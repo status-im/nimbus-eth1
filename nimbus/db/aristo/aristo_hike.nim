@@ -12,7 +12,7 @@
 
 import
   eth/[common, trie/nibbles],
-  "."/[aristo_desc, aristo_get, aristo_path]
+  "."/[aristo_desc, aristo_get]
 
 type
   Leg* = object
@@ -126,7 +126,7 @@ proc hikeUp*(
 
 proc hikeUp*(lty: LeafTie; db: AristoDb): Hike =
   ## Variant of `hike()`
-  lty.path.pathAsNibbles.hikeUp(lty.root, db)
+  lty.path.to(NibblesSeq).hikeUp(lty.root, db)
 
 # ------------------------------------------------------------------------------
 # End

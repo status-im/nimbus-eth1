@@ -14,7 +14,8 @@ import
   std/[algorithm, sequtils, sets, strutils, tables],
   eth/[common, trie/nibbles],
   stew/byteutils,
-  "."/[aristo_constants, aristo_desc, aristo_hike, aristo_vid]
+  "."/[aristo_constants, aristo_desc, aristo_hike, aristo_vid],
+  ./aristo_desc/aristo_types_private
 
 # ------------------------------------------------------------------------------
 # Ptivate functions
@@ -83,10 +84,10 @@ proc vidCode(lbl: HashLabel, db: AristoDb): uint64 =
       if vid.isValid:
         return vid.uint64
 
-proc ppKey(key: NodeKey): string =
-  if key == NodeKey.default:
+proc ppKey(key: HashKey): string =
+  if key == HashKey.default:
     return "£ø"
-  if key == VOID_NODE_KEY:
+  if key == VOID_HASH_KEY:
     return "£r"
   if key == VOID_CODE_KEY:
     return "£c"
@@ -96,9 +97,9 @@ proc ppKey(key: NodeKey): string =
            .squeeze(hex=true,ignLen=true)
 
 proc ppLabel(lbl: HashLabel; db: AristoDb): string =
-  if lbl.key == NodeKey.default:
+  if lbl.key == HashKey.default:
     return "£ø"
-  if lbl.key == VOID_NODE_KEY:
+  if lbl.key == VOID_HASH_KEY:
     return "£r"
   if lbl.key == VOID_CODE_KEY:
     return "£c"
@@ -118,11 +119,11 @@ proc ppLabel(lbl: HashLabel; db: AristoDb): string =
                      .mapIt(it.toHex(2)).join.tolowerAscii
                      .squeeze(hex=true,ignLen=true)
 
-proc ppRootKey(a: NodeKey): string =
+proc ppRootKey(a: HashKey): string =
   if a.isValid:
     return a.ppKey
 
-proc ppCodeKey(a: NodeKey): string =
+proc ppCodeKey(a: HashKey): string =
   if a != VOID_CODE_KEY:
     return a.ppKey
 
@@ -133,7 +134,7 @@ proc ppLeafTie(lty: LeafTie, db: AristoDb): string =
       return "@" & vid.ppVid
 
   "@" & ($lty.root.uint64.toHex).stripZeros & ":" &
-    lty.path.to(NodeKey).ByteArray32
+    lty.path.to(HashKey).ByteArray32
             .mapIt(it.toHex(2)).join.squeeze(hex=true,ignLen=true)
 
 proc ppPathPfx(pfx: NibblesSeq): string =
@@ -154,8 +155,8 @@ proc ppPayload(p: PayloadRef, db: AristoDb): string =
       result = "("
       result &= $p.account.nonce & ","
       result &= $p.account.balance & ","
-      result &= p.account.storageRoot.to(NodeKey).ppRootKey() & ","
-      result &= p.account.codeHash.to(NodeKey).ppCodeKey() & ")"
+      result &= p.account.storageRoot.to(HashKey).ppRootKey() & ","
+      result &= p.account.codeHash.to(HashKey).ppCodeKey() & ")"
 
 proc ppVtx(nd: VertexRef, db: AristoDb, vid: VertexID): string =
   if not nd.isValid:
@@ -261,9 +262,9 @@ proc lblToVtxID*(db: var AristoDb, lbl: HashLabel): VertexID =
       db.xMap[lbl] = result
 
 proc hashToVtxID*(db: var AristoDb, root: VertexID; hash: Hash256): VertexID =
-  db.lblToVtxID HashLabel(root: root, key: hash.to(NodeKey))
+  db.lblToVtxID HashLabel(root: root, key: hash.to(HashKey))
 
-proc pp*(key: NodeKey): string =
+proc pp*(key: HashKey): string =
   key.ppKey
 
 proc pp*(lbl: HashLabel, db = AristoDb()): string =

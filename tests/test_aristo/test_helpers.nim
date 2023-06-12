@@ -20,9 +20,12 @@ import
   ../test_sync_snap/test_types,
   ../replay/[pp, undump_accounts, undump_storages]
 
+from ../../nimbus/sync/snap/range_desc
+  import NodeKey
+
 type
   ProofTrieData* = object
-    root*: NodeKey
+    root*: HashKey
     id*: int
     proof*: seq[SnapProof]
     kvpLst*: seq[LeafTiePayload]
@@ -33,6 +36,9 @@ type
 
 proc toPfx(indent: int): string =
   "\n" & " ".repeat(indent)
+
+proc to(a: NodeKey; T: type HashKey): T =
+  a.T
 
 # ------------------------------------------------------------------------------
 # Public pretty printing
@@ -118,9 +124,9 @@ proc to*(sample: AccountsSample; T: type seq[UndumpStorages]): T =
     result.add w
 
 proc to*(ua: seq[UndumpAccounts]; T: type seq[ProofTrieData]): T =
-  var (rootKey, rootVid) = (VOID_NODE_KEY, VertexID(0))
+  var (rootKey, rootVid) = (VOID_HASH_KEY, VertexID(0))
   for w in ua:
-    let thisRoot = w.root.to(NodeKey)
+    let thisRoot = w.root.to(HashKey)
     if rootKey != thisRoot:
       (rootKey, rootVid) = (thisRoot, VertexID(rootVid.uint64 + 1))
     if 0 < w.data.accounts.len:
@@ -128,14 +134,16 @@ proc to*(ua: seq[UndumpAccounts]; T: type seq[ProofTrieData]): T =
         root:   rootKey,
         proof:  w.data.proof,
         kvpLst: w.data.accounts.mapIt(LeafTiePayload(
-          leafTie: LeafTie(root: rootVid, path: it.accKey.to(NodeTag)),
+          leafTie: LeafTie(
+            root:  rootVid,
+            path:  it.accKey.to(HashKey).to(HashID)),
           payload: PayloadRef(pType: BlobData, blob: it.accBlob))))
 
 proc to*(us: seq[UndumpStorages]; T: type seq[ProofTrieData]): T =
-  var (rootKey, rootVid) = (VOID_NODE_KEY, VertexID(0))
+  var (rootKey, rootVid) = (VOID_HASH_KEY, VertexID(0))
   for n,s in us:
     for w in s.data.storages:
-      let thisRoot = w.account.storageRoot.to(NodeKey)
+      let thisRoot = w.account.storageRoot.to(HashKey)
       if rootKey != thisRoot:
         (rootKey, rootVid) = (thisRoot, VertexID(rootVid.uint64 + 1))
       if 0 < w.data.len:
@@ -143,7 +151,9 @@ proc to*(us: seq[UndumpStorages]; T: type seq[ProofTrieData]): T =
           root:   thisRoot,
           id:     n + 1,
           kvpLst: w.data.mapIt(LeafTiePayload(
-            leafTie: LeafTie(root: rootVid, path: it.slotHash.to(NodeTag)),
+            leafTie: LeafTie(
+              root:  rootVid,
+              path:  it.slotHash.to(HashKey).to(HashID)),
             payload: PayloadRef(pType: BlobData, blob: it.slotData))))
     if 0 < result.len:
       result[^1].proof = s.data.proof

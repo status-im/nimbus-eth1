@@ -14,7 +14,8 @@ import
   std/sequtils,
   eth/[common, trie/nibbles],
   stew/results,
-  ./aristo_desc
+  ./aristo_desc,
+  ./aristo_desc/aristo_types_private
 
 # Info snippet (just a reminder to keep somewhere)
 #
@@ -34,35 +35,28 @@ import
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc pathAsNibbles*(key: NodeKey): NibblesSeq =
-  key.ByteArray32.initNibbleRange()
-
-proc pathAsNibbles*(tag: NodeTag): NibblesSeq =
-  tag.to(NodeKey).pathAsNibbles()
-
-proc pathAsBlob*(keyOrTag: NodeKey|NodeTag): Blob =
+proc pathAsBlob*(keyOrTag: HashKey|HashID): Blob =
   keyOrTag.pathAsNibbles.hexPrefixEncode(isLeaf=true)
 
-
-proc pathToKey*(partPath: NibblesSeq): Result[NodeKey,AristoError] =
+proc pathToKey*(partPath: NibblesSeq): Result[HashKey,AristoError] =
   var key: ByteArray32
   if partPath.len == 64:
     # Trailing dummy nibbles (aka no nibbles) force a nibble seq reorg
     let path = (partPath & EmptyNibbleSeq).getBytes()
     (addr key[0]).copyMem(unsafeAddr path[0], 32)
-    return ok(key.NodeKey)
+    return ok(key.HashKey)
   err(PathExpected64Nibbles)
 
-proc pathToKey*(partPath: Blob): Result[NodeKey,AristoError] =
+proc pathToKey*(partPath: Blob): Result[HashKey,AristoError] =
   let (isLeaf,pathSegment) = partPath.hexPrefixDecode
   if isleaf:
     return pathSegment.pathToKey()
   err(PathExpectedLeaf)
 
-proc pathToTag*(partPath: NibblesSeq|Blob): Result[NodeTag,AristoError] =
+proc pathToTag*(partPath: NibblesSeq|Blob): Result[HashID,AristoError] =
   let rc = partPath.pathToKey()
   if rc.isOk:
-    return ok(rc.value.to(NodeTag))
+    return ok(rc.value.to(HashID))
   err(rc.error)
 
 # --------------------
@@ -86,11 +80,11 @@ proc pathPfxPad*(pfx: NibblesSeq; dblNibble: static[byte]): NibblesSeq =
     let nope = seq[byte].default.initNibbleRange
     result = pfx.slice(0,64) & nope # nope forces re-alignment
 
-proc pathPfxPadKey*(pfx: NibblesSeq; dblNibble: static[byte]): NodeKey =
+proc pathPfxPadKey*(pfx: NibblesSeq; dblNibble: static[byte]): HashKey =
   ## Variant of `pathPfxPad()`.
   ##
   ## Extend (or cut) the argument nibbles sequence `pfx` for generating a
-  ## `NodeKey`.
+  ## `HashKey`.
   let bytes = pfx.pathPfxPad(dblNibble).getBytes
   (addr result.ByteArray32[0]).copyMem(unsafeAddr bytes[0], bytes.len)
 

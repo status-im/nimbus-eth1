@@ -16,16 +16,14 @@
 ##
 ## Some semantic explanations;
 ##
-## * NodeKey, NodeRef etc. refer to the standard/legacy `Merkel Patricia Tree`
+## * HashKey, NodeRef etc. refer to the standard/legacy `Merkle Patricia Tree`
 ## * VertexID, VertexRef, etc. refer to the `Aristo Trie`
 ##
 {.push raises: [].}
 
 import
   std/[sets, tables],
-  eth/[common, trie/nibbles],
-  stew/results,
-  ../../sync/snap/range_desc,
+  eth/common,
   ./aristo_constants,
   ./aristo_desc/[
     aristo_error, aristo_types_backend,
@@ -35,9 +33,6 @@ export
   # Not auto-exporting backend
   aristo_constants, aristo_error, aristo_types_identifiers,
   aristo_types_structural
-
-export # This one should go away one time
-  ByteArray32, NodeKey, NodeTag, digestTo, hash, to, `==`, `$`
 
 type
   AristoLayerRef* = ref object
@@ -60,10 +55,6 @@ type
     # Debugging data below, might go away in future
     xMap*: Table[HashLabel,VertexID] ## For pretty printing, extends `pAmk`
 
-static:
-  # Not that there is no doubt about this ...
-  doAssert NodeKey.default.ByteArray32.initNibbleRange.len == 64
-
 # ------------------------------------------------------------------------------
 # Public helpers
 # ------------------------------------------------------------------------------
@@ -77,6 +68,7 @@ proc getOrVoid*[W](tab: Table[W,HashLabel]; w: W): HashLabel =
 proc getOrVoid*[W](tab: Table[W,VertexID]; w: W): VertexID =
   tab.getOrDefault(w, VertexID(0))
 
+# --------
 
 proc isValid*(vtx: VertexRef): bool =
   vtx != VertexRef(nil) 
@@ -84,8 +76,8 @@ proc isValid*(vtx: VertexRef): bool =
 proc isValid*(nd: NodeRef): bool =
   nd != NodeRef(nil)
 
-proc isValid*(key: NodeKey): bool =
-  key != VOID_NODE_KEY
+proc isValid*(key: HashKey): bool =
+  key != VOID_HASH_KEY
 
 proc isValid*(lbl: HashLabel): bool =
   lbl != VOID_HASH_LABEL

@@ -11,7 +11,7 @@
 ## Aristo DB -- Patricia Trie builder, raw node insertion
 ## ======================================================
 ##
-## This module merges `NodeTag` values as hexary lookup paths into the
+## This module merges `HashID` values as hexary lookup paths into the
 ## `Patricia Trie`. When changing vertices (aka nodes without Merkle hashes),
 ## associated (but separated) Merkle hashes will be deleted unless locked.
 ## Instead of deleting locked hashes error handling is applied.
@@ -133,7 +133,7 @@ proc insertBranch(
 
   # Install `forkVtx`
   block:
-    # Clear Merkle hashes (aka node keys) unless proof mode.
+    # Clear Merkle hashes (aka hash keys) unless proof mode.
     if db.top.pPrf.len == 0:
       db.clearMerkleKeys(hike, linkID)
     elif linkID in db.top.pPrf:
@@ -228,17 +228,17 @@ proc concatBranchAndLeaf(
   if brVtx.bVid[nibble].isValid:
     return Hike(error: MergeRootBranchLinkBusy)
 
-  # Clear Merkle hashes (aka node keys) unless proof mode.
+  # Clear Merkle hashes (aka hash keys) unless proof mode.
   if db.top.pPrf.len == 0:
     db.clearMerkleKeys(hike, brVid)
   elif brVid in db.top.pPrf:
     return Hike(error: MergeBranchProofModeLock) # Ooops
 
-  # Append branch node
+  # Append branch vertex
   result = Hike(root: hike.root, legs: hike.legs)
   result.legs.add Leg(wp: VidVtxPair(vtx: brVtx, vid: brVid), nibble: nibble)
 
-  # Append leaf node
+  # Append leaf vertex
   let
     vid = db.vidFetch
     vtx = VertexRef(
@@ -324,7 +324,7 @@ proc topIsExtAddLeaf(
   result = Hike(root: hike.root, legs: hike.legs)
 
   if not brVtx.isValid:
-    # Blind vertex, promote to leaf node.
+    # Blind vertex, promote to leaf vertex.
     #
     #  --(extVid)--> <extVtx> --(brVid)--> nil
     #
@@ -354,7 +354,7 @@ proc topIsExtAddLeaf(
     if linkID.isValid:
       return Hike(error: MergeRootBranchLinkBusy)
 
-    # Clear Merkle hashes (aka node keys) unless proof mode
+    # Clear Merkle hashes (aka hash keys) unless proof mode
     if db.top.pPrf.len == 0:
       db.clearMerkleKeys(hike, brVid)
     elif brVid in db.top.pPrf:
@@ -386,7 +386,7 @@ proc topIsEmptyAddLeaf(
     if rootVtx.bVid[nibble].isValid:
       return Hike(error: MergeRootBranchLinkBusy)
 
-    # Clear Merkle hashes (aka node keys) unless proof mode
+    # Clear Merkle hashes (aka hash keys) unless proof mode
     if db.top.pPrf.len == 0:
       db.clearMerkleKeys(hike, hike.root)
     elif hike.root in db.top.pPrf:
@@ -413,14 +413,14 @@ proc topIsEmptyAddLeaf(
 
 proc mergeNodeImpl(
     db: AristoDb;                      # Database, top layer
-    nodeKey: NodeKey;                  # Merkel hash of node
+    hashKey: HashKey;                  # Merkel hash of node
     node: NodeRef;                     # Node derived from RLP representation
     rootVid: VertexID;                 # Current sub-trie
       ): Result[VertexID,AristoError]  =
-  ## The function merges a node key `nodeKey` expanded from its RLP
-  ## representation into the `Aristo Trie` database. The vertex is split off
-  ## from the node and stored separately. So are the Merkle hashes. The
-  ## vertex is labelled `locked`.
+  ## The function merges the argument hash key `hashKey` as expanded from the
+  ## node RLP representation into the `Aristo Trie` database. The vertex is
+  ## split off from the node and stored separately. So are the Merkle hashes.
+  ## The vertex is labelled `locked`.
   ##
   ## The `node` argument is *not* checked, whether the vertex IDs have been
   ## allocated, already. If the node comes straight from the `decode()` RLP
@@ -431,26 +431,26 @@ proc mergeNodeImpl(
   if not rootVid.isValid:
     return err(MergeRootKeyEmpty)
 
-  # Verify `nodeKey`
-  if not nodeKey.isValid:
-    return err(MergeNodeKeyEmpty)
+  # Verify `hashKey`
+  if not hashKey.isValid:
+    return err(MergeHashKeyEmpty)
 
   # Check whether the node exists, already. If not then create a new vertex ID
   var
-    nodeLbl = HashLabel(root: rootVid, key: nodeKey)
-    vid = db.top.pAmk.getOrVoid nodeLbl
+    hashLbl = HashLabel(root: rootVid, key: hashKey)
+    vid = db.top.pAmk.getOrVoid hashLbl
   if not vid.isValid:
-    vid = db.vidAttach nodeLbl
+    vid = db.vidAttach hashLbl
   else:
     let lbl = db.top.kMap.getOrVoid vid
-    if lbl == nodeLbl:
+    if lbl == hashLbl:
       if db.top.sTab.hasKey vid:
         # This is tyically considered OK
-        return err(MergeNodeKeyCachedAlready)
+        return err(MergeHashKeyCachedAlready)
       # Otherwise proceed
     elif lbl.isValid:
       # Different key assigned => error
-      return err(MergeNodeKeyDiffersFromCached)
+      return err(MergeHashKeyDiffersFromCached)
 
   let vtx = node.to(VertexRef) # the vertex IDs need to be set up now (if any)
 
@@ -523,7 +523,7 @@ proc merge*(
           vid: hike.root,
           vtx: VertexRef(
             vType: Leaf,
-            lPfx:  leaf.leafTie.path.pathAsNibbles,
+            lPfx:  leaf.leafTie.path.to(NibblesSeq),
             lData: leaf.payload))
         db.top.sTab[wp.vid] = wp.vtx
         result = Hike(root: wp.vid, legs: @[Leg(wp: wp, nibble: -1)])
@@ -565,12 +565,12 @@ proc merge*(
   var (merged, dups) = (0, 0)
   for n,w in proof:
     let
-      key = w.Blob.digestTo(NodeKey)
+      key = w.Blob.digestTo(HashKey)
       node = w.Blob.decode(NodeRef)
       rc = db.mergeNodeImpl(key, node, rootVid)
     if rc.isOK:
       merged.inc
-    elif rc.error == MergeNodeKeyCachedAlready:
+    elif rc.error == MergeHashKeyCachedAlready:
       dups.inc
     else:
       return (n, dups, rc.error)
@@ -579,7 +579,7 @@ proc merge*(
 
 proc merge*(
     db: AristoDb;                      # Database, top layer
-    rootKey: NodeKey;                  # Merkle hash for root
+    rootKey: HashKey;                  # Merkle hash for root
     rootVid = VertexID(0)              # Optionally, force root vertex ID
       ): Result[VertexID,AristoError] =
   ## Set up a `rootKey` associated with a vertex ID.

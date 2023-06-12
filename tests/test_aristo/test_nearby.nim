@@ -18,7 +18,6 @@ import
   unittest2,
   ../../nimbus/db/aristo/[
     aristo_desc, aristo_debug, aristo_merge, aristo_nearby],
-  ../../nimbus/sync/snap/range_desc,
   ./test_helpers
 
 # ------------------------------------------------------------------------------
@@ -28,14 +27,14 @@ import
 proc fwdWalkLeafsCompleteDB(
     db: AristoDb;
     root: VertexID;
-    tags: openArray[NodeTag];
+    tags: openArray[HashID];
     noisy: bool;
       ): tuple[visited: int, error:  AristoError] =
   let
     tLen = tags.len
   var
     error = AristoError(0)
-    lty = LeafTie(root: root, path: NodeTag(tags[0].u256 div 2))
+    lty = LeafTie(root: root, path: HashID(tags[0].u256 div 2))
     n = 0
   while true:
     let rc = lty.nearbyRight(db)
@@ -63,8 +62,8 @@ proc fwdWalkLeafsCompleteDB(
       error = AristoError(1)
       check rc.value.path == tags[n]
       break
-    if rc.value.path < high(NodeTag):
-      lty.path = NodeTag(rc.value.path.u256 + 1)
+    if rc.value.path < high(HashID):
+      lty.path = HashID(rc.value.path.u256 + 1)
     n.inc
 
   (n,error)
@@ -73,7 +72,7 @@ proc fwdWalkLeafsCompleteDB(
 proc revWalkLeafsCompleteDB(
     db: AristoDb;
     root: VertexID;
-    tags: openArray[NodeTag];
+    tags: openArray[HashID];
     noisy: bool;
       ): tuple[visited: int, error: AristoError] =
   let
@@ -81,7 +80,7 @@ proc revWalkLeafsCompleteDB(
   var
     error = AristoError(0)
     delta = ((high(UInt256) - tags[^1].u256) div 2)
-    lty = LeafTie(root: root, path:  NodeTag(tags[^1].u256 + delta))
+    lty = LeafTie(root: root, path:  HashID(tags[^1].u256 + delta))
     n = tLen-1
   while true: # and false:
     let rc = lty.nearbyLeft(db)
@@ -107,8 +106,8 @@ proc revWalkLeafsCompleteDB(
       error = AristoError(1)
       check rc.value.path == tags[n]
       break
-    if low(NodeTag) < rc.value.path:
-      lty.path = NodeTag(rc.value.path.u256 - 1)
+    if low(HashID) < rc.value.path:
+      lty.path = HashID(rc.value.path.u256 - 1)
     n.dec
 
   (tLen-1 - n, error)
@@ -124,8 +123,8 @@ proc test_nearbyKvpList*(
       ): bool =
   var
     db: AristoDb
-    rootKey = NodeKey.default
-    tagSet: HashSet[NodeTag]
+    rootKey = HashKey.default
+    tagSet: HashSet[HashID]
     count = 0
   for n,w in list:
     if resetDb or w.root != rootKey:

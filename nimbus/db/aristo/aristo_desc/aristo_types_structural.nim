@@ -16,7 +16,6 @@
 
 import
   eth/[common, trie/nibbles],
-  ../../../sync/snap/range_desc,
   "."/[aristo_error, aristo_types_identifiers]
 
 type
@@ -55,7 +54,7 @@ type
     ## Combined record for a *traditional* ``Merkle Patricia Tree` node merged
     ## with a structural `VertexRef` type object.
     error*: AristoError              ## Can be used for error signalling
-    key*: array[16,NodeKey]          ## Merkle hash/es for Branch & Extension
+    key*: array[16,HashKey]          ## Merkle hash/es for Branch & Extension
 
 # ------------------------------------------------------------------------------
 # Public helpers: `NodeRef` and `PayloadRef`

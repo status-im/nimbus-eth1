@@ -100,12 +100,12 @@ proc cachedVID(db: AristoDb; lbl: HashLabel): VertexID =
     result = db.vidAttach lbl
 
 # ------------------------------------------------------------------------------
-# Public functions for `VertexID` => `NodeKey` mapping
+# Public functions for `VertexID` => `HashKey` mapping
 # ------------------------------------------------------------------------------
 
-proc pal*(db: AristoDb; rootID: VertexID; vid: VertexID): NodeKey =
-  ## Retrieve the cached `Merkel` hash (aka `NodeKey` object) associated with
-  ## the argument `VertexID` type argument `vid`. Return a zero `NodeKey` if
+proc pal*(db: AristoDb; rootID: VertexID; vid: VertexID): HashKey =
+  ## Retrieve the cached `Merkel` hash (aka `HashKey` object) associated with
+  ## the argument `VertexID` type argument `vid`. Return a zero `HashKey` if
   ## there is none.
   ##
   ## If the vertex ID `vid` is not found in the cache, then the structural
@@ -122,7 +122,7 @@ proc pal*(db: AristoDb; rootID: VertexID; vid: VertexID): NodeKey =
       if db.convertPartiallyOk(vtx,node):
         var w = initRlpWriter()
         w.append node
-        result = w.finish.keccakHash.data.NodeKey
+        result = w.finish.keccakHash.data.HashKey
         db.top.kMap[vid] = HashLabel(root: rootID, key: result)
 
 # ------------------------------------------------------------------------------
@@ -135,7 +135,7 @@ proc updated*(nd: NodeRef; root: VertexID; db: AristoDb): NodeRef =
   ## For a `Leaf` node, the payload data `PayloadRef` type reference is *not*
   ## duplicated and returned as-is.
   ##
-  ## This function will not complain if all `Merkel` hashes (aka `NodeKey`
+  ## This function will not complain if all `Merkel` hashes (aka `HashKey`
   ## objects) are zero for either `Extension` or `Leaf` nodes.
   if nd.isValid:
     case nd.vType:
@@ -161,7 +161,7 @@ proc updated*(nd: NodeRef; root: VertexID; db: AristoDb): NodeRef =
 
 proc asNode*(vtx: VertexRef; db: AristoDb): NodeRef =
   ## Return a `NodeRef` object by augmenting missing `Merkel` hashes (aka
-  ## `NodeKey` objects) from the cache or from calculated cached vertex
+  ## `HashKey` objects) from the cache or from calculated cached vertex
   ## entries, if available.
   ##
   ## If not all `Merkel` hashes are available in a single lookup, then the

@@ -16,7 +16,6 @@
 
 import
   stew/results,
-  ../../../sync/snap/range_desc,
   "."/[aristo_error, aristo_types_identifiers, aristo_types_structural]
 
 type
@@ -26,7 +25,7 @@ type
         ## `Aristo DB` data record.
 
   GetKeyFn* =
-    proc(vid: VertexID): Result[NodeKey,AristoError] {.gcsafe, raises: [].}
+    proc(vid: VertexID): Result[HashKey,AristoError] {.gcsafe, raises: [].}
         ## Generic backend database retrieval function for a single
         ## `Aristo DB` hash lookup value.
 
@@ -53,7 +52,7 @@ type
         ## Generic backend database bulk storage function.
 
   PutKeyFn* =
-    proc(hdl: PutHdlRef; vkps: openArray[(VertexID,NodeKey)])
+    proc(hdl: PutHdlRef; vkps: openArray[(VertexID,HashKey)])
       {.gcsafe, raises: [].}
         ## Generic backend database bulk storage function.
 
