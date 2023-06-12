@@ -9,20 +9,15 @@
 # according to those terms.
 
 import
-  std/[sequtils, sets, times],
+  std/[sequtils, sets, times, strutils],
   ../common/common,
   ../db/accounts_cache,
   ".."/[errors, transaction, vm_state, vm_types],
   "."/[dao, eip4844, gaslimit, withdrawals],
   ./pow/[difficulty, header],
   ./pow,
-  chronicles,
+  nimcrypto/utils,
   stew/[objects, results]
-
-# chronicles stuff
-when loggingEnabled or enabledLogLevel > NONE:
-  import
-    nimcrypto/utils
 
 from stew/byteutils
   import nil
@@ -51,31 +46,28 @@ func isGenesis(header: BlockHeader): bool =
 # ------------------------------------------------------------------------------
 
 proc validateSeal(pow: PowRef; header: BlockHeader): Result[void,string] =
-  let (expMixDigest, miningValue) = try:
-    pow.getPowDigest(header)
+  try:
+    let (expMixDigest, miningValue) = pow.getPowDigest(header)
+
+    if expMixDigest != header.mixDigest:
+      let
+        miningHash = header.getPowSpecs.miningHash
+        (size, cachedHash) = try: pow.getPowCacheLookup(header.blockNumber)
+                            except KeyError: return err("Unknown block")
+                            except CatchableError as e: return err(e.msg)
+      return err("mixHash mismatch. actual=$1, expected=$2," &
+                " blockNumber=$3, miningHash=$4, nonce=$5, difficulty=$6," &
+                " size=$7, cachedHash=$8" % [
+                $header.mixDigest, $expMixDigest, $header.blockNumber,
+                $miningHash, header.nonce.toHex, $header.difficulty,
+                $size, $cachedHash])
+
+    let value = UInt256.fromBytesBE(miningValue.data)
+    if value > UInt256.high div header.difficulty:
+      return err("mining difficulty error")
+
   except CatchableError as err:
-    return err("test")
-
-  if expMixDigest != header.mixDigest:
-    let
-      miningHash = header.getPowSpecs.miningHash
-      (size, cachedHash) = try: pow.getPowCacheLookup(header.blockNumber)
-                           except KeyError: return err("Unknown block")
-                           except CatchableError as e: return err(e.msg)
-    debug "mixHash mismatch",
-      actual = header.mixDigest,
-      expected = expMixDigest,
-      blockNumber = header.blockNumber,
-      miningHash = miningHash,
-      nonce = header.nonce.toHex,
-      difficulty = header.difficulty,
-      size = size,
-      cachedHash = cachedHash
-    return err("mixHash mismatch")
-
-  let value = UInt256.fromBytesBE(miningValue.data)
-  if value > UInt256.high div header.difficulty:
-    return err("mining difficulty error")
+    return err(err.msg)
 
   ok()
 
@@ -249,22 +241,19 @@ proc validateTransaction*(
     sender:   EthAddress;      ## tx.getSender or tx.ecRecover
     maxLimit: GasInt;          ## gasLimit from block header
     baseFee:  UInt256;         ## baseFee from block header
-    fork:     EVMFork): bool =
+    fork:     EVMFork): Result[void, string] =
   let
     balance = roDB.getBalance(sender)
     nonce = roDB.getNonce(sender)
 
   if tx.txType == TxEip2930 and fork < FkBerlin:
-    debug "invalid tx: Eip2930 Tx type detected before Berlin"
-    return false
+    return err("invalid tx: Eip2930 Tx type detected before Berlin")
 
   if tx.txType == TxEip1559 and fork < FkLondon:
-    debug "invalid tx: Eip1559 Tx type detected before London"
-    return false
+    return err("invalid tx: Eip1559 Tx type detected before London")
 
   if fork >= FkShanghai and tx.contractCreation and tx.payload.len > EIP3860_MAX_INITCODE_SIZE:
-    debug "invalid tx: initcode size exceeds maximum"
-    return false
+    return err("invalid tx: initcode size exceeds maximum")
 
   # Note that the following check bears some plausibility but is _not_
   # covered by the eip-1559 reference (sort of) pseudo code, for details
@@ -281,81 +270,66 @@ proc validateTransaction*(
   #
   # The parallel lowGasLimit.json test never triggers the case checked below
   # as the paricular transaction is omitted (the txs list is just set empty.)
-  if maxLimit < tx.gasLimit:
-    debug "invalid tx: block header gasLimit exceeded",
-      maxLimit,
-      gasLimit = tx.gasLimit
-    return false
+  try:
+    if maxLimit < tx.gasLimit:
+      return err("invalid tx: block header gasLimit exceeded. maxLimit=$1, gasLimit=$2" % [
+        $maxLimit, $tx.gasLimit])
 
-  # ensure that the user was willing to at least pay the base fee
-  if tx.maxFee < baseFee.truncate(int64):
-    debug "invalid tx: maxFee is smaller than baseFee",
-      maxFee = tx.maxFee,
-      baseFee
-    return false
+    # ensure that the user was willing to at least pay the base fee
+    if tx.maxFee < baseFee.truncate(int64):
+      return err("invalid tx: maxFee is smaller than baseFee. maxFee=$1, baseFee=$2" % [
+        $tx.maxFee, $baseFee])
 
-  # The total must be the larger of the two
-  if tx.maxFee < tx.maxPriorityFee:
-    debug "invalid tx: maxFee is smaller than maPriorityFee",
-      maxFee         = tx.maxFee,
-      maxPriorityFee = tx.maxPriorityFee
-    return false
+    # The total must be the larger of the two
+    if tx.maxFee < tx.maxPriorityFee:
+      return err("invalid tx: maxFee is smaller than maPriorityFee. maxFee=$1, maxPriorityFee=$2" % [
+        $tx.maxFee, $tx.maxPriorityFee])
 
-  # the signer must be able to fully afford the transaction
-  let gasCost = if tx.txType >= TxEip1559:
-                  tx.gasLimit.u256 * tx.maxFee.u256
-                else:
-                  tx.gasLimit.u256 * tx.gasPrice.u256
+    # the signer must be able to fully afford the transaction
+    let gasCost = if tx.txType >= TxEip1559:
+                    tx.gasLimit.u256 * tx.maxFee.u256
+                  else:
+                    tx.gasLimit.u256 * tx.gasPrice.u256
 
-  if balance < gasCost:
-    debug "invalid tx: not enough cash for gas",
-      available = balance,
-      require   = gasCost
-    return false
+    if balance < gasCost:
+      return err("invalid tx: not enough cash for gas. avail=$1, require=$2" % [
+        $balance, $gasCost])
 
-  if balance - gasCost < tx.value:
-    debug "invalid tx: not enough cash to send",
-      available=balance,
-      availableMinusGas=balance-gasCost,
-      require=tx.value
-    return false
+    if balance - gasCost < tx.value:
+      return err("invalid tx: not enough cash to send. avail=$1, availMinusGas=$2, require=$3" % [
+        $balance, $(balance-gasCost), $tx.value])
 
-  if tx.gasLimit < tx.intrinsicGas(fork):
-    debug "invalid tx: not enough gas to perform calculation",
-      available=tx.gasLimit,
-      require=tx.intrinsicGas(fork)
-    return false
+    if tx.gasLimit < tx.intrinsicGas(fork):
+      return err("invalid tx: not enough gas to perform calculation. avail=$1, require=$2" % [
+        $tx.gasLimit, $tx.intrinsicGas(fork)])
 
-  if tx.nonce != nonce:
-    debug "invalid tx: account nonce mismatch",
-      txNonce=tx.nonce,
-      accountNonce=nonce
-    return false
+    if tx.nonce != nonce:
+      return err("invalid tx: account nonce mismatch. txNonce=$1, accNonce=$2" % [
+        $tx.nonce, $nonce])
 
-  if tx.nonce == high(uint64):
-    debug "invalid tx: nonce at maximum"
-    return false
+    if tx.nonce == high(uint64):
+      return err("invalid tx: nonce at maximum")
 
-  # EIP-3607 Reject transactions from senders with deployed code
-  # The EIP spec claims this attack never happened before
-  # Clients might choose to disable this rule for RPC calls like
-  # `eth_call` and `eth_estimateGas`
-  # EOA = Externally Owned Account
-  let codeHash = roDB.getCodeHash(sender)
-  if codeHash != EMPTY_SHA3:
-    debug "invalid tx: sender is not an EOA",
-      sender=sender.toHex,
-      codeHash=codeHash.data.toHex
-    return false
+    # EIP-3607 Reject transactions from senders with deployed code
+    # The EIP spec claims this attack never happened before
+    # Clients might choose to disable this rule for RPC calls like
+    # `eth_call` and `eth_estimateGas`
+    # EOA = Externally Owned Account
+    let codeHash = roDB.getCodeHash(sender)
+    if codeHash != EMPTY_SHA3:
+      return err("invalid tx: sender is not an EOA. sender=$1, codeHash=$2" % [
+        sender.toHex, codeHash.data.toHex])
+  except CatchableError as ex:
+    return err(ex.msg)
 
-  true
+  ok()
 
 proc validateTransaction*(
     vmState: BaseVMState;  ## Parent accounts environment for transaction
     tx:      Transaction;  ## tx to validate
     sender:  EthAddress;   ## tx.getSender or tx.ecRecover
     header:  BlockHeader;  ## Header for the block containing the current tx
-    fork:    EVMFork): bool =
+    fork:    EVMFork): Result[void, string] =
   ## Variant of `validateTransaction()`
   let
     roDB = vmState.readOnlyStateDB
