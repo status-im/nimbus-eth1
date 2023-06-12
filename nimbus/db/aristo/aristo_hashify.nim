@@ -102,10 +102,17 @@ proc leafToRootHasher(
       vfy = db.getKey wp.vid
     if not vfy.isValid:
       db.vidAttach(HashLabel(root: hike.root, key: key), wp.vid)
-    elif key != vfy:
+    elif key == vfy:
+      discard
+    elif db.top.kMap.getOrVoid(wp.vid).isValid:
       let error = HashifyExistingHashMismatch
       debug "hashify failed", vid=wp.vid, key, expected=vfy, error
       return err((wp.vid,error))
+    else:
+      # Otherwise `vfy` is a valid key which differs with the one on the
+      # backend. So the `vfy` key will be treated as missing (to be updated
+      # on the backend when saving the top layer.)
+      db.vidAttach(HashLabel(root: hike.root, key: key), wp.vid)
 
   ok -1 # all could be hashed
 
@@ -121,7 +128,6 @@ proc hashifyClear*(
   if not locksOnly:
     db.top.pAmk.clear
     db.top.kMap.clear
-    db.top.dKey.clear
   db.top.pPrf.clear
 
 
@@ -198,14 +204,22 @@ proc hashify*(
           toVid = rootAndVid[1]
 
         # Update Merkle hash (aka `HashKey`)
-        let fromLbl = db.top.kMap.getOrVoid fromVid
-        if fromLbl.isValid:
+        let fromKey = db.getKey fromVid
+        if fromKey.isValid:
           db.vidAttach(HashLabel(root: rootAndVid[0], key: hashKey), fromVid)
-        elif hashKey != fromLbl.key:
+        elif hashKey == fromKey:
+          discard
+        elif db.top.kMap.getOrVoid(fromVid).isValid:
           let error = HashifyExistingHashMismatch
           debug "hashify failed", vid=fromVid, key=hashKey,
-            expected=fromLbl.key.pp, error
+            expected=fromKey.pp, error
           return err((fromVid,error))
+        else:
+          # Otherwise `fromKey` is a valid key which differs with the one on
+          # the backend. So the `vfy` key will be treated as missing (to be
+          # updated on the backend when saving the top layer.)
+          redo[fromVid] = rootAndVid
+          continue
 
         done.incl fromVid
 

@@ -41,7 +41,6 @@ type
     sTab*: Table[VertexID,VertexRef] ## Structural vertex table
     lTab*: Table[LeafTie,VertexID]   ## Direct access, path to leaf vertex
     kMap*: Table[VertexID,HashLabel] ## Merkle hash key mapping
-    dKey*: HashSet[VertexID]         ## Locally deleted Merkle hash keys
     pAmk*: Table[HashLabel,VertexID] ## Reverse mapper for data import
     pPrf*: HashSet[VertexID]         ## Locked vertices (proof nodes)
     vGen*: seq[VertexID]             ## Unique vertex ID generator
@@ -84,6 +83,23 @@ proc isValid*(lbl: HashLabel): bool =
 
 proc isValid*(vid: VertexID): bool =
   vid != VertexID(0)
+
+# ------------------------------------------------------------------------------
+# Public functions, miscellaneous
+# ------------------------------------------------------------------------------
+
+# Note that the below `init()` function cannot go into
+# `aristo_types_identifiers` as this would result in a circular import.
+
+proc init*(key: var HashKey; data: openArray[byte]): bool =
+  ## Import argument `data` into `key` which must have length either `32`, or
+  ## `0`. The latter case is equivalent to an all zero byte array of size `32`.
+  if data.len == 32:
+    (addr key.ByteArray32[0]).copyMem(unsafeAddr data[0], data.len)
+    return true
+  if data.len == 0:
+    key = VOID_HASH_KEY
+    return true
 
 # ------------------------------------------------------------------------------
 # End

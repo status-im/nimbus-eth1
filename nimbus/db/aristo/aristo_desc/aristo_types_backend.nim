@@ -21,18 +21,18 @@ import
 type
   GetVtxFn* =
     proc(vid: VertexID): Result[VertexRef,AristoError] {.gcsafe, raises: [].}
-        ## Generic backend database retrieval function for a single structural
-        ## `Aristo DB` data record.
+      ## Generic backend database retrieval function for a single structural
+      ## `Aristo DB` data record.
 
   GetKeyFn* =
     proc(vid: VertexID): Result[HashKey,AristoError] {.gcsafe, raises: [].}
-        ## Generic backend database retrieval function for a single
-        ## `Aristo DB` hash lookup value.
+      ## Generic backend database retrieval function for a single
+      ## `Aristo DB` hash lookup value.
 
   GetIdgFn* =
     proc(): Result[seq[VertexID],AristoError] {.gcsafe, raises: [].}
-        ## Generic backend database retrieval function for a the ID generator
-        ## `Aristo DB` state record.
+      ## Generic backend database retrieval function for a the ID generator
+      ## `Aristo DB` state record.
 
   # -------------
 
@@ -49,16 +49,20 @@ type
   PutVtxFn* =
     proc(hdl: PutHdlRef; vrps: openArray[(VertexID,VertexRef)])
       {.gcsafe, raises: [].}
-        ## Generic backend database bulk storage function.
+        ## Generic backend database bulk storage function, `VertexRef(nil)`
+        ## values indicate that records should be deleted.
 
   PutKeyFn* =
     proc(hdl: PutHdlRef; vkps: openArray[(VertexID,HashKey)])
       {.gcsafe, raises: [].}
-        ## Generic backend database bulk storage function.
+        ## Generic backend database bulk storage function, `VOID_HASH_KEY`
+        ## values indicate that records should be deleted.
 
   PutIdgFn* =
-    proc(hdl: PutHdlRef; vs: openArray[VertexID]) {.gcsafe, raises: [].}
-        ## Generic backend database ID generator state storage function.
+    proc(hdl: PutHdlRef; vs: openArray[VertexID])
+      {.gcsafe, raises: [].}
+        ## Generic backend database ID generator state storage function. This
+        ## function replaces the current generator state.
 
   PutEndFn* =
     proc(hdl: PutHdlRef): AristoError {.gcsafe, raises: [].}
@@ -66,21 +70,11 @@ type
 
   # -------------
 
-  DelVtxFn* =
-    proc(vids: openArray[VertexID])
-      {.gcsafe, raises: [].}
-        ## Generic backend database delete function for the structural
-        ## `Aristo DB` data records
+  CloseFn* =
+    proc() {.gcsafe, raises: [].}
+      ## Generic destructor for the `Aristo DB` backend.
 
-  DelKeyFn* =
-    proc(vids: openArray[VertexID])
-      {.gcsafe, raises: [].}
-        ## Generic backend database delete function for the `Aristo DB`
-        ## Merkle hash key mappings.
-
-  # -------------
-
-  AristoBackendRef* = ref object
+  AristoBackendRef* = ref object of RootRef
     ## Backend interface.
     getVtxFn*: GetVtxFn              ## Read vertex record
     getKeyFn*: GetKeyFn              ## Read Merkle hash/key
@@ -90,8 +84,7 @@ type
     putKeyFn*: PutKeyFn              ## Bulk store vertex hashes
     putIdgFn*: PutIdgFn              ## Store ID generator state
     putEndFn*: PutEndFn              ## Commit bulk store session
-    delVtxFn*: DelVtxFn              ## Bulk delete vertex records
-    delKeyFn*: DelKeyFn              ## Bulk delete vertex Merkle hashes
+    closeFn*: CloseFn                ## Generic destructor
 
 # ------------------------------------------------------------------------------
 # End

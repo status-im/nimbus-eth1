@@ -11,33 +11,43 @@
 ## Constructors for Aristo DB
 ## ==========================
 ##
-## For a backend-less constructor use `AristoDb(top: AristoLayerRef())`.
 
 {.push raises: [].}
 
 import
-  ./aristo_init/[aristo_memory],
+  stew/results,
+  ./aristo_init/[aristo_init_common, aristo_memory],
   ./aristo_desc,
-  ./aristo_desc/aristo_types_private
+  ./aristo_desc/aristo_types_backend
+
+export
+  AristoBackendType, AristoStorageType, AristoTypedBackendRef
 
 # ------------------------------------------------------------------------------
-# Public functions
+# Public database constuctors, destructor
 # ------------------------------------------------------------------------------
 
-proc init*(key: var HashKey; data: openArray[byte]): bool =
-  ## Import argument `data` into `key` which must have length either `32`, or
-  ## `0`. The latter case is equivalent to an all zero byte array of size `32`.
-  if data.len == 32:
-    (addr key.ByteArray32[0]).copyMem(unsafeAddr data[0], data.len)
-    return true
-  if data.len == 0:
-    key = VOID_HASH_KEY
-    return true
+proc init*(
+    T: type AristoDb;
+    backend: static[AristoBackendType];
+      ): T =
+  ## Prototype for creating `BackendNone` and `BackendMemory`  type backend.
+  when backend == BackendNone:
+    T(top: AristoLayerRef())
 
-proc init*(T: type AristoDb): T =
-  ## Constructor with memory backend.
-  T(top:     AristoLayerRef(),
-    backend: memoryBackend())
+  elif backend == BackendMemory:
+    T(top: AristoLayerRef(), backend: memoryBackend())
+
+  else:
+    {.error: "Unknown/unsupported Aristo DB backend".}
+
+# -----------------
+
+proc finish*(db: var AristoDb) =
+  if not db.backend.isNil:
+    db.backend.closeFn()
+  db.top = AristoLayerRef(nil)
+  db.stack.setLen(0)
 
 # ------------------------------------------------------------------------------
 # End

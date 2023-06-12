@@ -17,7 +17,7 @@ import
   stew/results,
   unittest2,
   ../../nimbus/db/aristo/[
-    aristo_desc, aristo_debug, aristo_get, aristo_hashify,
+    aristo_desc, aristo_debug, aristo_get, aristo_hashify, aristo_init,
     aristo_hike, aristo_merge],
   ./test_helpers
 
@@ -126,7 +126,7 @@ proc test_mergeKvpList*(
     resetDb = false;
       ): bool =
 
-  var db = AristoDb(top: AristoLayerRef())
+  var db = AristoDb.init BackendNone
   for n,w in list:
     if resetDb:
       db.top = AristoLayerRef()

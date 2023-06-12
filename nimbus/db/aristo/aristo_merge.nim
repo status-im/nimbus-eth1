@@ -81,7 +81,8 @@ proc clearMerkleKeys(
       db.top.pAmk.del key
     elif db.getKeyBackend(vid).isOK:
       # Register for deleting on backend
-      db.top.dKey.incl vid
+      db.top.kMap[vid] = VOID_HASH_LABEL
+      db.top.pAmk.del key
 
 # -----------
 

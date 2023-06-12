@@ -14,7 +14,7 @@
 {.push raises: [].}
 
 import
-  std/[algorithm, sequtils, sets, tables],
+  std/[algorithm, sequtils, tables],
   ./aristo_desc
 
 # ------------------------------------------------------------------------------
@@ -92,7 +92,6 @@ proc vidReorg*(db: AristoDb) =
 
 proc vidAttach*(db: AristoDb; lbl: HashLabel; vid: VertexID) =
   ## Attach (i.r. register) a Merkle hash key to a vertex ID.
-  db.top.dKey.excl vid
   db.top.pAmk[lbl] = vid
   db.top.kMap[vid] = lbl
 

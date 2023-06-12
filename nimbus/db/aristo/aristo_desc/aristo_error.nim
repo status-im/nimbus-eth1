@@ -23,34 +23,26 @@ type
     RlpRlpException
     RlpOtherException
 
-    # Db record decoder, `blobify()`
-    DbrNilArgument
-    DbrUnknown
-    DbrTooShort
-    DbrBranchTooShort
-    DbrBranchSizeGarbled
-    DbrBranchInxOutOfRange
-    DbrExtTooShort
-    DbrExtSizeGarbled
-    DbrExtGotLeafPrefix
-    DbrLeafSizeGarbled
-    DbrLeafGotExtPrefix
+    # Data record transcoders, `deblobify()` and `blobify()`
+    BlobifyVtxExPathOverflow
+    BlobifyVtxLeafPathOverflow
 
-    # Db admin data decoder, `deblobify()`
-    ADbGarbledSize
-    ADbWrongType
-
-    # Db record encoder, `blobify()`
-    VtxExPathOverflow
-    VtxLeafPathOverflow
+    DeblobNilArgument
+    DeblobUnknown
+    DeblobTooShort
+    DeblobBranchTooShort
+    DeblobBranchSizeGarbled
+    DeblobBranchInxOutOfRange
+    DeblobExtTooShort
+    DeblobExtSizeGarbled
+    DeblobExtGotLeafPrefix
+    DeblobLeafSizeGarbled
+    DeblobLeafGotExtPrefix
+    DeblobSizeGarbled
+    DeblobWrongType
 
     # Converter `asNode()`, currenly for unit tests only
     CacheMissingNodekeys
-
-    # Get function `getVtxCascaded()`
-    GetVtxNotFound
-    GetTagNotFound
-    GetKeyNotFound
 
     # Path function `hikeUp()`
     PathRootMissing
@@ -59,10 +51,6 @@ type
     PathBranchBlindEdge
     PathExtTailEmpty
     PathExtTailMismatch
-
-    # Memory backend
-    MemBeVtxNotFound
-    MemBeKeyNotFound
 
     # Path/nibble/key conversions in `aisto_path.nim`
     PathExpected64Nibbles
@@ -132,6 +120,13 @@ type
     DelExtLocked
 
     # Save permanently, `save()`
-    BackendMissing
+    SaveBackendMissing
+
+    # Get functions form `aristo_get.nim`
+    GetLeafNotFound
+
+    # All backend and get functions form `aristo_get.nim`
+    GetVtxNotFound
+    GetKeyNotFound
 
 # End
