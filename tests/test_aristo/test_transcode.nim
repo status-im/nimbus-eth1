@@ -12,12 +12,14 @@
 ## Aristo (aka Patricia) DB trancoder test
 
 import
+  std/sequtils,
   eth/common,
   stew/byteutils,
   unittest2,
   ../../nimbus/db/kvstore_rocksdb,
   ../../nimbus/db/aristo/[
-    aristo_desc, aristo_debug, aristo_error, aristo_transcode, aristo_vid],
+    aristo_constants, aristo_desc, aristo_debug, aristo_error,
+    aristo_transcode, aristo_vid],
   "."/[test_aristo_cache, test_helpers]
 
 type
@@ -86,7 +88,7 @@ proc test_transcodeAccounts*(
       ) =
   ## Transcoder tests on accounts database
   var
-    adb = AristoDbRef()
+    adb = AristoDb(top: AristoLayerRef())
     count = -1
   for (n, key,value) in rocky.walkAllDb():
     if stopAfter < n:
@@ -106,7 +108,7 @@ proc test_transcodeAccounts*(
     # Provide DbRecord with dummy links and expanded payload. Registering the
     # node as vertex and re-converting it does the job
     var node = node0.updated(adb)
-    if node.isError:
+    if node.error != AristoError(0):
       check node.error == AristoError(0)
     else:
       case node.vType:
@@ -118,13 +120,13 @@ proc test_transcodeAccounts*(
       of aristo_desc.Extension:
         # key <-> vtx correspondence
         check node.key[0] == node0.key[0]
-        check not node.eVid.isZero
+        check node.eVid != VertexID(0)
       of aristo_desc.Branch:
         for n in 0..15:
           # key[n] <-> vtx[n] correspondence
           check node.key[n] == node0.key[n]
-          check node.key[n].isEmpty == node.bVid[n].isZero
-          if node.key[n].isEmpty != node.bVid[n].isZero:
+          if (node.key[n]==EMPTY_ROOT_KEY) != (node.bVid[n]==VertexID(0)):
+            check (node.key[n]==EMPTY_ROOT_KEY) == (node.bVid[n]==VertexID(0))
             echo ">>> node=", node.pp
 
     # This NIM object must match to the same RLP encoded byte stream
@@ -139,7 +141,7 @@ proc test_transcodeAccounts*(
     # NIM object <-> DbRecord mapping
     let dbr = node.blobify.getOrEmpty(noisy)
     var node1 = dbr.deblobify.asNode(adb)
-    if node1.isError:
+    if node1.error != AristoError(0):
       check node1.error == AristoError(0)
 
     block:
@@ -175,7 +177,7 @@ proc test_transcodeAccounts*(
 proc test_transcodeVidRecycleLists*(noisy = true; seed = 42) =
   ## Transcode VID lists held in `AristoDb` descriptor
   var td = TesterDesc.init seed
-  let db = AristoDbRef()
+  let db = AristoDb(top: AristoLayerRef())
 
   # Add some randum numbers
   block:
@@ -192,8 +194,8 @@ proc test_transcodeVidRecycleLists*(noisy = true; seed = 42) =
       expectedVids += (vid < first).ord
       db.vidDispose vid
 
-    check db.vGen.len == expectedVids
-    noisy.say "***", "vids=", db.vGen.len, " discarded=", count-expectedVids
+    check db.top.vGen.len == expectedVids
+    noisy.say "***", "vids=", db.top.vGen.len, " discarded=", count-expectedVids
 
   # Serialise/deserialise
   block:
@@ -201,32 +203,61 @@ proc test_transcodeVidRecycleLists*(noisy = true; seed = 42) =
 
     # Deserialise
     let db1 = block:
-      let rc = dbBlob.deblobify AristoDbRef
+      let rc = dbBlob.deblobify AristoDb
       if rc.isErr:
         check rc.isOk
-      rc.get(otherwise = AristoDbRef())
+      rc.get(otherwise = AristoDb(top: AristoLayerRef()))
 
-    check db.vGen == db1.vGen
+    check db.top.vGen == db1.top.vGen
 
   # Make sure that recycled numbers are fetched first
-  let topVid = db.vGen[^1]
-  while 1 < db.vGen.len:
+  let topVid = db.top.vGen[^1]
+  while 1 < db.top.vGen.len:
     let w = db.vidFetch()
     check w < topVid
-  check db.vGen.len == 1 and db.vGen[0] == topVid
+  check db.top.vGen.len == 1 and db.top.vGen[0] == topVid
 
   # Get some consecutive vertex IDs
   for n in 0 .. 5:
     let w = db.vidFetch()
     check w == topVid + n
-    check db.vGen.len == 1
+    check db.top.vGen.len == 1
 
   # Repeat last test after clearing the cache
-  db.vGen.setLen(0)
+  db.top.vGen.setLen(0)
   for n in 0 .. 5:
     let w = db.vidFetch()
-    check w == 1.VertexID + n
-    check db.vGen.len == 1
+    check w == VertexID(2) + n # VertexID(1) is default root ID
+    check db.top.vGen.len == 1
+
+  # Recycling and re-org tests
+  db.top.vGen = @[8, 7,  3, 4, 5,  9].mapIt(VertexID(it))
+  db.vidReorg()
+  check db.top.vGen == @[3, 4, 5, 7].mapIt(VertexID(it))
+
+  db.top.vGen = @[8, 7, 6,  3, 4, 5,  9].mapIt(VertexID(it))
+  db.vidReorg()
+  check db.top.vGen == @[3].mapIt(VertexID(it))
+
+  db.top.vGen = @[5, 4, 3,  7].mapIt(VertexID(it))
+  db.vidReorg()
+  check db.top.vGen == @[5, 4, 3,  7].mapIt(VertexID(it))
+
+  db.top.vGen = @[5].mapIt(VertexID(it))
+  db.vidReorg()
+  check db.top.vGen == @[5].mapIt(VertexID(it))
+
+  db.top.vGen = @[3, 5].mapIt(VertexID(it))
+  db.vidReorg()
+  check db.top.vGen == @[3, 5].mapIt(VertexID(it))
+
+  db.top.vGen = @[4, 5].mapIt(VertexID(it))
+  db.vidReorg()
+  check db.top.vGen == @[4].mapIt(VertexID(it))
+
+  db.top.vGen.setLen(0)
+  db.vidReorg()
+  check db.top.vGen.len == 0
 
 # ------------------------------------------------------------------------------
 # End

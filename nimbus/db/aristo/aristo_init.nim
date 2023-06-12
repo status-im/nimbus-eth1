@@ -23,23 +23,10 @@ import
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc init*(T: type AristoDbRef): T =
+proc init*(T: type AristoDb): T =
   ## Constructor with memory backend.
-  T(cascaded: false, backend: memoryBackend())
-
-proc init*(T: type AristoDbRef; db: T): T =
-  ## Cascaded constructor, a new layer is pushed and returned.
-  result = T(
-    cascaded: true,
-    lRoot:    db.lRoot,
-    vGen:     db.vGen,
-    stack:    db)
-  if db.cascaded:
-    result.level = db.level + 1
-    result.base = db.base
-  else:
-    result.level = 1
-    result.base = db
+  T(top:     AristoLayerRef(),
+    backend: memoryBackend())
 
 # ------------------------------------------------------------------------------
 # End

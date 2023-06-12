@@ -26,7 +26,8 @@ import
 # ------------------------------------------------------------------------------
 
 proc fwdWalkLeafsCompleteDB(
-    db: AristoDbRef;
+    db: AristoDb;
+    root: VertexID;
     tags: openArray[NodeTag];
     noisy: bool;
       ): tuple[visited: int, error:  AristoError] =
@@ -34,10 +35,10 @@ proc fwdWalkLeafsCompleteDB(
     tLen = tags.len
   var
     error = AristoError(0)
-    tag = (tags[0].u256 div 2).NodeTag
+    lky = LeafKey(root: root, path: NodeTag(tags[0].u256 div 2))
     n = 0
   while true:
-    let rc = tag.nearbyRight(db.lRoot, db) # , noisy)
+    let rc = lky.nearbyRight(db)
     #noisy.say "=================== ", n
     if rc.isErr:
       if rc.error != NearbyBeyondRange:
@@ -54,34 +55,35 @@ proc fwdWalkLeafsCompleteDB(
       error = AristoError(1)
       check n < tlen
       break
-    if rc.value != tags[n]:
+    if rc.value.path != tags[n]:
       noisy.say "***", "[", n, "/", tLen-1, "] fwd-walk -- leafs differ,",
         " got=", rc.value.pp(db),
         " wanted=", tags[n].pp(db) #, " db-dump\n    ", db.pp
       error = AristoError(1)
-      check rc.value == tags[n]
+      check rc.value.path == tags[n]
       break
-    if rc.value < high(NodeTag):
-      tag = (rc.value.u256 + 1).NodeTag
+    if rc.value.path < high(NodeTag):
+      lky.path = NodeTag(rc.value.path.u256 + 1)
     n.inc
 
   (n,error)
 
 
 proc revWalkLeafsCompleteDB(
-    db: AristoDbRef;
+    db: AristoDb;
+    root: VertexID;
     tags: openArray[NodeTag];
     noisy: bool;
-      ): tuple[visited: int, error:  AristoError] =
+      ): tuple[visited: int, error: AristoError] =
   let
     tLen = tags.len
   var
     error = AristoError(0)
     delta = ((high(UInt256) - tags[^1].u256) div 2)
-    tag = (tags[^1].u256 + delta).NodeTag
+    lky = LeafKey(root: root, path:  NodeTag(tags[^1].u256 + delta))
     n = tLen-1
   while true: # and false:
-    let rc = tag.nearbyLeft(db.lRoot, db) # , noisy)
+    let rc = lky.nearbyLeft(db)
     if rc.isErr:
       if rc.error != NearbyBeyondRange:
         noisy.say "***", "[", n, "/", tLen-1, "] rev-walk error=", rc.error
@@ -97,15 +99,15 @@ proc revWalkLeafsCompleteDB(
       error = AristoError(1)
       check 0 <= n
       break
-    if rc.value != tags[n]:
+    if rc.value.path != tags[n]:
       noisy.say "***", "[", n, "/", tLen-1, "] rev-walk -- leafs differ,",
         " got=", rc.value.pp(db),
         " wanted=", tags[n]..pp(db) #, " db-dump\n    ", db.pp
       error = AristoError(1)
-      check rc.value == tags[n]
+      check rc.value.path == tags[n]
       break
-    if low(NodeTag) < rc.value:
-      tag = (rc.value.u256 - 1).NodeTag
+    if low(NodeTag) < rc.value.path:
+      lky.path = NodeTag(rc.value.path.u256 - 1)
     n.dec
 
   (tLen-1 - n, error)
@@ -118,43 +120,56 @@ proc test_nearbyKvpList*(
     noisy: bool;
     list: openArray[ProofTrieData];
     resetDb = false;
-      ) =
+      ): bool =
   var
-    db = AristoDbRef()
+    db: AristoDb
+    rootKey = NodeKey.default
     tagSet: HashSet[NodeTag]
+    count = 0
   for n,w in list:
-    if resetDb:
-      db = AristoDbRef()
+    if resetDb or w.root != rootKey:
+      db.top = AristoLayerRef()
+      rootKey = w.root
       tagSet.reset
+      count = 0
+    count.inc
+
     let
       lstLen = list.len
-      lTabLen = db.lTab.len
-      leafs = w.kvpLst
+      lTabLen = db.top.lTab.len
+      leafs = w.kvpLst.mapRootVid VertexID(1) # merge into main trie
       added = db.merge leafs
 
-    check added.error == AristoError(0)
-    check db.lTab.len == lTabLen + added.merged
+    if added.error != AristoError(0):
+      check added.error == AristoError(0)
+      return
+
+    check db.top.lTab.len == lTabLen + added.merged
     check added.merged + added.dups == leafs.len
 
-    for w in leafs:
-      tagSet.incl w.pathTag
+    for kvp in leafs:
+      tagSet.incl kvp.leafKey.path
 
     let
       tags = tagSet.toSeq.sorted
-      fwdWalk = db.fwdWalkLeafsCompleteDB(tags, noisy=true)
-      revWalk = db.revWalkLeafsCompleteDB(tags, noisy=true)
+      rootVid = leafs[0].leafKey.root
+      fwdWalk = db.fwdWalkLeafsCompleteDB(rootVid, tags, noisy=true)
+      revWalk = db.revWalkLeafsCompleteDB(rootVid, tags, noisy=true)
 
     check fwdWalk.error == AristoError(0)
     check revWalk.error == AristoError(0)
     check fwdWalk == revWalk
 
     if {fwdWalk.error, revWalk.error} != {AristoError(0)}:
-      noisy.say "***", "<", n, "/", lstLen-1, "> db dump",
+      noisy.say "***", "<", n, "/", lstLen-1, ">",
+       " groups=", count, " db dump",
         "\n   post-state ", db.pp,
         "\n"
-      break
+      return
 
     #noisy.say "***", "sample ",n,"/",lstLen-1, " visited=", fwdWalk.visited
+
+  true
 
 # ------------------------------------------------------------------------------
 # End

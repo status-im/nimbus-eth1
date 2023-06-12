@@ -28,8 +28,6 @@ from web3/ethtypes import Quantity
 #from ../../../premix/downloader import request
 #from ../../../premix/parser import prefixHex, parseBlockHeader, parseReceipt, parseTransaction
 
-from eth/common import BlockHeader
-
 # Trying to do things the new web3 way:
 from ../../../nimbus_verified_proxy/validate_proof import getAccountFromProof
 
@@ -43,7 +41,7 @@ var fetchCounter*: int
 func toHash*(s: string): Hash256 {.raises: [ValueError].} =
   hexToPaddedByteArray[32](s).toHash
 
-func toHash*(h: BlockHash): Hash256 {.raises: [ValueError].} =
+func toHash*(h: BlockHash): Hash256 {.raises: [].} =
   distinctBase(h).toHash
 
 func toWeb3BlockHash*(h: Hash256): BlockHash =

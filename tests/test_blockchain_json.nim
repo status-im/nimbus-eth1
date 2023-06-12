@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  std/[json, os, tables, strutils, options, times],
+  std/[json, os, tables, strutils, options],
   unittest2,
   eth/rlp, eth/trie/trie_defs, eth/common/eth_types_rlp,
   stew/byteutils,
@@ -224,7 +224,7 @@ proc importBlock(tester: var Tester, com: CommonRef,
 
 proc applyFixtureBlockToChain(tester: var Tester, tb: var TestBlock,
                               com: CommonRef, checkSeal, validation: bool) =
-  decompose(tb.blockRLP, tb.header, tb.body)  
+  decompose(tb.blockRLP, tb.header, tb.body)
   tester.importBlock(com, tb, checkSeal, validation)
 
 func shouldCheckSeal(tester: Tester): bool =
@@ -268,8 +268,8 @@ proc runTester(tester: var Tester, com: CommonRef, testStatusIMPL: var TestStatu
             debugEcho "error message: ", res.error
             debugEcho "consensusType: ", com.consensus
 
-      except:
-        debugEcho "FATAL ERROR(WE HAVE BUG): ", getCurrentExceptionMsg()
+      except CatchableError as ex:
+        debugEcho "FATAL ERROR(WE HAVE BUG): ", ex.msg
 
     else:
       var noError = true

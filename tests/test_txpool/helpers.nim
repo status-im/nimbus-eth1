@@ -131,7 +131,7 @@ proc pp*(tx: Transaction): string =
     result &= ",gasLimit=" & tx.gasLimit.toKMG
   if tx.to.isSome:
     result &= ",to=" & tx.to.get.toXX
-  if tx.value != 0:
+  if tx.value.isZero.not:
     result &= ",value=" & tx.value.toKMG
   if 0 < tx.payload.len:
     result &= ",payload=" & tx.payload.toXX

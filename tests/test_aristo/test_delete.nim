@@ -30,6 +30,11 @@ type
 # Private helpers
 # ------------------------------------------------------------------------------
 
+proc sortedKeys(lTab: Table[LeafKey,VertexID]): seq[LeafKey] =
+  lTab.keys.toSeq.sorted(cmp = proc(a,b: LeafKey): int = cmp(a,b))
+
+# --------------
+
 proc posixPrngRand(state: var uint32): byte =
   ## POSIX.1-2001 example of a rand() implementation, see manual page rand(3).
   state = state * 1103515245 + 12345;
@@ -70,17 +75,18 @@ proc rand(td: var TesterDesc; top: int): int =
 # -----------------------
 
 proc fwdWalkVerify(
-    db: AristoDbRef;
+    db: AristoDb;
+    root: VertexID;
     noisy: bool;
       ): tuple[visited: int, error:  AristoError] =
   let
-    lTabLen = db.lTab.len
+    lTabLen = db.top.lTab.len
   var
     error = AristoError(0)
-    tag: NodeTag
+    lky = LeafKey(root: root)
     n = 0
   while n < lTabLen + 1:
-    let rc = tag.nearbyRight(db.lRoot, db) # , noisy)
+    let rc = lky.nearbyRight(db)
     #noisy.say "=================== ", n
     if rc.isErr:
       if rc.error != NearbyBeyondRange:
@@ -88,8 +94,8 @@ proc fwdWalkVerify(
         error = rc.error
         check rc.error == AristoError(0)
       break
-    if rc.value < high(NodeTag):
-      tag = (rc.value.u256 + 1).NodeTag
+    if rc.value.path < high(NodeTag):
+      lky.path = NodeTag(rc.value.path.u256 + 1)
     n.inc
 
   if error != AristoError(0):
@@ -108,13 +114,14 @@ proc fwdWalkVerify(
 proc test_delete*(
     noisy: bool;
     list: openArray[ProofTrieData];
-      ) =
+      ): bool =
   var td = TesterDesc.init 42
   for n,w in list:
     let
-      db = AristoDbRef()
+      db = AristoDb(top: AristoLayerRef())
       lstLen = list.len
-      added = db.merge w.kvpLst
+      leafs = w.kvpLst.mapRootVid VertexID(1) # merge into main trie
+      added = db.merge leafs
 
     if added.error != AristoError(0):
       check added.error == AristoError(0)
@@ -127,24 +134,24 @@ proc test_delete*(
     # Now `db` represents a (fully labelled) `Merkle Patricia Tree`
 
     # Provide a (reproducible) peudo-random copy of the leafs list
-    var leafs = db.lTab.keys.toSeq.mapIt(it.Uint256).sorted.mapIt(it.NodeTag)
-    if 2 < leafs.len:
-      for n in 0 ..< leafs.len-1:
-        let r = n + td.rand(leafs.len - n)
-        leafs[n].swap leafs[r]
+    var leafKeys = db.top.lTab.sortedKeys
+    if 2 < leafKeys.len:
+      for n in 0 ..< leafKeys.len-1:
+        let r = n + td.rand(leafKeys.len - n)
+        leafKeys[n].swap leafKeys[r]
 
-    let uMax = leafs.len - 1
-    for u,pathTag in leafs:
-      let rc = pathTag.delete(db) # , noisy=(tags.len < 2))
+    let uMax = leafKeys.len - 1
+    for u,leafKey in leafKeys:
+      let rc = leafKey.delete(db)
 
       if rc.isErr:
         check rc.error == (VertexID(0),AristoError(0))
         return
-      if pathTag in db.lTab:
-        check pathTag notin db.lTab
+      if leafKey in db.top.lTab:
+        check leafKey notin db.top.lTab
         return
-      if uMax != db.lTab.len + u:
-        check uMax == db.lTab.len + u
+      if uMax != db.top.lTab.len + u:
+        check uMax == db.top.lTab.len + u
         return
 
       # Walking the database is too slow for large tables. So the hope is that
@@ -152,12 +159,12 @@ proc test_delete*(
       const tailCheck = 999
       if uMax < u + tailCheck:
         if u < uMax:
-          let vfy = db.fwdWalkVerify(noisy)
+          let vfy = db.fwdWalkVerify(leafKey.root, noisy)
           if vfy.error != AristoError(0):
             check vfy == (0, AristoError(0))
             return
-        elif 0 < db.sTab.len:
-          check db.sTab.len == 0
+        elif 0 < db.top.sTab.len:
+          check db.top.sTab.len == 0
           return
         let rc = db.hashifyCheck(relax=true)
         if rc.isErr:
@@ -166,11 +173,12 @@ proc test_delete*(
 
       when true and false:
         if uMax < u + tailCheck or (u mod 777) == 3:
-          noisy.say "***", "step lTab=", db.lTab.len
+          noisy.say "***", "step lTab=", db.top.lTab.len
 
     when true and false:
       noisy.say "***", "sample <", n, "/", list.len-1, ">",
-        " lstLen=", w.kvpLst.len
+        " lstLen=", leafs.len
+  true
 
 # ------------------------------------------------------------------------------
 # End

@@ -57,7 +57,7 @@ proc branchNibbleMin*(vtx: VertexRef; minInx: int8): int8 =
   ## greater or equal the argument `nibble`.
   if vtx.vType == Branch:
     for n in minInx .. 15:
-      if not vtx.bVid[n].isZero:
+      if vtx.bVid[n] != VertexID(0):
         return n
   -1
 
@@ -66,7 +66,7 @@ proc branchNibbleMax*(vtx: VertexRef; maxInx: int8): int8 =
   ## less or equal the argument `nibble`.
   if vtx.vType == Branch:
     for n in maxInx.countDown 0:
-      if not vtx.bVid[n].isZero:
+      if vtx.bVid[n] != VertexID(0):
         return n
   -1
 
@@ -77,7 +77,7 @@ proc branchNibbleMax*(vtx: VertexRef; maxInx: int8): int8 =
 proc complete(
     hike: Hike;                         # Partially expanded chain of vertices
     vid: VertexID;                      # Start ID
-    db: AristoDbRef;                    # Database layer
+    db: AristoDb;                       # Database layer
     hikeLenMax: static[int];            # Beware of loops (if any)
     doLeast: static[bool];              # Direction: *least* or *most*
       ): Hike =
@@ -99,7 +99,7 @@ proc complete(
 
     of Extension:
       vid = vtx.eVid
-      if not vid.isZero:
+      if vid != VertexID(0):
         vtx = db.getVtx vid
         if not vtx.isNil:
           uHike.legs.add leg
@@ -124,7 +124,7 @@ proc complete(
 
 proc zeroAdjust(
     hike: Hike;                         # Partially expanded chain of vertices
-    db: AristoDbRef;                    # Database layer
+    db: AristoDb;                       # Database layer
     doLeast: static[bool];              # Direction: *least* or *most*
       ): Hike =
   ## Adjust empty argument path to the first node entry to the right. Ths
@@ -142,7 +142,7 @@ proc zeroAdjust(
     else:
       w.branchNibbleMax n
 
-  proc toHike(pfx: NibblesSeq, root: VertexID, db: AristoDbRef): Hike =
+  proc toHike(pfx: NibblesSeq, root: VertexID, db: AristoDb): Hike =
     when doLeast:
       pfx.pathPfxPad(0).hikeUp(root, db)
     else:
@@ -205,7 +205,7 @@ proc zeroAdjust(
 
 proc finalise(
     hike: Hike;                         # Partially expanded chain of vertices
-    db: AristoDbRef;                    # Database layer
+    db: AristoDb;                       # Database layer
     moveRight: static[bool];            # Direction of next vertex
       ): Hike =
   ## Handle some pathological cases after main processing failed
@@ -259,7 +259,7 @@ proc finalise(
 
 proc nearbyNext(
     hike: Hike;                         # Partially expanded chain of vertices
-    db: AristoDbRef;                    # Database layer
+    db: AristoDb;                       # Database layer
     hikeLenMax: static[int];            # Beware of loops (if any)
     moveRight: static[bool];            # Direction of next vertex
       ): Hike =
@@ -317,7 +317,7 @@ proc nearbyNext(
     # Look ahead checking next node
     if start:
       let vid = top.wp.vtx.bVid[top.nibble]
-      if vid.isZero:
+      if vid == VertexID(0):
         return Hike(error: NearbyDanglingLink) # error
 
       let vtx = db.getVtx vid
@@ -364,14 +364,13 @@ proc nearbyNext(
 
 
 proc nearbyNext(
-    baseTag: NodeTag;                   # Some `Patricia Trie` path
-    root: VertexID;                     # State root
-    db: AristoDbRef;                    # Database layer
+    lky: LeafKey;                       # Some `Patricia Trie` path
+    db: AristoDb;                       # Database layer
     hikeLenMax: static[int];            # Beware of loops (if any)
-    moveRight:static[ bool];            # Direction of next vertex
+    moveRight:static[bool];             # Direction of next vertex
       ): Result[NodeTag,AristoError] =
   ## Variant of `nearbyNext()`, convenience wrapper
-  let hike = baseTag.hikeUp(root,db).nearbyNext(db, hikeLenMax, moveRight)
+  let hike = lky.hikeUp(db).nearbyNext(db, hikeLenMax, moveRight)
   if hike.error != AristoError(0):
     return err(hike.error)
 
@@ -389,7 +388,7 @@ proc nearbyNext(
 
 proc nearbyRight*(
     hike: Hike;                         # Partially expanded chain of vertices
-    db: AristoDbRef;                    # Database layer
+    db: AristoDb;                       # Database layer
       ): Hike =
   ## Extends the maximally extended argument nodes `hike` to the right (i.e.
   ## with non-decreasing path value). This function does not backtrack if
@@ -403,17 +402,19 @@ proc nearbyRight*(
   hike.nearbyNext(db, 64, moveRight=true)
 
 proc nearbyRight*(
-    nodeTag: NodeTag;                   # Some `Patricia Trie` path
-    root: VertexID;                     # State root
-    db: AristoDbRef;                    # Database layer
-      ): Result[NodeTag,AristoError] =
+    lky: LeafKey;                       # Some `Patricia Trie` path
+    db: AristoDb;                       # Database layer
+      ): Result[LeafKey,AristoError] =
   ## Variant of `nearbyRight()` working with a `NodeTag` argument instead
   ## of a `Hike`.
-  nodeTag.nearbyNext(root, db, 64, moveRight=true)
+  let rc = lky.nearbyNext(db, 64, moveRight=true)
+  if rc.isErr:
+    return err(rc.error)
+  ok LeafKey(root: lky.root, path: rc.value)
 
 proc nearbyLeft*(
     hike: Hike;                         # Partially expanded chain of vertices
-    db: AristoDbRef;                    # Database layer
+    db: AristoDb;                       # Database layer
       ): Hike =
   ## Similar to `nearbyRight()`.
   ##
@@ -422,13 +423,15 @@ proc nearbyLeft*(
   hike.nearbyNext(db, 64, moveRight=false)
 
 proc nearbyLeft*(
-    nodeTag: NodeTag;                   # Some `Patricia Trie` path
-    root: VertexID;                     # State root
-    db: AristoDbRef;                    # Database layer
-      ): Result[NodeTag,AristoError] =
+    lky: LeafKey;                       # Some `Patricia Trie` path
+    db: AristoDb;                       # Database layer
+      ): Result[LeafKey,AristoError] =
   ## Similar to `nearbyRight()` for `NodeTag` argument instead
   ## of a `Hike`.
-  nodeTag.nearbyNext(root, db, 64, moveRight=false)
+  let rc = lky.nearbyNext(db, 64, moveRight=false)
+  if rc.isErr:
+    return err(rc.error)
+  ok LeafKey(root: lky.root, path: rc.value)
 
 # ------------------------------------------------------------------------------
 # Public debugging helpers
@@ -436,7 +439,7 @@ proc nearbyLeft*(
 
 proc nearbyRightMissing*(
     hike: Hike;                         # Partially expanded chain of vertices
-    db: AristoDbRef;                    # Database layer
+    db: AristoDb;                       # Database layer
       ): Result[bool,AristoError] =
   ## Returns `true` if the maximally extended argument nodes `hike` is the
   ## rightmost on the hexary trie database. It verifies that there is no more
@@ -464,7 +467,7 @@ proc nearbyRightMissing*(
     return err(NearbyBranchError)
 
   let vid = top.wp.vtx.bVid[top.nibble]
-  if vid.isZero:
+  if vid == VertexID(0):
     return err(NearbyDanglingLink) # error
 
   let vtx = db.getVtx vid

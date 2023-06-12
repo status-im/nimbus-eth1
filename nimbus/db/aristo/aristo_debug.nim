@@ -20,15 +20,26 @@ import
 # Ptivate functions
 # ------------------------------------------------------------------------------
 
-proc toPfx(indent: int): string =
-  "\n" & " ".repeat(indent)
+proc sortedKeys(lTab: Table[LeafKey,VertexID]): seq[LeafKey] =
+  lTab.keys.toSeq.sorted(cmp = proc(a,b: LeafKey): int = cmp(a,b))
 
-proc keyVidUpdate(db: AristoDbRef, key: NodeKey, vid: VertexID): string =
-  if not key.isEmpty and
-     not vid.isZero and
-     not db.isNil:
-    block:
-      let keyVid = db.pAmk.getOrDefault(key, VertexID(0))
+proc sortedKeys(kMap: Table[VertexID,NodeKey]): seq[VertexID] =
+  kMap.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID)
+
+proc sortedKeys(sTab: Table[VertexID,VertexRef]): seq[VertexID] =
+  sTab.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID)
+
+proc sortedKeys(pPrf: HashSet[VertexID]): seq[VertexID] =
+  pPrf.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID)
+
+proc toPfx(indent: int; offset = 0): string =
+  if 0 < indent: "\n" & " ".repeat(indent+offset) else: ""
+
+proc keyVidUpdate(db: var AristoDb, key: NodeKey, vid: VertexID): string =
+  if key != EMPTY_ROOT_KEY and
+     vid != VertexID(0):
+    if not db.top.isNil:
+      let keyVid = db.top.pAmk.getOrDefault(key, VertexID(0))
       if keyVid != VertexID(0):
         if keyVid != vid:
           result = "(!)"
@@ -57,20 +68,17 @@ proc squeeze(s: string; hex = false; ignLen = false): string =
     result &= ".." & s[s.len-16 .. ^1]
 
 proc stripZeros(a: string): string =
-  for n in 0 ..< a.len:
-    if a[n] != '0':
-      return a[n .. ^1]
-  return a
+  a.strip(leading=true, trailing=false, chars={'0'}).toLowerAscii
 
 proc ppVid(vid: VertexID): string =
-  if vid.isZero: "ø" else: "$" & vid.uint64.toHex.stripZeros.toLowerAscii
+  if vid == VertexID(0): "ø"
+  else: "$" & vid.uint64.toHex.stripZeros.toLowerAscii
 
-proc vidCode(key: NodeKey, db: AristoDbRef): uint64 =
-  if not db.isNil and
-     key != EMPTY_ROOT_KEY and
+proc vidCode(key: NodeKey, db: AristoDb): uint64 =
+  if key != EMPTY_ROOT_KEY and
      key != EMPTY_CODE_KEY:
-    block:
-      let vid = db.pAmk.getOrDefault(key, VertexID(0))
+    if not db.top.isNil:
+      let vid = db.top.pAmk.getOrDefault(key, VertexID(0))
       if vid != VertexID(0):
         return vid.uint64
     block:
@@ -78,7 +86,7 @@ proc vidCode(key: NodeKey, db: AristoDbRef): uint64 =
       if vid != VertexID(0):
         return vid.uint64
 
-proc ppKey(key: NodeKey, db: AristoDbRef): string =
+proc ppKey(key: NodeKey, db: AristoDb): string =
   if key == NodeKey.default:
     return "£ø"
   if key == EMPTY_ROOT_KEY:
@@ -86,38 +94,49 @@ proc ppKey(key: NodeKey, db: AristoDbRef): string =
   if key == EMPTY_CODE_KEY:
     return "£c"
 
-  if not db.isNil:
-    block:
-      let vid = db.pAmk.getOrDefault(key, VertexID(0))
-      if vid != VertexID(0):
-        return "£" & vid.uint64.toHex.stripZeros.toLowerAscii
-    block:
-      let vid = db.xMap.getOrDefault(key, VertexID(0))
-      if vid != VertexID(0):
-        return "£" & vid.uint64.toHex.stripZeros.toLowerAscii
+  if not db.top.isNil:
+    let vid = db.top.pAmk.getOrDefault(key, VertexID(0))
+    if vid != VertexID(0):
+      return "£" & vid.uint64.toHex.stripZeros.toLowerAscii
+  block:
+    let vid = db.xMap.getOrDefault(key, VertexID(0))
+    if vid != VertexID(0):
+      return "£" & vid.uint64.toHex.stripZeros.toLowerAscii
 
   "%" & key.ByteArray32
            .mapIt(it.toHex(2)).join.tolowerAscii
            .squeeze(hex=true,ignLen=true)
 
-proc ppRootKey(a: NodeKey, db: AristoDbRef): string =
+proc ppRootKey(a: NodeKey, db: AristoDb): string =
   if a != EMPTY_ROOT_KEY:
     return a.ppKey(db)
 
-proc ppCodeKey(a: NodeKey, db: AristoDbRef): string =
+proc ppCodeKey(a: NodeKey, db: AristoDb): string =
   if a != EMPTY_CODE_KEY:
     return a.ppKey(db)
 
-proc ppPathTag(tag: NodeTag, db: AristoDbRef): string =
+proc ppPathTag(tag: NodeTag, db: AristoDb): string =
   ## Raw key, for referenced key dump use `key.pp(db)` below
-  if not db.isNil:
-    let vid =  db.lTab.getOrDefault(tag, VertexID(0))
+  if not db.top.isNil:
+    let
+      lky = LeafKey(root: VertexID(1), path: tag)
+      vid =  db.top.lTab.getOrDefault(lky, VertexID(0))
     if vid != VertexID(0):
       return "@" & vid.ppVid
 
   "@" & tag.to(NodeKey).ByteArray32
-           .mapIt(it.toHex(2)).join.toLowerAscii
-           .squeeze(hex=true,ignLen=true)
+           .mapIt(it.toHex(2)).join.squeeze(hex=true,ignLen=true)
+
+proc ppLeafKey(lky: LeafKey, db: AristoDb): string =
+  ## Raw key, for referenced key dump use `key.pp(db)` below
+  if not db.top.isNil:
+    let vid =  db.top.lTab.getOrDefault(lky, VertexID(0))
+    if vid != VertexID(0):
+      return "@" & vid.ppVid
+
+  "@" & ($lky.root.uint64.toHex).stripZeros & ":" &
+    lky.path.to(NodeKey).ByteArray32
+            .mapIt(it.toHex(2)).join.squeeze(hex=true,ignLen=true)
 
 proc ppPathPfx(pfx: NibblesSeq): string =
   let s = $pfx
@@ -126,7 +145,7 @@ proc ppPathPfx(pfx: NibblesSeq): string =
 proc ppNibble(n: int8): string =
   if n < 0: "ø" elif n < 10: $n else: n.toHex(1).toLowerAscii
 
-proc ppPayload(p: PayloadRef, db: AristoDbRef): string =
+proc ppPayload(p: PayloadRef, db: AristoDb): string =
   if p.isNil:
     result = "n/a"
   else:
@@ -140,11 +159,13 @@ proc ppPayload(p: PayloadRef, db: AristoDbRef): string =
       result &= p.account.storageRoot.to(NodeKey).ppRootKey(db) & ","
       result &= p.account.codeHash.to(NodeKey).ppCodeKey(db) & ")"
 
-proc ppVtx(nd: VertexRef, db: AristoDbRef, vid: VertexID): string =
+proc ppVtx(nd: VertexRef, db: AristoDb, vid: VertexID): string =
   if nd.isNil:
     result = "n/a"
   else:
-    if db.isNil or vid.isZero or vid in db.pPrf:
+    if db.top.isNil or vid == VertexID(0) or vid in db.top.pPrf:
+      result = ["L(", "X(", "B("][nd.vType.ord]
+    elif vid in db.top.kMap:
       result = ["l(", "x(", "b("][nd.vType.ord]
     else:
       result = ["ł(", "€(", "þ("][nd.vType.ord]
@@ -155,14 +176,14 @@ proc ppVtx(nd: VertexRef, db: AristoDbRef, vid: VertexID): string =
       result &= nd.ePfx.ppPathPfx & "," & nd.eVid.ppVid
     of Branch:
       for n in 0..15:
-        if not nd.bVid[n].isZero:
+        if nd.bVid[n] != VertexID(0):
           result &= nd.bVid[n].ppVid
         if n < 15:
           result &= ","
     result &= ")"
 
 proc ppXMap*(
-    db: AristoDbRef;
+    db: AristoDb;
     kMap: Table[VertexID,NodeKey];
     pAmk: Table[NodeKey,VertexID];
     indent: int;
@@ -193,7 +214,7 @@ proc ppXMap*(
     s & "),"
 
   var cache: seq[(uint64,uint64,bool)]
-  for vid in toSeq(kMap.keys).mapIt(it.uint64).sorted.mapIt(it.VertexID):
+  for vid in kMap.sortedKeys:
     let key = kMap.getOrDefault(vid, EMPTY_ROOT_KEY)
     if key != EMPTY_ROOT_KEY:
       cache.add (vid.uint64, key.vidCode(db), 0 < dups.getOrDefault(vid, 0))
@@ -206,7 +227,7 @@ proc ppXMap*(
   result = "{"
   if 0 < cache.len:
     let
-      pfx = indent.toPfx
+      pfx = indent.toPfx(1)
     var
       (i, r) = (0, cache[0])
     result &= cache[i][0].ppNtry
@@ -217,13 +238,13 @@ proc ppXMap*(
       if r != w or w[2]:
         if i+1 != n:
           result &= ".. " & cache[n-1][0].ppNtry
-        result &= pfx & " " & cache[n][0].ppNtry
+        result &= pfx & cache[n][0].ppNtry
         (i, r) = (n, w)
     if i < cache.len - 1:
       if i+1 != cache.len - 1:
         result &= ".. "
       else:
-        result &= pfx & " "
+        result &= pfx
       result &= cache[^1][0].ppNtry
     result[^1] = '}'
   else:
@@ -233,10 +254,9 @@ proc ppXMap*(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc keyToVtxID*(db: AristoDbRef, key: NodeKey): VertexID =
+proc keyToVtxID*(db: var AristoDb, key: NodeKey): VertexID =
   ## Associate a vertex ID with the argument `key` for pretty printing.
-  if not db.isNil and
-     key != EMPTY_ROOT_KEY and
+  if key != EMPTY_ROOT_KEY and
      key != EMPTY_CODE_KEY:
     let vid = db.xMap.getOrDefault(key, VertexID(0))
     if vid != VertexID(0):
@@ -245,11 +265,14 @@ proc keyToVtxID*(db: AristoDbRef, key: NodeKey): VertexID =
       result = db.vidFetch()
       db.xMap[key] = result
 
-proc pp*(vid: NodeKey, db = AristoDbRef(nil)): string =
+proc pp*(vid: NodeKey, db = AristoDb()): string =
   vid.ppKey(db)
 
-proc pp*(tag: NodeTag, db = AristoDbRef(nil)): string =
+proc pp*(tag: NodeTag, db = AristoDb()): string =
   tag.ppPathTag(db)
+
+proc pp*(lky: LeafKey, db = AristoDb()): string =
+  lky.ppLeafKey(db)
 
 proc pp*(vid: VertexID): string =
   vid.ppVid
@@ -257,16 +280,16 @@ proc pp*(vid: VertexID): string =
 proc pp*(vid: openArray[VertexID]): string =
   "[" & vid.mapIt(it.ppVid).join(",") & "]"
 
-proc pp*(p: PayloadRef, db = AristoDbRef(nil)): string =
+proc pp*(p: PayloadRef, db = AristoDb()): string =
   p.ppPayload(db)
 
-proc pp*(nd: VertexRef, db = AristoDbRef(nil)): string =
+proc pp*(nd: VertexRef, db = AristoDb()): string =
   nd.ppVtx(db, VertexID(0))
 
-proc pp*(nd: NodeRef, db = AristoDbRef(nil)): string =
+proc pp*(nd: NodeRef, db: var AristoDB): string =
   if nd.isNil:
     result = "n/a"
-  elif nd.isError:
+  elif nd.error != AristoError(0):
     result = "(!" & $nd.error
   else:
     result = ["L(", "X(", "B("][nd.vType.ord]
@@ -282,158 +305,104 @@ proc pp*(nd: NodeRef, db = AristoDbRef(nil)): string =
     of Branch:
       result &= "["
       for n in 0..15:
-        if not nd.bVid[n].isZero or nd.key[n] != EMPTY_ROOT_KEY:
+        if nd.bVid[n] != VertexID(0) or nd.key[n] != EMPTY_ROOT_KEY:
           result &= nd.bVid[n].ppVid
         result &= db.keyVidUpdate(nd.key[n], nd.bVid[n]) & ","
       result[^1] = ']'
 
       result &= ",["
       for n in 0..15:
-        if not nd.bVid[n].isZero or nd.key[n] != EMPTY_ROOT_KEY:
+        if nd.bVid[n] != VertexID(0) or nd.key[n] != EMPTY_ROOT_KEY:
           result &= nd.key[n].ppKey(db)
         result &= ","
       result[^1] = ']'
   result &= ")"
 
-proc pp*(
-    sTab: Table[VertexID,VertexRef];
-    db = AristoDbRef(nil);
-    indent = 4;
-      ): string =
-  let pfx = indent.toPfx
-  var first = true
-  result = "{"
-  for vid in toSeq(sTab.keys).mapIt(it.uint64).sorted.mapIt(it.VertexID):
-    let vtx = sTab.getOrDefault(vid, VertexRef(nil))
-    if vtx != VertexRef(nil):
-      if first:
-        first = false
-      else:
-        result &= pfx & " "
-      result &= "(" & vid.ppVid & "," & vtx.ppVtx(db,vid) & ")"
-  result &= "}"
+proc pp*(nd: NodeRef): string =
+  var db = AristoDB()
+  nd.pp(db)
 
-proc pp*(
-    lTab: Table[NodeTag,VertexID];
-    indent = 4;
-      ): string =
-  let pfx = indent.toPfx
-  var first = true
-  result = "{"
-  for tag in toSeq(lTab.keys).mapIt(it.UInt256).sorted.mapIt(it.NodeTag):
-    let vid = lTab.getOrDefault(tag, VertexID(0))
-    if vid != VertexID(0):
-      if first:
-        first = false
-      else:
-        result &= pfx & " "
-      result &= "(" & tag.ppPathTag(nil) & "," & vid.ppVid & ")"
-  result &= "}"
+proc pp*(sTab: Table[VertexID,VertexRef]; db = AristoDb(); indent = 4): string =
+  "{" & sTab.sortedKeys
+            .mapIt((it, sTab.getOrDefault(it, VertexRef(nil))))
+            .filterIt(it[1] != VertexRef(nil))
+            .mapIt("(" & it[0].ppVid & "," & it[1].ppVtx(db,it[0]) & ")")
+            .join("," & indent.toPfx(1)) & "}"
+
+proc pp*(lTab: Table[LeafKey,VertexID]; indent = 4): string =
+  var db = AristoDb()
+  "{" & lTab.sortedKeys
+            .mapIt((it, lTab.getOrDefault(it, VertexID(0))))
+            .filterIt(it[1] != VertexID(0))
+            .mapIt("(" & it[0].ppLeafKey(db) & "," & it[1].ppVid & ")")
+            .join("," & indent.toPfx(1)) & "}"
 
 proc pp*(vGen: seq[VertexID]): string =
-  result = "["
-  for vid in vGen:
-    result &= vid.ppVid & ","
-  if result[^1] == ',':
-    result[^1] = ']'
-  else:
-    result &= "]"
+  "[" & vGen.mapIt(it.ppVid).join(",") & "]"
 
 proc pp*(pPrf: HashSet[VertexID]): string =
-  result = "{"
-  for vid in pPrf.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID):
-    result &= vid.ppVid & ","
-  if result[^1] == ',':
-    result[^1] = '}'
-  else:
-    result &= "}"
+  "{" & pPrf.sortedKeys.mapIt(it.ppVid).join(",") & "}"
 
-proc pp*(
-    leg: Leg;
-    db = AristoDbRef(nil);
-      ): string =
-  result = " (" & leg.wp.vid.ppVid & ","
-  if not db.isNil:
-    let key = db.kMap.getOrDefault(leg.wp.vid, EMPTY_ROOT_KEY)
-    if key != EMPTY_ROOT_KEY:
-      result &= key.ppKey(db)
-    else:
-      result &= "ø"
+proc pp*(leg: Leg; db = AristoDb()): string =
+  result = "(" & leg.wp.vid.ppVid & ","
+  if not db.top.isNil:
+    let key = db.top.kMap.getOrDefault(leg.wp.vid, EMPTY_ROOT_KEY)
+    result &= (if key != EMPTY_ROOT_KEY: key.ppKey(db) else: "ø")
   result &= "," & $leg.nibble.ppNibble & "," & leg.wp.vtx.pp(db) & ")"
 
-proc pp*(
-    hike: Hike;
-    db = AristoDbRef(nil);
-    indent = 4;
-      ): string =
-  let pfx = indent.toPfx
-  var first = true
-  result = "[(" & hike.root.ppVid & ")"
-  for leg in hike.legs:
-    result &= "," & pfx & leg.pp(db)
-  result &= "," & pfx & " (" & hike.tail.ppPathPfx & ")"
+proc pp*(hike: Hike; db = AristoDb(); indent = 4): string =
+  let pfx = indent.toPfx(1)
+  result = "["
+  if hike.legs.len == 0:
+    result &= "(" & hike.root.ppVid & ")"
+  else:
+    if hike.legs[0].wp.vid != hike.root:
+      result &= "(" & hike.root.ppVid & ")" & pfx
+    result &= hike.legs.mapIt(it.pp(db)).join(pfx)
+  result &= pfx & "(" & hike.tail.ppPathPfx & ")"
   if hike.error != AristoError(0):
-    result &= "," & pfx & " (" & $hike.error & ")"
+    result &= pfx & "(" & $hike.error & ")"
   result &= "]"
 
-proc pp*(
-    kMap: Table[VertexID,NodeKey];
-    db = AristoDbRef(nil);
-    indent = 4;
-      ): string =
-  let pfx = indent.toPfx
-  var first = true
-  result = "{"
-  for vid in toSeq(kMap.keys).mapIt(it.uint64).sorted.mapIt(it.VertexID):
-    let key = kMap.getOrDefault(vid, EMPTY_ROOT_KEY)
-    if key != EMPTY_ROOT_KEY:
-      if first:
-        first = false
-      else:
-        result &= pfx & " "
-      result &= "(" & vid.ppVid & "," & key.ppKey(db) & "),"
-  if result[^1] == ',':
-    result[^1] = '}'
-  else:
-    result &= "}"
+proc pp*(kMap: Table[VertexID,NodeKey]; indent = 4): string =
+  var db: AristoDb
+  "{" & kMap.sortedKeys
+            .mapIt((it,kMap.getOrDefault(it, EMPTY_ROOT_KEY)))
+            .filterIt(it[1] != EMPTY_ROOT_KEY)
+            .mapIt("(" & it[0].ppVid & "," & it[1].ppKey(db) & ")")
+            .join("," & indent.toPfx(1)) & "}"
 
-proc pp*(
-    pAmk: Table[NodeKey,VertexID];
-    db = AristoDbRef(nil);
-    indent = 4;
-      ): string =
-  let pfx = indent.toPfx
+proc pp*(pAmk: Table[NodeKey,VertexID]; indent = 4): string =
   var
+    db: AristoDb
     rev = pAmk.pairs.toSeq.mapIt((it[1],it[0])).toTable
-    first = true
-  result = "{"
-  for vid in rev.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID):
-    let key = rev.getOrDefault(vid, EMPTY_ROOT_KEY)
-    if key != EMPTY_ROOT_KEY:
-      if first:
-        first = false
-      else:
-        result &= pfx & " "
-      result &= "(" & key.ppKey(db) & "," & vid.ppVid & "),"
-  if result[^1] == ',':
-    result[^1] = '}'
-  else:
-    result &= "}"
+  "{" & rev.sortedKeys
+           .mapIt((it,rev.getOrDefault(it, EMPTY_ROOT_KEY)))
+           .filterIt(it[1] != EMPTY_ROOT_KEY)
+           .mapIt("(" & it[1].ppKey(db) & "," & it[0].ppVid & ")")
+           .join("," & indent.toPfx(1)) & "}"
+
+proc pp*(kMap: Table[VertexID,NodeKey]; db: AristoDb; indent = 4): string =
+  db.ppXMap(kMap, db.top.pAmk, indent)
+
+proc pp*(pAmk: Table[NodeKey,VertexID]; db: AristoDb; indent = 4): string =
+  db.ppXMap(db.top.kMap, pAmk, indent)
 
 # ---------------------
 
 proc pp*(
-    db: AristoDbRef;
+    db: AristoDb;
     sTabOk = true;
     lTabOk = true;
     kMapOk = true;
+    dKeyOk = true;
     pPrfOk = true;
     indent = 4;
       ): string =
   let
     pfx1 = max(indent-1,0).toPfx
     pfx2 = indent.toPfx
-    labelOk = 1 < sTabOk.ord + lTabOk.ord + kMapOk.ord + pPrfOk.ord
+    labelOk = 1 < sTabOk.ord + lTabOk.ord + kMapOk.ord + dKeyOk.ord + pPrfOk.ord
   var
     pfy1 = ""
     pfy2 = ""
@@ -448,18 +417,22 @@ proc pp*(
       pfy2 = pfx2
     rc
 
-  if sTabOk:
-    let info = "sTab(" & $db.sTab.len & ")"
-    result &= info.doPrefix & db.sTab.pp(db,indent)
-  if lTabOk:
-    let info = "lTab(" & $db.lTab.len & "),root=" & db.lRoot.ppVid
-    result &= info.doPrefix & db.lTab.pp(indent)
-  if kMapOk:
-    let info = "kMap(" & $db.kMap.len & "," & $db.pAmk.len & ")"
-    result &= info.doPrefix & db.ppXMap(db.kMap,db.pAmk,indent)
-  if pPrfOk:
-    let info = "pPrf(" & $db.pPrf.len & ")"
-    result &= info.doPrefix & db.pPrf.pp
+  if not db.top.isNil:
+    if sTabOk:
+      let info = "sTab(" & $db.top.sTab.len & ")"
+      result &= info.doPrefix & db.top.sTab.pp(db,indent)
+    if lTabOk:
+      let info = "lTab(" & $db.top.lTab.len & ")"
+      result &= info.doPrefix & db.top.lTab.pp(indent)
+    if kMapOk:
+      let info = "kMap(" & $db.top.kMap.len & "," & $db.top.pAmk.len & ")"
+      result &= info.doPrefix & db.ppXMap(db.top.kMap,db.top.pAmk,indent)
+    if dKeyOk:
+      let info = "dKey(" & $db.top.dkey.len & ")"
+      result &= info.doPrefix & db.top.dKey.pp
+    if pPrfOk:
+      let info = "pPrf(" & $db.top.pPrf.len & ")"
+      result &= info.doPrefix & db.top.pPrf.pp
 
 # ------------------------------------------------------------------------------
 # End

@@ -230,7 +230,7 @@ proc exec(ctx: var TransContext,
     if rc.isErr:
       rejected.add RejectedTx(
         index: txIndex,
-        error: "processTransaction failed"
+        error: rc.error
       )
       continue
 

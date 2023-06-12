@@ -5,8 +5,10 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import  unittest2, eth/trie/[hexary, db],
-        ../nimbus/db/state_db, stew/[byteutils, endians2], eth/common
+import
+  unittest2,
+  ../nimbus/db/state_db,
+  stew/[byteutils, endians2]
 
 include ../nimbus/db/accounts_cache
 

@@ -42,62 +42,46 @@
 {.push raises: [].}
 
 import
-  std/[algorithm, sequtils, sets, tables],
+  std/[sets, tables],
   chronicles,
   eth/common,
   stew/results,
-  ./aristo_debug,
-  "."/[aristo_constants, aristo_desc, aristo_error, aristo_get, aristo_hike,
-       aristo_transcode]
+  "."/[aristo_constants, aristo_debug, aristo_desc, aristo_error, aristo_get,
+       aristo_hike, aristo_transcode, aristo_vid]
 
 logScope:
   topics = "aristo-hashify"
 
 # ------------------------------------------------------------------------------
-# Private helper, debugging
-# ------------------------------------------------------------------------------
-
-proc pp(t: Table[VertexID,VertexID]): string =
-  result = "{"
-  for a in toSeq(t.keys).mapIt(it.uint64).sorted.mapIt(it.VertexID):
-    let b = t.getOrDefault(a, VertexID(0))
-    if b != VertexID(0):
-      result &= "(" & a.pp & "," & b.pp & "),"
-  if result[^1] == ',':
-    result[^1] = '}'
-  else:
-    result &= "}"
-
-# ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc toNode(vtx: VertexRef; db: AristoDbRef): Result[NodeRef,void] =
+proc toNode(vtx: VertexRef; db: AristoDb): Result[NodeRef,void] =
   case vtx.vType:
   of Leaf:
     return ok NodeRef(vType: Leaf, lPfx: vtx.lPfx, lData: vtx.lData)
   of Branch:
     let node = NodeRef(vType: Branch, bVid: vtx.bVid)
     for n in 0 .. 15:
-      if vtx.bVid[n].isZero:
+      if vtx.bVid[n] == VertexID(0):
         node.key[n] = EMPTY_ROOT_KEY
       else:
-        let key = db.kMap.getOrDefault(vtx.bVid[n], EMPTY_ROOT_KEY)
+        let key = db.getKey vtx.bVid[n]
         if key != EMPTY_ROOT_KEY:
           node.key[n] = key
           continue
         return err()
     return ok node
   of Extension:
-    if not vtx.eVid.isZero:
-      let key = db.kMap.getOrDefault(vtx.eVid, EMPTY_ROOT_KEY)
+    if vtx.eVid != VertexID(0):
+      let key = db.getKey vtx.eVid
       if key != EMPTY_ROOT_KEY:
         let node = NodeRef(vType: Extension, ePfx: vtx.ePfx, eVid: vtx.eVid)
         node.key[0] = key
         return ok node
 
 proc leafToRootHasher(
-    db: AristoDbRef;                   # Database, top layer
+    db: AristoDb;                      # Database, top layer
     hike: Hike;                        # Hike for labelling leaf..root
       ): Result[int,(VertexID,AristoError)] =
   ## Returns the index of the first node that could not be hashed
@@ -107,19 +91,20 @@ proc leafToRootHasher(
       rc = wp.vtx.toNode db
     if rc.isErr:
       return ok n
+
     # Vertices marked proof nodes need not be checked
-    if wp.vid in db.pPrf:
+    if wp.vid in db.top.pPrf:
       continue
 
     # Check against existing key, or store new key
-    let key = rc.value.encode.digestTo(NodeKey)
-    let vfyKey = db.kMap.getOrDefault(wp.vid, EMPTY_ROOT_KEY)
-    if vfyKey == EMPTY_ROOT_KEY:
-      db.pAmk[key] = wp.vid
-      db.kMap[wp.vid] = key
-    elif key != vfyKey:
+    let
+      key = rc.value.encode.digestTo(NodeKey)
+      vfy = db.getKey wp.vid
+    if vfy == EMPTY_ROOT_KEY:
+      db.vidAttach(key, wp.vid)
+    elif key != vfy:
       let error = HashifyExistingHashMismatch
-      debug "hashify failed", vid=wp.vid, key, expected=vfyKey, error
+      debug "hashify failed", vid=wp.vid, key, expected=vfy, error
       return err((wp.vid,error))
 
   ok -1 # all could be hashed
@@ -129,44 +114,48 @@ proc leafToRootHasher(
 # ------------------------------------------------------------------------------
 
 proc hashifyClear*(
-    db: AristoDbRef;                   # Database, top layer
+    db: AristoDb;                      # Database, top layer
     locksOnly = false;                 # If `true`, then clear only proof locks
       ) =
-  ## Clear all `Merkle` hashes from the argument database layer `db`.
+  ## Clear all `Merkle` hashes from the  `db` argument database top layer.
   if not locksOnly:
-    db.pAmk.clear
-    db.kMap.clear
-  db.pPrf.clear
+    db.top.pAmk.clear
+    db.top.kMap.clear
+    db.top.dKey.clear
+  db.top.pPrf.clear
 
 
 proc hashify*(
-    db: AristoDbRef;                   # Database, top layer
-    rootKey = EMPTY_ROOT_KEY;          # Optional root key
-      ): Result[NodeKey,(VertexID,AristoError)] =
+    db: AristoDb;                      # Database, top layer
+      ): Result[HashSet[VertexID],(VertexID,AristoError)] =
   ## Add keys to the  `Patricia Trie` so that it becomes a `Merkle Patricia
   ## Tree`. If successful, the function returns the key (aka Merkle hash) of
   ## the root vertex.
   var
-    thisRootKey = EMPTY_ROOT_KEY
+    roots: HashSet[VertexID]
+    completed: HashSet[VertexID]
 
     # Width-first leaf-to-root traversal structure
     backLink: Table[VertexID,VertexID]
     downMost: Table[VertexID,VertexID]
 
-  for (pathTag,vid) in db.lTab.pairs:
-    let hike = pathTag.hikeUp(db.lRoot,db)
+  for (lky,vid) in db.top.lTab.pairs:
+    let hike = lky.hikeUp(db)
     if hike.error != AristoError(0):
-      return err((VertexID(0),hike.error))
+      return err((hike.root,hike.error))
+
+    roots.incl hike.root
 
     # Hash as much of the `hike` as possible
     let n = block:
-      let rc = db.leafToRootHasher hike
+      let rc = db.leafToRootHasher(hike)
       if rc.isErr:
         return err(rc.error)
       rc.value
 
     if 0 < n:
-      # Backtrack and register remaining nodes
+      # Backtrack and register remaining nodes. Note that in case *n == 0*, the
+      # root vertex has not been fully resolved yet.
       #
       # hike.legs: (leg[0], leg[1], .., leg[n-1], leg[n], ..)
       #               |       |           |          |
@@ -178,25 +167,15 @@ proc hashify*(
       for u in (n-1).countDown(1):
         backLink[hike.legs[u].wp.vid] = hike.legs[u-1].wp.vid
 
-    elif thisRootKey == EMPTY_ROOT_KEY:
-      let rootVid = hike.legs[0].wp.vid
-      thisRootKey = db.kMap.getOrDefault(rootVid, EMPTY_ROOT_KEY)
-
-      if thisRootKey != EMPTY_ROOT_KEY:
-        if rootKey != EMPTY_ROOT_KEY and rootKey != thisRootKey:
-          return err((rootVid, HashifyRootHashMismatch))
-
-        if db.lRoot == VertexID(0):
-          db.lRoot = rootVid
-        elif db.lRoot != rootVid:
-          return err((rootVid,HashifyRootVidMismatch))
+    elif n < 0:
+      completed.incl hike.root
 
   # At least one full path leaf..root should have succeeded with labelling
-  if thisRootKey == EMPTY_ROOT_KEY:
+  # for each root.
+  if completed.len < roots.len:
     return err((VertexID(0),HashifyLeafToRootAllFailed))
 
   # Update remaining hashes
-  var n = 0 # for logging
   while 0 < downMost.len:
     var
       redo: Table[VertexID,VertexID]
@@ -217,10 +196,9 @@ proc hashify*(
         let nodeKey = rc.value.encode.digestTo(NodeKey)
 
         # Update Merkle hash (aka `nodeKey`)
-        let fromKey = db.kMap.getOrDefault(fromVid, EMPTY_ROOT_KEY)
+        let fromKey = db.top.kMap.getOrDefault(fromVid, EMPTY_ROOT_KEY)
         if fromKey == EMPTY_ROOT_KEY:
-          db.pAmk[nodeKey] = fromVid
-          db.kMap[fromVid] = nodeKey
+          db.vidAttach(nodeKey, fromVid)
         elif nodeKey != fromKey:
           let error = HashifyExistingHashMismatch
           debug "hashify failed", vid=fromVid, key=nodeKey,
@@ -244,39 +222,39 @@ proc hashify*(
       backLink.del vid
     downMost = redo
 
-  ok thisRootKey
+  ok completed
 
 # ------------------------------------------------------------------------------
 # Public debugging functions
 # ------------------------------------------------------------------------------
 
 proc hashifyCheck*(
-    db: AristoDbRef;                   # Database, top layer
+    db: AristoDb;                      # Database, top layer
     relax = false;                     # Check existing hashes only
       ): Result[void,(VertexID,AristoError)] =
   ## Verify that the Merkle hash keys are either completely missing or
   ## match all known vertices on the argument database layer `db`.
   if not relax:
-    for (vid,vtx) in db.sTab.pairs:
+    for (vid,vtx) in db.top.sTab.pairs:
       let rc = vtx.toNode(db)
       if rc.isErr:
         return err((vid,HashifyCheckVtxIncomplete))
 
-      let key = db.kMap.getOrDefault(vid, EMPTY_ROOT_KEY)
+      let key = db.top.kMap.getOrDefault(vid, EMPTY_ROOT_KEY)
       if key == EMPTY_ROOT_KEY:
         return err((vid,HashifyCheckVtxHashMissing))
       if key != rc.value.encode.digestTo(NodeKey):
         return err((vid,HashifyCheckVtxHashMismatch))
 
-      let revVid = db.pAmk.getOrDefault(key, VertexID(0))
+      let revVid = db.top.pAmk.getOrDefault(key, VertexID(0))
       if revVid == VertexID(0):
         return err((vid,HashifyCheckRevHashMissing))
       if revVid != vid:
         return err((vid,HashifyCheckRevHashMismatch))
 
-  elif 0 < db.pPrf.len:
-    for vid in db.pPrf:
-      let vtx = db.sTab.getOrDefault(vid, VertexRef(nil))
+  elif 0 < db.top.pPrf.len:
+    for vid in db.top.pPrf:
+      let vtx = db.top.sTab.getOrDefault(vid, VertexRef(nil))
       if vtx == VertexRef(nil):
         return err((vid,HashifyCheckVidVtxMismatch))
 
@@ -284,20 +262,20 @@ proc hashifyCheck*(
       if rc.isErr:
         return err((vid,HashifyCheckVtxIncomplete))
 
-      let key = db.kMap.getOrDefault(vid, EMPTY_ROOT_KEY)
+      let key = db.top.kMap.getOrDefault(vid, EMPTY_ROOT_KEY)
       if key == EMPTY_ROOT_KEY:
         return err((vid,HashifyCheckVtxHashMissing))
       if key != rc.value.encode.digestTo(NodeKey):
         return err((vid,HashifyCheckVtxHashMismatch))
 
-      let revVid = db.pAmk.getOrDefault(key, VertexID(0))
+      let revVid = db.top.pAmk.getOrDefault(key, VertexID(0))
       if revVid == VertexID(0):
         return err((vid,HashifyCheckRevHashMissing))
       if revVid != vid:
         return err((vid,HashifyCheckRevHashMismatch))
 
   else:
-    for (vid,key) in db.kMap.pairs:
+    for (vid,key) in db.top.kMap.pairs:
       let vtx = db.getVtx vid
       if not vtx.isNil:
         let rc = vtx.toNode(db)
@@ -305,27 +283,27 @@ proc hashifyCheck*(
           if key != rc.value.encode.digestTo(NodeKey):
             return err((vid,HashifyCheckVtxHashMismatch))
 
-          let revVid = db.pAmk.getOrDefault(key, VertexID(0))
+          let revVid = db.top.pAmk.getOrDefault(key, VertexID(0))
           if revVid == VertexID(0):
             return err((vid,HashifyCheckRevHashMissing))
           if revVid != vid:
             return err((vid,HashifyCheckRevHashMismatch))
 
-  if db.pAmk.len != db.kMap.len:
+  if db.top.pAmk.len != db.top.kMap.len:
     var knownKeys: HashSet[VertexID]
-    for (key,vid) in db.pAmk.pairs:
-      if not db.kMap.hasKey(vid):
+    for (key,vid) in db.top.pAmk.pairs:
+      if not db.top.kMap.hasKey(vid):
         return err((vid,HashifyCheckRevVtxMissing))
       if vid in knownKeys:
         return err((vid,HashifyCheckRevVtxDup))
       knownKeys.incl vid
     return err((VertexID(0),HashifyCheckRevCountMismatch)) # should not apply(!)
 
-  if 0 < db.pAmk.len and not relax and db.pAmk.len != db.sTab.len:
+  if 0 < db.top.pAmk.len and not relax and db.top.pAmk.len != db.top.sTab.len:
     return err((VertexID(0),HashifyCheckVtxCountMismatch))
 
-  for vid in db.pPrf:
-    if not db.kMap.hasKey(vid):
+  for vid in db.top.pPrf:
+    if not db.top.kMap.hasKey(vid):
       return err((vid,HashifyCheckVtxLockWithoutKey))
 
   ok()

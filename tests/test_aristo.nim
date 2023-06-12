@@ -18,7 +18,7 @@ import
   rocksdb,
   unittest2,
   ../nimbus/db/select_backend,
-  ../nimbus/db/aristo/[aristo_desc, aristo_error, aristo_merge],
+  ../nimbus/db/aristo/[aristo_desc, aristo_merge],
   ../nimbus/core/chain,
   ../nimbus/sync/snap/worker/db/[rocky_bulk_load, snapdb_accounts, snapdb_desc],
   ./replay/[pp, undump_accounts, undump_storages],
@@ -147,6 +147,12 @@ proc snapDbAccountsRef(cdb:ChainDb; root:Hash256; pers:bool):SnapDbAccountsRef =
 # Test Runners: accounts and accounts storages
 # ------------------------------------------------------------------------------
 
+proc miscRunner(noisy =true) =
+  suite &"Aristo: Miscellaneous tests":
+    test &"VertexID recyling lists":
+      noisy.test_transcodeVidRecycleLists()
+
+
 proc transcodeRunner(noisy =true; sample=accSample; stopAfter=high(int)) =
   let
     accLst = sample.to(seq[UndumpAccounts])
@@ -161,9 +167,6 @@ proc transcodeRunner(noisy =true; sample=accSample; stopAfter=high(int)) =
     db.flushDbs
 
   suite &"Aristo: transcoding {fileInfo} accounts for {info}":
-
-    test &"Trancoding VertexID recyling lists (seed={accLst.len})":
-      noisy.test_transcodeVidRecycleLists(accLst.len)
 
     # New common descriptor for this sub-group of tests
     let
@@ -193,16 +196,16 @@ proc accountsRunner(noisy=true; sample=accSample, resetDb=false) =
   suite &"Aristo: accounts data dump from {fileInfo}{listMode}":
 
     test &"Merge {accLst.len} account lists to database":
-      noisy.test_mergeKvpList(accLst, resetDb)
+      check noisy.test_mergeKvpList(accLst, resetDb)
 
     test &"Merge {accLst.len} proof & account lists to database":
-      noisy.test_mergeProofAndKvpList(accLst, resetDb)
+      check noisy.test_mergeProofAndKvpList(accLst, resetDb)
 
     test &"Traverse accounts database w/{accLst.len} account lists":
-      noisy.test_nearbyKvpList(accLst, resetDb)
+      check noisy.test_nearbyKvpList(accLst, resetDb)
 
     test &"Delete accounts database, successively {accLst.len} entries":
-      noisy.test_delete accLst
+      check noisy.test_delete accLst
 
 
 proc storagesRunner(
@@ -219,22 +222,23 @@ proc storagesRunner(
   suite &"Aristo: storages data dump from {fileInfo}{listMode}":
 
     test &"Merge {stoLst.len} storage slot lists to database":
-      noisy.test_mergeKvpList(stoLst, resetDb)
+      check noisy.test_mergeKvpList(stoLst, resetDb)
 
     test &"Merge {stoLst.len} proof & slots lists to database":
-      noisy.test_mergeProofAndKvpList(stoLst, resetDb, fileInfo, oops)
+      check noisy.test_mergeProofAndKvpList(stoLst, resetDb, fileInfo, oops)
 
     test &"Traverse storage slots database w/{stoLst.len} account lists":
-      noisy.test_nearbyKvpList(stoLst, resetDb)
+      check noisy.test_nearbyKvpList(stoLst, resetDb)
 
     test &"Delete storage database, successively {stoLst.len} entries":
-      noisy.test_delete stoLst
+      check noisy.test_delete stoLst
 
 # ------------------------------------------------------------------------------
 # Main function(s)
 # ------------------------------------------------------------------------------
 
 proc aristoMain*(noisy = defined(debug)) =
+  noisy.miscRunner()
   noisy.transcodeRunner()
   noisy.accountsRunner()
   noisy.storagesRunner()
@@ -242,6 +246,11 @@ proc aristoMain*(noisy = defined(debug)) =
 when isMainModule:
   const
     noisy = defined(debug) or true
+
+  setErrorLevel()
+
+  when true: # and false:
+    noisy.miscRunner()
 
   # Borrowed from `test_sync_snap.nim`
   when true: # and false:
@@ -259,9 +268,13 @@ when isMainModule:
 
   # This one usues dumps from the external `nimbus-eth1-blob` repo
   when true and false:
-    import ./test_sync_snap/snap_storage_xx
+    import ./test_sync_snap/snap_storage_xx, ../nimbus/db/aristo/aristo_error
     let knownFailures: KnownHasherFailure = @[
-      ("storages5__34__41_dump#10.20512",(VertexID(1),HashifyRootHashMismatch)),
+      ("storages3__18__25_dump#11.27367",(3,HashifyExistingHashMismatch)),
+      ("storages4__26__33_dump#11.23924",(6,HashifyExistingHashMismatch)),
+      ("storages5__34__41_dump#10.20512",(1,HashifyRootHashMismatch)),
+      ("storagesB__84__92_dump#6.9709",  (7,HashifyExistingHashMismatch)),
+      ("storagesD_102_109_dump#17.28287",(9,HashifyExistingHashMismatch)),
     ]
     noisy.showElapsed("@snap_storage_xx"):
       for n,sam in snapStorageList:

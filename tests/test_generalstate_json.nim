@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/[strutils, tables, json, os, sets, options, times],
+  std/[strutils, tables, json, os, sets, options],
   ./test_helpers, ./test_allowed_to_fail,
   ../nimbus/core/executor, test_config,
   ../nimbus/transaction,

@@ -22,10 +22,10 @@
 {.push raises: [].}
 
 import
-  std/[sets, tables],
+  std/[sets, strutils, tables],
   eth/[common, trie/nibbles],
   stew/results,
-  "."/[aristo_constants, aristo_error]
+  "."/aristo_error
 
 import
   ../../sync/snap/range_desc
@@ -37,33 +37,75 @@ type
     ## Tip of edge towards child object in the `Patricia Trie` logic. It is
     ## also the key into the structural table of the `Aristo Trie`.
 
+  LeafKey* = object
+    ## Generalised access key for a leaf vertex on a dedicated sub-trie
+    ## defined by the `root` field. The main trie is the sub-trie with
+    ## root ID `VertexID(1)`.
+    root*: VertexID                  ## Root ID for the sub-trie
+    path*: NodeTag                   ## Path into the `Patricia Trie`
+
+  # -------------
+
   GetVtxFn* =
-    proc(vid: VertexID): Result[VertexRef,AristoError]
-      {.gcsafe, raises: [].}
+    proc(vid: VertexID): Result[VertexRef,AristoError] {.gcsafe, raises: [].}
         ## Generic backend database retrieval function for a single structural
         ## `Aristo DB` data record.
 
   GetKeyFn* =
-    proc(vid: VertexID): Result[NodeKey,AristoError]
-      {.gcsafe, raises: [].}
+    proc(vid: VertexID): Result[NodeKey,AristoError] {.gcsafe, raises: [].}
         ## Generic backend database retrieval function for a single
         ## `Aristo DB` hash lookup value.
 
+  GetIdgFn* =
+    proc(): Result[seq[VertexID],AristoError] {.gcsafe, raises: [].}
+        ## Generic backend database retrieval function for a the ID generator
+        ## `Aristo DB` state record.
+
+  # -------------
+
+  PutHdlRef* = ref object of RootRef
+    ## Persistent database transaction frame handle. This handle is used to
+    ## wrap any of `PutVtxFn`, `PutKeyFn`, and `PutIdgFn` into and atomic
+    ## transaction frame. These transaction frames must not be interleaved
+    ## by any library function using the backend.
+
+  PutBegFn* =
+    proc(): PutHdlRef {.gcsafe, raises: [].}
+      ## Generic transaction initialisation function
+
   PutVtxFn* =
-    proc(vrps: openArray[(VertexID,VertexRef)]): AristoError
+    proc(hdl: PutHdlRef; vrps: openArray[(VertexID,VertexRef)])
       {.gcsafe, raises: [].}
         ## Generic backend database bulk storage function.
 
   PutKeyFn* =
-    proc(vkps: openArray[(VertexID,NodeKey)]): AristoError
+    proc(hdl: PutHdlRef; vkps: openArray[(VertexID,NodeKey)])
       {.gcsafe, raises: [].}
         ## Generic backend database bulk storage function.
 
-  DelFn* =
+  PutIdgFn* =
+    proc(hdl: PutHdlRef; vs: openArray[VertexID]) {.gcsafe, raises: [].}
+        ## Generic backend database ID generator state storage function.
+
+  PutEndFn* =
+    proc(hdl: PutHdlRef): AristoError {.gcsafe, raises: [].}
+      ## Generic transaction termination function
+
+  # -------------
+
+  DelVtxFn* =
     proc(vids: openArray[VertexID])
       {.gcsafe, raises: [].}
-        ## Generic backend database delete function for both, the structural
-        ## `Aristo DB` data record and the hash lookup value.
+        ## Generic backend database delete function for the structural
+        ## `Aristo DB` data records
+
+  DelKeyFn* =
+    proc(vids: openArray[VertexID])
+      {.gcsafe, raises: [].}
+        ## Generic backend database delete function for the `Aristo DB`
+        ## Merkle hash key mappings.
+
+  # -------------
 
   VertexType* = enum
     ## Type of `Aristo Trie` vertex
@@ -105,29 +147,32 @@ type
   AristoBackendRef* = ref object
     ## Backend interface.
     getVtxFn*: GetVtxFn              ## Read vertex record
-    getKeyFn*: GetKeyFn              ## Read vertex hash
+    getKeyFn*: GetKeyFn              ## Read Merkle hash/key
+    getIdgFn*: GetIdgFn              ## Read ID generator state
+    putBegFn*: PutBegFn              ## Start bulk store session
     putVtxFn*: PutVtxFn              ## Bulk store vertex records
     putKeyFn*: PutKeyFn              ## Bulk store vertex hashes
-    delFn*: DelFn                    ## Bulk delete vertex records and hashes
+    putIdgFn*: PutIdgFn              ## Store ID generator state
+    putEndFn*: PutEndFn              ## Commit bulk store session
+    delVtxFn*: DelVtxFn              ## Bulk delete vertex records
+    delKeyFn*: DelKeyFn              ## Bulk delete vertex Merkle hashes
 
-  AristoDbRef* = ref AristoDbObj
-  AristoDbObj = object
-    ## Hexary trie plus helper structures
-    sTab*: Table[VertexID,VertexRef] ## Structural vertex table making up a trie
-    lTab*: Table[NodeTag,VertexID]   ## Direct access, path to leaf node
-    lRoot*: VertexID                 ## Root vertex for `lTab[]`
+  AristoLayerRef* = ref object
+    ## Hexary trie database layer structures. Any layer holds the full
+    ## change relative to the backend.
+    sTab*: Table[VertexID,VertexRef] ## Structural vertex table
+    lTab*: Table[LeafKey,VertexID]   ## Direct access, path to leaf vertex
     kMap*: Table[VertexID,NodeKey]   ## Merkle hash key mapping
+    dKey*: HashSet[VertexID]         ## Locally deleted Merkle hash keys
     pAmk*: Table[NodeKey,VertexID]   ## Reverse mapper for data import
-    pPrf*: HashSet[VertexID]         ## Locked vertices (from proof vertices)
+    pPrf*: HashSet[VertexID]         ## Locked vertices (proof nodes)
     vGen*: seq[VertexID]             ## Unique vertex ID generator
 
-    case cascaded*: bool             ## Cascaded delta databases, tx layer
-    of true:
-      level*: int                    ## Positive number of stack layers
-      stack*: AristoDbRef            ## Down the chain, not `nil`
-      base*: AristoDbRef             ## Backend level descriptor, maybe unneeded
-    else:
-      backend*: AristoBackendRef     ## backend database (maybe `nil`)
+  AristoDb* = object
+    ## Set of database layers, supporting transaction frames
+    top*: AristoLayerRef             ## Database working layer
+    stack*: seq[AristoLayerRef]      ## Stashed parent layers
+    backend*: AristoBackendRef       ## Backend database (may well be `nil`)
 
     # Debugging data below, might go away in future
     xMap*: Table[NodeKey,VertexID]   ## For pretty printing, extends `pAmk`
@@ -144,6 +189,23 @@ proc `<`*(a, b: VertexID): bool {.borrow.}
 proc `==`*(a, b: VertexID): bool {.borrow.}
 proc cmp*(a, b: VertexID): int {.borrow.}
 proc `$`*(a: VertexID): string = $a.uint64
+
+# ------------------------------------------------------------------------------
+# Public helpers: `LeafKey` scalar data model
+# ------------------------------------------------------------------------------
+
+proc `<`*(a, b: LeafKey): bool =
+  a.root < b.root or (a.root == b.root and a.path < b.path)
+
+proc `==`*(a, b: LeafKey): bool =
+  a.root == b.root and a.path == b.path
+
+proc cmp*(a, b: LeafKey): int =
+  if a < b: -1 elif a == b: 0 else: 1
+
+proc `$`*(a: LeafKey): string =
+  let w = $a.root.uint64.toHex & ":" & $a.path.Uint256.toHex
+  w.strip(leading=true, trailing=false, chars={'0'}).toLowerAscii
 
 # ------------------------------------------------------------------------------
 # Public helpers: `NodeRef` and `PayloadRef`
@@ -208,15 +270,6 @@ proc `==`*(a, b: NodeRef): bool =
 # ------------------------------------------------------------------------------
 # Public helpers, miscellaneous functions
 # ------------------------------------------------------------------------------
-
-proc isZero*(a: VertexID): bool =
-  a == VertexID(0)
-
-proc isEmpty*(a: NodeKey): bool =
-  a == EMPTY_ROOT_KEY
-
-proc isError*(a: NodeRef): bool =
-  a.error != AristoError(0)
 
 proc convertTo*(payload: PayloadRef; T: type Blob): T =
   ## Probably lossy conversion as the storage type `kind` gets missing

@@ -150,8 +150,8 @@ proc init(com      : CommonRef,
   # set it before creating genesis block
   # TD need to be some(0.u256) because it can be the genesis
   # already at the MergeFork
-  let optionalGenesisTime = if genesis.isNil: none[EthTime]() else: some(genesis.timestamp)
-  com.hardForkTransition(ForkDeterminationInfo(blockNumber: 0.toBlockNumber, td: some(0.u256), time: optionalGenesisTime))
+  const TimeZero = fromUnix(0)
+  com.hardForkTransition(ForkDeterminationInfo(blockNumber: 0.toBlockNumber, td: some(0.u256), time: some(TimeZero)))
 
   # com.forkIds and com.blockZeroHash is set
   # by setForkId
