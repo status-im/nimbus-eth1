@@ -193,6 +193,11 @@ proc accountsRunner(noisy=true; sample=accSample, resetDb=false) =
     accLst = sample.to(seq[UndumpAccounts]).to(seq[ProofTrieData])
     fileInfo = sample.file.splitPath.tail.replace(".txt.gz","")
     listMode = if resetDb: "" else: ", merged data lists"
+    baseDir = getTmpDir() / sample.name & "-accounts"
+    dbDir = baseDir / "tmp"
+
+  defer:
+    try: baseDir.removeDir except CatchableError: discard
 
   suite &"Aristo: accounts data dump from {fileInfo}{listMode}":
 
@@ -202,8 +207,8 @@ proc accountsRunner(noisy=true; sample=accSample, resetDb=false) =
     test &"Merge {accLst.len} proof & account lists to database":
       check noisy.test_mergeProofAndKvpList(accLst, resetDb)
 
-    test &"Store {accLst.len} lists on database backends":
-      check noisy.test_backendConsistency(accLst, resetDb)
+    test &"Store {accLst.len} account lists on database backends":
+      check noisy.test_backendConsistency(accLst, dbDir, resetDb)
 
     test &"Traverse accounts database w/{accLst.len} account lists":
       check noisy.test_nearbyKvpList(accLst, resetDb)
@@ -222,6 +227,11 @@ proc storagesRunner(
     stoLst = sample.to(seq[UndumpStorages]).to(seq[ProofTrieData])
     fileInfo = sample.file.splitPath.tail.replace(".txt.gz","")
     listMode = if resetDb: "" else: ", merged data lists"
+    baseDir = getTmpDir() / sample.name & "-storage"
+    dbDir = baseDir / "tmp"
+
+  defer:
+    try: baseDir.removeDir except CatchableError: discard
 
   suite &"Aristo: storages data dump from {fileInfo}{listMode}":
 
@@ -230,6 +240,9 @@ proc storagesRunner(
 
     test &"Merge {stoLst.len} proof & slots lists to database":
       check noisy.test_mergeProofAndKvpList(stoLst, resetDb, fileInfo, oops)
+
+    test &"Store {stoLst.len} slot lists on database backends":
+      check noisy.test_backendConsistency(stoLst, dbDir, resetDb)
 
     test &"Traverse storage slots database w/{stoLst.len} account lists":
       check noisy.test_nearbyKvpList(stoLst, resetDb)

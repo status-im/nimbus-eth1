@@ -273,10 +273,7 @@ proc hashify*(
     return err((VertexID(0),HashifyLeafToRootAllFailed))
 
   # Update remaining hashes
-  var n = 0 # for logging
   while 0 < downMost.len:
-    n.inc
-
     var
       redo: BackVidTab
       done: HashSet[VertexID]

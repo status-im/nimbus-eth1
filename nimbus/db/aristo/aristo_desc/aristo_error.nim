@@ -131,4 +131,17 @@ type
     GetVtxNotFound
     GetKeyNotFound
 
+    # RocksDB backend
+    RdbBeCantCreateDataDir
+    RdbBeCantCreateBackupDir
+    RdbBeCantCreateTmpDir
+    RdbBeDriverInitError
+    RdbBeDriverGetError
+    RdbBeDriverDelError
+    RdbBeCreateSstWriter
+    RdbBeOpenSstWriter
+    RdbBeAddSstWriter
+    RdbBeFinishSstWriter
+    RdbBeIngestSstWriter
+
 # End

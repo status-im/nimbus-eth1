@@ -30,7 +30,6 @@ import
   eth/[common, trie/nibbles],
   stew/results,
   ../../sync/protocol,
-  ./aristo_debug,
   "."/[aristo_desc, aristo_get, aristo_hike, aristo_path, aristo_transcode,
        aristo_vid]
 
@@ -43,23 +42,6 @@ type
     ## sub-trie with `root=VertexID(1)`.
     leafTie*: LeafTie                  ## Full `Patricia Trie` path root-to-leaf
     payload*: PayloadRef               ## Leaf data payload
-
-# ------------------------------------------------------------------------------
-# Private helper, debugging
-# ------------------------------------------------------------------------------
-
-proc pp(key: HashKey; db: AristoDB; root: VertexID): string =
-  let vid = db.top.pAmk.getOrVoid HashLabel(root: root, key: key)
-  if vid.isValid: "£" & $vid.uint64 else: key.pp
-
-proc pp(q: openArray[HashKey]; db: AristoDB; root: VertexID): string =
-  "[" & q.toSeq.mapIt(it.pp(db,root)).join(" -> ") & "]"
-
-proc pp(q: openArray[seq[HashKey]]; db: AristoDB; root: VertexID): string =
-  q.mapIt(it.pp(db,root)).join("\n     ")
-
-proc pp(t: Table[HashKey,NodeRef]; db: AristoDB; root: VertexID): string =
-  "{" & t.keys.toSeq.mapIt(it.pp(db,root)).join(",") & "}"
 
 # ------------------------------------------------------------------------------
 # Private getters & setters

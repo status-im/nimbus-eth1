@@ -20,6 +20,7 @@ type
   AristoBackendType* = enum
     BackendNone        ## For providing backend-less constructor
     BackendMemory
+    BackendRocksDB
 
   AristoTypedBackendRef* = ref object of AristoBackendRef
     kind*: AristoBackendType         ## Backend type identifier

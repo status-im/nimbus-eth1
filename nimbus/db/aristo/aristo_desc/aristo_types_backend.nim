@@ -71,8 +71,11 @@ type
   # -------------
 
   CloseFn* =
-    proc() {.gcsafe, raises: [].}
-      ## Generic destructor for the `Aristo DB` backend.
+    proc(flush: bool) {.gcsafe, raises: [].}
+      ## Generic destructor for the `Aristo DB` backend. The argument `flush`
+      ## indicates that a full database deletion is requested. If passed
+      ## `false` the outcome might differ depending on the type of backend
+      ## (e.g. in-memory backends would flush on close.)
 
   AristoBackendRef* = ref object of RootRef
     ## Backend interface.

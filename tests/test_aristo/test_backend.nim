@@ -17,7 +17,7 @@ import
   unittest2,
   ../../nimbus/sync/protocol,
   ../../nimbus/db/aristo/aristo_init/[
-    aristo_memory],
+    aristo_memory, aristo_rocksdb],
   ../../nimbus/db/aristo/[
     aristo_desc, aristo_debug, aristo_hashify, aristo_init, aristo_layer,
     aristo_merge],
@@ -53,7 +53,7 @@ proc mergeData(
     return
 
   block:
-    let rc = db.hashify()
+    let rc = db.hashify # (noisy, true)
     if rc.isErr:
       when true: # and false:
         noisy.say "***", "dataMerge(9)",
@@ -67,7 +67,7 @@ proc mergeData(
 
 proc verify(
     ly: AristoLayerRef;                      # Database layer
-    be: MemBackendRef;                       # Backend
+    be: MemBackendRef|RdbBackendRef;         # Backend
     noisy: bool;
       ): bool =
   ## ..
@@ -109,14 +109,20 @@ proc verify(
 proc test_backendConsistency*(
     noisy: bool;
     list: openArray[ProofTrieData];          # Test data
+    rdbPath: string;                         # Rocks DB storage directory
     resetDb = false;
+    doRdbOk = true;
       ): bool =
   ## Import accounts
   var
     ndb: AristoDb                            # Reference cache
     mdb: AristoDb                            # Memory backend database
+    rdb: AristoDb                            # Rocks DB backend database
     rootKey = HashKey.default
     count = 0
+
+  defer:
+    rdb.finish(flush=true)
 
   for n,w in list:
     if w.root != rootKey or resetDB:
@@ -124,10 +130,18 @@ proc test_backendConsistency*(
       count = 0
       ndb = AristoDb.init(BackendNone)
       mdb = AristoDb.init(BackendMemory)
+      if doRdbOk:
+        rdb.finish(flush=true)
+        let rc = AristoDb.init(BackendRocksDB,rdbPath)
+        if rc.isErr:
+          check rc.error == AristoError(0)
+          return
+        rdb = rc.value
     count.inc
 
     check ndb.backend.isNil
     check not mdb.backend.isNil
+    check doRdbOk or not rdb.backend.isNil
 
     when true and false:
       noisy.say "***", "beCon(1) <", n, "/", list.len-1, ">", " groups=", count
@@ -137,34 +151,49 @@ proc test_backendConsistency*(
         rootVid = VertexID(1)
         leafs = w.kvpLst.mapRootVid VertexID(1) # for merging it into main trie
 
-      let ndbOk = ndb.mergeData(rootKey, rootVid, w.proof, leafs, noisy=false)
-      if not ndbOk:
-        check ndbOk
-        return
+      block:
+        let ndbOk = ndb.mergeData(
+          rootKey, rootVid, w.proof, leafs, noisy=false)
+        if not ndbOk:
+          check ndbOk
+          return
+      block:
+        let mdbOk = mdb.mergeData(
+          rootKey, rootVid, w.proof, leafs, noisy=false)
+        if not mdbOk:
+          check mdbOk
+          return
+      if doRdbOk: # optional
+        let rdbOk = rdb.mergeData(
+          rootKey, rootVid, w.proof, leafs, noisy=false)
+        if not rdbOk:
+          check rdbOk
+          return
 
       when true and false:
         noisy.say "***", "beCon(2) <", n, "/", list.len-1, ">",
           " groups=", count,
           "\n    cache dump\n    ", ndb.pp,
-          "\n    backend dump\n    ", ndb.backend.AristoTypedBackendRef.pp(ndb)
-
-      when true and false:
-        noisy.say "***", "beCon(3) <", n, "/", list.len-1, ">",
-          " groups=", count,
+          "\n    backend dump\n    ", ndb.backend.AristoTypedBackendRef.pp(ndb),
+          "\n    -------------",
           "\n    mdb cache\n    ", mdb.pp,
-          "\n    mdb backend\n    ", mdb.backend.AristoTypedBackendRef.pp(ndb)
-  
-      let mdbOk = mdb.mergeData(rootKey, rootVid, w.proof, leafs, noisy=false)
-      if not mdbOk:
-        check mdbOk
-        return
+          "\n    mdb backend\n    ", mdb.to(MemBackendRef).pp(ndb),
+          "\n    -------------",
+          "\n    rdb cache\n    ", rdb.pp,
+          "\n    rdb backend\n    ", rdb.to(RdbBackendRef).pp(ndb),
+          "\n    -------------"
 
     when true and false:
-      noisy.say "***", "beCon(3) <", n, "/", list.len-1, ">", " groups=", count
+      noisy.say "***", "beCon(4) <", n, "/", list.len-1, ">", " groups=", count
 
-    let
+    var
+      mdbPreSaveCache, mdbPreSaveBackend: string
+      rdbPreSaveCache, rdbPreSaveBackend: string
+    when true: # and false:
       mdbPreSaveCache = mdb.pp
-      mdbPreSaveBackend = mdb.backend.AristoTypedBackendRef.pp(ndb)
+      mdbPreSaveBackend = mdb.to(MemBackendRef).pp(ndb)
+      rdbPreSaveCache = rdb.pp
+      rdbPreSaveBackend = rdb.to(RdbBackendRef).pp(ndb)
 
     # Store onto backend database
     let mdbHist = block:
@@ -175,28 +204,47 @@ proc test_backendConsistency*(
         return
       rc.value
 
+    if doRdbOk:
+      let rdbHist = block:
+        let rc = rdb.save
+        if rc.isErr:
+          check rc.error == AristoError(0)
+          return
+        rc.value
+
     if not ndb.top.verify(mdb.backend.MemBackendRef, noisy):
-      when true: # and false:
+      when true and false:
         noisy.say "***", "beCon(4) <", n, "/", list.len-1, ">",
           " groups=", count,
           "\n    ndb cache\n    ", ndb.pp,
-          "\n    ndb backend\n    ", ndb.backend.AristoTypedBackendRef.pp(ndb),
+          "\n    ndb backend=", ndb.backend.isNil.not,
           #"\n    -------------",
           #"\n    mdb pre-save cache\n    ", mdbPreSaveCache,
           #"\n    mdb pre-save backend\n    ", mdbPreSaveBackend,
           "\n    -------------",
           "\n    mdb cache\n    ", mdb.pp,
-          "\n    mdb backend\n    ", mdb.backend.AristoTypedBackendRef.pp(ndb)
+          "\n    mdb backend\n    ", mdb.to(MemBackendRef).pp(ndb),
+          "\n    -------------"
       return
 
-    when true and false:
-      noisy.say "***", "beCon(8) <", n, "/", list.len-1, ">",
-        " groups=", count,
-        "\n    ndb cache\n    ", ndb.pp,
-        "\n    ndb backend\n    ", ndb.backend.AristoTypedBackendRef.pp(ndb),
-        "\n    -------------",
-        "\n    mdb cache\n    ", mdb.pp,
-        "\n    mdb backend\n    ", mdb.backend.AristoTypedBackendRef.pp(ndb)
+    if doRdbOk:
+      if not ndb.top.verify(rdb.backend.RdbBackendRef, noisy):
+        when true and false:
+          noisy.say "***", "beCon(4) <", n, "/", list.len-1, ">",
+            " groups=", count,
+            "\n    ndb cache\n    ", ndb.pp,
+            "\n    ndb backend=", ndb.backend.isNil.not,
+            "\n    -------------",
+            "\n    rdb pre-save cache\n    ", rdbPreSaveCache,
+            "\n    rdb pre-save backend\n    ", rdbPreSaveBackend,
+            "\n    -------------",
+            "\n    rdb cache\n    ", rdb.pp,
+            "\n    rdb backend\n    ", rdb.to(RdbBackendRef).pp(ndb),
+            #"\n    -------------",
+            #"\n    mdb cache\n    ", mdb.pp,
+            #"\n    mdb backend\n    ", mdb.to(MemBackendRef).pp(ndb),
+            "\n    -------------"
+        return
 
     when true and false:
       noisy.say "***", "beCon(9) <", n, "/", list.len-1, ">", " groups=", count

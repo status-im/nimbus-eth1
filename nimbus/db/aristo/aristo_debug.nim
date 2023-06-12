@@ -15,7 +15,7 @@ import
   eth/[common, trie/nibbles],
   stew/byteutils,
   "."/[aristo_constants, aristo_desc, aristo_hike, aristo_init, aristo_vid],
-  ./aristo_init/aristo_memory
+  ./aristo_init/[aristo_memory, aristo_rocksdb]
 
 # ------------------------------------------------------------------------------
 # Ptivate functions
@@ -253,9 +253,9 @@ proc ppBe[T](be: T; db: AristoDb; indent: int): string =
   ## Walk over backend tables
   let pfx = indent.toPfx
   result = "<" & $be.kind & ">"
-  result &= pfx & "vGen" & pfx & " " & be.walkIdg.toSeq.mapIt(
+  result &= pfx & "vGen" & pfx & " [" & be.walkIdg.toSeq.mapIt(
       it[2].pp
-    ).join(",")
+    ).join(",") & "]"
   result &= pfx & "sTab" & pfx & " {" & be.walkVtx.toSeq.mapIt(
       $(1+it[0]) & "(" & it[1].ppVid & "," & it[2].ppVtx(db,it[1]) & ")"
     ).join("," & pfx & "  ") & "}"
@@ -411,7 +411,7 @@ proc pp*(pAmk: Table[Hashlabel,VertexID]; db: AristoDb; indent = 4): string =
   db.ppXMap(db.top.kMap, pAmk, indent)
 
 proc pp*(
-    be: MemBackendRef;
+    be: MemBackendRef|RdbBackendRef;
     db: AristoDb;
     indent = 4;
       ): string =
@@ -467,6 +467,9 @@ proc pp*(
   case (if be.isNil: BackendNone else: be.kind)
   of BackendMemory:
     be.MemBackendRef.ppBe(db, indent)
+
+  of BackendRocksDB:
+    be.RdbBackendRef.ppBe(db, indent)
 
   of BackendNone:
     "n/a"

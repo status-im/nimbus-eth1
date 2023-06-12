@@ -20,7 +20,7 @@
 ##
 ##   let rc = AristoDb.init(BackendMemory)
 ##   if rc.isOk:
-##     let be = rc.value.backend.MemBackendRef
+##     let be = rc.value.to(MemBackendRef)
 ##     for (n, key, vtx) in be.walkVtx:
 ##       ...
 ##
@@ -145,7 +145,7 @@ proc putEndFn(db: MemBackendRef): PutEndFn =
 
 proc closeFn(db: MemBackendRef): CloseFn =
   result =
-    proc() =
+    proc(ignore: bool) =
       discard
 
 # ------------------------------------------------------------------------------
