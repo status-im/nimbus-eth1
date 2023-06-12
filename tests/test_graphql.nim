@@ -9,7 +9,7 @@
 
 import
   std/[os, json],
-  stew/byteutils, unittest2,
+  stew/byteutils,
   eth/[p2p, rlp],
   graphql, ../nimbus/graphql/ethapi, graphql/test_common,
   ../nimbus/sync/protocol,

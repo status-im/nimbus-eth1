@@ -1,6 +1,6 @@
 import
   strutils,
-  json_serialization/std/[sets, net], serialization/errors,
+  json_serialization/std/[sets, net],
   json_rpc/[client, jsonmarshal],
   web3/conversions,
   eth/common,

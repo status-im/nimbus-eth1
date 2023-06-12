@@ -18,7 +18,6 @@ import
   chronicles,
   chronos,
   eth/[common, p2p, p2p/private/p2p_types],
-  stew/byteutils,
   ./trace_config,
   ./eth/eth_types,
   ../types,

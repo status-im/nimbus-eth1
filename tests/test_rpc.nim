@@ -97,7 +97,7 @@ proc setupEnv(com: CommonRef, signer, ks2: EthAddress, ctx: EthContext): TestEnv
 
   let
     receiptRoot = com.db.persistReceipts(vmState.receipts)
-    date        = initDateTime(30, mMar, 2017, 00, 00, 00, 00, utc())
+    date        = dateTime(2017, mMar, 30)
     timeStamp   = date.toTime
     difficulty  = com.calcDifficulty(timeStamp, parent)
 
