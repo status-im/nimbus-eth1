@@ -360,8 +360,17 @@ proc pp*(leg: Leg; db = AristoDb()): string =
   result = "(" & leg.wp.vid.ppVid & ","
   if not db.top.isNil:
     let lbl = db.top.kMap.getOrVoid leg.wp.vid
-    result &= (if lbl.isValid: lbl.ppLabel(db) else: "ø")
-  result &= "," & $leg.nibble.ppNibble & "," & leg.wp.vtx.pp(db) & ")"
+    if not lbl.isValid:
+      result &= "ø"
+    elif leg.wp.vid != db.top.pAmk.getOrVoid lbl:
+      result &= lbl.ppLabel(db)
+  result &= ","
+  if leg.backend:
+    result &= "*"
+  result &= ","
+  if 0 <= leg.nibble:
+    result &= $leg.nibble.ppNibble
+  result &= "," & leg.wp.vtx.pp(db) & ")"
 
 proc pp*(hike: Hike; db = AristoDb(); indent = 4): string =
   let pfx = indent.toPfx(1)

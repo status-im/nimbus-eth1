@@ -242,9 +242,6 @@ proc test_mergeProofAndKvpList*(
     check db.top.lTab.len == lTabLen + merged.merged
     check merged.merged + merged.dups == leafs.len
 
-    if w.proof.len == 0:
-      let vtx = db.getVtx VertexID(1)
-
     block:
       if merged.error notin {AristoError(0), MergeLeafPathCachedAlready}:
         noisy.say "***", "<", n, "/", lstLen-1, ">\n   ", db.pp
@@ -277,9 +274,9 @@ proc test_mergeProofAndKvpList*(
           " testId=", testId,
           " groups=", count,
           "\n   pre-DB",
-          "\n   ", preDb,
+          "\n    ", preDb,
           "\n   --------",
-          "\n   ", db.pp
+          "\n    ", db.pp
         check rc.error == (VertexID(0),AristoError(0))
         return
 

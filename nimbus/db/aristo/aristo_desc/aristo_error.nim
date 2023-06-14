@@ -70,11 +70,13 @@ type
     MergeNonBranchProofModeLock
     MergeRootBranchLinkBusy
 
-    MergeHashKeyEmpty
+    MergeHashKeyInvalid
+    MergeRootVidInvalid
+    MergeRootKeyInvalid
+    MergeRevVidMustHaveBeenCached
     MergeHashKeyCachedAlready
     MergeHashKeyDiffersFromCached
-    MergeRootKeyEmpty
-
+    MergeNodeVtxDiffersFromExisting
     MergeRootKeyDiffersForVid
 
     # Update `Merkle` hashes `hashify()`

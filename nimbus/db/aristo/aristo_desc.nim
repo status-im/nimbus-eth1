@@ -69,19 +69,19 @@ proc getOrVoid*[W](tab: Table[W,VertexID]; w: W): VertexID =
 
 # --------
 
-proc isValid*(vtx: VertexRef): bool =
+func isValid*(vtx: VertexRef): bool =
   vtx != VertexRef(nil) 
 
-proc isValid*(nd: NodeRef): bool =
+func isValid*(nd: NodeRef): bool =
   nd != NodeRef(nil)
 
-proc isValid*(key: HashKey): bool =
+func isValid*(key: HashKey): bool =
   key != VOID_HASH_KEY
 
-proc isValid*(lbl: HashLabel): bool =
+func isValid*(lbl: HashLabel): bool =
   lbl != VOID_HASH_LABEL
 
-proc isValid*(vid: VertexID): bool =
+func isValid*(vid: VertexID): bool =
   vid != VertexID(0)
 
 # ------------------------------------------------------------------------------
@@ -91,7 +91,7 @@ proc isValid*(vid: VertexID): bool =
 # Note that the below `init()` function cannot go into
 # `aristo_types_identifiers` as this would result in a circular import.
 
-proc init*(key: var HashKey; data: openArray[byte]): bool =
+func init*(key: var HashKey; data: openArray[byte]): bool =
   ## Import argument `data` into `key` which must have length either `32`, or
   ## `0`. The latter case is equivalent to an all zero byte array of size `32`.
   if data.len == 32:

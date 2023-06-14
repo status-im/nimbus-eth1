@@ -24,7 +24,8 @@ import
   ./replay/[pp, undump_accounts, undump_storages],
   ./test_sync_snap/[snap_test_xx, test_accounts, test_types],
   ./test_aristo/[
-    test_delete, test_helpers, test_merge, test_nearby, test_transcode]
+    test_backend, test_delete, test_helpers, test_merge, test_nearby,
+    test_transcode]
 
 const
   baseDir = [".", "..", ".."/"..", $DirSep]
@@ -158,7 +159,7 @@ proc transcodeRunner(noisy =true; sample=accSample; stopAfter=high(int)) =
     accLst = sample.to(seq[UndumpAccounts])
     root = accLst[0].root
     tmpDir = getTmpDir()
-    db = tmpDir.testDbs(sample.name & "-accounts", instances=2, persistent=true)
+    db = tmpDir.testDbs(sample.name&"-transcode", instances=2, persistent=true)
     info = if db.persistent: &"persistent db on \"{db.baseDir}\""
            else: "in-memory db"
     fileInfo = sample.file.splitPath.tail.replace(".txt.gz","")
@@ -200,6 +201,9 @@ proc accountsRunner(noisy=true; sample=accSample, resetDb=false) =
 
     test &"Merge {accLst.len} proof & account lists to database":
       check noisy.test_mergeProofAndKvpList(accLst, resetDb)
+
+    test &"Store {accLst.len} lists on database backends":
+      check noisy.test_backendConsistency(accLst, resetDb)
 
     test &"Traverse accounts database w/{accLst.len} account lists":
       check noisy.test_nearbyKvpList(accLst, resetDb)
@@ -249,11 +253,11 @@ when isMainModule:
 
   setErrorLevel()
 
-  when true: # and false:
+  when true and false:
     noisy.miscRunner()
 
   # Borrowed from `test_sync_snap.nim`
-  when true: # and false:
+  when true and false:
     for n,sam in snapTestList:
       noisy.transcodeRunner(sam)
     for n,sam in snapTestStorageList:
