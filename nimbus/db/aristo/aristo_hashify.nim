@@ -42,13 +42,12 @@
 {.push raises: [].}
 
 import
-  std/[algorithm, sequtils, strutils],
-  std/[sets, tables],
+  std/[sequtils, sets, strutils, tables],
   chronicles,
   eth/common,
   stew/results,
-  "."/[aristo_constants, aristo_debug, aristo_desc, aristo_get,
-       aristo_hike, aristo_transcode, aristo_vid]
+  "."/[aristo_constants, aristo_desc, aristo_get, aristo_hike,
+       aristo_transcode, aristo_vid]
 
 type
   BackVidValRef = ref object
@@ -74,25 +73,6 @@ func getOrVoid(tab: BackVidTab; vid: VertexID): BackVidValRef =
 
 func isValid(brv: BackVidValRef): bool =
   brv != BackVidValRef(nil)
-
-# ------------------------------------------------------------------------------
-# Private helper, debugging
-# ------------------------------------------------------------------------------
-
-proc pp(w: BackVidValRef): string =
-  if w.isNil:
-    return "n/a"
-  result = "(" & w.root.pp & ","
-  if w.onBe:
-    result &= "*"
-  result &= "," & w.toVid.pp & ")"
-
-proc pp(t: BackVidTab): string =
-  proc pp(b: bool): string =
-    if b: "*" else: ""
-  "{" & t.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID)
-              .mapIt("(" & it.pp & "," & t.getOrVoid(it).pp & ")")
-              .join(",") & "}"
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -233,7 +213,7 @@ proc hashify*(
   for (lky,vid) in db.top.lTab.pairs:
     let hike = lky.hikeUp(db)
     if hike.error != AristoError(0):
-      return err((hike.root,hike.error))
+      return err((vid,hike.error))
 
     roots.incl hike.root
 
@@ -367,20 +347,24 @@ proc hashifyCheck*(
 
   else:
     for (vid,lbl) in db.top.kMap.pairs:
-      let vtx = db.getVtx vid
-      if vtx.isValid:
-        let rc = vtx.toNode(db)
-        if rc.isOk:
-          if lbl.key != rc.value.encode.digestTo(HashKey):
-            return err((vid,HashifyCheckVtxHashMismatch))
+      if lbl.isValid:                              # Otherwise to be deleted
+        let vtx = db.getVtx vid
+        if vtx.isValid:
+          let rc = vtx.toNode(db)
+          if rc.isOk:
+            if lbl.key != rc.value.encode.digestTo(HashKey):
+              return err((vid,HashifyCheckVtxHashMismatch))
 
-          let revVid = db.top.pAmk.getOrVoid lbl
-          if not revVid.isValid:
-            return err((vid,HashifyCheckRevHashMissing))
-          if revVid != vid:
-            return err((vid,HashifyCheckRevHashMismatch))
+            let revVid = db.top.pAmk.getOrVoid lbl
+            if not revVid.isValid:
+              return err((vid,HashifyCheckRevHashMissing))
+            if revVid != vid:
+              return err((vid,HashifyCheckRevHashMismatch))
 
-  if db.top.pAmk.len != db.top.kMap.len:
+  # Some `kMap[]` entries may ne void indicating backend deletion
+  let kMapCount = db.top.kMap.values.toSeq.filterIt(it.isValid).len
+
+  if db.top.pAmk.len != kMapCount:
     var knownKeys: HashSet[VertexID]
     for (key,vid) in db.top.pAmk.pairs:
       if not db.top.kMap.hasKey(vid):
@@ -390,7 +374,8 @@ proc hashifyCheck*(
       knownKeys.incl vid
     return err((VertexID(0),HashifyCheckRevCountMismatch)) # should not apply(!)
 
-  if 0 < db.top.pAmk.len and not relax and db.top.pAmk.len != db.top.sTab.len:
+  if 0 < db.top.pAmk.len and not relax and db.top.pAmk.len < db.top.sTab.len:
+    # Cannot have less changes than cached entries
     return err((VertexID(0),HashifyCheckVtxCountMismatch))
 
   for vid in db.top.pPrf:

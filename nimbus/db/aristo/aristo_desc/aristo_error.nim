@@ -69,6 +69,7 @@ type
     MergeLeafPathCachedAlready
     MergeNonBranchProofModeLock
     MergeRootBranchLinkBusy
+    MergeAssemblyFailed # Ooops, internal error
 
     MergeHashKeyInvalid
     MergeRootVidInvalid
