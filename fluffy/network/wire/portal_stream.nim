@@ -131,42 +131,24 @@ proc connectTo*(
     nodeAddress: NodeAddress,
     connectionId: uint16):
     Future[Result[UtpSocket[NodeAddress], string]] {.async.} =
-  let connectFut = stream.transport.connectTo(nodeAddress, connectionId)
-
-  # using yield, not await, as await does not play nice with cancellation
-  # interacting with async procs which allocates some resource
-  yield connectFut
-
-  var socketRes: ConnectionResult[NodeAddress]
-
-  if connectFut.completed():
-    socketRes = connectFut.read()
-  else:
-    raise connectFut.error
-
-  if socketRes.isErr():
-    case socketRes.error.kind
+  let connectRes = await stream.transport.connectTo(nodeAddress, connectionId)
+  if connectRes.isErr():
+    case connectRes.error.kind
     of SocketAlreadyExists:
       # This means that there is already a socket to this nodeAddress with given
-      # connection id. It probably means that a peersent us a connection id
-      # which is already in use..
-      # For now just fail the connection and return an error. Another strategy
-      # to consider would be to check what is the connection status, and then
-      # re-use it, or close it and retry connection.
+      # connection id. This means that a peer sent us a connection id which is
+      # already in use. The connection is failed and an error returned.
       let msg = "Socket to " & $nodeAddress & "with connection id: " &
         $connectionId & " already exists"
       return err(msg)
     of ConnectionTimedOut:
-      # Another strategy for handling this error would be to retry connecting a
-      # few times before giving up. But we know (as we control the uTP impl)
-      # that this error will only occur when a SYN packet was re-sent 3 times
-      # and failed to be acked. This should be enough of indication that the
-      # remote host is not reachable.
+      # A time-out here means that a uTP SYN packet was re-sent 3 times and
+      # failed to be acked. This should be enough of indication that the
+      # remote host is not reachable and no new connections are attempted.
       let msg = "uTP timeout while trying to connect to " & $nodeAddress
       return err(msg)
-
-  let socket = socketRes.get()
-  return ok(socket)
+  else:
+    return ok(connectRes.get())
 
 proc writeContentRequest(
     socket: UtpSocket[NodeAddress], stream: PortalStream,
