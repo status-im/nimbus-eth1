@@ -609,19 +609,11 @@ proc findContent*(p: PortalProtocol, dst: Node, contentKey: ByteList):
         return err("Trying to connect to node with unknown address")
 
       # uTP protocol uses BE for all values in the header, incl. connection id
-      let connFuture = p.stream.connectTo(
+      let connectionResult =
+        await p.stream.connectTo(
           nodeAddress.unsafeGet(),
           uint16.fromBytesBE(m.connectionId)
         )
-
-      yield connFuture
-
-      var connectionResult: Result[UtpSocket[NodeAddress], string]
-
-      if connFuture.completed():
-        connectionResult = connFuture.read()
-      else:
-        raise connFuture.error
 
       if connectionResult.isErr():
         debug "uTP connection error while trying to find content",
