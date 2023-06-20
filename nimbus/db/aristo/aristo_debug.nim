@@ -14,8 +14,8 @@ import
   std/[algorithm, sequtils, sets, strutils, tables],
   eth/[common, trie/nibbles],
   stew/byteutils,
-  "."/[aristo_constants, aristo_desc, aristo_hike, aristo_vid],
-  ./aristo_desc/aristo_types_private
+  "."/[aristo_constants, aristo_desc, aristo_hike, aristo_init, aristo_vid],
+  ./aristo_init/[aristo_memory, aristo_rocksdb]
 
 # ------------------------------------------------------------------------------
 # Ptivate functions
@@ -34,7 +34,7 @@ proc sortedKeys(pPrf: HashSet[VertexID]): seq[VertexID] =
   pPrf.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID)
 
 proc toPfx(indent: int; offset = 0): string =
-  if 0 < indent: "\n" & " ".repeat(indent+offset) else: ""
+  if 0 < indent+offset: "\n" & " ".repeat(indent+offset) else: ""
 
 proc labelVidUpdate(db: var AristoDb, lbl: HashLabel, vid: VertexID): string =
   if lbl.key.isValid and vid.isValid:
@@ -70,8 +70,13 @@ proc squeeze(s: string; hex = false; ignLen = false): string =
 proc stripZeros(a: string): string =
   a.strip(leading=true, trailing=false, chars={'0'}).toLowerAscii
 
-proc ppVid(vid: VertexID): string =
-  if vid.isValid: "$" & vid.uint64.toHex.stripZeros.toLowerAscii else: "$ø"
+proc ppVid(vid: VertexID; pfx = true): string =
+  if pfx:
+    result = "$"
+  if vid.isValid:
+    result &= vid.uint64.toHex.stripZeros.toLowerAscii
+  else:
+    result &= "ø"
 
 proc vidCode(lbl: HashLabel, db: AristoDb): uint64 =
   if lbl.isValid:
@@ -109,11 +114,11 @@ proc ppLabel(lbl: HashLabel; db: AristoDb): string =
   if not db.top.isNil:
     let vid = db.top.pAmk.getOrVoid lbl
     if vid.isValid:
-      return "£" & rid & vid.ppVid
+      return "£" & rid & vid.ppVid(pfx=false)
   block:
     let vid = db.xMap.getOrVoid lbl
     if vid.isValid:
-      return "£" & rid & vid.ppVid
+      return "£" & rid & vid.ppVid(pfx=false)
 
   "%" & rid & lbl.key.ByteArray32
                      .mapIt(it.toHex(2)).join.tolowerAscii
@@ -192,17 +197,14 @@ proc ppXMap*(
                  .filterIt(1 < it[1]).toTable
 
   proc ppNtry(n: uint64): string =
+    var s = "(" & VertexID(n).ppVid
     let lbl = kMap.getOrVoid VertexID(n)
-    var s = "(" & VertexID(n).ppVid & ","
     if lbl.isValid:
-      s &= lbl.ppLabel(db)
-
       let vid = pAmk.getOrVoid lbl
-      if vid.isValid:
-        s &= ",ø"
+      if not vid.isValid:
+        s &= "," & lbl.ppLabel(db) & ",ø"
       elif vid != VertexID(n):
-        s &= "," & vid.ppVid
-
+        s &= "," & lbl.ppLabel(db) & "," & vid.ppVid
       let count = dups.getOrDefault(VertexID(n), 0)
       if 0 < count:
         s &= ",*" & $count
@@ -247,6 +249,20 @@ proc ppXMap*(
   else:
     result &= "}"
 
+proc ppBe[T](be: T; db: AristoDb; indent: int): string =
+  ## Walk over backend tables
+  let pfx = indent.toPfx
+  result = "<" & $be.kind & ">"
+  result &= pfx & "vGen" & pfx & " [" & be.walkIdg.toSeq.mapIt(
+      it[2].pp
+    ).join(",") & "]"
+  result &= pfx & "sTab" & pfx & " {" & be.walkVtx.toSeq.mapIt(
+      $(1+it[0]) & "(" & it[1].ppVid & "," & it[2].ppVtx(db,it[1]) & ")"
+    ).join("," & pfx & "  ") & "}"
+  result &= pfx & "kMap" & pfx & " {" & be.walkKey.toSeq.mapIt(
+      $(1+it[0]) & "(" & it[1].ppVid & "," & it[2].ppKey & ")"
+    ).join("," & pfx & "  ") & "}"
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -276,8 +292,8 @@ proc pp*(lty: LeafTie, db = AristoDb()): string =
 proc pp*(vid: VertexID): string =
   vid.ppVid
 
-proc pp*(vid: openArray[VertexID]): string =
-  "[" & vid.mapIt(it.ppVid).join(",") & "]"
+proc pp*(vGen: openArray[VertexID]): string =
+  "[" & vGen.mapIt(it.ppVid).join(",") & "]"
 
 proc pp*(p: PayloadRef, db = AristoDb()): string =
   p.ppPayload(db)
@@ -337,9 +353,6 @@ proc pp*(lTab: Table[LeafTie,VertexID]; indent = 4): string =
             .mapIt("(" & it[0].ppLeafTie(db) & "," & it[1].ppVid & ")")
             .join("," & indent.toPfx(1)) & "}"
 
-proc pp*(vGen: seq[VertexID]): string =
-  "[" & vGen.mapIt(it.ppVid).join(",") & "]"
-
 proc pp*(pPrf: HashSet[VertexID]): string =
   "{" & pPrf.sortedKeys.mapIt(it.ppVid).join(",") & "}"
 
@@ -347,8 +360,17 @@ proc pp*(leg: Leg; db = AristoDb()): string =
   result = "(" & leg.wp.vid.ppVid & ","
   if not db.top.isNil:
     let lbl = db.top.kMap.getOrVoid leg.wp.vid
-    result &= (if lbl.isValid: lbl.ppLabel(db) else: "ø")
-  result &= "," & $leg.nibble.ppNibble & "," & leg.wp.vtx.pp(db) & ")"
+    if not lbl.isValid:
+      result &= "ø"
+    elif leg.wp.vid != db.top.pAmk.getOrVoid lbl:
+      result &= lbl.ppLabel(db)
+  result &= ","
+  if leg.backend:
+    result &= "*"
+  result &= ","
+  if 0 <= leg.nibble:
+    result &= $leg.nibble.ppNibble
+  result &= "," & leg.wp.vtx.pp(db) & ")"
 
 proc pp*(hike: Hike; db = AristoDb(); indent = 4): string =
   let pfx = indent.toPfx(1)
@@ -388,6 +410,13 @@ proc pp*(kMap: Table[VertexID,Hashlabel]; db: AristoDb; indent = 4): string =
 proc pp*(pAmk: Table[Hashlabel,VertexID]; db: AristoDb; indent = 4): string =
   db.ppXMap(db.top.kMap, pAmk, indent)
 
+proc pp*(
+    be: MemBackendRef|RdbBackendRef;
+    db: AristoDb;
+    indent = 4;
+      ): string =
+  be.ppBe(db, indent)
+
 # ---------------------
 
 proc pp*(
@@ -395,44 +424,55 @@ proc pp*(
     sTabOk = true;
     lTabOk = true;
     kMapOk = true;
-    dKeyOk = true;
     pPrfOk = true;
     indent = 4;
       ): string =
   let
-    pfx1 = max(indent-1,0).toPfx
-    pfx2 = indent.toPfx
-    labelOk = 1 < sTabOk.ord + lTabOk.ord + kMapOk.ord + dKeyOk.ord + pPrfOk.ord
+    pfx1 = indent.toPfx
+    pfx2 = indent.toPfx(1)
+    tagOk = 1 < sTabOk.ord + lTabOk.ord + kMapOk.ord + pPrfOk.ord
   var
-    pfy1 = ""
-    pfy2 = ""
+    pfy = ""
 
   proc doPrefix(s: string): string =
     var rc: string
-    if labelOk:
-      rc = pfy1 & s & pfx2
-      pfy1 = pfx1
+    if tagOk:
+      rc = pfy & s & pfx2
+      pfy = pfx1
     else:
-      rc = pfy2
-      pfy2 = pfx2
+      rc = pfy
+      pfy = pfx2
     rc
 
   if not db.top.isNil:
     if sTabOk:
       let info = "sTab(" & $db.top.sTab.len & ")"
-      result &= info.doPrefix & db.top.sTab.pp(db,indent)
+      result &= info.doPrefix & db.top.sTab.pp(db,indent+1)
     if lTabOk:
       let info = "lTab(" & $db.top.lTab.len & ")"
-      result &= info.doPrefix & db.top.lTab.pp(indent)
+      result &= info.doPrefix & db.top.lTab.pp(indent+1)
     if kMapOk:
       let info = "kMap(" & $db.top.kMap.len & "," & $db.top.pAmk.len & ")"
-      result &= info.doPrefix & db.ppXMap(db.top.kMap,db.top.pAmk,indent)
-    if dKeyOk:
-      let info = "dKey(" & $db.top.dkey.len & ")"
-      result &= info.doPrefix & db.top.dKey.pp
+      result &= info.doPrefix & db.ppXMap(db.top.kMap,db.top.pAmk,indent+1)
     if pPrfOk:
       let info = "pPrf(" & $db.top.pPrf.len & ")"
       result &= info.doPrefix & db.top.pPrf.pp
+
+proc pp*(
+  be: AristoTypedBackendRef;
+  db: AristoDb;
+  indent = 4;
+    ): string =
+
+  case (if be.isNil: BackendNone else: be.kind)
+  of BackendMemory:
+    be.MemBackendRef.ppBe(db, indent)
+
+  of BackendRocksDB:
+    be.RdbBackendRef.ppBe(db, indent)
+
+  of BackendNone:
+    "n/a"
 
 # ------------------------------------------------------------------------------
 # End

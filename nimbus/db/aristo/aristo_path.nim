@@ -14,8 +14,7 @@ import
   std/sequtils,
   eth/[common, trie/nibbles],
   stew/results,
-  ./aristo_desc,
-  ./aristo_desc/aristo_types_private
+  ./aristo_desc
 
 # Info snippet (just a reminder to keep somewhere)
 #

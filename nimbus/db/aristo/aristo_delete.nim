@@ -41,11 +41,11 @@ proc clearKey(db: AristoDb; vid: VertexID) =
     db.top.pAmk.del key
   elif db.getKeyBackend(vid).isOK:
     # Register for deleting on backend
-    db.top.dKey.incl vid
+    db.top.kMap[vid] = VOID_HASH_LABEL
+    db.top.pAmk.del key
 
 proc doneWith(db: AristoDb; vid: VertexID) =
   # Remove entry
-  db.top.dKey.excl vid # No need to register for deleting on backend
   db.vidDispose vid    # Will be propagated to backend
   db.top.sTab.del vid
   let key = db.top.kMap.getOrVoid vid
@@ -111,7 +111,7 @@ proc deleteImpl(
     # No need to keep it any longer
     db.top.lTab.del lty
   else:
-    # To be deleted in backend when it is updated
+    # To be recorded on change history
     db.top.lTab[lty] = VertexID(0)
 
   ok()

@@ -15,12 +15,14 @@
 {.push raises: [].}
 
 import
-  std/[strutils, hashes],
+  std/[sequtils, strutils, hashes],
   eth/[common, trie/nibbles],
-  stint,
-  ./aristo_types_private
+  stint
 
 type
+  ByteArray32* = array[32,byte]
+    ## Used for 32 byte hash components repurposed as Merkle hash labels.
+
   VertexID* = distinct uint64
     ## Unique identifier for a vertex of the `Aristo Trie`. The vertex is the
     ## prefix tree (aka `Patricia Trie`) component. When augmented by hash
@@ -72,75 +74,75 @@ static:
 # Public helpers: `VertexID` scalar data model
 # ------------------------------------------------------------------------------
 
-proc `<`*(a, b: VertexID): bool {.borrow.}
-proc `==`*(a, b: VertexID): bool {.borrow.}
-proc cmp*(a, b: VertexID): int {.borrow.}
-proc `$`*(a: VertexID): string = $a.uint64
+func `<`*(a, b: VertexID): bool {.borrow.}
+func `==`*(a, b: VertexID): bool {.borrow.}
+func cmp*(a, b: VertexID): int {.borrow.}
+func `$`*(a: VertexID): string = $a.uint64
 
-proc `==`*(a: VertexID; b: static[uint]): bool =
+func `==`*(a: VertexID; b: static[uint]): bool =
   a == VertexID(b)
 
 # ------------------------------------------------------------------------------
 # Public helpers: `HashID` scalar data model
 # ------------------------------------------------------------------------------
 
-proc u256*(lp: HashID): UInt256 = lp.UInt256
-proc low*(T: type HashID): T = low(UInt256).T
-proc high*(T: type HashID): T = high(UInt256).T
+func u256*(lp: HashID): UInt256 = lp.UInt256
+func low*(T: type HashID): T = low(UInt256).T
+func high*(T: type HashID): T = high(UInt256).T
 
-proc `+`*(a: HashID; b: UInt256): HashID = (a.u256+b).HashID
-proc `-`*(a: HashID; b: UInt256): HashID = (a.u256-b).HashID
-proc `-`*(a, b: HashID): UInt256 = (a.u256 - b.u256)
+func `+`*(a: HashID; b: UInt256): HashID = (a.u256+b).HashID
+func `-`*(a: HashID; b: UInt256): HashID = (a.u256-b).HashID
+func `-`*(a, b: HashID): UInt256 = (a.u256 - b.u256)
 
-proc `==`*(a, b: HashID): bool = a.u256 == b.u256
-proc `<=`*(a, b: HashID): bool = a.u256 <= b.u256
-proc `<`*(a, b: HashID): bool = a.u256 < b.u256
+func `==`*(a, b: HashID): bool = a.u256 == b.u256
+func `<=`*(a, b: HashID): bool = a.u256 <= b.u256
+func `<`*(a, b: HashID): bool = a.u256 < b.u256
 
-proc cmp*(x, y: HashID): int = cmp(x.UInt256, y.UInt256)
+func cmp*(x, y: HashID): int = cmp(x.UInt256, y.UInt256)
 
 # ------------------------------------------------------------------------------
 # Public helpers: Conversions between `HashID`, `HashKey`, `Hash256`
 # ------------------------------------------------------------------------------
 
-proc to*(hid: HashID; T: type Hash256): T =
+func to*(hid: HashID; T: type Hash256): T =
   result.data = hid.UInt256.toBytesBE
 
-proc to*(hid: HashID; T: type HashKey): T =
+func to*(hid: HashID; T: type HashKey): T =
   hid.UInt256.toBytesBE.T
 
-proc to*(key: HashKey; T: type HashID): T =
+func to*(key: HashKey; T: type HashID): T =
   UInt256.fromBytesBE(key.ByteArray32).T
 
-proc to*(key: HashKey; T: type Hash256): T =
+func to*(key: HashKey; T: type Hash256): T =
   T(data: ByteArray32(key))
 
-proc to*(hash: Hash256; T: type HashKey): T =
+func to*(hash: Hash256; T: type HashKey): T =
   hash.data.T
 
-proc to*(key: Hash256; T: type HashID): T =
+func to*(key: Hash256; T: type HashID): T =
   key.data.HashKey.to(T)
 
 # ------------------------------------------------------------------------------
 # Public helpers: Miscellaneous mappings
 # ------------------------------------------------------------------------------
 
-proc to*(key: HashKey; T: type Blob): T =
+func to*(key: HashKey; T: type Blob): T =
   ## Representation of a `HashKey` as `Blob` (preserving full information)
   key.ByteArray32.toSeq
 
-proc to*(key: HashKey; T: type NibblesSeq): T =
+func to*(key: HashKey; T: type NibblesSeq): T =
   ## Representation of a `HashKey` as `NibbleSeq` (preserving full information)
   key.ByteArray32.initNibbleRange()
 
-proc to*(hid: HashID; T: type NibblesSeq): T =
+func to*(hid: HashID; T: type NibblesSeq): T =
   ## Representation of a `HashKey` as `NibbleSeq` (preserving full information)
   ByteArray32(hid.to(HashKey)).initNibbleRange()
 
-proc to*(n: SomeUnsignedInt|UInt256; T: type HashID): T =
+func to*(n: SomeUnsignedInt|UInt256; T: type HashID): T =
   ## Representation of a scalar as `HashID` (preserving full information)
   n.u256.T
 
-proc digestTo*(data: Blob; T: type HashKey): T =
+func digestTo*(data: Blob; T: type HashKey): T =
   ## Keccak hash of a `Blob`, represented as a `HashKey`
   keccakHash(data).data.T
 
@@ -148,39 +150,39 @@ proc digestTo*(data: Blob; T: type HashKey): T =
 # Public helpers: `Tables` and `Rlp` support
 # ------------------------------------------------------------------------------
 
-proc hash*(a: HashID): Hash =
+func hash*(a: HashID): Hash =
   ## Table/KeyedQueue mixin
   a.to(HashKey).ByteArray32.hash
 
-proc hash*(a: HashKey): Hash =
+func hash*(a: HashKey): Hash =
   ## Table/KeyedQueue mixin
   a.ByteArray32.hash
 
-proc `==`*(a, b: HashKey): bool =
+func `==`*(a, b: HashKey): bool =
   ## Table/KeyedQueue mixin
   a.ByteArray32 == b.ByteArray32
 
-proc read*[T: HashID|HashKey](rlp: var Rlp, W: type T): T
+func read*[T: HashID|HashKey](rlp: var Rlp, W: type T): T
     {.gcsafe, raises: [RlpError].} =
   rlp.read(Hash256).to(T)
 
-proc append*(writer: var RlpWriter, val: HashID|HashKey) =
+func append*(writer: var RlpWriter, val: HashID|HashKey) =
   writer.append(val.to(Hash256))
 
 # ------------------------------------------------------------------------------
 # Public helpers: `LeafTie` scalar data model
 # ------------------------------------------------------------------------------
 
-proc `<`*(a, b: LeafTie): bool =
+func `<`*(a, b: LeafTie): bool =
   a.root < b.root or (a.root == b.root and a.path < b.path)
 
-proc `==`*(a, b: LeafTie): bool =
+func `==`*(a, b: LeafTie): bool =
   a.root == b.root and a.path == b.path
 
-proc cmp*(a, b: LeafTie): int =
+func cmp*(a, b: LeafTie): int =
   if a < b: -1 elif a == b: 0 else: 1
 
-proc `$`*(a: LeafTie): string =
+func `$`*(a: LeafTie): string =
   let w = $a.root.uint64.toHex & ":" & $a.path.Uint256.toHex
   w.strip(leading=true, trailing=false, chars={'0'}).toLowerAscii
 
@@ -188,7 +190,7 @@ proc `$`*(a: LeafTie): string =
 # Miscellaneous helpers
 # ------------------------------------------------------------------------------
 
-proc `$`*(hid: HashID): string =
+func `$`*(hid: HashID): string =
   if hid == high(HashID):
     "2^256-1"
   elif hid == 0.u256.HashID:
@@ -204,7 +206,7 @@ proc `$`*(hid: HashID): string =
   else:
     hid.UInt256.toHex
 
-proc `$`*(key: HashKey): string =
+func `$`*(key: HashKey): string =
   $key.to(HashID)
 
 # ------------------------------------------------------------------------------

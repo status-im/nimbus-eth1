@@ -10,31 +10,63 @@
 
 ## In-memory backend for Aristo DB
 ## ===============================
-
+##
+## The iterators provided here are currently available only by direct
+## backend access
+## ::
+##   import
+##     aristo/aristo_init,
+##     aristo/aristo_init/aristo_memory
+##
+##   let rc = AristoDb.init(BackendMemory)
+##   if rc.isOk:
+##     let be = rc.value.to(MemBackendRef)
+##     for (n, key, vtx) in be.walkVtx:
+##       ...
+##
 {.push raises: [].}
 
 import
-  std/[sequtils, tables],
+  std/[algorithm, sequtils, tables],
+  eth/common,
   stew/results,
+  ../aristo_constants,
   ../aristo_desc,
-  ../aristo_desc/aristo_types_backend
+  ../aristo_desc/aristo_types_backend,
+  ../aristo_transcode,
+  ./aristo_init_common
 
 type
-  MemBackendRef = ref object
+  MemBackendRef* = ref object of AristoTypedBackendRef
+    ## Inheriting table so access can be extended for debugging purposes
     sTab: Table[VertexID,VertexRef]  ## Structural vertex table making up a trie
     kMap: Table[VertexID,HashKey]    ## Merkle hash key mapping
     vGen: seq[VertexID]
-    txGen: uint                      ## Transaction ID generator (for debugging)
-    txId: uint                       ## Active transaction ID (for debugging)
 
-  MemPutHdlRef = ref object of PutHdlRef
-    txId: uint                       ## Transaction ID (for debugging)
+  MemPutHdlRef = ref object of TypedPutHdlRef
+    sTab: Table[VertexID,VertexRef]
+    kMap: Table[VertexID,HashKey]
+    vGen: seq[VertexID]
+    vGenOk: bool
+ 
+# ------------------------------------------------------------------------------
+# Private helpers
+# ------------------------------------------------------------------------------
 
-const
-  VerifyIxId = true # for debugging
+proc newSession(db: MemBackendRef): MemPutHdlRef =
+  new result
+  result.TypedPutHdlRef.beginSession db
+
+proc getSession(hdl: PutHdlRef; db: MemBackendRef): MemPutHdlRef =
+  hdl.TypedPutHdlRef.verifySession db
+  hdl.MemPutHdlRef
+
+proc endSession(hdl: PutHdlRef; db: MemBackendRef): MemPutHdlRef =
+  hdl.TypedPutHdlRef.finishSession db
+  hdl.MemPutHdlRef
 
 # ------------------------------------------------------------------------------
-# Private functions
+# Private functions: interface
 # ------------------------------------------------------------------------------
 
 proc getVtxFn(db: MemBackendRef): GetVtxFn =
@@ -43,7 +75,7 @@ proc getVtxFn(db: MemBackendRef): GetVtxFn =
       let vtx = db.sTab.getOrDefault(vid, VertexRef(nil))
       if vtx != VertexRef(nil):
         return ok vtx
-      err(MemBeVtxNotFound)
+      err(GetVtxNotFound)
 
 proc getKeyFn(db: MemBackendRef): GetKeyFn =
   result =
@@ -51,7 +83,7 @@ proc getKeyFn(db: MemBackendRef): GetKeyFn =
       let key = db.kMap.getOrDefault(vid, VOID_HASH_KEY)
       if key != VOID_HASH_KEY:
         return ok key
-      err(MemBeKeyNotFound)
+      err(GetKeyNotFound)
 
 proc getIdgFn(db: MemBackendRef): GetIdgFn =
   result =
@@ -63,78 +95,126 @@ proc getIdgFn(db: MemBackendRef): GetIdgFn =
 proc putBegFn(db: MemBackendRef): PutBegFn =
   result =
     proc(): PutHdlRef =
-      when VerifyIxId:
-        doAssert db.txId == 0
-        db.txGen.inc
-      MemPutHdlRef(txId: db.txGen)
+      db.newSession()
 
 
 proc putVtxFn(db: MemBackendRef): PutVtxFn =
   result =
     proc(hdl: PutHdlRef; vrps: openArray[(VertexID,VertexRef)]) =
-      when VerifyIxId:
-        doAssert db.txId == hdl.MemPutHdlRef.txId
+      let hdl = hdl.getSession db
       for (vid,vtx) in vrps:
-        db.sTab[vid] = vtx
+        hdl.sTab[vid] = vtx
 
 proc putKeyFn(db: MemBackendRef): PutKeyFn =
   result =
     proc(hdl: PutHdlRef; vkps: openArray[(VertexID,HashKey)]) =
-      when VerifyIxId:
-        doAssert db.txId == hdl.MemPutHdlRef.txId
+      let hdl = hdl.getSession db
       for (vid,key) in vkps:
-        db.kMap[vid] = key
+        hdl.kMap[vid] = key
 
 proc putIdgFn(db: MemBackendRef): PutIdgFn =
   result =
     proc(hdl: PutHdlRef; vs: openArray[VertexID])  =
-      when VerifyIxId:
-        doAssert db.txId == hdl.MemPutHdlRef.txId
-      db.vGen = vs.toSeq
+      let hdl = hdl.getSession db
+      hdl.vGen = vs.toSeq
+      hdl.vGenOk = true
 
 
 proc putEndFn(db: MemBackendRef): PutEndFn =
   result =
     proc(hdl: PutHdlRef): AristoError =
-      when VerifyIxId:
-        doAssert db.txId == hdl.MemPutHdlRef.txId
-        db.txId = 0
+      let hdl = hdl.endSession db
+
+      for (vid,vtx) in hdl.sTab.pairs:
+        if vtx.isValid:
+          db.sTab[vid] = vtx
+        else:
+          db.sTab.del vid
+
+      for (vid,key) in hdl.kMap.pairs:
+        if key.isValid:
+          db.kMap[vid] = key
+        else:
+          db.kMap.del vid
+
+      if hdl.vGenOk:
+        db.vGen = hdl.vGen
       AristoError(0)
 
 # -------------
 
-proc delVtxFn(db: MemBackendRef): DelVtxFn =
+proc closeFn(db: MemBackendRef): CloseFn =
   result =
-    proc(vids: openArray[VertexID]) =
-      for vid in vids:
-        db.sTab.del vid
-
-proc delKeyFn(db: MemBackendRef): DelKeyFn =
-  result =
-    proc(vids: openArray[VertexID]) =
-      for vid in vids:
-        db.kMap.del vid
+    proc(ignore: bool) =
+      discard
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
 proc memoryBackend*(): AristoBackendRef =
-  let db = MemBackendRef()
+  let db = MemBackendRef(kind: BackendMemory)
 
-  AristoBackendRef(
-    getVtxFn: getVtxFn db,
-    getKeyFn: getKeyFn db,
-    getIdgFn: getIdgFn db,
+  db.getVtxFn = getVtxFn db
+  db.getKeyFn = getKeyFn db
+  db.getIdgFn = getIdgFn db
 
-    putBegFn: putBegFn db,
-    putVtxFn: putVtxFn db,
-    putKeyFn: putKeyFn db,
-    putIdgFn: putIdgFn db,
-    putEndFn: putEndFn db,
+  db.putBegFn = putBegFn db
+  db.putVtxFn = putVtxFn db
+  db.putKeyFn = putKeyFn db
+  db.putIdgFn = putIdgFn db
+  db.putEndFn = putEndFn db
 
-    delVtxFn: delVtxFn db,
-    delKeyFn: delKeyFn db)
+  db.closeFn = closeFn db
+
+  db
+
+# ------------------------------------------------------------------------------
+# Public iterators (needs direct backend access)
+# ------------------------------------------------------------------------------
+
+iterator walkIdg*(
+    be: MemBackendRef;
+      ): tuple[n: int, vid: VertexID, vGen: seq[VertexID]] =
+  ## Iteration over the ID generator sub-table (there is at most one instance).
+  if 0 < be.vGen.len:
+    yield(0, VertexID(0), be.vGen)
+
+iterator walkVtx*(
+    be: MemBackendRef;
+      ): tuple[n: int, vid: VertexID, vtx: VertexRef] =
+  ##  Iteration over the vertex sub-table.
+  for n,vid in be.sTab.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID):
+    let vtx = be.sTab.getOrVoid vid
+    if vtx.isValid:
+      yield (n, vid, vtx)
+
+iterator walkKey*(
+    be: MemBackendRef;
+      ): tuple[n: int, vid: VertexID, key: HashKey] =
+  ## Iteration over the Markle hash sub-table.
+  for n,vid in be.kMap.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID):
+    let key = be.kMap.getOrDefault(vid, VOID_HASH_KEY)
+    if key.isValid:
+      yield (n, vid, key)
+
+iterator walk*(
+    be: MemBackendRef;
+      ): tuple[n: int, pfx: AristoStorageType, vid: VertexID, data: Blob] =
+  ## Walk over all key-value pairs of the database.
+  ##
+  ## Non-decodable entries are stepped over while the counter `n` of the
+  ## yield record is still incremented.
+  for (n,vid,vGen) in be.walkIdg:
+    yield (n, IdgPfx, vid, vGen.blobify)
+
+  for (n,vid,vtx) in be.walkVtx:
+    let rc = vtx.blobify
+    if rc.isOk:
+      yield (n, VtxPfx, vid, rc.value)
+
+  for (n,vid,key) in be.walkKey:
+    yield (n, KeyPfx, vid, key.to(Blob))
 
 # ------------------------------------------------------------------------------
 # End

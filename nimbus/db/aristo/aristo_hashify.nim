@@ -42,6 +42,7 @@
 {.push raises: [].}
 
 import
+  std/[algorithm, sequtils, strutils],
   std/[sets, tables],
   chronicles,
   eth/common,
@@ -49,8 +50,49 @@ import
   "."/[aristo_constants, aristo_debug, aristo_desc, aristo_get,
        aristo_hike, aristo_transcode, aristo_vid]
 
+type
+  BackVidValRef = ref object
+    root: VertexID                      ## Root vertex
+    onBe: bool                          ## Table key vid refers to backend
+    toVid: VertexID                     ## Next/follow up vertex
+
+  BackVidTab =
+    Table[VertexID,BackVidValRef]
+
 logScope:
   topics = "aristo-hashify"
+
+# ------------------------------------------------------------------------------
+# Private helpers
+# ------------------------------------------------------------------------------
+
+template logTxt(info: static[string]): static[string] =
+  "Hashify " & info
+
+func getOrVoid(tab: BackVidTab; vid: VertexID): BackVidValRef =
+  tab.getOrDefault(vid, BackVidValRef(nil))
+
+func isValid(brv: BackVidValRef): bool =
+  brv != BackVidValRef(nil)
+
+# ------------------------------------------------------------------------------
+# Private helper, debugging
+# ------------------------------------------------------------------------------
+
+proc pp(w: BackVidValRef): string =
+  if w.isNil:
+    return "n/a"
+  result = "(" & w.root.pp & ","
+  if w.onBe:
+    result &= "*"
+  result &= "," & w.toVid.pp & ")"
+
+proc pp(t: BackVidTab): string =
+  proc pp(b: bool): string =
+    if b: "*" else: ""
+  "{" & t.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID)
+              .mapIt("(" & it.pp & "," & t.getOrVoid(it).pp & ")")
+              .join(",") & "}"
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -80,6 +122,59 @@ proc toNode(vtx: VertexRef; db: AristoDb): Result[NodeRef,void] =
         node.key[0] = key
         return ok node
 
+
+proc updateHashKey(
+    db: AristoDb;                      # Database, top layer
+    root: VertexID;                    # Root ID
+    vid: VertexID;                     # Vertex ID to check for
+    expected: HashKey;                 # Hash key for vertex address by `vid`
+    backend: bool;                     # Set `true` id vertex is on backend
+      ): Result[void,AristoError] =
+  ## Update the argument hash key `expected` for the vertex addressed by `vid`.
+  ##
+  # If the Merkle hash has been cached locally, already it must match.
+  block:
+    let key = db.top.kMap.getOrVoid(vid).key
+    if key.isValid:
+      if key != expected:
+        let error = HashifyExistingHashMismatch
+        debug logTxt "hash update failed", vid, key, expected, error
+        return err(error)
+      return ok()
+
+  # If the vertex had been cached locally, there would be no locally cached
+  # Merkle hash key. It will be created at the bottom end of the function.
+  #
+  # So there remains tha case when vertex is available on the backend only.
+  # The Merkle hash not cached locally. It might be overloaded (and eventually
+  # overwitten.)
+  if backend:
+    # Ok, vertex is on the backend.
+    let rc = db.getKeyBackend vid
+    if rc.isOk:
+      let key = rc.value
+      if key == expected:
+        return ok()
+
+      # This step is a error in the sense that something the on the backend
+      # is fishy. There should not be contradicting Merkle hashes. Throwing
+      # an error heres would lead to a deadlock so we correct it.
+      debug "correcting backend hash key mismatch", vid, key, expected
+      # Proceed `vidAttach()`, below
+
+    elif rc.error != GetKeyNotFound:
+      debug logTxt "backend key fetch failed", vid, expected, error=rc.error
+      return err(rc.error)
+
+    else:
+      discard
+      # Proceed `vidAttach()`, below
+
+  # Othwise there is no Merkle hash, so create one with the `expected` key
+  db.vidAttach(HashLabel(root: root, key: expected), vid)
+  ok()
+
+
 proc leafToRootHasher(
     db: AristoDb;                      # Database, top layer
     hike: Hike;                        # Hike for labelling leaf..root
@@ -88,6 +183,7 @@ proc leafToRootHasher(
   for n in (hike.legs.len-1).countDown(0):
     let
       wp = hike.legs[n].wp
+      bg = hike.legs[n].backend
       rc = wp.vtx.toNode db
     if rc.isErr:
       return ok n
@@ -99,13 +195,9 @@ proc leafToRootHasher(
     # Check against existing key, or store new key
     let
       key = rc.value.encode.digestTo(HashKey)
-      vfy = db.getKey wp.vid
-    if not vfy.isValid:
-      db.vidAttach(HashLabel(root: hike.root, key: key), wp.vid)
-    elif key != vfy:
-      let error = HashifyExistingHashMismatch
-      debug "hashify failed", vid=wp.vid, key, expected=vfy, error
-      return err((wp.vid,error))
+      rx = db.updateHashKey(hike.root, wp.vid, key, bg)
+    if rx.isErr:
+      return err((wp.vid,rx.error))
 
   ok -1 # all could be hashed
 
@@ -121,7 +213,6 @@ proc hashifyClear*(
   if not locksOnly:
     db.top.pAmk.clear
     db.top.kMap.clear
-    db.top.dKey.clear
   db.top.pPrf.clear
 
 
@@ -136,8 +227,8 @@ proc hashify*(
     completed: HashSet[VertexID]
 
     # Width-first leaf-to-root traversal structure
-    backLink: Table[VertexID,(VertexID,VertexID)]
-    downMost: Table[VertexID,(VertexID,VertexID)]
+    backLink: BackVidTab
+    downMost: BackVidTab
 
   for (lky,vid) in db.top.lTab.pairs:
     let hike = lky.hikeUp(db)
@@ -148,7 +239,7 @@ proc hashify*(
 
     # Hash as much of the `hike` as possible
     let n = block:
-      let rc = db.leafToRootHasher(hike)
+      let rc = db.leafToRootHasher hike
       if rc.isErr:
         return err(rc.error)
       rc.value
@@ -163,9 +254,15 @@ proc hashify*(
       #               |                   |          |
       #               |     backLink[]    | downMost |
       #
-      downMost[hike.legs[n].wp.vid] = (hike.root, hike.legs[n-1].wp.vid)
+      downMost[hike.legs[n].wp.vid] = BackVidValRef(
+        root:  hike.root,
+        onBe:  hike.legs[n].backend,
+        toVid: hike.legs[n-1].wp.vid)
       for u in (n-1).countDown(1):
-        backLink[hike.legs[u].wp.vid] = (hike.root, hike.legs[u-1].wp.vid)
+        backLink[hike.legs[u].wp.vid] = BackVidValRef(
+          root:  hike.root,
+          onBe:  hike.legs[u].backend,
+          toVid: hike.legs[u-1].wp.vid)
 
     elif n < 0:
       completed.incl hike.root
@@ -178,41 +275,33 @@ proc hashify*(
   # Update remaining hashes
   while 0 < downMost.len:
     var
-      redo: Table[VertexID,(VertexID,VertexID)]
+      redo: BackVidTab
       done: HashSet[VertexID]
 
-    for (fromVid,rootAndVid) in downMost.pairs:
+    for (vid,val) in downMost.pairs:
       # Try to convert vertex to a node. This is possible only if all link
       # references have Merkle hashes.
       #
-      # Also `db.getVtx(fromVid)` => not nil as it was fetched earlier, already
-      let rc = db.getVtx(fromVid).toNode(db)
+      # Also `db.getVtx(vid)` => not nil as it was fetched earlier, already
+      let rc = db.getVtx(vid).toNode(db)
       if rc.isErr:
         # Cannot complete with this vertex, so do it later
-        redo[fromVid] = rootAndVid
+        redo[vid] = val
 
       else:
-        # Register Hashes
+        # Update Merkle hash
         let
-          hashKey = rc.value.encode.digestTo(HashKey)
-          toVid = rootAndVid[1]
+          key = rc.value.encode.digestTo(HashKey)
+          rx = db.updateHashKey(val.root, vid, key, val.onBe)
+        if rx.isErr:
+          return err((vid,rx.error))
 
-        # Update Merkle hash (aka `HashKey`)
-        let fromLbl = db.top.kMap.getOrVoid fromVid
-        if fromLbl.isValid:
-          db.vidAttach(HashLabel(root: rootAndVid[0], key: hashKey), fromVid)
-        elif hashKey != fromLbl.key:
-          let error = HashifyExistingHashMismatch
-          debug "hashify failed", vid=fromVid, key=hashKey,
-            expected=fromLbl.key.pp, error
-          return err((fromVid,error))
-
-        done.incl fromVid
+        done.incl vid
 
         # Proceed with back link
-        let nextItem = backLink.getOrDefault(toVid, (VertexID(0),VertexID(0)))
-        if nextItem[1].isValid:
-          redo[toVid] = nextItem
+        let nextItem = backLink.getOrVoid val.toVid
+        if nextItem.isValid:
+          redo[val.toVid] = nextItem
 
     # Make sure that the algorithm proceeds
     if done.len == 0:

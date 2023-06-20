@@ -17,7 +17,8 @@ import
   stew/results,
   unittest2,
   ../../nimbus/db/aristo/[
-    aristo_desc, aristo_delete, aristo_hashify, aristo_nearby, aristo_merge],
+    aristo_desc, aristo_delete, aristo_hashify, aristo_init, aristo_nearby,
+    aristo_merge],
   ./test_helpers
 
 type
@@ -116,7 +117,7 @@ proc test_delete*(
   var td = TesterDesc.init 42
   for n,w in list:
     let
-      db = AristoDb(top: AristoLayerRef())
+      db = AristoDb.init BackendNone # (top: AristoLayerRef())
       lstLen = list.len
       leafs = w.kvpLst.mapRootVid VertexID(1) # merge into main trie
       added = db.merge leafs

@@ -10,7 +10,7 @@
 # distributed except according to those terms.
 
 import
-  std/sequtils,
+  std/[os, sequtils],
   eth/common,
   rocksdb,
   ../../nimbus/db/aristo/[

@@ -18,7 +18,7 @@ import
   unittest2,
   ../../nimbus/db/kvstore_rocksdb,
   ../../nimbus/db/aristo/[
-    aristo_desc, aristo_debug, aristo_transcode, aristo_vid],
+    aristo_desc, aristo_debug, aristo_init, aristo_transcode, aristo_vid],
   "."/[test_aristo_cache, test_helpers]
 
 type
@@ -87,7 +87,7 @@ proc test_transcodeAccounts*(
       ) =
   ## Transcoder tests on accounts database
   var
-    adb = AristoDb(top: AristoLayerRef())
+    adb = AristoDb.init BackendNone
     count = -1
   for (n, key,value) in rocky.walkAllDb():
     if stopAfter < n:
@@ -139,7 +139,7 @@ proc test_transcodeAccounts*(
 
     # NIM object <-> DbRecord mapping
     let dbr = node.blobify.getOrEmpty(noisy)
-    var node1 = dbr.deblobify.asNode(adb)
+    var node1 = dbr.deblobify(VertexRef).asNode(adb)
     if node1.error != AristoError(0):
       check node1.error == AristoError(0)
 
@@ -163,7 +163,7 @@ proc test_transcodeAccounts*(
         noisy.say "***", "count=", count, " dbr1=", dbr1.toHex
 
     # Serialise back as is
-    let dbr2 = dbr.deblobify.asNode(adb).blobify.getOrEmpty(noisy)
+    let dbr2 = dbr.deblobify(VertexRef).asNode(adb).blobify.getOrEmpty(noisy)
     block:
       if dbr != dbr2:
         check dbr == dbr2
@@ -176,7 +176,7 @@ proc test_transcodeAccounts*(
 proc test_transcodeVidRecycleLists*(noisy = true; seed = 42) =
   ## Transcode VID lists held in `AristoDb` descriptor
   var td = TesterDesc.init seed
-  let db = AristoDb(top: AristoLayerRef())
+  let db = AristoDb.init BackendNone
 
   # Add some randum numbers
   block:
@@ -198,14 +198,16 @@ proc test_transcodeVidRecycleLists*(noisy = true; seed = 42) =
 
   # Serialise/deserialise
   block:
-    let dbBlob = db.blobify
+    let dbBlob = db.top.vGen.blobify
 
     # Deserialise
-    let db1 = block:
-      let rc = dbBlob.deblobify AristoDb
-      if rc.isErr:
-        check rc.isOk
-      rc.get(otherwise = AristoDb(top: AristoLayerRef()))
+    let
+      db1 = AristoDb.init BackendNone
+      rc = dbBlob.deblobify seq[VertexID]
+    if rc.isErr:
+      check rc.error == AristoError(0)
+    else:
+      db1.top.vGen = rc.value
 
     check db.top.vGen == db1.top.vGen
 
