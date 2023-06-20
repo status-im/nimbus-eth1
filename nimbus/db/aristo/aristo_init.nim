@@ -42,10 +42,17 @@ proc init*(
     ok T(top: AristoLayerRef(), backend: memoryBackend())
 
   elif backend == BackendRocksDB:
-    let rc = rocksDbBackend basePath
-    if rc.isErr:
-      return err(rc.error)
-    ok T(top: AristoLayerRef(), backend: rc.value)
+    let be = block:
+      let rc = rocksDbBackend basePath
+      if rc.isErr:
+        return err(rc.error)
+      rc.value
+    let vGen = block:
+      let rc = be.getIdgFn()
+      if rc.isErr:
+        return err(rc.error)
+      rc.value
+    ok T(top: AristoLayerRef(vGen: vGen), backend: be)
 
   else:
     {.error: "Unknown/unsupported Aristo DB backend".}
@@ -76,9 +83,11 @@ proc finish*(db: var AristoDb; flush = false) =
   ## always flush on close.)
   if not db.backend.isNil:
     db.backend.closeFn flush
+    db.backend = AristoBackendRef(nil)
   db.top = AristoLayerRef(nil)
   db.stack.setLen(0)
 
+# -----------------
 
 proc to*[W: MemBackendRef|RdbBackendRef](db: AristoDb; T: type W): T =
   ## Handy helper for lew-level access to some backend functionality

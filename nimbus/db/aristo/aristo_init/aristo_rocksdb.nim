@@ -31,7 +31,7 @@ import
   eth/common,
   rocksdb,
   stew/results,
-  ".."/[aristo_desc, aristo_transcode],
+  ".."/[aristo_constants, aristo_desc, aristo_transcode],
   ../aristo_desc/aristo_types_backend,
   ./aristo_rocksdb/[rdb_desc, rdb_get, rdb_init, rdb_put, rdb_walk],
   ./aristo_init_common
@@ -129,8 +129,12 @@ proc getIdgFn(db: RdbBackendRef): GetIdgFn =
         debug logTxt "getIdgFn: failed", error=rc.error[1]
         return err(rc.error[0])
 
+      if rc.value.len == 0:
+        let w = EmptyVidSeq
+        return ok w
+
       # Decode data record
-      return rc.value.deblobify seq[VertexID]
+      rc.value.deblobify seq[VertexID]
 
 # -------------
 

@@ -120,7 +120,7 @@ proc save*(
   # Delete stack and clear top
   db.stack.setLen(0)
   if clear:
-    db.top = AristoLayerRef(vGen: db.top.vgen)
+    db.top = AristoLayerRef(vGen: db.top.vGen)
 
   ok hst
 

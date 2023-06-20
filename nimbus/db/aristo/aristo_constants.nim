@@ -21,6 +21,9 @@ const
   EmptyNibbleSeq* = EmptyBlob.initNibbleRange
     ## Useful shortcut (borrowed from `sync/snap/constants.nim`)
 
+  EmptyVidSeq* = seq[VertexID].default
+    ## Useful shortcut
+
   VOID_CODE_KEY* = EMPTY_CODE_HASH.to(HashKey)
     ## Equivalent of `nil` for `Account` object code hash
 

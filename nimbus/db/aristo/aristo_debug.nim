@@ -251,17 +251,20 @@ proc ppXMap*(
 
 proc ppBe[T](be: T; db: AristoDb; indent: int): string =
   ## Walk over backend tables
-  let pfx = indent.toPfx
+  let
+    pfx = indent.toPfx
+    pfx1 = indent.toPfx(1)
+    pfx2 = indent.toPfx(2)
   result = "<" & $be.kind & ">"
-  result &= pfx & "vGen" & pfx & " [" & be.walkIdg.toSeq.mapIt(
-      it[2].pp
+  result &= pfx & "vGen" & pfx1 & "[" & be.walkIdg.toSeq.mapIt(
+      it[2].mapIt(it.ppVid).join(",")
     ).join(",") & "]"
-  result &= pfx & "sTab" & pfx & " {" & be.walkVtx.toSeq.mapIt(
+  result &= pfx & "sTab" & pfx1 & "{" & be.walkVtx.toSeq.mapIt(
       $(1+it[0]) & "(" & it[1].ppVid & "," & it[2].ppVtx(db,it[1]) & ")"
-    ).join("," & pfx & "  ") & "}"
-  result &= pfx & "kMap" & pfx & " {" & be.walkKey.toSeq.mapIt(
+    ).join(pfx2) & "}"
+  result &= pfx & "kMap" & pfx1 & "{" & be.walkKey.toSeq.mapIt(
       $(1+it[0]) & "(" & it[1].ppVid & "," & it[2].ppKey & ")"
-    ).join("," & pfx & "  ") & "}"
+    ).join(pfx2) & "}"
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -421,6 +424,7 @@ proc pp*(
 
 proc pp*(
     db: AristoDb;
+    vGenOk = true;
     sTabOk = true;
     lTabOk = true;
     kMapOk = true;
@@ -430,7 +434,7 @@ proc pp*(
   let
     pfx1 = indent.toPfx
     pfx2 = indent.toPfx(1)
-    tagOk = 1 < sTabOk.ord + lTabOk.ord + kMapOk.ord + pPrfOk.ord
+    tagOk = 1 < sTabOk.ord + lTabOk.ord + kMapOk.ord + pPrfOk.ord + vGenOk.ord
   var
     pfy = ""
 
@@ -445,6 +449,9 @@ proc pp*(
     rc
 
   if not db.top.isNil:
+    if vGenOk:
+      let info = "vGen(" & $db.top.vGen.len & ")"
+      result &= info.doPrefix & db.top.vGen.pp
     if sTabOk:
       let info = "sTab(" & $db.top.sTab.len & ")"
       result &= info.doPrefix & db.top.sTab.pp(db,indent+1)

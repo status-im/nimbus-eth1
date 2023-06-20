@@ -155,7 +155,7 @@ iterator walk*(
         break walkBody # done
 
       let vid = kData.keyVid(kLen)
-      if vid.isValid:
+      if vid.isValid or pfx == IdgPfx:
 
         # Fetch value data
         var vLen: csize_t
