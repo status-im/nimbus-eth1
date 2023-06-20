@@ -45,12 +45,12 @@ type
     CacheMissingNodekeys
 
     # Path function `hikeUp()`
-    PathRootMissing
-    PathLeafTooEarly
-    PathBranchTailEmpty
-    PathBranchBlindEdge
-    PathExtTailEmpty
-    PathExtTailMismatch
+    HikeRootMissing
+    HikeLeafTooEarly
+    HikeBranchTailEmpty
+    HikeBranchBlindEdge
+    HikeExtTailEmpty
+    HikeExtTailMismatch
 
     # Path/nibble/key conversions in `aisto_path.nim`
     PathExpected64Nibbles
