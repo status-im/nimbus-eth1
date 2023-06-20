@@ -75,14 +75,14 @@ proc clearMerkleKeys(
     vid: VertexID;                     # Additionall vertex IDs to clear
       ) =
   for vid in hike.legs.mapIt(it.wp.vid) & @[vid]:
-    let key = db.top.kMap.getOrVoid vid
-    if key.isValid:
+    let lbl = db.top.kMap.getOrVoid vid
+    if lbl.isValid:
       db.top.kMap.del vid
-      db.top.pAmk.del key
+      db.top.pAmk.del lbl
     elif db.getKeyBackend(vid).isOK:
       # Register for deleting on backend
       db.top.kMap[vid] = VOID_HASH_LABEL
-      db.top.pAmk.del key
+      db.top.pAmk.del lbl
 
 # -----------
 

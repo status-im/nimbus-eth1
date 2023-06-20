@@ -73,7 +73,7 @@ proc getVtxFn(db: MemBackendRef): GetVtxFn =
   result =
     proc(vid: VertexID): Result[VertexRef,AristoError] =
       let vtx = db.sTab.getOrDefault(vid, VertexRef(nil))
-      if vtx != VertexRef(nil):
+      if vtx.isValid:
         return ok vtx
       err(GetVtxNotFound)
 
@@ -81,7 +81,7 @@ proc getKeyFn(db: MemBackendRef): GetKeyFn =
   result =
     proc(vid: VertexID): Result[HashKey,AristoError] =
       let key = db.kMap.getOrDefault(vid, VOID_HASH_KEY)
-      if key != VOID_HASH_KEY:
+      if key.isValid:
         return ok key
       err(GetKeyNotFound)
 
