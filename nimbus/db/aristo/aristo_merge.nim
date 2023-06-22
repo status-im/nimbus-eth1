@@ -461,7 +461,7 @@ proc mergeNodeImpl(
   # Make sure that the `vid<->hashLbl` reverse mapping has been cached,
   # already. This is provided for if the `nodes` are processed in the right
   # order `root->.. ->leaf`.
-  var
+  let
     hashLbl = HashLabel(root: rootVid, key: hashKey)
     vid = db.top.pAmk.getOrVoid hashLbl
   if not vid.isValid:
@@ -517,7 +517,13 @@ proc mergeNodeImpl(
             vtx.bVid[n] = db.vidAttach bLbl
 
   db.top.pPrf.incl vid
-  db.top.sTab[vid] = vtx
+  if hasVtx:
+    let key = db.getKey vid
+    if key != hashKey:
+      db.top.sTab[vid] = vtx
+  else:
+    db.top.sTab[vid] = vtx
+
   ok vid
 
 # ------------------------------------------------------------------------------

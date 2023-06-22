@@ -208,13 +208,12 @@ proc test_mergeKvpList*(
         check rc == Result[void,(VertexID,AristoError)].ok()
         return
 
-    block:
-      let rdbHist = block:
-        let rc = db.save
-        if rc.isErr:
-          check rc.error == AristoError(0)
-          return
-        rc.value
+    let rdbHist = block:
+      let rc = db.save
+      if rc.isErr:
+        check rc.error == AristoError(0)
+        return
+      rc.value
 
     when true and false:
       noisy.say "*** kvp(5)", "<", n, "/", lstLen-1, ">",
@@ -232,6 +231,7 @@ proc test_mergeKvpList*(
 proc test_mergeProofAndKvpList*(
     noisy: bool;
     list: openArray[ProofTrieData];
+    rdbPath: string;                         # Rocks DB storage directory
     resetDb = false;
     idPfx = "";
     oops: KnownHasherFailure = @[];
@@ -242,9 +242,17 @@ proc test_mergeProofAndKvpList*(
     db: AristoDb
     rootKey = HashKey.default
     count = 0
+  defer:
+    db.finish(flush=true)
   for n,w in list:
     if resetDb or w.root != rootKey or w.proof.len == 0:
-      db.top = AristoLayerRef()
+      db.finish(flush=true)
+      db = block:
+        let rc = AristoDb.init(BackendRocksDB,rdbPath)
+        if rc.isErr:
+          check rc.error == AristoError(0)
+          return
+        rc.value
       rootKey = w.root
       count = 0
     count.inc
@@ -257,29 +265,42 @@ proc test_mergeProofAndKvpList*(
       leafs = w.kvpLst.mapRootVid VertexID(1) # merge into main trie
 
     when true and false:
-      noisy.say "***", "sample(1) <", n, "/", lstLen-1, ">",
+      noisy.say "***", "proofs(1) <", n, "/", lstLen-1, ">",
         " groups=", count, " nLeafs=", leafs.len,
-        " db-dump\n   ", db.pp
+        "\n    cache\n    ", db.pp,
+        "\n    backend\n    ", db.to(RdbBackendRef).pp(db),
+        "\n    --------"
 
-    var proved: tuple[merged: int, dups: int, error: AristoError]
+    var
+      proved: tuple[merged: int, dups: int, error: AristoError]
+      preDb: string
     if 0 < w.proof.len:
       let rc = db.merge(rootKey, VertexID(1))
       if rc.isErr:
         check rc.error == AristoError(0)
         return
-      proved = db.merge(w.proof, rc.value)
+
+      preDb = db.pp
+      proved = db.merge(w.proof, rc.value) # , noisy)
+
       check proved.error in {AristoError(0),MergeHashKeyCachedAlready}
       check w.proof.len == proved.merged + proved.dups
       check db.top.lTab.len == lTabLen
-      check db.top.sTab.len == proved.merged + sTabLen
+      check db.top.sTab.len <= proved.merged + sTabLen
       check proved.merged < db.top.pAmk.len
-      check proved.merged < db.top.kMap.len
 
     when true and false:
       if 0 < w.proof.len:
-        noisy.say "***", "sample(2) <", n, "/", lstLen-1, ">",
-          " groups=", count, " nLeafs=", leafs.len, " proved=", proved,
-          " db-dump\n   ", db.pp
+        noisy.say "***", "proofs(2) <", n, "/", lstLen-1, ">",
+          " groups=", count,
+          " nLeafs=", leafs.len,
+          " proved=", proved,
+          "\n    pre-DB\n    ", preDb,
+          "\n    --------",
+          "\n    cache\n    ", db.pp,
+          "\n    backend\n    ", db.to(RdbBackendRef).pp(db),
+          "\n    --------"
+        return
 
     let
       merged = db.merge leafs
@@ -295,9 +316,11 @@ proc test_mergeProofAndKvpList*(
         return
 
     when true and false:
-      noisy.say "***", "sample(3) <", n, "/", lstLen-1, ">",
+      noisy.say "***", "proofs(3) <", n, "/", lstLen-1, ">",
         " groups=", count, " nLeafs=", leafs.len, " merged=", merged,
-        " db-dump\n   ", db.pp
+        "\n    cache\n    ", db.pp,
+        "\n    backend\n    ", db.to(RdbBackendRef).pp(db),
+        "\n    --------"
 
     block:
       let
@@ -316,23 +339,34 @@ proc test_mergeProofAndKvpList*(
 
       # Otherwise, check for correctness
       elif rc.isErr:
-        noisy.say "***", "<", n, "/", lstLen-1, ">",
+        noisy.say "***", "proofs(4) <", n, "/", lstLen-1, ">",
           " testId=", testId,
           " groups=", count,
           "\n   pre-DB",
           "\n    ", preDb,
           "\n   --------",
-          "\n    ", db.pp
+          "\n    cache\n    ", db.pp,
+          "\n    backend\n    ", db.to(RdbBackendRef).pp(db),
+          "\n    --------"
         check rc.error == (VertexID(0),AristoError(0))
         return
 
-    when true and false:
-      noisy.say "***", "sample(4) <", n, "/", lstLen-1, ">",
-        " groups=", count,
-        " db-dump\n   ", db.pp
+    let rdbHist = block:
+      let rc = db.save
+      if rc.isErr:
+        check rc.error == AristoError(0)
+        return
+      rc.value
 
     when true and false:
-      noisy.say "***", "sample(5) <", n, "/", lstLen-1, ">",
+      noisy.say "***", "proofs(5) <", n, "/", lstLen-1, ">",
+        " groups=", count,
+        "\n    cache\n    ", db.pp,
+        "\n    backend\n    ", db.to(RdbBackendRef).pp(db),
+        "\n    --------"
+
+    when true and false:
+      noisy.say "***", "proofs(6) <", n, "/", lstLen-1, ">",
         " groups=", count, " proved=", proved.pp, " merged=", merged.pp
   true
 

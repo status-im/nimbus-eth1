@@ -193,25 +193,57 @@ proc ppXMap*(
     indent: int;
       ): string =
 
-  let dups = pAmk.values.toSeq.toCountTable.pairs.toSeq
-                 .filterIt(1 < it[1]).toTable
+  let
+    pfx = indent.toPfx(1)
+    dups = pAmk.values.toSeq.toCountTable.pairs.toSeq
+               .filterIt(1 < it[1]).toTable
+    revOnly = pAmk.pairs.toSeq.filterIt(not kMap.hasKey it[1])
+                        .mapIt((it[1],it[0])).toTable
 
   proc ppNtry(n: uint64): string =
-    var s = "(" & VertexID(n).ppVid
+    var s = VertexID(n).ppVid
     let lbl = kMap.getOrVoid VertexID(n)
     if lbl.isValid:
       let vid = pAmk.getOrVoid lbl
       if not vid.isValid:
-        s &= "," & lbl.ppLabel(db) & ",ø"
+        s = "(" & s & "," & lbl.ppLabel(db) & ",ø"
       elif vid != VertexID(n):
-        s &= "," & lbl.ppLabel(db) & "," & vid.ppVid
+        s = "(" & s & "," & lbl.ppLabel(db) & "," & vid.ppVid
       let count = dups.getOrDefault(VertexID(n), 0)
       if 0 < count:
+        if s[0] != '(':
+          s &= "(" & s
         s &= ",*" & $count
     else:
       s &= "£r(!)"
-    s & "),"
+    if s[0] == '(':
+      s &= ")"
+    s & ","
 
+  result = "{"
+  # Extra reverse lookups
+  let revKeys = revOnly.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID)
+  if 0 < revKeys.len:
+    proc ppRevlabel(vid: VertexID): string =
+      "(ø," & revOnly.getOrVoid(vid).ppLabel(db) & ")"
+    var (i, r) = (0, revKeys[0])
+    result &= revKeys[0].ppRevlabel
+    for n in 1 ..< revKeys.len:
+      let vid = revKeys[n]
+      r.inc
+      if r != vid:
+        if i+1 != n:
+          result &= ".. " & revKeys[n-1].ppRevlabel
+        result &= pfx & vid.ppRevlabel
+        (i, r) = (n, vid)
+    if i < revKeys.len - 1:
+      if i+1 != revKeys.len - 1:
+        result &= ".. "
+      else:
+        result &= pfx
+      result &= revKeys[^1].ppRevlabel
+
+  # Forward lookups
   var cache: seq[(uint64,uint64,bool)]
   for vid in kMap.sortedKeys:
     let lbl = kMap.getOrVoid vid
@@ -223,12 +255,10 @@ proc ppXMap*(
     else:
       cache.add (vid.uint64, 0u64, true)
 
-  result = "{"
   if 0 < cache.len:
-    let
-      pfx = indent.toPfx(1)
-    var
-      (i, r) = (0, cache[0])
+    var (i, r) = (0, cache[0])
+    if 0 < revKeys.len:
+      result &= pfx
     result &= cache[i][0].ppNtry
     for n in 1 ..< cache.len:
       let w = cache[n]

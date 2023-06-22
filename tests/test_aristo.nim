@@ -210,7 +210,7 @@ proc accountsRunner(
       check noisy.test_mergeKvpList(accLst, dbDir, resetDb)
 
     test &"Merge {accLst.len} proof & account lists to database":
-      check noisy.test_mergeProofAndKvpList(accLst, resetDb)
+      check noisy.test_mergeProofAndKvpList(accLst, dbDir, resetDb)
 
     test &"Compare {accLst.len} account lists on database backends":
       if cmpBackends:
@@ -249,7 +249,7 @@ proc storagesRunner(
 
     test &"Merge {stoLst.len} proof & slots lists to database":
       check noisy.test_mergeProofAndKvpList(
-        stoLst, resetDb, fileInfo, oops)
+        stoLst, dbDir, resetDb, fileInfo, oops)
 
     test &"Compare {stoLst.len} slot lists on database backends":
       if cmpBackends:
@@ -283,7 +283,7 @@ when isMainModule:
     noisy.miscRunner()
 
   # Borrowed from `test_sync_snap.nim`
-  when true and false:
+  when true: # and false:
     for n,sam in snapTestList:
       noisy.transcodeRunner(sam)
     for n,sam in snapTestStorageList:
