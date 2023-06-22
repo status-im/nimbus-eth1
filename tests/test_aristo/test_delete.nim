@@ -17,8 +17,8 @@ import
   stew/results,
   unittest2,
   ../../nimbus/db/aristo/[
-    aristo_desc, aristo_delete, aristo_hashify, aristo_init, aristo_nearby,
-    aristo_merge],
+    aristo_desc, aristo_debug, aristo_delete, aristo_hashify, aristo_init,
+    aristo_nearby, aristo_merge],
   ./test_helpers
 
 type
@@ -121,6 +121,7 @@ proc test_delete*(
       lstLen = list.len
       leafs = w.kvpLst.mapRootVid VertexID(1) # merge into main trie
       added = db.merge leafs
+      preState = db.pp
 
     if added.error != AristoError(0):
       check added.error == AristoError(0)
@@ -141,7 +142,7 @@ proc test_delete*(
 
     let uMax = leafTies.len - 1
     for u,leafTie in leafTies:
-      let rc = leafTie.delete(db)
+      let rc = leafTie.delete db # ,noisy)
       if rc.isErr:
         check rc.error == (VertexID(0),AristoError(0))
         return
@@ -164,8 +165,15 @@ proc test_delete*(
         elif 0 < db.top.sTab.len:
           check db.top.sTab.len == 0
           return
-        let rc = db.hashifyCheck(relax=true)
+        let rc = db.hashifyCheck(relax=true) # ,noisy=true)
         if rc.isErr:
+          noisy.say "***", "<", n, "/", lstLen-1, ">",
+            " item=", u, "/", uMax,
+            "\n    --------",
+            "\n    pre-DB\n    ", preState,
+            "\n    --------",
+            "\n    cache\n    ", db.pp,
+            "\n    --------"
           check rc.error == (VertexID(0),AristoError(0))
           return
 

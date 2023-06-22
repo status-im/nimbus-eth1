@@ -34,9 +34,9 @@ type
 
   AristoStorageType* = enum
     ## Storage types, key prefix
-    IdgPfx = 0                       ## ID generator
-    VtxPfx = 1                       ## Vertex data
-    KeyPfx = 2                       ## Key/hash data
+    IdgPfx = 1                       ## ID generator
+    VtxPfx = 2                       ## Vertex data
+    KeyPfx = 3                       ## Key/hash data
 
 # ------------------------------------------------------------------------------
 # Public helpers

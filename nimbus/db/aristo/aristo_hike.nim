@@ -71,7 +71,7 @@ proc hikeUp*(
     tail: path)
 
   if not root.isValid:
-    result.error = PathRootMissing
+    result.error = HikeRootMissing
 
   else:
     var vid = root
@@ -96,13 +96,13 @@ proc hikeUp*(
           result.legs.add leg
           result.tail = EmptyNibbleSeq
         else:
-          result.error = PathLeafTooEarly # Ooops
+          result.error = HikeLeafTooEarly # Ooops
         break # Buck stops here
 
       of Branch:
         if result.tail.len == 0:
           result.legs.add leg
-          result.error = PathBranchTailEmpty # Ooops
+          result.error = HikeBranchTailEmpty # Ooops
           break
 
         let
@@ -110,7 +110,7 @@ proc hikeUp*(
           nextVid = leg.wp.vtx.bVid[nibble]
 
         if not nextVid.isValid:
-          result.error = PathBranchBlindEdge # Ooops
+          result.error = HikeBranchBlindEdge # Ooops
           break
 
         leg.nibble = nibble
@@ -122,11 +122,11 @@ proc hikeUp*(
         if result.tail.len == 0:
           result.legs.add leg
           result.tail = EmptyNibbleSeq
-          result.error = PathExtTailEmpty # Well, somehow odd
+          result.error = HikeExtTailEmpty # Well, somehow odd
           break
 
         if leg.wp.vtx.ePfx.len != result.tail.sharedPrefixLen(leg.wp.vtx.ePfx):
-          result.error = PathExtTailMismatch # Need to branch from here
+          result.error = HikeExtTailMismatch # Need to branch from here
           break
 
         result.legs.add leg

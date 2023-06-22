@@ -75,14 +75,14 @@ proc clearMerkleKeys(
     vid: VertexID;                     # Additionall vertex IDs to clear
       ) =
   for vid in hike.legs.mapIt(it.wp.vid) & @[vid]:
-    let key = db.top.kMap.getOrVoid vid
-    if key.isValid:
+    let lbl = db.top.kMap.getOrVoid vid
+    if lbl.isValid:
       db.top.kMap.del vid
-      db.top.pAmk.del key
+      db.top.pAmk.del lbl
     elif db.getKeyBackend(vid).isOK:
       # Register for deleting on backend
       db.top.kMap[vid] = VOID_HASH_LABEL
-      db.top.pAmk.del key
+      db.top.pAmk.del lbl
 
 # -----------
 
@@ -248,6 +248,7 @@ proc concatBranchAndLeaf(
       lPfx:  hike.tail.slice(1),
       lData: payload)
   brVtx.bVid[nibble] = vid
+  db.top.sTab[brVid] = brVtx
   db.top.sTab[vid] = vtx
   result.legs.add Leg(wp: VidVtxPair(vtx: vtx, vid: vid), nibble: -1)
 
@@ -369,8 +370,9 @@ proc topIsExtAddLeaf(
         lPfx:  hike.tail.slice(1),
         lData: payload)
     brVtx.bVid[nibble] = vid
+    db.top.sTab[brVid] = brVtx
     db.top.sTab[vid] = vtx
-    result.legs[^1].nibble = nibble
+    result.legs.add Leg(wp: VidVtxPair(vtx: brVtx, vid: brVid), nibble: nibble)
     result.legs.add Leg(wp: VidVtxPair(vtx: vtx, vid: vid), nibble: -1)
 
 
@@ -400,6 +402,7 @@ proc topIsEmptyAddLeaf(
         lPfx:  hike.tail.slice(1),
         lData: payload)
     rootVtx.bVid[nibble] = leafVid
+    db.top.sTab[hike.root] = rootVtx
     db.top.sTab[leafVid] = leafVtx
     return Hike(
       root: hike.root,
@@ -407,6 +410,25 @@ proc topIsEmptyAddLeaf(
               Leg(wp: VidVtxPair(vtx: leafVtx, vid: leafVid), nibble: -1)])
 
   db.insertBranch(hike, hike.root, rootVtx, payload)
+
+
+proc updatePayload(
+    db: AristoDb;                      # Database, top layer
+    hike: Hike;                        # No path legs
+    leaf: LeafTiePayload;              # Leaf data and payload
+     ): Hike =
+  ## Update leaf vertex if payloads differ
+  result = hike
+  let vtx = result.legs[^1].wp.vtx
+
+  # Update payloads if they differ
+  if vtx.lData != leaf.payload:
+    let vid = result.legs[^1].wp.vid
+
+    vtx.lData = leaf.payload
+    db.top.sTab[vid] = vtx
+    db.top.lTab[leaf.leafTie] = vid
+    db.clearMerkleKeys(result, vid)
 
 # ------------------------------------------------------------------------------
 # Private functions: add Merkle proof node
@@ -512,7 +534,17 @@ proc merge*(
   ## stored with the leaf vertex in the database unless the leaf vertex exists
   ## already.
   ##
-  if db.top.lTab.hasKey leaf.leafTie:
+
+  # Check whether the leaf is on the database and payloads match
+  var haveLeafOk = false
+  block:
+    let vid = db.top.lTab.getOrVoid leaf.leafTie
+    if vid.isValid:
+      let vtx = db.getVtx vid
+      if vtx.isValid and vtx.lData == leaf.payload:
+        haveLeafOk = true
+
+  if haveLeafOk:
     result.error = MergeLeafPathCachedAlready
 
   else:
@@ -524,7 +556,7 @@ proc merge*(
       of Leaf:
         if 0 < hike.tail.len:          # `Leaf` vertex problem?
           return Hike(error: MergeLeafGarbledHike)
-        result = hike
+        result = db.updatePayload(hike, leaf)
       of Extension:
         result = db.topIsExtAddLeaf(hike, leaf.payload)
 
@@ -544,6 +576,12 @@ proc merge*(
             lData: leaf.payload))
         db.top.sTab[wp.vid] = wp.vtx
         result = Hike(root: wp.vid, legs: @[Leg(wp: wp, nibble: -1)])
+
+      # Double check the result until the code is more reliable
+      block:
+        let rc = result.to(NibblesSeq).pathToKey
+        if rc.isErr or rc.value != leaf.leafTie.path.to(HashKey):
+          result.error = MergeAssemblyFailed # Ooops
 
     # Update leaf acccess cache
     if result.error == AristoError(0):

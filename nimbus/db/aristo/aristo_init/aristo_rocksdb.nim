@@ -31,10 +31,12 @@ import
   eth/common,
   rocksdb,
   stew/results,
-  ".."/[aristo_desc, aristo_transcode],
+  ../aristo_constants,
+  ../aristo_desc,
   ../aristo_desc/aristo_types_backend,
-  ./aristo_rocksdb/[rdb_desc, rdb_get, rdb_init, rdb_put, rdb_walk],
-  ./aristo_init_common
+  ../aristo_transcode,
+  ./aristo_init_common,
+  ./aristo_rocksdb/[rdb_desc, rdb_get, rdb_init, rdb_put, rdb_walk]
 
 logScope:
   topics = "aristo-backend"
@@ -113,9 +115,10 @@ proc getKeyFn(db: RdbBackendRef): GetKeyFn =
         return err(rc.error[0])
 
       # Decode data record
-      var key: HashKey
-      if key.init rc.value:
-        return ok key
+      if 0 < rc.value.len:
+        var key: HashKey
+        if key.init rc.value:
+          return ok key
 
       err(GetKeyNotFound)
 
@@ -129,8 +132,12 @@ proc getIdgFn(db: RdbBackendRef): GetIdgFn =
         debug logTxt "getIdgFn: failed", error=rc.error[1]
         return err(rc.error[0])
 
+      if rc.value.len == 0:
+        let w = EmptyVidSeq
+        return ok w
+
       # Decode data record
-      return rc.value.deblobify seq[VertexID]
+      rc.value.deblobify seq[VertexID]
 
 # -------------
 

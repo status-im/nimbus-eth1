@@ -76,6 +76,9 @@ proc pp*(w: openArray[ProofTrieData]; indent = 4): string =
   let pfx = indent.toPfx
   "[" & w.mapIt(it.pp(indent + 1)).join("," & pfx & " ") & "]"
 
+proc pp*(ltp: LeafTiePayload; db: AristoDB): string =
+  "(" & ltp.leafTie.pp(db) & "," & ltp.payload.pp(db) & ")"
+
 # ----------
 
 proc say*(noisy = false; pfx = "***"; args: varargs[string, `$`]) =

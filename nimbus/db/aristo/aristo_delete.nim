@@ -34,24 +34,27 @@ proc branchStillNeeded(vtx: VertexRef): bool =
     if vtx.bVid[n].isValid:
       return true
 
-proc clearKey(db: AristoDb; vid: VertexID) =
-  let key = db.top.kMap.getOrVoid vid
-  if key.isValid:
+proc clearKey(
+    db: AristoDb;                      # Database, top layer
+    vid: VertexID;                     # Vertex IDs to clear
+      ) =
+  let lbl = db.top.kMap.getOrVoid vid
+  if lbl.isValid:
     db.top.kMap.del vid
-    db.top.pAmk.del key
+    db.top.pAmk.del lbl
   elif db.getKeyBackend(vid).isOK:
     # Register for deleting on backend
     db.top.kMap[vid] = VOID_HASH_LABEL
-    db.top.pAmk.del key
+    db.top.pAmk.del lbl
 
-proc doneWith(db: AristoDb; vid: VertexID) =
+proc doneWith(
+    db: AristoDb;                      # Database, top layer
+    vid: VertexID;                     # Vertex IDs to clear
+      ) =
   # Remove entry
-  db.vidDispose vid    # Will be propagated to backend
+  db.vidDispose vid                    # Will be propagated to backend
   db.top.sTab.del vid
-  let key = db.top.kMap.getOrVoid vid
-  if key.isValid:
-    db.top.kMap.del vid
-    db.top.pAmk.del key
+  db.clearKey vid
 
 
 proc deleteImpl(
@@ -66,44 +69,52 @@ proc deleteImpl(
     return err((VertexID(0),hike.error))
 
   # doAssert 0 < hike.legs.len and hike.tail.len == 0 # as assured by `hikeUp()`
-  var inx = hike.legs.len - 1
 
-  # Remove leaf entry on the top
-  let lf =  hike.legs[inx].wp
-  if lf.vtx.vType != Leaf:
-    return err((lf.vid,DelLeafExpexted))
-  if lf.vid in db.top.pPrf:
-    return err((lf.vid, DelLeafLocked))
-  db.doneWith lf.vid
-  inx.dec
+  var lf: VidVtxPair
+  block:
+    var inx = hike.legs.len - 1
 
-  while 0 <= inx:
-    # Unlink child vertex
-    let br = hike.legs[inx].wp
-    if br.vtx.vType != Branch:
-      return err((br.vid,DelBranchExpexted))
-    if br.vid in db.top.pPrf:
-      return err((br.vid, DelBranchLocked))
-    br.vtx.bVid[hike.legs[inx].nibble] = VertexID(0)
-
-    if br.vtx.branchStillNeeded:
-      db.clearKey br.vid
-      break
-
-    # Remove this `Branch` entry
-    db.doneWith br.vid
+    # Remove leaf entry on the top
+    lf =  hike.legs[inx].wp
+    if lf.vtx.vType != Leaf:
+      return err((lf.vid,DelLeafExpexted))
+    if lf.vid in db.top.pPrf:
+      return err((lf.vid, DelLeafLocked))
+    db.doneWith(lf.vid)
     inx.dec
 
-    if inx < 0:
-      break
-
-    # There might be an optional `Extension` to remove
-    let ext = hike.legs[inx].wp
-    if ext.vtx.vType == Extension:
+    while 0 <= inx:
+      # Unlink child vertex
+      let br = hike.legs[inx].wp
+      if br.vtx.vType != Branch:
+        return err((br.vid,DelBranchExpexted))
       if br.vid in db.top.pPrf:
-        return err((ext.vid, DelExtLocked))
-      db.doneWith ext.vid
+        return err((br.vid, DelBranchLocked))
+      br.vtx.bVid[hike.legs[inx].nibble] = VertexID(0)
+      db.top.sTab[br.vid] = br.vtx
+
+      if br.vtx.branchStillNeeded:
+        # Clear all keys up to the toot key
+        db.clearKey(br.vid)
+        while 0 < inx:
+          inx.dec
+          db.clearKey(hike.legs[inx].wp.vid)
+        break
+
+      # Remove this `Branch` entry
+      db.doneWith(br.vid)
       inx.dec
+
+      if inx < 0:
+        break
+
+      # There might be an optional `Extension` to remove
+      let ext = hike.legs[inx].wp
+      if ext.vtx.vType == Extension:
+        if br.vid in db.top.pPrf:
+          return err((ext.vid, DelExtLocked))
+        db.doneWith(ext.vid)
+        inx.dec
 
   # Delete leaf entry
   let rc = db.getVtxBackend lf.vid

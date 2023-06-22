@@ -290,7 +290,7 @@ proc deblobify*(data: Blob; vGen: var seq[VertexID]): AristoError =
   ## De-serialise the data record encoded with `blobify()` into the vertex ID
   ## generator argument `vGen`.
   if data.len == 0:
-    vGen = @[1.VertexID]
+    vGen = @[]
   else:
     if (data.len mod 8) != 1:
       return DeblobSizeGarbled

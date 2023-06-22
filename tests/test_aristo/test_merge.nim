@@ -14,11 +14,12 @@
 import
   std/tables,
   eth/common,
-  stew/results,
+  stew/[byteutils, results],
   unittest2,
+  ../../nimbus/db/aristo/aristo_init/aristo_rocksdb,
   ../../nimbus/db/aristo/[
     aristo_desc, aristo_debug, aristo_get, aristo_hashify, aristo_init,
-    aristo_hike, aristo_merge],
+    aristo_hike, aristo_layer, aristo_merge],
   ./test_helpers
 
 type
@@ -38,7 +39,7 @@ proc pp(w: tuple[merged: int, dups: int, error: AristoError]): string =
 proc mergeStepwise(
     db: AristoDb;
     leafs: openArray[LeafTiePayload];
-    noisy: bool;
+    noisy = false;
       ): tuple[merged: int, dups: int, error: AristoError] =
   let
     lTabLen = db.top.lTab.len
@@ -47,15 +48,17 @@ proc mergeStepwise(
 
   for n,leaf in leafs:
     var
-      event = false # or (2 < u) or true
+      event = false
       dumpOk = false or event
       stopOk = false
+
+    when true: # and false:
+      noisy.say "***", "step <", n, "/", leafs.len-1, "> leaf=", leaf.pp(db)
+
     let
       preState = db.pp
       hike = db.merge leaf
       ekih = leaf.leafTie.hikeUp(db)
-
-    noisy.say "***", "step <", n, "/", leafs.len-1, "> "
 
     case hike.error:
     of AristoError(0):
@@ -67,12 +70,13 @@ proc mergeStepwise(
       dumpOk = true
       stopOk = true
 
-    if ekih.error != AristoError(0):
+    if ekih.error != AristoError(0) or
+       ekih.legs[^1].wp.vtx.lData.blob != leaf.payload.blob:
       dumpOk = true
       stopOk = true
 
     let hashesOk = block:
-      let rc = db.hashifyCheck(relax = true)
+      let rc = db.hashifyCheck(relax=true)
       if rc.isOk:
         (VertexID(0),AristoError(0))
       else:
@@ -82,17 +86,22 @@ proc mergeStepwise(
           error = rc.error[1]
         rc.error
 
+    if db.top.lTab.len < lTabLen + merged:
+      dumpOk = true
+
     if dumpOk:
-      noisy.say "***", "<", n, "/", leafs.len-1, "> ", leaf.leafTie.pp,
-        "\n   pre-state ", preState,
-        "\n   --------",
-        "\n   merge => hike",
-        "\n    ", hike.pp(db),
-        "\n   --------",
-        "\n    ekih", ekih.pp(db),
-        "\n   --------",
-        "\n   post-state ", db.pp,
-        "\n"
+      noisy.say "***", "<", n, "/", leafs.len-1, ">",
+        " merged=", merged,
+        " dups=", dups,
+        " leaf=", leaf.pp(db),
+        "\n    --------",
+        "\n    hike\n    ", hike.pp(db),
+        "\n    ekih\n    ", ekih.pp(db),
+        "\n    pre-DB\n    ", preState,
+        "\n    --------",
+        "\n    cache\n    ", db.pp,
+        "\n    backend\n    ", db.to(RdbBackendRef).pp(db),
+        "\n    --------"
 
     check hike.error in {AristoError(0), MergeLeafPathCachedAlready}
     check ekih.error == AristoError(0)
@@ -103,12 +112,12 @@ proc mergeStepwise(
     elif ekih.legs[^1].wp.vtx.vType != Leaf:
       check ekih.legs[^1].wp.vtx.vType == Leaf
     elif hike.error != MergeLeafPathCachedAlready:
-      check ekih.legs[^1].wp.vtx.lData.blob == leaf.payload.blob
+      check ekih.legs[^1].wp.vtx.lData.blob.toHex == leaf.payload.blob.toHex
 
-    if db.top.lTab.len != lTabLen + merged:
+    if db.top.lTab.len < lTabLen + merged:
+      check lTabLen + merged <= db.top.lTab.len
       error = GenericError
-      check db.top.lTab.len == lTabLen + merged # quick leaf access table
-      stopOk = true                             # makes no sense to go on
+      stopOk = true # makes no sense to go on
 
     if stopOk:
       noisy.say "***", "<", n, "/", leafs.len-1, "> stop"
@@ -123,61 +132,96 @@ proc mergeStepwise(
 proc test_mergeKvpList*(
     noisy: bool;
     list: openArray[ProofTrieData];
+    rdbPath: string;                         # Rocks DB storage directory
     resetDb = false;
       ): bool =
 
-  var db = AristoDb.init BackendNone
+  var db: AristoDb
   for n,w in list:
-    if resetDb:
-      db.top = AristoLayerRef()
+    if resetDb or db.top.isNil:
+      db.finish(flush=true)
+      db = block:
+        let rc = AristoDb.init(BackendRocksDB,rdbPath)
+        if rc.isErr:
+          check rc.error == AristoError(0)
+          return
+        rc.value
     let
       lstLen = list.len
       lTabLen = db.top.lTab.len
       leafs = w.kvpLst.mapRootVid VertexID(1) # merge into main trie
-      #prePreDb = db.pp
-      added = db.merge leafs
-      #added = db.mergeStepwise(leafs, noisy=true)
 
-    check added.error == AristoError(0)
-    check db.top.lTab.len == lTabLen + added.merged
+    when true and false:
+      if true and 40 <= n:
+        noisy.say "*** kvp(1)", "<", n, "/", lstLen-1, ">",
+          " nLeafs=", leafs.len,
+          "\n    cache\n    ", db.pp,
+          "\n    backend\n    ", db.to(RdbBackendRef).pp(db),
+          "\n    --------"
+    let
+      added = db.merge leafs
+      #added = db.mergeStepwise(leafs) #, noisy=40 <= n)
+
+    if added.error != AristoError(0):
+      check added.error == AristoError(0)
+      return
+    # There might be an extra leaf in the cache after inserting a Branch
+    # which forks a previous leaf node and a new one.
+    check lTabLen + added.merged <= db.top.lTab.len
     check added.merged + added.dups == leafs.len
 
     let
-      #preDb = db.pp
-      preKMap = (db.top.kMap.len, db.pp(sTabOk=false, lTabOk=false))
-      prePAmk = (db.top.pAmk.len, db.top.pAmk.pp(db))
+      preDb = db.pp
 
     block:
-      let rc = db.hashify # (noisy=true)
+      let rc = db.hashify # (noisy=(0 < n))
       if rc.isErr: # or true:
-        noisy.say "***", "<", n, ">",
+        noisy.say "*** kvp(2)", "<", n, "/", lstLen-1, ">",
          " added=", added,
-         " db dump",
-          "\n   pre-kMap(", preKMap[0], ")\n    ", preKMap[1],
-          #"\n   pre-pre-DB", prePreDb, "\n   --------\n   pre-DB", preDb,
-          "\n   --------",
-          "\n   post-state ", db.pp,
-          "\n"
+          "\n    pre-DB\n    ", preDb,
+          "\n    --------",
+          "\n    cache\n    ", db.pp,
+          "\n    backend\n    ", db.to(RdbBackendRef).pp(db),
+          "\n    --------"
       if rc.isErr:
         check rc.error == (VertexID(0),AristoError(0)) # force message
         return
 
+    when true and false:
+      noisy.say "*** kvp(3)", "<", n, "/", lstLen-1, ">",
+        "\n    cache\n    ", db.pp,
+        "\n    backend\n    ", db.to(RdbBackendRef).pp(db),
+        "\n    --------"
+
     block:
       let rc = db.hashifyCheck()
       if rc.isErr:
-        noisy.say "***", "<", n, "/", lstLen-1, "> db dump",
-          "\n   pre-kMap(", preKMap[0], ")\n    ", preKMap[1],
-          "\n   --------",
-          "\n   pre-pAmk(", prePAmk[0], ")\n    ", prePAmk[1],
-          "\n   --------",
-          "\n   post-state ", db.pp,
-          "\n"
+        noisy.say "*** kvp(4)", "<", n, "/", lstLen-1, "> db dump",
+          "\n    pre-DB\n    ", preDb,
+          "\n    --------",
+          "\n    cache\n    ", db.pp,
+          "\n    backend\n    ", db.to(RdbBackendRef).pp(db),
+          "\n    --------"
       if rc.isErr:
         check rc == Result[void,(VertexID,AristoError)].ok()
         return
 
+    block:
+      let rdbHist = block:
+        let rc = db.save
+        if rc.isErr:
+          check rc.error == AristoError(0)
+          return
+        rc.value
+
     when true and false:
-      noisy.say "***", "sample ", n, "/", lstLen-1,
+      noisy.say "*** kvp(5)", "<", n, "/", lstLen-1, ">",
+        "\n    cache\n    ", db.pp,
+        "\n    backend\n    ", db.to(RdbBackendRef).pp(db),
+        "\n    --------"
+
+    when true and false:
+      noisy.say "*** kvp(9)", "sample ", n, "/", lstLen-1,
         " merged=", added.merged,
         " dup=", added.dups
   true

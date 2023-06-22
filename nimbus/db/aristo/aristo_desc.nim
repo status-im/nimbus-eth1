@@ -41,14 +41,14 @@ type
     sTab*: Table[VertexID,VertexRef] ## Structural vertex table
     lTab*: Table[LeafTie,VertexID]   ## Direct access, path to leaf vertex
     kMap*: Table[VertexID,HashLabel] ## Merkle hash key mapping
-    pAmk*: Table[HashLabel,VertexID] ## Reverse mapper for data import
+    pAmk*: Table[HashLabel,VertexID] ## Reverse `kMap` entries, hash key lookup
     pPrf*: HashSet[VertexID]         ## Locked vertices (proof nodes)
     vGen*: seq[VertexID]             ## Unique vertex ID generator
 
   AristoDb* = object
     ## Set of database layers, supporting transaction frames
-    top*: AristoLayerRef             ## Database working layer
-    stack*: seq[AristoLayerRef]      ## Stashed parent layers
+    top*: AristoLayerRef             ## Database working layer, mutable
+    stack*: seq[AristoLayerRef]      ## Stashed immutable parent layers
     backend*: AristoBackendRef       ## Backend database (may well be `nil`)
 
     # Debugging data below, might go away in future
@@ -58,13 +58,13 @@ type
 # Public helpers
 # ------------------------------------------------------------------------------
 
-proc getOrVoid*[W](tab: Table[W,VertexRef]; w: W): VertexRef =
+func getOrVoid*[W](tab: Table[W,VertexRef]; w: W): VertexRef =
   tab.getOrDefault(w, VertexRef(nil))
 
-proc getOrVoid*[W](tab: Table[W,HashLabel]; w: W): HashLabel =
+func getOrVoid*[W](tab: Table[W,HashLabel]; w: W): HashLabel =
   tab.getOrDefault(w, VOID_HASH_LABEL)
 
-proc getOrVoid*[W](tab: Table[W,VertexID]; w: W): VertexID =
+func getOrVoid*[W](tab: Table[W,VertexID]; w: W): VertexID =
   tab.getOrDefault(w, VertexID(0))
 
 # --------

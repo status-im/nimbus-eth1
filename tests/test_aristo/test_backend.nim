@@ -228,7 +228,7 @@ proc test_backendConsistency*(
       return
 
     if doRdbOk:
-      if not ndb.top.verify(rdb.backend.RdbBackendRef, noisy):
+      if not ndb.top.verify(rdb.to(RdbBackendRef), noisy):
         when true and false:
           noisy.say "***", "beCon(4) <", n, "/", list.len-1, ">",
             " groups=", count,
