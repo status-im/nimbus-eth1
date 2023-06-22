@@ -128,22 +128,40 @@ proc convertTo*(payload: PayloadRef; T: type Blob): T =
   of AccountData:
     result = rlp.encode payload.account
 
-proc to*(node: NodeRef; T: type VertexRef): T =
-  ## Extract a copy of the `VertexRef` part from a `NodeRef`. For a leaf
-  ## type, the `lData` payload reference will be a shallow copy, i.e. only
-  ## the reference pointer is copied.
-  case node.vType:
+proc dup*(pld: PayloadRef): PayloadRef =
+  ## Duplicate payload.
+  case pld.pType:
+  of BlobData:
+    PayloadRef(
+      pType:    BlobData,
+      blob:     pld.blob)
+  of AccountData:
+     PayloadRef(
+       pType:   AccountData,
+       account: pld.account)
+
+proc dup*(vtx: VertexRef): VertexRef =
+  ## Duplicate vertex.
+  # Not using `deepCopy()` here (some `gc` needs `--deepcopy:on`.)
+  case vtx.vType:
   of Leaf:
-    T(vType: Leaf,
-      lPfx:  node.lPfx,
-      lData: node.lData)
+    VertexRef(
+      vType: Leaf,
+      lPfx:  vtx.lPfx,
+      lData: vtx.ldata.dup)
   of Extension:
-    T(vType: Extension,
-      ePfx:  node.ePfx,
-      eVid:  node.eVid)
+    VertexRef(
+      vType: Extension,
+      ePfx:  vtx.ePfx,
+      eVid:  vtx.eVid)
   of Branch:
-    T(vType: Branch,
-      bVid:  node.bVid)
+    VertexRef(
+      vType: Branch,
+      bVid:  vtx.bVid)
+
+proc to*(node: NodeRef; T: type VertexRef): T =
+  ## Extract a copy of the `VertexRef` part from a `NodeRef`.
+  node.VertexRef.dup
 
 # ------------------------------------------------------------------------------
 # End

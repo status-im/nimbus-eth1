@@ -199,6 +199,7 @@ proc accountsRunner(
     fileInfo = sample.file.splitPath.tail.replace(".txt.gz","")
     listMode = if resetDb: "" else: ", merged data lists"
     baseDir = getTmpDir() / sample.name & "-accounts"
+    dbDir = baseDir / "tmp"
 
   defer:
     try: baseDir.removeDir except CatchableError: discard
@@ -206,27 +207,21 @@ proc accountsRunner(
   suite &"Aristo: accounts data dump from {fileInfo}{listMode}":
 
     test &"Merge {accLst.len} account lists to database":
-      # Local sud-directories needed as DB might be kept locked after close
-      let dbDir = baseDir / "tmp1"
       check noisy.test_mergeKvpList(accLst, dbDir, resetDb)
 
     test &"Merge {accLst.len} proof & account lists to database":
-      let dbDir = baseDir / "tmp2"
-      check noisy.test_mergeProofAndKvpList(accLst, resetDb)
+      check noisy.test_mergeProofAndKvpList(accLst, dbDir, resetDb)
 
     test &"Compare {accLst.len} account lists on database backends":
       if cmpBackends:
-        let dbDir = baseDir / "tmp3"
         check noisy.test_backendConsistency(accLst, dbDir, resetDb)
       else:
         skip()
 
     test &"Traverse accounts database w/{accLst.len} account lists":
-      let dbDir = baseDir / "tmp4"
       check noisy.test_nearbyKvpList(accLst, resetDb)
 
     test &"Delete accounts database, successively {accLst.len} entries":
-      let dbDir = baseDir / "tmp5"
       check noisy.test_delete accLst
 
 
@@ -242,6 +237,7 @@ proc storagesRunner(
     fileInfo = sample.file.splitPath.tail.replace(".txt.gz","")
     listMode = if resetDb: "" else: ", merged data lists"
     baseDir = getTmpDir() / sample.name & "-storage"
+    dbDir = baseDir / "tmp"
 
   defer:
     try: baseDir.removeDir except CatchableError: discard
@@ -249,28 +245,22 @@ proc storagesRunner(
   suite &"Aristo: storages data dump from {fileInfo}{listMode}":
 
     test &"Merge {stoLst.len} storage slot lists to database":
-      # Local sud-directories needed as DB might be kept locked after close
-      let dbDir = baseDir / "tmp1"
       check noisy.test_mergeKvpList(stoLst, dbDir, resetDb)
 
     test &"Merge {stoLst.len} proof & slots lists to database":
-      let dbDir = baseDir / "tmp2"
       check noisy.test_mergeProofAndKvpList(
-        stoLst, resetDb, fileInfo, oops)
+        stoLst, dbDir, resetDb, fileInfo, oops)
 
     test &"Compare {stoLst.len} slot lists on database backends":
-      let dbDir = baseDir / "tmp3"
       if cmpBackends:
         check noisy.test_backendConsistency(stoLst, dbDir, resetDb)
       else:
         skip()
 
     test &"Traverse storage slots database w/{stoLst.len} account lists":
-      let dbDir = baseDir / "tmp4"
       check noisy.test_nearbyKvpList(stoLst, resetDb)
 
     test &"Delete storage database, successively {stoLst.len} entries":
-      let dbDir = baseDir / "tmp5"
       check noisy.test_delete stoLst
 
 # ------------------------------------------------------------------------------
@@ -293,7 +283,7 @@ when isMainModule:
     noisy.miscRunner()
 
   # Borrowed from `test_sync_snap.nim`
-  when true and false:
+  when true: # and false:
     for n,sam in snapTestList:
       noisy.transcodeRunner(sam)
     for n,sam in snapTestStorageList:

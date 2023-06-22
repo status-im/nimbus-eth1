@@ -77,10 +77,12 @@ proc init*(
 # -----------------
 
 proc finish*(db: var AristoDb; flush = false) =
-  ## backend destructor. The argument `flush` indicates that a full database
+  ## Backend destructor. The argument `flush` indicates that a full database
   ## deletion is requested. If set ot left `false` the outcome might differ
   ## depending on the type of backend (e.g. the `BackendMemory` backend will
   ## always flush on close.)
+  ##
+  ## This distructor may be used on already *destructed* descriptors.
   if not db.backend.isNil:
     db.backend.closeFn flush
     db.backend = AristoBackendRef(nil)
