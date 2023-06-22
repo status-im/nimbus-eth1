@@ -135,8 +135,10 @@ proc test_mergeKvpList*(
     rdbPath: string;                         # Rocks DB storage directory
     resetDb = false;
       ): bool =
-
-  var db: AristoDb
+  var
+    db: AristoDb
+  defer:
+    db.finish(flush=true)
   for n,w in list:
     if resetDb or db.top.isNil:
       db.finish(flush=true)
