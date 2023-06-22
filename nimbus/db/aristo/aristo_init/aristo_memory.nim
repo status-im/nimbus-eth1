@@ -65,6 +65,12 @@ proc endSession(hdl: PutHdlRef; db: MemBackendRef): MemPutHdlRef =
   hdl.TypedPutHdlRef.finishSession db
   hdl.MemPutHdlRef
 
+proc cpy(vtx: VertexRef): VertexRef =
+  new result
+  result[] = vtx[]
+  if vtx.vType == Leaf:
+    result.lData[] = vtx.lData[]
+
 # ------------------------------------------------------------------------------
 # Private functions: interface
 # ------------------------------------------------------------------------------
@@ -72,9 +78,9 @@ proc endSession(hdl: PutHdlRef; db: MemBackendRef): MemPutHdlRef =
 proc getVtxFn(db: MemBackendRef): GetVtxFn =
   result =
     proc(vid: VertexID): Result[VertexRef,AristoError] =
-      let vtx = db.sTab.getOrDefault(vid, VertexRef(nil))
+      let vtx = db.sTab.getOrVoid vid
       if vtx.isValid:
-        return ok vtx
+        return ok cpy(vtx)
       err(GetVtxNotFound)
 
 proc getKeyFn(db: MemBackendRef): GetKeyFn =
@@ -103,7 +109,7 @@ proc putVtxFn(db: MemBackendRef): PutVtxFn =
     proc(hdl: PutHdlRef; vrps: openArray[(VertexID,VertexRef)]) =
       let hdl = hdl.getSession db
       for (vid,vtx) in vrps:
-        hdl.sTab[vid] = vtx
+        hdl.sTab[vid] = cpy(vtx)
 
 proc putKeyFn(db: MemBackendRef): PutKeyFn =
   result =
