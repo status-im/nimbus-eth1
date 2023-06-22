@@ -127,10 +127,10 @@ proc append*(writer: var RlpWriter; node: NodeRef) =
 # Public db record transcoders
 # ------------------------------------------------------------------------------
 
-proc blobify*(node: VertexRef; data: var Blob): AristoError =
-  ## This function serialises the node argument to a database record. Contrary
-  ## to RLP based serialisation, these records aim to align on fixed byte
-  ## boundaries.
+proc blobify*(vtx: VertexRef; data: var Blob): AristoError =
+  ## This function serialises the vertex argument to a database record.
+  ## Contrary to RLP based serialisation, these records aim to align on
+  ## fixed byte boundaries.
   ## ::
   ##   Branch:
   ##     uint64, ...    -- list of up to 16 child vertices lookup keys
@@ -152,7 +152,7 @@ proc blobify*(node: VertexRef; data: var Blob): AristoError =
   ## ::
   ##   8 * n * ((access shr (n * 4)) and 15)
   ##
-  case node.vType:
+  case vtx.vType:
   of Branch:
     var
       top = 0u64
@@ -160,30 +160,34 @@ proc blobify*(node: VertexRef; data: var Blob): AristoError =
       refs: Blob
       keys: Blob
     for n in 0..15:
-      if node.bVid[n].isValid:
+      if vtx.bVid[n].isValid:
         access = access or (1u16 shl n)
-        refs &= node.bVid[n].uint64.toBytesBE.toSeq
+        refs &= vtx.bVid[n].uint64.toBytesBE.toSeq
+    if refs.len < 16:
+      return BlobifyBranchMissingRefs
     data = refs & access.toBytesBE.toSeq & @[0u8]
   of Extension:
     let
-      pSegm = node.ePfx.hexPrefixEncode(isleaf = false)
+      pSegm = vtx.ePfx.hexPrefixEncode(isleaf = false)
       psLen = pSegm.len.byte
     if psLen == 0 or 33 < pslen:
-      return BlobifyVtxExPathOverflow
-    data = node.eVid.uint64.toBytesBE.toSeq & pSegm & @[0x80u8 or psLen]
+      return BlobifyExtPathOverflow
+    if not vtx.eVid.isValid:
+      return BlobifyExtMissingRefs
+    data = vtx.eVid.uint64.toBytesBE.toSeq & pSegm & @[0x80u8 or psLen]
   of Leaf:
     let
-      pSegm = node.lPfx.hexPrefixEncode(isleaf = true)
+      pSegm = vtx.lPfx.hexPrefixEncode(isleaf = true)
       psLen = pSegm.len.byte
     if psLen == 0 or 33 < psLen:
-      return BlobifyVtxLeafPathOverflow
-    data = node.lData.convertTo(Blob) & pSegm & @[0xC0u8 or psLen]
+      return BlobifyLeafPathOverflow
+    data = vtx.lData.convertTo(Blob) & pSegm & @[0xC0u8 or psLen]
 
-proc blobify*(node: VertexRef): Result[Blob, AristoError] =
+proc blobify*(vtx: VertexRef): Result[Blob, AristoError] =
   ## Variant of `blobify()`
   var
     data: Blob
-    info = node.blobify data
+    info = vtx.blobify data
   if info != AristoError(0):
     return err(info)
   ok(data)

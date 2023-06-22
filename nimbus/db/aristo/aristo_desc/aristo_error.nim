@@ -24,8 +24,10 @@ type
     RlpOtherException
 
     # Data record transcoders, `deblobify()` and `blobify()`
-    BlobifyVtxExPathOverflow
-    BlobifyVtxLeafPathOverflow
+    BlobifyBranchMissingRefs
+    BlobifyExtMissingRefs
+    BlobifyExtPathOverflow
+    BlobifyLeafPathOverflow
 
     DeblobNilArgument
     DeblobUnknown
@@ -87,6 +89,8 @@ type
     HashifyLeafToRootAllFailed
     HashifyRootHashMismatch
     HashifyRootVidMismatch
+    HashifyVidCircularDependence
+    HashifyVtxMissing
 
     HashifyCheckRevCountMismatch
     HashifyCheckRevHashMismatch
@@ -99,6 +103,12 @@ type
     HashifyCheckVtxHashMissing
     HashifyCheckVtxIncomplete
     HashifyCheckVtxLockWithoutKey
+
+    HashifyCheckBeVtxInvalid
+    HashifyCheckBeKeyInvalid
+    HashifyCheckBeVtxMissing
+    HashifyCheckBeKeyMissing
+    HashifyCheckBeVidWasDeleted
 
     # Neighbour vertex, tree traversal `nearbyRight()` and `nearbyLeft()`
     NearbyBeyondRange
