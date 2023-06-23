@@ -609,19 +609,11 @@ proc findContent*(p: PortalProtocol, dst: Node, contentKey: ByteList):
         return err("Trying to connect to node with unknown address")
 
       # uTP protocol uses BE for all values in the header, incl. connection id
-      let connFuture = p.stream.connectTo(
+      let connectionResult =
+        await p.stream.connectTo(
           nodeAddress.unsafeGet(),
           uint16.fromBytesBE(m.connectionId)
         )
-
-      yield connFuture
-
-      var connectionResult: Result[UtpSocket[NodeAddress], string]
-
-      if connFuture.completed():
-        connectionResult = connFuture.read()
-      else:
-        raise connFuture.error
 
       if connectionResult.isErr():
         debug "uTP connection error while trying to find content",
@@ -657,7 +649,10 @@ proc findContent*(p: PortalProtocol, dst: Node, contentKey: ByteList):
         else :
           debug "Socket read time-out",
             socketKey = socket.socketKey
-          socket.close()
+          # Note: This might look a bit strange, be not doing a socket.close()
+          # here as this is already done internally. utp_socket `checkTimeouts`
+          # already does a socket.destroy() on timeout. Might want to change the
+          # API on this later though.
           return err("Reading data from socket timed out, content request failed")
       except CancelledError as exc:
         # even though we already installed cancelCallback on readFut, it is worth

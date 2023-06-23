@@ -24,7 +24,8 @@ import
   ./replay/[pp, undump_accounts, undump_storages],
   ./test_sync_snap/[snap_test_xx, test_accounts, test_types],
   ./test_aristo/[
-    test_delete, test_helpers, test_merge, test_nearby, test_transcode]
+    test_backend, test_delete, test_helpers, test_merge, test_nearby,
+    test_transcode]
 
 const
   baseDir = [".", "..", ".."/"..", $DirSep]
@@ -158,7 +159,7 @@ proc transcodeRunner(noisy =true; sample=accSample; stopAfter=high(int)) =
     accLst = sample.to(seq[UndumpAccounts])
     root = accLst[0].root
     tmpDir = getTmpDir()
-    db = tmpDir.testDbs(sample.name & "-accounts", instances=2, persistent=true)
+    db = tmpDir.testDbs(sample.name&"-transcode", instances=2, persistent=true)
     info = if db.persistent: &"persistent db on \"{db.baseDir}\""
            else: "in-memory db"
     fileInfo = sample.file.splitPath.tail.replace(".txt.gz","")
@@ -187,19 +188,35 @@ proc transcodeRunner(noisy =true; sample=accSample; stopAfter=high(int)) =
         noisy.test_transcodeAccounts(db.cdb[0].rocksStoreRef, stopAfter)
 
 
-proc accountsRunner(noisy=true; sample=accSample, resetDb=false) =
+proc accountsRunner(
+    noisy = true;
+    sample = accSample;
+    resetDb = false;
+    cmpBackends = true;
+      ) =
   let
     accLst = sample.to(seq[UndumpAccounts]).to(seq[ProofTrieData])
     fileInfo = sample.file.splitPath.tail.replace(".txt.gz","")
     listMode = if resetDb: "" else: ", merged data lists"
+    baseDir = getTmpDir() / sample.name & "-accounts"
+    dbDir = baseDir / "tmp"
+
+  defer:
+    try: baseDir.removeDir except CatchableError: discard
 
   suite &"Aristo: accounts data dump from {fileInfo}{listMode}":
 
     test &"Merge {accLst.len} account lists to database":
-      check noisy.test_mergeKvpList(accLst, resetDb)
+      check noisy.test_mergeKvpList(accLst, dbDir, resetDb)
 
     test &"Merge {accLst.len} proof & account lists to database":
-      check noisy.test_mergeProofAndKvpList(accLst, resetDb)
+      check noisy.test_mergeProofAndKvpList(accLst, dbDir, resetDb)
+
+    test &"Compare {accLst.len} account lists on database backends":
+      if cmpBackends:
+        check noisy.test_backendConsistency(accLst, dbDir, resetDb)
+      else:
+        skip()
 
     test &"Traverse accounts database w/{accLst.len} account lists":
       check noisy.test_nearbyKvpList(accLst, resetDb)
@@ -213,19 +230,32 @@ proc storagesRunner(
     sample = storSample;
     resetDb = false;
     oops: KnownHasherFailure = @[];
+    cmpBackends = true;
       ) =
   let
     stoLst = sample.to(seq[UndumpStorages]).to(seq[ProofTrieData])
     fileInfo = sample.file.splitPath.tail.replace(".txt.gz","")
     listMode = if resetDb: "" else: ", merged data lists"
+    baseDir = getTmpDir() / sample.name & "-storage"
+    dbDir = baseDir / "tmp"
+
+  defer:
+    try: baseDir.removeDir except CatchableError: discard
 
   suite &"Aristo: storages data dump from {fileInfo}{listMode}":
 
     test &"Merge {stoLst.len} storage slot lists to database":
-      check noisy.test_mergeKvpList(stoLst, resetDb)
+      check noisy.test_mergeKvpList(stoLst, dbDir, resetDb)
 
     test &"Merge {stoLst.len} proof & slots lists to database":
-      check noisy.test_mergeProofAndKvpList(stoLst, resetDb, fileInfo, oops)
+      check noisy.test_mergeProofAndKvpList(
+        stoLst, dbDir, resetDb, fileInfo, oops)
+
+    test &"Compare {stoLst.len} slot lists on database backends":
+      if cmpBackends:
+        check noisy.test_backendConsistency(stoLst, dbDir, resetDb)
+      else:
+        skip()
 
     test &"Traverse storage slots database w/{stoLst.len} account lists":
       check noisy.test_nearbyKvpList(stoLst, resetDb)
@@ -268,13 +298,13 @@ when isMainModule:
 
   # This one usues dumps from the external `nimbus-eth1-blob` repo
   when true and false:
-    import ./test_sync_snap/snap_storage_xx, ../nimbus/db/aristo/aristo_error
+    import ./test_sync_snap/snap_storage_xx
     let knownFailures: KnownHasherFailure = @[
-      ("storages3__18__25_dump#11.27367",(3,HashifyExistingHashMismatch)),
-      ("storages4__26__33_dump#11.23924",(6,HashifyExistingHashMismatch)),
+      ("storages3__18__25_dump#12.27367",(3,HashifyExistingHashMismatch)),
+      ("storages4__26__33_dump#12.23924",(6,HashifyExistingHashMismatch)),
       ("storages5__34__41_dump#10.20512",(1,HashifyRootHashMismatch)),
-      ("storagesB__84__92_dump#6.9709",  (7,HashifyExistingHashMismatch)),
-      ("storagesD_102_109_dump#17.28287",(9,HashifyExistingHashMismatch)),
+      ("storagesB__84__92_dump#7.9709",  (7,HashifyExistingHashMismatch)),
+      ("storagesD_102_109_dump#18.28287",(9,HashifyExistingHashMismatch)),
     ]
     noisy.showElapsed("@snap_storage_xx"):
       for n,sam in snapStorageList:

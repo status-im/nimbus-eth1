@@ -103,6 +103,9 @@ proc asyncProcessTransactionImpl(
   let txRes = roDB.validateTransaction(tx, sender, header.gasLimit, baseFee256, excessDataGas, fork)
   if txRes.isOk:
 
+    # EIP-1153
+    vmState.stateDB.clearTransientStorage()
+
     # Execute the transaction.
     let
       accTx = vmState.stateDB.beginSavepoint

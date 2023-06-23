@@ -1,10 +1,21 @@
+# Nimbus
+# Copyright (c) 2023 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+#    http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or
+#    http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed except
+# according to those terms.
+
 import
   std/[tables, hashes, sets],
   eth/[common, rlp], eth/trie/[hexary, db, trie_defs],
   ../constants, ../utils/utils, storage_types,
   ../../stateless/multi_keys,
   ./distinct_tries,
-  ./access_list as ac_access_list
+  ./access_list as ac_access_list,
+  ./transient_storage
 
 const
   debugAccountsCache = false
@@ -53,6 +64,7 @@ type
     selfDestruct: HashSet[EthAddress]
     logEntries: seq[Log]
     accessList: ac_access_list.AccessList
+    transientStorage: TransientStorage
     state: TransactionState
     when debugAccountsCache:
       depth: int
@@ -119,6 +131,7 @@ proc beginSavepoint*(ac: var AccountsCache): SavePoint =
   new result
   result.cache = initTable[EthAddress, RefAccount]()
   result.accessList.init()
+  result.transientStorage.init()
   result.state = Pending
   result.parentSavepoint = ac.savePoint
   ac.savePoint = result
@@ -151,6 +164,7 @@ proc commit*(ac: var AccountsCache, sp: SavePoint) =
   for k, v in sp.cache:
     sp.parentSavepoint.cache[k] = v
 
+  ac.savePoint.transientStorage.merge(sp.transientStorage)
   ac.savePoint.accessList.merge(sp.accessList)
   ac.savePoint.selfDestruct.incl sp.selfDestruct
   ac.savePoint.logEntries.add sp.logEntries
@@ -688,6 +702,24 @@ func inAccessList*(ac: AccountsCache, address: EthAddress, slot: UInt256): bool 
       return
     sp = sp.parentSavepoint
 
+func getTransientStorage*(ac: AccountsCache,
+                          address: EthAddress, slot: UInt256): UInt256 =
+  var sp = ac.savePoint
+  while sp != nil:
+    let (ok, res) = sp.transientStorage.getStorage(address, slot)
+    if ok:
+      return res
+    sp = sp.parentSavepoint
+
+proc setTransientStorage*(ac: AccountsCache,
+                          address: EthAddress, slot, val: UInt256) =
+  ac.savePoint.transientStorage.setStorage(address, slot, val)
+
+proc clearTransientStorage*(ac: AccountsCache) {.inline.} =
+  # make sure all savepoint already committed
+  doAssert(ac.savePoint.parentSavepoint.isNil)
+  ac.savePoint.transientStorage.clear()
+
 proc rootHash*(db: ReadOnlyStateDB): KeccakHash {.borrow.}
 proc getCodeHash*(db: ReadOnlyStateDB, address: EthAddress): Hash256 {.borrow.}
 proc getStorageRoot*(db: ReadOnlyStateDB, address: EthAddress): Hash256 {.borrow.}
@@ -703,3 +735,5 @@ proc isEmptyAccount*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
 proc getCommittedStorage*(db: ReadOnlyStateDB, address: EthAddress, slot: UInt256): UInt256 {.borrow.}
 func inAccessList*(ac: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
 func inAccessList*(ac: ReadOnlyStateDB, address: EthAddress, slot: UInt256): bool {.borrow.}
+func getTransientStorage*(ac: ReadOnlyStateDB,
+                          address: EthAddress, slot: UInt256): UInt256 {.borrow.}

@@ -14,9 +14,9 @@
 {.push raises: [].}
 
 import
-  std/[sets, tables],
+  std/tables,
   stew/results,
-  "."/[aristo_constants, aristo_desc, aristo_error]
+  "."/aristo_desc
 
 type
   VidVtxPair* = object
@@ -35,78 +35,71 @@ proc getVtxBackend*(
   let be = db.backend
   if not be.isNil:
     return be.getVtxFn vid
-
   err(GetVtxNotFound)
 
 proc getKeyBackend*(
     db: AristoDb;
     vid: VertexID;
-      ): Result[NodeKey,AristoError] =
+      ): Result[HashKey,AristoError] =
   ## Get the merkle hash/key from the backend
-  # key must not have been locally deleted (but not saved, yet)
-  if vid notin db.top.dKey:
-    let be = db.backend
-    if not be.isNil:
-      return be.getKeyFn vid
-
+  let be = db.backend
+  if not be.isNil:
+    return be.getKeyFn vid
   err(GetKeyNotFound)
 
-
-proc getVtxCascaded*(
-    db: AristoDb;
-    vid: VertexID;
-      ): Result[VertexRef,AristoError] =
-  ## Get the vertex from the top layer or the `backened` layer if available.
-  let vtx = db.top.sTab.getOrDefault(vid, VertexRef(nil))
-  if vtx != VertexRef(nil):
-    return ok vtx
-
-  db.getVtxBackend vid
-
-proc getKeyCascaded*(
-    db: AristoDb;
-    vid: VertexID;
-      ): Result[NodeKey,AristoError] =
-  ## Get the Merkle hash/key from the top layer or the `backened` layer if
-  ## available.
-  let key = db.top.kMap.getOrDefault(vid, EMPTY_ROOT_KEY)
-  if key != EMPTY_ROOT_KEY:
-    return ok key
-
-  db.getKeyBackend vid
+# ------------------
 
 proc getLeaf*(
     db: AristoDb;
-    lky: LeafKey;
+    lty: LeafTie;
       ): Result[VidVtxPair,AristoError] =
   ## Get the vertex from the top layer by the `Patricia Trie` path. This
   ## function does not search on the `backend` layer.
-  let vid = db.top.lTab.getOrDefault(lky, VertexID(0))
-  if vid != VertexID(0):
-    let vtx = db.top.sTab.getOrDefault(vid, VertexRef(nil))
-    if vtx != VertexRef(nil):
-      return ok VidVtxPair(vid: vid, vtx: vtx)
+  let vid = db.top.lTab.getOrVoid lty
+  if not vid.isValid:
+    return err(GetLeafNotFound)
 
-  err(GetTagNotFound)
+  let vtx = db.top.sTab.getOrVoid vid
+  if not vtx.isValid:
+    return err(GetVtxNotFound)
 
-# ---------
+  ok VidVtxPair(vid: vid, vtx: vtx)
 
-proc getVtx*(db: AristoDb; vid: VertexID): VertexRef =
-  ## Variant of `getVtxCascaded()` returning `nil` on error (while
-  ## ignoring the detailed error type information.)
-  db.getVtxCascaded(vid).get(otherwise = VertexRef(nil))   
-
-proc getVtx*(db: AristoDb; lky: LeafKey): VertexRef =
-  ## Variant of `getLeaf()` returning `nil` on error (while
-  ## ignoring the detailed error type information.)
-  let rc = db.getLeaf lky
+proc getLeafVtx*(db: AristoDb; lty: LeafTie): VertexRef =
+  ## Variant of `getLeaf()` returning `nil` on error (while ignoring the
+  ## detailed error type information.)
+  ##
+  let rc = db.getLeaf lty
   if rc.isOk:
     return rc.value.vtx
-  
-proc getKey*(db: AristoDb; vid: VertexID): NodeKey =
-  ## Variant of `getKeyCascaded()` returning `EMPTY_ROOT_KEY` on error (while
-  ## ignoring the detailed error type information.)
-  db.getKeyCascaded(vid).get(otherwise = EMPTY_ROOT_KEY)
+
+# ------------------
+
+proc getVtx*(db: AristoDb; vid: VertexID): VertexRef =
+  ## Cascaded attempt to fetch a vertex from the top layer or the backend.
+  ## The function returns `nil` on error or failure.
+  ##
+  if db.top.sTab.hasKey vid:
+    # If the vertex is to be deleted on the backend, a `VertexRef(nil)` entry
+    # is kept in the local table in which case it is OK to return this value.
+    return db.top.sTab.getOrVoid vid
+  let rc = db.getVtxBackend vid
+  if rc.isOk:
+    return rc.value
+  VertexRef(nil)
+
+proc getKey*(db: AristoDb; vid: VertexID): HashKey =
+  ## Cascaded attempt to fetch a Merkle hash from the top layer or the backend.
+  ## The function returns `VOID_HASH_KEY` on error or failure.
+  ##
+  if db.top.kMap.hasKey vid:
+    # If the key is to be deleted on the backend, a `VOID_HASH_LABEL` entry
+    # is kept on the local table in which case it is OK to return this value.
+    return db.top.kMap.getOrVoid(vid).key
+  let rc = db.getKeyBackend vid
+  if rc.isOk:
+    return rc.value
+  VOID_HASH_KEY
 
 # ------------------------------------------------------------------------------
 # End

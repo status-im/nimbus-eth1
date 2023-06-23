@@ -40,7 +40,6 @@ proc setupTxContext*(vmState: BaseVMState,
   vmState.gasCosts = vmState.fork.forkToSchedule
   vmState.txVersionedHashes = @versionedHashes
 
-
 # FIXME-awkwardFactoring: the factoring out of the pre and
 # post parts feels awkward to me, but for now I'd really like
 # not to have too much duplicated code between sync and async.

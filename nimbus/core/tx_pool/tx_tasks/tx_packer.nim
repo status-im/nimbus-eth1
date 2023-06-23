@@ -191,6 +191,9 @@ proc vmExecGrabItem(pst: TxPackerStateRef; item: TxItemRef): Result[bool,void]
   if not xp.classifyValidatePacked(vmState, item):
     return ok(false) # continue with next account
 
+  # EIP-1153
+  vmState.stateDB.clearTransientStorage()
+
   let
     accTx = vmState.stateDB.beginSavepoint
     gasUsed = pst.runTx(item) # this is the crucial part, running the tx

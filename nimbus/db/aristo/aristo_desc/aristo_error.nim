@@ -23,46 +23,34 @@ type
     RlpRlpException
     RlpOtherException
 
-    # Db record decoder, `blobify()`
-    DbrNilArgument
-    DbrUnknown
-    DbrTooShort
-    DbrBranchTooShort
-    DbrBranchSizeGarbled
-    DbrBranchInxOutOfRange
-    DbrExtTooShort
-    DbrExtSizeGarbled
-    DbrExtGotLeafPrefix
-    DbrLeafSizeGarbled
-    DbrLeafGotExtPrefix
+    # Data record transcoders, `deblobify()` and `blobify()`
+    BlobifyVtxExPathOverflow
+    BlobifyVtxLeafPathOverflow
 
-    # Db admin data decoder, `deblobify()`
-    ADbGarbledSize
-    ADbWrongType
-
-    # Db record encoder, `blobify()`
-    VtxExPathOverflow
-    VtxLeafPathOverflow
+    DeblobNilArgument
+    DeblobUnknown
+    DeblobTooShort
+    DeblobBranchTooShort
+    DeblobBranchSizeGarbled
+    DeblobBranchInxOutOfRange
+    DeblobExtTooShort
+    DeblobExtSizeGarbled
+    DeblobExtGotLeafPrefix
+    DeblobLeafSizeGarbled
+    DeblobLeafGotExtPrefix
+    DeblobSizeGarbled
+    DeblobWrongType
 
     # Converter `asNode()`, currenly for unit tests only
     CacheMissingNodekeys
 
-    # Get function `getVtxCascaded()`
-    GetVtxNotFound
-    GetTagNotFound
-    GetKeyNotFound
-
     # Path function `hikeUp()`
-    PathRootMissing
-    PathLeafTooEarly
-    PathBranchTailEmpty
-    PathBranchBlindEdge
-    PathExtTailEmpty
-    PathExtTailMismatch
-
-    # Memory backend
-    MemBeVtxNotFound
-    MemBeKeyNotFound
+    HikeRootMissing
+    HikeLeafTooEarly
+    HikeBranchTailEmpty
+    HikeBranchBlindEdge
+    HikeExtTailEmpty
+    HikeExtTailMismatch
 
     # Path/nibble/key conversions in `aisto_path.nim`
     PathExpected64Nibbles
@@ -81,12 +69,15 @@ type
     MergeLeafPathCachedAlready
     MergeNonBranchProofModeLock
     MergeRootBranchLinkBusy
+    MergeAssemblyFailed # Ooops, internal error
 
-    MergeNodeKeyEmpty
-    MergeNodeKeyCachedAlready
-    MergeNodeKeyDiffersFromCached
-    MergeRootKeyEmpty
-
+    MergeHashKeyInvalid
+    MergeRootVidInvalid
+    MergeRootKeyInvalid
+    MergeRevVidMustHaveBeenCached
+    MergeHashKeyCachedAlready
+    MergeHashKeyDiffersFromCached
+    MergeNodeVtxDiffersFromExisting
     MergeRootKeyDiffersForVid
 
     # Update `Merkle` hashes `hashify()`
@@ -132,6 +123,26 @@ type
     DelExtLocked
 
     # Save permanently, `save()`
-    BackendMissing
+    SaveBackendMissing
+
+    # Get functions form `aristo_get.nim`
+    GetLeafNotFound
+
+    # All backend and get functions form `aristo_get.nim`
+    GetVtxNotFound
+    GetKeyNotFound
+
+    # RocksDB backend
+    RdbBeCantCreateDataDir
+    RdbBeCantCreateBackupDir
+    RdbBeCantCreateTmpDir
+    RdbBeDriverInitError
+    RdbBeDriverGetError
+    RdbBeDriverDelError
+    RdbBeCreateSstWriter
+    RdbBeOpenSstWriter
+    RdbBeAddSstWriter
+    RdbBeFinishSstWriter
+    RdbBeIngestSstWriter
 
 # End

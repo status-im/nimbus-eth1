@@ -14,7 +14,7 @@
 {.push raises: [].}
 
 import
-  std/[algorithm, sequtils, sets, tables],
+  std/[algorithm, sequtils, tables],
   ./aristo_desc
 
 # ------------------------------------------------------------------------------
@@ -90,16 +90,20 @@ proc vidReorg*(db: AristoDb) =
     # All entries are continuously increasing
     db.top.vGen = @[lst[0]]
 
-proc vidAttach*(db: AristoDb; key: NodeKey; vid: VertexID) =
+proc vidAttach*(db: AristoDb; lbl: HashLabel; vid: VertexID) =
   ## Attach (i.r. register) a Merkle hash key to a vertex ID.
-  db.top.dKey.excl vid
-  db.top.pAmk[key] = vid
-  db.top.kMap[vid] = key
+  db.top.pAmk[lbl] = vid
+  db.top.kMap[vid] = lbl
 
-proc vidAttach*(db: AristoDb; key: NodeKey): VertexID {.discardable.} =
+proc vidAttach*(db: AristoDb; lbl: HashLabel): VertexID {.discardable.} =
   ## Variant of `vidAttach()` with auto-generated vertex ID
   result = db.vidFetch
-  db.vidAttach(key, result)
+  db.vidAttach(lbl, result)
+
+proc vidRoot*(db: AristoDb; key: HashKey): VertexID {.discardable.} =
+  ## Variant of `vidAttach()` for generating a sub-trie root
+  result = db.vidFetch
+  db.vidAttach(HashLabel(root: result, key: key), result)
 
 # ------------------------------------------------------------------------------
 # End

@@ -11,7 +11,7 @@
 ## Aristo DB -- Patricia Trie builder, raw node insertion
 ## ======================================================
 ##
-## This module merges `NodeTag` values as hexary lookup paths into the
+## This module merges `HashID` values as hexary lookup paths into the
 ## `Patricia Trie`. When changing vertices (aka nodes without Merkle hashes),
 ## associated (but separated) Merkle hashes will be deleted unless locked.
 ## Instead of deleting locked hashes error handling is applied.
@@ -25,27 +25,22 @@
 {.push raises: [].}
 
 import
-  std/[sequtils, sets, tables],
+  std/[algorithm, sequtils, strutils, sets, tables],
   chronicles,
   eth/[common, trie/nibbles],
   stew/results,
   ../../sync/protocol,
-  "."/[aristo_constants, aristo_desc, aristo_error, aristo_get, aristo_hike,
-       aristo_path, aristo_transcode, aristo_vid]
+  "."/[aristo_desc, aristo_get, aristo_hike, aristo_path, aristo_transcode,
+       aristo_vid]
 
 logScope:
   topics = "aristo-merge"
 
 type
-  LeafSubKVP* = object
+  LeafTiePayload* = object
     ## Generalised key-value pair for a sub-trie. The main trie is the
     ## sub-trie with `root=VertexID(1)`.
-    leafKey*: LeafKey                  ## Full `Patricia Trie` path root-to-leaf
-    payload*: PayloadRef               ## Leaf data payload
-
-  LeafMainKVP* = object
-    ## Variant of `LeafSubKVP` for the main trie, implies: `root=VertexID(1)`
-    pathTag*: NodeTag                  ## Path root-to-leaf in main trie
+    leafTie*: LeafTie                  ## Full `Patricia Trie` path root-to-leaf
     payload*: PayloadRef               ## Leaf data payload
 
 # ------------------------------------------------------------------------------
@@ -80,13 +75,14 @@ proc clearMerkleKeys(
     vid: VertexID;                     # Additionall vertex IDs to clear
       ) =
   for vid in hike.legs.mapIt(it.wp.vid) & @[vid]:
-    let key = db.top.kMap.getOrDefault(vid, EMPTY_ROOT_KEY)
-    if key != EMPTY_ROOT_KEY:
+    let lbl = db.top.kMap.getOrVoid vid
+    if lbl.isValid:
       db.top.kMap.del vid
-      db.top.pAmk.del key
+      db.top.pAmk.del lbl
     elif db.getKeyBackend(vid).isOK:
       # Register for deleting on backend
-      db.top.dKey.incl vid
+      db.top.kMap[vid] = VOID_HASH_LABEL
+      db.top.pAmk.del lbl
 
 # -----------
 
@@ -138,7 +134,7 @@ proc insertBranch(
 
   # Install `forkVtx`
   block:
-    # Clear Merkle hashes (aka node keys) unless proof mode.
+    # Clear Merkle hashes (aka hash keys) unless proof mode.
     if db.top.pPrf.len == 0:
       db.clearMerkleKeys(hike, linkID)
     elif linkID in db.top.pPrf:
@@ -155,8 +151,8 @@ proc insertBranch(
 
       let
         local = db.vidFetch
-        lky = LeafKey(root: hike.root, path: rc.value)
-      db.top.lTab[lky] = local         # update leaf path lookup cache
+        lty = LeafTie(root: hike.root, path: rc.value)
+      db.top.lTab[lty] = local         # update leaf path lookup cache
       db.top.sTab[local] = linkVtx
       linkVtx.lPfx = linkVtx.lPfx.slice(1+n)
       forkVtx.bVid[linkInx] = local
@@ -205,6 +201,7 @@ proc insertBranch(
       wp:     VidVtxPair(
         vid: extVtx.eVid,
         vtx: forkVtx))
+
   else:
     db.top.sTab[linkID] = forkVtx
     result.legs.add Leg(
@@ -230,20 +227,20 @@ proc concatBranchAndLeaf(
     return Hike(error: MergeBranchGarbledTail)
 
   let nibble = hike.tail[0].int8
-  if brVtx.bVid[nibble] != VertexID(0):
+  if brVtx.bVid[nibble].isValid:
     return Hike(error: MergeRootBranchLinkBusy)
 
-  # Clear Merkle hashes (aka node keys) unless proof mode.
+  # Clear Merkle hashes (aka hash keys) unless proof mode.
   if db.top.pPrf.len == 0:
     db.clearMerkleKeys(hike, brVid)
   elif brVid in db.top.pPrf:
     return Hike(error: MergeBranchProofModeLock) # Ooops
 
-  # Append branch node
+  # Append branch vertex
   result = Hike(root: hike.root, legs: hike.legs)
   result.legs.add Leg(wp: VidVtxPair(vtx: brVtx, vid: brVid), nibble: nibble)
 
-  # Append leaf node
+  # Append leaf vertex
   let
     vid = db.vidFetch
     vtx = VertexRef(
@@ -251,11 +248,12 @@ proc concatBranchAndLeaf(
       lPfx:  hike.tail.slice(1),
       lData: payload)
   brVtx.bVid[nibble] = vid
+  db.top.sTab[brVid] = brVtx
   db.top.sTab[vid] = vtx
   result.legs.add Leg(wp: VidVtxPair(vtx: vtx, vid: vid), nibble: -1)
 
 # ------------------------------------------------------------------------------
-# Private functions
+# Private functions: add Particia Trie leaf vertex
 # ------------------------------------------------------------------------------
 
 proc topIsBranchAddLeaf(
@@ -278,7 +276,7 @@ proc topIsBranchAddLeaf(
     linkID = branch.bVid[nibble]
     linkVtx = db.getVtx linkID
 
-  if linkVtx.isNil:
+  if not linkVtx.isValid:
     #
     #  .. <branch>[nibble] --(linkID)--> nil
     #
@@ -328,8 +326,8 @@ proc topIsExtAddLeaf(
 
   result = Hike(root: hike.root, legs: hike.legs)
 
-  if brVtx.isNil:
-    # Blind vertex, promote to leaf node.
+  if not brVtx.isValid:
+    # Blind vertex, promote to leaf vertex.
     #
     #  --(extVid)--> <extVtx> --(brVid)--> nil
     #
@@ -356,10 +354,10 @@ proc topIsExtAddLeaf(
     #
     #  <-------- immutable --------------> <-------- mutable ----------> ..
     #
-    if linkID != VertexID(0):
+    if linkID.isValid:
       return Hike(error: MergeRootBranchLinkBusy)
 
-    # Clear Merkle hashes (aka node keys) unless proof mode
+    # Clear Merkle hashes (aka hash keys) unless proof mode
     if db.top.pPrf.len == 0:
       db.clearMerkleKeys(hike, brVid)
     elif brVid in db.top.pPrf:
@@ -372,8 +370,9 @@ proc topIsExtAddLeaf(
         lPfx:  hike.tail.slice(1),
         lData: payload)
     brVtx.bVid[nibble] = vid
+    db.top.sTab[brVid] = brVtx
     db.top.sTab[vid] = vtx
-    result.legs[^1].nibble = nibble
+    result.legs.add Leg(wp: VidVtxPair(vtx: brVtx, vid: brVid), nibble: nibble)
     result.legs.add Leg(wp: VidVtxPair(vtx: vtx, vid: vid), nibble: -1)
 
 
@@ -386,12 +385,11 @@ proc topIsEmptyAddLeaf(
   ## Append a `Leaf` vertex derived from the argument `payload` after the
   ## argument vertex `rootVtx` and append both the empty arguent `hike`.
   if rootVtx.vType == Branch:
-
     let nibble = hike.tail[0].int8
-    if rootVtx.bVid[nibble] != VertexID(0):
+    if rootVtx.bVid[nibble].isValid:
       return Hike(error: MergeRootBranchLinkBusy)
 
-    # Clear Merkle hashes (aka node keys) unless proof mode
+    # Clear Merkle hashes (aka hash keys) unless proof mode
     if db.top.pPrf.len == 0:
       db.clearMerkleKeys(hike, hike.root)
     elif hike.root in db.top.pPrf:
@@ -404,6 +402,7 @@ proc topIsEmptyAddLeaf(
         lPfx:  hike.tail.slice(1),
         lData: payload)
     rootVtx.bVid[nibble] = leafVid
+    db.top.sTab[hike.root] = rootVtx
     db.top.sTab[leafVid] = leafVtx
     return Hike(
       root: hike.root,
@@ -412,13 +411,128 @@ proc topIsEmptyAddLeaf(
 
   db.insertBranch(hike, hike.root, rootVtx, payload)
 
+
+proc updatePayload(
+    db: AristoDb;                      # Database, top layer
+    hike: Hike;                        # No path legs
+    leaf: LeafTiePayload;              # Leaf data and payload
+     ): Hike =
+  ## Update leaf vertex if payloads differ
+  result = hike
+  let vtx = result.legs[^1].wp.vtx
+
+  # Update payloads if they differ
+  if vtx.lData != leaf.payload:
+    let vid = result.legs[^1].wp.vid
+
+    vtx.lData = leaf.payload
+    db.top.sTab[vid] = vtx
+    db.top.lTab[leaf.leafTie] = vid
+    db.clearMerkleKeys(result, vid)
+
+# ------------------------------------------------------------------------------
+# Private functions: add Merkle proof node
+# ------------------------------------------------------------------------------
+
+proc mergeNodeImpl(
+    db: AristoDb;                      # Database, top layer
+    hashKey: HashKey;                  # Merkel hash of node
+    node: NodeRef;                     # Node derived from RLP representation
+    rootVid: VertexID;                 # Current sub-trie
+      ): Result[VertexID,AristoError]  =
+  ## The function merges the argument hash key `hashKey` as expanded from the
+  ## node RLP representation into the `Aristo Trie` database. The vertex is
+  ## split off from the node and stored separately. So are the Merkle hashes.
+  ## The vertex is labelled `locked`.
+  ##
+  ## The `node` argument is *not* checked, whether the vertex IDs have been
+  ## allocated, already. If the node comes straight from the `decode()` RLP
+  ## decoder as expected, these vertex IDs will be all zero.
+  ##
+  if node.error != AristoError(0):
+    return err(node.error)
+  if not rootVid.isValid:
+    return err(MergeRootKeyInvalid)
+
+  # Verify `hashKey`
+  if not hashKey.isValid:
+    return err(MergeHashKeyInvalid)
+
+  # Make sure that the `vid<->hashLbl` reverse mapping has been cached,
+  # already. This is provided for if the `nodes` are processed in the right
+  # order `root->.. ->leaf`.
+  let
+    hashLbl = HashLabel(root: rootVid, key: hashKey)
+    vid = db.top.pAmk.getOrVoid hashLbl
+  if not vid.isValid:
+    return err(MergeRevVidMustHaveBeenCached)
+
+  let lbl = db.top.kMap.getOrVoid vid
+  if lbl == hashLbl:
+    if db.top.sTab.hasKey vid:
+      # This is tyically considered OK
+      return err(MergeHashKeyCachedAlready)
+    # Otherwise proceed
+  elif lbl.isValid:
+    # Different key assigned => error
+    return err(MergeHashKeyDiffersFromCached)
+
+  let (vtx, hasVtx) = block:
+    let vty = db.getVtx vid
+    if vty.isValid:
+      (vty, true)
+    else:
+      (node.to(VertexRef), false)
+
+  # The `vertexID <-> hashLabel` mappings need to be set up now (if any)
+  case node.vType:
+  of Leaf:
+    discard
+  of Extension:
+    if node.key[0].isValid:
+      let eLbl = HashLabel(root: rootVid, key: node.key[0])
+      if hasVtx:
+        if not vtx.eVid.isValid:
+          return err(MergeNodeVtxDiffersFromExisting)
+        db.top.pAmk[eLbl] = vtx.eVid
+      else:
+        let eVid = db.top.pAmk.getOrVoid eLbl
+        if eVid.isValid:
+          vtx.eVid = eVid
+        else:
+          vtx.eVid = db.vidAttach eLbl
+  of Branch:
+    for n in 0..15:
+      if node.key[n].isValid:
+        let bLbl = HashLabel(root: rootVid, key: node.key[n])
+        if hasVtx:
+          if not vtx.bVid[n].isValid:
+            return err(MergeNodeVtxDiffersFromExisting)
+          db.top.pAmk[bLbl] = vtx.bVid[n]
+        else:
+          let bVid = db.top.pAmk.getOrVoid bLbl
+          if bVid.isValid:
+            vtx.bVid[n] = bVid
+          else:
+            vtx.bVid[n] = db.vidAttach bLbl
+
+  db.top.pPrf.incl vid
+  if hasVtx:
+    let key = db.getKey vid
+    if key != hashKey:
+      db.top.sTab[vid] = vtx
+  else:
+    db.top.sTab[vid] = vtx
+
+  ok vid
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
 proc merge*(
     db: AristoDb;                      # Database, top layer
-    leaf: LeafSubKVP;                  # Leaf item to add to the database
+    leaf: LeafTiePayload;              # Leaf item to add to the database
       ): Hike =
   ## Merge the argument `leaf` key-value-pair into the top level vertex table
   ## of the database `db`. The field `pathKey` of the `leaf` argument is used
@@ -426,12 +540,21 @@ proc merge*(
   ## stored with the leaf vertex in the database unless the leaf vertex exists
   ## already.
   ##
-  if db.top.lTab.hasKey leaf.leafKey:
+
+  # Check whether the leaf is on the database and payloads match
+  var haveLeafOk = false
+  block:
+    let vid = db.top.lTab.getOrVoid leaf.leafTie
+    if vid.isValid:
+      let vtx = db.getVtx vid
+      if vtx.isValid and vtx.lData == leaf.payload:
+        haveLeafOk = true
+
+  if haveLeafOk:
     result.error = MergeLeafPathCachedAlready
 
   else:
-    let hike = leaf.leafKey.hikeUp(db)
-
+    let hike = leaf.leafTie.hikeUp(db)
     if 0 < hike.legs.len:
       case hike.legs[^1].wp.vtx.vType:
       of Branch:
@@ -439,60 +562,47 @@ proc merge*(
       of Leaf:
         if 0 < hike.tail.len:          # `Leaf` vertex problem?
           return Hike(error: MergeLeafGarbledHike)
-        result = hike
+        result = db.updatePayload(hike, leaf)
       of Extension:
         result = db.topIsExtAddLeaf(hike, leaf.payload)
 
     else:
       # Empty hike
       let rootVtx = db.getVtx hike.root
-
-      if not rootVtx.isNil:
+      if rootVtx.isValid:
         result = db.topIsEmptyAddLeaf(hike,rootVtx,leaf.payload)
+
       else:
         # Bootstrap for existing root ID
         let wp = VidVtxPair(
           vid: hike.root,
           vtx: VertexRef(
             vType: Leaf,
-            lPfx:  leaf.leafKey.path.pathAsNibbles,
+            lPfx:  leaf.leafTie.path.to(NibblesSeq),
             lData: leaf.payload))
         db.top.sTab[wp.vid] = wp.vtx
         result = Hike(root: wp.vid, legs: @[Leg(wp: wp, nibble: -1)])
 
+      # Double check the result until the code is more reliable
+      block:
+        let rc = result.to(NibblesSeq).pathToKey
+        if rc.isErr or rc.value != leaf.leafTie.path.to(HashKey):
+          result.error = MergeAssemblyFailed # Ooops
+
     # Update leaf acccess cache
     if result.error == AristoError(0):
-      db.top.lTab[leaf.leafKey] = result.legs[^1].wp.vid
+      db.top.lTab[leaf.leafTie] = result.legs[^1].wp.vid
 
     # End else (1st level)
 
 proc merge*(
     db: AristoDb;                      # Database, top layer
-    leafs: openArray[LeafSubKVP];      # Leaf items to add to the database
+    leafs: openArray[LeafTiePayload];  # Leaf items to add to the database
       ): tuple[merged: int, dups: int, error: AristoError] =
   ## Variant of `merge()` for leaf lists.
   var (merged, dups) = (0, 0)
   for n,w in leafs:
-    let hike = db.merge(w)
-    if hike.error == AristoError(0):
-      merged.inc
-    elif hike.error == MergeLeafPathCachedAlready:
-      dups.inc
-    else:
-      return (n,dups,hike.error)
-
-  (merged, dups, AristoError(0))
-
-proc merge*(
-    db: AristoDb;                      # Database, top layer
-    leafs: openArray[LeafMainKVP];     # Leaf items to add to the database
-      ): tuple[merged: int, dups: int, error: AristoError] =
-  ## Variant of `merge()` for leaf lists on the main trie
-  var (merged, dups) = (0, 0)
-  for n,w in leafs:
-    let hike = db.merge(LeafSubKVP(
-      leafKey: LeafKey(root: VertexID(1), path: w.pathTag),
-      payload: w.payload))
+    let hike = db.merge w
     if hike.error == AristoError(0):
       merged.inc
     elif hike.error == MergeLeafPathCachedAlready:
@@ -506,98 +616,100 @@ proc merge*(
 
 proc merge*(
     db: AristoDb;                      # Database, top layer
-    nodeKey: NodeKey;                  # Merkel hash of node
-    node: NodeRef;                     # Node derived from RLP representation
-      ): Result[VertexID,AristoError]  =
-  ## The function merges a node key `nodeKey` expanded from its RLP
-  ## representation into the `Aristo Trie` database. The vertex is split off
-  ## from the node and stored separately. So are the Merkle hashes. The
-  ## vertex is labelled `locked`.
-  ##
-  ## The `node` argument is *not* checked, whether the vertex IDs have been
-  ## allocated, already. If the node comes straight from the `decode()` RLP
-  ## decoder as expected, these vertex IDs will be all zero.
-  ##
-  proc register(key: NodeKey): VertexID =
-    var vid = db.top.pAmk.getOrDefault(key, VertexID(0))
-    if vid == VertexID(0):
-      vid = db.vidAttach key
-    vid
-
-  # Check whether the record is correct
-  if node.error != AristoError(0):
-    return err(node.error)
-
-  # Verify `nodeKey`
-  if nodeKey == EMPTY_ROOT_KEY:
-    return err(MergeNodeKeyEmpty)
-
-  # Check whether the node exists, already. If not then create a new vertex ID
-  var vid = db.top.pAmk.getOrDefault(nodeKey, VertexID(0))
-  if vid == VertexID(0):
-    vid = nodeKey.register
-  else:
-    let key = db.top.kMap.getOrDefault(vid, EMPTY_ROOT_KEY)
-    if key == nodeKey:
-      if db.top.sTab.hasKey vid:
-        # This is tyically considered OK
-        return err(MergeNodeKeyCachedAlready)
-      # Otherwise proceed
-    elif key != EMPTY_ROOT_KEY:
-      # Different key assigned => error
-      return err(MergeNodeKeyDiffersFromCached)
-
-  let vtx = node.to(VertexRef) # the vertex IDs need to be set up now (if any)
-
-  case node.vType:
-  of Leaf:
-    discard
-  of Extension:
-    if node.key[0] != EMPTY_ROOT_KEY:
-      let eVid = db.top.pAmk.getOrDefault(node.key[0], VertexID(0))
-      if eVid != VertexID(0):
-        vtx.eVid = eVid
-      else:
-        vtx.eVid = node.key[0].register
-  of Branch:
-    for n in 0..15:
-      if node.key[n] != EMPTY_ROOT_KEY:
-        let bVid = db.top.pAmk.getOrDefault(node.key[n], VertexID(0))
-        if bVid != VertexID(0):
-          vtx.bVid[n] = bVid
-        else:
-          vtx.bVid[n] = node.key[n].register
-
-  db.top.pPrf.incl vid
-  db.top.sTab[vid] = vtx
-  ok vid
-
-proc merge*(
-    db: AristoDb;                      # Database, top layer
     proof: openArray[SnapProof];       # RLP encoded node records
+    rootVid: VertexID;                 # Current sub-trie
       ): tuple[merged: int, dups: int, error: AristoError]
       {.gcsafe, raises: [RlpError].} =
   ## The function merges the argument `proof` list of RLP encoded node records
   ## into the `Aristo Trie` database. This function is intended to be used with
   ## the proof nodes as returened by `snap/1` messages.
-  var (merged, dups) = (0, 0)
-  for n,w in proof:
+  ##
+  if not rootVid.isValid:
+    return (0,0,MergeRootVidInvalid)
+  let rootKey = db.getKey rootVid
+  if not rootKey.isValid:
+    return (0,0,MergeRootKeyInvalid)
+
+  # Expand and collect hash keys and nodes
+  var nodeTab: Table[HashKey,NodeRef]
+  for w in proof:
     let
-      key = w.Blob.digestTo(NodeKey)
+      key = w.Blob.digestTo(HashKey)
       node = w.Blob.decode(NodeRef)
-      rc = db.merge(key, node)
-    if rc.isOK:
-      merged.inc
-    elif rc.error == MergeNodeKeyCachedAlready:
-      dups.inc
-    else:
-      return (n, dups, rc.error)
+    nodeTab[key] = node
+
+  # Create a table with back links
+  var
+    backLink: Table[HashKey,HashKey]
+    blindNodes: HashSet[HashKey]
+  for (key,node) in nodeTab.pairs:
+    case node.vType:
+    of Leaf:
+      blindNodes.incl key
+    of Extension:
+      if nodeTab.hasKey node.key[0]:
+        backLink[node.key[0]] = key
+      else:
+        blindNodes.incl key
+    of Branch:
+      var isBlind = true
+      for n in 0 .. 15:
+        if nodeTab.hasKey node.key[n]:
+          isBlind = false
+          backLink[node.key[n]] = key
+      if isBlind:
+        blindNodes.incl key
+
+  # Run over blind nodes and build chains from a blind/bottom level node up
+  # to the root node. Select only chains that end up at the pre-defined root
+  # node.
+  var chains: seq[seq[HashKey]]
+  for w in blindNodes:
+    # Build a chain of nodes up to the root node
+    var
+      chain: seq[HashKey]
+      nodeKey = w
+    while nodeKey.isValid and nodeTab.hasKey nodeKey:
+      chain.add nodeKey
+      nodeKey = backLink.getOrDefault(nodeKey, VOID_HASH_KEY)
+    if 0 < chain.len and chain[^1] == rootKey:
+      chains.add chain
+
+  # Make sure that the reverse lookup for the root vertex label is available.
+  block:
+    let
+      lbl = HashLabel(root: rootVid, key: rootKey)
+      vid = db.top.pAmk.getOrVoid lbl
+    if not vid.isvalid:
+      db.top.pAmk[lbl] = rootVid
+
+  # Process over chains in reverse mode starting with the root node. This
+  # allows the algorithm to find existing nodes on the backend.
+  var
+    seen: HashSet[HashKey]
+    (merged, dups) = (0, 0)
+  # Process the root ID which is common to all chains
+  for chain in chains:
+    for key in chain.reversed:
+      if key in seen:
+        discard
+      else:
+        seen.incl key
+        let
+          node = nodeTab.getOrDefault(key, NodeRef(nil))
+          rc = db.mergeNodeImpl(key, node, rootVid)
+        if rc.isOK:
+          merged.inc
+        elif rc.error == MergeHashKeyCachedAlready:
+          dups.inc
+        else:
+          return (merged, dups, rc.error)
 
   (merged, dups, AristoError(0))
 
 proc merge*(
     db: AristoDb;                      # Database, top layer
-    rootKey: NodeKey;                  # Merkle hash for root
+    rootKey: HashKey;                  # Merkle hash for root
     rootVid = VertexID(0)              # Optionally, force root vertex ID
       ): Result[VertexID,AristoError] =
   ## Set up a `rootKey` associated with a vertex ID.
@@ -614,32 +726,30 @@ proc merge*(
   ##
   ## Upon successful return, the vertex ID assigned to the root key is returned.
   ##
-  if rootKey == EMPTY_ROOT_KEY:
-    return err(MergeRootKeyEmpty)
+  if not rootKey.isValid:
+    return err(MergeRootKeyInvalid)
 
-  if rootVid == VertexID(0) or
-     rootVid == VertexID(1):
-    let key = db.getKey VertexID(1)
-    if key == rootKey:
-      return ok VertexID(1)
-
-    # Otherwise assign if empty
-    if key == EMPTY_ROOT_KEY:
-      db.vidAttach(rootKey, VertexID(1))
-      return ok VertexID(1)
-
-    # Create new root key
-    if rootVid == VertexID(0):
-      return ok db.vidAttach(rootKey)
-
-  else:
+  if rootVid.isValid and rootVid != VertexID(1):
     let key = db.getKey rootVid
     if key == rootKey:
       return ok rootVid
 
-    if key == EMPTY_ROOT_KEY:
-      db.vidAttach(rootKey, rootVid)
+    if not key.isValid:
+      db.vidAttach(HashLabel(root: rootVid, key: rootKey), rootVid)
       return ok rootVid
+  else:
+    let key = db.getKey VertexID(1)
+    if key == rootKey:
+      return ok VertexID(1)
+
+    # Otherwise assign unless valid
+    if not key.isValid:
+      db.vidAttach(HashLabel(root: VertexID(1), key: rootKey), VertexID(1))
+      return ok VertexID(1)
+
+    # Create and assign a new root key
+    if not rootVid.isValid:
+      return ok db.vidRoot(rootKey)
 
   err(MergeRootKeyDiffersForVid)
 

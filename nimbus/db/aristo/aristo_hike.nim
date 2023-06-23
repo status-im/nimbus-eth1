@@ -12,13 +12,15 @@
 
 import
   eth/[common, trie/nibbles],
-  "."/[aristo_constants, aristo_desc, aristo_error, aristo_get, aristo_path]
+  stew/results,
+  "."/[aristo_desc, aristo_get]
 
 type
   Leg* = object
     ## For constructing a `VertexPath`
     wp*: VidVtxPair                ## Vertex ID and data ref
     nibble*: int8                  ## Next vertex selector for `Branch` (if any)
+    backend*: bool                 ## Sources from backend if `true`
 
   Hike* = object
     ## Trie traversal path
@@ -68,40 +70,47 @@ proc hikeUp*(
     root: root,
     tail: path)
 
-  if root == VertexID(0):
-    result.error = PathRootMissing
+  if not root.isValid:
+    result.error = HikeRootMissing
 
   else:
     var vid = root
-    while vid != VertexID(0):
-      var vtx = db.getVtx vid
-      if vtx.isNil:
-        break
+    while vid.isValid:
+      var leg = Leg(wp: VidVtxPair(vid: vid), nibble: -1)
 
-      var leg = Leg(wp: VidVtxPair(vid: vid, vtx: vtx), nibble: -1)
+      # Fetch vertex to be checked on this lap
+      leg.wp.vtx = db.top.sTab.getOrVoid vid
+      if not leg.wp.vtx.isValid:
 
-      case vtx.vType:
+        # Register vertex fetched from backend (if any)
+        let rc = db.getVtxBackend vid
+        if rc.isErr:
+          break
+        leg.backend = true
+        leg.wp.vtx = rc.value
+
+      case leg.wp.vtx.vType:
       of Leaf:
-        if result.tail.len == result.tail.sharedPrefixLen(vtx.lPfx):
+        if result.tail.len == result.tail.sharedPrefixLen(leg.wp.vtx.lPfx):
           # Bingo, got full path
           result.legs.add leg
           result.tail = EmptyNibbleSeq
         else:
-          result.error = PathLeafTooEarly # Ooops
+          result.error = HikeLeafTooEarly # Ooops
         break # Buck stops here
 
       of Branch:
         if result.tail.len == 0:
           result.legs.add leg
-          result.error = PathBranchTailEmpty # Ooops
+          result.error = HikeBranchTailEmpty # Ooops
           break
 
         let
           nibble = result.tail[0].int8
-          nextVid = vtx.bVid[nibble]
+          nextVid = leg.wp.vtx.bVid[nibble]
 
-        if nextVid == VertexID(0):
-          result.error = PathBranchBlindEdge # Ooops
+        if not nextVid.isValid:
+          result.error = HikeBranchBlindEdge # Ooops
           break
 
         leg.nibble = nibble
@@ -113,20 +122,20 @@ proc hikeUp*(
         if result.tail.len == 0:
           result.legs.add leg
           result.tail = EmptyNibbleSeq
-          result.error = PathExtTailEmpty # Well, somehow odd
+          result.error = HikeExtTailEmpty # Well, somehow odd
           break
 
-        if vtx.ePfx.len != result.tail.sharedPrefixLen(vtx.ePfx):
-          result.error = PathExtTailMismatch # Need to branch from here
+        if leg.wp.vtx.ePfx.len != result.tail.sharedPrefixLen(leg.wp.vtx.ePfx):
+          result.error = HikeExtTailMismatch # Need to branch from here
           break
 
         result.legs.add leg
-        result.tail = result.tail.slice(vtx.ePfx.len)
-        vid = vtx.eVid
+        result.tail = result.tail.slice(leg.wp.vtx.ePfx.len)
+        vid = leg.wp.vtx.eVid
 
-proc hikeUp*(lky: LeafKey; db: AristoDb): Hike =
+proc hikeUp*(lty: LeafTie; db: AristoDb): Hike =
   ## Variant of `hike()`
-  lky.path.pathAsNibbles.hikeUp(lky.root, db)
+  lty.path.to(NibblesSeq).hikeUp(lty.root, db)
 
 # ------------------------------------------------------------------------------
 # End

@@ -11,8 +11,8 @@
 {.push raises: [].}
 
 import
-  ../../sync/snap/range_desc,
-  eth/[common, trie/nibbles]
+  eth/[common, trie/nibbles],
+  ./aristo_desc/aristo_types_identifiers
 
 const
   EmptyBlob* = seq[byte].default
@@ -21,8 +21,15 @@ const
   EmptyNibbleSeq* = EmptyBlob.initNibbleRange
     ## Useful shortcut (borrowed from `sync/snap/constants.nim`)
 
-  EMPTY_ROOT_KEY* = EMPTY_ROOT_HASH.to(NodeKey)
+  EmptyVidSeq* = seq[VertexID].default
+    ## Useful shortcut
 
-  EMPTY_CODE_KEY* = EMPTY_CODE_HASH.to(NodeKey)
+  VOID_CODE_KEY* = EMPTY_CODE_HASH.to(HashKey)
+    ## Equivalent of `nil` for `Account` object code hash
+
+  VOID_HASH_KEY* = EMPTY_ROOT_HASH.to(HashKey)
+    ## Equivalent of `nil` for Merkle hash ket
+
+  VOID_HASH_LABEL* = HashLabel(root: VertexID(0), key: VOID_HASH_KEY)
 
 # End

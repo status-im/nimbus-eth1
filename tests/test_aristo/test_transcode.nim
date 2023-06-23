@@ -18,8 +18,7 @@ import
   unittest2,
   ../../nimbus/db/kvstore_rocksdb,
   ../../nimbus/db/aristo/[
-    aristo_constants, aristo_desc, aristo_debug, aristo_error,
-    aristo_transcode, aristo_vid],
+    aristo_desc, aristo_debug, aristo_init, aristo_transcode, aristo_vid],
   "."/[test_aristo_cache, test_helpers]
 
 type
@@ -88,7 +87,7 @@ proc test_transcodeAccounts*(
       ) =
   ## Transcoder tests on accounts database
   var
-    adb = AristoDb(top: AristoLayerRef())
+    adb = AristoDb.init BackendNone
     count = -1
   for (n, key,value) in rocky.walkAllDb():
     if stopAfter < n:
@@ -107,7 +106,7 @@ proc test_transcodeAccounts*(
 
     # Provide DbRecord with dummy links and expanded payload. Registering the
     # node as vertex and re-converting it does the job
-    var node = node0.updated(adb)
+    var node = node0.updated(VertexID(1), adb)
     if node.error != AristoError(0):
       check node.error == AristoError(0)
     else:
@@ -115,8 +114,8 @@ proc test_transcodeAccounts*(
       of aristo_desc.Leaf:
         let account = node.lData.blob.decode(Account)
         node.lData = PayloadRef(pType: AccountData, account: account)
-        discard adb.keyToVtxID node.lData.account.storageRoot.to(NodeKey)
-        discard adb.keyToVtxID node.lData.account.codeHash.to(NodeKey)
+        discard adb.hashToVtxID(VertexID(1), node.lData.account.storageRoot)
+        discard adb.hashToVtxID(VertexID(1), node.lData.account.codeHash)
       of aristo_desc.Extension:
         # key <-> vtx correspondence
         check node.key[0] == node0.key[0]
@@ -125,8 +124,8 @@ proc test_transcodeAccounts*(
         for n in 0..15:
           # key[n] <-> vtx[n] correspondence
           check node.key[n] == node0.key[n]
-          if (node.key[n]==EMPTY_ROOT_KEY) != (node.bVid[n]==VertexID(0)):
-            check (node.key[n]==EMPTY_ROOT_KEY) == (node.bVid[n]==VertexID(0))
+          if node.key[n].isValid != node.bVid[n].isValid:
+            check node.key[n].isValid == node.bVid[n].isValid
             echo ">>> node=", node.pp
 
     # This NIM object must match to the same RLP encoded byte stream
@@ -140,7 +139,7 @@ proc test_transcodeAccounts*(
 
     # NIM object <-> DbRecord mapping
     let dbr = node.blobify.getOrEmpty(noisy)
-    var node1 = dbr.deblobify.asNode(adb)
+    var node1 = dbr.deblobify(VertexRef).asNode(adb)
     if node1.error != AristoError(0):
       check node1.error == AristoError(0)
 
@@ -164,7 +163,7 @@ proc test_transcodeAccounts*(
         noisy.say "***", "count=", count, " dbr1=", dbr1.toHex
 
     # Serialise back as is
-    let dbr2 = dbr.deblobify.asNode(adb).blobify.getOrEmpty(noisy)
+    let dbr2 = dbr.deblobify(VertexRef).asNode(adb).blobify.getOrEmpty(noisy)
     block:
       if dbr != dbr2:
         check dbr == dbr2
@@ -177,7 +176,7 @@ proc test_transcodeAccounts*(
 proc test_transcodeVidRecycleLists*(noisy = true; seed = 42) =
   ## Transcode VID lists held in `AristoDb` descriptor
   var td = TesterDesc.init seed
-  let db = AristoDb(top: AristoLayerRef())
+  let db = AristoDb.init BackendNone
 
   # Add some randum numbers
   block:
@@ -199,14 +198,16 @@ proc test_transcodeVidRecycleLists*(noisy = true; seed = 42) =
 
   # Serialise/deserialise
   block:
-    let dbBlob = db.blobify
+    let dbBlob = db.top.vGen.blobify
 
     # Deserialise
-    let db1 = block:
-      let rc = dbBlob.deblobify AristoDb
-      if rc.isErr:
-        check rc.isOk
-      rc.get(otherwise = AristoDb(top: AristoLayerRef()))
+    let
+      db1 = AristoDb.init BackendNone
+      rc = dbBlob.deblobify seq[VertexID]
+    if rc.isErr:
+      check rc.error == AristoError(0)
+    else:
+      db1.top.vGen = rc.value
 
     check db.top.vGen == db1.top.vGen
 

@@ -14,7 +14,7 @@ import
   std/[bitops, sequtils],
   eth/[common, trie/nibbles],
   stew/results,
-  "."/[aristo_constants, aristo_desc, aristo_error]
+  "."/[aristo_constants, aristo_desc]
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -23,16 +23,6 @@ import
 proc aristoError(error: AristoError): NodeRef =
   ## Allows returning de
   NodeRef(vType: Leaf, error: error)
-
-proc aInit(key: var NodeKey; data: openArray[byte]): bool =
-  ## Import argument `data` into `key` which must have length either `32`, or
-  ## `0`. The latter case is equivalent to an all zero byte array of size `32`.
-  if data.len == 32:
-    (addr key.ByteArray32[0]).copyMem(unsafeAddr data[0], data.len)
-    return true
-  elif data.len == 0:
-    key = EMPTY_ROOT_KEY
-    return true
 
 # ------------------------------------------------------------------------------
 # Public RLP transcoder mixins
@@ -51,7 +41,7 @@ proc read*(
 
   var
     blobs = newSeq[Blob](2)         # temporary, cache
-    links: array[16,NodeKey]        # reconstruct branch node
+    links: array[16,HashKey]        # reconstruct branch node
     top = 0                         # count entries and positions
 
   # Collect lists of either 2 or 17 blob entries.
@@ -62,7 +52,7 @@ proc read*(
         return aristoError(RlpBlobExpected)
       blobs[top] = rlp.read(Blob)
     of 2 .. 15:
-      if not links[top].aInit(rlp.read(Blob)):
+      if not links[top].init(rlp.read(Blob)):
         return aristoError(RlpBranchLinkExpected)
     of 16:
       if not w.isBlob:
@@ -90,12 +80,12 @@ proc read*(
       var node = NodeRef(
         vType: Extension,
         ePfx:  pathSegment)
-      if not node.key[0].aInit(blobs[1]):
+      if not node.key[0].init(blobs[1]):
         return aristoError(RlpExtPathEncoding)
       return node
   of 17:
     for n in [0,1]:
-      if not links[n].aInit(blobs[n]):
+      if not links[n].init(blobs[n]):
         return aristoError(RlpBranchLinkExpected)
     return NodeRef(
       vType: Branch,
@@ -109,8 +99,8 @@ proc read*(
 proc append*(writer: var RlpWriter; node: NodeRef) =
   ## Mixin for RLP writer. Note that a `Dummy` node is encoded as an empty
   ## list.
-  proc addNodeKey(writer: var RlpWriter; key: NodeKey) =
-    if key == EMPTY_ROOT_KEY:
+  proc addHashKey(writer: var RlpWriter; key: HashKey) =
+    if not key.isValid:
       writer.append EmptyBlob
     else:
       writer.append key.to(Hash256)
@@ -122,12 +112,12 @@ proc append*(writer: var RlpWriter; node: NodeRef) =
     of Branch:
       writer.startList(17)
       for n in 0..15:
-        writer.addNodeKey node.key[n]
+        writer.addHashKey node.key[n]
       writer.append EmptyBlob
     of Extension:
       writer.startList(2)
       writer.append node.ePfx.hexPrefixEncode(isleaf = false)
-      writer.addNodeKey node.key[0]
+      writer.addHashKey node.key[0]
     of Leaf:
       writer.startList(2)
       writer.append node.lPfx.hexPrefixEncode(isleaf = true)
@@ -143,12 +133,12 @@ proc blobify*(node: VertexRef; data: var Blob): AristoError =
   ## boundaries.
   ## ::
   ##   Branch:
-  ##     uint64, ...    -- list of up to 16 child nodes lookup keys
+  ##     uint64, ...    -- list of up to 16 child vertices lookup keys
   ##     uint16         -- index bitmap
   ##     0x00           -- marker(2) + unused(2)
   ##
   ##   Extension:
-  ##     uint64         -- child node lookup key
+  ##     uint64         -- child vertex lookup key
   ##     Blob           -- hex encoded partial path (at least one byte)
   ##     0x80           -- marker(2) + unused(2)
   ##
@@ -158,7 +148,7 @@ proc blobify*(node: VertexRef; data: var Blob): AristoError =
   ##     0xc0           -- marker(2) + partialPathLen(6)
   ##
   ## For a branch record, the bytes of the `access` array indicate the position
-  ## of the Patricia Trie node reference. So the `vertexID` with index `n` has
+  ## of the Patricia Trie vertex reference. So the `vertexID` with index `n` has
   ## ::
   ##   8 * n * ((access shr (n * 4)) and 15)
   ##
@@ -170,7 +160,7 @@ proc blobify*(node: VertexRef; data: var Blob): AristoError =
       refs: Blob
       keys: Blob
     for n in 0..15:
-      if node.bVid[n] != VertexID(0):
+      if node.bVid[n].isValid:
         access = access or (1u16 shl n)
         refs &= node.bVid[n].uint64.toBytesBE.toSeq
     data = refs & access.toBytesBE.toSeq & @[0u8]
@@ -179,14 +169,14 @@ proc blobify*(node: VertexRef; data: var Blob): AristoError =
       pSegm = node.ePfx.hexPrefixEncode(isleaf = false)
       psLen = pSegm.len.byte
     if psLen == 0 or 33 < pslen:
-      return VtxExPathOverflow
+      return BlobifyVtxExPathOverflow
     data = node.eVid.uint64.toBytesBE.toSeq & pSegm & @[0x80u8 or psLen]
   of Leaf:
     let
       pSegm = node.lPfx.hexPrefixEncode(isleaf = true)
       psLen = pSegm.len.byte
     if psLen == 0 or 33 < psLen:
-      return VtxLeafPathOverflow
+      return BlobifyVtxLeafPathOverflow
     data = node.lData.convertTo(Blob) & pSegm & @[0xC0u8 or psLen]
 
 proc blobify*(node: VertexRef): Result[Blob, AristoError] =
@@ -199,41 +189,39 @@ proc blobify*(node: VertexRef): Result[Blob, AristoError] =
   ok(data)
 
 
-proc blobify*(db: AristoDb; data: var Blob) =
-  ## This function serialises some maintenance data for the `AristoDb`
-  ## descriptor. At the moment, this contains the recycliing table for the
-  ## `VertexID` values, only.
+proc blobify*(vGen: openArray[VertexID]; data: var Blob) =
+  ## This function serialises the key generator used in the `AristoDb`
+  ## descriptor.
   ##
-  ## This data recoed is supposed to be stored as the table value with the
-  ## zero key for persistent tables.
+  ## This data record is supposed to be as in a dedicated slot in the
+  ## persistent tables.
   ## ::
   ##   Admin:
   ##     uint64, ...    -- list of IDs
   ##     0x40
   ##
   data.setLen(0)
-  if not db.top.isNil:
-    for w in db.top.vGen:
-      data &= w.uint64.toBytesBE.toSeq
+  for w in vGen:
+    data &= w.uint64.toBytesBE.toSeq
   data.add 0x40u8
 
-proc blobify*(db: AristoDb): Blob =
-  ## Variant of `toDescRecord()`
-  db.blobify result
+proc blobify*(vGen: openArray[VertexID]): Blob =
+  ## Variant of `blobify()`
+  vGen.blobify result
 
 
 proc deblobify*(record: Blob; vtx: var VertexRef): AristoError =
   ## De-serialise a data record encoded with `blobify()`. The second
   ## argument `vtx` can be `nil`.
   if record.len < 3:                                  # minimum `Leaf` record
-    return DbrTooShort
+    return DeblobTooShort
 
   case record[^1] shr 6:
-  of 0: # `Branch` node
+  of 0: # `Branch` vertex
     if record.len < 19:                               # at least two edges
-      return DbrBranchTooShort
+      return DeblobBranchTooShort
     if (record.len mod 8) != 3:
-      return DbrBranchSizeGarbled
+      return DeblobBranchSizeGarbled
     let
       maxOffset = record.len - 11
       aInx = record.len - 3
@@ -244,7 +232,7 @@ proc deblobify*(record: Blob; vtx: var VertexRef): AristoError =
       vtxList: array[16,VertexID]
     while access != 0:
       if maxOffset < offs:
-        return DbrBranchInxOutOfRange
+        return DeblobBranchInxOutOfRange
       let n = access.firstSetBit - 1
       access.clearBit n
       vtxList[n] = (uint64.fromBytesBE record[offs ..< offs+8]).VertexID
@@ -254,32 +242,32 @@ proc deblobify*(record: Blob; vtx: var VertexRef): AristoError =
       vType: Branch,
       bVid:  vtxList)
 
-  of 2: # `Extension` node
+  of 2: # `Extension` vertex
     let
       sLen = record[^1].int and 0x3f                  # length of path segment
       rlen = record.len - 1                           # `vertexID` + path segm
     if record.len < 10:
-      return DbrExtTooShort
+      return DeblobExtTooShort
     if 8 + sLen != rlen:                              # => slen is at least 1
-      return DbrExtSizeGarbled
+      return DeblobExtSizeGarbled
     let (isLeaf, pathSegment) = hexPrefixDecode record[8 ..< rLen]
     if isLeaf:
-      return DbrExtGotLeafPrefix
+      return DeblobExtGotLeafPrefix
     vtx = VertexRef(
       vType: Extension,
       eVid:  (uint64.fromBytesBE record[0 ..< 8]).VertexID,
       ePfx:  pathSegment)
 
-  of 3: # `Leaf` node
+  of 3: # `Leaf` vertex
     let
       sLen = record[^1].int and 0x3f                  # length of path segment
       rlen = record.len - 1                           # payload + path segment
       pLen = rLen - sLen                              # payload length
     if rlen < sLen:
-      return DbrLeafSizeGarbled
+      return DeblobLeafSizeGarbled
     let (isLeaf, pathSegment) = hexPrefixDecode record[pLen ..< rLen]
     if not isLeaf:
-      return DbrLeafGotExtPrefix
+      return DeblobLeafGotExtPrefix
     vtx = VertexRef(
       vType:   Leaf,
       lPfx:    pathSegment,
@@ -287,41 +275,38 @@ proc deblobify*(record: Blob; vtx: var VertexRef): AristoError =
         pType: BlobData,
         blob:  record[0 ..< plen]))
   else:
-    return DbrUnknown
+    return DeblobUnknown
 
-
-proc deblobify*(data: Blob; db: var AristoDb): AristoError =
-  ## De-serialise the data record encoded with `blobify()` into a new current
-  ## top layer. If present, the previous top layer of the `db` descriptor is
-  ## pushed onto the parent layers stack.
-  if not db.top.isNil:
-    db.stack.add db.top
-  db.top = AristoLayerRef()
-  if data.len == 0:
-    db.top.vGen = @[1.VertexID]
-  else:
-    if (data.len mod 8) != 1:
-      return ADbGarbledSize
-    if data[^1] shr 6 != 1:
-      return ADbWrongType
-    for n in 0 ..< (data.len div 8):
-      let w = n * 8
-      db.top.vGen.add (uint64.fromBytesBE data[w ..< w + 8]).VertexID
-
-proc deblobify*[W: VertexRef|AristoDb](
-    record: Blob;
-    T: type W;
-      ): Result[T,AristoError] =
-  ## Variant of `deblobify()` for either `VertexRef` or `AristoDb`
-  var obj: T # isNil, will be auto-initialised
-  let info = record.deblobify obj
+proc deblobify*(data: Blob; T: type VertexRef): Result[T,AristoError] =
+  ## Variant of `deblobify()` for vertex deserialisation.
+  var vtx = T(nil) # will be auto-initialised
+  let info = data.deblobify vtx
   if info != AristoError(0):
     return err(info)
-  ok(obj)
+  ok vtx
 
-proc deblobify*(record: Blob): Result[VertexRef,AristoError] =
-  ## Default variant of `deblobify()` for `VertexRef`.
-  record.deblobify VertexRef
+
+proc deblobify*(data: Blob; vGen: var seq[VertexID]): AristoError =
+  ## De-serialise the data record encoded with `blobify()` into the vertex ID
+  ## generator argument `vGen`.
+  if data.len == 0:
+    vGen = @[]
+  else:
+    if (data.len mod 8) != 1:
+      return DeblobSizeGarbled
+    if data[^1] shr 6 != 1:
+      return DeblobWrongType
+    for n in 0 ..< (data.len div 8):
+      let w = n * 8
+      vGen.add (uint64.fromBytesBE data[w ..< w + 8]).VertexID
+
+proc deblobify*(data: Blob; T: type seq[VertexID]): Result[T,AristoError] =
+  ## Variant of `deblobify()` for deserialising the vertex ID generator state
+  var vGen: seq[VertexID]
+  let info = data.deblobify vGen
+  if info != AristoError(0):
+    return err(info)
+  ok vGen
 
 # ------------------------------------------------------------------------------
 # End
