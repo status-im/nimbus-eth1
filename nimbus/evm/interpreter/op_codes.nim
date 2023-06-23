@@ -104,8 +104,8 @@ type
     ChainIdOp =      0x46, ## Get current chain’s EIP-155 unique identifier.
     SelfBalance =    0x47, ## Get current contract's balance.
     BaseFee =        0x48, ## Get block’s base fee. EIP-3198
-    DataHash =       0x49, ## Get transaction's versionedHash. EIP-4844
-    
+    BlobHash =       0x49, ## Get transaction's versionedHash. EIP-4844
+
     Nop0x4A, Nop0x4B, Nop0x4C, Nop0x4D,
     Nop0x4E, Nop0x4F, ## ..
 

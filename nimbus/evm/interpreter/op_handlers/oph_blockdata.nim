@@ -17,6 +17,7 @@ import
   ../../computation,
   ../../stack,
   ../../async/operations,
+  ../utils/utils_numeric,
   ../op_codes,
   ./oph_defs
 
@@ -80,14 +81,14 @@ const
     k.cpt.stack.push:
       k.cpt.getBaseFee
 
-  dataHashOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+  blobHashOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x49, Get current transaction's EIP-4844 versioned hash.
-    let index = k.cpt.stack.popInt().truncate(int)
+    let index = k.cpt.stack.popInt().safeInt
     let len = k.cpt.getVersionedHashesLen
 
     if index < len:
       k.cpt.stack.push:
-        k.cpt.getVersionedHashes()[index]
+        k.cpt.getVersionedHash(index)
     else:
       k.cpt.stack.push:
         0
@@ -171,12 +172,12 @@ const
             run:  baseFeeOp,
             post: vm2OpIgnore)),
 
-    (opCode: DataHash,        ## 0x49, EIP-4844 Transaction versioned hash
+    (opCode: BlobHash,        ## 0x49, EIP-4844 Transaction versioned hash
      forks: Vm2OpCancunAndLater,
-     name: "dataHash",
+     name: "blobHash",
      info: "Get current transaction's EIP-4844 versioned hash",
      exec: (prep: vm2OpIgnore,
-            run:  dataHashOp,
+            run:  blobHashOp,
             post: vm2OpIgnore))]
 
 # ------------------------------------------------------------------------------

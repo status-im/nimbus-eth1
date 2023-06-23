@@ -115,12 +115,12 @@ template getGasPrice*(c: Computation): GasInt =
   else:
     c.vmState.txGasPrice
 
-template getVersionedHashes*(c: Computation): VersionedHashes =
+template getVersionedHash*(c: Computation, index: int): VersionedHash =
   when evmc_enabled:
     # TODO: implement
-    @[]
+    Hash256()
   else:
-    c.vmState.txVersionedHashes
+    c.vmState.txVersionedHashes[index]
 
 template getVersionedHashesLen*(c: Computation): int =
   when evmc_enabled:
