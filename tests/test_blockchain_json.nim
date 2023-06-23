@@ -412,6 +412,7 @@ proc blockchainJsonMain*(debugMode = false) =
     testFixture(n, testStatusIMPL, debugMode = true, config.trace)
 
 when isMainModule:
+  import std/times
   var message: string
 
   let start = getTime()

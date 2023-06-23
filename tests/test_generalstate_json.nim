@@ -190,6 +190,7 @@ proc generalStateJsonMain*(debugMode = false) =
     testFixture(n, testStatusIMPL, config.trace, true)
 
 when isMainModule:
+  import std/times
   var message: string
 
   let start = getTime()
