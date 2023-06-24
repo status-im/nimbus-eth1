@@ -458,10 +458,7 @@ p2pProtocol les(version = lesVersion,
 
       var results: seq[TransactionStatusMsg]
       for t in transactions:
-        let hash = t.rlpHash # TODO: this is not optimal, we can compute
-                             # the hash from the request bytes.
-                             # The RLP module can offer a helper Hashed[T]
-                             # to make this easy.
+        let hash = t.rlpHash
         var s = ctx.getTransactionStatus(hash)
         if s.status == TransactionStatus.Unknown:
           ctx.addTransactions([t])

@@ -180,6 +180,7 @@ proc validateDifficulty(ctx: LegacySyncRef,
     return false
 
 proc validateHeader(ctx: LegacySyncRef, header: BlockHeader,
+                    txs: openArray[Transaction],
                     height = none(BlockNumber)): bool
                     {.raises: [CatchableError].} =
   if header.parentHash == GENESIS_PARENT_HASH:
@@ -242,7 +243,7 @@ proc validateHeader(ctx: LegacySyncRef, header: BlockHeader,
       msg=res.error
     return false
 
-  res = com.validateEip4844Header(header)
+  res = com.validateEip4844Header(header, parentHeader, txs)
   if res.isErr:
     trace "validate eip4844 error",
       msg=res.error
@@ -1052,7 +1053,7 @@ proc handleNewBlock(ctx: LegacySyncRef,
       number=blk.header.blockNumber
     return
 
-  if not ctx.validateHeader(blk.header):
+  if not ctx.validateHeader(blk.header, blk.txs):
     error "invalid header from peer",
       peer, hash=short(blk.header.blockHash)
     return

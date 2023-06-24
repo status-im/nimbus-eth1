@@ -101,6 +101,10 @@ type
       ## Running basic validator failed on current transaction
       "Tx rejected by basic validator"
 
+    txInfoErrInvalidBlob = ##\
+      ## Invalid EIP-4844 kzg validation on blob wrapper
+      "Invalid EIP-4844 blob validation"
+
     # ------ Signature problems ------------------------------------------------
 
     txInfoErrInvalidSender = ##\

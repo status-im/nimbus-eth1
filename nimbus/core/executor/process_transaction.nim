@@ -78,6 +78,7 @@ proc asyncProcessTransactionImpl(
     baseFee = baseFee256.truncate(GasInt)
     tx = eip1559TxNormalization(tx, baseFee, fork)
     priorityFee = min(tx.maxPriorityFee, tx.maxFee - baseFee)
+    excessDataGas = vmState.parent.excessDataGas.get(0'u64)
 
   # Return failure unless explicitely set `ok()`
   var res: Result[GasInt, string] = err("")
@@ -99,7 +100,7 @@ proc asyncProcessTransactionImpl(
   # before leaving is crucial for some unit tests that us a direct/deep call
   # of the `processTransaction()` function. So there is no `return err()`
   # statement, here.
-  let txRes = roDB.validateTransaction(tx, sender, header.gasLimit, baseFee256, fork)
+  let txRes = roDB.validateTransaction(tx, sender, header.gasLimit, baseFee256, excessDataGas, fork)
   if txRes.isOk:
 
     # EIP-1153

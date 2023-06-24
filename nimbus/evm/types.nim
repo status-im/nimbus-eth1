@@ -52,6 +52,7 @@ type
     cumulativeGasUsed*: GasInt
     txOrigin*      : EthAddress
     txGasPrice*    : GasInt
+    txVersionedHashes*: VersionedHashes
     gasCosts*      : GasCosts
     fork*          : EVMFork
     minerAddress*  : EthAddress

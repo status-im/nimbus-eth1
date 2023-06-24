@@ -466,6 +466,15 @@ const
       output: T8nOutput(alloc: true, result: true),
       expOut: "exp.json",
     ),
+    TestSpec(
+      name  : "Cancun optional fields",
+      base  : "testdata/00-517",
+      input : t8nInput(
+        "alloc.json", "txs.json", "env.json", "Cancun", "",
+      ),
+      output: T8nOutput(alloc: true, result: true),
+      expOut: "exp.json",
+    ),
   ]
 
 proc main() =

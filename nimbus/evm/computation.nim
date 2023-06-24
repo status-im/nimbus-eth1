@@ -115,8 +115,22 @@ template getGasPrice*(c: Computation): GasInt =
   else:
     c.vmState.txGasPrice
 
+template getVersionedHash*(c: Computation, index: int): VersionedHash =
+  when evmc_enabled:
+    # TODO: implement
+    Hash256()
+  else:
+    c.vmState.txVersionedHashes[index]
+
+template getVersionedHashesLen*(c: Computation): int =
+  when evmc_enabled:
+    # TODO: implement
+    0
+  else:
+    c.vmState.txVersionedHashes.len
+
 proc getBlockHash*(c: Computation, number: UInt256): Hash256
-    {.gcsafe, raises: [CatchableError].} =
+                   {.gcsafe, raises: [CatchableError].} =
   when evmc_enabled:
     let
       blockNumber = c.host.getTxContext().block_number.u256

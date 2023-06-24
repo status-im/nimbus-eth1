@@ -44,6 +44,8 @@ type
     parentGasUsed*: Option[GasInt]
     parentGasLimit*: Option[GasInt]
     withdrawals*: Option[seq[Withdrawal]]
+    parentDataGasUsed*: Option[uint64]
+    parentExcessDataGas*: Option[uint64]
 
   TxsType* = enum
     TxsNone
@@ -92,6 +94,8 @@ type
     gasUsed*: GasInt
     currentBaseFee*: Option[UInt256]
     withdrawalsRoot*: Option[Hash256]
+    dataGasUsed*: Option[uint64]
+    excessDataGas*: Option[uint64]
 
 const
   ErrorEVM*              = 2.T8NExitCode

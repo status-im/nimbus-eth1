@@ -61,12 +61,15 @@ template fromJson(T: type GasInt, n: JsonNode, field: string): GasInt =
 template fromJson(T: type ChainId, n: JsonNode, field: string): ChainId =
   parseHexOrInt[uint64](n[field].getStr()).ChainId
 
-proc fromJson(T: type Hash256, n: JsonNode, field: string): Hash256 =
-  var num = n[field].getStr()
+proc fromJson(T: type Hash256, n: JsonNode): Hash256 =
+  var num = n.getStr()
   num.removePrefix("0x")
   if num.len < 64:
     num = repeat('0', 64 - num.len) & num
   Hash256(data: hexToByteArray(num, 32))
+
+proc fromJson(T: type Hash256, n: JsonNode, field: string): Hash256 =
+  fromJson(T, n[field])
 
 template fromJson(T: type EthTime, n: JsonNode, field: string): EthTime =
   fromUnix(parseHexOrInt[int64](n[field].getStr()))
@@ -99,6 +102,11 @@ proc fromJson(T: type Withdrawal, n: JsonNode): Withdrawal =
     amount: fromJson(uint64, n, "amount")
   )
 
+proc fromJson(T: type VersionedHashes, n: JsonNode, field: string): VersionedHashes =
+  let list = n[field]
+  for x in list:
+    result.add Hash256.fromJson(x)
+
 template `gas=`(tx: var Transaction, x: GasInt) =
   tx.gasLimit = x
 
@@ -119,6 +127,9 @@ template `maxPriorityFeePerGas=`(tx: var Transaction, x: GasInt) =
 
 template `maxFeePerGas=`(tx: var Transaction, x: GasInt) =
   tx.maxFee = x
+
+template `blobVersionedHashes=`(tx: var Transaction, x: VersionedHashes) =
+  tx.versionedHashes = x
 
 template required(o: untyped, T: type, oField: untyped) =
   const fName = astToStr(oField)
@@ -168,6 +179,8 @@ proc parseEnv*(ctx: var TransContext, n: JsonNode) =
   optional(ctx.env, UInt256, parentBaseFee)
   optional(ctx.env, GasInt, parentGasUsed)
   optional(ctx.env, GasInt, parentGasLimit)
+  optional(ctx.env, uint64, parentDataGasUsed)
+  optional(ctx.env, uint64, parentExcessDataGas)
 
   if n.hasKey("blockHashes"):
     let w = n["blockHashes"]
@@ -216,6 +229,13 @@ proc parseTx(n: JsonNode, chainId: ChainID): Transaction =
     required(tx, GasInt, maxPriorityFeePerGas)
     required(tx, GasInt, maxFeePerGas)
     omitZero(tx, AccessList, accessList)
+  of TxEip4844:
+    required(tx, ChainId, chainId)
+    required(tx, GasInt, maxPriorityFeePerGas)
+    required(tx, GasInt, maxFeePerGas)
+    omitZero(tx, AccessList, accessList)
+    required(tx, GasInt, maxFeePerDataGas)
+    required(tx, VersionedHashes, blobVersionedHashes)
 
   var eip155 = true
   if n.hasKey("protected"):
@@ -231,7 +251,7 @@ proc parseTx(n: JsonNode, chainId: ChainID): Transaction =
 proc parseTxLegacy(item: var Rlp): Result[Transaction, string] =
   try:
     var tx: Transaction
-    item.readTxLegacy(tx)
+    item.decodeTxLegacy(tx)
     return ok(tx)
   except RlpError as x:
     return err(x.msg)
@@ -240,7 +260,7 @@ proc parseTxTyped(item: var Rlp): Result[Transaction, string] =
   try:
     var tx: Transaction
     var rr = rlpFromBytes(item.read(Blob))
-    rr.readTxTyped(tx)
+    rr.decodeTxTyped(tx)
     return ok(tx)
   except RlpError as x:
     return err(x.msg)
@@ -420,3 +440,7 @@ proc `@@`*(x: ExecutionResult): JsonNode =
     result["currentBaseFee"] = @@(x.currentBaseFee)
   if x.withdrawalsRoot.isSome:
     result["withdrawalsRoot"] = @@(x.withdrawalsRoot)
+  if x.dataGasUsed.isSome:
+    result["dataGasUsed"] = @@(x.dataGasUsed)
+  if x.excessDataGas.isSome:
+    result["excessDataGas"] = @@(x.excessDataGas)

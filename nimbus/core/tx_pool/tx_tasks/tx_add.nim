@@ -23,7 +23,8 @@ import
   ./tx_recover,
   chronicles,
   eth/[common, keys],
-  stew/[keyed_queue, sorted_set]
+  stew/[keyed_queue, sorted_set],
+  ../../eip4844
 
 {.push raises: [].}
 
@@ -179,6 +180,14 @@ proc addTxs*(xp: TxPoolRef;
 
   for tx in txs.items:
     var reason: TxInfo
+    
+    if tx.txType == TxEip4844:
+      let res = tx.validateBlobTransactionWrapper()
+      if res.isErr:
+        # move item to waste basket     
+        reason = txInfoErrInvalidBlob
+        xp.txDB.reject(tx, reason, txItemPending, res.error)
+        invalidTxMeter(1)
 
     # Create tx item wrapper, preferably recovered from waste basket
     let rcTx = xp.recoverItem(tx, txItemPending, info)

@@ -144,7 +144,7 @@ template unsafeQuantityToInt64(q: web3types.Quantity): int64 =
   int64 q
 
 proc toTypedTransaction(tx: Transaction): TypedTransaction =
-  web3types.TypedTransaction(rlp.encode(tx))
+  web3types.TypedTransaction(rlp.encode(tx.removeNetworkPayload))
 
 func toWithdrawal(x: WithdrawalV1): Withdrawal =
   result.index = x.index.uint64

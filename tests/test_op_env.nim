@@ -374,5 +374,79 @@ proc opEnvMain*() =
         "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
       fork: Merge
 
+    # from here onward, versionedHashes is taken from
+    # tx.versionedHashes = @[EMPTY_UNCLE_HASH, EMPTY_SHA3]
+    # preset in macro_assembler: createSignedTx
+    when not defined(evmc_enabled):
+      assembler:
+        title: "EIP-4844: BlobHash 1"
+        code:
+          PUSH1 "0x01"
+          BlobHash
+          STOP
+        stack:
+          "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        fork: Cancun
+  
+      assembler:
+        title: "EIP-4844: BlobHash 0"
+        code:
+          PUSH1 "0x00"
+          BlobHash
+          STOP
+        stack:
+          "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+        fork: Cancun
+  
+      assembler:
+        title: "EIP-4844: BlobHash 2"
+        code:
+          PUSH1 "0x02"
+          BlobHash
+          STOP
+        stack:
+          "0x0000000000000000000000000000000000000000000000000000000000000000"
+        fork: Cancun
+  
+      assembler:
+        title: "EIP-4844: BlobHash 32 Bit high"
+        code:
+          PUSH4 "0xffffffff"
+          BlobHash
+          STOP
+        stack:
+          "0x0000000000000000000000000000000000000000000000000000000000000000"
+        fork: Cancun
+  
+      assembler:
+        title: "EIP-4844: BlobHash 64 Bit high"
+        code:
+          PUSH8 "0xffffffffffffffff"
+          BlobHash
+          STOP
+        stack:
+          "0x0000000000000000000000000000000000000000000000000000000000000000"
+        fork: Cancun
+  
+      assembler:
+        title: "EIP-4844: BlobHash 128 Bit high"
+        code:
+          PUSH16 "0xffffffffffffffffffffffffffffffff"
+          BlobHash
+          STOP
+        stack:
+          "0x0000000000000000000000000000000000000000000000000000000000000000"
+        fork: Cancun
+  
+      assembler:
+        title: "EIP-4844: BlobHash 256 Bit high"
+        code:
+          PUSH32 "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+          BlobHash
+          STOP
+        stack:
+          "0x0000000000000000000000000000000000000000000000000000000000000000"
+        fork: Cancun
+
 when isMainModule:
   opEnvMain()

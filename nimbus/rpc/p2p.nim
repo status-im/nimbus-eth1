@@ -258,10 +258,9 @@ proc setupEthRpc*(
       tx       = unsignedTx(data, chainDB, accDB.getNonce(address) + 1)
       eip155   = com.isEIP155(com.syncCurrent)
       signedTx = signTransaction(tx, acc.privateKey, com.chainId, eip155)
-      rlpTx    = rlp.encode(signedTx)
 
     txPool.add(signedTx)
-    result = keccakHash(rlpTx).ethHashStr
+    result = rlpHash(signedTx).ethHashStr
 
   server.rpc("eth_sendRawTransaction") do(data: HexDataStr) -> EthHashStr:
     ## Creates new message call transaction or a contract creation for signed transactions.
@@ -274,7 +273,7 @@ proc setupEthRpc*(
       signedTx = decodeTx(txBytes)
 
     txPool.add(signedTx)
-    result = keccakHash(txBytes).ethHashStr
+    result = rlpHash(signedTx).ethHashStr
 
   server.rpc("eth_call") do(call: EthCall, quantityTag: string) -> HexDataStr:
     ## Executes a new message call immediately without creating a transaction on the block chain.

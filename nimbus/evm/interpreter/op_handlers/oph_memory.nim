@@ -512,7 +512,7 @@ const
             post: vm2OpIgnore)),
 
     (opCode: Tload,     ## 0xb3, Load word from transient storage.
-     forks: Vm2Op1153AndLater,
+     forks: Vm2OpCancunAndLater,
      name: "tLoad",
      info: "Load word from transient storage",
      exec: (prep: vm2OpIgnore,
@@ -520,7 +520,7 @@ const
             post: vm2OpIgnore)),
 
     (opCode: Tstore,     ## 0xb4, Save word to transient storage.
-     forks: Vm2Op1153AndLater,
+     forks: Vm2OpCancunAndLater,
      name: "tStore",
      info: "Save word to transient storage",
      exec: (prep: vm2OpIgnore,

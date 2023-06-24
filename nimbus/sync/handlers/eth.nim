@@ -483,7 +483,9 @@ method handleAnnouncedTxs*(ctx: EthWireRef, peer: Peer, txs: openArray[Transacti
   var newTxHashes = newSeqOfCap[Hash256](txHashes.len)
   var validTxs = newSeqOfCap[Transaction](txHashes.len)
   for i, txHash in txHashes:
-    if ctx.inPoolAndOk(txHash):
+    # Nodes must not automatically broadcast blob transactions to
+    # their peers. per EIP-4844 spec
+    if ctx.inPoolAndOk(txHash) and txs[i].txType != TxEip4844:
       newTxHashes.add txHash
       validTxs.add txs[i]
 

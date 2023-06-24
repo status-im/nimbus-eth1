@@ -29,6 +29,7 @@ type
     value*         : Option[UInt256]
     data*          : seq[byte]
     accessList*    : AccessList
+    versionedHashes*: VersionedHashes
 
 proc toCallParams(vmState: BaseVMState, cd: RpcCallData,
                   globalGasCap: GasInt, baseFee: Option[UInt256],
@@ -73,7 +74,8 @@ proc toCallParams(vmState: BaseVMState, cd: RpcCallData,
     gasPrice:     gasPrice,
     value:        cd.value.get(0.u256),
     input:        cd.data,
-    accessList:   cd.accessList
+    accessList:   cd.accessList,
+    versionedHashes:cd.versionedHashes
   )
 
 proc rpcCallEvm*(call: RpcCallData, header: BlockHeader, com: CommonRef): CallResult
@@ -152,7 +154,7 @@ proc rpcEstimateGas*(cd: RpcCallData, header: BlockHeader, com: CommonRef, gasCa
     hi = gasCap
 
   cap = hi
-  let intrinsicGas = intrinsicGas(params, fork)
+  let intrinsicGas = intrinsicGas(params, vmState)
 
   # Create a helper to check if a gas allowance results in an executable transaction
   proc executable(gasLimit: GasInt): bool
@@ -201,6 +203,9 @@ proc callParamsForTx(tx: Transaction, sender: EthAddress, vmState: BaseVMState, 
   if tx.txType > TxLegacy:
     shallowCopy(result.accessList, tx.accessList)
 
+  if tx.txType >= TxEip4844:
+    result.versionedHashes = tx.versionedHashes
+
 proc callParamsForTest(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: EVMFork): CallParams =
   result = CallParams(
     vmState:      vmState,
@@ -218,6 +223,9 @@ proc callParamsForTest(tx: Transaction, sender: EthAddress, vmState: BaseVMState
   )
   if tx.txType > TxLegacy:
     shallowCopy(result.accessList, tx.accessList)
+
+  if tx.txType >= TxEip4844:
+    result.versionedHashes = tx.versionedHashes
 
 proc txCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: EVMFork): GasInt
     {.gcsafe, raises: [CatchableError].} =

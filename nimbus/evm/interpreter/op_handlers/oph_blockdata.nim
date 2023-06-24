@@ -17,6 +17,7 @@ import
   ../../computation,
   ../../stack,
   ../../async/operations,
+  ../utils/utils_numeric,
   ../op_codes,
   ./oph_defs
 
@@ -79,6 +80,18 @@ const
     ## 0x48, Get the block's base fee.
     k.cpt.stack.push:
       k.cpt.getBaseFee
+
+  blobHashOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+    ## 0x49, Get current transaction's EIP-4844 versioned hash.
+    let index = k.cpt.stack.popInt().safeInt
+    let len = k.cpt.getVersionedHashesLen
+
+    if index < len:
+      k.cpt.stack.push:
+        k.cpt.getVersionedHash(index)
+    else:
+      k.cpt.stack.push:
+        0
 
 # ------------------------------------------------------------------------------
 # Public, op exec table entries
@@ -157,6 +170,14 @@ const
      info: "Get current block's EIP-1559 base fee",
      exec: (prep: vm2OpIgnore,
             run:  baseFeeOp,
+            post: vm2OpIgnore)),
+
+    (opCode: BlobHash,        ## 0x49, EIP-4844 Transaction versioned hash
+     forks: Vm2OpCancunAndLater,
+     name: "blobHash",
+     info: "Get current transaction's EIP-4844 versioned hash",
+     exec: (prep: vm2OpIgnore,
+            run:  blobHashOp,
             post: vm2OpIgnore))]
 
 # ------------------------------------------------------------------------------

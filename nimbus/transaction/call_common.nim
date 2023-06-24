@@ -16,6 +16,7 @@ import
   ".."/[db/accounts_cache],
   ../evm/async/operations,
   ../common/evmforks,
+  ../core/eip4844,
   ./host_types
 
 when defined(evmc_enabled):
@@ -36,6 +37,7 @@ type
     value*:        HostValue            # Value sent from sender to recipient.
     input*:        seq[byte]            # Input data.
     accessList*:   AccessList           # EIP-2930 (Berlin) tx access list.
+    versionedHashes*: VersionedHashes   # EIP-4844 (Cancun) blob versioned hashes
     noIntrinsic*:  bool                 # Don't charge intrinsic gas.
     noAccessList*: bool                 # Don't initialise EIP-2929 access list.
     noGasCharge*:  bool                 # Don't charge sender account for gas.
@@ -67,10 +69,11 @@ proc hostToComputationMessage*(msg: EvmcMessage): Message =
     flags:           if msg.isStatic: emvcStatic else: emvcNoFlags
   )
 
-func intrinsicGas*(call: CallParams, fork: EVMFork): GasInt {.inline.} =
+func intrinsicGas*(call: CallParams, vmState: BaseVMState): GasInt {.inline.} =
   # Compute the baseline gas cost for this transaction.  This is the amount
   # of gas needed to send this transaction (but that is not actually used
   # for computation).
+  let fork = vmState.fork
   var gas = gasFees[fork][GasTransaction]
 
   # EIP-2 (Homestead) extra intrinsic gas for contract creations.
@@ -90,6 +93,12 @@ func intrinsicGas*(call: CallParams, fork: EVMFork): GasInt {.inline.} =
     for account in call.accessList:
       gas += ACCESS_LIST_ADDRESS_COST
       gas += account.storageKeys.len * ACCESS_LIST_STORAGE_KEY_COST
+
+  # EIP-4844
+  if fork >= FkCancun:
+    gas += calcDataFee(call.versionedHashes.len,
+      vmState.parent.excessDataGas).GasInt
+
   return gas
 
 proc initialAccessListEIP2929(call: CallParams) =
@@ -109,8 +118,8 @@ proc initialAccessListEIP2929(call: CallParams) =
     if vmState.fork >= FkShanghai:
       db.accessList(vmState.coinbase)
 
-    # TODO: Check this only adds the correct subset of precompiles.
-    for c in activePrecompiles():
+    # Adds the correct subset of precompiles.
+    for c in activePrecompiles(vmState.fork):
       db.accessList(c)
 
     # EIP2930 optional access list.
@@ -124,12 +133,13 @@ proc setupHost(call: CallParams): TransactionHost =
   vmState.setupTxContext(
     origin       = call.origin.get(call.sender),
     gasPrice     = call.gasPrice,
+    versionedHashes = call.versionedHashes,
     forkOverride = call.forkOverride
   )
 
   var intrinsicGas: GasInt = 0
   if not call.noIntrinsic:
-    intrinsicGas = intrinsicGas(call, vmState.fork)
+    intrinsicGas = intrinsicGas(call, vmState)
 
   let host = TransactionHost(
     vmState:       vmState,
@@ -286,7 +296,7 @@ proc asyncRunComputation*(call: CallParams): Future[CallResult] {.async.} =
   # This has to come before the newComputation call inside setupHost.
   if not call.isCreate:
     await ifNecessaryGetCodeForAccounts(call.vmState, @[call.to.toEvmc.fromEvmc])
-  
+
   let host = setupHost(call)
   prepareToRunComputation(host, call)
 

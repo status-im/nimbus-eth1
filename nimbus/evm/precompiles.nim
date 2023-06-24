@@ -9,28 +9,31 @@
 # according to those terms.
 
 import
-  std/[macros],
+  std/[math, macros],
+  stew/results,
   "."/[types, blake2b_f, blscurve],
   ./interpreter/[gas_meter, gas_costs, utils/utils_numeric],
   ../errors, eth/[common, keys], chronicles,
   nimcrypto/[ripemd, sha2, utils], bncurve/[fields, groups],
   ../common/evmforks,
+  ../core/eip4844,
   ./modexp
+
 
 type
   PrecompileAddresses* = enum
     # Frontier to Spurious Dragron
-    paEcRecover = 1
-    paSha256
-    paRipeMd160
-    paIdentity
+    paEcRecover  = 0x01,
+    paSha256     = 0x02,
+    paRipeMd160  = 0x03,
+    paIdentity   = 0x04,
     # Byzantium and Constantinople
-    paModExp
-    paEcAdd
-    paEcMul
-    paPairing
+    paModExp     = 0x05,
+    paEcAdd      = 0x06,
+    paEcMul      = 0x07,
+    paPairing    = 0x08,
     # Istanbul
-    paBlake2bf
+    paBlake2bf   = 0x09,
     # Berlin
     # EIP-2537: disabled
     # reason: not included in berlin
@@ -43,12 +46,38 @@ type
     # paBlsPairing
     # paBlsMapG1
     # paBlsMapG2
+    # Cancun
+    paNoop0x0A, paNoop0x0B, paNoop0x0C,
+    paNoop0x0D, paNoop0x0E, paNoop0x0F,
+    paNoop0x10, paNoop0x11, paNoop0x12,
+    paNoop0x13,
 
-iterator activePrecompiles*(): EthAddress =
+    paPointEvaluation = 0x14
+
+proc getMaxPrecompileAddr(fork: EVMFork): PrecompileAddresses =
+  if fork < FkByzantium: paIdentity
+  elif fork < FkIstanbul: paPairing
+  # EIP 2537: disabled
+  # reason: not included in berlin
+  # elif fork < FkBerlin: paBlake2bf
+  elif fork < FkCancun: paBlake2bf
+  else: PrecompileAddresses.high
+
+proc validPrecompileAddr(addrByte, maxPrecompileAddr: byte): bool =
+  (addrByte in PrecompileAddresses.low.byte .. maxPrecompileAddr) and
+    (addrByte notin paNoop0x0A.byte .. paNoop0x13.byte)
+
+proc validPrecompileAddr(addrByte: byte, fork: EVMFork): bool =
+  let maxPrecompileAddr = getMaxPrecompileAddr(fork)
+  validPrecompileAddr(addrByte, maxPrecompileAddr.byte)
+
+iterator activePrecompiles*(fork: EVMFork): EthAddress =
   var res: EthAddress
-  for c in PrecompileAddresses.low..PrecompileAddresses.high:
-    res[^1] = c.byte
-    yield res
+  let maxPrecompileAddr = getMaxPrecompileAddr(fork)
+  for c in PrecompileAddresses.low..maxPrecompileAddr:
+    if validPrecompileAddr(c.byte, maxPrecompileAddr.byte):
+      res[^1] = c.byte
+      yield res
 
 proc getSignature(computation: Computation): (array[32, byte], Signature) =
   # input is Hash, V, R, S
@@ -643,21 +672,30 @@ proc blsMapG2*(c: Computation) =
   if not encodePoint(p, c.output):
     raise newException(ValidationError, "blsMapG2 encodePoint error")
 
-proc getMaxPrecompileAddr(fork: EVMFork): PrecompileAddresses =
-  if fork < FkByzantium: paIdentity
-  elif fork < FkIstanbul: paPairing
-  # EIP 2537: disabled
-  # reason: not included in berlin
-  # elif fork < FkBerlin: paBlake2bf
-  else: PrecompileAddresses.high
+proc pointEvaluation*(c: Computation) =
+  # Verify p(z) = y given commitment that corresponds to the polynomial p(x) and a KZG proof.
+  # Also verify that the provided commitment matches the provided versioned_hash.
+  # The data is encoded as follows: versioned_hash | z | y | commitment | proof |
+
+  template input: untyped =
+    c.msg.data
+
+  c.gasMeter.consumeGas(POINT_EVALUATION_PRECOMPILE_GAS,
+    reason = "EIP-4844 Point Evaluation Precompile")
+
+  let res = pointEvaluation(input)
+  if res.isErr:
+    raise newException(ValidationError, res.error)
+
+  # return a constant
+  c.output = @PointEvaluationResult
 
 proc execPrecompiles*(computation: Computation, fork: EVMFork): bool {.inline.} =
   for i in 0..18:
     if computation.msg.codeAddress[i] != 0: return
 
   let lb = computation.msg.codeAddress[19]
-  let maxPrecompileAddr = getMaxPrecompileAddr(fork)
-  if lb in PrecompileAddresses.low.byte .. maxPrecompileAddr.byte:
+  if validPrecompileAddr(lb, fork):
     result = true
     let precompile = PrecompileAddresses(lb)
     #trace "Call precompile", precompile = precompile, codeAddr = computation.msg.codeAddress
@@ -672,6 +710,8 @@ proc execPrecompiles*(computation: Computation, fork: EVMFork): bool {.inline.} 
       of paEcMul: bn256ecMul(computation, fork)
       of paPairing: bn256ecPairing(computation, fork)
       of paBlake2bf: blake2bf(computation)
+      of paPointEvaluation: pointEvaluation(computation)
+      else: discard
       # EIP 2537: disabled
       # reason: not included in berlin
       # of paBlsG1Add: blsG1Add(computation)
