@@ -306,14 +306,14 @@ const
     discard
 
   tloadOp: Vm2OpFn = proc (k: var Vm2Ctx) =
-    ## 0xb3, Load word from transient storage.
+    ## 0x5c, Load word from transient storage.
     let
       slot = k.cpt.stack.peek()
       val  = k.cpt.getTransientStorage(slot)
     k.cpt.stack.top(val)
 
   tstoreOp: Vm2OpFn = proc (k: var Vm2Ctx) =
-    ## 0xb4, Save word to transient storage.
+    ## 0x5d, Save word to transient storage.
     checkInStaticContext(k.cpt)
 
     let
@@ -511,7 +511,7 @@ const
             run:  jumpDestOp,
             post: vm2OpIgnore)),
 
-    (opCode: Tload,     ## 0xb3, Load word from transient storage.
+    (opCode: Tload,     ## 0x5c, Load word from transient storage.
      forks: Vm2OpCancunAndLater,
      name: "tLoad",
      info: "Load word from transient storage",
@@ -519,7 +519,7 @@ const
             run:  tloadOp,
             post: vm2OpIgnore)),
 
-    (opCode: Tstore,     ## 0xb4, Save word to transient storage.
+    (opCode: Tstore,     ## 0x5d, Save word to transient storage.
      forks: Vm2OpCancunAndLater,
      name: "tStore",
      info: "Save word to transient storage",

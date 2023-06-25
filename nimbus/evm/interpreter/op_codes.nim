@@ -127,9 +127,10 @@ type
     JumpDest =       0x5b, ## Mark a valid destination for jumps. This
                            ## operation has no effect on machine state during
                            ## execution.
-    BeginSub =       0x5c, ## Marks the entry point to a subroutine
-    ReturnSub =      0x5d, ## Returns control to the caller of a subroutine.
-    JumpSub =        0x5e, ## Transfers control to a subroutine.
+    Tload =          0x5c, ## Load word from transient storage.
+    Tstore =         0x5d, ## Save word to transient storage.
+
+    Nop0x5E =        0x5e, ## Transfers control to a subroutine.
 
     # 5f, 60s & 70s: Push Operations.
     Push0 =          0x5f, ## Place 0 on stack. EIP-3855
@@ -174,12 +175,7 @@ type
 
     Nop0xA5, Nop0xA6, Nop0xA7, Nop0xA8, Nop0xA9, Nop0xAA,
     Nop0xAB, Nop0xAC, Nop0xAD, Nop0xAE, Nop0xAF, Nop0xB0,
-    Nop0xB1, Nop0xB2,
-
-    Tload =          0xb3, ## Load word from transient storage.
-    Tstore =         0xb4, ## Save word to transient storage.
-
-    Nop0xB5, Nop0xB6,
+    Nop0xB1, Nop0xB2, Nop0xB3, Nop0xB4, Nop0xB5, Nop0xB6,
     Nop0xB7, Nop0xB8, Nop0xB9, Nop0xBA, Nop0xBB, Nop0xBC,
     Nop0xBD, Nop0xBE, Nop0xBF, Nop0xC0, Nop0xC1, Nop0xC2,
     Nop0xC3, Nop0xC4, Nop0xC5, Nop0xC6, Nop0xC7, Nop0xC8,

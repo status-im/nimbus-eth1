@@ -626,9 +626,10 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
           Msize:          fixed GasBase,
           Gas:            fixed GasBase,
           JumpDest:       fixed GasJumpDest,
-          BeginSub:       fixed GasBase,
-          ReturnSub:      fixed GasLow,
-          JumpSub:        fixed GasHigh,
+
+          # 5c & 5d: Transient storage operations
+          Tload:          fixed GasWarmStorageRead,
+          Tstore:         fixed GasWarmStorageRead,
 
           # 5f, 60s & 70s: Push Operations
           Push0:          fixed GasBase,
@@ -707,10 +708,6 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
           Log2:           memExpansion `prefix gasLog2`,
           Log3:           memExpansion `prefix gasLog3`,
           Log4:           memExpansion `prefix gasLog4`,
-
-          # b0s: Transient storage operations
-          Tload:          fixed GasWarmStorageRead,
-          Tstore:         fixed GasWarmStorageRead,
 
           # f0s: System operations
           Create:         complex `prefix gasCreate`,
