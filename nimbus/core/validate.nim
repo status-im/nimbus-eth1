@@ -300,10 +300,7 @@ proc validateTransaction*(
         $tx.maxFee, $tx.maxPriorityFee])
 
     # the signer must be able to fully afford the transaction
-    let gasCost = if tx.txType >= TxEip1559:
-                    tx.gasLimit.u256 * tx.maxFee.u256
-                  else:
-                    tx.gasLimit.u256 * tx.gasPrice.u256
+    let gasCost = tx.gasCost()
 
     if balance < gasCost:
       return err("invalid tx: not enough cash for gas. avail=$1, require=$2" % [
