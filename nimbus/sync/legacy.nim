@@ -180,7 +180,7 @@ proc validateDifficulty(ctx: LegacySyncRef,
     return false
 
 proc validateHeader(ctx: LegacySyncRef, header: BlockHeader,
-                    txs: openArray[Transaction],
+                    body: BlockBody,
                     height = none(BlockNumber)): bool
                     {.raises: [CatchableError].} =
   if header.parentHash == GENESIS_PARENT_HASH:
@@ -237,13 +237,13 @@ proc validateHeader(ctx: LegacySyncRef, header: BlockHeader,
         parentNumber=parentHeader.blockNumber
       return false
 
-  res = com.validateWithdrawals(header)
+  res = com.validateWithdrawals(header, body)
   if res.isErr:
     trace "validate withdrawals error",
       msg=res.error
     return false
 
-  res = com.validateEip4844Header(header, parentHeader, txs)
+  res = com.validateEip4844Header(header, parentHeader, body.transactions)
   if res.isErr:
     trace "validate eip4844 error",
       msg=res.error
@@ -1053,7 +1053,13 @@ proc handleNewBlock(ctx: LegacySyncRef,
       number=blk.header.blockNumber
     return
 
-  if not ctx.validateHeader(blk.header, blk.txs):
+  let body = BlockBody(
+    transactions: blk.txs,
+    uncles: blk.uncles,
+    withdrawals: blk.withdrawals
+  )
+
+  if not ctx.validateHeader(blk.header, body):
     error "invalid header from peer",
       peer, hash=short(blk.header.blockHash)
     return

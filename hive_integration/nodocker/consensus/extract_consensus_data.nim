@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  std/[json, strutils, options],
+  std/[json],
   stew/byteutils,
   ../../../tools/common/helpers,
   ../../../nimbus/common/chain_config

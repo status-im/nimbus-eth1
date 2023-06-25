@@ -14,8 +14,7 @@ import
   ../../common/common,
   ../../utils/utils,
   ../pow,
-  ../clique,
-  ../validate
+  ../clique
 
 export
   common

@@ -49,8 +49,6 @@ type
     network      : string
     postStateHash: Hash256
 
-var pow = PowRef.new
-
 proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = false, trace = false)
 
 func normalizeNumber(n: JsonNode): JsonNode =
@@ -206,7 +204,7 @@ proc importBlock(tester: var Tester, com: CommonRef,
 
   if validation:
     let rc = com.validateHeaderAndKinship(
-      tb.header, tb.body, checkSeal, pow)
+      tb.header, tb.body, checkSeal)
     if rc.isErr:
       raise newException(
         ValidationError, "validateHeaderAndKinship: " & rc.error)
@@ -259,7 +257,7 @@ proc runTester(tester: var Tester, com: CommonRef, testStatusIMPL: var TestStatu
 
         # manually validating
         let res = com.validateHeaderAndKinship(
-                    tb.header, tb.body, checkSeal, pow)
+                    tb.header, tb.body, checkSeal)
         check res.isOk
         when defined(noisy):
           if res.isErr:

@@ -109,8 +109,7 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
         let res = c.com.validateHeaderAndKinship(
           header,
           body,
-          checkSealOK = false, # TODO: how to checkseal from here
-          pow = c.pow)
+          checkSealOK = false) # TODO: how to checkseal from here
         if res.isErr:
           debug "block validation error",
             msg = res.error

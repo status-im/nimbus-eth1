@@ -10,7 +10,6 @@
 
 import
   std/[sequtils, sets, times, strutils],
-  ../common/common,
   ../db/accounts_cache,
   ".."/[transaction, common/common],
   ".."/[errors],
@@ -24,8 +23,6 @@ from stew/byteutils
   import nil
 
 export
-  pow.PowRef,
-  pow.new,
   results
 
 {.push raises: [].}
@@ -73,8 +70,7 @@ proc validateSeal(pow: PowRef; header: BlockHeader): Result[void,string] =
   ok()
 
 proc validateHeader(com: CommonRef; header, parentHeader: BlockHeader;
-                    txs: openArray[Transaction]; checkSealOK: bool;
-                    pow: PowRef): Result[void,string] =
+                    body: BlockBody; checkSealOK: bool): Result[void,string] =
 
   template inDAOExtraRange(blockNumber: BlockNumber): bool =
     # EIP-799
@@ -88,7 +84,7 @@ proc validateHeader(com: CommonRef; header, parentHeader: BlockHeader;
   if header.extraData.len > 32:
     return err("BlockHeader.extraData larger than 32 bytes")
 
-  if header.gasUsed == 0 and 0 < txs.len:
+  if header.gasUsed == 0 and 0 < body.transactions.len:
     return err("zero gasUsed but transactions present");
 
   if header.gasUsed < 0 or header.gasUsed > header.gasLimit:
@@ -123,10 +119,10 @@ proc validateHeader(com: CommonRef; header, parentHeader: BlockHeader;
       return err("provided header difficulty is too low")
 
     if checkSealOK:
-      return pow.validateSeal(header)
+      return com.pow.validateSeal(header)
 
-  ? com.validateWithdrawals(header)
-  ? com.validateEip4844Header(header, parentHeader, txs)
+  ? com.validateWithdrawals(header, body)
+  ? com.validateEip4844Header(header, parentHeader, body.transactions)
 
   ok()
 
@@ -148,8 +144,8 @@ func validateUncle(currBlock, uncle, uncleParent: BlockHeader):
 
 
 proc validateUncles(com: CommonRef; header: BlockHeader;
-                    uncles: openArray[BlockHeader]; checkSealOK: bool;
-                    pow: PowRef): Result[void,string] =
+                    uncles: openArray[BlockHeader];
+                    checkSealOK: bool): Result[void,string] =
   let hasUncles = uncles.len > 0
   let shouldHaveUncles = header.ommersHash != EMPTY_UNCLE_HASH
 
@@ -213,7 +209,7 @@ proc validateUncles(com: CommonRef; header: BlockHeader;
 
     # Now perform VM level validation of the uncle
     if checkSealOK:
-      result = pow.validateSeal(uncle)
+      result = com.pow.validateSeal(uncle)
       if result.isErr:
         return
 
@@ -380,10 +376,8 @@ proc validateTransaction*(
 proc validateHeaderAndKinship*(
     com: CommonRef;
     header: BlockHeader;
-    uncles: openArray[BlockHeader];
-    txs: openArray[Transaction];
-    checkSealOK: bool;
-    pow: PowRef): Result[void, string] =
+    body: BlockBody;
+    checkSealOK: bool): Result[void, string] =
   if header.isGenesis:
     if header.extraData.len > 32:
       return err("BlockHeader.extraData larger than 32 bytes")
@@ -396,40 +390,21 @@ proc validateHeaderAndKinship*(
     return err("Failed to load block header from DB")
 
   result = com.validateHeader(
-    header, parent, txs, checkSealOK, pow)
+    header, parent, body, checkSealOK)
   if result.isErr:
     return
 
-  if uncles.len > MAX_UNCLES:
+  if body.uncles.len > MAX_UNCLES:
     return err("Number of uncles exceed limit.")
 
   if not chainDB.exists(header.stateRoot):
     return err("`state_root` was not found in the db.")
 
   if com.consensus != ConsensusType.POS:
-    result = com.validateUncles(header, uncles, checkSealOK, pow)
+    result = com.validateUncles(header, body.uncles, checkSealOK)
 
   if result.isOk:
     result = com.validateGasLimitOrBaseFee(header, parent)
-
-proc validateHeaderAndKinship*(
-    com: CommonRef;
-    header: BlockHeader;
-    body: BlockBody;
-    checkSealOK: bool;
-    pow: PowRef): Result[void, string] =
-
-  com.validateHeaderAndKinship(
-    header, body.uncles, body.transactions, checkSealOK, pow)
-
-proc validateHeaderAndKinship*(
-    com: CommonRef;
-    ethBlock: EthBlock;
-    checkSealOK: bool;
-    pow: PowRef): Result[void,string] =
-  com.validateHeaderAndKinship(
-    ethBlock.header, ethBlock.uncles, ethBlock.txs,
-    checkSealOK, pow)
 
 # ------------------------------------------------------------------------------
 # End

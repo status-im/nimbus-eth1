@@ -94,6 +94,9 @@ proc toGenesisHeader*(
   if g.difficulty.isZero and fork <= London:
     result.difficulty = GENESIS_DIFFICULTY
 
+  if fork >= Shanghai:
+    result.withdrawalsRoot = some(EMPTY_ROOT_HASH)
+
 proc toGenesisHeader*(
     genesis: Genesis;
     fork: HardFork;

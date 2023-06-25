@@ -85,20 +85,15 @@ proc procBlkPreamble(vmState: BaseVMState;
   if vmState.determineFork >= FkShanghai:
     if header.withdrawalsRoot.isNone:
       raise ValidationError.newException("Post-Shanghai block header must have withdrawalsRoot")
-    elif body.withdrawals.isNone:
+    if body.withdrawals.isNone:
       raise ValidationError.newException("Post-Shanghai block body must have withdrawals")
-    else:
-      if body.withdrawals.get.calcWithdrawalsRoot != header.withdrawalsRoot.get:
-        debug "Mismatched withdrawalsRoot",
-          blockNumber = header.blockNumber
-        return false
 
-      for withdrawal in body.withdrawals.get:
-        vmState.stateDB.addBalance(withdrawal.address, withdrawal.amount.gwei)
+    for withdrawal in body.withdrawals.get:
+      vmState.stateDB.addBalance(withdrawal.address, withdrawal.amount.gwei)
   else:
     if header.withdrawalsRoot.isSome:
       raise ValidationError.newException("Pre-Shanghai block header must not have withdrawalsRoot")
-    elif body.withdrawals.isSome:
+    if body.withdrawals.isSome:
       raise ValidationError.newException("Pre-Shanghai block body must not have withdrawals")
 
   if vmState.cumulativeGasUsed != header.gasUsed:
