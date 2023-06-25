@@ -20,7 +20,7 @@ import
   ../premix/regress,
   ./tracerTestGen,
   ./persistBlockTestGen,
-  ../hive_integration/nodocker/consensus/extract_consensus_data,
+  ../hive_integration/nodocker/rpc/rpc_sim,
   ../hive_integration/nodocker/consensus/consensus_sim,
   ../hive_integration/nodocker/graphql/graphql_sim,
   ../hive_integration/nodocker/engine/engine_sim,

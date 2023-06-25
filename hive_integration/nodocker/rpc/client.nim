@@ -46,6 +46,20 @@ proc nonceAt*(client: RpcClient, address: EthAddress): Future[AccountNonce] {.as
   let hex = await client.eth_getTransactionCount(ethAddressStr(address), "latest")
   result = parseHexInt(hex.string).AccountNonce
 
+func toTopics(list: openArray[Hash256]): seq[Topic] =
+  result = newSeqOfCap[Topic](list.len)
+  for x in list:
+    result.add x.data
+  
+func toLogs(list: openArray[FilterLog]): seq[Log] =
+  result = newSeqOfCap[Log](list.len)
+  for x in list:
+    result.add Log(
+      address: x.address,
+      data: x.data,
+      topics: toTopics(x.topics)
+    )
+
 proc txReceipt*(client: RpcClient, txHash: Hash256): Future[Option[Receipt]] {.async.} =
   let rr = await client.eth_getTransactionReceipt(txHash)
   if rr.isNone:
@@ -59,7 +73,7 @@ proc txReceipt*(client: RpcClient, txHash: Hash256): Future[Option[Receipt]] {.a
     hash       : rc.root.get(Hash256()),
     cumulativeGasUsed: parseHexInt(rc.cumulativeGasUsed.string).GasInt,
     bloom      : BloomFilter(rc.logsBloom),
-    logs       : rc.logs
+    logs       : toLogs(rc.logs)
   )
   result = some(rec)
 
