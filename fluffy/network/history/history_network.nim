@@ -344,21 +344,21 @@ proc get(db: ContentDB, T: type BlockHeader, contentId: ContentId): Opt[T] =
 
 proc get(db: ContentDB, T: type BlockBody, contentId: ContentId,
     header: BlockHeader): Opt[T] =
-  let encoded = db.get(contentId)
-  if encoded.isNone():
+  let encoded = db.get(contentId).valueOr:
     return Opt.none(T)
 
-  let timestamp = Moment.init(header.timestamp.toUnix(), Second)
-  let body =
-    if isShanghai(chainConfig, timestamp):
-      BlockBody.fromPortalBlockBodyOrRaise(
-        decodeSszOrRaise(encoded.get(), PortalBlockBodyShanghai))
-    elif isPoSBlock(chainConfig, header.blockNumber.truncate(uint64)):
-      BlockBody.fromPortalBlockBodyOrRaise(
-        decodeSszOrRaise(encoded.get(), PortalBlockBodyLegacy))
-    else:
-      BlockBody.fromPortalBlockBodyOrRaise(
-        decodeSszOrRaise(encoded.get(), PortalBlockBodyLegacy))
+  let
+    timestamp = Moment.init(header.timestamp.toUnix(), Second)
+    body =
+      if isShanghai(chainConfig, timestamp):
+        BlockBody.fromPortalBlockBodyOrRaise(
+          decodeSszOrRaise(encoded, PortalBlockBodyShanghai))
+      elif isPoSBlock(chainConfig, header.blockNumber.truncate(uint64)):
+        BlockBody.fromPortalBlockBodyOrRaise(
+          decodeSszOrRaise(encoded, PortalBlockBodyLegacy))
+      else:
+        BlockBody.fromPortalBlockBodyOrRaise(
+          decodeSszOrRaise(encoded, PortalBlockBodyLegacy))
 
   Opt.some(body)
 
@@ -733,17 +733,13 @@ proc validateContent(
   for i, contentItem in contentItems:
     let contentKey = contentKeys[i]
     if await n.validateContent(contentItem, contentKey):
-      let contentIdOpt = n.portalProtocol.toContentId(contentKey)
-      if contentIdOpt.isNone():
+      let contentId = n.portalProtocol.toContentId(contentKey).valueOr:
         error "Received offered content with invalid content key", contentKey
         return false
-
-      let contentId = contentIdOpt.get()
 
       n.portalProtocol.storeContent(contentKey, contentId, contentItem)
 
       info "Received offered content validated successfully", contentKey
-
     else:
       error "Received offered content failed validation", contentKey
       return false
