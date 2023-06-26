@@ -130,7 +130,7 @@ type
     Tload =          0x5c, ## Load word from transient storage.
     Tstore =         0x5d, ## Save word to transient storage.
 
-    Nop0x5E =        0x5e, ## Transfers control to a subroutine.
+    Mcopy =          0x5e, ## Memory copy
 
     # 5f, 60s & 70s: Push Operations.
     Push0 =          0x5f, ## Place 0 on stack. EIP-3855

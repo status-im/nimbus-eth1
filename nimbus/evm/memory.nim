@@ -52,3 +52,15 @@ proc write*(memory: var Memory, startPos: Natural, value: openArray[byte]) =
   validateLte(startPos + size, memory.len)
   for z, b in value:
     memory.bytes[z + startPos] = b
+
+proc copy*(memory: var Memory, dst, src, len: Natural) =
+  if len <= 0: return
+  memory.extend(max(dst, src), len)
+  if dst == src:
+    return
+  elif dst < src:
+    for i in 0..<len:
+      memory.bytes[dst+i] = memory.bytes[src+i]
+  else: # src > dst
+    for i in countdown(len-1, 0):
+      memory.bytes[dst+i] = memory.bytes[src+i]

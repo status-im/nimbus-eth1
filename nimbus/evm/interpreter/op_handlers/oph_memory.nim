@@ -321,6 +321,19 @@ const
       val  = k.cpt.stack.popInt()
     k.cpt.setTransientStorage(slot, val)
 
+  mCopyOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+    ## 0x5e, Copy memory
+    let (dst, src, size) = k.cpt.stack.popInt(3)
+
+    let (dstPos, srcPos, len) =
+      (dst.cleanMemRef, src.cleanMemRef, size.cleanMemRef)
+
+    k.cpt.gasMeter.consumeGas(
+      k.cpt.gasCosts[Mcopy].m_handler(k.cpt.memory.len, max(dstPos, srcPos), len),
+      reason = "Mcopy fee")
+
+    k.cpt.memory.copy(dstPos, srcPos, len)
+
 #[
   EIP-2315: temporary disabled
   Reason  : not included in berlin hard fork
@@ -525,6 +538,14 @@ const
      info: "Save word to transient storage",
      exec: (prep: vm2OpIgnore,
             run:  tstoreOp,
+            post: vm2OpIgnore)),
+
+    (opCode: Mcopy,     ## 0x5e, Copy memory
+     forks: Vm2OpCancunAndLater,
+     name: "MCopy",
+     info: "Copy memory",
+     exec: (prep: vm2OpIgnore,
+            run:  mCopyOp,
             post: vm2OpIgnore))]
 
 #[

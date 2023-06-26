@@ -812,5 +812,113 @@ proc opMemoryMain*() =
         "0x00"
         "0x0000000000000000000000000000002000000000000000000000000000000000"
 
+    assembler:
+      title: "MCOPY 1"
+      code:
+        PUSH32 "0x0000000000000000000000000000000000000000000000000000000000000000"
+        PUSH1  "0x00"
+        MSTORE
+        PUSH32 "0x000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+        PUSH1  "0x20"
+        MSTORE
+        PUSH1  "0x20" # len
+        PUSH1  "0x20" # src
+        PUSH1  "0x00" # dst
+        MCOPY
+      memory:
+        "0x000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+        "0x000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+      fork: Cancun
+
+    assembler:
+      title: "MCOPY 2: Overlap"
+      code:
+        PUSH32 "0x0101010101010101010101010101010101010101010101010101010101010101"
+        PUSH1  "0x00"
+        MSTORE
+        PUSH1  "0x20" # len
+        PUSH1  "0x00" # src
+        PUSH1  "0x00" # dst
+        MCOPY
+      memory:
+        "0x0101010101010101010101010101010101010101010101010101010101010101"
+      fork: Cancun
+
+    assembler:
+      title: "MCOPY 3"
+      code:
+        PUSH1 "0x00"
+        PUSH1 "0x00"
+        MSTORE8
+        PUSH1 "0x01"
+        PUSH1 "0x01"
+        MSTORE8
+        PUSH1 "0x02"
+        PUSH1 "0x02"
+        MSTORE8
+        PUSH1 "0x03"
+        PUSH1 "0x03"
+        MSTORE8
+        PUSH1 "0x04"
+        PUSH1 "0x04"
+        MSTORE8
+        PUSH1 "0x05"
+        PUSH1 "0x05"
+        MSTORE8
+        PUSH1 "0x06"
+        PUSH1 "0x06"
+        MSTORE8
+        PUSH1 "0x07"
+        PUSH1 "0x07"
+        MSTORE8
+        PUSH1 "0x08"
+        PUSH1 "0x08"
+        MSTORE8
+        PUSH1  "0x08" # len
+        PUSH1  "0x01" # src
+        PUSH1  "0x00" # dst
+        MCOPY
+      memory:
+        "0x0102030405060708080000000000000000000000000000000000000000000000"
+      fork: Cancun
+
+    assembler:
+      title: "MCOPY 4"
+      code:
+        PUSH1 "0x00"
+        PUSH1 "0x00"
+        MSTORE8
+        PUSH1 "0x01"
+        PUSH1 "0x01"
+        MSTORE8
+        PUSH1 "0x02"
+        PUSH1 "0x02"
+        MSTORE8
+        PUSH1 "0x03"
+        PUSH1 "0x03"
+        MSTORE8
+        PUSH1 "0x04"
+        PUSH1 "0x04"
+        MSTORE8
+        PUSH1 "0x05"
+        PUSH1 "0x05"
+        MSTORE8
+        PUSH1 "0x06"
+        PUSH1 "0x06"
+        MSTORE8
+        PUSH1 "0x07"
+        PUSH1 "0x07"
+        MSTORE8
+        PUSH1 "0x08"
+        PUSH1 "0x08"
+        MSTORE8
+        PUSH1  "0x08" # len
+        PUSH1  "0x00" # src
+        PUSH1  "0x01" # dst
+        MCOPY
+      memory:
+        "0x0000010203040506070000000000000000000000000000000000000000000000"
+      fork: Cancun
+
 when isMainModule:
   opMemoryMain()

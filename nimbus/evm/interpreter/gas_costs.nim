@@ -630,6 +630,9 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
           # 5c & 5d: Transient storage operations
           Tload:          fixed GasWarmStorageRead,
           Tstore:         fixed GasWarmStorageRead,
+          
+          # 5e: Memory copy
+          Mcopy:          memExpansion `prefix gasCopy`,
 
           # 5f, 60s & 70s: Push Operations
           Push0:          fixed GasBase,
