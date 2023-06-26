@@ -28,6 +28,7 @@
 
 import
   std/[algorithm, sequtils, tables],
+  chronicles,
   eth/common,
   stew/results,
   ../aristo_constants,
@@ -37,7 +38,7 @@ import
   ./aristo_init_common
 
 type
-  MemBackendRef* = ref object of AristoTypedBackendRef
+  MemBackendRef* = ref object of TypedBackendRef
     ## Inheriting table so access can be extended for debugging purposes
     sTab: Table[VertexID,VertexRef]  ## Structural vertex table making up a trie
     kMap: Table[VertexID,HashKey]    ## Merkle hash key mapping
@@ -52,6 +53,10 @@ type
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
+
+template logTxt(info: static[string]): static[string] =
+  "MemoryDB " & info
+
 
 proc newSession(db: MemBackendRef): MemPutHdlRef =
   new result
@@ -102,28 +107,43 @@ proc putVtxFn(db: MemBackendRef): PutVtxFn =
   result =
     proc(hdl: PutHdlRef; vrps: openArray[(VertexID,VertexRef)]) =
       let hdl = hdl.getSession db
-      for (vid,vtx) in vrps:
-        hdl.sTab[vid] = vtx.dup
+      if hdl.error.isNil:
+        for (vid,vtx) in vrps:
+          if not vtx.isNil:
+            let rc = vtx.blobify # verify data record
+            if rc.isErr:
+              hdl.error = TypedPutHdlErrRef(
+                pfx:  VtxPfx,
+                vid:  vid,
+                code: rc.error)
+              return
+          hdl.sTab[vid] = vtx.dup
 
 proc putKeyFn(db: MemBackendRef): PutKeyFn =
   result =
     proc(hdl: PutHdlRef; vkps: openArray[(VertexID,HashKey)]) =
       let hdl = hdl.getSession db
-      for (vid,key) in vkps:
-        hdl.kMap[vid] = key
+      if hdl.error.isNil:
+        for (vid,key) in vkps:
+          hdl.kMap[vid] = key
 
 proc putIdgFn(db: MemBackendRef): PutIdgFn =
   result =
     proc(hdl: PutHdlRef; vs: openArray[VertexID])  =
       let hdl = hdl.getSession db
-      hdl.vGen = vs.toSeq
-      hdl.vGenOk = true
+      if hdl.error.isNil:
+        hdl.vGen = vs.toSeq
+        hdl.vGenOk = true
 
 
 proc putEndFn(db: MemBackendRef): PutEndFn =
   result =
     proc(hdl: PutHdlRef): AristoError =
       let hdl = hdl.endSession db
+      if not hdl.error.isNil:
+        debug logTxt "putEndFn: failed",
+          pfx=hdl.error.pfx, vid=hdl.error.vid, error=hdl.error.code
+        return hdl.error.code
 
       for (vid,vtx) in hdl.sTab.pairs:
         if vtx.isValid:

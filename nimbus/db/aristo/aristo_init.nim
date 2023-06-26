@@ -21,7 +21,7 @@ import
   ./aristo_desc/aristo_types_backend
 
 export
-  AristoBackendType, AristoStorageType, AristoTypedBackendRef
+  AristoBackendType, AristoStorageType, TypedBackendRef
 
 # ------------------------------------------------------------------------------
 # Public database constuctors, destructor
@@ -91,7 +91,10 @@ proc finish*(db: var AristoDb; flush = false) =
 
 # -----------------
 
-proc to*[W: MemBackendRef|RdbBackendRef](db: AristoDb; T: type W): T =
+proc to*[W: TypedBackendRef|MemBackendRef|RdbBackendRef](
+    db: AristoDb;
+    T: type W;
+      ): T =
   ## Handy helper for lew-level access to some backend functionality
   db.backend.T
 

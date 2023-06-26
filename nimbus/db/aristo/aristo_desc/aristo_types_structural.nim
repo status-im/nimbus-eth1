@@ -143,21 +143,24 @@ proc dup*(pld: PayloadRef): PayloadRef =
 proc dup*(vtx: VertexRef): VertexRef =
   ## Duplicate vertex.
   # Not using `deepCopy()` here (some `gc` needs `--deepcopy:on`.)
-  case vtx.vType:
-  of Leaf:
-    VertexRef(
-      vType: Leaf,
-      lPfx:  vtx.lPfx,
-      lData: vtx.ldata.dup)
-  of Extension:
-    VertexRef(
-      vType: Extension,
-      ePfx:  vtx.ePfx,
-      eVid:  vtx.eVid)
-  of Branch:
-    VertexRef(
-      vType: Branch,
-      bVid:  vtx.bVid)
+  if vtx.isNil:
+    VertexRef(nil)
+  else:
+    case vtx.vType:
+    of Leaf:
+      VertexRef(
+        vType: Leaf,
+        lPfx:  vtx.lPfx,
+        lData: vtx.ldata.dup)
+    of Extension:
+      VertexRef(
+        vType: Extension,
+        ePfx:  vtx.ePfx,
+        eVid:  vtx.eVid)
+    of Branch:
+      VertexRef(
+        vType: Branch,
+        bVid:  vtx.bVid)
 
 proc to*(node: NodeRef; T: type VertexRef): T =
   ## Extract a copy of the `VertexRef` part from a `NodeRef`.

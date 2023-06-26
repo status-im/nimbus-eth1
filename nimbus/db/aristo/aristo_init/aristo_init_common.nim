@@ -10,6 +10,7 @@
 {.push raises: [].}
 
 import
+  ../aristo_desc,
   ../aristo_desc/aristo_types_backend
 
 const
@@ -22,13 +23,19 @@ type
     BackendMemory
     BackendRocksDB
 
-  AristoTypedBackendRef* = ref object of AristoBackendRef
+  TypedBackendRef* = ref object of AristoBackendRef
     kind*: AristoBackendType         ## Backend type identifier
     when verifyIxId:
       txGen: uint                    ## Transaction ID generator (for debugging)
       txId: uint                     ## Active transaction ID (for debugging)
 
+  TypedPutHdlErrRef* = ref object of RootRef
+    pfx*: AristoStorageType          ## Error sub-table
+    vid*: VertexID                   ## Vertex ID where the error occured
+    code*: AristoError               ## Error code (if any)
+
   TypedPutHdlRef* = ref object of PutHdlRef
+    error*: TypedPutHdlErrRef        ## Track error while collecting transaction
     when verifyIxId:
       txId: uint                     ## Transaction ID (for debugging)
 
@@ -42,7 +49,7 @@ type
 # Public helpers
 # ------------------------------------------------------------------------------
 
-proc beginSession*(hdl: TypedPutHdlRef; db: AristoTypedBackendRef) =
+proc beginSession*(hdl: TypedPutHdlRef; db: TypedBackendRef) =
   when verifyIxId:
     doAssert db.txId == 0
     if db.txGen == 0:
@@ -51,11 +58,11 @@ proc beginSession*(hdl: TypedPutHdlRef; db: AristoTypedBackendRef) =
     hdl.txId = db.txGen
     db.txGen.inc
 
-proc verifySession*(hdl: TypedPutHdlRef; db: AristoTypedBackendRef) =
+proc verifySession*(hdl: TypedPutHdlRef; db: TypedBackendRef) =
   when verifyIxId:
     doAssert db.txId == hdl.txId
 
-proc finishSession*(hdl: TypedPutHdlRef; db: AristoTypedBackendRef) =
+proc finishSession*(hdl: TypedPutHdlRef; db: TypedBackendRef) =
   when verifyIxId:
     doAssert db.txId == hdl.txId
     db.txId = 0
