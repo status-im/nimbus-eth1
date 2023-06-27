@@ -15,10 +15,12 @@ import
   ../../../nimbus/common/chain_config
 
 type
+  Blob = seq[byte]
+  
   ChainData* = object
     params*: NetworkParams
     lastBlockHash*: string
-    blocksRlp*: seq[byte]
+    blocksRlp*: seq[Blob]
 
 const genFields = [
   "nonce",

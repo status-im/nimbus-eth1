@@ -26,7 +26,13 @@ proc processChainData(cd: ChainData): TestStatus =
     )
 
   com.initializeEmptyDb()
-  discard importRlpBlock(cd.blocksRlp, com, "consensus_sim")
+
+  for bytes in cd.blocksRlp:
+    # ignore return value here
+    # because good blocks maybe interleaved with
+    # bad blocks
+    discard importRlpBlock(bytes, com, "consensus_sim")
+
   let head = com.db.getCanonicalHead()
   let blockHash = "0x" & head.blockHash.data.toHex
   if blockHash == cd.lastBlockHash:
