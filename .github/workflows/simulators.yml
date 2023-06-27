@@ -166,8 +166,7 @@ jobs:
         with:
           delete_release: true
           tag_name: sim-stat
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Simulators results
         uses: ncipollo/release-action@v1

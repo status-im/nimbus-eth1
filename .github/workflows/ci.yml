@@ -32,16 +32,16 @@ jobs:
           # vm2
           - os: linux
             cpu: amd64
-            evmc: nimvm2
+            evmc: nimvm
           # - os: linux
           #   cpu: i386
-          #   evmc: nimvm2
+          #   evmc: nimvm
           - os: windows
             cpu: amd64
-            evmc: nimvm2
+            evmc: nimvm
           - os: macos
             cpu: amd64
-            evmc: nimvm2
+            evmc: nimvm
         include:
           - target:
               os: linux
