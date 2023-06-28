@@ -23,16 +23,17 @@ proc importRlpBlock*(blocksRlp: openArray[byte]; com: CommonRef; importFile: str
     errorCount = 0
     header: BlockHeader
     body: BlockBody
-  let
-    head = com.db.getCanonicalHead()
 
+  # even though the new imported blocks have block number
+  # smaller than head, we keep importing it.
+  # it maybe a side chain.
+  
   while rlp.hasData:
     try:
       rlp.decompose(header, body)
-      if header.blockNumber > head.blockNumber:
-        if chain.persistBlocks([header], [body]) == ValidationResult.Error:
-          # register one more error and continue
-          errorCount.inc
+      if chain.persistBlocks([header], [body]) == ValidationResult.Error:
+        # register one more error and continue
+        errorCount.inc
     except RlpError as e:
       # terminate if there was a decoding error
       error "rlp error",
