@@ -34,7 +34,7 @@ Run Fluffy and trigger the propagation of data with the
 `portal_history_propagateEpochAccumulators` JSON-RPC API call:
 
 ```bash
-./build/fluffy --network:testnet0 --rpc --table-ip-limit:1024 --bucket-ip-limit:24
+./build/fluffy --rpc --table-ip-limit:1024 --bucket-ip-limit:24
 
 # From another terminal
 curl -s -X POST -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":"1","method":"portal_history_propagateEpochAccumulators","params":["./user_data_dir/"]}' http://localhost:8545 | jq
@@ -47,7 +47,7 @@ accumulators are available on the history network:
 
 Make sure you still have a fluffy instance running, if not run:
 ```bash
-./build/fluffy --network:testnet0 --rpc --table-ip-limit:1024 --bucket-ip-limit:24
+./build/fluffy --rpc --table-ip-limit:1024 --bucket-ip-limit:24
 ```
 
 Run the `content_verifier` tool and see if all epoch accumulators are found:
@@ -79,7 +79,7 @@ Ethereum JSON-RPC endpoint.
 `portal_history_propagate` JSON-RPC API call:
 
 ```bash
-./build/fluffy --network:testnet0 --table-ip-limit:1024 --bucket-ip-limit:24 --log-level:info --rpc
+./build/fluffy --table-ip-limit:1024 --bucket-ip-limit:24 --log-level:info --rpc
 
 # From another shell
 curl -s -X POST -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":"1","method":"portal_history_propagate","params":["./user_data_dir/eth-history-data.json"]}' http://localhost:8545 | jq
@@ -92,7 +92,7 @@ curl -s -X POST -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":"1
 Run a Fluffy node with the JSON-RPC API enabled.
 
 ```bash
-./build/fluffy --network:testnet0 --rpc --table-ip-limit:1024 --bucket-ip-limit:24
+./build/fluffy --rpc --table-ip-limit:1024 --bucket-ip-limit:24
 ```
 
 Build & run the `beacon_chain_bridge`:

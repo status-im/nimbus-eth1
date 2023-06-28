@@ -83,7 +83,7 @@ type
       desc:
         "Select which Portal network to join. This will set the " &
         "network specific bootstrap nodes automatically"
-      defaultValue: PortalNetwork.none
+      defaultValue: PortalNetwork.testnet0
       name: "network" }: PortalNetwork
 
     # Note: This will add bootstrap nodes for both Discovery v5 network and each
