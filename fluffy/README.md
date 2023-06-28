@@ -55,14 +55,9 @@ make fluffy
 
 ### Run a Fluffy client on the public testnet
 
-There is a public [Portal testnet](https://github.com/ethereum/portal-network-specs/blob/master/testnet.md#portal-network-testnet) which contains nodes of different clients.
-We run a fleet of Fluffy nodes that are part of this testnet.
-
-Provide the `--network:testnet0` option to join this network.
-
 ```bash
-# Connect to the Portal testnet and enable the JSON-RPC APIs
-./build/fluffy --network:testnet0 --rpc --table-ip-limit:1024 --bucket-ip-limit:24
+# Connect to the Portal testnet bootstrap nodes and enable the JSON-RPC APIs
+./build/fluffy --rpc --table-ip-limit:1024 --bucket-ip-limit:24
 ```
 
 The `table-ip-limit` and `bucket-ip-limit` options are needed to allow more
@@ -70,6 +65,12 @@ nodes with the same IPs in the routing tables. The default limits are there
 as security measure. It is currently needed to increase the limits for the testnet
 because the fleet of Fluffy nodes runs on only 2 machines / network interfaces.
 
+There is a public [Portal testnet](https://github.com/ethereum/portal-network-specs/blob/master/testnet.md#portal-network-testnet)
+which contains nodes of different clients.
+
+Fluffy will default join the network through these bootstrap nodes.
+You can also explicitly provide the `--network:testnet0` option to join this
+network, or `--network:none` to not connect to any of these bootstrapn odes.
 
 > **_Note:_** The `--network` option selects automatically a static set of
 specific bootstrap nodes belonging to a "testnet". Currently `testnet0` is the
