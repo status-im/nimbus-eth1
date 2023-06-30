@@ -24,8 +24,10 @@ type
     RlpOtherException
 
     # Data record transcoders, `deblobify()` and `blobify()`
-    BlobifyVtxExPathOverflow
-    BlobifyVtxLeafPathOverflow
+    BlobifyBranchMissingRefs
+    BlobifyExtMissingRefs
+    BlobifyExtPathOverflow
+    BlobifyLeafPathOverflow
 
     DeblobNilArgument
     DeblobUnknown
@@ -87,18 +89,49 @@ type
     HashifyLeafToRootAllFailed
     HashifyRootHashMismatch
     HashifyRootVidMismatch
+    HashifyVidCircularDependence
+    HashifyVtxMissing
 
-    HashifyCheckRevCountMismatch
-    HashifyCheckRevHashMismatch
-    HashifyCheckRevHashMissing
-    HashifyCheckRevVtxDup
-    HashifyCheckRevVtxMissing
-    HashifyCheckVidVtxMismatch
-    HashifyCheckVtxCountMismatch
-    HashifyCheckVtxHashMismatch
-    HashifyCheckVtxHashMissing
-    HashifyCheckVtxIncomplete
-    HashifyCheckVtxLockWithoutKey
+    # Cache checker `checkCache()`
+    CheckStkVtxIncomplete
+    CheckStkVtxKeyMissing
+    CheckStkVtxKeyMismatch
+    CheckStkRevKeyMissing
+    CheckStkRevKeyMismatch
+    CheckStkVtxCountMismatch
+
+    CheckRlxVidVtxMismatch
+    CheckRlxVtxIncomplete
+    CheckRlxVtxKeyMissing
+    CheckRlxVtxKeyMismatch
+    CheckRlxRevKeyMissing
+    CheckRlxRevKeyMismatch
+    CheckRlxVidVtxBeMissing
+    CheckRlxVtxEmptyKeyMissing
+    CheckRlxVtxEmptyKeyExpected
+
+    CheckAnyRevVtxMissing
+    CheckAnyRevVtxDup
+    CheckAnyRevCountMismatch
+    CheckAnyVtxLockWithoutKey
+
+    # Backend structural check `checkBE()`
+    CheckBeVtxInvalid
+    CheckBeKeyInvalid
+    CheckBeVtxMissing
+    CheckBeKeyMissing
+    CheckBeKeyCantCompile
+    CheckBeKeyMismatch
+    CheckBeGarbledVGen
+
+    CheckBeCacheKeyMissing
+    CheckBeCacheKeyNonEmpty
+    CheckBeCacheVidUnsynced
+    CheckBeCacheKeyDangling
+    CheckBeCacheVtxDangling
+    CheckBeCacheKeyCantCompile
+    CheckBeCacheKeyMismatch
+    CheckBeCacheGarbledVGen
 
     # Neighbour vertex, tree traversal `nearbyRight()` and `nearbyLeft()`
     NearbyBeyondRange
@@ -113,17 +146,22 @@ type
     NearbyPathTailUnexpected
     NearbyPathTailInxOverflow
     NearbyUnexpectedVtx
+    NearbyVidInvalid
 
     # Deletion of vertices, `delete()`
     DelPathTagError
     DelLeafExpexted
     DelLeafLocked
+    DelLeafUnexpected
     DelBranchExpexted
     DelBranchLocked
+    DelBranchWithoutRefs
     DelExtLocked
+    DelVidStaleVtx
 
     # Save permanently, `save()`
     SaveBackendMissing
+    SaveLeafVidRepurposed
 
     # Get functions form `aristo_get.nim`
     GetLeafNotFound

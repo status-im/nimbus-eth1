@@ -222,7 +222,7 @@ proc accountsRunner(
       check noisy.test_nearbyKvpList(accLst, resetDb)
 
     test &"Delete accounts database, successively {accLst.len} entries":
-      check noisy.test_delete accLst
+      check noisy.test_delete(accLst, dbDir)
 
 
 proc storagesRunner(
@@ -261,7 +261,7 @@ proc storagesRunner(
       check noisy.test_nearbyKvpList(stoLst, resetDb)
 
     test &"Delete storage database, successively {stoLst.len} entries":
-      check noisy.test_delete stoLst
+      check noisy.test_delete(stoLst, dbDir)
 
 # ------------------------------------------------------------------------------
 # Main function(s)
@@ -279,11 +279,11 @@ when isMainModule:
 
   setErrorLevel()
 
-  when true: # and false:
+  when true and false:
     noisy.miscRunner()
 
   # Borrowed from `test_sync_snap.nim`
-  when true: # and false:
+  when true and false:
     for n,sam in snapTestList:
       noisy.transcodeRunner(sam)
     for n,sam in snapTestStorageList:

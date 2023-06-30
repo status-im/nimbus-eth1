@@ -94,6 +94,12 @@ proc say*(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
 # Public helpers
 # ------------------------------------------------------------------------------
 
+proc `==`*[T: AristoError|VertexID](a: T, b: int): bool =
+  a == T(b)
+
+proc `==`*[S,T](a: (S,T), b: (int,int)): bool =
+  a == (S(b[0]), T(b[1]))
+
 proc to*(sample: AccountsSample; T: type seq[UndumpAccounts]): T =
   ## Convert test data into usable in-memory format
   let file = sample.file.findFilePath.value

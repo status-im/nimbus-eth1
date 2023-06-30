@@ -42,17 +42,11 @@ logScope:
   topics = "aristo-backend"
 
 type
-  RdbBackendRef* = ref object of AristoTypedBackendRef
+  RdbBackendRef* = ref object of TypedBackendRef
     rdb: RdbInst              ## Allows low level access to database
-
-  RdbPutHdlErr = tuple
-    pfx: AristoStorageType    ## Error sub-table
-    vid: VertexID             ## Vertex ID where the error occured
-    code: AristoError         ## Error code (if any)
 
   RdbPutHdlRef = ref object of TypedPutHdlRef
     cache: RdbTabs            ## Tranaction cache
-    error: RdbPutHdlErr       ## Track error while collecting transaction
 
 const
   extraTraceMessages = false or true
@@ -151,12 +145,15 @@ proc putVtxFn(db: RdbBackendRef): PutVtxFn =
   result =
     proc(hdl: PutHdlRef; vrps: openArray[(VertexID,VertexRef)]) =
       let hdl = hdl.getSession db
-      if hdl.error.code == AristoError(0):
+      if hdl.error.isNil:
         for (vid,vtx) in vrps:
           if vtx.isValid:
             let rc = vtx.blobify
             if rc.isErr:
-              hdl.error = (VtxPfx, vid, rc.error)
+              hdl.error = TypedPutHdlErrRef(
+                pfx:  VtxPfx,
+                vid:  vid,
+                code: rc.error)
               return
             hdl.cache[VtxPfx][vid] = rc.value
           else:
@@ -166,7 +163,7 @@ proc putKeyFn(db: RdbBackendRef): PutKeyFn =
   result =
     proc(hdl: PutHdlRef; vkps: openArray[(VertexID,HashKey)]) =
       let hdl = hdl.getSession db
-      if hdl.error.code == AristoError(0):
+      if hdl.error.isNil:
         for (vid,key) in vkps:
           if key.isValid:
             hdl.cache[KeyPfx][vid] = key.to(Blob)
@@ -178,7 +175,7 @@ proc putIdgFn(db: RdbBackendRef): PutIdgFn =
   result =
     proc(hdl: PutHdlRef; vs: openArray[VertexID])  =
       let hdl = hdl.getSession db
-      if hdl.error.code == AristoError(0):
+      if hdl.error.isNil:
         if 0 < vs.len:
           hdl.cache[IdgPfx][VertexID(0)] = vs.blobify
         else:
@@ -189,7 +186,7 @@ proc putEndFn(db: RdbBackendRef): PutEndFn =
   result =
     proc(hdl: PutHdlRef): AristoError =
       let hdl = hdl.endSession db
-      if hdl.error.code != AristoError(0):
+      if not hdl.error.isNil:
         debug logTxt "putEndFn: failed",
           pfx=hdl.error.pfx, vid=hdl.error.vid, error=hdl.error.code
         return hdl.error.code

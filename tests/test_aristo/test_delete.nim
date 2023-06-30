@@ -12,13 +12,14 @@
 ## Aristo (aka Patricia) DB records merge test
 
 import
-  std/[algorithm, bitops, sequtils],
+  std/[algorithm, bitops, sequtils, strutils, sets],
   eth/common,
   stew/results,
   unittest2,
   ../../nimbus/db/aristo/[
-    aristo_desc, aristo_debug, aristo_delete, aristo_hashify, aristo_init,
-    aristo_nearby, aristo_merge],
+    aristo_check, aristo_desc, aristo_debug, aristo_delete, aristo_get,
+    aristo_hashify, aristo_hike, aristo_init, aristo_layer, aristo_nearby,
+    aristo_merge],
   ./test_helpers
 
 type
@@ -31,6 +32,9 @@ type
 
 proc sortedKeys(lTab: Table[LeafTie,VertexID]): seq[LeafTie] =
   lTab.keys.toSeq.sorted(cmp = proc(a,b: LeafTie): int = cmp(a,b))
+
+proc pp(q: HashSet[LeafTie]): string =
+  "{" & q.toSeq.mapIt(it.pp).join(",") & "}"
 
 # --------------
 
@@ -73,38 +77,153 @@ proc rand(td: var TesterDesc; top: int): int =
 
 # -----------------------
 
+proc randomisedLeafs(db: AristoDb; td: var TesterDesc): seq[LeafTie] =
+  result = db.top.lTab.sortedKeys
+  if 2 < result.len:
+    for n in 0 ..< result.len-1:
+      let r = n + td.rand(result.len - n)
+      result[n].swap result[r]
+
+
+proc saveToBackend(
+    db: var AristoDb;
+    relax: bool;
+    noisy: bool;
+    debugID: int;
+      ): bool =
+  let
+    trigger = false # or (debugID == 340)
+    prePreCache = db.pp
+    prePreBe = db.to(TypedBackendRef).pp(db)
+  if trigger:
+    noisy.say "***", "saveToBackend =========================== ", debugID
+  block:
+    let rc = db.checkCache(relax=true)
+    if rc.isErr:
+      noisy.say "***", "saveToBackend (1) hashifyCheck",
+        " debugID=", debugID,
+        " error=", rc.error,
+        "\n    cache\n     ", db.pp,
+        "\n    backend\n    ", db.to(TypedBackendRef).pp(db),
+        "\n    --------"
+      check rc.error == (0,0)
+      return
+  block:
+    let rc = db.hashify # (noisy = trigger)
+    if rc.isErr:
+      noisy.say "***", "saveToBackend (2) hashify",
+        " debugID=", debugID,
+        " error=", rc.error,
+        "\n    pre-cache\n    ", prePreCache,
+        "\n    pre-be\n    ", prePreBe,
+        "\n    -------- hasify() -----",
+        "\n    cache\n     ", db.pp,
+        "\n    backend\n    ", db.to(TypedBackendRef).pp(db),
+        "\n    --------"
+      check rc.error == (0,0)
+      return
+  let
+    preCache = db.pp
+    preBe = db.to(TypedBackendRef).pp(db)
+  block:
+    let rc = db.checkBE(relax=true)
+    if rc.isErr:
+      let noisy = true
+      noisy.say "***", "saveToBackend (3) checkBE",
+        " debugID=", debugID,
+        " error=", rc.error,
+        "\n    cache\n    ", db.pp,
+        "\n    backend\n    ", db.to(TypedBackendRef).pp(db),
+        "\n    --------"
+      check rc.error == (0,0)
+      return
+  block:
+    let rc = db.save()
+    if rc.isErr:
+      check rc.error == (0,0)
+      return
+  block:
+    let rc = db.checkBE(relax=relax)
+    if rc.isErr:
+      let noisy = true
+      noisy.say "***", "saveToBackend (4) checkBE",
+        " debugID=", debugID,
+        " error=", rc.error,
+        "\n    prePre-cache\n    ", prePreCache,
+        "\n    prePre-be\n    ", prePreBe,
+        "\n    -------- hashify() -----",
+        "\n    pre-cache\n    ", preCache,
+        "\n    pre-be\n    ", preBe,
+        "\n    -------- save() --------",
+        "\n    cache\n    ", db.pp,
+        "\n    backend\n    ", db.to(TypedBackendRef).pp(db),
+        "\n    --------"
+      check rc.error == (0,0)
+      return
+
+  when true and false:
+    if trigger:
+      noisy.say "***", "saveToBackend (9)",
+        " debugID=", debugID,
+        "\n    prePre-cache\n    ", prePreCache,
+        "\n    prePre-be\n    ", prePreBe,
+        "\n    -------- hashify() -----",
+        "\n    pre-cache\n    ", preCache,
+        "\n    pre-be\n    ", preBe,
+        "\n    -------- save() --------",
+        "\n    cache\n    ", db.pp,
+        "\n    backend\n    ", db.to(TypedBackendRef).pp(db),
+        "\n    --------"
+  true
+
+
 proc fwdWalkVerify(
     db: AristoDb;
     root: VertexID;
+    left: HashSet[LeafTie];
     noisy: bool;
-      ): tuple[visited: int, error:  AristoError] =
+    debugID: int;
+      ): tuple[visited: int, error: AristoError] =
   let
-    lTabLen = db.top.lTab.len
+    nLeafs = left.len
   var
-    error = AristoError(0)
+    lfLeft = left
     lty = LeafTie(root: root)
     n = 0
-  while n < lTabLen + 1:
-    let rc = lty.nearbyRight(db)
-    #noisy.say "=================== ", n
+
+  while n < nLeafs + 1:
+    let id = n + (nLeafs + 1) * debugID
+    noisy.say "NearbyBeyondRange =================== ", id
+
+    let rc = lty.right db
     if rc.isErr:
-      if rc.error != NearbyBeyondRange:
-        noisy.say "***", "<", n, "/", lTabLen-1, "> fwd-walk error=", rc.error
-        error = rc.error
-        check rc.error == AristoError(0)
-      break
+      if rc.error[1] != NearbyBeyondRange or 0 < lfLeft.len:
+        noisy.say "***", "fwdWalkVerify (1) nearbyRight",
+          " n=", n, "/",  nLeafs,
+          " lty=", lty.pp(db),
+          " error=", rc.error
+        check rc.error == (0,0)
+        return (n,rc.error[1])
+      return (0, AristoError(0))
+
+    if rc.value notin lfLeft:
+      noisy.say "***", "fwdWalkVerify (2) lfLeft",
+        " n=", n, "/",  nLeafs,
+        " lty=", lty.pp(db)
+      check rc.error == (0,0)
+      return (n,rc.error[1])
+
     if rc.value.path < high(HashID):
       lty.path = HashID(rc.value.path.u256 + 1)
+
+    lfLeft.excl rc.value
     n.inc
 
-  if error != AristoError(0):
-    return (n,error)
-
-  if n != lTabLen:
-    check n == lTabLen
-    return (-1, AristoError(1))
-
-  (0, AristoError(0))
+  noisy.say "***", "fwdWalkVerify (9) oops",
+    " n=", n, "/", nLeafs,
+    " lfLeft=", lfLeft.pp
+  check n <= nLeafs
+  (-1, AristoError(1))
 
 # ------------------------------------------------------------------------------
 # Public test function
@@ -113,77 +232,149 @@ proc fwdWalkVerify(
 proc test_delete*(
     noisy: bool;
     list: openArray[ProofTrieData];
-      ): bool =
-  var td = TesterDesc.init 42
+    rdbPath: string;                          # Rocks DB storage directory
+       ): bool =
+  var
+    td = TesterDesc.init 42
+    db: AristoDb
+  defer:
+    db.finish(flush=true)
+
   for n,w in list:
+    # Start with new database
+    db.finish(flush=true)
+    db = block:
+      let rc = AristoDb.init(BackendRocksDB,rdbPath)
+      if rc.isErr:
+        check rc.error == 0
+        return
+      rc.value
+
+    # Merge leaf data into main trie (w/vertex ID 1)
     let
-      db = AristoDb.init BackendNone # (top: AristoLayerRef())
-      lstLen = list.len
-      leafs = w.kvpLst.mapRootVid VertexID(1) # merge into main trie
+      leafs = w.kvpLst.mapRootVid VertexID(1)
       added = db.merge leafs
-      preState = db.pp
-
-    if added.error != AristoError(0):
-      check added.error == AristoError(0)
+    if added.error != 0:
+      check added.error == 0
       return
-
-    let rc = db.hashify
-    if rc.isErr:
-      check rc.error == (VertexID(0),AristoError(0))
-      return
-    # Now `db` represents a (fully labelled) `Merkle Patricia Tree`
 
     # Provide a (reproducible) peudo-random copy of the leafs list
-    var leafTies = db.top.lTab.sortedKeys
-    if 2 < leafTies.len:
-      for n in 0 ..< leafTies.len-1:
-        let r = n + td.rand(leafTies.len - n)
-        leafTies[n].swap leafTies[r]
+    let leafTies = db.randomisedLeafs td
+    var leafsLeft = leafs.mapIt(it.leafTie).toHashSet
 
-    let uMax = leafTies.len - 1
+    # Complete as `Merkle Patricia Tree` and save to backend, clears cache
+    block:
+      let saveBeOk = db.saveToBackend(relax=true, noisy=false, 0)
+      if not saveBeOk:
+        check saveBeOk
+        return
+
+    # Trigger subsequent saving tasks in loop below
+    let (saveMod, saveRest, relax) = block:
+      if leafTies.len < 17:    (7, 3, false)
+      elif leafTies.len < 31: (11, 7, false)
+      else:   (leafTies.len div 5, 11, true)
+
+    # Loop over leaf ties
     for u,leafTie in leafTies:
-      let rc = leafTie.delete db # ,noisy)
+
+      # Get leaf vertex ID so making sure that it is on the database
+      let
+        runID = n + list.len * u
+        doSaveBeOk = ((u mod saveMod) == saveRest) # or true
+        trigger = false # or runID in {60,80}
+        tailWalkVerify = 20 # + 999
+        leafVid = block:
+          let hike = leafTie.hikeUp(db)
+          if hike.error !=  0:                     # Ooops
+            check hike.error == 0
+            return
+          hike.legs[^1].wp.vid
+
+      if doSaveBeOk:
+        when true and false:
+          noisy.say "***", "del(1)",
+            " n=", n, "/", list.len,
+            " u=", u, "/", leafTies.len,
+            " runID=", runID,
+            " relax=", relax,
+            " leafVid=", leafVid.pp
+        let saveBeOk = db.saveToBackend(relax=relax, noisy=noisy, runID)
+        if not saveBeOk:
+          noisy.say "***", "del(2)",
+           " n=", n, "/", list.len,
+           " u=", u, "/", leafTies.len,
+           " leafVid=", leafVid.pp
+          check saveBeOk
+          return
+
+      # Delete leaf
+      let
+        preCache = db.pp
+        rc = db.delete leafTie
       if rc.isErr:
-        check rc.error == (VertexID(0),AristoError(0))
+        check rc.error == (0,0)
         return
-      if leafTie in db.top.lTab:
-        check leafTie notin db.top.lTab
-        return
-      if uMax != db.top.lTab.len + u:
-        check uMax == db.top.lTab.len + u
+
+      # Update list of remaininf leafs
+      leafsLeft.excl leafTie
+
+      let leafVtx = db.getVtx leafVid
+      if leafVtx.isValid:
+        noisy.say "***", "del(3)",
+          " n=", n, "/", list.len,
+          " u=", u, "/", leafTies.len,
+          " runID=", runID,
+          " root=", leafTie.root.pp,
+          " leafVid=", leafVid.pp,
+          "\n    --------",
+          "\n    pre-cache\n    ", preCache,
+          "\n    --------",
+          "\n    cache\n    ", db.pp,
+          "\n    backend\n    ", db.to(TypedBackendRef).pp(db),
+          "\n    --------"
+        check leafVtx.isValid == false
         return
 
       # Walking the database is too slow for large tables. So the hope is that
       # potential errors will not go away and rather pop up later, as well.
-      const tailCheck = 999
-      if uMax < u + tailCheck:
-        if u < uMax:
-          let vfy = db.fwdWalkVerify(leafTie.root, noisy)
-          if vfy.error != AristoError(0):
-            check vfy == (0, AristoError(0))
+      if leafsLeft.len <= tailWalkVerify:
+        if u < leafTies.len-1:
+          let
+            noisy = false
+            vfy = db.fwdWalkVerify(leafTie.root, leafsLeft, noisy, runID)
+          if vfy.error != AristoError(0): # or 7 <= u:
+            noisy.say "***", "del(5)",
+              " n=", n, "/", list.len,
+              " u=", u, "/", leafTies.len,
+              " runID=", runID,
+              " root=", leafTie.root.pp,
+              " leafVid=", leafVid.pp,
+              "\n    leafVtx=", leafVtx.pp(db),
+              "\n    --------",
+              "\n    pre-cache\n    ", preCache,
+              "\n    -------- delete() -------",
+              "\n    cache\n    ", db.pp,
+              "\n    backend\n    ", db.to(TypedBackendRef).pp(db),
+              "\n    --------"
+            check vfy == (0,0)
             return
-        elif 0 < db.top.sTab.len:
-          check db.top.sTab.len == 0
-          return
-        let rc = db.hashifyCheck(relax=true) # ,noisy=true)
-        if rc.isErr:
-          noisy.say "***", "<", n, "/", lstLen-1, ">",
-            " item=", u, "/", uMax,
-            "\n    --------",
-            "\n    pre-DB\n    ", preState,
-            "\n    --------",
-            "\n    cache\n    ", db.pp,
-            "\n    --------"
-          check rc.error == (VertexID(0),AristoError(0))
-          return
 
       when true and false:
-        if uMax < u + tailCheck or (u mod 777) == 3:
-          noisy.say "***", "step lTab=", db.top.lTab.len
+        if trigger:
+          noisy.say "***", "del(8)",
+           " n=", n, "/", list.len,
+           " u=", u, "/", leafTies.len,
+           " runID=", runID,
+           "\n    pre-cache\n    ", preCache,
+           "\n    -------- delete() -------",
+           "\n    cache\n    ", db.pp,
+           "\n    backend\n    ", db.to(TypedBackendRef).pp(db),
+           "\n    --------"
 
-    when true and false:
-      noisy.say "***", "sample <", n, "/", list.len-1, ">",
-        " lstLen=", leafs.len
+    when true: # and false:
+      noisy.say "***", "del(9) n=", n, "/", list.len, " nLeafs=", leafs.len
+
   true
 
 # ------------------------------------------------------------------------------

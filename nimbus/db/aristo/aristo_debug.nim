@@ -78,6 +78,9 @@ proc ppVid(vid: VertexID; pfx = true): string =
   else:
     result &= "ø"
 
+proc ppVidList(vGen: openArray[VertexID]): string =
+  "[" & vGen.mapIt(it.ppVid).join(",") & "]"
+
 proc vidCode(lbl: HashLabel, db: AristoDb): uint64 =
   if lbl.isValid:
     if not db.top.isNil:
@@ -165,7 +168,7 @@ proc ppPayload(p: PayloadRef, db: AristoDb): string =
 
 proc ppVtx(nd: VertexRef, db: AristoDb, vid: VertexID): string =
   if not nd.isValid:
-    result = "n/a"
+    result = "ø"
   else:
     if db.top.isNil or not vid.isValid or vid in db.top.pPrf:
       result = ["L(", "X(", "B("][nd.vType.ord]
@@ -185,6 +188,29 @@ proc ppVtx(nd: VertexRef, db: AristoDb, vid: VertexID): string =
         if n < 15:
           result &= ","
     result &= ")"
+
+proc ppSTab(
+    sTab: Table[VertexID,VertexRef];
+    db = AristoDb();
+    indent = 4;
+      ): string =
+  "{" & sTab.sortedKeys
+            .mapIt((it, sTab.getOrVoid it))
+            .mapIt("(" & it[0].ppVid & "," & it[1].ppVtx(db,it[0]) & ")")
+            .join("," & indent.toPfx(1)) & "}"
+
+proc ppLTab(
+    lTab: Table[LeafTie,VertexID];
+    indent = 4;
+      ): string =
+  var db = AristoDb()
+  "{" & lTab.sortedKeys
+            .mapIt((it, lTab.getOrVoid it))
+            .mapIt("(" & it[0].ppLeafTie(db) & "," & it[1].ppVid & ")")
+            .join("," & indent.toPfx(1)) & "}"
+
+proc ppPPrf(pPrf: HashSet[VertexID]): string =
+  "{" & pPrf.sortedKeys.mapIt(it.ppVid).join(",") & "}"
 
 proc ppXMap*(
     db: AristoDb;
@@ -215,7 +241,7 @@ proc ppXMap*(
           s &= "(" & s
         s &= ",*" & $count
     else:
-      s &= "£r(!)"
+      s &= "£ø"
     if s[0] == '(':
       s &= ")"
     s & ","
@@ -233,7 +259,11 @@ proc ppXMap*(
       r.inc
       if r != vid:
         if i+1 != n:
-          result &= ".. " & revKeys[n-1].ppRevlabel
+          if i+1 == n-1:
+            result &= pfx
+          else:
+            result &= ".. "
+          result &= revKeys[n-1].ppRevlabel
         result &= pfx & vid.ppRevlabel
         (i, r) = (n, vid)
     if i < revKeys.len - 1:
@@ -261,13 +291,18 @@ proc ppXMap*(
       result &= pfx
     result &= cache[i][0].ppNtry
     for n in 1 ..< cache.len:
-      let w = cache[n]
-      r[0].inc
-      r[1].inc
+      let
+        m = cache[n-1]
+        w = cache[n]
+      r = (r[0]+1, r[1]+1, r[2])
       if r != w or w[2]:
         if i+1 != n:
-          result &= ".. " & cache[n-1][0].ppNtry
-        result &= pfx & cache[n][0].ppNtry
+          if i+1 == n-1:
+            result &= pfx
+          else:
+            result &= ".. "
+          result &= m[0].ppNtry
+        result &= pfx & w[0].ppNtry
         (i, r) = (n, w)
     if i < cache.len - 1:
       if i+1 != cache.len - 1:
@@ -295,6 +330,63 @@ proc ppBe[T](be: T; db: AristoDb; indent: int): string =
   result &= pfx & "kMap" & pfx1 & "{" & be.walkKey.toSeq.mapIt(
       $(1+it[0]) & "(" & it[1].ppVid & "," & it[2].ppKey & ")"
     ).join(pfx2) & "}"
+
+
+proc ppCache(
+    db: AristoDb;
+    vGenOk: bool;
+    sTabOk: bool;
+    lTabOk: bool;
+    kMapOk: bool;
+    pPrfOk: bool;
+    indent = 4;
+      ): string =
+  let
+    pfx1 = indent.toPfx
+    pfx2 = indent.toPfx(1)
+    tagOk = 1 < sTabOk.ord + lTabOk.ord + kMapOk.ord + pPrfOk.ord + vGenOk.ord
+  var
+    pfy = ""
+
+  proc doPrefix(s: string; dataOk: bool): string =
+    var rc: string
+    if tagOk:
+      rc = pfy & s & (if dataOk: pfx2 else: " ")
+      pfy = pfx1
+    else:
+      rc = pfy
+      pfy = pfx2
+    rc
+
+  if not db.top.isNil:
+    if vGenOk:
+      let
+        tLen = db.top.vGen.len
+        info = "vGen(" & $tLen & ")"
+      result &= info.doPrefix(0 < tLen) & db.top.vGen.ppVidList
+    if sTabOk:
+      let
+        tLen = db.top.sTab.len
+        info = "sTab(" & $tLen & ")"
+      result &= info.doPrefix(0 < tLen) & db.top.sTab.ppSTab(db,indent+1)
+    if lTabOk:
+      let
+        tlen = db.top.lTab.len
+        info = "lTab(" & $tLen & ")"
+      result &= info.doPrefix(0 < tLen) & db.top.lTab.ppLTab(indent+1)
+    if kMapOk:
+      let
+        tLen = db.top.kMap.len
+        ulen = db.top.pAmk.len
+        lInf = if tLen == uLen: $tLen else: $tLen & "," & $ulen
+        info = "kMap(" & lInf & ")"
+      result &= info.doPrefix(0 < tLen + uLen)
+      result &= db.ppXMap(db.top.kMap,db.top.pAmk,indent+1)
+    if pPrfOk:
+      let
+        tLen = db.top.pPrf.len
+        info = "pPrf(" & $tLen & ")"
+      result &= info.doPrefix(0 < tLen) & db.top.pPrf.ppPPrf
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -326,7 +418,7 @@ proc pp*(vid: VertexID): string =
   vid.ppVid
 
 proc pp*(vGen: openArray[VertexID]): string =
-  "[" & vGen.mapIt(it.ppVid).join(",") & "]"
+  vGen.ppVidList
 
 proc pp*(p: PayloadRef, db = AristoDb()): string =
   p.ppPayload(db)
@@ -372,22 +464,13 @@ proc pp*(nd: NodeRef): string =
   nd.pp(db)
 
 proc pp*(sTab: Table[VertexID,VertexRef]; db = AristoDb(); indent = 4): string =
-  "{" & sTab.sortedKeys
-            .mapIt((it, sTab.getOrVoid it))
-            .filterIt(it[1].isValid)
-            .mapIt("(" & it[0].ppVid & "," & it[1].ppVtx(db,it[0]) & ")")
-            .join("," & indent.toPfx(1)) & "}"
+  sTab.ppSTab
 
 proc pp*(lTab: Table[LeafTie,VertexID]; indent = 4): string =
-  var db = AristoDb()
-  "{" & lTab.sortedKeys
-            .mapIt((it, lTab.getOrVoid it))
-            .filterIt(it[1].isValid)
-            .mapIt("(" & it[0].ppLeafTie(db) & "," & it[1].ppVid & ")")
-            .join("," & indent.toPfx(1)) & "}"
+  lTab.ppLTab
 
 proc pp*(pPrf: HashSet[VertexID]): string =
-  "{" & pPrf.sortedKeys.mapIt(it.ppVid).join(",") & "}"
+  pPrf.ppPPrf
 
 proc pp*(leg: Leg; db = AristoDb()): string =
   result = "(" & leg.wp.vid.ppVid & ","
@@ -454,49 +537,31 @@ proc pp*(
 
 proc pp*(
     db: AristoDb;
-    vGenOk = true;
-    sTabOk = true;
-    lTabOk = true;
-    kMapOk = true;
-    pPrfOk = true;
     indent = 4;
       ): string =
-  let
-    pfx1 = indent.toPfx
-    pfx2 = indent.toPfx(1)
-    tagOk = 1 < sTabOk.ord + lTabOk.ord + kMapOk.ord + pPrfOk.ord + vGenOk.ord
-  var
-    pfy = ""
-
-  proc doPrefix(s: string): string =
-    var rc: string
-    if tagOk:
-      rc = pfy & s & pfx2
-      pfy = pfx1
-    else:
-      rc = pfy
-      pfy = pfx2
-    rc
-
-  if not db.top.isNil:
-    if vGenOk:
-      let info = "vGen(" & $db.top.vGen.len & ")"
-      result &= info.doPrefix & db.top.vGen.pp
-    if sTabOk:
-      let info = "sTab(" & $db.top.sTab.len & ")"
-      result &= info.doPrefix & db.top.sTab.pp(db,indent+1)
-    if lTabOk:
-      let info = "lTab(" & $db.top.lTab.len & ")"
-      result &= info.doPrefix & db.top.lTab.pp(indent+1)
-    if kMapOk:
-      let info = "kMap(" & $db.top.kMap.len & "," & $db.top.pAmk.len & ")"
-      result &= info.doPrefix & db.ppXMap(db.top.kMap,db.top.pAmk,indent+1)
-    if pPrfOk:
-      let info = "pPrf(" & $db.top.pPrf.len & ")"
-      result &= info.doPrefix & db.top.pPrf.pp
+  db.ppCache(
+    vGenOk=true, sTabOk=true, lTabOk=true, kMapOk=true, pPrfOk=true)
 
 proc pp*(
-  be: AristoTypedBackendRef;
+    db: AristoDb;
+    xTabOk: bool;
+    indent = 4;
+      ): string =
+  db.ppCache(
+    vGenOk=true, sTabOk=xTabOk, lTabOk=xTabOk, kMapOk=true, pPrfOk=true)
+
+proc pp*(
+    db: AristoDb;
+    xTabOk: bool;
+    kMapOk: bool;
+    other = false;
+    indent = 4;
+      ): string =
+  db.ppCache(
+    vGenOk=other, sTabOk=xTabOk, lTabOk=xTabOk, kMapOk=kMapOk, pPrfOk=other)
+
+proc pp*(
+  be: TypedBackendRef;
   db: AristoDb;
   indent = 4;
     ): string =

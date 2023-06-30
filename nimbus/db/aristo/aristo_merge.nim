@@ -150,7 +150,7 @@ proc insertBranch(
         return Hike(error: MergeBrLinkLeafGarbled)
 
       let
-        local = db.vidFetch
+        local = db.vidFetch(pristine = true)
         lty = LeafTie(root: hike.root, path: rc.value)
       db.top.lTab[lty] = local         # update leaf path lookup cache
       db.top.sTab[local] = linkVtx
@@ -168,7 +168,7 @@ proc insertBranch(
       forkVtx.bVid[linkInx] = local
 
   block:
-    let local = db.vidFetch
+    let local = db.vidFetch(pristine = true)
     forkVtx.bVid[leafInx] = local
     leafLeg.wp.vid = local
     leafLeg.wp.vtx = VertexRef(
@@ -242,7 +242,7 @@ proc concatBranchAndLeaf(
 
   # Append leaf vertex
   let
-    vid = db.vidFetch
+    vid = db.vidFetch(pristine = true)
     vtx = VertexRef(
       vType: Leaf,
       lPfx:  hike.tail.slice(1),
@@ -364,7 +364,7 @@ proc topIsExtAddLeaf(
       return Hike(error: MergeBranchProofModeLock)
 
     let
-      vid = db.vidFetch
+      vid = db.vidFetch(pristine = true)
       vtx = VertexRef(
         vType: Leaf,
         lPfx:  hike.tail.slice(1),
@@ -396,7 +396,7 @@ proc topIsEmptyAddLeaf(
       return Hike(error: MergeBranchProofModeLock)
 
     let
-      leafVid = db.vidFetch
+      leafVid = db.vidFetch(pristine = true)
       leafVtx = VertexRef(
         vType: Leaf,
         lPfx:  hike.tail.slice(1),
