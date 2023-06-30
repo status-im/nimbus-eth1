@@ -123,6 +123,7 @@ type
     NearbyPathTailUnexpected
     NearbyPathTailInxOverflow
     NearbyUnexpectedVtx
+    NearbyVidInvalid
 
     # Deletion of vertices, `delete()`
     DelPathTagError

@@ -85,13 +85,13 @@ proc fwdWalkVerify(
     lty = LeafTie(root: root)
     n = 0
   while n < lTabLen + 1:
-    let rc = lty.nearbyRight(db)
+    let rc = lty.right(db)
     #noisy.say "=================== ", n
     if rc.isErr:
-      if rc.error != NearbyBeyondRange:
+      if rc.error[1] != NearbyBeyondRange:
         noisy.say "***", "<", n, "/", lTabLen-1, "> fwd-walk error=", rc.error
-        error = rc.error
-        check rc.error == AristoError(0)
+        error = rc.error[1]
+        check rc.error == (0,0)
       break
     if rc.value.path < high(HashID):
       lty.path = HashID(rc.value.path.u256 + 1)

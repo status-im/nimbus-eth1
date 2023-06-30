@@ -33,40 +33,37 @@ proc fwdWalkLeafsCompleteDB(
   let
     tLen = tags.len
   var
-    error = AristoError(0)
     lty = LeafTie(root: root, path: HashID(tags[0].u256 div 2))
     n = 0
   while true:
-    let rc = lty.nearbyRight(db)
+    let rc = lty.right(db)
     #noisy.say "=================== ", n
     if rc.isErr:
-      if rc.error != NearbyBeyondRange:
+      if rc.error[1] != NearbyBeyondRange:
         noisy.say "***", "[", n, "/", tLen-1, "] fwd-walk error=", rc.error
-        error = rc.error
-        check rc.error == AristoError(0)
-      elif n != tLen:
-        error = AristoError(1)
+        check rc.error == (0,0)
+        return (n,rc.error[1])
+      if n != tLen:
         check n == tLen
+        return (n,AristoError(1))
       break
     if tLen <= n:
       noisy.say "***", "[", n, "/", tLen-1, "] fwd-walk -- ",
         " oops, too many leafs (index overflow)"
-      error = AristoError(1)
       check n < tlen
-      break
+      return (n,AristoError(1))
     if rc.value.path != tags[n]:
       noisy.say "***", "[", n, "/", tLen-1, "] fwd-walk -- leafs differ,",
         " got=", rc.value.pp(db),
         " wanted=", LeafTie(root: root, path: tags[n]).pp(db) #,
         # " db-dump\n    ", db.pp
-      error = AristoError(1)
       check rc.value.path == tags[n]
-      break
+      return (n,AristoError(1))
     if rc.value.path < high(HashID):
       lty.path = HashID(rc.value.path.u256 + 1)
     n.inc
 
-  (n,error)
+  (n,AristoError(0))
 
 
 proc revWalkLeafsCompleteDB(
@@ -78,39 +75,36 @@ proc revWalkLeafsCompleteDB(
   let
     tLen = tags.len
   var
-    error = AristoError(0)
     delta = ((high(UInt256) - tags[^1].u256) div 2)
     lty = LeafTie(root: root, path:  HashID(tags[^1].u256 + delta))
     n = tLen-1
   while true: # and false:
-    let rc = lty.nearbyLeft(db)
+    let rc = lty.left(db)
     if rc.isErr:
-      if rc.error != NearbyBeyondRange:
+      if rc.error[1] != NearbyBeyondRange:
         noisy.say "***", "[", n, "/", tLen-1, "] rev-walk error=", rc.error
-        error = rc.error
-        check rc.error == AristoError(0)
-      elif n != -1:
-        error = AristoError(1)
+        check rc.error == (0,0)
+        return (n,rc.error[1])
+      if n != -1:
         check n == -1
+        return (n,AristoError(1))
       break
     if n < 0:
       noisy.say "***", "[", n, "/", tLen-1, "] rev-walk -- ",
         " oops, too many leafs (index underflow)"
-      error = AristoError(1)
       check 0 <= n
-      break
+      return (n,AristoError(1))
     if rc.value.path != tags[n]:
       noisy.say "***", "[", n, "/", tLen-1, "] rev-walk -- leafs differ,",
         " got=", rc.value.pp(db),
         " wanted=", tags[n]..pp(db) #, " db-dump\n    ", db.pp
-      error = AristoError(1)
       check rc.value.path == tags[n]
-      break
+      return (n,AristoError(1))
     if low(HashID) < rc.value.path:
       lty.path = HashID(rc.value.path.u256 - 1)
     n.dec
 
-  (tLen-1 - n, error)
+  (tLen-1 - n, AristoError(0))
 
 # ------------------------------------------------------------------------------
 # Public test function
