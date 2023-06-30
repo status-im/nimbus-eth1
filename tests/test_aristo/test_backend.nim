@@ -59,7 +59,7 @@ proc mergeData(
         noisy.say "***", "dataMerge(9)",
           " nLeafs=", leafs.len,
           "\n    cache dump\n    ", db.pp,
-          "\n    backend dump\n    ", db.backend.AristoTypedBackendRef.pp(db)
+          "\n    backend dump\n    ", db.backend.TypedBackendRef.pp(db)
       check rc.error == (VertexID(0),AristoError(0))
       return
 
@@ -200,7 +200,7 @@ proc test_backendConsistency*(
       #noisy.say "***", "db-dump\n    ", mdb.pp
       let rc = mdb.save
       if rc.isErr:
-        check rc.error == AristoError(0)
+        check rc.error == (0,0)
         return
       rc.value
 
@@ -208,7 +208,7 @@ proc test_backendConsistency*(
       let rdbHist = block:
         let rc = rdb.save
         if rc.isErr:
-          check rc.error == AristoError(0)
+          check rc.error == (0,0)
           return
         rc.value
 

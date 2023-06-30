@@ -211,7 +211,7 @@ proc test_mergeKvpList*(
     let rdbHist = block:
       let rc = db.save
       if rc.isErr:
-        check rc.error == AristoError(0)
+        check rc.error == (0,0)
         return
       rc.value
 
@@ -324,7 +324,7 @@ proc test_mergeProofAndKvpList*(
 
     block:
       let
-        preDb = db.pp(sTabOk=false, lTabOk=false)
+        preDb = db.pp(xTabOk=false)
         rc = db.hashify() # noisy=true)
 
       # Handle known errors
@@ -354,7 +354,7 @@ proc test_mergeProofAndKvpList*(
     let rdbHist = block:
       let rc = db.save
       if rc.isErr:
-        check rc.error == AristoError(0)
+        check rc.error == (0,0)
         return
       rc.value
 

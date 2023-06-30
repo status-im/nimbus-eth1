@@ -21,19 +21,23 @@ import
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc vidFetch*(db: AristoDb): VertexID =
-  ## Create a new `VertexID`. Reusable *ID*s are kept in a list where the top
-  ## entry *ID0* has the property that any other *ID* larger *ID0* is also not
+proc vidFetch*(db: AristoDb; pristine = false): VertexID =
+  ## Create a new `VertexID`. Reusable vertex *ID*s are kept in a list where
+  ## the top entry *ID* has the property that any other *ID* larger is also not
   ## not used on the database.
+  ##
+  ## The function prefers to return recycled vertex *ID*s if there are any.
+  ## When the argument `pristine` is set `true`, the function guarantees to
+  ## return a non-recycled, brand new vertex *ID* which is the preferred mode
+  ## when creating leaf vertices.
   let top = db.top
-  case top.vGen.len:
-  of 0:
+  if top.vGen.len == 0:
     # Note that `VertexID(1)` is the root of the main trie
     top.vGen = @[VertexID(3)]
     result = VertexID(2)
-  of 1:
+  elif top.vGen.len == 1 or pristine:
     result = top.vGen[^1]
-    top.vGen = @[VertexID(result.uint64 + 1)]
+    top.vGen[^1] = result + 1
   else:
     result = top.vGen[^2]
     top.vGen[^2] = top.vGen[^1]

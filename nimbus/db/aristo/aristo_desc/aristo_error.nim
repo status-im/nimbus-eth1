@@ -134,6 +134,7 @@ type
 
     # Save permanently, `save()`
     SaveBackendMissing
+    SaveLeafVidRepurposed
 
     # Get functions form `aristo_get.nim`
     GetLeafNotFound

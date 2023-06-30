@@ -15,7 +15,7 @@
 import
   std/[sequtils, tables],
   stew/results,
-  "."/[aristo_desc, aristo_get]
+  "."/[aristo_desc, aristo_get, aristo_vid]
 
 type
   DeltaHistoryRef* = ref object
@@ -75,7 +75,7 @@ proc pop*(db: var AristoDb; merge = true): AristoError =
 proc save*(
     db: var AristoDb;                      # Database to be updated
     clear = true;                          # Clear current top level cache
-      ): Result[DeltaHistoryRef,AristoError] =
+      ): Result[DeltaHistoryRef,(VertexID,AristoError)] =
   ## Save top layer into persistent database. There is no check whether the
   ## current layer is fully consistent as a Merkle Patricia Tree. It is
   ## advised to run `hashify()` on the top layer before calling `save()`.
@@ -88,9 +88,9 @@ proc save*(
   ##
   let be = db.backend
   if be.isNil:
-    return err(SaveBackendMissing)
+    return err((VertexID(0),SaveBackendMissing))
 
-  let hst = DeltaHistoryRef()              # Change history
+  let hst = DeltaHistoryRef()                   # Change history
 
   # Record changed `Leaf` nodes into the history table
   for (lky,vid) in db.top.lTab.pairs:
@@ -99,14 +99,17 @@ proc save*(
       let rc = db.getVtxBackend vid
       if rc.isErr:
         if rc.error != GetVtxNotFound:
-          return err(rc.error)             # Stop
-        hst.leafs[lky] = PayloadRef(nil)   # So this is a new leaf vertex
+          return err((vid,rc.error))            # Stop
+        hst.leafs[lky] = PayloadRef(nil)        # So this is a new leaf vertex
       elif rc.value.vType == Leaf:
-        hst.leafs[lky] = rc.value.lData    # Record previous payload
+        hst.leafs[lky] = rc.value.lData         # Record previous payload
       else:
-        hst.leafs[lky] = PayloadRef(nil)   # Was re-puropsed as leaf vertex
+        return err((vid,SaveLeafVidRepurposed)) # Was re-puropsed
     else:
-      hst.leafs[lky] = PayloadRef(nil)     # New leaf vertex
+      hst.leafs[lky] = PayloadRef(nil)          # New leaf vertex
+
+  # Compact recycled nodes
+  db.vidReorg()
 
   # Save structural and other table entries
   let txFrame = be.putBegFn()
@@ -115,7 +118,7 @@ proc save*(
   be.putIdgFn(txFrame, db.top.vGen)
   let w = be.putEndFn txFrame
   if w != AristoError(0):
-    return err(w)
+    return err((VertexID(0),w))
 
   # Delete stack and clear top
   db.stack.setLen(0)

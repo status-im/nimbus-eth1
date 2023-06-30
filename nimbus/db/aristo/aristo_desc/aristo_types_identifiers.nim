@@ -75,12 +75,18 @@ static:
 # ------------------------------------------------------------------------------
 
 func `<`*(a, b: VertexID): bool {.borrow.}
+func `<=`*(a, b: VertexID): bool {.borrow.}
 func `==`*(a, b: VertexID): bool {.borrow.}
 func cmp*(a, b: VertexID): int {.borrow.}
 func `$`*(a: VertexID): string = $a.uint64
 
 func `==`*(a: VertexID; b: static[uint]): bool =
   a == VertexID(b)
+
+# Scalar model extension for `IntervalSetRef[VertexID,uint64]`
+proc `+`*(a: VertexID; b: uint64): VertexID = (a.uint64+b).VertexID
+proc `-`*(a: VertexID; b: uint64): VertexID = (a.uint64-b).VertexID
+proc `-`*(a, b: VertexID): uint64 = (a.uint64 - b.uint64)
 
 # ------------------------------------------------------------------------------
 # Public helpers: `HashID` scalar data model
