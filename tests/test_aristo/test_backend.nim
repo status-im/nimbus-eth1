@@ -59,7 +59,7 @@ proc mergeData(
         noisy.say "***", "dataMerge(9)",
           " nLeafs=", leafs.len,
           "\n    cache dump\n    ", db.pp,
-          "\n    backend dump\n    ", db.backend.TypedBackendRef.pp(db)
+          "\n    backend dump\n    ", db.to(TypedBackendRef).pp(db)
       check rc.error == (VertexID(0),AristoError(0))
       return
 
@@ -174,13 +174,13 @@ proc test_backendConsistency*(
         noisy.say "***", "beCon(2) <", n, "/", list.len-1, ">",
           " groups=", count,
           "\n    cache dump\n    ", ndb.pp,
-          "\n    backend dump\n    ", ndb.backend.AristoTypedBackendRef.pp(ndb),
+          "\n    backend dump\n    ", ndb.to(TypedBackendRef).pp(ndb),
           "\n    -------------",
           "\n    mdb cache\n    ", mdb.pp,
-          "\n    mdb backend\n    ", mdb.to(MemBackendRef).pp(ndb),
+          "\n    mdb backend\n    ", mdb.to(TypedBackendRef).pp(ndb),
           "\n    -------------",
           "\n    rdb cache\n    ", rdb.pp,
-          "\n    rdb backend\n    ", rdb.to(RdbBackendRef).pp(ndb),
+          "\n    rdb backend\n    ", rdb.to(TypedBackendRef).pp(ndb),
           "\n    -------------"
 
     when true and false:
@@ -212,7 +212,7 @@ proc test_backendConsistency*(
           return
         rc.value
 
-    if not ndb.top.verify(mdb.backend.MemBackendRef, noisy):
+    if not ndb.top.verify(mdb.to(MemBackendRef), noisy):
       when true and false:
         noisy.say "***", "beCon(4) <", n, "/", list.len-1, ">",
           " groups=", count,
@@ -223,7 +223,7 @@ proc test_backendConsistency*(
           #"\n    mdb pre-save backend\n    ", mdbPreSaveBackend,
           "\n    -------------",
           "\n    mdb cache\n    ", mdb.pp,
-          "\n    mdb backend\n    ", mdb.to(MemBackendRef).pp(ndb),
+          "\n    mdb backend\n    ", mdb.to(TypedBackendRef).pp(ndb),
           "\n    -------------"
       return
 
@@ -239,10 +239,10 @@ proc test_backendConsistency*(
             "\n    rdb pre-save backend\n    ", rdbPreSaveBackend,
             "\n    -------------",
             "\n    rdb cache\n    ", rdb.pp,
-            "\n    rdb backend\n    ", rdb.to(RdbBackendRef).pp(ndb),
+            "\n    rdb backend\n    ", rdb.to(TypedBackendRef).pp(ndb),
             #"\n    -------------",
             #"\n    mdb cache\n    ", mdb.pp,
-            #"\n    mdb backend\n    ", mdb.to(MemBackendRef).pp(ndb),
+            #"\n    mdb backend\n    ", mdb.to(TypedBackendRef).pp(ndb),
             "\n    -------------"
         return
 
