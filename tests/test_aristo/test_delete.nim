@@ -17,8 +17,8 @@ import
   stew/results,
   unittest2,
   ../../nimbus/db/aristo/[
-    aristo_desc, aristo_debug, aristo_delete, aristo_hashify, aristo_init,
-    aristo_nearby, aristo_merge],
+    aristo_check, aristo_desc, aristo_debug, aristo_delete, aristo_hashify,
+    aristo_init, aristo_nearby, aristo_merge],
   ./test_helpers
 
 type
@@ -165,7 +165,7 @@ proc test_delete*(
         elif 0 < db.top.sTab.len:
           check db.top.sTab.len == 0
           return
-        let rc = db.hashifyCheck(relax=true) # ,noisy=true)
+        let rc = db.checkCache(relax=true) # ,noisy=true)
         if rc.isErr:
           noisy.say "***", "<", n, "/", lstLen-1, ">",
             " item=", u, "/", uMax,

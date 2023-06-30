@@ -18,8 +18,8 @@ import
   unittest2,
   ../../nimbus/db/aristo/aristo_init/aristo_rocksdb,
   ../../nimbus/db/aristo/[
-    aristo_desc, aristo_debug, aristo_get, aristo_hashify, aristo_init,
-    aristo_hike, aristo_layer, aristo_merge],
+    aristo_check, aristo_desc, aristo_debug, aristo_get, aristo_hashify,
+    aristo_init, aristo_hike, aristo_layer, aristo_merge],
   ./test_helpers
 
 type
@@ -76,7 +76,7 @@ proc mergeStepwise(
       stopOk = true
 
     let hashesOk = block:
-      let rc = db.hashifyCheck(relax=true)
+      let rc = db.checkCache(relax=true)
       if rc.isOk:
         (VertexID(0),AristoError(0))
       else:
@@ -196,7 +196,7 @@ proc test_mergeKvpList*(
         "\n    --------"
 
     block:
-      let rc = db.hashifyCheck()
+      let rc = db.checkCache()
       if rc.isErr:
         noisy.say "*** kvp(4)", "<", n, "/", lstLen-1, "> db dump",
           "\n    pre-DB\n    ", preDb,

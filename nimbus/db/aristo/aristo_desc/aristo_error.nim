@@ -92,23 +92,46 @@ type
     HashifyVidCircularDependence
     HashifyVtxMissing
 
-    HashifyCheckRevCountMismatch
-    HashifyCheckRevHashMismatch
-    HashifyCheckRevHashMissing
-    HashifyCheckRevVtxDup
-    HashifyCheckRevVtxMissing
-    HashifyCheckVidVtxMismatch
-    HashifyCheckVtxCountMismatch
-    HashifyCheckVtxHashMismatch
-    HashifyCheckVtxHashMissing
-    HashifyCheckVtxIncomplete
-    HashifyCheckVtxLockWithoutKey
+    # Cache checker `checkCache()`
+    CheckStkVtxIncomplete
+    CheckStkVtxKeyMissing
+    CheckStkVtxKeyMismatch
+    CheckStkRevKeyMissing
+    CheckStkRevKeyMismatch
+    CheckStkVtxCountMismatch
 
-    HashifyCheckBeVtxInvalid
-    HashifyCheckBeKeyInvalid
-    HashifyCheckBeVtxMissing
-    HashifyCheckBeKeyMissing
-    HashifyCheckBeVidWasDeleted
+    CheckRlxVidVtxMismatch
+    CheckRlxVtxIncomplete
+    CheckRlxVtxKeyMissing
+    CheckRlxVtxKeyMismatch
+    CheckRlxRevKeyMissing
+    CheckRlxRevKeyMismatch
+    CheckRlxVidVtxBeMissing
+    CheckRlxVtxEmptyKeyMissing
+    CheckRlxVtxEmptyKeyExpected
+
+    CheckAnyRevVtxMissing
+    CheckAnyRevVtxDup
+    CheckAnyRevCountMismatch
+    CheckAnyVtxLockWithoutKey
+
+    # Backend structural check `checkBE()`
+    CheckBeVtxInvalid
+    CheckBeKeyInvalid
+    CheckBeVtxMissing
+    CheckBeKeyMissing
+    CheckBeKeyCantCompile
+    CheckBeKeyMismatch
+    CheckBeGarbledVGen
+
+    CheckBeCacheKeyMissing
+    CheckBeCacheKeyNonEmpty
+    CheckBeCacheVidUnsynced
+    CheckBeCacheKeyDangling
+    CheckBeCacheVtxDangling
+    CheckBeCacheKeyCantCompile
+    CheckBeCacheKeyMismatch
+    CheckBeCacheGarbledVGen
 
     # Neighbour vertex, tree traversal `nearbyRight()` and `nearbyLeft()`
     NearbyBeyondRange
