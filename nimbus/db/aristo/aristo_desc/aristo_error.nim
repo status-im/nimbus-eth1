@@ -152,9 +152,12 @@ type
     DelPathTagError
     DelLeafExpexted
     DelLeafLocked
+    DelLeafUnexpected
     DelBranchExpexted
     DelBranchLocked
+    DelBranchWithoutRefs
     DelExtLocked
+    DelVidStaleVtx
 
     # Save permanently, `save()`
     SaveBackendMissing
