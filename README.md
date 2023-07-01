@@ -199,7 +199,7 @@ Note, the Ubuntu PRoot is known to contain all Nimbus prerequisites compiled on 
 
 ```bash
 # Install prerequisites
-apt install librocksdb-dev
+apt install git make gcc librocksdb-dev
 
 # Clone repo and build Nimbus just like above
 git clone https://github.com/status-im/nimbus.git
