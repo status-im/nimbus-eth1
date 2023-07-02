@@ -1,5 +1,5 @@
 import
-  std/[math, tables, times],
+  std/[math, tables, times, os],
   eth/[keys],
   stew/[byteutils, results], unittest2,
   ../nimbus/db/state_db,
@@ -172,6 +172,39 @@ proc runTxPoolCliqueTest*() =
       let rr = chain.persistBlocks([blk.header], [body])
       check rr == ValidationResult.OK
 
+    test "Do not kick the signer out of list":
+      let timestamp = blk.header.timestamp
+      check xp.smartHead(blk.header)
+
+      let tx = env.makeTx(recipient, amount)
+      let res = xp.addLocal(tx, force = true)
+      check res.isOk
+      if res.isErr:
+        debugEcho res.error
+        return
+      check xp.nItems.total == 1
+
+      blk = xp.ethBlock()
+      body = BlockBody(
+        transactions: blk.txs,
+        uncles: blk.uncles
+      )
+      check blk.txs.len == 1
+
+      let rx = clique.seal(blk)
+      check rx.isOk
+      if rx.isErr:
+        debugEcho rx.error
+        return
+
+      # prevent block from future detected in persistBlocks
+      os.sleep(com.cliquePeriod * 1000)
+
+      xp.chain.clearAccounts
+      check xp.chain.vmState.processBlock(com.poa, blk.header, body).isOK
+      let rr = chain.persistBlocks([blk.header], [body])
+      check rr == ValidationResult.OK
+
 proc runTxPoolPosTest*() =
   var
     env = initEnv(some(100.u256))
@@ -303,7 +336,7 @@ when isMainModule:
   setErrorLevel() # mute logger
 
   runTxPoolCliqueTest()
-  runTxPoolPosTest()
-  noisy.runTxHeadDelta
+  #runTxPoolPosTest()
+  #noisy.runTxHeadDelta
 
 # End

@@ -91,7 +91,6 @@ proc prepareHeader(dh: TxChainRef; parent: BlockHeader, timestamp: EthTime)
     # but BaseVMState.minerAddress == signerAddress
     # - minerAddress is extracted from header.extraData
     # - header.coinbase is from clique engine
-    dh.prepHeader.coinbase = dh.miner
   of ConsensusType.POS:
     dh.com.pos.prepare(dh.prepHeader)
 
@@ -118,6 +117,8 @@ proc getTimestamp(dh: TxChainRef, parent: BlockHeader): EthTime =
   of ConsensusType.POS:
     dh.com.pos.timestamp
 
+proc feeRecipient*(dh: TxChainRef): EthAddress {.gcsafe.}
+
 proc resetTxEnv(dh: TxChainRef; parent: BlockHeader; fee: Option[UInt256])
   {.gcsafe,raises: [CatchableError].} =
   dh.txEnv.reset
@@ -138,7 +139,7 @@ proc resetTxEnv(dh: TxChainRef; parent: BlockHeader; fee: Option[UInt256])
     fee       = fee,
     prevRandao= dh.prepHeader.prevRandao,
     difficulty= dh.prepHeader.difficulty,
-    miner     = dh.prepHeader.coinbase,
+    miner     = dh.feeRecipient,
     com       = dh.com)
 
   dh.txEnv.txRoot = EMPTY_ROOT_HASH
@@ -260,7 +261,7 @@ proc maxMode*(dh: TxChainRef): bool =
   ## Getter
   dh.maxMode
 
-proc feeRecipient*(dh: TxChainRef): EthAddress =
+proc feeRecipient*(dh: TxChainRef): EthAddress {.gcsafe.} =
   ## Getter
   if dh.com.consensus == ConsensusType.POS:
     dh.com.pos.feeRecipient
