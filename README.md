@@ -1,4 +1,4 @@
-# Nimbus: ultra-light Ethereum execution layer client 
+# Nimbus: ultra-light Ethereum execution layer client
 [![License: Apache](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 ![GH action-nimbus-eth1](https://github.com/status-im/nimbus-eth1/workflows/CI/badge.svg)
@@ -232,13 +232,10 @@ available.)
  * ENABLE_EVMC=1<br>
    Enable mostly EVMC compliant wrapper around the native Nim VM
 
- * ENABLE_VM2LOWMEM=1<br>
+ * ENABLE_VMLOWMEM=1<br>
    Enable new re-factored version of the native Nim VM. This version is not
    optimised and coded in a way so that low memory compilers can handle it
    (observed on 32 bit windows 7.)
-
- * ENABLE_VM2=1<br>
-   Enable new re-factored version of the native Nim VM.
 
 For these variables, using &lt;variable&gt;=0 is ignored and &lt;variable&gt;=2
 has the same effect as &lt;variable&gt;=1 (ditto for other numbers.)
