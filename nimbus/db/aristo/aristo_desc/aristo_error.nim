@@ -162,7 +162,11 @@ type
 
     # Save permanently, `save()`
     SaveBackendMissing
+    SaveStateRootMissing
     SaveLeafVidRepurposed
+
+    # Pop layer, `pop()`
+    PopStackUnderflow
 
     # Get functions form `aristo_get.nim`
     GetLeafNotFound

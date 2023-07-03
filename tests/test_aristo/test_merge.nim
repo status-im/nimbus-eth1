@@ -208,12 +208,11 @@ proc test_mergeKvpList*(
         check rc == Result[void,(VertexID,AristoError)].ok()
         return
 
-    let rdbHist = block:
+    block:
       let rc = db.save
       if rc.isErr:
         check rc.error == (0,0)
         return
-      rc.value
 
     when true and false:
       noisy.say "*** kvp(5)", "<", n, "/", lstLen-1, ">",
@@ -351,12 +350,11 @@ proc test_mergeProofAndKvpList*(
         check rc.error == (VertexID(0),AristoError(0))
         return
 
-    let rdbHist = block:
+    block:
       let rc = db.save
       if rc.isErr:
         check rc.error == (0,0)
         return
-      rc.value
 
     when true and false:
       noisy.say "***", "proofs(5) <", n, "/", lstLen-1, ">",

@@ -17,11 +17,6 @@ import
   stew/results,
   "."/[aristo_desc, aristo_get, aristo_vid]
 
-type
-  DeltaHistoryRef* = ref object
-    ## Change history for backend saving
-    leafs*: Table[LeafTie,PayloadRef] ## Changed leafs after merge into backend
-
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
@@ -34,63 +29,78 @@ proc cpy(layer: AristoLayerRef): AristoLayerRef =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc push*(db: AristoDbRef) =
-  ## Save a copy of the current delta state on the stack of non-persistent
-  ## state layers.
-  db.stack.add db.top.cpy
-
-
-proc pop*(db: AristoDbRef; merge = true): AristoError =
-  ## Remove the current state later and merge it into the next layer if the
-  ## argument `merge` is `true`, and discard it otherwise. The next layer then
-  ## becomes the current state.
+proc retool*(
+    db: AristoDbRef;
+    flushStack = false;
+      ): Result[void,AristoError] =
+  ## This function re-initialises the top layer cache to its default value. It
+  ## acts as sort of a `rollback()` without a transaction.
   ##
-  ## Note that merging is sort of a virtual action because the top layer has
-  ## always the full latest non-persistent delta state. This implies that in
-  ## the case of *merging* just the first parent layer will be discarded.
-  ##
-  if 0 < db.stack.len:
-    if not merge:
-      # Roll back to parent layer state
-      db.top = db.stack[^1]
-    db.stack.setLen(db.stack.len-1)
-
-  elif merge:
-    # Accept as-is (there is no parent layer)
-    discard
-
-  elif db.backend.isNil:
-    db.top = AristoLayerRef()
+  if 0 < db.stack.len and not flushStack:
+    db.top = db.stack[^1].cpy
 
   else:
     # Initialise new top layer from the backend
-    let rc = db.backend.getIdgFn()
-    if rc.isErr:
-      return rc.error
-    db.top = AristoLayerRef(vGen: rc.value)
+    if db.backend.isNil:
+      db.top = AristoLayerRef()
+    else:
+      let rc = db.backend.getIdgFn()
+      if rc.isErr:
+        return err(rc.error)
+      db.top = AristoLayerRef(vGen: rc.value)
+    if flushStack:
+      db.stack.setLen(0)
 
-  AristoError(0)
+
+proc push*(db: var AristoDbRef) =
+  ## Save the current cache state on the stack and continue working on a copy
+  ## of that state.
+  ##
+  db.stack.add db.top.cpy
+
+proc pop*(
+    db: AristoDbRef;
+    merge = true;
+      ): Result[void,(VertexID,AristoError)] =
+  ## Reduce the cache state stack. If the argument `merge` is set `true`, the
+  ## current top layer cache remains active and the top item of the stack is
+  ## discarded. Otherwise if  `merge` is set `false`, top item of the stack is
+  ## popped onto current top layer cache (so replacing it.)
+  ##
+  if db.stack.len == 0:
+    return err((VertexID(0),PopStackUnderflow))
+
+  if not merge:
+    # Roll back to parent layer state.
+    db.top = db.stack[^1]
+  db.stack.setLen(db.stack.len-1)
+
+  ok()
 
 
 proc save*(
     db: AristoDbRef;                       # Database to be updated
-    clear = true;                          # Clear current top level cache
-      ): Result[DeltaHistoryRef,(VertexID,AristoError)] =
-  ## Save top layer into persistent database. There is no check whether the
-  ## current layer is fully consistent as a Merkle Patricia Tree. It is
-  ## advised to run `hashify()` on the top layer before calling `save()`.
+      ): Result[void,(VertexID,AristoError)] =
+  ## Save the top layer cache onto the persistent database. There is no check
+  ## whether the current layer is fully consistent as a Merkle Patricia Tree.
+  ## It is advised to run `hashify()` on the top layer before calling `save()`.
   ##
-  ## After successful storage, all parent layers are cleared. The top layer
-  ## is also cleared if the `clear` flag is set `true`.
+  ## After successful storage, all parent layers are cleared as well as the
+  ## the top layer cache.
   ##
-  ## Upon successful return, the previous state of the backend data is returned
-  ## relative to the changes made.
+  ## Upon successful return, the previous state of the backend data is saved
+  ## as a new entry in `history` field of the argument descriptor `db`.
   ##
   let be = db.backend
   if be.isNil:
     return err((VertexID(0),SaveBackendMissing))
 
-  let hst = DeltaHistoryRef()                   # Change history
+  # Get Merkle hash for state root
+  let key = db.getKey VertexID(1)
+  if not key.isValid:
+    return err((VertexID(1),SaveStateRootMissing))
+
+  let hst = AristoChangeLogRef(root: key)       # Change history, previous state
 
   # Record changed `Leaf` nodes into the history table
   for (lky,vid) in db.top.lTab.pairs:
@@ -122,10 +132,12 @@ proc save*(
 
   # Delete stack and clear top
   db.stack.setLen(0)
-  if clear:
-    db.top = AristoLayerRef(vGen: db.top.vGen)
+  db.top = AristoLayerRef(vGen: db.top.vGen)
 
-  ok hst
+  # Save history
+  db.history.add hst
+
+  ok()
 
 # ------------------------------------------------------------------------------
 # End

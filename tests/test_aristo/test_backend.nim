@@ -196,21 +196,18 @@ proc test_backendConsistency*(
       rdbPreSaveBackend = rdb.to(RdbBackendRef).pp(ndb)
 
     # Store onto backend database
-    let mdbHist = block:
+    block:
       #noisy.say "***", "db-dump\n    ", mdb.pp
       let rc = mdb.save
       if rc.isErr:
         check rc.error == (0,0)
         return
-      rc.value
 
     if doRdbOk:
-      let rdbHist = block:
-        let rc = rdb.save
-        if rc.isErr:
-          check rc.error == (0,0)
-          return
-        rc.value
+      let rc = rdb.save
+      if rc.isErr:
+        check rc.error == (0,0)
+        return
 
     if not ndb.top.verify(mdb.to(MemBackendRef), noisy):
       when true and false:
