@@ -7,7 +7,7 @@
   "responses":  [{
     "data" : {
       "block" : {
-        "transactionCount" : 1
+        "transactionCount" : "0x1"
       }
     }
   }],

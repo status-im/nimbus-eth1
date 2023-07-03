@@ -3,7 +3,7 @@
   "responses":[{
     "data" : {
       "block" : {
-        "estimateGas" : 21000
+        "estimateGas" : "0x5208"
       }
     }
   }],

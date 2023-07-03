@@ -1,9 +1,9 @@
 {
-  "request" :"{block{ estimateGas(data:{}) }}",
+  "request" :"{block(number: 32) { estimateGas(data:{}) }}",
   "responses":[{
     "data" : {
       "block" : {
-        "estimateGas" : 21000
+        "estimateGas" : "0x5208"
       }
     }
   }],

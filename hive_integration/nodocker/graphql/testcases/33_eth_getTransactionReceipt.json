@@ -11,14 +11,14 @@
           "createdContract": {
             "address": "0x6295ee1b4f6dd65047762f924ecd367c17eabf8f"
           },
-          "cumulativeGasUsed": 493172,
+          "cumulativeGasUsed": "0x78674",
           "from": {
             "address": "0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b"
           },
-          "gas": 3141592,
-          "gasUsed": 493172,
+          "gas": "0x2fefd8",
+          "gasUsed": "0x78674",
           "hash": "0x812742182a79a8e67733edc58cfa3767aa2d7ad06439d156ddbbb33e3403b4ed",
-          "index": 0,
+          "index": "0x0",
           "logs": [],
           "to": null
         }
@@ -34,12 +34,12 @@
           "createdContract": {
             "address": "0x6295ee1b4f6dd65047762f924ecd367c17eabf8f"
           },
-          "cumulativeGasUsed": 493172,
+          "cumulativeGasUsed": "0x78674",
           "from": {
             "address": "0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b"
           },
           "gas": "0x2fefd8",
-          "gasUsed": 493172,
+          "gasUsed": "0x78674",
           "hash": "0x812742182a79a8e67733edc58cfa3767aa2d7ad06439d156ddbbb33e3403b4ed",
           "index": 0,
           "logs": [],

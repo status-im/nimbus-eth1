@@ -5,20 +5,20 @@
   "responses": [{
     "data": {
       "pending": {
-        "transactionCount": 1,
+        "transactionCount": "0x1",
         "transactions": [
           {
-            "nonce": 50,
-            "gas": 1048575
+            "nonce": "0x32",
+            "gas": "0xfffff"
           }
         ],
         "account": {
           "balance": "0x140"
         },
-        "estimateGas": 21000,
+        "estimateGas": "0x5208",
         "call": {
           "data": "0x0000000000000000000000000000000000000000000000000000000000000001",
-          "status": 1
+          "status": "0x1"
         }
       }
     }

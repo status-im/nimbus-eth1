@@ -1,6 +1,6 @@
 {
   "request":     
-    "{ syncing {startingBlock currentBlock highestBlock pulledStates knownStates } }",
+    "{ syncing {startingBlock currentBlock highestBlock } }",
 
   "responses": [{
     "data" : {
