@@ -106,10 +106,11 @@ type
     CheckRlxVtxKeyMismatch
     CheckRlxRevKeyMissing
     CheckRlxRevKeyMismatch
-    CheckRlxVidVtxBeMissing
-    CheckRlxVtxEmptyKeyMissing
-    CheckRlxVtxEmptyKeyExpected
 
+    CheckAnyVidVtxMissing
+    CheckAnyVtxEmptyKeyMissing
+    CheckAnyVtxEmptyKeyExpected
+    CheckAnyVtxEmptyKeyMismatch
     CheckAnyRevVtxMissing
     CheckAnyRevVtxDup
     CheckAnyRevCountMismatch
