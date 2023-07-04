@@ -77,7 +77,7 @@ proc branchNibbleMax*(vtx: VertexRef; maxInx: int8): int8 =
 proc complete(
     hike: Hike;                         # Partially expanded chain of vertices
     vid: VertexID;                      # Start ID
-    db: AristoDb;                       # Database layer
+    db: AristoDbRef;                    # Database layer
     hikeLenMax: static[int];            # Beware of loops (if any)
     doLeast: static[bool];              # Direction: *least* or *most*
       ): Result[Hike,(VertexID,AristoError)] =
@@ -125,7 +125,7 @@ proc complete(
 
 proc zeroAdjust(
     hike: Hike;                         # Partially expanded chain of vertices
-    db: AristoDb;                       # Database layer
+    db: AristoDbRef;                    # Database layer
     doLeast: static[bool];              # Direction: *least* or *most*
       ): Result[Hike,(VertexID,AristoError)] =
   ## Adjust empty argument path to the first vertex entry to the right. Ths
@@ -143,7 +143,7 @@ proc zeroAdjust(
     else:
       w.branchNibbleMax n
 
-  proc toHike(pfx: NibblesSeq, root: VertexID, db: AristoDb): Hike =
+  proc toHike(pfx: NibblesSeq, root: VertexID, db: AristoDbRef): Hike =
     when doLeast:
       pfx.pathPfxPad(0).hikeUp(root, db)
     else:
@@ -203,7 +203,7 @@ proc zeroAdjust(
 
 proc finalise(
     hike: Hike;                         # Partially expanded chain of vertices
-    db: AristoDb;                       # Database layer
+    db: AristoDbRef;                    # Database layer
     moveRight: static[bool];            # Direction of next vertex
       ): Result[Hike,(VertexID,AristoError)] =
   ## Handle some pathological cases after main processing failed
@@ -259,7 +259,7 @@ proc finalise(
 
 proc nearbyNext(
     hike: Hike;                         # Partially expanded chain of vertices
-    db: AristoDb;                       # Database layer
+    db: AristoDbRef;                    # Database layer
     hikeLenMax: static[int];            # Beware of loops (if any)
     moveRight: static[bool];            # Direction of next vertex
       ): Result[Hike,(VertexID,AristoError)] =
@@ -367,7 +367,7 @@ proc nearbyNext(
 
 proc nearbyNextLeafTie(
     lty: LeafTie;                       # Some `Patricia Trie` path
-    db: AristoDb;                       # Database layer
+    db: AristoDbRef;                    # Database layer
     hikeLenMax: static[int];            # Beware of loops (if any)
     moveRight:static[bool];             # Direction of next vertex
       ): Result[HashID,(VertexID,AristoError)] =
@@ -394,7 +394,7 @@ proc nearbyNextLeafTie(
 
 proc right*(
     hike: Hike;                         # Partially expanded chain of vertices
-    db: AristoDb;                       # Database layer
+    db: AristoDbRef;                    # Database layer
       ): Result[Hike,(VertexID,AristoError)] =
   ## Extends the maximally extended argument vertices `hike` to the right (i.e.
   ## with non-decreasing path value). This function does not backtrack if
@@ -409,7 +409,7 @@ proc right*(
 
 proc right*(
     lty: LeafTie;                       # Some `Patricia Trie` path
-    db: AristoDb;                       # Database layer
+    db: AristoDbRef;                    # Database layer
       ): Result[LeafTie,(VertexID,AristoError)] =
   ## Variant of `nearbyRight()` working with a `HashID` argument instead
   ## of a `Hike`.
@@ -420,7 +420,7 @@ proc right*(
 
 proc left*(
     hike: Hike;                         # Partially expanded chain of vertices
-    db: AristoDb;                       # Database layer
+    db: AristoDbRef;                    # Database layer
       ): Result[Hike,(VertexID,AristoError)] =
   ## Similar to `nearbyRight()`.
   ##
@@ -430,7 +430,7 @@ proc left*(
 
 proc left*(
     lty: LeafTie;                       # Some `Patricia Trie` path
-    db: AristoDb;                       # Database layer
+    db: AristoDbRef;                    # Database layer
       ): Result[LeafTie,(VertexID,AristoError)] =
   ## Similar to `nearbyRight()` for `HashID` argument instead of a `Hike`.
   let rc = lty.nearbyNextLeafTie(db, 64, moveRight=false)
@@ -444,7 +444,7 @@ proc left*(
 
 proc rightMissing*(
     hike: Hike;                         # Partially expanded chain of vertices
-    db: AristoDb;                       # Database layer
+    db: AristoDbRef;                    # Database layer
       ): Result[bool,AristoError] =
   ## Returns `true` if the maximally extended argument vertex `hike` is the
   ## right most on the hexary trie database. It verifies that there is no more

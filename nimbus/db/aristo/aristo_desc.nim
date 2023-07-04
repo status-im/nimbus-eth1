@@ -35,24 +35,31 @@ export
   aristo_types_structural
 
 type
+  AristoChangeLogRef* = ref object
+    ## Change log: database state before backend saving.
+    root*: HashKey                    ## Previous hash key for `VertexID(1)`
+    leafs*: Table[LeafTie,PayloadRef] ## Changed leafs after merge into backend
+
   AristoLayerRef* = ref object
     ## Hexary trie database layer structures. Any layer holds the full
     ## change relative to the backend.
-    sTab*: Table[VertexID,VertexRef] ## Structural vertex table
-    lTab*: Table[LeafTie,VertexID]   ## Direct access, path to leaf vertex
-    kMap*: Table[VertexID,HashLabel] ## Merkle hash key mapping
-    pAmk*: Table[HashLabel,VertexID] ## Reverse `kMap` entries, hash key lookup
-    pPrf*: HashSet[VertexID]         ## Locked vertices (proof nodes)
-    vGen*: seq[VertexID]             ## Unique vertex ID generator
+    sTab*: Table[VertexID,VertexRef]  ## Structural vertex table
+    lTab*: Table[LeafTie,VertexID]    ## Direct access, path to leaf vertex
+    kMap*: Table[VertexID,HashLabel]  ## Merkle hash key mapping
+    pAmk*: Table[HashLabel,VertexID]  ## Reverse `kMap` entries, hash key lookup
+    pPrf*: HashSet[VertexID]          ## Locked vertices (proof nodes)
+    vGen*: seq[VertexID]              ## Unique vertex ID generator
 
-  AristoDb* = object
+  AristoDbRef* = ref AristoDbObj
+  AristoDbObj* = object
     ## Set of database layers, supporting transaction frames
-    top*: AristoLayerRef             ## Database working layer, mutable
-    stack*: seq[AristoLayerRef]      ## Stashed immutable parent layers
-    backend*: AristoBackendRef       ## Backend database (may well be `nil`)
+    top*: AristoLayerRef              ## Database working layer, mutable
+    stack*: seq[AristoLayerRef]       ## Stashed immutable parent layers
+    backend*: AristoBackendRef        ## Backend database (may well be `nil`)
+    history*: seq[AristoChangeLogRef] ## Backend saving history
 
     # Debugging data below, might go away in future
-    xMap*: Table[HashLabel,VertexID] ## For pretty printing, extends `pAmk`
+    xMap*: Table[HashLabel,VertexID]  ## For pretty printing, extends `pAmk`
 
 # ------------------------------------------------------------------------------
 # Public helpers

@@ -23,7 +23,7 @@ import
 # ------------------------------------------------------------------------------
 
 proc convertPartially(
-    db: AristoDb;
+    db: AristoDbRef;
     vtx: VertexRef;
     nd: var NodeRef;
       ): seq[VertexID] =
@@ -59,7 +59,7 @@ proc convertPartially(
       result.add vtx.bVid[n]
 
 proc convertPartiallyOk(
-    db: AristoDb;
+    db: AristoDbRef;
     vtx: VertexRef;
     nd: var NodeRef;
       ): bool =
@@ -93,7 +93,7 @@ proc convertPartiallyOk(
           continue
         return false
 
-proc cachedVID(db: AristoDb; lbl: HashLabel): VertexID =
+proc cachedVID(db: AristoDbRef; lbl: HashLabel): VertexID =
   ## Get vertex ID from reverse cache
   result = db.top.pAmk.getOrVoid lbl
   if not result.isValid:
@@ -103,7 +103,7 @@ proc cachedVID(db: AristoDb; lbl: HashLabel): VertexID =
 # Public functions for `VertexID` => `HashKey` mapping
 # ------------------------------------------------------------------------------
 
-proc pal*(db: AristoDb; rootID: VertexID; vid: VertexID): HashKey =
+proc pal*(db: AristoDbRef; rootID: VertexID; vid: VertexID): HashKey =
   ## Retrieve the cached `Merkel` hash (aka `HashKey` object) associated with
   ## the argument `VertexID` type argument `vid`. Return a zero `HashKey` if
   ## there is none.
@@ -129,7 +129,7 @@ proc pal*(db: AristoDb; rootID: VertexID; vid: VertexID): HashKey =
 # Public funcions extending/completing vertex records
 # ------------------------------------------------------------------------------
 
-proc updated*(nd: NodeRef; root: VertexID; db: AristoDb): NodeRef =
+proc updated*(nd: NodeRef; root: VertexID; db: AristoDbRef): NodeRef =
   ## Return a copy of the argument node `nd` with updated missing vertex IDs.
   ##
   ## For a `Leaf` node, the payload data `PayloadRef` type reference is *not*
@@ -159,7 +159,7 @@ proc updated*(nd: NodeRef; root: VertexID; db: AristoDb): NodeRef =
         if nd.key[n].isValid:
           result.bVid[n] = db.cachedVID HashLabel(root: root, key: nd.key[n])
 
-proc asNode*(vtx: VertexRef; db: AristoDb): NodeRef =
+proc asNode*(vtx: VertexRef; db: AristoDbRef): NodeRef =
   ## Return a `NodeRef` object by augmenting missing `Merkel` hashes (aka
   ## `HashKey` objects) from the cache or from calculated cached vertex
   ## entries, if available.
@@ -169,7 +169,7 @@ proc asNode*(vtx: VertexRef; db: AristoDb): NodeRef =
   if not db.convertPartiallyOk(vtx, result):
     return NodeRef(error: CacheMissingNodekeys)
 
-proc asNode*(rc: Result[VertexRef,AristoError]; db: AristoDb): NodeRef =
+proc asNode*(rc: Result[VertexRef,AristoError]; db: AristoDbRef): NodeRef =
   ## Variant of `asNode()`.
   if rc.isErr:
     return NodeRef(error: rc.error)

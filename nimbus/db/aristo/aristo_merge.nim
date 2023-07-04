@@ -70,7 +70,7 @@ proc `xPfx=`(vtx: VertexRef, val: NibblesSeq) =
 # ------------------------------------------------------------------------------
 
 proc clearMerkleKeys(
-    db: AristoDb;                      # Database, top layer
+    db: AristoDbRef;                   # Database, top layer
     hike: Hike;                        # Implied vertex IDs to clear hashes for
     vid: VertexID;                     # Additionall vertex IDs to clear
       ) =
@@ -87,7 +87,7 @@ proc clearMerkleKeys(
 # -----------
 
 proc insertBranch(
-    db: AristoDb;                      # Database, top layer
+    db: AristoDbRef;                   # Database, top layer
     hike: Hike;                        # Current state
     linkID: VertexID;                  # Vertex ID to insert
     linkVtx: VertexRef;                # Vertex to insert
@@ -214,7 +214,7 @@ proc insertBranch(
 
 
 proc concatBranchAndLeaf(
-    db: AristoDb;                      # Database, top layer
+    db: AristoDbRef;                   # Database, top layer
     hike: Hike;                        # Path top has a `Branch` vertex
     brVid: VertexID;                   # Branch vertex ID from from `Hike` top
     brVtx: VertexRef;                  # Branch vertex, linked to from `Hike`
@@ -257,7 +257,7 @@ proc concatBranchAndLeaf(
 # ------------------------------------------------------------------------------
 
 proc topIsBranchAddLeaf(
-    db: AristoDb;                      # Database, top layer
+    db: AristoDbRef;                   # Database, top layer
     hike: Hike;                        # Path top has a `Branch` vertex
     payload: PayloadRef;               # Leaf data payload
       ): Hike =
@@ -310,7 +310,7 @@ proc topIsBranchAddLeaf(
 
 
 proc topIsExtAddLeaf(
-    db: AristoDb;                      # Database, top layer
+    db: AristoDbRef;                   # Database, top layer
     hike: Hike;                        # Path top has an `Extension` vertex
     payload: PayloadRef;               # Leaf data payload
       ): Hike =
@@ -377,7 +377,7 @@ proc topIsExtAddLeaf(
 
 
 proc topIsEmptyAddLeaf(
-    db: AristoDb;                      # Database, top layer
+    db: AristoDbRef;                   # Database, top layer
     hike: Hike;                        # No path legs
     rootVtx: VertexRef;                # Root vertex
     payload: PayloadRef;               # Leaf data payload
@@ -413,7 +413,7 @@ proc topIsEmptyAddLeaf(
 
 
 proc updatePayload(
-    db: AristoDb;                      # Database, top layer
+    db: AristoDbRef;                   # Database, top layer
     hike: Hike;                        # No path legs
     leaf: LeafTiePayload;              # Leaf data and payload
      ): Hike =
@@ -435,7 +435,7 @@ proc updatePayload(
 # ------------------------------------------------------------------------------
 
 proc mergeNodeImpl(
-    db: AristoDb;                      # Database, top layer
+    db: AristoDbRef;                   # Database, top layer
     hashKey: HashKey;                  # Merkel hash of node
     node: NodeRef;                     # Node derived from RLP representation
     rootVid: VertexID;                 # Current sub-trie
@@ -531,7 +531,7 @@ proc mergeNodeImpl(
 # ------------------------------------------------------------------------------
 
 proc merge*(
-    db: AristoDb;                      # Database, top layer
+    db: AristoDbRef;                   # Database, top layer
     leaf: LeafTiePayload;              # Leaf item to add to the database
       ): Hike =
   ## Merge the argument `leaf` key-value-pair into the top level vertex table
@@ -596,7 +596,7 @@ proc merge*(
     # End else (1st level)
 
 proc merge*(
-    db: AristoDb;                      # Database, top layer
+    db: AristoDbRef;                   # Database, top layer
     leafs: openArray[LeafTiePayload];  # Leaf items to add to the database
       ): tuple[merged: int, dups: int, error: AristoError] =
   ## Variant of `merge()` for leaf lists.
@@ -615,7 +615,7 @@ proc merge*(
 # ---------------------
 
 proc merge*(
-    db: AristoDb;                      # Database, top layer
+    db: AristoDbRef;                   # Database, top layer
     proof: openArray[SnapProof];       # RLP encoded node records
     rootVid: VertexID;                 # Current sub-trie
       ): tuple[merged: int, dups: int, error: AristoError]
@@ -708,7 +708,7 @@ proc merge*(
   (merged, dups, AristoError(0))
 
 proc merge*(
-    db: AristoDb;                      # Database, top layer
+    db: AristoDbRef;                   # Database, top layer
     rootKey: HashKey;                  # Merkle hash for root
     rootVid = VertexID(0)              # Optionally, force root vertex ID
       ): Result[VertexID,AristoError] =

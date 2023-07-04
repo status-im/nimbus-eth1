@@ -22,24 +22,25 @@ import
 # ------------------------------------------------------------------------------
 
 proc checkCacheStrict*(
-    db: AristoDb;                      # Database, top layer
+    db: AristoDbRef;                   # Database, top layer
       ): Result[void,(VertexID,AristoError)] =
   for (vid,vtx) in db.top.sTab.pairs:
-    let rc = vtx.toNode db
-    if rc.isErr:
-      return err((vid,CheckStkVtxIncomplete))
+    if vtx.isValid:
+      let rc = vtx.toNode db
+      if rc.isErr:
+        return err((vid,CheckStkVtxIncomplete))
 
-    let lbl = db.top.kMap.getOrVoid vid
-    if not lbl.isValid:
-      return err((vid,CheckStkVtxKeyMissing))
-    if lbl.key != rc.value.toHashKey:
-      return err((vid,CheckStkVtxKeyMismatch))
+      let lbl = db.top.kMap.getOrVoid vid
+      if not lbl.isValid:
+        return err((vid,CheckStkVtxKeyMissing))
+      if lbl.key != rc.value.toHashKey:
+        return err((vid,CheckStkVtxKeyMismatch))
 
-    let revVid = db.top.pAmk.getOrVoid lbl
-    if not revVid.isValid:
-      return err((vid,CheckStkRevKeyMissing))
-    if revVid != vid:
-      return err((vid,CheckStkRevKeyMismatch))
+      let revVid = db.top.pAmk.getOrVoid lbl
+      if not revVid.isValid:
+        return err((vid,CheckStkRevKeyMissing))
+      if revVid != vid:
+        return err((vid,CheckStkRevKeyMismatch))
 
   if 0 < db.top.pAmk.len and db.top.pAmk.len < db.top.sTab.len:
     # Cannot have less changes than cached entries
@@ -49,7 +50,7 @@ proc checkCacheStrict*(
 
 
 proc checkCacheRelaxed*(
-    db: AristoDb;                      # Database, top layer
+    db: AristoDbRef;                   # Database, top layer
       ): Result[void,(VertexID,AristoError)] =
   if 0 < db.top.pPrf.len:
     for vid in db.top.pPrf:
@@ -70,15 +71,6 @@ proc checkCacheRelaxed*(
           return err((vid,CheckRlxRevKeyMissing))
         if revVid != vid:
           return err((vid,CheckRlxRevKeyMismatch))
-      else:
-        # Is be a deleted entry
-        let rc = db.getVtxBackend vid
-        if rc.isErr:
-          return err((vid,CheckRlxVidVtxBeMissing))
-        if not db.top.kMap.hasKey vid:
-          return err((vid,CheckRlxVtxEmptyKeyMissing))
-        if db.top.kMap.getOrVoid(vid).isValid:
-          return err((vid,CheckRlxVtxEmptyKeyExpected))
   else:
     for (vid,lbl) in db.top.kMap.pairs:
       if lbl.isValid:                              # Otherwise to be deleted
@@ -100,10 +92,30 @@ proc checkCacheRelaxed*(
 
 
 proc checkCacheCommon*(
-    db: AristoDb;                      # Database, top layer
+    db: AristoDbRef;                   # Database, top layer
       ): Result[void,(VertexID,AristoError)] =
   # Some `kMap[]` entries may ne void indicating backend deletion
-  let kMapCount = db.top.kMap.values.toSeq.filterIt(it.isValid).len
+  let
+    kMapCount = db.top.kMap.values.toSeq.filterIt(it.isValid).len
+    kMapNilCount = db.top.kMap.len - kMapCount
+
+  # Check deleted entries
+  var nNilVtx = 0
+  for (vid,vtx) in db.top.sTab.pairs:
+    if not vtx.isValid:
+      nNilVtx.inc
+      let rc = db.getVtxBackend vid
+      if rc.isErr:
+        return err((vid,CheckAnyVidVtxMissing))
+      if not db.top.kMap.hasKey vid:
+        return err((vid,CheckAnyVtxEmptyKeyMissing))
+      if db.top.kMap.getOrVoid(vid).isValid:
+        return err((vid,CheckAnyVtxEmptyKeyExpected))
+
+  # If present, there are at least as many deleted hashes as there are deleted
+  # vertices.
+  if kMapNilCount != 0 and kMapNilCount < nNilVtx:
+    return err((VertexID(0),CheckAnyVtxEmptyKeyMismatch))
 
   if db.top.pAmk.len != kMapCount:
     var knownKeys: HashSet[VertexID]

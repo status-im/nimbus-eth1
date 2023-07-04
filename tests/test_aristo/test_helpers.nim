@@ -47,7 +47,7 @@ proc to(a: NodeKey; T: type HashKey): T =
 proc pp*(
     w: ProofTrieData;
     rootID: VertexID;
-    db: var AristoDb;
+    db: AristoDbRef;
     indent = 4;
       ): string =
   let pfx = indent.toPfx
@@ -61,13 +61,13 @@ proc pp*(
   result &= "])"
 
 proc pp*(w: ProofTrieData; indent = 4): string =
-  var db = AristoDB()
+  var db = AristoDbRef()
   w.pp(VertexID(1), db, indent)
 
 proc pp*(
     w: openArray[ProofTrieData];
     rootID: VertexID;
-    db: var AristoDb;
+    db: AristoDbRef;
     indent = 4): string =
   let pfx = indent.toPfx
   "[" & w.mapIt(it.pp(rootID, db, indent + 1)).join("," & pfx & " ") & "]"
@@ -76,7 +76,7 @@ proc pp*(w: openArray[ProofTrieData]; indent = 4): string =
   let pfx = indent.toPfx
   "[" & w.mapIt(it.pp(indent + 1)).join("," & pfx & " ") & "]"
 
-proc pp*(ltp: LeafTiePayload; db: AristoDB): string =
+proc pp*(ltp: LeafTiePayload; db: AristoDbRef): string =
   "(" & ltp.leafTie.pp(db) & "," & ltp.payload.pp(db) & ")"
 
 # ----------

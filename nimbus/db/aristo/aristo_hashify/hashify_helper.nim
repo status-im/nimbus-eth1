@@ -23,7 +23,7 @@ import
 
 proc toNode*(
     vtx: VertexRef;                    # Vertex to convert
-    db: AristoDb;                      # Database, top layer
+    db: AristoDbRef;                   # Database, top layer
     stopEarly = true;                  # Full list of missing links if `false`
       ): Result[NodeRef,seq[VertexID]] =
   ## Convert argument vertex to node

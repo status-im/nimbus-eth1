@@ -36,7 +36,7 @@ proc sortedKeys(pPrf: HashSet[VertexID]): seq[VertexID] =
 proc toPfx(indent: int; offset = 0): string =
   if 0 < indent+offset: "\n" & " ".repeat(indent+offset) else: ""
 
-proc labelVidUpdate(db: var AristoDb, lbl: HashLabel, vid: VertexID): string =
+proc labelVidUpdate(db: AristoDbRef, lbl: HashLabel, vid: VertexID): string =
   if lbl.key.isValid and vid.isValid:
     if not db.top.isNil:
       let lblVid = db.top.pAmk.getOrVoid lbl
@@ -81,7 +81,7 @@ proc ppVid(vid: VertexID; pfx = true): string =
 proc ppVidList(vGen: openArray[VertexID]): string =
   "[" & vGen.mapIt(it.ppVid).join(",") & "]"
 
-proc vidCode(lbl: HashLabel, db: AristoDb): uint64 =
+proc vidCode(lbl: HashLabel, db: AristoDbRef): uint64 =
   if lbl.isValid:
     if not db.top.isNil:
       let vid = db.top.pAmk.getOrVoid lbl
@@ -104,7 +104,7 @@ proc ppKey(key: HashKey): string =
            .mapIt(it.toHex(2)).join.tolowerAscii
            .squeeze(hex=true,ignLen=true)
 
-proc ppLabel(lbl: HashLabel; db: AristoDb): string =
+proc ppLabel(lbl: HashLabel; db: AristoDbRef): string =
   if lbl.key == HashKey.default:
     return "£ø"
   if lbl.key == VOID_HASH_KEY:
@@ -135,7 +135,7 @@ proc ppCodeKey(a: HashKey): string =
   if a != VOID_CODE_KEY:
     return a.ppKey
 
-proc ppLeafTie(lty: LeafTie, db: AristoDb): string =
+proc ppLeafTie(lty: LeafTie, db: AristoDbRef): string =
   if not db.top.isNil:
     let vid =  db.top.lTab.getOrVoid lty
     if vid.isValid:
@@ -152,7 +152,7 @@ proc ppPathPfx(pfx: NibblesSeq): string =
 proc ppNibble(n: int8): string =
   if n < 0: "ø" elif n < 10: $n else: n.toHex(1).toLowerAscii
 
-proc ppPayload(p: PayloadRef, db: AristoDb): string =
+proc ppPayload(p: PayloadRef, db: AristoDbRef): string =
   if p.isNil:
     result = "n/a"
   else:
@@ -166,7 +166,7 @@ proc ppPayload(p: PayloadRef, db: AristoDb): string =
       result &= p.account.storageRoot.to(HashKey).ppRootKey() & ","
       result &= p.account.codeHash.to(HashKey).ppCodeKey() & ")"
 
-proc ppVtx(nd: VertexRef, db: AristoDb, vid: VertexID): string =
+proc ppVtx(nd: VertexRef, db: AristoDbRef, vid: VertexID): string =
   if not nd.isValid:
     result = "ø"
   else:
@@ -191,7 +191,7 @@ proc ppVtx(nd: VertexRef, db: AristoDb, vid: VertexID): string =
 
 proc ppSTab(
     sTab: Table[VertexID,VertexRef];
-    db = AristoDb();
+    db = AristoDbRef();
     indent = 4;
       ): string =
   "{" & sTab.sortedKeys
@@ -203,7 +203,7 @@ proc ppLTab(
     lTab: Table[LeafTie,VertexID];
     indent = 4;
       ): string =
-  var db = AristoDb()
+  let db = AristoDbRef()
   "{" & lTab.sortedKeys
             .mapIt((it, lTab.getOrVoid it))
             .mapIt("(" & it[0].ppLeafTie(db) & "," & it[1].ppVid & ")")
@@ -213,7 +213,7 @@ proc ppPPrf(pPrf: HashSet[VertexID]): string =
   "{" & pPrf.sortedKeys.mapIt(it.ppVid).join(",") & "}"
 
 proc ppXMap*(
-    db: AristoDb;
+    db: AristoDbRef;
     kMap: Table[VertexID,HashLabel];
     pAmk: Table[HashLabel,VertexID];
     indent: int;
@@ -314,7 +314,7 @@ proc ppXMap*(
   else:
     result &= "}"
 
-proc ppBe[T](be: T; db: AristoDb; indent: int): string =
+proc ppBe[T](be: T; db: AristoDbRef; indent: int): string =
   ## Walk over backend tables
   let
     pfx = indent.toPfx
@@ -333,7 +333,7 @@ proc ppBe[T](be: T; db: AristoDb; indent: int): string =
 
 
 proc ppCache(
-    db: AristoDb;
+    db: AristoDbRef;
     vGenOk: bool;
     sTabOk: bool;
     lTabOk: bool;
@@ -392,7 +392,7 @@ proc ppCache(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc lblToVtxID*(db: var AristoDb, lbl: HashLabel): VertexID =
+proc lblToVtxID*(db: AristoDbRef, lbl: HashLabel): VertexID =
   ## Associate a vertex ID with the argument `key` for pretty printing.
   if lbl.isValid:
     let vid = db.xMap.getOrVoid lbl
@@ -402,16 +402,16 @@ proc lblToVtxID*(db: var AristoDb, lbl: HashLabel): VertexID =
       result = db.vidFetch()
       db.xMap[lbl] = result
 
-proc hashToVtxID*(db: var AristoDb, root: VertexID; hash: Hash256): VertexID =
+proc hashToVtxID*(db: AristoDbRef; root: VertexID; hash: Hash256): VertexID =
   db.lblToVtxID HashLabel(root: root, key: hash.to(HashKey))
 
 proc pp*(key: HashKey): string =
   key.ppKey
 
-proc pp*(lbl: HashLabel, db = AristoDb()): string =
+proc pp*(lbl: HashLabel, db = AristoDbRef()): string =
   lbl.ppLabel(db)
 
-proc pp*(lty: LeafTie, db = AristoDb()): string =
+proc pp*(lty: LeafTie, db = AristoDbRef()): string =
   lty.ppLeafTie(db)
 
 proc pp*(vid: VertexID): string =
@@ -420,13 +420,13 @@ proc pp*(vid: VertexID): string =
 proc pp*(vGen: openArray[VertexID]): string =
   vGen.ppVidList
 
-proc pp*(p: PayloadRef, db = AristoDb()): string =
+proc pp*(p: PayloadRef, db = AristoDbRef()): string =
   p.ppPayload(db)
 
-proc pp*(nd: VertexRef, db = AristoDb()): string =
+proc pp*(nd: VertexRef, db = AristoDbRef()): string =
   nd.ppVtx(db, VertexID(0))
 
-proc pp*(nd: NodeRef; root: VertexID; db: var AristoDB): string =
+proc pp*(nd: NodeRef; root: VertexID; db: AristoDBRef): string =
   if not nd.isValid:
     result = "n/a"
   elif nd.error != AristoError(0):
@@ -460,10 +460,14 @@ proc pp*(nd: NodeRef; root: VertexID; db: var AristoDB): string =
   result &= ")"
 
 proc pp*(nd: NodeRef): string =
-  var db = AristoDB()
+  var db = AristoDbRef()
   nd.pp(db)
 
-proc pp*(sTab: Table[VertexID,VertexRef]; db = AristoDb(); indent = 4): string =
+proc pp*(
+    sTab: Table[VertexID,VertexRef];
+    db = AristoDbRef();
+    indent = 4;
+      ): string =
   sTab.ppSTab
 
 proc pp*(lTab: Table[LeafTie,VertexID]; indent = 4): string =
@@ -472,7 +476,7 @@ proc pp*(lTab: Table[LeafTie,VertexID]; indent = 4): string =
 proc pp*(pPrf: HashSet[VertexID]): string =
   pPrf.ppPPrf
 
-proc pp*(leg: Leg; db = AristoDb()): string =
+proc pp*(leg: Leg; db = AristoDbRef()): string =
   result = "(" & leg.wp.vid.ppVid & ","
   if not db.top.isNil:
     let lbl = db.top.kMap.getOrVoid leg.wp.vid
@@ -488,7 +492,7 @@ proc pp*(leg: Leg; db = AristoDb()): string =
     result &= $leg.nibble.ppNibble
   result &= "," & leg.wp.vtx.pp(db) & ")"
 
-proc pp*(hike: Hike; db = AristoDb(); indent = 4): string =
+proc pp*(hike: Hike; db = AristoDbRef(); indent = 4): string =
   let pfx = indent.toPfx(1)
   result = "["
   if hike.legs.len == 0:
@@ -503,7 +507,7 @@ proc pp*(hike: Hike; db = AristoDb(); indent = 4): string =
   result &= "]"
 
 proc pp*(kMap: Table[VertexID,Hashlabel]; indent = 4): string =
-  var db: AristoDb
+  let db = AristoDbRef()
   "{" & kMap.sortedKeys
             .mapIt((it,kMap.getOrVoid it))
             .filterIt(it[1].isValid)
@@ -511,24 +515,23 @@ proc pp*(kMap: Table[VertexID,Hashlabel]; indent = 4): string =
             .join("," & indent.toPfx(1)) & "}"
 
 proc pp*(pAmk: Table[Hashlabel,VertexID]; indent = 4): string =
-  var
-    db: AristoDb
-    rev = pAmk.pairs.toSeq.mapIt((it[1],it[0])).toTable
+  let db = AristoDbRef()
+  var rev = pAmk.pairs.toSeq.mapIt((it[1],it[0])).toTable
   "{" & rev.sortedKeys
            .mapIt((it,rev.getOrVoid it))
            .filterIt(it[1].isValid)
            .mapIt("(" & it[1].ppLabel(db) & "," & it[0].ppVid & ")")
            .join("," & indent.toPfx(1)) & "}"
 
-proc pp*(kMap: Table[VertexID,Hashlabel]; db: AristoDb; indent = 4): string =
+proc pp*(kMap: Table[VertexID,Hashlabel]; db: AristoDbRef; indent = 4): string =
   db.ppXMap(kMap, db.top.pAmk, indent)
 
-proc pp*(pAmk: Table[Hashlabel,VertexID]; db: AristoDb; indent = 4): string =
+proc pp*(pAmk: Table[Hashlabel,VertexID]; db: AristoDbRef; indent = 4): string =
   db.ppXMap(db.top.kMap, pAmk, indent)
 
 proc pp*(
     be: MemBackendRef|RdbBackendRef;
-    db: AristoDb;
+    db: AristoDbRef;
     indent = 4;
       ): string =
   be.ppBe(db, indent)
@@ -536,14 +539,14 @@ proc pp*(
 # ---------------------
 
 proc pp*(
-    db: AristoDb;
+    db: AristoDbRef;
     indent = 4;
       ): string =
   db.ppCache(
     vGenOk=true, sTabOk=true, lTabOk=true, kMapOk=true, pPrfOk=true)
 
 proc pp*(
-    db: AristoDb;
+    db: AristoDbRef;
     xTabOk: bool;
     indent = 4;
       ): string =
@@ -551,7 +554,7 @@ proc pp*(
     vGenOk=true, sTabOk=xTabOk, lTabOk=xTabOk, kMapOk=true, pPrfOk=true)
 
 proc pp*(
-    db: AristoDb;
+    db: AristoDbRef;
     xTabOk: bool;
     kMapOk: bool;
     other = false;
@@ -562,7 +565,7 @@ proc pp*(
 
 proc pp*(
   be: TypedBackendRef;
-  db: AristoDb;
+  db: AristoDbRef;
   indent = 4;
     ): string =
 

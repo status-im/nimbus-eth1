@@ -28,7 +28,7 @@ type
 # ------------------------------------------------------------------------------
 
 proc getVtxBackend*(
-    db: AristoDb;
+    db: AristoDbRef;
     vid: VertexID;
       ): Result[VertexRef,AristoError] =
   ## Get the vertex from the `backened` layer if available.
@@ -38,7 +38,7 @@ proc getVtxBackend*(
   err(GetVtxNotFound)
 
 proc getKeyBackend*(
-    db: AristoDb;
+    db: AristoDbRef;
     vid: VertexID;
       ): Result[HashKey,AristoError] =
   ## Get the merkle hash/key from the backend
@@ -50,7 +50,7 @@ proc getKeyBackend*(
 # ------------------
 
 proc getLeaf*(
-    db: AristoDb;
+    db: AristoDbRef;
     lty: LeafTie;
       ): Result[VidVtxPair,AristoError] =
   ## Get the vertex from the top layer by the `Patricia Trie` path. This
@@ -65,7 +65,7 @@ proc getLeaf*(
 
   ok VidVtxPair(vid: vid, vtx: vtx)
 
-proc getLeafVtx*(db: AristoDb; lty: LeafTie): VertexRef =
+proc getLeafVtx*(db: AristoDbRef; lty: LeafTie): VertexRef =
   ## Variant of `getLeaf()` returning `nil` on error (while ignoring the
   ## detailed error type information.)
   ##
@@ -75,7 +75,7 @@ proc getLeafVtx*(db: AristoDb; lty: LeafTie): VertexRef =
 
 # ------------------
 
-proc getVtx*(db: AristoDb; vid: VertexID): VertexRef =
+proc getVtx*(db: AristoDbRef; vid: VertexID): VertexRef =
   ## Cascaded attempt to fetch a vertex from the top layer or the backend.
   ## The function returns `nil` on error or failure.
   ##
@@ -88,7 +88,7 @@ proc getVtx*(db: AristoDb; vid: VertexID): VertexRef =
     return rc.value
   VertexRef(nil)
 
-proc getKey*(db: AristoDb; vid: VertexID): HashKey =
+proc getKey*(db: AristoDbRef; vid: VertexID): HashKey =
   ## Cascaded attempt to fetch a Merkle hash from the top layer or the backend.
   ## The function returns `VOID_HASH_KEY` on error or failure.
   ##

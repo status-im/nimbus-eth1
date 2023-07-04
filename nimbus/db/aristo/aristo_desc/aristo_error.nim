@@ -106,10 +106,11 @@ type
     CheckRlxVtxKeyMismatch
     CheckRlxRevKeyMissing
     CheckRlxRevKeyMismatch
-    CheckRlxVidVtxBeMissing
-    CheckRlxVtxEmptyKeyMissing
-    CheckRlxVtxEmptyKeyExpected
 
+    CheckAnyVidVtxMissing
+    CheckAnyVtxEmptyKeyMissing
+    CheckAnyVtxEmptyKeyExpected
+    CheckAnyVtxEmptyKeyMismatch
     CheckAnyRevVtxMissing
     CheckAnyRevVtxDup
     CheckAnyRevCountMismatch
@@ -161,7 +162,11 @@ type
 
     # Save permanently, `save()`
     SaveBackendMissing
+    SaveStateRootMissing
     SaveLeafVidRepurposed
+
+    # Pop layer, `pop()`
+    PopStackUnderflow
 
     # Get functions form `aristo_get.nim`
     GetLeafNotFound

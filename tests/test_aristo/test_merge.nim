@@ -37,7 +37,7 @@ proc pp(w: tuple[merged: int, dups: int, error: AristoError]): string =
     result &= ")"
 
 proc mergeStepwise(
-    db: AristoDb;
+    db: AristoDbRef;
     leafs: openArray[LeafTiePayload];
     noisy = false;
       ): tuple[merged: int, dups: int, error: AristoError] =
@@ -136,14 +136,14 @@ proc test_mergeKvpList*(
     resetDb = false;
       ): bool =
   var
-    db: AristoDb
+    db = AristoDbRef()
   defer:
     db.finish(flush=true)
   for n,w in list:
     if resetDb or db.top.isNil:
       db.finish(flush=true)
       db = block:
-        let rc = AristoDb.init(BackendRocksDB,rdbPath)
+        let rc = AristoDbRef.init(BackendRocksDB,rdbPath)
         if rc.isErr:
           check rc.error == AristoError(0)
           return
@@ -208,12 +208,11 @@ proc test_mergeKvpList*(
         check rc == Result[void,(VertexID,AristoError)].ok()
         return
 
-    let rdbHist = block:
+    block:
       let rc = db.save
       if rc.isErr:
         check rc.error == (0,0)
         return
-      rc.value
 
     when true and false:
       noisy.say "*** kvp(5)", "<", n, "/", lstLen-1, ">",
@@ -239,7 +238,7 @@ proc test_mergeProofAndKvpList*(
   let
     oopsTab = oops.toTable
   var
-    db: AristoDb
+    db = AristoDbRef()
     rootKey = HashKey.default
     count = 0
   defer:
@@ -248,9 +247,9 @@ proc test_mergeProofAndKvpList*(
     if resetDb or w.root != rootKey or w.proof.len == 0:
       db.finish(flush=true)
       db = block:
-        let rc = AristoDb.init(BackendRocksDB,rdbPath)
+        let rc = AristoDbRef.init(BackendRocksDB,rdbPath)
         if rc.isErr:
-          check rc.error == AristoError(0)
+          check rc.error == 0
           return
         rc.value
       rootKey = w.root
@@ -277,7 +276,7 @@ proc test_mergeProofAndKvpList*(
     if 0 < w.proof.len:
       let rc = db.merge(rootKey, VertexID(1))
       if rc.isErr:
-        check rc.error == AristoError(0)
+        check rc.error == 0
         return
 
       preDb = db.pp
@@ -351,12 +350,11 @@ proc test_mergeProofAndKvpList*(
         check rc.error == (VertexID(0),AristoError(0))
         return
 
-    let rdbHist = block:
+    block:
       let rc = db.save
       if rc.isErr:
         check rc.error == (0,0)
         return
-      rc.value
 
     when true and false:
       noisy.say "***", "proofs(5) <", n, "/", lstLen-1, ">",

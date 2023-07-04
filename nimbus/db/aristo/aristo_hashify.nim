@@ -79,7 +79,7 @@ func isValid(brv: BackVidValRef): bool =
 # ------------------------------------------------------------------------------
 
 proc updateHashKey(
-    db: AristoDb;                      # Database, top layer
+    db: AristoDbRef;                   # Database, top layer
     root: VertexID;                    # Root ID
     vid: VertexID;                     # Vertex ID to check for
     expected: HashKey;                 # Hash key for vertex address by `vid`
@@ -131,7 +131,7 @@ proc updateHashKey(
 
 
 proc leafToRootHasher(
-    db: AristoDb;                      # Database, top layer
+    db: AristoDbRef;                   # Database, top layer
     hike: Hike;                        # Hike for labelling leaf..root
       ): Result[int,(VertexID,AristoError)] =
   ## Returns the index of the first node that could not be hashed
@@ -159,7 +159,7 @@ proc leafToRootHasher(
 # ------------------
 
 proc deletedLeafHasher(
-    db: AristoDb;                      # Database, top layer
+    db: AristoDbRef;                   # Database, top layer
     hike: Hike;                        # Hike for labelling leaf..root
       ): Result[void,(VertexID,AristoError)] =
   var
@@ -214,7 +214,7 @@ proc deletedLeafHasher(
 # ------------------------------------------------------------------------------
 
 proc hashifyClear*(
-    db: AristoDb;                      # Database, top layer
+    db: AristoDbRef;                   # Database, top layer
     locksOnly = false;                 # If `true`, then clear only proof locks
       ) =
   ## Clear all `Merkle` hashes from the  `db` argument database top layer.
@@ -225,7 +225,7 @@ proc hashifyClear*(
 
 
 proc hashify*(
-    db: AristoDb;                      # Database, top layer
+    db: AristoDbRef;                   # Database, top layer
       ): Result[HashSet[VertexID],(VertexID,AristoError)] =
   ## Add keys to the  `Patricia Trie` so that it becomes a `Merkle Patricia
   ## Tree`. If successful, the function returns the key (aka Merkle hash) of
