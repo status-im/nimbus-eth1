@@ -63,9 +63,23 @@ TOOLS_DIRS := \
 # comma-separated values for the "clean" target
 TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(TOOLS))
 
+# Fluffy debugging tools + testing tools
+FLUFFY_TOOLS := \
+	beacon_chain_bridge \
+	eth_data_exporter \
+	content_verifier \
+	blockwalk \
+	portalcli
+FLUFFY_TOOLS_DIRS := \
+	fluffy/tools/bridge \
+	fluffy/tools
+# comma-separated values for the "clean" target
+FLUFFY_TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(FLUFFY_TOOLS))
+
 .PHONY: \
 	all \
 	$(TOOLS) \
+	$(FLUFFY_TOOLS) \
 	deps \
 	update \
 	nimbus \
@@ -226,11 +240,16 @@ fluffy-test-reproducibility:
 fluffy-test: | build deps
 	$(ENV_SCRIPT) nim fluffy_test $(NIM_PARAMS) nimbus.nims
 
-# builds the fluffy tools
-fluffy-tools: | build deps
-	$(ENV_SCRIPT) nim fluffy_tools $(NIM_PARAMS) nimbus.nims
+# builds the fluffy tools, wherever they are
+$(FLUFFY_TOOLS): | build deps
+	for D in $(FLUFFY_TOOLS_DIRS); do [ -e "$${D}/$@.nim" ] && TOOL_DIR="$${D}" && break; done && \
+		echo -e $(BUILD_MSG) "build/$@" && \
+		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/$@ "$${TOOL_DIR}/$@.nim"
 
-# builds the fluffy tools
+# builds all the fluffy tools
+fluffy-tools: | $(FLUFFY_TOOLS)
+
+# builds the uTP test app
 utp-test-app: | build deps
 	$(ENV_SCRIPT) nim utp_test_app $(NIM_PARAMS) nimbus.nims
 
@@ -275,7 +294,7 @@ txparse: | build deps
 
 # usual cleaning
 clean: | clean-common
-	rm -rf build/{nimbus,fluffy,nimbus_verified_proxy,$(TOOLS_CSV),all_tests,test_kvstore_rocksdb,test_rpc,all_fluffy_tests,all_fluffy_portal_spec_tests,test_portal_testnet,portalcli,blockwalk,eth_data_exporter,utp_test_app,utp_test,*.dSYM}
+	rm -rf build/{nimbus,fluffy,nimbus_verified_proxy,$(TOOLS_CSV),$(FLUFFY_TOOLS_CSV),all_tests,test_kvstore_rocksdb,test_rpc,all_fluffy_tests,all_fluffy_portal_spec_tests,test_portal_testnet,portalcli,blockwalk,eth_data_exporter,utp_test_app,utp_test,*.dSYM}
 	rm -rf tools/t8n/{t8n,t8n_test}
 	rm -rf tools/evmstate/{evmstate,evmstate_test}
 ifneq ($(USE_LIBBACKTRACE), 0)
