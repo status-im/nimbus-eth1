@@ -222,10 +222,6 @@ fluffy: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim fluffy $(NIM_PARAMS) nimbus.nims
 
-lc-bridge: | build deps
-	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim lc_bridge $(NIM_PARAMS) nimbus.nims
-
 # primitive reproducibility test
 fluffy-test-reproducibility:
 	+ [ -e build/fluffy ] || $(MAKE) V=0 fluffy; \

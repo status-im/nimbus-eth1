@@ -31,7 +31,7 @@ when declared(namedBin):
   namedBin = {
     "nimbus/nimbus": "nimbus",
     "fluffy/fluffy": "fluffy",
-    "lc_proxy/lc_proxy": "lc_proxy",
+    "nimbus_verified_proxy/nimbus_verified_proxy": "nimbus_verified_proxy",
   }.toTable()
 
 proc buildBinary(name: string, srcDir = "./", params = "", lang = "c") =
