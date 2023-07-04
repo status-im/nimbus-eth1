@@ -45,7 +45,8 @@ type
     pPrf*: HashSet[VertexID]         ## Locked vertices (proof nodes)
     vGen*: seq[VertexID]             ## Unique vertex ID generator
 
-  AristoDb* = object
+  AristoDbRef* = ref AristoDbObj
+  AristoDbObj* = object
     ## Set of database layers, supporting transaction frames
     top*: AristoLayerRef             ## Database working layer, mutable
     stack*: seq[AristoLayerRef]      ## Stashed immutable parent layers

@@ -22,7 +22,7 @@ import
 # ------------------------------------------------------------------------------
 
 proc checkCacheStrict*(
-    db: AristoDb;                      # Database, top layer
+    db: AristoDbRef;                   # Database, top layer
       ): Result[void,(VertexID,AristoError)] =
   for (vid,vtx) in db.top.sTab.pairs:
     if vtx.isValid:
@@ -50,7 +50,7 @@ proc checkCacheStrict*(
 
 
 proc checkCacheRelaxed*(
-    db: AristoDb;                      # Database, top layer
+    db: AristoDbRef;                   # Database, top layer
       ): Result[void,(VertexID,AristoError)] =
   if 0 < db.top.pPrf.len:
     for vid in db.top.pPrf:
@@ -92,7 +92,7 @@ proc checkCacheRelaxed*(
 
 
 proc checkCacheCommon*(
-    db: AristoDb;                      # Database, top layer
+    db: AristoDbRef;                   # Database, top layer
       ): Result[void,(VertexID,AristoError)] =
   # Some `kMap[]` entries may ne void indicating backend deletion
   let
@@ -115,9 +115,6 @@ proc checkCacheCommon*(
   # If present, there are at least as many deleted hashes as there are deleted
   # vertices.
   if kMapNilCount != 0 and kMapNilCount < nNilVtx:
-    if noisy: echo ">>> checkCommon (4)",
-      " nNilVtx=", nNilVtx,
-      " kMapNilCount=", kMapNilCount
     return err((VertexID(0),CheckAnyVtxEmptyKeyMismatch))
 
   if db.top.pAmk.len != kMapCount:

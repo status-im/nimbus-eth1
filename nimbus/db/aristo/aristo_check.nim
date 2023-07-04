@@ -27,7 +27,7 @@ import
 # ------------------------------------------------------------------------------
 
 proc checkCache*(
-    db: AristoDb;                      # Database, top layer
+    db: AristoDbRef;                   # Database, top layer
     relax = false;                     # Check existing hashes only
       ): Result[void,(VertexID,AristoError)] =
   ## Verify that the cache structure is correct as it would be after `merge()`
@@ -57,7 +57,7 @@ proc checkCache*(
 
 
 proc checkBE*(
-    db: AristoDb;                      # Database, top layer
+    db: AristoDbRef;                   # Database, top layer
     relax = true;                      # Not re-compiling hashes if `true`
     cache = true;                      # Also verify cache
       ): Result[void,(VertexID,AristoError)] =

@@ -43,7 +43,7 @@ proc branchStillNeeded(vtx: VertexRef): Result[int,void] =
   err()
 
 proc clearKey(
-    db: AristoDb;                      # Database, top layer
+    db: AristoDbRef;                   # Database, top layer
     vid: VertexID;                     # Vertex IDs to clear
       ) =
   let lbl = db.top.kMap.getOrVoid vid
@@ -56,7 +56,7 @@ proc clearKey(
     db.top.pAmk.del lbl
 
 proc doneWith(
-    db: AristoDb;                      # Database, top layer
+    db: AristoDbRef;                   # Database, top layer
     vid: VertexID;                     # Vertex IDs to clear
       ) =
   # Remove entry
@@ -72,7 +72,7 @@ proc doneWith(
 # ------------------------------------------------------------------------------
 
 proc collapseBranch(
-    db: AristoDb;                      # Database, top layer
+    db: AristoDbRef;                   # Database, top layer
     hike: Hike;                        # Fully expanded path
     nibble: byte;                      # Applicable link for `Branch` vertex
      ): Result[void,(VertexID,AristoError)] =
@@ -123,7 +123,7 @@ proc collapseBranch(
 
 
 proc collapseExt(
-    db: AristoDb;                      # Database, top layer
+    db: AristoDbRef;                   # Database, top layer
     hike: Hike;                        # Fully expanded path
     nibble: byte;                      # Link for `Branch` vertex `^2`
     vtx: VertexRef;                    # Follow up extension vertex (nibble)
@@ -173,7 +173,7 @@ proc collapseExt(
 
 
 proc collapseLeaf(
-    db: AristoDb;                      # Database, top layer
+    db: AristoDbRef;                   # Database, top layer
     hike: Hike;                        # Fully expanded path
     nibble: byte;                      # Link for `Branch` vertex `^2`
     vtx: VertexRef;                    # Follow up leaf vertex (from nibble)
@@ -259,7 +259,7 @@ proc collapseLeaf(
 # -------------------------
 
 proc deleteImpl(
-    db: AristoDb;                      # Database, top layer
+    db: AristoDbRef;                   # Database, top layer
     hike: Hike;                        # Fully expanded path
     lty: LeafTie;                      # `Patricia Trie` path root-to-leaf
       ): Result[void,(VertexID,AristoError)] =
@@ -338,7 +338,7 @@ proc deleteImpl(
 # ------------------------------------------------------------------------------
 
 proc delete*(
-    db: AristoDb;                      # Database, top layer
+    db: AristoDbRef;                   # Database, top layer
     hike: Hike;                        # Fully expanded chain of vertices
       ): Result[void,(VertexID,AristoError)] =
   ## Delete argument `hike` chain of vertices from the database
@@ -351,7 +351,7 @@ proc delete*(
   db.deleteImpl(hike, lty)
 
 proc delete*(
-    db: AristoDb;                      # Database, top layer
+    db: AristoDbRef;                   # Database, top layer
     lty: LeafTie;                      # `Patricia Trie` path root-to-leaf
       ): Result[void,(VertexID,AristoError)] =
   ## Variant of `delete()`

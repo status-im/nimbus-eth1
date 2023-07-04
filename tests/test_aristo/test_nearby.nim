@@ -25,7 +25,7 @@ import
 # ------------------------------------------------------------------------------
 
 proc fwdWalkLeafsCompleteDB(
-    db: AristoDb;
+    db: AristoDbRef;
     root: VertexID;
     tags: openArray[HashID];
     noisy: bool;
@@ -67,7 +67,7 @@ proc fwdWalkLeafsCompleteDB(
 
 
 proc revWalkLeafsCompleteDB(
-    db: AristoDb;
+    db: AristoDbRef;
     root: VertexID;
     tags: openArray[HashID];
     noisy: bool;
@@ -115,8 +115,9 @@ proc test_nearbyKvpList*(
     list: openArray[ProofTrieData];
     resetDb = false;
       ): bool =
+  let
+    db = AristoDbRef()
   var
-    db: AristoDb
     rootKey = HashKey.default
     tagSet: HashSet[HashID]
     count = 0

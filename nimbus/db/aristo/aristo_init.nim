@@ -28,7 +28,7 @@ export
 # ------------------------------------------------------------------------------
 
 proc init*(
-    T: type AristoDb;
+    T: type AristoDbRef;
     backend: static[AristoBackendType];
     basePath: string;
       ): Result[T, AristoError] =
@@ -58,7 +58,7 @@ proc init*(
     {.error: "Unknown/unsupported Aristo DB backend".}
 
 proc init*(
-    T: type AristoDb;
+    T: type AristoDbRef;
     backend: static[AristoBackendType];
       ): T =
   ## Simplified prototype for  `BackendNone` and `BackendMemory`  type backend.
@@ -76,7 +76,7 @@ proc init*(
 
 # -----------------
 
-proc finish*(db: var AristoDb; flush = false) =
+proc finish*(db: AristoDbRef; flush = false) =
   ## Backend destructor. The argument `flush` indicates that a full database
   ## deletion is requested. If set ot left `false` the outcome might differ
   ## depending on the type of backend (e.g. the `BackendMemory` backend will
@@ -92,7 +92,7 @@ proc finish*(db: var AristoDb; flush = false) =
 # -----------------
 
 proc to*[W: TypedBackendRef|MemBackendRef|RdbBackendRef](
-    db: AristoDb;
+    db: AristoDbRef;
     T: type W;
       ): T =
   ## Handy helper for lew-level access to some backend functionality

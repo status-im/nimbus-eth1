@@ -28,7 +28,7 @@ import
 # ------------------------------------------------------------------------------
 
 proc mergeData(
-    db: AristoDb;
+    db: AristoDbRef;
     rootKey: HashKey;
     rootVid: VertexID;
     proof: openArray[SnapProof];
@@ -115,9 +115,9 @@ proc test_backendConsistency*(
       ): bool =
   ## Import accounts
   var
-    ndb: AristoDb                            # Reference cache
-    mdb: AristoDb                            # Memory backend database
-    rdb: AristoDb                            # Rocks DB backend database
+    ndb = AristoDbRef()                      # Reference cache
+    mdb = AristoDbRef()                      # Memory backend database
+    rdb = AristoDbRef()                      # Rocks DB backend database
     rootKey = HashKey.default
     count = 0
 
@@ -128,13 +128,13 @@ proc test_backendConsistency*(
     if w.root != rootKey or resetDB:
       rootKey = w.root
       count = 0
-      ndb = AristoDb.init(BackendNone)
-      mdb = AristoDb.init(BackendMemory)
+      ndb = AristoDbRef.init BackendNone
+      mdb = AristoDbRef.init BackendMemory
       if doRdbOk:
         rdb.finish(flush=true)
-        let rc = AristoDb.init(BackendRocksDB,rdbPath)
+        let rc = AristoDbRef.init(BackendRocksDB,rdbPath)
         if rc.isErr:
-          check rc.error == AristoError(0)
+          check rc.error == 0
           return
         rdb = rc.value
     count.inc

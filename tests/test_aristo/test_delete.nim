@@ -77,7 +77,7 @@ proc rand(td: var TesterDesc; top: int): int =
 
 # -----------------------
 
-proc randomisedLeafs(db: AristoDb; td: var TesterDesc): seq[LeafTie] =
+proc randomisedLeafs(db: AristoDbRef; td: var TesterDesc): seq[LeafTie] =
   result = db.top.lTab.sortedKeys
   if 2 < result.len:
     for n in 0 ..< result.len-1:
@@ -86,7 +86,7 @@ proc randomisedLeafs(db: AristoDb; td: var TesterDesc): seq[LeafTie] =
 
 
 proc saveToBackend(
-    db: var AristoDb;
+    db: AristoDbRef;
     relax: bool;
     noisy: bool;
     debugID: int;
@@ -178,7 +178,7 @@ proc saveToBackend(
 
 
 proc fwdWalkVerify(
-    db: AristoDb;
+    db: AristoDbRef;
     root: VertexID;
     left: HashSet[LeafTie];
     noisy: bool;
@@ -236,7 +236,7 @@ proc test_delete*(
        ): bool =
   var
     td = TesterDesc.init 42
-    db: AristoDb
+    db = AristoDbRef()
   defer:
     db.finish(flush=true)
 
@@ -244,7 +244,7 @@ proc test_delete*(
     # Start with new database
     db.finish(flush=true)
     db = block:
-      let rc = AristoDb.init(BackendRocksDB,rdbPath)
+      let rc = AristoDbRef.init(BackendRocksDB,rdbPath)
       if rc.isErr:
         check rc.error == 0
         return
@@ -372,7 +372,7 @@ proc test_delete*(
            "\n    backend\n    ", db.to(TypedBackendRef).pp(db),
            "\n    --------"
 
-    when true: # and false:
+    when true and false:
       noisy.say "***", "del(9) n=", n, "/", list.len, " nLeafs=", leafs.len
 
   true

@@ -34,13 +34,13 @@ proc cpy(layer: AristoLayerRef): AristoLayerRef =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc push*(db: var AristoDb) =
+proc push*(db: AristoDbRef) =
   ## Save a copy of the current delta state on the stack of non-persistent
   ## state layers.
   db.stack.add db.top.cpy
 
 
-proc pop*(db: var AristoDb; merge = true): AristoError =
+proc pop*(db: AristoDbRef; merge = true): AristoError =
   ## Remove the current state later and merge it into the next layer if the
   ## argument `merge` is `true`, and discard it otherwise. The next layer then
   ## becomes the current state.
@@ -73,7 +73,7 @@ proc pop*(db: var AristoDb; merge = true): AristoError =
 
 
 proc save*(
-    db: var AristoDb;                      # Database to be updated
+    db: AristoDbRef;                       # Database to be updated
     clear = true;                          # Clear current top level cache
       ): Result[DeltaHistoryRef,(VertexID,AristoError)] =
   ## Save top layer into persistent database. There is no check whether the

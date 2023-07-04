@@ -38,7 +38,7 @@ proc invTo(s: IntervalSetRef[VertexID,uint64]; T: type HashSet[VertexID]): T =
 
 proc toNodeBe(
     vtx: VertexRef;                    # Vertex to convert
-    db: AristoDb;                      # Database, top layer
+    db: AristoDbRef;                   # Database, top layer
       ): Result[NodeRef,VertexID] =
   ## Similar to `toNode()` but fetching from the backend only
   case vtx.vType:
@@ -74,7 +74,7 @@ proc toNodeBe(
 
 proc checkBE*[T](
     be: T;                             # backend descriptor
-    db: AristoDb;                      # Database, top layer
+    db: AristoDbRef;                   # Database, top layer
     relax: bool;                       # Not compiling hashes if `true`
     cache: bool;                       # Also verify cache
       ): Result[void,(VertexID,AristoError)] =
@@ -157,7 +157,7 @@ proc checkBE*[T](
           return err((vid,CheckBeCacheKeyMismatch))
 
     # Check vGen
-    var tmp = AristoDB(top: AristoLayerRef(vGen: db.top.vGen))
+    var tmp = AristoDbRef(top: AristoLayerRef(vGen: db.top.vGen))
     tmp.vidReorg()
     let
       vGen = tmp.top.vGen.toHashSet

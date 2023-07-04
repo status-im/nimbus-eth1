@@ -21,7 +21,7 @@ import
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc vidFetch*(db: AristoDb; pristine = false): VertexID =
+proc vidFetch*(db: AristoDbRef; pristine = false): VertexID =
   ## Create a new `VertexID`. Reusable vertex *ID*s are kept in a list where
   ## the top entry *ID* has the property that any other *ID* larger is also not
   ## not used on the database.
@@ -44,7 +44,7 @@ proc vidFetch*(db: AristoDb; pristine = false): VertexID =
     top.vGen.setLen(top.vGen.len-1)
 
 
-proc vidPeek*(db: AristoDb): VertexID =
+proc vidPeek*(db: AristoDbRef): VertexID =
   ## Like `new()` without consuming this *ID*. It will return the *ID* that
   ## would be returned by the `new()` function.
   case db.top.vGen.len:
@@ -56,7 +56,7 @@ proc vidPeek*(db: AristoDb): VertexID =
     db.top.vGen[^2]
 
 
-proc vidDispose*(db: AristoDb; vid: VertexID) =
+proc vidDispose*(db: AristoDbRef; vid: VertexID) =
   ## Recycle the argument `vtxID` which is useful after deleting entries from
   ## the vertex table to prevent the `VertexID` type key values small.
   if VertexID(1) < vid:
@@ -70,7 +70,7 @@ proc vidDispose*(db: AristoDb; vid: VertexID) =
         db.top.vGen[^1] = vid
         db.top.vGen.add topID
 
-proc vidReorg*(db: AristoDb) =
+proc vidReorg*(db: AristoDbRef) =
   ## Remove redundant items from the recycle queue. All recycled entries are
   ## typically kept in the queue until the backend database is committed.
   if 1 < db.top.vGen.len:
@@ -94,17 +94,17 @@ proc vidReorg*(db: AristoDb) =
     # All entries are continuously increasing
     db.top.vGen = @[lst[0]]
 
-proc vidAttach*(db: AristoDb; lbl: HashLabel; vid: VertexID) =
+proc vidAttach*(db: AristoDbRef; lbl: HashLabel; vid: VertexID) =
   ## Attach (i.r. register) a Merkle hash key to a vertex ID.
   db.top.pAmk[lbl] = vid
   db.top.kMap[vid] = lbl
 
-proc vidAttach*(db: AristoDb; lbl: HashLabel): VertexID {.discardable.} =
+proc vidAttach*(db: AristoDbRef; lbl: HashLabel): VertexID {.discardable.} =
   ## Variant of `vidAttach()` with auto-generated vertex ID
   result = db.vidFetch
   db.vidAttach(lbl, result)
 
-proc vidRoot*(db: AristoDb; key: HashKey): VertexID {.discardable.} =
+proc vidRoot*(db: AristoDbRef; key: HashKey): VertexID {.discardable.} =
   ## Variant of `vidAttach()` for generating a sub-trie root
   result = db.vidFetch
   db.vidAttach(HashLabel(root: result, key: key), result)
