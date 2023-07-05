@@ -21,7 +21,7 @@ import
   ./aristo_desc/aristo_types_backend
 
 export
-  AristoBackendType, AristoStorageType, TypedBackendRef
+  AristoBackendType, TypedBackendRef
 
 # ------------------------------------------------------------------------------
 # Public database constuctors, destructor

@@ -188,4 +188,12 @@ type
     RdbBeFinishSstWriter
     RdbBeIngestSstWriter
 
+    # Transaction wrappers
+    TxDbStackNonEmpty
+    TxValidHandleExpected
+    TxBaseHandleExpected
+    TxTopHandleExpected
+    TxCacheKeyFetchFail
+    TxBeKeyFetchFail
+
 # End

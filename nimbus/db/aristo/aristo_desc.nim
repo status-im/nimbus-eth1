@@ -82,6 +82,9 @@ func isValid*(vtx: VertexRef): bool =
 func isValid*(nd: NodeRef): bool =
   nd != NodeRef(nil)
 
+func isValid*(pld: PayloadRef): bool =
+  pld != PayloadRef(nil)
+
 func isValid*(key: HashKey): bool =
   key != VOID_HASH_KEY
 
@@ -92,6 +95,7 @@ func isValid*(vid: VertexID): bool =
   vid != VertexID(0)
 
 # ------------------------------------------------------------------------------
+
 # Public functions, miscellaneous
 # ------------------------------------------------------------------------------
 
