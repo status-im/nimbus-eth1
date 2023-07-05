@@ -30,6 +30,7 @@ EXCLUDED_NIM_PACKAGES := 	\
 	vendor/nimbus-eth2/vendor/nim-libbacktrace			\
 	vendor/nimbus-eth2/vendor/nim-metrics						\
 	vendor/nimbus-eth2/vendor/nim-nat-traversal			\
+  vendor/nimbus-eth2/vendor/nim-results     			\
 	vendor/nimbus-eth2/vendor/nim-secp256k1					\
 	vendor/nimbus-eth2/vendor/nim-serialization			\
 	vendor/nimbus-eth2/vendor/nim-snappy						\
