@@ -31,8 +31,7 @@ when declared(namedBin):
   namedBin = {
     "nimbus/nimbus": "nimbus",
     "fluffy/fluffy": "fluffy",
-    "lc_proxy/lc_proxy": "lc_proxy",
-    "fluffy/tools/portalcli": "portalcli",
+    "nimbus_verified_proxy/nimbus_verified_proxy": "nimbus_verified_proxy",
   }.toTable()
 
 proc buildBinary(name: string, srcDir = "./", params = "", lang = "c") =
@@ -72,7 +71,7 @@ task test_evm, "Run EVM tests":
 ## Fluffy tasks
 
 task fluffy, "Build fluffy":
-  buildBinary "fluffy", "fluffy/", "-d:chronicles_log_level=TRACE -d:chronosStrictException -d:PREFER_BLST_SHA256=false"
+  buildBinary "fluffy", "fluffy/", "-d:chronicles_log_level=TRACE"
 
 task fluffy_test, "Run fluffy tests":
   # Need the nimbus_db_backend in state network tests as we need a Hexary to
@@ -82,13 +81,6 @@ task fluffy_test, "Run fluffy tests":
   # Using the real mainnet merge block number is not realistic for these tests.
   test "fluffy/tests", "all_fluffy_tests", "-d:chronicles_log_level=ERROR -d:chronosStrictException -d:nimbus_db_backend=sqlite -d:PREFER_BLST_SHA256=false -d:mergeBlockNumber:38130"
   test "fluffy/tests/beacon_light_client_tests", "all_beacon_light_client_tests", "-d:chronicles_log_level=ERROR -d:chronosStrictException -d:nimbus_db_backend=sqlite -d:PREFER_BLST_SHA256=false"
-
-task fluffy_tools, "Build fluffy tools":
-  buildBinary "beacon_chain_bridge", "fluffy/tools/bridge/", "-d:chronicles_log_level=TRACE -d:chronosStrictException -d:PREFER_BLST_SHA256=false -d:libp2p_pki_schemes=secp256k1"
-  buildBinary "eth_data_exporter", "fluffy/tools/", "-d:chronicles_log_level=TRACE -d:chronosStrictException -d:PREFER_BLST_SHA256=false"
-  buildBinary "content_verifier", "fluffy/tools/", "-d:chronicles_log_level=TRACE -d:chronosStrictException -d:PREFER_BLST_SHA256=false"
-  buildBinary "blockwalk", "fluffy/tools/", "-d:chronicles_log_level=TRACE -d:chronosStrictException"
-  buildBinary "portalcli", "fluffy/tools/", "-d:chronicles_log_level=TRACE -d:chronosStrictException -d:PREFER_BLST_SHA256=false"
 
 task utp_test_app, "Build uTP test app":
   buildBinary "utp_test_app", "fluffy/tools/utp_testing/", "-d:chronicles_log_level=TRACE -d:chronosStrictException"
