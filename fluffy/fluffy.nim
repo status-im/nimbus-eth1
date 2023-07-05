@@ -7,6 +7,8 @@
 
 {.push raises: [].}
 
+# test fluffy ci
+
 import
   std/os,
   confutils, confutils/std/net, chronicles, chronicles/topics_registry,
