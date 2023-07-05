@@ -265,11 +265,11 @@ when isMainModule:
 
   setErrorLevel()
 
-  when true and false:
+  when true: # and false:
     noisy.miscRunner()
 
   # Borrowed from `test_sync_snap.nim`
-  when true and false:
+  when true: # and false:
     for n,sam in snapTestList:
       noisy.transcodeRunner(sam)
     for n,sam in snapTestStorageList:

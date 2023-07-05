@@ -267,13 +267,61 @@ A *Leaf* record path segment is compact encoded. So it has at least one byte.
 The first byte *P0* has bit 5 set, i.e. *P0 and 0x20* is non-zero (bit 4 is
 also set if the right nibble is the first part of the path.)
 
+If present, the serialisation of the payload field can be either for account
+data, for RLP encoded or for unstructured data as defined below.
+
+### Leaf record payload serialisation for account data
+
+        0 +-- ..  --+
+		  |         |                        -- nonce, 0 or 8 bytes
+		  +-- ..  --+--+
+		  |            |                     -- balance, 0, 8, or 32 bytes
+		  +-- ..  --+--+
+		  |         |                        -- storage ID, 0 or 8 bytes
+		  +-- ..  --+--+
+		  |            |                     -- code hash, 0, 8 or 32 bytes
+          +--+ .. --+--+
+          |  |                               -- bitmask(2)-word array
+          +--+
+
+        where each bitmask(2)-word array entry defines the length of
+		the preceeding data fields:
+		  00 -- field is missing
+		  01 -- field lengthh is 8 bytes
+		  10 -- field lengthh is 32 bytes
+
+Apparently, entries 0 and and 2 of the bitmask(2) word array cannot have the
+value 10 as they refer to the nonce and the storage ID data fields. So, joining
+the bitmask(2)-word array to a single byte, the maximum value of that byte is
+0x99.
+
+### Leaf record payload serialisation for RLP encoded data
+
+        0 +--+ .. --+
+		  |  |      |                        -- data, at least one byte
+		  +--+ .. --+
+          |  |                               -- marker byte
+          +--+
+
+        where the marker byte is 0xaa
+
+### Leaf record payload serialisation for unstructured data
+
+        0 +--+ .. --+
+		  |  |      |                        -- data, at least one byte
+		  +--+ .. --+
+          |  |                               -- marker byte
+          +--+
+
+        where the marker byte is 0xff
+
 ### Descriptor record serialisation
 
         0 +-- ..
           ...                                -- recycled vertexIDs
-          +--+--+--+--+--+--+--+--+--+
-          |                          |       -- bottom of unused vertexIDs
-          +--+--+--+--+--+--+--+--+--+
+          +--+--+--+--+--+--+--+--+
+          |                       |          -- bottom of unused vertexIDs
+          +--+--+--+--+--+--+--+--+
           || |                               -- marker(2) + unused(6)
           +--+
 

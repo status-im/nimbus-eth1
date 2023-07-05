@@ -29,7 +29,16 @@ proc toNode*(
   ## Convert argument vertex to node
   case vtx.vType:
   of Leaf:
-    return ok NodeRef(vType: Leaf, lPfx: vtx.lPfx, lData: vtx.lData)
+    let node = NodeRef(vType: Leaf, lPfx: vtx.lPfx, lData: vtx.lData)
+    # Need to resolve storage root for account leaf
+    if vtx.lData.pType == AccountData:
+      let vid = vtx.lData.account.storageID
+      if vid.isValid:
+        let key = db.getKey vid
+        if not key.isValid:
+          return err(@[vid])
+        node.key[0] = key
+    return ok node
   of Branch:
     let node = NodeRef(vType: Branch, bVid: vtx.bVid)
     var missing: seq[VertexID]

@@ -89,7 +89,7 @@ proc test_transcodeAccounts*(
   var
     adb = AristoDbRef.init BackendNone
     count = -1
-  for (n, key,value) in rocky.walkAllDb():
+  for (n, key, value) in rocky.walkAllDb():
     if stopAfter < n:
       break
     count = n
@@ -112,10 +112,10 @@ proc test_transcodeAccounts*(
     else:
       case node.vType:
       of aristo_desc.Leaf:
-        let account = node.lData.blob.decode(Account)
-        node.lData = PayloadRef(pType: AccountData, account: account)
-        discard adb.hashToVtxID(VertexID(1), node.lData.account.storageRoot)
-        discard adb.hashToVtxID(VertexID(1), node.lData.account.codeHash)
+        let account = node.lData.rawBlob.decode(Account)
+        node.lData = PayloadRef(pType: LegacyAccount, legaAcc: account)
+        discard adb.hashToVtxID(VertexID(1), node.lData.legaAcc.storageRoot)
+        discard adb.hashToVtxID(VertexID(1), node.lData.legaAcc.codeHash)
       of aristo_desc.Extension:
         # key <-> vtx correspondence
         check node.key[0] == node0.key[0]
@@ -146,8 +146,9 @@ proc test_transcodeAccounts*(
     block:
       # `deblobify()` will always decode to `BlobData` type payload
       if node1.vType == aristo_desc.Leaf:
-        let account = node1.lData.blob.decode(Account)
-        node1.lData = PayloadRef(pType: AccountData, account: account)
+        # Node that deserialisation of the account stops at the RLP encoding
+        let account = node1.lData.rlpBlob.decode(Account)
+        node1.lData = PayloadRef(pType: LegacyAccount, legaAcc: account)
 
       if node != node1:
         check node == node1
