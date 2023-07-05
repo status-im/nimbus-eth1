@@ -23,9 +23,7 @@ import
   ../nimbus/sync/snap/worker/db/[rocky_bulk_load, snapdb_accounts, snapdb_desc],
   ./replay/[pp, undump_accounts, undump_storages],
   ./test_sync_snap/[snap_test_xx, test_accounts, test_types],
-  ./test_aristo/[
-    test_backend, test_delete, test_helpers, test_merge, test_nearby,
-    test_transcode]
+  ./test_aristo/[test_backend, test_helpers, test_transcode, test_tx]
 
 const
   baseDir = [".", "..", ".."/"..", $DirSep]
@@ -206,23 +204,17 @@ proc accountsRunner(
 
   suite &"Aristo: accounts data dump from {fileInfo}{listMode}":
 
-    test &"Merge {accLst.len} account lists to database":
-      check noisy.test_mergeKvpList(accLst, dbDir, resetDb)
-
     test &"Merge {accLst.len} proof & account lists to database":
-      check noisy.test_mergeProofAndKvpList(accLst, dbDir, resetDb)
+      check noisy.testTxMergeProofAndKvpList(accLst, dbDir, resetDb)
 
     test &"Compare {accLst.len} account lists on database backends":
       if cmpBackends:
-        check noisy.test_backendConsistency(accLst, dbDir, resetDb)
+        check noisy.testBackendConsistency(accLst, dbDir, resetDb)
       else:
         skip()
 
-    test &"Traverse accounts database w/{accLst.len} account lists":
-      check noisy.test_nearbyKvpList(accLst, resetDb)
-
     test &"Delete accounts database, successively {accLst.len} entries":
-      check noisy.test_delete(accLst, dbDir)
+      check noisy.testTxMergeAndDelete(accLst, dbDir)
 
 
 proc storagesRunner(
@@ -244,24 +236,18 @@ proc storagesRunner(
 
   suite &"Aristo: storages data dump from {fileInfo}{listMode}":
 
-    test &"Merge {stoLst.len} storage slot lists to database":
-      check noisy.test_mergeKvpList(stoLst, dbDir, resetDb)
-
     test &"Merge {stoLst.len} proof & slots lists to database":
-      check noisy.test_mergeProofAndKvpList(
+      check noisy.testTxMergeProofAndKvpList(
         stoLst, dbDir, resetDb, fileInfo, oops)
 
     test &"Compare {stoLst.len} slot lists on database backends":
       if cmpBackends:
-        check noisy.test_backendConsistency(stoLst, dbDir, resetDb)
+        check noisy.testBackendConsistency(stoLst, dbDir, resetDb)
       else:
         skip()
 
-    test &"Traverse storage slots database w/{stoLst.len} account lists":
-      check noisy.test_nearbyKvpList(stoLst, resetDb)
-
     test &"Delete storage database, successively {stoLst.len} entries":
-      check noisy.test_delete(stoLst, dbDir)
+      check noisy.testTxMergeAndDelete(stoLst, dbDir)
 
 # ------------------------------------------------------------------------------
 # Main function(s)

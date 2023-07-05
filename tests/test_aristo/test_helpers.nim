@@ -97,8 +97,15 @@ proc say*(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
 proc `==`*[T: AristoError|VertexID](a: T, b: int): bool =
   a == T(b)
 
-proc `==`*[S,T](a: (S,T), b: (int,int)): bool =
-  a == (S(b[0]), T(b[1]))
+proc `==`*(a: (VertexID,AristoError), b: (int,int)): bool =
+  (a[0].int,a[1].int) == b
+
+proc `==`*(a: (VertexID,AristoError), b: (int,AristoError)): bool =
+  (a[0].int,a[1]) == b
+
+proc `==`*(a: (int,AristoError), b: (int,int)): bool =
+  (a[0],a[1].int) == b
+
 
 proc to*(sample: AccountsSample; T: type seq[UndumpAccounts]): T =
   ## Convert test data into usable in-memory format

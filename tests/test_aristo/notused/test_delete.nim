@@ -229,7 +229,7 @@ proc fwdWalkVerify(
 # Public test function
 # ------------------------------------------------------------------------------
 
-proc test_delete*(
+proc testDelete*(
     noisy: bool;
     list: openArray[ProofTrieData];
     rdbPath: string;                          # Rocks DB storage directory
