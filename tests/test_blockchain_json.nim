@@ -59,10 +59,6 @@ func normalizeNumber(n: JsonNode): JsonNode =
     result = n
   elif str == "0x00":
     result = newJString("0x0")
-  elif str == "0x0000000000000000000000000000000000000000":
-    # withdrawalsAddressBounds contains this; it's meant as an address, not a number,
-    # so it shouldn't be shortened to "0x0"
-    result = n
   elif str[2] == '0':
     var i = 2
     while str[i] == '0':
@@ -96,7 +92,7 @@ func normalizeBlockHeader(node: JsonNode): JsonNode =
 func normalizeWithdrawal(node: JsonNode): JsonNode =
   for k, v in node:
     case k
-    of "address", "amount", "index", "validatorIndex":
+    of "amount", "index", "validatorIndex":
       node[k] = normalizeNumber(v)
     else: discard
   result = node
@@ -128,7 +124,7 @@ proc parseBlocks(blocks: JsonNode): seq[TestBlock] =
         t.goodBlock = true
       of "rlp":
         fixture.fromJson "rlp", t.blockRLP
-      of "transactions", "uncleHeaders",
+      of "transactions", "uncleHeaders", "hasBigInt",
          "blocknumber", "chainname", "chainnetwork":
         discard
       of "transactionSequence":
@@ -312,7 +308,8 @@ proc dumpDebugData(tester: Tester, fixtureName: string, fixtureIndex: int, succe
                     debugDataFromAccountList(tester)
 
   let status = if success: "_success" else: "_failed"
-  writeFile("debug_" & fixtureName & "_" & $fixtureIndex & status & ".json", debugData.pretty())
+  let name = fixtureName.replace('/', '-')
+  writeFile("debug_" & name & "_" & $fixtureIndex & status & ".json", debugData.pretty())
 
 proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = false, trace = false) =
   # 1 - mine the genesis block

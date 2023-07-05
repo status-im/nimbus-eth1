@@ -2,14 +2,17 @@ newBlockchainTests
 ===
 ## bc4895-withdrawals
 ```diff
++ accountInteractions.json                                        OK
 + amountIs0.json                                                  OK
 + amountIs0TouchAccount.json                                      OK
 + amountIs0TouchAccountAndTransaction.json                        OK
 + differentValidatorToTheSameAddress.json                         OK
 + incorrectWithdrawalsRoot.json                                   OK
 + shanghaiWithoutWithdrawalsRLP.json                              OK
++ staticcall.json                                                 OK
 + twoIdenticalIndex.json                                          OK
 + twoIdenticalIndexDifferentValidator.json                        OK
++ warmup.json                                                     OK
 + withdrawalsAddressBounds.json                                   OK
 + withdrawalsAmountBounds.json                                    OK
 + withdrawalsIndexBounds.json                                     OK
@@ -18,7 +21,7 @@ newBlockchainTests
 + withdrawalsRLPnotAList.json                                     OK
 + withdrawalsValidatorIndexBounds.json                            OK
 ```
-OK: 15/15 Fail: 0/15 Skip: 0/15
+OK: 18/18 Fail: 0/18 Skip: 0/18
 ## bcArrowGlacierToMerge
 ```diff
 + difficultyFormula.json                                          OK
@@ -380,12 +383,12 @@ OK: 96/96 Fail: 0/96 Skip: 0/96
 + testOpcode_70.json                                              OK
 + testOpcode_80.json                                              OK
 + testOpcode_90.json                                              OK
-+ testOpcode_A0.json                                              OK
-+ testOpcode_B0.json                                              OK
-+ testOpcode_C0.json                                              OK
-+ testOpcode_D0.json                                              OK
-+ testOpcode_E0.json                                              OK
-+ testOpcode_F0.json                                              OK
++ testOpcode_a0.json                                              OK
++ testOpcode_b0.json                                              OK
++ testOpcode_c0.json                                              OK
++ testOpcode_d0.json                                              OK
++ testOpcode_e0.json                                              OK
++ testOpcode_f0.json                                              OK
 + transactionFromNotExistingAccount.json                          OK
 + transactionFromSelfDestructedContract.json                      OK
 + txCost-sec73.json                                               OK
@@ -507,6 +510,23 @@ OK: 19/19 Fail: 0/19 Skip: 0/19
 + walletReorganizeOwners.json                                     OK
 ```
 OK: 5/5 Fail: 0/5 Skip: 0/5
+## eips
+```diff
++ initcode_limit_contract_creating_tx.json                        OK
++ initcode_limit_contract_creating_tx_gas_usage.json              OK
++ initcode_limit_create2_opcode.json                              OK
++ initcode_limit_create_opcode.json                               OK
++ push0.json                                                      OK
++ warm_coinbase_call_out_of_gas.json                              OK
++ warm_coinbase_gas_usage.json                                    OK
+```
+OK: 7/7 Fail: 0/7 Skip: 0/7
+## example
+```diff
++ access_list.json                                                OK
++ yul.json                                                        OK
+```
+OK: 2/2 Fail: 0/2 Skip: 0/2
 ## stArgsZeroOneBalance
 ```diff
 + addNonConst.json                                                OK
@@ -3296,6 +3316,12 @@ OK: 133/133 Fail: 0/133 Skip: 0/133
 + ecmul_1-2_2_21000_96.json                                       OK
 ```
 OK: 130/130 Fail: 0/130 Skip: 0/130
+## vm
+```diff
++ chain_id.json                                                   OK
++ dup.json                                                        OK
+```
+OK: 2/2 Fail: 0/2 Skip: 0/2
 ## vmArithmeticTest
 ```diff
 + add.json                                                        OK
@@ -3384,6 +3410,20 @@ OK: 0/3 Fail: 0/3 Skip: 3/3
 + swap.json                                                       OK
 ```
 OK: 11/11 Fail: 0/11 Skip: 0/11
+## withdrawals
+```diff
++ balance_within_block.json                                       OK
++ large_amount.json                                               OK
++ many_withdrawals.json                                           OK
++ multiple_withdrawals_same_address.json                          OK
++ newly_created_contract.json                                     OK
++ no_evm_execution.json                                           OK
++ self_destructing_account.json                                   OK
++ use_value_in_contract.json                                      OK
++ use_value_in_tx.json                                            OK
++ zero_amount.json                                                OK
+```
+OK: 10/10 Fail: 0/10 Skip: 0/10
 
 ---TOTAL---
-OK: 2910/3016 Fail: 0/3016 Skip: 106/3016
+OK: 2934/3040 Fail: 0/3040 Skip: 106/3040
