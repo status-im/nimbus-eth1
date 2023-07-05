@@ -153,7 +153,7 @@ proc to*(ua: seq[UndumpAccounts]; T: type seq[ProofTrieData]): T =
           leafTie: LeafTie(
             root:  rootVid,
             path:  it.accKey.to(HashKey).to(HashID)),
-          payload: PayloadRef(pType: BlobData, blob: it.accBlob))))
+          payload: PayloadRef(pType: RawData, rawBlob: it.accBlob))))
 
 proc to*(us: seq[UndumpStorages]; T: type seq[ProofTrieData]): T =
   var (rootKey, rootVid) = (VOID_HASH_KEY, VertexID(0))
@@ -170,7 +170,7 @@ proc to*(us: seq[UndumpStorages]; T: type seq[ProofTrieData]): T =
             leafTie: LeafTie(
               root:  rootVid,
               path:  it.slotHash.to(HashKey).to(HashID)),
-            payload: PayloadRef(pType: BlobData, blob: it.slotData))))
+            payload: PayloadRef(pType: RawData, rawBlob: it.slotData))))
     if 0 < result.len:
       result[^1].proof = s.data.proof
 

@@ -25,18 +25,42 @@ type
     Extension
     Branch
 
+  AristoAccount* = object
+    nonce*:     AccountNonce         ## Some `uint64` type
+    balance*:   UInt256
+    storageID*: VertexID             ## Implies storage root Merkle hash key
+    codeHash*:  Hash256
+
   PayloadType* = enum
-    ## Type of leaf data (to be extended)
-    BlobData                         ## Generic data, typically RLP encoded
-    AccountData                      ## Legacy `Account` with hash references
-    # AristoAccount                  ## `Aristo account` with vertex IDs links
+    ## Type of leaf data. On the Aristo backend, data are serialised as
+    ## follows:
+    ##
+    ## * Opaque data => opaque data, marked `0xff`
+    ## * `Account` object => RLP encoded data, marked `0xaa`
+    ## * `AristoAccount` object => serialised account, marked `0x99` or smaller
+    ##
+    ## On deserialisation from the Aristo backend, there is no reverese for an
+    ## `Account` object. It rather is kept as an RLP encoded `Blob`.
+    ##
+    ## * opaque data, marked `0xff` => `RawData`
+    ## * RLP encoded data, marked `0xaa` => `RlpData`
+    ## * erialised account, marked `0x99` or smaller => `AccountData`
+    ##
+    RawData                          ## Generic data
+    RlpData                          ## Marked RLP encoded
+    AccountData                      ## `Aristo account` with vertex IDs links
+    LegacyAccount                    ## Legacy `Account` with hash references
 
   PayloadRef* = ref object
     case pType*: PayloadType
-    of BlobData:
-      blob*: Blob                    ## Opaque data value reference
+    of RawData:
+      rawBlob*: Blob                 ## Opaque data, default value
+    of RlpData:
+      rlpBlob*: Blob                 ## Opaque data marked RLP encoded
     of AccountData:
-      account*: Account              ## Expanded accounting data
+      account*: AristoAccount
+    of LegacyAccount:
+      legaAcc*: Account              ## Expanded accounting data
 
   VertexRef* = ref object of RootRef
     ## Vertex for building a hexary Patricia or Merkle Patricia Trie
@@ -54,7 +78,7 @@ type
     ## Combined record for a *traditional* ``Merkle Patricia Tree` node merged
     ## with a structural `VertexRef` type object.
     error*: AristoError              ## Can be used for error signalling
-    key*: array[16,HashKey]          ## Merkle hash/es for Branch & Extension
+    key*: array[16,HashKey]          ## Merkle hash/es for vertices
 
 # ------------------------------------------------------------------------------
 # Public helpers: `NodeRef` and `PayloadRef`
@@ -70,11 +94,17 @@ proc `==`*(a, b: PayloadRef): bool =
     if a.pType != b.pType:
       return false
     case a.pType:
-    of BlobData:
-      if a.blob != b.blob:
+    of RawData:
+      if a.rawBlob != b.rawBlob:
+        return false
+    of RlpData:
+      if a.rlpBlob != b.rlpBlob:
         return false
     of AccountData:
       if a.account != b.account:
+        return false
+    of LegacyAccount:
+      if a.legaAcc != b.legaAcc:
         return false
   true
 
@@ -120,25 +150,25 @@ proc `==`*(a, b: NodeRef): bool =
 # Public helpers, miscellaneous functions
 # ------------------------------------------------------------------------------
 
-proc convertTo*(payload: PayloadRef; T: type Blob): T =
-  ## Probably lossy conversion as the storage type `kind` gets missing
-  case payload.pType:
-  of BlobData:
-    result = payload.blob
-  of AccountData:
-    result = rlp.encode payload.account
-
 proc dup*(pld: PayloadRef): PayloadRef =
   ## Duplicate payload.
   case pld.pType:
-  of BlobData:
+  of RawData:
     PayloadRef(
-      pType:    BlobData,
-      blob:     pld.blob)
+      pType:    RawData,
+      rawBlob:  pld.rawBlob)
+  of RlpData:
+    PayloadRef(
+      pType:    RlpData,
+      rlpBlob:  pld.rlpBlob)
   of AccountData:
      PayloadRef(
        pType:   AccountData,
        account: pld.account)
+  of LegacyAccount:
+     PayloadRef(
+       pType:   LegacyAccount,
+       legaAcc: pld.legaAcc)
 
 proc dup*(vtx: VertexRef): VertexRef =
   ## Duplicate vertex.

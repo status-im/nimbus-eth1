@@ -168,8 +168,11 @@ func `==`*(a, b: HashKey): bool =
   ## Table/KeyedQueue mixin
   a.ByteArray32 == b.ByteArray32
 
-func read*[T: HashID|HashKey](rlp: var Rlp, W: type T): T
-    {.gcsafe, raises: [RlpError].} =
+func read*[T: HashID|HashKey](
+    rlp: var Rlp;
+    W: type T;
+      ): T
+      {.gcsafe, raises: [RlpError].} =
   rlp.read(Hash256).to(T)
 
 func append*(writer: var RlpWriter, val: HashID|HashKey) =

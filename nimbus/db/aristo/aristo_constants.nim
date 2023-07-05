@@ -24,7 +24,7 @@ const
   EmptyVidSeq* = seq[VertexID].default
     ## Useful shortcut
 
-  VOID_CODE_KEY* = EMPTY_CODE_HASH.to(HashKey)
+  VOID_CODE_HASH* = EMPTY_CODE_HASH
     ## Equivalent of `nil` for `Account` object code hash
 
   VOID_HASH_KEY* = EMPTY_ROOT_HASH.to(HashKey)

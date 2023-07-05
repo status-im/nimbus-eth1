@@ -97,8 +97,6 @@ proc ppKey(key: HashKey): string =
     return "£ø"
   if key == VOID_HASH_KEY:
     return "£r"
-  if key == VOID_CODE_KEY:
-    return "£c"
 
   "%" & key.ByteArray32
            .mapIt(it.toHex(2)).join.tolowerAscii
@@ -109,8 +107,6 @@ proc ppLabel(lbl: HashLabel; db: AristoDbRef): string =
     return "£ø"
   if lbl.key == VOID_HASH_KEY:
     return "£r"
-  if lbl.key == VOID_CODE_KEY:
-    return "£c"
   
   let rid = if not lbl.root.isValid: "ø:"
             else: ($lbl.root.uint64.toHex).stripZeros & ":"
@@ -132,8 +128,7 @@ proc ppRootKey(a: HashKey): string =
     return a.ppKey
 
 proc ppCodeKey(a: HashKey): string =
-  if a != VOID_CODE_KEY:
-    return a.ppKey
+  a.ppKey
 
 proc ppLeafTie(lty: LeafTie, db: AristoDbRef): string =
   if not db.top.isNil:
@@ -157,14 +152,22 @@ proc ppPayload(p: PayloadRef, db: AristoDbRef): string =
     result = "n/a"
   else:
     case p.pType:
-    of BlobData:
-      result &= p.blob.toHex.squeeze(hex=true)
+    of RawData:
+      result &= p.rawBlob.toHex.squeeze(hex=true)
+    of RlpData:
+      result &= "(" & p.rlpBlob.toHex.squeeze(hex=true) & ")"
     of AccountData:
       result = "("
       result &= $p.account.nonce & ","
       result &= $p.account.balance & ","
-      result &= p.account.storageRoot.to(HashKey).ppRootKey() & ","
+      result &= p.account.storageID.ppVid & ","
       result &= p.account.codeHash.to(HashKey).ppCodeKey() & ")"
+    of LegacyAccount:
+      result = "("
+      result &= $p.legaAcc.nonce & ","
+      result &= $p.legaAcc.balance & ","
+      result &= p.legaAcc.storageRoot.to(HashKey).ppRootKey() & ","
+      result &= p.legaAcc.codeHash.to(HashKey).ppCodeKey() & ")"
 
 proc ppVtx(nd: VertexRef, db: AristoDbRef, vid: VertexID): string =
   if not nd.isValid:

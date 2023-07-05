@@ -43,7 +43,15 @@ proc toNodeBe(
   ## Similar to `toNode()` but fetching from the backend only
   case vtx.vType:
   of Leaf:
-    return ok NodeRef(vType: Leaf, lPfx: vtx.lPfx, lData: vtx.lData)
+    let node = NodeRef(vType: Leaf, lPfx: vtx.lPfx, lData: vtx.lData)
+    if vtx.lData.pType == AccountData:
+      let vid = vtx.lData.account.storageID
+      if vid.isValid:
+        let rc = db.getKeyBackend vid
+        if rc.isErr or not rc.value.isValid:
+          return err(vid)
+        node.key[0] = rc.value
+    return ok node
   of Branch:
     let node = NodeRef(vType: Branch, bVid: vtx.bVid)
     var missing: seq[VertexID]

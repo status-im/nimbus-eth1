@@ -42,6 +42,12 @@ type
     DeblobLeafGotExtPrefix
     DeblobSizeGarbled
     DeblobWrongType
+    DeblobPayloadTooShortInt64
+    DeblobPayloadTooShortInt256
+    DeblobNonceLenUnsupported
+    DeblobBalanceLenUnsupported
+    DeblobStorageLenUnsupported
+    DeblobCodeLenUnsupported
 
     # Converter `asNode()`, currenly for unit tests only
     CacheMissingNodekeys

@@ -12,17 +12,49 @@
 
 import
   std/[bitops, sequtils],
-  eth/[common, trie/nibbles],
+  eth/[common, rlp, trie/nibbles],
   stew/results,
   "."/[aristo_constants, aristo_desc]
 
 # ------------------------------------------------------------------------------
-# Private functions
+# Private helper
 # ------------------------------------------------------------------------------
 
 proc aristoError(error: AristoError): NodeRef =
   ## Allows returning de
   NodeRef(vType: Leaf, error: error)
+
+proc load64(data: Blob; start: var int): Result[uint64,AristoError] =
+  if data.len < start + 9:
+    return err(DeblobPayloadTooShortInt64)
+  let val = uint64.fromBytesBE(data[start ..< start + 8])
+  start += 8
+  ok val
+
+proc load256(data: Blob; start: var int): Result[UInt256,AristoError] =
+  if data.len < start + 33:
+    return err(DeblobPayloadTooShortInt256)
+  let val = UInt256.fromBytesBE(data[start ..< start + 32])
+  start += 32
+  ok val
+
+proc toPayloadBlob(node: NodeRef): Blob =
+  ## Probably lossy conversion as the storage type `kind` gets missing
+  let pyl = node.lData
+  case pyl.pType:
+  of RawData:
+    result = pyl.rawBlob
+  of RlpData:
+    result = pyl.rlpBlob
+  of LegacyAccount:
+    result = rlp.encode pyl.legaAcc
+  of AccountData:
+    let key = if pyl.account.storageID.isValid: node.key[0] else: VOID_HASH_KEY
+    result = rlp.encode Account(
+      nonce:       pyl.account.nonce,
+      balance:     pyl.account.balance,
+      storageRoot: key.to(Hash256),
+      codeHash:    pyl.account.codeHash)
 
 # ------------------------------------------------------------------------------
 # Public RLP transcoder mixins
@@ -71,11 +103,11 @@ proc read*(
     let (isLeaf, pathSegment) = hexPrefixDecode blobs[0]
     if isLeaf:
       return NodeRef(
-        vType:   Leaf,
-        lPfx:    pathSegment,
-        lData:   PayloadRef(
-          pType: BlobData,
-          blob:  blobs[1]))
+        vType:     Leaf,
+        lPfx:      pathSegment,
+        lData:     PayloadRef(
+          pType:   RawData,
+          rawBlob: blobs[1]))
     else:
       var node = NodeRef(
         vType: Extension,
@@ -121,11 +153,45 @@ proc append*(writer: var RlpWriter; node: NodeRef) =
     of Leaf:
       writer.startList(2)
       writer.append node.lPfx.hexPrefixEncode(isleaf = true)
-      writer.append node.lData.convertTo(Blob)
+      writer.append node.toPayloadBlob
 
 # ------------------------------------------------------------------------------
-# Public db record transcoders
+# Private functions
 # ------------------------------------------------------------------------------
+
+proc blobify*(pyl: PayloadRef): Blob =
+  if pyl.isNil:
+    return
+  case pyl.pType
+  of RawData:
+    result = pyl.rawBlob & @[0xff.byte]
+  of RlpData:
+    result = pyl.rlpBlob & @[0xaa.byte]
+  of LegacyAccount:
+    result = pyl.legaAcc.encode & @[0xaa.byte] # also RLP data
+
+  of AccountData:
+    var mask: byte
+    if 0 < pyl.account.nonce:
+      mask = mask or 0x01
+      result &= pyl.account.nonce.uint64.toBytesBE.toSeq
+
+    if high(uint64).u256 < pyl.account.balance:
+      mask = mask or 0x08
+      result &= pyl.account.balance.UInt256.toBytesBE.toSeq
+    elif 0 < pyl.account.balance:
+      mask = mask or 0x04
+      result &= pyl.account.balance.truncate(uint64).uint64.toBytesBE.toSeq
+
+    if VertexID(0) < pyl.account.storageID:
+      mask = mask or 0x10
+      result &= pyl.account.storageID.uint64.toBytesBE.toSeq
+
+    if pyl.account.codeHash != VOID_CODE_HASH:
+      mask = mask or 0x80
+      result &= pyl.account.codeHash.data.toSeq
+
+    result &= @[mask]
 
 proc blobify*(vtx: VertexRef; data: var Blob): AristoError =
   ## This function serialises the vertex argument to a database record.
@@ -181,7 +247,8 @@ proc blobify*(vtx: VertexRef; data: var Blob): AristoError =
       psLen = pSegm.len.byte
     if psLen == 0 or 33 < psLen:
       return BlobifyLeafPathOverflow
-    data = vtx.lData.convertTo(Blob) & pSegm & @[0xC0u8 or psLen]
+    data = vtx.lData.blobify & pSegm & @[0xC0u8 or psLen]
+
 
 proc blobify*(vtx: VertexRef): Result[Blob, AristoError] =
   ## Variant of `blobify()`
@@ -191,7 +258,6 @@ proc blobify*(vtx: VertexRef): Result[Blob, AristoError] =
   if info != AristoError(0):
     return err(info)
   ok(data)
-
 
 proc blobify*(vGen: openArray[VertexID]; data: var Blob) =
   ## This function serialises the key generator used in the `AristoDb`
@@ -213,6 +279,73 @@ proc blobify*(vGen: openArray[VertexID]): Blob =
   ## Variant of `blobify()`
   vGen.blobify result
 
+# -------------
+
+proc deblobify(data: Blob; pyl: var PayloadRef): AristoError =
+  if data.len == 0:
+    pyl = PayloadRef(pType: RawData)
+    return
+
+  let mask = data[^1]
+  if mask == 0xff:
+    pyl = PayloadRef(pType: RawData, rawBlob: data[0 .. ^2])
+    return
+  if mask == 0xaa:
+    pyl = PayloadRef(pType: RlpData, rlpBlob: data[0 .. ^2])
+    return
+  var
+    pAcc = PayloadRef(pType: AccountData)
+    start = 0
+
+  case mask and 0x03:
+  of 0x00:
+    discard
+  of 0x01:
+    let rc = data.load64 start
+    if rc.isErr:
+      return rc.error
+    pAcc.account.nonce = rc.value.AccountNonce
+  else:
+    return DeblobNonceLenUnsupported
+
+  case mask and 0x0c:
+  of 0x00:
+    discard
+  of 0x04:
+    let rc = data.load64 start
+    if rc.isErr:
+      return rc.error
+    pAcc.account.balance = rc.value.u256
+  of 0x08:
+    let rc = data.load256 start
+    if rc.isErr:
+      return rc.error
+    pAcc.account.balance = rc.value
+  else:
+    return DeblobBalanceLenUnsupported
+
+  case mask and 0x30:
+  of 0x00:
+    discard
+  of 0x10:
+    let rc = data.load64 start
+    if rc.isErr:
+      return rc.error
+    pAcc.account.storageID = rc.value.VertexID
+  else:
+    return DeblobStorageLenUnsupported
+
+  case mask and 0xc0:
+  of 0x00:
+    discard
+  of 0x80:
+    if data.len < start + 33:
+      return DeblobPayloadTooShortInt256
+    (addr pAcc.account.codeHash.data[0]).copyMem(unsafeAddr data[start], 32)
+  else:
+    return DeblobCodeLenUnsupported
+
+  pyl = pacc
 
 proc deblobify*(record: Blob; vtx: var VertexRef): AristoError =
   ## De-serialise a data record encoded with `blobify()`. The second
@@ -272,14 +405,17 @@ proc deblobify*(record: Blob; vtx: var VertexRef): AristoError =
     let (isLeaf, pathSegment) = hexPrefixDecode record[pLen ..< rLen]
     if not isLeaf:
       return DeblobLeafGotExtPrefix
+    var pyl: PayloadRef
+    let err = record[0 ..< plen].deblobify(pyl)
+    if err != AristoError(0):
+      return err
     vtx = VertexRef(
-      vType:   Leaf,
-      lPfx:    pathSegment,
-      lData:   PayloadRef(
-        pType: BlobData,
-        blob:  record[0 ..< plen]))
+      vType: Leaf,
+      lPfx:  pathSegment,
+      lData: pyl)
   else:
     return DeblobUnknown
+
 
 proc deblobify*(data: Blob; T: type VertexRef): Result[T,AristoError] =
   ## Variant of `deblobify()` for vertex deserialisation.
@@ -288,7 +424,6 @@ proc deblobify*(data: Blob; T: type VertexRef): Result[T,AristoError] =
   if info != AristoError(0):
     return err(info)
   ok vtx
-
 
 proc deblobify*(data: Blob; vGen: var seq[VertexID]): AristoError =
   ## De-serialise the data record encoded with `blobify()` into the vertex ID
