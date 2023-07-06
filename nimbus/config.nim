@@ -24,7 +24,7 @@ import
     confutils/std/net
   ],
   stew/shims/net as stewNet,
-  eth/[common, net/nat, p2p/bootnodes, p2p/enode],
+  eth/[common, net/nat, p2p/bootnodes, p2p/enode, p2p/discoveryv5/enr],
   "."/[db/select_backend,
     constants, vm_compile_info, version
   ],
@@ -278,6 +278,12 @@ type
       defaultValue: ""
       name: "bootstrap-file" }: InputFile
 
+    bootstrapEnrs {.
+      desc: "ENR URI of node to bootstrap discovery from. Argument may be repeated"
+      defaultValue: @[]
+      defaultValueDesc: ""
+      name: "bootstrap-enr" }: seq[enr.Record]
+
     staticPeers {.
       desc: "Connect to one or more trusted peers(as enode URL)"
       defaultValue: @[]
@@ -290,6 +296,12 @@ type
             "the file contents will replace the --staticPeers list"
       defaultValue: ""
       name: "static-peers-file" }: InputFile
+
+    staticPeersEnrs {.
+      desc: "ENR URI of node to connect to as trusted peer. Argument may be repeated"
+      defaultValue: @[]
+      defaultValueDesc: ""
+      name: "static-peer-enr" }: seq[enr.Record]
 
     reconnectMaxRetry* {.
       desc: "Specifies max number of retries if static peers disconnected/not connected. " &
@@ -541,6 +553,13 @@ proc parseCmdArg(T: type EthAddress, p: string): T
 proc completeCmdArg(T: type EthAddress, val: string): seq[string] =
   return @[]
 
+proc parseCmdArg*(T: type enr.Record, p: string): T {.raises: [ValueError].} =
+  if not fromURI(result, p):
+    raise newException(ValueError, "Invalid ENR")
+
+proc completeCmdArg*(T: type enr.Record, val: string): seq[string] =
+  return @[]
+
 proc processList(v: string, o: var seq[string])
     =
   ## Process comma-separated list of strings.
@@ -679,6 +698,30 @@ proc getRpcFlags*(conf: NimbusConf): set[RpcFlag] =
 proc getWsFlags*(conf: NimbusConf): set[RpcFlag] =
   getRpcFlags(conf.wsApi)
 
+proc fromEnr*(T: type ENode, r: enr.Record): ENodeResult[ENode] =
+  let
+    # TODO: there must always be a public key, else no signature verification
+    # could have been done and no Record would exist here.
+    # TypedRecord should be reworked not to have public key as an option.
+    pk = r.get(PublicKey).get()
+    tr = r.toTypedRecord().expect("id in valid record")
+
+  if tr.ip.isNone():
+    return err(IncorrectIP)
+  if tr.udp.isNone():
+    return err(IncorrectDiscPort)
+  if tr.tcp.isNone():
+    return err(IncorrectPort)
+
+  ok(ENode(
+    pubkey: pk,
+    address: Address(
+      ip: ipv4(tr.ip.get()),
+      udpPort: Port(tr.udp.get()),
+      tcpPort: Port(tr.tcp.get())
+    )
+  ))
+
 proc getBootNodes*(conf: NimbusConf): seq[ENode]
     {.gcsafe, raises: [CatchableError].} =
   # Ignore standard bootnodes if customNetwork is loaded
@@ -709,9 +752,25 @@ proc getBootNodes*(conf: NimbusConf): seq[ENode]
   # override built-in bootnodes
   loadBootstrapFile(string conf.bootstrapFile, result)
 
+  # Bootstrap nodes provided as ENRs
+  for enr in conf.bootstrapEnrs:
+    let enode = Enode.fromEnr(enr).valueOr:
+      fatal "Invalid bootstrap ENR provided", error
+      quit 1
+
+    result.add(enode)
+
 proc getStaticPeers*(conf: NimbusConf): seq[ENode] =
   result.append(conf.staticPeers)
   loadStaticPeersFile(string conf.staticPeersFile, result)
+
+  # Static peers provided as ENRs
+  for enr in conf.staticPeersEnrs:
+    let enode = Enode.fromEnr(enr).valueOr:
+      fatal "Invalid static peer ENR provided", error
+      quit 1
+
+    result.add(enode)
 
 proc getAllowedOrigins*(conf: NimbusConf): seq[Uri] =
   for item in repeatingList(conf.allowedOrigins):
