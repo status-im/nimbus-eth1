@@ -579,11 +579,10 @@ proc parseCmdArg(T: type NetworkParams, p: string): T
 proc completeCmdArg(T: type NetworkParams, val: string): seq[string] =
   return @[]
 
-proc setBootnodes(output: var seq[ENode], nodeUris: openArray[string])
-    {.gcsafe, raises: [CatchableError].} =
+proc setBootnodes(output: var seq[ENode], nodeUris: openArray[string]) =
   output = newSeqOfCap[ENode](nodeUris.len)
   for item in nodeUris:
-    output.add(ENode.fromString(item).tryGet())
+    output.add(ENode.fromString(item).expect("valid hardcoded ENode"))
 
 iterator repeatingList(listOfList: openArray[string]): string
     =
@@ -722,35 +721,34 @@ proc fromEnr*(T: type ENode, r: enr.Record): ENodeResult[ENode] =
     )
   ))
 
-proc getBootNodes*(conf: NimbusConf): seq[ENode]
-    {.gcsafe, raises: [CatchableError].} =
+proc getBootNodes*(conf: NimbusConf): seq[ENode] =
+  var bootstrapNodes: seq[ENode]
   # Ignore standard bootnodes if customNetwork is loaded
   if conf.customNetwork.isNone:
     case conf.networkId
     of MainNet:
-      result.setBootnodes(MainnetBootnodes)
+      bootstrapNodes.setBootnodes(MainnetBootnodes)
     of RopstenNet:
-      result.setBootnodes(RopstenBootnodes)
+      bootstrapNodes.setBootnodes(RopstenBootnodes)
     of RinkebyNet:
-      result.setBootnodes(RinkebyBootnodes)
+      bootstrapNodes.setBootnodes(RinkebyBootnodes)
     of GoerliNet:
-      result.setBootnodes(GoerliBootnodes)
+      bootstrapNodes.setBootnodes(GoerliBootnodes)
     of KovanNet:
-      result.setBootnodes(KovanBootnodes)
+      bootstrapNodes.setBootnodes(KovanBootnodes)
     of SepoliaNet:
-      result.setBootnodes(SepoliaBootnodes)
+      bootstrapNodes.setBootnodes(SepoliaBootnodes)
     else:
       # custom network id
       discard
 
-  # always allow custom boostrap nodes
-  # if it is set by user
+  # always allow bootstrap nodes provided by the user
   if conf.bootstrapNodes.len > 0:
-    result.append(conf.bootstrapNodes)
+    bootstrapNodes.append(conf.bootstrapNodes)
 
   # bootstrap nodes loaded from file might append or
   # override built-in bootnodes
-  loadBootstrapFile(string conf.bootstrapFile, result)
+  loadBootstrapFile(string conf.bootstrapFile, bootstrapNodes)
 
   # Bootstrap nodes provided as ENRs
   for enr in conf.bootstrapEnrs:
@@ -758,11 +756,14 @@ proc getBootNodes*(conf: NimbusConf): seq[ENode]
       fatal "Invalid bootstrap ENR provided", error
       quit 1
 
-    result.add(enode)
+    bootstrapNodes.add(enode)
+
+  bootstrapNodes
 
 proc getStaticPeers*(conf: NimbusConf): seq[ENode] =
-  result.append(conf.staticPeers)
-  loadStaticPeersFile(string conf.staticPeersFile, result)
+  var staticPeers: seq[ENode]
+  staticPeers.append(conf.staticPeers)
+  loadStaticPeersFile(string conf.staticPeersFile, staticPeers)
 
   # Static peers provided as ENRs
   for enr in conf.staticPeersEnrs:
@@ -770,7 +771,9 @@ proc getStaticPeers*(conf: NimbusConf): seq[ENode] =
       fatal "Invalid static peer ENR provided", error
       quit 1
 
-    result.add(enode)
+    staticPeers.add(enode)
+
+  staticPeers
 
 proc getAllowedOrigins*(conf: NimbusConf): seq[Uri] =
   for item in repeatingList(conf.allowedOrigins):
