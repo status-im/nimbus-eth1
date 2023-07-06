@@ -76,11 +76,11 @@ task fluffy, "Build fluffy":
 task fluffy_test, "Run fluffy tests":
   # Need the nimbus_db_backend in state network tests as we need a Hexary to
   # start from, even though it only uses the MemoryDb.
-  test "fluffy/tests/portal_spec_tests/mainnet", "all_fluffy_portal_spec_tests", "-d:chronicles_log_level=ERROR -d:chronosStrictException -d:nimbus_db_backend=sqlite -d:PREFER_BLST_SHA256=false"
-  # Running tests with a low `mergeBlockNumber` to make the tests faster.
-  # Using the real mainnet merge block number is not realistic for these tests.
-  test "fluffy/tests", "all_fluffy_tests", "-d:chronicles_log_level=ERROR -d:chronosStrictException -d:nimbus_db_backend=sqlite -d:PREFER_BLST_SHA256=false -d:mergeBlockNumber:38130"
-  test "fluffy/tests/beacon_light_client_tests", "all_beacon_light_client_tests", "-d:chronicles_log_level=ERROR -d:chronosStrictException -d:nimbus_db_backend=sqlite -d:PREFER_BLST_SHA256=false"
+  test "fluffy/tests/portal_spec_tests/mainnet", "all_fluffy_portal_spec_tests", "-d:chronicles_log_level=ERROR -d:nimbus_db_backend=sqlite"
+  # Seperate build for these tests as they are run with a low `mergeBlockNumber`
+  # to make the tests faster. Using the real mainnet merge block number is not
+  # realistic for these tests.
+  test "fluffy/tests", "all_fluffy_tests", "-d:chronicles_log_level=ERROR -d:nimbus_db_backend=sqlite -d:mergeBlockNumber:38130"
 
 task utp_test_app, "Build uTP test app":
   buildBinary "utp_test_app", "fluffy/tools/utp_testing/", "-d:chronicles_log_level=TRACE -d:chronosStrictException"
@@ -89,12 +89,12 @@ task utp_test, "Run uTP integration tests":
   test "fluffy/tools/utp_testing", "utp_test", "-d:chronicles_log_level=ERROR -d:chronosStrictException"
 
 task fluffy_test_portal_testnet, "Build test_portal_testnet":
-  buildBinary "test_portal_testnet", "fluffy/scripts/", "-d:chronicles_log_level=DEBUG -d:chronosStrictException -d:unittest2DisableParamFiltering -d:PREFER_BLST_SHA256=false"
+  buildBinary "test_portal_testnet", "fluffy/scripts/", "-d:chronicles_log_level=DEBUG -d:unittest2DisableParamFiltering"
 
 ## Nimbus Verified Proxy tasks
 
 task nimbus_verified_proxy, "Build Nimbus verified proxy":
-  buildBinary "nimbus_verified_proxy", "nimbus_verified_proxy/", "-d:chronicles_log_level=TRACE -d:chronosStrictException -d:PREFER_BLST_SHA256=false -d:libp2p_pki_schemes=secp256k1"
+  buildBinary "nimbus_verified_proxy", "nimbus_verified_proxy/", "-d:chronicles_log_level=TRACE"
 
 task nimbus_verified_proxy_test, "Run Nimbus verified proxy tests":
-  test "nimbus_verified_proxy/tests", "test_proof_validation", "-d:chronicles_log_level=ERROR -d:chronosStrictException -d:nimbus_db_backend=sqlite -d:PREFER_BLST_SHA256=false"
+  test "nimbus_verified_proxy/tests", "test_proof_validation", "-d:chronicles_log_level=ERROR -d:nimbus_db_backend=sqlite"
