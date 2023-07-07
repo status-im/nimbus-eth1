@@ -11,15 +11,11 @@ import
   std/[strutils, os],
   chronicles,
   stew/io2,
+  faststreams,
   json_serialization, json_serialization/std/tables,
-  faststreams
+  ../../eth_data/history_data_json_store
 
-type
-  JsonPortalContent* = object
-    content_key*: string
-    content_value*: string
-
-  JsonPortalContentTable* = OrderedTable[uint64, JsonPortalContent]
+export history_data_json_store
 
 proc writePortalContentToJson*(
     fh: OutputStreamHandle, content: JsonPortalContentTable) =

@@ -525,7 +525,7 @@ when isMainModule:
             content_key: encodedContentKey.asSeq().to0xHex(),
             content_value: encodedContent.to0xHex())
 
-          contentTable[blockNumber] = portalContent
+          contentTable[$blockNumber] = portalContent
         else:
           # TODO: Deal with writing post merge headers
           error "Not a pre merge header"

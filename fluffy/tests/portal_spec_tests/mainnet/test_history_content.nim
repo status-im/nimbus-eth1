@@ -17,13 +17,6 @@ import
   ../../../network/history/[history_content, history_network, accumulator],
   ../../test_history_util
 
-type
-  JsonPortalContent* = object
-    content_key*: string
-    content_value*: string
-
-  JsonPortalContentTable* = Table[string, JsonPortalContent]
-
 suite "History Content Encodings":
   test "HeaderWithProof Building and Encoding":
     const
