@@ -33,21 +33,6 @@ type
 
   BlockDataTable* = Table[string, BlockData]
 
-proc toString(v: IoErrorCode): string =
-  try: ioErrorMsg(v)
-  except Exception as e: raiseAssert e.msg
-
-proc readJsonType*(dataFile: string, T: type): Result[T, string] =
-  let data = ? readAllFile(dataFile).mapErr(toString)
-
-  let decoded =
-    try:
-      Json.decode(data, T)
-    except SerializationError as e:
-      return err("Failed decoding json data-file: " & e.msg)
-
-  ok(decoded)
-
 iterator blockHashes*(blockData: BlockDataTable): BlockHash =
   for k, v in blockData:
     var blockHash: BlockHash
@@ -189,6 +174,29 @@ proc getGenesisHeader*(id: NetworkId = MainNet): BlockHeader =
   except RlpError:
     raise (ref Defect)(msg: "Genesis should be valid")
 
+# Reading JSON Portal content and content keys
+
+type
+  JsonPortalContent* = object
+    content_key*: string
+    content_value*: string
+
+  JsonPortalContentTable* = OrderedTable[string, JsonPortalContent]
+
+proc toString(v: IoErrorCode): string =
+  try: ioErrorMsg(v)
+  except Exception as e: raiseAssert e.msg
+
+proc readJsonType*(dataFile: string, T: type): Result[T, string] =
+  let data = ? readAllFile(dataFile).mapErr(toString)
+
+  let decoded =
+    try:
+      Json.decode(data, T)
+    except SerializationError as e:
+      return err("Failed decoding json data-file: " & e.msg)
+
+  ok(decoded)
 
 # Writing JSON history data
 

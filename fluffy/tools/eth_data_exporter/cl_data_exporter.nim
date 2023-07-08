@@ -95,7 +95,7 @@ proc exportLCBootstrapUpdate*(
       )
 
       var contentTable: JsonPortalContentTable
-      contentTable[slot.uint64] = portalContent
+      contentTable[$slot] = portalContent
 
       writePortalContentToJson(fh, contentTable)
 
@@ -140,7 +140,7 @@ proc exportLCUpdates*(
         let
           slot = forkyObject.attested_header.beacon.slot
           period = forkyObject.attested_header.beacon.slot.sync_committee_period
-          contentKey = encode(updateContentKey(period.uint64, uint64(1)))
+          contentKey = encode(updateContentKey(period.uint64, count))
           forkDigest = forkDigestAtEpoch(
             forkDigests[], epoch(forkyObject.attested_header.beacon.slot), cfg)
 
@@ -156,7 +156,7 @@ proc exportLCUpdates*(
         )
 
         var contentTable: JsonPortalContentTable
-        contentTable[slot.uint64] = portalContent
+        contentTable[$slot] = portalContent
 
         writePortalContentToJson(fh, contentTable)
   else:
@@ -218,7 +218,7 @@ proc exportLCFinalityUpdate*(
       )
 
       var contentTable: JsonPortalContentTable
-      contentTable[optimisticSlot.uint64] = portalContent
+      contentTable[$optimisticSlot] = portalContent
 
       writePortalContentToJson(fh, contentTable)
 
@@ -275,6 +275,6 @@ proc exportLCOptimisticUpdate*(
       )
 
       var contentTable: JsonPortalContentTable
-      contentTable[slot.uint64] = portalContent
+      contentTable[$slot] = portalContent
 
       writePortalContentToJson(fh, contentTable)

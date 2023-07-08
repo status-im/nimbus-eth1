@@ -51,12 +51,12 @@ type
   # this causes them also to be included in a request, which makes perhaps less
   # sense?
   LightClientFinalityUpdateKey* = object
-    optimisticSlot: uint64 ## slot of attested header of the update
-    finalizedSlot: uint64 ## slot of finalized header of the update
+    optimisticSlot*: uint64 ## slot of attested header of the update
+    finalizedSlot*: uint64 ## slot of finalized header of the update
 
   # TODO: Same remark as for `LightClientFinalityUpdateKey`
   LightClientOptimisticUpdateKey* = object
-    optimisticSlot: uint64 ## slot of attested header of the update
+    optimisticSlot*: uint64 ## slot of attested header of the update
 
   ContentKey* = object
     case contentType*: ContentType
