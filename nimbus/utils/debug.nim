@@ -26,6 +26,8 @@ proc `$`(nonce: BlockNonce): string =
   nonce.toHex
 
 proc `$`(data: Blob): string =
+  if data.len == 0:
+    return "zero length"
   data.toHex
 
 proc debug*(h: BlockHeader): string =
@@ -112,6 +114,9 @@ proc `$`(x: ChainId): string =
   $int(x)
 
 proc `$`(acl: AccessList): string =
+  if acl.len == 0:
+    return "zero length"
+
   if acl.len > 0:
     result.add "\n"
 

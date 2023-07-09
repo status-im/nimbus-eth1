@@ -51,7 +51,7 @@ proc processTransactions*(vmState: BaseVMState;
     let rc = vmState.processTransaction(tx, sender, header)
     if rc.isErr:
       let debugTx =tx.debug()
-      return err("Error processing tx with index " & $(txIndex) & ": " & debugTx)
+      return err("Error processing tx with index " & $(txIndex) & ":\n" & debugTx & "\n" & rc.error)
     vmState.receipts[txIndex] = vmState.makeReceipt(tx.txType)
   ok()
 
@@ -75,9 +75,6 @@ proc procBlkPreamble(vmState: BaseVMState;
         blockNumber = header.blockNumber
       return false
     else:
-      #trace "Has transactions",
-      #  blockNumber = header.blockNumber,
-      #  blockHash = header.blockHash
       let r = processTransactions(vmState, header, body.transactions)
       if r.isErr:
         error("error in processing transactions", err=r.error)
