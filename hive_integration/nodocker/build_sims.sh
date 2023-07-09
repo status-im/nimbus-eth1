@@ -13,11 +13,13 @@ ${ENV_SCRIPT} nim ${NIM_FLAGS} ${SIM_DIR}/engine/engine_sim
 ${ENV_SCRIPT} nim ${NIM_FLAGS} ${SIM_DIR}/consensus/consensus_sim
 ${ENV_SCRIPT} nim ${NIM_FLAGS} ${SIM_DIR}/graphql/graphql_sim
 ${ENV_SCRIPT} nim ${NIM_FLAGS} ${SIM_DIR}/rpc/rpc_sim
+${ENV_SCRIPT} nim ${NIM_FLAGS} ${SIM_DIR}/pyspec/pyspec_sim
 
 ${SIM_DIR}/engine/engine_sim
 ${SIM_DIR}/consensus/consensus_sim
 ${SIM_DIR}/graphql/graphql_sim
 ${SIM_DIR}/rpc/rpc_sim
+${SIM_DIR}/pyspec/pyspec_sim
 
 echo "## ${1}" > simulators.md
-cat engine.md consensus.md graphql.md rpc.md >> simulators.md
+cat engine.md consensus.md graphql.md rpc.md pyspec.md >> simulators.md

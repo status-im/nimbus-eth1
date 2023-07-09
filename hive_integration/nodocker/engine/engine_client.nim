@@ -3,7 +3,7 @@ import
   stew/byteutils,
   eth/[common, common/eth_types, rlp], chronos,
   web3/engine_api_types,
-  json_rpc/[rpcclient, errors],
+  json_rpc/[rpcclient, errors, jsonmarshal],
   ../../../tests/rpcclient/eth_api,
   ../../../premix/parser,
   ../../../nimbus/rpc/hexstrings,
@@ -12,6 +12,12 @@ import
 import web3/engine_api as web3_engine_api
 
 type Hash256 = eth_types.Hash256
+
+from os import DirSep, AltSep
+const
+  sourceDir = currentSourcePath.rsplit({DirSep, AltSep}, 1)[0]
+
+createRpcSigs(RpcClient, sourceDir & "/engine_callsigs.nim")
 
 template wrapTry(body: untyped) =
   try:
@@ -33,6 +39,13 @@ proc forkchoiceUpdatedV1*(client: RpcClient,
   wrapTrySimpleRes:
     client.engine_forkchoiceUpdatedV1(update, payloadAttributes)
 
+proc forkchoiceUpdatedV2*(client: RpcClient,
+      update: ForkchoiceStateV1,
+      payloadAttributes = none(PayloadAttributesV2)):
+        Result[ForkchoiceUpdatedResponse, string] =
+  wrapTrySimpleRes:
+    client.engine_forkchoiceUpdatedV2(update, payloadAttributes)
+
 proc getPayloadV1*(client: RpcClient, payloadId: PayloadID): Result[ExecutionPayloadV1, string] =
   wrapTrySimpleRes:
     client.engine_getPayloadV1(payloadId)
@@ -45,6 +58,12 @@ proc newPayloadV1*(client: RpcClient,
 
 proc newPayloadV2*(client: RpcClient,
       payload: ExecutionPayloadV2):
+        Result[PayloadStatusV1, string] =
+  wrapTrySimpleRes:
+    client.engine_newPayloadV2(payload)
+
+proc newPayloadV2*(client: RpcClient,
+      payload: ExecutionPayloadV1OrV2):
         Result[PayloadStatusV1, string] =
   wrapTrySimpleRes:
     client.engine_newPayloadV2(payload)
@@ -180,6 +199,11 @@ proc balanceAt*(client: RpcClient, address: EthAddress): Result[UInt256, string]
   wrapTry:
     let res = waitFor client.eth_getBalance(ethAddressStr(address), "latest")
     return ok(UInt256.fromHex(res.string))
+
+proc nonceAt*(client: RpcClient, address: EthAddress): Result[AccountNonce, string] =
+  wrapTry:
+    let res = waitFor client.eth_getTransactionCount(ethAddressStr(address), "latest")
+    return ok(fromHex[AccountNonce](res.string))
 
 proc txReceipt*(client: RpcClient, txHash: Hash256): Result[eth_api.ReceiptObject, string] =
   wrapTry:

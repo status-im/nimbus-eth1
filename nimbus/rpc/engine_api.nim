@@ -108,7 +108,7 @@ proc handle_newPayload(sealingEngine: SealingEngineRef, api: EngineApiRef, com: 
       else:
         raise invalidParams("if timestamp is earlier than Shanghai, " &
           "payload must be ExecutionPayloadV1")
-  
+
   var header = toBlockHeader(payload)
   let blockHash = payload.blockHash.asEthHash
   var res = header.validateBlockHash(blockHash)
@@ -170,10 +170,11 @@ proc handle_newPayload(sealingEngine: SealingEngineRef, api: EngineApiRef, com: 
     td  = db.getScore(header.parentHash)
     ttd = com.ttd.get(high(common.BlockNumber))
 
-  if td < ttd:
-    warn "Ignoring pre-merge payload",
-      number = header.blockNumber, hash = blockHash, td, ttd
-    return invalidStatus()
+  when payload is ExecutionPayloadV1:
+    if (not com.forkGTE(MergeFork)) and td < ttd:
+      warn "Ignoring pre-merge payload",
+        number = header.blockNumber, hash = blockHash, td, ttd
+      return invalidStatus()
 
   if header.timestamp <= parent.timestamp:
     warn "Invalid timestamp",
@@ -204,7 +205,7 @@ proc handle_newPayload(sealingEngine: SealingEngineRef, api: EngineApiRef, com: 
     # TODO: cancel downloader
 
   return validStatus(blockHash)
-    
+
 # https://github.com/ethereum/execution-apis/blob/main/src/engine/specification.md#engine_getpayloadv1
 proc handle_getPayload(api: EngineApiRef, payloadId: PayloadID): GetPayloadV2Response {.raises: [CatchableError].} =
   trace "Engine API request received",
@@ -215,7 +216,7 @@ proc handle_getPayload(api: EngineApiRef, payloadId: PayloadID): GetPayloadV2Res
     raise unknownPayload("Unknown payload")
 
   let blockValue = sumOfBlockPriorityFees(payload)
-  
+
   return GetPayloadV2Response(
     executionPayload: payload,
     blockValue: blockValue
@@ -426,7 +427,7 @@ proc handle_forkchoiceUpdated(sealingEngine: SealingEngineRef, com: CommonRef, a
     if res.isErr:
       error "Failed to create sealing payload", err = res.error
       raise invalidAttr(res.error)
-    
+
     let payload = res.get
 
     let id = computePayloadId(blockHash, payloadAttrs)

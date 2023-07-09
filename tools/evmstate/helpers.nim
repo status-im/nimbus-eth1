@@ -15,7 +15,8 @@ import
   stint,
   stew/byteutils,
   ../../nimbus/transaction,
-  ../../nimbus/db/accounts_cache
+  ../../nimbus/db/accounts_cache,
+  ../../nimbus/common/chain_config
 
 template fromJson(T: type EthAddress, n: JsonNode): EthAddress =
   hexToByteArray(n.getStr, sizeof(T))
@@ -146,3 +147,17 @@ proc setupStateDB*(wantedState: JsonNode, stateDB: AccountsCache) =
     stateDB.setNonce(account, fromJson(AccountNonce, accountData["nonce"]))
     stateDB.setCode(account, fromJson(Blob, accountData["code"]))
     stateDB.setBalance(account, fromJson(UInt256, accountData["balance"]))
+
+iterator postState*(node: JsonNode): (EthAddress, GenesisAccount) =
+  for ac, accountData in node:
+    let account = hexToByteArray[20](ac)
+    var ga = GenesisAccount(
+      nonce  : fromJson(AccountNonce, accountData["nonce"]),
+      code   : fromJson(Blob, accountData["code"]),
+      balance: fromJson(UInt256, accountData["balance"]),
+    )
+
+    for slot, value in accountData{"storage"}:
+      ga.storage[fromHex(UInt256, slot)] = fromHex(UInt256, value.getStr)
+
+    yield (account, ga)
