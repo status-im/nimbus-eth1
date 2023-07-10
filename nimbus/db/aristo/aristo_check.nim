@@ -18,8 +18,7 @@ import
   eth/common,
   stew/[interval_set, results],
   ./aristo_init/[aristo_memory, aristo_rocksdb],
-  "."/[aristo_desc, aristo_get, aristo_init, aristo_vid],
-  ./aristo_hashify/hashify_helper,
+  "."/[aristo_desc, aristo_get, aristo_init, aristo_vid, aristo_utils],
   ./aristo_check/[check_be, check_cache]
 
 # ------------------------------------------------------------------------------

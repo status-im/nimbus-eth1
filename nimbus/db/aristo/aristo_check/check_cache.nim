@@ -14,8 +14,7 @@ import
   std/[sequtils, sets, tables],
   eth/common,
   stew/results,
-  ../aristo_hashify/hashify_helper,
-  ".."/[aristo_desc, aristo_get]
+  ".."/[aristo_desc, aristo_get, aristo_transcode, aristo_utils]
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -33,7 +32,7 @@ proc checkCacheStrict*(
       let lbl = db.top.kMap.getOrVoid vid
       if not lbl.isValid:
         return err((vid,CheckStkVtxKeyMissing))
-      if lbl.key != rc.value.toHashKey:
+      if lbl.key != rc.value.to(HashKey):
         return err((vid,CheckStkVtxKeyMismatch))
 
       let revVid = db.top.pAmk.getOrVoid lbl
@@ -63,7 +62,7 @@ proc checkCacheRelaxed*(
         let lbl = db.top.kMap.getOrVoid vid
         if not lbl.isValid:
           return err((vid,CheckRlxVtxKeyMissing))
-        if lbl.key != rc.value.toHashKey:
+        if lbl.key != rc.value.to(HashKey):
           return err((vid,CheckRlxVtxKeyMismatch))
 
         let revVid = db.top.pAmk.getOrVoid lbl
@@ -78,7 +77,7 @@ proc checkCacheRelaxed*(
         if vtx.isValid:
           let rc = vtx.toNode db
           if rc.isOk:
-            if lbl.key != rc.value.toHashKey:
+            if lbl.key != rc.value.to(HashKey):
               return err((vid,CheckRlxVtxKeyMismatch))
 
             let revVid = db.top.pAmk.getOrVoid lbl

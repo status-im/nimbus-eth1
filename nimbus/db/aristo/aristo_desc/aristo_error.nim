@@ -202,4 +202,11 @@ type
     TxCacheKeyFetchFail
     TxBeKeyFetchFail
 
+    # Miscelaneous handy helpers
+    PayloadTypeUnsupported
+    AccountRlpDecodingError
+    AccountStorageKeyMissing
+    AccountVtxUnsupported
+    AccountNodeUnsupported
+
 # End

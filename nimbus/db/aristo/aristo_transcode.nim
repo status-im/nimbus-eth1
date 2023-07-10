@@ -153,6 +153,12 @@ proc append*(writer: var RlpWriter; node: NodeRef) =
       writer.append node.lPfx.hexPrefixEncode(isleaf = true)
       writer.append node.toPayloadBlob
 
+# ---------------------
+
+proc to*(node: NodeRef; T: type HashKey): T =
+  ## Convert the argument `node` to the corresponding Merkle hash key
+  node.encode.digestTo T
+
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
