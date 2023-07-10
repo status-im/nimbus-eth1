@@ -363,6 +363,17 @@ proc right*(
     return err((VertexID(0),TxTopHandleExpected))
   lty.right tdb.db
 
+iterator right*(
+    tdb: AristoTxRef;                   # Database layer
+    start = low(LeafTie);               # Before or at first value
+      ): (LeafTie,PayloadRef) =
+  ## Traverse the sub-trie implied by the argument `start` with increasing
+  ## order. For details see `aristo_nearby.left()`.
+  if not tdb.db.isNil and not tdb.parent.isNil:
+    for (k,v) in tdb.db.right start:
+      yield (k,v)
+
+
 proc left*(
     lty: LeafTie;                       # Some `Patricia Trie` path
     tdb: AristoTxRef;                  # Database, transaction wrapper
@@ -372,6 +383,16 @@ proc left*(
   if tdb.db.isNil or tdb.parent.isNil:
     return err((VertexID(0),TxTopHandleExpected))
   lty.left tdb.db
+
+iterator left*(
+    tdb: AristoTxRef;                   # Database layer
+    start = high(LeafTie);              # Before or at first value
+      ): (LeafTie,PayloadRef) =
+  ## Traverse the sub-trie implied by the argument `start` with decreasing
+  ## order. For details see `aristo_nearby.left()`.
+  if not tdb.db.isNil and not tdb.parent.isNil:
+    for (k,v) in tdb.db.left start:
+      yield (k,v)
 
 # ------------------------------------------------------------------------------
 # Public helpers, miscellaneous

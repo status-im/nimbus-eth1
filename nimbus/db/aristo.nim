@@ -16,19 +16,24 @@
 import
   eth/common,
   aristo/aristo_desc/[aristo_types_identifiers, aristo_types_structural],
-  aristo/[aristo_constants, aristo_desc, aristo_init, aristo_transaction]
+  aristo/[aristo_constants, aristo_desc, aristo_init, aristo_nearby,
+          aristo_transaction, aristo_transcode, aristo_utils]
 
 export
   aristo_constants,
   aristo_transaction,
   aristo_types_identifiers,
   aristo_types_structural,
+  aristo_nearby,
+  aristo_utils,
   AristoBackendType,
   AristoDbRef,
   AristoError,
+  append,
   init,
   isValid,
-  finish
+  finish,
+  read
 
 # End
 
