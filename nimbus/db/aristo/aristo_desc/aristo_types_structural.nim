@@ -49,7 +49,6 @@ type
     RawData                          ## Generic data
     RlpData                          ## Marked RLP encoded
     AccountData                      ## `Aristo account` with vertex IDs links
-    LegacyAccount                    ## Legacy `Account` with hash references
 
   PayloadRef* = ref object
     case pType*: PayloadType
@@ -59,8 +58,6 @@ type
       rlpBlob*: Blob                 ## Opaque data marked RLP encoded
     of AccountData:
       account*: AristoAccount
-    of LegacyAccount:
-      legaAcc*: Account              ## Expanded accounting data
 
   VertexRef* = ref object of RootRef
     ## Vertex for building a hexary Patricia or Merkle Patricia Trie
@@ -102,9 +99,6 @@ proc `==`*(a, b: PayloadRef): bool =
         return false
     of AccountData:
       if a.account != b.account:
-        return false
-    of LegacyAccount:
-      if a.legaAcc != b.legaAcc:
         return false
   true
 
@@ -165,10 +159,6 @@ proc dup*(pld: PayloadRef): PayloadRef =
      PayloadRef(
        pType:   AccountData,
        account: pld.account)
-  of LegacyAccount:
-     PayloadRef(
-       pType:   LegacyAccount,
-       legaAcc: pld.legaAcc)
 
 proc dup*(vtx: VertexRef): VertexRef =
   ## Duplicate vertex.

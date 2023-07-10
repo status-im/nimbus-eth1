@@ -46,8 +46,6 @@ proc toPayloadBlob(node: NodeRef): Blob =
     result = pyl.rawBlob
   of RlpData:
     result = pyl.rlpBlob
-  of LegacyAccount:
-    result = rlp.encode pyl.legaAcc
   of AccountData:
     let key = if pyl.account.storageID.isValid: node.key[0] else: VOID_HASH_KEY
     result = rlp.encode Account(
@@ -167,8 +165,6 @@ proc blobify*(pyl: PayloadRef): Blob =
     result = pyl.rawBlob & @[0xff.byte]
   of RlpData:
     result = pyl.rlpBlob & @[0xaa.byte]
-  of LegacyAccount:
-    result = pyl.legaAcc.encode & @[0xaa.byte] # also RLP data
 
   of AccountData:
     var mask: byte
