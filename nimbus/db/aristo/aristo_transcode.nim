@@ -337,7 +337,7 @@ proc deblobify(data: Blob; pyl: var PayloadRef): AristoError =
 
   case mask and 0xc0:
   of 0x00:
-    discard
+    pAcc.account.codeHash = VOID_CODE_HASH
   of 0x80:
     if data.len < start + 33:
       return DeblobPayloadTooShortInt256

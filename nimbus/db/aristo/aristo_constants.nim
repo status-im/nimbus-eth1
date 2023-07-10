@@ -28,8 +28,9 @@ const
     ## Equivalent of `nil` for `Account` object code hash
 
   VOID_HASH_KEY* = EMPTY_ROOT_HASH.to(HashKey)
-    ## Equivalent of `nil` for Merkle hash ket
+    ## Void equivalent for Merkle hash value
 
   VOID_HASH_LABEL* = HashLabel(root: VertexID(0), key: VOID_HASH_KEY)
+    ## Void equivalent for Merkle hash value
 
 # End

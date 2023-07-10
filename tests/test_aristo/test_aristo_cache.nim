@@ -36,6 +36,15 @@ proc convertPartially(
       vType: Leaf,
       lPfx:  vtx.lPfx,
       lData: vtx.lData)
+    if vtx.lData.pType != AccountData:
+      return
+    let vid = vtx.lData.account.storageID
+    if vid.isValid:
+      let lbl = db.top.kMap.getOrVoid vid
+      if lbl.isValid:
+        nd.key[0] = lbl.key
+        return
+      result.add vid
   of Extension:
     nd = NodeRef(
       vType: Extension,
@@ -70,7 +79,15 @@ proc convertPartiallyOk(
       vType: Leaf,
       lPfx:  vtx.lPfx,
       lData: vtx.lData)
-    result = true
+    if vtx.lData.pType != AccountData:
+      result = true
+    else:
+      let vid = vtx.lData.account.storageID
+      if vid.isValid:
+        let lbl = db.top.kMap.getOrVoid vid
+        if lbl.isValid:
+          nd.key[0] = lbl.key
+          result = true
   of Extension:
     nd = NodeRef(
       vType: Extension,
