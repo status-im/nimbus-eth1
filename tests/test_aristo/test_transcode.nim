@@ -113,9 +113,16 @@ proc test_transcodeAccounts*(
       case node.vType:
       of aristo_desc.Leaf:
         let account = node.lData.rawBlob.decode(Account)
-        node.lData = PayloadRef(pType: LegacyAccount, legaAcc: account)
-        discard adb.hashToVtxID(VertexID(1), node.lData.legaAcc.storageRoot)
-        discard adb.hashToVtxID(VertexID(1), node.lData.legaAcc.codeHash)
+        node.key[0] = account.storageRoot.to(HashKey)
+        node.lData = PayloadRef(
+          pType:   AccountData,
+          account: AristoAccount(
+            nonce:     account.nonce,
+            balance:   account.balance,
+            codeHash:  account.codehash,
+            storageID: adb.vidAttach HashLabel(
+              root:    VertexID(1),
+              key:     account.storageRoot.to(HashKey))))
       of aristo_desc.Extension:
         # key <-> vtx correspondence
         check node.key[0] == node0.key[0]
@@ -144,12 +151,6 @@ proc test_transcodeAccounts*(
       check node1.error == AristoError(0)
 
     block:
-      # `deblobify()` will always decode to `BlobData` type payload
-      if node1.vType == aristo_desc.Leaf:
-        # Node that deserialisation of the account stops at the RLP encoding
-        let account = node1.lData.rlpBlob.decode(Account)
-        node1.lData = PayloadRef(pType: LegacyAccount, legaAcc: account)
-
       if node != node1:
         check node == node1
         noisy.say "***", "count=", count, " node=", node.pp(adb)

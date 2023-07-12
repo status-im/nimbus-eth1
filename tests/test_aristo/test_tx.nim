@@ -27,6 +27,10 @@ type
   KnownHasherFailure* = seq[(string,(int,AristoError))]
     ## (<sample-name> & "#" <instance>, (<vertex-id>,<error-symbol>))
 
+const
+  WalkStopRc =
+    Result[LeafTie,(VertexID,AristoError)].err((VertexID(0),NearbyBeyondRange))
+
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
@@ -207,74 +211,78 @@ proc saveToBackendWithOops(
 proc fwdWalkVerify(
     tx: AristoTxRef;
     root: VertexID;
-    left: HashSet[LeafTie];
+    leftOver: HashSet[LeafTie];
     noisy: bool;
     debugID: int;
       ): bool =
   let
-    nLeafs = left.len
+    nLeafs = leftOver.len
   var
-    lfLeft = left
-    lty = LeafTie(root: root)
+    leftOver = leftOver
+    last = LeafTie()
     n = 0
-
-  while n < nLeafs + 1:
-    let id = n + (nLeafs + 1) * debugID
-    let rc = lty.right tx
-    if rc.isErr:
-      if rc.error[1] == NearbyBeyondRange and lfLeft.len == 0:
-        return true
-      check rc.error == (0,0)
-      check lfLeft.len == 0
+  for (key,_) in tx.right low(LeafTie,root):
+    if key notin leftOver:
+      noisy.say "*** fwdWalkVerify", " id=", n + (nLeafs + 1) * debugID
+      check key in leftOver
       return
-
-    if rc.value notin lfLeft:
-      check rc.error == (0,0)
-      return
-
-    if rc.value.path < high(HashID):
-      lty.path = HashID(rc.value.path.u256 + 1)
-
-    lfLeft.excl rc.value
+    leftOver.excl key
+    last = key
     n.inc
 
-  check n <= nLeafs
+  # Verify stop condition
+  if last.root == VertexID(0):
+    last = low(LeafTie,root)
+  elif last != high(LeafTie,root):
+    last = last + 1
+  let rc = last.right tx
+  if rc.isOk or rc.error[1] != NearbyBeyondRange:
+    check rc == WalkStopRc
+    return
+
+  if n != nLeafs:
+    check n == nLeafs
+    return
+
+  true
 
 proc revWalkVerify(
     tx: AristoTxRef;
     root: VertexID;
-    left: HashSet[LeafTie];
+    leftOver: HashSet[LeafTie];
     noisy: bool;
     debugID: int;
       ): bool =
   let
-    nLeafs = left.len
+    nLeafs = leftOver.len
   var
-    lfLeft = left
-    lty = LeafTie(root: root, path:  HashID(high(UInt256)))
+    leftOver = leftOver
+    last = LeafTie()
     n = 0
-
-  while n < nLeafs + 1:
-    let id = n + (nLeafs + 1) * debugID
-    let rc = lty.left tx
-    if rc.isErr:
-      if rc.error[1] == NearbyBeyondRange and lfLeft.len == 0:
-        return true
-      check rc.error == (0,0)
-      check lfLeft.len == 0
+  for (key,_) in tx.left high(LeafTie,root):
+    if key notin leftOver:
+      noisy.say "*** revWalkVerify", " id=", n + (nLeafs + 1) * debugID
+      check key in leftOver
       return
-
-    if rc.value notin lfLeft:
-      check rc.error == (0,0)
-      return
-
-    if low(HashID) < rc.value.path:
-      lty.path = HashID(rc.value.path.u256 - 1)
-
-    lfLeft.excl rc.value
+    leftOver.excl key
+    last = key
     n.inc
 
-  check n <= nLeafs
+  # Verify stop condition
+  if last.root == VertexID(0):
+    last = high(LeafTie,root)
+  elif last != low(LeafTie,root):
+    last = last - 1
+  let rc = last.left tx
+  if rc.isOk or rc.error[1] != NearbyBeyondRange:
+    check rc == WalkStopRc
+    return
+
+  if n != nLeafs:
+    check n == nLeafs
+    return
+
+  true
 
 # ------------------------------------------------------------------------------
 # Public test function

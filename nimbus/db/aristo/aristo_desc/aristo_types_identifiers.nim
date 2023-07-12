@@ -107,6 +107,30 @@ func `<`*(a, b: HashID): bool = a.u256 < b.u256
 func cmp*(x, y: HashID): int = cmp(x.UInt256, y.UInt256)
 
 # ------------------------------------------------------------------------------
+# Public helpers: `LeafTie`
+# ------------------------------------------------------------------------------
+
+func high*(_: type LeafTie; root = VertexID(1)): LeafTie =
+  ## Highest possible `LeafTie` object for given root vertex.
+  LeafTie(root: root, path: high(HashID))
+
+func low*(_: type LeafTie; root = VertexID(1)): LeafTie =
+  ## Lowest possible `LeafTie` object for given root vertex.
+  LeafTie(root: root, path: low(HashID))
+
+func `+`*(lty: LeafTie, n: int): LeafTie =
+  ## Return a `LeafTie` object with incremented path field. This function
+  ## will not check for a path field overflow. Neither it will verify that
+  ## the argument `n` is non-negative.
+  LeafTie(root: lty.root, path: HashID(lty.path.u256 + n.u256))
+
+func `-`*(lty: LeafTie, n: int): LeafTie =
+  ## Return a `LeafTie` object with decremented path field. This function
+  ## will not check for a path field underflow. Neither it will verify that
+  ## the argument `n` is non-negative.
+  LeafTie(root: lty.root, path: HashID(lty.path.u256 - n.u256))
+
+# ------------------------------------------------------------------------------
 # Public helpers: Conversions between `HashID`, `HashKey`, `Hash256`
 # ------------------------------------------------------------------------------
 

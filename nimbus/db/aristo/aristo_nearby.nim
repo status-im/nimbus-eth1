@@ -70,6 +70,14 @@ proc branchNibbleMax*(vtx: VertexRef; maxInx: int8): int8 =
         return n
   -1
 
+# ------------------
+
+proc toTLeafTiePayload(hike: Hike): (LeafTie,PayloadRef) =
+  ## Shortcut for iterators. This function will gloriously crash unless the
+  ## `hike` argument is complete.
+  (LeafTie(root: hike.root, path: hike.to(NibblesSeq).pathToTag.value),
+   hike.legs[^1].wp.vtx.lData)
+
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
@@ -418,6 +426,48 @@ proc right*(
     return err(rc.error)
   ok LeafTie(root: lty.root, path: rc.value)
 
+iterator right*(
+    db: AristoDbRef;                    # Database layer
+    start = low(LeafTie);               # Before or at first value
+      ): (LeafTie,PayloadRef) =
+  ## Traverse the sub-trie implied by the argument `start` with increasing
+  ## order.
+  var
+    hike = start.hikeUp db
+    rc = hike.right db
+  while rc.isOK:
+    hike = rc.value
+    let (key, pyl) = hike.toTLeafTiePayload
+    yield (key, pyl)
+    if high(HashID) <= key.path:
+      break
+
+    # Increment `key` by one and update `hike`. In many cases, the current
+    # `hike` can be modified and re-used which saves some database lookups.
+    block:
+      let tail = hike.legs[^1].wp.vtx.lPfx
+      if 0 < tail.len:
+        let topNibble = tail[tail.len - 1]
+        if topNibble < 15:
+          let newNibble = @[topNibble+1].initNibbleRange.slice(1)
+          hike.tail = tail.slice(0, tail.len - 1) & newNibble
+          hike.legs.setLen(hike.legs.len - 1)
+          break
+      if 1 < tail.len:
+        let nxtNibble = tail[tail.len - 2]
+        if nxtNibble < 15:
+          let dblNibble = @[((nxtNibble+1) shl 4) + 0].initNibbleRange
+          hike.tail = tail.slice(0, tail.len - 2) & dblNibble
+          hike.legs.setLen(hike.legs.len - 1)
+          break
+      # Fall back to default method
+      hike = (key + 1).hikeUp db
+
+    rc = hike.right db
+    # End while
+
+# ----------------
+
 proc left*(
     hike: Hike;                         # Partially expanded chain of vertices
     db: AristoDbRef;                    # Database layer
@@ -437,6 +487,48 @@ proc left*(
   if rc.isErr:
     return err(rc.error)
   ok LeafTie(root: lty.root, path: rc.value)
+
+iterator left*(
+    db: AristoDbRef;                    # Database layer
+    start = high(LeafTie);              # Before or at first value
+      ): (LeafTie,PayloadRef) =
+  ## Traverse the sub-trie implied by the argument `start` with decreasing
+  ## order. It will stop at any error. In order to reproduce an error, one
+  ## can run the function `left()` on the last returned `LiefTie` item with
+  ## the `path` field decremented by `1`.
+  var
+    hike = start.hikeUp db
+    rc = hike.left db
+  while rc.isOK:
+    hike = rc.value
+    let (key, pyl) = hike.toTLeafTiePayload
+    yield (key, pyl)
+    if key.path <= low(HashID):
+      break
+
+    # Decrement `key` by one and update `hike`. In many cases, the current
+    # `hike` can be modified and re-used which saves some database lookups.
+    block:
+      let tail = hike.legs[^1].wp.vtx.lPfx
+      if 0 < tail.len:
+        let topNibble = tail[tail.len - 1]
+        if 0 < topNibble:
+          let newNibble = @[topNibble - 1].initNibbleRange.slice(1)
+          hike.tail = tail.slice(0, tail.len - 1) & newNibble
+          hike.legs.setLen(hike.legs.len - 1)
+          break
+      if 1 < tail.len:
+        let nxtNibble = tail[tail.len - 2]
+        if 0 < nxtNibble:
+          let dblNibble = @[((nxtNibble-1) shl 4) + 15].initNibbleRange
+          hike.tail = tail.slice(0, tail.len - 2) & dblNibble
+          hike.legs.setLen(hike.legs.len - 1)
+          break
+      # Fall back to default method
+      hike = (key - 1).hikeUp db
+
+    rc = hike.left db
+    # End while
 
 # ------------------------------------------------------------------------------
 # Public debugging helpers

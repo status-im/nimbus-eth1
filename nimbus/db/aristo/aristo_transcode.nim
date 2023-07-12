@@ -46,8 +46,6 @@ proc toPayloadBlob(node: NodeRef): Blob =
     result = pyl.rawBlob
   of RlpData:
     result = pyl.rlpBlob
-  of LegacyAccount:
-    result = rlp.encode pyl.legaAcc
   of AccountData:
     let key = if pyl.account.storageID.isValid: node.key[0] else: VOID_HASH_KEY
     result = rlp.encode Account(
@@ -155,6 +153,12 @@ proc append*(writer: var RlpWriter; node: NodeRef) =
       writer.append node.lPfx.hexPrefixEncode(isleaf = true)
       writer.append node.toPayloadBlob
 
+# ---------------------
+
+proc to*(node: NodeRef; T: type HashKey): T =
+  ## Convert the argument `node` to the corresponding Merkle hash key
+  node.encode.digestTo T
+
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
@@ -167,8 +171,6 @@ proc blobify*(pyl: PayloadRef): Blob =
     result = pyl.rawBlob & @[0xff.byte]
   of RlpData:
     result = pyl.rlpBlob & @[0xaa.byte]
-  of LegacyAccount:
-    result = pyl.legaAcc.encode & @[0xaa.byte] # also RLP data
 
   of AccountData:
     var mask: byte
@@ -337,7 +339,7 @@ proc deblobify(data: Blob; pyl: var PayloadRef): AristoError =
 
   case mask and 0xc0:
   of 0x00:
-    discard
+    pAcc.account.codeHash = VOID_CODE_HASH
   of 0x80:
     if data.len < start + 33:
       return DeblobPayloadTooShortInt256

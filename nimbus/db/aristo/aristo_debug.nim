@@ -14,7 +14,7 @@ import
   std/[algorithm, sequtils, sets, strutils, tables],
   eth/[common, trie/nibbles],
   stew/byteutils,
-  "."/[aristo_constants, aristo_desc, aristo_hike, aristo_init, aristo_vid],
+  "."/[aristo_constants, aristo_desc, aristo_hike, aristo_init],
   ./aristo_init/[aristo_memory, aristo_rocksdb]
 
 # ------------------------------------------------------------------------------
@@ -162,12 +162,6 @@ proc ppPayload(p: PayloadRef, db: AristoDbRef): string =
       result &= $p.account.balance & ","
       result &= p.account.storageID.ppVid & ","
       result &= p.account.codeHash.to(HashKey).ppCodeKey() & ")"
-    of LegacyAccount:
-      result = "("
-      result &= $p.legaAcc.nonce & ","
-      result &= $p.legaAcc.balance & ","
-      result &= p.legaAcc.storageRoot.to(HashKey).ppRootKey() & ","
-      result &= p.legaAcc.codeHash.to(HashKey).ppCodeKey() & ")"
 
 proc ppVtx(nd: VertexRef, db: AristoDbRef, vid: VertexID): string =
   if not nd.isValid:
@@ -394,19 +388,6 @@ proc ppCache(
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
-
-proc lblToVtxID*(db: AristoDbRef, lbl: HashLabel): VertexID =
-  ## Associate a vertex ID with the argument `key` for pretty printing.
-  if lbl.isValid:
-    let vid = db.xMap.getOrVoid lbl
-    if vid.isValid:
-      result = vid
-    else:
-      result = db.vidFetch()
-      db.xMap[lbl] = result
-
-proc hashToVtxID*(db: AristoDbRef; root: VertexID; hash: Hash256): VertexID =
-  db.lblToVtxID HashLabel(root: root, key: hash.to(HashKey))
 
 proc pp*(key: HashKey): string =
   key.ppKey

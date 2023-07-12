@@ -14,9 +14,8 @@ import
   std/[algorithm, sequtils, sets, tables],
   eth/common,
   stew/interval_set,
-  ../aristo_hashify/hashify_helper,
   ../aristo_init/[aristo_memory, aristo_rocksdb],
-  ".."/[aristo_desc, aristo_get, aristo_vid]
+  ".."/[aristo_desc, aristo_get, aristo_vid, aristo_transcode, aristo_utils]
 
 const
   Vid2 = @[VertexID(2)].toHashSet
@@ -108,7 +107,7 @@ proc checkBE*[T](
     if rx.isErr:
       return err((vid,CheckBeKeyCantCompile))
     if not relax:
-      let expected = rx.value.toHashKey
+      let expected = rx.value.to(HashKey)
       if expected != key:
         return err((vid,CheckBeKeyMismatch))
     discard vids.reduce Interval[VertexID,uint64].new(vid,vid)
@@ -160,7 +159,7 @@ proc checkBE*[T](
         let rc = vtx.toNode db # compile cache first
         if rc.isErr:
           return err((vid,CheckBeCacheKeyCantCompile))
-        let expected = rc.value.toHashKey
+        let expected = rc.value.to(HashKey)
         if expected != lbl.key:
           return err((vid,CheckBeCacheKeyMismatch))
 

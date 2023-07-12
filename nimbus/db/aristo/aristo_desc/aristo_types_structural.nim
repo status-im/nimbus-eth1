@@ -49,7 +49,6 @@ type
     RawData                          ## Generic data
     RlpData                          ## Marked RLP encoded
     AccountData                      ## `Aristo account` with vertex IDs links
-    LegacyAccount                    ## Legacy `Account` with hash references
 
   PayloadRef* = ref object
     case pType*: PayloadType
@@ -59,8 +58,6 @@ type
       rlpBlob*: Blob                 ## Opaque data marked RLP encoded
     of AccountData:
       account*: AristoAccount
-    of LegacyAccount:
-      legaAcc*: Account              ## Expanded accounting data
 
   VertexRef* = ref object of RootRef
     ## Vertex for building a hexary Patricia or Merkle Patricia Trie
@@ -102,9 +99,6 @@ proc `==`*(a, b: PayloadRef): bool =
         return false
     of AccountData:
       if a.account != b.account:
-        return false
-    of LegacyAccount:
-      if a.legaAcc != b.legaAcc:
         return false
   true
 
@@ -165,10 +159,6 @@ proc dup*(pld: PayloadRef): PayloadRef =
      PayloadRef(
        pType:   AccountData,
        account: pld.account)
-  of LegacyAccount:
-     PayloadRef(
-       pType:   LegacyAccount,
-       legaAcc: pld.legaAcc)
 
 proc dup*(vtx: VertexRef): VertexRef =
   ## Duplicate vertex.
@@ -191,6 +181,31 @@ proc dup*(vtx: VertexRef): VertexRef =
       VertexRef(
         vType: Branch,
         bVid:  vtx.bVid)
+
+proc dup*(node: NodeRef): NodeRef =
+  ## Duplicate node.
+  # Not using `deepCopy()` here (some `gc` needs `--deepcopy:on`.)
+  if node.isNil:
+    NodeRef(nil)
+  else:
+    case node.vType:
+    of Leaf:
+      NodeRef(
+        vType: Leaf,
+        lPfx:  node.lPfx,
+        lData: node.ldata.dup,
+        key:   node.key)
+    of Extension:
+      NodeRef(
+        vType: Extension,
+        ePfx:  node.ePfx,
+        eVid:  node.eVid,
+        key:   node.key)
+    of Branch:
+      NodeRef(
+        vType: Branch,
+        bVid:  node.bVid,
+        key:   node.key)
 
 proc to*(node: NodeRef; T: type VertexRef): T =
   ## Extract a copy of the `VertexRef` part from a `NodeRef`.

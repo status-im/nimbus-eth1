@@ -46,8 +46,8 @@ import
   chronicles,
   eth/common,
   stew/[interval_set, results],
-  "."/[aristo_desc, aristo_get, aristo_hike, aristo_vid],
-  ./aristo_hashify/hashify_helper
+  "."/[aristo_desc, aristo_get, aristo_hike, aristo_transcode, aristo_utils,
+       aristo_vid]
 
 type
   BackVidValRef = ref object
@@ -149,7 +149,7 @@ proc leafToRootHasher(
 
     # Check against existing key, or store new key
     let
-      key = rc.value.toHashKey
+      key = rc.value.to(HashKey)
       rx = db.updateHashKey(hike.root, wp.vid, key, bg)
     if rx.isErr:
       return err((wp.vid,rx.error))
@@ -179,7 +179,7 @@ proc deletedLeafHasher(
       let rc = wp.vtx.toNode(db, stopEarly=false)
       if rc.isOk:
         let
-          expected = rc.value.toHashKey
+          expected = rc.value.to(HashKey)
           key = db.getKey wp.vid
         if key.isValid:
           if key != expected:
@@ -228,8 +228,8 @@ proc hashify*(
     db: AristoDbRef;                   # Database, top layer
       ): Result[HashSet[VertexID],(VertexID,AristoError)] =
   ## Add keys to the  `Patricia Trie` so that it becomes a `Merkle Patricia
-  ## Tree`. If successful, the function returns the key (aka Merkle hash) of
-  ## the root vertex.
+  ## Tree`. If successful, the function returns the keys (aka Merkle hash) of
+  ## the root vertices.
   var
     roots: HashSet[VertexID]
     completed: HashSet[VertexID]
@@ -307,7 +307,7 @@ proc hashify*(
       else:
         # Update Merkle hash
         let
-          key = rc.value.toHashKey
+          key = rc.value.to(HashKey)
           rx = db.updateHashKey(val.root, vid, key, val.onBe)
         if rx.isErr:
           return err((vid,rx.error))
