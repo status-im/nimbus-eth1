@@ -612,6 +612,29 @@ proc merge*(
 
   (merged, dups, AristoError(0))
 
+proc merge*(
+    db: AristoDbRef;                   # Database, top layer
+    path: HashID;                      # Path into database
+    rlpData: Blob;                     # RLP encoded payload data
+      ): Result[void,AristoError] =
+  ## Variant of `merge()` for storing a single item. This function stores the
+  ## arguments as a `LeafTiePayload` type item on the main tree with root
+  ## vertex ID 1. This is handy when used on a temporary backendless `Aristo`
+  ## database. Having merged some leafs and sunsequently hashified (see
+  ## `hashify()`), the state root is avaliable as Merkle hash key for
+  ## vertex ID 1 (see `getKey()`.)
+  ##
+  let hike = db.merge LeafTiePayload(
+    leafTie: LeafTie(
+      root:    VertexID(1),
+      path:    path),
+    payload: PayloadRef(
+      pType:   RlpData,
+      rlpBlob: rlpData))
+  if hike.error == AristoError(0):
+    return err(hike.error)
+  ok()
+
 # ---------------------
 
 proc merge*(
