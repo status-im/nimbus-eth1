@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Copyright (c) 2021 Status Research & Development GmbH. Licensed under
+# Copyright (c) 2021-2023 Status Research & Development GmbH. Licensed under
 # either of:
 # - Apache License, version 2.0
 # - MIT license
@@ -244,7 +244,6 @@ echo "Starting ${NUM_NODES} nodes."
 for NUM_NODE in $(seq 0 $(( NUM_NODES - 1 ))); do
   # Reset arguments
   BOOTSTRAP_ARG=""
-  ACCUMULATOR_ARG=""
 
   NODE_DATA_DIR="${DATA_DIR}/node${NUM_NODE}"
 
