@@ -221,7 +221,7 @@ test-reproducibility:
 # builds the fluffy client
 fluffy: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim fluffy $(NIM_PARAMS) nimbus.nims
+		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/$@ "fluffy/$@.nim"
 
 # primitive reproducibility test
 fluffy-test-reproducibility:
@@ -235,7 +235,10 @@ fluffy-test-reproducibility:
 
 # builds and runs the fluffy test suite
 fluffy-test: | build deps
-	$(ENV_SCRIPT) nim fluffy_test $(NIM_PARAMS) nimbus.nims
+	echo -e $(BUILD_MSG) "build/all_fluffy_portal_spec_tests" && \
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -d:nimbus_db_backend=sqlite -o:build/all_fluffy_portal_spec_tests "fluffy/tests/portal_spec_tests/mainnet/all_fluffy_portal_spec_tests.nim"
+	echo -e $(BUILD_MSG) "build/all_fluffy_tests" && \
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -d:nimbus_db_backend=sqlite -d:mergeBlockNumber:38130 -o:build/all_fluffy_tests "fluffy/tests/all_fluffy_tests.nim"
 
 # builds the fluffy tools, wherever they are
 $(FLUFFY_TOOLS): | build deps
