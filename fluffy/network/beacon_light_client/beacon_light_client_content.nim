@@ -45,18 +45,9 @@ type
     startPeriod*: uint64
     count*: uint64
 
-  # TODO:
-  # `optimisticSlot` and `finalizedSlot` are currently not in the spec. They are
-  # added to avoid accepting them in an offer based on the slot values. However,
-  # this causes them also to be included in a request, which makes perhaps less
-  # sense?
-  LightClientFinalityUpdateKey* = object
-    optimisticSlot*: uint64 ## slot of attested header of the update
-    finalizedSlot*: uint64 ## slot of finalized header of the update
+  LightClientFinalityUpdateKey* = uint64
 
-  # TODO: Same remark as for `LightClientFinalityUpdateKey`
-  LightClientOptimisticUpdateKey* = object
-    optimisticSlot*: uint64 ## slot of attested header of the update
+  LightClientOptimisticUpdateKey* = uint64
 
   ContentKey* = object
     case contentType*: ContentType
@@ -239,16 +230,11 @@ func finalityUpdateContentKey*(
     finalizedSlot: uint64, optimisticSlot: uint64): ContentKey =
   ContentKey(
     contentType: lightClientFinalityUpdate,
-    lightClientFinalityUpdateKey: LightClientFinalityUpdateKey(
-      optimisticSlot: optimisticSlot,
-      finalizedSlot: finalizedSlot
-    )
+    lightClientFinalityUpdateKey: LightClientFinalityUpdateKey(0)
   )
 
 func optimisticUpdateContentKey*(optimisticSlot: uint64): ContentKey =
   ContentKey(
     contentType: lightClientOptimisticUpdate,
-    lightClientOptimisticUpdateKey: LightClientOptimisticUpdateKey(
-      optimisticSlot: optimisticSlot
-    )
+    lightClientOptimisticUpdateKey: LightClientOptimisticUpdateKey(0)
   )
