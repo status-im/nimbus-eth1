@@ -39,7 +39,7 @@ type
       name: "rpc-address" }: string
 
     baseRpcPort* {.
-      defaultValue: 7000
+      defaultValue: 10000
       desc: "Port of the JSON-RPC service of the bootstrap (first) node"
       name: "base-rpc-port" .}: uint16
 

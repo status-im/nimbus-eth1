@@ -249,6 +249,11 @@ $(FLUFFY_TOOLS): | build deps
 # builds all the fluffy tools
 fluffy-tools: | $(FLUFFY_TOOLS)
 
+# Build fluffy test_portal_testnet
+test_portal_testnet: | build deps
+	echo -e $(BUILD_MSG) "build/$@" && \
+		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -o:build/$@ "fluffy/scripts/$@.nim"
+
 # builds the uTP test app
 utp-test-app: | build deps
 	$(ENV_SCRIPT) nim utp_test_app $(NIM_PARAMS) nimbus.nims
@@ -256,10 +261,6 @@ utp-test-app: | build deps
 # builds and runs the utp integration test suite
 utp-test: | build deps
 	$(ENV_SCRIPT) nim utp_test $(NIM_PARAMS) nimbus.nims
-
-# Build fluffy test_portal_testnet
-fluffy-test-portal-testnet: | build deps
-	$(ENV_SCRIPT) nim fluffy_test_portal_testnet $(NIM_PARAMS) nimbus.nims
 
 # Nimbus Verified Proxy related targets
 
