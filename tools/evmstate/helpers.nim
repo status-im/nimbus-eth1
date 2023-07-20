@@ -67,6 +67,10 @@ proc fromJson(T: type AccessList, n: JsonNode): AccessList =
       ap.storageKeys.add hexToByteArray(sk.getStr, 32)
     result.add ap
 
+proc fromJson(T: type VersionedHashes, list: JsonNode): VersionedHashes =
+  for x in list:
+    result.add Hash256.fromJson(x)
+
 template required(T: type, nField: string): auto =
   fromJson(T, n[nField])
 
@@ -92,6 +96,8 @@ template optional(T: type, nField: string): auto =
     none(T)
 
 proc txType(n: JsonNode): TxType =
+  if "blobVersionedHashes" in n:
+    return TxEip4844
   if "gasPrice" notin n:
     return TxEip1559
   if "accessLists" in n:
@@ -121,7 +127,9 @@ proc parseTx*(n: JsonNode, dataIndex, gasIndex, valueIndex: int): Transaction =
     gasPrice: omitZero(GasInt, "gasPrice"),
     maxFee  : omitZero(GasInt, "maxFeePerGas"),
     accessList: omitZero(AccessList, "accessLists", dataIndex),
-    maxPriorityFee: omitZero(GasInt, "maxPriorityFeePerGas")
+    maxPriorityFee: omitZero(GasInt, "maxPriorityFeePerGas"),
+    maxFeePerDataGas: omitZero(GasInt, "maxFeePerDataGas"),
+    versionedHashes: omitZero(VersionedHashes, "blobVersionedHashes")
   )
 
   let rawTo = n["to"].getStr

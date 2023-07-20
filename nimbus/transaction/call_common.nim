@@ -94,11 +94,6 @@ func intrinsicGas*(call: CallParams, vmState: BaseVMState): GasInt {.inline.} =
       gas += ACCESS_LIST_ADDRESS_COST
       gas += account.storageKeys.len * ACCESS_LIST_STORAGE_KEY_COST
 
-  # EIP-4844
-  if fork >= FkCancun:
-    gas += calcDataFee(call.versionedHashes.len,
-      vmState.parent.excessDataGas).GasInt
-
   return gas
 
 proc initialAccessListEIP2929(call: CallParams) =
@@ -237,8 +232,18 @@ proc prepareToRunComputation(host: TransactionHost, call: CallParams) =
 
   # Charge for gas.
   if not call.noGasCharge:
-    host.vmState.mutateStateDB:
+    let
+      vmState = host.vmState
+      fork = vmState.fork
+
+    vmState.mutateStateDB:
       db.subBalance(call.sender, call.gasLimit.u256 * call.gasPrice.u256)
+
+      # EIP-4844
+      if fork >= FkCancun:
+        let blobFee = calcDataFee(call.versionedHashes.len,
+          vmState.parent.excessDataGas).GasInt
+        db.subBalance(call.sender, blobFee.u256)
 
 proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): GasInt =
   let c = host.computation
