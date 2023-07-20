@@ -157,8 +157,8 @@ func validateEip4844Header*(
     headerExcessDataGas = header.excessDataGas.get
     excessDataGas = calcExcessDataGas(parentHeader)
 
-  if dataGasUsed <= MAX_DATA_GAS_PER_BLOCK:
-    return err("dataGasUsed should greater than MAX_DATA_GAS_PER_BLOCK: " & $dataGasUsed)
+  if dataGasUsed > MAX_DATA_GAS_PER_BLOCK:
+    return err("dataGasUsed " & $dataGasUsed & " exceeds maximum allowance " & $MAX_DATA_GAS_PER_BLOCK)
 
   if headerDataGasUsed != dataGasUsed:
     return err("calculated dataGas not equal header.dataGasUsed")

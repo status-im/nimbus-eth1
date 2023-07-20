@@ -349,9 +349,9 @@ proc validateTransaction*(
       if tx.versionedHashes.len == 0:
         return err("invalid tx: there must be at least one blob")
 
-      if tx.versionedHashes.len > MAX_VERSIONED_HASHES_LIST_SIZE:
-        return err("invalid tx: access list len exceeds MAX_VERSIONED_HASHES_LIST_SIZE. len=" &
-          $tx.versionedHashes.len)
+      if tx.versionedHashes.len > MaxAllowedBlob.int:
+        return err("invalid tx: versioned hashes len exceeds MaxAllowedBlob=" & $MaxAllowedBlob &
+          ". get=" & $tx.versionedHashes.len)
 
       for i, bv in tx.versionedHashes:
         if bv.data[0] != BLOB_COMMITMENT_VERSION_KZG:

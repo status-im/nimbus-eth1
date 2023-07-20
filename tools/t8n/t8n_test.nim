@@ -475,6 +475,15 @@ const
       output: T8nOutput(alloc: true, result: true),
       expOut: "exp.json",
     ),
+    TestSpec(
+      name  : "Blobhash list bounds",
+      base  : "testdata/00-518",
+      input : t8nInput(
+        "alloc.json", "txs.json", "env.json", "Cancun", "",
+      ),
+      output: T8nOutput(alloc: true, result: true),
+      expOut: "exp.json",
+    ),
   ]
 
 proc main() =
