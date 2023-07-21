@@ -233,12 +233,18 @@ fluffy-test-reproducibility:
 		[ "$$MD5SUM1" = "$$MD5SUM2" ] && echo -e "\e[92mSuccess: identical binaries.\e[39m" || \
 			{ echo -e "\e[91mFailure: the binary changed between builds.\e[39m"; exit 1; }
 
+# fluffy tests
+all_fluffy_portal_spec_tests: | build deps
+	echo -e $(BUILD_MSG) "build/$@" && \
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -d:nimbus_db_backend=sqlite -o:build/$@ "fluffy/tests/portal_spec_tests/mainnet/$@.nim"
+
+
+all_fluffy_tests: | build deps
+	echo -e $(BUILD_MSG) "build/$@" && \
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -d:nimbus_db_backend=sqlite -d:mergeBlockNumber:38130 -o:build/$@ "fluffy/tests/$@.nim"
+
 # builds and runs the fluffy test suite
-fluffy-test: | build deps
-	echo -e $(BUILD_MSG) "build/all_fluffy_portal_spec_tests" && \
-	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -d:nimbus_db_backend=sqlite -o:build/all_fluffy_portal_spec_tests "fluffy/tests/portal_spec_tests/mainnet/all_fluffy_portal_spec_tests.nim"
-	echo -e $(BUILD_MSG) "build/all_fluffy_tests" && \
-	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -d:nimbus_db_backend=sqlite -d:mergeBlockNumber:38130 -o:build/all_fluffy_tests "fluffy/tests/all_fluffy_tests.nim"
+fluffy-test: | all_fluffy_portal_spec_tests all_fluffy_tests
 
 # builds the fluffy tools, wherever they are
 $(FLUFFY_TOOLS): | build deps

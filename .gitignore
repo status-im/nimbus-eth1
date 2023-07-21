@@ -32,6 +32,9 @@ nimcache
 
 /all_test.md
 
+# local testnet files
+/local_testnet_data
+
 # Nimble user files
 nimble.develop
 nimble.paths
