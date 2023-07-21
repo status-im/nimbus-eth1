@@ -23,7 +23,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")"/../..
 GETOPT_BINARY="getopt"
 if uname | grep -qi darwin; then
   # macOS
-  GETOPT_BINARY="/usr/local/opt/gnu-getopt/bin/getopt"
+  GETOPT_BINARY=$(find /opt/homebrew/opt/gnu-getopt/bin/getopt /usr/local/opt/gnu-getopt/bin/getopt 2> /dev/null | head -n1 || true)
   [[ -f "$GETOPT_BINARY" ]] || { echo "GNU getopt not installed. Please run 'brew install gnu-getopt'. Aborting."; exit 1; }
 fi
 
@@ -40,10 +40,10 @@ LONGOPTS="help,nodes:,data-dir:,enable-htop,log-level:,base-port:,base-rpc-port:
 NUM_NODES="64"
 DATA_DIR="local_testnet_data"
 USE_HTOP="0"
-LOG_LEVEL="TRACE"
+LOG_LEVEL="INFO"
 BASE_PORT="9000"
 BASE_METRICS_PORT="8008"
-BASE_RPC_PORT="7000"
+BASE_RPC_PORT="10000"
 REUSE_EXISTING_DATA_DIR="0"
 TIMEOUT_DURATION="0"
 KILL_OLD_PROCESSES="0"
@@ -183,9 +183,9 @@ fi
 
 # Build the binaries
 BINARIES="fluffy"
-TEST_BINARIES="fluffy-test-portal-testnet"
-$MAKE -j ${NPROC} LOG_LEVEL=TRACE ${BINARIES} NIMFLAGS="-d:chronicles_colors=off -d:chronicles_sinks=textlines"
-$MAKE -j ${NPROC} LOG_LEVEL=INFO ${TEST_BINARIES} NIMFLAGS="-d:chronicles_sinks=textlines"
+TEST_BINARIES="test_portal_testnet"
+$MAKE -j ${NPROC} LOG_LEVEL=TRACE ${BINARIES}
+$MAKE -j ${NPROC} LOG_LEVEL=INFO ${TEST_BINARIES}
 
 # Kill child processes on Ctrl-C/SIGTERM/exit, passing the PID of this shell
 # instance as the parent and the target process name as a pattern to the

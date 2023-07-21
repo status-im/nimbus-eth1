@@ -221,7 +221,7 @@ test-reproducibility:
 # builds the fluffy client
 fluffy: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim fluffy $(NIM_PARAMS) nimbus.nims
+		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/$@ "fluffy/$@.nim"
 
 # primitive reproducibility test
 fluffy-test-reproducibility:
@@ -233,9 +233,18 @@ fluffy-test-reproducibility:
 		[ "$$MD5SUM1" = "$$MD5SUM2" ] && echo -e "\e[92mSuccess: identical binaries.\e[39m" || \
 			{ echo -e "\e[91mFailure: the binary changed between builds.\e[39m"; exit 1; }
 
+# fluffy tests
+all_fluffy_portal_spec_tests: | build deps
+	echo -e $(BUILD_MSG) "build/$@" && \
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -d:nimbus_db_backend=sqlite -o:build/$@ "fluffy/tests/portal_spec_tests/mainnet/$@.nim"
+
+
+all_fluffy_tests: | build deps
+	echo -e $(BUILD_MSG) "build/$@" && \
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -d:nimbus_db_backend=sqlite -d:mergeBlockNumber:38130 -o:build/$@ "fluffy/tests/$@.nim"
+
 # builds and runs the fluffy test suite
-fluffy-test: | build deps
-	$(ENV_SCRIPT) nim fluffy_test $(NIM_PARAMS) nimbus.nims
+fluffy-test: | all_fluffy_portal_spec_tests all_fluffy_tests
 
 # builds the fluffy tools, wherever they are
 $(FLUFFY_TOOLS): | build deps
@@ -246,6 +255,11 @@ $(FLUFFY_TOOLS): | build deps
 # builds all the fluffy tools
 fluffy-tools: | $(FLUFFY_TOOLS)
 
+# Build fluffy test_portal_testnet
+test_portal_testnet: | build deps
+	echo -e $(BUILD_MSG) "build/$@" && \
+		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -o:build/$@ "fluffy/scripts/$@.nim"
+
 # builds the uTP test app
 utp-test-app: | build deps
 	$(ENV_SCRIPT) nim utp_test_app $(NIM_PARAMS) nimbus.nims
@@ -253,10 +267,6 @@ utp-test-app: | build deps
 # builds and runs the utp integration test suite
 utp-test: | build deps
 	$(ENV_SCRIPT) nim utp_test $(NIM_PARAMS) nimbus.nims
-
-# Build fluffy test_portal_testnet
-fluffy-test-portal-testnet: | build deps
-	$(ENV_SCRIPT) nim fluffy_test_portal_testnet $(NIM_PARAMS) nimbus.nims
 
 # Nimbus Verified Proxy related targets
 
