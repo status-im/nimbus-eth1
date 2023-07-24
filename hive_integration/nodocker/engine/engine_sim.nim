@@ -1,6 +1,5 @@
 import
   "."/[types, test_env, engine_tests, auths_tests],
-  unittest2,
   ../sim_utils
 
 proc combineTests(): seq[TestSpec] =

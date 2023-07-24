@@ -1,10 +1,9 @@
 import
-  std/[typetraits, json],
+  std/[typetraits],
   nimcrypto/sysrand,
   test_env,
-  eth/[common,  rlp, keys],
+  eth/[common, rlp, keys],
   json_rpc/[rpcclient],
-  ../../../nimbus/rpc/hexstrings,
   ../../../nimbus/transaction
 
 import eth/common/eth_types as common_eth_types

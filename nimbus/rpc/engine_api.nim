@@ -166,11 +166,10 @@ proc handle_newPayload(sealingEngine: SealingEngineRef, api: EngineApiRef, com: 
 
   # We have an existing parent, do some sanity checks to avoid the beacon client
   # triggering too early
-  let
-    td  = db.getScore(header.parentHash)
-    ttd = com.ttd.get(high(common.BlockNumber))
+  let ttd = com.ttd.get(high(common.BlockNumber))
 
   when payload is ExecutionPayloadV1:
+    let td  = db.getScore(header.parentHash)
     if (not com.forkGTE(MergeFork)) and td < ttd:
       warn "Ignoring pre-merge payload",
         number = header.blockNumber, hash = blockHash, td, ttd

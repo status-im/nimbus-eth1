@@ -1,5 +1,5 @@
 import
-  std/[os, json, times, math],
+  std/[os, times, math],
   eth/keys,
   eth/p2p as eth_p2p,
   stew/[results, byteutils],
@@ -99,7 +99,7 @@ proc setupELClient*(t: TestEnv, chainFile: string, enableAuth: bool) =
               else:
                 @[]
 
-  t.rpcServer = newRpcHttpServer(["localhost:" & $t.conf.rpcPort], hooks)
+  t.rpcServer = newRpcHttpServer(["127.0.0.1:" & $t.conf.rpcPort], hooks)
   t.sealingEngine = SealingEngineRef.new(
     t.chainRef, t.ctx, t.conf.engineSigner,
     txPool, EngineStopped
@@ -120,7 +120,7 @@ proc setupELClient*(t: TestEnv, chainFile: string, enableAuth: bool) =
   t.rpcServer.start()
 
   t.rpcClient = newRpcHttpClient()
-  waitFor t.rpcClient.connect("localhost", t.conf.rpcPort, false)
+  waitFor t.rpcClient.connect("127.0.0.1", t.conf.rpcPort, false)
   t.gHeader = t.com.genesisHeader
 
   let kRes = PrivateKey.fromHex(vaultKeyHex)

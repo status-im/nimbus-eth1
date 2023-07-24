@@ -90,7 +90,7 @@ proc runTest(steps: Steps) =
   com.initializeEmptyDb()
 
   var
-    rpcServer = newRpcSocketServer(["localhost:" & $conf.rpcPort])
+    rpcServer = newRpcSocketServer(["127.0.0.1:" & $conf.rpcPort])
     client = newRpcSocketClient()
     txPool = TxPoolRef.new(com, conf.engineSigner)
     sealingEngine = SealingEngineRef.new(
@@ -104,7 +104,7 @@ proc runTest(steps: Steps) =
 
   sealingEngine.start()
   rpcServer.start()
-  waitFor client.connect("localhost", conf.rpcPort)
+  waitFor client.connect("127.0.0.1", conf.rpcPort)
 
   suite "Engine API tests":
     for i, step in steps.list:

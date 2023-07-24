@@ -6,8 +6,7 @@ import
   json_rpc/[rpcclient, errors, jsonmarshal],
   ../../../tests/rpcclient/eth_api,
   ../../../premix/parser,
-  ../../../nimbus/rpc/hexstrings,
-  ../../../premix/parser
+  ../../../nimbus/rpc/hexstrings
 
 import web3/engine_api as web3_engine_api
 

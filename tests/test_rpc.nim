@@ -170,7 +170,7 @@ proc rpcMain*() =
     # Create Ethereum RPCs
     let RPC_PORT = 8545
     var
-      rpcServer = newRpcSocketServer(["localhost:" & $RPC_PORT])
+      rpcServer = newRpcSocketServer(["127.0.0.1:" & $RPC_PORT])
       client = newRpcSocketClient()
       txPool = TxPoolRef.new(com, conf.engineSigner)
 
@@ -179,7 +179,7 @@ proc rpcMain*() =
 
     # Begin tests
     rpcServer.start()
-    waitFor client.connect("localhost", Port(RPC_PORT))
+    waitFor client.connect("127.0.0.1", Port(RPC_PORT))
 
     # TODO: add more tests here
     test "web3_clientVersion":

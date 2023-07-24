@@ -62,7 +62,7 @@ proc setupELClient*(t: TestEnv, conf: ChainConfig, node: JsonNode) =
   doAssert(t.com.db.getCanonicalHead().blockHash == genesisHeader.blockHash)
 
   let txPool  = TxPoolRef.new(t.com, engineSigner)
-  t.rpcServer = newRpcHttpServer(["localhost:8545"])
+  t.rpcServer = newRpcHttpServer(["127.0.0.1:8545"])
   t.sealingEngine = SealingEngineRef.new(
     t.chainRef, t.ctx, engineSigner,
     txPool, EngineStopped
@@ -76,7 +76,7 @@ proc setupELClient*(t: TestEnv, conf: ChainConfig, node: JsonNode) =
   t.rpcServer.start()
 
   t.rpcClient = newRpcHttpClient()
-  waitFor t.rpcClient.connect("localhost", 8545.Port, false)
+  waitFor t.rpcClient.connect("127.0.0.1", 8545.Port, false)
 
 proc stopELClient*(t: TestEnv) =
   waitFor t.rpcClient.close()
