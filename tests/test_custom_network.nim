@@ -28,15 +28,15 @@
 ##
 
 import
-  std/[distros, os],
+  std/os,
+  chronicles,
+  results,
+  unittest2,
+  ../nimbus/core/chain, # must be early (compilation annoyance)
   ../nimbus/config,
   ../nimbus/db/select_backend,
-  ../nimbus/core/chain,
   ../nimbus/common/common,
-  ./replay/[undump_blocks, pp],
-  chronicles,
-  stew/results,
-  unittest2
+  ./replay/[undump_blocks, pp]
 
 type
   ReplaySession = object
@@ -85,31 +85,7 @@ const
     termTotalDff: 20_000_000_000_000.u256,
     mergeFork:    1000,
     ttdReachedAt: 55127,
-    failBlockAt:  9999999)
-
-when not defined(linux):
-  const isUbuntu32bit = false
-else:
-  # The `detectOs(Ubuntu)` directive is not Windows compatible, causes an
-  # error when running the system command `lsb_release -d` in the background.
-  let isUbuntu32bit = detectOs(Ubuntu) and int.sizeof == 4
-
-let
-  # There is a problem with the Github/CI which results in spurious crashes
-  # when leaving the `runner()` if the persistent ChainDBRef initialisation
-  # was present. The Github/CI set up for Linux/i386 is
-  #
-  #    Ubuntu 10.04.06 LTS
-  #       with repo kernel 5.4.0-1065-azure (see  'uname -a')
-  #
-  #    base OS architecture is amd64
-  #       with i386 foreign architecture
-  #
-  #    nimbus binary is an
-  #       ELF 32-bit LSB shared object,
-  #       Intel 80386, version 1 (SYSV), dynamically linked,
-  #
-  disablePersistentDB = isUbuntu32bit
+    failBlockAt:  1000) # Kludge, some change at the `merge` logic?
 
 # Block chains shared between test suites
 var
@@ -170,9 +146,8 @@ proc setErrorLevel =
 # ------------------------------------------------------------------------------
 
 proc ddbCleanUp(dir: string) =
-  if not disablePersistentDB:
-    ddbDir = dir
-    dir.flushDbDir
+  ddbDir = dir
+  dir.flushDbDir
 
 proc ddbCleanUp =
   ddbDir.ddbCleanUp
@@ -195,13 +170,14 @@ proc importBlocks(c: ChainRef; h: seq[BlockHeader]; b: seq[BlockBody];
     bRng = if 1 < h.len: &"s [#{first}..#{last}]={h.len}" else: &"   #{first}"
     blurb = &"persistBlocks([#{first}..#"
 
-  noisy.say "***", &"block{bRng} #txs={nTxs} #uncles={nUnc}"
-
   catchException("persistBlocks()", trace = true):
     if c.persistBlocks(h, b).isOk:
+      noisy.say "***", &"block{bRng} #txs={nTxs} #uncles={nUnc}"
       if not tddOk and c.com.ttdReached:
         noisy.say "***", &"block{bRng} => tddReached"
       return true
+
+  noisy.say "***", &"block{bRng} #txs={nTxs} #uncles={nUnc} -- failed"
 
 # ------------------------------------------------------------------------------
 # Test Runner
@@ -216,8 +192,7 @@ proc genesisLoadRunner(noisy = true;
     gFileInfo = sSpcs.genesisFile.splitFile.name.split(".")[0]
     gFilePath = sSpcs.genesisFile.findFilePath.value
 
-    tmpDir = if disablePersistentDB: "*notused*"
-             else: gFilePath.splitFile.dir / "tmp"
+    tmpDir = gFilePath.splitFile.dir / "tmp"
 
     persistPruneInfo = if persistPruneTrie: "pruning enabled"
                        else:                "no pruning"
@@ -240,24 +215,21 @@ proc genesisLoadRunner(noisy = true;
       check mcom.toHardFork(sSpcs.mergeFork.toBlockNumber.blockNumberToForkDeterminationInfo) == MergeFork
 
     test &"Construct persistent ChainDBRef on {tmpDir}, {persistPruneInfo}":
-      if disablePersistentDB:
-        skip()
-      else:
-        # Before allocating the database, the data directory needs to be
-        # cleared. There might be left overs from a previous crash or
-        # because there were file locks under Windows which prevented a
-        # previous clean up.
-        tmpDir.ddbCleanUp
+      # Before allocating the database, the data directory needs to be
+      # cleared. There might be left overs from a previous crash or
+      # because there were file locks under Windows which prevented a
+      # previous clean up.
+      tmpDir.ddbCleanUp
 
-        # Constructor ...
-        dcom = CommonRef.new(
-          tmpDir.newChainDB.trieDB,
-          networkId = params.config.chainId.NetworkId,
-          pruneTrie = persistPruneTrie,
-          params = params)
+      # Constructor ...
+      dcom = CommonRef.new(
+        tmpDir.newChainDB.trieDB,
+        networkId = params.config.chainId.NetworkId,
+        pruneTrie = persistPruneTrie,
+        params = params)
 
-        check dcom.ttd.get == sSpcs.termTotalDff
-        check dcom.toHardFork(sSpcs.mergeFork.toBlockNumber.blockNumberToForkDeterminationInfo) == MergeFork
+      check dcom.ttd.get == sSpcs.termTotalDff
+      check dcom.toHardFork(sSpcs.mergeFork.toBlockNumber.blockNumberToForkDeterminationInfo) == MergeFork
 
     test "Initialise in-memory Genesis":
       mcom.initializeEmptyDb
@@ -270,18 +242,15 @@ proc genesisLoadRunner(noisy = true;
       check storedhHeaderPP == onTheFlyHeaderPP
 
     test "Initialise persistent Genesis":
-      if disablePersistentDB:
-        skip()
-      else:
-        dcom.initializeEmptyDb
+      dcom.initializeEmptyDb
 
-        # Must be the same as the in-memory DB value
-        check dcom.db.getBlockHash(0.u256) == mcom.db.getBlockHash(0.u256)
+      # Must be the same as the in-memory DB value
+      check dcom.db.getBlockHash(0.u256) == mcom.db.getBlockHash(0.u256)
 
-        let
-          storedhHeaderPP = dcom.db.getBlockHeader(0.u256).pp
-          onTheFlyHeaderPP = dcom.genesisHeader.pp
-        check storedhHeaderPP == onTheFlyHeaderPP
+      let
+        storedhHeaderPP = dcom.db.getBlockHeader(0.u256).pp
+        onTheFlyHeaderPP = dcom.genesisHeader.pp
+      check storedhHeaderPP == onTheFlyHeaderPP
 
 
 proc testnetChainRunner(noisy = true;
@@ -386,6 +355,7 @@ when isMainModule:
     # typically on the `nimbus-eth1-blobs` module.
     noisy.testnetChainRunner(
       stopAfterBlock = 999999999)
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
