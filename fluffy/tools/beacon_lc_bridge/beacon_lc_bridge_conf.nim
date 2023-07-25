@@ -57,7 +57,7 @@ type BeaconBridgeConf* = object
 
   # Storage
   dataDir* {.
-    desc: "The directory where beacon_chain_bridge will store all data"
+    desc: "The directory where beacon_lc_bridge will store all data"
     defaultValue: defaultVerifiedProxyDataDir()
     defaultValueDesc: $defaultDataVerifiedProxyDirDesc
     abbr: "d"

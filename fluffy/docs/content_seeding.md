@@ -89,15 +89,15 @@ Run a Fluffy node with the JSON-RPC API enabled.
 ./build/fluffy --rpc --table-ip-limit:1024 --bucket-ip-limit:24
 ```
 
-Build & run the `beacon_chain_bridge`:
+Build & run the `beacon_lc_bridge`:
 ```bash
-make fluffy-tools
+make beacon_lc_bridge
 
 TRUSTED_BLOCK_ROOT=0x1234567890123456789012345678901234567890123456789012345678901234 # Replace this
-./build/beacon_chain_bridge --trusted-block-root=${TRUSTED_BLOCK_ROOT}
+./build/beacon_lc_bridge --trusted-block-root=${TRUSTED_BLOCK_ROOT}
 ```
 
-The `beacon_chain_bridge` will start with the consensus light client sync follow
+The `beacon_lc_bridge` will start with the consensus light client sync follow
 beacon block gossip. Once it is synced, the execution payload of new beacon
 blocks will be extracted and injected in the Portal network as execution headers
 and blocks.
