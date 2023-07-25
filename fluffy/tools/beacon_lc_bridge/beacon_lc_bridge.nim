@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 #
-# This beacon_chain_bridge allows for following the head of the beacon chain and
+# This beacon_lc_bridge allows for following the head of the beacon chain and
 # seeding the latest execution block headers and bodies into the Portal network.
 #
 # The bridge does consensus light client sync and follows beacon block gossip.
@@ -87,7 +87,7 @@ import
   ../../network/history/[history_content, history_network],
   ../../network/beacon_light_client/beacon_light_client_content,
   ../../common/common_types,
-  ./beacon_chain_bridge_conf
+  ./beacon_lc_bridge_conf
 
 from stew/objects import checkedEnumAssign
 from stew/byteutils import readHexChar

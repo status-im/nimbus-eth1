@@ -196,7 +196,7 @@ fi
 # Build the binaries
 BINARIES="fluffy"
 if [[ "${LC_BRIDGE}" == "1" ]]; then
-  BINARIES="${BINARIES} beacon_chain_bridge"
+  BINARIES="${BINARIES} beacon_lc_bridge"
 fi
 TEST_BINARIES="test_portal_testnet"
 $MAKE -j ${NPROC} LOG_LEVEL=TRACE ${BINARIES}
@@ -325,7 +325,7 @@ done
 if [[ "$LC_BRIDGE" == "1" ]]; then
   echo "Starting bridge node."
   LC_BRIDGE_DATA_DIR="${DATA_DIR}/lc_bridge"
-  ./build/beacon_chain_bridge \
+  ./build/beacon_lc_bridge \
     --data-dir="${LC_BRIDGE_DATA_DIR}" \
     --udp-port=$(( BASE_PORT + NUM_NODES )) \
     --rpc-address="127.0.0.1" \
