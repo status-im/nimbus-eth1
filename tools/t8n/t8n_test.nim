@@ -498,7 +498,6 @@ const
       expOut: "exp.json",
     ),
     TestSpec(
-<<<<<<< HEAD
       name  : "EVM tracer nil stack crash bug",
       base  : "testdata/00-519",
       input : t8nInput(

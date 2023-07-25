@@ -11,10 +11,8 @@
 import
   std/[tables, hashes, sets],
   eth/[common, rlp],
-  ../constants, ../utils/[utils, eof], storage_types,
+  ../constants, ../utils/[utils, eof],
   ../../stateless/multi_keys,
-  ../constants,
-  ../utils/utils,
   ./access_list as ac_access_list,
   "."/[core_db, distinct_tries, storage_types, transient_storage]
 
@@ -382,9 +380,9 @@ proc loadCode(acc: RefAccount, ac: AccountsCache) =
     return
 
   when defined(geth):
-    let data = ac.db.get(acc.account.codeHash.data)
+    let data = ac.kvt.get(acc.account.codeHash.data)
   else:
-    let data = ac.db.get(contractHashKey(acc.account.codeHash).toOpenArray)
+    let data = ac.kvt.get(contractHashKey(acc.account.codeHash).toOpenArray)
 
   acc.code = data
   acc.flags.incl CodeLoaded

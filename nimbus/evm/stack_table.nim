@@ -187,21 +187,39 @@ proc mergeStackTable(): StackTable {.compileTime.} =
   result = londonStackTable()
   result[PrevRandao] = sp(0, 1)
 
-proc cancunStackTable(): StackTable {.compileTime.} =
+proc shanghaiStackTable(): StackTable {.compileTime.} =
   result = mergeStackTable()
+  # new opcodes EIP-3855
+  result[Push0]  = sp(0, 1)
+
+proc cancunStackTable(): StackTable {.compileTime.} =
+  result = shanghaiStackTable()
+  # new opcodes EIP-4844
+  result[BlobHash]  = sp(1, 1)
+
+  # new opcodes EIP-1153
+  result[TLoad]  = sp(1, 1)
+  result[TStore] = sp(2, 0)
+
+  # new opcodes EIP-5656
+  result[Mcopy]  = sp(3, 0)
+
   # new opcodes EIP-4200
   result[Rjump]  = sp(0, 0)
   result[RJumpI] = sp(1, 0)
   result[RJumpV] = sp(1, 0)
+
   # new opcodes EIP-4750
   result[CallF]  = sp(0, 0)
   result[RetF]   = sp(0, 0)
-  # new opcodes EIP-3855
-  result[Push0]  = sp(0, 1)
+
+  # new opcodes EIP-7516
+  result[BlobBaseFee] = sp(1, 1)
 
   # disable opcodes EIP-3670
   result[CallCode]     = StackDesc()
   result[SelfDestruct] = StackDesc()
+
   # disable opcodes EIP-5450
   result[Jump]         = StackDesc()
   result[JumpI]        = StackDesc()
@@ -220,6 +238,6 @@ const
     istanbulStackTable(),
     londonStackTable(),
     mergeStackTable(),
-    mergeStackTable(),
+    shanghaiStackTable(),
     cancunStackTable(),
   ]

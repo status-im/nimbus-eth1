@@ -14,12 +14,11 @@ const
   lowMemoryCompileTime {.used.} = lowmem > 0
 
 import
-  std/[macros, sets, strformat],
-  pkg/[chronicles, chronos, stew/byteutils],
+  std/[macros, strformat],
   ".."/[constants, db/accounts_cache],
   "."/[code_stream, computation, validate],
   "."/[message, precompiles, state, types],
-  ../utils/[utils, eof],
+  ../utils/eof,
   ./interpreter/[op_dispatcher, gas_costs],
   pkg/[chronicles, chronos, eth/keys, stew/byteutils]
 
@@ -366,6 +365,9 @@ else:
 # to write the async version of the iterative one, but this one is
 # a bit shorter and feels cleaner, so if it works just as well I'd
 # rather use this one. --Adam
+import
+  async/operations
+
 proc asyncExecCallOrCreate*(c: Computation): Future[void] {.async.} =
   defer: c.dispose()
 

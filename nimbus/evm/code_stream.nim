@@ -10,7 +10,7 @@ import
   chronicles,
   eth/common,
   stew/[results, endians2],
-  stew/ranges/ptr_arith,
+  stew/ptrops,
   ../utils/eof,
   ./interpreter/op_codes
 

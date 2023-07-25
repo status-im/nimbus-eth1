@@ -1,5 +1,5 @@
 import
-  std/[tables, math, times],
+  std/[tables, math],
   eth/[keys],
   stew/byteutils,
   unittest2,
@@ -230,7 +230,7 @@ proc initEnv(): TestEnv =
 
   let
     com = CommonRef.new(
-      newMemoryDb(),
+      newCoreDbRef LegacyDbMemory,
       conf.pruneMode == PruneMode.Full,
       conf.networkId,
       conf.networkParams
@@ -278,6 +278,9 @@ proc eofMain*() =
   txs.add env.makeTx(some(cc), 0.u256, initCode)
 
   suite "Test EOF code deployment":
+    test "is EOF fork?":
+      check com.forkGTE(EOFFork)
+
     test "add txs to txpool":
       for tx in txs:
         let res = xp.addLocal(tx, force = true)
@@ -292,14 +295,15 @@ proc eofMain*() =
     test "generate POS block":
       com.pos.prevRandao = prevRandao
       com.pos.feeRecipient = aa
-      com.pos.timestamp = getTime()
+      com.pos.timestamp = EthTime.now()
 
       let blk = xp.ethBlock()
       check com.isBlockAfterTtd(blk.header)
 
       let body = BlockBody(
         transactions: blk.txs,
-        uncles: blk.uncles
+        uncles: blk.uncles,
+        withdrawals: some[seq[Withdrawal]](@[])
       )
       check blk.txs.len == 4
 
@@ -311,7 +315,7 @@ proc eofMain*() =
 
     test "check flags and various deployment mechanisms":
       var state = AccountsCache.init(
-        com.db.db,
+        com.db,
         stateRoot,
         com.pruneTrie)
 
