@@ -16,7 +16,7 @@ import
 
 type
   Blob = seq[byte]
-  
+
   ChainData* = object
     params*: NetworkParams
     lastBlockHash*: string
@@ -45,6 +45,8 @@ proc parseGenesis(n: JsonNode): Genesis =
   for x in genFields:
     genesis[x] = gen[x]
   optionalField("baseFeePerGas", genesis, gen)
+  optionalField("dataGasUsed", genesis, gen)
+  optionalField("excessDataGas", genesis, gen)
   genesis["alloc"] = n["pre"]
   parseGenesis($genesis)
 
