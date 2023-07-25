@@ -34,7 +34,7 @@ if [ ${PIPESTATUS[0]} != 4 ]; then
 fi
 
 OPTS="h:n:d"
-LONGOPTS="help,nodes:,data-dir:,enable-htop,log-level:,base-port:,base-rpc-port:,base-metrics-port:,reuse-existing-data-dir,timeout:,kill-old-processes"
+LONGOPTS="help,nodes:,data-dir:,enable-htop,log-level:,base-port:,base-rpc-port:,lc-bridge,trusted-block-root:,base-metrics-port:,reuse-existing-data-dir,timeout:,kill-old-processes"
 
 # default values
 NUM_NODES="64"
@@ -48,6 +48,8 @@ REUSE_EXISTING_DATA_DIR="0"
 TIMEOUT_DURATION="0"
 KILL_OLD_PROCESSES="0"
 SCRIPTS_DIR="fluffy/scripts/"
+LC_BRIDGE="0"
+TRUSTED_BLOCK_ROOT=""
 
 print_help() {
   cat <<EOF
@@ -61,6 +63,8 @@ E.g.: $(basename "$0") --nodes ${NUM_NODES} --data-dir "${DATA_DIR}" # defaults
   --base-port                 bootstrap node's discv5 port (default: ${BASE_PORT})
   --base-rpc-port             bootstrap node's RPC port (default: ${BASE_RPC_PORT})
   --base-metrics-port         bootstrap node's metrics server port (default: ${BASE_METRICS_PORT})
+  --lc-bridge                 run an beacon lc bridge attached to the bootstrap node
+  --trusted-block-root        recent trusted finalized block root to initialize the consensus light client from
   --enable-htop               use "htop" to see the fluffy processes without doing any tests
   --log-level                 set the log level (default: ${LOG_LEVEL})
   --reuse-existing-data-dir   instead of deleting and recreating the data dir, keep it and reuse everything we can from it
@@ -105,6 +109,14 @@ while true; do
       ;;
     --base-rpc-port)
       BASE_RPC_PORT="$2"
+      shift 2
+      ;;
+    --lc-bridge)
+      LC_BRIDGE="1"
+      shift
+      ;;
+    --trusted-block-root)
+      TRUSTED_BLOCK_ROOT="$2"
       shift 2
       ;;
     --base-metrics-port)
@@ -183,6 +195,9 @@ fi
 
 # Build the binaries
 BINARIES="fluffy"
+if [[ "${LC_BRIDGE}" == "1" ]]; then
+  BINARIES="${BINARIES} beacon_chain_bridge"
+fi
 TEST_BINARIES="test_portal_testnet"
 $MAKE -j ${NPROC} LOG_LEVEL=TRACE ${BINARIES}
 $MAKE -j ${NPROC} LOG_LEVEL=INFO ${TEST_BINARIES}
@@ -191,9 +206,13 @@ $MAKE -j ${NPROC} LOG_LEVEL=INFO ${TEST_BINARIES}
 # instance as the parent and the target process name as a pattern to the
 # "pkill" command.
 cleanup() {
-  pkill -f -P $$ fluffy &>/dev/null || true
+  for BINARY in ${BINARIES}; do
+    pkill -f -P $$ ${BINARY} &>/dev/null || true
+  done
   sleep 2
-  pkill -f -9 -P $$ fluffy &>/dev/null || true
+  for BINARY in ${BINARIES}; do
+    pkill -f -9 -P $$ ${BINARY} &>/dev/null || true
+  done
 
   # Delete the binaries we just built, because these are with none default logs.
   # TODO: When fluffy gets run time log options a la nimbus-eth2 we can keep
@@ -219,7 +238,7 @@ if [[ "${TIMEOUT_DURATION}" != "0" ]]; then
 fi
 
 PIDS=""
-NUM_JOBS=${NUM_NODES}
+NUM_JOBS=$(( NUM_NODES + LC_BRIDGE ))
 
 dump_logs() {
   LOG_LINES=20
@@ -233,6 +252,11 @@ dump_logs() {
 BOOTSTRAP_NODE=0
 BOOTSTRAP_TIMEOUT=5 # in seconds
 BOOTSTRAP_ENR_FILE="${DATA_DIR}/node${BOOTSTRAP_NODE}/fluffy_node.enr"
+
+TRUSTED_BLOCK_ROOT_ARG=""
+if [[ -z ${TRUSTED_BLOCK_ROOT} ]]; then
+  TRUSTED_BLOCK_ROOT_ARG="--trusted-block-root=${TRUSTED_BLOCK_ROOT}"
+fi
 
 for NUM_NODE in $(seq 0 $(( NUM_NODES - 1 ))); do
   NODE_DATA_DIR="${DATA_DIR}/node${NUM_NODE}"
@@ -275,6 +299,7 @@ for NUM_NODE in $(seq 0 $(( NUM_NODES - 1 ))); do
     --log-level="${LOG_LEVEL}" \
     --udp-port=$(( BASE_PORT + NUM_NODE )) \
     --data-dir="${NODE_DATA_DIR}" \
+    --network="none" \
     ${BOOTSTRAP_ARG} \
     --rpc \
     --rpc-address="127.0.0.1" \
@@ -285,6 +310,7 @@ for NUM_NODE in $(seq 0 $(( NUM_NODES - 1 ))); do
     --table-ip-limit=1024 \
     --bucket-ip-limit=24 \
     --bits-per-hop=1 \
+    ${TRUSTED_BLOCK_ROOT_ARG} \
     ${RADIUS_ARG} \
     ${EXTRA_ARGS} \
     > "${DATA_DIR}/log${NUM_NODE}.txt" 2>&1 &
@@ -295,6 +321,21 @@ for NUM_NODE in $(seq 0 $(( NUM_NODES - 1 ))); do
     PIDS="${PIDS},$!"
   fi
 done
+
+if [[ "$LC_BRIDGE" == "1" ]]; then
+  echo "Starting bridge node."
+  LC_BRIDGE_DATA_DIR="${DATA_DIR}/lc_bridge"
+  ./build/beacon_chain_bridge \
+    --data-dir="${LC_BRIDGE_DATA_DIR}" \
+    --udp-port=$(( BASE_PORT + NUM_NODES )) \
+    --rpc-address="127.0.0.1" \
+    --rpc-port="${BASE_RPC_PORT}" \
+    --beacon-light-client \
+    ${TRUSTED_BLOCK_ROOT_ARG} \
+    > "${DATA_DIR}/log_lc_bridge.txt" 2>&1 &
+
+  PIDS="${PIDS},$!"
+fi
 
 # give the regular nodes time to crash
 sleep 5
