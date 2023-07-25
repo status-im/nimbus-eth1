@@ -253,6 +253,7 @@ proc vmExecCommit(pst: TxPackerStateRef)
     # EIP-4844
     let excessDataGas = calcExcessDataGas(vmState.parent)
     xp.chain.excessDataGas = some(excessDataGas)
+    xp.chain.dataGasUsed = some(pst.dataGasUsed)
 
   proc balanceDelta: UInt256 =
     let postBalance = vmState.readOnlyStateDB.getBalance(xp.chain.feeRecipient)

@@ -70,7 +70,7 @@ proc makeTx*(t: var TestEnv, recipient: EthAddress, amount: UInt256, payload: op
   inc t.nonce
   signTransaction(tx, t.vaultKey, t.chainId, eip155 = true)
 
-proc initEnv(ttd: Option[UInt256] = none(UInt256)): TestEnv =
+proc initEnv(envFork: HardFork): TestEnv =
   var
     conf = makeConfig(@[
       "--engine-signer:658bdf435d810c91414ec09147daa6db62406379",
@@ -81,8 +81,14 @@ proc initEnv(ttd: Option[UInt256] = none(UInt256)): TestEnv =
     code: contractCode
   )
 
-  if ttd.isSome:
-    conf.networkParams.config.terminalTotalDifficulty = ttd
+  if envFork >= MergeFork:
+    conf.networkParams.config.terminalTotalDifficulty = some(100.u256)
+
+  if envFork >= Shanghai:
+    conf.networkParams.config.shanghaiTime = some(0.fromUnix)
+
+  if envFork >= Cancun:
+    conf.networkParams.config.cancunTime = some(0.fromUnix)
 
   let
     com = CommonRef.new(
@@ -112,7 +118,7 @@ const
 
 proc runTxPoolCliqueTest*() =
   var
-    env = initEnv()
+    env = initEnv(London)
 
   var
     tx = env.makeTx(recipient, amount)
@@ -173,7 +179,6 @@ proc runTxPoolCliqueTest*() =
       check rr == ValidationResult.OK
 
     test "Do not kick the signer out of list":
-      let timestamp = blk.header.timestamp
       check xp.smartHead(blk.header)
 
       let tx = env.makeTx(recipient, amount)
@@ -207,7 +212,7 @@ proc runTxPoolCliqueTest*() =
 
 proc runTxPoolPosTest*() =
   var
-    env = initEnv(some(100.u256))
+    env = initEnv(MergeFork)
 
   var
     tx = env.makeTx(recipient, amount)
@@ -260,13 +265,69 @@ proc runTxPoolPosTest*() =
       let bal = sdb.getBalance(feeRecipient)
       check not bal.isZero
 
+proc runTxPoolBlobhashTest*() =
+  var
+    env = initEnv(Cancun)
+
+  var
+    tx = env.makeTx(recipient, amount)
+    xp = env.xp
+    com = env.com
+    chain = env.chain
+    body: BlockBody
+    blk: EthBlock
+
+  suite "Test TxPool with blobhash block":
+    test "TxPool addLocal":
+      let res = xp.addLocal(tx, force = true)
+      check res.isOk
+      if res.isErr:
+        debugEcho res.error
+        return
+
+    test "TxPool jobCommit":
+      check xp.nItems.total == 1
+
+    test "TxPool ethBlock":
+      com.pos.prevRandao = prevRandao
+      com.pos.feeRecipient = feeRecipient
+      com.pos.timestamp = getTime()
+
+      blk = xp.ethBlock()
+
+      check com.isBlockAfterTtd(blk.header)
+
+      body = BlockBody(
+        transactions: blk.txs,
+        uncles: blk.uncles,
+        withdrawals: some[seq[Withdrawal]](@[])
+      )
+      check blk.txs.len == 1
+
+    test "Blobhash persistBlocks":
+      let rr = chain.persistBlocks([blk.header], [body])
+      check rr == ValidationResult.OK
+
+    test "validate TxPool prevRandao setter":
+      var sdb = newAccountStateDB(com.db.db, blk.header.stateRoot, pruneTrie = false)
+      let (val, ok) = sdb.getStorage(recipient, slot)
+      let randao = Hash256(data: val.toBytesBE)
+      check ok
+      check randao == prevRandao
+
+    test "feeRecipient rewarded":
+      check blk.header.coinbase == feeRecipient
+      var sdb = newAccountStateDB(com.db.db, blk.header.stateRoot, pruneTrie = false)
+      let bal = sdb.getBalance(feeRecipient)
+      check not bal.isZero
+
 proc runTxHeadDelta*(noisy = true) =
   ## see github.com/status-im/nimbus-eth1/issues/1031
 
   suite "TxPool: Synthesising blocks (covers issue #1031)":
     test "Packing and adding multiple blocks to chain":
       var
-        env = initEnv(some(100.u256))
+        env = initEnv(MergeFork)
         xp = env.xp
         com = env.com
         chain = env.chain
@@ -336,7 +397,8 @@ when isMainModule:
   setErrorLevel() # mute logger
 
   runTxPoolCliqueTest()
-  #runTxPoolPosTest()
-  #noisy.runTxHeadDelta
+  runTxPoolPosTest()
+  runTxPoolBlobhashTest()
+  noisy.runTxHeadDelta
 
 # End

@@ -900,6 +900,7 @@ when isMainModule:
 
   runTxPoolCliqueTest()
   runTxPoolPosTest()
+  runTxPoolBlobhashTest()
   noisy.runTxHeadDelta
 
   #noisy.runTxLoader(dir = ".")
