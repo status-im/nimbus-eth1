@@ -23,6 +23,7 @@
       {"name":"Address"},
       {"name":"Block"},
       {"name":"CallResult"},
+      {"name":"Withdrawal"},
       {"name":"Query"},
       {"name":"Boolean"},
       {"name":"FilterCriteria"},
@@ -106,38 +107,38 @@
 """
   result = """
 {
-  "chainID":1,
+  "chainID":"0x1",
   "block":{
     "__typename":"Block",
-    "number":3,
+    "number":"0x3",
     "hash":"0x72d69cc3c74c2740c27f4becae6c9f9fc524c702a9a48d23c564b13dce5fe0a1",
     "parent":{
       "__typename":"Block",
-      "number":2
+      "number":"0x2"
     },
     "nonce":"0x0000000000000000",
     "transactionsRoot":"0x8c8775e959d553f9f991a21a8502dbe6819c53c518711f2cbbbd7ed998f65647",
-    "transactionCount":1,
+    "transactionCount":"0x1",
     "stateRoot":"0x81b1df384897709e96a4b6319fda4e8f7682a1c9d753b1fb772ed4fb19f1e443",
     "receiptsRoot":"0x056b23fbba480696b65fe5a59b8f2148a1299103c4f57df839233af2cf4ca2d2",
     "miner":{
       "__typename":"Account",
       "address":"0x8888f1f195afa192cfee860698584c030f4c9db1",
       "balance":"0x542253a12a8f8dc0",
-      "transactionCount":0,
+      "transactionCount":"0x0",
       "code":"0x",
       "storage":"0x0000000000000000000000000000000000000000000000000000000000000000"
     },
     "extraData":"0x42",
-    "gasLimit":3141592,
+    "gasLimit":"0x2fefd8",
     "baseFeePerGas":null,
-    "gasUsed":21000,
+    "gasUsed":"0x5208",
     "timestamp":"0x54c99839",
     "logsBloom":"0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
     "mixHash":"0x0000000000000000000000000000000000000000000000000000000000000000",
     "difficulty":"0x20000",
     "totalDifficulty":"0x80000",
-    "ommerCount":1,
+    "ommerCount":"0x1",
     "ommers":[
       {
         "__typename":"Block",
@@ -154,7 +155,7 @@
       "__typename":"Account",
       "address":"0x095e7baea6a6c7c4c2dfeb977efac326af552d87",
       "balance":"0x1e",
-      "transactionCount":0,
+      "transactionCount":"0x0",
       "code":"0x",
       "storage":"0x0000000000000000000000000000000000000000000000000000000000000000"
     },
@@ -226,8 +227,8 @@
       {
         "__typename":"Transaction",
         "hash":"0xbb8e2ffb7276bc688c0305d5c35ae219cf036ac7a3b058ffa9d32275cc75f31b",
-        "nonce":0,
-        "index":0,
+        "nonce":"0x0",
+        "index":"0x0",
         "from":{
           "__typename":"Account",
           "address":"0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b"
@@ -238,21 +239,21 @@
         },
         "value":"0xa",
         "gasPrice":"0x3e8",
-        "gas":314159,
+        "gas":"0x4cb2f",
         "inputData":"0x",
         "block":{
           "__typename":"Block",
-          "number":1
+          "number":"0x1"
         },
-        "status":1,
-        "gasUsed":21000,
-        "cumulativeGasUsed":21000,
+        "status":"0x1",
+        "gasUsed":"0x5208",
+        "cumulativeGasUsed":"0x5208",
         "createdContract":null,
         "logs":[],
         "r":"0x25d49a54362b5ae38cf895fa9a1d3ded6f7d5577e572c9a93cdebff6e33ceaf7",
         "s":"0x773806df18e22db29acde1dd96c0418e28738af7f520e5e2c5c673494029e5",
         "v":"0x1b",
-        "type":0,
+        "type":"0x0",
         "accessList":null,
         "maxFeePerGas":null,
         "maxPriorityFeePerGas":null,
@@ -283,7 +284,7 @@
   "block":{
     "__typename":"Block",
     "hash":"0x72d69cc3c74c2740c27f4becae6c9f9fc524c702a9a48d23c564b13dce5fe0a1",
-    "number":3
+    "number":"0x3"
   }
 }
 """
@@ -304,7 +305,7 @@
   "block":{
     "__typename":"Block",
     "hash":"0x72d69cc3c74c2740c27f4becae6c9f9fc524c702a9a48d23c564b13dce5fe0a1",
-    "number":3
+    "number":"0x3"
   }
 }
 """
@@ -361,9 +362,9 @@
 {
   "syncing":{
     "__typename":"SyncState",
-    "startingBlock":0,
-    "currentBlock":3,
-    "highestBlock":0,
+    "startingBlock":"0x0",
+    "currentBlock":"0x3",
+    "highestBlock":"0x0",
     "pulledStates":null,
     "knownStates":null
   }
@@ -386,22 +387,22 @@
   "blocks":[
     {
       "__typename":"Block",
-      "number":0,
+      "number":"0x0",
       "hash":"0x2b253498ad5e63a16978753398bad1fde371a3e513438297b52d65dc98e1db29"
     },
     {
       "__typename":"Block",
-      "number":1,
+      "number":"0x1",
       "hash":"0xa4b71270e83c38d941d61fc2d8f3842f98a83203b82c3dea3176f1feb5a67b17"
     },
     {
       "__typename":"Block",
-      "number":2,
+      "number":"0x2",
       "hash":"0x579d2bdb721bde7a6bc56b53f4962a58493ee11482e8f738702ddb3d65888a74"
     },
     {
       "__typename":"Block",
-      "number":3,
+      "number":"0x3",
       "hash":"0x72d69cc3c74c2740c27f4becae6c9f9fc524c702a9a48d23c564b13dce5fe0a1"
     }
   ]
@@ -426,7 +427,7 @@
   result = """
 {
   "block":{
-    "estimateGas":21000
+    "estimateGas":"0x5208"
   }
 }
 """
@@ -457,8 +458,8 @@
     "call":{
       "__typename":"CallResult",
       "data":"0x",
-      "gasUsed":21000,
-      "status":1
+      "gasUsed":"0x5208",
+      "status":"0x1"
     }
   }
 }
@@ -471,24 +472,8 @@ mutation {
   sendRawTransaction(data: "0xf86080018304cb2f94095e7baea6a6c7c4c2dfeb977efac326af552d870a801ba077c7cd36820c71821c1aed59de46e70e701c4a8dd89c9ba508ab722210f60da8a03f29825d40c7c3f7bff3ca69267e0f3fb74b2d18b8c2c4e3c135b5d3b06e288d")
 }
 """
-  result = """
-{
-  "sendRawTransaction":"0x4ffa559ae277813fb886d1fa8743a590ba6b699f9893de99f5d1bcea9620b278"
-}
-"""
-
-[[units]]
-  name = "query.protocolVersion"
-  code = """
-{
-  protocolVersion
-}
-"""
-  result = """
-{
-  "protocolVersion":66
-}
-"""
+  errors = ["[2, 3]: Fatal: Field 'sendRawTransaction' cannot be resolved: \"transaction rejected by txpool\": @[\"sendRawTransaction\"]"]
+  result = """null"""
 
 [[units]]
   name = "query.block(number) logs"

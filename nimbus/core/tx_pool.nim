@@ -804,6 +804,14 @@ iterator okPairs*(xp: TxPoolRef): (Hash256, TxItemRef) =
 proc numTxs*(xp: TxPoolRef): int =
   xp.txDB.byItemID.len
 
+proc disposeAll*(xp: TxpoolRef) {.gcsafe,raises: [CatchableError].} =
+  let numTx = xp.numTxs
+  var list = newSeqOfCap[TxItemRef](numTx)
+  for x in nextPairs(xp.txDB.byItemID):
+    list.add x.data
+  for x in list:
+    xp.disposeItems(x)
+
 # ------------------------------------------------------------------------------
 # Public functions, local/remote accounts
 # ------------------------------------------------------------------------------

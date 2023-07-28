@@ -91,7 +91,11 @@ proc main() =
 
   var stat: SimStat
   let start = getTime()
-  for fileName {.inject.} in walkDirRec(
+
+  #let fileName = caseFolder & "/37_eth_sendRawTransaction_nonceTooLow.json"
+  #block:
+
+  for fileName in walkDirRec(
                  caseFolder, yieldFilter = {pcFile,pcLinkToFile}):
     if not fileName.endsWith(".json"):
       continue
@@ -100,6 +104,9 @@ proc main() =
     let node = parseFile(fileName)
     let status = ctx.processNode(node, fileName)
     stat.inc(name, status)
+
+    # simulate the real simulator
+    txPool.disposeAll()
 
   let elpd = getTime() - start
   print(stat, elpd, "graphql")
