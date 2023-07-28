@@ -35,8 +35,8 @@ type
     gasUser*    : GasInt
     parentHash* : Hash256
     baseFeePerGas*: Option[UInt256]
-    dataGasUsed*  : Option[uint64]    # EIP-4844
-    excessDataGas*: Option[uint64]    # EIP-4844
+    blobGasUsed*  : Option[uint64]    # EIP-4844
+    excessBlobGas*: Option[uint64]    # EIP-4844
 
   GenesisAlloc* = Table[EthAddress, GenesisAccount]
   GenesisAccount* = object
@@ -67,8 +67,8 @@ type
     gasUser*    : GasInt
     parentHash* : Hash256
     baseFeePerGas*: Option[UInt256]
-    dataGasUsed*  : Option[uint64]    # EIP-4844
-    excessDataGas*: Option[uint64]    # EIP-4844
+    blobGasUsed*  : Option[uint64]    # EIP-4844
+    excessBlobGas*: Option[uint64]    # EIP-4844
 
 const
   CustomNet*  = 0.NetworkId

@@ -234,7 +234,7 @@ proc validateUncles(com: CommonRef; header: BlockHeader;
 
 func gasCost(tx: Transaction): UInt256 =
   if tx.txType >= TxEip4844:
-    tx.gasLimit.u256 * tx.maxFee.u256 + tx.getTotalDataGas.u256 * tx.maxFeePerDataGas.u256
+    tx.gasLimit.u256 * tx.maxFee.u256 + tx.getTotalBlobGas.u256 * tx.maxFeePerBlobGas.u256
   elif tx.txType >= TxEip1559:
     tx.gasLimit.u256 * tx.maxFee.u256
   else:
@@ -246,7 +246,7 @@ proc validateTransaction*(
     sender:   EthAddress;      ## tx.getSender or tx.ecRecover
     maxLimit: GasInt;          ## gasLimit from block header
     baseFee:  UInt256;         ## baseFee from block header
-    excessDataGas: uint64;    ## excessDataGas from parent block header
+    excessBlobGas: uint64;    ## excessBlobGas from parent block header
     fork:     EVMFork): Result[void, string] =
 
   let
@@ -359,10 +359,10 @@ proc validateTransaction*(
             "get=$1, expect=$2" % [$bv.data[0].int, $BLOB_COMMITMENT_VERSION_KZG.int])
 
       # ensure that the user was willing to at least pay the current data gasprice
-      let dataGasPrice = getDataGasPrice(excessDataGas)
-      if tx.maxFeePerDataGas.uint64 < dataGasPrice:
-        return err("invalid tx: maxFeePerDataGas smaller than dataGasPrice. " &
-          "maxFeePerDataGas=$1, dataGasPrice=$2" % [$tx.maxFeePerDataGas, $dataGasPrice])
+      let blobGasPrice = getBlobGasPrice(excessBlobGas)
+      if tx.maxFeePerBlobGas.uint64 < blobGasPrice:
+        return err("invalid tx: maxFeePerBlobGas smaller than blobGasPrice. " &
+          "maxFeePerBlobGas=$1, blobGasPrice=$2" % [$tx.maxFeePerBlobGas, $blobGasPrice])
 
   except CatchableError as ex:
     return err(ex.msg)

@@ -79,7 +79,7 @@ proc makeAnRpcClient*(web3Url: string): Future[RpcClient] {.async.} =
     uncles*: seq[Hash256]             # list of uncle hashes.
     baseFeePerGas*: Option[UInt256]   # EIP-1559
     withdrawalsRoot*: Option[Hash256] # EIP-4895
-    excessDataGas*:   Option[UInt256] # EIP-4844
+    excessBlobGas*:   Option[UInt256] # EIP-4844
 ]#
 
 func fromQty(x: Option[Quantity]): Option[uint64] =
@@ -108,8 +108,8 @@ func blockHeaderFromBlockObject(o: BlockObject): BlockHeader =
     nonce: nonce,
     fee: o.baseFeePerGas,
     withdrawalsRoot: o.withdrawalsRoot.map(toHash),
-    dataGasUsed: fromQty(o.dataGasUsed),
-    excessDataGas: fromQty(o.excessDataGas)
+    blobGasUsed: fromQty(o.blobGasUsed),
+    excessBlobGas: fromQty(o.excessBlobGas)
   )
 
 proc fetchBlockHeaderWithHash*(rpcClient: RpcClient, h: Hash256): Future[BlockHeader] {.async.} =

@@ -52,10 +52,10 @@ type
     profit: UInt256          ## Net reward (w/o PoW specific block rewards)
     txRoot: Hash256          ## `rootHash` after packing
     stateRoot: Hash256       ## `stateRoot` after packing
-    dataGasUsed:
-      Option[uint64]         ## EIP-4844 block dataGasUsed
-    excessDataGas:
-      Option[uint64]         ## EIP-4844 block excessDataGas
+    blobGasUsed:
+      Option[uint64]         ## EIP-4844 block blobGasUsed
+    excessBlobGas:
+      Option[uint64]         ## EIP-4844 block excessBlobGas
 
   TxChainRef* = ref object ##\
     ## State cache of the transaction environment for creating a new\
@@ -144,8 +144,8 @@ proc resetTxEnv(dh: TxChainRef; parent: BlockHeader; fee: Option[UInt256])
 
   dh.txEnv.txRoot = EMPTY_ROOT_HASH
   dh.txEnv.stateRoot = dh.txEnv.vmState.parent.stateRoot
-  dh.txEnv.dataGasUsed = none(uint64)
-  dh.txEnv.excessDataGas = none(uint64)
+  dh.txEnv.blobGasUsed = none(uint64)
+  dh.txEnv.excessBlobGas = none(uint64)
 
 proc update(dh: TxChainRef; parent: BlockHeader)
     {.gcsafe,raises: [CatchableError].} =
@@ -224,8 +224,8 @@ proc getHeader*(dh: TxChainRef): BlockHeader
     # mixDigest: Hash256    # mining hash for given difficulty
     # nonce:     BlockNonce # mining free vaiable
     fee:         dh.txEnv.vmState.fee,
-    dataGasUsed: dh.txEnv.dataGasUsed,
-    excessDataGas: dh.txEnv.excessDataGas)
+    blobGasUsed: dh.txEnv.blobGasUsed,
+    excessBlobGas: dh.txEnv.excessBlobGas)
 
   if dh.com.forkGTE(Shanghai):
     result.withdrawalsRoot = some(calcWithdrawalsRoot(dh.withdrawals))
@@ -378,13 +378,13 @@ proc `txRoot=`*(dh: TxChainRef; val: Hash256) =
 proc `withdrawals=`*(dh: TxChainRef, val: sink seq[Withdrawal]) =
   dh.withdrawals = system.move(val)
 
-proc `excessDataGas=`*(dh: TxChainRef; val: Option[uint64]) =
+proc `excessBlobGas=`*(dh: TxChainRef; val: Option[uint64]) =
   ## Setter
-  dh.txEnv.excessDataGas = val
+  dh.txEnv.excessBlobGas = val
 
-proc `dataGasUsed=`*(dh: TxChainRef; val: Option[uint64]) =
+proc `blobGasUsed=`*(dh: TxChainRef; val: Option[uint64]) =
   ## Setter
-  dh.txEnv.dataGasUsed = val
+  dh.txEnv.blobGasUsed = val
 
 # ------------------------------------------------------------------------------
 # End

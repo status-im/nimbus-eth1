@@ -807,7 +807,7 @@ proc txMaxFeePerBlobGas(ud: RootRef, params: Args, parent: Node): RespResult {.a
   if tx.tx.txType < TxEIP4844:
     ok(respNull())
   else:
-    longNode(tx.tx.maxFeePerDataGas)
+    longNode(tx.tx.maxFeePerBlobGas)
 
 proc txVersionedHashes(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
@@ -1142,15 +1142,15 @@ proc blockWithdrawals(ud: RootRef, params: Args, parent: Node): RespResult {.api
 
 proc blockBlobGasUsed(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let h = HeaderNode(parent)
-  if h.header.dataGasUsed.isSome:
-    longNode(h.header.dataGasUsed.get)
+  if h.header.blobGasUsed.isSome:
+    longNode(h.header.blobGasUsed.get)
   else:
     ok(respNull())
 
 proc blockexcessBlobGas(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let h = HeaderNode(parent)
-  if h.header.excessDataGas.isSome:
-    longNode(h.header.excessDataGas.get)
+  if h.header.excessBlobGas.isSome:
+    longNode(h.header.excessBlobGas.get)
   else:
     ok(respNull())
 

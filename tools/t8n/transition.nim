@@ -99,7 +99,9 @@ proc envToHeader(env: EnvStruct): BlockHeader =
     timestamp  : env.currentTimestamp,
     stateRoot  : emptyRlpHash,
     fee        : env.currentBaseFee,
-    withdrawalsRoot: env.withdrawals.calcWithdrawalsRoot()
+    withdrawalsRoot: env.withdrawals.calcWithdrawalsRoot(),
+    blobGasUsed: env.currentBlobGasUsed,
+    excessBlobGas: env.currentExcessBlobGas
   )
 
 proc postState(db: AccountsCache, alloc: var GenesisAlloc) =
@@ -213,7 +215,7 @@ proc exec(ctx: var TransContext,
   vmState.receipts = newSeqOfCap[Receipt](txList.len)
   vmState.cumulativeGasUsed = 0
 
-  var dataGasUsed = 0'u64
+  var blobGasUsed = 0'u64
   for txIndex, txRes in txList:
     if txRes.isErr:
       rejected.add RejectedTx(
@@ -253,7 +255,7 @@ proc exec(ctx: var TransContext,
       rec, tx, sender, txIndex, gasUsed
     )
     includedTx.add tx
-    dataGasUsed += tx.getTotalDataGas
+    blobGasUsed += tx.getTotalBlobGas
 
   # Add mining reward? (-1 means rewards are disabled)
   if stateReward.isSome and stateReward.get >= 0:
@@ -302,8 +304,8 @@ proc exec(ctx: var TransContext,
   )
 
   if fork >= FkCancun:
-    result.result.dataGasUsed = some dataGasUsed
-    result.result.excessDataGas = some calcExcessDataGas(vmState.parent)
+    result.result.blobGasUsed = some blobGasUsed
+    result.result.excessBlobGas = some calcExcessBlobGas(vmState.parent)
 
 template wrapException(body: untyped) =
   when wrapExceptionEnabled:
@@ -408,8 +410,8 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
       difficulty: ctx.env.parentDifficulty.get(0.u256),
       ommersHash: uncleHash,
       blockNumber: ctx.env.currentNumber - 1.toBlockNumber,
-      dataGasUsed: ctx.env.parentDataGasUsed,
-      excessDataGas: ctx.env.parentExcessDataGas
+      blobGasUsed: ctx.env.parentBlobGasUsed,
+      excessBlobGas: ctx.env.parentExcessBlobGas
     )
 
     # Sanity check, to not `panic` in state_transition
@@ -426,11 +428,11 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
       raise newError(ErrorConfig, "Shanghai config but missing 'withdrawals' in env section")
 
     if com.isCancunOrLater(ctx.env.currentTimestamp):
-      if ctx.env.parentDataGasUsed.isNone:
-        raise newError(ErrorConfig, "Cancun config but missing 'parentDataGasUsed' in env section")
+      if ctx.env.parentBlobGasUsed.isNone:
+        raise newError(ErrorConfig, "Cancun config but missing 'parentBlobGasUsed' in env section")
 
-      if ctx.env.parentExcessDataGas.isNone:
-        raise newError(ErrorConfig, "Cancun config but missing 'parentExcessDataGas' in env section")
+      if ctx.env.parentExcessBlobGas.isNone:
+        raise newError(ErrorConfig, "Cancun config but missing 'parentExcessBlobGas' in env section")
 
       let res = loadKzgTrustedSetup()
       if res.isErr:

@@ -179,8 +179,10 @@ proc parseEnv*(ctx: var TransContext, n: JsonNode) =
   optional(ctx.env, UInt256, parentBaseFee)
   optional(ctx.env, GasInt, parentGasUsed)
   optional(ctx.env, GasInt, parentGasLimit)
-  optional(ctx.env, uint64, parentDataGasUsed)
-  optional(ctx.env, uint64, parentExcessDataGas)
+  optional(ctx.env, uint64, currentBlobGasUsed)
+  optional(ctx.env, uint64, currentExcessBlobGas)
+  optional(ctx.env, uint64, parentBlobGasUsed)
+  optional(ctx.env, uint64, parentExcessBlobGas)
 
   if n.hasKey("blockHashes"):
     let w = n["blockHashes"]
@@ -234,7 +236,7 @@ proc parseTx(n: JsonNode, chainId: ChainID): Transaction =
     required(tx, GasInt, maxPriorityFeePerGas)
     required(tx, GasInt, maxFeePerGas)
     omitZero(tx, AccessList, accessList)
-    required(tx, GasInt, maxFeePerDataGas)
+    required(tx, GasInt, maxFeePerBlobGas)
     required(tx, VersionedHashes, blobVersionedHashes)
 
   var eip155 = true
@@ -440,7 +442,7 @@ proc `@@`*(x: ExecutionResult): JsonNode =
     result["currentBaseFee"] = @@(x.currentBaseFee)
   if x.withdrawalsRoot.isSome:
     result["withdrawalsRoot"] = @@(x.withdrawalsRoot)
-  if x.dataGasUsed.isSome:
-    result["dataGasUsed"] = @@(x.dataGasUsed)
-  if x.excessDataGas.isSome:
-    result["excessDataGas"] = @@(x.excessDataGas)
+  if x.blobGasUsed.isSome:
+    result["blobGasUsed"] = @@(x.blobGasUsed)
+  if x.excessBlobGas.isSome:
+    result["excessBlobGas"] = @@(x.excessBlobGas)

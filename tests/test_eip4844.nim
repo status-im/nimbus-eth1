@@ -119,7 +119,7 @@ proc tx7(i: int): Transaction =
     maxFee:              10.GasInt,
     accessList:          accesses,
     versionedHashes:     @[digest],
-    maxFeePerDataGas:    10000000.GasInt,
+    maxFeePerBlobGas:    10000000.GasInt,
   )
 
 proc tx8(i: int): Transaction =
@@ -136,7 +136,7 @@ proc tx8(i: int): Transaction =
     maxFee:              10.GasInt,
     accessList:          accesses,
     versionedHashes:     @[digest],
-    maxFeePerDataGas:    10000000.GasInt,
+    maxFeePerBlobGas:    10000000.GasInt,
   )
 
 proc privKey(keyHex: string): PrivateKey =

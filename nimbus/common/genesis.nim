@@ -98,8 +98,8 @@ proc toGenesisHeader*(
     result.withdrawalsRoot = some(EMPTY_ROOT_HASH)
 
   if fork >= Cancun:
-    result.dataGasUsed = g.dataGasUsed
-    result.excessDataGas = g.excessDataGas
+    result.blobGasUsed = g.blobGasUsed
+    result.excessBlobGas = g.excessBlobGas
 
 proc toGenesisHeader*(
     genesis: Genesis;
