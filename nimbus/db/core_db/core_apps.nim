@@ -464,10 +464,12 @@ proc getTransactionCount*(
   var txCount = 0
   while true:
     let txKey = rlp.encode(txCount)
-    if txKey notin trie:
-      break
-    inc txCount
-  txCount
+    if txKey in trie:
+      inc txCount
+    else:
+      return txCount
+
+  doAssert(false, "unreachable")
 
 proc getUnclesCount*(
     db: CoreDbRef;
@@ -501,6 +503,10 @@ proc persistWithdrawals*(
     trie.put(rlp.encode(idx), encodedWd)
   trie.rootHash
 
+proc getWithdrawals*(db: CoreDbRef, withdrawalsRoot: Hash256): seq[Withdrawal] =
+  for encodedWd in db.getWithdrawalsData(withdrawalsRoot):
+    result.add(rlp.decode(encodedWd, Withdrawal))
+
 proc getBlockBody*(
     db: CoreDbRef;
     header: BlockHeader;
@@ -521,10 +527,7 @@ proc getBlockBody*(
       result = false
 
   if header.withdrawalsRoot.isSome:
-    var withdrawals: seq[Withdrawal]
-    for encodedWd in db.getWithdrawalsData(header.withdrawalsRoot.get):
-      withdrawals.add(rlp.decode(encodedWd, Withdrawal))
-    output.withdrawals = some(withdrawals)
+    output.withdrawals = some(db.getWithdrawals(header.withdrawalsRoot.get))
 
 proc getBlockBody*(
     db: CoreDbRef;
