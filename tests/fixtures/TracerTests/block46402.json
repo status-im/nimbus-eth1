@@ -283,7 +283,7 @@
             "0000000000000000000000000000000000000000000000000000000000000000",
             "0000000000000000000000000000000000000000000000000000000000000060"
           ],
-          "error": "Opcode Dispatch Error msg=Out of gas: Needed 20000 - Remaining 412 - Reason: SSTORE: 9a049f5d18c239efaa258af9f3e7002949a977a0[0] -> 924236965777326770894530693462975209021625492404 (0), depth=0",
+          "error": "Opcode Dispatch Error msg=Out of gas: Needed 20000 - Remaining 412 - Reason: SSTORE, depth=0",
           "gasCost": 0
         }
       ],
@@ -705,7 +705,7 @@
           "0000000000000000000000000000000000000000000000000000000000000000",
           "0000000000000000000000000000000000000000000000000000000000000060"
         ],
-        "error": "Opcode Dispatch Error msg=Out of gas: Needed 20000 - Remaining 412 - Reason: SSTORE: 9a049f5d18c239efaa258af9f3e7002949a977a0[0] -> 924236965777326770894530693462975209021625492404 (0), depth=0",
+        "error": "Opcode Dispatch Error msg=Out of gas: Needed 20000 - Remaining 412 - Reason: SSTORE, depth=0",
         "gasCost": 0
       }
     ]

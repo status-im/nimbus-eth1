@@ -27,8 +27,7 @@ import
   ./oph_defs,
   ./oph_helpers,
   eth/common,
-  stint,
-  strformat
+  stint
 
 {.push raises: [CatchableError].} # basically the annotation type of a `Vm2OpFn`
 
@@ -50,8 +49,7 @@ when evmc_enabled:
       gasCost  = c.gasCosts[Sstore].c_handler(newValue, gasParam)[0]
 
     c.gasMeter.consumeGas(
-      gasCost, &"SSTORE: {c.msg.contractAddress}[{slot}] " &
-              &"-> {newValue} ({currentValue})")
+      gasCost, "SSTORE")
 
 else:
   proc sstoreImpl(c: Computation, slot, newValue: UInt256) =
@@ -65,8 +63,7 @@ else:
         c.gasCosts[Sstore].c_handler(newValue, gasParam)
 
     c.gasMeter.consumeGas(
-      gasCost, &"SSTORE: {c.msg.contractAddress}[{slot}] " &
-              &"-> {newValue} ({currentValue})")
+      gasCost, "SSTORE")
     if gasRefund > 0:
       c.gasMeter.refundGas(gasRefund)
 
@@ -87,8 +84,7 @@ else:
       (gasCost, gasRefund) = c.gasCosts[Sstore].c_handler(newValue, gasParam)
 
     c.gasMeter.consumeGas(
-      gasCost, &"SSTORE EIP2200: {c.msg.contractAddress}[{slot}]" &
-              &" -> {newValue} ({currentValue})")
+      gasCost, "SSTORE EIP2200")
 
     if gasRefund != 0:
       c.gasMeter.refundGas(gasRefund)

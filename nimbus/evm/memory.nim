@@ -37,8 +37,9 @@ proc newMemory*(size: Natural): Memory =
   result.extend(0, size)
 
 proc read*(memory: var Memory, startPos: Natural, size: Natural): seq[byte] =
-  # TODO: use an openArray[byte]
-  result = memory.bytes[startPos ..< (startPos + size)]
+  result = newSeq[byte](size)
+  if size > 0:
+    copyMem(result[0].addr, memory.bytes[startPos].addr, size)
 
 when defined(evmc_enabled):
   proc readPtr*(memory: var Memory, startPos: Natural): ptr byte =
