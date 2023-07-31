@@ -70,7 +70,7 @@ logScope:
 template logTxt(info: static[string]): static[string] =
   "ChainDB " & info
 
-proc itNotImplemented(db: CoreDbRef, name: string) {.used.} =
+proc itNotImplemented(db: CoreDbRef|CoreDbKvtRef, name: string) {.used.} =
   debug logTxt "iterator not implemented", dbType=db.dbType, meth=name
 
 proc tmplNotImplemented*(db: CoreDbRef, name: string) {.used.} =
@@ -136,15 +136,15 @@ template shortTimeReadOnly*(db: CoreDbRef; id: CoreDbTxID; body: untyped) =
 # ------------------------------------------------------------------------------
 
 iterator pairs*(
-    db: CoreDbCaptRef;
+    db: CoreDbKvtRef;
       ): (Blob, Blob)
-      {.gcsafe, raises: [RlpError].} =
-  case db.parent.dbType:
-  of LegacyDbMemory, LegacyDbPersistent:
-    for k,v in db.LegacyCoreDbCaptRef:
+      {.gcsafe.} =
+  case db.dbType:
+  of LegacyDbMemory:
+    for k,v in db.LegacyCoreDbKvtRef:
       yield (k,v)
   else:
-    db.parent.itNotImplemented "pairs/capt"
+    db.itNotImplemented "pairs/kvt"
 
 iterator pairs*(
     db: CoreDbMptRef;

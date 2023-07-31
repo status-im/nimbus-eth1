@@ -12,15 +12,11 @@
 
 import
   std/options,
-  chronicles,
   eth/[common, rlp, trie/db, trie/hexary],
   results,
   ../../constants,
   ../select_backend,
   ./base
-
-logScope:
-  topics = "core_db-legacy"
 
 type
   LegacyCoreDbRef* = ref object of CoreDbRef
@@ -147,13 +143,6 @@ method recorder*(
       ): CoreDbRef =
   db.appDb
 
-iterator pairs*(
-    db: LegacyCoreDbCaptRef;
-      ): (Blob, Blob)
-      {.gcsafe, raises: [RlpError].} =
-  for k,v in db.recorder.pairsInMemoryDB:
-    yield (k,v)
-
 # ------------------------------------------------------------------------------
 # Public key-value table methods
 # ------------------------------------------------------------------------------
@@ -188,6 +177,13 @@ method contains*(
     key: openArray[byte];
       ): bool =
   db.db.contains key
+
+iterator pairs*(
+    db: LegacyCoreDbKvtRef;
+      ): (Blob, Blob)
+      {.gcsafe.} =
+  for k,v in db.db.pairsInMemoryDB:
+    yield (k,v)
 
 # ------------------------------------------------------------------------------
 # Public hexary trie methods

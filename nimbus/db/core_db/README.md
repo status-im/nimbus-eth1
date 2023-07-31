@@ -75,5 +75,5 @@ Usage of the replacement wrapper
           db = capture.recorder           # use the recorder in place of db
         ...
 
-        for key,value in capture:         # process recorded data
-         ...
+        for key,value in capture.recorder.kvt:
+         ...                              # process recorded data
