@@ -35,7 +35,7 @@ Here are some incomplete translations for objects and constructors.
 | initSecureHexaryTrie(db,..) | db.phk(..)      (no pruning)          |
 |                             | db.phkPrune(..) (w/pruning true/false)|
 | --                          |                                       |
-| newCaptureDB(db,memDB)      | newCoreDbCaptRef(db) (see below)      |
+| newCaptureDB(db,memDB)      | db.capture()    (see below)           |
 
 
 Usage of the replacement wrapper
@@ -71,7 +71,7 @@ Usage of the replacement wrapper
 ### Tracer support setup by hiding the current *CoreDbRef* behind a replacement:
 
         let
-          capture = newCoreDbCaptRef(db)
+          capture = db.capure()
           db = capture.recorder           # use the recorder in place of db
         ...
 

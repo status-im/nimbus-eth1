@@ -13,7 +13,16 @@
 import
   std/options,
   chronicles,
-  eth/common
+  eth/common,
+  ../../constants
+
+logScope:
+  topics = "core_db-base"
+
+when defined(release):
+  const AutoValidateDescriptors = false
+else:
+  const AutoValidateDescriptors = true
 
 type
   CoreDbCaptFlags* {.pure.} = enum
@@ -27,395 +36,594 @@ type
     # AristoDbMemory
     # AristoDbPersistent
 
+  # --------------------------------------------------
+  # Constructors
+  # --------------------------------------------------
+  CoreDbNewMptFn* = proc(root: Hash256): CoreDbMptRef {.gcsafe, raises: [].}
+  CoreDbNewLegacyMptFn* = proc(root: Hash256; prune: bool): CoreDbMptRef
+                            {.gcsafe, raises: [].}
+  CoreDbNewTxGetIdFn* = proc(): CoreDbTxID {.gcsafe, raises: [].}
+  CoreDbNewTxBeginFn* = proc(): CoreDbTxRef {.gcsafe, raises: [].}
+  CoreDbNewCaptFn = proc(flags: set[CoreDbCaptFlags] = {}): CoreDbCaptRef
+                      {.gcsafe, raises: [].}
+
+  CoreDbConstructors* = object
+    ## Constructors
+
+    # Hexary trie
+    mptFn*:       CoreDbNewMptFn
+    legacyMptFn*: CoreDbNewLegacyMptFn # Legacy handler, should go away
+
+    # Transactions
+    getIdFn*:     CoreDbNewTxGetIdFn
+    beginFn*:     CoreDbNewTxBeginFn
+
+    # capture/tracer
+    captureFn*:   CoreDbNewCaptFn
+
+
+  # --------------------------------------------------
+  # Sub-descriptor: Misc methods for main descriptor
+  # --------------------------------------------------
+  CoreDbInitLegaSetupFn* = proc() {.gcsafe, raises: [].}
+
+  CoreDbMiscFns* = object
+    legacySetupFn*: CoreDbInitLegaSetupFn
+
+  # --------------------------------------------------
+  # Sub-descriptor: KVT methods
+  # --------------------------------------------------
+  CoreDbKvtGetFn* = proc(k: openArray[byte]): Blob {.gcsafe, raises: [].}
+  CoreDbKvtMaybeGetFn* = proc(key: openArray[byte]): Option[Blob]
+                           {.gcsafe, raises: [].}
+  CoreDbKvtDelFn* = proc(k: openArray[byte]) {.gcsafe, raises: [].}
+  CoreDbKvtPutFn* = proc(k: openArray[byte]; v: openArray[byte])
+                      {.gcsafe, raises: [].}
+  CoreDbKvtContainsFn* = proc(k: openArray[byte]): bool {.gcsafe, raises: [].}
+  CoreDbKvtPairsIt* = iterator(): (Blob,Blob) {.gcsafe, raises: [].}
+
+  CoreDbKvtFns* = object
+    ## Methods for key-value table
+    getFn*:      CoreDbKvtGetFn
+    maybeGetFn*: CoreDbKvtMaybeGetFn
+    delFn*:      CoreDbKvtDelFn
+    putFn*:      CoreDbKvtPutFn
+    containsFn*: CoreDbKvtContainsFn
+    pairsIt*:    CoreDbKvtPairsIt
+
+
+  # --------------------------------------------------
+  # Sub-descriptor: Mpt/hexary trie methods
+  # --------------------------------------------------
+  CoreDbMptGetFn* = proc(k: openArray[byte]): Blob
+                      {.gcsafe, raises: [RlpError].}
+  CoreDbMptMaybeGetFn* = proc(k: openArray[byte]): Option[Blob]
+                           {.gcsafe, raises: [RlpError].}
+  CoreDbMptDelFn* = proc(k: openArray[byte]) {.gcsafe, raises: [RlpError].}
+  CoreDbMptPutFn* = proc(k: openArray[byte]; v: openArray[byte])
+                      {.gcsafe, raises: [RlpError].}
+  CoreDbMptContainsFn* = proc(k: openArray[byte]): bool
+                           {.gcsafe, raises: [RlpError].}
+  CoreDbMptRootHashFn* = proc(): Hash256 {.gcsafe, raises: [].}
+  CoreDbMptIsPruningFn* = proc(): bool {.gcsafe, raises: [].}
+  CoreDbMptPairsIt* = iterator(): (Blob,Blob) {.gcsafe, raises: [RlpError].}
+  CoreDbMptReplicateIt* = iterator(): (Blob,Blob) {.gcsafe, raises: [RlpError].}
+
+  CoreDbMptFns* = object
+    ## Methods for trie objects `CoreDbMptRef`
+    getFn*:       CoreDbMptGetFn
+    maybeGetFn*:  CoreDbMptMaybeGetFn
+    delFn*:       CoreDbMptDelFn
+    putFn*:       CoreDbMptPutFn
+    containsFn*:  CoreDbMptContainsFn
+    rootHashFn*:  CoreDbMptRootHashFn
+    pairsIt*:     CoreDbMptPairsIt
+    replicateIt*: CoreDbMptReplicateIt
+    isPruningFn*: CoreDbMptIsPruningFn # Legacy handler, should go away
+
+
+  # --------------------------------------------------
+  # Sub-descriptor: Transaction frame management
+  # --------------------------------------------------
+  CoreDbTxCommitFn* = proc(applyDeletes: bool) {.gcsafe, raises: [].}
+  CoreDbTxRollbackFn* = proc() {.gcsafe, raises: [].}
+  CoreDbTxDisposeFn* = proc() {.gcsafe, raises: [].}
+  CoreDbTxSafeDisposeFn* = proc() {.gcsafe, raises: [].}
+
+  CoreDbTxFns* = object
+    commitFn*:      CoreDbTxCommitFn
+    rollbackFn*:    CoreDbTxRollbackFn
+    disposeFn*:     CoreDbTxDisposeFn
+    safeDisposeFn*: CoreDbTxSafeDisposeFn
+
+  # --------------------------------------------------
+  # Sub-descriptor: Transaction ID management
+  # --------------------------------------------------
+  CoreDbTxIdSetIdFn* = proc() {.gcsafe, raises: [].}
+  CoreDbTxIdActionFn* = proc() {.gcsafe, raises: [CatchableError].}
+  CoreDbTxIdRoWrapperFn* = proc(action: CoreDbTxIdActionFn)
+                             {.gcsafe, raises: [CatchableError].}
+  CoreDbTxIdFns* = object
+    setIdFn*:     CoreDbTxIdSetIdFn
+    roWrapperFn*: CoreDbTxIdRoWrapperFn
+
+
+  # --------------------------------------------------
+  # Sub-descriptor: capture recorder methods
+  # --------------------------------------------------
+  CoreDbCaptRecorderFn* = proc(): CoreDbRef {.gcsafe, raises: [].}
+  CoreDbCaptFlagsFn* = proc(): set[CoreDbCaptFlags] {.gcsafe, raises: [].}
+
+  CoreDbCaptFns* = object
+    recorderFn*: CoreDbCaptRecorderFn
+    getFlagsFn*: CoreDbCaptFlagsFn
+
+  # --------------------------------------------------
+  # Production descriptors
+  # --------------------------------------------------
+
   CoreDbRef* = ref object of RootRef
     ## Database descriptor
-    kvt: CoreDbKvtRef
+    kvt: CoreDbKvtObj
+    new: CoreDbConstructors
+    methods: CoreDbMiscFns
 
-  CoreDbKvtRef* = ref object of RootRef
+  CoreDbKvtObj* = object
     ## Statically initialised Key-Value pair table living in `CoreDbRef`
     dbType: CoreDbType
+    methods: CoreDbKvtFns
 
-  CoreDbMptRef* = ref object of RootRef
+  CoreDbMptRef* = ref object
     ## Hexary/Merkle-Patricia tree derived from `CoreDbRef`, will be
     ## initialised on-the-fly.
     parent: CoreDbRef
+    methods: CoreDbMptFns
 
-  CoreDbPhkRef* = ref object of RootRef
+  CoreDbPhkRef* = ref object
     ## Similar to `CoreDbMptRef` but with pre-hashed keys. That is, any
     ## argument key for `put()`, `get()` etc. will be hashed first before
     ## being applied.
-    parent: CoreDbRef
+    parent: CoreDbMptRef
+    methods: CoreDbMptFns
 
-  CoreDbCaptRef* = ref object of RootRef
-    ## Db transaction tracer derived from `CoreDbRef`
-    parent: CoreDbRef
-    flags: set[CoreDbCaptFlags]
-
-  CoreDbTxRef* = ref object of RootRef
+  CoreDbTxRef* = ref object
     ## Transaction descriptor derived from `CoreDbRef`
     parent: CoreDbRef
+    methods: CoreDbTxFns
 
-  CoreDbTxID* = ref object of RootRef
+  CoreDbTxID* = ref object
+    ## Transaction ID descriptor derived from `CoreDbRef`
+    parent: CoreDbRef
+    methods: CoreDbTxIdFns
 
-logScope:
-  topics = "core_db-base"
+  CoreDbCaptRef* = ref object
+    ## Db transaction tracer derived from `CoreDbRef`
+    parent: CoreDbRef
+    methods: CoreDbCaptFns
+
+  MethodsDesc =
+    CoreDbKvtObj |
+    CoreDbMptRef | CoreDbPhkRef |
+    CoreDbTxRef  | CoreDbTxID   |
+    CoreDbCaptRef
 
 # ------------------------------------------------------------------------------
 # Private functions: helpers
 # ------------------------------------------------------------------------------
 
 template logTxt(info: static[string]): static[string] =
-  "CoreDb base: " & info
+  "CoreDb " & info
 
-proc notImplemented(db: CoreDbKvtRef, name: string) {.used.} =
-  debug logTxt "method not implemented", dbType=db.dbType, meth=name
+template itNotImplemented(db: CoreDbRef, name: string) =
+  warn logTxt "iterator not implemented", dbType=db.kvt.dbType, meth=name
 
-proc notImplemented(db: CoreDbRef, name: string) {.used.} =
-  db.kvt.notImplemented name
+# ---------
+
+proc validateMethodsDesc(db: CoreDbRef) =
+  doAssert not db.methods.legacySetupFn.isNil
+
+proc validateMethodsDesc(kvt: CoreDbKvtObj) =
+  doAssert kvt.dbType != CoreDbType(0)
+  doAssert not kvt.methods.getFn.isNil
+  doAssert not kvt.methods.maybeGetFn.isNil
+  doAssert not kvt.methods.delFn.isNil
+  doAssert not kvt.methods.putFn.isNil
+  doAssert not kvt.methods.containsFn.isNil
+  doAssert not kvt.methods.pairsIt.isNil
+
+proc validateMethodsDesc(trie: CoreDbMptRef|CoreDbPhkRef) =
+  doAssert not trie.parent.isNil
+  doAssert not trie.methods.getFn.isNil
+  doAssert not trie.methods.maybeGetFn.isNil
+  doAssert not trie.methods.delFn.isNil
+  doAssert not trie.methods.putFn.isNil
+  doAssert not trie.methods.containsFn.isNil
+  doAssert not trie.methods.rootHashFn.isNil
+  doAssert not trie.methods.isPruningFn.isNil
+  doAssert not trie.methods.pairsIt.isNil
+  doAssert not trie.methods.replicateIt.isNil
+
+proc validateMethodsDesc(cpt: CoreDbCaptRef) =
+  doAssert not cpt.parent.isNil
+  doAssert not cpt.methods.recorderFn.isNil
+  doAssert not cpt.methods.getFlagsFn.isNil
+
+proc validateMethodsDesc(tx: CoreDbTxRef) =
+  doAssert not tx.parent.isNil
+  doAssert not tx.methods.commitFn.isNil
+  doAssert not tx.methods.rollbackFn.isNil
+  doAssert not tx.methods.disposeFn.isNil
+  doAssert not tx.methods.safeDisposeFn.isNil
+
+proc validateMethodsDesc(id: CoreDbTxID) =
+  doAssert not id.parent.isNil
+  doAssert not id.methods.setIdFn.isNil
+  doAssert not id.methods.roWrapperFn.isNil
+
+proc validateConstructors(new: CoreDbConstructors) =
+  doAssert not new.mptFn.isNil
+  doAssert not new.legacyMptFn.isNil
+  doAssert not new.getIdFn.isNil
+  doAssert not new.beginFn.isNil
+  doAssert not new.captureFn.isNil
+
+# ---------
+
+proc toCoreDbPhkRef(mpt: CoreDbMptRef): CoreDbPhkRef =
+  ## MPT => pre-hashed MPT (aka PHK)
+  result = CoreDbPhkRef(
+    parent:  mpt,
+    methods: CoreDbMptFns(
+      getFn: proc(k: openArray[byte]): Blob
+          {.gcsafe, raises: [RlpError].} =
+        return mpt.methods.getFn(k.keccakHash.data),
+
+      maybeGetFn: proc(k: openArray[byte]): Option[Blob]
+          {.gcsafe, raises: [RlpError].} =
+        return mpt.methods.maybeGetFn(k.keccakHash.data),
+
+      delFn: proc(k: openArray[byte])
+          {.gcsafe, raises: [RlpError].} =
+        mpt.methods.delFn(k.keccakHash.data),
+
+      putFn: proc(k:openArray[byte]; v:openArray[byte])
+         {.gcsafe, raises: [RlpError].} =
+        mpt.methods.putFn(k.keccakHash.data, v),
+
+      containsFn: proc(k: openArray[byte]): bool
+          {.gcsafe, raises: [RlpError].} =
+        return mpt.methods.containsFn(k.keccakHash.data),
+
+      pairsIt: iterator(): (Blob, Blob) {.gcsafe.} =
+        mpt.parent.itNotImplemented("pairs/phk"),
+
+      replicateIt: iterator(): (Blob, Blob) {.gcsafe.} =
+        mpt.parent.itNotImplemented("replicate/phk"),
+
+      rootHashFn: mpt.methods.rootHashFn,
+      isPruningFn: mpt.methods.isPruningFn))
+
+  when AutoValidateDescriptors:
+    result.validateMethodsDesc
+
+
+proc kvtUpdate(db: CoreDbRef) =
+  ## Disable interator for non-memory instances
+  case db.kvt.dbType
+  of LegacyDbMemory:
+    discard
+  else:
+    db.kvt.methods.pairsIt = iterator(): (Blob, Blob) =
+      db.itNotImplemented "pairs/kvt"
+
+# ------------------------------------------------------------------------------
+# Public debugging helpers
+# ------------------------------------------------------------------------------
+
+proc validate*(desc: MethodsDesc) =
+  desc.validateMethodsDesc
+
+proc validate*(db: CoreDbRef) =
+  db.validateMethodsDesc
+  db.kvt.validateMethodsDesc
+  db.new.validateConstructors
 
 # ------------------------------------------------------------------------------
 # Public constructor
 # ------------------------------------------------------------------------------
 
-proc init*(db: CoreDbRef; dbType: CoreDbType; kvt: CoreDbKvtRef) =
-  db.kvt = kvt
-  kvt.dbType = dbType
+proc init*(
+    db:         CoreDbRef;
+    dbType:     CoreDbType;
+    dbMethods:  CoreDbMiscFns;
+    kvtMethods: CoreDbKvtFns;
+    new:        CoreDbConstructors
+     ) =
+  ## Base descriptor initaliser
+  db.methods = dbMethods
+  db.new = new
 
-proc init*(db: CoreDbTxRef|CoreDbMptRef|CoreDbPhkRef; parent: CoreDbRef) =
-  db.parent = parent
+  db.kvt.dbType = dbType
+  db.kvt.methods = kvtMethods
+  db.kvtUpdate()
 
-proc init*(db: CoreDbCaptRef; parent: CoreDbRef; flags: set[CoreDbCaptFlags]) =
-  db.parent = parent
-  db.flags = flags
+  when AutoValidateDescriptors:
+    db.validate
+
+
+proc newCoreDbMptRef*(db: CoreDbRef; methods: CoreDbMptFns): CoreDbMptRef =
+  ## Hexary trie constructor helper. Will be needed for the
+  ## sub-constructors defined in `CoreDbMptConstructor`.
+  result = CoreDbMptRef(
+    parent:  db,
+    methods: methods)
+
+  when AutoValidateDescriptors:
+    result.validate
+
+
+proc newCoreDbTxRef*(db: CoreDbRef; methods: CoreDbTxFns): CoreDbTxRef =
+  ## Transaction frame constructor helper. Will be needed for the
+  ## sub-constructors defined in `CoreDbTxConstructor`.
+  result = CoreDbTxRef(
+    parent:  db,
+    methods: methods)
+
+  when AutoValidateDescriptors:
+    result.validate
+
+
+proc newCoreDbTxID*(db: CoreDbRef; methods: CoreDbTxIdFns): CoreDbTxID =
+  ## Transaction ID constructor helper.
+  result = CoreDbTxID(
+    parent:  db,
+    methods: methods)
+
+  when AutoValidateDescriptors:
+    result.validate
+
+
+proc newCoreDbCaptRef*(db: CoreDbRef; methods: CoreDbCaptFns): CoreDbCaptRef =
+  ## Capture constructor helper.
+  result = CoreDbCaptRef(
+    parent:  db,
+    methods: methods)
+
+  when AutoValidateDescriptors:
+    db.validate
 
 # ------------------------------------------------------------------------------
-# Public getters
+# Public main descriptor methods
 # ------------------------------------------------------------------------------
 
 proc dbType*(db: CoreDbRef): CoreDbType =
+  ## Getter
   db.kvt.dbType
-
-proc dbType*(db: CoreDbKvtRef): CoreDbType =
-  db.dbType
-
-proc kvt*(db: CoreDbRef): CoreDbKvtRef =
-  db.kvt
-
-proc parent*(
-    db: CoreDbTxRef|CoreDbMptRef|CoreDbPhkRef|CoreDbCaptRef;
-      ): CoreDbRef =
-  db.parent
-
-proc flags*(db: CoreDbCaptRef): set[CoreDbCaptFlags] =
-  db.flags
-
-# ------------------------------------------------------------------------------
-# Public legacy helpers
-# ------------------------------------------------------------------------------
 
 # On the persistent legacy hexary trie, this function is needed for
 # bootstrapping and Genesis setup when the `purge` flag is activated.
-method compensateLegacySetup*(db: CoreDbRef) {.base.} =
-  db.notImplemented "compensateLegacySetup"
-
-# ------------------------------------------------------------------------------
-# Public tracer methods
-# ------------------------------------------------------------------------------
-
-method newCoreDbCaptRef*(
-    db: CoreDbRef;
-    flags: set[CoreDbCaptFlags] = {};
-      ): CoreDbCaptRef
-      {.base.} =
-  ## Start capture session on the argument `db`
-  db.notImplemented "newCaptureRef"
-
-method recorder*(
-    db: CoreDbCaptRef;
-      ): CoreDbRef
-      {.base.} =
-  ## Retrieve recording database descriptor
-  db.parent.notImplemented "db"
+proc compensateLegacySetup*(db: CoreDbRef) =
+  db.methods.legacySetupFn()
 
 # ------------------------------------------------------------------------------
 # Public key-value table methods
 # ------------------------------------------------------------------------------
 
-method get*(
-    db: CoreDbKvtRef;
-    key: openArray[byte];
-      ): Blob
-      {.base.} =
-  db.notImplemented "get/kvt"
+proc kvt*(db: CoreDbRef): CoreDbKvtObj =
+  ## Getter (pseudo constructor)
+  db.kvt
 
-method maybeGet*(
-    db: CoreDbKvtRef;
-    key: openArray[byte];
-      ): Option[Blob]
-      {.base.} =
-  db.notImplemented "maybeGet/kvt"
+proc dbType*(db: CoreDbKvtObj): CoreDbType =
+  ## Getter
+  db.dbType
 
-method del*(
-    db: CoreDbKvtRef;
-    key: openArray[byte];
-      ) {.base.} =
-  db.notImplemented "del/kvt"
+proc get*(db: CoreDbKvtObj; key: openArray[byte]): Blob =
+  db.methods.getFn key
 
-method put*(
-    db: CoreDbKvtRef;
-    key: openArray[byte];
-    value: openArray[byte];
-      ) {.base.} =
-  db.notImplemented "put/kvt"
+proc maybeGet*(db: CoreDbKvtObj; key: openArray[byte]): Option[Blob] =
+  db.methods.maybeGetFn key
 
-method contains*(
-    db: CoreDbKvtRef;
-    key: openArray[byte];
-      ): bool
-      {.base.} =
-  db.notImplemented "contains/kvt"
+proc del*(db: CoreDbKvtObj; key: openArray[byte]) =
+  db.methods.delFn key
+
+proc put*(db: CoreDbKvtObj; key: openArray[byte]; value: openArray[byte]) =
+  db.methods.putFn(key, value)
+
+proc contains*(db: CoreDbKvtObj; key: openArray[byte]): bool =
+  db.methods.containsFn key
+
+iterator pairs*(db: CoreDbKvtObj): (Blob, Blob) =
+  ## Iterator supported on memory DB (otherwise implementation dependent)
+  for k,v in db.methods.pairsIt():
+    yield (k,v)
 
 # ------------------------------------------------------------------------------
-# Public hexary trie methods
+# Public Merkle Patricia Tree, hexary trie constructors
 # ------------------------------------------------------------------------------
 
-method mpt*(
-    db: CoreDbRef;
-    root: Hash256;
-      ): CoreDbMptRef
-      {.base.} =
-  db.notImplemented "mpt"
+proc mpt*(db: CoreDbRef; root=EMPTY_ROOT_HASH): CoreDbMptRef =
+  ## Constructor
+  db.new.mptFn root
 
-method mpt*(
-    db: CoreDbRef;
-      ): CoreDbMptRef
-      {.base.} =
-  db.notImplemented "mpt"
+proc mptPrune*(db: CoreDbRef; root=EMPTY_ROOT_HASH): CoreDbMptRef =
+  ## Constructor
+  db.new.legacyMptFn(root, true)
 
-method isPruning*(
-    db: CoreDbMptRef;
-      ): bool
-      {.base.} =
-  db.parent.notImplemented "isPruning"
+proc mptPrune*(db: CoreDbRef; root: Hash256; prune: bool): CoreDbMptRef =
+  ## Constructor
+  db.new.legacyMptFn(root, prune)
 
-# -----
+proc mptPrune*(db: CoreDbRef; prune: bool): CoreDbMptRef =
+  ## Constructor
+  db.new.legacyMptFn(EMPTY_ROOT_HASH, prune)
 
-method mptPrune*(
-    db: CoreDbRef;
-    root: Hash256;
-      ): CoreDbMptRef
-      {.base.} =
-  ## Legacy mode MPT, will go away
-  db.notImplemented "mptPrune"
+# ------------------------------------------------------------------------------
+# Public pre-hashed key hexary trie constructors
+# ------------------------------------------------------------------------------
 
-method mptPrune*(
-    db: CoreDbRef;
-      ): CoreDbMptRef
-      {.base.} =
-  ## Legacy mode MPT, will go away
-  db.notImplemented "mptPrune"
+proc phk*(db: CoreDbRef; root=EMPTY_ROOT_HASH): CoreDbPhkRef =
+  ## Constructor
+  db.new.mptFn(root).toCoreDbPhkRef
 
-method mptPrune*(
-    db: CoreDbRef;
-    root: Hash256;
-    prune: bool;
-      ): CoreDbMptRef
-      {.base.} =
-  ## Legacy mode MPT, will go away
-  db.notImplemented "mptPrune"
+proc phkPrune*(db: CoreDbRef; root=EMPTY_ROOT_HASH): CoreDbPhkRef =
+  ## Constructor
+  db.new.legacyMptFn(root, true).toCoreDbPhkRef
 
-method mptPrune*(
-    db: CoreDbRef;
-    prune: bool;
-      ): CoreDbMptRef
-      {.base.} =
-  ## Legacy mode MPT, will go away
-  db.notImplemented "mptPrune"
+proc phkPrune*(db: CoreDbRef; root: Hash256; prune: bool): CoreDbPhkRef =
+  ## Constructor
+  db.new.legacyMptFn(root, prune).toCoreDbPhkRef
 
-# -----
+proc phkPrune*(db: CoreDbRef; prune: bool): CoreDbPhkRef =
+  ## Constructor
+  db.new.legacyMptFn(EMPTY_ROOT_HASH, prune).toCoreDbPhkRef
 
-{.push hint[XCannotRaiseY]: off.}
+# ------------------------------------------------------------------------------
+# Public hexary trie switch methods
+# ------------------------------------------------------------------------------
 
-method get*(
-    db: CoreDbMptRef;
+proc toPhk*(mpt: CoreDbMptRef): CoreDbPhkRef =
+  ## Getter
+  mpt.toCoreDbPhkRef
+
+proc toMpt*(trie: CoreDbPhkRef): CoreDbMptRef =
+  ## Getter
+  trie.parent
+
+# ------------------------------------------------------------------------------
+# Public hexary trie database methods (`mpt` or `phk`)
+# ------------------------------------------------------------------------------
+
+proc parent*(mpt: CoreDbMptRef): CoreDbRef =
+  ## Getter
+  mpt.parent
+
+proc parent*(trie: CoreDbPhkRef): CoreDbRef =
+  ## Getter
+  trie.parent.parent
+
+proc isPruning*(trie: CoreDbMptRef|CoreDbPhkRef): bool =
+  ## Getter
+  trie.methods.isPruningFn()
+
+proc get*(
+    trie: CoreDbMptRef|CoreDbPhkRef;
     key: openArray[byte];
       ): Blob
-      {.base, raises: [RlpError].} =
-  db.parent.notImplemented "get/mpt"
+      {.gcsafe, raises: [RlpError].} =
+  trie.methods.getFn key
 
-method maybeGet*(
-    db: CoreDbMptRef;
+proc maybeGet*(
+    trie: CoreDbMptRef|CoreDbPhkRef;
     key: openArray[byte];
       ): Option[Blob]
-      {.base, raises: [RlpError].} =
-  db.parent.notImplemented "maybeGet/mpt"
+      {.gcsafe, raises: [RlpError].} =
+  trie.methods.maybeGetFn key
 
-method del*(
-    db: CoreDbMptRef;
+proc del*(
+    trie: CoreDbMptRef|CoreDbPhkRef;
     key: openArray[byte];
-      ) {.base, raises: [RlpError].} =
-  db.parent.notImplemented "del/mpt"
+      ) {.gcsafe, raises: [RlpError].} =
+  trie.methods.delFn key
 
-method put*(
-    db: CoreDbMptRef;
+proc put*(
+    trie: CoreDbMptRef|CoreDbPhkRef;
     key: openArray[byte];
     value: openArray[byte];
-      ) {.base, raises: [RlpError].} =
-  db.parent.notImplemented "put/mpt"
+      ) {.gcsafe, raises: [RlpError].} =
+  trie.methods.putFn(key, value)
 
-method contains*(
-    db: CoreDbMptRef;
+proc contains*(
+    trie: CoreDbMptRef|CoreDbPhkRef;
     key: openArray[byte];
       ): bool
-      {.base, raises: [RlpError].} =
-  db.parent.notImplemented "contains/mpt"
+      {.gcsafe, raises: [RlpError].} =
+  trie.methods.containsFn key
 
-{.pop.}
-
-method rootHash*(
-    db: CoreDbMptRef;
+proc rootHash*(
+    trie: CoreDbMptRef|CoreDbPhkRef;
       ): Hash256
-      {.base.} =
-  db.parent.notImplemented "rootHash/mpt"
+      {.gcsafe.} =
+  trie.methods.rootHashFn()
 
-# ------------------------------------------------------------------------------
-# Public pre-kashed key hexary trie methods
-# ------------------------------------------------------------------------------
+iterator pairs*(
+    trie: CoreDbMptRef;
+      ): (Blob, Blob)
+      {.gcsafe, raises: [RlpError].} =
+  ## Trie traversal, only supported for `CoreDbMptRef`
+  for k,v in trie.methods.pairsIt():
+    yield (k,v)
 
-method phk*(
-    db: CoreDbRef;
-    root: Hash256;
-      ): CoreDbPhkRef
-      {.base.} =
-  db.notImplemented "phk"
-
-method phk*(
-    db: CoreDbRef;
-      ): CoreDbPhkRef
-      {.base.} =
-  db.notImplemented "phk"
-
-method isPruning*(
-    db: CoreDbPhkRef;
-      ): bool
-      {.base.} =
-  db.parent.notImplemented "isPruning"
-
-# -----------
-
-method phkPrune*(
-    db: CoreDbRef;
-    root: Hash256;
-      ): CoreDbPhkRef
-      {.base.} =
-  ## Legacy mode PHK, will go away
-  db.notImplemented "phkPrune"
-
-method phkPrune*(
-    db: CoreDbRef;
-      ): CoreDbPhkRef
-      {.base.} =
-  ## Legacy mode PHK, will go away
-  db.notImplemented "phkPrune"
-
-method phkPrune*(
-    db: CoreDbRef;
-    root: Hash256;
-    prune: bool;
-      ): CoreDbPhkRef
-      {.base.} =
-  ## Legacy mode PHK, will go away
-  db.notImplemented "phkPrune"
-
-method phkPrune*(
-    db: CoreDbRef;
-    prune: bool;
-      ): CoreDbPhkRef
-      {.base.} =
-  ## Legacy mode PHK, will go away
-  db.notImplemented "phkPrune"
-
-# -----------
-
-{.push hint[XCannotRaiseY]: off.}
-
-method get*(
-    db: CoreDbPhkRef;
-    key: openArray[byte];
-      ): Blob
-      {.base, raises: [RlpError].} =
-  db.parent.notImplemented "get/phk"
-
-method maybeGet*(
-    db: CoreDbPhkRef;
-    key: openArray[byte];
-      ): Option[Blob]
-      {.base, raises: [RlpError].} =
-  db.parent.notImplemented "maybeGet/phk"
-
-method del*(
-    db: CoreDbPhkRef;
-    key: openArray[byte];
-      ) {.base, raises: [RlpError].} =
-  db.parent.notImplemented "del/phk"
-
-method put*(
-    db: CoreDbPhkRef;
-    key: openArray[byte];
-    value: openArray[byte];
-      ) {.base, raises: [RlpError].} =
-  db.parent.notImplemented "put/phk"
-
-method contains*(
-    db: CoreDbPhkRef;
-    key: openArray[byte];
-      ): bool
-      {.base, raises: [RlpError].} =
-  db.parent.notImplemented "contains/phk"
-
-{.pop.}
-
-method rootHash*(
-    db: CoreDbPhkRef;
-      ): Hash256
-      {.base.} =
-  db.parent.notImplemented "rootHash/phk"
+iterator replicate*(
+    trie: CoreDbMptRef;
+      ): (Blob, Blob)
+      {.gcsafe, raises: [RlpError].} =
+  ## Low level trie dump, only supported for `CoreDbMptRef`
+  for k,v in trie.methods.replicateIt():
+    yield (k,v)
 
 # ------------------------------------------------------------------------------
 # Public transaction related methods
 # ------------------------------------------------------------------------------
 
-method getTransactionID*(db: CoreDbRef): CoreDbTxID {.base.} =
-  db.notImplemented "getTxID"
+proc getTransactionID*(db: CoreDbRef): CoreDbTxID  =
+  ## Getter, current transaction state
+  db.new.getIdFn()
 
-method setTransactionID*(db: CoreDbRef; id: CoreDbTxID) {.base.} =
-  db.notImplemented "setTxID"
+proc parent*(id: CoreDbTxID): CoreDbRef =
+  ## Getter
+  id.parent
 
-method beginTransaction*(db: CoreDbRef): CoreDbTxRef {.base.} =
-  db.notImplemented "beginTransaction"
+proc setTransactionID*(id: CoreDbTxID) =
+  ## Setter, revert to some earlier transaction state
+  id.methods.setIdFn()
 
-method commit*(t: CoreDbTxRef, applyDeletes = true) {.base.} =
-  t.parent.notImplemented "commit"
-
-method rollback*(t: CoreDbTxRef) {.base.} =
-  t.parent.notImplemented "rollback"
-
-method dispose*(t: CoreDbTxRef) {.base.} =
-  t.parent.notImplemented "dispose"
-
-method safeDispose*(t: CoreDbTxRef) {.base.} =
-  t.parent.notImplemented "safeDispose"
-
-{.push hint[XCannotRaiseY]: off.}
-
-method shortTimeReadOnly*(
-    db: CoreDbRef;
+proc shortTimeReadOnly*(
     id: CoreDbTxID;
     action: proc() {.gcsafe, raises: [CatchableError].};
-      ) {.base, raises: [CatchableError].} =
-  db.notImplemented "shortTimeReadOnly"
+      ) {.gcsafe, raises: [CatchableError].} =
+  ## Run `action()` in an earlier transaction environment.
+  id.methods.roWrapperFn action
 
-{.pop.}
+
+proc beginTransaction*(db: CoreDbRef): CoreDbTxRef =
+  ## Constructor
+  db.new.beginFn()
+
+proc parent*(db: CoreDbTxRef): CoreDbRef =
+  ## Getter
+  db.parent
+
+proc commit*(tx: CoreDbTxRef, applyDeletes = true) =
+  tx.methods.commitFn applyDeletes
+
+proc rollback*(tx: CoreDbTxRef) =
+  tx.methods.rollbackFn()
+
+proc dispose*(tx: CoreDbTxRef) =
+  tx.methods.disposeFn()
+
+proc safeDispose*(tx: CoreDbTxRef)  =
+  tx.methods.safeDisposeFn()
+
+# ------------------------------------------------------------------------------
+# Public tracer methods
+# ------------------------------------------------------------------------------
+
+proc capture*(db: CoreDbRef; flags: set[CoreDbCaptFlags] = {}): CoreDbCaptRef =
+  ## Constructor
+  db.new.captureFn flags
+
+proc parent*(db: CoreDbCaptRef): CoreDbRef =
+  ## Getter
+  db.parent
+
+proc recorder*(db: CoreDbCaptRef): CoreDbRef =
+  ## Getter
+  db.methods.recorderFn()
+
+proc flags*(db: CoreDbCaptRef): set[CoreDbCaptFlags] =
+  ## Getter
+  db.methods.getFlagsFn()
 
 # ------------------------------------------------------------------------------
 # End
