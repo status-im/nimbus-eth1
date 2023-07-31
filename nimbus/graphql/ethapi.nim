@@ -10,7 +10,7 @@
 import
   std/[strutils, times],
   stew/[results, byteutils], stint,
-  eth/[rlp], chronos,
+  eth/common/eth_types_rlp, chronos,
   stew/shims/net,
   graphql, graphql/graphql as context,
   graphql/common/types, graphql/httpserver,
@@ -19,7 +19,7 @@ import
   ".."/[transaction, vm_state, config, constants],
   ../common/common,
   ../transaction/call_evm,
-  ../core/tx_pool,
+  ../core/[tx_pool, tx_pool/tx_item],
   ../utils/utils
 
 from eth/p2p import EthereumNode
@@ -37,6 +37,7 @@ type
     ethQuery        = "Query"
     ethMutation     = "Mutation"
     ethAccessTuple  = "AccessTuple"
+    ethWithdrawal   = "Withdrawal"
 
   HeaderNode = ref object of Node
     header: BlockHeader
@@ -62,6 +63,9 @@ type
   AclNode = ref object of Node
     acl: AccessPair
 
+  WdNode = ref object of Node
+    wd: Withdrawal
+
   GraphqlContextRef = ref GraphqlContextObj
   GraphqlContextObj = object of Graphql
     ids: array[EthTypes, Name]
@@ -79,7 +83,12 @@ proc toHash(n: Node): Hash256 =
   result.data = hexToByteArray[32](n.stringVal)
 
 proc toBlockNumber(n: Node): BlockNumber =
-  result = parse(n.intVal, UInt256, radix = 10)
+  if n.kind == nkInt:
+    result = parse(n.intVal, UInt256, radix = 10)
+  elif n.kind == nkString:
+    result = parse(n.stringVal, UInt256, radix = 16)
+  else:
+    doAssert(false, "unknown node type: " & $n.kind)
 
 proc headerNode(ctx: GraphqlContextRef, header: BlockHeader): Node =
   HeaderNode(
@@ -126,6 +135,14 @@ proc aclNode(ctx: GraphqlContextRef, accessPair: AccessPair): Node =
     typeName: ctx.ids[ethAccessTuple],
     pos: Pos(),
     acl: accessPair
+  )
+
+proc wdNode(ctx: GraphqlContextRef, wd: Withdrawal): Node =
+  WdNode(
+    kind: nkMap,
+    typeName: ctx.ids[ethWithdrawal],
+    pos: Pos(),
+    wd: wd
   )
 
 proc getStateDB(com: CommonRef, header: BlockHeader): ReadOnlyStateDB =
@@ -190,6 +207,10 @@ proc bigIntNode(x: uint64 | int64): RespResult =
   # stdlib toHex is not suitable for hive
   const
     HexChars = "0123456789abcdef"
+
+  if x == 0:
+    return ok(Node(kind: nkString, stringVal: "0x0", pos: Pos()))
+
   var
     n = cast[uint64](x)
     r: array[2*sizeof(uint64), char]
@@ -278,6 +299,19 @@ proc getTxs(ctx: GraphqlContextRef, header: BlockHeader): RespResult =
   except CatchableError as e:
     err("can't get transactions: " & e.msg)
 
+proc getWithdrawals(ctx: GraphqlContextRef, header: BlockHeader): RespResult =
+  try:
+    if header.withdrawalsRoot.isSome:
+      let wds = getWithdrawals(ctx.chainDB, header.withdrawalsRoot.get)
+      var list = respList()
+      for wd in wds:
+        list.add wdNode(ctx, wd)
+      ok(list)
+    else:
+      ok(respNull())
+  except CatchableError as e:
+    err("can't get transactions: " & e.msg)
+
 proc getTxAt(ctx: GraphqlContextRef, header: BlockHeader, index: int): RespResult =
   try:
     var tx: Transaction
@@ -323,9 +357,25 @@ proc accountNode(ctx: GraphqlContextRef, header: BlockHeader, address: EthAddres
   except RlpError as ex:
     err(ex.msg)
 
+func hexCharToInt(c: char): uint64 =
+  case c
+  of 'a'..'f': return c.uint64 - 'a'.uint64 + 10'u64
+  of 'A'..'F': return c.uint64 - 'A'.uint64 + 10'u64
+  of '0'..'9': return c.uint64 - '0'.uint64
+  else: doAssert(false, "invalid hex digit: " & $c)
+
 proc parseU64(node: Node): uint64 =
-  for c in node.intVal:
-    result = result * 10 + uint64(c.int - '0'.int)
+  if node.kind == nkString:
+    if node.stringVal.len > 2 and node.stringVal[1] == 'x':
+      for i in 2..<node.stringVal.len:
+        let c = node.stringVal[i]
+        result = result * 16 + hexCharToInt(c)
+    else:
+      for c in node.stringVal:
+        result = result * 10 + (c.uint64 - '0'.uint64)
+  else:
+    for c in node.intVal:
+      result = result * 10 + (c.uint64 - '0'.uint64)
 
 {.pragma: apiRaises, raises: [].}
 
@@ -462,17 +512,17 @@ proc scalarLong(ctx: GraphqlRef, typeNode, node: Node): NodeResult {.cdecl, gcsa
         let val = parse(node.stringVal, UInt256, radix = 16)
         if val > maxU64:
           return err("long value overflow")
-        ok(Node(kind: nkInt, pos: node.pos, intVal: $val))
+        ok(node)
       else:
         let val = parse(node.stringVal, UInt256, radix = 10)
         if val > maxU64:
           return err("long value overflow")
-        ok(Node(kind: nkInt, pos: node.pos, intVal: node.stringVal))
+        ok(Node(kind: nkString, pos: node.pos, stringVal: "0x" & val.toHex))
     of nkInt:
       let val = parse(node.intVal, UInt256, radix = 10)
       if val > maxU64:
         return err("long value overflow")
-      ok(node)
+      ok(Node(kind: nkString, pos: node.pos, stringVal: "0x" & val.toHex))
     else:
       err("expect int, but got '$1'" % [$node.kind])
   except CatchableError as e:
@@ -583,25 +633,35 @@ proc txIndex(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} 
   ok(resp(tx.index))
 
 proc txFrom(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
-  # TODO: with block param
   let ctx = GraphqlContextRef(ud)
   let tx = TxNode(parent)
+
+  let blockNumber = if params[0].val.kind != nkEmpty:
+    parseU64(params[0].val).toBlockNumber
+  else:
+    tx.blockNumber
+
   var sender: EthAddress
   if not getSender(tx.tx, sender):
     return ok(respNull())
-  let hres = ctx.getBlockByNumber(tx.blockNumber)
+  let hres = ctx.getBlockByNumber(blockNumber)
   if hres.isErr:
     return hres
   let h = HeaderNode(hres.get())
   ctx.accountNode(h.header, sender)
 
 proc txTo(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
-  # TODO: with block param
   let ctx = GraphqlContextRef(ud)
   let tx = TxNode(parent)
+
+  let blockNumber = if params[0].val.kind != nkEmpty:
+    parseU64(params[0].val).toBlockNumber
+  else:
+    tx.blockNumber
+
   if tx.tx.contractCreation:
     return ok(respNull())
-  let hres = ctx.getBlockByNumber(tx.blockNumber)
+  let hres = ctx.getBlockByNumber(blockNumber)
   if hres.isErr:
     return hres
   let h = HeaderNode(hres.get())
@@ -741,6 +801,35 @@ proc txAccessList(ud: RootRef, params: Args, parent: Node): RespResult {.apiPrag
       list.add aclNode(ctx, x)
     ok(list)
 
+proc txMaxFeePerBlobGas(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+  let ctx = GraphqlContextRef(ud)
+  let tx = TxNode(parent)
+  if tx.tx.txType < TxEIP4844:
+    ok(respNull())
+  else:
+    longNode(tx.tx.maxFeePerDataGas)
+
+proc txVersionedHashes(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+  let ctx = GraphqlContextRef(ud)
+  let tx = TxNode(parent)
+  if tx.tx.txType < TxEIP4844:
+    ok(respNull())
+  else:
+    var list = respList()
+    for hs in tx.tx.versionedHashes:
+      list.add resp("0x" & hs.data.toHex)
+    ok(list)
+
+proc txRaw(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+  let tx = TxNode(parent)
+  let txBytes = rlp.encode(tx.tx)
+  resp(txBytes)
+
+proc txRawReceipt(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+  let tx = TxNode(parent)
+  let recBytes = rlp.encode(tx.receipt)
+  resp(recBytes)
+
 const txProcs = {
   "from": txFrom,
   "hash": txHash,
@@ -765,7 +854,11 @@ const txProcs = {
   "maxFeePerGas": txMaxFeePerGas,
   "maxPriorityFeePerGas": txMaxPriorityFeePerGas,
   "effectiveGasPrice": txEffectiveGasPrice,
-  "chainID": txChainId
+  "chainID": txChainId,
+  "maxFeePerBlobGas": txmaxFeePerBlobGas,
+  "versionedHashes": txVersionedHashes,
+  "raw": txRaw,
+  "rawReceipt": txRawReceipt
 }
 
 proc aclAddress(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
@@ -785,6 +878,29 @@ proc aclStorageKeys(ud: RootRef, params: Args, parent: Node): RespResult {.apiPr
 const aclProcs = {
   "address": aclAddress,
   "storageKeys": aclStorageKeys
+}
+
+proc wdIndex(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+  let w = WdNode(parent)
+  longNode(w.wd.index)
+
+proc wdValidator(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+  let w = WdNode(parent)
+  longNode(w.wd.validatorIndex)
+
+proc wdAddress(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+  let w = WdNode(parent)
+  resp(w.wd.address)
+
+proc wdAmount(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+  let w = WdNode(parent)
+  longNode(w.wd.amount)
+
+const wdProcs = {
+  "index": wdIndex,
+  "validator": wdValidator,
+  "address": wdAddress,
+  "amount": wdAmount
 }
 
 proc blockNumberImpl(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
@@ -1012,6 +1128,32 @@ proc blockBaseFeePerGas(ud: RootRef, params: Args, parent: Node): RespResult {.a
   else:
     ok(respNull())
 
+proc blockWithdrawalsRoot(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+  let h = HeaderNode(parent)
+  if h.header.withdrawalsRoot.isSome:
+    resp(h.header.withdrawalsRoot.get)
+  else:
+    ok(respNull())
+
+proc blockWithdrawals(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+  let ctx = GraphqlContextRef(ud)
+  let h = HeaderNode(parent)
+  getWithdrawals(ctx, h.header)
+
+proc blockBlobGasUsed(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+  let h = HeaderNode(parent)
+  if h.header.dataGasUsed.isSome:
+    longNode(h.header.dataGasUsed.get)
+  else:
+    ok(respNull())
+
+proc blockexcessBlobGas(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+  let h = HeaderNode(parent)
+  if h.header.excessDataGas.isSome:
+    longNode(h.header.excessDataGas.get)
+  else:
+    ok(respNull())
+
 const blockProcs = {
   "parent": blockParent,
   "number": blockNumberImpl,
@@ -1040,7 +1182,11 @@ const blockProcs = {
   "account": blockAccount,
   "call": blockCall,
   "estimateGas": blockEstimateGas,
-  "baseFeePerGas": blockBaseFeePerGas
+  "baseFeePerGas": blockBaseFeePerGas,
+  "withdrawalsRoot": blockWithdrawalsRoot,
+  "withdrawals": blockWithdrawals,
+  "blobGasUsed": blockBlobGasUsed,
+  "excessBlobGas": blockExcessBlobGas
 }
 
 proc callResultData(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
@@ -1151,6 +1297,12 @@ proc queryBlock(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma
     err("only one param allowed, number or hash, not both")
   elif number.kind == nkInt:
     getBlockByNumber(ctx, number)
+  elif number.kind == nkString:
+    try:
+      let blockNumber = toBlockNumber(number)
+      getBlockByNumber(ctx, blockNumber)
+    except ValueError as ex:
+      err(ex.msg)
   elif hash.kind == nkString:
     getBlockByHash(ctx, hash)
   else:
@@ -1241,16 +1393,26 @@ const queryProcs = {
   "chainID": queryChainId
 }
 
+proc inPoolAndOk(ctx: GraphqlContextRef, txHash: Hash256): bool =
+  let res = ctx.txPool.getItem(txHash)
+  if res.isErr: return false
+  res.get().reject == txInfoOk
+
 proc sendRawTransaction(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
-  # TODO: add tx validation and tx processing
-  # probably goes to tx pool
   # if tx validation failed, the result will be null
   let ctx = GraphqlContextRef(ud)
   try:
     let data   = hexToSeqByte(params[0].val.stringVal)
     let tx     = decodeTx(data) # we want to know if it is a valid tx blob
     let txHash = rlpHash(tx) # beware EIP-4844
-    resp(txHash)
+
+    ctx.txPool.add(tx)
+
+    if ctx.inPoolAndOk(txHash):
+      return resp(txHash)
+    else:
+      return err("transaction rejected by txpool")
+
   except CatchableError as em:
     return err("failed to process raw transaction: " & em.msg)
 
@@ -1315,6 +1477,7 @@ proc initEthApi(ctx: GraphqlContextRef) =
   ctx.addResolvers(ctx, ctx.ids[ethQuery      ], queryProcs)
   ctx.addResolvers(ctx, ctx.ids[ethMutation   ], mutationProcs)
   ctx.addResolvers(ctx, ctx.ids[ethAccessTuple], aclProcs)
+  ctx.addResolvers(ctx, ctx.ids[ethWithdrawal ], wdProcs)
 
   var qc = newQC(ctx)
   ctx.addInstrument(qc)

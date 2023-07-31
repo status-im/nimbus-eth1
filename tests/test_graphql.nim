@@ -8,7 +8,7 @@
 # those terms.
 
 import
-  std/[os, json],
+  std/[json],
   stew/byteutils,
   eth/[p2p, rlp],
   graphql, ../nimbus/graphql/ethapi, graphql/test_common,
@@ -25,8 +25,8 @@ type
     uncles: seq[BlockHeader]
 
 const
-  caseFolder = "tests" / "graphql" / "eth" & $ethVersion
-  dataFolder  = "tests" / "fixtures" / "eth_tests" / "BlockchainTests" / "ValidBlocks" / "bcUncleTest"
+  caseFolder = "tests/graphql"
+  dataFolder  = "tests/fixtures/eth_tests/BlockchainTests/ValidBlocks/bcUncleTest"
 
 proc toBlock(n: JsonNode, key: string): EthBlock =
   let rlpBlob = hexToSeqByte(n[key].str)
@@ -43,7 +43,7 @@ proc setupChain(): CommonRef =
     berlinBlock         : some(10.toBlockNumber)
   )
 
-  var jn = json.parseFile(dataFolder / "oneUncle.json")
+  var jn = json.parseFile(dataFolder & "/oneUncle.json")
   for k, v in jn:
     if v["network"].str == "Istanbul":
       jn = v

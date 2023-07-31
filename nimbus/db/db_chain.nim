@@ -227,10 +227,12 @@ proc getTransactionCount*(chain: ChainDBRef, txRoot: Hash256): int =
   var txCount = 0
   while true:
     let txKey = rlp.encode(txCount)
-    if txKey notin trie:
-      break
-    inc txCount
-  txCount
+    if txKey in trie:
+      inc txCount
+    else:
+      return txCount
+
+  doAssert(false, "unreachable")
 
 proc getUnclesCount*(db: ChainDBRef, ommersHash: Hash256): int =
   if ommersHash != EMPTY_UNCLE_HASH:
@@ -263,6 +265,10 @@ iterator getWithdrawalsData*(db: ChainDBRef, withdrawalsRoot: Hash256): seq[byte
       break
     inc idx
 
+proc getWithdrawals*(db: ChainDBRef, withdrawalsRoot: Hash256): seq[Withdrawal] =
+  for encodedWd in db.getWithdrawalsData(withdrawalsRoot):
+    result.add(rlp.decode(encodedWd, Withdrawal))
+
 proc getBlockBody*(db: ChainDBRef, header: BlockHeader, output: var BlockBody): bool =
   result = true
   output.transactions = @[]
@@ -278,10 +284,7 @@ proc getBlockBody*(db: ChainDBRef, header: BlockHeader, output: var BlockBody): 
       result = false
 
   if header.withdrawalsRoot.isSome:
-    var withdrawals: seq[Withdrawal]
-    for encodedWd in db.getWithdrawalsData(header.withdrawalsRoot.get):
-      withdrawals.add(rlp.decode(encodedWd, Withdrawal))
-    output.withdrawals = some(withdrawals)
+    output.withdrawals = some(db.getWithdrawals(header.withdrawalsRoot.get))
 
 proc getBlockBody*(db: ChainDBRef, blockHash: Hash256, output: var BlockBody): bool =
   var header: BlockHeader

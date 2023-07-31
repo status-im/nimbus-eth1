@@ -5,7 +5,7 @@ scalar Bytes32
 scalar Address
 
 # Bytes is an arbitrary length binary string, represented as 0x-prefixed hexadecimal.
-# An empty byte string is represented as '0x'. Byte strings must have an even number of hexadecimal nybbles.
+# An empty byte string is represented as '0x'. Byte strings must have an even number of hexadecimal nibbles.
 scalar Bytes
 
 # BigInt is a large integer. Input is accepted as either a JSON number or as a string.
@@ -13,7 +13,9 @@ scalar Bytes
 # 0x-prefixed hexadecimal.
 scalar BigInt
 
-# Long is a 64 bit unsigned integer.
+# Long is a 64 bit unsigned integer. Input is accepted as either a JSON number or as a string.
+# Strings may be either decimal or 0x-prefixed hexadecimal. Output values are all
+# 0x-prefixed hexadecimal.
 scalar Long
 
 schema {
@@ -46,7 +48,7 @@ type Account {
 # Log is an Ethereum event log.
 type Log {
   # Index is the index of this log in the block.
-  index: Int!
+  index: Long!
 
   # Account is the account which generated this log - this will always
   # be a contract account.
@@ -64,11 +66,26 @@ type Log {
 
 # EIP-2718 Access List
 type AccessTuple {
-  # access list address
+  # access list address.
   address: Address!
 
-  # access list storage keys, null if not present
+  # access list storage keys, null if not present.
   storageKeys: [Bytes32!]
+}
+
+# EIP-4895
+type Withdrawal {
+  # Index is a monotonically increasing identifier issued by consensus layer.
+  index: Long!
+
+  # Validator is index of the validator associated with withdrawal.
+  validator: Long!
+
+  # Recipient address of the withdrawn amount.
+  address: Address!
+
+  # Amount is the withdrawal value in Gwei.
+  amount: Long!
 }
 
 # Transaction is an Ethereum transaction.
@@ -81,7 +98,7 @@ type Transaction {
 
   # Index is the index of this transaction in the parent block. This will
   # be null if the transaction has not yet been mined.
-  index: Int
+  index: Long
 
   # From is the account that sent this transaction - this will always be
   # an externally owned account.
@@ -157,14 +174,31 @@ type Transaction {
   v: BigInt!
 
   # EIP 2718: envelope transaction support
-  type: Int
+  type: Long
 
   # EIP 2930: optional access list, null if not present
   accessList: [AccessTuple!]
 
+  # EIP-4844: blob gas a user willing to pay
+  maxFeePerBlobGas: Long
+
+  # EIP-4844: represents a list of hash outputs from kzg_to_versioned_hash
+  versionedHashes: [Bytes32!]
+
+  #--------------------------Extensions-------------------------------
+
   # If type == 0, chainID returns null.
   # If type > 0, chainID returns replay protection chainID
   chainID: Long
+
+  # Raw is the canonical encoding of the transaction.
+  # For legacy transactions, it returns the RLP encoding.
+  # For EIP-2718 typed transactions, it returns the type and payload.
+  raw: Bytes!
+
+  # RawReceipt is the canonical encoding of the receipt. For post EIP-2718 typed transactions
+  # this is equivalent to TxType || ReceiptEncoding.
+  rawReceipt: Bytes!
 }
 
 # BlockFilterCriteria encapsulates log filter criteria for a filter applied
@@ -207,7 +241,7 @@ type Block {
 
   # TransactionCount is the number of transactions in this block. if
   # transactions are not available for this block, this field will be null.
-  transactionCount: Int
+  transactionCount: Long
 
   # StateRoot is the keccak256 hash of the state trie after this block was processed.
   stateRoot: Bytes32!
@@ -249,7 +283,7 @@ type Block {
 
   # OmmerCount is the number of ommers (AKA uncles) associated with this
   # block. If ommers are unavailable, this field will be null.
-  ommerCount: Int
+  ommerCount: Long
 
   # Ommers is a list of ommer (AKA uncle) blocks associated with this block.
   # If ommers are unavailable, this field will be null. Depending on your
@@ -286,6 +320,32 @@ type Block {
   # EstimateGas estimates the amount of gas that will be required for
   # successful execution of a transaction at the current block's state.
   estimateGas(data: CallData!): Long!
+
+  # WithdrawalsRoot is the withdrawals trie root in this block.
+  # If withdrawals are unavailable for this block, this field will be null.
+  withdrawalsRoot: Bytes32
+
+  # Withdrawals is a list of withdrawals associated with this block. If
+  # withdrawals are unavailable for this block, this field will be null.
+  withdrawals: [Withdrawal!]
+
+  # EIP-4844: is the total amount of blob gas consumed by the transactions
+  # within the block.
+  blobGasUsed: Long
+
+  # EIP-4844: is a running total of blob gas consumed in excess of the target,
+  # prior to the block. Blocks with above-target blob gas consumption increase
+  # this value, blocks with below-target blob gas consumption decrease it
+  # (bounded at 0).
+  excessBlobGas: Long
+
+  #--------------------------Extensions-------------------------------
+
+  # RawHeader is the RLP encoding of the block's header.
+  rawHeader: Bytes!
+
+  # Raw is the RLP encoding of the block.
+  raw: Bytes!
 }
 
 # CallData represents the data associated with a local contract call.
@@ -379,7 +439,7 @@ type SyncState{
 # Pending represents the current pending state.
 type Pending {
   # TransactionCount is the number of transactions in the pending state.
-  transactionCount: Int!
+  transactionCount: Long!
 
   # Transactions is a list of transactions in the current pending state.
   transactions: [Transaction!]
