@@ -93,6 +93,9 @@ proc init*(db: CoreDbCaptRef; parent: CoreDbRef; flags: set[CoreDbCaptFlags]) =
 # ------------------------------------------------------------------------------
 
 proc dbType*(db: CoreDbRef): CoreDbType =
+  db.kvt.dbType
+
+proc dbType*(db: CoreDbKvtRef): CoreDbType =
   db.dbType
 
 proc kvt*(db: CoreDbRef): CoreDbKvtRef =
@@ -231,6 +234,8 @@ method mptPrune*(
 
 # -----
 
+{.push hint[XCannotRaiseY]: off.}
+
 method get*(
     db: CoreDbMptRef;
     key: openArray[byte];
@@ -264,6 +269,8 @@ method contains*(
       ): bool
       {.base, raises: [RlpError].} =
   db.parent.notImplemented "contains/mpt"
+
+{.pop.}
 
 method rootHash*(
     db: CoreDbMptRef;
@@ -330,6 +337,8 @@ method phkPrune*(
 
 # -----------
 
+{.push hint[XCannotRaiseY]: off.}
+
 method get*(
     db: CoreDbPhkRef;
     key: openArray[byte];
@@ -364,6 +373,8 @@ method contains*(
       {.base, raises: [RlpError].} =
   db.parent.notImplemented "contains/phk"
 
+{.pop.}
+
 method rootHash*(
     db: CoreDbPhkRef;
       ): Hash256
@@ -395,12 +406,16 @@ method dispose*(t: CoreDbTxRef) {.base.} =
 method safeDispose*(t: CoreDbTxRef) {.base.} =
   t.parent.notImplemented "safeDispose"
 
+{.push hint[XCannotRaiseY]: off.}
+
 method shortTimeReadOnly*(
     db: CoreDbRef;
     id: CoreDbTxID;
     action: proc() {.gcsafe, raises: [CatchableError].};
       ) {.base, raises: [CatchableError].} =
   db.notImplemented "shortTimeReadOnly"
+
+{.pop.}
 
 # ------------------------------------------------------------------------------
 # End
