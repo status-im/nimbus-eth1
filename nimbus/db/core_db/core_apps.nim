@@ -503,7 +503,11 @@ proc persistWithdrawals*(
     trie.put(rlp.encode(idx), encodedWd)
   trie.rootHash
 
-proc getWithdrawals*(db: CoreDbRef, withdrawalsRoot: Hash256): seq[Withdrawal] =
+proc getWithdrawals*(
+    db: CoreDbRef;
+    withdrawalsRoot: Hash256;
+      ): seq[Withdrawal]
+      {.gcsafe, raises: [RlpError].} =
   for encodedWd in db.getWithdrawalsData(withdrawalsRoot):
     result.add(rlp.decode(encodedWd, Withdrawal))
 
