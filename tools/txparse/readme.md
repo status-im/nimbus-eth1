@@ -11,9 +11,10 @@ Otherwise, it outputs `err: ` and a suitable error message.
 
 There are few options to build `txparse` tool like any other nimbus tools.
 
-1. Use nimble to install dependencies and your system Nim compiler(version <= 1.6.0).
+1. Use your system Nim compiler(v1.6.12) and git to install dependencies.
     ```
-    $> nimble install -y --depsOnly
+    $> git submodule update --init --recursive
+    $> ./env.sh (run once to generate nimbus-build-system.paths)
     $> nim c -d:release tools/txparse/txparse
     ```
 2. Use nimbus shipped Nim compiler and dependencies.

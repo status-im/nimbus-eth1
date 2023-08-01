@@ -6,9 +6,10 @@ The `t8n` tool is a stateless state transition utility.
 
 There are few options to build `t8n` tool like any other nimbus tools.
 
-1. Use nimble to install dependencies and your system Nim compiler(version <= 1.6.0).
+1. Use your system Nim compiler(v1.6.12) and git to install dependencies.
     ```
-    $> nimble install -y --depsOnly
+    $> git submodule update --init --recursive
+    $> ./env.sh (run once to generate nimbus-build-system.paths)
     $> nim c -d:release -d:chronicles_default_output_device=stderr tools/t8n/t8n
     $> nim c -r -d:release tools/t8n/t8n_test
     ```
