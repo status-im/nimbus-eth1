@@ -78,7 +78,7 @@ proc main() =
     conf    = makeConfig(@["--custom-network:" & genesisFile])
     ethCtx  = newEthContext()
     ethNode = setupEthNode(conf, ethCtx, eth)
-    com     = CommonRef.new(newMemoryDB(),
+    com     = CommonRef.new(newCoreDbRef LegacyDbMemory,
       pruneTrie = false,
       conf.networkId,
       conf.networkParams

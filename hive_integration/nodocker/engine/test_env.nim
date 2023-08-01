@@ -78,7 +78,7 @@ proc setupELClient*(t: TestEnv, chainFile: string, enableAuth: bool) =
 
   t.ethNode = setupEthNode(t.conf, t.ctx, eth)
   t.com = CommonRef.new(
-      newMemoryDb(),
+      newCoreDbRef LegacyDbMemory,
       t.conf.pruneMode == PruneMode.Full,
       t.conf.networkId,
       t.conf.networkParams
