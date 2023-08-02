@@ -27,15 +27,15 @@ export
   # Not all symbols from the object sources will be exported by default
   CoreDbCaptFlags,
   CoreDbCaptRef,
-  CoreDbKvtRef,
+  CoreDbKvtObj,
   CoreDbMptRef,
   CoreDbPhkRef,
   CoreDbRef,
   CoreDbTxID,
   CoreDbTxRef,
   CoreDbType,
-  LegacyCoreDbRef, # for shortTimeReadOnly()
   beginTransaction,
+  capture,
   commit,
   compensateLegacySetup,
   contains,
@@ -49,16 +49,19 @@ export
   maybeGet,
   mpt,
   mptPrune,
-  newCoreDbCaptRef,
+  pairs,
   parent,
   phk,
   phkPrune,
   put,
   recorder,
+  replicate,
   rollback,
   rootHash,
   safeDispose,
-  setTransactionID
+  setTransactionID,
+  toMpt,
+  toPhk
 
 logScope:
   topics = "core_db"
@@ -68,10 +71,7 @@ logScope:
 # ------------------------------------------------------------------------------
 
 template logTxt(info: static[string]): static[string] =
-  "ChainDB " & info
-
-proc itNotImplemented(db: CoreDbRef|CoreDbKvtRef, name: string) {.used.} =
-  debug logTxt "iterator not implemented", dbType=db.dbType, meth=name
+  "CoreDb " & info
 
 proc tmplNotImplemented*(db: CoreDbRef, name: string) {.used.} =
   debug logTxt "template not implemented", dbType=db.dbType, meth=name
@@ -88,11 +88,9 @@ proc newCoreDbRef*(
   ##
   ## Note: Using legacy notation `newCoreDbRef()` rather than
   ## `CoreDbRef.init()` because of compiler coughing.
-  db.newLegacyCoreDbRef()
+  db.newLegacyPersistentCoreDbRef()
 
-proc newCoreDbRef*(
-    dbType: static[CoreDbType];
-      ): CoreDbRef =
+proc newCoreDbRef*(dbType: static[CoreDbType]): CoreDbRef =
   ## Constructor for volatile/memory type DB
   ##
   ## Note: Using legacy notation `newCoreDbRef()` rather than
@@ -100,62 +98,26 @@ proc newCoreDbRef*(
   when dbType == LegacyDbMemory:
     newLegacyMemoryCoreDbRef()
   else:
-    {.error: "Unsupported dbType for CoreDbRef.init()".}
+    {.error: "Unsupported dbType for memory newCoreDbRef()".}
 
-proc newCoreDbRef*(
-    dbType: static[CoreDbType];
-    path: string;
-      ): CoreDbRef =
-  ## General constructor (the `path` argument is ignored for volatile/memory
-  ## type DB)
+proc newCoreDbRef*(dbType: static[CoreDbType]; path: string): CoreDbRef =
+  ## Constructor for persistent type DB
   ##
   ## Note: Using legacy notation `newCoreDbRef()` rather than
   ## `CoreDbRef.init()` because of compiler coughing.
-  when dbType == LegacyDbMemory:
-    newLegacyMemoryCoreDbRef()
-  elif dbType == LegacyDbPersistent:
+  when dbType == LegacyDbPersistent:
     newLegacyPersistentCoreDbRef path
   else:
-    {.error: "Unsupported dbType for CoreDbRef.init()".}
+    {.error: "Unsupported dbType for persistent newCoreDbRef()".}
 
 # ------------------------------------------------------------------------------
 # Public template wrappers
 # ------------------------------------------------------------------------------
 
-template shortTimeReadOnly*(db: CoreDbRef; id: CoreDbTxID; body: untyped) =
+template shortTimeReadOnly*(id: CoreDbTxID; body: untyped) =
   proc action() {.gcsafe, raises: [CatchableError].} =
     body
-  case db.dbType:
-  of LegacyDbMemory, LegacyDbPersistent:
-    db.LegacyCoreDbRef.shortTimeReadOnly(id, action)
-  else:
-    db.tmplNotImplemented "shortTimeReadOnly"
-
-# ------------------------------------------------------------------------------
-# Public iterators
-# ------------------------------------------------------------------------------
-
-iterator pairs*(
-    db: CoreDbKvtRef;
-      ): (Blob, Blob)
-      {.gcsafe.} =
-  case db.dbType:
-  of LegacyDbMemory:
-    for k,v in db.LegacyCoreDbKvtRef:
-      yield (k,v)
-  else:
-    db.itNotImplemented "pairs/kvt"
-
-iterator pairs*(
-    db: CoreDbMptRef;
-      ): (Blob, Blob)
-      {.gcsafe, raises: [RlpError].} =
-  case db.parent.dbType:
-  of LegacyDbMemory, LegacyDbPersistent:
-    for k,v in db.LegacyCoreDbMptRef:
-      yield (k,v)
-  else:
-    db.parent.itNotImplemented "pairs/mpt"
+  id.shortTimeReadOnly action
 
 # ------------------------------------------------------------------------------
 # End
