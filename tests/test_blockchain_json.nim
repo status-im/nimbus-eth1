@@ -18,6 +18,7 @@ import
   ../nimbus/[vm_state, vm_types, errors, constants],
   ../nimbus/db/accounts_cache,
   ../nimbus/utils/[utils, debug],
+  ../nimbus/evm/tracer/legacy_tracer,
   ../nimbus/core/[executor, validate, pow/header],
   ../stateless/[tree_from_witness, witness_types],
   ../tools/common/helpers as chp,
@@ -190,12 +191,16 @@ proc importBlock(tester: var Tester, com: CommonRef,
   let parentHeader = com.db.getBlockHeader(tb.header.parentHash)
   let td = some(com.db.getScore(tb.header.parentHash))
   com.hardForkTransition(tb.header.blockNumber, td, some(tb.header.timestamp))
+  let tracerInst = if tester.trace:
+                 newLegacyTracer({})
+               else:
+                 LegacyTracer(nil)
 
   tester.vmState = BaseVMState.new(
     parentHeader,
     tb.header,
     com,
-    (if tester.trace: {TracerFlags.EnableTracing} else: {}),
+    tracerInst,
   )
 
   if validation:
@@ -230,7 +235,8 @@ proc collectDebugData(tester: var Tester) =
     return
 
   let vmState = tester.vmState
-  let tracingResult = if tester.trace: vmState.getTracingResult() else: %[]
+  let tracerInst = LegacyTracer(vmState.tracer)
+  let tracingResult = if tester.trace: tracerInst.getTracingResult() else: %[]
   tester.debugData.add %{
     "blockNumber": %($vmState.blockNumber),
     "structLogs": tracingResult,

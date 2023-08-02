@@ -44,7 +44,7 @@ type
 
     disableStorage* {.
       desc: "disable storage output"
-      defaultValue: false
+      defaultValue: true
       name: "nostorage" }: bool
 
     disableReturnData* {.

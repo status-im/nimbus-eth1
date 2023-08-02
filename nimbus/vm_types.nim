@@ -20,7 +20,7 @@ export
   vmt.Message,
   vmt.MsgFlags,
   vmt.TracerFlags,
-  vmt.TransactionTracer,
+  vmt.TracerRef,
   vmt.VMFlag
 
 when defined(evmc_enabled):

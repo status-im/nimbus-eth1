@@ -11,7 +11,7 @@
 import
   ".."/[db/accounts_cache, constants],
   "."/[code_stream, memory, message, stack, state],
-  "."/[transaction_tracer, types],
+  "."/[types],
   ./interpreter/[gas_meter, gas_costs, op_codes],
   ../common/[common, evmforks],
   ../utils/utils,
@@ -386,22 +386,37 @@ proc refundSelfDestruct*(c: Computation) =
   c.gasMeter.refundGas(cost * num)
 
 proc tracingEnabled*(c: Computation): bool =
-  TracerFlags.EnableTracing in c.vmState.tracer.flags
+  c.vmState.tracingEnabled
 
-proc traceOpCodeStarted*(c: Computation, op: Op): int
-    {.gcsafe, raises: [CatchableError].} =
-  c.vmState.tracer.traceOpCodeStarted(c, op)
+proc traceOpCodeStarted*(c: Computation, op: Op): int {.gcsafe, raises: [].} =
+  c.vmState.captureOpStart(
+    c.code.pc - 1,
+    op,
+    c.gasMeter.gasRemaining,
+    c.msg.depth + 1)
 
-proc traceOpCodeEnded*(c: Computation, op: Op, lastIndex: int)
-    {.gcsafe, raises: [CatchableError].} =
-  c.vmState.tracer.traceOpCodeEnded(c, op, lastIndex)
+proc traceOpCodeEnded*(c: Computation, op: Op, opIndex: int) {.gcsafe, raises: [].} =
+  c.vmState.captureOpEnd(
+    c.code.pc - 1,
+    op,
+    c.gasMeter.gasRemaining,
+    c.gasMeter.gasRefunded,
+    c.returnData,
+    c.msg.depth + 1,
+    opIndex)
 
-proc traceError*(c: Computation)
-    {.gcsafe, raises: [CatchableError].} =
-  c.vmState.tracer.traceError(c)
+proc traceError*(c: Computation) {.gcsafe, raises: [].} =
+  c.vmState.captureFault(
+    c.code.pc - 1,
+    c.instr,
+    c.gasMeter.gasRemaining,
+    c.gasMeter.gasRefunded,
+    c.returnData,
+    c.msg.depth + 1,
+    some(c.error.info))
 
 proc prepareTracer*(c: Computation) =
-  c.vmState.tracer.prepare(c.msg.depth)
+  c.vmState.capturePrepare(c.msg.depth)
 
 # ------------------------------------------------------------------------------
 # End

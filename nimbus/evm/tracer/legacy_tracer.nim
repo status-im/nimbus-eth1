@@ -1,0 +1,205 @@
+# Nimbus
+# Copyright (c) 2023 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+#    http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or
+#    http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed except
+# according to those terms.
+
+import
+  std/[json, sets, strutils, hashes],
+  eth/common/eth_types,
+  eth/rlp,
+  stew/byteutils,
+  chronicles,
+  ".."/[types, memory, stack],
+  ../interpreter/op_codes,
+  ../../db/accounts_cache,
+  ../../errors
+
+type
+  LegacyTracer* = ref object of TracerRef
+    trace: JsonNode
+    accounts: HashSet[EthAddress]
+    storageKeys: seq[HashSet[UInt256]]
+    comp: Computation
+    gas: GasInt
+
+proc hash*(x: UInt256): Hash =
+  result = hash(x.toByteArrayBE)
+
+proc rememberStorageKey(ctx: LegacyTracer, compDepth: int, key: UInt256) =
+  ctx.storageKeys[compDepth].incl key
+
+iterator storage(ctx: LegacyTracer, compDepth: int): UInt256 =
+  doAssert compDepth >= 0 and compDepth < ctx.storageKeys.len
+  for key in ctx.storageKeys[compDepth]:
+    yield key
+
+template stripLeadingZeros(value: string): string =
+  var cidx = 0
+  # ignore the last character so we retain '0' on zero value
+  while cidx < value.len - 1 and value[cidx] == '0':
+    cidx.inc
+  value[cidx .. ^1]
+
+proc encodeHexInt(x: SomeInteger): JsonNode =
+  %("0x" & x.toHex.stripLeadingZeros.toLowerAscii)
+
+proc newLegacyTracer*(flags: set[TracerFlags]): LegacyTracer =
+  let trace = newJObject()
+
+  # make appear at the top of json object
+  trace["gas"] = %0
+  trace["failed"] = %false
+  trace["returnValue"] = %""
+  trace["structLogs"] = newJArray()
+
+  LegacyTracer(
+    flags: flags,
+    trace: trace
+  )
+
+method capturePrepare*(ctx: LegacyTracer, depth: int) {.gcsafe.} =
+  if depth >= ctx.storageKeys.len:
+    let prevLen = ctx.storageKeys.len
+    ctx.storageKeys.setLen(depth + 1)
+    for i in prevLen ..< ctx.storageKeys.len - 1:
+      ctx.storageKeys[i] = initHashSet[UInt256]()
+
+  ctx.storageKeys[depth] = initHashSet[UInt256]()
+
+# Top call frame
+method captureStart*(ctx: LegacyTracer, c: Computation,
+                     sender: EthAddress, to: EthAddress,
+                     create: bool, input: openArray[byte],
+                     gas: GasInt, value: UInt256) {.gcsafe.} =
+  ctx.comp = c
+
+method captureEnd*(ctx: LegacyTracer, output: openArray[byte],
+                   gasUsed: GasInt, error: Option[string]) {.gcsafe.} =
+  discard
+
+# Opcode level
+method captureOpStart*(ctx: LegacyTracer, pc: int,
+                       op: Op, gas: GasInt,
+                       depth: int): int {.gcsafe.} =
+  try:
+    let
+      j = newJObject()
+      c = ctx.comp
+    ctx.trace["structLogs"].add(j)
+
+    j["op"] = %(($op).toUpperAscii)
+    j["pc"] = %(c.code.pc - 1)
+    j["depth"] = %(c.msg.depth + 1)
+    j["gas"] = %(gas)
+    ctx.gas = gas
+
+    # log stack
+    if TracerFlags.DisableStack notin ctx.flags:
+      let stack = newJArray()
+      for v in c.stack.values:
+        stack.add(%v.dumpHex())
+      j["stack"] = stack
+
+    # log memory
+    if TracerFlags.DisableMemory notin ctx.flags:
+      let mem = newJArray()
+      const chunkLen = 32
+      let numChunks = c.memory.len div chunkLen
+      for i in 0 ..< numChunks:
+        let memHex = c.memory.bytes.toOpenArray(i * chunkLen, (i + 1) * chunkLen - 1).toHex()
+        mem.add(%(memHex.toUpperAscii))
+      j["memory"] = mem
+
+    if TracerFlags.EnableAccount in ctx.flags:
+      case op
+      of Call, CallCode, DelegateCall, StaticCall:
+        if c.stack.values.len > 2:
+          ctx.accounts.incl c.stack[^2, EthAddress]
+      of ExtCodeCopy, ExtCodeSize, Balance, SelfDestruct:
+        if c.stack.values.len > 1:
+          ctx.accounts.incl c.stack[^1, EthAddress]
+      else:
+        discard
+
+    if TracerFlags.DisableStorage notin ctx.flags:
+      if op == Sstore:
+        if c.stack.values.len > 1:
+          ctx.rememberStorageKey(c.msg.depth, c.stack[^1, UInt256])
+
+    result = ctx.trace["structLogs"].len - 1
+  except KeyError as ex:
+    error "LegacyTracer captureOpStart", msg=ex.msg
+  except ValueError as ex:
+    error "LegacyTracer captureOpStart", msg=ex.msg
+  except InsufficientStack as ex:
+    error "LegacyTracer captureOpEnd", msg=ex.msg
+
+method captureOpEnd*(ctx: LegacyTracer, pc: int,
+                     op: Op, gas: GasInt, refund: GasInt,
+                     rData: openArray[byte],
+                     depth: int, opIndex: int) {.gcsafe.} =
+  try:
+    let
+      j = ctx.trace["structLogs"].elems[opIndex]
+      c = ctx.comp
+
+    # TODO: figure out how to get storage
+    # when contract execution interrupted by exception
+    if TracerFlags.DisableStorage notin ctx.flags:
+      var storage = newJObject()
+      if c.msg.depth < ctx.storageKeys.len:
+        var stateDB = c.vmState.stateDB
+        for key in ctx.storage(c.msg.depth):
+          let value = stateDB.getStorage(c.msg.contractAddress, key)
+          storage[key.dumpHex] = %(value.dumpHex)
+        j["storage"] = storage
+
+    j["gasCost"] = %(ctx.gas - gas)
+
+    if op in {Return, Revert} and TracerFlags.DisableReturnData notin ctx.flags:
+      let returnValue = %("0x" & toHex(c.output))
+      j["returnValue"] = returnValue
+      ctx.trace["returnValue"] = returnValue
+  except KeyError as ex:
+    error "LegacyTracer captureOpEnd", msg=ex.msg
+  except RlpError as ex:
+    error "LegacyTracer captureOpEnd", msg=ex.msg
+
+method captureFault*(ctx: LegacyTracer, pc: int,
+                     op: Op, gas: GasInt, refund: GasInt,
+                     rData: openArray[byte],
+                     depth: int, error: Option[string]) {.gcsafe.} =
+  try:
+    let c = ctx.comp
+    if ctx.trace["structLogs"].elems.len > 0:
+      let j = ctx.trace["structLogs"].elems[^1]
+      j["error"] = %(c.error.info)
+      j["gasCost"] = %(ctx.gas - gas)
+
+    ctx.trace["failed"] = %true
+  except KeyError as ex:
+    error "LegacyTracer captureOpEnd", msg=ex.msg
+  except InsufficientStack as ex:
+    error "LegacyTracer captureOpEnd", msg=ex.msg
+
+proc getTracingResult*(ctx: LegacyTracer): JsonNode =
+  ctx.trace
+
+iterator tracedAccounts*(ctx: LegacyTracer): EthAddress =
+  for acc in ctx.accounts:
+    yield acc
+
+iterator tracedAccountsPairs*(ctx: LegacyTracer): (int, EthAddress) =
+  var idx = 0
+  for acc in ctx.accounts:
+    yield (idx, acc)
+    inc idx
+
+proc removeTracedAccounts*(ctx: LegacyTracer, accounts: varargs[EthAddress]) =
+  for acc in accounts:
+    ctx.accounts.excl acc

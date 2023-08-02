@@ -14,6 +14,7 @@ import
   ../nimbus/db/accounts_cache,
   ../nimbus/common/common,
   ../nimbus/utils/[utils, debug],
+  ../nimbus/evm/tracer/legacy_tracer,
   ../tools/common/helpers as chp,
   ../tools/evmstate/helpers,
   ../tools/common/state_clearing,
@@ -50,7 +51,8 @@ method getAncestorHash*(vmState: BaseVMState; blockNumber: BlockNumber): Hash256
     return keccakHash(toBytes($blockNumber))
 
 proc dumpDebugData(tester: Tester, vmState: BaseVMState, gasUsed: GasInt, success: bool) =
-  let tracingResult = if tester.trace: vmState.getTracingResult() else: %[]
+  let tracerInst = LegacyTracer(vmState.tracer)
+  let tracingResult = if tester.trace: tracerInst.getTracingResult() else: %[]
   let debugData = %{
     "gasUsed": %gasUsed,
     "structLogs": tracingResult,
@@ -63,12 +65,16 @@ proc testFixtureIndexes(tester: Tester, testStatusIMPL: var TestStatus) =
   let
     com    = CommonRef.new(newMemoryDB(), tester.chainConfig, getConfiguration().pruning)
     parent = BlockHeader(stateRoot: emptyRlpHash)
+    tracer = if tester.trace:
+               newLegacyTracer({})
+             else:
+               LegacyTracer(nil)
 
   let vmState = BaseVMState.new(
-      parent      = parent,
-      header      = tester.header,
-      com         = com,
-      tracerFlags = (if tester.trace: {TracerFlags.EnableTracing} else: {}),
+      parent = parent,
+      header = tester.header,
+      com    = com,
+      tracer = tracer,
     )
 
   var gasUsed: GasInt

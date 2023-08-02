@@ -26,7 +26,7 @@ proc createVmStateForStatelessMode*(com: CommonRef, header: BlockHeader, body: B
                                     parentHeader: BlockHeader, asyncFactory: AsyncOperationFactory): Result[BaseVMState, string]
                                    {.inline.} =
   let vmState = BaseVMState()
-  if not vmState.statelessInit(parentHeader, header, com, asyncFactory, {}):
+  if not vmState.statelessInit(parentHeader, header, com, asyncFactory):
     return err("Cannot initialise VmState for block number " & $(header.blockNumber))
   waitFor(ifNecessaryGetAccounts(vmState, coinbasesOfThisBlockAndUncles(header, body)))
   ok(vmState)

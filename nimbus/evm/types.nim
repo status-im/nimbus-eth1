@@ -9,7 +9,6 @@
 # according to those terms.
 
 import
-  std/[json, sets],
   chronos,
   json_rpc/rpcclient,
   "."/[stack, memory, code_stream],
@@ -46,7 +45,7 @@ type
     prevRandao*    : Hash256
     blockDifficulty*: UInt256
     flags*         : set[VMFlag]
-    tracer*        : TransactionTracer
+    tracer*        : TracerRef
     receipts*      : seq[Receipt]
     stateDB*       : AccountsCache
     cumulativeGasUsed*: GasInt
@@ -57,24 +56,6 @@ type
     fork*          : EVMFork
     minerAddress*  : EthAddress
     asyncFactory*  : AsyncOperationFactory
-
-  TracerFlags* {.pure.} = enum
-    EnableTracing
-    DisableStorage
-    DisableMemory
-    DisableStack
-    DisableState
-    DisableStateDiff
-    EnableAccount
-    DisableReturnData
-    GethCompatibility
-
-  TransactionTracer* = object
-    trace*: JsonNode
-    flags*: set[TracerFlags]
-    accounts*: HashSet[EthAddress]
-    storageKeys*: seq[HashSet[UInt256]]
-    gasUsed*: GasInt
 
   Computation* = ref object
     # The execution computation
@@ -129,3 +110,82 @@ type
     value*:            UInt256
     data*:             seq[byte]
     flags*:            MsgFlags
+
+  TracerFlags* {.pure.} = enum
+    DisableStorage
+    DisableMemory
+    DisableStack
+    DisableState
+    DisableStateDiff
+    EnableAccount
+    DisableReturnData
+
+  StructLog* = object
+    pc*         : int
+    op*         : Op
+    gas*        : GasInt
+    gasCost*    : GasInt
+    memory*     : seq[byte]
+    memSize*    : int
+    stack*      : seq[UInt256]
+    returnData* : seq[byte]
+    storage*    : Table[UInt256, UInt256]
+    depth*      : int
+    refund*     : GasInt
+    opName*     : string
+    error*      : string
+
+  TracerRef* = ref object of RootObj
+    flags*: set[TracerFlags]
+
+# Transaction level
+method captureTxStart*(ctx: TracerRef, gasLimit: GasInt) {.base, gcsafe.} =
+  discard
+
+method captureTxEnd*(ctx: TracerRef, restGas: GasInt) {.base, gcsafe.} =
+  discard
+
+# Top call frame
+method captureStart*(ctx: TracerRef, c: Computation,
+                     sender: EthAddress, to: EthAddress,
+                     create: bool, input: openArray[byte],
+                     gas: GasInt, value: UInt256) {.base, gcsafe.} =
+  discard
+
+method captureEnd*(ctx: TracerRef, output: openArray[byte],
+                   gasUsed: GasInt, error: Option[string]) {.base, gcsafe.} =
+  discard
+
+# Rest of call frames
+method captureEnter*(ctx: TracerRef, op: Op,
+                     sender: EthAddress, to: EthAddress,
+                     input: openArray[byte], gas: GasInt,
+                     value: UInt256) {.base, gcsafe.} =
+  discard
+
+method captureExit*(ctx: TracerRef, output: openArray[byte],
+                    gasUsed: GasInt, error: Option[string]) {.base, gcsafe.} =
+  discard
+
+# Opcode level
+method captureOpStart*(ctx: TracerRef, pc: int,
+                       op: Op, gas: GasInt,
+                       depth: int): int {.base, gcsafe.} =
+  discard
+
+method captureOpEnd*(ctx: TracerRef, pc: int,
+                     op: Op, gas: GasInt, refund: GasInt,
+                     rData: openArray[byte],
+                     depth: int, opIndex: int) {.base, gcsafe.} =
+  discard
+
+method captureFault*(ctx: TracerRef, pc: int,
+                     op: Op, gas: GasInt, refund: GasInt,
+                     rData: openArray[byte],
+                     depth: int, error: Option[string]) {.base, gcsafe.} =
+  discard
+
+
+method capturePrepare*(ctx: TracerRef, depth: int) {.base, gcsafe.} =
+  discard
+

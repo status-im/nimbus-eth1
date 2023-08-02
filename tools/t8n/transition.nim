@@ -21,7 +21,8 @@ import
   ../../nimbus/core/pow/difficulty,
   ../../nimbus/core/dao,
   ../../nimbus/core/executor/[process_transaction, executor_helpers],
-  ../../nimbus/core/eip4844
+  ../../nimbus/core/eip4844,
+  ../../nimbus/evm/tracer/json_tracer
 
 import stew/byteutils
 const
@@ -157,29 +158,36 @@ proc encodeHexInt(x: SomeInteger): JsonNode =
 proc toHex(x: Hash256): string =
   "0x" & x.data.toHex
 
-proc dumpTrace(txIndex: int, txHash: Hash256, vmState: BaseVMstate) =
-  let txHash = "0x" & toLowerAscii($txHash)
-  let fName = "trace-$1-$2.jsonl" % [$txIndex, txHash]
-  let trace = vmState.getTracingResult()
-  var s = newFileStream(fName, fmWrite)
-
-  trace["gasUsed"] = encodeHexInt(vmState.tracerGasUsed)
-  trace.delete("gas")
-  let stateRoot = %{
-    "stateRoot": %(vmState.readOnlyStateDB.rootHash.toHex)
+proc setupTrace(conf: T8NConf, txIndex: int, txHash: Hash256, vmState: BaseVMstate) =
+  var tracerFlags = {
+    TracerFlags.DisableMemory,
+    TracerFlags.DisableStorage,
+    TracerFlags.DisableState,
+    TracerFlags.DisableStateDiff,
+    TracerFlags.DisableReturnData
   }
 
-  let logs = trace["structLogs"]
-  trace.delete("structLogs")
-  for x in logs:
-    if "error" in x:
-      trace["error"] = x["error"]
-      x.delete("error")
-    s.writeLine($x)
+  if conf.traceEnabled:
+    if conf.traceMemory: tracerFlags.excl TracerFlags.DisableMemory
+    if conf.traceNostack: tracerFlags.incl TracerFlags.DisableStack
+    if conf.traceReturnData: tracerFlags.excl TracerFlags.DisableReturnData
 
-  s.writeLine($trace)
-  s.writeLine($stateRoot)
-  s.close()
+  let
+    txHash = "0x" & toLowerAscii($txHash)
+    baseDir = if conf.outputBaseDir.len > 0:
+                conf.outputBaseDir
+              else:
+                "."
+    fName = "$1/trace-$2-$3.jsonl" % [baseDir, $txIndex, txHash]
+    stream = newFileStream(fName, fmWrite)
+    tracerInst = newJsonTracer(stream, tracerFlags, false)
+
+  vmState.tracer = tracerInst
+
+proc closeTrace(vmState: BaseVMstate) =
+  let tracer = JsonTracer(vmState.tracer)
+  if tracer.isNil.not:
+    tracer.close()
 
 func gwei(n: uint64): UInt256 =
   n.u256 * (10 ^ 9).u256
@@ -187,7 +195,8 @@ func gwei(n: uint64): UInt256 =
 proc exec(ctx: var TransContext,
           vmState: BaseVMState,
           stateReward: Option[UInt256],
-          header: BlockHeader): ExecOutput =
+          header: BlockHeader,
+          conf: T8NConf): ExecOutput =
 
   let txList = ctx.parseTxs(vmState.com.chainId)
 
@@ -222,10 +231,13 @@ proc exec(ctx: var TransContext,
       )
       continue
 
+    if conf.traceEnabled:
+      setupTrace(conf, txIndex, rlpHash(tx), vmState)
+
     let rc = vmState.processTransaction(tx, sender, header)
 
-    if vmState.tracingEnabled:
-      dumpTrace(txIndex, rlpHash(tx), vmState)
+    if conf.traceEnabled:
+      closeTrace(vmState)
 
     if rc.isErr:
       rejected.add RejectedTx(
@@ -353,21 +365,6 @@ proc calcBaseFee(env: EnvStruct): UInt256 =
 
 proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
   wrapException:
-    var tracerFlags = {
-      TracerFlags.DisableMemory,
-      TracerFlags.DisableStorage,
-      TracerFlags.DisableState,
-      TracerFlags.DisableStateDiff,
-      TracerFlags.DisableReturnData,
-      TracerFlags.GethCompatibility
-    }
-
-    if conf.traceEnabled:
-      tracerFlags.incl TracerFlags.EnableTracing
-      if conf.traceMemory: tracerFlags.excl TracerFlags.DisableMemory
-      if conf.traceNostack: tracerFlags.incl TracerFlags.DisableStack
-      if conf.traceReturnData: tracerFlags.excl TracerFlags.DisableReturnData
-
     if conf.inputAlloc.len == 0 and conf.inputEnv.len == 0 and conf.inputTxs.len == 0:
       raise newError(ErrorConfig, "either one of input is needeed(alloc, txs, or env)")
 
@@ -472,15 +469,14 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
     vmState.init(
       parent      = parent,
       header      = header,
-      com         = com,
-      tracerFlags = (if conf.traceEnabled: tracerFlags else: {})
+      com         = com
     )
 
     vmState.mutateStateDB:
       db.setupAlloc(ctx.alloc)
       db.persist(clearEmptyAccount = false, clearCache = false)
 
-    let res = exec(ctx, vmState, conf.stateReward, header)
+    let res = exec(ctx, vmState, conf.stateReward, header, conf)
 
     if vmState.hashError.len > 0:
       raise newError(ErrorMissingBlockhash, vmState.hashError)

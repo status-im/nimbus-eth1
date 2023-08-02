@@ -3,6 +3,7 @@ import
   ./common/common,
   ./db/[accounts_cache, capturedb],
   ./utils/utils,
+  ./evm/tracer/legacy_tracer,
   "."/[constants, vm_state, vm_types, transaction, core/executor],
   nimcrypto/utils as ncrutils,
   ./rpc/hexstrings, ./launcher,
@@ -90,9 +91,9 @@ proc traceTransaction*(com: CommonRef, header: BlockHeader,
     memoryDB = newMemoryDB()
     captureDB = newCaptureDB(com.db.db, memoryDB)
     captureTrieDB = trieDB captureDB
-    captureFlags = tracerFlags + {EnableAccount}
+    tracerInst = newLegacyTracer(tracerFlags)
     captureCom = com.clone(captureTrieDB)
-    vmState = BaseVMState.new(header, captureCom, captureFlags)
+    vmState = BaseVMState.new(header, captureCom)
 
   var stateDb = vmState.stateDB
 
@@ -115,7 +116,7 @@ proc traceTransaction*(com: CommonRef, header: BlockHeader,
     let recipient = tx.getRecipient(sender)
 
     if idx == txIndex:
-      vmState.enableTracing()
+      vmState.tracer = tracerInst # only enable tracer on target tx
       before.captureAccount(stateDb, sender, senderName)
       before.captureAccount(stateDb, recipient, recipientName)
       before.captureAccount(stateDb, miner, minerName)
@@ -130,20 +131,20 @@ proc traceTransaction*(com: CommonRef, header: BlockHeader,
       after.captureAccount(stateDb, sender, senderName)
       after.captureAccount(stateDb, recipient, recipientName)
       after.captureAccount(stateDb, miner, minerName)
-      vmState.removeTracedAccounts(sender, recipient, miner)
+      tracerInst.removeTracedAccounts(sender, recipient, miner)
       stateDb.persist()
       stateDiff["afterRoot"] = %($stateDb.rootHash)
       break
 
   # internal transactions:
   var stateBefore = AccountsCache.init(captureTrieDB, beforeRoot, com.pruneTrie)
-  for idx, acc in tracedAccountsPairs(vmState):
+  for idx, acc in tracedAccountsPairs(tracerInst):
     before.captureAccount(stateBefore, acc, internalTxName & $idx)
 
-  for idx, acc in tracedAccountsPairs(vmState):
+  for idx, acc in tracedAccountsPairs(tracerInst):
     after.captureAccount(stateDb, acc, internalTxName & $idx)
 
-  result = vmState.getTracingResult()
+  result = tracerInst.getTracingResult()
   result["gas"] = %gasUsed
 
   if TracerFlags.DisableStateDiff notin tracerFlags:
@@ -161,8 +162,9 @@ proc dumpBlockState*(com: CommonRef, header: BlockHeader, body: BlockBody, dumpS
     captureTrieDB = trieDB captureDB
     captureCom = com.clone(captureTrieDB)
     # we only need stack dump if we want to scan for internal transaction address
-    captureFlags = {EnableTracing, DisableMemory, DisableStorage, EnableAccount}
-    vmState = BaseVMState.new(header, captureCom, captureFlags)
+    captureFlags = {DisableMemory, DisableStorage, EnableAccount}
+    tracerInst = newLegacyTracer(captureFlags)
+    vmState = BaseVMState.new(header, captureCom, tracerInst)
     miner = vmState.coinbase()
 
   var
@@ -190,20 +192,20 @@ proc dumpBlockState*(com: CommonRef, header: BlockHeader, body: BlockBody, dumpS
     let recipient = tx.getRecipient(sender)
     after.captureAccount(stateAfter, sender, senderName & $idx)
     after.captureAccount(stateAfter, recipient, recipientName & $idx)
-    vmState.removeTracedAccounts(sender, recipient)
+    tracerInst.removeTracedAccounts(sender, recipient)
 
   after.captureAccount(stateAfter, miner, minerName)
-  vmState.removeTracedAccounts(miner)
+  tracerInst.removeTracedAccounts(miner)
 
   for idx, uncle in body.uncles:
     after.captureAccount(stateAfter, uncle.coinbase, uncleName & $idx)
-    vmState.removeTracedAccounts(uncle.coinbase)
+    tracerInst.removeTracedAccounts(uncle.coinbase)
 
   # internal transactions:
-  for idx, acc in tracedAccountsPairs(vmState):
+  for idx, acc in tracedAccountsPairs(tracerInst):
     before.captureAccount(stateBefore, acc, internalTxName & $idx)
 
-  for idx, acc in tracedAccountsPairs(vmState):
+  for idx, acc in tracedAccountsPairs(tracerInst):
     after.captureAccount(stateAfter, acc, internalTxName & $idx)
 
   result = %{"before": before, "after": after}
@@ -218,8 +220,8 @@ proc traceBlock*(com: CommonRef, header: BlockHeader, body: BlockBody, tracerFla
     captureDB = newCaptureDB(com.db.db, memoryDB)
     captureTrieDB = trieDB captureDB
     captureCom = com.clone(captureTrieDB)
-    captureFlags = tracerFlags + {EnableTracing}
-    vmState = BaseVMState.new(header, captureCom, captureFlags)
+    tracerInst = newLegacyTracer(tracerFlags)
+    vmState = BaseVMState.new(header, captureCom, tracerInst)
 
   if header.txRoot == EMPTY_ROOT_HASH: return newJNull()
   doAssert(body.transactions.calcTxRoot == header.txRoot)
@@ -234,7 +236,7 @@ proc traceBlock*(com: CommonRef, header: BlockHeader, body: BlockBody, tracerFla
     if rc.isOk:
       gasUsed = gasUsed + rc.value
 
-  result = vmState.getTracingResult()
+  result = tracerInst.getTracingResult()
   result["gas"] = %gasUsed
 
   if TracerFlags.DisableState notin tracerFlags:

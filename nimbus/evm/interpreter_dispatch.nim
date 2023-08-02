@@ -171,8 +171,30 @@ proc afterExecCreate(c: Computation)
   else:
     c.rollback()
 
+
+const
+  MsgKindToOp: array[CallKind, Op] = [
+    CALL,
+    DELEGATECALL,
+    CALLCODE,
+    CREATE,
+    CREATE2
+  ]
+
+func msgToOp(msg: Message): Op =
+  if emvcStatic == msg.flags:
+    return STATICCALL
+  MsgKindToOp[msg.kind]
+
 proc beforeExec(c: Computation): bool
     {.gcsafe, raises: [ValueError].} =
+
+  if c.msg.depth > 0:
+    c.vmState.captureEnter(msgToOp(c.msg),
+        c.msg.sender, c.msg.contractAddress,
+        c.msg.data, c.msg.gas,
+        c.msg.value)
+
   if not c.msg.isCreate:
     c.beforeExecCall()
     false
@@ -181,10 +203,19 @@ proc beforeExec(c: Computation): bool
 
 proc afterExec(c: Computation)
     {.gcsafe, raises: [CatchableError].} =
+
   if not c.msg.isCreate:
     c.afterExecCall()
   else:
     c.afterExecCreate()
+
+  if c.msg.depth > 0:
+    let gasUsed = c.msg.gas - c.gasMeter.gasRemaining
+    let error = if c.isError:
+                  some(c.error.info)
+                else:
+                  none(string)
+    c.vmState.captureExit(c.output, gasUsed, error)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -306,7 +337,7 @@ proc asyncExecCallOrCreate*(c: Computation): Future[void] {.async.} =
   defer: c.dispose()
 
   await ifNecessaryGetCode(c.vmState, c.msg.contractAddress)
-  
+
   if c.beforeExec():
     return
   c.executeOpcodes()

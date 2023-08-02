@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  std/[json, strutils, sets, tables, options],
+  std/[json, strutils, sets, tables, options, streams],
   chronicles,
   eth/keys,
   stew/[results, byteutils],
@@ -20,6 +20,7 @@ import
   ../../nimbus/transaction,
   ../../nimbus/core/executor,
   ../../nimbus/common/common,
+  ../../nimbus/evm/tracer/json_tracer,
   ../common/helpers as chp,
   "."/[config, helpers],
   ../common/state_clearing
@@ -166,49 +167,29 @@ proc dumpState(vmState: BaseVMState): StateDump =
     accounts: dumpAccounts(vmState.stateDB)
   )
 
-template stripLeadingZeros(value: string): string =
-  var cidx = 0
-  # ignore the last character so we retain '0' on zero value
-  while cidx < value.len - 1 and value[cidx] == '0':
-    cidx.inc
-  value[cidx .. ^1]
-
-proc encodeHexInt(x: SomeInteger): JsonNode =
-  %("0x" & x.toHex.stripLeadingZeros.toLowerAscii)
-
-proc writeTraceToStderr(vmState: BaseVMState, pretty: bool) =
-  let trace = vmState.getTracingResult()
-  trace["gasUsed"] = encodeHexInt(vmState.tracerGasUsed)
-  trace.delete("gas")
+proc writeRootHashToStderr(vmState: BaseVMState) =
   let stateRoot = %{
     "stateRoot": %(vmState.readOnlyStateDB.rootHash)
   }
-  if pretty:
-    stderr.writeLine(trace.pretty)
-  else:
-    let logs = trace["structLogs"]
-    trace.delete("structLogs")
-    for x in logs:
-      if "error" in x:
-        trace["error"] = x["error"]
-        x.delete("error")
-      stderr.writeLine($x)
-
-    stderr.writeLine($trace)
-    stderr.writeLine($stateRoot)
+  stderr.writeLine($stateRoot)
 
 proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateResult =
   let
     com     = CommonRef.new(newMemoryDB(), ctx.chainConfig, pruneTrie = false)
     parent  = BlockHeader(stateRoot: emptyRlpHash)
     fork    = com.toEVMFork(ctx.header.forkDeterminationInfoForHeader)
+    stream  = newFileStream(stderr)
+    tracer  = if conf.jsonEnabled:
+                newJSonTracer(stream, ctx.tracerFlags, conf.pretty)
+              else:
+                JsonTracer(nil)
 
   let vmState = TestVMState()
   vmState.init(
-    parent      = parent,
-    header      = ctx.header,
-    com         = com,
-    tracerFlags = ctx.tracerFlags)
+    parent = parent,
+    header = ctx.header,
+    com    = com,
+    tracer = tracer)
 
   var gasUsed: GasInt
   let sender = ctx.tx.getSender()
@@ -229,7 +210,7 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
     if conf.dumpEnabled:
       result.state = dumpState(vmState)
     if conf.jsonEnabled:
-      writeTraceToStderr(vmState, conf.pretty)
+      writeRootHashToStderr(vmState)
 
   let rc = vmState.processTransaction(
                 ctx.tx, sender, ctx.header, fork)
@@ -241,9 +222,7 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
 
 proc toTracerFlags(conf: Stateconf): set[TracerFlags] =
   result = {
-    TracerFlags.DisableStateDiff,
-    TracerFlags.EnableTracing,
-    TracerFlags.GethCompatibility
+    TracerFlags.DisableStateDiff
   }
 
   if conf.disableMemory    : result.incl TracerFlags.DisableMemory

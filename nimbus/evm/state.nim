@@ -11,13 +11,13 @@
 {.push raises: [].}
 
 import
-  std/[json, options, sets, strformat, tables],
+  std/[options, sets, strformat, tables],
   eth/[keys],
   ../../stateless/[witness_from_tree, witness_types],
   ../db/accounts_cache,
   ../common/[common, evmforks],
   ./async/data_sources,
-  ./transaction_tracer,
+  ./interpreter/op_codes,
   ./types
 
 proc init(
@@ -31,7 +31,7 @@ proc init(
       difficulty:   UInt256;
       miner:        EthAddress;
       com:          CommonRef;
-      tracer:       TransactionTracer,
+      tracer:       TracerRef,
       asyncFactory: AsyncOperationFactory = AsyncOperationFactory(maybeDataSource: none[AsyncDataSource]()))
     {.gcsafe.} =
   ## Initialisation helper
@@ -48,33 +48,6 @@ proc init(
   self.stateDB = ac
   self.minerAddress = miner
   self.asyncFactory = asyncFactory
-
-proc init(
-      self:        BaseVMState;
-      ac:          AccountsCache;
-      parent:      BlockHeader;
-      timestamp:   EthTime;
-      gasLimit:    GasInt;
-      fee:         Option[UInt256];
-      prevRandao:  Hash256;
-      difficulty:  UInt256;
-      miner:       EthAddress;
-      com:         CommonRef;
-      tracerFlags: set[TracerFlags])
-    {.gcsafe.} =
-  var tracer: TransactionTracer
-  tracer.initTracer(tracerFlags)
-  self.init(
-    ac        = ac,
-    parent    = parent,
-    timestamp = timestamp,
-    gasLimit  = gasLimit,    
-    fee       = fee,
-    prevRandao= prevRandao,
-    difficulty= difficulty,
-    miner     = miner,
-    com       = com,
-    tracer    = tracer)
 
 # --------------
 
@@ -96,7 +69,7 @@ proc new*(
       difficulty:  UInt256,         ## tx env: difficulty
       miner:       EthAddress;      ## tx env: coinbase(PoW) or signer(PoA)
       com:         CommonRef;       ## block chain config
-      tracerFlags: set[TracerFlags] = {}): T
+      tracer:      TracerRef = nil): T
     {.gcsafe.} =
   ## Create a new `BaseVMState` descriptor from a parent block header. This
   ## function internally constructs a new account state cache rooted at
@@ -116,7 +89,7 @@ proc new*(
     difficulty  = difficulty,
     miner       = miner,
     com         = com,
-    tracerFlags = tracerFlags)
+    tracer      = tracer)
 
 proc reinit*(self:      BaseVMState;     ## Object descriptor
              parent:    BlockHeader;     ## parent header, account sync pos.
@@ -192,11 +165,11 @@ proc reinit*(self:      BaseVMState; ## Object descriptor
       header    = header)
 
 proc init*(
-      self:        BaseVMState;     ## Object descriptor
-      parent:      BlockHeader;     ## parent header, account sync position
-      header:      BlockHeader;     ## header with tx environment data fields
-      com:         CommonRef;       ## block chain config
-      tracerFlags: set[TracerFlags] = {})
+      self:   BaseVMState;     ## Object descriptor
+      parent: BlockHeader;     ## parent header, account sync position
+      header: BlockHeader;     ## header with tx environment data fields
+      com:    CommonRef;       ## block chain config
+      tracer: TracerRef = nil)
     {.gcsafe, raises: [CatchableError].} =
   ## Variant of `new()` constructor above for in-place initalisation. The
   ## `parent` argument is used to sync the accounts cache and the `header`
@@ -215,14 +188,14 @@ proc init*(
     difficulty  = header.difficulty,
     miner       = com.minerAddress(header),
     com         = com,
-    tracerFlags = tracerFlags)
+    tracer      = tracer)
 
 proc new*(
-      T:           type BaseVMState;
-      parent:      BlockHeader;     ## parent header, account sync position
-      header:      BlockHeader;     ## header with tx environment data fields
-      com:         CommonRef;       ## block chain config
-      tracerFlags: set[TracerFlags] = {}): T
+      T:      type BaseVMState;
+      parent: BlockHeader;     ## parent header, account sync position
+      header: BlockHeader;     ## header with tx environment data fields
+      com:    CommonRef;       ## block chain config
+      tracer: TracerRef = nil): T
     {.gcsafe, raises: [CatchableError].} =
   ## This is a variant of the `new()` constructor above where the `parent`
   ## argument is used to sync the accounts cache and the `header` is used
@@ -232,41 +205,41 @@ proc new*(
   ## networks, the miner address is retrievable via `ecRecover()`.
   new result
   result.init(
-    parent      = parent,
-    header      = header,
-    com         = com,
-    tracerFlags = tracerFlags)
+    parent = parent,
+    header = header,
+    com    = com,
+    tracer = tracer)
 
 proc new*(
-      T:           type BaseVMState;
-      header:      BlockHeader;     ## header with tx environment data fields
-      com:         CommonRef;       ## block chain config
-      tracerFlags: set[TracerFlags] = {}): T
+      T:      type BaseVMState;
+      header: BlockHeader;     ## header with tx environment data fields
+      com:    CommonRef;       ## block chain config
+      tracer: TracerRef = nil): T
     {.gcsafe, raises: [CatchableError].} =
   ## This is a variant of the `new()` constructor above where the field
   ## `header.parentHash`, is used to fetch the `parent` BlockHeader to be
   ## used in the `new()` variant, above.
   BaseVMState.new(
-    parent      = com.db.getBlockHeader(header.parentHash),
-    header      = header,
-    com         = com,
-    tracerFlags = tracerFlags)
+    parent = com.db.getBlockHeader(header.parentHash),
+    header = header,
+    com    = com,
+    tracer = tracer)
 
 proc init*(
-      vmState:     BaseVMState;
-      header:      BlockHeader;     ## header with tx environment data fields
-      com:         CommonRef;       ## block chain config
-      tracerFlags: set[TracerFlags] = {}): bool
+      vmState: BaseVMState;
+      header:  BlockHeader;     ## header with tx environment data fields
+      com:     CommonRef;       ## block chain config
+      tracer:  TracerRef = nil): bool
     {.gcsafe, raises: [CatchableError].} =
   ## Variant of `new()` which does not throw an exception on a dangling
   ## `BlockHeader` parent hash reference.
   var parent: BlockHeader
   if com.db.getBlockHeader(header.parentHash, parent):
     vmState.init(
-      parent      = parent,
-      header      = header,
-      com         = com,
-      tracerFlags = tracerFlags)
+      parent = parent,
+      header = header,
+      com    = com,
+      tracer = tracer)
     return true
 
 proc statelessInit*(
@@ -275,10 +248,8 @@ proc statelessInit*(
     header:       BlockHeader;     ## header with tx environment data fields
     com:          CommonRef;       ## block chain config
     asyncFactory: AsyncOperationFactory;
-    tracerFlags:  set[TracerFlags] = {}): bool
+    tracer:       TracerRef = nil): bool
     {.gcsafe, raises: [CatchableError].} =
-  var tracer: TransactionTracer
-  tracer.initTracer(tracerFlags)
   vmState.init(
     ac          = AccountsCache.init(com.db.db, parent.stateRoot, com.pruneTrie),
     parent      = parent,
@@ -345,41 +316,8 @@ template mutateStateDB*(vmState: BaseVMState, body: untyped) =
     var db {.inject.} = vmState.stateDB
     body
 
-proc getTracingResult*(vmState: BaseVMState): JsonNode {.inline.} =
-  doAssert(EnableTracing in vmState.tracer.flags)
-  vmState.tracer.trace
-
 proc getAndClearLogEntries*(vmState: BaseVMState): seq[Log] =
   vmState.stateDB.getAndClearLogEntries()
-
-proc enableTracing*(vmState: BaseVMState) =
-  vmState.tracer.flags.incl EnableTracing
-
-proc disableTracing*(vmState: BaseVMState) =
-  vmState.tracer.flags.excl EnableTracing
-
-func tracingEnabled*(vmState: BaseVMState): bool =
-  EnableTracing in vmState.tracer.flags
-
-iterator tracedAccounts*(vmState: BaseVMState): EthAddress =
-  for acc in vmState.tracer.accounts:
-    yield acc
-
-iterator tracedAccountsPairs*(vmState: BaseVMState): (int, EthAddress) =
-  var idx = 0
-  for acc in vmState.tracer.accounts:
-    yield (idx, acc)
-    inc idx
-
-proc removeTracedAccounts*(vmState: BaseVMState, accounts: varargs[EthAddress]) =
-  for acc in accounts:
-    vmState.tracer.accounts.excl acc
-
-proc tracerGasUsed*(vmState: BaseVMState, gasUsed: GasInt) =
-  vmState.tracer.gasUsed = gasUsed
-
-proc tracerGasUsed*(vmState: BaseVMState): GasInt =
-  vmState.tracer.gasUsed
 
 proc status*(vmState: BaseVMState): bool =
   ExecutionOK in vmState.flags
@@ -413,3 +351,62 @@ func forkDeterminationInfoForVMState*(vmState: BaseVMState): ForkDeterminationIn
 
 func determineFork*(vmState: BaseVMState): EVMFork =
   vmState.com.toEVMFork(vmState.forkDeterminationInfoForVMState)
+
+func tracingEnabled*(vmState: BaseVMState): bool =
+  vmState.tracer.isNil.not
+
+proc captureTxStart*(vmState: BaseVMState, gasLimit: GasInt) =
+  if vmState.tracingEnabled:
+    vmState.tracer.captureTxStart(gasLimit)
+
+proc captureTxEnd*(vmState: BaseVMState, restGas: GasInt) =
+  if vmState.tracingEnabled:
+    vmState.tracer.captureTxEnd(restGas)
+
+proc captureStart*(vmState: BaseVMState, c: Computation,
+                   sender: EthAddress, to: EthAddress,
+                   create: bool, input: openArray[byte],
+                   gas: GasInt, value: UInt256) =
+  if vmState.tracingEnabled:
+    vmState.tracer.captureStart(c, sender, to, create, input, gas, value)
+
+proc captureEnd*(vmState: BaseVMState, output: openArray[byte],
+                 gasUsed: GasInt, error: Option[string]) =
+  if vmState.tracingEnabled:
+    vmState.tracer.captureEnd(output, gasUsed, error)
+
+proc captureEnter*(vmState: BaseVMState, op: Op,
+                   sender: EthAddress, to: EthAddress,
+                   input: openArray[byte], gas: GasInt,
+                   value: UInt256) =
+  if vmState.tracingEnabled:
+    vmState.tracer.captureEnter(op, sender, to, input, gas, value)
+
+proc captureExit*(vmState: BaseVMState, output: openArray[byte],
+                  gasUsed: GasInt, error: Option[string]) =
+  if vmState.tracingEnabled:
+    vmState.tracer.captureExit(output, gasUsed, error)
+
+proc captureOpStart*(vmState: BaseVMState, pc: int,
+                   op: Op, gas: GasInt,
+                   depth: int): int =
+  if vmState.tracingEnabled:
+    result = vmState.tracer.captureOpStart(pc, op, gas, depth)
+
+proc captureOpEnd*(vmState: BaseVMState, pc: int,
+                   op: Op, gas: GasInt, refund: GasInt,
+                   rData: openArray[byte],
+                   depth: int, opIndex: int) =
+  if vmState.tracingEnabled:
+    vmState.tracer.captureOpEnd(pc, op, gas, refund, rData, depth, opIndex)
+
+proc captureFault*(vmState: BaseVMState, pc: int,
+                   op: Op, gas: GasInt, refund: GasInt,
+                   rData: openArray[byte],
+                   depth: int, error: Option[string]) =
+  if vmState.tracingEnabled:
+    vmState.tracer.captureFault(pc, op, gas, refund, rData, depth, error)
+
+proc capturePrepare*(vmState: BaseVMState, depth: int) =
+  if vmState.tracingEnabled:
+    vmState.tracer.capturePrepare(depth)
