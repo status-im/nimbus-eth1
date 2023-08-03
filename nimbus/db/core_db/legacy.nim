@@ -231,7 +231,10 @@ proc newLegacyPersistentCoreDbRef*(path: string): CoreDbRef =
   # the `ResultError` exception (or any other `CatchableError`). So this is
   # converted to a `Defect`.
   var backend: ChainDB
-  try: backend = newChainDB path
+  try:
+    {.push warning[Deprecated]: off.}
+    backend = newChainDB path
+    {.pop.}
   except CatchableError as e:
     let msg = "DB initialisation error(" & $e.name & "): " & e.msg
     raise (ref ResultDefect)(msg: msg)
