@@ -16,7 +16,6 @@
 {.push raises: [].}
 
 import
-  chronicles,
   eth/[common, trie/db],
   ./core_db/[base, core_apps, legacy]
 
@@ -62,19 +61,6 @@ export
   setTransactionID,
   toMpt,
   toPhk
-
-logScope:
-  topics = "core_db"
-
-# ------------------------------------------------------------------------------
-# Private functions: helpers
-# ------------------------------------------------------------------------------
-
-template logTxt(info: static[string]): static[string] =
-  "CoreDb " & info
-
-proc tmplNotImplemented*(db: CoreDbRef, name: string) {.used.} =
-  debug logTxt "template not implemented", dbType=db.dbType, meth=name
 
 # ------------------------------------------------------------------------------
 # Public constructor

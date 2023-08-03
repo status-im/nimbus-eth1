@@ -228,14 +228,13 @@ proc newLegacyPersistentCoreDbRef*(path: string): CoreDbRef =
   #     `b.kind in {tyObject} + skipPtrs`  [AssertionDefect]
   #
   # when running `select_backend.newChainDB(path)`. The culprit seems to be
-  # the `ResultError` exception (or any other `CatchableError`).
-  #
-  doAssert dbBackend == rocksdb
-  let rc = RocksStoreRef.init(path, "nimbus")
-  doAssert(rc.isOk, "Cannot start RocksDB: " & rc.error)
-  doAssert(not rc.value.isNil, "Starting RocksDB returned nil")
-
-  let backend = ChainDB(kv: rc.value.kvStore, rdb: rc.value)
+  # the `ResultError` exception (or any other `CatchableError`). So this is
+  # converted to a `Defect`.
+  var backend: ChainDB
+  try: backend = newChainDB path
+  except CatchableError as e:
+    let msg = "DB initialisation error(" & $e.name & "): " & e.msg
+    raise (ref ResultDefect)(msg: msg)
   newLegacyDbRef(LegacyDbPersistent, backend.trieDB, backend)
 
 proc newLegacyMemoryCoreDbRef*(): CoreDbRef =
