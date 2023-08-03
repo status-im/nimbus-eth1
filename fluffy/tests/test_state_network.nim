@@ -8,22 +8,22 @@
 import
   std/os,
   testutils/unittests, chronos,
-  eth/[common/eth_hash, keys, trie/db, trie/hexary],
+  eth/[common/eth_hash, keys],
   eth/p2p/discoveryv5/protocol as discv5_protocol, eth/p2p/discoveryv5/routing_table,
-  ../../nimbus/[config, db/db_chain, db/state_db],
+  ../../nimbus/[config, db/core_db, db/state_db],
   ../../nimbus/common/[chain_config, genesis],
   ../network/wire/[portal_protocol, portal_stream],
   ../network/state/[state_content, state_network],
   ../content_db,
   ./test_helpers
 
-proc genesisToTrie(filePath: string): HexaryTrie =
+proc genesisToTrie(filePath: string): CoreDbMptRef =
   # TODO: Doing our best here with API that exists, to be improved.
   var cn: NetworkParams
   if not loadNetworkParams(filePath, cn):
     quit(1)
 
-  let sdb  = newStateDB(newMemoryDB(), false)
+  let sdb  = newStateDB(newCoreDbRef LegacyDbMemory, false)
   let map  = toForkTransitionTable(cn.config)
   let fork = map.toHardFork(forkDeterminationInfo(0.toBlockNumber, cn.genesis.timestamp))
   discard toGenesisHeader(cn.genesis, sdb, fork)

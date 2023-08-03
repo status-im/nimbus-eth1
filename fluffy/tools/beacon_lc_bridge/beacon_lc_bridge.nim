@@ -68,7 +68,7 @@
 import
   std/[os, strutils, options],
   chronicles, chronos, confutils,
-  eth/[keys, rlp], eth/[trie, trie/db],
+  eth/[keys, rlp],
   # Need to rename this because of web3 ethtypes and ambigious indentifier mess
   # for `BlockHeader`.
   eth/common/eth_types as etypes,
@@ -87,6 +87,7 @@ import
   ../../network/history/[history_content, history_network],
   ../../network/beacon_light_client/beacon_light_client_content,
   ../../common/common_types,
+  ../../nimbus/db/core_db,
   ./beacon_lc_bridge_conf
 
 from stew/objects import checkedEnumAssign
@@ -189,7 +190,7 @@ proc calculateTransactionData(
     items: openArray[TypedTransaction]):
     Hash256 {.raises: [].} =
 
-  var tr = initHexaryTrie(newMemoryDB())
+  var tr = newCoreDbRef(LegacyDbMemory).mptPrune
   for i, t in items:
     try:
       let tx = distinctBase(t)
@@ -207,7 +208,7 @@ proc calculateWithdrawalsRoot(
   items: openArray[WithdrawalV1]):
     Hash256 {.raises: [].} =
 
-  var tr = initHexaryTrie(newMemoryDB())
+  var tr = newCoreDbRef(LegacyDbMemory).mptPrune
   for i, w in items:
     try:
       let withdrawal = etypes.Withdrawal(

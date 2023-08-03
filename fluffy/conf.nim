@@ -10,10 +10,11 @@
 import
   std/os,
   uri, confutils, confutils/std/net, chronicles,
-  eth/keys, eth/net/nat, eth/p2p/discoveryv5/[enr, node, routing_table],
+  eth/keys, eth/p2p/discoveryv5/[enr, node, routing_table],
   json_rpc/rpcproxy,
   nimcrypto/hash,
   stew/byteutils,
+  eth/net/nat, # must be late (compilation annoyance)
   ./logging,
   ./network/wire/portal_protocol_config
 
