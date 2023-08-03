@@ -13,11 +13,6 @@
 ##
 {.push raises: [].}
 
-import aristo/aristo_desc/[
-  aristo_types_identifiers, aristo_types_structural]
-export
-  aristo_types_identifiers, aristo_types_structural
-
 import aristo/[
   aristo_constants, aristo_delete, aristo_fetch, aristo_hashify, aristo_init,
   aristo_merge, aristo_nearby, aristo_tx, aristo_utils]
@@ -30,10 +25,13 @@ import
 export
   append, read
 
-import
-  aristo/aristo_vid
+import aristo/aristo_desc/[
+  aristo_types_identifiers, aristo_types_structural]
 export
-  vidFetch
+  AristoAccount,
+  PayloadRef,
+  PayloadType,
+  `==`
 
 import
   aristo/aristo_desc

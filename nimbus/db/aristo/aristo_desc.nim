@@ -22,12 +22,14 @@
 {.push raises: [].}
 
 import
-  std/[sets, tables],
+  std/tables,
   eth/common,
   ./aristo_constants,
   ./aristo_desc/[
-    aristo_error, aristo_types_backend,
-    aristo_types_identifiers, aristo_types_structural]
+    aristo_error, aristo_types_identifiers, aristo_types_structural]
+
+from ./aristo_desc/aristo_types_backend
+  import AristoBackendRef
 
 export
   # Not auto-exporting backend
@@ -35,28 +37,12 @@ export
   aristo_types_structural
 
 type
-  AristoChangeLogRef* = ref object
-    ## Change log: database state before backend saving.
-    root*: HashKey                    ## Previous hash key for `VertexID(1)`
-    leafs*: Table[LeafTie,PayloadRef] ## Changed leafs after merge into backend
-
   AristoTxRef* = ref object
     ## Transaction descriptor
     db*: AristoDbRef                  ## Database descriptor
     parent*: AristoTxRef              ## Previous transaction
     txUid*: uint                      ## Unique ID among transactions
     stackInx*: int                    ## Stack index for this transaction
-
-  AristoLayerRef* = ref object
-    ## Hexary trie database layer structures. Any layer holds the full
-    ## change relative to the backend.
-    sTab*: Table[VertexID,VertexRef]  ## Structural vertex table
-    lTab*: Table[LeafTie,VertexID]    ## Direct access, path to leaf vertex
-    kMap*: Table[VertexID,HashLabel]  ## Merkle hash key mapping
-    pAmk*: Table[HashLabel,VertexID]  ## Reverse `kMap` entries, hash key lookup
-    pPrf*: HashSet[VertexID]          ## Locked vertices (proof nodes)
-    vGen*: seq[VertexID]              ## Unique vertex ID generator
-    txUid*: uint                      ## Transaction identifier if positive
 
   AristoDbRef* = ref AristoDbObj
   AristoDbObj* = object
@@ -106,7 +92,6 @@ func isValid*(vid: VertexID): bool =
   vid != VertexID(0)
 
 # ------------------------------------------------------------------------------
-
 # Public functions, miscellaneous
 # ------------------------------------------------------------------------------
 

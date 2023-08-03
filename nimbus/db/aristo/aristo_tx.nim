@@ -45,10 +45,6 @@ proc restore(db: AristoDbRef, backup: AristoDbRef) =
   db.txRef =    backup.txRef
   db.txUidGen = backup.txUidGen
 
-proc cpy(layer: AristoLayerRef): AristoLayerRef =
-  new result
-  result[] = layer[]
-
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
@@ -171,7 +167,7 @@ proc txBegin*(db: AristoDbRef): AristoTxRef =
   ##     ... continue using db ...
   ##     tx.commit()
   ##
-  db.stack.add db.top.cpy # push (save and use top later)
+  db.stack.add db.top.dup # push (save and use top later)
   db.top.txUid = db.getTxUid()
 
   db.txRef = AristoTxRef(
