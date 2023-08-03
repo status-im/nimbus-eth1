@@ -11,29 +11,18 @@
 ## Core database replacement wrapper object
 ## ========================================
 ##
-## See `core_db/README.md`
+## See `core_db/README.md` for implementation details
 ##
-## This module automatically pulls in the persitent backend library at the
-## linking stage (e.g. `rocksdb`) which can be avoided for pure memory DB
-## applications by importing `db/code_db/memory_only` (rather than
-## `db/core_db`.)
+## This module provides a memory datanase only. For providing a persistent
+## constructot, import `db/code_db/persistent` though avoiding to
+## unnecessarily link to the persistent backend library (e.g. `rocksdb`)
+## when a memory only database is used.
 ##
 {.push raises: [].}
 
 import
-  ./core_db/[memory_only, legacy_persistent]
-
+  ./core_db/memory_only
 export
   memory_only
-
-proc newCoreDbRef*(dbType: static[CoreDbType]; path: string): CoreDbRef =
-  ## Constructor for persistent type DB
-  ##
-  ## Note: Using legacy notation `newCoreDbRef()` rather than
-  ## `CoreDbRef.init()` because of compiler coughing.
-  when dbType == LegacyDbPersistent:
-    newLegacyPersistentCoreDbRef path
-  else:
-    {.error: "Unsupported dbType for persistent newCoreDbRef()".}
 
 # End

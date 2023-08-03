@@ -35,6 +35,7 @@ import
   ../nimbus/core/chain, # must be early (compilation annoyance)
   ../nimbus/config,
   ../nimbus/common/common,
+  ../nimbus/db/core_db/persistent,
   ./replay/[undump_blocks, pp]
 
 type

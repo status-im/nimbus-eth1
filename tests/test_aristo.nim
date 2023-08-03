@@ -19,7 +19,7 @@ import
   unittest2,
   ../nimbus/db/aristo/[aristo_desc, aristo_merge],
   ../nimbus/db/core_db,
-  ../nimbus/db/core_db/legacy_persistent,
+  ../nimbus/db/core_db/[legacy_persistent, persistent],
   ../nimbus/core/chain,
   ../nimbus/sync/snap/worker/db/[rocky_bulk_load, snapdb_accounts, snapdb_desc],
   ./replay/[pp, undump_accounts, undump_storages],

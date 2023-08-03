@@ -1,6 +1,7 @@
 import
   json,
   ../nimbus/common/common, # must be early (compilation annoyance)
+  ../nimbus/db/core_db/persistent,
   ../nimbus/[config, tracer, vm_types]
 
 proc dumpTest(com: CommonRef, blockNumber: int) =

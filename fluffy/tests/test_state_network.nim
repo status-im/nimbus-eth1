@@ -10,7 +10,7 @@ import
   testutils/unittests, chronos,
   eth/[common/eth_hash, keys],
   eth/p2p/discoveryv5/protocol as discv5_protocol, eth/p2p/discoveryv5/routing_table,
-  ../../nimbus/[config, db/core_db/memory_only, db/state_db],
+  ../../nimbus/[config, db/core_db, db/state_db],
   ../../nimbus/common/[chain_config, genesis],
   ../network/wire/[portal_protocol, portal_stream],
   ../network/state/[state_content, state_network],

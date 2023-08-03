@@ -2,7 +2,8 @@ import
   json, stint,
   ../nimbus/[tracer, config],
   ../nimbus/core/chain,
-  ../nimbus/common/common
+  ../nimbus/common/common,
+  ../nimbus/db/core_db/persistent
 
 proc dumpTest(com: CommonRef, blockNumber: int) =
   let

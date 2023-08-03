@@ -3,6 +3,7 @@ import
   ../nimbus/[vm_state, vm_types],
   ../nimbus/core/executor,
   ../nimbus/common/common,
+  ../nimbus/db/core_db/persistent,
   configuration # must be late (compilation annoyance)
 
 const

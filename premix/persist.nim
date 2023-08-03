@@ -3,9 +3,9 @@
 import
   chronicles,
   ../nimbus/errors,
-  ../nimbus/db/storage_types,
   ../nimbus/core/chain,
   ../nimbus/common,
+  ../nimbus/db/[core_db/persistent, storage_types],
   configuration  # must be late (compilation annoyance)
 
 when defined(graphql):

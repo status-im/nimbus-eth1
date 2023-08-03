@@ -22,7 +22,7 @@ import
   stew/shims/net as stewNet,
   websock/websock as ws,
   "."/[config, constants, version, rpc, common],
-  ./db/select_backend,
+  ./db/[core_db/persistent, select_backend],
   ./graphql/ethapi,
   ./core/[chain, sealer, clique/clique_desc,
     clique/clique_sealer, tx_pool, block_import],

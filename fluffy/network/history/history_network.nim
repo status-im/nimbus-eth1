@@ -14,7 +14,7 @@ import
   ../../common/common_types,
   ../../content_db,
   ../../network_metadata,
-  ../../../nimbus/[constants, db/core_db/memory_only],
+  ../../../nimbus/[constants, db/core_db],
   ../wire/[portal_protocol, portal_stream, portal_protocol_config],
   "."/[history_content, accumulator]
 

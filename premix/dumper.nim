@@ -6,6 +6,7 @@
 import
   stint,
   ../nimbus/common/common,
+  ../nimbus/db/core_db/persistent,
   ../nimbus/core/executor,
   ../nimbus/[vm_state, vm_types],
   ../nimbus/tracer,
