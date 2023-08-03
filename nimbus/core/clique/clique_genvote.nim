@@ -22,7 +22,6 @@ import
   std/[sequtils, times],
   eth/[common, keys],
   ../../constants,
-  ../../db/db_chain,
   ./clique_cfg,
   ./clique_defs,
   ./clique_desc,
@@ -179,7 +178,7 @@ proc cliqueGenvote*(
   ##
   ##    [..]
   ##
-  ##    | var db: ChainDBRef = ...
+  ##    | var db: CoreDbRef = ...
   ##    | var c = db.newChain
   ##
   ##

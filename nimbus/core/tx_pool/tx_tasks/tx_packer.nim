@@ -15,24 +15,18 @@
 {.push raises: [].}
 
 import
-  std/[sets, tables],
-  ../../../db/accounts_cache,
+  chronicles,
+  eth/[keys, rlp],
+  stew/sorted_set,
+  ../../../db/[accounts_cache, core_db],
   ../../../common/common,
   "../.."/[dao, executor, validate, eip4844],
   ../../../transaction/call_evm,
   ../../../transaction,
   ../../../vm_state,
   ../../../vm_types,
-  ../tx_chain,
-  ../tx_desc,
-  ../tx_item,
-  ../tx_tabs,
-  ../tx_tabs/tx_status,
-  ./tx_bucket,
-  ./tx_classify,
-  chronicles,
-  eth/[keys, rlp, trie, trie/db],
-  stew/[sorted_set]
+  ".."/[tx_chain, tx_desc, tx_item, tx_tabs, tx_tabs/tx_status],
+  "."/[tx_bucket, tx_classify]
 
 type
   TxPackerError* = object of CatchableError
@@ -40,7 +34,7 @@ type
 
   TxPackerStateRef = ref object
     xp: TxPoolRef
-    tr: HexaryTrie
+    tr: CoreDbMptRef
     cleanState: bool
     balance: UInt256
     dataGasUsed: uint64
@@ -57,16 +51,16 @@ logScope:
 # Private helpers
 # ------------------------------------------------------------------------------
 
-template safeExecutor(info: string; code: untyped) =
-  try:
-    code
-  except CatchableError as e:
-    raise (ref CatchableError)(msg: e.msg)
-  except Defect as e:
-    raise (ref Defect)(msg: e.msg)
-  except:
-    let e = getCurrentException()
-    raise newException(TxPackerError, info & "(): " & $e.name & " -- " & e.msg)
+#template safeExecutor(info: string; code: untyped) =
+#  try:
+#    code
+#  except CatchableError as e:
+#    raise (ref CatchableError)(msg: e.msg)
+#  except Defect as e:
+#    raise (ref Defect)(msg: e.msg)
+#  except:
+#    let e = getCurrentException()
+#    raise newException(TxPackerError, info & "(): " & $e.name & " -- " & e.msg)
 
 proc persist(pst: TxPackerStateRef)
     {.gcsafe,raises: [RlpError].} =
@@ -168,7 +162,7 @@ proc vmExecInit(xp: TxPoolRef): TxPackerStateRef
 
   TxPackerStateRef( # return value
     xp: xp,
-    tr: newMemoryDB().initHexaryTrie,
+    tr: newCoreDbRef(LegacyDbMemory).mptPrune,
     balance: xp.chain.vmState.readOnlyStateDB.getBalance(xp.chain.feeRecipient))
 
 proc vmExecGrabItem(pst: TxPackerStateRef; item: TxItemRef): Result[bool,void]
@@ -271,7 +265,7 @@ proc packerVmExec*(xp: TxPoolRef) {.gcsafe,raises: [CatchableError].} =
   ## Rebuild `packed` bucket by selection items from the `staged` bucket
   ## after executing them in the VM.
   let db = xp.chain.com.db
-  let dbTx = db.db.beginTransaction
+  let dbTx = db.beginTransaction
   defer: dbTx.dispose()
 
   var pst = xp.vmExecInit

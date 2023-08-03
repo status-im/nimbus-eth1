@@ -11,46 +11,47 @@
 import
   std/typetraits,
   eth/common,
-  eth/trie/[db, hexary]
+  ./core_db
 
 type
-  DB = TrieDatabaseRef
-  AccountsTrie* = distinct SecureHexaryTrie
-  StorageTrie* = distinct SecureHexaryTrie
+  DB = CoreDbRef
+  AccountsTrie* = distinct CoreDbPhkRef
+  StorageTrie* = distinct CoreDbPhkRef
 
 # I don't understand why "borrow" doesn't work here. --Adam
 proc rootHash*   (trie: AccountsTrie | StorageTrie): KeccakHash      = distinctBase(trie).rootHash
-proc rootHashHex*(trie: AccountsTrie | StorageTrie): string          = distinctBase(trie).rootHashHex
-proc db*         (trie: AccountsTrie | StorageTrie): TrieDatabaseRef = distinctBase(trie).db
+proc rootHashHex*(trie: AccountsTrie | StorageTrie): string          = $trie.rootHash
+proc db*         (trie: AccountsTrie | StorageTrie): DB              = distinctBase(trie).parent
 proc isPruning*  (trie: AccountsTrie | StorageTrie): bool            = distinctBase(trie).isPruning
-
+proc mpt*        (trie: AccountsTrie | StorageTrie): CoreDbMptRef    = distinctBase(trie).toMpt
+proc phk*        (trie: AccountsTrie | StorageTrie): CoreDbPhkRef    = distinctBase(trie)
 
 
 template initAccountsTrie*(db: DB, rootHash: KeccakHash, isPruning = true): AccountsTrie =
-  AccountsTrie(initSecureHexaryTrie(db, rootHash, isPruning))
+  AccountsTrie(db.phkPrune(rootHash, isPruning))
 
 template initAccountsTrie*(db: DB, isPruning = true): AccountsTrie =
-  AccountsTrie(initSecureHexaryTrie(db, isPruning))
+  AccountsTrie(db.phkPrune(isPruning))
 
 proc getAccountBytes*(trie: AccountsTrie, address: EthAddress): seq[byte] =
-  SecureHexaryTrie(trie).get(address)
+  CoreDbPhkRef(trie).get(address)
 
 proc maybeGetAccountBytes*(trie: AccountsTrie, address: EthAddress): Option[seq[byte]] =
-  SecureHexaryTrie(trie).maybeGet(address)
+  CoreDbPhkRef(trie).maybeGet(address)
 
 proc putAccountBytes*(trie: var AccountsTrie, address: EthAddress, value: openArray[byte]) =
-  SecureHexaryTrie(trie).put(address, value)
+  CoreDbPhkRef(trie).put(address, value)
 
 proc delAccountBytes*(trie: var AccountsTrie, address: EthAddress) =
-  SecureHexaryTrie(trie).del(address)
+  CoreDbPhkRef(trie).del(address)
 
 
 
 template initStorageTrie*(db: DB, rootHash: KeccakHash, isPruning = true): StorageTrie =
-  StorageTrie(initSecureHexaryTrie(db, rootHash, isPruning))
+  StorageTrie(db.phkPrune(rootHash, isPruning))
 
 template initStorageTrie*(db: DB, isPruning = true): StorageTrie =
-  StorageTrie(initSecureHexaryTrie(db, isPruning))
+  StorageTrie(db.phkPrune(isPruning))
 
 template createTrieKeyFromSlot*(slot: UInt256): auto =
   # XXX: This is too expensive. Similar to `createRangeFromAddress`
@@ -62,16 +63,16 @@ template createTrieKeyFromSlot*(slot: UInt256): auto =
   # morally equivalent to toByteRange_Unnecessary but with different types
 
 proc getSlotBytes*(trie: StorageTrie, slotAsKey: openArray[byte]): seq[byte] =
-  SecureHexaryTrie(trie).get(slotAsKey)
+  CoreDbPhkRef(trie).get(slotAsKey)
 
 proc maybeGetSlotBytes*(trie: StorageTrie, slotAsKey: openArray[byte]): Option[seq[byte]] =
-  SecureHexaryTrie(trie).maybeGet(slotAsKey)
+  CoreDbPhkRef(trie).maybeGet(slotAsKey)
 
 proc putSlotBytes*(trie: var StorageTrie, slotAsKey: openArray[byte], value: openArray[byte]) =
-  SecureHexaryTrie(trie).put(slotAsKey, value)
+  CoreDbPhkRef(trie).put(slotAsKey, value)
 
 proc delSlotBytes*(trie: var StorageTrie, slotAsKey: openArray[byte]) =
-  SecureHexaryTrie(trie).del(slotAsKey)
+  CoreDbPhkRef(trie).del(slotAsKey)
 
 proc storageTrieForAccount*(trie: AccountsTrie, account: Account, isPruning = true): StorageTrie =
   # TODO: implement `prefix-db` to solve issue #228 permanently.
@@ -79,4 +80,4 @@ proc storageTrieForAccount*(trie: AccountsTrie, account: Account, isPruning = tr
   # underlying-db key without disturb how the trie works.
   # it will create virtual container for each account.
   # see nim-eth#9
-  initStorageTrie(SecureHexaryTrie(trie).db, account.storageRoot, isPruning)
+  initStorageTrie(trie.db, account.storageRoot, isPruning)

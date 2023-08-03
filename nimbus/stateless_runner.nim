@@ -1,18 +1,16 @@
 import
+  std/[options, times],
+  chronicles,
   chronos,
-  options,
-  times,
   nimcrypto,
   stew/results,
   json_rpc/rpcclient,
   eth/[common/eth_types, p2p],
-  core/chain/[chain_desc],
-  core/executor/process_block,
-  db/[db_chain, select_backend, accounts_cache],
-  eth/trie/[db, trie_defs],
-  evm/async/[data_sources, operations, data_sources/json_rpc_data_source],
-  ./vm_state, ./vm_types,
-  chronicles
+  ./core/chain/chain_desc,
+  ./core/executor/process_block,
+  ./db/[core_db, select_backend, accounts_cache],
+  ./evm/async/[data_sources, operations, data_sources/json_rpc_data_source],
+  "."/[vm_state, vm_types]
 
 from strutils import parseInt, startsWith
 from common/common import initializeEmptyDb
@@ -38,7 +36,7 @@ proc statelesslyRunBlock*(asyncDataSource: AsyncDataSource, com: CommonRef, head
     let t0 = now()
 
     # FIXME-Adam: this doesn't feel like the right place for this; where should it go?
-    com.db.db.put(emptyRlpHash.data, emptyRlp)
+    com.db.compensateLegacySetup()
 
     let blockHash: Hash256 = header.blockHash
 
@@ -109,11 +107,11 @@ proc statelesslyRunTransaction*(asyncDataSource: AsyncDataSource, com: CommonRef
   let (header, body) = waitFor(asyncDataSource.fetchBlockHeaderAndBodyWithHash(headerHash))
 
   # FIXME-Adam: this doesn't feel like the right place for this; where should it go?
-  com.db.db.put(emptyRlpHash.data, emptyRlp)
+  com.db.compensateLegacySetup()
 
   #let blockHash: Hash256 = header.blockHash
 
-  let transaction = com.db.db.beginTransaction()
+  let transaction = com.db.beginTransaction()
   defer: transaction.rollback()  # intentionally throwing away the result of this execution
 
   let asyncFactory = AsyncOperationFactory(maybeDataSource: some(asyncDataSource))

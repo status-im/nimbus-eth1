@@ -11,8 +11,8 @@
 
 import
   chronicles,
-  eth/[rlp, trie/db],
-  ../../db/[storage_types, db_chain]
+  eth/rlp,
+  ../../db/[core_db, storage_types]
 
 type
   # transitionStatus describes the status of eth1/2 transition. This switch
@@ -25,32 +25,29 @@ type
   # Merger is an internal help structure used to track the eth1/2 transition status.
   # It's a common structure can be used in both full node and light client.
   MergerRef* = ref object
-    db    : TrieDatabaseRef
+    db    : CoreDbRef
     status: TransitionStatus
 
-proc writeStatus(db: TrieDatabaseRef, status: TransitionStatus) =
-  db.put(transitionStatusKey().toOpenArray(), rlp.encode(status))
+proc writeStatus(db: CoreDbRef, status: TransitionStatus) {.gcsafe, raises: [RlpError].} =
+  db.kvt.put(transitionStatusKey().toOpenArray(), rlp.encode(status))
 
-proc readStatus(db: TrieDatabaseRef): TransitionStatus =
-  var bytes = db.get(transitionStatusKey().toOpenArray())
+proc readStatus(db: CoreDbRef): TransitionStatus {.gcsafe, raises: [RlpError].} =
+  var bytes = db.kvt.get(transitionStatusKey().toOpenArray())
   if bytes.len > 0:
     try:
       result = rlp.decode(bytes, typeof result)
     except CatchableError:
       error "Failed to decode POS transition status"
 
-proc new*(_: type MergerRef, db: TrieDatabaseRef): MergerRef =
+proc new*(_: type MergerRef, db: CoreDbRef): MergerRef {.gcsafe, raises: [RlpError].} =
   MergerRef(
     db: db,
     status: db.readStatus()
   )
 
-proc new*(_: type MergerRef, db: ChainDBRef): MergerRef =
-  MergerRef.new(db.db)
-
 # ReachTTD is called whenever the first NewHead message received
 # from the consensus-layer.
-proc reachTTD*(m: MergerRef) =
+proc reachTTD*(m: MergerRef) {.gcsafe, raises: [RlpError].} =
   if m.status.leftPoW:
     return
 
@@ -61,7 +58,7 @@ proc reachTTD*(m: MergerRef) =
 
 # FinalizePoS is called whenever the first FinalisedBlock message received
 # from the consensus-layer.
-proc finalizePoS*(m: MergerRef) =
+proc finalizePoS*(m: MergerRef) {.gcsafe, raises: [RlpError].} =
   if m.status.enteredPoS:
     return
 

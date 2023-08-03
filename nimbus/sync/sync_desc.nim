@@ -18,12 +18,10 @@
 import
   eth/p2p,
   ../core/chain,
-  ../db/db_chain,
   ./handlers/eth
 
 export
-  chain,
-  db_chain
+  chain
 
 type
   BuddyRunState* = enum

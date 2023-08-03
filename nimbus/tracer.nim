@@ -1,22 +1,22 @@
 import
   std/[strutils, json],
   ./common/common,
-  ./db/[accounts_cache, capturedb],
+  ./db/[core_db, accounts_cache],
   ./utils/utils,
   ./evm/tracer/legacy_tracer,
   "."/[constants, vm_state, vm_types, transaction, core/executor],
   nimcrypto/utils as ncrutils,
   ./rpc/hexstrings, ./launcher,
-  stew/results
+  results
 
 when defined(geth):
   import db/geth_db
 
-  proc getParentHeader(db: ChainDBRef, header: BlockHeader): BlockHeader =
+  proc getParentHeader(db: CoreDbRef, header: BlockHeader): BlockHeader =
     db.blockHeader(header.blockNumber.truncate(uint64) - 1)
 
 else:
-  proc getParentHeader(self: ChainDBRef, header: BlockHeader): BlockHeader =
+  proc getParentHeader(self: CoreDbRef, header: BlockHeader): BlockHeader =
     self.getBlockHeader(header.parentHash)
 
 proc `%`(x: openArray[byte]): JsonNode =
@@ -34,7 +34,7 @@ proc toJson(receipt: Receipt): JsonNode =
   else:
     result["status"] = %receipt.status
 
-proc dumpReceipts*(chainDB: ChainDBRef, header: BlockHeader): JsonNode =
+proc dumpReceipts*(chainDB: CoreDbRef, header: BlockHeader): JsonNode =
   result = newJArray()
   for receipt in chainDB.getReceipts(header.receiptRoot):
     result.add receipt.toJson
@@ -69,11 +69,14 @@ proc captureAccount(n: JsonNode, db: AccountsCache, address: EthAddress, name: s
 
   n.add jaccount
 
-proc dumpMemoryDB*(node: JsonNode, memoryDB: TrieDatabaseRef) =
+proc dumpMemoryDB*(node: JsonNode, db: CoreDbRef) =
   var n = newJObject()
-  for k, v in pairsInMemoryDB(memoryDB):
+  for k, v in db.kvt:
     n[k.toHex(false)] = %v
   node["state"] = n
+
+proc dumpMemoryDB*(node: JsonNode, capture: CoreDbCaptRef) =
+  node.dumpMemoryDB capture.recorder
 
 const
   senderName = "sender"
@@ -88,11 +91,9 @@ proc traceTransaction*(com: CommonRef, header: BlockHeader,
     # parent = com.db.getParentHeader(header) -- notused
     # we add a memory layer between backend/lower layer db
     # and capture state db snapshot during transaction execution
-    memoryDB = newMemoryDB()
-    captureDB = newCaptureDB(com.db.db, memoryDB)
-    captureTrieDB = trieDB captureDB
+    capture = com.db.capture()
     tracerInst = newLegacyTracer(tracerFlags)
-    captureCom = com.clone(captureTrieDB)
+    captureCom = com.clone(capture.recorder)
     vmState = BaseVMState.new(header, captureCom)
 
   var stateDb = vmState.stateDB
@@ -137,7 +138,7 @@ proc traceTransaction*(com: CommonRef, header: BlockHeader,
       break
 
   # internal transactions:
-  var stateBefore = AccountsCache.init(captureTrieDB, beforeRoot, com.pruneTrie)
+  var stateBefore = AccountsCache.init(capture.recorder, beforeRoot, com.pruneTrie)
   for idx, acc in tracedAccountsPairs(tracerInst):
     before.captureAccount(stateBefore, acc, internalTxName & $idx)
 
@@ -152,15 +153,13 @@ proc traceTransaction*(com: CommonRef, header: BlockHeader,
 
   # now we dump captured state db
   if TracerFlags.DisableState notin tracerFlags:
-    result.dumpMemoryDB(memoryDB)
+    result.dumpMemoryDB(capture)
 
 proc dumpBlockState*(com: CommonRef, header: BlockHeader, body: BlockBody, dumpState = false): JsonNode =
   let
     parent = com.db.getParentHeader(header)
-    memoryDB = newMemoryDB()
-    captureDB = newCaptureDB(com.db.db, memoryDB)
-    captureTrieDB = trieDB captureDB
-    captureCom = com.clone(captureTrieDB)
+    capture = com.db.capture()
+    captureCom = com.clone(capture.recorder)
     # we only need stack dump if we want to scan for internal transaction address
     captureFlags = {DisableMemory, DisableStorage, EnableAccount}
     tracerInst = newLegacyTracer(captureFlags)
@@ -170,7 +169,7 @@ proc dumpBlockState*(com: CommonRef, header: BlockHeader, body: BlockBody, dumpS
   var
     before = newJArray()
     after = newJArray()
-    stateBefore = AccountsCache.init(captureTrieDB, parent.stateRoot, com.pruneTrie)
+    stateBefore = AccountsCache.init(capture.recorder, parent.stateRoot, com.pruneTrie)
 
   for idx, tx in body.transactions:
     let sender = tx.getSender
@@ -211,15 +210,13 @@ proc dumpBlockState*(com: CommonRef, header: BlockHeader, body: BlockBody, dumpS
   result = %{"before": before, "after": after}
 
   if dumpState:
-    result.dumpMemoryDB(memoryDB)
+    result.dumpMemoryDB(capture)
 
 proc traceBlock*(com: CommonRef, header: BlockHeader, body: BlockBody, tracerFlags: set[TracerFlags] = {}): JsonNode =
   let
     # parent = com.db.getParentHeader(header) -- notused
-    memoryDB = newMemoryDB()
-    captureDB = newCaptureDB(com.db.db, memoryDB)
-    captureTrieDB = trieDB captureDB
-    captureCom = com.clone(captureTrieDB)
+    capture = com.db.capture()
+    captureCom = com.clone(capture.recorder)
     tracerInst = newLegacyTracer(tracerFlags)
     vmState = BaseVMState.new(header, captureCom, tracerInst)
 
@@ -240,7 +237,7 @@ proc traceBlock*(com: CommonRef, header: BlockHeader, body: BlockBody, tracerFla
   result["gas"] = %gasUsed
 
   if TracerFlags.DisableState notin tracerFlags:
-    result.dumpMemoryDB(memoryDB)
+    result.dumpMemoryDB(capture)
 
 proc traceTransactions*(com: CommonRef, header: BlockHeader, blockBody: BlockBody): JsonNode =
   result = newJArray()
@@ -253,10 +250,8 @@ proc dumpDebuggingMetaData*(com: CommonRef, header: BlockHeader,
     blockNumber = header.blockNumber
 
   var
-    memoryDB = newMemoryDB()
-    captureDB = newCaptureDB(com.db.db, memoryDB)
-    captureTrieDB = trieDB captureDB
-    captureCom = com.clone(captureTrieDB)
+    capture = com.db.capture()
+    captureCom = com.clone(capture.recorder)
     bloom = createBloom(vmState.receipts)
 
   let blockSummary = %{
@@ -274,7 +269,7 @@ proc dumpDebuggingMetaData*(com: CommonRef, header: BlockHeader,
     "block": blockSummary
   }
 
-  metaData.dumpMemoryDB(memoryDB)
+  metaData.dumpMemoryDB(capture)
 
   let jsonFileName = "debug" & $blockNumber & ".json"
   if launchDebugger:

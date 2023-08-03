@@ -311,7 +311,7 @@ proc importStorageSlots*(
   #      nSlotLists=data.storages.len, proofs=data.proof.len
 
 proc importStorageSlots*(
-    pv: SnapDbRef;             ## Base descriptor on `ChainDBRef`
+    pv: SnapDbRef;             ## Base descriptor on `CoreDbRef`
     peer: Peer;                ## For log messages, only
     data: AccountStorageRange; ## Account storage reply from `snap/1` protocol
       ): seq[HexaryNodeReport] =
@@ -394,7 +394,7 @@ proc importRawStorageSlotsNodes*(
         report=result.len
 
 proc importRawStorageSlotsNodes*(
-    pv: SnapDbRef;                ## Base descriptor on `ChainDBRef`
+    pv: SnapDbRef;                ## Base descriptor on `CoreDbRef`
     peer: Peer,                   ## For log messages, only
     accKey: NodeKey;              ## Account key
     nodes: openArray[NodeSpecs];  ## List of `(key,data)` records
@@ -458,7 +458,7 @@ proc inspectStorageSlotsTrie*(
   return ok(stats)
 
 proc inspectStorageSlotsTrie*(
-    pv: SnapDbRef;                       ## Base descriptor on `ChainDBRef`
+    pv: SnapDbRef;                       ## Base descriptor on `CoreDbRef`
     peer: Peer;                          ## For log messages, only
     accKey: NodeKey;                     ## Account key
     root: Hash256;                       ## state root
@@ -498,7 +498,7 @@ proc getStorageSlotsData*(
   return ok(acc)
 
 proc getStorageSlotsData*(
-    pv: SnapDbRef;             ## Base descriptor on `ChainDBRef`
+    pv: SnapDbRef;             ## Base descriptor on `CoreDbRef`
     peer: Peer,                ## For log messages, only
     accKey: NodeKey;              ## Account key
     root: Hash256;             ## state root

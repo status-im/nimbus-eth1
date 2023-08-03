@@ -292,7 +292,7 @@ proc importAccounts*(
   ok(gaps)
 
 proc importAccounts*(
-    pv: SnapDbRef;            ## Base descriptor on `ChainDBRef`
+    pv: SnapDbRef;            ## Base descriptor on `CoreDbRef`
     peer: Peer;               ## For log messages
     root: Hash256;            ## State root
     base: NodeTag;            ## Before or at first account entry in `data`
@@ -371,7 +371,7 @@ proc importRawAccountsNodes*(
       trace "Raw account nodes imported", peer, slot, nItems, nReport=result.len
 
 proc importRawAccountsNodes*(
-    pv: SnapDbRef;                ## Base descriptor on `ChainDBRef`
+    pv: SnapDbRef;                ## Base descriptor on `CoreDbRef`
     peer: Peer,                   ## For log messages, only
     nodes: openArray[NodeSpecs];  ## List of `(key,data)` records
     reportNodes = {Leaf};         ## Additional node types to report
@@ -399,7 +399,7 @@ proc getAccountsNodeKey*(
   err(NodeNotFound)
 
 proc getAccountsNodeKey*(
-    pv: SnapDbRef;                ## Base descriptor on `ChainDBRef`
+    pv: SnapDbRef;                ## Base descriptor on `CoreDbRef`
     root: Hash256;                ## state root
     path: Blob;                   ## Partial node path
       ): Result[NodeKey,HexaryError] =
@@ -432,7 +432,7 @@ proc getAccountsData*(
   return ok(acc)
 
 proc getAccountsData*(
-    pv: SnapDbRef;                ## Base descriptor on `ChainDBRef`
+    pv: SnapDbRef;                ## Base descriptor on `CoreDbRef`
     root: Hash256;                ## State root
     path: NodeKey;                ## Account to visit
       ): Result[Account,HexaryError] =

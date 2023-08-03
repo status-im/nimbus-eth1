@@ -70,7 +70,7 @@ type
   GraphqlContextObj = object of Graphql
     ids: array[EthTypes, Name]
     com: CommonRef
-    chainDB: ChainDBRef
+    chainDB: CoreDbRef
     ethNode: EthereumNode
     txPool: TxPoolRef
 
@@ -148,7 +148,7 @@ proc wdNode(ctx: GraphqlContextRef, wd: Withdrawal): Node =
 proc getStateDB(com: CommonRef, header: BlockHeader): ReadOnlyStateDB =
   ## Retrieves the account db from canonical head
   ## we don't use accounst_cache here because it's read only operations
-  let ac = newAccountStateDB(com.db.db, header.stateRoot, com.pruneTrie)
+  let ac = newAccountStateDB(com.db, header.stateRoot, com.pruneTrie)
   ReadOnlyStateDB(ac)
 
 proc getBlockByNumber(ctx: GraphqlContextRef, number: Node): RespResult =
@@ -1014,14 +1014,16 @@ proc blockOmmerHash(ud: RootRef, params: Args, parent: Node): RespResult {.apiPr
 proc blockTransactions(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
   let h = HeaderNode(parent)
-  getTxs(ctx, h.header)
+  {.cast(noSideEffect).}:
+    getTxs(ctx, h.header)
 
 proc blockTransactionAt(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
   let h = HeaderNode(parent)
   try:
     let index = parseU64(params[0].val)
-    getTxAt(ctx, h.header, index.int)
+    {.cast(noSideEffect).}:
+      getTxAt(ctx, h.header, index.int)
   except ValueError as ex:
     err(ex.msg)
 
@@ -1105,7 +1107,8 @@ proc blockCall(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.
   let param = params[0].val
   try:
     let callData = toCallData(param)
-    ctx.makeCall(callData, h.header)
+    {.cast(noSideEffect).}:
+      ctx.makeCall(callData, h.header)
   except CatchableError as em:
     err("call error: " & em.msg)
 
@@ -1116,8 +1119,9 @@ proc blockEstimateGas(ud: RootRef, params: Args, parent: Node): RespResult {.api
   try:
     let callData = toCallData(param)
     # TODO: DEFAULT_RPC_GAS_CAP should configurable
-    let gasUsed = rpcEstimateGas(callData, h.header, ctx.com, DEFAULT_RPC_GAS_CAP)
-    longNode(gasUsed)
+    {.cast(noSideEffect).}:
+      let gasUsed = rpcEstimateGas(callData, h.header, ctx.com, DEFAULT_RPC_GAS_CAP)
+      longNode(gasUsed)
   except CatchableError as em:
     err("estimateGas error: " & em.msg)
 
@@ -1344,7 +1348,8 @@ proc queryTransaction(ud: RootRef, params: Args, parent: Node): RespResult {.api
   let ctx = GraphqlContextRef(ud)
   try:
     let hash = toHash(params[0].val)
-    getTxByHash(ctx, hash)
+    {.cast(noSideEffect).}:
+      getTxByHash(ctx, hash)
   except ValueError as ex:
     err(ex.msg)
 
@@ -1356,7 +1361,8 @@ proc queryLogs(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.
 proc queryGasPrice(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
   try:
-    bigIntNode(calculateMedianGasPrice(ctx.chainDB))
+    {.cast(noSideEffect).}:
+      bigIntNode(calculateMedianGasPrice(ctx.chainDB))
   except CatchableError as em:
     err("can't get gasPrice: " & em.msg)
 

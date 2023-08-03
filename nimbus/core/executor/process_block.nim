@@ -159,7 +159,7 @@ proc processBlockNotPoA*(
     debug "Unsupported PoA request"
     return ValidationResult.Error
 
-  var dbTx = vmState.com.db.db.beginTransaction()
+  var dbTx = vmState.com.db.beginTransaction()
   defer: dbTx.dispose()
 
   if not vmState.procBlkPreamble(header, body):
@@ -205,7 +205,7 @@ proc processBlock*(
   #   debug "PoA update failed"
   #   return ValidationResult.Error
 
-  var dbTx = vmState.com.db.db.beginTransaction()
+  var dbTx = vmState.com.db.beginTransaction()
   defer: dbTx.dispose()
 
   if not vmState.procBlkPreamble(header, body):

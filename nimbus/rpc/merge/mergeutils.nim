@@ -8,13 +8,14 @@
 # those terms.
 
 import
-  std/[typetraits, times, strutils, sequtils],
-  nimcrypto/[hash, sha2],
-  web3/engine_api_types,
+  std/[typetraits, times, strutils],
+  eth/[rlp, common],
   json_rpc/errors,
-  eth/[trie, rlp, common, common/eth_types, trie/db],
+  nimcrypto/[hash, sha2],
   stew/[results, byteutils],
+  web3/engine_api_types,
   ../../constants,
+  ../../db/core_db,
   ../../utils/utils,
   ./mergetypes
 
@@ -51,7 +52,7 @@ template asEthHash*(hash: engine_api_types.BlockHash): Hash256 =
   Hash256(data: distinctBase(hash))
 
 proc calcRootHashRlp*(items: openArray[seq[byte]]): Hash256 =
-  var tr = initHexaryTrie(newMemoryDB())
+  var tr = newCoreDbRef(LegacyDbMemory).mptPrune
   for i, t in items:
     tr.put(rlp.encode(i), t)
   return tr.rootHash()

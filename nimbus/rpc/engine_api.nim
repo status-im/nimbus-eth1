@@ -52,7 +52,7 @@ func toPayloadAttributesV1OrPayloadAttributesV2*(a: PayloadAttributesV1OrV2): Re
       )
     )
 
-proc latestValidHash(db: ChainDBRef, parent: EthBlockHeader, ttd: DifficultyInt): Hash256
+proc latestValidHash(db: CoreDbRef, parent: EthBlockHeader, ttd: DifficultyInt): Hash256
     {.gcsafe, raises: [RlpError].} =
   let ptd = db.getScore(parent.parentHash)
   if ptd >= ttd:

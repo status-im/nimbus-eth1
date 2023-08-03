@@ -10,9 +10,10 @@
 import
   std/typetraits,
   eth/common/eth_types as etypes,
-  eth/[trie, rlp, trie/db],
+  eth/[trie, rlp],
   stint,
-  web3
+  web3,
+  ../../nimbus/db/core_db
 
 type
   ExecutionData* = object
@@ -88,7 +89,7 @@ proc calculateTransactionData(
   ## - root of transactions trie
   ## - list of transactions hashes
   ## - total size of transactions in block
-  var tr = initHexaryTrie(newMemoryDB())
+  var tr = newCoreDbRef(LegacyDbMemory).mptPrune
   var txHashes: seq[TxHash]
   var txSize: uint64
   for i, t in items:

@@ -13,8 +13,8 @@
 import
   std/[algorithm, tables],
   chronicles,
-  eth/[common, trie/db],
-  ../../../../db/kvstore_rocksdb,
+  eth/common,
+  ../../../../db/[core_db, kvstore_rocksdb],
   ../../range_desc,
   "."/[hexary_desc, hexary_error, rocky_bulk_load, snapdb_desc]
 
@@ -91,36 +91,36 @@ proc toAccountsKey(a: RepairKey): auto =
 proc toStorageSlotsKey(a: RepairKey): auto =
   a.convertTo(NodeKey).toStorageSlotsKey
 
-proc stateRootGet*(db: TrieDatabaseRef; nodeKey: Nodekey): Blob =
-  db.get(nodeKey.toStateRootKey.toOpenArray)
+proc stateRootGet*(db: CoreDbRef; nodeKey: Nodekey): Blob =
+  db.kvt.get(nodeKey.toStateRootKey.toOpenArray)
 
 # ------------------------------------------------------------------------------
 # Public functions: get
 # ------------------------------------------------------------------------------
 
-proc persistentAccountsGetFn*(db: TrieDatabaseRef): AccountsGetFn =
+proc persistentAccountsGetFn*(db: CoreDbRef): AccountsGetFn =
   ## Returns a `get()` function for retrieving accounts data
   return proc(key: openArray[byte]): Blob =
     var nodeKey: NodeKey
     if nodeKey.init(key):
-      return db.get(nodeKey.toAccountsKey.toOpenArray)
+      return db.kvt.get(nodeKey.toAccountsKey.toOpenArray)
 
-proc persistentContractsGetFn*(db: TrieDatabaseRef): ContractsGetFn =
+proc persistentContractsGetFn*(db: CoreDbRef): ContractsGetFn =
   ## Returns a `get()` function for retrieving contracts data
   return proc(key: openArray[byte]): Blob =
     var nodeKey: NodeKey
     if nodeKey.init(key):
-      return db.get(nodeKey.toContractHashKey.toOpenArray)
+      return db.kvt.get(nodeKey.toContractHashKey.toOpenArray)
 
-proc persistentStorageSlotsGetFn*(db: TrieDatabaseRef): StorageSlotsGetFn =
+proc persistentStorageSlotsGetFn*(db: CoreDbRef): StorageSlotsGetFn =
   ## Returns a `get()` function for retrieving storage slots data
   return proc(accKey: NodeKey; key: openArray[byte]): Blob =
     var nodeKey: NodeKey
     if nodeKey.init(key):
-      return db.get(nodeKey.toStorageSlotsKey.toOpenArray)
+      return db.kvt.get(nodeKey.toStorageSlotsKey.toOpenArray)
 
 proc persistentStateRootGet*(
-    db: TrieDatabaseRef;
+    db: CoreDbRef;
     root: NodeKey;
       ): Result[StateRootRegistry,HexaryError] =
   ## Implements a `get()` function for returning state root registry data.
@@ -137,15 +137,14 @@ proc persistentStateRootGet*(
 # ------------------------------------------------------------------------------
 
 proc persistentBlockHeaderPut*(
-    db: TrieDatabaseRef;
+    db: CoreDbRef;
     hdr: BlockHeader;
       ) =
   ## Store a single header. This function is intended to finalise snap sync
   ## with storing a universal pivot header not unlike genesis.
   let hashKey = hdr.blockHash
-  # see `nimbus/db/db_chain.db()`
-  db.put(hashKey.toBlockHeaderKey.toOpenArray, rlp.encode(hdr))
-  db.put(hdr.blockNumber.toBlockNumberKey.toOpenArray, rlp.encode(hashKey))
+  db.kvt.put(hashKey.toBlockHeaderKey.toOpenArray, rlp.encode(hdr))
+  db.kvt.put(hdr.blockNumber.toBlockNumberKey.toOpenArray, rlp.encode(hashKey))
   when extraTraceMessages:
     trace logTxt "stored block header", hashKey,
       blockNumber=hdr.blockNumber.toStr,
@@ -153,7 +152,7 @@ proc persistentBlockHeaderPut*(
 
 proc persistentAccountsPut*(
     db: HexaryTreeDbRef;
-    base: TrieDatabaseRef;
+    base: CoreDbRef;
       ): Result[void,HexaryError] =
   ## Bulk store using transactional `put()`
   let dbTx = base.beginTransaction
@@ -165,12 +164,12 @@ proc persistentAccountsPut*(
       when extraTraceMessages:
         trace logTxt "unresolved node in repair table", error
       return err(error)
-    base.put(key.toAccountsKey.toOpenArray, value.convertTo(Blob))
+    base.kvt.put(key.toAccountsKey.toOpenArray, value.convertTo(Blob))
   ok()
 
 proc persistentStorageSlotsPut*(
     db: HexaryTreeDbRef;
-    base: TrieDatabaseRef;
+    base: CoreDbRef;
       ): Result[void,HexaryError] =
   ## Bulk store using transactional `put()`
   let dbTx = base.beginTransaction
@@ -182,12 +181,12 @@ proc persistentStorageSlotsPut*(
       when extraTraceMessages:
         trace logTxt "unresolved node in repair table", error
       return err(error)
-    base.put(key.toStorageSlotsKey.toOpenArray, value.convertTo(Blob))
+    base.kvt.put(key.toStorageSlotsKey.toOpenArray, value.convertTo(Blob))
   ok()
 
 proc persistentContractPut*(
     data: seq[(NodeKey,Blob)];
-    base: TrieDatabaseRef;
+    base: CoreDbRef;
       ): Result[void,HexaryError]
       {.gcsafe, raises: [OSError,IOError,KeyError].} =
   ## SST based bulk load on `rocksdb`.
@@ -195,12 +194,12 @@ proc persistentContractPut*(
   defer: dbTx.commit
 
   for (key,val) in data:
-    base.put(key.toContracthashKey.toOpenArray,val)
+    base.kvt.put(key.toContracthashKey.toOpenArray,val)
   ok()
 
 
 proc persistentStateRootPut*(
-    db: TrieDatabaseRef;
+    db: CoreDbRef;
     root: NodeKey;
     data: Blob;
       ) {.gcsafe, raises: [RlpError].} =
@@ -224,10 +223,10 @@ proc persistentStateRootPut*(
       zeroEntryData = rlp.encode StateRootRegistry(key: root)
       
     # Store a new top entry
-    db.put(root.toStateRootKey.toOpenArray, rootEntryData)
+    db.kvt.put(root.toStateRootKey.toOpenArray, rootEntryData)
 
     # Store updated base record pointing to top entry
-    db.put(zeroKey.toStateRootKey.toOpenArray, zeroEntryData)
+    db.kvt.put(zeroKey.toStateRootKey.toOpenArray, zeroEntryData)
 
   else:
     let record = rlp.decode(rlpData, StateRootRegistry)
@@ -236,7 +235,7 @@ proc persistentStateRootPut*(
       let rootEntryData =
         rlp.encode StateRootRegistry(key: record.key, data: data)
 
-      db.put(root.toStateRootKey.toOpenArray, rootEntryData)
+      db.kvt.put(root.toStateRootKey.toOpenArray, rootEntryData)
 
 
 proc persistentAccountsPut*(

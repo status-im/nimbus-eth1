@@ -153,7 +153,7 @@ proc update(dh: TxChainRef; parent: BlockHeader)
   let
     timestamp = dh.getTimestamp(parent)
     db  = dh.com.db
-    acc = AccountsCache.init(db.db, parent.stateRoot, dh.com.pruneTrie)
+    acc = AccountsCache.init(db, parent.stateRoot, dh.com.pruneTrie)
     fee = if dh.com.isLondon(parent.blockNumber + 1, timestamp):
             some(dh.com.baseFeeGet(parent).uint64.u256)
           else:

@@ -123,7 +123,7 @@ proc nextAccountsChainDbKey*(
     accKey: NodeKey;
     getFn: HexaryGetFn;
       ): Result[NodeKey,HexaryError] =
-  ## Fetch the account path on the `ChainDBRef`, the one next to the
+  ## Fetch the account path on the `CoreDbRef`, the one next to the
   ## argument account key.
   noExceptionOops("getChainDbAccount()"):
     let path = accKey
@@ -140,7 +140,7 @@ proc prevAccountsChainDbKey*(
     accKey: NodeKey;
     getFn: HexaryGetFn;
       ): Result[NodeKey,HexaryError] =
-  ## Fetch the account path on the `ChainDBRef`, the one before to the
+  ## Fetch the account path on the `CoreDbRef`, the one before to the
   ## argument account.
   noExceptionOops("getChainDbAccount()"):
     let path = accKey
