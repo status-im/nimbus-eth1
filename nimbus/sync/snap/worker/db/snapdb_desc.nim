@@ -34,7 +34,7 @@ type
   SnapDbRef* = ref object
     ## Global, re-usable descriptor
     keyMap: Table[RepairKey,uint]    ## For debugging only (will go away)
-    db: CoreDbRef              ## General database
+    db: CoreDbRef                    ## General database
     rocky: RocksStoreRef             ## Set if rocksdb is available
 
   SnapDbBaseRef* = ref object of RootRef

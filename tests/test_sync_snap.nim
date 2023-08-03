@@ -441,6 +441,7 @@ proc snapRunner(noisy = true; specs: SnapSyncSpecs) =
         if dsc.chn.db.toLegacyBackend.rocksStoreRef.isNil:
           skip()
         else:
+          dsc.chn.db.compensateLegacySetup
           dsc.chn.test_syncdbAppendBlocks(tailPath,pivot,updateSize,noisy)
 
 # ------------------------------------------------------------------------------

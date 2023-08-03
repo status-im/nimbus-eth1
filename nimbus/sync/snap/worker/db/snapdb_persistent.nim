@@ -13,8 +13,8 @@
 import
   std/[algorithm, tables],
   chronicles,
-  eth/common,
-  ../../../../db/[core_db, kvstore_rocksdb],
+  eth/[common, trie/db],
+  ../../../../db/[core_db, core_db/legacy, kvstore_rocksdb],
   ../../range_desc,
   "."/[hexary_desc, hexary_error, rocky_bulk_load, snapdb_desc]
 
@@ -92,7 +92,7 @@ proc toStorageSlotsKey(a: RepairKey): auto =
   a.convertTo(NodeKey).toStorageSlotsKey
 
 proc stateRootGet*(db: CoreDbRef; nodeKey: Nodekey): Blob =
-  db.kvt.get(nodeKey.toStateRootKey.toOpenArray)
+  db.toLegacyTrieRef.get(nodeKey.toStateRootKey.toOpenArray)
 
 # ------------------------------------------------------------------------------
 # Public functions: get
@@ -103,21 +103,21 @@ proc persistentAccountsGetFn*(db: CoreDbRef): AccountsGetFn =
   return proc(key: openArray[byte]): Blob =
     var nodeKey: NodeKey
     if nodeKey.init(key):
-      return db.kvt.get(nodeKey.toAccountsKey.toOpenArray)
+      return db.toLegacyTrieRef.get(nodeKey.toAccountsKey.toOpenArray)
 
 proc persistentContractsGetFn*(db: CoreDbRef): ContractsGetFn =
   ## Returns a `get()` function for retrieving contracts data
   return proc(key: openArray[byte]): Blob =
     var nodeKey: NodeKey
     if nodeKey.init(key):
-      return db.kvt.get(nodeKey.toContractHashKey.toOpenArray)
+      return db.toLegacyTrieRef.get(nodeKey.toContractHashKey.toOpenArray)
 
 proc persistentStorageSlotsGetFn*(db: CoreDbRef): StorageSlotsGetFn =
   ## Returns a `get()` function for retrieving storage slots data
   return proc(accKey: NodeKey; key: openArray[byte]): Blob =
     var nodeKey: NodeKey
     if nodeKey.init(key):
-      return db.kvt.get(nodeKey.toStorageSlotsKey.toOpenArray)
+      return db.toLegacyTrieRef.get(nodeKey.toStorageSlotsKey.toOpenArray)
 
 proc persistentStateRootGet*(
     db: CoreDbRef;
