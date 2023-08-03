@@ -26,9 +26,9 @@ type
 # Private helpers
 # ------------------------------------------------------------------------------
 
-template ifLegacyOk(db: CoreDbRef; body: untyped) =
+template iflegaPersOk(db: CoreDbRef; body: untyped) =
   case db.dbType:
-  of LegacyDbMemory, LegacyDbPersistent:
+  of LegacyDbPersistent:
     body
   else:
     discard
@@ -62,7 +62,7 @@ proc newLegacyPersistentCoreDbRef*(path: string): CoreDbRef =
 # ------------------------------------------------------------------------------
 
 proc toLegacyBackend*(db: CoreDbRef): ChainDB =
-  db.ifLegacyOk:
+  db.ifLegaPersOk:
     return db.LegaPersDbRef.backend
 
 # ------------------------------------------------------------------------------

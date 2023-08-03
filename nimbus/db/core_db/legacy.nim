@@ -17,7 +17,6 @@ import
 
 type
   LegacyDbRef* = ref object of CoreDbRef
-    #backend: ChainDB     # for backend access (legacy mode)
     tdb: TrieDatabaseRef # copy of descriptor reference captured with closures
 
   HexaryTrieRef = ref object
