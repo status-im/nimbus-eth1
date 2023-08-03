@@ -186,9 +186,6 @@ proc modExp*(b, e, m: openArray[byte]): seq[byte] =
   if m.len == 0:
     return @[0.byte]
 
-  if e.len == 0:
-    return @[1.byte]
-
   if mp_init_multi(base, exp.addr, modulo.addr, nil) != MP_OKAY:
     return
 
@@ -209,6 +206,9 @@ proc modExp*(b, e, m: openArray[byte]): seq[byte] =
       # For all x != 0, x^0 == 1 as well
       mp_clear_multi(base, exp.addr, modulo.addr, nil)
       return @[1.byte]
+  else:
+    mp_clear_multi(base, exp.addr, modulo.addr, nil)
+    return @[1.byte]
 
   if b.len > 0:
     discard mp_from_ubin(base, b[0].getPtr, b.len.csize_t)
