@@ -1,7 +1,7 @@
 import
   std/[json, strutils, os],
   downloader, stint,
-  ../nimbus/tracer, chronicles, prestate,
+  ../nimbus/tracer, prestate,
   eth/common, premixcore
 
 proc generateGethData(thisBlock: Block, blockNumber: UInt256, accounts: JsonNode): JsonNode =
@@ -55,7 +55,7 @@ proc main() =
     generatePrestate(nimbus, geth, blockNumber, parentBlock.header, thisBlock.header, thisBlock.body)
 
     printDebugInstruction(blockNumber)
-  except:
+  except CatchableError:
     echo getCurrentExceptionMsg()
 
 main()

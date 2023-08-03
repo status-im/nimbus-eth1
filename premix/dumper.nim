@@ -4,22 +4,19 @@
 #
 
 import
-  configuration, stint,
-  eth/trie/hexary,
-  ../nimbus/db/[select_backend, capturedb],
+  stint,
   ../nimbus/common/common,
   ../nimbus/core/executor,
   ../nimbus/[vm_state, vm_types],
-  ../nimbus/tracer
+  ../nimbus/tracer,
+  ./configuration # must be late (compilation annoyance)
 
 proc dumpDebug(com: CommonRef, blockNumber: UInt256) =
   var
-    memoryDB = newMemoryDB()
-    captureDB = newCaptureDB(com.db.db, memoryDB)
-    captureTrieDB = trieDB captureDB
-    captureCom = com.clone(captureTrieDB)
+    capture = com.db.capture()
+    captureCom = com.clone(capture.recorder)
 
-  let transaction = memoryDB.beginTransaction()
+  let transaction = capture.recorder.beginTransaction()
   defer: transaction.dispose()
 
 
@@ -39,9 +36,7 @@ proc dumpDebug(com: CommonRef, blockNumber: UInt256) =
 
 proc main() {.used.} =
   let conf = getConfiguration()
-  let db = newChainDB(conf.dataDir)
-  let trieDB = trieDB db
-  let com = CommonRef.new(trieDB, false)
+  let com = CommonRef.new(newCoreDbRef(LegacyDbPersistent, conf.dataDir), false)
 
   if conf.head != 0.u256:
     dumpDebug(com, conf.head)

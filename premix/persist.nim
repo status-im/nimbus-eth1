@@ -1,30 +1,33 @@
 # use this module to quickly populate db with data from geth/parity
 
 import
-  eth/rlp,
-  chronicles, configuration,
+  chronicles,
   ../nimbus/errors,
-  eth/trie/hexary,
-  ../nimbus/db/select_backend,
   ../nimbus/db/storage_types,
   ../nimbus/core/chain,
-  ../nimbus/common
+  ../nimbus/common,
+  configuration  # must be late (compilation annoyance)
 
 when defined(graphql):
   import graphql_downloader
 else:
   import downloader
 
-const
-  manualCommit = nimbus_db_backend == "lmdb"
+# `lmdb` is not used, anymore
+#
+# const
+#   manualCommit = nimbus_db_backend == "lmdb"
+#
+# template persistToDb(db: ChainDB, body: untyped) =
+#   when manualCommit:
+#     if not db.txBegin(): doAssert(false)
+#   body
+#   when manualCommit:
+#     if not db.txCommit(): doAssert(false)
 
-template persistToDb(db: ChainDB, body: untyped) =
-  when manualCommit:
-    if not db.txBegin(): doAssert(false)
-  body
-  when manualCommit:
-    if not db.txCommit(): doAssert(false)
-
+template persistToDb(db: CoreDbRef, body: untyped) =
+  block: body
+ 
 proc main() {.used.} =
   # 97 block with uncles
   # 46147 block with first transaction
@@ -39,19 +42,19 @@ proc main() {.used.} =
   # 66407 failed transaction
 
   let conf = configuration.getConfiguration()
-  let db = newChainDB(conf.dataDir)
-  let trieDB = trieDB db
-  let com = CommonRef.new(trieDB, false, conf.netId, networkParams(conf.netId))
+  let com = CommonRef.new(
+    newCoreDbRef(LegacyDbPersistent, conf.dataDir),
+    false, conf.netId, networkParams(conf.netId))
 
   # move head to block number ...
   if conf.head != 0.u256:
     var parentBlock = requestBlock(conf.head)
     discard com.db.setHead(parentBlock.header)
 
-  if canonicalHeadHashKey().toOpenArray notin trieDB:
-    persistToDb(db):
+  if canonicalHeadHashKey().toOpenArray notin com.db.kvt:
+    persistToDb(com.db):
       com.initializeEmptyDb()
-    doAssert(canonicalHeadHashKey().toOpenArray in trieDB)
+    doAssert(canonicalHeadHashKey().toOpenArray in com.db.kvt)
 
   var head = com.db.getCanonicalHead()
   var blockNumber = head.blockNumber + 1
@@ -77,7 +80,7 @@ proc main() {.used.} =
     blockNumber += one
 
     if numBlocks == numBlocksToCommit:
-      persistToDb(db):
+      persistToDb(com.db):
         if chain.persistBlocks(headers, bodies) != ValidationResult.OK:
           raise newException(ValidationError, "Error when validating blocks")
       numBlocks = 0
@@ -89,7 +92,7 @@ proc main() {.used.} =
       break
 
   if numBlocks > 0:
-    persistToDb(db):
+    persistToDb(com.db):
       if chain.persistBlocks(headers, bodies) != ValidationResult.OK:
         raise newException(ValidationError, "Error when validating blocks")
 
@@ -107,5 +110,5 @@ when isMainModule:
 
   try:
     main()
-  except:
+  except CatchableError:
     echo getCurrentExceptionMsg()

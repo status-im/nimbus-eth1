@@ -8,15 +8,15 @@ import
   ../nimbus/tracer,
   ../nimbus/common/common
 
-proc prepareBlockEnv(node: JsonNode, memoryDB: TrieDatabaseRef) =
+proc prepareBlockEnv(node: JsonNode, memoryDB: CoreDbRef) =
   let state = node["state"]
 
   for k, v in state:
     let key = hexToSeqByte(k)
     let value = hexToSeqByte(v.getStr())
-    memoryDB.put(key, value)
+    memoryDB.kvt.put(key, value)
 
-proc executeBlock(blockEnv: JsonNode, memoryDB: TrieDatabaseRef, blockNumber: UInt256) =
+proc executeBlock(blockEnv: JsonNode, memoryDB: CoreDbRef, blockNumber: UInt256) =
   let
     parentNumber = blockNumber - 1
     com = CommonRef.new(memoryDB)
@@ -59,7 +59,7 @@ proc main() =
 
   let
     blockEnv = json.parseFile(paramStr(1))
-    memoryDB = newMemoryDB()
+    memoryDB = newCoreDbRef(LegacyDbMemory)
     blockNumber = UInt256.fromHex(blockEnv["blockNumber"].getStr())
 
   prepareBlockEnv(blockEnv, memoryDB)

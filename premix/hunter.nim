@@ -5,7 +5,7 @@ import
   ../nimbus/[vm_state, vm_types],
   ../nimbus/utils/utils,
   ../nimbus/tracer,
-  ../nimbus/db/state_db,
+  ../nimbus/db/[core_db, state_db],
   ../nimbus/core/executor,
   ../nimbus/common/common,
   "."/[configuration, downloader, parser, premixcore]
@@ -13,11 +13,11 @@ import
 const
   emptyCodeHash = blankStringHash
 
-proc store(memoryDB: TrieDatabaseRef, branch: JsonNode) =
+proc store(memoryDB: CoreDbRef, branch: JsonNode) =
   for p in branch:
     let rlp = hexToSeqByte(p.getStr)
     let hash = keccakHash(rlp)
-    memoryDB.put(hash.data, rlp)
+    memoryDB.kvt.put(hash.data, rlp)
 
 proc parseAddress(address: string): EthAddress =
   hexToByteArray(address, result)
@@ -25,10 +25,10 @@ proc parseAddress(address: string): EthAddress =
 proc parseU256(val: string): UInt256 =
   UInt256.fromHex(val)
 
-proc prepareBlockEnv(parent: BlockHeader, thisBlock: Block): TrieDatabaseRef =
+proc prepareBlockEnv(parent: BlockHeader, thisBlock: Block): CoreDbRef =
   var
     accounts     = requestPostState(thisBlock)
-    memoryDB     = newMemoryDB()
+    memoryDB     = newCoreDbRef LegacyDbMemory
     accountDB    = newAccountStateDB(memoryDB, parent.stateRoot, false)
     parentNumber = %(parent.blockNumber.prefixHex)
 
@@ -81,7 +81,7 @@ method getAncestorHash*(vmState: HunterVMState, blockNumber: BlockNumber): Hash2
     result = header.hash
     vmState.headers[blockNumber] = header
 
-proc putAncestorsIntoDB(vmState: HunterVMState, db: ChainDBRef) =
+proc putAncestorsIntoDB(vmState: HunterVMState, db: CoreDbRef) =
   for header in vmState.headers.values:
     db.addBlockNumberToHashLookup(header)
 

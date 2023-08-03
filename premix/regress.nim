@@ -1,11 +1,9 @@
 import
-  eth/rlp,
-  chronicles, configuration,
-  eth/trie/hexary,
-  ../nimbus/db/select_backend,
+  chronicles,
   ../nimbus/[vm_state, vm_types],
   ../nimbus/core/executor,
-  ../nimbus/common/common
+  ../nimbus/common/common,
+  configuration # must be late (compilation annoyance)
 
 const
   numBlocks = 256
@@ -22,7 +20,7 @@ proc validateBlock(com: CommonRef, blockNumber: BlockNumber): BlockNumber =
     headers[i] = com.db.getBlockHeader(blockNumber + i.u256)
     bodies[i]  = com.db.getBlockBody(headers[i].blockHash)
 
-  let transaction = com.db.db.beginTransaction()
+  let transaction = com.db.beginTransaction()
   defer: transaction.dispose()
 
   for i in 0 ..< numBlocks:
@@ -44,9 +42,7 @@ proc validateBlock(com: CommonRef, blockNumber: BlockNumber): BlockNumber =
 proc main() {.used.} =
   let
     conf = getConfiguration()
-    db = newChainDB(conf.dataDir)
-    trieDB = trieDB db
-    com = CommonRef.new(trieDB, false)
+    com = CommonRef.new(newCoreDbRef(LegacyDbPersistent, conf.dataDir), false)
 
   # move head to block number ...
   if conf.head == 0.u256:
