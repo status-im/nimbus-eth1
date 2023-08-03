@@ -17,8 +17,9 @@ import
   eth/[common, p2p],
   rocksdb,
   unittest2,
-  ../nimbus/db/select_backend,
   ../nimbus/db/aristo/[aristo_desc, aristo_merge],
+  ../nimbus/db/core_db,
+  ../nimbus/db/core_db/legacy,
   ../nimbus/core/chain,
   ../nimbus/sync/snap/worker/db/[rocky_bulk_load, snapdb_accounts, snapdb_desc],
   ./replay/[pp, undump_accounts, undump_storages],
@@ -40,9 +41,6 @@ const
   # Number of database slots available
   nTestDbInstances = 9
 
-  # Dormant (may be set if persistent database causes problems)
-  disablePersistentDB = false
-
 type
   TestDbs = object
     ## Provide enough spare empty databases
@@ -50,7 +48,7 @@ type
     dbDir: string
     baseDir: string # for cleanup
     subDir: string  # for cleanup
-    cdb: array[nTestDbInstances,ChainDb]
+    cdb: array[nTestDbInstances,CoreDbRef]
 
 # ------------------------------------------------------------------------------
 # Helpers
@@ -109,9 +107,9 @@ proc flushDbDir(s: string; subDir = "") =
 proc flushDbs(db: TestDbs) =
   if db.persistent:
     for n in 0 ..< nTestDbInstances:
-      if db.cdb[n].rocksStoreRef.isNil:
+      if db.cdb[n].isNil or db.cdb[n].dbType != LegacyDbPersistent:
         break
-      db.cdb[n].rocksStoreRef.store.db.rocksdb_close
+      db.cdb[n].toLegacyBackend.rocksStoreRef.store.db.rocksdb_close
     db.baseDir.flushDbDir(db.subDir)
 
 proc testDbs(
@@ -120,7 +118,7 @@ proc testDbs(
     instances: int;
     persistent: bool;
       ): TestDbs =
-  if disablePersistentDB or workDir == "" or not persistent:
+  if workDir == "" or not persistent:
     result.persistent = false
     result.dbDir = "*notused*"
   else:
@@ -134,12 +132,17 @@ proc testDbs(
   if result.persistent:
     workDir.flushDbDir(subDir)
     for n in 0 ..< min(result.cdb.len, instances):
-      result.cdb[n] = (result.dbDir / $n).newChainDB
+      result.cdb[n] = newCoreDbRef(LegacyDbPersistent, result.dbDir / $n)
 
-proc snapDbRef(cdb: ChainDb; pers: bool): SnapDbRef =
-  if pers: SnapDbRef.init(cdb) else: SnapDbRef.init(newMemoryDB())
+proc snapDbRef(cdb: CoreDbRef; pers: bool): SnapDbRef =
+  if pers: SnapDbRef.init(cdb)
+  else: SnapDbRef.init(newCoreDbRef LegacyDbMemory)
 
-proc snapDbAccountsRef(cdb:ChainDb; root:Hash256; pers:bool):SnapDbAccountsRef =
+proc snapDbAccountsRef(
+    cdb: CoreDbRef;
+    root: Hash256;
+    pers: bool;
+      ): SnapDbAccountsRef =
   SnapDbAccountsRef.init(cdb.snapDbRef(pers), root, Peer())
 
 # ------------------------------------------------------------------------------
@@ -183,7 +186,8 @@ proc transcodeRunner(noisy =true; sample=accSample; stopAfter=high(int)) =
 
     test "Trancoding database records: RLP, NodeRef, Blob, VertexRef":
       noisy.showElapsed("test_transcoder()"):
-        noisy.test_transcodeAccounts(db.cdb[0].rocksStoreRef, stopAfter)
+        noisy.test_transcodeAccounts(
+          db.cdb[0].toLegacyBackend.rocksStoreRef, stopAfter)
 
 
 proc accountsRunner(

@@ -12,10 +12,10 @@
 ## Snap sync components tester and TDD environment
 
 import
-  std/[sequtils],
-  eth/[common, p2p, trie/db],
+  std/sequtils,
+  eth/[common, p2p],
   unittest2,
-  ../../nimbus/db/select_backend,
+  ../../nimbus/db/core_db,
   ../../nimbus/sync/snap/range_desc,
   ../../nimbus/sync/snap/worker/db/[
     hexary_desc, hexary_inspect, hexary_paths,
@@ -135,7 +135,7 @@ proc test_inspectAccountsInMemDb*(
 
 proc test_inspectAccountsPersistent*(
     inList: seq[seq[UndumpAccounts]];
-    cdb: ChainDb;
+    cdb: CoreDbRef;
     accuStats: seq[(int,TrieNodeStat)];
       ) =
   ## Fingerprinting accumulated accounts for persistent db
@@ -166,7 +166,7 @@ proc test_inspectCascadedMemDb*(
       ) =
   ## Cascaded fingerprinting accounts for in-memory-db
   let
-    cscBase = SnapDbRef.init(newMemoryDB())
+    cscBase = SnapDbRef.init(newCoreDbRef LegacyDbMemory)
     cscDesc = SnapDbAccountsRef.init(cscBase, Hash256(), Peer())
   var
     cscStep: Table[NodeKey,(int,seq[Blob])]
@@ -196,7 +196,7 @@ proc test_inspectCascadedMemDb*(
 
 proc test_inspectCascadedPersistent*(
     inList: seq[seq[UndumpAccounts]];
-    cdb: ChainDb;
+    cdb: CoreDbRef;
       ) =
   ## Cascaded fingerprinting accounts for persistent db
   let

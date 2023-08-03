@@ -69,7 +69,7 @@ proc setupChain(): CommonRef =
   )
 
   let com = CommonRef.new(
-    newMemoryDb(),
+    newCoreDbRef LegacyDbMemory,
     pruneTrie = false,
     CustomNet,
     customNetwork

@@ -89,7 +89,7 @@ template runTest(network: untyped, name: string) =
   test name:
     var
       params = networkParams(network)
-      com    = CommonRef.new(newMemoryDB(), true, network, params)
+      com    = CommonRef.new(newCoreDbRef LegacyDbMemory, true, network, params)
 
     for x in `network IDs`:
       let id = com.forkId(x.blockNumber.toBlockNumber.blockNumberToForkDeterminationInfo)

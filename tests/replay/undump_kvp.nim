@@ -14,7 +14,7 @@ import
   eth/common,
   rocksdb,
   stew/byteutils,
-  ../../nimbus/db/[db_chain, kvstore_rocksdb],
+  ../../nimbus/db/kvstore_rocksdb,
   ../../nimbus/sync/snap/[constants, range_desc, worker/db/hexary_desc],
   ./gunzip
 

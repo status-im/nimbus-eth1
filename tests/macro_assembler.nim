@@ -3,7 +3,6 @@ import
   eth/keys,
   unittest2,
   chronicles,
-  eth/trie/hexary,
   stew/byteutils,
   stew/shims/macros
 
@@ -261,7 +260,7 @@ proc initVMEnv*(network: string): BaseVMState =
   let
     conf = getChainConfig(network)
     com = CommonRef.new(
-      newMemoryDB(),
+      newCoreDbRef LegacyDbMemory,
       conf,
       false,
       conf.chainId.NetworkId)
@@ -326,7 +325,7 @@ proc verifyAsmResult(vmState: BaseVMState, boa: Assembler, asmResult: CallResult
 
   var
     storageRoot = stateDB.getStorageRoot(codeAddress)
-    trie = initStorageTrie(com.db.db, storageRoot)
+    trie = initStorageTrie(com.db, storageRoot)
 
   for kv in boa.storage:
     let key = kv[0].toHex()

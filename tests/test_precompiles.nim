@@ -72,7 +72,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     vmState = BaseVMState.new(
       BlockHeader(blockNumber: 1.u256),
       BlockHeader(),
-      CommonRef.new(newMemoryDB(), config = ChainConfig())
+      CommonRef.new(newCoreDbRef LegacyDbMemory, config = ChainConfig())
     )
 
   case toLowerAscii(label)

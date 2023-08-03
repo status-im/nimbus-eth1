@@ -1,19 +1,15 @@
 import
-  json, chronicles,
-  ../nimbus/db/[capturedb, select_backend],
-  ../nimbus/[config, vm_types],
-  ../nimbus/tracer,
-  ../nimbus/common/common
+  json,
+  ../nimbus/common/common, # must be early (compilation annoyance)
+  ../nimbus/[config, tracer, vm_types]
 
 proc dumpTest(com: CommonRef, blockNumber: int) =
   let
     blockNumber = blockNumber.u256
 
   var
-    memoryDB = newMemoryDB()
-    captureDB = newCaptureDB(com.db.db, memoryDB)
-    captureTrieDB = trieDB captureDB
-    captureCom = com.clone(captureTrieDB)
+    capture = com.db.capture()
+    captureCom = com.clone(capture.recorder)
 
   let
     header = captureCom.db.getBlockHeader(blockNumber)
@@ -32,7 +28,7 @@ proc dumpTest(com: CommonRef, blockNumber: int) =
     "receipts": receipts
   }
 
-  metaData.dumpMemoryDB(memoryDB)
+  metaData.dumpMemoryDB(capture)
   writeFile("block" & $blockNumber & ".json", metaData.pretty())
 
 proc main() {.used.} =
@@ -50,9 +46,8 @@ proc main() {.used.} =
   # nimbus --rpc-api: eth, debug --prune: archive
 
   var conf = makeConfig()
-  let db = newChainDB(string conf.dataDir)
-  let trieDB = trieDB db
-  let com = CommonRef.new(trieDB, false)
+  let db = newCoreDbRef(LegacyDbPersistent, string conf.dataDir)
+  let com = CommonRef.new(db, false)
 
   com.dumpTest(97)
   com.dumpTest(46147)

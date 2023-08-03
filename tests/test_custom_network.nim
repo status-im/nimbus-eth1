@@ -34,7 +34,6 @@ import
   unittest2,
   ../nimbus/core/chain, # must be early (compilation annoyance)
   ../nimbus/config,
-  ../nimbus/db/select_backend,
   ../nimbus/common/common,
   ./replay/[undump_blocks, pp]
 
@@ -207,7 +206,7 @@ proc genesisLoadRunner(noisy = true;
 
     test "Construct in-memory ChainDBRef, pruning enabled":
       mcom = CommonRef.new(
-        newMemoryDB(),
+        newCoreDbRef LegacyDbMemory,
         networkId = params.config.chainId.NetworkId,
         params = params)
 
@@ -223,7 +222,7 @@ proc genesisLoadRunner(noisy = true;
 
       # Constructor ...
       dcom = CommonRef.new(
-        tmpDir.newChainDB.trieDB,
+        newCoreDbRef(LegacyDbPersistent, tmpDir),
         networkId = params.config.chainId.NetworkId,
         pruneTrie = persistPruneTrie,
         params = params)

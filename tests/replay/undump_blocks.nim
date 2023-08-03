@@ -10,11 +10,10 @@
 
 import
   std/[os, sequtils, strformat, strutils],
-  ../../nimbus/db/db_chain,
-  ./gunzip,
   eth/[common, rlp],
   nimcrypto/utils,
-  stew/results
+  ../../nimbus/db/core_db,
+  ./gunzip
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -74,7 +73,7 @@ proc dumpBlocksEndNl*: string =
 proc dumpBlocksListNl*(header: BlockHeader; body: BlockBody): string =
   dumpBlocksList(header, body) & "\n"
 
-proc dumpBlocksBeginNl*(db: ChainDBRef;
+proc dumpBlocksBeginNl*(db: CoreDbRef;
                        headers: openArray[BlockHeader]): string =
   if headers[0].blockNumber == 1.u256:
     let
@@ -88,7 +87,7 @@ proc dumpBlocksBeginNl*(db: ChainDBRef;
   result &= dumpBlocksBegin(headers) & "\n"
 
 
-proc dumpBlocksNl*(db: ChainDBRef; headers: openArray[BlockHeader];
+proc dumpBlocksNl*(db: CoreDbRef; headers: openArray[BlockHeader];
                    bodies: openArray[BlockBody]): string =
   ## Add this below the line `transaction.commit()` in the function
   ## `p2p/chain/persist_blocks.persistBlocksImpl()`:

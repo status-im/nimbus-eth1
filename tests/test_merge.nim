@@ -80,7 +80,7 @@ proc runTest(steps: Steps) =
     ctx  = newEthContext()
     ethNode = setupEthNode(conf, ctx, eth)
     com = CommonRef.new(
-      newMemoryDb(),
+      newCoreDbRef LegacyDbMemory,
       conf.pruneMode == PruneMode.Full,
       conf.networkId,
       conf.networkParams
