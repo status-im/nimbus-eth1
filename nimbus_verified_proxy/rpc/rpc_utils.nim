@@ -13,7 +13,7 @@ import
   eth/[trie, rlp],
   stint,
   web3,
-  ../../nimbus/db/core_db
+  ../../nimbus/db/core_db/memory_only
 
 type
   ExecutionData* = object

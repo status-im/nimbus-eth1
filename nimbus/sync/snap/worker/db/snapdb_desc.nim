@@ -14,7 +14,7 @@ import
   std/tables,
   chronicles,
   eth/[common, p2p, trie/nibbles],
-  ../../../../db/core_db/legacy,
+  ../../../../db/core_db/legacy_persistent,
   ../../../../db/[core_db, select_backend, storage_types],
   ../../../protocol,
   ../../range_desc,

@@ -87,7 +87,7 @@ import
   ../../network/history/[history_content, history_network],
   ../../network/beacon_light_client/beacon_light_client_content,
   ../../common/common_types,
-  ../../nimbus/db/core_db,
+  ../../nimbus/db/core_db/memory_only,
   ./beacon_lc_bridge_conf
 
 from stew/objects import checkedEnumAssign
