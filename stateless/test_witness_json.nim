@@ -1,5 +1,6 @@
 import
-  eth/common, eth/trie/db, json, os, unittest2,
+  eth/common, json, os, unittest2,
+  ../../nimbus/db/core_db,
   ./tree_from_witness, parseopt,
   ./witness_types, stew/byteutils
 
@@ -119,7 +120,7 @@ proc parseTester(filename: string, testStatusIMPL: var TestStatus): Tester =
 proc runTest(filePath, fileName: string) =
   test fileName:
     let t = parseTester(filePath, testStatusIMPL)
-    var db = newMemoryDB()
+    var db = newCoreDbRef(LegacyDbMemory)
     try:
       var tb = initTreeBuilder(t.output, db, {wfEIP170})
       let root = tb.buildTree()
@@ -137,7 +138,7 @@ proc writeFuzzData(filePath, fileName: string) =
   let t = parseTester(filePath, testStatusIMPL)
 
   # this block below check the parsed json
-  var db = newMemoryDB()
+  var db = newCoreDbRef(LegacyDbMemory)
   var tb = initTreeBuilder(t.output, db, {wfEIP170})
   discard tb.buildTree()
 

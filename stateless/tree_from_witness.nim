@@ -1,11 +1,11 @@
 import
   typetraits,
   faststreams/inputs, eth/[common, rlp], stint,
-  eth/trie/[db, trie_defs],
-  ./witness_types, stew/byteutils, ../nimbus/constants
+  eth/trie/trie_defs,
+  ./witness_types, stew/byteutils, ../nimbus/[constants, db/core_db]
 
 type
-  DB = TrieDatabaseRef
+  DB = CoreDbRef
 
   NodeKey = object
     usedBytes: int
@@ -168,7 +168,7 @@ proc toNodeKey(t: var TreeBuilder, z: openArray[byte]): NodeKey =
   else:
     result.data = keccakHash(z).data
     result.usedBytes = 32
-    t.db.put(result.data, z)
+    t.db.kvt.put(result.data, z)
 
 proc toNodeKey(z: openArray[byte]): NodeKey =
   if z.len >= 32:
@@ -178,13 +178,13 @@ proc toNodeKey(z: openArray[byte]): NodeKey =
 
 proc forceSmallNodeKeyToHash(t: var TreeBuilder, r: NodeKey): NodeKey =
   let hash = keccakHash(r.data.toOpenArray(0, r.usedBytes-1))
-  t.db.put(hash.data, r.data.toOpenArray(0, r.usedBytes-1))
+  t.db.kvt.put(hash.data, r.data.toOpenArray(0, r.usedBytes-1))
   result.data = hash.data
   result.usedBytes = 32
 
 proc writeCode(t: var TreeBuilder, code: openArray[byte]): Hash256 =
   result = keccakHash(code)
-  put(t.db, result.data, code)
+  put(t.db.kvt, result.data, code)
 
 proc branchNode(t: var TreeBuilder, depth: int, storageMode: bool): NodeKey
 proc extensionNode(t: var TreeBuilder, depth: int, storageMode: bool): NodeKey

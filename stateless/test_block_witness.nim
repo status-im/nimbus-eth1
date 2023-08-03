@@ -1,16 +1,16 @@
 import
   unittest2, os, json, strutils,
-  eth/[common, rlp], eth/trie/[hexary, db, trie_defs],
+  eth/[common, rlp], eth/trie/trie_defs,
   stew/byteutils,
   ../tests/[test_helpers, test_config],
-  ../nimbus/db/[accounts_cache, distinct_tries], ./witness_types,
+  ../nimbus/db/[accounts_cache, core_db, distinct_tries], ./witness_types,
   ../stateless/[witness_from_tree, tree_from_witness],
   ./multi_keys
 
 type
   Tester = object
     keys: MultikeysRef
-    memDB: TrieDatabaseRef
+    memDB: CoreDbRef
 
 proc testGetBranch(tester: Tester, rootHash: KeccakHash, testStatusIMPL: var TestStatus) =
   var trie = initAccountsTrie(tester.memdb, rootHash)
@@ -20,7 +20,7 @@ proc testGetBranch(tester: Tester, rootHash: KeccakHash, testStatusIMPL: var Tes
     var wb = initWitnessBuilder(tester.memdb, rootHash, flags)
     var witness = wb.buildWitness(tester.keys)
 
-    var db = newMemoryDB()
+    var db = newCoreDbRef(LegacyDbMemory)
     when defined(useInputStream):
       var input = memoryInput(witness)
       var tb = initTreeBuilder(input, db, flags)
@@ -77,7 +77,7 @@ proc setupStateDB(tester: var Tester, wantedState: JsonNode, stateDB: var Accoun
 
 proc testBlockWitness(node: JsonNode, rootHash: Hash256, testStatusIMPL: var TestStatus) =
   var
-    tester = Tester(memDB: newMemoryDB())
+    tester = Tester(memDB: newCoreDbRef(LegacyDbMemory))
     ac = AccountsCache.init(tester.memDB, emptyRlpHash, true)
 
   let root = tester.setupStateDB(node, ac)
