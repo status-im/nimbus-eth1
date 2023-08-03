@@ -175,7 +175,7 @@ proc writeRootHashToStderr(vmState: BaseVMState) =
 
 proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateResult =
   let
-    com     = CommonRef.new(newMemoryDB(), ctx.chainConfig, pruneTrie = false)
+    com     = CommonRef.new(newCoreDbRef LegacyDbMemory, ctx.chainConfig, pruneTrie = false)
     parent  = BlockHeader(stateRoot: emptyRlpHash)
     fork    = com.toEVMFork(ctx.header.forkDeterminationInfoForHeader)
     stream  = newFileStream(stderr)
