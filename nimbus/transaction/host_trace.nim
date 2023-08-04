@@ -10,7 +10,7 @@
 
 import
   macros, strformat, strutils, stint, chronicles,
-  stew/byteutils, stew/ranges/ptr_arith,
+  stew/byteutils, stew/ptrops,
   ./host_types
 
 # Set `true` or `false` to control host call tracing.

@@ -19,16 +19,18 @@ type
   #       directly if it's not involving stint computation
   #       and we can reduce unecessary conversion further
   nimbus_tx_context* = object
-    tx_gas_price*    : evmc_uint256be # The transaction gas price.
-    tx_origin*       : EthAddress     # The transaction origin account.
-    block_coinbase*  : EthAddress     # The miner of the block.
-    block_number*    : int64          # The block number.
-    block_timestamp* : int64          # The block timestamp.
-    block_gas_limit* : int64          # The block gas limit.
-    block_prev_randao*: evmc_uint256be # The block difficulty.
-    chain_id*        : evmc_uint256be # The blockchain's ChainID.
-    block_base_fee*  : evmc_uint256be # The block base fee.
-
+    tx_gas_price*     : evmc_uint256be   # The transaction gas price.
+    tx_origin*        : EthAddress       # The transaction origin account.
+    block_coinbase*   : EthAddress       # The miner of the block.
+    block_number*     : int64            # The block number.
+    block_timestamp*  : int64            # The block timestamp.
+    block_gas_limit*  : int64            # The block gas limit.
+    block_prev_randao*: evmc_uint256be   # The block difficulty.
+    chain_id*         : evmc_uint256be   # The blockchain's ChainID.
+    block_base_fee*   : evmc_uint256be   # The block base fee.
+    blob_hashes*      : ptr evmc_bytes32 # The array of blob hashes (EIP-4844).
+    blob_hashes_count*: csize_t          # The number of blob hashes (EIP-4844).
+    
   nimbus_message* = object
     kind*        : evmc_call_kind
     flags*       : uint32
