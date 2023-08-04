@@ -79,6 +79,12 @@ proc basicServices(nimbus: NimbusNode,
   # the engineSigner is zero.
   nimbus.txPool = TxPoolRef.new(com, conf.engineSigner)
 
+  # txPool must be informed of active head
+  # so it can know the latest account state
+  # e.g. sender nonce, etc
+  let head = com.db.getCanonicalHead()
+  doAssert nimbus.txPool.smartHead(head)
+
   # chainRef: some name to avoid module-name/filed/function misunderstandings
   nimbus.chainRef = newChain(com)
   if conf.verifyFrom.isSome:
