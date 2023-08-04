@@ -853,7 +853,7 @@ proc runTxPackerTests(noisy = true) =
           # even though the difficulty or the blocknumber is lower than
           # previous canonical head
           check hdr.blockHash == xq.chain.com.db.getCanonicalHead.blockHash
-          
+
           # Is the withdrawals persisted and loaded properly?
           var blockBody: BlockBody
           check xq.chain.com.db.getBlockBody(hdr, blockBody)
@@ -882,6 +882,7 @@ proc txPoolMain*(noisy = defined(debug)) =
   noisy.runTxPackerTests
   runTxPoolCliqueTest()
   runTxPoolPosTest()
+  runTxPoolBlobhashTest()
   noisy.runTxHeadDelta
 
 when isMainModule:

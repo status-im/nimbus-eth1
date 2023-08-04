@@ -7,6 +7,7 @@ import
   ../nimbus/core/clique/[clique_sealer, clique_desc],
   ../nimbus/[config, transaction, constants],
   ../nimbus/core/tx_pool,
+  ../nimbus/core/tx_pool/tx_item,
   ../nimbus/core/casper,
   ../nimbus/core/executor,
   ../nimbus/common/common,
@@ -68,6 +69,11 @@ proc makeTx*(t: var TestEnv, recipient: EthAddress, amount: UInt256, payload: op
   )
 
   inc t.nonce
+  signTransaction(tx, t.vaultKey, t.chainId, eip155 = true)
+
+proc signTxWithNonce(t: TestEnv, tx: Transaction, nonce: AccountNonce): Transaction =
+  var tx = tx
+  tx.nonce = nonce
   signTransaction(tx, t.vaultKey, t.chainId, eip155 = true)
 
 proc initEnv(envFork: HardFork): TestEnv =
@@ -265,12 +271,18 @@ proc runTxPoolPosTest*() =
       let bal = sdb.getBalance(feeRecipient)
       check not bal.isZero
 
+proc inPoolAndOk(txPool: TxPoolRef, txHash: Hash256): bool =
+  let res = txPool.getItem(txHash)
+  if res.isErr: return false
+  res.get().reject == txInfoOk
+
 proc runTxPoolBlobhashTest*() =
   var
     env = initEnv(Cancun)
 
   var
-    tx = env.makeTx(recipient, amount)
+    tx1 = env.makeTx(recipient, amount)
+    tx2 = env.makeTx(recipient, amount)
     xp = env.xp
     com = env.com
     chain = env.chain
@@ -279,14 +291,16 @@ proc runTxPoolBlobhashTest*() =
 
   suite "Test TxPool with blobhash block":
     test "TxPool addLocal":
-      let res = xp.addLocal(tx, force = true)
+      let res = xp.addLocal(tx1, force = true)
       check res.isOk
       if res.isErr:
         debugEcho res.error
         return
+      let res2 = xp.addLocal(tx2, force = true)
+      check res2.isOk
 
     test "TxPool jobCommit":
-      check xp.nItems.total == 1
+      check xp.nItems.total == 2
 
     test "TxPool ethBlock":
       com.pos.prevRandao = prevRandao
@@ -302,7 +316,7 @@ proc runTxPoolBlobhashTest*() =
         uncles: blk.uncles,
         withdrawals: some[seq[Withdrawal]](@[])
       )
-      check blk.txs.len == 1
+      check blk.txs.len == 2
 
     test "Blobhash persistBlocks":
       let rr = chain.persistBlocks([blk.header], [body])
@@ -320,6 +334,21 @@ proc runTxPoolBlobhashTest*() =
       var sdb = newAccountStateDB(com.db.db, blk.header.stateRoot, pruneTrie = false)
       let bal = sdb.getBalance(feeRecipient)
       check not bal.isZero
+
+    test "add tx with nonce too low":
+      let
+        tx3 = env.makeTx(recipient, amount)
+        tx4 = env.signTxWithNonce(tx3, AccountNonce(env.nonce-2))
+        xp = env.xp
+
+      check xp.smartHead(blk.header)
+      let res = xp.addLocal(tx4, force = true)
+      check res.isOk
+      if res.isErr:
+        debugEcho res.error
+        return
+
+      check inPoolAndOk(xp, rlpHash(tx4)) == false
 
 proc runTxHeadDelta*(noisy = true) =
   ## see github.com/status-im/nimbus-eth1/issues/1031
@@ -399,6 +428,6 @@ when isMainModule:
   runTxPoolCliqueTest()
   runTxPoolPosTest()
   runTxPoolBlobhashTest()
-  noisy.runTxHeadDelta
+  #noisy.runTxHeadDelta
 
 # End

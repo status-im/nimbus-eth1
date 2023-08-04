@@ -105,6 +105,12 @@ proc setupEnv*(): TestEnv =
 
   let chainRef = newChain(com)
   let txPool = TxPoolRef.new(com, conf.engineSigner)
+
+  # txPool must be informed of active head
+  # so it can know the latest account state
+  let head = com.db.getCanonicalHead()
+  doAssert txPool.smartHead(head)
+
   let sealingEngine = SealingEngineRef.new(
     chainRef, ethCtx, conf.engineSigner,
     txPool, EngineStopped

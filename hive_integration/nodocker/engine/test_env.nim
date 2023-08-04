@@ -88,6 +88,11 @@ proc setupELClient*(t: TestEnv, chainFile: string, enableAuth: bool) =
   t.com.initializeEmptyDb()
   let txPool = TxPoolRef.new(t.com, t.conf.engineSigner)
 
+  # txPool must be informed of active head
+  # so it can know the latest account state
+  let head = t.com.db.getCanonicalHead()
+  doAssert txPool.smartHead(head)
+  
   var key: JwtSharedKey
   let kr = key.fromHex(jwtSecret)
   if kr.isErr:

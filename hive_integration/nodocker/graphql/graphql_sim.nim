@@ -92,8 +92,11 @@ proc main() =
   var stat: SimStat
   let start = getTime()
 
-  #let fileName = caseFolder & "/37_eth_sendRawTransaction_nonceTooLow.json"
-  #block:
+  # txPool must be informed of active head
+  # so it can know the latest account state
+  # e.g. "sendRawTransaction Nonce too low" case
+  let head = com.db.getCanonicalHead()
+  doAssert txPool.smartHead(head)
 
   for fileName in walkDirRec(
                  caseFolder, yieldFilter = {pcFile,pcLinkToFile}):
