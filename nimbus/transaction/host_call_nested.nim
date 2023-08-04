@@ -10,7 +10,7 @@
 
 import
   eth/common/eth_types,
-  stew/ranges/ptr_arith,
+  stew/ptrops,
   stint,
   ".."/[vm_types, vm_computation],
   ../utils/utils,
