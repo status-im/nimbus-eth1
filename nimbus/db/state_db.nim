@@ -6,10 +6,12 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  strformat,
-  chronicles, eth/[common, rlp], eth/trie/[hexary, db, trie_defs],
-  ../constants, ../utils/utils, storage_types, sets,
-  ./distinct_tries
+  std/[sets, strformat],
+  chronicles,
+  eth/[common, rlp],
+  ../constants,
+  ../utils/utils,
+  "."/[core_db, distinct_tries, storage_types]
 
 logScope:
   topics = "state_db"
@@ -49,28 +51,28 @@ type
   AccountStateDB* = ref object
     trie: AccountsTrie
     originalRoot: KeccakHash   # will be updated for every transaction
-    transactionID: TransactionID
+    transactionID: CoreDbTxID
     when aleth_compat:
       cleared: HashSet[EthAddress]
 
   ReadOnlyStateDB* = distinct AccountStateDB
 
-template trieDB(stateDB: AccountStateDB): TrieDatabaseRef =
-  HexaryTrie(stateDB.trie).db
-
-func pruneTrie*(db: AccountStateDB): bool =
+proc pruneTrie*(db: AccountStateDB): bool =
   db.trie.isPruning
 
-func db*(db: AccountStateDB): TrieDatabaseRef =
-  HexaryTrie(db.trie).db
+func db*(db: AccountStateDB): CoreDbRef =
+  db.trie.db
+
+func kvt*(db: AccountStateDB): CoreDbKvtObj =
+  db.trie.db.kvt
 
 proc rootHash*(db: AccountStateDB): KeccakHash =
   db.trie.rootHash
 
 proc `rootHash=`*(db: AccountStateDB, root: KeccakHash) =
-  db.trie = initAccountsTrie(trieDB(db), root, db.trie.isPruning)
+  db.trie = initAccountsTrie(db.trie.db, root, db.trie.isPruning)
 
-proc newAccountStateDB*(backingStore: TrieDatabaseRef,
+proc newAccountStateDB*(backingStore: CoreDbRef,
                         root: KeccakHash, pruneTrie: bool): AccountStateDB =
   result.new()
   result.trie = initAccountsTrie(backingStore, root, pruneTrie)
@@ -79,11 +81,11 @@ proc newAccountStateDB*(backingStore: TrieDatabaseRef,
   when aleth_compat:
     result.cleared = initHashSet[EthAddress]()
 
-proc getTrie*(db: AccountStateDB): HexaryTrie =
-  HexaryTrie db.trie
+proc getTrie*(db: AccountStateDB): CoreDbMptRef =
+  db.trie.mpt
 
-proc getSecureTrie*(db: AccountStateDB): SecureHexaryTrie =
-  SecureHexaryTrie db.trie
+proc getSecureTrie*(db: AccountStateDB): CoreDbPhkRef =
+  db.trie.phk
 
 proc getAccount*(db: AccountStateDB, address: EthAddress): Account =
   let recordFound = db.trie.getAccountBytes(address)
@@ -130,7 +132,7 @@ template getStorageTrie(db: AccountStateDB, account: Account): auto =
 
 proc clearStorage*(db: AccountStateDB, address: EthAddress) =
   var account = db.getAccount(address)
-  account.storageRoot = emptyRlpHash
+  account.storageRoot = EMPTY_ROOT_HASH
   db.setAccount(address, account)
   when aleth_compat:
     db.cleared.incl address
@@ -155,7 +157,7 @@ proc setStorage*(db: AccountStateDB,
   # map slothash back to slot value
   # see iterator storage below
   var
-    triedb = trieDB(db)
+    triedb = db.kvt
     # slotHash can be obtained from accountTrie.put?
     slotHash = keccakHash(slot.toByteArrayBE)
   triedb.put(slotHashToSlotKey(slotHash.data).toOpenArray, rlp.encode(slot))
@@ -166,8 +168,8 @@ proc setStorage*(db: AccountStateDB,
 iterator storage*(db: AccountStateDB, address: EthAddress): (UInt256, UInt256) =
   let
     storageRoot = db.getStorageRoot(address)
-    triedb = trieDB(db)
-  var trie = initHexaryTrie(triedb, storageRoot)
+    triedb = db.kvt
+    trie = db.db.mptPrune storageRoot
 
   for key, value in trie:
     if key.len != 0:
@@ -208,7 +210,7 @@ proc setCode*(db: AccountStateDB, address: EthAddress, code: openArray[byte]) =
 
   let
     newCodeHash = keccakHash(code)
-    triedb = trieDB(db)
+    triedb = db.kvt
 
   if code.len != 0:
     triedb.put(contractHashKey(newCodeHash).toOpenArray, code)
@@ -217,7 +219,7 @@ proc setCode*(db: AccountStateDB, address: EthAddress, code: openArray[byte]) =
   db.setAccount(address, account)
 
 proc getCode*(db: AccountStateDB, address: EthAddress): seq[byte] =
-  let triedb = trieDB(db)
+  let triedb = db.kvt
   triedb.get(contractHashKey(db.getCodeHash(address)).toOpenArray)
 
 proc hasCodeOrNonce*(db: AccountStateDB, address: EthAddress): bool {.inline.} =
@@ -252,7 +254,7 @@ proc isDeadAccount*(db: AccountStateDB, address: EthAddress): bool =
 proc getCommittedStorage*(db: AccountStateDB, address: EthAddress, slot: UInt256): UInt256 =
   let tmpHash = db.rootHash
   db.rootHash = db.originalRoot
-  shortTimeReadOnly(trieDB(db), db.transactionID):
+  db.transactionID.shortTimeReadOnly():
     when aleth_compat:
       if address in db.cleared:
         debug "Forced contract creation on existing account detected", address
@@ -268,7 +270,7 @@ proc updateOriginalRoot*(db: AccountStateDB) =
   db.originalRoot = db.rootHash
   # no need to rollback or dispose
   # transactionID, it will be handled elsewhere
-  db.transactionID = trieDB(db).getTransactionID()
+  db.transactionID = db.db.getTransactionID()
 
   when aleth_compat:
     db.cleared.clear()

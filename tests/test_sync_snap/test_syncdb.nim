@@ -13,12 +13,12 @@
 
 import
   std/[sequtils, strutils],
-  eth/trie/db,
+  eth/[common, trie/db],
   stew/byteutils,
   unittest2,
-  ../../nimbus/common,
+  ../../nimbus/common as nimbus_common,
   ../../nimbus/core/chain,
-  ../../nimbus/db/[db_chain, storage_types],
+  ../../nimbus/db/[core_db/legacy, storage_types],
   ../../nimbus/sync/snap/worker/db/snapdb_desc,
   ../replay/[pp, undump_blocks, undump_kvp],
   ./test_helpers
@@ -139,7 +139,7 @@ proc test_syncdbImportSnapshot*(
     case w.kind:
     of UndumpKey32:
       key = w.key32.toSeq
-      if select.isNil or 0 < select.com.db.db.get(key).len:
+      if select.isNil or 0 < select.com.db.toLegacyTrieRef.get(key).len:
         result[0][0].inc
       else:
         storeOk = false
@@ -170,7 +170,7 @@ proc test_syncdbImportSnapshot*(
       noisy.say "*** import", result.pp, ".. "
 
     if storeOk:
-      chn.com.db.db.put(key, w.data)
+      chn.com.db.toLegacyTrieRef.put(key, w.data)
 
   if (count mod 23456) != 0:
     noisy.say "*** import", result.pp, " ok"
@@ -188,7 +188,7 @@ proc test_syncdbAppendBlocks*(
   let
     blkLen = 33
     lastBlock = pivotBlock + max(1,nItemsMax).uint64
-    db = chn.com.db.db
+    kvt = chn.com.db.toLegacyTrieRef
 
     # Join (headers,blocks) pair in the range pivotBlock..lastBlock
     q = toSeq(filePath.undumpBlocks(pivotBlock,lastBlock)).pairJoin
@@ -197,8 +197,8 @@ proc test_syncdbAppendBlocks*(
     pivNum = q[0][0].blockNumber
 
   # Verify pivot
-  check 0 < db.get(pivHash.toBlockHeaderKey.toOpenArray).len
-  check pivHash == db.get(pivNum.toBlockNumberKey.toOpenArray).decode(Hash256)
+  check 0 < kvt.get(pivHash.toBlockHeaderKey.toOpenArray).len
+  check pivHash == kvt.get(pivNum.toBlockNumberKey.toOpenArray).decode(Hash256)
 
   # Set up genesis deputy.
   chn.com.startOfHistory = pivHash

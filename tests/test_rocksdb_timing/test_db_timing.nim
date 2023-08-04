@@ -17,7 +17,8 @@ import
   rocksdb,
   unittest2,
   ../../nimbus/core/chain,
-  ../../nimbus/db/select_backend,
+  ../../nimbus/db/core_db,
+  ../../nimbus/db/core_db/legacy_persistent,
   ../../nimbus/sync/snap/range_desc,
   ../../nimbus/sync/snap/worker/db/[hexary_desc, rocky_bulk_load],
   ../../nimbus/utils/prettify,
@@ -129,11 +130,11 @@ proc test_dbTimingRockySetup*(
     noisy: bool;
     t32: var Table[ByteArray32,Blob],
     t33: var Table[ByteArray33,Blob],
-    cdb: ChainDb;
+    cdb: CoreDbRef;
      ) =
   ## Extract key-value records into memory tables via rocksdb iterator
   let
-    rdb = cdb.rocksStoreRef
+    rdb = cdb.toLegacyBackend.rocksStoreRef
     rop = rdb.store.readOptions
     rit = rdb.store.db.rocksdb_create_iterator(rop)
   check not rit.isNil
@@ -180,11 +181,11 @@ proc test_dbTimingRockySetup*(
 proc test_dbTimingStoreDirect32*(
     noisy: bool;
     t32: Table[ByteArray32,Blob];
-    cdb: ChainDb;
+    cdb: CoreDbRef;
      ) =
   ## Direct db, key length 32, no transaction
   var ela: Duration
-  let tdb = cdb.trieDB
+  let tdb = cdb.kvt
 
   if noisy: echo ""
   noisy.showElapsed("Standard db loader(keyLen 32)", ela):
@@ -202,11 +203,11 @@ proc test_dbTimingStoreDirect32*(
 proc test_dbTimingStoreDirectly32as33*(
     noisy: bool;
     t32: Table[ByteArray32,Blob],
-    cdb: ChainDb;
+    cdb: CoreDbRef;
      ) =
   ## Direct db, key length 32 as 33, no transaction
   var ela = initDuration()
-  let tdb = cdb.trieDB
+  let tdb = cdb.kvt
 
   if noisy: echo ""
   noisy.showElapsed("Standard db loader(keyLen 32 as 33)", ela):
@@ -224,15 +225,15 @@ proc test_dbTimingStoreDirectly32as33*(
 proc test_dbTimingStoreTx32*(
     noisy: bool;
     t32: Table[ByteArray32,Blob],
-    cdb: ChainDb;
+    cdb: CoreDbRef;
      ) =
   ## Direct db, key length 32, transaction based
   var ela: Duration
-  let tdb = cdb.trieDB
+  let tdb = cdb.kvt
 
   if noisy: echo ""
   noisy.showElapsed("Standard db loader(tx,keyLen 32)", ela):
-    let dbTx = tdb.beginTransaction
+    let dbTx = cdb.beginTransaction
     defer: dbTx.commit
 
     for (key,val) in t32.pairs:
@@ -249,15 +250,15 @@ proc test_dbTimingStoreTx32*(
 proc test_dbTimingStoreTx32as33*(
     noisy: bool;
     t32: Table[ByteArray32,Blob],
-    cdb: ChainDb;
+    cdb: CoreDbRef;
      ) =
   ## Direct db, key length 32 as 33, transaction based
   var ela: Duration
-  let tdb = cdb.trieDB
+  let tdb = cdb.kvt
 
   if noisy: echo ""
   noisy.showElapsed("Standard db loader(tx,keyLen 32 as 33)", ela):
-    let dbTx = tdb.beginTransaction
+    let dbTx = cdb.beginTransaction
     defer: dbTx.commit
 
     for (key,val) in t32.pairs:
@@ -274,11 +275,11 @@ proc test_dbTimingStoreTx32as33*(
 proc test_dbTimingDirect33*(
     noisy: bool;
     t33: Table[ByteArray33,Blob],
-    cdb: ChainDb;
+    cdb: CoreDbRef;
      ) =
   ## Direct db, key length 33, no transaction
   var ela: Duration
-  let tdb = cdb.trieDB
+  let tdb = cdb.kvt
 
   if noisy: echo ""
   noisy.showElapsed("Standard db loader(keyLen 33)", ela):
@@ -296,15 +297,15 @@ proc test_dbTimingDirect33*(
 proc test_dbTimingTx33*(
     noisy: bool;
     t33: Table[ByteArray33,Blob],
-    cdb: ChainDb;
+    cdb: CoreDbRef;
      ) =
   ## Direct db, key length 33, transaction based
   var ela: Duration
-  let tdb = cdb.trieDB
+  let tdb = cdb.kvt
 
   if noisy: echo ""
   noisy.showElapsed("Standard db loader(tx,keyLen 33)", ela):
-    let dbTx = tdb.beginTransaction
+    let dbTx = cdb.beginTransaction
     defer: dbTx.commit
 
     for (key,val) in t33.pairs:
@@ -321,7 +322,7 @@ proc test_dbTimingTx33*(
 proc test_dbTimingRocky32*(
     noisy: bool;
     t32: Table[ByteArray32,Blob],
-    cdb: ChainDb;
+    cdb: CoreDbRef;
     fullNoise = false;
      ) =
   ## Rocksdb, key length 32
@@ -329,7 +330,7 @@ proc test_dbTimingRocky32*(
     ela: array[4,Duration]
     size: int64
   let
-    rdb = cdb.rocksStoreRef
+    rdb = cdb.toLegacyBackend.rocksStoreRef
 
   # Note that 32 and 33 size keys cannot be usefully merged into the same SST
   # file. The keys must be added in a sorted mode. So playing safe, key sizes
@@ -379,7 +380,7 @@ proc test_dbTimingRocky32*(
 proc test_dbTimingRocky32as33*(
     noisy: bool;
     t32: Table[ByteArray32,Blob],
-    cdb: ChainDb;
+    cdb: CoreDbRef;
     fullNoise = false;
      ) =
   ## Rocksdb, key length 32 as 33
@@ -387,7 +388,7 @@ proc test_dbTimingRocky32as33*(
     ela: array[4,Duration]
     size: int64
   let
-    rdb = cdb.rocksStoreRef
+    rdb = cdb.toLegacyBackend.rocksStoreRef
 
   # Note that 32 and 33 size keys cannot be usefiully merged into the same SST
   # file. The keys must be added in a sorted mode. So playing safe, key sizes
@@ -437,14 +438,14 @@ proc test_dbTimingRocky32as33*(
 proc test_dbTimingRocky33*(
     noisy: bool;
     t33: Table[ByteArray33,Blob],
-    cdb: ChainDb;
+    cdb: CoreDbRef;
     fullNoise = false;
      ) =
   ##  Rocksdb, key length 33
   var
     ela: array[4,Duration]
     size: int64
-  let rdb = cdb.rocksStoreRef
+  let rdb = cdb.toLegacyBackend.rocksStoreRef
 
   # Note that 32 and 33 size keys cannot be usefiully merged into the same SST
   # file. The keys must be added in a sorted mode. So playing safe, key sizes

@@ -10,8 +10,7 @@ import
   unittest2,
   stew/byteutils,
   ./test_helpers,
-  ../nimbus/vm_types,
-  ../nimbus/tracer,
+  ../nimbus/[tracer, vm_types],
   ../nimbus/common/common
 
 proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus)
@@ -24,7 +23,7 @@ proc tracerJsonMain*() =
 proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus) =
   var
     blockNumber = UInt256.fromHex(node["blockNumber"].getStr())
-    memoryDB = newMemoryDB()
+    memoryDB = newCoreDbRef LegacyDbMemory
     com = CommonRef.new(memoryDB, chainConfigForNetwork(MainNet))
     state = node["state"]
     receipts = node["receipts"]
@@ -35,7 +34,7 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus) =
   for k, v in state:
     let key = hexToSeqByte(k)
     let value = hexToSeqByte(v.getStr())
-    memoryDB.put(key, value)
+    memoryDB.kvt.put(key, value)
 
   var header = com.db.getBlockHeader(blockNumber)
   var headerHash = header.blockHash

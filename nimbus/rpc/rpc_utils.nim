@@ -7,13 +7,13 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import hexstrings, eth/[common, keys, trie/db], stew/byteutils,
-  ../db/db_chain, strutils, algorithm, options, times, json,
+{.push raises: [].}
+
+import hexstrings, eth/[common, keys], stew/byteutils,
+  ../db/core_db, strutils, algorithm, options, times, json,
   ../constants, stint, rpc_types,
   ../utils/utils, ../transaction,
   ../transaction/call_evm, ../common/evmforks
-
-{.push raises: [].}
 
 const
   defaultTag = "latest"
@@ -39,7 +39,7 @@ func hexToInt*(s: string, T: typedesc[SomeInteger]): T
     result = result shl 4 or readHexChar(s[i]).T
     inc(i)
 
-proc headerFromTag*(chain: ChainDBRef, blockTag: string): BlockHeader
+proc headerFromTag*(chain: CoreDbRef, blockTag: string): BlockHeader
     {.gcsafe, raises: [CatchableError].} =
   let tag = blockTag.toLowerAscii
   case tag
@@ -56,14 +56,14 @@ proc headerFromTag*(chain: ChainDBRef, blockTag: string): BlockHeader
     let blockNum = stint.fromHex(UInt256, tag)
     result = chain.getBlockHeader(blockNum.toBlockNumber)
 
-proc headerFromTag*(chain: ChainDBRef, blockTag: Option[string]): BlockHeader
+proc headerFromTag*(chain: CoreDbRef, blockTag: Option[string]): BlockHeader
     {.gcsafe, raises: [CatchableError].} =
   if blockTag.isSome():
     return chain.headerFromTag(blockTag.unsafeGet())
   else:
     return chain.headerFromTag(defaultTag)
 
-proc calculateMedianGasPrice*(chain: ChainDBRef): GasInt
+proc calculateMedianGasPrice*(chain: CoreDbRef): GasInt
     {.gcsafe, raises: [CatchableError].} =
   var prices  = newSeqOfCap[GasInt](64)
   let header = chain.getCanonicalHead()
@@ -81,7 +81,7 @@ proc calculateMedianGasPrice*(chain: ChainDBRef): GasInt
     else:
       result = prices[middle]
 
-proc unsignedTx*(tx: TxSend, chain: ChainDBRef, defaultNonce: AccountNonce): Transaction
+proc unsignedTx*(tx: TxSend, chain: CoreDbRef, defaultNonce: AccountNonce): Transaction
     {.gcsafe, raises: [CatchableError].} =
   if tx.to.isSome:
     result.to = some(toAddress(tx.to.get))
@@ -152,7 +152,7 @@ proc populateTransactionObject*(tx: Transaction, header: BlockHeader, txIndex: i
   result.r = encodeQuantity(tx.R)
   result.s = encodeQuantity(tx.S)
 
-proc populateBlockObject*(header: BlockHeader, chain: ChainDBRef, fullTx: bool, isUncle = false): BlockObject
+proc populateBlockObject*(header: BlockHeader, chain: CoreDbRef, fullTx: bool, isUncle = false): BlockObject
     {.gcsafe, raises: [CatchableError].} =
   let blockHash = header.blockHash
 

@@ -45,7 +45,7 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
                           # wildcard exception, wrapped below in public section
                           {.inline, raises: [CatchableError].} =
 
-  let transaction = c.db.db.beginTransaction()
+  let transaction = c.db.beginTransaction()
   defer: transaction.dispose()
 
   var cliqueState = c.clique.cliqueSave

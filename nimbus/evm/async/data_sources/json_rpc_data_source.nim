@@ -1,6 +1,5 @@
 import
-  std/[sequtils, typetraits, options],
-  times,
+  std/[sequtils, typetraits, options, times],
   chronicles,
   chronos,
   nimcrypto,
@@ -9,12 +8,12 @@ import
   json_rpc/rpcclient,
   eth/common,
   eth/rlp,
-  eth/trie/[db, hexary_proof_verification],
+  eth/trie/hexary_proof_verification,
   eth/p2p,
   eth/p2p/rlpx,
   eth/p2p/private/p2p_types,
   ../../../sync/protocol,
-  ../../../db/[db_chain, distinct_tries, incomplete_db, storage_types],
+  ../../../db/[core_db, distinct_tries, incomplete_db, storage_types],
   ../data_sources
 
 when defined(legacy_eth66_enabled):
@@ -307,14 +306,14 @@ proc fetchAndVerifyCode(client: RpcClient, p: CodeFetchingInfo, desiredCodeHash:
       error("code hash values do not match", p=p, desiredCodeHash=desiredCodeHash, fetchedCodeHash=fetchedCodeHash)
       raise newException(CatchableError, "async code received code for " & $(p.address) & " whose hash (" & $(fetchedCodeHash) & ") does not match the desired hash (" & $(desiredCodeHash) & ")")
 
-proc putCode*(db: TrieDatabaseRef, codeHash: Hash256, code: seq[byte]) =
+proc putCode*(db: CoreDbRef, codeHash: Hash256, code: seq[byte]) =
   when defined(geth):
-    db.put(codeHash.data, code)
+    db.kvt.put(codeHash.data, code)
   else:
-    db.put(contractHashKey(codeHash).toOpenArray, code)
+    db.kvt.put(contractHashKey(codeHash).toOpenArray, code)
 
 proc putCode*(trie: AccountsTrie, codeHash: Hash256, code: seq[byte]) =
-  putCode(distinctBase(trie).db, codeHash, code)
+  putCode(trie.db, codeHash, code)
 
 proc storeCode(trie: AccountsTrie, p: CodeFetchingInfo, desiredCodeHash: Hash256, fetchedCode: seq[byte]) =
   trie.putCode(desiredCodeHash, fetchedCode)
@@ -378,10 +377,10 @@ proc verifyFetchedBlockHeader(fetchedHeader: BlockHeader, desiredBlockNumber: Bl
   # know what block hash we want?
   ok()
 
-proc storeBlockHeader(chainDB: ChainDBRef, header: BlockHeader) =
+proc storeBlockHeader(chainDB: CoreDbRef, header: BlockHeader) =
   chainDB.persistHeaderToDbWithoutSetHeadOrScore(header)
 
-proc assertThatWeHaveStoredBlockHeader(chainDB: ChainDBRef, blockNumber: BlockNumber, header: BlockHeader) =
+proc assertThatWeHaveStoredBlockHeader(chainDB: CoreDbRef, blockNumber: BlockNumber, header: BlockHeader) =
   let h = chainDB.getBlockHash(blockNumber)
   doAssert(h == header.blockHash, "stored the block header for block " & $(blockNumber))
 
@@ -393,7 +392,7 @@ proc raiseExceptionIfError[V, E](whatAreWeVerifying: V, r: Result[void, E]) =
 const shouldDoUnnecessarySanityChecks = true
 
 # This proc fetches both the account and also optionally some of its slots, because that's what eth_getProof can do.
-proc ifNecessaryGetAccountAndSlots*(client: RpcClient, db: TrieDatabaseRef, blockNumber: BlockNumber, stateRoot: Hash256, address: EthAddress, slots: seq[UInt256], justCheckingAccount: bool, justCheckingSlots: bool, newStateRootForSanityChecking: Hash256): Future[void] {.async.} =
+proc ifNecessaryGetAccountAndSlots*(client: RpcClient, db: CoreDbRef, blockNumber: BlockNumber, stateRoot: Hash256, address: EthAddress, slots: seq[UInt256], justCheckingAccount: bool, justCheckingSlots: bool, newStateRootForSanityChecking: Hash256): Future[void] {.async.} =
   let trie = initAccountsTrie(db, stateRoot, false)  # important for sanity checks
   let trie2 = initAccountsTrie(db, newStateRootForSanityChecking, false)  # important for sanity checks
   let doesAccountActuallyNeedToBeFetched = not trie.hasAllNodesForAccount(address)
@@ -439,13 +438,13 @@ proc ifNecessaryGetAccountAndSlots*(client: RpcClient, db: TrieDatabaseRef, bloc
         let slotAsKey = createTrieKeyFromSlot(slot)
         let slotHash = keccakHash(slotAsKey)
         let slotEncoded = rlp.encode(slot)
-        db.put(slotHashToSlotKey(slotHash.data).toOpenArray, slotEncoded)
+        db.kvt.put(slotHashToSlotKey(slotHash.data).toOpenArray, slotEncoded)
 
         if shouldDoUnnecessarySanityChecks:
           assertThatWeHaveStoredSlot(trie, address, acc, slot, fetchedVal, false)
           assertThatWeHaveStoredSlot(trie2, address, acc, slot, fetchedVal, true)
 
-proc ifNecessaryGetCode*(client: RpcClient, db: TrieDatabaseRef, blockNumber: BlockNumber, stateRoot: Hash256, address: EthAddress, justChecking: bool, newStateRootForSanityChecking: Hash256): Future[void] {.async.} =
+proc ifNecessaryGetCode*(client: RpcClient, db: CoreDbRef, blockNumber: BlockNumber, stateRoot: Hash256, address: EthAddress, justChecking: bool, newStateRootForSanityChecking: Hash256): Future[void] {.async.} =
   await ifNecessaryGetAccountAndSlots(client, db, blockNumber, stateRoot, address, @[], false, false, newStateRootForSanityChecking)  # to make sure we've got the codeHash
   let trie = initAccountsTrie(db, stateRoot, false)  # important for sanity checks
 
@@ -461,7 +460,7 @@ proc ifNecessaryGetCode*(client: RpcClient, db: TrieDatabaseRef, blockNumber: Bl
       if shouldDoUnnecessarySanityChecks:
         assertThatWeHaveStoredCode(trie, p, desiredCodeHash)
 
-proc ifNecessaryGetBlockHeaderByNumber*(client: RpcClient, chainDB: ChainDBRef, blockNumber: BlockNumber, justChecking: bool): Future[void] {.async.} =
+proc ifNecessaryGetBlockHeaderByNumber*(client: RpcClient, chainDB: CoreDbRef, blockNumber: BlockNumber, justChecking: bool): Future[void] {.async.} =
   let maybeHeaderAndHash = chainDB.getBlockHeaderWithHash(blockNumber)
   if maybeHeaderAndHash.isNone:
     let fetchedHeader = await fetchBlockHeaderWithNumber(client, blockNumber)
@@ -477,16 +476,16 @@ proc ifNecessaryGetBlockHeaderByNumber*(client: RpcClient, chainDB: ChainDBRef, 
 # Used in asynchronous on-demand-data-fetching mode.
 proc realAsyncDataSource*(peerPool: PeerPool, client: RpcClient, justChecking: bool): AsyncDataSource =
   AsyncDataSource(
-    ifNecessaryGetAccount: (proc(db: TrieDatabaseRef, blockNumber: BlockNumber, stateRoot: Hash256, address: EthAddress, newStateRootForSanityChecking: Hash256): Future[void] {.async.} =
+    ifNecessaryGetAccount: (proc(db: CoreDbRef, blockNumber: BlockNumber, stateRoot: Hash256, address: EthAddress, newStateRootForSanityChecking: Hash256): Future[void] {.async.} =
       await ifNecessaryGetAccountAndSlots(client, db, blockNumber, stateRoot, address, @[], false, false, newStateRootForSanityChecking)
     ),
-    ifNecessaryGetSlots:   (proc(db: TrieDatabaseRef, blockNumber: BlockNumber, stateRoot: Hash256, address: EthAddress, slots: seq[UInt256], newStateRootForSanityChecking: Hash256): Future[void] {.async.} =
+    ifNecessaryGetSlots:   (proc(db: CoreDbRef, blockNumber: BlockNumber, stateRoot: Hash256, address: EthAddress, slots: seq[UInt256], newStateRootForSanityChecking: Hash256): Future[void] {.async.} =
       await ifNecessaryGetAccountAndSlots(client, db, blockNumber, stateRoot, address, slots, false, false, newStateRootForSanityChecking)
     ),
-    ifNecessaryGetCode: (proc(db: TrieDatabaseRef, blockNumber: BlockNumber, stateRoot: Hash256, address: EthAddress, newStateRootForSanityChecking: Hash256): Future[void] {.async.} =
+    ifNecessaryGetCode: (proc(db: CoreDbRef, blockNumber: BlockNumber, stateRoot: Hash256, address: EthAddress, newStateRootForSanityChecking: Hash256): Future[void] {.async.} =
       await ifNecessaryGetCode(client, db, blockNumber, stateRoot, address, justChecking, newStateRootForSanityChecking)
     ),
-    ifNecessaryGetBlockHeaderByNumber: (proc(chainDB: ChainDBRef, blockNumber: BlockNumber): Future[void] {.async.} =
+    ifNecessaryGetBlockHeaderByNumber: (proc(chainDB: CoreDbRef, blockNumber: BlockNumber): Future[void] {.async.} =
       await ifNecessaryGetBlockHeaderByNumber(client, chainDB, blockNumber, justChecking)
     ),
 

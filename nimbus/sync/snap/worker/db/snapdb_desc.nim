@@ -13,8 +13,9 @@
 import
   std/tables,
   chronicles,
-  eth/[common, p2p, trie/db, trie/nibbles],
-  ../../../../db/[select_backend, storage_types],
+  eth/[common, p2p, trie/nibbles],
+  ../../../../db/core_db/legacy_persistent,
+  ../../../../db/[core_db, select_backend, storage_types],
   ../../../protocol,
   ../../range_desc,
   "."/[hexary_desc, hexary_error, hexary_import, hexary_nearby, hexary_paths,
@@ -33,7 +34,7 @@ type
   SnapDbRef* = ref object
     ## Global, re-usable descriptor
     keyMap: Table[RepairKey,uint]    ## For debugging only (will go away)
-    db: TrieDatabaseRef              ## General database
+    db: CoreDbRef                    ## General database
     rocky: RocksStoreRef             ## Set if rocksdb is available
 
   SnapDbBaseRef* = ref object of RootRef
@@ -83,19 +84,10 @@ proc clearRockyCacheFile(rocky: RocksStoreRef): bool =
 
 proc init*(
     T: type SnapDbRef;
-    db: TrieDatabaseRef
+    db: CoreDbRef
       ): T =
   ## Main object constructor
-  T(db: db)
-
-proc init*(
-    T: type SnapDbRef;
-    db: ChainDb
-      ): T =
-  ## Variant of `init()` allowing bulk import on rocksdb backend
-  result = T(db: db.trieDB, rocky: db.rocksStoreRef)
-  if not result.rocky.clearRockyCacheFile():
-    result.rocky = nil
+  T(db: db, rocky: db.toLegacyBackend.rocksStoreRef)
 
 proc init*(
     T: type HexaryTreeDbRef;
@@ -150,11 +142,11 @@ proc rockDb*(pv: SnapDbRef): RocksStoreRef =
   ## Getter  variant
   pv.rocky
 
-proc kvDb*(ps: SnapDbBaseRef): TrieDatabaseRef =
+proc kvDb*(ps: SnapDbBaseRef): CoreDbRef =
   ## Getter, low level access to underlying persistent key-value DB
   ps.base.db
 
-proc kvDb*(pv: SnapDbRef): TrieDatabaseRef =
+proc kvDb*(pv: SnapDbRef): CoreDbRef =
   ## Getter, low level access to underlying persistent key-value DB
   pv.db
 

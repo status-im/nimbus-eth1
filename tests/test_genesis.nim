@@ -17,7 +17,7 @@ proc findFilePath(file: string): string =
         return path
 
 proc makeGenesis(networkId: NetworkId): BlockHeader =
-  let com = CommonRef.new(newMemoryDB(), params = networkParams(networkId))
+  let com = CommonRef.new(newCoreDbRef LegacyDbMemory, params = networkParams(networkId))
   com.genesisHeader
 
 proc genesisTest() =
@@ -56,7 +56,7 @@ proc customGenesisTest() =
     test "calaveras.json":
       var cg: NetworkParams
       check loadNetworkParams("calaveras.json".findFilePath, cg)
-      let com = CommonRef.new(newMemoryDB(), params = cg)
+      let com = CommonRef.new(newCoreDbRef LegacyDbMemory, params = cg)
       let stateRoot = "664c93de37eb4a72953ea42b8c046cdb64c9f0b0bca5505ade8d970d49ebdb8c".toDigest
       let genesisHash = "eb9233d066c275efcdfed8037f4fc082770176aefdbcb7691c71da412a5670f2".toDigest
       check com.genesisHeader.stateRoot == stateRoot
@@ -68,7 +68,7 @@ proc customGenesisTest() =
     test "Devnet4.json (aka Kintsugi in all but chainId)":
       var cg: NetworkParams
       check loadNetworkParams("devnet4.json".findFilePath, cg)
-      let com = CommonRef.new(newMemoryDB(), params = cg)
+      let com = CommonRef.new(newCoreDbRef LegacyDbMemory, params = cg)
       let stateRoot = "3b84f313bfd49c03cc94729ade2e0de220688f813c0c895a99bd46ecc9f45e1e".toDigest
       let genesisHash = "a28d8d73e087a01d09d8cb806f60863652f30b6b6dfa4e0157501ff07d422399".toDigest
       check com.genesisHeader.stateRoot == stateRoot
@@ -78,7 +78,7 @@ proc customGenesisTest() =
     test "Devnet5.json (aka Kiln in all but chainId and TTD)":
       var cg: NetworkParams
       check loadNetworkParams("devnet5.json".findFilePath, cg)
-      let com = CommonRef.new(newMemoryDB(), params = cg)
+      let com = CommonRef.new(newCoreDbRef LegacyDbMemory, params = cg)
       let stateRoot = "52e628c7f35996ba5a0402d02b34535993c89ff7fc4c430b2763ada8554bee62".toDigest
       let genesisHash = "51c7fe41be669f69c45c33a56982cbde405313342d9e2b00d7c91a7b284dd4f8".toDigest
       check com.genesisHeader.stateRoot == stateRoot
@@ -88,7 +88,7 @@ proc customGenesisTest() =
     test "Mainnet shadow fork 1":
       var cg: NetworkParams
       check loadNetworkParams("mainshadow1.json".findFilePath, cg)
-      let com = CommonRef.new(newMemoryDB(), params = cg)
+      let com = CommonRef.new(newCoreDbRef LegacyDbMemory, params = cg)
       let stateRoot = "d7f8974fb5ac78d9ac099b9ad5018bedc2ce0a72dad1827a1709da30580f0544".toDigest
       let genesisHash = "d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3".toDigest
       let ttd = "46_089_003_871_917_200_000_000".parse(Uint256)

@@ -98,7 +98,7 @@ proc initEnv(envFork: HardFork): TestEnv =
 
   let
     com = CommonRef.new(
-      newMemoryDb(),
+      newCoreDbRef LegacyDbMemory,
       conf.pruneMode == PruneMode.Full,
       conf.networkId,
       conf.networkParams
@@ -259,7 +259,7 @@ proc runTxPoolPosTest*() =
       check rr == ValidationResult.OK
 
     test "validate TxPool prevRandao setter":
-      var sdb = newAccountStateDB(com.db.db, blk.header.stateRoot, pruneTrie = false)
+      var sdb = newAccountStateDB(com.db, blk.header.stateRoot, pruneTrie = false)
       let (val, ok) = sdb.getStorage(recipient, slot)
       let randao = Hash256(data: val.toBytesBE)
       check ok
@@ -267,7 +267,7 @@ proc runTxPoolPosTest*() =
 
     test "feeRecipient rewarded":
       check blk.header.coinbase == feeRecipient
-      var sdb = newAccountStateDB(com.db.db, blk.header.stateRoot, pruneTrie = false)
+      var sdb = newAccountStateDB(com.db, blk.header.stateRoot, pruneTrie = false)
       let bal = sdb.getBalance(feeRecipient)
       check not bal.isZero
 
@@ -323,7 +323,7 @@ proc runTxPoolBlobhashTest*() =
       check rr == ValidationResult.OK
 
     test "validate TxPool prevRandao setter":
-      var sdb = newAccountStateDB(com.db.db, blk.header.stateRoot, pruneTrie = false)
+      var sdb = newAccountStateDB(com.db, blk.header.stateRoot, pruneTrie = false)
       let (val, ok) = sdb.getStorage(recipient, slot)
       let randao = Hash256(data: val.toBytesBE)
       check ok
@@ -331,7 +331,7 @@ proc runTxPoolBlobhashTest*() =
 
     test "feeRecipient rewarded":
       check blk.header.coinbase == feeRecipient
-      var sdb = newAccountStateDB(com.db.db, blk.header.stateRoot, pruneTrie = false)
+      var sdb = newAccountStateDB(com.db, blk.header.stateRoot, pruneTrie = false)
       let bal = sdb.getBalance(feeRecipient)
       check not bal.isZero
 
@@ -412,7 +412,7 @@ proc runTxHeadDelta*(noisy = true) =
       check com.syncCurrent == 10.toBlockNumber
       head = com.db.getBlockHeader(com.syncCurrent)
       var
-        sdb = newAccountStateDB(com.db.db, head.stateRoot, pruneTrie = false)
+        sdb = newAccountStateDB(com.db, head.stateRoot, pruneTrie = false)
 
       let
         expected = u256(txPerblock * numBlocks) * amount

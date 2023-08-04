@@ -143,7 +143,7 @@ proc cfg*(c: Clique): CliqueCfg =
   ## Getter
   c.cfg
 
-proc db*(c: Clique): ChainDBRef =
+proc db*(c: Clique): CoreDbRef =
   ## Getter
   c.cfg.db
 
@@ -164,7 +164,7 @@ proc applySnapsMinBacklog*(c: Clique): bool =
 # Public setters
 # ------------------------------------------------------------------------------
 
-proc `db=`*(c: Clique; db: ChainDBRef) =
+proc `db=`*(c: Clique; db: CoreDbRef) =
   ## Setter, re-set database
   c.cfg.db = db
   c.proposals = initTable[EthAddress,bool]()

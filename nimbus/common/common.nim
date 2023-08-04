@@ -13,17 +13,17 @@ import
   std/[options, times],
   chronicles,
   eth/trie/trie_defs,
-  ./chain_config,
-  ./hardforks,
-  ./evmforks,
-  ./genesis,
+  ../core/[pow, clique, casper],
+  ../db/[core_db, storage_types],
   ../utils/[utils, ec_recover],
-  ../db/[db_chain, storage_types],
-  ../core/[pow, clique, casper]
+  ".."/[constants, errors],
+  "."/[chain_config, evmforks, genesis, hardforks]
 
 export
   chain_config,
-  db_chain,
+  core_db,
+  constants,
+  errors,
   options,
   evmforks,
   hardforks,
@@ -41,7 +41,7 @@ type
 
   CommonRef* = ref object
     # all purpose storage
-    db: ChainDBRef
+    db: CoreDbRef
 
     # prune underlying state db?
     pruneTrie: bool
@@ -130,7 +130,7 @@ proc daoCheck(conf: ChainConfig) =
     conf.daoForkBlock = conf.homesteadBlock
 
 proc init(com      : CommonRef,
-          db       : TrieDatabaseRef,
+          db       : CoreDbRef,
           pruneTrie: bool,
           networkId: NetworkId,
           config   : ChainConfig,
@@ -138,7 +138,7 @@ proc init(com      : CommonRef,
 
   config.daoCheck()
 
-  com.db          = ChainDBRef.new(db)
+  com.db          = db
   com.pruneTrie   = pruneTrie
   com.config      = config
   com.forkTransitionTable = config.toForkTransitionTable()
@@ -157,7 +157,7 @@ proc init(com      : CommonRef,
   # by setForkId
   if genesis.isNil.not:
     com.genesisHeader = toGenesisHeader(genesis,
-      com.currentFork, com.db.db)
+      com.currentFork, com.db)
     com.setForkId(com.genesisHeader)
 
   # Initalise the PoA state regardless of whether it is needed on the current
@@ -194,7 +194,7 @@ proc getTdIfNecessary(com: CommonRef, blockHash: Hash256): Option[DifficultyInt]
 # ------------------------------------------------------------------------------
 
 proc new*(_: type CommonRef,
-          db: TrieDatabaseRef,
+          db: CoreDbRef,
           pruneTrie: bool = true,
           networkId: NetworkId = MainNet,
           params = networkParams(MainNet)): CommonRef
@@ -211,7 +211,7 @@ proc new*(_: type CommonRef,
     params.genesis)
 
 proc new*(_: type CommonRef,
-          db: TrieDatabaseRef,
+          db: CoreDbRef,
           config: ChainConfig,
           pruneTrie: bool = true,
           networkId: NetworkId = MainNet): CommonRef
@@ -227,11 +227,11 @@ proc new*(_: type CommonRef,
     config,
     nil)
 
-proc clone*(com: CommonRef, db: TrieDatabaseRef): CommonRef =
+proc clone*(com: CommonRef, db: CoreDbRef): CommonRef =
   ## clone but replace the db
   ## used in EVM tracer whose db is CaptureDB
   CommonRef(
-    db           : ChainDBRef.new(db),
+    db           : db,
     pruneTrie    : com.pruneTrie,
     config       : com.config,
     forkTransitionTable: com.forkTransitionTable,
@@ -248,7 +248,7 @@ proc clone*(com: CommonRef, db: TrieDatabaseRef): CommonRef =
   )
 
 proc clone*(com: CommonRef): CommonRef =
-  com.clone(com.db.db)
+  com.clone(com.db)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -361,14 +361,14 @@ proc consensus*(com: CommonRef, header: BlockHeader): ConsensusType
 
 proc initializeEmptyDb*(com: CommonRef)
     {.gcsafe, raises: [CatchableError].} =
-  let trieDB = com.db.db
-  if canonicalHeadHashKey().toOpenArray notin trieDB:
+  let kvt = com.db.kvt()
+  if canonicalHeadHashKey().toOpenArray notin kvt:
     trace "Writing genesis to DB"
     doAssert(com.genesisHeader.blockNumber.isZero,
       "can't commit genesis block with number > 0")
     discard com.db.persistHeaderToDb(com.genesisHeader,
       com.consensusType == ConsensusType.POS)
-    doAssert(canonicalHeadHashKey().toOpenArray in trieDB)
+    doAssert(canonicalHeadHashKey().toOpenArray in kvt)
 
 proc syncReqNewHead*(com: CommonRef; header: BlockHeader)
     {.gcsafe, raises: [].} =
@@ -396,7 +396,7 @@ func pos*(com: CommonRef): CasperRef =
   ## Getter
   com.pos
 
-func db*(com: CommonRef): ChainDBRef =
+func db*(com: CommonRef): CoreDbRef =
   com.db
 
 func consensus*(com: CommonRef): ConsensusType =

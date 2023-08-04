@@ -1,12 +1,12 @@
 import
   randutils, random, unittest2, stew/byteutils, os,
-  eth/[common, rlp], eth/trie/[hexary, db, trie_defs, nibbles],
+  eth/[common, rlp], eth/trie/[trie_defs, nibbles],
   faststreams/inputs, nimcrypto/sysrand,
   ../stateless/[witness_from_tree, tree_from_witness],
-  ../nimbus/db/[distinct_tries, storage_types], ./witness_types, ./multi_keys
+  ../nimbus/db/[core_db, distinct_tries, storage_types], ./witness_types, ./multi_keys
 
 type
-   DB = TrieDatabaseRef
+   DB = CoreDbRef
 
    StorageKeys = tuple[storageRoot: Hash256, keys: MultikeysRef]
 
@@ -33,7 +33,7 @@ proc randCode(db: DB): Hash256 =
     let codeLen = rand(1..150)
     let code = randList(byte, rng(0, 255), codeLen, unique = false)
     result = keccakHash(code)
-    db.put(contractHashKey(result).toOpenArray, code)
+    db.kvt.put(contractHashKey(result).toOpenArray, code)
 
 proc randStorage(db: DB): StorageKeys =
   if rand(0..1) == 0:
@@ -68,7 +68,7 @@ proc randAddress(): EthAddress =
 proc runTest(numPairs: int, testStatusIMPL: var TestStatus,
              addIdenticalKeys: bool = false, addInvalidKeys: static[bool] = false) =
 
-  var memDB = newMemoryDB()
+  var memDB = newCoreDbRef(LegacyDbMemory)
   var trie = initAccountsTrie(memDB)
   var addrs = newSeq[AccountKey](numPairs)
   var accs = newSeq[Account](numPairs)
@@ -93,7 +93,7 @@ proc runTest(numPairs: int, testStatusIMPL: var TestStatus,
 
   var wb = initWitnessBuilder(memDB, rootHash, {wfEIP170})
   var witness = wb.buildWitness(mkeys)
-  var db = newMemoryDB()
+  var db = newCoreDbRef(LegacyDbMemory)
   when defined(useInputStream):
     var input = memoryInput(witness)
     var tb = initTreeBuilder(input, db, {wfEIP170})
@@ -138,7 +138,7 @@ proc initMultiKeys(keys: openArray[string], storageMode: bool = false): Multikey
       )
 
 proc parseInvalidInput(payload: openArray[byte]): bool =
-  var db = newMemoryDB()
+  var db = newCoreDbRef(LegacyDbMemory)
   try:
     var tb = initTreeBuilder(payload, db, {wfEIP170})
     discard tb.buildTree()
@@ -260,11 +260,11 @@ proc witnessKeysMain*() =
         "01234567c140158288775c8912aed274fb9d6a3a260e9e95e03e70ba8df30f6b",
       ]
       let m  = initMultiKeys(keys, true)
-      var memDB = newMemoryDB()
+      var memDB = newCoreDbRef(LegacyDbMemory)
       var trie = initAccountsTrie(memDB)
       var acc  = randAccount(memDB)
 
-      var tt = initHexaryTrie(memDB)
+      var tt = memDB.mptPrune
       for x in m.keys:
         tt.put(x.hash, rlp.encode(1.u256))
       acc.account.storageRoot = tt.rootHash
@@ -277,7 +277,7 @@ proc witnessKeysMain*() =
 
       var wb = initWitnessBuilder(memDB, rootHash, {wfEIP170})
       var witness = wb.buildWitness(mkeys)
-      var db = newMemoryDB()
+      var db = newCoreDbRef(LegacyDbMemory)
       var tb = initTreeBuilder(witness, db, {wfEIP170})
       let root = tb.buildTree()
       check root.data == rootHash.data

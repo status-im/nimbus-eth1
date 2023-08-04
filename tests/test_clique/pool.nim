@@ -14,16 +14,12 @@ import
   ethash,
   secp256k1/abi,
   stew/objects,
-  ../../nimbus/[config, constants],
+  ../../nimbus/core/[chain, clique], # must be early (compilation annoyance)
   ../../nimbus/common/common,
-  ../../nimbus/core/[chain,
-                    clique,
-                    clique/clique_desc,
-                    clique/clique_genvote,
-                    clique/clique_helpers,
-                    clique/clique_snapshot,
-                    clique/snapshot/ballot,
-                    clique/snapshot/snapshot_desc],
+  ../../nimbus/core/clique/[clique_desc, clique_genvote,
+                            clique_helpers, clique_snapshot],
+  ../../nimbus/core/clique/snapshot/[ballot, snapshot_desc],
+  ../../nimbus/[config, constants],
   ./voter_samples as vs
 
 export
@@ -78,11 +74,11 @@ proc posixPrngRand(state: var uint32): byte =
 # ------------------------------------------------------------------------------
 
 proc getBlockHeader(ap: TesterPool; number: BlockNumber): BlockHeader =
-  ## Shortcut => db/db_chain.getBlockHeader()
+  ## Shortcut => db/core_db.getBlockHeader()
   doAssert ap.chain.clique.db.getBlockHeader(number, result)
 
 proc getBlockHeader(ap: TesterPool; hash: Hash256): BlockHeader =
-  ## Shortcut => db/db_chain.getBlockHeader()
+  ## Shortcut => db/core_db.getBlockHeader()
   doAssert ap.chain.clique.db.getBlockHeader(hash, result)
 
 proc isZero(a: openArray[byte]): bool =
@@ -268,7 +264,7 @@ proc resetChainDb(ap: TesterPool; extraData: Blob; debug = false) =
     ap.boot.genesis.extraData = extraData
 
   let com = CommonRef.new(
-    newMemoryDb(),
+    newCoreDbRef LegacyDbMemory,
     networkId = ap.networkId,
     params = ap.boot)
   ap.chain = newChain(com)
@@ -324,7 +320,7 @@ proc clique*(ap: TesterPool): Clique =
   ## Getter
   ap.chain.clique
 
-proc db*(ap: TesterPool): ChainDBRef =
+proc db*(ap: TesterPool): CoreDbRef =
   ## Getter
   ap.clique.db
 

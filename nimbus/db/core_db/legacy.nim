@@ -13,14 +13,10 @@
 import
   std/options,
   eth/[common, rlp, trie/db, trie/hexary],
-  results,
-  ../../constants,
-  ../select_backend,
   ./base
 
 type
-  LegacyDbRef = ref object of CoreDbRef
-    backend: ChainDB     # for backend access (legacy mode)
+  LegacyDbRef* = ref object of CoreDbRef
     tdb: TrieDatabaseRef # copy of descriptor reference captured with closures
 
   HexaryTrieRef = ref object
@@ -32,7 +28,8 @@ type
     recorder: TrieDatabaseRef
     appDb: CoreDbRef
 
-proc newLegacyDbRef(
+proc init*(
+    db: LegacyDbRef;
     dbType: CoreDbType;
     tdb: TrieDatabaseRef;
      ): CoreDbRef {.gcsafe.}
@@ -86,7 +83,7 @@ proc newRecorderRef(
     flags:    flags,
     parent:   tdb,
     recorder: newMemoryDB())
-  result.appDb = newLegacyDbRef(LegacyDbPersistent, trieDB result)
+  result.appDb = LegacyDbRef().init(LegacyDbPersistent, trieDB result)
 
 # ------------------------------------------------------------------------------
 # Private database method function tables
@@ -191,55 +188,31 @@ proc constructors(tdb: TrieDatabaseRef, parent: CoreDbRef): CoreDbConstructors =
       return newCoreDbCaptRef(parent, newRecorderRef(tdb, flags).cptMethods))
 
 # ------------------------------------------------------------------------------
-# Private constructor helpers
+# Public constructor helpers
 # ------------------------------------------------------------------------------
 
-proc newLegacyDbRef(
+proc init*(
+    db: LegacyDbRef;
     dbType: CoreDbType;
     tdb: TrieDatabaseRef;
      ): CoreDbRef =
-  result = LegacyDbRef(tdb: tdb)
-  result.init(
+  db.tdb = tdb
+  db.init(
     dbType =     dbType,
     dbMethods =  tdb.miscMethods,
     kvtMethods = tdb.kvtMethods,
-    new =        tdb.constructors result)
-
-proc newLegacyDbRef(
-    dbType: CoreDbType;
-    tdb: TrieDatabaseRef;
-    backend: ChainDB;
-     ): CoreDbRef =
-  result = newLegacyDbRef(dbType, tdb)
-  result.LegacyDbRef.backend = backend
+    new =        tdb.constructors db)
+  return db
 
 # ------------------------------------------------------------------------------
 # Public constructor and low level data retrieval, storage & transation frame
 # ------------------------------------------------------------------------------
 
 proc newLegacyPersistentCoreDbRef*(db: TrieDatabaseRef): CoreDbRef =
-  newLegacyDbRef(LegacyDbPersistent, db)
-
-proc newLegacyPersistentCoreDbRef*(path: string): CoreDbRef =
-  # Kludge: Compiler bails out on `results.tryGet()` with
-  # ::
-  #   fatal.nim(54)            sysFatal
-  #   Error: unhandled exception: types.nim(1251, 10) \
-  #     `b.kind in {tyObject} + skipPtrs`  [AssertionDefect]
-  #
-  # when running `select_backend.newChainDB(path)`. The culprit seems to be
-  # the `ResultError` exception (or any other `CatchableError`).
-  #
-  doAssert dbBackend == rocksdb
-  let rc = RocksStoreRef.init(path, "nimbus")
-  doAssert(rc.isOk, "Cannot start RocksDB: " & rc.error)
-  doAssert(not rc.value.isNil, "Starting RocksDB returned nil")
-
-  let backend = ChainDB(kv: rc.value.kvStore, rdb: rc.value)
-  newLegacyDbRef(LegacyDbPersistent, backend.trieDB, backend)
+  LegacyDbRef().init(LegacyDbPersistent, db)
 
 proc newLegacyMemoryCoreDbRef*(): CoreDbRef =
-  newLegacyDbRef(LegacyDbMemory, newMemoryDB())
+  LegacyDbRef().init(LegacyDbMemory, newMemoryDB())
 
 # ------------------------------------------------------------------------------
 # Public legacy helpers
@@ -248,10 +221,6 @@ proc newLegacyMemoryCoreDbRef*(): CoreDbRef =
 proc toLegacyTrieRef*(db: CoreDbRef): TrieDatabaseRef =
   db.ifLegacyOk:
     return db.LegacyDbRef.tdb
-
-proc toLegacyBackend*(db: CoreDbRef): ChainDB =
-  db.ifLegacyOk:
-    return db.LegacyDbRef.backend
 
 # ------------------------------------------------------------------------------
 # End

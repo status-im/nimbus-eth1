@@ -17,60 +17,59 @@
 ## and
 ## `go-ethereum <https://github.com/ethereum/EIPs/blob/master/EIPS/eip-225.md>`_
 ##
+{.push raises: [].}
 
 import
   std/[random, times],
   ethash,
-  ../../db/db_chain,
+  ../../db/core_db,
   ../../utils/ec_recover,
   ./clique_defs
 
 export
-  db_chain
+  core_db
 
 const
   prngSeed = 42
 
-{.push raises: [].}
-
 type
   CliqueCfg* = ref object of RootRef
-    db*: ChainDBRef ##\
+    db*: CoreDbRef
       ## All purpose (incl. blockchain) database.
 
-    nSnaps*: uint64 ##\
+    nSnaps*: uint64
       ## Number of snapshots stored on disk (for logging troublesshoting)
 
-    snapsData*: uint64 ##\
+    snapsData*: uint64
       ## Raw payload stored on disk (for logging troublesshoting)
 
-    period: Duration ##\
+    period: Duration
       ## Time between blocks to enforce.
 
-    ckpInterval: int ##\
+    ckpInterval: int
       ## Number of blocks after which to save the vote snapshot to the
       ## disk database.
 
-    roThreshold: int ##\
+    roThreshold: int
       ## Number of blocks after which a chain segment is considered immutable
       ## (ie. soft finality). It is used by the downloader as a hard limit
       ## against deep ancestors, by the blockchain against deep reorgs, by the
       ## freezer as the cutoff threshold and by clique as the snapshot trust
       ## limit.
 
-    prng: Rand ##\
+    prng: Rand
       ## PRNG state for internal random generator. This PRNG is
       ## cryptographically insecure but with reproducible data stream.
 
-    signatures: EcRecover ##\
+    signatures: EcRecover
       ## Recent block signatures cached to speed up mining.
 
-    epoch: int ##\
+    epoch: int
       ## The number of blocks after which to checkpoint and reset the pending
       ## votes.Suggested 30000 for the testnet to remain analogous to the
       ## mainnet ethash epoch.
 
-    logInterval: Duration ##\
+    logInterval: Duration
       ## Time interval after which the `snapshotApply()` function main loop
       ## produces logging entries.
 
@@ -78,7 +77,7 @@ type
 # Public constructor
 # ------------------------------------------------------------------------------
 
-proc newCliqueCfg*(db: ChainDBRef): CliqueCfg =
+proc newCliqueCfg*(db: CoreDbRef): CliqueCfg =
   result = CliqueCfg(
     db:          db,
     epoch:       EPOCH_LENGTH,

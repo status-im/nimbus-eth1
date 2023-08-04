@@ -11,114 +11,18 @@
 ## Core database replacement wrapper object
 ## ========================================
 ##
-## See `core_db/README.md`
+## See `core_db/README.md` for implementation details
+##
+## This module provides a memory datanase only. For providing a persistent
+## constructot, import `db/code_db/persistent` though avoiding to
+## unnecessarily link to the persistent backend library (e.g. `rocksdb`)
+## when a memory only database is used.
 ##
 {.push raises: [].}
 
 import
-  chronicles,
-  eth/[common, trie/db],
-  ./core_db/[base, core_apps, legacy]
-
+  ./core_db/memory_only
 export
-  common,
-  core_apps,
+  memory_only
 
-  # Not all symbols from the object sources will be exported by default
-  CoreDbCaptFlags,
-  CoreDbCaptRef,
-  CoreDbKvtObj,
-  CoreDbMptRef,
-  CoreDbPhkRef,
-  CoreDbRef,
-  CoreDbTxID,
-  CoreDbTxRef,
-  CoreDbType,
-  beginTransaction,
-  capture,
-  commit,
-  compensateLegacySetup,
-  contains,
-  dbType,
-  del,
-  dispose,
-  get,
-  getTransactionID,
-  isPruning,
-  kvt,
-  maybeGet,
-  mpt,
-  mptPrune,
-  pairs,
-  parent,
-  phk,
-  phkPrune,
-  put,
-  recorder,
-  replicate,
-  rollback,
-  rootHash,
-  safeDispose,
-  setTransactionID,
-  toMpt,
-  toPhk
-
-logScope:
-  topics = "core_db"
-
-# ------------------------------------------------------------------------------
-# Private functions: helpers
-# ------------------------------------------------------------------------------
-
-template logTxt(info: static[string]): static[string] =
-  "CoreDb " & info
-
-proc tmplNotImplemented*(db: CoreDbRef, name: string) {.used.} =
-  debug logTxt "template not implemented", dbType=db.dbType, meth=name
-
-# ------------------------------------------------------------------------------
-# Public constructor
-# ------------------------------------------------------------------------------
-
-proc newCoreDbRef*(
-    db: TrieDatabaseRef;
-      ): CoreDbRef
-      {.gcsafe, deprecated: "use newCoreDbRef(LegacyDbPersistent,<path>)".} =
-  ## Legacy constructor.
-  ##
-  ## Note: Using legacy notation `newCoreDbRef()` rather than
-  ## `CoreDbRef.init()` because of compiler coughing.
-  db.newLegacyPersistentCoreDbRef()
-
-proc newCoreDbRef*(dbType: static[CoreDbType]): CoreDbRef =
-  ## Constructor for volatile/memory type DB
-  ##
-  ## Note: Using legacy notation `newCoreDbRef()` rather than
-  ## `CoreDbRef.init()` because of compiler coughing.
-  when dbType == LegacyDbMemory:
-    newLegacyMemoryCoreDbRef()
-  else:
-    {.error: "Unsupported dbType for memory newCoreDbRef()".}
-
-proc newCoreDbRef*(dbType: static[CoreDbType]; path: string): CoreDbRef =
-  ## Constructor for persistent type DB
-  ##
-  ## Note: Using legacy notation `newCoreDbRef()` rather than
-  ## `CoreDbRef.init()` because of compiler coughing.
-  when dbType == LegacyDbPersistent:
-    newLegacyPersistentCoreDbRef path
-  else:
-    {.error: "Unsupported dbType for persistent newCoreDbRef()".}
-
-# ------------------------------------------------------------------------------
-# Public template wrappers
-# ------------------------------------------------------------------------------
-
-template shortTimeReadOnly*(id: CoreDbTxID; body: untyped) =
-  proc action() {.gcsafe, raises: [CatchableError].} =
-    body
-  id.shortTimeReadOnly action
-
-# ------------------------------------------------------------------------------
 # End
-# ------------------------------------------------------------------------------

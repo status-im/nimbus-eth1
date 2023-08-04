@@ -71,7 +71,7 @@ Usage of the replacement wrapper
 ### Tracer support setup by hiding the current *CoreDbRef* behind a replacement:
 
         let
-          capture = db.capure()
+          capture = db.capture()
           db = capture.recorder           # use the recorder in place of db
         ...
 

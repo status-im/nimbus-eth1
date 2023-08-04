@@ -1,6 +1,7 @@
 import
-  eth/[trie, rlp, common/eth_types_rlp, trie/db],
-  stew/byteutils
+  eth/[rlp, common/eth_types_rlp],
+  stew/byteutils,
+  ../db/core_db
 
 export eth_types_rlp
 
@@ -8,7 +9,7 @@ export eth_types_rlp
 
 proc calcRootHash[T](items: openArray[T]): Hash256
     {.gcsafe, raises: [RlpError]} =
-  var tr = initHexaryTrie(newMemoryDB())
+  var tr = newCoreDbRef(LegacyDbMemory).mptPrune
   for i, t in items:
     tr.put(rlp.encode(i), rlp.encode(t))
   return tr.rootHash
@@ -78,4 +79,3 @@ proc decompose*(rlpBytes: openArray[byte],
                 body: var BlockBody) {.gcsafe, raises: [RlpError].} =
   var rlp = rlpFromBytes(rlpBytes)
   rlp.decompose(header, body)
-  

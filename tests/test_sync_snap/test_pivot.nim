@@ -14,7 +14,7 @@
 import
   eth/[common, p2p],
   unittest2,
-  ../../nimbus/db/select_backend,
+  ../../nimbus/db/core_db,
   ../../nimbus/sync/snap/range_desc,
   ../../nimbus/sync/snap/worker/db/[snapdb_desc, snapdb_pivot]
 
@@ -27,7 +27,7 @@ when defined(windows):
 
 proc test_pivotStoreRead*(
     accKeys: seq[NodeKey];
-    cdb: ChainDb;
+    cdb: CoreDbRef;
       ) =
   ## Storing/retrieving items on persistent pivot/checkpoint registry
   let

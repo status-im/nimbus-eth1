@@ -39,7 +39,7 @@ proc genesisHeader(node: JsonNode): BlockHeader =
   rlp.decode(genesisRLP, EthBlock).header
 
 proc setupELClient*(t: TestEnv, conf: ChainConfig, node: JsonNode) =
-  let memDB = newMemoryDb()
+  let memDB = newCoreDbRef LegacyDbMemory
   t.ctx  = newEthContext()
   t.ethNode = setupEthNode(t.conf, t.ctx, eth)
   t.com = CommonRef.new(

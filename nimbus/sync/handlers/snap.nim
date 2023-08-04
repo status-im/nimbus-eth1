@@ -14,10 +14,10 @@ import
   std/sequtils,
   chronicles,
   chronos,
-  eth/[common, p2p, trie/nibbles],
+  eth/[common, p2p, trie/db, trie/nibbles],
   stew/[byteutils, interval_set],
-  ../../db/db_chain,
   ../../core/chain,
+  ../../db/core_db/legacy,
   ../snap/[constants, range_desc],
   ../snap/worker/db/[hexary_desc, hexary_error, hexary_paths,
                      snapdb_persistent, hexary_range],
@@ -77,7 +77,7 @@ proc getAccountFn(
   # The snap sync implementation provides a function `persistentAccountGetFn()`
   # similar to this one. But it is not safe to use it at the moment as the
   # storage table might (or might not) differ.
-  let db = ctx.chain.com.db.db
+  let db = ctx.chain.com.db.toLegacyTrieRef
   return proc(key: openArray[byte]): Blob =
     db.get(key)
 
@@ -89,7 +89,7 @@ proc getStoSlotFn(
   # The snap sync implementation provides a function
   # `persistentStorageSlotsGetFn()` similar to this one. But it is not safe to
   # use it at the moment as the storage table might (or might not) differ.
-  let db = ctx.chain.com.db.db
+  let db = ctx.chain.com.db.toLegacyTrieRef
   return proc(key: openArray[byte]): Blob =
     db.get(key)
 
@@ -98,7 +98,7 @@ proc getCodeFn(
       ): HexaryGetFn
       {.gcsafe.} =
   # It is save to borrow this function from the snap sync implementation.
-  ctx.chain.com.db.db.persistentContractsGetFn
+  ctx.chain.com.db.persistentContractsGetFn
 
 # ----------------------------------
 

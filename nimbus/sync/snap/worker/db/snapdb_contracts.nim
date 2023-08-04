@@ -41,7 +41,7 @@ template noExceptionOops(info: static[string]; code: untyped) =
 # ------------------------------------------------------------------------------
 
 proc persistentContracts(
-    ps: SnapDbContractsRef;    ## Base descriptor on `ChainDBRef`
+    ps: SnapDbContractsRef;    ## Base descriptor on `CoreDbRef`
     data: seq[(NodeKey,Blob)]; ## Contract code items
       ): Result[void,HexaryError]
       {.gcsafe, raises: [OSError,IOError,KeyError].} =
@@ -98,7 +98,7 @@ proc importContracts*(
     raiseAssert "Not possible @ importAccounts(" & $e.name & "):" & e.msg
 
 proc importContracts*(
-    pv: SnapDbRef;            ## Base descriptor on `ChainDBRef`
+    pv: SnapDbRef;            ## Base descriptor on `CoreDbRef`
     peer: Peer;               ## For log messages
     data: seq[(NodeKey,Blob)]; ## Contract code items
       ): Result[void,HexaryError] =

@@ -12,12 +12,13 @@
 ## Snap sync components tester and TDD environment
 
 import
-  std/[distros, os, sets, sequtils, strformat, strutils, tables],
+  std/[os, sets, sequtils, strformat, strutils, tables],
   chronicles,
   eth/[common, p2p],
   rocksdb,
   unittest2,
-  ../nimbus/db/select_backend,
+  ../nimbus/db/[core_db, kvstore_rocksdb],
+  ../nimbus/db/core_db/[legacy_persistent, persistent],
   ../nimbus/core/chain,
   ../nimbus/sync/types,
   ../nimbus/sync/snap/range_desc,
@@ -52,28 +53,13 @@ type
     dbDir: string
     baseDir: string # for cleanup
     subDir: string  # for cleanup
-    cdb: array[nTestDbInstances,ChainDb]
+    cdb: array[nTestDbInstances,CoreDbRef]
 
   SnapRunDesc = object
     id: int
     info: string
     file: string
     chn: ChainRef
-    select: ChainRef
-    rocky: RocksStoreRef
-
-when defined(linux):
-  # The `detectOs(Ubuntu)` directive is not Windows compatible, causes an
-  # error when running the system command `lsb_release -d` in the background.
-  let isUbuntu32bit = detectOs(Ubuntu) and int.sizeof == 4
-else:
-  const isUbuntu32bit = false
-
-let
-  # There was a problem with the Github/CI which results in spurious crashes
-  # when leaving the `runner()` if the persistent ChainDBRef initialisation
-  # was present, see `test_custom_network` for more details.
-  disablePersistentDB = isUbuntu32bit
 
 var
   xTmpDir: string
@@ -168,9 +154,9 @@ proc flushDbDir(s: string; subDir = "") =
 proc flushDbs(db: TestDbs) =
   if db.persistent:
     for n in 0 ..< nTestDbInstances:
-      if db.cdb[n].rocksStoreRef.isNil:
+      if db.cdb[n].isNil or db.cdb[n].dbType != LegacyDbPersistent:
         break
-      db.cdb[n].rocksStoreRef.store.db.rocksdb_close
+      db.cdb[n].toLegacyBackend.rocksStoreRef.store.db.rocksdb_close
     db.baseDir.flushDbDir(db.subDir)
 
 proc testDbs(
@@ -179,7 +165,7 @@ proc testDbs(
     instances: int;
     persistent: bool;
       ): TestDbs =
-  if disablePersistentDB or workDir == "" or not persistent:
+  if workDir == "" or not persistent:
     result.persistent = false
     result.dbDir = "*notused*"
   else:
@@ -193,12 +179,17 @@ proc testDbs(
   if result.persistent:
     workDir.flushDbDir(subDir)
     for n in 0 ..< min(result.cdb.len, instances):
-      result.cdb[n] = (result.dbDir / $n).newChainDB
+      result.cdb[n] = newCoreDbRef(LegacyDbPersistent, result.dbDir / $n)
 
-proc snapDbRef(cdb: ChainDb; pers: bool): SnapDbRef =
-  if pers: SnapDbRef.init(cdb) else: SnapDbRef.init(newMemoryDB())
+proc snapDbRef(cdb: CoreDbRef; pers: bool): SnapDbRef =
+  if pers: SnapDbRef.init(cdb)
+  else: SnapDbRef.init(newCoreDbRef LegacyDbMemory)
 
-proc snapDbAccountsRef(cdb:ChainDb; root:Hash256; pers:bool):SnapDbAccountsRef =
+proc snapDbAccountsRef(
+    cdb: CoreDbRef;
+    root: Hash256;
+    pers: bool;
+      ):SnapDbAccountsRef =
   SnapDbAccountsRef.init(cdb.snapDbRef(pers), root, Peer())
 
 # ------------------------------------------------------------------------------
@@ -334,9 +325,10 @@ proc inspectionRunner(
       accumAcc = &"F{ingerprinting} accumulated accounts"
       cascAcc = &"Cascaded f{ingerprinting} accumulated accounts lists"
 
-      memBase = SnapDbRef.init(newMemoryDB())
+      memBase = SnapDbRef.init(newCoreDbRef LegacyDbMemory)
       dbSlot = proc(n: int): SnapDbRef =
-        if 2+n < nTestDbInstances and not db.cdb[2+n].rocksStoreRef.isNil:
+        if 2+n < nTestDbInstances and
+           not db.cdb[2+n].toLegacyBackend.rocksStoreRef.isNil:
           return SnapDbRef.init(db.cdb[2+n])
 
     test &"{singleAcc} for in-memory-db":
@@ -407,9 +399,8 @@ proc snapRunner(noisy = true; specs: SnapSyncSpecs) =
   var dsc = SnapRunDesc(
     info: specs.snapDump.splitPath.tail.replace(".txt.gz",""),
     file: specs.snapDump.findFilePath.value,
-    rocky: db.cdb[0].rocksStoreRef,
     chn: CommonRef.new(
-      db.cdb[0].trieDB,
+      db.cdb[0],
       networkId = specs.network,
       pruneTrie = true,
       params = specs.network.networkParams).newChain)
@@ -419,16 +410,16 @@ proc snapRunner(noisy = true; specs: SnapSyncSpecs) =
   suite &"SyncSnap: verify \"{dsc.info}\" snapshot against full sync":
 
     #test "Import block chain":
-    #  if dsc.rocky.isNil:
+    #  if dsc.chn.db.toLegacyBackend.rocksStoreRef.isNil:
     #    skip()
     #  else:
     #    noisy.showElapsed("import block chain"):
     #      check dsc.chn.test_syncdbImportChainBlocks(allFile, pivot) == pivot
     #    noisy.showElapsed("dump db"):
-    #      dsc[1].rocky.dumpAllDb()
+    #      dsc[1].chn.db.toLegacyBackend.rocksStoreRef.dumpAllDb()
 
     test "Import snapshot dump":
-      if dsc.rocky.isNil:
+      if dsc.chn.db.toLegacyBackend.rocksStoreRef.isNil:
         skip()
       else:
         noisy.showElapsed(&"undump \"{dsc.info}\""):
@@ -444,12 +435,13 @@ proc snapRunner(noisy = true; specs: SnapSyncSpecs) =
             " other=", cSum, ")" #, " b=",b.pp, " c=", c.pp
         when false: # or true:
           noisy.showElapsed(&"dump db \"{dsc.info}\""):
-            dsc.rocky.dumpAllDb()
+            dsc.chn.db.toLegacyBackend.rocksStoreRef.dumpAllDb()
 
       test &"Append block chain from \"{tailInfo}\"":
-        if dsc.rocky.isNil:
+        if dsc.chn.db.toLegacyBackend.rocksStoreRef.isNil:
           skip()
         else:
+          dsc.chn.db.compensateLegacySetup
           dsc.chn.test_syncdbAppendBlocks(tailPath,pivot,updateSize,noisy)
 
 # ------------------------------------------------------------------------------

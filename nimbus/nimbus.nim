@@ -22,7 +22,7 @@ import
   stew/shims/net as stewNet,
   websock/websock as ws,
   "."/[config, constants, version, rpc, common],
-  ./db/select_backend,
+  ./db/[core_db/persistent, select_backend],
   ./graphql/ethapi,
   ./core/[chain, sealer, clique/clique_desc,
     clique/clique_sealer, tx_pool, block_import],
@@ -56,7 +56,6 @@ type
     chainRef: ChainRef
     txPool: TxPoolRef
     networkLoop: Future[void]
-    dbBackend: ChainDB
     peerManager: PeerManagerRef
     legaSyncRef: LegacySyncRef
     snapSyncRef: SnapSyncRef
@@ -192,7 +191,7 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
           nimbus.ethNode.peerPool)
       nimbus.snapSyncRef = SnapSyncRef.init(
         nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers,
-        nimbus.dbBackend, tickerOK, exCtrlFile)
+        tickerOK, exCtrlFile)
     of SyncMode.Stateless:
       # FIXME-Adam: what needs to go here?
       nimbus.statelessSyncRef = StatelessSyncRef.init()
@@ -418,9 +417,8 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
     evmcSetLibraryPath(conf.evm)
 
   createDir(string conf.dataDir)
-  nimbus.dbBackend = newChainDB(string conf.dataDir)
-  let trieDB = trieDB nimbus.dbBackend
-  let com = CommonRef.new(trieDB,
+  let com = CommonRef.new(
+    newCoreDbRef(LegacyDbPersistent, string conf.dataDir),
     conf.pruneMode == PruneMode.Full,
     conf.networkId,
     conf.networkParams

@@ -43,7 +43,7 @@ template handleRlpException(info: static[string]; code: untyped) =
 # ------------------------------------------------------------------------------
 
 proc pivotSaveDB*(
-    pv: SnapDbRef;                ## Base descriptor on `ChainDBRef`
+    pv: SnapDbRef;                ## Base descriptor on `CoreDbRef`
     data: SnapDbPivotRegistry;    ## Registered data record
       ): Result[int,HexaryError] =
   ## Register pivot environment
@@ -54,7 +54,7 @@ proc pivotSaveDB*(
   # notreached
 
 proc pivotRecoverDB*(
-  pv: SnapDbRef;                  ## Base descriptor on `ChainDBRef`
+  pv: SnapDbRef;                  ## Base descriptor on `CoreDbRef`
   stateRoot: NodeKey;             ## Check for a particular state root
     ): Result[SnapDbPivotRegistry,HexaryError] =
   ## Restore pivot environment for a particular state root.
@@ -67,7 +67,7 @@ proc pivotRecoverDB*(
   err(StateRootNotFound)
 
 proc pivotRecoverDB*(
-  pv: SnapDbRef;                  ## Base descriptor on `ChainDBRef`
+  pv: SnapDbRef;                  ## Base descriptor on `CoreDbRef`
     ): Result[SnapDbPivotRegistry,HexaryError] =
   ## Restore pivot environment that was saved latest.
   let rc = pv.kvDb.persistentStateRootGet(NodeKey.default)

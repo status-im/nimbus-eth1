@@ -1,17 +1,16 @@
 import
-  options,
+  std/options,
   chronos,
   stint,
   eth/common,
-  eth/trie/db,
-  ../../db/db_chain
+  ../../db/core_db
 
 type
   AsyncDataSource* = ref object of RootObj
-    ifNecessaryGetSlots*:       proc(db: TrieDatabaseRef, blockNumber: BlockNumber, stateRoot: Hash256, address: EthAddress, slots: seq[UInt256], newStateRootForSanityChecking: Hash256): Future[void] {.gcsafe.}
-    ifNecessaryGetCode*:        proc(db: TrieDatabaseRef, blockNumber: BlockNumber, stateRoot: Hash256, address: EthAddress, newStateRootForSanityChecking: Hash256): Future[void] {.gcsafe.}
-    ifNecessaryGetAccount*:     proc(db: TrieDatabaseRef, blockNumber: BlockNumber, stateRoot: Hash256, address: EthAddress, newStateRootForSanityChecking: Hash256): Future[void] {.gcsafe.}
-    ifNecessaryGetBlockHeaderByNumber*: proc(chainDB: ChainDBRef, blockNumber: BlockNumber): Future[void] {.gcsafe.}
+    ifNecessaryGetSlots*:       proc(db: CoreDbRef, blockNumber: BlockNumber, stateRoot: Hash256, address: EthAddress, slots: seq[UInt256], newStateRootForSanityChecking: Hash256): Future[void] {.gcsafe.}
+    ifNecessaryGetCode*:        proc(db: CoreDbRef, blockNumber: BlockNumber, stateRoot: Hash256, address: EthAddress, newStateRootForSanityChecking: Hash256): Future[void] {.gcsafe.}
+    ifNecessaryGetAccount*:     proc(db: CoreDbRef, blockNumber: BlockNumber, stateRoot: Hash256, address: EthAddress, newStateRootForSanityChecking: Hash256): Future[void] {.gcsafe.}
+    ifNecessaryGetBlockHeaderByNumber*: proc(coreDb: CoreDbRef, blockNumber: BlockNumber): Future[void] {.gcsafe.}
     # FIXME-Adam: Later.
     #fetchNodes*: proc(stateRoot: Hash256, paths: seq[seq[seq[byte]]], nodeHashes: seq[Hash256]): Future[seq[seq[byte]]] {.gcsafe.}
     fetchBlockHeaderWithHash*: proc(h: Hash256): Future[BlockHeader] {.gcsafe.}
@@ -33,18 +32,18 @@ proc asyncFactoryWithNoDataSource*(): AsyncOperationFactory =
 #   - an ifSome/map operation on Options
 #   - some kind of "what are we fetching" tuple, so that this is just one thing
 
-proc ifNecessaryGetSlots*(asyncFactory: AsyncOperationFactory, db: TrieDatabaseRef, blockNumber: BlockNumber, stateRoot: Hash256, address: EthAddress, slots: seq[UInt256], newStateRootForSanityChecking: Hash256): Future[void] {.async.} =
+proc ifNecessaryGetSlots*(asyncFactory: AsyncOperationFactory, db: CoreDbRef, blockNumber: BlockNumber, stateRoot: Hash256, address: EthAddress, slots: seq[UInt256], newStateRootForSanityChecking: Hash256): Future[void] {.async.} =
   if asyncFactory.maybeDataSource.isSome:
     await asyncFactory.maybeDataSource.get.ifNecessaryGetSlots(db, blockNumber, stateRoot, address, slots, newStateRootForSanityChecking)
 
-proc ifNecessaryGetCode*(asyncFactory: AsyncOperationFactory, db: TrieDatabaseRef, blockNumber: BlockNumber, stateRoot: Hash256, address: EthAddress, newStateRootForSanityChecking: Hash256): Future[void] {.async.} =
+proc ifNecessaryGetCode*(asyncFactory: AsyncOperationFactory, db: CoreDbRef, blockNumber: BlockNumber, stateRoot: Hash256, address: EthAddress, newStateRootForSanityChecking: Hash256): Future[void] {.async.} =
   if asyncFactory.maybeDataSource.isSome:
     await asyncFactory.maybeDataSource.get.ifNecessaryGetCode(db, blockNumber, stateRoot, address, newStateRootForSanityChecking)
 
-proc ifNecessaryGetAccount*(asyncFactory: AsyncOperationFactory, db: TrieDatabaseRef, blockNumber: BlockNumber, stateRoot: Hash256, address: EthAddress, newStateRootForSanityChecking: Hash256): Future[void] {.async.} =
+proc ifNecessaryGetAccount*(asyncFactory: AsyncOperationFactory, db: CoreDbRef, blockNumber: BlockNumber, stateRoot: Hash256, address: EthAddress, newStateRootForSanityChecking: Hash256): Future[void] {.async.} =
   if asyncFactory.maybeDataSource.isSome:
     await asyncFactory.maybeDataSource.get.ifNecessaryGetAccount(db, blockNumber, stateRoot, address, newStateRootForSanityChecking)
 
-proc ifNecessaryGetBlockHeaderByNumber*(asyncFactory: AsyncOperationFactory, chainDB: ChainDBRef, blockNumber: BlockNumber): Future[void] {.async.} =
+proc ifNecessaryGetBlockHeaderByNumber*(asyncFactory: AsyncOperationFactory, coreDb: CoreDbRef, blockNumber: BlockNumber): Future[void] {.async.} =
   if asyncFactory.maybeDataSource.isSome:
-    await asyncFactory.maybeDataSource.get.ifNecessaryGetBlockHeaderByNumber(chainDB, blockNumber)
+    await asyncFactory.maybeDataSource.get.ifNecessaryGetBlockHeaderByNumber(coreDb, blockNumber)

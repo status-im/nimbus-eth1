@@ -44,7 +44,6 @@ type
   SnapCtxData* = object
     ## Globally shared data extension
     rng*: ref HmacDrbgContext          ## Random generator
-    dbBackend*: ChainDB                ## Low level DB driver access (if any)
     snapDb*: SnapDbRef                 ## Accounts snapshot DB
 
     # Info

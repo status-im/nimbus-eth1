@@ -6,9 +6,10 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
+  eth/trie/trie_defs,
+  stew/[byteutils, endians2],
   unittest2,
-  ../nimbus/db/state_db,
-  stew/[byteutils, endians2]
+  ../nimbus/db/state_db
 
 include ../nimbus/db/accounts_cache
 
@@ -22,9 +23,9 @@ proc stateDBMain*() =
       const emptyAcc {.used.} = newAccount()
 
       var
-        memDB = newMemoryDB()
-        acDB {.used.} = newMemoryDB()
-        trie = initHexaryTrie(memDB)
+        memDB = newCoreDbRef LegacyDbMemory
+        acDB {.used.} = newCoreDbRef LegacyDbMemory
+        trie = memDB.mptPrune()
         stateDB {.used.} = newAccountStateDB(memDB, trie.rootHash, true)
         address {.used.} = hexToByteArray[20]("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6")
         code {.used.} = hexToSeqByte("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6")
@@ -150,7 +151,7 @@ proc stateDBMain*() =
       ac.persist()
       check ac.getCode(addr2) == code
       let key = contractHashKey(keccakHash(code))
-      check acDB.get(key.toOpenArray) == code
+      check acDB.kvt.get(key.toOpenArray) == code
 
     test "accessList operations":
       proc verifyAddrs(ac: AccountsCache, addrs: varargs[int]): bool =

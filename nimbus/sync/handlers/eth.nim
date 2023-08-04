@@ -53,7 +53,7 @@ type
     NotAvailable
 
   EthWireRef* = ref object of EthWireBase
-    db: ChainDBRef
+    db: CoreDbRef
     chain: ChainRef
     txPool: TxPoolRef
     peerPool: PeerPool
@@ -92,7 +92,7 @@ proc inPoolAndOk(ctx: EthWireRef, txHash: Hash256): bool =
   if res.isErr: return false
   res.get().reject == txInfoOk
 
-proc successorHeader(db: ChainDBRef,
+proc successorHeader(db: CoreDbRef,
                      h: BlockHeader,
                      output: var BlockHeader,
                      skip = 0'u): bool {.gcsafe, raises: [RlpError].} =
@@ -100,7 +100,7 @@ proc successorHeader(db: ChainDBRef,
   if h.blockNumber <= (not 0.toBlockNumber) - offset:
     result = db.getBlockHeader(h.blockNumber + offset, output)
 
-proc ancestorHeader(db: ChainDBRef,
+proc ancestorHeader(db: CoreDbRef,
                      h: BlockHeader,
                      output: var BlockHeader,
                      skip = 0'u): bool {.gcsafe, raises: [RlpError].} =
@@ -108,7 +108,7 @@ proc ancestorHeader(db: ChainDBRef,
   if h.blockNumber >= offset:
     result = db.getBlockHeader(h.blockNumber - offset, output)
 
-proc blockHeader(db: ChainDBRef,
+proc blockHeader(db: CoreDbRef,
                  b: HashOrNum,
                  output: var BlockHeader): bool
                  {.gcsafe, raises: [RlpError].} =
@@ -563,7 +563,7 @@ method handleNewBlockHashes*(ctx: EthWireRef, peer: Peer, hashes: openArray[NewB
 
 when defined(legacy_eth66_enabled):
   method getStorageNodes*(ctx: EthWireRef, hashes: openArray[Hash256]): seq[Blob] {.gcsafe.} =
-    let db = ctx.db.db
+    let db = ctx.db.kvt
     for hash in hashes:
       result.add db.get(hash.data)
 

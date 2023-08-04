@@ -1,5 +1,5 @@
 import
-  testutils/fuzzing, eth/trie/db,
+  testutils/fuzzing, ../../nimbus/db/core_db,
   ./tree_from_witness, ./witness_types
 
 # please read instruction in status-im/nim-testutils/fuzzing/readme.md
@@ -7,7 +7,7 @@ import
 # if you want to run fuzz test
 
 test:
-  var db = newMemoryDB()
+  var db = newCoreDbRef(LegacyDbMemory)
   try:
     var tb = initTreeBuilder(payload, db, {wfEIP170})
     let root = tb.buildTree()

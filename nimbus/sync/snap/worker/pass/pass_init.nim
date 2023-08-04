@@ -12,7 +12,7 @@
 
 import
   chronicles,
-  "../../../.."/[common, db/select_backend],
+  ../../../../common,
   ../../../misc/ticker,
   ../../worker_desc,
   ../db/snapdb_desc,
@@ -73,9 +73,7 @@ proc releaseTicker(ctx: SnapCtxRef) =
 
 proc setupSnapDb(ctx: SnapCtxRef) =
   ## Helper for `setup()`: Initialise snap sync database layer
-  ctx.pool.snapDb =
-    if ctx.pool.dbBackend.isNil: SnapDbRef.init(ctx.chain.db.db)
-    else: SnapDbRef.init(ctx.pool.dbBackend)
+  ctx.pool.snapDb = SnapDbRef.init(ctx.chain.db)
 
 # ------------------------------------------------------------------------------
 # Public start/stop and admin functions

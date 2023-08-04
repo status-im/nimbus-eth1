@@ -9,7 +9,6 @@
 
 import
   web3/engine_api_types,
-  ../../db/db_chain,
   ./merger
 
 import eth/common/eth_types except BlockHeader

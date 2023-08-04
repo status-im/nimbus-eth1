@@ -3,7 +3,7 @@ import
   unittest2,
   eth/rlp,
   ./test_helpers,
-  ../nimbus/[transaction, errors],
+  ../nimbus/[errors, transaction, vm_types],
   ../nimbus/utils/utils
 
 const

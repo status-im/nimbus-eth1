@@ -12,7 +12,7 @@ import
   std/[options, times],
   chronicles,
   chronos,
-  eth/[common/eth_types_rlp, trie/db],
+  eth/common/eth_types_rlp,
   ".."/[vm_types, vm_state, vm_gas_costs],
   ../db/accounts_cache,
   ../common/common,
@@ -89,7 +89,7 @@ proc rpcCallEvm*(call: RpcCallData, header: BlockHeader, com: CommonRef): CallRe
   let vmState = BaseVMState.new(topHeader, com)
   let params  = toCallParams(vmState, call, globalGasCap, header.fee)
 
-  var dbTx = com.db.db.beginTransaction()
+  var dbTx = com.db.beginTransaction()
   defer: dbTx.dispose() # always dispose state changes
 
   runComputation(params)
@@ -112,7 +112,7 @@ proc rpcEstimateGas*(cd: RpcCallData, header: BlockHeader, com: CommonRef, gasCa
     hi : GasInt = cd.gasLimit.get(0.GasInt)
     cap: GasInt
 
-  var dbTx = com.db.db.beginTransaction()
+  var dbTx = com.db.beginTransaction()
   defer: dbTx.dispose() # always dispose state changes
 
   # Determine the highest gas limit can be used during the estimation.

@@ -10,11 +10,11 @@
 
 import
   std/[algorithm, os, sequtils, strformat, tables, times],
+  ../../nimbus/core/[chain, tx_pool], # must be early (compilation annoyance)
+  ../../nimbus/common/common,
   ../../nimbus/[config, constants],
-  ../../nimbus/core/[chain, tx_pool],
   ../../nimbus/utils/ec_recover,
   ../../nimbus/core/tx_pool/[tx_chain, tx_item],
-  ../../nimbus/common/common,
   ./helpers,
   ./sign_helper,
   eth/[keys, p2p],
@@ -43,7 +43,7 @@ proc importBlocks(c: ChainRef; h: seq[BlockHeader]; b: seq[BlockBody]): int =
 proc blockChainForTesting*(network: NetworkID): CommonRef =
 
   result = CommonRef.new(
-    newMemoryDb(),
+    newCoreDbRef LegacyDbMemory,
     networkId = network,
     params = network.networkParams)
 

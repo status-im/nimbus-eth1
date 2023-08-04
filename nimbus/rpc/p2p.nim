@@ -41,7 +41,7 @@ proc setupEthRpc*(
   proc getStateDB(header: BlockHeader): ReadOnlyStateDB =
     ## Retrieves the account db from canonical head
     # we don't use accounst_cache here because it's only read operations
-    let ac = newAccountStateDB(chainDB.db, header.stateRoot, com.pruneTrie)
+    let ac = newAccountStateDB(chainDB, header.stateRoot, com.pruneTrie)
     result = ReadOnlyStateDB(ac)
 
   proc stateDBFromTag(tag: string, readOnly = true): ReadOnlyStateDB
@@ -439,7 +439,7 @@ proc setupEthRpc*(
     result = some(uncle)
 
   proc getLogsForBlock(
-      chain: ChainDBRef,
+      chain: CoreDbRef,
       hash: Hash256,
       header: BlockHeader,
       opts: FilterOptions): seq[FilterLog]
@@ -458,7 +458,7 @@ proc setupEthRpc*(
       return @[]
 
   proc getLogsForRange(
-      chain: ChainDBRef,
+      chain: CoreDbRef,
       start: UInt256,
       finish: UInt256,
       opts: FilterOptions): seq[FilterLog]

@@ -17,7 +17,7 @@ import
 proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus) =
   var
     blockNumber = UInt256.fromHex(node["blockNumber"].getStr())
-    memoryDB    = newMemoryDB()
+    memoryDB    = newCoreDbRef LegacyDbMemory
     config      = chainConfigForNetwork(MainNet)
     com         = CommonRef.new(memoryDB, config, pruneTrie = false)
     state       = node["state"]
@@ -25,7 +25,7 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus) =
   for k, v in state:
     let key = hexToSeqByte(k)
     let value = hexToSeqByte(v.getStr())
-    memoryDB.put(key, value)
+    memoryDB.kvt.put(key, value)
 
   let
     parentNumber = blockNumber - 1

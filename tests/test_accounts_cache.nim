@@ -45,7 +45,7 @@ const
     MainNet, "mainnet843841.txt.gz", 50000, 3000)
 
 var
-  xdb: ChainDBRef
+  xdb: CoreDbRef
   txs: seq[Transaction]
   txi: seq[int] # selected index into txs[] (crashable sender addresses)
 
@@ -95,7 +95,7 @@ proc setErrorLevel =
 
 proc blockChainForTesting*(network: NetworkId): CommonRef =
   result = CommonRef.new(
-    newMemoryDB(),
+    newCoreDbRef LegacyDbMemory,
     networkId = network,
     params = network.networkParams)
   initializeEmptyDb(result)
@@ -168,7 +168,7 @@ proc runTrial3crash(vmState: BaseVMState; inx: int; noisy = false) =
   let eAddr = txs[inx].getSender
 
   block:
-    let dbTx = xdb.db.beginTransaction()
+    let dbTx = xdb.beginTransaction()
 
     block:
       let accTx = vmState.stateDB.beginSavepoint
@@ -205,7 +205,7 @@ proc runTrial3crash(vmState: BaseVMState; inx: int; noisy = false) =
   #   in the cache they must in sync with the new rootHash.
   #
   block:
-    let dbTx = xdb.db.beginTransaction()
+    let dbTx = xdb.beginTransaction()
 
     block:
       let accTx = vmState.stateDB.beginSavepoint
@@ -231,7 +231,7 @@ proc runTrial4(vmState: BaseVMState; inx: int; rollback: bool) =
   let eAddr = txs[inx].getSender
 
   block:
-    let dbTx = xdb.db.beginTransaction()
+    let dbTx = xdb.beginTransaction()
 
     block:
       let accTx = vmState.stateDB.beginSavepoint
@@ -261,7 +261,7 @@ proc runTrial4(vmState: BaseVMState; inx: int; rollback: bool) =
     dbTx.commit()
 
   block:
-    let dbTx = xdb.db.beginTransaction()
+    let dbTx = xdb.beginTransaction()
 
     block:
       let accTx = vmState.stateDB.beginSavepoint
@@ -331,14 +331,14 @@ proc runner(noisy = true; capture = goerliCapture) =
           txi.add n
 
     test &"Run {txi.len} two-step trials with rollback":
-      let dbTx = xdb.db.beginTransaction()
+      let dbTx = xdb.beginTransaction()
       defer: dbTx.dispose()
       for n in txi:
         let vmState = com.getVmState(xdb.getCanonicalHead.blockNumber)
         vmState.runTrial2ok(n)
 
     test &"Run {txi.len} three-step trials with rollback":
-      let dbTx = xdb.db.beginTransaction()
+      let dbTx = xdb.beginTransaction()
       defer: dbTx.dispose()
       for n in txi:
         let vmState = com.getVmState(xdb.getCanonicalHead.blockNumber)
@@ -346,7 +346,7 @@ proc runner(noisy = true; capture = goerliCapture) =
 
     test &"Run {txi.len} three-step trials with extra db frame rollback" &
         " throwing Exceptions":
-      let dbTx = xdb.db.beginTransaction()
+      let dbTx = xdb.beginTransaction()
       defer: dbTx.dispose()
       for n in txi:
         let vmState = com.getVmState(xdb.getCanonicalHead.blockNumber)
@@ -354,14 +354,14 @@ proc runner(noisy = true; capture = goerliCapture) =
           vmState.runTrial3crash(n, noisy)
 
     test &"Run {txi.len} tree-step trials without rollback":
-      let dbTx = xdb.db.beginTransaction()
+      let dbTx = xdb.beginTransaction()
       defer: dbTx.dispose()
       for n in txi:
         let vmState = com.getVmState(xdb.getCanonicalHead.blockNumber)
         vmState.runTrial3(n, rollback = false)
 
     test &"Run {txi.len} four-step trials with rollback and db frames":
-      let dbTx = xdb.db.beginTransaction()
+      let dbTx = xdb.beginTransaction()
       defer: dbTx.dispose()
       for n in txi:
         let vmState = com.getVmState(xdb.getCanonicalHead.blockNumber)

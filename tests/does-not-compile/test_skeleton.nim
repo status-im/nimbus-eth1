@@ -57,7 +57,7 @@ proc initEnv(ccm: CCModify = nil): TestEnv =
 
   let
     chainDB = newChainDBRef(
-      newMemoryDb(),
+      newCoreDbRef LegacyDbMemory,
       conf.pruneMode == PruneMode.Full,
       conf.networkId,
       conf.networkParams

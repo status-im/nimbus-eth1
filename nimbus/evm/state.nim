@@ -80,7 +80,7 @@ proc new*(
   ## with the `parent` block header.
   new result
   result.init(
-    ac          = AccountsCache.init(com.db.db, parent.stateRoot, com.pruneTrie),
+    ac          = AccountsCache.init(com.db, parent.stateRoot, com.pruneTrie),
     parent      = parent,
     timestamp   = timestamp,
     gasLimit    = gasLimit,
@@ -115,7 +115,7 @@ proc reinit*(self:      BaseVMState;     ## Object descriptor
       com    = self.com
       db     = com.db
       ac     = if self.stateDB.rootHash == parent.stateRoot: self.stateDB
-               else: AccountsCache.init(db.db, parent.stateRoot, com.pruneTrie)
+               else: AccountsCache.init(db, parent.stateRoot, com.pruneTrie)
     self[].reset
     self.init(
       ac          = ac,
@@ -179,7 +179,7 @@ proc init*(
   ## It requires the `header` argument properly initalised so that for PoA
   ## networks, the miner address is retrievable via `ecRecover()`.
   self.init(
-    ac          = AccountsCache.init(com.db.db, parent.stateRoot, com.pruneTrie),
+    ac          = AccountsCache.init(com.db, parent.stateRoot, com.pruneTrie),
     parent      = parent,
     timestamp   = header.timestamp,
     gasLimit    = header.gasLimit,
@@ -251,7 +251,7 @@ proc statelessInit*(
     tracer:       TracerRef = nil): bool
     {.gcsafe, raises: [CatchableError].} =
   vmState.init(
-    ac          = AccountsCache.init(com.db.db, parent.stateRoot, com.pruneTrie),
+    ac          = AccountsCache.init(com.db, parent.stateRoot, com.pruneTrie),
     parent      = parent,
     timestamp   = header.timestamp,
     gasLimit    = header.gasLimit,
@@ -340,7 +340,7 @@ proc buildWitness*(vmState: BaseVMState): seq[byte]
   let flags = if vmState.fork >= FkSpurious: {wfEIP170} else: {}
 
   # build witness from tree
-  var wb = initWitnessBuilder(vmState.com.db.db, rootHash, flags)
+  var wb = initWitnessBuilder(vmState.com.db, rootHash, flags)
   wb.buildWitness(mkeys)
 
 func forkDeterminationInfoForVMState*(vmState: BaseVMState): ForkDeterminationInfo =

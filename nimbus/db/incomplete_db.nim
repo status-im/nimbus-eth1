@@ -12,10 +12,7 @@ The points of these two files are:
 import
   chronicles,
   eth/[common],
-  eth/trie/[hexary, db, trie_defs],
-  storage_types,
-  ./values_from_bytes,
-  ./distinct_tries
+  "."/[core_db, distinct_tries, storage_types, values_from_bytes]
 
 
 
@@ -29,36 +26,36 @@ proc ifNodesExistGetStorageBytesWithinAccount*(storageTrie: StorageTrie, slotAsK
   storageTrie.maybeGetSlotBytes(slotAsKey)
 
 
-proc populateDbWithNodes*(db: TrieDatabaseRef, nodes: seq[seq[byte]]) =
+proc populateDbWithNodes*(db: CoreDbRef, nodes: seq[seq[byte]]) =
   error("GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG AARDVARK: populateDbWithNodes received nodes, about to populate", nodes)   # AARDVARK not an error, I just want it to stand out
   for nodeBytes in nodes:
     let nodeHash = keccakHash(nodeBytes)
     info("AARDVARK: populateDbWithNodes about to add node", nodeHash, nodeBytes)
-    db.put(nodeHash.data, nodeBytes)
+    db.kvt.put(nodeHash.data, nodeBytes)
 
 # AARDVARK: just make the callers call populateDbWithNodes directly?
-proc populateDbWithBranch*(db: TrieDatabaseRef, branch: seq[seq[byte]]) =
+proc populateDbWithBranch*(db: CoreDbRef, branch: seq[seq[byte]]) =
   for nodeBytes in branch:
     let nodeHash = keccakHash(nodeBytes)
-    db.put(nodeHash.data, nodeBytes)
+    db.kvt.put(nodeHash.data, nodeBytes)
 
 # Returns a none if there are missing nodes; if the account itself simply
 # doesn't exist yet, that's fine and it returns some(newAccount()).
 proc ifNodesExistGetAccount*(trie: AccountsTrie, address: EthAddress): Option[Account] =
   ifNodesExistGetAccountBytes(trie, address).map(accountFromBytes)
 
-proc maybeGetCode*(db: TrieDatabaseRef, codeHash: Hash256): Option[seq[byte]] =
+proc maybeGetCode*(db: CoreDbRef, codeHash: Hash256): Option[seq[byte]] =
   when defined(geth):
-    return db.maybeGet(codeHash.data)
+    return db.kvt.maybeGet(codeHash.data)
   else:
-    return db.maybeGet(contractHashKey(codeHash).toOpenArray)
+    return db.kvt.maybeGet(contractHashKey(codeHash).toOpenArray)
 
 proc maybeGetCode*(trie: AccountsTrie, address: EthAddress): Option[seq[byte]] =
   let maybeAcc = trie.ifNodesExistGetAccount(address)
   if maybeAcc.isNone:
     none[seq[byte]]()
   else:
-    maybeGetCode(SecureHexaryTrie(trie).db, maybeAcc.get.codeHash)
+    maybeGetCode(trie.db, maybeAcc.get.codeHash)
 
 proc checkingForMissingNodes_getCode*(trie: AccountsTrie, address: EthAddress): seq[byte] =
   let m = maybeGetCode(trie, address)

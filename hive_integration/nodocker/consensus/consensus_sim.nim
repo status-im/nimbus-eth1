@@ -19,7 +19,7 @@ import
 proc processChainData(cd: ChainData): TestStatus =
   let
     networkId = NetworkId(cd.params.config.chainId)
-    com = CommonRef.new(newMemoryDB(),
+    com = CommonRef.new(newCoreDbRef LegacyDbMemory,
       pruneTrie = false,
       networkId,
       cd.params

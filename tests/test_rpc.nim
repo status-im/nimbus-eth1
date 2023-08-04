@@ -31,10 +31,10 @@ type
     txHash: Hash256
     blockHash: Hash256
 
-proc persistFixtureBlock(chainDB: ChainDBRef) =
+proc persistFixtureBlock(chainDB: CoreDbRef) =
   let header = getBlockHeader4514995()
   # Manually inserting header to avoid any parent checks
-  chainDB.db.put(genericHashKey(header.blockHash).toOpenArray, rlp.encode(header))
+  chainDB.kvt.put(genericHashKey(header.blockHash).toOpenArray, rlp.encode(header))
   chainDB.addBlockNumberToHashLookup(header)
   discard chainDB.persistTransactions(header.blockNumber, getBlockBody4514995().transactions)
   discard chainDB.persistReceipts(getReceipts4514995())
@@ -140,7 +140,7 @@ proc rpcMain*() =
       ctx  = newEthContext()
       ethNode = setupEthNode(conf, ctx, eth)
       com = CommonRef.new(
-        newMemoryDB(),
+        newCoreDbRef LegacyDbMemory,
         conf.pruneMode == PruneMode.Full,
         conf.networkId,
         conf.networkParams

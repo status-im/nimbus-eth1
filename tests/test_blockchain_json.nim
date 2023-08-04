@@ -166,14 +166,14 @@ proc parseTester(fixture: JsonNode, testStatusIMPL: var TestStatus): Tester =
 
   result.network = fixture["network"].getStr
 
-proc blockWitness(vmState: BaseVMState, chainDB: ChainDBRef) =
+proc blockWitness(vmState: BaseVMState, chainDB: CoreDbRef) =
   let rootHash = vmState.stateDB.rootHash
   let witness = vmState.buildWitness()
   let fork = vmState.fork
   let flags = if fork >= FKSpurious: {wfEIP170} else: {}
 
   # build tree from witness
-  var db = newMemoryDB()
+  var db = newCoreDbRef LegacyDbMemory
   when defined(useInputStream):
     var input = memoryInput(witness)
     var tb = initTreeBuilder(input, db, flags)
@@ -337,7 +337,7 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
 
     let
       pruneTrie = test_config.getConfiguration().pruning
-      memDB     = newMemoryDb()
+      memDB     = newCoreDbRef LegacyDbMemory
       stateDB   = AccountsCache.init(memDB, emptyRlpHash, pruneTrie)
       config    = getChainConfig(tester.network)
       com       = CommonRef.new(memDB, config, pruneTrie)

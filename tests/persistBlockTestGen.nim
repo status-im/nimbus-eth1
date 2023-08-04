@@ -1,9 +1,9 @@
 import
-  json, stint, chronicles, eth/rlp,
-  ../nimbus/db/[capturedb, select_backend],
+  json, stint,
   ../nimbus/[tracer, config],
   ../nimbus/core/chain,
-  ../nimbus/common/common
+  ../nimbus/common/common,
+  ../nimbus/db/core_db/persistent
 
 proc dumpTest(com: CommonRef, blockNumber: int) =
   let
@@ -11,10 +11,8 @@ proc dumpTest(com: CommonRef, blockNumber: int) =
     parentNumber = blockNumber - 1
 
   var
-    memoryDB = newMemoryDB()
-    captureDB = newCaptureDB(com.db.db, memoryDB)
-    captureTrieDB = trieDB captureDB
-    captureCom = com.clone(captureTrieDB)
+    capture = com.db.capture()
+    captureCom = com.clone(capture.recorder)
 
   let
     parent = captureCom.db.getBlockHeader(parentNumber)
@@ -32,7 +30,7 @@ proc dumpTest(com: CommonRef, blockNumber: int) =
     "blockNumber": %blockNumber.toHex
   }
 
-  metaData.dumpMemoryDB(memoryDB)
+  metaData.dumpMemoryDB(capture)
   writeFile("block" & $blockNumber & ".json", metaData.pretty())
 
 proc main() {.used.} =
@@ -50,9 +48,8 @@ proc main() {.used.} =
   # nimbus --rpcapi: eth, debug --prune: archive
 
   var conf = makeConfig()
-  let db = newChainDB(string conf.dataDir)
-  let trieDB = trieDB db
-  let com = CommonRef.new(trieDB, false)
+  let db = newCoreDbRef(LegacyDbPersistent, string conf.dataDir)
+  let com = CommonRef.new(db, false)
 
   com.dumpTest(97)
   com.dumpTest(98) # no uncles and no tx

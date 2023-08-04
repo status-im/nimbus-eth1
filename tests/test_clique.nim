@@ -38,7 +38,7 @@ const
 # ------------------------------------------------------------------------------
 
 proc getBlockHeader(ap: TesterPool; number: BlockNumber): BlockHeader =
-  ## Shortcut => db/db_chain.getBlockHeader()
+  ## Shortcut => db/core_db.getBlockHeader()
   doAssert ap.db.getBlockHeader(number, result)
 
 proc ppSecs(elapsed: Duration): string =

@@ -63,7 +63,6 @@ import
   chronos,
   eth/p2p,
   stew/[byteutils, interval_set, sorted_set],
-  ../../db/db_chain,
   ../../utils/utils,
   ".."/[protocol, sync_desc, types]
 

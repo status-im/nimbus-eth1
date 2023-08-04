@@ -228,7 +228,7 @@
 ## A piece of code using this pool architecture could look like as follows:
 ## ::
 ##    # see also unit test examples, e.g. "Block packer tests"
-##    var db: ChainDBRef                    # to be initialised
+##    var db: CoreDbRef                      # to be initialised
 ##    var txs: seq[Transaction]              # to be initialised
 ##
 ##    proc mineThatBlock(blk: EthBlock)      # external function

@@ -78,7 +78,7 @@ proc pow*(c: ChainRef): PowRef =
   ## Getter
   c.com.pow
 
-proc db*(c: ChainRef): ChainDBRef =
+proc db*(c: ChainRef): CoreDbRef =
   ## Getter
   c.com.db
 

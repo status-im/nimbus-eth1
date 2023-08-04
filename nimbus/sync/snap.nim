@@ -112,7 +112,6 @@ proc init*(
     chain: ChainRef;
     rng: ref HmacDrbgContext;
     maxPeers: int;
-    dbBackend: ChainDb;
     enableTicker = false;
     exCtrlFile = none(string);
       ): T =
@@ -121,7 +120,6 @@ proc init*(
   result.ctx.chain = chain # explicitely override
   result.ctx.pool.rng = rng
   result.ctx.pool.enableTicker = enableTicker
-  result.ctx.pool.dbBackend = dbBackend
   # Required to have been initialised via `addEthHandlerCapability()`
   doAssert not result.ctx.ethWireCtx.isNil
 

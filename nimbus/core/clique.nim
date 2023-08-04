@@ -44,7 +44,7 @@ type
 # Public
 # ------------------------------------------------------------------------------
 
-proc newClique*(db: ChainDBRef, cliquePeriod, cliqueEpoch: int): Clique =
+proc newClique*(db: CoreDbRef, cliquePeriod, cliqueEpoch: int): Clique =
   ## Constructor for a new Clique proof-of-authority consensus engine. The
   ## initial state of the engine is `empty`, there are no authorised signers.
   ##

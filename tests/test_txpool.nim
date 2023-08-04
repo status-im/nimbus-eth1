@@ -10,11 +10,11 @@
 
 import
   std/[algorithm, os, random, sequtils, strformat, strutils, tables, times],
-  ../nimbus/[config, vm_state, vm_types],
-  ../nimbus/core/[chain, clique, executor, casper],
-  ../nimbus/core/[tx_pool, tx_pool/tx_item],
+  ../nimbus/core/chain, # must be early (compilation annoyance)
   ../nimbus/common/common,
   ../nimbus/core/clique/clique_sealer,
+  ../nimbus/core/[clique, executor, casper, tx_pool, tx_pool/tx_item],
+  ../nimbus/[config, vm_state, vm_types],
   ./test_txpool/[helpers, setup, sign_helper],
   ./test_txpool2,
   chronos,

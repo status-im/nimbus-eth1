@@ -50,7 +50,8 @@ when dbBackend == sqlite:
     let db = SqStoreRef.init(path, "nimbus").expect("working database")
     ChainDB(kv: kvStore db.openKvStore().expect("working database"))
 elif dbBackend == rocksdb:
-  proc newChainDB*(path: string): ChainDB =
+  proc newChainDB*(path: string): ChainDB
+      {.gcsafe, deprecated: "use newCoreDbRef(LegacyDbPersistent,<path>)".} =
     let rdb = RocksStoreRef.init(path, "nimbus").tryGet()
     ChainDB(kv: kvStore rdb, rdb: rdb)
 elif dbBackend == lmdb:

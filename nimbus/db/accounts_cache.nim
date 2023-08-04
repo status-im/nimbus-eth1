@@ -10,12 +10,12 @@
 
 import
   std/[tables, hashes, sets],
-  eth/[common, rlp], eth/trie/[hexary, db, trie_defs],
-  ../constants, ../utils/utils, storage_types,
+  eth/[common, rlp],
   ../../stateless/multi_keys,
-  ./distinct_tries,
+  ../constants,
+  ../utils/utils,
   ./access_list as ac_access_list,
-  ./transient_storage
+  "."/[core_db, distinct_tries, storage_types, transient_storage]
 
 const
   debugAccountsCache = false
@@ -44,7 +44,6 @@ type
     codeTouched*: bool
 
   AccountsCache* = ref object
-    db: TrieDatabaseRef
     trie: AccountsTrie
     savePoint: SavePoint
     witnessCache: Table[EthAddress, WitnessData]
@@ -102,19 +101,20 @@ proc beginSavepoint*(ac: var AccountsCache): SavePoint {.gcsafe.}
 # FIXME-Adam: this is only necessary because of my sanity checks on the latest rootHash;
 # take this out once those are gone.
 proc rawTrie*(ac: AccountsCache): AccountsTrie = ac.trie
-proc rawDb*(ac: AccountsCache): TrieDatabaseRef = ac.trie.db
+
+func db(ac: AccountsCache): CoreDbRef = ac.trie.db
+func kvt(ac: AccountsCache): CoreDbKvtObj = ac.db.kvt
 
 # The AccountsCache is modeled after TrieDatabase for it's transaction style
-proc init*(x: typedesc[AccountsCache], db: TrieDatabaseRef,
-           root: KeccakHash, pruneTrie: bool = true): AccountsCache =
+proc init*(x: typedesc[AccountsCache], db: CoreDbRef,
+           root: KeccakHash, pruneTrie = true): AccountsCache =
   new result
-  result.db = db
   result.trie = initAccountsTrie(db, root, pruneTrie)
   result.witnessCache = initTable[EthAddress, WitnessData]()
   discard result.beginSavepoint
 
-proc init*(x: typedesc[AccountsCache], db: TrieDatabaseRef, pruneTrie: bool = true): AccountsCache =
-  init(x, db, emptyRlpHash, pruneTrie)
+proc init*(x: typedesc[AccountsCache], db: CoreDbRef, pruneTrie = true): AccountsCache =
+  init(x, db, EMPTY_ROOT_HASH, pruneTrie)
 
 proc rootHash*(ac: AccountsCache): KeccakHash =
   # make sure all savepoint already committed
@@ -245,7 +245,7 @@ template createTrieKeyFromSlot(slot: UInt256): auto =
   # pad32(int_to_big_endian(slot))
   # morally equivalent to toByteRange_Unnecessary but with different types
 
-template getStorageTrie(db: TrieDatabaseRef, acc: RefAccount): auto =
+template getStorageTrie(db: CoreDbRef, acc: RefAccount): auto =
   # TODO: implement `prefix-db` to solve issue #228 permanently.
   # the `prefix-db` will automatically insert account address to the
   # underlying-db key without disturb how the trie works.
@@ -253,7 +253,7 @@ template getStorageTrie(db: TrieDatabaseRef, acc: RefAccount): auto =
   # see nim-eth#9
   initStorageTrie(db, acc.account.storageRoot, false)
 
-proc originalStorageValue(acc: RefAccount, slot: UInt256, db: TrieDatabaseRef): UInt256 =
+proc originalStorageValue(acc: RefAccount, slot: UInt256, db: CoreDbRef): UInt256 =
   # share the same original storage between multiple
   # versions of account
   if acc.originalStorage.isNil:
@@ -275,7 +275,7 @@ proc originalStorageValue(acc: RefAccount, slot: UInt256, db: TrieDatabaseRef): 
 
   acc.originalStorage[slot] = result
 
-proc storageValue(acc: RefAccount, slot: UInt256, db: TrieDatabaseRef): UInt256 =
+proc storageValue(acc: RefAccount, slot: UInt256, db: CoreDbRef): UInt256 =
   acc.overlayStorage.withValue(slot, val) do:
     return val[]
   do:
@@ -303,14 +303,14 @@ proc persistMode(acc: RefAccount): PersistMode =
     if IsNew notin acc.flags:
       result = Remove
 
-proc persistCode(acc: RefAccount, db: TrieDatabaseRef) =
+proc persistCode(acc: RefAccount, db: CoreDbRef) =
   if acc.code.len != 0:
     when defined(geth):
-      db.put(acc.account.codeHash.data, acc.code)
+      db.kvt.put(acc.account.codeHash.data, acc.code)
     else:
-      db.put(contractHashKey(acc.account.codeHash).toOpenArray, acc.code)
+      db.kvt.put(contractHashKey(acc.account.codeHash).toOpenArray, acc.code)
 
-proc persistStorage(acc: RefAccount, db: TrieDatabaseRef, clearCache: bool) =
+proc persistStorage(acc: RefAccount, db: CoreDbRef, clearCache: bool) =
   if acc.overlayStorage.len == 0:
     # TODO: remove the storage too if we figure out
     # how to create 'virtual' storage room for each account
@@ -336,7 +336,7 @@ proc persistStorage(acc: RefAccount, db: TrieDatabaseRef, clearCache: bool) =
     # see iterator storage below
     # slotHash can be obtained from storageTrie.putSlotBytes?
     let slotHash = keccakHash(slotAsKey)
-    db.put(slotHashToSlotKey(slotHash.data).toOpenArray, rlp.encode(slot))
+    db.kvt.put(slotHashToSlotKey(slotHash.data).toOpenArray, rlp.encode(slot))
 
   if not clearCache:
     # if we preserve cache, move the overlayStorage
@@ -387,9 +387,9 @@ proc getCode*(ac: AccountsCache, address: EthAddress): seq[byte] =
     result = acc.code
   else:
     when defined(geth):
-      let data = ac.db.get(acc.account.codeHash.data)
+      let data = ac.kvt.get(acc.account.codeHash.data)
     else:
-      let data = ac.db.get(contractHashKey(acc.account.codeHash).toOpenArray)
+      let data = ac.kvt.get(contractHashKey(acc.account.codeHash).toOpenArray)
 
     acc.code = data
     acc.flags.incl CodeLoaded
@@ -486,10 +486,10 @@ proc setStorage*(ac: AccountsCache, address: EthAddress, slot, value: UInt256) =
 proc clearStorage*(ac: AccountsCache, address: EthAddress) =
   let acc = ac.getAccount(address)
   acc.flags.incl {Alive}
-  if acc.account.storageRoot != emptyRlpHash:
+  if acc.account.storageRoot != EMPTY_ROOT_HASH:
     # there is no point to clone the storage since we want to remove it
     let acc = ac.makeDirty(address, cloneStorage = false)
-    acc.account.storageRoot = emptyRlpHash
+    acc.account.storageRoot = EMPTY_ROOT_HASH
     if acc.originalStorage.isNil.not:
       # also clear originalStorage cache, otherwise
       # both getStorage and getCommittedStorage will
@@ -614,11 +614,11 @@ iterator storage*(ac: AccountsCache, address: EthAddress): (UInt256, UInt256) =
   let acc = ac.getAccount(address, false)
   if not acc.isNil:
     let storageRoot = acc.account.storageRoot
-    var trie = initHexaryTrie(ac.db, storageRoot)
+    let trie = ac.db.mptPrune storageRoot
 
     for slotHash, value in trie:
       if slotHash.len == 0: continue
-      let keyData = ac.db.get(slotHashToSlotKey(slotHash).toOpenArray)
+      let keyData = ac.kvt.get(slotHashToSlotKey(slotHash).toOpenArray)
       if keyData.len == 0: continue
       yield (rlp.decode(keyData, UInt256), rlp.decode(value, UInt256))
 
