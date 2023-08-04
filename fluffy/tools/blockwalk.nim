@@ -40,12 +40,12 @@ type
       name: "block-hash" .}: Hash256
 
 proc parseCmdArg*(T: type Hash256, p: string): T
-    {.raises: [ConfigurationError].} =
+    {.raises: [ValueError].} =
   var hash: Hash256
   try:
     hexToByteArray(p, hash.data)
   except ValueError:
-    raise newException(ConfigurationError, "Invalid Hash256")
+    raise newException(ValueError, "Invalid Hash256")
 
   return hash
 

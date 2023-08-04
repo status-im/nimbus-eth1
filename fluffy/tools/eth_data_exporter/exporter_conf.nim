@@ -184,7 +184,7 @@ type
         discard
 
 proc parseCmdArg*(
-    T: type Web3Url, p: string): T {.raises: [ConfigurationError].} =
+    T: type Web3Url, p: string): T {.raises: [ValueError].} =
   let
     url = parseUri(p)
     normalizedScheme = url.scheme.toLowerAscii()
@@ -195,7 +195,7 @@ proc parseCmdArg*(
     Web3Url(kind: WsUrl, url: p)
   else:
     raise newException(
-      ConfigurationError,
+      ValueError,
       "The Web3 URL must specify one of following protocols: http/https/ws/wss"
     )
 
@@ -203,14 +203,14 @@ proc completeCmdArg*(T: type Web3Url, val: string): seq[string] =
   return @[]
 
 proc parseCmdArg*(T: type StorageMode, p: string): T
-    {.raises: [ConfigurationError].} =
+    {.raises: [ValueError].} =
   if p == "db":
     return DbStorage
   elif p == "json":
     return JsonStorage
   else:
     let msg = "Provided mode: " & p & " is not a valid. Should be `json` or `db`"
-    raise newException(ConfigurationError, msg)
+    raise newException(ValueError, msg)
 
 proc completeCmdArg*(T: type StorageMode, val: string): seq[string] =
   return @[]

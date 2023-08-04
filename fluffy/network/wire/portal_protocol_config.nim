@@ -54,7 +54,7 @@ proc init*(
   )
 
 proc parseCmdArg*(T: type RadiusConfig, p: string): T
-    {.raises: [ConfigurationError].} =
+    {.raises: [ValueError].} =
   if p.startsWith("dynamic") and len(p) == 7:
     RadiusConfig(kind: Dynamic)
   elif p.startsWith("static:"):
@@ -64,11 +64,11 @@ proc parseCmdArg*(T: type RadiusConfig, p: string): T
         uint16.parseCmdArg(num)
       except ValueError:
         let msg = "Provided logRadius: " & num & " is not a valid number"
-        raise newException(ConfigurationError, msg)
+        raise newException(ValueError, msg)
 
     if parsed > 256:
       raise newException(
-        ConfigurationError, "Provided logRadius should be <= 256"
+        ValueError, "Provided logRadius should be <= 256"
       )
 
     RadiusConfig(kind: Static, logRadius: parsed)
@@ -80,11 +80,11 @@ proc parseCmdArg*(T: type RadiusConfig, p: string): T
         let msg =
           "Not supported radius config option: " & p & " . " &
           "Supported options: dynamic and static:logRadius"
-        raise newException(ConfigurationError, msg)
+        raise newException(ValueError, msg)
 
     if parsed > 256:
       raise newException(
-        ConfigurationError, "Provided logRadius should be <= 256")
+        ValueError, "Provided logRadius should be <= 256")
 
     RadiusConfig(kind: Static, logRadius: parsed)
 
