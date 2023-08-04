@@ -247,8 +247,8 @@ proc asPortalBlockData*(
       nonce: default(BlockNonce),
       fee: some(payload.baseFeePerGas),
       withdrawalsRoot: withdrawalsRoot,
-      dataGasUsed: options.none(uint64),
-      excessDataGas: options.none(uint64)
+      blobGasUsed: options.none(uint64),
+      excessBlobGas: options.none(uint64)
     )
 
     headerWithProof = BlockHeaderWithProof(
@@ -292,8 +292,8 @@ proc asPortalBlockData*(
       nonce: default(BlockNonce),
       fee: some(payload.baseFeePerGas),
       withdrawalsRoot: withdrawalsRoot,
-      dataGasUsed: options.none(uint64),
-      excessDataGas: options.none(uint64) # TODO: adjust later according to deneb fork
+      blobGasUsed: options.none(uint64),
+      excessBlobGas: options.none(uint64) # TODO: adjust later according to deneb fork
     )
 
     headerWithProof = BlockHeaderWithProof(
