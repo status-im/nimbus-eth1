@@ -65,6 +65,15 @@ proc setupTxContext(host: TransactionHost) =
   host.txContext.chain_id         = vmState.com.chainId.uint.u256.toEvmc
   host.txContext.block_base_fee   = vmState.baseFee.toEvmc
 
+  if vmState.txVersionedHashes.len > 0:
+    type
+      BlobHashPtr = typeof host.txContext.blob_hashes
+    host.txContext.blob_hashes = cast[BlobHashPtr](vmState.txVersionedHashes[0].addr)
+  else:
+    host.txContext.blob_hashes = nil
+
+  host.txContext.blob_hashes_count= vmState.txVersionedHashes.len.csize_t
+
   # Most host functions do `flip256` in `evmc_host_glue`, but due to this
   # result being cached, it's better to do `flip256` when filling the cache.
   host.txContext.tx_gas_price     = flip256(host.txContext.tx_gas_price)

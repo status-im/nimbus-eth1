@@ -113,7 +113,9 @@ proc parseHeader*(n: JsonNode): BlockHeader =
     timestamp  : required(EthTime, "currentTimestamp"),
     stateRoot  : emptyRlpHash,
     mixDigest  : omitZero(Hash256, "currentRandom"),
-    fee        : optional(UInt256, "currentBaseFee")
+    fee        : optional(UInt256, "currentBaseFee"),
+    excessBlobGas: optional(uint64, "excessBlobGas"),
+    blobGasUsed: optional(uint64, "blobGasUsed")
   )
 
 proc parseTx*(n: JsonNode, dataIndex, gasIndex, valueIndex: int): Transaction =
@@ -128,7 +130,7 @@ proc parseTx*(n: JsonNode, dataIndex, gasIndex, valueIndex: int): Transaction =
     maxFee  : omitZero(GasInt, "maxFeePerGas"),
     accessList: omitZero(AccessList, "accessLists", dataIndex),
     maxPriorityFee: omitZero(GasInt, "maxPriorityFeePerGas"),
-    maxFeePerDataGas: omitZero(GasInt, "maxFeePerDataGas"),
+    maxFeePerBlobGas: omitZero(GasInt, "maxFeePerBlobGas"),
     versionedHashes: omitZero(VersionedHashes, "blobVersionedHashes")
   )
 

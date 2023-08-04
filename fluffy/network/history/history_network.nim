@@ -209,7 +209,7 @@ func validateBlockHeaderBytes*(
 
   let header = ? decodeRlp(bytes, BlockHeader)
 
-  if header.excessDataGas.isSome:
+  if header.excessBlobGas.isSome:
     return err("EIP-4844 not yet implemented")
 
   # TODO: Verify timestamp with Shanghai timestamp to if isSome()

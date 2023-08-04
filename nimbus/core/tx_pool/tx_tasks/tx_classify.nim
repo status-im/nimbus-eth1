@@ -233,9 +233,9 @@ proc classifyValidatePacked*(xp: TxPoolRef;
                else:
                  xp.chain.limits.trgLimit
     tx = item.tx.eip1559TxNormalization(xp.chain.baseFee.GasInt, fork)
-    excessDataGas = vmState.parent.excessDataGas.get(0'u64)
+    excessBlobGas = vmState.parent.excessBlobGas.get(0'u64)
 
-  roDB.validateTransaction(tx, item.sender, gasLimit, baseFee, excessDataGas, fork).isOk
+  roDB.validateTransaction(tx, item.sender, gasLimit, baseFee, excessBlobGas, fork).isOk
 
 proc classifyPacked*(xp: TxPoolRef; gasBurned, moreBurned: GasInt): bool =
   ## Classifier for *packing* (i.e. adding up `gasUsed` values after executing

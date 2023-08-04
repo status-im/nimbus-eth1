@@ -77,16 +77,16 @@ proc pointEvaluation*(input: openArray[byte]): Result[void, string] =
 
   ok()
 
-# calcExcessDataGas implements calc_excess_data_gas from EIP-4844
-proc calcExcessDataGas*(parent: BlockHeader): uint64 =
+# calcExcessBlobGas implements calc_excess_data_gas from EIP-4844
+proc calcExcessBlobGas*(parent: BlockHeader): uint64 =
   let
-    excessDataGas = parent.excessDataGas.get(0'u64)
-    dataGasUsed = parent.dataGasUsed.get(0'u64)
+    excessBlobGas = parent.excessBlobGas.get(0'u64)
+    blobGasUsed = parent.blobGasUsed.get(0'u64)
 
-  if excessDataGas + dataGasUsed < TARGET_DATA_GAS_PER_BLOCK:
+  if excessBlobGas + blobGasUsed < TARGET_BLOB_GAS_PER_BLOCK:
     0'u64
   else:
-    excessDataGas + dataGasUsed - TARGET_DATA_GAS_PER_BLOCK
+    excessBlobGas + blobGasUsed - TARGET_BLOB_GAS_PER_BLOCK
 
 # fakeExponential approximates factor * e ** (num / denom) using a taylor expansion
 # as described in the EIP-4844 spec.
@@ -103,33 +103,33 @@ func fakeExponential*(factor, numerator, denominator: uint64): uint64 =
 
   output div denominator
 
-proc getTotalDataGas*(tx: Transaction): uint64 =
-  DATA_GAS_PER_BLOB * tx.versionedHashes.len.uint64
+proc getTotalBlobGas*(tx: Transaction): uint64 =
+  GAS_PER_BLOB * tx.versionedHashes.len.uint64
 
-proc getTotalDataGas*(versionedHashesLen: int): uint64 =
-  DATA_GAS_PER_BLOB * versionedHasheslen.uint64
+proc getTotalBlobGas*(versionedHashesLen: int): uint64 =
+  GAS_PER_BLOB * versionedHasheslen.uint64
 
-# getDataGasPrice implements get_data_gas_price from EIP-4844
-func getDataGasprice*(parentExcessDataGas: uint64): uint64 =
+# getBlobGasPrice implements get_data_gas_price from EIP-4844
+func getBlobGasprice*(parentExcessBlobGas: uint64): uint64 =
   fakeExponential(
-    MIN_DATA_GASPRICE,
-    parentExcessDataGas,
-    DATA_GASPRICE_UPDATE_FRACTION
+    MIN_BLOB_GASPRICE,
+    parentExcessBlobGas,
+    BLOB_GASPRICE_UPDATE_FRACTION
   )
 
 proc calcDataFee*(tx: Transaction,
-                  parentExcessDataGas: Option[uint64]): uint64 =
-  tx.getTotalDataGas *
-    getDataGasprice(parentExcessDataGas.get(0'u64))
+                  parentExcessBlobGas: Option[uint64]): uint64 =
+  tx.getTotalBlobGas *
+    getBlobGasprice(parentExcessBlobGas.get(0'u64))
 
 proc calcDataFee*(versionedHashesLen: int,
-                  parentExcessDataGas: Option[uint64]): uint64 =
-  getTotalDataGas(versionedHashesLen) *
-    getDataGasprice(parentExcessDataGas.get(0'u64))
+                  parentExcessBlobGas: Option[uint64]): uint64 =
+  getTotalBlobGas(versionedHashesLen) *
+    getBlobGasprice(parentExcessBlobGas.get(0'u64))
 
-func dataGasUsed(txs: openArray[Transaction]): uint64 =
+func blobGasUsed(txs: openArray[Transaction]): uint64 =
   for tx in txs:
-    result += tx.getTotalDataGas
+    result += tx.getTotalBlobGas
 
 # https://eips.ethereum.org/EIPS/eip-4844
 func validateEip4844Header*(
@@ -137,34 +137,34 @@ func validateEip4844Header*(
     txs: openArray[Transaction]): Result[void, string] {.raises: [].} =
 
   if not com.forkGTE(Cancun):
-    if header.dataGasUsed.isSome:
-      return err("unexpected EIP-4844 dataGasUsed in block header")
+    if header.blobGasUsed.isSome:
+      return err("unexpected EIP-4844 blobGasUsed in block header")
 
-    if header.excessDataGas.isSome:
-      return err("unexpected EIP-4844 excessDataGas in block header")
+    if header.excessBlobGas.isSome:
+      return err("unexpected EIP-4844 excessBlobGas in block header")
 
     return ok()
 
-  if header.dataGasUsed.isNone:
-    return err("expect EIP-4844 dataGasUsed in block header")
+  if header.blobGasUsed.isNone:
+    return err("expect EIP-4844 blobGasUsed in block header")
 
-  if header.excessDataGas.isNone:
-    return err("expect EIP-4844 excessDataGas in block header")
+  if header.excessBlobGas.isNone:
+    return err("expect EIP-4844 excessBlobGas in block header")
 
   let
-    headerDataGasUsed = header.dataGasUsed.get()
-    dataGasUsed = dataGasUsed(txs)
-    headerExcessDataGas = header.excessDataGas.get
-    excessDataGas = calcExcessDataGas(parentHeader)
+    headerBlobGasUsed = header.blobGasUsed.get()
+    blobGasUsed = blobGasUsed(txs)
+    headerExcessBlobGas = header.excessBlobGas.get
+    excessBlobGas = calcExcessBlobGas(parentHeader)
 
-  if dataGasUsed > MAX_DATA_GAS_PER_BLOCK:
-    return err("dataGasUsed " & $dataGasUsed & " exceeds maximum allowance " & $MAX_DATA_GAS_PER_BLOCK)
+  if blobGasUsed > MAX_BLOB_GAS_PER_BLOCK:
+    return err("blobGasUsed " & $blobGasUsed & " exceeds maximum allowance " & $MAX_BLOB_GAS_PER_BLOCK)
 
-  if headerDataGasUsed != dataGasUsed:
-    return err("calculated dataGas not equal header.dataGasUsed")
+  if headerBlobGasUsed != blobGasUsed:
+    return err("calculated blobGas not equal header.blobGasUsed")
 
-  if headerExcessDataGas != excessDataGas:
-    return err("calculated excessDataGas not equal header.excessDataGas")
+  if headerExcessBlobGas != excessBlobGas:
+    return err("calculated excessBlobGas not equal header.excessBlobGas")
 
   return ok()
 

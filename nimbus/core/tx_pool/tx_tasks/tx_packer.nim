@@ -37,7 +37,7 @@ type
     tr: CoreDbMptRef
     cleanState: bool
     balance: UInt256
-    dataGasUsed: uint64
+    blobGasUsed: uint64
 
 const
   receiptsExtensionSize = ##\
@@ -132,9 +132,9 @@ proc runTxCommit(pst: TxPackerStateRef; item: TxItemRef; gasBurned: GasInt)
   vmState.cumulativeGasUsed += gasBurned
   vmState.receipts[inx] = vmState.makeReceipt(item.tx.txType)
 
-  # EIP-4844, count dataGasUsed
+  # EIP-4844, count blobGasUsed
   if item.tx.txType >= TxEip4844:
-    pst.dataGasUsed += item.tx.getTotalDataGas
+    pst.blobGasUsed += item.tx.getTotalBlobGas
 
   # Update txRoot
   pst.tr.put(rlp.encode(inx), rlp.encode(item.tx.removeNetworkPayload))
@@ -245,9 +245,9 @@ proc vmExecCommit(pst: TxPackerStateRef)
 
   if vmState.com.forkGTE(Cancun):
     # EIP-4844
-    let excessDataGas = calcExcessDataGas(vmState.parent)
-    xp.chain.excessDataGas = some(excessDataGas)
-    xp.chain.dataGasUsed = some(pst.dataGasUsed)
+    let excessBlobGas = calcExcessBlobGas(vmState.parent)
+    xp.chain.excessBlobGas = some(excessBlobGas)
+    xp.chain.blobGasUsed = some(pst.blobGasUsed)
 
   proc balanceDelta: UInt256 =
     let postBalance = vmState.readOnlyStateDB.getBalance(xp.chain.feeRecipient)

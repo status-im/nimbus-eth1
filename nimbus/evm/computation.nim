@@ -35,13 +35,13 @@ when defined(evmc_enabled):
     evmc/evmc,
     evmc_helpers,
     evmc_api,
-    stew/ranges/ptr_arith
+    stew/ptrops
 
   export
     evmc,
     evmc_helpers,
     evmc_api,
-    ptr_arith
+    ptrops
 
 const
   evmc_enabled* = defined(evmc_enabled)
@@ -117,15 +117,13 @@ template getGasPrice*(c: Computation): GasInt =
 
 template getVersionedHash*(c: Computation, index: int): VersionedHash =
   when evmc_enabled:
-    # TODO: implement
-    Hash256()
+    cast[ptr UncheckedArray[VersionedHash]](c.host.getTxContext().blob_hashes)[index]
   else:
     c.vmState.txVersionedHashes[index]
 
 template getVersionedHashesLen*(c: Computation): int =
   when evmc_enabled:
-    # TODO: implement
-    0
+    c.host.getTxContext().blob_hashes_count.int
   else:
     c.vmState.txVersionedHashes.len
 

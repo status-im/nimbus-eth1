@@ -240,25 +240,25 @@ func completeCmdArg*(T: type TrustedDigest, input: string): seq[string] =
   return @[]
 
 proc parseCmdArg*(T: type enr.Record, p: string): T
-    {.raises: [ConfigurationError].} =
+    {.raises: [ValueError].} =
   if not fromURI(result, p):
-    raise newException(ConfigurationError, "Invalid ENR")
+    raise newException(ValueError, "Invalid ENR")
 
 proc completeCmdArg*(T: type enr.Record, val: string): seq[string] =
   return @[]
 
 proc parseCmdArg*(T: type Node, p: string): T
-    {.raises: [ConfigurationError].} =
+    {.raises: [ValueError].} =
   var record: enr.Record
   if not fromURI(record, p):
-    raise newException(ConfigurationError, "Invalid ENR")
+    raise newException(ValueError, "Invalid ENR")
 
   let n = newNode(record)
   if n.isErr:
-    raise newException(ConfigurationError, $n.error)
+    raise newException(ValueError, $n.error)
 
   if n[].address.isNone():
-    raise newException(ConfigurationError, "ENR without address")
+    raise newException(ValueError, "ENR without address")
 
   n[]
 
@@ -266,17 +266,17 @@ proc completeCmdArg*(T: type Node, val: string): seq[string] =
   return @[]
 
 proc parseCmdArg*(T: type PrivateKey, p: string): T
-    {.raises: [ConfigurationError].} =
+    {.raises: [ValueError].} =
   try:
     result = PrivateKey.fromHex(p).tryGet()
   except CatchableError:
-    raise newException(ConfigurationError, "Invalid private key")
+    raise newException(ValueError, "Invalid private key")
 
 proc completeCmdArg*(T: type PrivateKey, val: string): seq[string] =
   return @[]
 
 proc parseCmdArg*(T: type ClientConfig, p: string): T
-      {.raises: [ConfigurationError].} =
+      {.raises: [ValueError].} =
   let uri = parseUri(p)
   if (uri.scheme == "http" or uri.scheme == "https"):
     getHttpClientConfig(p)
@@ -284,7 +284,7 @@ proc parseCmdArg*(T: type ClientConfig, p: string): T
     getWebSocketClientConfig(p)
   else:
     raise newException(
-      ConfigurationError, "Proxy uri should have defined scheme (http/https/ws/wss)"
+      ValueError, "Proxy uri should have defined scheme (http/https/ws/wss)"
     )
 
 proc completeCmdArg*(T: type ClientConfig, val: string): seq[string] =

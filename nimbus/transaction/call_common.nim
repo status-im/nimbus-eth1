@@ -246,7 +246,7 @@ proc prepareToRunComputation(host: TransactionHost, call: CallParams) =
       # EIP-4844
       if fork >= FkCancun:
         let blobFee = calcDataFee(call.versionedHashes.len,
-          vmState.parent.excessDataGas).GasInt
+          vmState.parent.excessBlobGas).GasInt
         db.subBalance(call.sender, blobFee.u256)
 
 proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): GasInt =

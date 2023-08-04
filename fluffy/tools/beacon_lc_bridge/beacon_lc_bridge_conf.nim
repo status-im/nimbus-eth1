@@ -170,7 +170,7 @@ type BeaconBridgeConf* = object
     name: "direct-peer" .}: seq[string]
 
 proc parseCmdArg*(
-    T: type Web3Url, p: string): T {.raises: [ConfigurationError].} =
+    T: type Web3Url, p: string): T {.raises: [ValueError].} =
   let
     url = parseUri(p)
     normalizedScheme = url.scheme.toLowerAscii()
@@ -181,7 +181,7 @@ proc parseCmdArg*(
     Web3Url(kind: WsUrl, web3Url: p)
   else:
     raise newException(
-      ConfigurationError,
+      ValueError,
       "The Web3 URL must specify one of following protocols: http/https/ws/wss"
     )
 
