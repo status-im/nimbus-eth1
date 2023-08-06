@@ -181,7 +181,7 @@ proc getTd(com: CommonRef, blockHash: Hash256): Option[DifficultyInt] =
 
 proc needTdForHardForkDetermination(com: CommonRef): bool =
   let t = com.forkTransitionTable.mergeForkTransitionThreshold
-  t.blockNumber.isNone and t.ttd.isSome
+  t.ttdPassed.isNone and t.blockNumber.isNone and t.ttd.isSome
 
 proc getTdIfNecessary(com: CommonRef, blockHash: Hash256): Option[DifficultyInt] =
   if needTdForHardForkDetermination(com):

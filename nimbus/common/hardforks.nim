@@ -62,6 +62,7 @@ type
   MergeForkTransitionThreshold* = object
     blockNumber*: Option[BlockNumber]
     ttd*: Option[DifficultyInt]
+    ttdPassed*: Option[bool]
 
   ForkTransitionTable* = object
     blockNumberThresholds*: array[Frontier..GrayGlacier, Option[BlockNumber]]
@@ -132,9 +133,11 @@ func isGTETransitionThreshold*(map: ForkTransitionTable, forkDeterminer: ForkDet
     map.blockNumberThresholds[fork].isSome and forkDeterminer.blockNumber >= map.blockNumberThresholds[fork].get
   elif fork == MergeFork:
     # MergeFork is a special case that can use either block number or ttd;
-    # block number takes precedence.
+    # ttdPassed > block number > ttd takes precedence.
     let t = map.mergeForkTransitionThreshold
-    if t.blockNumber.isSome:
+    if t.ttdPassed.isSome:
+      t.ttdPassed.get
+    elif t.blockNumber.isSome:
       forkDeterminer.blockNumber >= t.blockNumber.get
     elif t.ttd.isSome and forkDeterminer.td.isSome:
       forkDeterminer.td.get >= t.ttd.get
@@ -172,6 +175,7 @@ type
 
     clique*             : CliqueOptions
     terminalTotalDifficulty*: Option[UInt256]
+    terminalTotalDifficultyPassed*: Option[bool]
     consensusType*
       {.dontSerialize.} : ConsensusType
 
@@ -215,7 +219,11 @@ const
 
 
 func mergeForkTransitionThreshold*(conf: ChainConfig): MergeForkTransitionThreshold =
-  MergeForkTransitionThreshold(blockNumber: conf.mergeForkBlock, ttd: conf.terminalTotalDifficulty)
+  MergeForkTransitionThreshold(
+    blockNumber: conf.mergeForkBlock,
+    ttd: conf.terminalTotalDifficulty,
+    ttdPassed: conf.terminalTotalDifficultyPassed
+  )
 
 proc toForkTransitionTable*(conf: ChainConfig): ForkTransitionTable =
   # We used to auto-generate this code from a list of
@@ -258,7 +266,8 @@ proc populateFromForkTransitionTable*(conf: ChainConfig, t: ForkTransitionTable)
 
   conf.mergeForkBlock          = t.mergeForkTransitionThreshold.blockNumber
   conf.terminalTotalDifficulty = t.mergeForkTransitionThreshold.ttd
-  
+  conf.terminalTotalDifficultyPassed = t.mergeForkTransitionThreshold.ttdPassed
+
   conf.shanghaiTime        = t.timeThresholds[HardFork.Shanghai]
   conf.cancunTime          = t.timeThresholds[HardFork.Cancun]
 
