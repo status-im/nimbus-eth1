@@ -12,6 +12,7 @@
     "muirGlacierBlock": 33,
     "berlinBlock": 33,
     "londonBlock": 33,    
+    "mergeForkBlock": 33,
     "terminalTotalDifficulty": 4357120,
     "shanghaiTime": 1444660030    
   },

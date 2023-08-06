@@ -24,10 +24,14 @@ proc importRlpBlock*(blocksRlp: openArray[byte]; com: CommonRef; importFile: str
     header: BlockHeader
     body: BlockBody
 
+  # The following kludge is needed for the `LegacyDbPersistent` type database
+  # when `pruneTrie` is enabled. For other cases, this code is irrelevant.
+  com.db.compensateLegacySetup()
+
   # even though the new imported blocks have block number
   # smaller than head, we keep importing it.
   # it maybe a side chain.
-  
+
   while rlp.hasData:
     try:
       rlp.decompose(header, body)
