@@ -415,19 +415,20 @@ proc topIsEmptyAddLeaf(
 proc updatePayload(
     db: AristoDbRef;                   # Database, top layer
     hike: Hike;                        # No path legs
-    leaf: LeafTiePayload;              # Leaf data and payload
+    leafTie: LeafTie;                  # Leaf item to add to the database
+    payload: PayloadRef;               # Payload value
      ): Hike =
   ## Update leaf vertex if payloads differ
   result = hike
   let vtx = result.legs[^1].wp.vtx
 
   # Update payloads if they differ
-  if vtx.lData != leaf.payload:
+  if vtx.lData != payload:
     let vid = result.legs[^1].wp.vid
 
-    vtx.lData = leaf.payload
+    vtx.lData = payload
     db.top.sTab[vid] = vtx
-    db.top.lTab[leaf.leafTie] = vid
+    db.top.lTab[leafTie] = vid
     db.clearMerkleKeys(result, vid)
 
 # ------------------------------------------------------------------------------
@@ -532,7 +533,8 @@ proc mergeNodeImpl(
 
 proc merge*(
     db: AristoDbRef;                   # Database, top layer
-    leaf: LeafTiePayload;              # Leaf item to add to the database
+    leafTie: LeafTie;                  # Leaf item to add to the database
+    payload: PayloadRef;               # Payload value
       ): Hike =
   ## Merge the argument `leaf` key-value-pair into the top level vertex table
   ## of the database `db`. The field `pathKey` of the `leaf` argument is used
@@ -544,33 +546,33 @@ proc merge*(
   # Check whether the leaf is on the database and payloads match
   var haveLeafOk = false
   block:
-    let vid = db.top.lTab.getOrVoid leaf.leafTie
+    let vid = db.top.lTab.getOrVoid leafTie
     if vid.isValid:
       let vtx = db.getVtx vid
-      if vtx.isValid and vtx.lData == leaf.payload:
+      if vtx.isValid and vtx.lData == payload:
         haveLeafOk = true
 
   if haveLeafOk:
     result.error = MergeLeafPathCachedAlready
 
   else:
-    let hike = leaf.leafTie.hikeUp(db)
+    let hike = leafTie.hikeUp(db)
     if 0 < hike.legs.len:
       case hike.legs[^1].wp.vtx.vType:
       of Branch:
-        result = db.topIsBranchAddLeaf(hike, leaf.payload)
+        result = db.topIsBranchAddLeaf(hike, payload)
       of Leaf:
         if 0 < hike.tail.len:          # `Leaf` vertex problem?
           return Hike(error: MergeLeafGarbledHike)
-        result = db.updatePayload(hike, leaf)
+        result = db.updatePayload(hike, leafTie, payload)
       of Extension:
-        result = db.topIsExtAddLeaf(hike, leaf.payload)
+        result = db.topIsExtAddLeaf(hike, payload)
 
     else:
       # Empty hike
       let rootVtx = db.getVtx hike.root
       if rootVtx.isValid:
-        result = db.topIsEmptyAddLeaf(hike,rootVtx,leaf.payload)
+        result = db.topIsEmptyAddLeaf(hike,rootVtx, payload)
 
       else:
         # Bootstrap for existing root ID
@@ -578,22 +580,37 @@ proc merge*(
           vid: hike.root,
           vtx: VertexRef(
             vType: Leaf,
-            lPfx:  leaf.leafTie.path.to(NibblesSeq),
-            lData: leaf.payload))
+            lPfx:  leafTie.path.to(NibblesSeq),
+            lData: payload))
         db.top.sTab[wp.vid] = wp.vtx
         result = Hike(root: wp.vid, legs: @[Leg(wp: wp, nibble: -1)])
 
       # Double check the result until the code is more reliable
       block:
         let rc = result.to(NibblesSeq).pathToKey
-        if rc.isErr or rc.value != leaf.leafTie.path.to(HashKey):
+        if rc.isErr or rc.value != leafTie.path.to(HashKey):
           result.error = MergeAssemblyFailed # Ooops
 
     # Update leaf acccess cache
     if result.error == AristoError(0):
-      db.top.lTab[leaf.leafTie] = result.legs[^1].wp.vid
+      db.top.lTab[leafTie] = result.legs[^1].wp.vid
 
     # End else (1st level)
+
+proc merge*(
+    db: AristoDbRef;                   # Database, top layer
+    leaf: LeafTiePayload               # Leaf item to add to the database
+      ): Result[bool,AristoError] =
+  ## Variant of `merge()`. This function will not indicate if the leaf
+  ## was cached, already.
+  let hike = db.merge(leaf.leafTie, leaf.payload)
+  case hike.error:
+  of AristoError(0):
+    ok(true)
+  of MergeLeafPathCachedAlready:
+    ok(false)
+  else:
+    err(hike.error)
 
 proc merge*(
     db: AristoDbRef;                   # Database, top layer
@@ -602,7 +619,7 @@ proc merge*(
   ## Variant of `merge()` for leaf lists.
   var (merged, dups) = (0, 0)
   for n,w in leafs:
-    let hike = db.merge w
+    let hike = db.merge(w.leafTie, w.payload)
     if hike.error == AristoError(0):
       merged.inc
     elif hike.error == MergeLeafPathCachedAlready:
@@ -616,7 +633,7 @@ proc merge*(
     db: AristoDbRef;                   # Database, top layer
     path: HashID;                      # Path into database
     rlpData: Blob;                     # RLP encoded payload data
-      ): Result[void,AristoError] =
+      ): Result[bool,AristoError] =
   ## Variant of `merge()` for storing a single item. This function stores the
   ## arguments as a `LeafTiePayload` type item on the main tree with root
   ## vertex ID 1. This is handy when used on a temporary backendless `Aristo`
@@ -624,16 +641,13 @@ proc merge*(
   ## `hashify()`), the state root is avaliable as Merkle hash key for
   ## vertex ID 1 (see `getKey()`.)
   ##
-  let hike = db.merge LeafTiePayload(
+  db.merge LeafTiePayload(
     leafTie: LeafTie(
       root:    VertexID(1),
       path:    path),
     payload: PayloadRef(
       pType:   RlpData,
       rlpBlob: rlpData))
-  if hike.error == AristoError(0):
-    return err(hike.error)
-  ok()
 
 # ---------------------
 

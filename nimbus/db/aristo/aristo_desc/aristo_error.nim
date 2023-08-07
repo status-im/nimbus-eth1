@@ -171,9 +171,6 @@ type
     SaveStateRootMissing
     SaveLeafVidRepurposed
 
-    # Pop layer, `pop()`
-    PopStackUnderflow
-
     # Get functions form `aristo_get.nim`
     GetLeafNotFound
 
@@ -195,12 +192,13 @@ type
     RdbBeIngestSstWriter
 
     # Transaction wrappers
-    TxDbStackNonEmpty
-    TxValidHandleExpected
-    TxBaseHandleExpected
-    TxTopHandleExpected
-    TxCacheKeyFetchFail
-    TxBeKeyFetchFail
+    TxNoPendingTx
+    TxArgStaleTx
+    TxNotTopTx
+    TxExecNestingAttempt
+    TxExecBaseTxLocked
+    TxExecDirectiveLocked
+    TxStackUnderflow
 
     # Miscelaneous handy helpers
     PayloadTypeUnsupported

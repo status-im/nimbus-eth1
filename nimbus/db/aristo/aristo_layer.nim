@@ -18,65 +18,8 @@ import
   "."/[aristo_desc, aristo_get, aristo_vid]
 
 # ------------------------------------------------------------------------------
-# Private functions
-# ------------------------------------------------------------------------------
-
-proc cpy(layer: AristoLayerRef): AristoLayerRef =
-  new result
-  result[] = layer[]
-
-# ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
-
-proc retool*(
-    db: AristoDbRef;
-    flushStack = false;
-      ): Result[void,AristoError] =
-  ## This function re-initialises the top layer cache to its default value. It
-  ## acts as sort of a `rollback()` without a transaction.
-  ##
-  if 0 < db.stack.len and not flushStack:
-    db.top = db.stack[^1].cpy
-
-  else:
-    # Initialise new top layer from the backend
-    if db.backend.isNil:
-      db.top = AristoLayerRef()
-    else:
-      let rc = db.backend.getIdgFn()
-      if rc.isErr:
-        return err(rc.error)
-      db.top = AristoLayerRef(vGen: rc.value)
-    if flushStack:
-      db.stack.setLen(0)
-
-
-proc push*(db: var AristoDbRef) =
-  ## Save the current cache state on the stack and continue working on a copy
-  ## of that state.
-  ##
-  db.stack.add db.top.cpy
-
-proc pop*(
-    db: AristoDbRef;
-    merge = true;
-      ): Result[void,(VertexID,AristoError)] =
-  ## Reduce the cache state stack. If the argument `merge` is set `true`, the
-  ## current top layer cache remains active and the top item of the stack is
-  ## discarded. Otherwise if  `merge` is set `false`, top item of the stack is
-  ## popped onto current top layer cache (so replacing it.)
-  ##
-  if db.stack.len == 0:
-    return err((VertexID(0),PopStackUnderflow))
-
-  if not merge:
-    # Roll back to parent layer state.
-    db.top = db.stack[^1]
-  db.stack.setLen(db.stack.len-1)
-
-  ok()
-
 
 proc save*(
     db: AristoDbRef;                       # Database to be updated

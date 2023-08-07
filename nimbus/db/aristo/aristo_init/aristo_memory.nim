@@ -18,7 +18,7 @@
 ##     aristo/aristo_init,
 ##     aristo/aristo_init/aristo_memory
 ##
-##   let rc = AristoDb.init(BackendMemory)
+##   let rc = newAristoDbRef(BackendMemory)
 ##   if rc.isOk:
 ##     let be = rc.value.to(MemBackendRef)
 ##     for (n, key, vtx) in be.walkVtx:

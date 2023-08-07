@@ -275,6 +275,17 @@ proc deleteImpl(
     return err((lf.vid,DelLeafExpexted))
   if lf.vid in db.top.pPrf:
     return err((lf.vid, DelLeafLocked))
+
+  # Will be needed at the end. Just detect an error early enouhh
+  let leafVidBe = block:
+    let rc = db.getVtxBackend lf.vid
+    if rc.isErr:
+      if rc.error != GetVtxNotFound:
+        return err((lf.vid, rc.error))
+      VertexRef(nil)
+    else:
+      rc.value
+
   db.doneWith lf.vid
 
   if 1 < hike.legs.len:
@@ -323,13 +334,12 @@ proc deleteImpl(
         return err(rc.error)
 
   # Delete leaf entry
-  let rc = db.getVtxBackend lf.vid
-  if rc.isErr and rc.error == GetVtxNotFound:
-    # No need to keep it any longer
-    db.top.lTab.del lty
-  else:
+  if leafVidBe.isValid:
     # To be recorded on change history
     db.top.lTab[lty] = VertexID(0)
+  else:
+    # No need to keep it any longer in cache
+    db.top.lTab.del lty
 
   ok()
 
