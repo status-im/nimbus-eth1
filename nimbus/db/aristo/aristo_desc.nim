@@ -40,6 +40,13 @@ type
     root*: HashKey                    ## Previous hash key for `VertexID(1)`
     leafs*: Table[LeafTie,PayloadRef] ## Changed leafs after merge into backend
 
+  AristoTxRef* = ref object
+    ## Transaction descriptor
+    db*: AristoDbRef                  ## Database descriptor
+    parent*: AristoTxRef              ## Previous transaction
+    txUid*: uint                      ## Unique ID among transactions
+    stackInx*: int                    ## Stack index for this transaction
+
   AristoLayerRef* = ref object
     ## Hexary trie database layer structures. Any layer holds the full
     ## change relative to the backend.
@@ -49,6 +56,7 @@ type
     pAmk*: Table[HashLabel,VertexID]  ## Reverse `kMap` entries, hash key lookup
     pPrf*: HashSet[VertexID]          ## Locked vertices (proof nodes)
     vGen*: seq[VertexID]              ## Unique vertex ID generator
+    txUid*: uint                      ## Transaction identifier if positive
 
   AristoDbRef* = ref AristoDbObj
   AristoDbObj* = object
@@ -57,6 +65,9 @@ type
     stack*: seq[AristoLayerRef]       ## Stashed immutable parent layers
     backend*: AristoBackendRef        ## Backend database (may well be `nil`)
     history*: seq[AristoChangeLogRef] ## Backend saving history
+
+    txRef*: AristoTxRef               ## Latest active transaction
+    txUidGen*: uint                   ## Tx-relative unique number generator
 
     # Debugging data below, might go away in future
     xMap*: Table[HashLabel,VertexID]  ## For pretty printing, extends `pAmk`

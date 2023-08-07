@@ -13,27 +13,33 @@
 ##
 {.push raises: [].}
 
-import
-  eth/common,
-  aristo/aristo_desc/[aristo_types_identifiers, aristo_types_structural],
-  aristo/[aristo_constants, aristo_desc, aristo_init, aristo_nearby,
-          aristo_transaction, aristo_transcode, aristo_utils]
-
+import aristo/aristo_desc/[
+  aristo_types_identifiers, aristo_types_structural]
 export
-  aristo_constants,
-  aristo_transaction,
-  aristo_types_identifiers,
-  aristo_types_structural,
-  aristo_nearby,
-  aristo_utils,
-  AristoBackendType,
+  aristo_types_identifiers, aristo_types_structural
+
+import aristo/[
+  aristo_constants, aristo_delete, aristo_fetch, aristo_hashify, aristo_init,
+  aristo_merge, aristo_nearby, aristo_tx, aristo_utils]
+export
+  aristo_constants, aristo_delete, aristo_fetch, aristo_hashify, aristo_init,
+  aristo_merge, aristo_nearby, aristo_tx, aristo_utils
+
+import
+  aristo/aristo_transcode
+export
+  append, read
+
+import
+  aristo/aristo_vid
+export
+  vidFetch
+
+import
+  aristo/aristo_desc
+export
   AristoDbRef,
   AristoError,
-  append,
-  init,
-  isValid,
-  finish,
-  read
+  isValid
 
 # End
-
