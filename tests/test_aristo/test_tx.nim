@@ -16,7 +16,7 @@ import
   eth/common,
   stew/results,
   unittest2,
-  ../../nimbus/db/aristo,
+  ../../nimbus/db/[aristo, aristo/aristo_init/persistent],
   ../../nimbus/db/aristo/[aristo_check, aristo_desc, aristo_get, aristo_merge],
   ./test_helpers
 
@@ -303,7 +303,7 @@ proc testTxMergeAndDelete*(
   for n,w in list:
     # Start with brand new persistent database.
     db = block:
-      let rc = AristoDbRef.init(BackendRocksDB,rdbPath)
+      let rc = newAristoDbRef(BackendRocksDB,rdbPath)
       if rc.isErr:
         check rc.error == 0
         return
@@ -415,7 +415,7 @@ proc testTxMergeProofAndKvpList*(
     if resetDb or w.root != rootKey or w.proof.len == 0:
       tdb.innerCleanUp tx
       adb = block:
-        let rc = AristoDbRef.init(BackendRocksDB,rdbPath)
+        let rc = newAristoDbRef(BackendRocksDB,rdbPath)
         if rc.isErr:
           check rc.error == 0
           return

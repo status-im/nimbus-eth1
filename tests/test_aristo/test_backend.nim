@@ -17,7 +17,7 @@ import
   unittest2,
   ../../nimbus/sync/protocol,
   ../../nimbus/db/aristo/aristo_init/[
-    aristo_memory, aristo_rocksdb],
+    aristo_memory, aristo_rocksdb, persistent],
   ../../nimbus/db/aristo/[
     aristo_desc, aristo_debug, aristo_hashify, aristo_init, aristo_layer,
     aristo_merge],
@@ -128,11 +128,11 @@ proc test_backendConsistency*(
     if w.root != rootKey or resetDB:
       rootKey = w.root
       count = 0
-      ndb = AristoDbRef.init BackendNone
-      mdb = AristoDbRef.init BackendMemory
+      ndb = newAristoDbRef BackendNone
+      mdb = newAristoDbRef BackendMemory
       if doRdbOk:
         rdb.finish(flush=true)
-        let rc = AristoDbRef.init(BackendRocksDB,rdbPath)
+        let rc = newAristoDbRef(BackendRocksDB,rdbPath)
         if rc.isErr:
           check rc.error == 0
           return

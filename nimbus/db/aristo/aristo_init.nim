@@ -11,93 +11,18 @@
 ## Constructors for Aristo DB
 ## ==========================
 ##
-
+## See `./README.md` for implementation details
+##
+## This module provides a memory datanase only. For providing a persistent
+## constructor, import `aristo_init/persistent` though avoiding to
+## unnecessarily link to the persistent backend library (e.g. `rocksdb`)
+## when a memory only database is used.
+##
 {.push raises: [].}
 
 import
-  stew/results,
-  ./aristo_init/[aristo_init_common, aristo_memory, aristo_rocksdb],
-  ./aristo_desc,
-  ./aristo_desc/aristo_types_backend
-
+  ./aristo_init/memory_only
 export
-  AristoBackendType, TypedBackendRef
+  memory_only
 
-# ------------------------------------------------------------------------------
-# Public database constuctors, destructor
-# ------------------------------------------------------------------------------
-
-proc init*(
-    T: type AristoDbRef;
-    backend: static[AristoBackendType];
-    basePath: string;
-      ): Result[T, AristoError] =
-  ## Generic constructor, `basePath` argument is ignored for `BackendNone` and
-  ## `BackendMemory`  type backend database. Also, both of these backends
-  ## aways succeed initialising.
-  when backend == BackendNone:
-    ok T(top: AristoLayerRef())
-
-  elif backend == BackendMemory:
-    ok T(top: AristoLayerRef(), backend: memoryBackend())
-
-  elif backend == BackendRocksDB:
-    let be = block:
-      let rc = rocksDbBackend basePath
-      if rc.isErr:
-        return err(rc.error)
-      rc.value
-    let vGen = block:
-      let rc = be.getIdgFn()
-      if rc.isErr:
-        return err(rc.error)
-      rc.value
-    ok T(top: AristoLayerRef(vGen: vGen), backend: be)
-
-  else:
-    {.error: "Unknown/unsupported Aristo DB backend".}
-
-proc init*(
-    T: type AristoDbRef;
-    backend: static[AristoBackendType];
-      ): T =
-  ## Simplified prototype for  `BackendNone` and `BackendMemory`  type backend.
-  when backend == BackendNone:
-    T(top: AristoLayerRef())
-
-  elif backend == BackendMemory:
-    T(top: AristoLayerRef(), backend: memoryBackend())
-
-  elif backend == BackendRocksDB:
-    {.error: "Aristo DB backend \"BackendRocksDB\" needs basePath argument".}
-
-  else:
-    {.error: "Unknown/unsupported Aristo DB backend".}
-
-# -----------------
-
-proc finish*(db: AristoDbRef; flush = false) =
-  ## Backend destructor. The argument `flush` indicates that a full database
-  ## deletion is requested. If set ot left `false` the outcome might differ
-  ## depending on the type of backend (e.g. the `BackendMemory` backend will
-  ## always flush on close.)
-  ##
-  ## This distructor may be used on already *destructed* descriptors.
-  if not db.backend.isNil:
-    db.backend.closeFn flush
-    db.backend = AristoBackendRef(nil)
-  db.top = AristoLayerRef(nil)
-  db.stack.setLen(0)
-
-# -----------------
-
-proc to*[W: TypedBackendRef|MemBackendRef|RdbBackendRef](
-    db: AristoDbRef;
-    T: type W;
-      ): T =
-  ## Handy helper for lew-level access to some backend functionality
-  db.backend.T
-
-# ------------------------------------------------------------------------------
 # End
-# ------------------------------------------------------------------------------

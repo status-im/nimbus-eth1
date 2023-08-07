@@ -61,8 +61,9 @@ type
     ## hash key is paired with the top vertex of the relevant sub-trie. This
     ## construction is similar to the one of a `LeafTie` object.
     ##
-    ## Note that `LeafTie` objects have no representation in the `Aristo Trie`.
-    ## They are used temporarily and in caches or backlog tables.
+    ## Note that `HashLabel` objects have no representation in the
+    ## `Aristo Trie`. They are used temporarily and in caches or backlog
+    ## tables.
     root*: VertexID                  ## Root ID for the sub-trie.
     key*: HashKey                    ## Merkle hash tacked to a vertex.
 
@@ -172,8 +173,8 @@ func to*(n: SomeUnsignedInt|UInt256; T: type HashID): T =
   ## Representation of a scalar as `HashID` (preserving full information)
   n.u256.T
 
-func digestTo*(data: Blob; T: type HashKey): T =
-  ## Keccak hash of a `Blob`, represented as a `HashKey`
+func digestTo*(data: openArray[byte]; T: type HashKey): T =
+  ## Keccak hash of a `Blob` like argument, represented as a `HashKey`
   keccakHash(data).data.T
 
 # ------------------------------------------------------------------------------

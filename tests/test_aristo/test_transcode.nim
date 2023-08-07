@@ -87,7 +87,7 @@ proc test_transcodeAccounts*(
       ) =
   ## Transcoder tests on accounts database
   var
-    adb = AristoDbRef.init BackendNone
+    adb = newAristoDbRef BackendNone
     count = -1
   for (n, key, value) in rocky.walkAllDb():
     if stopAfter < n:
@@ -178,7 +178,7 @@ proc test_transcodeAccounts*(
 proc test_transcodeVidRecycleLists*(noisy = true; seed = 42) =
   ## Transcode VID lists held in `AristoDb` descriptor
   var td = TesterDesc.init seed
-  let db = AristoDbRef.init BackendNone
+  let db = newAristoDbRef BackendNone
 
   # Add some randum numbers
   block:
@@ -204,7 +204,7 @@ proc test_transcodeVidRecycleLists*(noisy = true; seed = 42) =
 
     # Deserialise
     let
-      db1 = AristoDbRef.init BackendNone
+      db1 = newAristoDbRef BackendNone
       rc = dbBlob.deblobify seq[VertexID]
     if rc.isErr:
       check rc.error == AristoError(0)
