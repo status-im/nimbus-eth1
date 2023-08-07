@@ -10,7 +10,7 @@ import
 # JWT Authentication Related
 const
   defaultJwtTokenSecretBytes = "secretsecretsecretsecretsecretse"
-  maxTimeDriftSeconds        = 5'i64
+  maxTimeDriftSeconds        = 60'i64
   defaultProtectedHeader     = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9"
 
 proc base64urlEncode(x: auto): string =

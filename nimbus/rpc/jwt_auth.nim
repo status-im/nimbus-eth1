@@ -138,15 +138,15 @@ proc verifyTokenHS256(token: string; key: JwtSharedKey): Result[void,JwtError] =
     raiseAssert "Ooops verifyTokenHS256(): name=" & $e.name & " msg=" & e.msg
 
   # github.com/ethereum/
-  #  /execution-apis/blob/v1.0.0-alpha.8/src/engine/authentication.md#jwt-claims
+  #  /execution-apis/blob/v1.0.0-beta.3/src/engine/authentication.md#jwt-claims
   #
   # "Required: iat (issued-at) claim. The EL SHOULD only accept iat timestamps
-  #  which are within +-5 seconds from the current time."
+  #  which are within +-60 seconds from the current time."
   #
   # https://datatracker.ietf.org/doc/html/rfc7519#section-4.1.6 describes iat
   # claims.
   let delta = getTime().toUnix - time
-  if delta < -5 or 5 < delta:
+  if delta < -60 or 60 < delta:
     debug "Iat timestamp problem, accepted |delta| <= 5",
       delta
     return err(jwtTimeValidationError)
