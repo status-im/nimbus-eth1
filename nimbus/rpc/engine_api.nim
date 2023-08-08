@@ -232,7 +232,7 @@ proc handle_exchangeTransitionConfiguration(sealingEngine: SealingEngineRef, com
   let ttd = com.ttd
 
   if ttd.isNone:
-    raise newException(ValueError, "invalid ttd: EL (none) CL ($2)" % [$conf.terminalTotalDifficulty])
+    raise newException(ValueError, "invalid ttd: EL (none) CL ($1)" % [$conf.terminalTotalDifficulty])
 
   if conf.terminalTotalDifficulty != ttd.get:
     raise newException(ValueError, "invalid ttd: EL ($1) CL ($2)" % [$ttd.get, $conf.terminalTotalDifficulty])
