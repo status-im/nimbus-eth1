@@ -17,11 +17,12 @@ import
   ../../constants,
   ../../db/core_db,
   ../../utils/utils,
+  ../../rpc/execution_types,
   ./mergetypes
 
 type Hash256 = eth_types.Hash256
 
-proc computePayloadId*(headBlockHash: Hash256, params: PayloadAttributesV1 | PayloadAttributesV2): PayloadID =
+proc computePayloadId*(headBlockHash: Hash256, params: SomePayloadAttributes): PayloadID =
   var dest: Hash256
   var ctx: sha256
   ctx.init()
@@ -73,7 +74,7 @@ proc toWithdrawalV1*(w: Withdrawal): WithdrawalV1 =
     amount: Quantity(w.amount) # AARDVARK: is this wei or gwei or what?
   )
 
-proc maybeWithdrawalsRoot(payload: ExecutionPayloadV1 | ExecutionPayloadV2): Option[Hash256] =
+proc maybeWithdrawalsRoot(payload: SomeExecutionPayload): Option[Hash256] =
   when payload is ExecutionPayloadV1:
     none(Hash256)
   else:
@@ -87,7 +88,19 @@ proc toWithdrawals(withdrawals: openArray[WithdrawalV1]): seq[WithDrawal] =
   for wd in withdrawals:
     result.add toWithdrawal(wd)
 
-proc toBlockHeader*(payload: ExecutionPayloadV1 | ExecutionPayloadV2): EthBlockHeader =
+proc maybeBlobGasUsed(payload: SomeExecutionPayload): Option[uint64] =
+  when payload is ExecutionPayloadV3:
+    some(payload.blobGasUsed.uint64)
+  else:
+    none(uint64)
+
+proc maybeExcessBlobGas(payload: SomeExecutionPayload): Option[uint64] =
+  when payload is ExecutionPayloadV3:
+    some(payload.excessBlobGas.uint64)
+  else:
+    none(uint64)
+
+proc toBlockHeader*(payload: SomeExecutionPayload): EthBlockHeader =
   let transactions = seq[seq[byte]](payload.transactions)
   let txRoot = calcRootHashRlp(transactions)
 
@@ -108,17 +121,21 @@ proc toBlockHeader*(payload: ExecutionPayloadV1 | ExecutionPayloadV2): EthBlockH
     mixDigest      : payload.prevRandao.asEthHash, # EIP-4399 redefine `mixDigest` -> `prevRandao`
     nonce          : default(BlockNonce),
     fee            : some payload.baseFeePerGas,
-    withdrawalsRoot: payload.maybeWithdrawalsRoot # EIP-4895
+    withdrawalsRoot: payload.maybeWithdrawalsRoot, # EIP-4895
+    blobGasUsed    : payload.maybeBlobGasUsed, # EIP-4844
+    excessBlobGas  : payload.maybeExcessBlobGas, # EIP-4844
   )
 
 proc toTypedTransaction*(tx: Transaction): TypedTransaction =
   TypedTransaction(rlp.encode(tx))
 
-proc toBlockBody*(payload: ExecutionPayloadV1 | ExecutionPayloadV2): BlockBody =
+proc toBlockBody*(payload: SomeExecutionPayload): BlockBody =
   result.transactions.setLen(payload.transactions.len)
   for i, tx in payload.transactions:
     result.transactions[i] = rlp.decode(distinctBase tx, Transaction)
   when payload is ExecutionPayloadV2:
+    result.withdrawals = some(payload.withdrawals.toWithdrawals)
+  when payload is ExecutionPayloadV3:
     result.withdrawals = some(payload.withdrawals.toWithdrawals)
 
 proc `$`*(x: BlockHash): string =
@@ -214,5 +231,11 @@ proc unknownPayload*(msg: string): ref InvalidRequest =
 proc invalidAttr*(msg: string): ref InvalidRequest =
   (ref InvalidRequest)(
     code: engineApiInvalidPayloadAttributes,
+    msg: msg
+  )
+
+proc unsupportedFork*(msg: string): ref InvalidRequest =
+  (ref InvalidRequest)(
+    code: engineApiUnsupportedFork,
     msg: msg
   )

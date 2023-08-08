@@ -27,7 +27,8 @@ import
     clique_cfg,
     clique_sealer],
   ../utils/utils,
-  ../common/[common, context]
+  ../common/[common, context],
+  ../rpc/execution_types
 
 
 from web3/ethtypes as web3types import nil, TypedTransaction, WithdrawalV1, ExecutionPayloadV1OrV2, toExecutionPayloadV1OrV2, toExecutionPayloadV1
@@ -158,7 +159,7 @@ func toWithdrawals(list: openArray[WithdrawalV1]): seq[Withdrawal] =
     result.add toWithdrawal(x)
 
 proc generateExecutionPayload*(engine: SealingEngineRef,
-                               payloadAttrs: PayloadAttributesV1 | PayloadAttributesV2): Result[ExecutionPayloadV1OrV2, string] =
+                               payloadAttrs: SomePayloadAttributes): Result[ExecutionPayload, string] =
   let
     headBlock = try: engine.chain.db.getCanonicalHead()
                 except CatchableError: return err "No head block in database"
@@ -169,6 +170,8 @@ proc generateExecutionPayload*(engine: SealingEngineRef,
   pos.feeRecipient = EthAddress payloadAttrs.suggestedFeeRecipient
 
   when payloadAttrs is PayloadAttributesV2:
+    engine.txPool.withdrawals = payloadAttrs.withdrawals.toWithdrawals
+  elif payloadAttrs is PayloadAttributesV3:
     engine.txPool.withdrawals = payloadAttrs.withdrawals.toWithdrawals
   else:
     engine.txPool.withdrawals = @[]
@@ -199,7 +202,17 @@ proc generateExecutionPayload*(engine: SealingEngineRef,
     else:
       none[seq[WithdrawalV1]]()
 
-  return ok(ExecutionPayloadV1OrV2(
+  let blobGasUsed = if blk.header.blobGasUsed.isSome:
+                      some(blk.header.blobGasUsed.get.Quantity)
+                    else:
+                      none(Quantity)
+
+  let excessBlobGas = if blk.header.excessBlobGas.isSome:
+                        some(blk.header.excessBlobGas.get.Quantity)
+                      else:
+                        none(Quantity)
+
+  return ok(ExecutionPayload(
     parentHash: Web3BlockHash blk.header.parentHash.data,
     feeRecipient: Web3Address blk.header.coinbase,
     stateRoot: Web3BlockHash blk.header.stateRoot.data,
@@ -214,12 +227,10 @@ proc generateExecutionPayload*(engine: SealingEngineRef,
     baseFeePerGas: blk.header.fee.get(UInt256.zero),
     blockHash: Web3BlockHash blockHash.data,
     transactions: transactions,
-    withdrawals: withdrawals
+    withdrawals: withdrawals,
+    blobGasUsed: blobGasUsed,
+    excessBlobGas: excessBlobGas
   ))
-
-proc generateExecutionPayloadV1*(engine: SealingEngineRef,
-                                 payloadAttrs: PayloadAttributesV1): Result[ExecutionPayloadV1, string] =
-  return generateExecutionPayload(engine, payloadAttrs).map(toExecutionPayloadV1)
 
 proc new*(_: type SealingEngineRef,
           chain: ChainRef,

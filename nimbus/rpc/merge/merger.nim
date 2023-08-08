@@ -28,10 +28,10 @@ type
     db    : CoreDbRef
     status: TransitionStatus
 
-proc writeStatus(db: CoreDbRef, status: TransitionStatus) {.gcsafe, raises: [RlpError].} =
+proc writeStatus(db: CoreDbRef, status: TransitionStatus) {.gcsafe, raises: [].} =
   db.kvt.put(transitionStatusKey().toOpenArray(), rlp.encode(status))
 
-proc readStatus(db: CoreDbRef): TransitionStatus {.gcsafe, raises: [RlpError].} =
+proc readStatus(db: CoreDbRef): TransitionStatus {.gcsafe, raises: [].} =
   var bytes = db.kvt.get(transitionStatusKey().toOpenArray())
   if bytes.len > 0:
     try:
@@ -39,7 +39,7 @@ proc readStatus(db: CoreDbRef): TransitionStatus {.gcsafe, raises: [RlpError].} 
     except CatchableError:
       error "Failed to decode POS transition status"
 
-proc new*(_: type MergerRef, db: CoreDbRef): MergerRef {.gcsafe, raises: [RlpError].} =
+proc new*(_: type MergerRef, db: CoreDbRef): MergerRef {.gcsafe, raises: [].} =
   MergerRef(
     db: db,
     status: db.readStatus()
@@ -47,7 +47,7 @@ proc new*(_: type MergerRef, db: CoreDbRef): MergerRef {.gcsafe, raises: [RlpErr
 
 # ReachTTD is called whenever the first NewHead message received
 # from the consensus-layer.
-proc reachTTD*(m: MergerRef) {.gcsafe, raises: [RlpError].} =
+proc reachTTD*(m: MergerRef) {.gcsafe, raises: [].} =
   if m.status.leftPoW:
     return
 
@@ -58,7 +58,7 @@ proc reachTTD*(m: MergerRef) {.gcsafe, raises: [RlpError].} =
 
 # FinalizePoS is called whenever the first FinalisedBlock message received
 # from the consensus-layer.
-proc finalizePoS*(m: MergerRef) {.gcsafe, raises: [RlpError].} =
+proc finalizePoS*(m: MergerRef) {.gcsafe, raises: [].} =
   if m.status.enteredPoS:
     return
 

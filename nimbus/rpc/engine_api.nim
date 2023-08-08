@@ -11,7 +11,8 @@ import
   std/[typetraits, times, strutils, sequtils, sets],
   stew/[results, byteutils],
   json_rpc/rpcserver,
-  web3/[conversions, engine_api_types],
+  web3/[conversions],
+  web3/engine_api_types as web3types,
   eth/rlp,
   eth/common/eth_types,
   eth/common/eth_types_rlp,
@@ -22,6 +23,7 @@ import
   ../core/[tx_pool, sealer],
   ../evm/async/data_sources,
   ./merge/[mergetypes, mergeutils],
+  ./execution_types,
   # put chronicles import last because Nim
   # compiler resolve `$` for logging
   # arguments differently on Windows vs posix
@@ -30,7 +32,11 @@ import
 
 {.push raises: [].}
 
-type Hash256 = eth_types.Hash256
+type
+  Hash256 = eth_types.Hash256
+  Web3Blob = web3types.Blob
+  Web3KZGProof = web3types.KZGProof
+  Web3KZGCommitment = web3types.KZGCommitment
 
 
 func toPayloadAttributesV1OrPayloadAttributesV2*(a: PayloadAttributesV1OrV2): Result[PayloadAttributesV1, PayloadAttributesV2] =
@@ -92,7 +98,10 @@ template unsafeQuantityToInt64(q: Quantity): int64 =
 # null.) --Adam
 
 # https://github.com/ethereum/execution-apis/blob/main/src/engine/specification.md#engine_newpayloadv1
-proc handle_newPayload(sealingEngine: SealingEngineRef, api: EngineApiRef, com: CommonRef, maybeAsyncDataSource: Option[AsyncDataSource], payload: ExecutionPayloadV1 | ExecutionPayloadV2): PayloadStatusV1 {.raises: [CatchableError].} =
+proc handle_newPayload(sealingEngine: SealingEngineRef,
+                       api: EngineApiRef,
+                       com: CommonRef, maybeAsyncDataSource: Option[AsyncDataSource],
+                       payload: SomeExecutionPayload): PayloadStatusV1 {.raises: [CatchableError].} =
   trace "Engine API request received",
     meth = "newPayload", number = $(distinctBase payload.blockNumber), hash = payload.blockHash
 
@@ -221,6 +230,41 @@ proc handle_getPayload(api: EngineApiRef, payloadId: PayloadID): GetPayloadV2Res
     blockValue: blockValue
   )
 
+proc handle_getPayloadV3(api: EngineApiRef, com: CommonRef, payloadId: PayloadID): GetPayloadV3Response {.raises: [CatchableError].} =
+  trace "Engine API request received",
+    meth = "GetPayload", id = payloadId.toHex
+
+  var payload: ExecutionPayloadV3
+  if not api.get(payloadId, payload):
+    raise unknownPayload("Unknown payload")
+
+  if not com.isCancunOrLater(fromUnix(payload.timestamp.unsafeQuantityToInt64)):
+    raise unsupportedFork("payload timestamp is less than Cancun activation")
+
+  var
+    blockValue: UInt256
+    blobsBundle: BlobsBundleV1
+
+  try:
+    for ttx in payload.transactions:
+      let tx = rlp.decode(distinctBase(ttx), Transaction)
+      blockValue += u256(tx.gasPrice * tx.maxPriorityFee)
+      if tx.networkPayload.isNil.not:
+        for blob in tx.networkPayload.blobs:
+          blobsBundle.blobs.add Web3Blob(blob)
+        for p in tx.networkPayload.proofs:
+          blobsBundle.proofs.add Web3KZGProof(p)
+        for k in tx.networkPayload.commitments:
+          blobsBundle.commitments.add Web3KZGCommitment(k)
+  except RlpError:
+    doAssert(false, "found TypedTransaction that RLP failed to decode")
+
+  return GetPayloadV3Response(
+    executionPayload: payload,
+    blockValue: blockValue,
+    blobsBundle: blobsBundle
+  )
+
 # https://github.com/ethereum/execution-apis/blob/main/src/engine/specification.md#engine_exchangetransitionconfigurationv1
 proc handle_exchangeTransitionConfiguration(sealingEngine: SealingEngineRef, com: CommonRef, conf: TransitionConfigurationV1): TransitionConfigurationV1 {.raises: [CatchableError].} =
   trace "Engine API request received",
@@ -281,10 +325,16 @@ proc handle_exchangeTransitionConfiguration(sealingEngine: SealingEngineRef, com
 # If there are payloadAttributes:
 #     we try to assemble a block with the payloadAttributes and return its payloadID
 # https://github.com/ethereum/execution-apis/blob/main/src/engine/shanghai.md#engine_forkchoiceupdatedv2
-proc handle_forkchoiceUpdated(sealingEngine: SealingEngineRef, com: CommonRef, api: EngineApiRef, update: ForkchoiceStateV1, payloadAttributes: Option[PayloadAttributesV1] | Option[PayloadAttributesV2]): ForkchoiceUpdatedResponse {.raises: [CatchableError].} =
+proc handle_forkchoiceUpdated(sealingEngine: SealingEngineRef,
+                              com: CommonRef, api: EngineApiRef,
+                              update: ForkchoiceStateV1,
+                              payloadAttributes: SomeOptionalPayloadAttributes): ForkchoiceUpdatedResponse {.raises: [CatchableError].} =
 
   if payloadAttributes.isSome:
-    if com.isShanghaiOrLater(fromUnix(payloadAttributes.get.timestamp.unsafeQuantityToInt64)):
+    if com.isCancunOrLater(fromUnix(payloadAttributes.get.timestamp.unsafeQuantityToInt64)):
+      when not(payloadAttributes is Option[PayloadAttributesV3]):
+        raise invalidParams("if timestamp is Cancun or later, payloadAttributes must be PayloadAttributesV3")
+    elif com.isShanghaiOrLater(fromUnix(payloadAttributes.get.timestamp.unsafeQuantityToInt64)):
       when not(payloadAttributes is Option[PayloadAttributesV2]):
         raise invalidParams("if timestamp is Shanghai or later, payloadAttributes must be PayloadAttributesV2")
     else:
@@ -475,6 +525,7 @@ const supportedMethods: HashSet[string] =
     "engine_exchangeTransitionConfigurationV1",
     "engine_forkchoiceUpdatedV1",
     "engine_forkchoiceUpdatedV2",
+    "engine_forkchoiceUpdatedV3",
     "engine_getPayloadBodiesByHashV1"
   ])
 
@@ -498,12 +549,31 @@ proc setupEngineAPI*(
   server.rpc("engine_newPayloadV1") do(payload: ExecutionPayloadV1) -> PayloadStatusV1:
     return handle_newPayload(sealingEngine, api, com, maybeAsyncDataSource, payload)
 
-  server.rpc("engine_newPayloadV2") do(payload: ExecutionPayloadV1OrV2) -> PayloadStatusV1:
-    let p = payload.toExecutionPayloadV1OrExecutionPayloadV2
-    if p.isOk:
-      return handle_newPayload(sealingEngine, api, com, maybeAsyncDataSource, p.get)
+  server.rpc("engine_newPayloadV2") do(payload: ExecutionPayload) -> PayloadStatusV1:
+    if payload.version == Version.V1:
+      return handle_newPayload(sealingEngine, api, com, maybeAsyncDataSource, payload.V1)
     else:
-      return handle_newPayload(sealingEngine, api, com, maybeAsyncDataSource, p.error)
+      return handle_newPayload(sealingEngine, api, com, maybeAsyncDataSource, payload.V2)
+
+  server.rpc("engine_newPayloadV3") do(payload: ExecutionPayload,
+                                       expectedBlobVersionedHashes: seq[FixedBytes[32]],
+                                       parentBeaconBlockRoot: FixedBytes[32]) -> PayloadStatusV1:
+    case payload.version:
+    of Version.V1:
+      return handle_newPayload(sealingEngine, api, com, maybeAsyncDataSource, payload.V1)
+    of Version.V2:
+      return handle_newPayload(sealingEngine, api, com, maybeAsyncDataSource, payload.V2)
+    of Version.V3:
+      if not com.isCancunOrLater(fromUnix(payload.timestamp.unsafeQuantityToInt64)):
+        raise unsupportedFork("payload timestamp is less than Cancun activation")
+      var versionedHashes: seq[Hash256]
+      for x in payload.transactions:
+        let tx = rlp.decode(distinctBase(x), Transaction)
+        versionedHashes.add tx.versionedHashes
+      for i, x in expectedBlobVersionedHashes:
+        if distinctBase(x) != versionedHashes[i].data:
+          return invalidStatus()
+      return handle_newPayload(sealingEngine, api, com, maybeAsyncDataSource, payload.V3)
 
   server.rpc("engine_getPayloadV1") do(payloadId: PayloadID) -> ExecutionPayloadV1:
     let r = handle_getPayload(api, payloadId)
@@ -511,6 +581,9 @@ proc setupEngineAPI*(
 
   server.rpc("engine_getPayloadV2") do(payloadId: PayloadID) -> GetPayloadV2Response:
     return handle_getPayload(api, payloadId)
+
+  server.rpc("engine_getPayloadV3") do(payloadId: PayloadID) -> GetPayloadV3Response:
+    return handle_getPayloadV3(api, com, payloadId)
 
   server.rpc("engine_exchangeTransitionConfigurationV1") do(conf: TransitionConfigurationV1) -> TransitionConfigurationV1:
     return handle_exchangeTransitionConfiguration(sealingEngine, com, conf)
@@ -522,15 +595,30 @@ proc setupEngineAPI*(
 
   server.rpc("engine_forkchoiceUpdatedV2") do(
       update: ForkchoiceStateV1,
-      payloadAttributes: Option[PayloadAttributesV1OrV2]) -> ForkchoiceUpdatedResponse:
+      payloadAttributes: Option[PayloadAttributes]) -> ForkchoiceUpdatedResponse:
     if payloadAttributes.isNone:
       return handle_forkchoiceUpdated(sealingEngine, com, api, update, none[PayloadAttributesV2]())
     else:
-      let a = payloadAttributes.get.toPayloadAttributesV1OrPayloadAttributesV2
-      if a.isOk:
-        return handle_forkchoiceUpdated(sealingEngine, com, api, update, some(a.get))
+      let attr = payloadAttributes.get
+      if attr.version == Version.V1:
+        return handle_forkchoiceUpdated(sealingEngine, com, api, update, some(attr.V1))
       else:
-        return handle_forkchoiceUpdated(sealingEngine, com, api, update, some(a.error))
+        return handle_forkchoiceUpdated(sealingEngine, com, api, update, some(attr.V2))
+
+  server.rpc("engine_forkchoiceUpdatedV3") do(
+      update: ForkchoiceStateV1,
+      payloadAttributes: Option[PayloadAttributes]) -> ForkchoiceUpdatedResponse:
+    if payloadAttributes.isNone:
+      return handle_forkchoiceUpdated(sealingEngine, com, api, update, none[PayloadAttributesV3]())
+    else:
+      let attr = payloadAttributes.get
+      case attr.version
+      of Version.V1:
+        return handle_forkchoiceUpdated(sealingEngine, com, api, update, some(attr.V1))
+      of Version.V2:
+        return handle_forkchoiceUpdated(sealingEngine, com, api, update, some(attr.V2))
+      of Version.V3:
+        return handle_forkchoiceUpdated(sealingEngine, com, api, update, some(attr.V3))
 
   server.rpc("engine_getPayloadBodiesByHashV1") do(
       hashes: seq[BlockHash]) -> seq[Option[ExecutionPayloadBodyV1]]:
