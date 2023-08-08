@@ -468,8 +468,10 @@ const supportedMethods: HashSet[string] =
   toHashSet([
     "engine_newPayloadV1",
     "engine_newPayloadV2",
+    "engine_newPayloadV3",
     "engine_getPayloadV1",
     "engine_getPayloadV2",
+    "engine_getPayloadV3",
     "engine_exchangeTransitionConfigurationV1",
     "engine_forkchoiceUpdatedV1",
     "engine_forkchoiceUpdatedV2",

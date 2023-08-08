@@ -92,7 +92,7 @@ proc setupELClient*(t: TestEnv, chainFile: string, enableAuth: bool) =
   # so it can know the latest account state
   let head = t.com.db.getCanonicalHead()
   doAssert txPool.smartHead(head)
-  
+
   var key: JwtSharedKey
   let kr = key.fromHex(jwtSecret)
   if kr.isErr:
@@ -140,6 +140,13 @@ proc setupELClient*(chainFile: string, enableAuth: bool): TestEnv =
     conf: makeConfig(@["--engine-signer:658bdf435d810c91414ec09147daa6db62406379", "--custom-network:" & genesisFile])
   )
   setupELClient(result, chainFile, enableAuth)
+
+proc setupELClient*(conf: ChainConfig): TestEnv =
+  result = TestEnv(
+    conf: makeConfig(@["--engine-signer:658bdf435d810c91414ec09147daa6db62406379", "--custom-network:" & genesisFile])
+  )
+  result.conf.networkParams.config = conf
+  setupELClient(result, "", false)
 
 proc stopELClient*(t: TestEnv) =
   waitFor t.rpcClient.close()

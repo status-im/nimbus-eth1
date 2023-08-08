@@ -67,6 +67,12 @@ proc newPayloadV2*(client: RpcClient,
   wrapTrySimpleRes:
     client.engine_newPayloadV2(payload)
 
+proc exchangeCapabilities*(client: RpcClient,
+      methods: seq[string]):
+        Result[seq[string], string] =
+  wrapTrySimpleRes:
+    client.engine_exchangeCapabilities(methods)
+    
 proc toBlockNumber(n: Option[HexQuantityStr]): common.BlockNumber =
   if n.isNone:
     return 0.toBlockNumber
