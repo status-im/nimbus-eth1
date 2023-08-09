@@ -128,7 +128,6 @@ proc checkBE*[T](
 
   # Check cache against backend
   if cache:
-
     # Check structural table
     for (vid,vtx) in db.top.sTab.pairs:
       # A `kMap[]` entry must exist.
@@ -164,10 +163,8 @@ proc checkBE*[T](
           return err((vid,CheckBeCacheKeyMismatch))
 
     # Check vGen
-    var tmp = AristoDbRef(top: AristoLayerRef(vGen: db.top.vGen))
-    tmp.vidReorg()
     let
-      vGen = tmp.top.vGen.toHashSet
+      vGen = db.top.vGen.vidReorg.toHashSet
       vGenExpected = vids.invTo(HashSet[VertexID])
       delta = vGenExpected -+- vGen # symmetric difference
     if 0 < delta.len:

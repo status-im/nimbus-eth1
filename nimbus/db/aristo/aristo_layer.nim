@@ -61,14 +61,11 @@ proc save*(
     else:
       hst.leafs[lky] = PayloadRef(nil)          # New leaf vertex
 
-  # Compact recycled nodes
-  db.vidReorg()
-
   # Save structural and other table entries
   let txFrame = be.putBegFn()
   be.putVtxFn(txFrame, db.top.sTab.pairs.toSeq)
   be.putKeyFn(txFrame, db.top.kMap.pairs.toSeq.mapIt((it[0],it[1].key)))
-  be.putIdgFn(txFrame, db.top.vGen)
+  be.putIdgFn(txFrame, db.top.vGen.vidReorg) # Compact recycled IDs
   let w = be.putEndFn txFrame
   if w != AristoError(0):
     return err((VertexID(0),w))
