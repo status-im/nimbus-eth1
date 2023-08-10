@@ -14,9 +14,9 @@
 {.push raises: [].}
 
 import
-  std/tables,
-  stew/results,
-  "."/aristo_desc
+  std/[options, tables],
+  results,
+  ./aristo_desc
 
 type
   VidVtxPair* = object
@@ -27,7 +27,16 @@ type
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc getVtxBackend*(
+proc getIdgUnfilteredBackend*(
+    db: AristoDbRef;
+      ): Result[seq[VertexID],AristoError] =
+  ## Get the ID generator state the `backened` layer if available.
+  let be = db.backend
+  if not be.isNil:
+    return be.getIdgFn()
+  err(GetIdgNotFound)
+
+proc getVtxUnfilteredBackend*(
     db: AristoDbRef;
     vid: VertexID;
       ): Result[VertexRef,AristoError] =
@@ -35,9 +44,9 @@ proc getVtxBackend*(
   let be = db.backend
   if not be.isNil:
     return be.getVtxFn vid
-  err(GetVtxNotFound)
+  err GetVtxNotFound
 
-proc getKeyBackend*(
+proc getKeyUnfilteredBackend*(
     db: AristoDbRef;
     vid: VertexID;
       ): Result[HashKey,AristoError] =
@@ -45,7 +54,41 @@ proc getKeyBackend*(
   let be = db.backend
   if not be.isNil:
     return be.getKeyFn vid
-  err(GetKeyNotFound)
+  err GetKeyNotFound
+
+# ------------------
+
+proc getIdgBackend*(
+    db: AristoDbRef;
+      ): Result[seq[VertexID],AristoError] =
+  ## Get the ID generator state the `backened` layer if available.
+  if not db.roFilter.isNil and db.roFilter.vGen.isSome:
+    return ok(db.roFilter.vGen.unsafeGet)
+  db.getIdgUnfilteredBackend()
+
+proc getVtxBackend*(
+    db: AristoDbRef;
+    vid: VertexID;
+      ): Result[VertexRef,AristoError] =
+  ## Get the vertex from the `backened` layer if available.
+  if not db.roFilter.isNil and db.roFilter.sTab.hasKey vid:
+    let vtx = db.roFilter.sTab.getOrVoid vid
+    if vtx.isValid:
+      return ok(vtx)
+    return err(GetVtxNotFound)
+  db.getVtxUnfilteredBackend vid
+
+proc getKeyBackend*(
+    db: AristoDbRef;
+    vid: VertexID;
+      ): Result[HashKey,AristoError] =
+  ## Get the merkle hash/key from the backend
+  if not db.roFilter.isNil and db.roFilter.kMap.hasKey vid:
+    let key = db.roFilter.kMap.getOrVoid vid
+    if key.isValid:
+      return ok(key)
+    return err(GetKeyNotFound)
+  db.getKeyUnfilteredBackend vid
 
 # ------------------
 
@@ -100,6 +143,10 @@ proc getKey*(db: AristoDbRef; vid: VertexID): HashKey =
   if rc.isOk:
     return rc.value
   VOID_HASH_KEY
+
+proc getRootKey*(db: AristoDbRef; vid: VertexID): HashKey =
+  ## Shortcut for `db.getkey VertexID(1)`
+  db.getKey VertexID(1)
 
 # ------------------------------------------------------------------------------
 # End

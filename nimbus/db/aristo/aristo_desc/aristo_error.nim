@@ -177,6 +177,7 @@ type
     # All backend and get functions form `aristo_get.nim`
     GetVtxNotFound
     GetKeyNotFound
+    GetIdgNotFound
 
     # RocksDB backend
     RdbBeCantCreateDataDir

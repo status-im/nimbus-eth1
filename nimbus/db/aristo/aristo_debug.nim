@@ -17,6 +17,9 @@ import
   "."/[aristo_constants, aristo_desc, aristo_hike, aristo_init],
   ./aristo_init/[aristo_memory, aristo_rocksdb]
 
+export
+  TypedBackendRef, aristo_init.to
+
 # ------------------------------------------------------------------------------
 # Ptivate functions
 # ------------------------------------------------------------------------------
@@ -25,6 +28,9 @@ proc sortedKeys(lTab: Table[LeafTie,VertexID]): seq[LeafTie] =
   lTab.keys.toSeq.sorted(cmp = proc(a,b: LeafTie): int = cmp(a,b))
 
 proc sortedKeys(kMap: Table[VertexID,HashLabel]): seq[VertexID] =
+  kMap.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID)
+
+proc sortedKeys(kMap: Table[VertexID,HashKey]): seq[VertexID] =
   kMap.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID)
 
 proc sortedKeys(sTab: Table[VertexID,VertexRef]): seq[VertexID] =
@@ -311,7 +317,32 @@ proc ppXMap*(
   else:
     result &= "}"
 
-proc ppBe[T](be: T; db: AristoDbRef; indent: int): string =
+proc ppFilter(fl: AristoFilterRef; db: AristoDbRef; indent: int): string =
+  ## Walk over filter tables
+  let
+    pfx = indent.toPfx
+    pfx1 = indent.toPfx(1)
+    pfx2 = indent.toPfx(2)
+  result = "<filter>"
+  if db.roFilter.isNil:
+    result &= " n/a"
+    return
+  result &= pfx & "vGen" & pfx1 & "["
+  if fl.vGen.isSome:
+    result &= fl.vGen.unsafeGet.mapIt(it.ppVid).join(",")
+  result &= "]" & pfx & "sTab" & pfx1 & "{"
+  for n,vid in fl.sTab.sortedKeys:
+    let vtx = fl.sTab.getOrVoid vid
+    if 0 < n: result &= pfx2
+    result &= $(1+n) & "(" & vid.ppVid & "," & vtx.ppVtx(db,vid) & ")"
+  result &= "}" & pfx & "kMap" & pfx1 & "{"
+  for n,vid in fl.kMap.sortedKeys:
+    let key = fl.kMap.getOrVoid vid
+    if 0 < n: result &= pfx2
+    result &= $(1+n) & "(" & vid.ppVid & "," & key.ppKey & ")"
+  result &= "}"
+
+proc ppBeOnly[T](be: T; db: AristoDbRef; indent: int): string =
   ## Walk over backend tables
   let
     pfx = indent.toPfx
@@ -328,8 +359,12 @@ proc ppBe[T](be: T; db: AristoDbRef; indent: int): string =
       $(1+it[0]) & "(" & it[1].ppVid & "," & it[2].ppKey & ")"
     ).join(pfx2) & "}"
 
+proc ppBe[T](be: T; db: AristoDbRef; indent: int): string =
+  ## backend + filter
+  db.roFilter.ppFilter(db, indent) & indent.toPfx & be.ppBeOnly(db,indent)
 
-proc ppCache(
+proc ppLayer(
+    layer: AristoLayerRef;
     db: AristoDbRef;
     vGenOk: bool;
     sTabOk: bool;
@@ -355,35 +390,35 @@ proc ppCache(
       pfy = pfx2
     rc
 
-  if not db.top.isNil:
+  if not layer.isNil:
     if vGenOk:
       let
-        tLen = db.top.vGen.len
+        tLen = layer.vGen.len
         info = "vGen(" & $tLen & ")"
-      result &= info.doPrefix(0 < tLen) & db.top.vGen.ppVidList
+      result &= info.doPrefix(0 < tLen) & layer.vGen.ppVidList
     if sTabOk:
       let
-        tLen = db.top.sTab.len
+        tLen = layer.sTab.len
         info = "sTab(" & $tLen & ")"
-      result &= info.doPrefix(0 < tLen) & db.top.sTab.ppSTab(db,indent+1)
+      result &= info.doPrefix(0 < tLen) & layer.sTab.ppSTab(db,indent+1)
     if lTabOk:
       let
-        tlen = db.top.lTab.len
+        tlen = layer.lTab.len
         info = "lTab(" & $tLen & ")"
-      result &= info.doPrefix(0 < tLen) & db.top.lTab.ppLTab(indent+1)
+      result &= info.doPrefix(0 < tLen) & layer.lTab.ppLTab(indent+1)
     if kMapOk:
       let
-        tLen = db.top.kMap.len
-        ulen = db.top.pAmk.len
+        tLen = layer.kMap.len
+        ulen = layer.pAmk.len
         lInf = if tLen == uLen: $tLen else: $tLen & "," & $ulen
         info = "kMap(" & lInf & ")"
       result &= info.doPrefix(0 < tLen + uLen)
-      result &= db.ppXMap(db.top.kMap,db.top.pAmk,indent+1)
+      result &= db.ppXMap(layer.kMap, layer.pAmk,indent+1)
     if pPrfOk:
       let
-        tLen = db.top.pPrf.len
+        tLen = layer.pPrf.len
         info = "pPrf(" & $tLen & ")"
-      result &= info.doPrefix(0 < tLen) & db.top.pPrf.ppPPrf
+      result &= info.doPrefix(0 < tLen) & layer.pPrf.ppPPrf
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -523,19 +558,46 @@ proc pp*(
 # ---------------------
 
 proc pp*(
+    layer: AristoLayerRef;
     db: AristoDbRef;
     indent = 4;
       ): string =
-  db.ppCache(
-    vGenOk=true, sTabOk=true, lTabOk=true, kMapOk=true, pPrfOk=true)
+  layer.ppLayer(
+    db, vGenOk=true, sTabOk=true, lTabOk=true, kMapOk=true, pPrfOk=true)
+
+proc pp*(
+    layer: AristoLayerRef;
+    db: AristoDbRef;
+    xTabOk: bool;
+    indent = 4;
+      ): string =
+  layer.ppLayer(
+    db, vGenOk=true, sTabOk=xTabOk, lTabOk=xTabOk, kMapOk=true, pPrfOk=true)
+
+proc pp*(
+    layer: AristoLayerRef;
+    db: AristoDbRef;
+    xTabOk: bool;
+    kMapOk: bool;
+    other = false;
+    indent = 4;
+      ): string =
+  layer.ppLayer(
+    db, vGenOk=other, sTabOk=xTabOk, lTabOk=xTabOk, kMapOk=kMapOk, pPrfOk=other)
+
+
+proc pp*(
+    db: AristoDbRef;
+    indent = 4;
+      ): string =
+  db.top.pp(db, indent=indent)
 
 proc pp*(
     db: AristoDbRef;
     xTabOk: bool;
     indent = 4;
       ): string =
-  db.ppCache(
-    vGenOk=true, sTabOk=xTabOk, lTabOk=xTabOk, kMapOk=true, pPrfOk=true)
+  db.top.pp(db, xTabOk=xTabOk, indent=indent)
 
 proc pp*(
     db: AristoDbRef;
@@ -544,15 +606,15 @@ proc pp*(
     other = false;
     indent = 4;
       ): string =
-  db.ppCache(
-    vGenOk=other, sTabOk=xTabOk, lTabOk=xTabOk, kMapOk=kMapOk, pPrfOk=other)
+  db.top.pp(db, xTabOk=xTabOk, kMapOk=kMapOk, other=other, indent=indent)
+
 
 proc pp*(
   be: TypedBackendRef;
   db: AristoDbRef;
   indent = 4;
     ): string =
-
+  ## May be called as `db.to(TypedBackendRef).pp(db)`
   case (if be.isNil: BackendNone else: be.kind)
   of BackendMemory:
     be.MemBackendRef.ppBe(db, indent)
@@ -561,7 +623,7 @@ proc pp*(
     be.RdbBackendRef.ppBe(db, indent)
 
   of BackendNone:
-    "n/a"
+    db.roFilter.ppFilter(db, indent) & indent.toPfx & "<BackendNone>"
 
 # ------------------------------------------------------------------------------
 # End

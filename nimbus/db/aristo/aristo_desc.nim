@@ -49,6 +49,7 @@ type
     ## Set of database layers, supporting transaction frames
     top*: AristoLayerRef              ## Database working layer, mutable
     stack*: seq[AristoLayerRef]       ## Stashed immutable parent layers
+    roFilter*: AristoFilterRef        ## Apply read filter (locks writing)
     backend*: AristoBackendRef        ## Backend database (may well be `nil`)
     history*: seq[AristoChangeLogRef] ## Backend saving history
 
@@ -67,6 +68,9 @@ func getOrVoid*[W](tab: Table[W,VertexRef]; w: W): VertexRef =
 
 func getOrVoid*[W](tab: Table[W,HashLabel]; w: W): HashLabel =
   tab.getOrDefault(w, VOID_HASH_LABEL)
+
+func getOrVoid*[W](tab: Table[W,HashKey]; w: W): HashKey =
+  tab.getOrDefault(w, VOID_HASH_KEY)
 
 func getOrVoid*[W](tab: Table[W,VertexID]; w: W): VertexID =
   tab.getOrDefault(w, VertexID(0))

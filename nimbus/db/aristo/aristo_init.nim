@@ -13,7 +13,7 @@
 ##
 ## See `./README.md` for implementation details
 ##
-## This module provides a memory datanase only. For providing a persistent
+## This module provides a memory database only. For providing a persistent
 ## constructor, import `aristo_init/persistent` though avoiding to
 ## unnecessarily link to the persistent backend library (e.g. `rocksdb`)
 ## when a memory only database is used.
