@@ -127,7 +127,7 @@ proc test_backendConsistency*(
     if w.root != rootKey or resetDB:
       rootKey = w.root
       count = 0
-      ndb = newAristoDbRef BackendNone
+      ndb = newAristoDbRef BackendVoid
       mdb = newAristoDbRef BackendMemory
       if doRdbOk:
         rdb.finish(flush=true)

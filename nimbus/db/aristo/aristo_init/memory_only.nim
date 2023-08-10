@@ -20,13 +20,13 @@ import
   "."/[aristo_init_common, aristo_memory]
 
 type
-  NoneBackendRef* = ref object of TypedBackendRef
+  VoidBackendRef* = ref object of TypedBackendRef
     ## Dummy descriptor type, will typically used as `nil` reference
 
 export
   AristoBackendType,
+  VoidBackendRef,
   MemBackendRef,
-  NoneBackendRef,
   TypedBackendRef
 
 # ------------------------------------------------------------------------------
@@ -37,7 +37,7 @@ proc newAristoDbRef*(
     backend: static[AristoBackendType];
       ): AristoDbRef =
   ## Simplified prototype for  `BackendNone` and `BackendMemory`  type backend.
-  when backend == BackendNone:
+  when backend == BackendVoid:
     AristoDbRef(top: AristoLayerRef())
 
   elif backend == BackendMemory:
@@ -66,7 +66,7 @@ proc finish*(db: AristoDbRef; flush = false) =
 
 # -----------------
 
-proc to*[W: TypedBackendRef|MemBackendRef|NoneBackendRef](
+proc to*[W: TypedBackendRef|MemBackendRef|VoidBackendRef](
     db: AristoDbRef;
     T: type W;
       ): T =

@@ -83,8 +83,8 @@ proc checkBE*(
       return MemBackendRef.checkBE(db, cache=cache, relax=relax)
     of BackendRocksDB:
       return RdbBackendRef.checkBE(db, cache=cache, relax=relax)
-    of BackendNone:
-      return NoneBackendRef.checkBE(db, cache=cache, relax=relax)
+    of BackendVoid:
+      return VoidBackendRef.checkBE(db, cache=cache, relax=relax)
   ok()
 
 # ------------------------------------------------------------------------------

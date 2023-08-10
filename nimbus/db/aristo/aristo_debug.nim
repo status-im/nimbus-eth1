@@ -615,14 +615,14 @@ proc pp*(
   indent = 4;
     ): string =
   ## May be called as `db.to(TypedBackendRef).pp(db)`
-  case (if be.isNil: BackendNone else: be.kind)
+  case (if be.isNil: BackendVoid else: be.kind)
   of BackendMemory:
     be.MemBackendRef.ppBe(db, indent)
 
   of BackendRocksDB:
     be.RdbBackendRef.ppBe(db, indent)
 
-  of BackendNone:
+  of BackendVoid:
     db.roFilter.ppFilter(db, indent) & indent.toPfx & "<BackendNone>"
 
 # ------------------------------------------------------------------------------

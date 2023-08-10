@@ -80,7 +80,7 @@ proc toNodeBe(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc checkBE*[T: RdbBackendRef|MemBackendRef|NoneBackendRef](
+proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
     _: type T;
     db: AristoDbRef;                   # Database, top layer
     relax: bool;                       # Not compiling hashes if `true`

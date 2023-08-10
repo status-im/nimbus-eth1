@@ -24,7 +24,7 @@ iterator walkVtxBeImpl*[T](
   ## Generic iterator
   var n = 0
 
-  when be is NoneBackendRef:
+  when be is VoidBackendRef:
     let filter = if db.roFilter.isNil: AristoFilterRef() else: db.roFilter
 
   else:
@@ -59,7 +59,7 @@ iterator walkKeyBeImpl*[T](
   ## Generic iterator
   var n = 0
 
-  when be is NoneBackendRef:
+  when be is VoidBackendRef:
     let filter = if db.roFilter.isNil: AristoFilterRef() else: db.roFilter
 
   else:
@@ -97,7 +97,7 @@ iterator walkIdgBeImpl*[T](
      yield(0, VertexID(0), db.roFilter.vGen.unsafeGet)
      nNext = 1
 
-  when be isnot NoneBackendRef:
+  when be isnot VoidBackendRef:
     mixin walkIdg
 
     for (n,vid,vGen) in be.walkIdg:
