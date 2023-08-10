@@ -80,10 +80,13 @@ type
 
   # ----------------------
 
-  AristoChangeLogRef* = ref object
-    ## Change log: database state before backend saving.
-    root*: HashKey                    ## Previous hash key for `VertexID(1)`
-    leafs*: Table[LeafTie,PayloadRef] ## Changed leafs after merge into backend
+  AristoDeltaRef* = ref object
+    ## Delta layer between backend and top/stack transaction layers.
+    src*: HashKey                    ## Applicable to this state root
+    sTab*: seq[(VertexID,VertexRef)] ## Filter structural vertex table
+    kMap*: seq[(VertexID,HashKey)]   ## Filter Merkle hash key mapping
+    vGen*: Option[seq[VertexID]]     ## Filter unique vertex ID generator
+    trg*: HashKey                    ## Resulting state root (i.e. `kMap[1]`)
 
   AristoFilterRef* = ref object
     ## Delta layer with expanded sequences for quick access

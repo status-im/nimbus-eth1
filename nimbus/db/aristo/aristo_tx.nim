@@ -14,8 +14,9 @@
 {.push raises: [].}
 
 import
+  std/[options, sequtils, tables],
   results,
-  "."/[aristo_desc, aristo_layer]
+  "."/[aristo_desc, aristo_filter]
 
 type
   AristoTxAction* = proc() {.gcsafe, raises: [CatchableError].}
@@ -34,14 +35,12 @@ proc backup(db: AristoDbRef): AristoDbRef =
   AristoDbRef(
     top:      db.top,      # ref
     stack:    db.stack,    # sequence of refs
-    history:  db.history,  # sequence of refs
     txRef:    db.txRef,    # ref
     txUidGen: db.txUidGen) # number
 
 proc restore(db: AristoDbRef, backup: AristoDbRef) =
   db.top =      backup.top
   db.stack =    backup.stack
-  db.history =  backup.history
   db.txRef =    backup.txRef
   db.txUidGen = backup.txUidGen
 
@@ -117,8 +116,8 @@ proc exec*(
   ##   `tx.rollack()` will throw an `AssertDefect` error.
   ## * The `ececute()` call must not be nested. Doing otherwise will throw an
   ##   `AssertDefect` error.
-  ## * Changes on the database referred to by `tx` cannot be saved on disk with
-  ##   the `persistent()` directive.
+  ## * Changes on the database referred to by `tx` can be staged but not saved
+  ##   persistently with the `stow()` directive.
   ##
   ## After return, the state of the underlying database will not have changed.
   ## Any transactions left open by the `action()` call will have been discarded.
@@ -268,17 +267,70 @@ proc collapse*(
 # Public functions: save database
 # ------------------------------------------------------------------------------
 
-proc persistent*(db: AristoDbRef): Result[void,AristoError] =
-  ## ...
-  let noTxPending = db.txRef.isNil
-  if not noTxPending and TxUidLocked <= db.txRef.txUid:
+proc stow*(
+    db: AristoDbRef;
+    stageOnly = true;
+    extendOK = false;
+      ): Result[void,AristoError] =
+  ## If there is no backend while the `stageOnly` is set `true`, the function
+  ## returns immediately with an error.The same happens if the backend is
+  ## locked due to an `exec()` call while `stageOnly` is set.
+  ##
+  ## Otherwise, the data changes from the top layer cache are merged into the
+  ## backend stage area. After that, the top layer cache is cleared.
+  ##
+  ## If the argument `stageOnly` is set `true`, all the staged data are merged
+  ## into the backend database. The staged data area is cleared.
+  ##
+  if not db.txRef.isNil and
+     TxUidLocked <= db.txRef.txUid and
+     not stageOnly:
     return err(TxExecDirectiveLocked)
 
-  let rc = db.save()
-  if rc.isErr:
-    return err(rc.error[1])
+  let be = db.backend
+  if be.isNil and not stageOnly:
+    return err(TxBackendMissing)
+
+  let fwd = block:
+    let rc = db.fwdFilter(db.top, extendOK)
+    if rc.isErr:
+      return err(rc.error[1])
+    rc.value
+
+  if fwd.vGen.isSome: # Otherwise this layer is pointless
+    block:
+      let rc = db.merge fwd
+      if rc.isErr:
+        return err(rc.error[1])
+      rc.value
+
+    if not stageOnly:
+      # Save structural and other table entries
+      let txFrame = be.putBegFn()
+      be.putVtxFn(txFrame, db.roFilter.sTab.pairs.toSeq)
+      be.putKeyFn(txFrame, db.roFilter.kMap.pairs.toSeq)
+      be.putIdgFn(txFrame, db.roFilter.vGen.unsafeGet)
+      let w = be.putEndFn txFrame
+      if w != AristoError(0):
+        return err(w)
+
+      db.roFilter = AristoFilterRef(nil)
+
+  # Delete or clear stack and clear top
+  db.stack.setLen(0)
+  db.top = AristoLayerRef(vGen: db.top.vGen, txUid: db.top.txUid)
 
   ok()
+
+proc stow*(
+    db: AristoDbRef;
+    stageLimit: int;
+    extendOK = false;
+      ): Result[void,AristoError] =
+  ## Variant of `stow()` with the `stageOnly` argument replaced by
+  ## `stageLimit <= max(db.roFilter.bulk, db.top.bulk)`.
+  let w = max(db.roFilter.bulk, db.top.bulk)
+  db.stow(stageOnly=(stageLimit <= w), extendOK=extendOK)
 
 # ------------------------------------------------------------------------------
 # End

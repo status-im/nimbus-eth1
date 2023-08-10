@@ -51,7 +51,6 @@ type
     stack*: seq[AristoLayerRef]       ## Stashed immutable parent layers
     roFilter*: AristoFilterRef        ## Apply read filter (locks writing)
     backend*: AristoBackendRef        ## Backend database (may well be `nil`)
-    history*: seq[AristoChangeLogRef] ## Backend saving history
 
     txRef*: AristoTxRef               ## Latest active transaction
     txUidGen*: uint                   ## Tx-relative unique number generator
