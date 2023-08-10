@@ -70,14 +70,14 @@ proc vidDispose*(db: AristoDbRef; vid: VertexID) =
         db.top.vGen[^1] = vid
         db.top.vGen.add topID
 
-proc vidReorg*(db: AristoDbRef) =
-  ## Remove redundant items from the recycle queue. All recycled entries are
-  ## typically kept in the queue until the backend database is committed.
-  if 1 < db.top.vGen.len:
-    let lst = db.top.vGen.mapIt(uint64(it)).sorted.mapIt(VertexID(it))
+proc vidReorg*(vGen: seq[VertexID]): seq[VertexID] =
+  ## Return a compacted version of the argument vertex ID generator state
+  ## `vGen`. The function removes redundant items from the recycle queue.
+  if 1 < vGen.len:
+    let lst = vGen.mapIt(uint64(it)).sorted.mapIt(VertexID(it))
     for n in (lst.len-1).countDown(1):
       if lst[n-1].uint64 + 1 != lst[n].uint64:
-        # All elements larger than `lst[n-1` are in increasing order. For
+        # All elements larger than `lst[n-1]` are in increasing order. For
         # the last continuously increasing sequence, only the smallest item
         # is needed and the rest can be removed
         #
@@ -88,11 +88,12 @@ proc vidReorg*(db: AristoDbRef) =
         #              n
         #
         if n < lst.len-1:
-          db.top.vGen.shallowCopy lst
-          db.top.vGen.setLen(n+1)
-        return
+          return lst[0..n]
+        return vGen
     # All entries are continuously increasing
-    db.top.vGen = @[lst[0]]
+    return @[lst[0]]
+
+  vGen
 
 proc vidAttach*(db: AristoDbRef; lbl: HashLabel; vid: VertexID) =
   ## Attach (i.r. register) a Merkle hash key to a vertex ID.

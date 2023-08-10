@@ -17,7 +17,7 @@ import
   std/[algorithm, sequtils, sets, tables],
   eth/common,
   stew/[interval_set, results],
-  ./aristo_init/[aristo_memory, aristo_rocksdb],
+  ./aristo_walk/persistent,
   "."/[aristo_desc, aristo_get, aristo_init, aristo_vid, aristo_utils],
   ./aristo_check/[check_be, check_cache]
 
@@ -80,11 +80,11 @@ proc checkBE*(
     let be = db.to(TypedBackendRef)
     case be.kind:
     of BackendMemory:
-      return be.MemBackendRef.checkBE(db, cache=cache, relax=relax)
+      return MemBackendRef.checkBE(db, cache=cache, relax=relax)
     of BackendRocksDB:
-      return be.RdbBackendRef.checkBE(db, cache=cache, relax=relax)
+      return RdbBackendRef.checkBE(db, cache=cache, relax=relax)
     of BackendNone:
-      discard
+      return NoneBackendRef.checkBE(db, cache=cache, relax=relax)
   ok()
 
 # ------------------------------------------------------------------------------

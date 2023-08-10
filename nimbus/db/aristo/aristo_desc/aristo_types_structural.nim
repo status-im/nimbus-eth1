@@ -15,6 +15,7 @@
 {.push raises: [].}
 
 import
+  std/[options, sets, tables],
   eth/[common, trie/nibbles],
   "."/[aristo_error, aristo_types_identifiers]
 
@@ -76,6 +77,35 @@ type
     ## with a structural `VertexRef` type object.
     error*: AristoError              ## Can be used for error signalling
     key*: array[16,HashKey]          ## Merkle hash/es for vertices
+
+  # ----------------------
+
+  AristoDeltaRef* = ref object
+    ## Delta layer between backend and top/stack transaction layers.
+    src*: HashKey                    ## Applicable to this state root
+    sTab*: seq[(VertexID,VertexRef)] ## Filter structural vertex table
+    kMap*: seq[(VertexID,HashKey)]   ## Filter Merkle hash key mapping
+    vGen*: Option[seq[VertexID]]     ## Filter unique vertex ID generator
+    trg*: HashKey                    ## Resulting state root (i.e. `kMap[1]`)
+
+  AristoFilterRef* = ref object
+    ## Delta layer with expanded sequences for quick access
+    src*: HashKey                    ## Applicable to this state root
+    sTab*: Table[VertexID,VertexRef] ## Filter structural vertex table
+    kMap*: Table[VertexID,HashKey]   ## Filter Merkle hash key mapping
+    vGen*: Option[seq[VertexID]]     ## Filter unique vertex ID generator
+    trg*: HashKey                    ## Resulting state root (i.e. `kMap[1]`)
+
+  AristoLayerRef* = ref object
+    ## Hexary trie database layer structures. Any layer holds the full
+    ## change relative to the backend.
+    sTab*: Table[VertexID,VertexRef]  ## Structural vertex table
+    lTab*: Table[LeafTie,VertexID]    ## Direct access, path to leaf vertex
+    kMap*: Table[VertexID,HashLabel]  ## Merkle hash key mapping
+    pAmk*: Table[HashLabel,VertexID]  ## Reverse `kMap` entries, hash key lookup
+    pPrf*: HashSet[VertexID]          ## Locked vertices (proof nodes)
+    vGen*: seq[VertexID]              ## Unique vertex ID generator
+    txUid*: uint                      ## Transaction identifier if positive
 
 # ------------------------------------------------------------------------------
 # Public helpers: `NodeRef` and `PayloadRef`
@@ -206,6 +236,18 @@ proc dup*(node: NodeRef): NodeRef =
         vType: Branch,
         bVid:  node.bVid,
         key:   node.key)
+
+proc dup*(layer: AristoLayerRef): AristoLayerRef =
+  ## Duplicate layer.
+  result = AristoLayerRef(
+    lTab:  layer.lTab,
+    kMap:  layer.kMap,
+    pAmk:  layer.pAmk,
+    pPrf:  layer.pPrf,
+    vGen:  layer.vGen,
+    txUid: layer.txUid)
+  for (k,v) in layer.sTab.pairs:
+    result.sTab[k] = v.dup
 
 proc to*(node: NodeRef; T: type VertexRef): T =
   ## Extract a copy of the `VertexRef` part from a `NodeRef`.

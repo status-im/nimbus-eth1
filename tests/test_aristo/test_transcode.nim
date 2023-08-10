@@ -234,33 +234,16 @@ proc test_transcodeVidRecycleLists*(noisy = true; seed = 42) =
     check db.top.vGen.len == 1
 
   # Recycling and re-org tests
-  db.top.vGen = @[8, 7,  3, 4, 5,  9].mapIt(VertexID(it))
-  db.vidReorg()
-  check db.top.vGen == @[3, 4, 5, 7].mapIt(VertexID(it))
+  func toVQ(a: seq[int]): seq[VertexID] = a.mapIt(VertexID(it))
 
-  db.top.vGen = @[8, 7, 6,  3, 4, 5,  9].mapIt(VertexID(it))
-  db.vidReorg()
-  check db.top.vGen == @[3].mapIt(VertexID(it))
+  check @[8, 7,  3, 4, 5,  9]    .toVQ.vidReorg == @[3, 4, 5,  7] .toVQ
+  check @[8, 7, 6,  3, 4, 5,  9] .toVQ.vidReorg == @[3]           .toVQ
+  check @[5, 4, 3,  7]           .toVQ.vidReorg == @[5, 4, 3,  7] .toVQ
+  check @[5]                     .toVQ.vidReorg == @[5]           .toVQ
+  check @[3, 5]                  .toVQ.vidReorg == @[3, 5]        .toVQ
+  check @[4, 5]                  .toVQ.vidReorg == @[4]           .toVQ
 
-  db.top.vGen = @[5, 4, 3,  7].mapIt(VertexID(it))
-  db.vidReorg()
-  check db.top.vGen == @[5, 4, 3,  7].mapIt(VertexID(it))
-
-  db.top.vGen = @[5].mapIt(VertexID(it))
-  db.vidReorg()
-  check db.top.vGen == @[5].mapIt(VertexID(it))
-
-  db.top.vGen = @[3, 5].mapIt(VertexID(it))
-  db.vidReorg()
-  check db.top.vGen == @[3, 5].mapIt(VertexID(it))
-
-  db.top.vGen = @[4, 5].mapIt(VertexID(it))
-  db.vidReorg()
-  check db.top.vGen == @[4].mapIt(VertexID(it))
-
-  db.top.vGen.setLen(0)
-  db.vidReorg()
-  check db.top.vGen.len == 0
+  check newSeq[VertexID](0).vidReorg().len == 0
 
 # ------------------------------------------------------------------------------
 # End

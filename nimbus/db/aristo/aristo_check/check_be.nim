@@ -14,8 +14,9 @@ import
   std/[algorithm, sequtils, sets, tables],
   eth/common,
   stew/interval_set,
-  ../aristo_init/[aristo_memory, aristo_rocksdb],
-  ".."/[aristo_desc, aristo_get, aristo_vid, aristo_transcode, aristo_utils]
+  ../../aristo,
+  ../aristo_walk/persistent,
+  ".."/[aristo_desc, aristo_get, aristo_vid, aristo_transcode]
 
 const
   Vid2 = @[VertexID(2)].toHashSet
@@ -79,8 +80,8 @@ proc toNodeBe(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc checkBE*[T](
-    be: T;                             # backend descriptor
+proc checkBE*[T: RdbBackendRef|MemBackendRef|NoneBackendRef](
+    _: type T;
     db: AristoDbRef;                   # Database, top layer
     relax: bool;                       # Not compiling hashes if `true`
     cache: bool;                       # Also verify cache
@@ -90,14 +91,14 @@ proc checkBE*[T](
   let vids = IntervalSetRef[VertexID,uint64].init()
   discard vids.merge Interval[VertexID,uint64].new(VertexID(1),high(VertexID))
 
-  for (_,vid,vtx) in be.walkVtx:
+  for (_,vid,vtx) in T.walkVtxBE db:
     if not vtx.isValid:
       return err((vid,CheckBeVtxInvalid))
     let rc = db.getKeyBackend vid
     if rc.isErr or not rc.value.isValid:
       return err((vid,CheckBeKeyMissing))
 
-  for (_,vid,key) in be.walkKey:
+  for (_,vid,key) in T.walkKeyBE db:
     if not key.isvalid:
       return err((vid,CheckBeKeyInvalid))
     let rc = db.getVtxBackend vid
@@ -116,7 +117,7 @@ proc checkBE*[T](
   block:
     # Extract vertex ID generator state
     var vGen: HashSet[VertexID]
-    for (_,_,w) in be.walkIdg:
+    for (_,_,w) in T.walkIdgBE db:
       vGen = vGen + w.toHashSet
     let
       vGenExpected = vids.invTo(HashSet[VertexID])
@@ -128,7 +129,6 @@ proc checkBE*[T](
 
   # Check cache against backend
   if cache:
-
     # Check structural table
     for (vid,vtx) in db.top.sTab.pairs:
       # A `kMap[]` entry must exist.
@@ -164,10 +164,8 @@ proc checkBE*[T](
           return err((vid,CheckBeCacheKeyMismatch))
 
     # Check vGen
-    var tmp = AristoDbRef(top: AristoLayerRef(vGen: db.top.vGen))
-    tmp.vidReorg()
     let
-      vGen = tmp.top.vGen.toHashSet
+      vGen = db.top.vGen.vidReorg.toHashSet
       vGenExpected = vids.invTo(HashSet[VertexID])
       delta = vGenExpected -+- vGen # symmetric difference
     if 0 < delta.len:

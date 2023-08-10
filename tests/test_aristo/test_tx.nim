@@ -30,6 +30,8 @@ type
     ## (<sample-name> & "#" <instance>, (<vertex-id>,<error-symbol>))
 
 const
+  MaxFilterBulk = 15_000
+
   WalkStopRc =
     Result[LeafTie,(VertexID,AristoError)].err((VertexID(0),NearbyBeyondRange))
 
@@ -98,6 +100,7 @@ proc innerCleanUp(db: AristoDbRef) =
 
 proc saveToBackend(
     tx: var AristoTxRef;
+    extendOK: bool;
     relax: bool;
     noisy: bool;
     debugID: int;
@@ -158,7 +161,7 @@ proc saveToBackend(
         check rc.value.level < 0
         return
     block:
-      let rc = db.persistent()
+      let rc = db.stow(stageLimit=MaxFilterBulk, extendOK=extendOK)
       if rc.isErr:
         check rc.error == 0
         return
@@ -175,6 +178,7 @@ proc saveToBackend(
 
 proc saveToBackendWithOops(
     tx: var AristoTxRef;
+    extendOK: bool;
     noisy: bool;
     debugID: int;
     oops: (int,AristoError);
@@ -225,7 +229,7 @@ proc saveToBackendWithOops(
         check rc.value.level < 0
         return
     block:
-      let rc = db.persistent()
+      let rc = db.stow(stageLimit=MaxFilterBulk, extendOK=extendOK)
       if rc.isErr:
         check rc.error == 0
         return
@@ -378,7 +382,8 @@ proc testTxMergeAndDelete*(
         (leaf, lid) = lvp
 
       if doSaveBeOk:
-        if not tx.saveToBackend(relax=relax, noisy=noisy, runID):
+        if not tx.saveToBackend(
+            extendOK=false, relax=relax, noisy=noisy, runID):
           return
 
       # Delete leaf
@@ -490,7 +495,8 @@ proc testTxMergeProofAndKvpList*(
 
     block:
       let oops = oopsTab.getOrDefault(testId,(0,AristoError(0)))
-      if not tx.saveToBackendWithOops(noisy, runID, oops):
+      if not tx.saveToBackendWithOops(
+          extendOK=true, noisy=noisy, debugID=runID, oops):
         return
 
     when true and false:

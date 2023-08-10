@@ -166,17 +166,16 @@ type
     DelExtLocked
     DelVidStaleVtx
 
-    # Save permanently, `save()`
-    SaveBackendMissing
-    SaveStateRootMissing
-    SaveLeafVidRepurposed
+    # Functions from  `aristo_filter.nim`
+    FilStateRootMissing
+    FilStateRootMismatch
+    FilPrettyPointlessLayer
 
     # Get functions form `aristo_get.nim`
     GetLeafNotFound
-
-    # All backend and get functions form `aristo_get.nim`
     GetVtxNotFound
     GetKeyNotFound
+    GetIdgNotFound
 
     # RocksDB backend
     RdbBeCantCreateDataDir
@@ -199,6 +198,7 @@ type
     TxExecBaseTxLocked
     TxExecDirectiveLocked
     TxStackUnderflow
+    TxBackendMissing
 
     # Miscelaneous handy helpers
     PayloadTypeUnsupported

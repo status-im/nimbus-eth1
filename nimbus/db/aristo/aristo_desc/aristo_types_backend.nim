@@ -15,7 +15,7 @@
 {.push raises: [].}
 
 import
-  stew/results,
+  results,
   "."/[aristo_error, aristo_types_identifiers, aristo_types_structural]
 
 type
@@ -76,6 +76,8 @@ type
       ## indicates that a full database deletion is requested. If passed
       ## `false` the outcome might differ depending on the type of backend
       ## (e.g. in-memory backends would flush on close.)
+
+  # -------------
 
   AristoBackendRef* = ref object of RootRef
     ## Backend interface.
