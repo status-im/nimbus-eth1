@@ -22,8 +22,8 @@ import
   results,
   ../aristo_desc,
   "."/[aristo_init_common, aristo_rocksdb, memory_only]
-
 export
+  RdbBackendRef,
   memory_only
 
 # ------------------------------------------------------------------------------

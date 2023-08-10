@@ -19,8 +19,15 @@ import
   ../aristo_desc/aristo_types_backend,
   "."/[aristo_init_common, aristo_memory]
 
+type
+  NoneBackendRef* = ref object of TypedBackendRef
+    ## Dummy descriptor type, will typically used as `nil` reference
+
 export
-  AristoBackendType, TypedBackendRef
+  AristoBackendType,
+  MemBackendRef,
+  NoneBackendRef,
+  TypedBackendRef
 
 # ------------------------------------------------------------------------------
 # Public database constuctors, destructor
@@ -59,7 +66,7 @@ proc finish*(db: AristoDbRef; flush = false) =
 
 # -----------------
 
-proc to*[W: TypedBackendRef|MemBackendRef](
+proc to*[W: TypedBackendRef|MemBackendRef|NoneBackendRef](
     db: AristoDbRef;
     T: type W;
       ): T =
