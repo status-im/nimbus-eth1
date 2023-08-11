@@ -286,6 +286,9 @@ proc deleteImpl(
     else:
       rc.value
 
+  # Will modify top level cache
+  db.top.dirty = true
+
   db.doneWith lf.vid
 
   if 1 < hike.legs.len:

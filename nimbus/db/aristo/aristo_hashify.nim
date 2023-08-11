@@ -238,6 +238,9 @@ proc hashify*(
     backLink: BackVidTab
     downMost: BackVidTab
 
+  # Unconditionally mark the top layer
+  db.top.dirty = true
+
   for (lky,vid) in db.top.lTab.pairs:
     let hike = lky.hikeUp(db)
 
@@ -329,6 +332,7 @@ proc hashify*(
       backLink.del vid
     downMost = redo
 
+  db.top.dirty = false
   ok completed
 
 # ------------------------------------------------------------------------------

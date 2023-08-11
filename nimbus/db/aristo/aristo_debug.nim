@@ -376,7 +376,8 @@ proc ppLayer(
   let
     pfx1 = indent.toPfx
     pfx2 = indent.toPfx(1)
-    tagOk = 1 < sTabOk.ord + lTabOk.ord + kMapOk.ord + pPrfOk.ord + vGenOk.ord
+    nOKs = sTabOk.ord + lTabOk.ord + kMapOk.ord + pPrfOk.ord + vGenOk.ord
+    tagOk = 1 < nOKs
   var
     pfy = ""
 
@@ -419,6 +420,10 @@ proc ppLayer(
         tLen = layer.pPrf.len
         info = "pPrf(" & $tLen & ")"
       result &= info.doPrefix(0 < tLen) & layer.pPrf.ppPPrf
+    if 0 < nOKs:
+      let
+        info = if layer.dirty: "dirty" else: "clean"
+      result &= info.doPrefix(false)
 
 # ------------------------------------------------------------------------------
 # Public functions

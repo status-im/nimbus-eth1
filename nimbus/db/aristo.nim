@@ -14,10 +14,10 @@
 {.push raises: [].}
 
 import aristo/[
-  aristo_constants, aristo_delete, aristo_fetch, aristo_hashify, aristo_init,
+  aristo_constants, aristo_delete, aristo_fetch, aristo_init,
   aristo_merge, aristo_nearby, aristo_tx, aristo_utils]
 export
-  aristo_constants, aristo_delete, aristo_fetch, aristo_hashify, aristo_init,
+  aristo_constants, aristo_delete, aristo_fetch, aristo_init,
   aristo_merge, aristo_nearby, aristo_tx, aristo_utils
 
 import

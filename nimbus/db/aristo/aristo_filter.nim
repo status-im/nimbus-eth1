@@ -39,7 +39,7 @@ proc getBeStateRoot(
 proc getLayerStateRoots(
     db: AristoDbRef;
     layer: AristoLayerRef;
-    extendOK: bool;
+    chunkedMpt: bool;
       ): Result[StateRootPair,AristoError] =
   ## Get the Merkle hash key for target state root to arrive at after this
   ## reverse filter was applied.
@@ -53,7 +53,7 @@ proc getLayerStateRoots(
     spr.fg = layer.kMap.getOrVoid(VertexID 1).key
     if spr.fg.isValid:
       return ok(spr)
-  if extendOK:
+  if chunkedMpt:
     let vid = layer.pAmk.getOrVoid HashLabel(root: VertexID(1), key: spr.be)
     if vid == VertexID(1):
       spr.fg = spr.be
@@ -90,7 +90,7 @@ func bulk*(layer: AristolayerRef): int =
 proc fwdFilter*(
     db: AristoDbRef;
     layer: AristoLayerRef;
-    extendOK = false;
+    chunkedMpt = false;
       ): Result[AristoFilterRef,(VertexID,AristoError)] =
   ## Assemble forward delta, i.e. changes to the backend equivalent to applying
   ## the current top layer.
@@ -107,7 +107,7 @@ proc fwdFilter*(
   # Register the Merkle hash keys of the MPT where this reverse filter will be
   # applicable: `be => fg`
   let (srcRoot, trgRoot) = block:
-    let rc = db.getLayerStateRoots(layer, extendOk)
+    let rc = db.getLayerStateRoots(layer, chunkedMpt)
     if rc.isOK:
       (rc.value.be, rc.value.fg)
     elif rc.error == FilPrettyPointlessLayer:

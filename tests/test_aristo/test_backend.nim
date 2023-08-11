@@ -17,7 +17,7 @@ import
   unittest2,
   ../../nimbus/sync/protocol,
   ../../nimbus/db/aristo,
-  ../../nimbus/db/aristo/[aristo_desc, aristo_debug],
+  ../../nimbus/db/aristo/[aristo_desc, aristo_debug, aristo_hashify],
   ../../nimbus/db/aristo/aristo_init/[
     aristo_memory, aristo_rocksdb, persistent],
   ./test_helpers
@@ -197,15 +197,15 @@ proc test_backendConsistency*(
     # Store onto backend database
     block:
       #noisy.say "***", "db-dump\n    ", mdb.pp
-      let rc = mdb.stow(stageOnly=false, extendOK=true)
+      let rc = mdb.stow(persistent=true, dontHashify=true, chunkedMpt=true)
       if rc.isErr:
-        check rc.error == 0
+        check rc.error == (0,0)
         return
 
     if doRdbOk:
-      let rc = rdb.stow(stageOnly=false, extendOK=true)
+      let rc = rdb.stow(persistent=true, dontHashify=true, chunkedMpt=true)
       if rc.isErr:
-        check rc.error == 0
+        check rc.error == (0,0)
         return
 
     if not ndb.top.verify(mdb.to(MemBackendRef), noisy):

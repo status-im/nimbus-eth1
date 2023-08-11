@@ -99,6 +99,7 @@ proc vidAttach*(db: AristoDbRef; lbl: HashLabel; vid: VertexID) =
   ## Attach (i.r. register) a Merkle hash key to a vertex ID.
   db.top.pAmk[lbl] = vid
   db.top.kMap[vid] = lbl
+  db.top.dirty = true # Modified top level cache
 
 proc vidAttach*(db: AristoDbRef; lbl: HashLabel): VertexID {.discardable.} =
   ## Variant of `vidAttach()` with auto-generated vertex ID

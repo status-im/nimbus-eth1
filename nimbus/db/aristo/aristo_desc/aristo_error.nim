@@ -191,6 +191,7 @@ type
     RdbBeIngestSstWriter
 
     # Transaction wrappers
+    TxStackGarbled
     TxNoPendingTx
     TxArgStaleTx
     TxNotTopTx

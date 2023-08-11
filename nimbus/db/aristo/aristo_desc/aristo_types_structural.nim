@@ -106,6 +106,7 @@ type
     pPrf*: HashSet[VertexID]          ## Locked vertices (proof nodes)
     vGen*: seq[VertexID]              ## Unique vertex ID generator
     txUid*: uint                      ## Transaction identifier if positive
+    dirty*: bool                      ## Needs to be hashified if `true`
 
 # ------------------------------------------------------------------------------
 # Public helpers: `NodeRef` and `PayloadRef`
