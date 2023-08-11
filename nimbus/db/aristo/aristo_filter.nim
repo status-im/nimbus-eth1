@@ -29,7 +29,7 @@ type
 proc getBeStateRoot(
     db: AristoDbRef;
       ): Result[HashKey,AristoError] =
-  let rc = db.getKeyBackend VertexID(1)
+  let rc = db.getKeyBE VertexID(1)
   if rc.isOk:
     return ok(rc.value)
   if rc.error == GetKeyNotFound:
@@ -182,7 +182,7 @@ proc merge*(
     if vtx.isValid or not newFilter.sTab.hasKey vid:
       newFilter.sTab[vid] = vtx
     elif newFilter.sTab.getOrVoid(vid).isValid:
-      let rc = db.getVtxUnfilteredBackend vid
+      let rc = db.getVtxUBE vid
       if rc.isOk:
         newFilter.sTab[vid] = vtx # VertexRef(nil)
       elif rc.error == GetVtxNotFound:
@@ -194,7 +194,7 @@ proc merge*(
     if key.isValid or not newFilter.kMap.hasKey vid:
       newFilter.kMap[vid] = key
     elif newFilter.kMap.getOrVoid(vid).isValid:
-      let rc = db.getKeyUnfilteredBackend vid
+      let rc = db.getKeyUBE vid
       if rc.isOk:
         newFilter.kMap[vid] = key # VOID_HASH_KEY
       elif rc.error == GetKeyNotFound:

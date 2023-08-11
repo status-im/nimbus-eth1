@@ -50,7 +50,7 @@ proc clearKey(
   if lbl.isValid:
     db.top.kMap.del vid
     db.top.pAmk.del lbl
-  elif db.getKeyBackend(vid).isOK:
+  elif db.getKeyBE(vid).isOK:
     # Register for deleting on backend
     db.top.kMap[vid] = VOID_HASH_LABEL
     db.top.pAmk.del lbl
@@ -60,7 +60,7 @@ proc doneWith(
     vid: VertexID;                     # Vertex IDs to clear
       ) =
   # Remove entry
-  if db.getVtxBackend(vid).isOk:
+  if db.getVtxBE(vid).isOk:
     db.top.sTab[vid] = VertexRef(nil)  # Will be propagated to backend
   else:
     db.top.sTab.del vid
@@ -278,7 +278,7 @@ proc deleteImpl(
 
   # Will be needed at the end. Just detect an error early enouhh
   let leafVidBe = block:
-    let rc = db.getVtxBackend lf.vid
+    let rc = db.getVtxBE lf.vid
     if rc.isErr:
       if rc.error != GetVtxNotFound:
         return err((lf.vid, rc.error))

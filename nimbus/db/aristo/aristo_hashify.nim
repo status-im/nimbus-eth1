@@ -105,7 +105,7 @@ proc updateHashKey(
   # overwitten.)
   if backend:
     # Ok, vertex is on the backend.
-    let rc = db.getKeyBackend vid
+    let rc = db.getKeyBE vid
     if rc.isOk:
       let key = rc.value
       if key == expected:
