@@ -22,7 +22,7 @@
 {.push raises: [].}
 
 import
-  std/tables,
+  std/[sets, tables],
   eth/common,
   ./aristo_constants,
   ./aristo_desc/[
@@ -31,8 +31,8 @@ import
 from ./aristo_desc/aristo_types_backend
   import AristoBackendRef
 
+# Not auto-exporting backend
 export
-  # Not auto-exporting backend
   aristo_constants, aristo_error, aristo_types_identifiers,
   aristo_types_structural
 
@@ -44,6 +44,13 @@ type
     txUid*: uint                      ## Unique ID among transactions
     level*: int                       ## Stack index for this transaction
 
+  AristoDudesRef* = ref object
+    case rwOk*: bool
+    of true:
+      roDudes*: HashSet[AristoDbRef]  ## Read-only peers
+    else:
+      rwDb*: AristoDbRef              ## Link to writable descriptor
+
   AristoDbRef* = ref AristoDbObj
   AristoDbObj* = object
     ## Set of database layers, supporting transaction frames
@@ -54,6 +61,7 @@ type
 
     txRef*: AristoTxRef               ## Latest active transaction
     txUidGen*: uint                   ## Tx-relative unique number generator
+    dudes*: AristoDudesRef            ## Related DB descriptors
 
     # Debugging data below, might go away in future
     xMap*: Table[HashLabel,VertexID]  ## For pretty printing, extends `pAmk`

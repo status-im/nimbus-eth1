@@ -14,7 +14,7 @@
 {.push raises: [].}
 
 import
-  std/[options, sequtils, tables],
+  std/options,
   results,
   "."/[aristo_desc, aristo_filter, aristo_hashify]
 
@@ -31,10 +31,6 @@ func getDbDescFromTopTx(tx: AristoTxRef): Result[AristoDbRef,AristoError] =
   if tx.level != db.stack.len:
     return err(TxStackUnderflow)
   ok db
-
-# ------------------------------------------------------------------------------
-# Private functions
-# ------------------------------------------------------------------------------
 
 proc getTxUid(db: AristoDbRef): uint =
   if db.txUidGen == high(uint):
@@ -158,7 +154,7 @@ proc commit*(
       return err((VertexID(0),rc.error))
     rc.value
 
-  if not dontHashify:
+  if db.top.dirty and not dontHashify:
     let rc = db.hashify()
     if rc.isErr:
       return err(rc.error)
@@ -196,8 +192,8 @@ proc collapse*(
   if not commit:
     db.stack[0].swap db.top
 
-  if not dontHashify:
-    var rc = db.hashify()
+  if db.top.dirty and not dontHashify:
+    let rc = db.hashify()
     if rc.isErr:
       if not commit:
         db.stack[0].swap db.top # restore
@@ -218,8 +214,8 @@ proc stow*(
     chunkedMpt = false;               # Partial data (e.g. from `snap`)
       ): Result[void,(VertexID,AristoError)] =
   ## If there is no backend while the `persistent` argument is set `true`,
-  ## the function returns immediately with an error.The same happens if the
-  ## backend is locked while `persistent` is set (e.g. by an `exec()` call.)
+  ## the function returns immediately with an error.The same happens if there
+  ## is a pending transaction.
   ##
   ## The `dontHashify` is treated as described for `commit()`.
   ##
@@ -234,9 +230,17 @@ proc stow*(
   ## If the argument `persistent` is set `true`, all the staged data are merged
   ## into the physical backend database and the staged data area is cleared.
   ##
-  let be = db.backend
-  if be.isNil and persistent:
-    return err((VertexID(0),TxBackendMissing))
+  if not db.txRef.isNil:
+    return err((VertexID(0),TxPendingTx))
+  if 0 < db.stack.len:
+    return err((VertexID(0),TxStackGarbled))
+  if persistent and not db.canResolveBE():
+    return err((VertexID(0),TxRoBackendOrMissing))
+
+  if db.top.dirty and not dontHashify:
+    let rc = db.hashify()
+    if rc.isErr:
+      return err(rc.error)
 
   let fwd = block:
     let rc = db.fwdFilter(db.top, chunkedMpt)
@@ -246,22 +250,17 @@ proc stow*(
 
   if fwd.vGen.isSome: # Otherwise this layer is pointless
     block:
+      # Merge `top` layer into `roFilter`
       let rc = db.merge fwd
       if rc.isErr:
         return err(rc.error)
-      rc.value
+      db.top = AristoLayerRef(vGen: db.roFilter.vGen.unsafeGet)
 
-    if persistent:
-      # Save structural and other table entries
-      let txFrame = be.putBegFn()
-      be.putVtxFn(txFrame, db.roFilter.sTab.pairs.toSeq)
-      be.putKeyFn(txFrame, db.roFilter.kMap.pairs.toSeq)
-      be.putIdgFn(txFrame, db.roFilter.vGen.unsafeGet)
-      let w = be.putEndFn txFrame
-      if w != AristoError(0):
-        return err((VertexID(0),w))
-
-      db.roFilter = AristoFilterRef(nil)
+  if persistent:
+    let rc = db.resolveBE()
+    if rc.isErr:
+      return err(rc.error)
+    db.roFilter = AristoFilterRef(nil)
 
   # Delete or clear stack and clear top
   db.stack.setLen(0)

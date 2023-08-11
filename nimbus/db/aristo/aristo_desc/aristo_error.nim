@@ -169,9 +169,11 @@ type
     DelVidStaleVtx
 
     # Functions from  `aristo_filter.nim`
+    FilRoBackendOrMissing
     FilStateRootMissing
     FilStateRootMismatch
     FilPrettyPointlessLayer
+    FilDudeFilterUpdateError
 
     # Get functions form `aristo_get.nim`
     GetLeafNotFound
@@ -194,8 +196,9 @@ type
 
     # Transaction wrappers
     TxArgStaleTx
-    TxBackendMissing
+    TxRoBackendOrMissing
     TxNoPendingTx
+    TxPendingTx
     TxNotTopTx
     TxStackGarbled
     TxStackUnderflow

@@ -200,7 +200,7 @@ proc ppSTab(
   "{" & sTab.sortedKeys
             .mapIt((it, sTab.getOrVoid it))
             .mapIt("(" & it[0].ppVid & "," & it[1].ppVtx(db,it[0]) & ")")
-            .join("," & indent.toPfx(1)) & "}"
+            .join(indent.toPfx(2)) & "}"
 
 proc ppLTab(
     lTab: Table[LeafTie,VertexID];
@@ -210,7 +210,7 @@ proc ppLTab(
   "{" & lTab.sortedKeys
             .mapIt((it, lTab.getOrVoid it))
             .mapIt("(" & it[0].ppLeafTie(db) & "," & it[1].ppVid & ")")
-            .join("," & indent.toPfx(1)) & "}"
+            .join(indent.toPfx(2)) & "}"
 
 proc ppPPrf(pPrf: HashSet[VertexID]): string =
   "{" & pPrf.sortedKeys.mapIt(it.ppVid).join(",") & "}"
@@ -324,9 +324,11 @@ proc ppFilter(fl: AristoFilterRef; db: AristoDbRef; indent: int): string =
     pfx1 = indent.toPfx(1)
     pfx2 = indent.toPfx(2)
   result = "<filter>"
-  if db.roFilter.isNil:
+  if fl.isNil:
     result &= " n/a"
     return
+  result &= pfx & "trg(" & fl.trg.ppKey & ")"
+  result &= pfx & "src(" & fl.src.ppKey & ")"
   result &= pfx & "vGen" & pfx1 & "["
   if fl.vGen.isSome:
     result &= fl.vGen.unsafeGet.mapIt(it.ppVid).join(",")
@@ -361,7 +363,7 @@ proc ppBeOnly[T](be: T; db: AristoDbRef; indent: int): string =
 
 proc ppBe[T](be: T; db: AristoDbRef; indent: int): string =
   ## backend + filter
-  db.roFilter.ppFilter(db, indent) & indent.toPfx & be.ppBeOnly(db,indent)
+  db.roFilter.ppFilter(db, indent+1) & indent.toPfx & be.ppBeOnly(db,indent+1)
 
 proc ppLayer(
     layer: AristoLayerRef;
@@ -374,8 +376,8 @@ proc ppLayer(
     indent = 4;
       ): string =
   let
-    pfx1 = indent.toPfx
-    pfx2 = indent.toPfx(1)
+    pfx1 = indent.toPfx(1)
+    pfx2 = indent.toPfx(2)
     nOKs = sTabOk.ord + lTabOk.ord + kMapOk.ord + pPrfOk.ord + vGenOk.ord
     tagOk = 1 < nOKs
   var
@@ -392,6 +394,8 @@ proc ppLayer(
     rc
 
   if not layer.isNil:
+    if 2 < nOKs:
+      result &= "<layer>".doPrefix(false)
     if vGenOk:
       let
         tLen = layer.vGen.len
@@ -613,6 +617,12 @@ proc pp*(
       ): string =
   db.top.pp(db, xTabOk=xTabOk, kMapOk=kMapOk, other=other, indent=indent)
 
+proc pp*(
+    filter: AristoFilterRef;
+    db = AristoDbRef();
+    indent = 4;
+      ): string =
+  filter.ppFilter(db, indent)
 
 proc pp*(
   be: TypedBackendRef;
