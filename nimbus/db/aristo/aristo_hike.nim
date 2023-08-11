@@ -83,7 +83,7 @@ proc hikeUp*(
       if not leg.wp.vtx.isValid:
 
         # Register vertex fetched from backend (if any)
-        let rc = db.getVtxBackend vid
+        let rc = db.getVtxBE vid
         if rc.isErr:
           break
         leg.backend = true

@@ -376,7 +376,8 @@ proc ppLayer(
   let
     pfx1 = indent.toPfx
     pfx2 = indent.toPfx(1)
-    tagOk = 1 < sTabOk.ord + lTabOk.ord + kMapOk.ord + pPrfOk.ord + vGenOk.ord
+    nOKs = sTabOk.ord + lTabOk.ord + kMapOk.ord + pPrfOk.ord + vGenOk.ord
+    tagOk = 1 < nOKs
   var
     pfy = ""
 
@@ -419,6 +420,10 @@ proc ppLayer(
         tLen = layer.pPrf.len
         info = "pPrf(" & $tLen & ")"
       result &= info.doPrefix(0 < tLen) & layer.pPrf.ppPPrf
+    if 0 < nOKs:
+      let
+        info = if layer.dirty: "dirty" else: "clean"
+      result &= info.doPrefix(false)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -615,14 +620,14 @@ proc pp*(
   indent = 4;
     ): string =
   ## May be called as `db.to(TypedBackendRef).pp(db)`
-  case (if be.isNil: BackendNone else: be.kind)
+  case (if be.isNil: BackendVoid else: be.kind)
   of BackendMemory:
     be.MemBackendRef.ppBe(db, indent)
 
   of BackendRocksDB:
     be.RdbBackendRef.ppBe(db, indent)
 
-  of BackendNone:
+  of BackendVoid:
     db.roFilter.ppFilter(db, indent) & indent.toPfx & "<BackendNone>"
 
 # ------------------------------------------------------------------------------

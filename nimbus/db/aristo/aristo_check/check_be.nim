@@ -36,7 +36,7 @@ proc invTo(s: IntervalSetRef[VertexID,uint64]; T: type HashSet[VertexID]): T =
         for pt in w.minPt .. w.maxPt:
           result.incl pt
 
-proc toNodeBe(
+proc toNodeBE(
     vtx: VertexRef;                    # Vertex to convert
     db: AristoDbRef;                   # Database, top layer
       ): Result[NodeRef,VertexID] =
@@ -47,7 +47,7 @@ proc toNodeBe(
     if vtx.lData.pType == AccountData:
       let vid = vtx.lData.account.storageID
       if vid.isValid:
-        let rc = db.getKeyBackend vid
+        let rc = db.getKeyBE vid
         if rc.isErr or not rc.value.isValid:
           return err(vid)
         node.key[0] = rc.value
@@ -58,7 +58,7 @@ proc toNodeBe(
     for n in 0 .. 15:
       let vid = vtx.bVid[n]
       if vid.isValid:
-        let rc = db.getKeyBackend vid
+        let rc = db.getKeyBE vid
         if rc.isOk and rc.value.isValid:
           node.key[n] = rc.value
         else:
@@ -69,7 +69,7 @@ proc toNodeBe(
   of Extension:
     let
       vid = vtx.eVid
-      rc = db.getKeyBackend vid
+      rc = db.getKeyBE vid
     if rc.isOk and rc.value.isValid:
       let node = NodeRef(vType: Extension, ePfx: vtx.ePfx, eVid: vid)
       node.key[0] = rc.value
@@ -80,7 +80,7 @@ proc toNodeBe(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc checkBE*[T: RdbBackendRef|MemBackendRef|NoneBackendRef](
+proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
     _: type T;
     db: AristoDbRef;                   # Database, top layer
     relax: bool;                       # Not compiling hashes if `true`
@@ -94,17 +94,17 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|NoneBackendRef](
   for (_,vid,vtx) in T.walkVtxBE db:
     if not vtx.isValid:
       return err((vid,CheckBeVtxInvalid))
-    let rc = db.getKeyBackend vid
+    let rc = db.getKeyBE vid
     if rc.isErr or not rc.value.isValid:
       return err((vid,CheckBeKeyMissing))
 
   for (_,vid,key) in T.walkKeyBE db:
     if not key.isvalid:
       return err((vid,CheckBeKeyInvalid))
-    let rc = db.getVtxBackend vid
+    let rc = db.getVtxBE vid
     if rc.isErr or not rc.value.isValid:
       return err((vid,CheckBeVtxMissing))
-    let rx = rc.value.toNodeBe db # backend only
+    let rx = rc.value.toNodeBE db # backend only
     if rx.isErr:
       return err((vid,CheckBeKeyCantCompile))
     if not relax:
@@ -143,7 +143,7 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|NoneBackendRef](
         if lbl.isValid:
           return err((vid,CheckBeCacheKeyNonEmpty))
         # There must be a representation on the backend DB
-        if db.getVtxBackend(vid).isErr:
+        if db.getVtxBE(vid).isErr:
           return err((vid,CheckBeCacheVidUnsynced))
         # Register deleted vid against backend generator state
         discard vids.merge Interval[VertexID,uint64].new(vid,vid)

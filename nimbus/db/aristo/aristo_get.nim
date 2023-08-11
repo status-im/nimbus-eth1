@@ -27,30 +27,30 @@ type
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc getIdgUnfilteredBackend*(
+proc getIdgUBE*(
     db: AristoDbRef;
       ): Result[seq[VertexID],AristoError] =
-  ## Get the ID generator state the `backened` layer if available.
+  ## Get the ID generator state from the unfiltered backened if available.
   let be = db.backend
   if not be.isNil:
     return be.getIdgFn()
   err(GetIdgNotFound)
 
-proc getVtxUnfilteredBackend*(
+proc getVtxUBE*(
     db: AristoDbRef;
     vid: VertexID;
       ): Result[VertexRef,AristoError] =
-  ## Get the vertex from the `backened` layer if available.
+  ## Get the vertex from the unfiltered backened if available.
   let be = db.backend
   if not be.isNil:
     return be.getVtxFn vid
   err GetVtxNotFound
 
-proc getKeyUnfilteredBackend*(
+proc getKeyUBE*(
     db: AristoDbRef;
     vid: VertexID;
       ): Result[HashKey,AristoError] =
-  ## Get the merkle hash/key from the backend
+  ## Get the merkle hash/key from the unfiltered backend if available.
   let be = db.backend
   if not be.isNil:
     return be.getKeyFn vid
@@ -58,37 +58,37 @@ proc getKeyUnfilteredBackend*(
 
 # ------------------
 
-proc getIdgBackend*(
+proc getIdgBE*(
     db: AristoDbRef;
       ): Result[seq[VertexID],AristoError] =
   ## Get the ID generator state the `backened` layer if available.
   if not db.roFilter.isNil and db.roFilter.vGen.isSome:
     return ok(db.roFilter.vGen.unsafeGet)
-  db.getIdgUnfilteredBackend()
+  db.getIdgUBE()
 
-proc getVtxBackend*(
+proc getVtxBE*(
     db: AristoDbRef;
     vid: VertexID;
       ): Result[VertexRef,AristoError] =
-  ## Get the vertex from the `backened` layer if available.
+  ## Get the vertex from the (filtered) backened if available.
   if not db.roFilter.isNil and db.roFilter.sTab.hasKey vid:
     let vtx = db.roFilter.sTab.getOrVoid vid
     if vtx.isValid:
       return ok(vtx)
     return err(GetVtxNotFound)
-  db.getVtxUnfilteredBackend vid
+  db.getVtxUBE vid
 
-proc getKeyBackend*(
+proc getKeyBE*(
     db: AristoDbRef;
     vid: VertexID;
       ): Result[HashKey,AristoError] =
-  ## Get the merkle hash/key from the backend
+  ## Get the merkle hash/key from the (filtered) backend if available.
   if not db.roFilter.isNil and db.roFilter.kMap.hasKey vid:
     let key = db.roFilter.kMap.getOrVoid vid
     if key.isValid:
       return ok(key)
     return err(GetKeyNotFound)
-  db.getKeyUnfilteredBackend vid
+  db.getKeyUBE vid
 
 # ------------------
 
@@ -126,7 +126,7 @@ proc getVtx*(db: AristoDbRef; vid: VertexID): VertexRef =
     # If the vertex is to be deleted on the backend, a `VertexRef(nil)` entry
     # is kept in the local table in which case it is OK to return this value.
     return db.top.sTab.getOrVoid vid
-  let rc = db.getVtxBackend vid
+  let rc = db.getVtxBE vid
   if rc.isOk:
     return rc.value
   VertexRef(nil)
@@ -139,7 +139,7 @@ proc getKey*(db: AristoDbRef; vid: VertexID): HashKey =
     # If the key is to be deleted on the backend, a `VOID_HASH_LABEL` entry
     # is kept on the local table in which case it is OK to return this value.
     return db.top.kMap.getOrVoid(vid).key
-  let rc = db.getKeyBackend vid
+  let rc = db.getKeyBE vid
   if rc.isOk:
     return rc.value
   VOID_HASH_KEY

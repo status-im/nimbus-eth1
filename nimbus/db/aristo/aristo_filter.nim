@@ -29,7 +29,7 @@ type
 proc getBeStateRoot(
     db: AristoDbRef;
       ): Result[HashKey,AristoError] =
-  let rc = db.getKeyBackend VertexID(1)
+  let rc = db.getKeyBE VertexID(1)
   if rc.isOk:
     return ok(rc.value)
   if rc.error == GetKeyNotFound:
@@ -39,7 +39,7 @@ proc getBeStateRoot(
 proc getLayerStateRoots(
     db: AristoDbRef;
     layer: AristoLayerRef;
-    extendOK: bool;
+    chunkedMpt: bool;
       ): Result[StateRootPair,AristoError] =
   ## Get the Merkle hash key for target state root to arrive at after this
   ## reverse filter was applied.
@@ -53,7 +53,7 @@ proc getLayerStateRoots(
     spr.fg = layer.kMap.getOrVoid(VertexID 1).key
     if spr.fg.isValid:
       return ok(spr)
-  if extendOK:
+  if chunkedMpt:
     let vid = layer.pAmk.getOrVoid HashLabel(root: VertexID(1), key: spr.be)
     if vid == VertexID(1):
       spr.fg = spr.be
@@ -90,7 +90,7 @@ func bulk*(layer: AristolayerRef): int =
 proc fwdFilter*(
     db: AristoDbRef;
     layer: AristoLayerRef;
-    extendOK = false;
+    chunkedMpt = false;
       ): Result[AristoFilterRef,(VertexID,AristoError)] =
   ## Assemble forward delta, i.e. changes to the backend equivalent to applying
   ## the current top layer.
@@ -107,7 +107,7 @@ proc fwdFilter*(
   # Register the Merkle hash keys of the MPT where this reverse filter will be
   # applicable: `be => fg`
   let (srcRoot, trgRoot) = block:
-    let rc = db.getLayerStateRoots(layer, extendOk)
+    let rc = db.getLayerStateRoots(layer, chunkedMpt)
     if rc.isOK:
       (rc.value.be, rc.value.fg)
     elif rc.error == FilPrettyPointlessLayer:
@@ -182,7 +182,7 @@ proc merge*(
     if vtx.isValid or not newFilter.sTab.hasKey vid:
       newFilter.sTab[vid] = vtx
     elif newFilter.sTab.getOrVoid(vid).isValid:
-      let rc = db.getVtxUnfilteredBackend vid
+      let rc = db.getVtxUBE vid
       if rc.isOk:
         newFilter.sTab[vid] = vtx # VertexRef(nil)
       elif rc.error == GetVtxNotFound:
@@ -194,7 +194,7 @@ proc merge*(
     if key.isValid or not newFilter.kMap.hasKey vid:
       newFilter.kMap[vid] = key
     elif newFilter.kMap.getOrVoid(vid).isValid:
-      let rc = db.getKeyUnfilteredBackend vid
+      let rc = db.getKeyUBE vid
       if rc.isOk:
         newFilter.kMap[vid] = key # VOID_HASH_KEY
       elif rc.error == GetKeyNotFound:

@@ -16,10 +16,9 @@ import
   eth/common,
   stew/results,
   unittest2,
-  ../../nimbus/db/[aristo, aristo/aristo_init/persistent],
   ../../nimbus/db/aristo/[
-    aristo_check, aristo_delete, aristo_desc, aristo_hashify,
-    aristo_get, aristo_merge],
+    aristo_check, aristo_delete, aristo_desc, aristo_get, aristo_merge],
+  ../../nimbus/db/[aristo, aristo/aristo_init/persistent],
   ./test_helpers
 
 type
@@ -30,7 +29,8 @@ type
     ## (<sample-name> & "#" <instance>, (<vertex-id>,<error-symbol>))
 
 const
-  MaxFilterBulk = 15_000
+  MaxFilterBulk = 150_000
+    ## Policy settig for `pack()`
 
   WalkStopRc =
     Result[LeafTie,(VertexID,AristoError)].err((VertexID(0),NearbyBeyondRange))
@@ -95,12 +95,12 @@ proc innerCleanUp(db: AristoDbRef) =
   if rc.isOk:
     let rx = rc.value.collapse(commit=false)
     if rx.isErr:
-      check rx.error == 0
+      check rx.error == (0,0)
   db.finish(flush=true)
 
 proc saveToBackend(
     tx: var AristoTxRef;
-    extendOK: bool;
+    chunkedMpt: bool;
     relax: bool;
     noisy: bool;
     debugID: int;
@@ -111,8 +111,8 @@ proc saveToBackend(
   block:
     block:
       let level = tx.level
-      if level != 1:
-        check level == 1
+      if level != 2:
+        check level == 2
         return
     block:
       let rc = db.checkCache(relax=true)
@@ -125,7 +125,12 @@ proc saveToBackend(
     block:
       let rc = tx.commit()
       if rc.isErr:
-        check rc.error == 0
+        check rc.error == (0,0)
+        return
+    block:
+      # Make sure MPT hashes are OK
+      if db.top.dirty:
+        check db.top.dirty == false
         return
     block:
       let rc = db.txTop()
@@ -134,13 +139,8 @@ proc saveToBackend(
         return
       tx = rc.value
       let level = tx.level
-      if level != 0:
-        check level == 0
-        return
-    block:
-      let rc = db.hashify()
-      if rc.isErr:
-        check rc.error == (0,0)
+      if level != 1:
+        check level == 1
         return
     block:
       let rc = db.checkBE(relax=true)
@@ -153,17 +153,22 @@ proc saveToBackend(
     block:
       let rc = tx.commit()
       if rc.isErr:
-        check rc.error == 0
+        check rc.error == (0,0)
+        return
+    block:
+      # Make sure MPT hashes are OK
+      if db.top.dirty:
+        check db.top.dirty == false
         return
     block:
       let rc = db.txTop()
       if rc.isOk:
-        check rc.value.level < 0
+        check rc.value.level < 0 # force error
         return
     block:
-      let rc = db.stow(stageLimit=MaxFilterBulk, extendOK=extendOK)
+      let rc = db.stow(stageLimit=MaxFilterBulk, chunkedMpt=chunkedMpt)
       if rc.isErr:
-        check rc.error == 0
+        check rc.error == (0,0)
         return
     block:
       let rc = db.checkBE(relax=relax)
@@ -172,13 +177,13 @@ proc saveToBackend(
         return
 
   # Update layers to original level
-  tx = db.txBegin().to(AristoDbRef).txBegin()
+  tx = db.txBegin().value.to(AristoDbRef).txBegin().value
 
   true
 
 proc saveToBackendWithOops(
     tx: var AristoTxRef;
-    extendOK: bool;
+    chunkedMpt: bool;
     noisy: bool;
     debugID: int;
     oops: (int,AristoError);
@@ -189,8 +194,8 @@ proc saveToBackendWithOops(
   block:
     block:
       let level = tx.level
-      if level != 1:
-        check level == 1
+      if level != 2:
+        check level == 2
         return
 
   # Commit and hashify the current layer
@@ -198,7 +203,12 @@ proc saveToBackendWithOops(
     block:
       let rc = tx.commit()
       if rc.isErr:
-        check rc.error == 0
+        check rc.error == (0,0)
+        return
+    block:
+      # Make sure MPT hashes are OK
+      if db.top.dirty:
+        check db.top.dirty == false
         return
     block:
       let rc = db.txTop()
@@ -207,13 +217,8 @@ proc saveToBackendWithOops(
         return
       tx = rc.value
       let level = tx.level
-      if level != 0:
-        check level == 0
-        return
-    block:
-      let rc = db.hashify()
-      if rc.isErr:
-        check rc.error == (0,0)
+      if level != 1:
+        check level == 1
         return
 
   # Commit and save to backend
@@ -221,7 +226,12 @@ proc saveToBackendWithOops(
     block:
       let rc = tx.commit()
       if rc.isErr:
-        check rc.error == 0
+        check rc.error == (0,0)
+        return
+    block:
+      # Make sure MPT hashes are OK
+      if db.top.dirty:
+        check db.top.dirty == false
         return
     block:
       let rc = db.txTop()
@@ -229,13 +239,13 @@ proc saveToBackendWithOops(
         check rc.value.level < 0
         return
     block:
-      let rc = db.stow(stageLimit=MaxFilterBulk, extendOK=extendOK)
+      let rc = db.stow(stageLimit=MaxFilterBulk, chunkedMpt=chunkedMpt)
       if rc.isErr:
-        check rc.error == 0
+        check rc.error == (0,0)
         return
 
   # Update layers to original level
-  tx = db.txBegin().to(AristoDbRef).txBegin()
+  tx = db.txBegin().value.to(AristoDbRef).txBegin().value
 
   true
 
@@ -343,9 +353,9 @@ proc testTxMergeAndDelete*(
 
     # Start transaction (double frame for testing)
     check db.txTop.isErr
-    var tx = db.txBegin().to(AristoDbRef).txBegin()
+    var tx = db.txBegin().value.to(AristoDbRef).txBegin().value
     check tx.isTop()
-    check tx.level == 1
+    check tx.level == 2
 
     # Reset database so that the next round has a clean setup
     defer: db.innerCleanUp
@@ -383,7 +393,7 @@ proc testTxMergeAndDelete*(
 
       if doSaveBeOk:
         if not tx.saveToBackend(
-            extendOK=false, relax=relax, noisy=noisy, runID):
+            chunkedMpt=false, relax=relax, noisy=noisy, runID):
           return
 
       # Delete leaf
@@ -450,7 +460,7 @@ proc testTxMergeProofAndKvpList*(
         rc.value
 
       # Start transaction (double frame for testing)
-      tx = db.txBegin().to(AristoDbRef).txBegin()
+      tx = db.txBegin().value.to(AristoDbRef).txBegin().value
       check tx.isTop()
 
       # Update root
@@ -496,7 +506,7 @@ proc testTxMergeProofAndKvpList*(
     block:
       let oops = oopsTab.getOrDefault(testId,(0,AristoError(0)))
       if not tx.saveToBackendWithOops(
-          extendOK=true, noisy=noisy, debugID=runID, oops):
+          chunkedMpt=true, noisy=noisy, debugID=runID, oops):
         return
 
     when true and false:

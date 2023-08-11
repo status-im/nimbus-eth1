@@ -51,7 +51,7 @@ proc newAristoDbRef*(
       rc.value
     ok AristoDbRef(top: AristoLayerRef(vGen: vGen), backend: be)
 
-  elif backend == BackendNone:
+  elif backend == BackendVoid:
     {.error: "Use BackendNone.init() without path argument".}
 
   elif backend == BackendMemory:

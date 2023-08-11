@@ -103,7 +103,7 @@ proc checkCacheCommon*(
   for (vid,vtx) in db.top.sTab.pairs:
     if not vtx.isValid:
       nNilVtx.inc
-      let rc = db.getVtxBackend vid
+      let rc = db.getVtxBE vid
       if rc.isErr:
         return err((vid,CheckAnyVidVtxMissing))
       if not db.top.kMap.hasKey vid:

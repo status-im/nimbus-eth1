@@ -19,7 +19,7 @@ const
 
 type
   AristoBackendType* = enum
-    BackendNone        ## For providing backend-less constructor
+    BackendVoid                      ## For providing backend-less constructor
     BackendMemory
     BackendRocksDB
 

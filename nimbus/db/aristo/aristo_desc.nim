@@ -42,7 +42,7 @@ type
     db*: AristoDbRef                  ## Database descriptor
     parent*: AristoTxRef              ## Previous transaction
     txUid*: uint                      ## Unique ID among transactions
-    stackInx*: int                    ## Stack index for this transaction
+    level*: int                       ## Stack index for this transaction
 
   AristoDbRef* = ref AristoDbObj
   AristoDbObj* = object

@@ -24,7 +24,7 @@ export
 # Public iterators (all in one)
 # ------------------------------------------------------------------------------
 
-iterator walkVtxBe*[T: MemBackendRef|NoneBackendRef](
+iterator walkVtxBe*[T: MemBackendRef|VoidBackendRef](
    _: type T;
    db: AristoDbRef;
      ): tuple[n: int, vid: VertexID, vtx: VertexRef] =
@@ -34,7 +34,7 @@ iterator walkVtxBe*[T: MemBackendRef|NoneBackendRef](
   for (n,vid,vtx) in db.to(T).walkVtxBeImpl db:
     yield (n,vid,vtx)
 
-iterator walkKeyBe*[T: MemBackendRef|NoneBackendRef](
+iterator walkKeyBe*[T: MemBackendRef|VoidBackendRef](
    _: type T;
    db: AristoDbRef;
      ): tuple[n: int, vid: VertexID, key: HashKey] =
@@ -42,7 +42,7 @@ iterator walkKeyBe*[T: MemBackendRef|NoneBackendRef](
   for (n,vid,key) in db.to(T).walkKeyBeImpl db:
     yield (n,vid,key)
 
-iterator walkIdgBe*[T: MemBackendRef|NoneBackendRef](
+iterator walkIdgBe*[T: MemBackendRef|VoidBackendRef](
    _: type T;
    db: AristoDbRef;
      ): tuple[n: int, vid: VertexID, vGen: seq[VertexID]] =

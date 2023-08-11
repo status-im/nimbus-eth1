@@ -79,10 +79,12 @@ proc clearMerkleKeys(
     if lbl.isValid:
       db.top.kMap.del vid
       db.top.pAmk.del lbl
-    elif db.getKeyBackend(vid).isOK:
+      db.top.dirty = true # Modified top level cache
+    elif db.getKeyBE(vid).isOK:
       # Register for deleting on backend
       db.top.kMap[vid] = VOID_HASH_LABEL
       db.top.pAmk.del lbl
+      db.top.dirty = true # Modified top level cache
 
 # -----------
 
@@ -131,6 +133,9 @@ proc insertBranch(
     leafInx = hike.tail[n]
   var
     leafLeg = Leg(nibble: -1)
+
+  # Will modify top level cache
+  db.top.dirty = true
 
   # Install `forkVtx`
   block:
@@ -240,6 +245,9 @@ proc concatBranchAndLeaf(
   result = Hike(root: hike.root, legs: hike.legs)
   result.legs.add Leg(wp: VidVtxPair(vtx: brVtx, vid: brVid), nibble: nibble)
 
+  # Will modify top level cache
+  db.top.dirty = true
+
   # Append leaf vertex
   let
     vid = db.vidFetch(pristine = true)
@@ -287,6 +295,9 @@ proc topIsBranchAddLeaf(
       debug "Dangling leaf link, reused", branch=hike.legs[^1].wp.vid,
         nibble, linkID, leafPfx=hike.tail
 
+    # Will modify top level cache
+    db.top.dirty = true
+
     # Reuse placeholder entry in table
     let vtx = VertexRef(
       vType: Leaf,
@@ -333,6 +344,10 @@ proc topIsExtAddLeaf(
     #
     #  <-------- immutable -------------->
     #
+
+    # Will modify top level cache
+    db.top.dirty = true
+
     let vtx = VertexRef(
       vType: Leaf,
       lPfx:  extVtx.ePfx & hike.tail,
@@ -357,6 +372,9 @@ proc topIsExtAddLeaf(
     if linkID.isValid:
       return Hike(error: MergeRootBranchLinkBusy)
 
+    # Will modify top level cache
+    db.top.dirty = true
+
     # Clear Merkle hashes (aka hash keys) unless proof mode
     if db.top.pPrf.len == 0:
       db.clearMerkleKeys(hike, brVid)
@@ -372,6 +390,7 @@ proc topIsExtAddLeaf(
     brVtx.bVid[nibble] = vid
     db.top.sTab[brVid] = brVtx
     db.top.sTab[vid] = vtx
+    db.top.dirty = true # Modified top level cache
     result.legs.add Leg(wp: VidVtxPair(vtx: brVtx, vid: brVid), nibble: nibble)
     result.legs.add Leg(wp: VidVtxPair(vtx: vtx, vid: vid), nibble: -1)
 
@@ -389,6 +408,9 @@ proc topIsEmptyAddLeaf(
     if rootVtx.bVid[nibble].isValid:
       return Hike(error: MergeRootBranchLinkBusy)
 
+    # Will modify top level cache
+    db.top.dirty = true
+
     # Clear Merkle hashes (aka hash keys) unless proof mode
     if db.top.pPrf.len == 0:
       db.clearMerkleKeys(hike, hike.root)
@@ -404,6 +426,7 @@ proc topIsEmptyAddLeaf(
     rootVtx.bVid[nibble] = leafVid
     db.top.sTab[hike.root] = rootVtx
     db.top.sTab[leafVid] = leafVtx
+    db.top.dirty = true # Modified top level cache
     return Hike(
       root: hike.root,
       legs: @[Leg(wp: VidVtxPair(vtx: rootVtx, vid: hike.root), nibble: nibble),
@@ -426,8 +449,12 @@ proc updatePayload(
   if vtx.lData != payload:
     let vid = result.legs[^1].wp.vid
 
+    # Will modify top level cache
+    db.top.dirty = true
+
     vtx.lData = payload
     db.top.sTab[vid] = vtx
+    db.top.dirty = true # Modified top level cache
     db.top.lTab[leafTie] = vid
     db.clearMerkleKeys(result, vid)
 
@@ -518,12 +545,9 @@ proc mergeNodeImpl(
             vtx.bVid[n] = db.vidAttach bLbl
 
   db.top.pPrf.incl vid
-  if hasVtx:
-    let key = db.getKey vid
-    if key != hashKey:
-      db.top.sTab[vid] = vtx
-  else:
+  if not hasVtx or db.getKey(vid) != hashKey:
     db.top.sTab[vid] = vtx
+    db.top.dirty = true # Modified top level cache
 
   ok vid
 
@@ -583,6 +607,7 @@ proc merge*(
             lPfx:  leafTie.path.to(NibblesSeq),
             lData: payload))
         db.top.sTab[wp.vid] = wp.vtx
+        db.top.dirty = true # Modified top level cache
         result = Hike(root: wp.vid, legs: @[Leg(wp: wp, nibble: -1)])
 
       # Double check the result until the code is more reliable
@@ -596,6 +621,7 @@ proc merge*(
       db.top.lTab[leafTie] = result.legs[^1].wp.vid
 
     # End else (1st level)
+
 
 proc merge*(
     db: AristoDbRef;                   # Database, top layer
@@ -719,6 +745,7 @@ proc merge*(
       vid = db.top.pAmk.getOrVoid lbl
     if not vid.isvalid:
       db.top.pAmk[lbl] = rootVid
+      db.top.dirty = true # Modified top level cache
 
   # Process over chains in reverse mode starting with the root node. This
   # allows the algorithm to find existing nodes on the backend.
