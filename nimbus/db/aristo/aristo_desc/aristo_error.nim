@@ -191,15 +191,12 @@ type
     RdbBeIngestSstWriter
 
     # Transaction wrappers
-    TxStackGarbled
-    TxNoPendingTx
     TxArgStaleTx
-    TxNotTopTx
-    TxExecNestingAttempt
-    TxExecBaseTxLocked
-    TxExecDirectiveLocked
-    TxStackUnderflow
     TxBackendMissing
+    TxNoPendingTx
+    TxNotTopTx
+    TxStackGarbled
+    TxStackUnderflow
 
     # Miscelaneous handy helpers
     PayloadTypeUnsupported

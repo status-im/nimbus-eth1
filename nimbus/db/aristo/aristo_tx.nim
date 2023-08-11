@@ -18,15 +18,6 @@ import
   results,
   "."/[aristo_desc, aristo_filter, aristo_hashify]
 
-type
-  AristoTxAction* = proc() {.gcsafe, raises: [CatchableError].}
-
-const
-  TxUidLocked = high(uint) div 2
-    ## The range of valid transactions of is roughly `high(int)`. For
-    ## normal transactions, the lower range is applied while for restricted
-    ## transactions used with `execute()` below, the higher range is used.
-
 func isTop*(tx: AristoTxRef): bool
 
 # ------------------------------------------------------------------------------
@@ -36,37 +27,18 @@ func isTop*(tx: AristoTxRef): bool
 func getDbDescFromTopTx(tx: AristoTxRef): Result[AristoDbRef,AristoError] =
   if not tx.isTop():
     return err(TxNotTopTx)
-  if tx.txUid == TxUidLocked:
-    return err(TxExecBaseTxLocked)
   let db = tx.db
   if tx.level != db.stack.len:
     return err(TxStackUnderflow)
   ok db
-
-proc backup(db: AristoDbRef): AristoDbRef =
-  AristoDbRef(
-    top:      db.top,      # ref
-    stack:    db.stack,    # sequence of refs
-    txRef:    db.txRef,    # ref
-    txUidGen: db.txUidGen) # number
-
-proc restore(db: AristoDbRef, backup: AristoDbRef) =
-  db.top =      backup.top
-  db.stack =    backup.stack
-  db.txRef =    backup.txRef
-  db.txUidGen = backup.txUidGen
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
 proc getTxUid(db: AristoDbRef): uint =
-  if db.txUidGen < TxUidLocked:
-    if db.txUidGen == TxUidLocked - 1:
-      db.txUidGen = 0
-  else:
-    if db.txUidGen == high(uint):
-      db.txUidGen = TxUidLocked
+  if db.txUidGen == high(uint):
+    db.txUidGen = 0
   db.txUidGen.inc
   db.txUidGen
 
@@ -116,55 +88,6 @@ proc rebase*(
     # Roll back to some earlier layer.
     db.top = db.stack[inx]
     db.stack.setLen(inx)
-  ok()
-
-proc exec*(
-    tx: AristoTxRef;                  # Some transaction on database
-    action: AristoTxAction;           # Closure to execute
-      ): Result[void,AristoError]
-      {.gcsafe, raises: [CatchableError].} =
-  ## Execute function argument `action()` on a transaction `tx` which might
-  ## refer to an earlier one. There are some restrictions on the database
-  ## `tx` referres to which might have been captured by the `action` closure.
-  ##
-  ## Restrictions:
-  ## * For the argument transaction `tx`, the expressions `tx.commit()` or
-  ##   `tx.rollack()` will throw an `AssertDefect` error.
-  ## * The `ececute()` call must not be nested. Doing otherwise will throw an
-  ##   `AssertDefect` error.
-  ## * Changes on the database referred to by `tx` can be staged but not saved
-  ##   persistently with the `stow()` directive.
-  ##
-  ## After return, the state of the underlying database will not have changed.
-  ## Any transactions left open by the `action()` call will have been discarded.
-  ##
-  ## So these restrictions amount to sort of a temporary *read-only* mode for
-  ## the underlying database.
-  ##
-  if TxUidLocked <= tx.txUid:
-    return err(TxExecNestingAttempt)
-
-  # Move current DB to a backup copy
-  let
-    db = tx.db
-    saved = db.backup
-
-  # Install transaction layer
-  if not tx.isTop():
-    if db.stack.len <= tx.level:
-      return err(TxArgStaleTx)
-    db.top[] = db.stack[tx.level][] # deep copy
-
-  db.top.txUid = TxUidLocked
-  db.stack = @[AristoLayerRef()]
-  db.txUidGen = TxUidLocked
-  db.txRef = AristoTxRef(db: db, txUid: TxUidLocked, level: 1)
-
-  # execute action
-  action()
-
-  # restore
-  db.restore saved
   ok()
 
 # ------------------------------------------------------------------------------
@@ -311,9 +234,6 @@ proc stow*(
   ## If the argument `persistent` is set `true`, all the staged data are merged
   ## into the physical backend database and the staged data area is cleared.
   ##
-  if not db.txRef.isNil and TxUidLocked <= db.txRef.txUid and persistent:
-    return err((VertexID(0),TxExecDirectiveLocked))
-
   let be = db.backend
   if be.isNil and persistent:
     return err((VertexID(0),TxBackendMissing))
