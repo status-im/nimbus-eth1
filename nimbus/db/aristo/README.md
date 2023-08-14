@@ -205,7 +205,7 @@ in the key-value table that implements the *Patricia Trie*. It is now called
 The structural keys *w, x, y, z* from the example *(3)* are called *vertexID*
 and implemented as 64 bit values, stored *Big Endian* in the serialisation.
 
-### Branch record serialisation
+### 4.1 Branch record serialisation
 
         0 +--+--+--+--+--+--+--+--+--+
           |                          |       -- first vertexID
@@ -230,7 +230,7 @@ vector *access(16)* is reset to zero, then there is no *n*-th structural
 Note that data are stored *Big Endian*, so the bits *0..7* of *access* are
 stored in the right byte of the serialised bitmap.
 
-### Extension record serialisation
+### 4.2 Extension record serialisation
 
         0 +--+--+--+--+--+--+--+--+--+
           |                          |       -- vertexID
@@ -250,7 +250,7 @@ zero (bit 4 is set if the right nibble is the first part of the path.)
 Note that the *pathSegmentLen(6)* is redunant as it is determined by the length
 of the extension record (as *recordLen - 9*.)
 
-### Leaf record serialisation
+### 4.3 Leaf record serialisation
 
         0 +-- ..
           ...                                -- payload (may be empty)
@@ -270,52 +270,52 @@ also set if the right nibble is the first part of the path.)
 If present, the serialisation of the payload field can be either for account
 data, for RLP encoded or for unstructured data as defined below.
 
-### Leaf record payload serialisation for account data
+### 4.4 Leaf record payload serialisation for account data
 
         0 +-- ..  --+
-		  |         |                        -- nonce, 0 or 8 bytes
-		  +-- ..  --+--+
-		  |            |                     -- balance, 0, 8, or 32 bytes
-		  +-- ..  --+--+
-		  |         |                        -- storage ID, 0 or 8 bytes
-		  +-- ..  --+--+
-		  |            |                     -- code hash, 0, 8 or 32 bytes
+          |         |                        -- nonce, 0 or 8 bytes
+          +-- ..  --+--+
+          |            |                     -- balance, 0, 8, or 32 bytes
+          +-- ..  --+--+
+          |         |                        -- storage ID, 0 or 8 bytes
+          +-- ..  --+--+
+          |            |                     -- code hash, 0, 8 or 32 bytes
           +--+ .. --+--+
           |  |                               -- bitmask(2)-word array
           +--+
 
         where each bitmask(2)-word array entry defines the length of
-		the preceeding data fields:
-		  00 -- field is missing
-		  01 -- field lengthh is 8 bytes
-		  10 -- field lengthh is 32 bytes
+        the preceeding data fields:
+          00 -- field is missing
+          01 -- field lengthh is 8 bytes
+          10 -- field lengthh is 32 bytes
 
 Apparently, entries 0 and and 2 of the bitmask(2) word array cannot have the
 value 10 as they refer to the nonce and the storage ID data fields. So, joining
 the bitmask(2)-word array to a single byte, the maximum value of that byte is
 0x99.
 
-### Leaf record payload serialisation for RLP encoded data
+### 4.5 Leaf record payload serialisation for RLP encoded data
 
         0 +--+ .. --+
-		  |  |      |                        -- data, at least one byte
-		  +--+ .. --+
+          |  |      |                        -- data, at least one byte
+          +--+ .. --+
           |  |                               -- marker byte
           +--+
 
         where the marker byte is 0xaa
 
-### Leaf record payload serialisation for unstructured data
+### 4.6 Leaf record payload serialisation for unstructured data
 
         0 +--+ .. --+
-		  |  |      |                        -- data, at least one byte
-		  +--+ .. --+
+          |  |      |                        -- data, at least one byte
+          +--+ .. --+
           |  |                               -- marker byte
           +--+
 
         where the marker byte is 0xff
 
-### Descriptor record serialisation
+### 4.7 Descriptor record serialisation
 
         0 +-- ..
           ...                                -- recycled vertexIDs
@@ -330,9 +330,130 @@ the bitmask(2)-word array to a single byte, the maximum value of that byte is
 
 Currently, the descriptor record only contains data for producing unique
 vectorID values that can be used as structural keys. If this descriptor is
-missing, the value `(0x40000000,0x01)` is assumed. The last vertexID in the
+missing, the value *(0x40000000,0x01)* is assumed. The last vertexID in the
 descriptor list has the property that that all values greater or equal than
 this value can be used as vertexID.
 
 The vertexIDs in the descriptor record must all be non-zero and record itself
 should be allocated in the structural table associated with the zero key.
+
+5. *Patricia Trie* implementation notes
+---------------------------------------
+
+### 5.1 Database decriptor representation
+
+        ^      +----------+
+        |      | top      |   active delta layer, application cache
+        |      +----------+
+        |      +----------+   ^
+       db      | stack[n] |   |
+       desc    |    :     |   |  optional passive delta layers, handled by
+       obj     | stack[1] |   |  transaction management (can be used to
+        |      | stack[0] |   |  successively replace the top layer)
+        |      +----------+   v
+        |      +----------+
+        |      | roFilter |   optional read-only backend filter
+        |      +----------+
+        |      +----------+
+        |      | backend  |   optional physical key-value backend database
+        v      +----------+
+
+ There is a three tier access to a key-value database entry as in
+
+        top -> roFilter -> backend
+
+where only the *top* layer is obligatory.
+
+### 5.2 Distributed access using the same backend
+
+There can be many descriptors for the same database. Due to delta layers and
+filters, each descriptor instance can work with a different state of the
+database.
+
+Although there is only one of the instances that can write the current state
+on the physical backend database, this priviledge can be shifted to any
+instance for the price of updating the *roFiters* for all other instances.
+
+#### Example:
+
+        db1   db2   db3       -- db1, db2, .. database descriptors/handles
+         |     |     |
+        tx1   tx2   tx3       -- tx1, tx2, ..transaction/top layers
+         |     |     |
+         ø     ø     ø        -- no backend filters yet
+          \    |    /
+           \   |   /
+              PBE             -- physical backend database
+
+After collapse/committing *tx1* and saving it to the physical backend
+database, the above architecture mutates to
+
+        db1   db2   db3
+         |     |     |
+         ø    tx2   tx3
+         |     |     |
+         ø   ~tx1  ~tx1       -- filter reverting the effect of tx1 on PBE
+          \    |    /
+           \   |   /
+            tx1+PBE           -- tx1 merged into physical backend database
+
+When looked at descriptor API there are no changes when accessing data via
+*db1*, *db2*, or *db3*. In a different, more algebraic notation, the above
+tansformation is written as
+ 
+        | tx1, ø |                                                   (8)
+        | tx2, ø | PBE
+        | tx3, ø |
+
+            ||
+            \/
+
+        |  ø,    ø  |                                                (9)
+        | tx2, ~tx1 | tx1+PBE
+        | tx3, ~tx1 |
+
+ The system can be further converted without changing the API by committing
+ and saving *tx2* on the middle line of matrix (9)
+ 
+        |  ø,       ø  |                                             (10)
+        |  ø, tx2+~tx1 | tx1+PBE
+        | tx3,    ~tx1 |
+
+            ||
+            \/
+
+        |  ø,       ~(tx2+~tx1) |                                    (11)
+        |  ø,               ø   | (tx2+~tx1)+tx1+PBE
+        | tx3, ~tx1+~(tx2+~tx1) |
+
+The *+* notation just means the repeated application of filters in
+left-to-right order. The notation looks like algebraic group notation but this
+will not be analysed further as there is no need for a general theory for the
+current implementation.
+
+Suffice to say that the inverse *~tx* of *tx* is calculated against the
+current state of the physical backend database which makes it messy to
+formulate boundary conditions.
+
+Nevertheless, *(8)* can alse be transformed by committing and saving *tx2*
+(rather than *tx1*.) This gives
+
+        | tx1, ~tx2 |                                                (12)
+        |  ø,    ø  | tx2+PBE
+        | tx3, ~tx2 |
+
+            ||
+            \/
+
+        |  ø, (tx1+~tx2) |                                           (13)
+        |  ø,        ø   | tx2+PBE
+        | tx3,     ~tx2  |
+
+ As *(11)* and *(13)* represent the same API, one has
+
+        tx2+PBE == tx1+(tx2+~tx1)+PBE    because of the middle rows  (14)
+        ~tx2    == ~tx1+~(tx2+~tx1)      because of (14)             (15)
+
+ which shows some distributive property in *(14)* and commutative property in
+ *(15)* for this example. In particulat it might be handy for testing/verifying
+ against this example.
