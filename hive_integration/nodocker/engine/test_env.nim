@@ -78,10 +78,6 @@ proc close*(env: TestEnv) =
   for eng in env.clients:
     eng.close()
 
-proc addEngine*(env: TestEnv): EngineEnv =
-  var conf = envConfig(env.conf.networkParams.config)
-  env.addEngine(conf)
-
 func client*(env: TestEnv): RpcHttpClient =
   env.clients.first.client
 
@@ -90,6 +86,12 @@ func engine*(env: TestEnv): EngineEnv =
 
 proc setupCLMock*(env: TestEnv) =
   env.clmock = newCLMocker(env.clients, env.engine.com)
+
+proc addEngine*(env: TestEnv): EngineEnv =
+  var conf = env.conf # clone the conf
+  let eng = env.addEngine(conf)
+  eng.connect(env.engine.node)
+  eng
 
 proc makeTx*(env: TestEnv, eng: EngineEnv, tc: BaseTx, nonce: AccountNonce): Transaction =
   eng.makeTx(env.vaultKey, tc, nonce)

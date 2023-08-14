@@ -51,7 +51,7 @@ template testLatestHeader(client: untyped, expectedHash: Web3Hash) =
       expect = expectedHash,
       get = lastHash
 
-#proc sendTx(t: TestEnv, recipient: EthAddress, val: UInt256, data: openArray[byte] = []): bool =
+#proc sendTx(env: TestEnv, recipient: EthAddress, val: UInt256, data: openArray[byte] = []): bool =
 #  t.tx = t.makeTx(recipient, val, data)
 #  let rr = env.client.sendTransaction(t.tx)
 #  if rr.isErr:
@@ -59,7 +59,7 @@ template testLatestHeader(client: untyped, expectedHash: Web3Hash) =
 #    return false
 #  return true
 #
-#proc sendTx(t: TestEnv, val: UInt256): bool =
+#proc sendTx(env: TestEnv, val: UInt256): bool =
 #  t.sendTx(prevRandaoContractAddr, val)
 
 # Invalid Terminal Block in ForkchoiceUpdated:
@@ -88,7 +88,7 @@ proc invalidTerminalBlockForkchoiceUpdated*(env: TestEnv): bool =
 
 #[
 # Invalid GetPayload Under PoW: Client must reject GetPayload directives under PoW.
-proc invalidGetPayloadUnderPoW(t: TestEnv): TestStatus =
+proc invalidGetPayloadUnderPoW(env: TestEnv): TestStatus =
   result = TestStatus.OK
 
   # We start in PoW and try to get an invalid Payload, which should produce an error but nothing should be disrupted.
@@ -101,7 +101,7 @@ proc invalidGetPayloadUnderPoW(t: TestEnv): TestStatus =
 
 # Invalid Terminal Block in NewPayload:
 # Client must reject NewPayload directives if the referenced ParentHash does not meet the TTD requirement.
-proc invalidTerminalBlockNewPayload(t: TestEnv): TestStatus =
+proc invalidTerminalBlockNewPayload(env: TestEnv): TestStatus =
   result = TestStatus.OK
 
   let gBlock = t.gHeader
@@ -126,16 +126,16 @@ proc invalidTerminalBlockNewPayload(t: TestEnv): TestStatus =
   # Check that PoW chain progresses
   testCond t.verifyPoWProgress(t.gHeader.blockHash)
 
-proc unknownHeadBlockHash(t: TestEnv): TestStatus =
+proc unknownHeadBlockHash(env: TestEnv): TestStatus =
   result = TestStatus.OK
 
-  let ok = waitFor t.clMock.waitForTTD()
+  let ok = waitFor env.clMock.waitForTTD()
   testCond ok
 
   var randomHash: common.Hash256
   testCond randomBytes(randomHash.data) == 32
 
-  let clMock = t.clMock
+  let clMock = env.clMock
   let forkchoiceStateUnknownHeadHash = ForkchoiceStateV1(
     headBlockHash:      BlockHash randomHash.data,
     safeBlockHash:      clMock.latestForkchoice.finalizedBlockHash,
@@ -163,17 +163,17 @@ proc unknownHeadBlockHash(t: TestEnv): TestStatus =
   testCond s.payloadStatus.status == PayloadExecutionStatus.syncing
   testCond s.payloadId.isNone
 
-proc unknownSafeBlockHash(t: TestEnv): TestStatus =
+proc unknownSafeBlockHash(env: TestEnv): TestStatus =
   result = TestStatus.OK
 
-  let ok = waitFor t.clMock.waitForTTD()
+  let ok = waitFor env.clMock.waitForTTD()
   testCond ok
 
   # Produce blocks before starting the test
-  let produce5BlockRes = t.clMock.produceBlocks(5, BlockProcessCallbacks())
+  let produce5BlockRes = env.clMock.produceBlocks(5, BlockProcessCallbacks())
   testCond produce5BlockRes
 
-  let clMock = t.clMock
+  let clMock = env.clMock
   let client = env.client
   let produceSingleBlockRes = clMock.produceSingleBlock(BlockProcessCallbacks(
     # Run test after a new payload has been broadcast
@@ -196,17 +196,17 @@ proc unknownSafeBlockHash(t: TestEnv): TestStatus =
 
   testCond produceSingleBlockRes
 
-proc unknownFinalizedBlockHash(t: TestEnv): TestStatus =
+proc unknownFinalizedBlockHash(env: TestEnv): TestStatus =
   result = TestStatus.OK
 
-  let ok = waitFor t.clMock.waitForTTD()
+  let ok = waitFor env.clMock.waitForTTD()
   testCond ok
 
   # Produce blocks before starting the test
-  let produce5BlockRes = t.clMock.produceBlocks(5, BlockProcessCallbacks())
+  let produce5BlockRes = env.clMock.produceBlocks(5, BlockProcessCallbacks())
   testCond produce5BlockRes
 
-  let clMock = t.clMock
+  let clMock = env.clMock
   let client = env.client
   let produceSingleBlockRes = clMock.produceSingleBlock(BlockProcessCallbacks(
     # Run test after a new payload has been broadcast
@@ -250,15 +250,15 @@ type
     alternativePayloads: seq[ExecutableData]
 
 template inconsistentForkchoiceStateGen(procname: untyped, inconsistency: Inconsistency) =
-  proc procName(t: TestEnv): TestStatus =
+  proc procName(env: TestEnv): TestStatus =
     result = TestStatus.OK
 
     # Wait until TTD is reached by this client
-    let ok = waitFor t.clMock.waitForTTD()
+    let ok = waitFor env.clMock.waitForTTD()
     testCond ok
 
     var pList = PayloadList()
-    let clMock = t.clMock
+    let clMock = env.clMock
     let client = env.client
 
     # Produce blocks before starting the test
@@ -320,14 +320,14 @@ inconsistentForkchoiceStateGen(inconsistentForkchoiceState3, Inconsistency.Final
 
 # Verify behavior on a forkchoiceUpdated with invalid payload attributes
 template invalidPayloadAttributesGen(procname: untyped, syncingCond: bool) =
-  proc procName(t: TestEnv): TestStatus =
+  proc procName(env: TestEnv): TestStatus =
     result = TestStatus.OK
 
     # Wait until TTD is reached by this client
-    let ok = waitFor t.clMock.waitForTTD()
+    let ok = waitFor env.clMock.waitForTTD()
     testCond ok
 
-    let clMock = t.clMock
+    let clMock = env.clMock
     let client = env.client
 
     # Produce blocks before starting the test
@@ -378,14 +378,14 @@ template invalidPayloadAttributesGen(procname: untyped, syncingCond: bool) =
 invalidPayloadAttributesGen(invalidPayloadAttributes1, false)
 invalidPayloadAttributesGen(invalidPayloadAttributes2, true)
 
-proc preTTDFinalizedBlockHash(t: TestEnv): TestStatus =
+proc preTTDFinalizedBlockHash(env: TestEnv): TestStatus =
   result = TestStatus.OK
 
-  let ok = waitFor t.clMock.waitForTTD()
+  let ok = waitFor env.clMock.waitForTTD()
   testCond ok
 
   # Produce blocks before starting the test
-  let produce5BlockRes = t.clMock.produceBlocks(5, BlockProcessCallbacks())
+  let produce5BlockRes = env.clMock.produceBlocks(5, BlockProcessCallbacks())
   testCond produce5BlockRes
 
   let
@@ -396,7 +396,7 @@ proc preTTDFinalizedBlockHash(t: TestEnv): TestStatus =
       finalizedBlockHash: gHash,
     )
     client = env.client
-    clMock = t.clMock
+    clMock = env.clMock
 
   var res = client.forkchoiceUpdatedV1(forkchoiceState)
   testFCU(res, invalid, some(common.Hash256()))
@@ -435,17 +435,17 @@ type
     hash: common.Hash256
 
 template badHashOnNewPayloadGen(procname: untyped, syncingCond: bool, sideChain: bool) =
-  proc procName(t: TestEnv): TestStatus =
+  proc procName(env: TestEnv): TestStatus =
     result = TestStatus.OK
 
-    let ok = waitFor t.clMock.waitForTTD()
+    let ok = waitFor env.clMock.waitForTTD()
     testCond ok
 
     # Produce blocks before starting the test
-    let produce5BlockRes = t.clMock.produceBlocks(5, BlockProcessCallbacks())
+    let produce5BlockRes = env.clMock.produceBlocks(5, BlockProcessCallbacks())
     testCond produce5BlockRes
 
-    let clMock = t.clMock
+    let clMock = env.clMock
     let client = env.client
     let shadow = Shadow()
 
@@ -530,18 +530,18 @@ badHashOnNewPayloadGen(badHashOnNewPayload2, true, false)
 badHashOnNewPayloadGen(badHashOnNewPayload3, false, true)
 badHashOnNewPayloadGen(badHashOnNewPayload4, true, true)
 
-proc parentHashOnExecPayload(t: TestEnv): TestStatus =
+proc parentHashOnExecPayload(env: TestEnv): TestStatus =
   result = TestStatus.OK
 
   # Wait until TTD is reached by this client
-  let ok = waitFor t.clMock.waitForTTD()
+  let ok = waitFor env.clMock.waitForTTD()
   testCond ok
 
   # Produce blocks before starting the test
-  let produce5BlockRes = t.clMock.produceBlocks(5, BlockProcessCallbacks())
+  let produce5BlockRes = env.clMock.produceBlocks(5, BlockProcessCallbacks())
   testCond produce5BlockRes
 
-  let clMock = t.clMock
+  let clMock = env.clMock
   let client = env.client
   var produceSingleBlockRes = clMock.produceSingleBlock(BlockProcessCallbacks(
     # Run test after the new payload has been obtained
@@ -560,14 +560,14 @@ proc parentHashOnExecPayload(t: TestEnv): TestStatus =
   testCond produceSingleBlockRes
 
 # Attempt to re-org to a chain containing an invalid transition payload
-proc invalidTransitionPayload(t: TestEnv): TestStatus =
+proc invalidTransitionPayload(env: TestEnv): TestStatus =
   result = TestStatus.OK
 
   # Wait until TTD is reached by main client
-  let ok = waitFor t.clMock.waitForTTD()
+  let ok = waitFor env.clMock.waitForTTD()
   testCond ok
 
-  let clMock = t.clMock
+  let clMock = env.clMock
   let client = env.client
 
   # Produce two blocks before trying to re-org
@@ -603,14 +603,14 @@ proc invalidTransitionPayload(t: TestEnv): TestStatus =
   testCond pbRes
 
 template invalidPayloadTestCaseGen(procName: untyped, payloadField: InvalidPayloadField, emptyTxs: bool = false) =
-  proc procName(t: TestEnv): TestStatus =
+  proc procName(env: TestEnv): TestStatus =
     result = TestStatus.OK
 
     # Wait until TTD is reached by this client
-    let ok = waitFor t.clMock.waitForTTD()
+    let ok = waitFor env.clMock.waitForTTD()
     testCond ok
 
-    let clMock = t.clMock
+    let clMock = env.clMock
     let client = env.client
 
     template txProc(): bool =
@@ -763,19 +763,19 @@ invalidPayloadTestCaseGen(invalidPayload15, InvalidTransactionValue)
 
 # Test to verify Block information available at the Eth RPC after NewPayload
 template blockStatusExecPayloadGen(procname: untyped, transitionBlock: bool) =
-  proc procName(t: TestEnv): TestStatus =
+  proc procName(env: TestEnv): TestStatus =
     result = TestStatus.OK
 
     # Wait until TTD is reached by this client
-    let ok = waitFor t.clMock.waitForTTD()
+    let ok = waitFor env.clMock.waitForTTD()
     testCond ok
 
     # Produce blocks before starting the test, only if we are not testing the transition block
     when not transitionBlock:
-      let produce5BlockRes = t.clMock.produceBlocks(5, BlockProcessCallbacks())
+      let produce5BlockRes = env.clMock.produceBlocks(5, BlockProcessCallbacks())
       testCond produce5BlockRes
 
-    let clMock = t.clMock
+    let clMock = env.clMock
     let client = env.client
     let shadow = Shadow()
 
@@ -828,14 +828,14 @@ type
 template invalidMissingAncestorReOrgGen(procName: untyped,
   invalid_index: int, payloadField: InvalidPayloadField, p2psync: bool, emptyTxs: bool) =
 
-  proc procName(t: TestEnv): TestStatus =
+  proc procName(env: TestEnv): TestStatus =
     result = TestStatus.OK
 
     # Wait until TTD is reached by this client
-    let ok = waitFor t.clMock.waitForTTD()
+    let ok = waitFor env.clMock.waitForTTD()
     testCond ok
 
-    let clMock = t.clMock
+    let clMock = env.clMock
     let client = env.client
 
     # Produce blocks before starting the test
@@ -942,19 +942,19 @@ invalidMissingAncestorReOrgGen(invalidMissingAncestor2, 9, InvalidStateRoot, fal
 invalidMissingAncestorReOrgGen(invalidMissingAncestor3, 10, InvalidStateRoot, false, true)
 
 template blockStatusHeadBlockGen(procname: untyped, transitionBlock: bool) =
-  proc procName(t: TestEnv): TestStatus =
+  proc procName(env: TestEnv): TestStatus =
     result = TestStatus.OK
 
     # Wait until TTD is reached by this client
-    let ok = waitFor t.clMock.waitForTTD()
+    let ok = waitFor env.clMock.waitForTTD()
     testCond ok
 
     # Produce blocks before starting the test, only if we are not testing the transition block
     when not transitionBlock:
-      let produce5BlockRes = t.clMock.produceBlocks(5, BlockProcessCallbacks())
+      let produce5BlockRes = env.clMock.produceBlocks(5, BlockProcessCallbacks())
       testCond produce5BlockRes
 
-    let clMock = t.clMock
+    let clMock = env.clMock
     let client = env.client
     let shadow = Shadow()
 
@@ -981,10 +981,10 @@ template blockStatusHeadBlockGen(procname: untyped, transitionBlock: bool) =
 blockStatusHeadBlockGen(blockStatusHeadBlock1, false)
 blockStatusHeadBlockGen(blockStatusHeadBlock2, true)
 
-proc blockStatusSafeBlock(t: TestEnv): TestStatus =
+proc blockStatusSafeBlock(env: TestEnv): TestStatus =
   result = TestStatus.OK
 
-  let clMock = t.clMock
+  let clMock = env.clMock
   let client = env.client
 
   # On PoW mode, `safe` tag shall return error.
@@ -993,7 +993,7 @@ proc blockStatusSafeBlock(t: TestEnv): TestStatus =
   testCond rr.isErr
 
   # Wait until this client catches up with latest PoS Block
-  let ok = waitFor t.clMock.waitForTTD()
+  let ok = waitFor env.clMock.waitForTTD()
   testCond ok
 
   # First ForkchoiceUpdated sent was equal to 0x00..00, `safe` should return error now
@@ -1012,10 +1012,10 @@ proc blockStatusSafeBlock(t: TestEnv): TestStatus =
 
   testCond pbres
 
-proc blockStatusFinalizedBlock(t: TestEnv): TestStatus =
+proc blockStatusFinalizedBlock(env: TestEnv): TestStatus =
   result = TestStatus.OK
 
-  let clMock = t.clMock
+  let clMock = env.clMock
   let client = env.client
 
   # On PoW mode, `finalized` tag shall return error.
@@ -1024,7 +1024,7 @@ proc blockStatusFinalizedBlock(t: TestEnv): TestStatus =
   testCond rr.isErr
 
   # Wait until this client catches up with latest PoS Block
-  let ok = waitFor t.clMock.waitForTTD()
+  let ok = waitFor env.clMock.waitForTTD()
   testCond ok
 
   # First ForkchoiceUpdated sent was equal to 0x00..00, `finalized` should return error now
@@ -1043,18 +1043,18 @@ proc blockStatusFinalizedBlock(t: TestEnv): TestStatus =
 
   testCond pbres
 
-proc blockStatusReorg(t: TestEnv): TestStatus =
+proc blockStatusReorg(env: TestEnv): TestStatus =
   result = TestStatus.OK
 
   # Wait until TTD is reached by this client
-  let ok = waitFor t.clMock.waitForTTD()
+  let ok = waitFor env.clMock.waitForTTD()
   testCond ok
 
   # Produce blocks before starting the test
-  let produce5BlockRes = t.clMock.produceBlocks(5, BlockProcessCallbacks())
+  let produce5BlockRes = env.clMock.produceBlocks(5, BlockProcessCallbacks())
   testCond produce5BlockRes
 
-  let clMock = t.clMock
+  let clMock = env.clMock
   let client = env.client
   var produceSingleBlockRes = clMock.produceSingleBlock(BlockProcessCallbacks(
     # Run test after a forkchoice with new HeadBlockHash has been broadcasted
@@ -1130,18 +1130,18 @@ proc blockStatusReorg(t: TestEnv): TestStatus =
   ))
   testCond produceSingleBlockRes
 
-proc reExecPayloads(t: TestEnv): TestStatus =
+proc reExecPayloads(env: TestEnv): TestStatus =
   result = TestStatus.OK
 
   # Wait until this client catches up with latest PoS
-  let ok = waitFor t.clMock.waitForTTD()
+  let ok = waitFor env.clMock.waitForTTD()
   testCond ok
 
   # How many Payloads we are going to re-execute
   var payloadReExecCount = 10
 
   # Create those blocks
-  let produceBlockRes = t.clMock.produceBlocks(payloadReExecCount, BlockProcessCallbacks())
+  let produceBlockRes = env.clMock.produceBlocks(payloadReExecCount, BlockProcessCallbacks())
   testCond produceBlockRes
 
   # Re-execute the payloads
@@ -1154,7 +1154,7 @@ proc reExecPayloads(t: TestEnv): TestStatus =
   info "Started re-executing payloads at block", number=lastBlock
 
   let
-    clMock = t.clMock
+    clMock = env.clMock
     start  = lastBlock - payloadReExecCount + 1
 
   for i in start..lastBlock:
@@ -1171,18 +1171,18 @@ proc reExecPayloads(t: TestEnv): TestStatus =
       testCond true:
         error "(test issue) Payload does not exist", index=i
 
-proc multipleNewCanonicalPayloads(t: TestEnv): TestStatus =
+proc multipleNewCanonicalPayloads(env: TestEnv): TestStatus =
   result = TestStatus.OK
 
   # Wait until TTD is reached by this client
-  let ok = waitFor t.clMock.waitForTTD()
+  let ok = waitFor env.clMock.waitForTTD()
   testCond ok
 
   # Produce blocks before starting the test
-  let produce5BlockRes = t.clMock.produceBlocks(5, BlockProcessCallbacks())
+  let produce5BlockRes = env.clMock.produceBlocks(5, BlockProcessCallbacks())
   testCond produce5BlockRes
 
-  let clMock = t.clMock
+  let clMock = env.clMock
   let client = env.client
   var produceSingleBlockRes = clMock.produceSingleBlock(BlockProcessCallbacks(
     # Run test after a new payload has been obtained
@@ -1213,11 +1213,11 @@ proc multipleNewCanonicalPayloads(t: TestEnv): TestStatus =
   # At the end the clMocker continues to try to execute fcU with the original payload, which should not fail
   testCond produceSingleBlockRes
 
-proc outOfOrderPayloads(t: TestEnv): TestStatus =
+proc outOfOrderPayloads(env: TestEnv): TestStatus =
   result = TestStatus.OK
 
   # Wait until TTD is reached by this client
-  let ok = waitFor t.clMock.waitForTTD()
+  let ok = waitFor env.clMock.waitForTTD()
   testCond ok
 
   # First prepare payloads on a first client, which will also contain multiple transactions
@@ -1232,7 +1232,7 @@ proc outOfOrderPayloads(t: TestEnv): TestStatus =
   var recipient: EthAddress
   doAssert randomBytes(recipient) == 20
 
-  let clMock = t.clMock
+  let clMock = env.clMock
   let client = env.client
   var produceBlockRes = clMock.produceBlocks(payloadCount, BlockProcessCallbacks(
     # We send the transactions after we got the Payload ID, before the clMocker gets the prepared Payload
@@ -1257,14 +1257,14 @@ proc outOfOrderPayloads(t: TestEnv): TestStatus =
 
 # Test that performing a re-org back into a previous block of the canonical chain does not produce errors and the chain
 # is still capable of progressing.
-proc reorgBack(t: TestEnv): TestStatus =
+proc reorgBack(env: TestEnv): TestStatus =
   result = TestStatus.OK
 
   # Wait until TTD is reached by this client
-  let ok = waitFor t.clMock.waitForTTD()
+  let ok = waitFor env.clMock.waitForTTD()
   testCond ok
 
-  let clMock = t.clMock
+  let clMock = env.clMock
   let client = env.client
 
   testCond clMock.produceSingleBlock(BlockProcessCallbacks())
@@ -1298,16 +1298,16 @@ type
   SideChainList = ref object
     sidechainPayloads: seq[ExecutionPayloadV1]
 
-proc reorgBackFromSyncing(t: TestEnv): TestStatus =
+proc reorgBackFromSyncing(env: TestEnv): TestStatus =
   result = TestStatus.OK
 
   # Wait until TTD is reached by this client
-  let ok = waitFor t.clMock.waitForTTD()
+  let ok = waitFor env.clMock.waitForTTD()
   testCond ok
 
   # Produce an alternative chain
   let pList = SideChainList()
-  let clMock = t.clMock
+  let clMock = env.clMock
   let client = env.client
 
   let r1 = clMock.produceBlocks(10, BlockProcessCallbacks(
@@ -1371,15 +1371,15 @@ type
     noTxnPayload: ExecutionPayloadV1
     txHash: common.Hash256
 
-proc transactionReorg(t: TestEnv): TestStatus =
+proc transactionReorg(env: TestEnv): TestStatus =
   result = TestStatus.OK
 
   # Wait until TTD is reached by this client
-  let ok = waitFor t.clMock.waitForTTD()
+  let ok = waitFor env.clMock.waitForTTD()
   testCond ok
 
   # Produce blocks before starting the test
-  testCond t.clMock.produceBlocks(5, BlockProcessCallbacks())
+  testCond env.clMock.produceBlocks(5, BlockProcessCallbacks())
 
   # Create transactions that modify the state in order to testCond after the reorg.
   const
@@ -1388,7 +1388,7 @@ proc transactionReorg(t: TestEnv): TestStatus =
 
   let
     client = env.client
-    clMock = t.clMock
+    clMock = env.clMock
     shadow = TxReorgShadow()
 
   for i in 0..<txCount:
@@ -1468,7 +1468,7 @@ proc transactionReorg(t: TestEnv): TestStatus =
 
     testCond pbres
 
-proc testCondPrevRandaoValue(t: TestEnv, expectedPrevRandao: common.Hash256, blockNumber: uint64): bool =
+proc testCondPrevRandaoValue(env: TestEnv, expectedPrevRandao: common.Hash256, blockNumber: uint64): bool =
   let storageKey = blockNumber.u256
   let client = env.client
 
@@ -1485,19 +1485,19 @@ proc testCondPrevRandaoValue(t: TestEnv, expectedPrevRandao: common.Hash256, blo
     return false
   true
 
-proc sidechainReorg(t: TestEnv): TestStatus =
+proc sidechainReorg(env: TestEnv): TestStatus =
   result = TestStatus.OK
 
   # Wait until TTD is reached by this client
-  let ok = waitFor t.clMock.waitForTTD()
+  let ok = waitFor env.clMock.waitForTTD()
   testCond ok
 
   # Produce blocks before starting the test
-  testCond t.clMock.produceBlocks(5, BlockProcessCallbacks())
+  testCond env.clMock.produceBlocks(5, BlockProcessCallbacks())
 
   let
     client = env.client
-    clMock = t.clMock
+    clMock = env.clMock
 
   # Produce two payloads, send fcU with first payload, testCond transaction outcome, then reorg, testCond transaction outcome again
 
@@ -1575,11 +1575,11 @@ proc sidechainReorg(t: TestEnv): TestStatus =
   let latestBlockNum = clMock.latestHeadNumber.uint64
   testCond testCondPrevRandaoValue(t, clMock.prevRandaoHistory[latestBlockNum], latestBlockNum)
 
-proc suggestedFeeRecipient(t: TestEnv): TestStatus =
+proc suggestedFeeRecipient(env: TestEnv): TestStatus =
   result = TestStatus.OK
 
   # Wait until TTD is reached by this client
-  let ok = waitFor t.clMock.waitForTTD()
+  let ok = waitFor env.clMock.waitForTTD()
   testCond ok
 
   # Amount of transactions to send
@@ -1592,7 +1592,7 @@ proc suggestedFeeRecipient(t: TestEnv): TestStatus =
 
   let
     client = env.client
-    clMock = t.clMock
+    clMock = env.clMock
 
   # Send multiple transactions
   for i in 0..<txCount:
@@ -1649,21 +1649,21 @@ proc suggestedFeeRecipient(t: TestEnv): TestStatus =
     error "balance does not match fees",
       feeRecipientBalance, feeRecipientFees
 
-proc sendTxAsync(t: TestEnv): Future[void] {.async.} =
+proc sendTxAsync(env: TestEnv): Future[void] {.async.} =
   let
-    clMock = t.clMock
+    clMock = env.clMock
     period = chronos.milliseconds(500)
 
   while not clMock.ttdReached:
     await sleepAsync(period)
     discard t.sendTx(0.u256)
 
-proc prevRandaoOpcodeTx(t: TestEnv): TestStatus =
+proc prevRandaoOpcodeTx(env: TestEnv): TestStatus =
   result = TestStatus.OK
 
   let
     client = env.client
-    clMock = t.clMock
+    clMock = env.clMock
     sendTxFuture = sendTxAsync(t)
 
   # Wait until TTD is reached by this client

@@ -2,6 +2,7 @@ import
   std/[os, math],
   eth/keys,
   eth/p2p as eth_p2p,
+  chronos,
   json_rpc/[rpcserver, rpcclient],
   stew/[results, byteutils],
   ../../../nimbus/[
@@ -14,6 +15,8 @@ import
     core/block_import,
     rpc,
     sync/protocol,
+    sync/beacon,
+    sync/handlers,
     beacon/beacon_engine,
     common
   ],
@@ -39,12 +42,14 @@ type
   EngineEnv* = ref object
     conf   : NimbusConf
     com    : CommonRef
+    node   : EthereumNode
     server : RpcHttpServer
     sealer : SealingEngineRef
     ttd    : DifficultyInt
     tx     : Transaction
     nonce  : uint64
     client : RpcHttpClient
+    sync   : BeaconSyncRef
 
 const
   baseFolder  = "hive_integration/nodocker/engine"
@@ -66,7 +71,11 @@ proc makeCom*(conf: NimbusConf): CommonRef =
   )
 
 proc envConfig*(): NimbusConf =
-  makeConfig(@["--engine-signer:658bdf435d810c91414ec09147daa6db62406379", "--custom-network:" & genesisFile])
+  makeConfig(@[
+    "--engine-signer:658bdf435d810c91414ec09147daa6db62406379",
+    "--custom-network:" & genesisFile,
+    "--listen-address: 127.0.0.1",
+  ])
 
 proc envConfig*(conf: ChainConfig): NimbusConf =
   result = envConfig()
@@ -82,13 +91,18 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
     echo error
     quit(QuitFailure)
 
-  let
-    node  = setupEthNode(conf, ctx, eth)
+  var
+    node  = setupEthNode(conf, ctx)
     com   = makeCom(conf)
     chain = newChain(com)
 
   com.initializeEmptyDb()
   let txPool = TxPoolRef.new(com, conf.engineSigner)
+
+  node.addEthHandlerCapability(
+    node.peerPool,
+    chain,
+    txPool)
 
   # txPool must be informed of active head
   # so it can know the latest account state
@@ -101,14 +115,14 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
     quit(QuitFailure)
 
   let
-    hooks = if enableAuth: @[httpJwtAuth(key)]
-            else: @[]
+    hooks  = if enableAuth: @[httpJwtAuth(key)]
+             else: @[]
     server = newRpcHttpServer(["127.0.0.1:" & $conf.rpcPort], hooks)
     sealer = SealingEngineRef.new(
               chain, ctx, conf.engineSigner,
               txPool, EngineStopped)
+    sync   = BeaconSyncRef.init(node, chain, ctx.rng, conf.maxPeers, id=conf.tcpPort.int)
     beaconEngine = BeaconEngineRef.new(txPool, chain)
-
 
   setupEthRpc(node, ctx, com, txPool, server)
   setupEngineAPI(beaconEngine, server)
@@ -126,15 +140,22 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
   let client = newRpcHttpClient()
   waitFor client.connect("127.0.0.1", conf.rpcPort, false)
 
+  sync.start()
+  node.startListening()
+
   EngineEnv(
     conf   : conf,
     com    : com,
+    node   : node,
     server : server,
     sealer : sealer,
-    client : client
+    client : client,
+    sync   : sync
   )
 
 proc close*(env: EngineEnv) =
+  env.node.stopListening()
+  env.sync.stop()
   waitFor env.client.close()
   waitFor env.sealer.stop()
   waitFor env.server.closeWait()
@@ -156,7 +177,13 @@ func ttd*(env: EngineEnv): UInt256 =
 
 func com*(env: EngineEnv): CommonRef =
   env.com
-  
+
+func node*(env: EngineEnv): ENode =
+  env.node.listeningAddress
+
+proc connect*(env: EngineEnv, node: ENode) =
+  waitFor env.node.connectToNode(node)
+
 func gwei(n: int64): GasInt {.compileTime.} =
   GasInt(n * (10 ^ 9))
 

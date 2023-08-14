@@ -27,7 +27,7 @@ import
   ./core/[chain, sealer, clique/clique_desc,
     clique/clique_sealer, tx_pool, block_import],
   ./beacon/beacon_engine,
-  ./sync/[legacy, full, protocol, snap, stateless,
+  ./sync/[beacon, legacy, full, protocol, snap, stateless,
     protocol/les_protocol, handlers, peers],
   ./evm/async/data_sources/json_rpc_data_source
 
@@ -60,6 +60,7 @@ type
     legaSyncRef: LegacySyncRef
     snapSyncRef: SnapSyncRef
     fullSyncRef: FullSyncRef
+    beaconSyncRef: BeaconSyncRef
     statelessSyncRef: StatelessSyncRef
     beaconEngine: BeaconEngineRef
 
@@ -105,7 +106,7 @@ proc manageAccounts(nimbus: NimbusNode, conf: NimbusConf) =
       quit(QuitFailure)
 
 proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
-              protocols: set[ProtocolFlag]) =
+              com: CommonRef, protocols: set[ProtocolFlag]) =
   ## Creating P2P Server
   let kpres = nimbus.ctx.getNetKeys(conf.netKey, conf.dataDir.string)
   if kpres.isErr:
@@ -190,8 +191,13 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
       # FIXME-Adam: what needs to go here?
       nimbus.statelessSyncRef = StatelessSyncRef.init()
     of SyncMode.Default:
-      nimbus.legaSyncRef = LegacySyncRef.new(
-        nimbus.ethNode, nimbus.chainRef)
+      if com.forkGTE(MergeFork):
+        nimbus.beaconSyncRef = BeaconSyncRef.init(
+          nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers,
+        )
+      else:
+        nimbus.legaSyncRef = LegacySyncRef.new(
+          nimbus.ethNode, nimbus.chainRef)
 
   # Connect directly to the static nodes
   let staticPeers = conf.getStaticPeers()
@@ -426,17 +432,20 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
   else:
     basicServices(nimbus, conf, com)
     manageAccounts(nimbus, conf)
-    setupP2P(nimbus, conf, protocols)
+    setupP2P(nimbus, conf, com, protocols)
     localServices(nimbus, conf, com, protocols)
 
     if conf.maxPeers > 0:
       case conf.syncMode:
       of SyncMode.Default:
-        nimbus.legaSyncRef.start
-        nimbus.ethNode.setEthHandlerNewBlocksAndHashes(
-          legacy.newBlockHandler,
-          legacy.newBlockHashesHandler,
-          cast[pointer](nimbus.legaSyncRef))
+        if com.forkGTE(MergeFork):
+          nimbus.beaconSyncRef.start
+        else:
+          nimbus.legaSyncRef.start
+          nimbus.ethNode.setEthHandlerNewBlocksAndHashes(
+            legacy.newBlockHandler,
+            legacy.newBlockHashesHandler,
+            cast[pointer](nimbus.legaSyncRef))
       of SyncMode.Full:
         nimbus.fullSyncRef.start
       of SyncMode.Stateless:
@@ -474,6 +483,8 @@ proc stop*(nimbus: NimbusNode, conf: NimbusConf) {.async, gcsafe.} =
     nimbus.snapSyncRef.stop()
   if nimbus.fullSyncRef.isNil.not:
     nimbus.fullSyncRef.stop()
+  if nimbus.beaconSyncRef.isNil.not:
+    nimbus.beaconSyncRef.stop()
 
 proc process*(nimbus: NimbusNode, conf: NimbusConf) =
   # Main event loop

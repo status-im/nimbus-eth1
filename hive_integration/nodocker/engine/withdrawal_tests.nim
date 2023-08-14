@@ -247,7 +247,7 @@ let wdTestList* = [
       wdAbleAccountCount: MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
       syncSteps: 1,
   )),
-  #[TestDesc(
+  TestDesc(
     name: "Sync after 128 blocks - Withdrawals on Block 2 - Multiple Withdrawal Accounts",
     about: "- Spawn a first client\n" &
       "- Go through withdrawals fork on Block 2\n" &
@@ -262,7 +262,7 @@ let wdTestList* = [
       wdPerBlock:      MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
       wdAbleAccountCount: 1024,
       syncSteps: 1,
-  )),]#
+  )),
 
   # EVM Tests (EIP-3651, EIP-3855, EIP-3860)
   TestDesc(
