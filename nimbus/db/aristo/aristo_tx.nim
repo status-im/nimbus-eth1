@@ -14,9 +14,9 @@
 {.push raises: [].}
 
 import
-  std/options,
+  std/[options, sets],
   results,
-  "."/[aristo_desc, aristo_filter, aristo_hashify]
+  "."/[aristo_desc, aristo_filter, aristo_get, aristo_hashify]
 
 func isTop*(tx: AristoTxRef): bool
 
@@ -37,6 +37,18 @@ proc getTxUid(db: AristoDbRef): uint =
     db.txUidGen = 0
   db.txUidGen.inc
   db.txUidGen
+
+proc linkClone(db: AristoDbRef; clone: AristoDbRef) =
+  ## Link clone to parent
+  clone.dudes = AristoDudesRef(
+    rwOk: false,
+    rwDb: db)
+  if db.dudes.isNil:
+    db.dudes = AristoDudesRef(
+      rwOk:    true,
+      roDudes: @[clone].toHashSet)
+  else:
+    db.dudes.roDudes.incl clone
 
 # ------------------------------------------------------------------------------
 # Public functions, getters
@@ -71,19 +83,107 @@ func to*(tx: AristoTxRef; T: type[AristoDbRef]): T =
   ## Getter, retrieves the parent database descriptor from argument `tx`
   tx.db
 
-proc rebase*(
-    tx: AristoTxRef;                  # Some transaction on database
-      ): Result[void,AristoError] =
-  ## Revert transaction stack to an earlier point in time.
-  if not tx.isTop():
-    let
-      db = tx.db
-      inx = tx.level
-    if db.stack.len <= inx or db.stack[inx].txUid != tx.txUid:
-      return err(TxArgStaleTx)
-    # Roll back to some earlier layer.
-    db.top = db.stack[inx]
-    db.stack.setLen(inx)
+
+proc copyCat*(tx: AristoTxRef): Result[AristoDbRef,AristoError] =
+  ## Clone a transaction into a new DB descriptor. The new descriptor is linked
+  ## to the transaction parent and will be updated with functions like
+  ## `aristo_filter.resolveBE()` or `aristo_filter.ackqRwMode()`. The new
+  ## descriptor is fully functional apart from the fact that the physical
+  ## backend cannot be updated (but see `aristo_filter.ackqRwMode()`.)
+  ##
+  ## The new DB descriptor contains a copy of the argument transaction `tx` as
+  ## top layer of level 1 (i.e. this is he only transaction.) Rolling back will
+  ## end up at the backend layer (incl. backend filter.)
+  ##
+  ## Use `aristo_filter.dispose()` to clean up the new DB descriptor.
+  ##
+  let db = tx.db
+
+  # Provide new top layer
+  var topLayer: AristoLayerRef
+  if db.txRef == tx:
+    topLayer = db.top.dup
+  elif tx.level < db.stack.len:
+    topLayer = db.stack[tx.level].dup
+  else:
+    return err(TxArgStaleTx)
+  if topLayer.txUid != tx.txUid:
+    return err(TxArgStaleTx)
+  topLayer.txUid = 1
+
+  # Empty stack
+  let stackLayer = block:
+    let rc = db.getIdgBE()
+    if rc.isOk:
+      AristoLayerRef(vGen: rc.value)
+    elif rc.error == GetIdgNotFound:
+      AristoLayerRef()
+    else:
+      return err(rc.error)
+
+  # Set up clone associated to `db`
+  let txClone = AristoDbRef(
+    top:      topLayer,    # is a deep copy
+    stack:    @[stackLayer],
+    roFilter: db.roFilter, # no need to copy contents (done when updated)
+    backend:  db.backend,
+    txUidGen: 1,
+    dudes: AristoDudesRef(
+      rwOk:   false,
+      rwDb:   db))
+
+  # Link clone to parent
+  db.linkClone txClone
+
+  # Install transaction similar to `tx` on clone
+  txClone.txRef = AristoTxRef(
+    db:    txClone,
+    txUid: 1,
+    level: 1)
+
+  ok(txClone)
+
+proc copyCat*(db: AristoDbRef): Result[AristoDbRef,AristoError] =
+  ## Variant of `copyCat()`. If there is a transaction pending, then the
+  ## function returns `db.txTop.value.copyCat()`. Otherwise it returns a
+  ## clone of the top layer.
+  ##
+  ## Use `aristo_filter.dispose()` to clean up the copy cat descriptor.
+  ##
+  if db.txRef.isNil:
+    let dbClone = AristoDbRef(
+      top:      db.top.dup,  # is a deep copy
+      roFilter: db.roFilter, # no need to copy contents (done when updated)
+      backend:  db.backend)
+
+    # Link clone to parent
+    db.linkClone dbClone
+    return ok(dbClone)
+
+  db.txRef.copyCat()
+
+
+proc exec*(
+    tx: AristoTxRef;
+    action: AristoDbAction;
+      ): Result[void,AristoError]
+      {.gcsafe, raises: [CatchableError].} =
+  ## Execute function argument `action()` on a temporary `tx.copyCat()`
+  ## transaction database. After return, the temporary database gets
+  ## destroyed.
+  ##
+  let db = block:
+    let rc = tx.copyCat()
+    if rc.isErr:
+      return err(rc.error)
+    rc.value
+
+  db.action()
+
+  block:
+    let rc = db.dispose()
+    if rc.isErr:
+      return err(rc.error)
   ok()
 
 # ------------------------------------------------------------------------------

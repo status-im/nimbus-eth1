@@ -349,7 +349,7 @@ should be allocated in the structural table associated with the zero key.
        db      | stack[n] |   |
        desc    |    :     |   |  optional passive delta layers, handled by
        obj     | stack[1] |   |  transaction management (can be used to
-        |      | stack[0] |   |  successively replace the top layer)
+        |      | stack[0] |   |  successively recover the top layer)
         |      +----------+   v
         |      +----------+
         |      | roFilter |   optional read-only backend filter
@@ -449,11 +449,15 @@ Nevertheless, *(8)* can alse be transformed by committing and saving *tx2*
         |  ø,        ø   | tx2+PBE
         | tx3,     ~tx2  |
 
- As *(11)* and *(13)* represent the same API, one has
+As *(11)* and *(13)* represent the same API, one has
 
-        tx2+PBE == tx1+(tx2+~tx1)+PBE    because of the middle rows  (14)
-        ~tx2    == ~tx1+~(tx2+~tx1)      because of (14)             (15)
+        tx2+PBE =~ tx1+(tx2+~tx1)+PBE    because of the middle rows  (14)
+        ~tx2    =~ ~tx1+~(tx2+~tx1)      because of (14)             (15)
 
- which shows some distributive property in *(14)* and commutative property in
- *(15)* for this example. In particulat it might be handy for testing/verifying
- against this example.
+which looks like some distributive property in *(14)* and commutative
+property in *(15)* for this example (but it is not straight algebraically.)
+The *=~* operator above indicates that the representations are equivalent in
+the sense that they have the same effect on the backend database (looks a
+bit like residue classes.)
+
+It might be handy for testing/verifying an implementation using this example.

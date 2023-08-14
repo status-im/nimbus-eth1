@@ -24,7 +24,8 @@ import
   ../nimbus/sync/snap/worker/db/[rocky_bulk_load, snapdb_accounts, snapdb_desc],
   ./replay/[pp, undump_accounts, undump_storages],
   ./test_sync_snap/[snap_test_xx, test_accounts, test_types],
-  ./test_aristo/[test_backend, test_helpers, test_transcode, test_tx]
+  ./test_aristo/[
+    test_backend, test_filter, test_helpers, test_transcode, test_tx]
 
 const
   baseDir = [".", "..", ".."/"..", $DirSep]
@@ -220,6 +221,9 @@ proc accountsRunner(
     test &"Delete accounts database, successively {accLst.len} entries":
       check noisy.testTxMergeAndDelete(accLst, dbDir)
 
+    test &"Distributed backend access {accLst.len} entries":
+      check noisy.testDistributedAccess(accLst, dbDir)
+
 
 proc storagesRunner(
     noisy = true;
@@ -252,6 +256,9 @@ proc storagesRunner(
 
     test &"Delete storage database, successively {stoLst.len} entries":
       check noisy.testTxMergeAndDelete(stoLst, dbDir)
+
+    test &"Distributed backend access {stoLst.len} entries":
+      check noisy.testDistributedAccess(stoLst, dbDir)
 
 # ------------------------------------------------------------------------------
 # Main function(s)

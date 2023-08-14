@@ -350,6 +350,53 @@ proc resolveBE*(db: AristoDbRef): Result[void,(VertexID,AristoError)] =
 
   ok()
 
+
+proc ackqRwMode*(db: AristoDbRef): Result[void,AristoError] =
+  ## Re-focus the `db` argument descriptor to backend read-write permission.
+  if not db.dudes.isNil and not db.dudes.rwOk:
+    # Steal dudes list, make the rw-parent a read-only dude
+    let parent = db.dudes.rwDb
+    db.dudes = parent.dudes
+    parent.dudes = AristoDudesRef(rwOk: false, rwDb: db)
+
+    # Exclude self
+    db.dudes.roDudes.excl db
+
+    # Update dudes
+    for w in db.dudes.roDudes:
+      # Let all other dudes refer to this one
+      w.dudes.rwDb = db
+
+    # Update dudes list (parent was alredy updated)
+    db.dudes.roDudes.incl parent
+    return ok()
+
+  err(FilNotReadOnlyDude)
+
+
+proc dispose*(db: AristoDbRef): Result[void,AristoError] =
+  ## Terminate usage of the `db` argument descriptor with backend read-only
+  ## permission.
+  ##
+  ## This type of descriptoy should always be terminated after use. Otherwise
+  ## it would always be udated when running `resolveBE()` which costs
+  ## unnecessary computing ressources. Also, the read-only backend filter
+  ## copies might grow big when it could be avoided.
+  if not db.isNil and
+     not db.dudes.isNil and
+     not db.dudes.rwOk:
+    # Unlink argument `db`
+    db.dudes.rwDb.dudes.roDudes.excl db
+
+    # Unlink more so it would not do harm if used wrongly
+    db.stack.setlen(0)
+    db.backend = AristoBackendRef(nil)
+    db.txRef = AristoTxRef(nil)
+    db.dudes = AristoDudesRef(nil)
+    return ok()
+
+  err(FilNotReadOnlyDude)
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

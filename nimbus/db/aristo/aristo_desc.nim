@@ -11,7 +11,7 @@
 ## Aristo DB -- a Patricia Trie with labeled edges
 ## ===============================================
 ##
-## These data structures allows to overlay the *Patricia Trie* with *Merkel
+## These data structures allow to overlay the *Patricia Trie* with *Merkel
 ## Trie* hashes. See the `README.md` in the `aristo` folder for documentation.
 ##
 ## Some semantic explanations;
@@ -22,7 +22,7 @@
 {.push raises: [].}
 
 import
-  std/[sets, tables],
+  std/[hashes, sets, tables],
   eth/common,
   ./aristo_constants,
   ./aristo_desc/[
@@ -53,7 +53,7 @@ type
 
   AristoDbRef* = ref AristoDbObj
   AristoDbObj* = object
-    ## Set of database layers, supporting transaction frames
+    ## Three tier database object supporting distributed instances.
     top*: AristoLayerRef              ## Database working layer, mutable
     stack*: seq[AristoLayerRef]       ## Stashed immutable parent layers
     roFilter*: AristoFilterRef        ## Apply read filter (locks writing)
@@ -65,6 +65,9 @@ type
 
     # Debugging data below, might go away in future
     xMap*: Table[HashLabel,VertexID]  ## For pretty printing, extends `pAmk`
+
+  AristoDbAction* = proc(db: AristoDbRef) {.gcsafe, raises: [CatchableError].}
+    ## Generic call back function/closure.
 
 # ------------------------------------------------------------------------------
 # Public helpers
@@ -106,9 +109,13 @@ func isValid*(vid: VertexID): bool =
 # Public functions, miscellaneous
 # ------------------------------------------------------------------------------
 
+# Hash set helper
+func hash*(db: AristoDbRef): Hash =
+  ## Table/KeyedQueue/HashSet mixin
+  cast[pointer](db).hash
+
 # Note that the below `init()` function cannot go into
 # `aristo_types_identifiers` as this would result in a circular import.
-
 func init*(key: var HashKey; data: openArray[byte]): bool =
   ## Import argument `data` into `key` which must have length either `32`, or
   ## `0`. The latter case is equivalent to an all zero byte array of size `32`.

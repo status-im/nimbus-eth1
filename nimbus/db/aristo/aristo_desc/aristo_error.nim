@@ -174,6 +174,7 @@ type
     FilStateRootMismatch
     FilPrettyPointlessLayer
     FilDudeFilterUpdateError
+    FilNotReadOnlyDude
 
     # Get functions form `aristo_get.nim`
     GetLeafNotFound

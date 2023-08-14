@@ -14,6 +14,7 @@
 {.push raises: [].}
 
 import
+  std/sets,
   results,
   ../aristo_desc,
   ../aristo_desc/aristo_types_backend,
@@ -57,12 +58,22 @@ proc finish*(db: AristoDbRef; flush = false) =
   ## depending on the type of backend (e.g. the `BackendMemory` backend will
   ## always flush on close.)
   ##
+  ## In case of distributed descriptors accessing the same backend, all
+  ## distributed descriptors will be destroyed.
+  ##
   ## This distructor may be used on already *destructed* descriptors.
-  if not db.backend.isNil:
-    db.backend.closeFn flush
-    db.backend = AristoBackendRef(nil)
-  db.top = AristoLayerRef(nil)
-  db.stack.setLen(0)
+  ##
+  if not db.isNil:
+    if not db.backend.isNil:
+      db.backend.closeFn flush
+
+    if db.dudes.isNil:
+      db[] = AristoDbObj()
+    else:
+      let lebo = if db.dudes.rwOk: db else: db.dudes.rwDb
+      for w in lebo.dudes.roDudes:
+        w[] = AristoDbObj()
+      lebo[] = AristoDbObj()
 
 # -----------------
 
