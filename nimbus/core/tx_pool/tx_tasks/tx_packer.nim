@@ -20,6 +20,7 @@ import
   stew/sorted_set,
   ../../../db/[accounts_cache, core_db],
   ../../../common/common,
+  ../../../utils/utils,
   "../.."/[dao, executor, validate, eip4844],
   ../../../transaction/call_evm,
   ../../../transaction,
@@ -91,7 +92,6 @@ proc runTx(pst: TxPackerStateRef; item: TxItemRef): GasInt
 
   pst.cleanState = false
   doAssert 0 <= result
-
 
 proc runTxCommit(pst: TxPackerStateRef; item: TxItemRef; gasBurned: GasInt)
     {.gcsafe,raises: [CatchableError].} =
@@ -218,6 +218,11 @@ proc vmExecCommit(pst: TxPackerStateRef)
   let
     xp = pst.xp
     vmState = xp.chain.vmState
+
+  # EIP-4895
+  if xp.chain.nextFork >= FkShanghai:
+    for withdrawal in xp.chain.withdrawals:
+      vmState.stateDB.addBalance(withdrawal.address, withdrawal.amount.gwei)
 
   # EIP-3675: no reward for miner in POA/POS
   if vmState.com.consensus == ConsensusType.POW:

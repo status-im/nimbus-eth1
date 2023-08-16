@@ -311,7 +311,7 @@ proc vmState*(dh: TxChainRef): BaseVMState =
 
 proc withdrawals*(dh: TxChainRef): seq[Withdrawal] =
   ## Getter, `BaseVmState` descriptor based on the current insertion point.
-  result = system.move(dh.withdrawals)
+  dh.withdrawals
 
 # ------------------------------------------------------------------------------
 # Public functions, setters

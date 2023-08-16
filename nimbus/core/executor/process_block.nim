@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  math,
+  ../../utils/utils,
   ../../common/common,
   ../../constants,
   ../../db/accounts_cache,
@@ -27,13 +27,6 @@ import
   stew/results
 
 {.push raises: [].}
-
-# ------------------------------------------------------------------------------
-# Private functions
-# ------------------------------------------------------------------------------
-
-func gwei(n: uint64): UInt256 =
-  n.u256 * (10 ^ 9).u256
 
 # Factored this out of procBlkPreamble so that it can be used directly for
 # stateless execution of specific transactions.

@@ -1,4 +1,5 @@
 import
+  std/math,
   eth/[rlp, common/eth_types_rlp],
   stew/byteutils,
   ../db/core_db
@@ -65,8 +66,8 @@ proc short*(h: Hash256): string =
   bytes[^3..^1] = h.data[^3..^1]
   bytes.toHex
 
-proc decompose*(rlp: var Rlp, 
-                header: var BlockHeader, 
+proc decompose*(rlp: var Rlp,
+                header: var BlockHeader,
                 body: var BlockBody) {.gcsafe, raises: [RlpError].} =
   var blk = rlp.read(EthBlock)
   header = system.move(blk.header)
@@ -74,8 +75,11 @@ proc decompose*(rlp: var Rlp,
   body.uncles = system.move(blk.uncles)
   body.withdrawals = system.move(blk.withdrawals)
 
-proc decompose*(rlpBytes: openArray[byte], 
-                header: var BlockHeader, 
+proc decompose*(rlpBytes: openArray[byte],
+                header: var BlockHeader,
                 body: var BlockBody) {.gcsafe, raises: [RlpError].} =
   var rlp = rlpFromBytes(rlpBytes)
   rlp.decompose(header, body)
+
+func gwei*(n: uint64): UInt256 =
+  n.u256 * (10 ^ 9).u256
