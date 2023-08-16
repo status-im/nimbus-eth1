@@ -135,6 +135,35 @@ proc callData*(call: EthCall): RpcCallData
   optionalU256(call.value, result.value)
   optionalBytes(call.data, result.data)
 
+proc toWd(wd: Withdrawal): WithdrawalObject =
+  WithdrawalObject(
+    index: encodeQuantity(wd.index),
+    validatorIndex: encodeQuantity(wd.validatorIndex),
+    address: wd.address,
+    amount: encodeQuantity(wd.amount),
+  )
+
+proc toWdList(list: openArray[Withdrawal]): seq[WithdrawalObject] =
+  result = newSeqOfCap[WithdrawalObject](list.len)
+  for x in list:
+    result.add toWd(x)
+
+proc toHashList(list: openArray[StorageKey]): seq[Hash256] =
+  result = newSeqOfCap[Hash256](list.len)
+  for x in list:
+    result.add Hash256(data: x)
+
+proc toAccessTuple(ac: AccessPair): AccessTuple =
+  AccessTuple(
+    address: ac.address,
+    storageKeys: toHashList(ac.storageKeys)
+  )
+
+proc toAccessTupleList(list: openArray[AccessPair]): seq[AccessTuple] =
+  result = newSeqOfCap[AccessTuple](list.len)
+  for x in list:
+    result.add toAccessTuple(x)
+
 proc populateTransactionObject*(tx: Transaction, header: BlockHeader, txIndex: int): TransactionObject
     {.gcsafe, raises: [ValidationError].} =
   result.blockHash = some(header.hash)
@@ -151,6 +180,19 @@ proc populateTransactionObject*(tx: Transaction, header: BlockHeader, txIndex: i
   result.v = encodeQuantity(tx.V.uint)
   result.r = encodeQuantity(tx.R)
   result.s = encodeQuantity(tx.S)
+
+  if tx.txType >= TxEip2930:
+    result.chainId = some(encodeQuantity(tx.chainId.uint64))
+    result.`type` = some(encodeQuantity(tx.txType.uint64))
+    result.accessList = some(toAccessTupleList(tx.accessList))
+  
+  if tx.txType >= TxEIP1559:
+    result.maxFeePerGas = some(encodeQuantity(tx.maxFee.uint64))
+    result.maxPriorityFeePerGas = some(encodeQuantity(tx.maxPriorityFee.uint64))
+  
+  if tx.txType >= TxEIP4844:
+    result.maxFeePerBlobGas = some(encodeQuantity(tx.maxFeePerBlobGas.uint64))
+    #result.versionedHashes = some(tx.versionedHashes)
 
 proc populateBlockObject*(header: BlockHeader, chain: CoreDbRef, fullTx: bool, isUncle = false): BlockObject
     {.gcsafe, raises: [CatchableError].} =
@@ -193,6 +235,16 @@ proc populateBlockObject*(header: BlockHeader, chain: CoreDbRef, fullTx: bool, i
     else:
       for x in chain.getBlockTransactionHashes(header):
         result.transactions.add %(x)
+
+  if header.withdrawalsRoot.isSome:
+    result.withdrawalsRoot = header.withdrawalsRoot
+    result.withdrawals = some(toWdList(chain.getWithdrawals(header.withdrawalsRoot.get)))
+
+  if header.blobGasUsed.isSome:
+    result.blobGasUsed = some(encodeQuantity(header.blobGasUsed.get))
+
+  if header.excessBlobGas.isSome:
+    result.excessBlobGas = some(encodeQuantity(header.excessBlobGas.get))
 
 proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction,
                       txIndex: int, header: BlockHeader, fork: EVMFork): ReceiptObject

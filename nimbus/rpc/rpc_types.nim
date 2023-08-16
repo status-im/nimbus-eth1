@@ -74,7 +74,10 @@ type
     baseFeePerGas*: Option[HexQuantityStr]
     transactions*: seq[JsonNode]    # list of transaction objects, or 32 Bytes transaction hashes depending on the last given parameter.
     uncles*: seq[Hash256]           # list of uncle hashes.
-    withdrawals*: seq[WithdrawalObject] # list of validator withdrawals
+    withdrawals*: Option[seq[WithdrawalObject]]    # list of validator withdrawals
+    withdrawalsRoot*: Option[Hash256]      # EIP-4895
+    blobGasUsed*: Option[HexQuantityStr]   # EIP-4844
+    excessBlobGas*: Option[HexQuantityStr] # EIP-4844
 
   TransactionObject* = object       # A transaction object, or null when no transaction was found:
     # Returned to user
@@ -92,6 +95,17 @@ type
     v*: HexQuantityStr                # ECDSA recovery id
     r*: HexQuantityStr                # 32 Bytes - ECDSA signature r
     s*: HexQuantityStr                # 32 Bytes - ECDSA signature s
+    `type`*: Option[HexQuantityStr]   # EIP-2718, with 0x0 for Legacy
+    chainId*: Option[HexQuantityStr]         # EIP-159
+    accessList*: Option[seq[AccessTuple]]   # EIP-2930
+    maxFeePerGas*: Option[HexQuantityStr]         # EIP-1559
+    maxPriorityFeePerGas*: Option[HexQuantityStr] # EIP-1559
+    maxFeePerBlobGas*: Option[HexQuantityStr]     # EIP-4844
+    versionedHashes*: Option[VersionedHashes]     # EIP-4844
+
+  AccessTuple* = object
+    address*: EthAddress
+    storageKeys*: seq[Hash256]
 
   WithdrawalObject* = object
     index*: HexQuantityStr

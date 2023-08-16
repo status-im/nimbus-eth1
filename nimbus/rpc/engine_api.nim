@@ -331,10 +331,11 @@ proc handle_forkchoiceUpdated(sealingEngine: SealingEngineRef,
                               payloadAttributes: SomeOptionalPayloadAttributes): ForkchoiceUpdatedResponse {.raises: [CatchableError].} =
 
   if payloadAttributes.isSome:
-    if com.isCancunOrLater(fromUnix(payloadAttributes.get.timestamp.unsafeQuantityToInt64)):
+    let attr = payloadAttributes.get
+    if com.isCancunOrLater(fromUnix(attr.timestamp.unsafeQuantityToInt64)):
       when not(payloadAttributes is Option[PayloadAttributesV3]):
         raise invalidParams("if timestamp is Cancun or later, payloadAttributes must be PayloadAttributesV3")
-    elif com.isShanghaiOrLater(fromUnix(payloadAttributes.get.timestamp.unsafeQuantityToInt64)):
+    elif com.isShanghaiOrLater(fromUnix(attr.timestamp.unsafeQuantityToInt64)):
       when not(payloadAttributes is Option[PayloadAttributesV2]):
         raise invalidParams("if timestamp is Shanghai or later, payloadAttributes must be PayloadAttributesV2")
     else:

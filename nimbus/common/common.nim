@@ -145,21 +145,6 @@ proc init(com      : CommonRef,
   com.networkId   = networkId
   com.syncProgress= SyncProgress()
 
-  # com.currentFork and com.consensusType
-  # is set by hardForkTransition.
-  # set it before creating genesis block
-  # TD need to be some(0.u256) because it can be the genesis
-  # already at the MergeFork
-  const TimeZero = fromUnix(0)
-  com.hardForkTransition(ForkDeterminationInfo(blockNumber: 0.toBlockNumber, td: some(0.u256), time: some(TimeZero)))
-
-  # com.forkIds and com.blockZeroHash is set
-  # by setForkId
-  if genesis.isNil.not:
-    com.genesisHeader = toGenesisHeader(genesis,
-      com.currentFork, com.db)
-    com.setForkId(com.genesisHeader)
-
   # Initalise the PoA state regardless of whether it is needed on the current
   # network. For non-PoA networks this descriptor is ignored.
   com.poa = newClique(com.db, com.cliquePeriod, com.cliqueEpoch)
@@ -167,6 +152,32 @@ proc init(com      : CommonRef,
   # Always initialise the PoW epoch cache even though it migh no be used
   com.pow = PowRef.new
   com.pos = CasperRef.new
+
+  # com.currentFork and com.consensusType
+  # is set by hardForkTransition.
+  # set it before creating genesis block
+  # TD need to be some(0.u256) because it can be the genesis
+  # already at the MergeFork
+  const TimeZero = fromUnix(0)
+
+  # com.forkIds and com.blockZeroHash is set
+  # by setForkId
+  if genesis.isNil.not:
+    com.hardForkTransition(ForkDeterminationInfo(
+      blockNumber: 0.toBlockNumber,
+      td: some(0.u256),
+      time: some(genesis.timestamp)
+    ))
+    com.genesisHeader = toGenesisHeader(genesis,
+      com.currentFork, com.db)
+    com.setForkId(com.genesisHeader)
+    com.pos.timestamp = genesis.timestamp
+  else:
+    com.hardForkTransition(ForkDeterminationInfo(
+      blockNumber: 0.toBlockNumber,
+      td: some(0.u256),
+      time: some(TimeZero)
+    ))
 
   # By default, history begins at genesis.
   com.startOfHistory = GENESIS_PARENT_HASH
@@ -266,6 +277,7 @@ proc hardForkTransition(
   ## at that time, TD is no longer needed to find a fork
   ## TD only needed during transition from POW/POA to POS.
   ## Same thing happen before London block, TD can be ignored.
+
   let fork = com.toHardFork(forkDeterminer)
   com.currentFork = fork
   com.consensusTransition(fork)

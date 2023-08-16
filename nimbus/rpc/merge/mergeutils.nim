@@ -126,6 +126,12 @@ proc toBlockHeader*(payload: SomeExecutionPayload): EthBlockHeader =
     excessBlobGas  : payload.maybeExcessBlobGas, # EIP-4844
   )
 
+proc toBlockHeader*(payload: ExecutionPayload): EthBlockHeader =
+  case payload.version
+  of Version.V1: toBlockHeader(payload.V1)
+  of Version.V2: toBlockHeader(payload.V2)
+  of Version.V3: toBlockHeader(payload.V3)
+
 proc toTypedTransaction*(tx: Transaction): TypedTransaction =
   TypedTransaction(rlp.encode(tx))
 
