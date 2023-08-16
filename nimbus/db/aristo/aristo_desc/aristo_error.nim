@@ -92,7 +92,8 @@ type
     HashifyCannotComplete
     HashifyCannotHashRoot
     HashifyExistingHashMismatch
-    HashifyLeafToRootAllFailed
+    HashifyDownVtxlevelExceeded
+    HashifyDownVtxLeafUnexpected
     HashifyRootHashMismatch
     HashifyRootVidMismatch
     HashifyVidCircularDependence
