@@ -245,3 +245,9 @@ proc unsupportedFork*(msg: string): ref InvalidRequest =
     code: engineApiUnsupportedFork,
     msg: msg
   )
+
+proc tooLargeRequest*(msg: string): ref InvalidRequest =
+  (ref InvalidRequest)(
+    code: engineApiTooLargeRequest,
+    msg: msg
+  )

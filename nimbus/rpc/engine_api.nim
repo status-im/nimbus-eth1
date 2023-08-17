@@ -33,6 +33,7 @@ import
 {.push raises: [].}
 
 type
+  BlockHeader = eth_types.BlockHeader
   Hash256 = eth_types.Hash256
   Web3Blob = web3types.Blob
   Web3KZGProof = web3types.KZGProof
@@ -495,11 +496,55 @@ proc handle_forkchoiceUpdated(sealingEngine: SealingEngineRef,
 func toHash(value: array[32, byte]): Hash256 =
   result.data = value
 
-proc handle_getPayloadBodiesByHash(sealingEngine: SealingEngineRef, hashes: seq[BlockHash]): seq[Option[ExecutionPayloadBodyV1]] {.raises: [CatchableError].} =
+const
+  maxBodyRequest = 32
+
+proc handle_getPayloadBodiesByHash(sealingEngine: SealingEngineRef,
+                                   hashes: seq[BlockHash]):
+                                     seq[Option[ExecutionPayloadBodyV1]] {.raises: [CatchableError].} =
+  if hashes.len > maxBodyRequest:
+    raise tooLargeRequest("request exceeds max allowed " & $maxBodyRequest)
+
   let db = sealingEngine.chain.db
   var body: BlockBody
   for h in hashes:
     if db.getBlockBody(toHash(distinctBase(h)), body):
+      var typedTransactions: seq[TypedTransaction]
+      for tx in body.transactions:
+        typedTransactions.add(tx.toTypedTransaction)
+      var withdrawals: seq[WithdrawalV1]
+      for w in body.withdrawals.get:
+        withdrawals.add(w.toWithdrawalV1)
+      result.add(
+        some(ExecutionPayloadBodyV1(
+          transactions: typedTransactions,
+          withdrawals: withdrawals
+        ))
+      )
+    else:
+      result.add(none[ExecutionPayloadBodyV1]())
+
+proc handle_getPayloadBodiesByRange(sealingEngine: SealingEngineRef,
+                                    start: uint64, count: uint64):
+                                      seq[Option[ExecutionPayloadBodyV1]] {.raises: [CatchableError].} =
+  if start == 0:
+    raise invalidParams("start block should greater than zero")
+
+  if count == 0:
+    raise invalidParams("blocks count should greater than zero")
+
+  if count > maxBodyRequest:
+    raise tooLargeRequest("request exceeds max allowed " & $maxBodyRequest)
+
+  let db = sealingEngine.chain.db
+  var body: BlockBody
+  var header: BlockHeader
+  for bn in start..<start+count:
+    if not db.getBlockHeader(bn.toBlockNumber, header):
+      result.add(none[ExecutionPayloadBodyV1]())
+      continue
+
+    if db.getBlockBody(header, body):
       var typedTransactions: seq[TypedTransaction]
       for tx in body.transactions:
         typedTransactions.add(tx.toTypedTransaction)
@@ -527,7 +572,8 @@ const supportedMethods: HashSet[string] =
     "engine_forkchoiceUpdatedV1",
     "engine_forkchoiceUpdatedV2",
     "engine_forkchoiceUpdatedV3",
-    "engine_getPayloadBodiesByHashV1"
+    "engine_getPayloadBodiesByHashV1",
+    "engine_getPayloadBodiesByRangeV1",
   ])
 
 # I'm trying to keep the handlers below very thin, and move the
@@ -625,3 +671,6 @@ proc setupEngineAPI*(
       hashes: seq[BlockHash]) -> seq[Option[ExecutionPayloadBodyV1]]:
     return handle_getPayloadBodiesByHash(sealingEngine, hashes)
 
+  server.rpc("engine_getPayloadBodiesByRangeV1") do(
+      start: Quantity, count: Quantity) -> seq[Option[ExecutionPayloadBodyV1]]:
+    return handle_getPayloadBodiesByRange(sealingEngine, start.uint64, count.uint64)
