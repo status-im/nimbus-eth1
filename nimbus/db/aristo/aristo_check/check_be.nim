@@ -129,6 +129,9 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
 
   # Check cache against backend
   if cache:
+    if db.top.dirty:
+      return err((VertexID(0),CheckBeCacheIsDirty))
+
     # Check structural table
     for (vid,vtx) in db.top.sTab.pairs:
       # A `kMap[]` entry must exist.

@@ -132,6 +132,7 @@ type
     CheckBeKeyMismatch
     CheckBeGarbledVGen
 
+    CheckBeCacheIsDirty
     CheckBeCacheKeyMissing
     CheckBeCacheKeyNonEmpty
     CheckBeCacheVidUnsynced
