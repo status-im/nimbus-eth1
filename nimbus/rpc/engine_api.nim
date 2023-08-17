@@ -537,7 +537,12 @@ proc handle_getPayloadBodiesByRange(com: CommonRef,
 
   let db = com.db
   var header: BlockHeader
-  for bn in start..<start+count:
+  var last = start+count-1
+  let current = com.syncCurrent.truncate(uint64)
+  if last > current:
+    last = current
+
+  for bn in start..last:
     if not db.getBlockHeader(bn.toBlockNumber, header):
       result.add none(ExecutionPayloadBodyV1)
       continue
