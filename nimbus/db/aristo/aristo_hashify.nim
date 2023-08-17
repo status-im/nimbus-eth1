@@ -58,6 +58,16 @@ type
   BackVidTab =
     Table[VertexID,BackVidValRef]
 
+  BackWVtxRef = ref object
+    w: BackVidValRef
+    vtx: VertexRef
+
+  BackWVtxTab =
+    Table[VertexID,BackWVtxRef]
+
+const
+  SubTreeSearchDepthMax = 64
+
 logScope:
   topics = "aristo-hashify"
 
@@ -71,8 +81,14 @@ template logTxt(info: static[string]): static[string] =
 func getOrVoid(tab: BackVidTab; vid: VertexID): BackVidValRef =
   tab.getOrDefault(vid, BackVidValRef(nil))
 
+func getOrVoid(tab: BackWVtxTab; vid: VertexID): BackWVtxRef =
+  tab.getOrDefault(vid, BackWVtxRef(nil))
+
 func isValid(brv: BackVidValRef): bool =
   brv != BackVidValRef(nil)
+
+func isValid(brv: BackWVtxRef): bool =
+  brv != BackWVtxRef(nil)
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -209,6 +225,119 @@ proc deletedLeafHasher(
 
   ok()
 
+# ------------------
+
+proc resolveStateRoots(
+    db: AristoDbRef;                   # Database, top layer
+    uVids: BackVidTab;                 # Unresolved vertex IDs
+      ): Result[void,(VertexID,AristoError)] =
+  ## Resolve unresolved nodes. There might be a sub-tree on the backend which
+  ## blocks resolving the current structure. So search the `uVids` argument
+  ## list for missing vertices and resolve it.
+  #
+  # Update out-of-path  hashes, i.e. fill gaps caused by branching out from
+  # `downMost` table vertices.
+  #
+  # Example
+  # ::
+  #   $1                       ^
+  #    \                       |
+  #     $7 -- $6 -- leaf $8    |  on top layer,
+  #      \     `--- leaf $9    |  $5..$9 were inserted,
+  #       $5                   |  $1 was redefined
+  #        \                   v
+  #         \
+  #          \                 ^
+  #           $4 -- leaf $2    |  from
+  #            `--- leaf $3    |  backend (BE)
+  #                            v
+  #   backLink[] = {$7}
+  #   downMost[] = {$7}
+  #   top.kMap[] = {£1, £6, £8, £9}
+  #   BE.kMap[]  = {£1, £2, £3, £4}
+  #
+  # So `$5` (needed for `$7`) cannot be resolved because it is neither on
+  # the path `($1..$8)`, nor is it on `($1..$9)`.
+  #
+  var follow: BackWVtxTab
+
+  proc wVtxRef(db: AristoDbRef; root, vid, toVid: VertexID): BackWVtxRef =
+    let vtx = db.getVtx vid
+    if vtx.isValid:
+      return BackWVtxRef(
+        vtx:     vtx,
+        w: BackVidValRef(
+          root:  root,
+          onBe:  not db.top.sTab.getOrVoid(vid).isValid,
+          toVid: toVid))
+
+  # Init `follow` table by unresolved `Branch` leafs from `vidTab`
+  for (uVid,uVal) in uVids.pairs:
+    let uVtx = db.getVtx uVid
+    if uVtx.isValid and uVtx.vType == Branch:
+      var didSomething = false
+      for vid in uVtx.bVid:
+        if vid.isValid and not db.getKey(vid).isValid:
+          let w = db.wVtxRef(root=uVal.root, vid=vid, toVid=uVid)
+          if not w.isNil:
+            follow[vid] = w
+            didSomething = true
+      # Add state root to be resolved, as well
+      if didSomething and not follow.hasKey uVal.root:
+        let w = db.wVtxRef(root=uVal.root, vid=uVal.root, toVid=uVal.root)
+        if not w.isNil:
+          follow[uVal.root] = w
+
+  # Update and re-collect into `follow` table
+  var level = 0
+  while 0 < follow.len:
+    var
+      changes = false
+      redo: BackWVtxTab
+    for (fVid,fVal) in follow.pairs:
+      # Resolve or keep for later
+      let rc = fVal.vtx.toNode db
+      if rc.isOk:
+        # Update Merkle hash
+        let
+          key = rc.value.to(HashKey)
+          rx = db.updateHashKey(fVal.w.root, fVid, key, fVal.w.onBe)
+        if rx.isErr:
+          return err((fVid, rx.error))
+        changes = true
+      else:
+        # Cannot complete with this vertex, so dig deeper and do it later
+        redo[fVid] = fVal
+
+        case fVal.vtx.vType:
+        of Branch:
+          for vid in fVal.vtx.bVid:
+            if vid.isValid and not db.getKey(vid).isValid:
+              let w = db.wVtxRef(root=fVal.w.root, vid=vid, toVid=fVid)
+              if not w.isNil:
+                changes = true
+                redo[vid] = w
+        of Extension:
+          let vid = fVal.vtx.eVid
+          if vid.isValid and not db.getKey(vid).isValid:
+            let w = db.wVtxRef(root=fVal.w.root,vid=vid, toVid=fVid)
+            if not w.isNil:
+              changes = true
+              redo[vid] = w
+        of Leaf:
+          # Should habe been hashed earlier
+          return err((fVid,HashifyDownVtxLeafUnexpected))
+
+    # Beware of loops
+    if not changes or SubTreeSearchDepthMax < level:
+      return err((VertexID(0),HashifyDownVtxlevelExceeded))
+
+    # Restart with a new instance of `follow`
+    redo.swap follow
+    level.inc
+
+  ok()
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -244,7 +373,7 @@ proc hashify*(
   for (lky,vid) in db.top.lTab.pairs:
     let hike = lky.hikeUp(db)
 
-    # There might be deleted entries on the leaf table. If this is tha case,
+    # There might be deleted entries on the leaf table. If this is the case,
     # the Merkle hashes for the vertices in the `hike` can all be compiled.
     if not vid.isValid:
       let rc = db.deletedLeafHasher hike
@@ -268,12 +397,17 @@ proc hashify*(
         # Backtrack and register remaining nodes. Note that in case *n == 0*,
         # the root vertex has not been fully resolved yet.
         #
-        # hike.legs: (leg[0], leg[1], .., leg[n-1], leg[n], ..)
-        #               |       |           |          |
-        #               | <---- |     <---- |   <----  |
-        #               |                   |          |
-        #               |     backLink[]    | downMost |
+        #               .. unresolved hash keys | all set here ..
+        #                                       |
+        #                                       |
+        # hike.legs: (leg[0], leg[1], ..leg[n-1], leg[n], ..)
+        #               |       |        |            |
+        #               | <---- |  <---- |  <-------- |
+        #               |                |            |
+        #               |   backLink[]   | downMost[] |
         #
+        if n+1 < hike.legs.len:
+          downMost.del hike.legs[n+1].wp.vid
         downMost[hike.legs[n].wp.vid] = BackVidValRef(
           root:  hike.root,
           onBe:  hike.legs[n].backend,
@@ -289,7 +423,9 @@ proc hashify*(
   # At least one full path leaf..root should have succeeded with labelling
   # for each root.
   if completed.len < roots.len:
-    return err((VertexID(0),HashifyLeafToRootAllFailed))
+    let rc = db.resolveStateRoots backLink
+    if rc.isErr:
+      return err(rc.error)
 
   # Update remaining hashes
   while 0 < downMost.len:

@@ -9,12 +9,12 @@
 # at your option. This file may not be copied, modified, or
 # distributed except according to those terms.
 
-## Aristo (aka Patricia) DB records merge test
+## Aristo (aka Patricia) DB records transaction based merge test
 
 import
   std/[algorithm, bitops, sequtils, sets, tables],
   eth/common,
-  stew/results,
+  results,
   unittest2,
   ../../nimbus/db/aristo/[
     aristo_check, aristo_delete, aristo_desc, aristo_get, aristo_merge],

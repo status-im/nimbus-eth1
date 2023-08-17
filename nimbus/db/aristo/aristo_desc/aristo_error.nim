@@ -92,7 +92,8 @@ type
     HashifyCannotComplete
     HashifyCannotHashRoot
     HashifyExistingHashMismatch
-    HashifyLeafToRootAllFailed
+    HashifyDownVtxlevelExceeded
+    HashifyDownVtxLeafUnexpected
     HashifyRootHashMismatch
     HashifyRootVidMismatch
     HashifyVidCircularDependence
@@ -131,6 +132,7 @@ type
     CheckBeKeyMismatch
     CheckBeGarbledVGen
 
+    CheckBeCacheIsDirty
     CheckBeCacheKeyMissing
     CheckBeCacheKeyNonEmpty
     CheckBeCacheVidUnsynced
@@ -167,9 +169,12 @@ type
     DelVidStaleVtx
 
     # Functions from  `aristo_filter.nim`
+    FilRoBackendOrMissing
     FilStateRootMissing
     FilStateRootMismatch
     FilPrettyPointlessLayer
+    FilDudeFilterUpdateError
+    FilNotReadOnlyDude
 
     # Get functions form `aristo_get.nim`
     GetLeafNotFound
@@ -192,8 +197,9 @@ type
 
     # Transaction wrappers
     TxArgStaleTx
-    TxBackendMissing
+    TxRoBackendOrMissing
     TxNoPendingTx
+    TxPendingTx
     TxNotTopTx
     TxStackGarbled
     TxStackUnderflow

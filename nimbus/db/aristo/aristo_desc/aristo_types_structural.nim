@@ -250,6 +250,16 @@ proc dup*(layer: AristoLayerRef): AristoLayerRef =
   for (k,v) in layer.sTab.pairs:
     result.sTab[k] = v.dup
 
+proc dup*(filter: AristoFilterRef): AristoFilterRef =
+  ## Duplicate layer.
+  result = AristoFilterRef(
+    src:  filter.src,
+    kMap: filter.kMap,
+    vGen: filter.vGen,
+    trg:  filter.trg)
+  for (k,v) in filter.sTab.pairs:
+    result.sTab[k] = v.dup
+
 proc to*(node: NodeRef; T: type VertexRef): T =
   ## Extract a copy of the `VertexRef` part from a `NodeRef`.
   node.VertexRef.dup
