@@ -57,7 +57,10 @@ func init*(
     value: encodeQuantity(tx.value),
     v: encodeQuantity(tx.V.uint),
     r: encodeQuantity(tx.R),
-    s: encodeQuantity(tx.S)
+    s: encodeQuantity(tx.S),
+    `type`: encodeQuantity(tx.txType.uint64),
+    maxFeePerGas: encodeQuantity(tx.maxFee.uint64),
+    maxPriorityFeePerGas: encodeQuantity(tx.maxPriorityFee.uint64),
   )
 
 # Note: Similar as `populateBlockObject` from rpc_utils, but lacking the
