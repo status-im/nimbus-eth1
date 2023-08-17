@@ -319,6 +319,7 @@ proc persistStorage(acc: RefAccount, db: CoreDbRef, clearCache: bool) =
   if not clearCache and acc.originalStorage.isNil:
     acc.originalStorage = newTable[UInt256, UInt256]()
 
+  db.compensateLegacySetup()
   var storageTrie = getStorageTrie(db, acc)
 
   for slot, value in acc.overlayStorage:

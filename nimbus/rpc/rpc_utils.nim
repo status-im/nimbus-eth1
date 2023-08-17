@@ -166,6 +166,7 @@ proc toAccessTupleList(list: openArray[AccessPair]): seq[AccessTuple] =
 
 proc populateTransactionObject*(tx: Transaction, header: BlockHeader, txIndex: int): TransactionObject
     {.gcsafe, raises: [ValidationError].} =
+  result.`type` = encodeQuantity(tx.txType.uint64)
   result.blockHash = some(header.hash)
   result.blockNumber = some(encodeQuantity(header.blockNumber))
   result.`from` = tx.getSender()
@@ -180,16 +181,13 @@ proc populateTransactionObject*(tx: Transaction, header: BlockHeader, txIndex: i
   result.v = encodeQuantity(tx.V.uint)
   result.r = encodeQuantity(tx.R)
   result.s = encodeQuantity(tx.S)
+  result.maxFeePerGas = encodeQuantity(tx.maxFee.uint64)
+  result.maxPriorityFeePerGas = encodeQuantity(tx.maxPriorityFee.uint64)
 
   if tx.txType >= TxEip2930:
     result.chainId = some(encodeQuantity(tx.chainId.uint64))
-    result.`type` = some(encodeQuantity(tx.txType.uint64))
     result.accessList = some(toAccessTupleList(tx.accessList))
-  
-  if tx.txType >= TxEIP1559:
-    result.maxFeePerGas = some(encodeQuantity(tx.maxFee.uint64))
-    result.maxPriorityFeePerGas = some(encodeQuantity(tx.maxPriorityFee.uint64))
-  
+
   if tx.txType >= TxEIP4844:
     result.maxFeePerBlobGas = some(encodeQuantity(tx.maxFeePerBlobGas.uint64))
     #result.versionedHashes = some(tx.versionedHashes)

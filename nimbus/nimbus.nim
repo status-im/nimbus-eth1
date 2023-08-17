@@ -425,6 +425,8 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
     )
 
   com.initializeEmptyDb()
+  com.db.compensateLegacySetup()
+
   let protocols = conf.getProtocolFlags()
 
   case conf.cmd

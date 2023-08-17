@@ -53,27 +53,27 @@ type
   ## Note that this includes slightly different information from eth/common.BlockHeader
   BlockObject* = object
     # Returned to user
-    number*: Option[HexQuantityStr] # the block number. null when its pending block.
-    hash*: Option[Hash256]          # hash of the block. null when its pending block.
-    parentHash*: Hash256            # hash of the parent block.
-    nonce*: Option[HexDataStr]      # hash of the generated proof-of-work. null when its pending block.
-    sha3Uncles*: Hash256            # SHA3 of the uncles data in the block.
-    logsBloom*: FixedBytes[256]     # the bloom filter for the logs of the block. null when its pending block.
-    transactionsRoot*: Hash256      # the root of the transaction trie of the block.
-    stateRoot*: Hash256             # the root of the final state trie of the block.
-    receiptsRoot*: Hash256          # the root of the receipts trie of the block.
-    miner*: EthAddress              # the address of the beneficiary to whom the mining rewards were given.
-    difficulty*: HexQuantityStr     # integer of the difficulty for this block.
-    totalDifficulty*: HexQuantityStr# integer of the total difficulty of the chain until this block.
-    extraData*: HexDataStr          # the "extra data" field of this block.
-    mixHash*: Hash256
-    size*: HexQuantityStr           # integer the size of this block in bytes.
-    gasLimit*: HexQuantityStr       # the maximum gas allowed in this block.
-    gasUsed*: HexQuantityStr        # the total used gas by all transactions in this block.
-    timestamp*: HexQuantityStr      # the unix timestamp for when the block was collated.
+    number*: Option[HexQuantityStr]        # the block number. null when its pending block.
+    hash*: Option[Hash256]                 # hash of the block. null when its pending block.
+    parentHash*: Hash256                   # hash of the parent block.
+    nonce*: Option[HexDataStr]             # hash of the generated proof-of-work. null when its pending block.
+    sha3Uncles*: Hash256                   # SHA3 of the uncles data in the block.
+    logsBloom*: FixedBytes[256]            # the bloom filter for the logs of the block. null when its pending block.
+    transactionsRoot*: Hash256             # the root of the transaction trie of the block.
+    stateRoot*: Hash256                    # the root of the final state trie of the block.
+    receiptsRoot*: Hash256                 # the root of the receipts trie of the block.
+    miner*: EthAddress                     # the address of the beneficiary to whom the mining rewards were given.
+    difficulty*: HexQuantityStr            # integer of the difficulty for this block.
+    totalDifficulty*: HexQuantityStr       # integer of the total difficulty of the chain until this block.
+    extraData*: HexDataStr                 # the "extra data" field of this block.
+    mixHash*: Hash256                      
+    size*: HexQuantityStr                  # integer the size of this block in bytes.
+    gasLimit*: HexQuantityStr              # the maximum gas allowed in this block.
+    gasUsed*: HexQuantityStr               # the total used gas by all transactions in this block.
+    timestamp*: HexQuantityStr             # the unix timestamp for when the block was collated.
     baseFeePerGas*: Option[HexQuantityStr]
-    transactions*: seq[JsonNode]    # list of transaction objects, or 32 Bytes transaction hashes depending on the last given parameter.
-    uncles*: seq[Hash256]           # list of uncle hashes.
+    transactions*: seq[JsonNode]           # list of transaction objects, or 32 Bytes transaction hashes depending on the last given parameter.
+    uncles*: seq[Hash256]                  # list of uncle hashes.
     withdrawals*: Option[seq[WithdrawalObject]]    # list of validator withdrawals
     withdrawalsRoot*: Option[Hash256]      # EIP-4895
     blobGasUsed*: Option[HexQuantityStr]   # EIP-4844
@@ -81,27 +81,27 @@ type
 
   TransactionObject* = object       # A transaction object, or null when no transaction was found:
     # Returned to user
-    blockHash*: Option[Hash256]       # hash of the block where this transaction was in. null when its pending.
-    blockNumber*: Option[HexQuantityStr] # block number where this transaction was in. null when its pending.
-    `from`*: EthAddress               # address of the sender.
-    gas*: HexQuantityStr              # gas provided by the sender.
-    gasPrice*: HexQuantityStr         # gas price provided by the sender in Wei.
-    hash*: Hash256                    # hash of the transaction.
-    input*: Blob                      # the data send along with the transaction.
-    nonce*: HexQuantityStr            # the number of transactions made by the sender prior to this one.
-    to*: Option[EthAddress]           # address of the receiver. null when its a contract creation transaction.
+    `type`*: HexQuantityStr                   # EIP-2718, with 0x0 for Legacy
+    blockHash*: Option[Hash256]               # hash of the block where this transaction was in. null when its pending.
+    blockNumber*: Option[HexQuantityStr]      # block number where this transaction was in. null when its pending.
+    `from`*: EthAddress                       # address of the sender.
+    gas*: HexQuantityStr                      # gas provided by the sender.
+    gasPrice*: HexQuantityStr                 # gas price provided by the sender in Wei.
+    maxFeePerGas*: HexQuantityStr             # EIP-1559
+    maxPriorityFeePerGas*: HexQuantityStr     # EIP-1559
+    hash*: Hash256                            # hash of the transaction.
+    input*: Blob                              # the data send along with the transaction.
+    nonce*: HexQuantityStr                    # the number of transactions made by the sender prior to this one.
+    to*: Option[EthAddress]                   # address of the receiver. null when its a contract creation transaction.
     transactionIndex*: Option[HexQuantityStr] # integer of the transactions index position in the block. null when its pending.
-    value*: HexQuantityStr            # value transferred in Wei.
-    v*: HexQuantityStr                # ECDSA recovery id
-    r*: HexQuantityStr                # 32 Bytes - ECDSA signature r
-    s*: HexQuantityStr                # 32 Bytes - ECDSA signature s
-    `type`*: Option[HexQuantityStr]   # EIP-2718, with 0x0 for Legacy
-    chainId*: Option[HexQuantityStr]         # EIP-159
-    accessList*: Option[seq[AccessTuple]]   # EIP-2930
-    maxFeePerGas*: Option[HexQuantityStr]         # EIP-1559
-    maxPriorityFeePerGas*: Option[HexQuantityStr] # EIP-1559
-    maxFeePerBlobGas*: Option[HexQuantityStr]     # EIP-4844
-    versionedHashes*: Option[VersionedHashes]     # EIP-4844
+    value*: HexQuantityStr                    # value transferred in Wei.
+    v*: HexQuantityStr                        # ECDSA recovery id
+    r*: HexQuantityStr                        # 32 Bytes - ECDSA signature r
+    s*: HexQuantityStr                        # 32 Bytes - ECDSA signature s    
+    chainId*: Option[HexQuantityStr]          # EIP-159
+    accessList*: Option[seq[AccessTuple]]     # EIP-2930
+    maxFeePerBlobGas*: Option[HexQuantityStr] # EIP-4844
+    versionedHashes*: Option[VersionedHashes] # EIP-4844
 
   AccessTuple* = object
     address*: EthAddress
