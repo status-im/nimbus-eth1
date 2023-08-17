@@ -39,26 +39,6 @@ type
   Web3KZGProof = web3types.KZGProof
   Web3KZGCommitment = web3types.KZGCommitment
 
-
-func toPayloadAttributesV1OrPayloadAttributesV2*(a: PayloadAttributesV1OrV2): Result[PayloadAttributesV1, PayloadAttributesV2] =
-  if a.withdrawals.isNone:
-    ok(
-      PayloadAttributesV1(
-        timestamp: a.timestamp,
-        prevRandao: a.prevRandao,
-        suggestedFeeRecipient: a.suggestedFeeRecipient
-      )
-    )
-  else:
-    err(
-      PayloadAttributesV2(
-        timestamp: a.timestamp,
-        prevRandao: a.prevRandao,
-        suggestedFeeRecipient: a.suggestedFeeRecipient,
-        withdrawals: a.withdrawals.get
-      )
-    )
-
 proc latestValidHash(db: CoreDbRef, parent: EthBlockHeader, ttd: DifficultyInt): Hash256
     {.gcsafe, raises: [RlpError].} =
   let ptd = db.getScore(parent.parentHash)
