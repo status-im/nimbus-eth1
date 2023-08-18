@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/[bitops, sequtils],
+  std/[bitops, sequtils, sets],
   eth/[common, rlp, trie/nibbles],
   stew/results,
   "."/[aristo_constants, aristo_desc]
@@ -262,8 +262,8 @@ proc blobify*(vtx: VertexRef): Result[Blob, AristoError] =
   ok(data)
 
 proc blobify*(vGen: openArray[VertexID]; data: var Blob) =
-  ## This function serialises the key generator used in the `AristoDb`
-  ## descriptor.
+  ## This function serialises the vertex ID generator state used in the
+  ## `AristoDbRef` descriptor.
   ##
   ## This data record is supposed to be as in a dedicated slot in the
   ## persistent tables.
@@ -280,6 +280,104 @@ proc blobify*(vGen: openArray[VertexID]; data: var Blob) =
 proc blobify*(vGen: openArray[VertexID]): Blob =
   ## Variant of `blobify()`
   vGen.blobify result
+
+proc blobify*(filter: FilterRef; data: var Blob): AristoError =
+  ## This function serialises an Aristo DB filter object
+  ## ::
+  ##   Filter encoding:
+  ##     Uint256        -- source key
+  ##     Uint256        -- target key
+  ##     uint32         -- number of vertex IDs (vertex ID generator state)
+  ##     uint32         -- number of (id,key,vertex) triplets
+  ##
+  ##     uint64, ...    -- list of vertex IDs (vertex ID generator state)
+  ##
+  ##     uint32         -- flag(3) + vtxLen(29), first triplet
+  ##     uint64         -- vertex ID
+  ##     Uint256        -- optional key
+  ##     Blob           -- optional vertex
+  ##
+  ##     ...            -- more triplets
+  ##
+  data.setLen(0)
+  data &= filter.src.ByteArray32.toSeq
+  data &= filter.trg.ByteArray32.toSeq
+
+  data &= filter.vGen.len.uint32.toBytesBE.toSeq
+  data &= newSeq[byte](4) # place holder
+
+  # Store vertex ID generator state
+  for w in filter.vGen:
+    data &= w.uint64.toBytesBE.toSeq
+
+  var
+    n = 0
+    leftOver = filter.kMap.keys.toSeq.toHashSet
+
+  # Loop over vertex table
+  for (vid,vtx) in filter.sTab.pairs:
+    n.inc
+    leftOver.excl vid
+
+    var
+      keyMode = 0u                 # present and usable
+      vtxMode = 0u                 # present and usable
+      keyBlob: Blob
+      vtxBlob: Blob
+
+    let key = filter.kMap.getOrVoid vid
+    if key.isValid:
+      keyBlob = key.ByteArray32.toSeq
+    elif filter.kMap.hasKey vid:
+      keyMode = 1u                 # void hash key => considered deleted
+    else:
+      keyMode = 2u                 # ignore that hash key
+
+    if vtx.isValid:
+      let error = vtx.blobify vtxBlob
+      if error != AristoError(0):
+        return error
+    else:
+      vtxMode = 1u                 # nil vertex => considered deleted
+
+    if (vtxBlob.len and not 0x1fffffff) != 0:
+      return BlobifyFilterRecordOverflow
+
+    let pfx = ((keyMode * 3 + vtxMode) shl 29) or vtxBlob.len.uint
+    data &=
+      pfx.uint32.toBytesBE.toSeq &
+      vid.uint64.toBytesBE.toSeq &
+      keyBlob &
+      vtxBlob
+
+  # Loop over remaining data from key table
+  for vid in leftOver:
+    n.inc
+    var
+      mode = 2u                    # key present and usable, ignore vtx
+      keyBlob: Blob
+
+    let key = filter.kMap.getOrVoid vid
+    if key.isValid:
+      keyBlob = key.ByteArray32.toSeq
+    else:
+      mode = 5u                    # 1 * 3 + 2: void key, ignore vtx
+
+    let pfx = (mode shl 29)
+    data &=
+      pfx.uint32.toBytesBE.toSeq &
+      vid.uint64.toBytesBE.toSeq &
+      keyBlob
+
+  data[68 ..< 72] = n.uint32.toBytesBE.toSeq
+
+proc blobify*(filter: FilterRef): Result[Blob, AristoError] =
+  ## ...
+  var data: Blob
+  let error = filter.blobify data
+  if error != AristoError(0):
+    return err(error)
+  ok data
 
 # -------------
 
@@ -448,6 +546,76 @@ proc deblobify*(data: Blob; T: type seq[VertexID]): Result[T,AristoError] =
   if info != AristoError(0):
     return err(info)
   ok vGen
+
+
+proc deblobify*(data: Blob; filter: var FilterRef): AristoError =
+  ## De-serialise an Aristo DB filter object
+  if data.len < 72: # minumum length 72 for an empty filter
+    return DeblobFilterTooShort
+
+  let f = FilterRef()
+  (addr f.src.ByteArray32[0]).copyMem(unsafeAddr data[0], 32)
+  (addr f.trg.ByteArray32[0]).copyMem(unsafeAddr data[32], 32)
+
+  let
+    nVids = uint32.fromBytesBE data[64 ..< 68]
+    nTriplets = uint32.fromBytesBE data[68 ..< 72]
+    nTrplStart = (72 + nVids * 8).int
+
+  if data.len < nTrplStart:
+    return DeblobFilterGenTooShort
+  for n in 0 ..< nVids:
+    let w = 72 + n * 8
+    f.vGen.add (uint64.fromBytesBE data[w ..< w + 8]).VertexID
+
+  var offs = nTrplStart
+  for n in 0 ..< nTriplets:
+    if data.len < offs + 12:
+      return DeblobFilterTrpTooShort
+
+    let
+      flag = data[offs] shr 5 # double triplets: {0,1,2} x {0,1,2}
+      vLen = ((uint32.fromBytesBE data[offs ..< offs + 4]) and 0x1fffffff).int
+    if (vLen == 0) != ((flag mod 3) > 0):
+      return DeblobFilterTrpVtxSizeGarbled # contadiction
+    offs = offs + 4
+
+    let vid = (uint64.fromBytesBE data[offs ..< offs + 8]).VertexID
+    offs = offs + 8
+
+    if data.len < offs + (flag < 3).ord * 32 + vLen:
+      return DeblobFilterTrpTooShort
+
+    if flag < 3:                                        # {0} x {0,1,2}
+      var key: HashKey
+      (addr key.ByteArray32[0]).copyMem(unsafeAddr data[offs], 32)
+      f.kMap[vid] = key
+      offs = offs + 32
+    elif flag < 6:                                      # {0,1} x {0,1,2}
+      f.kMap[vid] = VOID_HASH_KEY
+
+    if 0 < vLen:
+      var vtx: VertexRef
+      let error = data[offs ..< offs + vLen].deblobify vtx
+      if error != AristoError(0):
+        return error
+      f.sTab[vid] = vtx
+      offs = offs + vLen
+    elif (flag mod 3) == 1:                             # {0,1,2} x {1}
+      f.sTab[vid] = VertexRef(nil)
+
+  if data.len != offs:
+    return DeblobFilterSizeGarbled
+
+  filter = f
+
+proc deblobify*(data: Blob; T: type FilterRef): Result[T,AristoError] =
+  ##  Variant of `deblobify()` for deserialising an Aristo DB filter object
+  var filter: T
+  let error = data.deblobify filter
+  if error != AristoError(0):
+    return err(error)
+  ok filter
 
 # ------------------------------------------------------------------------------
 # End

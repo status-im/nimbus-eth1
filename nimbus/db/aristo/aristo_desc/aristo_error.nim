@@ -28,6 +28,7 @@ type
     BlobifyExtMissingRefs
     BlobifyExtPathOverflow
     BlobifyLeafPathOverflow
+    BlobifyFilterRecordOverflow
 
     DeblobNilArgument
     DeblobUnknown
@@ -48,6 +49,11 @@ type
     DeblobBalanceLenUnsupported
     DeblobStorageLenUnsupported
     DeblobCodeLenUnsupported
+    DeblobFilterTooShort
+    DeblobFilterGenTooShort
+    DeblobFilterTrpTooShort
+    DeblobFilterTrpVtxSizeGarbled
+    DeblobFilterSizeGarbled
 
     # Converter `asNode()`, currenly for unit tests only
     CacheMissingNodekeys
@@ -181,6 +187,8 @@ type
     GetVtxNotFound
     GetKeyNotFound
     GetIdgNotFound
+    GetLogNotFound
+    GetEpoNotFound
 
     # RocksDB backend
     RdbBeCantCreateDataDir

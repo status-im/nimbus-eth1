@@ -106,6 +106,8 @@ proc `==`*(a: (VertexID,AristoError), b: (int,AristoError)): bool =
 proc `==`*(a: (int,AristoError), b: (int,int)): bool =
   (a[0],a[1].int) == b
 
+proc `==`*(a: (int,VertexID,AristoError), b: (int,int,int)): bool =
+  (a[0], a[1].int, a[2].int) == b
 
 proc to*(sample: AccountsSample; T: type seq[UndumpAccounts]): T =
   ## Convert test data into usable in-memory format
