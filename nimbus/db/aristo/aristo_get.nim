@@ -14,7 +14,7 @@
 {.push raises: [].}
 
 import
-  std/[options, tables],
+  std/tables,
   results,
   ./aristo_desc
 
@@ -62,8 +62,8 @@ proc getIdgBE*(
     db: AristoDbRef;
       ): Result[seq[VertexID],AristoError] =
   ## Get the ID generator state the `backened` layer if available.
-  if not db.roFilter.isNil and db.roFilter.vGen.isSome:
-    return ok(db.roFilter.vGen.unsafeGet)
+  if not db.roFilter.isNil:
+    return ok(db.roFilter.vGen)
   db.getIdgUBE()
 
 proc getVtxBE*(

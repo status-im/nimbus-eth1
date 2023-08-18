@@ -93,9 +93,9 @@ iterator walkIdgBeImpl*[T](
       ): tuple[n: int, vid: VertexID, vGen: seq[VertexID]] =
   ## Generic pseudo iterator
   var nNext = 0
-  if not db.roFilter.isNil and db.roFilter.vGen.isSome:
-     yield(0, VertexID(0), db.roFilter.vGen.unsafeGet)
-     nNext = 1
+  if db.roFilter.isValid:
+    yield(0, VertexID(0), db.roFilter.vGen)
+    nNext = 1
 
   when be isnot VoidBackendRef:
     mixin walkIdg

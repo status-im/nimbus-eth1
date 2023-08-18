@@ -105,6 +105,9 @@ func isValid*(lbl: HashLabel): bool =
 func isValid*(vid: VertexID): bool =
   vid != VertexID(0)
 
+func isValid*(filter: AristoFilterRef): bool =
+  filter != AristoFilterRef(nil)
+
 # ------------------------------------------------------------------------------
 # Public functions, miscellaneous
 # ------------------------------------------------------------------------------

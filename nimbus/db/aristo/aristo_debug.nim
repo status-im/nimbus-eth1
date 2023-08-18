@@ -329,10 +329,9 @@ proc ppFilter(fl: AristoFilterRef; db: AristoDbRef; indent: int): string =
     return
   result &= pfx & "trg(" & fl.trg.ppKey & ")"
   result &= pfx & "src(" & fl.src.ppKey & ")"
-  result &= pfx & "vGen" & pfx1 & "["
-  if fl.vGen.isSome:
-    result &= fl.vGen.unsafeGet.mapIt(it.ppVid).join(",")
-  result &= "]" & pfx & "sTab" & pfx1 & "{"
+  result &= pfx & "vGen" & pfx1 & "[" &
+    fl.vGen.mapIt(it.ppVid).join(",") & "]"
+  result &= pfx & "sTab" & pfx1 & "{"
   for n,vid in fl.sTab.sortedKeys:
     let vtx = fl.sTab.getOrVoid vid
     if 0 < n: result &= pfx2

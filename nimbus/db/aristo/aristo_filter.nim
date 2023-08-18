@@ -13,7 +13,7 @@
 ##
 
 import
-  std/[options, sequtils, sets, tables],
+  std/[sequtils, sets, tables],
   results,
   ./aristo_desc/aristo_types_backend,
   "."/[aristo_desc, aristo_get, aristo_vid]
@@ -87,19 +87,16 @@ proc merge(
   ##                               |
   ##
   # Degenerate case: `upper` is void
-  if lower.isNil or lower.vGen.isNone:
-    if upper.isNil or upper.vGen.isNone:
+  if lower.isNil:
+    if upper.isNil:
       # Even more degenerate case when both filters are void
-      return ok AristoFilterRef(
-        src: beStateRoot,
-        trg: beStateRoot,
-        vGen: none(seq[VertexID]))
+      return ok AristoFilterRef(nil)
     if upper.src != beStateRoot:
       return err((VertexID(1),FilStateRootMismatch))
     return ok(upper)
 
   # Degenerate case: `upper` is non-trivial and `lower` is void
-  if upper.isNil or upper.vGen.isNone:
+  if upper.isNil:
     if lower.src != beStateRoot:
       return err((VertexID(0), FilStateRootMismatch))
     return ok(lower)
@@ -191,7 +188,7 @@ proc fwdFilter*(
     if rc.isOK:
       (rc.value.be, rc.value.fg)
     elif rc.error == FilPrettyPointlessLayer:
-      return ok AristoFilterRef(vGen: none(seq[VertexID]))
+      return ok AristoFilterRef(nil)
     else:
       return err((VertexID(1), rc.error))
 
@@ -199,7 +196,7 @@ proc fwdFilter*(
     src:  srcRoot,
     sTab: layer.sTab,
     kMap: layer.kMap.pairs.toSeq.mapIt((it[0],it[1].key)).toTable,
-    vGen: some(layer.vGen.vidReorg), # Compact recycled IDs
+    vGen: layer.vGen.vidReorg, # Compact recycled IDs
     trg:  trgRoot)
 
 
@@ -223,7 +220,7 @@ proc revFilter*(
     let rc = db.getIdgUBE()
     if rc.isErr:
       return err((VertexID(0), rc.error))
-    rev.vGen = some rc.value
+    rev.vGen = rc.value
 
   # Calculate reverse changes for the `sTab[]` structural table
   for vid in filter.sTab.keys:
@@ -297,9 +294,6 @@ proc resolveBE*(db: AristoDbRef): Result[void,(VertexID,AristoError)] =
   # Blind or missing filter
   if db.roFilter.isNil:
     return ok()
-  if db.roFilter.vGen.isNone:
-    db.roFilter = AristoFilterRef(nil)
-    return ok()
 
   let ubeRootKey = block:
     let rc = db.getKeyUBE VertexID(1)
@@ -342,7 +336,7 @@ proc resolveBE*(db: AristoDbRef): Result[void,(VertexID,AristoError)] =
     txFrame = be.putBegFn()
   be.putVtxFn(txFrame, db.roFilter.sTab.pairs.toSeq)
   be.putKeyFn(txFrame, db.roFilter.kMap.pairs.toSeq)
-  be.putIdgFn(txFrame, db.roFilter.vGen.unsafeGet)
+  be.putIdgFn(txFrame, db.roFilter.vGen)
   let w = be.putEndFn txFrame
   if w != AristoError(0):
     rollback()

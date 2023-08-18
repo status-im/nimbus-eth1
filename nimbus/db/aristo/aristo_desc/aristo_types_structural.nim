@@ -15,7 +15,7 @@
 {.push raises: [].}
 
 import
-  std/[options, sets, tables],
+  std/[sets, tables],
   eth/[common, trie/nibbles],
   "."/[aristo_error, aristo_types_identifiers]
 
@@ -80,21 +80,13 @@ type
 
   # ----------------------
 
-  AristoDeltaRef* = ref object
-    ## Delta layer between backend and top/stack transaction layers.
-    src*: HashKey                    ## Applicable to this state root
-    sTab*: seq[(VertexID,VertexRef)] ## Filter structural vertex table
-    kMap*: seq[(VertexID,HashKey)]   ## Filter Merkle hash key mapping
-    vGen*: Option[seq[VertexID]]     ## Filter unique vertex ID generator
-    trg*: HashKey                    ## Resulting state root (i.e. `kMap[1]`)
-
   AristoFilterRef* = ref object
     ## Delta layer with expanded sequences for quick access
     src*: HashKey                    ## Applicable to this state root
+    trg*: HashKey                    ## Resulting state root (i.e. `kMap[1]`)
     sTab*: Table[VertexID,VertexRef] ## Filter structural vertex table
     kMap*: Table[VertexID,HashKey]   ## Filter Merkle hash key mapping
-    vGen*: Option[seq[VertexID]]     ## Filter unique vertex ID generator
-    trg*: HashKey                    ## Resulting state root (i.e. `kMap[1]`)
+    vGen*: seq[VertexID]             ## Filter unique vertex ID generator
 
   AristoLayerRef* = ref object
     ## Hexary trie database layer structures. Any layer holds the full

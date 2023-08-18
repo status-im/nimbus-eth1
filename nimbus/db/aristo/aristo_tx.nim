@@ -348,13 +348,12 @@ proc stow*(
       return err(rc.error)
     rc.value
 
-  if fwd.vGen.isSome: # Otherwise this layer is pointless
-    block:
-      # Merge `top` layer into `roFilter`
-      let rc = db.merge fwd
-      if rc.isErr:
-        return err(rc.error)
-      db.top = AristoLayerRef(vGen: db.roFilter.vGen.unsafeGet)
+  if fwd.isValid:
+    # Merge `top` layer into `roFilter`
+    let rc = db.merge fwd
+    if rc.isErr:
+      return err(rc.error)
+    db.top = AristoLayerRef(vGen: db.roFilter.vGen)
 
   if persistent:
     let rc = db.resolveBE()
