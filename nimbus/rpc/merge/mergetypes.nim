@@ -43,6 +43,7 @@ type
   PayloadItem = object
     id: PayloadID
     payload: ExecutionPayload
+    blockValue: UInt256
 
   HeaderItem = object
     hash: Hash256
@@ -83,43 +84,57 @@ proc get*(api: EngineApiRef, hash: Hash256, header: var EthBlockHeader): bool =
       return true
   false
 
-proc put*(api: EngineApiRef, id: PayloadID, payload: ExecutionPayload) =
-  api.payloadQueue.put(PayloadItem(id: id, payload: payload))
+proc put*(api: EngineApiRef, id: PayloadID,
+          blockValue: UInt256, payload: ExecutionPayload) =
+  api.payloadQueue.put(PayloadItem(id: id,
+    payload: payload, blockValue: blockValue))
 
-proc put*(api: EngineApiRef, id: PayloadID, payload: SomeExecutionPayload) =
-  api.put(id, payload.executionPayload)
+proc put*(api: EngineApiRef, id: PayloadID,
+          blockValue: UInt256, payload: SomeExecutionPayload) =
+  api.put(id, blockValue, payload.executionPayload)
 
-proc get*(api: EngineApiRef, id: PayloadID, payload: var ExecutionPayload): bool =
+proc get*(api: EngineApiRef, id: PayloadID,
+          blockValue: var UInt256,
+          payload: var ExecutionPayload): bool =
   for x in api.payloadQueue:
     if x.id == id:
       payload = x.payload
+      blockValue = x.blockValue
       return true
   false
 
-proc get*(api: EngineApiRef, id: PayloadID, payload: var ExecutionPayloadV1): bool =
+proc get*(api: EngineApiRef, id: PayloadID,
+          blockValue: var UInt256,
+          payload: var ExecutionPayloadV1): bool =
   var p: ExecutionPayload
-  let found = api.get(id, p)
+  let found = api.get(id, blockValue, p)
   doAssert(p.version == Version.V1)
   payload = p.V1
   return found
 
-proc get*(api: EngineApiRef, id: PayloadID, payload: var ExecutionPayloadV2): bool =
+proc get*(api: EngineApiRef, id: PayloadID,
+          blockValue: var UInt256,
+          payload: var ExecutionPayloadV2): bool =
   var p: ExecutionPayload
-  let found = api.get(id, p)
+  let found = api.get(id, blockValue, p)
   doAssert(p.version == Version.V2)
   payload = p.V2
   return found
 
-proc get*(api: EngineApiRef, id: PayloadID, payload: var ExecutionPayloadV3): bool =
+proc get*(api: EngineApiRef, id: PayloadID,
+          blockValue: var UInt256,
+          payload: var ExecutionPayloadV3): bool =
   var p: ExecutionPayload
-  let found = api.get(id, p)
+  let found = api.get(id, blockValue, p)
   doAssert(p.version == Version.V3)
   payload = p.V3
   return found
 
-proc get*(api: EngineApiRef, id: PayloadID, payload: var ExecutionPayloadV1OrV2): bool =
+proc get*(api: EngineApiRef, id: PayloadID,
+          blockValue: var UInt256,
+          payload: var ExecutionPayloadV1OrV2): bool =
   var p: ExecutionPayload
-  let found = api.get(id, p)
+  let found = api.get(id, blockValue, p)
   doAssert(p.version in {Version.V1, Version.V2})
   payload = p.V1V2
   return found

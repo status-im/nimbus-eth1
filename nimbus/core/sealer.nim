@@ -232,6 +232,11 @@ proc generateExecutionPayload*(engine: SealingEngineRef,
     excessBlobGas: excessBlobGas
   ))
 
+proc blockValue*(engine: SealingEngineRef): UInt256 =
+  # return sum of reward for feeRecipient for each
+  # tx included in a block
+  engine.txPool.blockValue
+
 proc new*(_: type SealingEngineRef,
           chain: ChainRef,
           ctx: EthContext,

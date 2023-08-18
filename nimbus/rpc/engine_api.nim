@@ -58,17 +58,6 @@ proc invalidFCU(com: CommonRef, header: EthBlockHeader): ForkchoiceUpdatedRespon
   let blockHash = latestValidHash(com.db, parent, com.ttd.get(high(common.BlockNumber)))
   invalidFCU(blockHash)
 
-proc txPriorityFee(ttx: TypedTransaction): UInt256 =
-  try:
-    let tx = rlp.decode(distinctBase(ttx), Transaction)
-    return u256(tx.gasPrice * tx.maxPriorityFee)
-  except RlpError:
-    doAssert(false, "found TypedTransaction that RLP failed to decode")
-
-# AARDVARK: make sure I have the right units (wei/gwei)
-proc sumOfBlockPriorityFees(payload: ExecutionPayloadV1OrV2): UInt256 =
-  payload.transactions.foldl(a + txPriorityFee(b), UInt256.zero)
-
 template unsafeQuantityToInt64(q: Quantity): int64 =
   int64 q
 
@@ -201,10 +190,9 @@ proc handle_getPayload(api: EngineApiRef, payloadId: PayloadID): GetPayloadV2Res
     meth = "GetPayload", id = payloadId.toHex
 
   var payload: ExecutionPayloadV1OrV2
-  if not api.get(payloadId, payload):
+  var blockValue: UInt256
+  if not api.get(payloadId, blockValue, payload):
     raise unknownPayload("Unknown payload")
-
-  let blockValue = sumOfBlockPriorityFees(payload)
 
   return GetPayloadV2Response(
     executionPayload: payload,
@@ -216,20 +204,19 @@ proc handle_getPayloadV3(api: EngineApiRef, com: CommonRef, payloadId: PayloadID
     meth = "GetPayload", id = payloadId.toHex
 
   var payload: ExecutionPayloadV3
-  if not api.get(payloadId, payload):
+  var blockValue: UInt256
+  if not api.get(payloadId, blockValue, payload):
     raise unknownPayload("Unknown payload")
 
   if not com.isCancunOrLater(fromUnix(payload.timestamp.unsafeQuantityToInt64)):
     raise unsupportedFork("payload timestamp is less than Cancun activation")
 
   var
-    blockValue: UInt256
     blobsBundle: BlobsBundleV1
 
   try:
     for ttx in payload.transactions:
       let tx = rlp.decode(distinctBase(ttx), Transaction)
-      blockValue += u256(tx.gasPrice * tx.maxPriorityFee)
       if tx.networkPayload.isNil.not:
         for blob in tx.networkPayload.blobs:
           blobsBundle.blobs.add Web3Blob(blob)
@@ -462,7 +449,7 @@ proc handle_forkchoiceUpdated(sealingEngine: SealingEngineRef,
     let payload = res.get
 
     let id = computePayloadId(blockHash, payloadAttrs)
-    api.put(id, payload)
+    api.put(id, sealingEngine.blockValue, payload)
 
     info "Created payload for sealing",
       id = id.toHex,

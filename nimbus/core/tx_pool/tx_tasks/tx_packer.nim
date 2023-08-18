@@ -108,6 +108,7 @@ proc runTxCommit(pst: TxPackerStateRef; item: TxItemRef; gasBurned: GasInt)
   assert 0 <= gasTip
   let reward = gasBurned.u256 * gasTip.uint64.u256
   vmState.stateDB.addBalance(xp.chain.feeRecipient, reward)
+  xp.blockValue += reward
 
   if vmState.generateWitness:
     vmState.stateDB.collectWitnessData()
@@ -152,6 +153,9 @@ proc vmExecInit(xp: TxPoolRef): TxPackerStateRef
 
   # Flush `packed` bucket
   xp.bucketFlushPacked
+
+  # reset blockValue before adding any tx
+  xp.blockValue = 0.u256
 
   xp.chain.maxMode = (packItemsMaxGasLimit in xp.pFlags)
 
