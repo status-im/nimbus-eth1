@@ -220,7 +220,7 @@ and implemented as 64 bit values, stored *Big Endian* in the serialisation.
         where
           marker(2) is the double bit array 00
 
-For a given index *n* between *0..15*, if the bit at position *n* of the it
+For a given index *n* between *0..15*, if the bit at position *n* of the bit
 vector *access(16)* is reset to zero, then there is no *n*-th structural
 *vertexID*. Otherwise one calculates
 
@@ -320,7 +320,7 @@ the bitmask(2)-word array to a single byte, the maximum value of that byte is
         0 +-- ..
           ...                                -- recycled vertexIDs
           +--+--+--+--+--+--+--+--+
-          |                       |          -- bottom of unused vertexIDs
+          |                       |          -- bottom of unused vertex IDs
           +--+--+--+--+--+--+--+--+
           || |                               -- marker(2) + unused(6)
           +--+
@@ -336,6 +336,52 @@ this value can be used as vertexID.
 
 The vertexIDs in the descriptor record must all be non-zero and record itself
 should be allocated in the structural table associated with the zero key.
+
+### 4.7 Backend filter record serialisation
+
+        0  +--+--+--+--+--+ .. --+--+ .. --+
+           |                               | -- 32 bytes filter source hash
+        32 +--+--+--+--+--+ .. --+--+ .. --+
+           |                               | -- 32 bytes filter target hash
+        64 +--+--+--+--+--+ .. --+--+ .. --+
+           |           |                     -- number of unused vertex IDs
+        68 +--+--+--+--+
+           |           |                     -- number of structural triplets
+        72 +--+--+--+--+--+ .. --+
+           |                     |           -- first unused vertex ID
+        80 +--+--+--+--+--+ .. --+
+           ...                               -- more unused vertex ID
+        N1 +--+--+--+--+
+           ||          |                     -- flg(3) + vtxLen(29), 1st triplet
+           +--+--+--+--+--+ .. --+
+           |                     |           -- vertex ID of first triplet
+           +--+--+--+--+--+ .. --+--+ .. --+
+           |                               | -- optional 32 bytes hash key
+           +--+--+--+--+--+ .. --+--+ .. --+
+           ...                               -- optional vertex record
+        N2 +--+--+--+--+
+           ||          |                     -- flg(3) + vtxLen(29), 2nd triplet
+           +--+--+--+--+
+           ...
+
+        where
+          + minimum size of an empty filer is 72 bytes
+
+          + the flg(3) represents the tuple (key-mode,vertex-mode) encoding
+            the serialised storage states
+
+              0 -- encoded and present
+              1 -- not encoded, void => considered deleted
+              2 -- not encoded, to be ignored
+
+            so, when encoded as
+
+              flg(3) = key-mode * 3 + vertex-mode
+
+            the the tuple (2,2) will never occur and flg(3) < 9
+
+          + the vtxLen(29) is the number of bytes of the optional vertex record
+            which has maximum size 2^29-1 which is short of 512 MiB
 
 5. *Patricia Trie* implementation notes
 ---------------------------------------
@@ -400,7 +446,7 @@ database, the above architecture mutates to
 When looked at descriptor API there are no changes when accessing data via
 *db1*, *db2*, or *db3*. In a different, more algebraic notation, the above
 tansformation is written as
- 
+
         | tx1, ø |                                                   (8)
         | tx2, ø | PBE
         | tx3, ø |
@@ -414,7 +460,7 @@ tansformation is written as
 
  The system can be further converted without changing the API by committing
  and saving *tx2* on the middle line of matrix (9)
- 
+
         |  ø,       ø  |                                             (10)
         |  ø, tx2+~tx1 | tx1+PBE
         | tx3,    ~tx1 |

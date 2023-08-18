@@ -79,7 +79,7 @@ type
 
   # -------------
 
-  AristoBackendRef* = ref object of RootRef
+  BackendRef* = ref object of RootRef
     ## Backend interface.
     getVtxFn*: GetVtxFn              ## Read vertex record
     getKeyFn*: GetKeyFn              ## Read Merkle hash/key

@@ -31,7 +31,7 @@ export
 # ------------------------------------------------------------------------------
 
 proc newAristoDbRef*(
-    backend: static[AristoBackendType];
+    backend: static[BackendType];
     basePath: string;
       ): Result[AristoDbRef, AristoError] =
   ## Generic constructor, `basePath` argument is ignored for `BackendNone` and
@@ -49,7 +49,7 @@ proc newAristoDbRef*(
         be.closeFn(flush = false)
         return err(rc.error)
       rc.value
-    ok AristoDbRef(top: AristoLayerRef(vGen: vGen), backend: be)
+    ok AristoDbRef(top: LayerRef(vGen: vGen), backend: be)
 
   elif backend == BackendVoid:
     {.error: "Use BackendNone.init() without path argument".}

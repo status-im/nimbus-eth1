@@ -13,7 +13,7 @@
 ##
 
 import
-  std/[options, sequtils, sets, tables],
+  std/[sequtils, sets, tables],
   results,
   ./aristo_desc/aristo_types_backend,
   "."/[aristo_desc, aristo_get, aristo_vid]
@@ -29,7 +29,7 @@ type
 
 proc getLayerStateRoots(
     db: AristoDbRef;
-    layer: AristoLayerRef;
+    layer: LayerRef;
     chunkedMpt: bool;
       ): Result[StateRootPair,AristoError] =
   ## Get the Merkle hash key for target state root to arrive at after this
@@ -69,10 +69,10 @@ proc getLayerStateRoots(
 
 proc merge(
     db: AristoDbRef;
-    upper: AristoFilterRef;                    # Src filter, `nil` is ok
-    lower: AristoFilterRef;                    # Trg filter, `nil` is ok
+    upper: FilterRef;                          # Src filter, `nil` is ok
+    lower: FilterRef;                          # Trg filter, `nil` is ok
     beStateRoot: HashKey;                      # Merkle hash key
-      ): Result[AristoFilterRef,(VertexID,AristoError)] =
+      ): Result[FilterRef,(VertexID,AristoError)] =
   ## Merge argument `upper` into the `lower` filter instance.
   ##
   ## Comparing before and after merge
@@ -87,19 +87,16 @@ proc merge(
   ##                               |
   ##
   # Degenerate case: `upper` is void
-  if lower.isNil or lower.vGen.isNone:
-    if upper.isNil or upper.vGen.isNone:
+  if lower.isNil:
+    if upper.isNil:
       # Even more degenerate case when both filters are void
-      return ok AristoFilterRef(
-        src: beStateRoot,
-        trg: beStateRoot,
-        vGen: none(seq[VertexID]))
+      return ok FilterRef(nil)
     if upper.src != beStateRoot:
       return err((VertexID(1),FilStateRootMismatch))
     return ok(upper)
 
   # Degenerate case: `upper` is non-trivial and `lower` is void
-  if upper.isNil or upper.vGen.isNone:
+  if upper.isNil:
     if lower.src != beStateRoot:
       return err((VertexID(0), FilStateRootMismatch))
     return ok(lower)
@@ -110,7 +107,7 @@ proc merge(
     return err((VertexID(0), FilStateRootMismatch))
 
   # There is no need to deep copy table vertices as they will not be modified.
-  let newFilter = AristoFilterRef(
+  let newFilter = FilterRef(
     src:  lower.src,
     sTab: lower.sTab,
     kMap: lower.kMap,
@@ -148,19 +145,19 @@ proc merge(
 # Public helpers
 # ------------------------------------------------------------------------------
 
-func bulk*(filter: AristoFilterRef): int =
+func bulk*(filter: FilterRef): int =
   ## Some measurement for the size of the filter calculated as the length of
   ## the `sTab[]` table plus the lengthof the `kMap[]` table. This can be used
   ## to set a threshold when to flush the staging area to the backend DB to
   ## be used in `stow()`.
   ##
-  ## The `filter` argument may be `nil`, i.e. `AristoFilterRef(nil).bulk == 0`
+  ## The `filter` argument may be `nil`, i.e. `FilterRef(nil).bulk == 0`
   if filter.isNil: 0 else: filter.sTab.len + filter.kMap.len
 
-func bulk*(layer: AristolayerRef): int =
+func bulk*(layer: LayerRef): int =
   ## Variant of `bulk()` for layers rather than filters.
   ##
-  ## The `layer` argument may be `nil`, i.e. `AristoLayerRef(nil).bulk == 0`
+  ## The `layer` argument may be `nil`, i.e. `LayerRef(nil).bulk == 0`
   if layer.isNil: 0 else: layer.sTab.len + layer.kMap.len
 
 # ------------------------------------------------------------------------------
@@ -169,9 +166,9 @@ func bulk*(layer: AristolayerRef): int =
 
 proc fwdFilter*(
     db: AristoDbRef;
-    layer: AristoLayerRef;
+    layer: LayerRef;
     chunkedMpt = false;
-      ): Result[AristoFilterRef,(VertexID,AristoError)] =
+      ): Result[FilterRef,(VertexID,AristoError)] =
   ## Assemble forward delta, i.e. changes to the backend equivalent to applying
   ## the current top layer.
   ##
@@ -191,22 +188,22 @@ proc fwdFilter*(
     if rc.isOK:
       (rc.value.be, rc.value.fg)
     elif rc.error == FilPrettyPointlessLayer:
-      return ok AristoFilterRef(vGen: none(seq[VertexID]))
+      return ok FilterRef(nil)
     else:
       return err((VertexID(1), rc.error))
 
-  ok AristoFilterRef(
+  ok FilterRef(
     src:  srcRoot,
     sTab: layer.sTab,
     kMap: layer.kMap.pairs.toSeq.mapIt((it[0],it[1].key)).toTable,
-    vGen: some(layer.vGen.vidReorg), # Compact recycled IDs
+    vGen: layer.vGen.vidReorg, # Compact recycled IDs
     trg:  trgRoot)
 
 
 proc revFilter*(
     db: AristoDbRef;
-    filter: AristoFilterRef;
-      ): Result[AristoFilterRef,(VertexID,AristoError)] =
+    filter: FilterRef;
+      ): Result[FilterRef,(VertexID,AristoError)] =
   ## Assemble reverse filter for the `filter` argument, i.e. changes to the
   ## backend that reverse the effect of applying the this read-only filter.
   ##
@@ -214,7 +211,7 @@ proc revFilter*(
   ## backend (excluding optionally installed read-only filter.)
   ##
   # Register MPT state roots for reverting back
-  let rev = AristoFilterRef(
+  let rev = FilterRef(
     src: filter.trg,
     trg: filter.src)
 
@@ -223,7 +220,7 @@ proc revFilter*(
     let rc = db.getIdgUBE()
     if rc.isErr:
       return err((VertexID(0), rc.error))
-    rev.vGen = some rc.value
+    rev.vGen = rc.value
 
   # Calculate reverse changes for the `sTab[]` structural table
   for vid in filter.sTab.keys:
@@ -253,7 +250,7 @@ proc revFilter*(
 
 proc merge*(
     db: AristoDbRef;
-    filter: AristoFilterRef;
+    filter: FilterRef;
       ): Result[void,(VertexID,AristoError)] =
   ## Merge the argument `filter` into the read-only filter layer. Note that
   ## this function has no control of the filter source. Having merged the
@@ -297,9 +294,6 @@ proc resolveBE*(db: AristoDbRef): Result[void,(VertexID,AristoError)] =
   # Blind or missing filter
   if db.roFilter.isNil:
     return ok()
-  if db.roFilter.vGen.isNone:
-    db.roFilter = AristoFilterRef(nil)
-    return ok()
 
   let ubeRootKey = block:
     let rc = db.getKeyUBE VertexID(1)
@@ -311,7 +305,7 @@ proc resolveBE*(db: AristoDbRef): Result[void,(VertexID,AristoError)] =
       return err((VertexID(1),rc.error))
 
   # Filters rollback helper
-  var roFilters: seq[(AristoDbRef,AristoFilterRef)]
+  var roFilters: seq[(AristoDbRef,FilterRef)]
   proc rollback() =
     for (d,f) in roFilters:
       d.roFilter = f
@@ -342,7 +336,7 @@ proc resolveBE*(db: AristoDbRef): Result[void,(VertexID,AristoError)] =
     txFrame = be.putBegFn()
   be.putVtxFn(txFrame, db.roFilter.sTab.pairs.toSeq)
   be.putKeyFn(txFrame, db.roFilter.kMap.pairs.toSeq)
-  be.putIdgFn(txFrame, db.roFilter.vGen.unsafeGet)
+  be.putIdgFn(txFrame, db.roFilter.vGen)
   let w = be.putEndFn txFrame
   if w != AristoError(0):
     rollback()
@@ -357,7 +351,7 @@ proc ackqRwMode*(db: AristoDbRef): Result[void,AristoError] =
     # Steal dudes list, make the rw-parent a read-only dude
     let parent = db.dudes.rwDb
     db.dudes = parent.dudes
-    parent.dudes = AristoDudesRef(rwOk: false, rwDb: db)
+    parent.dudes = DudesRef(rwOk: false, rwDb: db)
 
     # Exclude self
     db.dudes.roDudes.excl db
@@ -390,9 +384,9 @@ proc dispose*(db: AristoDbRef): Result[void,AristoError] =
 
     # Unlink more so it would not do harm if used wrongly
     db.stack.setlen(0)
-    db.backend = AristoBackendRef(nil)
+    db.backend = BackendRef(nil)
     db.txRef = AristoTxRef(nil)
-    db.dudes = AristoDudesRef(nil)
+    db.dudes = DudesRef(nil)
     return ok()
 
   err(FilNotReadOnlyDude)

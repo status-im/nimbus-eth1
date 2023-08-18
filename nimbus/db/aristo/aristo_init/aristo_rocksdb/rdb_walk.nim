@@ -31,13 +31,12 @@ func keyPfx(kData: cstring, kLen: csize_t): int =
   else:
     -1
 
-func keyVid(kData: cstring, kLen: csize_t): VertexID =
+func keyXid(kData: cstring, kLen: csize_t): uint64 =
   if not kData.isNil and kLen == 1 + sizeof(VertexID):
-    var data = kData.toOpenArrayByte(1,int(kLen)-1).toSeq
-    return uint64.fromBytesBE(data).VertexID
+    return uint64.fromBytesBE kData.toOpenArrayByte(1,int(kLen)-1).toSeq
 
-func to(vid: VertexID; T: type Blob): T =
-  vid.uint64.toBytesBE.toSeq
+func to(xid: uint64; T: type Blob): T =
+  xid.toBytesBE.toSeq
 
 func valBlob(vData: cstring, vLen: csize_t): Blob =
   if not vData.isNil and 0 < vLen:
@@ -49,7 +48,7 @@ func valBlob(vData: cstring, vLen: csize_t): Blob =
 
 iterator walk*(
     rdb: RdbInst;
-      ): tuple[n: int, pfx: AristoStorageType, vid: VertexID, data: Blob] =
+      ): tuple[n: int, pfx: StorageType, xid: uint64, data: Blob] =
   ## Walk over all key-value pairs of the database.
   ##
   ## Non-decodable entries are stepped over while the counter `n` of the
@@ -66,17 +65,17 @@ iterator walk*(
 
     let pfx = kData.keyPfx(kLen)
     if 0 <= pfx:
-      if high(AristoStorageType).ord < pfx:
+      if high(StorageType).ord < pfx:
         break
 
-      let vid = kData.keyVid(kLen)
-      if vid.isValid:
+      let xid = kData.keyXid(kLen)
+      if 0 < xid:
         var vLen: csize_t
         let vData = rit.rocksdb_iter_value(addr vLen)
 
         let val = vData.valBlob(vLen)
         if 0 < val.len:
-          yield (count, pfx.AristoStorageType, vid, val)
+          yield (count, pfx.StorageType, xid, val)
 
     # Update Iterator (might overwrite kData/vdata)
     rit.rocksdb_iter_next()
@@ -85,8 +84,8 @@ iterator walk*(
 
 iterator walk*(
     rdb: RdbInst;
-    pfx: AristoStorageType;
-      ): tuple[n: int, vid: VertexID, data: Blob] =
+    pfx: StorageType;
+      ): tuple[n: int, xid: uint64, data: Blob] =
   ## Walk over key-value pairs of the table referted to by the argument `pfx`.
   ##
   ## Non-decodable entries are stepped over while the counter `n` of the
@@ -107,7 +106,7 @@ iterator walk*(
     kData = rit.rocksdb_iter_key(addr kLen)
 
     case pfx:
-    of IdgPfx:
+    of Oops, IdgPfx:
       discard
     of VtxPfx, KeyPfx:
       # Skip over admin records until vertex sub-table reached
@@ -121,7 +120,7 @@ iterator walk*(
         # End while
 
     case pfx:
-    of IdgPfx, VtxPfx:
+    of Oops, IdgPfx, VtxPfx:
       discard
     of KeyPfx:
       # Reposition search head to key sub-table
@@ -130,7 +129,7 @@ iterator walk*(
         # Move search head to the first Merkle hash entry by seeking the same
         # vertex ID on the key table. This might skip over stale keys smaller
         # than the current one.
-        let key = @[KeyPfx.ord.byte] & kData.keyVid(kLen).to(Blob)
+        let key = @[KeyPfx.ord.byte] & kData.keyXid(kLen).to(Blob)
         rit.rocksdb_iter_seek(cast[cstring](unsafeAddr key[0]), csize_t(kLen))
 
         # It is not clear what happens when the `key` does not exist. The guess
@@ -154,8 +153,8 @@ iterator walk*(
       if pfx.ord < kPfx:
         break walkBody # done
 
-      let vid = kData.keyVid(kLen)
-      if vid.isValid or pfx == IdgPfx:
+      let xid = kData.keyXid(kLen)
+      if 0 < xid or pfx == IdgPfx:
 
         # Fetch value data
         var vLen: csize_t
@@ -163,7 +162,7 @@ iterator walk*(
 
         let val = vData.valBlob(vLen)
         if 0 < val.len:
-          yield (count, vid, val)
+          yield (count, xid, val)
 
       # Update Iterator
       rit.rocksdb_iter_next()

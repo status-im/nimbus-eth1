@@ -25,12 +25,12 @@ iterator walkVtxBeImpl*[T](
   var n = 0
 
   when be is VoidBackendRef:
-    let filter = if db.roFilter.isNil: AristoFilterRef() else: db.roFilter
+    let filter = if db.roFilter.isNil: FilterRef() else: db.roFilter
 
   else:
     mixin walkVtx
 
-    let filter = AristoFilterRef()
+    let filter = FilterRef()
     if not db.roFilter.isNil:
       filter.sTab = db.roFilter.sTab # copy table
 
@@ -60,12 +60,12 @@ iterator walkKeyBeImpl*[T](
   var n = 0
 
   when be is VoidBackendRef:
-    let filter = if db.roFilter.isNil: AristoFilterRef() else: db.roFilter
+    let filter = if db.roFilter.isNil: FilterRef() else: db.roFilter
 
   else:
     mixin walkKey
 
-    let filter = AristoFilterRef()
+    let filter = FilterRef()
     if not db.roFilter.isNil:
       filter.kMap = db.roFilter.kMap # copy table
 
@@ -90,19 +90,19 @@ iterator walkKeyBeImpl*[T](
 iterator walkIdgBeImpl*[T](
     be: T;                             # Backend descriptor
     db: AristoDbRef;                   # Database with optional backend filter
-      ): tuple[n: int, vid: VertexID, vGen: seq[VertexID]] =
+      ): tuple[n: int, id: uint64, vGen: seq[VertexID]] =
   ## Generic pseudo iterator
   var nNext = 0
-  if not db.roFilter.isNil and db.roFilter.vGen.isSome:
-     yield(0, VertexID(0), db.roFilter.vGen.unsafeGet)
-     nNext = 1
+  if db.roFilter.isValid:
+    yield(0, 0u64, db.roFilter.vGen)
+    nNext = 1
 
   when be isnot VoidBackendRef:
     mixin walkIdg
 
-    for (n,vid,vGen) in be.walkIdg:
+    for (n,id,vGen) in be.walkIdg:
       if nNext <= n:
-        yield(n,vid,vGen)
+        yield(n,id,vGen)
 
 # ------------------------------------------------------------------------------
 # End

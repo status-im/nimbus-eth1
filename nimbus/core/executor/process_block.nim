@@ -14,7 +14,6 @@ import
   ../../constants,
   ../../db/accounts_cache,
   ../../transaction,
-  ../../utils/utils,
   ../../vm_state,
   ../../vm_types,
   ../../utils/debug,

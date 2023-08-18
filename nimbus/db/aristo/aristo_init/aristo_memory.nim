@@ -40,12 +40,12 @@ import
 type
   MemBackendRef* = ref object of TypedBackendRef
     ## Inheriting table so access can be extended for debugging purposes
-    sTab: Table[VertexID,VertexRef]  ## Structural vertex table making up a trie
+    sTab: Table[VertexID,Blob]       ## Structural vertex table making up a trie
     kMap: Table[VertexID,HashKey]    ## Merkle hash key mapping
     vGen: seq[VertexID]
 
   MemPutHdlRef = ref object of TypedPutHdlRef
-    sTab: Table[VertexID,VertexRef]
+    sTab: Table[VertexID,Blob]
     kMap: Table[VertexID,HashKey]
     vGen: seq[VertexID]
     vGenOk: bool
@@ -77,9 +77,13 @@ proc endSession(hdl: PutHdlRef; db: MemBackendRef): MemPutHdlRef =
 proc getVtxFn(db: MemBackendRef): GetVtxFn =
   result =
     proc(vid: VertexID): Result[VertexRef,AristoError] =
-      let vtx = db.sTab.getOrVoid vid
-      if vtx.isValid:
-        return ok vtx.dup
+      # Fetch serialised data record
+      let data = db.sTab.getOrDefault(vid, EmptyBlob)
+      if 0 < data.len:
+        let rc = data.deblobify VertexRef
+        if rc.isErr:
+          debug logTxt "getVtxFn() failed", vid, error=rc.error, info=rc.error
+        return rc
       err(GetVtxNotFound)
 
 proc getKeyFn(db: MemBackendRef): GetKeyFn =
@@ -109,15 +113,17 @@ proc putVtxFn(db: MemBackendRef): PutVtxFn =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
         for (vid,vtx) in vrps:
-          if not vtx.isNil:
-            let rc = vtx.blobify # verify data record
+          if vtx.isValid:
+            let rc = vtx.blobify()
             if rc.isErr:
               hdl.error = TypedPutHdlErrRef(
                 pfx:  VtxPfx,
                 vid:  vid,
                 code: rc.error)
               return
-          hdl.sTab[vid] = vtx.dup
+            hdl.sTab[vid] = rc.value
+          else:
+            hdl.sTab[vid] = EmptyBlob
 
 proc putKeyFn(db: MemBackendRef): PutKeyFn =
   result =
@@ -141,13 +147,18 @@ proc putEndFn(db: MemBackendRef): PutEndFn =
     proc(hdl: PutHdlRef): AristoError =
       let hdl = hdl.endSession db
       if not hdl.error.isNil:
-        debug logTxt "putEndFn: failed",
-          pfx=hdl.error.pfx, vid=hdl.error.vid, error=hdl.error.code
+        case hdl.error.pfx:
+        of VtxPfx, KeyPfx:
+          debug logTxt "putEndFn: vtx/key failed",
+            pfx=hdl.error.pfx, vid=hdl.error.vid, error=hdl.error.code
+        else:
+          debug logTxt "putEndFn: failed",
+            pfx=hdl.error.pfx, error=hdl.error.code
         return hdl.error.code
 
-      for (vid,vtx) in hdl.sTab.pairs:
-        if vtx.isValid:
-          db.sTab[vid] = vtx
+      for (vid,data) in hdl.sTab.pairs:
+        if 0 < data.len:
+          db.sTab[vid] = data
         else:
           db.sTab.del vid
 
@@ -172,7 +183,7 @@ proc closeFn(db: MemBackendRef): CloseFn =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc memoryBackend*(): AristoBackendRef =
+proc memoryBackend*(): BackendRef =
   let db = MemBackendRef(kind: BackendMemory)
 
   db.getVtxFn = getVtxFn db
@@ -195,19 +206,23 @@ proc memoryBackend*(): AristoBackendRef =
 
 iterator walkIdg*(
     be: MemBackendRef;
-      ): tuple[n: int, vid: VertexID, vGen: seq[VertexID]] =
+      ): tuple[n: int, id: uint64, vGen: seq[VertexID]] =
   ## Iteration over the ID generator sub-table (there is at most one instance).
   if 0 < be.vGen.len:
-    yield(0, VertexID(0), be.vGen)
+    yield(0, 0u64, be.vGen)
 
 iterator walkVtx*(
     be: MemBackendRef;
       ): tuple[n: int, vid: VertexID, vtx: VertexRef] =
   ##  Iteration over the vertex sub-table.
   for n,vid in be.sTab.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID):
-    let vtx = be.sTab.getOrVoid vid
-    if vtx.isValid:
-      yield (n, vid, vtx)
+    let data = be.sTab.getOrDefault(vid, EmptyBlob)
+    if 0 < data.len:
+      let rc = data.deblobify VertexRef
+      if rc.isErr:
+        debug logTxt "walkVtxFn() skip", n, vid, error=rc.error
+      else:
+        yield (n, vid, rc.value)
 
 iterator walkKey*(
     be: MemBackendRef;
@@ -220,21 +235,25 @@ iterator walkKey*(
 
 iterator walk*(
     be: MemBackendRef;
-      ): tuple[n: int, pfx: AristoStorageType, vid: VertexID, data: Blob] =
+      ): tuple[n: int, pfx: StorageType, xid: uint64, data: Blob] =
   ## Walk over all key-value pairs of the database.
   ##
   ## Non-decodable entries are stepped over while the counter `n` of the
   ## yield record is still incremented.
-  for (n,vid,vGen) in be.walkIdg:
-    yield (n, IdgPfx, vid, vGen.blobify)
+  var n = 0
+  for (_,id,vGen) in be.walkIdg:
+    yield (n, IdgPfx, id, vGen.blobify)
+    n.inc
 
-  for (n,vid,vtx) in be.walkVtx:
-    let rc = vtx.blobify
-    if rc.isOk:
-      yield (n, VtxPfx, vid, rc.value)
+  for vid in be.sTab.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID):
+    let data = be.sTab.getOrDefault(vid, EmptyBlob)
+    if 0 < data.len:
+      yield (n, VtxPfx, vid.uint64, data)
+    n.inc
 
-  for (n,vid,key) in be.walkKey:
-    yield (n, KeyPfx, vid, key.to(Blob))
+  for (_,vid,key) in be.walkKey:
+    yield (n, KeyPfx, vid.uint64, key.to(Blob))
+    n.inc
 
 # ------------------------------------------------------------------------------
 # End

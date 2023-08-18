@@ -18,19 +18,16 @@ import
   unittest2,
   ../../nimbus/db/aristo/[
     aristo_check, aristo_debug, aristo_desc, aristo_filter, aristo_get,
-    aristo_merge],
+    aristo_merge, aristo_transcode],
   ../../nimbus/db/[aristo, aristo/aristo_init/persistent],
   ./test_helpers
 
 type
-  LeafTriplet = tuple
-    a, b, c: seq[LeafTiePayload]
+  LeafQuartet =
+    array[0..3, seq[LeafTiePayload]]
 
-  LeafQuartet = tuple
-    a, b, c, d: seq[LeafTiePayload]
-
-  DbTriplet = object
-    db1, db2, db3: AristoDbRef
+  DbTriplet =
+    array[0..2, AristoDbRef]
 
 # ------------------------------------------------------------------------------
 # Private debugging helpers
@@ -61,7 +58,7 @@ proc dump(dx: varargs[AristoDbRef]): string =
   "".dump dx
 
 proc dump(w: DbTriplet): string =
-  "db".dump(w.db1, w.db2, w.db3)
+  "db".dump(w[0], w[1], w[2])
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -76,110 +73,63 @@ iterator quadripartite(td: openArray[ProofTrieData]): LeafQuartet =
 
     if lst.len < 8:
       if 2 < collect.len:
-        yield(collect[0], collect[1], collect[2], lst)
+        yield [collect[0], collect[1], collect[2], lst]
         collect.setLen(0)
       else:
         collect.add lst
     else:
       if collect.len == 0:
         let a = lst.len div 4
-        yield(lst[0 ..< a], lst[a ..< 2*a], lst[2*a ..< 3*a], lst[3*a .. ^1])
+        yield [lst[0 ..< a], lst[a ..< 2*a], lst[2*a ..< 3*a], lst[3*a .. ^1]]
       else:
         if collect.len == 1:
           let a = lst.len div 3
-          yield(collect[0], lst[0 ..< a], lst[a ..< 2*a], lst[a .. ^1])
+          yield [collect[0], lst[0 ..< a], lst[a ..< 2*a], lst[a .. ^1]]
         elif collect.len == 2:
           let a = lst.len div 2
-          yield(collect[0], collect[1], lst[0 ..< a], lst[a .. ^1])
+          yield [collect[0], collect[1], lst[0 ..< a], lst[a .. ^1]]
         else:
-          yield(collect[0], collect[1], collect[2], lst)
+          yield [collect[0], collect[1], collect[2], lst]
         collect.setLen(0)
 
 proc dbTriplet(w: LeafQuartet; rdbPath: string): Result[DbTriplet,AristoError] =
-  let
-    db1 = block:
-      let rc = newAristoDbRef(BackendRocksDB,rdbPath)
-      if rc.isErr:
-        check rc.error == 0
-        return
-      rc.value
-
-    # Fill backend
-    m0 = db1.merge w.a
-    rc = db1.stow(persistent=true)
-
-  if rc.isErr:
-    check rc.error == (0,0)
-    return
-
-  let
-    db2 = db1.copyCat.value
-    db3 = db1.copyCat.value
-
-    # Clause (9) from `aristo/README.md` example
-    m1 = db1.merge w.b
-    m2 = db2.merge w.c
-    m3 = db3.merge w.d
-
-  if m1.error == 0 and
-     m2.error == 0 and
-     m3.error == 0:
-    return ok DbTriplet(db1: db1, db2: db2, db3: db3)
-
-  # Failed
-  db1.finish(flush=true)
-
-  check m1.error == 0
-  check m2.error == 0
-  check m3.error == 0
-
-  var error = m1.error
-  if error != 0: error = m2.error
-  if error != 0: error = m3.error
-  err(error)
-
-
-proc checkBeOk(
-    dx: DbTriplet;
-    relax = false;
-    forceCache = false;
-    noisy = true;
-      ): bool =
-  check not dx.db1.top.isNil
-  block:
-    let
-      cache = if forceCache: true else: not dx.db1.top.dirty
-      rc1 = dx.db1.checkBE(relax=relax, cache=cache)
-    if rc1.isErr:
-      noisy.say "***", "db1 check failed (do-cache=", cache, ")"
-      check rc1.error == (0,0)
+  let db = block:
+    let rc = newAristoDbRef(BackendRocksDB,rdbPath)
+    if rc.isErr:
+      check rc.error == 0
       return
-  block:
-    let
-      cache = if forceCache: true else: not dx.db2.top.dirty
-      rc2 = dx.db2.checkBE(relax=relax, cache=cache)
-    if rc2.isErr:
-      noisy.say "***", "db2 check failed (do-cache=", cache, ")"
-      check rc2.error == (0,0)
-      return
-  block:
-    let
-      cache = if forceCache: true else: not dx.db3.top.dirty
-      rc3 = dx.db3.checkBE(relax=relax, cache=cache)
-    if rc3.isErr:
-      noisy.say "***", "db3 check failed (do-cache=", cache, ")"
-      check rc3.error == (0,0)
-      return
-  true
+    rc.value
 
-# ---------
+  # Fill backend
+  block:
+    let report = db.merge w[0]
+    if report.error != AristoError(0):
+      db.finish(flush=true)
+      check report.error == 0
+      return err(report.error)
+    let rc = db.stow(persistent=true)
+    if rc.isErr:
+      check rc.error == (0,0)
+      return
+
+  let dx = [db, db.copyCat.value, db.copyCat.value]
+
+  # Clause (9) from `aristo/README.md` example
+  for n in 0 ..< dx.len:
+    let report = dx[n].merge w[n+1]
+    if report.error != AristoError(0):
+      db.finish(flush=true)
+      check (n, report.error) == (n,0)
+      return err(report.error)
+
+  return ok dx
+
+# ----------------------
 
 proc cleanUp(dx: DbTriplet) =
-  discard dx.db3.dispose
-  discard dx.db2.dispose
-  dx.db1.finish(flush=true)
+  dx[0].finish(flush=true)
 
-proc eq(a, b: AristoFilterRef; db: AristoDbRef; noisy = true): bool =
+proc isDbEq(a, b: FilterRef; db: AristoDbRef; noisy = true): bool =
   ## Verify that argument filter `a` has the same effect on the
   ## physical/unfiltered backend of `db` as argument filter `b`.
   if a.isNil:
@@ -219,7 +169,7 @@ proc eq(a, b: AristoFilterRef; db: AristoDbRef; noisy = true): bool =
           return false # general error
 
     if 0 < bTab.len:
-      noisy.say "*** eq:", "bTabLen=", bTab.len
+      noisy.say "***", "not dbEq:", "bTabLen=", bTab.len
       return false
 
     # Similar for `kMap[]`
@@ -249,8 +199,113 @@ proc eq(a, b: AristoFilterRef; db: AristoDbRef; noisy = true): bool =
           return false # general error
 
     if 0 < bMap.len:
-      noisy.say "*** eq:", " bMapLen=", bMap.len
+      noisy.say "***", "not dbEq:", " bMapLen=", bMap.len
       return false
+
+  true
+
+proc isEq(a, b: FilterRef; db: AristoDbRef; noisy = true): bool =
+  ## ..
+  if a.src != b.src:
+    noisy.say "***", "not isEq:", " a.src=", a.src.pp, " b.src=", b.src.pp
+    return
+  if a.trg != b.trg:
+    noisy.say "***", "not isEq:", " a.trg=", a.trg.pp, " b.trg=", b.trg.pp
+    return
+  if a.vGen != b.vGen:
+    noisy.say "***", "not isEq:", " a.vGen=", a.vGen.pp, " b.vGen=", b.vGen.pp
+    return
+  if a.sTab.len != b.sTab.len:
+    noisy.say "***", "not isEq:",
+      " a.sTab.len=", a.sTab.len,
+      " b.sTab.len=", b.sTab.len
+    return
+  if a.kMap.len != b.kMap.len:
+    noisy.say "***", "not isEq:",
+      " a.kMap.len=", a.kMap.len,
+      " b.kMap.len=", b.kMap.len
+    return
+  for (vid,aVtx) in a.sTab.pairs:
+    if b.sTab.hasKey vid:
+      let bVtx = b.sTab.getOrVoid vid
+      if aVtx != bVtx:
+        noisy.say "***", "not isEq:",
+          " vid=", vid.pp,
+          " aVtx=", aVtx.pp(db),
+          " bVtx=", bVtx.pp(db)
+        return
+    else:
+      noisy.say "***", "not isEq:",
+        " vid=", vid.pp,
+        " aVtx=", aVtx.pp(db),
+        " bVtx=n/a"
+      return
+  for (vid,aKey) in a.kMap.pairs:
+    if b.kMap.hasKey vid:
+      let bKey = b.kMap.getOrVoid vid
+      if aKey != bkey:
+        noisy.say "***", "not isEq:",
+          " vid=", vid.pp,
+          " aKey=", aKey.pp,
+          " bKey=", bKey.pp
+        return
+    else:
+      noisy.say "*** not eq:",
+        " vid=", vid.pp,
+        " aKey=", aKey.pp,
+        " bKey=n/a"
+      return
+
+  true
+
+# ----------------------
+
+proc checkBeOk(
+    dx: DbTriplet;
+    relax = false;
+    forceCache = false;
+    noisy = true;
+      ): bool =
+  ## ..
+  for n in 0 ..< dx.len:
+    let
+      cache = if forceCache: true else: not dx[n].top.dirty
+      rc = dx[n].checkBE(relax=relax, cache=cache)
+    if rc.isErr:
+      noisy.say "***", "db check failed", " n=", n, " cache=", cache
+      check (n, rc.error[0], rc.error[1]) == (n, 0, 0)
+      return
+  true
+
+proc checkFilterTrancoderOk(
+    dx: DbTriplet;
+    noisy = true;
+      ): bool =
+  ## ..
+  for n in 0 ..< dx.len:
+    if dx[n].roFilter.isValid:
+      let data = block:
+        let rc = dx[n].roFilter.blobify()
+        if rc.isErr:
+          noisy.say "***", "db serialisation failed",
+            " n=", n, " error=", rc.error
+          check rc.error == 0
+          return
+        rc.value
+      let dcdRoundTrip = block:
+        let rc = data.deblobify FilterRef
+        if rc.isErr:
+          noisy.say "***", "db de-serialisation failed",
+            " n=", n, " error=", rc.error
+          check rc.error == 0
+          return
+        rc.value
+      if not dx[n].roFilter.isEq(dcdRoundTrip, dx[n], noisy):
+        #noisy.say "***", "checkFilterTrancoderOk failed",
+        #  "\n   roFilter=", dx[n].roFilter.pp(dx[n]),
+        #  "\n   dcdRoundTrip=", dcdRoundTrip.pp(dx[n])
+        check (n,dx[n].roFilter) == (n,dcdRoundTrip)
+        return
 
   true
 
@@ -270,8 +325,8 @@ proc testDistributedAccess*(
     # Resulting clause (11) filters from `aristo/README.md` example
     # which will be used in the second part of the tests
     var
-      c11Filter1 = AristoFilterRef(nil)
-      c11Filter3 = AristoFilterRef(nil)
+      c11Filter1 = FilterRef(nil)
+      c11Filter3 = FilterRef(nil)
 
     # Work through clauses (8)..(11) from `aristo/README.md` example
     block:
@@ -283,7 +338,7 @@ proc testDistributedAccess*(
           if rc.isErr:
             return
           rc.value
-        (db1, db2, db3) = (dx.db1, dx.db2, dx.db3)
+        (db1, db2, db3) = (dx[0], dx[1], dx[2])
       defer:
         dx.cleanUp()
 
@@ -297,8 +352,8 @@ proc testDistributedAccess*(
           # noisy.say "*** testDistributedAccess (2) n=", n, dx.dump
           check rc.error == (0,0)
           return
-      if db1.roFilter != AristoFilterRef(nil):
-        check db1.roFilter == AristoFilterRef(nil)
+      if db1.roFilter.isValid:
+        check db1.roFilter == FilterRef(nil)
         return
       if db2.roFilter != db3.roFilter:
         check db2.roFilter == db3.roFilter
@@ -310,8 +365,8 @@ proc testDistributedAccess*(
           noisy.say "*** testDistributedAccess (3)", "n=", n, "db2".dump db2
           check rc.error == (0,0)
           return
-      if db1.roFilter != AristoFilterRef(nil):
-        check db1.roFilter == AristoFilterRef(nil)
+      if db1.roFilter.isValid:
+        check db1.roFilter == FilterRef(nil)
         return
       if db2.roFilter == db3.roFilter:
         check db2.roFilter != db3.roFilter
@@ -328,8 +383,8 @@ proc testDistributedAccess*(
         if rc.isErr:
           check rc.error == (0,0)
           return
-      if db2.roFilter != AristoFilterRef(nil):
-        check db2.roFilter == AristoFilterRef(nil)
+      if db2.roFilter.isValid:
+        check db2.roFilter == FilterRef(nil)
         return
 
       # Check/verify backends
@@ -337,6 +392,11 @@ proc testDistributedAccess*(
         let ok = dx.checkBeOk(noisy=noisy)
         if not ok:
           noisy.say "*** testDistributedAccess (4)", "n=", n, "db3".dump db3
+          check ok
+          return
+      block:
+        let ok = dx.checkFilterTrancoderOk(noisy=noisy)
+        if not ok:
           check ok
           return
 
@@ -357,7 +417,7 @@ proc testDistributedAccess*(
           if rc.isErr:
             return
           rc.value
-        (db1, db2, db3) = (dy.db1, dy.db2, dy.db3)
+        (db1, db2, db3) = (dy[0], dy[1], dy[2])
       defer:
         dy.cleanUp()
 
@@ -372,8 +432,8 @@ proc testDistributedAccess*(
         if rc.isErr:
           check rc.error == (0,0)
           return
-      if db2.roFilter != AristoFilterRef(nil):
-        check db1.roFilter == AristoFilterRef(nil)
+      if db2.roFilter.isValid:
+        check db1.roFilter == FilterRef(nil)
         return
       if db1.roFilter != db3.roFilter:
         check db1.roFilter == db3.roFilter
@@ -388,27 +448,32 @@ proc testDistributedAccess*(
 
       # Clause (14) from `aristo/README.md` check
       block:
-        let c11Filter1_eq_db1RoFilter = c11Filter1.eq(db1.roFilter, db1, noisy)
-        if not c11Filter1_eq_db1RoFilter:
+        let c11Fil1_eq_db1RoFilter = c11Filter1.isDbEq(db1.roFilter, db1, noisy)
+        if not c11Fil1_eq_db1RoFilter:
           noisy.say "*** testDistributedAccess (7)", "n=", n,
             "\n   c11Filter1=", c11Filter3.pp(db1),
             "db1".dump(db1)
-          check c11Filter1_eq_db1RoFilter
+          check c11Fil1_eq_db1RoFilter
           return
 
       # Clause (15) from `aristo/README.md` check
       block:
-        let c11Filter3_eq_db3RoFilter = c11Filter3.eq(db3. roFilter, db3, noisy)
-        if not c11Filter3_eq_db3RoFilter:
+        let c11Fil3_eq_db3RoFilter = c11Filter3.isDbEq(db3.roFilter, db3, noisy)
+        if not c11Fil3_eq_db3RoFilter:
           noisy.say "*** testDistributedAccess (8)", "n=", n,
             "\n   c11Filter3=", c11Filter3.pp(db3),
             "db3".dump(db3)
-          check c11Filter3_eq_db3RoFilter
+          check c11Fil3_eq_db3RoFilter
           return
 
       # Check/verify backends
       block:
         let ok = dy.checkBeOk(noisy=noisy)
+        if not ok:
+          check ok
+          return
+      block:
+        let ok = dy.checkFilterTrancoderOk(noisy=noisy)
         if not ok:
           check ok
           return

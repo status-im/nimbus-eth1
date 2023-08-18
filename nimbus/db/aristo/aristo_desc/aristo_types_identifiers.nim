@@ -79,7 +79,7 @@ func `<`*(a, b: VertexID): bool {.borrow.}
 func `<=`*(a, b: VertexID): bool {.borrow.}
 func `==`*(a, b: VertexID): bool {.borrow.}
 func cmp*(a, b: VertexID): int {.borrow.}
-func `$`*(a: VertexID): string = $a.uint64
+func `$`*(a: VertexID): string {.borrow.}
 
 func `==`*(a: VertexID; b: static[uint]): bool =
   a == VertexID(b)

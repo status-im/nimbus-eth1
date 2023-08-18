@@ -148,7 +148,7 @@ proc putVtxFn(db: RdbBackendRef): PutVtxFn =
       if hdl.error.isNil:
         for (vid,vtx) in vrps:
           if vtx.isValid:
-            let rc = vtx.blobify
+            let rc = vtx.blobify()
             if rc.isErr:
               hdl.error = TypedPutHdlErrRef(
                 pfx:  VtxPfx,
@@ -187,8 +187,13 @@ proc putEndFn(db: RdbBackendRef): PutEndFn =
     proc(hdl: PutHdlRef): AristoError =
       let hdl = hdl.endSession db
       if not hdl.error.isNil:
-        debug logTxt "putEndFn: failed",
-          pfx=hdl.error.pfx, vid=hdl.error.vid, error=hdl.error.code
+        case hdl.error.pfx:
+        of VtxPfx, KeyPfx:
+          debug logTxt "putEndFn: vtx/key failed",
+            pfx=hdl.error.pfx, vid=hdl.error.vid, error=hdl.error.code
+        else:
+          debug logTxt "putEndFn: failed",
+            pfx=hdl.error.pfx, error=hdl.error.code
         return hdl.error.code
       let rc = db.rdb.put hdl.cache
       if rc.isErr:
@@ -208,7 +213,7 @@ proc closeFn(db: RdbBackendRef): CloseFn =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc rocksDbBackend*(path: string): Result[AristoBackendRef,AristoError] =
+proc rocksDbBackend*(path: string): Result[BackendRef,AristoError] =
   let
     db = RdbBackendRef(kind: BackendRocksDB)
     rc = db.rdb.init(path, maxOpenFiles)
@@ -238,7 +243,7 @@ proc rocksDbBackend*(path: string): Result[AristoBackendRef,AristoError] =
 
 iterator walk*(
     be: RdbBackendRef;
-      ): tuple[n: int, pfx: AristoStorageType, vid: VertexID, data: Blob] =
+      ): tuple[n: int, pfx: StorageType, xid: uint64, data: Blob] =
   ## Walk over all key-value pairs of the database.
   ##
   ## Non-decodable entries are stepped over while the counter `n` of the
@@ -248,30 +253,30 @@ iterator walk*(
 
 iterator walkIdg*(
     be: RdbBackendRef;
-      ): tuple[n: int, vid: VertexID, vGen: seq[VertexID]] =
+      ): tuple[n: int, id: uint64, vGen: seq[VertexID]] =
   ## Variant of `walk()` iteration over the ID generator sub-table.
-  for (n, vid, data) in be.rdb.walk IdgPfx:
+  for (n, id, data) in be.rdb.walk IdgPfx:
     let rc = data.deblobify seq[VertexID]
     if rc.isOk:
-      yield (n, vid, rc.value)
+      yield (n, id, rc.value)
 
 iterator walkVtx*(
     be: RdbBackendRef;
       ): tuple[n: int, vid: VertexID, vtx: VertexRef] =
   ## Variant of `walk()` iteration over the vertex sub-table.
-  for (n, vid, data) in be.rdb.walk VtxPfx:
+  for (n, xid, data) in be.rdb.walk VtxPfx:
     let rc = data.deblobify VertexRef
     if rc.isOk:
-      yield (n, vid, rc.value)
+      yield (n, VertexID(xid), rc.value)
 
 iterator walkkey*(
     be: RdbBackendRef;
       ): tuple[n: int, vid: VertexID, key: HashKey] =
   ## Variant of `walk()` iteration over the Markle hash sub-table.
-  for (n, vid, data) in be.rdb.walk KeyPfx:
+  for (n, xid, data) in be.rdb.walk KeyPfx:
     var hashKey: HashKey
     if hashKey.init data:
-      yield (n, vid, hashKey)
+      yield (n, VertexID(xid), hashKey)
 
 # ------------------------------------------------------------------------------
 # End

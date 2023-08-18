@@ -65,7 +65,7 @@ proc mergeData(
   true
 
 proc verify(
-    ly: AristoLayerRef;                      # Database layer
+    ly: LayerRef;                            # Database layer
     be: MemBackendRef|RdbBackendRef;         # Backend
     noisy: bool;
       ): bool =
