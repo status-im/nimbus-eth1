@@ -148,7 +148,7 @@ proc putVtxFn(db: RdbBackendRef): PutVtxFn =
       if hdl.error.isNil:
         for (vid,vtx) in vrps:
           if vtx.isValid:
-            let rc = vtx.blobify
+            let rc = vtx.blobify()
             if rc.isErr:
               hdl.error = TypedPutHdlErrRef(
                 pfx:  VtxPfx,

@@ -40,12 +40,12 @@ import
 type
   MemBackendRef* = ref object of TypedBackendRef
     ## Inheriting table so access can be extended for debugging purposes
-    sTab: Table[VertexID,VertexRef]  ## Structural vertex table making up a trie
+    sTab: Table[VertexID,Blob]       ## Structural vertex table making up a trie
     kMap: Table[VertexID,HashKey]    ## Merkle hash key mapping
     vGen: seq[VertexID]
 
   MemPutHdlRef = ref object of TypedPutHdlRef
-    sTab: Table[VertexID,VertexRef]
+    sTab: Table[VertexID,Blob]
     kMap: Table[VertexID,HashKey]
     vGen: seq[VertexID]
     vGenOk: bool
@@ -77,9 +77,13 @@ proc endSession(hdl: PutHdlRef; db: MemBackendRef): MemPutHdlRef =
 proc getVtxFn(db: MemBackendRef): GetVtxFn =
   result =
     proc(vid: VertexID): Result[VertexRef,AristoError] =
-      let vtx = db.sTab.getOrVoid vid
-      if vtx.isValid:
-        return ok vtx.dup
+      # Fetch serialised data record
+      let data = db.sTab.getOrDefault(vid, EmptyBlob)
+      if 0 < data.len:
+        let rc = data.deblobify VertexRef
+        if rc.isErr:
+          debug logTxt "getVtxFn() failed", vid, error=rc.error, info=rc.error
+        return rc
       err(GetVtxNotFound)
 
 proc getKeyFn(db: MemBackendRef): GetKeyFn =
@@ -109,15 +113,17 @@ proc putVtxFn(db: MemBackendRef): PutVtxFn =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
         for (vid,vtx) in vrps:
-          if not vtx.isNil:
-            let rc = vtx.blobify # verify data record
+          if vtx.isValid:
+            let rc = vtx.blobify()
             if rc.isErr:
               hdl.error = TypedPutHdlErrRef(
                 pfx:  VtxPfx,
                 vid:  vid,
                 code: rc.error)
               return
-          hdl.sTab[vid] = vtx.dup
+            hdl.sTab[vid] = rc.value
+          else:
+            hdl.sTab[vid] = EmptyBlob
 
 proc putKeyFn(db: MemBackendRef): PutKeyFn =
   result =
@@ -150,9 +156,9 @@ proc putEndFn(db: MemBackendRef): PutEndFn =
             pfx=hdl.error.pfx, error=hdl.error.code
         return hdl.error.code
 
-      for (vid,vtx) in hdl.sTab.pairs:
-        if vtx.isValid:
-          db.sTab[vid] = vtx
+      for (vid,data) in hdl.sTab.pairs:
+        if 0 < data.len:
+          db.sTab[vid] = data
         else:
           db.sTab.del vid
 
@@ -210,9 +216,13 @@ iterator walkVtx*(
       ): tuple[n: int, vid: VertexID, vtx: VertexRef] =
   ##  Iteration over the vertex sub-table.
   for n,vid in be.sTab.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID):
-    let vtx = be.sTab.getOrVoid vid
-    if vtx.isValid:
-      yield (n, vid, vtx)
+    let data = be.sTab.getOrDefault(vid, EmptyBlob)
+    if 0 < data.len:
+      let rc = data.deblobify VertexRef
+      if rc.isErr:
+        debug logTxt "walkVtxFn() skip", n, vid, error=rc.error
+      else:
+        yield (n, vid, rc.value)
 
 iterator walkKey*(
     be: MemBackendRef;
@@ -235,10 +245,10 @@ iterator walk*(
     yield (n, IdgPfx, id, vGen.blobify)
     n.inc
 
-  for (_,vid,vtx) in be.walkVtx:
-    let rc = vtx.blobify
-    if rc.isOk:
-      yield (n, VtxPfx, vid.uint64, rc.value)
+  for vid in be.sTab.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID):
+    let data = be.sTab.getOrDefault(vid, EmptyBlob)
+    if 0 < data.len:
+      yield (n, VtxPfx, vid.uint64, data)
     n.inc
 
   for (_,vid,key) in be.walkKey:
