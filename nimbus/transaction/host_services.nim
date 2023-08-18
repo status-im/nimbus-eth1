@@ -286,6 +286,15 @@ proc accessStorage(host: TransactionHost, address: HostAddress,
     else:
       return EVMC_ACCESS_WARM
 
+proc getTransientStorage(host: TransactionHost,
+                         address: HostAddress, key: HostKey): HostValue {.show.} =
+  host.vmState.readOnlyStateDB.getTransientStorage(address, key)
+
+proc setTransientStorage(host: TransactionHost, address: HostAddress,
+                key: HostKey, newVal: HostValue) {.show.} =
+  host.vmState.mutateStateDB:
+    db.setTransientStorage(address, key, newVal)
+
 when use_evmc_glue:
   {.pop: inline.}
   const included_from_host_services = true

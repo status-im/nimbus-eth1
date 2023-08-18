@@ -30,7 +30,7 @@ type
     block_base_fee*   : evmc_uint256be   # The block base fee.
     blob_hashes*      : ptr evmc_bytes32 # The array of blob hashes (EIP-4844).
     blob_hashes_count*: csize_t          # The number of blob hashes (EIP-4844).
-    
+
   nimbus_message* = object
     kind*        : evmc_call_kind
     flags*       : uint32
@@ -77,6 +77,10 @@ type
                           address: EthAddress): evmc_access_status {.cdecl, gcsafe, raises: [CatchableError].}
     access_storage*: proc(context: evmc_host_context, address: EthAddress,
                           key: var evmc_bytes32): evmc_access_status {.cdecl, gcsafe, raises: [CatchableError].}
+    get_transient_storage*: proc(context: evmc_host_context, address: EthAddress,
+                       key: ptr evmc_uint256be): evmc_uint256be {.cdecl, gcsafe, raises: [CatchableError].}
+    set_transient_storage*: proc(context: evmc_host_context, address: EthAddress,
+                       key, value: ptr evmc_uint256be) {.cdecl, gcsafe, raises: [CatchableError].}
 
 proc nim_host_get_interface*(): ptr nimbus_host_interface {.importc, cdecl.}
 proc nim_host_create_context*(vmstate: pointer, msg: ptr evmc_message): evmc_host_context {.importc, cdecl.}
@@ -165,3 +169,16 @@ proc accessStorage*(ctx: HostContext, address: EthAddress,
     {.gcsafe, raises: [CatchableError].} =
   var key = toEvmc(key)
   ctx.host.access_storage(ctx.context, address, key)
+
+proc getTransientStorage*(ctx: HostContext, address: EthAddress, key: UInt256): UInt256
+    {.gcsafe, raises: [CatchableError].} =
+  var key = toEvmc(key)
+  UInt256.fromEvmc ctx.host.get_transient_storage(ctx.context, address, key.addr)
+
+proc setTransientStorage*(ctx: HostContext, address: EthAddress,
+                 key, value: UInt256)
+    {.gcsafe, raises: [CatchableError].} =
+  var
+    key = toEvmc(key)
+    value = toEvmc(value)
+  ctx.host.set_transient_storage(ctx.context, address, key.addr, value.addr)

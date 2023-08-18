@@ -81,6 +81,15 @@ proc accessStorage(p: evmc_host_context, address: var evmc_address,
                    key: var evmc_bytes32): evmc_access_status {.cdecl.} =
   toHost(p).accessStorage(address.fromEvmc, key.flip256.fromEvmc)
 
+proc getTransientStorage(p: evmc_host_context, address: var evmc_address,
+                key: var evmc_bytes32): evmc_bytes32
+    {.cdecl, raises: [RlpError].} =
+  toHost(p).getTransientStorage(address.fromEvmc, key.flip256.fromEvmc).toEvmc.flip256
+
+proc setTransientStorage(p: evmc_host_context, address: var evmc_address,
+                key, value: var evmc_bytes32) {.cdecl, raises: [RlpError].} =
+  toHost(p).setTransientStorage(address.fromEvmc, key.flip256.fromEvmc, value.flip256.fromEvmc)
+
 let hostInterface = evmc_host_interface(
   account_exists: accountExists,
   get_storage:    getStorage,
@@ -96,6 +105,8 @@ let hostInterface = evmc_host_interface(
   emit_log:       emitLog,
   access_account: accessAccount,
   access_storage: accessStorage,
+  get_transient_storage: getTransientStorage,
+  set_transient_storage: setTransientStorage,
 )
 
 proc evmcExecComputation*(host: TransactionHost): EvmcResult

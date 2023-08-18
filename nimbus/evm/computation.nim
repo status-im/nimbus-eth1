@@ -200,16 +200,14 @@ template getCode*(c: Computation, address: EthAddress): seq[byte] =
 
 template setTransientStorage*(c: Computation, slot, val: UInt256) =
   when evmc_enabled:
-    # TODO: EIP-1153
-    discard
+    c.host.setTransientStorage(c.msg.contractAddress, slot, val)
   else:
     c.vmState.stateDB.
       setTransientStorage(c.msg.contractAddress, slot, val)
 
 template getTransientStorage*(c: Computation, slot: UInt256): UInt256 =
   when evmc_enabled:
-    # TODO: EIP-1153
-    0.u256
+    c.host.getTransientStorage(c.msg.contractAddress, slot)
   else:
     c.vmState.readOnlyStateDB.
       getTransientStorage(c.msg.contractAddress, slot)
