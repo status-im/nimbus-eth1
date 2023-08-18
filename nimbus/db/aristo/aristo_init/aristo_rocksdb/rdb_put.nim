@@ -159,7 +159,7 @@ proc put*(
   # Vertices with empty table values will be deleted
   var delKey: HashSet[RdbKey]
 
-  for pfx in low(AristoStorageType) .. high(AristoStorageType):
+  for pfx in low(StorageType) .. high(StorageType):
     when extraTraceMessages:
       trace logTxt "sub-table", pfx, nItems=tabs[pfx].len
 

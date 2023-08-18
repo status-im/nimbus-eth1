@@ -48,7 +48,7 @@ func valBlob(vData: cstring, vLen: csize_t): Blob =
 
 iterator walk*(
     rdb: RdbInst;
-      ): tuple[n: int, pfx: AristoStorageType, xid: uint64, data: Blob] =
+      ): tuple[n: int, pfx: StorageType, xid: uint64, data: Blob] =
   ## Walk over all key-value pairs of the database.
   ##
   ## Non-decodable entries are stepped over while the counter `n` of the
@@ -65,7 +65,7 @@ iterator walk*(
 
     let pfx = kData.keyPfx(kLen)
     if 0 <= pfx:
-      if high(AristoStorageType).ord < pfx:
+      if high(StorageType).ord < pfx:
         break
 
       let xid = kData.keyXid(kLen)
@@ -75,7 +75,7 @@ iterator walk*(
 
         let val = vData.valBlob(vLen)
         if 0 < val.len:
-          yield (count, pfx.AristoStorageType, xid, val)
+          yield (count, pfx.StorageType, xid, val)
 
     # Update Iterator (might overwrite kData/vdata)
     rit.rocksdb_iter_next()
@@ -84,7 +84,7 @@ iterator walk*(
 
 iterator walk*(
     rdb: RdbInst;
-    pfx: AristoStorageType;
+    pfx: StorageType;
       ): tuple[n: int, xid: uint64, data: Blob] =
   ## Walk over key-value pairs of the table referted to by the argument `pfx`.
   ##

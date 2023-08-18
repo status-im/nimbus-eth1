@@ -40,11 +40,11 @@ proc getTxUid(db: AristoDbRef): uint =
 
 proc linkClone(db: AristoDbRef; clone: AristoDbRef) =
   ## Link clone to parent
-  clone.dudes = AristoDudesRef(
+  clone.dudes = DudesRef(
     rwOk: false,
     rwDb: db)
   if db.dudes.isNil:
-    db.dudes = AristoDudesRef(
+    db.dudes = DudesRef(
       rwOk:    true,
       roDudes: @[clone].toHashSet)
   else:
@@ -100,7 +100,7 @@ proc copyCat*(tx: AristoTxRef): Result[AristoDbRef,AristoError] =
   let db = tx.db
 
   # Provide new top layer
-  var topLayer: AristoLayerRef
+  var topLayer: LayerRef
   if db.txRef == tx:
     topLayer = db.top.dup
   elif tx.level < db.stack.len:
@@ -115,9 +115,9 @@ proc copyCat*(tx: AristoTxRef): Result[AristoDbRef,AristoError] =
   let stackLayer = block:
     let rc = db.getIdgBE()
     if rc.isOk:
-      AristoLayerRef(vGen: rc.value)
+      LayerRef(vGen: rc.value)
     elif rc.error == GetIdgNotFound:
-      AristoLayerRef()
+      LayerRef()
     else:
       return err(rc.error)
 
@@ -128,7 +128,7 @@ proc copyCat*(tx: AristoTxRef): Result[AristoDbRef,AristoError] =
     roFilter: db.roFilter, # no need to copy contents (done when updated)
     backend:  db.backend,
     txUidGen: 1,
-    dudes: AristoDudesRef(
+    dudes: DudesRef(
       rwOk:   false,
       rwDb:   db))
 
@@ -353,17 +353,17 @@ proc stow*(
     let rc = db.merge fwd
     if rc.isErr:
       return err(rc.error)
-    db.top = AristoLayerRef(vGen: db.roFilter.vGen)
+    db.top = LayerRef(vGen: db.roFilter.vGen)
 
   if persistent:
     let rc = db.resolveBE()
     if rc.isErr:
       return err(rc.error)
-    db.roFilter = AristoFilterRef(nil)
+    db.roFilter = FilterRef(nil)
 
   # Delete or clear stack and clear top
   db.stack.setLen(0)
-  db.top = AristoLayerRef(vGen: db.top.vGen, txUid: db.top.txUid)
+  db.top = LayerRef(vGen: db.top.vGen, txUid: db.top.txUid)
 
   ok()
 

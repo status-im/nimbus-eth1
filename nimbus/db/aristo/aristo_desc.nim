@@ -29,7 +29,7 @@ import
     aristo_error, aristo_types_identifiers, aristo_types_structural]
 
 from ./aristo_desc/aristo_types_backend
-  import AristoBackendRef
+  import BackendRef
 
 # Not auto-exporting backend
 export
@@ -44,7 +44,7 @@ type
     txUid*: uint                      ## Unique ID among transactions
     level*: int                       ## Stack index for this transaction
 
-  AristoDudesRef* = ref object
+  DudesRef* = ref object
     case rwOk*: bool
     of true:
       roDudes*: HashSet[AristoDbRef]  ## Read-only peers
@@ -54,14 +54,14 @@ type
   AristoDbRef* = ref AristoDbObj
   AristoDbObj* = object
     ## Three tier database object supporting distributed instances.
-    top*: AristoLayerRef              ## Database working layer, mutable
-    stack*: seq[AristoLayerRef]       ## Stashed immutable parent layers
-    roFilter*: AristoFilterRef        ## Apply read filter (locks writing)
-    backend*: AristoBackendRef        ## Backend database (may well be `nil`)
+    top*: LayerRef                    ## Database working layer, mutable
+    stack*: seq[LayerRef]             ## Stashed immutable parent layers
+    roFilter*: FilterRef              ## Apply read filter (locks writing)
+    backend*: BackendRef              ## Backend database (may well be `nil`)
 
     txRef*: AristoTxRef               ## Latest active transaction
     txUidGen*: uint                   ## Tx-relative unique number generator
-    dudes*: AristoDudesRef            ## Related DB descriptors
+    dudes*: DudesRef                  ## Related DB descriptors
 
     # Debugging data below, might go away in future
     xMap*: Table[HashLabel,VertexID]  ## For pretty printing, extends `pAmk`
@@ -105,8 +105,8 @@ func isValid*(lbl: HashLabel): bool =
 func isValid*(vid: VertexID): bool =
   vid != VertexID(0)
 
-func isValid*(filter: AristoFilterRef): bool =
-  filter != AristoFilterRef(nil)
+func isValid*(filter: FilterRef): bool =
+  filter != FilterRef(nil)
 
 # ------------------------------------------------------------------------------
 # Public functions, miscellaneous

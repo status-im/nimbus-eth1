@@ -33,7 +33,7 @@ type
   RdbKey* = array[1 + sizeof VertexID, byte]
     ## Sub-table key, <pfx> + VertexID
 
-  RdbTabs* = array[AristoStorageType,Table[VertexID,Blob]]
+  RdbTabs* = array[StorageType,Table[VertexID,Blob]]
     ## Combined table for caching data to be stored/updated
 
 const
@@ -47,12 +47,12 @@ const
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc toRdbKey*(vid: VertexID; pfx: AristoStorageType): Rdbkey =
+proc toRdbKey*(vid: VertexID; pfx: StorageType): Rdbkey =
   let vidKey = vid.uint64.toBytesBE
   result[0] = pfx.ord.byte
   copyMem(addr result[1], unsafeAddr vidKey, sizeof vidKey)
 
-template toOpenArray*(vid: VertexID; pfx: AristoStorageType): openArray[byte] =
+template toOpenArray*(vid: VertexID; pfx: StorageType): openArray[byte] =
   vid.toRdbKey(pfx).toOpenArray(0, sizeof VertexID)
 
 # ------------------------------------------------------------------------------

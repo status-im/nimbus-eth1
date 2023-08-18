@@ -213,7 +213,7 @@ proc closeFn(db: RdbBackendRef): CloseFn =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc rocksDbBackend*(path: string): Result[AristoBackendRef,AristoError] =
+proc rocksDbBackend*(path: string): Result[BackendRef,AristoError] =
   let
     db = RdbBackendRef(kind: BackendRocksDB)
     rc = db.rdb.init(path, maxOpenFiles)
@@ -243,7 +243,7 @@ proc rocksDbBackend*(path: string): Result[AristoBackendRef,AristoError] =
 
 iterator walk*(
     be: RdbBackendRef;
-      ): tuple[n: int, pfx: AristoStorageType, xid: uint64, data: Blob] =
+      ): tuple[n: int, pfx: StorageType, xid: uint64, data: Blob] =
   ## Walk over all key-value pairs of the database.
   ##
   ## Non-decodable entries are stepped over while the counter `n` of the

@@ -18,26 +18,26 @@ const
     ## Enforce session tracking
 
 type
-  AristoBackendType* = enum
+  BackendType* = enum
     BackendVoid                      ## For providing backend-less constructor
     BackendMemory
     BackendRocksDB
 
-  AristoStorageType* = enum
+  StorageType* = enum
     ## Storage types, key prefix
     Oops = 0
     IdgPfx = 1                       ## ID generator
     VtxPfx = 2                       ## Vertex data
     KeyPfx = 3                       ## Key/hash data
 
-  TypedBackendRef* = ref object of AristoBackendRef
-    kind*: AristoBackendType         ## Backend type identifier
+  TypedBackendRef* = ref object of BackendRef
+    kind*: BackendType               ## Backend type identifier
     when verifyIxId:
       txGen: uint                    ## Transaction ID generator (for debugging)
       txId: uint                     ## Active transaction ID (for debugging)
 
   TypedPutHdlErrRef* = ref object of RootRef
-    case pfx*: AristoStorageType     ## Error sub-table
+    case pfx*: StorageType           ## Error sub-table
     of VtxPfx, KeyPfx:
       vid*: VertexID                 ## Vertex ID where the error occured
     of IdgPfx, Oops:

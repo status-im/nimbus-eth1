@@ -25,7 +25,7 @@ type
     ## Dummy descriptor type, will typically used as `nil` reference
 
 export
-  AristoBackendType,
+  BackendType,
   VoidBackendRef,
   MemBackendRef,
   TypedBackendRef
@@ -35,14 +35,14 @@ export
 # ------------------------------------------------------------------------------
 
 proc newAristoDbRef*(
-    backend: static[AristoBackendType];
+    backend: static[BackendType];
       ): AristoDbRef =
   ## Simplified prototype for  `BackendNone` and `BackendMemory`  type backend.
   when backend == BackendVoid:
-    AristoDbRef(top: AristoLayerRef())
+    AristoDbRef(top: LayerRef())
 
   elif backend == BackendMemory:
-    AristoDbRef(top: AristoLayerRef(), backend: memoryBackend())
+    AristoDbRef(top: LayerRef(), backend: memoryBackend())
 
   elif backend == BackendRocksDB:
     {.error: "Aristo DB backend \"BackendRocksDB\" needs basePath argument".}

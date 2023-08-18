@@ -80,7 +80,7 @@ type
 
   # ----------------------
 
-  AristoFilterRef* = ref object
+  FilterRef* = ref object
     ## Delta layer with expanded sequences for quick access
     src*: HashKey                    ## Applicable to this state root
     trg*: HashKey                    ## Resulting state root (i.e. `kMap[1]`)
@@ -88,7 +88,7 @@ type
     kMap*: Table[VertexID,HashKey]   ## Filter Merkle hash key mapping
     vGen*: seq[VertexID]             ## Filter unique vertex ID generator
 
-  AristoLayerRef* = ref object
+  LayerRef* = ref object
     ## Hexary trie database layer structures. Any layer holds the full
     ## change relative to the backend.
     sTab*: Table[VertexID,VertexRef]  ## Structural vertex table
@@ -230,9 +230,9 @@ proc dup*(node: NodeRef): NodeRef =
         bVid:  node.bVid,
         key:   node.key)
 
-proc dup*(layer: AristoLayerRef): AristoLayerRef =
+proc dup*(layer: LayerRef): LayerRef =
   ## Duplicate layer.
-  result = AristoLayerRef(
+  result = LayerRef(
     lTab:  layer.lTab,
     kMap:  layer.kMap,
     pAmk:  layer.pAmk,
@@ -242,9 +242,9 @@ proc dup*(layer: AristoLayerRef): AristoLayerRef =
   for (k,v) in layer.sTab.pairs:
     result.sTab[k] = v.dup
 
-proc dup*(filter: AristoFilterRef): AristoFilterRef =
+proc dup*(filter: FilterRef): FilterRef =
   ## Duplicate layer.
-  result = AristoFilterRef(
+  result = FilterRef(
     src:  filter.src,
     kMap: filter.kMap,
     vGen: filter.vGen,

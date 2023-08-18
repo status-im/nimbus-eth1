@@ -317,7 +317,7 @@ proc ppXMap*(
   else:
     result &= "}"
 
-proc ppFilter(fl: AristoFilterRef; db: AristoDbRef; indent: int): string =
+proc ppFilter(fl: FilterRef; db: AristoDbRef; indent: int): string =
   ## Walk over filter tables
   let
     pfx = indent.toPfx
@@ -365,7 +365,7 @@ proc ppBe[T](be: T; db: AristoDbRef; indent: int): string =
   db.roFilter.ppFilter(db, indent+1) & indent.toPfx & be.ppBeOnly(db,indent+1)
 
 proc ppLayer(
-    layer: AristoLayerRef;
+    layer: LayerRef;
     db: AristoDbRef;
     vGenOk: bool;
     sTabOk: bool;
@@ -453,7 +453,7 @@ proc pp*(p: PayloadRef, db = AristoDbRef()): string =
 proc pp*(nd: VertexRef, db = AristoDbRef()): string =
   nd.ppVtx(db, VertexID(0))
 
-proc pp*(nd: NodeRef; root: VertexID; db: AristoDBRef): string =
+proc pp*(nd: NodeRef; root: VertexID; db: AristoDbRef): string =
   if not nd.isValid:
     result = "n/a"
   elif nd.error != AristoError(0):
@@ -566,7 +566,7 @@ proc pp*(
 # ---------------------
 
 proc pp*(
-    layer: AristoLayerRef;
+    layer: LayerRef;
     db: AristoDbRef;
     indent = 4;
       ): string =
@@ -574,7 +574,7 @@ proc pp*(
     db, vGenOk=true, sTabOk=true, lTabOk=true, kMapOk=true, pPrfOk=true)
 
 proc pp*(
-    layer: AristoLayerRef;
+    layer: LayerRef;
     db: AristoDbRef;
     xTabOk: bool;
     indent = 4;
@@ -583,7 +583,7 @@ proc pp*(
     db, vGenOk=true, sTabOk=xTabOk, lTabOk=xTabOk, kMapOk=true, pPrfOk=true)
 
 proc pp*(
-    layer: AristoLayerRef;
+    layer: LayerRef;
     db: AristoDbRef;
     xTabOk: bool;
     kMapOk: bool;
@@ -617,7 +617,7 @@ proc pp*(
   db.top.pp(db, xTabOk=xTabOk, kMapOk=kMapOk, other=other, indent=indent)
 
 proc pp*(
-    filter: AristoFilterRef;
+    filter: FilterRef;
     db = AristoDbRef();
     indent = 4;
       ): string =

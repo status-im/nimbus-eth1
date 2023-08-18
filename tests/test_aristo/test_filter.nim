@@ -179,7 +179,7 @@ proc cleanUp(dx: DbTriplet) =
   discard dx.db2.dispose
   dx.db1.finish(flush=true)
 
-proc eq(a, b: AristoFilterRef; db: AristoDbRef; noisy = true): bool =
+proc eq(a, b: FilterRef; db: AristoDbRef; noisy = true): bool =
   ## Verify that argument filter `a` has the same effect on the
   ## physical/unfiltered backend of `db` as argument filter `b`.
   if a.isNil:
@@ -270,8 +270,8 @@ proc testDistributedAccess*(
     # Resulting clause (11) filters from `aristo/README.md` example
     # which will be used in the second part of the tests
     var
-      c11Filter1 = AristoFilterRef(nil)
-      c11Filter3 = AristoFilterRef(nil)
+      c11Filter1 = FilterRef(nil)
+      c11Filter3 = FilterRef(nil)
 
     # Work through clauses (8)..(11) from `aristo/README.md` example
     block:
@@ -297,8 +297,8 @@ proc testDistributedAccess*(
           # noisy.say "*** testDistributedAccess (2) n=", n, dx.dump
           check rc.error == (0,0)
           return
-      if db1.roFilter != AristoFilterRef(nil):
-        check db1.roFilter == AristoFilterRef(nil)
+      if db1.roFilter.isValid:
+        check db1.roFilter == FilterRef(nil)
         return
       if db2.roFilter != db3.roFilter:
         check db2.roFilter == db3.roFilter
@@ -310,8 +310,8 @@ proc testDistributedAccess*(
           noisy.say "*** testDistributedAccess (3)", "n=", n, "db2".dump db2
           check rc.error == (0,0)
           return
-      if db1.roFilter != AristoFilterRef(nil):
-        check db1.roFilter == AristoFilterRef(nil)
+      if db1.roFilter.isValid:
+        check db1.roFilter == FilterRef(nil)
         return
       if db2.roFilter == db3.roFilter:
         check db2.roFilter != db3.roFilter
@@ -328,8 +328,8 @@ proc testDistributedAccess*(
         if rc.isErr:
           check rc.error == (0,0)
           return
-      if db2.roFilter != AristoFilterRef(nil):
-        check db2.roFilter == AristoFilterRef(nil)
+      if db2.roFilter.isValid:
+        check db2.roFilter == FilterRef(nil)
         return
 
       # Check/verify backends
@@ -372,8 +372,8 @@ proc testDistributedAccess*(
         if rc.isErr:
           check rc.error == (0,0)
           return
-      if db2.roFilter != AristoFilterRef(nil):
-        check db1.roFilter == AristoFilterRef(nil)
+      if db2.roFilter.isValid:
+        check db1.roFilter == FilterRef(nil)
         return
       if db1.roFilter != db3.roFilter:
         check db1.roFilter == db3.roFilter

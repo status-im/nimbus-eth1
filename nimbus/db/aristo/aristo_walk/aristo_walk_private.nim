@@ -25,12 +25,12 @@ iterator walkVtxBeImpl*[T](
   var n = 0
 
   when be is VoidBackendRef:
-    let filter = if db.roFilter.isNil: AristoFilterRef() else: db.roFilter
+    let filter = if db.roFilter.isNil: FilterRef() else: db.roFilter
 
   else:
     mixin walkVtx
 
-    let filter = AristoFilterRef()
+    let filter = FilterRef()
     if not db.roFilter.isNil:
       filter.sTab = db.roFilter.sTab # copy table
 
@@ -60,12 +60,12 @@ iterator walkKeyBeImpl*[T](
   var n = 0
 
   when be is VoidBackendRef:
-    let filter = if db.roFilter.isNil: AristoFilterRef() else: db.roFilter
+    let filter = if db.roFilter.isNil: FilterRef() else: db.roFilter
 
   else:
     mixin walkKey
 
-    let filter = AristoFilterRef()
+    let filter = FilterRef()
     if not db.roFilter.isNil:
       filter.kMap = db.roFilter.kMap # copy table
 
