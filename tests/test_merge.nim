@@ -151,13 +151,16 @@ proc testEngineApiSupport() =
 
   suite "Test engine api support":
     test "test payload queue":
-      api.put(id1, ep1)
-      api.put(id2, ep2)
+      api.put(id1, 123.u256, ep1)
+      api.put(id2, 456.u256, ep2)
       var eep1, eep2: ExecutionPayloadV1
-      check api.get(id1, eep1)
-      check api.get(id2, eep2)
+      var bv1, bv2: UInt256
+      check api.get(id1, bv1, eep1)
+      check api.get(id2, bv2, eep2)
       check eep1.gasLimit == ep1.gasLimit
       check eep2.gasLimit == ep2.gasLimit
+      check bv1 == 123.u256
+      check bv2 == 456.u256
 
     test "test header queue":
       api.put(hash1, hdr1)
