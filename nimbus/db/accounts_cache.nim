@@ -29,6 +29,7 @@ type
     CodeLoaded
     CodeChanged
     StorageChanged
+    NewlyCreated # EIP-6780: self destruct only in same transaction
 
   AccountFlags = set[AccountFlag]
 
@@ -76,7 +77,8 @@ const
     IsNew,
     Touched,
     CodeChanged,
-    StorageChanged
+    StorageChanged,
+    NewlyCreated
     }
 
   ripemdAddr* = block:
@@ -485,8 +487,11 @@ proc setStorage*(ac: AccountsCache, address: EthAddress, slot, value: UInt256) =
     acc.flags.incl StorageChanged
 
 proc clearStorage*(ac: AccountsCache, address: EthAddress) =
+  # a.k.a createStateObject. If there is an existing account with
+  # the given address, it is overwritten.
+
   let acc = ac.getAccount(address)
-  acc.flags.incl {Alive}
+  acc.flags.incl {Alive, NewlyCreated}
   if acc.account.storageRoot != EMPTY_ROOT_HASH:
     # there is no point to clone the storage since we want to remove it
     let acc = ac.makeDirty(address, cloneStorage = false)
@@ -505,6 +510,14 @@ proc deleteAccount*(ac: AccountsCache, address: EthAddress) =
 
 proc selfDestruct*(ac: AccountsCache, address: EthAddress) =
   ac.savePoint.selfDestruct.incl address
+
+proc selfDestruct6780*(ac: AccountsCache, address: EthAddress) =
+  let acc = ac.getAccount(address, false)
+  if acc.isNil:
+    return
+
+  if NewlyCreated in acc.flags:
+    ac.selfDestruct(address)
 
 proc selfDestructLen*(ac: AccountsCache): int =
   ac.savePoint.selfDestruct.len

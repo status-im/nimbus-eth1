@@ -350,6 +350,7 @@ proc merge*(c, child: Computation) =
 
 proc execSelfDestruct*(c: Computation, beneficiary: EthAddress)
     {.gcsafe, raises: [CatchableError].} =
+
   c.vmState.mutateStateDB:
     let localBalance = c.getBalance(c.msg.contractAddress)
 
@@ -362,7 +363,10 @@ proc execSelfDestruct*(c: Computation, beneficiary: EthAddress)
     db.setBalance(c.msg.contractAddress, 0.u256)
 
     # Register the account to be deleted
-    db.selfDestruct(c.msg.contractAddress)
+    if c.fork >= FkCancun:
+      db.selfDestruct6780(c.msg.contractAddress)
+    else:
+      db.selfDestruct(c.msg.contractAddress)
 
     trace "SELFDESTRUCT",
       contractAddress = c.msg.contractAddress.toHex,

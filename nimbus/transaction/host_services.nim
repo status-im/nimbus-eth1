@@ -229,7 +229,10 @@ proc selfDestruct(host: TransactionHost, address, beneficiary: HostAddress) {.sh
     # This must come after sending to the beneficiary in case the
     # contract named itself as the beneficiary.
     db.setBalance(address, 0.u256)
-    db.selfDestruct(address)
+    if host.vmState.fork >= FkCancun:
+      db.selfDestruct6780(address)
+    else:
+      db.selfDestruct(address)
 
 template call(host: TransactionHost, msg: EvmcMessage): EvmcResult =
   # `call` is special.  The C stack usage must be kept small for deeply nested

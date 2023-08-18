@@ -150,7 +150,7 @@ const
             gasCost = gasCost + ColdAccountAccessCost
 
       cpt.gasMeter.consumeGas(
-        gasCost, reason = "SELFDESTRUCT EIP161")
+        gasCost, reason = "SELFDESTRUCT EIP2929")
       cpt.selfDestruct(beneficiary)
 
 # ------------------------------------------------------------------------------
