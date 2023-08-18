@@ -141,8 +141,13 @@ proc putEndFn(db: MemBackendRef): PutEndFn =
     proc(hdl: PutHdlRef): AristoError =
       let hdl = hdl.endSession db
       if not hdl.error.isNil:
-        debug logTxt "putEndFn: failed",
-          pfx=hdl.error.pfx, vid=hdl.error.vid, error=hdl.error.code
+        case hdl.error.pfx:
+        of VtxPfx, KeyPfx:
+          debug logTxt "putEndFn: vtx/key failed",
+            pfx=hdl.error.pfx, vid=hdl.error.vid, error=hdl.error.code
+        else:
+          debug logTxt "putEndFn: failed",
+            pfx=hdl.error.pfx, error=hdl.error.code
         return hdl.error.code
 
       for (vid,vtx) in hdl.sTab.pairs:
@@ -195,10 +200,10 @@ proc memoryBackend*(): AristoBackendRef =
 
 iterator walkIdg*(
     be: MemBackendRef;
-      ): tuple[n: int, vid: VertexID, vGen: seq[VertexID]] =
+      ): tuple[n: int, id: uint64, vGen: seq[VertexID]] =
   ## Iteration over the ID generator sub-table (there is at most one instance).
   if 0 < be.vGen.len:
-    yield(0, VertexID(0), be.vGen)
+    yield(0, 0u64, be.vGen)
 
 iterator walkVtx*(
     be: MemBackendRef;
@@ -220,21 +225,25 @@ iterator walkKey*(
 
 iterator walk*(
     be: MemBackendRef;
-      ): tuple[n: int, pfx: AristoStorageType, vid: VertexID, data: Blob] =
+      ): tuple[n: int, pfx: AristoStorageType, xid: uint64, data: Blob] =
   ## Walk over all key-value pairs of the database.
   ##
   ## Non-decodable entries are stepped over while the counter `n` of the
   ## yield record is still incremented.
-  for (n,vid,vGen) in be.walkIdg:
-    yield (n, IdgPfx, vid, vGen.blobify)
+  var n = 0
+  for (_,id,vGen) in be.walkIdg:
+    yield (n, IdgPfx, id, vGen.blobify)
+    n.inc
 
-  for (n,vid,vtx) in be.walkVtx:
+  for (_,vid,vtx) in be.walkVtx:
     let rc = vtx.blobify
     if rc.isOk:
-      yield (n, VtxPfx, vid, rc.value)
+      yield (n, VtxPfx, vid.uint64, rc.value)
+    n.inc
 
-  for (n,vid,key) in be.walkKey:
-    yield (n, KeyPfx, vid, key.to(Blob))
+  for (_,vid,key) in be.walkKey:
+    yield (n, KeyPfx, vid.uint64, key.to(Blob))
+    n.inc
 
 # ------------------------------------------------------------------------------
 # End

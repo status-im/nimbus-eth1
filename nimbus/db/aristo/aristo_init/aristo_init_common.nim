@@ -23,6 +23,13 @@ type
     BackendMemory
     BackendRocksDB
 
+  AristoStorageType* = enum
+    ## Storage types, key prefix
+    Oops = 0
+    IdgPfx = 1                       ## ID generator
+    VtxPfx = 2                       ## Vertex data
+    KeyPfx = 3                       ## Key/hash data
+
   TypedBackendRef* = ref object of AristoBackendRef
     kind*: AristoBackendType         ## Backend type identifier
     when verifyIxId:
@@ -30,20 +37,17 @@ type
       txId: uint                     ## Active transaction ID (for debugging)
 
   TypedPutHdlErrRef* = ref object of RootRef
-    pfx*: AristoStorageType          ## Error sub-table
-    vid*: VertexID                   ## Vertex ID where the error occured
+    case pfx*: AristoStorageType     ## Error sub-table
+    of VtxPfx, KeyPfx:
+      vid*: VertexID                 ## Vertex ID where the error occured
+    of IdgPfx, Oops:
+      discard
     code*: AristoError               ## Error code (if any)
 
   TypedPutHdlRef* = ref object of PutHdlRef
     error*: TypedPutHdlErrRef        ## Track error while collecting transaction
     when verifyIxId:
       txId: uint                     ## Transaction ID (for debugging)
-
-  AristoStorageType* = enum
-    ## Storage types, key prefix
-    IdgPfx = 1                       ## ID generator
-    VtxPfx = 2                       ## Vertex data
-    KeyPfx = 3                       ## Key/hash data
 
 # ------------------------------------------------------------------------------
 # Public helpers

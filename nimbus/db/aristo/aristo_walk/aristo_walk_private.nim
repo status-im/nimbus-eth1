@@ -90,19 +90,19 @@ iterator walkKeyBeImpl*[T](
 iterator walkIdgBeImpl*[T](
     be: T;                             # Backend descriptor
     db: AristoDbRef;                   # Database with optional backend filter
-      ): tuple[n: int, vid: VertexID, vGen: seq[VertexID]] =
+      ): tuple[n: int, id: uint64, vGen: seq[VertexID]] =
   ## Generic pseudo iterator
   var nNext = 0
   if db.roFilter.isValid:
-    yield(0, VertexID(0), db.roFilter.vGen)
+    yield(0, 0u64, db.roFilter.vGen)
     nNext = 1
 
   when be isnot VoidBackendRef:
     mixin walkIdg
 
-    for (n,vid,vGen) in be.walkIdg:
+    for (n,id,vGen) in be.walkIdg:
       if nNext <= n:
-        yield(n,vid,vGen)
+        yield(n,id,vGen)
 
 # ------------------------------------------------------------------------------
 # End
