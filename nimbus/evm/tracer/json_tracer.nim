@@ -88,7 +88,10 @@ proc captureOpImpl(ctx: JsonTracer, pc: int,
     res["memory"] = mem
 
   if TracerFlags.DisableStack notin ctx.flags:
-    res["stack"] = ctx.stack
+    if ctx.stack.isNil:
+      res["stack"] = newJArray()
+    else:
+      res["stack"] = ctx.stack
 
   if TracerFlags.DisableReturnData notin ctx.flags:
     res["returnData"] = %(rData)

@@ -28,9 +28,15 @@ type
 
   T8NConf* = object of RootObj
     traceEnabled* {.
-      desc: "Output full trace logs to files trace-<txIndex>-<txhash>.jsonl"
-      defaultValue: false
-      name: "trace" }: bool
+      desc: "Enable and set where to put full EVM trace logs"
+      longDesc:
+        "`stdout` - into the stdout output\n" &
+        "`stderr` - into the stderr output\n" &
+        "<file>   - into the file <file>-<txIndex>.jsonl\n" &
+        "none     - output.basedir/trace-<txIndex>-<txhash>.jsonl\n"
+      defaultValue: none(string)
+      defaultValueDesc: "disabled"
+      name: "trace" }: Option[string]
 
     traceMemory* {.
       desc: "Enable full memory dump in traces"
@@ -166,7 +172,7 @@ proc convertToNimStyle(cmds: openArray[string]): seq[string] =
 
 const
   Copyright = "Copyright (c) 2022 Status Research & Development GmbH"
-  Version   = "Nimbus-t8n 0.1.2"
+  Version   = "Nimbus-t8n 0.2.2"
 
 # force the compiler to instantiate T8NConf.load
 # rather than have to export parseCmdArg

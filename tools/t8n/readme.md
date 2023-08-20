@@ -36,7 +36,11 @@ t8n [OPTIONS]...
 
 The following options are available:
 
- --trace                 Output full trace logs to files trace-<txIndex>-<txhash>.jsonl [=false].
+ --trace                 Enable and set where to put full EVM trace logs [=disabled].
+                             `stdout` - into the stdout output.
+                             `stderr` - into the stderr output.
+                             <file>   - into the file <file>-<txIndex>.jsonl.
+                             none     - output.basedir/trace-<txIndex>-<txhash>.jsonl.
  --trace.memory          Enable full memory dump in traces [=false].
  --trace.nostack         Disable stack output in traces [=false].
  --trace.returndata      Enable return data output in traces [=false].

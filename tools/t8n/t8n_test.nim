@@ -25,6 +25,7 @@ type
     alloc : bool
     result: bool
     body  : bool
+    trace : bool
 
   TestSpec = object
     name       : string
@@ -70,6 +71,9 @@ proc get(opt: T8nOutput): string =
     result.add(" --output.body stdout")
   else:
     result.add(" --output.body")
+
+  if opt.trace:
+    result.add(" --trace stdout")
 
 template exit(jsc: var JsonComparator, msg: string) =
   jsc.path = path
@@ -137,16 +141,25 @@ proc runTest(appDir: string, spec: TestSpec): bool =
     return false
 
   if spec.expOut.len > 0:
-    let path = base / spec.expOut
-    let want = json.parseFile(path)
-    let have = json.parseJson(res)
-    var jsc = JsonComparator()
-    if not jsc.cmp(want, have, "root") and notRejectedError(jsc.path):
-      echo "test $1: output wrong, have \n$2\nwant\n$3\n" %
-        [spec.name, have.pretty, want.pretty]
-      echo "path: $1, error: $2" %
-        [jsc.path, jsc.error]
-      return false
+    if spec.expOut.endsWith(".json"):
+      let path = base / spec.expOut
+      let want = json.parseFile(path)
+      let have = json.parseJson(res)
+      var jsc = JsonComparator()
+      if not jsc.cmp(want, have, "root") and notRejectedError(jsc.path):
+        echo "test $1: output wrong, have \n$2\nwant\n$3\n" %
+          [spec.name, have.pretty, want.pretty]
+        echo "path: $1, error: $2" %
+          [jsc.path, jsc.error]
+        return false
+    else:
+      # compare as regular text
+      let path = base / spec.expOut
+      let want = readFile(path)
+      if want.replace("\x0D\x0A", "\n") != res:
+        echo "test $1: output wrong, have \n$2\nwant\n$3\n" %
+          [spec.name, res, want]
+        return false
   return true
 
 const
@@ -483,6 +496,15 @@ const
       ),
       output: T8nOutput(alloc: true, result: true),
       expOut: "exp.json",
+    ),
+    TestSpec(
+      name  : "EVM tracer crash bug",
+      base  : "testdata/00-519",
+      input : t8nInput(
+        "alloc.json", "txs.json", "env.json", "Shanghai", "0",
+      ),
+      output: T8nOutput(trace: true),
+      expOut: "exp.txt",
     ),
   ]
 

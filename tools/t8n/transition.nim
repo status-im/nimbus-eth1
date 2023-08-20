@@ -147,18 +147,22 @@ proc calcLogsHash(receipts: openArray[Receipt]): Hash256 =
     logs.add rec.logs
   rlpHash(logs)
 
-template stripLeadingZeros(value: string): string =
-  var cidx = 0
-  # ignore the last character so we retain '0' on zero value
-  while cidx < value.len - 1 and value[cidx] == '0':
-    cidx.inc
-  value[cidx .. ^1]
+proc defaultTraceStream(conf: T8NConf, txIndex: int, txHash: Hash256): Stream =
+  let
+    txHash = "0x" & toLowerAscii($txHash)
+    baseDir = if conf.outputBaseDir.len > 0:
+                conf.outputBaseDir
+              else:
+                "."
+    fName = "$1/trace-$2-$3.jsonl" % [baseDir, $txIndex, txHash]
+  newFileStream(fName, fmWrite)
 
-proc encodeHexInt(x: SomeInteger): JsonNode =
-  %("0x" & x.toHex.stripLeadingZeros.toLowerAscii)
-
-proc toHex(x: Hash256): string =
-  "0x" & x.data.toHex
+proc traceToFileStream(path: string, txIndex: int): Stream =
+  # replace whatever `.ext` to `-${txIndex}.jsonl`
+  let
+    file = path.splitFile
+    fName = "$1/$2-$3.jsonl" % [file.dir, file.name, $txIndex]
+  newFileStream(fName, fmWrite)
 
 proc setupTrace(conf: T8NConf, txIndex: int, txHash: Hash256, vmState: BaseVMstate) =
   var tracerFlags = {
@@ -169,22 +173,20 @@ proc setupTrace(conf: T8NConf, txIndex: int, txHash: Hash256, vmState: BaseVMsta
     TracerFlags.DisableReturnData
   }
 
-  if conf.traceEnabled:
-    if conf.traceMemory: tracerFlags.excl TracerFlags.DisableMemory
-    if conf.traceNostack: tracerFlags.incl TracerFlags.DisableStack
-    if conf.traceReturnData: tracerFlags.excl TracerFlags.DisableReturnData
+  if conf.traceMemory: tracerFlags.excl TracerFlags.DisableMemory
+  if conf.traceNostack: tracerFlags.incl TracerFlags.DisableStack
+  if conf.traceReturnData: tracerFlags.excl TracerFlags.DisableReturnData
 
-  let
-    txHash = "0x" & toLowerAscii($txHash)
-    baseDir = if conf.outputBaseDir.len > 0:
-                conf.outputBaseDir
-              else:
-                "."
-    fName = "$1/trace-$2-$3.jsonl" % [baseDir, $txIndex, txHash]
-    stream = newFileStream(fName, fmWrite)
-    tracerInst = newJsonTracer(stream, tracerFlags, false)
-
-  vmState.tracer = tracerInst
+  let traceMode = conf.traceEnabled.get
+  let stream = if traceMode == "stdout":
+                 newFileStream(stdout)
+               elif traceMode == "stderr":
+                 newFileStream(stderr)
+               elif traceMode.len > 0:
+                 traceToFileStream(traceMode, txIndex)
+               else:
+                 defaultTraceStream(conf, txIndex, txHash)
+  vmState.tracer = newJsonTracer(stream, tracerFlags, false)
 
 proc closeTrace(vmState: BaseVMstate) =
   let tracer = JsonTracer(vmState.tracer)
@@ -233,12 +235,12 @@ proc exec(ctx: var TransContext,
       )
       continue
 
-    if conf.traceEnabled:
+    if conf.traceEnabled.isSome:
       setupTrace(conf, txIndex, rlpHash(tx), vmState)
 
     let rc = vmState.processTransaction(tx, sender, header)
 
-    if conf.traceEnabled:
+    if conf.traceEnabled.isSome:
       closeTrace(vmState)
 
     if rc.isErr:
