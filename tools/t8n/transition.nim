@@ -157,6 +157,13 @@ proc defaultTraceStream(conf: T8NConf, txIndex: int, txHash: Hash256): Stream =
     fName = "$1/trace-$2-$3.jsonl" % [baseDir, $txIndex, txHash]
   newFileStream(fName, fmWrite)
 
+proc traceToFileStream(path: string, txIndex: int): Stream =
+  # replace whatever `.ext` to `-${txIndex}.jsonl`
+  let
+    file = path.splitFile
+    fName = "$1/$2-$3.jsonl" % [file.dir, file.name, $txIndex]
+  newFileStream(fName, fmWrite)
+
 proc setupTrace(conf: T8NConf, txIndex: int, txHash: Hash256, vmState: BaseVMstate) =
   var tracerFlags = {
     TracerFlags.DisableMemory,
@@ -176,7 +183,7 @@ proc setupTrace(conf: T8NConf, txIndex: int, txHash: Hash256, vmState: BaseVMsta
                elif traceMode == "stderr":
                  newFileStream(stderr)
                elif traceMode.len > 0:
-                 newFileStream(traceMode, fmWrite)
+                 traceToFileStream(traceMode, txIndex)
                else:
                  defaultTraceStream(conf, txIndex, txHash)
   vmState.tracer = newJsonTracer(stream, tracerFlags, false)

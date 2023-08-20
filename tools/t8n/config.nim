@@ -32,8 +32,8 @@ type
       longDesc:
         "`stdout` - into the stdout output\n" &
         "`stderr` - into the stderr output\n" &
-        "<file>   - into the file <file>\n" &
-        "none     - output.basedir/trace-<txIndex>-<txhash>.jsonl\n"      
+        "<file>   - into the file <file>-<txIndex>.jsonl\n" &
+        "none     - output.basedir/trace-<txIndex>-<txhash>.jsonl\n"
       defaultValue: none(string)
       defaultValueDesc: "disabled"
       name: "trace" }: Option[string]
@@ -172,7 +172,7 @@ proc convertToNimStyle(cmds: openArray[string]): seq[string] =
 
 const
   Copyright = "Copyright (c) 2022 Status Research & Development GmbH"
-  Version   = "Nimbus-t8n 0.1.2"
+  Version   = "Nimbus-t8n 0.2.2"
 
 # force the compiler to instantiate T8NConf.load
 # rather than have to export parseCmdArg
