@@ -1,7 +1,6 @@
 import
   std/[base64, times, strutils],
   test_env,
-  unittest2,
   chronicles,
   nimcrypto/[hmac],
   json_rpc/[rpcclient],
@@ -32,9 +31,7 @@ proc getClient(t: TestEnv, token: string): RpcHttpClient =
   return client
 
 template genAuthTest(procName: untyped, timeDriftSeconds: int64, customAuthSecretBytes: string, authOK: bool) =
-  proc procName(t: TestEnv): TestStatus =
-    result = TestStatus.OK
-
+  proc procName(t: TestEnv): bool =
     # Default values
     var
       # All test cases send a simple TransitionConfigurationV1 to check the Authentication mechanism (JWT)
@@ -57,9 +54,10 @@ template genAuthTest(procName: untyped, timeDriftSeconds: int64, customAuthSecre
       discard waitFor client.call("engine_exchangeTransitionConfigurationV1", %[%tConf])
       testCond authOk:
         error "Authentication was supposed to fail authentication but passed"
-    except CatchableError:
+    except CatchableError as ex:
       testCond not authOk:
         error "Authentication was supposed to pass authentication but failed"
+    return true
 
 genAuthTest(authTest1, 0'i64, "", true)
 genAuthTest(authTest2, 0'i64, "secretsecretsecretsecretsecrets", false)
@@ -69,41 +67,68 @@ genAuthTest(authTest5, 1 - maxTimeDriftSeconds, "", true)
 genAuthTest(authTest6, maxTimeDriftSeconds + 1, "", false)
 genAuthTest(authTest7, maxTimeDriftSeconds - 1, "", true)
 
+type
+  AuthSpec* = ref object of BaseSpec
+    exec*: proc(t: TestEnv): bool
+
+proc specExecute(ws: BaseSpec): bool =
+  let
+    ws  = AuthSpec(ws)
+    env = setupELClient("", true)
+
+  env.setRealTTD(0)
+  result = ws.exec(env)
+  env.stopELClient()
+
 # JWT Authentication Tests
-const authTestList* = [
-  TestSpec(
+let authTestList* = [
+  TestDesc(
     name: "JWT Authentication: No time drift, correct secret",
-    run: authTest1,
-    enableAuth: true
+    run: specExecute,
+    spec: AuthSpec(
+      exec: authTest1,
+    )
   ),
-  TestSpec(
+  TestDesc(
     name: "JWT Authentication: No time drift, incorrect secret (shorter)",
-    run: authTest2,
-    enableAuth: true
+    run: specExecute,
+    spec: AuthSpec(
+      exec: authTest2,
+    )
   ),
-  TestSpec(
+  TestDesc(
     name: "JWT Authentication: No time drift, incorrect secret (longer)",
-    run: authTest3,
-    enableAuth: true
+    run: specExecute,
+    spec: AuthSpec(
+      exec: authTest3,
+    )
   ),
-  TestSpec(
+  TestDesc(
     name: "JWT Authentication: Negative time drift, exceeding limit, correct secret",
-    run: authTest4,
-    enableAuth: true
+    run: specExecute,
+    spec: AuthSpec(
+      exec: authTest4,
+    )
   ),
-  TestSpec(
+  TestDesc(
     name: "JWT Authentication: Negative time drift, within limit, correct secret",
-    run: authTest5,
-    enableAuth: true
+    run: specExecute,
+    spec: AuthSpec(
+      exec: authTest5,
+    )
   ),
-  TestSpec(
+  TestDesc(
     name: "JWT Authentication: Positive time drift, exceeding limit, correct secret",
-    run: authTest6,
-    enableAuth: true
+    run: specExecute,
+    spec: AuthSpec(
+      exec: authTest6,
+    )
   ),
-  TestSpec(
+  TestDesc(
     name: "JWT Authentication: Positive time drift, within limit, correct secret",
-    run: authTest7,
-    enableAuth: true
+    run: specExecute,
+    spec: AuthSpec(
+      exec: authTest7,
+    )
   )
 ]

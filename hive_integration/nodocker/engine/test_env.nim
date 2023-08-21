@@ -20,13 +20,10 @@ import
   ../../../tests/test_helpers,
   "."/[clmock, engine_client]
 
-import web3/engine_api_types
-from web3/ethtypes as web3types import nil
-
 export
-  common, engine_api_types, times,
+  common, times,
   results, constants,
-  TypedTransaction, clmock, engine_client
+  clmock, engine_client
 
 type
   EthBlockHeader* = common.BlockHeader
@@ -43,21 +40,26 @@ type
     gHeader*: EthBlockHeader
     ttd*: DifficultyInt
     clMock*: CLMocker
-    nonce*: uint64
     vaultKey*: PrivateKey
     tx*: Transaction
+    nonce*: uint64
 
-  Web3BlockHash* = web3types.BlockHash
-  Web3Address* = web3types.Address
-  Web3Bloom* = web3types.FixedBytes[256]
-  Web3Quantity* = web3types.Quantity
-  Web3PrevRandao* = web3types.FixedBytes[32]
-  Web3ExtraData* = web3types.DynamicBytes[0, 32]
+  BaseTx* = object of RootObj
+    recipient*: Option[EthAddress]
+    gasLimit* : GasInt
+    amount*   : UInt256
+    payload*  : seq[byte]
+    txType*   : Option[TxType]
+
+  BigInitcodeTx* = object of BaseTx
+    initcodeLength*: int
+    padByte*       : uint8
+    initcode*      : seq[byte]
 
 const
-  baseFolder  = "hive_integration" / "nodocker" / "engine"
-  genesisFile = baseFolder / "genesis.json"
-  sealerKey   = baseFolder / "sealer.key"
+  baseFolder  = "hive_integration/nodocker/engine"
+  genesisFile = baseFolder / "init/genesis.json"
+  sealerKey   = baseFolder / "init/sealer.key"
   chainFolder = baseFolder / "chains"
 
   # This is the account that sends vault funding transactions.
@@ -148,10 +150,20 @@ proc setupELClient*(conf: ChainConfig): TestEnv =
   result.conf.networkParams.config = conf
   setupELClient(result, "", false)
 
+proc newTestEnv*(): TestEnv =
+  TestEnv(
+    conf: makeConfig(@["--engine-signer:658bdf435d810c91414ec09147daa6db62406379", "--custom-network:" & genesisFile])
+  )
+
+proc newTestEnv*(conf: ChainConfig): TestEnv =
+  result = TestEnv(
+    conf: makeConfig(@["--engine-signer:658bdf435d810c91414ec09147daa6db62406379", "--custom-network:" & genesisFile])
+  )
+  result.conf.networkParams.config = conf
+
 proc stopELClient*(t: TestEnv) =
   waitFor t.rpcClient.close()
   waitFor t.sealingEngine.stop()
-  #waitFor t.rpcServer.stop()
   waitFor t.rpcServer.closeWait()
 
 # TTD is the value specified in the TestSpec + Genesis.Difficulty
@@ -159,7 +171,7 @@ proc setRealTTD*(t: TestEnv, ttdValue: int64) =
   let realTTD = t.gHeader.difficulty + ttdValue.u256
   t.com.setTTD some(realTTD)
   t.ttd = realTTD
-  t.clmock = newCLMocker(t.rpcClient, realTTD)
+  t.clmock = newCLMocker(t.rpcClient, t.com)
 
 proc slotsToSafe*(t: TestEnv, x: int) =
   t.clMock.slotsToSafe = x
@@ -170,25 +182,97 @@ proc slotsToFinalized*(t: TestEnv, x: int) =
 func gwei(n: int64): GasInt {.compileTime.} =
   GasInt(n * (10 ^ 9))
 
-proc makeNextTransaction*(t: TestEnv, recipient: EthAddress, amount: UInt256, payload: openArray[byte] = []): Transaction =
+proc getTxType(tc: BaseTx, nonce: uint64): TxType =
+  if tc.txType.isNone:
+    if nonce mod 2 == 0:
+      TxLegacy
+    else:
+      TxEIP1559
+  else:
+    tc.txType.get
+
+proc makeTx*(t: TestEnv, tc: BaseTx, nonce: AccountNonce): Transaction =
   const
-    gasLimit = 75000.GasInt
     gasPrice = 30.gwei
+    gasTipPrice = 1.gwei
+
+    gasFeeCap = gasPrice
+    gasTipCap = gasTipPrice
 
   let chainId = t.conf.networkParams.config.chainId
-  let tx = Transaction(
-    txType  : TxLegacy,
-    chainId : chainId,
-    nonce   : AccountNonce(t.nonce),
-    gasPrice: gasPrice,
-    gasLimit: gasLimit,
-    to      : some(recipient),
-    value   : amount,
-    payload : @payload
-  )
+  let txType = tc.getTxType(nonce)
 
-  inc t.nonce
+  # Build the transaction depending on the specified type
+  let tx = if txType == TxLegacy:
+             Transaction(
+               txType  : TxLegacy,
+               nonce   : nonce,
+               to      : tc.recipient,
+               value   : tc.amount,
+               gasLimit: tc.gasLimit,
+               gasPrice: gasPrice,
+               payload : tc.payload
+             )
+           else:
+             Transaction(
+               txType  : TxEIP1559,
+               nonce   : nonce,
+               gasLimit: tc.gasLimit,
+               maxFee  : gasFeeCap,
+               maxPriorityFee: gasTipCap,
+               to      : tc.recipient,
+               value   : tc.amount,
+               payload : tc.payload,
+               chainId : chainId
+             )
+
   signTransaction(tx, t.vaultKey, chainId, eip155 = true)
+
+proc makeTx*(t: TestEnv, tc: var BigInitcodeTx, nonce: AccountNonce): Transaction =
+  if tc.payload.len == 0:
+    # Prepare initcode payload
+    if tc.initcode.len != 0:
+      doAssert(tc.initcode.len <= tc.initcodeLength, "invalid initcode (too big)")
+      tc.payload = tc.initcode
+
+    while tc.payload.len < tc.initcodeLength:
+      tc.payload.add tc.padByte
+
+  doAssert(tc.recipient.isNone, "invalid configuration for big contract tx creator")
+  t.makeTx(tc.BaseTx, nonce)
+
+proc sendNextTx*(t: TestEnv, tc: BaseTx): bool =
+  t.tx = t.makeTx(tc, t.nonce)
+  inc t.nonce
+  let rr = t.rpcClient.sendTransaction(t.tx)
+  if rr.isErr:
+    error "Unable to send transaction", msg=rr.error
+    return false
+  return true
+
+proc sendTx*(t: TestEnv, tc: BaseTx, nonce: AccountNonce): bool =
+  t.tx = t.makeTx(tc, nonce)
+  let rr = t.rpcClient.sendTransaction(t.tx)
+  if rr.isErr:
+    error "Unable to send transaction", msg=rr.error
+    return false
+  return true
+
+proc sendTx*(t: TestEnv, tc: BigInitcodeTx, nonce: AccountNonce): bool =
+  t.tx = t.makeTx(tc, nonce)
+  let rr = t.rpcClient.sendTransaction(t.tx)
+  if rr.isErr:
+    error "Unable to send transaction", msg=rr.error
+    return false
+  return true
+
+proc sendTx*(t: TestEnv, tx: Transaction): bool =
+  t.tx = tx
+  let rr = t.rpcClient.sendTransaction(t.tx)
+  if rr.isErr:
+    error "Unable to send transaction", msg=rr.error
+    return false
+  return true
 
 proc verifyPoWProgress*(t: TestEnv, lastBlockHash: ethtypes.Hash256): bool =
   let res = waitFor verifyPoWProgress(t.rpcClient, lastBlockHash)
