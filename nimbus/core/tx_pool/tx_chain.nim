@@ -276,6 +276,11 @@ proc baseFee*(dh: TxChainRef): GasPrice =
   else:
     0.GasPrice
 
+proc excessBlobGas*(dh: TxChainRef): uint64 =
+  ## Getter, baseFee for the next bock header. This value is auto-generated
+  ## when a new insertion point is set via `head=`.
+  dh.txEnv.vmState.parent.excessBlobGas.get(0'u64)
+
 proc nextFork*(dh: TxChainRef): EVMFork =
   ## Getter, fork of next block
   dh.com.toEVMFork(dh.txEnv.vmState.forkDeterminationInfoForVMState)

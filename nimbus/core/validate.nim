@@ -232,7 +232,7 @@ proc validateUncles(com: CommonRef; header: BlockHeader;
 # Public function, extracted from executor
 # ------------------------------------------------------------------------------
 
-func gasCost(tx: Transaction): UInt256 =
+func gasCost*(tx: Transaction): UInt256 =
   if tx.txType >= TxEip4844:
     tx.gasLimit.u256 * tx.maxFee.u256 + tx.getTotalBlobGas.u256 * tx.maxFeePerBlobGas.u256
   elif tx.txType >= TxEip1559:
@@ -240,18 +240,9 @@ func gasCost(tx: Transaction): UInt256 =
   else:
     tx.gasLimit.u256 * tx.gasPrice.u256
 
-proc validateTransaction*(
-    roDB:     ReadOnlyStateDB; ## Parent accounts environment for transaction
+proc validateTxBasic*(
     tx:       Transaction;     ## tx to validate
-    sender:   EthAddress;      ## tx.getSender or tx.ecRecover
-    maxLimit: GasInt;          ## gasLimit from block header
-    baseFee:  UInt256;         ## baseFee from block header
-    excessBlobGas: uint64;    ## excessBlobGas from parent block header
     fork:     EVMFork): Result[void, string] =
-
-  let
-    balance = roDB.getBalance(sender)
-    nonce = roDB.getNonce(sender)
 
   if tx.txType == TxEip2930 and fork < FkBerlin:
     return err("invalid tx: Eip2930 Tx type detected before Berlin")
@@ -264,6 +255,68 @@ proc validateTransaction*(
 
   if fork >= FkShanghai and tx.contractCreation and tx.payload.len > EIP3860_MAX_INITCODE_SIZE:
     return err("invalid tx: initcode size exceeds maximum")
+
+  try:
+    # The total must be the larger of the two
+    if tx.maxFee < tx.maxPriorityFee:
+      return err("invalid tx: maxFee is smaller than maPriorityFee. maxFee=$1, maxPriorityFee=$2" % [
+        $tx.maxFee, $tx.maxPriorityFee])
+
+    if tx.gasLimit < tx.intrinsicGas(fork):
+      return err("invalid tx: not enough gas to perform calculation. avail=$1, require=$2" % [
+        $tx.gasLimit, $tx.intrinsicGas(fork)])
+
+    if fork >= FkCancun:
+      if tx.payload.len > MAX_CALLDATA_SIZE:
+        return err("invalid tx: payload len exceeds MAX_CALLDATA_SIZE. len=" &
+          $tx.payload.len)
+
+      if tx.accessList.len > MAX_ACCESS_LIST_SIZE:
+        return err("invalid tx: access list len exceeds MAX_ACCESS_LIST_SIZE. len=" &
+          $tx.accessList.len)
+
+      for i, acl in tx.accessList:
+        if acl.storageKeys.len > MAX_ACCESS_LIST_STORAGE_KEYS:
+          return err("invalid tx: access list storage keys len exceeds MAX_ACCESS_LIST_STORAGE_KEYS. " &
+            "index=$1, len=$2" % [$i, $acl.storageKeys.len])
+
+    if tx.txType >= TxEip4844:
+      if tx.to.isNone:
+        return err("invalid tx: destination must be not empty")
+
+      if tx.versionedHashes.len == 0:
+        return err("invalid tx: there must be at least one blob")
+
+      if tx.versionedHashes.len > MaxAllowedBlob.int:
+        return err("invalid tx: versioned hashes len exceeds MaxAllowedBlob=" & $MaxAllowedBlob &
+          ". get=" & $tx.versionedHashes.len)
+
+      for i, bv in tx.versionedHashes:
+        if bv.data[0] != BLOB_COMMITMENT_VERSION_KZG:
+          return err("invalid tx: one of blobVersionedHash has invalid version. " &
+            "get=$1, expect=$2" % [$bv.data[0].int, $BLOB_COMMITMENT_VERSION_KZG.int])
+
+  except CatchableError as ex:
+    return err(ex.msg)
+
+  ok()
+
+proc validateTransaction*(
+    roDB:     ReadOnlyStateDB; ## Parent accounts environment for transaction
+    tx:       Transaction;     ## tx to validate
+    sender:   EthAddress;      ## tx.getSender or tx.ecRecover
+    maxLimit: GasInt;          ## gasLimit from block header
+    baseFee:  UInt256;         ## baseFee from block header
+    excessBlobGas: uint64;    ## excessBlobGas from parent block header
+    fork:     EVMFork): Result[void, string] =
+
+  let res = validateTxBasic(tx, fork)
+  if res.isErr:
+    return res
+
+  let
+    balance = roDB.getBalance(sender)
+    nonce = roDB.getNonce(sender)
 
   # Note that the following check bears some plausibility but is _not_
   # covered by the eip-1559 reference (sort of) pseudo code, for details
@@ -290,11 +343,6 @@ proc validateTransaction*(
       return err("invalid tx: maxFee is smaller than baseFee. maxFee=$1, baseFee=$2" % [
         $tx.maxFee, $baseFee])
 
-    # The total must be the larger of the two
-    if tx.maxFee < tx.maxPriorityFee:
-      return err("invalid tx: maxFee is smaller than maPriorityFee. maxFee=$1, maxPriorityFee=$2" % [
-        $tx.maxFee, $tx.maxPriorityFee])
-
     # the signer must be able to fully afford the transaction
     let gasCost = tx.gasCost()
 
@@ -305,10 +353,6 @@ proc validateTransaction*(
     if balance - gasCost < tx.value:
       return err("invalid tx: not enough cash to send. avail=$1, availMinusGas=$2, require=$3" % [
         $balance, $(balance-gasCost), $tx.value])
-
-    if tx.gasLimit < tx.intrinsicGas(fork):
-      return err("invalid tx: not enough gas to perform calculation. avail=$1, require=$2" % [
-        $tx.gasLimit, $tx.intrinsicGas(fork)])
 
     if tx.nonce != nonce:
       return err("invalid tx: account nonce mismatch. txNonce=$1, accNonce=$2" % [
@@ -327,37 +371,7 @@ proc validateTransaction*(
       return err("invalid tx: sender is not an EOA. sender=$1, codeHash=$2" % [
         sender.toHex, codeHash.data.toHex])
 
-
-    if fork >= FkCancun:
-      if tx.payload.len > MAX_CALLDATA_SIZE:
-        return err("invalid tx: payload len exceeds MAX_CALLDATA_SIZE. len=" &
-          $tx.payload.len)
-
-      if tx.accessList.len > MAX_ACCESS_LIST_SIZE:
-        return err("invalid tx: access list len exceeds MAX_ACCESS_LIST_SIZE. len=" &
-          $tx.accessList.len)
-
-      for i, acl in tx.accessList:
-        if acl.storageKeys.len > MAX_ACCESS_LIST_STORAGE_KEYS:
-          return err("invalid tx: access list storage keys len exceeds MAX_ACCESS_LIST_STORAGE_KEYS. " &
-            "index=$1, len=$2" % [$i, $acl.storageKeys.len])
-
-    if tx.txType == TxEip4844:
-      if tx.to.isNone:
-        return err("invalid tx: destination must be not empty")
-
-      if tx.versionedHashes.len == 0:
-        return err("invalid tx: there must be at least one blob")
-
-      if tx.versionedHashes.len > MaxAllowedBlob.int:
-        return err("invalid tx: versioned hashes len exceeds MaxAllowedBlob=" & $MaxAllowedBlob &
-          ". get=" & $tx.versionedHashes.len)
-
-      for i, bv in tx.versionedHashes:
-        if bv.data[0] != BLOB_COMMITMENT_VERSION_KZG:
-          return err("invalid tx: one of blobVersionedHash has invalid version. " &
-            "get=$1, expect=$2" % [$bv.data[0].int, $BLOB_COMMITMENT_VERSION_KZG.int])
-
+    if tx.txType >= TxEip4844:
       # ensure that the user was willing to at least pay the current data gasprice
       let blobGasPrice = getBlobGasPrice(excessBlobGas)
       if tx.maxFeePerBlobGas.uint64 < blobGasPrice:

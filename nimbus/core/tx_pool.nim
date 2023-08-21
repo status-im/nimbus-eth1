@@ -910,6 +910,11 @@ proc addLocal*(xp: TxPoolRef;
   xp.add(tx, "local tx")
   ok()
 
+proc inPoolAndOk*(xp: TxPoolRef; txHash: Hash256): bool =
+  let res = xp.getItem(txHash)
+  if res.isErr: return false
+  res.get().reject == txInfoOk
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

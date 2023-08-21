@@ -91,6 +91,14 @@ proc fromJson*(n: JsonNode, name: string, x: var TxType) =
   else:
     x = hexToInt(node.getStr(), int).TxType
 
+proc fromJson*(n: JsonNode, name: string, x: var seq[Hash256]) =
+  let node = n[name]
+  var h: Hash256
+  x = newSeqOfCap[Hash256](node.len)
+  for v in node:
+    hexToByteArray(v.getStr(), h.data)
+    x.add h
+
 proc parseBlockHeader*(n: JsonNode): BlockHeader =
   n.fromJson "parentHash", result.parentHash
   n.fromJson "sha3Uncles", result.ommersHash
@@ -153,6 +161,13 @@ proc parseTransaction*(n: JsonNode): Transaction =
     if accessList.len > 0:
       for acn in accessList:
         tx.accessList.add parseAccessPair(acn)
+
+  if tx.txType >= TxEip4844:
+    n.fromJson "maxFeePerBlobGas", tx.maxFeePerBlobGas
+
+  if n.hasKey("versionedHashes") and n["versionedHashes"].kind != JNull:
+    n.fromJson "versionedHashes", tx.versionedHashes
+
   tx
 
 proc parseWithdrawal*(n: JsonNode): Withdrawal =

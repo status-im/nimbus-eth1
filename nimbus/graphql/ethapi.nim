@@ -1399,11 +1399,6 @@ const queryProcs = {
   "chainID": queryChainId
 }
 
-proc inPoolAndOk(ctx: GraphqlContextRef, txHash: Hash256): bool =
-  let res = ctx.txPool.getItem(txHash)
-  if res.isErr: return false
-  res.get().reject == txInfoOk
-
 proc sendRawTransaction(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   # if tx validation failed, the result will be null
   let ctx = GraphqlContextRef(ud)
@@ -1414,7 +1409,7 @@ proc sendRawTransaction(ud: RootRef, params: Args, parent: Node): RespResult {.a
 
     ctx.txPool.add(tx)
 
-    if ctx.inPoolAndOk(txHash):
+    if ctx.txPool.inPoolAndOk(txHash):
       return resp(txHash)
     else:
       return err("transaction rejected by txpool")

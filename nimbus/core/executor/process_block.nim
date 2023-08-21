@@ -16,7 +16,6 @@ import
   ../../transaction,
   ../../vm_state,
   ../../vm_types,
-  ../../utils/debug,
   ../clique,
   ../dao,
   ./calculate_reward,
@@ -38,12 +37,10 @@ proc processTransactions*(vmState: BaseVMState;
   for txIndex, tx in transactions:
     var sender: EthAddress
     if not tx.getSender(sender):
-      let debugTx =tx.debug()
-      return err("Could not get sender for tx with index " & $(txIndex) & ": " & debugTx)
+      return err("Could not get sender for tx with index " & $(txIndex))
     let rc = vmState.processTransaction(tx, sender, header)
     if rc.isErr:
-      let debugTx =tx.debug()
-      return err("Error processing tx with index " & $(txIndex) & ":\n" & debugTx & "\n" & rc.error)
+      return err("Error processing tx with index " & $(txIndex) & ":" & rc.error)
     vmState.receipts[txIndex] = vmState.makeReceipt(tx.txType)
   ok()
 

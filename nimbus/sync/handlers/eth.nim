@@ -87,11 +87,6 @@ proc inPool(ctx: EthWireRef, txHash: Hash256): bool =
   let res = ctx.txPool.getItem(txHash)
   res.isOk
 
-proc inPoolAndOk(ctx: EthWireRef, txHash: Hash256): bool =
-  let res = ctx.txPool.getItem(txHash)
-  if res.isErr: return false
-  res.get().reject == txInfoOk
-
 proc successorHeader(db: CoreDbRef,
                      h: BlockHeader,
                      output: var BlockHeader,
@@ -288,7 +283,7 @@ proc fetchTransactions(ctx: EthWireRef, reqHashes: seq[Hash256], peer: Peer): Fu
 
   var newTxHashes = newSeqOfCap[Hash256](reqHashes.len)
   for txHash in reqHashes:
-    if ctx.inPoolAndOk(txHash):
+    if ctx.txPool.inPoolAndOk(txHash):
       newTxHashes.add txHash
 
   let peers = ctx.getPeers(peer)
@@ -485,7 +480,7 @@ method handleAnnouncedTxs*(ctx: EthWireRef, peer: Peer, txs: openArray[Transacti
   for i, txHash in txHashes:
     # Nodes must not automatically broadcast blob transactions to
     # their peers. per EIP-4844 spec
-    if ctx.inPoolAndOk(txHash) and txs[i].txType != TxEip4844:
+    if ctx.txPool.inPoolAndOk(txHash) and txs[i].txType != TxEip4844:
       newTxHashes.add txHash
       validTxs.add txs[i]
 

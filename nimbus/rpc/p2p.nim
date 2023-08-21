@@ -269,11 +269,14 @@ proc setupEthRpc*(
     ## Returns the transaction hash, or the zero hash if the transaction is not yet available.
     ## Note: Use eth_getTransactionReceipt to get the contract address, after the transaction was mined, when you created a contract.
     let
-      txBytes = hexToSeqByte(data.string)
+      txBytes  = hexToSeqByte(data.string)
       signedTx = decodeTx(txBytes)
+      txHash   = rlpHash(signedTx)
 
     txPool.add(signedTx)
-    result = rlpHash(signedTx).ethHashStr
+    if not txPool.inPoolAndOk(txHash):
+      raise newException(ValueError, "transaction rejected by txpool")
+    result = txHash.ethHashStr
 
   server.rpc("eth_call") do(call: EthCall, quantityTag: string) -> HexDataStr:
     ## Executes a new message call immediately without creating a transaction on the block chain.

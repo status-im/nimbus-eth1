@@ -190,7 +190,7 @@ proc populateTransactionObject*(tx: Transaction, header: BlockHeader, txIndex: i
 
   if tx.txType >= TxEIP4844:
     result.maxFeePerBlobGas = some(encodeQuantity(tx.maxFeePerBlobGas.uint64))
-    #result.versionedHashes = some(tx.versionedHashes)
+    result.versionedHashes = some(tx.versionedHashes)
 
 proc populateBlockObject*(header: BlockHeader, chain: CoreDbRef, fullTx: bool, isUncle = false): BlockObject
     {.gcsafe, raises: [CatchableError].} =
