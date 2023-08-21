@@ -13,6 +13,7 @@
 import
   std/[algorithm, sequtils, sets, strutils, tables],
   eth/[common, trie/nibbles],
+  results,
   stew/byteutils,
   "."/[aristo_constants, aristo_desc, aristo_hike, aristo_init],
   ./aristo_init/[aristo_memory, aristo_rocksdb]
@@ -350,9 +351,8 @@ proc ppBeOnly[T](be: T; db: AristoDbRef; indent: int): string =
     pfx1 = indent.toPfx(1)
     pfx2 = indent.toPfx(2)
   result = "<" & $be.kind & ">"
-  result &= pfx & "vGen" & pfx1 & "[" & be.walkIdg.toSeq.mapIt(
-      it[2].mapIt(it.ppVid).join(",")
-    ).join(",") & "]"
+  result &= pfx & "vGen" & pfx1 & "[" &
+    be.getIdgFn().get(otherwise = EmptyVidSeq).mapIt(it.ppVid).join(",") & "]"
   result &= pfx & "sTab" & pfx1 & "{" & be.walkVtx.toSeq.mapIt(
       $(1+it[0]) & "(" & it[1].ppVid & "," & it[2].ppVtx(db,it[1]) & ")"
     ).join(pfx2) & "}"

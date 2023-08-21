@@ -46,7 +46,7 @@ type
     rdb: RdbInst              ## Allows low level access to database
 
   RdbPutHdlRef = ref object of TypedPutHdlRef
-    cache: RdbTabs            ## Tranaction cache
+    cache: RdbTabs            ## Transaction cache
 
 const
   extraTraceMessages = false or true
@@ -75,6 +75,16 @@ proc getSession(hdl: PutHdlRef; db: RdbBackendRef): RdbPutHdlRef =
 proc endSession(hdl: PutHdlRef; db: RdbBackendRef): RdbPutHdlRef =
   hdl.TypedPutHdlRef.finishSession db
   hdl.RdbPutHdlRef
+
+
+proc `vtxCache=`(hdl: RdbPutHdlRef; val: tuple[vid: VertexID; data: Blob]) =
+  hdl.cache[VtxPfx][val.vid.uint64] = val.data
+
+proc `keyCache=`(hdl: RdbPutHdlRef; val: tuple[vid: VertexID; data: Blob]) =
+  hdl.cache[KeyPfx][val.vid.uint64] = val.data
+
+proc `admCache=`(hdl: RdbPutHdlRef; val: tuple[id: AdminTabID; data: Blob]) =
+  hdl.cache[AdmPfx][val.id.uint64] = val.data
 
 # ------------------------------------------------------------------------------
 # Private functions: interface
@@ -121,7 +131,7 @@ proc getIdgFn(db: RdbBackendRef): GetIdgFn =
     proc(): Result[seq[VertexID],AristoError]=
 
       # Fetch serialised data record
-      let rc = db.rdb.get VertexID(0).toOpenArray(IdgPfx)
+      let rc = db.rdb.get AdmTabId_Idg.toOpenArray()
       if rc.isErr:
         debug logTxt "getIdgFn: failed", error=rc.error[1]
         return err(rc.error[0])
@@ -155,9 +165,9 @@ proc putVtxFn(db: RdbBackendRef): PutVtxFn =
                 vid:  vid,
                 code: rc.error)
               return
-            hdl.cache[VtxPfx][vid] = rc.value
+            hdl.vtxCache = (vid, rc.value)
           else:
-            hdl.cache[VtxPfx][vid] = EmptyBlob
+            hdl.vtxCache = (vid, EmptyBlob)
 
 proc putKeyFn(db: RdbBackendRef): PutKeyFn =
   result =
@@ -166,10 +176,9 @@ proc putKeyFn(db: RdbBackendRef): PutKeyFn =
       if hdl.error.isNil:
         for (vid,key) in vkps:
           if key.isValid:
-            hdl.cache[KeyPfx][vid] = key.to(Blob)
+            hdl.keyCache = (vid, key.to(Blob))
           else:
-            hdl.cache[KeyPfx][vid] = EmptyBlob
-            
+            hdl.keyCache = (vid, EmptyBlob)
 
 proc putIdgFn(db: RdbBackendRef): PutIdgFn =
   result =
@@ -177,9 +186,9 @@ proc putIdgFn(db: RdbBackendRef): PutIdgFn =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
         if 0 < vs.len:
-          hdl.cache[IdgPfx][VertexID(0)] = vs.blobify
+          hdl.admCache = (AdmTabId_Idg, vs.blobify)
         else:
-          hdl.cache[IdgPfx][VertexID(0)] = EmptyBlob
+          hdl.admCache = (AdmTabId_Idg, EmptyBlob)
 
 
 proc putEndFn(db: RdbBackendRef): PutEndFn =
@@ -250,15 +259,6 @@ iterator walk*(
   ## yield record is still incremented.
   for w in be.rdb.walk:
     yield w
-
-iterator walkIdg*(
-    be: RdbBackendRef;
-      ): tuple[n: int, id: uint64, vGen: seq[VertexID]] =
-  ## Variant of `walk()` iteration over the ID generator sub-table.
-  for (n, id, data) in be.rdb.walk IdgPfx:
-    let rc = data.deblobify seq[VertexID]
-    if rc.isOk:
-      yield (n, id, rc.value)
 
 iterator walkVtx*(
     be: RdbBackendRef;

@@ -163,10 +163,10 @@ proc put*(
     when extraTraceMessages:
       trace logTxt "sub-table", pfx, nItems=tabs[pfx].len
 
-    for vid in tabs[pfx].keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID):
+    for id in tabs[pfx].keys.toSeq.sorted:
       let
-        key = vid.toRdbKey pfx
-        val = tabs[pfx].getOrDefault(vid, EmptyBlob)
+        key = id.toRdbKey pfx
+        val = tabs[pfx].getOrDefault(id, EmptyBlob)
       if val.len == 0:
         delKey.incl key
       else:

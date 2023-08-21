@@ -74,7 +74,6 @@ proc verify(
   let
     beSTab = be.walkVtx.toSeq.mapIt((it[1],it[2])).toTable
     beKMap = be.walkKey.toSeq.mapIt((it[1],it[2])).toTable
-    beIdg = be.walkIdg.toSeq
 
   for vid in beSTab.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID):
     let

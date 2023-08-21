@@ -315,12 +315,12 @@ the bitmask(2)-word array to a single byte, the maximum value of that byte is
 
         where the marker byte is 0xff
 
-### 4.7 Descriptor record serialisation
+### 4.7 Serialisation of the list of unused vertex IDs
 
         0 +-- ..
           ...                                -- recycled vertexIDs
           +--+--+--+--+--+--+--+--+
-          |                       |          -- bottom of unused vertex IDs
+          |                       |          -- last unused vertex IDs
           +--+--+--+--+--+--+--+--+
           || |                               -- marker(2) + unused(6)
           +--+
@@ -328,14 +328,11 @@ the bitmask(2)-word array to a single byte, the maximum value of that byte is
         where
           marker(2) is the double bit array 01
 
-Currently, the descriptor record only contains data for producing unique
-vectorID values that can be used as structural keys. If this descriptor is
-missing, the value *(0x40000000,0x01)* is assumed. The last vertexID in the
-descriptor list has the property that that all values greater or equal than
-this value can be used as vertexID.
+The vertex IDs in this record must all be non-zero. The last entry in the list
+indicates that all ID values greater or equal than this value are free and can
+be used as vertex IDs. If this record is missing, the value *(1u64,0x01)* is
+assumed, i.e. the list with the single vertex ID *1*.
 
-The vertexIDs in the descriptor record must all be non-zero and record itself
-should be allocated in the structural table associated with the zero key.
 
 ### 4.7 Backend filter record serialisation
 

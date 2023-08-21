@@ -26,9 +26,13 @@ type
   StorageType* = enum
     ## Storage types, key prefix
     Oops = 0
-    IdgPfx = 1                       ## ID generator
+    AdmPfx = 1                       ## Admin data, e.g. ID generator
     VtxPfx = 2                       ## Vertex data
     KeyPfx = 3                       ## Key/hash data
+
+  AdminTabID* = distinct uint64
+    ## Access keys for admin table records. When exposed (e.g. when itereating
+    ## over the tables), this data type is to be used.
 
   TypedBackendRef* = ref object of BackendRef
     kind*: BackendType               ## Backend type identifier
@@ -40,7 +44,7 @@ type
     case pfx*: StorageType           ## Error sub-table
     of VtxPfx, KeyPfx:
       vid*: VertexID                 ## Vertex ID where the error occured
-    of IdgPfx, Oops:
+    of AdmPfx, Oops:
       discard
     code*: AristoError               ## Error code (if any)
 
@@ -48,6 +52,9 @@ type
     error*: TypedPutHdlErrRef        ## Track error while collecting transaction
     when verifyIxId:
       txId: uint                     ## Transaction ID (for debugging)
+
+const
+  AdmTabIdIdg* = AdminTabID(0)       ## Access key for vertex ID generator state
 
 # ------------------------------------------------------------------------------
 # Public helpers
