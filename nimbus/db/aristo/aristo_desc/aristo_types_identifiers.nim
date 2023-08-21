@@ -23,6 +23,9 @@ type
   ByteArray32* = array[32,byte]
     ## Used for 32 byte hash components repurposed as Merkle hash labels.
 
+  FilterID* = distinct uint64
+    ## Identifier used to tag filter logs stored on the backend.
+
   VertexID* = distinct uint64
     ## Unique identifier for a vertex of the `Aristo Trie`. The vertex is the
     ## prefix tree (aka `Patricia Trie`) component. When augmented by hash
@@ -88,6 +91,13 @@ func `==`*(a: VertexID; b: static[uint]): bool =
 proc `+`*(a: VertexID; b: uint64): VertexID = (a.uint64+b).VertexID
 proc `-`*(a: VertexID; b: uint64): VertexID = (a.uint64-b).VertexID
 proc `-`*(a, b: VertexID): uint64 = (a.uint64 - b.uint64)
+
+# ------------------------------------------------------------------------------
+# Public helpers: `FilterID` scalar data model
+# ------------------------------------------------------------------------------
+
+func `==`*(a, b: FilterID): bool {.borrow.}
+func `$`*(a: FilterID): string {.borrow.}
 
 # ------------------------------------------------------------------------------
 # Public helpers: `HashID` scalar data model

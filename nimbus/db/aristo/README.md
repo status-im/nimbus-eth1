@@ -214,11 +214,11 @@ and implemented as 64 bit values, stored *Big Endian* in the serialisation.
           +--+--+
           |     |                            -- access(16) bitmap
           +--+--+
-          || |                               -- marker(2) + unused(6)
+          |  |                               -- marker(8), 0x08
           +--+
 
         where
-          marker(2) is the double bit array 00
+          marker(8) is the eight bit array *0000-1000*
 
 For a given index *n* between *0..15*, if the bit at position *n* of the bit
 vector *access(16)* is reset to zero, then there is no *n*-th structural
@@ -281,7 +281,7 @@ data, for RLP encoded or for unstructured data as defined below.
           +-- ..  --+--+
           |            |                     -- code hash, 0, 8 or 32 bytes
           +--+ .. --+--+
-          |  |                               -- bitmask(2)-word array
+          |  |                               -- 4 x bitmask(2), word array
           +--+
 
         where each bitmask(2)-word array entry defines the length of
@@ -290,30 +290,32 @@ data, for RLP encoded or for unstructured data as defined below.
           01 -- field lengthh is 8 bytes
           10 -- field lengthh is 32 bytes
 
-Apparently, entries 0 and and 2 of the bitmask(2) word array cannot have the
-value 10 as they refer to the nonce and the storage ID data fields. So, joining
-the bitmask(2)-word array to a single byte, the maximum value of that byte is
-0x99.
+Apparently, entries 0 and and 2 of the *4 x bitmask(2)* word array cannot have
+the two bit value *10* as they refer to the nonce and the storage ID data
+fields. So, joining the *4 x bitmask(2)* word array to a single byte, the
+maximum value of that byte is 0x99.
 
 ### 4.5 Leaf record payload serialisation for RLP encoded data
 
         0 +--+ .. --+
           |  |      |                        -- data, at least one byte
           +--+ .. --+
-          |  |                               -- marker byte
+          |  |                               -- marker(8), 0x6a
           +--+
 
-        where the marker byte is 0xaa
+        where
+          marker(8) is the eight bit array *0110-1010*
 
 ### 4.6 Leaf record payload serialisation for unstructured data
 
         0 +--+ .. --+
           |  |      |                        -- data, at least one byte
           +--+ .. --+
-          |  |                               -- marker byte
+          |  |                               -- marker(8), 0x6b
           +--+
 
-        where the marker byte is 0xff
+        where
+          marker(8) is the eight bit array *0110-1011*
 
 ### 4.7 Serialisation of the list of unused vertex IDs
 
@@ -322,11 +324,11 @@ the bitmask(2)-word array to a single byte, the maximum value of that byte is
           +--+--+--+--+--+--+--+--+
           |                       |          -- last unused vertex IDs
           +--+--+--+--+--+--+--+--+
-          || |                               -- marker(2) + unused(6)
+          |  |                               -- marker(8), 0x7c
           +--+
 
         where
-          marker(2) is the double bit array 01
+          marker(8) is the eight bit array *0111-1100*
 
 The vertex IDs in this record must all be non-zero. The last entry in the list
 indicates that all ID values greater or equal than this value are free and can
@@ -334,7 +336,7 @@ be used as vertex IDs. If this record is missing, the value *(1u64,0x01)* is
 assumed, i.e. the list with the single vertex ID *1*.
 
 
-### 4.7 Backend filter record serialisation
+### 4.8 Backend filter record serialisation
 
         0  +--+--+--+--+--+ .. --+--+ .. --+
            |                               | -- 32 bytes filter source hash
@@ -360,6 +362,9 @@ assumed, i.e. the list with the single vertex ID *1*.
            ||          |                     -- flg(3) + vtxLen(29), 2nd triplet
            +--+--+--+--+
            ...
+           +--+
+           |  |                               -- marker(8), 0x7d
+           +--+
 
         where
           + minimum size of an empty filer is 72 bytes
@@ -379,6 +384,42 @@ assumed, i.e. the list with the single vertex ID *1*.
 
           + the vtxLen(29) is the number of bytes of the optional vertex record
             which has maximum size 2^29-1 which is short of 512 MiB
+
+          + the marker(8) is the eight bit array *0111-1101*
+
+### 4.9 Serialisation of a list of filter IDs
+
+        0 +-- ..
+          ...                                -- some filter ID
+          +--+--+--+--+--+--+--+--+
+          |                       |          -- last filter IDs
+          +--+--+--+--+--+--+--+--+
+          |  |                               -- marker(8), 0x7e
+          +--+
+
+        where
+          marker(8) is the eight bit array *0111-1110*
+
+This list is used to control the filters on the database. By holding some IDs
+in a dedicated list (e.g. the latest filters) one can quickly access particular
+entries without searching through the set of filters.
+
+### 4.10 Serialisation record identifier identification
+
+Any of the above records can uniquely be identified by its trailing marker,
+i.e. the last byte of a serialised record.
+
+|** Bit mask**| **Hex value**    | **Record type**      |**Chapter reference**|
+|:-----------:|:----------------:|:--------------------:|:-------------------:|
+|   0000 1000 | 0x08             | Branch record        | 4.1                 |
+|   10xx xxxx | 0x80 + x(6)      | Extension record     | 4.2                 |
+|   11xx xxxx | 0xC0 + x(6)      | Leaf record          | 4.3                 |
+|   0xxx 0yyy | (x(3)<<4) + y(3) | account payload      | 4.4                 |
+|   0110 1010 | 0x6a             | RLP encoded payload  | 4.5                 |
+|   0110 1011 | 0x6b             | unstructured payload | 4.6                 |
+|   0111 1100 | 0x7c             | list of vertex IDs   | 4.7                 |
+|   0111 1101 | 0x7d             | Filter record        | 4.8                 |
+|   0111 1110 | 0x7e             | list of vertex IDs   | 4.9                 |
 
 5. *Patricia Trie* implementation notes
 ---------------------------------------

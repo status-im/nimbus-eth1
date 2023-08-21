@@ -186,9 +186,9 @@ type
     GetLeafNotFound
     GetVtxNotFound
     GetKeyNotFound
+    GetFilNotFound
     GetIdgNotFound
-    GetLogNotFound
-    GetEpoNotFound
+    GetFasNotFound
 
     # RocksDB backend
     RdbBeCantCreateDataDir
