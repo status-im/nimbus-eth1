@@ -168,9 +168,9 @@ proc blobify*(pyl: PayloadRef): Blob =
     return
   case pyl.pType
   of RawData:
-    result = pyl.rawBlob & @[0xff.byte]
+    result = pyl.rawBlob & @[0x6b.byte]
   of RlpData:
-    result = pyl.rlpBlob & @[0xaa.byte]
+    result = pyl.rlpBlob & @[0x6a.byte]
 
   of AccountData:
     var mask: byte
@@ -203,17 +203,17 @@ proc blobify*(vtx: VertexRef; data: var Blob): AristoError =
   ##   Branch:
   ##     uint64, ...    -- list of up to 16 child vertices lookup keys
   ##     uint16         -- index bitmap
-  ##     0x00           -- marker(2) + unused(2)
+  ##     0x08           -- marker(8)
   ##
   ##   Extension:
   ##     uint64         -- child vertex lookup key
   ##     Blob           -- hex encoded partial path (at least one byte)
-  ##     0x80           -- marker(2) + unused(2)
+  ##     0x80 + xx      -- marker(2) + pathSegmentLen(6)
   ##
   ##   Leaf:
   ##     Blob           -- opaque leaf data payload (might be zero length)
   ##     Blob           -- hex encoded partial path (at least one byte)
-  ##     0xc0           -- marker(2) + partialPathLen(6)
+  ##     0xc0 + yy      -- marker(2) + partialPathLen(6)
   ##
   ## For a branch record, the bytes of the `access` array indicate the position
   ## of the Patricia Trie vertex reference. So the `vertexID` with index `n` has
@@ -233,7 +233,7 @@ proc blobify*(vtx: VertexRef; data: var Blob): AristoError =
         refs &= vtx.bVid[n].uint64.toBytesBE.toSeq
     if refs.len < 16:
       return BlobifyBranchMissingRefs
-    data = refs & access.toBytesBE.toSeq & @[0u8]
+    data = refs & access.toBytesBE.toSeq & @[0x08u8]
   of Extension:
     let
       pSegm = vtx.ePfx.hexPrefixEncode(isleaf = false)
@@ -262,42 +262,39 @@ proc blobify*(vtx: VertexRef): Result[Blob, AristoError] =
   ok(data)
 
 proc blobify*(vGen: openArray[VertexID]; data: var Blob) =
-  ## This function serialises the vertex ID generator state used in the
-  ## `AristoDbRef` descriptor.
-  ##
-  ## This data record is supposed to be as in a dedicated slot in the
-  ## persistent tables.
+  ## This function serialises a list of vertex IDs.
   ## ::
-  ##   Admin:
-  ##     uint64, ...    -- list of IDs
-  ##     0x40
+  ##   uint64, ...    -- list of IDs
+  ##   0x7c           -- marker(8)
   ##
   data.setLen(0)
   for w in vGen:
     data &= w.uint64.toBytesBE.toSeq
-  data.add 0x40u8
+  data.add 0x7Cu8
 
 proc blobify*(vGen: openArray[VertexID]): Blob =
   ## Variant of `blobify()`
   vGen.blobify result
 
+
 proc blobify*(filter: FilterRef; data: var Blob): AristoError =
   ## This function serialises an Aristo DB filter object
   ## ::
-  ##   Filter encoding:
-  ##     Uint256        -- source key
-  ##     Uint256        -- target key
-  ##     uint32         -- number of vertex IDs (vertex ID generator state)
-  ##     uint32         -- number of (id,key,vertex) triplets
+  ##   Uint256        -- source key
+  ##   Uint256        -- target key
+  ##   uint32         -- number of vertex IDs (vertex ID generator state)
+  ##   uint32         -- number of (id,key,vertex) triplets
   ##
-  ##     uint64, ...    -- list of vertex IDs (vertex ID generator state)
+  ##   uint64, ...    -- list of vertex IDs (vertex ID generator state)
   ##
-  ##     uint32         -- flag(3) + vtxLen(29), first triplet
-  ##     uint64         -- vertex ID
-  ##     Uint256        -- optional key
-  ##     Blob           -- optional vertex
+  ##   uint32         -- flag(3) + vtxLen(29), first triplet
+  ##   uint64         -- vertex ID
+  ##   Uint256        -- optional key
+  ##   Blob           -- optional vertex
   ##
-  ##     ...            -- more triplets
+  ##   ...            -- more triplets
+  ##   0x7d           -- marker(8)
+  ##
   ##
   data.setLen(0)
   data &= filter.src.ByteArray32.toSeq
@@ -370,6 +367,7 @@ proc blobify*(filter: FilterRef; data: var Blob): AristoError =
       keyBlob
 
   data[68 ..< 72] = n.uint32.toBytesBE.toSeq
+  data.add 0x7Du8
 
 proc blobify*(filter: FilterRef): Result[Blob, AristoError] =
   ## ...
@@ -379,6 +377,22 @@ proc blobify*(filter: FilterRef): Result[Blob, AristoError] =
     return err(error)
   ok data
 
+
+proc blobify*(vFos: openArray[FilterID]; data: var Blob) =
+  ## This function serialises a list of filter IDs.
+  ## ::
+  ##   uint64, ...    -- list of IDs
+  ##   0x7e           -- marker(8)
+  ##
+  data.setLen(0)
+  for w in vFos:
+    data &= w.uint64.toBytesBE.toSeq
+  data.add 0x7Eu8
+
+proc blobify*(vFos: openArray[FilterID]): Blob =
+  ## Variant of `blobify()`
+  vFos.blobify result
+
 # -------------
 
 proc deblobify(data: Blob; pyl: var PayloadRef): AristoError =
@@ -387,10 +401,10 @@ proc deblobify(data: Blob; pyl: var PayloadRef): AristoError =
     return
 
   let mask = data[^1]
-  if mask == 0xff:
+  if mask == 0x6b: # unstructured payload
     pyl = PayloadRef(pType: RawData, rawBlob: data[0 .. ^2])
     return
-  if mask == 0xaa:
+  if mask == 0x6a: # RLP encoded payload
     pyl = PayloadRef(pType: RlpData, rlpBlob: data[0 .. ^2])
     return
   var
@@ -455,6 +469,8 @@ proc deblobify*(record: Blob; vtx: var VertexRef): AristoError =
 
   case record[^1] shr 6:
   of 0: # `Branch` vertex
+    if record[^1] != 0x08u8:
+      return DeblobUnknown
     if record.len < 19:                               # at least two edges
       return DeblobBranchTooShort
     if (record.len mod 8) != 3:
@@ -516,7 +532,6 @@ proc deblobify*(record: Blob; vtx: var VertexRef): AristoError =
   else:
     return DeblobUnknown
 
-
 proc deblobify*(data: Blob; T: type VertexRef): Result[T,AristoError] =
   ## Variant of `deblobify()` for vertex deserialisation.
   var vtx = T(nil) # will be auto-initialised
@@ -524,6 +539,7 @@ proc deblobify*(data: Blob; T: type VertexRef): Result[T,AristoError] =
   if info != AristoError(0):
     return err(info)
   ok vtx
+
 
 proc deblobify*(data: Blob; vGen: var seq[VertexID]): AristoError =
   ## De-serialise the data record encoded with `blobify()` into the vertex ID
@@ -533,7 +549,7 @@ proc deblobify*(data: Blob; vGen: var seq[VertexID]): AristoError =
   else:
     if (data.len mod 8) != 1:
       return DeblobSizeGarbled
-    if data[^1] shr 6 != 1:
+    if data[^1] != 0x7c:
       return DeblobWrongType
     for n in 0 ..< (data.len div 8):
       let w = n * 8
@@ -552,6 +568,8 @@ proc deblobify*(data: Blob; filter: var FilterRef): AristoError =
   ## De-serialise an Aristo DB filter object
   if data.len < 72: # minumum length 72 for an empty filter
     return DeblobFilterTooShort
+  if data[^1] != 0x7d:
+    return DeblobWrongType
 
   let f = FilterRef()
   (addr f.src.ByteArray32[0]).copyMem(unsafeAddr data[0], 32)
@@ -604,7 +622,7 @@ proc deblobify*(data: Blob; filter: var FilterRef): AristoError =
     elif (flag mod 3) == 1:                             # {0,1,2} x {1}
       f.sTab[vid] = VertexRef(nil)
 
-  if data.len != offs:
+  if data.len != offs + 1:
     return DeblobFilterSizeGarbled
 
   filter = f
@@ -616,6 +634,28 @@ proc deblobify*(data: Blob; T: type FilterRef): Result[T,AristoError] =
   if error != AristoError(0):
     return err(error)
   ok filter
+
+proc deblobify*(data: Blob; vFas: var seq[FilterID]): AristoError =
+  ## De-serialise the data record encoded with `blobify()` into a filter ID
+  ## argument liet `vFas`.
+  if data.len == 0:
+    vFas = @[]
+  else:
+    if (data.len mod 8) != 1:
+      return DeblobSizeGarbled
+    if data[^1] != 0x7e:
+      return DeblobWrongType
+    for n in 0 ..< (data.len div 8):
+      let w = n * 8
+      vFas.add (uint64.fromBytesBE data[w ..< w + 8]).FilterID
+
+proc deblobify*(data: Blob; T: type seq[FilterID]): Result[T,AristoError] =
+  ## Variant of `deblobify()` for deserialising the vertex ID generator state
+  var vFas: seq[FilterID]
+  let info = data.deblobify vFas
+  if info != AristoError(0):
+    return err(info)
+  ok vFas
 
 # ------------------------------------------------------------------------------
 # End

@@ -96,6 +96,9 @@ func isValid*(nd: NodeRef): bool =
 func isValid*(pld: PayloadRef): bool =
   pld != PayloadRef(nil)
 
+func isValid*(filter: FilterRef): bool =
+  filter != FilterRef(nil)
+
 func isValid*(key: HashKey): bool =
   key != VOID_HASH_KEY
 
@@ -105,8 +108,8 @@ func isValid*(lbl: HashLabel): bool =
 func isValid*(vid: VertexID): bool =
   vid != VertexID(0)
 
-func isValid*(filter: FilterRef): bool =
-  filter != FilterRef(nil)
+func isValid*(fid: FilterID): bool =
+  fid != FilterID(0)
 
 # ------------------------------------------------------------------------------
 # Public functions, miscellaneous
