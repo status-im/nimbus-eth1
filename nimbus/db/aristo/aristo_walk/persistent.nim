@@ -47,14 +47,6 @@ iterator walkKeyBe*(
   for (n,vid,key) in db.to(T).walkKeyBeImpl db:
     yield (n,vid,key)
 
-iterator walkIdgBe*(
-   T: type RdbBackendRef;
-   db: AristoDbRef;
-     ): tuple[n: int, id: uint64, vGen: seq[VertexID]] =
-  ## Similar to `walkVtxBe()` but for vertex ID generator states.
-  for (n,vid,vGen) in db.to(T).walkIdgBeImpl db:
-    yield (n,vid,vGen)
-
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

@@ -27,7 +27,7 @@
 {.push raises: [].}
 
 import
-  std/[algorithm, sequtils, tables],
+  std/[algorithm, options, sequtils, tables],
   chronicles,
   eth/common,
   stew/results,
@@ -42,13 +42,12 @@ type
     ## Inheriting table so access can be extended for debugging purposes
     sTab: Table[VertexID,Blob]       ## Structural vertex table making up a trie
     kMap: Table[VertexID,HashKey]    ## Merkle hash key mapping
-    vGen: seq[VertexID]
+    vGen: Option[seq[VertexID]]
 
   MemPutHdlRef = ref object of TypedPutHdlRef
     sTab: Table[VertexID,Blob]
     kMap: Table[VertexID,HashKey]
-    vGen: seq[VertexID]
-    vGenOk: bool
+    vGen: Option[seq[VertexID]]
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -97,7 +96,9 @@ proc getKeyFn(db: MemBackendRef): GetKeyFn =
 proc getIdgFn(db: MemBackendRef): GetIdgFn =
   result =
     proc(): Result[seq[VertexID],AristoError]=
-      ok db.vGen
+      if db.vGen.isSome:
+        return ok db.vGen.unsafeGet
+      err(GetIdgNotFound)
 
 # -------------
 
@@ -138,8 +139,7 @@ proc putIdgFn(db: MemBackendRef): PutIdgFn =
     proc(hdl: PutHdlRef; vs: openArray[VertexID])  =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
-        hdl.vGen = vs.toSeq
-        hdl.vGenOk = true
+        hdl.vGen = some(vs.toSeq)
 
 
 proc putEndFn(db: MemBackendRef): PutEndFn =
@@ -168,8 +168,12 @@ proc putEndFn(db: MemBackendRef): PutEndFn =
         else:
           db.kMap.del vid
 
-      if hdl.vGenOk:
-        db.vGen = hdl.vGen
+      if hdl.vGen.isSome:
+        let vGen = hdl.vGen.unsafeGet
+        if vGen.len == 0:
+          db.vGen = none(seq[VertexID])
+        else:
+          db.vGen = some(vGen)
       AristoError(0)
 
 # -------------
@@ -204,13 +208,6 @@ proc memoryBackend*(): BackendRef =
 # Public iterators (needs direct backend access)
 # ------------------------------------------------------------------------------
 
-iterator walkIdg*(
-    be: MemBackendRef;
-      ): tuple[n: int, id: uint64, vGen: seq[VertexID]] =
-  ## Iteration over the ID generator sub-table (there is at most one instance).
-  if 0 < be.vGen.len:
-    yield(0, 0u64, be.vGen)
-
 iterator walkVtx*(
     be: MemBackendRef;
       ): tuple[n: int, vid: VertexID, vtx: VertexRef] =
@@ -241,8 +238,8 @@ iterator walk*(
   ## Non-decodable entries are stepped over while the counter `n` of the
   ## yield record is still incremented.
   var n = 0
-  for (_,id,vGen) in be.walkIdg:
-    yield (n, IdgPfx, id, vGen.blobify)
+  if be.vGen.isSome:
+    yield(0, AdmPfx, AdmTabIdIdg.uint64, be.vGen.unsafeGet.blobify)
     n.inc
 
   for vid in be.sTab.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID):

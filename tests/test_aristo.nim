@@ -14,18 +14,13 @@
 import
   std/[os, strformat, strutils],
   chronicles,
-  eth/[common, p2p],
-  rocksdb,
+  eth/common,
+  results,
   unittest2,
   ../nimbus/db/aristo/[aristo_desc, aristo_merge],
-  ../nimbus/db/core_db,
-  ../nimbus/db/core_db/[legacy_persistent, persistent],
-  ../nimbus/core/chain,
-  ../nimbus/sync/snap/worker/db/[rocky_bulk_load, snapdb_accounts, snapdb_desc],
   ./replay/[pp, undump_accounts, undump_storages],
-  ./test_sync_snap/[snap_test_xx, test_accounts, test_types],
-  ./test_aristo/[
-    test_backend, test_filter, test_helpers, test_transcode, test_tx]
+  ./test_sync_snap/[snap_test_xx, test_types],
+  ./test_aristo/[test_backend, test_filter, test_helpers, test_misc, test_tx]
 
 const
   baseDir = [".", "..", ".."/"..", $DirSep]
@@ -38,18 +33,6 @@ const
   # Standard test samples
   accSample = snapTest0
   storSample = snapTest4
-
-  # Number of database slots available
-  nTestDbInstances = 9
-
-type
-  TestDbs = object
-    ## Provide enough spare empty databases
-    persistent: bool
-    dbDir: string
-    baseDir: string # for cleanup
-    subDir: string  # for cleanup
-    cdb: array[nTestDbInstances,CoreDbRef]
 
 # ------------------------------------------------------------------------------
 # Helpers
@@ -87,108 +70,13 @@ proc setErrorLevel {.used.} =
     setLogLevel(LogLevel.ERROR)
 
 # ------------------------------------------------------------------------------
-# Private functions
-# ------------------------------------------------------------------------------
-
-proc flushDbDir(s: string; subDir = "") =
-  if s != "":
-    let baseDir = s / "tmp"
-    for n in 0 ..< nTestDbInstances:
-      let instDir = if subDir == "": baseDir / $n else: baseDir / subDir / $n
-      if (instDir / "nimbus" / "data").dirExists:
-        # Typically under Windows: there might be stale file locks.
-        try: instDir.removeDir except CatchableError: discard
-    try: (baseDir / subDir).removeDir except CatchableError: discard
-    block dontClearUnlessEmpty:
-      for w in baseDir.walkDir:
-        break dontClearUnlessEmpty
-      try: baseDir.removeDir except CatchableError: discard
-
-
-proc flushDbs(db: TestDbs) =
-  if db.persistent:
-    for n in 0 ..< nTestDbInstances:
-      if db.cdb[n].isNil or db.cdb[n].dbType != LegacyDbPersistent:
-        break
-      db.cdb[n].toLegacyBackend.rocksStoreRef.store.db.rocksdb_close
-    db.baseDir.flushDbDir(db.subDir)
-
-proc testDbs(
-    workDir: string;
-    subDir: string;
-    instances: int;
-    persistent: bool;
-      ): TestDbs =
-  if workDir == "" or not persistent:
-    result.persistent = false
-    result.dbDir = "*notused*"
-  else:
-    result.persistent = true
-    result.baseDir = workDir
-    result.subDir = subDir
-    if subDir != "":
-      result.dbDir = workDir / "tmp" / subDir
-    else:
-      result.dbDir = workDir / "tmp"
-  if result.persistent:
-    workDir.flushDbDir(subDir)
-    for n in 0 ..< min(result.cdb.len, instances):
-      result.cdb[n] = newCoreDbRef(LegacyDbPersistent, result.dbDir / $n)
-
-proc snapDbRef(cdb: CoreDbRef; pers: bool): SnapDbRef =
-  if pers: SnapDbRef.init(cdb)
-  else: SnapDbRef.init(newCoreDbRef LegacyDbMemory)
-
-proc snapDbAccountsRef(
-    cdb: CoreDbRef;
-    root: Hash256;
-    pers: bool;
-      ): SnapDbAccountsRef =
-  SnapDbAccountsRef.init(cdb.snapDbRef(pers), root, Peer())
-
-# ------------------------------------------------------------------------------
 # Test Runners: accounts and accounts storages
 # ------------------------------------------------------------------------------
 
 proc miscRunner(noisy =true) =
   suite &"Aristo: Miscellaneous tests":
     test &"VertexID recyling lists":
-      noisy.test_transcodeVidRecycleLists()
-
-
-proc transcodeRunner(noisy =true; sample=accSample; stopAfter=high(int)) =
-  let
-    accLst = sample.to(seq[UndumpAccounts])
-    root = accLst[0].root
-    tmpDir = getTmpDir()
-    db = tmpDir.testDbs(sample.name&"-transcode", instances=2, persistent=true)
-    info = if db.persistent: &"persistent db on \"{db.baseDir}\""
-           else: "in-memory db"
-    fileInfo = sample.file.splitPath.tail.replace(".txt.gz","")
-
-  defer:
-    db.flushDbs
-
-  suite &"Aristo: transcoding {fileInfo} accounts for {info}":
-
-    # New common descriptor for this sub-group of tests
-    let
-      desc = db.cdb[0].snapDbAccountsRef(root, db.persistent)
-      hexaDb = desc.hexaDb
-      getFn = desc.getAccountFn
-      dbg = if noisy: hexaDb else: nil
-
-    # Borrowed from `test_sync_snap/test_accounts.nim`
-    test &"Importing {accLst.len} list items to persistent database":
-      if db.persistent:
-        accLst.test_accountsImport(desc, true)
-      else:
-        skip()
-
-    test "Trancoding database records: RLP, NodeRef, Blob, VertexRef":
-      noisy.showElapsed("test_transcoder()"):
-        noisy.test_transcodeAccounts(
-          db.cdb[0].toLegacyBackend.rocksStoreRef, stopAfter)
+      noisy.testVidRecycleLists()
 
 
 proc accountsRunner(
@@ -266,7 +154,6 @@ proc storagesRunner(
 
 proc aristoMain*(noisy = defined(debug)) =
   noisy.miscRunner()
-  noisy.transcodeRunner()
   noisy.accountsRunner()
   noisy.storagesRunner()
 
@@ -278,13 +165,6 @@ when isMainModule:
 
   when true: # and false:
     noisy.miscRunner()
-
-  # Borrowed from `test_sync_snap.nim`
-  when true: # and false:
-    for n,sam in snapTestList:
-      noisy.transcodeRunner(sam)
-    for n,sam in snapTestStorageList:
-      noisy.transcodeRunner(sam)
 
   # This one uses dumps from the external `nimbus-eth1-blob` repo
   when true and false:

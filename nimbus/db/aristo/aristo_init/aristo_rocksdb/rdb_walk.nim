@@ -106,7 +106,7 @@ iterator walk*(
     kData = rit.rocksdb_iter_key(addr kLen)
 
     case pfx:
-    of Oops, IdgPfx:
+    of Oops, AdmPfx:
       discard
     of VtxPfx, KeyPfx:
       # Skip over admin records until vertex sub-table reached
@@ -120,7 +120,7 @@ iterator walk*(
         # End while
 
     case pfx:
-    of Oops, IdgPfx, VtxPfx:
+    of Oops, AdmPfx, VtxPfx:
       discard
     of KeyPfx:
       # Reposition search head to key sub-table
@@ -154,7 +154,7 @@ iterator walk*(
         break walkBody # done
 
       let xid = kData.keyXid(kLen)
-      if 0 < xid or pfx == IdgPfx:
+      if 0 < xid or pfx == AdmPfx:
 
         # Fetch value data
         var vLen: csize_t

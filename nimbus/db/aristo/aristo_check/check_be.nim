@@ -116,9 +116,14 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
   # Compare calculated state against database state
   block:
     # Extract vertex ID generator state
-    var vGen: HashSet[VertexID]
-    for (_,_,w) in T.walkIdgBE db:
-      vGen = vGen + w.toHashSet
+    let vGen = block:
+      let rc = db.getIdgBE()
+      if rc.isOk:
+        rc.value.toHashSet
+      elif rc.error == GetIdgNotFound:
+        EmptyVidSeq.toHashSet
+      else:
+        return err((VertexID(0),rc.error))
     let
       vGenExpected = vids.invTo(HashSet[VertexID])
       delta = vGenExpected -+- vGen # symmetric difference
