@@ -29,10 +29,20 @@ type
       ## Generic backend database retrieval function for a single
       ## `Aristo DB` hash lookup value.
 
+  GetFilFn* =
+    proc(fid: FilterID): Result[FilterRef,AristoError]
+      {.gcsafe, raises: [].}
+        ## Generic backend database retrieval function for a filter record.
+
   GetIdgFn* =
     proc(): Result[seq[VertexID],AristoError] {.gcsafe, raises: [].}
       ## Generic backend database retrieval function for a the ID generator
       ## `Aristo DB` state record.
+
+  GetFasFn* =
+    proc(): Result[seq[FilterID],AristoError] {.gcsafe, raises: [].}
+      ## Generic backend database retrieval function for some administartion
+      ## of the filters (e.g. the top ID.)
 
   # -------------
 
@@ -58,11 +68,22 @@ type
         ## Generic backend database bulk storage function, `VOID_HASH_KEY`
         ## values indicate that records should be deleted.
 
+  PutFilFn* =
+    proc(hdl: PutHdlRef; vf: openArray[(FilterID,FilterRef)])
+      {.gcsafe, raises: [].}
+        ## Generic backend database storage function for filter records.
+
   PutIdgFn* =
     proc(hdl: PutHdlRef; vs: openArray[VertexID])
       {.gcsafe, raises: [].}
         ## Generic backend database ID generator state storage function. This
         ## function replaces the current generator state.
+
+  PutFasFn* =
+    proc(hdl: PutHdlRef; vs: openArray[FilterID])
+      {.gcsafe, raises: [].}
+        ## Generic backend database filter ID state storage function. This
+        ## function replaces the current filter ID state.
 
   PutEndFn* =
     proc(hdl: PutHdlRef): AristoError {.gcsafe, raises: [].}
@@ -83,12 +104,18 @@ type
     ## Backend interface.
     getVtxFn*: GetVtxFn              ## Read vertex record
     getKeyFn*: GetKeyFn              ## Read Merkle hash/key
-    getIdgFn*: GetIdgFn              ## Read ID generator state
+    getFilFn*: GetFilFn              ## Read back log filter
+    getIdgFn*: GetIdgFn              ## Read vertex ID generator state
+    getFasFn*: GetFasFn              ## Read filter ID state
+
     putBegFn*: PutBegFn              ## Start bulk store session
     putVtxFn*: PutVtxFn              ## Bulk store vertex records
     putKeyFn*: PutKeyFn              ## Bulk store vertex hashes
+    putFilFn*: PutFilFn              ## Store back log filter
     putIdgFn*: PutIdgFn              ## Store ID generator state
+    putFasFn*: PutFasFn              ## Store filter ID state
     putEndFn*: PutEndFn              ## Commit bulk store session
+
     closeFn*: CloseFn                ## Generic destructor
 
 # ------------------------------------------------------------------------------

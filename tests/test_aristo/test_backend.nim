@@ -11,19 +11,56 @@
 ## Aristo (aka Patricia) DB records merge test
 
 import
-  std/[algorithm, sequtils, sets, tables],
+  std/[algorithm, hashes, sequtils, sets, strutils, tables],
   eth/common,
-  stew/results,
+  results,
   unittest2,
   ../../nimbus/sync/protocol,
   ../../nimbus/db/aristo,
-  ../../nimbus/db/aristo/[aristo_desc, aristo_debug, aristo_hashify],
-  ../../nimbus/db/aristo/aristo_init/[
-    aristo_memory, aristo_rocksdb, persistent],
+  ../../nimbus/db/aristo/[
+    aristo_debug,
+    aristo_desc,
+    aristo_desc/aristo_types_backend,
+    aristo_hashify,
+    aristo_init/aristo_memory,
+    aristo_init/aristo_rocksdb,
+    aristo_persistent,
+    aristo_transcode,
+    aristo_vid],
   ./test_helpers
+
+const
+  BlindHash = EmptyBlob.hash
 
 # ------------------------------------------------------------------------------
 # Private helpers
+# ------------------------------------------------------------------------------
+
+func hash(filter: FilterRef): Hash =
+  ## Unique hash/filter -- cannot use de/blobify as the expressions
+  ## `filter.blobify` and `filter.blobify.value.deblobify.value.blobify` are
+  ## not necessarily the same binaries due to unsorted tables.
+  ##
+  var h = BlindHash
+  if not filter.isNil:
+    h = h !& filter.src.ByteArray32.hash
+    h = h !& filter.trg.ByteArray32.hash
+
+    for w in filter.vGen.vidReorg:
+      h = h !& w.uint64.hash
+
+    for w in filter.sTab.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID):
+      let data = filter.sTab.getOrVoid(w).blobify.get(otherwise = EmptyBlob)
+      h = h !& (w.uint64.toBytesBE.toSeq & data).hash
+
+    for w in filter.kMap.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID):
+      let data = filter.kMap.getOrVoid(w).ByteArray32.toSeq
+      h = h !& (w.uint64.toBytesBE.toSeq & data).hash
+
+  !$h
+
+# ------------------------------------------------------------------------------
+# Private functions
 # ------------------------------------------------------------------------------
 
 proc mergeData(
@@ -100,6 +137,80 @@ proc verify(
 
   true
 
+# -----------
+  
+proc collectFilter(
+    db: AristoDbRef;
+    filter: FilterRef;
+    tab: var Table[FilterID,Hash];
+    noisy: bool;
+      ): bool =
+  ## Store filter on permanent BE and register digest
+  if not filter.isNil:
+    let
+      fid = FilterID(7 * (tab.len + 1)) # just some number
+      be = db.backend
+      tx = be.putBegFn()
+
+    be.putFilFn(tx, @[(fid,filter)])
+    let endOk = be.putEndFn tx
+    if endOk != AristoError(0):
+      check endOk == AristoError(0)
+      return
+
+    tab[fid] = filter.hash
+
+  true
+
+proc verifyFiltersImpl[T: MemBackendRef|RdbBackendRef](
+    _: type T;
+    db: AristoDbRef;
+    tab: Table[FilterID,Hash];
+    noisy: bool;
+      ): bool =
+  ## Compare stored filters against registered ones
+  var n = 0
+  for (_,fid,filter) in T.walkFilBe db:
+    let
+      filterHash = filter.hash
+      registered = tab.getOrDefault(fid, BlindHash)
+    if registered == BlindHash:
+      check (fid,registered) != (0,BlindHash)
+      return
+    if filterHash != registered:
+      noisy.say "***", "verifyFiltersImpl",
+        " n=", n+1,
+        " fid=", fid.pp,
+        " filterHash=", filterHash.int.toHex,
+        " registered=", registered.int.toHex
+      check (fid,filterHash) == (fid,registered)
+      return
+    n.inc
+
+  if n != tab.len:
+    check n == tab.len
+    return
+
+  true
+
+proc verifyFilters(
+    db: AristoDbRef;
+    tab: Table[FilterID,Hash];
+    noisy: bool;
+      ): bool =
+  ## Wrapper
+  let
+    be = db.to(TypedBackendRef)
+    kind = (if be.isNil: BackendVoid else: be.kind)
+  case kind:
+  of BackendMemory:
+    return MemBackendRef.verifyFiltersImpl(db, tab, noisy)
+  of BackendRocksDB:
+    return RdbBackendRef.verifyFiltersImpl(db, tab, noisy)
+  else:
+    discard
+  check kind == BackendMemory or kind == BackendRocksDB
+
 # ------------------------------------------------------------------------------
 # Public test function
 # ------------------------------------------------------------------------------
@@ -113,6 +224,7 @@ proc test_backendConsistency*(
       ): bool =
   ## Import accounts
   var
+    filTab: Table[FilterID,Hash]             # Filter register
     ndb = AristoDbRef()                      # Reference cache
     mdb = AristoDbRef()                      # Memory backend database
     rdb = AristoDbRef()                      # Rocks DB backend database
@@ -129,6 +241,12 @@ proc test_backendConsistency*(
       ndb = newAristoDbRef BackendVoid
       mdb = newAristoDbRef BackendMemory
       if doRdbOk:
+        if not rdb.backend.isNil: # ignore bootstrap
+          let verifyFiltersOk = rdb.verifyFilters(filTab, noisy)
+          if not verifyFiltersOk:
+            check verifyFiltersOk
+            return
+          filTab.clear
         rdb.finish(flush=true)
         let rc = newAristoDbRef(BackendRocksDB,rdbPath)
         if rc.isErr:
@@ -188,11 +306,23 @@ proc test_backendConsistency*(
       mdbPreSaveCache, mdbPreSaveBackend: string
       rdbPreSaveCache, rdbPreSaveBackend: string
     when true: # and false:
-      mdbPreSaveCache = mdb.pp
-      mdbPreSaveBackend = mdb.to(MemBackendRef).pp(ndb)
+      #mdbPreSaveCache = mdb.pp
+      #mdbPreSaveBackend = mdb.to(MemBackendRef).pp(ndb)
       rdbPreSaveCache = rdb.pp
       rdbPreSaveBackend = rdb.to(RdbBackendRef).pp(ndb)
 
+
+    # Provide filter, store filter on permanent BE, and register filter digest
+    block:
+      let rc = mdb.stow(persistent=false, dontHashify=true, chunkedMpt=true)
+      if rc.isErr:
+        check rc.error == (0,0)
+        return
+      let collectFilterOk = rdb.collectFilter(mdb.roFilter, filTab, noisy)
+      if not collectFilterOk:
+        check collectFilterOk
+        return
+      
     # Store onto backend database
     block:
       #noisy.say "***", "db-dump\n    ", mdb.pp
@@ -243,6 +373,13 @@ proc test_backendConsistency*(
 
     when true and false:
       noisy.say "***", "beCon(9) <", n, "/", list.len-1, ">", " groups=", count
+
+  # Finally ...
+  block:
+    let verifyFiltersOk = rdb.verifyFilters(filTab, noisy)
+    if not verifyFiltersOk:
+      check verifyFiltersOk
+      return
 
   true
 

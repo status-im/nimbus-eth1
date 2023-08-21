@@ -36,6 +36,15 @@ proc getIdgUBE*(
     return be.getIdgFn()
   err(GetIdgNotFound)
 
+proc getFasUBE*(
+    db: AristoDbRef;
+      ): Result[seq[FilterID],AristoError] =
+  ## Get the list of filter IDs unfiltered backened if available.
+  let be = db.backend
+  if not be.isNil:
+    return be.getFasFn()
+  err(GetFasNotFound)
+
 proc getVtxUBE*(
     db: AristoDbRef;
     vid: VertexID;
@@ -55,6 +64,16 @@ proc getKeyUBE*(
   if not be.isNil:
     return be.getKeyFn vid
   err GetKeyNotFound
+
+proc getFilUBE*(
+    db: AristoDbRef;
+    fid: FilterID;
+      ): Result[FilterRef,AristoError] =
+  ## Get the filter from the unfiltered backened if available.
+  let be = db.backend
+  if not be.isNil:
+    return be.getFilFn fid
+  err GetFilNotFound
 
 # ------------------
 

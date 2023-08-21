@@ -53,10 +53,13 @@ proc toRdbKey*(id: uint64; pfx: StorageType): RdbKey =
   copyMem(addr result[1], unsafeAddr idKey, sizeof idKey)
 
 template toOpenArray*(vid: VertexID; pfx: StorageType): openArray[byte] =
-  vid.uint64.toRdbKey(pfx).toOpenArray(0, sizeof VertexID)
+  vid.uint64.toRdbKey(pfx).toOpenArray(0, sizeof uint64)
+
+template toOpenArray*(fid: FilterID): openArray[byte] =
+  fid.uint64.toRdbKey(FilPfx).toOpenArray(0, sizeof uint64)
 
 template toOpenArray*(aid: AdminTabID): openArray[byte] =
-  aid.uint64.toRdbKey(AdmPfx).toOpenArray(0, sizeof AdminTabID)
+  aid.uint64.toRdbKey(AdmPfx).toOpenArray(0, sizeof uint64)
 
 # ------------------------------------------------------------------------------
 # End
