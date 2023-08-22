@@ -414,12 +414,12 @@ i.e. the last byte of a serialised record.
 |   0000 1000 | 0x08             | Branch record        | 4.1                 |
 |   10xx xxxx | 0x80 + x(6)      | Extension record     | 4.2                 |
 |   11xx xxxx | 0xC0 + x(6)      | Leaf record          | 4.3                 |
-|   0xxx 0yyy | (x(3)<<4) + y(3) | account payload      | 4.4                 |
+|   0xxx 0yyy | (x(3)<<4) + y(3) | Account payload      | 4.4                 |
 |   0110 1010 | 0x6a             | RLP encoded payload  | 4.5                 |
-|   0110 1011 | 0x6b             | unstructured payload | 4.6                 |
-|   0111 1100 | 0x7c             | list of vertex IDs   | 4.7                 |
+|   0110 1011 | 0x6b             | Unstructured payload | 4.6                 |
+|   0111 1100 | 0x7c             | List of vertex IDs   | 4.7                 |
 |   0111 1101 | 0x7d             | Filter record        | 4.8                 |
-|   0111 1110 | 0x7e             | list of vertex IDs   | 4.9                 |
+|   0111 1110 | 0x7e             | List of vertex IDs   | 4.9                 |
 
 5. *Patricia Trie* implementation notes
 ---------------------------------------

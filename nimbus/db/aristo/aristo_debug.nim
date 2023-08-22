@@ -85,6 +85,12 @@ proc ppVid(vid: VertexID; pfx = true): string =
   else:
     result &= "ø"
 
+proc ppFid(fid: FilterID): string =
+  if fid.isValid:
+    "%" & fid.uint64.toHex.stripZeros.toLowerAscii
+  else:
+    "ø"
+
 proc ppVidList(vGen: openArray[VertexID]): string =
   "[" & vGen.mapIt(it.ppVid).join(",") & "]"
 
@@ -443,6 +449,9 @@ proc pp*(lty: LeafTie, db = AristoDbRef()): string =
 
 proc pp*(vid: VertexID): string =
   vid.ppVid
+
+proc pp*(fid: FilterID): string =
+  fid.ppFid
 
 proc pp*(vGen: openArray[VertexID]): string =
   vGen.ppVidList

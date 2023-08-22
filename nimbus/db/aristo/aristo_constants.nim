@@ -24,6 +24,9 @@ const
   EmptyVidSeq* = seq[VertexID].default
     ## Useful shortcut
 
+  EmptyFidSeq* = seq[FilterID].default
+    ## Useful shortcut
+
   VOID_CODE_HASH* = EMPTY_CODE_HASH
     ## Equivalent of `nil` for `Account` object code hash
 

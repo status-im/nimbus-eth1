@@ -42,12 +42,16 @@ type
     ## Inheriting table so access can be extended for debugging purposes
     sTab: Table[VertexID,Blob]       ## Structural vertex table making up a trie
     kMap: Table[VertexID,HashKey]    ## Merkle hash key mapping
+    rFil: Table[FilterID,Blob]       ## Backend filters
     vGen: Option[seq[VertexID]]
+    vFas: Option[seq[FilterID]]
 
   MemPutHdlRef = ref object of TypedPutHdlRef
     sTab: Table[VertexID,Blob]
     kMap: Table[VertexID,HashKey]
+    rFil: Table[FilterID,Blob]
     vGen: Option[seq[VertexID]]
+    vFas: Option[seq[FilterID]]
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -93,12 +97,27 @@ proc getKeyFn(db: MemBackendRef): GetKeyFn =
         return ok key
       err(GetKeyNotFound)
 
+proc getFilFn(db: MemBackendRef): GetFilFn =
+  result =
+    proc(fid: FilterID): Result[FilterRef,AristoError] =
+      let data = db.rFil.getOrDefault(fid, EmptyBlob)
+      if 0 < data.len:
+        return data.deblobify FilterRef
+      err(GetFilNotFound)
+
 proc getIdgFn(db: MemBackendRef): GetIdgFn =
   result =
     proc(): Result[seq[VertexID],AristoError]=
       if db.vGen.isSome:
         return ok db.vGen.unsafeGet
       err(GetIdgNotFound)
+
+proc getFasFn(db: MemBackendRef): GetFasFn =
+  result =
+    proc(): Result[seq[FilterID],AristoError]=
+      if db.vFas.isSome:
+        return ok db.vFas.unsafeGet
+      err(GetFasNotFound)
 
 # -------------
 
@@ -134,12 +153,34 @@ proc putKeyFn(db: MemBackendRef): PutKeyFn =
         for (vid,key) in vkps:
           hdl.kMap[vid] = key
 
+proc putFilFn(db: MemBackendRef): PutFilFn =
+  result =
+    proc(hdl: PutHdlRef; vf: openArray[(FilterID,FilterRef)]) =
+      let hdl = hdl.getSession db
+      if hdl.error.isNil:
+        for (fid,filter) in vf:
+          let rc = filter.blobify()
+          if rc.isErr:
+            hdl.error = TypedPutHdlErrRef(
+              pfx:  FilPfx,
+              fid:  fid,
+              code: rc.error)
+            return
+          hdl.rFil[fid] = rc.value
+
 proc putIdgFn(db: MemBackendRef): PutIdgFn =
   result =
     proc(hdl: PutHdlRef; vs: openArray[VertexID])  =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
         hdl.vGen = some(vs.toSeq)
+
+proc putFasFn(db: MemBackendRef): PutFasFn =
+  result =
+    proc(hdl: PutHdlRef; fs: openArray[FilterID])  =
+      let hdl = hdl.getSession db
+      if hdl.error.isNil:
+        hdl.vFas = some(fs.toSeq)
 
 
 proc putEndFn(db: MemBackendRef): PutEndFn =
@@ -151,6 +192,9 @@ proc putEndFn(db: MemBackendRef): PutEndFn =
         of VtxPfx, KeyPfx:
           debug logTxt "putEndFn: vtx/key failed",
             pfx=hdl.error.pfx, vid=hdl.error.vid, error=hdl.error.code
+        of FilPfx:
+          debug logTxt "putEndFn: filter failed",
+            pfx=hdl.error.pfx, fid=hdl.error.fid, error=hdl.error.code
         else:
           debug logTxt "putEndFn: failed",
             pfx=hdl.error.pfx, error=hdl.error.code
@@ -168,12 +212,26 @@ proc putEndFn(db: MemBackendRef): PutEndFn =
         else:
           db.kMap.del vid
 
+      for (fid,data) in hdl.rFil.pairs:
+        if fid.isValid:
+          db.rFil[fid] = data
+        else:
+          db.rFil.del fid
+
       if hdl.vGen.isSome:
         let vGen = hdl.vGen.unsafeGet
         if vGen.len == 0:
           db.vGen = none(seq[VertexID])
         else:
           db.vGen = some(vGen)
+
+      if hdl.vFas.isSome:
+        let vFas = hdl.vFas.unsafeGet
+        if vFas.len == 0:
+          db.vFas = none(seq[FilterID])
+        else:
+          db.vFas = some(vFas)
+
       AristoError(0)
 
 # -------------
@@ -192,12 +250,16 @@ proc memoryBackend*(): BackendRef =
 
   db.getVtxFn = getVtxFn db
   db.getKeyFn = getKeyFn db
+  db.getFilFn = getFilFn db
   db.getIdgFn = getIdgFn db
+  db.getFasFn = getFasFn db
 
   db.putBegFn = putBegFn db
   db.putVtxFn = putVtxFn db
   db.putKeyFn = putKeyFn db
+  db.putFilFn = putFilFn db
   db.putIdgFn = putIdgFn db
+  db.putFasFn = putFasFn db
   db.putEndFn = putEndFn db
 
   db.closeFn = closeFn db
@@ -230,6 +292,20 @@ iterator walkKey*(
     if key.isValid:
       yield (n, vid, key)
 
+iterator walkFil*(
+    be: MemBackendRef;
+      ): tuple[n: int, fid: FilterID, filter: FilterRef] =
+  ##  Iteration over the vertex sub-table.
+  for n,fid in be.rFil.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.FilterID):
+    let data = be.rFil.getOrDefault(fid, EmptyBlob)
+    if 0 < data.len:
+      let rc = data.deblobify FilterRef
+      if rc.isErr:
+        debug logTxt "walkFilFn() skip", n, fid, error=rc.error
+      else:
+        yield (n, fid, rc.value)
+
+
 iterator walk*(
     be: MemBackendRef;
       ): tuple[n: int, pfx: StorageType, xid: uint64, data: Blob] =
@@ -238,8 +314,13 @@ iterator walk*(
   ## Non-decodable entries are stepped over while the counter `n` of the
   ## yield record is still incremented.
   var n = 0
+
   if be.vGen.isSome:
     yield(0, AdmPfx, AdmTabIdIdg.uint64, be.vGen.unsafeGet.blobify)
+    n.inc
+
+  if be.vFas.isSome:
+    yield(0, AdmPfx, AdmTabIdFas.uint64, be.vFas.unsafeGet.blobify)
     n.inc
 
   for vid in be.sTab.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID):
@@ -250,6 +331,12 @@ iterator walk*(
 
   for (_,vid,key) in be.walkKey:
     yield (n, KeyPfx, vid.uint64, key.to(Blob))
+    n.inc
+
+  for lid in be.rFil.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.FilterID):
+    let data = be.rFil.getOrDefault(lid, EmptyBlob)
+    if 0 < data.len:
+      yield (n, FilPfx, lid.uint64, data)
     n.inc
 
 # ------------------------------------------------------------------------------

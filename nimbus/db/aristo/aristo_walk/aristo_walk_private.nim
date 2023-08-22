@@ -86,6 +86,18 @@ iterator walkKeyBeImpl*[T](
       yield (n,vid,key)
       n.inc
 
+
+iterator walkFilBeImpl*[T](
+    be: T;                             # Backend descriptor
+    db: AristoDbRef;                   # Database with optional backend filter
+      ): tuple[n: int, fid: FilterID, filter: FilterRef] =
+  ## Generic filter iterator
+  when be isnot VoidBackendRef:
+    mixin walkFil
+
+    for (n,fid,filter) in be.walkFil:
+      yield (n,fid,filter)
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

@@ -42,6 +42,14 @@ iterator walkKeyBe*[T: MemBackendRef|VoidBackendRef](
   for (n,vid,key) in db.to(T).walkKeyBeImpl db:
     yield (n,vid,key)
 
+iterator walkFilBe*[T: MemBackendRef|VoidBackendRef](
+   _: type T;
+   db: AristoDbRef;
+     ): tuple[n: int, fid: FilterID, filter: FilterRef] =
+  ## Similar to `walkVtxBe()` but for filters.
+  for (n,fid,filter) in db.to(T).walkFilBeImpl db:
+    yield (n,fid,filter)
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
