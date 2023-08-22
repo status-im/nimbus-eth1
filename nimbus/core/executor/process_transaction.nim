@@ -76,7 +76,7 @@ proc asyncProcessTransactionImpl(
     roDB = vmState.readOnlyStateDB
     baseFee256 = header.eip1559BaseFee(fork)
     baseFee = baseFee256.truncate(GasInt)
-    tx = eip1559TxNormalization(tx, baseFee, fork)
+    tx = eip1559TxNormalization(tx, baseFee)
     priorityFee = min(tx.maxPriorityFee, tx.maxFee - baseFee)
     excessBlobGas = vmState.parent.excessBlobGas.get(0'u64)
 

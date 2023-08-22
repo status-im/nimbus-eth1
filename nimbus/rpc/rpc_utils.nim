@@ -13,7 +13,7 @@ import hexstrings, eth/[common, keys], stew/byteutils,
   ../db/core_db, strutils, algorithm, options, times, json,
   ../constants, stint, rpc_types,
   ../utils/utils, ../transaction,
-  ../transaction/call_evm, ../common/evmforks
+  ../transaction/call_evm
 
 const
   defaultTag = "latest"
@@ -245,7 +245,7 @@ proc populateBlockObject*(header: BlockHeader, chain: CoreDbRef, fullTx: bool, i
     result.excessBlobGas = some(encodeQuantity(header.excessBlobGas.get))
 
 proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction,
-                      txIndex: int, header: BlockHeader, fork: EVMFork): ReceiptObject
+                      txIndex: int, header: BlockHeader): ReceiptObject
     {.gcsafe, raises: [ValidationError].} =
   result.transactionHash = tx.rlpHash
   result.transactionIndex = encodeQuantity(txIndex.uint)
@@ -296,5 +296,5 @@ proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction,
     # 1 = success, 0 = failure.
     result.status = some(encodeQuantity(receipt.status.uint64))
 
-  let normTx = eip1559TxNormalization(tx, header.baseFee.truncate(GasInt), fork)
+  let normTx = eip1559TxNormalization(tx, header.baseFee.truncate(GasInt))
   result.effectiveGasPrice = encodeQuantity(normTx.gasPrice.uint64)

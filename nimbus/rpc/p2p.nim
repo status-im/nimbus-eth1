@@ -395,13 +395,12 @@ proc setupEthRpc*(
     var
       idx = 0
       prevGasUsed = GasInt(0)
-      fork = com.toEVMFork(header.forkDeterminationInfoForHeader)
 
     for receipt in chainDB.getReceipts(header.receiptRoot):
       let gasUsed = receipt.cumulativeGasUsed - prevGasUsed
       prevGasUsed = receipt.cumulativeGasUsed
       if idx == txDetails.index:
-        return some(populateReceipt(receipt, gasUsed, tx, txDetails.index, header, fork))
+        return some(populateReceipt(receipt, gasUsed, tx, txDetails.index, header))
       idx.inc
 
   server.rpc("eth_getUncleByBlockHashAndIndex") do(data: EthHashStr, quantity: HexQuantityStr) -> Option[BlockObject]:

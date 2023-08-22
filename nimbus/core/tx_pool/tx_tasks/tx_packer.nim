@@ -84,7 +84,7 @@ proc runTx(pst: TxPackerStateRef; item: TxItemRef): GasInt
   let
     fork = pst.xp.chain.nextFork
     baseFee = pst.xp.chain.baseFee
-    tx = item.tx.eip1559TxNormalization(baseFee.GasInt, fork)
+    tx = item.tx.eip1559TxNormalization(baseFee.GasInt)
 
   #safeExecutor "tx_packer.runTx":
   #  # Execute transaction, may return a wildcard `Exception`

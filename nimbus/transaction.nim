@@ -192,7 +192,7 @@ proc signTransaction*(tx: Transaction, privateKey: PrivateKey, chainId: ChainId,
   result.S = UInt256.fromBytesBE(sig[32..63])
 
 func eip1559TxNormalization*(tx: Transaction;
-                             baseFee: GasInt; fork: EVMFork): Transaction =
+                             baseFee: GasInt): Transaction =
   ## This function adjusts a legacy transaction to EIP-1559 standard. This
   ## is needed particularly when using the `validateTransaction()` utility
   ## with legacy transactions.
@@ -200,7 +200,7 @@ func eip1559TxNormalization*(tx: Transaction;
   if tx.txType < TxEip1559:
     result.maxPriorityFee = tx.gasPrice
     result.maxFee = tx.gasPrice
-  if FkLondon <= fork:
+  else:
     result.gasPrice = baseFee + min(result.maxPriorityFee, result.maxFee - baseFee)
 
 func effectiveGasTip*(tx: Transaction; baseFee: Option[UInt256]): GasInt =

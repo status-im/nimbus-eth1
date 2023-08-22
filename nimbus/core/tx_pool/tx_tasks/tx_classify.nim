@@ -221,7 +221,7 @@ proc classifyValidatePacked*(xp: TxPoolRef;
                  xp.chain.limits.maxLimit
                else:
                  xp.chain.limits.trgLimit
-    tx = item.tx.eip1559TxNormalization(xp.chain.baseFee.GasInt, fork)
+    tx = item.tx.eip1559TxNormalization(xp.chain.baseFee.GasInt)
     excessBlobGas = vmState.parent.excessBlobGas.get(0'u64)
 
   roDB.validateTransaction(tx, item.sender, gasLimit, baseFee, excessBlobGas, fork).isOk
