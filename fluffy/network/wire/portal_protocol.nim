@@ -496,30 +496,24 @@ proc reqResponse[Request: SomeMessage, Response: SomeMessage](
   # an empty response needs to be send in that case.
   # See: https://github.com/ethereum/devp2p/blob/master/discv5/discv5-wire.md#talkreq-request-0x05
 
-  if talkresp.isOk():
-    let msg = decodeMessage(talkresp.value())
+  let messageResponse = talkresp.mapErr(proc (x: cstring): string = $x)
+    .flatMap(proc (x: seq[byte]): Result[Message, string] = decodeMessage(x))
+    .flatMap(proc (m: Message): Result[Response, string] =
+      getInnerMessage[Response](m))
 
-    let messageResponse = msg
-      .flatMap(proc (m: Message): Result[Response, string] =
-        getInnerMessage[Response](m))
+  if messageResponse.isOk():
+    trace "Received message response", srcId = dst.id,
+      srcAddress = dst.address, kind = messageKind(Response)
+    portal_message_response_incoming.inc(
+      labelValues = [$p.protocolId, $messageKind(Response)])
 
-    if messageResponse.isOk():
-      trace "Received message response", srcId = dst.id,
-        srcAddress = dst.address, kind = messageKind(Response)
-      portal_message_response_incoming.inc(
-        labelValues = [$p.protocolId, $messageKind(Response)])
-
-      p.routingTable.setJustSeen(dst)
-    else:
-      debug "Error receiving message response", error = messageResponse.error,
-        srcId = dst.id, srcAddress = dst.address
-      p.routingTable.replaceNode(dst)
-
-    return messageResponse
+    p.routingTable.setJustSeen(dst)
   else:
-    debug "Error receiving talk response", error = talkresp.error,
+    debug "Error receiving message response", error = messageResponse.error,
       srcId = dst.id, srcAddress = dst.address
-    return err("Error receiving talk response")
+    p.routingTable.replaceNode(dst)
+
+  return messageResponse
 
 proc pingImpl*(p: PortalProtocol, dst: Node):
     Future[PortalResult[PongMessage]] {.async.} =
