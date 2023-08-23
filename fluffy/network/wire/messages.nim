@@ -142,16 +142,16 @@ func encodeMessage*[T: SomeMessage](m: T): seq[byte] =
   elif T is OfferMessage: SSZ.encode(Message(kind: offer, offer: m))
   elif T is AcceptMessage: SSZ.encode(Message(kind: accept, accept: m))
 
-func decodeMessage*(body: openArray[byte]): Result[Message, cstring] =
+func decodeMessage*(body: openArray[byte]): Result[Message, string] =
   try:
     if body.len < 1: # TODO: This check should probably move a layer down
       return err("No message data, peer might not support this talk protocol")
     ok(SSZ.decode(body, Message))
-  except SszError:
-    err("Invalid message encoding")
+  except SszError as e:
+    err("Invalid message encoding: " & e.msg)
 
 template innerMessage[T: SomeMessage](
-    message: Message, expected: MessageKind): Result[T, cstring] =
+    message: Message, expected: MessageKind): Result[T, string] =
   if (message.kind == expected):
     ok(message.expected)
   else:
@@ -160,7 +160,7 @@ template innerMessage[T: SomeMessage](
 # Each `Message` variants corresponds to an MessageKind. Therefore, the inner
 # message can be extracted when providing the expected message type T.
 # If the message does not hold the expacted variant, return error.
-func getInnerMessage*[T: SomeMessage](m: Message): Result[T, cstring] =
+func getInnerMessage*[T: SomeMessage](m: Message): Result[T, string] =
   innerMessage[T](m, messageKind(T))
 
 func getTalkReqOverhead*(protocolIdLen: int): int =

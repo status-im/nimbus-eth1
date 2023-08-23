@@ -171,7 +171,7 @@ type
     offerQueue: AsyncQueue[OfferRequest]
     offerWorkers: seq[Future[void]]
 
-  PortalResult*[T] = Result[T, cstring]
+  PortalResult*[T] = Result[T, string]
 
   FoundContentKind* = enum
     Nodes,
@@ -495,9 +495,10 @@ proc reqResponse[Request: SomeMessage, Response: SomeMessage](
   # not supporting the specific talk protocol, as according to specification
   # an empty response needs to be send in that case.
   # See: https://github.com/ethereum/devp2p/blob/master/discv5/discv5-wire.md#talkreq-request-0x05
-  let messageResponse = talkresp
-    .flatMap(proc (x: seq[byte]): Result[Message, cstring] = decodeMessage(x))
-    .flatMap(proc (m: Message): Result[Response, cstring] =
+
+  let messageResponse = talkresp.mapErr(proc (x: cstring): string = $x)
+    .flatMap(proc (x: seq[byte]): Result[Message, string] = decodeMessage(x))
+    .flatMap(proc (m: Message): Result[Response, string] =
       getInnerMessage[Response](m))
 
   if messageResponse.isOk():
