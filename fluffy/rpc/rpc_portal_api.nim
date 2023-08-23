@@ -55,6 +55,9 @@ proc installPortalApiHandlers*(
     return true
 
   rpcServer.rpc("portal_" & network & "GetEnr") do(nodeId: NodeId) -> Record:
+    if p.localNode.id == nodeId:
+      return p.localNode.record
+
     let node = p.getNode(nodeId)
     if node.isSome():
       return node.get().record
