@@ -68,7 +68,7 @@ proc installPortalApiHandlers*(
       p.routingTable.removeNode(node.get())
       return true
     else:
-      raise newException(ValueError, "Record not in local routing table.")
+      return false
 
   rpcServer.rpc("portal_" & network & "LookupEnr") do(nodeId: NodeId) -> Record:
     let lookup = await p.resolve(nodeId)
