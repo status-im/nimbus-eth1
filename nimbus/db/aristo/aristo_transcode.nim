@@ -378,20 +378,21 @@ proc blobify*(filter: FilterRef): Result[Blob, AristoError] =
   ok data
 
 
-proc blobify*(vFos: openArray[QueueID]; data: var Blob) =
-  ## This function serialises a list of filter IDs.
+proc blobify*(vFqs: openArray[(QueueID,QueueID)]; data: var Blob) =
+  ## This function serialises a list of filter queue IDs.
   ## ::
   ##   uint64, ...    -- list of IDs
   ##   0x7e           -- marker(8)
   ##
   data.setLen(0)
-  for w in vFos:
-    data &= w.uint64.toBytesBE.toSeq
+  for w in vFqs:
+    data &= w[0].uint64.toBytesBE.toSeq
+    data &= w[1].uint64.toBytesBE.toSeq
   data.add 0x7Eu8
 
-proc blobify*(vFos: openArray[QueueID]): Blob =
+proc blobify*(vFqs: openArray[(QueueID,QueueID)]): Blob =
   ## Variant of `blobify()`
-  vFos.blobify result
+  vFqs.blobify result
 
 # -------------
 
@@ -635,27 +636,33 @@ proc deblobify*(data: Blob; T: type FilterRef): Result[T,AristoError] =
     return err(error)
   ok filter
 
-proc deblobify*(data: Blob; vFas: var seq[QueueID]): AristoError =
-  ## De-serialise the data record encoded with `blobify()` into a filter ID
-  ## argument liet `vFas`.
+proc deblobify*(data: Blob; vFqs: var seq[(QueueID,QueueID)]): AristoError =
+  ## De-serialise the data record encoded with `blobify()` into a filter queue
+  ## ID argument liet `vFqs`.
   if data.len == 0:
-    vFas = @[]
+    vFqs = @[]
   else:
-    if (data.len mod 8) != 1:
+    if (data.len mod 16) != 1:
       return DeblobSizeGarbled
     if data[^1] != 0x7e:
       return DeblobWrongType
-    for n in 0 ..< (data.len div 8):
-      let w = n * 8
-      vFas.add (uint64.fromBytesBE data[w ..< w + 8]).QueueID
+    for n in 0 ..< (data.len div 16):
+      let
+        w = n * 16
+        a = (uint64.fromBytesBE data[w + 0 ..< w + 8]).QueueID
+        b = (uint64.fromBytesBE data[w + 8 ..< w + 16]).QueueID
+      vFqs.add (a,b)
 
-proc deblobify*(data: Blob; T: type seq[QueueID]): Result[T,AristoError] =
-  ## Variant of `deblobify()` for deserialising the filter queue ID state
-  var vFas: seq[QueueID]
-  let info = data.deblobify vFas
+proc deblobify*(
+    data: Blob;
+    T: type seq[(QueueID,QueueID)];
+      ): Result[T,AristoError] =
+  ## Variant of `deblobify()` for deserialising the vertex ID generator state
+  var vFqs: seq[(QueueID,QueueID)]
+  let info = data.deblobify vFqs
   if info != AristoError(0):
     return err(info)
-  ok vFas
+  ok vFqs
 
 # ------------------------------------------------------------------------------
 # End

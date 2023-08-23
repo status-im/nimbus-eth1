@@ -44,14 +44,14 @@ type
     kMap: Table[VertexID,HashKey]    ## Merkle hash key mapping
     rFil: Table[QueueID,Blob]       ## Backend filters
     vGen: Option[seq[VertexID]]
-    vFas: Option[seq[QueueID]]
+    vFqs: Option[seq[(QueueID,QueueID)]]
 
   MemPutHdlRef = ref object of TypedPutHdlRef
     sTab: Table[VertexID,Blob]
     kMap: Table[VertexID,HashKey]
     rFil: Table[QueueID,Blob]
     vGen: Option[seq[VertexID]]
-    vFas: Option[seq[QueueID]]
+    vFqs: Option[seq[(QueueID,QueueID)]]
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -112,12 +112,12 @@ proc getIdgFn(db: MemBackendRef): GetIdgFn =
         return ok db.vGen.unsafeGet
       err(GetIdgNotFound)
 
-proc getFasFn(db: MemBackendRef): GetFasFn =
+proc getFqsFn(db: MemBackendRef): GetFqsFn =
   result =
-    proc(): Result[seq[QueueID],AristoError]=
-      if db.vFas.isSome:
-        return ok db.vFas.unsafeGet
-      err(GetFasNotFound)
+    proc(): Result[seq[(QueueID,QueueID)],AristoError]=
+      if db.vFqs.isSome:
+        return ok db.vFqs.unsafeGet
+      err(GetFqsNotFound)
 
 # -------------
 
@@ -175,12 +175,12 @@ proc putIdgFn(db: MemBackendRef): PutIdgFn =
       if hdl.error.isNil:
         hdl.vGen = some(vs.toSeq)
 
-proc putFasFn(db: MemBackendRef): PutFasFn =
+proc putFqsFn(db: MemBackendRef): PutFqsFn =
   result =
-    proc(hdl: PutHdlRef; fs: openArray[QueueID])  =
+    proc(hdl: PutHdlRef; fs: openArray[(QueueID,QueueID)])  =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
-        hdl.vFas = some(fs.toSeq)
+        hdl.vFqs = some(fs.toSeq)
 
 
 proc putEndFn(db: MemBackendRef): PutEndFn =
@@ -225,12 +225,12 @@ proc putEndFn(db: MemBackendRef): PutEndFn =
         else:
           db.vGen = some(vGen)
 
-      if hdl.vFas.isSome:
-        let vFas = hdl.vFas.unsafeGet
-        if vFas.len == 0:
-          db.vFas = none(seq[QueueID])
+      if hdl.vFqs.isSome:
+        let vFqs = hdl.vFqs.unsafeGet
+        if vFqs.len == 0:
+          db.vFqs = none(seq[(QueueID,QueueID)])
         else:
-          db.vFas = some(vFas)
+          db.vFqs = some(vFqs)
 
       AristoError(0)
 
@@ -252,14 +252,14 @@ proc memoryBackend*(): BackendRef =
   db.getKeyFn = getKeyFn db
   db.getFilFn = getFilFn db
   db.getIdgFn = getIdgFn db
-  db.getFasFn = getFasFn db
+  db.getFqsFn = getFqsFn db
 
   db.putBegFn = putBegFn db
   db.putVtxFn = putVtxFn db
   db.putKeyFn = putKeyFn db
   db.putFilFn = putFilFn db
   db.putIdgFn = putIdgFn db
-  db.putFasFn = putFasFn db
+  db.putFqsFn = putFqsFn db
   db.putEndFn = putEndFn db
 
   db.closeFn = closeFn db
@@ -319,8 +319,8 @@ iterator walk*(
     yield(0, AdmPfx, AdmTabIdIdg.uint64, be.vGen.unsafeGet.blobify)
     n.inc
 
-  if be.vFas.isSome:
-    yield(0, AdmPfx, AdmTabIdFas.uint64, be.vFas.unsafeGet.blobify)
+  if be.vFqs.isSome:
+    yield(0, AdmPfx, AdmTabIdFqs.uint64, be.vFqs.unsafeGet.blobify)
     n.inc
 
   for vid in be.sTab.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID):

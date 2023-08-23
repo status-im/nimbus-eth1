@@ -402,7 +402,8 @@ assumed, i.e. the list with the single vertex ID *1*.
 
 This list is used to control the filters on the database. By holding some IDs
 in a dedicated list (e.g. the latest filters) one can quickly access particular
-entries without searching through the set of filters.
+entries without searching through the set of filters. In the current
+implementation this list comes in ID pairs i.e. the number of entries is even.
 
 ### 4.10 Serialisation record identifier identification
 

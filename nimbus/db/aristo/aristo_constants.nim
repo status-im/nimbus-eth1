@@ -24,7 +24,7 @@ const
   EmptyVidSeq* = seq[VertexID].default
     ## Useful shortcut
 
-  EmptyQidSeq* = seq[QueueID].default
+  EmptyQidPairSeq* = seq[(QueueID,QueueID)].default
     ## Useful shortcut
 
   VOID_CODE_HASH* = EMPTY_CODE_HASH

@@ -36,14 +36,14 @@ proc getIdgUBE*(
     return be.getIdgFn()
   err(GetIdgNotFound)
 
-proc getFasUBE*(
+proc getFqsUBE*(
     db: AristoDbRef;
-      ): Result[seq[QueueID],AristoError] =
+      ): Result[seq[(QueueID,QueueID)],AristoError] =
   ## Get the list of filter IDs unfiltered backened if available.
   let be = db.backend
   if not be.isNil:
-    return be.getFasFn()
-  err(GetFasNotFound)
+    return be.getFqsFn()
+  err(GetFqsNotFound)
 
 proc getVtxUBE*(
     db: AristoDbRef;

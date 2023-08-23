@@ -163,22 +163,22 @@ proc getIdgFn(db: RdbBackendRef): GetIdgFn =
       # Decode data record
       rc.value.deblobify seq[VertexID]
 
-proc getFasFn(db: RdbBackendRef): GetFasFn =
+proc getFqsFn(db: RdbBackendRef): GetFqsFn =
   result =
-    proc(): Result[seq[QueueID],AristoError]=
+    proc(): Result[seq[(QueueID,QueueID)],AristoError]=
 
       # Fetch serialised data record
-      let rc = db.rdb.get AdmTabIdFas.toOpenArray()
+      let rc = db.rdb.get AdmTabIdFqs.toOpenArray()
       if rc.isErr:
         debug logTxt "getFosFn: failed", error=rc.error[1]
         return err(rc.error[0])
 
       if rc.value.len == 0:
-        let w = EmptyQidSeq
+        let w = EmptyQidPairSeq
         return ok w
 
       # Decode data record
-      rc.value.deblobify seq[QueueID]
+      rc.value.deblobify seq[(QueueID,QueueID)]
 
 # -------------
 
@@ -245,15 +245,15 @@ proc putIdgFn(db: RdbBackendRef): PutIdgFn =
         else:
           hdl.admCache = (AdmTabIdIdg, EmptyBlob)
 
-proc putFasFn(db: RdbBackendRef): PutFasFn =
+proc putFqsFn(db: RdbBackendRef): PutFqsFn =
   result =
-    proc(hdl: PutHdlRef; vs: openArray[QueueID])  =
+    proc(hdl: PutHdlRef; vs: openArray[(QueueID,QueueID)])  =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
         if 0 < vs.len:
-          hdl.admCache = (AdmTabIdFas, vs.blobify)
+          hdl.admCache = (AdmTabIdFqs, vs.blobify)
         else:
-          hdl.admCache = (AdmTabIdFas, EmptyBlob)
+          hdl.admCache = (AdmTabIdFqs, EmptyBlob)
 
 
 proc putEndFn(db: RdbBackendRef): PutEndFn =
@@ -301,14 +301,14 @@ proc rocksDbBackend*(path: string): Result[BackendRef,AristoError] =
   db.getKeyFn = getKeyFn db
   db.getFilFn = getFilFn db
   db.getIdgFn = getIdgFn db
-  db.getFasFn = getFasFn db
+  db.getFqsFn = getFqsFn db
 
   db.putBegFn = putBegFn db
   db.putVtxFn = putVtxFn db
   db.putKeyFn = putKeyFn db
   db.putFilFn = putFilFn db
   db.putIdgFn = putIdgFn db
-  db.putFasFn = putFasFn db
+  db.putFqsFn = putFqsFn db
   db.putEndFn = putEndFn db
 
   db.closeFn = closeFn db
