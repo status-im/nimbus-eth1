@@ -395,6 +395,9 @@ proc traceOpCodeStarted*(c: Computation, op: Op): int {.gcsafe, raises: [].} =
     c.gasMeter.gasRemaining,
     c.msg.depth + 1)
 
+proc traceCallFamilyGas*(c: Computation, op: Op, gas: GasInt) {.gcsafe, raises: [].} =
+  c.vmState.callFamilyGas(op, gas, c.msg.depth + 1)
+
 proc traceOpCodeEnded*(c: Computation, op: Op, opIndex: int) {.gcsafe, raises: [].} =
   c.vmState.captureOpEnd(
     c.code.pc - 1,

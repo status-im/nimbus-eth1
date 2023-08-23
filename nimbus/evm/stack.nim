@@ -58,7 +58,7 @@ proc ensurePop(elements: Stack, a: int) =
   let expected = a
   if num < expected:
     raise newException(InsufficientStack,
-      &"Stack underflow: expected {expected} elements, got {num} instead.")
+      &"Stack underflow, expect {expected}, got {num}")
 
 proc popAux[T](stack: var Stack, value: var T) =
   ensurePop(stack, 1)
@@ -103,7 +103,7 @@ proc swap*(stack: var Stack, position: int) =
     (stack.values[^1], stack.values[^idx]) = (stack.values[^idx], stack.values[^1])
   else:
     raise newException(InsufficientStack,
-                      &"Insufficient stack items for SWAP{position}")
+                      "Stack underflow for SWAP" & $position)
 
 template getInt(x: int): int = x
 
@@ -114,7 +114,7 @@ proc dup*(stack: var Stack, position: int | UInt256) =
     stack.push(stack.values[^position])
   else:
     raise newException(InsufficientStack,
-                      &"Insufficient stack items for DUP{position}")
+                      "Stack underflow for DUP" & $position)
 
 proc peek*(stack: Stack): UInt256 =
   # This should be used only for testing purposes!

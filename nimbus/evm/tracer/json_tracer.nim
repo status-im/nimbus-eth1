@@ -29,6 +29,17 @@ type
     stack: JsonNode
     storageKeys: seq[HashSet[UInt256]]
     index: int
+    callFamilyNode: JsonNode
+
+const
+  callFamily = [
+    Create,
+    Create2,
+    Call,
+    CallCode,
+    DelegateCall,
+    StaticCall,
+  ]
 
 template stripLeadingZeros(value: string): string =
   var cidx = 0
@@ -41,7 +52,10 @@ proc encodeHexInt(x: SomeInteger): JsonNode =
   %("0x" & x.toHex.stripLeadingZeros.toLowerAscii)
 
 proc `%`(x: openArray[byte]): JsonNode =
-  %("0x" & x.toHex)
+  if x.len == 0:
+    %("")
+  else:
+    %("0x" & x.toHex)
 
 proc writeJson(ctx: JsonTracer, res: JsonNode) =
   try:
@@ -113,7 +127,10 @@ proc captureOpImpl(ctx: JsonTracer, pc: int,
   if error.isSome:
     res["error"] = %(error.get)
 
-  ctx.writeJson(res)
+  if op in callFamily:
+    ctx.callFamilyNode = res
+  else:
+    ctx.writeJson(res)
 
 proc newJsonTracer*(stream: Stream, flags: set[TracerFlags], pretty: bool): JsonTracer =
   JsonTracer(
@@ -171,13 +188,34 @@ method captureOpStart*(ctx: JsonTracer, pc: int,
     except ValueError as ex:
       error "JsonTracer captureOpStart", msg=ex.msg
 
+  if op in callFamily:
+    try:
+      ctx.captureOpImpl(pc, op, 0, 0, [], depth, none(string))
+    except RlpError as ex:
+      error "JsonTracer captureOpEnd", msg=ex.msg
+
+  # make sure captureOpEnd get the right opIndex
   result = ctx.index
   inc ctx.index
+
+method callFamilyGas*(ctx: JsonTracer,
+                      op: Op, gas: GasInt,
+                      depth: int) {.gcsafe.} =
+  doAssert(op in callFamily)
+  doAssert(ctx.callFamilyNode.isNil.not)
+  let res = ctx.callFamilyNode
+  res["gasCost"] = encodeHexInt(gas)
+  ctx.writeJson(res)
 
 method captureOpEnd*(ctx: JsonTracer, pc: int,
                      op: Op, gas: GasInt, refund: GasInt,
                      rData: openArray[byte],
                      depth: int, opIndex: int) {.gcsafe.} =
+
+  if op in callFamily:
+    # call family opcode is processed in captureOpStart
+    return
+
   try:
     ctx.captureOpImpl(pc, op, gas, refund, rData, depth, none(string))
   except RlpError as ex:

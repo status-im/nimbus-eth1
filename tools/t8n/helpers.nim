@@ -212,9 +212,6 @@ proc parseTx(n: JsonNode, chainId: ChainID): Transaction =
   required(tx, GasInt, gas)
   required(tx, UInt256, value)
   required(tx, Blob, input)
-  required(tx, int64, v)
-  required(tx, UInt256, r)
-  required(tx, UInt256, s)
 
   if n.hasKey("to"):
     tx.to = some(EthAddress.fromJson(n, "to"))
@@ -248,6 +245,9 @@ proc parseTx(n: JsonNode, chainId: ChainID): Transaction =
     let secretKey = PrivateKey.fromRaw(data).tryGet
     signTransaction(tx, secretKey, chainId, eip155)
   else:
+    required(tx, int64, v)
+    required(tx, UInt256, r)
+    required(tx, UInt256, s)
     tx
 
 proc parseTxLegacy(item: var Rlp): Result[Transaction, string] =

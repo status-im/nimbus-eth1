@@ -203,8 +203,11 @@ const
       raise newException(
         StaticContextError,
         "Cannot modify state while inside of a STATICCALL context")
-    
-    let p = cpt.callParams
+
+    let
+      gasAtStart = cpt.gasMeter.gasRemaining
+      p = cpt.callParams
+
     cpt.asyncChainTo(ifNecessaryGetAccounts(cpt.vmState, @[p.sender])):
       cpt.asyncChainTo(ifNecessaryGetCodeForAccounts(cpt.vmState, @[p.contractAddress, p.codeAddress])):
         var (gasCost, childGasLimit) = cpt.gasCosts[Call].c_handler(
@@ -237,6 +240,9 @@ const
         if gasCost < 0 and childGasLimit <= 0:
           raise newException(
             OutOfGas, "Gas not enough to perform calculation (call)")
+
+        gasCost = gasAtStart - cpt.gasMeter.gasRemaining
+        cpt.traceCallFamilyGas(Call, gasCost)
 
         cpt.memory.extend(p.memInPos, p.memInLen)
         cpt.memory.extend(p.memOutPos, p.memOutLen)
@@ -287,6 +293,7 @@ const
     ## 0xf2, Message-call into this account with an alternative account's code.
     let
       cpt = k.cpt
+      gasAtStart = cpt.gasMeter.gasRemaining
       p = cpt.callCodeParams
 
     cpt.asyncChainTo(ifNecessaryGetAccounts(cpt.vmState, @[p.sender])):
@@ -324,6 +331,9 @@ const
         if gasCost < 0 and childGasLimit <= 0:
           raise newException(
             OutOfGas, "Gas not enough to perform calculation (callCode)")
+
+        gasCost = gasAtStart - cpt.gasMeter.gasRemaining
+        cpt.traceCallFamilyGas(CallCode, gasCost)
 
         cpt.memory.extend(p.memInPos, p.memInLen)
         cpt.memory.extend(p.memOutPos, p.memOutLen)
@@ -375,6 +385,7 @@ const
     ##       code, but persisting the current values for sender and value.
     let
       cpt = k.cpt
+      gasAtStart = cpt.gasMeter.gasRemaining
       p = cpt.delegateCallParams
 
     cpt.asyncChainTo(ifNecessaryGetAccounts(cpt.vmState, @[p.sender])):
@@ -408,6 +419,9 @@ const
         if gasCost < 0 and childGasLimit <= 0:
           raise newException(
             OutOfGas, "Gas not enough to perform calculation (delegateCall)")
+
+        gasCost = gasAtStart - cpt.gasMeter.gasRemaining
+        cpt.traceCallFamilyGas(DelegateCall, gasCost)
 
         cpt.memory.extend(p.memInPos, p.memInLen)
         cpt.memory.extend(p.memOutPos, p.memOutLen)
@@ -451,6 +465,7 @@ const
 
     let
       cpt = k.cpt
+      gasAtStart = cpt.gasMeter.gasRemaining
       p = cpt.staticCallParams
 
     cpt.asyncChainTo(ifNecessaryGetAccounts(cpt.vmState, @[p.sender])):
@@ -489,6 +504,9 @@ const
         if gasCost < 0 and childGasLimit <= 0:
           raise newException(
             OutOfGas, "Gas not enough to perform calculation (staticCall)")
+
+        gasCost = gasAtStart - cpt.gasMeter.gasRemaining
+        cpt.traceCallFamilyGas(StaticCall, gasCost)
 
         cpt.memory.extend(p.memInPos, p.memInLen)
         cpt.memory.extend(p.memOutPos, p.memOutLen)

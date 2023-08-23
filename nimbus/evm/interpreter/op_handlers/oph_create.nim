@@ -99,11 +99,13 @@ const
       raise newException(InitcodeError,
         &"CREATE: have {memLen}, max {EIP3860_MAX_INITCODE_SIZE}")
 
-    let gasParams = GasParams(
-      kind:              Create,
-      cr_currentMemSize: k.cpt.memory.len,
-      cr_memOffset:      memPos,
-      cr_memLength:      memLen)
+    let
+      gasAtStart = k.cpt.gasMeter.gasRemaining
+      gasParams = GasParams(
+        kind:              Create,
+        cr_currentMemSize: k.cpt.memory.len,
+        cr_memOffset:      memPos,
+        cr_memLength:      memLen)
 
     var gasCost = k.cpt.gasCosts[Create].c_handler(1.u256, gasParams).gasCost
     k.cpt.gasMeter.consumeGas(
@@ -131,6 +133,9 @@ const
     if k.cpt.fork >= FkTangerine:
       createMsgGas -= createMsgGas div 64
     k.cpt.gasMeter.consumeGas(createMsgGas, reason = "CREATE")
+
+    gasCost = gasAtStart - k.cpt.gasMeter.gasRemaining
+    k.cpt.traceCallFamilyGas(Create, gasCost)
 
     when evmc_enabled:
       let
@@ -177,11 +182,13 @@ const
       raise newException(InitcodeError,
         &"CREATE2: have {memLen}, max {EIP3860_MAX_INITCODE_SIZE}")
 
-    let gasParams = GasParams(
-      kind:              Create,
-      cr_currentMemSize: k.cpt.memory.len,
-      cr_memOffset:      memPos,
-      cr_memLength:      memLen)
+    let
+      gasAtStart = k.cpt.gasMeter.gasRemaining
+      gasParams = GasParams(
+        kind:              Create,
+        cr_currentMemSize: k.cpt.memory.len,
+        cr_memOffset:      memPos,
+        cr_memLength:      memLen)
 
     var gasCost = k.cpt.gasCosts[Create].c_handler(1.u256, gasParams).gasCost
     gasCost = gasCost + k.cpt.gasCosts[Create2].m_handler(0, 0, memLen)
@@ -211,6 +218,9 @@ const
     if k.cpt.fork >= FkTangerine:
       createMsgGas -= createMsgGas div 64
     k.cpt.gasMeter.consumeGas(createMsgGas, reason = "CREATE2")
+
+    gasCost = gasAtStart - k.cpt.gasMeter.gasRemaining
+    k.cpt.traceCallFamilyGas(Create2, gasCost)
 
     when evmc_enabled:
       let

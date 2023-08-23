@@ -498,12 +498,21 @@ const
       expOut: "exp.json",
     ),
     TestSpec(
-      name  : "EVM tracer crash bug",
+      name  : "EVM tracer nil stack crash bug",
       base  : "testdata/00-519",
       input : t8nInput(
         "alloc.json", "txs.json", "env.json", "Shanghai", "0",
       ),
       output: T8nOutput(trace: true),
+      expOut: "exp.txt",
+    ),
+    TestSpec(
+      name  : "EVM tracer wrong order for CALL family opcodes",
+      base  : "testdata/00-520",
+      input : t8nInput(
+        "alloc.json", "txs.json", "env.json", "Merge", "0",
+      ),
+      output: T8nOutput(trace: true, result: true),
       expOut: "exp.txt",
     ),
   ]

@@ -393,6 +393,12 @@ proc captureOpStart*(vmState: BaseVMState, pc: int,
   if vmState.tracingEnabled:
     result = vmState.tracer.captureOpStart(pc, op, gas, depth)
 
+proc callFamilyGas*(vmState: BaseVMState,
+                    op: Op, gas: GasInt,
+                    depth: int) =
+  if vmState.tracingEnabled:          
+    vmState.tracer.callFamilyGas(op, gas, depth)
+                      
 proc captureOpEnd*(vmState: BaseVMState, pc: int,
                    op: Op, gas: GasInt, refund: GasInt,
                    rData: openArray[byte],

@@ -257,8 +257,8 @@ proc executeOpcodes*(c: Computation, shouldPrepareTracer: bool = true)
     except CatchableError as e:
       let
         msg = e.msg
-        depth = $c.msg.depth
-      c.setError("Opcode Dispatch Error msg=" & msg & ", depth=" & depth, true)
+        depth = $(c.msg.depth + 1) # plus one to match tracer depth, and avoid confusion
+      c.setError("Opcode Dispatch Error: " & msg & ", depth=" & depth, true)
 
   if c.isError() and c.continuation.isNil:
     if c.tracingEnabled: c.traceError()

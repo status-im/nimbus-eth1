@@ -173,6 +173,11 @@ method captureOpStart*(ctx: TracerRef, pc: int,
                        depth: int): int {.base, gcsafe.} =
   discard
 
+method callFamilyGas*(ctx: TracerRef,
+                      op: Op, gas: GasInt,
+                      depth: int) {.base, gcsafe.} =
+  discard
+
 method captureOpEnd*(ctx: TracerRef, pc: int,
                      op: Op, gas: GasInt, refund: GasInt,
                      rData: openArray[byte],
@@ -188,4 +193,3 @@ method captureFault*(ctx: TracerRef, pc: int,
 
 method capturePrepare*(ctx: TracerRef, depth: int) {.base, gcsafe.} =
   discard
-
