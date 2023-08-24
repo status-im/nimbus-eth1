@@ -138,7 +138,7 @@ type
 
   RadiusCache* = LRUCache[NodeId, UInt256]
 
-  ContentInfo* = object
+  ContentKV* = object
     contentKey*: ByteList
     content*: seq[byte]
 
@@ -149,7 +149,7 @@ type
     dst: Node
     case kind: OfferRequestType
     of Direct:
-      contentList: List[ContentInfo, contentKeysLimit]
+      contentList: List[ContentKV, contentKeysLimit]
     of Database:
       contentKeys: ContentKeysList
 
@@ -188,15 +188,16 @@ type
 
   ContentLookupResult* = object
     content*: seq[byte]
+    utpTransfer*: bool
     # List of nodes which do not have requested content, and for which
     # content is in their range
     nodesInterestedInContent*: seq[Node]
 
 proc init*(
-  T: type ContentInfo,
+  T: type ContentKV,
   contentKey: ByteList,
   content: seq[byte]): T =
-  ContentInfo(
+  ContentKV(
     contentKey: contentKey,
     content: content
   )
@@ -204,9 +205,11 @@ proc init*(
 proc init*(
   T: type ContentLookupResult,
   content: seq[byte],
+  utpTransfer: bool,
   nodesInterestedInContent: seq[Node]): T =
   ContentLookupResult(
     content: content,
+    utpTransfer: utpTransfer,
     nodesInterestedInContent: nodesInterestedInContent
   )
 
@@ -832,12 +835,12 @@ proc offer*(p: PortalProtocol, dst: Node, contentKeys: ContentKeysList):
   let req = OfferRequest(dst: dst, kind: Database, contentKeys: contentKeys)
   return await p.offer(req)
 
-proc offer*(p: PortalProtocol, dst: Node, content: seq[ContentInfo]):
+proc offer*(p: PortalProtocol, dst: Node, content: seq[ContentKV]):
     Future[PortalResult[ContentKeysBitList]] {.async.} =
   if len(content) > contentKeysLimit:
     return err("Cannot offer more than 64 content items")
 
-  let contentList = List[ContentInfo, contentKeysLimit].init(content)
+  let contentList = List[ContentKV, contentKeysLimit].init(content)
   let req = OfferRequest(dst: dst, kind: Direct, contentList: contentList)
   return await p.offer(req)
 
@@ -939,8 +942,8 @@ proc triggerPoke*(
     if not p.offerQueue.full():
       try:
         let
-          ci = ContentInfo(contentKey: contentKey, content: content)
-          list = List[ContentInfo, contentKeysLimit].init(@[ci])
+          contentKV = ContentKV(contentKey: contentKey, content: content)
+          list = List[ContentKV, contentKeysLimit].init(@[contentKV])
           req = OfferRequest(dst: node, kind: Direct, contentList: list)
         p.offerQueue.putNoWait(req)
       except AsyncQueueFullError as e:
@@ -1034,7 +1037,8 @@ proc contentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256):
         for f in pendingQueries:
           f.cancel()
         portal_lookup_content_requests.observe(requestAmount)
-        return Opt.some(ContentLookupResult.init(content.content, nodesWithoutContent))
+        return Opt.some(ContentLookupResult.init(
+          content.content, content.utpTransfer, nodesWithoutContent))
     else:
       # TODO: Should we do something with the node that failed responding our
       # query?
@@ -1120,11 +1124,11 @@ proc neighborhoodGossip*(
   if content.len() == 0:
     return 0
 
-  var contentList = List[ContentInfo, contentKeysLimit].init(@[])
+  var contentList = List[ContentKV, contentKeysLimit].init(@[])
   for i, contentItem in content:
-    let contentInfo =
-      ContentInfo(contentKey: contentKeys[i], content: contentItem)
-    discard contentList.add(contentInfo)
+    let contentKV =
+      ContentKV(contentKey: contentKeys[i], content: contentItem)
+    discard contentList.add(contentKV)
 
   # Just taking the first content item as target id.
   # TODO: come up with something better?

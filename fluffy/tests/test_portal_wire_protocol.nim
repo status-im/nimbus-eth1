@@ -165,11 +165,11 @@ procSuite "Portal Wire Protocol Tests":
 
   asyncTest "Offer/Accept/Stream":
     let (proto1, proto2) = defaultTestSetup(rng)
-    var content: seq[ContentInfo]
+    var content: seq[ContentKV]
     for i in 0..<contentKeysLimit:
-      let contentItem = ContentInfo(
+      let contentKV = ContentKV(
         contentKey: ByteList(@[byte i]), content: repeat(byte i, 5000))
-      content.add(contentItem)
+      content.add(contentKV)
 
     let res = await proto1.offer(proto2.baseProtocol.localNode, content)
 
@@ -181,10 +181,10 @@ procSuite "Portal Wire Protocol Tests":
     check contentItems.len() == content.len()
 
     for i, contentItem in contentItems:
-      let contentInfo = content[i]
+      let contentKV = content[i]
       check:
-        contentItem == contentInfo.content
-        contentKeys[i] == contentInfo.contentKey
+        contentItem == contentKV.content
+        contentKeys[i] == contentKV.contentKey
 
     await proto1.stopPortalProtocol()
     await proto2.stopPortalProtocol()

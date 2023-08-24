@@ -19,6 +19,11 @@ export rpcserver
 # Portal Network JSON-RPC impelentation as per specification:
 # https://github.com/ethereum/portal-network-specs/tree/master/jsonrpc
 
+type
+  ContentInfo = object
+    content: string
+    utpTransfer: bool
+
 # Note:
 # Using a string for the network parameter will give an error in the rpc macro:
 # Error: Invalid node kind nnkInfix for macros.`$`
@@ -114,10 +119,6 @@ proc installPortalApiHandlers*(
 
   rpcServer.rpc("portal_" & network & "FindContent") do(
       enr: Record, contentKey: string) -> JsonNode:
-    type ContentInfo = object
-      content: string
-      utpTransfer: bool
-
     let
       node = toNodeWithAddress(enr)
       foundContentResult = await p.findContent(
@@ -144,8 +145,8 @@ proc installPortalApiHandlers*(
       node = toNodeWithAddress(enr)
       key = hexToSeqByte(contentKey)
       content = hexToSeqByte(contentValue)
-      contentInfo = ContentInfo(contentKey: ByteList.init(key), content: content)
-      res = await p.offer(node, @[contentInfo])
+      contentKV = ContentKV(contentKey: ByteList.init(key), content: content)
+      res = await p.offer(node, @[contentKV])
 
     if res.isOk():
       return SSZ.encode(res.get()).to0xHex()
@@ -158,16 +159,19 @@ proc installPortalApiHandlers*(
     return discovered.map(proc(n: Node): Record = n.record)
 
   rpcServer.rpc("portal_" & network & "RecursiveFindContent") do(
-      contentKey: string) -> string:
+      contentKey: string) -> ContentInfo:
     let
       key = ByteList.init(hexToSeqByte(contentKey))
       contentId = p.toContentId(key).valueOr:
         raise newException(ValueError, "Invalid content key")
 
       contentResult = (await p.contentLookup(key, contentId)).valueOr:
-        return "0x"
+        return ContentInfo(content: "0x", utpTransfer: false)
 
-    return contentResult.content.to0xHex()
+    return ContentInfo(
+        content: contentResult.content.to0xHex(),
+        utpTransfer: contentResult.utpTransfer
+      )
 
   rpcServer.rpc("portal_" & network & "Store") do(
       contentKey: string, contentValue: string) -> bool:

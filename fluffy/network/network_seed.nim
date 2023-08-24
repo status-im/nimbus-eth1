@@ -63,7 +63,9 @@ proc depthContentPropagate*(
     seenOnly = true
   )
 
-  proc worker(p: PortalProtocol, db: SeedDb, node: Node, radius: UInt256): Future[void] {.async.} =
+  proc worker(
+      p: PortalProtocol, db: SeedDb, node: Node, radius: UInt256):
+      Future[void] {.async.} =
     var offset = 0
     while true:
       let content = db.getContentInRange(node.id, radius, batchSize, offset)
@@ -71,12 +73,13 @@ proc depthContentPropagate*(
       if len(content) == 0:
         break
 
-      var contentInfo: seq[ContentInfo]
+      var contentKV: seq[ContentKV]
       for e in content:
-        let info = ContentInfo(contentKey: ByteList.init(e.contentKey), content: e.content)
-        contentInfo.add(info)
+        let info = ContentKV(
+          contentKey: ByteList.init(e.contentKey), content: e.content)
+        contentKV.add(info)
 
-      let offerResult = await p.offer(node, contentInfo)
+      let offerResult = await p.offer(node, contentKV)
 
       if offerResult.isErr() or len(content) < batchSize:
         # peer failed or we reached end of database stop offering more content
@@ -89,7 +92,8 @@ proc depthContentPropagate*(
 
     var offset = 0
     while true:
-      let content = db.getContentInRange(p.localNode.id, p.dataRadius, localBatchSize, offset)
+      let content = db.getContentInRange(
+        p.localNode.id, p.dataRadius, localBatchSize, offset)
 
       if len(content) == 0:
         break
@@ -127,7 +131,8 @@ proc depthContentPropagate*(
 
   return ok()
 
-func contentDataToKeys(contentData: seq[ContentDataDist]): (ContentKeysList, seq[seq[byte]]) =
+func contentDataToKeys(
+    contentData: seq[ContentDataDist]): (ContentKeysList, seq[seq[byte]]) =
   var contentKeys: seq[ByteList]
   var content: seq[seq[byte]]
   for cd in contentData:
@@ -176,7 +181,8 @@ proc breadthContentPropagate*(
   while true:
     # Setting radius to `UInt256.high` and using batchSize and offset, means
     # we will iterate over whole database in batches of `maxItemsPerOffer` items
-    var contentData = db.getContentInRange(target, UInt256.high, batchSize, offset)
+    var contentData = db.getContentInRange(
+      target, UInt256.high, batchSize, offset)
 
     if len(contentData) == 0:
       break
@@ -237,16 +243,17 @@ proc offerContentInNodeRange*(
   let
     db = SeedDb.new(path = dbPath, name = dbName)
     (node, radius) = maybeNodeAndRadius.unsafeGet()
-    content = db.getContentInRange(node.id, radius, int64(numberToToOffer), int64(starting))
+    content = db.getContentInRange(
+      node.id, radius, int64(numberToToOffer), int64(starting))
 
   # We got all we wanted from seed_db, it can be closed now.
   db.close()
 
-  var ci: seq[ContentInfo]
+  var ci: seq[ContentKV]
 
   for cont in content:
     let k = ByteList.init(cont.contentKey)
-    let info = ContentInfo(contentKey: k, content: cont.content)
+    let info = ContentKV(contentKey: k, content: cont.content)
     ci.add(info)
 
   # waiting for offer result, by the end of this call remote node should
@@ -274,7 +281,8 @@ proc storeContentInNodeRange*(
     localRadius = p.dataRadius
     db = SeedDb.new(path = dbPath, name = dbName)
     localId = p.localNode.id
-    contentInRange = db.getContentInRange(localId, localRadius, int64(max), int64(starting))
+    contentInRange = db.getContentInRange(
+      localId, localRadius, int64(max), int64(starting))
 
   db.close()
 
