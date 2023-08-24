@@ -233,8 +233,8 @@ proc fcu(cl: CLMocker, version: Version,
             Result[ForkchoiceUpdatedResponse, string] =
   case version
   of Version.V1: cl.client.forkchoiceUpdatedV1(update, attr.V1)
-  of Version.V2: cl.client.forkchoiceUpdatedV2(update, attr.V2)
-  of Version.V3: cl.client.forkchoiceUpdatedV3(update, attr.V3)
+  of Version.V2: cl.client.forkchoiceUpdatedV2(update, attr)
+  of Version.V3: cl.client.forkchoiceUpdatedV3(update, attr)
 
 proc getNextPayloadID*(cl: CLMocker): bool =
   # Generate a random value for the PrevRandao field

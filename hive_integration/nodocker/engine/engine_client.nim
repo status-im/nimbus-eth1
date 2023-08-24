@@ -41,19 +41,19 @@ proc forkchoiceUpdatedV1*(client: RpcClient,
   wrapTrySimpleRes:
     client.engine_forkchoiceUpdatedV1(update, payloadAttributes)
 
-proc forkchoiceUpdatedV2*(client: RpcClient,
-      update: ForkchoiceStateV1,
-      payloadAttributes = none(PayloadAttributesV2)):
-        Result[ForkchoiceUpdatedResponse, string] =
-  wrapTrySimpleRes:
-    client.engine_forkchoiceUpdatedV2(update, payloadAttributes)
+#proc forkchoiceUpdatedV2*(client: RpcClient,
+#      update: ForkchoiceStateV1,
+#      payloadAttributes = none(PayloadAttributesV2)):
+#        Result[ForkchoiceUpdatedResponse, string] =
+#  wrapTrySimpleRes:
+#    client.engine_forkchoiceUpdatedV2(update, payloadAttributes)
 
-proc forkchoiceUpdatedV3*(client: RpcClient,
-      update: ForkchoiceStateV1,
-      payloadAttributes = none(PayloadAttributesV3)):
-        Result[ForkchoiceUpdatedResponse, string] =
-  wrapTrySimpleRes:
-    client.engine_forkchoiceUpdatedV3(update, payloadAttributes)
+#proc forkchoiceUpdatedV3*(client: RpcClient,
+#      update: ForkchoiceStateV1,
+#      payloadAttributes = none(PayloadAttributesV3)):
+#        Result[ForkchoiceUpdatedResponse, string] =
+#  wrapTrySimpleRes:
+#    client.engine_forkchoiceUpdatedV3(update, payloadAttributes)
 
 proc forkchoiceUpdatedV2*(client: RpcClient,
       update: ForkchoiceStateV1,
