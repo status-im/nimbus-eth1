@@ -16,7 +16,8 @@ import
   results,
   stew/byteutils,
   "."/[aristo_constants, aristo_desc, aristo_hike, aristo_init],
-  ./aristo_init/[memory_db, rocks_db]
+  ./aristo_init/[memory_db, rocks_db],
+  ./aristo_filter/filter_desc
 
 export
   TypedBackendRef, aristo_init.to
@@ -86,10 +87,27 @@ proc ppVid(vid: VertexID; pfx = true): string =
     result &= "ø"
 
 proc ppQid(qid: QueueID): string =
-  if qid.isValid:
-    "%" & qid.uint64.toHex.stripZeros.toLowerAscii
-  else:
-    "ø"
+  if not qid.isValid:
+    return "ø"
+  let
+    chn = qid.uint64 shr 62
+    qid = qid.uint64 and 0x3fff_ffff_ffff_ffffu64
+  result = "%"
+  if 0 < chn:
+    result &= $chn & ":"
+
+  if 0x0fff_ffff_ffff_ffffu64 <= qid.uint64:
+    block here:
+      if qid.uint64 == 0x0fff_ffff_ffff_ffffu64:
+        result &= "(2^60-1)"
+      elif qid.uint64 == 0x1fff_ffff_ffff_ffffu64:
+        result &= "(2^61-1)"
+      elif qid.uint64 == 0x3fff_ffff_ffff_ffffu64:
+        result &= "(2^62-1)"
+      else:
+        break here
+      return
+  result &= qid.uint64.toHex.stripZeros.toLowerAscii
 
 proc ppVidList(vGen: openArray[VertexID]): string =
   "[" & vGen.mapIt(it.ppVid).join(",") & "]"
@@ -452,6 +470,15 @@ proc pp*(vid: VertexID): string =
 
 proc pp*(qid: QueueID): string =
   qid.ppQid
+
+proc pp*(a: openArray[(QueueID,QueueID)]): string =
+  "[" & a.toSeq.mapIt("(" & it[0].pp & "," & it[1].pp & ")").join(",") & "]"
+
+proc pp*(a: QidAction): string =
+  ($a.op).replace("Qid", "") & "(" & a.qid.pp & "," & a.xid.pp & ")"
+
+proc pp*(a: openArray[QidAction]): string =
+  "[" & a.toSeq.mapIt(it.pp).join(",") & "]"
 
 proc pp*(vGen: openArray[VertexID]): string =
   vGen.ppVidList

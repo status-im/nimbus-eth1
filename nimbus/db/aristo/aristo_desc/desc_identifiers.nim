@@ -26,6 +26,10 @@ type
   QueueID* = distinct uint64
     ## Identifier used to tag filter logs stored on the backend.
 
+  FilterID* = distinct uint64
+    ## Identifier used to identify a particular filter. It is generatied with the
+    ## filter.
+
   VertexID* = distinct uint64
     ## Unique identifier for a vertex of the `Aristo Trie`. The vertex is the
     ## prefix tree (aka `Patricia Trie`) component. When augmented by hash
@@ -84,20 +88,43 @@ func `==`*(a, b: VertexID): bool {.borrow.}
 func cmp*(a, b: VertexID): int {.borrow.}
 func `$`*(a: VertexID): string {.borrow.}
 
-func `==`*(a: VertexID; b: static[uint]): bool =
-  a == VertexID(b)
+func `==`*(a: VertexID; b: static[uint]): bool = (a == VertexID(b))
 
-# Scalar model extension for `IntervalSetRef[VertexID,uint64]`
-proc `+`*(a: VertexID; b: uint64): VertexID = (a.uint64+b).VertexID
-proc `-`*(a: VertexID; b: uint64): VertexID = (a.uint64-b).VertexID
-proc `-`*(a, b: VertexID): uint64 = (a.uint64 - b.uint64)
+# Scalar model extension as in `IntervalSetRef[VertexID,uint64]`
+func `+`*(a: VertexID; b: uint64): VertexID = (a.uint64+b).VertexID
+func `-`*(a: VertexID; b: uint64): VertexID = (a.uint64-b).VertexID
+func `-`*(a, b: VertexID): uint64 = (a.uint64 - b.uint64)
 
 # ------------------------------------------------------------------------------
 # Public helpers: `QueueID` scalar data model
 # ------------------------------------------------------------------------------
 
+func `<`*(a, b: QueueID): bool {.borrow.}
+func `<=`*(a, b: QueueID): bool {.borrow.}
 func `==`*(a, b: QueueID): bool {.borrow.}
+func cmp*(a, b: QueueID): int {.borrow.}
 func `$`*(a: QueueID): string {.borrow.}
+
+func `==`*(a: QueueID; b: static[uint]): bool = (a == QueueID(b))
+
+func `+`*(a: QueueID; b: uint64): QueueID = (a.uint64+b).QueueID
+func `-`*(a: QueueID; b: uint64): QueueID = (a.uint64-b).QueueID
+func `-`*(a, b: QueueID): uint64 = (a.uint64 - b.uint64)
+
+# ------------------------------------------------------------------------------
+# Public helpers: `FilterID` scalar data model
+# ------------------------------------------------------------------------------
+
+func `<`*(a, b: FilterID): bool {.borrow.}
+func `<=`*(a, b: FilterID): bool {.borrow.}
+func `==`*(a, b: FilterID): bool {.borrow.}
+func `$`*(a: FilterID): string {.borrow.}
+
+func `==`*(a: FilterID; b: static[uint]): bool = (a == FilterID(b))
+
+func `+`*(a: FilterID; b: uint64): FilterID = (a.uint64+b).FilterID
+func `-`*(a: FilterID; b: uint64): FilterID = (a.uint64-b).FilterID
+func `-`*(a, b: FilterID): uint64 = (a.uint64 - b.uint64)
 
 # ------------------------------------------------------------------------------
 # Public helpers: `HashID` scalar data model

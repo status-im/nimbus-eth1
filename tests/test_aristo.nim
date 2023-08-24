@@ -73,10 +73,18 @@ proc setErrorLevel {.used.} =
 # Test Runners: accounts and accounts storages
 # ------------------------------------------------------------------------------
 
-proc miscRunner(noisy =true) =
-  suite &"Aristo: Miscellaneous tests":
-    test &"VertexID recyling lists":
-      noisy.testVidRecycleLists()
+proc miscRunner(
+    noisy = true;
+    qidSampleSize = QidSample;
+     ) =
+
+  suite "Aristo: Miscellaneous tests":
+
+    test "VertexID recyling lists":
+      check noisy.testVidRecycleLists()
+
+    test &"QueueID slot management (sample size: {qidSampleSize})":
+      check noisy.testQidScheduler(sampleSize = qidSampleSize)
 
 
 proc accountsRunner(
@@ -164,7 +172,7 @@ when isMainModule:
   setErrorLevel()
 
   when true: # and false:
-    noisy.miscRunner()
+    noisy.miscRunner(qidSampleSize = 10_000)
 
   # This one uses dumps from the external `nimbus-eth1-blob` repo
   when true and false:

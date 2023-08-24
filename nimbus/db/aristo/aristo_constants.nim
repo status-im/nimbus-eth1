@@ -36,4 +36,10 @@ const
   VOID_HASH_LABEL* = HashLabel(root: VertexID(0), key: VOID_HASH_KEY)
     ## Void equivalent for Merkle hash value
 
+  DEFAULT_QID_QUEUES* = [
+    (128,   0), ## Consecutive list of 128 filter slots
+    ( 64,  63), ## Overflow list, 64 filters, skipping 63 filters in-between
+    ( 64, 127), ## ..
+    ( 64, 255)]
+
 # End
