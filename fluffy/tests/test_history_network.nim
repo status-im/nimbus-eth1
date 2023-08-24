@@ -59,9 +59,9 @@ proc createEmptyHeaders(fromNum: int, toNum: int): seq[BlockHeader] =
     headers.add(bh)
   return headers
 
-proc headersToContentInfo(
-    headersWithProof: seq[BlockHeaderWithProof]): seq[ContentInfo] =
-  var contentInfos: seq[ContentInfo]
+proc headersToContentKV(
+    headersWithProof: seq[BlockHeaderWithProof]): seq[ContentKV] =
+  var contentKVs: seq[ContentKV]
   for headerWithProof in headersWithProof:
     let
       # TODO: Decoding step could be avoided
@@ -70,10 +70,10 @@ proc headersToContentInfo(
       blockKey = BlockKey(blockHash: headerHash)
       contentKey = encode(ContentKey(
         contentType: blockHeader, blockHeaderKey: blockKey))
-      contentInfo = ContentInfo(
+      contentKV = ContentKV(
         contentKey: contentKey, content: SSZ.encode(headerWithProof))
-    contentInfos.add(contentInfo)
-  return contentInfos
+    contentKVs.add(contentKV)
+  return contentKVs
 
 procSuite "History Content Network":
   let rng = newRng()
@@ -198,15 +198,15 @@ procSuite "History Content Network":
     check headersWithProof.isOk()
 
     # This is one header more than maxOfferedHistoryContent
-    let contentInfos = headersToContentInfo(headersWithProof.get())
+    let contentKVs = headersToContentKV(headersWithProof.get())
 
     # node 1 will offer the content so it needs to have it in its database
-    for contentInfo in contentInfos:
-      let id = toContentId(contentInfo.contentKey)
+    for contentKV in contentKVs:
+      let id = toContentId(contentKV.contentKey)
       historyNode1.portalProtocol.storeContent(
-        contentInfo.contentKey,
+        contentKV.contentKey,
         id,
-        contentInfo.content
+        contentKV.content
       )
 
     # Offering 1 content item too much which should result in a discv5 packet
@@ -214,14 +214,14 @@ procSuite "History Content Network":
     block:
       let offerResult = await historyNode1.portalProtocol.offer(
         historyNode2.localNode(),
-        contentInfos
+        contentKVs
       )
 
       # Fail due timeout, as remote side must drop the too large discv5 packet
       check offerResult.isErr()
 
-      for contentInfo in contentInfos:
-        let id = toContentId(contentInfo.contentKey)
+      for contentKV in contentKVs:
+        let id = toContentId(contentKV.contentKey)
         check historyNode2.containsId(id) == false
 
     # One content key less should make offer be succesful and should result
@@ -229,14 +229,14 @@ procSuite "History Content Network":
     block:
       let offerResult = await historyNode1.portalProtocol.offer(
         historyNode2.localNode(),
-        contentInfos[0..<maxOfferedHistoryContent]
+        contentKVs[0..<maxOfferedHistoryContent]
       )
 
       check offerResult.isOk()
 
-      for i, contentInfo in contentInfos:
-        let id = toContentId(contentInfo.contentKey)
-        if i < len(contentInfos) - 1:
+      for i, contentKV in contentKVs:
+        let id = toContentId(contentKV.contentKey)
+        if i < len(contentKVs) - 1:
           check historyNode2.containsId(id) == true
         else:
           check historyNode2.containsId(id) == false
@@ -283,23 +283,23 @@ procSuite "History Content Network":
       selectedHeaders, epochAccumulators)
     check headersWithProof.isOk()
 
-    let contentInfos = headersToContentInfo(headersWithProof.get())
+    let contentKVs = headersToContentKV(headersWithProof.get())
 
-    for contentInfo in contentInfos:
-      let id = toContentId(contentInfo.contentKey)
+    for contentKV in contentKVs:
+      let id = toContentId(contentKV.contentKey)
       historyNode1.portalProtocol.storeContent(
-        contentInfo.contentKey,
+        contentKV.contentKey,
         id,
-        contentInfo.content
+        contentKV.content
       )
 
       let offerResult = await historyNode1.portalProtocol.offer(
-        historyNode2.localNode(), @[contentInfo])
+        historyNode2.localNode(), @[contentKV])
 
       check offerResult.isOk()
 
-    for contentInfo in contentInfos:
-      let id = toContentId(contentInfo.contentKey)
+    for contentKV in contentKVs:
+      let id = toContentId(contentKV.contentKey)
       check historyNode2.containsId(id) == true
 
     await historyNode1.stop()
