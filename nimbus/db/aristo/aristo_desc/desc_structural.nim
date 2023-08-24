@@ -17,7 +17,7 @@
 import
   std/[sets, tables],
   eth/[common, trie/nibbles],
-  "."/[aristo_error, aristo_types_identifiers]
+  "."/[desc_error, desc_identifiers]
 
 type
   VertexType* = enum

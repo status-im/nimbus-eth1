@@ -33,9 +33,9 @@ import
   stew/results,
   ../aristo_constants,
   ../aristo_desc,
-  ../aristo_desc/aristo_types_backend,
+  ../aristo_desc/desc_backend,
   ../aristo_transcode,
-  ./aristo_init_common
+  ./init_common
 
 type
   MemBackendRef* = ref object of TypedBackendRef

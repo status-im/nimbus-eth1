@@ -33,10 +33,10 @@ import
   stew/results,
   ../aristo_constants,
   ../aristo_desc,
-  ../aristo_desc/aristo_types_backend,
+  ../aristo_desc/desc_backend,
   ../aristo_transcode,
-  ./aristo_init_common,
-  ./aristo_rocksdb/[rdb_desc, rdb_get, rdb_init, rdb_put, rdb_walk]
+  ./init_common,
+  ./rocks_db/[rdb_desc, rdb_get, rdb_init, rdb_put, rdb_walk]
 
 logScope:
   topics = "aristo-backend"

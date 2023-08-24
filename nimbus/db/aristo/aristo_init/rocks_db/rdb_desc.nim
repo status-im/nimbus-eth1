@@ -19,7 +19,7 @@ import
   rocksdb,
   stint,
   ../../aristo_desc,
-  ../aristo_init_common.nim
+  ../init_common
 
 type
   RdbInst* = object

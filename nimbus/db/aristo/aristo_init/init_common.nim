@@ -11,7 +11,7 @@
 
 import
   ../aristo_desc,
-  ../aristo_desc/aristo_types_backend
+  ../aristo_desc/desc_backend
 
 const
   verifyIxId = true # and false

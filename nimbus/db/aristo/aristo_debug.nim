@@ -16,7 +16,7 @@ import
   results,
   stew/byteutils,
   "."/[aristo_constants, aristo_desc, aristo_hike, aristo_init],
-  ./aristo_init/[aristo_memory, aristo_rocksdb]
+  ./aristo_init/[memory_db, rocks_db]
 
 export
   TypedBackendRef, aristo_init.to

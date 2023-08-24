@@ -20,10 +20,10 @@ import
   ../../nimbus/db/aristo/[
     aristo_debug,
     aristo_desc,
-    aristo_desc/aristo_types_backend,
+    aristo_desc/desc_backend,
     aristo_hashify,
-    aristo_init/aristo_memory,
-    aristo_init/aristo_rocksdb,
+    aristo_init/memory_db,
+    aristo_init/rocks_db,
     aristo_persistent,
     aristo_transcode,
     aristo_vid],

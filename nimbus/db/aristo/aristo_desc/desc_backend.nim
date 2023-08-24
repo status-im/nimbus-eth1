@@ -16,7 +16,7 @@
 
 import
   results,
-  "."/[aristo_error, aristo_types_identifiers, aristo_types_structural]
+  "."/[desc_error, desc_identifiers, desc_structural]
 
 type
   GetVtxFn* =

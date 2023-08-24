@@ -20,7 +20,7 @@ import
   rocksdb,
   stew/results,
   "../.."/[aristo_constants, aristo_desc],
-  ../aristo_init_common,
+  ../init_common,
   ./rdb_desc
 
 logScope:

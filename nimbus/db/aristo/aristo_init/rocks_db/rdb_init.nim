@@ -87,7 +87,7 @@ proc destroy*(rdb: var RdbInst; flush: bool) =
     base = rdb.basePath / BaseFolder
   try:
     (base / TempFolder).removeDir
-  
+
     if flush:
       (base / DataFolder).removeDir
 

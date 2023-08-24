@@ -13,11 +13,11 @@
 ## =====================================================
 ##
 import
-  ../aristo_init/[aristo_memory, memory_only],
+  ../aristo_init/[memory_db, memory_only],
   ".."/[aristo_desc, aristo_init],
-  ./aristo_walk_private
+  ./walk_private
 export
-  aristo_memory,
+  memory_db,
   memory_only
 
 # ------------------------------------------------------------------------------

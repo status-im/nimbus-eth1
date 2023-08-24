@@ -17,7 +17,7 @@ import
   std/sequtils,
   eth/common,
   rocksdb,
-  ../aristo_init_common,
+  ../init_common,
   ./rdb_desc
 
 # ------------------------------------------------------------------------------

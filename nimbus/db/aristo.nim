@@ -25,8 +25,7 @@ import
 export
   append, read
 
-import aristo/aristo_desc/[
-  aristo_types_identifiers, aristo_types_structural]
+import aristo/aristo_desc/[desc_identifiers, desc_structural]
 export
   AristoAccount,
   PayloadRef,

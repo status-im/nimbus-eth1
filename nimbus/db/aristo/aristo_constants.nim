@@ -12,7 +12,7 @@
 
 import
   eth/[common, trie/nibbles],
-  ./aristo_desc/aristo_types_identifiers
+  ./aristo_desc/desc_identifiers
 
 const
   EmptyBlob* = seq[byte].default

@@ -17,8 +17,8 @@ import
   std/sets,
   results,
   ../aristo_desc,
-  ../aristo_desc/aristo_types_backend,
-  "."/[aristo_init_common, aristo_memory]
+  ../aristo_desc/desc_backend,
+  "."/[init_common, memory_db]
 
 type
   VoidBackendRef* = ref object of TypedBackendRef

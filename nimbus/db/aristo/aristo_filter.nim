@@ -15,9 +15,9 @@
 import
   std/[sequtils, sets, tables],
   results,
-  ./aristo_desc/aristo_types_backend,
   "."/[aristo_desc, aristo_get, aristo_vid],
-  ./aristo_filter/[aristo_filter_desc, aristo_filter_helpers]
+  ./aristo_desc/desc_backend,
+  ./aristo_filter/[filter_desc, filter_helpers]
 
 # ------------------------------------------------------------------------------
 # Public helpers

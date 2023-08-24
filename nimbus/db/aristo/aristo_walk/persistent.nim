@@ -18,11 +18,11 @@
 ## `./aristo_walk/persistent`.)
 ##
 import
-  ../aristo_init/[aristo_rocksdb, persistent],
+  ../aristo_init/[rocks_db, persistent],
   ".."/[aristo_desc, aristo_init],
-  "."/[aristo_walk_private, memory_only]
+  "."/[walk_private, memory_only]
 export
-  aristo_rocksdb,
+  rocks_db,
   memory_only,
   persistent
 

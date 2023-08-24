@@ -12,7 +12,7 @@ import
   std/tables,
   results,
   ".."/[aristo_desc, aristo_get],
-  ./aristo_filter_desc
+  ./filter_desc
 
 # ------------------------------------------------------------------------------
 # Public functions
