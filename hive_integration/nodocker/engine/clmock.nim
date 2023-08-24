@@ -368,7 +368,7 @@ func versionedHashes(bb: BlobsBundleV1): seq[BlockHash] =
 
   for com in bb.commitments:
     var h = keccakHash(com.bytes)
-    h.data[0] = BLOB_COMMITMENT_VERSION_KZG
+    h.data[0] = VERSIONED_HASH_VERSION_KZG
     result.add BlockHash(h.data)
 
 proc broadcastNewPayload(cl: CLMocker, payload: ExecutionPayload): Result[PayloadStatusV1, string] =

@@ -139,11 +139,11 @@ proc validateTxEip4844(tx: Transaction) =
       (acl.storageKeys.len <= MAX_ACCESS_LIST_STORAGE_KEYS)
 
   isValid = isValid and
-    tx.versionedHashes.len <= MaxAllowedBlob.int
+    tx.versionedHashes.len <= MAX_ALLOWED_BLOB.int
 
   for bv in tx.versionedHashes:
     isValid = isValid and
-      bv.data[0] == BLOB_COMMITMENT_VERSION_KZG
+      bv.data[0] == VERSIONED_HASH_VERSION_KZG
 
   if not isValid:
     raise newException(ValidationError, "Invalid EIP-4844 transaction")

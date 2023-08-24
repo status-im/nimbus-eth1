@@ -287,14 +287,14 @@ proc validateTxBasic*(
       if tx.versionedHashes.len == 0:
         return err("invalid tx: there must be at least one blob")
 
-      if tx.versionedHashes.len > MaxAllowedBlob.int:
-        return err("invalid tx: versioned hashes len exceeds MaxAllowedBlob=" & $MaxAllowedBlob &
+      if tx.versionedHashes.len > MAX_ALLOWED_BLOB.int:
+        return err("invalid tx: versioned hashes len exceeds MAX_ALLOWED_BLOB=" & $MAX_ALLOWED_BLOB &
           ". get=" & $tx.versionedHashes.len)
 
       for i, bv in tx.versionedHashes:
-        if bv.data[0] != BLOB_COMMITMENT_VERSION_KZG:
+        if bv.data[0] != VERSIONED_HASH_VERSION_KZG:
           return err("invalid tx: one of blobVersionedHash has invalid version. " &
-            "get=$1, expect=$2" % [$bv.data[0].int, $BLOB_COMMITMENT_VERSION_KZG.int])
+            "get=$1, expect=$2" % [$bv.data[0].int, $VERSIONED_HASH_VERSION_KZG.int])
 
   except CatchableError as ex:
     return err(ex.msg)

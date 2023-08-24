@@ -40,7 +40,7 @@ const
 # kzgToVersionedHash implements kzg_to_versioned_hash from EIP-4844
 proc kzgToVersionedHash(kzg: kzg.KZGCommitment): VersionedHash =
   result = keccakHash(kzg)
-  result.data[0] = BLOB_COMMITMENT_VERSION_KZG
+  result.data[0] = VERSIONED_HASH_VERSION_KZG
 
 # pointEvaluation implements point_evaluation_precompile from EIP-4844
 # return value and gas consumption is handled by pointEvaluation in
@@ -65,6 +65,9 @@ proc pointEvaluation*(input: openArray[byte]): Result[void, string] =
   y[0..<32] = input[64..<96]
   commitment[0..<48] = input[96..<144]
   kzgProof[0..<48]   = input[144..<192]
+
+  if kzgToVersionedHash(commitment).data != versionedHash:
+    return err("versionedHash should equal to kzgToVersionedHash(commitment)")
 
   # Verify KZG proof
   let res = kzg.verifyKzgProof(commitment, z, y, kzgProof)
@@ -197,7 +200,7 @@ proc validateBlobTransactionWrapper*(tx: Transaction):
   # Now that all commitments have been verified, check that versionedHashes matches the commitments
   for i in 0 ..< tx.versionedHashes.len:
     # this additional check also done in tx validation
-    if tx.versionedHashes[i].data[0] != BLOB_COMMITMENT_VERSION_KZG:
+    if tx.versionedHashes[i].data[0] != VERSIONED_HASH_VERSION_KZG:
       return err("wrong kzg version in versioned hash at index " & $i)
 
     if tx.versionedHashes[i] != kzgToVersionedHash(tx.networkPayload.commitments[i]):

@@ -47,12 +47,7 @@ type
     # paBlsMapG1
     # paBlsMapG2
     # Cancun
-    paNoop0x0A, paNoop0x0B, paNoop0x0C,
-    paNoop0x0D, paNoop0x0E, paNoop0x0F,
-    paNoop0x10, paNoop0x11, paNoop0x12,
-    paNoop0x13,
-
-    paPointEvaluation = 0x14
+    paPointEvaluation = 0x0A
 
 proc getMaxPrecompileAddr(fork: EVMFork): PrecompileAddresses =
   if fork < FkByzantium: paIdentity
@@ -64,8 +59,7 @@ proc getMaxPrecompileAddr(fork: EVMFork): PrecompileAddresses =
   else: PrecompileAddresses.high
 
 proc validPrecompileAddr(addrByte, maxPrecompileAddr: byte): bool =
-  (addrByte in PrecompileAddresses.low.byte .. maxPrecompileAddr) and
-    (addrByte notin paNoop0x0A.byte .. paNoop0x13.byte)
+  (addrByte in PrecompileAddresses.low.byte .. maxPrecompileAddr)
 
 proc validPrecompileAddr(addrByte: byte, fork: EVMFork): bool =
   let maxPrecompileAddr = getMaxPrecompileAddr(fork)
