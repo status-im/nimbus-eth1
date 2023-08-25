@@ -18,11 +18,11 @@
 ## `./aristo_walk/persistent`.)
 ##
 import
-  ../aristo_init/[aristo_rocksdb, persistent],
+  ../aristo_init/[rocks_db, persistent],
   ".."/[aristo_desc, aristo_init],
-  "."/[aristo_walk_private, memory_only]
+  "."/[walk_private, memory_only]
 export
-  aristo_rocksdb,
+  rocks_db,
   memory_only,
   persistent
 
@@ -50,10 +50,10 @@ iterator walkKeyBe*(
 iterator walkFilBe*(
    T: type RdbBackendRef;
    db: AristoDbRef;
-     ): tuple[n: int, fid: FilterID, filter: FilterRef] =
+     ): tuple[n: int, qid: QueueID, filter: FilterRef] =
   ## Similar to `walkVtxBe()` but for filters.
-  for (n,fid,filter) in db.to(T).walkFilBeImpl db:
-    yield (n,fid,filter)
+  for (n,qid,filter) in db.to(T).walkFilBeImpl db:
+    yield (n,qid,filter)
 
 # ------------------------------------------------------------------------------
 # End

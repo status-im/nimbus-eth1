@@ -188,7 +188,7 @@ type
     GetKeyNotFound
     GetFilNotFound
     GetIdgNotFound
-    GetFasNotFound
+    GetFqsNotFound
 
     # RocksDB backend
     RdbBeCantCreateDataDir

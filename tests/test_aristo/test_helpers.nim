@@ -109,7 +109,7 @@ proc `==`*(a: (int,AristoError), b: (int,int)): bool =
 proc `==`*(a: (int,VertexID,AristoError), b: (int,int,int)): bool =
   (a[0], a[1].int, a[2].int) == b
 
-proc `==`*(a: (FilterID,Hash), b: (int,Hash)): bool =
+proc `==`*(a: (QueueID,Hash), b: (int,Hash)): bool =
   (a[0].int,a[1]) == b
 
 proc to*(sample: AccountsSample; T: type seq[UndumpAccounts]): T =

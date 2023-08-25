@@ -11,7 +11,7 @@
 
 import
   ../aristo_desc,
-  ../aristo_desc/aristo_types_backend
+  ../aristo_desc/desc_backend
 
 const
   verifyIxId = true # and false
@@ -46,7 +46,7 @@ type
     of VtxPfx, KeyPfx:
       vid*: VertexID                 ## Vertex ID where the error occured
     of FilPfx:
-      fid*: FilterID                 ## Ditto
+      qid*: QueueID                  ## Ditto
     of AdmPfx, Oops:
       discard
     code*: AristoError               ## Error code (if any)
@@ -58,7 +58,7 @@ type
 
 const
   AdmTabIdIdg* = AdminTabID(0)       ## Access key for vertex ID generator state
-  AdmTabIdFas* = AdminTabID(1)       ## Access key for filter state
+  AdmTabIdFqs* = AdminTabID(1)       ## Access key for filter queue states
 
 # ------------------------------------------------------------------------------
 # Public helpers

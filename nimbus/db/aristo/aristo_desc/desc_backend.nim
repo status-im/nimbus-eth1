@@ -16,7 +16,7 @@
 
 import
   results,
-  "."/[aristo_error, aristo_types_identifiers, aristo_types_structural]
+  "."/[desc_error, desc_identifiers, desc_structural]
 
 type
   GetVtxFn* =
@@ -30,7 +30,7 @@ type
       ## `Aristo DB` hash lookup value.
 
   GetFilFn* =
-    proc(fid: FilterID): Result[FilterRef,AristoError]
+    proc(qid: QueueID): Result[FilterRef,AristoError]
       {.gcsafe, raises: [].}
         ## Generic backend database retrieval function for a filter record.
 
@@ -39,10 +39,10 @@ type
       ## Generic backend database retrieval function for a the ID generator
       ## `Aristo DB` state record.
 
-  GetFasFn* =
-    proc(): Result[seq[FilterID],AristoError] {.gcsafe, raises: [].}
-      ## Generic backend database retrieval function for some administartion
-      ## of the filters (e.g. the top ID.)
+  GetFqsFn* =
+    proc(): Result[seq[(QueueID,QueueID)],AristoError] {.gcsafe, raises: [].}
+      ## Generic backend database retrieval function for some filter queue
+      ## administration data (e.g. the bottom/top ID.)
 
   # -------------
 
@@ -69,7 +69,7 @@ type
         ## values indicate that records should be deleted.
 
   PutFilFn* =
-    proc(hdl: PutHdlRef; vf: openArray[(FilterID,FilterRef)])
+    proc(hdl: PutHdlRef; qf: openArray[(QueueID,FilterRef)])
       {.gcsafe, raises: [].}
         ## Generic backend database storage function for filter records.
 
@@ -79,11 +79,11 @@ type
         ## Generic backend database ID generator state storage function. This
         ## function replaces the current generator state.
 
-  PutFasFn* =
-    proc(hdl: PutHdlRef; vs: openArray[FilterID])
+  PutFqsFn* =
+    proc(hdl: PutHdlRef; vs: openArray[(QueueID,QueueID)])
       {.gcsafe, raises: [].}
         ## Generic backend database filter ID state storage function. This
-        ## function replaces the current filter ID state.
+        ## function replaces the current filter ID list.
 
   PutEndFn* =
     proc(hdl: PutHdlRef): AristoError {.gcsafe, raises: [].}
@@ -106,14 +106,14 @@ type
     getKeyFn*: GetKeyFn              ## Read Merkle hash/key
     getFilFn*: GetFilFn              ## Read back log filter
     getIdgFn*: GetIdgFn              ## Read vertex ID generator state
-    getFasFn*: GetFasFn              ## Read filter ID state
+    getFqsFn*: GetFqsFn              ## Read filter ID state
 
     putBegFn*: PutBegFn              ## Start bulk store session
     putVtxFn*: PutVtxFn              ## Bulk store vertex records
     putKeyFn*: PutKeyFn              ## Bulk store vertex hashes
     putFilFn*: PutFilFn              ## Store back log filter
     putIdgFn*: PutIdgFn              ## Store ID generator state
-    putFasFn*: PutFasFn              ## Store filter ID state
+    putFqsFn*: PutFqsFn              ## Store filter ID state
     putEndFn*: PutEndFn              ## Commit bulk store session
 
     closeFn*: CloseFn                ## Generic destructor

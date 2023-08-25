@@ -12,7 +12,7 @@
 
 import
   eth/[common, trie/nibbles],
-  ./aristo_desc/aristo_types_identifiers
+  ./aristo_desc/desc_identifiers
 
 const
   EmptyBlob* = seq[byte].default
@@ -24,7 +24,7 @@ const
   EmptyVidSeq* = seq[VertexID].default
     ## Useful shortcut
 
-  EmptyFidSeq* = seq[FilterID].default
+  EmptyQidPairSeq* = seq[(QueueID,QueueID)].default
     ## Useful shortcut
 
   VOID_CODE_HASH* = EMPTY_CODE_HASH
@@ -35,5 +35,11 @@ const
 
   VOID_HASH_LABEL* = HashLabel(root: VertexID(0), key: VOID_HASH_KEY)
     ## Void equivalent for Merkle hash value
+
+  DEFAULT_QID_QUEUES* = [
+    (128,   0), ## Consecutive list of 128 filter slots
+    ( 64,  63), ## Overflow list, 64 filters, skipping 63 filters in-between
+    ( 64, 127), ## ..
+    ( 64, 255)]
 
 # End

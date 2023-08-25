@@ -25,16 +25,14 @@ import
   std/[hashes, sets, tables],
   eth/common,
   ./aristo_constants,
-  ./aristo_desc/[
-    aristo_error, aristo_types_identifiers, aristo_types_structural]
+  ./aristo_desc/[desc_error, desc_identifiers, desc_structural]
 
-from ./aristo_desc/aristo_types_backend
+from ./aristo_desc/desc_backend
   import BackendRef
 
 # Not auto-exporting backend
 export
-  aristo_constants, aristo_error, aristo_types_identifiers,
-  aristo_types_structural
+  aristo_constants, desc_error, desc_identifiers, desc_structural
 
 type
   AristoTxRef* = ref object
@@ -108,8 +106,8 @@ func isValid*(lbl: HashLabel): bool =
 func isValid*(vid: VertexID): bool =
   vid != VertexID(0)
 
-func isValid*(fid: FilterID): bool =
-  fid != FilterID(0)
+func isValid*(qid: QueueID): bool =
+  qid != QueueID(0)
 
 # ------------------------------------------------------------------------------
 # Public functions, miscellaneous
@@ -120,8 +118,8 @@ func hash*(db: AristoDbRef): Hash =
   ## Table/KeyedQueue/HashSet mixin
   cast[pointer](db).hash
 
-# Note that the below `init()` function cannot go into
-# `aristo_types_identifiers` as this would result in a circular import.
+# Note that the below `init()` function cannot go into `desc_identifiers` as
+# this would result in a circular import.
 func init*(key: var HashKey; data: openArray[byte]): bool =
   ## Import argument `data` into `key` which must have length either `32`, or
   ## `0`. The latter case is equivalent to an all zero byte array of size `32`.
