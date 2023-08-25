@@ -23,7 +23,6 @@ type
   JsonTracer* = ref object of TracerRef
     stream: Stream
     pretty: bool
-    comp: Computation
     gas: GasInt
     pc: int
     stack: JsonNode
@@ -76,13 +75,12 @@ iterator storage(ctx: JsonTracer, compDepth: int): UInt256 =
   for key in ctx.storageKeys[compDepth]:
     yield key
 
-proc captureOpImpl(ctx: JsonTracer, pc: int,
+proc captureOpImpl(ctx: JsonTracer, c: Computation, pc: int,
                    op: Op, gas: GasInt, refund: GasInt,
                    rData: openArray[byte],
                    depth: int, error: Option[string]) {.gcsafe.} =
   let
     gasCost = ctx.gas - gas
-    c = ctx.comp
 
   var res = %{
     "pc": %(ctx.pc),
@@ -139,7 +137,7 @@ proc newJsonTracer*(stream: Stream, flags: set[TracerFlags], pretty: bool): Json
     pretty: pretty
   )
 
-method capturePrepare*(ctx: JsonTracer, depth: int) {.gcsafe.} =
+method capturePrepare*(ctx: JsonTracer, comp: Computation, depth: int) {.gcsafe.} =
   if depth >= ctx.storageKeys.len:
     let prevLen = ctx.storageKeys.len
     ctx.storageKeys.setLen(depth + 1)
@@ -149,13 +147,13 @@ method capturePrepare*(ctx: JsonTracer, depth: int) {.gcsafe.} =
   ctx.storageKeys[depth] = initHashSet[UInt256]()
 
 # Top call frame
-method captureStart*(ctx: JsonTracer, c: Computation,
+method captureStart*(ctx: JsonTracer, comp: Computation,
                      sender: EthAddress, to: EthAddress,
                      create: bool, input: openArray[byte],
-                     gas: GasInt, value: UInt256) {.gcsafe.} =
-  ctx.comp = c
+                     gasLimit: GasInt, value: UInt256) {.gcsafe.} =
+  discard
 
-method captureEnd*(ctx: JsonTracer, output: openArray[byte],
+method captureEnd*(ctx: JsonTracer, comp: Computation, output: openArray[byte],
                    gasUsed: GasInt, error: Option[string]) {.gcsafe.} =
   var res = %{
     "output": %(output),
@@ -166,21 +164,19 @@ method captureEnd*(ctx: JsonTracer, output: openArray[byte],
   ctx.writeJson(res)
 
 # Opcode level
-method captureOpStart*(ctx: JsonTracer, pc: int,
+method captureOpStart*(ctx: JsonTracer, c: Computation, pc: int,
                        op: Op, gas: GasInt,
                        depth: int): int {.gcsafe.} =
   ctx.gas = gas
   ctx.pc = pc
 
   if TracerFlags.DisableStack notin ctx.flags:
-    let c = ctx.comp
     ctx.stack = newJArray()
     for v in c.stack.values:
       ctx.stack.add(%("0x" & v.dumpHex.stripLeadingZeros))
 
   if TracerFlags.DisableStorage notin ctx.flags and op == SSTORE:
     try:
-      let c = ctx.comp
       if c.stack.values.len > 1:
         ctx.rememberStorageKey(c.msg.depth, c.stack[^1, UInt256])
     except InsufficientStack as ex:
@@ -190,7 +186,7 @@ method captureOpStart*(ctx: JsonTracer, pc: int,
 
   if op in callFamily:
     try:
-      ctx.captureOpImpl(pc, op, 0, 0, [], depth, none(string))
+      ctx.captureOpImpl(c, pc, op, 0, 0, [], depth, none(string))
     except RlpError as ex:
       error "JsonTracer captureOpEnd", msg=ex.msg
 
@@ -198,7 +194,7 @@ method captureOpStart*(ctx: JsonTracer, pc: int,
   result = ctx.index
   inc ctx.index
 
-method callFamilyGas*(ctx: JsonTracer,
+method callFamilyGas*(ctx: JsonTracer, comp: Computation,
                       op: Op, gas: GasInt,
                       depth: int) {.gcsafe.} =
   doAssert(op in callFamily)
@@ -207,7 +203,7 @@ method callFamilyGas*(ctx: JsonTracer,
   res["gasCost"] = encodeHexInt(gas)
   ctx.writeJson(res)
 
-method captureOpEnd*(ctx: JsonTracer, pc: int,
+method captureOpEnd*(ctx: JsonTracer, comp: Computation, pc: int,
                      op: Op, gas: GasInt, refund: GasInt,
                      rData: openArray[byte],
                      depth: int, opIndex: int) {.gcsafe.} =
@@ -217,16 +213,16 @@ method captureOpEnd*(ctx: JsonTracer, pc: int,
     return
 
   try:
-    ctx.captureOpImpl(pc, op, gas, refund, rData, depth, none(string))
+    ctx.captureOpImpl(comp, pc, op, gas, refund, rData, depth, none(string))
   except RlpError as ex:
     error "JsonTracer captureOpEnd", msg=ex.msg
 
-method captureFault*(ctx: JsonTracer, pc: int,
+method captureFault*(ctx: JsonTracer, comp: Computation, pc: int,
                      op: Op, gas: GasInt, refund: GasInt,
                      rData: openArray[byte],
                      depth: int, error: Option[string]) {.gcsafe.} =
   try:
-    ctx.captureOpImpl(pc, op, gas, refund, rData, depth, error)
+    ctx.captureOpImpl(comp, pc, op, gas, refund, rData, depth, error)
   except RlpError as ex:
     error "JsonTracer captureOpEnd", msg=ex.msg
 

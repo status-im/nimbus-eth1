@@ -139,6 +139,7 @@ type
     flags*: set[TracerFlags]
 
 # Transaction level
+# This is called once fo each transaction
 method captureTxStart*(ctx: TracerRef, gasLimit: GasInt) {.base, gcsafe.} =
   discard
 
@@ -146,50 +147,50 @@ method captureTxEnd*(ctx: TracerRef, restGas: GasInt) {.base, gcsafe.} =
   discard
 
 # Top call frame
-method captureStart*(ctx: TracerRef, c: Computation,
+method captureStart*(ctx: TracerRef, comp: Computation,
                      sender: EthAddress, to: EthAddress,
                      create: bool, input: openArray[byte],
-                     gas: GasInt, value: UInt256) {.base, gcsafe.} =
+                     gasLimit: GasInt, value: UInt256) {.base, gcsafe.} =
   discard
 
-method captureEnd*(ctx: TracerRef, output: openArray[byte],
+method captureEnd*(ctx: TracerRef, comp: Computation, output: openArray[byte],
                    gasUsed: GasInt, error: Option[string]) {.base, gcsafe.} =
   discard
 
 # Rest of call frames
-method captureEnter*(ctx: TracerRef, op: Op,
+method captureEnter*(ctx: TracerRef, comp: Computation, op: Op,
                      sender: EthAddress, to: EthAddress,
-                     input: openArray[byte], gas: GasInt,
+                     input: openArray[byte], gasLimit: GasInt,
                      value: UInt256) {.base, gcsafe.} =
   discard
 
-method captureExit*(ctx: TracerRef, output: openArray[byte],
+method captureExit*(ctx: TracerRef, comp: Computation, output: openArray[byte],
                     gasUsed: GasInt, error: Option[string]) {.base, gcsafe.} =
   discard
 
 # Opcode level
-method captureOpStart*(ctx: TracerRef, pc: int,
+method captureOpStart*(ctx: TracerRef, comp: Computation, pc: int,
                        op: Op, gas: GasInt,
                        depth: int): int {.base, gcsafe.} =
   discard
 
-method callFamilyGas*(ctx: TracerRef,
+method callFamilyGas*(ctx: TracerRef, comp: Computation,
                       op: Op, gas: GasInt,
                       depth: int) {.base, gcsafe.} =
   discard
 
-method captureOpEnd*(ctx: TracerRef, pc: int,
+method captureOpEnd*(ctx: TracerRef, comp: Computation, pc: int,
                      op: Op, gas: GasInt, refund: GasInt,
                      rData: openArray[byte],
                      depth: int, opIndex: int) {.base, gcsafe.} =
   discard
 
-method captureFault*(ctx: TracerRef, pc: int,
+method captureFault*(ctx: TracerRef, comp: Computation, pc: int,
                      op: Op, gas: GasInt, refund: GasInt,
                      rData: openArray[byte],
                      depth: int, error: Option[string]) {.base, gcsafe.} =
   discard
 
 
-method capturePrepare*(ctx: TracerRef, depth: int) {.base, gcsafe.} =
+method capturePrepare*(ctx: TracerRef, comp: Computation, depth: int) {.base, gcsafe.} =
   discard

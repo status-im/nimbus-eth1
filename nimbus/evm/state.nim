@@ -363,56 +363,57 @@ proc captureTxEnd*(vmState: BaseVMState, restGas: GasInt) =
   if vmState.tracingEnabled:
     vmState.tracer.captureTxEnd(restGas)
 
-proc captureStart*(vmState: BaseVMState, c: Computation,
+proc captureStart*(vmState: BaseVMState, comp: Computation,
                    sender: EthAddress, to: EthAddress,
                    create: bool, input: openArray[byte],
-                   gas: GasInt, value: UInt256) =
+                   gasLimit: GasInt, value: UInt256) =
   if vmState.tracingEnabled:
-    vmState.tracer.captureStart(c, sender, to, create, input, gas, value)
+    vmState.tracer.captureStart(comp, sender, to, create, input, gasLimit, value)
 
-proc captureEnd*(vmState: BaseVMState, output: openArray[byte],
+proc captureEnd*(vmState: BaseVMState, comp: Computation, output: openArray[byte],
                  gasUsed: GasInt, error: Option[string]) =
   if vmState.tracingEnabled:
-    vmState.tracer.captureEnd(output, gasUsed, error)
+    vmState.tracer.captureEnd(comp, output, gasUsed, error)
 
-proc captureEnter*(vmState: BaseVMState, op: Op,
+proc captureEnter*(vmState: BaseVMState, comp: Computation, op: Op,
                    sender: EthAddress, to: EthAddress,
-                   input: openArray[byte], gas: GasInt,
+                   input: openArray[byte], gasLimit: GasInt,
                    value: UInt256) =
   if vmState.tracingEnabled:
-    vmState.tracer.captureEnter(op, sender, to, input, gas, value)
+    vmState.tracer.captureEnter(comp, op, sender, to, input, gasLimit, value)
 
-proc captureExit*(vmState: BaseVMState, output: openArray[byte],
+proc captureExit*(vmState: BaseVMState, comp: Computation, output: openArray[byte],
                   gasUsed: GasInt, error: Option[string]) =
   if vmState.tracingEnabled:
-    vmState.tracer.captureExit(output, gasUsed, error)
+    vmState.tracer.captureExit(comp, output, gasUsed, error)
 
-proc captureOpStart*(vmState: BaseVMState, pc: int,
+proc captureOpStart*(vmState: BaseVMState, comp: Computation, pc: int,
                    op: Op, gas: GasInt,
                    depth: int): int =
   if vmState.tracingEnabled:
-    result = vmState.tracer.captureOpStart(pc, op, gas, depth)
+    result = vmState.tracer.captureOpStart(comp, pc, op, gas, depth)
 
 proc callFamilyGas*(vmState: BaseVMState,
+                    comp: Computation,
                     op: Op, gas: GasInt,
                     depth: int) =
-  if vmState.tracingEnabled:          
-    vmState.tracer.callFamilyGas(op, gas, depth)
-                      
-proc captureOpEnd*(vmState: BaseVMState, pc: int,
+  if vmState.tracingEnabled:
+    vmState.tracer.callFamilyGas(comp, op, gas, depth)
+
+proc captureOpEnd*(vmState: BaseVMState, comp: Computation, pc: int,
                    op: Op, gas: GasInt, refund: GasInt,
                    rData: openArray[byte],
                    depth: int, opIndex: int) =
   if vmState.tracingEnabled:
-    vmState.tracer.captureOpEnd(pc, op, gas, refund, rData, depth, opIndex)
+    vmState.tracer.captureOpEnd(comp, pc, op, gas, refund, rData, depth, opIndex)
 
-proc captureFault*(vmState: BaseVMState, pc: int,
+proc captureFault*(vmState: BaseVMState, comp: Computation, pc: int,
                    op: Op, gas: GasInt, refund: GasInt,
                    rData: openArray[byte],
                    depth: int, error: Option[string]) =
   if vmState.tracingEnabled:
-    vmState.tracer.captureFault(pc, op, gas, refund, rData, depth, error)
+    vmState.tracer.captureFault(comp, pc, op, gas, refund, rData, depth, error)
 
-proc capturePrepare*(vmState: BaseVMState, depth: int) =
+proc capturePrepare*(vmState: BaseVMState, comp: Computation, depth: int) =
   if vmState.tracingEnabled:
-    vmState.tracer.capturePrepare(depth)
+    vmState.tracer.capturePrepare(comp, depth)

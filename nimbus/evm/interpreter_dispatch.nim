@@ -190,7 +190,8 @@ proc beforeExec(c: Computation): bool
     {.gcsafe, raises: [ValueError].} =
 
   if c.msg.depth > 0:
-    c.vmState.captureEnter(msgToOp(c.msg),
+    c.vmState.captureEnter(c,
+        msgToOp(c.msg),
         c.msg.sender, c.msg.contractAddress,
         c.msg.data, c.msg.gas,
         c.msg.value)
@@ -215,7 +216,7 @@ proc afterExec(c: Computation)
                   some(c.error.info)
                 else:
                   none(string)
-    c.vmState.captureExit(c.output, gasUsed, error)
+    c.vmState.captureExit(c, c.output, gasUsed, error)
 
 # ------------------------------------------------------------------------------
 # Public functions

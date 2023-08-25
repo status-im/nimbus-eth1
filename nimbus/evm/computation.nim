@@ -390,16 +390,18 @@ proc tracingEnabled*(c: Computation): bool =
 
 proc traceOpCodeStarted*(c: Computation, op: Op): int {.gcsafe, raises: [].} =
   c.vmState.captureOpStart(
+    c,
     c.code.pc - 1,
     op,
     c.gasMeter.gasRemaining,
     c.msg.depth + 1)
 
 proc traceCallFamilyGas*(c: Computation, op: Op, gas: GasInt) {.gcsafe, raises: [].} =
-  c.vmState.callFamilyGas(op, gas, c.msg.depth + 1)
+  c.vmState.callFamilyGas(c, op, gas, c.msg.depth + 1)
 
 proc traceOpCodeEnded*(c: Computation, op: Op, opIndex: int) {.gcsafe, raises: [].} =
   c.vmState.captureOpEnd(
+    c,
     c.code.pc - 1,
     op,
     c.gasMeter.gasRemaining,
@@ -410,6 +412,7 @@ proc traceOpCodeEnded*(c: Computation, op: Op, opIndex: int) {.gcsafe, raises: [
 
 proc traceError*(c: Computation) {.gcsafe, raises: [].} =
   c.vmState.captureFault(
+    c,
     c.code.pc - 1,
     c.instr,
     c.gasMeter.gasRemaining,
@@ -419,7 +422,7 @@ proc traceError*(c: Computation) {.gcsafe, raises: [].} =
     some(c.error.info))
 
 proc prepareTracer*(c: Computation) =
-  c.vmState.capturePrepare(c.msg.depth)
+  c.vmState.capturePrepare(c, c.msg.depth)
 
 # ------------------------------------------------------------------------------
 # End
