@@ -85,9 +85,9 @@ proc ppVid(vid: VertexID; pfx = true): string =
   else:
     result &= "ø"
 
-proc ppFid(fid: FilterID): string =
-  if fid.isValid:
-    "%" & fid.uint64.toHex.stripZeros.toLowerAscii
+proc ppQid(qid: QueueID): string =
+  if qid.isValid:
+    "%" & qid.uint64.toHex.stripZeros.toLowerAscii
   else:
     "ø"
 
@@ -450,8 +450,8 @@ proc pp*(lty: LeafTie, db = AristoDbRef()): string =
 proc pp*(vid: VertexID): string =
   vid.ppVid
 
-proc pp*(fid: FilterID): string =
-  fid.ppFid
+proc pp*(qid: QueueID): string =
+  qid.ppQid
 
 proc pp*(vGen: openArray[VertexID]): string =
   vGen.ppVidList

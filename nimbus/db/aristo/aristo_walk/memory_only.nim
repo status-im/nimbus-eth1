@@ -45,10 +45,10 @@ iterator walkKeyBe*[T: MemBackendRef|VoidBackendRef](
 iterator walkFilBe*[T: MemBackendRef|VoidBackendRef](
    _: type T;
    db: AristoDbRef;
-     ): tuple[n: int, fid: FilterID, filter: FilterRef] =
+     ): tuple[n: int, qid: QueueID, filter: FilterRef] =
   ## Similar to `walkVtxBe()` but for filters.
-  for (n,fid,filter) in db.to(T).walkFilBeImpl db:
-    yield (n,fid,filter)
+  for (n,qid,filter) in db.to(T).walkFilBeImpl db:
+    yield (n,qid,filter)
 
 # ------------------------------------------------------------------------------
 # End

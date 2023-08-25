@@ -46,7 +46,7 @@ type
     of VtxPfx, KeyPfx:
       vid*: VertexID                 ## Vertex ID where the error occured
     of FilPfx:
-      fid*: FilterID                 ## Ditto
+      qid*: QueueID                  ## Ditto
     of AdmPfx, Oops:
       discard
     code*: AristoError               ## Error code (if any)

@@ -30,7 +30,7 @@ type
       ## `Aristo DB` hash lookup value.
 
   GetFilFn* =
-    proc(fid: FilterID): Result[FilterRef,AristoError]
+    proc(qid: QueueID): Result[FilterRef,AristoError]
       {.gcsafe, raises: [].}
         ## Generic backend database retrieval function for a filter record.
 
@@ -40,7 +40,7 @@ type
       ## `Aristo DB` state record.
 
   GetFasFn* =
-    proc(): Result[seq[FilterID],AristoError] {.gcsafe, raises: [].}
+    proc(): Result[seq[QueueID],AristoError] {.gcsafe, raises: [].}
       ## Generic backend database retrieval function for some administartion
       ## of the filters (e.g. the top ID.)
 
@@ -69,7 +69,7 @@ type
         ## values indicate that records should be deleted.
 
   PutFilFn* =
-    proc(hdl: PutHdlRef; vf: openArray[(FilterID,FilterRef)])
+    proc(hdl: PutHdlRef; qf: openArray[(QueueID,FilterRef)])
       {.gcsafe, raises: [].}
         ## Generic backend database storage function for filter records.
 
@@ -80,7 +80,7 @@ type
         ## function replaces the current generator state.
 
   PutFasFn* =
-    proc(hdl: PutHdlRef; vs: openArray[FilterID])
+    proc(hdl: PutHdlRef; qs: openArray[QueueID])
       {.gcsafe, raises: [].}
         ## Generic backend database filter ID state storage function. This
         ## function replaces the current filter ID state.

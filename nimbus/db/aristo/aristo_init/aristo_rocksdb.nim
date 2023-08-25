@@ -83,8 +83,8 @@ proc `vtxCache=`(hdl: RdbPutHdlRef; val: tuple[vid: VertexID; data: Blob]) =
 proc `keyCache=`(hdl: RdbPutHdlRef; val: tuple[vid: VertexID; data: Blob]) =
   hdl.cache[KeyPfx][val.vid.uint64] = val.data
 
-proc `filCache=`(hdl: RdbPutHdlRef; val: tuple[fid: FilterID; data: Blob]) =
-  hdl.cache[FilPfx][val.fid.uint64] = val.data
+proc `filCache=`(hdl: RdbPutHdlRef; val: tuple[qid: QueueID; data: Blob]) =
+  hdl.cache[FilPfx][val.qid.uint64] = val.data
 
 proc `admCache=`(hdl: RdbPutHdlRef; val: tuple[id: AdminTabID; data: Blob]) =
   hdl.cache[AdmPfx][val.id.uint64] = val.data
@@ -131,12 +131,12 @@ proc getKeyFn(db: RdbBackendRef): GetKeyFn =
 
 proc getFilFn(db: RdbBackendRef): GetFilFn =
   result =
-    proc(fid: FilterID): Result[FilterRef,AristoError] =
+    proc(qid: QueueID): Result[FilterRef,AristoError] =
 
       # Fetch serialised data record
-      let rc = db.rdb.get fid.toOpenArray()
+      let rc = db.rdb.get qid.toOpenArray()
       if rc.isErr:
-        debug logTxt "getFilFn: failed", fid,
+        debug logTxt "getFilFn: failed", qid,
           error=rc.error[0], info=rc.error[1]
         return err(rc.error[0])
 
@@ -165,7 +165,7 @@ proc getIdgFn(db: RdbBackendRef): GetIdgFn =
 
 proc getFasFn(db: RdbBackendRef): GetFasFn =
   result =
-    proc(): Result[seq[FilterID],AristoError]=
+    proc(): Result[seq[QueueID],AristoError]=
 
       # Fetch serialised data record
       let rc = db.rdb.get AdmTabIdFas.toOpenArray()
@@ -174,11 +174,11 @@ proc getFasFn(db: RdbBackendRef): GetFasFn =
         return err(rc.error[0])
 
       if rc.value.len == 0:
-        let w = EmptyFidSeq
+        let w = EmptyQidSeq
         return ok w
 
       # Decode data record
-      rc.value.deblobify seq[FilterID]
+      rc.value.deblobify seq[QueueID]
 
 # -------------
 
@@ -219,21 +219,21 @@ proc putKeyFn(db: RdbBackendRef): PutKeyFn =
 
 proc putFilFn(db: RdbBackendRef): PutFilFn =
   result =
-    proc(hdl: PutHdlRef; vrps: openArray[(FilterID,FilterRef)]) =
+    proc(hdl: PutHdlRef; vrps: openArray[(QueueID,FilterRef)]) =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
-        for (fid,filter) in vrps:
+        for (qid,filter) in vrps:
           if filter.isValid:
             let rc = filter.blobify()
             if rc.isErr:
               hdl.error = TypedPutHdlErrRef(
                 pfx:  FilPfx,
-                fid:  fid,
+                qid:  qid,
                 code: rc.error)
               return
-            hdl.filCache = (fid, rc.value)
+            hdl.filCache = (qid, rc.value)
           else:
-            hdl.filCache = (fid, EmptyBlob)
+            hdl.filCache = (qid, EmptyBlob)
 
 proc putIdgFn(db: RdbBackendRef): PutIdgFn =
   result =
@@ -247,7 +247,7 @@ proc putIdgFn(db: RdbBackendRef): PutIdgFn =
 
 proc putFasFn(db: RdbBackendRef): PutFasFn =
   result =
-    proc(hdl: PutHdlRef; vs: openArray[FilterID])  =
+    proc(hdl: PutHdlRef; vs: openArray[QueueID])  =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
         if 0 < vs.len:
@@ -349,12 +349,12 @@ iterator walkKey*(
 
 iterator walkFil*(
     be: RdbBackendRef;
-      ): tuple[n: int, fid: FilterID, filter: FilterRef] =
+      ): tuple[n: int, qid: QueueID, filter: FilterRef] =
   ## Variant of `walk()` iteration over the filter sub-table.
   for (n, xid, data) in be.rdb.walk FilPfx:
     let rc = data.deblobify FilterRef
     if rc.isOk:
-      yield (n, FilterID(xid), rc.value)
+      yield (n, QueueID(xid), rc.value)
 
 # ------------------------------------------------------------------------------
 # End

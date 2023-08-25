@@ -142,13 +142,13 @@ proc verify(
 proc collectFilter(
     db: AristoDbRef;
     filter: FilterRef;
-    tab: var Table[FilterID,Hash];
+    tab: var Table[QueueID,Hash];
     noisy: bool;
       ): bool =
   ## Store filter on permanent BE and register digest
   if not filter.isNil:
     let
-      fid = FilterID(7 * (tab.len + 1)) # just some number
+      fid = QueueID(7 * (tab.len + 1)) # just some number
       be = db.backend
       tx = be.putBegFn()
 
@@ -165,7 +165,7 @@ proc collectFilter(
 proc verifyFiltersImpl[T: MemBackendRef|RdbBackendRef](
     _: type T;
     db: AristoDbRef;
-    tab: Table[FilterID,Hash];
+    tab: Table[QueueID,Hash];
     noisy: bool;
       ): bool =
   ## Compare stored filters against registered ones
@@ -195,7 +195,7 @@ proc verifyFiltersImpl[T: MemBackendRef|RdbBackendRef](
 
 proc verifyFilters(
     db: AristoDbRef;
-    tab: Table[FilterID,Hash];
+    tab: Table[QueueID,Hash];
     noisy: bool;
       ): bool =
   ## Wrapper
@@ -224,7 +224,7 @@ proc test_backendConsistency*(
       ): bool =
   ## Import accounts
   var
-    filTab: Table[FilterID,Hash]             # Filter register
+    filTab: Table[QueueID,Hash]             # Filter register
     ndb = AristoDbRef()                      # Reference cache
     mdb = AristoDbRef()                      # Memory backend database
     rdb = AristoDbRef()                      # Rocks DB backend database

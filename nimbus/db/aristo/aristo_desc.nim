@@ -108,8 +108,8 @@ func isValid*(lbl: HashLabel): bool =
 func isValid*(vid: VertexID): bool =
   vid != VertexID(0)
 
-func isValid*(fid: FilterID): bool =
-  fid != FilterID(0)
+func isValid*(qid: QueueID): bool =
+  qid != QueueID(0)
 
 # ------------------------------------------------------------------------------
 # Public functions, miscellaneous
