@@ -107,9 +107,11 @@ proc asyncProcessTransactionImpl(
     vmState.stateDB.clearTransientStorage()
 
     # Execute the transaction.
+    vmState.captureTxStart(tx.gasLimit)
     let
       accTx = vmState.stateDB.beginSavepoint
       gasBurned = tx.txCallEvm(sender, vmState, fork)
+    vmState.captureTxEnd(tx.gasLimit - gasBurned)
 
     res = commitOrRollbackDependingOnGasUsed(vmState, accTx, header, tx, gasBurned, priorityFee)
   else:

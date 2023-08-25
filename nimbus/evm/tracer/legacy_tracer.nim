@@ -24,7 +24,6 @@ type
     trace: JsonNode
     accounts: HashSet[EthAddress]
     storageKeys: seq[HashSet[UInt256]]
-    comp: Computation
     gas: GasInt
 
 proc hash*(x: UInt256): Hash =
@@ -62,7 +61,7 @@ proc newLegacyTracer*(flags: set[TracerFlags]): LegacyTracer =
     trace: trace
   )
 
-method capturePrepare*(ctx: LegacyTracer, depth: int) {.gcsafe.} =
+method capturePrepare*(ctx: LegacyTracer, comp: Computation, depth: int) {.gcsafe.} =
   if depth >= ctx.storageKeys.len:
     let prevLen = ctx.storageKeys.len
     ctx.storageKeys.setLen(depth + 1)
@@ -71,25 +70,13 @@ method capturePrepare*(ctx: LegacyTracer, depth: int) {.gcsafe.} =
 
   ctx.storageKeys[depth] = initHashSet[UInt256]()
 
-# Top call frame
-method captureStart*(ctx: LegacyTracer, c: Computation,
-                     sender: EthAddress, to: EthAddress,
-                     create: bool, input: openArray[byte],
-                     gas: GasInt, value: UInt256) {.gcsafe.} =
-  ctx.comp = c
-
-method captureEnd*(ctx: LegacyTracer, output: openArray[byte],
-                   gasUsed: GasInt, error: Option[string]) {.gcsafe.} =
-  discard
-
 # Opcode level
-method captureOpStart*(ctx: LegacyTracer, pc: int,
+method captureOpStart*(ctx: LegacyTracer, c: Computation, pc: int,
                        op: Op, gas: GasInt,
                        depth: int): int {.gcsafe.} =
   try:
     let
       j = newJObject()
-      c = ctx.comp
     ctx.trace["structLogs"].add(j)
 
     j["op"] = %(($op).toUpperAscii)
@@ -139,14 +126,13 @@ method captureOpStart*(ctx: LegacyTracer, pc: int,
   except InsufficientStack as ex:
     error "LegacyTracer captureOpEnd", msg=ex.msg
 
-method captureOpEnd*(ctx: LegacyTracer, pc: int,
+method captureOpEnd*(ctx: LegacyTracer, c: Computation, pc: int,
                      op: Op, gas: GasInt, refund: GasInt,
                      rData: openArray[byte],
                      depth: int, opIndex: int) {.gcsafe.} =
   try:
     let
       j = ctx.trace["structLogs"].elems[opIndex]
-      c = ctx.comp
 
     # TODO: figure out how to get storage
     # when contract execution interrupted by exception
@@ -170,15 +156,14 @@ method captureOpEnd*(ctx: LegacyTracer, pc: int,
   except RlpError as ex:
     error "LegacyTracer captureOpEnd", msg=ex.msg
 
-method captureFault*(ctx: LegacyTracer, pc: int,
+method captureFault*(ctx: LegacyTracer, comp: Computation, pc: int,
                      op: Op, gas: GasInt, refund: GasInt,
                      rData: openArray[byte],
                      depth: int, error: Option[string]) {.gcsafe.} =
   try:
-    let c = ctx.comp
     if ctx.trace["structLogs"].elems.len > 0:
       let j = ctx.trace["structLogs"].elems[^1]
-      j["error"] = %(c.error.info)
+      j["error"] = %(comp.error.info)
       j["gasCost"] = %(ctx.gas - gas)
 
     ctx.trace["failed"] = %true

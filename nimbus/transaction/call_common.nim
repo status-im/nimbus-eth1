@@ -194,7 +194,7 @@ proc setupHost(call: CallParams): TransactionHost =
   vmState.captureStart(host.computation, call.sender, call.to,
                        call.isCreate, call.input,
                        call.gasLimit, call.value)
-                       
+
   return host
 
 when defined(evmc_enabled):
@@ -283,7 +283,7 @@ proc finishRunningComputation(host: TransactionHost, call: CallParams): CallResu
               else:
                 none(string)
 
-  host.vmState.captureEnd(c.output, gasUsed, error)
+  host.vmState.captureEnd(c, c.output, gasUsed, error)
 
   result.isError = c.isError
   result.gasUsed = call.gasLimit - gasRemaining
