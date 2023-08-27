@@ -11,29 +11,24 @@ import
   std/[os, json, strutils, times, typetraits, options],
   stew/[byteutils, results],
   eth/common,
-  web3/engine_api_types,
   ../sim_utils,
   ../../../tools/common/helpers as chp,
   ../../../tools/evmstate/helpers as ehp,
   ../../../tests/test_helpers,
+  ../../../nimbus/beacon/web3_eth_conv,
+  ../../../nimbus/beacon/execution_types,
+  ../../../nimbus/beacon/payload_conv,
   ../engine/engine_client,
-  ./test_env,
-  ./helpers
+  ./test_env
 
 const
   baseFolder = "hive_integration/nodocker/pyspec"
   caseFolder = baseFolder & "/testcases"
   supportedNetwork = ["Merge", "Shanghai", "MergeToShanghaiAtTime15k"]
 
-type
-  Hash256 = common.Hash256
-
 proc getPayload(node: JsonNode): ExecutionPayloadV1OrV2 =
   let rlpBytes = hexToSeqByte(node.getStr)
-  toPayloadV1OrV2(rlp.decode(rlpBytes, EthBlock))
-
-proc hash256(h: Web3BlockHash): Hash256 =
-  Hash256(data: distinctBase h)
+  executionPayloadV1V2(rlp.decode(rlpBytes, EthBlock))
 
 proc validatePostState(node: JsonNode, t: TestEnv): bool =
   # check nonce, balance & storage of accounts in final block against fixture values
@@ -101,7 +96,7 @@ proc runTest(node: JsonNode, network: string): TestStatus =
   t.setupELClient(conf, node)
 
   let blks = node["blocks"]
-  var latestValidHash = Hash256()
+  var latestValidHash = common.Hash256()
   result = TestStatus.OK
   for blkNode in blks:
     let expectedStatus = if "expectException" in blkNode:
@@ -117,7 +112,7 @@ proc runTest(node: JsonNode, network: string): TestStatus =
 
     let pStatus = res.value
     if pStatus.status == PayloadExecutionStatus.valid:
-      latestValidHash = hash256(pStatus.latestValidHash.get)
+      latestValidHash = ethHash pStatus.latestValidHash.get
 
     if pStatus.status != expectedStatus:
       result = TestStatus.Failed
@@ -128,7 +123,7 @@ proc runTest(node: JsonNode, network: string): TestStatus =
 
   block:
     # only update head of beacon chain if valid response occurred
-    if latestValidHash != Hash256():
+    if latestValidHash != common.Hash256():
       # update with latest valid response
       let fcState = ForkchoiceStateV1(headBlockHash: BlockHash latestValidHash.data)
       let res = t.rpcClient.forkchoiceUpdatedV2(fcState)

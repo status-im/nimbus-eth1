@@ -7,7 +7,7 @@ import
   ../../../tests/rpcclient/eth_api,
   ../../../premix/parser,
   ../../../nimbus/rpc/hexstrings,
-  ../../../nimbus/rpc/execution_types
+  ../../../nimbus/beacon/execution_types
 
 import web3/engine_api as web3_engine_api
 

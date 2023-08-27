@@ -128,10 +128,10 @@ proc maxCheckPointLe(d: var LocalSnaps; number: BlockNumber): BlockNumber =
     0.u256
 
 proc isCheckPoint(d: var LocalSnaps; number: BlockNumber): bool =
-  (number mod d.c.cfg.ckpInterval) == 0
+  (number mod d.c.cfg.ckpInterval).isZero
 
 proc isEpoch(d: var LocalSnaps; number: BlockNumber): bool =
-  (number mod d.c.cfg.epoch) == 0
+  (number mod d.c.cfg.epoch).isZero
 
 proc isSnapshotPosition(d: var LocalSnaps; number: BlockNumber): bool =
   # clique/clique.go(394): if number == 0 || (number%c.config.Epoch [..]

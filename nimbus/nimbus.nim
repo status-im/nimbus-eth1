@@ -26,7 +26,7 @@ import
   ./graphql/ethapi,
   ./core/[chain, sealer, clique/clique_desc,
     clique/clique_sealer, tx_pool, block_import],
-  ./rpc/merge/merger,
+  ./beacon/beacon_engine,
   ./sync/[legacy, full, protocol, snap, stateless,
     protocol/les_protocol, handlers, peers],
   ./evm/async/data_sources/json_rpc_data_source
@@ -61,7 +61,7 @@ type
     snapSyncRef: SnapSyncRef
     fullSyncRef: FullSyncRef
     statelessSyncRef: StatelessSyncRef
-    merger: MergerRef
+    beaconEngine: BeaconEngineRef
 
 proc importBlocks(conf: NimbusConf, com: CommonRef) =
   if string(conf.blocksFile).len > 0:
@@ -74,9 +74,6 @@ proc importBlocks(conf: NimbusConf, com: CommonRef) =
 proc basicServices(nimbus: NimbusNode,
                    conf: NimbusConf,
                    com: CommonRef) =
-  # app wide TxPool singleton
-  # TODO: disable some of txPool internal mechanism if
-  # the engineSigner is zero.
   nimbus.txPool = TxPoolRef.new(com, conf.engineSigner)
 
   # txPool must be informed of active head
@@ -92,10 +89,7 @@ proc basicServices(nimbus: NimbusNode,
     nimbus.chainRef.extraValidation = 0 < verifyFrom
     nimbus.chainRef.verifyFrom = verifyFrom
 
-  # this is temporary workaround to track POS transition
-  # until we have proper chain config and hard fork module
-  # see issue #640
-  nimbus.merger = MergerRef.new(com.db)
+  nimbus.beaconEngine = BeaconEngineRef.new(nimbus.txPool, nimbus.chainRef)
 
 proc manageAccounts(nimbus: NimbusNode, conf: NimbusConf) =
   if string(conf.keyStore).len > 0:
@@ -371,32 +365,32 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
     nimbus.sealingEngine.start()
 
   if conf.engineApiEnabled:
-    let maybeAsyncDataSource = maybeStatelessAsyncDataSource(nimbus, conf)
+    #let maybeAsyncDataSource = maybeStatelessAsyncDataSource(nimbus, conf)
     if conf.engineApiPort != conf.rpcPort:
       nimbus.engineApiServer = newRpcHttpServer(
         [initTAddress(conf.engineApiAddress, conf.engineApiPort)],
         authHooks = @[httpJwtAuthHook, httpCorsHook]
       )
-      setupEngineAPI(nimbus.sealingEngine, nimbus.engineApiServer, nimbus.merger, maybeAsyncDataSource)
+      setupEngineAPI(nimbus.beaconEngine, nimbus.engineApiServer)
       setupEthRpc(nimbus.ethNode, nimbus.ctx, com, nimbus.txPool, nimbus.engineApiServer)
       nimbus.engineApiServer.start()
     else:
-      setupEngineAPI(nimbus.sealingEngine, nimbus.rpcServer, nimbus.merger, maybeAsyncDataSource)
+      setupEngineAPI(nimbus.beaconEngine, nimbus.rpcServer)
 
     info "Starting engine API server", port = conf.engineApiPort
 
   if conf.engineApiWsEnabled:
-    let maybeAsyncDataSource = maybeStatelessAsyncDataSource(nimbus, conf)
+    #let maybeAsyncDataSource = maybeStatelessAsyncDataSource(nimbus, conf)
     if conf.engineApiWsPort != conf.wsPort:
       nimbus.engineApiWsServer = newRpcWebSocketServer(
         initTAddress(conf.engineApiWsAddress, conf.engineApiWsPort),
         authHooks = @[wsJwtAuthHook, wsCorsHook]
       )
-      setupEngineAPI(nimbus.sealingEngine, nimbus.engineApiWsServer, nimbus.merger, maybeAsyncDataSource)
+      setupEngineAPI(nimbus.beaconEngine, nimbus.engineApiWsServer)
       setupEthRpc(nimbus.ethNode, nimbus.ctx, com, nimbus.txPool, nimbus.engineApiWsServer)
       nimbus.engineApiWsServer.start()
     else:
-      setupEngineAPI(nimbus.sealingEngine, nimbus.wsRpcServer, nimbus.merger, maybeAsyncDataSource)
+      setupEngineAPI(nimbus.beaconEngine, nimbus.wsRpcServer)
 
     info "Starting WebSocket engine API server", port = conf.engineApiWsPort
 

@@ -1,3 +1,12 @@
+# Nimbus
+# Copyright (c) 2023 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT))
+# at your option.
+# This file may not be copied, modified, or distributed except according to
+# those terms.
+
 import
   stint,
   web3/ethtypes,
@@ -98,6 +107,17 @@ func V3*(attr: PayloadAttributes): PayloadAttributesV3 =
     parentBeaconBlockRoot: attr.parentBeaconBlockRoot.get
   )
 
+func payloadAttributes*(attr: PayloadAttributesV1): PayloadAttributes =
+  PayloadAttributes(
+    timestamp: attr.timestamp,
+    prevRandao: attr.prevRandao,
+    suggestedFeeRecipient: attr.suggestedFeeRecipient
+  )
+
+func payloadAttributes*(x: Option[PayloadAttributesV1]): Option[PayloadAttributes] =
+  if x.isNone: none(PayloadAttributes)
+  else: some(payloadAttributes x.get)
+
 func V1V2*(p: ExecutionPayload): ExecutionPayloadV1OrV2 =
   ExecutionPayloadV1OrV2(
     parentHash: p.parentHash,
@@ -173,6 +193,43 @@ func V3*(p: ExecutionPayload): ExecutionPayloadV3 =
     withdrawals: p.withdrawals.get,
     blobGasUsed: p.blobGasUsed.get,
     excessBlobGas: p.excessBlobGas.get
+  )
+
+func V1*(p: ExecutionPayloadV1OrV2): ExecutionPayloadV1 =
+  ExecutionPayloadV1(
+    parentHash: p.parentHash,
+    feeRecipient: p.feeRecipient,
+    stateRoot: p.stateRoot,
+    receiptsRoot: p.receiptsRoot,
+    logsBloom: p.logsBloom,
+    prevRandao: p.prevRandao,
+    blockNumber: p.blockNumber,
+    gasLimit: p.gasLimit,
+    gasUsed: p.gasUsed,
+    timestamp: p.timestamp,
+    extraData: p.extraData,
+    baseFeePerGas: p.baseFeePerGas,
+    blockHash: p.blockHash,
+    transactions: p.transactions
+  )
+
+func V2*(p: ExecutionPayloadV1OrV2): ExecutionPayloadV2 =
+  ExecutionPayloadV2(
+    parentHash: p.parentHash,
+    feeRecipient: p.feeRecipient,
+    stateRoot: p.stateRoot,
+    receiptsRoot: p.receiptsRoot,
+    logsBloom: p.logsBloom,
+    prevRandao: p.prevRandao,
+    blockNumber: p.blockNumber,
+    gasLimit: p.gasLimit,
+    gasUsed: p.gasUsed,
+    timestamp: p.timestamp,
+    extraData: p.extraData,
+    baseFeePerGas: p.baseFeePerGas,
+    blockHash: p.blockHash,
+    transactions: p.transactions,
+    withdrawals: p.withdrawals.get
   )
 
 func executionPayload*(p: ExecutionPayloadV1): ExecutionPayload =

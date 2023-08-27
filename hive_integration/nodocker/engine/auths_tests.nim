@@ -3,6 +3,7 @@ import
   test_env,
   chronicles,
   nimcrypto/[hmac],
+  web3/engine_api_types,
   json_rpc/[rpcclient],
   ./types
 

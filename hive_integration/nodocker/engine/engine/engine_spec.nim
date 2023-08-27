@@ -2,15 +2,14 @@ import
   std/tables,
   stew/byteutils,
   chronicles,
+  eth/common,
   nimcrypto/sysrand,
   chronos,
   ".."/[test_env, helper, types],
   ../../../nimbus/transaction,
   ../../../nimbus/rpc/rpc_types,
-  ../../../nimbus/rpc/merge/mergeutils
-
-import eth/common/eth_types as common_eth_types
-type Hash256 = common_eth_types.Hash256
+  ../../../nimbus/beacon/web3_eth_conv,
+  ../../../nimbus/beacon/execution_types
 
 type
   EngineSpec* = ref object of BaseSpec
@@ -23,7 +22,7 @@ type
 const
   prevRandaoContractAddr = hexToByteArray[20]("0000000000000000000000000000000000000316")
 
-template testNP(res, cond: untyped, validHash = none(Hash256)) =
+template testNP(res, cond: untyped, validHash = none(common.Hash256)) =
   testCond res.isOk
   let s = res.get()
   testCond s.status == PayloadExecutionStatus.cond:
@@ -31,7 +30,7 @@ template testNP(res, cond: untyped, validHash = none(Hash256)) =
   testCond s.latestValidHash == validHash:
     error "Unexpected NewPayload latestValidHash", expect=validHash, get=s.latestValidHash
 
-template testNPEither(res, cond: untyped, validHash = none(Hash256)) =
+template testNPEither(res, cond: untyped, validHash = none(common.Hash256)) =
   testCond res.isOk
   let s = res.get()
   testCond s.status in cond:
@@ -39,13 +38,13 @@ template testNPEither(res, cond: untyped, validHash = none(Hash256)) =
   testCond s.latestValidHash == validHash:
     error "Unexpected NewPayload latestValidHash", expect=validHash, get=s.latestValidHash
 
-template testLatestHeader(client: untyped, expectedHash: BlockHash) =
-  var lastHeader: EthBlockHeader
+template testLatestHeader(client: untyped, expectedHash: Web3Hash) =
+  var lastHeader: common.BlockHeader
   var hRes = client.latestHeader(lastHeader)
   testCond hRes.isOk:
     error "unable to get latest header", msg=hRes.error
 
-  let lastHash = BlockHash lastHeader.blockHash.data
+  let lastHash = w3Hash lastHeader.blockHash
   # Latest block header available via Eth RPC should not have changed at this point
   testCond lastHash == expectedHash:
     error "latest block header incorrect",
@@ -80,7 +79,7 @@ proc invalidTerminalBlockForkchoiceUpdated*(t: TestEnv): bool =
   # either obtained from the Payload validation process or as a result of
   # validating a PoW block referenced by forkchoiceState.headBlockHash
 
-  testFCU(res, invalid, some(Hash256()))
+  testFCU(res, invalid, some(common.Hash256()))
   # ValidationError is not validated since it can be either null or a string message
 
   # Check that PoW chain progresses
@@ -122,7 +121,7 @@ proc invalidTerminalBlockNewPayload(t: TestEnv): TestStatus =
   # Execution specification:
   # {status: INVALID, latestValidHash=0x00..00}
   # if terminal block conditions are not satisfied
-  testNP(res, invalid, some(Hash256()))
+  testNP(res, invalid, some(common.Hash256()))
 
   # Check that PoW chain progresses
   testCond t.verifyPoWProgress(t.gHeader.blockHash)
@@ -133,7 +132,7 @@ proc unknownHeadBlockHash(t: TestEnv): TestStatus =
   let ok = waitFor t.clMock.waitForTTD()
   testCond ok
 
-  var randomHash: Hash256
+  var randomHash: common.Hash256
   testCond randomBytes(randomHash.data) == 32
 
   let clMock = t.clMock
@@ -180,7 +179,7 @@ proc unknownSafeBlockHash(t: TestEnv): TestStatus =
     # Run test after a new payload has been broadcast
     onNewPayloadBroadcast: proc(): bool =
       # Generate a random SafeBlock hash
-      var randomSafeBlockHash: Hash256
+      var randomSafeBlockHash: common.Hash256
       doAssert randomBytes(randomSafeBlockHash.data) == 32
 
       # Send forkchoiceUpdated with random SafeBlockHash
@@ -213,7 +212,7 @@ proc unknownFinalizedBlockHash(t: TestEnv): TestStatus =
     # Run test after a new payload has been broadcast
     onNewPayloadBroadcast: proc(): bool =
       # Generate a random SafeBlock hash
-      var randomFinalBlockHash: Hash256
+      var randomFinalBlockHash: common.Hash256
       doAssert randomBytes(randomFinalBlockHash.data) == 32
 
       # Send forkchoiceUpdated with random SafeBlockHash
@@ -339,13 +338,13 @@ template invalidPayloadAttributesGen(procname: untyped, syncingCond: bool) =
     produceBlockRes = clMock.produceSingleBlock(BlockProcessCallbacks(
       onNewPayloadBroadcast: proc(): bool =
         # Try to apply the new payload with invalid attributes
-        var blockHash: Hash256
+        var blockHash: common.Hash256
         when syncingCond:
           # Setting a random hash will put the client into `SYNCING`
           doAssert randomBytes(blockHash.data) == 32
         else:
           # Set the block hash to the next payload that was broadcasted
-          blockHash = hash256(clMock.latestPayloadBuilt.blockHash)
+          blockHash = common.Hash256(clMock.latestPayloadBuilt.blockHash)
 
         let fcu = ForkchoiceStateV1(
           headBlockHash:      Web3BlockHash blockHash.data,
@@ -400,7 +399,7 @@ proc preTTDFinalizedBlockHash(t: TestEnv): TestStatus =
     clMock = t.clMock
 
   var res = client.forkchoiceUpdatedV1(forkchoiceState)
-  testFCU(res, invalid, some(Hash256()))
+  testFCU(res, invalid, some(common.Hash256()))
 
   res = client.forkchoiceUpdatedV1(clMock.latestForkchoice)
   testFCU(res, valid)
@@ -433,7 +432,7 @@ proc preTTDFinalizedBlockHash(t: TestEnv): TestStatus =
 
 type
   Shadow = ref object
-    hash: Hash256
+    hash: common.Hash256
 
 template badHashOnNewPayloadGen(procname: untyped, syncingCond: bool, sideChain: bool) =
   proc procName(t: TestEnv): TestStatus =
@@ -455,7 +454,7 @@ template badHashOnNewPayloadGen(procname: untyped, syncingCond: bool, sideChain:
       onGetPayload: proc(): bool =
         # Alter hash on the payload and send it to client, should produce an error
         var alteredPayload = clMock.latestPayloadBuilt
-        var invalidPayloadHash = hash256(alteredPayload.blockHash)
+        var invalidPayloadHash = common.Hash256(alteredPayload.blockHash)
         let lastByte = int invalidPayloadHash.data[^1]
         invalidPayloadHash.data[^1] = byte(not lastByte)
         shadow.hash = invalidPayloadHash
@@ -468,7 +467,7 @@ template badHashOnNewPayloadGen(procname: untyped, syncingCond: bool, sideChain:
           alteredPayload.parentHash = Web3BlockHash clMock.latestHeader.parentHash.data
         elif syncingCond:
           # We need to send an fcU to put the client in SYNCING state.
-          var randomHeadBlock: Hash256
+          var randomHeadBlock: common.Hash256
           doAssert randomBytes(randomHeadBlock.data) == 32
 
           let latestHeaderHash = clMock.latestHeader.blockHash
@@ -590,12 +589,12 @@ proc invalidTransitionPayload(t: TestEnv): TestStatus =
 
       let res = client.newPayloadV1(alteredPayload)
       let cond = {PayloadExecutionStatus.invalid, PayloadExecutionStatus.accepted}
-      testNPEither(res, cond, some(Hash256()))
+      testNPEither(res, cond, some(common.Hash256()))
 
       let rr = client.forkchoiceUpdatedV1(
         ForkchoiceStateV1(headBlockHash: alteredPayload.blockHash)
       )
-      testFCU(rr, invalid, some(Hash256()))
+      testFCU(rr, invalid, some(common.Hash256()))
 
       testLatestHeader(client, clMock.latestExecutedPayload.blockHash)
       return true
@@ -648,7 +647,7 @@ template invalidPayloadTestCaseGen(procName: untyped, payloadField: InvalidPaylo
             return false
 
         let alteredPayload = generateInvalidPayload(clMock.latestPayloadBuilt, payloadField, t.vaultKey)
-        invalidPayload.hash = hash256(alteredPayload.blockHash)
+        invalidPayload.hash = common.Hash256(alteredPayload.blockHash)
 
         # Depending on the field we modified, we expect a different status
         let rr = client.newPayloadV1(alteredPayload)
@@ -715,7 +714,7 @@ template invalidPayloadTestCaseGen(procName: untyped, payloadField: InvalidPaylo
 
         # Finally, attempt to fetch the invalid payload using the JSON-RPC endpoint
         var header: rpc_types.BlockHeader
-        let rp = client.headerByHash(alteredPayload.blockHash.hash256, header)
+        let rp = client.headerByHash(alteredPayload.blockHash.common.Hash256, header)
         rp.isErr
     ))
 
@@ -872,7 +871,7 @@ template invalidMissingAncestorReOrgGen(procName: untyped,
       onGetPayload: proc(): bool =
         # Insert extraData to ensure we deviate from the main payload, which contains empty extradata
         var alternatePayload = customizePayload(clMock.latestPayloadBuilt, CustomPayload(
-          parentHash: some(shadow.altChainPayloads[^1].blockHash.hash256),
+          parentHash: some(shadow.altChainPayloads[^1].blockHash.common.Hash256),
           extraData:  some(@[1.byte]),
         ))
 
@@ -913,7 +912,7 @@ template invalidMissingAncestorReOrgGen(procName: untyped,
           if i == invalid_index:
             # If this is the first payload after the common ancestor, and this is the payload we invalidated,
             # then we have all the information to determine that this payload is invalid.
-            testNP(rr, invalid, some(shadow.altChainPayloads[i-1].blockHash.hash256))
+            testNP(rr, invalid, some(shadow.altChainPayloads[i-1].blockHash.common.Hash256))
           elif i > invalid_index:
             # We have already sent the invalid payload, but the client could've discarded it.
             # In reality the CL will not get to this point because it will have already received the `INVALID`
@@ -922,7 +921,7 @@ template invalidMissingAncestorReOrgGen(procName: untyped,
             testNPEither(rr, cond)
           else:
             # This is one of the payloads before the invalid one, therefore is valid.
-            let latestValidHash = some(shadow.altChainPayloads[i].blockHash.hash256)
+            let latestValidHash = some(shadow.altChainPayloads[i].blockHash.common.Hash256)
             testNP(rr, valid, latestValidHash)
             testFCU(rs, valid, latestValidHash)
 
@@ -989,7 +988,7 @@ proc blockStatusSafeBlock(t: TestEnv): TestStatus =
   let client = t.rpcClient
 
   # On PoW mode, `safe` tag shall return error.
-  var header: EthBlockHeader
+  var header: common.BlockHeader
   var rr = client.namedHeader("safe", header)
   testCond rr.isErr
 
@@ -1004,10 +1003,10 @@ proc blockStatusSafeBlock(t: TestEnv): TestStatus =
   let pbres = clMock.produceBlocks(3, BlockProcessCallbacks(
     # Run test after a forkchoice with new SafeBlockHash has been broadcasted
     onSafeBlockChange: proc(): bool =
-      var header: EthBlockHeader
+      var header: common.BlockHeader
       let rr = client.namedHeader("safe", header)
       testCond rr.isOk
-      let safeBlockHash = hash256(clMock.latestForkchoice.safeBlockHash)
+      let safeBlockHash = common.Hash256(clMock.latestForkchoice.safeBlockHash)
       header.blockHash == safeBlockHash
   ))
 
@@ -1020,7 +1019,7 @@ proc blockStatusFinalizedBlock(t: TestEnv): TestStatus =
   let client = t.rpcClient
 
   # On PoW mode, `finalized` tag shall return error.
-  var header: EthBlockHeader
+  var header: common.BlockHeader
   var rr = client.namedHeader("finalized", header)
   testCond rr.isErr
 
@@ -1035,10 +1034,10 @@ proc blockStatusFinalizedBlock(t: TestEnv): TestStatus =
   let pbres = clMock.produceBlocks(3, BlockProcessCallbacks(
     # Run test after a forkchoice with new FinalizedBlockHash has been broadcasted
     onFinalizedBlockChange: proc(): bool =
-      var header: EthBlockHeader
+      var header: common.BlockHeader
       let rr = client.namedHeader("finalized", header)
       testCond rr.isOk
-      let finalizedBlockHash = hash256(clMock.latestForkchoice.finalizedBlockHash)
+      let finalizedBlockHash = common.Hash256(clMock.latestForkchoice.finalizedBlockHash)
       header.blockHash == finalizedBlockHash
   ))
 
@@ -1061,7 +1060,7 @@ proc blockStatusReorg(t: TestEnv): TestStatus =
     # Run test after a forkchoice with new HeadBlockHash has been broadcasted
     onForkchoiceBroadcast: proc(): bool =
       # Verify the client is serving the latest HeadBlock
-      var currHeader: EthBlockHeader
+      var currHeader: common.BlockHeader
       var hRes = client.latestHeader(currHeader)
       if hRes.isErr:
         error "unable to get latest header", msg=hRes.error
@@ -1190,7 +1189,7 @@ proc multipleNewCanonicalPayloads(t: TestEnv): TestStatus =
     onGetPayload: proc(): bool =
       let payloadCount = 80
       let basePayload = toExecutableData(clMock.latestPayloadBuilt)
-      var newPrevRandao: Hash256
+      var newPrevRandao: common.Hash256
 
       # Fabricate and send multiple new payloads by changing the PrevRandao field
       for i in 0..<payloadCount:
@@ -1322,7 +1321,7 @@ proc reorgBackFromSyncing(t: TestEnv): TestStatus =
       let executableData = toExecutableData(clMock.latestPayloadBuilt)
       let altPayload = customizePayload(executableData,
         CustomPayload(
-          parentHash: some(altParentHash.hash256),
+          parentHash: some(altParentHash.common.Hash256),
           extraData:  some(@[0x01.byte]),
         ))
 
@@ -1370,7 +1369,7 @@ proc reorgBackFromSyncing(t: TestEnv): TestStatus =
 type
   TxReorgShadow = ref object
     noTxnPayload: ExecutionPayloadV1
-    txHash: Hash256
+    txHash: common.Hash256
 
 proc transactionReorg(t: TestEnv): TestStatus =
   result = TestStatus.OK
@@ -1446,7 +1445,7 @@ proc transactionReorg(t: TestEnv): TestStatus =
           return false
 
         let rz = client.newPayloadV1(shadow.noTxnPayload)
-        testNP(rz, valid, some(hash256(shadow.noTxnPayload.blockHash)))
+        testNP(rz, valid, some(common.Hash256(shadow.noTxnPayload.blockHash)))
 
         let rx = client.forkchoiceUpdatedV1(ForkchoiceStateV1(
           headBlockHash:      shadow.noTxnPayload.blockHash,
@@ -1469,7 +1468,7 @@ proc transactionReorg(t: TestEnv): TestStatus =
 
     testCond pbres
 
-proc testCondPrevRandaoValue(t: TestEnv, expectedPrevRandao: Hash256, blockNumber: uint64): bool =
+proc testCondPrevRandaoValue(t: TestEnv, expectedPrevRandao: common.Hash256, blockNumber: uint64): bool =
   let storageKey = blockNumber.u256
   let client = t.rpcClient
 
@@ -1478,7 +1477,7 @@ proc testCondPrevRandaoValue(t: TestEnv, expectedPrevRandao: Hash256, blockNumbe
     error "Unable to get storage", msg=res.error
     return false
 
-  let opcodeValueAtBlock = Hash256(data: res.get().toBytesBE)
+  let opcodeValueAtBlock = common.Hash256(data: res.get().toBytesBE)
   if opcodeValueAtBlock != expectedPrevRandao:
     error "Storage does not match prevRandao",
       expected=expectedPrevRandao.data,
@@ -1509,7 +1508,7 @@ proc sidechainReorg(t: TestEnv): TestStatus =
     onNewPayloadBroadcast: proc(): bool =
       # At this point the clMocker has a payload that will result in a specific outcome,
       # we can produce an alternative payload, send it, fcU to it, and verify the changes
-      var alternativePrevRandao: Hash256
+      var alternativePrevRandao: common.Hash256
       doAssert randomBytes(alternativePrevRandao.data) == 32
 
       let timestamp = Quantity toUnix(clMock.latestHeader.timestamp + 1.seconds)

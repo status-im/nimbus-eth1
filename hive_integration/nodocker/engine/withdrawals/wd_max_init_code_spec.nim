@@ -9,7 +9,8 @@ import
   ../types,
   ../helper,
   ../../../nimbus/constants,
-  ../../../nimbus/rpc/execution_types
+  ../../../nimbus/beacon/execution_types,
+  ../../../nimbus/beacon/web3_eth_conv
 
 # EIP-3860 Shanghai Tests:
 # Send transactions overflowing the MAX_INITCODE_SIZE
@@ -75,7 +76,7 @@ proc execute*(ws: MaxInitcodeSizeSpec, t: TestEnv): bool =
     let tx = t.makeTx(invalidTxCreator, i)
     testCond not t.sendTx(tx):
       error "Client accepted tx exceeding the MAX_INITCODE_SIZE"
-  
+
     let res = t.rpcClient.txByHash(rlpHash(tx))
     testCond res.isErr:
       error "Invalid tx was not unknown to the client"
@@ -100,7 +101,7 @@ proc execute*(ws: MaxInitcodeSizeSpec, t: TestEnv): bool =
 
       # Customize the payload to include a tx with an invalid initcode
       let customData = CustomPayload(
-        beaconRoot: hash256 t.clMock.latestPayloadAttributes.parentBeaconBlockRoot,
+        beaconRoot: ethHash t.clMock.latestPayloadAttributes.parentBeaconBlockRoot,
         transactions: some( @[invalidTx] ),
       )
 

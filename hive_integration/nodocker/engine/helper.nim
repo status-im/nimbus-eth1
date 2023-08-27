@@ -5,53 +5,48 @@ import
   json_rpc/[rpcclient],
   ../../../nimbus/transaction,
   ../../../nimbus/utils/utils,
-  ../../../nimbus/rpc/execution_types,
-  ./types
-
-import eth/common/eth_types as common_eth_types
-type
-  Hash256 = common_eth_types.Hash256
-  EthBlockHeader = common_eth_types.BlockHeader
+  ../../../nimbus/beacon/execution_types,
+  ../../../nimbus/beacon/web3_eth_conv
 
 type
   ExecutableData* = object
-    parentHash*   : Hash256
+    parentHash*   : common.Hash256
     feeRecipient* : EthAddress
-    stateRoot*    : Hash256
-    receiptsRoot* : Hash256
+    stateRoot*    : common.Hash256
+    receiptsRoot* : common.Hash256
     logsBloom*    : BloomFilter
-    prevRandao*   : Hash256
+    prevRandao*   : common.Hash256
     number*       : uint64
     gasLimit*     : GasInt
     gasUsed*      : GasInt
     timestamp*    : EthTime
     extraData*    : common.Blob
     baseFeePerGas*: UInt256
-    blockHash*    : Hash256
+    blockHash*    : common.Hash256
     transactions* : seq[Transaction]
     withdrawals*  : Option[seq[Withdrawal]]
     blobGasUsed*  : Option[uint64]
     excessBlobGas*: Option[uint64]
 
   CustomPayload* = object
-    parentHash*   : Option[Hash256]
+    parentHash*   : Option[common.Hash256]
     feeRecipient* : Option[EthAddress]
-    stateRoot*    : Option[Hash256]
-    receiptsRoot* : Option[Hash256]
+    stateRoot*    : Option[common.Hash256]
+    receiptsRoot* : Option[common.Hash256]
     logsBloom*    : Option[BloomFilter]
-    prevRandao*   : Option[Hash256]
+    prevRandao*   : Option[common.Hash256]
     number*       : Option[uint64]
     gasLimit*     : Option[GasInt]
     gasUsed*      : Option[GasInt]
     timestamp*    : Option[EthTime]
     extraData*    : Option[common.Blob]
     baseFeePerGas*: Option[UInt256]
-    blockHash*    : Option[Hash256]
+    blockHash*    : Option[common.Hash256]
     transactions* : Option[seq[Transaction]]
     withdrawals*  : Option[seq[Withdrawal]]
     blobGasUsed*  : Option[uint64]
     excessBlobGas*: Option[uint64]
-    beaconRoot*   : Option[Hash256]
+    beaconRoot*   : Option[common.Hash256]
     removeWithdrawals*: bool
 
   InvalidPayloadField* = enum
@@ -96,9 +91,9 @@ proc customizePayload*(basePayload: ExecutableData, customData: CustomPayload): 
                elif basePayload.withdrawals.isSome:
                  some(calcWithdrawalsRoot(basePayload.withdrawals.get))
                else:
-                 none(Hash256)
+                 none(common.Hash256)
 
-  var customHeader = EthBlockHeader(
+  var customHeader = common.BlockHeader(
     parentHash:    basePayload.parentHash,
     ommersHash:    EMPTY_UNCLE_HASH,
     coinbase:      basePayload.feeRecipient,
@@ -169,16 +164,16 @@ proc customizePayload*(basePayload: ExecutableData, customData: CustomPayload): 
   # Return the new payload
   result = ExecutionPayload(
     parentHash:    w3Hash customHeader.parentHash,
-    feeRecipient:  Web3Address customHeader.coinbase,
+    feeRecipient:  w3Addr customHeader.coinbase,
     stateRoot:     w3Hash customHeader.stateRoot,
     receiptsRoot:  w3Hash customHeader.receiptRoot,
-    logsBloom:     Web3Bloom customHeader.bloom,
-    prevRandao:    Web3PrevRandao customHeader.mixDigest.data,
-    blockNumber:   Web3Quantity customHeader.blockNumber.truncate(uint64),
-    gasLimit:      Web3Quantity customHeader.gasLimit,
-    gasUsed:       Web3Quantity customHeader.gasUsed,
-    timestamp:     Web3Quantity toUnix(customHeader.timestamp),
-    extraData:     Web3ExtraData customHeader.extraData,
+    logsBloom:     w3Bloom customHeader.bloom,
+    prevRandao:    w3PrevRandao customHeader.mixDigest,
+    blockNumber:   w3Qty customHeader.blockNumber,
+    gasLimit:      w3Qty customHeader.gasLimit,
+    gasUsed:       w3Qty customHeader.gasUsed,
+    timestamp:     w3Qty customHeader.timestamp,
+    extraData:     w3ExtraData customHeader.extraData,
     baseFeePerGas: customHeader.baseFee,
     blockHash:     w3Hash customHeader.blockHash,
     blobGasUsed:   w3Qty customHeader.blobGasUsed,
@@ -201,29 +196,24 @@ proc customizePayload*(basePayload: ExecutableData, customData: CustomPayload): 
 
 proc toExecutableData*(payload: ExecutionPayload): ExecutableData =
   result = ExecutableData(
-    parentHash    : hash256(payload.parentHash),
+    parentHash    : ethHash payload.parentHash,
     feeRecipient  : distinctBase payload.feeRecipient,
-    stateRoot     : hash256(payload.stateRoot),
-    receiptsRoot  : hash256(payload.receiptsRoot),
+    stateRoot     : ethHash payload.stateRoot,
+    receiptsRoot  : ethHash payload.receiptsRoot,
     logsBloom     : distinctBase payload.logsBloom,
-    prevRandao    : hash256(payload.prevRandao),
+    prevRandao    : ethHash payload.prevRandao,
     number        : uint64 payload.blockNumber,
     gasLimit      : GasInt payload.gasLimit,
     gasUsed       : GasInt payload.gasUsed,
-    timestamp     : fromUnix(int64 payload.timestamp),
+    timestamp     : ethTime payload.timestamp,
     extraData     : distinctBase payload.extraData,
     baseFeePerGas : payload.baseFeePerGas,
-    blockHash     : hash256(payload.blockHash),
+    blockHash     : ethHash payload.blockHash,
     blobGasUsed   : u64 payload.blobGasUsed,
     excessBlobGas : u64 payload.excessBlobGas,
+    transactions  : ethTxs payload.transactions,
+    withdrawals   : ethWithdrawals payload.withdrawals,
   )
-
-  for data in payload.transactions:
-    let tx = rlp.decode(distinctBase data, Transaction)
-    result.transactions.add tx
-
-  if payload.withdrawals.isSome:
-    result.withdrawals = some(withdrawals(payload.withdrawals.get))
 
 proc customizePayload*(basePayload: ExecutionPayload, customData: CustomPayload): ExecutionPayload =
   customizePayload(basePayload.toExecutableData, customData)
@@ -269,7 +259,7 @@ proc customizeTx(baseTx: Transaction, vaultKey: PrivateKey, customTx: CustomTx):
     let chainId = baseTx.chainId
     signTransaction(modTx, vaultKey, chainId, eip155 = true)
 
-proc modifyHash(x: Hash256): Hash256 =
+proc modifyHash(x: common.Hash256): common.Hash256 =
   result = x
   result.data[^1] = byte(255 - x.data[^1].int)
 
@@ -297,7 +287,7 @@ proc generateInvalidPayload*(basePayload: ExecutableData,
   of InvalidPrevRandao:
     # This option potentially requires a transaction that uses the PREVRANDAO opcode.
     # Otherwise the payload will still be valid.
-    var randomHash: Hash256
+    var randomHash: common.Hash256
     doAssert randomBytes(randomHash.data) == 32
     customPayload.prevRandao = some(randomHash)
   of RemoveTransaction:
@@ -343,7 +333,7 @@ proc generateInvalidPayload*(basePayload: ExecutionPayload,
                              vaultKey = default(PrivateKey)): ExecutionPayload =
   generateInvalidPayload(basePayload.toExecutableData, payloadField, vaultKey)
 
-proc txInPayload*(payload: ExecutionPayload, txHash: Hash256): bool =
+proc txInPayload*(payload: ExecutionPayload, txHash: common.Hash256): bool =
   for txBytes in payload.transactions:
     let currTx = rlp.decode(common.Blob txBytes, Transaction)
     if rlpHash(currTx) == txHash:

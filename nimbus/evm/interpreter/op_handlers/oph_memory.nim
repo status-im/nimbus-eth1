@@ -262,7 +262,7 @@ const
   jumpIOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x57, Conditionally alter the program counter.
     let (jumpTarget, testedValue) = k.cpt.stack.popInt(2)
-    if testedValue != 0:
+    if testedValue.isZero.not:
       jumpImpl(k.cpt, jumpTarget)
 
   pcOp: Vm2OpFn = proc (k: var Vm2Ctx) =

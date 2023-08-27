@@ -1,53 +1,36 @@
 # Nimbus
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2018-2023 Status Research & Development GmbH
 # Licensed under either of
-#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
-#    http://www.apache.org/licenses/LICENSE-2.0)
-#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or
-#    http://opensource.org/licenses/MIT)
-# at your option. This file may not be copied, modified, or distributed except
-# according to those terms.
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT))
+# at your option.
+# This file may not be copied, modified, or distributed except according to
+# those terms.
 
 import
-  std/[sequtils, times, typetraits],
+  std/[times],
   pkg/[chronos,
     stew/results,
     chronicles,
-    eth/keys,
-    eth/rlp],
+    eth/keys],
   ".."/[config,
     constants],
   "."/[
     chain,
     tx_pool,
-    casper,
     validate],
   "."/clique/[
     clique_desc,
     clique_cfg,
     clique_sealer],
   ../utils/utils,
-  ../common/[common, context],
-  ../rpc/execution_types
-
-
-from web3/ethtypes as web3types import nil, TypedTransaction, WithdrawalV1, ExecutionPayloadV1OrV2, toExecutionPayloadV1OrV2, toExecutionPayloadV1
-from web3/engine_api_types import PayloadAttributesV1, ExecutionPayloadV1, PayloadAttributesV2, ExecutionPayloadV2
-
-export
-  # generateExecutionPayload caller will need this
-  casper
+  ../common/[common, context]
 
 type
   EngineState* = enum
     EngineStopped,
     EngineRunning,
     EnginePostMerge
-
-  Web3BlockHash = web3types.BlockHash
-  Web3Address = web3types.Address
-  Web3Bloom = web3types.FixedBytes[256]
-  Web3Quantity = web3types.Quantity
 
   SealingEngineRef* = ref SealingEngineObj
   SealingEngineObj = object of RootObj
@@ -140,102 +123,6 @@ proc sealingLoop(engine: SealingEngineRef): Future[void] {.async.} =
 
     discard engine.txPool.smartHead(blk.header) # add transactions update jobs
     info "block generated", number=blk.header.blockNumber
-
-template unsafeQuantityToInt64(q: web3types.Quantity): int64 =
-  int64 q
-
-proc toTypedTransaction(tx: Transaction): TypedTransaction =
-  web3types.TypedTransaction(rlp.encode(tx.removeNetworkPayload))
-
-func toWithdrawal(x: WithdrawalV1): Withdrawal =
-  result.index = x.index.uint64
-  result.validatorIndex = x.validatorIndex.uint64
-  result.address = x.address.EthAddress
-  result.amount = x.amount.uint64
-
-func toWithdrawals(list: openArray[WithdrawalV1]): seq[Withdrawal] =
-  result = newSeqOfCap[Withdrawal](list.len)
-  for x in list:
-    result.add toWithdrawal(x)
-
-proc generateExecutionPayload*(engine: SealingEngineRef,
-                               payloadAttrs: SomePayloadAttributes): Result[ExecutionPayload, string] =
-  let
-    headBlock = try: engine.chain.db.getCanonicalHead()
-                except CatchableError: return err "No head block in database"
-    pos = engine.chain.com.pos
-
-  pos.prevRandao   = Hash256(data: distinctBase payloadAttrs.prevRandao)
-  pos.timestamp    = fromUnix(payloadAttrs.timestamp.unsafeQuantityToInt64)
-  pos.feeRecipient = EthAddress payloadAttrs.suggestedFeeRecipient
-
-  when payloadAttrs is PayloadAttributesV2:
-    engine.txPool.withdrawals = payloadAttrs.withdrawals.toWithdrawals
-  elif payloadAttrs is PayloadAttributesV3:
-    engine.txPool.withdrawals = payloadAttrs.withdrawals.toWithdrawals
-  else:
-    engine.txPool.withdrawals = @[]
-
-  if headBlock.blockHash != engine.txPool.head.blockHash:
-    # reorg
-    discard engine.txPool.smartHead(headBlock)
-
-  var blk: EthBlock
-  let res = engine.generateBlock(blk)
-  if res.isErr:
-    error "sealing engine generateBlock error", msg = res.error
-    return err(res.error)
-
-  # make sure both generated block header and payloadRes(ExecutionPayloadV2)
-  # produce the same blockHash
-  blk.header.fee = some(blk.header.fee.get(UInt256.zero)) # force it with some(UInt256)
-
-  let blockHash = rlpHash(blk.header)
-  if blk.header.extraData.len > 32:
-    return err "extraData length should not exceed 32 bytes"
-
-  let transactions = blk.txs.map(toTypedTransaction)
-
-  let withdrawals =
-    when payloadAttrs is PayloadAttributesV2:
-      some(payloadAttrs.withdrawals)
-    else:
-      none[seq[WithdrawalV1]]()
-
-  let blobGasUsed = if blk.header.blobGasUsed.isSome:
-                      some(blk.header.blobGasUsed.get.Quantity)
-                    else:
-                      none(Quantity)
-
-  let excessBlobGas = if blk.header.excessBlobGas.isSome:
-                        some(blk.header.excessBlobGas.get.Quantity)
-                      else:
-                        none(Quantity)
-
-  return ok(ExecutionPayload(
-    parentHash: Web3BlockHash blk.header.parentHash.data,
-    feeRecipient: Web3Address blk.header.coinbase,
-    stateRoot: Web3BlockHash blk.header.stateRoot.data,
-    receiptsRoot: Web3BlockHash blk.header.receiptRoot.data,
-    logsBloom: Web3Bloom blk.header.bloom,
-    prevRandao: payloadAttrs.prevRandao,
-    blockNumber: Web3Quantity blk.header.blockNumber.truncate(uint64),
-    gasLimit: Web3Quantity blk.header.gasLimit,
-    gasUsed: Web3Quantity blk.header.gasUsed,
-    timestamp: payloadAttrs.timestamp,
-    extraData: web3types.DynamicBytes[0, 32] blk.header.extraData,
-    baseFeePerGas: blk.header.fee.get(UInt256.zero),
-    blockHash: Web3BlockHash blockHash.data,
-    transactions: transactions,
-    withdrawals: withdrawals,
-    blobGasUsed: blobGasUsed,
-    excessBlobGas: excessBlobGas
-  ))
-
-proc blockValue*(engine: SealingEngineRef): UInt256 =
-  # return sum of reward for feeRecipient for each
-  # tx included in a block
-  engine.txPool.blockValue
 
 proc new*(_: type SealingEngineRef,
           chain: ChainRef,

@@ -12,7 +12,10 @@
 ## ============================================
 ##
 
-{.push raises: [CatchableError].} # basically the annotation type of a `Vm2OpFn`
+when defined(evmc_enabled):
+  {.push raises: [CatchableError].} # basically the annotation type of a `Vm2OpFn`
+else:
+  {.push raises: [].}
 
 import
   ../../../errors,

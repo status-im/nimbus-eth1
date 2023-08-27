@@ -5,8 +5,9 @@ import
   stew/[byteutils, endians2],
   eth/common, chronos,
   json_rpc/rpcclient,
-  ../../../nimbus/rpc/merge/mergeutils,
-  ../../../nimbus/rpc/execution_types,
+  ../../../nimbus/beacon/execution_types,
+  ../../../nimbus/beacon/web3_eth_conv,
+  ../../../nimbus/beacon/payload_conv,
   ../../../nimbus/[constants],
   ../../../nimbus/common as nimbus_common,
   ./engine_client
@@ -322,11 +323,12 @@ proc getNextPayload*(cl: CLMocker): bool =
   cl.latestBlockValue = x.blockValue
   cl.latestBlobsBundle = x.blobsBundle
 
-  let header = toBlockHeader(cl.latestPayloadBuilt)
-  let blockHash = BlockHash header.blockHash.data
+  let beaconRoot = ethHash cl.latestPayloadAttributes.parentBeaconblockRoot
+  let header = blockHeader(cl.latestPayloadBuilt, beaconRoot)
+  let blockHash = w3Hash header.blockHash
   if blockHash != cl.latestPayloadBuilt.blockHash:
     error "CLMocker: getNextPayload blockHash mismatch",
-      expected=cl.latestPayloadBuilt.blockHash.toHex,
+      expected=cl.latestPayloadBuilt.blockHash,
       get=blockHash.toHex
     return false
 
@@ -338,19 +340,19 @@ proc getNextPayload*(cl: CLMocker): bool =
 
   if cl.latestPayloadBuilt.feeRecipient != cl.latestPayloadAttributes.suggestedFeeRecipient:
     error "CLMocker: Incorrect SuggestedFeeRecipient on payload built",
-      expect=cl.latestPayloadBuilt.feeRecipient.toHex,
-      get=cl.latestPayloadAttributes.suggestedFeeRecipient.toHex
+      expect=cl.latestPayloadBuilt.feeRecipient,
+      get=cl.latestPayloadAttributes.suggestedFeeRecipient
     return false
 
   if cl.latestPayloadBuilt.prevRandao != cl.latestPayloadAttributes.prevRandao:
     error "CLMocker: Incorrect PrevRandao on payload built",
-      expect=cl.latestPayloadBuilt.prevRandao.toHex,
-      get=cl.latestPayloadAttributes.prevRandao.toHex
+      expect=cl.latestPayloadBuilt.prevRandao,
+      get=cl.latestPayloadAttributes.prevRandao
     return false
 
   if cl.latestPayloadBuilt.parentHash != BlockHash cl.latestHeader.blockHash.data:
     error "CLMocker: Incorrect ParentHash on payload built",
-      expect=cl.latestPayloadBuilt.parentHash.toHex,
+      expect=cl.latestPayloadBuilt.parentHash,
       get=cl.latestHeader.blockHash
     return false
 

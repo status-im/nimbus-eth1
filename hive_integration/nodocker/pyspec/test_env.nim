@@ -14,7 +14,7 @@ import
     core/tx_pool,
     rpc,
     sync/protocol,
-    rpc/merge/merger,
+    beacon/beacon_engine,
     common
   ],
   ../../../tests/test_helpers,
@@ -68,10 +68,9 @@ proc setupELClient*(t: TestEnv, conf: ChainConfig, node: JsonNode) =
     txPool, EngineStopped
   )
 
-  let merger = MergerRef.new(t.com.db)
+  let beaconEngine = BeaconEngineRef.new(txPool, t.chainRef)
   setupEthRpc(t.ethNode, t.ctx, t.com, txPool, t.rpcServer)
-  setupEngineAPI(t.sealingEngine, t.rpcServer, merger)
-  #setupDebugRpc(t.com, t.rpcServer)
+  setupEngineAPI(beaconEngine, t.rpcServer)
 
   t.rpcServer.start()
 

@@ -209,7 +209,7 @@ proc verifyHeaderFields(c: Clique; header: BlockHeader): CliqueOkResult =
     return err((errFutureBlock,""))
 
   # Checkpoint blocks need to enforce zero beneficiary
-  let isCheckPoint = (header.blockNumber mod c.cfg.epoch.u256) == 0
+  let isCheckPoint = (header.blockNumber mod c.cfg.epoch.u256).isZero
   if isCheckPoint and not header.coinbase.isZero:
     return err((errInvalidCheckpointBeneficiary,""))
 

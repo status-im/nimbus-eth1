@@ -1,18 +1,10 @@
 import
-  std/[options, times, strutils, typetraits],
+  std/[options, typetraits, strutils],
+  eth/common,
   web3/ethtypes,
-  ../../../nimbus/rpc/merge/mergeutils,
-  ../../../nimbus/rpc/execution_types,
   web3/engine_api_types,
-  eth/common/eth_types_rlp
-
-from web3/ethtypes as web3types import nil
-
-export
-  ethtypes,
-  engine_api_types
-
-import eth/common/eth_types as common
+  ../../../nimbus/beacon/execution_types,
+  ../../../nimbus/beacon/web3_eth_conv
 
 type
   BaseSpec* = ref object of RootObj
@@ -24,13 +16,6 @@ type
     run*  : proc(spec: BaseSpec): bool
     spec* : BaseSpec
 
-  Web3Hash256* = web3types.Hash256
-  Web3Address* = web3types.Address
-  Web3Bloom* = web3types.FixedBytes[256]
-  Web3Quantity* = web3types.Quantity
-  Web3PrevRandao* = web3types.FixedBytes[32]
-  Web3ExtraData* = web3types.DynamicBytes[0, 32]
-
 template testCond*(expr: untyped) =
   if not (expr):
     return false
@@ -39,88 +24,6 @@ template testCond*(expr, body: untyped) =
   if not (expr):
     body
     return false
-
-proc `$`*(x: Option[common.Hash256]): string =
-  if x.isNone:
-    "none"
-  else:
-    $x.get()
-
-proc `$`*(x: Option[BlockHash]): string =
-  if x.isNone:
-    "none"
-  else:
-    $x.get()
-
-proc `$`*(x: Option[PayloadID]): string =
-  if x.isNone:
-    "none"
-  else:
-    x.get().toHex
-
-func w3Hash*(x: common.Hash256): Web3Hash256 =
-  Web3Hash256 x.data
-
-func w3Hash*(x: Option[common.Hash256]): Option[BlockHash] =
-  if x.isNone:
-    return none(BlockHash)
-  some(BlockHash x.get.data)
-
-proc w3Hash*(x: common.BlockHeader): BlockHash =
-  BlockHash x.blockHash.data
-
-func w3Qty*(a: EthTime, b: int): Quantity =
-  Quantity(a.toUnix + b.int64)
-
-func w3Qty*(x: Option[uint64]): Option[Quantity] =
-  if x.isNone:
-    return none(Quantity)
-  return some(Quantity x.get)
-
-func u64*(x: Option[Quantity]): Option[uint64] =
-  if x.isNone:
-    return none(uint64)
-  return some(uint64 x.get)
-
-func w3PrevRandao*(): Web3PrevRandao =
-  discard
-
-func w3Address*(): Web3Address =
-  discard
-
-proc hash256*(h: Web3Hash256): common.Hash256 =
-  common.Hash256(data: distinctBase h)
-
-proc hash256*(h: Option[Web3Hash256]): Option[common.Hash256] =
-  if h.isNone:
-    return none(common.Hash256)
-  some(hash256(h.get))
-
-proc w3Withdrawal*(w: Withdrawal): WithdrawalV1 =
-  WithdrawalV1(
-    index: Quantity(w.index),
-    validatorIndex: Quantity(w.validatorIndex),
-    address: Address(w.address),
-    amount: Quantity(w.amount)
-  )
-
-proc w3Withdrawals*(list: openArray[Withdrawal]): seq[WithdrawalV1] =
-  result = newSeqOfCap[WithdrawalV1](list.len)
-  for x in list:
-    result.add w3Withdrawal(x)
-
-proc withdrawal*(w: WithdrawalV1): Withdrawal =
-  Withdrawal(
-    index: uint64(w.index),
-    validatorIndex: uint64(w.validatorIndex),
-    address: distinctBase(w.address),
-    amount: uint64(w.amount)
-  )
-
-proc withdrawals*(list: openArray[WithdrawalV1]): seq[Withdrawal] =
-  result = newSeqOfCap[Withdrawal](list.len)
-  for x in list:
-    result.add withdrawal(x)
 
 proc `==`*(a: Option[BlockHash], b: Option[common.Hash256]): bool =
   if a.isNone and b.isNone:
@@ -190,7 +93,7 @@ template expectBalanceEqual*(res: untyped, expectedBalance: UInt256) =
   testCond res.get == expectedBalance:
     error "balance mismatch", expect=expectedBalance, get=res.get
 
-template expectLatestValidHash*(res: untyped, expectedHash: Web3Hash256) =
+template expectLatestValidHash*(res: untyped, expectedHash: Web3Hash) =
   testCond res.isOk:
     error "Unexpected error", msg=res.error
   let s = res.get

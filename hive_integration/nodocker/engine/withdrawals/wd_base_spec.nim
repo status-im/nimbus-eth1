@@ -15,7 +15,8 @@ import
   ../../../nimbus/common/common,
   ../../../nimbus/utils/utils,
   ../../../nimbus/common/chain_config,
-  ../../../nimbus/rpc/execution_types
+  ../../../nimbus/beacon/execution_types,
+  ../../../nimbus/beacon/web3_eth_conv
 
 type
   WDBaseSpec* = ref object of BaseSpec
@@ -321,7 +322,7 @@ proc execute*(ws: WDBaseSpec, t: TestEnv): bool =
         let emptyWithdrawalsList = newSeq[Withdrawal]()
         let customizer = CustomPayload(
           withdrawals: some(emptyWithdrawalsList),
-          beaconRoot: hash256 t.clMock.latestPayloadAttributes.parentBeaconBlockRoot
+          beaconRoot: ethHash t.clMock.latestPayloadAttributes.parentBeaconBlockRoot
         )
         let payloadPlusWithdrawals = customizePayload(t.clMock.latestPayloadBuilt, customizer)
         var r = t.rpcClient.newPayloadV2(payloadPlusWithdrawals.V1V2)
@@ -410,7 +411,7 @@ proc execute*(ws: WDBaseSpec, t: TestEnv): bool =
         # be checked first instead of responding `INVALID`
         let customizer = CustomPayload(
           removeWithdrawals: true,
-          beaconRoot: hash256 t.clMock.latestPayloadAttributes.parentBeaconBlockRoot
+          beaconRoot: ethHash t.clMock.latestPayloadAttributes.parentBeaconBlockRoot
         )
         let nilWithdrawalsPayload = customizePayload(t.clMock.latestPayloadBuilt, customizer)
         let r = t.rpcClient.newPayloadV2(nilWithdrawalsPayload.V1V2)
@@ -431,7 +432,7 @@ proc execute*(ws: WDBaseSpec, t: TestEnv): bool =
             get=wdList.len
 
         for i, x in sentList:
-          let z = withdrawal wdList[i]
+          let z = ethWithdrawal wdList[i]
           testCond z == x:
             error "Incorrect withdrawal", index=i
       return true

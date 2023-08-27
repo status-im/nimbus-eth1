@@ -93,7 +93,7 @@ proc snapshotApplySeq*(s: Snapshot; headers: var seq[BlockHeader],
       number = header.blockNumber
 
     # Remove any votes on checkpoint blocks
-    if (number mod s.cfg.epoch) == 0:
+    if (number mod s.cfg.epoch).isZero:
       # Note that the correctness of the authorised accounts list is verified in
       #   clique/clique.verifyCascadingFields(),
       #   see clique/clique.go(355): if number%c.config.Epoch == 0 {

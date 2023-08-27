@@ -102,7 +102,7 @@ proc prepare*(c: Clique; parent: BlockHeader, header: var BlockHeader): CliqueOk
   header.coinbase.reset
 
   let modEpoch = (parent.blockNumber+1) mod c.cfg.epoch
-  if modEpoch != 0:
+  if modEpoch.isZero.not:
     # Gather all the proposals that make sense voting on
     var addresses: seq[EthAddress]
     for (address,authorize) in c.proposals.pairs:
@@ -120,7 +120,7 @@ proc prepare*(c: Clique; parent: BlockHeader, header: var BlockHeader): CliqueOk
 
   # Ensure the extra data has all its components
   header.extraData.setLen(EXTRA_VANITY)
-  if modEpoch == 0:
+  if modEpoch.isZero:
     header.extraData.add c.snapshot.ballot.authSigners.mapIt(toSeq(it)).concat
   header.extraData.add 0.byte.repeat(EXTRA_SEAL)
 

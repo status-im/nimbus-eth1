@@ -17,7 +17,7 @@ import
   ../nimbus/common,
   ../nimbus/config,
   ../nimbus/core/[sealer, tx_pool, chain],
-  ../nimbus/rpc/merge/[mergetypes, merger],
+  ../nimbus/beacon/[beacon_engine, payload_queue],
   ./test_helpers
 
 const
@@ -67,7 +67,7 @@ proc getPayload(step: Step, client: RpcClient, testStatusIMPL: var TestStatus) =
   try:
     let res = waitFor client.call(step.meth, step.params)
     check toLowerAscii($res) == toLowerAscii($step.expect)
-  except:
+  except CatchableError:
     check step.error == true
 
 proc newPayload(step: Step, client: RpcClient, testStatusIMPL: var TestStatus) =
@@ -97,10 +97,10 @@ proc runTest(steps: Steps) =
       chainRef, ctx, conf.engineSigner,
       txPool, EnginePostMerge
     )
-    merger = MergerRef.new(com.db)
+    beaconEngine = BeaconEngineRef.new(txPool, chainRef)
 
   setupEthRpc(ethNode, ctx, com, txPool, rpcServer)
-  setupEngineAPI(sealingEngine, rpcServer, merger)
+  setupEngineAPI(beaconEngine, rpcServer)
 
   sealingEngine.start()
   rpcServer.start()
@@ -138,14 +138,14 @@ proc `==`(a, b: Quantity): bool =
   uint64(a) == uint64(b)
 
 proc testEngineApiSupport() =
-  var api = EngineAPIRef.new(nil)
+  var api = PayloadQueue()
   let
     id1 = toId(1)
     id2 = toId(2)
     ep1 = ExecutionPayloadV1(gasLimit: Quantity 100)
     ep2 = ExecutionPayloadV1(gasLimit: Quantity 101)
-    hdr1 = EthBlockHeader(gasLimit: 100)
-    hdr2 = EthBlockHeader(gasLimit: 101)
+    hdr1 = common.BlockHeader(gasLimit: 100)
+    hdr2 = common.BlockHeader(gasLimit: 101)
     hash1 = hdr1.blockHash
     hash2 = hdr2.blockHash
 
@@ -165,7 +165,7 @@ proc testEngineApiSupport() =
     test "test header queue":
       api.put(hash1, hdr1)
       api.put(hash2, hdr2)
-      var eh1, eh2: EthBlockHeader
+      var eh1, eh2: common.BlockHeader
       check api.get(hash1, eh1)
       check api.get(hash2, eh2)
       check eh1.gasLimit == hdr1.gasLimit

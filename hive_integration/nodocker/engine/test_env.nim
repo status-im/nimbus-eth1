@@ -14,7 +14,7 @@ import
     core/block_import,
     rpc,
     sync/protocol,
-    rpc/merge/merger,
+    beacon/beacon_engine,
     common
   ],
   ../../../tests/test_helpers,
@@ -112,9 +112,9 @@ proc setupELClient*(t: TestEnv, chainFile: string, enableAuth: bool) =
     txPool, EngineStopped
   )
 
-  let merger = MergerRef.new(t.com.db)
+  let beaconEngine = BeaconEngineRef.new(txPool, t.chainRef)
   setupEthRpc(t.ethNode, t.ctx, t.com, txPool, t.rpcServer)
-  setupEngineAPI(t.sealingEngine, t.rpcServer, merger)
+  setupEngineAPI(beaconEngine, t.rpcServer)
   setupDebugRpc(t.com, t.rpcServer)
 
   # Do not start clique sealing engine if we are using a Proof of Work chain file

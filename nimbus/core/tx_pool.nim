@@ -593,6 +593,10 @@ proc triggerReorg*(xp: TxPoolRef)
 # Public functions, getters
 # ------------------------------------------------------------------------------
 
+proc com*(xp: TxPoolRef): CommonRef =
+  ## Getter
+  xp.chain.com
+
 proc baseFee*(xp: TxPoolRef): GasPrice =
   ## Getter, this parameter modifies/determines the expected gain when packing
   xp.chain.baseFee
@@ -602,7 +606,7 @@ proc dirtyBuckets*(xp: TxPoolRef): bool =
   ## flag is also set.
   xp.pDirtyBuckets
 
-proc ethBlock*(xp: TxPoolRef): EthBlock
+proc ethBlock*(xp: TxPoolRef, someBaseFee: bool = false): EthBlock
     {.gcsafe,raises: [CatchableError].} =
   ## Getter, retrieves a packed block ready for mining and signing depending
   ## on the internally cached block chain head, the txs in the pool and some
@@ -625,6 +629,10 @@ proc ethBlock*(xp: TxPoolRef): EthBlock
   if com.forkGTE(Shanghai):
     result.withdrawals = some(xp.chain.withdrawals)
 
+  if someBaseFee:
+    # make sure baseFee always has something
+    result.header.fee = some(result.header.fee.get(0.u256))
+  
 proc gasCumulative*(xp: TxPoolRef): GasInt =
   ## Getter, retrieves the gas that will be burned in the block after
   ## retrieving it via `ethBlock`.
