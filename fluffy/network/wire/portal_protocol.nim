@@ -381,7 +381,7 @@ proc handleOffer(p: PortalProtocol, o: OfferMessage, srcId: NodeId): seq[byte] =
     AcceptMessage(connectionId: connectionId, contentKeys: contentKeysBitList))
 
 proc messageHandler(protocol: TalkProtocol, request: seq[byte],
-    srcId: NodeId, srcUdpAddress: Address): seq[byte] =
+    srcId: NodeId, srcUdpAddress: Address, node: Opt[Node]): seq[byte] =
   doAssert(protocol of PortalProtocol)
 
   logScope:
@@ -393,16 +393,9 @@ proc messageHandler(protocol: TalkProtocol, request: seq[byte],
   if decoded.isOk():
     let message = decoded.get()
     trace "Received message request", srcId, srcUdpAddress, kind = message.kind
-    # Received a proper Portal message, check if this node exists in the base
-    # routing table and add if so.
-    # When the node exists in the base discv5 routing table it is likely that
-    # it will/would end up in the portal routing tables too but that is not
-    # certain as more nodes might exists on the base layer, and it will depend
-    # on the distance, order of lookups, etc.
-    # Note: Could add a findNodes with distance 0 call when not, and perhaps,
-    # optionally pass ENRs if the message was a discv5 handshake containing the
-    # ENR.
-    let node = p.baseProtocol.getNode(srcId)
+    # If the returned message was part of a handshake, an ENR might be provided
+    # by the discovery v5 layer. In that case, add the ENR to the portal network
+    # routing table.
     if node.isSome():
       discard p.routingTable.addNode(node.get())
 
