@@ -43,7 +43,7 @@ export
   vms.captureEnter,
   vms.captureExit,
   vms.captureOpStart,
-  vms.callFamilyGas,
+  vms.captureGasCost,
   vms.captureOpEnd,
   vms.captureFault,
   vms.capturePrepare

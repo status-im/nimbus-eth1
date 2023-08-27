@@ -20,7 +20,6 @@ import
   ../../types,
   ../../async/operations,
   ../gas_costs,
-  ../gas_meter,
   ../op_codes,
   ../utils/utils_numeric,
   ./oph_defs,
@@ -45,7 +44,7 @@ const
     let (startPos, size) = k.cpt.stack.popInt(2)
 
     let (pos, len) = (startPos.cleanMemRef, size.cleanMemRef)
-    k.cpt.gasMeter.consumeGas(
+    k.cpt.opcodeGastCost(Return,
       k.cpt.gasCosts[Return].m_handler(k.cpt.memory.len, pos, len),
       reason = "RETURN")
     k.cpt.memory.extend(pos, len)
@@ -58,7 +57,7 @@ const
     let (startPos, size) = k.cpt.stack.popInt(2)
 
     let (pos, len) = (startPos.cleanMemRef, size.cleanMemRef)
-    k.cpt.gasMeter.consumeGas(
+    k.cpt.opcodeGastCost(Revert,
       k.cpt.gasCosts[Revert].m_handler(k.cpt.memory.len, pos, len),
       reason = "REVERT")
 
@@ -95,7 +94,7 @@ const
 
       let gasCost =
         cpt.gasCosts[SelfDestruct].c_handler(0.u256, gasParams).gasCost
-      cpt.gasMeter.consumeGas(
+      cpt.opcodeGastCost(SelfDestruct,
         gasCost, reason = "SELFDESTRUCT EIP150")
       cpt.selfDestruct(beneficiary)
 
@@ -117,7 +116,7 @@ const
 
       let gasCost =
         cpt.gasCosts[SelfDestruct].c_handler(0.u256, gasParams).gasCost
-      cpt.gasMeter.consumeGas(
+      cpt.opcodeGastCost(SelfDestruct,
         gasCost, reason = "SELFDESTRUCT EIP161")
       cpt.selfDestruct(beneficiary)
 
@@ -149,7 +148,7 @@ const
             db.accessList(beneficiary)
             gasCost = gasCost + ColdAccountAccessCost
 
-      cpt.gasMeter.consumeGas(
+      cpt.opcodeGastCost(SelfDestruct,
         gasCost, reason = "SELFDESTRUCT EIP2929")
       cpt.selfDestruct(beneficiary)
 

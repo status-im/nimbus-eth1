@@ -18,7 +18,6 @@ import
   ../../../errors,
   ../../types,
   ../gas_costs,
-  ../gas_meter,
   eth/common,
   eth/common/eth_types,
   macros,
@@ -35,26 +34,33 @@ else:
 # Public
 # ------------------------------------------------------------------------------
 
-proc gasEip2929AccountCheck*(c: Computation; address: EthAddress) =
+proc gasEip2929AccountCheck*(c: Computation; address: EthAddress): GasInt =
   when defined(evmc_enabled):
-    let gasCost = if c.host.accessAccount(address) == EVMC_ACCESS_COLD:
-                    ColdAccountAccessCost
-                  else:
-                    WarmStorageReadCost
-    c.gasMeter.consumeGas(
-      gasCost,
-      reason = "gasEIP2929AccountCheck")
+    result = if c.host.accessAccount(address) == EVMC_ACCESS_COLD:
+               ColdAccountAccessCost
+             else:
+               WarmStorageReadCost
   else:
     c.vmState.mutateStateDB:
-      let gasCost = if not db.inAccessList(address):
-                      db.accessList(address)
-                      ColdAccountAccessCost
-                    else:
-                      WarmStorageReadCost
+      result = if not db.inAccessList(address):
+                 db.accessList(address)
+                 ColdAccountAccessCost
+               else:
+                 WarmStorageReadCost
 
-      c.gasMeter.consumeGas(
-        gasCost,
-        reason = "gasEIP2929AccountCheck")
+proc gasEip2929AccountCheck*(c: Computation; address: EthAddress, slot: UInt256): GasInt =
+  when defined(evmc_enabled):
+    result = if c.host.accessStorage(address, slot) == EVMC_ACCESS_COLD:
+               ColdSloadCost
+             else:
+               WarmStorageReadCost
+  else:
+    c.vmState.mutateStateDB:
+      result = if not db.inAccessList(address, slot):
+                 db.accessList(address, slot)
+                 ColdSloadCost
+               else:
+                 WarmStorageReadCost
 
 template checkInStaticContext*(c: Computation) =
   ## Verify static context in handler function, raise an error otherwise

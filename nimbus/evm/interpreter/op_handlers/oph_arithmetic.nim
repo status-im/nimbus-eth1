@@ -20,7 +20,6 @@ import
   ../../types,
   ../op_codes,
   ../gas_costs,
-  ../gas_meter,
   ../utils/utils_numeric,
   ./oph_defs,
   eth/common
@@ -131,7 +130,7 @@ const
     ## 0x0A, Exponentiation
     let (base, exponent) = k.cpt.stack.popInt(2)
 
-    k.cpt.gasMeter.consumeGas(
+    k.cpt.opcodeGastCost(Exp,
       k.cpt.gasCosts[Exp].d_handler(exponent),
       reason = "EXP: exponent bytes")
 
@@ -231,7 +230,7 @@ const
 
   byteOp: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## 0x20, Retrieve single byte from word.
-    let (position, value) = k.cpt.stack.popInt(2)    
+    let (position, value) = k.cpt.stack.popInt(2)
     k.cpt.stack.push:
       if position >= 32.u256:
         zero(UInt256)

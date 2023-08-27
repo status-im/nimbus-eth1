@@ -47,7 +47,7 @@ template handleFixedGasCostsDirective(fork: EVMFork; op: Op; k: var Vm2Ctx) =
     if k.cpt.tracingEnabled:
       k.cpt.opIndex = k.cpt.traceOpCodeStarted(op)
 
-    k.cpt.gasMeter.consumeGas(k.cpt.gasCosts[op].cost, reason = $op)
+    k.cpt.opcodeGastCost(op, k.cpt.gasCosts[op].cost, reason = $op)
     vmOpHandlers[fork][op].run(k)
 
     # If continuation is not nil, traceOpCodeEnded will be called in executeOpcodes.

@@ -20,7 +20,6 @@ import
   ../../stack,
   ../../async/operations,
   ../gas_costs,
-  ../gas_meter,
   ../op_codes,
   ../utils/utils_numeric,
   ./oph_defs,
@@ -84,7 +83,8 @@ const
     let address = cpt.stack.popAddress()
 
     cpt.asyncChainTo(ifNecessaryGetAccount(cpt.vmState, address)):
-      cpt.gasEip2929AccountCheck(address)
+      let gasCost = cpt.gasCosts[Balance].cost + cpt.gasEip2929AccountCheck(address)
+      cpt.opcodeGastCost(Balance, gasCost, reason = "Balance EIP2929")
       cpt.stack.push:
         cpt.getBalance(address)
 
@@ -140,7 +140,7 @@ const
     let (memPos, copyPos, len) =
       (memStartPos.cleanMemRef, copyStartPos.cleanMemRef, size.cleanMemRef)
 
-    k.cpt.gasMeter.consumeGas(
+    k.cpt.opcodeGastCost(CallDataCopy,
       k.cpt.gasCosts[CallDataCopy].m_handler(k.cpt.memory.len, memPos, len),
       reason = "CallDataCopy fee")
 
@@ -165,7 +165,7 @@ const
       let (memPos, copyPos, len) =
         (memStartPos.cleanMemRef, copyStartPos.cleanMemRef, size.cleanMemRef)
 
-      cpt.gasMeter.consumeGas(
+      cpt.opcodeGastCost(CodeCopy,
         cpt.gasCosts[CodeCopy].m_handler(cpt.memory.len, memPos, len),
         reason = "CodeCopy fee")
 
@@ -193,7 +193,8 @@ const
     let address = cpt.stack.popAddress()
 
     cpt.asyncChainTo(ifNecessaryGetCode(cpt.vmState, address)):
-      cpt.gasEip2929AccountCheck(address)
+      let gasCost = cpt.gasCosts[ExtCodeSize].cost + cpt.gasEip2929AccountCheck(address)
+      cpt.opcodeGastCost(ExtCodeSize, gasCost, reason = "ExtCodeSize EIP2929")
       cpt.stack.push:
         cpt.getCodeSize(address)
 
@@ -209,7 +210,7 @@ const
       let (memPos, codePos, len) =
         (memStartPos.cleanMemRef, codeStartPos.cleanMemRef, size.cleanMemRef)
 
-      cpt.gasMeter.consumeGas(
+      cpt.opcodeGastCost(ExtCodeCopy,
         cpt.gasCosts[ExtCodeCopy].m_handler(cpt.memory.len, memPos, len),
         reason = "ExtCodeCopy fee")
 
@@ -226,11 +227,10 @@ const
       let (memStartPos, codeStartPos, size) = cpt.stack.popInt(3)
       let (memPos, codePos, len) = (memStartPos.cleanMemRef,
                                     codeStartPos.cleanMemRef, size.cleanMemRef)
-      cpt.gasMeter.consumeGas(
-        cpt.gasCosts[ExtCodeCopy].m_handler(cpt.memory.len, memPos, len),
-        reason = "ExtCodeCopy fee")
 
-      cpt.gasEip2929AccountCheck(address)
+      let gasCost = cpt.gasCosts[ExtCodeCopy].m_handler(cpt.memory.len, memPos, len) +
+                      cpt.gasEip2929AccountCheck(address)
+      cpt.opcodeGastCost(ExtCodeCopy, gasCost, reason = "ExtCodeCopy EIP2929")
 
       let codeBytes = cpt.getCode(address)
       cpt.memory.writePaddedResult(codeBytes, memPos, codePos, len)
@@ -253,7 +253,7 @@ const
 
     let gasCost = k.cpt.gasCosts[ReturnDataCopy].m_handler(
       k.cpt.memory.len, memPos, len)
-    k.cpt.gasMeter.consumeGas(gasCost, reason = "returnDataCopy fee")
+    k.cpt.opcodeGastCost(ReturnDataCopy, gasCost, reason = "returnDataCopy fee")
 
     if copyPos + len > k.cpt.returnData.len:
       raise newException(
@@ -280,7 +280,8 @@ const
     let address = k.cpt.stack.popAddress()
 
     cpt.asyncChainTo(ifNecessaryGetCode(cpt.vmState, address)):
-      cpt.gasEip2929AccountCheck(address)
+      let gasCost = cpt.gasCosts[ExtCodeHash].cost + cpt.gasEip2929AccountCheck(address)
+      cpt.opcodeGastCost(ExtCodeHash, gasCost, reason = "ExtCodeHash EIP2929")
 
       cpt.stack.push:
         cpt.getCodeHash(address)

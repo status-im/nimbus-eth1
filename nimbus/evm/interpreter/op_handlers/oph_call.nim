@@ -56,6 +56,7 @@ type
     memOffset:       int
     memLength:       int
     contractAddress: EthAddress
+    gasCallEIP2929:  GasInt
 
 
 proc updateStackAndParams(q: var LocalParams; c: Computation) =
@@ -79,9 +80,7 @@ proc updateStackAndParams(q: var LocalParams; c: Computation) =
   if FkBerlin <= c.fork:
     when evmc_enabled:
       if c.host.accessAccount(q.codeAddress) == EVMC_ACCESS_COLD:
-        c.gasMeter.consumeGas(
-          ColdAccountAccessCost - WarmStorageReadCost,
-          reason = "EIP2929 gasCall")
+        q.gasCallEIP2929 = ColdAccountAccessCost - WarmStorageReadCost
     else:
       c.vmState.mutateStateDB:
         if not db.inAccessList(q.codeAddress):
@@ -89,9 +88,7 @@ proc updateStackAndParams(q: var LocalParams; c: Computation) =
 
           # The WarmStorageReadCostEIP2929 (100) is already deducted in
           # the form of a constant `gasCall`
-          c.gasMeter.consumeGas(
-            ColdAccountAccessCost - WarmStorageReadCost,
-            reason = "EIP2929 gasCall")
+          q.gasCallEIP2929 = ColdAccountAccessCost - WarmStorageReadCost
 
 
 proc callParams(c: Computation): LocalParams =
@@ -205,7 +202,6 @@ const
         "Cannot modify state while inside of a STATICCALL context")
 
     let
-      gasAtStart = cpt.gasMeter.gasRemaining
       p = cpt.callParams
 
     cpt.asyncChainTo(ifNecessaryGetAccounts(cpt.vmState, @[p.sender])):
@@ -215,17 +211,15 @@ const
           GasParams(
             kind:             Call,
             c_isNewAccount:   not cpt.accountExists(p.contractAddress),
-            c_gasBalance:     cpt.gasMeter.gasRemaining,
+            c_gasBalance:     cpt.gasMeter.gasRemaining - p.gasCallEIP2929,
             c_contractGas:    p.gas,
             c_currentMemSize: cpt.memory.len,
             c_memOffset:      p.memOffset,
             c_memLength:      p.memLength))
 
-        # EIP 2046: temporary disabled
-        # reduce gas fee for precompiles
-        # from 700 to 40
+        gasCost += p.gasCallEIP2929
         if gasCost >= 0:
-          cpt.gasMeter.consumeGas(gasCost, reason = $Call)
+          cpt.opcodeGastCost(Call, gasCost, reason = $Call)
 
         cpt.returnData.setLen(0)
 
@@ -241,17 +235,11 @@ const
           raise newException(
             OutOfGas, "Gas not enough to perform calculation (call)")
 
-        gasCost = gasAtStart - cpt.gasMeter.gasRemaining
-        cpt.traceCallFamilyGas(Call, gasCost)
-
         cpt.memory.extend(p.memInPos, p.memInLen)
         cpt.memory.extend(p.memOutPos, p.memOutLen)
 
         let senderBalance = cpt.getBalance(p.sender)
         if senderBalance < p.value:
-          #debug "Insufficient funds",
-          #  available = senderBalance,
-          #  needed = cpt.msg.value
           cpt.gasMeter.returnGas(childGasLimit)
           return
 
@@ -293,7 +281,6 @@ const
     ## 0xf2, Message-call into this account with an alternative account's code.
     let
       cpt = k.cpt
-      gasAtStart = cpt.gasMeter.gasRemaining
       p = cpt.callCodeParams
 
     cpt.asyncChainTo(ifNecessaryGetAccounts(cpt.vmState, @[p.sender])):
@@ -303,17 +290,15 @@ const
           GasParams(
             kind:             CallCode,
             c_isNewAccount:   not cpt.accountExists(p.contractAddress),
-            c_gasBalance:     cpt.gasMeter.gasRemaining,
+            c_gasBalance:     cpt.gasMeter.gasRemaining - p.gasCallEIP2929,
             c_contractGas:    p.gas,
             c_currentMemSize: cpt.memory.len,
             c_memOffset:      p.memOffset,
             c_memLength:      p.memLength))
 
-        # EIP 2046: temporary disabled
-        # reduce gas fee for precompiles
-        # from 700 to 40
+        gasCost += p.gasCallEIP2929
         if gasCost >= 0:
-          cpt.gasMeter.consumeGas(gasCost, reason = $CallCode)
+          cpt.opcodeGastCost(CallCode, gasCost, reason = $CallCode)
 
         cpt.returnData.setLen(0)
 
@@ -325,24 +310,15 @@ const
           cpt.gasMeter.returnGas(childGasLimit)
           return
 
-        # EIP 2046: temporary disabled
-        # reduce gas fee for precompiles
-        # from 700 to 40
         if gasCost < 0 and childGasLimit <= 0:
           raise newException(
             OutOfGas, "Gas not enough to perform calculation (callCode)")
-
-        gasCost = gasAtStart - cpt.gasMeter.gasRemaining
-        cpt.traceCallFamilyGas(CallCode, gasCost)
 
         cpt.memory.extend(p.memInPos, p.memInLen)
         cpt.memory.extend(p.memOutPos, p.memOutLen)
 
         let senderBalance = cpt.getBalance(p.sender)
         if senderBalance < p.value:
-          #debug "Insufficient funds",
-          #  available = senderBalance,
-          #  needed = cpt.msg.value
           cpt.gasMeter.returnGas(childGasLimit)
           return
 
@@ -385,7 +361,6 @@ const
     ##       code, but persisting the current values for sender and value.
     let
       cpt = k.cpt
-      gasAtStart = cpt.gasMeter.gasRemaining
       p = cpt.delegateCallParams
 
     cpt.asyncChainTo(ifNecessaryGetAccounts(cpt.vmState, @[p.sender])):
@@ -395,17 +370,15 @@ const
           GasParams(
             kind: DelegateCall,
             c_isNewAccount:   not cpt.accountExists(p.contractAddress),
-            c_gasBalance:     cpt.gasMeter.gasRemaining,
+            c_gasBalance:     cpt.gasMeter.gasRemaining - p.gasCallEIP2929,
             c_contractGas:    p.gas,
             c_currentMemSize: cpt.memory.len,
             c_memOffset:      p.memOffset,
             c_memLength:      p.memLength))
 
-        # EIP 2046: temporary disabled
-        # reduce gas fee for precompiles
-        # from 700 to 40
+        gasCost += p.gasCallEIP2929
         if gasCost >= 0:
-          cpt.gasMeter.consumeGas(gasCost, reason = $DelegateCall)
+          cpt.opcodeGastCost(DelegateCall, gasCost, reason = $DelegateCall)
 
         cpt.returnData.setLen(0)
         if cpt.msg.depth >= MaxCallDepth:
@@ -419,9 +392,6 @@ const
         if gasCost < 0 and childGasLimit <= 0:
           raise newException(
             OutOfGas, "Gas not enough to perform calculation (delegateCall)")
-
-        gasCost = gasAtStart - cpt.gasMeter.gasRemaining
-        cpt.traceCallFamilyGas(DelegateCall, gasCost)
 
         cpt.memory.extend(p.memInPos, p.memInLen)
         cpt.memory.extend(p.memOutPos, p.memOutLen)
@@ -465,7 +435,6 @@ const
 
     let
       cpt = k.cpt
-      gasAtStart = cpt.gasMeter.gasRemaining
       p = cpt.staticCallParams
 
     cpt.asyncChainTo(ifNecessaryGetAccounts(cpt.vmState, @[p.sender])):
@@ -475,21 +444,15 @@ const
           GasParams(
             kind: StaticCall,
             c_isNewAccount:   not cpt.accountExists(p.contractAddress),
-            c_gasBalance:     cpt.gasMeter.gasRemaining,
+            c_gasBalance:     cpt.gasMeter.gasRemaining - p.gasCallEIP2929,
             c_contractGas:    p.gas,
             c_currentMemSize: cpt.memory.len,
             c_memOffset:      p.memOffset,
             c_memLength:      p.memLength))
 
-        # EIP 2046: temporary disabled
-        # reduce gas fee for precompiles
-        # from 700 to 40
-        #
-        # when opCode == StaticCall:
-        #  if cpt.fork >= FkBerlin and codeAddress.toInt <= MaxPrecompilesAddr:
-        #    gasCost = gasCost - 660.GasInt
+        gasCost += p.gasCallEIP2929
         if gasCost >= 0:
-          cpt.gasMeter.consumeGas(gasCost, reason = $StaticCall)
+          cpt.opcodeGastCost(StaticCall, gasCost, reason = $StaticCall)
 
         cpt.returnData.setLen(0)
 
@@ -504,9 +467,6 @@ const
         if gasCost < 0 and childGasLimit <= 0:
           raise newException(
             OutOfGas, "Gas not enough to perform calculation (staticCall)")
-
-        gasCost = gasAtStart - cpt.gasMeter.gasRemaining
-        cpt.traceCallFamilyGas(StaticCall, gasCost)
 
         cpt.memory.extend(p.memInPos, p.memInLen)
         cpt.memory.extend(p.memOutPos, p.memOutLen)

@@ -87,41 +87,42 @@ const
     checkInStaticContext(k.cpt)
 
     let
-      endowment = k.cpt.stack.popInt()
-      memPos    = k.cpt.stack.popInt().safeInt
-      memLen    = k.cpt.stack.peekInt().safeInt
+      cpt       = k.cpt
+      endowment = cpt.stack.popInt()
+      memPos    = cpt.stack.popInt().safeInt
+      memLen    = cpt.stack.peekInt().safeInt
 
-    k.cpt.stack.top(0)
+    cpt.stack.top(0)
 
     # EIP-3860
-    if k.cpt.fork >= FkShanghai and memLen > EIP3860_MAX_INITCODE_SIZE:
+    if cpt.fork >= FkShanghai and memLen > EIP3860_MAX_INITCODE_SIZE:
       trace "Initcode size exceeds maximum", initcodeSize = memLen
       raise newException(InitcodeError,
         &"CREATE: have {memLen}, max {EIP3860_MAX_INITCODE_SIZE}")
 
     let
-      gasAtStart = k.cpt.gasMeter.gasRemaining
       gasParams = GasParams(
         kind:              Create,
-        cr_currentMemSize: k.cpt.memory.len,
+        cr_currentMemSize: cpt.memory.len,
         cr_memOffset:      memPos,
         cr_memLength:      memLen)
 
-    var gasCost = k.cpt.gasCosts[Create].c_handler(1.u256, gasParams).gasCost
-    k.cpt.gasMeter.consumeGas(
-      gasCost, reason = &"CREATE: GasCreate + {memLen} * memory expansion")
-    k.cpt.memory.extend(memPos, memLen)
-    k.cpt.returnData.setLen(0)
+    let gasCost = cpt.gasCosts[Create].c_handler(1.u256, gasParams).gasCost
 
-    if k.cpt.msg.depth >= MaxCallDepth:
+    cpt.opcodeGastCost(Create,
+      gasCost, reason = &"CREATE: GasCreate + {memLen} * memory expansion")
+    cpt.memory.extend(memPos, memLen)
+    cpt.returnData.setLen(0)
+
+    if cpt.msg.depth >= MaxCallDepth:
       debug "Computation Failure",
         reason = "Stack too deep",
         maxDepth = MaxCallDepth,
-        depth = k.cpt.msg.depth
+        depth = cpt.msg.depth
       return
 
     if endowment != 0:
-      let senderBalance = k.cpt.getBalance(k.cpt.msg.contractAddress)
+      let senderBalance = cpt.getBalance(cpt.msg.contractAddress)
       if senderBalance < endowment:
         debug "Computation Failure",
           reason = "Insufficient funds available to transfer",
@@ -129,38 +130,35 @@ const
           balance = senderBalance
         return
 
-    var createMsgGas = k.cpt.gasMeter.gasRemaining
-    if k.cpt.fork >= FkTangerine:
+    var createMsgGas = cpt.gasMeter.gasRemaining
+    if cpt.fork >= FkTangerine:
       createMsgGas -= createMsgGas div 64
-    k.cpt.gasMeter.consumeGas(createMsgGas, reason = "CREATE")
-
-    gasCost = gasAtStart - k.cpt.gasMeter.gasRemaining
-    k.cpt.traceCallFamilyGas(Create, gasCost)
+    cpt.gasMeter.consumeGas(createMsgGas, reason = "CREATE msg gas")
 
     when evmc_enabled:
       let
         msg = new(nimbus_message)
-        c   = k.cpt
+        c   = cpt
       msg[] = nimbus_message(
         kind: evmcCreate.ord.evmc_call_kind,
-        depth: (k.cpt.msg.depth + 1).int32,
+        depth: (cpt.msg.depth + 1).int32,
         gas: createMsgGas,
-        sender: k.cpt.msg.contractAddress,
-        input_data: k.cpt.memory.readPtr(memPos),
+        sender: cpt.msg.contractAddress,
+        input_data: cpt.memory.readPtr(memPos),
         input_size: memLen.uint,
         value: toEvmc(endowment),
         create2_salt: toEvmc(ZERO_CONTRACTSALT),
       )
       c.execSubCreate(msg)
     else:
-      k.cpt.execSubCreate(
+      cpt.execSubCreate(
         childMsg = Message(
           kind:   evmcCreate,
-          depth:  k.cpt.msg.depth + 1,
+          depth:  cpt.msg.depth + 1,
           gas:    createMsgGas,
-          sender: k.cpt.msg.contractAddress,
+          sender: cpt.msg.contractAddress,
           value:  endowment,
-          data:   k.cpt.memory.read(memPos, memLen)))
+          data:   cpt.memory.read(memPos, memLen)))
 
   # ---------------------
 
@@ -169,44 +167,44 @@ const
     checkInStaticContext(k.cpt)
 
     let
-      endowment = k.cpt.stack.popInt()
-      memPos    = k.cpt.stack.popInt().safeInt
-      memLen    = k.cpt.stack.popInt().safeInt
-      salt      = ContractSalt(bytes: k.cpt.stack.peekInt().toBytesBE)
+      cpt       = k.cpt
+      endowment = cpt.stack.popInt()
+      memPos    = cpt.stack.popInt().safeInt
+      memLen    = cpt.stack.popInt().safeInt
+      salt      = ContractSalt(bytes: cpt.stack.peekInt().toBytesBE)
 
-    k.cpt.stack.top(0)
+    cpt.stack.top(0)
 
     # EIP-3860
-    if k.cpt.fork >= FkShanghai and memLen > EIP3860_MAX_INITCODE_SIZE:
+    if cpt.fork >= FkShanghai and memLen > EIP3860_MAX_INITCODE_SIZE:
       trace "Initcode size exceeds maximum", initcodeSize = memLen
       raise newException(InitcodeError,
         &"CREATE2: have {memLen}, max {EIP3860_MAX_INITCODE_SIZE}")
 
     let
-      gasAtStart = k.cpt.gasMeter.gasRemaining
       gasParams = GasParams(
         kind:              Create,
-        cr_currentMemSize: k.cpt.memory.len,
+        cr_currentMemSize: cpt.memory.len,
         cr_memOffset:      memPos,
         cr_memLength:      memLen)
 
-    var gasCost = k.cpt.gasCosts[Create].c_handler(1.u256, gasParams).gasCost
-    gasCost = gasCost + k.cpt.gasCosts[Create2].m_handler(0, 0, memLen)
+    var gasCost = cpt.gasCosts[Create].c_handler(1.u256, gasParams).gasCost
+    gasCost = gasCost + cpt.gasCosts[Create2].m_handler(0, 0, memLen)
 
-    k.cpt.gasMeter.consumeGas(
+    cpt.opcodeGastCost(Create2,
       gasCost, reason = &"CREATE2: GasCreate + {memLen} * memory expansion")
-    k.cpt.memory.extend(memPos, memLen)
-    k.cpt.returnData.setLen(0)
+    cpt.memory.extend(memPos, memLen)
+    cpt.returnData.setLen(0)
 
-    if k.cpt.msg.depth >= MaxCallDepth:
+    if cpt.msg.depth >= MaxCallDepth:
       debug "Computation Failure",
         reason = "Stack too deep",
         maxDepth = MaxCallDepth,
-        depth = k.cpt.msg.depth
+        depth = cpt.msg.depth
       return
 
     if endowment != 0:
-      let senderBalance = k.cpt.getBalance(k.cpt.msg.contractAddress)
+      let senderBalance = cpt.getBalance(cpt.msg.contractAddress)
       if senderBalance < endowment:
         debug "Computation Failure",
           reason = "Insufficient funds available to transfer",
@@ -214,39 +212,36 @@ const
           balance = senderBalance
         return
 
-    var createMsgGas = k.cpt.gasMeter.gasRemaining
-    if k.cpt.fork >= FkTangerine:
+    var createMsgGas = cpt.gasMeter.gasRemaining
+    if cpt.fork >= FkTangerine:
       createMsgGas -= createMsgGas div 64
-    k.cpt.gasMeter.consumeGas(createMsgGas, reason = "CREATE2")
-
-    gasCost = gasAtStart - k.cpt.gasMeter.gasRemaining
-    k.cpt.traceCallFamilyGas(Create2, gasCost)
+    cpt.gasMeter.consumeGas(createMsgGas, reason = "CREATE2 msg gas")
 
     when evmc_enabled:
       let
         msg = new(nimbus_message)
-        c   = k.cpt
+        c   = cpt
       msg[] = nimbus_message(
         kind: evmcCreate2.ord.evmc_call_kind,
-        depth: (k.cpt.msg.depth + 1).int32,
+        depth: (cpt.msg.depth + 1).int32,
         gas: createMsgGas,
-        sender: k.cpt.msg.contractAddress,
-        input_data: k.cpt.memory.readPtr(memPos),
+        sender: cpt.msg.contractAddress,
+        input_data: cpt.memory.readPtr(memPos),
         input_size: memLen.uint,
         value: toEvmc(endowment),
         create2_salt: toEvmc(salt),
       )
       c.execSubCreate(msg)
     else:
-      k.cpt.execSubCreate(
+      cpt.execSubCreate(
         salt = salt,
         childMsg = Message(
           kind:   evmcCreate2,
-          depth:  k.cpt.msg.depth + 1,
+          depth:  cpt.msg.depth + 1,
           gas:    createMsgGas,
-          sender: k.cpt.msg.contractAddress,
+          sender: cpt.msg.contractAddress,
           value:  endowment,
-          data:   k.cpt.memory.read(memPos, memLen)))
+          data:   cpt.memory.read(memPos, memLen)))
 
 # ------------------------------------------------------------------------------
 # Public, op exec table entries

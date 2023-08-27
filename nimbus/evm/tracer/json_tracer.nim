@@ -28,17 +28,7 @@ type
     stack: JsonNode
     storageKeys: seq[HashSet[UInt256]]
     index: int
-    callFamilyNode: JsonNode
-
-const
-  callFamily = [
-    Create,
-    Create2,
-    Call,
-    CallCode,
-    DelegateCall,
-    StaticCall,
-  ]
+    node: JsonNode
 
 template stripLeadingZeros(value: string): string =
   var cidx = 0
@@ -47,8 +37,11 @@ template stripLeadingZeros(value: string): string =
     cidx.inc
   value[cidx .. ^1]
 
-proc encodeHexInt(x: SomeInteger): JsonNode =
+proc encodeHex(x: SomeInteger): JsonNode =
   %("0x" & x.toHex.stripLeadingZeros.toLowerAscii)
+
+proc encodeHex(x: UInt256): string =
+  "0x" & x.dumpHex.stripLeadingZeros
 
 proc `%`(x: openArray[byte]): JsonNode =
   if x.len == 0:
@@ -77,16 +70,15 @@ iterator storage(ctx: JsonTracer, compDepth: int): UInt256 =
 
 proc captureOpImpl(ctx: JsonTracer, c: Computation, pc: int,
                    op: Op, gas: GasInt, refund: GasInt,
-                   rData: openArray[byte],
-                   depth: int, error: Option[string]) {.gcsafe.} =
+                   rData: openArray[byte], depth: int, error: Option[string]) {.gcsafe.} =
   let
     gasCost = ctx.gas - gas
 
   var res = %{
     "pc": %(ctx.pc),
     "op": %(op.int),
-    "gas": encodeHexInt(ctx.gas),
-    "gasCost": encodeHexInt(gasCost),
+    "gas": encodeHex(ctx.gas),
+    "gasCost": encodeHex(gasCost),
     "memSize": %(c.memory.len)
   }
 
@@ -114,8 +106,7 @@ proc captureOpImpl(ctx: JsonTracer, c: Computation, pc: int,
       var stateDB = c.vmState.stateDB
       for key in ctx.storage(c.msg.depth):
         let value = stateDB.getStorage(c.msg.contractAddress, key)
-        storage["0x" & key.dumpHex.stripLeadingZeros] =
-            %("0x" & value.dumpHex.stripLeadingZeros)
+        storage[key.encodeHex] = %(value.encodeHex)
     res["storage"] = storage
 
   res["depth"] = %(depth)
@@ -125,10 +116,7 @@ proc captureOpImpl(ctx: JsonTracer, c: Computation, pc: int,
   if error.isSome:
     res["error"] = %(error.get)
 
-  if op in callFamily:
-    ctx.callFamilyNode = res
-  else:
-    ctx.writeJson(res)
+  ctx.node = res
 
 proc newJsonTracer*(stream: Stream, flags: set[TracerFlags], pretty: bool): JsonTracer =
   JsonTracer(
@@ -157,15 +145,15 @@ method captureEnd*(ctx: JsonTracer, comp: Computation, output: openArray[byte],
                    gasUsed: GasInt, error: Option[string]) {.gcsafe.} =
   var res = %{
     "output": %(output),
-    "gasUsed": encodeHexInt(gasUsed)
+    "gasUsed": encodeHex(gasUsed)
   }
   if error.isSome:
     res["error"] = %(error.get())
   ctx.writeJson(res)
 
 # Opcode level
-method captureOpStart*(ctx: JsonTracer, c: Computation, pc: int,
-                       op: Op, gas: GasInt,
+method captureOpStart*(ctx: JsonTracer, c: Computation,
+                       fixed: bool, pc: int, op: Op, gas: GasInt,
                        depth: int): int {.gcsafe.} =
   ctx.gas = gas
   ctx.pc = pc
@@ -173,7 +161,7 @@ method captureOpStart*(ctx: JsonTracer, c: Computation, pc: int,
   if TracerFlags.DisableStack notin ctx.flags:
     ctx.stack = newJArray()
     for v in c.stack.values:
-      ctx.stack.add(%("0x" & v.dumpHex.stripLeadingZeros))
+      ctx.stack.add(%(v.encodeHex))
 
   if TracerFlags.DisableStorage notin ctx.flags and op == SSTORE:
     try:
@@ -184,47 +172,71 @@ method captureOpStart*(ctx: JsonTracer, c: Computation, pc: int,
     except ValueError as ex:
       error "JsonTracer captureOpStart", msg=ex.msg
 
-  if op in callFamily:
-    try:
-      ctx.captureOpImpl(c, pc, op, 0, 0, [], depth, none(string))
-    except RlpError as ex:
-      error "JsonTracer captureOpEnd", msg=ex.msg
+  try:
+    ctx.captureOpImpl(c, pc, op, 0, 0, [], depth, none(string))
+  except RlpError as ex:
+    error "JsonTracer captureOpStart", msg=ex.msg
 
   # make sure captureOpEnd get the right opIndex
   result = ctx.index
   inc ctx.index
 
-method callFamilyGas*(ctx: JsonTracer, comp: Computation,
-                      op: Op, gas: GasInt,
-                      depth: int) {.gcsafe.} =
-  doAssert(op in callFamily)
-  doAssert(ctx.callFamilyNode.isNil.not)
-  let res = ctx.callFamilyNode
-  res["gasCost"] = encodeHexInt(gas)
-  ctx.writeJson(res)
+method captureGasCost*(ctx: JsonTracer, comp: Computation,
+                       fixed: bool, op: Op, gasCost: GasInt, gasRemaining: GasInt,
+                       depth: int) {.gcsafe.} =
+  doAssert(ctx.node.isNil.not)
+  let res = ctx.node
+  res["gasCost"] = encodeHex(gasCost)
 
-method captureOpEnd*(ctx: JsonTracer, comp: Computation, pc: int,
-                     op: Op, gas: GasInt, refund: GasInt,
+  if gasCost <= gasRemaining and not fixed:
+    ctx.writeJson(res)
+    ctx.node = nil
+  # else:
+  # OOG will be handled by captureFault
+  # opcode with fixed gasCost will be handled by captureOpEnd
+
+method captureOpEnd*(ctx: JsonTracer, comp: Computation,
+                     fixed: bool, pc: int, op: Op, gas: GasInt, refund: GasInt,
                      rData: openArray[byte],
                      depth: int, opIndex: int) {.gcsafe.} =
+  if fixed:
+    doAssert(ctx.node.isNil.not)
+    let res = ctx.node
+    res["refund"] = %(refund)
 
-  if op in callFamily:
-    # call family opcode is processed in captureOpStart
+    if TracerFlags.DisableReturnData notin ctx.flags:
+      res["returnData"] = %(rData)
+
+    ctx.writeJson(res)
+    ctx.node = nil
+    return
+
+method captureFault*(ctx: JsonTracer, comp: Computation,
+                     fixed: bool, pc: int, op: Op, gas: GasInt, refund: GasInt,
+                     rData: openArray[byte],
+                     depth: int, error: Option[string]) {.gcsafe.} =
+
+  if ctx.node.isNil.not:
+    let res = ctx.node
+    res["refund"] = %(refund)
+
+    if TracerFlags.DisableReturnData notin ctx.flags:
+      res["returnData"] = %(rData)
+
+    if error.isSome:
+      res["error"] = %(error.get)
+
+    ctx.writeJson(res)
+    ctx.node = nil
     return
 
   try:
-    ctx.captureOpImpl(comp, pc, op, gas, refund, rData, depth, none(string))
-  except RlpError as ex:
-    error "JsonTracer captureOpEnd", msg=ex.msg
-
-method captureFault*(ctx: JsonTracer, comp: Computation, pc: int,
-                     op: Op, gas: GasInt, refund: GasInt,
-                     rData: openArray[byte],
-                     depth: int, error: Option[string]) {.gcsafe.} =
-  try:
     ctx.captureOpImpl(comp, pc, op, gas, refund, rData, depth, error)
+    doAssert(ctx.node.isNil.not)
+    ctx.writeJson(ctx.node)
+    ctx.node = nil
   except RlpError as ex:
-    error "JsonTracer captureOpEnd", msg=ex.msg
+    error "JsonTracer captureOpFault", msg=ex.msg
 
 proc close*(ctx: JsonTracer) =
   ctx.stream.close()

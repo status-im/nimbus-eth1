@@ -41,15 +41,14 @@ when not defined(evmc_enabled):
 # ------------------------------------------------------------------------------
 
 when evmc_enabled:
-  proc sstoreEvmc(c: Computation, slot, newValue: UInt256) =
+  proc sstoreEvmc(c: Computation, slot, newValue: UInt256, coldAccess = 0.GasInt) =
     let
       currentValue = c.getStorage(slot)
       status   = c.host.setStorage(c.msg.contractAddress, slot, newValue)
       gasParam = GasParams(kind: Op.Sstore, s_status: status)
-      gasCost  = c.gasCosts[Sstore].c_handler(newValue, gasParam)[0]
+      gasCost  = c.gasCosts[Sstore].c_handler(newValue, gasParam)[0] + coldAccess
 
-    c.gasMeter.consumeGas(
-      gasCost, "SSTORE")
+    c.opcodeGastCost(Sstore, gasCost, "SSTORE")
 
 else:
   proc sstoreImpl(c: Computation, slot, newValue: UInt256) =
@@ -62,8 +61,7 @@ else:
       (gasCost, gasRefund) =
         c.gasCosts[Sstore].c_handler(newValue, gasParam)
 
-    c.gasMeter.consumeGas(
-      gasCost, "SSTORE")
+    c.opcodeGastCost(Sstore, gasCost, "SSTORE")
     if gasRefund > 0:
       c.gasMeter.refundGas(gasRefund)
 
@@ -71,7 +69,7 @@ else:
       db.setStorage(c.msg.contractAddress, slot, newValue)
 
 
-  proc sstoreNetGasMeteringImpl(c: Computation; slot, newValue: UInt256) =
+  proc sstoreNetGasMeteringImpl(c: Computation; slot, newValue: UInt256, coldAccess = 0.GasInt) =
     let
       stateDB = c.vmState.readOnlyStateDB
       currentValue = c.getStorage(slot)
@@ -81,17 +79,21 @@ else:
         s_currentValue: currentValue,
         s_originalValue: stateDB.getCommittedStorage(c.msg.contractAddress, slot))
 
-      (gasCost, gasRefund) = c.gasCosts[Sstore].c_handler(newValue, gasParam)
+      res = c.gasCosts[Sstore].c_handler(newValue, gasParam)
 
-    c.gasMeter.consumeGas(
-      gasCost, "SSTORE EIP2200")
+    c.opcodeGastCost(Sstore, res.gasCost + coldAccess, "SSTORE")
 
-    if gasRefund != 0:
-      c.gasMeter.refundGas(gasRefund)
+    if res.gasRefund != 0:
+      c.gasMeter.refundGas(res.gasRefund)
 
     c.vmState.mutateStateDB:
       db.setStorage(c.msg.contractAddress, slot, newValue)
 
+template sstoreEvmcOrNetGasMetering(cpt, slot, newValue: untyped, coldAccess = 0.GasInt) =
+  when evmc_enabled:
+    sstoreEvmc(cpt, slot, newValue, coldAccess)
+  else:
+    sstoreNetGasMeteringImpl(cpt, slot, newValue, coldAccess)
 
 proc jumpImpl(c: Computation; jumpTarget: UInt256) =
   if jumpTarget >= c.code.len.u256:
@@ -124,7 +126,7 @@ const
     let (memStartPos) = k.cpt.stack.popInt(1)
 
     let memPos = memStartPos.cleanMemRef
-    k.cpt.gasMeter.consumeGas(
+    k.cpt.opcodeGastCost(Mload,
       k.cpt.gasCosts[Mload].m_handler(k.cpt.memory.len, memPos, 32),
       reason = "MLOAD: GasVeryLow + memory expansion")
 
@@ -138,7 +140,7 @@ const
     let (memStartPos, value) = k.cpt.stack.popInt(2)
 
     let memPos = memStartPos.cleanMemRef
-    k.cpt.gasMeter.consumeGas(
+    k.cpt.opcodeGastCost(Mstore,
       k.cpt.gasCosts[Mstore].m_handler(k.cpt.memory.len, memPos, 32),
       reason = "MSTORE: GasVeryLow + memory expansion")
 
@@ -151,8 +153,8 @@ const
     let (memStartPos, value) = k.cpt.stack.popInt(2)
 
     let memPos = memStartPos.cleanMemRef
-    k.cpt.gasMeter.consumeGas(
-      k.cpt.gasCosts[Mstore].m_handler(k.cpt.memory.len, memPos, 1),
+    k.cpt.opcodeGastCost(Mstore8,
+      k.cpt.gasCosts[Mstore8].m_handler(k.cpt.memory.len, memPos, 1),
       reason = "MSTORE8: GasVeryLow + memory expansion")
 
     k.cpt.memory.extend(memPos, 1)
@@ -174,20 +176,9 @@ const
     let (slot) = cpt.stack.popInt(1)
 
     cpt.asyncChainTo(ifNecessaryGetSlot(cpt.vmState, cpt.msg.contractAddress, slot)):
-      when evmc_enabled:
-        let gasCost = if cpt.host.accessStorage(cpt.msg.contractAddress, slot) == EVMC_ACCESS_COLD:
-                        ColdSloadCost
-                      else:
-                        WarmStorageReadCost
-        cpt.gasMeter.consumeGas(gasCost, reason = "sloadEIP2929")
-      else:
-        cpt.vmState.mutateStateDB:
-          let gasCost = if not db.inAccessList(cpt.msg.contractAddress, slot):
-                          db.accessList(cpt.msg.contractAddress, slot)
-                          ColdSloadCost
-                        else:
-                          WarmStorageReadCost
-          cpt.gasMeter.consumeGas(gasCost, reason = "sloadEIP2929")
+      let gasCost = cpt.gasEip2929AccountCheck(cpt.msg.contractAddress, slot) +
+                      cpt.gasCosts[Sload].cost
+      cpt.opcodeGastCost(Sload, gasCost, reason = "sloadEIP2929")
       cpt.stack.push:
         cpt.getStorage(slot)
 
@@ -200,10 +191,7 @@ const
 
     checkInStaticContext(cpt)
     cpt.asyncChainTo(ifNecessaryGetSlot(cpt.vmState, cpt.msg.contractAddress, slot)):
-      when evmc_enabled:
-        sstoreEvmc(cpt, slot, newValue)
-      else:
-        sstoreImpl(cpt, slot, newValue)
+      sstoreEvmcOrNetGasMetering(cpt, slot, newValue)
 
 
   sstoreEIP1283Op: Vm2OpFn = proc (k: var Vm2Ctx) =
@@ -213,10 +201,7 @@ const
 
     checkInStaticContext(cpt)
     cpt.asyncChainTo(ifNecessaryGetSlot(cpt.vmState, cpt.msg.contractAddress, slot)):
-      when evmc_enabled:
-        sstoreEvmc(cpt, slot, newValue)
-      else:
-        sstoreNetGasMeteringImpl(cpt, slot, newValue)
+      sstoreEvmcOrNetGasMetering(cpt, slot, newValue)
 
 
   sstoreEIP2200Op: Vm2OpFn = proc (k: var Vm2Ctx) =
@@ -233,10 +218,7 @@ const
         "Gas not enough to perform EIP2200 SSTORE")
 
     cpt.asyncChainTo(ifNecessaryGetSlot(cpt.vmState, cpt.msg.contractAddress, slot)):
-      when evmc_enabled:
-        sstoreEvmc(cpt, slot, newValue)
-      else:
-        sstoreNetGasMeteringImpl(cpt, slot, newValue)
+      sstoreEvmcOrNetGasMetering(cpt, slot, newValue)
 
 
   sstoreEIP2929Op: Vm2OpFn = proc (k: var Vm2Ctx) =
@@ -252,19 +234,17 @@ const
       raise newException(OutOfGas, "Gas not enough to perform EIP2200 SSTORE")
 
     cpt.asyncChainTo(ifNecessaryGetSlot(cpt.vmState, cpt.msg.contractAddress, slot)):
+      var coldAccessGas = 0.GasInt
       when evmc_enabled:
         if cpt.host.accessStorage(cpt.msg.contractAddress, slot) == EVMC_ACCESS_COLD:
-          cpt.gasMeter.consumeGas(ColdSloadCost, reason = "sstoreEIP2929")
+          coldAccessGas = ColdSloadCost
       else:
         cpt.vmState.mutateStateDB:
           if not db.inAccessList(cpt.msg.contractAddress, slot):
             db.accessList(cpt.msg.contractAddress, slot)
-            cpt.gasMeter.consumeGas(ColdSloadCost, reason = "sstoreEIP2929")
+            coldAccessGas = ColdSloadCost
 
-      when evmc_enabled:
-        sstoreEvmc(cpt, slot, newValue)
-      else:
-        sstoreNetGasMeteringImpl(cpt, slot, newValue)
+      sstoreEvmcOrNetGasMetering(cpt, slot, newValue, coldAccessGas)
 
   # -------
 
@@ -324,7 +304,7 @@ const
     let (dstPos, srcPos, len) =
       (dst.cleanMemRef, src.cleanMemRef, size.cleanMemRef)
 
-    k.cpt.gasMeter.consumeGas(
+    k.cpt.opcodeGastCost(Mcopy,
       k.cpt.gasCosts[Mcopy].m_handler(k.cpt.memory.len, max(dstPos, srcPos), len),
       reason = "Mcopy fee")
 

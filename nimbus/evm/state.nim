@@ -17,7 +17,7 @@ import
   ../db/accounts_cache,
   ../common/[common, evmforks],
   ./async/data_sources,
-  ./interpreter/op_codes,
+  ./interpreter/[op_codes, gas_costs],
   ./types
 
 proc init(
@@ -391,28 +391,32 @@ proc captureOpStart*(vmState: BaseVMState, comp: Computation, pc: int,
                    op: Op, gas: GasInt,
                    depth: int): int =
   if vmState.tracingEnabled:
-    result = vmState.tracer.captureOpStart(comp, pc, op, gas, depth)
+    let fixed = vmState.gasCosts[op].kind == GckFixed
+    result = vmState.tracer.captureOpStart(comp, fixed, pc, op, gas, depth)
 
-proc callFamilyGas*(vmState: BaseVMState,
+proc captureGasCost*(vmState: BaseVMState,
                     comp: Computation,
-                    op: Op, gas: GasInt,
+                    op: Op, gasCost: GasInt, gasRemaining: GasInt,
                     depth: int) =
   if vmState.tracingEnabled:
-    vmState.tracer.callFamilyGas(comp, op, gas, depth)
+    let fixed = vmState.gasCosts[op].kind == GckFixed
+    vmState.tracer.captureGasCost(comp, fixed, op, gasCost, gasRemaining, depth)
 
 proc captureOpEnd*(vmState: BaseVMState, comp: Computation, pc: int,
                    op: Op, gas: GasInt, refund: GasInt,
                    rData: openArray[byte],
                    depth: int, opIndex: int) =
   if vmState.tracingEnabled:
-    vmState.tracer.captureOpEnd(comp, pc, op, gas, refund, rData, depth, opIndex)
+    let fixed = vmState.gasCosts[op].kind == GckFixed
+    vmState.tracer.captureOpEnd(comp, fixed, pc, op, gas, refund, rData, depth, opIndex)
 
 proc captureFault*(vmState: BaseVMState, comp: Computation, pc: int,
                    op: Op, gas: GasInt, refund: GasInt,
                    rData: openArray[byte],
                    depth: int, error: Option[string]) =
   if vmState.tracingEnabled:
-    vmState.tracer.captureFault(comp, pc, op, gas, refund, rData, depth, error)
+    let fixed = vmState.gasCosts[op].kind == GckFixed
+    vmState.tracer.captureFault(comp, fixed, pc, op, gas, refund, rData, depth, error)
 
 proc capturePrepare*(vmState: BaseVMState, comp: Computation, depth: int) =
   if vmState.tracingEnabled:

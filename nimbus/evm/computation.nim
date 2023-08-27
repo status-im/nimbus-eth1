@@ -396,9 +396,6 @@ proc traceOpCodeStarted*(c: Computation, op: Op): int {.gcsafe, raises: [].} =
     c.gasMeter.gasRemaining,
     c.msg.depth + 1)
 
-proc traceCallFamilyGas*(c: Computation, op: Op, gas: GasInt) {.gcsafe, raises: [].} =
-  c.vmState.callFamilyGas(c, op, gas, c.msg.depth + 1)
-
 proc traceOpCodeEnded*(c: Computation, op: Op, opIndex: int) {.gcsafe, raises: [].} =
   c.vmState.captureOpEnd(
     c,
@@ -423,6 +420,15 @@ proc traceError*(c: Computation) {.gcsafe, raises: [].} =
 
 proc prepareTracer*(c: Computation) =
   c.vmState.capturePrepare(c, c.msg.depth)
+
+proc opcodeGastCost*(c: Computation, op: Op, gasCost: GasInt, reason: string) {.gcsafe, raises: [OutOfGas, ValueError].}  =
+  c.vmState.captureGasCost(
+    c,
+    op,
+    gasCost,
+    c.gasMeter.gasRemaining,
+    c.msg.depth + 1)
+  c.gasMeter.consumeGas(gasCost, reason)
 
 # ------------------------------------------------------------------------------
 # End

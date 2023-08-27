@@ -20,7 +20,6 @@ import
   ../../stack,
   ../../types,
   ../gas_costs,
-  ../gas_meter,
   ../op_codes,
   ../utils/utils_numeric,
   ./oph_defs,
@@ -59,7 +58,7 @@ proc logImpl(c: Computation, opcode: Op, topicCount: int) =
   if memPos < 0 or len < 0:
     raise newException(OutOfBoundsRead, "Out of bounds memory access")
 
-  c.gasMeter.consumeGas(
+  c.opcodeGastCost(opcode,
     c.gasCosts[opcode].m_handler(c.memory.len, memPos, len),
     reason = "Memory expansion, Log topic and data gas cost")
   c.memory.extend(memPos, len)

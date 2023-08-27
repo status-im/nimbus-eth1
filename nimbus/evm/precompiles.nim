@@ -34,6 +34,7 @@ type
     paPairing    = 0x08,
     # Istanbul
     paBlake2bf   = 0x09,
+    paPointEvaluation = 0x0A
     # Berlin
     # EIP-2537: disabled
     # reason: not included in berlin
@@ -47,7 +48,7 @@ type
     # paBlsMapG1
     # paBlsMapG2
     # Cancun
-    paPointEvaluation = 0x0A
+    
 
 proc getMaxPrecompileAddr(fork: EVMFork): PrecompileAddresses =
   if fork < FkByzantium: paIdentity
@@ -705,7 +706,7 @@ proc execPrecompiles*(computation: Computation, fork: EVMFork): bool {.inline.} 
       of paPairing: bn256ecPairing(computation, fork)
       of paBlake2bf: blake2bf(computation)
       of paPointEvaluation: pointEvaluation(computation)
-      else: discard
+      #else: discard
       # EIP 2537: disabled
       # reason: not included in berlin
       # of paBlsG1Add: blsG1Add(computation)

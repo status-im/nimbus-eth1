@@ -71,8 +71,8 @@ method capturePrepare*(ctx: LegacyTracer, comp: Computation, depth: int) {.gcsaf
   ctx.storageKeys[depth] = initHashSet[UInt256]()
 
 # Opcode level
-method captureOpStart*(ctx: LegacyTracer, c: Computation, pc: int,
-                       op: Op, gas: GasInt,
+method captureOpStart*(ctx: LegacyTracer, c: Computation,
+                       fixed: bool, pc: int, op: Op, gas: GasInt,
                        depth: int): int {.gcsafe.} =
   try:
     let
@@ -126,8 +126,8 @@ method captureOpStart*(ctx: LegacyTracer, c: Computation, pc: int,
   except InsufficientStack as ex:
     error "LegacyTracer captureOpEnd", msg=ex.msg
 
-method captureOpEnd*(ctx: LegacyTracer, c: Computation, pc: int,
-                     op: Op, gas: GasInt, refund: GasInt,
+method captureOpEnd*(ctx: LegacyTracer, c: Computation,
+                     fixed: bool, pc: int, op: Op, gas: GasInt, refund: GasInt,
                      rData: openArray[byte],
                      depth: int, opIndex: int) {.gcsafe.} =
   try:
@@ -156,8 +156,8 @@ method captureOpEnd*(ctx: LegacyTracer, c: Computation, pc: int,
   except RlpError as ex:
     error "LegacyTracer captureOpEnd", msg=ex.msg
 
-method captureFault*(ctx: LegacyTracer, comp: Computation, pc: int,
-                     op: Op, gas: GasInt, refund: GasInt,
+method captureFault*(ctx: LegacyTracer, comp: Computation,
+                     fixed: bool, pc: int, op: Op, gas: GasInt, refund: GasInt,
                      rData: openArray[byte],
                      depth: int, error: Option[string]) {.gcsafe.} =
   try:

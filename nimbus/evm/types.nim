@@ -169,28 +169,28 @@ method captureExit*(ctx: TracerRef, comp: Computation, output: openArray[byte],
   discard
 
 # Opcode level
-method captureOpStart*(ctx: TracerRef, comp: Computation, pc: int,
-                       op: Op, gas: GasInt,
+method captureOpStart*(ctx: TracerRef, comp: Computation,
+                       fixed: bool, pc: int, op: Op, gas: GasInt,
                        depth: int): int {.base, gcsafe.} =
   discard
 
-method callFamilyGas*(ctx: TracerRef, comp: Computation,
-                      op: Op, gas: GasInt,
-                      depth: int) {.base, gcsafe.} =
+method captureGasCost*(ctx: TracerRef, comp: Computation,
+                       fixed: bool, op: Op, gasCost: GasInt,
+                       gasRemaining: GasInt, depth: int) {.base, gcsafe.} =
   discard
 
-method captureOpEnd*(ctx: TracerRef, comp: Computation, pc: int,
-                     op: Op, gas: GasInt, refund: GasInt,
+method captureOpEnd*(ctx: TracerRef, comp: Computation,
+                     fixed: bool, pc: int, op: Op, gas: GasInt, refund: GasInt,
                      rData: openArray[byte],
                      depth: int, opIndex: int) {.base, gcsafe.} =
   discard
 
-method captureFault*(ctx: TracerRef, comp: Computation, pc: int,
-                     op: Op, gas: GasInt, refund: GasInt,
+method captureFault*(ctx: TracerRef, comp: Computation,
+                     fixed: bool, pc: int, op: Op, gas: GasInt, refund: GasInt,
                      rData: openArray[byte],
                      depth: int, error: Option[string]) {.base, gcsafe.} =
   discard
 
-
+# Called at the start of EVM interpreter loop
 method capturePrepare*(ctx: TracerRef, comp: Computation, depth: int) {.base, gcsafe.} =
   discard

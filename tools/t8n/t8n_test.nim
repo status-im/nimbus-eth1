@@ -515,6 +515,15 @@ const
       output: T8nOutput(trace: true, result: true),
       expOut: "exp.txt",
     ),
+    TestSpec(
+      name  : "EVM tracer CALL family exception",
+      base  : "testdata/00-521",
+      input : t8nInput(
+        "alloc.json", "txs.json", "env.json", "Shanghai", "0",
+      ),
+      output: T8nOutput(trace: true, result: true),
+      expOut: "exp.txt",
+    ),
   ]
 
 proc main() =

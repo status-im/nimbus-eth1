@@ -19,7 +19,6 @@ import
   ../../memory,
   ../../stack,
   ../gas_costs,
-  ../gas_meter,
   ../op_codes,
   ../utils/utils_numeric,
   ./oph_defs,
@@ -40,7 +39,7 @@ const
     if pos < 0 or len < 0 or pos > 2147483648'i64:
       raise newException(OutOfBoundsRead, "Out of bounds memory access")
 
-    k.cpt.gasMeter.consumeGas(
+    k.cpt.opcodeGastCost(Op.Sha3,
       k.cpt.gasCosts[Op.Sha3].m_handler(k.cpt.memory.len, pos, len),
       reason = "SHA3: word gas cost")
 

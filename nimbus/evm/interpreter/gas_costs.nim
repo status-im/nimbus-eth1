@@ -94,7 +94,8 @@ type
     GckFixed,
     GckDynamic,
     GckMemExpansion,
-    GckComplex
+    GckComplex,
+    GckLater
 
   GasResult = tuple[gasCost, gasRefund: GasInt]
 
@@ -102,7 +103,7 @@ type
     case kind*: GasCostKind
     of GckInvalidOp:
       discard
-    of GckFixed:
+    of GckFixed, GckLater:
       cost*: GasInt
     of GckDynamic:
       d_handler*: proc(value: UInt256): GasInt
@@ -535,6 +536,13 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
     func fixed(gasFeeKind: static[GasFeeKind]): GasCost =
       GasCost(kind: GckFixed, cost: static(FeeSchedule[gasFeeKind]))
 
+    func fixedOrLater(gasFeeKind: static[GasFeeKind]): GasCost =
+      when fork < FkBerlin:
+        GasCost(kind: GckFixed, cost: static(FeeSchedule[gasFeeKind]))
+      else:
+        # GckLater is processed by the opcode
+        GasCost(kind: GckLater, cost: static(FeeSchedule[gasFeeKind]))
+
     func dynamic(handler: proc(value: UInt256): GasInt
                   {.nimcall, gcsafe, raises: [CatchableError].}): GasCost =
         GasCost(kind: GckDynamic, d_handler: handler)
@@ -585,7 +593,7 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
 
           # 30s: Environmental Information
           Address:         fixed GasBase,
-          Balance:         fixed GasBalance,
+          Balance:         fixedOrLater GasBalance,
           Origin:          fixed GasBase,
           Caller:          fixed GasBase,
           CallValue:       fixed GasBase,
@@ -595,11 +603,11 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
           CodeSize:        fixed GasBase,
           CodeCopy:        memExpansion `prefix gasCopy`,
           GasPrice:        fixed GasBase,
-          ExtCodeSize:     fixed GasExtCode,
+          ExtCodeSize:     fixedOrLater GasExtCode,
           ExtCodeCopy:     memExpansion `prefix gasExtCodeCopy`,
           ReturnDataSize:  fixed GasBase,
           ReturnDataCopy:  memExpansion `prefix gasCopy`,
-          ExtCodeHash:     fixed GasExtCodeHash,
+          ExtCodeHash:     fixedOrLater GasExtCodeHash,
 
           # 40s: Block Information
           Blockhash:       fixed GasBlockhash,
@@ -618,7 +626,7 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
           Mload:          memExpansion `prefix gasLoadStore`,
           Mstore:         memExpansion `prefix gasLoadStore`,
           Mstore8:        memExpansion `prefix gasLoadStore`,
-          Sload:          fixed GasSload,
+          Sload:          fixedOrLater GasSload,
           Sstore:         complex `prefix gasSstore`,
           Jump:           fixed GasMid,
           JumpI:          fixed GasHigh,
@@ -630,7 +638,7 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
           # 5c & 5d: Transient storage operations
           Tload:          fixed GasWarmStorageRead,
           Tstore:         fixed GasWarmStorageRead,
-          
+
           # 5e: Memory copy
           Mcopy:          memExpansion `prefix gasCopy`,
 
