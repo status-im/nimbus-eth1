@@ -64,7 +64,7 @@ const
     k.cpt.memory.extend(pos, len)
     k.cpt.output = k.cpt.memory.read(pos, len)
     # setError(msg, false) will signal cheap revert
-    k.cpt.setError("REVERT opcode executed", false)
+    k.cpt.setError(EVMC_REVERT, "REVERT opcode executed", false)
 
 
   invalidOp: Vm2OpFn = proc(k: var Vm2Ctx) =

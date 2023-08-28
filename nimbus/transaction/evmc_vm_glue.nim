@@ -9,7 +9,7 @@
 {.push raises: [].}
 
 import
-  ./host_types, evmc/evmc, stew/ranges/ptr_arith,
+  ./host_types, evmc/evmc,
   ".."/[vm_types, vm_computation, vm_state_transactions]
 
 proc evmcReleaseResult(result: var evmc_result) {.cdecl.} =
@@ -56,9 +56,7 @@ proc evmcExecute(vm: ptr evmc_vm, hostInterface: ptr evmc_host_interface,
 
   return evmc_result(
     # Standard EVMC result, if a bit generic.
-    status_code: if c.isSuccess:            EVMC_SUCCESS
-                 elif not c.error.burnsGas: EVMC_REVERT
-                 else:                      EVMC_FAILURE,
+    status_code: c.statusCode,
     # Gas left is required to be zero when not `EVMC_SUCCESS` or `EVMC_REVERT`.
     gas_left:    if result.status_code notin {EVMC_SUCCESS, EVMC_REVERT}: 0'i64
                  else: c.gasMeter.gasRemaining.int64,

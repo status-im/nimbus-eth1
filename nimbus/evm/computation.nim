@@ -51,7 +51,7 @@ const
 # ------------------------------------------------------------------------------
 
 proc generateContractAddress(c: Computation, salt: ContractSalt): EthAddress =
-  if c.msg.kind == evmcCreate:
+  if c.msg.kind == EVMC_CREATE:
     let creationNonce = c.vmState.readOnlyStateDB().getNonce(c.msg.sender)
     result = generateAddress(c.msg.sender, creationNonce)
   else:
@@ -273,7 +273,26 @@ proc rollback*(c: Computation) =
   c.vmState.stateDB.rollback(c.savePoint)
 
 proc setError*(c: Computation, msg: string, burnsGas = false) =
-  c.error = Error(info: msg, burnsGas: burnsGas)
+  c.error = Error(statusCode: EVMC_FAILURE, info: msg, burnsGas: burnsGas)
+
+proc setError*(c: Computation, code: evmc_status_code, burnsGas = false) =
+  c.error = Error(statusCode: code, info: $code, burnsGas: burnsGas)
+
+proc setError*(c: Computation, code: evmc_status_code, msg: string, burnsGas = false) =
+  c.error = Error(statusCode: code, info: msg, burnsGas: burnsGas)
+
+func statusCode*(c: Computation): evmc_status_code =
+  if c.isSuccess:
+    EVMC_SUCCESS
+  else:
+    c.error.statusCode
+
+func errorOpt*(c: Computation): Option[string] =
+  if c.isSuccess:
+    return none(string)
+  if c.error.statusCode == EVMC_REVERT:
+    return none(string)
+  some(c.error.info)
 
 proc writeContract*(c: Computation)
     {.gcsafe, raises: [CatchableError].} =
@@ -292,16 +311,14 @@ proc writeContract*(c: Computation)
   # EIP-3541 constraint (https://eips.ethereum.org/EIPS/eip-3541).
   if fork >= FkLondon and c.output[0] == 0xEF.byte:
     withExtra trace, "New contract code starts with 0xEF byte, not allowed by EIP-3541"
-    # TODO: Return `EVMC_CONTRACT_VALIDATION_FAILURE` (like Silkworm).
-    c.setError("EVMC_CONTRACT_VALIDATION_FAILURE", true)
+    c.setError(EVMC_CONTRACT_VALIDATION_FAILURE, true)
     return
 
   # EIP-170 constraint (https://eips.ethereum.org/EIPS/eip-3541).
   if fork >= FkSpurious and len > EIP170_MAX_CODE_SIZE:
     withExtra trace, "New contract code exceeds EIP-170 limit",
       codeSize=len, maxSize=EIP170_MAX_CODE_SIZE
-    # TODO: Return `EVMC_OUT_OF_GAS` (like Silkworm).
-    c.setError("EVMC_OUT_OF_GAS", true)
+    c.setError(EVMC_OUT_OF_GAS, true)
     return
 
   # Charge gas and write the code even if the code address is self-destructed.
@@ -322,8 +339,7 @@ proc writeContract*(c: Computation)
 
   if fork >= FkHomestead:
     # EIP-2 (https://eips.ethereum.org/EIPS/eip-2).
-    # TODO: Return `EVMC_OUT_OF_GAS` (like Silkworm).
-    c.setError("EVMC_OUT_OF_GAS", true)
+    c.setError(EVMC_OUT_OF_GAS, true)
   else:
     # Before EIP-2, when out of gas for code storage, the account ends up with
     # zero-length code and no error.  No gas is charged.  Code cited in EIP-2:
@@ -416,7 +432,7 @@ proc traceError*(c: Computation) {.gcsafe, raises: [].} =
     c.gasMeter.gasRefunded,
     c.returnData,
     c.msg.depth + 1,
-    some(c.error.info))
+    c.errorOpt)
 
 proc prepareTracer*(c: Computation) =
   c.vmState.capturePrepare(c, c.msg.depth)

@@ -20,7 +20,6 @@ import
   ../gas_costs,
   eth/common,
   eth/common/eth_types,
-  macros,
   stint
 
 when defined(evmc_enabled):
@@ -64,7 +63,7 @@ proc gasEip2929AccountCheck*(c: Computation; address: EthAddress, slot: UInt256)
 
 template checkInStaticContext*(c: Computation) =
   ## Verify static context in handler function, raise an error otherwise
-  if emvcStatic == c.msg.flags:
+  if EVMC_STATIC in c.msg.flags:
     # TODO: if possible, this check only appear
     # when fork >= FkByzantium
     raise newException(

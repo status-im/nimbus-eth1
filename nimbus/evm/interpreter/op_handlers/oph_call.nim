@@ -142,7 +142,7 @@ proc staticCallParams(c: Computation):  LocalParams =
 
   result.value           = 0.u256
   result.sender          = c.msg.contractAddress
-  result.flags           = emvcStatic
+  result.flags.incl        EVMC_STATIC
   result.contractAddress = result.codeAddress
 
   result.updateStackAndParams(c)
@@ -196,7 +196,7 @@ const
     ## 0xf1, Message-Call into an account
     let cpt = k.cpt
 
-    if emvcStatic == cpt.msg.flags and cpt.stack[^3, UInt256] > 0.u256:
+    if EVMC_STATIC in cpt.msg.flags and cpt.stack[^3, UInt256] > 0.u256:
       raise newException(
         StaticContextError,
         "Cannot modify state while inside of a STATICCALL context")
@@ -248,7 +248,7 @@ const
             msg = new(nimbus_message)
             c   = cpt
           msg[] = nimbus_message(
-            kind        : evmcCall.ord.evmc_call_kind,
+            kind        : EVMC_CALL,
             depth       : (cpt.msg.depth + 1).int32,
             gas         : childGasLimit,
             sender      : p.sender,
@@ -257,7 +257,7 @@ const
             input_data  : cpt.memory.readPtr(p.memInPos),
             input_size  : p.memInLen.uint,
             value       : toEvmc(p.value),
-            flags       : p.flags.uint32
+            flags       : p.flags
           )
           c.execSubCall(msg, p)
         else:
@@ -265,7 +265,7 @@ const
             memPos = p.memOutPos,
             memLen = p.memOutLen,
             childMsg = Message(
-              kind:            evmcCall,
+              kind:            EVMC_CALL,
               depth:           cpt.msg.depth + 1,
               gas:             childGasLimit,
               sender:          p.sender,
@@ -327,7 +327,7 @@ const
             msg = new(nimbus_message)
             c   = cpt
           msg[] = nimbus_message(
-            kind        : evmcCallCode.ord.evmc_call_kind,
+            kind        : EVMC_CALLCODE,
             depth       : (cpt.msg.depth + 1).int32,
             gas         : childGasLimit,
             sender      : p.sender,
@@ -336,7 +336,7 @@ const
             input_data  : cpt.memory.readPtr(p.memInPos),
             input_size  : p.memInLen.uint,
             value       : toEvmc(p.value),
-            flags       : p.flags.uint32
+            flags       : p.flags
           )
           c.execSubCall(msg, p)
         else:
@@ -344,7 +344,7 @@ const
             memPos = p.memOutPos,
             memLen = p.memOutLen,
             childMsg = Message(
-              kind:            evmcCallCode,
+              kind:            EVMC_CALLCODE,
               depth:           cpt.msg.depth + 1,
               gas:             childGasLimit,
               sender:          p.sender,
@@ -401,7 +401,7 @@ const
             msg = new(nimbus_message)
             c   = cpt
           msg[] = nimbus_message(
-            kind        : evmcDelegateCall.ord.evmc_call_kind,
+            kind        : EVMC_DELEGATECALL,
             depth       : (cpt.msg.depth + 1).int32,
             gas         : childGasLimit,
             sender      : p.sender,
@@ -410,7 +410,7 @@ const
             input_data  : cpt.memory.readPtr(p.memInPos),
             input_size  : p.memInLen.uint,
             value       : toEvmc(p.value),
-            flags       : p.flags.uint32
+            flags       : p.flags
           )
           c.execSubCall(msg, p)
         else:
@@ -418,7 +418,7 @@ const
             memPos = p.memOutPos,
             memLen = p.memOutLen,
             childMsg = Message(
-              kind:            evmcDelegateCall,
+              kind:            EVMC_DELEGATECALL,
               depth:           cpt.msg.depth + 1,
               gas:             childGasLimit,
               sender:          p.sender,
@@ -476,7 +476,7 @@ const
             msg = new(nimbus_message)
             c   = cpt
           msg[] = nimbus_message(
-            kind        : evmcCall.ord.evmc_call_kind,
+            kind        : EVMC_CALL,
             depth       : (cpt.msg.depth + 1).int32,
             gas         : childGasLimit,
             sender      : p.sender,
@@ -485,7 +485,7 @@ const
             input_data  : cpt.memory.readPtr(p.memInPos),
             input_size  : p.memInLen.uint,
             value       : toEvmc(p.value),
-            flags       : p.flags.uint32
+            flags       : p.flags
           )
           c.execSubCall(msg, p)
         else:
@@ -493,7 +493,7 @@ const
             memPos = p.memOutPos,
             memLen = p.memOutLen,
             childMsg = Message(
-              kind:            evmcCall,
+              kind:            EVMC_CALL,
               depth:           cpt.msg.depth + 1,
               gas:             childGasLimit,
               sender:          p.sender,

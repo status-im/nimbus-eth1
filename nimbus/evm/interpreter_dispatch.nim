@@ -102,7 +102,7 @@ proc selectVM(c: Computation, fork: EVMFork, shouldPrepareTracer: bool)
 
 proc beforeExecCall(c: Computation) =
   c.snapshot()
-  if c.msg.kind == evmcCall:
+  if c.msg.kind == EVMC_CALL:
     c.vmState.mutateStateDB:
       db.subBalance(c.msg.sender, c.msg.value)
       db.addBalance(c.msg.contractAddress, c.msg.value)
@@ -182,7 +182,7 @@ const
   ]
 
 func msgToOp(msg: Message): Op =
-  if emvcStatic == msg.flags:
+  if EVMC_STATIC in msg.flags:
     return STATICCALL
   MsgKindToOp[msg.kind]
 
@@ -212,18 +212,14 @@ proc afterExec(c: Computation)
 
   if c.msg.depth > 0:
     let gasUsed = c.msg.gas - c.gasMeter.gasRemaining
-    let error = if c.isError:
-                  some(c.error.info)
-                else:
-                  none(string)
-    c.vmState.captureExit(c, c.output, gasUsed, error)
+    c.vmState.captureExit(c, c.output, gasUsed, c.errorOpt)
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
 proc executeOpcodes*(c: Computation, shouldPrepareTracer: bool = true)
-    {.gcsafe, raises: [CatchableError].} =
+    {.gcsafe, raises: [].} =
   let fork = c.fork
 
   block:
@@ -263,7 +259,6 @@ proc executeOpcodes*(c: Computation, shouldPrepareTracer: bool = true)
 
   if c.isError() and c.continuation.isNil:
     if c.tracingEnabled: c.traceError()
-    #trace "executeOpcodes error", msg=c.error.info
 
 when vm_use_recursion:
   # Recursion with tiny stack frame per level.

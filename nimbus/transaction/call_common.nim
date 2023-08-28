@@ -66,7 +66,7 @@ proc hostToComputationMessage*(msg: EvmcMessage): Message =
     # When input size is zero, input data pointer may be null.
     data:            if msg.input_size <= 0: @[]
                      else: @(makeOpenArray(msg.input_data, msg.input_size.int)),
-    flags:           if msg.isStatic: emvcStatic else: emvcNoFlags
+    flags:           msg.flags
   )
 
 func intrinsicGas*(call: CallParams, vmState: BaseVMState): GasInt {.inline.} =
@@ -206,9 +206,9 @@ when defined(evmc_enabled):
     if callResult.status_code == EVMC_SUCCESS:
       c.error = nil
     elif callResult.status_code == EVMC_REVERT:
-      c.setError("EVMC_REVERT", false)
+      c.setError(EVMC_REVERT, false)
     else:
-      c.setError($callResult.status_code, true)
+      c.setError(callResult.status_code, true)
 
     c.gasMeter.gasRemaining = callResult.gas_left
     c.msg.contractAddress = callResult.create_address.fromEvmc
@@ -278,12 +278,7 @@ proc finishRunningComputation(host: TransactionHost, call: CallParams): CallResu
   let gasRemaining = calculateAndPossiblyRefundGas(host, call)
   # evm gas used without intrinsic gas
   let gasUsed = host.msg.gas - gasRemaining
-  let error = if c.isError:
-                some(c.error.info)
-              else:
-                none(string)
-
-  host.vmState.captureEnd(c, c.output, gasUsed, error)
+  host.vmState.captureEnd(c, c.output, gasUsed, c.errorOpt)
 
   result.isError = c.isError
   result.gasUsed = call.gasLimit - gasRemaining

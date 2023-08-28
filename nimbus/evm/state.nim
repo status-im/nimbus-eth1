@@ -35,7 +35,6 @@ proc init(
       asyncFactory: AsyncOperationFactory = AsyncOperationFactory(maybeDataSource: none[AsyncDataSource]()))
     {.gcsafe.} =
   ## Initialisation helper
-  self.prevHeaders = @[]
   self.parent = parent
   self.timestamp = timestamp
   self.gasLimit = gasLimit
@@ -296,17 +295,6 @@ method getAncestorHash*(
     result = db.headerHash(blockNumber.truncate(uint64))
   else:
     result = db.getBlockHash(blockNumber)
-
-  #TODO: should we use deque here?
-  # someday we may revive this code when
-  # we already have working miner
-  when false:
-    let idx = ancestorDepth.toInt
-    if idx >= vmState.prevHeaders.len:
-      return
-
-    var header = vmState.prevHeaders[idx]
-    result = header.hash
 
 proc readOnlyStateDB*(vmState: BaseVMState): ReadOnlyStateDB {.inline.} =
   ReadOnlyStateDB(vmState.stateDB)

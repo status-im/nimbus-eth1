@@ -17,6 +17,14 @@ import
   ../db/accounts_cache,
   ../common/[common, evmforks]
 
+# this import not guarded by `when defined(evmc_enabled)`
+# because we want to use evmc types such as evmc_call_kind
+# and evmc_flags
+import
+  evmc/evmc
+
+export evmc
+
 {.push raises: [].}
 
 when defined(evmc_enabled):
@@ -35,27 +43,26 @@ type
     ClearCache
 
   BaseVMState* = ref object of RootObj
-    prevHeaders*   : seq[BlockHeader]
-    com*           : CommonRef
-    gasPool*       : GasInt
-    parent*        : BlockHeader
-    timestamp*     : EthTime
-    gasLimit*      : GasInt
-    fee*           : Option[UInt256]
-    prevRandao*    : Hash256
-    blockDifficulty*: UInt256
-    flags*         : set[VMFlag]
-    tracer*        : TracerRef
-    receipts*      : seq[Receipt]
-    stateDB*       : AccountsCache
+    com*              : CommonRef
+    gasPool*          : GasInt
+    parent*           : BlockHeader
+    timestamp*        : EthTime
+    gasLimit*         : GasInt
+    fee*              : Option[UInt256]
+    prevRandao*       : Hash256
+    blockDifficulty*  : UInt256
+    flags*            : set[VMFlag]
+    tracer*           : TracerRef
+    receipts*         : seq[Receipt]
+    stateDB*          : AccountsCache
     cumulativeGasUsed*: GasInt
-    txOrigin*      : EthAddress
-    txGasPrice*    : GasInt
+    txOrigin*         : EthAddress
+    txGasPrice*       : GasInt
     txVersionedHashes*: VersionedHashes
-    gasCosts*      : GasCosts
-    fork*          : EVMFork
-    minerAddress*  : EthAddress
-    asyncFactory*  : AsyncOperationFactory
+    gasCosts*         : GasCosts
+    fork*             : EVMFork
+    minerAddress*     : EthAddress
+    asyncFactory*     : AsyncOperationFactory
 
   Computation* = ref object
     # The execution computation
@@ -82,23 +89,17 @@ type
     continuation*:          proc() {.gcsafe, raises: [CatchableError].}
 
   Error* = ref object
-    info*:                  string
-    burnsGas*:              bool
+    statusCode*: evmc_status_code
+    info*      : string
+    burnsGas*  : bool
 
   GasMeter* = object
     gasRefunded*: GasInt
     gasRemaining*: GasInt
 
-  CallKind* = enum
-    evmcCall         = 0, # CALL
-    evmcDelegateCall = 1, # DELEGATECALL
-    evmcCallCode     = 2, # CALLCODE
-    evmcCreate       = 3, # CREATE
-    evmcCreate2      = 4  # CREATE2
+  CallKind* = evmc_call_kind
 
-  MsgFlags* = enum
-    emvcNoFlags  = 0
-    emvcStatic   = 1
+  MsgFlags* = evmc_flags
 
   Message* = ref object
     kind*:             CallKind

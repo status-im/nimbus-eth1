@@ -83,11 +83,11 @@ proc accessStorage(p: evmc_host_context, address: var evmc_address,
 
 proc getTransientStorage(p: evmc_host_context, address: var evmc_address,
                 key: var evmc_bytes32): evmc_bytes32
-    {.cdecl, raises: [RlpError].} =
+    {.cdecl, raises: [].} =
   toHost(p).getTransientStorage(address.fromEvmc, key.flip256.fromEvmc).toEvmc.flip256
 
 proc setTransientStorage(p: evmc_host_context, address: var evmc_address,
-                key, value: var evmc_bytes32) {.cdecl, raises: [RlpError].} =
+                key, value: var evmc_bytes32) {.cdecl, raises: [].} =
   toHost(p).setTransientStorage(address.fromEvmc, key.flip256.fromEvmc, value.flip256.fromEvmc)
 
 let hostInterface = evmc_host_interface(

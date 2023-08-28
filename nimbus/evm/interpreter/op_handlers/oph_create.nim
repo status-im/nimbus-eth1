@@ -140,7 +140,7 @@ const
         msg = new(nimbus_message)
         c   = cpt
       msg[] = nimbus_message(
-        kind: evmcCreate.ord.evmc_call_kind,
+        kind: EVMC_CREATE,
         depth: (cpt.msg.depth + 1).int32,
         gas: createMsgGas,
         sender: cpt.msg.contractAddress,
@@ -153,7 +153,7 @@ const
     else:
       cpt.execSubCreate(
         childMsg = Message(
-          kind:   evmcCreate,
+          kind:   EVMC_CREATE,
           depth:  cpt.msg.depth + 1,
           gas:    createMsgGas,
           sender: cpt.msg.contractAddress,
@@ -222,7 +222,7 @@ const
         msg = new(nimbus_message)
         c   = cpt
       msg[] = nimbus_message(
-        kind: evmcCreate2.ord.evmc_call_kind,
+        kind: EVMC_CREATE2,
         depth: (cpt.msg.depth + 1).int32,
         gas: createMsgGas,
         sender: cpt.msg.contractAddress,
@@ -236,7 +236,7 @@ const
       cpt.execSubCreate(
         salt = salt,
         childMsg = Message(
-          kind:   evmcCreate2,
+          kind:   EVMC_CREATE2,
           depth:  cpt.msg.depth + 1,
           gas:    createMsgGas,
           sender: cpt.msg.contractAddress,

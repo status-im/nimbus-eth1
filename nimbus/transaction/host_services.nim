@@ -9,7 +9,7 @@
 #{.push raises: [].}
 
 import
-  sets, times, stint, chronicles,
+  times, stint, chronicles,
   eth/common/eth_types, ../db/accounts_cache,
   ../common/[evmforks, common],
   ".."/[vm_state, vm_computation, vm_internals, vm_gas_costs],

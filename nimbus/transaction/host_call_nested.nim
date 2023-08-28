@@ -43,7 +43,7 @@ proc afterExecCreateEvmcNested(host: TransactionHost, child: Computation,
     res.status_code = EVMC_SUCCESS
     res.create_address = child.msg.contractAddress.toEvmc
   else:
-    res.status_code = if child.shouldBurnGas: EVMC_FAILURE else: EVMC_REVERT
+    res.status_code = child.statusCode
     if child.output.len > 0:
       # TODO: can we move the ownership of seq to raw pointer?
       res.output_size = child.output.len.uint
@@ -65,7 +65,7 @@ proc beforeExecCallEvmcNested(host: TransactionHost,
                        host.computation.msg.contractAddress,
     value: m.value.fromEvmc,
     data: @(makeOpenArray(m.inputData, m.inputSize.int)),
-    flags: if m.isStatic: emvcStatic else: emvcNoFlags,
+    flags: m.flags,
   )
   return newComputation(host.vmState, childMsg)
 
@@ -78,7 +78,7 @@ proc afterExecCallEvmcNested(host: TransactionHost, child: Computation,
     host.computation.merge(child)
     res.status_code = EVMC_SUCCESS
   else:
-    res.status_code = if child.shouldBurnGas: EVMC_FAILURE else: EVMC_REVERT
+    res.status_code = child.statusCode
 
   if child.output.len > 0:
     # TODO: can we move the ownership of seq to raw pointer?

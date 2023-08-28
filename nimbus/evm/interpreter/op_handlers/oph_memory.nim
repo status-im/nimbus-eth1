@@ -21,7 +21,6 @@ import
   ../../stack,
   ../../types,
   ../gas_costs,
-  ../gas_meter,
   ../op_codes,
   ../utils/utils_numeric,
   ./oph_defs,
@@ -33,6 +32,7 @@ import
 
 when not defined(evmc_enabled):
   import
+    ../gas_meter,
     ../../state,
     ../../../db/accounts_cache
 

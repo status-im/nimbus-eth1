@@ -8,9 +8,6 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-
-# The VM computation module suffers from a circular include/import dependency.
-# After fixing this wrapper should be re-factored.
 import
   ./evm/computation as vmc,
   ./evm/interpreter_dispatch as vmi
@@ -57,6 +54,8 @@ export
   vmc.traceOpCodeEnded,
   vmc.traceOpCodeStarted,
   vmc.tracingEnabled,
-  vmc.writeContract
+  vmc.writeContract,
+  vmc.statusCode,
+  vmc.errorOpt
 
 # End

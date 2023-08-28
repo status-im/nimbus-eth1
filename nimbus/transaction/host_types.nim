@@ -88,9 +88,6 @@ template flip256*(word256: evmc_uint256be): evmc_uint256be =
 template isCreate*(kind: EvmcCallKind): bool =
   kind in {EVMC_CREATE, EVMC_CREATE2}
 
-template isStatic*(msg: EvmcMessage): bool =
-  EVMC_STATIC in msg.flags
-
 template isZero*(n: evmc_bytes32): bool =
   n == default(evmc_bytes32)
 

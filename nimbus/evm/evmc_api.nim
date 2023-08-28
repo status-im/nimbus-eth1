@@ -33,7 +33,7 @@ type
 
   nimbus_message* = object
     kind*        : evmc_call_kind
-    flags*       : uint32
+    flags*       : evmc_flags
     depth*       : int32
     gas*         : int64
     recipient*   : EthAddress

@@ -11,4 +11,4 @@
 import ./types
 
 proc isCreate*(message: Message): bool =
-  message.kind in {evmcCreate, evmcCreate2}
+  message.kind in {EVMC_CREATE, EVMC_CREATE2}
