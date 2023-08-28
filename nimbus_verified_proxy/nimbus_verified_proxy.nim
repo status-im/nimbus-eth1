@@ -42,19 +42,12 @@ func getConfiguredChainId(networkMetadata: Eth2NetworkMetadata): Quantity =
 
 type OnHeaderCallback* = proc (s: cstring) {.cdecl, raises: [], gcsafe.}
 
-var optimisticHeaderCallback : OnHeaderCallback = nil
-var finalizedHeaderCallback : OnHeaderCallback = nil
-proc setOptimisticHeaderCallback*(cb: OnHeaderCallback) {.exportc, dynlib.} =
-  optimisticHeaderCallback = cb
-  echo "optimistic header callback set"
+proc run(config: VerifiedProxyConf, callbacks: varargs[OnHeaderCallback]) {.raises: [CatchableError], gcsafe.} =
+  var optimisticHeaderCallback, finalizedHeaderCallback: OnHeaderCallback
+  if len(callbacks) == 2:
+    optimisticHeaderCallback = callbacks[0]
+    finalizedHeaderCallback = callbacks[1]
 
-proc setFinalizedHeaderCallback*(cb: OnHeaderCallback) {.exportc, dynlib.} =
-  finalizedHeaderCallback = cb
-  echo "finalized header callback set"
-
-
-
-proc run(config: VerifiedProxyConf) {.raises: [CatchableError], gcsafe.} =
   # Required as both Eth2Node and LightClient requires correct config type
   var lcConfig = config.asLightClientConf()
 
@@ -298,8 +291,15 @@ proc initLib() =
      nimGC_setStackBottom(locals)
 
 
-proc parseConfigAndRun*(configJson: cstring) {.gcsafe.} =
-  let str = $configJson
+type Context = object
+  thread: Thread[ptr Context]
+  configJson: cstring
+  stop: bool
+  onOptimisticHeader: OnHeaderCallback
+  onFinalizedHeader: OnHeaderCallback
+
+proc runContext(ctx: ptr Context) {.thread.} =
+  let str = $ctx.configJson
   try:
     let jsonNode = parseJson(str)
 
@@ -322,19 +322,10 @@ proc parseConfigAndRun*(configJson: cstring) {.gcsafe.} =
       discv5Enabled: true,
     )
 
-    run(myConfig)
+    run(myConfig, ctx.onOptimisticHeader, ctx.onFinalizedHeader)
   except Exception as err:
     echo "Exception when running ", getCurrentExceptionMsg(), err.getStackTrace() 
 
-type Context = object
-  thread: Thread[ptr Context]
-  configJson: cstring
-  stop: bool
-  onOptimisticHeader: OnHeaderCallback
-  onFinalizedHeader: OnHeaderCallback
-
-proc runContext(ctx: ptr Context) {.thread.} =
-  parseConfigAndRun(ctx.configJson)
 
   #[let node = parseConfigAndRun(ctx.configJson)
 
