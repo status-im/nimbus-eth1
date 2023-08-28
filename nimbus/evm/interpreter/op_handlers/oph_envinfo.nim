@@ -25,7 +25,6 @@ import
   ./oph_defs,
   ./oph_helpers,
   eth/common,
-  sequtils,
   stint,
   strformat
 
@@ -33,29 +32,6 @@ import
 
 when not defined(evmc_enabled):
   import ../../state
-
-# ------------------------------------------------------------------------------
-# Private helpers
-# ------------------------------------------------------------------------------
-
-proc writePaddedResult(mem: var Memory,
-                       data: openArray[byte],
-                       memPos, dataPos, len: Natural,
-                       paddingValue = 0.byte) =
-
-  mem.extend(memPos, len)
-  let dataEndPosition = dataPos.int64 + len - 1
-  let sourceBytes =
-    data[min(dataPos, data.len) .. min(data.len - 1, dataEndPosition)]
-
-  mem.write(memPos, sourceBytes)
-
-  # Don't duplicate zero-padding of mem.extend
-  let paddingOffset = min(memPos + sourceBytes.len, mem.len)
-  let numPaddingBytes = min(mem.len - paddingOffset, len - sourceBytes.len)
-  if numPaddingBytes > 0:
-    # TODO: avoid unnecessary memory allocation
-    mem.write(paddingOffset, repeat(paddingValue, numPaddingBytes))
 
 # ------------------------------------------------------------------------------
 # Private, op handlers implementation
@@ -144,7 +120,7 @@ const
       k.cpt.gasCosts[CallDataCopy].m_handler(k.cpt.memory.len, memPos, len),
       reason = "CallDataCopy fee")
 
-    k.cpt.memory.writePaddedResult(k.cpt.msg.data, memPos, copyPos, len)
+    k.cpt.memory.writePadded(k.cpt.msg.data, memPos, copyPos, len)
 
 
   codeSizeOp: Vm2OpFn = proc (k: var Vm2Ctx) =
@@ -169,7 +145,7 @@ const
         cpt.gasCosts[CodeCopy].m_handler(cpt.memory.len, memPos, len),
         reason = "CodeCopy fee")
 
-      cpt.memory.writePaddedResult(cpt.code.bytes, memPos, copyPos, len)
+      cpt.memory.writePadded(cpt.code.bytes, memPos, copyPos, len)
 
 
   gasPriceOp: Vm2OpFn = proc (k: var Vm2Ctx) =
@@ -215,7 +191,7 @@ const
         reason = "ExtCodeCopy fee")
 
       let codeBytes = cpt.getCode(address)
-      cpt.memory.writePaddedResult(codeBytes, memPos, codePos, len)
+      cpt.memory.writePadded(codeBytes, memPos, codePos, len)
 
 
   extCodeCopyEIP2929Op: Vm2OpFn = proc (k: var Vm2Ctx) =
@@ -233,7 +209,7 @@ const
       cpt.opcodeGastCost(ExtCodeCopy, gasCost, reason = "ExtCodeCopy EIP2929")
 
       let codeBytes = cpt.getCode(address)
-      cpt.memory.writePaddedResult(codeBytes, memPos, codePos, len)
+      cpt.memory.writePadded(codeBytes, memPos, codePos, len)
 
   # -----------
 
@@ -262,7 +238,7 @@ const
           &"for data from index {copyStartPos} to {copyStartPos + size}. "&
           &"Return data is {k.cpt.returnData.len} in \n" &
           "length")
-    k.cpt.memory.writePaddedResult(k.cpt.returnData, memPos, copyPos, len)
+    k.cpt.memory.writePadded(k.cpt.returnData, memPos, copyPos, len)
 
   # ---------------
 

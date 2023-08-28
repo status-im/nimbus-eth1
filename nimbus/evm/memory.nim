@@ -54,6 +54,10 @@ proc write*(memory: var Memory, startPos: Natural, value: openArray[byte]) =
   for z, b in value:
     memory.bytes[z + startPos] = b
 
+proc write*(memory: var Memory, startPos: Natural, value: byte) =
+  validateLte(startPos + 1, memory.len)
+  memory.bytes[startPos] = value
+
 proc copy*(memory: var Memory, dst, src, len: Natural) =
   if len <= 0: return
   memory.extend(max(dst, src), len)
@@ -65,3 +69,33 @@ proc copy*(memory: var Memory, dst, src, len: Natural) =
   else: # src > dst
     for i in countdown(len-1, 0):
       memory.bytes[dst+i] = memory.bytes[src+i]
+
+proc writePadded*(memory: var Memory, data: openArray[byte],
+                  memPos, dataPos, len: Natural) =
+
+  memory.extend(memPos, len)
+  let
+    dataEndPos = dataPos.int64 + len
+    dataStart  = min(dataPos, data.len)
+    dataEnd    = min(data.len, dataEndPos)
+    dataLen    = dataEnd - dataStart
+    padStart   = min(memPos + dataLen, memory.len)
+    numPad     = min(memory.len - padStart, len - dataLen)
+    padEnd     = padStart + numPad
+
+  var
+    di = dataStart
+    mi = memPos
+
+  while di < dataEnd:
+    memory.bytes[mi] = data[di]
+    inc di
+    inc mi
+
+  # although memory.extend already pad new block of memory
+  # with zeros, it can be rewrite by some opcode
+  # so we need to clean the garbage if current op supply us with
+  # `data` shorter than `len`
+  while mi < padEnd:
+    memory.bytes[mi] = 0.byte
+    inc mi

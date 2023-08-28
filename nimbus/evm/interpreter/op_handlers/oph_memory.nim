@@ -158,7 +158,7 @@ const
       reason = "MSTORE8: GasVeryLow + memory expansion")
 
     k.cpt.memory.extend(memPos, 1)
-    k.cpt.memory.write(memPos, [value.toByteArrayBE[31]])
+    k.cpt.memory.write(memPos, value.toByteArrayBE[31])
 
   # -------
 
