@@ -246,10 +246,6 @@ template gasCosts*(c: Computation): untyped =
 template fork*(c: Computation): untyped =
   c.vmState.fork
 
-proc isOriginComputation*(c: Computation): bool =
-  # Is this computation the computation initiated by a transaction
-  c.msg.sender == c.vmState.txOrigin
-
 template isSuccess*(c: Computation): bool =
   c.error.isNil
 

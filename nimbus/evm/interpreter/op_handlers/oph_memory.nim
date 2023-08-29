@@ -89,6 +89,12 @@ else:
     c.vmState.mutateStateDB:
       db.setStorage(c.msg.contractAddress, slot, newValue)
 
+template sstoreEvmcOrSstore(cpt, slot, newValue: untyped) =
+  when evmc_enabled:
+    sstoreEvmc(cpt, slot, newValue, 0.GasInt)
+  else:
+    sstoreImpl(cpt, slot, newValue)
+
 template sstoreEvmcOrNetGasMetering(cpt, slot, newValue: untyped, coldAccess = 0.GasInt) =
   when evmc_enabled:
     sstoreEvmc(cpt, slot, newValue, coldAccess)
@@ -191,7 +197,7 @@ const
 
     checkInStaticContext(cpt)
     cpt.asyncChainTo(ifNecessaryGetSlot(cpt.vmState, cpt.msg.contractAddress, slot)):
-      sstoreEvmcOrNetGasMetering(cpt, slot, newValue)
+      sstoreEvmcOrSstore(cpt, slot, newValue)
 
 
   sstoreEIP1283Op: Vm2OpFn = proc (k: var Vm2Ctx) =

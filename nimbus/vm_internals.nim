@@ -92,7 +92,6 @@ export
   bChp.getStorage,
   bChp.getTimestamp,
   bChp.isError,
-  bChp.isOriginComputation,
   bChp.isSuccess,
   bChp.merge,
   bChp.newComputation,

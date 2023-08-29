@@ -39,7 +39,6 @@ export
   vmc.getStorage,
   vmc.getTimestamp,
   vmc.isError,
-  vmc.isOriginComputation,
   vmc.isSuccess,
   vmc.merge,
   vmc.newComputation,
