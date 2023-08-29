@@ -158,7 +158,7 @@ func pp(qt: QTabRef; scd: QidSchedRef): string =
 
 # ------------------
 
-proc exec(db: QTabRef; serial: int; instr: seq[QidAction]): bool =
+proc exec(db: QTabRef; serial: int; instr: seq[QidAction]; relax: bool): bool =
   ## ..
   var
     saved: bool
@@ -187,15 +187,22 @@ proc exec(db: QTabRef; serial: int; instr: seq[QidAction]): bool =
       for w in hold:
         for qid in w[0] .. w[1]:
           let val = db.getOrDefault(qid, QValRef(nil))
-          xCheck not val.isNil
-          if merged.isNil:
-            merged = val
-          else:
-            xCheck merged.fid + merged.width + 1 == val.fid
-            merged.width += val.width + 1
-          db.del qid
-      xCheck not merged.isNil
-      db[act.qid] = merged
+          if not relax:
+            xCheck not val.isNil
+          if not val.isNil:
+            if merged.isNil:
+              merged = val
+            else:
+              if relax:
+                xCheck merged.fid + merged.width + 1 <= val.fid
+              else:
+                xCheck merged.fid + merged.width + 1 == val.fid
+              merged.width += val.width + 1
+            db.del qid
+      if not relax:
+        xCheck not merged.isNil
+      if not merged.isNil:
+        db[act.qid] = merged
       hold.setLen(0)
 
   xCheck saved
@@ -204,7 +211,7 @@ proc exec(db: QTabRef; serial: int; instr: seq[QidAction]): bool =
   true
 
 
-proc validate(db: QTabRef; scd: QidSchedRef; serial: int): bool =
+proc validate(db: QTabRef; scd: QidSchedRef; serial: int; relax: bool): bool =
   ## Verify that the round-robin queues in `db` are consecutive and in the
   ## right order.
   var
@@ -215,13 +222,19 @@ proc validate(db: QTabRef; scd: QidSchedRef; serial: int): bool =
     step *= scd.ctx.q[chn].width + 1        # defined by schedule layout
     for kvp in queue:
       let (qid,val) = (kvp[0], kvp[1])
-      xCheck not val.isNil                  # Entries must exist
-      xCheck val.fid + step == lastVal      # Item distances must match
-      xCheck val.width + 1 == step          # Must correspond to `step` size
-      lastVal = val.fid
+      if not relax:
+        xCheck not val.isNil                # Entries must exist
+        xCheck val.fid + step == lastVal    # Item distances must match
+      if not val.isNil:
+        xCheck val.fid + step <= lastVal    # Item distances must decrease
+        xCheck val.width + 1 == step        # Must correspond to `step` size
+        lastVal = val.fid
 
   # Compare database against expected fill state
-  xCheck db.len == scd.len
+  if relax:
+    xCheck db.len <= scd.len
+  else:
+    xCheck db.len == scd.len
 
   true
 
@@ -363,10 +376,10 @@ proc testQidScheduler*(
 
   for n in 1 .. sampleSize:
     let w = scd.addItem()
-    let execOk = list.exec(serial=n, instr=w.exec)
+    let execOk = list.exec(serial=n, instr=w.exec, relax=false)
     xCheck execOk
     scd[] = w.fifo[]
-    let validateOk = list.validate(scd, serial=n)
+    let validateOk = list.validate(scd, serial=n, relax=false)
     xCheck validateOk:
       show(serial=n, exec=w.exec)
 
@@ -378,7 +391,51 @@ proc testQidScheduler*(
           " scd[", j, "]=", scd[j].pp,
           "\n     fifo=", list.pp scd
 
-  if debug:
+    if debug:
+      show(exec=w.exec)
+
+  # -------------------
+
+  # Mark deleted some entries from database
+  var
+    nDel = (list.len * reorgPercent) div 100
+    delIDs: HashSet[QueueID]
+  for n in 0 ..< nDel:
+    delIDs.incl scd[n]
+
+  # Delete these entries
+  let fetch = scd.fetchItems nDel
+  for act in fetch.exec:
+    xCheck act.op == HoldQid
+    for qid in act.qid .. act.xid:
+      xCheck qid in delIDs
+      xCheck list.hasKey qid
+      delIDs.excl qid
+      list.del qid
+
+  xCheck delIDs.len == 0
+  scd[] = fetch.fifo[]
+
+  # Continue adding items
+  for n in sampleSize + 1 .. 2 * sampleSize:
+    let w = scd.addItem()
+    let execOk = list.exec(serial=n, instr=w.exec, relax=true)
+    xCheck execOk
+    scd[] = w.fifo[]
+    let validateOk = list.validate(scd, serial=n, relax=true)
+    xCheck validateOk:
+      show(serial=n, exec=w.exec)
+
+  # Continue adding items, now strictly
+  for n in 2 * sampleSize + 1 .. 3 * sampleSize:
+    let w = scd.addItem()
+    let execOk = list.exec(serial=n, instr=w.exec, relax=false)
+    xCheck execOk
+    scd[] = w.fifo[]
+    let validateOk = list.validate(scd, serial=n, relax=false)
+    xCheck validateOk
+
+  if debug: # or true:
     show()
 
   true

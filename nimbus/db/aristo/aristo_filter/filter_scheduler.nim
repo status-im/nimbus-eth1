@@ -338,6 +338,126 @@ proc addItem*(
   (revActions.reversed, QidSchedRef(ctx: fifo.ctx, state: state))
 
 
+proc fetchItems*(
+    fifo: QidSchedRef;                             # Cascaded fifos descriptor
+    size: int;                                     # Leading items to merge
+      ): tuple[exec: seq[QidAction], fifo: QidSchedRef] =
+  ## Get the instructions for extracting the latest `size` items from the
+  ## cascaded queues. argument `fifo` is a complete state of the addresses of
+  ## a cascaded *FIFO* when applied to a database. Only the *FIFO* queue
+  ## addresses are used in order to describe how to add another item.
+  ##
+  ## The function returns a list of instructions what to do when adding a new
+  ## item and the new state of the cascaded *FIFO*. The following instructions
+  ## may be returned:
+  ## ::
+  ##    HoldQid <from-id>..<to-id> -- Move the records accessed by the argument
+  ##                               -- addresses from the database to the right
+  ##                               -- end of the local hold queue. The age of
+  ##                               -- the items on the hold queue increases
+  ##                               -- left to right.
+  ##
+  ## The extracted items will then be available from the hold queue.
+  var
+    actions: seq[QidAction]
+    state = fifo.state
+
+  if 0 < size:
+    var size = size.uint64
+
+    for n in 0 ..< fifo.state.len:
+      let q = fifo.state[n]
+      if q[0] == 0:
+        discard
+
+      elif q[0] <= q[1]:
+        # Single file
+        # ::
+        #  |          :
+        #  |  q[0]--> 3
+        #  |          4
+        #  |          5 <--q[1]
+        #  |           :
+        #
+        let qSize = q[1] - q[0] + 1
+
+        if size <= qSize:
+          if size < qSize:
+            state[n][1] = q[1] - size
+          elif state.len == n + 1:
+            state.setLen(n)
+          else:
+            state[n] = (QueueID(0), QueueID(0))
+          actions.add QidAction(
+            op:  HoldQid,
+            qid: n.globalQid(q[1] - size + 1),
+            xid: n.globalQid q[1])
+          break
+
+        actions.add QidAction(
+          op:  HoldQid,
+          qid: n.globalQid q[0],
+          xid: n.globalQid q[1])
+        state[n] = (QueueID(0), QueueID(0))
+
+        size -= qSize # Otherwise continue
+
+      else:
+        # Wrap aound, double files
+        # ::
+        #  |          :
+        #  |          3 <--q[1]
+        #  |          4
+        #  |  q[0]--> 5
+        #  |          :
+        #  |         wrap
+        let
+          wrap = fifo.ctx.q[n].wrap
+          qSize1 = q[1] - QueueID(0)
+
+        if size <= qSize1:
+          if size == qSize1:
+            state[n][1] = wrap
+          else:
+            state[n][1] = q[1] - size
+          actions.add QidAction(
+            op:  HoldQid,
+            qid: n.globalQid(q[1] - size + 1),
+            xid: n.globalQid q[1])
+          break
+
+        actions.add QidAction(
+          op:  HoldQid,
+          qid: n.globalQid QueueID(1),
+          xid: n.globalQid q[1])
+        size -= qSize1 # Otherwise continue
+
+        let qSize0 = wrap - q[0] + 1
+
+        if size <= qSize0:
+          if size < qSize0:
+            state[n][1] = wrap - size
+          elif state.len == n + 1:
+            state.setLen(n)
+          else:
+            state[n] = (QueueID(0), QueueID(0))
+          actions.add QidAction(
+            op:  HoldQid,
+            qid: n.globalQid wrap - size + 1,
+            xid: n.globalQid wrap)
+          break
+
+        actions.add QidAction(
+          op:  HoldQid,
+          qid: n.globalQid q[0],
+          xid: n.globalQid wrap)
+        size -= qSize0
+
+        state[n] = (QueueID(0), QueueID(0))
+
+  (actions, QidSchedRef(ctx: fifo.ctx, state: state))
+
+
 proc lengths*(
     fifo: QidSchedRef;                             # Cascaded fifos descriptor
       ): seq[int] =
