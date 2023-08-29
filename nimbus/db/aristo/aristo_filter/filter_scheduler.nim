@@ -216,7 +216,7 @@ func fifoDel(
 # ------------------------------------------------------------------------------
 
 proc stats*(
-    ctx: openArray[tuple[size, width: int]];
+    ctx: openArray[tuple[size, width: int]];       # Schedule layout
       ): tuple[maxQueue: int, minCovered: int, maxCovered: int] =
   ## Number of maximally stored and covered queued entries for the argument
   ## layout `ctx`. The resulting value of `maxQueue` entry is the maximal
@@ -232,30 +232,29 @@ proc stats*(
     result.maxCovered += (size * step).int
 
 proc stats*(
-    ctx: openArray[tuple[size, width, wrap: int]];
+    ctx: openArray[tuple[size, width, wrap: int]]; # Schedule layout
       ): tuple[maxQueue: int, minCovered: int, maxCovered: int] =
   ## Variant of `stats()`
   ctx.toSeq.mapIt((it[0],it[1])).stats
 
 proc stats*(
-    ctx: QidLayoutRef;
+    ctx: QidLayoutRef;                             # Cascaded fifos descriptor
       ): tuple[maxQueue: int, minCovered: int, maxCovered: int] =
   ## Variant of `stats()`
   ctx.q.toSeq.mapIt((it[0].int,it[1].int)).stats
 
 
 proc addItem*(
-    fifo: QidSchedRef;
+    fifo: QidSchedRef;                             # Cascaded fifos descriptor
       ): tuple[exec: seq[QidAction], fifo: QidSchedRef] =
   ## Get the instructions for adding a new slot to the cascades queues. The
-  ## argument `fifo` is a complete state of the addresses a cascaded *FIFO*
+  ## argument `fifo` is a complete state of the addresses of a cascaded *FIFO*
   ## when applied to a database. Only the *FIFO* queue addresses are needed
   ## in order to describe how to add another item.
   ##
-  ## Return value is a list of instructions what to do when adding a new item
-  ## and the new state of the cascaded *FIFO*.
-  ##
-  ## The following instructions may be returned:
+  ## The function returns a list of instructions what to do when adding a new
+  ## item and the new state of the cascaded *FIFO*. The following instructions
+  ## may be returned:
   ## ::
   ##    SaveQid <queue-id>         -- Store a new item under the address
   ##                               -- <queue-id> on the database.
@@ -271,6 +270,10 @@ proc addItem*(
   ##                               -- <queue-id> on the database. Clear the
   ##                               -- the hold queue.
   ##
+  ##    DelQid <queue-id>          -- Delete item. This happens if the last
+  ##                               -- oberflow queue needs to make space for
+  ##                               -- another item.
+  ##
   let
     ctx = fifo.ctx.q
   var
@@ -280,7 +283,7 @@ proc addItem*(
 
   for n in 0 ..< ctx.len:
     if state.len < n + 1:
-      state.setlen(n + 1)
+      state.setLen(n + 1)
 
     let
       overlapWidth = ctx[(n+1) mod ctx.len].width
@@ -296,6 +299,7 @@ proc addItem*(
         revActions.add QidAction(op: SaveQid, qid: qQidAdded)
       if 0 < deferred.len:
         revActions &= deferred
+        deferred.setLen(0)
       break
 
     else:
@@ -324,7 +328,79 @@ proc addItem*(
 
     # End loop
 
+  # Delete item from final overflow queue. There is only one as `overlapWidth`
+  # is `ctx[0]` which is `0`
+  if 0 < deferred.len:
+    revActions.add QidAction(
+      op:  DelQid,
+      qid: deferred[0].qid)
+
   (revActions.reversed, QidSchedRef(ctx: fifo.ctx, state: state))
+
+
+proc lengths*(
+    fifo: QidSchedRef;                             # Cascaded fifos descriptor
+      ): seq[int] =
+  ## Return the list of lengths for all cascaded sub-fifos.
+  for n in 0 ..< fifo.state.len:
+    result.add fifo.state[n].fifoLen(fifo.ctx.q[n].wrap).int
+
+proc len*(
+    fifo: QidSchedRef;                             # Cascaded fifos descriptor
+      ): int =
+  ## Size of the fifo
+  fifo.lengths.foldl(a + b, 0)
+
+
+proc `[]`*(
+    fifo: QidSchedRef;                             # Cascaded fifos descriptor
+    inx: int;                                      # Index into latest items
+      ): QueueID =
+  ## Get the queue ID of the `inx`-th `fifo` entry where index `0` refers to
+  ## the entry most recently added, `1` the one before, etc. If there is no
+  ## such entry `QueueID(0)` is returned.
+  if 0 <= inx:
+    var inx = inx.uint64
+
+    for n in 0 ..< fifo.state.len:
+      let q = fifo.state[n]
+      if q[0] == 0:
+        discard
+
+      elif q[0] <= q[1]:
+        # Single file
+        # ::
+        #  |          :
+        #  |  q[0]--> 3
+        #  |          4
+        #  |          5 <--q[1]
+        #  |           :
+        #
+        let qInxMax = q[1] - q[0]
+        if inx <= qInxMax:
+          return n.globalQid(q[1] - inx)
+        inx -= qInxMax + 1 # Otherwise continue
+
+      else:
+        # Wrap aound, double files
+        # ::
+        #  |          :
+        #  |          3 <--q[1]
+        #  |          4
+        #  |  q[0]--> 5
+        #  |          :
+        #  |         wrap
+        let qInxMax1 = q[1] - QueueID(1)
+        if inx <= qInxMax1:
+          return n.globalQid(q[1] - inx)
+        inx -= qInxMax1 + 1 # Otherwise continue
+
+        let
+          wrap = fifo.ctx.q[n].wrap
+          qInxMax0 = wrap - q[0]
+        if inx <= qInxMax0:
+          return n.globalQid(wrap - inx)
+        inx -= qInxMax0 + 1 # Otherwise continue
 
 # ------------------------------------------------------------------------------
 # End
