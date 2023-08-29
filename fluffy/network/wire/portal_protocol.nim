@@ -170,6 +170,7 @@ type
     radiusCache: RadiusCache
     offerQueue: AsyncQueue[OfferRequest]
     offerWorkers: seq[Future[void]]
+    disablePoke: bool
 
   PortalResult*[T] = Result[T, string]
 
@@ -467,7 +468,8 @@ proc new*(T: type PortalProtocol,
     bootstrapRecords: @bootstrapRecords,
     stream: stream,
     radiusCache: RadiusCache.init(256),
-    offerQueue: newAsyncQueue[OfferRequest](concurrentOffers))
+    offerQueue: newAsyncQueue[OfferRequest](concurrentOffers),
+    disablePoke: config.disablePoke)
 
   proto.baseProtocol.registerTalkProtocol(@(proto.protocolId), proto).expect(
     "Only one protocol should have this id")
@@ -933,6 +935,11 @@ proc triggerPoke*(
     nodes: seq[Node],
     contentKey: ByteList,
     content: seq[byte]) =
+  ## In order to properly test gossip mechanisms (e.g. in Portal Hive),
+  ## we need the option to turn off the POKE functionality as it influences
+  ## how data moves around the network.
+  if p.disablePoke:                                                                                                                       
+    return 
   ## Triggers asynchronous offer-accept interaction to provided nodes.
   ## Provided content should be in range of provided nodes.
   for node in nodes:
