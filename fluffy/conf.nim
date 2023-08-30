@@ -226,6 +226,13 @@ type
       defaultValue: none(TrustedDigest)
       name: "trusted-block-root" .}: Option[TrustedDigest]
 
+    disablePoke* {.
+      hidden
+      desc: "Disable POKE functionality for gossip mechanisms testing"
+      defaultValue: defaultDisablePoke
+      defaultValueDesc: $defaultDisablePoke
+      name: "disable-poke" .}: bool
+
     case cmd* {.
       command
       defaultValue: noCommand .}: PortalCmd

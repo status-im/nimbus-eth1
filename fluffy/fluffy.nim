@@ -166,7 +166,8 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
       config.tableIpLimit,
       config.bucketIpLimit,
       config.bitsPerHop,
-      config.radiusConfig
+      config.radiusConfig,
+      config.disablePoke
     )
     streamManager = StreamManager.new(d)
 

@@ -27,10 +27,12 @@ type
     tableIpLimits*: TableIpLimits
     bitsPerHop*: int
     radiusConfig*: RadiusConfig
+    disablePoke*: bool
 
 const
   defaultRadiusConfig* = RadiusConfig(kind: Dynamic)
   defaultRadiusConfigDesc* = $defaultRadiusConfig.kind
+  defaultDisablePoke* = false
 
   defaultPortalProtocolConfig* = PortalProtocolConfig(
     tableIpLimits: DefaultTableIpLimits,
@@ -43,14 +45,16 @@ proc init*(
     tableIpLimit: uint,
     bucketIpLimit: uint,
     bitsPerHop: int,
-    radiusConfig: RadiusConfig): T =
+    radiusConfig: RadiusConfig,
+    disablePoke: bool): T =
 
   PortalProtocolConfig(
     tableIpLimits: TableIpLimits(
       tableIpLimit: tableIpLimit,
       bucketIpLimit: bucketIpLimit),
     bitsPerHop: bitsPerHop,
-    radiusConfig: radiusConfig
+    radiusConfig: radiusConfig,
+    disablePoke: disablePoke
   )
 
 proc parseCmdArg*(T: type RadiusConfig, p: string): T
