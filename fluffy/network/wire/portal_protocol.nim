@@ -393,11 +393,22 @@ proc messageHandler(protocol: TalkProtocol, request: seq[byte],
   if decoded.isOk():
     let message = decoded.get()
     trace "Received message request", srcId, srcUdpAddress, kind = message.kind
-    # If the returned message was part of a handshake, an ENR might be provided
-    # by the discovery v5 layer. In that case, add the ENR to the portal network
+    # Received a proper Portal message, check first if an ENR is provided by
+    # the discovery v5 layer and add it to the portal network routing table.
+    # If not provided through the handshake, try to get it from the discovery v5
     # routing table.
+    # When the node would be eligable for the portal network routing table, it
+    # is possible that it exists in the base discv5 routing table as the same
+    # node ids are used. It is not certain at all however as more nodes might
+    # exists on the base layer, and it will also depend on the distance,
+    # order of lookups, etc.
+    # Note: As third measure, could run a findNodes request with distance 0.
     if node.isSome():
       discard p.routingTable.addNode(node.get())
+    else:
+      let node = p.baseProtocol.getNode(srcId)
+      if node.isSome():
+        discard p.routingTable.addNode(node.get())
 
     portal_message_requests_incoming.inc(
       labelValues = [$p.protocolId, $message.kind])

@@ -131,10 +131,6 @@ procSuite "Portal Wire Protocol Tests":
     check (await proto1.baseProtocol.ping(proto2.localNode)).isOk()
     check (await proto2.baseProtocol.ping(proto1.localNode)).isOk()
 
-    # Start the portal protocol to seed nodes from the discoveryv5 routing
-    # table.
-    proto2.start()
-
     let contentKey = ByteList.init(@[1'u8])
 
     # content does not exist so this should provide us with the closest nodes
