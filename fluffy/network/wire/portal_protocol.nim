@@ -381,7 +381,7 @@ proc handleOffer(p: PortalProtocol, o: OfferMessage, srcId: NodeId): seq[byte] =
     AcceptMessage(connectionId: connectionId, contentKeys: contentKeysBitList))
 
 proc messageHandler(protocol: TalkProtocol, request: seq[byte],
-    srcId: NodeId, srcUdpAddress: Address): seq[byte] =
+    srcId: NodeId, srcUdpAddress: Address, node: Opt[Node]): seq[byte] =
   doAssert(protocol of PortalProtocol)
 
   logScope:
@@ -393,18 +393,22 @@ proc messageHandler(protocol: TalkProtocol, request: seq[byte],
   if decoded.isOk():
     let message = decoded.get()
     trace "Received message request", srcId, srcUdpAddress, kind = message.kind
-    # Received a proper Portal message, check if this node exists in the base
-    # routing table and add if so.
-    # When the node exists in the base discv5 routing table it is likely that
-    # it will/would end up in the portal routing tables too but that is not
-    # certain as more nodes might exists on the base layer, and it will depend
-    # on the distance, order of lookups, etc.
-    # Note: Could add a findNodes with distance 0 call when not, and perhaps,
-    # optionally pass ENRs if the message was a discv5 handshake containing the
-    # ENR.
-    let node = p.baseProtocol.getNode(srcId)
+    # Received a proper Portal message, check first if an ENR is provided by
+    # the discovery v5 layer and add it to the portal network routing table.
+    # If not provided through the handshake, try to get it from the discovery v5
+    # routing table.
+    # When the node would be eligable for the portal network routing table, it
+    # is possible that it exists in the base discv5 routing table as the same
+    # node ids are used. It is not certain at all however as more nodes might
+    # exists on the base layer, and it will also depend on the distance,
+    # order of lookups, etc.
+    # Note: As third measure, could run a findNodes request with distance 0.
     if node.isSome():
       discard p.routingTable.addNode(node.get())
+    else:
+      let node = p.baseProtocol.getNode(srcId)
+      if node.isSome():
+        discard p.routingTable.addNode(node.get())
 
     portal_message_requests_incoming.inc(
       labelValues = [$p.protocolId, $message.kind])
