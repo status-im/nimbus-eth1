@@ -350,19 +350,16 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
 
     nimbus.chainRef.clique.authorize(conf.engineSigner, signFunc)
 
-  # always create sealing engine instance but not always run it
-  # e.g. engine api need sealing engine without it running
-  var initialState = EngineStopped
-  if com.forkGTE(MergeFork):
-     initialState = EnginePostMerge
-  nimbus.sealingEngine = SealingEngineRef.new(
-    nimbus.chainRef, nimbus.ctx, conf.engineSigner,
-    nimbus.txPool, initialState
-  )
+  # disable sealing engine if beacon engine enabled
+  if not com.forkGTE(MergeFork):
+    nimbus.sealingEngine = SealingEngineRef.new(
+      nimbus.chainRef, nimbus.ctx, conf.engineSigner,
+      nimbus.txPool, EngineStopped
+    )
 
-  # only run sealing engine if there is a signer
-  if conf.engineSigner != ZERO_ADDRESS:
-    nimbus.sealingEngine.start()
+    # only run sealing engine if there is a signer
+    if conf.engineSigner != ZERO_ADDRESS:
+      nimbus.sealingEngine.start()
 
   if conf.engineApiEnabled:
     #let maybeAsyncDataSource = maybeStatelessAsyncDataSource(nimbus, conf)
@@ -465,7 +462,7 @@ proc stop*(nimbus: NimbusNode, conf: NimbusConf) {.async, gcsafe.} =
     nimbus.engineApiWsServer.stop()
   if conf.graphqlEnabled:
     await nimbus.graphqlServer.stop()
-  if conf.engineSigner != ZERO_ADDRESS:
+  if conf.engineSigner != ZERO_ADDRESS and nimbus.sealingEngine.isNil.not:
     await nimbus.sealingEngine.stop()
   if conf.maxPeers > 0:
     await nimbus.networkLoop.cancelAndWait()
