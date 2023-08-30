@@ -15,10 +15,12 @@ import
   ../../common/common,
   ../../db/accounts_cache,
   ../../transaction/call_evm,
+  ../../transaction/call_common,
   ../../transaction,
   ../../vm_state,
   ../../vm_types,
   ../../evm/async/operations,
+  ../../constants,
   ../validate,
   chronos,
   stew/results
@@ -128,6 +130,43 @@ proc asyncProcessTransactionImpl(
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
+
+proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash256):
+                              Result[void, string] {.raises: [CatchableError].} =
+  ## processBeaconBlockRoot applies the EIP-4788 system call to the
+  ## beacon block root contract. This method is exported to be used in tests.
+  ## If EIP-4788 is enabled, we need to invoke the beaconroot storage
+  ## contract with the new root.
+  let
+    statedb = vmState.stateDB
+    call = CallParams(
+      vmState:  vmState,
+      sender:   SystemAddress,
+      gasLimit: 30_000_000.GasInt,
+      gasPrice: 0.GasInt,
+      to:       BeaconRootsStorageAddress,
+      input:    @(beaconRoot.data),
+    )
+
+  # runComputation a.k.a syscall/evm.call
+  if call.runComputation().isError:
+    return err("processBeaconBlockRoot: syscall error")
+
+  # We can choose to set SystemAddress nonce to 0
+  # like erigon or geth(their EVM have explicit nonce set)
+  # or we delete the account manually instead of let it deleted
+  # by AccountsCache.persist.
+  statedb.deleteAccount(SystemAddress)
+
+  when false:
+    # nimbus EVM automatically increase sender nonce by one
+    # for each call/create.
+    statedb.setNonce(SystemAddress, 0)
+    # statedb.persist probably not needed as each processTransaction
+    # will call it.
+    statedb.persist(clearEmptyAccount = true, clearCache = false)
+
+  ok()
 
 proc asyncProcessTransaction*(
     vmState: BaseVMState; ## Parent accounts environment for transaction

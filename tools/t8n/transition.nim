@@ -101,7 +101,7 @@ proc envToHeader(env: EnvStruct): BlockHeader =
     fee        : env.currentBaseFee,
     withdrawalsRoot: env.withdrawals.calcWithdrawalsRoot(),
     blobGasUsed: env.currentBlobGasUsed,
-    excessBlobGas: env.currentExcessBlobGas
+    excessBlobGas: env.currentExcessBlobGas,
   )
 
 proc postState(db: AccountsCache, alloc: var GenesisAlloc) =
@@ -217,6 +217,10 @@ proc exec(ctx: var TransContext,
   vmState.receipts = newSeqOfCap[Receipt](txList.len)
   vmState.cumulativeGasUsed = 0
 
+  if ctx.env.parentBeaconBlockRoot.isSome:
+    vmState.processBeaconBlockRoot(ctx.env.parentBeaconBlockRoot.get).isOkOr:
+      raise newError(ErrorConfig, error)
+
   var blobGasUsed = 0'u64
   for txIndex, txRes in txList:
     if txRes.isErr:
@@ -306,8 +310,8 @@ proc exec(ctx: var TransContext,
   )
 
   if fork >= FkCancun:
-    result.result.blobGasUsed = some blobGasUsed
-    result.result.excessBlobGas = some calcExcessBlobGas(vmState.parent)
+    result.result.currentBlobGasUsed = some blobGasUsed
+    result.result.currentExcessBlobGas = some calcExcessBlobGas(vmState.parent)
 
 template wrapException(body: untyped) =
   when wrapExceptionEnabled:
@@ -413,7 +417,7 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
       ommersHash: uncleHash,
       blockNumber: ctx.env.currentNumber - 1.toBlockNumber,
       blobGasUsed: ctx.env.parentBlobGasUsed,
-      excessBlobGas: ctx.env.parentExcessBlobGas
+      excessBlobGas: ctx.env.parentExcessBlobGas,
     )
 
     # Sanity check, to not `panic` in state_transition
@@ -436,9 +440,15 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
       if ctx.env.parentExcessBlobGas.isNone:
         raise newError(ErrorConfig, "Cancun config but missing 'parentExcessBlobGas' in env section")
 
+      if ctx.env.parentBeaconBlockRoot.isNone:
+        raise newError(ErrorConfig, "Cancun config but missing 'parentBeaconBlockRoot' in env section")
+
       let res = loadKzgTrustedSetup()
       if res.isErr:
         raise newError(ErrorConfig, res.error)
+    else:
+      # un-set it if it has been set too early
+      ctx.env.parentBeaconBlockRoot = none(Hash256)
 
     if com.forkGTE(MergeFork):
       if ctx.env.currentRandom.isNone:

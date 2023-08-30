@@ -339,6 +339,10 @@ type Block {
   # (bounded at 0).
   excessBlobGas: Long
 
+  # EIP-4788: This root consumes 32 bytes and is exactly the hash tree root
+  # of the parent beacon block for the given execution block.
+  parentBeaconBlockRoot: Bytes32
+
   #--------------------------Extensions-------------------------------
 
   # RawHeader is the RLP encoding of the block's header.

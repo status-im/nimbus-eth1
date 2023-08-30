@@ -1158,6 +1158,14 @@ proc blockexcessBlobGas(ud: RootRef, params: Args, parent: Node): RespResult {.a
   else:
     ok(respNull())
 
+proc blockParentBeaconBlockRoot(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+  let h = HeaderNode(parent)
+  if h.header.parentBeaconBlockRoot.isSome:
+    resp(h.header.parentBeaconBlockRoot.get)
+  else:
+    ok(respNull())
+
+
 const blockProcs = {
   "parent": blockParent,
   "number": blockNumberImpl,
@@ -1190,7 +1198,8 @@ const blockProcs = {
   "withdrawalsRoot": blockWithdrawalsRoot,
   "withdrawals": blockWithdrawals,
   "blobGasUsed": blockBlobGasUsed,
-  "excessBlobGas": blockExcessBlobGas
+  "excessBlobGas": blockExcessBlobGas,
+  "parentBeaconBlockRoot": blockParentBeaconBlockRoot,
 }
 
 proc callResultData(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =

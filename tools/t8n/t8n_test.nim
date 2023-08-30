@@ -524,6 +524,24 @@ const
       output: T8nOutput(trace: true, result: true),
       expOut: "exp.txt",
     ),
+    TestSpec(
+      name  : "Cancun tests",
+      base  : "testdata/28",
+      input : t8nInput(
+        "alloc.json", "txs.rlp", "env.json", "Cancun", "",
+      ),
+      output: T8nOutput(alloc: true, result: true),
+      expOut: "exp.json",
+    ),
+    TestSpec(
+      name  : "More cancun tests",
+      base  : "/testdata/29",
+      input : t8nInput(
+        "alloc.json", "txs.json", "env.json", "Cancun", "",
+      ),
+      output: T8nOutput(alloc: true, result: true),
+      expOut: "exp.json",
+    ),
   ]
 
 proc main() =
