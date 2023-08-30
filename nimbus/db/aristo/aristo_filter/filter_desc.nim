@@ -32,6 +32,7 @@ type
     SaveQid                        ## Store new item
     HoldQid                        ## Move/append range items to local queue
     DequQid                        ## Store merged local queue items
+    DelQid                         ## Delete entry from last overflow queue
 
   QidLayoutRef* = ref object
     ## Layout of cascaded list of filter ID slot queues where a slot queue

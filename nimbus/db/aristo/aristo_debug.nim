@@ -86,6 +86,11 @@ proc ppVid(vid: VertexID; pfx = true): string =
   else:
     result &= "ø"
 
+proc ppFid(fid: FilterID): string =
+  if not fid.isValid:
+    return "ø"
+  "@" & $fid
+
 proc ppQid(qid: QueueID): string =
   if not qid.isValid:
     return "ø"
@@ -470,6 +475,9 @@ proc pp*(vid: VertexID): string =
 
 proc pp*(qid: QueueID): string =
   qid.ppQid
+
+proc pp*(fid: FilterID): string =
+  fid.ppFid
 
 proc pp*(a: openArray[(QueueID,QueueID)]): string =
   "[" & a.toSeq.mapIt("(" & it[0].pp & "," & it[1].pp & ")").join(",") & "]"
