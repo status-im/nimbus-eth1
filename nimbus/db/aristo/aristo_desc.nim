@@ -109,6 +109,9 @@ func isValid*(vid: VertexID): bool =
 func isValid*(qid: QueueID): bool =
   qid != QueueID(0)
 
+func isValid*(fid: FilterID): bool =
+  fid != FilterID(0)
+
 # ------------------------------------------------------------------------------
 # Public functions, miscellaneous
 # ------------------------------------------------------------------------------

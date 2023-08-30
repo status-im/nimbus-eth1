@@ -236,6 +236,28 @@ proc validate(db: QTabRef; scd: QidSchedRef; serial: int; relax: bool): bool =
   else:
     xCheck db.len == scd.len
 
+  proc qFn(qid: QueueID): FilterID =
+    let val = db.getOrDefault(qid, QValRef(nil))
+    if not val.isNil:
+      return val.fid
+
+  # Test filter ID selection
+  var lastFid = FilterID(serial + 1)
+
+  xCheck scd.le(lastFid + 0, qFn) == scd[0] # Test fringe condition
+  xCheck scd.le(lastFid + 1, qFn) == scd[0] # Test fringe condition
+
+  for (qid,val) in db.fifos(scd).flatten:
+    for w in (lastFid-1).countDown val.fid:
+      xCheck scd.le(w, qFn) == qid
+    lastFid = val.fid
+
+  if FilterID(1) < lastFid:                 # Test fringe condition
+    xCheck scd.le(lastFid - 1, qFn) == QueueID(0)
+
+  if FilterID(2) < lastFid:                 # Test fringe condition
+    xCheck scd.le(lastFid - 2, qFn) == QueueID(0)
+
   true
 
 # ------------------------------------------------------------------------------
@@ -328,27 +350,27 @@ proc testQidScheduler*(
   ##    QueueID |       QValRef    |
   ##            | FilterID | width | comment
   ##    --------+----------+-------+----------------------------------
-  ##    %7      |  9997    |   0   | %7 stands for QueueID(7)
-  ##    %8      |  9998    |   0   |
+  ##    %a      | 10000    |   0   | %a stands for QueueID(10)
   ##    %9      |  9999    |   0   |
-  ##    %a      | 10000    |   0   |
+  ##    %8      |  9998    |   0   |
+  ##    %7      |  9997    |   0   |
   ##            |          |       |
-  ##    %1:6    |  9981    |   3   | %1:6 stands for QueueID((1 shl 62) + 6)
-  ##    %1:7    |  9985    |   3   |
-  ##    %1:8    |  9989    |   3   |
   ##    %1:9    |  9993    |   3   | 9993 + 3 + 1 => 9997, see %7
+  ##    %1:8    |  9989    |   3   |
+  ##    %1:7    |  9985    |   3   |
+  ##    %1:6    |  9981    |   3   | %1:6 stands for QueueID((1 shl 62) + 6)
   ##            |          |       |
-  ##    %2:3    |  9841    |  19   |
-  ##    %2:4    |  9861    |  19   |
-  ##    %2:5    |  9881    |  19   |
-  ##    %2:6    |  9901    |  19   |
-  ##    %2:7    |  9921    |  19   |
-  ##    %2:8    |  9941    |  19   |
   ##    %2:9    |  9961    |  19   | 9961 + 19 + 1 => 9981, see %1:6
+  ##    %2:8    |  9941    |  19   |
+  ##    %2:7    |  9921    |  19   |
+  ##    %2:6    |  9901    |  19   |
+  ##    %2:5    |  9881    |  19   |
+  ##    %2:4    |  9861    |  19   |
+  ##    %2:3    |  9841    |  19   |
   ##            |          |       |
-  ##    %3:a    |  9481    | 119   |
-  ##    %3:1    |  9601    | 119   |
   ##    %3:2    |  9721    | 119   | 9721 + 119 + 1 => 9871, see %2:3
+  ##    %3:1    |  9601    | 119   |
+  ##    %3:a    |  9481    | 119   |
   ##
   var
     debug = false # or true
@@ -415,6 +437,8 @@ proc testQidScheduler*(
 
   xCheck delIDs.len == 0
   scd[] = fetch.fifo[]
+
+  # -------------------
 
   # Continue adding items
   for n in sampleSize + 1 .. 2 * sampleSize:

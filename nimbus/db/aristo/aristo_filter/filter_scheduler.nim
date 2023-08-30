@@ -13,6 +13,20 @@ import
   ".."/[aristo_constants, aristo_desc],
   ./filter_desc
 
+type
+  QuFilMap* = proc(qid: QueueID): FilterID {.gcsafe, raises: [].}
+    ## The map `fn: QueueID -> FilterID` can be augmented to a strictly
+    ## *decreasing* map `g: {0 .. N} -> FilterID`, with `g = fn([])`
+    ##
+    ## * `i < j` => `fn(fifo[j]) < fn(fifo[i])`
+    ##
+    ## for a `fifo` of type `QidSchedRef`, `N = fifo.len` and the function
+    ## `[]: {0 .. N} -> QueueID` as defined below.
+    ##
+    ## This *decreasing* requirement can be seen as a generalisation of a
+    ## block chain scenario with `i`, `j`  backward steps into the past and
+    ## the `FilterID` as the block number.
+
 const
   ZeroQidPair = (QueueID(0),QueueID(0))
 
@@ -521,6 +535,47 @@ proc `[]`*(
         if inx <= qInxMax0:
           return n.globalQid(wrap - inx)
         inx -= qInxMax0 + 1 # Otherwise continue
+
+proc le*(
+    fifo: QidSchedRef;                             # Cascaded fifos descriptor
+    fid: FilterID;                                 # Upper bound
+    fn: QuFilMap;                                  # QueueID/FilterID mapping
+      ): QueueID =
+  ## Find the `qid` address of type `QueueID` with
+  ## * `fn(qid) <= fid`
+  ## * for all `qid1` with `fn(qid1) <= fid` one has `fn(qid1) <= fn(qid)`
+  ##
+  ## The argument type `QuFilMap` of map `fn()` has been commented on earlier.
+  ##
+  var
+    left = 0
+    right = fifo.len - 1
+
+  if 0 <= right:
+    let maxQid = fifo[left]
+    if maxQid.fn <= fid:
+      return maxQid
+
+    # Bisection
+    if fifo[right].fn <= fid:
+      while 1 < right - left:
+        let half = (left + right) div 2
+        #
+        # FilterID:   100      70       33
+        # inx:        left ... half ... right
+        # fid:             77
+        #
+        # with `fifo[left].fn > fid >= fifo[right].fn`
+        #
+        if fid >= fifo[half].fn:
+          right = half
+        else: # fifo[half].fn > fid
+          left = half
+
+      # Now: `fifo[right].fn <= fid < fifo[left].fn` (and `right == left+1`)
+      return fifo[right]
+
+  # otherwise QueueID(0)
 
 # ------------------------------------------------------------------------------
 # End
