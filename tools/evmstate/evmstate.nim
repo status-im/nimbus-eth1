@@ -212,13 +212,20 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
     if conf.jsonEnabled:
       writeRootHashToStderr(vmState)
 
-  let rc = vmState.processTransaction(
-                ctx.tx, sender, ctx.header, fork)
-  if rc.isOk:
-    gasUsed = rc.value
-
-  let miner = ctx.header.coinbase
-  coinbaseStateClearing(vmState, miner, fork)
+  try:
+    let rc = vmState.processTransaction(
+                  ctx.tx, sender, ctx.header, fork)
+    if rc.isOk:
+      gasUsed = rc.value
+  
+    let miner = ctx.header.coinbase
+    coinbaseStateClearing(vmState, miner, fork)
+  except CatchableError as ex:
+    echo "FATAL: ", ex.msg
+    quit(QuitFailure)
+  except AssertionDefect as ex:
+    echo "FATAL: ", ex.msg
+    quit(QuitFailure)
 
 proc toTracerFlags(conf: Stateconf): set[TracerFlags] =
   result = {

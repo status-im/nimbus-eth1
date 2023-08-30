@@ -83,12 +83,13 @@ proc toCaseStmt(forkArg, opArg, k: NimNode): NimNode =
     var forkCaseSubExpr = nnkCaseStmt.newTree(branchOnFork)
     for fork in EVMFork:
       let asFork = quote do: EVMFork(`fork`)
+      let gcTable = forkToGck[fork]
 
       let branchStmt = block:
         if op == Stop:
           quote do:
             handleStopDirective(`k`)
-        elif BaseGasCosts[op].kind == GckFixed:
+        elif gcTable[op] == GckFixed:
           quote do:
             handleFixedGasCostsDirective(`asFork`,`asOp`,`k`)
         else:

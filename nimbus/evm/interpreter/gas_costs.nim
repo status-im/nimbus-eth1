@@ -866,6 +866,31 @@ gasCosts(FkBerlin, berlin, BerlinGasCosts)
 gasCosts(FkLondon, london, LondonGasCosts)
 gasCosts(FkShanghai, shanghai, ShanghaiGasCosts)
 
+type
+  OpGck* = array[Op, GasCostKind]
+
+func opGck(gc: GasCosts): OpGck {.compileTime.} =
+  for op, x in gc:
+    result[op] = x.kind
+
+# Map fork to GasCostKind
+# used in op_dispatcher.nim
+const forkToGck*: array[EVMFork, OpGck] = [
+  opGck BaseGasCosts          , # FkFrontier
+  opGck HomesteadGasCosts     , # FkHomestead
+  opGck TangerineGasCosts     , # kTangerine
+  opGck SpuriousGasCosts      , # FkSpurious
+  opGck SpuriousGasCosts      , # FkByzantium
+  opGck ConstantinopleGasCosts, # FkConstantinople
+  opGck SpuriousGasCosts      , # FkPetersburg
+  opGck IstanbulGasCosts      , # FkIstanbul
+  opGck BerlinGasCosts        , # FkBerlin
+  opGck LondonGasCosts        , # FkLondon
+  opGck LondonGasCosts        , # FkParis
+  opGck ShanghaiGasCosts      , # FkShanghai
+  opGck ShanghaiGasCosts      , # FkCancun
+  ]
+
 proc forkToSchedule*(fork: EVMFork): GasCosts =
   if fork < FkHomestead:
     BaseGasCosts
