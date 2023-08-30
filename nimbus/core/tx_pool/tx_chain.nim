@@ -230,6 +230,9 @@ proc getHeader*(dh: TxChainRef): BlockHeader
   if dh.com.forkGTE(Shanghai):
     result.withdrawalsRoot = some(calcWithdrawalsRoot(dh.withdrawals))
 
+  if dh.com.forkGTE(Cancun):
+    result.parentBeaconBlockRoot = some(dh.com.pos.parentBeaconBlockRoot)
+
   dh.prepareForSeal(result)
 
 proc clearAccounts*(dh: TxChainRef)

@@ -244,6 +244,8 @@ proc populateBlockObject*(header: BlockHeader, chain: CoreDbRef, fullTx: bool, i
   if header.excessBlobGas.isSome:
     result.excessBlobGas = some(encodeQuantity(header.excessBlobGas.get))
 
+  result.parentBeaconBlockRoot = header.parentBeaconBlockRoot
+
 proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction,
                       txIndex: int, header: BlockHeader): ReceiptObject
     {.gcsafe, raises: [ValidationError].} =

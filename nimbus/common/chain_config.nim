@@ -37,6 +37,7 @@ type
     baseFeePerGas*: Option[UInt256]
     blobGasUsed*  : Option[uint64]    # EIP-4844
     excessBlobGas*: Option[uint64]    # EIP-4844
+    parentBeaconBlockRoot*: Option[Hash256]   # EIP-4788
 
   GenesisAlloc* = Table[EthAddress, GenesisAccount]
   GenesisAccount* = object
@@ -69,6 +70,7 @@ type
     baseFeePerGas*: Option[UInt256]
     blobGasUsed*  : Option[uint64]    # EIP-4844
     excessBlobGas*: Option[uint64]    # EIP-4844
+    parentBeaconBlockRoot*: Option[Hash256]   # EIP-4788
 
 const
   CustomNet*  = 0.NetworkId

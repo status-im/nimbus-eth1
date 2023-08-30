@@ -670,7 +670,7 @@ func witnessData(acc: RefAccount): WitnessData =
   result.storageKeys = initHashSet[UInt256]()
   update(result, acc)
 
-proc collectWitnessData*(ac: var AccountsCache) =
+proc collectWitnessData*(ac: AccountsCache) =
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
   # usually witness data is collected before we call persist()
@@ -694,10 +694,10 @@ proc makeMultiKeys*(ac: AccountsCache): MultikeysRef =
     result.add(k, v.codeTouched, multiKeys(v.storageKeys))
   result.sort()
 
-proc accessList*(ac: var AccountsCache, address: EthAddress) {.inline.} =
+proc accessList*(ac: AccountsCache, address: EthAddress) {.inline.} =
   ac.savePoint.accessList.add(address)
 
-proc accessList*(ac: var AccountsCache, address: EthAddress, slot: UInt256) {.inline.} =
+proc accessList*(ac: AccountsCache, address: EthAddress, slot: UInt256) {.inline.} =
   ac.savePoint.accessList.add(address, slot)
 
 func inAccessList*(ac: AccountsCache, address: EthAddress): bool =

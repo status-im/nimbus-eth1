@@ -155,6 +155,9 @@ proc generatePayload*(ben: BeaconEngineRef,
     pos.prevRandao   = ethHash attrs.prevRandao
     pos.timestamp    = ethTime attrs.timestamp
     pos.feeRecipient = ethAddr attrs.suggestedFeeRecipient
+    
+    if attrs.parentBeaconBlockRoot.isSome:
+      pos.parentBeaconBlockRoot = ethHash attrs.parentBeaconBlockRoot.get
 
     xp.setWithdrawals(attrs)
 

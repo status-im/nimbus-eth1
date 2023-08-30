@@ -115,7 +115,8 @@ proc parseHeader*(n: JsonNode): BlockHeader =
     mixDigest  : omitZero(Hash256, "currentRandom"),
     fee        : optional(UInt256, "currentBaseFee"),
     excessBlobGas: optional(uint64, "excessBlobGas"),
-    blobGasUsed: optional(uint64, "blobGasUsed")
+    blobGasUsed: optional(uint64, "blobGasUsed"),
+    parentBeaconBlockRoot: optional(Hash256, "parentBeaconBlockRoot"),
   )
 
 proc parseTx*(n: JsonNode, dataIndex, gasIndex, valueIndex: int): Transaction =

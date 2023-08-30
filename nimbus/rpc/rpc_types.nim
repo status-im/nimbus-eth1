@@ -66,7 +66,7 @@ type
     difficulty*: HexQuantityStr            # integer of the difficulty for this block.
     totalDifficulty*: HexQuantityStr       # integer of the total difficulty of the chain until this block.
     extraData*: HexDataStr                 # the "extra data" field of this block.
-    mixHash*: Hash256                      
+    mixHash*: Hash256
     size*: HexQuantityStr                  # integer the size of this block in bytes.
     gasLimit*: HexQuantityStr              # the maximum gas allowed in this block.
     gasUsed*: HexQuantityStr               # the total used gas by all transactions in this block.
@@ -78,6 +78,7 @@ type
     withdrawalsRoot*: Option[Hash256]      # EIP-4895
     blobGasUsed*: Option[HexQuantityStr]   # EIP-4844
     excessBlobGas*: Option[HexQuantityStr] # EIP-4844
+    parentBeaconBlockRoot*: Option[Hash256] # EIP-4788
 
   TransactionObject* = object       # A transaction object, or null when no transaction was found:
     # Returned to user
@@ -97,7 +98,7 @@ type
     value*: HexQuantityStr                    # value transferred in Wei.
     v*: HexQuantityStr                        # ECDSA recovery id
     r*: HexQuantityStr                        # 32 Bytes - ECDSA signature r
-    s*: HexQuantityStr                        # 32 Bytes - ECDSA signature s    
+    s*: HexQuantityStr                        # 32 Bytes - ECDSA signature s
     chainId*: Option[HexQuantityStr]          # EIP-159
     accessList*: Option[seq[AccessTuple]]     # EIP-2930
     maxFeePerBlobGas*: Option[HexQuantityStr] # EIP-4844

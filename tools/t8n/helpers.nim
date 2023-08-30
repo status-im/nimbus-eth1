@@ -183,6 +183,7 @@ proc parseEnv*(ctx: var TransContext, n: JsonNode) =
   optional(ctx.env, uint64, currentExcessBlobGas)
   optional(ctx.env, uint64, parentBlobGasUsed)
   optional(ctx.env, uint64, parentExcessBlobGas)
+  optional(ctx.env, Hash256, parentBeaconBlockRoot)
 
   if n.hasKey("blockHashes"):
     let w = n["blockHashes"]
@@ -442,7 +443,7 @@ proc `@@`*(x: ExecutionResult): JsonNode =
     result["currentBaseFee"] = @@(x.currentBaseFee)
   if x.withdrawalsRoot.isSome:
     result["withdrawalsRoot"] = @@(x.withdrawalsRoot)
-  if x.blobGasUsed.isSome:
-    result["blobGasUsed"] = @@(x.blobGasUsed)
-  if x.excessBlobGas.isSome:
-    result["excessBlobGas"] = @@(x.excessBlobGas)
+  if x.currentBlobGasUsed.isSome:
+    result["currentBlobGasUsed"] = @@(x.currentBlobGasUsed)
+  if x.currentExcessBlobGas.isSome:
+    result["currentExcessBlobGas"] = @@(x.currentExcessBlobGas)

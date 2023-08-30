@@ -48,6 +48,7 @@ type
     currentExcessBlobGas*: Option[uint64]
     parentBlobGasUsed*: Option[uint64]
     parentExcessBlobGas*: Option[uint64]
+    parentBeaconBlockRoot*: Option[Hash256]
 
   TxsType* = enum
     TxsNone
@@ -96,8 +97,8 @@ type
     gasUsed*: GasInt
     currentBaseFee*: Option[UInt256]
     withdrawalsRoot*: Option[Hash256]
-    blobGasUsed*: Option[uint64]
-    excessBlobGas*: Option[uint64]
+    currentBlobGasUsed*: Option[uint64]
+    currentExcessBlobGas*: Option[uint64]
 
 const
   ErrorEVM*              = 2.T8NExitCode

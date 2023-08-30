@@ -14,6 +14,7 @@ type
     feeRecipient : EthAddress
     timestamp    : EthTime
     prevRandao   : Hash256
+    parentBeaconBlockRoot: Hash256
 
 proc prepare*(ctx: CasperRef, header: var BlockHeader) =
   header.coinbase   = ctx.feeRecipient
@@ -40,6 +41,9 @@ func timestamp*(ctx: CasperRef): EthTime =
 func prevRandao*(ctx: CasperRef): Hash256 =
   ctx.prevRandao
 
+func parentBeaconBlockRoot*(ctx: CasperRef): Hash256 =
+  ctx.parentBeaconBlockRoot
+
 # ------------------------------------------------------------------------------
 # Setters
 # ------------------------------------------------------------------------------
@@ -52,3 +56,6 @@ proc `timestamp=`*(ctx: CasperRef, val: EthTime) =
 
 proc `prevRandao=`*(ctx: CasperRef, val: Hash256) =
   ctx.prevRandao = val
+
+proc `parentBeaconBlockRoot=`*(ctx: CasperRef, val: Hash256) =
+  ctx.parentBeaconBlockRoot = val

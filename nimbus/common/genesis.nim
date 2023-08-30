@@ -83,6 +83,7 @@ proc toGenesisHeader*(
   if fork >= Cancun:
     result.blobGasUsed = g.blobGasUsed
     result.excessBlobGas = g.excessBlobGas
+    result.parentBeaconBlockRoot = g.parentBeaconBlockRoot
 
 proc toGenesisHeader*(
     genesis: Genesis;

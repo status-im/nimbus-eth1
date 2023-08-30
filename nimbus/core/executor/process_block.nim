@@ -34,6 +34,11 @@ proc processTransactions*(vmState: BaseVMState;
     {.gcsafe, raises: [CatchableError].} =
   vmState.receipts = newSeq[Receipt](transactions.len)
   vmState.cumulativeGasUsed = 0
+
+  if header.parentBeaconBlockRoot.isSome:
+    vmState.processBeaconBlockRoot(header.parentBeaconBlockRoot.get).isOkOr:
+      return err(error)
+
   for txIndex, tx in transactions:
     var sender: EthAddress
     if not tx.getSender(sender):
@@ -57,6 +62,13 @@ proc procBlkPreamble(vmState: BaseVMState;
     debug "Mismatched txRoot",
       blockNumber = header.blockNumber
     return false
+
+  if vmState.determineFork >= FkCancun:
+    if header.parentBeaconBlockRoot.isNone:
+      raise ValidationError.newException("Post-Cancun block header must have parentBeaconBlockRoot")
+  else:
+    if header.parentBeaconBlockRoot.isSome:
+      raise ValidationError.newException("Pre-Cancun block header must not have parentBeaconBlockRoot")
 
   if header.txRoot != EMPTY_ROOT_HASH:
     if body.transactions.len == 0:
