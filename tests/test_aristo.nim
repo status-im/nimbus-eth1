@@ -83,7 +83,7 @@ proc miscRunner(
     test "VertexID recyling lists":
       check noisy.testVidRecycleLists()
 
-    test &"QueueID slot management (sample size: {qidSampleSize})":
+    test &"QueueID cascaded fifos API (sample size: {qidSampleSize})":
       check noisy.testQidScheduler(sampleSize = qidSampleSize)
 
 
