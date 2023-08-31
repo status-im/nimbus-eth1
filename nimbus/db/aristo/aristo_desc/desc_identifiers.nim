@@ -27,8 +27,8 @@ type
     ## Identifier used to tag filter logs stored on the backend.
 
   FilterID* = distinct uint64
-    ## Identifier used to identify a particular filter. It is generatied with the
-    ## filter.
+    ## Identifier used to identify a particular filter. It is generatied with
+    ## the filter when stored to database.
 
   VertexID* = distinct uint64
     ## Unique identifier for a vertex of the `Aristo Trie`. The vertex is the

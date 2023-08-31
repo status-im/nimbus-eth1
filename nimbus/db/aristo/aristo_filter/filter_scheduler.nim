@@ -34,9 +34,6 @@ const
 # Private helpers
 # ------------------------------------------------------------------------------
 
-func `+`*(a: QueueID; b: uint): QueueID = (a.uint64+b.uint64).QueueID
-func `-`*(a: QueueID; b: uint): QueueID = (a.uint64-b.uint64).QueueID
-
 func `<`(a: static[uint]; b: QueueID): bool = QueueID(a) < b
 
 func globalQid(queue: int, qid: QueueID): QueueID =
@@ -229,7 +226,7 @@ func fifoDel(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc stats*(
+func stats*(
     ctx: openArray[tuple[size, width: int]];       # Schedule layout
       ): tuple[maxQueue: int, minCovered: int, maxCovered: int] =
   ## Number of maximally stored and covered queued entries for the argument
@@ -245,20 +242,20 @@ proc stats*(
     result.minCovered += (ctx[n].size * step).int
     result.maxCovered += (size * step).int
 
-proc stats*(
+func stats*(
     ctx: openArray[tuple[size, width, wrap: int]]; # Schedule layout
       ): tuple[maxQueue: int, minCovered: int, maxCovered: int] =
   ## Variant of `stats()`
   ctx.toSeq.mapIt((it[0],it[1])).stats
 
-proc stats*(
+func stats*(
     ctx: QidLayoutRef;                             # Cascaded fifos descriptor
       ): tuple[maxQueue: int, minCovered: int, maxCovered: int] =
   ## Variant of `stats()`
   ctx.q.toSeq.mapIt((it[0].int,it[1].int)).stats
 
 
-proc addItem*(
+func addItem*(
     fifo: QidSchedRef;                             # Cascaded fifos descriptor
       ): tuple[exec: seq[QidAction], fifo: QidSchedRef] =
   ## Get the instructions for adding a new slot to the cascades queues. The
@@ -352,7 +349,7 @@ proc addItem*(
   (revActions.reversed, QidSchedRef(ctx: fifo.ctx, state: state))
 
 
-proc fetchItems*(
+func fetchItems*(
     fifo: QidSchedRef;                             # Cascaded fifos descriptor
     size: int;                                     # Leading items to merge
       ): tuple[exec: seq[QidAction], fifo: QidSchedRef] =
@@ -472,21 +469,21 @@ proc fetchItems*(
   (actions, QidSchedRef(ctx: fifo.ctx, state: state))
 
 
-proc lengths*(
+func lengths*(
     fifo: QidSchedRef;                             # Cascaded fifos descriptor
       ): seq[int] =
   ## Return the list of lengths for all cascaded sub-fifos.
   for n in 0 ..< fifo.state.len:
     result.add fifo.state[n].fifoLen(fifo.ctx.q[n].wrap).int
 
-proc len*(
+func len*(
     fifo: QidSchedRef;                             # Cascaded fifos descriptor
       ): int =
   ## Size of the fifo
   fifo.lengths.foldl(a + b, 0)
 
 
-proc `[]`*(
+func `[]`*(
     fifo: QidSchedRef;                             # Cascaded fifos descriptor
     inx: int;                                      # Index into latest items
       ): QueueID =

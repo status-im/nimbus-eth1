@@ -102,6 +102,8 @@ type
 
   BackendRef* = ref object of RootRef
     ## Backend interface.
+    filters*: QidSchedRef            ## Filter slot queue state
+
     getVtxFn*: GetVtxFn              ## Read vertex record
     getKeyFn*: GetKeyFn              ## Read Merkle hash/key
     getFilFn*: GetFilFn              ## Read back log filter
