@@ -24,6 +24,7 @@ type
     RlpOtherException
 
     # Data record transcoders, `deblobify()` and `blobify()`
+    BlobifyNilVertex
     BlobifyBranchMissingRefs
     BlobifyExtMissingRefs
     BlobifyExtPathOverflow

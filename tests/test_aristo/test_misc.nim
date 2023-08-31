@@ -33,30 +33,9 @@ type
 
   QTabRef = TableRef[QueueID,QValRef]
 
-const
-  QidSlotLyo = [(4,0,10),(3,3,10),(3,4,10),(3,5,10)]
-  QidSlotLy1 = [(4,0,0),(3,3,0),(3,4,0),(3,5,0)]
-
-  QidSample* = (3 * QidSlotLyo.stats.minCovered) div 2
-
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
-
-template xCheck(expr: untyped): untyped =
-  ## Note: this check will invoke `expr` twice
-  if not (expr):
-    check expr
-    return
-
-template xCheck(expr: untyped; ifFalse: untyped): untyped =
-  ## Note: this check will invoke `expr` twice
-  if not (expr):
-    ifFalse
-    check expr
-    return
-
-# ---------------------
 
 proc posixPrngRand(state: var uint32): byte =
   ## POSIX.1-2001 example of a rand() implementation, see manual page rand(3).
@@ -296,10 +275,8 @@ proc testVidRecycleLists*(noisy = true; seed = 42): bool =
     let
       db1 = newAristoDbRef BackendVoid
       rc = dbBlob.deblobify seq[VertexID]
-    if rc.isErr:
-      xCheck rc.error == AristoError(0)
-    else:
-      db1.top.vGen = rc.value
+    xCheckRc rc.error == 0
+    db1.top.vGen = rc.value
 
     xCheck db.top.vGen == db1.top.vGen
 

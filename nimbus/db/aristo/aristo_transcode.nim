@@ -220,6 +220,8 @@ proc blobify*(vtx: VertexRef; data: var Blob): AristoError =
   ## ::
   ##   8 * n * ((access shr (n * 4)) and 15)
   ##
+  if not vtx.isValid:
+    return BlobifyNilVertex
   case vtx.vType:
   of Branch:
     var
