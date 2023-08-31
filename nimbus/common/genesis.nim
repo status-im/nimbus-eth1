@@ -81,9 +81,9 @@ proc toGenesisHeader*(
     result.withdrawalsRoot = some(EMPTY_ROOT_HASH)
 
   if fork >= Cancun:
-    result.blobGasUsed = g.blobGasUsed
-    result.excessBlobGas = g.excessBlobGas
-    result.parentBeaconBlockRoot = g.parentBeaconBlockRoot
+    result.blobGasUsed = g.blobGasUsed.get(0'u64).some
+    result.excessBlobGas = g.excessBlobGas.get(0'u64).some
+    result.parentBeaconBlockRoot = g.parentBeaconBlockRoot.get(Hash256()).some
 
 proc toGenesisHeader*(
     genesis: Genesis;
