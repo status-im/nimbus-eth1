@@ -79,31 +79,38 @@ proc `+`(a: VertexID, b: int): VertexID =
 
 # ---------------------
 
+iterator walkFifo(qt: QTabRef;scd: QidSchedRef): (QueueID,QValRef) =
+  ## ...
+  proc kvp(chn: int, qid: QueueID): (QueueID,QValRef) =
+    let cid = QueueID((chn.uint64 shl 62) or qid.uint64)
+    (cid, qt.getOrDefault(cid, QValRef(nil)))
+
+  if not scd.isNil:
+    for i in 0 ..< scd.state.len:
+      let (left, right) = scd.state[i]
+      if left == 0:
+        discard
+      elif left <= right:
+        for j in right.countDown left:
+          yield kvp(i, j)
+      else:
+        for j in right.countDown QueueID(1):
+          yield kvp(i, j)
+        for j in scd.ctx.q[i].wrap.countDown left:
+          yield kvp(i, j)
+
+proc fifos(qt: QTabRef; scd: QidSchedRef): seq[seq[(QueueID,QValRef)]] =
+  ## ..
+  var lastChn = -1
+  for (qid,val) in qt.walkFifo scd:
+    let chn = (qid.uint64 shr 62).int
+    while lastChn < chn:
+      lastChn.inc
+      result.add newSeq[(QueueID,QValRef)](0)
+    result[^1].add (qid,val)
+
 func sortedPairs(qt: QTabRef): seq[(QueueID,QValRef)] =
   qt.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.QueueID).mapIt((it,qt[it]))
-
-func fifos(qt: QTabRef; scd: QidSchedRef): seq[seq[(QueueID,QValRef)]] =
-  proc kvp(chn: int, qid: QueueID): (QueueID,QValRef) =
-    let
-      cid = QueueID((chn.uint64 shl 62) or qid.uint64)
-      val = qt.getOrDefault(cid, QValRef(nil))
-    (cid, val)
-
-  for i in 0 ..< scd.state.len:
-    let
-      left =  scd.state[i][0]
-      right = scd.state[i][1]
-    result.add newSeq[(QueueID,QValRef)](0)
-    if left == 0:
-      discard
-    elif left <= right:
-      for j in right.countDown left:
-        result[i].add kvp(i, j)
-    else:
-      for j in right.countDown QueueID(1):
-        result[i].add kvp(i, j)
-      for j in scd.ctx.q[i].wrap.countDown left:
-        result[i].add kvp(i, j)
 
 func flatten(a: seq[seq[(QueueID,QValRef)]]): seq[(QueueID,QValRef)] =
   for w in a:
@@ -436,7 +443,7 @@ proc testQidScheduler*(
     let validateOk = list.validate(scd, serial=n, relax=false)
     xCheck validateOk
 
-  if debug: # or true:
+  if debug:
     show()
 
   true
