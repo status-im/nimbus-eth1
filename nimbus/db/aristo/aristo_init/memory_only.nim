@@ -30,19 +30,29 @@ export
   MemBackendRef,
   TypedBackendRef
 
+let
+  DefaultQidLayoutRef* = DEFAULT_QID_QUEUES.to(QidLayoutRef)
+
 # ------------------------------------------------------------------------------
 # Public database constuctors, destructor
 # ------------------------------------------------------------------------------
 
 proc newAristoDbRef*(
     backend: static[BackendType];
+    qidLayout = DefaultQidLayoutRef;
       ): AristoDbRef =
   ## Simplified prototype for  `BackendNone` and `BackendMemory`  type backend.
+  ##
+  ## If the `qidLayout` argument is set `QidLayoutRef(nil)`, the a backend
+  ## database will not provide filter history management. Providing a different
+  ## scheduler layout shoud be used with care as table access with different
+  ## layouts might render the filter history data unmanageable.
+  ##
   when backend == BackendVoid:
     AristoDbRef(top: LayerRef())
 
   elif backend == BackendMemory:
-    AristoDbRef(top: LayerRef(), backend: memoryBackend())
+    AristoDbRef(top: LayerRef(), backend: memoryBackend(qidLayout))
 
   elif backend == BackendRocksDB:
     {.error: "Aristo DB backend \"BackendRocksDB\" needs basePath argument".}

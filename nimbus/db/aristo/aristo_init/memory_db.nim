@@ -42,9 +42,10 @@ type
     ## Inheriting table so access can be extended for debugging purposes
     sTab: Table[VertexID,Blob]       ## Structural vertex table making up a trie
     kMap: Table[VertexID,HashKey]    ## Merkle hash key mapping
-    rFil: Table[QueueID,Blob]       ## Backend filters
+    rFil: Table[QueueID,Blob]        ## Backend filters
     vGen: Option[seq[VertexID]]
     vFqs: Option[seq[(QueueID,QueueID)]]
+    noFq: bool                       ## No filter queues available
 
   MemPutHdlRef = ref object of TypedPutHdlRef
     sTab: Table[VertexID,Blob]
@@ -98,12 +99,17 @@ proc getKeyFn(db: MemBackendRef): GetKeyFn =
       err(GetKeyNotFound)
 
 proc getFilFn(db: MemBackendRef): GetFilFn =
-  result =
-    proc(qid: QueueID): Result[FilterRef,AristoError] =
-      let data = db.rFil.getOrDefault(qid, EmptyBlob)
-      if 0 < data.len:
-        return data.deblobify FilterRef
-      err(GetFilNotFound)
+  if db.noFq:
+    result =
+      proc(qid: QueueID): Result[FilterRef,AristoError] =
+        err(FilQuSchedDisabled)
+  else:
+    result =
+      proc(qid: QueueID): Result[FilterRef,AristoError] =
+        let data = db.rFil.getOrDefault(qid, EmptyBlob)
+        if 0 < data.len:
+          return data.deblobify FilterRef
+        err(GetFilNotFound)
 
 proc getIdgFn(db: MemBackendRef): GetIdgFn =
   result =
@@ -113,11 +119,16 @@ proc getIdgFn(db: MemBackendRef): GetIdgFn =
       err(GetIdgNotFound)
 
 proc getFqsFn(db: MemBackendRef): GetFqsFn =
-  result =
-    proc(): Result[seq[(QueueID,QueueID)],AristoError]=
-      if db.vFqs.isSome:
-        return ok db.vFqs.unsafeGet
-      err(GetFqsNotFound)
+  if db.noFq:
+    result =
+      proc(): Result[seq[(QueueID,QueueID)],AristoError] =
+        err(FilQuSchedDisabled)
+  else:
+    result =
+      proc(): Result[seq[(QueueID,QueueID)],AristoError] =
+        if db.vFqs.isSome:
+          return ok db.vFqs.unsafeGet
+        err(GetFqsNotFound)
 
 # -------------
 
@@ -154,19 +165,32 @@ proc putKeyFn(db: MemBackendRef): PutKeyFn =
           hdl.kMap[vid] = key
 
 proc putFilFn(db: MemBackendRef): PutFilFn =
-  result =
-    proc(hdl: PutHdlRef; vf: openArray[(QueueID,FilterRef)]) =
-      let hdl = hdl.getSession db
-      if hdl.error.isNil:
-        for (qid,filter) in vf:
-          let rc = filter.blobify()
-          if rc.isErr:
-            hdl.error = TypedPutHdlErrRef(
-              pfx:  FilPfx,
-              qid:  qid,
-              code: rc.error)
-            return
-          hdl.rFil[qid] = rc.value
+  if db.noFq:
+    result =
+      proc(hdl: PutHdlRef; vf: openArray[(QueueID,FilterRef)]) =
+        let hdl = hdl.getSession db
+        if hdl.error.isNil:
+          hdl.error = TypedPutHdlErrRef(
+            pfx:  FilPfx,
+            qid:  (if 0 < vf.len: vf[0][0] else: QueueID(0)),
+            code: FilQuSchedDisabled)
+  else:
+    result =
+      proc(hdl: PutHdlRef; vf: openArray[(QueueID,FilterRef)]) =
+        let hdl = hdl.getSession db
+        if hdl.error.isNil:
+          for (qid,filter) in vf:
+            if filter.isValid:
+              let rc = filter.blobify()
+              if rc.isErr:
+                hdl.error = TypedPutHdlErrRef(
+                  pfx:  FilPfx,
+                  qid:  qid,
+                  code: rc.error)
+                return
+              hdl.rFil[qid] = rc.value
+            else:
+              hdl.rFil[qid] = EmptyBlob
 
 proc putIdgFn(db: MemBackendRef): PutIdgFn =
   result =
@@ -176,11 +200,20 @@ proc putIdgFn(db: MemBackendRef): PutIdgFn =
         hdl.vGen = some(vs.toSeq)
 
 proc putFqsFn(db: MemBackendRef): PutFqsFn =
-  result =
-    proc(hdl: PutHdlRef; fs: openArray[(QueueID,QueueID)])  =
-      let hdl = hdl.getSession db
-      if hdl.error.isNil:
-        hdl.vFqs = some(fs.toSeq)
+  if db.noFq:
+    result =
+      proc(hdl: PutHdlRef; fs: openArray[(QueueID,QueueID)])  =
+        let hdl = hdl.getSession db
+        if hdl.error.isNil:
+          hdl.error = TypedPutHdlErrRef(
+            pfx:  AdmPfx,
+            code: FilQuSchedDisabled)
+  else:
+    result =
+      proc(hdl: PutHdlRef; fs: openArray[(QueueID,QueueID)])  =
+        let hdl = hdl.getSession db
+        if hdl.error.isNil:
+          hdl.vFqs = some(fs.toSeq)
 
 
 proc putEndFn(db: MemBackendRef): PutEndFn =
@@ -213,7 +246,7 @@ proc putEndFn(db: MemBackendRef): PutEndFn =
           db.kMap.del vid
 
       for (qid,data) in hdl.rFil.pairs:
-        if qid.isValid:
+        if 0 < data.len:
           db.rFil[qid] = data
         else:
           db.rFil.del qid
@@ -245,8 +278,10 @@ proc closeFn(db: MemBackendRef): CloseFn =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc memoryBackend*(): BackendRef =
-  let db = MemBackendRef(kind: BackendMemory)
+proc memoryBackend*(qidLayout: QidLayoutRef): BackendRef =
+  let db = MemBackendRef(
+    kind: BackendMemory,
+    noFq: qidLayout.isNil)
 
   db.getVtxFn = getVtxFn db
   db.getKeyFn = getKeyFn db
@@ -263,6 +298,10 @@ proc memoryBackend*(): BackendRef =
   db.putEndFn = putEndFn db
 
   db.closeFn = closeFn db
+
+  # Set up filter management table
+  if not db.noFq:
+    db.filters = QidSchedRef(ctx: qidLayout)
 
   db
 
@@ -296,14 +335,15 @@ iterator walkFil*(
     be: MemBackendRef;
       ): tuple[n: int, qid: QueueID, filter: FilterRef] =
   ##  Iteration over the vertex sub-table.
-  for n,qid in be.rFil.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.QueueID):
-    let data = be.rFil.getOrDefault(qid, EmptyBlob)
-    if 0 < data.len:
-      let rc = data.deblobify FilterRef
-      if rc.isErr:
-        debug logTxt "walkFilFn() skip", n,qid, error=rc.error
-      else:
-        yield (n, qid, rc.value)
+  if not be.noFq:
+    for n,qid in be.rFil.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.QueueID):
+      let data = be.rFil.getOrDefault(qid, EmptyBlob)
+      if 0 < data.len:
+        let rc = data.deblobify FilterRef
+        if rc.isErr:
+          debug logTxt "walkFilFn() skip", n,qid, error=rc.error
+        else:
+          yield (n, qid, rc.value)
 
 
 iterator walk*(
@@ -319,9 +359,10 @@ iterator walk*(
     yield(0, AdmPfx, AdmTabIdIdg.uint64, be.vGen.unsafeGet.blobify)
     n.inc
 
-  if be.vFqs.isSome:
-    yield(0, AdmPfx, AdmTabIdFqs.uint64, be.vFqs.unsafeGet.blobify)
-    n.inc
+  if not be.noFq:
+    if be.vFqs.isSome:
+      yield(0, AdmPfx, AdmTabIdFqs.uint64, be.vFqs.unsafeGet.blobify)
+      n.inc
 
   for vid in be.sTab.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID):
     let data = be.sTab.getOrDefault(vid, EmptyBlob)
@@ -333,11 +374,12 @@ iterator walk*(
     yield (n, KeyPfx, vid.uint64, key.to(Blob))
     n.inc
 
-  for lid in be.rFil.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.QueueID):
-    let data = be.rFil.getOrDefault(lid, EmptyBlob)
-    if 0 < data.len:
-      yield (n, FilPfx, lid.uint64, data)
-    n.inc
+  if not be.noFq:
+    for lid in be.rFil.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.QueueID):
+      let data = be.rFil.getOrDefault(lid, EmptyBlob)
+      if 0 < data.len:
+        yield (n, FilPfx, lid.uint64, data)
+      n.inc
 
 # ------------------------------------------------------------------------------
 # End
