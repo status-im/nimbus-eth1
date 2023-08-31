@@ -182,8 +182,7 @@ const
     let (slot) = cpt.stack.popInt(1)
 
     cpt.asyncChainTo(ifNecessaryGetSlot(cpt.vmState, cpt.msg.contractAddress, slot)):
-      let gasCost = cpt.gasEip2929AccountCheck(cpt.msg.contractAddress, slot) +
-                      cpt.gasCosts[Sload].cost
+      let gasCost = cpt.gasEip2929AccountCheck(cpt.msg.contractAddress, slot)
       cpt.opcodeGastCost(Sload, gasCost, reason = "sloadEIP2929")
       cpt.stack.push:
         cpt.getStorage(slot)

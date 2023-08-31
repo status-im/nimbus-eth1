@@ -59,7 +59,7 @@ const
     let address = cpt.stack.popAddress()
 
     cpt.asyncChainTo(ifNecessaryGetAccount(cpt.vmState, address)):
-      let gasCost = cpt.gasCosts[Balance].cost + cpt.gasEip2929AccountCheck(address)
+      let gasCost = cpt.gasEip2929AccountCheck(address)
       cpt.opcodeGastCost(Balance, gasCost, reason = "Balance EIP2929")
       cpt.stack.push:
         cpt.getBalance(address)
@@ -169,7 +169,7 @@ const
     let address = cpt.stack.popAddress()
 
     cpt.asyncChainTo(ifNecessaryGetCode(cpt.vmState, address)):
-      let gasCost = cpt.gasCosts[ExtCodeSize].cost + cpt.gasEip2929AccountCheck(address)
+      let gasCost = cpt.gasEip2929AccountCheck(address)
       cpt.opcodeGastCost(ExtCodeSize, gasCost, reason = "ExtCodeSize EIP2929")
       cpt.stack.push:
         cpt.getCodeSize(address)
@@ -256,7 +256,7 @@ const
     let address = k.cpt.stack.popAddress()
 
     cpt.asyncChainTo(ifNecessaryGetCode(cpt.vmState, address)):
-      let gasCost = cpt.gasCosts[ExtCodeHash].cost + cpt.gasEip2929AccountCheck(address)
+      let gasCost = cpt.gasEip2929AccountCheck(address)
       cpt.opcodeGastCost(ExtCodeHash, gasCost, reason = "ExtCodeHash EIP2929")
 
       cpt.stack.push:

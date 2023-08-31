@@ -23,8 +23,10 @@ template wrapException(body) =
     except T8NError as e:
       stderr.writeLine(e.msg)
       quit(e.exitCode.int)
-    except:
-      let e = getCurrentException()
+    except CatchableError as e:
+      stderr.writeLine($e.name & " : " & e.msg)
+      quit(QuitFailure)
+    except AssertionDefect as e:
       stderr.writeLine($e.name & " : " & e.msg)
       quit(QuitFailure)
   else:

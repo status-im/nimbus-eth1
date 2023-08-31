@@ -542,6 +542,33 @@ const
       output: T8nOutput(alloc: true, result: true),
       expOut: "exp.json",
     ),
+    TestSpec(
+      name  : "Trace EIP-2929 Balance, Sload, ExtCodeSize, ExtCodeHash",
+      base  : "testdata/00-522",
+      input : t8nInput(
+        "alloc.json", "txs.json", "env.json", "Berlin", "0",
+      ),
+      output: T8nOutput(trace: true, result: true),
+      expOut: "exp.txt",
+    ),
+    TestSpec(
+      name  : "Trace Post EIP-2929 Balance, Sload, ExtCodeSize, ExtCodeHash",
+      base  : "testdata/00-522",
+      input : t8nInput(
+        "alloc.json", "txs.json", "env.json", "London", "0",
+      ),
+      output: T8nOutput(trace: true, result: true),
+      expOut: "exp.txt",
+    ),
+    TestSpec(
+      name  : "Trace Pre EIP-2929 Balance, Sload, ExtCodeSize, ExtCodeHash",
+      base  : "testdata/00-522",
+      input : t8nInput(
+        "alloc.json", "txs.json", "env.json", "Istanbul", "0",
+      ),
+      output: T8nOutput(trace: true, result: true),
+      expOut: "istanbul.txt",
+    ),
   ]
 
 proc main() =
