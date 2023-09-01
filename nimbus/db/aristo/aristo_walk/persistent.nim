@@ -54,6 +54,13 @@ iterator walkFilBe*(
   for (n,qid,filter) in be.walkFilBeImpl:
     yield (n,qid,filter)
 
+iterator walkFifoBe*(
+   be: RdbBackendRef;
+     ): (QueueID,FilterRef) =
+  ## Walk filter slots in fifo order.
+  for (qid,filter) in be.walkFifoBeImpl:
+    yield (qid,filter)
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
