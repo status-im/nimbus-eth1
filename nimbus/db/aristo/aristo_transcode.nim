@@ -282,6 +282,7 @@ proc blobify*(vGen: openArray[VertexID]): Blob =
 proc blobify*(filter: FilterRef; data: var Blob): AristoError =
   ## This function serialises an Aristo DB filter object
   ## ::
+  ##   uint64         -- filter ID
   ##   Uint256        -- source key
   ##   Uint256        -- target key
   ##   uint32         -- number of vertex IDs (vertex ID generator state)
@@ -297,8 +298,10 @@ proc blobify*(filter: FilterRef; data: var Blob): AristoError =
   ##   ...            -- more triplets
   ##   0x7d           -- marker(8)
   ##
-  ##
+  if not filter.isValid:
+    return BlobifyNilFilter
   data.setLen(0)
+  data &= filter.fid.uint64.toBytesBE.toSeq
   data &= filter.src.ByteArray32.toSeq
   data &= filter.trg.ByteArray32.toSeq
 
@@ -368,7 +371,7 @@ proc blobify*(filter: FilterRef; data: var Blob): AristoError =
       vid.uint64.toBytesBE.toSeq &
       keyBlob
 
-  data[68 ..< 72] = n.uint32.toBytesBE.toSeq
+  data[76 ..< 80] = n.uint32.toBytesBE.toSeq
   data.add 0x7Du8
 
 proc blobify*(filter: FilterRef): Result[Blob, AristoError] =
@@ -566,27 +569,27 @@ proc deblobify*(data: Blob; T: type seq[VertexID]): Result[T,AristoError] =
     return err(info)
   ok vGen
 
-
 proc deblobify*(data: Blob; filter: var FilterRef): AristoError =
   ## De-serialise an Aristo DB filter object
-  if data.len < 72: # minumum length 72 for an empty filter
+  if data.len < 80: # minumum length 80 for an empty filter
     return DeblobFilterTooShort
   if data[^1] != 0x7d:
     return DeblobWrongType
 
   let f = FilterRef()
-  (addr f.src.ByteArray32[0]).copyMem(unsafeAddr data[0], 32)
-  (addr f.trg.ByteArray32[0]).copyMem(unsafeAddr data[32], 32)
+  f.fid = (uint64.fromBytesBE data[0 ..< 8]).FilterID
+  (addr f.src.ByteArray32[0]).copyMem(unsafeAddr data[8], 32)
+  (addr f.trg.ByteArray32[0]).copyMem(unsafeAddr data[40], 32)
 
   let
-    nVids = uint32.fromBytesBE data[64 ..< 68]
-    nTriplets = uint32.fromBytesBE data[68 ..< 72]
-    nTrplStart = (72 + nVids * 8).int
+    nVids = uint32.fromBytesBE data[72 ..< 76]
+    nTriplets = uint32.fromBytesBE data[76 ..< 80]
+    nTrplStart = (80 + nVids * 8).int
 
   if data.len < nTrplStart:
     return DeblobFilterGenTooShort
   for n in 0 ..< nVids:
-    let w = 72 + n * 8
+    let w = 80 + n * 8
     f.vGen.add (uint64.fromBytesBE data[w ..< w + 8]).VertexID
 
   var offs = nTrplStart
