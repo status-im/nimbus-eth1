@@ -322,8 +322,8 @@ proc rocksDbBackend*(
     qidLayout: QidLayoutRef;
       ): Result[BackendRef,AristoError] =
   let db = RdbBackendRef(
-    kind: BackendRocksDB,
-    noFq: qidLayout.isNil)
+    beKind: BackendRocksDB,
+    noFq:   qidLayout.isNil)
 
   # Initialise RocksDB
   block:

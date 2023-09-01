@@ -36,7 +36,7 @@ type
     ## over the tables), this data type is to be used.
 
   TypedBackendRef* = ref object of BackendRef
-    kind*: BackendType               ## Backend type identifier
+    beKind*: BackendType             ## Backend type identifier
     when verifyIxId:
       txGen: uint                    ## Transaction ID generator (for debugging)
       txId: uint                     ## Active transaction ID (for debugging)

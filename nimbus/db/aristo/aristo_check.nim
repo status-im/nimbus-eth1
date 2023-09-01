@@ -76,15 +76,13 @@ proc checkBE*(
   ##   Moreover, the union of both sets is equivalent to the set of positive
   ##   `uint64` numbers.
   ##
-  if not db.backend.isNil:
-    let be = db.to(TypedBackendRef)
-    case be.kind:
-    of BackendMemory:
-      return MemBackendRef.checkBE(db, cache=cache, relax=relax)
-    of BackendRocksDB:
-      return RdbBackendRef.checkBE(db, cache=cache, relax=relax)
-    of BackendVoid:
-      return VoidBackendRef.checkBE(db, cache=cache, relax=relax)
+  case db.backend.kind:
+  of BackendMemory:
+    return MemBackendRef.checkBE(db, cache=cache, relax=relax)
+  of BackendRocksDB:
+    return RdbBackendRef.checkBE(db, cache=cache, relax=relax)
+  of BackendVoid:
+    return VoidBackendRef.checkBE(db, cache=cache, relax=relax)
   ok()
 
 # ------------------------------------------------------------------------------

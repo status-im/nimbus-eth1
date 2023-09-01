@@ -89,7 +89,6 @@ iterator walkKeyBeImpl*[T](
 
 iterator walkFilBeImpl*[T](
     be: T;                             # Backend descriptor
-    db: AristoDbRef;                   # Database with optional backend filter
       ): tuple[n: int, qid: QueueID, filter: FilterRef] =
   ## Generic filter iterator
   when be isnot VoidBackendRef:

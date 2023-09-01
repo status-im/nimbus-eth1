@@ -19,7 +19,8 @@ import
   ../../nimbus/db/aristo/[
     aristo_check, aristo_debug, aristo_desc, aristo_filter, aristo_get,
     aristo_merge, aristo_transcode],
-  ../../nimbus/db/[aristo, aristo/aristo_init/persistent],
+  ../../nimbus/db/aristo,
+  ../../nimbus/db/aristo/aristo_init/persistent,
   ./test_helpers
 
 type
@@ -35,7 +36,7 @@ type
 
 proc dump(pfx: string; dx: varargs[AristoDbRef]): string =
   proc dump(db: AristoDbRef): string =
-    db.pp & "\n    " & db.to(TypedBackendRef).pp(db) & "\n"
+    db.pp & "\n    " & db.backend.pp(db) & "\n"
   if 0 < dx.len:
     result = "\n   "
   var

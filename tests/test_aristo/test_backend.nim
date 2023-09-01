@@ -88,7 +88,7 @@ proc mergeData(
       noisy.say "***", "dataMerge(9)",
         " nLeafs=", leafs.len,
         "\n    cache dump\n    ", db.pp,
-        "\n    backend dump\n    ", db.to(TypedBackendRef).pp(db)
+        "\n    backend dump\n    ", db.backend.pp(db)
 
   true
 
@@ -145,15 +145,14 @@ proc collectFilter(
 
   true
 
-proc verifyFiltersImpl[T: MemBackendRef|RdbBackendRef](
-    _: type T;
-    db: AristoDbRef;
+proc verifyFiltersImpl[T](
+    be: T;
     tab: Table[QueueID,Hash];
     noisy: bool;
       ): bool =
   ## Compare stored filters against registered ones
   var n = 0
-  for (_,fid,filter) in T.walkFilBe db:
+  for (_,fid,filter) in be.walkFilBe:
     let
       filterHash = filter.hash
       registered = tab.getOrDefault(fid, BlindHash)
@@ -177,17 +176,14 @@ proc verifyFilters(
     noisy: bool;
       ): bool =
   ## Wrapper
-  let
-    be = db.to(TypedBackendRef)
-    kind = (if be.isNil: BackendVoid else: be.kind)
-  case kind:
+  case db.backend.kind:
   of BackendMemory:
-    return MemBackendRef.verifyFiltersImpl(db, tab, noisy)
+    return db.to(MemBackendRef).verifyFiltersImpl(tab, noisy)
   of BackendRocksDB:
-    return RdbBackendRef.verifyFiltersImpl(db, tab, noisy)
+    return db.to(RdbBackendRef).verifyFiltersImpl(tab, noisy)
   else:
     discard
-  check kind == BackendMemory or kind == BackendRocksDB
+  check db.backend.kind == BackendMemory or db.backend.kind == BackendRocksDB
 
 # ------------------------------------------------------------------------------
 # Public test function
@@ -263,13 +259,13 @@ proc testBackendConsistency*(
         noisy.say "***", "beCon(2) <", n, "/", list.len-1, ">",
           " groups=", count,
           "\n    cache dump\n    ", ndb.pp,
-          "\n    backend dump\n    ", ndb.to(TypedBackendRef).pp(ndb),
+          "\n    backend dump\n    ", ndb.backend.pp(ndb),
           "\n    -------------",
           "\n    mdb cache\n    ", mdb.pp,
-          "\n    mdb backend\n    ", mdb.to(TypedBackendRef).pp(ndb),
+          "\n    mdb backend\n    ", mdb.backend.pp(ndb),
           "\n    -------------",
           "\n    rdb cache\n    ", rdb.pp,
-          "\n    rdb backend\n    ", rdb.to(TypedBackendRef).pp(ndb),
+          "\n    rdb backend\n    ", rdb.backend.pp(ndb),
           "\n    -------------"
 
     when true and false:
@@ -315,7 +311,7 @@ proc testBackendConsistency*(
             #"\n    mdb pre-save backend\n    ", mdbPreSaveBackend,
             "\n    -------------",
             "\n    mdb cache\n    ", mdb.pp,
-            "\n    mdb backend\n    ", mdb.to(TypedBackendRef).pp(ndb),
+            "\n    mdb backend\n    ", mdb.backend.pp(ndb),
             "\n    -------------"
 
     if doRdbOk:
@@ -331,10 +327,10 @@ proc testBackendConsistency*(
             "\n    rdb pre-save backend\n    ", rdbPreSaveBackend,
             "\n    -------------",
             "\n    rdb cache\n    ", rdb.pp,
-            "\n    rdb backend\n    ", rdb.to(TypedBackendRef).pp(ndb),
+            "\n    rdb backend\n    ", rdb.backend.pp(ndb),
             #"\n    -------------",
             #"\n    mdb cache\n    ", mdb.pp,
-            #"\n    mdb backend\n    ", mdb.to(TypedBackendRef).pp(ndb),
+            #"\n    mdb backend\n    ", mdb.backend.pp(ndb),
             "\n    -------------"
 
     when true and false:

@@ -26,9 +26,7 @@ type
 
 export
   BackendType,
-  VoidBackendRef,
-  MemBackendRef,
-  TypedBackendRef
+  MemBackendRef
 
 let
   DefaultQidLayoutRef* = DEFAULT_QID_QUEUES.to(QidLayoutRef)
@@ -93,6 +91,16 @@ proc to*[W: TypedBackendRef|MemBackendRef|VoidBackendRef](
       ): T =
   ## Handy helper for lew-level access to some backend functionality
   db.backend.T
+
+proc kind*(
+    be: BackendRef;
+      ): BackendType =
+  ## Retrieves the backend type symbol for a `TypedBackendRef` argument where
+  ## `BackendVoid` is returned for the`nil` backend.
+  if be.isNil:
+    BackendVoid
+  else:
+    be.TypedBackendRef.beKind
 
 # ------------------------------------------------------------------------------
 # End

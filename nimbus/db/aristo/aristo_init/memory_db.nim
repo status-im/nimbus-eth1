@@ -280,8 +280,8 @@ proc closeFn(db: MemBackendRef): CloseFn =
 
 proc memoryBackend*(qidLayout: QidLayoutRef): BackendRef =
   let db = MemBackendRef(
-    kind: BackendMemory,
-    noFq: qidLayout.isNil)
+    beKind: BackendMemory,
+    noFq:   qidLayout.isNil)
 
   db.getVtxFn = getVtxFn db
   db.getKeyFn = getKeyFn db
