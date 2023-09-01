@@ -391,11 +391,15 @@ proc testQidScheduler*(
 
     let fifoID = list.fifos(scd).flatten.mapIt(it[0])
     for j in 0 ..< list.len:
+      # Check fifo order
       xCheck fifoID[j] == scd[j]:
         noisy.say "***", "n=", n, " exec=", w.exec.pp,
           " fifoID[", j, "]=", fifoID[j].pp,
           " scd[", j, "]=", scd[j].pp,
           "\n     fifo=", list.pp scd
+      # Check random access and reverse
+      let qid = scd[j]
+      xCheck j == scd[qid]
 
     if debug:
       show(exec=w.exec)

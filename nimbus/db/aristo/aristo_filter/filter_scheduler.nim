@@ -26,6 +26,8 @@ type
     ## This *decreasing* requirement can be seen as a generalisation of a
     ## block chain scenario with `i`, `j`  backward steps into the past and
     ## the `FilterID` as the block number.
+    ##
+    ## In order to flag an error, `FilterID(0)` must be returned.
 
 const
   ZeroQidPair = (QueueID(0),QueueID(0))
@@ -533,6 +535,54 @@ func `[]`*(
           return n.globalQid(wrap - inx)
         inx -= qInxMax0 + 1 # Otherwise continue
 
+
+func `[]`*(
+    fifo: QidSchedRef;                             # Cascaded fifos descriptor
+    qid: QueueID;                                  # Index into latest items
+      ): int =
+  ## ..
+  if QueueID(0) < qid:
+    let
+      chn = (qid.uint64 shr 62).int
+      qid = (qid.uint64 and 0x3fff_ffff_ffff_ffffu64).QueueID
+
+    if chn < fifo.state.len:
+      var offs = 0
+      for n in 0 ..< chn:
+        offs += fifo.state[n].fifoLen(fifo.ctx.q[n].wrap).int
+
+      let q = fifo.state[chn]
+      if q[0] <= q[1]:
+        # Single file
+        # ::
+        #  |          :
+        #  |  q[0]--> 3
+        #  |          4
+        #  |          5 <--q[1]
+        #  |           :
+        #
+        if q[0] <= qid and qid <= q[1]:
+          return offs + (q[1] - qid).int
+      else:
+        # Wrap aound, double files
+        # ::
+        #  |          :
+        #  |          3 <--q[1]
+        #  |          4
+        #  |  q[0]--> 5
+        #  |          :
+        #  |         wrap
+        #
+        if QueueID(1) <= qid and qid <= q[1]:
+          return offs + (q[1] - qid).int
+
+        if q[0] <= qid:
+          let wrap = fifo.ctx.q[chn].wrap
+          if qid <= wrap:
+            return offs + (q[1] - QueueID(0)).int + (wrap - qid).int
+  -1
+
+
 proc le*(
     fifo: QidSchedRef;                             # Cascaded fifos descriptor
     fid: FilterID;                                 # Upper bound
@@ -542,19 +592,27 @@ proc le*(
   ## * `fn(qid) <= fid`
   ## * for all `qid1` with `fn(qid1) <= fid` one has `fn(qid1) <= fn(qid)`
   ##
+  ## If `fn()` returns `FilterID(0)`, then this function returns `QueueID(0)`
+  ##
   ## The argument type `QuFilMap` of map `fn()` has been commented on earlier.
   ##
   var
     left = 0
     right = fifo.len - 1
 
+  template getFid(qid: QueueID): FilterID =
+    let fid = fn(qid)
+    if not fid.isValid:
+      return QueueID(0)
+    fid
+
   if 0 <= right:
     let maxQid = fifo[left]
-    if maxQid.fn <= fid:
+    if maxQid.getFid <= fid:
       return maxQid
 
     # Bisection
-    if fifo[right].fn <= fid:
+    if fifo[right].getFid <= fid:
       while 1 < right - left:
         let half = (left + right) div 2
         #
@@ -564,9 +622,9 @@ proc le*(
         #
         # with `fifo[left].fn > fid >= fifo[right].fn`
         #
-        if fid >= fifo[half].fn:
+        if fid >= fifo[half].getFid:
           right = half
-        else: # fifo[half].fn > fid
+        else: # fifo[half].getFid > fid
           left = half
 
       # Now: `fifo[right].fn <= fid < fifo[left].fn` (and `right == left+1`)

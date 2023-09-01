@@ -355,6 +355,7 @@ proc ppFilter(fl: FilterRef; db: AristoDbRef; indent: int): string =
   if fl.isNil:
     result &= " n/a"
     return
+  result &= pfx & "fid=" & fl.fid.ppFid
   result &= pfx & "trg(" & fl.trg.ppKey & ")"
   result &= pfx & "src(" & fl.src.ppKey & ")"
   result &= pfx & "vGen" & pfx1 & "[" &
