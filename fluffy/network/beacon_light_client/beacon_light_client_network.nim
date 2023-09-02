@@ -29,7 +29,7 @@ type
   LightClientNetwork* = ref object
     portalProtocol*: PortalProtocol
     lightClientDb*: LightClientDb
-    contentQueue*: AsyncQueue[(ContentKeysList, seq[seq[byte]])]
+    contentQueue*: AsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])]
     forkDigests*: ForkDigests
     processContentLoop: Future[void]
 
@@ -173,7 +173,7 @@ proc new*(
     bootstrapRecords: openArray[Record] = [],
     portalConfig: PortalProtocolConfig = defaultPortalProtocolConfig): T =
   let
-    contentQueue = newAsyncQueue[(ContentKeysList, seq[seq[byte]])](50)
+    contentQueue = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
 
     stream = streamManager.registerNewStream(contentQueue)
 
@@ -227,14 +227,15 @@ proc validateContent(
 
 proc neighborhoodGossipDiscardPeers(
     p: PortalProtocol,
+    srcNodeId: Opt[NodeId],
     contentKeys: ContentKeysList,
     content: seq[seq[byte]]): Future[void] {.async.} =
-  discard await p.neighborhoodGossip(contentKeys, content)
+  discard await p.neighborhoodGossip(srcNodeId, contentKeys, content)
 
 proc processContentLoop(n: LightClientNetwork) {.async.} =
   try:
     while true:
-      let (contentKeys, contentItems) =
+      let (srcNodeId, contentKeys, contentItems) =
         await n.contentQueue.popFirst()
 
       # When there is one invalid content item, all other content items are
@@ -243,7 +244,7 @@ proc processContentLoop(n: LightClientNetwork) {.async.} =
       # due to missing network data for validation.
       if await n.validateContent(contentKeys, contentItems):
         asyncSpawn n.portalProtocol.neighborhoodGossipDiscardPeers(
-          contentKeys, contentItems
+          srcNodeId, contentKeys, contentItems
         )
 
   except CancelledError:

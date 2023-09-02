@@ -67,7 +67,7 @@ type
     connectionTimeout: Duration
     contentReadTimeout*: Duration
     rng: ref HmacDrbgContext
-    contentQueue*: AsyncQueue[(ContentKeysList, seq[seq[byte]])]
+    contentQueue*: AsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])]
 
   StreamManager* = ref object
     transport: UtpDiscv5Protocol
@@ -248,12 +248,12 @@ proc readContentOffer(
   # as `AcceptConnectionCallback` is `asyncSpawn`'ed and there are no limits
   # on the `contentOffers`. Might move the queue to before the reading of the
   # socket, and let the specific networks handle that.
-  await stream.contentQueue.put((offer.contentKeys, contentItems))
+  await stream.contentQueue.put((Opt.some(offer.nodeId), offer.contentKeys, contentItems))
 
 proc new(
     T: type PortalStream,
     transport: UtpDiscv5Protocol,
-    contentQueue: AsyncQueue[(ContentKeysList, seq[seq[byte]])],
+    contentQueue: AsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])],
     connectionTimeout: Duration,
     contentReadTimeout: Duration,
     rng: ref HmacDrbgContext): T =
@@ -340,7 +340,7 @@ proc new*(T: type StreamManager, d: protocol.Protocol): T =
 
 proc registerNewStream*(
     m : StreamManager,
-    contentQueue: AsyncQueue[(ContentKeysList, seq[seq[byte]])],
+    contentQueue: AsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])],
     connectionTimeout = defaultConnectionTimeout,
     contentReadTimeout = defaultContentReadTimeout): PortalStream =
 

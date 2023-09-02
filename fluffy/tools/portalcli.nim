@@ -224,7 +224,7 @@ proc run(config: PortalCliConf) =
   let
     db = ContentDB.new("", config.storageSize, inMemory = true)
     sm = StreamManager.new(d)
-    cq = newAsyncQueue[(ContentKeysList, seq[seq[byte]])](50)
+    cq = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
     stream = sm.registerNewStream(cq)
     portal = PortalProtocol.new(d, config.protocolId,
       testContentIdHandler, createGetHandler(db), stream,

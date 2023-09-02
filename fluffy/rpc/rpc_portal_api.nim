@@ -202,6 +202,6 @@ proc installPortalApiHandlers*(
       key = hexToSeqByte(contentKey)
       content = hexToSeqByte(contentValue)
       contentKeys = ContentKeysList(@[ByteList.init(key)])
-      numberOfPeers = await p.neighborhoodGossip(contentKeys, @[content])
+      numberOfPeers = await p.neighborhoodGossip(Opt.none(NodeId), contentKeys, @[content])
 
     return numberOfPeers
