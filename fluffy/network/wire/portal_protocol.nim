@@ -20,7 +20,7 @@ import
   "."/[portal_stream, portal_protocol_config],
   ./messages
 
-export messages, routing_table
+export messages, routing_table, protocol
 
 declareCounter portal_message_requests_incoming,
   "Portal wire protocol incoming message requests",
@@ -1128,10 +1128,10 @@ proc getNClosestNodesWithRadius*(
 
 proc neighborhoodGossip*(
     p: PortalProtocol,
+    srcNodeId: Opt[NodeId],
     contentKeys: ContentKeysList,
     content: seq[seq[byte]]): Future[int] {.async.} =
   ## Returns number of peers to which content was gossiped
-
   if content.len() == 0:
     return 0
 
@@ -1170,7 +1170,10 @@ proc neighborhoodGossip*(
     let radius = p.radiusCache.get(node.id)
     if radius.isSome():
       if p.inRange(node.id, radius.unsafeGet(), contentId):
-        gossipNodes.add(node)
+        if srcNodeId.isNone:
+          gossipNodes.add(node)
+        elif node.id != srcNodeId.get():
+          gossipNodes.add(node)
 
   if gossipNodes.len >= 8: # use local nodes for gossip
     portal_gossip_without_lookup.inc(labelValues = [$p.protocolId])

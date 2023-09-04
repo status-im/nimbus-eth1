@@ -132,13 +132,14 @@ proc depthContentPropagate*(
   return ok()
 
 func contentDataToKeys(
-    contentData: seq[ContentDataDist]): (ContentKeysList, seq[seq[byte]]) =
+    contentData: seq[ContentDataDist]):
+    (Opt[NodeId], ContentKeysList, seq[seq[byte]]) =
   var contentKeys: seq[ByteList]
   var content: seq[seq[byte]]
   for cd in contentData:
     contentKeys.add(ByteList.init(cd.contentKey))
     content.add(cd.content)
-  return (ContentKeysList(contentKeys), content)
+  return (Opt.none(NodeId), ContentKeysList(contentKeys), content)
 
 proc breadthContentPropagate*(
     p: PortalProtocol, seedDbPath: string):
@@ -152,15 +153,15 @@ proc breadthContentPropagate*(
   const gossipsPerBatch = 5
 
   var gossipQueue =
-    newAsyncQueue[(ContentKeysList, seq[seq[byte]])](concurrentGossips)
+    newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](concurrentGossips)
 
   var gossipWorkers: seq[Future[void]]
 
   proc gossipWorker(p: PortalProtocol) {.async.} =
     while true:
-      let (keys, content) = await gossipQueue.popFirst()
+      let (srcNodeId, keys, content) = await gossipQueue.popFirst()
 
-      discard await p.neighborhoodGossip(keys, content)
+      discard await p.neighborhoodGossip(srcNodeId, keys, content)
 
   for i in 0 ..< concurrentGossips:
     gossipWorkers.add(gossipWorker(p))

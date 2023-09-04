@@ -35,7 +35,7 @@ proc initPortalProtocol(
     d = initDiscoveryNode(rng, privKey, address, bootstrapRecords)
     db = ContentDB.new("", uint32.high, inMemory = true)
     manager = StreamManager.new(d)
-    q = newAsyncQueue[(ContentKeysList, seq[seq[byte]])](50)
+    q = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
     stream = manager.registerNewStream(q)
 
     proto = PortalProtocol.new(
@@ -171,7 +171,7 @@ procSuite "Portal Wire Protocol Tests":
 
     check res.isOk()
 
-    let (contentKeys, contentItems) =
+    let (srcNodeId, contentKeys, contentItems) =
         await proto2.stream.contentQueue.popFirst()
 
     check contentItems.len() == content.len()
@@ -332,7 +332,7 @@ procSuite "Portal Wire Protocol Tests":
       dbLimit = 100_000'u32
       db = ContentDB.new("", dbLimit, inMemory = true)
       m = StreamManager.new(node1)
-      q = newAsyncQueue[(ContentKeysList, seq[seq[byte]])](50)
+      q = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
       stream = m.registerNewStream(q)
 
       proto1 = PortalProtocol.new(

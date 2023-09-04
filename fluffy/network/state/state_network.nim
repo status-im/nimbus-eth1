@@ -22,7 +22,7 @@ const
 type StateNetwork* = ref object
   portalProtocol*: PortalProtocol
   contentDB*: ContentDB
-  contentQueue*: AsyncQueue[(ContentKeysList, seq[seq[byte]])]
+  contentQueue*: AsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])]
   processContentLoop: Future[void]
 
 func toContentIdHandler(contentKey: ByteList): results.Opt[ContentId] =
@@ -70,7 +70,7 @@ proc new*(
     bootstrapRecords: openArray[Record] = [],
     portalConfig: PortalProtocolConfig = defaultPortalProtocolConfig): T =
 
-  let cq = newAsyncQueue[(ContentKeysList, seq[seq[byte]])](50)
+  let cq = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
 
   let s = streamManager.registerNewStream(cq)
 

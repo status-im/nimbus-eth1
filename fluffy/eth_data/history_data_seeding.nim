@@ -60,7 +60,7 @@ proc propagateEpochAccumulator*(
       encodedAccumulator
     )
     discard await p.neighborhoodGossip(
-      ContentKeysList(@[encKey]), @[encodedAccumulator])
+      Opt.none(NodeId), ContentKeysList(@[encKey]), @[encodedAccumulator])
 
     return ok()
 
@@ -87,14 +87,14 @@ proc historyPropagate*(
   const concurrentGossips = 20
 
   var gossipQueue =
-    newAsyncQueue[(ContentKeysList, seq[byte])](concurrentGossips)
+    newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[byte])](concurrentGossips)
   var gossipWorkers: seq[Future[void]]
 
   proc gossipWorker(p: PortalProtocol) {.async.} =
     while true:
-      let (keys, content) = await gossipQueue.popFirst()
+      let (srcNodeId, keys, content) = await gossipQueue.popFirst()
 
-      discard await p.neighborhoodGossip(keys, @[content])
+      discard await p.neighborhoodGossip(srcNodeId, keys, @[content])
 
   for i in 0 ..< concurrentGossips:
     gossipWorkers.add(gossipWorker(p))
@@ -121,7 +121,7 @@ proc historyPropagate*(
           p.storeContent(encKey, contentId, value[1])
 
           await gossipQueue.addLast(
-            (ContentKeysList(@[encode(value[0])]), value[1]))
+            (Opt.none(NodeId), ContentKeysList(@[encode(value[0])]), value[1]))
 
     return ok()
   else:
@@ -152,7 +152,7 @@ proc historyPropagateBlock*(
         contentId = history_content.toContentId(encKey)
       p.storeContent(encKey, contentId, value[1])
 
-      discard await p.neighborhoodGossip(ContentKeysList(@[encode(value[0])]), @[value[1]])
+      discard await p.neighborhoodGossip(Opt.none(NodeId), ContentKeysList(@[encode(value[0])]), @[value[1]])
 
     return ok()
   else:
@@ -190,7 +190,7 @@ proc historyPropagateHeadersWithProof*(
       p.storeContent(encKey, contentId, encodedContent)
 
       let keys = ContentKeysList(@[encode(contentKey)])
-      discard await p.neighborhoodGossip(keys, @[encodedContent])
+      discard await p.neighborhoodGossip(Opt.none(NodeId), keys, @[encodedContent])
 
   return ok()
 
@@ -229,7 +229,7 @@ proc historyPropagateHeaders*(
     while true:
       let (keys, content) = await gossipQueue.popFirst()
 
-      discard await p.neighborhoodGossip(keys, @[content])
+      discard await p.neighborhoodGossip(Opt.none(NodeId), keys, @[content])
 
   for i in 0 ..< concurrentGossips:
     gossipWorkers.add(gossipWorker(p))
