@@ -83,8 +83,11 @@ proc miscRunner(
     test "VertexID recyling lists":
       check noisy.testVidRecycleLists()
 
-    test &"QueueID cascaded fifos API (sample size: {qidSampleSize})":
+    test &"Low level cascaded fifos API (sample size: {qidSampleSize})":
       check noisy.testQidScheduler(sampleSize = qidSampleSize)
+
+    test &"High level cascaded fifos API (sample size: {qidSampleSize})":
+      check noisy.testFilterFifo(sampleSize = qidSampleSize)
 
 
 proc accountsRunner(
@@ -172,7 +175,7 @@ when isMainModule:
   setErrorLevel()
 
   when true: # and false:
-    noisy.miscRunner(qidSampleSize = 10_000)
+    noisy.miscRunner(qidSampleSize = 1_000)
 
   # This one uses dumps from the external `nimbus-eth1-blob` repo
   when true and false:

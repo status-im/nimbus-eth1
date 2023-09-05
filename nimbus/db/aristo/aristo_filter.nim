@@ -17,7 +17,7 @@ import
   results,
   "."/[aristo_desc, aristo_get, aristo_vid],
   ./aristo_desc/desc_backend,
-  ./aristo_filter/[filter_desc, filter_helpers]
+  ./aristo_filter/[filter_desc, filter_fifos, filter_helpers, filter_merge]
 
 # ------------------------------------------------------------------------------
 # Public helpers
@@ -43,9 +43,9 @@ func bulk*(layer: LayerRef): int =
 # ------------------------------------------------------------------------------
 
 proc fwdFilter*(
-    db: AristoDbRef;
-    layer: LayerRef;
-    chunkedMpt = false;
+    db: AristoDbRef;                   # Database
+    layer: LayerRef;                   # Layer to derive filter from
+    chunkedMpt = false;                # Relax for snap/proof scenario
       ): Result[FilterRef,(VertexID,AristoError)] =
   ## Assemble forward delta, i.e. changes to the backend equivalent to applying
   ## the current top layer.
@@ -79,8 +79,8 @@ proc fwdFilter*(
 
 
 proc revFilter*(
-    db: AristoDbRef;
-    filter: FilterRef;
+    db: AristoDbRef;                   # Database
+    filter: FilterRef;                 # Filter to revert
       ): Result[FilterRef,(VertexID,AristoError)] =
   ## Assemble reverse filter for the `filter` argument, i.e. changes to the
   ## backend that reverse the effect of applying the this read-only filter.
@@ -96,9 +96,10 @@ proc revFilter*(
   # Get vid generator state on backend
   block:
     let rc = db.getIdgUBE()
-    if rc.isErr:
+    if rc.isOk:
+      rev.vGen = rc.value
+    elif rc.error != GetIdgNotFound:
       return err((VertexID(0), rc.error))
-    rev.vGen = rc.value
 
   # Calculate reverse changes for the `sTab[]` structural table
   for vid in filter.sTab.keys:
@@ -127,8 +128,8 @@ proc revFilter*(
 # ------------------------------------------------------------------------------
 
 proc merge*(
-    db: AristoDbRef;
-    filter: FilterRef;
+    db: AristoDbRef;                   # Database
+    filter: FilterRef;                 # Filter to apply to database
       ): Result[void,(VertexID,AristoError)] =
   ## Merge the argument `filter` into the read-only filter layer. Note that
   ## this function has no control of the filter source. Having merged the
@@ -166,8 +167,15 @@ proc resolveBE*(db: AristoDbRef): Result[void,(VertexID,AristoError)] =
   ## For any associated descriptors working on the same backend, their backend
   ## filters will be updated so that the change of the backend DB remains
   ## unnoticed.
-  if not db.canResolveBE():
-    return err((VertexID(1),FilRoBackendOrMissing))
+  ##
+  ## Unless the disabled (see `newAristoDbRef()`, reverse filters are stored
+  ## on a cascaded fifo table so that recent database states can be reverted.
+  ##
+  if db.backend.isNil:
+    return err((VertexID(0),FilBackendMissing))
+  if not db.dudes.isNil and
+     not db.dudes.rwOk:
+    return err((VertexID(0),FilBackendRoMode))
 
   # Blind or missing filter
   if db.roFilter.isNil:
@@ -188,15 +196,24 @@ proc resolveBE*(db: AristoDbRef): Result[void,(VertexID,AristoError)] =
     for (d,f) in roFilters:
       d.roFilter = f
 
+  # Calculate reverse filter from current filter
+  let rev = block:
+    let rc = db.revFilter db.roFilter
+    if rc.isErr:
+      return err(rc.error)
+    rc.value
+
+  # Figure out how to save the rev filter on cascades slots queue
+  let be = db.backend
+  var instr: SaveInstr
+  if not be.filters.isNil:
+    let rc = be.store rev
+    if rc.isErr:
+      return err((VertexID(0),rc.error))
+    instr = rc.value
+
   # Update dudes
   if not db.dudes.isNil:
-    # Calculate reverse filter from current filter
-    let rev = block:
-      let rc = db.revFilter db.roFilter
-      if rc.isErr:
-        return err(rc.error)
-      rc.value
-
     # Update distributed filters. Note that the physical backend database
     # has not been updated, yet. So the new root key for the backend will
     # be `db.roFilter.trg`.
@@ -209,16 +226,21 @@ proc resolveBE*(db: AristoDbRef): Result[void,(VertexID,AristoError)] =
       dude.roFilter = rc.value
 
   # Save structural and other table entries
-  let
-    be = db.backend
-    txFrame = be.putBegFn()
+  let txFrame = be.putBegFn()
   be.putVtxFn(txFrame, db.roFilter.sTab.pairs.toSeq)
   be.putKeyFn(txFrame, db.roFilter.kMap.pairs.toSeq)
   be.putIdgFn(txFrame, db.roFilter.vGen)
+  if not be.filters.isNil:
+    be.putFilFn(txFrame, instr.put)
+    be.putFqsFn(txFrame, instr.scd.state)
   let w = be.putEndFn txFrame
   if w != AristoError(0):
     rollback()
     return err((VertexID(0),w))
+
+  # Update slot queue scheduler state (as saved)
+  if not be.filters.isNil:
+    be.filters.state = instr.scd.state
 
   ok()
 

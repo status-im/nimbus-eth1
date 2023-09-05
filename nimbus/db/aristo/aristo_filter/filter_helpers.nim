@@ -11,8 +11,8 @@
 import
   std/tables,
   results,
-  ".."/[aristo_desc, aristo_get],
-  ./filter_desc
+  ".."/[aristo_desc, aristo_desc/desc_backend, aristo_get],
+  "."/[filter_desc, filter_scheduler]
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -55,78 +55,19 @@ proc getLayerStateRoots*(
   err(FilStateRootMismatch)
 
 
-proc merge*(
-    db: AristoDbRef;
-    upper: FilterRef;                          # Src filter, `nil` is ok
-    lower: FilterRef;                          # Trg filter, `nil` is ok
-    beStateRoot: HashKey;                      # Merkle hash key
-      ): Result[FilterRef,(VertexID,AristoError)] =
-  ## Merge argument `upper` into the `lower` filter instance.
+proc le*(be: BackendRef; fid: FilterID): QueueID =
+  ## This function returns the filter lookup label of type `QueueID` for
+  ## the filter item with maximal filter ID `<=` argument `fid`.
   ##
-  ## Comparing before and after merge
-  ## ::
-  ##   current                     | merged
-  ##   ----------------------------+--------------------------------
-  ##   trg2 --upper-- (src2==trg1) |
-  ##                               | trg2 --newFilter-- (src1==trg0)
-  ##   trg1 --lower-- (src1==trg0) |
-  ##                               |
-  ##   trg0 --beStateRoot          | trg0 --beStateRoot
-  ##                               |
-  ##
-  # Degenerate case: `upper` is void
-  if lower.isNil:
-    if upper.isNil:
-      # Even more degenerate case when both filters are void
-      return ok FilterRef(nil)
-    if upper.src != beStateRoot:
-      return err((VertexID(1),FilStateRootMismatch))
-    return ok(upper)
+  proc qid2fid(qid: QueueID): FilterID =
+      let rc = be.getFilFn qid
+      if rc.isErr:
+        return FilterID(0)
+      rc.value.fid
 
-  # Degenerate case: `upper` is non-trivial and `lower` is void
-  if upper.isNil:
-    if lower.src != beStateRoot:
-      return err((VertexID(0), FilStateRootMismatch))
-    return ok(lower)
-
-  # Verify stackability
-  if upper.src != lower.trg or
-     lower.src != beStateRoot:
-    return err((VertexID(0), FilStateRootMismatch))
-
-  # There is no need to deep copy table vertices as they will not be modified.
-  let newFilter = FilterRef(
-    src:  lower.src,
-    sTab: lower.sTab,
-    kMap: lower.kMap,
-    vGen: upper.vGen,
-    trg:  upper.trg)
-
-  for (vid,vtx) in upper.sTab.pairs:
-    if vtx.isValid or not newFilter.sTab.hasKey vid:
-      newFilter.sTab[vid] = vtx
-    elif newFilter.sTab.getOrVoid(vid).isValid:
-      let rc = db.getVtxUBE vid
-      if rc.isOk:
-        newFilter.sTab[vid] = vtx # VertexRef(nil)
-      elif rc.error == GetVtxNotFound:
-        newFilter.sTab.del vid
-      else:
-        return err((vid,rc.error))
-
-  for (vid,key) in upper.kMap.pairs:
-    if key.isValid or not newFilter.kMap.hasKey vid:
-      newFilter.kMap[vid] = key
-    elif newFilter.kMap.getOrVoid(vid).isValid:
-      let rc = db.getKeyUBE vid
-      if rc.isOk:
-        newFilter.kMap[vid] = key # VOID_HASH_KEY
-      elif rc.error == GetKeyNotFound:
-        newFilter.kMap.del vid
-      else:
-        return err((vid,rc.error))
-
-  ok newFilter
+  if not be.isNil and
+     not be.filters.isNil:
+    return be.filters.le(fid, qid2fid)
 
 # ------------------------------------------------------------------------------
 # End
