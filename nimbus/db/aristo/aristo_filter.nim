@@ -18,8 +18,7 @@ import
   "."/[aristo_desc, aristo_get, aristo_vid],
   ./aristo_desc/desc_backend,
   ./aristo_filter/[
-    filter_desc, filter_fifos, filter_helpers, filter_merge,
-    filter_reverse, filter_siblings]
+    filter_fifos, filter_helpers, filter_merge, filter_reverse, filter_siblings]
 
 # ------------------------------------------------------------------------------
 # Public helpers

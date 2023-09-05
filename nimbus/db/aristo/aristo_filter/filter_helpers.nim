@@ -12,7 +12,18 @@ import
   std/tables,
   results,
   ".."/[aristo_desc, aristo_desc/desc_backend, aristo_get],
-  "."/[filter_desc, filter_scheduler]
+  ./filter_scheduler
+
+type
+  StateRootPair* = object
+    ## Helper structure for analysing state roots.
+    be*: HashKey                   ## Backend state root
+    fg*: HashKey                   ## Layer or filter implied state root
+
+  FilterIndexPair* = object
+    ## Helper structure for fetching filters from cascaded fifo
+    inx*: int                      ## Non negative fifo index
+    fil*: FilterRef                ## Valid filter
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -25,6 +36,7 @@ proc getLayerStateRoots*(
       ): Result[StateRootPair,AristoError] =
   ## Get the Merkle hash key for target state root to arrive at after this
   ## reverse filter was applied.
+  ##
   var spr: StateRootPair
 
   spr.be = block:
@@ -55,19 +67,45 @@ proc getLayerStateRoots*(
   err(FilStateRootMismatch)
 
 
-proc le*(be: BackendRef; fid: FilterID): QueueID =
-  ## This function returns the filter lookup label of type `QueueID` for
-  ## the filter item with maximal filter ID `<=` argument `fid`.
+proc getFilterFromFifo*(
+    be: BackendRef;
+    fid: FilterID;
+    earlierOK = false;
+      ): Result[FilterIndexPair,AristoError] =
+  ## Find filter on cascaded fifos and return its index and filter ID.
   ##
+  var cache = (QueueID(0),FilterRef(nil))  # Avoids double lookup for last entry
   proc qid2fid(qid: QueueID): FilterID =
+    if qid == cache[0]:                    # Avoids double lookup for last entry
+      return cache[1].fid
+    let rc = be.getFilFn qid
+    if rc.isErr:
+      return FilterID(0)
+    cache = (qid,rc.value)
+    rc.value.fid
+
+  if be.filters.isNil:
+    return err(FilQuSchedDisabled)
+
+  let qid = be.filters.le(fid, qid2fid, forceEQ = not earlierOK)
+  if not qid.isValid:
+    return err(FilFilterNotFound)
+
+  var fip = FilterIndexPair()
+  fip.fil = block:
+    if cache[0] == qid:
+      cache[1]
+    else:
       let rc = be.getFilFn qid
       if rc.isErr:
-        return FilterID(0)
-      rc.value.fid
+        return err(rc.error)
+      rc.value
 
-  if not be.isNil and
-     not be.filters.isNil:
-    return be.filters.le(fid, qid2fid)
+  fip.inx = be.filters[qid]
+  if fip.inx < 0:
+    return err(FilInxByQidFailed)
+
+  ok fip
 
 # ------------------------------------------------------------------------------
 # End

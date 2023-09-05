@@ -12,7 +12,7 @@ import
   std/tables,
   results,
   ".."/[aristo_desc, aristo_desc/desc_backend],
-  "."/[filter_desc, filter_merge, filter_scheduler]
+  "."/[filter_merge, filter_scheduler]
 
 type
   FifoInstr* = object

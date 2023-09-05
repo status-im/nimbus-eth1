@@ -18,7 +18,7 @@ import
   "."/[aristo_constants, aristo_desc, aristo_hike, aristo_init],
   ./aristo_desc/desc_backend,
   ./aristo_init/[memory_db, rocks_db],
-  ./aristo_filter/filter_desc
+  ./aristo_filter/filter_scheduler
 
 # ------------------------------------------------------------------------------
 # Private functions

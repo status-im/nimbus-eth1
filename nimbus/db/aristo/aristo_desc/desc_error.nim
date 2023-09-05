@@ -188,7 +188,8 @@ type
     FilExecOops
     FilExecSaveMissing
     FilExecStackUnderflow
-    FilInxByFidFailed
+    FilFilterNotFound
+    FilInxByQidFailed
     FilNilFilterRejected
     FilPosArgExpected
     FilPrettyPointlessLayer

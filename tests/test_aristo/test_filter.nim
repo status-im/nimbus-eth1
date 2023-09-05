@@ -22,8 +22,7 @@ import
     aristo_merge, aristo_persistent, aristo_transcode],
   ../../nimbus/db/aristo,
   ../../nimbus/db/aristo/aristo_desc/desc_backend,
-  ../../nimbus/db/aristo/aristo_filter/[
-    filter_desc, filter_fifos, filter_helpers, filter_scheduler],
+  ../../nimbus/db/aristo/aristo_filter/[filter_fifos, filter_scheduler],
   ./test_helpers
 
 type
@@ -397,6 +396,13 @@ proc storeFilter(
   be.filters.state = instr.scd.state
   true
 
+proc qid2fidFn(be: BackendRef): QuFilMap =
+  result = proc(qid: QueueID): FilterID =
+    let rc = be.getFilFn qid
+    if rc.isErr:
+      return FilterID(0)
+    rc.value.fid
+ 
 proc storeFilter(
     be: BackendRef;
     serial: int;
@@ -426,7 +432,7 @@ proc fetchDelete(
       let rc = be.fetch(backStep = backStep)
       xCheckRc rc.error == 0
       rc.value
-    qid = be.le instr.fil.fid
+    qid = be.filters.le(instr.fil.fid, be.qid2fidFn)
     inx = be.filters[qid]
   xCheck backStep == inx + 1
   xCheck instr.del.put == vfyInst.put
@@ -505,7 +511,7 @@ proc validateFifo(
 
       # Check access by queue ID (all end up at `qid`)
       for fid in filter.fid ..< lastFid:
-        xCheck qid == be.le fid
+        xCheck qid == be.filters.le(fid, be.qid2fidFn)
 
       inx.inc
       lastFid = filter.fid

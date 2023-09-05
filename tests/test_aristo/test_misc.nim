@@ -20,7 +20,7 @@ import
   ../../nimbus/db/aristo,
   ../../nimbus/db/aristo/[
     aristo_debug, aristo_desc, aristo_transcode, aristo_vid],
-  ../../nimbus/db/aristo/aristo_filter/[filter_desc, filter_scheduler],
+  ../../nimbus/db/aristo/aristo_filter/filter_scheduler,
   ./test_helpers
 
 type
@@ -234,8 +234,11 @@ proc validate(db: QTabRef; scd: QidSchedRef; serial: int; relax: bool): bool =
   xCheck scd.le(lastFid + 1, qFn) == scd[0] # Test fringe condition
 
   for (qid,val) in db.fifos(scd).flatten:
-    for w in (lastFid-1).countDown val.fid:
+    xCheck scd.eq(val.fid, qFn) == qid
+    xCheck scd.le(val.fid, qFn) == qid
+    for w in val.fid+1 ..< lastFid:
       xCheck scd.le(w, qFn) == qid
+      xCheck scd.eq(w, qFn) == QueueID(0)
     lastFid = val.fid
 
   if FilterID(1) < lastFid:                 # Test fringe condition

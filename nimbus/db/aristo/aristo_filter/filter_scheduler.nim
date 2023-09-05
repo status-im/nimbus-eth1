@@ -10,10 +10,24 @@
 
 import
   std/[algorithm, sequtils],
-  ".."/[aristo_constants, aristo_desc],
-  ./filter_desc
+  ".."/[aristo_constants, aristo_desc]
 
 type
+  QidAction* = object
+    ## Instruction for administering filter queue ID slots. The op-code is
+    ## followed by one or two queue ID arguments. In case of a two arguments,
+    ## the value of the second queue ID is never smaller than the first one.
+    op*: QidOp                     ## Action, followed by at most two queue IDs
+    qid*: QueueID                  ## Action argument
+    xid*: QueueID                  ## Second action argument for range argument
+
+  QidOp* = enum
+    Oops = 0
+    SaveQid                        ## Store new item
+    HoldQid                        ## Move/append range items to local queue
+    DequQid                        ## Store merged local queue items
+    DelQid                         ## Delete entry from last overflow queue
+
   QuFilMap* = proc(qid: QueueID): FilterID {.gcsafe, raises: [].}
     ## The map `fn: QueueID -> FilterID` can be augmented to a strictly
     ## *decreasing* map `g: {0 .. N} -> FilterID`, with `g = fn([])`
@@ -587,9 +601,10 @@ proc le*(
     fifo: QidSchedRef;                             # Cascaded fifos descriptor
     fid: FilterID;                                 # Upper bound
     fn: QuFilMap;                                  # QueueID/FilterID mapping
+    forceEQ = false;                               # Check for strict equality
       ): QueueID =
   ## Find the `qid` address of type `QueueID` with `fn(qid) <= fid` and
-  ## `fid < fn(qid+1)`
+  ## `fid < fn(qid+1)`.
   ##
   ## If `fn()` returns `FilterID(0)`, then this function returns `QueueID(0)`
   ##
@@ -599,41 +614,75 @@ proc le*(
     left = 0
     right = fifo.len - 1
 
-  template getFid(qid: QueueID): FilterID =
-    let fid = fn(qid)
-    if not fid.isValid:
-      return QueueID(0)
-    fid
+  template toFid(qid: QueueID): FilterID =
+    let w = fn(qid)
+    if not w.isValid:
+      return QueueID(0) # exit hosting function environment
+    w
 
-  if 0 <= right:
-    let maxQid = fifo[left]
-    if maxQid.getFid <= fid:
+  # The algorithm below tryes to avoid `toFid()` as much as possible because
+  # it might invoke an extra database lookup.
+
+  if fid.isValid and 0 <= right:
+    # Check left fringe
+    let
+      maxQid = fifo[left]
+      maxFid = maxQid.toFid
+    if maxFid <= fid:
+      if forceEQ and maxFid != fid:
+        return QueueID(0)
       return maxQid
+    # So `fid < fifo[left]`
+
+    # Check right fringe
+    let
+      minQid = fifo[right]
+      minFid = minQid.toFid
+    if fid <= minFid:
+      if minFid == fid:
+        return minQid
+      return QueueID(0)
+    # So `fifo[right] < fid`
 
     # Bisection
-    if fifo[right].getFid <= fid:
-      var pivotLeFid = true
-      while 1 < right - left:
-        let half = (left + right) div 2
-        #
-        # FilterID:   100      70       33
-        # inx:        left ... half ... right
-        # fid:             77
-        #
-        # with `fifo[left].fn > fid >= fifo[right].fn`
-        #
-        let pivotLeFid = fifo[half].getFid <= fid
-        if pivotLeFid:   # fid >= fifo[half].getFid:
-          right = half
-        else:            # fifo[half].getFid > fid
-          left = half
+    var rightQid = minQid        # Might be used as end result
+    while 1 < right - left:
+      let
+        pivot = (left + right) div 2
+        pivQid = fifo[pivot]
+        pivFid = pivQid.toFid
+      #
+      # Example:
+      # ::
+      #   FilterID:   100       70       33
+      #   inx:        left ... pivot ... right
+      #   fid:             77
+      #
+      # with `fifo[left].toFid > fid > fifo[right].toFid`
+      #
+      if pivFid < fid:           # fid >= fifo[half].toFid:
+        right = pivot
+        rightQid = pivQid
+      elif fid < pivFid:         # fifo[half].toFid > fid
+        left = pivot
+      else:
+        return pivQid
 
-      # Now: `fifo[right].fn <= fid < fifo[left].fn` (and `right == left+1`).
-      # So make sure that the entry exists.
-      if not pivotLeFid or fid < fifo[left].fn:
-        return fifo[right]
+    # Now: `fifo[right].toFid < fid < fifo[left].toFid` (and `right == left+1`).
+    if not forceEQ:
+      # Make sure that `fifo[right].toFid` exists
+      if rightQid.fn.isValid:
+        return rightQid
 
-  # otherwise QueueID(0)
+  # Otherwise QueueID(0)
+
+proc eq*(
+    fifo: QidSchedRef;                             # Cascaded fifos descriptor
+    fid: FilterID;                                 # Filter ID to search for
+    fn: QuFilMap;                                  # QueueID/FilterID mapping
+      ): QueueID =
+  ## Variant of `le()` for strict equality.
+  fifo.le(fid, fn, forceEQ = true)
 
 # ------------------------------------------------------------------------------
 # End
