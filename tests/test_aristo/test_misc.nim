@@ -33,30 +33,9 @@ type
 
   QTabRef = TableRef[QueueID,QValRef]
 
-const
-  QidSlotLyo = [(4,0,10),(3,3,10),(3,4,10),(3,5,10)]
-  QidSlotLy1 = [(4,0,0),(3,3,0),(3,4,0),(3,5,0)]
-
-  QidSample* = (3 * QidSlotLyo.stats.minCovered) div 2
-
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
-
-template xCheck(expr: untyped): untyped =
-  ## Note: this check will invoke `expr` twice
-  if not (expr):
-    check expr
-    return
-
-template xCheck(expr: untyped; ifFalse: untyped): untyped =
-  ## Note: this check will invoke `expr` twice
-  if not (expr):
-    ifFalse
-    check expr
-    return
-
-# ---------------------
 
 proc posixPrngRand(state: var uint32): byte =
   ## POSIX.1-2001 example of a rand() implementation, see manual page rand(3).
@@ -100,31 +79,38 @@ proc `+`(a: VertexID, b: int): VertexID =
 
 # ---------------------
 
+iterator walkFifo(qt: QTabRef;scd: QidSchedRef): (QueueID,QValRef) =
+  ## ...
+  proc kvp(chn: int, qid: QueueID): (QueueID,QValRef) =
+    let cid = QueueID((chn.uint64 shl 62) or qid.uint64)
+    (cid, qt.getOrDefault(cid, QValRef(nil)))
+
+  if not scd.isNil:
+    for i in 0 ..< scd.state.len:
+      let (left, right) = scd.state[i]
+      if left == 0:
+        discard
+      elif left <= right:
+        for j in right.countDown left:
+          yield kvp(i, j)
+      else:
+        for j in right.countDown QueueID(1):
+          yield kvp(i, j)
+        for j in scd.ctx.q[i].wrap.countDown left:
+          yield kvp(i, j)
+
+proc fifos(qt: QTabRef; scd: QidSchedRef): seq[seq[(QueueID,QValRef)]] =
+  ## ..
+  var lastChn = -1
+  for (qid,val) in qt.walkFifo scd:
+    let chn = (qid.uint64 shr 62).int
+    while lastChn < chn:
+      lastChn.inc
+      result.add newSeq[(QueueID,QValRef)](0)
+    result[^1].add (qid,val)
+
 func sortedPairs(qt: QTabRef): seq[(QueueID,QValRef)] =
   qt.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.QueueID).mapIt((it,qt[it]))
-
-func fifos(qt: QTabRef; scd: QidSchedRef): seq[seq[(QueueID,QValRef)]] =
-  proc kvp(chn: int, qid: QueueID): (QueueID,QValRef) =
-    let
-      cid = QueueID((chn.uint64 shl 62) or qid.uint64)
-      val = qt.getOrDefault(cid, QValRef(nil))
-    (cid, val)
-
-  for i in 0 ..< scd.state.len:
-    let
-      left =  scd.state[i][0]
-      right = scd.state[i][1]
-    result.add newSeq[(QueueID,QValRef)](0)
-    if left == 0:
-      discard
-    elif left <= right:
-      for j in right.countDown left:
-        result[i].add kvp(i, j)
-    else:
-      for j in right.countDown QueueID(1):
-        result[i].add kvp(i, j)
-      for j in scd.ctx.q[i].wrap.countDown left:
-        result[i].add kvp(i, j)
 
 func flatten(a: seq[seq[(QueueID,QValRef)]]): seq[(QueueID,QValRef)] =
   for w in a:
@@ -296,10 +282,8 @@ proc testVidRecycleLists*(noisy = true; seed = 42): bool =
     let
       db1 = newAristoDbRef BackendVoid
       rc = dbBlob.deblobify seq[VertexID]
-    if rc.isErr:
-      xCheck rc.error == AristoError(0)
-    else:
-      db1.top.vGen = rc.value
+    xCheckRc rc.error == 0
+    db1.top.vGen = rc.value
 
     xCheck db.top.vGen == db1.top.vGen
 
@@ -407,11 +391,15 @@ proc testQidScheduler*(
 
     let fifoID = list.fifos(scd).flatten.mapIt(it[0])
     for j in 0 ..< list.len:
+      # Check fifo order
       xCheck fifoID[j] == scd[j]:
         noisy.say "***", "n=", n, " exec=", w.exec.pp,
           " fifoID[", j, "]=", fifoID[j].pp,
           " scd[", j, "]=", scd[j].pp,
           "\n     fifo=", list.pp scd
+      # Check random access and reverse
+      let qid = scd[j]
+      xCheck j == scd[qid]
 
     if debug:
       show(exec=w.exec)
@@ -459,7 +447,7 @@ proc testQidScheduler*(
     let validateOk = list.validate(scd, serial=n, relax=false)
     xCheck validateOk
 
-  if debug: # or true:
+  if debug:
     show()
 
   true

@@ -82,6 +82,7 @@ type
 
   FilterRef* = ref object
     ## Delta layer with expanded sequences for quick access
+    fid*: FilterID                   ## Filter identifier
     src*: HashKey                    ## Applicable to this state root
     trg*: HashKey                    ## Resulting state root (i.e. `kMap[1]`)
     sTab*: Table[VertexID,VertexRef] ## Filter structural vertex table
@@ -99,6 +100,40 @@ type
     vGen*: seq[VertexID]              ## Unique vertex ID generator
     txUid*: uint                      ## Transaction identifier if positive
     dirty*: bool                      ## Needs to be hashified if `true`
+
+  # ----------------------
+
+  QidLayoutRef* = ref object
+    ## Layout of cascaded list of filter ID slot queues where a slot queue
+    ## with index `N+1` serves as an overflow queue of slot queue `N`.
+    q*: array[4,QidSpec]
+
+  QidSpec* = tuple
+    ## Layout of a filter ID slot queue
+    size: uint                     ## Capacity of queue, length within `1..wrap`
+    width: uint                    ## Instance gaps (relative to prev. item)
+    wrap: QueueID                  ## Range `1..wrap` for round-robin queue
+
+  QidSchedRef* = ref object of RootRef
+    ## Current state of the filter queues
+    ctx*: QidLayoutRef             ## Organisation of the FIFO
+    state*: seq[(QueueID,QueueID)] ## Current fill state
+
+const
+  DefaultQidWrap = QueueID(0x3fff_ffff_ffff_ffffu64)
+
+  QidSpecSizeMax* = high(uint32).uint
+    ## Maximum value allowed for a `size` value of a `QidSpec` object
+
+  QidSpecWidthMax* = high(uint32).uint
+    ## Maximum value allowed for a `width` value of a `QidSpec` object
+
+# ------------------------------------------------------------------------------
+# Private helpers
+# ------------------------------------------------------------------------------
+
+func max(a, b, c: int): int =
+  max(max(a,b),c)
 
 # ------------------------------------------------------------------------------
 # Public helpers: `NodeRef` and `PayloadRef`
@@ -242,19 +277,54 @@ proc dup*(layer: LayerRef): LayerRef =
   for (k,v) in layer.sTab.pairs:
     result.sTab[k] = v.dup
 
-proc dup*(filter: FilterRef): FilterRef =
-  ## Duplicate layer.
-  result = FilterRef(
-    src:  filter.src,
-    kMap: filter.kMap,
-    vGen: filter.vGen,
-    trg:  filter.trg)
-  for (k,v) in filter.sTab.pairs:
-    result.sTab[k] = v.dup
+# ---------------
 
-proc to*(node: NodeRef; T: type VertexRef): T =
+func to*(node: NodeRef; T: type VertexRef): T =
   ## Extract a copy of the `VertexRef` part from a `NodeRef`.
   node.VertexRef.dup
+
+func to*(a: array[4,tuple[size, width: int]]; T: type QidLayoutRef): T =
+  ## Convert a size-width array to a `QidLayoutRef` layout. Over large
+  ## array field values are adjusted to its maximal size.
+  var q: array[4,QidSpec]
+  for n in 0..3:
+    q[n] = (min(a[n].size.uint, QidSpecSizeMax),
+            min(a[n].width.uint, QidSpecWidthMax),
+            DefaultQidWrap)
+  q[0].width = 0
+  T(q: q)
+
+func to*(a: array[4,tuple[size, width, wrap: int]]; T: type QidLayoutRef): T =
+  ## Convert a size-width-wrap array to a `QidLayoutRef` layout. Over large
+  ## array field values are adjusted to its maximal size. Too small `wrap`
+  ## values are adjusted to its minimal size.
+  var q: array[4,QidSpec]
+  for n in 0..2:
+    q[n] = (min(a[n].size.uint, QidSpecSizeMax),
+            min(a[n].width.uint, QidSpecWidthMax),
+            QueueID(max(a[n].size + a[n+1].width, a[n].width+1, a[n].wrap)))
+  q[0].width = 0
+  q[3] = (min(a[3].size.uint, QidSpecSizeMax),
+          min(a[3].width.uint, QidSpecWidthMax),
+          QueueID(max(a[3].size, a[3].width, a[3].wrap)))
+  T(q: q)
+
+# ------------------------------------------------------------------------------
+# Public constructors for filter slot scheduler state
+# ------------------------------------------------------------------------------
+
+func init*(T: type QidSchedRef; a: array[4,(int,int)]): T =
+  ## Constructor, see comments at the coverter function `to()` for adjustments
+  ## of the layout argument `a`.
+  T(ctx: a.to(QidLayoutRef))
+
+func init*(T: type QidSchedRef; a: array[4,(int,int,int)]): T =
+  ## Constructor, see comments at the coverter function `to()` for adjustments
+  ## of the layout argument `a`.
+  T(ctx: a.to(QidLayoutRef))
+
+func init*(T: type QidSchedRef; ctx: QidLayoutRef): T =
+  T(ctx: ctx)
 
 # ------------------------------------------------------------------------------
 # End

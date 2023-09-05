@@ -48,12 +48,18 @@ iterator walkKeyBe*(
     yield (n,vid,key)
 
 iterator walkFilBe*(
-   T: type RdbBackendRef;
-   db: AristoDbRef;
+   be: RdbBackendRef;
      ): tuple[n: int, qid: QueueID, filter: FilterRef] =
-  ## Similar to `walkVtxBe()` but for filters.
-  for (n,qid,filter) in db.to(T).walkFilBeImpl db:
+  ## Iterate over backend filters.
+  for (n,qid,filter) in be.walkFilBeImpl:
     yield (n,qid,filter)
+
+iterator walkFifoBe*(
+   be: RdbBackendRef;
+     ): (QueueID,FilterRef) =
+  ## Walk filter slots in fifo order.
+  for (qid,filter) in be.walkFifoBeImpl:
+    yield (qid,filter)
 
 # ------------------------------------------------------------------------------
 # End

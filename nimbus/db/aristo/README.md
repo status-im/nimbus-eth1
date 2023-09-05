@@ -233,7 +233,7 @@ stored in the right byte of the serialised bitmap.
 ### 4.2 Extension record serialisation
 
         0 +--+--+--+--+--+--+--+--+--+
-          |                          |       -- vertexID
+          |                          |       -- vertex ID
         8 +--+--+--+--+--+--+--+--+--+
           |  | ...                           -- path segment
           +--+
@@ -338,17 +338,19 @@ assumed, i.e. the list with the single vertex ID *1*.
 
 ### 4.8 Backend filter record serialisation
 
-        0  +--+--+--+--+--+ .. --+--+ .. --+
+         0 +--+--+--+--+--+ .. --+
+           |                     |           -- filter ID
+         8 +--+--+--+--+--+ .. --+--+ .. --+
            |                               | -- 32 bytes filter source hash
-        32 +--+--+--+--+--+ .. --+--+ .. --+
+        40 +--+--+--+--+--+ .. --+--+ .. --+
            |                               | -- 32 bytes filter target hash
-        64 +--+--+--+--+--+ .. --+--+ .. --+
+        72 +--+--+--+--+--+ .. --+--+ .. --+
            |           |                     -- number of unused vertex IDs
-        68 +--+--+--+--+
+        76 +--+--+--+--+
            |           |                     -- number of structural triplets
-        72 +--+--+--+--+--+ .. --+
-           |                     |           -- first unused vertex ID
         80 +--+--+--+--+--+ .. --+
+           |                     |           -- first unused vertex ID
+        88 +--+--+--+--+--+ .. --+
            ...                               -- more unused vertex ID
         N1 +--+--+--+--+
            ||          |                     -- flg(3) + vtxLen(29), 1st triplet

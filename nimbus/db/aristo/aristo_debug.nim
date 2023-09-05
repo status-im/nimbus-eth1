@@ -16,14 +16,12 @@ import
   results,
   stew/byteutils,
   "."/[aristo_constants, aristo_desc, aristo_hike, aristo_init],
+  ./aristo_desc/desc_backend,
   ./aristo_init/[memory_db, rocks_db],
   ./aristo_filter/filter_desc
 
-export
-  TypedBackendRef, aristo_init.to
-
 # ------------------------------------------------------------------------------
-# Ptivate functions
+# Private functions
 # ------------------------------------------------------------------------------
 
 proc sortedKeys(lTab: Table[LeafTie,VertexID]): seq[LeafTie] =
@@ -357,6 +355,7 @@ proc ppFilter(fl: FilterRef; db: AristoDbRef; indent: int): string =
   if fl.isNil:
     result &= " n/a"
     return
+  result &= pfx & "fid=" & fl.fid.ppFid
   result &= pfx & "trg(" & fl.trg.ppKey & ")"
   result &= pfx & "src(" & fl.src.ppKey & ")"
   result &= pfx & "vGen" & pfx1 & "[" &
@@ -600,13 +599,6 @@ proc pp*(kMap: Table[VertexID,Hashlabel]; db: AristoDbRef; indent = 4): string =
 proc pp*(pAmk: Table[Hashlabel,VertexID]; db: AristoDbRef; indent = 4): string =
   db.ppXMap(db.top.kMap, pAmk, indent)
 
-proc pp*(
-    be: MemBackendRef|RdbBackendRef;
-    db: AristoDbRef;
-    indent = 4;
-      ): string =
-  be.ppBe(db, indent)
-
 # ---------------------
 
 proc pp*(
@@ -668,12 +660,11 @@ proc pp*(
   filter.ppFilter(db, indent)
 
 proc pp*(
-  be: TypedBackendRef;
+  be: BackendRef;
   db: AristoDbRef;
   indent = 4;
     ): string =
-  ## May be called as `db.to(TypedBackendRef).pp(db)`
-  case (if be.isNil: BackendVoid else: be.kind)
+  case be.kind:
   of BackendMemory:
     be.MemBackendRef.ppBe(db, indent)
 

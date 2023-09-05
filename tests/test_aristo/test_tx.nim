@@ -32,8 +32,12 @@ const
   MaxFilterBulk = 150_000
     ## Policy settig for `pack()`
 
-  WalkStopRc =
+  WalkStopErr =
     Result[LeafTie,(VertexID,AristoError)].err((VertexID(0),NearbyBeyondRange))
+
+let
+  TxQidLyo = QidSlotLyo.to(QidLayoutRef)
+    ## Cascaded filter slots layout for testing
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -89,13 +93,12 @@ proc randomisedLeafs(
       let r = n + td.rand(result.len - n)
       result[n].swap result[r]
 
-proc innerCleanUp(db: AristoDbRef) =
+proc innerCleanUp(db: AristoDbRef): bool {.discardable.}  =
   ## Defer action
-  let rc = db.txTop()
-  if rc.isOk:
-    let rx = rc.value.collapse(commit=false)
-    if rx.isErr:
-      check rx.error == (0,0)
+  let rx = db.txTop()
+  if rx.isOk:
+    let rc = rx.value.collapse(commit=false)
+    xCheckRc rc.error == (0,0)
   db.finish(flush=true)
 
 proc saveToBackend(
@@ -107,74 +110,52 @@ proc saveToBackend(
       ): bool =
   var db = tx.to(AristoDbRef)
 
-  # Verify context: nesting level must be 1 (i.e. two transactions)
+  # Verify context: nesting level must be 2 (i.e. two transactions)
+  xCheck tx.level == 2
+
   block:
-    block:
-      let level = tx.level
-      if level != 2:
-        check level == 2
-        return
-    block:
-      let rc = db.checkCache(relax=true)
-      if rc.isErr:
-        check rc.error == (0,0)
-        return
+    let rc = db.checkCache(relax=true)
+    xCheckRc rc.error == (0,0)
 
   # Commit and hashify the current layer
   block:
-    block:
-      let rc = tx.commit()
-      if rc.isErr:
-        check rc.error == (0,0)
-        return
-    block:
-      # Make sure MPT hashes are OK
-      if db.top.dirty:
-        check db.top.dirty == false
-        return
-    block:
-      let rc = db.txTop()
-      if rc.isErr:
-        check rc.error == 0
-        return
-      tx = rc.value
-      let level = tx.level
-      if level != 1:
-        check level == 1
-        return
-    block:
-      let rc = db.checkBE(relax=true)
-      if rc.isErr:
-        check rc.error == (0,0)
-        return
+    let rc = tx.commit()
+    xCheckRc rc.error == (0,0)
+
+  # Make sure MPT hashes are OK
+  xCheck db.top.dirty == false
+
+  block:
+    let rc = db.txTop()
+    xCheckRc rc.error == 0
+    tx = rc.value
+
+  # Verify context: nesting level must be 1 (i.e. one transaction)
+  xCheck tx.level == 1
+
+  block:
+    let rc = db.checkBE(relax=true)
+    xCheckRc rc.error == (0,0)
 
   # Commit and save to backend
   block:
-    block:
-      let rc = tx.commit()
-      if rc.isErr:
-        check rc.error == (0,0)
-        return
-    block:
-      # Make sure MPT hashes are OK
-      if db.top.dirty:
-        check db.top.dirty == false
-        return
-    block:
-      let rc = db.txTop()
-      if rc.isOk:
-        check rc.value.level < 0 # force error
-        return
-    block:
-      let rc = db.stow(stageLimit=MaxFilterBulk, chunkedMpt=chunkedMpt)
-      if rc.isErr:
-        check rc.error == (0,0)
-        return
-    block:
-      let rc = db.checkBE(relax=relax)
-      if rc.isErr:
-        check rc.error == (0,0)
-        return
+    let rc = tx.commit()
+    xCheckRc rc.error == (0,0)
+
+  # Make sure MPT hashes are OK
+  xCheck db.top.dirty == false
+
+  block:
+    let rc = db.txTop()
+    xCheckErr rc.value.level < 0 # force error
+
+  block:
+    let rc = db.stow(stageLimit=MaxFilterBulk, chunkedMpt=chunkedMpt)
+    xCheckRc rc.error == (0,0)
+
+  block:
+    let rc = db.checkBE(relax=relax)
+    xCheckRc rc.error == (0,0)
 
   # Update layers to original level
   tx = db.txBegin().value.to(AristoDbRef).txBegin().value
@@ -190,59 +171,40 @@ proc saveToBackendWithOops(
       ): bool =
   var db = tx.to(AristoDbRef)
 
-  # Verify context: nesting level must be 1 (i.e. two transactions)
-  block:
-    block:
-      let level = tx.level
-      if level != 2:
-        check level == 2
-        return
+  # Verify context: nesting level must be 2 (i.e. two transactions)
+  xCheck tx.level == 2
 
   # Commit and hashify the current layer
   block:
-    block:
-      let rc = tx.commit()
-      if rc.isErr:
-        check rc.error == (0,0)
-        return
-    block:
-      # Make sure MPT hashes are OK
-      if db.top.dirty:
-        check db.top.dirty == false
-        return
-    block:
-      let rc = db.txTop()
-      if rc.isErr:
-        check rc.error == 0
-        return
-      tx = rc.value
-      let level = tx.level
-      if level != 1:
-        check level == 1
-        return
+    let rc = tx.commit()
+    xCheckRc rc.error == (0,0)
+
+  # Make sure MPT hashes are OK
+  xCheck db.top.dirty == false
+
+  block:
+    let rc = db.txTop()
+    xCheckRc rc.error == 0
+    tx = rc.value
+
+  # Verify context: nesting level must be 1 (i.e. one transaction)
+  xCheck tx.level == 1
 
   # Commit and save to backend
   block:
-    block:
-      let rc = tx.commit()
-      if rc.isErr:
-        check rc.error == (0,0)
-        return
-    block:
-      # Make sure MPT hashes are OK
-      if db.top.dirty:
-        check db.top.dirty == false
-        return
-    block:
-      let rc = db.txTop()
-      if rc.isOk:
-        check rc.value.level < 0
-        return
-    block:
-      let rc = db.stow(stageLimit=MaxFilterBulk, chunkedMpt=chunkedMpt)
-      if rc.isErr:
-        check rc.error == (0,0)
-        return
+    let rc = tx.commit()
+    xCheckRc rc.error == (0,0)
+
+  # Make sure MPT hashes are OK
+  xCheck db.top.dirty == false
+
+  block:
+    let rc = db.txTop()
+    xCheckErr rc.value.level < 0 # force error
+
+  block:
+    let rc = db.stow(stageLimit=MaxFilterBulk, chunkedMpt=chunkedMpt)
+    xCheckRc rc.error == (0,0)
 
   # Update layers to original level
   tx = db.txBegin().value.to(AristoDbRef).txBegin().value
@@ -264,10 +226,8 @@ proc fwdWalkVerify(
     last = LeafTie()
     n = 0
   for (key,_) in db.right low(LeafTie,root):
-    if key notin leftOver:
+    xCheck key in leftOver:
       noisy.say "*** fwdWalkVerify", " id=", n + (nLeafs + 1) * debugID
-      check key in leftOver
-      return
     leftOver.excl key
     last = key
     n.inc
@@ -278,13 +238,12 @@ proc fwdWalkVerify(
   elif last != high(LeafTie,root):
     last = last + 1
   let rc = last.right db
-  if rc.isOk or rc.error[1] != NearbyBeyondRange:
-    check rc == WalkStopRc
-    return
+  if rc.isOk:
+    xCheck rc == WalkStopErr
+  else:
+    xCheck rc.error[1] == NearbyBeyondRange
 
-  if n != nLeafs:
-    check n == nLeafs
-    return
+  xCheck n == nLeafs
 
   true
 
@@ -302,10 +261,8 @@ proc revWalkVerify(
     last = LeafTie()
     n = 0
   for (key,_) in db.left high(LeafTie,root):
-    if key notin leftOver:
+    xCheck key in leftOver:
       noisy.say "*** revWalkVerify", " id=", n + (nLeafs + 1) * debugID
-      check key in leftOver
-      return
     leftOver.excl key
     last = key
     n.inc
@@ -316,13 +273,12 @@ proc revWalkVerify(
   elif last != low(LeafTie,root):
     last = last - 1
   let rc = last.left db
-  if rc.isOk or rc.error[1] != NearbyBeyondRange:
-    check rc == WalkStopRc
-    return
+  if rc.isOk:
+    xCheck rc == WalkStopErr
+  else:
+    xCheck rc.error[1] == NearbyBeyondRange
 
-  if n != nLeafs:
-    check n == nLeafs
-    return
+  xCheck n == nLeafs
 
   true
 
@@ -345,17 +301,15 @@ proc testTxMergeAndDelete*(
   for n,w in list:
     # Start with brand new persistent database.
     db = block:
-      let rc = newAristoDbRef(BackendRocksDB,rdbPath)
-      if rc.isErr:
-        check rc.error == 0
-        return
+      let rc = newAristoDbRef(BackendRocksDB, rdbPath, qidLayout=TxQidLyo)
+      xCheckRc rc.error == 0
       rc.value
 
     # Start transaction (double frame for testing)
-    check db.txTop.isErr
+    xCheck db.txTop.isErr
     var tx = db.txBegin().value.to(AristoDbRef).txBegin().value
-    check tx.isTop()
-    check tx.level == 2
+    xCheck tx.isTop()
+    xCheck tx.level == 2
 
     # Reset database so that the next round has a clean setup
     defer: db.innerCleanUp
@@ -364,18 +318,14 @@ proc testTxMergeAndDelete*(
     let kvpLeafs = w.kvpLst.mapRootVid VertexID(1)
     for leaf in kvpLeafs:
       let rc = db.merge leaf
-      if rc.isErr:
-        check rc.error == 0
-        return
+      xCheckRc rc.error == 0
 
     # List of all leaf entries that should be on the database
     var leafsLeft = kvpLeafs.mapIt(it.leafTie).toHashSet
 
     # Provide a (reproducible) peudo-random copy of the leafs list
     let leafVidPairs = db.randomisedLeafs prng
-    if leafVidPairs.len != leafsLeft.len:
-      check leafVidPairs.len == leafsLeft.len
-      return
+    xCheck leafVidPairs.len == leafsLeft.len
 
     # Trigger subsequent saving tasks in loop below
     let (saveMod, saveRest, relax) = block:
@@ -398,17 +348,13 @@ proc testTxMergeAndDelete*(
 
       # Delete leaf
       let rc = db.delete leaf
-      if rc.isErr:
-        check rc.error == (0,0)
-        return
+      xCheckRc rc.error == (0,0)
 
       # Update list of remaininf leafs
       leafsLeft.excl leaf
 
       let deletedVtx = tx.db.getVtx lid
-      if deletedVtx.isValid:
-        check deletedVtx.isValid == false
-        return
+      xCheck deletedVtx.isValid == false
 
       # Walking the database is too slow for large tables. So the hope is that
       # potential errors will not go away and rather pop up later, as well.
@@ -453,15 +399,14 @@ proc testTxMergeProofAndKvpList*(
     if resetDb or w.root != rootKey or w.proof.len == 0:
       db.innerCleanUp
       db = block:
-        let rc = newAristoDbRef(BackendRocksDB,rdbPath)
-        if rc.isErr:
-          check rc.error == 0
-          return
+        # New DB with disabled filter slots management
+        let rc = newAristoDbRef(BackendRocksDB,rdbPath,QidLayoutRef(nil))
+        xCheckRc rc.error == 0
         rc.value
 
       # Start transaction (double frame for testing)
       tx = db.txBegin().value.to(AristoDbRef).txBegin().value
-      check tx.isTop()
+      xCheck tx.isTop()
 
       # Update root
       rootKey = w.root
@@ -480,28 +425,22 @@ proc testTxMergeProofAndKvpList*(
       proved: tuple[merged: int, dups: int, error: AristoError]
     if 0 < w.proof.len:
       let rc = db.merge(rootKey, VertexID(1))
-      if rc.isErr:
-        check rc.error == 0
-        return
+      xCheckRc rc.error == 0
 
       proved = db.merge(w.proof, rc.value) # , noisy)
 
-      check proved.error in {AristoError(0),MergeHashKeyCachedAlready}
-      check w.proof.len == proved.merged + proved.dups
-      check db.top.lTab.len == lTabLen
-      check db.top.sTab.len <= proved.merged + sTabLen
-      check proved.merged < db.top.pAmk.len
+      xCheck proved.error in {AristoError(0),MergeHashKeyCachedAlready}
+      xCheck w.proof.len == proved.merged + proved.dups
+      xCheck db.top.lTab.len == lTabLen
+      xCheck db.top.sTab.len <= proved.merged + sTabLen
+      xCheck proved.merged < db.top.pAmk.len
 
     let
       merged = db.merge leafs
 
-    check db.top.lTab.len == lTabLen + merged.merged
-    check merged.merged + merged.dups == leafs.len
-
-    block:
-      if merged.error notin {AristoError(0), MergeLeafPathCachedAlready}:
-        check merged.error in {AristoError(0), MergeLeafPathCachedAlready}
-        return
+    xCheck db.top.lTab.len == lTabLen + merged.merged
+    xCheck merged.merged + merged.dups == leafs.len
+    xCheck merged.error in {AristoError(0), MergeLeafPathCachedAlready}
 
     block:
       let oops = oopsTab.getOrDefault(testId,(0,AristoError(0)))

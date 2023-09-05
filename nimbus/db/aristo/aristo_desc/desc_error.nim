@@ -24,6 +24,8 @@ type
     RlpOtherException
 
     # Data record transcoders, `deblobify()` and `blobify()`
+    BlobifyNilFilter
+    BlobifyNilVertex
     BlobifyBranchMissingRefs
     BlobifyExtMissingRefs
     BlobifyExtPathOverflow
@@ -181,6 +183,7 @@ type
     FilPrettyPointlessLayer
     FilDudeFilterUpdateError
     FilNotReadOnlyDude
+    FilQuSchedDisabled
 
     # Get functions form `aristo_get.nim`
     GetLeafNotFound

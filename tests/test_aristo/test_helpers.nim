@@ -14,7 +14,8 @@ import
   eth/common,
   rocksdb,
   ../../nimbus/db/aristo/[
-    aristo_constants, aristo_debug, aristo_desc, aristo_merge],
+    aristo_constants, aristo_debug, aristo_desc,
+    aristo_filter/filter_scheduler, aristo_merge],
   ../../nimbus/db/kvstore_rocksdb,
   ../../nimbus/sync/protocol/snap/snap_types,
   ../test_sync_snap/test_types,
@@ -29,6 +30,10 @@ type
     id*: int
     proof*: seq[SnapProof]
     kvpLst*: seq[LeafTiePayload]
+
+const
+  QidSlotLyo* = [(4,0,10),(3,3,10),(3,4,10),(3,5,10)]
+  QidSample* = (3 * QidSlotLyo.stats.minCovered) div 2
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -186,6 +191,39 @@ proc mapRootVid*(
   a.mapIt(LeafTiePayload(
     leafTie: LeafTie(root: toVid, path: it.leafTie.path),
     payload: it.payload))
+
+# ------------------------------------------------------------------------------
+# Public workflow helpers
+# ------------------------------------------------------------------------------
+
+template xCheck*(expr: untyped): untyped =
+  ## Note: this check will invoke `expr` twice
+  if not (expr):
+    check expr
+    return
+
+template xCheck*(expr: untyped; ifFalse: untyped): untyped =
+  ## Note: this check will invoke `expr` twice
+  if not (expr):
+    ifFalse
+    check expr
+    return
+
+template xCheckRc*(expr: untyped): untyped =
+  if rc.isErr:
+    xCheck(expr)
+
+template xCheckRc*(expr: untyped; ifFalse: untyped): untyped =
+  if rc.isErr:
+    xCheck(expr, ifFalse)
+
+template xCheckErr*(expr: untyped): untyped =
+  if rc.isOk:
+    xCheck(expr)
+
+template xCheckErr*(expr: untyped; ifFalse: untyped): untyped =
+  if rc.isOk:
+    xCheck(expr, ifFalse)
 
 # ------------------------------------------------------------------------------
 # Public iterators

@@ -11,6 +11,7 @@
 
 import
   std/[algorithm, sequtils, tables],
+  results,
   ".."/[aristo_desc, aristo_init]
 
 # ------------------------------------------------------------------------------
@@ -89,7 +90,6 @@ iterator walkKeyBeImpl*[T](
 
 iterator walkFilBeImpl*[T](
     be: T;                             # Backend descriptor
-    db: AristoDbRef;                   # Database with optional backend filter
       ): tuple[n: int, qid: QueueID, filter: FilterRef] =
   ## Generic filter iterator
   when be isnot VoidBackendRef:
@@ -97,6 +97,33 @@ iterator walkFilBeImpl*[T](
 
     for (n,qid,filter) in be.walkFil:
       yield (n,qid,filter)
+
+
+iterator walkFifoBeImpl*[T](
+    be: T;                             # Backend descriptor
+      ): (QueueID,FilterRef) =
+  ## Generic filter iterator walking slots in fifo order. This iterator does
+  ## not depend on the backend type but may be type restricted nevertheless.
+  when be isnot VoidBackendRef:
+    proc kvp(chn: int, qid: QueueID): (QueueID,FilterRef) =
+      let cid = QueueID((chn.uint64 shl 62) or qid.uint64)
+      (cid, be.getFilFn(cid).get(otherwise = FilterRef(nil)))
+
+    if not be.isNil:
+      let scd = be.filters
+      if not scd.isNil:
+        for i in 0 ..< scd.state.len:
+          let (left, right) = scd.state[i]
+          if left == 0:
+            discard
+          elif left <= right:
+            for j in right.countDown left:
+              yield kvp(i, j)
+          else:
+            for j in right.countDown QueueID(1):
+              yield kvp(i, j)
+            for j in scd.ctx.q[i].wrap.countDown left:
+              yield kvp(i, j)
 
 # ------------------------------------------------------------------------------
 # End

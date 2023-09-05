@@ -33,13 +33,20 @@ export
 proc newAristoDbRef*(
     backend: static[BackendType];
     basePath: string;
+    qidLayout = DefaultQidLayoutRef;
       ): Result[AristoDbRef, AristoError] =
   ## Generic constructor, `basePath` argument is ignored for `BackendNone` and
   ## `BackendMemory`  type backend database. Also, both of these backends
   ## aways succeed initialising.
+  ##
+  ## If the `qidLayout` argument is set `QidLayoutRef(nil)`, the a backend
+  ## database will not provide filter history management. Providing a different
+  ## scheduler layout shoud be used with care as table access with different
+  ## layouts might render the filter history data unmanageable.
+  ##
   when backend == BackendRocksDB:
     let be = block:
-      let rc = rocksDbBackend basePath
+      let rc = rocksDbBackend(basePath, qidLayout)
       if rc.isErr:
         return err(rc.error)
       rc.value

@@ -26,6 +26,8 @@ type
     ## This *decreasing* requirement can be seen as a generalisation of a
     ## block chain scenario with `i`, `j`  backward steps into the past and
     ## the `FilterID` as the block number.
+    ##
+    ## In order to flag an error, `FilterID(0)` must be returned.
 
 const
   ZeroQidPair = (QueueID(0),QueueID(0))
@@ -33,9 +35,6 @@ const
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
-
-func `+`*(a: QueueID; b: uint): QueueID = (a.uint64+b.uint64).QueueID
-func `-`*(a: QueueID; b: uint): QueueID = (a.uint64-b.uint64).QueueID
 
 func `<`(a: static[uint]; b: QueueID): bool = QueueID(a) < b
 
@@ -229,7 +228,7 @@ func fifoDel(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc stats*(
+func stats*(
     ctx: openArray[tuple[size, width: int]];       # Schedule layout
       ): tuple[maxQueue: int, minCovered: int, maxCovered: int] =
   ## Number of maximally stored and covered queued entries for the argument
@@ -245,20 +244,20 @@ proc stats*(
     result.minCovered += (ctx[n].size * step).int
     result.maxCovered += (size * step).int
 
-proc stats*(
+func stats*(
     ctx: openArray[tuple[size, width, wrap: int]]; # Schedule layout
       ): tuple[maxQueue: int, minCovered: int, maxCovered: int] =
   ## Variant of `stats()`
   ctx.toSeq.mapIt((it[0],it[1])).stats
 
-proc stats*(
+func stats*(
     ctx: QidLayoutRef;                             # Cascaded fifos descriptor
       ): tuple[maxQueue: int, minCovered: int, maxCovered: int] =
   ## Variant of `stats()`
   ctx.q.toSeq.mapIt((it[0].int,it[1].int)).stats
 
 
-proc addItem*(
+func addItem*(
     fifo: QidSchedRef;                             # Cascaded fifos descriptor
       ): tuple[exec: seq[QidAction], fifo: QidSchedRef] =
   ## Get the instructions for adding a new slot to the cascades queues. The
@@ -352,7 +351,7 @@ proc addItem*(
   (revActions.reversed, QidSchedRef(ctx: fifo.ctx, state: state))
 
 
-proc fetchItems*(
+func fetchItems*(
     fifo: QidSchedRef;                             # Cascaded fifos descriptor
     size: int;                                     # Leading items to merge
       ): tuple[exec: seq[QidAction], fifo: QidSchedRef] =
@@ -472,21 +471,21 @@ proc fetchItems*(
   (actions, QidSchedRef(ctx: fifo.ctx, state: state))
 
 
-proc lengths*(
+func lengths*(
     fifo: QidSchedRef;                             # Cascaded fifos descriptor
       ): seq[int] =
   ## Return the list of lengths for all cascaded sub-fifos.
   for n in 0 ..< fifo.state.len:
     result.add fifo.state[n].fifoLen(fifo.ctx.q[n].wrap).int
 
-proc len*(
+func len*(
     fifo: QidSchedRef;                             # Cascaded fifos descriptor
       ): int =
   ## Size of the fifo
   fifo.lengths.foldl(a + b, 0)
 
 
-proc `[]`*(
+func `[]`*(
     fifo: QidSchedRef;                             # Cascaded fifos descriptor
     inx: int;                                      # Index into latest items
       ): QueueID =
@@ -536,6 +535,54 @@ proc `[]`*(
           return n.globalQid(wrap - inx)
         inx -= qInxMax0 + 1 # Otherwise continue
 
+
+func `[]`*(
+    fifo: QidSchedRef;                             # Cascaded fifos descriptor
+    qid: QueueID;                                  # Index into latest items
+      ): int =
+  ## ..
+  if QueueID(0) < qid:
+    let
+      chn = (qid.uint64 shr 62).int
+      qid = (qid.uint64 and 0x3fff_ffff_ffff_ffffu64).QueueID
+
+    if chn < fifo.state.len:
+      var offs = 0
+      for n in 0 ..< chn:
+        offs += fifo.state[n].fifoLen(fifo.ctx.q[n].wrap).int
+
+      let q = fifo.state[chn]
+      if q[0] <= q[1]:
+        # Single file
+        # ::
+        #  |          :
+        #  |  q[0]--> 3
+        #  |          4
+        #  |          5 <--q[1]
+        #  |           :
+        #
+        if q[0] <= qid and qid <= q[1]:
+          return offs + (q[1] - qid).int
+      else:
+        # Wrap aound, double files
+        # ::
+        #  |          :
+        #  |          3 <--q[1]
+        #  |          4
+        #  |  q[0]--> 5
+        #  |          :
+        #  |         wrap
+        #
+        if QueueID(1) <= qid and qid <= q[1]:
+          return offs + (q[1] - qid).int
+
+        if q[0] <= qid:
+          let wrap = fifo.ctx.q[chn].wrap
+          if qid <= wrap:
+            return offs + (q[1] - QueueID(0)).int + (wrap - qid).int
+  -1
+
+
 proc le*(
     fifo: QidSchedRef;                             # Cascaded fifos descriptor
     fid: FilterID;                                 # Upper bound
@@ -545,19 +592,27 @@ proc le*(
   ## * `fn(qid) <= fid`
   ## * for all `qid1` with `fn(qid1) <= fid` one has `fn(qid1) <= fn(qid)`
   ##
+  ## If `fn()` returns `FilterID(0)`, then this function returns `QueueID(0)`
+  ##
   ## The argument type `QuFilMap` of map `fn()` has been commented on earlier.
   ##
   var
     left = 0
     right = fifo.len - 1
 
+  template getFid(qid: QueueID): FilterID =
+    let fid = fn(qid)
+    if not fid.isValid:
+      return QueueID(0)
+    fid
+
   if 0 <= right:
     let maxQid = fifo[left]
-    if maxQid.fn <= fid:
+    if maxQid.getFid <= fid:
       return maxQid
 
     # Bisection
-    if fifo[right].fn <= fid:
+    if fifo[right].getFid <= fid:
       while 1 < right - left:
         let half = (left + right) div 2
         #
@@ -567,9 +622,9 @@ proc le*(
         #
         # with `fifo[left].fn > fid >= fifo[right].fn`
         #
-        if fid >= fifo[half].fn:
+        if fid >= fifo[half].getFid:
           right = half
-        else: # fifo[half].fn > fid
+        else: # fifo[half].getFid > fid
           left = half
 
       # Now: `fifo[right].fn <= fid < fifo[left].fn` (and `right == left+1`)
