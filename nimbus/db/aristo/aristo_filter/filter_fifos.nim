@@ -15,14 +15,14 @@ import
   "."/[filter_desc, filter_merge, filter_scheduler]
 
 type
-  SaveInstr* = object
+  FifoInstr* = object
+    ## Database backend instructions for storing or deleting filters.
     put*: seq[(QueueID,FilterRef)]
     scd*: QidSchedRef
 
-  DeleteInstr* = object
+  FetchInstr* = object
     fil*: FilterRef
-    put*: seq[(QueueID,FilterRef)]
-    scd*: QidSchedRef
+    del*: FifoInstr
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -60,7 +60,7 @@ template nextFidOrReturn(be: BackendRef): FilterID =
 proc store*(
     be: BackendRef;                               # Database backend
     filter: FilterRef;                            # Filter to save
-      ): Result[SaveInstr,AristoError] =
+      ): Result[FifoInstr,AristoError] =
   ## Calculate backend instructions for storing the arguent `filter` on the
   ## argument backend `be`.
   ##
@@ -74,7 +74,7 @@ proc store*(
 
   # Update filters and calculate database update
   var
-    instr = SaveInstr(scd: upd.fifo)
+    instr = FifoInstr(scd: upd.fifo)
     hold: seq[FilterRef]
     saved = false
 
@@ -128,7 +128,7 @@ proc store*(
 proc fetch*(
     be: BackendRef;                               # Database backend
     backStep: int;                                # Backstep this many filters
-      ): Result[DeleteInstr,AristoError] =
+      ): Result[FetchInstr,AristoError] =
   ## This function returns the single filter obtained by squash merging the
   ## topmost `backStep` filters on the backend fifo. Also, backend instructions
   ## are calculated and returned for deleting the merged filters on the fifo.
@@ -140,7 +140,7 @@ proc fetch*(
 
   # Get instructions
   let fetch = be.filters.fetchItems backStep
-  var instr = DeleteInstr(scd: fetch.fifo)
+  var instr = FetchInstr(del: FifoInstr(scd: fetch.fifo))
 
   # Follow `HoldQid` instructions and combine filters for sub-queues and
   # push intermediate results on the `hold` stack
@@ -150,11 +150,11 @@ proc fetch*(
       return err(FilExecHoldExpected)
 
     hold.add be.getFilterOrReturn act.qid
-    instr.put.add (act.qid,FilterRef(nil))
+    instr.del.put.add (act.qid,FilterRef(nil))
 
     for qid in act.qid+1 .. act.xid:
       let lower = be.getFilterOrReturn qid
-      instr.put.add (qid,FilterRef(nil))
+      instr.del.put.add (qid,FilterRef(nil))
 
       hold[^1] = hold[^1].joinFiltersOrReturn lower
 
@@ -169,6 +169,31 @@ proc fetch*(
     upper = upper.joinFiltersOrReturn lower
 
   instr.fil = upper
+  ok instr
+
+
+proc delete*(
+    be: BackendRef;                               # Database backend
+    backStep: int;                                # Backstep this many filters
+      ): Result[FifoInstr,AristoError] =
+  ## Variant of `fetch()` for calculating the deletion part only.
+  if be.filters.isNil:
+    return err(FilQuSchedDisabled)
+  if backStep <= 0:
+    return err(FilPosArgExpected)
+
+  # Get instructions
+  let fetch = be.filters.fetchItems backStep
+  var instr = FifoInstr(scd: fetch.fifo)
+
+  # Follow `HoldQid` instructions for producing the list of entries that
+  # need to be deleted
+  for act in fetch.exec:
+    if act.op != HoldQid:
+      return err(FilExecHoldExpected)
+    for qid in act.qid .. act.xid:
+      instr.put.add (qid,FilterRef(nil))
+
   ok instr
 
 # ------------------------------------------------------------------------------

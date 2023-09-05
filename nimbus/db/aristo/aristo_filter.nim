@@ -13,11 +13,13 @@
 ##
 
 import
-  std/[sequtils, sets, tables],
+  std/[sequtils, tables],
   results,
   "."/[aristo_desc, aristo_get, aristo_vid],
   ./aristo_desc/desc_backend,
-  ./aristo_filter/[filter_desc, filter_fifos, filter_helpers, filter_merge]
+  ./aristo_filter/[
+    filter_desc, filter_fifos, filter_helpers, filter_merge,
+    filter_reverse, filter_siblings]
 
 # ------------------------------------------------------------------------------
 # Public helpers
@@ -77,52 +79,6 @@ proc fwdFilter*(
     vGen: layer.vGen.vidReorg, # Compact recycled IDs
     trg:  trgRoot)
 
-
-proc revFilter*(
-    db: AristoDbRef;                   # Database
-    filter: FilterRef;                 # Filter to revert
-      ): Result[FilterRef,(VertexID,AristoError)] =
-  ## Assemble reverse filter for the `filter` argument, i.e. changes to the
-  ## backend that reverse the effect of applying the this read-only filter.
-  ##
-  ## This read-only filter is calculated against the current unfiltered
-  ## backend (excluding optionally installed read-only filter.)
-  ##
-  # Register MPT state roots for reverting back
-  let rev = FilterRef(
-    src: filter.trg,
-    trg: filter.src)
-
-  # Get vid generator state on backend
-  block:
-    let rc = db.getIdgUBE()
-    if rc.isOk:
-      rev.vGen = rc.value
-    elif rc.error != GetIdgNotFound:
-      return err((VertexID(0), rc.error))
-
-  # Calculate reverse changes for the `sTab[]` structural table
-  for vid in filter.sTab.keys:
-    let rc = db.getVtxUBE vid
-    if rc.isOk:
-      rev.sTab[vid] = rc.value
-    elif rc.error == GetVtxNotFound:
-      rev.sTab[vid] = VertexRef(nil)
-    else:
-      return err((vid,rc.error))
-
-  # Calculate reverse changes for the `kMap` sequence.
-  for vid in filter.kMap.keys:
-    let rc = db.getKeyUBE vid
-    if rc.isOk:
-      rev.kMap[vid] = rc.value
-    elif rc.error == GetKeyNotFound:
-      rev.kMap[vid] = VOID_HASH_KEY
-    else:
-      return err((vid,rc.error))
-
-  ok(rev)
-
 # ------------------------------------------------------------------------------
 # Public functions, apply/install filters
 # ------------------------------------------------------------------------------
@@ -154,15 +110,13 @@ proc merge*(
 
 proc canResolveBE*(db: AristoDbRef): bool =
   ## Check whether the read-only filter can be merged into the backend
-  if not db.backend.isNil:
-    if db.dudes.isNil or db.dudes.rwOk:
-      return true
+  not db.backend.isNil and db.isCentre
 
 
 proc resolveBE*(db: AristoDbRef): Result[void,(VertexID,AristoError)] =
   ## Resolve the backend filter into the physical backend. This requires that
-  ## the argument `db` descriptor has read-write permission for the backend
-  ## (see also the below function `ackqRwMode()`.)
+  ## the argument `db` descriptor has write permission for the backend (see
+  ## the function `aristo_desc.isCentre()`.)
   ##
   ## For any associated descriptors working on the same backend, their backend
   ## filters will be updated so that the change of the backend DB remains
@@ -173,8 +127,7 @@ proc resolveBE*(db: AristoDbRef): Result[void,(VertexID,AristoError)] =
   ##
   if db.backend.isNil:
     return err((VertexID(0),FilBackendMissing))
-  if not db.dudes.isNil and
-     not db.dudes.rwOk:
+  if not db.isCentre:
     return err((VertexID(0),FilBackendRoMode))
 
   # Blind or missing filter
@@ -190,40 +143,21 @@ proc resolveBE*(db: AristoDbRef): Result[void,(VertexID,AristoError)] =
     else:
       return err((VertexID(1),rc.error))
 
-  # Filters rollback helper
-  var roFilters: seq[(AristoDbRef,FilterRef)]
-  proc rollback() =
-    for (d,f) in roFilters:
-      d.roFilter = f
-
-  # Calculate reverse filter from current filter
-  let rev = block:
-    let rc = db.revFilter db.roFilter
+  let updateSiblings = block:
+    let rc = UpdateSiblingsRef.init db
     if rc.isErr:
-      return err(rc.error)
+      return err((VertexID(0),rc.error))
     rc.value
+  defer: updateSiblings.rollback()
 
-  # Figure out how to save the rev filter on cascades slots queue
+  # Figure out how to save the reverse filter on a cascades slots queue
   let be = db.backend
-  var instr: SaveInstr
+  var instr: FifoInstr
   if not be.filters.isNil:
-    let rc = be.store rev
+    let rc = be.store updateSiblings.rev
     if rc.isErr:
       return err((VertexID(0),rc.error))
     instr = rc.value
-
-  # Update dudes
-  if not db.dudes.isNil:
-    # Update distributed filters. Note that the physical backend database
-    # has not been updated, yet. So the new root key for the backend will
-    # be `db.roFilter.trg`.
-    for dude in db.dudes.roDudes.items:
-      let rc = db.merge(dude.roFilter, rev, db.roFilter.trg)
-      if rc.isErr:
-        rollback()
-        return err(rc.error)
-      roFilters.add (dude, dude.roFilter)
-      dude.roFilter = rc.value
 
   # Save structural and other table entries
   let txFrame = be.putBegFn()
@@ -235,61 +169,19 @@ proc resolveBE*(db: AristoDbRef): Result[void,(VertexID,AristoError)] =
     be.putFqsFn(txFrame, instr.scd.state)
   let w = be.putEndFn txFrame
   if w != AristoError(0):
-    rollback()
     return err((VertexID(0),w))
+
+  # Update dudes
+  block:
+    let rc = updateSiblings.update().commit()
+    if rc.isErr:
+      return err((VertexID(0),rc.error))
 
   # Update slot queue scheduler state (as saved)
   if not be.filters.isNil:
     be.filters.state = instr.scd.state
 
   ok()
-
-
-proc ackqRwMode*(db: AristoDbRef): Result[void,AristoError] =
-  ## Re-focus the `db` argument descriptor to backend read-write permission.
-  if not db.dudes.isNil and not db.dudes.rwOk:
-    # Steal dudes list, make the rw-parent a read-only dude
-    let parent = db.dudes.rwDb
-    db.dudes = parent.dudes
-    parent.dudes = DudesRef(rwOk: false, rwDb: db)
-
-    # Exclude self
-    db.dudes.roDudes.excl db
-
-    # Update dudes
-    for w in db.dudes.roDudes:
-      # Let all other dudes refer to this one
-      w.dudes.rwDb = db
-
-    # Update dudes list (parent was alredy updated)
-    db.dudes.roDudes.incl parent
-    return ok()
-
-  err(FilNotReadOnlyDude)
-
-
-proc dispose*(db: AristoDbRef): Result[void,AristoError] =
-  ## Terminate usage of the `db` argument descriptor with backend read-only
-  ## permission.
-  ##
-  ## This type of descriptoy should always be terminated after use. Otherwise
-  ## it would always be udated when running `resolveBE()` which costs
-  ## unnecessary computing ressources. Also, the read-only backend filter
-  ## copies might grow big when it could be avoided.
-  if not db.isNil and
-     not db.dudes.isNil and
-     not db.dudes.rwOk:
-    # Unlink argument `db`
-    db.dudes.rwDb.dudes.roDudes.excl db
-
-    # Unlink more so it would not do harm if used wrongly
-    db.stack.setlen(0)
-    db.backend = BackendRef(nil)
-    db.txRef = AristoTxRef(nil)
-    db.dudes = DudesRef(nil)
-    return ok()
-
-  err(FilNotReadOnlyDude)
 
 # ------------------------------------------------------------------------------
 # End

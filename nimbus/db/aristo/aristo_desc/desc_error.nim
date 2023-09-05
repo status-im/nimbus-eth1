@@ -187,7 +187,6 @@ type
     FilExecStackUnderflow
     FilInxByFidFailed
     FilNilFilterRejected
-    FilNotReadOnlyDude
     FilPosArgExpected
     FilPrettyPointlessLayer
     FilQidByLeFidFailed
@@ -196,6 +195,8 @@ type
     FilStateRootMissing
     FilTrgSrcMismatch
     FilTrgTopSrcMismatch
+    FilNegativeEpisode
+    FilSiblingsCommitUnfinshed
 
     # Get functions form `aristo_get.nim`
     GetLeafNotFound
@@ -226,6 +227,10 @@ type
     TxNotTopTx
     TxStackGarbled
     TxStackUnderflow
+
+    # Functions from `aristo_desc`
+    MustBeOnCentre
+    NotAllowedOnCentre
 
     # Miscelaneous handy helpers
     PayloadTypeUnsupported

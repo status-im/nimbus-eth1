@@ -75,13 +75,9 @@ proc finish*(db: AristoDbRef; flush = false) =
     if not db.backend.isNil:
       db.backend.closeFn flush
 
-    if db.dudes.isNil:
-      db[] = AristoDbObj()
-    else:
-      let lebo = if db.dudes.rwOk: db else: db.dudes.rwDb
-      for w in lebo.dudes.roDudes:
-        w[] = AristoDbObj()
-      lebo[] = AristoDbObj()
+    let lebo = db.getCentre
+    discard lebo.forgetOthers()
+    lebo[] = AristoDbObj(top: LayerRef())
 
 # -----------------
 

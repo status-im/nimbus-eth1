@@ -24,6 +24,10 @@ func isTop*(tx: AristoTxRef): bool
 # Private helpers
 # ------------------------------------------------------------------------------
 
+func toVae(err: AristoError): (VertexID,AristoError) =
+  ## Map single error to error pair with dummy vertex
+  (VertexID(0),err)
+
 func getDbDescFromTopTx(tx: AristoTxRef): Result[AristoDbRef,AristoError] =
   if not tx.isTop():
     return err(TxNotTopTx)
@@ -37,18 +41,6 @@ proc getTxUid(db: AristoDbRef): uint =
     db.txUidGen = 0
   db.txUidGen.inc
   db.txUidGen
-
-proc linkClone(db: AristoDbRef; clone: AristoDbRef) =
-  ## Link clone to parent
-  clone.dudes = DudesRef(
-    rwOk: false,
-    rwDb: db)
-  if db.dudes.isNil:
-    db.dudes = DudesRef(
-      rwOk:    true,
-      roDudes: @[clone].toHashSet)
-  else:
-    db.dudes.roDudes.incl clone
 
 # ------------------------------------------------------------------------------
 # Public functions, getters
@@ -84,18 +76,17 @@ func to*(tx: AristoTxRef; T: type[AristoDbRef]): T =
   tx.db
 
 
-proc copyCat*(tx: AristoTxRef): Result[AristoDbRef,AristoError] =
-  ## Clone a transaction into a new DB descriptor. The new descriptor is linked
-  ## to the transaction parent and will be updated with functions like
-  ## `aristo_filter.resolveBE()` or `aristo_filter.ackqRwMode()`. The new
-  ## descriptor is fully functional apart from the fact that the physical
-  ## backend cannot be updated (but see `aristo_filter.ackqRwMode()`.)
+proc forkTx*(tx: AristoTxRef): Result[AristoDbRef,AristoError] =
+  ## Clone a transaction into a new DB descriptor  accessing the same backend
+  ## (if any) database as the argument `db`. The new descriptor is linked to
+  ## the transaction parent and is fully functional as a forked instance (see
+  ## comments on `aristo_desc.reCentre()` for details.)
   ##
-  ## The new DB descriptor contains a copy of the argument transaction `tx` as
-  ## top layer of level 1 (i.e. this is he only transaction.) Rolling back will
-  ## end up at the backend layer (incl. backend filter.)
+  ## The new DB descriptor will contain a copy of the argument transaction
+  ## `tx` as top layer of level 1 (i.e. this is he only transaction.) Rolling
+  ## back will end up at the backend layer (incl. backend filter.)
   ##
-  ## Use `aristo_filter.dispose()` to clean up the new DB descriptor.
+  ## Use `aristo_desc.forget()` to clean up this descriptor.
   ##
   let db = tx.db
 
@@ -121,19 +112,14 @@ proc copyCat*(tx: AristoTxRef): Result[AristoDbRef,AristoError] =
     else:
       return err(rc.error)
 
-  # Set up clone associated to `db`
-  let txClone = AristoDbRef(
-    top:      topLayer,    # is a deep copy
-    stack:    @[stackLayer],
-    roFilter: db.roFilter, # no need to copy contents (done when updated)
-    backend:  db.backend,
-    txUidGen: 1,
-    dudes: DudesRef(
-      rwOk:   false,
-      rwDb:   db))
+  let txClone = ? db.fork(rawToplayer = true)
 
-  # Link clone to parent
-  db.linkClone txClone
+  # Set up clone associated to `db`
+  txClone.top = topLayer          # is a deep copy
+  txClone.stack = @[stackLayer]
+  txClone.roFilter = db.roFilter  # no need to copy contents (done when updated)
+  txClone.backend = db.backend
+  txClone.txUidGen = 1
 
   # Install transaction similar to `tx` on clone
   txClone.txRef = AristoTxRef(
@@ -143,24 +129,22 @@ proc copyCat*(tx: AristoTxRef): Result[AristoDbRef,AristoError] =
 
   ok(txClone)
 
-proc copyCat*(db: AristoDbRef): Result[AristoDbRef,AristoError] =
-  ## Variant of `copyCat()`. If there is a transaction pending, then the
-  ## function returns `db.txTop.value.copyCat()`. Otherwise it returns a
-  ## clone of the top layer.
+proc forkTop*(db: AristoDbRef): Result[AristoDbRef,AristoError] =
+  ## Variant of `forkTx()` for the top transaction if there is any. Otherwise
+  ## the top layer is cloned, only.
   ##
-  ## Use `aristo_filter.dispose()` to clean up the copy cat descriptor.
+  ## Use `aristo_desc.forget()` to clean up this descriptor.
   ##
   if db.txRef.isNil:
-    let dbClone = AristoDbRef(
-      top:      db.top.dup,  # is a deep copy
-      roFilter: db.roFilter, # no need to copy contents (done when updated)
-      backend:  db.backend)
+    let dbClone = ? db.fork(rawToplayer = true)
 
-    # Link clone to parent
-    db.linkClone dbClone
+    dbClone.top = db.top.dup       # is a deep copy
+    dbClone.roFilter = db.roFilter # no need to copy contents when updated
+    dbClone.backend = db.backend
+
     return ok(dbClone)
 
-  db.txRef.copyCat()
+  db.txRef.forkTx()
 
 
 proc exec*(
@@ -173,7 +157,7 @@ proc exec*(
   ## destroyed.
   ##
   let db = block:
-    let rc = tx.copyCat()
+    let rc = tx.forkTx()
     if rc.isErr:
       return err(rc.error)
     rc.value
@@ -181,7 +165,7 @@ proc exec*(
   db.action()
 
   block:
-    let rc = db.dispose()
+    let rc = db.forget()
     if rc.isErr:
       return err(rc.error)
   ok()
@@ -333,9 +317,9 @@ proc stow*(
   if not db.txRef.isNil:
     return err((VertexID(0),TxPendingTx))
   if 0 < db.stack.len:
-    return err((VertexID(0),TxStackGarbled))
+    return err(TxStackGarbled.toVae)
   if persistent and not db.canResolveBE():
-    return err((VertexID(0),TxRoBackendOrMissing))
+    return err(TxRoBackendOrMissing.toVae)
 
   if db.top.dirty and not dontHashify:
     let rc = db.hashify()
@@ -356,9 +340,7 @@ proc stow*(
     db.top = LayerRef(vGen: db.roFilter.vGen)
 
   if persistent:
-    let rc = db.resolveBE()
-    if rc.isErr:
-      return err(rc.error)
+    ? db.resolveBE()
     db.roFilter = FilterRef(nil)
 
   # Delete or clear stack and clear top
