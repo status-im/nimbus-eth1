@@ -13,14 +13,17 @@
 ##
 
 import
+  std/[sequtils, sets, strutils],
   eth/common,
   results,
   unittest2,
   ../../nimbus/db/aristo/[
     aristo_check, aristo_debug, aristo_desc, aristo_filter, aristo_get,
-    aristo_merge, aristo_transcode],
+    aristo_merge, aristo_persistent, aristo_transcode],
   ../../nimbus/db/aristo,
-  ../../nimbus/db/aristo/aristo_init/persistent,
+  ../../nimbus/db/aristo/aristo_desc/desc_backend,
+  ../../nimbus/db/aristo/aristo_filter/[
+    filter_desc, filter_fifos, filter_helpers, filter_scheduler],
   ./test_helpers
 
 type
@@ -33,6 +36,67 @@ type
 # ------------------------------------------------------------------------------
 # Private debugging helpers
 # ------------------------------------------------------------------------------
+
+proc fifosImpl[T](be: T): seq[seq[(QueueID,FilterRef)]] =
+  var lastChn = -1
+  for (qid,val) in be.walkFifoBE:
+    let chn = (qid.uint64 shr 62).int
+    while lastChn < chn:
+      lastChn.inc
+      result.add newSeq[(QueueID,FilterRef)](0)
+    result[^1].add (qid,val)
+
+proc fifos(be: BackendRef): seq[seq[(QueueID,FilterRef)]] =
+  ## Wrapper
+  case be.kind:
+  of BackendMemory:
+    return be.MemBackendRef.fifosImpl
+  of BackendRocksDB:
+    return be.RdbBackendRef.fifosImpl
+  else:
+    discard
+  check be.kind == BackendMemory or be.kind == BackendRocksDB
+
+func flatten(a: seq[seq[(QueueID,FilterRef)]]): seq[(QueueID,FilterRef)] =
+  for w in a:
+    result &= w
+
+proc fList(be: BackendRef): seq[(QueueID,FilterRef)] =
+  case be.kind:
+  of BackendMemory:
+    return be.MemBackendRef.walkFilBe.toSeq.mapIt((it.qid, it.filter))
+  of BackendRocksDB:
+    return be.RdbBackendRef.walkFilBe.toSeq.mapIt((it.qid, it.filter))
+  else:
+    discard
+  check be.kind == BackendMemory or be.kind == BackendRocksDB
+
+func ppFil(w: FilterRef): string =
+  func pp(w: HashKey): string =
+    let n = w.to(HashID).UInt256
+    if n == 0: "£ø" else: "£" & $n
+  "(" & w.fid.pp & "," & w.src.pp & "->" & w.trg.pp & ")"
+
+func pp(qf: (QueueID,FilterRef)): string =
+  "(" & qf[0].pp & "," & (if qf[1].isNil: "ø" else: qf[1].ppFil) & ")"
+
+proc pp(q: openArray[(QueueID,FilterRef)]): string =
+  "{" & q.mapIt(it.pp).join(",") & "}"
+
+proc pp(q: seq[seq[(QueueID,FilterRef)]]): string =
+  result = "["
+  for w in q:
+    if w.len == 0:
+      result &= "ø"
+    else:
+      result &= w.mapIt(it.pp).join(",")
+    result &= ","
+  if result[^1] == ',':
+    result[^1] = ']'
+  else:
+    result &= "]"
+
+# -------------------------
 
 proc dump(pfx: string; dx: varargs[AristoDbRef]): string =
   proc dump(db: AristoDbRef): string =
@@ -97,9 +161,6 @@ proc dbTriplet(w: LeafQuartet; rdbPath: string): Result[DbTriplet,AristoError] =
   let db = block:
     let rc = newAristoDbRef(BackendRocksDB,rdbPath)
     xCheckRc rc.error == 0
-    if rc.isErr:
-      check rc.error == 0
-      return
     rc.value
 
   # Fill backend
@@ -307,6 +368,138 @@ proc checkFilterTrancoderOk(
 
   true
 
+# -------------------------
+
+func to(fid: FilterID; T: type HashKey): T =
+  fid.uint64.to(HashID).to(T)
+
+
+proc storeFilter(
+    be: BackendRef;
+    filter: FilterRef;
+      ): bool =
+  ## ..
+  let instr = block:
+    let rc = be.store filter
+    xCheckRc rc.error == 0
+    rc.value
+
+  # Update database
+  let txFrame = be.putBegFn()
+  be.putFilFn(txFrame, instr.put)
+  be.putFqsFn(txFrame, instr.scd.state)
+  let done = be.putEndFn txFrame
+  xCheck done == 0
+
+  be.filters.state = instr.scd.state
+  true
+
+proc storeFilter(
+    be: BackendRef;
+    serial: int;
+      ): bool =
+  ## Variant of `storeFilter()`
+  let fid = FilterID(serial)
+  be.storeFilter FilterRef(
+    fid: fid,
+    src: fid.to(HashKey),
+    trg: (fid-1).to(HashKey))
+
+
+proc fetchDelete(
+    be: BackendRef;
+    backStep: int;
+    filter: var FilterRef;
+      ): bool =
+  ## ...
+  # let filter = block:
+
+  let
+    instr = block:
+      let rc = be.fetch(backStep = backStep)
+      xCheckRc rc.error == 0
+      rc.value
+    qid = be.le instr.fil.fid
+    inx = be.filters[qid]
+  xCheck backStep == inx + 1
+
+  # Update database
+  let txFrame = be.putBegFn()
+  be.putFilFn(txFrame, instr.put)
+  be.putFqsFn(txFrame, instr.scd.state)
+  let done = be.putEndFn txFrame
+  xCheck done == 0
+
+  be.filters.state = instr.scd.state
+  filter = instr.fil
+
+  # Verify that state was properly installed
+  let rc = be.getFqsFn()
+  xCheckRc rc.error == 0
+  xCheck rc.value == be.filters.state
+
+  true
+
+
+proc validateFifo(
+   be: BackendRef;
+   serial: int;
+     ): bool =
+  func to(key: HashKey; T: type uint64): T =
+    key.to(HashID).UInt256.truncate(uint64)
+
+  var lastTrg = serial.uint64
+  ## Verify filter setup
+  ##
+  ## Example
+  ## ::
+  ##      QueueID |  FilterID  |         HashKey
+  ##        qid   | filter.fid | filter.src -> filter.trg
+  ##      --------+------------+--------------------------
+  ##        %4    |    @654    |   £654 -> £653
+  ##        %3    |    @653    |   £653 -> £652
+  ##        %2    |    @652    |   £652 -> £651
+  ##        %1    |    @651    |   £651 -> £650
+  ##        %a    |    @650    |   £650 -> £649
+  ##        %9    |    @649    |   £649 -> £648
+  ##              |            |
+  ##        %1:2  |    @648    |   £648 -> £644
+  ##        %1:1  |    @644    |   £644 -> £640
+  ##        %1:a  |    @640    |   £640 -> £636
+  ##        %1:9  |    @636    |   £636 -> £632
+  ##        %1:8  |    @632    |   £632 -> £628
+  ##        %1:7  |    @628    |   £628 -> £624
+  ##        %1:6  |    @624    |   £624 -> £620
+  ##              |            |
+  ##        %2:1  |    @620    |   £620 -> £600
+  ##        %2:a  |    @600    |   £600 -> £580
+  ##        ..    |    ..      |   ..
+  ##
+  var
+    inx = 0
+    lastFid = FilterID(serial+1)
+  for chn,fifo in be.fifos:
+    for (qid,filter) in fifo:
+
+      # Check filter objects
+      xCheck chn == (qid.uint64 shr 62).int
+      xCheck filter != FilterRef(nil)
+      xCheck filter.src.to(uint64) == lastTrg
+      lastTrg = filter.trg.to(uint64)
+
+      # Check random access
+      xCheck qid == be.filters[inx]
+      xCheck inx == be.filters[qid]
+
+      # Check access by queue ID (all end up at `qid`)
+      for fid in filter.fid ..< lastFid:
+        xCheck qid == be.le fid
+
+      inx.inc
+      lastFid = filter.fid
+
+  true
+
 # ------------------------------------------------------------------------------
 # Public test function
 # ------------------------------------------------------------------------------
@@ -433,6 +626,86 @@ proc testDistributedAccess*(
 
       when false: # or true:
         noisy.say "*** testDistributedAccess (9)", "n=", n, dy.dump
+
+  true
+
+
+proc testFilterFifo*(
+    noisy = true;
+    layout = QidSlotLyo;
+    sampleSize = QidSample;
+    reorgPercent = 40;
+    rdbPath = "";
+      ): bool =
+  var
+    debug = false # or true
+  let
+    db = if 0 < rdbPath.len:
+      let rc = newAristoDbRef(BackendRocksDB,rdbPath,layout.to(QidLayoutRef))
+      xCheckRc rc.error == 0
+      rc.value
+    else:
+      BackendMemory.newAristoDbRef(layout.to(QidLayoutRef))
+    be = db.backend
+
+  defer: db.finish(flush=true)
+
+  proc show(serial = 0; exec: seq[QidAction] = @[]) =
+    var s = ""
+    if 0 < serial:
+      s &= " n=" & $serial
+    s &= " len=" & $be.filters.len
+    if 0 < exec.len:
+      s &= " exec=" & exec.pp
+    s &= "" &
+      "\n   state=" & be.filters.state.pp &
+      #"\n    list=" & be.fList.pp &
+      "\n    fifo=" & be.fifos.pp &
+      "\n"
+    noisy.say "***", s
+
+  if debug:
+    noisy.say "***", "sampleSize=", sampleSize,
+     " ctx=", be.filters.ctx.q, " stats=", be.filters.ctx.stats
+
+  # -------------------
+
+  for n in 1 .. sampleSize:
+    let storeFilterOK = be.storeFilter(serial=n)
+    xCheck storeFilterOK
+    #show(n)
+    let validateFifoOk = be.validateFifo(serial=n)
+    xCheck validateFifoOk
+
+  # -------------------
+
+  # Squash some entries on the fifo
+  block:
+    var
+      filtersLen = be.filters.len
+      nDel = (filtersLen * reorgPercent) div 100
+      filter: FilterRef
+
+    # Extract and delete leading filters, use squashed filters extract
+    let fetchDeleteOk = be.fetchDelete(nDel, filter)
+    xCheck fetchDeleteOk
+    xCheck be.filters.len + nDel == filtersLen
+
+    # Push squashed filter
+    let storeFilterOK = be.storeFilter filter
+    xCheck storeFilterOK
+
+  #show sampleSize
+
+  # -------------------
+
+  # Continue adding items
+  for n in sampleSize + 1 .. 2 * sampleSize:
+    let storeFilterOK = be.storeFilter(serial=n)
+    xCheck storeFilterOK
+    #show(n)
+    let validateFifoOk = be.validateFifo(serial=n)
+    xCheck validateFifoOk
 
   true
 

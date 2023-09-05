@@ -177,13 +177,25 @@ type
     DelVidStaleVtx
 
     # Functions from  `aristo_filter.nim`
-    FilRoBackendOrMissing
-    FilStateRootMissing
-    FilStateRootMismatch
-    FilPrettyPointlessLayer
+    FilBackendMissing
+    FilBackendRoMode
     FilDudeFilterUpdateError
+    FilExecDublicateSave
+    FilExecHoldExpected
+    FilExecOops
+    FilExecSaveMissing
+    FilExecStackUnderflow
+    FilInxByFidFailed
+    FilNilFilterRejected
     FilNotReadOnlyDude
+    FilPosArgExpected
+    FilPrettyPointlessLayer
+    FilQidByLeFidFailed
     FilQuSchedDisabled
+    FilStateRootMismatch
+    FilStateRootMissing
+    FilTrgSrcMismatch
+    FilTrgTopSrcMismatch
 
     # Get functions form `aristo_get.nim`
     GetLeafNotFound

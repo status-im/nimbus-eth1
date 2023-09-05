@@ -588,9 +588,8 @@ proc le*(
     fid: FilterID;                                 # Upper bound
     fn: QuFilMap;                                  # QueueID/FilterID mapping
       ): QueueID =
-  ## Find the `qid` address of type `QueueID` with
-  ## * `fn(qid) <= fid`
-  ## * for all `qid1` with `fn(qid1) <= fid` one has `fn(qid1) <= fn(qid)`
+  ## Find the `qid` address of type `QueueID` with `fn(qid) <= fid` and
+  ## `fid < fn(qid+1)`
   ##
   ## If `fn()` returns `FilterID(0)`, then this function returns `QueueID(0)`
   ##
@@ -613,6 +612,7 @@ proc le*(
 
     # Bisection
     if fifo[right].getFid <= fid:
+      var pivotLeFid = true
       while 1 < right - left:
         let half = (left + right) div 2
         #
@@ -622,13 +622,16 @@ proc le*(
         #
         # with `fifo[left].fn > fid >= fifo[right].fn`
         #
-        if fid >= fifo[half].getFid:
+        let pivotLeFid = fifo[half].getFid <= fid
+        if pivotLeFid:   # fid >= fifo[half].getFid:
           right = half
-        else: # fifo[half].getFid > fid
+        else:            # fifo[half].getFid > fid
           left = half
 
-      # Now: `fifo[right].fn <= fid < fifo[left].fn` (and `right == left+1`)
-      return fifo[right]
+      # Now: `fifo[right].fn <= fid < fifo[left].fn` (and `right == left+1`).
+      # So make sure that the entry exists.
+      if not pivotLeFid or fid < fifo[left].fn:
+        return fifo[right]
 
   # otherwise QueueID(0)
 
