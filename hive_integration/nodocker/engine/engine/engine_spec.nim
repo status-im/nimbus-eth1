@@ -2,10 +2,10 @@ import
   std/tables,
   stew/byteutils,
   chronicles,
-  eth/common,
   nimcrypto/sysrand,
   chronos,
   ".."/[test_env, helper, types],
+  ../../../nimbus/common,
   ../../../nimbus/transaction,
   ../../../nimbus/rpc/rpc_types,
   ../../../nimbus/beacon/web3_eth_conv,
@@ -13,7 +13,7 @@ import
 
 type
   EngineSpec* = ref object of BaseSpec
-    exec*: proc(t: TestEnv): bool
+    exec*: proc(env: TestEnv): bool
     ttd*: int64
     chainFile*: string
     slotsToFinalized*: int
@@ -53,7 +53,7 @@ template testLatestHeader(client: untyped, expectedHash: Web3Hash) =
 
 #proc sendTx(t: TestEnv, recipient: EthAddress, val: UInt256, data: openArray[byte] = []): bool =
 #  t.tx = t.makeTx(recipient, val, data)
-#  let rr = t.rpcClient.sendTransaction(t.tx)
+#  let rr = env.client.sendTransaction(t.tx)
 #  if rr.isErr:
 #    error "Unable to send transaction", msg=rr.error
 #    return false
@@ -64,16 +64,16 @@ template testLatestHeader(client: untyped, expectedHash: Web3Hash) =
 
 # Invalid Terminal Block in ForkchoiceUpdated:
 # Client must reject ForkchoiceUpdated directives if the referenced HeadBlockHash does not meet the TTD requirement.
-proc invalidTerminalBlockForkchoiceUpdated*(t: TestEnv): bool =
+proc invalidTerminalBlockForkchoiceUpdated*(env: TestEnv): bool =
   let
-    gHash = w3Hash t.gHeader.blockHash
+    gHash = w3Hash env.engine.com.genesisHash
     forkchoiceState = ForkchoiceStateV1(
       headBlockHash:      gHash,
       safeBlockHash:      gHash,
       finalizedBlockHash: gHash,
     )
 
-  let res = t.rpcClient.forkchoiceUpdatedV1(forkchoiceState)
+  let res = env.client.forkchoiceUpdatedV1(forkchoiceState)
   # Execution specification:
   # {payloadStatus: {status: INVALID, latestValidHash=0x00..00}, payloadId: null}
   # either obtained from the Payload validation process or as a result of
@@ -83,7 +83,7 @@ proc invalidTerminalBlockForkchoiceUpdated*(t: TestEnv): bool =
   # ValidationError is not validated since it can be either null or a string message
 
   # Check that PoW chain progresses
-  testCond t.verifyPoWProgress(t.gHeader.blockHash)
+  testCond env.verifyPoWProgress(env.engine.com.genesisHash)
   return true
 
 #[
@@ -93,7 +93,7 @@ proc invalidGetPayloadUnderPoW(t: TestEnv): TestStatus =
 
   # We start in PoW and try to get an invalid Payload, which should produce an error but nothing should be disrupted.
   let id = PayloadID [1.byte, 2,3,4,5,6,7,8]
-  let res = t.rpcClient.getPayloadV1(id)
+  let res = env.client.getPayloadV1(id)
   testCond res.isErr
 
   # Check that PoW chain progresses
@@ -116,7 +116,7 @@ proc invalidTerminalBlockNewPayload(t: TestEnv): TestStatus =
     baseFeePerGas:gBlock.baseFee
   )
   let hashedPayload = customizePayload(payload, CustomPayload())
-  let res = t.rpcClient.newPayloadV1(hashedPayload)
+  let res = env.client.newPayloadV1(hashedPayload)
 
   # Execution specification:
   # {status: INVALID, latestValidHash=0x00..00}
@@ -142,7 +142,7 @@ proc unknownHeadBlockHash(t: TestEnv): TestStatus =
     finalizedBlockHash: clMock.latestForkchoice.finalizedBlockHash,
   )
 
-  var res = t.rpcClient.forkchoiceUpdatedV1(forkchoiceStateUnknownHeadHash)
+  var res = env.client.forkchoiceUpdatedV1(forkchoiceStateUnknownHeadHash)
   testCond res.isOk
 
   let s = res.get()
@@ -158,7 +158,7 @@ proc unknownHeadBlockHash(t: TestEnv): TestStatus =
     timestamp: Quantity(timestamp + 1)
   )
 
-  res = t.rpcClient.forkchoiceUpdatedV1(forkchoiceStateUnknownHeadHash, some(payloadAttr))
+  res = env.client.forkchoiceUpdatedV1(forkchoiceStateUnknownHeadHash, some(payloadAttr))
   testCond res.isOk
   testCond s.payloadStatus.status == PayloadExecutionStatus.syncing
   testCond s.payloadId.isNone
@@ -174,7 +174,7 @@ proc unknownSafeBlockHash(t: TestEnv): TestStatus =
   testCond produce5BlockRes
 
   let clMock = t.clMock
-  let client = t.rpcClient
+  let client = env.client
   let produceSingleBlockRes = clMock.produceSingleBlock(BlockProcessCallbacks(
     # Run test after a new payload has been broadcast
     onNewPayloadBroadcast: proc(): bool =
@@ -207,7 +207,7 @@ proc unknownFinalizedBlockHash(t: TestEnv): TestStatus =
   testCond produce5BlockRes
 
   let clMock = t.clMock
-  let client = t.rpcClient
+  let client = env.client
   let produceSingleBlockRes = clMock.produceSingleBlock(BlockProcessCallbacks(
     # Run test after a new payload has been broadcast
     onNewPayloadBroadcast: proc(): bool =
@@ -259,7 +259,7 @@ template inconsistentForkchoiceStateGen(procname: untyped, inconsistency: Incons
 
     var pList = PayloadList()
     let clMock = t.clMock
-    let client = t.rpcClient
+    let client = env.client
 
     # Produce blocks before starting the test
     let produceBlockRes = clMock.produceBlocks(3, BlockProcessCallbacks(
@@ -328,7 +328,7 @@ template invalidPayloadAttributesGen(procname: untyped, syncingCond: bool) =
     testCond ok
 
     let clMock = t.clMock
-    let client = t.rpcClient
+    let client = env.client
 
     # Produce blocks before starting the test
     var produceBlockRes = clMock.produceBlocks(5, BlockProcessCallbacks())
@@ -395,7 +395,7 @@ proc preTTDFinalizedBlockHash(t: TestEnv): TestStatus =
       safeBlockHash:      gHash,
       finalizedBlockHash: gHash,
     )
-    client = t.rpcClient
+    client = env.client
     clMock = t.clMock
 
   var res = client.forkchoiceUpdatedV1(forkchoiceState)
@@ -446,7 +446,7 @@ template badHashOnNewPayloadGen(procname: untyped, syncingCond: bool, sideChain:
     testCond produce5BlockRes
 
     let clMock = t.clMock
-    let client = t.rpcClient
+    let client = env.client
     let shadow = Shadow()
 
     var produceSingleBlockRes = clMock.produceSingleBlock(BlockProcessCallbacks(
@@ -542,7 +542,7 @@ proc parentHashOnExecPayload(t: TestEnv): TestStatus =
   testCond produce5BlockRes
 
   let clMock = t.clMock
-  let client = t.rpcClient
+  let client = env.client
   var produceSingleBlockRes = clMock.produceSingleBlock(BlockProcessCallbacks(
     # Run test after the new payload has been obtained
     onGetPayload: proc(): bool =
@@ -568,7 +568,7 @@ proc invalidTransitionPayload(t: TestEnv): TestStatus =
   testCond ok
 
   let clMock = t.clMock
-  let client = t.rpcClient
+  let client = env.client
 
   # Produce two blocks before trying to re-org
   t.nonce = 2 # Initial PoW chain already contains 2 transactions
@@ -611,7 +611,7 @@ template invalidPayloadTestCaseGen(procName: untyped, payloadField: InvalidPaylo
     testCond ok
 
     let clMock = t.clMock
-    let client = t.rpcClient
+    let client = env.client
 
     template txProc(): bool =
       when not emptyTxs:
@@ -776,7 +776,7 @@ template blockStatusExecPayloadGen(procname: untyped, transitionBlock: bool) =
       testCond produce5BlockRes
 
     let clMock = t.clMock
-    let client = t.rpcClient
+    let client = env.client
     let shadow = Shadow()
 
     var produceSingleBlockRes = clMock.produceSingleBlock(BlockProcessCallbacks(
@@ -836,7 +836,7 @@ template invalidMissingAncestorReOrgGen(procName: untyped,
     testCond ok
 
     let clMock = t.clMock
-    let client = t.rpcClient
+    let client = env.client
 
     # Produce blocks before starting the test
     testCond clMock.produceBlocks(5, BlockProcessCallbacks())
@@ -955,7 +955,7 @@ template blockStatusHeadBlockGen(procname: untyped, transitionBlock: bool) =
       testCond produce5BlockRes
 
     let clMock = t.clMock
-    let client = t.rpcClient
+    let client = env.client
     let shadow = Shadow()
 
     var produceSingleBlockRes = clMock.produceSingleBlock(BlockProcessCallbacks(
@@ -985,7 +985,7 @@ proc blockStatusSafeBlock(t: TestEnv): TestStatus =
   result = TestStatus.OK
 
   let clMock = t.clMock
-  let client = t.rpcClient
+  let client = env.client
 
   # On PoW mode, `safe` tag shall return error.
   var header: common.BlockHeader
@@ -1016,7 +1016,7 @@ proc blockStatusFinalizedBlock(t: TestEnv): TestStatus =
   result = TestStatus.OK
 
   let clMock = t.clMock
-  let client = t.rpcClient
+  let client = env.client
 
   # On PoW mode, `finalized` tag shall return error.
   var header: common.BlockHeader
@@ -1055,7 +1055,7 @@ proc blockStatusReorg(t: TestEnv): TestStatus =
   testCond produce5BlockRes
 
   let clMock = t.clMock
-  let client = t.rpcClient
+  let client = env.client
   var produceSingleBlockRes = clMock.produceSingleBlock(BlockProcessCallbacks(
     # Run test after a forkchoice with new HeadBlockHash has been broadcasted
     onForkchoiceBroadcast: proc(): bool =
@@ -1145,7 +1145,7 @@ proc reExecPayloads(t: TestEnv): TestStatus =
   testCond produceBlockRes
 
   # Re-execute the payloads
-  let client = t.rpcClient
+  let client = env.client
   var hRes = client.blockNumber()
   testCond hRes.isOk:
     error "unable to get blockNumber", msg=hRes.error
@@ -1183,7 +1183,7 @@ proc multipleNewCanonicalPayloads(t: TestEnv): TestStatus =
   testCond produce5BlockRes
 
   let clMock = t.clMock
-  let client = t.rpcClient
+  let client = env.client
   var produceSingleBlockRes = clMock.produceSingleBlock(BlockProcessCallbacks(
     # Run test after a new payload has been obtained
     onGetPayload: proc(): bool =
@@ -1233,7 +1233,7 @@ proc outOfOrderPayloads(t: TestEnv): TestStatus =
   doAssert randomBytes(recipient) == 20
 
   let clMock = t.clMock
-  let client = t.rpcClient
+  let client = env.client
   var produceBlockRes = clMock.produceBlocks(payloadCount, BlockProcessCallbacks(
     # We send the transactions after we got the Payload ID, before the clMocker gets the prepared Payload
     onPayloadProducerSelected: proc(): bool =
@@ -1265,7 +1265,7 @@ proc reorgBack(t: TestEnv): TestStatus =
   testCond ok
 
   let clMock = t.clMock
-  let client = t.rpcClient
+  let client = env.client
 
   testCond clMock.produceSingleBlock(BlockProcessCallbacks())
 
@@ -1308,7 +1308,7 @@ proc reorgBackFromSyncing(t: TestEnv): TestStatus =
   # Produce an alternative chain
   let pList = SideChainList()
   let clMock = t.clMock
-  let client = t.rpcClient
+  let client = env.client
 
   let r1 = clMock.produceBlocks(10, BlockProcessCallbacks(
     onGetPayload: proc(): bool =
@@ -1387,7 +1387,7 @@ proc transactionReorg(t: TestEnv): TestStatus =
     contractAddr = hexToByteArray[20]("0000000000000000000000000000000000000317")
 
   let
-    client = t.rpcClient
+    client = env.client
     clMock = t.clMock
     shadow = TxReorgShadow()
 
@@ -1470,7 +1470,7 @@ proc transactionReorg(t: TestEnv): TestStatus =
 
 proc testCondPrevRandaoValue(t: TestEnv, expectedPrevRandao: common.Hash256, blockNumber: uint64): bool =
   let storageKey = blockNumber.u256
-  let client = t.rpcClient
+  let client = env.client
 
   let res = client.storageAt(prevRandaoContractAddr, storageKey)
   if res.isErr:
@@ -1496,7 +1496,7 @@ proc sidechainReorg(t: TestEnv): TestStatus =
   testCond t.clMock.produceBlocks(5, BlockProcessCallbacks())
 
   let
-    client = t.rpcClient
+    client = env.client
     clMock = t.clMock
 
   # Produce two payloads, send fcU with first payload, testCond transaction outcome, then reorg, testCond transaction outcome again
@@ -1591,7 +1591,7 @@ proc suggestedFeeRecipient(t: TestEnv): TestStatus =
   testCond randomBytes(feeRecipient) == 20
 
   let
-    client = t.rpcClient
+    client = env.client
     clMock = t.clMock
 
   # Send multiple transactions
@@ -1662,7 +1662,7 @@ proc prevRandaoOpcodeTx(t: TestEnv): TestStatus =
   result = TestStatus.OK
 
   let
-    client = t.rpcClient
+    client = env.client
     clMock = t.clMock
     sendTxFuture = sendTxAsync(t)
 

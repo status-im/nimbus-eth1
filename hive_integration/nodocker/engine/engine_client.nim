@@ -11,6 +11,8 @@ import
 
 import web3/engine_api as web3_engine_api
 
+export execution_types
+
 type
   Hash256 = eth_types.Hash256
   VersionedHash = engine_api_types.VersionedHash

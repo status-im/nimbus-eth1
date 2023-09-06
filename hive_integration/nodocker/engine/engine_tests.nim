@@ -6,16 +6,18 @@ import
 proc specExecute(ws: BaseSpec): bool =
   var
     ws = EngineSpec(ws)
-    env = setupELClient(ws.chainFile, false)
+    env = TestEnv.new(ws.chainFile, false)
 
-  env.setRealTTD(ws.ttd)
+  env.engine.setRealTTD(ws.ttd)
+  env.setupCLMock()
+  
   if ws.slotsToFinalized != 0:
     env.slotsToFinalized(ws.slotsToFinalized)
   if ws.slotsToSafe != 0:
     env.slotsToSafe(ws.slotsToSafe)
 
   result = ws.exec(env)
-  env.stopELClient()
+  env.close()
 
 let engineTestList* = [
   # Engine API Negative Test Cases

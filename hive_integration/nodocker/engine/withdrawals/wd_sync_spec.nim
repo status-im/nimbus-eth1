@@ -1,6 +1,8 @@
 import
   chronicles,
+  json_rpc/rpcclient,
   ./wd_base_spec,
+  ./wd_history,
   ../test_env,
   ../engine_client,
   ../types
@@ -14,40 +16,51 @@ type
     syncShouldFail*: bool
     timeoutSeconds*: int
 
-proc execute*(ws: SyncSpec, t: TestEnv): bool =
+proc doSync(ws: SyncSpec, client: RpcClient, clMock: CLMocker): Future[bool] {.async.} =
+  let period = chronos.seconds(1)
+  var loop = 0
+  while loop < ws.timeoutSeconds:
+    let res = client.newPayloadV2(clMock.latestExecutedPayload.V1V2)
+    discard res
+
+    let r = client.forkchoiceUpdatedV2(clMock.latestForkchoice)
+    if r.isErr:
+      error "fcu error", msg=r.error
+      return false
+
+    let s = r.get
+    if s.payloadStatus.status == PayloadExecutionStatus.valid:
+      return true
+
+    if s.payloadStatus.status == PayloadExecutionStatus.invalid:
+      error "Syncing client rejected valid chain"
+
+    await sleepAsync(period)
+    inc loop
+
+  return false
+
+proc execute*(ws: SyncSpec, env: TestEnv): bool =
   # Do the base withdrawal test first, skipping base verifications
   WDBaseSpec(ws).skipBaseVerifications = true
-  testCond WDBaseSpec(ws).execute(t)
+  testCond WDBaseSpec(ws).execute(env)
 
-#[
   # Spawn a secondary client which will need to sync to the primary client
-  secondaryEngine, err := hive_rpc.HiveRPCEngineStarter{}.StartClient(t.T, t.TestContext, t.Genesis, t.ClientParams, t.ClientFiles, t.Engine)
-  if err != nil {
-    error "Unable to spawn a secondary client: %v", t.TestName, err)
+  let sec = env.addEngine()
 
-  secondaryEngineTest := test.NewTestEngineClient(t, secondaryEngine)
-  t.clMock.AddEngineClient(secondaryEngine)
-
-  if ws.SyncSteps > 1 {
+  if ws.syncSteps > 1:
     # TODO
+    discard
   else:
     # Send the FCU to trigger sync on the secondary client
-  loop:
-    for {
-      select {
-      case <-t.TimeoutContext.Done():
-        error "Timeout while waiting for secondary client to sync", t.TestName)
-      case <-time.After(time.Second):
-        secondaryEngineTest.TestEngineNewPayloadV2(
-          &t.clMock.latestExecutedPayload,
-        r := secondaryEngineTest.TestEngineForkchoiceUpdatedV2(
-          &t.clMock.latestForkchoice,
-          nil,
-        if r.Response.PayloadStatus.Status == test.Valid {
-          break loop
-        if r.Response.PayloadStatus.Status == test.Invalid {
-          error "Syncing client rejected valid chain: %s", t.TestName, r.Response)
+    let ok = waitFor doSync(ws, sec.client, env.clMock)
+    if not ok:
+      return false
 
-  ws.wdHistory.VerifyWithdrawals(t.clMock.latestHeader.Number.Uint64(), nil, secondaryEngineTest)
-]#
+  let bn = env.clMock.latestHeader.blockNumber.truncate(uint64)
+  let res = ws.wdHistory.verifyWithdrawals(bn, none(UInt256), sec.client)
+  if res.isErr:
+    error "wd history error", msg=res.error
+    return false
+
   return true

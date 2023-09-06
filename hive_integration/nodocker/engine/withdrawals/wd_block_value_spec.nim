@@ -11,13 +11,13 @@ import
 type
   BlockValueSpec* = ref object of WDBaseSpec
 
-proc execute*(ws: BlockValueSpec, t: TestEnv): bool =
+proc execute*(ws: BlockValueSpec, env: TestEnv): bool =
   WDBaseSpec(ws).skipBaseVerifications = true
-  testCond WDBaseSpec(ws).execute(t)
+  testCond WDBaseSpec(ws).execute(env)
 
   # Get the latest block and the transactions included
   var blk: EthBlock
-  let b = t.rpcClient.latestBlock(blk)
+  let b = env.client.latestBlock(blk)
   b.expectNoError()
 
   var totalValue: UInt256
@@ -26,7 +26,7 @@ proc execute*(ws: BlockValueSpec, t: TestEnv): bool =
 
   for tx in blk.txs:
     let txHash = rlpHash(tx)
-    let r = t.rpcClient.txReceipt(txHash)
+    let r = env.client.txReceipt(txHash)
     r.expectNoError()
 
     let
@@ -35,9 +35,9 @@ proc execute*(ws: BlockValueSpec, t: TestEnv): bool =
 
     totalValue += txTip.uint64.u256 * rec.gasUsed.u256
 
-  doAssert(t.cLMock.latestBlockValue.isSome)
-  testCond totalValue == t.cLMock.latestBlockValue.get:
+  doAssert(env.cLMock.latestBlockValue.isSome)
+  testCond totalValue == env.cLMock.latestBlockValue.get:
     error "Unexpected block value returned on GetPayloadV2",
       expect=totalValue,
-      get=t.cLMock.latestBlockValue.get
+      get=env.cLMock.latestBlockValue.get
   return true

@@ -23,21 +23,21 @@ proc prepareAuthCallToken(secret: string, time: int64): string =
   let sig = base64urlEncode(sha256.hmac(key, token).data)
   token & "." & sig
 
-proc getClient(t: TestEnv, token: string): RpcHttpClient =
+proc getClient(env: TestEnv, token: string): RpcHttpClient =
   proc authHeaders(): seq[(string, string)] =
     @[("Authorization", "Bearer " & token)]
 
   let client = newRpcHttpClient(getHeaders = authHeaders)
-  waitFor client.connect("127.0.0.1", t.conf.rpcPort, false)
+  waitFor client.connect("127.0.0.1", env.engine.rpcPort, false)
   return client
 
 template genAuthTest(procName: untyped, timeDriftSeconds: int64, customAuthSecretBytes: string, authOK: bool) =
-  proc procName(t: TestEnv): bool =
+  proc procName(env: TestEnv): bool =
     # Default values
     var
       # All test cases send a simple TransitionConfigurationV1 to check the Authentication mechanism (JWT)
       tConf = TransitionConfigurationV1(
-        terminalTotalDifficulty: t.ttd
+        terminalTotalDifficulty: env.engine.ttd
       )
       testSecret = customAuthSecretBytes
       testTime   = getTime().toUnix
@@ -49,13 +49,13 @@ template genAuthTest(procName: untyped, timeDriftSeconds: int64, customAuthSecre
       testTime = testTime + timeDriftSeconds
 
     let token = prepareAuthCallToken(testSecret, testTime)
-    let client = getClient(t, token)
+    let client = getClient(env, token)
 
     try:
       discard waitFor client.call("engine_exchangeTransitionConfigurationV1", %[%tConf])
       testCond authOk:
         error "Authentication was supposed to fail authentication but passed"
-    except CatchableError as ex:
+    except CatchableError:
       testCond not authOk:
         error "Authentication was supposed to pass authentication but failed"
     return true
@@ -70,16 +70,16 @@ genAuthTest(authTest7, maxTimeDriftSeconds - 1, "", true)
 
 type
   AuthSpec* = ref object of BaseSpec
-    exec*: proc(t: TestEnv): bool
+    exec*: proc(env: TestEnv): bool
 
 proc specExecute(ws: BaseSpec): bool =
   let
     ws  = AuthSpec(ws)
-    env = setupELClient("", true)
+    env = TestEnv.new("", true)
 
-  env.setRealTTD(0)
+  env.engine.setRealTTD(0)
   result = ws.exec(env)
-  env.stopELClient()
+  env.close()
 
 # JWT Authentication Tests
 let authTestList* = [

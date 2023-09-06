@@ -1,4 +1,5 @@
 import
+  std/[options, times],
   ./test_env,
   ./types,
   chronicles,
@@ -7,7 +8,7 @@ import
 
 type
   ECSpec* = ref object of BaseSpec
-    exec*: proc(t: TestEnv): bool
+    exec*: proc(env: TestEnv): bool
     conf*: ChainConfig
 
 const
@@ -30,8 +31,8 @@ const
     "engine_getPayloadV3",
   ]
 
-proc ecImpl(t: TestEnv, minExpectedCaps: openArray[string]): bool =
-  let res = t.rpcClient.exchangeCapabilities(@minExpectedCaps)
+proc ecImpl(env: TestEnv, minExpectedCaps: openArray[string]): bool =
+  let res = env.client.exchangeCapabilities(@minExpectedCaps)
   testCond res.isOk:
     error "Unable request capabilities", msg=res.error
 
@@ -57,9 +58,9 @@ proc getCCCancun(timestamp: int): ChainConfig =
 
 proc specExecute(ws: BaseSpec): bool =
   let ws = ECSpec(ws)
-  let env = setupELClient(ws.conf)
+  let env = TestEnv.new(ws.conf)
   result = ws.exec(env)
-  env.stopELClient()
+  env.close()
 
 # const doesn't work with ref object
 let ecTestList* = [

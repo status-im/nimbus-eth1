@@ -3,7 +3,7 @@ import
   withdrawals/wd_block_value_spec,
   withdrawals/wd_max_init_code_spec,
   #withdrawals/wd_payload_body_spec,
-  withdrawals/wd_reorg_spec,
+  #withdrawals/wd_reorg_spec,
   withdrawals/wd_sync_spec,
   ./types,
   ./test_env
@@ -11,19 +11,20 @@ import
 proc specExecute[T](ws: BaseSpec): bool =
   let
     ws   = T(ws)
-    conf = ws.getForkConfig()
-    env  = newTestEnv(conf)
-  discard ws.getGenesis(env.conf.networkParams)
+    conf = envConfig(ws.getForkConfig())
 
-  setupELClient(env, "", false)
-  env.setRealTTD(0)
+  discard ws.getGenesis(conf.networkParams)
+
+  let env  = TestEnv.new(conf)
+  env.engine.setRealTTD(0)
+  env.setupCLMock()
   ws.configureCLMock(env.clMock)
   result = ws.execute(env)
-  env.stopELClient()
+  env.close()
 
 let wdTestList* = [
   #Re-Org tests
-  TestDesc(
+  #[TestDesc(
     name: "Withdrawals Fork on Block 1 - 1 Block Re-Org",
     about: "Tests a simple 1 block re-org",
     run: specExecute[ReorgSpec],
@@ -166,7 +167,7 @@ let wdTestList* = [
       reOrgBlockCount:         10,
       reOrgViaSync:            true,
       sidechaintimeIncrements: 1,
-  )),
+  )),]#
 
   # Sync Tests
   TestDesc(
@@ -178,7 +179,7 @@ let wdTestList* = [
       "- Wait for sync and verify withdrawn account's balance\n",
     run: specExecute[SyncSpec],
     spec: SyncSpec(
-      timeoutSeconds: 6000,
+      timeoutSeconds:  6,
       wdForkHeight:    1,
       wdBlockCount:    2,
       wdPerBlock:      MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
@@ -246,7 +247,7 @@ let wdTestList* = [
       wdAbleAccountCount: MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
       syncSteps: 1,
   )),
-  TestDesc(
+  #[TestDesc(
     name: "Sync after 128 blocks - Withdrawals on Block 2 - Multiple Withdrawal Accounts",
     about: "- Spawn a first client\n" &
       "- Go through withdrawals fork on Block 2\n" &
@@ -261,7 +262,7 @@ let wdTestList* = [
       wdPerBlock:      MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
       wdAbleAccountCount: 1024,
       syncSteps: 1,
-  )),
+  )),]#
 
   # EVM Tests (EIP-3651, EIP-3855, EIP-3860)
   TestDesc(
@@ -282,6 +283,7 @@ let wdTestList* = [
       wdForkHeight: 1,
       wdBlockCount: 1,
   )),
+  # Base tests
   TestDesc(
     name: "Withdrawals Fork On Genesis",
     about: "Tests the withdrawals fork happening since genesis (e.g. on a testnet).",

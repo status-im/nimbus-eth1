@@ -1,5 +1,6 @@
 import
-  "."/[types, test_env],
+  std/times,
+  ./types,
   ../sim_utils
 
 import
@@ -9,7 +10,7 @@ import
   ./withdrawal_tests
 
 proc combineTests(): seq[TestDesc] =
-  result = @wdTestList
+  result.add wdTestList
   result.add ecTestList
   result.add authTestList
   result.add engineTestList

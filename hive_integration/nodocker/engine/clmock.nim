@@ -10,6 +10,8 @@ import
   ../../../nimbus/beacon/payload_conv,
   ../../../nimbus/[constants],
   ../../../nimbus/common as nimbus_common,
+  ./client_pool,
+  ./engine_env,
   ./engine_client
 
 import web3/engine_api_types except Hash256  # conflict with the one from eth/common
@@ -30,7 +32,8 @@ type
     blockTimestampIncrement*: Option[int]
 
     # Block Production State
-    client                  : RpcClient
+    clients                 : ClientPool
+    nextBlockProducer*      : EngineEnv
     nextFeeRecipient*       : EthAddress
     nextPayloadID*          : PayloadID
     currentPayloadNumber*   : uint64
@@ -65,7 +68,7 @@ type
 
   BlockProcessCallbacks* = object
     onPayloadProducerSelected* : proc(): bool {.gcsafe.}
-    onGetPayloadID*            : proc(): bool {.gcsafe.}
+    onRequestNextPayload*      : proc(): bool {.gcsafe.}
     onGetPayload*              : proc(): bool {.gcsafe.}
     onNewPayloadBroadcast*     : proc(): bool {.gcsafe.}
     onForkchoiceBroadcast*     : proc(): bool {.gcsafe.}
@@ -77,13 +80,13 @@ type
     blockValue: Option[UInt256]
     blobsBundle: Option[BlobsBundleV1]
 
-func latestPayloadNumber(h: Table[uint64, ExecutionPayload]): uint64 =
+func latestPayloadNumber*(h: Table[uint64, ExecutionPayload]): uint64 =
   result = 0'u64
   for n, _ in h:
     if n > result:
       result = n
 
-func latestWithdrawalsIndex(h: Table[uint64, ExecutionPayload]): uint64 =
+func latestWithdrawalsIndex*(h: Table[uint64, ExecutionPayload]): uint64 =
   result = 0'u64
   for n, p in h:
     if p.withdrawals.isNone:
@@ -93,17 +96,20 @@ func latestWithdrawalsIndex(h: Table[uint64, ExecutionPayload]): uint64 =
       if w.index.uint64 > result:
         result = w.index.uint64
 
-proc init*(cl: CLMocker, client: RpcClient, com: CommonRef) =
-  cl.client = client
+func client(cl: CLMocker): RpcClient =
+  cl.clients.first.client
+
+proc init(cl: CLMocker, clients: ClientPool, com: CommonRef) =
+  cl.clients = clients
   cl.com = com
   cl.slotsToSafe = 1
   cl.slotsToFinalized = 2
   cl.payloadProductionClientDelay = 1
   cl.headerHistory[0] = com.genesisHeader()
 
-proc newClMocker*(client: RpcClient, com: CommonRef): CLMocker =
+proc newClMocker*(clients: ClientPool, com: CommonRef): CLMocker =
   new result
-  result.init(client, com)
+  result.init(clients, com)
 
 proc waitForTTD*(cl: CLMocker): Future[bool] {.async.} =
   let ttd = cl.com.ttd()
@@ -179,32 +185,6 @@ func timestampToBeaconRoot(timestamp: Quantity): FixedBytes[32] =
   let h = keccakHash(timestamp.uint64.toBytesBE)
   FixedBytes[32](h.data)
 
-proc pickNextPayloadProducer(cl: CLMocker): bool =
-  let nRes = cl.client.blockNumber()
-  if nRes.isErr:
-    error "CLMocker: could not get block number", msg=nRes.error
-    return false
-
-  let lastBlockNumber = nRes.get
-  if cl.latestHeadNumber != lastBlockNumber:
-    error "CLMocker: unexpected lastBlockNumber",
-      get = lastBlockNumber,
-      expect = cl.latestHeadNumber
-    return false
-
-  var header: common.BlockHeader
-  let hRes = cl.client.headerByNumber(lastBlockNumber, header)
-  if hRes.isErr:
-    error "CLMocker: Could not get block header", msg=hRes.error
-    return false
-
-  let lastBlockHash = header.blockHash
-  if cl.latestHeader.blockHash != lastBlockHash:
-    error "CLMocker: Failed to obtain a client on the latest block number"
-    return false
-
-  return true
-
 func isShanghai(cl: CLMocker, timestamp: Quantity): bool =
   let ts = fromUnix(timestamp.int64)
   cl.com.isShanghaiOrLater(ts)
@@ -218,26 +198,58 @@ func V1(attr: Option[PayloadAttributes]): Option[PayloadAttributesV1] =
     return none(PayloadAttributesV1)
   some(attr.get.V1)
 
-func V2(attr: Option[PayloadAttributes]): Option[PayloadAttributesV2] =
-  if attr.isNone:
-    return none(PayloadAttributesV2)
-  some(attr.get.V2)
+when false:
+  func V2(attr: Option[PayloadAttributes]): Option[PayloadAttributesV2] =
+    if attr.isNone:
+      return none(PayloadAttributesV2)
+    some(attr.get.V2)
 
-func V3(attr: Option[PayloadAttributes]): Option[PayloadAttributesV3] =
-  if attr.isNone:
-    return none(PayloadAttributesV3)
-  some(attr.get.V3)
+  func V3(attr: Option[PayloadAttributes]): Option[PayloadAttributesV3] =
+    if attr.isNone:
+      return none(PayloadAttributesV3)
+    some(attr.get.V3)
 
 proc fcu(cl: CLMocker, version: Version,
           update: ForkchoiceStateV1,
           attr: Option[PayloadAttributes]):
             Result[ForkchoiceUpdatedResponse, string] =
+  let client = cl.nextBlockProducer.client
   case version
-  of Version.V1: cl.client.forkchoiceUpdatedV1(update, attr.V1)
-  of Version.V2: cl.client.forkchoiceUpdatedV2(update, attr)
-  of Version.V3: cl.client.forkchoiceUpdatedV3(update, attr)
+  of Version.V1: client.forkchoiceUpdatedV1(update, attr.V1)
+  of Version.V2: client.forkchoiceUpdatedV2(update, attr)
+  of Version.V3: client.forkchoiceUpdatedV3(update, attr)
 
-proc getNextPayloadID*(cl: CLMocker): bool =
+# Picks the next payload producer from the set of clients registered
+proc pickNextPayloadProducer(cl: CLMocker): bool =
+  doAssert cl.clients.len != 0
+
+  for i in 0 ..< cl.clients.len:
+    # Get a client to generate the payload
+    let id = (cl.latestHeadNumber.int + i) mod cl.clients.len
+    cl.nextBlockProducer = cl.clients[id]
+
+    # Get latest header. Number and hash must coincide with our view of the chain,
+    # and only then we can build on top of this client's chain
+    var latestHeader: common.BlockHeader
+    let res = cl.nextBlockProducer.client.latestHeader(latestHeader)
+    if res.isErr:
+      error "CLMocker: Could not get latest block header while selecting client for payload production",
+        msg=res.error
+      return false
+
+    let lastBlockHash = latestHeader.blockHash
+    if cl.latestHeader.blockHash != lastBlockHash or
+       cl.latestHeadNumber != latestHeader.blockNumber.truncate(uint64):
+      # Selected client latest block hash does not match canonical chain, try again
+      cl.nextBlockProducer = nil
+      continue
+    else:
+      break
+
+  doAssert cl.nextBlockProducer != nil
+  return true
+
+proc requestNextPayload(cl: CLMocker): bool =
   # Generate a random value for the PrevRandao field
   var nextPrevRandao: common.Hash256
   doAssert randomBytes(nextPrevRandao.data) == 32
@@ -271,11 +283,13 @@ proc getNextPayloadID*(cl: CLMocker): bool =
   if s.payloadStatus.status != PayloadExecutionStatus.valid:
     error "CLMocker: Unexpected forkchoiceUpdated Response from Payload builder",
       status=s.payloadStatus.status
+    return false
 
   if s.payloadStatus.latestValidHash.isNone or s.payloadStatus.latestValidHash.get != cl.latestForkchoice.headBlockHash:
     error "CLMocker: Unexpected forkchoiceUpdated LatestValidHash Response from Payload builder",
       latest=s.payloadStatus.latestValidHash,
       head=cl.latestForkchoice.headBlockHash
+    return false
 
   doAssert s.payLoadID.isSome
   cl.nextPayloadID = s.payloadID.get()
@@ -283,8 +297,9 @@ proc getNextPayloadID*(cl: CLMocker): bool =
 
 proc getPayload(cl: CLMocker, payloadId: PayloadID): Result[GetPayloadResponse, string] =
   let ts = cl.latestPayloadAttributes.timestamp
+  let client = cl.nextBlockProducer.client
   if cl.isCancun(ts):
-    let res = cl.client.getPayloadV3(payloadId)
+    let res = client.getPayloadV3(payloadId)
     if res.isErr:
       return err(res.error)
     let x = res.get
@@ -295,7 +310,7 @@ proc getPayload(cl: CLMocker, payloadId: PayloadID): Result[GetPayloadResponse, 
     ))
 
   if cl.isShanghai(ts):
-    let res = cl.client.getPayloadV2(payloadId)
+    let res = client.getPayloadV2(payloadId)
     if res.isErr:
       return err(res.error)
     let x = res.get
@@ -304,14 +319,14 @@ proc getPayload(cl: CLMocker, payloadId: PayloadID): Result[GetPayloadResponse, 
       blockValue: some(x.blockValue)
     ))
 
-  let res = cl.client.getPayloadV1(payloadId)
+  let res = client.getPayloadV1(payloadId)
   if res.isErr:
     return err(res.error)
   return ok(GetPayloadResponse(
     executionPayload: executionPayload(res.get),
   ))
 
-proc getNextPayload*(cl: CLMocker): bool =
+proc getNextPayload(cl: CLMocker): bool =
   let res = cl.getPayload(cl.nextPayloadID)
   if res.isErr:
     error "CLMocker: Could not getPayload",
@@ -364,17 +379,17 @@ proc getNextPayload*(cl: CLMocker): bool =
 
   return true
 
-func versionedHashes(bb: BlobsBundleV1): seq[BlockHash] =
+func versionedHashes(bb: BlobsBundleV1): seq[Web3Hash] =
   doAssert(bb.commitments.len > 0)
   result = newSeqOfCap[BlockHash](bb.commitments.len)
 
   for com in bb.commitments:
     var h = keccakHash(com.bytes)
     h.data[0] = VERSIONED_HASH_VERSION_KZG
-    result.add BlockHash(h.data)
+    result.add w3Hash h
 
 proc broadcastNewPayload(cl: CLMocker, payload: ExecutionPayload): Result[PayloadStatusV1, string] =
-  var versionedHashes: seq[BlockHash]
+  var versionedHashes: seq[Web3Hash]
   if cl.latestBlobsBundle.isSome:
     # Broadcast the blob bundle to all clients
     versionedHashes = versionedHashes(cl.latestBlobsBundle.get)
@@ -433,7 +448,7 @@ proc broadcastNextNewPayload(cl: CLMocker): bool =
   cl.executedPayloadHistory[number] = cl.latestPayloadBuilt
   return true
 
-proc broadcastForkchoiceUpdated*(cl: CLMocker,
+proc broadcastForkchoiceUpdated(cl: CLMocker,
       update: ForkchoiceStateV1): Result[ForkchoiceUpdatedResponse, string] =
   let version = cl.latestExecutedPayload.version
   cl.fcu(version, update, none(PayloadAttributes))
@@ -483,13 +498,13 @@ proc produceSingleBlock*(cl: CLMocker, cb: BlockProcessCallbacks): bool {.gcsafe
     if not cb.onPayloadProducerSelected():
       return false
 
-  if not cl.getNextPayloadID():
+  if not cl.requestNextPayload():
     return false
 
   cl.setNextWithdrawals(none(seq[WithdrawalV1]))
 
-  if cb.onGetPayloadID != nil:
-    if not cb.onGetPayloadID():
+  if cb.onRequestNextPayload != nil:
+    if not cb.onRequestNextPayload():
       return false
 
   # Give the client a delay between getting the payload ID and actually retrieving the payload
