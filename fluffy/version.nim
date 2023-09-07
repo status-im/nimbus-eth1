@@ -7,7 +7,9 @@
 
 {.push raises: [].}
 
-import strutils
+import
+  std/strutils,
+  metrics
 
 const
   versionMajor* = 0
@@ -23,10 +25,37 @@ const
 
   clientName* = "fluffy"
 
-  nimVersion* = staticExec("nim --version | grep -oP '[0-9]+\\.[0-9]+\\.[0-9]+'")
+  nimFullBanner = staticExec("nim --version")
+  nimBanner* = staticExec("nim --version | grep Version")
 
   # The web3_clientVersion
   clientVersion* = clientName & "/" &
       fullVersionStr & "/" &
       hostOS & "-" & hostCPU & "/" &
-      "Nim" & nimVersion
+      "Nim" & NimVersion
+
+  compileYear = CompileDate[0 ..< 4]  # YYYY-MM-DD (UTC)
+  copyrightBanner* =
+    "Copyright (c) 2021-" & compileYear & " Status Research & Development GmbH"
+
+func getNimGitHash*(): string =
+  const gitPrefix = "git hash: "
+  let tmp = splitLines(nimFullBanner)
+  if tmp.len == 0:
+    return
+  for line in tmp:
+    if line.startsWith(gitPrefix) and line.len > 8 + gitPrefix.len:
+      result = line[gitPrefix.len..<gitPrefix.len + 8]
+
+# TODO: Currently prefixing these metric names as the non prefixed names give
+# a collector already registered conflict at runtime. This is due to the same
+# names in nimbus-eth2 nimbus_binary_common.nim even though there are no direct
+# imports of that file.
+
+declareGauge versionGauge,"Fluffy version info (as metric labels)",
+  ["version", "commit"], name = "fluffy_version"
+versionGauge.set(1, labelValues = [fullVersionStr, gitRevision])
+
+declareGauge nimVersionGauge, "Nim version info",
+  ["version", "nim_commit"], name = "fluffy_nim_version"
+nimVersionGauge.set(1, labelValues = [NimVersion, getNimGitHash()])

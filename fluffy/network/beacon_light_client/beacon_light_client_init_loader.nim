@@ -12,7 +12,6 @@ import
   beacon_chain/spec/forks,
   beacon_chain/spec/datatypes/altair,
   beacon_chain/beacon_clock,
-  beacon_chain/nimbus_binary_common,
   beacon_chain/conf
 
 type

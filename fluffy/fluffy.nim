@@ -276,7 +276,10 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
 
 when isMainModule:
   {.pop.}
-  let config = PortalConf.load()
+  let config = PortalConf.load(
+    version = clientName & " " & fullVersionStr & "\p\p" & nimBanner,
+    copyrightBanner = copyrightBanner
+  )
   {.push raises: [].}
 
   case config.cmd
