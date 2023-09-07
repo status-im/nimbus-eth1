@@ -150,6 +150,9 @@ type
     CheckBeCacheKeyMismatch
     CheckBeCacheGarbledVGen
 
+    CheckBeFifoSrcTrgMismatch
+    CheckBeFifoTrgNotStateRoot
+
     # Neighbour vertex, tree traversal `nearbyRight()` and `nearbyLeft()`
     NearbyBeyondRange
     NearbyBranchError

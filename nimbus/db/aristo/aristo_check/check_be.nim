@@ -84,7 +84,8 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
     _: type T;
     db: AristoDbRef;                   # Database, top layer
     relax: bool;                       # Not compiling hashes if `true`
-    cache: bool;                       # Also verify cache
+    cache: bool;                       # Also verify against top layer cache
+    fifos = true;                      # Also verify cascaded filter fifos
       ): Result[void,(VertexID,AristoError)] =
   ## Make sure that each vertex has a Merkle hash and vice versa. Also check
   ## the vertex ID generator state.
@@ -132,7 +133,7 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
       if vGenExpected != Vid2 or 0 < vGen.len:
         return err((delta.toSeq.sorted[^1],CheckBeGarbledVGen))
 
-  # Check cache against backend
+  # Check top layer cache against backend
   if cache:
     if db.top.dirty:
       return err((VertexID(0),CheckBeCacheIsDirty))
@@ -155,6 +156,16 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
           return err((vid,CheckBeCacheVidUnsynced))
         # Register deleted vid against backend generator state
         discard vids.merge Interval[VertexID,uint64].new(vid,vid)
+
+    # Check cascaded fifos
+    if fifos and not db.backend.filters.isNil:
+      var lastTrg = db.getKeyUBE(VertexID(1)).get(otherwise = VOID_HASH_KEY)
+      for (qid,filter) in db.to(T).walkFifoBe: # walk in fifo order
+        if filter.src != lastTrg:
+          return err((VertexID(0),CheckBeFifoSrcTrgMismatch))
+        if filter.trg != filter.kMap.getOrVoid VertexID(1):
+          return err((VertexID(1),CheckBeFifoTrgNotStateRoot))
+        lastTrg = filter.trg
 
     # Check key table
     for (vid,lbl) in db.top.kMap.pairs:

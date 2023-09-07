@@ -20,7 +20,7 @@ import
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc checkCacheStrict*(
+proc checkTopStrict*(
     db: AristoDbRef;                   # Database, top layer
       ): Result[void,(VertexID,AristoError)] =
   for (vid,vtx) in db.top.sTab.pairs:
@@ -48,7 +48,7 @@ proc checkCacheStrict*(
   ok()
 
 
-proc checkCacheRelaxed*(
+proc checkTopRelaxed*(
     db: AristoDbRef;                   # Database, top layer
       ): Result[void,(VertexID,AristoError)] =
   if 0 < db.top.pPrf.len:
@@ -90,7 +90,7 @@ proc checkCacheRelaxed*(
   ok()
 
 
-proc checkCacheCommon*(
+proc checkTopCommon*(
     db: AristoDbRef;                   # Database, top layer
       ): Result[void,(VertexID,AristoError)] =
   # Some `kMap[]` entries may ne void indicating backend deletion
