@@ -12,10 +12,10 @@
 
 import
   eth/p2p,
+  ../../db/select_backend,
   ../../core/[chain, tx_pool],
   ../protocol,
-  ./eth as handlers_eth,
-  ./snap as handlers_snap
+  ./eth as handlers_eth
 
 # ------------------------------------------------------------------------------
 # Public functions: convenience mappings for `eth`
@@ -47,17 +47,21 @@ proc addEthHandlerCapability*(
 # Public functions: convenience mappings for `snap`
 # ------------------------------------------------------------------------------
 
-proc addSnapHandlerCapability*(
-    node: var EthereumNode;
-    peerPool: PeerPool;
-    chain = ChainRef(nil);
-      ) =
-  ## Install `snap` handlers,Passing `chein` as `nil` installs the handler
-  ## in minimal/outbound mode.
-  if chain.isNil:
-    node.addCapability protocol.snap
-  else:
-    node.addCapability(protocol.snap, SnapWireRef.init(chain, peerPool))
+when dbBackend != select_backend.none:
+  import 
+    ./snap as handlers_snap
+    
+  proc addSnapHandlerCapability*(
+      node: var EthereumNode;
+      peerPool: PeerPool;
+      chain = ChainRef(nil);
+        ) =
+    ## Install `snap` handlers,Passing `chein` as `nil` installs the handler
+    ## in minimal/outbound mode.
+    if chain.isNil:
+      node.addCapability protocol.snap
+    else:
+      node.addCapability(protocol.snap, SnapWireRef.init(chain, peerPool))
 
 # ------------------------------------------------------------------------------
 # End
