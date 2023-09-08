@@ -118,6 +118,9 @@ const
   # And then there are still limits to be applied also for FindContent and the
   # incoming directions.
   concurrentOffers = 50
+  # Max size of the offerQueue, when reaching this limits, offers to be started
+  # for neighborhoodGossip or POKE will be dropped.
+  offerQueueSize = 200
 
 type
   ToContentIdHandler* =
@@ -475,7 +478,7 @@ proc new*(T: type PortalProtocol,
     bootstrapRecords: @bootstrapRecords,
     stream: stream,
     radiusCache: RadiusCache.init(256),
-    offerQueue: newAsyncQueue[OfferRequest](concurrentOffers),
+    offerQueue: newAsyncQueue[OfferRequest](offerQueueSize),
     disablePoke: config.disablePoke)
 
   proto.baseProtocol.registerTalkProtocol(@(proto.protocolId), proto).expect(
@@ -956,7 +959,7 @@ proc triggerPoke*(
           contentKV = ContentKV(contentKey: contentKey, content: content)
           list = List[ContentKV, contentKeysLimit].init(@[contentKV])
           req = OfferRequest(dst: node, kind: Direct, contentList: list)
-        p.offerQueue.putNoWait(req)
+        p.offerQueue.addLastNoWait(req)
       except AsyncQueueFullError as e:
         # Should not occur as full() check is done.
         raiseAssert(e.msg)
@@ -1178,21 +1181,32 @@ proc neighborhoodGossip*(
   if gossipNodes.len >= 8: # use local nodes for gossip
     portal_gossip_without_lookup.inc(labelValues = [$p.protocolId])
     let numberOfGossipedNodes = min(gossipNodes.len, maxGossipNodes)
-    for node in gossipNodes[0..<numberOfGossipedNodes]:
+    for i, node in gossipNodes[0..<numberOfGossipedNodes]:
       let req = OfferRequest(dst: node, kind: Direct, contentList: contentList)
-      await p.offerQueue.addLast(req)
+      try:
+        p.offerQueue.addLastNoWait(req)
+      except AsyncQueueFullError:
+        debug "offerQueue is full, dropping offers."
+        return i
+
+    # TODO: This is not great as the individual offers might have still failed.
     return numberOfGossipedNodes
   else: # use looked up nodes for gossip
     portal_gossip_with_lookup.inc(labelValues = [$p.protocolId])
     let closestNodes = await p.lookup(NodeId(contentId))
     let numberOfGossipedNodes = min(closestNodes.len, maxGossipNodes)
-    for node in closestNodes[0..<numberOfGossipedNodes]:
+    for i, node in closestNodes[0..<numberOfGossipedNodes]:
       # Note: opportunistically not checking if the radius of the node is known
       # and thus if the node is in radius with the content. Reason is, these
       # should really be the closest nodes in the DHT, and thus are most likely
       # going to be in range of the requested content.
       let req = OfferRequest(dst: node, kind: Direct, contentList: contentList)
-      await p.offerQueue.addLast(req)
+      try:
+        p.offerQueue.addLastNoWait(req)
+      except AsyncQueueFullError:
+        debug "offerQueue is full, dropping offers."
+        return i
+
     return numberOfGossipedNodes
 
 proc storeContent*(
