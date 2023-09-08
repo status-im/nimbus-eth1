@@ -294,7 +294,7 @@ proc stow*(
     return err(TxPendingTx.toVae)
   if 0 < db.stack.len:
     return err(TxStackGarbled.toVae)
-  if persistent and not db.canResolveBE():
+  if persistent and not db.canResolveBackendFilter():
     return err(TxRoBackendOrMissing.toVae)
 
   if db.top.dirty and not dontHashify:
@@ -308,7 +308,7 @@ proc stow*(
     db.top = LayerRef(vGen: db.roFilter.vGen)
 
   if persistent:
-    ? db.resolveBE()
+    ? db.resolveBackendFilter().mapErr toVae
     db.roFilter = FilterRef(nil)
 
   # Delete or clear stack and clear top

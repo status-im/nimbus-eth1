@@ -95,13 +95,14 @@ proc accountsRunner(
     sample = accSample;
     resetDb = false;
     cmpBackends = true;
+    persistent = true;
       ) =
   let
     accLst = sample.to(seq[UndumpAccounts]).to(seq[ProofTrieData])
     fileInfo = sample.file.splitPath.tail.replace(".txt.gz","")
     listMode = if resetDb: "" else: ", merged data lists"
     baseDir = getTmpDir() / sample.name & "-accounts"
-    dbDir = baseDir / "tmp"
+    dbDir = if persistent: baseDir / "tmp" else: ""
 
   defer:
     try: baseDir.removeDir except CatchableError: discard
@@ -123,6 +124,9 @@ proc accountsRunner(
     test &"Distributed backend access {accLst.len} entries":
       check noisy.testDistributedAccess(accLst, dbDir)
 
+    test &"Filter backlog management {accLst.len} entries":
+      check noisy.testFilterBacklog(accLst, rdbPath=dbDir)
+
 
 proc storagesRunner(
     noisy = true;
@@ -130,13 +134,14 @@ proc storagesRunner(
     resetDb = false;
     oops: KnownHasherFailure = @[];
     cmpBackends = true;
+    persistent = true;
       ) =
   let
     stoLst = sample.to(seq[UndumpStorages]).to(seq[ProofTrieData])
     fileInfo = sample.file.splitPath.tail.replace(".txt.gz","")
     listMode = if resetDb: "" else: ", merged data lists"
     baseDir = getTmpDir() / sample.name & "-storage"
-    dbDir = baseDir / "tmp"
+    dbDir = if persistent: baseDir / "tmp" else: ""
 
   defer:
     try: baseDir.removeDir except CatchableError: discard
@@ -158,6 +163,9 @@ proc storagesRunner(
 
     test &"Distributed backend access {stoLst.len} entries":
       check noisy.testDistributedAccess(stoLst, dbDir)
+
+    test &"Filter backlog management {stoLst.len} entries":
+      check noisy.testFilterBacklog(stoLst, rdbPath=dbDir)
 
 # ------------------------------------------------------------------------------
 # Main function(s)
@@ -200,11 +208,13 @@ when isMainModule:
         noisy.storagesRunner(sam, resetDb=true, oops=knownFailures)
 
   when true: # and false:
-    for n,sam in snapTestList:
-      noisy.accountsRunner(sam)
-    for n,sam in snapTestStorageList:
-      noisy.accountsRunner(sam)
-      noisy.storagesRunner(sam)
+    noisy.showElapsed("@snap_test_list"):
+      for n,sam in snapTestList:
+        noisy.accountsRunner(sam)
+    noisy.showElapsed("@snap_test_storage_list"):
+      for n,sam in snapTestStorageList:
+        noisy.accountsRunner(sam)
+        noisy.storagesRunner(sam)
 
 # ------------------------------------------------------------------------------
 # End

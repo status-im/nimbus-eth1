@@ -632,12 +632,6 @@ proc pp*(
 
 proc pp*(
     db: AristoDbRef;
-    indent = 4;
-      ): string =
-  db.top.pp(db, indent=indent)
-
-proc pp*(
-    db: AristoDbRef;
     xTabOk: bool;
     indent = 4;
       ): string =
@@ -673,6 +667,17 @@ proc pp*(
 
   of BackendVoid:
     db.roFilter.ppFilter(db, indent) & indent.toPfx & "<BackendNone>"
+
+proc pp*(
+    db: AristoDbRef;
+    backendOk = false;
+    indent = 4;
+      ): string =
+  result = db.top.pp(db, indent=indent) & indent.toPfx
+  if backendOk:
+    result &= db.backend.pp(db)
+  else:
+    result &= db.roFilter.ppFilter(db, indent+1)
 
 # ------------------------------------------------------------------------------
 # End

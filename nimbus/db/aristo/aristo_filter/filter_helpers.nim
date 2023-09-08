@@ -107,6 +107,41 @@ proc getFilterFromFifo*(
 
   ok fip
 
+
+proc getFilterOverlap*(
+    be: BackendRef;
+    filter: FilterRef;
+      ): int =
+  ## Return the number of filters in the leading chain that is reverted by the
+  ## argument `filter`. A heuristc approach is used here for an argument
+  ## `filter` with a valid filter ID when the chain is longer than one items.
+  ## So only single chain overlaps a guaranteed to be found.
+  ##
+  # Check against the top-fifo entry
+  let qid = be.filters[0]
+  if not qid.isValid:
+    return 0
+  let top = block:
+    let rc = be.getFilFn qid
+    if rc.isErr:
+      return 0
+    rc.value
+
+  # The `filter` must match the `top`
+  if filter.src != top.src:
+    return 0
+
+  # Does the filter revert the fitst entry?
+  if filter.trg == top.trg:
+    return 1
+
+  # Check against sme stored filter IDs
+  if filter.isValid:
+    let rc = be.getFilterFromFifo(filter.fid, earlierOK=true)
+    if rc.isOk:
+      if filter.trg == rc.value.fil.trg:
+        return 1 + rc.value.inx
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

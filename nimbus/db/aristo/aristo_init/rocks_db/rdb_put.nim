@@ -181,7 +181,7 @@ proc put*(
       trace logTxt "commit error", error=rc.error[0], info=rc.error[1]
       return err(rc.error)
 
-  # Delete vertices after successful updating veritces with non-zero values.
+  # Delete vertices after successfully updating vertices with non-zero values.
   for key in delKey:
     let rc = rdb.store.del key
     if rc.isErr:

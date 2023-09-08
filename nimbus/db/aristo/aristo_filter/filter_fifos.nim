@@ -57,9 +57,9 @@ template nextFidOrReturn(be: BackendRef): FilterID =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc store*(
-    be: BackendRef;                               # Database backend
-    filter: FilterRef;                            # Filter to save
+proc fifosStore*(
+    be: BackendRef;                              # Database backend
+    filter: FilterRef;                           # Filter to save
       ): Result[FifoInstr,AristoError] =
   ## Calculate backend instructions for storing the arguent `filter` on the
   ## argument backend `be`.
@@ -125,21 +125,21 @@ proc store*(
   ok instr
 
 
-proc fetch*(
-    be: BackendRef;                               # Database backend
-    backStep: int;                                # Backstep this many filters
+proc fifosFetch*(
+    be: BackendRef;                              # Database backend
+    backSteps: int;                              # Backstep this many filters
       ): Result[FetchInstr,AristoError] =
   ## This function returns the single filter obtained by squash merging the
-  ## topmost `backStep` filters on the backend fifo. Also, backend instructions
+  ## topmost `backSteps` filters on the backend fifo. Also, backend instructions
   ## are calculated and returned for deleting the merged filters on the fifo.
   ##
   if be.filters.isNil:
     return err(FilQuSchedDisabled)
-  if backStep <= 0:
-    return err(FilPosArgExpected)
+  if backSteps <= 0:
+    return err(FilBackStepsExpected)
 
   # Get instructions
-  let fetch = be.filters.fetchItems backStep
+  let fetch = be.filters.fetchItems backSteps
   var instr = FetchInstr(del: FifoInstr(scd: fetch.fifo))
 
   # Follow `HoldQid` instructions and combine filters for sub-queues and
@@ -172,18 +172,18 @@ proc fetch*(
   ok instr
 
 
-proc delete*(
-    be: BackendRef;                               # Database backend
-    backStep: int;                                # Backstep this many filters
+proc fifosDelete*(
+    be: BackendRef;                              # Database backend
+    backSteps: int;                              # Backstep this many filters
       ): Result[FifoInstr,AristoError] =
   ## Variant of `fetch()` for calculating the deletion part only.
   if be.filters.isNil:
     return err(FilQuSchedDisabled)
-  if backStep <= 0:
-    return err(FilPosArgExpected)
+  if backSteps <= 0:
+    return err(FilBackStepsExpected)
 
   # Get instructions
-  let fetch = be.filters.fetchItems backStep
+  let fetch = be.filters.fetchItems backSteps
   var instr = FifoInstr(scd: fetch.fifo)
 
   # Follow `HoldQid` instructions for producing the list of entries that

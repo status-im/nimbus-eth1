@@ -182,16 +182,19 @@ type
     # Functions from  `aristo_filter.nim`
     FilBackendMissing
     FilBackendRoMode
+    FilBackStepsExpected
     FilDudeFilterUpdateError
     FilExecDublicateSave
     FilExecHoldExpected
     FilExecOops
     FilExecSaveMissing
     FilExecStackUnderflow
+    FilFilterInvalid
     FilFilterNotFound
     FilInxByQidFailed
+    FilNegativeEpisode
     FilNilFilterRejected
-    FilPosArgExpected
+    FilNoMatchOnFifo
     FilPrettyPointlessLayer
     FilQidByLeFidFailed
     FilQuSchedDisabled
@@ -199,7 +202,6 @@ type
     FilStateRootMissing
     FilTrgSrcMismatch
     FilTrgTopSrcMismatch
-    FilNegativeEpisode
     FilSiblingsCommitUnfinshed
 
     # Get functions form `aristo_get.nim`
