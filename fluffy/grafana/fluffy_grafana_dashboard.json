@@ -237,6 +237,10 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P5354BB48EF90EBE5"
+      },
       "description": "Fluffy and Nim version",
       "fill": 1,
       "fillGradient": 0,
@@ -264,7 +268,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.15",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -274,18 +278,30 @@
       "steppedLine": false,
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
+          "editorMode": "code",
           "exemplar": true,
-          "expr": "fluffy_version",
+          "expr": "fluffy_version{instance=\"${instance}\",container=\"${container}\"}",
           "interval": "",
           "legendFormat": "{{version}}",
+          "range": true,
           "refId": "A"
         },
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
+          "editorMode": "code",
           "exemplar": true,
-          "expr": "fluffy_nim_version",
+          "expr": "fluffy_nim_version{instance=\"${instance}\",container=\"${container}\"}",
           "hide": false,
           "interval": "",
           "legendFormat": "{{version}}-{{nim_commit}}",
+          "range": true,
           "refId": "B"
         }
       ],
@@ -2251,8 +2267,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -2349,13 +2364,9 @@
       },
       {
         "current": {
-          "selected": true,
-          "text": [
-            "nimbus-fluffy-mainnet-master-01"
-          ],
-          "value": [
-            "nimbus-fluffy-mainnet-master-01"
-          ]
+          "selected": false,
+          "text": "nimbus-fluffy-mainnet-master-01",
+          "value": "nimbus-fluffy-mainnet-master-01"
         },
         "datasource": {
           "type": "prometheus",
@@ -2380,13 +2391,13 @@
     ]
   },
   "time": {
-    "from": "now-30m",
+    "from": "now-3h",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "",
   "title": "Nimbus Fluffy Dashboard",
   "uid": "iWQQPuPnkadsf",
-  "version": 9,
+  "version": 10,
   "weekStart": ""
 }
