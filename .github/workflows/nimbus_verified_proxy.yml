@@ -39,19 +39,16 @@ jobs:
           - target:
               os: linux
             builder: ubuntu-20.04
-            shell: bash
           - target:
               os: macos
             builder: macos-11
-            shell: bash
           - target:
               os: windows
             builder: windows-latest
-            shell: msys2 {0}
 
     defaults:
       run:
-        shell: ${{ matrix.shell }}
+        shell: bash
 
     name: '${{ matrix.target.os }}-${{ matrix.target.cpu }}'
     runs-on: ${{ matrix.builder }}
@@ -60,7 +57,6 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Derive environment variables
-        shell: bash
         run: |
           if [[ '${{ matrix.target.cpu }}' == 'amd64' ]]; then
             PLATFORM=x64
@@ -116,26 +112,13 @@ jobs:
           brew install gnu-getopt
           brew link --force gnu-getopt
 
-      - name: MSYS2 (Windows i386)
-        if: runner.os == 'Windows' && matrix.target.cpu == 'i386'
-        uses: msys2/setup-msys2@v2
+      - name: Restore llvm-mingw (Windows) from cache
+        if: runner.os == 'Windows'
+        id: windows-mingw-cache
+        uses: actions/cache@v3
         with:
-          path-type: inherit
-          msystem: MINGW32
-          install: >-
-            base-devel
-            git
-            mingw-w64-i686-toolchain
-
-      - name: MSYS2 (Windows amd64)
-        if: runner.os == 'Windows' && matrix.target.cpu == 'amd64'
-        uses: msys2/setup-msys2@v2
-        with:
-          path-type: inherit
-          install: >-
-            base-devel
-            git
-            mingw-w64-x86_64-toolchain
+          path: external/mingw-${{ matrix.target.cpu }}
+          key: 'mingw-llvm-17-${{ matrix.target.cpu }}'
 
       - name: Restore Nim DLLs dependencies (Windows) from cache
         if: runner.os == 'Windows'
@@ -144,6 +127,24 @@ jobs:
         with:
           path: external/dlls-${{ matrix.target.cpu }}
           key: 'dlls-${{ matrix.target.cpu }}-verified-proxy'
+
+      - name: Install llvm-mingw dependency (Windows)
+        if: >
+          steps.windows-mingw-cache.outputs.cache-hit != 'true' &&
+          runner.os == 'Windows'
+        run: |
+          mkdir -p external
+          MINGW_BASE="https://github.com/mstorsjo/llvm-mingw/releases/download/20230905"
+          if [[ '${{ matrix.target.cpu }}' == 'amd64' ]]; then
+            MINGW_URL="$MINGW_BASE/llvm-mingw-20230905-ucrt-x86_64.zip"
+            ARCH=64
+          else
+            MINGW_URL="$MINGW_BASE/llvm-mingw-20230905-ucrt-x86_64.zip"
+            ARCH=32
+          fi
+          curl -L "$MINGW_URL" -o "external/mingw-${{ matrix.target.cpu }}.zip"
+          7z x -y "external/mingw-${{ matrix.target.cpu }}.zip" -oexternal/mingw-${{ matrix.target.cpu }}/
+          mv external/mingw-${{ matrix.target.cpu }}/**/* ./external/mingw-${{ matrix.target.cpu }}
 
       - name: Install DLLs dependencies (Windows)
         if: >
@@ -159,6 +160,7 @@ jobs:
         if: >
           runner.os == 'Windows'
         run: |
+          echo '${{ github.workspace }}'"/external/mingw-${{ matrix.target.cpu }}/bin" >> $GITHUB_PATH
           echo '${{ github.workspace }}'"/external/dlls-${{ matrix.target.cpu }}" >> $GITHUB_PATH
 
       - name: Get latest nimbus-build-system commit hash

@@ -140,6 +140,16 @@ ifeq ($(USE_LIBBACKTRACE), 0)
   NIM_PARAMS += -d:disable_libbacktrace
 endif
 
+# TODO: port this back to nimbus-build-system
+# after we can switch to nim 1.6.16
+# This rule override the one in targets.mk
+libnatpmp.a: | sanity-checks
+ifeq ($(OS), Windows_NT)
+	+ "$(MAKE)" -C vendor/nim-nat-traversal/vendor/libnatpmp-upstream OS=mingw CC=$(CC) CFLAGS="-Wall -Wno-cpp -Os -DWIN32 -DNATPMP_STATICLIB -DENABLE_STRNATPMPERR -DNATPMP_MAX_RETRIES=4 $(CFLAGS)" $@ $(HANDLE_OUTPUT)
+else
+	+ "$(MAKE)" CFLAGS="-Wall -Wno-cpp -Os -DENABLE_STRNATPMPERR -DNATPMP_MAX_RETRIES=4 $(CFLAGS)" -C vendor/nim-nat-traversal/vendor/libnatpmp-upstream $@ $(HANDLE_OUTPUT)
+endif
+
 deps: | deps-common nat-libs nimbus.nims
 ifneq ($(USE_LIBBACKTRACE), 0)
 deps: | libbacktrace
