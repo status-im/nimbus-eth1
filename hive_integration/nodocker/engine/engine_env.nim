@@ -152,9 +152,13 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
     client : client,
     sync   : sync
   )
+  
+proc close(node: EthereumNode) =
+  node.stopListening()
+  waitFor node.listeningServer.closeWait()
 
 proc close*(env: EngineEnv) =
-  env.node.stopListening()
+  env.node.close()
   env.sync.stop()
   waitFor env.client.close()
   waitFor env.sealer.stop()

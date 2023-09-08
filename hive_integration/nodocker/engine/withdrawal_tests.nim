@@ -256,7 +256,7 @@ let wdTestList* = [
       "- Wait for sync, which include syncing a pre-Withdrawals block, and verify withdrawn account's balance\n",
     run: specExecute[SyncSpec],
     spec: SyncSpec(
-      timeoutSeconds: 300,
+      timeoutSeconds:  50,
       wdForkHeight:    2,
       wdBlockCount:    128,
       wdPerBlock:      MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
