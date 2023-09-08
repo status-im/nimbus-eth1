@@ -376,21 +376,14 @@ proc hashify*(
     # There might be deleted entries on the leaf table. If this is the case,
     # the Merkle hashes for the vertices in the `hike` can all be compiled.
     if not vid.isValid:
-      let rc = db.deletedLeafHasher hike
-      if rc.isErr:
-        return err(rc.error)
+      ? db.deletedLeafHasher hike
 
     elif hike.error != AristoError(0):
       return err((vid,hike.error))
 
     else:
       # Hash as much of the `hike` as possible
-      let n = block:
-        let rc = db.leafToRootHasher hike
-        if rc.isErr:
-          return err(rc.error)
-        rc.value
-
+      let n = ? db.leafToRootHasher hike
       roots.incl hike.root
 
       if 0 < n:
@@ -423,9 +416,7 @@ proc hashify*(
   # At least one full path leaf..root should have succeeded with labelling
   # for each root.
   if completed.len < roots.len:
-    let rc = db.resolveStateRoots backLink
-    if rc.isErr:
-      return err(rc.error)
+    ? db.resolveStateRoots backLink
 
   # Update remaining hashes
   while 0 < downMost.len:

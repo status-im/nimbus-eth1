@@ -156,18 +156,9 @@ proc exec*(
   ## transaction database. After return, the temporary database gets
   ## destroyed.
   ##
-  let db = block:
-    let rc = tx.forkTx()
-    if rc.isErr:
-      return err(rc.error)
-    rc.value
-
+  let db = ? tx.forkTx()
   db.action()
-
-  block:
-    let rc = db.forget()
-    if rc.isErr:
-      return err(rc.error)
+  ? db.forget()
   ok()
 
 # ------------------------------------------------------------------------------
@@ -186,7 +177,7 @@ proc txBegin*(db: AristoDbRef): Result[AristoTxRef,(VertexID,AristoError)] =
   ##     tx.commit()
   ##
   if db.level != db.stack.len:
-    return err((VertexID(0),TxStackGarbled))
+    return err(TxStackGarbled.toVae)
 
   db.stack.add db.top.dup # push (save and use top later)
   db.top.txUid = db.getTxUid()
@@ -199,7 +190,6 @@ proc txBegin*(db: AristoDbRef): Result[AristoTxRef,(VertexID,AristoError)] =
 
   ok db.txRef
 
-
 proc rollback*(
     tx: AristoTxRef;                  # Top transaction on database
       ): Result[void,(VertexID,AristoError)] =
@@ -207,11 +197,7 @@ proc rollback*(
   ## performed for this transactio. The previous transaction is returned if
   ## there was any.
   ##
-  let db = block:
-    let rc = tx.getDbDescFromTopTx()
-    if rc.isErr:
-      return err((VertexID(0),rc.error))
-    rc.value
+  let db = ? tx.getDbDescFromTopTx().mapErr toVae
 
   # Roll back to previous layer.
   db.top = db.stack[^1]
@@ -232,16 +218,10 @@ proc commit*(
   ## Unless the argument `dontHashify` is set `true`, the function will process
   ## Merkle Patricia Treee hashes unless there was no change to this layer.
   ## This may produce additional errors (see `hashify()`.)
-  let db = block:
-    let rc = tx.getDbDescFromTopTx()
-    if rc.isErr:
-      return err((VertexID(0),rc.error))
-    rc.value
+  let db = ? tx.getDbDescFromTopTx().mapErr toVae
 
   if db.top.dirty and not dontHashify:
-    let rc = db.hashify()
-    if rc.isErr:
-      return err(rc.error)
+    discard ? db.hashify()
 
   # Keep top and discard layer below
   db.top.txUid = db.stack[^1].txUid
@@ -265,11 +245,7 @@ proc collapse*(
   ##     tx = db.topTx.value
   ##
   ## The `dontHashify` is treated as described for `commit()`
-  let db = block:
-    let rc = tx.getDbDescFromTopTx()
-    if rc.isErr:
-      return err((VertexID(0),rc.error))
-    rc.value
+  let db = ? tx.getDbDescFromTopTx().mapErr toVae
 
   # If commit, then leave the current layer and clear the stack, oterwise
   # install the stack bottom.
@@ -315,28 +291,20 @@ proc stow*(
   ## into the physical backend database and the staged data area is cleared.
   ##
   if not db.txRef.isNil:
-    return err((VertexID(0),TxPendingTx))
+    return err(TxPendingTx.toVae)
   if 0 < db.stack.len:
     return err(TxStackGarbled.toVae)
   if persistent and not db.canResolveBE():
     return err(TxRoBackendOrMissing.toVae)
 
   if db.top.dirty and not dontHashify:
-    let rc = db.hashify()
-    if rc.isErr:
-      return err(rc.error)
+    discard ? db.hashify()
 
-  let fwd = block:
-    let rc = db.fwdFilter(db.top, chunkedMpt)
-    if rc.isErr:
-      return err(rc.error)
-    rc.value
+  let fwd = ? db.fwdFilter(db.top, chunkedMpt)
 
   if fwd.isValid:
     # Merge `top` layer into `roFilter`
-    let rc = db.merge fwd
-    if rc.isErr:
-      return err(rc.error)
+    ? db.merge fwd
     db.top = LayerRef(vGen: db.roFilter.vGen)
 
   if persistent:

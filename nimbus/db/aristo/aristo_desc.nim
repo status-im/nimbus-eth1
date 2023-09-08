@@ -146,7 +146,7 @@ func isCentre*(db: AristoDbRef): bool =
 
 func getCentre*(db: AristoDbRef): AristoDbRef =
   ## Get the centre descriptor among all other descriptors accessing the same
-  ## backend (see comments on `reCentre()` for details.)
+  ## backend database (see comments on `reCentre()` for details.)
   ##
   if db.dudes.isNil or db.dudes.rwOk:
     db
