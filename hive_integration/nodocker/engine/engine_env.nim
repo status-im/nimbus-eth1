@@ -91,7 +91,7 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
     echo error
     quit(QuitFailure)
 
-  var
+  let
     node  = setupEthNode(conf, ctx)
     com   = makeCom(conf)
     chain = newChain(com)
@@ -152,13 +152,9 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
     client : client,
     sync   : sync
   )
-  
-proc close(node: EthereumNode) =
-  node.stopListening()
-  waitFor node.listeningServer.closeWait()
 
 proc close*(env: EngineEnv) =
-  env.node.close()
+  waitFor env.node.closeWait()
   env.sync.stop()
   waitFor env.client.close()
   waitFor env.sealer.stop()
