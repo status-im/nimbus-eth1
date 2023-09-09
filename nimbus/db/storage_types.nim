@@ -26,8 +26,8 @@ type
     finalizedHash
     skeletonProgress
     skeletonBlockHashToNumber
-    skeletonBlock
-    skeletonTransaction
+    skeletonHeader
+    skeletonBody
     snapSyncAccount
     snapSyncStorageSlot
     snapSyncStateRoot
@@ -100,17 +100,16 @@ proc skeletonBlockHashToNumberKey*(h: Hash256): DbKey {.inline.} =
   result.data[1 .. 32] = h.data
   result.dataEndPos = uint8 32
 
-proc skeletonBlockKey*(u: BlockNumber): DbKey {.inline.} =
-  result.data[0] = byte ord(skeletonBlock)
+proc skeletonHeaderKey*(u: BlockNumber): DbKey {.inline.} =
+  result.data[0] = byte ord(skeletonHeader)
   doAssert sizeof(u) <= 32
   copyMem(addr result.data[1], unsafeAddr u, sizeof(u))
   result.dataEndPos = uint8 sizeof(u)
 
-proc skeletonTransactionKey*(u: BlockNumber): DbKey {.inline.} =
-  result.data[0] = byte ord(skeletonTransaction)
-  doAssert sizeof(u) <= 32
-  copyMem(addr result.data[1], unsafeAddr u, sizeof(u))
-  result.dataEndPos = uint8 sizeof(u)
+proc skeletonBodyKey*(h: Hash256): DbKey {.inline.} =
+  result.data[0] = byte ord(skeletonBody)
+  result.data[1 .. 32] = h.data
+  result.dataEndPos = uint8 32
 
 proc snapSyncAccountKey*(h: openArray[byte]): DbKey {.inline.} =
   doAssert(h.len == 32)

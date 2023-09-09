@@ -2,6 +2,7 @@ import
   std/math,
   eth/[rlp, common/eth_types_rlp],
   stew/byteutils,
+  nimcrypto,
   ../db/core_db
 
 export eth_types_rlp
@@ -23,6 +24,28 @@ template calcWithdrawalsRoot*(withdrawals: openArray[Withdrawal]): Hash256 =
 
 template calcReceiptRoot*(receipts: openArray[Receipt]): Hash256 =
   calcRootHash(receipts)
+
+func sumHash*(hashes: varargs[Hash256]): Hash256 =
+  var ctx: sha256
+  ctx.init()
+  for hash in hashes:
+    ctx.update hash.data
+  ctx.finish result.data
+  ctx.clear()
+
+proc sumHash*(body: BlockBody): Hash256 {.gcsafe, raises: [RlpError]} =
+  let txRoot = calcTxRoot(body.transactions)
+  let ommersHash = keccakHash(rlp.encode(body.uncles))
+  let wdRoot = if body.withdrawals.isSome:
+                 calcWithdrawalsRoot(body.withdrawals.get)
+               else: EMPTY_ROOT_HASH
+  sumHash(txRoot, ommersHash, wdRoot)
+
+proc sumHash*(header: BlockHeader): Hash256 =
+  let wdRoot = if header.withdrawalsRoot.isSome:
+                 header.withdrawalsRoot.get
+               else: EMPTY_ROOT_HASH
+  sumHash(header.txRoot, header.ommersHash, wdRoot)
 
 func generateAddress*(address: EthAddress, nonce: AccountNonce): EthAddress =
   result[0..19] = keccakHash(rlp.encodeList(address, nonce)).data.toOpenArray(12, 31)
