@@ -22,7 +22,7 @@ import
 # ------------------------------------------------------------------------------
 
 proc setEthHandlerNewBlocksAndHashes*(
-    node: var EthereumNode;
+    node: EthereumNode;
     blockHandler: NewBlockHandler;
     hashesHandler: NewBlockHashesHandler;
     arg: pointer;
@@ -32,7 +32,7 @@ proc setEthHandlerNewBlocksAndHashes*(
   w.setNewBlockHashesHandler(hashesHandler, arg)
 
 proc addEthHandlerCapability*(
-    node: var EthereumNode;
+    node: EthereumNode;
     peerPool: PeerPool;
     chain: ChainRef;
     txPool = TxPoolRef(nil);
@@ -48,11 +48,11 @@ proc addEthHandlerCapability*(
 # ------------------------------------------------------------------------------
 
 when dbBackend != select_backend.none:
-  import 
+  import
     ./snap as handlers_snap
-    
+
   proc addSnapHandlerCapability*(
-      node: var EthereumNode;
+      node: EthereumNode;
       peerPool: PeerPool;
       chain = ChainRef(nil);
         ) =
