@@ -106,7 +106,7 @@ jobs:
         uses: actions/cache@v3
         with:
           path: external/mingw-amd64
-          key: 'mingw-llvm-17-amd64'
+          key: 'mingw-llvm-17-sim'
 
       - name: Install llvm-mingw dependency (Windows)
         if: >
