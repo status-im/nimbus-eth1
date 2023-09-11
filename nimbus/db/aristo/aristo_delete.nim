@@ -29,6 +29,10 @@ logScope:
 # Private heplers
 # ------------------------------------------------------------------------------
 
+func toVae(err: AristoError): (VertexID,AristoError) =
+  ## Map single error to error pair with dummy vertex
+  (VertexID(0),err)
+
 proc branchStillNeeded(vtx: VertexRef): Result[int,void] =
   ## Returns the nibble if there is only one reference left.
   var nibble = -1
@@ -325,16 +329,13 @@ proc deleteImpl(
         return err((nxt.vid, DelVidStaleVtx))
 
       # Collapse `Branch` vertex `br` depending on `nxt` vertex type
-      let rc = block:
-        case nxt.vtx.vType:
-        of Branch:
-          db.collapseBranch(hike, nibble.byte)
-        of Extension:
-          db.collapseExt(hike, nibble.byte, nxt.vtx)
-        of Leaf:
-          db.collapseLeaf(hike, nibble.byte, nxt.vtx)
-      if rc.isErr:
-        return err(rc.error)
+      case nxt.vtx.vType:
+      of Branch:
+        ? db.collapseBranch(hike, nibble.byte)
+      of Extension:
+        ? db.collapseExt(hike, nibble.byte, nxt.vtx)
+      of Leaf:
+        ? db.collapseLeaf(hike, nibble.byte, nxt.vtx)
 
   # Delete leaf entry
   if leafVidBe.isValid:
@@ -356,11 +357,9 @@ proc delete*(
       ): Result[void,(VertexID,AristoError)] =
   ## Delete argument `hike` chain of vertices from the database
   # Need path in order to remove it from `lTab[]`
-  let lty = block:
-    let rc = hike.to(NibblesSeq).pathToTag()
-    if rc.isErr:
-      return err((VertexID(0),DelPathTagError))
-    LeafTie(root: hike.root, path: rc.value)
+  let lty = LeafTie(
+    root: hike.root,
+    path: ? hike.to(NibblesSeq).pathToTag().mapErr toVae)
   db.deleteImpl(hike, lty)
 
 proc delete*(

@@ -53,10 +53,7 @@ proc pathToKey*(partPath: Blob): Result[HashKey,AristoError] =
   err(PathExpectedLeaf)
 
 proc pathToTag*(partPath: NibblesSeq|Blob): Result[HashID,AristoError] =
-  let rc = partPath.pathToKey()
-  if rc.isOk:
-    return ok(rc.value.to(HashID))
-  err(rc.error)
+  ok (? partPath.pathToKey).to(HashID)
 
 # --------------------
 

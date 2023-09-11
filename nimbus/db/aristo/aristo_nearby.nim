@@ -292,11 +292,7 @@ proc nearbyNext(
       w.branchNibbleMax(n - 1)
 
   # Some easy cases
-  let hike = block:
-    var rc = hike.zeroAdjust(db, doLeast=moveRight)
-    if rc.isErr:
-      return err(rc.error)
-    rc.value
+  let hike = ? hike.zeroAdjust(db, doLeast=moveRight)
 
   if hike.legs[^1].wp.vtx.vType == Extension:
     let vid = hike.legs[^1].wp.vtx.eVid
@@ -379,12 +375,8 @@ proc nearbyNextLeafTie(
     hikeLenMax: static[int];            # Beware of loops (if any)
     moveRight:static[bool];             # Direction of next vertex
       ): Result[HashID,(VertexID,AristoError)] =
-  ## Variant of `nearbyNext()`, convenience wrapper 
-  let hike = block:
-    let rc = lty.hikeUp(db).nearbyNext(db, hikeLenMax, moveRight)
-    if rc.isErr:
-      return err(rc.error)
-    rc.value
+  ## Variant of `nearbyNext()`, convenience wrapper
+  let hike = ? lty.hikeUp(db).nearbyNext(db, hikeLenMax, moveRight)
 
   if 0 < hike.legs.len:
     if hike.legs[^1].wp.vtx.vType != Leaf:
@@ -421,10 +413,9 @@ proc right*(
       ): Result[LeafTie,(VertexID,AristoError)] =
   ## Variant of `nearbyRight()` working with a `HashID` argument instead
   ## of a `Hike`.
-  let rc = lty.nearbyNextLeafTie(db, 64, moveRight=true)
-  if rc.isErr:
-    return err(rc.error)
-  ok LeafTie(root: lty.root, path: rc.value)
+  ok LeafTie(
+    root: lty.root,
+    path: ? lty.nearbyNextLeafTie(db, 64, moveRight=true))
 
 iterator right*(
     db: AristoDbRef;                    # Database layer
@@ -483,10 +474,9 @@ proc left*(
     db: AristoDbRef;                    # Database layer
       ): Result[LeafTie,(VertexID,AristoError)] =
   ## Similar to `nearbyRight()` for `HashID` argument instead of a `Hike`.
-  let rc = lty.nearbyNextLeafTie(db, 64, moveRight=false)
-  if rc.isErr:
-    return err(rc.error)
-  ok LeafTie(root: lty.root, path: rc.value)
+  ok LeafTie(
+    root: lty.root,
+    path: ? lty.nearbyNextLeafTie(db, 64, moveRight=false))
 
 iterator left*(
     db: AristoDbRef;                    # Database layer

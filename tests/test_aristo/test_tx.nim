@@ -114,7 +114,7 @@ proc saveToBackend(
   xCheck tx.level == 2
 
   block:
-    let rc = db.checkCache(relax=true)
+    let rc = db.checkTop(relax=true)
     xCheckRc rc.error == (0,0)
 
   # Commit and hashify the current layer

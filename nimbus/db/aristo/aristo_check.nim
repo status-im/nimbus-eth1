@@ -19,13 +19,13 @@ import
   stew/[interval_set, results],
   ./aristo_walk/persistent,
   "."/[aristo_desc, aristo_get, aristo_init, aristo_vid, aristo_utils],
-  ./aristo_check/[check_be, check_cache]
+  ./aristo_check/[check_be, check_top]
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc checkCache*(
+proc checkTop*(
     db: AristoDbRef;                   # Database, top layer
     relax = false;                     # Check existing hashes only
       ): Result[void,(VertexID,AristoError)] =
@@ -44,26 +44,23 @@ proc checkCache*(
   ##   correnspond.
   ##
   if relax:
-    let rc = db.checkCacheRelaxed()
-    if rc.isErr:
-      return rc
+    ? db.checkTopRelaxed()
   else:
-    let rc = db.checkCacheStrict()
-    if rc.isErr:
-      return rc
+    ? db.checkTopStrict()
 
-  db.checkCacheCommon()
+  db.checkTopCommon()
 
 
 proc checkBE*(
     db: AristoDbRef;                   # Database, top layer
     relax = true;                      # Not re-compiling hashes if `true`
-    cache = true;                      # Also verify cache
+    cache = true;                      # Also verify against top layer cache
+    fifos = false;                     # Also verify cascaded filter fifos
       ): Result[void,(VertexID,AristoError)] =
   ## Veryfy database backend structure. If the argument `relax` is set `false`,
   ## all necessary Merkle hashes are compiled and verified. If the argument
-  ## `cache` is set `true`, the cache is also checked so that a `safe()`
-  ## operation will leave the backend consistent.
+  ## `cache` is set `true`, the cache is also checked so that a safe operation
+  ## (like `resolveBackendFilter()`) will leave the backend consistent.
   ##
   ## The following is verified:
   ##
@@ -83,6 +80,18 @@ proc checkBE*(
     return RdbBackendRef.checkBE(db, cache=cache, relax=relax)
   of BackendVoid:
     return VoidBackendRef.checkBE(db, cache=cache, relax=relax)
+  ok()
+
+
+proc check*(
+    db: AristoDbRef;                   # Database, top layer
+    relax = false;                     # Check existing hashes only
+    cache = true;                      # Also verify against top layer cache
+    fifos = true;                      # Also verify cascaded filter fifos
+     ): Result[void,(VertexID,AristoError)] =
+  ## Shortcut for running `checkTop()` followed by `checkBE()`
+  ? db.checkTop(relax = relax)
+  ? db.checkBE(relax = relax, cache = cache)
   ok()
 
 # ------------------------------------------------------------------------------

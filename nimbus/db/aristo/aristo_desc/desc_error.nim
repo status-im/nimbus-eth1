@@ -150,6 +150,9 @@ type
     CheckBeCacheKeyMismatch
     CheckBeCacheGarbledVGen
 
+    CheckBeFifoSrcTrgMismatch
+    CheckBeFifoTrgNotStateRoot
+
     # Neighbour vertex, tree traversal `nearbyRight()` and `nearbyLeft()`
     NearbyBeyondRange
     NearbyBranchError
@@ -179,16 +182,19 @@ type
     # Functions from  `aristo_filter.nim`
     FilBackendMissing
     FilBackendRoMode
+    FilBackStepsExpected
     FilDudeFilterUpdateError
     FilExecDublicateSave
     FilExecHoldExpected
     FilExecOops
     FilExecSaveMissing
     FilExecStackUnderflow
-    FilInxByFidFailed
+    FilFilterInvalid
+    FilFilterNotFound
+    FilInxByQidFailed
+    FilNegativeEpisode
     FilNilFilterRejected
-    FilNotReadOnlyDude
-    FilPosArgExpected
+    FilNoMatchOnFifo
     FilPrettyPointlessLayer
     FilQidByLeFidFailed
     FilQuSchedDisabled
@@ -196,6 +202,7 @@ type
     FilStateRootMissing
     FilTrgSrcMismatch
     FilTrgTopSrcMismatch
+    FilSiblingsCommitUnfinshed
 
     # Get functions form `aristo_get.nim`
     GetLeafNotFound
@@ -226,6 +233,10 @@ type
     TxNotTopTx
     TxStackGarbled
     TxStackUnderflow
+
+    # Functions from `aristo_desc`
+    MustBeOnCentre
+    NotAllowedOnCentre
 
     # Miscelaneous handy helpers
     PayloadTypeUnsupported

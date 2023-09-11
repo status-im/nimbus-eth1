@@ -18,7 +18,7 @@ import
   "."/[aristo_constants, aristo_desc, aristo_hike, aristo_init],
   ./aristo_desc/desc_backend,
   ./aristo_init/[memory_db, rocks_db],
-  ./aristo_filter/filter_desc
+  ./aristo_filter/filter_scheduler
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -356,8 +356,8 @@ proc ppFilter(fl: FilterRef; db: AristoDbRef; indent: int): string =
     result &= " n/a"
     return
   result &= pfx & "fid=" & fl.fid.ppFid
-  result &= pfx & "trg(" & fl.trg.ppKey & ")"
-  result &= pfx & "src(" & fl.src.ppKey & ")"
+  result &= pfx & "src=" & fl.src.ppKey
+  result &= pfx & "trg=" & fl.trg.ppKey
   result &= pfx & "vGen" & pfx1 & "[" &
     fl.vGen.mapIt(it.ppVid).join(",") & "]"
   result &= pfx & "sTab" & pfx1 & "{"
@@ -632,12 +632,6 @@ proc pp*(
 
 proc pp*(
     db: AristoDbRef;
-    indent = 4;
-      ): string =
-  db.top.pp(db, indent=indent)
-
-proc pp*(
-    db: AristoDbRef;
     xTabOk: bool;
     indent = 4;
       ): string =
@@ -673,6 +667,17 @@ proc pp*(
 
   of BackendVoid:
     db.roFilter.ppFilter(db, indent) & indent.toPfx & "<BackendNone>"
+
+proc pp*(
+    db: AristoDbRef;
+    backendOk = false;
+    indent = 4;
+      ): string =
+  result = db.top.pp(db, indent=indent) & indent.toPfx
+  if backendOk:
+    result &= db.backend.pp(db)
+  else:
+    result &= db.roFilter.ppFilter(db, indent+1)
 
 # ------------------------------------------------------------------------------
 # End

@@ -22,8 +22,7 @@ import
     aristo_merge, aristo_persistent, aristo_transcode],
   ../../nimbus/db/aristo,
   ../../nimbus/db/aristo/aristo_desc/desc_backend,
-  ../../nimbus/db/aristo/aristo_filter/[
-    filter_desc, filter_fifos, filter_helpers, filter_scheduler],
+  ../../nimbus/db/aristo/aristo_filter/[filter_fifos, filter_scheduler],
   ./test_helpers
 
 type
@@ -71,25 +70,28 @@ proc fList(be: BackendRef): seq[(QueueID,FilterRef)] =
     discard
   check be.kind == BackendMemory or be.kind == BackendRocksDB
 
-func ppFil(w: FilterRef): string =
-  func pp(w: HashKey): string =
-    let n = w.to(HashID).UInt256
-    if n == 0: "£ø" else: "£" & $n
-  "(" & w.fid.pp & "," & w.src.pp & "->" & w.trg.pp & ")"
+func ppFil(w: FilterRef; db = AristoDbRef(nil)): string =
+  proc qq(key: HashKey; db: AristoDbRef): string =
+    if db.isNil:
+      let n = key.to(HashID).UInt256
+      if n == 0: "£ø" else: "£" & $n
+    else:
+      HashLabel(root: VertexID(1), key: key).pp(db)
+  "(" & w.fid.pp & "," & w.src.qq(db) & "->" & w.trg.qq(db) & ")"
 
-func pp(qf: (QueueID,FilterRef)): string =
-  "(" & qf[0].pp & "," & (if qf[1].isNil: "ø" else: qf[1].ppFil) & ")"
+func pp(qf: (QueueID,FilterRef); db = AristoDbRef(nil)): string =
+  "(" & qf[0].pp & "," & (if qf[1].isNil: "ø" else: qf[1].ppFil(db)) & ")"
 
-proc pp(q: openArray[(QueueID,FilterRef)]): string =
-  "{" & q.mapIt(it.pp).join(",") & "}"
+proc pp(q: openArray[(QueueID,FilterRef)]; db = AristoDbRef(nil)): string =
+  "{" & q.mapIt(it.pp(db)).join(",") & "}"
 
-proc pp(q: seq[seq[(QueueID,FilterRef)]]): string =
+proc pp(q: seq[seq[(QueueID,FilterRef)]]; db = AristoDbRef(nil)): string =
   result = "["
   for w in q:
     if w.len == 0:
       result &= "ø"
     else:
-      result &= w.mapIt(it.pp).join(",")
+      result &= w.mapIt(it.pp db).join(",")
     result &= ","
   if result[^1] == ',':
     result[^1] = ']'
@@ -166,7 +168,7 @@ proc dbTriplet(w: LeafQuartet; rdbPath: string): Result[DbTriplet,AristoError] =
   # Fill backend
   block:
     let report = db.merge w[0]
-    if report.error != AristoError(0):
+    if report.error != 0:
       db.finish(flush=true)
       check report.error == 0
       return err(report.error)
@@ -175,12 +177,12 @@ proc dbTriplet(w: LeafQuartet; rdbPath: string): Result[DbTriplet,AristoError] =
       check rc.error == (0,0)
       return
 
-  let dx = [db, db.copyCat.value, db.copyCat.value]
+  let dx = [db, db.forkTop.value, db.forkTop.value]
 
   # Clause (9) from `aristo/README.md` example
   for n in 0 ..< dx.len:
     let report = dx[n].merge w[n+1]
-    if report.error != AristoError(0):
+    if report.error != 0:
       db.finish(flush=true)
       check (n, report.error) == (n,0)
       return err(report.error)
@@ -373,6 +375,12 @@ proc checkFilterTrancoderOk(
 func to(fid: FilterID; T: type HashKey): T =
   fid.uint64.to(HashID).to(T)
 
+proc qid2fidFn(be: BackendRef): QuFilMap =
+  result = proc(qid: QueueID): FilterID =
+    let rc = be.getFilFn qid
+    if rc.isErr:
+      return FilterID(0)
+    rc.value.fid
 
 proc storeFilter(
     be: BackendRef;
@@ -380,7 +388,7 @@ proc storeFilter(
       ): bool =
   ## ..
   let instr = block:
-    let rc = be.store filter
+    let rc = be.fifosStore filter
     xCheckRc rc.error == 0
     rc.value
 
@@ -405,32 +413,36 @@ proc storeFilter(
     src: fid.to(HashKey),
     trg: (fid-1).to(HashKey))
 
-
 proc fetchDelete(
     be: BackendRef;
-    backStep: int;
+    backSteps: int;
     filter: var FilterRef;
       ): bool =
   ## ...
-  # let filter = block:
-
   let
-    instr = block:
-      let rc = be.fetch(backStep = backStep)
+    vfyInst = block:
+      let rc = be.fifosDelete(backSteps = backSteps)
       xCheckRc rc.error == 0
       rc.value
-    qid = be.le instr.fil.fid
+    instr = block:
+      let rc = be.fifosFetch(backSteps = backSteps)
+      xCheckRc rc.error == 0
+      rc.value
+    qid = be.filters.le(instr.fil.fid, be.qid2fidFn)
     inx = be.filters[qid]
-  xCheck backStep == inx + 1
+  xCheck backSteps == inx + 1
+  xCheck instr.del.put == vfyInst.put
+  xCheck instr.del.scd.state == vfyInst.scd.state
+  xCheck instr.del.scd.ctx == vfyInst.scd.ctx
 
   # Update database
   let txFrame = be.putBegFn()
-  be.putFilFn(txFrame, instr.put)
-  be.putFqsFn(txFrame, instr.scd.state)
+  be.putFilFn(txFrame, instr.del.put)
+  be.putFqsFn(txFrame, instr.del.scd.state)
   let done = be.putEndFn txFrame
   xCheck done == 0
 
-  be.filters.state = instr.scd.state
+  be.filters.state = instr.del.scd.state
   filter = instr.fil
 
   # Verify that state was properly installed
@@ -444,14 +456,12 @@ proc fetchDelete(
 proc validateFifo(
    be: BackendRef;
    serial: int;
+   hashesOk = false;
      ): bool =
-  func to(key: HashKey; T: type uint64): T =
-    key.to(HashID).UInt256.truncate(uint64)
-
-  var lastTrg = serial.uint64
+  ##
   ## Verify filter setup
   ##
-  ## Example
+  ## Example (hashesOk==false)
   ## ::
   ##      QueueID |  FilterID  |         HashKey
   ##        qid   | filter.fid | filter.src -> filter.trg
@@ -476,16 +486,21 @@ proc validateFifo(
   ##        ..    |    ..      |   ..
   ##
   var
+    lastTrg = serial.u256.to(HashID)
     inx = 0
     lastFid = FilterID(serial+1)
+
+  if hashesOk:
+    lastTrg = be.getKeyFn(VertexID(1)).get(otherwise = VOID_HASH_KEY).to(HashID)
+
   for chn,fifo in be.fifos:
     for (qid,filter) in fifo:
 
       # Check filter objects
       xCheck chn == (qid.uint64 shr 62).int
       xCheck filter != FilterRef(nil)
-      xCheck filter.src.to(uint64) == lastTrg
-      lastTrg = filter.trg.to(uint64)
+      xCheck filter.src.to(HashID) == lastTrg
+      lastTrg = filter.trg.to(HashID)
 
       # Check random access
       xCheck qid == be.filters[inx]
@@ -493,12 +508,19 @@ proc validateFifo(
 
       # Check access by queue ID (all end up at `qid`)
       for fid in filter.fid ..< lastFid:
-        xCheck qid == be.le fid
+        xCheck qid == be.filters.le(fid, be.qid2fidFn)
 
       inx.inc
       lastFid = filter.fid
 
   true
+
+# ---------------------------------
+
+iterator payload(list: openArray[ProofTrieData]): LeafTiePayload =
+  for w in list:
+    for p in w.kvpLst.mapRootVid VertexID(1):
+      yield p
 
 # ------------------------------------------------------------------------------
 # Public test function
@@ -550,9 +572,7 @@ proc testDistributedAccess*(
       xCheck db2.roFilter != db3.roFilter
 
       # Clause (11) from `aristo/README.md` example
-      block:
-        let rc = db2.ackqRwMode()
-        xCheckRc rc.error == 0
+      db2.reCentre()
       block:
         let rc = db2.stow(persistent=true)
         xCheckRc rc.error == (0,0)
@@ -588,9 +608,7 @@ proc testDistributedAccess*(
         dy.cleanUp()
 
       # Build clause (12) from `aristo/README.md` example
-      block:
-        let rc = db2.ackqRwMode()
-        xCheckRc rc.error == 0
+      db2.reCentre()
       block:
         let rc = db2.stow(persistent=true)
         xCheckRc rc.error == (0,0)
@@ -632,13 +650,11 @@ proc testDistributedAccess*(
 
 proc testFilterFifo*(
     noisy = true;
-    layout = QidSlotLyo;
-    sampleSize = QidSample;
-    reorgPercent = 40;
-    rdbPath = "";
+    layout = QidSlotLyo;                   # Backend fifos layout
+    sampleSize = QidSample;                # Synthetic filters generation
+    reorgPercent = 40;                     # To be deleted and re-filled
+    rdbPath = "";                          # Optional Rocks DB storage directory
       ): bool =
-  var
-    debug = false # or true
   let
     db = if 0 < rdbPath.len:
       let rc = newAristoDbRef(BackendRocksDB,rdbPath,layout.to(QidLayoutRef))
@@ -647,7 +663,6 @@ proc testFilterFifo*(
     else:
       BackendMemory.newAristoDbRef(layout.to(QidLayoutRef))
     be = db.backend
-
   defer: db.finish(flush=true)
 
   proc show(serial = 0; exec: seq[QidAction] = @[]) =
@@ -664,7 +679,7 @@ proc testFilterFifo*(
       "\n"
     noisy.say "***", s
 
-  if debug:
+  when false: # or true
     noisy.say "***", "sampleSize=", sampleSize,
      " ctx=", be.filters.ctx.q, " stats=", be.filters.ctx.stats
 
@@ -673,11 +688,8 @@ proc testFilterFifo*(
   for n in 1 .. sampleSize:
     let storeFilterOK = be.storeFilter(serial=n)
     xCheck storeFilterOK
-    #show(n)
     let validateFifoOk = be.validateFifo(serial=n)
     xCheck validateFifoOk
-
-  # -------------------
 
   # Squash some entries on the fifo
   block:
@@ -695,10 +707,6 @@ proc testFilterFifo*(
     let storeFilterOK = be.storeFilter filter
     xCheck storeFilterOK
 
-  #show sampleSize
-
-  # -------------------
-
   # Continue adding items
   for n in sampleSize + 1 .. 2 * sampleSize:
     let storeFilterOK = be.storeFilter(serial=n)
@@ -706,6 +714,121 @@ proc testFilterFifo*(
     #show(n)
     let validateFifoOk = be.validateFifo(serial=n)
     xCheck validateFifoOk
+
+  true
+
+
+proc testFilterBacklog*(
+    noisy: bool;
+    list: openArray[ProofTrieData];        # Sample data for generating filters
+    layout = QidSlotLyo;                   # Backend fifos layout
+    reorgPercent = 40;                     # To be deleted and re-filled
+    rdbPath = "";                          # Optional Rocks DB storage directory
+       ): bool =
+  let
+    db = if 0 < rdbPath.len:
+      let rc = newAristoDbRef(BackendRocksDB,rdbPath,layout.to(QidLayoutRef))
+      xCheckRc rc.error == 0
+      rc.value
+    else:
+      BackendMemory.newAristoDbRef(layout.to(QidLayoutRef))
+    be = db.backend
+  defer: db.finish(flush=true)
+
+  proc show(serial = -42) =
+    var s = ""
+    if 0 <= serial:
+      s &= " n=" & $serial
+    s &= " len=" & $be.filters.len
+    s &= "" &
+      " root=" & be.getKeyFn(VertexID(1))
+                   .get(otherwise = VOID_HASH_KEY).pp &
+      "\n   state=" & be.filters.state.pp &
+      "\n    fifo=" & be.fifos.pp(db) &
+      "\n"
+    noisy.say "***", s
+
+  # -------------------
+
+  # Load/store persistent data while producing backlog
+  var n = 0
+  for w in list.payload:
+    n.inc
+    block:
+      let rc = db.merge w
+      xCheckRc rc.error == 0
+    block:
+      let rc = db.stow(persistent=true)
+      xCheckRc rc.error == (0,0)
+    let validateFifoOk = be.validateFifo(serial=n, hashesOk=true)
+    xCheck validateFifoOk
+
+  # Verify
+  block:
+    let rc = db.check(relax=false)
+    xCheckRc rc.error == (0,0)
+
+  #show(n)
+
+  # -------------------
+
+  # Retrieve some earlier state
+  var
+    fifoLen = be.filters.len
+    pivot = (fifoLen * reorgPercent) div 100
+    qid = be.filters[pivot]
+    xb = AristoDbRef(nil)
+
+  for episode in 0 .. pivot:
+    if not xb.isNil:
+      let rc = xb.forget
+      xCheckRc rc.error == 0
+    xCheck db.nForked == 0
+
+    # Realign to earlier state
+    xb = block:
+      let rc = db.forkBackLog(episode = episode)
+      xCheckRc rc.error == 0
+      rc.value
+    block:
+      let rc = xb.check(relax=false)
+      xCheckRc rc.error == (0,0)
+
+    # Store this state backend database (temporarily re-centre)
+    block:
+      let rc = xb.resolveBackendFilter(reCentreOk = true)
+      xCheckRc rc.error == 0
+    xCheck db.isCentre
+    block:
+      let rc = db.check(relax=false)
+      xCheckRc rc.error == (0,0)
+    block:
+      let rc = xb.check(relax=false)
+      xCheckRc rc.error == (0,0)
+
+    # Restore previous database state
+    block:
+      let rc = db.resolveBackendFilter()
+      xCheckRc rc.error == 0
+    block:
+      let rc = db.check(relax=false)
+      xCheckRc rc.error == (0,0)
+    block:
+      let rc = xb.check(relax=false)
+      xCheckRc rc.error == (0,0)
+
+    when false: # or true:
+      echo ">>>",
+        "\n   xb\n    ", xb.pp,
+        "\n   db\n    ", db.pp(backendOk=true),
+        "\n"
+
+    #show(episode)
+
+    # Note that the above process squashes the first `episode` entries into
+    # a single one (summing up number gives an arithmetic series.)
+    let expSize = max(1, fifoLen - episode * (episode+1) div 2)
+    xCheck be.filters.len == expSize
 
   true
 

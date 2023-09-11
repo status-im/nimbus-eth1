@@ -13,11 +13,12 @@
 ##
 
 import
-  std/[sequtils, sets, tables],
+  std/[sequtils, tables],
   results,
   "."/[aristo_desc, aristo_get, aristo_vid],
   ./aristo_desc/desc_backend,
-  ./aristo_filter/[filter_desc, filter_fifos, filter_helpers, filter_merge]
+  ./aristo_filter/[
+    filter_fifos, filter_helpers, filter_merge, filter_reverse, filter_siblings]
 
 # ------------------------------------------------------------------------------
 # Public helpers
@@ -77,52 +78,6 @@ proc fwdFilter*(
     vGen: layer.vGen.vidReorg, # Compact recycled IDs
     trg:  trgRoot)
 
-
-proc revFilter*(
-    db: AristoDbRef;                   # Database
-    filter: FilterRef;                 # Filter to revert
-      ): Result[FilterRef,(VertexID,AristoError)] =
-  ## Assemble reverse filter for the `filter` argument, i.e. changes to the
-  ## backend that reverse the effect of applying the this read-only filter.
-  ##
-  ## This read-only filter is calculated against the current unfiltered
-  ## backend (excluding optionally installed read-only filter.)
-  ##
-  # Register MPT state roots for reverting back
-  let rev = FilterRef(
-    src: filter.trg,
-    trg: filter.src)
-
-  # Get vid generator state on backend
-  block:
-    let rc = db.getIdgUBE()
-    if rc.isOk:
-      rev.vGen = rc.value
-    elif rc.error != GetIdgNotFound:
-      return err((VertexID(0), rc.error))
-
-  # Calculate reverse changes for the `sTab[]` structural table
-  for vid in filter.sTab.keys:
-    let rc = db.getVtxUBE vid
-    if rc.isOk:
-      rev.sTab[vid] = rc.value
-    elif rc.error == GetVtxNotFound:
-      rev.sTab[vid] = VertexRef(nil)
-    else:
-      return err((vid,rc.error))
-
-  # Calculate reverse changes for the `kMap` sequence.
-  for vid in filter.kMap.keys:
-    let rc = db.getKeyUBE vid
-    if rc.isOk:
-      rev.kMap[vid] = rc.value
-    elif rc.error == GetKeyNotFound:
-      rev.kMap[vid] = VOID_HASH_KEY
-    else:
-      return err((vid,rc.error))
-
-  ok(rev)
-
 # ------------------------------------------------------------------------------
 # Public functions, apply/install filters
 # ------------------------------------------------------------------------------
@@ -143,39 +98,45 @@ proc merge*(
     else:
       return err((VertexID(1),rc.error))
 
-  db.roFilter = block:
-    let rc = db.merge(filter, db.roFilter, ubeRootKey)
-    if rc.isErr:
-      return err(rc.error)
-    rc.value
-
+  db.roFilter = ? db.merge(filter, db.roFilter, ubeRootKey)
   ok()
 
 
-proc canResolveBE*(db: AristoDbRef): bool =
+proc canResolveBackendFilter*(db: AristoDbRef): bool =
   ## Check whether the read-only filter can be merged into the backend
-  if not db.backend.isNil:
-    if db.dudes.isNil or db.dudes.rwOk:
-      return true
+  not db.backend.isNil and db.isCentre
 
 
-proc resolveBE*(db: AristoDbRef): Result[void,(VertexID,AristoError)] =
-  ## Resolve the backend filter into the physical backend. This requires that
-  ## the argument `db` descriptor has read-write permission for the backend
-  ## (see also the below function `ackqRwMode()`.)
+proc resolveBackendFilter*(
+    db: AristoDbRef;
+    reCentreOk = false;
+      ): Result[void,AristoError] =
+  ## Resolve the backend filter into the physical backend database.
   ##
-  ## For any associated descriptors working on the same backend, their backend
-  ## filters will be updated so that the change of the backend DB remains
-  ## unnoticed.
+  ## This needs write permission on the backend DB for the argument `db`
+  ## descriptor (see the function `aristo_desc.isCentre()`.) With the argument
+  ## flag `reCentreOk` passed `true`, write permission will be temporarily
+  ## acquired when needed.
   ##
-  ## Unless the disabled (see `newAristoDbRef()`, reverse filters are stored
-  ## on a cascaded fifo table so that recent database states can be reverted.
+  ## When merging the current backend filter, its reverse will be is stored as
+  ## back log on the filter fifos (so the current state can be retrieved.)
+  ## Also, other non-centre descriptors are updated so there is no visible
+  ## database change for these descriptors.
+  ##
+  ## Caveat: This function will delete entries from the cascaded fifos if the
+  ##         current backend filter is the reverse compiled from the top item
+  ##         chain from the cascaded fifos as implied by the function
+  ##         `forkBackLog()`, for example.
   ##
   if db.backend.isNil:
-    return err((VertexID(0),FilBackendMissing))
-  if not db.dudes.isNil and
-     not db.dudes.rwOk:
-    return err((VertexID(0),FilBackendRoMode))
+    return err(FilBackendMissing)
+
+  let parent = db.getCentre
+  if db != parent:
+    if not reCentreOk:
+      return err(FilBackendRoMode)
+    db.reCentre
+  defer: parent.reCentre
 
   # Blind or missing filter
   if db.roFilter.isNil:
@@ -188,108 +149,86 @@ proc resolveBE*(db: AristoDbRef): Result[void,(VertexID,AristoError)] =
     elif rc.error == GetKeyNotFound:
       VOID_HASH_KEY
     else:
-      return err((VertexID(1),rc.error))
-
-  # Filters rollback helper
-  var roFilters: seq[(AristoDbRef,FilterRef)]
-  proc rollback() =
-    for (d,f) in roFilters:
-      d.roFilter = f
-
-  # Calculate reverse filter from current filter
-  let rev = block:
-    let rc = db.revFilter db.roFilter
-    if rc.isErr:
       return err(rc.error)
-    rc.value
 
-  # Figure out how to save the rev filter on cascades slots queue
-  let be = db.backend
-  var instr: SaveInstr
-  if not be.filters.isNil:
-    let rc = be.store rev
-    if rc.isErr:
-      return err((VertexID(0),rc.error))
-    instr = rc.value
+  let updateSiblings = ? UpdateSiblingsRef.init db
+  defer: updateSiblings.rollback()
 
-  # Update dudes
-  if not db.dudes.isNil:
-    # Update distributed filters. Note that the physical backend database
-    # has not been updated, yet. So the new root key for the backend will
-    # be `db.roFilter.trg`.
-    for dude in db.dudes.roDudes.items:
-      let rc = db.merge(dude.roFilter, rev, db.roFilter.trg)
-      if rc.isErr:
-        rollback()
-        return err(rc.error)
-      roFilters.add (dude, dude.roFilter)
-      dude.roFilter = rc.value
+  # Figure out how to save the reverse filter on a cascades slots queue
+  let
+    be = db.backend
+    backLogOk = not be.filters.isNil           # otherwise disabled
+    revFilter = updateSiblings.rev
+
+  # Compile instruction for updating filters on the cascaded fifos
+  var instr = FifoInstr()
+  block getInstr:
+    if not backLogOk:                          # Ignore reverse filter
+      break getInstr
+    if db.roFilter.isValid:
+      let ovLap = be.getFilterOverlap db.roFilter
+      if 0 < ovLap:
+        instr = ? be.fifosDelete ovLap         # Revert redundant entries
+        break getInstr
+    instr = ? be.fifosStore updateSiblings.rev # Store reverse filter
 
   # Save structural and other table entries
   let txFrame = be.putBegFn()
   be.putVtxFn(txFrame, db.roFilter.sTab.pairs.toSeq)
   be.putKeyFn(txFrame, db.roFilter.kMap.pairs.toSeq)
   be.putIdgFn(txFrame, db.roFilter.vGen)
-  if not be.filters.isNil:
+  if backLogOk:
     be.putFilFn(txFrame, instr.put)
     be.putFqsFn(txFrame, instr.scd.state)
   let w = be.putEndFn txFrame
   if w != AristoError(0):
-    rollback()
-    return err((VertexID(0),w))
+    return err(w)
 
-  # Update slot queue scheduler state (as saved)
-  if not be.filters.isNil:
+  # Update dudes and this descriptor
+  ? updateSiblings.update().commit()
+
+  # Finally update slot queue scheduler state (as saved)
+  if backLogOk:
     be.filters.state = instr.scd.state
 
   ok()
 
 
-proc ackqRwMode*(db: AristoDbRef): Result[void,AristoError] =
-  ## Re-focus the `db` argument descriptor to backend read-write permission.
-  if not db.dudes.isNil and not db.dudes.rwOk:
-    # Steal dudes list, make the rw-parent a read-only dude
-    let parent = db.dudes.rwDb
-    db.dudes = parent.dudes
-    parent.dudes = DudesRef(rwOk: false, rwDb: db)
-
-    # Exclude self
-    db.dudes.roDudes.excl db
-
-    # Update dudes
-    for w in db.dudes.roDudes:
-      # Let all other dudes refer to this one
-      w.dudes.rwDb = db
-
-    # Update dudes list (parent was alredy updated)
-    db.dudes.roDudes.incl parent
-    return ok()
-
-  err(FilNotReadOnlyDude)
-
-
-proc dispose*(db: AristoDbRef): Result[void,AristoError] =
-  ## Terminate usage of the `db` argument descriptor with backend read-only
-  ## permission.
+proc forkBackLog*(
+    db: AristoDbRef;
+    episode: int;
+      ): Result[AristoDbRef,AristoError] =
+  ## Construct a new descriptor on the `db` backend which enters it through a
+  ## set of backend filters from the casacded filter fifos. The filter used is
+  ## addressed as `episode`, where the most recend backward filter has episode
+  ## `0`, the next older has episode `1`, etc.
   ##
-  ## This type of descriptoy should always be terminated after use. Otherwise
-  ## it would always be udated when running `resolveBE()` which costs
-  ## unnecessary computing ressources. Also, the read-only backend filter
-  ## copies might grow big when it could be avoided.
-  if not db.isNil and
-     not db.dudes.isNil and
-     not db.dudes.rwOk:
-    # Unlink argument `db`
-    db.dudes.rwDb.dudes.roDudes.excl db
+  ## Use `aristo_filter.forget()` directive to clean up this descriptor.
+  ##
+  let be = db.backend
+  if be.isNil:
+    return err(FilBackendMissing)
+  if episode < 0:
+    return err(FilNegativeEpisode)
+  let
+    instr = ? be.fifosFetch(backSteps = episode+1)
+    clone = ? db.fork(rawToplayer = true)
+  clone.top.vGen = instr.fil.vGen
+  clone.roFilter = instr.fil
+  ok clone
 
-    # Unlink more so it would not do harm if used wrongly
-    db.stack.setlen(0)
-    db.backend = BackendRef(nil)
-    db.txRef = AristoTxRef(nil)
-    db.dudes = DudesRef(nil)
-    return ok()
+proc forkBackLog*(
+    db: AristoDbRef;
+    fid: FilterID;
+    earlierOK = false;
+      ): Result[AristoDbRef,AristoError] =
+  ## ..
+  let be = db.backend
+  if be.isNil:
+    return err(FilBackendMissing)
 
-  err(FilNotReadOnlyDude)
+  let fip = ? be.getFilterFromFifo(fid, earlierOK)
+  db.forkBackLog fip.inx
 
 # ------------------------------------------------------------------------------
 # End
