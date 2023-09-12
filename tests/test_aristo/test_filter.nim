@@ -161,9 +161,12 @@ iterator quadripartite(td: openArray[ProofTrieData]): LeafQuartet =
 
 proc dbTriplet(w: LeafQuartet; rdbPath: string): Result[DbTriplet,AristoError] =
   let db = block:
-    let rc = newAristoDbRef(BackendRocksDB,rdbPath)
-    xCheckRc rc.error == 0
-    rc.value
+    if 0 < rdbPath.len:
+      let rc = newAristoDbRef(BackendRocksDB,rdbPath)
+      xCheckRc rc.error == 0
+      rc.value
+    else:
+      newAristoDbRef(BackendMemory)
 
   # Fill backend
   block:

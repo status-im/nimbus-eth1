@@ -208,6 +208,8 @@ proc testBackendConsistency*(
   defer:
     rdb.finish(flush=true)
 
+  xCheck rdbPath != ""
+
   for n,w in list:
     if w.root != rootKey or resetDB:
       rootKey = w.root
