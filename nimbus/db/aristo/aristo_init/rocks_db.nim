@@ -30,7 +30,7 @@ import
   chronicles,
   eth/common,
   rocksdb,
-  stew/results,
+  results,
   ../aristo_constants,
   ../aristo_desc,
   ../aristo_desc/desc_backend,

@@ -16,7 +16,7 @@
 import
   eth/common,
   rocksdb,
-  stew/results,
+  results,
   "../.."/[aristo_constants, aristo_desc],
   ./rdb_desc
 

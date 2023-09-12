@@ -30,7 +30,7 @@ import
   std/[algorithm, options, sequtils, tables],
   chronicles,
   eth/common,
-  stew/results,
+  results,
   ../aristo_constants,
   ../aristo_desc,
   ../aristo_desc/desc_backend,
