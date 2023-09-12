@@ -227,7 +227,7 @@ type
 
     # Transaction wrappers
     TxArgStaleTx
-    TxRoBackendOrMissing
+    TxBackendNotWritable
     TxNoPendingTx
     TxPendingTx
     TxNotTopTx
