@@ -45,17 +45,14 @@ proc newAristoDbRef*(
   ## layouts might render the filter history data unmanageable.
   ##
   when backend == BackendRocksDB:
-    let be = block:
-      let rc = rocksDbBackend(basePath, qidLayout)
-      if rc.isErr:
-        return err(rc.error)
-      rc.value
-    let vGen = block:
-      let rc = be.getIdgFn()
-      if rc.isErr:
-        be.closeFn(flush = false)
-        return err(rc.error)
-      rc.value
+    let
+      be = ? rocksDbBackend(basePath, qidLayout)
+      vGen = block:
+        let rc = be.getIdgFn()
+        if rc.isErr:
+          be.closeFn(flush = false)
+          return err(rc.error)
+        rc.value
     ok AristoDbRef(top: LayerRef(vGen: vGen), backend: be)
 
   elif backend == BackendVoid:
