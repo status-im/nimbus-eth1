@@ -13,7 +13,7 @@
 import
   std/sequtils,
   eth/[common, trie/nibbles],
-  stew/results,
+  results,
   ./aristo_desc
 
 # Info snippet (just a reminder to keep somewhere)

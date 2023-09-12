@@ -161,9 +161,12 @@ iterator quadripartite(td: openArray[ProofTrieData]): LeafQuartet =
 
 proc dbTriplet(w: LeafQuartet; rdbPath: string): Result[DbTriplet,AristoError] =
   let db = block:
-    let rc = newAristoDbRef(BackendRocksDB,rdbPath)
-    xCheckRc rc.error == 0
-    rc.value
+    if 0 < rdbPath.len:
+      let rc = newAristoDbRef(BackendRocksDB,rdbPath)
+      xCheckRc rc.error == 0
+      rc.value
+    else:
+      newAristoDbRef(BackendMemory)
 
   # Fill backend
   block:
@@ -396,8 +399,8 @@ proc storeFilter(
   let txFrame = be.putBegFn()
   be.putFilFn(txFrame, instr.put)
   be.putFqsFn(txFrame, instr.scd.state)
-  let done = be.putEndFn txFrame
-  xCheck done == 0
+  let rc = be.putEndFn txFrame
+  xCheckRc rc.error == 0
 
   be.filters.state = instr.scd.state
   true
@@ -436,11 +439,12 @@ proc fetchDelete(
   xCheck instr.del.scd.ctx == vfyInst.scd.ctx
 
   # Update database
-  let txFrame = be.putBegFn()
-  be.putFilFn(txFrame, instr.del.put)
-  be.putFqsFn(txFrame, instr.del.scd.state)
-  let done = be.putEndFn txFrame
-  xCheck done == 0
+  block:
+    let txFrame = be.putBegFn()
+    be.putFilFn(txFrame, instr.del.put)
+    be.putFqsFn(txFrame, instr.del.scd.state)
+    let rc = be.putEndFn txFrame
+    xCheckRc rc.error == 0
 
   be.filters.state = instr.del.scd.state
   filter = instr.fil

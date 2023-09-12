@@ -62,9 +62,9 @@ proc newAristoDbRef*(
 
 proc finish*(db: AristoDbRef; flush = false) =
   ## Backend destructor. The argument `flush` indicates that a full database
-  ## deletion is requested. If set ot left `false` the outcome might differ
-  ## depending on the type of backend (e.g. the `BackendMemory` backend will
-  ## always flush on close.)
+  ## deletion is requested. If set `false` the outcome might differ depending
+  ## on the type of backend (e.g. the `BackendMemory` backend will always
+  ## flush on close.)
   ##
   ## In case of distributed descriptors accessing the same backend, all
   ## distributed descriptors will be destroyed.

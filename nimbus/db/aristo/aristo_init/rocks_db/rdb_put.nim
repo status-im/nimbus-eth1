@@ -18,7 +18,7 @@ import
   chronicles,
   eth/common,
   rocksdb,
-  stew/results,
+  results,
   "../.."/[aristo_constants, aristo_desc],
   ../init_common,
   ./rdb_desc
@@ -147,7 +147,7 @@ proc commit(
 
 proc put*(
     rdb: var RdbInst;
-    tabs: RdbTabs,
+    tabs: RdbTabs;
       ): Result[void,(AristoError,string)] =
 
   var session = block:

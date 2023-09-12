@@ -100,20 +100,21 @@ proc accountsRunner(
   let
     accLst = sample.to(seq[UndumpAccounts]).to(seq[ProofTrieData])
     fileInfo = sample.file.splitPath.tail.replace(".txt.gz","")
-    listMode = if resetDb: "" else: ", merged data lists"
+    listMode = if resetDb: "" else: ", merged dumps"
     baseDir = getTmpDir() / sample.name & "-accounts"
     dbDir = if persistent: baseDir / "tmp" else: ""
+    isPersistent = if persistent: "persistent DB" else: "mem DB only"
 
   defer:
     try: baseDir.removeDir except CatchableError: discard
 
-  suite &"Aristo: accounts data dump from {fileInfo}{listMode}":
+  suite &"Aristo: accounts data dump from {fileInfo}{listMode}, {isPersistent}":
 
     test &"Merge {accLst.len} proof & account lists to database":
       check noisy.testTxMergeProofAndKvpList(accLst, dbDir, resetDb)
 
-    test &"Compare {accLst.len} account lists on database backends":
-      if cmpBackends:
+    test &"Compare {accLst.len} account lists on different database backends":
+      if cmpBackends and 0 < dbDir.len:
         check noisy.testBackendConsistency(accLst, dbDir, resetDb)
       else:
         skip()
@@ -139,21 +140,22 @@ proc storagesRunner(
   let
     stoLst = sample.to(seq[UndumpStorages]).to(seq[ProofTrieData])
     fileInfo = sample.file.splitPath.tail.replace(".txt.gz","")
-    listMode = if resetDb: "" else: ", merged data lists"
+    listMode = if resetDb: "" else: ", merged dumps"
     baseDir = getTmpDir() / sample.name & "-storage"
     dbDir = if persistent: baseDir / "tmp" else: ""
+    isPersistent = if persistent: "persistent DB" else: "mem DB only"
 
   defer:
     try: baseDir.removeDir except CatchableError: discard
 
-  suite &"Aristo: storages data dump from {fileInfo}{listMode}":
+  suite &"Aristo: storages data dump from {fileInfo}{listMode}, {isPersistent}":
 
     test &"Merge {stoLst.len} proof & slots lists to database":
       check noisy.testTxMergeProofAndKvpList(
         stoLst, dbDir, resetDb, fileInfo, oops)
 
-    test &"Compare {stoLst.len} slot lists on database backends":
-      if cmpBackends:
+    test &"Compare {stoLst.len} slot lists on different database backends":
+      if cmpBackends and 0 < dbDir.len:
         check noisy.testBackendConsistency(stoLst, dbDir, resetDb)
       else:
         skip()
@@ -208,13 +210,14 @@ when isMainModule:
         noisy.storagesRunner(sam, resetDb=true, oops=knownFailures)
 
   when true: # and false:
+    let persistent = false
     noisy.showElapsed("@snap_test_list"):
       for n,sam in snapTestList:
-        noisy.accountsRunner(sam)
+        noisy.accountsRunner(sam, persistent=persistent)
     noisy.showElapsed("@snap_test_storage_list"):
       for n,sam in snapTestStorageList:
-        noisy.accountsRunner(sam)
-        noisy.storagesRunner(sam)
+        noisy.accountsRunner(sam, persistent=persistent)
+        noisy.storagesRunner(sam, persistent=persistent)
 
 # ------------------------------------------------------------------------------
 # End

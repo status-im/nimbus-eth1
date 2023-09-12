@@ -12,7 +12,7 @@
 
 import
   eth/[common, trie/nibbles],
-  stew/results,
+  results,
   "."/[aristo_desc, aristo_get]
 
 type

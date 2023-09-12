@@ -8,8 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-## Aristo DB -- Patricia Trie structural data types
-## ================================================
+## Aristo DB -- Patricia Trie backend data access
+## ==============================================
 ##
 
 {.push raises: [].}
@@ -86,7 +86,7 @@ type
         ## function replaces the current filter ID list.
 
   PutEndFn* =
-    proc(hdl: PutHdlRef): AristoError {.gcsafe, raises: [].}
+    proc(hdl: PutHdlRef): Result[void,AristoError] {.gcsafe, raises: [].}
       ## Generic transaction termination function
 
   # -------------

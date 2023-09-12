@@ -30,7 +30,7 @@ import
   std/[algorithm, options, sequtils, tables],
   chronicles,
   eth/common,
-  stew/results,
+  results,
   ../aristo_constants,
   ../aristo_desc,
   ../aristo_desc/desc_backend,
@@ -218,7 +218,7 @@ proc putFqsFn(db: MemBackendRef): PutFqsFn =
 
 proc putEndFn(db: MemBackendRef): PutEndFn =
   result =
-    proc(hdl: PutHdlRef): AristoError =
+    proc(hdl: PutHdlRef): Result[void,AristoError] =
       let hdl = hdl.endSession db
       if not hdl.error.isNil:
         case hdl.error.pfx:
@@ -231,7 +231,7 @@ proc putEndFn(db: MemBackendRef): PutEndFn =
         else:
           debug logTxt "putEndFn: failed",
             pfx=hdl.error.pfx, error=hdl.error.code
-        return hdl.error.code
+        return err(hdl.error.code)
 
       for (vid,data) in hdl.sTab.pairs:
         if 0 < data.len:
@@ -265,7 +265,7 @@ proc putEndFn(db: MemBackendRef): PutEndFn =
         else:
           db.vFqs = some(vFqs)
 
-      AristoError(0)
+      ok()
 
 # -------------
 

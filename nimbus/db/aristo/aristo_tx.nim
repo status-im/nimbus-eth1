@@ -274,7 +274,7 @@ proc stow*(
     chunkedMpt = false;               # Partial data (e.g. from `snap`)
       ): Result[void,(VertexID,AristoError)] =
   ## If there is no backend while the `persistent` argument is set `true`,
-  ## the function returns immediately with an error.The same happens if there
+  ## the function returns immediately with an error. The same happens if there
   ## is a pending transaction.
   ##
   ## The `dontHashify` is treated as described for `commit()`.
@@ -295,7 +295,7 @@ proc stow*(
   if 0 < db.stack.len:
     return err(TxStackGarbled.toVae)
   if persistent and not db.canResolveBackendFilter():
-    return err(TxRoBackendOrMissing.toVae)
+    return err(TxBackendNotWritable.toVae)
 
   if db.top.dirty and not dontHashify:
     discard ? db.hashify()

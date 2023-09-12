@@ -138,8 +138,8 @@ proc collectFilter(
       tx = be.putBegFn()
 
     be.putFilFn(tx, @[(fid,filter)])
-    let endOk = be.putEndFn tx
-    xCheck endOk == AristoError(0)
+    let rc = be.putEndFn tx
+    xCheckRc rc.error == 0
 
     tab[fid] = filter.hash
 
@@ -207,6 +207,8 @@ proc testBackendConsistency*(
 
   defer:
     rdb.finish(flush=true)
+
+  xCheck rdbPath != ""
 
   for n,w in list:
     if w.root != rootKey or resetDB:

@@ -37,11 +37,11 @@ type
     ## Combined table for caching data to be stored/updated
 
 const
-  BaseFolder* = "nimbus"         # Same as for Legacy DB has "backups"
+  BaseFolder* = "nimbus"         # Same as for Legacy DB
   DataFolder* = "aristo"         # Legacy DB has "data"
-  BackupFolder* = "history"      # Legacy DB has "backups"
+  BackupFolder* = "ahistory"     # Legacy DB has "backups"
+  SstCache* = "abulkput"         # Rocks DB bulk load file name in temp folder
   TempFolder* = "tmp"            # Not used with legacy DB
-  SstCache* = "bulkput"          # Rocks DB bulk load file name in temp folder
 
 # ------------------------------------------------------------------------------
 # Public functions

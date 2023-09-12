@@ -17,7 +17,7 @@ import
   std/os,
   chronicles,
   rocksdb,
-  stew/results,
+  results,
   ../../aristo_desc,
   ./rdb_desc
 

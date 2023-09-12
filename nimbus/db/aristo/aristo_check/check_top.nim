@@ -13,7 +13,7 @@
 import
   std/[sequtils, sets, tables],
   eth/common,
-  stew/results,
+  results,
   ".."/[aristo_desc, aristo_get, aristo_transcode, aristo_utils]
 
 # ------------------------------------------------------------------------------

@@ -19,7 +19,7 @@ import
   std/[sets, tables],
   chronicles,
   eth/[common, trie/nibbles],
-  stew/results,
+  results,
   "."/[aristo_desc, aristo_get, aristo_hike, aristo_path, aristo_vid]
 
 logScope:

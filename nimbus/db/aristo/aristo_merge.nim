@@ -28,7 +28,7 @@ import
   std/[algorithm, sequtils, strutils, sets, tables],
   chronicles,
   eth/[common, trie/nibbles],
-  stew/results,
+  results,
   ../../sync/protocol,
   "."/[aristo_desc, aristo_get, aristo_hike, aristo_path, aristo_transcode,
        aristo_vid]
