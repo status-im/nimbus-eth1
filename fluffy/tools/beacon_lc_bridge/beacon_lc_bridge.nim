@@ -402,7 +402,7 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
   let
     genesisState =
       try:
-        template genesisData(): auto = metadata.genesisData
+        template genesisData(): auto = metadata.genesis.bakedBytes
         newClone(readSszForkedHashedBeaconState(
           cfg, genesisData.toOpenArray(genesisData.low, genesisData.high)))
       except CatchableError as err:
