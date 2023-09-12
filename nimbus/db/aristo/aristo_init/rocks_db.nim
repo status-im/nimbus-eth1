@@ -288,7 +288,7 @@ proc putFqsFn(db: RdbBackendRef): PutFqsFn =
 
 proc putEndFn(db: RdbBackendRef): PutEndFn =
   result =
-    proc(hdl: PutHdlRef): AristoError =
+    proc(hdl: PutHdlRef): Result[void,AristoError] =
       let hdl = hdl.endSession db
       if not hdl.error.isNil:
         case hdl.error.pfx:
@@ -298,14 +298,14 @@ proc putEndFn(db: RdbBackendRef): PutEndFn =
         else:
           debug logTxt "putEndFn: failed",
             pfx=hdl.error.pfx, error=hdl.error.code
-        return hdl.error.code
+        return err(hdl.error.code)
       let rc = db.rdb.put hdl.cache
       if rc.isErr:
         when extraTraceMessages:
           debug logTxt "putEndFn: failed",
             error=rc.error[0], info=rc.error[1]
-        return rc.error[0]
-      AristoError(0)
+        return err(rc.error[0])
+      ok()
 
 
 proc closeFn(db: RdbBackendRef): CloseFn =

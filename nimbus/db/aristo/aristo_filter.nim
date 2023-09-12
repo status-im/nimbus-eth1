@@ -180,9 +180,7 @@ proc resolveBackendFilter*(
   if backLogOk:
     be.putFilFn(txFrame, instr.put)
     be.putFqsFn(txFrame, instr.scd.state)
-  let w = be.putEndFn txFrame
-  if w != AristoError(0):
-    return err(w)
+  ? be.putEndFn txFrame
 
   # Update dudes and this descriptor
   ? updateSiblings.update().commit()
