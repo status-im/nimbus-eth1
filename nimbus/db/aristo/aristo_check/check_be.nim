@@ -160,7 +160,7 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
     # Check cascaded fifos
     if fifos and not db.backend.filters.isNil:
       var lastTrg = db.getKeyUBE(VertexID(1)).get(otherwise = VOID_HASH_KEY)
-      for (qid,filter) in db.to(T).walkFifoBe: # walk in fifo order
+      for (qid,filter) in db.backend.T.walkFifoBe: # walk in fifo order
         if filter.src != lastTrg:
           return err((VertexID(0),CheckBeFifoSrcTrgMismatch))
         if filter.trg != filter.kMap.getOrVoid VertexID(1):

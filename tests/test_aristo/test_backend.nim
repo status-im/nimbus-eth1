@@ -177,11 +177,12 @@ proc verifyFilters(
     noisy: bool;
       ): bool =
   ## Wrapper
-  case db.backend.kind:
+  let be = db.backend
+  case be.kind:
   of BackendMemory:
-    return db.to(MemBackendRef).verifyFiltersImpl(tab, noisy)
+    return be.MemBackendRef.verifyFiltersImpl(tab, noisy)
   of BackendRocksDB:
-    return db.to(RdbBackendRef).verifyFiltersImpl(tab, noisy)
+    return be.RdbBackendRef.verifyFiltersImpl(tab, noisy)
   else:
     discard
   check db.backend.kind == BackendMemory or db.backend.kind == BackendRocksDB
@@ -215,8 +216,8 @@ proc testBackendConsistency*(
     if w.root != rootKey or resetDB:
       rootKey = w.root
       count = 0
-      ndb = newAristoDbRef BackendVoid
-      mdb = newAristoDbRef BackendMemory
+      ndb = AristoDbRef.init()
+      mdb = AristoDbRef.init MemBackendRef
 
       if doRdbOk:
         if not rdb.backend.isNil: # ignore bootstrap
@@ -224,7 +225,7 @@ proc testBackendConsistency*(
           xCheck verifyFiltersOk
           filTab.clear
         rdb.finish(flush=true)
-        let rc = newAristoDbRef(BackendRocksDB, rdbPath)
+        let rc = AristoDbRef.init(RdbBackendRef, rdbPath)
         xCheckRc rc.error == 0
         rdb = rc.value
 
@@ -279,9 +280,9 @@ proc testBackendConsistency*(
       rdbPreSaveCache, rdbPreSaveBackend: string
     when true: # and false:
       #mdbPreSaveCache = mdb.pp
-      #mdbPreSaveBackend = mdb.to(MemBackendRef).pp(ndb)
+      #mdbPreSaveBackend = mdb.backend.pp(mdb)
       rdbPreSaveCache = rdb.pp
-      rdbPreSaveBackend = rdb.to(RdbBackendRef).pp(ndb)
+      rdbPreSaveBackend = rdb.backend.pp(rdb)
 
 
     # Provide filter, store filter on permanent BE, and register filter digest
@@ -302,7 +303,7 @@ proc testBackendConsistency*(
       xCheckRc rc.error == (0,0)
 
     block:
-      let mdbVerifyOk = ndb.top.verify(mdb.to(MemBackendRef), noisy)
+      let mdbVerifyOk = ndb.top.verify(mdb.backend.MemBackendRef, noisy)
       xCheck mdbVerifyOk:
         when true and false:
           noisy.say "***", "beCon(4) <", n, "/", list.len-1, ">",
@@ -318,7 +319,7 @@ proc testBackendConsistency*(
             "\n    -------------"
 
     if doRdbOk:
-      let rdbVerifyOk = ndb.top.verify(rdb.to(RdbBackendRef), noisy)
+      let rdbVerifyOk = ndb.top.verify(rdb.backend.RdbBackendRef, noisy)
       xCheck rdbVerifyOk:
         when true and false:
           noisy.say "***", "beCon(4) <", n, "/", list.len-1, ">",

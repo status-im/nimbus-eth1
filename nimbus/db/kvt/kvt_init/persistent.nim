@@ -21,7 +21,7 @@
 import
   results,
   ../kvt_desc,
-  "."/[init_common, rocks_db, memory_only]
+  "."/[rocks_db, memory_only]
 export
   RdbBackendRef,
   memory_only
@@ -30,34 +30,20 @@ export
 # Public database constuctors, destructor
 # ------------------------------------------------------------------------------
 
-proc newKvtDbRef*(
-    backend: static[BackendType];
+proc init*[W: MemOnlyBackend|RdbBackendRef](
+    T: type KvtDbRef;
+    B: type W;
     basePath: string;
       ): Result[KvtDbRef,KvtError] =
   ## Generic constructor, `basePath` argument is ignored for `BackendNone` and
   ## `BackendMemory`  type backend database. Also, both of these backends
   ## aways succeed initialising.
   ##
-  when backend == BackendRocksDB:
+  when B is RdbBackendRef:
     ok KvtDbRef(top: LayerRef(vGen: vGen), backend: ? rocksDbBackend basePath)
 
-  elif backend == BackendVoid:
-    {.error: "Use BackendNone.init() without path argument".}
-
-  elif backend == BackendMemory:
-    {.error: "Use BackendMemory.init() without path argument".}
-
   else:
-    {.error: "Unknown/unsupported Kvt DB backend".}
-
-# -----------------
-
-proc to*[W: RdbBackendRef](
-    db: KvtDbRef;
-    T: type W;
-      ): T =
-  ## Handy helper for lew-level access to some backend functionality
-  db.backend.T
+    ok KvtDbRef.init B
 
 # ------------------------------------------------------------------------------
 # End

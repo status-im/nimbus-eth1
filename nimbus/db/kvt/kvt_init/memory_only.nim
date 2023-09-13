@@ -14,42 +14,56 @@
 {.push raises: [].}
 
 import
-  std/sets,
-  results,
   ../kvt_desc,
   ../kvt_desc/desc_backend,
   "."/[init_common, memory_db]
 
 type
   VoidBackendRef* = ref object of TypedBackendRef
-    ## Dummy descriptor type, will typically used as `nil` reference
+    ## Dummy descriptor type, used as `nil` reference
+
+  MemOnlyBackend* = VoidBackendRef|MemBackendRef
 
 export
   BackendType,
   MemBackendRef
 
 # ------------------------------------------------------------------------------
+# Public helpers
+# -----------------------------------------------------------------------------
+
+proc kind*(
+    be: BackendRef;
+      ): BackendType =
+  ## Retrieves the backend type symbol for a `be` backend database argument
+  ## where `BackendVoid` is returned for the`nil` backend.
+  if be.isNil:
+    BackendVoid
+  else:
+    be.TypedBackendRef.beKind
+
+# ------------------------------------------------------------------------------
 # Public database constuctors, destructor
 # ------------------------------------------------------------------------------
 
-proc newKvtDbRef*(
-    backend: static[BackendType];
-      ): KvtDbRef =
-  ## Simplified prototype for  `BackendNone` and `BackendMemory`  type backend.
+proc init*(
+    T: type KvtDbRef;                         # Target type
+    B: type MemOnlyBackend;                   # Backend type
+      ): T =
+  ## Memory backend constructor.
   ##
-  when backend == BackendVoid:
+  when B is VoidBackendRef:
     KvtDbRef(top: LayerRef())
 
-  elif backend == BackendMemory:
+  elif B is MemBackendRef:
     KvtDbRef(top: LayerRef(), backend: memoryBackend(qidLayout))
 
-  elif backend == BackendRocksDB:
-    {.error: "Kvt DB backend \"BackendRocksDB\" needs basePath argument".}
-
-  else:
-    {.error: "Unknown/unsupported Kvt DB backend".}
-
-# -----------------
+proc init*(
+    T: type KvtDbRef;                         # Target type
+      ): T =
+  ## Shortcut for `KvtDbRef.init(VoidBackendRef)`
+  KvtDbRef.init VoidBackendRef
+ 
 
 proc finish*(db: KvtDbRef; flush = false) =
   ## Backend destructor. The argument `flush` indicates that a full database
@@ -63,25 +77,6 @@ proc finish*(db: KvtDbRef; flush = false) =
     if not db.backend.isNil:
       db.backend.closeFn flush
     db[] = KvtDbObj(top: LayerRef())
-
-# -----------------
-
-proc to*[W: TypedBackendRef|MemBackendRef|VoidBackendRef](
-    db: KvtDbRef;
-    T: type W;
-      ): T =
-  ## Handy helper for lew-level access to some backend functionality
-  db.backend.T
-
-proc kind*(
-    be: BackendRef;
-      ): BackendType =
-  ## Retrieves the backend type symbol for a `TypedBackendRef` argument where
-  ## `BackendVoid` is returned for the`nil` backend.
-  if be.isNil:
-    BackendVoid
-  else:
-    be.TypedBackendRef.beKind
 
 # ------------------------------------------------------------------------------
 # End

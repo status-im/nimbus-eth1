@@ -162,11 +162,11 @@ iterator quadripartite(td: openArray[ProofTrieData]): LeafQuartet =
 proc dbTriplet(w: LeafQuartet; rdbPath: string): Result[DbTriplet,AristoError] =
   let db = block:
     if 0 < rdbPath.len:
-      let rc = newAristoDbRef(BackendRocksDB,rdbPath)
+      let rc = AristoDbRef.init(RdbBackendRef, rdbPath)
       xCheckRc rc.error == 0
       rc.value
     else:
-      newAristoDbRef(BackendMemory)
+      AristoDbRef.init MemBackendRef
 
   # Fill backend
   block:
@@ -661,11 +661,11 @@ proc testFilterFifo*(
       ): bool =
   let
     db = if 0 < rdbPath.len:
-      let rc = newAristoDbRef(BackendRocksDB,rdbPath,layout.to(QidLayoutRef))
+      let rc = AristoDbRef.init(RdbBackendRef, rdbPath, layout.to(QidLayoutRef))
       xCheckRc rc.error == 0
       rc.value
     else:
-      BackendMemory.newAristoDbRef(layout.to(QidLayoutRef))
+      AristoDbRef.init(MemBackendRef, layout.to(QidLayoutRef))
     be = db.backend
   defer: db.finish(flush=true)
 
@@ -731,11 +731,11 @@ proc testFilterBacklog*(
        ): bool =
   let
     db = if 0 < rdbPath.len:
-      let rc = newAristoDbRef(BackendRocksDB,rdbPath,layout.to(QidLayoutRef))
+      let rc = AristoDbRef.init(RdbBackendRef, rdbPath, layout.to(QidLayoutRef))
       xCheckRc rc.error == 0
       rc.value
     else:
-      BackendMemory.newAristoDbRef(layout.to(QidLayoutRef))
+      AristoDbRef.init(MemBackendRef, layout.to(QidLayoutRef))
     be = db.backend
   defer: db.finish(flush=true)
 

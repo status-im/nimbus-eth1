@@ -36,7 +36,7 @@ iterator walkVtxBe*(
      ): tuple[n: int, vid: VertexID, vtx: VertexRef] =
   ## Iterate over filtered RocksDB backend vertices. This function depends on
   ## the particular backend type name which must match the backend descriptor.
-  for (n,vid,vtx) in db.to(T).walkVtxBeImpl db:
+  for (n,vid,vtx) in db.backend.T.walkVtxBeImpl db:
     yield (n,vid,vtx)
 
 iterator walkKeyBe*(
@@ -44,7 +44,7 @@ iterator walkKeyBe*(
    db: AristoDbRef;
      ): tuple[n: int, vid: VertexID, key: HashKey] =
   ## Similar to `walkVtxBe()` but for keys.
-  for (n,vid,key) in db.to(T).walkKeyBeImpl db:
+  for (n,vid,key) in db.backend.T.walkKeyBeImpl db:
     yield (n,vid,key)
 
 iterator walkFilBe*(

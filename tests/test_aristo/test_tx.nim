@@ -303,11 +303,11 @@ proc testTxMergeAndDelete*(
     # Start with brand new persistent database.
     db = block:
       if 0 < rdbPath.len:
-        let rc = newAristoDbRef(BackendRocksDB, rdbPath, qidLayout=TxQidLyo)
+        let rc = AristoDbRef.init(RdbBackendRef, rdbPath, qidLayout=TxQidLyo)
         xCheckRc rc.error == 0
         rc.value
       else:
-        newAristoDbRef(BackendMemory, qidLayout=TxQidLyo)
+        AristoDbRef.init(MemBackendRef, qidLayout=TxQidLyo)
 
     # Start transaction (double frame for testing)
     xCheck db.txTop.isErr
@@ -405,11 +405,11 @@ proc testTxMergeProofAndKvpList*(
       db = block:
         # New DB with disabled filter slots management
         if 0 < rdbPath.len:
-          let rc = newAristoDbRef(BackendRocksDB,rdbPath,QidLayoutRef(nil))
+          let rc = AristoDbRef.init(RdbBackendRef, rdbPath, QidLayoutRef(nil))
           xCheckRc rc.error == 0
           rc.value
         else:
-          newAristoDbRef(BackendMemory, QidLayoutRef(nil))
+          AristoDbRef.init(MemBackendRef, QidLayoutRef(nil))
 
       # Start transaction (double frame for testing)
       tx = db.txBegin().value.to(AristoDbRef).txBegin().value
