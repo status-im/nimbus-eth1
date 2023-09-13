@@ -71,7 +71,7 @@ proc toGenesisHeader*(
   elif fork >= London:
     result.baseFee = EIP1559_INITIAL_BASE_FEE.u256
 
-  if g.gasLimit.isZero:
+  if g.gasLimit == 0:
     result.gasLimit = GENESIS_GAS_LIMIT
 
   if g.difficulty.isZero and fork <= London:

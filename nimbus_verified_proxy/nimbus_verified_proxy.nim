@@ -36,6 +36,7 @@ func getConfiguredChainId(networkMetadata: Eth2NetworkMetadata): Quantity =
         of rinkeby: 4.Quantity
         of goerli:  5.Quantity
         of sepolia: 11155111.Quantity
+        of holesky: 17000.Quantity
     return chainId
   else:
     return networkMetadata.cfg.DEPOSIT_CHAIN_ID.Quantity
@@ -61,7 +62,7 @@ proc run(config: VerifiedProxyConf) {.raises: [CatchableError].} =
   let
     genesisState =
       try:
-        template genesisData(): auto = metadata.genesisData
+        template genesisData(): auto = metadata.genesis.bakedBytes
         newClone(readSszForkedHashedBeaconState(
           cfg, genesisData.toOpenArray(genesisData.low, genesisData.high)))
       except CatchableError as err:

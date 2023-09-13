@@ -10,7 +10,7 @@ import
   std/[hashes, tables],
   chronos, chronicles, confutils,
   confutils/std/net as confNet,
-  stew/byteutils,
+  stew/[byteutils, endians2],
   stew/shims/net,
   json_rpc/servers/httpserver,
   eth/p2p/discoveryv5/protocol,

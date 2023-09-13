@@ -54,8 +54,8 @@ type
 proc vrsSerialised(tx: Transaction): Result[array[65,byte],UtilsError] =
   ## Parts copied from `transaction.getSignature`.
   var data: array[65,byte]
-  data[0..31] = tx.R.toByteArrayBE
-  data[32..63] = tx.S.toByteArrayBE
+  data[0..31] = tx.R.toBytesBE
+  data[32..63] = tx.S.toBytesBE
 
   if tx.txType != TxLegacy:
     data[64] = tx.V.byte

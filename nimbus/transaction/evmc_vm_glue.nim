@@ -69,7 +69,7 @@ proc evmcExecute(vm: ptr evmc_vm, hostInterface: ptr evmc_host_interface,
     # Nim defaults are fine for `create_address` and `padding`, zero bytes.
   )
 
-const evmcName  = "Nimbus EVM (vm2)"
+const evmcName  = "Nimbus EVM"
 const evmcVersion = "0.0.1"
 
 proc evmcGetCapabilities(vm: ptr evmc_vm): evmc_capabilities {.cdecl.} =

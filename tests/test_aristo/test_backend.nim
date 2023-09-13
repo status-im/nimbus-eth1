@@ -15,6 +15,7 @@ import
   eth/common,
   results,
   unittest2,
+  stew/endians2,
   ../../nimbus/sync/protocol,
   ../../nimbus/db/aristo,
   ../../nimbus/db/aristo/[
@@ -123,7 +124,7 @@ proc verify(
   true
 
 # -----------
-  
+
 proc collectFilter(
     db: AristoDbRef;
     filter: FilterRef;
@@ -289,7 +290,7 @@ proc testBackendConsistency*(
       xCheckRc rc.error == (0,0)
       let collectFilterOk = rdb.collectFilter(mdb.roFilter, filTab, noisy)
       xCheck collectFilterOk
-      
+
     # Store onto backend database
     block:
       #noisy.say "***", "db-dump\n    ", mdb.pp

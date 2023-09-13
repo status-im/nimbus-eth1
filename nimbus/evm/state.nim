@@ -274,7 +274,7 @@ method blockNumber*(vmState: BaseVMState): BlockNumber {.base, gcsafe.} =
 method difficulty*(vmState: BaseVMState): UInt256 {.base, gcsafe.} =
   if vmState.com.consensus == ConsensusType.POS:
     # EIP-4399/EIP-3675
-    UInt256.fromBytesBE(vmState.prevRandao.data, allowPadding = false)
+    UInt256.fromBytesBE(vmState.prevRandao.data)
   else:
     vmState.blockDifficulty
 

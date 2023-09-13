@@ -12,7 +12,7 @@ import
   eth/[rlp],
   json_rpc/errors,
   nimcrypto/[hash, sha2],
-  stew/[results],
+  stew/[results, endians2],
   ../../constants,
   ../../db/core_db,
   ../../utils/utils,

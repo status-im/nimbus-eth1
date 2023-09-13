@@ -17,6 +17,7 @@ import
   ../utils/utils,
   ./pow/[pow_cache, pow_dataset],
   eth/[common, keys, p2p, rlp],
+  stew/endians2,
   ethash,
   stint
 

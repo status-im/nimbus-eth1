@@ -74,8 +74,7 @@ proc rangeToPadded*[T: StUint](x: openArray[byte], first, last, size: int): T =
   var temp: array[N, byte]
   temp[0..hi-lo] = x.toOpenArray(lo, hi)
   result = T.fromBytesBE(
-    temp.toOpenArray(0, size-1),
-    allowPadding = true
+    temp.toOpenArray(0, size-1)
   )
 
 proc rangeToPadded*(x: openArray[byte], first, size: int): seq[byte] =
@@ -90,7 +89,7 @@ proc rangeToPadded*(x: openArray[byte], first, size: int): seq[byte] =
 
 # calculates the memory size required for a step
 func calcMemSize*(offset, length: int): int {.inline.} =
-  if length.isZero: return 0
+  if length == 0: return 0
   result = offset + length
 
 func safeInt*(x: UInt256): int {.inline.} =

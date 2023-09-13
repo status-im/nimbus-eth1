@@ -24,7 +24,7 @@ proc getBeaconData*(): (RuntimeConfig, ref ForkDigests) {.raises: [IOError].} =
     metadata = getMetadataForNetwork("mainnet")
     genesisState =
       try:
-        template genesisData(): auto = metadata.genesisData
+        template genesisData(): auto = metadata.genesis.bakedBytes
         newClone(readSszForkedHashedBeaconState(
           metadata.cfg,
           genesisData.toOpenArray(genesisData.low, genesisData.high)))

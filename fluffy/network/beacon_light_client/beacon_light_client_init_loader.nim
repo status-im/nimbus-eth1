@@ -32,7 +32,7 @@ proc loadNetworkData*(
 
     genesisState =
       try:
-        template genesisData(): auto = metadata.genesisData
+        template genesisData(): auto = metadata.genesis.bakedBytes
         newClone(readSszForkedHashedBeaconState(
           metadata.cfg, genesisData.toOpenArray(genesisData.low, genesisData.high)))
       except CatchableError as err:

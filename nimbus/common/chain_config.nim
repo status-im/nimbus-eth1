@@ -89,7 +89,7 @@ const
 
 proc read(rlp: var Rlp, x: var AddressBalance, _: type EthAddress): EthAddress
     {.gcsafe, raises: [RlpError].} =
-  let val = rlp.read(UInt256).toByteArrayBE()
+  let val = rlp.read(UInt256).toBytesBE()
   result[0 .. ^1] = val.toOpenArray(12, val.high)
 
 proc read(rlp: var Rlp, x: var AddressBalance, _: type GenesisAccount): GenesisAccount

@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  nimcrypto/[hash, sha2, keccak], stew/[objects, results], stint,
+  nimcrypto/[hash, sha2, keccak], stew/[objects, results, endians2], stint,
   ssz_serialization,
   ../../common/common_types
 

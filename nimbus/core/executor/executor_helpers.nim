@@ -44,7 +44,7 @@ func createBloom*(receipts: openArray[Receipt]): Bloom =
   var bloom: LogsBloom
   for rec in receipts:
     bloom.value = bloom.value or logsBloom(rec.logs).value
-  result = bloom.value.toByteArrayBE
+  result = bloom.value.toBytesBE
 
 proc makeReceipt*(vmState: BaseVMState; txType: TxType): Receipt =
 
@@ -61,7 +61,7 @@ proc makeReceipt*(vmState: BaseVMState; txType: TxType): Receipt =
   rec.receiptType = txType
   rec.cumulativeGasUsed = vmState.cumulativeGasUsed
   rec.logs = vmState.getAndClearLogEntries()
-  rec.bloom = logsBloom(rec.logs).value.toByteArrayBE
+  rec.bloom = logsBloom(rec.logs).value.toBytesBE
   rec
 
 # ------------------------------------------------------------------------------

@@ -12,7 +12,7 @@
 
 import
   std/[sequtils, sets, algorithm],
-  stew/[results, byteutils, leb128], chronicles, chronos, nimcrypto/hash,
+  stew/[results, byteutils, leb128, endians2], chronicles, chronos, nimcrypto/hash,
   bearssl, ssz_serialization, metrics, faststreams,
   eth/rlp, eth/p2p/discoveryv5/[protocol, node, enr, routing_table, random2,
     nodes_verification, lru],

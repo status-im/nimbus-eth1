@@ -65,7 +65,7 @@ type
     headers: Table[BlockNumber, BlockHeader]
 
 proc hash*(x: UInt256): Hash =
-  result = hash(x.toByteArrayBE)
+  result = hash(x.toBytesBE)
 
 proc new(T: type HunterVMState; parent, header: BlockHeader, com: CommonRef): T =
   new result

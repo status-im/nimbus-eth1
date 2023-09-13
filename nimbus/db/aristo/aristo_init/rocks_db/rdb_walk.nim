@@ -16,6 +16,7 @@
 import
   std/sequtils,
   eth/common,
+  stew/endians2,
   rocksdb,
   ../init_common,
   ./rdb_desc

@@ -16,6 +16,7 @@ import
   eth/common,
   results,
   stew/byteutils,
+  stew/endians2,
   unittest2,
   ../../nimbus/db/aristo,
   ../../nimbus/db/aristo/[

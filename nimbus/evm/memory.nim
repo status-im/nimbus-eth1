@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  chronicles, eth/common/eth_types,
+  chronicles,
   ./validation,
   ./interpreter/utils/utils_numeric
 

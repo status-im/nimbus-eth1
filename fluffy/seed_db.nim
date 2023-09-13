@@ -125,7 +125,7 @@ proc put*(db: SeedDb, contentId: array[32, byte], contentKey: seq[byte], content
   db.putStmt.exec((contentId, contentKey, content)).expectDb()
 
 proc put*(db: SeedDb, contentId: UInt256, contentKey: seq[byte], content: seq[byte]): void =
-  db.put(contentId.toByteArrayBE(), contentKey, content)
+  db.put(contentId.toBytesBE(), contentKey, content)
 
 proc get*(db: SeedDb, contentId: array[32, byte]): Option[ContentData] =
   var res = none[ContentData]()
@@ -133,7 +133,7 @@ proc get*(db: SeedDb, contentId: array[32, byte]): Option[ContentData] =
   return res
 
 proc get*(db: SeedDb, contentId: UInt256): Option[ContentData] =
-  db.get(contentId.toByteArrayBE())
+  db.get(contentId.toBytesBE())
 
 proc getContentInRange*(
     db: SeedDb,
@@ -147,7 +147,7 @@ proc getContentInRange*(
 
   var res: seq[ContentDataDist] = @[]
   var cd: ContentDataDist
-  for e in db.getInRangeStmt.exec((nodeId.toByteArrayBE(), nodeRadius.toByteArrayBE(), max, offset), cd):
+  for e in db.getInRangeStmt.exec((nodeId.toBytesBE(), nodeRadius.toBytesBE(), max, offset), cd):
     res.add(cd)
   return res
 
