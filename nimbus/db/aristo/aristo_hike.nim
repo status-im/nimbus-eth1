@@ -27,7 +27,6 @@ type
     root*: VertexID                ## Handy for some fringe cases
     legs*: seq[Leg]                ## Chain of vertices and IDs
     tail*: NibblesSeq              ## Portion of non completed path
-    error*: AristoError            ## Info for whoever wants it to see
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -49,6 +48,10 @@ func getNibblesImpl(hike: Hike; start = 0; maxLen = high(int)): NibblesSeq =
 # Public functions
 # ------------------------------------------------------------------------------
 
+func to*(rc: Result[Hike,(Hike,AristoError)]; T: type Hike): T =
+  ## Extract `Hike` from either ok ot error part of argument `rc`.
+  if rc.isOk: rc.value else: rc.error[0]
+
 func to*(hike: Hike; T: type NibblesSeq): T =
   ## Convert back
   hike.getNibblesImpl() & hike.tail
@@ -63,77 +66,74 @@ proc hikeUp*(
     path: NibblesSeq;                            # Partial path
     root: VertexID;                              # Start vertex
     db: AristoDbRef;                             # Database
-      ): Hike =
+      ): Result[Hike,(Hike,AristoError)] =
   ## For the argument `path`, find and return the logest possible path in the
   ## argument database `db`.
-  result = Hike(
+  var hike = Hike(
     root: root,
     tail: path)
 
   if not root.isValid:
-    result.error = HikeRootMissing
+    return err((hike,HikeRootMissing))
 
-  else:
-    var vid = root
-    while vid.isValid:
-      var leg = Leg(wp: VidVtxPair(vid: vid), nibble: -1)
+  var vid = root
+  while vid.isValid:
+    var leg = Leg(wp: VidVtxPair(vid: vid), nibble: -1)
 
-      # Fetch vertex to be checked on this lap
-      leg.wp.vtx = db.top.sTab.getOrVoid vid
-      if not leg.wp.vtx.isValid:
+    # Fetch vertex to be checked on this lap
+    leg.wp.vtx = db.top.sTab.getOrVoid vid
+    if not leg.wp.vtx.isValid:
 
-        # Register vertex fetched from backend (if any)
-        let rc = db.getVtxBE vid
-        if rc.isErr:
-          break
-        leg.backend = true
-        leg.wp.vtx = rc.value
+      # Register vertex fetched from backend (if any)
+      let rc = db.getVtxBE vid
+      if rc.isErr:
+        break
+      leg.backend = true
+      leg.wp.vtx = rc.value
 
-      case leg.wp.vtx.vType:
-      of Leaf:
-        if result.tail.len == result.tail.sharedPrefixLen(leg.wp.vtx.lPfx):
-          # Bingo, got full path
-          result.legs.add leg
-          result.tail = EmptyNibbleSeq
-        else:
-          result.error = HikeLeafTooEarly # Ooops
-        break # Buck stops here
+    case leg.wp.vtx.vType:
+    of Leaf:
+      if hike.tail.len == hike.tail.sharedPrefixLen(leg.wp.vtx.lPfx):
+        # Bingo, got full path
+        hike.legs.add leg
+        hike.tail = EmptyNibbleSeq
+        break
 
-      of Branch:
-        if result.tail.len == 0:
-          result.legs.add leg
-          result.error = HikeBranchTailEmpty # Ooops
-          break
+      return err((hike,HikeLeafTooEarly))
 
-        let
-          nibble = result.tail[0].int8
-          nextVid = leg.wp.vtx.bVid[nibble]
+    of Branch:
+      if hike.tail.len == 0:
+        hike.legs.add leg
+        return err((hike,HikeBranchTailEmpty))
 
-        if not nextVid.isValid:
-          result.error = HikeBranchBlindEdge # Ooops
-          break
+      let
+        nibble = hike.tail[0].int8
+        nextVid = leg.wp.vtx.bVid[nibble]
 
-        leg.nibble = nibble
-        result.legs.add leg
-        result.tail = result.tail.slice(1)
-        vid = nextVid
+      if not nextVid.isValid:
+        return err((hike,HikeBranchBlindEdge))
 
-      of Extension:
-        if result.tail.len == 0:
-          result.legs.add leg
-          result.tail = EmptyNibbleSeq
-          result.error = HikeExtTailEmpty # Well, somehow odd
-          break
+      leg.nibble = nibble
+      hike.legs.add leg
+      hike.tail = hike.tail.slice(1)
+      vid = nextVid
 
-        if leg.wp.vtx.ePfx.len != result.tail.sharedPrefixLen(leg.wp.vtx.ePfx):
-          result.error = HikeExtTailMismatch # Need to branch from here
-          break
+    of Extension:
+      if hike.tail.len == 0:
+        hike.legs.add leg
+        hike.tail = EmptyNibbleSeq
+        return err((hike,HikeExtTailEmpty))    # Well, somehow odd
 
-        result.legs.add leg
-        result.tail = result.tail.slice(leg.wp.vtx.ePfx.len)
-        vid = leg.wp.vtx.eVid
+      if leg.wp.vtx.ePfx.len != hike.tail.sharedPrefixLen(leg.wp.vtx.ePfx):
+        return err((hike,HikeExtTailMismatch)) # Need to branch from here
 
-proc hikeUp*(lty: LeafTie; db: AristoDbRef): Hike =
+      hike.legs.add leg
+      hike.tail = hike.tail.slice(leg.wp.vtx.ePfx.len)
+      vid = leg.wp.vtx.eVid
+
+  ok hike
+
+proc hikeUp*(lty: LeafTie; db: AristoDbRef): Result[Hike,(Hike,AristoError)] =
   ## Variant of `hike()`
   lty.path.to(NibblesSeq).hikeUp(lty.root, db)
 

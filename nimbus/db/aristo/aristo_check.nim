@@ -16,7 +16,8 @@
 import
   std/[algorithm, sequtils, sets, tables],
   eth/common,
-  stew/[interval_set, results],
+  stew/interval_set,
+  results,
   ./aristo_walk/persistent,
   "."/[aristo_desc, aristo_get, aristo_init, aristo_vid, aristo_utils],
   ./aristo_check/[check_be, check_top]

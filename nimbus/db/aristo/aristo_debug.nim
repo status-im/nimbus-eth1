@@ -568,8 +568,6 @@ proc pp*(hike: Hike; db = AristoDbRef(); indent = 4): string =
       result &= "(" & hike.root.ppVid & ")" & pfx
     result &= hike.legs.mapIt(it.pp(db)).join(pfx)
   result &= pfx & "(" & hike.tail.ppPathPfx & ")"
-  if hike.error != AristoError(0):
-    result &= pfx & "(" & $hike.error & ")"
   result &= "]"
 
 proc pp*(kMap: Table[VertexID,Hashlabel]; indent = 4): string =

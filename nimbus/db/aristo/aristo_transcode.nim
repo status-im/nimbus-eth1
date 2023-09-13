@@ -13,7 +13,8 @@
 import
   std/[bitops, sequtils, sets],
   eth/[common, rlp, trie/nibbles],
-  stew/[results, endians2],
+  results,
+  stew/endians2,
   "."/[aristo_constants, aristo_desc]
 
 # ------------------------------------------------------------------------------

@@ -33,6 +33,12 @@ func toVae(err: AristoError): (VertexID,AristoError) =
   ## Map single error to error pair with dummy vertex
   (VertexID(0),err)
 
+func toVae(err: (Hike,AristoError)): (VertexID,AristoError) =
+  if 0 < err[0].legs.len:
+    (err[0].legs[^1].wp.vid, err[1])
+  else:
+    (VertexID(0), err[1])
+
 proc branchStillNeeded(vtx: VertexRef): Result[int,void] =
   ## Returns the nibble if there is only one reference left.
   var nibble = -1
@@ -268,11 +274,6 @@ proc deleteImpl(
     lty: LeafTie;                      # `Patricia Trie` path root-to-leaf
       ): Result[void,(VertexID,AristoError)] =
   ## Implementation of *delete* functionality.
-  if hike.error != AristoError(0):
-    if 0 < hike.legs.len:
-      return err((hike.legs[^1].wp.vid,hike.error))
-    return err((VertexID(0),hike.error))
-
   # Remove leaf entry on the top
   let lf =  hike.legs[^1].wp
   if lf.vtx.vType != Leaf:
@@ -356,6 +357,7 @@ proc delete*(
     hike: Hike;                        # Fully expanded chain of vertices
       ): Result[void,(VertexID,AristoError)] =
   ## Delete argument `hike` chain of vertices from the database
+  ##
   # Need path in order to remove it from `lTab[]`
   let lty = LeafTie(
     root: hike.root,
@@ -367,7 +369,17 @@ proc delete*(
     lty: LeafTie;                      # `Patricia Trie` path root-to-leaf
       ): Result[void,(VertexID,AristoError)] =
   ## Variant of `delete()`
-  db.deleteImpl(lty.hikeUp(db), lty)
+  ##
+  db.deleteImpl(? lty.hikeUp(db).mapErr toVae, lty)
+
+proc delete*(
+    db: AristoDbRef;
+    root: VertexID;
+    path: Blob;
+      ): Result[void,(VertexID,AristoError)] =
+  ## Variant of `fetchPayload()`
+  ##
+  db.delete(? path.initNibbleRange.hikeUp(root, db).mapErr toVae)
 
 # ------------------------------------------------------------------------------
 # End
