@@ -46,13 +46,17 @@ proc pathToKey*(partPath: NibblesSeq): Result[HashKey,AristoError] =
     return ok(key.HashKey)
   err(PathExpected64Nibbles)
 
-proc pathToKey*(partPath: Blob): Result[HashKey,AristoError] =
+proc pathToKey*(
+    partPath: openArray[byte];
+      ): Result[HashKey,AristoError] =
   let (isLeaf,pathSegment) = partPath.hexPrefixDecode
   if isleaf:
     return pathSegment.pathToKey()
   err(PathExpectedLeaf)
 
-proc pathToTag*(partPath: NibblesSeq|Blob): Result[HashID,AristoError] =
+proc pathToTag*(
+    partPath: NibblesSeq|openArray[byte];
+      ): Result[HashID,AristoError] =
   ok (? partPath.pathToKey).to(HashID)
 
 # --------------------

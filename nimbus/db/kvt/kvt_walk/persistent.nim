@@ -30,7 +30,7 @@ export
 # Public iterators (all in one)
 # ------------------------------------------------------------------------------
 
-iterator walkAny*(
+iterator walkPairs*(
    be: RdbBackendRef;
      ): tuple[key: Blob, data: Blob] =
   ## Walk filter slots in fifo order.

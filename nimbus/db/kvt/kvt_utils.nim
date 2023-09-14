@@ -25,7 +25,7 @@ import
 
 proc getBE*(
     db: KvtDbRef;                     # Database
-    key: Blob;                        # Key of database record
+    key: openArray[byte];             # Key of database record
       ): Result[Blob,KvtError] =
   ## For the argument `key` return the associated value from the backend
   ## database if available.
@@ -41,8 +41,8 @@ proc getBE*(
 
 proc put*(
     db: KvtDbRef;                     # Database
-    key: Blob;                        # Key of database record to store
-    data: Blob;                       # Value of database record to store
+    key: openArray[byte];             # Key of database record to store
+    data: openArray[byte];            # Value of database record to store
       ): Result[void,KvtError] =
   ## For the argument `key` associated the argument `data` as value (which
   ## will be marked in the top layer cache.)
@@ -51,13 +51,13 @@ proc put*(
   if data.len == 0:
     return err(DataInvalid)
 
-  db.top.tab[key] = data
+  db.top.tab[@key] = @data
   ok()
 
 
 proc del*(
     db: KvtDbRef;                     # Database
-    key: Blob;                        # Key of database record to delete
+    key: openArray[byte];             # Key of database record to delete
       ): Result[void,KvtError] =
   ## For the argument `key` delete the associated value (which will be marked
   ## in the top layer cache.)
@@ -66,9 +66,9 @@ proc del*(
 
   let rc = db.getBE(key)
   if rc.isOk:
-    db.top.tab[key] = EmptyBlob
+    db.top.tab[@key] = EmptyBlob
   elif rc.error == GetNotFound:
-    db.top.tab.del key
+    db.top.tab.del @key
   else:
     return err(rc.error)
 
@@ -78,14 +78,14 @@ proc del*(
 
 proc get*(
     db: KvtDbRef;                     # Database
-    key: Blob;                        # Key of database record
+    key: openArray[byte];             # Key of database record
       ): Result[Blob,KvtError] =
   ## For the argument `key` return the associated value preferably from the
   ## top layer, or the database otherwise.
   ##
   if key.len == 0:
     return err(KeyInvalid)
-  let data = db.top.tab.getOrVoid key
+  let data = db.top.tab.getOrVoid @key
   if data.isValid:
     return ok(data)
   db.getBE key
