@@ -221,7 +221,7 @@ jobs:
           runner.os == 'Windows'
         run: |
           echo '${{ github.workspace }}'"/external/mingw-${{ matrix.target.cpu }}/bin" >> $GITHUB_PATH
-          echo '${{ github.workspace }}'"/external/dlls-${{ matrix.target.cpu }}" >> $GITHUB_PATH          
+          echo '${{ github.workspace }}'"/external/dlls-${{ matrix.target.cpu }}" >> $GITHUB_PATH
 
       - name: Get latest nimbus-build-system commit hash
         id: versions
@@ -237,7 +237,7 @@ jobs:
         uses: actions/cache@v3
         with:
           path: NimBinCache
-          key: 'nim-${{ matrix.target.os }}-${{ matrix.target.cpu }}-${{ steps.versions.outputs.nimbus_build_system }}'
+          key: 'nim-${{ matrix.target.os }}-${{ matrix.target.cpu }}-${{ steps.versions.outputs.nimbus_build_system }}-${{ matrix.target.evmc }}'
 
       - name: Build Nim and Nimbus-eth1 dependencies
         run: |
