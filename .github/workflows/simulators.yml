@@ -28,7 +28,7 @@ jobs:
         uses: actions/cache@v3
         with:
           path: NimBinaries
-          key: 'nim-linux-amd64-${{ steps.versions.outputs.nimbus_build_system }}'
+          key: 'nim-linux-amd64-${{ steps.versions.outputs.nimbus_build_system }}-sim'
 
       - name: Build Nim and deps
         run: |
@@ -69,7 +69,7 @@ jobs:
         uses: actions/cache@v3
         with:
           path: NimBinaries
-          key: 'nim-macos-amd64-${{ steps.versions.outputs.nimbus_build_system }}'
+          key: 'nim-macos-amd64-${{ steps.versions.outputs.nimbus_build_system }}-sim'
 
       - name: Build Nim and deps
         run: |
@@ -139,7 +139,7 @@ jobs:
         uses: actions/cache@v3
         with:
           path: NimBinaries
-          key: 'nim-windows-amd64-${{ steps.versions.outputs.nimbus_build_system }}'
+          key: 'nim-windows-amd64-${{ steps.versions.outputs.nimbus_build_system }}-sim'
 
       - name: Build Nim and deps
         run: |
