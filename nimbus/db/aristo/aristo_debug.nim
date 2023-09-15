@@ -15,9 +15,9 @@ import
   eth/[common, trie/nibbles],
   results,
   stew/byteutils,
-  "."/[aristo_constants, aristo_desc, aristo_hike, aristo_init],
+  "."/[aristo_constants, aristo_desc, aristo_hike],
   ./aristo_desc/desc_backend,
-  ./aristo_init/[memory_db, rocks_db],
+  ./aristo_init/[memory_db, memory_only, rocks_db],
   ./aristo_filter/filter_scheduler
 
 # ------------------------------------------------------------------------------
@@ -372,7 +372,7 @@ proc ppFilter(fl: FilterRef; db: AristoDbRef; indent: int): string =
     result &= $(1+n) & "(" & vid.ppVid & "," & key.ppKey & ")"
   result &= "}"
 
-proc ppBeOnly[T](be: T; db: AristoDbRef; indent: int): string =
+proc ppBe[T](be: T; db: AristoDbRef; indent: int): string =
   ## Walk over backend tables
   let
     pfx = indent.toPfx
@@ -387,10 +387,6 @@ proc ppBeOnly[T](be: T; db: AristoDbRef; indent: int): string =
   result &= pfx & "kMap" & pfx1 & "{" & be.walkKey.toSeq.mapIt(
       $(1+it[0]) & "(" & it[1].ppVid & "," & it[2].ppKey & ")"
     ).join(pfx2) & "}"
-
-proc ppBe[T](be: T; db: AristoDbRef; indent: int): string =
-  ## backend + filter
-  db.roFilter.ppFilter(db, indent+1) & indent.toPfx & be.ppBeOnly(db,indent+1)
 
 proc ppLayer(
     layer: LayerRef;
@@ -572,8 +568,6 @@ proc pp*(hike: Hike; db = AristoDbRef(); indent = 4): string =
       result &= "(" & hike.root.ppVid & ")" & pfx
     result &= hike.legs.mapIt(it.pp(db)).join(pfx)
   result &= pfx & "(" & hike.tail.ppPathPfx & ")"
-  if hike.error != AristoError(0):
-    result &= pfx & "(" & $hike.error & ")"
   result &= "]"
 
 proc pp*(kMap: Table[VertexID,Hashlabel]; indent = 4): string =
@@ -658,15 +652,14 @@ proc pp*(
   db: AristoDbRef;
   indent = 4;
     ): string =
+  result = db.roFilter.ppFilter(db, indent+1) & indent.toPfx
   case be.kind:
   of BackendMemory:
-    be.MemBackendRef.ppBe(db, indent)
-
+    result &= be.MemBackendRef.ppBe(db, indent)
   of BackendRocksDB:
-    be.RdbBackendRef.ppBe(db, indent)
-
+    result &= be.RdbBackendRef.ppBe(db, indent)
   of BackendVoid:
-    db.roFilter.ppFilter(db, indent) & indent.toPfx & "<BackendNone>"
+    result &= "<NoBackend>"
 
 proc pp*(
     db: AristoDbRef;

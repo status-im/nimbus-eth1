@@ -14,15 +14,15 @@
 {.push raises: [].}
 
 import
-  std/sets,
-  results,
   ../aristo_desc,
   ../aristo_desc/desc_backend,
   "."/[init_common, memory_db]
 
 type
   VoidBackendRef* = ref object of TypedBackendRef
-    ## Dummy descriptor type, will typically used as `nil` reference
+    ## Dummy descriptor type, used as `nil` reference
+
+  MemOnlyBackend* = VoidBackendRef|MemBackendRef
 
 export
   BackendType,
@@ -32,33 +32,47 @@ let
   DefaultQidLayoutRef* = DEFAULT_QID_QUEUES.to(QidLayoutRef)
 
 # ------------------------------------------------------------------------------
+# Public helpers
+# ------------------------------------------------------------------------------
+
+proc kind*(
+    be: BackendRef;
+      ): BackendType =
+  ## Retrieves the backend type symbol for a `be` backend database argument
+  ## where `BackendVoid` is returned for the`nil` backend.
+  if be.isNil:
+    BackendVoid
+  else:
+    be.TypedBackendRef.beKind
+
+# ------------------------------------------------------------------------------
 # Public database constuctors, destructor
 # ------------------------------------------------------------------------------
 
-proc newAristoDbRef*(
-    backend: static[BackendType];
-    qidLayout = DefaultQidLayoutRef;
-      ): AristoDbRef =
-  ## Simplified prototype for  `BackendNone` and `BackendMemory`  type backend.
+proc init*(
+    T: type AristoDbRef;                      # Target type
+    B: type MemOnlyBackend;                   # Backend type
+    qidLayout = DefaultQidLayoutRef;          # Optional fifo schedule
+      ): T =
+  ## Memory backend constructor.
   ##
   ## If the `qidLayout` argument is set `QidLayoutRef(nil)`, the a backend
   ## database will not provide filter history management. Providing a different
   ## scheduler layout shoud be used with care as table access with different
   ## layouts might render the filter history data unmanageable.
   ##
-  when backend == BackendVoid:
+  when B is VoidBackendRef:
     AristoDbRef(top: LayerRef())
 
-  elif backend == BackendMemory:
+  elif B is MemBackendRef:
     AristoDbRef(top: LayerRef(), backend: memoryBackend(qidLayout))
 
-  elif backend == BackendRocksDB:
-    {.error: "Aristo DB backend \"BackendRocksDB\" needs basePath argument".}
+proc init*(
+    T: type AristoDbRef;                      # Target type
+      ): T =
+  ## Shortcut for `AristoDbRef.init(VoidBackendRef)`
+  AristoDbRef.init VoidBackendRef
 
-  else:
-    {.error: "Unknown/unsupported Aristo DB backend".}
-
-# -----------------
 
 proc finish*(db: AristoDbRef; flush = false) =
   ## Backend destructor. The argument `flush` indicates that a full database
@@ -78,25 +92,6 @@ proc finish*(db: AristoDbRef; flush = false) =
     let lebo = db.getCentre
     discard lebo.forgetOthers()
     lebo[] = AristoDbObj(top: LayerRef())
-
-# -----------------
-
-proc to*[W: TypedBackendRef|MemBackendRef|VoidBackendRef](
-    db: AristoDbRef;
-    T: type W;
-      ): T =
-  ## Handy helper for lew-level access to some backend functionality
-  db.backend.T
-
-proc kind*(
-    be: BackendRef;
-      ): BackendType =
-  ## Retrieves the backend type symbol for a `TypedBackendRef` argument where
-  ## `BackendVoid` is returned for the`nil` backend.
-  if be.isNil:
-    BackendVoid
-  else:
-    be.TypedBackendRef.beKind
 
 # ------------------------------------------------------------------------------
 # End

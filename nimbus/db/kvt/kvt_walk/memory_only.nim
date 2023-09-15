@@ -24,7 +24,7 @@ export
 # Public iterators (all in one)
 # ------------------------------------------------------------------------------
 
-iterator walkAny*(
+iterator walkPairs*(
    be: MemBackendRef|VoidBackendRef;
      ): tuple[key: Blob, data: Blob] =
   ## Iterate over backend filters.

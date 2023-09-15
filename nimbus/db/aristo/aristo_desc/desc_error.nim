@@ -233,10 +233,15 @@ type
     TxNotTopTx
     TxStackGarbled
     TxStackUnderflow
+    TxSpanOffCentre
+    TxGarbledSpan
 
     # Functions from `aristo_desc`
+    CentreTxLocked
     MustBeOnCentre
     NotAllowedOnCentre
+    GarbledTxSpan
+    OutsideTxSpan
 
     # Miscelaneous handy helpers
     PayloadTypeUnsupported

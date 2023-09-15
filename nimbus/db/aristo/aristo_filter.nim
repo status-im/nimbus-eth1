@@ -135,8 +135,8 @@ proc resolveBackendFilter*(
   if db != parent:
     if not reCentreOk:
       return err(FilBackendRoMode)
-    db.reCentre
-  defer: parent.reCentre
+    ? db.reCentre
+  defer: discard parent.reCentre
 
   # Blind or missing filter
   if db.roFilter.isNil:

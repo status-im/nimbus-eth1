@@ -9,6 +9,31 @@ This description does assume familiarity with the abstract notion of a hexary
 say the state of a valid *Merkle Patricia Tree* is uniquely verified by its
 top level vertex.
 
+Contents
+--------
+* [1. Deleting entries in a compact *Merkle Patricia Tree*](#ch1)
+
+* [2. *Patricia Trie* example with *Merkle hash* labelled edges](#ch2)
+
+* [3. Discussion of the examples *(1)* and *(3)*](#ch3)
+
+* [4. *Patricia Trie* node serialisation with *Merkle hash* labelled edges](#ch4)
+  + [4.1 Branch record serialisation](#ch4x1)
+  + [4.2 Extension record serialisation](#ch4x2)
+  + [4.3 Leaf record serialisation](#ch4x3)
+  + [4.4 Leaf record payload serialisation for account data](#ch4x4)
+  + [4.5 Leaf record payload serialisation for RLP encoded data](#ch4x5)
+  + [4.6 Leaf record payload serialisation for unstructured data](#ch4x6)
+  + [4.7 Serialisation of the list of unused vertex IDs](#ch4x7)
+  + [4.8 Backend filter record serialisation](#ch4x8)
+  + [4.9 Serialisation of a list of filter IDs](#ch4x92)
+  + [4.10 Serialisation record identifier identification](#ch4x10)
+
+* [5. *Patricia Trie* implementation notes](#ch5)
+  + [5.1 Database decriptor representation](#ch5x1)
+  + [5.2 Distributed access using the same backend](#ch5x2)
+
+<a name="ch1"></a>
 1. Deleting entries in a compact *Merkle Patricia Tree*
 -------------------------------------------------------
 The main feature of the *Aristo Trie* representation is that there are no
@@ -60,6 +85,7 @@ but it becomes too clumsy to be useful on a large state (i.e. database).
 Reference counts come to mind but maintaining these is generally error prone
 when actors concurrently manipulate the state (i.e. database).
 
+<a name="ch2"></a>
 2. *Patricia Trie* example with *Merkle hash* labelled edges
 ------------------------------------------------------------
 Continuing with the example from chapter 1, the *branch* node is extended by
@@ -127,6 +153,7 @@ changes are values.
 
       root3 = (w,hash(d,b,c,,, ..))
 
+<a name="ch3"></a>
 3. Discussion of the examples *(1)* and *(3)*
 ---------------------------------------------
 Examples *(1)* and *(3)* differ in that the structural *Patricia Trie*
@@ -186,6 +213,7 @@ hash mapping.
        leaf-a leaf-b leaf-c
 
 
+<a name="ch4"></a>
 4. *Patricia Trie* node serialisation with *Merkle hash* labelled edges
 -----------------------------------------------------------------------
 The data structure for the *Aristo Trie* forllows example *(7)* by keeping
@@ -205,6 +233,7 @@ in the key-value table that implements the *Patricia Trie*. It is now called
 The structural keys *w, x, y, z* from the example *(3)* are called *vertexID*
 and implemented as 64 bit values, stored *Big Endian* in the serialisation.
 
+<a name="ch4x1"></a>
 ### 4.1 Branch record serialisation
 
         0 +--+--+--+--+--+--+--+--+--+
@@ -230,6 +259,7 @@ vector *access(16)* is reset to zero, then there is no *n*-th structural
 Note that data are stored *Big Endian*, so the bits *0..7* of *access* are
 stored in the right byte of the serialised bitmap.
 
+<a name="ch4x2"></a>
 ### 4.2 Extension record serialisation
 
         0 +--+--+--+--+--+--+--+--+--+
@@ -250,6 +280,7 @@ zero (bit 4 is set if the right nibble is the first part of the path.)
 Note that the *pathSegmentLen(6)* is redunant as it is determined by the length
 of the extension record (as *recordLen - 9*.)
 
+<a name="ch4x3"></a>
 ### 4.3 Leaf record serialisation
 
         0 +-- ..
@@ -270,6 +301,7 @@ also set if the right nibble is the first part of the path.)
 If present, the serialisation of the payload field can be either for account
 data, for RLP encoded or for unstructured data as defined below.
 
+<a name="ch4x4"></a>
 ### 4.4 Leaf record payload serialisation for account data
 
         0 +-- ..  --+
@@ -295,6 +327,7 @@ the two bit value *10* as they refer to the nonce and the storage ID data
 fields. So, joining the *4 x bitmask(2)* word array to a single byte, the
 maximum value of that byte is 0x99.
 
+<a name="ch4x5"></a>
 ### 4.5 Leaf record payload serialisation for RLP encoded data
 
         0 +--+ .. --+
@@ -306,6 +339,7 @@ maximum value of that byte is 0x99.
         where
           marker(8) is the eight bit array *0110-1010*
 
+<a name="ch4x6"></a>
 ### 4.6 Leaf record payload serialisation for unstructured data
 
         0 +--+ .. --+
@@ -317,6 +351,7 @@ maximum value of that byte is 0x99.
         where
           marker(8) is the eight bit array *0110-1011*
 
+<a name="ch4x7"></a>
 ### 4.7 Serialisation of the list of unused vertex IDs
 
         0 +-- ..
@@ -335,7 +370,7 @@ indicates that all ID values greater or equal than this value are free and can
 be used as vertex IDs. If this record is missing, the value *(1u64,0x01)* is
 assumed, i.e. the list with the single vertex ID *1*.
 
-
+<a name="ch4x8"></a>
 ### 4.8 Backend filter record serialisation
 
          0 +--+--+--+--+--+ .. --+
@@ -389,6 +424,7 @@ assumed, i.e. the list with the single vertex ID *1*.
 
           + the marker(8) is the eight bit array *0111-1101*
 
+<a name="ch4x9"></a>
 ### 4.9 Serialisation of a list of filter IDs
 
         0 +-- ..
@@ -407,26 +443,29 @@ in a dedicated list (e.g. the latest filters) one can quickly access particular
 entries without searching through the set of filters. In the current
 implementation this list comes in ID pairs i.e. the number of entries is even.
 
-### 4.10 Serialisation record identifier identification
+<a name="ch4x10"></a>
+### 4.10 Serialisation record identifier tags
 
 Any of the above records can uniquely be identified by its trailing marker,
 i.e. the last byte of a serialised record.
 
 |** Bit mask**| **Hex value**    | **Record type**      |**Chapter reference**|
 |:-----------:|:----------------:|:--------------------:|:-------------------:|
-|   0000 1000 | 0x08             | Branch record        | 4.1                 |
-|   10xx xxxx | 0x80 + x(6)      | Extension record     | 4.2                 |
-|   11xx xxxx | 0xC0 + x(6)      | Leaf record          | 4.3                 |
-|   0xxx 0yyy | (x(3)<<4) + y(3) | Account payload      | 4.4                 |
-|   0110 1010 | 0x6a             | RLP encoded payload  | 4.5                 |
-|   0110 1011 | 0x6b             | Unstructured payload | 4.6                 |
-|   0111 1100 | 0x7c             | List of vertex IDs   | 4.7                 |
-|   0111 1101 | 0x7d             | Filter record        | 4.8                 |
-|   0111 1110 | 0x7e             | List of vertex IDs   | 4.9                 |
+|   0000 1000 | 0x08             | Branch record        | [4.1](#ch4x1)       |
+|   10xx xxxx | 0x80 + x(6)      | Extension record     | [4.2](#ch4x2)       |
+|   11xx xxxx | 0xC0 + x(6)      | Leaf record          | [4.3](#ch4x3)       |
+|   0xxx 0yyy | (x(3)<<4) + y(3) | Account payload      | [4.4](#ch4x4)       |
+|   0110 1010 | 0x6a             | RLP encoded payload  | [4.5](#ch4x5)       |
+|   0110 1011 | 0x6b             | Unstructured payload | [4.6](#ch4x6)       |
+|   0111 1100 | 0x7c             | List of vertex IDs   | [4.7](#ch4x7)       |
+|   0111 1101 | 0x7d             | Filter record        | [4.8](#ch4x8)       |
+|   0111 1110 | 0x7e             | List of vertex IDs   | [4.9](#ch4x9)       |
 
+<a name="ch5"></a>
 5. *Patricia Trie* implementation notes
 ---------------------------------------
 
+<a name="ch5x1"></a>
 ### 5.1 Database decriptor representation
 
         ^      +----------+
@@ -451,6 +490,7 @@ i.e. the last byte of a serialised record.
 
 where only the *top* layer is obligatory.
 
+<a name="ch5x2"></a>
 ### 5.2 Distributed access using the same backend
 
 There can be many descriptors for the same database. Due to delta layers and

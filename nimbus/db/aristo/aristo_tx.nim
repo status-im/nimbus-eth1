@@ -14,26 +14,34 @@
 {.push raises: [].}
 
 import
-  std/[options, sets],
+  std/[sequtils, tables],
   results,
   "."/[aristo_desc, aristo_filter, aristo_get, aristo_hashify]
 
+type
+  DoSpanPrepFn =
+    proc(db: AristoDbRef; flg: bool): Result[void,AristoError]
+
+  DoSpanExecFn =
+    proc(db: AristoDbRef)
+
 func isTop*(tx: AristoTxRef): bool
+func level*(db: AristoDbRef): int
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
-func toVae(err: AristoError): (VertexID,AristoError) =
-  ## Map single error to error pair with dummy vertex
-  (VertexID(0),err)
+func fromVae(err: (VertexID,AristoError)): AristoError =
+  ## Map error pair to error reason component
+  err[1]
 
 func getDbDescFromTopTx(tx: AristoTxRef): Result[AristoDbRef,AristoError] =
   if not tx.isTop():
     return err(TxNotTopTx)
   let db = tx.db
   if tx.level != db.stack.len:
-    return err(TxStackUnderflow)
+    return err(TxStackGarbled)
   ok db
 
 proc getTxUid(db: AristoDbRef): uint =
@@ -41,6 +49,147 @@ proc getTxUid(db: AristoDbRef): uint =
     db.txUidGen = 0
   db.txUidGen.inc
   db.txUidGen
+
+# ------------------------------------------------------------------------------
+# Private functions: Single descriptor transaction frame
+# ------------------------------------------------------------------------------
+
+proc txBeginPrepImpl(db: AristoDbRef): Result[void,AristoError] =
+  ## Starts a new transaction.
+  ##
+  if db.level != db.stack.len:
+    return err(TxStackGarbled)
+  ok()
+
+proc txBeginExecImpl(db: AristoDbRef) =
+  ## Starts a new transaction.
+  ##
+  db.stack.add db.top.dup # push (save and use top later)
+  db.top.txUid = db.getTxUid()
+
+  db.txRef = AristoTxRef(
+    db:     db,
+    txUid:  db.top.txUid,
+    parent: db.txRef,
+    level:  db.stack.len)
+
+# ---------------
+
+proc rollbackImpl(db: AristoDbRef) =
+  ## Roll back to previous layer.
+  ##
+  db.top = db.stack[^1]
+  db.stack.setLen(db.stack.len-1)
+  db.txRef = db.txRef.parent          # `db.txRef` needs to be checked by caller
+
+# ---------------
+
+proc commitPrepImpl(
+    db: AristoDbRef;                  # Top transaction on database
+    dontHashify: bool;                # Process/fix MPT hashes
+      ): Result[void,AristoError] =
+  ## Commit transaction layer.
+  ##
+  if db.top.dirty and not dontHashify:
+    discard ? db.hashify().mapErr fromVae
+  ok()
+
+proc commitExecImpl(db: AristoDbRef) =
+  ## Commit transaction layer.
+  ##
+  # Keep top and discard layer below
+  db.top.txUid = db.stack[^1].txUid
+  db.stack.setLen(db.stack.len-1)
+  db.txRef = db.txRef.parent          # `db.txRef` needs to be checked by caller
+
+# ---------------
+
+proc collapseCommitPrepImpl(
+    db: AristoDbRef;
+    dontHashify = false;              # Process/fix MPT hashes
+      ): Result[void,AristoError] =
+  # For commit, hashify the current layer, otherwise the stack bottom layer.
+  # install the stack bottom.
+  if db.top.dirty and not dontHashify:
+    discard ? db.hashify().mapErr fromVae
+  ok()
+
+proc collapseRollbackPrepImpl(
+    db: AristoDbRef;
+    dontHashify = false;              # Process/fix MPT hashes
+      ): Result[void,AristoError] =
+  # Rollback hashify the current layer, otherwise the stack bottom layer.
+  # install the stack bottom.
+  if db.top.dirty and not dontHashify:
+    db.stack[0].swap db.top
+    defer: db.stack[0].swap db.top
+    discard ? db.hashify().mapErr fromVae
+  ok()
+
+
+proc collapseCommitExecImpl(db: AristoDbRef) =
+  # If commit, then leave the current layer and clear the stack, oterwise
+  # install the stack bottom.
+  db.top.txUid = 0
+  db.stack.setLen(0)
+  db.txRef = AristoTxRef(nil)
+
+proc collapseRollbackExecImpl(db: AristoDbRef) =
+  db.stack[0].swap db.top
+  db.top.txUid = 0
+  db.stack.setLen(0)
+  db.txRef = AristoTxRef(nil)
+
+# ---------------
+
+proc doSpan(
+    db: AristoDbRef;                  # Top transaction on database
+    prepFn = DoSpanPrepFn(nil);       # Optional preparation layer
+    prepFlag = false;                 # `prepFn` argument
+    execFn: DoSpanExecFn;             # Mandatory execution layer
+      ): Result[void,AristoError] =
+  ## Common execution framework for `rollbackImpl()` or `commitImpl()` over
+  ## all descriptors in the transaction span.
+  ##
+  if not prepFn.isNil:
+    var
+      revert: Table[AristoDbRef,LayerRef]
+    defer:
+      # Restore previous layer
+      for (dude,top) in revert.pairs:
+        dude.top = top
+
+    for dude in db.txSpan:
+      if dude.stack.len == 0 or
+         dude.stack.len != dude.txRef.level or
+         dude.top.txUid != dude.txRef.txUid:
+        return err(TxStackGarbled)
+      let keep = db.top
+      ? dude.prepFn prepFlag            # Preparation function
+      revert[dude] = keep
+    revert.clear                        # Done, no restoring
+
+  for dude in db.txSpan:
+    dude.execFn()                       # Commit function
+
+  if db.level == 0:
+    db.txSpanClear()
+
+  ok()
+
+proc doThisPrep(
+    db: AristoDbRef;                  # Top transaction on database
+    prepFn = DoSpanPrepFn(nil);       # Mandatory preparation layer function
+    prepFlag = false;                 # `prepFn` argument
+      ): Result[void,AristoError] =
+  ## ..
+  let
+    keep = db.top
+    rc = db.prepFn prepFlag
+  if rc.isErr:
+    db.top = keep
+    return err(rc.error)
+  ok()
 
 # ------------------------------------------------------------------------------
 # Public functions, getters
@@ -165,7 +314,7 @@ proc exec*(
 # Public functions: Transaction frame
 # ------------------------------------------------------------------------------
 
-proc txBegin*(db: AristoDbRef): Result[AristoTxRef,(VertexID,AristoError)] =
+proc txBegin*(db: AristoDbRef): Result[AristoTxRef,AristoError] =
   ## Starts a new transaction.
   ##
   ## Example:
@@ -176,41 +325,76 @@ proc txBegin*(db: AristoDbRef): Result[AristoTxRef,(VertexID,AristoError)] =
   ##     ... continue using db ...
   ##     tx.commit()
   ##
-  if db.level != db.stack.len:
-    return err(TxStackGarbled.toVae)
+  if not db.inTxSpan:
+    ? db.txBeginPrepImpl()
+    db.txBeginExecImpl()
 
-  db.stack.add db.top.dup # push (save and use top later)
-  db.top.txUid = db.getTxUid()
+  elif not db.isCentre:
+    return err(TxSpanOffCentre)
 
-  db.txRef = AristoTxRef(
-    db:     db,
-    txUid:  db.top.txUid,
-    parent: db.txRef,
-    level:  db.stack.len)
+  else:
+    for dude in db.txSpan:
+      ? dude.txBeginPrepImpl()   # Only check, no need to restore
+    for dude in db.txSpan:
+      dude.txBeginExecImpl()
 
   ok db.txRef
 
+proc txBeginSpan*(db: AristoDbRef): Result[AristoTxRef,AristoError] =
+  ## Start a new transaction simultaneously on all descriptors accessing the
+  ## same backend.
+  ##
+  ## This function must be run on the centre argument descriptor `db` (see
+  ## comments on `aristo_desc.reCentre()` for details.) This function is
+  ## effective only when there is no transaction opened, yet. Sub-transactions
+  ## are handled by `txBegin()` accordingly.
+  ##
+  ## When starting sub-transactions outside a transaction span, these
+  ## transactions are handled independently.
+  ##
+  ## Example:
+  ## ::
+  ##    let
+  ##      tx = db.txBeginSpan    # includes all forked descriptors
+  ##      ty = db.txBegin        # includes all forked descriptors
+  ##
+  ##      tmpDb = tx.forkTx      # outside transaction span
+  ##      tz = tmpDb.txBegin     # outside transaction span
+  ##
+  if not db.isCentre:
+    return err(TxSpanOffCentre)
+
+  if 0 < db.nForked:
+    if db.level == 0:
+      if 0 < db.nTxSpan:
+        return err(TxGarbledSpan)
+      db.forked.toSeq.txSpanSet
+
+  db.txBegin
+
+
 proc rollback*(
     tx: AristoTxRef;                  # Top transaction on database
-      ): Result[void,(VertexID,AristoError)] =
+      ): Result[void,AristoError] =
   ## Given a *top level* handle, this function discards all database operations
   ## performed for this transactio. The previous transaction is returned if
   ## there was any.
   ##
-  let db = ? tx.getDbDescFromTopTx().mapErr toVae
+  let db = ? tx.getDbDescFromTopTx()
+  if not db.inTxSpan:
+    db.rollbackImpl()
+    return ok()
 
-  # Roll back to previous layer.
-  db.top = db.stack[^1]
-  db.stack.setLen(db.stack.len-1)
+  if not db.isCentre:
+    return err(TxSpanOffCentre)
 
-  db.txRef = tx.parent
-  ok()
+  db.doSpan(execFn = rollbackImpl)
 
 
 proc commit*(
     tx: AristoTxRef;                  # Top transaction on database
     dontHashify = false;              # Process/fix MPT hashes
-      ): Result[void,(VertexID,AristoError)] =
+      ): Result[void,AristoError] =
   ## Given a *top level* handle, this function accepts all database operations
   ## performed through this handle and merges it to the previous layer. The
   ## previous transaction is returned if there was any.
@@ -218,24 +402,27 @@ proc commit*(
   ## Unless the argument `dontHashify` is set `true`, the function will process
   ## Merkle Patricia Treee hashes unless there was no change to this layer.
   ## This may produce additional errors (see `hashify()`.)
-  let db = ? tx.getDbDescFromTopTx().mapErr toVae
+  ##
+  let db = ? tx.getDbDescFromTopTx()
+  if not db.inTxSpan:
+    ? db.doThisPrep(commitPrepImpl, dontHashify)
+    db.commitExecImpl()
+    return ok()
 
-  if db.top.dirty and not dontHashify:
-    discard ? db.hashify()
+  if not db.isCentre:
+    return err(TxSpanOffCentre)
 
-  # Keep top and discard layer below
-  db.top.txUid = db.stack[^1].txUid
-  db.stack.setLen(db.stack.len-1)
-
-  db.txRef = tx.parent
-  ok()
+  db.doSpan(
+    prepFn   = commitPrepImpl,
+    prepFlag = dontHashify,
+    execFn   = commitExecImpl)
 
 
 proc collapse*(
     tx: AristoTxRef;                  # Top transaction on database
     commit: bool;                     # Commit if `true`, otherwise roll back
     dontHashify = false;              # Process/fix MPT hashes
-      ): Result[void,(VertexID,AristoError)] =
+      ): Result[void,AristoError] =
   ## Iterated application of `commit()` or `rollback()` performing the
   ## something similar to
   ## ::
@@ -244,24 +431,31 @@ proc collapse*(
   ##     if db.topTx.isErr: break
   ##     tx = db.topTx.value
   ##
-  ## The `dontHashify` is treated as described for `commit()`
-  let db = ? tx.getDbDescFromTopTx().mapErr toVae
+  ## The `dontHashify` flag is treated as described for `commit()`
+  ##
+  let db = ? tx.getDbDescFromTopTx()
+  if not db.inTxSpan:
+    if commit:
+      ? db.doThisPrep(collapseCommitPrepImpl, dontHashify)
+      db.collapseCommitExecImpl()
+    else:
+      ? db.doThisPrep(collapseRollbackPrepImpl, dontHashify)
+      db.collapseRollbackExecImpl()
+    return ok()
 
-  # If commit, then leave the current layer and clear the stack, oterwise
-  # install the stack bottom.
-  if not commit:
-    db.stack[0].swap db.top
+  if not db.isCentre:
+    return err(TxSpanOffCentre)
 
-  if db.top.dirty and not dontHashify:
-    let rc = db.hashify()
-    if rc.isErr:
-      if not commit:
-        db.stack[0].swap db.top # restore
-      return err(rc.error)
-
-  db.top.txUid = 0
-  db.stack.setLen(0)
-  ok()
+  if commit:
+    db.doSpan(
+      prepFn   = collapseCommitPrepImpl,
+      prepFlag = dontHashify,
+      execFn   = collapseCommitExecImpl)
+  else:
+    db.doSpan(
+      prepFn   = collapseRollbackPrepImpl,
+      prepFlag = dontHashify,
+      execFn   = collapseRollbackExecImpl)
 
 # ------------------------------------------------------------------------------
 # Public functions: save database
@@ -272,7 +466,7 @@ proc stow*(
     persistent = false;               # Stage only unless `true`
     dontHashify = false;              # Process/fix MPT hashes
     chunkedMpt = false;               # Partial data (e.g. from `snap`)
-      ): Result[void,(VertexID,AristoError)] =
+      ): Result[void,AristoError] =
   ## If there is no backend while the `persistent` argument is set `true`,
   ## the function returns immediately with an error. The same happens if there
   ## is a pending transaction.
@@ -291,24 +485,24 @@ proc stow*(
   ## into the physical backend database and the staged data area is cleared.
   ##
   if not db.txRef.isNil:
-    return err(TxPendingTx.toVae)
+    return err(TxPendingTx)
   if 0 < db.stack.len:
-    return err(TxStackGarbled.toVae)
+    return err(TxStackGarbled)
   if persistent and not db.canResolveBackendFilter():
-    return err(TxBackendNotWritable.toVae)
+    return err(TxBackendNotWritable)
 
   if db.top.dirty and not dontHashify:
-    discard ? db.hashify()
+    discard ? db.hashify().mapErr fromVae
 
-  let fwd = ? db.fwdFilter(db.top, chunkedMpt)
+  let fwd = ? db.fwdFilter(db.top, chunkedMpt).mapErr fromVae
 
   if fwd.isValid:
     # Merge `top` layer into `roFilter`
-    ? db.merge fwd
+    ? db.merge(fwd).mapErr fromVae
     db.top = LayerRef(vGen: db.roFilter.vGen)
 
   if persistent:
-    ? db.resolveBackendFilter().mapErr toVae
+    ? db.resolveBackendFilter()
     db.roFilter = FilterRef(nil)
 
   # Delete or clear stack and clear top
@@ -322,7 +516,7 @@ proc stow*(
     stageLimit: int;                  # Policy based persistent storage
     dontHashify = false;              # Process/fix MPT hashes
     chunkedMpt = false;               # Partial data (e.g. from `snap`)
-      ): Result[void,(VertexID,AristoError)] =
+      ): Result[void,AristoError] =
   ## Variant of `stow()` with the `persistent` argument replaced by
   ## `stageLimit < max(db.roFilter.bulk, db.top.bulk)`.
   db.stow(

@@ -14,9 +14,23 @@
 {.push raises: [].}
 
 import
-  eth/common,
+  eth/[common, trie/nibbles],
   results,
   "."/[aristo_desc, aristo_hike]
+
+# ------------------------------------------------------------------------------
+# Private functions
+# ------------------------------------------------------------------------------
+
+proc fetchPayloadImpl(
+    rc: Result[Hike,(Hike,AristoError)];
+      ): Result[PayloadRef,(VertexID,AristoError)] =
+  if rc.isErr:
+    let vid =
+      if rc.error[0].legs.len == 0: VertexID(0)
+      else: rc.error[0].legs[^1].wp.vid
+    return err((vid, rc.error[1]))
+  ok rc.value.legs[^1].wp.vtx.lData
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -29,13 +43,16 @@ proc fetchPayload*(
   ## Cascaded attempt to traverse the `Aristo Trie` and fetch the value of a
   ## leaf vertex. This function is complementary to `merge()`.
   ##
-  let hike = key.hikeUp db
-  if hike.error != AristoError(0):
-    let vid =
-      if hike.legs.len == 0: VertexID(0)
-      else: hike.legs[^1].wp.vid
-    return err((vid,hike.error))
-  ok hike.legs[^1].wp.vtx.lData
+  key.hikeUp(db).fetchPayloadImpl
+
+proc fetchPayload*(
+    db: AristoDbRef;
+    root: VertexID;
+    path: Blob;
+      ): Result[PayloadRef,(VertexID,AristoError)] =
+  ## Variant of `fetchPayload()`
+  ##
+  path.initNibbleRange.hikeUp(root, db).fetchPayloadImpl
 
 # ------------------------------------------------------------------------------
 # End

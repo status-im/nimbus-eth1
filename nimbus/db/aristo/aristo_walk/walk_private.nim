@@ -19,13 +19,12 @@ import
 # ------------------------------------------------------------------------------
 
 iterator walkVtxBeImpl*[T](
-    be: T;                             # Backend descriptor
     db: AristoDbRef;                   # Database with optional backend filter
       ): tuple[n: int, vid: VertexID, vtx: VertexRef] =
   ## Generic iterator
   var n = 0
 
-  when be is VoidBackendRef:
+  when T is VoidBackendRef:
     let filter = if db.roFilter.isNil: FilterRef() else: db.roFilter
 
   else:
@@ -35,7 +34,7 @@ iterator walkVtxBeImpl*[T](
     if not db.roFilter.isNil:
       filter.sTab = db.roFilter.sTab # copy table
 
-    for (_,vid,vtx) in be.walkVtx:
+    for (_,vid,vtx) in db.backend.T.walkVtx:
       if filter.sTab.hasKey vid:
         let fVtx = filter.sTab.getOrVoid vid
         if fVtx.isValid:
@@ -54,13 +53,12 @@ iterator walkVtxBeImpl*[T](
 
 
 iterator walkKeyBeImpl*[T](
-    be: T;                             # Backend descriptor
     db: AristoDbRef;                   # Database with optional backend filter
       ): tuple[n: int, vid: VertexID, key: HashKey] =
   ## Generic iterator
   var n = 0
 
-  when be is VoidBackendRef:
+  when T is VoidBackendRef:
     let filter = if db.roFilter.isNil: FilterRef() else: db.roFilter
 
   else:
@@ -70,7 +68,7 @@ iterator walkKeyBeImpl*[T](
     if not db.roFilter.isNil:
       filter.kMap = db.roFilter.kMap # copy table
 
-    for (_,vid,key) in be.walkKey:
+    for (_,vid,key) in db.backend.T.walkKey:
       if filter.kMap.hasKey vid:
         let fKey = filter.kMap.getOrVoid vid
         if fKey.isValid:
@@ -92,7 +90,7 @@ iterator walkFilBeImpl*[T](
     be: T;                             # Backend descriptor
       ): tuple[n: int, qid: QueueID, filter: FilterRef] =
   ## Generic filter iterator
-  when be isnot VoidBackendRef:
+  when T isnot VoidBackendRef:
     mixin walkFil
 
     for (n,qid,filter) in be.walkFil:
@@ -101,10 +99,10 @@ iterator walkFilBeImpl*[T](
 
 iterator walkFifoBeImpl*[T](
     be: T;                             # Backend descriptor
-      ): (QueueID,FilterRef) =
+      ): tuple[qid: QueueID, fid: FilterRef] =
   ## Generic filter iterator walking slots in fifo order. This iterator does
   ## not depend on the backend type but may be type restricted nevertheless.
-  when be isnot VoidBackendRef:
+  when T isnot VoidBackendRef:
     proc kvp(chn: int, qid: QueueID): (QueueID,FilterRef) =
       let cid = QueueID((chn.uint64 shl 62) or qid.uint64)
       (cid, be.getFilFn(cid).get(otherwise = FilterRef(nil)))
@@ -124,6 +122,19 @@ iterator walkFifoBeImpl*[T](
               yield kvp(i, j)
             for j in scd.ctx.q[i].wrap.countDown left:
               yield kvp(i, j)
+
+
+iterator walkPairsImpl*[T](
+   db: AristoDbRef;                   # Database with top layer & backend filter
+     ): tuple[vid: VertexID, vtx: VertexRef] =
+  ## Walk over all `(VertexID,VertexRef)` in the database. Note that entries
+  ## are unsorted.
+  for (vid,vtx) in db.top.sTab.pairs:
+    if vtx.isValid:
+      yield (vid,vtx)
+  for (_,vid,vtx) in walkVtxBeImpl[T](db):
+    if vid notin db.top.sTab and vtx.isValid:
+      yield (vid,vtx)
 
 # ------------------------------------------------------------------------------
 # End

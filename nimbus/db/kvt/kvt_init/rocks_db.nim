@@ -80,10 +80,10 @@ proc endSession(hdl: PutHdlRef; db: RdbBackendRef): RdbPutHdlRef =
 
 proc getKvpFn(db: RdbBackendRef): GetKvpFn =
   result =
-    proc(key: Blob): Result[Blob,KvtError] =
+    proc(key: openArray[byte]): Result[Blob,KvtError] =
       if key.len == 0:
         return err(KeyInvalid)
-      let rc = db.rdb.get key.toOpenArray(0,key.len-1)
+      let rc = db.rdb.get key
       if rc.isErr:
         debug logTxt "getKvpFn() failed", key,
           error=rc.error[0], info=rc.error[1]

@@ -13,8 +13,13 @@
 import
   std/[bitops, sequtils, sets],
   eth/[common, rlp, trie/nibbles],
-  stew/[results, endians2],
-  "."/[aristo_constants, aristo_desc]
+  results,
+  stew/endians2,
+  "."/[aristo_constants, aristo_desc, aristo_get]
+
+type
+  ResolveVidFn = proc(vid: VertexID): HashKey
+    ## Resolve storage root vertex ID
 
 # ------------------------------------------------------------------------------
 # Private helper
@@ -38,16 +43,19 @@ proc load256(data: Blob; start: var int): Result[UInt256,AristoError] =
   start += 32
   ok val
 
-proc toPayloadBlob(node: NodeRef): Blob =
-  ## Probably lossy conversion as the storage type `kind` gets missing
-  let pyl = node.lData
+proc serialise(pyl: PayloadRef; getKey: ResolveVidFn): Blob =
+  ## Encode the data payload of the argument `pyl` as RLP `Blob` if it is of
+  ## account type, otherwise pass the data as is.
+  ##
   case pyl.pType:
   of RawData:
     result = pyl.rawBlob
   of RlpData:
     result = pyl.rlpBlob
   of AccountData:
-    let key = if pyl.account.storageID.isValid: node.key[0] else: VOID_HASH_KEY
+    let
+      vid = pyl.account.storageID
+      key = if vid.isValid: vid.getkey else: VOID_HASH_KEY
     result = rlp.encode Account(
       nonce:       pyl.account.nonce,
       balance:     pyl.account.balance,
@@ -135,6 +143,9 @@ proc append*(writer: var RlpWriter; node: NodeRef) =
     else:
       writer.append key.to(Hash256)
 
+  proc getKeyFn(key: HashKey): ResolveVidFn =
+    result = proc(vid: VertexID): HashKey = key
+
   if node.error != AristoError(0):
     writer.startList(0)
   else:
@@ -151,7 +162,7 @@ proc append*(writer: var RlpWriter; node: NodeRef) =
     of Leaf:
       writer.startList(2)
       writer.append node.lPfx.hexPrefixEncode(isleaf = true)
-      writer.append node.toPayloadBlob
+      writer.append node.lData.serialise node.key[0].getKeyFn
 
 # ---------------------
 
@@ -159,8 +170,15 @@ proc to*(node: NodeRef; T: type HashKey): T =
   ## Convert the argument `node` to the corresponding Merkle hash key
   node.encode.digestTo T
 
+proc serialise*(db: AristoDbRef; pyl: PayloadRef): Blob =
+  ## Encode the data payload of the argument `pyl` as RLP `Blob` if it is of
+  ## account type, otherwise pass the data as is.
+  ##
+  proc getKey(vid: VertexID): HashKey = db.getKey vid
+  pyl.serialise getKey
+
 # ------------------------------------------------------------------------------
-# Private functions
+# Public functions
 # ------------------------------------------------------------------------------
 
 proc blobify*(pyl: PayloadRef): Blob =

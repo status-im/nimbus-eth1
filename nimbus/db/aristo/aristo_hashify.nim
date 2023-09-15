@@ -45,7 +45,8 @@ import
   std/[algorithm, sequtils, sets, strutils, tables],
   chronicles,
   eth/common,
-  stew/[interval_set, results],
+  results,
+  stew/interval_set,
   "."/[aristo_desc, aristo_get, aristo_hike, aristo_transcode, aristo_utils,
        aristo_vid]
 
@@ -77,6 +78,7 @@ logScope:
 
 template logTxt(info: static[string]): static[string] =
   "Hashify " & info
+
 
 func getOrVoid(tab: BackVidTab; vid: VertexID): BackVidValRef =
   tab.getOrDefault(vid, BackVidValRef(nil))
@@ -371,19 +373,21 @@ proc hashify*(
   db.top.dirty = true
 
   for (lky,vid) in db.top.lTab.pairs:
-    let hike = lky.hikeUp(db)
+    let rc = lky.hikeUp db
 
     # There might be deleted entries on the leaf table. If this is the case,
     # the Merkle hashes for the vertices in the `hike` can all be compiled.
     if not vid.isValid:
-      ? db.deletedLeafHasher hike
+      ? db.deletedLeafHasher rc.to(Hike)
 
-    elif hike.error != AristoError(0):
-      return err((vid,hike.error))
+    elif rc.isErr:
+      return err((vid,rc.error[1]))
 
     else:
       # Hash as much of the `hike` as possible
-      let n = ? db.leafToRootHasher hike
+      let
+        hike = rc.value
+        n = ? db.leafToRootHasher hike
       roots.incl hike.root
 
       if 0 < n:

@@ -153,9 +153,9 @@ proc zeroAdjust(
 
   proc toHike(pfx: NibblesSeq, root: VertexID, db: AristoDbRef): Hike =
     when doLeast:
-      pfx.pathPfxPad(0).hikeUp(root, db)
+      pfx.pathPfxPad(0).hikeUp(root, db).to(Hike)
     else:
-      pfx.pathPfxPad(255).hikeUp(root, db)
+      pfx.pathPfxPad(255).hikeUp(root, db).to(Hike)
 
   if 0 < hike.legs.len:
     return ok(hike)
@@ -376,7 +376,7 @@ proc nearbyNextLeafTie(
     moveRight:static[bool];             # Direction of next vertex
       ): Result[HashID,(VertexID,AristoError)] =
   ## Variant of `nearbyNext()`, convenience wrapper
-  let hike = ? lty.hikeUp(db).nearbyNext(db, hikeLenMax, moveRight)
+  let hike = ? lty.hikeUp(db).to(Hike).nearbyNext(db, hikeLenMax, moveRight)
 
   if 0 < hike.legs.len:
     if hike.legs[^1].wp.vtx.vType != Leaf:
@@ -424,7 +424,7 @@ iterator right*(
   ## Traverse the sub-trie implied by the argument `start` with increasing
   ## order.
   var
-    hike = start.hikeUp db
+    hike = start.hikeUp(db).to(Hike)
     rc = hike.right db
   while rc.isOK:
     hike = rc.value
@@ -452,7 +452,7 @@ iterator right*(
           hike.legs.setLen(hike.legs.len - 1)
           break
       # Fall back to default method
-      hike = (key + 1).hikeUp db
+      hike = (key + 1).hikeUp(db).to(Hike)
 
     rc = hike.right db
     # End while
@@ -487,7 +487,7 @@ iterator left*(
   ## can run the function `left()` on the last returned `LiefTie` item with
   ## the `path` field decremented by `1`.
   var
-    hike = start.hikeUp db
+    hike = start.hikeUp(db).to(Hike)
     rc = hike.left db
   while rc.isOK:
     hike = rc.value
@@ -515,7 +515,7 @@ iterator left*(
           hike.legs.setLen(hike.legs.len - 1)
           break
       # Fall back to default method
-      hike = (key - 1).hikeUp db
+      hike = (key - 1).hikeUp(db).to(Hike)
 
     rc = hike.left db
     # End while

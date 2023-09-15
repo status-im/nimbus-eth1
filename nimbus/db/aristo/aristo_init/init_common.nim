@@ -19,7 +19,7 @@ const
 
 type
   BackendType* = enum
-    BackendVoid                      ## For providing backend-less constructor
+    BackendVoid = 0                  ## For providing backend-less constructor
     BackendMemory
     BackendRocksDB
 

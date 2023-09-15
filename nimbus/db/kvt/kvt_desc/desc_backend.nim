@@ -21,7 +21,7 @@ import
 
 type
   GetKvpFn* =
-    proc(key: Blob): Result[Blob,KvtError] {.gcsafe, raises: [].}
+    proc(key: openArray[byte]): Result[Blob,KvtError] {.gcsafe, raises: [].}
       ## Generic backend database retrieval function
 
   # -------------

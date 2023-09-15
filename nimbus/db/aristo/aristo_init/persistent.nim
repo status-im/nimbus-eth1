@@ -21,7 +21,7 @@
 import
   results,
   ../aristo_desc,
-  "."/[init_common, rocks_db, memory_only]
+  "."/[rocks_db, memory_only]
 export
   RdbBackendRef,
   memory_only
@@ -30,21 +30,21 @@ export
 # Public database constuctors, destructor
 # ------------------------------------------------------------------------------
 
-proc newAristoDbRef*(
-    backend: static[BackendType];
+proc init*[W: MemOnlyBackend|RdbBackendRef](
+    T: type AristoDbRef;
+    B: type W;
     basePath: string;
     qidLayout = DefaultQidLayoutRef;
-      ): Result[AristoDbRef, AristoError] =
-  ## Generic constructor, `basePath` argument is ignored for `BackendNone` and
-  ## `BackendMemory`  type backend database. Also, both of these backends
-  ## aways succeed initialising.
+      ): Result[T, AristoError] =
+  ## Generic constructor, `basePath` argument is ignored for memory backend
+  ## databases (which also unconditionally succeed initialising.)
   ##
   ## If the `qidLayout` argument is set `QidLayoutRef(nil)`, the a backend
   ## database will not provide filter history management. Providing a different
   ## scheduler layout shoud be used with care as table access with different
   ## layouts might render the filter history data unmanageable.
   ##
-  when backend == BackendRocksDB:
+  when B is RdbBackendRef:
     let
       be = ? rocksDbBackend(basePath, qidLayout)
       vGen = block:
@@ -54,24 +54,8 @@ proc newAristoDbRef*(
           return err(rc.error)
         rc.value
     ok AristoDbRef(top: LayerRef(vGen: vGen), backend: be)
-
-  elif backend == BackendVoid:
-    {.error: "Use BackendNone.init() without path argument".}
-
-  elif backend == BackendMemory:
-    {.error: "Use BackendMemory.init() without path argument".}
-
   else:
-    {.error: "Unknown/unsupported Aristo DB backend".}
-
-# -----------------
-
-proc to*[W: RdbBackendRef](
-    db: AristoDbRef;
-    T: type W;
-      ): T =
-  ## Handy helper for lew-level access to some backend functionality
-  db.backend.T
+    ok AristoDbRef.init(B, qidLayout)
 
 # ------------------------------------------------------------------------------
 # End

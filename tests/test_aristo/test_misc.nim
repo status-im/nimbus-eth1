@@ -258,7 +258,7 @@ proc testVidRecycleLists*(noisy = true; seed = 42): bool =
   ## Transcode VID lists held in `AristoDb` descriptor
   ##
   var td = TesterDesc.init seed
-  let db = newAristoDbRef BackendVoid
+  let db = AristoDbRef.init()
 
   # Add some randum numbers
   block:
@@ -284,7 +284,7 @@ proc testVidRecycleLists*(noisy = true; seed = 42): bool =
 
     # Deserialise
     let
-      db1 = newAristoDbRef BackendVoid
+      db1 = AristoDbRef.init()
       rc = dbBlob.deblobify seq[VertexID]
     xCheckRc rc.error == 0
     db1.top.vGen = rc.value
