@@ -39,4 +39,8 @@ type
     TxStackGarbled
     TxStackUnderflow
 
+    # Functions from `kvt_desc`
+    MustBeOnCentre
+    NotAllowedOnCentre
+
 # End
