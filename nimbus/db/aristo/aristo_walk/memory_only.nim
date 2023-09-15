@@ -31,7 +31,7 @@ iterator walkVtxBe*[T: MemBackendRef|VoidBackendRef](
   ## Iterate over filtered memory backend or backend-less vertices. This
   ## function depends on the particular backend type name which must match
   ## the backend descriptor.
-  for (n,vid,vtx) in db.backend.T.walkVtxBeImpl db:
+  for (n,vid,vtx) in walkVtxBeImpl[T](db):
     yield (n,vid,vtx)
 
 iterator walkKeyBe*[T: MemBackendRef|VoidBackendRef](
@@ -39,22 +39,33 @@ iterator walkKeyBe*[T: MemBackendRef|VoidBackendRef](
    db: AristoDbRef;
      ): tuple[n: int, vid: VertexID, key: HashKey] =
   ## Similar to `walkVtxBe()` but for keys.
-  for (n,vid,key) in db.backend.T.walkKeyBeImpl db:
+  for (n,vid,key) in walkKeyBeImpl[T](db):
     yield (n,vid,key)
 
-iterator walkFilBe*(
-   be: MemBackendRef|VoidBackendRef;
+iterator walkFilBe*[T: MemBackendRef|VoidBackendRef](
+   be: T;
      ): tuple[n: int, qid: QueueID, filter: FilterRef] =
   ## Iterate over backend filters.
-  for (n,qid,filter) in be.walkFilBeImpl:
+  for (n,qid,filter) in walkFilBeImpl[T](be):
     yield (n,qid,filter)
 
-iterator walkFifoBe*(
-   be: MemBackendRef|VoidBackendRef;
-     ): (QueueID,FilterRef) =
+iterator walkFifoBe*[T: MemBackendRef|VoidBackendRef](
+   be: T;
+     ):  tuple[qid: QueueID, fid: FilterRef] =
   ## Walk filter slots in fifo order.
-  for (qid,filter) in be.walkFifoBeImpl:
+  for (qid,filter) in walkFifoBeImpl[T](be):
     yield (qid,filter)
+
+# -----------
+
+iterator walkPairs*[T: MemBackendRef|VoidBackendRef](
+   _: type T;
+   db: AristoDbRef;
+     ): tuple[vid: VertexID, vtx: VertexRef] =
+  ## Walk over all `(VertexID,VertexRef)` in the database. Note that entries
+  ## are unsorted.
+  for (vid,vtx) in walkPairsImpl[T](db):
+    yield (vid,vtx)
 
 # ------------------------------------------------------------------------------
 # End
