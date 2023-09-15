@@ -17,7 +17,6 @@ import
   std/tables,
   eth/common,
   rocksdb,
-  stint,
   stew/endians2,
   ../../aristo_desc,
   ../init_common

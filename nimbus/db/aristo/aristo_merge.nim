@@ -69,6 +69,20 @@ proc `xPfx=`(vtx: VertexRef, val: NibblesSeq) =
 # Private helpers
 # ------------------------------------------------------------------------------
 
+proc to(
+    rc: Result[Hike,AristoError];
+    T: type Result[bool,AristoError];
+      ): T =
+  ## Return code converter
+  if rc.isOk:
+    ok true
+  elif rc.error == MergeLeafPathCachedAlready:
+    ok false
+  else:
+    err(rc.error)
+
+# -----------
+
 proc clearMerkleKeys(
     db: AristoDbRef;                   # Database, top layer
     hike: Hike;                        # Implied vertex IDs to clear hashes for
@@ -566,13 +580,12 @@ proc merge*(
     leafTie: LeafTie;                  # Leaf item to add to the database
     payload: PayloadRef;               # Payload value
       ): Result[Hike,AristoError] =
-  ## Merge the argument `leaf` key-value-pair into the top level vertex table
-  ## of the database `db`. The field `pathKey` of the `leaf` argument is used
-  ## to index the leaf vertex on the `Patricia Trie`. The field `payload` is
-  ## stored with the leaf vertex in the database unless the leaf vertex exists
-  ## already.
+  ## Merge the argument `leafTie` key-value-pair into the top level vertex
+  ## table of the database `db`. The field `path` of the `leafTie` argument is
+  ## used to index the leaf vertex on the `Patricia Trie`. The field `payload`
+  ## is stored with the leaf vertex in the database unless the leaf vertex
+  ## exists already.
   ##
-
   # Check whether the leaf is on the database and payloads match
   block:
     let vid = db.top.lTab.getOrVoid leafTie
@@ -626,17 +639,35 @@ proc merge*(
 
 proc merge*(
     db: AristoDbRef;                   # Database, top layer
+    root: VertexID;                    # MPT state root
+    path: openArray[byte];             # Leaf item to add to the database
+    payload: PayloadRef;               # Payload value
+      ): Result[bool,AristoError] =
+  ## Variant of `merge()` for `(root,path)` arguments instead of a `LeafTie`
+  ## object.
+  let lty = LeafTie(root: root, path: ? path.pathToTag)
+  db.merge(lty, payload).to(typeof result)
+
+proc merge*(
+    db: AristoDbRef;                   # Database, top layer
+    root: VertexID;                    # MPT state root
+    path: openArray[byte];             # Leaf item to add to the database
+    data: openArray[byte];             # Payload value
+      ): Result[bool,AristoError] =
+  ## Variant of `merge()` for `(root,path)` arguments instead of a `LeafTie`
+  ## object. The payload argument `data` will be stored as `RlpData` if
+  ## the `root` argument is `VertexID(1)`, and as `RawData` otherwise.
+  let pyl = if root == VertexID(1): PayloadRef(pType: RlpData, rlpBlob: @data)
+            else:                   PayloadRef(pType: RawData, rawBlob: @data)
+  db.merge(root, path, pyl)
+
+proc merge*(
+    db: AristoDbRef;                   # Database, top layer
     leaf: LeafTiePayload               # Leaf item to add to the database
       ): Result[bool,AristoError] =
   ## Variant of `merge()`. This function will not indicate if the leaf
   ## was cached, already.
-  let rc = db.merge(leaf.leafTie, leaf.payload)
-  if rc.isOk:
-    ok true
-  elif rc.error == MergeLeafPathCachedAlready:
-    ok false
-  else:
-    err(rc.error)
+  db.merge(leaf.leafTie, leaf.payload).to(typeof result)
 
 proc merge*(
     db: AristoDbRef;                   # Database, top layer
@@ -658,22 +689,18 @@ proc merge*(
 proc merge*(
     db: AristoDbRef;                   # Database, top layer
     path: HashID;                      # Path into database
-    rlpData: Blob;                     # RLP encoded payload data
+    rlpData: openArray[byte];          # RLP encoded payload data
       ): Result[bool,AristoError] =
-  ## Variant of `merge()` for storing a single item. This function stores the
-  ## arguments as a `LeafTiePayload` type item on the main tree with root
-  ## vertex ID 1. This is handy when used on a temporary backendless `Aristo`
-  ## database. Having merged some leafs and sunsequently hashified (see
-  ## `hashify()`), the state root is avaliable as Merkle hash key for
-  ## vertex ID 1 (see `getKey()`.)
+  ## Variant of `merge()` for storing a single item with implicte state root
+  ## argument `VertexID(1)`.
   ##
-  db.merge LeafTiePayload(
-    leafTie: LeafTie(
+  db.merge(
+    LeafTie(
       root:    VertexID(1),
       path:    path),
-    payload: PayloadRef(
+    PayloadRef(
       pType:   RlpData,
-      rlpBlob: rlpData))
+      rlpBlob: @rlpData)).to(typeof result)
 
 # ---------------------
 

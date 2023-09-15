@@ -175,7 +175,7 @@ func `-`*(lty: LeafTie, n: int): LeafTie =
 func to*(hid: HashID; T: type Hash256): T =
   result.data = hid.UInt256.toBytesBE
 
-proc to*(hid: HashID; T: type HashKey): T =
+func to*(hid: HashID; T: type HashKey): T =
   hid.UInt256.toBytesBE.T
 
 func to*(key: HashKey; T: type HashID): T =
@@ -197,6 +197,10 @@ func to*(key: Hash256; T: type HashID): T =
 func to*(key: HashKey; T: type Blob): T =
   ## Representation of a `HashKey` as `Blob` (preserving full information)
   key.ByteArray32.toSeq
+
+func to*(hid: HashID; T: type Blob): T =
+  ## Representation of a `HashID` as `Blob` (preserving full information)
+  hid.UInt256.toBytesBE.toSeq
 
 func to*(key: HashKey; T: type NibblesSeq): T =
   ## Representation of a `HashKey` as `NibbleSeq` (preserving full information)
