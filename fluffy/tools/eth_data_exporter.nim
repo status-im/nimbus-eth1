@@ -540,7 +540,7 @@ when isMainModule:
         quit 1
 
   of ExporterCmd.beacon:
-    let (cfg, forkDigests) = getBeaconData()
+    let (cfg, forkDigests, _) = getBeaconData()
 
     case config.beaconCmd
     of BeaconCmd.exportLCBootstrap:

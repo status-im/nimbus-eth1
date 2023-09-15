@@ -389,7 +389,7 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
 
   setupLogging(config.logLevel, config.logStdout, none(OutFile))
 
-  notice "Launching Nimbus beacon chain bridge",
+  notice "Launching fluffy beacon chain light bridge",
     cmdParams = commandLineParams(), config
 
   let metadata = loadEth2Network(config.eth2Network)

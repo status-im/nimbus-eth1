@@ -15,18 +15,18 @@ import
 
 export net, conf
 
-proc defaultVerifiedProxyDataDir*(): string =
+proc defaultDataDir*(): string =
   let dataDir = when defined(windows):
-    "AppData" / "Roaming" / "FluffyBeaconChainBridge"
+    "AppData" / "Roaming" / "FluffyBeaconLCBridge"
   elif defined(macosx):
-    "Library" / "Application Support" / "FluffyBeaconChainBridge"
+    "Library" / "Application Support" / "FluffyBeaconLCBridge"
   else:
-    ".cache" / "fluffy-beacon-chain-bridge"
+    ".cache" / "fluffy-beacon-lc-bridge"
 
   getHomeDir() / dataDir
 
 const
-  defaultDataVerifiedProxyDirDesc* = defaultVerifiedProxyDataDir()
+  defaultDataDirDesc* = defaultDataDir()
 
 type
   Web3UrlKind* = enum
@@ -58,8 +58,8 @@ type BeaconBridgeConf* = object
   # Storage
   dataDir* {.
     desc: "The directory where beacon_lc_bridge will store all data"
-    defaultValue: defaultVerifiedProxyDataDir()
-    defaultValueDesc: $defaultDataVerifiedProxyDirDesc
+    defaultValue: defaultDataDir()
+    defaultValueDesc: $defaultDataDirDesc
     abbr: "d"
     name: "data-dir" .}: OutDir
 

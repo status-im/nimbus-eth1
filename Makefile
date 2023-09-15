@@ -66,6 +66,7 @@ TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(TOOLS))
 
 # Fluffy debugging tools + testing tools
 FLUFFY_TOOLS := \
+	beacon_chain_bridge \
 	beacon_lc_bridge \
 	eth_data_exporter \
 	content_verifier \
@@ -73,6 +74,7 @@ FLUFFY_TOOLS := \
 	portalcli
 FLUFFY_TOOLS_DIRS := \
 	fluffy/tools/beacon_lc_bridge \
+	fluffy/tools/beacon_chain_bridge \
 	fluffy/tools
 # comma-separated values for the "clean" target
 FLUFFY_TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(FLUFFY_TOOLS))

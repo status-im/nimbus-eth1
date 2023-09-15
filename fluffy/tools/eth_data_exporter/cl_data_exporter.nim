@@ -13,13 +13,17 @@ import
   eth/async_utils,
   beacon_chain/networking/network_metadata,
   beacon_chain/spec//eth2_apis/rest_beacon_client,
+  beacon_chain/beacon_clock,
   ../../network/beacon_light_client/beacon_light_client_content,
   ./exporter_common
+
+export beacon_clock
 
 const
   restRequestsTimeout = 30.seconds
 
-proc getBeaconData*(): (RuntimeConfig, ref ForkDigests) {.raises: [IOError].} =
+proc getBeaconData*(): (
+    RuntimeConfig, ref ForkDigests, BeaconClock) {.raises: [IOError].} =
   let
     metadata = getMetadataForNetwork("mainnet")
     genesisState =
@@ -35,7 +39,10 @@ proc getBeaconData*(): (RuntimeConfig, ref ForkDigests) {.raises: [IOError].} =
     forkDigests = newClone ForkDigests.init(
       metadata.cfg, genesis_validators_root)
 
-  return (metadata.cfg, forkDigests)
+    beaconClock = BeaconClock.init(getStateField(genesisState[], genesis_time))
+
+
+  return (metadata.cfg, forkDigests, beaconClock)
 
 func forkDigestAtEpoch(
     forkDigests: ForkDigests, epoch: Epoch, cfg: RuntimeConfig): ForkDigest =
