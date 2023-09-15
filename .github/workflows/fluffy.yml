@@ -259,7 +259,7 @@ jobs:
         if: runner.os == 'Windows'
         run: |
           gcc --version
-          DEFAULT_MAKE_FLAGS="-j${ncpu}"
+          DEFAULT_MAKE_FLAGS="-j1"
           mingw32-make ${DEFAULT_MAKE_FLAGS} fluffy
           build/fluffy.exe --help
           find . -type d -name ".git" -exec rm -rf {} +
