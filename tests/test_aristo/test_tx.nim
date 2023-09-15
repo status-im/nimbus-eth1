@@ -18,7 +18,8 @@ import
   unittest2,
   stew/endians2,
   ../../nimbus/db/aristo/[
-    aristo_check, aristo_delete, aristo_desc, aristo_get, aristo_merge],
+    aristo_check, aristo_debug, aristo_delete, aristo_desc, aristo_get,
+    aristo_merge],
   ../../nimbus/db/[aristo, aristo/aristo_init/persistent],
   ./test_helpers
 
@@ -99,7 +100,7 @@ proc innerCleanUp(db: AristoDbRef): bool {.discardable.}  =
   let rx = db.txTop()
   if rx.isOk:
     let rc = rx.value.collapse(commit=false)
-    xCheckRc rc.error == (0,0)
+    xCheckRc rc.error == 0
   db.finish(flush=true)
 
 proc saveToBackend(
@@ -121,7 +122,7 @@ proc saveToBackend(
   # Commit and hashify the current layer
   block:
     let rc = tx.commit()
-    xCheckRc rc.error == (0,0)
+    xCheckRc rc.error == 0
 
   # Make sure MPT hashes are OK
   xCheck db.top.dirty == false
@@ -141,7 +142,7 @@ proc saveToBackend(
   # Commit and save to backend
   block:
     let rc = tx.commit()
-    xCheckRc rc.error == (0,0)
+    xCheckRc rc.error == 0
 
   # Make sure MPT hashes are OK
   xCheck db.top.dirty == false
@@ -152,7 +153,7 @@ proc saveToBackend(
 
   block:
     let rc = db.stow(stageLimit=MaxFilterBulk, chunkedMpt=chunkedMpt)
-    xCheckRc rc.error == (0,0)
+    xCheckRc rc.error == 0
 
   block:
     let rc = db.checkBE(relax=relax)
@@ -178,7 +179,7 @@ proc saveToBackendWithOops(
   # Commit and hashify the current layer
   block:
     let rc = tx.commit()
-    xCheckRc rc.error == (0,0)
+    xCheckRc rc.error == 0
 
   # Make sure MPT hashes are OK
   xCheck db.top.dirty == false
@@ -194,7 +195,7 @@ proc saveToBackendWithOops(
   # Commit and save to backend
   block:
     let rc = tx.commit()
-    xCheckRc rc.error == (0,0)
+    xCheckRc rc.error == 0
 
   # Make sure MPT hashes are OK
   xCheck db.top.dirty == false
@@ -205,7 +206,7 @@ proc saveToBackendWithOops(
 
   block:
     let rc = db.stow(stageLimit=MaxFilterBulk, chunkedMpt=chunkedMpt)
-    xCheckRc rc.error == (0,0)
+    xCheckRc rc.error == 0
 
   # Update layers to original level
   tx = db.txBegin().value.to(AristoDbRef).txBegin().value
@@ -458,6 +459,242 @@ proc testTxMergeProofAndKvpList*(
     when true and false:
       noisy.say "***", "proofs(6) <", n, "/", lstLen-1, ">",
         " groups=", count, " proved=", proved.pp, " merged=", merged.pp
+  true
+
+
+proc testTxSpanMultiInstances*(
+    noisy: bool;
+    genBase = 42;
+      ): bool =
+  ## Test multi tx behaviour with span synchronisation
+  ##
+  let
+    db = AristoDbRef.init() # no backend needed
+  var
+    dx: seq[AristoDbRef]
+
+  var genID = genBase
+  proc newHashID(): HashID =
+    result = HashID(genID.u256)
+    genID.inc
+  proc newPayload(): Blob =
+    result = @[genID].encode
+    genID.inc
+
+  proc show(serial = -42) =
+    var s = ""
+    if 0 <= serial:
+      s &= "n=" & $serial
+    s &= "\n   db level=" & $db.level
+    s &= " inTxSpan=" & $db.inTxSpan
+    s &= " nForked=" & $db.nForked
+    s &= " nTxSpan=" & $db.nTxSpan
+    s &= "\n    " & db.pp
+    for n,w in dx:
+      s &= "\n"
+      s &= "\n   dx[" & $n & "]"
+      s &= " level=" & $w.level
+      s &= " inTxSpan=" & $w.inTxSpan
+      s &= "\n    " & w.pp
+    noisy.say "***", s, "\n"
+
+  # Add some data and first transaction
+  block:
+    let rc = db.merge(newHashID(), newPayload())
+    xCheckRc rc.error == 0
+  block:
+    let rc = db.checkTop(relax=true)
+    xCheckRc rc.error == (0,0)
+  xCheck not db.inTxSpan
+
+  # Fork and populate two more instances
+  for _ in 1 .. 2:
+    block:
+      let rc = db.forkTop
+      xCheckRc rc.error == 0
+      dx.add rc.value
+    block:
+      let rc = dx[^1].merge(newHashID(), newPayload())
+      xCheckRc rc.error == 0
+    block:
+      let rc = db.checkTop(relax=true)
+      xCheckRc rc.error == (0,0)
+    xCheck not dx[^1].inTxSpan
+
+  #show(1)
+
+  # Span transaction on a non-centre instance fails but succeeds on centre
+  block:
+    let rc = dx[0].txBeginSpan
+    xCheck rc.isErr
+    xCheck rc.error == TxSpanOffCentre
+  block:
+    let rc = db.txBeginSpan
+    xCheckRc rc.error == 0
+
+  # Now all instances have transactions level 1
+  xCheck db.level == 1
+  xCheck db.inTxSpan
+  xCheck db.nForked == dx.len
+  xCheck db.nTxSpan == dx.len + 1
+  for n in 0 ..< dx.len:
+    xCheck dx[n].level == 1
+    xCheck dx[n].inTxSpan
+
+  #show(2)
+
+  # Add more data ..
+  block:
+    let rc = db.merge(newHashID(), newPayload())
+    xCheckRc rc.error == 0
+  for n in 0 ..< dx.len:
+    let rc = dx[n].merge(newHashID(), newPayload())
+    xCheckRc rc.error == 0
+
+  #show(3)
+
+  # Span transaction on a non-centre instance fails but succeeds on centre
+  block:
+    let rc = dx[0].txBeginSpan
+    xCheck rc.isErr
+    xCheck rc.error == TxSpanOffCentre
+  block:
+    let rc = db.txBegin
+    xCheckRc rc.error == 0
+
+  # Now all instances have transactions level 2
+  xCheck db.level == 2
+  xCheck db.inTxSpan
+  xCheck db.nForked == dx.len
+  xCheck db.nTxSpan == dx.len + 1
+  for n in 0 ..< dx.len:
+    xCheck dx[n].level == 2
+    xCheck dx[n].inTxSpan
+
+  #show(4)
+
+  # Fork first transaction from a forked instance
+  block:
+    let rc = dx[0].txTop.value.parent.forkTx
+    xCheckRc rc.error == 0
+    dx.add rc.value
+
+  # No change for the other instances
+  xCheck db.level == 2
+  xCheck db.inTxSpan
+  xCheck db.nForked == dx.len
+  for n in 0 ..< dx.len - 1:
+    xCheck dx[n].level == 2
+    xCheck dx[n].inTxSpan
+
+  # This here has changed
+  xCheck db.nTxSpan == dx.len
+  xCheck not dx[^1].inTxSpan
+  xCheck dx[^1].level == 1
+
+  # Add transaction outside tx span
+  block:
+    let rc = dx[^1].txBegin
+    xCheckRc rc.error == 0
+  xCheck not dx[^1].inTxSpan
+  xCheck dx[^1].level == 2
+
+  # No change for the other instances
+  xCheck db.level == 2
+  xCheck db.inTxSpan
+  xCheck db.nForked == dx.len
+  xCheck db.nTxSpan == dx.len
+  for n in 0 ..< dx.len - 1:
+    xCheck dx[n].level == 2
+    xCheck dx[n].inTxSpan
+
+  #show(5)
+
+  # Commit on a non-centre span instance fails but succeeds on centre
+  block:
+    let rc = dx[0].txTop.value.commit
+    xCheck rc.isErr
+    xCheck rc.error == TxSpanOffCentre
+  block:
+    let rc = db.txTop.value.commit
+    xCheckRc rc.error == 0
+  block:
+    let rc = db.check() # full check as commit hashifies
+    xCheckRc rc.error == (0,0)
+  for n in 0 ..< dx.len - 1:
+    let rc = dx[n].check()
+    xCheckRc rc.error == (0,0)
+
+  # Verify changes for the span instances
+  xCheck db.level == 1
+  xCheck db.inTxSpan
+  xCheck db.nForked == dx.len
+  xCheck db.nTxSpan == dx.len
+  for n in 0 ..< dx.len - 1:
+    xCheck dx[n].level == 1
+    xCheck dx[n].inTxSpan
+
+  # No changes for the instance outside tx span
+  xCheck not dx[^1].inTxSpan
+  xCheck dx[^1].level == 2
+
+  #show(6)
+
+  # Destroy one instance from the span instances
+  block:
+    let
+      dxTop = dx.pop
+      rc = dx[^1].forget
+    xCheckRc rc.error == 0
+    dx[^1] = dxTop
+
+  # Verify changes for the span instances
+  xCheck db.level == 1
+  xCheck db.inTxSpan
+  xCheck db.nForked == dx.len
+  xCheck db.nTxSpan == dx.len
+  for n in 0 ..< dx.len - 1:
+    xCheck dx[n].level == 1
+    xCheck dx[n].inTxSpan
+
+  # No changes for the instance outside tx span
+  xCheck not dx[^1].inTxSpan
+  xCheck dx[^1].level == 2
+
+  # Finish up span instances
+  block:
+    let rc = db.txTop.value.collapse(commit = true)
+    xCheckRc rc.error == 0
+  block:
+    let rc = db.check() # full check as commit hashifies
+    xCheckRc rc.error == (0,0)
+  for n in 0 ..< dx.len - 1:
+    let rc = dx[n].check()
+    xCheckRc rc.error == (0,0)
+
+  # No span instances anymore
+  xCheck db.level == 0
+  xCheck not db.inTxSpan
+  xCheck db.nForked == dx.len
+  xCheck db.nTxSpan == 0
+  for n in 0 ..< dx.len - 1:
+    xCheck dx[n].level == 0
+    xCheck not dx[n].inTxSpan
+
+  #show(7)
+
+  # Clean up
+  block:
+    let rc = db.forgetOthers()
+    xCheckRc rc.error == 0
+    dx.setLen(0)
+  xCheck db.level == 0
+  xCheck not db.inTxSpan
+  xCheck db.nForked == 0
+  xCheck db.nTxSpan == 0
+
+  #show(8)
+
   true
 
 # ------------------------------------------------------------------------------

@@ -36,6 +36,9 @@ export
   aristo_constants, desc_error, desc_identifiers, desc_structural
 
 type
+  AristoDudes* = HashSet[AristoDbRef]
+    ## Descriptor peers asharing the same backend
+
   AristoTxRef* = ref object
     ## Transaction descriptor
     db*: AristoDbRef                  ## Database descriptor
@@ -46,7 +49,8 @@ type
   DudesRef = ref object
     case rwOk: bool
     of true:
-      roDudes: HashSet[AristoDbRef]   ## Read-only peers
+      roDudes: AristoDudes            ## Read-only peers
+      txDudes: AristoDudes            ## Other transaction peers
     else:
       rwDb: AristoDbRef               ## Link to writable descriptor
 
@@ -153,7 +157,10 @@ func getCentre*(db: AristoDbRef): AristoDbRef =
   else:
     db.dudes.rwDb
 
-proc reCentre*(db: AristoDbRef) =
+proc reCentre*(
+    db: AristoDbRef;
+    force = false;
+      ): Result[void,AristoError] =
   ## Re-focus the `db` argument descriptor so that it becomes the centre.
   ## Nothing is done if the `db` descriptor is the centre, already.
   ##
@@ -167,8 +174,22 @@ proc reCentre*(db: AristoDbRef) =
   ## accessing the same backend database. Descriptors where `isCentre()`
   ## returns `false` must be single destructed with `forget()`.
   ##
+  ## If there is an open transaction spanning several descriptors, the `force`
+  ## flag must be set `true` (unless the argument `db` is centre, already.) The
+  ## argument `db` must be covered by the transaction span. Then the re-centred
+  ## descriptor will also be the centre of the transaction span.
+  ##
   if not db.isCentre:
     let parent = db.dudes.rwDb
+
+    # Check for multi-transactions
+    if 0 < parent.dudes.txDudes.len:
+      if not force:
+        return err(CentreTxLocked)
+      if db notin parent.dudes.txDudes:
+        return err(OutsideTxSpan)
+      if db.txRef.isNil or parent.txRef.isNil:
+        return err(GarbledTxSpan)
 
     # Steal dudes list from parent, make the rw-parent a read-only dude
     db.dudes = parent.dudes
@@ -185,6 +206,63 @@ proc reCentre*(db: AristoDbRef) =
     # Update dudes list (parent was alredy updated)
     db.dudes.roDudes.incl parent
 
+    # Update transaction span
+    if 0 < db.dudes.txDudes.len:
+      db.dudes.txDudes.excl db
+      db.dudes.txDudes.incl parent
+
+  ok()
+
+
+iterator txSpan*(db: AristoDbRef): AristoDbRef =
+  ## Interate over all descriptors belonging to the transaction span if there
+  ## is any. Note that the centre descriptor is aways part of the transaction
+  ## if there is any.
+  ##
+  if not db.dudes.isNil:
+    let parent = db.getCentre
+    if 0 < parent.dudes.txDudes.len:
+      yield parent
+      for dude in parent.dudes.txDudes.items:
+        yield dude
+
+func nTxSpan*(db: AristoDbRef): int =
+  ## Returns the number of descriptors belonging to the transaction span. This
+  ## function is a fast version of `db.txSpan.toSeq.len`. Note that the
+  ## returned numbe is never `1` (either `0` or at least `2`.)
+  ##
+  if not db.dudes.isNil:
+    let parent = db.getCentre
+    if 0 < parent.dudes.txDudes.len:
+      return 1 + db.getCentre.dudes.txDudes.len
+
+func inTxSpan*(db: AristoDbRef): bool =
+  ## Returns `true` if the argument descriptor `db` belongs to the transaction
+  ## span if there is any. Note that the centre descriptor is aways part of
+  ## the transaction if there is any.
+  ##
+  if not db.isCentre:
+    return db in db.dudes.rwDb.dudes.txDudes
+  elif not db.dudes.isNil:
+    return 0 < db.dudes.txDudes.len
+  false
+
+proc txSpanSet*(dudes: openArray[AristoDbRef]) =
+  ## Define the set of argument descriptors as transaction span.
+  ##
+  if 0 < dudes.len:
+    let parent = dudes[0].getCentre
+    if not parent.dudes.isNil:
+      parent.dudes.txDudes = dudes.toHashSet - [parent].toHashSet
+
+proc txSpanClear*(db: AristoDbRef) =
+  ## Remove all descriptors from the transaction span.
+  ##
+  if not db.isCentre:
+    db.dudes.rwDb.dudes.txDudes.clear
+  elif not db.dudes.isNil:
+    db.dudes.txDudes.clear
+      
 
 proc fork*(
     db: AristoDbRef;
@@ -235,8 +313,7 @@ iterator forked*(db: AristoDbRef): AristoDbRef =
 func nForked*(db: AristoDbRef): int =
   ## Returns the number of non centre descriptors (see comments on `reCentre()`
   ## for details.) This function is a fast version of `db.forked.toSeq.len`.
-  let parent = db.getCentre
-  if not parent.dudes.isNil:
+  if not db.dudes.isNil:
     return db.getCentre.dudes.roDudes.len
 
 
@@ -255,7 +332,8 @@ proc forget*(db: AristoDbRef): Result[void,AristoError] =
   if parent.dudes.roDudes.len < 2:
     parent.dudes = DudesRef(nil)
   else:
-    db.dudes.rwDb.dudes.roDudes.excl db
+    parent.dudes.roDudes.excl db
+    parent.dudes.txDudes.excl db # might be empty, anyway
 
   # Clear descriptor so it would not do harm if used wrongly
   db[] = AristoDbObj(top: LayerRef())

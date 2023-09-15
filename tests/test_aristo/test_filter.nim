@@ -177,7 +177,7 @@ proc dbTriplet(w: LeafQuartet; rdbPath: string): Result[DbTriplet,AristoError] =
       return err(report.error)
     let rc = db.stow(persistent=true)
     if rc.isErr:
-      check rc.error == (0,0)
+      check rc.error == 0
       return
 
   let dx = [db, db.forkTop.value, db.forkTop.value]
@@ -564,22 +564,24 @@ proc testDistributedAccess*(
       # Clause (9) from `aristo/README.md` example
       block:
         let rc = db1.stow(persistent=true)
-        xCheckRc rc.error == (0,0)
+        xCheckRc rc.error == 0
       xCheck db1.roFilter == FilterRef(nil)
       xCheck db2.roFilter == db3.roFilter
 
       block:
         let rc = db2.stow(persistent=false)
-        xCheckRc rc.error == (0,0):
+        xCheckRc rc.error == 0:
           noisy.say "*** testDistributedAccess (3)", "n=", n, "db2".dump db2
       xCheck db1.roFilter == FilterRef(nil)
       xCheck db2.roFilter != db3.roFilter
 
       # Clause (11) from `aristo/README.md` example
-      db2.reCentre()
+      block:
+        let rc = db2.reCentre()
+        xCheckRc rc.error == 0
       block:
         let rc = db2.stow(persistent=true)
-        xCheckRc rc.error == (0,0)
+        xCheckRc rc.error == 0
       xCheck db2.roFilter == FilterRef(nil)
 
       # Check/verify backends
@@ -612,17 +614,19 @@ proc testDistributedAccess*(
         dy.cleanUp()
 
       # Build clause (12) from `aristo/README.md` example
-      db2.reCentre()
+      block:
+        let rc = db2.reCentre()
+        xCheckRc rc.error == 0
       block:
         let rc = db2.stow(persistent=true)
-        xCheckRc rc.error == (0,0)
+        xCheckRc rc.error == 0
       xCheck db2.roFilter == FilterRef(nil)
       xCheck db1.roFilter == db3.roFilter
 
       # Clause (13) from `aristo/README.md` example
       block:
         let rc = db1.stow(persistent=false)
-        xCheckRc rc.error == (0,0)
+        xCheckRc rc.error == 0
 
       # Clause (14) from `aristo/README.md` check
       let c11Fil1_eq_db1RoFilter = c11Filter1.isDbEq(db1.roFilter, db1, noisy)
@@ -763,7 +767,7 @@ proc testFilterBacklog*(
       xCheckRc rc.error == 0
     block:
       let rc = db.stow(persistent=true)
-      xCheckRc rc.error == (0,0)
+      xCheckRc rc.error == 0
     let validateFifoOk = be.validateFifo(serial=n, hashesOk=true)
     xCheck validateFifoOk
 

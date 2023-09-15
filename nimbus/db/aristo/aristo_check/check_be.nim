@@ -158,7 +158,9 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
         discard vids.merge Interval[VertexID,uint64].new(vid,vid)
 
     # Check cascaded fifos
-    if fifos and not db.backend.filters.isNil:
+    if fifos and
+       not db.backend.isNil and
+       not db.backend.filters.isNil:
       var lastTrg = db.getKeyUBE(VertexID(1)).get(otherwise = VOID_HASH_KEY)
       for (qid,filter) in db.backend.T.walkFifoBe: # walk in fifo order
         if filter.src != lastTrg:

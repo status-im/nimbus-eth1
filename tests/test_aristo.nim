@@ -89,6 +89,9 @@ proc miscRunner(
     test &"High level cascaded fifos API (sample size: {qidSampleSize})":
       check noisy.testFilterFifo(sampleSize = qidSampleSize)
 
+    test "Multi instances transactions":
+      check noisy.testTxSpanMultiInstances()
+
 
 proc accountsRunner(
     noisy = true;

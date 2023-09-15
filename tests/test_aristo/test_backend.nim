@@ -288,7 +288,7 @@ proc testBackendConsistency*(
     # Provide filter, store filter on permanent BE, and register filter digest
     block:
       let rc = mdb.stow(persistent=false, dontHashify=true, chunkedMpt=true)
-      xCheckRc rc.error == (0,0)
+      xCheckRc rc.error == 0
       let collectFilterOk = rdb.collectFilter(mdb.roFilter, filTab, noisy)
       xCheck collectFilterOk
 
@@ -296,11 +296,11 @@ proc testBackendConsistency*(
     block:
       #noisy.say "***", "db-dump\n    ", mdb.pp
       let rc = mdb.stow(persistent=true, dontHashify=true, chunkedMpt=true)
-      xCheckRc rc.error == (0,0)
+      xCheckRc rc.error == 0
 
     if doRdbOk:
       let rc = rdb.stow(persistent=true, dontHashify=true, chunkedMpt=true)
-      xCheckRc rc.error == (0,0)
+      xCheckRc rc.error == 0
 
     block:
       let mdbVerifyOk = ndb.top.verify(mdb.backend.MemBackendRef, noisy)
