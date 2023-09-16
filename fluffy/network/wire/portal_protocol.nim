@@ -369,7 +369,7 @@ proc handleOffer(p: PortalProtocol, o: OfferMessage, srcId: NodeId): seq[byte] =
       return @[]
 
   let connectionId =
-    if contentKeysBitList.countOnes() != 0:
+    if contentKeysBitList.countOnes() != 0 and not p.stream.contentQueue.full():
       p.stream.addContentOffer(srcId, contentKeys)
     else:
       # When the node does not accept any of the content offered, reply with an
