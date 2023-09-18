@@ -16,6 +16,7 @@ import
   ../aristo_init/[memory_db, memory_only],
   ".."/[aristo_desc, aristo_init],
   ./walk_private
+
 export
   memory_db,
   memory_only
@@ -66,6 +67,14 @@ iterator walkPairs*[T: MemBackendRef|VoidBackendRef](
   ## are unsorted.
   for (vid,vtx) in walkPairsImpl[T](db):
     yield (vid,vtx)
+
+iterator replicate*[T: MemBackendRef|VoidBackendRef](
+   _: type T;
+   db: AristoDbRef;
+    ): tuple[vid: VertexID, key: HashKey, vtx: VertexRef, node: NodeRef] =
+  ## Variant of `walkPairsImpl()` for legacy applications.
+  for (vid,key,vtx,node) in replicateImpl[T](db):
+   yield (vid,key,vtx,node)
 
 # ------------------------------------------------------------------------------
 # End

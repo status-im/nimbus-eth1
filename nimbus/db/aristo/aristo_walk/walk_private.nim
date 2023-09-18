@@ -12,7 +12,7 @@
 import
   std/[algorithm, sequtils, tables],
   results,
-  ".."/[aristo_desc, aristo_init]
+  ".."/[aristo_desc, aristo_get, aristo_init, aristo_utils]
 
 # ------------------------------------------------------------------------------
 # Public generic iterators
@@ -135,6 +135,19 @@ iterator walkPairsImpl*[T](
   for (_,vid,vtx) in walkVtxBeImpl[T](db):
     if vid notin db.top.sTab and vtx.isValid:
       yield (vid,vtx)
+
+iterator replicateImpl*[T](
+   db: AristoDbRef;                   # Database with top layer & backend filter
+     ): tuple[vid: VertexID, key: HashKey, vtx: VertexRef, node: NodeRef] =
+  ## Variant of `walkPairsImpl()` for legacy applications.
+  for (vid,vtx) in walkPairsImpl[T](db):
+    let node = block:
+      let rc = vtx.toNode(db)
+      if rc.isOk:
+        rc.value
+      else:
+        NodeRef(nil)
+    yield (vid, db.getKey vid, vtx, node)
 
 # ------------------------------------------------------------------------------
 # End

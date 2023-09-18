@@ -18,7 +18,7 @@ import
   "."/[aristo_constants, aristo_desc, aristo_get]
 
 type
-  ResolveVidFn = proc(vid: VertexID): HashKey
+  ResolveVidFn = proc(vid: VertexID): HashKey {.gcsafe, raises: [].}
     ## Resolve storage root vertex ID
 
 # ------------------------------------------------------------------------------

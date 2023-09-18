@@ -21,6 +21,7 @@ import
   ../aristo_init/[rocks_db, persistent],
   ".."/[aristo_desc, aristo_init],
   "."/[walk_private, memory_only]
+
 export
   rocks_db,
   memory_only,
@@ -71,6 +72,14 @@ iterator walkPairs*(
   ## are unsorted.
   for (vid,vtx) in walkPairsImpl[T](db):
     yield (vid,vtx)
+
+iterator replicate*(
+   T: type RdbBackendRef;
+   db: AristoDbRef;
+    ): tuple[vid: VertexID, key: HashKey, vtx: VertexRef, node: NodeRef] =
+  ## Variant of `walkPairsImpl()` for legacy applications.
+  for (vid,key,vtx,node) in replicateImpl[T](db):
+   yield (vid,key,vtx,node)
 
 # ------------------------------------------------------------------------------
 # End

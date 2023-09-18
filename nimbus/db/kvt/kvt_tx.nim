@@ -72,6 +72,79 @@ func to*(tx: KvtTxRef; T: type[KvtDbRef]): T =
   ## Getter, retrieves the parent database descriptor from argument `tx`
   tx.db
 
+proc forkTx*(tx: KvtTxRef): Result[KvtDbRef,KvtError] =
+  ## Clone a transaction into a new DB descriptor  accessing the same backend
+  ## (if any) database as the argument `db`. The new descriptor is linked to
+  ## the transaction parent and is fully functional as a forked instance (see
+  ## comments on `kvt_desc.reCentre()` for details.)
+  ##
+  ## The new DB descriptor will contain a copy of the argument transaction
+  ## `tx` as top layer of level 1 (i.e. this is he only transaction.) Rolling
+  ## back will end up at the backend layer (incl. backend filter.)
+  ##
+  ## Use `kvt_desc.forget()` to clean up this descriptor.
+  ##
+  let db = tx.db
+
+  # Provide new top layer
+  var topLayer: LayerRef
+  if db.txRef == tx:
+    topLayer = db.top.dup
+  elif tx.level < db.stack.len:
+    topLayer = db.stack[tx.level].dup
+  else:
+    return err(TxArgStaleTx)
+  if topLayer.txUid != tx.txUid:
+    return err(TxArgStaleTx)
+  topLayer.txUid = 1
+
+  let txClone = ? db.fork()
+
+  # Set up clone associated to `db`
+  txClone.top = topLayer          # is a deep copy
+  txClone.stack = @[LayerRef()]
+  txClone.backend = db.backend
+  txClone.txUidGen = 1
+
+  # Install transaction similar to `tx` on clone
+  txClone.txRef = KvtTxRef(
+    db:    txClone,
+    txUid: 1,
+    level: 1)
+
+  ok(txClone)
+
+proc forkTop*(db: KvtDbRef): Result[KvtDbRef,KvtError] =
+  ## Variant of `forkTx()` for the top transaction if there is any. Otherwise
+  ## the top layer is cloned, only.
+  ##
+  ## Use `kvt_desc.forget()` to clean up this descriptor.
+  ##
+  if db.txRef.isNil:
+    let dbClone = ? db.fork()
+
+    dbClone.top = db.top.dup       # is a deep copy
+    dbClone.backend = db.backend
+
+    return ok(dbClone)
+
+  db.txRef.forkTx()
+
+
+proc exec*(
+    tx: KvtTxRef;
+    action: KvtDbAction;
+      ): Result[void,KvtError]
+      {.gcsafe, raises: [CatchableError].} =
+  ## Execute function argument `action()` on a temporary `tx.forkTx()`
+  ## transaction database. After return, the temporary database gets
+  ## destroyed.
+  ##
+  let db = ? tx.forkTx()
+  db.action()
+  ? db.forget()
+  ok()
+
 # ------------------------------------------------------------------------------
 # Public functions: Transaction frame
 # ------------------------------------------------------------------------------
@@ -156,6 +229,7 @@ proc collapse*(
 
   db.top.txUid = 0
   db.stack.setLen(0)
+  db.txRef = KvtTxRef(nil)
   ok()
 
 # ------------------------------------------------------------------------------

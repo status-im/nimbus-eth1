@@ -18,7 +18,7 @@ import
   rocksdb,
   unittest2,
   ../nimbus/db/[core_db, kvstore_rocksdb],
-  ../nimbus/db/core_db/[legacy_persistent, persistent],
+  ../nimbus/db/core_db/[legacy_rocksdb, persistent],
   ../nimbus/core/chain,
   ../nimbus/sync/types,
   ../nimbus/sync/snap/range_desc,

@@ -56,7 +56,7 @@ proc init*(
     KvtDbRef(top: LayerRef())
 
   elif B is MemBackendRef:
-    KvtDbRef(top: LayerRef(), backend: memoryBackend(qidLayout))
+    KvtDbRef(top: LayerRef(), backend: memoryBackend())
 
 proc init*(
     T: type KvtDbRef;                         # Target type
@@ -76,7 +76,10 @@ proc finish*(db: KvtDbRef; flush = false) =
   if not db.isNil:
     if not db.backend.isNil:
       db.backend.closeFn flush
-    db[] = KvtDbObj(top: LayerRef())
+
+    let lebo = db.getCentre
+    discard lebo.forgetOthers()
+    lebo[] = KvtDbObj()
 
 # ------------------------------------------------------------------------------
 # End

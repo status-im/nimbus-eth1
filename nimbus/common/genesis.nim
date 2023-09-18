@@ -1,6 +1,6 @@
 import
   std/tables,
-  eth/[common, rlp, eip1559],
+  eth/[common, eip1559],
   eth/trie/trie_defs,
   ../db/[core_db, state_db],
   ../constants,
@@ -23,7 +23,7 @@ proc toGenesisHeader*(
     sdb: AccountStateDB;
     fork: HardFork;
       ): BlockHeader
-      {.gcsafe, raises: [RlpError].} =
+      {.gcsafe, raises: [CatchableError].} =
   ## Initialise block chain DB accounts derived from the `genesis.alloc` table
   ## of the `db` descriptor argument.
   ##
@@ -90,7 +90,7 @@ proc toGenesisHeader*(
     fork: HardFork;
     db = CoreDbRef(nil);
       ): BlockHeader
-      {.gcsafe, raises: [RlpError].} =
+      {.gcsafe, raises: [CatchableError].} =
   ## Generate the genesis block header from the `genesis` and `config`
   ## argument value.
   let
@@ -102,7 +102,7 @@ proc toGenesisHeader*(
     params: NetworkParams;
     db = CoreDbRef(nil);
       ): BlockHeader
-      {.raises: [RlpError].} =
+      {.raises: [CatchableError].} =
   ## Generate the genesis block header from the `genesis` and `config`
   ## argument value.
   let map  = toForkTransitionTable(params.config)

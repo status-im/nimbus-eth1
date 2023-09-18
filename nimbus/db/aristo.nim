@@ -15,28 +15,32 @@
 
 import aristo/[
   aristo_constants, aristo_delete, aristo_fetch, aristo_init,
-  aristo_merge, aristo_nearby, aristo_tx, aristo_utils]
+  aristo_merge, aristo_nearby, aristo_tx, aristo_utils, aristo_walk]
 export
   aristo_constants, aristo_delete, aristo_fetch, aristo_init,
-  aristo_merge, aristo_nearby, aristo_tx, aristo_utils
+  aristo_merge, aristo_nearby, aristo_tx, aristo_utils, aristo_walk
 
 import
   aristo/aristo_transcode
 export
-  append, read
+  append, read, serialise
 
 import aristo/aristo_desc/[desc_identifiers, desc_structural]
 export
   AristoAccount,
   PayloadRef,
   PayloadType,
+  desc_identifiers,
   `==`
 
 import
   aristo/aristo_desc
 export
+  AristoDbAction,
   AristoDbRef,
   AristoError,
+  AristoTxRef,
+  forget,
   isValid
 
 # End

@@ -40,7 +40,7 @@ proc init*[W: MemOnlyBackend|RdbBackendRef](
   ## aways succeed initialising.
   ##
   when B is RdbBackendRef:
-    ok KvtDbRef(top: LayerRef(vGen: vGen), backend: ? rocksDbBackend basePath)
+    ok KvtDbRef(top: LayerRef(), backend: ? rocksDbBackend basePath)
 
   else:
     ok KvtDbRef.init B

@@ -20,10 +20,10 @@ import
 
 type
   DoSpanPrepFn =
-    proc(db: AristoDbRef; flg: bool): Result[void,AristoError]
+    proc(db: AristoDbRef; flg: bool): Result[void,AristoError] {.gcsafe.}
 
   DoSpanExecFn =
-    proc(db: AristoDbRef)
+    proc(db: AristoDbRef) {.gcsafe.}
 
 func isTop*(tx: AristoTxRef): bool
 func level*(db: AristoDbRef): int
@@ -147,7 +147,8 @@ proc doSpan(
     prepFn = DoSpanPrepFn(nil);       # Optional preparation layer
     prepFlag = false;                 # `prepFn` argument
     execFn: DoSpanExecFn;             # Mandatory execution layer
-      ): Result[void,AristoError] =
+      ): Result[void,AristoError]
+      {.gcsafe.} =
   ## Common execution framework for `rollbackImpl()` or `commitImpl()` over
   ## all descriptors in the transaction span.
   ##
@@ -181,7 +182,8 @@ proc doThisPrep(
     db: AristoDbRef;                  # Top transaction on database
     prepFn = DoSpanPrepFn(nil);       # Mandatory preparation layer function
     prepFlag = false;                 # `prepFn` argument
-      ): Result[void,AristoError] =
+      ): Result[void,AristoError]
+      {.gcsafe.} =
   ## ..
   let
     keep = db.top
@@ -225,7 +227,10 @@ func to*(tx: AristoTxRef; T: type[AristoDbRef]): T =
   tx.db
 
 
-proc forkTx*(tx: AristoTxRef): Result[AristoDbRef,AristoError] =
+proc forkTx*(
+    tx: AristoTxRef;                  # Transaction descriptor
+    dontHashify = false;              # Process/fix MPT hashes
+      ): Result[AristoDbRef,AristoError] =
   ## Clone a transaction into a new DB descriptor  accessing the same backend
   ## (if any) database as the argument `db`. The new descriptor is linked to
   ## the transaction parent and is fully functional as a forked instance (see
@@ -234,6 +239,9 @@ proc forkTx*(tx: AristoTxRef): Result[AristoDbRef,AristoError] =
   ## The new DB descriptor will contain a copy of the argument transaction
   ## `tx` as top layer of level 1 (i.e. this is he only transaction.) Rolling
   ## back will end up at the backend layer (incl. backend filter.)
+  ##
+  ## If the arguent flag `dontHashify` is passed `true`, the clone descriptor
+  ## will *NOT* be hashified right after construction.
   ##
   ## Use `aristo_desc.forget()` to clean up this descriptor.
   ##
@@ -276,9 +284,19 @@ proc forkTx*(tx: AristoTxRef): Result[AristoDbRef,AristoError] =
     txUid: 1,
     level: 1)
 
+  if db.top.dirty and not dontHashify:
+    let rc = txClone.hashify()
+    if rc.isErr:
+      discard txClone.forget()
+      return err(rc.error.fromVae)
+
   ok(txClone)
 
-proc forkTop*(db: AristoDbRef): Result[AristoDbRef,AristoError] =
+
+proc forkTop*(
+    db: AristoDbRef;
+    dontHashify = false;              # Process/fix MPT hashes
+      ): Result[AristoDbRef,AristoError] =
   ## Variant of `forkTx()` for the top transaction if there is any. Otherwise
   ## the top layer is cloned, only.
   ##
@@ -291,21 +309,30 @@ proc forkTop*(db: AristoDbRef): Result[AristoDbRef,AristoError] =
     dbClone.roFilter = db.roFilter # no need to copy contents when updated
     dbClone.backend = db.backend
 
+    if db.top.dirty and not dontHashify:
+      let rc = dbClone.hashify()
+      if rc.isErr:
+        discard dbClone.forget()
+        return err(rc.error.fromVae)
     return ok(dbClone)
 
-  db.txRef.forkTx()
+  db.txRef.forkTx dontHashify
 
 
 proc exec*(
     tx: AristoTxRef;
     action: AristoDbAction;
+    dontHashify = false;              # Process/fix MPT hashes
       ): Result[void,AristoError]
       {.gcsafe, raises: [CatchableError].} =
-  ## Execute function argument `action()` on a temporary `tx.copyCat()`
-  ## transaction database. After return, the temporary database gets
+  ## Execute function argument `action()` on a temporary `tx.forkTx()`
+  ## transaction clone database. After return, the temporary database gets
   ## destroyed.
   ##
-  let db = ? tx.forkTx()
+  ## If the arguent flag `dontHashify` is passed `true`, the clone database
+  ## will *NOT* be hashified right after construction.
+  ##
+  let db = ? tx.forkTx dontHashify
   db.action()
   ? db.forget()
   ok()

@@ -29,7 +29,7 @@ import
   chronicles,
   eth/[common, trie/nibbles],
   results,
-  ../../sync/protocol,
+  ../../sync/protocol/snap/snap_types,
   "."/[aristo_desc, aristo_get, aristo_hike, aristo_path, aristo_transcode,
        aristo_vid]
 
