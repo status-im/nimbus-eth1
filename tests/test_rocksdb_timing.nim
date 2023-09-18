@@ -17,7 +17,7 @@ import
   eth/[common, p2p],
   rocksdb,
   unittest2,
-  ../nimbus/db/core_db/[legacy_persistent, persistent],
+  ../nimbus/db/core_db/[legacy_rocksdb, persistent],
   ../nimbus/core/chain,
   ../nimbus/sync/snap/range_desc,
   ../nimbus/sync/snap/worker/db/[hexary_desc, rocky_bulk_load],

@@ -13,7 +13,7 @@
 {.push raises: [].}
 
 import
-  "."/[memory_only, legacy_persistent]
+  "."/[memory_only, legacy_rocksdb]
 
 export
   memory_only
@@ -25,6 +25,7 @@ proc newCoreDbRef*(dbType: static[CoreDbType]; path: string): CoreDbRef =
   ## `CoreDbRef.init()` because of compiler coughing.
   when dbType == LegacyDbPersistent:
     newLegacyPersistentCoreDbRef path
+
   else:
     {.error: "Unsupported dbType for persistent newCoreDbRef()".}
 
