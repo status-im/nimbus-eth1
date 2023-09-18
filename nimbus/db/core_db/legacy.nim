@@ -28,11 +28,17 @@ type
     recorder: TrieDatabaseRef
     appDb: CoreDbRef
 
+# Annotation helpers
+{.pragma:    noRaise, gcsafe, raises: [].}
+{.pragma:   rlpRaise, gcsafe, raises: [RlpError].}
+{.pragma: catchRaise, gcsafe, raises: [CatchableError].}
+
 proc init*(
     db: LegacyDbRef;
     dbType: CoreDbType;
     tdb: TrieDatabaseRef;
-     ): CoreDbRef {.gcsafe.}
+      ): CoreDbRef
+      {.noRaise.}
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -97,46 +103,44 @@ proc miscMethods(tdb: TrieDatabaseRef): CoreDbMiscFns =
 proc kvtMethods(tdb: TrieDatabaseRef): CoreDbKvtFns =
   ## Key-value database table handlers
   CoreDbKvtFns(
-    getFn:      proc(k: openArray[byte]): Blob =         return tdb.get(k),
-    maybeGetFn: proc(k: openArray[byte]): Option[Blob] = return tdb.maybeGet(k),
-    delFn:      proc(k: openArray[byte]) =                      tdb.del(k),
-    putFn:      proc(k: openArray[byte]; v: openArray[byte]) =  tdb.put(k,v),
-    containsFn: proc(k: openArray[byte]): bool =         return tdb.contains(k),
-    pairsIt:    iterator(): (Blob, Blob) {.gcsafe.} =
-                  for k,v in tdb.pairsInMemoryDB:
-                    yield (k,v))
+    getFn:      proc(k: openArray[byte]): Blob =               tdb.get(k),
+    maybeGetFn: proc(k: openArray[byte]): Option[Blob] =       tdb.maybeGet(k),
+    delFn:      proc(k: openArray[byte]) =                     tdb.del(k),
+    putFn:      proc(k: openArray[byte]; v: openArray[byte]) = tdb.put(k,v),
+    containsFn: proc(k: openArray[byte]): bool =               tdb.contains(k),
+    pairsIt:    iterator(): (Blob, Blob) {.noRaise.} =
+      for k,v in tdb.pairsInMemoryDB:
+        yield (k,v))
 
 proc mptMethods(mpt: HexaryTrieRef): CoreDbMptFns =
   ## Hexary trie database handlers
   CoreDbMptFns(
-    getFn: proc(k: openArray[byte]): Blob {.gcsafe, raises: [RlpError].} =
-      return mpt.trie.get(k),
+    getFn: proc(k: openArray[byte]): Blob {.rlpRaise.} =
+      mpt.trie.get(k),
 
-    maybeGetFn: proc(k: openArray[byte]): Option[Blob]
-        {.gcsafe, raises: [RlpError].} =
-      return mpt.trie.maybeGet(k),
+    maybeGetFn: proc(k: openArray[byte]): Option[Blob] {.rlpRaise.} =
+      mpt.trie.maybeGet(k),
 
-    delFn: proc(k: openArray[byte]) {.gcsafe, raises: [RlpError].} =
+    delFn: proc(k: openArray[byte]) {.rlpRaise.} =
       mpt.trie.del(k),
 
-    putFn: proc(k: openArray[byte]; v: openArray[byte])
-        {.gcsafe, raises: [RlpError].} =
+    putFn: proc(k: openArray[byte]; v: openArray[byte]) {.rlpRaise.} =
       mpt.trie.put(k,v),
 
-    containsFn: proc(k: openArray[byte]): bool {.gcsafe, raises: [RlpError].} =
-      return mpt.trie.contains(k),
+    containsFn: proc(k: openArray[byte]): bool {.rlpRaise.} =
+      mpt.trie.contains(k),
 
     rootHashFn: proc(): Hash256 =
-      return mpt.trie.rootHash,
+      mpt.trie.rootHash,
 
     isPruningFn: proc(): bool =
-      return mpt.trie.isPruning,
+      mpt.trie.isPruning,
 
-    pairsIt: iterator(): (Blob, Blob) {.gcsafe, raises: [RlpError].} =
+    pairsIt: iterator(): (Blob, Blob) {.rlpRaise.} =
       for k,v in mpt.trie.pairs():
         yield (k,v),
 
-    replicateIt: iterator(): (Blob, Blob) {.gcsafe, raises: [RlpError].} =
+    replicateIt: iterator(): (Blob, Blob) {.rlpRaise.} =
       for k,v in mpt.trie.replicate():
         yield (k,v))
 
@@ -152,17 +156,16 @@ proc tidMethods(tid: TransactionID; tdb: TrieDatabaseRef): CoreDbTxIdFns =
     setIdFn: proc() =
       tdb.setTransactionID(tid),
 
-    roWrapperFn: proc(action: CoreDbTxIdActionFn)
-        {.gcsafe, raises: [CatchableError].} =
+    roWrapperFn: proc(action: CoreDbTxIdActionFn) {.catchRaise.} =
       tdb.shortTimeReadOnly(tid, action()))
 
 proc cptMethods(cpt: RecorderRef): CoreDbCaptFns =
   CoreDbCaptFns(
     recorderFn: proc(): CoreDbRef =
-      return cpt.appDb,
+      cpt.appDb,
 
     getFlagsFn: proc(): set[CoreDbCaptFlags] =
-      return cpt.flags)
+      cpt.flags)
 
 # ------------------------------------------------------------------------------
 # Private constructor functions table
@@ -172,20 +175,20 @@ proc constructors(tdb: TrieDatabaseRef, parent: CoreDbRef): CoreDbConstructors =
   CoreDbConstructors(
     mptFn: proc(root: Hash256): CoreDbMptRef =
       let mpt = HexaryTrieRef(trie: initHexaryTrie(tdb, root, false))
-      return newCoreDbMptRef(parent, mpt.mptMethods),
+      newCoreDbMptRef(parent, mpt.mptMethods),
 
     legacyMptFn: proc(root: Hash256; prune: bool): CoreDbMptRef =
       let mpt = HexaryTrieRef(trie: initHexaryTrie(tdb, root, prune))
-      return newCoreDbMptRef(parent, mpt.mptMethods),
+      newCoreDbMptRef(parent, mpt.mptMethods),
 
     getIdFn: proc(): CoreDbTxID =
-      return newCoreDbTxID(parent, tdb.getTransactionID.tidMethods tdb),
+      newCoreDbTxID(parent, tdb.getTransactionID.tidMethods tdb),
 
     beginFn: proc(): CoreDbTxRef =
-      return newCoreDbTxRef(parent, tdb.beginTransaction.txMethods),
+      newCoreDbTxRef(parent, tdb.beginTransaction.txMethods),
 
     captureFn: proc(flags: set[CoreDbCaptFlags] = {}): CoreDbCaptRef =
-      return newCoreDbCaptRef(parent, newRecorderRef(tdb, flags).cptMethods))
+      newCoreDbCaptRef(parent, newRecorderRef(tdb, flags).cptMethods))
 
 # ------------------------------------------------------------------------------
 # Public constructor helpers
@@ -202,7 +205,7 @@ proc init*(
     dbMethods =  tdb.miscMethods,
     kvtMethods = tdb.kvtMethods,
     new =        tdb.constructors db)
-  return db
+  db
 
 # ------------------------------------------------------------------------------
 # Public constructor and low level data retrieval, storage & transation frame

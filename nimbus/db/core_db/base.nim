@@ -24,6 +24,11 @@ when defined(release):
 else:
   const AutoValidateDescriptors = true
 
+# Annotation helpers
+{.pragma:    noRaise, gcsafe, raises: [].}
+{.pragma:   rlpRaise, gcsafe, raises: [RlpError].}
+{.pragma: catchRaise, gcsafe, raises: [CatchableError].}
+
 type
   CoreDbCaptFlags* {.pure.} = enum
     PersistPut
@@ -39,13 +44,12 @@ type
   # --------------------------------------------------
   # Constructors
   # --------------------------------------------------
-  CoreDbNewMptFn* = proc(root: Hash256): CoreDbMptRef {.gcsafe, raises: [].}
-  CoreDbNewLegacyMptFn* = proc(root: Hash256; prune: bool): CoreDbMptRef
-                            {.gcsafe, raises: [].}
-  CoreDbNewTxGetIdFn* = proc(): CoreDbTxID {.gcsafe, raises: [].}
-  CoreDbNewTxBeginFn* = proc(): CoreDbTxRef {.gcsafe, raises: [].}
-  CoreDbNewCaptFn = proc(flags: set[CoreDbCaptFlags] = {}): CoreDbCaptRef
-                      {.gcsafe, raises: [].}
+  CoreDbNewMptFn* = proc(root: Hash256): CoreDbMptRef {.noRaise.}
+  CoreDbNewLegacyMptFn* =
+    proc(root: Hash256; prune: bool): CoreDbMptRef {.noRaise.}
+  CoreDbNewTxGetIdFn* = proc(): CoreDbTxID {.noRaise.}
+  CoreDbNewTxBeginFn* = proc(): CoreDbTxRef {.noRaise.}
+  CoreDbNewCaptFn = proc(flags: set[CoreDbCaptFlags]): CoreDbCaptRef {.noRaise.}
 
   CoreDbConstructors* = object
     ## Constructors
@@ -65,7 +69,7 @@ type
   # --------------------------------------------------
   # Sub-descriptor: Misc methods for main descriptor
   # --------------------------------------------------
-  CoreDbInitLegaSetupFn* = proc() {.gcsafe, raises: [].}
+  CoreDbInitLegaSetupFn* = proc() {.noRaise.}
 
   CoreDbMiscFns* = object
     legacySetupFn*: CoreDbInitLegaSetupFn
@@ -73,14 +77,12 @@ type
   # --------------------------------------------------
   # Sub-descriptor: KVT methods
   # --------------------------------------------------
-  CoreDbKvtGetFn* = proc(k: openArray[byte]): Blob {.gcsafe, raises: [].}
-  CoreDbKvtMaybeGetFn* = proc(key: openArray[byte]): Option[Blob]
-                           {.gcsafe, raises: [].}
-  CoreDbKvtDelFn* = proc(k: openArray[byte]) {.gcsafe, raises: [].}
-  CoreDbKvtPutFn* = proc(k: openArray[byte]; v: openArray[byte])
-                      {.gcsafe, raises: [].}
-  CoreDbKvtContainsFn* = proc(k: openArray[byte]): bool {.gcsafe, raises: [].}
-  CoreDbKvtPairsIt* = iterator(): (Blob,Blob) {.gcsafe, raises: [].}
+  CoreDbKvtGetFn* = proc(k: openArray[byte]): Blob {.noRaise.}
+  CoreDbKvtMaybeGetFn* = proc(key: openArray[byte]): Option[Blob] {.noRaise.}
+  CoreDbKvtDelFn* = proc(k: openArray[byte]) {.noRaise.}
+  CoreDbKvtPutFn* = proc(k: openArray[byte]; v: openArray[byte]) {.noRaise.}
+  CoreDbKvtContainsFn* = proc(k: openArray[byte]): bool {.noRaise.}
+  CoreDbKvtPairsIt* = iterator(): (Blob,Blob) {.noRaise.}
 
   CoreDbKvtFns* = object
     ## Methods for key-value table
@@ -95,19 +97,15 @@ type
   # --------------------------------------------------
   # Sub-descriptor: Mpt/hexary trie methods
   # --------------------------------------------------
-  CoreDbMptGetFn* = proc(k: openArray[byte]): Blob
-                      {.gcsafe, raises: [RlpError].}
-  CoreDbMptMaybeGetFn* = proc(k: openArray[byte]): Option[Blob]
-                           {.gcsafe, raises: [RlpError].}
-  CoreDbMptDelFn* = proc(k: openArray[byte]) {.gcsafe, raises: [RlpError].}
-  CoreDbMptPutFn* = proc(k: openArray[byte]; v: openArray[byte])
-                      {.gcsafe, raises: [RlpError].}
-  CoreDbMptContainsFn* = proc(k: openArray[byte]): bool
-                           {.gcsafe, raises: [RlpError].}
-  CoreDbMptRootHashFn* = proc(): Hash256 {.gcsafe, raises: [].}
-  CoreDbMptIsPruningFn* = proc(): bool {.gcsafe, raises: [].}
-  CoreDbMptPairsIt* = iterator(): (Blob,Blob) {.gcsafe, raises: [RlpError].}
-  CoreDbMptReplicateIt* = iterator(): (Blob,Blob) {.gcsafe, raises: [RlpError].}
+  CoreDbMptGetFn* = proc(k: openArray[byte]): Blob {.rlpRaise.}
+  CoreDbMptMaybeGetFn* = proc(k: openArray[byte]): Option[Blob] {.rlpRaise.}
+  CoreDbMptDelFn* = proc(k: openArray[byte]) {.rlpRaise.}
+  CoreDbMptPutFn* = proc(k: openArray[byte]; v: openArray[byte]) {.rlpRaise.}
+  CoreDbMptContainsFn* = proc(k: openArray[byte]): bool {.rlpRaise.}
+  CoreDbMptRootHashFn* = proc(): Hash256 {.noRaise.}
+  CoreDbMptIsPruningFn* = proc(): bool {.noRaise.}
+  CoreDbMptPairsIt* = iterator(): (Blob,Blob) {.rlpRaise.}
+  CoreDbMptReplicateIt* = iterator(): (Blob,Blob) {.rlpRaise.}
 
   CoreDbMptFns* = object
     ## Methods for trie objects `CoreDbMptRef`
@@ -125,10 +123,10 @@ type
   # --------------------------------------------------
   # Sub-descriptor: Transaction frame management
   # --------------------------------------------------
-  CoreDbTxCommitFn* = proc(applyDeletes: bool) {.gcsafe, raises: [].}
-  CoreDbTxRollbackFn* = proc() {.gcsafe, raises: [].}
-  CoreDbTxDisposeFn* = proc() {.gcsafe, raises: [].}
-  CoreDbTxSafeDisposeFn* = proc() {.gcsafe, raises: [].}
+  CoreDbTxCommitFn* = proc(applyDeletes: bool) {.noRaise.}
+  CoreDbTxRollbackFn* = proc() {.noRaise.}
+  CoreDbTxDisposeFn* = proc() {.noRaise.}
+  CoreDbTxSafeDisposeFn* = proc() {.noRaise.}
 
   CoreDbTxFns* = object
     commitFn*:      CoreDbTxCommitFn
@@ -139,10 +137,9 @@ type
   # --------------------------------------------------
   # Sub-descriptor: Transaction ID management
   # --------------------------------------------------
-  CoreDbTxIdSetIdFn* = proc() {.gcsafe, raises: [].}
-  CoreDbTxIdActionFn* = proc() {.gcsafe, raises: [CatchableError].}
-  CoreDbTxIdRoWrapperFn* = proc(action: CoreDbTxIdActionFn)
-                             {.gcsafe, raises: [CatchableError].}
+  CoreDbTxIdSetIdFn* = proc() {.noRaise.}
+  CoreDbTxIdActionFn* = proc() {.catchRaise.}
+  CoreDbTxIdRoWrapperFn* = proc(action: CoreDbTxIdActionFn) {.catchRaise.}
   CoreDbTxIdFns* = object
     setIdFn*:     CoreDbTxIdSetIdFn
     roWrapperFn*: CoreDbTxIdRoWrapperFn
@@ -151,8 +148,8 @@ type
   # --------------------------------------------------
   # Sub-descriptor: capture recorder methods
   # --------------------------------------------------
-  CoreDbCaptRecorderFn* = proc(): CoreDbRef {.gcsafe, raises: [].}
-  CoreDbCaptFlagsFn* = proc(): set[CoreDbCaptFlags] {.gcsafe, raises: [].}
+  CoreDbCaptRecorderFn* = proc(): CoreDbRef {.noRaise.}
+  CoreDbCaptFlagsFn* = proc(): set[CoreDbCaptFlags] {.noRaise.}
 
   CoreDbCaptFns* = object
     recorderFn*: CoreDbCaptRecorderFn
@@ -257,7 +254,7 @@ proc validateMethodsDesc(tx: CoreDbTxRef) =
 
 proc validateMethodsDesc(id: CoreDbTxID) =
   doAssert not id.parent.isNil
-  doAssert not id.methods.setIdFn.isNil
+  # doAssert not id.methods.setIdFn.isNil
   doAssert not id.methods.roWrapperFn.isNil
 
 proc validateConstructors(new: CoreDbConstructors) =
@@ -274,30 +271,25 @@ proc toCoreDbPhkRef(mpt: CoreDbMptRef): CoreDbPhkRef =
   result = CoreDbPhkRef(
     parent:  mpt,
     methods: CoreDbMptFns(
-      getFn: proc(k: openArray[byte]): Blob
-          {.gcsafe, raises: [RlpError].} =
-        return mpt.methods.getFn(k.keccakHash.data),
+      getFn: proc(k: openArray[byte]): Blob {.rlpRaise.} =
+        mpt.methods.getFn(k.keccakHash.data),
 
-      maybeGetFn: proc(k: openArray[byte]): Option[Blob]
-          {.gcsafe, raises: [RlpError].} =
-        return mpt.methods.maybeGetFn(k.keccakHash.data),
+      maybeGetFn: proc(k: openArray[byte]): Option[Blob] {.rlpRaise.} =
+        mpt.methods.maybeGetFn(k.keccakHash.data),
 
-      delFn: proc(k: openArray[byte])
-          {.gcsafe, raises: [RlpError].} =
+      delFn: proc(k: openArray[byte]) {.rlpRaise.} =
         mpt.methods.delFn(k.keccakHash.data),
 
-      putFn: proc(k:openArray[byte]; v:openArray[byte])
-         {.gcsafe, raises: [RlpError].} =
+      putFn: proc(k:openArray[byte]; v:openArray[byte]) {.rlpRaise.} =
         mpt.methods.putFn(k.keccakHash.data, v),
 
-      containsFn: proc(k: openArray[byte]): bool
-          {.gcsafe, raises: [RlpError].} =
-        return mpt.methods.containsFn(k.keccakHash.data),
+      containsFn: proc(k: openArray[byte]): bool {.rlpRaise.} =
+        mpt.methods.containsFn(k.keccakHash.data),
 
-      pairsIt: iterator(): (Blob, Blob) {.gcsafe.} =
+      pairsIt: iterator(): (Blob, Blob) {.noRaise.} =
         mpt.parent.itNotImplemented("pairs/phk"),
 
-      replicateIt: iterator(): (Blob, Blob) {.gcsafe.} =
+      replicateIt: iterator(): (Blob, Blob) {.noRaise.} =
         mpt.parent.itNotImplemented("replicate/phk"),
 
       rootHashFn: mpt.methods.rootHashFn,
@@ -509,34 +501,34 @@ proc get*(
     trie: CoreDbMptRef|CoreDbPhkRef;
     key: openArray[byte];
       ): Blob
-      {.gcsafe, raises: [RlpError].} =
+      {.rlpRaise.} =
   trie.methods.getFn key
 
 proc maybeGet*(
     trie: CoreDbMptRef|CoreDbPhkRef;
     key: openArray[byte];
       ): Option[Blob]
-      {.gcsafe, raises: [RlpError].} =
+      {.rlpRaise.} =
   trie.methods.maybeGetFn key
 
 proc del*(
     trie: CoreDbMptRef|CoreDbPhkRef;
     key: openArray[byte];
-      ) {.gcsafe, raises: [RlpError].} =
+      ) {.rlpRaise.} =
   trie.methods.delFn key
 
 proc put*(
     trie: CoreDbMptRef|CoreDbPhkRef;
     key: openArray[byte];
     value: openArray[byte];
-      ) {.gcsafe, raises: [RlpError].} =
+      ) {.rlpRaise.} =
   trie.methods.putFn(key, value)
 
 proc contains*(
     trie: CoreDbMptRef|CoreDbPhkRef;
     key: openArray[byte];
       ): bool
-      {.gcsafe, raises: [RlpError].} =
+      {.rlpRaise.} =
   trie.methods.containsFn key
 
 proc rootHash*(
@@ -548,7 +540,7 @@ proc rootHash*(
 iterator pairs*(
     trie: CoreDbMptRef;
       ): (Blob, Blob)
-      {.gcsafe, raises: [RlpError].} =
+      {.rlpRaise.} =
   ## Trie traversal, only supported for `CoreDbMptRef`
   for k,v in trie.methods.pairsIt():
     yield (k,v)
@@ -556,7 +548,7 @@ iterator pairs*(
 iterator replicate*(
     trie: CoreDbMptRef;
       ): (Blob, Blob)
-      {.gcsafe, raises: [RlpError].} =
+      {.rlpRaise.} =
   ## Low level trie dump, only supported for `CoreDbMptRef`
   for k,v in trie.methods.replicateIt():
     yield (k,v)
@@ -579,8 +571,8 @@ proc setTransactionID*(id: CoreDbTxID) =
 
 proc shortTimeReadOnly*(
     id: CoreDbTxID;
-    action: proc() {.gcsafe, raises: [CatchableError].};
-      ) {.gcsafe, raises: [CatchableError].} =
+    action: proc() {.catchRaise.};
+      ) {.catchRaise.} =
   ## Run `action()` in an earlier transaction environment.
   id.methods.roWrapperFn action
 
