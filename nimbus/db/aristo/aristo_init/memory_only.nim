@@ -26,7 +26,8 @@ type
 
 export
   BackendType,
-  MemBackendRef
+  MemBackendRef,
+  QidLayoutRef
 
 let
   DefaultQidLayoutRef* = DEFAULT_QID_QUEUES.to(QidLayoutRef)
