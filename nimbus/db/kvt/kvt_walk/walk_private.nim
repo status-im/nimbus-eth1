@@ -9,30 +9,31 @@
 # at your option. This file may not be copied, modified, or
 # distributed except according to those terms.
 
-## Iterators for non-persistent backend of the Kvt DB
-## ==================================================
-##
 import
+  std/tables,
   eth/common,
-  ../kvt_init/[memory_db, memory_only],
-  ".."/[kvt_desc, kvt_init],
-  ./walk_private
-
-export
-  memory_db,
-  memory_only
+  ".."/[kvt_desc, kvt_init]
 
 # ------------------------------------------------------------------------------
-# Public iterators (all in one)
+# Public generic iterators
 # ------------------------------------------------------------------------------
 
-iterator walkPairs*[T: MemBackendRef|VoidBackendRef](
-   _: type T;
-   db: KvtDbRef;
+iterator walkPairsImpl*[T](
+   db: KvtDbRef;                   # Database with top layer & backend filter
      ): tuple[key: Blob, data: Blob] =
-  ## Iterate over backend filters.
-  for (vid,vtx) in walkPairsImpl[T](db):
-    yield (vid,vtx)
+  ## Walk over all `(VertexID,VertexRef)` in the database. Note that entries
+  ## are unsorted.
+
+  for (key,data) in db.top.tab.pairs:
+    if data.isValid:
+      yield (key,data)
+
+  when T isnot VoidBackendRef:
+    mixin walk
+
+    for (key,data) in db.backend.T.walk:
+      if key notin db.top.tab and data.isValid:
+        yield (key,data)
 
 # ------------------------------------------------------------------------------
 # End

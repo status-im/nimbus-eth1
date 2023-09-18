@@ -20,7 +20,9 @@
 import
   eth/common,
   ../kvt_init/[rocks_db, persistent],
-  ./memory_only
+  ../kvt_desc,
+  "."/[memory_only, walk_private]
+
 export
   rocks_db,
   memory_only,
@@ -31,11 +33,12 @@ export
 # ------------------------------------------------------------------------------
 
 iterator walkPairs*(
-   be: RdbBackendRef;
+   T: type RdbBackendRef;
+   db: KvtDbRef;
      ): tuple[key: Blob, data: Blob] =
-  ## Walk filter slots in fifo order.
-  for (k,v) in be.walk:
-    yield (k,v)
+  ## Iterate over backend filters.
+  for (vid,vtx) in walkPairsImpl[T](db):
+    yield (vid,vtx)
 
 # ------------------------------------------------------------------------------
 # End
