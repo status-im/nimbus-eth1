@@ -14,20 +14,41 @@ import
 
 type
   MethodsDesc =
-    CoreDbKvtObj |
-    CoreDbMptRef | CoreDbPhkRef |
-    CoreDbTxRef  | CoreDbTxID   |
-    CoreDbCaptRef
+    CoreDxKvtRef |
+    CoreDxMptRef | CoreDxPhkRef |
+    CoreDxTxRef  | CoreDxTxID   |
+    CoreDxCaptRef
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc validateMethodsDesc(db: CoreDbRef) =
-  doAssert not db.methods.legacySetupFn.isNil
+proc validateMethodsDesc(msc: CoreDbMiscFns) =
+  doAssert not msc.legacySetupFn.isNil
 
-proc validateMethodsDesc(kvt: CoreDbKvtObj) =
-  doAssert kvt.dbType != CoreDbType(0)
+proc validateMethodsDesc(fns: CoreDbMptFns) =
+  doAssert not fns.getFn.isNil
+  doAssert not fns.maybeGetFn.isNil
+  doAssert not fns.delFn.isNil
+  doAssert not fns.putFn.isNil
+  doAssert not fns.containsFn.isNil
+  doAssert not fns.rootHashFn.isNil
+  doAssert not fns.isPruningFn.isNil
+  doAssert not fns.pairsIt.isNil
+  doAssert not fns.replicateIt.isNil
+
+proc validateConstructors(new: CoreDbConstructorFns) =
+  doAssert not new.mptFn.isNil
+  doAssert not new.legacyMptFn.isNil
+  doAssert not new.getIdFn.isNil
+  doAssert not new.beginFn.isNil
+  doAssert not new.captureFn.isNil
+
+# ------------
+  
+proc validateMethodsDesc(kvt: CoreDxKvtRef) =
+  doAssert not kvt.isNil
+  doAssert not kvt.parent.isNil
   doAssert not kvt.methods.getFn.isNil
   doAssert not kvt.methods.maybeGetFn.isNil
   doAssert not kvt.methods.delFn.isNil
@@ -35,41 +56,42 @@ proc validateMethodsDesc(kvt: CoreDbKvtObj) =
   doAssert not kvt.methods.containsFn.isNil
   doAssert not kvt.methods.pairsIt.isNil
 
-proc validateMethodsDesc(trie: CoreDbMptRef|CoreDbPhkRef) =
-  doAssert not trie.parent.isNil
-  doAssert not trie.methods.getFn.isNil
-  doAssert not trie.methods.maybeGetFn.isNil
-  doAssert not trie.methods.delFn.isNil
-  doAssert not trie.methods.putFn.isNil
-  doAssert not trie.methods.containsFn.isNil
-  doAssert not trie.methods.rootHashFn.isNil
-  doAssert not trie.methods.isPruningFn.isNil
-  doAssert not trie.methods.pairsIt.isNil
-  doAssert not trie.methods.replicateIt.isNil
+proc validateMethodsDesc(mpt: CoreDxMptRef) =
+  doAssert not mpt.isNil
+  doAssert not mpt.parent.isNil
+  mpt.methods.validateMethodsDesc
 
-proc validateMethodsDesc(cpt: CoreDbCaptRef) =
+proc validateMethodsDesc(phk: CoreDxPhkRef) =
+  doAssert not phk.isNil
+  doAssert not phk.fromMpt.isNil
+  phk.methods.validateMethodsDesc
+
+proc validateMethodsDesc(cpt: CoreDxCaptRef) =
+  doAssert not cpt.isNil
   doAssert not cpt.parent.isNil
   doAssert not cpt.methods.recorderFn.isNil
   doAssert not cpt.methods.getFlagsFn.isNil
 
-proc validateMethodsDesc(tx: CoreDbTxRef) =
+proc validateMethodsDesc(tx: CoreDxTxRef) =
+  doAssert not tx.isNil
   doAssert not tx.parent.isNil
   doAssert not tx.methods.commitFn.isNil
   doAssert not tx.methods.rollbackFn.isNil
   doAssert not tx.methods.disposeFn.isNil
   doAssert not tx.methods.safeDisposeFn.isNil
 
-proc validateMethodsDesc(id: CoreDbTxID) =
+proc validateMethodsDesc(id: CoreDxTxID) =
+  doAssert not id.isNil
   doAssert not id.parent.isNil
-  # doAssert not id.methods.setIdFn.isNil
+  doAssert not id.methods.setIdFn.isNil
   doAssert not id.methods.roWrapperFn.isNil
 
-proc validateConstructors(new: CoreDbConstructors) =
-  doAssert not new.mptFn.isNil
-  doAssert not new.legacyMptFn.isNil
-  doAssert not new.getIdFn.isNil
-  doAssert not new.beginFn.isNil
-  doAssert not new.captureFn.isNil
+proc validateMethodsDesc(db: CoreDbRef) =
+  doAssert not db.isNil
+  doAssert db.dbType != CoreDbType(0)
+  db.kvtRef.validateMethodsDesc
+  db.new.validateConstructors
+  db.methods.validateMethodsDesc
 
 # ------------------------------------------------------------------------------
 # Public debugging helpers
@@ -80,8 +102,6 @@ proc validate*(desc: MethodsDesc) =
 
 proc validate*(db: CoreDbRef) =
   db.validateMethodsDesc
-  db.kvtObj.validateMethodsDesc
-  db.new.validateConstructors
 
 # ------------------------------------------------------------------------------
 # End

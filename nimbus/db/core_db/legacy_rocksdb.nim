@@ -23,17 +23,6 @@ type
     backend: ChainDB     # for backend access (legacy mode)
 
 # ------------------------------------------------------------------------------
-# Private helpers
-# ------------------------------------------------------------------------------
-
-template iflegaPersOk(db: CoreDbRef; body: untyped) =
-  case db.dbType:
-  of LegacyDbPersistent:
-    body
-  else:
-    discard
-
-# ------------------------------------------------------------------------------
 # Public constructor and low level data retrieval, storage & transation frame
 # ------------------------------------------------------------------------------
 
@@ -62,7 +51,7 @@ proc newLegacyPersistentCoreDbRef*(path: string): CoreDbRef =
 # ------------------------------------------------------------------------------
 
 proc toLegacyBackend*(db: CoreDbRef): ChainDB =
-  db.ifLegaPersOk:
+  if db.dbType == LegacyDbPersistent:
     return db.LegaPersDbRef.backend
 
 # ------------------------------------------------------------------------------

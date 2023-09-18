@@ -17,14 +17,19 @@ type
   DB = CoreDbRef
   AccountsTrie* = distinct CoreDbPhkRef
   StorageTrie* = distinct CoreDbPhkRef
+  DistinctTrie* = AccountsTrie | StorageTrie
+
+func toBase(t: DistinctTrie): CoreDbPhkRef =
+  ## Note that `CoreDbPhkRef` is a distinct variant of `CoreDxPhkRef`
+  t.CoreDbPhkRef
 
 # I don't understand why "borrow" doesn't work here. --Adam
-proc rootHash*   (trie: AccountsTrie | StorageTrie): KeccakHash      = distinctBase(trie).rootHash
-proc rootHashHex*(trie: AccountsTrie | StorageTrie): string          = $trie.rootHash
-proc db*         (trie: AccountsTrie | StorageTrie): DB              = parent(distinctBase(trie))
-proc isPruning*  (trie: AccountsTrie | StorageTrie): bool            = distinctBase(trie).isPruning
-proc mpt*        (trie: AccountsTrie | StorageTrie): CoreDbMptRef    = distinctBase(trie).toMpt
-proc phk*        (trie: AccountsTrie | StorageTrie): CoreDbPhkRef    = distinctBase(trie)
+proc rootHash*   (t: DistinctTrie): KeccakHash        = t.toBase.rootHash()
+proc rootHashHex*(t: DistinctTrie): string            = $t.toBase.rootHash()
+proc db*         (t: DistinctTrie): DB                = t.toBase.parent()
+proc isPruning*  (t: DistinctTrie): bool              = t.toBase.isPruning()
+proc mpt*        (t: DistinctTrie): CoreDbMptRef = t.toBase.toMpt()
+func phk*        (t: DistinctTrie): CoreDbPhkRef = t.toBase
 
 
 template initAccountsTrie*(db: DB, rootHash: KeccakHash, isPruning = true): AccountsTrie =

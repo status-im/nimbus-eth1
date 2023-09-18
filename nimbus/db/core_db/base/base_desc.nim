@@ -11,18 +11,15 @@
 {.push raises: [].}
 
 import
-  eth/common
+  eth/common,
+  results,
+  ../../../errors
 
 # Annotation helpers
-{.pragma:    noRaise, gcsafe, raises: [].}
-{.pragma:   rlpRaise, gcsafe, raises: [RlpError].}
-{.pragma: catchRaise, gcsafe, raises: [CatchableError].}
+{.pragma:  noRaise, gcsafe, raises: [].}
+{.pragma: apiRaise, gcsafe, raises: [CoreDbApiError].}
 
 type
-  CoreDbCaptFlags* {.pure.} = enum
-    PersistPut
-    PersistDel
-
   CoreDbType* = enum
     Ooops
     LegacyDbMemory
@@ -30,22 +27,37 @@ type
     # AristoDbMemory
     # AristoDbPersistent
 
+const
+  CoreDbPersistentTypes* = {LegacyDbPersistent}
+
+type
+  CoreDbError* = object of RootObj
+    ## Generic error object
+
+  CoreDbRc*[T] = Result[T,CoreDbError]
+
+  CoreDbCaptFlags* {.pure.} = enum
+    PersistPut
+    PersistDel
+
   # --------------------------------------------------
   # Constructors
   # --------------------------------------------------
-  CoreDbNewMptFn* = proc(root: Hash256): CoreDbMptRef {.noRaise.}
-  CoreDbNewLegacyMptFn* =
-    proc(root: Hash256; prune: bool): CoreDbMptRef {.noRaise.}
-  CoreDbNewTxGetIdFn* = proc(): CoreDbTxID {.noRaise.}
-  CoreDbNewTxBeginFn* = proc(): CoreDbTxRef {.noRaise.}
-  CoreDbNewCaptFn = proc(flags: set[CoreDbCaptFlags]): CoreDbCaptRef {.noRaise.}
+  CoreDbNewMptFn* =
+    proc(root: Hash256): CoreDbRc[CoreDxMptRef] {.noRaise.}
+  CoreDbNewLegaMptFn* =
+    proc(root: Hash256; prune: bool): CoreDbRc[CoreDxMptRef] {.noRaise.}
+  CoreDbNewTxGetIdFn* = proc(): CoreDbRc[CoreDxTxID] {.noRaise.}
+  CoreDbNewTxBeginFn* = proc(): CoreDbRc[CoreDxTxRef] {.noRaise.}
+  CoreDbNewCaptFn* =
+    proc(flgs: set[CoreDbCaptFlags]): CoreDbRc[CoreDxCaptRef] {.noRaise.}
 
-  CoreDbConstructors* = object
+  CoreDbConstructorFns* = object
     ## Constructors
 
     # Hexary trie
     mptFn*:       CoreDbNewMptFn
-    legacyMptFn*: CoreDbNewLegacyMptFn # Legacy handler, should go away
+    legacyMptFn*: CoreDbNewLegaMptFn   # Legacy handler, should go away
 
     # Transactions
     getIdFn*:     CoreDbNewTxGetIdFn
@@ -67,12 +79,14 @@ type
   # --------------------------------------------------
   # Sub-descriptor: KVT methods
   # --------------------------------------------------
-  CoreDbKvtGetFn* = proc(k: openArray[byte]): Blob {.noRaise.}
-  CoreDbKvtMaybeGetFn* = proc(key: openArray[byte]): Option[Blob] {.noRaise.}
-  CoreDbKvtDelFn* = proc(k: openArray[byte]) {.noRaise.}
-  CoreDbKvtPutFn* = proc(k: openArray[byte]; v: openArray[byte]) {.noRaise.}
-  CoreDbKvtContainsFn* = proc(k: openArray[byte]): bool {.noRaise.}
-  CoreDbKvtPairsIt* = iterator(): (Blob,Blob) {.noRaise.}
+  CoreDbKvtGetFn* = proc(k: openArray[byte]): CoreDbRc[Blob] {.noRaise.} 
+  CoreDbKvtMaybeGetFn* =
+    proc(key: openArray[byte]): CoreDbRc[Blob] {.noRaise.}
+  CoreDbKvtDelFn* = proc(k: openArray[byte]): CoreDbRc[void] {.noRaise.}
+  CoreDbKvtPutFn* =
+    proc(k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] {.noRaise.}
+  CoreDbKvtContainsFn* = proc(k: openArray[byte]): CoreDbRc[bool] {.noRaise.}
+  CoreDbKvtPairsIt* = iterator(): (Blob,Blob) {.apiRaise.}
 
   CoreDbKvtFns* = object
     ## Methods for key-value table
@@ -87,15 +101,19 @@ type
   # --------------------------------------------------
   # Sub-descriptor: Mpt/hexary trie methods
   # --------------------------------------------------
-  CoreDbMptGetFn* = proc(k: openArray[byte]): Blob {.rlpRaise.}
-  CoreDbMptMaybeGetFn* = proc(k: openArray[byte]): Option[Blob] {.rlpRaise.}
-  CoreDbMptDelFn* = proc(k: openArray[byte]) {.rlpRaise.}
-  CoreDbMptPutFn* = proc(k: openArray[byte]; v: openArray[byte]) {.catchRaise.}
-  CoreDbMptContainsFn* = proc(k: openArray[byte]): bool {.rlpRaise.}
-  CoreDbMptRootHashFn* = proc(): Hash256 {.noRaise.}
+  CoreDbMptGetFn* =
+    proc(k: openArray[byte]): CoreDbRc[Blob] {.noRaise.}
+  CoreDbMptMaybeGetFn* =
+    proc(k: openArray[byte]): CoreDbRc[Blob] {.noRaise.}
+  CoreDbMptDelFn* =
+    proc(k: openArray[byte]): CoreDbRc[void] {.noRaise.}
+  CoreDbMptPutFn* =
+    proc(k: openArray[byte]; v: openArray[byte]): CoreDbRc[void ] {.noRaise.}
+  CoreDbMptContainsFn* = proc(k: openArray[byte]): CoreDbRc[bool] {.noRaise.}
+  CoreDbMptRootHashFn* = proc(): CoreDbRc[Hash256] {.noRaise.}
   CoreDbMptIsPruningFn* = proc(): bool {.noRaise.}
-  CoreDbMptPairsIt* = iterator(): (Blob,Blob) {.rlpRaise.}
-  CoreDbMptReplicateIt* = iterator(): (Blob,Blob) {.rlpRaise.}
+  CoreDbMptPairsIt* = iterator(): (Blob,Blob) {.apiRaise.}
+  CoreDbMptReplicateIt* = iterator(): (Blob,Blob) {.apiRaise.}
 
   CoreDbMptFns* = object
     ## Methods for trie objects `CoreDbMptRef`
@@ -113,10 +131,10 @@ type
   # --------------------------------------------------
   # Sub-descriptor: Transaction frame management
   # --------------------------------------------------
-  CoreDbTxCommitFn* = proc(applyDeletes: bool) {.noRaise.}
-  CoreDbTxRollbackFn* = proc() {.noRaise.}
-  CoreDbTxDisposeFn* = proc() {.noRaise.}
-  CoreDbTxSafeDisposeFn* = proc() {.noRaise.}
+  CoreDbTxCommitFn* = proc(applyDeletes: bool): CoreDbRc[void] {.noRaise.}
+  CoreDbTxRollbackFn* = proc(): CoreDbRc[void] {.noRaise.}
+  CoreDbTxDisposeFn* = proc(): CoreDbRc[void] {.noRaise.}
+  CoreDbTxSafeDisposeFn* = proc(): CoreDbRc[void] {.noRaise.}
 
   CoreDbTxFns* = object
     commitFn*:      CoreDbTxCommitFn
@@ -127,9 +145,10 @@ type
   # --------------------------------------------------
   # Sub-descriptor: Transaction ID management
   # --------------------------------------------------
-  CoreDbTxIdSetIdFn* = proc() {.noRaise.}
-  CoreDbTxIdActionFn* = proc() {.catchRaise.}
-  CoreDbTxIdRoWrapperFn* = proc(action: CoreDbTxIdActionFn) {.catchRaise.}
+  CoreDbTxIdSetIdFn* = proc(): CoreDbRc[void] {.noRaise.}
+  CoreDbTxIdActionFn* = proc() {.noRaise.}
+  CoreDbTxIdRoWrapperFn* =
+    proc(action: CoreDbTxIdActionFn): CoreDbRc[void] {.noRaise.}
   CoreDbTxIdFns* = object
     setIdFn*:     CoreDbTxIdSetIdFn
     roWrapperFn*: CoreDbTxIdRoWrapperFn
@@ -138,7 +157,7 @@ type
   # --------------------------------------------------
   # Sub-descriptor: capture recorder methods
   # --------------------------------------------------
-  CoreDbCaptRecorderFn* = proc(): CoreDbRef {.noRaise.}
+  CoreDbCaptRecorderFn* = proc(): CoreDbRc[CoreDbRef] {.noRaise.}
   CoreDbCaptFlagsFn* = proc(): set[CoreDbCaptFlags] {.noRaise.}
 
   CoreDbCaptFns* = object
@@ -148,42 +167,42 @@ type
   # --------------------------------------------------
   # Production descriptors
   # --------------------------------------------------
-
   CoreDbRef* = ref object of RootRef
     ## Database descriptor
-    kvtObj*: CoreDbKvtObj
-    new*: CoreDbConstructors
+    dbType*: CoreDbType
+    kvtRef*: CoreDxKvtRef
+    new*: CoreDbConstructorFns
     methods*: CoreDbMiscFns
 
-  CoreDbKvtObj* = object
+  CoreDxKvtRef* = ref object
     ## Statically initialised Key-Value pair table living in `CoreDbRef`
-    dbType*: CoreDbType
+    parent*: CoreDbRef
     methods*: CoreDbKvtFns
 
-  CoreDbMptRef* = ref object
+  CoreDxMptRef* = ref object
     ## Hexary/Merkle-Patricia tree derived from `CoreDbRef`, will be
     ## initialised on-the-fly.
     parent*: CoreDbRef
     methods*: CoreDbMptFns
 
-  CoreDbPhkRef* = ref object
+  CoreDxPhkRef* = ref object
     ## Similar to `CoreDbMptRef` but with pre-hashed keys. That is, any
     ## argument key for `put()`, `get()` etc. will be hashed first before
     ## being applied.
-    parent*: CoreDbMptRef
+    fromMpt*: CoreDxMptRef
     methods*: CoreDbMptFns
 
-  CoreDbTxRef* = ref object
+  CoreDxTxRef* = ref object
     ## Transaction descriptor derived from `CoreDbRef`
     parent*: CoreDbRef
     methods*: CoreDbTxFns
 
-  CoreDbTxID* = ref object
+  CoreDxTxID* = ref object
     ## Transaction ID descriptor derived from `CoreDbRef`
     parent*: CoreDbRef
     methods*: CoreDbTxIdFns
 
-  CoreDbCaptRef* = ref object
+  CoreDxCaptRef* = ref object
     ## Db transaction tracer derived from `CoreDbRef`
     parent*: CoreDbRef
     methods*: CoreDbCaptFns

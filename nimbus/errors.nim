@@ -71,4 +71,6 @@ type
 
   InitcodeError* = object of EVMError
     ## Error to signal inicode size > EIP3860_MAX_INITCODE_SIZE
-    
+
+  CoreDbApiError* = object of CatchableError
+    ## Errors related to `CoreDB` API

@@ -13,9 +13,14 @@
 import
   std/options,
   eth/[common, rlp, trie/db, trie/hexary],
+  results,
+  ../../errors,
   "."/[base, base/base_desc]
 
 type
+  LegacyApiRlpError* = object of CoreDbApiError
+    ## For re-routing exceptions in iterator closure
+
   LegacyDbRef* = ref object of CoreDbRef
     tdb: TrieDatabaseRef # copy of descriptor reference captured with closures
 
@@ -28,28 +33,37 @@ type
     recorder: TrieDatabaseRef
     appDb: CoreDbRef
 
-# Annotation helpers
-{.pragma:    noRaise, gcsafe, raises: [].}
-{.pragma:   rlpRaise, gcsafe, raises: [RlpError].}
-{.pragma: catchRaise, gcsafe, raises: [CatchableError].}
+  LegacyCoreDbError = object of CoreDbError
+    ctx: string     ## Context where the exception occured
+    name: string    ## name of exception
+    msg: string     ## Exception info
 
 proc init*(
     db: LegacyDbRef;
     dbType: CoreDbType;
     tdb: TrieDatabaseRef;
       ): CoreDbRef
-      {.noRaise.}
+      {.gcsafe.}
 
 # ------------------------------------------------------------------------------
-# Private helpers
+# Private helpers, exceprion management
 # ------------------------------------------------------------------------------
 
-template ifLegacyOk(db: CoreDbRef; body: untyped) =
-  case db.dbType:
-  of LegacyDbMemory, LegacyDbPersistent:
-    body
-  else:
-    discard
+template mapRlpException(info: static[string]; code: untyped) =
+  try:
+    code
+  except RlpError as e:
+    return err(LegacyCoreDbError(
+      ctx: info,
+      name: $e.name,
+      msg: e.msg))
+
+template reraiseRlpException(info: static[string]; code: untyped) =
+  try:
+    code
+  except RlpError as e:
+    let msg = info & ", name=\"" & $e.name & "\", msg=\"" & e.msg & "\""
+    raise (ref LegacyApiRlpError)(msg: msg)
 
 # ------------------------------------------------------------------------------
 # Private mixin methods for `trieDB` (backport from capturedb/tracer sources)
@@ -95,74 +109,117 @@ proc newRecorderRef(
 # Private database method function tables
 # ------------------------------------------------------------------------------
 
-proc miscMethods(tdb: TrieDatabaseRef): CoreDbMiscFns =
+proc miscMethods(db: LegacyDbRef): CoreDbMiscFns =
   CoreDbMiscFns(
     legacySetupFn: proc() =
-      tdb.put(EMPTY_ROOT_HASH.data, @[0x80u8]))
+      db.tdb.put(EMPTY_ROOT_HASH.data, @[0x80u8]))
 
 proc kvtMethods(tdb: TrieDatabaseRef): CoreDbKvtFns =
   ## Key-value database table handlers
   CoreDbKvtFns(
-    getFn:      proc(k: openArray[byte]): Blob =               tdb.get(k),
-    maybeGetFn: proc(k: openArray[byte]): Option[Blob] =       tdb.maybeGet(k),
-    delFn:      proc(k: openArray[byte]) =                     tdb.del(k),
-    putFn:      proc(k: openArray[byte]; v: openArray[byte]) = tdb.put(k,v),
-    containsFn: proc(k: openArray[byte]): bool =               tdb.contains(k),
-    pairsIt:    iterator(): (Blob, Blob) {.noRaise.} =
+    getFn: proc(k: openArray[byte]): CoreDbRc[Blob] =
+      ok(tdb.get(k)),
+
+    maybeGetFn: proc(k: openArray[byte]): CoreDbRc[Blob] =
+      let rc = tdb.maybeGet(k)
+      if rc.isSome: ok(rc.unsafeGet)
+      else: err(LegacyCoreDbError()),
+
+    delFn: proc(k: openArray[byte]): CoreDbRc[void] =
+      tdb.del(k)
+      ok(),
+
+    putFn: proc(k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] =
+      tdb.put(k,v)
+      ok(),
+
+    containsFn: proc(k: openArray[byte]): CoreDbRc[bool] =
+      ok(tdb.contains(k)),
+
+    pairsIt: iterator(): (Blob, Blob) =
       for k,v in tdb.pairsInMemoryDB:
         yield (k,v))
 
 proc mptMethods(mpt: HexaryTrieRef): CoreDbMptFns =
   ## Hexary trie database handlers
   CoreDbMptFns(
-    getFn: proc(k: openArray[byte]): Blob {.rlpRaise.} =
-      mpt.trie.get(k),
+    getFn: proc(k: openArray[byte]): CoreDbRc[Blob] =
+      mapRlpException("legacy/mpt/get()"):
+        return ok(mpt.trie.get(k))
+      discard,
 
-    maybeGetFn: proc(k: openArray[byte]): Option[Blob] {.rlpRaise.} =
-      mpt.trie.maybeGet(k),
+    maybeGetFn: proc(k: openArray[byte]): CoreDbRc[Blob] =
+      mapRlpException("legacy/mpt/maybeGet()"):
+        let rc = mpt.trie.maybeGet(k)
+        if rc.isSome: return ok(rc.unsafeGet)
+        else: return err(LegacyCoreDbError(ctx: "maybeGet()"))
+      discard,
 
-    delFn: proc(k: openArray[byte]) {.rlpRaise.} =
-      mpt.trie.del(k),
+    delFn: proc(k: openArray[byte]): CoreDbRc[void] =
+      mapRlpException("legacy/mpt/del()"):
+        mpt.trie.del(k)
+      ok(),
 
-    putFn: proc(k: openArray[byte]; v: openArray[byte]) {.rlpRaise.} =
-      mpt.trie.put(k,v),
+    putFn: proc(k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] =
+      mapRlpException("legacy/mpt/put()"):
+        mpt.trie.put(k,v)
+      ok(),
 
-    containsFn: proc(k: openArray[byte]): bool {.rlpRaise.} =
-      mpt.trie.contains(k),
+    containsFn: proc(k: openArray[byte]): CoreDbRc[bool] =
+      mapRlpException("legacy/mpt/put()"):
+        return ok(mpt.trie.contains(k))
+      discard,
 
-    rootHashFn: proc(): Hash256 =
-      mpt.trie.rootHash,
+    rootHashFn: proc(): CoreDbRc[Hash256] =
+      ok(mpt.trie.rootHash),
 
     isPruningFn: proc(): bool =
       mpt.trie.isPruning,
 
-    pairsIt: iterator(): (Blob, Blob) {.rlpRaise.} =
-      for k,v in mpt.trie.pairs():
-        yield (k,v),
+    pairsIt: iterator(): (Blob, Blob) {.gcsafe, raises: [CoreDbApiError].} =
+      reraiseRlpException("legacy/mpt/pairs()"):
+        for k,v in mpt.trie.pairs():
+          yield (k,v)
+      discard,
 
-    replicateIt: iterator(): (Blob, Blob) {.rlpRaise.} =
-      for k,v in mpt.trie.replicate():
-        yield (k,v))
+    replicateIt: iterator(): (Blob, Blob) {.gcsafe, raises: [CoreDbApiError].} =
+      reraiseRlpException("legacy/mpt/replicate()"):
+        for k,v in mpt.trie.replicate():
+          yield (k,v)
+      discard)
 
 proc txMethods(tx: DbTransaction): CoreDbTxFns =
   CoreDbTxFns(
-    commitFn:      proc(applyDeletes: bool) = tx.commit(applyDeletes),
-    rollbackFn:    proc() =                   tx.rollback(),
-    disposeFn:     proc() =                   tx.dispose(),
-    safeDisposeFn: proc() =                   tx.safeDispose())
+    commitFn: proc(applyDeletes: bool): CoreDbRc[void] =
+      tx.commit(applyDeletes)
+      ok(),
+
+    rollbackFn: proc(): CoreDbRc[void] =
+      tx.rollback()
+      ok(),
+
+    disposeFn: proc(): CoreDbRc[void] =
+      tx.dispose()
+      ok(),
+
+    safeDisposeFn: proc(): CoreDbRc[void] =
+      tx.safeDispose()
+      ok())
 
 proc tidMethods(tid: TransactionID; tdb: TrieDatabaseRef): CoreDbTxIdFns =
   CoreDbTxIdFns(
-    setIdFn: proc() =
-      tdb.setTransactionID(tid),
+    setIdFn: proc(): CoreDbRc[void] =
+      tdb.setTransactionID(tid)
+      ok(),
 
-    roWrapperFn: proc(action: CoreDbTxIdActionFn) {.catchRaise.} =
-      tdb.shortTimeReadOnly(tid, action()))
+    roWrapperFn: proc(action: CoreDbTxIdActionFn): CoreDbRc[void] =
+      tdb.shortTimeReadOnly(tid, action())
+      ok())
 
 proc cptMethods(cpt: RecorderRef): CoreDbCaptFns =
   CoreDbCaptFns(
-    recorderFn: proc(): CoreDbRef =
-      cpt.appDb,
+    recorderFn: proc(): CoreDbRc[CoreDbRef] =
+      ok(cpt.appDb),
 
     getFlagsFn: proc(): set[CoreDbCaptFlags] =
       cpt.flags)
@@ -171,24 +228,27 @@ proc cptMethods(cpt: RecorderRef): CoreDbCaptFns =
 # Private constructor functions table
 # ------------------------------------------------------------------------------
 
-proc constructors(tdb: TrieDatabaseRef, parent: CoreDbRef): CoreDbConstructors =
-  CoreDbConstructors(
-    mptFn: proc(root: Hash256): CoreDbMptRef =
+proc constructors(
+    tdb: TrieDatabaseRef;
+    parent: CoreDbRef;
+      ): CoreDbConstructorFns =
+  CoreDbConstructorFns(
+    mptFn: proc(root: Hash256): CoreDbRc[CoreDxMptRef] =
       let mpt = HexaryTrieRef(trie: initHexaryTrie(tdb, root, false))
-      newCoreDbMptRef(parent, mpt.mptMethods),
+      ok(newCoreDbMptRef(parent, mpt.mptMethods)),
 
-    legacyMptFn: proc(root: Hash256; prune: bool): CoreDbMptRef =
+    legacyMptFn: proc(root: Hash256; prune: bool): CoreDbRc[CoreDxMptRef] =
       let mpt = HexaryTrieRef(trie: initHexaryTrie(tdb, root, prune))
-      newCoreDbMptRef(parent, mpt.mptMethods),
+      ok(newCoreDbMptRef(parent, mpt.mptMethods)),
 
-    getIdFn: proc(): CoreDbTxID =
-      newCoreDbTxID(parent, tdb.getTransactionID.tidMethods tdb),
+    getIdFn: proc(): CoreDbRc[CoreDxTxID] =
+      ok(newCoreDbTxID(parent, tdb.getTransactionID.tidMethods tdb)),
 
-    beginFn: proc(): CoreDbTxRef =
-      newCoreDbTxRef(parent, tdb.beginTransaction.txMethods),
+    beginFn: proc(): CoreDbRc[CoreDxTxRef] =
+      ok(newCoreDbTxRef(parent, tdb.beginTransaction.txMethods)),
 
-    captureFn: proc(flags: set[CoreDbCaptFlags] = {}): CoreDbCaptRef =
-      newCoreDbCaptRef(parent, newRecorderRef(tdb, flags).cptMethods))
+    captureFn: proc(flags: set[CoreDbCaptFlags] = {}): CoreDbRc[CoreDxCaptRef] =
+      ok(newCoreDbCaptRef(parent, newRecorderRef(tdb, flags).cptMethods)))
 
 # ------------------------------------------------------------------------------
 # Public constructor helpers
@@ -202,9 +262,9 @@ proc init*(
   db.tdb = tdb
   db.init(
     dbType =     dbType,
-    dbMethods =  tdb.miscMethods,
+    dbMethods =  db.miscMethods,
     kvtMethods = tdb.kvtMethods,
-    new =        tdb.constructors db)
+    newSubMod =  tdb.constructors db)
   db
 
 # ------------------------------------------------------------------------------
@@ -222,7 +282,7 @@ proc newLegacyMemoryCoreDbRef*(): CoreDbRef =
 # ------------------------------------------------------------------------------
 
 proc toLegacyTrieRef*(db: CoreDbRef): TrieDatabaseRef =
-  db.ifLegacyOk:
+  if db.dbType in {LegacyDbMemory, LegacyDbPersistent}:
     return db.LegacyDbRef.tdb
 
 # ------------------------------------------------------------------------------

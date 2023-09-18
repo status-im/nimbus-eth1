@@ -11,6 +11,7 @@
 {.push raises: [].}
 
 import
+  std/options,
   eth/[common, trie/db],
   "."/[base, core_apps, legacy_db]
 
@@ -20,14 +21,21 @@ export
 
   # Not all symbols from the object sources will be exported by default
   CoreDbCaptFlags,
+  CoreDbError,
   CoreDbCaptRef,
-  CoreDbKvtObj,
+  CoreDbKvtRef,
   CoreDbMptRef,
   CoreDbPhkRef,
   CoreDbRef,
   CoreDbTxID,
   CoreDbTxRef,
   CoreDbType,
+  CoreDxCaptRef,
+  CoreDxKvtRef,
+  CoreDxMptRef,
+  CoreDxPhkRef,
+  CoreDxTxID,
+  CoreDxTxRef,
   beginTransaction,
   capture,
   commit,
@@ -41,11 +49,15 @@ export
   isPruning,
   kvt,
   maybeGet,
-  mpt,
   mptPrune,
+  newCapture,
+  newMpt,
+  newMptPrune,
+  newPhk,
+  newPhkPrune,
+  newTransaction,
   pairs,
   parent,
-  phk,
   phkPrune,
   put,
   recorder,
@@ -55,7 +67,8 @@ export
   safeDispose,
   setTransactionID,
   toMpt,
-  toPhk
+  toPhk,
+  toTransactionID
 
 # ------------------------------------------------------------------------------
 # Public constructor
@@ -69,6 +82,7 @@ proc newCoreDbRef*(
   ##
   ## Note: Using legacy notation `newCoreDbRef()` rather than
   ## `CoreDbRef.init()` because of compiler coughing.
+  ##
   db.newLegacyPersistentCoreDbRef()
 
 proc newCoreDbRef*(dbType: static[CoreDbType]): CoreDbRef =
@@ -76,8 +90,10 @@ proc newCoreDbRef*(dbType: static[CoreDbType]): CoreDbRef =
   ##
   ## Note: Using legacy notation `newCoreDbRef()` rather than
   ## `CoreDbRef.init()` because of compiler coughing.
+  ##
   when dbType == LegacyDbMemory:
     newLegacyMemoryCoreDbRef()
+
   else:
     {.error: "Unsupported dbType for memory newCoreDbRef()".}
 
@@ -85,8 +101,8 @@ proc newCoreDbRef*(dbType: static[CoreDbType]): CoreDbRef =
 # Public template wrappers
 # ------------------------------------------------------------------------------
 
-template shortTimeReadOnly*(id: CoreDbTxID; body: untyped) =
-  proc action() {.gcsafe, raises: [CatchableError].} =
+template shortTimeReadOnly*(id: CoreDxTxID|CoreDbTxID; body: untyped) =
+  proc action() =
     body
   id.shortTimeReadOnly action
 
