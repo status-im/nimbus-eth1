@@ -230,7 +230,8 @@ proc validateBlockBody(
 
   let calculatedTxsRoot = calcTxsRoot(body.transactions)
   if calculatedTxsRoot != header.txRoot:
-    return err("Invalid transactions root")
+    return err("Invalid transactions root: expected " &
+      $header.txRoot & " - got " & $calculatedTxsRoot)
 
   ok()
 
@@ -246,15 +247,19 @@ proc validateBlockBody(
 
   let calculatedTxsRoot = calcTxsRoot(body.transactions)
   if calculatedTxsRoot != header.txRoot:
-    return err("Invalid transactions root")
+    return err("Invalid transactions root: expected " &
+      $header.txRoot & " - got " & $calculatedTxsRoot)
 
   # TODO: This check is done higher up but perhaps this can become cleaner with
   # some refactor.
   doAssert(header.withdrawalsRoot.isSome())
 
-  let calculatedWithdrawalsRoot = calcWithdrawalsRoot(body.withdrawals)
-  if calculatedWithdrawalsRoot != header.txRoot:
-    return err("Invalid transactions root")
+  let
+    calculatedWithdrawalsRoot = calcWithdrawalsRoot(body.withdrawals)
+    headerWithdrawalsRoot = header.withdrawalsRoot.get()
+  if calculatedWithdrawalsRoot != headerWithdrawalsRoot:
+    return err("Invalid withdrawals root: expected " &
+      $headerWithdrawalsRoot & " - got " & $calculatedWithdrawalsRoot)
 
   ok()
 
