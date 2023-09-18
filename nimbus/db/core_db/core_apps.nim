@@ -431,7 +431,7 @@ proc persistTransactions*(
     blockNumber: BlockNumber;
     transactions: openArray[Transaction];
       ): Hash256
-      {.gcsafe, raises: [RlpError].} =
+      {.gcsafe, raises: [CatchableError].} =
   var trie = db.mptPrune()
   for idx, tx in transactions:
     let
@@ -496,7 +496,7 @@ proc persistWithdrawals*(
     db: CoreDbRef;
     withdrawals: openArray[Withdrawal];
       ): Hash256
-      {.gcsafe, raises: [RlpError].} =
+      {.gcsafe, raises: [CatchableError].} =
   var trie = db.mptPrune()
   for idx, wd in withdrawals:
     let  encodedWd = rlp.encode(wd)
@@ -623,7 +623,7 @@ proc persistReceipts*(
     db: CoreDbRef;
     receipts: openArray[Receipt];
       ): Hash256
-      {.gcsafe, raises: [RlpError].} =
+      {.gcsafe, raises: [CatchableError].} =
   var trie = db.mptPrune()
   for idx, rec in receipts:
     trie.put(rlp.encode(idx), rlp.encode(rec))

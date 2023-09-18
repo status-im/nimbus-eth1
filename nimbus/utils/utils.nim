@@ -9,7 +9,7 @@ export eth_types_rlp
 {.push raises: [].}
 
 proc calcRootHash[T](items: openArray[T]): Hash256
-    {.gcsafe, raises: [RlpError]} =
+    {.gcsafe, raises: [CatchableError]} =
   var tr = newCoreDbRef(LegacyDbMemory).mptPrune
   for i, t in items:
     tr.put(rlp.encode(i), rlp.encode(t))

@@ -100,7 +100,7 @@ type
   CoreDbMptGetFn* = proc(k: openArray[byte]): Blob {.rlpRaise.}
   CoreDbMptMaybeGetFn* = proc(k: openArray[byte]): Option[Blob] {.rlpRaise.}
   CoreDbMptDelFn* = proc(k: openArray[byte]) {.rlpRaise.}
-  CoreDbMptPutFn* = proc(k: openArray[byte]; v: openArray[byte]) {.rlpRaise.}
+  CoreDbMptPutFn* = proc(k: openArray[byte]; v: openArray[byte]) {.catchRaise.}
   CoreDbMptContainsFn* = proc(k: openArray[byte]): bool {.rlpRaise.}
   CoreDbMptRootHashFn* = proc(): Hash256 {.noRaise.}
   CoreDbMptIsPruningFn* = proc(): bool {.noRaise.}
@@ -280,7 +280,7 @@ proc toCoreDbPhkRef(mpt: CoreDbMptRef): CoreDbPhkRef =
       delFn: proc(k: openArray[byte]) {.rlpRaise.} =
         mpt.methods.delFn(k.keccakHash.data),
 
-      putFn: proc(k:openArray[byte]; v:openArray[byte]) {.rlpRaise.} =
+      putFn: proc(k:openArray[byte]; v:openArray[byte]) {.catchRaise.} =
         mpt.methods.putFn(k.keccakHash.data, v),
 
       containsFn: proc(k: openArray[byte]): bool {.rlpRaise.} =
@@ -521,7 +521,7 @@ proc put*(
     trie: CoreDbMptRef|CoreDbPhkRef;
     key: openArray[byte];
     value: openArray[byte];
-      ) {.rlpRaise.} =
+      ) {.catchRaise.} =
   trie.methods.putFn(key, value)
 
 proc contains*(

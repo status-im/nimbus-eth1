@@ -69,8 +69,14 @@ proc validateSeal(pow: PowRef; header: BlockHeader): Result[void,string] =
 
   ok()
 
-proc validateHeader(com: CommonRef; header, parentHeader: BlockHeader;
-                    body: BlockBody; checkSealOK: bool): Result[void,string] =
+proc validateHeader(
+    com: CommonRef;
+    header: BlockHeader;
+    parentHeader: BlockHeader;
+    body: BlockBody;
+    checkSealOK: bool;
+      ): Result[void,string]
+      {.gcsafe, raises: [CatchableError].} =
 
   template inDAOExtraRange(blockNumber: BlockNumber): bool =
     # EIP-799
@@ -391,7 +397,9 @@ proc validateHeaderAndKinship*(
     com: CommonRef;
     header: BlockHeader;
     body: BlockBody;
-    checkSealOK: bool): Result[void, string] =
+    checkSealOK: bool;
+      ): Result[void, string]
+      {.gcsafe, raises: [CatchableError].} =
   if header.isGenesis:
     if header.extraData.len > 32:
       return err("BlockHeader.extraData larger than 32 bytes")

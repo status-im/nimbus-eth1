@@ -64,7 +64,7 @@ logScope:
 #    raise newException(TxPackerError, info & "(): " & $e.name & " -- " & e.msg)
 
 proc persist(pst: TxPackerStateRef)
-    {.gcsafe,raises: [RlpError].} =
+    {.gcsafe,raises: [CatchableError].} =
   ## Smart wrapper
   if not pst.cleanState:
     let fork = pst.xp.chain.nextFork

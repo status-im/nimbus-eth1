@@ -18,18 +18,18 @@ import
 # ------------------------------------------------------------------------------
 
 func wdRoot(list: openArray[WithdrawalV1]): common.Hash256
-             {.gcsafe, raises:[RlpError].} =
+             {.gcsafe, raises:[CatchableError].} =
   {.nosideEffect.}:
     calcWithdrawalsRoot(ethWithdrawals list)
 
 func wdRoot(x: Option[seq[WithdrawalV1]]): Option[common.Hash256]
-             {.gcsafe, raises:[RlpError].} =
+             {.gcsafe, raises:[CatchableError].} =
   {.nosideEffect.}:
     if x.isNone: none(common.Hash256)
     else: some(wdRoot x.get)
 
 func txRoot(list: openArray[Web3Tx]): common.Hash256
-             {.gcsafe, raises:[RlpError].} =
+             {.gcsafe, raises:[CatchableError].} =
   {.nosideEffect.}:
     calcTxRoot(ethTxs list)
 
@@ -81,7 +81,7 @@ func executionPayloadV1V2*(blk: EthBlock): ExecutionPayloadV1OrV2 =
 
 func blockHeader*(p: ExecutionPayload,
                      beaconRoot: Option[common.Hash256]):
-                       common.BlockHeader {.gcsafe, raises:[RlpError].} =
+                       common.BlockHeader {.gcsafe, raises:[CatchableError].} =
   common.BlockHeader(
     parentHash     : ethHash p.parentHash,
     ommersHash     : EMPTY_UNCLE_HASH,
@@ -115,7 +115,7 @@ func blockBody*(p: ExecutionPayload):
 
 func ethBlock*(p: ExecutionPayload,
                beaconRoot: Option[common.Hash256]):
-                 common.EthBlock {.gcsafe, raises:[RlpError].} =
+                 common.EthBlock {.gcsafe, raises:[CatchableError].} =
   common.Ethblock(
     header     : blockHeader(p, beaconRoot),
     uncles     : @[],

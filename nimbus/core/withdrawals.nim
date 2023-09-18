@@ -16,8 +16,11 @@ import
 
 # https://eips.ethereum.org/EIPS/eip-4895
 proc validateWithdrawals*(
-    com: CommonRef, header: BlockHeader, body: BlockBody
-): Result[void, string] =
+    com: CommonRef,
+    header: BlockHeader,
+    body: BlockBody
+      ): Result[void, string]
+      {.gcsafe, raises: [CatchableError].} =
 
   if com.forkGTE(Shanghai):
     if header.withdrawalsRoot.isNone:
