@@ -375,7 +375,7 @@ proc delete*(
 proc delete*(
     db: AristoDbRef;
     root: VertexID;
-    path: Blob;
+    path: openArray[byte];
       ): Result[void,(VertexID,AristoError)] =
   ## Variant of `fetchPayload()`
   ##

@@ -48,7 +48,7 @@ proc fetchPayload*(
 proc fetchPayload*(
     db: AristoDbRef;
     root: VertexID;
-    path: Blob;
+    path: openArray[byte];
       ): Result[PayloadRef,(VertexID,AristoError)] =
   ## Variant of `fetchPayload()`
   ##
