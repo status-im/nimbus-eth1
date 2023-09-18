@@ -239,11 +239,10 @@ proc validateBlockBody(
     Result[void, string] =
   ## Validate the block body against the txRoot, ommersHash and withdrawalsRoot
   ## from the header.
-  # Shortcutting the ommersHash calculation as uncles needs to be empty
-  # TODO: This is since post-merge, however, we would need an additional object
-  # type for that period to do this.
-  if body.uncles.len > 0:
-    return err("Invalid ommers hash")
+  # Shortcut the ommersHash calculation as uncles must be an RLP encoded
+  # empty list
+  if body.uncles.asSeq() != @[byte 0xc0]:
+    return err("Invalid ommers hash, uncles list is not empty")
 
   let calculatedTxsRoot = calcTxsRoot(body.transactions)
   if calculatedTxsRoot != header.txRoot:
