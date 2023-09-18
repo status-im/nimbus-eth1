@@ -32,6 +32,11 @@ type
 const
   extraTraceMessages = false # or true
 
+# Annotation helpers
+{.pragma:    noRaise, gcsafe, raises: [].}
+{.pragma:   rlpRaise, gcsafe, raises: [RlpError].}
+{.pragma: catchRaise, gcsafe, raises: [CatchableError].}
+
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
@@ -58,7 +63,7 @@ proc persistentStorageSlots(
     db: HexaryTreeDbRef;       ## Current table
     ps: SnapDbStorageSlotsRef; ## For persistent database
       ): Result[void,HexaryError]
-      {.gcsafe, raises: [OSError,IOError,KeyError].} =
+      {.catchRaise.} =
   ## Store accounts trie table on databse
   if ps.rockDb.isNil:
     let rc = db.persistentStorageSlotsPut(ps.kvDb)
@@ -115,7 +120,7 @@ proc importStorageSlots(
     data: AccountSlots;        ## Account storage descriptor
     proof: seq[SnapProof];    ## Storage slots proof data
       ): Result[seq[NodeSpecs],HexaryError]
-      {.gcsafe, raises: [CatchableError,KeyError].} =
+      {.catchRaise.} =
   ## Process storage slots for a particular storage root. See `importAccounts()`
   ## for comments on the return value.
   let
@@ -326,7 +331,8 @@ proc importRawStorageSlotsNodes*(
     nodes: openArray[NodeSpecs]; ## List of `(key,data)` records
     reportNodes = {Leaf};        ## Additional node types to report
     persistent = false;          ## store data on disk
-      ): seq[HexaryNodeReport] =
+      ): seq[HexaryNodeReport]
+      {.catchRaise.} =
   ## Store data nodes given as argument `nodes` on the persistent database.
   ##
   ## If there were an error when processing a particular argument `notes` item,
@@ -399,7 +405,8 @@ proc importRawStorageSlotsNodes*(
     accKey: NodeKey;              ## Account key
     nodes: openArray[NodeSpecs];  ## List of `(key,data)` records
     reportNodes = {Leaf};         ## Additional node types to report
-      ): seq[HexaryNodeReport] =
+      ): seq[HexaryNodeReport]
+      {.catchRaise.} =
   ## Variant of `importRawNodes()` for persistent storage.
   SnapDbStorageSlotsRef.init(
     pv, accKey, Hash256(), peer).importRawStorageSlotsNodes(

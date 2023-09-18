@@ -34,6 +34,11 @@ type
 const
   extraTraceMessages = false # or true
 
+# Annotation helpers
+{.pragma:    noRaise, gcsafe, raises: [].}
+{.pragma:   rlpRaise, gcsafe, raises: [RlpError].}
+{.pragma: catchRaise, gcsafe, raises: [CatchableError].}
+
 proc getAccountFn*(ps: SnapDbAccountsRef): HexaryGetFn
 
 # ------------------------------------------------------------------------------
@@ -61,7 +66,7 @@ proc persistentAccounts(
     db: HexaryTreeDbRef;      ## Current table
     ps: SnapDbAccountsRef;    ## For persistent database
       ): Result[void,HexaryError]
-      {.gcsafe, raises: [OSError,IOError,KeyError].} =
+      {.catchRaise.} =
   ## Store accounts trie table on databse
   if ps.rockDb.isNil:
     let rc = db.persistentAccountsPut(ps.kvDb)
@@ -309,7 +314,7 @@ proc importRawAccountsNodes*(
     reportNodes = {Leaf};        ## Additional node types to report
     persistent = false;          ## store data on disk
       ): seq[HexaryNodeReport]
-      {.gcsafe, raises: [IOError].} =
+      {.catchRaise.} =
   ## Store data nodes given as argument `nodes` on the persistent database.
   ##
   ## If there were an error when processing a particular argument `notes` item,
@@ -376,7 +381,7 @@ proc importRawAccountsNodes*(
     nodes: openArray[NodeSpecs];  ## List of `(key,data)` records
     reportNodes = {Leaf};         ## Additional node types to report
       ): seq[HexaryNodeReport]
-      {.gcsafe, raises: [IOError].} =
+      {.catchRaise.} =
   ## Variant of `importRawNodes()` for persistent storage.
   SnapDbAccountsRef.init(
     pv, Hash256(), peer).importRawAccountsNodes(

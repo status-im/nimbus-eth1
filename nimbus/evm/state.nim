@@ -20,6 +20,11 @@ import
   ./interpreter/[op_codes, gas_costs],
   ./types
 
+# Annotation helpers
+{.pragma:    noRaise, gcsafe, raises: [].}
+{.pragma:   rlpRaise, gcsafe, raises: [RlpError].}
+{.pragma: catchRaise, gcsafe, raises: [CatchableError].}
+
 proc init(
       self:         BaseVMState;
       ac:           AccountsCache;
@@ -33,7 +38,7 @@ proc init(
       com:          CommonRef;
       tracer:       TracerRef,
       asyncFactory: AsyncOperationFactory = AsyncOperationFactory(maybeDataSource: none[AsyncDataSource]()))
-    {.gcsafe.} =
+    {.noRaise.} =
   ## Initialisation helper
   self.parent = parent
   self.timestamp = timestamp
@@ -69,7 +74,7 @@ proc new*(
       miner:       EthAddress;      ## tx env: coinbase(PoW) or signer(PoA)
       com:         CommonRef;       ## block chain config
       tracer:      TracerRef = nil): T
-    {.gcsafe.} =
+    {.catchRaise.} =
   ## Create a new `BaseVMState` descriptor from a parent block header. This
   ## function internally constructs a new account state cache rooted at
   ## `parent.stateRoot`
@@ -99,7 +104,7 @@ proc reinit*(self:      BaseVMState;     ## Object descriptor
              difficulty:UInt256,         ## tx env: difficulty
              miner:     EthAddress;      ## tx env: coinbase(PoW) or signer(PoA)
              ): bool
-    {.gcsafe.} =
+    {.catchRaise.} =
   ## Re-initialise state descriptor. The `AccountsCache` database is
   ## re-initilaise only if its `rootHash` doe not point to `parent.stateRoot`,
   ## already. Accumulated state data are reset.
@@ -134,7 +139,7 @@ proc reinit*(self:      BaseVMState; ## Object descriptor
              parent:    BlockHeader; ## parent header, account sync pos.
              header:    BlockHeader; ## header with tx environment data fields
              ): bool
-    {.gcsafe, raises: [CatchableError].} =
+    {.catchRaise.} =
   ## Variant of `reinit()`. The `parent` argument is used to sync the accounts
   ## cache and the `header` is used as a container to pass the `timestamp`,
   ## `gasLimit`, and `fee` values.
@@ -153,7 +158,7 @@ proc reinit*(self:      BaseVMState; ## Object descriptor
 proc reinit*(self:      BaseVMState; ## Object descriptor
              header:    BlockHeader; ## header with tx environment data fields
              ): bool
-    {.gcsafe, raises: [CatchableError].} =
+    {.catchRaise.} =
   ## This is a variant of the `reinit()` function above where the field
   ## `header.parentHash`, is used to fetch the `parent` BlockHeader to be
   ## used in the `update()` variant, above.
@@ -169,7 +174,7 @@ proc init*(
       header: BlockHeader;     ## header with tx environment data fields
       com:    CommonRef;       ## block chain config
       tracer: TracerRef = nil)
-    {.gcsafe, raises: [CatchableError].} =
+    {.catchRaise.} =
   ## Variant of `new()` constructor above for in-place initalisation. The
   ## `parent` argument is used to sync the accounts cache and the `header`
   ## is used as a container to pass the `timestamp`, `gasLimit`, and `fee`
@@ -195,7 +200,7 @@ proc new*(
       header: BlockHeader;     ## header with tx environment data fields
       com:    CommonRef;       ## block chain config
       tracer: TracerRef = nil): T
-    {.gcsafe, raises: [CatchableError].} =
+    {.catchRaise.} =
   ## This is a variant of the `new()` constructor above where the `parent`
   ## argument is used to sync the accounts cache and the `header` is used
   ## as a container to pass the `timestamp`, `gasLimit`, and `fee` values.
@@ -214,7 +219,7 @@ proc new*(
       header: BlockHeader;     ## header with tx environment data fields
       com:    CommonRef;       ## block chain config
       tracer: TracerRef = nil): T
-    {.gcsafe, raises: [CatchableError].} =
+    {.catchRaise.} =
   ## This is a variant of the `new()` constructor above where the field
   ## `header.parentHash`, is used to fetch the `parent` BlockHeader to be
   ## used in the `new()` variant, above.
@@ -229,7 +234,7 @@ proc init*(
       header:  BlockHeader;     ## header with tx environment data fields
       com:     CommonRef;       ## block chain config
       tracer:  TracerRef = nil): bool
-    {.gcsafe, raises: [CatchableError].} =
+    {.catchRaise.} =
   ## Variant of `new()` which does not throw an exception on a dangling
   ## `BlockHeader` parent hash reference.
   var parent: BlockHeader
@@ -248,7 +253,7 @@ proc statelessInit*(
     com:          CommonRef;       ## block chain config
     asyncFactory: AsyncOperationFactory;
     tracer:       TracerRef = nil): bool
-    {.gcsafe, raises: [CatchableError].} =
+    {.catchRaise.} =
   vmState.init(
     ac          = AccountsCache.init(com.db, parent.stateRoot, com.pruneTrie),
     parent      = parent,
@@ -263,22 +268,22 @@ proc statelessInit*(
     asyncFactory = asyncFactory)
   return true
 
-method coinbase*(vmState: BaseVMState): EthAddress {.base, gcsafe.} =
+method coinbase*(vmState: BaseVMState): EthAddress {.base, noRaise.} =
   vmState.minerAddress
 
-method blockNumber*(vmState: BaseVMState): BlockNumber {.base, gcsafe.} =
+method blockNumber*(vmState: BaseVMState): BlockNumber {.base, noRaise.} =
   # it should return current block number
   # and not head.blockNumber
   vmState.parent.blockNumber + 1
 
-method difficulty*(vmState: BaseVMState): UInt256 {.base, gcsafe.} =
+method difficulty*(vmState: BaseVMState): UInt256 {.base, noRaise.} =
   if vmState.com.consensus == ConsensusType.POS:
     # EIP-4399/EIP-3675
     UInt256.fromBytesBE(vmState.prevRandao.data)
   else:
     vmState.blockDifficulty
 
-method baseFee*(vmState: BaseVMState): UInt256 {.base, gcsafe.} =
+method baseFee*(vmState: BaseVMState): UInt256 {.base, noRaise.} =
   if vmState.fee.isSome:
     vmState.fee.get
   else:
@@ -288,15 +293,17 @@ when defined(geth):
   import db/geth_db
 
 method getAncestorHash*(
-    vmState: BaseVMState, blockNumber: BlockNumber):
-    Hash256 {.base, gcsafe, raises: [CatchableError].} =
+    vmState: BaseVMState;
+    blockNumber: BlockNumber;
+      ): Hash256
+      {.base, catchRaise.} =
   let db = vmState.com.db
   when defined(geth):
     result = db.headerHash(blockNumber.truncate(uint64))
   else:
     result = db.getBlockHash(blockNumber)
 
-proc readOnlyStateDB*(vmState: BaseVMState): ReadOnlyStateDB {.inline.} =
+proc readOnlyStateDB*(vmState: BaseVMState): ReadOnlyStateDB =
   ReadOnlyStateDB(vmState.stateDB)
 
 template mutateStateDB*(vmState: BaseVMState, body: untyped) =
@@ -393,7 +400,7 @@ proc captureGasCost*(vmState: BaseVMState,
 proc captureOpEnd*(vmState: BaseVMState, comp: Computation, pc: int,
                    op: Op, gas: GasInt, refund: GasInt,
                    rData: openArray[byte],
-                   depth: int, opIndex: int) =
+                   depth: int, opIndex: int) {.catchRaise.} =
   if vmState.tracingEnabled:
     let fixed = vmState.gasCosts[op].kind == GckFixed
     vmState.tracer.captureOpEnd(comp, fixed, pc, op, gas, refund, rData, depth, opIndex)

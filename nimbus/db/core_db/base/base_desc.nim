@@ -33,19 +33,21 @@ type
   # --------------------------------------------------
   # Constructors
   # --------------------------------------------------
-  CoreDbNewMptFn* = proc(root: Hash256): CoreDbMptRef {.noRaise.}
-  CoreDbNewLegacyMptFn* =
-    proc(root: Hash256; prune: bool): CoreDbMptRef {.noRaise.}
-  CoreDbNewTxGetIdFn* = proc(): CoreDbTxID {.noRaise.}
-  CoreDbNewTxBeginFn* = proc(): CoreDbTxRef {.noRaise.}
-  CoreDbNewCaptFn = proc(flags: set[CoreDbCaptFlags]): CoreDbCaptRef {.noRaise.}
+  CoreDbNewMptFn* =
+      proc(root: Hash256): CoreDbMptRef {.catchRaise.}
+  CoreDbNewLegaMptFn* =
+    proc(root: Hash256; prune: bool): CoreDbMptRef {.catchRaise.}
+  CoreDbNewTxGetIdFn* = proc(): CoreDbTxID {.catchRaise.}
+  CoreDbNewTxBeginFn* = proc(): CoreDbTxRef {.catchRaise.}
+  CoreDbNewCaptFn* =
+    proc(flgs: set[CoreDbCaptFlags]): CoreDbCaptRef {.catchRaise.}
 
   CoreDbConstructors* = object
     ## Constructors
 
     # Hexary trie
     mptFn*:       CoreDbNewMptFn
-    legacyMptFn*: CoreDbNewLegacyMptFn # Legacy handler, should go away
+    legacyMptFn*: CoreDbNewLegaMptFn   # Legacy handler, should go away
 
     # Transactions
     getIdFn*:     CoreDbNewTxGetIdFn
@@ -95,7 +97,7 @@ type
   CoreDbMptRootHashFn* = proc(): Hash256 {.noRaise.}
   CoreDbMptIsPruningFn* = proc(): bool {.noRaise.}
   CoreDbMptPairsIt* = iterator(): (Blob,Blob) {.rlpRaise.}
-  CoreDbMptReplicateIt* = iterator(): (Blob,Blob) {.rlpRaise.}
+  CoreDbMptReplicateIt* = iterator(): (Blob,Blob) {.catchRaise.}
 
   CoreDbMptFns* = object
     ## Methods for trie objects `CoreDbMptRef`
@@ -113,10 +115,10 @@ type
   # --------------------------------------------------
   # Sub-descriptor: Transaction frame management
   # --------------------------------------------------
-  CoreDbTxCommitFn* = proc(applyDeletes: bool) {.noRaise.}
-  CoreDbTxRollbackFn* = proc() {.noRaise.}
-  CoreDbTxDisposeFn* = proc() {.noRaise.}
-  CoreDbTxSafeDisposeFn* = proc() {.noRaise.}
+  CoreDbTxCommitFn* = proc(applyDeletes: bool) {.catchRaise.}
+  CoreDbTxRollbackFn* = proc() {.catchRaise.}
+  CoreDbTxDisposeFn* = proc() {.catchRaise.}
+  CoreDbTxSafeDisposeFn* = proc() {.catchRaise.}
 
   CoreDbTxFns* = object
     commitFn*:      CoreDbTxCommitFn
@@ -127,7 +129,7 @@ type
   # --------------------------------------------------
   # Sub-descriptor: Transaction ID management
   # --------------------------------------------------
-  CoreDbTxIdSetIdFn* = proc() {.noRaise.}
+  CoreDbTxIdSetIdFn* = proc() {.catchRaise.}
   CoreDbTxIdActionFn* = proc() {.catchRaise.}
   CoreDbTxIdRoWrapperFn* = proc(action: CoreDbTxIdActionFn) {.catchRaise.}
   CoreDbTxIdFns* = object
@@ -148,7 +150,6 @@ type
   # --------------------------------------------------
   # Production descriptors
   # --------------------------------------------------
-
   CoreDbRef* = ref object of RootRef
     ## Database descriptor
     kvtObj*: CoreDbKvtObj
@@ -170,7 +171,7 @@ type
     ## Similar to `CoreDbMptRef` but with pre-hashed keys. That is, any
     ## argument key for `put()`, `get()` etc. will be hashed first before
     ## being applied.
-    parent*: CoreDbMptRef
+    fromMpt*: CoreDbMptRef
     methods*: CoreDbMptFns
 
   CoreDbTxRef* = ref object

@@ -8,6 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [].}
+
 import
   chronos,
   json_rpc/rpcclient,
@@ -25,8 +27,6 @@ import
 
 export evmc
 
-{.push raises: [].}
-
 when defined(evmc_enabled):
   import
     ./evmc_api
@@ -35,6 +35,11 @@ when defined(evmc_enabled):
 # low resource using methods.  Keep both here because true EVMC API requires
 # the small-stack method, but Chronos `async` is better without recursion.
 const vm_use_recursion* = defined(evmc_enabled)
+
+# Annotation helpers
+{.pragma:    noRaise, gcsafe, raises: [].}
+{.pragma:   rlpRaise, gcsafe, raises: [RlpError].}
+{.pragma: catchRaise, gcsafe, raises: [CatchableError].}
 
 type
   VMFlag* = enum
@@ -86,7 +91,7 @@ type
     else:
       parent*, child*:      Computation
     pendingAsyncOperation*: Future[void]
-    continuation*:          proc() {.gcsafe, raises: [CatchableError].}
+    continuation*:          proc() {.catchRaise.}
 
   Error* = ref object
     statusCode*: evmc_status_code
@@ -141,57 +146,57 @@ type
 
 # Transaction level
 # This is called once fo each transaction
-method captureTxStart*(ctx: TracerRef, gasLimit: GasInt) {.base, gcsafe.} =
+method captureTxStart*(ctx: TracerRef, gasLimit: GasInt) {.base, noRaise.} =
   discard
 
-method captureTxEnd*(ctx: TracerRef, restGas: GasInt) {.base, gcsafe.} =
+method captureTxEnd*(ctx: TracerRef, restGas: GasInt) {.base, noRaise.} =
   discard
 
 # Top call frame
 method captureStart*(ctx: TracerRef, comp: Computation,
                      sender: EthAddress, to: EthAddress,
                      create: bool, input: openArray[byte],
-                     gasLimit: GasInt, value: UInt256) {.base, gcsafe.} =
+                     gasLimit: GasInt, value: UInt256) {.base, noRaise.} =
   discard
 
 method captureEnd*(ctx: TracerRef, comp: Computation, output: openArray[byte],
-                   gasUsed: GasInt, error: Option[string]) {.base, gcsafe.} =
+                   gasUsed: GasInt, error: Option[string]) {.base, noRaise.} =
   discard
 
 # Rest of call frames
 method captureEnter*(ctx: TracerRef, comp: Computation, op: Op,
                      sender: EthAddress, to: EthAddress,
                      input: openArray[byte], gasLimit: GasInt,
-                     value: UInt256) {.base, gcsafe.} =
+                     value: UInt256) {.base, noRaise.} =
   discard
 
 method captureExit*(ctx: TracerRef, comp: Computation, output: openArray[byte],
-                    gasUsed: GasInt, error: Option[string]) {.base, gcsafe.} =
+                    gasUsed: GasInt, error: Option[string]) {.base, noRaise.} =
   discard
 
 # Opcode level
 method captureOpStart*(ctx: TracerRef, comp: Computation,
                        fixed: bool, pc: int, op: Op, gas: GasInt,
-                       depth: int): int {.base, gcsafe.} =
+                       depth: int): int {.base, noRaise.} =
   discard
 
 method captureGasCost*(ctx: TracerRef, comp: Computation,
                        fixed: bool, op: Op, gasCost: GasInt,
-                       gasRemaining: GasInt, depth: int) {.base, gcsafe.} =
+                       gasRemaining: GasInt, depth: int) {.base, noRaise.} =
   discard
 
 method captureOpEnd*(ctx: TracerRef, comp: Computation,
                      fixed: bool, pc: int, op: Op, gas: GasInt, refund: GasInt,
                      rData: openArray[byte],
-                     depth: int, opIndex: int) {.base, gcsafe.} =
+                     depth: int, opIndex: int) {.base, catchRaise.} =
   discard
 
 method captureFault*(ctx: TracerRef, comp: Computation,
                      fixed: bool, pc: int, op: Op, gas: GasInt, refund: GasInt,
                      rData: openArray[byte],
-                     depth: int, error: Option[string]) {.base, gcsafe.} =
+                     depth: int, error: Option[string]) {.base, noRaise.} =
   discard
 
 # Called at the start of EVM interpreter loop
-method capturePrepare*(ctx: TracerRef, comp: Computation, depth: int) {.base, gcsafe.} =
+method capturePrepare*(ctx: TracerRef, comp: Computation, depth: int) {.base, noRaise.} =
   discard

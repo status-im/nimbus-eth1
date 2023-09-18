@@ -11,7 +11,6 @@
 import
   std/[json, sets, streams, strutils],
   eth/common/eth_types,
-  eth/rlp,
   stew/byteutils,
   chronicles,
   ".."/[types, memory, stack],
@@ -167,15 +166,13 @@ method captureOpStart*(ctx: JsonTracer, c: Computation,
     try:
       if c.stack.values.len > 1:
         ctx.rememberStorageKey(c.msg.depth, c.stack[^1, UInt256])
-    except InsufficientStack as ex:
-      error "JsonTracer captureOpStart", msg=ex.msg
-    except ValueError as ex:
-      error "JsonTracer captureOpStart", msg=ex.msg
+    except CatchableError as ex:
+      error "JsonTracer captureOpStart", name=($ex.name), msg=ex.msg
 
   try:
     ctx.captureOpImpl(c, pc, op, 0, 0, [], depth, none(string))
-  except RlpError as ex:
-    error "JsonTracer captureOpStart", msg=ex.msg
+  except CatchableError as ex:
+    error "JsonTracer captureOpStart", name=($ex.name), msg=ex.msg
 
   # make sure captureOpEnd get the right opIndex
   result = ctx.index
@@ -235,8 +232,8 @@ method captureFault*(ctx: JsonTracer, comp: Computation,
     doAssert(ctx.node.isNil.not)
     ctx.writeJson(ctx.node)
     ctx.node = nil
-  except RlpError as ex:
-    error "JsonTracer captureOpFault", msg=ex.msg
+  except CatchableError as ex:
+    error "JsonTracer captureOpFault", name=($ex.name), msg=ex.msg
 
 proc close*(ctx: JsonTracer) =
   ctx.stream.close()

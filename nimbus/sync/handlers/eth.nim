@@ -24,6 +24,11 @@ import
 logScope:
   topics = "eth-wire"
 
+# Annotation helpers
+{.pragma:    noRaise, gcsafe, raises: [].}
+{.pragma:   rlpRaise, gcsafe, raises: [RlpError].}
+{.pragma: catchRaise, gcsafe, raises: [CatchableError].}
+
 type
   HashToTime = TableRef[Hash256, Time]
 
@@ -31,14 +36,12 @@ type
     arg: pointer,
     peer: Peer,
     blk: EthBlock,
-    totalDifficulty: DifficultyInt) {.
-      gcsafe, raises: [CatchableError].}
+    totalDifficulty: DifficultyInt) {.catchRaise.}
 
   NewBlockHashesHandler* = proc(
     arg: pointer,
     peer: Peer,
-    hashes: openArray[NewBlockHashesAnnounce]) {.
-      gcsafe, raises: [CatchableError].}
+    hashes: openArray[NewBlockHashesAnnounce]) {.catchRaise.}
 
   NewBlockHandlerPair = object
     arg: pointer
@@ -91,7 +94,7 @@ proc inPool(ctx: EthWireRef, txHash: Hash256): bool =
 proc successorHeader(db: CoreDbRef,
                      h: BlockHeader,
                      output: var BlockHeader,
-                     skip = 0'u): bool {.gcsafe, raises: [RlpError].} =
+                     skip = 0'u): bool {.rlpRaise.} =
   let offset = 1 + skip.toBlockNumber
   if h.blockNumber <= (not 0.toBlockNumber) - offset:
     result = db.getBlockHeader(h.blockNumber + offset, output)
@@ -99,7 +102,7 @@ proc successorHeader(db: CoreDbRef,
 proc ancestorHeader(db: CoreDbRef,
                      h: BlockHeader,
                      output: var BlockHeader,
-                     skip = 0'u): bool {.gcsafe, raises: [RlpError].} =
+                     skip = 0'u): bool {.rlpRaise.} =
   let offset = 1 + skip.toBlockNumber
   if h.blockNumber >= offset:
     result = db.getBlockHeader(h.blockNumber - offset, output)
@@ -107,7 +110,7 @@ proc ancestorHeader(db: CoreDbRef,
 proc blockHeader(db: CoreDbRef,
                  b: HashOrNum,
                  output: var BlockHeader): bool
-                 {.gcsafe, raises: [RlpError].} =
+                 {.rlpRaise.} =
   if b.isHash:
     db.getBlockHeader(b.hash, output)
   else:
@@ -324,10 +327,10 @@ proc onPeerDisconnected(ctx: EthWireRef, peer: Peer) =
 proc setupPeerObserver(ctx: EthWireRef) =
   var po = PeerObserver(
     onPeerConnected:
-      proc(p: Peer) {.gcsafe.} =
+      proc(p: Peer) {.noRaise.} =
         ctx.onPeerConnected(p),
     onPeerDisconnected:
-      proc(p: Peer) {.gcsafe.} =
+      proc(p: Peer) {.noRaise.} =
         ctx.onPeerDisconnected(p))
   po.setProtocol protocol.eth
   ctx.peerPool.addObserver(ctx, po)
@@ -375,11 +378,11 @@ proc setNewBlockHashesHandler*(ctx: EthWireRef, handler: NewBlockHashesHandler, 
 # Public getters/setters
 # ------------------------------------------------------------------------------
 
-proc `txPoolEnabled=`*(ctx: EthWireRef; ena: bool) {.gcsafe, raises: [].} =
+proc `txPoolEnabled=`*(ctx: EthWireRef; ena: bool) {.noRaise.} =
   if ctx.enableTxPool != NotAvailable:
     ctx.enableTxPool = if ena: Enabled else: Suspended
 
-proc txPoolEnabled*(ctx: EthWireRef): bool {.gcsafe, raises: [].} =
+proc txPoolEnabled*(ctx: EthWireRef): bool {.noRaise.} =
   ctx.enableTxPool == Enabled
 
 # ------------------------------------------------------------------------------
@@ -405,7 +408,7 @@ method getStatus*(ctx: EthWireRef): EthState
   )
 
 method getReceipts*(ctx: EthWireRef, hashes: openArray[Hash256]): seq[seq[Receipt]]
-    {.gcsafe, raises: [RlpError].} =
+    {.catchRaise.} =
   let db = ctx.db
   var header: BlockHeader
   for blockHash in hashes:
@@ -425,7 +428,7 @@ method getPooledTxs*(ctx: EthWireRef, hashes: openArray[Hash256]): seq[Transacti
       trace "handlers.getPooledTxs: tx not found", txHash
 
 method getBlockBodies*(ctx: EthWireRef, hashes: openArray[Hash256]): seq[BlockBody]
-    {.gcsafe, raises: [RlpError].} =
+    {.catchRaise.} =
   let db = ctx.db
   var body: BlockBody
   for blockHash in hashes:
@@ -436,7 +439,7 @@ method getBlockBodies*(ctx: EthWireRef, hashes: openArray[Hash256]): seq[BlockBo
       trace "handlers.getBlockBodies: blockBody not found", blockHash
 
 method getBlockHeaders*(ctx: EthWireRef, req: BlocksRequest): seq[BlockHeader]
-    {.gcsafe, raises: [RlpError].} =
+    {.rlpRaise.} =
   let db = ctx.db
   var foundBlock: BlockHeader
   result = newSeqOfCap[BlockHeader](req.maxResults)
@@ -454,7 +457,7 @@ method getBlockHeaders*(ctx: EthWireRef, req: BlocksRequest): seq[BlockHeader]
       result.add foundBlock
 
 method handleAnnouncedTxs*(ctx: EthWireRef, peer: Peer, txs: openArray[Transaction])
-    {.gcsafe, raises: [CatchableError].} =
+    {.catchRaise.} =
   if ctx.enableTxPool != Enabled:
     when trMissingOrDisabledGossipOk:
       notEnabled("handleAnnouncedTxs")
@@ -528,7 +531,7 @@ method handleAnnouncedTxsHashes*(ctx: EthWireRef, peer: Peer, txHashes: openArra
   asyncSpawn ctx.fetchTransactions(reqHashes, peer)
 
 method handleNewBlock*(ctx: EthWireRef, peer: Peer, blk: EthBlock, totalDifficulty: DifficultyInt)
-    {.gcsafe, raises: [CatchableError].} =
+    {.catchRaise.} =
   if ctx.chain.com.forkGTE(MergeFork):
     debug "Dropping peer for sending NewBlock after merge (EIP-3675)",
       peer, blockNumber=blk.header.blockNumber,
@@ -543,7 +546,7 @@ method handleNewBlock*(ctx: EthWireRef, peer: Peer, blk: EthBlock, totalDifficul
     )
 
 method handleNewBlockHashes*(ctx: EthWireRef, peer: Peer, hashes: openArray[NewBlockHashesAnnounce])
-    {.gcsafe, raises: [CatchableError].} =
+    {.catchRaise.} =
   if ctx.chain.com.forkGTE(MergeFork):
     debug "Dropping peer for sending NewBlockHashes after merge (EIP-3675)",
       peer, numHashes=hashes.len
@@ -558,12 +561,12 @@ method handleNewBlockHashes*(ctx: EthWireRef, peer: Peer, hashes: openArray[NewB
     )
 
 when defined(legacy_eth66_enabled):
-  method getStorageNodes*(ctx: EthWireRef, hashes: openArray[Hash256]): seq[Blob] {.gcsafe.} =
+  method getStorageNodes*(ctx: EthWireRef, hashes: openArray[Hash256]): seq[Blob] {.noRaise.} =
     let db = ctx.db.kvt
     for hash in hashes:
       result.add db.get(hash.data)
 
-  method handleNodeData*(ctx: EthWireRef, peer: Peer, data: openArray[Blob]) {.gcsafe.} =
+  method handleNodeData*(ctx: EthWireRef, peer: Peer, data: openArray[Blob]) {.noRaise.} =
     notImplemented("handleNodeData")
 
 # ------------------------------------------------------------------------------

@@ -26,6 +26,11 @@ type
 const
   extraTraceMessages = false or true
 
+# Annotation helpers
+{.pragma:    noRaise, gcsafe, raises: [].}
+{.pragma:   rlpRaise, gcsafe, raises: [RlpError].}
+{.pragma: catchRaise, gcsafe, raises: [CatchableError].}
+
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
@@ -44,7 +49,7 @@ proc persistentContracts(
     ps: SnapDbContractsRef;    ## Base descriptor on `CoreDbRef`
     data: seq[(NodeKey,Blob)]; ## Contract code items
       ): Result[void,HexaryError]
-      {.gcsafe, raises: [OSError,IOError,KeyError].} =
+      {.catchRaise.} =
   ## Store contract codes onto permanent database
   if ps.rockDb.isNil:
     let rc = data.persistentContractPut ps.kvDb

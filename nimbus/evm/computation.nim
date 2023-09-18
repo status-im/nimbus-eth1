@@ -8,6 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [].}
+
 import
   ".."/[db/accounts_cache, constants],
   "."/[code_stream, memory, message, stack, state],
@@ -21,8 +23,6 @@ import
 
 export
   common
-
-{.push raises: [].}
 
 logScope:
   topics = "vm computation"
@@ -45,6 +45,11 @@ when defined(evmc_enabled):
 
 const
   evmc_enabled* = defined(evmc_enabled)
+
+# Annotation helpers
+{.pragma:    noRaise, gcsafe, raises: [].}
+{.pragma:   rlpRaise, gcsafe, raises: [RlpError].}
+{.pragma: catchRaise, gcsafe, raises: [CatchableError].}
 
 # ------------------------------------------------------------------------------
 # Helpers
@@ -128,7 +133,7 @@ template getVersionedHashesLen*(c: Computation): int =
     c.vmState.txVersionedHashes.len
 
 proc getBlockHash*(c: Computation, number: UInt256): Hash256
-                   {.gcsafe, raises: [CatchableError].} =
+                   {.catchRaise.} =
   when evmc_enabled:
     let
       blockNumber = c.host.getTxContext().block_number.u256
@@ -291,7 +296,7 @@ func errorOpt*(c: Computation): Option[string] =
   some(c.error.info)
 
 proc writeContract*(c: Computation)
-    {.gcsafe, raises: [CatchableError].} =
+    {.catchRaise.} =
   template withExtra(tracer: untyped, args: varargs[untyped]) =
     tracer args, newContract=($c.msg.contractAddress),
       blockNumber=c.vmState.blockNumber,
@@ -361,7 +366,7 @@ proc merge*(c, child: Computation) =
   c.gasMeter.refundGas(child.gasMeter.gasRefunded)
 
 proc execSelfDestruct*(c: Computation, beneficiary: EthAddress)
-    {.gcsafe, raises: [CatchableError].} =
+    {.catchRaise.} =
 
   c.vmState.mutateStateDB:
     let localBalance = c.getBalance(c.msg.contractAddress)
@@ -400,7 +405,7 @@ proc refundSelfDestruct*(c: Computation) =
 proc tracingEnabled*(c: Computation): bool =
   c.vmState.tracingEnabled
 
-proc traceOpCodeStarted*(c: Computation, op: Op): int {.gcsafe, raises: [].} =
+proc traceOpCodeStarted*(c: Computation, op: Op): int {.noRaise.} =
   c.vmState.captureOpStart(
     c,
     c.code.pc - 1,
@@ -408,7 +413,7 @@ proc traceOpCodeStarted*(c: Computation, op: Op): int {.gcsafe, raises: [].} =
     c.gasMeter.gasRemaining,
     c.msg.depth + 1)
 
-proc traceOpCodeEnded*(c: Computation, op: Op, opIndex: int) {.gcsafe, raises: [].} =
+proc traceOpCodeEnded*(c: Computation, op: Op, opIndex: int) {.catchRaise.} =
   c.vmState.captureOpEnd(
     c,
     c.code.pc - 1,
@@ -419,7 +424,7 @@ proc traceOpCodeEnded*(c: Computation, op: Op, opIndex: int) {.gcsafe, raises: [
     c.msg.depth + 1,
     opIndex)
 
-proc traceError*(c: Computation) {.gcsafe, raises: [].} =
+proc traceError*(c: Computation) {.noRaise.} =
   c.vmState.captureFault(
     c,
     c.code.pc - 1,

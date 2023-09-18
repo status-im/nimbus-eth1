@@ -41,6 +41,10 @@ else:
 {.pragma:   rlpRaise, gcsafe, raises: [RlpError].}
 {.pragma: catchRaise, gcsafe, raises: [CatchableError].}
 
+type
+  CoreDbTrieRef* = CoreDbMptRef | CoreDbPhkRef
+    ## Shortcut, *MPT* modules
+
 # ------------------------------------------------------------------------------
 # Private functions: helpers
 # ------------------------------------------------------------------------------
@@ -53,38 +57,42 @@ template itNotImplemented(db: CoreDbRef, name: string) =
 
 # ---------
 
-proc toCoreDbPhkRef(mpt: CoreDbMptRef): CoreDbPhkRef =
+func toCoreDbPhkRef(mpt: CoreDbMptRef): CoreDbPhkRef =
   ## MPT => pre-hashed MPT (aka PHK)
   result = CoreDbPhkRef(
-    parent:  mpt,
-    methods: CoreDbMptFns(
-      getFn: proc(k: openArray[byte]): Blob {.rlpRaise.} =
-        mpt.methods.getFn(k.keccakHash.data),
+    fromMpt: mpt,
+    methods: mpt.methods)
 
-      maybeGetFn: proc(k: openArray[byte]): Option[Blob] {.rlpRaise.} =
-        mpt.methods.maybeGetFn(k.keccakHash.data),
+  result.methods.getFn =
+    proc(k: openArray[byte]): Blob {.rlpRaise.} =
+      mpt.methods.getFn(k.keccakHash.data)
 
-      delFn: proc(k: openArray[byte]) {.rlpRaise.} =
-        mpt.methods.delFn(k.keccakHash.data),
+  result.methods.maybeGetFn =
+    proc(k: openArray[byte]): Option[Blob] {.rlpRaise.} =
+      mpt.methods.maybeGetFn(k.keccakHash.data)
 
-      putFn: proc(k:openArray[byte]; v:openArray[byte]) {.catchRaise.} =
-        mpt.methods.putFn(k.keccakHash.data, v),
+  result.methods.delFn =
+    proc(k: openArray[byte]) {.rlpRaise.} =
+      mpt.methods.delFn(k.keccakHash.data)
 
-      containsFn: proc(k: openArray[byte]): bool {.rlpRaise.} =
-        mpt.methods.containsFn(k.keccakHash.data),
+  result.methods.putFn =
+    proc(k:openArray[byte]; v:openArray[byte]) {.catchRaise.} =
+      mpt.methods.putFn(k.keccakHash.data, v)
 
-      pairsIt: iterator(): (Blob, Blob) {.noRaise.} =
-        mpt.parent.itNotImplemented("pairs/phk"),
+  result.methods.containsFn =
+    proc(k: openArray[byte]): bool {.rlpRaise.} =
+      mpt.methods.containsFn(k.keccakHash.data)
 
-      replicateIt: iterator(): (Blob, Blob) {.noRaise.} =
-        mpt.parent.itNotImplemented("replicate/phk"),
+  result.methods.pairsIt =
+    iterator(): (Blob, Blob) {.noRaise.} =
+      mpt.parent.itNotImplemented("pairs/phk")
 
-      rootHashFn: mpt.methods.rootHashFn,
-      isPruningFn: mpt.methods.isPruningFn))
+  result.methods.replicateIt =
+    iterator(): (Blob, Blob) {.noRaise.} =
+      mpt.parent.itNotImplemented("replicate/phk")
 
   when AutoValidateDescriptors:
     result.validate
-
 
 proc kvtUpdate(db: CoreDbRef) =
   ## Disable interator for non-memory instances
@@ -95,16 +103,19 @@ proc kvtUpdate(db: CoreDbRef) =
     db.kvtObj.methods.pairsIt = iterator(): (Blob, Blob) =
       db.itNotImplemented "pairs/kvt"
 
+func parent(phk: CoreDbPhkRef): CoreDbRef =
+  phk.fromMpt.parent
+
 # ------------------------------------------------------------------------------
 # Public constructor
 # ------------------------------------------------------------------------------
 
 proc init*(
-    db:         CoreDbRef;
-    dbType:     CoreDbType;
-    dbMethods:  CoreDbMiscFns;
-    kvtMethods: CoreDbKvtFns;
-    new:        CoreDbConstructors
+    db:         CoreDbRef;                # Main descriptor, locally extended
+    dbType:     CoreDbType;               # Backend symbol
+    dbMethods:  CoreDbMiscFns;            # General methods
+    kvtMethods: CoreDbKvtFns;             # Kvt related methods
+    new:        CoreDbConstructors;       # Sub-module constructors
      ) =
   ## Base descriptor initaliser
   db.methods = dbMethods
@@ -208,19 +219,28 @@ iterator pairs*(db: CoreDbKvtObj): (Blob, Blob) =
 # Public Merkle Patricia Tree, hexary trie constructors
 # ------------------------------------------------------------------------------
 
-proc mpt*(db: CoreDbRef; root=EMPTY_ROOT_HASH): CoreDbMptRef =
+proc mpt*(db: CoreDbRef; root=EMPTY_ROOT_HASH): CoreDbMptRef {.catchRaise.} =
   ## Constructor
   db.new.mptFn root
 
-proc mptPrune*(db: CoreDbRef; root=EMPTY_ROOT_HASH): CoreDbMptRef =
+proc mptPrune*(
+    db: CoreDbRef;
+    root=EMPTY_ROOT_HASH;
+      ): CoreDbMptRef
+      {.catchRaise.} =
   ## Constructor
   db.new.legacyMptFn(root, true)
 
-proc mptPrune*(db: CoreDbRef; root: Hash256; prune: bool): CoreDbMptRef =
+proc mptPrune*(
+    db: CoreDbRef;
+    root: Hash256;
+    prune: bool;
+      ): CoreDbMptRef
+      {.catchRaise.} =
   ## Constructor
   db.new.legacyMptFn(root, prune)
 
-proc mptPrune*(db: CoreDbRef; prune: bool): CoreDbMptRef =
+proc mptPrune*(db: CoreDbRef; prune: bool): CoreDbMptRef {.catchRaise.} =
   ## Constructor
   db.new.legacyMptFn(EMPTY_ROOT_HASH, prune)
 
@@ -228,19 +248,28 @@ proc mptPrune*(db: CoreDbRef; prune: bool): CoreDbMptRef =
 # Public pre-hashed key hexary trie constructors
 # ------------------------------------------------------------------------------
 
-proc phk*(db: CoreDbRef; root=EMPTY_ROOT_HASH): CoreDbPhkRef =
+proc phk*(db: CoreDbRef; root=EMPTY_ROOT_HASH): CoreDbPhkRef {.catchRaise.} =
   ## Constructor
   db.new.mptFn(root).toCoreDbPhkRef
 
-proc phkPrune*(db: CoreDbRef; root=EMPTY_ROOT_HASH): CoreDbPhkRef =
+proc phkPrune*(
+    db: CoreDbRef;
+    root=EMPTY_ROOT_HASH;
+      ): CoreDbPhkRef
+      {.catchRaise.} =
   ## Constructor
   db.new.legacyMptFn(root, true).toCoreDbPhkRef
 
-proc phkPrune*(db: CoreDbRef; root: Hash256; prune: bool): CoreDbPhkRef =
+proc phkPrune*(
+    db: CoreDbRef;
+    root: Hash256;
+    prune: bool;
+      ): CoreDbPhkRef
+      {.catchRaise.} =
   ## Constructor
   db.new.legacyMptFn(root, prune).toCoreDbPhkRef
 
-proc phkPrune*(db: CoreDbRef; prune: bool): CoreDbPhkRef =
+proc phkPrune*(db: CoreDbRef; prune: bool): CoreDbPhkRef {.catchRaise.} =
   ## Constructor
   db.new.legacyMptFn(EMPTY_ROOT_HASH, prune).toCoreDbPhkRef
 
@@ -249,98 +278,73 @@ proc phkPrune*(db: CoreDbRef; prune: bool): CoreDbPhkRef =
 # ------------------------------------------------------------------------------
 
 proc toPhk*(mpt: CoreDbMptRef): CoreDbPhkRef =
-  ## Getter
+  ## Replaces argument `mpt` by a pre-hashed *MPT*. The argment `mpt` should
+  ## not be used, anymore.
   mpt.toCoreDbPhkRef
 
-proc toMpt*(trie: CoreDbPhkRef): CoreDbMptRef =
-  ## Getter
-  trie.parent
+proc toMpt*(phk: CoreDbPhkRef): CoreDbMptRef =
+  ## Replaces the pre-hashed argument trie `phk` by the non pre-hashed *MPT*.
+  ## The argment `phk` should not be used, anymore.
+  ## not be used, anymore.
+  phk.fromMpt
 
 # ------------------------------------------------------------------------------
 # Public hexary trie database methods (`mpt` or `phk`)
 # ------------------------------------------------------------------------------
 
-proc parent*(mpt: CoreDbMptRef): CoreDbRef =
+proc parent*(trie: CoreDbTrieRef): CoreDbRef =
   ## Getter
-  mpt.parent
+  trie.parent
 
-proc parent*(trie: CoreDbPhkRef): CoreDbRef =
-  ## Getter
-  trie.parent.parent
-
-proc isPruning*(trie: CoreDbMptRef|CoreDbPhkRef): bool =
+proc isPruning*(trie: CoreDbTrieRef): bool =
   ## Getter
   trie.methods.isPruningFn()
 
-proc get*(
-    trie: CoreDbMptRef|CoreDbPhkRef;
-    key: openArray[byte];
-      ): Blob
-      {.rlpRaise.} =
-  trie.methods.getFn key
+proc get*(trie: CoreDbTrieRef; key: openArray[byte]): Blob {.rlpRaise.} =
+  trie.methods.getFn(key)
 
 proc maybeGet*(
-    trie: CoreDbMptRef|CoreDbPhkRef;
+    trie: CoreDbTrieRef;
     key: openArray[byte];
       ): Option[Blob]
       {.rlpRaise.} =
   trie.methods.maybeGetFn key
 
-proc del*(
-    trie: CoreDbMptRef|CoreDbPhkRef;
-    key: openArray[byte];
-      ) {.rlpRaise.} =
+proc del*(trie: CoreDbTrieRef; key: openArray[byte]) {.rlpRaise.} =
   trie.methods.delFn key
 
 proc put*(
-    trie: CoreDbMptRef|CoreDbPhkRef;
+    trie: CoreDbTrieRef;
     key: openArray[byte];
     value: openArray[byte];
       ) {.catchRaise.} =
   trie.methods.putFn(key, value)
 
-proc contains*(
-    trie: CoreDbMptRef|CoreDbPhkRef;
-    key: openArray[byte];
-      ): bool
-      {.rlpRaise.} =
+proc contains*(trie: CoreDbTrieRef; key: openArray[byte]): bool {.rlpRaise.} =
   trie.methods.containsFn key
 
-proc rootHash*(
-    trie: CoreDbMptRef|CoreDbPhkRef;
-      ): Hash256
-      {.gcsafe.} =
+proc rootHash*(trie: CoreDbTrieRef): Hash256 {.noRaise.} =
   trie.methods.rootHashFn()
 
-iterator pairs*(
-    trie: CoreDbMptRef;
-      ): (Blob, Blob)
-      {.rlpRaise.} =
+iterator pairs*(mpt: CoreDbMptRef): (Blob, Blob) {.rlpRaise.} =
   ## Trie traversal, only supported for `CoreDbMptRef`
-  for k,v in trie.methods.pairsIt():
+  for k,v in mpt.methods.pairsIt():
     yield (k,v)
 
-iterator replicate*(
-    trie: CoreDbMptRef;
-      ): (Blob, Blob)
-      {.rlpRaise.} =
+iterator replicate*(mpt: CoreDbMptRef): (Blob, Blob) {.catchRaise.} =
   ## Low level trie dump, only supported for `CoreDbMptRef`
-  for k,v in trie.methods.replicateIt():
+  for k,v in mpt.methods.replicateIt():
     yield (k,v)
 
 # ------------------------------------------------------------------------------
 # Public transaction related methods
 # ------------------------------------------------------------------------------
 
-proc getTransactionID*(db: CoreDbRef): CoreDbTxID  =
+proc getTransactionID*(db: CoreDbRef): CoreDbTxID  {.catchRaise.} =
   ## Getter, current transaction state
   db.new.getIdFn()
 
-proc parent*(id: CoreDbTxID): CoreDbRef =
-  ## Getter
-  id.parent
-
-proc setTransactionID*(id: CoreDbTxID) =
+proc setTransactionID*(id: CoreDbTxID) {.catchRaise.} =
   ## Setter, revert to some earlier transaction state
   id.methods.setIdFn()
 
@@ -352,7 +356,7 @@ proc shortTimeReadOnly*(
   id.methods.roWrapperFn action
 
 
-proc beginTransaction*(db: CoreDbRef): CoreDbTxRef =
+proc beginTransaction*(db: CoreDbRef): CoreDbTxRef {.catchRaise.} =
   ## Constructor
   db.new.beginFn()
 
@@ -360,23 +364,27 @@ proc parent*(db: CoreDbTxRef): CoreDbRef =
   ## Getter
   db.parent
 
-proc commit*(tx: CoreDbTxRef, applyDeletes = true) =
+proc commit*(tx: CoreDbTxRef, applyDeletes = true) {.catchRaise.} =
   tx.methods.commitFn applyDeletes
 
-proc rollback*(tx: CoreDbTxRef) =
+proc rollback*(tx: CoreDbTxRef) {.catchRaise.} =
   tx.methods.rollbackFn()
 
-proc dispose*(tx: CoreDbTxRef) =
+proc dispose*(tx: CoreDbTxRef) {.catchRaise.} =
   tx.methods.disposeFn()
 
-proc safeDispose*(tx: CoreDbTxRef)  =
+proc safeDispose*(tx: CoreDbTxRef) {.catchRaise.} =
   tx.methods.safeDisposeFn()
 
 # ------------------------------------------------------------------------------
 # Public tracer methods
 # ------------------------------------------------------------------------------
 
-proc capture*(db: CoreDbRef; flags: set[CoreDbCaptFlags] = {}): CoreDbCaptRef =
+proc capture*(
+    db: CoreDbRef;
+    flags: set[CoreDbCaptFlags] = {};
+      ): CoreDbCaptRef
+      {.catchRaise.} =
   ## Constructor
   db.new.captureFn flags
 

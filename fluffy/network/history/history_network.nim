@@ -25,6 +25,10 @@ logScope:
 
 export accumulator
 
+# Annotation helpers
+{.pragma:    noRaise, gcsafe, raises: [].}
+{.pragma: catchRaise, gcsafe, raises: [CatchableError].}
+
 # This looks like it makes no sense, because it makes no sense. It's a
 # workaround for what seems to be a compiler bug; see here:
 #
@@ -183,7 +187,7 @@ func encode*(receipts: seq[Receipt]): seq[byte] =
 # TODO: Failures on validation and perhaps deserialisation should be punished
 # for if/when peer scoring/banning is added.
 
-proc calcRootHash(items: Transactions | PortalReceipts | Withdrawals): Hash256 =
+proc calcRootHash(items: Transactions | PortalReceipts | Withdrawals): Hash256 {.catchRaise.} =
   var tr = newCoreDbRef(LegacyDbMemory).mptPrune
   for i, item in items:
     try:
@@ -222,7 +226,8 @@ func validateBlockHeaderBytes*(
 
 proc validateBlockBody(
     body: PortalBlockBodyLegacy, header: BlockHeader):
-    Result[void, string] =
+    Result[void, string]
+    {.catchRaise.} =
   ## Validate the block body against the txRoot and ommersHash from the header.
   let calculatedOmmersHash = keccakHash(body.uncles.asSeq())
   if calculatedOmmersHash != header.ommersHash:
@@ -237,7 +242,8 @@ proc validateBlockBody(
 
 proc validateBlockBody(
     body: PortalBlockBodyShanghai, header: BlockHeader):
-    Result[void, string] =
+    Result[void, string]
+    {.catchRaise.} =
   ## Validate the block body against the txRoot, ommersHash and withdrawalsRoot
   ## from the header.
   # Shortcut the ommersHash calculation as uncles must be an RLP encoded
@@ -273,7 +279,8 @@ proc decodeBlockBodyBytes*(bytes: openArray[byte]): Result[BlockBody, string] =
 
 proc validateBlockBodyBytes*(
     bytes: openArray[byte], header: BlockHeader):
-    Result[BlockBody, string] =
+    Result[BlockBody, string]
+    {.catchRaise.} =
   ## Fully decode the SSZ encoded Portal Block Body and validate it against the
   ## header.
   ## TODO: improve this decoding in combination with the block body validation
@@ -309,7 +316,7 @@ proc validateBlockBodyBytes*(
       BlockBody.fromPortalBlockBody(body)
 
 proc validateReceipts*(
-    receipts: PortalReceipts, receiptsRoot: KeccakHash): Result[void, string] =
+    receipts: PortalReceipts, receiptsRoot: KeccakHash): Result[void, string] {.catchRaise.} =
   let calculatedReceiptsRoot = calcReceiptsRoot(receipts)
 
   if calculatedReceiptsRoot != receiptsRoot:
@@ -319,7 +326,7 @@ proc validateReceipts*(
 
 proc validateReceiptsBytes*(
     bytes: openArray[byte],
-    receiptsRoot: KeccakHash): Result[seq[Receipt], string] =
+    receiptsRoot: KeccakHash): Result[seq[Receipt], string] {.catchRaise.} =
   ## Fully decode the SSZ Block Body and validate it against the header.
   let receipts = ? decodeSsz(bytes, PortalReceipts)
 

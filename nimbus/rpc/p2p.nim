@@ -33,19 +33,24 @@ import
       type cast to avoid extra processing.
 ]#
 
+# Annotation helpers
+{.pragma:    noRaise, gcsafe, raises: [].}
+{.pragma:   rlpRaise, gcsafe, raises: [RlpError].}
+{.pragma: catchRaise, gcsafe, raises: [CatchableError].}
+
 proc setupEthRpc*(
     node: EthereumNode, ctx: EthContext, com: CommonRef,
     txPool: TxPoolRef, server: RpcServer) =
 
   let chainDB = com.db
-  proc getStateDB(header: BlockHeader): ReadOnlyStateDB =
+  proc getStateDB(header: BlockHeader): ReadOnlyStateDB {.catchRaise.} =
     ## Retrieves the account db from canonical head
     # we don't use accounst_cache here because it's only read operations
     let ac = newAccountStateDB(chainDB, header.stateRoot, com.pruneTrie)
     result = ReadOnlyStateDB(ac)
 
   proc stateDBFromTag(tag: string, readOnly = true): ReadOnlyStateDB
-      {.gcsafe, raises: [CatchableError].} =
+      {.catchRaise.} =
     result = getStateDB(chainDB.headerFromTag(tag))
 
   server.rpc("eth_protocolVersion") do() -> Option[string]:
@@ -444,8 +449,9 @@ proc setupEthRpc*(
       chain: CoreDbRef,
       hash: Hash256,
       header: BlockHeader,
-      opts: FilterOptions): seq[FilterLog]
-        {.gcsafe, raises: [RlpError,ValueError].} =
+      opts: FilterOptions
+        ): seq[FilterLog]
+        {.catchRaise.} =
     if headerBloomFilter(header, opts.address, opts.topics):
       let blockBody = chain.getBlockBody(hash)
       let receipts = chain.getReceipts(header.receiptRoot)
@@ -463,8 +469,9 @@ proc setupEthRpc*(
       chain: CoreDbRef,
       start: UInt256,
       finish: UInt256,
-      opts: FilterOptions): seq[FilterLog]
-        {.gcsafe, raises: [RlpError,ValueError].} =
+      opts: FilterOptions
+        ): seq[FilterLog]
+        {.catchRaise.} =
     var logs = newSeq[FilterLog]()
     var i = start
     while i <= finish:

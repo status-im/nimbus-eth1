@@ -35,17 +35,24 @@ proc validateMethodsDesc(kvt: CoreDbKvtObj) =
   doAssert not kvt.methods.containsFn.isNil
   doAssert not kvt.methods.pairsIt.isNil
 
-proc validateMethodsDesc(trie: CoreDbMptRef|CoreDbPhkRef) =
-  doAssert not trie.parent.isNil
-  doAssert not trie.methods.getFn.isNil
-  doAssert not trie.methods.maybeGetFn.isNil
-  doAssert not trie.methods.delFn.isNil
-  doAssert not trie.methods.putFn.isNil
-  doAssert not trie.methods.containsFn.isNil
-  doAssert not trie.methods.rootHashFn.isNil
-  doAssert not trie.methods.isPruningFn.isNil
-  doAssert not trie.methods.pairsIt.isNil
-  doAssert not trie.methods.replicateIt.isNil
+proc validateMethodsDesc(fns: CoreDbMptFns) =
+  doAssert not fns.getFn.isNil
+  doAssert not fns.maybeGetFn.isNil
+  doAssert not fns.delFn.isNil
+  doAssert not fns.putFn.isNil
+  doAssert not fns.containsFn.isNil
+  doAssert not fns.rootHashFn.isNil
+  doAssert not fns.isPruningFn.isNil
+  doAssert not fns.pairsIt.isNil
+  doAssert not fns.replicateIt.isNil
+
+proc validateMethodsDesc(mpt: CoreDbMptRef) =
+  doAssert not mpt.parent.isNil
+  mpt.methods.validateMethodsDesc
+
+proc validateMethodsDesc(phk: CoreDbPhkRef) =
+  doAssert not phk.fromMpt.isNil
+  phk.methods.validateMethodsDesc
 
 proc validateMethodsDesc(cpt: CoreDbCaptRef) =
   doAssert not cpt.parent.isNil

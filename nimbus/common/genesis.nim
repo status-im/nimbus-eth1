@@ -1,3 +1,15 @@
+# Nimbus
+# Copyright (c) 2018 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+#    http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or
+#    http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed except
+# according to those terms.
+
+{.push raises: [].}
+
 import
   std/tables,
   eth/[common, eip1559],
@@ -6,7 +18,9 @@ import
   ../constants,
   ./chain_config
 
-{.push raises: [].}
+# Annotation helpers
+{.pragma:    noRaise, gcsafe, raises: [].}
+{.pragma: catchRaise, gcsafe, raises: [CatchableError].}
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -15,7 +29,7 @@ proc newStateDB*(
     db: CoreDbRef;
     pruneTrie: bool;
       ): AccountStateDB
-      {.gcsafe, raises: [].}=
+      {.catchRaise.} =
   newAccountStateDB(db, emptyRlpHash, pruneTrie)
 
 proc toGenesisHeader*(
@@ -23,7 +37,7 @@ proc toGenesisHeader*(
     sdb: AccountStateDB;
     fork: HardFork;
       ): BlockHeader
-      {.gcsafe, raises: [CatchableError].} =
+      {.catchRaise.} =
   ## Initialise block chain DB accounts derived from the `genesis.alloc` table
   ## of the `db` descriptor argument.
   ##
@@ -90,7 +104,7 @@ proc toGenesisHeader*(
     fork: HardFork;
     db = CoreDbRef(nil);
       ): BlockHeader
-      {.gcsafe, raises: [CatchableError].} =
+      {.catchRaise.} =
   ## Generate the genesis block header from the `genesis` and `config`
   ## argument value.
   let
@@ -102,16 +116,12 @@ proc toGenesisHeader*(
     params: NetworkParams;
     db = CoreDbRef(nil);
       ): BlockHeader
-      {.raises: [CatchableError].} =
+      {.catchRaise.} =
   ## Generate the genesis block header from the `genesis` and `config`
   ## argument value.
   let map  = toForkTransitionTable(params.config)
   let fork = map.toHardFork(forkDeterminationInfo(0.toBlockNumber, params.genesis.timestamp))
   toGenesisHeader(params.genesis, fork, db)
-
-# End
-
-
 
 # ------------------------------------------------------------------------------
 # End

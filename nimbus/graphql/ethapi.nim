@@ -377,9 +377,11 @@ proc parseU64(node: Node): uint64 =
     for c in node.intVal:
       result = result * 10 + (c.uint64 - '0'.uint64)
 
-{.pragma: apiRaises, raises: [].}
+{.pragma:    noRaise, raises: [].}
+{.pragma: catchRaise, raises: [CatchableError].}
 
-{.pragma: apiPragma, cdecl, gcsafe, apiRaises, locks:0.}
+{.pragma:   apiPragma, cdecl, gcsafe,    noRaise, locks:0.}
+{.pragma: catchPragma, cdecl, gcsafe, catchRaise, locks:0.}
 {.push hint[XDeclaredButNotUsed]: off.}
 
 proc validateHex(x: Node, minLen = 0): NodeResult =
@@ -552,7 +554,7 @@ proc accountCode(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragm
   except RlpError as ex:
     err(ex.msg)
 
-proc accountStorage(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+proc accountStorage(ud: RootRef, params: Args, parent: Node): RespResult {.catchPragma.} =
   let ctx = GraphqlContextRef(ud)
   let acc = AccountNode(parent)
   try:
@@ -579,7 +581,7 @@ proc logIndex(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.}
   let log = LogNode(parent)
   ok(resp(log.index))
 
-proc logAccount(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+proc logAccount(ud: RootRef, params: Args, parent: Node): RespResult {.catchPragma.} =
   # TODO: with block param
   let ctx = GraphqlContextRef(ud)
   let log = LogNode(parent)
@@ -632,7 +634,7 @@ proc txIndex(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} 
   let tx = TxNode(parent)
   ok(resp(tx.index))
 
-proc txFrom(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+proc txFrom(ud: RootRef, params: Args, parent: Node): RespResult {.catchPragma.} =
   let ctx = GraphqlContextRef(ud)
   let tx = TxNode(parent)
 
@@ -650,7 +652,7 @@ proc txFrom(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let h = HeaderNode(hres.get())
   ctx.accountNode(h.header, sender)
 
-proc txTo(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+proc txTo(ud: RootRef, params: Args, parent: Node): RespResult {.catchPragma.} =
   let ctx = GraphqlContextRef(ud)
   let tx = TxNode(parent)
 
@@ -747,7 +749,7 @@ proc txCumulativeGasUsed(ud: RootRef, params: Args, parent: Node): RespResult {.
   let tx = TxNode(parent)
   longNode(tx.receipt.cumulativeGasUsed)
 
-proc txCreatedContract(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+proc txCreatedContract(ud: RootRef, params: Args, parent: Node): RespResult {.catchPragma.} =
   let ctx = GraphqlContextRef(ud)
   let tx = TxNode(parent)
   var sender: EthAddress
@@ -944,7 +946,7 @@ proc blockReceiptsRoot(ud: RootRef, params: Args, parent: Node): RespResult {.ap
   let h = HeaderNode(parent)
   resp(h.header.receiptRoot)
 
-proc blockMiner(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+proc blockMiner(ud: RootRef, params: Args, parent: Node): RespResult {.catchPragma.} =
   let ctx = GraphqlContextRef(ud)
   let h = HeaderNode(parent)
   ctx.accountNode(h.header, h.header.coinbase)
@@ -1032,7 +1034,7 @@ proc blockLogs(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.
   # TODO: stub, missing impl
   err("not implemented")
 
-proc blockAccount(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+proc blockAccount(ud: RootRef, params: Args, parent: Node): RespResult {.catchPragma.} =
   let ctx = GraphqlContextRef(ud)
   let h = HeaderNode(parent)
   try:
@@ -1289,7 +1291,7 @@ proc pickBlockNumber(ctx: GraphqlContextRef, number: Node): BlockNumber =
   else:
     parseU64(number).toBlockNumber
 
-proc queryAccount(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+proc queryAccount(ud: RootRef, params: Args, parent: Node): RespResult {.catchPragma.} =
   let ctx = GraphqlContextRef(ud)
   try:
     let address = hexToByteArray[20](params[0].val.stringVal)
@@ -1446,7 +1448,7 @@ type
     names: array[QcNames, Name]
 
 proc calcQC(qc: QueryComplexity, field: FieldRef): int {.cdecl,
-            gcsafe, apiRaises.} =
+            gcsafe, noRaise.} =
   let qc = EthQueryComplexity(qc)
   if field.parentType.sym.name == qc.names[qcType] and
      field.field.name.name == qc.names[qcFields]:

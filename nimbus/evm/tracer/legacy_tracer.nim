@@ -26,6 +26,11 @@ type
     storageKeys: seq[HashSet[UInt256]]
     gas: GasInt
 
+# Annotation helpers
+{.pragma:    noRaise, gcsafe, raises: [].}
+{.pragma:   rlpRaise, gcsafe, raises: [RlpError].}
+{.pragma: catchRaise, gcsafe, raises: [CatchableError].}
+
 proc hash*(x: UInt256): Hash =
   result = hash(x.toByteArrayBE)
 
@@ -51,7 +56,7 @@ proc newLegacyTracer*(flags: set[TracerFlags]): LegacyTracer =
     trace: trace
   )
 
-method capturePrepare*(ctx: LegacyTracer, comp: Computation, depth: int) {.gcsafe.} =
+method capturePrepare*(ctx: LegacyTracer, comp: Computation, depth: int) {.noRaise.} =
   if depth >= ctx.storageKeys.len:
     let prevLen = ctx.storageKeys.len
     ctx.storageKeys.setLen(depth + 1)
@@ -63,7 +68,7 @@ method capturePrepare*(ctx: LegacyTracer, comp: Computation, depth: int) {.gcsaf
 # Opcode level
 method captureOpStart*(ctx: LegacyTracer, c: Computation,
                        fixed: bool, pc: int, op: Op, gas: GasInt,
-                       depth: int): int {.gcsafe.} =
+                       depth: int): int {.noRaise.} =
   try:
     let
       j = newJObject()
@@ -119,7 +124,8 @@ method captureOpStart*(ctx: LegacyTracer, c: Computation,
 method captureOpEnd*(ctx: LegacyTracer, c: Computation,
                      fixed: bool, pc: int, op: Op, gas: GasInt, refund: GasInt,
                      rData: openArray[byte],
-                     depth: int, opIndex: int) {.gcsafe.} =
+                     depth: int, opIndex: int)
+                     {.catchRaise.} =
   try:
     let
       j = ctx.trace["structLogs"].elems[opIndex]
@@ -149,7 +155,7 @@ method captureOpEnd*(ctx: LegacyTracer, c: Computation,
 method captureFault*(ctx: LegacyTracer, comp: Computation,
                      fixed: bool, pc: int, op: Op, gas: GasInt, refund: GasInt,
                      rData: openArray[byte],
-                     depth: int, error: Option[string]) {.gcsafe.} =
+                     depth: int, error: Option[string]) {.noRaise.} =
   try:
     if ctx.trace["structLogs"].elems.len > 0:
       let j = ctx.trace["structLogs"].elems[^1]

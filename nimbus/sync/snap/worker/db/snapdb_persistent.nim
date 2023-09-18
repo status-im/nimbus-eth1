@@ -59,6 +59,11 @@ const
   extraTraceMessages = false # or true
     ## Enable additional logging noise
 
+# Annotation helpers
+{.pragma:    noRaise, gcsafe, raises: [].}
+{.pragma:   rlpRaise, gcsafe, raises: [RlpError].}
+{.pragma: catchRaise, gcsafe, raises: [CatchableError].}
+
 # ------------------------------------------------------------------------------
 # Private helpers, logging
 # ------------------------------------------------------------------------------
@@ -153,7 +158,8 @@ proc persistentBlockHeaderPut*(
 proc persistentAccountsPut*(
     db: HexaryTreeDbRef;
     base: CoreDbRef;
-      ): Result[void,HexaryError] =
+      ): Result[void,HexaryError]
+      {.catchRaise.} =
   ## Bulk store using transactional `put()`
   let dbTx = base.beginTransaction
   defer: dbTx.commit
@@ -170,7 +176,8 @@ proc persistentAccountsPut*(
 proc persistentStorageSlotsPut*(
     db: HexaryTreeDbRef;
     base: CoreDbRef;
-      ): Result[void,HexaryError] =
+      ): Result[void,HexaryError]
+      {.catchRaise.} =
   ## Bulk store using transactional `put()`
   let dbTx = base.beginTransaction
   defer: dbTx.commit
@@ -188,7 +195,7 @@ proc persistentContractPut*(
     data: seq[(NodeKey,Blob)];
     base: CoreDbRef;
       ): Result[void,HexaryError]
-      {.gcsafe, raises: [OSError,IOError,KeyError].} =
+      {.catchRaise.} =
   ## SST based bulk load on `rocksdb`.
   let dbTx = base.beginTransaction
   defer: dbTx.commit
@@ -202,7 +209,7 @@ proc persistentStateRootPut*(
     db: CoreDbRef;
     root: NodeKey;
     data: Blob;
-      ) {.gcsafe, raises: [RlpError].} =
+      ) {.rlpRaise.} =
   ## Save or update state root registry data.
   const
     zeroKey = NodeKey.default
@@ -390,6 +397,7 @@ proc persistentContractPut*(
         dataLen=data.len, error, info=bulker.lastError()
     return err(error)
   ok()
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
