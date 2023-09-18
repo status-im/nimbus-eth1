@@ -14,15 +14,17 @@
 {.push raises: [].}
 
 import kvt/[
-  kvt_constants, kvt_init, kvt_tx, kvt_utils]
+  kvt_constants, kvt_init, kvt_tx, kvt_utils, kvt_walk]
 export
-  kvt_constants, kvt_init, kvt_tx, kvt_utils
+  kvt_constants, kvt_init, kvt_tx, kvt_utils, kvt_walk
 
 import
   kvt/kvt_desc
 export
+  KvtDbAction,
   KvtDbRef,
   KvtError,
+  KvtTxRef,
   isValid
 
 # End
