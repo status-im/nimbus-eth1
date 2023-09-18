@@ -7,6 +7,12 @@
 
 SHELL := bash # the shell used internally by "make"
 
+# Temporary workaround for error due to LFS quota reached for holesky git
+# submodule of nimbus-eth2 git submodule.
+# Fails on downloading object: public-keys/all.txt
+# Basically workaround by disabling git LFS completely.
+export GIT_LFS_SKIP_SMUDGE=1
+
 # used inside the included makefiles
 BUILD_SYSTEM_DIR := vendor/nimbus-build-system
 
