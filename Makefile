@@ -104,7 +104,18 @@ FLUFFY_TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(FLUFFY_TOOLS))
 
 ifeq ($(NIM_PARAMS),)
 # "variables.mk" was not included, so we update the submodules.
-GIT_SUBMODULE_UPDATE := git submodule update --init --recursive
+# selectively download nimbus-eth2 submodules because we don't need all of it's modules
+# also holesky already exceeds github LFS quota
+GIT_SUBMODULE_UPDATE := git -c submodule."vendor/nimbus-eth2".update=none submodule update --init --recursive; \
+  git submodule update vendor/nimbus-eth2; \
+  cd vendor/nimbus-eth2; \
+  git submodule update --init vendor/eth2-networks; \
+  git submodule update --init vendor/holesky; \
+  git submodule update --init vendor/sepolia; \
+  git submodule update --init vendor/gnosis-chain-configs; \
+  git submodule update --init --recursive vendor/nim-kzg4844; \
+  cd ../..
+
 .DEFAULT:
 	+@ echo -e "Git submodules not found. Running '$(GIT_SUBMODULE_UPDATE)'.\n"; \
 		$(GIT_SUBMODULE_UPDATE); \
@@ -185,6 +196,11 @@ endif
 update: | update-common
 	rm -rf nimbus.nims && \
 		$(MAKE) nimbus.nims $(HANDLE_OUTPUT)
+
+update-from-ci: | sanity-checks update-test
+	rm -rf nimbus.nims && \
+		$(MAKE) nimbus.nims $(HANDLE_OUTPUT)
+	+ "$(MAKE)" --no-print-directory deps-common
 
 # builds the tools, wherever they are
 $(TOOLS): | build deps
