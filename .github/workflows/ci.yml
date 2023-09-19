@@ -241,7 +241,7 @@ jobs:
 
       - name: Build Nim and Nimbus-eth1 dependencies
         run: |
-          make -j${ncpu} ARCH_OVERRIDE=${PLATFORM} CI_CACHE=NimBinCache update
+          make -j${ncpu} ARCH_OVERRIDE=${PLATFORM} CI_CACHE=NimBinCache update-from-ci
 
       - name: Run nimbus-eth1 tests (Windows)
         if: runner.os == 'Windows'

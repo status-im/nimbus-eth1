@@ -85,7 +85,7 @@ if [[ "${PLATFORM}" == "Windows_amd64" ]]; then
 
   build_rocksdb TARGET_OS=MINGW CXX="${CXX}"
 
-  make -j$(nproc) update
+  make -j$(nproc) update-from-ci
 
   make \
     -j$(nproc) \
@@ -133,7 +133,7 @@ elif [[ "${PLATFORM}" == "Linux_arm32v7" ]]; then
 
   build_rocksdb TARGET_ARCHITECTURE=arm CXX="${CXX}"
 
-  make -j$(nproc) update
+  make -j$(nproc) update-from-ci
 
   env CFLAGS="" make \
     -j$(nproc) \
@@ -154,7 +154,7 @@ elif [[ "${PLATFORM}" == "Linux_arm64v8" ]]; then
 
   build_rocksdb TARGET_ARCHITECTURE=arm64 CXX="${CXX}"
 
-  make -j$(nproc) update
+  make -j$(nproc) update-from-ci
 
   make \
     -j$(nproc) \
@@ -183,7 +183,7 @@ elif [[ "${PLATFORM}" == "macOS_amd64" ]]; then
 
   build_rocksdb TARGET_OS=Darwin CXX="${CXX}" AR="${AR}"
 
-  make -j$(nproc) update
+  make -j$(nproc) update-from-ci
 
   make \
     -j$(nproc) \
@@ -225,7 +225,7 @@ elif [[ "${PLATFORM}" == "macOS_arm64" ]]; then
 
   build_rocksdb TARGET_OS=Darwin TARGET_ARCHITECTURE=arm64 CXX="${CXX}" AR="${AR}"
 
-  make -j$(nproc) update
+  make -j$(nproc) update-from-ci
 
   make \
     -j$(nproc) \
@@ -259,7 +259,7 @@ else
 
   build_rocksdb
 
-  make -j$(nproc) update
+  make -j$(nproc) update-from-ci
 
   make \
     -j$(nproc) \
