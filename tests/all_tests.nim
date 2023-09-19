@@ -49,4 +49,5 @@ cliBuilder:
           ./test_keyed_queue_rlp,
           ./test_txpool,
           ./test_merge,
-          ./test_eip4844
+          ./test_eip4844,
+          ./test_beacon/test_skeleton

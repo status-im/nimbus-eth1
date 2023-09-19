@@ -188,9 +188,9 @@ proc calcRootHash(items: Transactions | PortalReceipts | Withdrawals): Hash256 =
   for i, item in items:
     try:
       tr.put(rlp.encode(i), item.asSeq())
-    except RlpError as e:
-      # TODO: Investigate this RlpError as it doesn't sound like this is
-      # something that can actually occur.
+    except CatchableError as e:
+      # tr.put now is a generic interface to whatever underlying db
+      # and it can raise exception if the backend db is something like aristo
       raiseAssert(e.msg)
 
   return tr.rootHash

@@ -195,9 +195,8 @@ proc calculateTransactionData(
     try:
       let tx = distinctBase(t)
       tr.put(rlp.encode(i), tx)
-    except RlpError as e:
-      # TODO: Investigate this RlpError as it doesn't sound like this is
-      # something that can actually occur.
+    except CatchableError as e:
+      # tr.put interface can raise exception
       raiseAssert(e.msg)
 
   return tr.rootHash()
@@ -218,7 +217,7 @@ proc calculateWithdrawalsRoot(
         amount: distinctBase(w.amount)
       )
       tr.put(rlp.encode(i), rlp.encode(withdrawal))
-    except RlpError as e:
+    except CatchableError as e:
       raiseAssert(e.msg)
 
   return tr.rootHash()
