@@ -84,7 +84,7 @@ template asEthHash(hash: BlockHash): etypes.Hash256 =
 
 proc calculateTransactionData(
     items: openArray[TypedTransaction]):
-    (etypes.Hash256, seq[TxHash], uint64) {.raises: [RlpError].} =
+    (etypes.Hash256, seq[TxHash], uint64) {.raises: [RlpError, CatchableError].} =
   ## returns tuple composed of
   ## - root of transactions trie
   ## - list of transactions hashes
@@ -122,7 +122,7 @@ func blockHeaderSize(
   return uint64(len(rlp.encode(bh)))
 
 proc asBlockObject*(
-    p: ExecutionData): BlockObject {.raises: [RlpError, ValueError].} =
+    p: ExecutionData): BlockObject {.raises: [RlpError, ValueError, CatchableError].} =
   # TODO: currently we always calculate txHashes as BlockObject does not have
   # option of returning full transactions. It needs fixing at nim-web3 library
   # level

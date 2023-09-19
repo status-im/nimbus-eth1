@@ -171,7 +171,7 @@ proc getGenesisHeader*(id: NetworkId = MainNet): BlockHeader =
 
   try:
     toGenesisHeader(params)
-  except RlpError:
+  except RlpError, CatchableError:
     raise (ref Defect)(msg: "Genesis should be valid")
 
 # Reading JSON Portal content and content keys
