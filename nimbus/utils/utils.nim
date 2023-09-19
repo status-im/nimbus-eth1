@@ -33,7 +33,7 @@ func sumHash*(hashes: varargs[Hash256]): Hash256 =
   ctx.finish result.data
   ctx.clear()
 
-proc sumHash*(body: BlockBody): Hash256 {.gcsafe, raises: [RlpError]} =
+proc sumHash*(body: BlockBody): Hash256 {.gcsafe, raises: [CatchableError]} =
   let txRoot = calcTxRoot(body.transactions)
   let ommersHash = keccakHash(rlp.encode(body.uncles))
   let wdRoot = if body.withdrawals.isSome:
