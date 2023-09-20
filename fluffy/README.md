@@ -157,6 +157,21 @@ The code follows the
 [Status Nim Style Guide](https://status-im.github.io/nim-style-guide/).
 
 
+## Build local dev container for portal-hive
+
+To develop code against portal-hive tests you will need:
+
+1) Clone and build portal-hive ([#1](https://github.com/ethereum/portal-hive))
+
+2) Modify `Dockerfile` for fluffy in `portal-hive/clients/fluffy/Dockerfile` ([#2](https://github.com/ethereum/portal-hive/blob/main/docs/overview.md#running-a-client-built-from-source))
+
+3) Build local dev container using following command: ```docker build --tag fluffy-dev --file ./fluffy/tools/docker/Dockerfile.portalhive .``` You may need to change fluffy-dev to the tag you using in portal-hive client dockerfile.
+
+4) Run the tests
+
+Also keep in mind that `./vendors` is dockerignored and cached. If you have to make local changes to one of the dependencies in that directory you'll have to remove `vendors/` from `./fluffy/tools/docker/Dockerfile.portalhive.dockerignore`.
+
+
 ## Metrics and their visualisation
 
 To enable metrics run Fluffy with the `--metrics` flag:
