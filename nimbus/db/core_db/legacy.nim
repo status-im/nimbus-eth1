@@ -13,7 +13,7 @@
 import
   std/options,
   eth/[common, rlp, trie/db, trie/hexary],
-  ./base
+  "."/[base, base/base_desc]
 
 type
   LegacyDbRef* = ref object of CoreDbRef
