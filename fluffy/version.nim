@@ -39,8 +39,8 @@ const
   copyrightBanner* =
     "Copyright (c) 2021-" & compileYear & " Status Research & Development GmbH"
 
-  # Short debugging indentifier for ENR
-  clientInfoShort* = toBytes("f-" & gitRevision)
+  # Short debugging identifier to be placed in the ENR
+  enrClientInfoShort* = toBytes("f")
 
 func getNimGitHash*(): string =
   const gitPrefix = "git hash: "

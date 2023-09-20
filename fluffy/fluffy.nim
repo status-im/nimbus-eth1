@@ -147,9 +147,10 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
     d = newProtocol(
       netkey,
       extIp, none(Port), extUdpPort,
-      # Note: The addition of clientInfo to the ENR is a temporary measure to
-      # easily identify & debug the clients used in the testnet.
-      localEnrFields = {"c": clientInfoShort},
+      # Note: The addition of default clientInfo to the ENR is a temporary
+      # measure to easily identify & debug the clients used in the testnet.
+      # Might make this into a, default off, cli option.
+      localEnrFields = {"c": enrClientInfoShort},
       bootstrapRecords = bootstrapRecords,
       bindIp = bindIp, bindPort = udpPort,
       enrAutoUpdate = config.enrAutoUpdate,
