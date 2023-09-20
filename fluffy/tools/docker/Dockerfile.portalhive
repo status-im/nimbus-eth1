@@ -1,0 +1,26 @@
+FROM debian:stable-slim as build
+
+ENV DEBIAN_FRONTEND=noninteractive TZ="Etc/UTC"
+ENV NPROC=2
+
+RUN apt update \
+  && apt install make bash build-essential git -y \
+  && apt-get clean \
+  && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+COPY ../../ /fluffy
+
+WORKDIR /fluffy
+
+RUN --mount=type=cache,target=/fluffy/vendor \
+    make deps -j${NPROC}
+
+RUN --mount=type=cache,target=/fluffy/vendor <<EOF
+  set -e
+  make fluffy -j${NPROC}
+  cp /fluffy/build/fluffy /usr/local/bin/fluffy
+EOF
+
+FROM debian:stable-slim as app
+
+COPY --from=build /usr/local/bin/fluffy /usr/local/bin/fluffy
