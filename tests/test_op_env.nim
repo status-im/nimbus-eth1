@@ -366,7 +366,7 @@ proc opEnvMain*() =
     assembler:
       title: "EIP-4399 PrevRandao: EMPTY_UNCLE_HASH"
       setup:
-        vmState.prevRandao = EMPTY_UNCLE_HASH
+        vmState.blockCtx.prevRandao = EMPTY_UNCLE_HASH
       code:
         PrevRandao
         STOP
@@ -387,7 +387,7 @@ proc opEnvMain*() =
         stack:
           "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
         fork: Cancun
-  
+
       assembler:
         title: "EIP-4844: BlobHash 0"
         code:
@@ -397,7 +397,7 @@ proc opEnvMain*() =
         stack:
           "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
         fork: Cancun
-  
+
       assembler:
         title: "EIP-4844: BlobHash 2"
         code:
@@ -407,7 +407,7 @@ proc opEnvMain*() =
         stack:
           "0x0000000000000000000000000000000000000000000000000000000000000000"
         fork: Cancun
-  
+
       assembler:
         title: "EIP-4844: BlobHash 32 Bit high"
         code:
@@ -417,7 +417,7 @@ proc opEnvMain*() =
         stack:
           "0x0000000000000000000000000000000000000000000000000000000000000000"
         fork: Cancun
-  
+
       assembler:
         title: "EIP-4844: BlobHash 64 Bit high"
         code:
@@ -427,7 +427,7 @@ proc opEnvMain*() =
         stack:
           "0x0000000000000000000000000000000000000000000000000000000000000000"
         fork: Cancun
-  
+
       assembler:
         title: "EIP-4844: BlobHash 128 Bit high"
         code:
@@ -437,7 +437,7 @@ proc opEnvMain*() =
         stack:
           "0x0000000000000000000000000000000000000000000000000000000000000000"
         fork: Cancun
-  
+
       assembler:
         title: "EIP-4844: BlobHash 256 Bit high"
         code:

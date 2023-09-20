@@ -137,7 +137,7 @@ proc parseTx*(n: JsonNode, dataIndex, gasIndex, valueIndex: int): Transaction =
     maxFee  : omitZero(GasInt, "maxFeePerGas"),
     accessList: omitZero(AccessList, "accessLists", dataIndex),
     maxPriorityFee: omitZero(GasInt, "maxPriorityFeePerGas"),
-    maxFeePerBlobGas: omitZero(GasInt, "maxFeePerBlobGas"),
+    maxFeePerBlobGas: omitZero(UInt256, "maxFeePerBlobGas"),
     versionedHashes: omitZero(VersionedHashes, "blobVersionedHashes")
   )
 

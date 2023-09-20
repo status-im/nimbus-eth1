@@ -24,29 +24,31 @@ proc init(
       self:         BaseVMState;
       ac:           AccountsCache;
       parent:       BlockHeader;
-      timestamp:    EthTime;
-      gasLimit:     GasInt;
-      fee:          Option[UInt256];
-      prevRandao:   Hash256;
-      difficulty:   UInt256;
-      miner:        EthAddress;
+      blockCtx:     BlockContext;
       com:          CommonRef;
       tracer:       TracerRef,
       asyncFactory: AsyncOperationFactory = AsyncOperationFactory(maybeDataSource: none[AsyncDataSource]()))
     {.gcsafe.} =
   ## Initialisation helper
   self.parent = parent
-  self.timestamp = timestamp
-  self.gasLimit = gasLimit
-  self.gasPool = gasLimit
-  self.fee = fee
-  self.prevRandao = prevRandao
-  self.blockDifficulty = difficulty
+  self.blockCtx = blockCtx
+  self.gasPool = blockCtx.gasLimit
   self.com = com
   self.tracer = tracer
   self.stateDB = ac
-  self.minerAddress = miner
   self.asyncFactory = asyncFactory
+
+func blockCtx(com: CommonRef, header: BlockHeader):
+                BlockContext {.gcsafe, raises: [CatchableError].} =
+  BlockContext(
+    timestamp    : header.timestamp,
+    gasLimit     : header.gasLimit,
+    fee          : header.fee,
+    prevRandao   : header.prevRandao,
+    difficulty   : header.difficulty,
+    coinbase     : com.minerAddress(header),
+    excessBlobGas: header.excessBlobGas.get(0'u64),
+  )
 
 # --------------
 
@@ -59,16 +61,11 @@ proc `$`*(vmState: BaseVMState): string
              &"\n  blockNumber: {vmState.parent.blockNumber + 1}"
 
 proc new*(
-      T:           type BaseVMState;
-      parent:      BlockHeader;     ## parent header, account sync position
-      timestamp:   EthTime;         ## tx env: time stamp
-      gasLimit:    GasInt;          ## tx env: gas limit
-      fee:         Option[UInt256]; ## tx env: optional base fee
-      prevRandao:  Hash256;         ## tx env: POS block randomness
-      difficulty:  UInt256,         ## tx env: difficulty
-      miner:       EthAddress;      ## tx env: coinbase(PoW) or signer(PoA)
-      com:         CommonRef;       ## block chain config
-      tracer:      TracerRef = nil): T
+      T:        type BaseVMState;
+      parent:   BlockHeader;     ## parent header, account sync position
+      blockCtx: BlockContext;
+      com:      CommonRef;       ## block chain config
+      tracer:   TracerRef = nil): T
     {.gcsafe.} =
   ## Create a new `BaseVMState` descriptor from a parent block header. This
   ## function internally constructs a new account state cache rooted at
@@ -79,25 +76,15 @@ proc new*(
   ## with the `parent` block header.
   new result
   result.init(
-    ac          = AccountsCache.init(com.db, parent.stateRoot, com.pruneTrie),
-    parent      = parent,
-    timestamp   = timestamp,
-    gasLimit    = gasLimit,
-    fee         = fee,
-    prevRandao  = prevRandao,
-    difficulty  = difficulty,
-    miner       = miner,
-    com         = com,
-    tracer      = tracer)
+    ac       = AccountsCache.init(com.db, parent.stateRoot, com.pruneTrie),
+    parent   = parent,
+    blockCtx = blockCtx,
+    com      = com,
+    tracer   = tracer)
 
-proc reinit*(self:      BaseVMState;     ## Object descriptor
-             parent:    BlockHeader;     ## parent header, account sync pos.
-             timestamp: EthTime;         ## tx env: time stamp
-             gasLimit:  GasInt;          ## tx env: gas limit
-             fee:       Option[UInt256]; ## tx env: optional base fee
-             prevRandao:Hash256;         ## tx env: POS block randomness
-             difficulty:UInt256,         ## tx env: difficulty
-             miner:     EthAddress;      ## tx env: coinbase(PoW) or signer(PoA)
+proc reinit*(self:     BaseVMState;     ## Object descriptor
+             parent:   BlockHeader;     ## parent header, account sync pos.
+             blockCtx: BlockContext
              ): bool
     {.gcsafe.} =
   ## Re-initialise state descriptor. The `AccountsCache` database is
@@ -117,22 +104,17 @@ proc reinit*(self:      BaseVMState;     ## Object descriptor
                else: AccountsCache.init(db, parent.stateRoot, com.pruneTrie)
     self[].reset
     self.init(
-      ac          = ac,
-      parent      = parent,
-      timestamp   = timestamp,
-      gasLimit    = gasLimit,
-      fee         = fee,
-      prevRandao  = prevRandao,
-      difficulty  = difficulty,
-      miner       = miner,
-      com         = com,
-      tracer      = tracer)
+      ac       = ac,
+      parent   = parent,
+      blockCtx = blockCtx,
+      com      = com,
+      tracer   = tracer)
     return true
   # else: false
 
-proc reinit*(self:      BaseVMState; ## Object descriptor
-             parent:    BlockHeader; ## parent header, account sync pos.
-             header:    BlockHeader; ## header with tx environment data fields
+proc reinit*(self:   BaseVMState; ## Object descriptor
+             parent: BlockHeader; ## parent header, account sync pos.
+             header: BlockHeader; ## header with tx environment data fields
              ): bool
     {.gcsafe, raises: [CatchableError].} =
   ## Variant of `reinit()`. The `parent` argument is used to sync the accounts
@@ -142,13 +124,9 @@ proc reinit*(self:      BaseVMState; ## Object descriptor
   ## It requires the `header` argument properly initalised so that for PoA
   ## networks, the miner address is retrievable via `ecRecover()`.
   result = self.reinit(
-    parent    = parent,
-    timestamp = header.timestamp,
-    gasLimit  = header.gasLimit,
-    fee       = header.fee,
-    prevRandao= header.prevRandao,
-    difficulty= header.difficulty,
-    miner     = self.com.minerAddress(header))
+    parent   = parent,
+    blockCtx = self.com.blockCtx(header),
+    )
 
 proc reinit*(self:      BaseVMState; ## Object descriptor
              header:    BlockHeader; ## header with tx environment data fields
@@ -178,16 +156,11 @@ proc init*(
   ## It requires the `header` argument properly initalised so that for PoA
   ## networks, the miner address is retrievable via `ecRecover()`.
   self.init(
-    ac          = AccountsCache.init(com.db, parent.stateRoot, com.pruneTrie),
-    parent      = parent,
-    timestamp   = header.timestamp,
-    gasLimit    = header.gasLimit,
-    fee         = header.fee,
-    prevRandao  = header.prevRandao,
-    difficulty  = header.difficulty,
-    miner       = com.minerAddress(header),
-    com         = com,
-    tracer      = tracer)
+    ac       = AccountsCache.init(com.db, parent.stateRoot, com.pruneTrie),
+    parent   = parent,
+    blockCtx = com.blockCtx(header),
+    com      = com,
+    tracer   = tracer)
 
 proc new*(
       T:      type BaseVMState;
@@ -252,19 +225,14 @@ proc statelessInit*(
   vmState.init(
     ac          = AccountsCache.init(com.db, parent.stateRoot, com.pruneTrie),
     parent      = parent,
-    timestamp   = header.timestamp,
-    gasLimit    = header.gasLimit,
-    fee         = header.fee,
-    prevRandao  = header.prevRandao,
-    difficulty  = header.difficulty,
-    miner       = com.minerAddress(header),
+    blockCtx    = com.blockCtx(header),
     com         = com,
     tracer      = tracer,
     asyncFactory = asyncFactory)
   return true
 
 method coinbase*(vmState: BaseVMState): EthAddress {.base, gcsafe.} =
-  vmState.minerAddress
+  vmState.blockCtx.coinbase
 
 method blockNumber*(vmState: BaseVMState): BlockNumber {.base, gcsafe.} =
   # it should return current block number
@@ -274,15 +242,12 @@ method blockNumber*(vmState: BaseVMState): BlockNumber {.base, gcsafe.} =
 method difficulty*(vmState: BaseVMState): UInt256 {.base, gcsafe.} =
   if vmState.com.consensus == ConsensusType.POS:
     # EIP-4399/EIP-3675
-    UInt256.fromBytesBE(vmState.prevRandao.data)
+    UInt256.fromBytesBE(vmState.blockCtx.prevRandao.data)
   else:
-    vmState.blockDifficulty
+    vmState.blockCtx.difficulty
 
 method baseFee*(vmState: BaseVMState): UInt256 {.base, gcsafe.} =
-  if vmState.fee.isSome:
-    vmState.fee.get
-  else:
-    0.u256
+  vmState.blockCtx.fee.get(0.u256)
 
 when defined(geth):
   import db/geth_db
@@ -335,7 +300,7 @@ func forkDeterminationInfoForVMState*(vmState: BaseVMState): ForkDeterminationIn
   # FIXME-Adam: Is this timestamp right? Note that up above in blockNumber we add 1;
   # should timestamp be adding 12 or something?
   # Also, can I get the TD? Do I need to?
-  forkDeterminationInfo(vmState.blockNumber, vmState.timestamp)
+  forkDeterminationInfo(vmState.blockNumber, vmState.blockCtx.timestamp)
 
 func determineFork*(vmState: BaseVMState): EVMFork =
   vmState.com.toEVMFork(vmState.forkDeterminationInfoForVMState)

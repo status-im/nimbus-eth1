@@ -42,15 +42,20 @@ type
     GenerateWitness
     ClearCache
 
-  BaseVMState* = ref object of RootObj
-    com*              : CommonRef
-    gasPool*          : GasInt
-    parent*           : BlockHeader
+  BlockContext* = object
     timestamp*        : EthTime
     gasLimit*         : GasInt
     fee*              : Option[UInt256]
     prevRandao*       : Hash256
-    blockDifficulty*  : UInt256
+    difficulty*       : UInt256
+    coinbase*         : EthAddress
+    excessBlobGas*    : uint64
+
+  BaseVMState* = ref object of RootObj
+    com*              : CommonRef
+    gasPool*          : GasInt
+    parent*           : BlockHeader
+    blockCtx*         : BlockContext
     flags*            : set[VMFlag]
     tracer*           : TracerRef
     receipts*         : seq[Receipt]
@@ -61,7 +66,6 @@ type
     txVersionedHashes*: VersionedHashes
     gasCosts*         : GasCosts
     fork*             : EVMFork
-    minerAddress*     : EthAddress
     asyncFactory*     : AsyncOperationFactory
 
   Computation* = ref object

@@ -96,11 +96,13 @@ proc debugAccounts*(vmState: BaseVMState): string =
 proc debug*(vms: BaseVMState): string =
   result.add "com.consensus    : " & $vms.com.consensus       & "\n"
   result.add "parent           : " & $vms.parent.blockHash    & "\n"
-  result.add "timestamp        : " & $vms.timestamp.toUnix    & "\n"
-  result.add "gasLimit         : " & $vms.gasLimit            & "\n"
-  result.add "fee              : " & $vms.fee                 & "\n"
-  result.add "prevRandao       : " & $vms.prevRandao          & "\n"
-  result.add "blockDifficulty  : " & $vms.blockDifficulty     & "\n"
+  result.add "timestamp        : " & $vms.blockCtx.timestamp.toUnix & "\n"
+  result.add "gasLimit         : " & $vms.blockCtx.gasLimit   & "\n"
+  result.add "fee              : " & $vms.blockCtx.fee        & "\n"
+  result.add "prevRandao       : " & $vms.blockCtx.prevRandao & "\n"
+  result.add "blockDifficulty  : " & $vms.blockCtx.difficulty & "\n"
+  result.add "coinbase         : " & $vms.blockCtx.coinbase   & "\n"
+  result.add "excessBlobGas    : " & $vms.blockCtx.excessBlobGas & "\n"
   result.add "flags            : " & $vms.flags               & "\n"
   result.add "receipts.len     : " & $vms.receipts.len        & "\n"
   result.add "stateDB.root     : " & $vms.stateDB.rootHash    & "\n"
@@ -108,7 +110,6 @@ proc debug*(vms: BaseVMState): string =
   result.add "txOrigin         : " & $vms.txOrigin            & "\n"
   result.add "txGasPrice       : " & $vms.txGasPrice          & "\n"
   result.add "fork             : " & $vms.fork                & "\n"
-  result.add "minerAddress     : " & $vms.minerAddress        & "\n"
 
 proc `$`(x: ChainId): string =
   $int(x)

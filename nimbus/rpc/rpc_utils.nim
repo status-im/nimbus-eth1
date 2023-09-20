@@ -189,7 +189,7 @@ proc populateTransactionObject*(tx: Transaction, header: BlockHeader, txIndex: i
     result.accessList = some(toAccessTupleList(tx.accessList))
 
   if tx.txType >= TxEIP4844:
-    result.maxFeePerBlobGas = some(encodeQuantity(tx.maxFeePerBlobGas.uint64))
+    result.maxFeePerBlobGas = some(encodeQuantity(tx.maxFeePerBlobGas))
     result.versionedHashes = some(tx.versionedHashes)
 
 proc populateBlockObject*(header: BlockHeader, chain: CoreDbRef, fullTx: bool, isUncle = false): BlockObject

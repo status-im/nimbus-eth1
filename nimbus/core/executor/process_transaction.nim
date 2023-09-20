@@ -80,7 +80,7 @@ proc asyncProcessTransactionImpl(
     baseFee = baseFee256.truncate(GasInt)
     tx = eip1559TxNormalization(tx, baseFee)
     priorityFee = min(tx.maxPriorityFee, tx.maxFee - baseFee)
-    excessBlobGas = vmState.parent.excessBlobGas.get(0'u64)
+    excessBlobGas = header.excessBlobGas.get(0'u64)
 
   # Return failure unless explicitely set `ok()`
   var res: Result[GasInt, string] = err("")

@@ -234,7 +234,7 @@ proc parseTx(n: JsonNode, chainId: ChainID): Transaction =
     required(tx, GasInt, maxPriorityFeePerGas)
     required(tx, GasInt, maxFeePerGas)
     omitZero(tx, AccessList, accessList)
-    required(tx, GasInt, maxFeePerBlobGas)
+    required(tx, UInt256, maxFeePerBlobGas)
     required(tx, VersionedHashes, blobVersionedHashes)
 
   var eip155 = true
