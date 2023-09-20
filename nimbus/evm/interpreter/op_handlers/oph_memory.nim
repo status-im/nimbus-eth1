@@ -289,9 +289,9 @@ const
   tloadOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x5c, Load word from transient storage.
     let
-      slot = k.cpt.stack.peek()
+      slot = k.cpt.stack.popInt()
       val  = k.cpt.getTransientStorage(slot)
-    k.cpt.stack.top(val)
+    k.cpt.stack.push: val
 
   tstoreOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x5d, Save word to transient storage.

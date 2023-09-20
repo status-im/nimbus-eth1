@@ -920,5 +920,27 @@ proc opMemoryMain*() =
         "0x0000010203040506070000000000000000000000000000000000000000000000"
       fork: Cancun
 
+    assembler:
+      title: "TSTORE/TLOAD"
+      code:
+        PUSH1 "0xAA"
+        PUSH1 "0xBB"
+        TSTORE
+        PUSH1 "0xBB"
+        TLOAD
+      stack:
+        "0x00000000000000000000000000000000000000000000000000000000000000AA"
+      fork: Cancun
+
+    assembler:
+      title: "TLOAD stack underflow not crash"
+      code:
+        PUSH1 "0xAA"
+        PUSH1 "0xBB"
+        TSTORE
+        TLOAD
+      success: false
+      fork: Cancun
+
 when isMainModule:
   opMemoryMain()
