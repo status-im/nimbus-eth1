@@ -448,7 +448,7 @@ proc setBalance*(ac: AccountsCache, address: EthAddress, balance: UInt256) =
 proc addBalance*(ac: AccountsCache, address: EthAddress, delta: UInt256) {.inline.} =
   # EIP161: We must check emptiness for the objects such that the account
   # clearing (0,0,0 objects) can take effect.
-  if delta == 0.u256:
+  if delta.isZero:
     let acc = ac.getAccount(address)
     if acc.isEmpty:
       ac.makeDirty(address).flags.incl Touched
@@ -456,6 +456,12 @@ proc addBalance*(ac: AccountsCache, address: EthAddress, delta: UInt256) {.inlin
   ac.setBalance(address, ac.getBalance(address) + delta)
 
 proc subBalance*(ac: AccountsCache, address: EthAddress, delta: UInt256) {.inline.} =
+  if delta.isZero:
+    # This zero delta early exit is important as shown in EIP-4788.
+    # If the account is created, it will change the state.
+    # But early exit will prevent the account creation.
+    # In this case, the SystemAddress
+    return
   ac.setBalance(address, ac.getBalance(address) - delta)
 
 proc setNonce*(ac: AccountsCache, address: EthAddress, nonce: AccountNonce) =

@@ -212,7 +212,7 @@ template getTransientStorage*(c: Computation, slot: UInt256): UInt256 =
     c.vmState.readOnlyStateDB.
       getTransientStorage(c.msg.contractAddress, slot)
 
-proc newComputation*(vmState: BaseVMState, message: Message,
+proc newComputation*(vmState: BaseVMState, sysCall: bool, message: Message,
                      salt: ContractSalt = ZERO_CONTRACTSALT): Computation =
   new result
   result.vmState = vmState
@@ -221,6 +221,7 @@ proc newComputation*(vmState: BaseVMState, message: Message,
   result.stack = newStack()
   result.returnStack = @[]
   result.gasMeter.init(message.gas)
+  result.sysCall = sysCall
 
   if result.msg.isCreate():
     result.msg.contractAddress = result.generateContractAddress(salt)
@@ -230,7 +231,8 @@ proc newComputation*(vmState: BaseVMState, message: Message,
     result.code = newCodeStream(
       vmState.readOnlyStateDB.getCode(message.codeAddress))
 
-proc newComputation*(vmState: BaseVMState, message: Message, code: seq[byte]): Computation =
+proc newComputation*(vmState: BaseVMState, sysCall: bool,
+                     message: Message, code: seq[byte]): Computation =
   new result
   result.vmState = vmState
   result.msg = message
@@ -239,6 +241,7 @@ proc newComputation*(vmState: BaseVMState, message: Message, code: seq[byte]): C
   result.returnStack = @[]
   result.gasMeter.init(message.gas)
   result.code = newCodeStream(code)
+  result.sysCall = sysCall
 
 template gasCosts*(c: Computation): untyped =
   c.vmState.gasCosts

@@ -13,6 +13,7 @@ import
 
 export
   vmx.asyncExecComputation,
-  vmx.execComputation
+  vmx.execComputation,
+  vmx.execSysCall
 
 # End

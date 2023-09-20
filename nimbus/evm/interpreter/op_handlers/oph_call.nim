@@ -172,7 +172,7 @@ else:
     # need to provide explicit <c> and <child> for capturing in chainTo proc()
     # <memPos> and <memLen> are provided by value and need not be captured
     var
-      child = newComputation(c.vmState, childMsg)
+      child = newComputation(c.vmState, false, childMsg)
 
     c.chainTo(child):
       if not child.shouldBurnGas:

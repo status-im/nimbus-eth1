@@ -140,32 +140,26 @@ proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash256):
   let
     statedb = vmState.stateDB
     call = CallParams(
-      vmState:  vmState,
-      sender:   SystemAddress,
-      gasLimit: 30_000_000.GasInt,
-      gasPrice: 0.GasInt,
-      to:       BeaconRootsStorageAddress,
-      input:    @(beaconRoot.data),
+      vmState  : vmState,
+      sender   : SystemAddress,
+      gasLimit : 30_000_000.GasInt,
+      gasPrice : 0.GasInt,
+      to       : BeaconRootsStorageAddress,
+      input    : @(beaconRoot.data),
+
+      # It's a systemCall, no need for other knicks knacks
+      sysCall     : true,
+      noAccessList: true,
+      noIntrinsic : true,
+      noGasCharge : true,
+      noRefund    : true,
     )
 
   # runComputation a.k.a syscall/evm.call
   if call.runComputation().isError:
     return err("processBeaconBlockRoot: syscall error")
 
-  # We can choose to set SystemAddress nonce to 0
-  # like erigon or geth(their EVM have explicit nonce set)
-  # or we delete the account manually instead of let it deleted
-  # by AccountsCache.persist.
-  statedb.deleteAccount(SystemAddress)
-
-  when false:
-    # nimbus EVM automatically increase sender nonce by one
-    # for each call/create.
-    statedb.setNonce(SystemAddress, 0)
-    # statedb.persist probably not needed as each processTransaction
-    # will call it.
-    statedb.persist(clearEmptyAccount = true, clearCache = false)
-
+  statedb.persist(clearEmptyAccount = true, clearCache = false)
   ok()
 
 proc asyncProcessTransaction*(

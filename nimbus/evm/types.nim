@@ -87,6 +87,7 @@ type
       parent*, child*:      Computation
     pendingAsyncOperation*: Future[void]
     continuation*:          proc() {.gcsafe, raises: [CatchableError].}
+    sysCall*:               bool
 
   Error* = ref object
     statusCode*: evmc_status_code

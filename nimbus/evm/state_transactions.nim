@@ -63,6 +63,9 @@ proc execComputation*(c: Computation)
   c.execCallOrCreate()
   c.postExecComputation()
 
+template execSysCall*(c: Computation) =
+  c.execCallOrCreate()
+
 # FIXME-duplicatedForAsync
 proc asyncExecComputation*(c: Computation): Future[void] {.async.} =
   c.preExecComputation()

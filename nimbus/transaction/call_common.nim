@@ -42,6 +42,7 @@ type
     noAccessList*: bool                 # Don't initialise EIP-2929 access list.
     noGasCharge*:  bool                 # Don't charge sender account for gas.
     noRefund*:     bool                 # Don't apply gas refund/burn rule.
+    sysCall*:      bool                 # System call or ordinary call
 
   # Standard call result.  (Some fields are beyond what EVMC can return,
   # and must only be used from tests because they will not always be set).
@@ -176,7 +177,7 @@ proc setupHost(call: CallParams): TransactionHost =
         host.msg.input_data = host.input[0].addr
 
     let cMsg = hostToComputationMessage(host.msg)
-    host.computation = newComputation(vmState, cMsg, code)
+    host.computation = newComputation(vmState, call.sysCall, cMsg, code)
 
     shallowCopy(host.code, code)
 
@@ -189,7 +190,7 @@ proc setupHost(call: CallParams): TransactionHost =
       host.msg.input_data = host.input[0].addr
 
     let cMsg = hostToComputationMessage(host.msg)
-    host.computation = newComputation(vmState, cMsg)
+    host.computation = newComputation(vmState, call.sysCall, cMsg)
 
   vmState.captureStart(host.computation, call.sender, call.to,
                        call.isCreate, call.input,
@@ -297,7 +298,10 @@ proc runComputation*(call: CallParams): CallResult
   when defined(evmc_enabled):
     doExecEvmc(host, call)
   else:
-    execComputation(host.computation)
+    if host.computation.sysCall:
+      execSysCall(host.computation)
+    else:
+      execComputation(host.computation)
 
   finishRunningComputation(host, call)
 

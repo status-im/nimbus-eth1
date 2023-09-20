@@ -30,7 +30,7 @@ proc beforeExecCreateEvmcNested(host: TransactionHost,
     value: m.value.fromEvmc,
     data: @(makeOpenArray(m.inputData, m.inputSize.int))
   )
-  return newComputation(host.vmState, childMsg,
+  return newComputation(host.vmState, false, childMsg,
                         cast[ContractSalt](m.create2_salt))
 
 proc afterExecCreateEvmcNested(host: TransactionHost, child: Computation,
@@ -67,7 +67,7 @@ proc beforeExecCallEvmcNested(host: TransactionHost,
     data: @(makeOpenArray(m.inputData, m.inputSize.int)),
     flags: m.flags,
   )
-  return newComputation(host.vmState, childMsg)
+  return newComputation(host.vmState, false, childMsg)
 
 proc afterExecCallEvmcNested(host: TransactionHost, child: Computation,
                              res: var EvmcResult) {.inline.} =
