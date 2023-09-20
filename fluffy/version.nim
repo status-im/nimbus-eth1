@@ -9,6 +9,7 @@
 
 import
   std/strutils,
+  stew/byteutils,
   metrics
 
 const
@@ -37,6 +38,9 @@ const
   compileYear = CompileDate[0 ..< 4]  # YYYY-MM-DD (UTC)
   copyrightBanner* =
     "Copyright (c) 2021-" & compileYear & " Status Research & Development GmbH"
+
+  # Short debugging identifier to be placed in the ENR
+  enrClientInfoShort* = toBytes("f")
 
 func getNimGitHash*(): string =
   const gitPrefix = "git hash: "
