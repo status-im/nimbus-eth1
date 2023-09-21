@@ -15,6 +15,7 @@ import
   ../nimbus/common/common,
   ../nimbus/utils/[utils, debug],
   ../nimbus/evm/tracer/legacy_tracer,
+  ../nimbus/core/eip4844,
   ../tools/common/helpers as chp,
   ../tools/evmstate/helpers,
   ../tools/common/state_clearing,
@@ -23,8 +24,9 @@ import
   stew/[results, byteutils]
 
 type
-  Tester = object
+  TestCtx = object
     name: string
+    parent: BlockHeader
     header: BlockHeader
     pre: JsonNode
     tx: Transaction
@@ -35,6 +37,9 @@ type
     trace: bool
     index: int
     fork: string
+
+var
+  trustedSetupLoaded = false
 
 proc toBytes(x: string): seq[byte] =
   result = newSeq[byte](x.len)
@@ -50,39 +55,47 @@ method getAncestorHash*(vmState: BaseVMState; blockNumber: BlockNumber): Hash256
   else:
     return keccakHash(toBytes($blockNumber))
 
-proc dumpDebugData(tester: Tester, vmState: BaseVMState, gasUsed: GasInt, success: bool) =
+proc dumpDebugData(ctx: TestCtx, vmState: BaseVMState, gasUsed: GasInt, success: bool) =
   let tracerInst = LegacyTracer(vmState.tracer)
-  let tracingResult = if tester.trace: tracerInst.getTracingResult() else: %[]
+  let tracingResult = if ctx.trace: tracerInst.getTracingResult() else: %[]
   let debugData = %{
     "gasUsed": %gasUsed,
     "structLogs": tracingResult,
     "accounts": vmState.dumpAccounts()
   }
   let status = if success: "_success" else: "_failed"
-  writeFile(tester.name & "_" & tester.fork & "_" & $tester.index & status & ".json", debugData.pretty())
+  writeFile(ctx.name & "_" & ctx.fork & "_" & $ctx.index & status & ".json", debugData.pretty())
 
-proc testFixtureIndexes(tester: Tester, testStatusIMPL: var TestStatus) =
+proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
   let
-    com    = CommonRef.new(newCoreDbRef LegacyDbMemory, tester.chainConfig, getConfiguration().pruning)
+    com    = CommonRef.new(newCoreDbRef LegacyDbMemory, ctx.chainConfig, getConfiguration().pruning)
     parent = BlockHeader(stateRoot: emptyRlpHash)
-    tracer = if tester.trace:
+    tracer = if ctx.trace:
                newLegacyTracer({})
              else:
                LegacyTracer(nil)
 
+  if com.isCancunOrLater(ctx.header.timestamp):
+    if not trustedSetupLoaded:
+      let res = loadKzgTrustedSetup()
+      if res.isErr:
+        echo "FATAL: ", res.error
+        quit(QuitFailure)
+      trustedSetupLoaded = true
+
   let vmState = BaseVMState.new(
       parent = parent,
-      header = tester.header,
+      header = ctx.header,
       com    = com,
       tracer = tracer,
     )
 
   var gasUsed: GasInt
-  let sender = tester.tx.getSender()
-  let fork = com.toEVMFork(tester.header.forkDeterminationInfoForHeader)
+  let sender = ctx.tx.getSender()
+  let fork = com.toEVMFork(ctx.header.forkDeterminationInfoForHeader)
 
   vmState.mutateStateDB:
-    setupStateDB(tester.pre, db)
+    setupStateDB(ctx.pre, db)
 
     # this is an important step when using accounts_cache
     # it will affect the account storage's location
@@ -91,35 +104,36 @@ proc testFixtureIndexes(tester: Tester, testStatusIMPL: var TestStatus) =
 
   defer:
     let obtainedHash = vmState.readOnlyStateDB.rootHash
-    check obtainedHash == tester.expectedHash
+    check obtainedHash == ctx.expectedHash
     let logEntries = vmState.getAndClearLogEntries()
     let actualLogsHash = rlpHash(logEntries)
-    check(tester.expectedLogs == actualLogsHash)
-    if tester.debugMode:
-      let success = tester.expectedLogs == actualLogsHash and obtainedHash == tester.expectedHash
-      tester.dumpDebugData(vmState, gasUsed, success)
+    check(ctx.expectedLogs == actualLogsHash)
+    if ctx.debugMode:
+      let success = ctx.expectedLogs == actualLogsHash and obtainedHash == ctx.expectedHash
+      ctx.dumpDebugData(vmState, gasUsed, success)
 
   let rc = vmState.processTransaction(
-                tester.tx, sender, tester.header, fork)
+                ctx.tx, sender, ctx.header, fork)
   if rc.isOk:
     gasUsed = rc.value
 
-  let miner = tester.header.coinbase
+  let miner = ctx.header.coinbase
   coinbaseStateClearing(vmState, miner, fork)
 
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus,
                  trace = false, debugMode = false) =
-  var tester: Tester
+  var ctx: TestCtx
   var fixture: JsonNode
   for label, child in fixtures:
     fixture = child
-    tester.name = label
+    ctx.name = label
     break
 
-  tester.pre = fixture["pre"]
-  tester.header = parseHeader(fixture["env"])
-  tester.trace = trace
-  tester.debugMode = debugMode
+  ctx.pre    = fixture["pre"]
+  ctx.parent = parseParentHeader(fixture["env"])
+  ctx.header = parseHeader(fixture["env"])
+  ctx.trace  = trace
+  ctx.debugMode = debugMode
 
   let
     post   = fixture["post"]
@@ -128,51 +142,53 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus,
 
   template prepareFork(forkName: string) =
     try:
-      tester.chainConfig = getChainConfig(forkName)
+      ctx.chainConfig = getChainConfig(forkName)
     except ValueError as ex:
       debugEcho ex.msg
+      testStatusIMPL = TestStatus.Failed
       return
 
   template runSubTest(subTest: JsonNode) =
-    tester.expectedHash = Hash256.fromJson(subTest["hash"])
-    tester.expectedLogs = Hash256.fromJson(subTest["logs"])
-    tester.tx = parseTx(txData, subTest["indexes"])
-    tester.testFixtureIndexes(testStatusIMPL)
+    ctx.expectedHash = Hash256.fromJson(subTest["hash"])
+    ctx.expectedLogs = Hash256.fromJson(subTest["logs"])
+    ctx.tx = parseTx(txData, subTest["indexes"])
+    ctx.testFixtureIndexes(testStatusIMPL)
 
   if conf.fork.len > 0:
     if not post.hasKey(conf.fork):
       debugEcho "selected fork not available: " & conf.fork
       return
 
-    tester.fork = conf.fork
+    ctx.fork = conf.fork
     let forkData = post[conf.fork]
     prepareFork(conf.fork)
     if conf.index.isNone:
       for subTest in forkData:
         runSubTest(subTest)
-        inc tester.index
+        inc ctx.index
     else:
-      tester.index = conf.index.get()
-      if tester.index > forkData.len or tester.index < 0:
+      ctx.index = conf.index.get()
+      if ctx.index > forkData.len or ctx.index < 0:
         debugEcho "selected index out of range(0-$1), requested $2" %
-          [$forkData.len, $tester.index]
+          [$forkData.len, $ctx.index]
         return
 
-      let subTest = forkData[tester.index]
+      let subTest = forkData[ctx.index]
       runSubTest(subTest)
   else:
     for forkName, forkData in post:
       prepareFork(forkName)
-      tester.fork = forkName
-      tester.index = 0
+      ctx.fork = forkName
+      ctx.index = 0
       for subTest in forkData:
         runSubTest(subTest)
-        inc tester.index
+        inc ctx.index
 
 proc generalStateJsonMain*(debugMode = false) =
   const
-    legacyFolder = "eth_tests" / "LegacyTests" / "Constantinople" / "GeneralStateTests"
-    newFolder = "eth_tests" / "GeneralStateTests"
+    legacyFolder = "eth_tests/LegacyTests/Constantinople/GeneralStateTests"
+    newFolder = "eth_tests/GeneralStateTests"
+    #newFolder = "eth_tests/EIPTests/StateTests"
 
   let config = getConfiguration()
   if config.testSubject == "" or not debugMode:

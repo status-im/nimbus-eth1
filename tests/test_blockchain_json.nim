@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  std/[json, os, tables, strutils, options],
+  std/[json, os, tables, strutils, options, streams],
   unittest2,
   eth/rlp, eth/trie/trie_defs, eth/common/eth_types_rlp,
   stew/byteutils,
@@ -19,11 +19,13 @@ import
   ../nimbus/db/accounts_cache,
   ../nimbus/utils/[utils, debug],
   ../nimbus/evm/tracer/legacy_tracer,
+  ../nimbus/evm/tracer/json_tracer,
   ../nimbus/core/[executor, validate, pow/header],
   ../stateless/[tree_from_witness, witness_types],
   ../tools/common/helpers as chp,
   ../tools/evmstate/helpers,
-  ../nimbus/common/common
+  ../nimbus/common/common,
+  ../nimbus/core/eip4844
 
 type
   SealEngine = enum
@@ -38,7 +40,7 @@ type
     hasException: bool
     withdrawals: Option[seq[Withdrawal]]
 
-  Tester = object
+  TestCtx = object
     lastBlockHash: Hash256
     genesisHeader: BlockHeader
     blocks       : seq[TestBlock]
@@ -49,6 +51,10 @@ type
     debugData    : JsonNode
     network      : string
     postStateHash: Hash256
+    json         : bool
+
+var
+  trustedSetupLoaded = false
 
 proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = false, trace = false)
 
@@ -142,7 +148,7 @@ proc parseBlocks(blocks: JsonNode): seq[TestBlock] =
 
     result.add t
 
-proc parseTester(fixture: JsonNode, testStatusIMPL: var TestStatus): Tester =
+proc parseTestCtx(fixture: JsonNode, testStatusIMPL: var TestStatus): TestCtx =
   result.blocks = parseBlocks(fixture["blocks"])
 
   fixture.fromJson "lastblockhash", result.lastBlockHash
@@ -185,23 +191,48 @@ proc blockWitness(vmState: BaseVMState, chainDB: CoreDbRef) =
   if root != rootHash:
     raise newException(ValidationError, "Invalid trie generated from block witness")
 
-proc importBlock(tester: var Tester, com: CommonRef,
+proc setupTracer(ctx: TestCtx): TracerRef =
+  if ctx.trace:
+    if ctx.json:
+      var tracerFlags = {
+        TracerFlags.DisableMemory,
+        TracerFlags.DisableStorage,
+        TracerFlags.DisableState,
+        TracerFlags.DisableStateDiff,
+        TracerFlags.DisableReturnData
+      }
+      let stream = newFileStream(stdout)
+      newJsonTracer(stream, tracerFlags, false)
+    else:
+      newLegacyTracer({})
+  else:
+    TracerRef()
+
+proc importBlock(ctx: var TestCtx, com: CommonRef,
                  tb: TestBlock, checkSeal, validation: bool) =
 
   let parentHeader = com.db.getBlockHeader(tb.header.parentHash)
   let td = some(com.db.getScore(tb.header.parentHash))
   com.hardForkTransition(tb.header.blockNumber, td, some(tb.header.timestamp))
-  let tracerInst = if tester.trace:
-                 newLegacyTracer({})
-               else:
-                 LegacyTracer(nil)
 
-  tester.vmState = BaseVMState.new(
-    parentHeader,
-    tb.header,
-    com,
-    tracerInst,
-  )
+  if com.isCancunOrLater(tb.header.timestamp):
+    if not trustedSetupLoaded:
+      let res = loadKzgTrustedSetup()
+      if res.isErr:
+        echo "FATAL: ", res.error
+        quit(QuitFailure)
+      trustedSetupLoaded = true
+
+  if ctx.vmState.isNil or ctx.vmState.stateDB.isTopLevelClean.not:
+    let tracerInst = ctx.setupTracer()
+    ctx.vmState = BaseVMState.new(
+      parentHeader,
+      tb.header,
+      com,
+      tracerInst,
+    )
+  else:
+    doAssert(ctx.vmState.reinit(parentHeader, tb.header))
 
   if validation:
     let rc = com.validateHeaderAndKinship(
@@ -210,52 +241,52 @@ proc importBlock(tester: var Tester, com: CommonRef,
       raise newException(
         ValidationError, "validateHeaderAndKinship: " & rc.error)
 
-  let res = tester.vmState.processBlockNotPoA(tb.header, tb.body)
+  let res = ctx.vmState.processBlockNotPoA(tb.header, tb.body)
   if res == ValidationResult.Error:
     if not (tb.hasException or (not tb.goodBlock)):
       raise newException(ValidationError, "process block validation")
   else:
-    if tester.vmState.generateWitness():
-     blockWitness(tester.vmState, com.db)
+    if ctx.vmState.generateWitness():
+     blockWitness(ctx.vmState, com.db)
 
   discard com.db.persistHeaderToDb(tb.header,
     com.consensus == ConsensusType.POS)
 
-proc applyFixtureBlockToChain(tester: var Tester, tb: var TestBlock,
+proc applyFixtureBlockToChain(ctx: var TestCtx, tb: var TestBlock,
                               com: CommonRef, checkSeal, validation: bool) =
   decompose(tb.blockRLP, tb.header, tb.body)
-  tester.importBlock(com, tb, checkSeal, validation)
+  ctx.importBlock(com, tb, checkSeal, validation)
 
-func shouldCheckSeal(tester: Tester): bool =
-  if tester.sealEngine.isSome:
-    result = tester.sealEngine.get() != NoProof
+func shouldCheckSeal(ctx: TestCtx): bool =
+  if ctx.sealEngine.isSome:
+    result = ctx.sealEngine.get() != NoProof
 
-proc collectDebugData(tester: var Tester) =
-  if tester.vmState.isNil:
+proc collectDebugData(ctx: var TestCtx) =
+  if ctx.vmState.isNil:
     return
 
-  let vmState = tester.vmState
+  let vmState = ctx.vmState
   let tracerInst = LegacyTracer(vmState.tracer)
-  let tracingResult = if tester.trace: tracerInst.getTracingResult() else: %[]
-  tester.debugData.add %{
+  let tracingResult = if ctx.trace: tracerInst.getTracingResult() else: %[]
+  ctx.debugData.add %{
     "blockNumber": %($vmState.blockNumber),
     "structLogs": tracingResult,
   }
 
-proc runTester(tester: var Tester, com: CommonRef, testStatusIMPL: var TestStatus) =
-  discard com.db.persistHeaderToDb(tester.genesisHeader,
+proc runTestCtx(ctx: var TestCtx, com: CommonRef, testStatusIMPL: var TestStatus) =
+  discard com.db.persistHeaderToDb(ctx.genesisHeader,
     com.consensus == ConsensusType.POS)
-  check com.db.getCanonicalHead().blockHash == tester.genesisHeader.blockHash
-  let checkSeal = tester.shouldCheckSeal
+  check com.db.getCanonicalHead().blockHash == ctx.genesisHeader.blockHash
+  let checkSeal = ctx.shouldCheckSeal
 
-  if tester.debugMode:
-    tester.debugData = newJArray()
+  if ctx.debugMode:
+    ctx.debugData = newJArray()
 
-  for idx, tb in tester.blocks:
+  for idx, tb in ctx.blocks:
     if tb.goodBlock:
       try:
-        tester.applyFixtureBlockToChain(
-          tester.blocks[idx], com, checkSeal, validation = false)
+        ctx.applyFixtureBlockToChain(
+          ctx.blocks[idx], com, checkSeal, validation = false)
 
         # manually validating
         let res = com.validateHeaderAndKinship(
@@ -274,14 +305,14 @@ proc runTester(tester: var Tester, com: CommonRef, testStatusIMPL: var TestStatu
     else:
       var noError = true
       try:
-        tester.applyFixtureBlockToChain(tester.blocks[idx],
+        ctx.applyFixtureBlockToChain(ctx.blocks[idx],
           com, checkSeal, validation = true)
       except ValueError, ValidationError, BlockNotFound, RlpError:
         # failure is expected on this bad block
         check (tb.hasException or (not tb.goodBlock))
         noError = false
-        if tester.debugMode:
-          tester.debugData.add %{
+        if ctx.debugMode:
+          ctx.debugData.add %{
             "exception": %($getCurrentException().name),
             "msg": %getCurrentExceptionMsg()
           }
@@ -289,32 +320,32 @@ proc runTester(tester: var Tester, com: CommonRef, testStatusIMPL: var TestStatu
       # Block should have caused a validation error
       check noError == false
 
-    if tester.debugMode:
-      tester.collectDebugData()
+    if ctx.debugMode and not ctx.json:
+      ctx.collectDebugData()
 
-proc debugDataFromAccountList(tester: Tester): JsonNode =
-  let vmState = tester.vmState
-  result = %{"debugData": tester.debugData}
+proc debugDataFromAccountList(ctx: TestCtx): JsonNode =
+  let vmState = ctx.vmState
+  result = %{"debugData": ctx.debugData}
   if not vmState.isNil:
     result["accounts"] = vmState.dumpAccounts()
 
-proc debugDataFromPostStateHash(tester: Tester): JsonNode =
-  let vmState = tester.vmState
+proc debugDataFromPostStateHash(ctx: TestCtx): JsonNode =
+  let vmState = ctx.vmState
   %{
-    "debugData": tester.debugData,
+    "debugData": ctx.debugData,
     "postStateHash": %($vmState.readOnlyStateDB.rootHash),
-    "expectedStateHash": %($tester.postStateHash),
+    "expectedStateHash": %($ctx.postStateHash),
     "accounts": vmState.dumpAccounts()
   }
 
-proc dumpDebugData(tester: Tester, fixtureName: string, fixtureIndex: int, success: bool) =
-  let debugData = if tester.postStateHash != Hash256():
-                    debugDataFromPostStateHash(tester)
+proc dumpDebugData(ctx: TestCtx, fixtureName: string, fixtureIndex: int, success: bool) =
+  let debugData = if ctx.postStateHash != Hash256():
+                    debugDataFromPostStateHash(ctx)
                   else:
-                    debugDataFromAccountList(tester)
+                    debugDataFromAccountList(ctx)
 
   let status = if success: "_success" else: "_failed"
-  let name = fixtureName.replace('/', '-')
+  let name = fixtureName.replace('/', '-').replace(':', '-')
   writeFile("debug_" & name & "_" & $fixtureIndex & status & ".json", debugData.pretty())
 
 proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = false, trace = false) =
@@ -333,50 +364,51 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
     if specifyIndex > 0 and fixtureIndex != specifyIndex:
       continue
 
-    var tester = parseTester(fixture, testStatusIMPL)
+    var ctx = parseTestCtx(fixture, testStatusIMPL)
 
     let
       pruneTrie = test_config.getConfiguration().pruning
       memDB     = newCoreDbRef LegacyDbMemory
       stateDB   = AccountsCache.init(memDB, emptyRlpHash, pruneTrie)
-      config    = getChainConfig(tester.network)
+      config    = getChainConfig(ctx.network)
       com       = CommonRef.new(memDB, config, pruneTrie)
 
     setupStateDB(fixture["pre"], stateDB)
     stateDB.persist()
 
-    check stateDB.rootHash == tester.genesisHeader.stateRoot
+    check stateDB.rootHash == ctx.genesisHeader.stateRoot
 
-    tester.debugMode = debugMode
-    tester.trace = trace
+    ctx.debugMode = debugMode
+    ctx.trace = trace
+    ctx.json = test_config.getConfiguration().json
 
     var success = true
     try:
-      tester.runTester(com, testStatusIMPL)
+      ctx.runTestCtx(com, testStatusIMPL)
       let header = com.db.getCanonicalHead()
       let lastBlockHash = header.blockHash
-      check lastBlockHash == tester.lastBlockHash
-      success = lastBlockHash == tester.lastBlockHash
-      if tester.postStateHash != Hash256():
-        let rootHash = tester.vmState.stateDB.rootHash
-        if tester.postStateHash != rootHash:
+      check lastBlockHash == ctx.lastBlockHash
+      success = lastBlockHash == ctx.lastBlockHash
+      if ctx.postStateHash != Hash256():
+        let rootHash = ctx.vmState.stateDB.rootHash
+        if ctx.postStateHash != rootHash:
           raise newException(ValidationError, "incorrect postStateHash, expect=" &
             $rootHash & ", get=" &
-            $tester.postStateHash
+            $ctx.postStateHash
           )
-      elif lastBlockHash == tester.lastBlockHash:
+      elif lastBlockHash == ctx.lastBlockHash:
         # multiple chain, we are using the last valid canonical
         # state root to test against 'postState'
         let stateDB = AccountsCache.init(memDB, header.stateRoot, pruneTrie)
         verifyStateDB(fixture["postState"], ReadOnlyStateDB(stateDB))
 
-      success = lastBlockHash == tester.lastBlockHash
+      success = lastBlockHash == ctx.lastBlockHash
     except ValidationError as E:
       echo fixtureName, " ERROR: ", E.msg
       success = false
 
-    if tester.debugMode:
-      tester.dumpDebugData(fixtureName, fixtureIndex, success)
+    if ctx.debugMode:
+      ctx.dumpDebugData(fixtureName, fixtureIndex, success)
 
     fixtureTested = true
     check success == true
@@ -388,8 +420,10 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
 
 proc blockchainJsonMain*(debugMode = false) =
   const
-    legacyFolder = "eth_tests" / "LegacyTests" / "Constantinople" / "BlockchainTests"
-    newFolder = "eth_tests" / "BlockchainTests"
+    legacyFolder = "eth_tests/LegacyTests/Constantinople/BlockchainTests"
+    newFolder = "eth_tests/BlockchainTests"
+    #newFolder = "eth_tests/EIPTests/BlockchainTests"
+    #newFolder = "eth_tests/EIPTests/Pyspecs/cancun"
 
   let config = test_config.getConfiguration()
   if config.testSubject == "" or not debugMode:
@@ -407,7 +441,7 @@ proc blockchainJsonMain*(debugMode = false) =
       quit(QuitFailure)
 
     let folder = if config.legacy: legacyFolder else: newFolder
-    let path = "tests" / "fixtures" / folder
+    let path = "tests/fixtures/" & folder
     let n = json.parseFile(path / config.testSubject)
     var testStatusIMPL: TestStatus
     testFixture(n, testStatusIMPL, debugMode = true, config.trace)
