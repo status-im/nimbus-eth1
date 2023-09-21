@@ -50,8 +50,8 @@ proc loadBootstrapFile*(bootstrapFile: string,
 # However that would require the pull the keystore.nim and parts of
 # keystore_management.nim out of nimbus-eth2.
 proc getPersistentNetKey*(
-    rng: var HmacDrbgContext, keyFilePath: string, dataDir: string):
-    PrivateKey =
+    rng: var HmacDrbgContext, keyFilePath: string):
+    tuple[key: PrivateKey, newNetKey: bool] =
   logScope:
     key_file = keyFilePath
 
@@ -69,7 +69,7 @@ proc getPersistentNetKey*(
       let netKey = PrivateKey.fromHex(netKeyInHex)
       if netKey.isOk():
         info "Network key was successfully read"
-        netKey.get()
+        (netKey.get(), false)
       else:
         fatal "Invalid private key from file", error = netKey.error
         quit QuitFailure
@@ -88,4 +88,32 @@ proc getPersistentNetKey*(
 
     info "New network key file was created"
 
-    key
+    (key, true)
+
+proc getPersistentEnr*(enrFilePath: string): Opt[enr.Record] =
+  logScope:
+    enr_file = enrFilePath
+
+  if fileAccessible(enrFilePath, {AccessFlags.Find}):
+    info "ENR file is present, reading ENR"
+
+    let readResult = readAllChars(enrFilePath)
+    if readResult.isErr():
+      warn "Could not load ENR file",
+        error = ioErrorMsg(readResult.error)
+      return Opt.none(enr.Record)
+
+    let enrUri = readResult.get()
+
+    var record: enr.Record
+    # TODO: This old API of var passing is very error prone and should be
+    # changed in nim-eth.
+    if not record.fromURI(enrUri):
+      warn "Could not decode ENR from ENR file"
+      return Opt.none(enr.Record)
+    else:
+      return Opt.some(record)
+
+  else:
+    warn "Could not find ENR file. Was it manually deleted?"
+    return Opt.none(enr.Record)
