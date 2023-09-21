@@ -13,7 +13,7 @@
 import
   eth/trie/db,
   ../select_backend,
-  "."/[base, legacy]
+  "."/[base, legacy_db]
 
 export
   toLegacyTrieRef

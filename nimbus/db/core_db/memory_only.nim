@@ -12,7 +12,7 @@
 
 import
   eth/[common, trie/db],
-  "."/[base, core_apps, legacy]
+  "."/[base, core_apps, legacy_db]
 
 export
   common,
