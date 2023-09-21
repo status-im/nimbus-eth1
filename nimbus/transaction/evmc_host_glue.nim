@@ -21,12 +21,12 @@ proc accountExists(p: evmc_host_context, address: var evmc_address): c99bool {.c
 
 proc getStorage(p: evmc_host_context, address: var evmc_address,
                 key: var evmc_bytes32): evmc_bytes32
-    {.cdecl, raises: [RlpError].} =
+    {.cdecl, raises: [CatchableError].} =
   toHost(p).getStorage(address.fromEvmc, key.flip256.fromEvmc).toEvmc.flip256
 
 proc setStorage(p: evmc_host_context, address: var evmc_address,
                 key, value: var evmc_bytes32): evmc_storage_status
-    {.cdecl, raises: [RlpError].} =
+    {.cdecl, raises: [CatchableError].} =
   toHost(p).setStorage(address.fromEvmc, key.flip256.fromEvmc, value.flip256.fromEvmc)
 
 proc getBalance(p: evmc_host_context,
