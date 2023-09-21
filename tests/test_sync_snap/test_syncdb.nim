@@ -18,7 +18,7 @@ import
   unittest2,
   ../../nimbus/common as nimbus_common,
   ../../nimbus/core/chain,
-  ../../nimbus/db/[core_db/legacy, storage_types],
+  ../../nimbus/db/[core_db/legacy_db, storage_types],
   ../../nimbus/sync/snap/worker/db/snapdb_desc,
   ../replay/[pp, undump_blocks, undump_kvp],
   ./test_helpers
