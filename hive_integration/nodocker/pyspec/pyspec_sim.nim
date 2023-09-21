@@ -11,6 +11,7 @@ import
   std/[os, json, strutils, times, typetraits, options],
   stew/[byteutils, results],
   eth/common,
+  json_rpc/rpcclient,
   ../sim_utils,
   ../../../tools/common/helpers as chp,
   ../../../tools/evmstate/helpers as ehp,
@@ -18,17 +19,35 @@ import
   ../../../nimbus/beacon/web3_eth_conv,
   ../../../nimbus/beacon/execution_types,
   ../../../nimbus/beacon/payload_conv,
+  ../../../nimbus/core/eip4844,
   ../engine/engine_client,
   ./test_env
 
 const
   baseFolder = "hive_integration/nodocker/pyspec"
+  #caseFolder = "tests/fixtures/eth_tests/EIPTests/Pyspecs/cancun"
   caseFolder = baseFolder & "/testcases"
-  supportedNetwork = ["Merge", "Shanghai", "MergeToShanghaiAtTime15k"]
+  supportedNetwork = [
+    "Merge",
+    "Shanghai",
+    "MergeToShanghaiAtTime15k",
+    "Cancun",
+    "ShanghaiToCancunAtTime15k",
+  ]
 
-proc getPayload(node: JsonNode): ExecutionPayloadV1OrV2 =
-  let rlpBytes = hexToSeqByte(node.getStr)
-  executionPayloadV1V2(rlp.decode(rlpBytes, EthBlock))
+type
+  Payload = object
+    payload: ExecutionPayload
+    beaconRoot: Option[common.Hash256]
+
+proc getPayload(node: JsonNode): Payload =
+  let
+    rlpBytes = hexToSeqByte(node.getStr)
+    blk = rlp.decode(rlpBytes, EthBlock)
+  Payload(
+    payload: executionPayload(blk),
+    beaconRoot: blk.header.parentBeaconBlockRoot,
+  )
 
 proc validatePostState(node: JsonNode, t: TestEnv): bool =
   # check nonce, balance & storage of accounts in final block against fixture values
@@ -90,13 +109,42 @@ proc validatePostState(node: JsonNode, t: TestEnv): bool =
 
   return true
 
+proc collectBlobHashes(list: openArray[Web3Tx]): seq[Web3Hash] =
+  for w3tx in list:
+    let tx = ethTx(w3Tx)
+    for h in tx.versionedHashes:
+      result.add w3Hash(h)
+
+proc newPayload(client: RpcClient,
+                payload: ExecutionPayload,
+                beaconRoot: Option[common.Hash256]): Result[PayloadStatusV1, string] =
+  case payload.version
+  of Version.V1: return client.newPayloadV1(payload.V1)
+  of Version.V2: return client.newPayloadV2(payload.V2)
+  of Version.V3:
+    let versionedHashes = collectBlobHashes(payload.transactions)
+    return client.newPayloadV3(payload.V3,
+      versionedHashes,
+      w3Hash beaconRoot.get)
+
+proc forkchoiceUpdated(client: RpcClient, version: Version,
+          update: ForkchoiceStateV1):
+            Result[ForkchoiceUpdatedResponse, string] =
+  case version
+  of Version.V1: client.forkchoiceUpdatedV1(update)
+  of Version.V2: client.forkchoiceUpdatedV2(update)
+  of Version.V3: client.forkchoiceUpdatedV3(update)
+
 proc runTest(node: JsonNode, network: string): TestStatus =
   let conf = getChainConfig(network)
   var t = TestEnv(conf: makeTestConfig())
   t.setupELClient(conf, node)
 
   let blks = node["blocks"]
-  var latestValidHash = common.Hash256()
+  var
+    latestValidHash = common.Hash256()
+    latestVersion: Version
+
   result = TestStatus.OK
   for blkNode in blks:
     let expectedStatus = if "expectException" in blkNode:
@@ -104,10 +152,12 @@ proc runTest(node: JsonNode, network: string): TestStatus =
                          else:
                            PayloadExecutionStatus.valid
     let payload = getPayload(blkNode["rlp"])
-    let res = t.rpcClient.newPayloadV2(payload)
+    latestVersion = payload.payload.version
+    let res = t.rpcClient.newPayload(payload.payload, payload.beaconRoot)
     if res.isErr:
       result = TestStatus.Failed
-      echo "unable to send block ", payload.blockNumber.uint64, ": ", res.error
+      echo "unable to send block ",
+        payload.payload.blockNumber.uint64, ": ", res.error
       break
 
     let pStatus = res.value
@@ -116,7 +166,10 @@ proc runTest(node: JsonNode, network: string): TestStatus =
 
     if pStatus.status != expectedStatus:
       result = TestStatus.Failed
-      echo "payload status mismatch for block ", payload.blockNumber.uint64, ", status: ", pStatus.status
+      echo "payload status mismatch for block ",
+        payload.payload.blockNumber.uint64,
+        ", status: ", pStatus.status,
+        ",expected: ", expectedStatus
       if pStatus.validationError.isSome:
         echo pStatus.validationError.get
       break
@@ -126,7 +179,7 @@ proc runTest(node: JsonNode, network: string): TestStatus =
     if latestValidHash != common.Hash256():
       # update with latest valid response
       let fcState = ForkchoiceStateV1(headBlockHash: BlockHash latestValidHash.data)
-      let res = t.rpcClient.forkchoiceUpdatedV2(fcState)
+      let res = t.rpcClient.forkchoiceUpdated(latestVersion, fcState)
       if res.isErr:
         result = TestStatus.Failed
         echo "unable to update head of beacon chain: ", res.error
@@ -142,6 +195,11 @@ proc main() =
   var stat: SimStat
   let start = getTime()
 
+  let res = loadKzgTrustedSetup()
+  if res.isErr:
+    echo "FATAL: ", res.error
+    quit(QuitFailure)
+
   for fileName in walkDirRec(caseFolder):
     if not fileName.endsWith(".json"):
       continue
@@ -153,8 +211,12 @@ proc main() =
         # skip pre Merge tests
         continue
 
-      let status = runTest(fixture, network)
-      stat.inc(name, status)
+      try:
+        let status = runTest(fixture, network)
+        stat.inc(name, status)
+      except CatchableError as ex:
+        debugEcho ex.msg
+        stat.inc(name, TestStatus.Failed)
 
   let elpd = getTime() - start
   print(stat, elpd, "pyspec")
