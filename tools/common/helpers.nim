@@ -22,7 +22,7 @@ const
   TimeZero: EthTime = fromUnix(0)
 
 proc createForkTransitionTable(transitionFork: HardFork, b: Option[BlockNumber], t: Option[EthTime], ttd: Option[DifficultyInt]): ForkTransitionTable =
-  
+
   proc blockNumberToUse(f: HardFork): Option[BlockNumber] =
     if f < transitionFork:
       some(BlockNumberZero)
@@ -30,7 +30,7 @@ proc createForkTransitionTable(transitionFork: HardFork, b: Option[BlockNumber],
       b
     else:
       none(BlockNumber)
-  
+
   proc timeToUse(f: HardFork): Option[EthTime] =
     if f < transitionFork:
       some(TimeZero)
@@ -38,13 +38,13 @@ proc createForkTransitionTable(transitionFork: HardFork, b: Option[BlockNumber],
       t
     else:
       none(EthTime)
-  
+
   for f in low(HardFork) .. lastPurelyBlockNumberBasedFork:
     result.blockNumberThresholds[f] = blockNumberToUse(f)
 
   result.mergeForkTransitionThreshold.blockNumber = blockNumberToUse(HardFork.MergeFork)
   result.mergeForkTransitionThreshold.ttd = ttd
-  
+
   for f in firstTimeBasedFork .. high(HardFork):
     result.timeThresholds[f] = timeToUse(f)
 
@@ -115,6 +115,8 @@ func getChainConfig*(network: string, c: ChainConfig) =
     c.assignTime(HardFork.Shanghai, fromUnix(15000))
   of $TestFork.Cancun:
     c.assignTime(HardFork.Cancun, TimeZero)
+  of $TestFork.ShanghaiToCancunAtTime15k:
+    c.assignTime(HardFork.Cancun, fromUnix(15000))
   else:
     raise newException(ValueError, "unsupported network " & network)
 

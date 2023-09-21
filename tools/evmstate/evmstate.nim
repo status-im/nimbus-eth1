@@ -21,6 +21,7 @@ import
   ../../nimbus/core/executor,
   ../../nimbus/common/common,
   ../../nimbus/evm/tracer/json_tracer,
+  ../../nimbus/core/eip4844,
   ../common/helpers as chp,
   "."/[config, helpers],
   ../common/state_clearing
@@ -28,6 +29,7 @@ import
 type
   StateContext = object
     name: string
+    parent: BlockHeader
     header: BlockHeader
     tx: Transaction
     expectedHash: Hash256
@@ -37,6 +39,7 @@ type
     index: int
     tracerFlags: set[TracerFlags]
     error: string
+    trustedSetupLoaded: bool
 
   DumpAccount = ref object
     balance : UInt256
@@ -176,7 +179,6 @@ proc writeRootHashToStderr(vmState: BaseVMState) =
 proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateResult =
   let
     com     = CommonRef.new(newCoreDbRef LegacyDbMemory, ctx.chainConfig, pruneTrie = false)
-    parent  = BlockHeader(stateRoot: emptyRlpHash)
     fork    = com.toEVMFork(ctx.header.forkDeterminationInfoForHeader)
     stream  = newFileStream(stderr)
     tracer  = if conf.jsonEnabled:
@@ -184,9 +186,17 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
               else:
                 JsonTracer(nil)
 
+  if com.isCancunOrLater(ctx.header.timestamp):
+    if not ctx.trustedSetupLoaded:
+      let res = loadKzgTrustedSetup()
+      if res.isErr:
+        echo "FATAL: ", res.error
+        quit(QuitFailure)      
+      ctx.trustedSetupLoaded = true
+    
   let vmState = TestVMState()
   vmState.init(
-    parent = parent,
+    parent = ctx.parent,
     header = ctx.header,
     com    = com,
     tracer = tracer)
@@ -217,7 +227,7 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
                   ctx.tx, sender, ctx.header, fork)
     if rc.isOk:
       gasUsed = rc.value
-  
+
     let miner = ctx.header.coinbase
     coinbaseStateClearing(vmState, miner, fork)
   except CatchableError as ex:
@@ -248,6 +258,7 @@ proc prepareAndRun(ctx: var StateContext, conf: StateConf): bool =
     post    = n["post"]
     pre     = n["pre"]
 
+  ctx.parent = parseParentHeader(n["env"])
   ctx.header = parseHeader(n["env"])
 
   if conf.debugEnabled or conf.jsonEnabled:

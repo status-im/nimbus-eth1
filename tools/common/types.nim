@@ -35,6 +35,7 @@ type
     Shanghai
     MergeToShanghaiAtTime15k
     Cancun
+    ShanghaiToCancunAtTime15k
 
   LogLevel* = enum
     Silent

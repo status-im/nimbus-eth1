@@ -21,8 +21,9 @@ type
     dispName: string
 
 const
-  inputFolder = "tests" / "fixtures" / "eth_tests" / "GeneralStateTests"
-  testData = "tools" / "evmstate" / "testdata"
+  inputFolder = "tests/fixtures/eth_tests/GeneralStateTests"
+  #inputFolder = "tests/fixtures/eth_tests/EIPTests/StateTests"
+  testData = "tools/evmstate/testdata"
 
 proc runTest(filename: string): bool =
   let appDir = getAppDir()

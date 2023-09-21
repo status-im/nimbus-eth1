@@ -114,9 +114,15 @@ proc parseHeader*(n: JsonNode): BlockHeader =
     stateRoot  : emptyRlpHash,
     mixDigest  : omitZero(Hash256, "currentRandom"),
     fee        : optional(UInt256, "currentBaseFee"),
-    excessBlobGas: optional(uint64, "excessBlobGas"),
-    blobGasUsed: optional(uint64, "blobGasUsed"),
-    parentBeaconBlockRoot: optional(Hash256, "parentBeaconBlockRoot"),
+    withdrawalsRoot: optional(Hash256, "currentWithdrawalsRoot"),
+    parentBeaconBlockRoot: optional(Hash256, "currentBeaconRoot"),
+  )
+
+proc parseParentHeader*(n: JsonNode): BlockHeader =
+  BlockHeader(
+    stateRoot: emptyRlpHash,
+    excessBlobGas: optional(uint64, "parentExcessBlobGas"),
+    blobGasUsed: optional(uint64, "parentBlobGasUsed"),
   )
 
 proc parseTx*(n: JsonNode, dataIndex, gasIndex, valueIndex: int): Transaction =
