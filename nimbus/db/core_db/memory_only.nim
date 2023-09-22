@@ -55,7 +55,6 @@ export
   newCapture,
   newMpt,
   newMptPrune,
-  newPhk,
   newPhkPrune,
   newTransaction,
   pairs,

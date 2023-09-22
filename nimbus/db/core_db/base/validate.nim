@@ -30,7 +30,6 @@ proc validateMethodsDesc(msc: CoreDbMiscFns) =
 proc validateMethodsDesc(kvt: CoreDbKvtFns) =
   doAssert not kvt.backendFn.isNil
   doAssert not kvt.getFn.isNil
-  doAssert not kvt.maybeGetFn.isNil
   doAssert not kvt.delFn.isNil
   doAssert not kvt.putFn.isNil
   doAssert not kvt.containsFn.isNil
@@ -39,7 +38,6 @@ proc validateMethodsDesc(kvt: CoreDbKvtFns) =
 proc validateMethodsDesc(fns: CoreDbMptFns) =
   doAssert not fns.backendFn.isNil
   doAssert not fns.getFn.isNil
-  doAssert not fns.maybeGetFn.isNil
   doAssert not fns.delFn.isNil
   doAssert not fns.putFn.isNil
   doAssert not fns.containsFn.isNil
@@ -89,7 +87,6 @@ proc validateMethodsDesc(tx: CoreDxTxRef) =
 proc validateMethodsDesc(id: CoreDxTxID) =
   doAssert not id.isNil
   doAssert not id.parent.isNil
-  doAssert not id.methods.setIdFn.isNil
   doAssert not id.methods.roWrapperFn.isNil
 
 proc validateMethodsDesc(db: CoreDbRef) =

@@ -135,11 +135,6 @@ proc kvtMethods(tdb: TrieDatabaseRef): CoreDbKvtFns =
     getFn: proc(k: openArray[byte]): CoreDbRc[Blob] =
       ok(tdb.get(k)),
 
-    maybeGetFn: proc(k: openArray[byte]): CoreDbRc[Blob] =
-      let rc = tdb.maybeGet(k)
-      if rc.isSome: ok(rc.unsafeGet)
-      else: err(LegacyCoreDbError()),
-
     delFn: proc(k: openArray[byte]): CoreDbRc[void] =
       tdb.del(k)
       ok(),
@@ -164,13 +159,6 @@ proc mptMethods(mpt: HexaryTrieRef): CoreDbMptFns =
     getFn: proc(k: openArray[byte]): CoreDbRc[Blob] =
       mapRlpException("legacy/mpt/get()"):
         return ok(mpt.trie.get(k))
-      discard,
-
-    maybeGetFn: proc(k: openArray[byte]): CoreDbRc[Blob] =
-      mapRlpException("legacy/mpt/maybeGet()"):
-        let rc = mpt.trie.maybeGet(k)
-        if rc.isSome: return ok(rc.unsafeGet)
-        else: return err(LegacyCoreDbError(ctx: "maybeGet()"))
       discard,
 
     delFn: proc(k: openArray[byte]): CoreDbRc[void] =
@@ -226,10 +214,6 @@ proc txMethods(tx: DbTransaction): CoreDbTxFns =
 
 proc tidMethods(tid: TransactionID; tdb: TrieDatabaseRef): CoreDbTxIdFns =
   CoreDbTxIdFns(
-    setIdFn: proc(): CoreDbRc[void] =
-      tdb.setTransactionID(tid)
-      ok(),
-
     roWrapperFn: proc(action: CoreDbTxIdActionFn): CoreDbRc[void] =
       tdb.shortTimeReadOnly(tid, action())
       ok())

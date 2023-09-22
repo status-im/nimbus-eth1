@@ -95,7 +95,6 @@ type
     ## Methods for key-value table
     backendFn*:  CoreDbKvtBackendFn
     getFn*:      CoreDbKvtGetFn
-    maybeGetFn*: CoreDbKvtMaybeGetFn
     delFn*:      CoreDbKvtDelFn
     putFn*:      CoreDbKvtPutFn
     containsFn*: CoreDbKvtContainsFn
@@ -124,7 +123,6 @@ type
     ## Methods for trie objects
     backendFn*:   CoreDbMptBackendFn
     getFn*:       CoreDbMptGetFn
-    maybeGetFn*:  CoreDbMptMaybeGetFn
     delFn*:       CoreDbMptDelFn
     putFn*:       CoreDbMptPutFn
     containsFn*:  CoreDbMptContainsFn
@@ -156,7 +154,6 @@ type
   CoreDbTxIdRoWrapperFn* =
     proc(action: CoreDbTxIdActionFn): CoreDbRc[void] {.noRaise.}
   CoreDbTxIdFns* = object
-    setIdFn*:     CoreDbTxIdSetIdFn
     roWrapperFn*: CoreDbTxIdRoWrapperFn
 
 

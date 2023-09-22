@@ -99,10 +99,6 @@ func toCoreDxPhkRef(mpt: CoreDxMptRef): CoreDxPhkRef =
     proc(k: openArray[byte]): CoreDbRc[Blob] =
       mpt.methods.getFn(k.keccakHash.data)
 
-  result.methods.maybeGetFn =
-    proc(k: openArray[byte]): CoreDbRc[Blob] =
-      mpt.methods.maybeGetFn(k.keccakHash.data)
-
   result.methods.delFn =
     proc(k: openArray[byte]): CoreDbRc[void] =
       mpt.methods.delFn(k.keccakHash.data)
@@ -233,9 +229,6 @@ func toKvt*(db: CoreDbRef): CoreDxKvtRef =
 proc get*(kvt: CoreDxKvtRef; key: openArray[byte]): CoreDbRc[Blob] =
   kvt.methods.getFn key
 
-proc maybeGet*(kvt: CoreDxKvtRef; key: openArray[byte]): CoreDbRc[Blob] =
-  kvt.methods.maybeGetFn key
-
 proc del*(kvt: CoreDxKvtRef; key: openArray[byte]): CoreDbRc[void] =
   kvt.methods.delFn key
 
@@ -267,6 +260,18 @@ proc newMpt*(db: CoreDbRef; root=EMPTY_ROOT_HASH): CoreDbRc[CoreDxMptRef] =
   ## Constructor
   db.new.mptFn root
 
+proc toMpt*(phk: CoreDxPhkRef): CoreDxMptRef =
+  ## Replaces the pre-hashed argument trie `phk` by the non pre-hashed *MPT*.
+  phk.fromMpt
+
+proc toPhk*(mpt: CoreDxMptRef): CoreDxPhkRef =
+  ## Replaces argument `mpt` by a pre-hashed *MPT*.
+  mpt.toCoreDxPhkRef
+
+# ------------------------------------------------------------------------------
+# Public hexary trie legacy constructors
+# ------------------------------------------------------------------------------
+
 proc newMptPrune*(
     db: CoreDbRef;
     root = EMPTY_ROOT_HASH;
@@ -275,19 +280,6 @@ proc newMptPrune*(
   ## Constructor, `HexaryTrie` compliant
   db.new.legacyMptFn(root, prune)
 
-proc toMpt*(phk: CoreDxPhkRef): CoreDxMptRef =
-  ## Replaces the pre-hashed argument trie `phk` by the non pre-hashed *MPT*.
-  ## The argment `phk` should not be used, anymore.
-  phk.fromMpt
-
-# ------------------------------------------------------------------------------
-# Public pre-hashed key hexary trie constructors
-# ------------------------------------------------------------------------------
-
-proc newPhk*(db: CoreDbRef; root=EMPTY_ROOT_HASH): CoreDbRc[CoreDxPhkRef] =
-  ## Constructor
-  ok (? db.new.mptFn root).toCoreDxPhkRef
-
 proc newPhkPrune*(
     db: CoreDbRef;
     root = EMPTY_ROOT_HASH;
@@ -295,11 +287,6 @@ proc newPhkPrune*(
         ): CoreDbRc[CoreDxPhkRef] =
   ## Constructor, `SecureHexaryTrie` compliant
   ok (? db.new.legacyMptFn(root, prune)).toCoreDxPhkRef
-
-proc toPhk*(mpt: CoreDxMptRef): CoreDxPhkRef =
-  ## Replaces argument `mpt` by a pre-hashed *MPT*. The argment `mpt` should
-  ## not be used, anymore.
-  mpt.toCoreDxPhkRef
 
 # ------------------------------------------------------------------------------
 # Public hexary trie database methods (`mpt` or `phk`)
@@ -311,9 +298,6 @@ proc isPruning*(trie: CoreDxTrieRef): bool =
 
 proc get*(trie: CoreDxTrieRef; key: openArray[byte]): CoreDbRc[Blob] =
   trie.methods.getFn(key)
-
-proc maybeGet*(trie: CoreDxTrieRef; key: openArray[byte]): CoreDbRc[Blob] =
-  trie.methods.maybeGetFn key
 
 proc del*(trie: CoreDxTrieRef; key: openArray[byte]): CoreDbRc[void] =
   trie.methods.delFn key
@@ -416,11 +400,6 @@ when ProvideCoreDbLegacyAPI:
   proc get*(kvt: CoreDbKvtRef; key: openArray[byte]): Blob =
     kvt.distinctBase.get(key).expect "kvt/get()"
 
-  proc maybeGet*(kvt: CoreDbKvtRef; key: openArray[byte]): Option[Blob] =
-    let rc = kvt.distinctBase.maybeGet key
-    if rc.isOk: some(rc.value)
-    else: none(Blob)
-
   proc del*(kvt: CoreDbKvtRef; key: openArray[byte]): void =
     kvt.distinctBase.del(key).expect "kvt/del()"
 
@@ -470,11 +449,6 @@ when ProvideCoreDbLegacyAPI:
   proc get*(trie: CoreDbTrieRef; key: openArray[byte]): Blob =
     trie.distinctBase.get(key).expect "trie/get()"
 
-  proc maybeGet*(trie: CoreDbTrieRef; key: openArray[byte]): Option[Blob] =
-    let rc = trie.distinctBase.maybeGet key
-    if rc.isOk: some(rc.value)
-    else: none(Blob)
-
   proc del*(trie: CoreDbTrieRef; key: openArray[byte]) =
     trie.distinctBase.del(key).expect "trie/del()"
 
@@ -508,9 +482,6 @@ when ProvideCoreDbLegacyAPI:
 
   proc getTransactionID*(db: CoreDbRef): CoreDbTxID =
     (db.toTransactionID().expect "getTransactionID()").CoreDbTxID
-
-  proc setTransactionID*(id: CoreDbTxID) =
-    id.distinctBase.methods.setIdFn().expect "txId/setTransactionID()"
 
   proc shortTimeReadOnly*(
       id: CoreDbTxID;

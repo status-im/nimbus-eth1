@@ -9,8 +9,7 @@
 # the account are all present (in stateless mode), etc.
 
 import
-  std/typetraits,
-  eth/common,
+  eth/[common, trie/hexary],
   ./core_db
 
 type
@@ -42,7 +41,11 @@ proc getAccountBytes*(trie: AccountsTrie, address: EthAddress): seq[byte] =
   CoreDbPhkRef(trie).get(address)
 
 proc maybeGetAccountBytes*(trie: AccountsTrie, address: EthAddress): Option[seq[byte]] =
-  CoreDbPhkRef(trie).maybeGet(address)
+  let phk = CoreDbPhkRef(trie)
+  if phk.parent.isLegacy:
+    phk.backend.toLegacy.SecureHexaryTrie.maybeGet(address)
+  else:
+    some(phk.get(address))
 
 proc putAccountBytes*(trie: var AccountsTrie, address: EthAddress, value: openArray[byte]) =
   CoreDbPhkRef(trie).put(address, value)
@@ -71,7 +74,11 @@ proc getSlotBytes*(trie: StorageTrie, slotAsKey: openArray[byte]): seq[byte] =
   CoreDbPhkRef(trie).get(slotAsKey)
 
 proc maybeGetSlotBytes*(trie: StorageTrie, slotAsKey: openArray[byte]): Option[seq[byte]] =
-  CoreDbPhkRef(trie).maybeGet(slotAsKey)
+  let phk = CoreDbPhkRef(trie)
+  if phk.parent.isLegacy:
+    phk.backend.toLegacy.SecureHexaryTrie.maybeGet(slotAsKey)
+  else:
+    some(phk.get(slotAsKey))
 
 proc putSlotBytes*(trie: var StorageTrie, slotAsKey: openArray[byte], value: openArray[byte]) =
   CoreDbPhkRef(trie).put(slotAsKey, value)
