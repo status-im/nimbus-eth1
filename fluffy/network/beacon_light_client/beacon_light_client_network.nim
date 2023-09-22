@@ -59,7 +59,8 @@ proc getLightClientBootstrap*(
 
   let
     bootstrap = bootstrapContentLookup.unsafeGet()
-    decodingResult = decodeLightClientBootstrapForked(l.forkDigests, bootstrap.content)
+    decodingResult = decodeLightClientBootstrapForked(
+      l.forkDigests, bootstrap.content)
 
   if decodingResult.isErr:
     return Opt.none(ForkedLightClientBootstrap)
@@ -70,11 +71,12 @@ proc getLightClientBootstrap*(
 
 proc getLightClientUpdatesByRange*(
     l: LightClientNetwork,
-    startPeriod: uint64,
+    startPeriod: SyncCommitteePeriod,
     count: uint64):
     Future[results.Opt[ForkedLightClientUpdateList]] {.async.} =
   let
-    bk = LightClientUpdateKey(startPeriod: startPeriod, count: count)
+    bk = LightClientUpdateKey(
+      startPeriod: distinctBase(startPeriod), count: count)
     ck = ContentKey(
       contentType: lightClientUpdate,
       lightClientUpdateKey: bk
@@ -107,13 +109,13 @@ proc getUpdate(
   let
     keyEncoded = encode(ck)
     contentID = toContentId(keyEncoded)
-    updateLooukup = await l.portalProtocol.contentLookup(keyEncoded, contentId)
+    updateLookup = await l.portalProtocol.contentLookup(keyEncoded, contentId)
 
-  if updateLooukup.isNone():
+  if updateLookup.isNone():
     warn "Failed fetching update from the network", contentKey = keyEncoded
     return Opt.none(seq[byte])
 
-  return ok(updateLooukup.get().content)
+  return ok(updateLookup.get().content)
 
 # TODO:
 # Currently both getLightClientFinalityUpdate and getLightClientOptimisticUpdate
@@ -214,7 +216,6 @@ proc validateContent(
         return false
 
       let contentId = contentIdOpt.get()
-
       n.portalProtocol.storeContent(contentKey, contentId, contentItem)
 
       info "Received offered content validated successfully", contentKey
