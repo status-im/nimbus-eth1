@@ -32,7 +32,7 @@ export
   CoreDxPhkRef,
   CoreDxTxID,
   CoreDxTxRef
- 
+
 logScope:
   topics = "core_db-base"
 
@@ -74,6 +74,7 @@ type
 
   CoreDxChldRef* = CoreDxKvtRef | CoreDxTrieRef | CoreDxTxRef | CoreDxTxID |
                    CoreDxCaptRef |
+                   CoreDbError |
                    CoreDbBackendRef | CoreDbKvtBackendRef | CoreDbMptBackendRef
     ## Shortcut, all modules with a `parent`
 
@@ -130,6 +131,13 @@ func parent(phk: CoreDxPhkRef): CoreDbRef =
 # Public constructor
 # ------------------------------------------------------------------------------
 
+template bless*(db: CoreDbRef; child: untyped): auto =
+  ## Complete sub-module descriptor, fill in `parent`
+  child.parent = db
+  when AutoValidateDescriptors:
+    child.validate
+  child
+
 proc init*(
     db:         CoreDbRef;                # Main descriptor, locally extended
     dbType:     CoreDbType;               # Backend symbol
@@ -153,38 +161,6 @@ proc init*(
 
   when AutoValidateDescriptors:
     db.validate
-
-
-proc newCoreDbMptRef*(db: CoreDbRef; methods: CoreDbMptFns): CoreDxMptRef =
-  ## Hexary trie constructor helper. Will be needed for the
-  ## sub-constructors defined in `CoreDbMptConstructor`.
-  result = CoreDxMptRef(
-    parent:  db,
-    methods: methods)
-
-  when AutoValidateDescriptors:
-    result.validate
-
-
-proc newCoreDbTxRef*(db: CoreDbRef; methods: CoreDbTxFns): CoreDxTxRef =
-  ## Transaction frame constructor helper. Will be needed for the
-  ## sub-constructors defined in `CoreDbTxConstructor`.
-  result = CoreDxTxRef(
-    parent:  db,
-    methods: methods)
-
-  when AutoValidateDescriptors:
-    result.validate
-
-
-proc newCoreDbTxID*(db: CoreDbRef; methods: CoreDbTxIdFns): CoreDxTxID =
-  ## Transaction ID constructor helper.
-  result = CoreDxTxID(
-    parent:  db,
-    methods: methods)
-
-  when AutoValidateDescriptors:
-    result.validate
 
 
 proc newCoreDbCaptRef*(db: CoreDbRef; methods: CoreDbCaptFns): CoreDxCaptRef =
@@ -217,6 +193,11 @@ proc backend*(db: CoreDbRef): CoreDbBackendRef =
   ## Getter, retrieves the *raw* backend object for special support.
   result = db.methods.backendFn()
   result.parent = db
+
+proc `$$`*(e: CoreDbError): string =
+  ## Pretty print error symbol, note that this directive may have side effects
+  ## as it calls a backend function.
+  e.parent.methods.errorPrintFn(e)
 
 # ------------------------------------------------------------------------------
 # Public key-value table methods

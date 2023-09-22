@@ -43,7 +43,7 @@ type
     mpt: HexaryTrie
 
   LegacyCoreDbError = object of CoreDbError
-    ctx: string     ## Context where the exception occured
+    ctx: string     ## Context where the exception or error occured
     name: string    ## name of exception
     msg: string     ## Exception info
 
@@ -58,14 +58,15 @@ proc init*(
 # Private helpers, exceprion management
 # ------------------------------------------------------------------------------
 
-template mapRlpException(info: static[string]; code: untyped) =
+template mapRlpException(db: LegacyDbRef; info: static[string]; code: untyped) =
   try:
     code
   except RlpError as e:
-    return err(LegacyCoreDbError(
-      ctx: info,
+    var w = LegacyCoreDbError(
+      ctx:  info,
       name: $e.name,
-      msg: e.msg))
+      msg:  e.msg)
+    return err(db.bless w)
 
 template reraiseRlpException(info: static[string]; code: untyped) =
   try:
@@ -105,14 +106,14 @@ proc del(db: RecorderRef, key: openArray[byte]) =
 
 proc newRecorderRef(
     tdb: TrieDatabaseRef;
-    flags: set[CoreDbCaptFlags] = {};
+    flags: set[CoreDbCaptFlags];
       ): RecorderRef =
   ## Capture constuctor, uses `mixin` values from above
   result = RecorderRef(
     flags:    flags,
     parent:   tdb,
     recorder: newMemoryDB())
-  result.appDb = LegacyDbRef().init(LegacyDbPersistent, trieDB result)
+  result.appDb = LegacyDbRef().init(LegacyDbMemory, trieDB result)
 
 # ------------------------------------------------------------------------------
 # Private database method function tables
@@ -121,16 +122,49 @@ proc newRecorderRef(
 proc miscMethods(db: LegacyDbRef): CoreDbMiscFns =
   CoreDbMiscFns(
     backendFn: proc(): CoreDbBackendRef =
-      LegacyCoreDbBE(base: db),
+      db.bless(LegacyCoreDbBE(base: db)),
+
+    errorPrintFn: proc(e: CoreDbError): string =
+      let e = e.LegacyCoreDbError
+      result &= "ctx=\"" & $e.ctx & "\"" & " , "
+      result &= "name=\"" & $e.name & "\"" & ", "
+      result &= "msg=\"" & $e.msg & "\"",
 
     legacySetupFn: proc() =
       db.tdb.put(EMPTY_ROOT_HASH.data, @[0x80u8]))
 
-proc kvtMethods(tdb: TrieDatabaseRef): CoreDbKvtFns =
+proc kvtHandlers(db: LegacyDbRef): CoreDxKvtRef =
   ## Key-value database table handlers
+  let tdb = db.tdb
+  CoreDxKvtRef(
+    methods: CoreDbKvtFns(
+      backendFn: proc(): CoreDbKvtBackendRef =
+        db.bless(LegacyCoreDbKvtBE(tdb: tdb)),
+
+      getFn: proc(k: openArray[byte]): CoreDbRc[Blob] =
+        ok(tdb.get(k)),
+
+      delFn: proc(k: openArray[byte]): CoreDbRc[void] =
+        tdb.del(k)
+        ok(),
+
+      putFn: proc(k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] =
+        tdb.put(k,v)
+        ok(),
+
+      containsFn: proc(k: openArray[byte]): CoreDbRc[bool] =
+        ok(tdb.contains(k)),
+
+      pairsIt: iterator(): (Blob, Blob) =
+        for k,v in tdb.pairsInMemoryDB:
+          yield (k,v)))
+
+proc kvtMethods(db: LegacyDbRef): CoreDbKvtFns =
+  ## Key-value database table handlers
+  let tdb = db.tdb
   CoreDbKvtFns(
     backendFn: proc(): CoreDbKvtBackendRef =
-      LegacyCoreDbKvtBE(tdb: tdb),
+      db.bless(LegacyCoreDbKvtBE(tdb: tdb)),
 
     getFn: proc(k: openArray[byte]): CoreDbRc[Blob] =
       ok(tdb.get(k)),
@@ -150,29 +184,29 @@ proc kvtMethods(tdb: TrieDatabaseRef): CoreDbKvtFns =
       for k,v in tdb.pairsInMemoryDB:
         yield (k,v))
 
-proc mptMethods(mpt: HexaryTrieRef): CoreDbMptFns =
+proc mptMethods(mpt: HexaryTrieRef; db: LegacyDbRef): CoreDbMptFns =
   ## Hexary trie database handlers
   CoreDbMptFns(
     backendFn: proc(): CoreDbMptBackendRef =
-      LegacyCoreDbMptBE(mpt: mpt.trie),
+      db.bless(LegacyCoreDbMptBE(mpt: mpt.trie)),
 
     getFn: proc(k: openArray[byte]): CoreDbRc[Blob] =
-      mapRlpException("legacy/mpt/get()"):
+      db.mapRlpException("legacy/mpt/get()"):
         return ok(mpt.trie.get(k))
       discard,
 
     delFn: proc(k: openArray[byte]): CoreDbRc[void] =
-      mapRlpException("legacy/mpt/del()"):
+      db.mapRlpException("legacy/mpt/del()"):
         mpt.trie.del(k)
       ok(),
 
     putFn: proc(k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] =
-      mapRlpException("legacy/mpt/put()"):
+      db.mapRlpException("legacy/mpt/put()"):
         mpt.trie.put(k,v)
       ok(),
 
     containsFn: proc(k: openArray[byte]): CoreDbRc[bool] =
-      mapRlpException("legacy/mpt/put()"):
+      db.mapRlpException("legacy/mpt/put()"):
         return ok(mpt.trie.contains(k))
       discard,
 
@@ -230,27 +264,30 @@ proc cptMethods(cpt: RecorderRef): CoreDbCaptFns =
 # Private constructor functions table
 # ------------------------------------------------------------------------------
 
-proc constructors(
-    tdb: TrieDatabaseRef;
-    parent: CoreDbRef;
-      ): CoreDbConstructorFns =
+proc constructors(db: LegacyDbRef): CoreDbConstructorFns =
+  let tdb = db.tdb
   CoreDbConstructorFns(
     mptFn: proc(root: Hash256): CoreDbRc[CoreDxMptRef] =
       let mpt = HexaryTrieRef(trie: initHexaryTrie(tdb, root, false))
-      ok(newCoreDbMptRef(parent, mpt.mptMethods)),
+      var dsc = CoreDxMptRef(methods: mpt.mptMethods(db))
+      ok(db.bless dsc),
 
     legacyMptFn: proc(root: Hash256; prune: bool): CoreDbRc[CoreDxMptRef] =
       let mpt = HexaryTrieRef(trie: initHexaryTrie(tdb, root, prune))
-      ok(newCoreDbMptRef(parent, mpt.mptMethods)),
+      var dsc = CoreDxMptRef(methods: mpt.mptMethods(db))
+      ok(db.bless dsc),
 
     getIdFn: proc(): CoreDbRc[CoreDxTxID] =
-      ok(newCoreDbTxID(parent, tdb.getTransactionID.tidMethods tdb)),
+      var dsc = CoreDxTxID(methods: tdb.getTransactionID.tidMethods(tdb))
+      ok(db.bless dsc),
 
     beginFn: proc(): CoreDbRc[CoreDxTxRef] =
-      ok(newCoreDbTxRef(parent, tdb.beginTransaction.txMethods)),
+      var dsc = CoreDxTxRef(methods: tdb.beginTransaction.txMethods)
+      ok(db.bless dsc),
 
-    captureFn: proc(flags: set[CoreDbCaptFlags] = {}): CoreDbRc[CoreDxCaptRef] =
-      ok(newCoreDbCaptRef(parent, newRecorderRef(tdb, flags).cptMethods)))
+    captureFn: proc(flags: set[CoreDbCaptFlags]): CoreDbRc[CoreDxCaptRef] =
+      var dsc = CoreDxCaptRef(methods: newRecorderRef(tdb, flags).cptMethods)
+      ok(db.bless dsc))
 
 # ------------------------------------------------------------------------------
 # Public constructor helpers
@@ -265,8 +302,8 @@ proc init*(
   db.init(
     dbType =     dbType,
     dbMethods =  db.miscMethods,
-    kvtMethods = tdb.kvtMethods,
-    newSubMod =  tdb.constructors db)
+    kvtMethods = db.kvtMethods,
+    newSubMod =  db.constructors)
   db
 
 # ------------------------------------------------------------------------------

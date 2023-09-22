@@ -50,7 +50,6 @@ export
   isLegacy,
   isPruning,
   kvt,
-  maybeGet,
   mptPrune,
   newCapture,
   newMpt,

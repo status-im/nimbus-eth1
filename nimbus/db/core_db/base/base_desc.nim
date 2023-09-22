@@ -31,9 +31,6 @@ const
   CoreDbPersistentTypes* = {LegacyDbPersistent}
 
 type
-  CoreDbError* = object of RootObj
-    ## Generic error object
-
   CoreDbRc*[T] = Result[T,CoreDbError]
 
   CoreDbCaptFlags* {.pure.} = enum
@@ -71,10 +68,12 @@ type
   # Sub-descriptor: Misc methods for main descriptor
   # --------------------------------------------------
   CoreDbBackendFn* = proc(): CoreDbBackendRef {.noRaise.}
+  CoreDbErrorPrintFn* = proc(e: CoreDbError): string {.noRaise.}
   CoreDbInitLegaSetupFn* = proc() {.noRaise.}
 
   CoreDbMiscFns* = object
     backendFn*:     CoreDbBackendFn
+    errorPrintFn*:  CoreDbErrorPrintFn
     legacySetupFn*: CoreDbInitLegaSetupFn
 
 
@@ -83,8 +82,6 @@ type
   # --------------------------------------------------
   CoreDbKvtBackendFn* = proc(): CoreDbKvtBackendRef {.noRaise.}
   CoreDbKvtGetFn* = proc(k: openArray[byte]): CoreDbRc[Blob] {.noRaise.} 
-  CoreDbKvtMaybeGetFn* =
-    proc(key: openArray[byte]): CoreDbRc[Blob] {.noRaise.}
   CoreDbKvtDelFn* = proc(k: openArray[byte]): CoreDbRc[void] {.noRaise.}
   CoreDbKvtPutFn* =
     proc(k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] {.noRaise.}
@@ -106,8 +103,6 @@ type
   # --------------------------------------------------
   CoreDbMptBackendFn* = proc(): CoreDbMptBackendRef {.noRaise.}
   CoreDbMptGetFn* =
-    proc(k: openArray[byte]): CoreDbRc[Blob] {.noRaise.}
-  CoreDbMptMaybeGetFn* =
     proc(k: openArray[byte]): CoreDbRc[Blob] {.noRaise.}
   CoreDbMptDelFn* =
     proc(k: openArray[byte]): CoreDbRc[void] {.noRaise.}
@@ -176,6 +171,10 @@ type
     kvtRef*: CoreDxKvtRef
     new*: CoreDbConstructorFns
     methods*: CoreDbMiscFns
+
+  CoreDbError* = object of RootObj
+    ## Generic error object
+    parent*: CoreDbRef
 
   CoreDbBackendRef* = ref object of RootRef
     ## Backend wrapper for direct backend access

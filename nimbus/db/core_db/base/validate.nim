@@ -13,10 +13,13 @@ import
   ./base_desc
 
 type
+  EphemMethodsDesc =
+    CoreDbBackendRef | CoreDbKvtBackendRef | CoreDbMptBackendRef
+
   MethodsDesc =
-    CoreDxKvtRef |
-    CoreDxMptRef | CoreDxPhkRef |
-    CoreDxTxRef  | CoreDxTxID   |
+    CoreDxKvtRef  |
+    CoreDxMptRef  | CoreDxPhkRef |
+    CoreDxTxRef   | CoreDxTxID   |
     CoreDxCaptRef
 
 # ------------------------------------------------------------------------------
@@ -25,6 +28,7 @@ type
 
 proc validateMethodsDesc(msc: CoreDbMiscFns) =
   doAssert not msc.backendFn.isNil
+  doAssert not msc.errorPrintFn.isNil
   doAssert not msc.legacySetupFn.isNil
 
 proc validateMethodsDesc(kvt: CoreDbKvtFns) =
@@ -54,6 +58,13 @@ proc validateConstructors(new: CoreDbConstructorFns) =
   doAssert not new.captureFn.isNil
 
 # ------------
+
+proc validateMethodsDesc(e: CoreDbError) =
+  doAssert not e.parent.isNil
+
+proc validateMethodsDesc(eph: EphemMethodsDesc) =
+  doAssert not eph.isNil
+  doAssert not eph.parent.isNil
   
 proc validateMethodsDesc(kvt: CoreDxKvtRef) =
   doAssert not kvt.isNil
@@ -100,7 +111,7 @@ proc validateMethodsDesc(db: CoreDbRef) =
 # Public debugging helpers
 # ------------------------------------------------------------------------------
 
-proc validate*(desc: MethodsDesc) =
+proc validate*(desc: MethodsDesc | EphemMethodsDesc | CoreDbError) =
   desc.validateMethodsDesc
 
 proc validate*(db: CoreDbRef) =
