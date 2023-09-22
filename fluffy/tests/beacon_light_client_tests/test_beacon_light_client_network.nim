@@ -181,7 +181,7 @@ procSuite "Beacon Light Client Content Network":
 
     let updatesResult =
       await lcNode1.lightClientNetwork.getLightClientUpdatesByRange(
-        startPeriod.uint64,
+        startPeriod,
         uint64(2)
       )
 
