@@ -18,8 +18,7 @@ import
   ../../nimbus/db/core_db,
   ../../nimbus/sync/snap/range_desc,
   ../../nimbus/sync/snap/worker/db/[
-    hexary_desc, hexary_inspect, hexary_paths,
-    rocky_bulk_load, snapdb_accounts, snapdb_desc],
+    hexary_desc, hexary_inspect, hexary_paths, snapdb_accounts, snapdb_desc],
   ../replay/[pp, undump_accounts],
   ./test_helpers
 

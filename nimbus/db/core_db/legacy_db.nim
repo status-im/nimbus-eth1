@@ -33,6 +33,15 @@ type
     recorder: TrieDatabaseRef
     appDb: CoreDbRef
 
+  LegacyCoreDbBE = ref object of CoreDbBackendRef
+    base: LegacyDbRef
+
+  LegacyCoreDbKvtBE = ref object of CoreDbKvtBackendRef
+    tdb: TrieDatabaseRef
+
+  LegacyCoreDbMptBE = ref object of CoreDbMptBackendRef
+    mpt: HexaryTrie
+
   LegacyCoreDbError = object of CoreDbError
     ctx: string     ## Context where the exception occured
     name: string    ## name of exception
@@ -111,12 +120,18 @@ proc newRecorderRef(
 
 proc miscMethods(db: LegacyDbRef): CoreDbMiscFns =
   CoreDbMiscFns(
+    backendFn: proc(): CoreDbBackendRef =
+      LegacyCoreDbBE(base: db),
+
     legacySetupFn: proc() =
       db.tdb.put(EMPTY_ROOT_HASH.data, @[0x80u8]))
 
 proc kvtMethods(tdb: TrieDatabaseRef): CoreDbKvtFns =
   ## Key-value database table handlers
   CoreDbKvtFns(
+    backendFn: proc(): CoreDbKvtBackendRef =
+      LegacyCoreDbKvtBE(tdb: tdb),
+
     getFn: proc(k: openArray[byte]): CoreDbRc[Blob] =
       ok(tdb.get(k)),
 
@@ -143,6 +158,9 @@ proc kvtMethods(tdb: TrieDatabaseRef): CoreDbKvtFns =
 proc mptMethods(mpt: HexaryTrieRef): CoreDbMptFns =
   ## Hexary trie database handlers
   CoreDbMptFns(
+    backendFn: proc(): CoreDbMptBackendRef =
+      LegacyCoreDbMptBE(mpt: mpt.trie),
+
     getFn: proc(k: openArray[byte]): CoreDbRc[Blob] =
       mapRlpException("legacy/mpt/get()"):
         return ok(mpt.trie.get(k))
@@ -281,10 +299,21 @@ proc newLegacyMemoryCoreDbRef*(): CoreDbRef =
 # Public legacy helpers
 # ------------------------------------------------------------------------------
 
-proc toLegacyTrieRef*(db: CoreDbRef): TrieDatabaseRef =
-  if db.dbType in {LegacyDbMemory, LegacyDbPersistent}:
-    return db.LegacyDbRef.tdb
+func isLegacy*(be: CoreDbRef): bool =
+  be.dbType in {LegacyDbMemory, LegacyDbPersistent}
 
+#func toLegacy*(be: CoreDbBackendRef): LegacyDbRef =
+#  if be.parent.isLegacy:
+#    return be.LegacyCoreDbBE.base
+
+func toLegacy*(be: CoreDbKvtBackendRef): TrieDatabaseRef =
+  if be.parent.isLegacy:
+    return be.LegacyCoreDbKvtBE.tdb
+
+func toLegacy*(be: CoreDbMptBackendRef): HexaryTrie =
+  if be.parent.isLegacy:
+    return be.LegacyCoreDbMptBE.mpt
+ 
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

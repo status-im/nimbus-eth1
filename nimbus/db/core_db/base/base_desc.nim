@@ -70,15 +70,18 @@ type
   # --------------------------------------------------
   # Sub-descriptor: Misc methods for main descriptor
   # --------------------------------------------------
+  CoreDbBackendFn* = proc(): CoreDbBackendRef {.noRaise.}
   CoreDbInitLegaSetupFn* = proc() {.noRaise.}
 
   CoreDbMiscFns* = object
+    backendFn*:     CoreDbBackendFn
     legacySetupFn*: CoreDbInitLegaSetupFn
 
 
   # --------------------------------------------------
   # Sub-descriptor: KVT methods
   # --------------------------------------------------
+  CoreDbKvtBackendFn* = proc(): CoreDbKvtBackendRef {.noRaise.}
   CoreDbKvtGetFn* = proc(k: openArray[byte]): CoreDbRc[Blob] {.noRaise.} 
   CoreDbKvtMaybeGetFn* =
     proc(key: openArray[byte]): CoreDbRc[Blob] {.noRaise.}
@@ -90,6 +93,7 @@ type
 
   CoreDbKvtFns* = object
     ## Methods for key-value table
+    backendFn*:  CoreDbKvtBackendFn
     getFn*:      CoreDbKvtGetFn
     maybeGetFn*: CoreDbKvtMaybeGetFn
     delFn*:      CoreDbKvtDelFn
@@ -101,6 +105,7 @@ type
   # --------------------------------------------------
   # Sub-descriptor: Mpt/hexary trie methods
   # --------------------------------------------------
+  CoreDbMptBackendFn* = proc(): CoreDbMptBackendRef {.noRaise.}
   CoreDbMptGetFn* =
     proc(k: openArray[byte]): CoreDbRc[Blob] {.noRaise.}
   CoreDbMptMaybeGetFn* =
@@ -116,7 +121,8 @@ type
   CoreDbMptReplicateIt* = iterator(): (Blob,Blob) {.apiRaise.}
 
   CoreDbMptFns* = object
-    ## Methods for trie objects `CoreDbMptRef`
+    ## Methods for trie objects
+    backendFn*:   CoreDbMptBackendFn
     getFn*:       CoreDbMptGetFn
     maybeGetFn*:  CoreDbMptMaybeGetFn
     delFn*:       CoreDbMptDelFn
@@ -173,6 +179,18 @@ type
     kvtRef*: CoreDxKvtRef
     new*: CoreDbConstructorFns
     methods*: CoreDbMiscFns
+
+  CoreDbBackendRef* = ref object of RootRef
+    ## Backend wrapper for direct backend access
+    parent*: CoreDbRef
+
+  CoreDbKvtBackendRef* = ref object of RootRef
+    ## Backend wrapper for direct backend access
+    parent*: CoreDbRef
+
+  CoreDbMptBackendRef* = ref object of RootRef
+    ## Backend wrapper for direct backend access
+    parent*: CoreDbRef
 
   CoreDxKvtRef* = ref object
     ## Statically initialised Key-Value pair table living in `CoreDbRef`

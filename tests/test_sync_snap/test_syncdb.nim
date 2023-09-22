@@ -139,7 +139,7 @@ proc test_syncdbImportSnapshot*(
     case w.kind:
     of UndumpKey32:
       key = w.key32.toSeq
-      if select.isNil or 0 < select.com.db.toLegacyTrieRef.get(key).len:
+      if select.isNil or 0 < select.com.db.kvt.backend.toLegacy.get(key).len:
         result[0][0].inc
       else:
         storeOk = false
@@ -170,7 +170,7 @@ proc test_syncdbImportSnapshot*(
       noisy.say "*** import", result.pp, ".. "
 
     if storeOk:
-      chn.com.db.toLegacyTrieRef.put(key, w.data)
+      chn.com.db.kvt.backend.toLegacy.put(key, w.data)
 
   if (count mod 23456) != 0:
     noisy.say "*** import", result.pp, " ok"
@@ -188,7 +188,7 @@ proc test_syncdbAppendBlocks*(
   let
     blkLen = 33
     lastBlock = pivotBlock + max(1,nItemsMax).uint64
-    kvt = chn.com.db.toLegacyTrieRef
+    kvt = chn.com.db.kvt.backend.toLegacy
 
     # Join (headers,blocks) pair in the range pivotBlock..lastBlock
     q = toSeq(filePath.undumpBlocks(pivotBlock,lastBlock)).pairJoin

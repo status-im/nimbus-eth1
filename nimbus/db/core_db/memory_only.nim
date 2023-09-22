@@ -36,6 +36,7 @@ export
   CoreDxPhkRef,
   CoreDxTxID,
   CoreDxTxRef,
+  backend,
   beginTransaction,
   capture,
   commit,
@@ -46,6 +47,7 @@ export
   dispose,
   get,
   getTransactionID,
+  isLegacy,
   isPruning,
   kvt,
   maybeGet,
@@ -66,6 +68,7 @@ export
   rootHash,
   safeDispose,
   setTransactionID,
+  toLegacy,
   toMpt,
   toPhk,
   toTransactionID

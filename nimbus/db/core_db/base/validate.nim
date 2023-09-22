@@ -24,9 +24,20 @@ type
 # ------------------------------------------------------------------------------
 
 proc validateMethodsDesc(msc: CoreDbMiscFns) =
+  doAssert not msc.backendFn.isNil
   doAssert not msc.legacySetupFn.isNil
 
+proc validateMethodsDesc(kvt: CoreDbKvtFns) =
+  doAssert not kvt.backendFn.isNil
+  doAssert not kvt.getFn.isNil
+  doAssert not kvt.maybeGetFn.isNil
+  doAssert not kvt.delFn.isNil
+  doAssert not kvt.putFn.isNil
+  doAssert not kvt.containsFn.isNil
+  doAssert not kvt.pairsIt.isNil
+
 proc validateMethodsDesc(fns: CoreDbMptFns) =
+  doAssert not fns.backendFn.isNil
   doAssert not fns.getFn.isNil
   doAssert not fns.maybeGetFn.isNil
   doAssert not fns.delFn.isNil
@@ -49,12 +60,7 @@ proc validateConstructors(new: CoreDbConstructorFns) =
 proc validateMethodsDesc(kvt: CoreDxKvtRef) =
   doAssert not kvt.isNil
   doAssert not kvt.parent.isNil
-  doAssert not kvt.methods.getFn.isNil
-  doAssert not kvt.methods.maybeGetFn.isNil
-  doAssert not kvt.methods.delFn.isNil
-  doAssert not kvt.methods.putFn.isNil
-  doAssert not kvt.methods.containsFn.isNil
-  doAssert not kvt.methods.pairsIt.isNil
+  kvt.methods.validateMethodsDesc
 
 proc validateMethodsDesc(mpt: CoreDxMptRef) =
   doAssert not mpt.isNil

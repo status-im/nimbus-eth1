@@ -87,7 +87,7 @@ proc init*(
     db: CoreDbRef
       ): T =
   ## Main object constructor
-  T(db: db, rocky: db.toLegacyBackend.rocksStoreRef)
+  T(db: db, rocky: db.backend.toRocksStoreRef)
 
 proc init*(
     T: type HexaryTreeDbRef;

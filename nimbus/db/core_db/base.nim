@@ -19,8 +19,11 @@ import
   ./base/[base_desc, validate]
 
 export
+  CoreDbBackendRef,
   CoreDbCaptFlags,
   CoreDbError,
+  CoreDbKvtBackendRef,
+  CoreDbMptBackendRef,
   CoreDbRef,
   CoreDbType,
   CoreDxCaptRef,
@@ -70,7 +73,8 @@ type
     ## Shortcut, *MPT* modules
 
   CoreDxChldRef* = CoreDxKvtRef | CoreDxTrieRef | CoreDxTxRef | CoreDxTxID |
-                   CoreDxCaptRef
+                   CoreDxCaptRef |
+                   CoreDbBackendRef | CoreDbKvtBackendRef | CoreDbMptBackendRef
     ## Shortcut, all modules with a `parent`
 
 # ------------------------------------------------------------------------------
@@ -213,6 +217,11 @@ func parent*(cld: CoreDxChldRef): CoreDbRef =
   ## Getter, common method for all sub-modules
   cld.parent
 
+proc backend*(db: CoreDbRef): CoreDbBackendRef =
+  ## Getter, retrieves the *raw* backend object for special support.
+  result = db.methods.backendFn()
+  result.parent = db
+
 # ------------------------------------------------------------------------------
 # Public key-value table methods
 # ------------------------------------------------------------------------------
@@ -244,6 +253,11 @@ iterator pairs*(kvt: CoreDxKvtRef): (Blob, Blob) {.apiRaise.} =
   ## Iterator supported on memory DB (otherwise implementation dependent)
   for k,v in kvt.methods.pairsIt():
     yield (k,v)
+
+proc backend*(kvt: CoreDxKvtRef): CoreDbKvtBackendRef =
+  ## Getter, retrieves the *raw* backend object for special support.
+  result = kvt.methods.backendFn()
+  result.parent = kvt.parent
 
 # ------------------------------------------------------------------------------
 # Public Merkle Patricia Tree, hexary trie constructors
@@ -326,6 +340,11 @@ iterator replicate*(mpt: CoreDxMptRef): (Blob, Blob) {.apiRaise.} =
   ## Low level trie dump, only supported for `CoreDxMptRef`
   for k,v in mpt.methods.replicateIt():
     yield (k,v)
+
+proc backend*(trie: CoreDxTrieRef): CoreDbMptBackendRef =
+  ## Getter, retrieves the *raw* backend object for special support.
+  result = trie.methods.backendFn()
+  result.parent = trie.parent
 
 # ------------------------------------------------------------------------------
 # Public transaction related methods
@@ -415,6 +434,9 @@ when ProvideCoreDbLegacyAPI:
     for k,v in kvt.distinctBase.pairs():
       yield (k,v)
 
+  proc backend*(kvt: CoreDbKvtRef): CoreDbKvtBackendRef =
+    kvt.distinctBase.backend
+
   # ----------------
 
   proc toMpt*(phk: CoreDbPhkRef): CoreDbMptRef =
@@ -478,6 +500,9 @@ when ProvideCoreDbLegacyAPI:
     ## Low level trie dump, only supported for `CoreDbMptRef`
     for k,v in mpt.distinctBase.replicate():
       yield (k,v)
+
+  proc backend*(trie: CoreDbTrieRef): CoreDbMptBackendRef =
+    trie.distinctBase.backend
 
   # ----------------
 
