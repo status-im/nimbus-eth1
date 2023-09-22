@@ -69,7 +69,7 @@ type
     # Debugging data below, might go away in future
     xMap*: Table[HashLabel,VertexID]  ## For pretty printing, extends `pAmk`
 
-  AristoDbAction* = proc(db: AristoDbRef) {.gcsafe, raises: [CatchableError].}
+  AristoDbAction* = proc(db: AristoDbRef) {.gcsafe, raises: [].}
     ## Generic call back function/closure.
 
 # ------------------------------------------------------------------------------

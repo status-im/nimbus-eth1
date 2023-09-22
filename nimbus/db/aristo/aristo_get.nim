@@ -150,15 +150,23 @@ proc getVtx*(db: AristoDbRef; vid: VertexID): VertexRef =
     return rc.value
   VertexRef(nil)
 
-proc getKey*(db: AristoDbRef; vid: VertexID): HashKey =
+proc getKeyRc*(db: AristoDbRef; vid: VertexID): Result[HashKey,AristoError] =
   ## Cascaded attempt to fetch a Merkle hash from the top layer or the backend.
-  ## The function returns `VOID_HASH_KEY` on error or failure.
   ##
   if db.top.kMap.hasKey vid:
     # If the key is to be deleted on the backend, a `VOID_HASH_LABEL` entry
     # is kept on the local table in which case it is OK to return this value.
-    return db.top.kMap.getOrVoid(vid).key
-  let rc = db.getKeyBE vid
+    let key = db.top.kMap.getOrVoid(vid).key
+    if key.isValid:
+      return ok(key)
+    return err(GetKeyNotFound)
+  db.getKeyBE vid
+
+proc getKey*(db: AristoDbRef; vid: VertexID): HashKey =
+  ## Cascaded attempt to fetch a vertex from the top layer or the backend.
+  ## The function returns `nil` on error or failure.
+  ##
+  let rc = db.getKeyRc vid
   if rc.isOk:
     return rc.value
   VOID_HASH_KEY

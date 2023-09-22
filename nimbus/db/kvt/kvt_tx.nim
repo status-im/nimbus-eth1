@@ -134,8 +134,7 @@ proc forkTop*(db: KvtDbRef): Result[KvtDbRef,KvtError] =
 proc exec*(
     tx: KvtTxRef;
     action: KvtDbAction;
-      ): Result[void,KvtError]
-      {.gcsafe, raises: [CatchableError].} =
+      ): Result[void,KvtError] =
   ## Execute function argument `action()` on a temporary `tx.forkTx()`
   ## transaction database. After return, the temporary database gets
   ## destroyed.
