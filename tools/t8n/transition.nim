@@ -24,7 +24,6 @@ import
   ../../nimbus/core/eip4844,
   ../../nimbus/evm/tracer/json_tracer
 
-import stew/byteutils
 const
   wrapExceptionEnabled* {.booldefine.} = true
   stdinSelector = "stdin"
@@ -311,7 +310,10 @@ proc exec(ctx: var TransContext,
 
   if fork >= FkCancun:
     result.result.currentBlobGasUsed = some blobGasUsed
-    result.result.currentExcessBlobGas = some calcExcessBlobGas(vmState.parent)
+    if ctx.env.currentExcessBlobGas.isSome:
+      result.result.currentExcessBlobGas = ctx.env.currentExcessBlobGas
+    elif ctx.env.parentExcessBlobGas.isSome and ctx.env.parentBlobGasUsed.isSome:
+      result.result.currentExcessBlobGas = some calcExcessBlobGas(vmState.parent)
 
 template wrapException(body: untyped) =
   when wrapExceptionEnabled:
@@ -434,12 +436,6 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
       raise newError(ErrorConfig, "Shanghai config but missing 'withdrawals' in env section")
 
     if com.isCancunOrLater(ctx.env.currentTimestamp):
-      if ctx.env.parentBlobGasUsed.isNone:
-        raise newError(ErrorConfig, "Cancun config but missing 'parentBlobGasUsed' in env section")
-
-      if ctx.env.parentExcessBlobGas.isNone:
-        raise newError(ErrorConfig, "Cancun config but missing 'parentExcessBlobGas' in env section")
-
       if ctx.env.parentBeaconBlockRoot.isNone:
         raise newError(ErrorConfig, "Cancun config but missing 'parentBeaconBlockRoot' in env section")
 
