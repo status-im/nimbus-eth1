@@ -18,6 +18,7 @@ type
     trace*: bool
     legacy*: bool
     pruning*: bool
+    json*: bool
 
 var testConfig {.threadvar.}: Configuration
 
@@ -48,6 +49,7 @@ proc processArguments*(msg: var string): ConfigStatus =
       of "trace": config.trace = parseBool(value)
       of "legacy": config.legacy = parseBool(value)
       of "pruning": config.pruning = parseBool(value)
+      of "json": config.json = parseBool(value)
       else:
         msg = "Unknown option " & key
         if value.len > 0: msg = msg & " : " & value

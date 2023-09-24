@@ -117,6 +117,9 @@ proc parseBlockHeader*(n: JsonNode): BlockHeader =
   n.fromJson "nonce", result.nonce
   n.fromJson "baseFeePerGas", result.fee
   n.fromJson "withdrawalsRoot", result.withdrawalsRoot
+  n.fromJson "blobGasUsed", result.blobGasUsed
+  n.fromJson "excessBlobGas", result.excessBlobGas
+  n.fromJson "parentBeaconBlockRoot", result.parentBeaconBlockRoot
 
   if result.baseFee == 0.u256:
     # probably geth bug
