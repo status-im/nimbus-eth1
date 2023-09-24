@@ -53,17 +53,17 @@ proc setupTxContext(host: TransactionHost) =
   host.txContext.tx_gas_price     = vmState.txGasPrice.u256.toEvmc
   host.txContext.tx_origin        = vmState.txOrigin.toEvmc
   # vmState.coinbase now unused
-  host.txContext.block_coinbase   = vmState.minerAddress.toEvmc
+  host.txContext.block_coinbase   = vmState.blockCtx.coinbase.toEvmc
   # vmState.blockNumber now unused
   host.txContext.block_number     = (vmState.blockNumber
                                      .truncate(typeof(host.txContext.block_number)))
   # vmState.timestamp now unused
-  host.txContext.block_timestamp  = vmState.timestamp.toUnix
+  host.txContext.block_timestamp  = vmState.blockCtx.timestamp.toUnix
   # vmState.gasLimit now unused
-  host.txContext.block_gas_limit  = vmState.gasLimit
+  host.txContext.block_gas_limit  = vmState.blockCtx.gasLimit
   # vmState.difficulty now unused
   host.txContext.chain_id         = vmState.com.chainId.uint.u256.toEvmc
-  host.txContext.block_base_fee   = vmState.baseFee.toEvmc
+  host.txContext.block_base_fee   = vmState.blockCtx.fee.get(0.u256).toEvmc
 
   if vmState.txVersionedHashes.len > 0:
     type
@@ -82,7 +82,7 @@ proc setupTxContext(host: TransactionHost) =
 
   # EIP-4399
   # Transfer block randomness to difficulty OPCODE
-  let difficulty = vmState.difficulty.toEvmc
+  let difficulty = vmState.difficultyOrPrevRandao.toEvmc
   host.txContext.block_prev_randao = flip256(difficulty)
 
   host.cachedTxContext = true

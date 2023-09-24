@@ -20,7 +20,7 @@ export
   vms.buildWitness,
   vms.coinbase,
   vms.determineFork,
-  vms.difficulty,
+  vms.difficultyOrPrevRandao,
   vms.baseFee,
   vms.forkDeterminationInfoForVMState,
   vms.generateWitness,

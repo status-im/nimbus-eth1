@@ -239,7 +239,7 @@ method blockNumber*(vmState: BaseVMState): BlockNumber {.base, gcsafe.} =
   # and not head.blockNumber
   vmState.parent.blockNumber + 1
 
-method difficulty*(vmState: BaseVMState): UInt256 {.base, gcsafe.} =
+method difficultyOrPrevRandao*(vmState: BaseVMState): UInt256 {.base, gcsafe.} =
   if vmState.com.consensus == ConsensusType.POS:
     # EIP-4399/EIP-3675
     UInt256.fromBytesBE(vmState.blockCtx.prevRandao.data)

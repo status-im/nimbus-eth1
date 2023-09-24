@@ -83,7 +83,7 @@ template getDifficulty*(c: Computation): DifficultyInt =
   when evmc_enabled:
     UInt256.fromEvmc c.host.getTxContext().block_prev_randao
   else:
-    c.vmState.blockCtx.difficulty
+    c.vmState.difficultyOrPrevRandao
 
 template getGasLimit*(c: Computation): GasInt =
   when evmc_enabled:
