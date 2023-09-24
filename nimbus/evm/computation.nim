@@ -71,7 +71,7 @@ template getTimestamp*(c: Computation): int64 =
   when evmc_enabled:
     c.host.getTxContext().block_timestamp
   else:
-    c.vmState.timestamp.toUnix
+    c.vmState.blockCtx.timestamp.toUnix
 
 template getBlockNumber*(c: Computation): UInt256 =
   when evmc_enabled:
@@ -83,19 +83,19 @@ template getDifficulty*(c: Computation): DifficultyInt =
   when evmc_enabled:
     UInt256.fromEvmc c.host.getTxContext().block_prev_randao
   else:
-    c.vmState.difficulty
+    c.vmState.difficultyOrPrevRandao
 
 template getGasLimit*(c: Computation): GasInt =
   when evmc_enabled:
     c.host.getTxContext().block_gas_limit.GasInt
   else:
-    c.vmState.gasLimit
+    c.vmState.blockCtx.gasLimit
 
 template getBaseFee*(c: Computation): UInt256 =
   when evmc_enabled:
     UInt256.fromEvmc c.host.getTxContext().block_base_fee
   else:
-    c.vmState.baseFee
+    c.vmState.blockCtx.fee.get(0.u256)
 
 template getChainId*(c: Computation): uint =
   when evmc_enabled:

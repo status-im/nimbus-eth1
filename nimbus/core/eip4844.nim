@@ -10,6 +10,7 @@
 
 import
   std/[os, strutils],
+  nimcrypto/sha2,
   kzg4844/kzg_ex as kzg,
   stew/results,
   stint,
@@ -39,7 +40,7 @@ const
 
 # kzgToVersionedHash implements kzg_to_versioned_hash from EIP-4844
 proc kzgToVersionedHash(kzg: kzg.KZGCommitment): VersionedHash =
-  result = keccakHash(kzg)
+  result = sha256.digest(kzg)
   result.data[0] = VERSIONED_HASH_VERSION_KZG
 
 # pointEvaluation implements point_evaluation_precompile from EIP-4844
@@ -50,7 +51,7 @@ proc pointEvaluation*(input: openArray[byte]): Result[void, string] =
   # Also verify that the provided commitment matches the provided versioned_hash.
   # The data is encoded as follows: versioned_hash | z | y | commitment | proof |
 
-  if input.len < PrecompileInputLength:
+  if input.len != PrecompileInputLength:
     return err("invalid input length")
 
   var
@@ -93,16 +94,16 @@ proc calcExcessBlobGas*(parent: BlockHeader): uint64 =
 
 # fakeExponential approximates factor * e ** (num / denom) using a taylor expansion
 # as described in the EIP-4844 spec.
-func fakeExponential*(factor, numerator, denominator: uint64): uint64 =
+func fakeExponential*(factor, numerator, denominator: UInt256): UInt256 =
   var
-    i = 1'u64
-    output = 0'u64
+    i = 1.u256
+    output = 0.u256
     numeratorAccum = factor * denominator
 
-  while numeratorAccum > 0'u64:
+  while numeratorAccum > 0.u256:
     output += numeratorAccum
     numeratorAccum = (numeratorAccum * numerator) div (denominator * i)
-    i = i + 1'u64
+    i = i + 1.u256
 
   output div denominator
 
@@ -113,22 +114,17 @@ proc getTotalBlobGas*(versionedHashesLen: int): uint64 =
   GAS_PER_BLOB * versionedHasheslen.uint64
 
 # getBlobGasPrice implements get_data_gas_price from EIP-4844
-func getBlobGasprice*(parentExcessBlobGas: uint64): uint64 =
+func getBlobGasprice*(excessBlobGas: uint64): UInt256 =
   fakeExponential(
-    MIN_BLOB_GASPRICE,
-    parentExcessBlobGas,
-    BLOB_GASPRICE_UPDATE_FRACTION
+    MIN_BLOB_GASPRICE.u256,
+    excessBlobGas.u256,
+    BLOB_GASPRICE_UPDATE_FRACTION.u256
   )
 
-proc calcDataFee*(tx: Transaction,
-                  parentExcessBlobGas: Option[uint64]): uint64 =
-  tx.getTotalBlobGas *
-    getBlobGasprice(parentExcessBlobGas.get(0'u64))
-
 proc calcDataFee*(versionedHashesLen: int,
-                  parentExcessBlobGas: Option[uint64]): uint64 =
-  getTotalBlobGas(versionedHashesLen) *
-    getBlobGasprice(parentExcessBlobGas.get(0'u64))
+                  excessBlobGas: uint64): UInt256 =
+  getTotalBlobGas(versionedHashesLen).u256 *
+    getBlobGasprice(excessBlobGas)
 
 func blobGasUsed(txs: openArray[Transaction]): uint64 =
   for tx in txs:

@@ -107,7 +107,7 @@ proc txFeesCovered(xp: TxPoolRef; item: TxItemRef): bool =
     let
       excessBlobGas = xp.chain.excessBlobGas
       blobGasPrice = getBlobGasPrice(excessBlobGas)
-    if item.tx.maxFeePerBlobGas.uint64 < blobGasPrice:
+    if item.tx.maxFeePerBlobGas < blobGasPrice:
       debug "invalid tx: maxFeePerBlobGas smaller than blobGasPrice",
         maxFeePerBlobGas=item.tx.maxFeePerBlobGas,
         blobGasPrice=blobGasPrice
@@ -222,7 +222,7 @@ proc classifyValidatePacked*(xp: TxPoolRef;
                else:
                  xp.chain.limits.trgLimit
     tx = item.tx.eip1559TxNormalization(xp.chain.baseFee.GasInt)
-    excessBlobGas = vmState.parent.excessBlobGas.get(0'u64)
+    excessBlobGas = calcExcessBlobGas(vmState.parent)
 
   roDB.validateTransaction(tx, item.sender, gasLimit, baseFee, excessBlobGas, fork).isOk
 

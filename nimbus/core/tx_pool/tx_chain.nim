@@ -132,15 +132,19 @@ proc resetTxEnv(dh: TxChainRef; parent: BlockHeader; fee: Option[UInt256])
 
   # we don't consider PoS difficulty here
   # because that is handled in vmState
+  let blockCtx = BlockContext(
+    timestamp : dh.prepHeader.timestamp,
+    gasLimit  : (if dh.maxMode: dh.limits.maxLimit else: dh.limits.trgLimit),
+    fee       : fee,
+    prevRandao: dh.prepHeader.prevRandao,
+    difficulty: dh.prepHeader.difficulty,
+    coinbase  : dh.feeRecipient,
+  )
+
   dh.txEnv.vmState = BaseVMState.new(
-    parent    = parent,
-    timestamp = dh.prepHeader.timestamp,
-    gasLimit  = (if dh.maxMode: dh.limits.maxLimit else: dh.limits.trgLimit),
-    fee       = fee,
-    prevRandao= dh.prepHeader.prevRandao,
-    difficulty= dh.prepHeader.difficulty,
-    miner     = dh.feeRecipient,
-    com       = dh.com)
+    parent   = parent,
+    blockCtx = blockCtx,
+    com      = dh.com)
 
   dh.txEnv.txRoot = EMPTY_ROOT_HASH
   dh.txEnv.stateRoot = dh.txEnv.vmState.parent.stateRoot
@@ -217,13 +221,13 @@ proc getHeader*(dh: TxChainRef): BlockHeader
     bloom:       dh.txEnv.receipts.createBloom,
     difficulty:  dh.prepHeader.difficulty,
     blockNumber: dh.txEnv.vmState.blockNumber,
-    gasLimit:    dh.txEnv.vmState.gasLimit,
+    gasLimit:    dh.txEnv.vmState.blockCtx.gasLimit,
     gasUsed:     gasUsed,
     timestamp:   dh.prepHeader.timestamp,
     # extraData: Blob       # signing data
     # mixDigest: Hash256    # mining hash for given difficulty
     # nonce:     BlockNonce # mining free vaiable
-    fee:         dh.txEnv.vmState.fee,
+    fee:         dh.txEnv.vmState.blockCtx.fee,
     blobGasUsed: dh.txEnv.blobGasUsed,
     excessBlobGas: dh.txEnv.excessBlobGas)
 
@@ -238,7 +242,7 @@ proc getHeader*(dh: TxChainRef): BlockHeader
 proc clearAccounts*(dh: TxChainRef)
     {.gcsafe,raises: [CatchableError].} =
   ## Reset transaction environment, e.g. before packing a new block
-  dh.resetTxEnv(dh.txEnv.vmState.parent, dh.txEnv.vmState.fee)
+  dh.resetTxEnv(dh.txEnv.vmState.parent, dh.txEnv.vmState.blockCtx.fee)
 
 # ------------------------------------------------------------------------------
 # Public functions, getters
@@ -274,15 +278,15 @@ proc feeRecipient*(dh: TxChainRef): EthAddress {.gcsafe.} =
 proc baseFee*(dh: TxChainRef): GasPrice =
   ## Getter, baseFee for the next bock header. This value is auto-generated
   ## when a new insertion point is set via `head=`.
-  if dh.txEnv.vmState.fee.isSome:
-    dh.txEnv.vmState.fee.get.truncate(uint64).GasPrice
+  if dh.txEnv.vmState.blockCtx.fee.isSome:
+    dh.txEnv.vmState.blockCtx.fee.get.truncate(uint64).GasPrice
   else:
     0.GasPrice
 
 proc excessBlobGas*(dh: TxChainRef): uint64 =
   ## Getter, baseFee for the next bock header. This value is auto-generated
   ## when a new insertion point is set via `head=`.
-  dh.txEnv.vmState.parent.excessBlobGas.get(0'u64)
+  dh.txEnv.excessBlobGas.get(0'u64)
 
 proc nextFork*(dh: TxChainRef): EVMFork =
   ## Getter, fork of next block
@@ -330,9 +334,9 @@ proc `baseFee=`*(dh: TxChainRef; val: GasPrice) =
   ## function would be called in exceptional cases only as this parameter is
   ## determined by the `head=` update.
   if 0 < val or dh.com.isLondon(dh.txEnv.vmState.blockNumber):
-    dh.txEnv.vmState.fee = some(val.uint64.u256)
+    dh.txEnv.vmState.blockCtx.fee = some(val.uint64.u256)
   else:
-    dh.txEnv.vmState.fee = UInt256.none()
+    dh.txEnv.vmState.blockCtx.fee = UInt256.none()
 
 proc `head=`*(dh: TxChainRef; val: BlockHeader)
     {.gcsafe,raises: [CatchableError].} =
@@ -348,20 +352,20 @@ proc `lhwm=`*(dh: TxChainRef; val: TxChainGasLimitsPc) =
     dh.lhwm = val
     let parent = dh.txEnv.vmState.parent
     dh.limits = dh.com.gasLimitsGet(parent, dh.limits.gasLimit, dh.lhwm)
-    dh.txEnv.vmState.gasLimit = if dh.maxMode: dh.limits.maxLimit
-                                else:          dh.limits.trgLimit
+    dh.txEnv.vmState.blockCtx.gasLimit = if dh.maxMode: dh.limits.maxLimit
+                                         else:          dh.limits.trgLimit
 
 proc `maxMode=`*(dh: TxChainRef; val: bool) =
   ## Setter, the packing mode (maximal or target limit) for the next block
   ## header
   dh.maxMode = val
-  dh.txEnv.vmState.gasLimit = if dh.maxMode: dh.limits.maxLimit
-                              else:          dh.limits.trgLimit
+  dh.txEnv.vmState.blockCtx.gasLimit = if dh.maxMode: dh.limits.maxLimit
+                                       else:          dh.limits.trgLimit
 
 proc `miner=`*(dh: TxChainRef; val: EthAddress) =
   ## Setter
   dh.miner = val
-  dh.txEnv.vmState.minerAddress = val
+  dh.txEnv.vmState.blockCtx.coinbase = val
 
 proc `profit=`*(dh: TxChainRef; val: UInt256) =
   ## Setter
