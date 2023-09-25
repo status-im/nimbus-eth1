@@ -31,6 +31,14 @@ logScope:
 # Private functions
 # ------------------------------------------------------------------------------
 
+const
+  supportedOS = defined(windows) or defined(linux) or defined(macosx)
+  optimizationCondition = not lowMemoryCompileTime and defined(release) and supportedOS
+
+when optimizationCondition:
+  # this is a top level pragma since nim 1.6.16
+  {.optimization: speed.}
+
 proc selectVM(c: Computation, fork: EVMFork, shouldPrepareTracer: bool)
     {.gcsafe, raises: [CatchableError].} =
   ## Op code execution handler main loop.
@@ -68,27 +76,27 @@ proc selectVM(c: Computation, fork: EVMFork, shouldPrepareTracer: bool)
         when defined(windows):
           when defined(cpu64):
             {.warning: "*** Win64/VM2 handler switch => computedGoto".}
-            {.computedGoto, optimization: speed.}
+            {.computedGoto.}
           else:
             # computedGoto not compiling on github/ci (out of memory) -- jordan
             {.warning: "*** Win32/VM2 handler switch => optimisation disabled".}
-            # {.computedGoto, optimization: speed.}
+            # {.computedGoto.}
 
         elif defined(linux):
           when defined(cpu64):
             {.warning: "*** Linux64/VM2 handler switch => computedGoto".}
-            {.computedGoto, optimization: speed.}
+            {.computedGoto.}
           else:
             {.warning: "*** Linux32/VM2 handler switch => computedGoto".}
-            {.computedGoto, optimization: speed.}
+            {.computedGoto.}
 
         elif defined(macosx):
           when defined(cpu64):
             {.warning: "*** MacOs64/VM2 handler switch => computedGoto".}
-            {.computedGoto, optimization: speed.}
+            {.computedGoto.}
           else:
             {.warning: "*** MacOs32/VM2 handler switch => computedGoto".}
-            {.computedGoto, optimization: speed.}
+            {.computedGoto.}
 
         else:
           {.warning: "*** Unsupported OS => no handler switch optimisation".}
