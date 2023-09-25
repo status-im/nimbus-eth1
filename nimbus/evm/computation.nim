@@ -369,18 +369,19 @@ proc execSelfDestruct*(c: Computation, beneficiary: EthAddress)
   c.vmState.mutateStateDB:
     let localBalance = c.getBalance(c.msg.contractAddress)
 
-    # Transfer to beneficiary
-    db.addBalance(beneficiary, localBalance)
-
-    # Zero the balance of the address being deleted.
-    # This must come after sending to beneficiary in case the
-    # contract named itself as the beneficiary.
-    db.setBalance(c.msg.contractAddress, 0.u256)
-
     # Register the account to be deleted
     if c.fork >= FkCancun:
+      # Zeroing contract balance except beneficiary
+      # is the same address
+      db.subBalance(c.msg.contractAddress, localBalance)
+
+      # Transfer to beneficiary
+      db.addBalance(beneficiary, localBalance)
+
       db.selfDestruct6780(c.msg.contractAddress)
     else:
+      # Transfer to beneficiary
+      db.addBalance(beneficiary, localBalance)
       db.selfDestruct(c.msg.contractAddress)
 
     trace "SELFDESTRUCT",

@@ -220,18 +220,20 @@ proc copyCode(host: TransactionHost, address: HostAddress,
 
 proc selfDestruct(host: TransactionHost, address, beneficiary: HostAddress) {.show.} =
   host.vmState.mutateStateDB:
-    let closingBalance = db.getBalance(address)
+    let localBalance = db.getBalance(address)
 
-    # Transfer to beneficiary
-    db.addBalance(beneficiary, closingBalance)
-
-    # Zero balance of account being deleted.
-    # This must come after sending to the beneficiary in case the
-    # contract named itself as the beneficiary.
-    db.setBalance(address, 0.u256)
     if host.vmState.fork >= FkCancun:
+      # Zeroing contract balance except beneficiary
+      # is the same address
+      db.subBalance(address, localBalance)
+
+      # Transfer to beneficiary
+      db.addBalance(beneficiary, localBalance)
+
       db.selfDestruct6780(address)
     else:
+      # Transfer to beneficiary
+      db.addBalance(beneficiary, localBalance)
       db.selfDestruct(address)
 
 template call(host: TransactionHost, msg: EvmcMessage): EvmcResult =
