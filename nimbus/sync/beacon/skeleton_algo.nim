@@ -135,27 +135,6 @@ proc trySubChainsMerge*(sk: SkeletonRef): Result[bool, string] =
   if edited: sk.writeProgress()
   ok(merged)
 
-#[
-  if headers.len > 0:
-    let first {.used.} = headers[0]
-    let last  {.used.} = headers[^1]
-    let sc    {.used.} = if sk.subchains.len > 0:
-                           sk.subchains[0]
-                         else:
-                           SkeletonSubchain()
-    debug "Skeleton putBlocks start",
-      count = headers.len,
-      first = first.blockNumber,
-      hash  = short(first.blockHash),
-      fork  = sk.toFork(first.blockNumber),
-      last  = last.blockNumber,
-      hash  = short(last.blockHash),
-      fork  = sk.toFork(last.blockNumber),
-      head  = sc.head,
-      tail  = sc.tail,
-      next  = short(sc.next)
-]#
-
 proc putBlocks*(sk: SkeletonRef, headers: openArray[BlockHeader]):
                   Result[StatusAndNumber, string] =
   ## Writes skeleton blocks to the db by number
@@ -266,17 +245,12 @@ proc backStep(sk: SkeletonRef): Result[uint64, string] =
     sk.last.next = tailHeader.parentHash
     sk.writeProgress()
     return ok(newTail)
-  else:
-    # we need a new head, emptying the subchains
-    sk.clear()
-    sk.writeProgress()
-    debug "Couldn't backStep subchain 0, dropping subchains for new head signal"
-    return ok(0)
 
-  # unreachable?
-  sk.progress.linked = sk.isLinked().valueOr:
-    return err(error)
-  ok(0)
+  # we need a new head, emptying the subchains
+  sk.clear()
+  sk.writeProgress()
+  debug "Couldn't backStep subchain 0, dropping subchains for new head signal"
+  return ok(0)
 
 # Inserts skeleton blocks into canonical chain and runs execution.
 proc fillCanonicalChain*(sk: SkeletonRef): Result[void, string] =
