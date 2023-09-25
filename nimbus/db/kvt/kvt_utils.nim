@@ -90,6 +90,25 @@ proc get*(
     return ok(data)
   db.getBE key
 
+proc contains*(
+    db: KvtDbRef;                     # Database
+    key: openArray[byte];             # Key of database record
+      ): Result[bool,KvtError] =
+  ## For the argument `key` return the associated value preferably from the
+  ## top layer, or the database otherwise.
+  ##
+  if key.len == 0:
+    return err(KeyInvalid)
+  let data = db.top.tab.getOrVoid @key
+  if data.isValid:
+    return ok(true)
+  let rc = db.getBE(key)
+  if rc.isOk:
+    return ok(true)
+  if rc.error == GetNotFound:
+    return ok(false)
+  err(rc.error)
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

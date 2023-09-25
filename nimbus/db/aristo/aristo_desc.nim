@@ -324,19 +324,20 @@ proc forget*(db: AristoDbRef): Result[void,AristoError] =
   ## A non centre descriptor should always be destructed after use (see also
   ## comments on `fork()`.)
   ##
-  if db.isCentre:
-    return err(NotAllowedOnCentre)
+  if not db.isNil:
+    if db.isCentre:
+      return err(NotAllowedOnCentre)
 
-  # Unlink argument `db`
-  let parent = db.dudes.rwDb
-  if parent.dudes.roDudes.len < 2:
-    parent.dudes = DudesRef(nil)
-  else:
-    parent.dudes.roDudes.excl db
-    parent.dudes.txDudes.excl db # might be empty, anyway
+    # Unlink argument `db`
+    let parent = db.dudes.rwDb
+    if parent.dudes.roDudes.len < 2:
+      parent.dudes = DudesRef(nil)
+    else:
+      parent.dudes.roDudes.excl db
+      parent.dudes.txDudes.excl db # might be empty, anyway
 
-  # Clear descriptor so it would not do harm if used wrongly
-  db[] = AristoDbObj(top: LayerRef())
+    # Clear descriptor so it would not do harm if used wrongly
+    db[] = AristoDbObj(top: LayerRef())
   ok()
 
 proc forgetOthers*(db: AristoDbRef): Result[void,AristoError] =

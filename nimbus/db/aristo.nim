@@ -25,6 +25,11 @@ import
 export
   append, read, serialise
 
+import
+  aristo/aristo_get
+export
+  getKeyRc
+
 import aristo/aristo_desc/[desc_identifiers, desc_structural]
 export
   AristoAccount,
