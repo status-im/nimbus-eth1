@@ -18,7 +18,7 @@ import
   "."/[aristo_constants, aristo_desc, aristo_get]
 
 # Annotation helper
-{.pragma:  noRaise, gcsafe, raises: [].}
+{.pragma: noRaise, gcsafe, raises: [].}
 
 type
   ResolveVidFn = proc(vid: VertexID): Result[HashKey,AristoError] {.noRaise.}
