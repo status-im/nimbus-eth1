@@ -25,7 +25,7 @@ type
     tdb: TrieDatabaseRef # copy of descriptor reference captured with closures
 
   HexaryTrieRef = ref object
-    trie: HexaryTrie     # nedded for decriptor capturing with closures
+    trie: HexaryTrie     # needed for descriptor capturing with closures
 
   RecorderRef = ref object of RootRef
     flags: set[CoreDbCaptFlags]
