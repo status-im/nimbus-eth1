@@ -11,44 +11,17 @@
 import
   ./skeleton_desc,
   ./skeleton_utils,
-  ./skeleton_db
+  ./skeleton_db,
+  ../../utils/utils
 
 {.push gcsafe, raises: [].}
 
 logScope:
   topics = "skeleton"
 
-proc isLinked*(sk: SkeletonRef): Result[bool, string] =
-  ## Returns true if the skeleton chain is linked to canonical
-  if sk.isEmpty:
-    return ok(false)
-
-  let sc = sk.last
-
-  # if its genesis we are linked
-  if sc.tail == 0:
-    return ok(true)
-
-  let head = sk.blockHeight
-  if sc.tail > head + 1:
-    return ok(false)
-
-  let number = sc.tail - 1
-  let maybeHeader = sk.getHeader(number).valueOr:
-    return err("isLinked: " & error)
-
-  # The above sc.tail > head - 1
-  # assure maybeHeader.isSome
-  doAssert maybeHeader.isSome
-
-  let nextHeader = maybeHeader.get
-  let linked = sc.next == nextHeader.blockHash
-  if linked and sk.len > 1:
-    # Remove all other subchains as no more relevant
-    sk.removeAllButLast()
-    sk.writeProgress()
-
-  return ok(linked)
+# ------------------------------------------------------------------------------
+# Private helpers
+# ------------------------------------------------------------------------------
 
 proc fastForwardHead(sk: SkeletonRef, last: Segment, target: uint64): Result[void, string] =
   # Try fast forwarding the chain head to the number
@@ -83,6 +56,76 @@ proc fastForwardHead(sk: SkeletonRef, last: Segment, target: uint64): Result[voi
   debug "lastchain head fast forwarded",
     `from`=head, to=last.head, tail=last.tail
   ok()
+
+proc backStep(sk: SkeletonRef): Result[uint64, string] =
+  if sk.conf.fillCanonicalBackStep <= 0:
+    return ok(0)
+
+  let sc = sk.last
+  var
+    newTail = sc.tail
+    maybeTailHeader: Opt[BlockHeader]
+
+  while true:
+    newTail = newTail + sk.conf.fillCanonicalBackStep
+    maybeTailHeader = sk.getHeader(newTail, true).valueOr:
+      return err(error)
+    if maybeTailHeader.isSome or newTail > sc.head: break
+
+  if newTail > sc.head:
+    newTail = sc.head
+    maybeTailHeader = sk.getHeader(newTail, true).valueOr:
+      return err(error)
+
+  if maybeTailHeader.isSome and newTail > 0:
+    debug "Backstepped skeleton", head=sc.head, tail=newTail
+    let tailHeader = maybeTailHeader.get
+    sk.last.tail = tailHeader.u64
+    sk.last.next = tailHeader.parentHash
+    sk.writeProgress()
+    return ok(newTail)
+
+  # we need a new head, emptying the subchains
+  sk.clear()
+  sk.writeProgress()
+  debug "Couldn't backStep subchain 0, dropping subchains for new head signal"
+  return ok(0)
+
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
+
+proc isLinked*(sk: SkeletonRef): Result[bool, string] =
+  ## Returns true if the skeleton chain is linked to canonical
+  if sk.isEmpty:
+    return ok(false)
+
+  let sc = sk.last
+
+  # if its genesis we are linked
+  if sc.tail == 0:
+    return ok(true)
+
+  let head = sk.blockHeight
+  if sc.tail > head + 1:
+    return ok(false)
+
+  let number = sc.tail - 1
+  let maybeHeader = sk.getHeader(number).valueOr:
+    return err("isLinked: " & error)
+
+  # The above sc.tail > head - 1
+  # assure maybeHeader.isSome
+  doAssert maybeHeader.isSome
+
+  let nextHeader = maybeHeader.get
+  let linked = sc.next == nextHeader.blockHash
+  if linked and sk.len > 1:
+    # Remove all other subchains as no more relevant
+    sk.removeAllButLast()
+    sk.writeProgress()
+
+  return ok(linked)
 
 proc trySubChainsMerge*(sk: SkeletonRef): Result[bool, string] =
   var
@@ -193,18 +236,18 @@ proc putBlocks*(sk: SkeletonRef, headers: openArray[BlockHeader]):
   sk.writeProgress()
 
   # Print a progress report making the UX a bit nicer
-  if getTime() - sk.logged > STATUS_LOG_INTERVAL:
-    var left = sk.last.tail - 1 - sk.blockHeight
-    if sk.progress.linked: left = 0
-    if left > 0:
-      sk.logged = getTime()
-      if sk.pulled == 0:
-        info "Beacon sync starting", left=left
-      else:
-        let sinceStarted = getTime() - sk.started
-        let eta = (sinceStarted div sk.pulled.int64) * left.int64
-        info "Syncing beacon headers",
-          downloaded=sk.pulled, left=left, eta=eta
+  #if getTime() - sk.logged > STATUS_LOG_INTERVAL:
+  #  var left = sk.last.tail - 1 - sk.blockHeight
+  #  if sk.progress.linked: left = 0
+  #  if left > 0:
+  #    sk.logged = getTime()
+  #    if sk.pulled == 0:
+  #      info "Beacon sync starting", left=left
+  #    else:
+  #      let sinceStarted = getTime() - sk.started
+  #      let eta = (sinceStarted div sk.pulled.int64) * left.int64
+  #      info "Syncing beacon headers",
+  #        downloaded=sk.pulled, left=left, eta=eta.short
 
   sk.progress.linked = sk.isLinked().valueOr:
     return err(error)
@@ -217,40 +260,6 @@ proc putBlocks*(sk: SkeletonRef, headers: openArray[BlockHeader]):
   if merged:
     res.status.incl SyncMerged
   ok(res)
-
-proc backStep(sk: SkeletonRef): Result[uint64, string] =
-  if sk.conf.fillCanonicalBackStep <= 0:
-    return ok(0)
-
-  let sc = sk.last
-  var
-    newTail = sc.tail
-    maybeTailHeader: Opt[BlockHeader]
-
-  while true:
-    newTail = newTail + sk.conf.fillCanonicalBackStep
-    maybeTailHeader = sk.getHeader(newTail, true).valueOr:
-      return err(error)
-    if maybeTailHeader.isSome or newTail > sc.head: break
-
-  if newTail > sc.head:
-    newTail = sc.head
-    maybeTailHeader = sk.getHeader(newTail, true).valueOr:
-      return err(error)
-
-  if maybeTailHeader.isSome and newTail > 0:
-    debug "Backstepped skeleton", head=sc.head, tail=newTail
-    let tailHeader = maybeTailHeader.get
-    sk.last.tail = tailHeader.u64
-    sk.last.next = tailHeader.parentHash
-    sk.writeProgress()
-    return ok(newTail)
-
-  # we need a new head, emptying the subchains
-  sk.clear()
-  sk.writeProgress()
-  debug "Couldn't backStep subchain 0, dropping subchains for new head signal"
-  return ok(0)
 
 # Inserts skeleton blocks into canonical chain and runs execution.
 proc fillCanonicalChain*(sk: SkeletonRef): Result[void, string] =
@@ -324,11 +333,11 @@ proc fillCanonicalChain*(sk: SkeletonRef): Result[void, string] =
         parentHash=header.parentHash.short
 
       # Lets log some parent by number and parent by hash, that may help to understand whats going on
-      let parent = sk.getHeader(number - 1).valueOr:
+      let parent {.used.} = sk.getHeader(number - 1).valueOr:
         return err(error)
       debug "ParentByNumber", number=parent.numberStr, hash=parent.blockHashStr
 
-      let parentWithHash = sk.getHeader(header.parentHash).valueOr:
+      let parentWithHash {.used.} = sk.getHeader(header.parentHash).valueOr:
         return err(error)
 
       debug "parentByHash",
@@ -346,7 +355,7 @@ proc fillCanonicalChain*(sk: SkeletonRef): Result[void, string] =
     # it will be fetched from the chain without any issues
     sk.deleteHeaderAndBody(header)
     if sk.fillLogIndex >= 20:
-      info "Skeleton canonical chain fill status",
+      debug "Skeleton canonical chain fill status",
         canonicalHead,
         chainHead=sk.blockHeight,
         subchainHead=subchain.head

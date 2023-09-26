@@ -15,7 +15,7 @@ import
   chronicles,
   chronos,
   stew/[interval_set, sorted_set],
-  ./beacon/[worker, worker_desc],
+  ./beacon/[worker, worker_desc, beacon_impl],
   "."/[sync_desc, sync_sched, protocol]
 
 logScope:
@@ -110,16 +110,17 @@ proc updateBeaconHeaderCB(ctx: BeaconSyncRef): SyncReqNewHeadCB =
   ## for the RPC module.
   result = proc(h: BlockHeader) {.gcsafe, raises: [].} =
     try:
-      debugEcho "REQUEST SYNC TO: ", h.blockNumber
-      debugEcho "REQUEST SYNC TO: ", h.blockHash
+      debug "REQUEST SYNC", number=h.blockNumber, hash=h.blockHash.short
+      waitFor ctx.ctx.appendSyncTarget(h)
     except CatchableError as ex:
-      debugEcho ex.msg
+      error "updateBeconHeaderCB error", msg=ex.msg
 
 proc enableRpcMagic(ctx: BeaconSyncRef) =
   ## Helper for `setup()`: Enable external pivot update via RPC
   let com = ctx.ctx.chain.com
   com.syncReqNewHead = ctx.updateBeaconHeaderCB
-  com.syncReqRelaxV2 = true
+  # We need engine_newPayload to be strict
+  com.syncReqRelaxV2 = false
 
 # ------------------------------------------------------------------------------
 # Public functions

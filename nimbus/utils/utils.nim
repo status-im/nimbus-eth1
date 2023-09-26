@@ -1,5 +1,5 @@
 import
-  std/math,
+  std/[math, times, strutils],
   eth/[rlp, common/eth_types_rlp],
   stew/byteutils,
   nimcrypto,
@@ -47,6 +47,11 @@ proc sumHash*(header: BlockHeader): Hash256 =
                else: EMPTY_ROOT_HASH
   sumHash(header.txRoot, header.ommersHash, wdRoot)
 
+func hasBody*(h: BlockHeader): bool =
+  h.txRoot != EMPTY_ROOT_HASH or
+    h.ommersHash != EMPTY_UNCLE_HASH or
+    h.withdrawalsRoot.get(EMPTY_ROOT_HASH) != EMPTY_ROOT_HASH
+
 func generateAddress*(address: EthAddress, nonce: AccountNonce): EthAddress =
   result[0..19] = keccakHash(rlp.encodeList(address, nonce)).data.toOpenArray(12, 31)
 
@@ -88,6 +93,16 @@ proc short*(h: Hash256): string =
   bytes[0..2] = h.data[0..2]
   bytes[^3..^1] = h.data[^3..^1]
   bytes.toHex
+
+func short*(x: Duration): string =
+  let parts = x.toParts
+  if parts[Hours] > 0:
+    result.add $parts[Hours]
+    result.add ':'
+
+  result.add intToStr(parts[Minutes].int, 2)
+  result.add ':'
+  result.add intToStr(parts[Seconds].int, 2)
 
 proc decompose*(rlp: var Rlp,
                 header: var BlockHeader,

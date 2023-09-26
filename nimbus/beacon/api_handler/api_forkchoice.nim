@@ -78,7 +78,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
 
     info "Forkchoice requested sync to new head",
       number = header.blockNumber,
-      hash   = blockHash
+      hash   = blockHash.short
 
     # Update sync header (if any)
     com.syncReqNewHead(header)
@@ -117,7 +117,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
   if db.getBlockHash(header.blockNumber, canonHash) and canonHash == blockHash:
     # TODO should this be possible?
     # If we allow these types of reorgs, we will do lots and lots of reorgs during sync
-    warn "Reorg to previous block"
+    debug "Reorg to previous block"
     if chain.setCanonical(header) != ValidationResult.OK:
       return invalidFCU(com, header)
   elif chain.setCanonical(header) != ValidationResult.OK:
@@ -184,7 +184,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
 
     info "Created payload for sealing",
       id = id.toHex,
-      hash = payload.blockHash,
+      hash = payload.blockHash.short,
       number = payload.blockNumber
 
     return validFCU(some(id), blockHash)

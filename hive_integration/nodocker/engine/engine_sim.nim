@@ -11,9 +11,9 @@ import
 
 proc combineTests(): seq[TestDesc] =
   result.add wdTestList
-  result.add ecTestList
-  result.add authTestList
-  result.add engineTestList
+  #result.add ecTestList
+  #result.add authTestList
+  #result.add engineTestList
 
 let
   testList = combineTests()

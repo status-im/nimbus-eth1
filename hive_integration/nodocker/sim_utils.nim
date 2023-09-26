@@ -9,6 +9,7 @@
 
 import
   std/[tables, strutils, times],
+  ../../nimbus/utils/utils,
   unittest2
 
 export
@@ -45,6 +46,6 @@ proc print*(stat: SimStat, dur: Duration, name: string) =
   f.write("\n")
   f.write("  - " & $stat)
   f.write("\n")
-  f.write("  - " & $dur)
+  f.write("  - " & dur.short)
   f.write("\n")
   f.close()
