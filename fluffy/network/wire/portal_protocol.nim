@@ -12,12 +12,13 @@
 
 import
   std/[sequtils, sets, algorithm, tables],
-  stew/[results, byteutils, leb128, endians2], chronicles, chronos,
+  stew/[results, byteutils, leb128, endians2, shims/net], chronicles, chronos,
   nimcrypto/hash, bearssl, ssz_serialization, metrics, faststreams,
   eth/rlp, eth/p2p/discoveryv5/[protocol, node, enr, routing_table, random2,
     nodes_verification, lru],
   ../../seed_db,
   "."/[portal_stream, portal_protocol_config],
+  ../state/state_distance,
   ./messages
 
 export messages, routing_table, protocol
@@ -191,6 +192,26 @@ type
   ContentLookupResult* = object
     content*: seq[byte]
     utpTransfer*: bool
+    # List of nodes which do not have requested content, and for which
+    # content is in their range
+    nodesInterestedInContent*: seq[Node]
+
+  TraceResponse* = object
+    nodeId*: NodeId
+    ts*: Moment
+    respondedWith*: seq[NodeId]
+    enr*: Record
+    ip*: ValidIpAddress
+    port*: Port
+    distance*: UInt256
+    distance_log2*: uint16
+
+  TraceContentLookupResult* = object
+    origin*: NodeId
+    receivedFrom*: NodeId
+    content*: seq[byte]
+    ts*: Moment
+    responses*: seq[TraceResponse]
     # List of nodes which do not have requested content, and for which
     # content is in their range
     nodesInterestedInContent*: seq[Node]
@@ -1071,6 +1092,144 @@ proc contentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256):
 
   portal_lookup_content_failures.inc()
   return Opt.none(ContentLookupResult)
+
+proc traceContentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256):
+    Future[Opt[TraceContentLookupResult]] {.async.} =
+  ## Perform a lookup for the given target, return the closest n nodes to the
+  ## target. Maximum value for n is `BUCKET_SIZE`.
+  # `closestNodes` holds the k closest nodes to target found, sorted by distance
+  # Unvalidated nodes are used for requests as a form of validation.
+  var closestNodes = p.routingTable.neighbours(
+    targetId, BUCKET_SIZE, seenOnly = false)
+  # Shuffling the order of the nodes in order to not always hit the same node
+  # first for the same request.
+  p.baseProtocol.rng[].shuffle(closestNodes)
+
+  let ts = now(chronos.Moment)
+  var responses = newSeq[TraceResponse]()
+
+  var asked, seen = initHashSet[NodeId]()
+  asked.incl(p.baseProtocol.localNode.id) # No need to ask our own node
+  seen.incl(p.baseProtocol.localNode.id) # No need to discover our own node
+  for node in closestNodes:
+    seen.incl(node.id)
+
+  var pendingQueries = newSeqOfCap[Future[PortalResult[FoundContent]]](alpha)
+  var requestAmount = 0'i64
+
+  var nodesWithoutContent: seq[Node] = newSeq[Node]()
+
+  while true:
+    var i = 0
+    # Doing `alpha` amount of requests at once as long as closer non queried
+    # nodes are discovered.
+    while i < closestNodes.len and pendingQueries.len < alpha:
+      let n = closestNodes[i]
+      if not asked.containsOrIncl(n.id):
+        pendingQueries.add(p.findContent(n, target))
+        requestAmount.inc()
+      inc i
+
+    trace "Pending lookup queries", total = pendingQueries.len
+
+    if pendingQueries.len == 0:
+      break
+
+    let query = await one(pendingQueries)
+    trace "Got lookup query response"
+
+    let index = pendingQueries.find(query)
+    if index != -1:
+      pendingQueries.del(index)
+    else:
+      error "Resulting query should have been in the pending queries"
+
+    let contentResult = query.read
+
+    if contentResult.isOk():
+      let content = contentResult.get()
+
+      case content.kind
+      of Nodes:
+        let ts = now(chronos.Moment)
+
+        let maybeRadius = p.radiusCache.get(content.src.id)
+        if maybeRadius.isSome() and
+            p.inRange(content.src.id, maybeRadius.unsafeGet(), targetId):
+          # Only return nodes which may be interested in content.
+          # No need to check for duplicates in nodesWithoutContent
+          # as requests are never made two times to the same node.
+          nodesWithoutContent.add(content.src)
+
+        var respondedWith = newSeq[NodeId]()
+
+        for n in content.nodes:
+          if not seen.containsOrIncl(n.id):
+            respondedWith.add(n.id)
+            discard p.routingTable.addNode(n)
+            # If it wasn't seen before, insert node while remaining sorted
+            closestNodes.insert(n, closestNodes.lowerBound(n,
+              proc(x: Node, n: Node): int =
+                cmp(p.routingTable.distance(x.id, targetId),
+                  p.routingTable.distance(n.id, targetId))
+            ))
+
+            if closestNodes.len > BUCKET_SIZE:
+              closestNodes.del(closestNodes.high())
+
+        let distance = p.routingTable.distance(content.src.id, targetId)
+
+        let address = content.src.address.get()
+
+        responses.add(TraceResponse(
+          nodeId: content.src.id,
+          ts: ts,
+          respondedWith: respondedWith,
+          enr: content.src.record,
+          ip: address.ip,
+          port: address.port,
+          distance: distance,
+          distance_log2: stateLogDistance(content.src.id, targetId)
+        ))
+
+      of Content:
+        let ts = now(chronos.Moment)
+
+        # cancel any pending queries as the content has been found
+        for f in pendingQueries:
+          f.cancel()
+        portal_lookup_content_requests.observe(requestAmount)
+
+        let distance = p.routingTable.distance(content.src.id, targetId)
+
+        let address = content.src.address.get()
+
+        responses.add(TraceResponse(
+          nodeId: content.src.id,
+          ts: ts,
+          respondedWith: newSeq[NodeId](),
+          enr: content.src.record,
+          ip: address.ip,
+          port: address.port,
+          distance: distance,
+          distance_log2: stateLogDistance(content.src.id, targetId)
+        ))
+
+        return Opt.some(TraceContentLookupResult(
+          ts: ts,
+          origin: localNode(p).id,
+          receivedFrom: content.src.id,
+          content: content.content,
+          nodesInterestedInContent: nodesWithoutContent,
+          responses: responses
+        ))
+    else:
+      # TODO: Should we do something with the node that failed responding our
+      # query?
+      discard
+
+  portal_lookup_content_failures.inc()
+  return Opt.none(TraceContentLookupResult)
 
 proc query*(p: PortalProtocol, target: NodeId, k = BUCKET_SIZE): Future[seq[Node]]
     {.async.} =
