@@ -1,5 +1,5 @@
 import
-  std/[strutils, tables, os, json, times],
+  std/[strutils, tables, os, json],
   unittest2,
   stew/byteutils,
   ../nimbus/core/pow/difficulty,
@@ -84,12 +84,12 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     for title, t in tests:
       let p = BlockHeader(
         difficulty : t.parentDifficulty,
-        timestamp  : times.fromUnix(t.parentTimestamp),
+        timestamp  : EthTime(t.parentTimestamp),
         blockNumber: t.currentBlockNumber - 1,
         ommersHash : t.parentUncles
       )
 
-      let timestamp = times.fromUnix(t.currentTimeStamp)
+      let timestamp = EthTime(t.currentTimeStamp)
 
       let diff = calculator(revision, timestamp, p)
       check diff == t.currentDifficulty

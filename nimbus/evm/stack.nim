@@ -27,7 +27,7 @@ proc len*(stack: Stack): int {.inline.} =
   len(stack.values)
 
 proc toStackElement(v: UInt256, elem: var StackElement) {.inline.} = elem = v
-proc toStackElement(v: uint | int | GasInt, elem: var StackElement) {.inline.} = elem = v.u256
+proc toStackElement(v: uint64 | uint | int | GasInt, elem: var StackElement) {.inline.} = elem = v.u256
 proc toStackElement(v: EthAddress, elem: var StackElement) {.inline.} = elem.initFromBytesBE(v)
 proc toStackElement(v: MDigest, elem: var StackElement) {.inline.} = elem.initFromBytesBE(v.data)
 
@@ -46,7 +46,7 @@ proc pushAux[T](stack: var Stack, value: T) =
   stack.values.setLen(stack.values.len + 1)
   toStackElement(value, stack.values[^1])
 
-proc push*(stack: var Stack, value: uint | int | GasInt | UInt256 | EthAddress | Hash256) {.inline.} =
+proc push*(stack: var Stack, value: uint64 | uint | int | GasInt | UInt256 | EthAddress | Hash256) {.inline.} =
   pushAux(stack, value)
 
 proc push*(stack: var Stack, value: openArray[byte]) {.inline.} =

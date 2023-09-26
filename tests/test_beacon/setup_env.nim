@@ -84,7 +84,7 @@ func header*(bn: uint64, temp, parent: BlockHeader, diff: uint64): BlockHeader =
     blockNumber: bn.toBlockNumber,
     parentHash : parent.blockHash,
     difficulty : diff.u256,
-    timestamp  : fromUnix(parent.timestamp.toUnix + 1),
+    timestamp  : parent.timestamp + 1,
     gasLimit   : temp.gasLimit,
     stateRoot  : temp.stateRoot,
     txRoot     : temp.txRoot,

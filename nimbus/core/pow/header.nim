@@ -7,7 +7,7 @@
 
 
 import
-  std/[strformat, times],
+  std/[strformat],
   ./difficulty
 
 export BlockHeader

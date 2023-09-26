@@ -13,7 +13,7 @@
 ## ----------------------------------------------------
 
 import
-  std/[tables, times],
+  std/[tables],
   ./pp_light,
   ../../nimbus/common/chain_config,
   eth/common
@@ -45,7 +45,7 @@ proc pp*(h: BlockHeader; sep = " "): string =
     &"coinbase={h.coinbase.pp}{sep}" &
     &"gasLimit={h.gasLimit}{sep}" &
     &"gasUsed={h.gasUsed}{sep}" &
-    &"timestamp={h.timestamp.toUnix}{sep}" &
+    &"timestamp={h.timestamp}{sep}" &
     &"extraData={h.extraData.pp}{sep}" &
     &"difficulty={h.difficulty}{sep}" &
     &"mixDigest={h.mixDigest.pp}{sep}" &
@@ -62,7 +62,7 @@ proc pp*(h: BlockHeader; sep = " "): string =
 proc pp*(g: Genesis; sep = " "): string =
   "" &
     &"nonce={g.nonce.pp}{sep}" &
-    &"timestamp={g.timestamp.toUnix}{sep}" &
+    &"timestamp={g.timestamp}{sep}" &
     &"extraData={g.extraData.pp}{sep}" &
     &"gasLimit={g.gasLimit}{sep}" &
     &"difficulty={g.difficulty}{sep}" &

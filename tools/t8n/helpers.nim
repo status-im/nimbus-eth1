@@ -72,7 +72,7 @@ proc fromJson(T: type Hash256, n: JsonNode, field: string): Hash256 =
   fromJson(T, n[field])
 
 template fromJson(T: type EthTime, n: JsonNode, field: string): EthTime =
-  fromUnix(parseHexOrInt[int64](n[field].getStr()))
+  EthTime(parseHexOrInt[uint64](n[field].getStr()))
 
 proc fromJson(T: type AccessList, n: JsonNode, field: string): AccessList =
   let z = n[field]

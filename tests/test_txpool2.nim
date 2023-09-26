@@ -1,5 +1,5 @@
 import
-  std/[tables, times, os],
+  std/[tables,  os],
   eth/[keys],
   stew/[byteutils, results], unittest2,
   ../nimbus/db/state_db,
@@ -89,10 +89,10 @@ proc initEnv(envFork: HardFork): TestEnv =
     conf.networkParams.config.terminalTotalDifficulty = some(100.u256)
 
   if envFork >= Shanghai:
-    conf.networkParams.config.shanghaiTime = some(0.fromUnix)
+    conf.networkParams.config.shanghaiTime = some(0.EthTime)
 
   if envFork >= Cancun:
-    conf.networkParams.config.cancunTime = some(0.fromUnix)
+    conf.networkParams.config.cancunTime = some(0.EthTime)
 
   let
     com = CommonRef.new(
@@ -207,7 +207,7 @@ proc runTxPoolCliqueTest*() =
         return
 
       # prevent block from future detected in persistBlocks
-      os.sleep(com.cliquePeriod * 1000)
+      os.sleep(com.cliquePeriod.int * 1000)
 
       xp.chain.clearAccounts
       check xp.chain.vmState.processBlock(blk.header, body).isOK
@@ -240,7 +240,7 @@ proc runTxPoolPosTest*() =
     test "TxPool ethBlock":
       com.pos.prevRandao = prevRandao
       com.pos.feeRecipient = feeRecipient
-      com.pos.timestamp = getTime()
+      com.pos.timestamp = EthTime.now()
 
       blk = xp.ethBlock()
 
@@ -303,7 +303,7 @@ proc runTxPoolBlobhashTest*() =
     test "TxPool ethBlock":
       com.pos.prevRandao = prevRandao
       com.pos.feeRecipient = feeRecipient
-      com.pos.timestamp = getTime()
+      com.pos.timestamp = EthTime.now()
 
       blk = xp.ethBlock()
 
@@ -381,7 +381,7 @@ proc runTxHeadDelta*(noisy = true) =
             # pending/staged/packed : total/disposed
             &" stats={xp.nItems.pp}"
 
-          timestamp = timestamp + 1.seconds
+          timestamp = timestamp + 1
           com.pos.prevRandao = prevRandao
           com.pos.timestamp  = timestamp
           com.pos.feeRecipient = feeRecipient

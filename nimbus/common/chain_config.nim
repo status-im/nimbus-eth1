@@ -86,6 +86,14 @@ const
 # ------------------------------------------------------------------------------
 # Private helper functions
 # ------------------------------------------------------------------------------
+proc writeValue(writer: var JsonWriter, value: Option[EthTime])
+     {.gcsafe, raises: [IOError].} =
+  mixin writeValue
+
+  if value.isSome:
+    writer.writeValue value.get.uint64
+  else:
+    writer.writeValue JsonString("null")
 
 proc read(rlp: var Rlp, x: var AddressBalance, _: type EthAddress): EthAddress
     {.gcsafe, raises: [RlpError].} =
@@ -172,13 +180,13 @@ proc readValue(reader: var JsonReader, value: var BlockNonce)
 proc readValue(reader: var JsonReader, value: var EthTime)
     {.gcsafe, raises: [SerializationError, IOError].} =
   try:
-    value = fromHex[int64](reader.readValue(string)).fromUnix
+    value = fromHex[int64](reader.readValue(string)).EthTime
   except ValueError as ex:
     reader.raiseUnexpectedValue(ex.msg)
 
 # but shanghaiTime and cancunTime in config is in int literal
 proc readValue(reader: var JsonReader, value: var Option[EthTime])
-    {.gcsafe, raises: [SerializationError, IOError].} =
+    {.gcsafe, raises: [IOError].} =
   let tok = reader.lexer.lazyTok
   if tok == tkNull:
     reset value
@@ -187,8 +195,8 @@ proc readValue(reader: var JsonReader, value: var Option[EthTime])
     # both readValue(GasInt/AccountNonce) will be called if
     # we use readValue(int64/uint64)
     let tok {.used.} = reader.lexer.tok # resove lazy token
-    let val = reader.lexer.absIntVal.int64
-    value = some val.fromUnix
+    let val = EthTime reader.lexer.absIntVal
+    value = some val
     reader.lexer.next()
 
 proc readValue(reader: var JsonReader, value: var seq[byte])
@@ -401,7 +409,7 @@ proc chainConfigForNetwork*(id: NetworkId): ChainConfig =
       arrowGlacierBlock:   some(13_773_000.toBlockNumber), # 2021-12-09 19:55:23 UTC
       grayGlacierBlock:    some(15_050_000.toBlockNumber), # 2022-06-30 10:54:04 UTC
       terminalTotalDifficulty: some(mainNetTTD),
-      shanghaiTime:        some(1_681_338_455.fromUnix)
+      shanghaiTime:        some(1_681_338_455.EthTime)
     )
   of RopstenNet:
     ChainConfig(
@@ -462,7 +470,7 @@ proc chainConfigForNetwork*(id: NetworkId): ChainConfig =
       berlinBlock:         some(4_460_644.toBlockNumber),  # 2021-03-18 05:29:51 UTC
       londonBlock:         some(5_062_605.toBlockNumber),  # 2021-07-01 03:19:39 UTC
       terminalTotalDifficulty: some(10790000.u256),
-      shanghaiTime:        some(1_678_832_736.fromUnix)
+      shanghaiTime:        some(1_678_832_736.EthTime)
     )
   of SepoliaNet:
     const sepoliaTTD = parse("17000000000000000",UInt256)
@@ -483,7 +491,7 @@ proc chainConfigForNetwork*(id: NetworkId): ChainConfig =
       berlinBlock:         some(0.toBlockNumber),
       londonBlock:         some(0.toBlockNumber),
       terminalTotalDifficulty: some(sepoliaTTD),
-      shanghaiTime:        some(1_677_557_088.fromUnix)
+      shanghaiTime:        some(1_677_557_088.EthTime)
     )
   else:
     ChainConfig()
@@ -510,7 +518,7 @@ proc genesisBlockForNetwork*(id: NetworkId): Genesis
   of RinkebyNet:
     Genesis(
       nonce: 0.toBlockNonce,
-      timestamp: initTime(0x58ee40ba, 0),
+      timestamp: EthTime(0x58ee40ba),
       extraData: hexToSeqByte("0x52657370656374206d7920617574686f7269746168207e452e436172746d616e42eb768f2244c8811c63729a21a3569731535f067ffc57839b00206d1ad20c69a1981b489f772031b279182d99e65703f0076e4812653aab85fca0f00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
       gasLimit: 4700000,
       difficulty: 1.u256,
@@ -519,7 +527,7 @@ proc genesisBlockForNetwork*(id: NetworkId): Genesis
   of GoerliNet:
     Genesis(
       nonce: 0.toBlockNonce,
-      timestamp: initTime(0x5c51a607, 0),
+      timestamp: EthTime(0x5c51a607),
       extraData: hexToSeqByte("0x22466c6578692069732061207468696e6722202d204166726900000000000000e0a2bd4258d2768837baa26a28fe71dc079f84c70000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
       gasLimit: 0xa00000,
       difficulty: 1.u256,
@@ -528,7 +536,7 @@ proc genesisBlockForNetwork*(id: NetworkId): Genesis
   of SepoliaNet:
     Genesis(
       nonce: 0.toBlockNonce,
-      timestamp: initTime(0x6159af19, 0),
+      timestamp: EthTime(0x6159af19),
       extraData: hexToSeqByte("0x5365706f6c69612c20417468656e732c204174746963612c2047726565636521"),
       gasLimit: 0x1c9c380,
       difficulty: 0x20000.u256,

@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  std/[sequtils, sets, times, strutils],
+  std/[sequtils, sets, strutils],
   ../db/accounts_cache,
   ".."/[transaction, common/common],
   ".."/[errors],
@@ -92,7 +92,7 @@ proc validateHeader(
   if header.blockNumber != parentHeader.blockNumber + 1:
     return err("Blocks must be numbered consecutively")
 
-  if header.timestamp.toUnix <= parentHeader.timestamp.toUnix:
+  if header.timestamp <= parentHeader.timestamp:
     return err("timestamp must be strictly later than parent")
 
   if com.daoForkSupport and inDAOExtraRange(header.blockNumber):

@@ -1,5 +1,5 @@
 import
-  std/[times, tables],
+  std/[tables],
   chronicles,
   nimcrypto/sysrand,
   stew/[byteutils, endians2],
@@ -165,16 +165,16 @@ proc isBlockPoS*(cl: CLMocker, bn: common.BlockNumber): bool =
   return true
 
 # Return the per-block timestamp value increment
-func getTimestampIncrement(cl: CLMocker): int =
-  cl.blockTimestampIncrement.get(1)
+func getTimestampIncrement(cl: CLMocker): EthTime =
+  EthTime cl.blockTimestampIncrement.get(1)
 
 # Returns the timestamp value to be included in the next payload attributes
-func getNextBlockTimestamp(cl: CLMocker): int64 =
+func getNextBlockTimestamp(cl: CLMocker): EthTime =
   if cl.firstPoSBlockNumber.isNone and cl.transitionPayloadTimestamp.isSome:
     # We are producing the transition payload and there's a value specified
     # for this specific payload
-    return cl.transitionPayloadTimestamp.get
-  return cl.latestHeader.timestamp.toUnix + cl.getTimestampIncrement().int64
+    return EthTime cl.transitionPayloadTimestamp.get
+  return cl.latestHeader.timestamp + cl.getTimestampIncrement()
 
 func setNextWithdrawals(cl: CLMocker, nextWithdrawals: Option[seq[WithdrawalV1]]) =
   cl.nextWithdrawals = nextWithdrawals
@@ -185,11 +185,11 @@ func timestampToBeaconRoot(timestamp: Quantity): FixedBytes[32] =
   FixedBytes[32](h.data)
 
 func isShanghai(cl: CLMocker, timestamp: Quantity): bool =
-  let ts = fromUnix(timestamp.int64)
+  let ts = EthTime(timestamp.uint64)
   cl.com.isShanghaiOrLater(ts)
 
 func isCancun(cl: CLMocker, timestamp: Quantity): bool =
-  let ts = fromUnix(timestamp.int64)
+  let ts = EthTime(timestamp.uint64)
   cl.com.isCancunOrLater(ts)
 
 # Picks the next payload producer from the set of clients registered

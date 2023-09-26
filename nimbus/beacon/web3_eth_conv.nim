@@ -8,7 +8,7 @@
 # those terms.
 
 import
-  std/[options, times, typetraits],
+  std/[options, typetraits],
   web3/ethtypes,
   web3/engine_api_types,
   eth/common/eth_types_rlp,
@@ -86,7 +86,7 @@ func u256*(x: Web3Quantity): UInt256 =
   u256(x.uint64)
 
 func ethTime*(x: Web3Quantity): common.EthTime =
-  fromUnix(x.unsafeQuantityToInt64)
+  common.EthTime(x.unsafeQuantityToInt64)
 
 func ethHash*(x: Web3PrevRandao): common.Hash256 =
   common.Hash256(data: distinctBase x)
@@ -163,10 +163,10 @@ func w3Qty*(x: common.GasInt): Web3Quantity =
   Web3Quantity x.uint64
 
 func w3Qty*(x: common.EthTime): Web3Quantity =
-  Web3Quantity x.toUnix
+  Web3Quantity x.uint64
 
 func w3Qty*(x: common.EthTime, y: int): Web3Quantity =
-  Web3Quantity(x.toUnix + y.int64)
+  Web3Quantity(x + y.EthTime)
 
 func w3Qty*(x: Web3Quantity, y: int): Web3Quantity =
   Web3Quantity(x.uint64 + y.uint64)

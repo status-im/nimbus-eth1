@@ -9,7 +9,6 @@
 # according to those terms.
 
 import
-  std/times,
   ../../nimbus/common/common,
   ./types
 
@@ -19,7 +18,7 @@ export
 const
   BlockNumberZero: BlockNumber = 0.toBlockNumber
   BlockNumberFive: BlockNumber = 5.toBlockNumber
-  TimeZero: EthTime = fromUnix(0)
+  TimeZero = EthTime(0)
 
 proc createForkTransitionTable(transitionFork: HardFork, b: Option[BlockNumber], t: Option[EthTime], ttd: Option[DifficultyInt]): ForkTransitionTable =
 
@@ -112,11 +111,11 @@ func getChainConfig*(network: string, c: ChainConfig) =
   of $TestFork.Shanghai:
     c.assignTime(HardFork.Shanghai, TimeZero)
   of $TestFork.MergeToShanghaiAtTime15k:
-    c.assignTime(HardFork.Shanghai, fromUnix(15000))
+    c.assignTime(HardFork.Shanghai, EthTime(15000))
   of $TestFork.Cancun:
     c.assignTime(HardFork.Cancun, TimeZero)
   of $TestFork.ShanghaiToCancunAtTime15k:
-    c.assignTime(HardFork.Cancun, fromUnix(15000))
+    c.assignTime(HardFork.Cancun, EthTime(15000))
   else:
     raise newException(ValueError, "unsupported network " & network)
 

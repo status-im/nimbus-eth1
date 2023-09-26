@@ -58,7 +58,7 @@ proc setupTxContext(host: TransactionHost) =
   host.txContext.block_number     = (vmState.blockNumber
                                      .truncate(typeof(host.txContext.block_number)))
   # vmState.timestamp now unused
-  host.txContext.block_timestamp  = vmState.blockCtx.timestamp.toUnix
+  host.txContext.block_timestamp  = cast[int64](vmState.blockCtx.timestamp)
   # vmState.gasLimit now unused
   host.txContext.block_gas_limit  = vmState.blockCtx.gasLimit
   # vmState.difficulty now unused

@@ -47,7 +47,7 @@ template fromJson(T: type AccountNonce, n: JsonNode): AccountNonce =
   fromHex[AccountNonce](n.getStr)
 
 template fromJson(T: type EthTime, n: JsonNode): EthTime =
-  fromUnix(fromHex[int64](n.getStr))
+  EthTime(fromHex[uint64](n.getStr))
 
 proc fromJson(T: type PrivateKey, n: JsonNode): PrivateKey =
   var secretKey = n.getStr

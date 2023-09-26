@@ -98,7 +98,7 @@ proc setupEnv(com: CommonRef, signer, ks2: EthAddress, ctx: EthContext): TestEnv
   let
     receiptRoot = com.db.persistReceipts(vmState.receipts)
     date        = dateTime(2017, mMar, 30)
-    timeStamp   = date.toTime
+    timeStamp   = date.toTime.toUnix.EthTime
     difficulty  = com.calcDifficulty(timeStamp, parent)
 
   # call persist() before we get the rootHash

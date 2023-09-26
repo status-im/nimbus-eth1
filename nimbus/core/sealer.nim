@@ -8,7 +8,6 @@
 # those terms.
 
 import
-  std/[times],
   pkg/[chronos,
     stew/results,
     chronicles,
@@ -95,7 +94,7 @@ proc sealingLoop(engine: SealingEngineRef): Future[void] {.async.} =
   clique.authorize(engine.signer, signerFunc)
 
   # convert times.Duration to chronos.Duration
-  let period = chronos.seconds(clique.cfg.period.inSeconds)
+  let period = chronos.seconds(clique.cfg.period.int64)
 
   while engine.state == EngineRunning:
     # the sealing engine will tick every `cliquePeriod` seconds

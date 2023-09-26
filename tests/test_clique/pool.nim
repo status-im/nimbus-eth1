@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  std/[algorithm, sequtils, strformat, strutils, tables, times],
+  std/[algorithm, sequtils, strformat, strutils, tables],
   eth/keys,
   ethash,
   secp256k1/abi,
@@ -404,7 +404,7 @@ proc appendVoter*(ap: TesterPool;
     voter = ap.address(voter.voted),
     seal = ap.privateKey(voter.signer),
     parent = parent,
-    elapsed = initDuration(seconds = 100),
+    elapsed = EthTime(100),
     voteInOk = voter.auth,
     outOfTurn = voter.noTurn,
     checkPoint = voter.checkpoint.mapIt(ap.address(it)).sorted(EthAscending))

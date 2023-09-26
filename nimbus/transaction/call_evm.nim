@@ -83,7 +83,7 @@ proc rpcCallEvm*(call: RpcCallData, header: BlockHeader, com: CommonRef): CallRe
   const globalGasCap = 0 # TODO: globalGasCap should configurable by user
   let topHeader = BlockHeader(
     parentHash: header.blockHash,
-    timestamp:  getTime().utc.toTime,
+    timestamp:  EthTime.now(),
     gasLimit:   0.GasInt,          ## ???
     fee:        UInt256.none())    ## ???
   let vmState = BaseVMState.new(topHeader, com)
@@ -99,7 +99,7 @@ proc rpcEstimateGas*(cd: RpcCallData, header: BlockHeader, com: CommonRef, gasCa
   # Binary search the gas requirement, as it may be higher than the amount used
   let topHeader = BlockHeader(
     parentHash: header.blockHash,
-    timestamp:  getTime().utc.toTime,
+    timestamp:  EthTime.now(),
     gasLimit:   0.GasInt,          ## ???
     fee:        UInt256.none())    ## ???
   let vmState = BaseVMState.new(topHeader, com)

@@ -1,5 +1,5 @@
 import
-  std/[typetraits, times],
+  std/[typetraits],
   nimcrypto/sysrand,
   eth/[common, rlp, keys],
   json_rpc/[rpcclient],
@@ -283,7 +283,7 @@ proc generateInvalidPayload*(basePayload: ExecutableData,
   of InvalidGasUsed:
     customPayload.gasUsed = some(basePayload.gasUsed - 1)
   of InvalidTimestamp:
-    customPayload.timestamp = some(basePayload.timestamp - 1.seconds)
+    customPayload.timestamp = some(basePayload.timestamp - 1)
   of InvalidPrevRandao:
     # This option potentially requires a transaction that uses the PREVRANDAO opcode.
     # Otherwise the payload will still be valid.

@@ -43,7 +43,7 @@ type
     snapsData*: uint64
       ## Raw payload stored on disk (for logging troublesshoting)
 
-    period: Duration
+    period: EthTime
       ## Time between blocks to enforce.
 
     ckpInterval: int
@@ -108,9 +108,9 @@ proc `epoch=`*(cfg: CliqueCfg; epoch: SomeInteger) =
   cfg.epoch = if 0 < epoch: epoch
               else: EPOCH_LENGTH
 
-proc `period=`*(cfg: CliqueCfg; period: Duration) =
+proc `period=`*(cfg: CliqueCfg; period: EthTime) =
   ## Setter
-  cfg.period = if period != Duration(): period
+  cfg.period = if period != EthTime(0): period
                else: BLOCK_PERIOD
 
 proc `ckpInterval=`*(cfg: CliqueCfg; numBlocks: SomeInteger) =
@@ -147,7 +147,7 @@ proc epoch*(cfg: CliqueCfg): BlockNumber =
   ## Getter
   cfg.epoch.u256
 
-proc period*(cfg: CliqueCfg): Duration =
+proc period*(cfg: CliqueCfg): EthTime =
   ## Getter
   cfg.period
 

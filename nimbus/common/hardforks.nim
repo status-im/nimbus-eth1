@@ -8,7 +8,7 @@
 # those terms.
 
 import
-  std/[options, times],
+  std/[options],
   eth/common,
   stew/endians2,
   json_serialization,
@@ -114,7 +114,7 @@ func adjustForNextBlock*(t: EthTime): EthTime =
   #
   # If this makes no sense, what should the callers
   # do instead?
-  fromUnix(t.toUnix + 12)
+  t + 12
 
 func adjustForNextBlock*(f: ForkDeterminationInfo): ForkDeterminationInfo =
   ForkDeterminationInfo(
@@ -343,7 +343,7 @@ func toNextFork(n: Option[BlockNumber]): uint64 =
 # EIP-6122: ForkID now works with timestamps too.
 func toNextFork(t: Option[EthTime]): uint64 =
   if t.isSome:
-    t.get.toUnix.uint64
+    t.get.uint64
   else:
     0'u64
 

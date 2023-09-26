@@ -10,7 +10,7 @@
 {.push raises: [].}
 
 import hexstrings, eth/[common, keys], stew/byteutils,
-  ../db/core_db, strutils, algorithm, options, times, json,
+  ../db/core_db, strutils, algorithm, options, json,
   ../constants, stint, rpc_types,
   ../utils/utils, ../transaction,
   ../transaction/call_evm
@@ -216,7 +216,7 @@ proc populateBlockObject*(header: BlockHeader, chain: CoreDbRef, fullTx: bool, i
 
   result.gasLimit  = encodeQuantity(header.gasLimit.uint64)
   result.gasUsed   = encodeQuantity(header.gasUsed.uint64)
-  result.timestamp = encodeQuantity(header.timestamp.toUnix.uint64)
+  result.timestamp = encodeQuantity(header.timestamp.uint64)
   result.baseFeePerGas = if header.fee.isSome:
                            some(encodeQuantity(header.baseFee))
                          else:

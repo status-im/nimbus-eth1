@@ -1,5 +1,5 @@
 import
-  json, strutils, times, options, os,
+  json, strutils, options, os,
   eth/common, httputils, nimcrypto/utils,
   stint, stew/byteutils
 
@@ -75,8 +75,8 @@ proc fromJson*(n: JsonNode, name: string, x: var SomeInteger) =
     doAssert($x == $node.getInt, name)
 
 proc fromJson*(n: JsonNode, name: string, x: var EthTime) =
-  x = initTime(hexToInt(n[name].getStr(), int64), 0)
-  doAssert(x.toUnix.prefixHex == toLowerAscii(n[name].getStr()), name)
+  x = EthTime(hexToInt(n[name].getStr(), uint64))
+  doAssert(x.uint64.prefixHex == toLowerAscii(n[name].getStr()), name)
 
 proc fromJson*[T](n: JsonNode, name: string, x: var Option[T]) =
   if name in n:

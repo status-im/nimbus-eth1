@@ -1,5 +1,4 @@
 import
-  times,
   ../../common/common
 
 export
@@ -37,8 +36,8 @@ template difficultyBomb(periodCount: UInt256) =
 func calcDifficultyFrontier*(timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
   var diff: DifficultyInt
   let adjust  = parent.difficulty div DifficultyBoundDivisorU
-  let time = timeStamp.toUnix()
-  let parentTime = parent.timestamp.toUnix()
+  let time = timeStamp
+  let parentTime = parent.timestamp
 
   if time - parentTime < DurationLimit:
     diff = parent.difficulty + adjust
@@ -61,12 +60,12 @@ func calcDifficultyHomestead*(timeStamp: EthTime, parent: BlockHeader): Difficul
   #         (parent_diff / 2048 * max(1 - (block_timestamp - parent_timestamp) # 10, -99))
   #        ) + 2^(periodCount - 2)
 
-  let time = timeStamp.toUnix()
-  let parentTime = parent.timestamp.toUnix()
+  let time = timeStamp
+  let parentTime = parent.timestamp
   let parentDifficulty = cast[Int256](parent.difficulty)
 
   # 1 - (block_timestamp - parent_timestamp) # 10
-  var x = (time - parentTime).i256
+  var x = (time - parentTime).uint64.i256
   x = x div bigTenI
   x = bigOneI - x
 
@@ -102,12 +101,12 @@ func makeDifficultyCalculator(bombDelay: static[int], timeStamp: EthTime, parent
   #         (parent_diff / 2048 * max((2 if len(parent.uncles) else 1) - ((timestamp - parent.timestamp) # 9), -99))
   #        ) + 2^(periodCount - 2)
 
-  let time = timeStamp.toUnix()
-  let parentTime = parent.timestamp.toUnix()
+  let time = timeStamp
+  let parentTime = parent.timestamp
   let parentDifficulty = cast[Int256](parent.difficulty)
 
   # (2 if len(parent_uncles) else 1) - (block_timestamp - parent_timestamp) # 9
-  var x = (time - parentTime).i256
+  var x = (time - parentTime).uint64.i256
   x = x div bigNine
 
   if parent.ommersHash == EMPTY_UNCLE_HASH:
