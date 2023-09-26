@@ -118,15 +118,22 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
     # TODO: allow for no TCP port mapping!
     (extIp, _, extUdpPort) =
       try: setupAddress(config.nat,
-        config.listenAddress, udpPort, udpPort, "dcli")
+        config.listenAddress, udpPort, udpPort, "fluffy")
       except CatchableError as exc: raise exc
       # TODO: Ideally we don't have the Exception here
       except Exception as exc: raiseAssert exc.msg
-    netkey =
+    (netkey, newNetKey) =
       if config.networkKey.isSome():
-        config.networkKey.get()
+        (config.networkKey.get(), true)
       else:
-        getPersistentNetKey(rng[], config.networkKeyFile, config.dataDir.string)
+        getPersistentNetKey(rng[], config.networkKeyFile)
+
+    enrFilePath = config.dataDir / "fluffy_node.enr"
+    previousEnr =
+      if not newNetKey:
+        getPersistentEnr(enrFilePath)
+      else:
+        Opt.none(enr.Record)
 
   var bootstrapRecords: seq[Record]
   loadBootstrapFile(string config.bootstrapNodesFile, bootstrapRecords)
@@ -152,6 +159,11 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
       # Might make this into a, default off, cli option.
       localEnrFields = {"c": enrClientInfoShort},
       bootstrapRecords = bootstrapRecords,
+      previousRecord = # TODO: discv5/enr code still uses Option, to be changed.
+        if previousEnr.isSome():
+          some(previousEnr.get())
+        else:
+          none(enr.Record),
       bindIp = bindIp, bindPort = udpPort,
       enrAutoUpdate = config.enrAutoUpdate,
       config = discoveryConfig,

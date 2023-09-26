@@ -515,6 +515,7 @@ proc deleteAccount*(ac: AccountsCache, address: EthAddress) =
   acc.kill()
 
 proc selfDestruct*(ac: AccountsCache, address: EthAddress) =
+  ac.setBalance(address, 0.u256)
   ac.savePoint.selfDestruct.incl address
 
 proc selfDestruct6780*(ac: AccountsCache, address: EthAddress) =
