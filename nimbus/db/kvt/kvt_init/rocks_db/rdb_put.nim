@@ -48,13 +48,13 @@ proc getFileSize(fileName: string): int64 =
     defer: f.close
     try:
       result = f.getFileSize
-    except:
+    except CatchableError:
       discard
 
 proc rmFileIgnExpt(fileName: string) =
   try:
     fileName.removeFile
-  except:
+  except CatchableError:
     discard
 
 # ------------------------------------------------------------------------------

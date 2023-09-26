@@ -323,8 +323,7 @@ proc exec*(
     tx: AristoTxRef;
     action: AristoDbAction;
     dontHashify = false;              # Process/fix MPT hashes
-      ): Result[void,AristoError]
-      {.gcsafe, raises: [CatchableError].} =
+      ): Result[void,AristoError] =
   ## Execute function argument `action()` on a temporary `tx.forkTx()`
   ## transaction clone database. After return, the temporary database gets
   ## destroyed.

@@ -137,35 +137,47 @@ proc getLeafVtx*(db: AristoDbRef; lty: LeafTie): VertexRef =
 
 # ------------------
 
-proc getVtx*(db: AristoDbRef; vid: VertexID): VertexRef =
+proc getVtxRc*(db: AristoDbRef; vid: VertexID): Result[VertexRef,AristoError] =
   ## Cascaded attempt to fetch a vertex from the top layer or the backend.
-  ## The function returns `nil` on error or failure.
   ##
   if db.top.sTab.hasKey vid:
     # If the vertex is to be deleted on the backend, a `VertexRef(nil)` entry
     # is kept in the local table in which case it is OK to return this value.
-    return db.top.sTab.getOrVoid vid
-  let rc = db.getVtxBE vid
+    let vtx = db.top.sTab.getOrVoid vid
+    if vtx.isValid:
+      return ok(vtx)
+    return err(GetVtxNotFound)
+  db.getVtxBE vid
+
+proc getVtx*(db: AristoDbRef; vid: VertexID): VertexRef =
+  ## Cascaded attempt to fetch a vertex from the top layer or the backend.
+  ## The function returns `nil` on error or failure.
+  ##
+  let rc = db.getVtxRc vid
   if rc.isOk:
     return rc.value
   VertexRef(nil)
 
-proc getKey*(db: AristoDbRef; vid: VertexID): HashKey =
+proc getKeyRc*(db: AristoDbRef; vid: VertexID): Result[HashKey,AristoError] =
   ## Cascaded attempt to fetch a Merkle hash from the top layer or the backend.
-  ## The function returns `VOID_HASH_KEY` on error or failure.
   ##
   if db.top.kMap.hasKey vid:
     # If the key is to be deleted on the backend, a `VOID_HASH_LABEL` entry
     # is kept on the local table in which case it is OK to return this value.
-    return db.top.kMap.getOrVoid(vid).key
-  let rc = db.getKeyBE vid
+    let key = db.top.kMap.getOrVoid(vid).key
+    if key.isValid:
+      return ok(key)
+    return err(GetKeyNotFound)
+  db.getKeyBE vid
+
+proc getKey*(db: AristoDbRef; vid: VertexID): HashKey =
+  ## Cascaded attempt to fetch a vertex from the top layer or the backend.
+  ## The function returns `nil` on error or failure.
+  ##
+  let rc = db.getKeyRc vid
   if rc.isOk:
     return rc.value
   VOID_HASH_KEY
-
-proc getRootKey*(db: AristoDbRef; vid: VertexID): HashKey =
-  ## Shortcut for `db.getkey VertexID(1)`
-  db.getKey VertexID(1)
 
 # ------------------------------------------------------------------------------
 # End

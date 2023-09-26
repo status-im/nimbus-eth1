@@ -17,7 +17,7 @@ import
   eth/[common, p2p, trie/db, trie/nibbles],
   stew/[byteutils, interval_set],
   ../../core/chain,
-  ../../db/core_db/legacy,
+  ../../db/core_db/legacy_db,
   ../snap/[constants, range_desc],
   ../snap/worker/db/[hexary_desc, hexary_error, hexary_paths,
                      snapdb_persistent, hexary_range],
@@ -77,9 +77,10 @@ proc getAccountFn(
   # The snap sync implementation provides a function `persistentAccountGetFn()`
   # similar to this one. But it is not safe to use it at the moment as the
   # storage table might (or might not) differ.
-  let db = ctx.chain.com.db.toLegacyTrieRef
+  let db = ctx.chain.com.db
   return proc(key: openArray[byte]): Blob =
-    db.get(key)
+    if db.isLegacy:
+      return db.kvt.backend.toLegacy.get(key)
 
 proc getStoSlotFn(
     ctx: SnapWireRef;
@@ -89,9 +90,10 @@ proc getStoSlotFn(
   # The snap sync implementation provides a function
   # `persistentStorageSlotsGetFn()` similar to this one. But it is not safe to
   # use it at the moment as the storage table might (or might not) differ.
-  let db = ctx.chain.com.db.toLegacyTrieRef
+  let db = ctx.chain.com.db
   return proc(key: openArray[byte]): Blob =
-    db.get(key)
+    if db.isLegacy:
+      return db.kvt.backend.toLegacy.get(key)
 
 proc getCodeFn(
     ctx: SnapWireRef;

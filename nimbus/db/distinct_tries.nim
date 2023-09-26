@@ -9,22 +9,26 @@
 # the account are all present (in stateless mode), etc.
 
 import
-  std/typetraits,
-  eth/common,
+  eth/[common, trie/hexary],
   ./core_db
 
 type
   DB = CoreDbRef
   AccountsTrie* = distinct CoreDbPhkRef
   StorageTrie* = distinct CoreDbPhkRef
+  DistinctTrie* = AccountsTrie | StorageTrie
+
+func toBase(t: DistinctTrie): CoreDbPhkRef =
+  ## Note that `CoreDbPhkRef` is a distinct variant of `CoreDxPhkRef`
+  t.CoreDbPhkRef
 
 # I don't understand why "borrow" doesn't work here. --Adam
-proc rootHash*   (trie: AccountsTrie | StorageTrie): KeccakHash      = distinctBase(trie).rootHash
-proc rootHashHex*(trie: AccountsTrie | StorageTrie): string          = $trie.rootHash
-proc db*         (trie: AccountsTrie | StorageTrie): DB              = distinctBase(trie).parent
-proc isPruning*  (trie: AccountsTrie | StorageTrie): bool            = distinctBase(trie).isPruning
-proc mpt*        (trie: AccountsTrie | StorageTrie): CoreDbMptRef    = distinctBase(trie).toMpt
-proc phk*        (trie: AccountsTrie | StorageTrie): CoreDbPhkRef    = distinctBase(trie)
+proc rootHash*   (t: DistinctTrie): KeccakHash        = t.toBase.rootHash()
+proc rootHashHex*(t: DistinctTrie): string            = $t.toBase.rootHash()
+proc db*         (t: DistinctTrie): DB                = t.toBase.parent()
+proc isPruning*  (t: DistinctTrie): bool              = t.toBase.isPruning()
+proc mpt*        (t: DistinctTrie): CoreDbMptRef = t.toBase.toMpt()
+func phk*        (t: DistinctTrie): CoreDbPhkRef = t.toBase
 
 
 template initAccountsTrie*(db: DB, rootHash: KeccakHash, isPruning = true): AccountsTrie =
@@ -37,7 +41,11 @@ proc getAccountBytes*(trie: AccountsTrie, address: EthAddress): seq[byte] =
   CoreDbPhkRef(trie).get(address)
 
 proc maybeGetAccountBytes*(trie: AccountsTrie, address: EthAddress): Option[seq[byte]] =
-  CoreDbPhkRef(trie).maybeGet(address)
+  let phk = CoreDbPhkRef(trie)
+  if phk.parent.isLegacy:
+    phk.backend.toLegacy.SecureHexaryTrie.maybeGet(address)
+  else:
+    some(phk.get(address))
 
 proc putAccountBytes*(trie: var AccountsTrie, address: EthAddress, value: openArray[byte]) =
   CoreDbPhkRef(trie).put(address, value)
@@ -66,7 +74,11 @@ proc getSlotBytes*(trie: StorageTrie, slotAsKey: openArray[byte]): seq[byte] =
   CoreDbPhkRef(trie).get(slotAsKey)
 
 proc maybeGetSlotBytes*(trie: StorageTrie, slotAsKey: openArray[byte]): Option[seq[byte]] =
-  CoreDbPhkRef(trie).maybeGet(slotAsKey)
+  let phk = CoreDbPhkRef(trie)
+  if phk.parent.isLegacy:
+    phk.backend.toLegacy.SecureHexaryTrie.maybeGet(slotAsKey)
+  else:
+    some(phk.get(slotAsKey))
 
 proc putSlotBytes*(trie: var StorageTrie, slotAsKey: openArray[byte], value: openArray[byte]) =
   CoreDbPhkRef(trie).put(slotAsKey, value)

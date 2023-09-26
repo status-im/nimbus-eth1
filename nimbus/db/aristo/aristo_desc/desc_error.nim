@@ -245,9 +245,11 @@ type
 
     # Miscelaneous handy helpers
     PayloadTypeUnsupported
+    LeafKeyInvalid
     AccountRlpDecodingError
     AccountStorageKeyMissing
     AccountVtxUnsupported
     AccountNodeUnsupported
+    NotImplemented
 
 # End

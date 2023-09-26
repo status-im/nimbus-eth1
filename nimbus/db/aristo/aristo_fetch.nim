@@ -14,7 +14,7 @@
 {.push raises: [].}
 
 import
-  eth/[common, trie/nibbles],
+  eth/trie/nibbles,
   results,
   "."/[aristo_desc, aristo_hike]
 
@@ -31,6 +31,13 @@ proc fetchPayloadImpl(
       else: rc.error[0].legs[^1].wp.vid
     return err((vid, rc.error[1]))
   ok rc.value.legs[^1].wp.vtx.lData
+
+proc fetchPayloadImpl(
+    db: AristoDbRef;
+    root: VertexID;
+    path: openArray[byte];
+      ): Result[PayloadRef,(VertexID,AristoError)] =
+  path.initNibbleRange.hikeUp(root, db).fetchPayloadImpl
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -52,7 +59,23 @@ proc fetchPayload*(
       ): Result[PayloadRef,(VertexID,AristoError)] =
   ## Variant of `fetchPayload()`
   ##
-  path.initNibbleRange.hikeUp(root, db).fetchPayloadImpl
+  if path.len == 0:
+    return err((VertexID(0),LeafKeyInvalid))
+  db.fetchPayloadImpl(root, path)
+
+proc contains*(
+    db: AristoDbRef;                  # Database
+    root: VertexID;
+    path: openArray[byte];            # Key of database record
+      ): Result[bool,(VertexID,AristoError)] =
+  ## Variant of `fetchPayload()`
+  ##
+  if path.len == 0:
+    return err((VertexID(0),LeafKeyInvalid))
+  let rc = db.fetchPayloadImpl(root, path)
+  if rc.isOk:
+    return ok(true)
+  return ok(false)
 
 # ------------------------------------------------------------------------------
 # End

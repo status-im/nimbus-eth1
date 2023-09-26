@@ -17,8 +17,11 @@ import
   stew/endians2,
   "."/[aristo_constants, aristo_desc, aristo_get]
 
+# Annotation helper
+{.pragma: noRaise, gcsafe, raises: [].}
+
 type
-  ResolveVidFn = proc(vid: VertexID): HashKey {.gcsafe, raises: [].}
+  ResolveVidFn = proc(vid: VertexID): Result[HashKey,AristoError] {.noRaise.}
     ## Resolve storage root vertex ID
 
 # ------------------------------------------------------------------------------
@@ -43,20 +46,30 @@ proc load256(data: Blob; start: var int): Result[UInt256,AristoError] =
   start += 32
   ok val
 
-proc serialise(pyl: PayloadRef; getKey: ResolveVidFn): Blob =
+proc serialise(
+    pyl: PayloadRef;
+    getKey: ResolveVidFn;
+      ): Result[Blob,(VertexID,AristoError)] =
   ## Encode the data payload of the argument `pyl` as RLP `Blob` if it is of
   ## account type, otherwise pass the data as is.
   ##
   case pyl.pType:
   of RawData:
-    result = pyl.rawBlob
+    ok pyl.rawBlob
   of RlpData:
-    result = pyl.rlpBlob
+    ok pyl.rlpBlob
   of AccountData:
     let
       vid = pyl.account.storageID
-      key = if vid.isValid: vid.getkey else: VOID_HASH_KEY
-    result = rlp.encode Account(
+      key = block:
+        if not vid.isValid:
+          VOID_HASH_KEY
+        else:
+          let rc = vid.getkey
+          if rc.isErr:
+            return err((vid,rc.error))
+          rc.value
+    ok rlp.encode Account(
       nonce:       pyl.account.nonce,
       balance:     pyl.account.balance,
       storageRoot: key.to(Hash256),
@@ -66,10 +79,7 @@ proc serialise(pyl: PayloadRef; getKey: ResolveVidFn): Blob =
 # Public RLP transcoder mixins
 # ------------------------------------------------------------------------------
 
-proc read*(
-    rlp: var Rlp;
-    T: type NodeRef;
-      ): T {.gcsafe, raises: [RlpError]} =
+proc read*(rlp: var Rlp; T: type NodeRef): T {.gcsafe, raises: [RlpError].} =
   ## Mixin for RLP writer, see `fromRlpRecord()` for an encoder with detailed
   ## error return code (if needed.) This reader is a jazzed up version which
   ## reports some particular errors in the `Dummy` type node.
@@ -143,9 +153,6 @@ proc append*(writer: var RlpWriter; node: NodeRef) =
     else:
       writer.append key.to(Hash256)
 
-  proc getKeyFn(key: HashKey): ResolveVidFn =
-    result = proc(vid: VertexID): HashKey = key
-
   if node.error != AristoError(0):
     writer.startList(0)
   else:
@@ -155,14 +162,19 @@ proc append*(writer: var RlpWriter; node: NodeRef) =
       for n in 0..15:
         writer.addHashKey node.key[n]
       writer.append EmptyBlob
+
     of Extension:
       writer.startList(2)
       writer.append node.ePfx.hexPrefixEncode(isleaf = false)
       writer.addHashKey node.key[0]
+
     of Leaf:
+      proc getKey0(vid: VertexID): Result[HashKey,AristoError] {.noRaise.} =
+        ok(node.key[0]) # always succeeds
+
       writer.startList(2)
       writer.append node.lPfx.hexPrefixEncode(isleaf = true)
-      writer.append node.lData.serialise node.key[0].getKeyFn
+      writer.append node.lData.serialise(getKey0).value
 
 # ---------------------
 
@@ -170,11 +182,16 @@ proc to*(node: NodeRef; T: type HashKey): T =
   ## Convert the argument `node` to the corresponding Merkle hash key
   node.encode.digestTo T
 
-proc serialise*(db: AristoDbRef; pyl: PayloadRef): Blob =
+proc serialise*(
+    db: AristoDbRef;
+    pyl: PayloadRef;
+      ): Result[Blob,(VertexID,AristoError)] =
   ## Encode the data payload of the argument `pyl` as RLP `Blob` if it is of
   ## account type, otherwise pass the data as is.
   ##
-  proc getKey(vid: VertexID): HashKey = db.getKey vid
+  proc getKey(vid: VertexID): Result[HashKey,AristoError] =
+    db.getKeyRc(vid)
+
   pyl.serialise getKey
 
 # ------------------------------------------------------------------------------

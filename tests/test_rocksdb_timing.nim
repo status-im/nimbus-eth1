@@ -20,7 +20,7 @@ import
   ../nimbus/db/core_db/[legacy_rocksdb, persistent],
   ../nimbus/core/chain,
   ../nimbus/sync/snap/range_desc,
-  ../nimbus/sync/snap/worker/db/[hexary_desc, rocky_bulk_load],
+  ../nimbus/sync/snap/worker/db/hexary_desc,
   ./replay/pp,
   ./test_rocksdb_timing/[bulk_test_xx, test_db_timing]
 
@@ -117,7 +117,7 @@ proc flushDbs(db: TestDbs) =
     for n in 0 ..< nTestDbInstances:
       if db.cdb[n].isNil or db.cdb[n].dbType != LegacyDbPersistent:
          break
-      db.cdb[n].toLegacyBackend.rocksStoreRef.store.db.rocksdb_close
+      db.cdb[n].backend.toRocksStoreRef.store.db.rocksdb_close
     db.baseDir.flushDbDir(db.subDir)
 
 proc testDbs(
@@ -174,7 +174,7 @@ proc importRunner(noisy = true;  persistent = true; capture = bChainCapture) =
       noisy.test_dbTimingUndumpBlocks(filePath, ddb, numBlocks, loadNoise)
 
     test "Extract key-value records into memory tables via rocksdb iterator":
-      if db.cdb[0].toLegacyBackend.rocksStoreRef.isNil:
+      if db.cdb[0].backend.toRocksStoreRef.isNil:
         skip() # not persistent => db.cdb[0] is nil
       else:
         noisy.test_dbTimingRockySetup(xTab32, xTab33, db.cdb[0])
@@ -253,7 +253,7 @@ proc dbTimingRunner(noisy = true;  persistent = true; cleanUp = true) =
       test &"{storeTx33} (key length 33) {intoTrieDb}":
         noisy.test_dbTimingTx33(xTab33, xDbs.cdb[5])
 
-      if xDbs.cdb[0].toLegacyBackend.rocksStoreRef.isNil:
+      if xDbs.cdb[0].backend.toRocksStoreRef.isNil:
         test "The rocksdb interface must be available": skip()
       else:
         test &"{storeRks32} (key length 32) {intoRksDb}":

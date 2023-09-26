@@ -13,25 +13,11 @@
 import
   eth/trie/db,
   ../select_backend,
-  "."/[base, legacy]
-
-export
-  toLegacyTrieRef
+  "."/[base, legacy_db]
 
 type
   LegaPersDbRef = ref object of LegacyDbRef
-    backend: ChainDB     # for backend access (legacy mode)
-
-# ------------------------------------------------------------------------------
-# Private helpers
-# ------------------------------------------------------------------------------
-
-template iflegaPersOk(db: CoreDbRef; body: untyped) =
-  case db.dbType:
-  of LegacyDbPersistent:
-    body
-  else:
-    discard
+    rdb: RocksStoreRef     # for backend access with legacy mode
 
 # ------------------------------------------------------------------------------
 # Public constructor and low level data retrieval, storage & transation frame
@@ -55,15 +41,15 @@ proc newLegacyPersistentCoreDbRef*(path: string): CoreDbRef =
   except CatchableError as e:
     let msg = "DB initialisation error(" & $e.name & "): " & e.msg
     raise (ref ResultDefect)(msg: msg)
-  LegaPersDbRef(backend: backend).init(LegacyDbPersistent, backend.trieDB)
+  LegaPersDbRef(rdb: backend.rdb).init(LegacyDbPersistent, backend.trieDB)
 
 # ------------------------------------------------------------------------------
-# Public legacy helpers
+# Public helper for direct backend access
 # ------------------------------------------------------------------------------
 
-proc toLegacyBackend*(db: CoreDbRef): ChainDB =
-  db.ifLegaPersOk:
-    return db.LegaPersDbRef.backend
+proc toRocksStoreRef*(db: CoreDbBackendRef): RocksStoreRef =
+  if db.parent.dbType == LegacyDbPersistent:
+    return db.parent.LegaPersDbRef.rdb
 
 # ------------------------------------------------------------------------------
 # End

@@ -56,7 +56,7 @@ type
     txUidGen*: uint                   ## Tx-relative unique number generator
     dudes: DudesRef                   ## Related DB descriptors
 
-  KvtDbAction* = proc(db: KvtDbRef) {.gcsafe, raises: [CatchableError].}
+  KvtDbAction* = proc(db: KvtDbRef) {.gcsafe, raises: [].}
     ## Generic call back function/closure.
 
 # ------------------------------------------------------------------------------
