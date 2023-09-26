@@ -55,7 +55,7 @@ proc init*(
       {.gcsafe.}
 
 # ------------------------------------------------------------------------------
-# Private helpers, exceprion management
+# Private helpers, exception management
 # ------------------------------------------------------------------------------
 
 template mapRlpException(db: LegacyDbRef; info: static[string]; code: untyped) =
