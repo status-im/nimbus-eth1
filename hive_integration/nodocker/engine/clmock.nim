@@ -75,11 +75,6 @@ type
     onSafeBlockChange *        : proc(): bool {.gcsafe.}
     onFinalizedBlockChange*    : proc(): bool {.gcsafe.}
 
-  GetPayloadResponse = object
-    executionPayload: ExecutionPayload
-    blockValue: Option[UInt256]
-    blobsBundle: Option[BlobsBundleV1]
-
 func latestPayloadNumber*(h: Table[uint64, ExecutionPayload]): uint64 =
   result = 0'u64
   for n, _ in h:
@@ -99,17 +94,21 @@ func latestWithdrawalsIndex*(h: Table[uint64, ExecutionPayload]): uint64 =
 func client(cl: CLMocker): RpcClient =
   cl.clients.first.client
 
-proc init(cl: CLMocker, clients: ClientPool, com: CommonRef) =
-  cl.clients = clients
+proc init(cl: CLMocker, eng: EngineEnv, com: CommonRef) =
+  cl.clients = ClientPool()
+  cl.clients.add eng
   cl.com = com
   cl.slotsToSafe = 1
   cl.slotsToFinalized = 2
   cl.payloadProductionClientDelay = 1
   cl.headerHistory[0] = com.genesisHeader()
 
-proc newClMocker*(clients: ClientPool, com: CommonRef): CLMocker =
+proc newClMocker*(eng: EngineEnv, com: CommonRef): CLMocker =
   new result
-  result.init(clients, com)
+  result.init(eng, com)
+
+proc addEngine*(cl: CLMocker, eng: EngineEnv) =
+  cl.clients.add eng
 
 proc waitForTTD*(cl: CLMocker): Future[bool] {.async.} =
   let ttd = cl.com.ttd()
@@ -193,32 +192,6 @@ func isCancun(cl: CLMocker, timestamp: Quantity): bool =
   let ts = fromUnix(timestamp.int64)
   cl.com.isCancunOrLater(ts)
 
-func V1(attr: Option[PayloadAttributes]): Option[PayloadAttributesV1] =
-  if attr.isNone:
-    return none(PayloadAttributesV1)
-  some(attr.get.V1)
-
-when false:
-  func V2(attr: Option[PayloadAttributes]): Option[PayloadAttributesV2] =
-    if attr.isNone:
-      return none(PayloadAttributesV2)
-    some(attr.get.V2)
-
-  func V3(attr: Option[PayloadAttributes]): Option[PayloadAttributesV3] =
-    if attr.isNone:
-      return none(PayloadAttributesV3)
-    some(attr.get.V3)
-
-proc fcu(cl: CLMocker, version: Version,
-          update: ForkchoiceStateV1,
-          attr: Option[PayloadAttributes]):
-            Result[ForkchoiceUpdatedResponse, string] =
-  let client = cl.nextBlockProducer.client
-  case version
-  of Version.V1: client.forkchoiceUpdatedV1(update, attr.V1)
-  of Version.V2: client.forkchoiceUpdatedV2(update, attr)
-  of Version.V3: client.forkchoiceUpdatedV3(update, attr)
-
 # Picks the next payload producer from the set of clients registered
 proc pickNextPayloadProducer(cl: CLMocker): bool =
   doAssert cl.clients.len != 0
@@ -274,7 +247,8 @@ proc requestNextPayload(cl: CLMocker): bool =
   cl.prevRandaoHistory[number] = nextPrevRandao
 
   let version = cl.latestPayloadAttributes.version
-  let res = cl.fcu(version, cl.latestForkchoice, some(cl.latestPayloadAttributes))
+  let client = cl.nextBlockProducer.client
+  let res = client.forkchoiceUpdated(version, cl.latestForkchoice, some(cl.latestPayloadAttributes))
   if res.isErr:
     error "CLMocker: Could not send forkchoiceUpdated", version=version, msg=res.error
     return false
@@ -299,32 +273,11 @@ proc getPayload(cl: CLMocker, payloadId: PayloadID): Result[GetPayloadResponse, 
   let ts = cl.latestPayloadAttributes.timestamp
   let client = cl.nextBlockProducer.client
   if cl.isCancun(ts):
-    let res = client.getPayloadV3(payloadId)
-    if res.isErr:
-      return err(res.error)
-    let x = res.get
-    return ok(GetPayloadResponse(
-      executionPayload: executionPayload(x.executionPayload),
-      blockValue: some(x.blockValue),
-      blobsBundle: some(x.blobsBundle)
-    ))
-
-  if cl.isShanghai(ts):
-    let res = client.getPayloadV2(payloadId)
-    if res.isErr:
-      return err(res.error)
-    let x = res.get
-    return ok(GetPayloadResponse(
-      executionPayload: executionPayload(x.executionPayload),
-      blockValue: some(x.blockValue)
-    ))
-
-  let res = client.getPayloadV1(payloadId)
-  if res.isErr:
-    return err(res.error)
-  return ok(GetPayloadResponse(
-    executionPayload: executionPayload(res.get),
-  ))
+    client.getPayload(payloadId, Version.V3)
+  elif cl.isShanghai(ts):
+    client.getPayload(payloadId, Version.V2)
+  else:
+    client.getPayload(payloadId, Version.V1)
 
 proc getNextPayload(cl: CLMocker): bool =
   let res = cl.getPayload(cl.nextPayloadID)
@@ -451,7 +404,8 @@ proc broadcastNextNewPayload(cl: CLMocker): bool =
 proc broadcastForkchoiceUpdated(cl: CLMocker,
       update: ForkchoiceStateV1): Result[ForkchoiceUpdatedResponse, string] =
   let version = cl.latestExecutedPayload.version
-  cl.fcu(version, update, none(PayloadAttributes))
+  let client = cl.nextBlockProducer.client
+  client.forkchoiceUpdated(version, update, none(PayloadAttributes))
 
 proc broadcastLatestForkchoice(cl: CLMocker): bool =
   let res = cl.broadcastForkchoiceUpdated(cl.latestForkchoice)
@@ -479,7 +433,6 @@ proc broadcastLatestForkchoice(cl: CLMocker): bool =
       msg=s.payloadID.get.toHex
 
   return true
-
 
 proc produceSingleBlock*(cl: CLMocker, cb: BlockProcessCallbacks): bool {.gcsafe.} =
   doAssert(cl.ttdReached)

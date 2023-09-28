@@ -7,13 +7,15 @@ import
   ./clmock,
   ./engine_client,
   ./client_pool,
-  ./engine_env
+  ./engine_env,
+  ./tx_sender
 
 export
   clmock,
   engine_client,
   client_pool,
-  engine_env
+  engine_env,
+  tx_sender
 
 type
   TestEnv* = ref object
@@ -23,25 +25,17 @@ type
     port      : int
     rpcPort   : int
     clients   : ClientPool
+    sender    : TxSender
     clMock*   : CLMocker
-    vaultKey  : PrivateKey
-
-const
-  vaultKeyHex = "63b508a03c3b5937ceb903af8b1b0c191012ef6eb7e9c3fb7afa94e5d214d376"
 
 proc makeEnv(conf: NimbusConf): TestEnv =
-  let env = TestEnv(
+  TestEnv(
     conf   : conf,
     port   : 30303,
     rpcPort: 8545,
     clients: ClientPool(),
+    sender : TxSender.new(conf.networkParams),
   )
-
-  env.vaultKey = PrivateKey.fromHex(vaultKeyHex).valueOr:
-    echo error
-    quit(QuitFailure)
-
-  env
 
 proc addEngine(env: TestEnv, conf: var NimbusConf): EngineEnv =
   conf.tcpPort = Port env.port
@@ -85,47 +79,58 @@ func engine*(env: TestEnv): EngineEnv =
   env.clients.first
 
 proc setupCLMock*(env: TestEnv) =
-  env.clmock = newCLMocker(env.clients, env.engine.com)
+  env.clmock = newCLMocker(env.engine, env.engine.com)
 
-proc addEngine*(env: TestEnv): EngineEnv =
+proc addEngine*(env: TestEnv, addToCL: bool = true): EngineEnv =
+  doAssert(env.clMock.isNil.not)
   var conf = env.conf # clone the conf
   let eng = env.addEngine(conf)
   eng.connect(env.engine.node)
+  if addToCL:
+    env.clMock.addEngine(eng)
   eng
 
-proc makeTx*(env: TestEnv, eng: EngineEnv, tc: BaseTx, nonce: AccountNonce): Transaction =
-  eng.makeTx(env.vaultKey, tc, nonce)
+proc makeTx*(env: TestEnv, tc: BaseTx, nonce: AccountNonce): Transaction =
+  env.sender.makeTx(tc, nonce)
 
-proc makeTx*(env: TestEnv, eng: EngineEnv, tc: var BigInitcodeTx, nonce: AccountNonce): Transaction =
-  eng.makeTx(env.vaultKey, tc, nonce)
+proc makeTx*(env: TestEnv, tc: BigInitcodeTx, nonce: AccountNonce): Transaction =
+  env.sender.makeTx(tc, nonce)
+
+proc makeTxs*(env: TestEnv, tc: BaseTx, num: int): seq[Transaction] =
+  result = newSeqOfCap[Transaction](num)
+  for _ in 0..<num:
+    result.add env.sender.makeNextTx(tc)
 
 proc sendNextTx*(env: TestEnv, eng: EngineEnv, tc: BaseTx): bool =
-  eng.sendNextTx(env.vaultKey, tc)
+  env.sender.sendNextTx(eng.client, tc)
 
 proc sendTx*(env: TestEnv, eng: EngineEnv, tc: BaseTx, nonce: AccountNonce): bool =
-  eng.sendTx(env.vaultKey, tc, nonce)
+  env.sender.sendTx(eng.client, tc, nonce)
 
 proc sendTx*(env: TestEnv, eng: EngineEnv, tc: BigInitcodeTx, nonce: AccountNonce): bool =
-  eng.sendTx(env.vaultKey, tc, nonce)
+  env.sender.sendTx(eng.client, tc, nonce)
 
-
-proc makeTx*(env: TestEnv, tc: BaseTx, nonce: AccountNonce): Transaction =
-  env.engine.makeTx(env.vaultKey, tc, nonce)
-
-proc makeTx*(env: TestEnv, tc: var BigInitcodeTx, nonce: AccountNonce): Transaction =
-  env.engine.makeTx(env.vaultKey, tc, nonce)
+proc sendTxs*(env: TestEnv, eng: EngineEnv, txs: openArray[Transaction]): bool =
+  for tx in txs:
+    if not sendTx(eng.client, tx):
+      return false
+  true
 
 proc sendNextTx*(env: TestEnv, tc: BaseTx): bool =
-  env.engine.sendNextTx(env.vaultKey, tc)
+  let client = env.engine.client
+  env.sender.sendNextTx(client, tc)
 
 proc sendTx*(env: TestEnv, tc: BaseTx, nonce: AccountNonce): bool =
-  env.engine.sendTx(env.vaultKey, tc, nonce)
+  let client = env.engine.client
+  env.sender.sendTx(client, tc, nonce)
 
 proc sendTx*(env: TestEnv, tc: BigInitcodeTx, nonce: AccountNonce): bool =
-  env.engine.sendTx(env.vaultKey, tc, nonce)
+  let client = env.engine.client
+  env.sender.sendTx(client, tc, nonce)
 
 proc sendTx*(env: TestEnv, tx: Transaction): bool =
-  env.engine.sendTx(tx)
+  let client = env.engine.client
+  sendTx(client, tx)
 
 proc verifyPoWProgress*(env: TestEnv, lastBlockHash: common.Hash256): bool =
   let res = waitFor env.client.verifyPoWProgress(lastBlockHash)

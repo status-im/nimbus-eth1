@@ -11,7 +11,9 @@ import
 
 import web3/engine_api as web3_engine_api
 
-export execution_types
+export
+  execution_types,
+  rpcclient
 
 type
   Hash256 = eth_types.Hash256
@@ -43,20 +45,6 @@ proc forkchoiceUpdatedV1*(client: RpcClient,
   wrapTrySimpleRes:
     client.engine_forkchoiceUpdatedV1(update, payloadAttributes)
 
-#proc forkchoiceUpdatedV2*(client: RpcClient,
-#      update: ForkchoiceStateV1,
-#      payloadAttributes = none(PayloadAttributesV2)):
-#        Result[ForkchoiceUpdatedResponse, string] =
-#  wrapTrySimpleRes:
-#    client.engine_forkchoiceUpdatedV2(update, payloadAttributes)
-
-#proc forkchoiceUpdatedV3*(client: RpcClient,
-#      update: ForkchoiceStateV1,
-#      payloadAttributes = none(PayloadAttributesV3)):
-#        Result[ForkchoiceUpdatedResponse, string] =
-#  wrapTrySimpleRes:
-#    client.engine_forkchoiceUpdatedV3(update, payloadAttributes)
-
 proc forkchoiceUpdatedV2*(client: RpcClient,
       update: ForkchoiceStateV1,
       payloadAttributes = none(PayloadAttributes)):
@@ -82,6 +70,50 @@ proc getPayloadV2*(client: RpcClient, payloadId: PayloadID): Result[GetPayloadV2
 proc getPayloadV3*(client: RpcClient, payloadId: PayloadID): Result[GetPayloadV3Response, string] =
   wrapTrySimpleRes:
     client.engine_getPayloadV3(payloadId)
+
+proc getPayload*(client: RpcClient,
+                 payloadId: PayloadID,
+                 version: Version): Result[GetPayloadResponse, string] =
+  if version == Version.V3:
+    let x = client.getPayloadV3(payloadId).valueOr:
+      return err(error)
+    ok(GetPayloadResponse(
+      executionPayload: executionPayload(x.executionPayload),
+      blockValue: some(x.blockValue),
+      blobsBundle: some(x.blobsBundle)
+    ))
+  elif version == Version.V2:
+    let x = client.getPayloadV2(payloadId).valueOr:
+      return err(error)
+    ok(GetPayloadResponse(
+      executionPayload: executionPayload(x.executionPayload),
+      blockValue: some(x.blockValue)
+    ))
+  else:
+    let x = client.getPayloadV1(payloadId).valueOr:
+      return err(error)
+    ok(GetPayloadResponse(
+      executionPayload: executionPayload(x),
+    ))
+
+proc forkchoiceUpdated*(client: RpcClient,
+                        update: ForkchoiceStateV1,
+                        attr: PayloadAttributes):
+                          Result[ForkchoiceUpdatedResponse, string] =
+  case attr.version
+  of Version.V1: client.forkchoiceUpdatedV1(update, some attr.V1)
+  of Version.V2: client.forkchoiceUpdatedV2(update, some attr)
+  of Version.V3: client.forkchoiceUpdatedV3(update, some attr)
+
+proc forkchoiceUpdated*(client: RpcClient,
+                        version: Version,
+                        update: ForkchoiceStateV1,
+                        attr = none(PayloadAttributes)):
+                          Result[ForkchoiceUpdatedResponse, string] =
+  case version
+  of Version.V1: client.forkchoiceUpdatedV1(update, attr.V1)
+  of Version.V2: client.forkchoiceUpdatedV2(update, attr)
+  of Version.V3: client.forkchoiceUpdatedV3(update, attr)
 
 proc newPayloadV1*(client: RpcClient,
       payload: ExecutionPayloadV1):
@@ -109,6 +141,15 @@ proc newPayloadV3*(client: RpcClient,
         Result[PayloadStatusV1, string] =
   wrapTrySimpleRes:
     client.engine_newPayloadV3(payload, versionedHashes, parentBeaconBlockRoot)
+
+proc newPayload*(client: RpcClient,
+                 payload: ExecutionPayload,
+                 version: Version):
+                   Result[PayloadStatusV1, string] =
+  if version == Version.V1:
+    client.newPayloadV1(payload.V1)
+  else:
+    client.newPayloadV2(payload.V2)
 
 proc exchangeCapabilities*(client: RpcClient,
       methods: seq[string]):

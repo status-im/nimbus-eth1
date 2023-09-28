@@ -1,14 +1,13 @@
 import
-  std/[os, math],
+  std/os,
   eth/keys,
   eth/p2p as eth_p2p,
   chronos,
   json_rpc/[rpcserver, rpcclient],
-  stew/[results, byteutils],
+  stew/[results],
   ../../../nimbus/[
     config,
     constants,
-    transaction,
     core/sealer,
     core/chain,
     core/tx_pool,
@@ -20,25 +19,12 @@ import
     beacon/beacon_engine,
     common
   ],
-  ../../../tests/test_helpers,
-  ./engine_client
+  ../../../tests/test_helpers
 
 export
   results
 
 type
-  BaseTx* = object of RootObj
-    recipient*: Option[EthAddress]
-    gasLimit* : GasInt
-    amount*   : UInt256
-    payload*  : seq[byte]
-    txType*   : Option[TxType]
-
-  BigInitcodeTx* = object of BaseTx
-    initcodeLength*: int
-    padByte*       : uint8
-    initcode*      : seq[byte]
-
   EngineEnv* = ref object
     conf   : NimbusConf
     com    : CommonRef
@@ -46,8 +32,6 @@ type
     server : RpcHttpServer
     sealer : SealingEngineRef
     ttd    : DifficultyInt
-    tx     : Transaction
-    nonce  : uint64
     client : RpcHttpClient
     sync   : BeaconSyncRef
 
@@ -56,11 +40,7 @@ const
   genesisFile = baseFolder & "/init/genesis.json"
   sealerKey   = baseFolder & "/init/sealer.key"
   chainFolder = baseFolder & "/chains"
-
-  # This is the account that sends vault funding transactions.
-  vaultAddr*  = hexToByteArray[20]("0xcf49fda3be353c69b41ed96333cd24302da4556f")
   jwtSecret   = "0x7365637265747365637265747365637265747365637265747365637265747365"
-
 
 proc makeCom*(conf: NimbusConf): CommonRef =
   CommonRef.new(
@@ -189,98 +169,3 @@ func node*(env: EngineEnv): ENode =
 
 proc connect*(env: EngineEnv, node: ENode) =
   waitFor env.node.connectToNode(node)
-
-func gwei(n: int64): GasInt {.compileTime.} =
-  GasInt(n * (10 ^ 9))
-
-proc getTxType(tc: BaseTx, nonce: uint64): TxType =
-  if tc.txType.isNone:
-    if nonce mod 2 == 0:
-      TxLegacy
-    else:
-      TxEIP1559
-  else:
-    tc.txType.get
-
-proc makeTx*(env: EngineEnv, vaultKey: PrivateKey, tc: BaseTx, nonce: AccountNonce): Transaction =
-  const
-    gasPrice = 30.gwei
-    gasTipPrice = 1.gwei
-
-    gasFeeCap = gasPrice
-    gasTipCap = gasTipPrice
-
-  let chainId = env.conf.networkParams.config.chainId
-  let txType = tc.getTxType(nonce)
-
-  # Build the transaction depending on the specified type
-  let tx = if txType == TxLegacy:
-             Transaction(
-               txType  : TxLegacy,
-               nonce   : nonce,
-               to      : tc.recipient,
-               value   : tc.amount,
-               gasLimit: tc.gasLimit,
-               gasPrice: gasPrice,
-               payload : tc.payload
-             )
-           else:
-             Transaction(
-               txType  : TxEIP1559,
-               nonce   : nonce,
-               gasLimit: tc.gasLimit,
-               maxFee  : gasFeeCap,
-               maxPriorityFee: gasTipCap,
-               to      : tc.recipient,
-               value   : tc.amount,
-               payload : tc.payload,
-               chainId : chainId
-             )
-
-  signTransaction(tx, vaultKey, chainId, eip155 = true)
-
-proc makeTx*(env: EngineEnv, vaultKey: PrivateKey, tc: var BigInitcodeTx, nonce: AccountNonce): Transaction =
-  if tc.payload.len == 0:
-    # Prepare initcode payload
-    if tc.initcode.len != 0:
-      doAssert(tc.initcode.len <= tc.initcodeLength, "invalid initcode (too big)")
-      tc.payload = tc.initcode
-
-    while tc.payload.len < tc.initcodeLength:
-      tc.payload.add tc.padByte
-
-  doAssert(tc.recipient.isNone, "invalid configuration for big contract tx creator")
-  env.makeTx(vaultKey, tc.BaseTx, nonce)
-
-proc sendNextTx*(env: EngineEnv, vaultKey: PrivateKey, tc: BaseTx): bool =
-  env.tx = env.makeTx(vaultKey, tc, env.nonce)
-  inc env.nonce
-  let rr = env.client.sendTransaction(env.tx)
-  if rr.isErr:
-    error "Unable to send transaction", msg=rr.error
-    return false
-  return true
-
-proc sendTx*(env: EngineEnv, vaultKey: PrivateKey, tc: BaseTx, nonce: AccountNonce): bool =
-  env.tx = env.makeTx(vaultKey, tc, nonce)
-  let rr = env.client.sendTransaction(env.tx)
-  if rr.isErr:
-    error "Unable to send transaction", msg=rr.error
-    return false
-  return true
-
-proc sendTx*(env: EngineEnv, vaultKey: PrivateKey, tc: BigInitcodeTx, nonce: AccountNonce): bool =
-  env.tx = env.makeTx(vaultKey, tc, nonce)
-  let rr = env.client.sendTransaction(env.tx)
-  if rr.isErr:
-    error "Unable to send transaction", msg=rr.error
-    return false
-  return true
-
-proc sendTx*(env: EngineEnv, tx: Transaction): bool =
-  env.tx = tx
-  let rr = env.client.sendTransaction(env.tx)
-  if rr.isErr:
-    error "Unable to send transaction", msg=rr.error
-    return false
-  return true

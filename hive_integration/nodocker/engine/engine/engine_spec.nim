@@ -19,9 +19,6 @@ type
     slotsToFinalized*: int
     slotsToSafe*: int
 
-const
-  prevRandaoContractAddr = hexToByteArray[20]("0000000000000000000000000000000000000316")
-
 template testNP(res, cond: untyped, validHash = none(common.Hash256)) =
   testCond res.isOk
   let s = res.get()
