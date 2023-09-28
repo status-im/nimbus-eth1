@@ -13,6 +13,7 @@ import
   eth/p2p/discoveryv5/[protocol, enr],
   beacon_chain/spec/forks,
   beacon_chain/spec/datatypes/[phase0, altair, bellatrix],
+  beacon_chain/gossip_processing/light_client_processor,
   ../../../nimbus/constants,
   ../wire/[portal_protocol, portal_stream, portal_protocol_config],
   "."/[beacon_light_client_content, beacon_light_client_db]
@@ -20,7 +21,7 @@ import
 export beacon_light_client_content, beacon_light_client_db
 
 logScope:
-  topics = "portal_beacon_lc"
+  topics = "portal_beacon_network"
 
 const
   lightClientProtocolId* = [byte 0x50, 0x1A]
@@ -29,6 +30,7 @@ type
   LightClientNetwork* = ref object
     portalProtocol*: PortalProtocol
     lightClientDb*: LightClientDb
+    processor*: ref LightClientProcessor
     contentQueue*: AsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])]
     forkDigests*: ForkDigests
     processContentLoop: Future[void]
@@ -37,7 +39,7 @@ func toContentIdHandler(contentKey: ByteList): results.Opt[ContentId] =
   ok(toContentId(contentKey))
 
 proc getLightClientBootstrap*(
-    l: LightClientNetwork,
+    n: LightClientNetwork,
     trustedRoot: Digest):
     Future[results.Opt[ForkedLightClientBootstrap]] {.async.} =
   let
@@ -50,7 +52,7 @@ proc getLightClientBootstrap*(
     contentID = toContentId(keyEncoded)
 
   let bootstrapContentLookup =
-      await l.portalProtocol.contentLookup(keyEncoded, contentId)
+      await n.portalProtocol.contentLookup(keyEncoded, contentId)
 
   if bootstrapContentLookup.isNone():
       warn "Failed fetching LightClientBootstrap from the network",
@@ -60,7 +62,7 @@ proc getLightClientBootstrap*(
   let
     bootstrap = bootstrapContentLookup.unsafeGet()
     decodingResult = decodeLightClientBootstrapForked(
-      l.forkDigests, bootstrap.content)
+      n.forkDigests, bootstrap.content)
 
   if decodingResult.isErr:
     return Opt.none(ForkedLightClientBootstrap)
@@ -70,7 +72,7 @@ proc getLightClientBootstrap*(
     return Opt.some(decodingResult.get())
 
 proc getLightClientUpdatesByRange*(
-    l: LightClientNetwork,
+    n: LightClientNetwork,
     startPeriod: SyncCommitteePeriod,
     count: uint64):
     Future[results.Opt[ForkedLightClientUpdateList]] {.async.} =
@@ -85,7 +87,7 @@ proc getLightClientUpdatesByRange*(
     contentID = toContentId(keyEncoded)
 
   let updatesResult =
-      await l.portalProtocol.contentLookup(keyEncoded, contentId)
+      await n.portalProtocol.contentLookup(keyEncoded, contentId)
 
   if updatesResult.isNone():
       warn "Failed fetching updates network", contentKey = keyEncoded
@@ -94,7 +96,7 @@ proc getLightClientUpdatesByRange*(
   let
     updates = updatesResult.unsafeGet()
     decodingResult = decodeLightClientUpdatesByRange(
-      l.forkDigests, updates.content)
+      n.forkDigests, updates.content)
 
   if decodingResult.isErr:
     return Opt.none(ForkedLightClientUpdateList)
@@ -104,12 +106,12 @@ proc getLightClientUpdatesByRange*(
     return Opt.some(decodingResult.get())
 
 proc getUpdate(
-    l: LightClientNetwork, ck: ContentKey):
+    n: LightClientNetwork, ck: ContentKey):
     Future[results.Opt[seq[byte]]] {.async.} =
   let
     keyEncoded = encode(ck)
     contentID = toContentId(keyEncoded)
-    updateLookup = await l.portalProtocol.contentLookup(keyEncoded, contentId)
+    updateLookup = await n.portalProtocol.contentLookup(keyEncoded, contentId)
 
   if updateLookup.isNone():
     warn "Failed fetching update from the network", contentKey = keyEncoded
@@ -122,14 +124,14 @@ proc getUpdate(
 # are implemented in naive way as finding first peer with any of those updates
 # and treating it as latest. This will probably need to get improved.
 proc getLightClientFinalityUpdate*(
-    l: LightClientNetwork,
+    n: LightClientNetwork,
     currentFinalSlot: uint64,
     currentOptimisticSlot: uint64
   ): Future[results.Opt[ForkedLightClientFinalityUpdate]] {.async.} =
 
   let
     ck = finalityUpdateContentKey(currentFinalSlot, currentOptimisticSlot)
-    lookupResult = await l.getUpdate(ck)
+    lookupResult = await n.getUpdate(ck)
 
   if lookupResult.isErr:
     return Opt.none(ForkedLightClientFinalityUpdate)
@@ -137,7 +139,7 @@ proc getLightClientFinalityUpdate*(
   let
     finalityUpdate = lookupResult.get()
     decodingResult = decodeLightClientFinalityUpdateForked(
-      l.forkDigests, finalityUpdate)
+      n.forkDigests, finalityUpdate)
 
   if decodingResult.isErr:
     return Opt.none(ForkedLightClientFinalityUpdate)
@@ -145,21 +147,21 @@ proc getLightClientFinalityUpdate*(
     return Opt.some(decodingResult.get())
 
 proc getLightClientOptimisticUpdate*(
-    l: LightClientNetwork,
+    n: LightClientNetwork,
     currentOptimisticSlot: uint64
   ): Future[results.Opt[ForkedLightClientOptimisticUpdate]] {.async.} =
 
   let
     ck = optimisticUpdateContentKey(currentOptimisticSlot)
-    lookupResult = await l.getUpdate(ck)
+    lookupResult = await n.getUpdate(ck)
 
   if lookupResult.isErr:
     return Opt.none(ForkedLightClientOptimisticUpdate)
 
   let
-    optimimsticUpdate = lookupResult.get()
+    optimisticUpdate = lookupResult.get()
     decodingResult = decodeLightClientOptimisticUpdateForked(
-      l.forkDigests, optimimsticUpdate)
+      n.forkDigests, optimisticUpdate)
 
   if decodingResult.isErr:
     return Opt.none(ForkedLightClientOptimisticUpdate)
@@ -194,13 +196,63 @@ proc new*(
     forkDigests: forkDigests
   )
 
-# TODO: this should be probably supplied by upper layer i.e Light client which uses
-# light client network as data provider as only it has all necessary context to
-# validate data
 proc validateContent(
     n: LightClientNetwork, content: seq[byte], contentKey: ByteList):
     Future[bool] {.async.} =
-  return true
+  let key = contentKey.decode().valueOr:
+    return false
+
+  case key.contentType:
+  of lightClientBootstrap:
+    let decodingResult = decodeLightClientBootstrapForked(
+      n.forkDigests, content)
+    if decodingResult.isOk:
+      # TODO:
+      # Currently only verifying if the content can be decoded.
+      # Later on we need to either provide a list of acceptable bootstraps (not
+      # really scalable and requires quite some configuration) or find some
+      # way to proof these.
+      return true
+    else:
+      return false
+
+  of lightClientUpdate:
+    let decodingResult = decodeLightClientUpdatesByRange(
+      n.forkDigests, content)
+    if decodingResult.isOk:
+      # TODO:
+      # Currently only verifying if the content can be decoded.
+      # Eventually only new updates that can be verified because the local
+      # node is synced should be accepted.
+      return true
+    else:
+      return false
+
+  of lightClientFinalityUpdate:
+    let decodingResult = decodeLightClientFinalityUpdateForked(
+      n.forkDigests, content)
+    if decodingResult.isOk:
+      let res = n.processor[].processLightClientFinalityUpdate(
+        MsgSource.gossip, decodingResult.get())
+      if res.isErr():
+        return false
+      else:
+        return true
+    else:
+      return false
+
+  of lightClientOptimisticUpdate:
+    let decodingResult = decodeLightClientOptimisticUpdateForked(
+      n.forkDigests, content)
+    if decodingResult.isOk:
+      let res = n.processor[].processLightClientOptimisticUpdate(
+        MsgSource.gossip, decodingResult.get())
+      if res.isErr():
+        return false
+      else:
+        return true
+    else:
+      return false
 
 proc validateContent(
     n: LightClientNetwork,

@@ -13,7 +13,8 @@ import
   beacon_chain/gossip_processing/light_client_processor,
   beacon_chain/spec/datatypes/altair,
   beacon_chain/beacon_clock,
-  "."/[beacon_light_client_network, beacon_light_client_manager]
+  "."/[beacon_light_client_network, beacon_light_client_manager,
+    beacon_light_client_init_loader]
 
 export
   LightClientFinalizationMode,
@@ -30,9 +31,9 @@ type
     network*: LightClientNetwork
     cfg: RuntimeConfig
     forkDigests: ref ForkDigests
-    getBeaconTime: GetBeaconTimeFn
+    getBeaconTime*: GetBeaconTimeFn
     store: ref ForkedLightClientStore
-    processor: ref LightClientProcessor
+    processor*: ref LightClientProcessor
     manager: LightClientManager
     onFinalizedHeader*, onOptimisticHeader*: LightClientHeaderCallback
     trustedBlockRoot*: Option[Eth2Digest]
@@ -148,19 +149,20 @@ proc new*(
     T: type LightClient,
     network: LightClientNetwork,
     rng: ref HmacDrbgContext,
-    cfg: RuntimeConfig,
-    forkDigests: ref ForkDigests,
-    getBeaconTime: GetBeaconTimeFn,
-    genesis_validators_root: Eth2Digest,
+    networkData: NetworkInitData,
     finalizationMode: LightClientFinalizationMode): T =
+  let
+    getBeaconTime = networkData.clock.getBeaconTimeFn()
+    forkDigests = newClone networkData.forks
+
   LightClient.new(
     network, rng,
     dumpEnabled = false, dumpDirInvalid = ".", dumpDirIncoming = ".",
-    cfg, forkDigests, getBeaconTime, genesis_validators_root, finalizationMode
-  )
+    networkData.metadata.cfg, forkDigests, getBeaconTime,
+    networkData.genesis_validators_root, finalizationMode)
 
 proc start*(lightClient: LightClient) =
-  notice "Starting light client",
+  notice "Starting beacon light client",
     trusted_block_root = lightClient.trustedBlockRoot
   lightClient.manager.start()
 

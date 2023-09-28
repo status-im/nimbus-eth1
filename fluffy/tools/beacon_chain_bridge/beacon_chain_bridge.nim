@@ -394,7 +394,8 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
           else:
             lastFinalityUpdateEpoch = epoch(res.get())
 
-        if wallPeriod > lastUpdatePeriod:
+        if wallPeriod > lastUpdatePeriod and
+            wallSlot > start_slot(wallEpoch):
           # TODO: Need to delay timing here also with one slot?
           let res = await gossipLCUpdates(
             restClient, portalRpcClient,

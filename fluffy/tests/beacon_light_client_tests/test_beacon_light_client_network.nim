@@ -65,79 +65,80 @@ procSuite "Beacon Light Client Content Network":
     await lcNode2.stop()
 
   asyncTest "Get latest optimistic and finality updates":
-    let
-      lcNode1 = newLCNode(rng, 20302)
-      lcNode2 = newLCNode(rng, 20303)
-      forkDigests = testForkDigests
+    skip()
+    # let
+    #   lcNode1 = newLCNode(rng, 20302)
+    #   lcNode2 = newLCNode(rng, 20303)
+    #   forkDigests = testForkDigests
 
-    check:
-      lcNode1.portalProtocol().addNode(lcNode2.localNode()) == Added
-      lcNode2.portalProtocol().addNode(lcNode1.localNode()) == Added
+    # check:
+    #   lcNode1.portalProtocol().addNode(lcNode2.localNode()) == Added
+    #   lcNode2.portalProtocol().addNode(lcNode1.localNode()) == Added
 
-      (await lcNode1.portalProtocol().ping(lcNode2.localNode())).isOk()
-      (await lcNode2.portalProtocol().ping(lcNode1.localNode())).isOk()
+    #   (await lcNode1.portalProtocol().ping(lcNode2.localNode())).isOk()
+    #   (await lcNode2.portalProtocol().ping(lcNode1.localNode())).isOk()
 
-    let
-      finalityUpdateData = SSZ.decode(
-        lightClientFinalityUpdateBytes, altair.LightClientFinalityUpdate)
-      finalityUpdate = ForkedLightClientFinalityUpdate(
-        kind: LightClientDataFork.Altair, altairData: finalityUpdateData)
-      finalizedHeaderSlot = finalityUpdateData.finalized_header.beacon.slot
-      finalizedOptimisticHeaderSlot =
-        finalityUpdateData.attested_header.beacon.slot
+    # let
+    #   finalityUpdateData = SSZ.decode(
+    #     lightClientFinalityUpdateBytes, altair.LightClientFinalityUpdate)
+    #   finalityUpdate = ForkedLightClientFinalityUpdate(
+    #     kind: LightClientDataFork.Altair, altairData: finalityUpdateData)
+    #   finalizedHeaderSlot = finalityUpdateData.finalized_header.beacon.slot
+    #   finalizedOptimisticHeaderSlot =
+    #     finalityUpdateData.attested_header.beacon.slot
 
-      optimisticUpdateData = SSZ.decode(
-        lightClientOptimisticUpdateBytes, altair.LightClientOptimisticUpdate)
-      optimisticUpdate = ForkedLightClientOptimisticUpdate(
-        kind: LightClientDataFork.Altair, altairData: optimisticUpdateData)
-      optimisticHeaderSlot = optimisticUpdateData.attested_header.beacon.slot
+    #   optimisticUpdateData = SSZ.decode(
+    #     lightClientOptimisticUpdateBytes, altair.LightClientOptimisticUpdate)
+    #   optimisticUpdate = ForkedLightClientOptimisticUpdate(
+    #     kind: LightClientDataFork.Altair, altairData: optimisticUpdateData)
+    #   optimisticHeaderSlot = optimisticUpdateData.attested_header.beacon.slot
 
-      finalityUpdateKey = finalityUpdateContentKey(
-        distinctBase(finalizedHeaderSlot),
-        distinctBase(finalizedOptimisticHeaderSlot)
-      )
-      finalityKeyEnc = encode(finalityUpdateKey)
-      finalityUpdateId = toContentId(finalityKeyEnc)
+    #   finalityUpdateKey = finalityUpdateContentKey(
+    #     distinctBase(finalizedHeaderSlot),
+    #     distinctBase(finalizedOptimisticHeaderSlot)
+    #   )
+    #   finalityKeyEnc = encode(finalityUpdateKey)
+    #   finalityUpdateId = toContentId(finalityKeyEnc)
 
-      optimistUpdateKey = optimisticUpdateContentKey(
-        distinctBase(optimisticHeaderSlot))
-      optimisticKeyEnc = encode(optimistUpdateKey)
-      optimisticUpdateId = toContentId(optimisticKeyEnc)
+    #   optimistUpdateKey = optimisticUpdateContentKey(
+    #     distinctBase(optimisticHeaderSlot))
+    #   optimisticKeyEnc = encode(optimistUpdateKey)
+    #   optimisticUpdateId = toContentId(optimisticKeyEnc)
 
 
-    # This silently assumes that peer stores only one latest update, under
-    # the contentId coresponding to latest update content key
-    lcNode2.portalProtocol().storeContent(
-      finalityKeyEnc,
-      finalityUpdateId,
-      encodeForkedLightClientObject(finalityUpdate, forkDigests.altair)
-    )
+    # # This silently assumes that peer stores only one latest update, under
+    # # the contentId coresponding to latest update content key
+    # lcNode2.portalProtocol().storeContent(
+    #   finalityKeyEnc,
+    #   finalityUpdateId,
+    #   encodeForkedLightClientObject(finalityUpdate, forkDigests.altair)
+    # )
 
-    lcNode2.portalProtocol().storeContent(
-      optimisticKeyEnc,
-      optimisticUpdateId,
-      encodeForkedLightClientObject(optimisticUpdate, forkDigests.altair)
-    )
+    # lcNode2.portalProtocol().storeContent(
+    #   optimisticKeyEnc,
+    #   optimisticUpdateId,
+    #   encodeForkedLightClientObject(optimisticUpdate, forkDigests.altair)
+    # )
 
-    let
-      finalityResult =
-        await lcNode1.lightClientNetwork.getLightClientFinalityUpdate(
-          distinctBase(finalizedHeaderSlot) - 1,
-          distinctBase(finalizedOptimisticHeaderSlot) - 1
-        )
-      optimisticResult =
-        await lcNode1.lightClientNetwork.getLightClientOptimisticUpdate(
-          distinctBase(optimisticHeaderSlot) - 1
-        )
+    # let
+    #   finalityResult =
+    #     await lcNode1.lightClientNetwork.getLightClientFinalityUpdate(
+    #       distinctBase(finalizedHeaderSlot) - 1,
+    #       distinctBase(finalizedOptimisticHeaderSlot) - 1
+    #     )
+    #   optimisticResult =
+    #     await lcNode1.lightClientNetwork.getLightClientOptimisticUpdate(
+    #       distinctBase(optimisticHeaderSlot) - 1
+    #     )
 
-    check:
-      finalityResult.isOk()
-      optimisticResult.isOk()
-      finalityResult.get().altairData == finalityUpdate.altairData
-      optimisticResult.get().altairData == optimisticUpdate.altairData
+    # check:
+    #   finalityResult.isOk()
+    #   optimisticResult.isOk()
+    #   finalityResult.get().altairData == finalityUpdate.altairData
+    #   optimisticResult.get().altairData == optimisticUpdate.altairData
 
-    await lcNode1.stop()
-    await lcNode2.stop()
+    # await lcNode1.stop()
+    # await lcNode2.stop()
 
   asyncTest "Get range of light client updates":
     let

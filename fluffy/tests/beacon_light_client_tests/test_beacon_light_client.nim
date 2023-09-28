@@ -13,10 +13,9 @@ import
   beacon_chain/spec/forks,
   beacon_chain/spec/datatypes/altair,
   beacon_chain/spec/helpers,
-  beacon_chain/beacon_clock,
-  beacon_chain/conf,
   ../../network/wire/[portal_protocol, portal_stream],
-  ../../network/beacon_light_client/beacon_light_client,
+  ../../network/beacon_light_client/[beacon_light_client,
+    beacon_light_client_init_loader],
   "."/[light_client_test_data, beacon_light_client_test_helpers]
 
 procSuite "Portal Beacon Light Client":
@@ -33,38 +32,14 @@ procSuite "Portal Beacon Light Client":
           raiseAssert(exc.msg)
     )
 
-  proc loadMainnetData(): Eth2NetworkMetadata =
-    try:
-      return loadEth2Network(some("mainnet"))
-    except CatchableError as exc:
-      raiseAssert(exc.msg)
-
   asyncTest "Start and retrieve bootstrap":
     let
       finalizedHeaders = newAsyncQueue[ForkedLightClientHeader]()
       optimisticHeaders = newAsyncQueue[ForkedLightClientHeader]()
       # Test data is retrieved from mainnet
-      metadata = loadMainnetData()
-      genesisState =
-        try:
-          template genesisData(): auto = metadata.genesis.bakedBytes
-          newClone(readSszForkedHashedBeaconState(
-            metadata.cfg, genesisData.toOpenArray(genesisData.low, genesisData.high)))
-        except CatchableError as err:
-          raiseAssert "Invalid baked-in state: " & err.msg
-
-      beaconClock = BeaconClock.init(getStateField(genesisState[], genesis_time))
-
-      # TODO: Should probably mock somehow passing time.
-      getBeaconTime = beaconClock.getBeaconTimeFn()
-
-      genesis_validators_root =
-        getStateField(genesisState[], genesis_validators_root)
-
-      forkDigests = newClone ForkDigests.init(metadata.cfg, genesis_validators_root)
-
-      lcNode1 = newLCNode(rng, 20302, forkDigests[])
-      lcNode2 = newLCNode(rng, 20303, forkDigests[])
+      networkData = loadNetworkData("mainnet")
+      lcNode1 = newLCNode(rng, 20302, networkData.forks)
+      lcNode2 = newLCNode(rng, 20303, networkData.forks)
       altairData = SSZ.decode(bootstrapBytes, altair.LightClientBootstrap)
       bootstrap = ForkedLightClientBootstrap(
         kind: LightClientDataFork.Altair, altairData: altairData)
@@ -92,18 +67,12 @@ procSuite "Portal Beacon Light Client":
     lcNode2.portalProtocol().storeContent(
       bootstrapContentKeyEncoded,
       bootstrapContentId,
-      encodeForkedLightClientObject(bootstrap, forkDigests.altair)
+      encodeForkedLightClientObject(bootstrap, networkData.forks.altair)
     )
 
     let lc = LightClient.new(
-      lcNode1.lightClientNetwork,
-      rng,
-      metadata.cfg,
-      forkDigests,
-      getBeaconTime,
-      genesis_validators_root,
-      LightClientFinalizationMode.Optimistic
-    )
+      lcNode1.lightClientNetwork, rng, networkData,
+      LightClientFinalizationMode.Optimistic)
 
     lc.onFinalizedHeader = headerCallback(finalizedHeaders)
     lc.onOptimisticHeader = headerCallback(optimisticHeaders)
@@ -113,7 +82,7 @@ procSuite "Portal Beacon Light Client":
     # bootstrap for given trustedBlockRoot
     lc.start()
 
-    # Wait untill the beacon light client retrieves the bootstrap. Upon receving
+    # Wait until the beacon light client retrieves the bootstrap. Upon receiving
     # the bootstrap both onFinalizedHeader and onOptimisticHeader callbacks
     # will be called.
     let

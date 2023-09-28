@@ -324,9 +324,6 @@ proc loop(self: LightClientManager) {.async.} =
         optimistic = self.getOptimisticPeriod(),
         isNextSyncCommitteeKnown = self.isNextSyncCommitteeKnown())
 
-      finalizedSlot = self.getFinalizedSlot()
-      optimisticSlot = self.getOptimisticSlot()
-
       didProgress =
         case syncTask.kind
         of LcSyncKind.UpdatesByRange:
@@ -334,11 +331,19 @@ proc loop(self: LightClientManager) {.async.} =
           await self.query(UpdatesByRange,
             (startPeriod: syncTask.startPeriod, count: syncTask.count))
         of LcSyncKind.FinalityUpdate:
+          let
+            # TODO: This is tricky. The optimistic slot kinda depends on when
+            # the request for the finality update is send?
+            # How to resolve? Don't use the optimistic slot in the content key
+            # to begin with, does it add anything?
+            optimisticSlot = wallTime.slotOrZero() - 1
+            finalizedSlot = start_slot(epoch(wallTime.slotOrZero()) - 2)
           await self.query(FinalityUpdate, SlotInfo(
             finalizedSlot: finalizedSlot,
             optimisticSlot: optimisticSlot
           ))
         of LcSyncKind.OptimisticUpdate:
+          let optimisticSlot = wallTime.slotOrZero() - 1
           await self.query(OptimisticUpdate, optimisticSlot)
 
     nextSyncTaskTime = wallTime + self.rng.nextLcSyncTaskDelay(

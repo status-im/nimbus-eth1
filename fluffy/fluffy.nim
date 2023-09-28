@@ -34,69 +34,21 @@ import
 
 chronicles.formatIt(IoErrorCode): $it
 
-proc initBeaconLightClient(
-      network: LightClientNetwork, networkData: NetworkInitData,
-      trustedBlockRoot: Option[Eth2Digest]): LightClient =
-  let
-    getBeaconTime = networkData.clock.getBeaconTimeFn()
+# Application callbacks used when new finalized header or optimistic header is
+# available.
+proc onFinalizedHeader(
+    lightClient: LightClient, finalizedHeader: ForkedLightClientHeader) =
+  withForkyHeader(finalizedHeader):
+    when lcDataFork > LightClientDataFork.None:
+      info "New LC finalized header",
+        finalized_header = shortLog(forkyHeader)
 
-    refDigests = newClone networkData.forks
-
-    lc = LightClient.new(
-      network,
-      network.portalProtocol.baseProtocol.rng,
-      networkData.metadata.cfg,
-      refDigests,
-      getBeaconTime,
-      networkData.genesis_validators_root,
-      LightClientFinalizationMode.Optimistic
-    )
-
-  # TODO: For now just log new headers. Ultimately we should also use callbacks
-  # for each lc object to save them to db and offer them to the network.
-  # TODO-2: The above statement sounds that this work should really be done at a
-  # later lower, and these callbacks are rather for use for the "application".
-  proc onFinalizedHeader(
-      lightClient: LightClient, finalizedHeader: ForkedLightClientHeader) =
-    withForkyHeader(finalizedHeader):
-      when lcDataFork > LightClientDataFork.None:
-        info "New LC finalized header",
-          finalized_header = shortLog(forkyHeader)
-
-  proc onOptimisticHeader(
-      lightClient: LightClient, optimisticHeader: ForkedLightClientHeader) =
-    withForkyHeader(optimisticHeader):
-      when lcDataFork > LightClientDataFork.None:
-        info "New LC optimistic header",
-          optimistic_header = shortLog(forkyHeader)
-
-  lc.onFinalizedHeader = onFinalizedHeader
-  lc.onOptimisticHeader = onOptimisticHeader
-  lc.trustedBlockRoot = trustedBlockRoot
-
-  # proc onSecond(time: Moment) =
-  #   let wallSlot = getBeaconTime().slotOrZero()
-  #   # TODO this is a place to enable/disable gossip based on the current status
-  #   # of light client
-  #   # lc.updateGossipStatus(wallSlot + 1)
-
-  # proc runOnSecondLoop() {.async.} =
-  #   let sleepTime = chronos.seconds(1)
-  #   while true:
-  #     let start = chronos.now(chronos.Moment)
-  #     await chronos.sleepAsync(sleepTime)
-  #     let afterSleep = chronos.now(chronos.Moment)
-  #     let sleepTime = afterSleep - start
-  #     onSecond(start)
-  #     let finished = chronos.now(chronos.Moment)
-  #     let processingTime = finished - afterSleep
-  #     trace "onSecond task completed", sleepTime, processingTime
-
-  # onSecond(Moment.now())
-
-  # asyncSpawn runOnSecondLoop()
-
-  lc
+proc onOptimisticHeader(
+    lightClient: LightClient, optimisticHeader: ForkedLightClientHeader) =
+  withForkyHeader(optimisticHeader):
+    when lcDataFork > LightClientDataFork.None:
+      info "New LC optimistic header",
+        optimistic_header = shortLog(forkyHeader)
 
 proc run(config: PortalConf) {.raises: [CatchableError].} =
   setupLogging(config.logLevel, config.logStdout)
@@ -176,7 +128,8 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
   # the selected `Radius`.
   let
     db = ContentDB.new(config.dataDir / "db" / "contentdb_" &
-      d.localNode.id.toBytesBE().toOpenArray(0, 8).toHex(), maxSize = config.storageSize)
+      d.localNode.id.toBytesBE().toOpenArray(0, 8).toHex(),
+      maxSize = config.storageSize)
 
     portalConfig = PortalProtocolConfig.init(
       config.tableIpLimit,
@@ -218,10 +171,10 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
       # Eventually this should be always-on functionality.
       if config.trustedBlockRoot.isSome():
         let
-          # Fluffy works only over mainnet data currently
+          # Portal works only over mainnet data currently
           networkData = loadNetworkData("mainnet")
           beaconLightClientDb = LightClientDb.new(
-            config.dataDir / "lightClientDb")
+            config.dataDir / "db" / "beacon_lc_db")
           lightClientNetwork = LightClientNetwork.new(
             d,
             beaconLightClientDb,
@@ -229,8 +182,20 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
             networkData.forks,
             bootstrapRecords = bootstrapRecords)
 
-        Opt.some(initBeaconLightClient(
-          lightClientNetwork, networkData, config.trustedBlockRoot))
+        let lc = LightClient.new(
+          lightClientNetwork, rng, networkData,
+          LightClientFinalizationMode.Optimistic)
+
+        lc.onFinalizedHeader = onFinalizedHeader
+        lc.onOptimisticHeader = onOptimisticHeader
+        lc.trustedBlockRoot = config.trustedBlockRoot
+
+        # TODO:
+        # Quite dirty. Use register validate callbacks instead. Or, revisit
+        # the object relationships regarding the beacon light client.
+        lightClientNetwork.processor = lc.processor
+
+        Opt.some(lc)
       else:
         Opt.none(LightClient)
 
@@ -266,6 +231,28 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
     let lc = beaconLightClient.get()
     lc.network.start()
     lc.start()
+
+    proc onSecond(time: Moment) =
+      let wallSlot = lc.getBeaconTime().slotOrZero()
+      # TODO:
+      # Figure out what to do with this one.
+      # lc.updateGossipStatus(wallSlot + 1)
+
+    proc runOnSecondLoop() {.async.} =
+      let sleepTime = chronos.seconds(1)
+      while true:
+        let start = chronos.now(chronos.Moment)
+        await chronos.sleepAsync(sleepTime)
+        let afterSleep = chronos.now(chronos.Moment)
+        let sleepTime = afterSleep - start
+        onSecond(start)
+        let finished = chronos.now(chronos.Moment)
+        let processingTime = finished - afterSleep
+        trace "onSecond task completed", sleepTime, processingTime
+
+    onSecond(Moment.now())
+
+    asyncSpawn runOnSecondLoop()
 
   ## Starting the JSON-RPC APIs
   if config.rpcEnabled:
