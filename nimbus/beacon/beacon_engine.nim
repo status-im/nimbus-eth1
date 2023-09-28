@@ -24,7 +24,7 @@ export
 type
   BeaconEngineRef* = ref object
     txPool: TxPoolRef
-    merge : MergeTrackerRef
+    merge : MergeTracker
     queue : PayloadQueue
     chain : ChainRef
 
@@ -56,7 +56,7 @@ proc new*(_: type BeaconEngineRef,
           chain: ChainRef): BeaconEngineRef =
   BeaconEngineRef(
     txPool: txPool,
-    merge : MergeTrackerRef.new(txPool.com.db),
+    merge : MergeTracker.init(txPool.com.db),
     queue : PayloadQueue(),
     chain : chain,
   )
