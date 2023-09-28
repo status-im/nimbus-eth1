@@ -143,18 +143,36 @@ proc setupTally*(ctx: BeaconCtxRef) =
   for x in skel.subchains:
     discard ctx.pool.mask.reduce(x.tail, x.head)
     discard ctx.pool.pulled.merge(x.tail, x.head)
-  ctx.pool.tallyOk = true
 
 proc mergeTally*(ctx: BeaconCtxRef, least: uint64, last: uint64) =
   discard ctx.pool.mask.merge(least, last)
-  ctx.pool.tallyOk = true
 
 proc reduceTally*(ctx: BeaconCtxRef, least: uint64, last: uint64) =
   discard ctx.pool.mask.reduce(least, last)
   discard ctx.pool.pulled.merge(least, last)
 
-proc downloaded*(ctx: BeaconCtxRef, least: uint64, last: uint64): bool =
-  ctx.pool.pulled.covered(least, last) > 0'u64
+proc downloaded*(ctx: BeaconCtxRef, head: uint64): bool =
+  ctx.pool.pulled.covered(head, head) > 0'u64
+
+proc headTally(ctx: BeaconCtxRef, head: uint64) =
+  discard ctx.pool.pulled.merge(head, head)
+  let rc = ctx.pool.mask.le()
+  if rc.isSome:
+    let maxPt = rc.get().maxPt
+    if head > maxPt:
+      # new head
+      discard ctx.pool.mask.merge(maxPt+1, head-1)
+  else:
+    # initialize
+    discard ctx.pool.mask.merge(1'u64, head)
+  discard ctx.pool.mask.reduce(head, head)
+
+proc popFirst(x: var TargetQueue): BlockHeader =
+  # assume we already check len > 0
+  x.shift().get().data
+
+proc addLast(x: var TargetQueue, h: BlockHeader) =
+  discard x.prepend(h.blockHash, h)
 
 # ------------------------------------------------------------------------------
 # Synchronizer will produce jobs for workers
@@ -199,12 +217,9 @@ proc appendSyncTarget*(ctx: BeaconCtxRef, h: BlockHeader): Future[void] {.async.
 
   let number = h.u64
   ctx.pool.mode.incl bmAppendTarget
-  if not ctx.pool.tallyOk:
-    # The mask is not filled by initSync
-    ctx.mergeTally(1'u64, number)
 
-  if not ctx.downloaded(number, number):
-    ctx.reduceTally(number, number)
+  if not ctx.downloaded(number):
+    ctx.headTally(number)
     ctx.pool.target.addLast(h)
 
   ctx.pool.mode.excl bmAppendTarget

@@ -189,6 +189,13 @@ proc putBlocks*(sk: SkeletonRef, headers: openArray[BlockHeader]):
   if sk.len == 0:
     return err("no subchain set")
 
+  # best place to debug beacon downloader
+  when false:
+    var numbers: seq[uint64]
+    for header in headers:
+      numbers.add header.u64
+    debugEcho numbers
+
   for header in headers:
     let
       number = header.u64

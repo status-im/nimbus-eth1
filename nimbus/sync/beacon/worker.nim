@@ -34,8 +34,9 @@ const
 
 proc setup*(ctx: BeaconCtxRef): bool =
   ## Global set up
-  ctx.pool.mask = IntervalSetRef[uint64, uint64].init()
-  ctx.pool.pulled = IntervalSetRef[uint64, uint64].init()
+  ctx.pool.target.init()
+  ctx.pool.mask = HeaderInterval.init()
+  ctx.pool.pulled = HeaderInterval.init()
   ctx.pool.skeleton = SkeletonRef.new(ctx.chain)
   let res = ctx.pool.skeleton.open()
   if res.isErr:
@@ -106,7 +107,7 @@ proc runDaemon*(ctx: BeaconCtxRef) {.async.} =
   var sleepDuration = timer.milliseconds(300)
   if ctx.pool.jobs.len == 0 and ctx.pool.target.len == 0:
     sleepDuration = timer.seconds(5)
-    
+
   await sleepAsync sleepDuration
 
 

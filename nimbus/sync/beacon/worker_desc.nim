@@ -13,6 +13,7 @@
 import
   std/deques,
   stew/interval_set,
+  stew/keyed_queue,
   eth/p2p,
   chronos,
   ../sync_desc,
@@ -20,7 +21,8 @@ import
 
 export
   deques,
-  interval_set
+  interval_set,
+  keyed_queue
 
 type
   BeaconMode* = enum
@@ -67,17 +69,19 @@ type
     job*    : BeaconJob
     requeue*: seq[BeaconJob]
 
+  TargetQueue* = KeyedQueue[Hash256, BlockHeader]
+  HeaderInterval* = IntervalSetRef[uint64, uint64]
+
   BeaconCtxData* = object
     ## Globally shared data extension
-    rng*     : ref HmacDrbgContext            ## Random generator, pre-initialised
-    id*      : int                            ## Instance id, for debugging purpose
-    skeleton*: SkeletonRef                    ## Core algorithm, tracking both canonical and side chain
-    mode*    : set[BeaconMode]                ## Do one thing at a time
-    target*  : Deque[BlockHeader]             ## Sync target list
-    jobs*    : Deque[BeaconJob]               ## Each buddy can get a job from here
-    mask*    : IntervalSetRef[uint64, uint64] ## Skeleton gaps need to be downloaded
-    pulled*  : IntervalSetRef[uint64, uint64] ## Downloaded skeleton blocks
-    tallyOk* : bool
+    rng*     : ref HmacDrbgContext  ## Random generator, pre-initialised
+    id*      : int                  ## Instance id, for debugging purpose
+    skeleton*: SkeletonRef          ## Core algorithm, tracking both canonical and side chain
+    mode*    : set[BeaconMode]      ## Do one thing at a time
+    target*  : TargetQueue          ## Sync target list
+    jobs*    : Deque[BeaconJob]     ## Each buddy can get a job from here
+    mask*    : HeaderInterval       ## Skeleton gaps need to be downloaded
+    pulled*  : HeaderInterval       ## Downloaded skeleton blocks
 
   BeaconBuddyRef* = BuddyRef[BeaconCtxData,BeaconBuddyData]
     ## Extended worker peer descriptor
