@@ -12,7 +12,8 @@ import
   web3/ethtypes,
   web3/engine_api_types,
   eth/common/eth_types_rlp,
-  stew/byteutils
+  stew/byteutils,
+  ../utils/utils
 
 from web3/ethtypes as web3types import nil
 import eth/common/eth_types as common
@@ -55,6 +56,10 @@ proc `$`*(x: Web3Quantity): string =
 
 proc `$`*(x: Web3Address): string =
   distinctBase(x).toHex
+  
+proc short*(x: Web3Hash): string =
+  let z = common.Hash256(data: distinctBase x)
+  short(z)
 
 # ------------------------------------------------------------------------------
 # Web3 defaults

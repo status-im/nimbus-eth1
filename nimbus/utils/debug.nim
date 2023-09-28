@@ -14,7 +14,8 @@ import
   stew/byteutils,
   ../vm_state,
   ../vm_types,
-  ../db/accounts_cache
+  ../db/accounts_cache,
+  ./utils
 
 proc `$`(hash: Hash256): string =
   hash.data.toHex
@@ -143,3 +144,29 @@ proc debug*(tx: Transaction): string =
   result.add "V             : " & $tx.V              & "\n"
   result.add "R             : " & $tx.R              & "\n"
   result.add "S             : " & $tx.S              & "\n"
+
+proc debugSum*(h: BlockHeader): string =
+  result.add "txRoot         : " & $h.txRoot      & "\n"
+  result.add "ommersHash     : " & $h.ommersHash  & "\n"
+  if h.withdrawalsRoot.isSome:
+    result.add "withdrawalsRoot: " & $h.withdrawalsRoot.get() & "\n"
+  result.add "sumHash        : " & $sumHash(h)   & "\n"
+
+proc debugSum*(body: BlockBody): string =
+  let ommersHash = keccakHash(rlp.encode(body.uncles))
+  let txRoot = calcTxRoot(body.transactions)
+  let wdRoot = if body.withdrawals.isSome:
+                 calcWithdrawalsRoot(body.withdrawals.get)
+               else: EMPTY_ROOT_HASH
+  let numwd = if body.withdrawals.isSome:
+                $body.withdrawals.get().len
+              else:
+                "none"
+  result.add "txRoot     : " & $txRoot        & "\n"
+  result.add "ommersHash : " & $ommersHash    & "\n"
+  if body.withdrawals.isSome:
+    result.add "wdRoot     : " & $wdRoot      & "\n"
+  result.add "num tx     : " & $body.transactions.len & "\n"
+  result.add "num uncles : " & $body.uncles.len & "\n"
+  result.add "num wd     : " & numwd          & "\n"
+  result.add "sumHash    : " & $sumHash(body) & "\n"

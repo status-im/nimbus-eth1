@@ -16,6 +16,10 @@ type
     run*  : proc(spec: BaseSpec): bool
     spec* : BaseSpec
 
+const
+  DefaultTimeout* = 60 # seconds
+  DefaultSleep* = 1
+
 template testCond*(expr: untyped) =
   if not (expr):
     return false

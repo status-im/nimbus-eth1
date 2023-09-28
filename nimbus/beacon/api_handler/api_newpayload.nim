@@ -66,7 +66,7 @@ proc newPayload*(ben: BeaconEngineRef,
   # return a fake success.
   if db.getBlockHeader(blockHash, header):
     warn "Ignoring already known beacon payload",
-      number = header.blockNumber, hash = blockHash
+      number = header.blockNumber, hash = blockHash.short
     return validStatus(blockHash)
 
   # If the parent is missing, we - in theory - could trigger a sync, but that
@@ -94,8 +94,8 @@ proc newPayload*(ben: BeaconEngineRef,
     # a forkchoice update request.
     warn "Ignoring payload with missing parent",
       number = header.blockNumber,
-      hash   = blockHash,
-      parent = header.parentHash
+      hash   = blockHash.short,
+      parent = header.parentHash.short
     return acceptedStatus()
 
   # We have an existing parent, do some sanity checks to avoid the beacon client

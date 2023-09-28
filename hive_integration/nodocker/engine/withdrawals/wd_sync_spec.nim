@@ -15,10 +15,16 @@ type
     syncSteps*: int  # Sync block chunks that will be passed as head through FCUs to the syncing client
     syncShouldFail*: bool
     timeoutSeconds*: int
+    sleep*: int
 
 proc doSync(ws: SyncSpec, client: RpcClient, clMock: CLMocker): Future[bool] {.async.} =
-  let period = chronos.seconds(1)
+  if ws.sleep == 0:
+    ws.sleep = DefaultSleep
+  let period = chronos.seconds(ws.sleep)
   var loop = 0
+  if ws.timeoutSeconds == 0:
+    ws.timeoutSeconds = DefaultTimeout
+
   while loop < ws.timeoutSeconds:
     let res = client.newPayloadV2(clMock.latestExecutedPayload.V1V2)
     discard res
@@ -36,7 +42,7 @@ proc doSync(ws: SyncSpec, client: RpcClient, clMock: CLMocker): Future[bool] {.a
       error "Syncing client rejected valid chain"
 
     await sleepAsync(period)
-    inc loop
+    loop += ws.sleep
 
   return false
 

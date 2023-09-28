@@ -40,7 +40,7 @@ type
     hash: common.Hash256
     header: common.BlockHeader
 
-  PayloadQueue* = ref object
+  PayloadQueue* = object
     payloadQueue: SimpleQueue[MaxTrackedPayloads, PayloadItem]
     headerQueue: SimpleQueue[MaxTrackedHeaders, HeaderItem]
 

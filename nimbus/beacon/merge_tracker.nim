@@ -28,7 +28,7 @@ type
   # Merger is an internal help structure used to track the eth1/2
   # transition status. It's a common structure can be used in both full node
   # and light client.
-  MergeTrackerRef* = ref object
+  MergeTracker* = object
     db    : CoreDbRef
     status: TransitionStatus
 
@@ -51,8 +51,8 @@ proc readStatus(db: CoreDbRef): TransitionStatus =
 # Constructors
 # ------------------------------------------------------------------------------
 
-proc new*(_: type MergeTrackerRef, db: CoreDbRef): MergeTrackerRef =
-  MergeTrackerRef(
+proc init*(_: type MergeTracker, db: CoreDbRef): MergeTracker =
+  MergeTracker(
     db: db,
     status: db.readStatus()
   )
@@ -61,7 +61,7 @@ proc new*(_: type MergeTrackerRef, db: CoreDbRef): MergeTrackerRef =
 # Public functions, setters
 # ------------------------------------------------------------------------------
 
-proc reachTTD*(m: MergeTrackerRef) =
+proc reachTTD*(m: var MergeTracker) =
   ## ReachTTD is called whenever the first NewHead message received
   ## from the consensus-layer.
   if m.status.leftPoW:
@@ -72,7 +72,7 @@ proc reachTTD*(m: MergeTrackerRef) =
 
   info "Left PoW stage"
 
-proc finalizePoS*(m: MergeTrackerRef) =
+proc finalizePoS*(m: var MergeTracker) =
   ## FinalizePoS is called whenever the first FinalisedBlock message received
   ## from the consensus-layer.
 
@@ -88,10 +88,10 @@ proc finalizePoS*(m: MergeTrackerRef) =
 # Public functions, getters
 # ------------------------------------------------------------------------------
 
-func ttdReached*(m: MergeTrackerRef): bool =
+func ttdReached*(m: MergeTracker): bool =
   ## TTDReached reports whether the chain has left the PoW stage.
   m.status.leftPoW
 
-func posFinalized*(m: MergeTrackerRef): bool =
+func posFinalized*(m: MergeTracker): bool =
   ## PoSFinalized reports whether the chain has entered the PoS stage.
   m.status.enteredPoS

@@ -13,9 +13,13 @@
 import
   chronicles,
   chronos,
+  chronos/timer,
   eth/p2p,
   ".."/[protocol, sync_desc],
-  ./worker_desc
+  ./worker_desc,
+  ./skeleton_main,
+  ./skeleton_utils,
+  ./beacon_impl
 
 logScope:
   topics = "beacon-buddy"
@@ -24,41 +28,27 @@ const
   extraTraceMessages = false # or true
     ## Enabled additional logging noise
 
-  FirstPivotSeenTimeout = 3.minutes
-    ## Turn on relaxed pivot negotiation after some waiting time when there
-    ## was a `peer` seen but was rejected. This covers a rare event. Typically
-    ## useless peers do not appear ready for negotiation.
-
-  FirstPivotAcceptedTimeout = 50.seconds
-    ## Turn on relaxed pivot negotiation after some waiting time when there
-    ## was a `peer` accepted but no second one yet.
-
-# ------------------------------------------------------------------------------
-# Private helpers
-# ------------------------------------------------------------------------------
-
-proc pp(n: BlockNumber): string =
-  ## Dedicated pretty printer (`$` is defined elsewhere using `UInt256`)
-  if n == high(BlockNumber): "high" else:"#" & $n
-
-# ------------------------------------------------------------------------------
-# Private functions
-# ------------------------------------------------------------------------------
-
-
 # ------------------------------------------------------------------------------
 # Public start/stop and admin functions
 # ------------------------------------------------------------------------------
 
 proc setup*(ctx: BeaconCtxRef): bool =
   ## Global set up
-  #ctx.pool.pivot = BestPivotCtxRef.init(ctx.pool.rng)
+  ctx.pool.target.init()
+  ctx.pool.mask = HeaderInterval.init()
+  ctx.pool.pulled = HeaderInterval.init()
+  ctx.pool.skeleton = SkeletonRef.new(ctx.chain)
+  let res = ctx.pool.skeleton.open()
+  if res.isErr:
+    error "Cannot open beacon skeleton", msg=res.error
+    return false
 
+  ctx.pool.mode.incl bmResumeSync
   true
 
 proc release*(ctx: BeaconCtxRef) =
   ## Global clean up
-  #ctx.pool.pivot = nil
+  discard
 
 proc start*(buddy: BeaconBuddyRef): bool =
   ## Initialise worker peer
@@ -88,12 +78,37 @@ proc runDaemon*(ctx: BeaconCtxRef) {.async.} =
   ## `runSingle()`, or `runMulti()` functions.
   ##
 
-  debugEcho "RUNDAEMON: ", ctx.pool.id
-  ctx.daemon = false
+  debug "RUNDAEMON", id=ctx.pool.id
+
+  # Just wake up after long sleep (e.g. client terminated)
+  if bmResumeSync in ctx.pool.mode:
+    let ok = await ctx.resumeSync()
+    ctx.pool.mode.excl bmResumeSync
+
+  # We get order from engine API
+  if ctx.pool.target.len > 0:
+    await ctx.setSyncTarget()
+
+  # Distributing jobs of filling gaps to peers
+  let mask = ctx.pool.mask
+  for x in mask.decreasing:
+    ctx.fillBlocksGaps(x.minPt, x.maxPt)
+
+  # Tell the `runPool` to grab job for each peer
+  if ctx.pool.jobs.len > 0:
+    ctx.poolMode = true
+
+  # Rerun this function next iteration
+  # if there are more new sync target
+  ctx.daemon = ctx.pool.target.len > 0
 
   # Without waiting, this function repeats every 50ms (as set with the constant
   # `sync_sched.execLoopTimeElapsedMin`.) Larger waiting time cleans up logging.
-  await sleepAsync 300.milliseconds
+  var sleepDuration = timer.milliseconds(300)
+  if ctx.pool.jobs.len == 0 and ctx.pool.target.len == 0:
+    sleepDuration = timer.seconds(5)
+
+  await sleepAsync sleepDuration
 
 
 proc runSingle*(buddy: BeaconBuddyRef) {.async.} =
@@ -110,22 +125,25 @@ proc runSingle*(buddy: BeaconBuddyRef) {.async.} =
   ##
   let
     ctx = buddy.ctx
-    peer {.used.} = buddy.peer
 
-  debugEcho "RUNSINGLE: ", ctx.pool.id
+  debug "RUNSINGLE", id=ctx.pool.id
 
   if buddy.ctrl.stopped:
     when extraTraceMessages:
       trace "Single mode stopped", peer, pivotState=ctx.pool.pivotState
     return # done with this buddy
 
-  var napping = 2.seconds
+  var napping = timer.seconds(2)
   when extraTraceMessages:
     trace "Single mode end", peer, napping
 
   # Without waiting, this function repeats every 50ms (as set with the constant
   # `sync_sched.execLoopTimeElapsedMin`.)
   await sleepAsync napping
+
+  # request new jobs, if available
+  if ctx.pool.jobs.len == 0:
+    ctx.daemon = true
 
 
 proc runPool*(buddy: BeaconBuddyRef; last: bool; laps: int): bool =
@@ -147,9 +165,25 @@ proc runPool*(buddy: BeaconBuddyRef; last: bool; laps: int): bool =
   let
     ctx = buddy.ctx
 
-  debugEcho "RUNPOOL: ", ctx.pool.id
+  debug "RUNPOOL", id=ctx.pool.id
 
-  true # Stop after running once regardless of peer
+  # If a peer cannot finish it's job,
+  # we will put it back into circulation.
+  # A peer can also spawn more jobs.
+  if buddy.only.requeue.len > 0:
+    for job in buddy.only.requeue:
+      ctx.pool.jobs.addLast(job)
+    buddy.only.requeue.setLen(0)
+    buddy.only.job = nil
+
+  # Take distributed jobs for each peer
+  if ctx.pool.jobs.len > 0 and buddy.only.job.isNil:
+    buddy.only.job = ctx.pool.jobs.popFirst()
+    buddy.ctrl.multiOk = true
+
+  # If there is no more jobs, stop
+  ctx.pool.jobs.len == 0
+
 
 proc runMulti*(buddy: BeaconBuddyRef) {.async.} =
   ## This peer worker is invoked if the `buddy.ctrl.multiOk` flag is set
@@ -159,12 +193,22 @@ proc runMulti*(buddy: BeaconBuddyRef) {.async.} =
   let
     ctx = buddy.ctx
 
-  debugEcho "RUNMULTI: ", ctx.pool.id
+  debug "RUNMULTI", id=ctx.pool.id
+
+  # If each of peers get their job,
+  # execute it until failure or success
+  # It is also possible to spawn more jobs
+  if buddy.only.job.isNil.not:
+    await buddy.executeJob(buddy.only.job)
 
   # Update persistent database
   #while not buddy.ctrl.stopped:
     # Allow thread switch as `persistBlocks()` might be slow
-  await sleepAsync(10.milliseconds)
+  await sleepAsync timer.milliseconds(10)
+
+  # request new jobs, if available
+  if ctx.pool.jobs.len == 0:
+    ctx.daemon = true
 
 # ------------------------------------------------------------------------------
 # End

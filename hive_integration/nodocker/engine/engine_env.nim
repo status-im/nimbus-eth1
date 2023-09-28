@@ -121,7 +121,10 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
     sealer = SealingEngineRef.new(
               chain, ctx, conf.engineSigner,
               txPool, EngineStopped)
-    sync   = BeaconSyncRef.init(node, chain, ctx.rng, conf.maxPeers, id=conf.tcpPort.int)
+    sync   = if com.ttd().isSome:
+               BeaconSyncRef.init(node, chain, ctx.rng, conf.maxPeers, id=conf.tcpPort.int)
+             else:
+               BeaconSyncRef(nil)
     beaconEngine = BeaconEngineRef.new(txPool, chain)
 
   setupEthRpc(node, ctx, com, txPool, server)
@@ -140,7 +143,9 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
   let client = newRpcHttpClient()
   waitFor client.connect("127.0.0.1", conf.rpcPort, false)
 
-  sync.start()
+  if com.ttd().isSome:
+    sync.start()
+
   node.startListening()
 
   EngineEnv(
@@ -155,7 +160,8 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
 
 proc close*(env: EngineEnv) =
   waitFor env.node.closeWait()
-  env.sync.stop()
+  if not env.sync.isNil:
+    env.sync.stop()
   waitFor env.client.close()
   waitFor env.sealer.stop()
   waitFor env.server.closeWait()
