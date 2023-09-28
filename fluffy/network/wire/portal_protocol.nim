@@ -12,8 +12,8 @@
 
 import
   std/[sequtils, sets, algorithm],
-  stew/[results, byteutils, leb128, endians2], chronicles, chronos, nimcrypto/hash,
-  bearssl, ssz_serialization, metrics, faststreams,
+  stew/[results, byteutils, leb128, endians2], chronicles, chronos,
+  nimcrypto/hash, bearssl, ssz_serialization, metrics, faststreams,
   eth/rlp, eth/p2p/discoveryv5/[protocol, node, enr, routing_table, random2,
     nodes_verification, lru],
   ../../seed_db,
@@ -945,8 +945,8 @@ proc triggerPoke*(
   ## In order to properly test gossip mechanisms (e.g. in Portal Hive),
   ## we need the option to turn off the POKE functionality as it influences
   ## how data moves around the network.
-  if p.disablePoke:                                                                                                                       
-    return 
+  if p.disablePoke:
+    return
   ## Triggers asynchronous offer-accept interaction to provided nodes.
   ## Provided content should be in range of provided nodes.
   for node in nodes:

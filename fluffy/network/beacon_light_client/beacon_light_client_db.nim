@@ -155,11 +155,18 @@ proc createGetHandler*(db: LightClientDb): DbGetHandler =
         else:
           return ok(SSZ.encode(updates))
       elif ck.contentType == lightClientFinalityUpdate:
-        # TODO Return only when the update is better that requeste by contentKey
-        return db.get(bestFinalUpdateKey)
+        # TODO I:
+        # Current storage by contentId will not allow for easy pruning. Should
+        # probably store with extra Slot information column. Or perhaps just
+        # in a cache the begin with.
+        # TODO II:
+        # - Return only when the update is better than what is requested by
+        # contentKey. This is currently not possible as the contentKey does not
+        # include best update information.
+        return db.get(contentId)
       elif ck.contentType == lightClientOptimisticUpdate:
-        # TODO Return only when the update is better that requeste by contentKey
-        return db.get(bestOptimisticUpdateKey)
+        # TODO I & II of above applies here too.
+        return db.get(contentId)
       else:
         return db.get(contentId)
   )
@@ -193,9 +200,9 @@ proc createStoreHandler*(db: LightClientDb): DbStoreHandler =
         db.putLightClientUpdate(period, update.asSeq())
         inc period
     elif ck.contentType == lightClientFinalityUpdate:
-      db.put(bestFinalUpdateKey, content)
+      db.put(contentId, content)
     elif ck.contentType == lightClientOptimisticUpdate:
-      db.put(bestOptimisticUpdateKey, content)
+      db.put(contentId, content)
     else:
       db.put(contentId, content)
   )
