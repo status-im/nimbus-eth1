@@ -9,7 +9,6 @@ import
     constants,
     transaction,
     db/accounts_cache,
-    core/sealer,
     core/chain,
     core/tx_pool,
     rpc,
@@ -28,7 +27,6 @@ type
     com: CommonRef
     chainRef: ChainRef
     rpcServer: RpcHttpServer
-    sealingEngine: SealingEngineRef
     rpcClient*: RpcHttpClient
 
 const
@@ -63,10 +61,6 @@ proc setupELClient*(t: TestEnv, conf: ChainConfig, node: JsonNode) =
 
   let txPool  = TxPoolRef.new(t.com, engineSigner)
   t.rpcServer = newRpcHttpServer(["127.0.0.1:8545"])
-  t.sealingEngine = SealingEngineRef.new(
-    t.chainRef, t.ctx, engineSigner,
-    txPool, EngineStopped
-  )
 
   let beaconEngine = BeaconEngineRef.new(txPool, t.chainRef)
   setupEthRpc(t.ethNode, t.ctx, t.com, txPool, t.rpcServer)
@@ -79,5 +73,4 @@ proc setupELClient*(t: TestEnv, conf: ChainConfig, node: JsonNode) =
 
 proc stopELClient*(t: TestEnv) =
   waitFor t.rpcClient.close()
-  waitFor t.sealingEngine.stop()
   waitFor t.rpcServer.closeWait()

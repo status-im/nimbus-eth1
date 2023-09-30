@@ -193,7 +193,7 @@ proc execute*(ws: ReorgSpec, env: TestEnv): bool =
         # This block is part of both chains, simply forward it to the secondary client
         payload = env.clMock.latestPayloadBuilt
 
-      let r = sec.client.newPayload(payload, payload.version)
+      let r = sec.client.newPayload(payload)
       r.expectStatus(valid)
 
       let fcState = ForkchoiceStateV1(
@@ -304,7 +304,7 @@ proc execute*(ws: ReorgSpec, env: TestEnv): bool =
         hash=payload.blockHash.short,
         parentHash=payload.parentHash.short
 
-      let r = env.client.newPayload(payload, version)
+      let r = env.client.newPayload(payload)
       r.expectStatusEither(valid, accepted)
 
       let fcState = ForkchoiceStateV1(headBlockHash: payload.blockHash)

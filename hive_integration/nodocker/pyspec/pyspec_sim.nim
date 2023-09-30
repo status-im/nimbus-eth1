@@ -109,32 +109,6 @@ proc validatePostState(node: JsonNode, t: TestEnv): bool =
 
   return true
 
-proc collectBlobHashes(list: openArray[Web3Tx]): seq[Web3Hash] =
-  for w3tx in list:
-    let tx = ethTx(w3Tx)
-    for h in tx.versionedHashes:
-      result.add w3Hash(h)
-
-proc newPayload(client: RpcClient,
-                payload: ExecutionPayload,
-                beaconRoot: Option[common.Hash256]): Result[PayloadStatusV1, string] =
-  case payload.version
-  of Version.V1: return client.newPayloadV1(payload.V1)
-  of Version.V2: return client.newPayloadV2(payload.V2)
-  of Version.V3:
-    let versionedHashes = collectBlobHashes(payload.transactions)
-    return client.newPayloadV3(payload.V3,
-      versionedHashes,
-      w3Hash beaconRoot.get)
-
-proc forkchoiceUpdated(client: RpcClient, version: Version,
-          update: ForkchoiceStateV1):
-            Result[ForkchoiceUpdatedResponse, string] =
-  case version
-  of Version.V1: client.forkchoiceUpdatedV1(update)
-  of Version.V2: client.forkchoiceUpdatedV2(update)
-  of Version.V3: client.forkchoiceUpdatedV3(update)
-
 proc runTest(node: JsonNode, network: string): TestStatus =
   let conf = getChainConfig(network)
   var t = TestEnv(conf: makeTestConfig())

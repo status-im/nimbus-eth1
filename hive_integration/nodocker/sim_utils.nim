@@ -38,14 +38,14 @@ proc `$`*(stat: SimStat): string =
     for c in stat.failingCases:
       result.add "    - $1 \n" % [c]
 
-  result.add "ok: $1, skipped: $2, failed: $3" % [$stat.ok, $stat.skipped, $stat.failed]
+  result.add "  - ok: $1, skipped: $2, failed: $3" % [$stat.ok, $stat.skipped, $stat.failed]
 
 proc print*(stat: SimStat, dur: Duration, name: string) =
   var f = open(name & ".md", fmWrite)
   f.write("* " & name)
   f.write("\n")
-  f.write("  - " & $stat)
+  f.write($stat)
   f.write("\n")
-  f.write("  - " & dur.short)
+  f.write("  - Elapsed: " & dur.short)
   f.write("\n")
   f.close()
