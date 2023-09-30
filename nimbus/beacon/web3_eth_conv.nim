@@ -175,6 +175,9 @@ func w3Qty*(x: Option[uint64]): Option[Web3Quantity] =
   if x.isNone: none(Web3Quantity)
   else: some(Web3Quantity x.get)
 
+func w3Qty*(x: uint64): Web3Quantity =
+  Web3Quantity(x)
+
 func w3ExtraData*(x: common.Blob): Web3ExtraData =
   Web3ExtraData x
 

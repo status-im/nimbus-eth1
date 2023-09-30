@@ -114,17 +114,12 @@ proc txFeesCovered(xp: TxPoolRef; item: TxItemRef): bool =
       return false
   true
 
-import stew/byteutils
-import ../../../utils/debug
-
 proc txCostInBudget(xp: TxPoolRef; item: TxItemRef): bool =
   ## Check whether the worst case expense is covered by the price budget,
   let
     balance = xp.chain.getBalance(item.sender)
     gasCost = item.tx.gasCost
   if balance < gasCost:
-    debugEcho "nonce: ", item.tx.nonce, " ", balance, " ", gasCost, " ", item.sender.toHex
-    debugEcho debug(item.tx)
     debug "invalid tx: not enough cash for gas",
       available = balance,
       require = gasCost

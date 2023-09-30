@@ -434,6 +434,36 @@ proc broadcastLatestForkchoice(cl: CLMocker): bool =
 
   return true
 
+func w3Address(x: int): Web3Address =
+  var res: array[20, byte]
+  res[^1] = x.byte
+  Web3Address(res)
+
+proc makeNextWithdrawals(cl: CLMocker): seq[WithdrawalV1] =
+  var
+    withdrawalCount = 10
+    withdrawalIndex = 0'u64
+
+  if cl.latestPayloadBuilt.withdrawals.isSome:
+    let wds = cl.latestPayloadBuilt.withdrawals.get
+    for w in wds:
+      if w.index.uint64 > withdrawalIndex:
+        withdrawalIndex = w.index.uint64
+
+  var
+    withdrawals = newSeq[WithdrawalV1](withdrawalCount)
+
+  for i in 0..<withdrawalCount:
+    withdrawalIndex += 1
+    withdrawals[i] = WithdrawalV1(
+      index:          w3Qty withdrawalIndex,
+      validatorIndex: w3Qty i,
+      address:        w3Address i,
+      amount:         w3Qty 100'u64,
+    )
+
+  return withdrawals
+
 proc produceSingleBlock*(cl: CLMocker, cb: BlockProcessCallbacks): bool {.gcsafe.} =
   doAssert(cl.ttdReached)
 
@@ -444,7 +474,7 @@ proc produceSingleBlock*(cl: CLMocker, cb: BlockProcessCallbacks): bool {.gcsafe
   # Check if next withdrawals necessary, test can override this value on
   # `OnPayloadProducerSelected` callback
   if cl.nextWithdrawals.isNone:
-    var nw: seq[WithdrawalV1]
+    let nw = cl.makeNextWithdrawals()
     cl.setNextWithdrawals(some(nw))
 
   if cb.onPayloadProducerSelected != nil:
