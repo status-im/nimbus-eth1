@@ -52,6 +52,11 @@ type
     Option[PayloadAttributesV2] |
     Option[PayloadAttributesV3]
 
+  GetPayloadResponse* = object
+    executionPayload*: ExecutionPayload
+    blockValue*: Option[UInt256]
+    blobsBundle*: Option[BlobsBundleV1]
+
   Version* {.pure.} = enum
     V1
     V2
@@ -59,21 +64,27 @@ type
 
 func version*(payload: ExecutionPayload): Version =
   if payload.blobGasUsed.isSome and payload.excessBlobGas.isSome:
-    return Version.V3
-
-  if payload.withdrawals.isSome:
-    return Version.V2
-
-  Version.V1
+    Version.V3
+  elif payload.withdrawals.isSome:
+    Version.V2
+  else:
+    Version.V1
 
 func version*(attr: PayloadAttributes): Version =
   if attr.parentBeaconBlockRoot.isSome:
-    return Version.V3
+    Version.V3
+  elif attr.withdrawals.isSome:
+    Version.V2
+  else:
+    Version.V1
 
-  if attr.withdrawals.isSome:
-    return Version.V2
-
-  Version.V1
+func version*(res: GetPayloadResponse): Version =
+  if res.blobsBundle.isSome:
+    Version.V3
+  elif res.blockValue.isSome:
+    Version.V2
+  else:
+    Version.V1
 
 func V1V2*(attr: PayloadAttributes): PayloadAttributesV1OrV2 =
   PayloadAttributesV1OrV2(
@@ -106,6 +117,22 @@ func V3*(attr: PayloadAttributes): PayloadAttributesV3 =
     withdrawals: attr.withdrawals.get,
     parentBeaconBlockRoot: attr.parentBeaconBlockRoot.get
   )
+
+func V1*(attr: Option[PayloadAttributes]): Option[PayloadAttributesV1] =
+  if attr.isNone:
+    return none(PayloadAttributesV1)
+  some(attr.get.V1)
+
+when false:
+  func V2*(attr: Option[PayloadAttributes]): Option[PayloadAttributesV2] =
+    if attr.isNone:
+      return none(PayloadAttributesV2)
+    some(attr.get.V2)
+
+  func V3*(attr: Option[PayloadAttributes]): Option[PayloadAttributesV3] =
+    if attr.isNone:
+      return none(PayloadAttributesV3)
+    some(attr.get.V3)
 
 func payloadAttributes*(attr: PayloadAttributesV1): PayloadAttributes =
   PayloadAttributes(
@@ -307,4 +334,20 @@ func executionPayload*(p: ExecutionPayloadV1OrV2): ExecutionPayload =
     blockHash: p.blockHash,
     transactions: p.transactions,
     withdrawals: p.withdrawals
+  )
+
+func V1*(res: GetPayloadResponse): ExecutionPayloadV1 =
+  res.executionPayload.V1
+
+func V2*(res: GetPayloadResponse): GetPayloadV2Response =
+  GetPayloadV2Response(
+    executionPayload: res.executionPayload.V1V2,
+    blockValue: res.blockValue.get
+  )
+
+func V3*(res: GetPayloadResponse): GetPayloadV3Response =
+  GetPayloadV3Response(
+    executionPayload: res.executionPayload.V3,
+    blockValue: res.blockValue.get,
+    blobsBundle: res.blobsBundle.get
   )

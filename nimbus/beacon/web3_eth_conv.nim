@@ -56,7 +56,7 @@ proc `$`*(x: Web3Quantity): string =
 
 proc `$`*(x: Web3Address): string =
   distinctBase(x).toHex
-  
+
 proc short*(x: Web3Hash): string =
   let z = common.Hash256(data: distinctBase x)
   short(z)
@@ -167,6 +167,9 @@ func w3Qty*(x: common.EthTime): Web3Quantity =
 
 func w3Qty*(x: common.EthTime, y: int): Web3Quantity =
   Web3Quantity(x.toUnix + y.int64)
+
+func w3Qty*(x: Web3Quantity, y: int): Web3Quantity =
+  Web3Quantity(x.uint64 + y.uint64)
 
 func w3Qty*(x: Option[uint64]): Option[Web3Quantity] =
   if x.isNone: none(Web3Quantity)

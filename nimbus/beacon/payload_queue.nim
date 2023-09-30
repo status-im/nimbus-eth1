@@ -21,7 +21,7 @@ const
   # maxTrackedHeaders is the maximum number of executed payloads the execution
   # engine tracks before evicting old ones. Ideally we should only ever track
   # the latest one; but have a slight wiggle room for non-ideal conditions.
-  MaxTrackedHeaders = 10
+  MaxTrackedHeaders = 96
 
 type
   QueueItem[T] = object

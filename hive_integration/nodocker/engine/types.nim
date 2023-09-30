@@ -1,6 +1,7 @@
 import
   std/[options, typetraits, strutils],
   eth/common,
+  stew/byteutils,
   web3/ethtypes,
   web3/engine_api_types,
   ../../../nimbus/beacon/execution_types,
@@ -19,6 +20,7 @@ type
 const
   DefaultTimeout* = 60 # seconds
   DefaultSleep* = 1
+  prevRandaoContractAddr* = hexToByteArray[20]("0000000000000000000000000000000000000316")
 
 template testCond*(expr: untyped) =
   if not (expr):
@@ -84,6 +86,16 @@ template expectStatus*(res, cond: untyped) =
   let s = res.get()
   testCond s.status == PayloadExecutionStatus.cond:
     error "Unexpected newPayload status", expect=PayloadExecutionStatus.cond, get=s.status
+
+template expectStatusEither*(res, cond1, cond2: untyped) =
+  testCond res.isOk:
+    error "Unexpected newPayload error", msg=res.error
+  let s = res.get()
+  testCond s.status == PayloadExecutionStatus.cond1 or s.status == PayloadExecutionStatus.cond2:
+    error "Unexpected newPayload status",
+      expect1=PayloadExecutionStatus.cond1,
+      expect2=PayloadExecutionStatus.cond2,
+      get=s.status
 
 template expectWithdrawalsRoot*(res: untyped, h: common.BlockHeader, wdRoot: Option[common.Hash256]) =
   testCond res.isOk:

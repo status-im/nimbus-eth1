@@ -18,7 +18,6 @@ import
   ".."/[protocol, sync_desc],
   ./worker_desc,
   ./skeleton_main,
-  ./skeleton_utils,
   ./beacon_impl
 
 logScope:

@@ -3,7 +3,7 @@ import
   withdrawals/wd_block_value_spec,
   withdrawals/wd_max_init_code_spec,
   #withdrawals/wd_payload_body_spec,
-  #withdrawals/wd_reorg_spec,
+  withdrawals/wd_reorg_spec,
   withdrawals/wd_sync_spec,
   ./types,
   ./test_env
@@ -24,7 +24,72 @@ proc specExecute[T](ws: BaseSpec): bool =
 
 let wdTestList* = [
   #Re-Org tests
-  #[TestDesc(
+  TestDesc(
+    name: "Withdrawals Fork on Block 1 - 8 Block Re-Org, Sync",
+    about: "Tests a 8 block re-org using NewPayload. Re-org does not change withdrawals fork height",
+    run: specExecute[ReorgSpec],
+    spec: ReorgSpec(
+      slotsToSafe:      u256(32),
+      slotsToFinalized: u256(64),
+      timeoutSeconds:   300,
+      wdForkHeight: 1, # Genesis is Pre-Withdrawals
+      wdBlockCount: MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
+      wdPerBlock:   MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
+      reOrgBlockCount: 8,
+      reOrgViaSync:    true,
+  )),
+  TestDesc(
+    name: "Withdrawals Fork on Block 8 - 10 Block Re-Org Sync",
+    about: " Tests a 10 block re-org using sync",
+      # Re-org does not change withdrawals fork height, but changes
+      #  the payload at the height of the fork
+    run: specExecute[ReorgSpec],
+    spec: ReorgSpec(
+      slotsToSafe:      u256(32),
+      slotsToFinalized: u256(64),
+      timeoutSeconds:   300,
+      wdForkHeight: 8, # Genesis is Pre-Withdrawals
+      wdBlockCount: 8,
+      wdPerBlock:   MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
+      reOrgBlockCount: 10,
+      reOrgViaSync:    true,
+  )),
+  TestDesc(
+    name: "Withdrawals Fork on Canonical Block 8 / Side Block 7 - 10 Block Re-Org Sync",
+    about: "Tests a 10 block re-org using sync",
+      # Sidechain reaches withdrawals fork at a lower block height
+      # than the canonical chain
+    run: specExecute[ReorgSpec],
+    spec: ReorgSpec(
+      slotsToSafe:      u256(32),
+      slotsToFinalized: u256(64),
+      timeoutSeconds:   300,
+      wdForkHeight: 8, # Genesis is Pre-Withdrawals
+      wdBlockCount: 8,
+      wdPerBlock:   MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
+      reOrgBlockCount:         10,
+      reOrgViaSync:            true,
+      sidechaintimeIncrements: 2,
+  )),
+  TestDesc(
+    name: "Withdrawals Fork on Canonical Block 8 / Side Block 9 - 10 Block Re-Org Sync",
+    about: "Tests a 10 block re-org using sync",
+      # Sidechain reaches withdrawals fork at a higher block height
+      # than the canonical chain
+    run: specExecute[ReorgSpec],
+    spec: ReorgSpec(
+      slotsToSafe:      u256(32),
+      slotsToFinalized: u256(64),
+      timeoutSeconds:   300,
+      wdForkHeight: 8, # Genesis is Pre-Withdrawals
+      wdBlockCount: 8,
+      wdPerBlock:   MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
+      timeIncrements:        2,
+      reOrgBlockCount:         10,
+      reOrgViaSync:            true,
+      sidechaintimeIncrements: 1,
+  )),
+  TestDesc(
     name: "Withdrawals Fork on Block 1 - 1 Block Re-Org",
     about: "Tests a simple 1 block re-org",
     run: specExecute[ReorgSpec],
@@ -53,20 +118,6 @@ let wdTestList* = [
       reOrgViaSync:    false,
   )),
   TestDesc(
-    name: "Withdrawals Fork on Block 1 - 8 Block Re-Org, Sync",
-    about: "Tests a 8 block re-org using NewPayload. Re-org does not change withdrawals fork height",
-    run: specExecute[ReorgSpec],
-    spec: ReorgSpec(
-      slotsToSafe:      u256(32),
-      slotsToFinalized: u256(64),
-      timeoutSeconds:   300,
-      wdForkHeight: 1, # Genesis is Pre-Withdrawals
-      wdBlockCount: MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
-      wdPerBlock:   MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
-      reOrgBlockCount: 8,
-      reOrgViaSync:    true,
-  )),
-  TestDesc(
     name: "Withdrawals Fork on Block 8 - 10 Block Re-Org NewPayload",
     about: "Tests a 10 block re-org using NewPayload\n" &
         "Re-org does not change withdrawals fork height, but changes\n" &
@@ -83,22 +134,6 @@ let wdTestList* = [
       reOrgViaSync:    false,
   )),
   TestDesc(
-    name: "Withdrawals Fork on Block 8 - 10 Block Re-Org Sync",
-    about: " Tests a 10 block re-org using sync",
-      # Re-org does not change withdrawals fork height, but changes
-      #  the payload at the height of the fork
-    run: specExecute[ReorgSpec],
-    spec: ReorgSpec(
-      slotsToSafe:      u256(32),
-      slotsToFinalized: u256(64),
-      timeoutSeconds:   300,
-      wdForkHeight: 8, # Genesis is Pre-Withdrawals
-      wdBlockCount: 8,
-      wdPerBlock:   MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
-      reOrgBlockCount: 10,
-      reOrgViaSync:    true,
-  )),
-  TestDesc(
     name: "Withdrawals Fork on Canonical Block 8 / Side Block 7 - 10 Block Re-Org",
     about: "Tests a 10 block re-org using NewPayload",
       # Sidechain reaches withdrawals fork at a lower block height
@@ -113,23 +148,6 @@ let wdTestList* = [
       wdPerBlock:   MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
       reOrgBlockCount:         10,
       reOrgViaSync:            false,
-      sidechaintimeIncrements: 2,
-  )),
-  TestDesc(
-    name: "Withdrawals Fork on Canonical Block 8 / Side Block 7 - 10 Block Re-Org Sync",
-    about: "Tests a 10 block re-org using sync",
-      # Sidechain reaches withdrawals fork at a lower block height
-      # than the canonical chain
-    run: specExecute[ReorgSpec],
-    spec: ReorgSpec(
-      slotsToSafe:      u256(32),
-      slotsToFinalized: u256(64),
-      timeoutSeconds:   300,
-      wdForkHeight: 8, # Genesis is Pre-Withdrawals
-      wdBlockCount: 8,
-      wdPerBlock:   MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
-      reOrgBlockCount:         10,
-      reOrgViaSync:            true,
       sidechaintimeIncrements: 2,
   )),
   TestDesc(
@@ -150,24 +168,6 @@ let wdTestList* = [
       reOrgViaSync:            false,
       sidechaintimeIncrements: 1,
   )),
-  TestDesc(
-    name: "Withdrawals Fork on Canonical Block 8 / Side Block 9 - 10 Block Re-Org Sync",
-    about: "Tests a 10 block re-org using sync",
-      # Sidechain reaches withdrawals fork at a higher block height
-      # than the canonical chain
-    run: specExecute[ReorgSpec],
-    spec: ReorgSpec(
-      slotsToSafe:      u256(32),
-      slotsToFinalized: u256(64),
-      timeoutSeconds:   300,
-      wdForkHeight: 8, # Genesis is Pre-Withdrawals
-      wdBlockCount: 8,
-      wdPerBlock:   MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
-      timeIncrements:        2,
-      reOrgBlockCount:         10,
-      reOrgViaSync:            true,
-      sidechaintimeIncrements: 1,
-  )),]#
 
   # Sync Tests
   TestDesc(

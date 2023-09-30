@@ -1,11 +1,15 @@
 import
+  std/tables,
   stint,
   chronos,
   chronicles,
+  eth/common,
   ./wd_base_spec,
+  ./wd_history,
   ../test_env,
   ../engine_client,
-  ../types
+  ../types,
+  ../../../nimbus/beacon/web3_eth_conv
 
 # Withdrawals re-org spec:
 # Specifies a withdrawals test where the withdrawals re-org can happen
@@ -13,311 +17,315 @@ import
 # withdrawals block.
 type
   ReorgSpec* = ref object of WDBaseSpec
-    reOrgBlockCount*        : uint64 # How many blocks the re-org will replace, including the head
-    reOrgViaSync*           : bool   # Whether the client should fetch the sidechain by syncing from the secondary client
-    sidechainTimeIncrements*: uint64
+    # How many blocks the re-org will replace, including the head
+    reOrgBlockCount*        : int
+    # Whether the client should fetch the sidechain by syncing from the secondary client
+    reOrgViaSync*           : bool
+    sidechainTimeIncrements*: int
     slotsToSafe*            : UInt256
     slotsToFinalized*       : UInt256
     timeoutSeconds*         : int
-    
-#[
-func (ws *WithdrawalsReorgSpec) GetSidechainSplitHeight() uint64 {
-  if ws.ReOrgBlockCount > ws.getTotalPayloadCount() {
-    panic("invalid payload/re-org configuration")
 
-  return ws.getTotalPayloadCount() + 1 - ws.ReOrgBlockCount
+  Sidechain = ref object
+    startAccount: UInt256
+    nextIndex   : int
+    wdHistory   : WDHistory
+    sidechain   : Table[uint64, ExecutionPayload]
+    payloadId   : PayloadID
+    height      : uint64
+    attr        : Option[PayloadAttributes]
 
-func (ws *WithdrawalsReorgSpec) GetSidechainBlockTimeIncrements() uint64 {
-  if ws.SidechainTimeIncrements == 0 {
+  Canonical = ref object
+    startAccount: UInt256
+    nextIndex   : int
+
+proc getSidechainSplitHeight(ws: ReorgSpec): int =
+  doAssert(ws.reOrgBlockCount <= ws.getTotalPayloadCount())
+  return ws.getTotalPayloadCount() + 1 - ws.reOrgBlockCount
+
+proc getSidechainBlockTimeIncrements(ws: ReorgSpec): int=
+  if ws.sidechainTimeIncrements == 0:
     return ws.getBlockTimeIncrements()
+  ws.sidechainTimeIncrements
 
-  return ws.SidechainTimeIncrements
+proc getSidechainWdForkHeight(ws: ReorgSpec): int =
+  if ws.getSidechainBlockTimeIncrements() != ws.getBlockTimeIncrements():
+    # Block timestamp increments in both chains are different so need to
+    # calculate different heights, only if split happens before fork.
+    # We cannot split by having two different genesis blocks.
+    doAssert(ws.getSidechainSplitHeight() != 0, "invalid sidechain split height")
 
-func (ws *WithdrawalsReorgSpec) GetSidechainWithdrawalsForkHeight() uint64 {
-  if ws.getSidechainBlockTimeIncrements() != ws.getBlockTimeIncrements() {
-    # Block timestamp increments in both chains are different so need to calculate different heights, only if split happens before fork
-    if ws.getSidechainSplitHeight() == 0 {
-      # We cannot split by having two different genesis blocks.
-      panic("invalid sidechain split height")
-
-    if ws.getSidechainSplitHeight() <= ws.WithdrawalsForkHeight {
+    if ws.getSidechainSplitHeight() <= ws.wdForkHeight:
       # We need to calculate the height of the fork on the sidechain
-      sidechainSplitBlockTimestamp := ((ws.getSidechainSplitHeight() - 1) * ws.getBlockTimeIncrements())
-      remainingTime := (ws.getWithdrawalsGenesisTimeDelta() - sidechainSplitBlockTimestamp)
-      if remainingTime == 0 {
+      let sidechainSplitBlocktimestamp = (ws.getSidechainSplitHeight() - 1) * ws.getBlockTimeIncrements()
+      let remainingTime = ws.getWithdrawalsGenesisTimeDelta() - sidechainSplitBlocktimestamp
+      if remainingTime == 0 :
         return ws.getSidechainSplitHeight()
 
-      return ((remainingTime - 1) / ws.SidechainTimeIncrements) + ws.getSidechainSplitHeight()
+      return ((remainingTime - 1) div ws.sidechainTimeIncrements) + ws.getSidechainSplitHeight()
 
-  return ws.WithdrawalsForkHeight
-]#
+  return ws.wdForkHeight
 
-proc execute*(ws: ReorgSpec, t: TestEnv): bool =
-  testCond waitFor t.clMock.waitForTTD()
+proc execute*(ws: ReorgSpec, env: TestEnv): bool =
+  result = true
 
-  return true
-#[
+  testCond waitFor env.clMock.waitForTTD()
+
   # Spawn a secondary client which will produce the sidechain
-  secondaryEngine, err := hive_rpc.HiveRPCEngineStarter{}.StartClient(t.T, t.TestContext, t.Genesis, t.ClientParams, t.ClientFiles, t.Engine)
-  if err != nil {
-    error "Unable to spawn a secondary client: %v", t.TestName, err)
-  }
-  secondaryEngineTest := test.NewTestEngineClient(t, secondaryEngine)
-  # t.clMock.AddEngineClient(secondaryEngine)
+  let sec = env.addEngine(addToCL = false)
 
-  var (
-    canonicalStartAccount       = big.NewInt(0x1000)
-    canonicalNextIndex          = uint64(0)
-    sidechainStartAccount       = new(big.Int).SetBit(common.Big0, 160, 1)
-    sidechainNextIndex          = uint64(0)
-    sidechainwdHistory = make(wdHistory)
-    sidechain                   = make(map[uint64]*typ.ExecutableData)
-    sidechainPayloadId          *beacon.PayloadID
-  )
+  var
+    canonical = Canonical(
+      startAccount: u256(0x1000),
+      nextIndex   : 0,
+    )
+    sidechain = Sidechain(
+      startAccount: 1.u256 shl 160,
+      nextIndex   : 0,
+      wdHistory   : WDHistory(),
+      sidechain   : initTable[uint64, ExecutionPayload]()
+    )
 
   # Sidechain withdraws on the max account value range 0xffffffffffffffffffffffffffffffffffffffff
-  sidechainStartAccount.Sub(sidechainStartAccount, big.NewInt(int64(ws.getWithdrawableAccountCount())+1))
+  sidechain.startAccount -= u256(ws.getWithdrawableAccountCount()+1)
 
-  t.clMock.ProduceBlocks(int(ws.getPreWithdrawalsBlockCount()+ws.WithdrawalsBlockCount), clmock.BlockProcessCallbacks{
-    OnPayloadProducerSelected: proc(): bool =
-      t.clMock.NextWithdrawals = nil
+  let numBlocks = ws.getPreWithdrawalsBlockCount()+ws.wdBlockCount
+  let pbRes = env.clMock.produceBlocks(numBlocks, BlockProcessCallbacks(
+    onPayloadProducerSelected: proc(): bool =
+      env.clMock.nextWithdrawals = none(seq[WithdrawalV1])
 
-      if t.clMock.CurrentPayloadNumber >= ws.WithdrawalsForkHeight {
+      if env.clMock.currentPayloadNumber >= ws.wdForkHeight.uint64:
         # Prepare some withdrawals
-        t.clMock.NextWithdrawals, canonicalNextIndex = ws.GenerateWithdrawalsForBlock(canonicalNextIndex, canonicalStartAccount)
-        ws.wdHistory[t.clMock.CurrentPayloadNumber] = t.clMock.NextWithdrawals
-      }
+        let wfb = ws.generateWithdrawalsForBlock(canonical.nextIndex, canonical.startAccount)
+        env.clMock.nextWithdrawals = some(w3Withdrawals wfb.wds)
+        canonical.nextIndex = wfb.nextIndex
+        ws.wdHistory.put(env.clMock.currentPayloadNumber, wfb.wds)
 
-      if t.clMock.CurrentPayloadNumber >= ws.getSidechainSplitHeight() {
+      if env.clMock.currentPayloadNumber >= ws.getSidechainSplitHeight().uint64:
         # We have split
-        if t.clMock.CurrentPayloadNumber >= ws.getSidechainWithdrawalsForkHeight() {
+        if env.clMock.currentPayloadNumber >= ws.getSidechainWdForkHeight().uint64:
           # And we are past the withdrawals fork on the sidechain
-          sidechainwdHistory[t.clMock.CurrentPayloadNumber], sidechainNextIndex = ws.GenerateWithdrawalsForBlock(sidechainNextIndex, sidechainStartAccount)
-        } # else nothing to do
-      } else {
-        # We have not split
-        sidechainwdHistory[t.clMock.CurrentPayloadNumber] = t.clMock.NextWithdrawals
-        sidechainNextIndex = canonicalNextIndex
-      }
+          let wfb = ws.generateWithdrawalsForBlock(sidechain.nextIndex, sidechain.startAccount)
+          sidechain.wdHistory.put(env.clMock.currentPayloadNumber, wfb.wds)
+          sidechain.nextIndex = wfb.nextIndex
+      else:
+        if env.clMock.nextWithdrawals.isSome:
+          let wds = ethWithdrawals env.clMock.nextWithdrawals.get()
+          sidechain.wdHistory.put(env.clMock.currentPayloadNumber, wds)
+        sidechain.nextIndex = canonical.nextIndex
 
-    },
-    OnRequestNextPayload: proc(): bool =
+      return true
+    ,
+    onRequestNextPayload: proc(): bool =
       # Send transactions to be included in the payload
-      txs, err := helper.SendNextTransactions(
-        t.TestContext,
-        t.clMock.NextBlockProducer,
-        &helper.BaseTransactionCreator{
-          Recipient: &globals.PrevRandaoContractAddr,
-          Amount:    common.Big1,
-          Payload:   nil,
-          TxType:    t.TestTransactionType,
-          GasLimit:  75000,
-        },
-        ws.getTransactionCountPerPayload(),
+      let txs = env.makeTxs(
+        BaseTx(
+          recipient: some(prevRandaoContractAddr),
+          amount:    1.u256,
+          txType:    ws.txType,
+          gasLimit:  75000.GasInt,
+        ),
+        ws.getTransactionCountPerPayload()
       )
-      if err != nil {
-        error "Error trying to send transactions: %v", t.TestName, err)
-      }
+
+      testCond env.sendTxs(env.clMock.nextBlockProducer, txs):
+        error "Error trying to send transaction"
 
       # Error will be ignored here since the tx could have been already relayed
-      secondaryEngine.SendTransactions(t.TestContext, txs...)
+      discard env.sendTxs(sec, txs)
 
-      if t.clMock.CurrentPayloadNumber >= ws.getSidechainSplitHeight() {
+      if env.clMock.currentPayloadNumber >= ws.getSidechainSplitHeight().uint64:
         # Also request a payload from the sidechain
-        fcU := beacon.ForkchoiceStateV1{
-          HeadBlockHash: t.clMock.latestForkchoice.HeadBlockHash,
-        }
+        var fcState = ForkchoiceStateV1(
+          headBlockHash: env.clMock.latestForkchoice.headBlockHash,
+        )
 
-        if t.clMock.CurrentPayloadNumber > ws.getSidechainSplitHeight() {
-          if lastSidePayload, ok := sidechain[t.clMock.CurrentPayloadNumber-1]; !ok {
-            panic("sidechain payload not found")
-          } else {
-            fcU.HeadBlockHash = lastSidePayload.BlockHash
-          }
-        }
+        if env.clMock.currentPayloadNumber > ws.getSidechainSplitHeight().uint64:
+          let lastSidePayload = sidechain.sidechain[env.clMock.currentPayloadNumber-1]
+          fcState.headBlockHash = lastSidePayload.blockHash
 
-        var version int
-        pAttributes := typ.PayloadAttributes{
-          Random:                t.clMock.latestPayloadAttributes.Random,
-          SuggestedFeeRecipient: t.clMock.latestPayloadAttributes.SuggestedFeeRecipient,
-        }
-        if t.clMock.CurrentPayloadNumber > ws.getSidechainSplitHeight() {
-          pAttributes.Timestamp = sidechain[t.clMock.CurrentPayloadNumber-1].Timestamp + uint64(ws.getSidechainBlockTimeIncrements())
-        } else if t.clMock.CurrentPayloadNumber == ws.getSidechainSplitHeight() {
-          pAttributes.Timestamp = t.clMock.latestHeader.Time + uint64(ws.getSidechainBlockTimeIncrements())
-        } else {
-          pAttributes.Timestamp = t.clMock.latestPayloadAttributes.Timestamp
-        }
-        if t.clMock.CurrentPayloadNumber >= ws.getSidechainWithdrawalsForkHeight() {
+        var attr = PayloadAttributes(
+          prevRandao:            env.clMock.latestPayloadAttributes.prevRandao,
+          suggestedFeeRecipient: env.clMock.latestPayloadAttributes.suggestedFeeRecipient,
+        )
+
+        if env.clMock.currentPayloadNumber > ws.getSidechainSplitHeight().uint64:
+          attr.timestamp = w3Qty(sidechain.sidechain[env.clMock.currentPayloadNumber-1].timestamp, ws.getSidechainBlockTimeIncrements())
+        elif env.clMock.currentPayloadNumber == ws.getSidechainSplitHeight().uint64:
+          attr.timestamp = w3Qty(env.clMock.latestHeader.timestamp, ws.getSidechainBlockTimeIncrements())
+        else:
+          attr.timestamp = env.clMock.latestPayloadAttributes.timestamp
+
+        if env.clMock.currentPayloadNumber >= ws.getSidechainwdForkHeight().uint64:
           # Withdrawals
-          version = 2
-          pAttributes.Withdrawals = sidechainwdHistory[t.clMock.CurrentPayloadNumber]
-        } else {
-          # No withdrawals
-          version = 1
-        }
+          let rr = sidechain.wdHistory.get(env.clMock.currentPayloadNumber)
+          testCond rr.isOk:
+            error "sidechain wd", msg=rr.error
 
-        info "Requesting sidechain payload %d: %v", t.TestName, t.clMock.CurrentPayloadNumber, pAttributes)
+          attr.withdrawals = some(w3Withdrawals rr.get)
 
-        r := secondaryEngineTest.forkchoiceUpdated(&fcU, &pAttributes, version)
+        info "Requesting sidechain payload",
+          number=env.clMock.currentPayloadNumber
+
+        sidechain.attr = some(attr)
+        let r = sec.client.forkchoiceUpdated(fcState, attr)
         r.expectNoError()
-        r.expectPayloadStatus(test.Valid)
-        if r.Response.PayloadID == nil {
-          error "Unable to get a payload ID on the sidechain", t.TestName)
-        }
-        sidechainPayloadId = r.Response.PayloadID
-      }
-    },
-    OnGetPayload: proc(): bool =
-      var (
-        version int
-        payload *typ.ExecutableData
-      )
-      if t.clMock.CurrentPayloadNumber >= ws.getSidechainWithdrawalsForkHeight() {
-        version = 2
-      } else {
-        version = 1
-      }
-      if t.clMock.latestPayloadBuilt.Number >= ws.getSidechainSplitHeight() {
+        r.testFCU(valid)
+        testCond r.get().payloadID.isSome:
+          error "Unable to get a payload ID on the sidechain"
+        sidechain.payloadId = r.get().payloadID.get()
+
+      return true
+    ,
+    onGetPayload: proc(): bool =
+      var
+        payload: ExecutionPayload
+
+      if env.clMock.latestPayloadBuilt.blockNumber.uint64 >= ws.getSidechainSplitHeight().uint64:
         # This payload is built by the secondary client, hence need to manually fetch it here
-        r := secondaryEngineTest.getPayload(sidechainPayloadId, version)
+        doAssert(sidechain.attr.isSome)
+        let version = sidechain.attr.get().version
+        let r = sec.client.getPayload(sidechain.payloadId, version)
         r.expectNoError()
-        payload = &r.Payload
-        sidechain[payload.Number] = payload
-      } else {
+        payload = r.get().executionPayload
+        sidechain.sidechain[payload.blockNumber.uint64] = payload
+      else:
         # This block is part of both chains, simply forward it to the secondary client
-        payload = &t.clMock.latestPayloadBuilt
-      }
-      r := secondaryEngineTest.newPayload(payload, nil, nil, version)
-      r.expectStatus(test.Valid)
-      p := secondaryEngineTest.forkchoiceUpdated(
-        &beacon.ForkchoiceStateV1{
-          HeadBlockHash: payload.BlockHash,
-        },
-        nil,
-        version,
+        payload = env.clMock.latestPayloadBuilt
+
+      let r = sec.client.newPayload(payload, payload.version)
+      r.expectStatus(valid)
+
+      let fcState = ForkchoiceStateV1(
+        headBlockHash: payload.blockHash,
       )
-      p.expectPayloadStatus(test.Valid)
-    },
-  })
+      let p = sec.client.forkchoiceUpdated(payload.version, fcState)
+      p.testFCU(valid)
+      return true
+  ))
+  testCond pbRes
 
-  sidechainHeight := t.clMock.latestExecutedPayload.Number
+  sidechain.height = env.clMock.latestExecutedPayload.blockNumber.uint64
 
-  if ws.WithdrawalsForkHeight < ws.getSidechainWithdrawalsForkHeight() {
+  if ws.wdForkHeight < ws.getSidechainwdForkHeight():
     # This means the canonical chain forked before the sidechain.
     # Therefore we need to produce more sidechain payloads to reach
     # at least`ws.WithdrawalsBlockCount` withdrawals payloads produced on
     # the sidechain.
-    for i := uint64(0); i < ws.getSidechainWithdrawalsForkHeight()-ws.WithdrawalsForkHeight; i++ {
-      sidechainwdHistory[sidechainHeight+1], sidechainNextIndex = ws.GenerateWithdrawalsForBlock(sidechainNextIndex, sidechainStartAccount)
-      pAttributes := typ.PayloadAttributes{
-        Timestamp:             sidechain[sidechainHeight].Timestamp + ws.getSidechainBlockTimeIncrements(),
-        Random:                t.clMock.latestPayloadAttributes.Random,
-        SuggestedFeeRecipient: t.clMock.latestPayloadAttributes.SuggestedFeeRecipient,
-        Withdrawals:           sidechainwdHistory[sidechainHeight+1],
-      }
-      r := secondaryEngineTest.forkchoiceUpdatedV2(&beacon.ForkchoiceStateV1{
-        HeadBlockHash: sidechain[sidechainHeight].BlockHash,
-      }, &pAttributes)
-      r.expectPayloadStatus(test.Valid)
-      time.Sleep(time.Second)
-      p := secondaryEngineTest.getPayloadV2(r.Response.PayloadID)
+    let height = ws.getSidechainwdForkHeight()-ws.wdForkHeight
+    for i in 0..<height:
+      let
+        wfb = ws.generateWithdrawalsForBlock(sidechain.nextIndex, sidechain.startAccount)
+
+      sidechain.wdHistory.put(sidechain.height+1, wfb.wds)
+      sidechain.nextIndex = wfb.nextIndex
+
+      let wds = sidechain.wdHistory.get(sidechain.height+1).valueOr:
+        echo "get wd history error ", error
+        return false
+
+      let
+        attr = PayloadAttributes(
+          timestamp:             w3Qty(sidechain.sidechain[sidechain.height].timestamp, ws.getSidechainBlockTimeIncrements()),
+          prevRandao:            env.clMock.latestPayloadAttributes.prevRandao,
+          suggestedFeeRecipient: env.clMock.latestPayloadAttributes.suggestedFeeRecipient,
+          withdrawals:           some(w3Withdrawals wds),
+        )
+        fcState = ForkchoiceStateV1(
+          headBlockHash: sidechain.sidechain[sidechain.height].blockHash,
+        )
+
+      let r = sec.client.forkchoiceUpdatedV2(fcState, some(attr))
+      r.testFCU(valid)
+
+      let p = sec.client.getPayloadV2(r.get().payloadID.get)
       p.expectNoError()
-      s := secondaryEngineTest.newPayloadV2(&p.Payload)
-      s.expectStatus(test.Valid)
-      q := secondaryEngineTest.forkchoiceUpdatedV2(
-        &beacon.ForkchoiceStateV1{
-          HeadBlockHash: p.Payload.BlockHash,
-        },
-        nil,
-      )
-      q.expectPayloadStatus(test.Valid)
-      sidechainHeight++
-      sidechain[sidechainHeight] = &p.Payload
-    }
-  }
+
+      let z = p.get()
+      let s = sec.client.newPayloadV2(z.executionPayload)
+      s.expectStatus(valid)
+
+      let fs = ForkchoiceStateV1(headBlockHash: z.executionPayload.blockHash)
+
+      let q = sec.client.forkchoiceUpdatedV2(fs)
+      q.testFCU(valid)
+
+      inc sidechain.height
+      sidechain.sidechain[sidechain.height] = executionPayload(z.executionPayload)
 
   # Check the withdrawals on the latest
-  ws.wdHistory.VerifyWithdrawals(
-    sidechainHeight,
-    nil,
-    t.TestEngine,
-  )
+  let res = ws.wdHistory.verifyWithdrawals(sidechain.height, none(UInt256), env.client)
+  testCond res.isOk
 
-  if ws.ReOrgViaSync {
+  if ws.reOrgViaSync:
     # Send latest sidechain payload as NewPayload + FCU and wait for sync
-  loop:
-    for {
-      r := t.rpcClient.newPayloadV2(sidechain[sidechainHeight])
+    let
+      payload = sidechain.sidechain[sidechain.height]
+      sideHash = sidechain.sidechain[sidechain.height].blockHash
+      sleep = DefaultSleep
+      period = chronos.seconds(sleep)
+
+    var loop = 0
+    if ws.timeoutSeconds == 0:
+      ws.timeoutSeconds = DefaultTimeout
+
+    while loop < ws.timeoutSeconds:
+      let r = env.client.newPayloadV2(payload.V2)
       r.expectNoError()
-      p := t.rpcClient.forkchoiceUpdatedV2(
-        &beacon.ForkchoiceStateV1{
-          HeadBlockHash: sidechain[sidechainHeight].BlockHash,
-        },
-        nil,
-      )
+      let fcState = ForkchoiceStateV1(headBlockHash: sideHash)
+      let p = env.client.forkchoiceUpdatedV2(fcState)
       p.expectNoError()
-      if p.Response.PayloadStatus.Status == test.Invalid {
-        error "Primary client invalidated side chain", t.TestName)
-      }
-      select {
-      case <-t.TimeoutContext.Done():
-        error "Timeout waiting for sync", t.TestName)
-      case <-time.After(time.Second):
-        b := t.rpcClient.BlockByNumber(nil)
-        if b.Block.Hash() == sidechain[sidechainHeight].BlockHash {
-          # sync successful
-          break loop
-        }
-      }
-    }
-  } else {
+
+      let status = p.get().payloadStatus.status
+      if status == PayloadExecutionStatus.invalid:
+        error "Primary client invalidated side chain"
+        return false
+
+      var header: common.BlockHeader
+      let b = env.client.latestHeader(header)
+      testCond b.isOk
+      if header.blockHash == ethHash(sidehash):
+        # sync successful
+        break
+
+      waitFor sleepAsync(period)
+      loop += sleep
+  else:
     # Send all payloads one by one to the primary client
-    for payloadNumber := ws.getSidechainSplitHeight(); payloadNumber <= sidechainHeight; payloadNumber++ {
-      payload, ok := sidechain[payloadNumber]
-      if !ok {
-        error "Invalid payload %d requested.", t.TestName, payloadNumber)
-      }
-      var version int
-      if payloadNumber >= ws.getSidechainWithdrawalsForkHeight() {
-        version = 2
-      } else {
-        version = 1
-      }
-      info "Sending sidechain payload %d, hash=%s, parent=%s", t.TestName, payloadNumber, payload.BlockHash, payload.ParentHash)
-      r := t.rpcClient.newPayload(payload, nil, nil, version)
-      r.expectStatusEither(test.Valid, test.Accepted)
-      p := t.rpcClient.forkchoiceUpdated(
-        &beacon.ForkchoiceStateV1{
-          HeadBlockHash: payload.BlockHash,
-        },
-        nil,
-        version,
-      )
-      p.expectPayloadStatus(test.Valid)
-    }
-  }
+    var payloadNumber = ws.getSidechainSplitHeight()
+    while payloadNumber.uint64 <= sidechain.height:
+      let payload = sidechain.sidechain[payloadNumber.uint64]
+      var version = Version.V1
+      if payloadNumber >= ws.getSidechainwdForkHeight():
+        version = Version.V2
+
+      info "Sending sidechain",
+        payloadNumber,
+        hash=payload.blockHash.short,
+        parentHash=payload.parentHash.short
+
+      let r = env.client.newPayload(payload, version)
+      r.expectStatusEither(valid, accepted)
+
+      let fcState = ForkchoiceStateV1(headBlockHash: payload.blockHash)
+      let p = env.client.forkchoiceUpdated(version, fcState)
+      p.testFCU(valid)
+      inc payloadNumber
+
 
   # Verify withdrawals changed
-  sidechainwdHistory.VerifyWithdrawals(
-    sidechainHeight,
-    nil,
-    t.TestEngine,
-  )
+  let r2 = sidechain.wdHistory.verifyWithdrawals(sidechain.height, none(UInt256), env.client)
+  testCond r2.isOk
+
   # Verify all balances of accounts in the original chain didn't increase
   # after the fork.
   # We are using different accounts credited between the canonical chain
   # and the fork.
   # We check on `latest`.
-  ws.wdHistory.VerifyWithdrawals(
-    ws.WithdrawalsForkHeight-1,
-    nil,
-    t.TestEngine,
-  )
+  let r3 = ws.wdHistory.verifyWithdrawals(uint64(ws.wdForkHeight-1), none(UInt256), env.client)
+  testCond r3.isOk
 
   # Re-Org back to the canonical chain
-  r := t.rpcClient.forkchoiceUpdatedV2(&beacon.ForkchoiceStateV1{
-    HeadBlockHash: t.clMock.latestPayloadBuilt.BlockHash,
-  }, nil)
-  r.expectPayloadStatus(test.Valid)
-]#
+  let fcState = ForkchoiceStateV1(headBlockHash: env.clMock.latestPayloadBuilt.blockHash)
+  let r = env.client.forkchoiceUpdatedV2(fcState)
+  r.testFCU(valid)

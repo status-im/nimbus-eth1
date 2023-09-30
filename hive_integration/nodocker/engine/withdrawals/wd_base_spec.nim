@@ -32,8 +32,8 @@ type
     skipBaseVerifications*:    bool   # For code reuse of the base spec procedure
 
   WithdrawalsForBlock = object
-    wds: seq[Withdrawal]
-    nextIndex: int
+    wds*: seq[Withdrawal]
+    nextIndex*: int
 
 const
   GenesisTimestamp = 0x1234
@@ -46,13 +46,13 @@ const
   ]
 
 # Get the per-block timestamp increments configured for this test
-func getBlockTimeIncrements(ws: WDBaseSpec): int =
+func getBlockTimeIncrements*(ws: WDBaseSpec): int =
   if ws.timeIncrements == 0:
     return 1
   ws.timeIncrements
 
 # Timestamp delta between genesis and the withdrawals fork
-func getWithdrawalsGenesisTimeDelta(ws: WDBaseSpec): int =
+func getWithdrawalsGenesisTimeDelta*(ws: WDBaseSpec): int =
   ws.wdForkHeight * ws.getBlockTimeIncrements()
 
 # Calculates Shanghai fork timestamp given the amount of blocks that need to be
@@ -93,7 +93,7 @@ func addUnconditionalBytecode(g: Genesis, start, stop: UInt256) =
     )
     acc = acc + 1
 
-func getWithdrawableAccountCount(ws: WDBaseSpec):int =
+func getWithdrawableAccountCount*(ws: WDBaseSpec):int =
   if ws.wdAbleAccountCount == 0:
     # Withdraw to MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK accounts by default
     return MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK
@@ -163,7 +163,7 @@ func getGenesis*(ws: WDBaseSpec, param: NetworkParams): NetworkParams =
 
   param
 
-func getTransactionCountPerPayload(ws: WDBaseSpec): int =
+func getTransactionCountPerPayload*(ws: WDBaseSpec): int =
   ws.txPerBlock.get(16)
 
 proc verifyContractsStorage(ws: WDBaseSpec, env: TestEnv): Result[void, string] =
@@ -201,11 +201,11 @@ func getPreWithdrawalsBlockCount*(ws: WDBaseSpec): int =
     ws.wdForkHeight - 1
 
 # Number of payloads to be produced (pre and post withdrawals) during the entire test
-func getTotalPayloadCount(ws: WDBaseSpec): int =
+func getTotalPayloadCount*(ws: WDBaseSpec): int =
   ws.getPreWithdrawalsBlockCount() + ws.wdBlockCount
 
 # Generates a list of withdrawals based on current configuration
-func generateWithdrawalsForBlock(ws: WDBaseSpec, nextIndex: int, startAccount: UInt256): WithdrawalsForBlock =
+func generateWithdrawalsForBlock*(ws: WDBaseSpec, nextIndex: int, startAccount: UInt256): WithdrawalsForBlock =
   let
     differentAccounts = ws.getWithdrawableAccountCount()
 
