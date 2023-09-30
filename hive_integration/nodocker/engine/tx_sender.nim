@@ -1,6 +1,5 @@
 import
   std/[tables, math],
-  eth/common,
   eth/keys,
   stew/endians2,
   nimcrypto/sha2,
