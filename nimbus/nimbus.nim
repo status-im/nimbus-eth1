@@ -333,7 +333,7 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
     )
     nimbus.graphqlServer.start()
 
-  if conf.engineSigner != ZERO_ADDRESS:
+  if conf.engineSigner != ZERO_ADDRESS and not com.forkGTE(MergeFork):
     let res = nimbus.ctx.am.getAccount(conf.engineSigner)
     if res.isErr:
       error "Failed to get account",
