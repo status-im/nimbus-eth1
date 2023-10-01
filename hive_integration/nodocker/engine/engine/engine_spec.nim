@@ -16,8 +16,6 @@ type
     exec*: proc(env: TestEnv): bool
     ttd*: int64
     chainFile*: string
-    slotsToFinalized*: int
-    slotsToSafe*: int
 
 template testNP(res, cond: untyped, validHash = none(common.Hash256)) =
   testCond res.isOk

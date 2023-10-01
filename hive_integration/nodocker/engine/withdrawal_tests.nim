@@ -6,9 +6,11 @@ import
   withdrawals/wd_reorg_spec,
   withdrawals/wd_sync_spec,
   ./types,
-  ./test_env
+  ./test_env,
+  ./base_spec
 
 proc specExecute[T](ws: BaseSpec): bool =
+  ws.mainFork = ForkShanghai
   let
     ws   = T(ws)
     conf = envConfig(ws.getForkConfig())
@@ -29,10 +31,10 @@ let wdTestList* = [
     about: "Tests a 8 block re-org using NewPayload. Re-org does not change withdrawals fork height",
     run: specExecute[ReorgSpec],
     spec: ReorgSpec(
-      slotsToSafe:      u256(32),
-      slotsToFinalized: u256(64),
+      slotsToSafe:      32,
+      slotsToFinalized: 64,
       timeoutSeconds:   300,
-      wdForkHeight: 1, # Genesis is Pre-Withdrawals
+      forkHeight: 1, # Genesis is Pre-Withdrawals
       wdBlockCount: MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
       wdPerBlock:   MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
       reOrgBlockCount: 8,
@@ -45,10 +47,10 @@ let wdTestList* = [
       #  the payload at the height of the fork
     run: specExecute[ReorgSpec],
     spec: ReorgSpec(
-      slotsToSafe:      u256(32),
-      slotsToFinalized: u256(64),
+      slotsToSafe:      32,
+      slotsToFinalized: 64,
       timeoutSeconds:   300,
-      wdForkHeight: 8, # Genesis is Pre-Withdrawals
+      forkHeight: 8, # Genesis is Pre-Withdrawals
       wdBlockCount: 8,
       wdPerBlock:   MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
       reOrgBlockCount: 10,
@@ -61,10 +63,10 @@ let wdTestList* = [
       # than the canonical chain
     run: specExecute[ReorgSpec],
     spec: ReorgSpec(
-      slotsToSafe:      u256(32),
-      slotsToFinalized: u256(64),
+      slotsToSafe:      32,
+      slotsToFinalized: 64,
       timeoutSeconds:   300,
-      wdForkHeight: 8, # Genesis is Pre-Withdrawals
+      forkHeight: 8, # Genesis is Pre-Withdrawals
       wdBlockCount: 8,
       wdPerBlock:   MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
       reOrgBlockCount:         10,
@@ -78,13 +80,13 @@ let wdTestList* = [
       # than the canonical chain
     run: specExecute[ReorgSpec],
     spec: ReorgSpec(
-      slotsToSafe:      u256(32),
-      slotsToFinalized: u256(64),
+      slotsToSafe:      32,
+      slotsToFinalized: 64,
       timeoutSeconds:   300,
-      wdForkHeight: 8, # Genesis is Pre-Withdrawals
+      forkHeight: 8, # Genesis is Pre-Withdrawals
       wdBlockCount: 8,
       wdPerBlock:   MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
-      timeIncrements:        2,
+      blockTimestampIncrement: 2,
       reOrgBlockCount:         10,
       reOrgViaSync:            true,
       sidechaintimeIncrements: 1,
@@ -94,10 +96,10 @@ let wdTestList* = [
     about: "Tests a simple 1 block re-org",
     run: specExecute[ReorgSpec],
     spec: ReorgSpec(
-      slotsToSafe:      u256(32),
-      slotsToFinalized: u256(64),
+      slotsToSafe:      32,
+      slotsToFinalized: 64,
       timeoutSeconds:   300,
-      wdForkHeight: 1, # Genesis is Pre-Withdrawals
+      forkHeight: 1, # Genesis is Pre-Withdrawals
       wdBlockCount: MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
       wdPerBlock:   MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
       reOrgBlockCount: 1,
@@ -108,10 +110,10 @@ let wdTestList* = [
     about: "Tests a 8 block re-org using NewPayload. Re-org does not change withdrawals fork height",
     run: specExecute[ReorgSpec],
     spec: ReorgSpec(
-      slotsToSafe:      u256(32),
-      slotsToFinalized: u256(64),
+      slotsToSafe:      32,
+      slotsToFinalized: 64,
       timeoutSeconds:   300,
-      wdForkHeight: 1, # Genesis is Pre-Withdrawals
+      forkHeight: 1, # Genesis is Pre-Withdrawals
       wdBlockCount: MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
       wdPerBlock:   MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
       reOrgBlockCount: 8,
@@ -124,10 +126,10 @@ let wdTestList* = [
         "the payload at the height of the fork\n",
     run: specExecute[ReorgSpec],
     spec: ReorgSpec(
-      slotsToSafe:      u256(32),
-      slotsToFinalized: u256(64),
+      slotsToSafe:      32,
+      slotsToFinalized: 64,
       timeoutSeconds:   300,
-      wdForkHeight: 8, # Genesis is Pre-Withdrawals
+      forkHeight: 8, # Genesis is Pre-Withdrawals
       wdBlockCount: 8,
       wdPerBlock:   MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
       reOrgBlockCount: 10,
@@ -140,10 +142,10 @@ let wdTestList* = [
       # than the canonical chain
     run: specExecute[ReorgSpec],
     spec: ReorgSpec(
-      slotsToSafe:      u256(32),
-      slotsToFinalized: u256(64),
+      slotsToSafe:      32,
+      slotsToFinalized: 64,
       timeoutSeconds:   300,
-      wdForkHeight: 8, # Genesis is Pre-Withdrawals
+      forkHeight: 8, # Genesis is Pre-Withdrawals
       wdBlockCount: 8,
       wdPerBlock:   MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
       reOrgBlockCount:         10,
@@ -157,13 +159,13 @@ let wdTestList* = [
       # than the canonical chain
     run: specExecute[ReorgSpec],
     spec: ReorgSpec(
-      slotsToSafe:      u256(32),
-      slotsToFinalized: u256(64),
+      slotsToSafe:      32,
+      slotsToFinalized: 64,
       timeoutSeconds:   300,
-      wdForkHeight: 8, # Genesis is Pre-Withdrawals
+      forkHeight: 8, # Genesis is Pre-Withdrawals
       wdBlockCount: 8,
       wdPerBlock:   MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
-      timeIncrements:        2,
+      blockTimestampIncrement: 2,
       reOrgBlockCount:         10,
       reOrgViaSync:            false,
       sidechaintimeIncrements: 1,
@@ -180,7 +182,7 @@ let wdTestList* = [
     run: specExecute[SyncSpec],
     spec: SyncSpec(
       timeoutSeconds:  6,
-      wdForkHeight:    1,
+      forkHeight:    1,
       wdBlockCount:    2,
       wdPerBlock:      MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
       wdAbleAccountCount: 1,
@@ -196,7 +198,7 @@ let wdTestList* = [
       "- Wait for sync and verify withdrawn account's balance\n",
     run: specExecute[SyncSpec],
     spec: SyncSpec(
-      wdForkHeight:    1,
+      forkHeight:    1,
       wdBlockCount:    2,
       wdPerBlock:      MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
       wdAbleAccountCount: 1,
@@ -210,7 +212,7 @@ let wdTestList* = [
       "- Wait for sync and verify withdrawn account's balance\n",
     run: specExecute[SyncSpec],
     spec: SyncSpec(
-      wdForkHeight:    0,
+      forkHeight:    0,
       wdBlockCount:    2,
       wdPerBlock:      MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
       wdAbleAccountCount: 1,
@@ -225,7 +227,7 @@ let wdTestList* = [
       "- Wait for sync, which include syncing a pre-Withdrawals block, and verify withdrawn account's balance\n",
     run: specExecute[SyncSpec],
     spec: SyncSpec(
-      wdForkHeight:    2,
+      forkHeight:    2,
       wdBlockCount:    2,
       wdPerBlock:      MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
       wdAbleAccountCount: MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
@@ -241,7 +243,7 @@ let wdTestList* = [
       "- Wait for sync, which include syncing a pre-Withdrawals block, and verify withdrawn account's balance\n",
     run: specExecute[SyncSpec],
     spec: SyncSpec(
-      wdForkHeight:    2,
+      forkHeight:    2,
       wdBlockCount:    2,
       wdPerBlock:      MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
       wdAbleAccountCount: MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
@@ -257,7 +259,7 @@ let wdTestList* = [
     run: specExecute[SyncSpec],
     spec: SyncSpec(
       timeoutSeconds:  100,
-      wdForkHeight:    2,
+      forkHeight:    2,
       wdBlockCount:    128,
       wdPerBlock:      MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
       wdAbleAccountCount: 1024,
@@ -269,7 +271,7 @@ let wdTestList* = [
     name: "Max Initcode Size",
     run: specExecute[MaxInitcodeSizeSpec],
     spec: MaxInitcodeSizeSpec(
-      wdForkHeight: 2, # Block 1 is Pre-Withdrawals
+      forkHeight: 2, # Block 1 is Pre-Withdrawals
       wdBlockCount: 2,
       overflowMaxInitcodeTxCountBeforeFork: 0,
       overflowMaxInitcodeTxCountAfterFork:  1,
@@ -280,7 +282,7 @@ let wdTestList* = [
     about: "Verify the block value returned in GetPayloadV2.",
     run: specExecute[BlockValueSpec],
     spec: BlockValueSpec(
-      wdForkHeight: 1,
+      forkHeight: 1,
       wdBlockCount: 1,
   )),
   # Base tests
@@ -289,7 +291,7 @@ let wdTestList* = [
     about: "Tests the withdrawals fork happening since genesis (e.g. on a testnet).",
     run: specExecute[WDBaseSpec],
     spec: WDBaseSpec(
-      wdForkHeight: 0,
+      forkHeight: 0,
       wdBlockCount: 2, # Genesis is a withdrawals block
       wdPerBlock:   MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
   )),
@@ -298,7 +300,7 @@ let wdTestList* = [
     about: "Tests the withdrawals fork happening directly after genesis.",
     run: specExecute[WDBaseSpec],
     spec: WDBaseSpec(
-      wdForkHeight: 1, # Only Genesis is Pre-Withdrawals
+      forkHeight: 1, # Only Genesis is Pre-Withdrawals
       wdBlockCount: 1,
       wdPerBlock:   MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
   )),
@@ -309,7 +311,7 @@ let wdTestList* = [
       " client is expected to respond with the appropriate error.",
     run: specExecute[WDBaseSpec],
     spec: WDBaseSpec(
-      wdForkHeight: 2, # Genesis and Block 1 are Pre-Withdrawals
+      forkHeight: 2, # Genesis and Block 1 are Pre-Withdrawals
       wdBlockCount: 1,
       wdPerBlock:   MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
   )),
@@ -320,7 +322,7 @@ let wdTestList* = [
       " client is expected to respond with the appropriate error.",
     run: specExecute[WDBaseSpec],
     spec: WDBaseSpec(
-      wdForkHeight: 3, # Genesis, Block 1 and 2 are Pre-Withdrawals
+      forkHeight: 3, # Genesis, Block 1 and 2 are Pre-Withdrawals
       wdBlockCount: 1,
       wdPerBlock:   MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
   )),
@@ -329,7 +331,7 @@ let wdTestList* = [
     about: "Make multiple withdrawals to a single account.",
     run: specExecute[WDBaseSpec],
     spec: WDBaseSpec(
-      wdForkHeight:    1,
+      forkHeight:    1,
       wdBlockCount:    1,
       wdPerBlock:    MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
       wdAbleAccountCount: 1,
@@ -342,7 +344,7 @@ let wdTestList* = [
       " is not in ordered sequence.",
     run: specExecute[WDBaseSpec],
     spec: WDBaseSpec(
-      wdForkHeight:    1,
+      forkHeight:    1,
       wdBlockCount:    1,
       wdPerBlock:    MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
       wdAbleAccountCount: 2,
@@ -354,7 +356,7 @@ let wdTestList* = [
     # TimeoutSeconds: 240,
     run: specExecute[WDBaseSpec],
     spec: WDBaseSpec(
-      wdForkHeight:    1,
+      forkHeight:    1,
       wdBlockCount:    4,
       wdPerBlock:    MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK * 5,
       wdAbleAccountCount: 1024,
@@ -364,7 +366,7 @@ let wdTestList* = [
     about: "Make multiple withdrawals where the amount withdrawn is 0.",
     run: specExecute[WDBaseSpec],
     spec: WDBaseSpec(
-      wdForkHeight:    1,
+      forkHeight:    1,
       wdBlockCount:    1,
       wdPerBlock:    MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
       wdAbleAccountCount: 2,
@@ -375,7 +377,7 @@ let wdTestList* = [
     about: "Produce withdrawals block with zero withdrawals.",
     run: specExecute[WDBaseSpec],
     spec: WDBaseSpec(
-      wdForkHeight: 1,
+      forkHeight: 1,
       wdBlockCount: 1,
       wdPerBlock:   0,
   )),
@@ -384,7 +386,7 @@ let wdTestList* = [
     about: "Send a valid payload with a corrupted hash using engine_newPayloadV2.",
     run: specExecute[WDBaseSpec],
     spec: WDBaseSpec(
-      wdForkHeight:    1,
+      forkHeight:    1,
       wdBlockCount:    1,
       testCorrupedHashPayloads: true,
     )

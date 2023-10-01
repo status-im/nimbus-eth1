@@ -1,7 +1,8 @@
 import
   ./engine/engine_spec,
   ./types,
-  ./test_env
+  ./test_env,
+  ./base_spec
 
 proc specExecute(ws: BaseSpec): bool =
   var
@@ -10,12 +11,7 @@ proc specExecute(ws: BaseSpec): bool =
 
   env.engine.setRealTTD(ws.ttd)
   env.setupCLMock()
-  
-  if ws.slotsToFinalized != 0:
-    env.slotsToFinalized(ws.slotsToFinalized)
-  if ws.slotsToSafe != 0:
-    env.slotsToSafe(ws.slotsToSafe)
-
+  ws.configureCLMock(env.clMock)
   result = ws.exec(env)
   env.close()
 

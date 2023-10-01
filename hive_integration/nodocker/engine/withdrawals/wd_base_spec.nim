@@ -11,18 +11,15 @@ import
   ../test_env,
   ../engine_client,
   ../types,
+  ../base_spec,
   ../../../nimbus/common/common,
   ../../../nimbus/utils/utils,
   ../../../nimbus/common/chain_config,
   ../../../nimbus/beacon/execution_types,
   ../../../nimbus/beacon/web3_eth_conv
 
-import ../../../tools/common/helpers except LogLevel
-
 type
   WDBaseSpec* = ref object of BaseSpec
-    timeIncrements*:     int          # Timestamp increments per block throughout the test
-    wdForkHeight*:       int          # Withdrawals activation fork height
     wdBlockCount*:       int          # Number of blocks on and after withdrawals fork activation
     wdPerBlock*:         int          # Number of withdrawals per block
     wdAbleAccountCount*: int          # Number of accounts to withdraw to (round-robin)
@@ -37,7 +34,6 @@ type
     nextIndex*: int
 
 const
-  GenesisTimestamp = 0x1234
   WARM_COINBASE_ADDRESS = hexToByteArray[20]("0x0101010101010101010101010101010101010101")
   PUSH0_ADDRESS         = hexToByteArray[20]("0x0202020202020202020202020202020202020202")
   MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK* = 16
@@ -46,33 +42,13 @@ const
     PUSH0_ADDRESS,
   ]
 
-# Get the per-block timestamp increments configured for this test
-func getBlockTimeIncrements*(ws: WDBaseSpec): int =
-  if ws.timeIncrements == 0:
-    return 1
-  ws.timeIncrements
-
 # Timestamp delta between genesis and the withdrawals fork
 func getWithdrawalsGenesisTimeDelta*(ws: WDBaseSpec): int =
-  ws.wdForkHeight * ws.getBlockTimeIncrements()
-
-# Calculates Shanghai fork timestamp given the amount of blocks that need to be
-# produced beforehand.
-func getWithdrawalsForkTime(ws: WDBaseSpec): int =
-  GenesisTimestamp + ws.getWithdrawalsGenesisTimeDelta()
-
-# Generates the fork config, including withdrawals fork timestamp.
-func getForkConfig*(ws: WDBaseSpec): ChainConfig =
-  result = getChainConfig("Shanghai")
-  result.shanghaiTime = some(ws.getWithdrawalsForkTime().EthTime)
+  ws.forkHeight * ws.getBlockTimeIncrements()
 
 # Get the start account for all withdrawals.
 func getWithdrawalsStartAccount*(ws: WDBaseSpec): UInt256 =
   0x1000.u256
-
-func toAddress(x: UInt256): EthAddress =
-  var mm = x.toByteArrayBE
-  copyMem(result[0].addr, mm[11].addr, 20)
 
 # Adds bytecode that unconditionally sets an storage key to specified account range
 func addUnconditionalBytecode(g: Genesis, start, stop: UInt256) =
@@ -177,7 +153,7 @@ proc verifyContractsStorage(ws: WDBaseSpec, env: TestEnv): Result[void, string] 
     r = env.client.storageAt(WARM_COINBASE_ADDRESS, latestPayloadNumber, latestPayloadNumber)
     p = env.client.storageAt(PUSH0_ADDRESS, 0.u256, latestPayloadNumber)
 
-  if latestPayloadNumber.truncate(int) >= ws.wdForkHeight:
+  if latestPayloadNumber.truncate(int) >= ws.forkHeight:
     # Shanghai
     r.expectStorageEqual(WARM_COINBASE_ADDRESS, 100.u256)    # WARM_STORAGE_READ_COST
     p.expectStorageEqual(PUSH0_ADDRESS, latestPayloadNumber) # tx succeeded
@@ -188,18 +164,13 @@ proc verifyContractsStorage(ws: WDBaseSpec, env: TestEnv): Result[void, string] 
 
   ok()
 
-# Changes the CL Mocker default time increments of 1 to the value specified
-# in the test spec.
-proc configureCLMock*(ws: WDBaseSpec, cl: CLMocker) =
-  cl.blockTimestampIncrement = some(ws.getBlockTimeIncrements())
-
 # Number of blocks to be produced (not counting genesis) before withdrawals
 # fork.
 func getPreWithdrawalsBlockCount*(ws: WDBaseSpec): int =
-  if ws.wdForkHeight == 0:
+  if ws.forkHeight == 0:
     0
   else:
-    ws.wdForkHeight - 1
+    ws.forkHeight - 1
 
 # Number of payloads to be produced (pre and post withdrawals) during the entire test
 func getTotalPayloadCount*(ws: WDBaseSpec): int =
@@ -235,7 +206,7 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
   testCond ok
 
   # Check if we have pre-Shanghai blocks
-  if ws.getWithdrawalsForkTime() > GenesisTimestamp:
+  if ws.getForkTime() > GenesisTimestamp:
     # Check `latest` during all pre-shanghai blocks, none should
     # contain `withdrawalsRoot`, including genesis.
 
@@ -538,7 +509,7 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
       let r = env.client.headerByNumber(bn, h)
 
       var expectedWithdrawalsRoot: Option[common.Hash256]
-      if bn >= ws.wdForkHeight.uint64:
+      if bn >= ws.forkHeight.uint64:
         let wds = ws.wdHistory.getWithdrawals(bn)
         expectedWithdrawalsRoot = some(calcWithdrawalsRoot(wds.list))
 

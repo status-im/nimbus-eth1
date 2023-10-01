@@ -5,6 +5,7 @@ import
   nimcrypto/sha2,
   chronicles,
   ./engine_client,
+  ./cancun/blobs,
   ../../../nimbus/transaction,
   ../../../nimbus/common,
   ../../../nimbus/utils/utils
@@ -22,7 +23,15 @@ type
     padByte*       : uint8
     initcode*      : seq[byte]
 
-  TestAccount = object
+  # Blob transaction creator
+  BlobTx* = object of BaseTx
+    gasFee*    : GasInt
+    gasTip*    : GasInt
+    blobGasFee*: UInt256
+    blobID*    : BlobID
+    blobCount* : int
+
+  TestAccount* = object
     key    : PrivateKey
     address: EthAddress
     index  : int
@@ -38,8 +47,21 @@ type
     key*    : PrivateKey
     nonce*  : AccountNonce
 
+  CustomTransactionData* = object
+    nonce*              : Option[uint64]
+    gasPriceOrGasFeeCap*: Option[GasInt]
+    gasTipCap*          : Option[GasInt]
+    gas*                : Option[GasInt]
+    to*                 : Option[common.EthAddress]
+    value*              : Option[UInt256]
+    data*               : Option[seq[byte]]
+    chainId*            : Option[ChainId]
+    signature*          : Option[UInt256]
+
 const
   TestAccountCount = 1000
+  gasPrice* = 30.gwei
+  gasTipPrice* = 1.gwei
 
 func toAddress(key: PrivateKey): EthAddress =
   toKeyPair(key).pubkey.toCanonicalAddress()
@@ -67,6 +89,9 @@ proc getNextNonce(sender: TxSender, address: EthAddress): uint64 =
   sender.nonceMap[address] = nonce + 1
   nonce
 
+proc getLastNonce(sender: TxSender, address: EthAddress): uint64 =
+  sender.nonceMap.getOrDefault(address, 0'u64)
+
 proc fillBalance(sender: TxSender, params: NetworkParams) =
   for x in sender.accounts:
     params.genesis.alloc[x.address] = GenesisAccount(
@@ -89,9 +114,6 @@ proc getTxType(tc: BaseTx, nonce: uint64): TxType =
 
 proc makeTx(params: MakeTxParams, tc: BaseTx): Transaction =
   const
-    gasPrice = 30.gwei
-    gasTipPrice = 1.gwei
-
     gasFeeCap = gasPrice
     gasTipCap = gasTipPrice
 
@@ -212,3 +234,74 @@ proc sendTx*(client: RpcClient, tx: Transaction): bool =
     error "Unable to send transaction", msg=rr.error
     return false
   return true
+
+proc makeTx*(params: MakeTxParams, tc: BlobTx): Transaction =
+  # Need tx wrap data that will pass blob verification
+  let data = blobDataGenerator(tc.blobID, tc.blobCount)
+  doAssert(tc.recipient.isSome, "nil recipient address")
+
+  # Collect fields for transaction
+  let
+    gasFeeCap = if tc.gasFee != 0.GasInt: tc.gasFee
+                else: gasPrice
+    gasTipCap = if tc.gasTip != 0.GasInt: tc.gasTip
+                else: gasTipPrice
+
+  let unsignedTx = Transaction(
+    txType    : TxEIP4844,
+    chainId   : params.chainId,
+    nonce     : params.nonce,
+    maxPriorityFee: gasTipCap,
+    maxFee    : gasFeeCap,
+    gasLimit  : tc.gasLimit,
+    to        : tc.recipient,
+    value     : tc.amount,
+    payload   : tc.payload,
+    maxFeePerBlobGas: tc.blobGasFee,
+    versionedHashes: data.hashes,
+  )
+
+  var tx = signTransaction(unsignedTx, params.key, params.chainId, eip155 = true)
+  tx.networkPayload = NetworkPayload(
+    blobs      : data.blobs,
+    commitments: data.commitments,
+    proofs     : data.proofs,
+  )
+
+  tx
+
+proc getAccount*(sender: TxSender, idx: int): TestAccount =
+  sender.accounts[idx]
+
+proc sendTx*(sender: TxSender, acc: TestAccount, client: RpcClient, tc: BlobTx): Result[Transaction, void] =
+  let
+    params = MakeTxParams(
+      chainId: sender.chainId,
+      key: acc.key,
+      nonce: sender.getNextNonce(acc.address),
+    )
+    tx = params.makeTx(tc)
+
+  let rr = client.sendTransaction(tx)
+  if rr.isErr:
+    error "Unable to send transaction", msg=rr.error
+    return err()
+  return ok(tx)
+
+proc replaceTx*(sender: TxSender, acc: TestAccount, client: RpcClient, tc: BlobTx): Result[Transaction, void] =
+  let
+    params = MakeTxParams(
+      chainId: sender.chainId,
+      key: acc.key,
+      nonce: sender.getLastNonce(acc.address),
+    )
+    tx = params.makeTx(tc)
+
+  let rr = client.sendTransaction(tx)
+  if rr.isErr:
+    error "Unable to send transaction", msg=rr.error
+    return err()
+  return ok(tx)
+
+proc customizeTransaction*(sender: TxSender, baseTx: Transaction, custTx: CustomTransactionData): Transaction =
+  discard

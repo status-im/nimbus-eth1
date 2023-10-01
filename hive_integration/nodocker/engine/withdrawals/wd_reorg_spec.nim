@@ -9,6 +9,7 @@ import
   ../test_env,
   ../engine_client,
   ../types,
+  ../base_spec,
   ../../../nimbus/beacon/web3_eth_conv
 
 # Withdrawals re-org spec:
@@ -22,9 +23,6 @@ type
     # Whether the client should fetch the sidechain by syncing from the secondary client
     reOrgViaSync*           : bool
     sidechainTimeIncrements*: int
-    slotsToSafe*            : UInt256
-    slotsToFinalized*       : UInt256
-    timeoutSeconds*         : int
 
   Sidechain = ref object
     startAccount: UInt256
@@ -48,14 +46,14 @@ proc getSidechainBlockTimeIncrements(ws: ReorgSpec): int=
     return ws.getBlockTimeIncrements()
   ws.sidechainTimeIncrements
 
-proc getSidechainWdForkHeight(ws: ReorgSpec): int =
+proc getSidechainforkHeight(ws: ReorgSpec): int =
   if ws.getSidechainBlockTimeIncrements() != ws.getBlockTimeIncrements():
     # Block timestamp increments in both chains are different so need to
     # calculate different heights, only if split happens before fork.
     # We cannot split by having two different genesis blocks.
     doAssert(ws.getSidechainSplitHeight() != 0, "invalid sidechain split height")
 
-    if ws.getSidechainSplitHeight() <= ws.wdForkHeight:
+    if ws.getSidechainSplitHeight() <= ws.forkHeight:
       # We need to calculate the height of the fork on the sidechain
       let sidechainSplitBlocktimestamp = (ws.getSidechainSplitHeight() - 1) * ws.getBlockTimeIncrements()
       let remainingTime = ws.getWithdrawalsGenesisTimeDelta() - sidechainSplitBlocktimestamp
@@ -64,7 +62,7 @@ proc getSidechainWdForkHeight(ws: ReorgSpec): int =
 
       return ((remainingTime - 1) div ws.sidechainTimeIncrements) + ws.getSidechainSplitHeight()
 
-  return ws.wdForkHeight
+  return ws.forkHeight
 
 proc execute*(ws: ReorgSpec, env: TestEnv): bool =
   result = true
@@ -94,7 +92,7 @@ proc execute*(ws: ReorgSpec, env: TestEnv): bool =
     onPayloadProducerSelected: proc(): bool =
       env.clMock.nextWithdrawals = none(seq[WithdrawalV1])
 
-      if env.clMock.currentPayloadNumber >= ws.wdForkHeight.uint64:
+      if env.clMock.currentPayloadNumber >= ws.forkHeight.uint64:
         # Prepare some withdrawals
         let wfb = ws.generateWithdrawalsForBlock(canonical.nextIndex, canonical.startAccount)
         env.clMock.nextWithdrawals = some(w3Withdrawals wfb.wds)
@@ -103,7 +101,7 @@ proc execute*(ws: ReorgSpec, env: TestEnv): bool =
 
       if env.clMock.currentPayloadNumber >= ws.getSidechainSplitHeight().uint64:
         # We have split
-        if env.clMock.currentPayloadNumber >= ws.getSidechainWdForkHeight().uint64:
+        if env.clMock.currentPayloadNumber >= ws.getSidechainforkHeight().uint64:
           # And we are past the withdrawals fork on the sidechain
           let wfb = ws.generateWithdrawalsForBlock(sidechain.nextIndex, sidechain.startAccount)
           sidechain.wdHistory.put(env.clMock.currentPayloadNumber, wfb.wds)
@@ -156,7 +154,7 @@ proc execute*(ws: ReorgSpec, env: TestEnv): bool =
         else:
           attr.timestamp = env.clMock.latestPayloadAttributes.timestamp
 
-        if env.clMock.currentPayloadNumber >= ws.getSidechainwdForkHeight().uint64:
+        if env.clMock.currentPayloadNumber >= ws.getSidechainforkHeight().uint64:
           # Withdrawals
           let rr = sidechain.wdHistory.get(env.clMock.currentPayloadNumber)
           testCond rr.isOk:
@@ -207,12 +205,12 @@ proc execute*(ws: ReorgSpec, env: TestEnv): bool =
 
   sidechain.height = env.clMock.latestExecutedPayload.blockNumber.uint64
 
-  if ws.wdForkHeight < ws.getSidechainwdForkHeight():
+  if ws.forkHeight < ws.getSidechainforkHeight():
     # This means the canonical chain forked before the sidechain.
     # Therefore we need to produce more sidechain payloads to reach
     # at least`ws.WithdrawalsBlockCount` withdrawals payloads produced on
     # the sidechain.
-    let height = ws.getSidechainwdForkHeight()-ws.wdForkHeight
+    let height = ws.getSidechainforkHeight()-ws.forkHeight
     for i in 0..<height:
       let
         wfb = ws.generateWithdrawalsForBlock(sidechain.nextIndex, sidechain.startAccount)
@@ -296,7 +294,7 @@ proc execute*(ws: ReorgSpec, env: TestEnv): bool =
     while payloadNumber.uint64 <= sidechain.height:
       let payload = sidechain.sidechain[payloadNumber.uint64]
       var version = Version.V1
-      if payloadNumber >= ws.getSidechainwdForkHeight():
+      if payloadNumber >= ws.getSidechainforkHeight():
         version = Version.V2
 
       info "Sending sidechain",
@@ -322,7 +320,7 @@ proc execute*(ws: ReorgSpec, env: TestEnv): bool =
   # We are using different accounts credited between the canonical chain
   # and the fork.
   # We check on `latest`.
-  let r3 = ws.wdHistory.verifyWithdrawals(uint64(ws.wdForkHeight-1), none(UInt256), env.client)
+  let r3 = ws.wdHistory.verifyWithdrawals(uint64(ws.forkHeight-1), none(UInt256), env.client)
   testCond r3.isOk
 
   # Re-Org back to the canonical chain

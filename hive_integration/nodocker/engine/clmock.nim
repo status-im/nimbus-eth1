@@ -2,7 +2,7 @@ import
   std/[tables],
   chronicles,
   nimcrypto/sysrand,
-  stew/[byteutils, endians2],
+  stew/[byteutils],
   eth/common, chronos,
   json_rpc/rpcclient,
   ../../../nimbus/beacon/execution_types,
@@ -12,7 +12,8 @@ import
   ../../../nimbus/common as nimbus_common,
   ./client_pool,
   ./engine_env,
-  ./engine_client
+  ./engine_client,
+  ./types
 
 import web3/engine_api_types except Hash256  # conflict with the one from eth/common
 
@@ -24,9 +25,10 @@ type
     # Number of required slots before a block which was set as Head moves to `safe` and `finalized` respectively
     slotsToSafe*     : int
     slotsToFinalized*: int
+    safeSlotsToImportOptimistically*: int
 
     # Wait time before attempting to get the payload
-    payloadProductionClientDelay: int
+    payloadProductionClientDelay*: int
 
     # Block production related
     blockTimestampIncrement*: Option[int]
@@ -52,6 +54,7 @@ type
     latestPayloadBuilt*     : ExecutionPayload
     latestBlockValue*       : Option[UInt256]
     latestBlobsBundle*      : Option[BlobsBundleV1]
+    latestShouldOverrideBuilder*: Option[bool]
     latestPayloadAttributes*: PayloadAttributes
     latestExecutedPayload*  : ExecutionPayload
     latestForkchoice*       : ForkchoiceStateV1
@@ -60,7 +63,6 @@ type
     firstPoSBlockNumber       : Option[uint64]
     ttdReached*               : bool
     transitionPayloadTimestamp: Option[int]
-    safeSlotsToImportOptimistically: int
     chainTotalDifficulty      : UInt256
 
     # Shanghai related
@@ -68,6 +70,7 @@ type
 
   BlockProcessCallbacks* = object
     onPayloadProducerSelected* : proc(): bool {.gcsafe.}
+    onPayloadAttributesGenerated* : proc(): bool {.gcsafe.}
     onRequestNextPayload*      : proc(): bool {.gcsafe.}
     onGetPayload*              : proc(): bool {.gcsafe.}
     onNewPayloadBroadcast*     : proc(): bool {.gcsafe.}
@@ -100,7 +103,7 @@ proc init(cl: CLMocker, eng: EngineEnv, com: CommonRef) =
   cl.com = com
   cl.slotsToSafe = 1
   cl.slotsToFinalized = 2
-  cl.payloadProductionClientDelay = 1
+  cl.payloadProductionClientDelay = 0
   cl.headerHistory[0] = com.genesisHeader()
 
 proc newClMocker*(eng: EngineEnv, com: CommonRef): CLMocker =
@@ -179,11 +182,6 @@ func getNextBlockTimestamp(cl: CLMocker): EthTime =
 func setNextWithdrawals(cl: CLMocker, nextWithdrawals: Option[seq[WithdrawalV1]]) =
   cl.nextWithdrawals = nextWithdrawals
 
-func timestampToBeaconRoot(timestamp: Quantity): FixedBytes[32] =
-  # Generates a deterministic hash from the timestamp
-  let h = keccakHash(timestamp.uint64.toBytesBE)
-  FixedBytes[32](h.data)
-
 func isShanghai(cl: CLMocker, timestamp: Quantity): bool =
   let ts = EthTime(timestamp.uint64)
   cl.com.isShanghaiOrLater(ts)
@@ -222,7 +220,7 @@ proc pickNextPayloadProducer(cl: CLMocker): bool =
   doAssert cl.nextBlockProducer != nil
   return true
 
-proc requestNextPayload(cl: CLMocker): bool =
+proc generatePayloadAttributes(cl: CLMocker) =
   # Generate a random value for the PrevRandao field
   var nextPrevRandao: common.Hash256
   doAssert randomBytes(nextPrevRandao.data) == 32
@@ -246,6 +244,7 @@ proc requestNextPayload(cl: CLMocker): bool =
   let number = cl.latestHeader.blockNumber.truncate(uint64) + 1
   cl.prevRandaoHistory[number] = nextPrevRandao
 
+proc requestNextPayload(cl: CLMocker): bool =
   let version = cl.latestPayloadAttributes.version
   let client = cl.nextBlockProducer.client
   let res = client.forkchoiceUpdated(version, cl.latestForkchoice, some(cl.latestPayloadAttributes))
@@ -290,6 +289,7 @@ proc getNextPayload(cl: CLMocker): bool =
   cl.latestPayloadBuilt = x.executionPayload
   cl.latestBlockValue = x.blockValue
   cl.latestBlobsBundle = x.blobsBundle
+  cl.latestShouldOverrideBuilder = x.shouldOverrideBuilder
 
   let beaconRoot = ethHash cl.latestPayloadAttributes.parentBeaconblockRoot
   let header = blockHeader(cl.latestPayloadBuilt, beaconRoot)
@@ -333,7 +333,7 @@ proc getNextPayload(cl: CLMocker): bool =
   return true
 
 func versionedHashes(bb: BlobsBundleV1): seq[Web3Hash] =
-  doAssert(bb.commitments.len > 0)
+  #doAssert(bb.commitments.len > 0)
   result = newSeqOfCap[BlockHash](bb.commitments.len)
 
   for com in bb.commitments:
@@ -481,6 +481,12 @@ proc produceSingleBlock*(cl: CLMocker, cb: BlockProcessCallbacks): bool {.gcsafe
     if not cb.onPayloadProducerSelected():
       return false
 
+  cl.generatePayloadAttributes()
+
+  if cb.onPayloadAttributesGenerated != nil:
+    if not cb.onPayloadAttributesGenerated():
+      return false
+
   if not cl.requestNextPayload():
     return false
 
@@ -491,7 +497,9 @@ proc produceSingleBlock*(cl: CLMocker, cb: BlockProcessCallbacks): bool {.gcsafe
       return false
 
   # Give the client a delay between getting the payload ID and actually retrieving the payload
-  #time.Sleep(PayloadProductionClientDelay)
+  if cl.payloadProductionClientDelay != 0:
+    let period = chronos.seconds(cl.payloadProductionClientDelay)
+    waitFor sleepAsync(period)
 
   if not cl.getNextPayload():
     return false
