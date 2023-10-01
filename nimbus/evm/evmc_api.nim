@@ -30,6 +30,7 @@ type
     block_base_fee*   : evmc_uint256be   # The block base fee.
     blob_hashes*      : ptr evmc_bytes32 # The array of blob hashes (EIP-4844).
     blob_hashes_count*: csize_t          # The number of blob hashes (EIP-4844).
+    blob_base_fee*    : evmc_uint256be   # The blob base fee (EIP-7516).
 
   nimbus_message* = object
     kind*        : evmc_call_kind

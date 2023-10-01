@@ -620,6 +620,7 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
           SelfBalance:     fixed GasLow,
           BaseFee:         fixed GasBase,
           BlobHash:        fixed GasVeryLow,
+          BlobBaseFee:     fixed GasBase,
 
           # 50s: Stack, Memory, Storage and Flow Operations
           Pop:            fixed GasBase,

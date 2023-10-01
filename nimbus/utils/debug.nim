@@ -108,8 +108,10 @@ proc debug*(vms: BaseVMState): string =
   result.add "receipts.len     : " & $vms.receipts.len        & "\n"
   result.add "stateDB.root     : " & $vms.stateDB.rootHash    & "\n"
   result.add "cumulativeGasUsed: " & $vms.cumulativeGasUsed   & "\n"
-  result.add "txOrigin         : " & $vms.txOrigin            & "\n"
-  result.add "txGasPrice       : " & $vms.txGasPrice          & "\n"
+  result.add "tx.origin        : " & $vms.txCtx.origin        & "\n"
+  result.add "tx.gasPrice      : " & $vms.txCtx.gasPrice      & "\n"
+  result.add "tx.blobHash.len  : " & $vms.txCtx.versionedHashes.len & "\n"
+  result.add "tx.blobBaseFee   : " & $vms.txCtx.blobBaseFee   & "\n"
   result.add "fork             : " & $vms.fork                & "\n"
 
 proc `$`(x: ChainId): string =

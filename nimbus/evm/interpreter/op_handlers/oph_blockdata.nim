@@ -93,6 +93,12 @@ const
       k.cpt.stack.push:
         0
 
+  blobBaseFeeOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+    ## 0x4a, Get the block's base fee.
+    k.cpt.stack.push:
+      k.cpt.getBlobBaseFee
+
+
 # ------------------------------------------------------------------------------
 # Public, op exec table entries
 # ------------------------------------------------------------------------------
@@ -178,6 +184,14 @@ const
      info: "Get current transaction's EIP-4844 versioned hash",
      exec: (prep: vm2OpIgnore,
             run:  blobHashOp,
+            post: vm2OpIgnore)),
+
+    (opCode: BlobBaseFee,     ## 0x4a, EIP-7516 Returns the current data-blob base-fee
+     forks: Vm2OpCancunAndLater,
+     name: "blobBaseFee",
+     info: "Returns the current data-blob base-fee",
+     exec: (prep: vm2OpIgnore,
+            run:  blobBaseFeeOp,
             post: vm2OpIgnore))]
 
 # ------------------------------------------------------------------------------
