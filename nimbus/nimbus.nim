@@ -21,6 +21,8 @@ import
   metrics/[chronos_httpserver, chronicles_support],
   stew/shims/net as stewNet,
   websock/websock as ws,
+  kzg4844/kzg_ex as kzg,
+  ./core/eip4844,
   "."/[config, constants, version, rpc, common],
   ./db/[core_db/persistent, select_backend],
   ./graphql/ethapi,
@@ -425,6 +427,18 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
   com.db.compensateLegacySetup()
 
   let protocols = conf.getProtocolFlags()
+
+  if conf.trustedSetupFile.isSome:
+    let fileName = conf.trustedSetupFile.get()
+    let res = Kzg.loadTrustedSetup(fileName)
+    if res.isErr:
+      fatal "Cannot load Kzg trusted setup from file", msg=res.error
+      quit(QuitFailure)
+  else:
+    let res = loadKzgTrustedSetup()
+    if res.isErr:
+      fatal "Cannot load baked in Kzg trusted setup", msg=res.error
+      quit(QuitFailure)
 
   case conf.cmd
   of NimbusCmd.`import`:

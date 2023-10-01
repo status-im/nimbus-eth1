@@ -521,6 +521,12 @@ type
         defaultValue: ""
         name: "stateless-data-source-url" .}: string
 
+      trustedSetupFile* {.
+        desc: "Load EIP-4844 trusted setup file"
+        defaultValue: none(string)
+        defaultValueDesc: "Baked in trusted setup"
+        name: "trusted-setup-file" .}: Option[string]
+
     of `import`:
 
       blocksFile* {.
