@@ -107,25 +107,31 @@ template getOrigin*(c: Computation): EthAddress =
   when evmc_enabled:
     c.host.getTxContext().tx_origin
   else:
-    c.vmState.txOrigin
+    c.vmState.txCtx.origin
 
 template getGasPrice*(c: Computation): GasInt =
   when evmc_enabled:
     UInt256.fromEvmc(c.host.getTxContext().tx_gas_price).truncate(GasInt)
   else:
-    c.vmState.txGasPrice
+    c.vmState.txCtx.gasPrice
 
 template getVersionedHash*(c: Computation, index: int): VersionedHash =
   when evmc_enabled:
     cast[ptr UncheckedArray[VersionedHash]](c.host.getTxContext().blob_hashes)[index]
   else:
-    c.vmState.txVersionedHashes[index]
+    c.vmState.txCtx.versionedHashes[index]
 
 template getVersionedHashesLen*(c: Computation): int =
   when evmc_enabled:
     c.host.getTxContext().blob_hashes_count.int
   else:
-    c.vmState.txVersionedHashes.len
+    c.vmState.txCtx.versionedHashes.len
+
+template getBlobBaseFee*(c: Computation): UInt256 =
+  when evmc_enabled:
+    UInt256.fromEvmc c.host.getTxContext().blob_base_fee
+  else:
+    c.vmState.txCtx.blobBaseFee
 
 proc getBlockHash*(c: Computation, number: UInt256): Hash256
                    {.gcsafe, raises: [CatchableError].} =

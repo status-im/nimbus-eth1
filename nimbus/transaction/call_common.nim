@@ -127,9 +127,12 @@ proc initialAccessListEIP2929(call: CallParams) =
 proc setupHost(call: CallParams): TransactionHost =
   let vmState = call.vmState
   vmState.setupTxContext(
-    origin       = call.origin.get(call.sender),
-    gasPrice     = call.gasPrice,
-    versionedHashes = call.versionedHashes,
+    TxContext(
+      origin         : call.origin.get(call.sender),
+      gasPrice       : call.gasPrice,
+      versionedHashes: call.versionedHashes,
+      blobBaseFee    : getBlobGasprice(vmState.blockCtx.excessBlobGas),
+    ),
     forkOverride = call.forkOverride
   )
 

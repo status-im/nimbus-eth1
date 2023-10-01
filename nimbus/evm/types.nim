@@ -51,21 +51,25 @@ type
     coinbase*         : EthAddress
     excessBlobGas*    : uint64
 
+  TxContext* = object
+    origin*         : EthAddress
+    gasPrice*       : GasInt
+    versionedHashes*: VersionedHashes
+    blobBaseFee*    : UInt256
+
   BaseVMState* = ref object of RootObj
     com*              : CommonRef
+    stateDB*          : AccountsCache
     gasPool*          : GasInt
     parent*           : BlockHeader
     blockCtx*         : BlockContext
+    txCtx*            : TxContext
     flags*            : set[VMFlag]
+    fork*             : EVMFork
     tracer*           : TracerRef
     receipts*         : seq[Receipt]
-    stateDB*          : AccountsCache
     cumulativeGasUsed*: GasInt
-    txOrigin*         : EthAddress
-    txGasPrice*       : GasInt
-    txVersionedHashes*: VersionedHashes
     gasCosts*         : GasCosts
-    fork*             : EVMFork
     asyncFactory*     : AsyncOperationFactory
 
   Computation* = ref object

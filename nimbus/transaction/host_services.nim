@@ -50,8 +50,8 @@ proc setupTxContext(host: TransactionHost) =
   # values over much of the 256-bit range.
 
   let vmState = host.vmState
-  host.txContext.tx_gas_price     = vmState.txGasPrice.u256.toEvmc
-  host.txContext.tx_origin        = vmState.txOrigin.toEvmc
+  host.txContext.tx_gas_price     = vmState.txCtx.gasPrice.u256.toEvmc
+  host.txContext.tx_origin        = vmState.txCtx.origin.toEvmc
   # vmState.coinbase now unused
   host.txContext.block_coinbase   = vmState.blockCtx.coinbase.toEvmc
   # vmState.blockNumber now unused
@@ -65,20 +65,22 @@ proc setupTxContext(host: TransactionHost) =
   host.txContext.chain_id         = vmState.com.chainId.uint.u256.toEvmc
   host.txContext.block_base_fee   = vmState.blockCtx.fee.get(0.u256).toEvmc
 
-  if vmState.txVersionedHashes.len > 0:
+  if vmState.txCtx.versionedHashes.len > 0:
     type
       BlobHashPtr = typeof host.txContext.blob_hashes
-    host.txContext.blob_hashes = cast[BlobHashPtr](vmState.txVersionedHashes[0].addr)
+    host.txContext.blob_hashes = cast[BlobHashPtr](vmState.txCtx.versionedHashes[0].addr)
   else:
     host.txContext.blob_hashes = nil
 
-  host.txContext.blob_hashes_count= vmState.txVersionedHashes.len.csize_t
+  host.txContext.blob_hashes_count= vmState.txCtx.versionedHashes.len.csize_t
+  host.txContext.blob_base_fee    = vmState.txCtx.blobBaseFee.toEvmc
 
   # Most host functions do `flip256` in `evmc_host_glue`, but due to this
   # result being cached, it's better to do `flip256` when filling the cache.
   host.txContext.tx_gas_price     = flip256(host.txContext.tx_gas_price)
   host.txContext.chain_id         = flip256(host.txContext.chain_id)
   host.txContext.block_base_fee   = flip256(host.txContext.block_base_fee)
+  host.txContext.blob_base_fee    = flip256(host.txContext.blob_base_fee)
 
   # EIP-4399
   # Transfer block randomness to difficulty OPCODE

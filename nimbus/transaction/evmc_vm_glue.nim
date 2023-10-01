@@ -101,8 +101,8 @@ proc evmc_create_nimbus_evm(): ptr evmc_vm {.cdecl, exportc.} =
   GC_ref(vm)
   return cast[ptr evmc_vm](vm)
 
-# This code assumes fields, methods and types of ABI version 10, and must be
+# This code assumes fields, methods and types of ABI version 11, and must be
 # checked for compatibility if the `import evmc/evmc` major version is updated.
-when EVMC_ABI_VERSION != 10:
-  {.error: ("This code assumes EVMC_ABI_VERSION 10;" &
+when EVMC_ABI_VERSION != 11:
+  {.error: ("This code assumes EVMC_ABI_VERSION 11;" &
             " update the code to use EVMC_ABI_VERSION " & $EVMC_ABI_VERSION).}

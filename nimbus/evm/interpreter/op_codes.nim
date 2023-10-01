@@ -105,8 +105,9 @@ type
     SelfBalance =    0x47, ## Get current contract's balance.
     BaseFee =        0x48, ## Get block’s base fee. EIP-3198
     BlobHash =       0x49, ## Get transaction's versionedHash. EIP-4844
+    BlobBaseFee =    0x4A, ## Returns the current data-blob base-fee
 
-    Nop0x4A, Nop0x4B, Nop0x4C, Nop0x4D,
+    Nop0x4B, Nop0x4C, Nop0x4D,
     Nop0x4E, Nop0x4F, ## ..
 
     # 50s: Stack, Memory, Storage and Flow Operations
