@@ -31,7 +31,7 @@ const
   CoreDbPersistentTypes* = {LegacyDbPersistent}
 
 type
-  CoreDbRc*[T] = Result[T,CoreDbError]
+  CoreDbRc*[T] = Result[T,CoreDbErrorRef]
 
   CoreDbCaptFlags* {.pure.} = enum
     PersistPut
@@ -68,7 +68,7 @@ type
   # Sub-descriptor: Misc methods for main descriptor
   # --------------------------------------------------
   CoreDbBackendFn* = proc(): CoreDbBackendRef {.noRaise.}
-  CoreDbErrorPrintFn* = proc(e: CoreDbError): string {.noRaise.}
+  CoreDbErrorPrintFn* = proc(e: CoreDbErrorRef): string {.noRaise.}
   CoreDbInitLegaSetupFn* = proc() {.noRaise.}
 
   CoreDbMiscFns* = object
@@ -172,7 +172,7 @@ type
     new*: CoreDbConstructorFns
     methods*: CoreDbMiscFns
 
-  CoreDbError* = object of RootObj
+  CoreDbErrorRef* = ref object of RootRef
     ## Generic error object
     parent*: CoreDbRef
 

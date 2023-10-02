@@ -21,7 +21,7 @@ export
 
   # Not all symbols from the object sources will be exported by default
   CoreDbCaptFlags,
-  CoreDbError,
+  CoreDbErrorRef,
   CoreDbCaptRef,
   CoreDbKvtRef,
   CoreDbMptRef,

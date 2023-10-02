@@ -59,7 +59,8 @@ proc validateConstructors(new: CoreDbConstructorFns) =
 
 # ------------
 
-proc validateMethodsDesc(e: CoreDbError) =
+proc validateMethodsDesc(e: CoreDbErrorRef) =
+  doAssert not e.isNil
   doAssert not e.parent.isNil
 
 proc validateMethodsDesc(eph: EphemMethodsDesc) =
@@ -111,7 +112,7 @@ proc validateMethodsDesc(db: CoreDbRef) =
 # Public debugging helpers
 # ------------------------------------------------------------------------------
 
-proc validate*(desc: MethodsDesc | EphemMethodsDesc | CoreDbError) =
+proc validate*(desc: MethodsDesc | EphemMethodsDesc | CoreDbErrorRef) =
   desc.validateMethodsDesc
 
 proc validate*(db: CoreDbRef) =

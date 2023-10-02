@@ -21,7 +21,7 @@ import
 export
   CoreDbBackendRef,
   CoreDbCaptFlags,
-  CoreDbError,
+  CoreDbErrorRef,
   CoreDbKvtBackendRef,
   CoreDbMptBackendRef,
   CoreDbRef,
@@ -74,7 +74,7 @@ type
 
   CoreDxChldRef* = CoreDxKvtRef | CoreDxTrieRef | CoreDxTxRef | CoreDxTxID |
                    CoreDxCaptRef |
-                   CoreDbError |
+                   CoreDbErrorRef |
                    CoreDbBackendRef | CoreDbKvtBackendRef | CoreDbMptBackendRef
     ## Shortcut, all modules with a `parent`
 
@@ -194,7 +194,7 @@ proc backend*(db: CoreDbRef): CoreDbBackendRef =
   result = db.methods.backendFn()
   result.parent = db
 
-proc `$$`*(e: CoreDbError): string =
+proc `$$`*(e: CoreDbErrorRef): string =
   ## Pretty print error symbol, note that this directive may have side effects
   ## as it calls a backend function.
   e.parent.methods.errorPrintFn(e)
