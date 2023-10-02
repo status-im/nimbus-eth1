@@ -42,7 +42,7 @@ type
   LegacyCoreDbMptBE = ref object of CoreDbMptBackendRef
     mpt: HexaryTrie
 
-  LegacyCoreDbError = object of CoreDbError
+  LegacyCoreDbError = ref object of CoreDbErrorRef
     ctx: string     ## Context where the exception or error occured
     name: string    ## name of exception
     msg: string     ## Exception info
@@ -124,11 +124,13 @@ proc miscMethods(db: LegacyDbRef): CoreDbMiscFns =
     backendFn: proc(): CoreDbBackendRef =
       db.bless(LegacyCoreDbBE(base: db)),
 
-    errorPrintFn: proc(e: CoreDbError): string =
-      let e = e.LegacyCoreDbError
-      result &= "ctx=\"" & $e.ctx & "\"" & " , "
-      result &= "name=\"" & $e.name & "\"" & ", "
-      result &= "msg=\"" & $e.msg & "\"",
+    errorPrintFn: proc(e: CoreDbErrorRef): string =
+      if not e.isNil:
+        let e = e.LegacyCoreDbError
+        result &= "ctx=\"" & $e.ctx & "\"" & " , "
+        result &= "name=\"" & $e.name & "\"" & ", "
+        result &= "msg=\"" & $e.msg & "\""
+      discard,
 
     legacySetupFn: proc() =
       db.tdb.put(EMPTY_ROOT_HASH.data, @[0x80u8]))
