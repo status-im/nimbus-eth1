@@ -167,7 +167,7 @@ proc getKeyRc*(db: AristoDbRef; vid: VertexID): Result[HashKey,AristoError] =
     let key = db.top.kMap.getOrVoid(vid).key
     if key.isValid:
       return ok(key)
-    return err(GetKeyNotFound)
+    return err(GetKeyTempLocked)
   db.getKeyBE vid
 
 proc getKey*(db: AristoDbRef; vid: VertexID): HashKey =

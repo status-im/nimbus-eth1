@@ -15,7 +15,6 @@
 
 import
   eth/common,
-  stint,
   results,
   "."/[aristo_desc, aristo_get]
 
@@ -43,10 +42,7 @@ proc toAccount*(
       codeHash:    payload.account.codehash,
       storageRoot: EMPTY_ROOT_HASH)
     if payload.account.storageID.isValid:
-      let key = db.getKey payload.account.storageID
-      if not key.isValid:
-        return err(AccountStorageKeyMissing)
-      acc.storageRoot = key.to(Hash256)
+      acc.storageRoot = (? db.getKeyRc payload.account.storageID).to(Hash256)
     return ok(acc)
   else:
     discard

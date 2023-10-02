@@ -208,6 +208,7 @@ type
     GetLeafNotFound
     GetVtxNotFound
     GetKeyNotFound
+    GetKeyTempLocked
     GetFilNotFound
     GetIdgNotFound
     GetFqsNotFound
