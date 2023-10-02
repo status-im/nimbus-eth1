@@ -79,23 +79,27 @@ only option, which results in connecting to the
 It should be noted that there is currently no real way to distinguish a "specific" Portal
 network, and as long as the same Portal protocols are supported, nodes can
 simply connect to it and no real separation can be made.
+When testing locally the `--network:none` option can be provided to avoid
+connecting to any of the testnet bootstrap nodes.
 
 <!-- TODO: Update this once we have the headersWithProof type merged and data on the network -->
 
-The testnet is currently storing only the first 25000 mainnet blocks. This can
+The Portal testnet is slowly being filled up with historical data through bridge nodes.
+Because of this, more recent history data is more likely to be available.. This can
 be tested by using the JSON-RPC call `eth_getBlockByHash`:
 ```
 # Get the hash of a block from your favorite block explorer, e.g.:
-# 0x8dda3a641653c0454569c3b5be529f58b14d2a5b5d87956664c746ce1e367c21
-# Run command to get this block:
-curl -s -X POST -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":"1","method":"eth_getBlockByHash","params":["0x8dda3a641653c0454569c3b5be529f58b14d2a5b5d87956664c746ce1e367c21", false]}' http://localhost:8545 | jq
+BLOCKHASH=0x34eea44911b19f9aa8c72f69bdcbda3ed933b11a940511b6f3f58a87427231fb # Replace this to the block hash of your choice
+# Run this command to get this block:
+curl -s -X POST -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":"1","method":"eth_getBlockByHash","params":["'${BLOCKHASH}'", true]}' http://localhost:8545 | jq
 ```
 
 One can also use the `blockwalk` tool to walk down the blocks one by one, e.g:
 ```bash
-make fluffy-tools
+make blockwalk
 
-./build/blockwalk --block-hash:0xf6bfad56d1a45d1661506343dd1e511b5d7e17565b3ec293125ff0890b9709e5
+BLOCKHASH=0x34eea44911b19f9aa8c72f69bdcbda3ed933b11a940511b6f3f58a87427231fb # Replace this to the block hash of your choice
+./build/blockwalk --block-hash:${BLOCKHASH}
 ```
 
 ### Run Fluffy test suite
