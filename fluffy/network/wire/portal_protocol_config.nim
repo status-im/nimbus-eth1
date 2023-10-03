@@ -10,6 +10,7 @@
 import
   std/strutils,
   confutils,
+  chronos,
   eth/p2p/discoveryv5/routing_table
 
 type
@@ -29,10 +30,12 @@ type
     radiusConfig*: RadiusConfig
     disablePoke*: bool
 
+
 const
   defaultRadiusConfig* = RadiusConfig(kind: Dynamic)
   defaultRadiusConfigDesc* = $defaultRadiusConfig.kind
   defaultDisablePoke* = false
+  revalidationTimeout* = chronos.seconds(30) 
 
   defaultPortalProtocolConfig* = PortalProtocolConfig(
     tableIpLimits: DefaultTableIpLimits,
