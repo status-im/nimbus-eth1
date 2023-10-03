@@ -14,22 +14,34 @@ import
 
 type
   EphemMethodsDesc =
-    CoreDbBackendRef | CoreDbKvtBackendRef | CoreDbMptBackendRef
+    CoreDbBackendRef | CoreDbKvtBackendRef | CoreDbMptBackendRef |
+    CoreDbAccBackendRef | CoreDbVidRef
 
   MethodsDesc =
-    CoreDxKvtRef  |
-    CoreDxMptRef  | CoreDxPhkRef |
-    CoreDxTxRef   | CoreDxTxID   |
+    CoreDxKvtRef |
+    CoreDxMptRef | CoreDxPhkRef | CoreDxAccRef  |
+    CoreDxTxRef  | CoreDxTxID   |
     CoreDxCaptRef
+
+  ValidateDesc* = MethodsDesc | EphemMethodsDesc | CoreDbErrorRef
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc validateMethodsDesc(msc: CoreDbMiscFns) =
-  doAssert not msc.backendFn.isNil
-  doAssert not msc.errorPrintFn.isNil
-  doAssert not msc.legacySetupFn.isNil
+proc validateMethodsDesc(base: CoreDbBaseFns) =
+  doAssert not base.backendFn.isNil
+  doAssert not base.destroyFn.isNil
+  doAssert not base.vidHashFn.isNil
+  doAssert not base.errorPrintFn.isNil
+  doAssert not base.legacySetupFn.isNil
+  doAssert not base.getRootFn.isNil
+  doAssert not base.newKvtFn.isNil
+  doAssert not base.newMptFn.isNil
+  doAssert not base.newAccFn.isNil
+  doAssert not base.getIdFn.isNil
+  doAssert not base.beginFn.isNil
+  doAssert not base.captureFn.isNil
 
 proc validateMethodsDesc(kvt: CoreDbKvtFns) =
   doAssert not kvt.backendFn.isNil
@@ -41,23 +53,30 @@ proc validateMethodsDesc(kvt: CoreDbKvtFns) =
 
 proc validateMethodsDesc(fns: CoreDbMptFns) =
   doAssert not fns.backendFn.isNil
-  doAssert not fns.getFn.isNil
-  doAssert not fns.delFn.isNil
-  doAssert not fns.putFn.isNil
+  doAssert not fns.fetchFn.isNil
+  doAssert not fns.deleteFn.isNil
+  doAssert not fns.mergeFn.isNil
   doAssert not fns.containsFn.isNil
-  doAssert not fns.rootHashFn.isNil
+  doAssert not fns.rootVidFn.isNil
   doAssert not fns.isPruningFn.isNil
   doAssert not fns.pairsIt.isNil
   doAssert not fns.replicateIt.isNil
 
-proc validateConstructors(new: CoreDbConstructorFns) =
-  doAssert not new.mptFn.isNil
-  doAssert not new.legacyMptFn.isNil
-  doAssert not new.getIdFn.isNil
-  doAssert not new.beginFn.isNil
-  doAssert not new.captureFn.isNil
+proc validateMethodsDesc(fns: CoreDbAccFns) =
+  doAssert not fns.backendFn.isNil
+  doAssert not fns.fetchFn.isNil
+  doAssert not fns.deleteFn.isNil
+  doAssert not fns.mergeFn.isNil
+  doAssert not fns.containsFn.isNil
+  doAssert not fns.rootVidFn.isNil
+  doAssert not fns.isPruningFn.isNil
 
 # ------------
+
+proc validateMethodsDesc(vid: CoreDbVidRef) =
+  doAssert not vid.isNil
+  doAssert not vid.parent.isNil
+  doAssert vid.ready == true
 
 proc validateMethodsDesc(e: CoreDbErrorRef) =
   doAssert not e.isNil
@@ -66,7 +85,7 @@ proc validateMethodsDesc(e: CoreDbErrorRef) =
 proc validateMethodsDesc(eph: EphemMethodsDesc) =
   doAssert not eph.isNil
   doAssert not eph.parent.isNil
-  
+
 proc validateMethodsDesc(kvt: CoreDxKvtRef) =
   doAssert not kvt.isNil
   doAssert not kvt.parent.isNil
@@ -76,6 +95,11 @@ proc validateMethodsDesc(mpt: CoreDxMptRef) =
   doAssert not mpt.isNil
   doAssert not mpt.parent.isNil
   mpt.methods.validateMethodsDesc
+
+proc validateMethodsDesc(acc: CoreDxAccRef) =
+  doAssert not acc.isNil
+  doAssert not acc.parent.isNil
+  acc.methods.validateMethodsDesc
 
 proc validateMethodsDesc(phk: CoreDxPhkRef) =
   doAssert not phk.isNil
@@ -104,16 +128,14 @@ proc validateMethodsDesc(id: CoreDxTxID) =
 proc validateMethodsDesc(db: CoreDbRef) =
   doAssert not db.isNil
   doAssert db.dbType != CoreDbType(0)
-  db.kvtRef.validateMethodsDesc
-  db.new.validateConstructors
   db.methods.validateMethodsDesc
 
 # ------------------------------------------------------------------------------
 # Public debugging helpers
 # ------------------------------------------------------------------------------
 
-proc validate*(desc: MethodsDesc | EphemMethodsDesc | CoreDbErrorRef) =
-  desc.validateMethodsDesc
+proc validate*(dsc: ValidateDesc) =
+  dsc.validateMethodsDesc
 
 proc validate*(db: CoreDbRef) =
   db.validateMethodsDesc
