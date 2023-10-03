@@ -17,7 +17,7 @@ import
   eth/[common, p2p, trie/db, trie/nibbles],
   stew/[byteutils, interval_set],
   ../../core/chain,
-  ../../db/core_db/legacy_db,
+  ../../db/core_db,
   ../snap/[constants, range_desc],
   ../snap/worker/db/[hexary_desc, hexary_error, hexary_paths,
                      snapdb_persistent, hexary_range],

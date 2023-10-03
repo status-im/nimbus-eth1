@@ -63,7 +63,7 @@ proc pruneTrie*(db: AccountStateDB): bool =
 func db*(db: AccountStateDB): CoreDbRef =
   db.trie.db
 
-func kvt*(db: AccountStateDB): CoreDbKvtRef =
+proc kvt*(db: AccountStateDB): CoreDbKvtRef =
   db.trie.db.kvt
 
 proc rootHash*(db: AccountStateDB): KeccakHash =

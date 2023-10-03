@@ -19,13 +19,19 @@ import
   ./base/[base_desc, validate]
 
 export
+  CoreDbAccount,
+  CoreDbApiError,
   CoreDbBackendRef,
   CoreDbCaptFlags,
+  CoreDbErrorCode,
   CoreDbErrorRef,
+  CoreDbAccBackendRef,
   CoreDbKvtBackendRef,
   CoreDbMptBackendRef,
   CoreDbRef,
   CoreDbType,
+  CoreDbVidRef,
+  CoreDxAccRef,
   CoreDxCaptRef,
   CoreDxKvtRef,
   CoreDxMptRef,
@@ -52,7 +58,7 @@ const
 when ProvideCoreDbLegacyAPI:
   type
     TxWrapperApiError* = object of CoreDbApiError
-      ## For re-routing exceptions in iterator closure
+      ## For re-routing exception on tx/action template
 
     CoreDbKvtRef*  = distinct CoreDxKvtRef ## Let methods defect on error
     CoreDbMptRef*  = distinct CoreDxMptRef ## ...
@@ -61,22 +67,27 @@ when ProvideCoreDbLegacyAPI:
     CoreDbTxID*    = distinct CoreDxTxID
     CoreDbCaptRef* = distinct CoreDxCaptRef
 
-    CoreDbTrieRef* = CoreDbMptRef | CoreDbPhkRef
+    CoreDbTrieRefs* = CoreDbMptRef | CoreDbPhkRef
       ## Shortcut, *MPT* modules for (legacy API)
 
-    CoreDbChldRef* = CoreDbKvtRef | CoreDbTrieRef | CoreDbTxRef | CoreDbTxID |
-                     CoreDbCaptRef
-      ## Shortcut, all modules with a `parent` (for legacy API)
+    CoreDbChldRefs* = CoreDbKvtRef | CoreDbTrieRefs | CoreDbTxRef | CoreDbTxID |
+                      CoreDbCaptRef
+      ## Shortcut, all modules with a `parent` entry (for legacy API)
 
 type
-  CoreDxTrieRef* = CoreDxMptRef | CoreDxPhkRef
-    ## Shortcut, *MPT* modules
+  CoreDxTrieRefs = CoreDxMptRef | CoreDxPhkRef | CoreDxAccRef
+    ## Shortcut, *MPT* descriptors
 
-  CoreDxChldRef* = CoreDxKvtRef | CoreDxTrieRef | CoreDxTxRef | CoreDxTxID |
-                   CoreDxCaptRef |
-                   CoreDbErrorRef |
-                   CoreDbBackendRef | CoreDbKvtBackendRef | CoreDbMptBackendRef
-    ## Shortcut, all modules with a `parent`
+  CoreDxTrieRelated = CoreDxTrieRefs | CoreDxTxRef | CoreDxTxID | CoreDxCaptRef
+    ## Shortcut, descriptors for sub-modules running on an *MPT*
+
+  CoreDbBackends = CoreDbBackendRef | CoreDbKvtBackendRef |
+                   CoreDbMptBackendRef | CoreDbAccBackendRef
+    ## Shortcut, all backend descriptors.
+
+  CoreDxChldRefs = CoreDxKvtRef | CoreDxTrieRelated | CoreDbBackends |
+                   CoreDbErrorRef
+    ## Shortcut, all descriptors with a `parent` entry.
 
 # ------------------------------------------------------------------------------
 # Private functions: helpers
@@ -96,17 +107,17 @@ func toCoreDxPhkRef(mpt: CoreDxMptRef): CoreDxPhkRef =
     fromMpt: mpt,
     methods: mpt.methods)
 
-  result.methods.getFn =
+  result.methods.fetchFn =
     proc(k: openArray[byte]): CoreDbRc[Blob] =
-      mpt.methods.getFn(k.keccakHash.data)
+      mpt.methods.fetchFn(k.keccakHash.data)
 
-  result.methods.delFn =
+  result.methods.deleteFn =
     proc(k: openArray[byte]): CoreDbRc[void] =
-      mpt.methods.delFn(k.keccakHash.data)
+      mpt.methods.deleteFn(k.keccakHash.data)
 
-  result.methods.putFn =
-    proc(k:openArray[byte]; v:openArray[byte]): CoreDbRc[void] =
-      mpt.methods.putFn(k.keccakHash.data, v)
+  result.methods.mergeFn =
+    proc(k:openArray[byte]; v: openArray[byte]): CoreDbRc[void] =
+      mpt.methods.mergeFn(k.keccakHash.data, v)
 
   result.methods.containsFn =
     proc(k: openArray[byte]): CoreDbRc[bool] =
@@ -128,49 +139,47 @@ func parent(phk: CoreDxPhkRef): CoreDbRef =
   phk.fromMpt.parent
 
 # ------------------------------------------------------------------------------
-# Public constructor
+# Public constructor helper
 # ------------------------------------------------------------------------------
 
-template bless*(db: CoreDbRef; child: untyped): auto =
-  ## Complete sub-module descriptor, fill in `parent`
+proc bless*(db: CoreDbRef): CoreDbRef =
+  ## Verify descriptor
+  when AutoValidateDescriptors:
+    db.validate
+  db
+
+proc bless*(db: CoreDbRef; child: CoreDbVidRef): CoreDbVidRef =
+  ## Complete sub-module descriptor, fill in `parent` and actvate it.
   child.parent = db
+  child.ready = true
   when AutoValidateDescriptors:
     child.validate
   child
 
-proc init*(
-    db:         CoreDbRef;                # Main descriptor, locally extended
-    dbType:     CoreDbType;               # Backend symbol
-    dbMethods:  CoreDbMiscFns;            # General methods
-    kvtMethods: CoreDbKvtFns;             # Kvt related methods
-    newSubMod:  CoreDbConstructorFns;     # Sub-module constructors
-     ) =
-  ## Base descriptor initaliser
-  db.dbType = dbType
-  db.methods = dbMethods
-  db.new = newSubMod
-
-  db.kvtRef = CoreDxKvtRef(
-    parent:  db,
-    methods: kvtMethods)
+proc bless*(db: CoreDbRef; child: CoreDxKvtRef): CoreDxKvtRef =
+  ## Complete sub-module descriptor, fill in `parent` and de-actvate
+  ## iterator for persistent database.
+  child.parent = db
 
   # Disable interator for non-memory instances
-  if dbType in CoreDbPersistentTypes:
-    db.kvtRef.methods.pairsIt = iterator(): (Blob, Blob) =
+  if db.dbType in CoreDbPersistentTypes:
+    child.methods.pairsIt = iterator(): (Blob, Blob) =
       db.itNotImplemented "pairs/kvt"
 
   when AutoValidateDescriptors:
-    db.validate
+    child.validate
+  child
 
 
-proc newCoreDbCaptRef*(db: CoreDbRef; methods: CoreDbCaptFns): CoreDxCaptRef =
-  ## Capture constructor helper.
-  result = CoreDxCaptRef(
-    parent:  db,
-    methods: methods)
-
+proc bless*[T: CoreDxTrieRelated | CoreDbErrorRef | CoreDbBackends](
+    db: CoreDbRef;
+    child: T;
+      ): auto =
+  ## Complete sub-module descriptor, fill in `parent`.
+  child.parent = db
   when AutoValidateDescriptors:
-    db.validate
+    child.validate
+  child
 
 # ------------------------------------------------------------------------------
 # Public main descriptor methods
@@ -180,32 +189,87 @@ proc dbType*(db: CoreDbRef): CoreDbType =
   ## Getter
   db.dbType
 
-# On the persistent legacy hexary trie, this function is needed for
-# bootstrapping and Genesis setup when the `purge` flag is activated.
 proc compensateLegacySetup*(db: CoreDbRef) =
+  ## On the persistent legacy hexary trie, this function is needed for
+  ## bootstrapping and Genesis setup when the `purge` flag is activated.
+  ## Otherwise the database backend may defect on an internal inconsistency.
   db.methods.legacySetupFn()
 
-func parent*(cld: CoreDxChldRef): CoreDbRef =
+func parent*(cld: CoreDxChldRefs): CoreDbRef =
   ## Getter, common method for all sub-modules
   cld.parent
 
-proc backend*(db: CoreDbRef): CoreDbBackendRef =
-  ## Getter, retrieves the *raw* backend object for special support.
-  result = db.methods.backendFn()
-  result.parent = db
+proc backend*(dsc: CoreDxKvtRef | CoreDxTrieRelated | CoreDbRef): auto =
+  ## Getter, retrieves the *raw* backend object for special/localised support.
+  dsc.methods.backendFn()
+
+proc finish*(db: CoreDbRef; flush = false) =
+  ## Database destructor. If the argument `flush` is set `false`, the database
+  ## is left as-is and only the in-memory handlers are cleaned up.
+  ##
+  ## Otherwise the destructor is allowed to remove the database. This feature
+  ## depends on the backend database. Currently, only the `AristoDbRocks` type
+  ## backend removes the database on `true`.
+  db.methods.destroyFn flush
 
 proc `$$`*(e: CoreDbErrorRef): string =
   ## Pretty print error symbol, note that this directive may have side effects
   ## as it calls a backend function.
   e.parent.methods.errorPrintFn(e)
 
+proc hash*(vid: CoreDbVidRef): Result[Hash256,void] =
+  ## Getter (well, sort of), retrieves the hash for a `vid` argument. The
+  ## function might fail if there is currently no hash available (e.g. on
+  ## `Aristo`.) Note that this is different from succeeding with an
+  ## `EMPTY_ROOT_HASH` value.
+  ##
+  ## The value `EMPTY_ROOT_HASH` is also returned on an empty `vid` argument
+  ## `CoreDbVidRef(nil)`, say.
+  ##
+  if not vid.isNil and vid.ready:
+    return vid.parent.methods.vidHashFn vid
+  ok EMPTY_ROOT_HASH
+
+proc recast*(account: CoreDbAccount): Result[Account,void] =
+  ## Convert the argument `account` to the portable Ethereum representation
+  ## of an account. This conversion may fail if the storage root hash (see
+  ## `hash()` above) is currently unavailable.
+  ##
+  ## Note that for the legacy backend, this function always succeeds.
+  ##
+  ok Account(
+    nonce:       account.nonce,
+    balance:     account.balance,
+    codeHash:    account.codeHash,
+    storageRoot: ? account.storageVid.hash)
+
+proc getRoot*(
+    db: CoreDbRef;
+    root: Hash256;
+    createOk = false;
+      ): CoreDbRc[CoreDbVidRef] =
+  ## Find root node with argument hash `root` in database and return the
+  ## corresponding `CoreDbVidRef` object. If the `root` arguent is set
+  ## `EMPTY_CODE_HASH`, this function always succeeds, otherwise it fails
+  ## unless a root node with the corresponding hash exists.
+  ##
+  ## This function is intended to open a virtual accounts trie database as in:
+  ## ::
+  ##   proc openAccountLedger(db: CoreDbRef, rootHash: Hash256): CoreDxMptRef =
+  ##     let root = db.getRoot(rootHash).isOkOr:
+  ##       # some error handling
+  ##       return
+  ##     db.newAccMpt root
+  ##
+  db.methods.getRootFn(root, createOk)
+
 # ------------------------------------------------------------------------------
 # Public key-value table methods
 # ------------------------------------------------------------------------------
 
-func toKvt*(db: CoreDbRef): CoreDxKvtRef =
+proc newKvt*(db: CoreDbRef): CoreDxKvtRef =
   ## Getter (pseudo constructor)
-  db.kvtRef
+  db.methods.newKvtFn()
 
 proc get*(kvt: CoreDxKvtRef; key: openArray[byte]): CoreDbRc[Blob] =
   kvt.methods.getFn key
@@ -228,73 +292,66 @@ iterator pairs*(kvt: CoreDxKvtRef): (Blob, Blob) {.apiRaise.} =
   for k,v in kvt.methods.pairsIt():
     yield (k,v)
 
-proc backend*(kvt: CoreDxKvtRef): CoreDbKvtBackendRef =
-  ## Getter, retrieves the *raw* backend object for special support.
-  result = kvt.methods.backendFn()
-  result.parent = kvt.parent
-
 # ------------------------------------------------------------------------------
 # Public Merkle Patricia Tree, hexary trie constructors
 # ------------------------------------------------------------------------------
 
-proc newMpt*(db: CoreDbRef; root=EMPTY_ROOT_HASH): CoreDbRc[CoreDxMptRef] =
-  ## Constructor
-  db.new.mptFn root
+proc newMpt*(db: CoreDbRef; root: CoreDbVidRef; prune = true): CoreDxMptRef =
+  ## Constructor, will defect on failure (note that the legacy backend
+  ## always succeeds)
+  db.methods.newMptFn(root, prune).valueOr: raiseAssert $$error
+
+proc newAccMpt*(db: CoreDbRef; root: CoreDbVidRef; prune = true): CoreDxAccRef =
+  ## Similar to `newMpt()` for handling accounts. Although this sub-trie can
+  ## be emulated by means of `newMpt(..).toPhk()`, it is recommended using
+  ## this constructor which implies its own subset of methods to handle that
+  ## trie.
+  db.methods.newAccFn(root, prune).valueOr: raiseAssert $$error
 
 proc toMpt*(phk: CoreDxPhkRef): CoreDxMptRef =
   ## Replaces the pre-hashed argument trie `phk` by the non pre-hashed *MPT*.
+  ## Note that this does not apply to an accounts trie that was created by
+  ## `newAccMpt()`.
   phk.fromMpt
 
 proc toPhk*(mpt: CoreDxMptRef): CoreDxPhkRef =
   ## Replaces argument `mpt` by a pre-hashed *MPT*.
+  ## Note that this does not apply to an accounts trie that was created by
+  ## `newAaccMpt()`.
   mpt.toCoreDxPhkRef
 
 # ------------------------------------------------------------------------------
-# Public hexary trie legacy constructors
+# Public common methods for all hexary trie databases (`mpt`, `phk`, or `acc`)
 # ------------------------------------------------------------------------------
 
-proc newMptPrune*(
-    db: CoreDbRef;
-    root = EMPTY_ROOT_HASH;
-    prune = true;
-      ): CoreDbRc[CoreDxMptRef] =
-  ## Constructor, `HexaryTrie` compliant
-  db.new.legacyMptFn(root, prune)
-
-proc newPhkPrune*(
-    db: CoreDbRef;
-    root = EMPTY_ROOT_HASH;
-      prune = true;
-        ): CoreDbRc[CoreDxPhkRef] =
-  ## Constructor, `SecureHexaryTrie` compliant
-  ok (? db.new.legacyMptFn(root, prune)).toCoreDxPhkRef
-
-# ------------------------------------------------------------------------------
-# Public hexary trie database methods (`mpt` or `phk`)
-# ------------------------------------------------------------------------------
-
-proc isPruning*(trie: CoreDxTrieRef): bool =
+proc isPruning*(dsc: CoreDxTrieRefs | CoreDxAccRef): bool =
   ## Getter
-  trie.methods.isPruningFn()
+  dsc.methods.isPruningFn()
 
-proc get*(trie: CoreDxTrieRef; key: openArray[byte]): CoreDbRc[Blob] =
-  trie.methods.getFn(key)
+proc rootVid*(dsc: CoreDxTrieRefs | CoreDxAccRef): CoreDbVidRef =
+  ## Getter, result is not `nil`
+  dsc.methods.rootVidFn()
 
-proc del*(trie: CoreDxTrieRef; key: openArray[byte]): CoreDbRc[void] =
-  trie.methods.delFn key
+# ------------------------------------------------------------------------------
+# Public generic hexary trie database methods (`mpt` or `phk`)
+# ------------------------------------------------------------------------------
 
-proc put*(
-    trie: CoreDxTrieRef;
+proc fetch*(trie: CoreDxTrieRefs; key: openArray[byte]): CoreDbRc[Blob] =
+  ## Fetch data from the argument `trie`
+  trie.methods.fetchFn(key)
+
+proc delete*(trie: CoreDxTrieRefs; key: openArray[byte]): CoreDbRc[void] =
+  trie.methods.deleteFn key
+
+proc merge*(
+    trie: CoreDxTrieRefs;
     key: openArray[byte];
     value: openArray[byte];
       ): CoreDbRc[void] =
-  trie.methods.putFn(key, value)
+  trie.methods.mergeFn(key, value)
 
-proc contains*(trie: CoreDxTrieRef; key: openArray[byte]): CoreDbRc[bool] =
+proc contains*(trie: CoreDxTrieRefs; key: openArray[byte]): CoreDbRc[bool] =
   trie.methods.containsFn key
-
-proc rootHash*(trie: CoreDxTrieRef): CoreDbRc[Hash256] =
-  trie.methods.rootHashFn()
 
 iterator pairs*(mpt: CoreDxMptRef): (Blob, Blob) {.apiRaise.} =
   ## Trie traversal, only supported for `CoreDxMptRef`
@@ -306,10 +363,26 @@ iterator replicate*(mpt: CoreDxMptRef): (Blob, Blob) {.apiRaise.} =
   for k,v in mpt.methods.replicateIt():
     yield (k,v)
 
-proc backend*(trie: CoreDxTrieRef): CoreDbMptBackendRef =
-  ## Getter, retrieves the *raw* backend object for special support.
-  result = trie.methods.backendFn()
-  result.parent = trie.parent
+# ------------------------------------------------------------------------------
+# Public trie database methods for accounts
+# ------------------------------------------------------------------------------
+
+proc fetch*(acc: CoreDxAccRef; address: EthAddress): CoreDbRc[CoreDbAccount] =
+  ## Fetch data from the argument `trie`
+  acc.methods.fetchFn address
+
+proc delete*(acc: CoreDxAccRef; address: EthAddress): CoreDbRc[void] =
+  acc.methods.deleteFn address
+
+proc merge*(
+    acc: CoreDxAccRef;
+    address: EthAddress;
+    account: CoreDbAccount;
+      ): CoreDbRc[void] =
+  acc.methods.mergeFn(address, account)
+
+proc contains*(acc: CoreDxAccRef; address: EthAddress): CoreDbRc[bool] =
+  acc.methods.containsFn address
 
 # ------------------------------------------------------------------------------
 # Public transaction related methods
@@ -317,7 +390,7 @@ proc backend*(trie: CoreDxTrieRef): CoreDbMptBackendRef =
 
 proc toTransactionID*(db: CoreDbRef): CoreDbRc[CoreDxTxID] =
   ## Getter, current transaction state
-  db.new.getIdFn()
+  db.methods.getIdFn()
 
 proc shortTimeReadOnly*(
     id: CoreDxTxID;
@@ -329,7 +402,7 @@ proc shortTimeReadOnly*(
 
 proc newTransaction*(db: CoreDbRef): CoreDbRc[CoreDxTxRef] =
   ## Constructor
-  db.new.beginFn()
+  db.methods.beginFn()
 
 proc commit*(tx: CoreDxTxRef, applyDeletes = true): CoreDbRc[void] =
   tx.methods.commitFn applyDeletes
@@ -352,7 +425,7 @@ proc newCapture*(
     flags: set[CoreDbCaptFlags] = {};
       ): CoreDbRc[CoreDxCaptRef] =
   ## Constructor
-  db.new.captureFn flags
+  db.methods.captureFn flags
 
 proc recorder*(db: CoreDxCaptRef): CoreDbRc[CoreDbRef] =
   ## Getter
@@ -368,15 +441,18 @@ proc flags*(db: CoreDxCaptRef): set[CoreDbCaptFlags] =
 
 when ProvideCoreDbLegacyAPI:
 
-  func parent*(cld: CoreDbChldRef): CoreDbRef =
+  func parent*(cld: CoreDbChldRefs): CoreDbRef =
     ## Getter, common method for all sub-modules
     cld.distinctBase.parent()
 
+  proc backend*(dsc: CoreDbChldRefs): auto =
+    dsc.distinctBase.backend
+
   # ----------------
 
-  func kvt*(db: CoreDbRef): CoreDbKvtRef =
+  proc kvt*(db: CoreDbRef): CoreDbKvtRef =
     ## Legacy pseudo constructor, see `toKvt()` for production constructor
-    db.toKvt.CoreDbKvtRef
+    db.newKvt().CoreDbKvtRef
 
   proc get*(kvt: CoreDbKvtRef; key: openArray[byte]): Blob =
     kvt.distinctBase.get(key).expect "kvt/get()"
@@ -394,22 +470,17 @@ when ProvideCoreDbLegacyAPI:
     for k,v in kvt.distinctBase.pairs():
       yield (k,v)
 
-  proc backend*(kvt: CoreDbKvtRef): CoreDbKvtBackendRef =
-    kvt.distinctBase.backend
-
   # ----------------
 
   proc toMpt*(phk: CoreDbPhkRef): CoreDbMptRef =
     phk.distinctBase.toMpt.CoreDbMptRef
 
-  proc mpt*(db: CoreDbRef; root=EMPTY_ROOT_HASH): CoreDbMptRef =
-    db.newMpt(root).expect("db/mpt()").CoreDbMptRef
-
   proc mptPrune*(db: CoreDbRef; root: Hash256; prune = true): CoreDbMptRef =
-    db.newMptPrune(root, prune).expect("db/mptPrune()").CoreDbMptRef
+    let vid = db.getRoot(root, createOk=true).expect "mpt/getRoot()"
+    db.newMpt(vid, prune).CoreDbMptRef
 
   proc mptPrune*(db: CoreDbRef; prune = true): CoreDbMptRef =
-    db.newMptPrune(EMPTY_ROOT_HASH, prune).expect("db/mptPrune()").CoreDbMptRef
+    db.newMpt(CoreDbVidRef(nil), prune).CoreDbMptRef
 
   # ----------------
 
@@ -417,47 +488,41 @@ when ProvideCoreDbLegacyAPI:
     mpt.distinctBase.toPhk.CoreDbPhkRef
 
   proc phkPrune*(db: CoreDbRef; root: Hash256; prune = true): CoreDbPhkRef =
-    db.newPhkPrune(root, prune).expect("db/phkPrune()").CoreDbPhkRef
+    let vid = db.getRoot(root, createOk=true).expect "phk/getRoot()"
+    db.newMpt(vid, prune).toCoreDxPhkRef.CoreDbPhkRef
 
   proc phkPrune*(db: CoreDbRef; prune = true): CoreDbPhkRef =
-    db.newPhkPrune(EMPTY_ROOT_HASH, prune).expect("db/phkPrune()").CoreDbPhkRef
+    db.newMpt(CoreDbVidRef(nil), prune).toCoreDxPhkRef.CoreDbPhkRef
 
   # ----------------
 
-  proc isPruning*(trie: CoreDbTrieRef): bool =
+  proc isPruning*(trie: CoreDbTrieRefs): bool =
     trie.distinctBase.isPruning()
 
-  proc get*(trie: CoreDbTrieRef; key: openArray[byte]): Blob =
-    trie.distinctBase.get(key).expect "trie/get()"
+  proc get*(trie: CoreDbTrieRefs; key: openArray[byte]): Blob =
+    trie.distinctBase.fetch(key).expect "trie/get()"
 
-  proc del*(trie: CoreDbTrieRef; key: openArray[byte]) =
-    trie.distinctBase.del(key).expect "trie/del()"
+  proc del*(trie: CoreDbTrieRefs; key: openArray[byte]) =
+    trie.distinctBase.delete(key).expect "trie/del()"
 
-  proc put*(
-      trie: CoreDbTrieRef;
-      key: openArray[byte];
-      value: openArray[byte];
-        ) =
-    trie.distinctBase.put(key, value).expect "trie/put()"
+  proc put*(trie: CoreDbTrieRefs; key: openArray[byte]; val: openArray[byte]) =
+    trie.distinctBase.merge(key, val).expect "trie/put()"
 
-  proc contains*(trie: CoreDbTrieRef; key: openArray[byte]): bool =
+  proc contains*(trie: CoreDbTrieRefs; key: openArray[byte]): bool =
     trie.distinctBase.contains(key).expect "trie/contains()"
 
-  proc rootHash*(trie: CoreDbTrieRef): Hash256 =
-    trie.distinctBase.rootHash().expect "trie/rootHash()"
+  proc rootHash*(trie: CoreDbTrieRefs): Hash256 =
+    trie.distinctBase.rootVid().hash().expect "trie/rootHash()"
 
   iterator pairs*(mpt: CoreDbMptRef): (Blob, Blob) {.apiRaise.} =
-    ## Trie traversal, only supported for `CoreDbMptRef`
+    ## Trie traversal, not supported for `CoreDbPhkRef`
     for k,v in mpt.distinctBase.pairs():
       yield (k,v)
 
   iterator replicate*(mpt: CoreDbMptRef): (Blob, Blob) {.apiRaise.} =
-    ## Low level trie dump, only supported for `CoreDbMptRef`
+    ## Low level trie dump, not supported for `CoreDbPhkRef`
     for k,v in mpt.distinctBase.replicate():
       yield (k,v)
-
-  proc backend*(trie: CoreDbTrieRef): CoreDbMptBackendRef =
-    trie.distinctBase.backend
 
   # ----------------
 

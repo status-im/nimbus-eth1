@@ -105,7 +105,7 @@ proc beginSavepoint*(ac: var AccountsCache): SavePoint {.gcsafe.}
 proc rawTrie*(ac: AccountsCache): AccountsTrie = ac.trie
 
 func db(ac: AccountsCache): CoreDbRef = ac.trie.db
-func kvt(ac: AccountsCache): CoreDbKvtRef = ac.db.kvt
+proc kvt(ac: AccountsCache): CoreDbKvtRef = ac.db.kvt
 
 # The AccountsCache is modeled after TrieDatabase for it's transaction style
 proc init*(x: typedesc[AccountsCache], db: CoreDbRef,

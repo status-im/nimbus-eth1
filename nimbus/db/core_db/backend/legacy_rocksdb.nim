@@ -12,12 +12,17 @@
 
 import
   eth/trie/db,
-  ../select_backend,
-  "."/[base, legacy_db]
+  rocksdb,
+  "../.."/select_backend,
+  ../base,
+  ./legacy_db
 
 type
   LegaPersDbRef = ref object of LegacyDbRef
     rdb: RocksStoreRef     # for backend access with legacy mode
+
+# No other backend supported
+doAssert nimbus_db_backend == "rocksdb"
 
 # ------------------------------------------------------------------------------
 # Public constructor and low level data retrieval, storage & transation frame
@@ -41,7 +46,11 @@ proc newLegacyPersistentCoreDbRef*(path: string): CoreDbRef =
   except CatchableError as e:
     let msg = "DB initialisation error(" & $e.name & "): " & e.msg
     raise (ref ResultDefect)(msg: msg)
-  LegaPersDbRef(rdb: backend.rdb).init(LegacyDbPersistent, backend.trieDB)
+
+  proc done() =
+    backend.rdb.store.close()
+
+  LegaPersDbRef(rdb: backend.rdb).init(LegacyDbPersistent, backend.trieDB, done)
 
 # ------------------------------------------------------------------------------
 # Public helper for direct backend access
