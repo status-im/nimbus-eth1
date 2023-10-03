@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  ../../db/accounts_cache,
+  ../../db/ledger,
   ../../common/common,
   ../../vm_state,
   ../../vm_types

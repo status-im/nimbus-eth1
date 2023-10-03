@@ -16,7 +16,7 @@ import
   ./test_helpers, ./test_allowed_to_fail,
   ../premix/parser, test_config,
   ../nimbus/[vm_state, vm_types, errors, constants],
-  ../nimbus/db/accounts_cache,
+  ../nimbus/db/ledger,
   ../nimbus/utils/[utils, debug],
   ../nimbus/evm/tracer/legacy_tracer,
   ../nimbus/evm/tracer/json_tracer,
@@ -369,7 +369,7 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
     let
       pruneTrie = test_config.getConfiguration().pruning
       memDB     = newCoreDbRef LegacyDbMemory
-      stateDB   = AccountsCache.init(memDB, emptyRlpHash, pruneTrie)
+      stateDB   = WrappedAccountsCache.init(memDB, emptyRlpHash, pruneTrie)
       config    = getChainConfig(ctx.network)
       com       = CommonRef.new(memDB, config, pruneTrie)
 
@@ -399,7 +399,7 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
       elif lastBlockHash == ctx.lastBlockHash:
         # multiple chain, we are using the last valid canonical
         # state root to test against 'postState'
-        let stateDB = AccountsCache.init(memDB, header.stateRoot, pruneTrie)
+        let stateDB = WrappedAccountsCache.init(memDB, header.stateRoot, pruneTrie)
         verifyStateDB(fixture["postState"], ReadOnlyStateDB(stateDB))
 
       success = lastBlockHash == ctx.lastBlockHash

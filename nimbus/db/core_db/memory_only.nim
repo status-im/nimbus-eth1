@@ -13,7 +13,7 @@
 import
   std/options,
   eth/[common, trie/db],
-  ./backend/[legacy_db],
+  ./backend/[aristo_db, legacy_db],
   "."/[base, core_apps]
 
 export
@@ -110,8 +110,29 @@ proc newCoreDbRef*(
   when dbType == LegacyDbMemory:
     newLegacyMemoryCoreDbRef()
 
+  elif dbType == AristoDbMemory:
+    newAristoMemoryCoreDbRef()
+
+  elif dbType == AristoDbVoid:
+    newAristoVoidCoreDbRef()
+
   else:
     {.error: "Unsupported dbType for memory-only newCoreDbRef()".}
+
+proc newCoreDbRef*(
+    dbType: static[CoreDbType];      # Database type symbol
+    qidLayout: QidLayoutRef;         # `Aristo` only
+      ): CoreDbRef =
+  ## Constructor for volatile/memory type DB
+  ##
+  ## Note: Using legacy notation `newCoreDbRef()` rather than
+  ## `CoreDbRef.init()` because of compiler coughing.
+  ##
+  when dbType == AristoDbMemory:
+    newAristoMemoryCoreDbRef(DefaultQidLayoutRef)
+
+  else:
+    {.error: "Unsupported dbType for newCoreDbRef() with qidLayout argument".}
 
 # ------------------------------------------------------------------------------
 # Public template wrappers

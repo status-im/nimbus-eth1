@@ -30,7 +30,7 @@ when defined(evmc_enabled):
 else:
   import
     ../../state,
-    ../../../db/accounts_cache
+    ../../../db/ledger
 
 # ------------------------------------------------------------------------------
 # Public

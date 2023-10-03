@@ -16,7 +16,7 @@ const
 import
   std/[macros, strformat],
   pkg/[chronicles, chronos, stew/byteutils],
-  ".."/[constants, db/accounts_cache],
+  ".."/[constants, db/ledger],
   "."/[code_stream, computation],
   "."/[message, precompiles, state, types],
   ./async/operations,
@@ -121,7 +121,7 @@ proc afterExecCall(c: Computation) =
   ## also see: https://github.com/ethereum/EIPs/issues/716
 
   if c.isError or c.fork >= FkByzantium:
-    if c.msg.contractAddress == ripemdAddr:
+    if c.msg.contractAddress == RIPEMD_ADDR:
       # Special case to account for geth+parity bug
       c.vmState.stateDB.ripemdSpecial()
 

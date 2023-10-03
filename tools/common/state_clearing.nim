@@ -11,7 +11,7 @@
 import
   ../../nimbus/common/common,
   ../../nimbus/[vm_state, vm_types],
-  ../../nimbus/db/accounts_cache
+  ../../nimbus/db/ledger
 
 proc coinbaseStateClearing*(vmState: BaseVMState,
                             miner: EthAddress,

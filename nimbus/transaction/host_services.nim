@@ -10,7 +10,7 @@
 
 import
   times, stint, chronicles,
-  eth/common/eth_types, ../db/accounts_cache,
+  eth/common/eth_types, ../db/ledger,
   ../common/[evmforks, common],
   ".."/[vm_state, vm_computation, vm_internals, vm_gas_costs],
   ./host_types, ./host_trace, ./host_call_nested

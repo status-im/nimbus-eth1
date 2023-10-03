@@ -16,7 +16,7 @@ import
   stint,
   eth/trie/[trie_defs],
   ../../nimbus/[vm_types, vm_state],
-  ../../nimbus/db/accounts_cache,
+  ../../nimbus/db/ledger,
   ../../nimbus/transaction,
   ../../nimbus/core/executor,
   ../../nimbus/common/common,
@@ -150,7 +150,7 @@ proc writeResultToStdout(stateRes: seq[StateResult]) =
   stdout.write(n.pretty)
   stdout.write("\n")
 
-proc dumpAccounts(db: AccountsCache): Table[EthAddress, DumpAccount] =
+proc dumpAccounts(db: LedgerRef): Table[EthAddress, DumpAccount] =
   for accAddr in db.addresses():
     let acc = DumpAccount(
       balance : db.getBalance(accAddr),

@@ -1,7 +1,7 @@
 import
   std/[strutils, json],
   ./common/common,
-  ./db/[core_db, accounts_cache],
+  ./db/[core_db, ledger],
   ./utils/utils,
   ./evm/tracer/legacy_tracer,
   "."/[constants, vm_state, vm_types, transaction, core/executor],
@@ -44,7 +44,7 @@ proc toJson*(receipts: seq[Receipt]): JsonNode =
   for receipt in receipts:
     result.add receipt.toJson
 
-proc captureAccount(n: JsonNode, db: AccountsCache, address: EthAddress, name: string) =
+proc captureAccount(n: JsonNode, db: LedgerRef, address: EthAddress, name: string) =
   var jaccount = newJObject()
   jaccount["name"] = %name
   jaccount["address"] = %("0x" & $address)
@@ -138,7 +138,7 @@ proc traceTransaction*(com: CommonRef, header: BlockHeader,
       break
 
   # internal transactions:
-  var stateBefore = AccountsCache.init(capture.recorder, beforeRoot, com.pruneTrie)
+  var stateBefore = WrappedAccountsCache.init(capture.recorder, beforeRoot, com.pruneTrie)
   for idx, acc in tracedAccountsPairs(tracerInst):
     before.captureAccount(stateBefore, acc, internalTxName & $idx)
 
@@ -169,7 +169,7 @@ proc dumpBlockState*(com: CommonRef, header: BlockHeader, body: BlockBody, dumpS
   var
     before = newJArray()
     after = newJArray()
-    stateBefore = AccountsCache.init(capture.recorder, parent.stateRoot, com.pruneTrie)
+    stateBefore = WrappedAccountsCache.init(capture.recorder, parent.stateRoot, com.pruneTrie)
 
   for idx, tx in body.transactions:
     let sender = tx.getSender

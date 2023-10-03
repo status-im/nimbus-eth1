@@ -16,7 +16,7 @@ import
   ../common/state_clearing,
   ../../nimbus/[vm_types, vm_state, transaction],
   ../../nimbus/common/common,
-  ../../nimbus/db/accounts_cache,
+  ../../nimbus/db/ledger,
   ../../nimbus/utils/utils,
   ../../nimbus/core/pow/difficulty,
   ../../nimbus/core/dao,
@@ -103,7 +103,7 @@ proc envToHeader(env: EnvStruct): BlockHeader =
     excessBlobGas: env.currentExcessBlobGas,
   )
 
-proc postState(db: AccountsCache, alloc: var GenesisAlloc) =
+proc postState(db: LedgerRef, alloc: var GenesisAlloc) =
   for accAddr in db.addresses():
     var acc = GenesisAccount(
       code: db.getCode(accAddr),
@@ -328,7 +328,7 @@ template wrapException(body: untyped) =
   else:
     body
 
-proc setupAlloc(stateDB: AccountsCache, alloc: GenesisAlloc) =
+proc setupAlloc(stateDB: LedgerRef, alloc: GenesisAlloc) =
   for accAddr, acc in alloc:
     stateDB.setNonce(accAddr, acc.nonce)
     stateDB.setCode(accAddr, acc.code)

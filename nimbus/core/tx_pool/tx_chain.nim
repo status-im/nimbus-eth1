@@ -16,7 +16,7 @@ import
   std/times,
   ../../common/common,
   ../../constants,
-  ../../db/accounts_cache,
+  ../../db/ledger,
   ../../utils/utils,
   ../../vm_state,
   ../../vm_types,
@@ -157,7 +157,7 @@ proc update(dh: TxChainRef; parent: BlockHeader)
   let
     timestamp = dh.getTimestamp(parent)
     db  = dh.com.db
-    acc = AccountsCache.init(db, parent.stateRoot, dh.com.pruneTrie)
+    acc = WrappedAccountsCache.init(db, parent.stateRoot, dh.com.pruneTrie)
     fee = if dh.com.isLondon(parent.blockNumber + 1, timestamp):
             some(dh.com.baseFeeGet(parent).uint64.u256)
           else:

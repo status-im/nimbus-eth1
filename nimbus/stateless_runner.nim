@@ -8,7 +8,7 @@ import
   eth/[common/eth_types, p2p],
   ./core/chain/chain_desc,
   ./core/executor/process_block,
-  ./db/[core_db, select_backend, accounts_cache],
+  ./db/[core_db, select_backend, ledger],
   ./evm/async/[data_sources, operations, data_sources/json_rpc_data_source],
   "."/[vm_state, vm_types]
 

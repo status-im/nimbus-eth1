@@ -10,7 +10,7 @@
 
 import
   std/[sequtils, sets, times, strutils],
-  ../db/accounts_cache,
+  ../db/ledger,
   ".."/[transaction, common/common],
   ".."/[errors],
   "."/[dao, eip4844, gaslimit, withdrawals],

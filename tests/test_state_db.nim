@@ -11,7 +11,7 @@ import
   unittest2,
   ../nimbus/db/state_db
 
-include ../nimbus/db/accounts_cache
+include ../nimbus/db/ledger/accounts_cache
 
 func initAddr(z: int): EthAddress =
   const L = sizeof(result)
@@ -170,10 +170,10 @@ proc stateDBMain*() =
             return false
         true
 
-      proc accessList(ac: var AccountsCache, address: int) {.inline.} =
+      proc accessList(ac: AccountsCache, address: int) {.inline.} =
         ac.accessList(address.initAddr)
 
-      proc accessList(ac: var AccountsCache, address, slot: int) {.inline.} =
+      proc accessList(ac: AccountsCache, address, slot: int) {.inline.} =
         ac.accessList(address.initAddr, slot.u256)
 
       var ac = init(AccountsCache, acDB)

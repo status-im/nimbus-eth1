@@ -14,28 +14,28 @@ import
   std/[options, sets, strformat, tables],
   eth/[keys],
   ../../stateless/[witness_from_tree, witness_types],
-  ../db/accounts_cache,
+  ../db/ledger,
   ../common/[common, evmforks],
   ./async/data_sources,
   ./interpreter/[op_codes, gas_costs],
   ./types
 
 proc init(
-      self:         BaseVMState;
-      ac:           AccountsCache;
-      parent:       BlockHeader;
-      blockCtx:     BlockContext;
-      com:          CommonRef;
-      tracer:       TracerRef,
-      asyncFactory: AsyncOperationFactory = AsyncOperationFactory(maybeDataSource: none[AsyncDataSource]()))
-    {.gcsafe.} =
+    self:        BaseVMState;
+    stateDB:     LedgerRef;
+    parent:      BlockHeader;
+    blockCtx:    BlockContext;
+    com:         CommonRef;
+    tracer:      TracerRef;
+    asyncFactory = AsyncOperationFactory(maybeDataSource: none[AsyncDataSource]());
+      ) {.gcsafe.} =
   ## Initialisation helper
   self.parent = parent
   self.blockCtx = blockCtx
   self.gasPool = blockCtx.gasLimit
   self.com = com
   self.tracer = tracer
-  self.stateDB = ac
+  self.stateDB = stateDB
   self.asyncFactory = asyncFactory
 
 func blockCtx(com: CommonRef, header: BlockHeader):
@@ -61,12 +61,14 @@ proc `$`*(vmState: BaseVMState): string
              &"\n  blockNumber: {vmState.parent.blockNumber + 1}"
 
 proc new*(
-      T:        type BaseVMState;
-      parent:   BlockHeader;     ## parent header, account sync position
-      blockCtx: BlockContext;
-      com:      CommonRef;       ## block chain config
-      tracer:   TracerRef = nil): T
-    {.gcsafe.} =
+    T:          type BaseVMState;
+    parent:     BlockHeader;     ## parent header, account sync position
+    blockCtx:   BlockContext;
+    com:        CommonRef;       ## block chain config
+    tracer      = TracerRef(nil);
+    stateDbType = type WrappedAccountsCache;
+      ): T
+      {.gcsafe.} =
   ## Create a new `BaseVMState` descriptor from a parent block header. This
   ## function internally constructs a new account state cache rooted at
   ## `parent.stateRoot`
@@ -76,35 +78,37 @@ proc new*(
   ## with the `parent` block header.
   new result
   result.init(
-    ac       = AccountsCache.init(com.db, parent.stateRoot, com.pruneTrie),
+    stateDB  = stateDbType.init(com.db, parent.stateRoot, com.pruneTrie),
     parent   = parent,
     blockCtx = blockCtx,
     com      = com,
     tracer   = tracer)
 
-proc reinit*(self:     BaseVMState;     ## Object descriptor
-             parent:   BlockHeader;     ## parent header, account sync pos.
-             blockCtx: BlockContext
-             ): bool
-    {.gcsafe.} =
-  ## Re-initialise state descriptor. The `AccountsCache` database is
+proc reinit*(
+    self:      BaseVMState;     ## Object descriptor
+    parent:    BlockHeader;     ## parent header, account sync pos.
+    blockCtx:  BlockContext;
+    stateDbType = type WrappedAccountsCache;
+      ): bool
+      {.gcsafe.} =
+  ## Re-initialise state descriptor. The `LedgerRef` database is
   ## re-initilaise only if its `rootHash` doe not point to `parent.stateRoot`,
   ## already. Accumulated state data are reset.
   ##
-  ## This function returns `true` unless the `AccountsCache` database could be
+  ## This function returns `true` unless the `LedgerRef` database could be
   ## queries about its `rootHash`, i.e. `isTopLevelClean` evaluated `true`. If
   ## this function returns `false`, the function argument `self` is left
   ## untouched.
   if self.stateDB.isTopLevelClean:
     let
-      tracer = self.tracer
-      com    = self.com
-      db     = com.db
-      ac     = if self.stateDB.rootHash == parent.stateRoot: self.stateDB
-               else: AccountsCache.init(db, parent.stateRoot, com.pruneTrie)
+      tracer  = self.tracer
+      com     = self.com
+      db      = com.db
+      stateDB = if self.stateDB.rootHash == parent.stateRoot: self.stateDB
+                else: stateDbType.init(db, parent.stateRoot, com.pruneTrie)
     self[].reset
     self.init(
-      ac       = ac,
+      stateDB  = stateDB,
       parent   = parent,
       blockCtx = blockCtx,
       com      = com,
@@ -142,12 +146,13 @@ proc reinit*(self:      BaseVMState; ## Object descriptor
       header    = header)
 
 proc init*(
-      self:   BaseVMState;     ## Object descriptor
-      parent: BlockHeader;     ## parent header, account sync position
-      header: BlockHeader;     ## header with tx environment data fields
-      com:    CommonRef;       ## block chain config
-      tracer: TracerRef = nil)
-    {.gcsafe, raises: [CatchableError].} =
+    self:       BaseVMState;     ## Object descriptor
+    parent:     BlockHeader;     ## parent header, account sync position
+    header:     BlockHeader;     ## header with tx environment data fields
+    com:        CommonRef;       ## block chain config
+    tracer      = TracerRef(nil);
+    stateDbType = type WrappedAccountsCache;
+      ) {.gcsafe, raises: [CatchableError].} =
   ## Variant of `new()` constructor above for in-place initalisation. The
   ## `parent` argument is used to sync the accounts cache and the `header`
   ## is used as a container to pass the `timestamp`, `gasLimit`, and `fee`
@@ -156,7 +161,7 @@ proc init*(
   ## It requires the `header` argument properly initalised so that for PoA
   ## networks, the miner address is retrievable via `ecRecover()`.
   self.init(
-    ac       = AccountsCache.init(com.db, parent.stateRoot, com.pruneTrie),
+    stateDB  = stateDbType.init(com.db, parent.stateRoot, com.pruneTrie),
     parent   = parent,
     blockCtx = com.blockCtx(header),
     com      = com,
@@ -220,14 +225,16 @@ proc statelessInit*(
     header:       BlockHeader;     ## header with tx environment data fields
     com:          CommonRef;       ## block chain config
     asyncFactory: AsyncOperationFactory;
-    tracer:       TracerRef = nil): bool
-    {.gcsafe, raises: [CatchableError].} =
+    tracer        = TracerRef(nil);
+    stateDbType   = type WrappedAccountsCache;
+      ): bool
+      {.gcsafe, raises: [CatchableError].} =
   vmState.init(
-    ac          = AccountsCache.init(com.db, parent.stateRoot, com.pruneTrie),
-    parent      = parent,
-    blockCtx    = com.blockCtx(header),
-    com         = com,
-    tracer      = tracer,
+    stateDB      = stateDbType.init(com.db, parent.stateRoot, com.pruneTrie),
+    parent       = parent,
+    blockCtx     = com.blockCtx(header),
+    com          = com,
+    tracer       = tracer,
     asyncFactory = asyncFactory)
   return true
 

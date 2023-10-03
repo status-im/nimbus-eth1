@@ -8,17 +8,26 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [].}
+
+## Re-write of `accounts_cache.nim` using new database API.
+##
+## Many objects and names are kept as in the original ``accounts_cache.nim` so
+## that a diff against the original file gives useful results (e.g. using
+## the graphical diff tool `meld`.)
+
 import
   std/[tables, hashes, sets],
   eth/[common, rlp],
-  ../../stateless/multi_keys,
-  ../constants,
-  ../utils/utils,
-  ./access_list as ac_access_list,
-  "."/[core_db, distinct_tries, storage_types, transient_storage]
+  results,
+  ../../../stateless/multi_keys,
+  "../.."/[constants, errors, utils/utils],
+  ../access_list as ac_access_list,
+  ".."/[core_db, storage_types, transient_storage],
+  ./cached_ledger_accounts
 
 const
-  debugAccountsCache = false
+  debugCachedLedgerRef = false
 
 type
   AccountFlag = enum
@@ -34,7 +43,7 @@ type
   AccountFlags = set[AccountFlag]
 
   RefAccount = ref object
-    account: Account
+    account: CoreDbAccount
     flags: AccountFlags
     code: seq[byte]
     originalStorage: TableRef[UInt256, UInt256]
@@ -44,29 +53,30 @@ type
     storageKeys*: HashSet[UInt256]
     codeTouched*: bool
 
-  AccountsCache* = ref object
-    trie: AccountsTrie
-    savePoint: SavePoint
+  CachedLedgerRef* = ref object
+    kvt: CoreDbKvtRef # Legacy API is god enough here
+    ledger: AccountLedger
+    savePoint: LedgerSavePoint
     witnessCache: Table[EthAddress, WitnessData]
     isDirty: bool
     ripemdSpecial: bool
 
-  ReadOnlyStateDB* = distinct AccountsCache
+  ReadOnlyStateDB* = distinct CachedLedgerRef
 
   TransactionState = enum
     Pending
     Committed
     RolledBack
 
-  SavePoint* = ref object
-    parentSavepoint: SavePoint
+  LedgerSavePoint* = ref object
+    parentSavepoint: LedgerSavePoint
     cache: Table[EthAddress, RefAccount]
     selfDestruct: HashSet[EthAddress]
     logEntries: seq[Log]
     accessList: ac_access_list.AccessList
     transientStorage: TransientStorage
     state: TransactionState
-    when debugAccountsCache:
+    when debugCachedLedgerRef:
       depth: int
 
 const
@@ -86,11 +96,11 @@ const
       result[19] = x.byte
     initAddress(3)
 
-when debugAccountsCache:
+when debugCachedLedgerRef:
   import
     stew/byteutils
 
-  proc inspectSavePoint(name: string, x: SavePoint) =
+  proc inspectSavePoint(name: string, x: LedgerSavePoint) =
     debugEcho "*** ", name, ": ", x.depth, " ***"
     var sp = x
     while sp != nil:
@@ -98,38 +108,49 @@ when debugAccountsCache:
         debugEcho address.toHex, " ", acc.flags
       sp = sp.parentSavepoint
 
-proc beginSavepoint*(ac: var AccountsCache): SavePoint {.gcsafe.}
+proc beginSavepoint*(ac: CachedLedgerRef): LedgerSavePoint {.gcsafe.}
 
 # FIXME-Adam: this is only necessary because of my sanity checks on the latest rootHash;
 # take this out once those are gone.
-proc rawTrie*(ac: AccountsCache): AccountsTrie = ac.trie
+proc rawTrie*(ac: CachedLedgerRef): AccountLedger = ac.ledger
 
-func db(ac: AccountsCache): CoreDbRef = ac.trie.db
-proc kvt(ac: AccountsCache): CoreDbKvtRef = ac.db.kvt
+func newCoreDbAccount: CoreDbAccount =
+  CoreDbAccount(
+    nonce:      emptyAcc.nonce,
+    balance:    emptyAcc.balance,
+    codeHash:   emptyAcc.codeHash,
+    storageVid: CoreDbVidRef(nil))
 
-# The AccountsCache is modeled after TrieDatabase for it's transaction style
-proc init*(x: typedesc[AccountsCache], db: CoreDbRef,
-           root: KeccakHash, pruneTrie = true): AccountsCache =
+template noRlpException(info: static[string]; code: untyped) =
+  try:
+    code
+  except RlpError as e:
+    raiseAssert info & ", name=\"" & $e.name & "\", msg=\"" & e.msg & "\""
+
+# The CachedLedgerRef is modeled after TrieDatabase for it's transaction style
+proc init*(x: typedesc[CachedLedgerRef], db: CoreDbRef,
+           root: KeccakHash, pruneTrie = true): CachedLedgerRef =
   new result
-  result.trie = initAccountsTrie(db, root, pruneTrie)
+  result.kvt = db.kvt
+  result.ledger = AccountLedger.init(db, root, pruneTrie)
   result.witnessCache = initTable[EthAddress, WitnessData]()
   discard result.beginSavepoint
 
-proc init*(x: typedesc[AccountsCache], db: CoreDbRef, pruneTrie = true): AccountsCache =
+proc init*(x: typedesc[CachedLedgerRef], db: CoreDbRef, pruneTrie = true): CachedLedgerRef =
   init(x, db, EMPTY_ROOT_HASH, pruneTrie)
 
-proc rootHash*(ac: AccountsCache): KeccakHash =
+proc rootHash*(ac: CachedLedgerRef): KeccakHash =
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
   # make sure all cache already committed
   doAssert(ac.isDirty == false)
-  ac.trie.rootHash
+  ac.ledger.rootHash
 
-proc isTopLevelClean*(ac: AccountsCache): bool =
+proc isTopLevelClean*(ac: CachedLedgerRef): bool =
   ## Getter, returns `true` if all pending data have been commited.
   not ac.isDirty and ac.savePoint.parentSavepoint.isNil
 
-proc beginSavepoint*(ac: var AccountsCache): SavePoint =
+proc beginSavepoint*(ac: CachedLedgerRef): LedgerSavePoint =
   new result
   result.cache = initTable[EthAddress, RefAccount]()
   result.accessList.init()
@@ -138,12 +159,12 @@ proc beginSavepoint*(ac: var AccountsCache): SavePoint =
   result.parentSavepoint = ac.savePoint
   ac.savePoint = result
 
-  when debugAccountsCache:
+  when debugCachedLedgerRef:
     if not result.parentSavePoint.isNil:
       result.depth = result.parentSavePoint.depth + 1
     inspectSavePoint("snapshot", result)
 
-proc rollback*(ac: var AccountsCache, sp: SavePoint) =
+proc rollback*(ac: CachedLedgerRef, sp: LedgerSavePoint) =
   # Transactions should be handled in a strictly nested fashion.
   # Any child transaction must be committed or rolled-back before
   # its parent transactions:
@@ -151,10 +172,10 @@ proc rollback*(ac: var AccountsCache, sp: SavePoint) =
   ac.savePoint = sp.parentSavepoint
   sp.state = RolledBack
 
-  when debugAccountsCache:
+  when debugCachedLedgerRef:
     inspectSavePoint("rollback", ac.savePoint)
 
-proc commit*(ac: var AccountsCache, sp: SavePoint) =
+proc commit*(ac: CachedLedgerRef, sp: LedgerSavePoint) =
   # Transactions should be handled in a strictly nested fashion.
   # Any child transaction must be committed or rolled-back before
   # its parent transactions:
@@ -172,18 +193,18 @@ proc commit*(ac: var AccountsCache, sp: SavePoint) =
   ac.savePoint.logEntries.add sp.logEntries
   sp.state = Committed
 
-  when debugAccountsCache:
+  when debugCachedLedgerRef:
     inspectSavePoint("commit", ac.savePoint)
 
-proc dispose*(ac: var AccountsCache, sp: SavePoint) {.inline.} =
+proc dispose*(ac: CachedLedgerRef, sp: LedgerSavePoint) =
   if sp.state == Pending:
     ac.rollback(sp)
 
-proc safeDispose*(ac: var AccountsCache, sp: SavePoint) {.inline.} =
+proc safeDispose*(ac: CachedLedgerRef, sp: LedgerSavePoint) =
   if (not isNil(sp)) and (sp.state == Pending):
     ac.rollback(sp)
 
-proc getAccount(ac: AccountsCache, address: EthAddress, shouldCreate = true): RefAccount =
+proc getAccount(ac: CachedLedgerRef, address: EthAddress, shouldCreate = true): RefAccount =
   # search account from layers of cache
   var sp = ac.savePoint
   while sp != nil:
@@ -193,28 +214,19 @@ proc getAccount(ac: AccountsCache, address: EthAddress, shouldCreate = true): Re
     sp = sp.parentSavepoint
 
   # not found in cache, look into state trie
-  let recordFound =
-    try:
-      ac.trie.getAccountBytes(address)
-    except RlpError:
-      raiseAssert("No RlpError should occur on trie access for an address")
-  if recordFound.len > 0:
-    # we found it
-    try:
-      result = RefAccount(
-        account: rlp.decode(recordFound, Account),
-        flags: {Alive}
-        )
-    except RlpError:
-      raiseAssert("No RlpError should occur on decoding account from trie")
-  else:
-    if not shouldCreate:
-      return
-    # it's a request for new account
+  let rc = ac.ledger.fetch address
+  if rc.isOk:
     result = RefAccount(
-      account: newAccount(),
-      flags: {Alive, IsNew}
-      )
+      account: rc.value,
+      flags: {Alive})
+
+  elif shouldCreate:
+    result = RefAccount(
+      account: newCoreDbAccount(),
+      flags: {Alive, IsNew})
+
+  else:
+    return # ignore, don't cache
 
   # cache the account
   ac.savePoint.cache[address] = result
@@ -238,24 +250,7 @@ proc isEmpty(acc: RefAccount): bool =
 template exists(acc: RefAccount): bool =
   Alive in acc.flags
 
-template createTrieKeyFromSlot(slot: UInt256): auto =
-  # XXX: This is too expensive. Similar to `createRangeFromAddress`
-  # Converts a number to hex big-endian representation including
-  # prefix and leading zeros:
-  slot.toBytesBE
-  # Original py-evm code:
-  # pad32(int_to_big_endian(slot))
-  # morally equivalent to toByteRange_Unnecessary but with different types
-
-template getStorageTrie(db: CoreDbRef, acc: RefAccount): auto =
-  # TODO: implement `prefix-db` to solve issue #228 permanently.
-  # the `prefix-db` will automatically insert account address to the
-  # underlying-db key without disturb how the trie works.
-  # it will create virtual container for each account.
-  # see nim-eth#9
-  initStorageTrie(db, acc.account.storageRoot, false)
-
-proc originalStorageValue(acc: RefAccount, slot: UInt256, db: CoreDbRef): UInt256 =
+proc originalStorageValue(acc: RefAccount, slot: UInt256, ac: CachedLedgerRef): UInt256 =
   # share the same original storage between multiple
   # versions of account
   if acc.originalStorage.isNil:
@@ -265,29 +260,24 @@ proc originalStorageValue(acc: RefAccount, slot: UInt256, db: CoreDbRef): UInt25
       return val[]
 
   # Not in the original values cache - go to the DB.
-  let
-    slotAsKey = createTrieKeyFromSlot slot
-    storageTrie = getStorageTrie(db, acc)
-    foundRecord = storageTrie.getSlotBytes(slotAsKey)
-
-  result = if foundRecord.len > 0:
-            rlp.decode(foundRecord, UInt256)
-          else:
-            UInt256.zero()
+  let rc = StorageLedger.init(ac.ledger, acc.account).fetch slot
+  if rc.isOk and 0 < rc.value.len:
+    noRlpException "originalStorageValue()":
+      result = rlp.decode(rc.value, UInt256)
 
   acc.originalStorage[slot] = result
 
-proc storageValue(acc: RefAccount, slot: UInt256, db: CoreDbRef): UInt256 =
+proc storageValue(acc: RefAccount, slot: UInt256, ac: CachedLedgerRef): UInt256 =
   acc.overlayStorage.withValue(slot, val) do:
     return val[]
   do:
-    result = acc.originalStorageValue(slot, db)
+    result = acc.originalStorageValue(slot, ac)
 
 proc kill(acc: RefAccount) =
   acc.flags.excl Alive
   acc.overlayStorage.clear()
   acc.originalStorage = nil
-  acc.account = newAccount()
+  acc.account = newCoreDbAccount()
   acc.code = default(seq[byte])
 
 type
@@ -305,14 +295,14 @@ proc persistMode(acc: RefAccount): PersistMode =
     if IsNew notin acc.flags:
       result = Remove
 
-proc persistCode(acc: RefAccount, db: CoreDbRef) =
+proc persistCode(acc: RefAccount, ac: CachedLedgerRef) =
   if acc.code.len != 0:
     when defined(geth):
-      db.kvt.put(acc.account.codeHash.data, acc.code)
+      ac.kvt.put(acc.account.codeHash.data, acc.code)
     else:
-      db.kvt.put(contractHashKey(acc.account.codeHash).toOpenArray, acc.code)
+      ac.kvt.put(contractHashKey(acc.account.codeHash).toOpenArray, acc.code)
 
-proc persistStorage(acc: RefAccount, db: CoreDbRef, clearCache: bool) =
+proc persistStorage(acc: RefAccount, ac: CachedLedgerRef, clearCache: bool) =
   if acc.overlayStorage.len == 0:
     # TODO: remove the storage too if we figure out
     # how to create 'virtual' storage room for each account
@@ -321,25 +311,17 @@ proc persistStorage(acc: RefAccount, db: CoreDbRef, clearCache: bool) =
   if not clearCache and acc.originalStorage.isNil:
     acc.originalStorage = newTable[UInt256, UInt256]()
 
-  db.compensateLegacySetup()
-  var storageTrie = getStorageTrie(db, acc)
+  var storageLedger = StorageLedger.init(ac.ledger, acc.account)
 
   for slot, value in acc.overlayStorage:
-    let slotAsKey = createTrieKeyFromSlot slot
-
     if value > 0:
       let encodedValue = rlp.encode(value)
-      storageTrie.putSlotBytes(slotAsKey, encodedValue)
+      storageLedger.merge(slot, encodedValue)
     else:
-      storageTrie.delSlotBytes(slotAsKey)
+      storageLedger.delete(slot)
 
-    # TODO: this can be disabled if we do not perform
-    #       accounts tracing
-    # map slothash back to slot value
-    # see iterator storage below
-    # slotHash can be obtained from storageTrie.putSlotBytes?
-    let slotHash = keccakHash(slotAsKey)
-    db.kvt.put(slotHashToSlotKey(slotHash.data).toOpenArray, rlp.encode(slot))
+    let key = slot.toBytesBE.keccakHash.data.slotHashToSlotKey
+    ac.kvt.put(key.toOpenArray, rlp.encode(slot))
 
   if not clearCache:
     # if we preserve cache, move the overlayStorage
@@ -351,9 +333,9 @@ proc persistStorage(acc: RefAccount, db: CoreDbRef, clearCache: bool) =
         acc.originalStorage.del(slot)
     acc.overlayStorage.clear()
 
-  acc.account.storageRoot = storageTrie.rootHash
+  acc.account.storageVid = storageLedger.rootVid
 
-proc makeDirty(ac: AccountsCache, address: EthAddress, cloneStorage = true): RefAccount =
+proc makeDirty(ac: CachedLedgerRef, address: EthAddress, cloneStorage = true): RefAccount =
   ac.isDirty = true
   result = ac.getAccount(address)
   if address in ac.savePoint.cache:
@@ -366,22 +348,22 @@ proc makeDirty(ac: AccountsCache, address: EthAddress, cloneStorage = true): Ref
   result.flags.incl Dirty
   ac.savePoint.cache[address] = result
 
-proc getCodeHash*(ac: AccountsCache, address: EthAddress): Hash256 {.inline.} =
+proc getCodeHash*(ac: CachedLedgerRef, address: EthAddress): Hash256 =
   let acc = ac.getAccount(address, false)
   if acc.isNil: emptyAcc.codeHash
   else: acc.account.codeHash
 
-proc getBalance*(ac: AccountsCache, address: EthAddress): UInt256 {.inline.} =
+proc getBalance*(ac: CachedLedgerRef, address: EthAddress): UInt256 =
   let acc = ac.getAccount(address, false)
   if acc.isNil: emptyAcc.balance
   else: acc.account.balance
 
-proc getNonce*(ac: AccountsCache, address: EthAddress): AccountNonce {.inline.} =
+proc getNonce*(ac: CachedLedgerRef, address: EthAddress): AccountNonce =
   let acc = ac.getAccount(address, false)
   if acc.isNil: emptyAcc.nonce
   else: acc.account.nonce
 
-proc getCode*(ac: AccountsCache, address: EthAddress): seq[byte] =
+proc getCode*(ac: CachedLedgerRef, address: EthAddress): seq[byte] =
   let acc = ac.getAccount(address, false)
   if acc.isNil:
     return
@@ -398,40 +380,40 @@ proc getCode*(ac: AccountsCache, address: EthAddress): seq[byte] =
     acc.flags.incl CodeLoaded
     result = acc.code
 
-proc getCodeSize*(ac: AccountsCache, address: EthAddress): int {.inline.} =
+proc getCodeSize*(ac: CachedLedgerRef, address: EthAddress): int =
   ac.getCode(address).len
 
-proc getCommittedStorage*(ac: AccountsCache, address: EthAddress, slot: UInt256): UInt256 {.inline.} =
+proc getCommittedStorage*(ac: CachedLedgerRef, address: EthAddress, slot: UInt256): UInt256 =
   let acc = ac.getAccount(address, false)
   if acc.isNil:
     return
-  acc.originalStorageValue(slot, ac.db)
+  acc.originalStorageValue(slot, ac)
 
-proc getStorage*(ac: AccountsCache, address: EthAddress, slot: UInt256): UInt256 {.inline.} =
+proc getStorage*(ac: CachedLedgerRef, address: EthAddress, slot: UInt256): UInt256 =
   let acc = ac.getAccount(address, false)
   if acc.isNil:
     return
-  acc.storageValue(slot, ac.db)
+  acc.storageValue(slot, ac)
 
-proc hasCodeOrNonce*(ac: AccountsCache, address: EthAddress): bool {.inline.} =
+proc hasCodeOrNonce*(ac: CachedLedgerRef, address: EthAddress): bool =
   let acc = ac.getAccount(address, false)
   if acc.isNil:
     return
   acc.account.nonce != 0 or acc.account.codeHash != EMPTY_SHA3
 
-proc accountExists*(ac: AccountsCache, address: EthAddress): bool {.inline.} =
+proc accountExists*(ac: CachedLedgerRef, address: EthAddress): bool =
   let acc = ac.getAccount(address, false)
   if acc.isNil:
     return
   acc.exists()
 
-proc isEmptyAccount*(ac: AccountsCache, address: EthAddress): bool {.inline.} =
+proc isEmptyAccount*(ac: CachedLedgerRef, address: EthAddress): bool =
   let acc = ac.getAccount(address, false)
   doAssert not acc.isNil
   doAssert acc.exists()
   acc.isEmpty()
 
-proc isDeadAccount*(ac: AccountsCache, address: EthAddress): bool =
+proc isDeadAccount*(ac: CachedLedgerRef, address: EthAddress): bool =
   let acc = ac.getAccount(address, false)
   if acc.isNil:
     return true
@@ -439,13 +421,13 @@ proc isDeadAccount*(ac: AccountsCache, address: EthAddress): bool =
     return true
   acc.isEmpty()
 
-proc setBalance*(ac: AccountsCache, address: EthAddress, balance: UInt256) =
+proc setBalance*(ac: CachedLedgerRef, address: EthAddress, balance: UInt256) =
   let acc = ac.getAccount(address)
   acc.flags.incl {Alive}
   if acc.account.balance != balance:
     ac.makeDirty(address).account.balance = balance
 
-proc addBalance*(ac: AccountsCache, address: EthAddress, delta: UInt256) {.inline.} =
+proc addBalance*(ac: CachedLedgerRef, address: EthAddress, delta: UInt256) =
   # EIP161: We must check emptiness for the objects such that the account
   # clearing (0,0,0 objects) can take effect.
   if delta.isZero:
@@ -455,7 +437,7 @@ proc addBalance*(ac: AccountsCache, address: EthAddress, delta: UInt256) {.inlin
     return
   ac.setBalance(address, ac.getBalance(address) + delta)
 
-proc subBalance*(ac: AccountsCache, address: EthAddress, delta: UInt256) {.inline.} =
+proc subBalance*(ac: CachedLedgerRef, address: EthAddress, delta: UInt256) =
   if delta.isZero:
     # This zero delta early exit is important as shown in EIP-4788.
     # If the account is created, it will change the state.
@@ -464,16 +446,16 @@ proc subBalance*(ac: AccountsCache, address: EthAddress, delta: UInt256) {.inlin
     return
   ac.setBalance(address, ac.getBalance(address) - delta)
 
-proc setNonce*(ac: AccountsCache, address: EthAddress, nonce: AccountNonce) =
+proc setNonce*(ac: CachedLedgerRef, address: EthAddress, nonce: AccountNonce) =
   let acc = ac.getAccount(address)
   acc.flags.incl {Alive}
   if acc.account.nonce != nonce:
     ac.makeDirty(address).account.nonce = nonce
 
-proc incNonce*(ac: AccountsCache, address: EthAddress) {.inline.} =
+proc incNonce*(ac: CachedLedgerRef, address: EthAddress) =
   ac.setNonce(address, ac.getNonce(address) + 1)
 
-proc setCode*(ac: AccountsCache, address: EthAddress, code: seq[byte]) =
+proc setCode*(ac: CachedLedgerRef, address: EthAddress, code: seq[byte]) =
   let acc = ac.getAccount(address)
   acc.flags.incl {Alive}
   let codeHash = keccakHash(code)
@@ -483,42 +465,43 @@ proc setCode*(ac: AccountsCache, address: EthAddress, code: seq[byte]) =
     acc.code = code
     acc.flags.incl CodeChanged
 
-proc setStorage*(ac: AccountsCache, address: EthAddress, slot, value: UInt256) =
+proc setStorage*(ac: CachedLedgerRef, address: EthAddress, slot, value: UInt256) =
   let acc = ac.getAccount(address)
   acc.flags.incl {Alive}
-  let oldValue = acc.storageValue(slot, ac.db)
+  let oldValue = acc.storageValue(slot, ac)
   if oldValue != value:
     var acc = ac.makeDirty(address)
     acc.overlayStorage[slot] = value
     acc.flags.incl StorageChanged
 
-proc clearStorage*(ac: AccountsCache, address: EthAddress) =
+proc clearStorage*(ac: CachedLedgerRef, address: EthAddress) =
   # a.k.a createStateObject. If there is an existing account with
   # the given address, it is overwritten.
 
   let acc = ac.getAccount(address)
   acc.flags.incl {Alive, NewlyCreated}
-  if acc.account.storageRoot != EMPTY_ROOT_HASH:
+  let accHash = acc.account.storageVid.hash.valueOr: return
+  if accHash != EMPTY_ROOT_HASH:
     # there is no point to clone the storage since we want to remove it
     let acc = ac.makeDirty(address, cloneStorage = false)
-    acc.account.storageRoot = EMPTY_ROOT_HASH
+    acc.account.storageVid = CoreDbVidRef(nil)
     if acc.originalStorage.isNil.not:
       # also clear originalStorage cache, otherwise
       # both getStorage and getCommittedStorage will
       # return wrong value
       acc.originalStorage.clear()
 
-proc deleteAccount*(ac: AccountsCache, address: EthAddress) =
+proc deleteAccount*(ac: CachedLedgerRef, address: EthAddress) =
   # make sure all savepoints already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
   let acc = ac.getAccount(address)
   acc.kill()
 
-proc selfDestruct*(ac: AccountsCache, address: EthAddress) =
+proc selfDestruct*(ac: CachedLedgerRef, address: EthAddress) =
   ac.setBalance(address, 0.u256)
   ac.savePoint.selfDestruct.incl address
 
-proc selfDestruct6780*(ac: AccountsCache, address: EthAddress) =
+proc selfDestruct6780*(ac: CachedLedgerRef, address: EthAddress) =
   let acc = ac.getAccount(address, false)
   if acc.isNil:
     return
@@ -526,23 +509,23 @@ proc selfDestruct6780*(ac: AccountsCache, address: EthAddress) =
   if NewlyCreated in acc.flags:
     ac.selfDestruct(address)
 
-proc selfDestructLen*(ac: AccountsCache): int =
+proc selfDestructLen*(ac: CachedLedgerRef): int =
   ac.savePoint.selfDestruct.len
 
-proc addLogEntry*(ac: AccountsCache, log: Log) =
+proc addLogEntry*(ac: CachedLedgerRef, log: Log) =
   ac.savePoint.logEntries.add log
 
-proc logEntries*(ac: AccountsCache): seq[Log] =
+proc logEntries*(ac: CachedLedgerRef): seq[Log] =
   ac.savePoint.logEntries
 
-proc getAndClearLogEntries*(ac: AccountsCache): seq[Log] =
+proc getAndClearLogEntries*(ac: CachedLedgerRef): seq[Log] =
   result = ac.savePoint.logEntries
   ac.savePoint.logEntries.setLen(0)
 
-proc ripemdSpecial*(ac: AccountsCache) =
+proc ripemdSpecial*(ac: CachedLedgerRef) =
   ac.ripemdSpecial = true
 
-proc deleteEmptyAccount(ac: AccountsCache, address: EthAddress) =
+proc deleteEmptyAccount(ac: CachedLedgerRef, address: EthAddress) =
   let acc = ac.getAccount(address, false)
   if acc.isNil:
     return
@@ -552,7 +535,7 @@ proc deleteEmptyAccount(ac: AccountsCache, address: EthAddress) =
     return
   acc.kill()
 
-proc clearEmptyAccounts(ac: AccountsCache) =
+proc clearEmptyAccounts(ac: CachedLedgerRef) =
   for address, acc in ac.savePoint.cache:
     if Touched in acc.flags and
         acc.isEmpty and acc.exists:
@@ -563,7 +546,7 @@ proc clearEmptyAccounts(ac: AccountsCache) =
     ac.deleteEmptyAccount(ripemdAddr)
     ac.ripemdSpecial = false
 
-proc persist*(ac: AccountsCache,
+proc persist*(ac: CachedLedgerRef,
               clearEmptyAccount: bool = false,
               clearCache: bool = true) =
   # make sure all savepoint already committed
@@ -580,14 +563,14 @@ proc persist*(ac: AccountsCache,
     case acc.persistMode()
     of Update:
       if CodeChanged in acc.flags:
-        acc.persistCode(ac.db)
+        acc.persistCode(ac)
       if StorageChanged in acc.flags:
         # storageRoot must be updated first
         # before persisting account into merkle trie
-        acc.persistStorage(ac.db, clearCache)
-      ac.trie.putAccountBytes address, rlp.encode(acc.account)
+        acc.persistStorage(ac, clearCache)
+      ac.ledger.merge(address, acc.account)
     of Remove:
-      ac.trie.delAccountBytes address
+      ac.ledger.delete address
       if not clearCache:
         cleanAccounts.incl address
     of DoNothing:
@@ -611,51 +594,49 @@ proc persist*(ac: AccountsCache,
 
   ac.isDirty = false
 
-iterator addresses*(ac: AccountsCache): EthAddress =
+iterator addresses*(ac: CachedLedgerRef): EthAddress =
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
   for address, _ in ac.savePoint.cache:
     yield address
 
-iterator accounts*(ac: AccountsCache): Account =
+iterator accounts*(ac: CachedLedgerRef): Account =
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
   for _, account in ac.savePoint.cache:
-    yield account.account
+    yield account.account.recast.value
 
-iterator pairs*(ac: AccountsCache): (EthAddress, Account) =
+iterator pairs*(ac: CachedLedgerRef): (EthAddress, Account) =
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
   for address, account in ac.savePoint.cache:
-    yield (address, account.account)
+    yield (address, account.account.recast.value)
 
-iterator storage*(ac: AccountsCache, address: EthAddress): (UInt256, UInt256) =
+iterator storage*(ac: CachedLedgerRef, address: EthAddress): (UInt256, UInt256) {.gcsafe, raises: [CoreDbApiError].} =
   # beware that if the account not persisted,
   # the storage root will not be updated
   let acc = ac.getAccount(address, false)
   if not acc.isNil:
-    let storageRoot = acc.account.storageRoot
-    let trie = ac.db.mptPrune storageRoot
+    noRlpException "storage()":
+      for slotHash, value in ac.ledger.storage acc.account:
+        if slotHash.len == 0: continue
+        let keyData = ac.kvt.get(slotHashToSlotKey(slotHash).toOpenArray)
+        if keyData.len == 0: continue
+        yield (rlp.decode(keyData, UInt256), rlp.decode(value, UInt256))
 
-    for slotHash, value in trie:
-      if slotHash.len == 0: continue
-      let keyData = ac.kvt.get(slotHashToSlotKey(slotHash).toOpenArray)
-      if keyData.len == 0: continue
-      yield (rlp.decode(keyData, UInt256), rlp.decode(value, UInt256))
-
-iterator cachedStorage*(ac: AccountsCache, address: EthAddress): (UInt256, UInt256) =
+iterator cachedStorage*(ac: CachedLedgerRef, address: EthAddress): (UInt256, UInt256) =
   let acc = ac.getAccount(address, false)
   if not acc.isNil:
     if not acc.originalStorage.isNil:
       for k, v in acc.originalStorage:
         yield (k, v)
 
-proc getStorageRoot*(ac: AccountsCache, address: EthAddress): Hash256 =
+proc getStorageRoot*(ac: CachedLedgerRef, address: EthAddress): Hash256 =
   # beware that if the account not persisted,
   # the storage root will not be updated
   let acc = ac.getAccount(address, false)
-  if acc.isNil: emptyAcc.storageRoot
-  else: acc.account.storageRoot
+  if acc.isNil: EMPTY_ROOT_HASH
+  else: acc.account.storageVid.hash.valueOr: EMPTY_ROOT_HASH
 
 func update(wd: var WitnessData, acc: RefAccount) =
   wd.codeTouched = CodeChanged in acc.flags
@@ -677,7 +658,7 @@ func witnessData(acc: RefAccount): WitnessData =
   result.storageKeys = initHashSet[UInt256]()
   update(result, acc)
 
-proc collectWitnessData*(ac: AccountsCache) =
+proc collectWitnessData*(ac: CachedLedgerRef) =
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
   # usually witness data is collected before we call persist()
@@ -694,20 +675,20 @@ func multiKeys(slots: HashSet[UInt256]): MultikeysRef =
     result.add x.toBytesBE
   result.sort()
 
-proc makeMultiKeys*(ac: AccountsCache): MultikeysRef =
+proc makeMultiKeys*(ac: CachedLedgerRef): MultikeysRef =
   # this proc is called after we done executing a block
   new result
   for k, v in ac.witnessCache:
     result.add(k, v.codeTouched, multiKeys(v.storageKeys))
   result.sort()
 
-proc accessList*(ac: AccountsCache, address: EthAddress) {.inline.} =
+proc accessList*(ac: CachedLedgerRef, address: EthAddress) =
   ac.savePoint.accessList.add(address)
 
-proc accessList*(ac: AccountsCache, address: EthAddress, slot: UInt256) {.inline.} =
+proc accessList*(ac: CachedLedgerRef, address: EthAddress, slot: UInt256) =
   ac.savePoint.accessList.add(address, slot)
 
-func inAccessList*(ac: AccountsCache, address: EthAddress): bool =
+func inAccessList*(ac: CachedLedgerRef, address: EthAddress): bool =
   var sp = ac.savePoint
   while sp != nil:
     result = sp.accessList.contains(address)
@@ -715,7 +696,7 @@ func inAccessList*(ac: AccountsCache, address: EthAddress): bool =
       return
     sp = sp.parentSavepoint
 
-func inAccessList*(ac: AccountsCache, address: EthAddress, slot: UInt256): bool =
+func inAccessList*(ac: CachedLedgerRef, address: EthAddress, slot: UInt256): bool =
   var sp = ac.savePoint
   while sp != nil:
     result = sp.accessList.contains(address, slot)
@@ -723,7 +704,7 @@ func inAccessList*(ac: AccountsCache, address: EthAddress, slot: UInt256): bool 
       return
     sp = sp.parentSavepoint
 
-func getTransientStorage*(ac: AccountsCache,
+func getTransientStorage*(ac: CachedLedgerRef,
                           address: EthAddress, slot: UInt256): UInt256 =
   var sp = ac.savePoint
   while sp != nil:
@@ -732,11 +713,11 @@ func getTransientStorage*(ac: AccountsCache,
       return res
     sp = sp.parentSavepoint
 
-proc setTransientStorage*(ac: AccountsCache,
+proc setTransientStorage*(ac: CachedLedgerRef,
                           address: EthAddress, slot, val: UInt256) =
   ac.savePoint.transientStorage.setStorage(address, slot, val)
 
-proc clearTransientStorage*(ac: AccountsCache) {.inline.} =
+proc clearTransientStorage*(ac: CachedLedgerRef) =
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
   ac.savePoint.transientStorage.clear()

@@ -8,7 +8,7 @@ import
     config,
     constants,
     transaction,
-    db/accounts_cache,
+    db/ledger,
     core/chain,
     core/tx_pool,
     rpc,
@@ -47,7 +47,7 @@ proc setupELClient*(t: TestEnv, conf: ChainConfig, node: JsonNode) =
     )
   t.chainRef = newChain(t.com)
   let
-    stateDB = AccountsCache.init(memDB, emptyRlpHash, t.conf.pruneMode == PruneMode.Full)
+    stateDB = WrappedAccountsCache.init(memDB, emptyRlpHash, t.conf.pruneMode == PruneMode.Full)
     genesisHeader = node.genesisHeader
 
   setupStateDB(node["pre"], stateDB)

@@ -13,7 +13,7 @@ import
   ../nimbus/rpc/rpc_utils,
   ../nimbus/[constants, transaction, config,
              vm_state, vm_types, version],
-  ../nimbus/db/[accounts_cache, storage_types],
+  ../nimbus/db/[ledger, storage_types],
   ../nimbus/sync/protocol,
   ../nimbus/core/[tx_pool, chain, executor, executor/executor_helpers, pow/difficulty],
   ../nimbus/utils/utils,

@@ -8,8 +8,10 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [].}
+
 import
-  ".."/[db/accounts_cache, constants],
+  ".."/[db/ledger, constants],
   "."/[code_stream, memory, message, stack, state],
   "."/[types],
   ./interpreter/[gas_meter, gas_costs, op_codes],
@@ -21,8 +23,6 @@ import
 
 export
   common
-
-{.push raises: [].}
 
 logScope:
   topics = "vm computation"

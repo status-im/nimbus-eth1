@@ -12,7 +12,7 @@
 
 import
   ../../common/common,
-  ../../db/accounts_cache,
+  ../../db/ledger,
   ../../vm_state,
   ../../vm_types,
   eth/[bloom]

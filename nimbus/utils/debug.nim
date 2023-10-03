@@ -14,7 +14,7 @@ import
   stew/byteutils,
   ../vm_state,
   ../vm_types,
-  ../db/accounts_cache,
+  ../db/ledger,
   ./utils
 
 proc `$`(hash: Hash256): string =
@@ -58,7 +58,7 @@ proc debug*(h: BlockHeader): string =
     result.add "excessBlobGas  : " & $h.excessBlobGas.get() & "\n"
   result.add "blockHash      : " & $blockHash(h) & "\n"
 
-proc dumpAccount(stateDB: AccountsCache, address: EthAddress): JsonNode =
+proc dumpAccount(stateDB: LedgerRef, address: EthAddress): JsonNode =
   var storage = newJObject()
   for k, v in stateDB.cachedStorage(address):
     storage[k.toHex] = %v.toHex

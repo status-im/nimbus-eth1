@@ -11,7 +11,7 @@ import
   ../nimbus/core/executor, test_config,
   ../nimbus/transaction,
   ../nimbus/[vm_state, vm_types],
-  ../nimbus/db/accounts_cache,
+  ../nimbus/db/ledger,
   ../nimbus/common/common,
   ../nimbus/utils/[utils, debug],
   ../nimbus/evm/tracer/legacy_tracer,

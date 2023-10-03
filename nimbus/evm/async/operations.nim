@@ -3,20 +3,20 @@ import
   stint,
   eth/common,
   ../../common as dot_common,
-  ../../db/[accounts_cache, distinct_tries],
+  ../../db/ledger,
   ../types,
   ./data_sources
 
 
 
 proc ifNecessaryGetAccount*(vmState: BaseVMState, address: EthAddress): Future[void] {.async.} =
-  await vmState.asyncFactory.ifNecessaryGetAccount(vmState.com.db, vmState.parent.blockNumber, vmState.parent.stateRoot, address, vmState.stateDB.rawTrie.rootHash)
+  await vmState.asyncFactory.ifNecessaryGetAccount(vmState.com.db, vmState.parent.blockNumber, vmState.parent.stateRoot, address, vmState.stateDB.rawRootHash)
 
 proc ifNecessaryGetCode*(vmState: BaseVMState, address: EthAddress): Future[void] {.async.} =
-  await vmState.asyncFactory.ifNecessaryGetCode(vmState.com.db, vmState.parent.blockNumber, vmState.parent.stateRoot, address, vmState.stateDB.rawTrie.rootHash)
+  await vmState.asyncFactory.ifNecessaryGetCode(vmState.com.db, vmState.parent.blockNumber, vmState.parent.stateRoot, address, vmState.stateDB.rawRootHash)
 
 proc ifNecessaryGetSlots*(vmState: BaseVMState, address: EthAddress, slots: seq[UInt256]): Future[void] {.async.} =
-  await vmState.asyncFactory.ifNecessaryGetSlots(vmState.com.db, vmState.parent.blockNumber, vmState.parent.stateRoot, address, slots, vmState.stateDB.rawTrie.rootHash)
+  await vmState.asyncFactory.ifNecessaryGetSlots(vmState.com.db, vmState.parent.blockNumber, vmState.parent.stateRoot, address, slots, vmState.stateDB.rawRootHash)
 
 proc ifNecessaryGetSlot*(vmState: BaseVMState, address: EthAddress, slot: UInt256): Future[void] {.async.} =
   await ifNecessaryGetSlots(vmState, address, @[slot])
@@ -28,7 +28,7 @@ proc ifNecessaryGetBlockHeaderByNumber*(vmState: BaseVMState, blockNumber: Block
 FIXME-Adam: This is for later.
 proc fetchAndPopulateNodes*(vmState: BaseVMState, paths: seq[seq[seq[byte]]], nodeHashes: seq[Hash256]): Future[void] {.async.} =
   if vmState.asyncFactory.maybeDataSource.isSome:
-    # let stateRoot = vmState.stateDB.rawTrie.rootHash # FIXME-Adam: this might not be right, huh? the peer might expect the parent block's final stateRoot, not this weirdo intermediate one
+    # let stateRoot = vmState.stateDB.rawRootHash # FIXME-Adam: this might not be right, huh? the peer might expect the parent block's final stateRoot, not this weirdo intermediate one
     let stateRoot = vmState.parent.stateRoot
     let nodes = await vmState.asyncFactory.maybeDataSource.get.fetchNodes(stateRoot, paths, nodeHashes)
     populateDbWithNodes(vmState.stateDB.rawDb, nodes)

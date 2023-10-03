@@ -34,7 +34,7 @@ when not defined(evmc_enabled):
   import
     ../gas_meter,
     ../../state,
-    ../../../db/accounts_cache
+    ../../../db/ledger
 
 # ------------------------------------------------------------------------------
 # Private helpers

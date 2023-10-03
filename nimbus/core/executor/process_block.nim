@@ -12,7 +12,7 @@ import
   ../../utils/utils,
   ../../common/common,
   ../../constants,
-  ../../db/accounts_cache,
+  ../../db/ledger,
   ../../transaction,
   ../../vm_state,
   ../../vm_types,

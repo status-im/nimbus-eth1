@@ -14,7 +14,7 @@ import
   chronos,
   eth/common/eth_types_rlp,
   ".."/[vm_types, vm_state, vm_gas_costs],
-  ../db/accounts_cache,
+  ../db/ledger,
   ../common/common,
   ./call_common
 

@@ -38,7 +38,7 @@ import
 when not defined(evmc_enabled):
   import
     ../../state,
-    ../../../db/accounts_cache
+    ../../../db/ledger
 
 # ------------------------------------------------------------------------------
 # Private helpers
