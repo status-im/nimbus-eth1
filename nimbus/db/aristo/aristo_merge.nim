@@ -840,7 +840,9 @@ proc merge*(
 
     # Create and assign a new root key
     if not rootVid.isValid:
-      return ok db.vidRoot(rootKey)
+      let vid = db.vidFetch
+      db.vidAttach(HashLabel(root: vid, key: rootKey), vid)
+      return ok vid
 
   err(MergeRootKeyDiffersForVid)
 

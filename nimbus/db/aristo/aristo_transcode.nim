@@ -65,7 +65,7 @@ proc serialise(
         if not vid.isValid:
           VOID_HASH_KEY
         else:
-          let rc = vid.getkey
+          let rc = vid.getKey
           if rc.isErr:
             return err((vid,rc.error))
           rc.value
