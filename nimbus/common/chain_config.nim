@@ -465,6 +465,7 @@ proc chainConfigForNetwork*(id: NetworkId): ChainConfig =
       shanghaiTime:        some(1_678_832_736.fromUnix)
     )
   of SepoliaNet:
+    const sepoliaTTD = parse("17000000000000000",UInt256)
     ChainConfig(
       consensusType:       ConsensusType.POW,
       chainId:             SepoliaNet.ChainId,
@@ -481,6 +482,7 @@ proc chainConfigForNetwork*(id: NetworkId): ChainConfig =
       muirGlacierBlock:    some(0.toBlockNumber),
       berlinBlock:         some(0.toBlockNumber),
       londonBlock:         some(0.toBlockNumber),
+      terminalTotalDifficulty: some(sepoliaTTD),
       shanghaiTime:        some(1_677_557_088.fromUnix)
     )
   else:
