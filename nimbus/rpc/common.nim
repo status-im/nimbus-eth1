@@ -46,21 +46,24 @@ proc setupCommonRpc*(node: EthereumNode, conf: NimbusConf, server: RpcServer) =
     let peerCount = uint node.numPeers
     result = encodeQuantity(peerCount)
 
-  server.rpc("net_nodeInfo") do() -> NodeInfo:
-    let enode = toENode(node)
-    let nodeId = toNodeId(node.keys.pubkey)
-    result = NodeInfo(
-      id: nodeId.toHex,
-      name: conf.agentString,
-      enode: $enode,
-      ip: $enode.address.ip,
-      ports: NodePorts(
-        discovery: $enode.address.udpPort,
-        listener: $enode.address.tcpPort
+  server.rpc("admin_nodeInfo") do() -> NodeInfo:
+    let
+      enode = toENode(node)
+      nodeId = toNodeId(node.keys.pubkey)
+      nodeInfo = NodeInfo(
+        id: nodeId.toHex,
+        name: conf.agentString,
+        enode: $enode,
+        ip: $enode.address.ip,
+        ports: NodePorts(
+          discovery: $enode.address.udpPort,
+          listener: $enode.address.tcpPort
+        )
       )
-    )
 
-  server.rpc("nimbus_addPeer") do(enode: string) -> bool:
+    return nodeInfo
+
+  server.rpc("admin_addPeer") do(enode: string) -> bool:
     var res = ENode.fromString(enode)
     if res.isOk:
       asyncSpawn node.connectToNode(res.get())
