@@ -88,7 +88,7 @@ const
 
   # EIP-4788 addresses
   # BeaconRootsStorageAddress is the address where historical beacon roots are stored as per EIP-4788
-  BeaconRootsStorageAddress* = hexToByteArray[20]("0xbEac00dDB15f3B6d645C48263dC93862413A222D")
+  BeaconRootsStorageAddress* = hexToByteArray[20]("0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02")
   # SystemAddress is where the system-transaction is sent from as per EIP-4788
   SystemAddress* = hexToByteArray[20]("0xfffffffffffffffffffffffffffffffffffffffe")
 
