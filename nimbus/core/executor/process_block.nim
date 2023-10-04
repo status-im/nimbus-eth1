@@ -174,6 +174,11 @@ proc processBlock*(
   if not vmState.procBlkEpilogue(header, body):
     return ValidationResult.Error
 
+  # `applyDeletes = false`
+  # If the trie pruning activated, each of the block will have its own state
+  # trie keep intact, rather than destroyed by trie pruning. But the current
+  # block will still get a pruned trie. If trie pruning deactivated,
+  # `applyDeletes` have no effects.
   dbTx.commit(applyDeletes = false)
 
   ValidationResult.OK

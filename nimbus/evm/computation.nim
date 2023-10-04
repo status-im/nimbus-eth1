@@ -370,7 +370,7 @@ proc merge*(c, child: Computation) =
   c.gasMeter.refundGas(child.gasMeter.gasRefunded)
 
 proc execSelfDestruct*(c: Computation, beneficiary: EthAddress)
-    {.gcsafe, raises: [].} =
+    {.gcsafe, raises: [CatchableError].} =
 
   c.vmState.mutateStateDB:
     let localBalance = c.getBalance(c.msg.contractAddress)
