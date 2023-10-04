@@ -1,12 +1,13 @@
 import
-  std/[tables, math],
+  std/[tables],
   eth/keys,
   stew/endians2,
   nimcrypto/sha2,
   chronicles,
   ./engine_client,
   ../../../nimbus/transaction,
-  ../../../nimbus/common
+  ../../../nimbus/common,
+  ../../../nimbus/utils/utils
 
 type
   BaseTx* = object of RootObj
@@ -76,9 +77,6 @@ proc new*(_: type TxSender, params: NetworkParams): TxSender =
   result = TxSender(chainId: params.config.chainId)
   result.createAccounts()
   result.fillBalance(params)
-
-func gwei(n: int64): GasInt {.compileTime.} =
-  GasInt(n * (10 ^ 9))
 
 proc getTxType(tc: BaseTx, nonce: uint64): TxType =
   if tc.txType.isNone:

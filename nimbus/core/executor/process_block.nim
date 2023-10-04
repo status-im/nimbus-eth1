@@ -87,7 +87,7 @@ proc procBlkPreamble(vmState: BaseVMState;
       raise ValidationError.newException("Post-Shanghai block body must have withdrawals")
 
     for withdrawal in body.withdrawals.get:
-      vmState.stateDB.addBalance(withdrawal.address, withdrawal.amount.gwei)
+      vmState.stateDB.addBalance(withdrawal.address, withdrawal.weiAmount)
   else:
     if header.withdrawalsRoot.isSome:
       raise ValidationError.newException("Pre-Shanghai block header must not have withdrawalsRoot")

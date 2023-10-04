@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  std/[json, strutils, times, tables, os, math, streams],
+  std/[json, strutils, times, tables, os, streams],
   eth/[rlp, trie, eip1559],
   stint, stew/results,
   "."/[config, types, helpers],
@@ -192,9 +192,6 @@ proc closeTrace(vmState: BaseVMstate) =
   if tracer.isNil.not:
     tracer.close()
 
-func gwei(n: uint64): UInt256 =
-  n.u256 * (10 ^ 9).u256
-
 proc exec(ctx: var TransContext,
           vmState: BaseVMState,
           stateReward: Option[UInt256],
@@ -284,7 +281,7 @@ proc exec(ctx: var TransContext,
 
   if ctx.env.withdrawals.isSome:
     for withdrawal in ctx.env.withdrawals.get:
-      vmState.stateDB.addBalance(withdrawal.address, withdrawal.amount.gwei)
+      vmState.stateDB.addBalance(withdrawal.address, withdrawal.weiAmount)
 
   let miner = ctx.env.currentCoinbase
   let fork = vmState.com.toEVMFork

@@ -1,9 +1,10 @@
 import
-  std/[tables, sets, strutils, math],
+  std/[tables, sets, strutils],
   eth/common/eth_types,
   json_rpc/[rpcclient],
   stew/[byteutils, results],
-  ../engine_client
+  ../engine_client,
+  ../../../nimbus/utils/utils
 
 type
   Withdrawals* = ref object
@@ -24,10 +25,6 @@ proc get*(wh: WDHistory, blockNumber: uint64): Result[seq[Withdrawal], string] =
   if wds.isNil:
     return err("withdrawal not found in block " & $blockNumber)
   ok(wds.list)
-
-# Helper types to convert gwei into wei more easily
-func weiAmount(w: Withdrawal): UInt256 =
-  w.amount.u256 * (10 ^ 9).u256
 
 # Gets an account expected value for a given block, taking into account all
 # withdrawals that credited the account.
