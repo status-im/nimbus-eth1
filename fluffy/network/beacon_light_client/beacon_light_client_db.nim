@@ -8,7 +8,6 @@
 {.push raises: [].}
 
 import
-  std/[options],
   chronicles,
   metrics,
   eth/db/kvstore,
@@ -34,6 +33,18 @@ type
   LightClientDb* = ref object
     kv: KvStoreRef
     lcuStore: BestLightClientUpdateStore
+    finalityUpdateCache: Opt[LightClientFinalityUpdateCache]
+    optimisticUpdateCache: Opt[LightClientOptimisticUpdateCache]
+
+  # Storing the content encoded here. Could also store decoded and access the
+  # slot directly. However, that would require is to have access to the
+  # fork digests here to be able the re-encode the data.
+  LightClientFinalityUpdateCache = object
+    lastFinalityUpdate: seq[byte]
+    lastFinalityUpdateSlot: uint64
+  LightClientOptimisticUpdateCache = object
+    lastOptimisticUpdate: seq[byte]
+    lastOptimisticUpdateSlot: uint64
 
 template expectDb(x: auto): untyped =
   # There's no meaningful error handling implemented for a corrupt database or
@@ -155,18 +166,30 @@ proc createGetHandler*(db: LightClientDb): DbGetHandler =
         else:
           return ok(SSZ.encode(updates))
       elif ck.contentType == lightClientFinalityUpdate:
-        # TODO I:
-        # Current storage by contentId will not allow for easy pruning. Should
-        # probably store with extra Slot information column. Or perhaps just
-        # in a cache the begin with.
-        # TODO II:
-        # - Return only when the update is better than what is requested by
+        # TODO:
+        # Return only when the update is better than what is requested by
         # contentKey. This is currently not possible as the contentKey does not
         # include best update information.
-        return db.get(contentId)
+        if db.finalityUpdateCache.isSome():
+          let slot = ck.lightClientFinalityUpdateKey.finalizedSlot
+          let cache = db.finalityUpdateCache.get()
+          if cache.lastFinalityUpdateSlot >= slot:
+            return Opt.some(cache.lastFinalityUpdate)
+          else:
+            return Opt.none(seq[byte])
+        else:
+          return Opt.none(seq[byte])
       elif ck.contentType == lightClientOptimisticUpdate:
-        # TODO I & II of above applies here too.
-        return db.get(contentId)
+        # TODO same as above applies here too.
+        if db.optimisticUpdateCache.isSome():
+          let slot = ck.lightClientOptimisticUpdateKey.optimisticSlot
+          let cache = db.optimisticUpdateCache.get()
+          if cache.lastOptimisticUpdateSlot >= slot:
+            return Opt.some(cache.lastOptimisticUpdate)
+          else:
+            return Opt.none(seq[byte])
+        else:
+          return Opt.none(seq[byte])
       else:
         return db.get(contentId)
   )
@@ -200,9 +223,17 @@ proc createStoreHandler*(db: LightClientDb): DbStoreHandler =
         db.putLightClientUpdate(period, update.asSeq())
         inc period
     elif ck.contentType == lightClientFinalityUpdate:
-      db.put(contentId, content)
+      db.finalityUpdateCache =
+        Opt.some(LightClientFinalityUpdateCache(
+          lastFinalityUpdateSlot: ck.lightClientFinalityUpdateKey.finalizedSlot,
+          lastFinalityUpdate: content
+        ))
     elif ck.contentType == lightClientOptimisticUpdate:
-      db.put(contentId, content)
+      db.optimisticUpdateCache =
+        Opt.some(LightClientOptimisticUpdateCache(
+          lastOptimisticUpdateSlot: ck.lightClientOptimisticUpdateKey.optimisticSlot,
+          lastOptimisticUpdate: content
+        ))
     else:
       db.put(contentId, content)
   )

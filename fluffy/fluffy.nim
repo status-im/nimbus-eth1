@@ -180,7 +180,8 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
             beaconLightClientDb,
             streamManager,
             networkData.forks,
-            bootstrapRecords = bootstrapRecords)
+            bootstrapRecords = bootstrapRecords,
+            portalConfig = portalConfig)
 
         let lc = LightClient.new(
           lightClientNetwork, rng, networkData,
