@@ -17,7 +17,7 @@ import
   "."/[dao, eip4844, gaslimit, withdrawals],
   ./pow/[difficulty, header],
   ./pow,
-  nimcrypto/utils,
+  nimcrypto/utils as cryptoutils,
   stew/[objects, results]
 
 from stew/byteutils
