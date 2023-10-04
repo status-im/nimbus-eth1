@@ -17,6 +17,7 @@ import
   ../../../nimbus/common,
   ../../../nimbus/config,
   ../../../nimbus/rpc,
+  ../../../nimbus/utils/utils,
   ../../../nimbus/core/[chain, tx_pool, sealer],
   ../../../tests/test_helpers,
   ./vault
@@ -33,7 +34,7 @@ type
 
 const
   initPath = "hive_integration" / "nodocker" / "rpc" / "init"
-  gasPrice* = 30000000000 # 30 Gwei or 30 * pow(10, 9)
+  gasPrice* = 30.gwei
   chainID*  = ChainID(7)
 
 proc manageAccounts(ctx: EthContext, conf: NimbusConf) =

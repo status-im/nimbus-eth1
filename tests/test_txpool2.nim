@@ -1,5 +1,5 @@
 import
-  std/[math, tables, times, os],
+  std/[tables, times, os],
   eth/[keys],
   stew/[byteutils, results], unittest2,
   ../nimbus/db/state_db,
@@ -11,6 +11,7 @@ import
   ../nimbus/core/casper,
   ../nimbus/core/executor,
   ../nimbus/common/common,
+  ../nimbus/utils/utils,
   ../nimbus/[vm_state, vm_types],
   ./test_txpool/helpers,
   ./macro_assembler
@@ -48,9 +49,6 @@ proc privKey(keyHex: string): PrivateKey =
     quit(QuitFailure)
 
   kRes.get()
-
-func gwei(n: uint64): GasInt {.compileTime.} =
-  GasInt(n * (10'u64 ^ 9'u64))
 
 proc makeTx*(t: var TestEnv, recipient: EthAddress, amount: UInt256, payload: openArray[byte] = []): Transaction =
   const

@@ -119,5 +119,9 @@ proc decompose*(rlpBytes: openArray[byte],
   var rlp = rlpFromBytes(rlpBytes)
   rlp.decompose(header, body)
 
-func gwei*(n: uint64): UInt256 =
-  n.u256 * (10 ^ 9).u256
+func gwei*(n: uint64): GasInt =
+  GasInt(n * (10'u64 ^ 9'u64))
+
+# Helper types to convert gwei into wei more easily
+func weiAmount*(w: Withdrawal): UInt256 =
+  gwei(w.amount).u256

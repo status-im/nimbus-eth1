@@ -226,7 +226,7 @@ proc vmExecCommit(pst: TxPackerStateRef)
   # EIP-4895
   if xp.chain.nextFork >= FkShanghai:
     for withdrawal in xp.chain.withdrawals:
-      vmState.stateDB.addBalance(withdrawal.address, withdrawal.amount.gwei)
+      vmState.stateDB.addBalance(withdrawal.address, withdrawal.weiAmount)
 
   # EIP-3675: no reward for miner in POA/POS
   if vmState.com.consensus == ConsensusType.POW:
