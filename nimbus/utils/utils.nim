@@ -124,4 +124,4 @@ func gwei*(n: uint64): GasInt =
 
 # Helper types to convert gwei into wei more easily
 func weiAmount*(w: Withdrawal): UInt256 =
-  gwei(w.amount).u256
+  w.amount.u256 * (10'u64 ^ 9'u64).u256
