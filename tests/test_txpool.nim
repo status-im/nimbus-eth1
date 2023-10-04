@@ -814,7 +814,6 @@ proc runTxPackerTests(noisy = true) =
             " size=", mostlySize + blk.txs[n].gasLimit - blk.header.gasUsed
 
         let
-          poa = bcCom.poa
           bdy = BlockBody(transactions: blk.txs, withdrawals: blk.withdrawals)
           hdr = block:
             var rc = blk.header
@@ -831,13 +830,13 @@ proc runTxPackerTests(noisy = true) =
         # Test low-level function for adding the new block to the database
         #xq.chain.maxMode = (packItemsMaxGasLimit in xq.flags)
         xq.chain.clearAccounts
-        check xq.chain.vmState.processBlock(poa, hdr, bdy).isOK
+        check xq.chain.vmState.processBlock(hdr, bdy).isOK
 
         setErrorLevel()
 
         # Re-allocate using VM environment from `persistBlocks()`
         let vmstate2 = BaseVMState.new(hdr, bcCom)
-        check vmstate2.processBlock(poa, hdr, bdy).isOK
+        check vmstate2.processBlock(hdr, bdy).isOK
 
         # This should not have changed
         check canonicalHead == xq.chain.com.db.getCanonicalHead

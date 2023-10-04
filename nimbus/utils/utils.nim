@@ -3,14 +3,14 @@ import
   eth/[rlp, common/eth_types_rlp],
   stew/byteutils,
   nimcrypto,
-  ../db/core_db
+  ../db/core_db,
+  ../constants
 
 export eth_types_rlp
 
 {.push raises: [].}
 
-proc calcRootHash[T](items: openArray[T]): Hash256
-    {.gcsafe, raises: [CatchableError]} =
+proc calcRootHash[T](items: openArray[T]): Hash256 {.gcsafe.} =
   var tr = newCoreDbRef(LegacyDbMemory).mptPrune
   for i, t in items:
     tr.put(rlp.encode(i), rlp.encode(t))
@@ -33,7 +33,7 @@ func sumHash*(hashes: varargs[Hash256]): Hash256 =
   ctx.finish result.data
   ctx.clear()
 
-proc sumHash*(body: BlockBody): Hash256 {.gcsafe, raises: [CatchableError]} =
+proc sumHash*(body: BlockBody): Hash256 {.gcsafe, raises: []} =
   let txRoot = calcTxRoot(body.transactions)
   let ommersHash = keccakHash(rlp.encode(body.uncles))
   let wdRoot = if body.withdrawals.isSome:
@@ -125,3 +125,7 @@ func gwei*(n: uint64): GasInt =
 # Helper types to convert gwei into wei more easily
 func weiAmount*(w: Withdrawal): UInt256 =
   w.amount.u256 * (10'u64 ^ 9'u64).u256
+
+func isGenesis*(header: BlockHeader): bool =
+  header.blockNumber == 0.u256 and
+    header.parentHash == GENESIS_PARENT_HASH

@@ -39,14 +39,27 @@ type
 # Private
 # ------------------------------------------------------------------------------
 
+proc getVmState(c: ChainRef, header: BlockHeader):
+                 Result[BaseVMState, void]
+                  {.gcsafe, raises: [CatchableError].} =
+  if c.vmState.isNil.not:
+    return ok(c.vmState)
+
+  let vmState = BaseVMState()
+  if not vmState.init(header, c.com):
+    debug "Cannot initialise VmState",
+      number = header.blockNumber
+    return err()
+  return ok(vmState)
+
 proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
                        bodies: openArray[BlockBody],
                        flags: PersistBlockFlags = {}): ValidationResult
                           # wildcard exception, wrapped below in public section
                           {.inline, raises: [CatchableError].} =
 
-  let transaction = c.db.beginTransaction()
-  defer: transaction.dispose()
+  let dbTx = c.db.beginTransaction()
+  defer: dbTx.dispose()
 
   var cliqueState = c.clique.cliqueSave
   defer: c.clique.cliqueRestore(cliqueState)
@@ -54,11 +67,7 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
   c.com.hardForkTransition(headers[0])
 
   # Note that `0 < headers.len`, assured when called from `persistBlocks()`
-  let vmState = BaseVMState()
-  if not vmState.init(headers[0], c.com):
-    debug "Cannot initialise VmState",
-      fromBlock = headers[0].blockNumber,
-      toBlock = headers[^1].blockNumber
+  let vmState = c.getVmState(headers[0]).valueOr:
     return ValidationResult.Error
 
   trace "Persisting blocks",
@@ -77,9 +86,22 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
         item = i
       return ValidationResult.Error
 
+    if c.validateBlock and c.extraValidation and
+       c.verifyFrom <= header.blockNumber:
+
+      if c.com.consensus != ConsensusType.POA:
+        let res = c.com.validateHeaderAndKinship(
+          header,
+          body,
+          checkSealOK = false) # TODO: how to checkseal from here
+        if res.isErr:
+          debug "block validation error",
+            msg = res.error
+          return ValidationResult.Error
+
     let
       validationResult = if c.validateBlock:
-                           vmState.processBlock(c.clique, header, body)
+                           vmState.processBlock(header, body)
                          else:
                            ValidationResult.OK
     when not defined(release):
@@ -105,15 +127,6 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
             blockNumber = header.blockNumber,
             msg = $rc.error
           return ValidationResult.Error
-      else:
-        let res = c.com.validateHeaderAndKinship(
-          header,
-          body,
-          checkSealOK = false) # TODO: how to checkseal from here
-        if res.isErr:
-          debug "block validation error",
-            msg = res.error
-          return ValidationResult.Error
 
     if NoPersistHeader notin flags:
       discard c.db.persistHeaderToDb(
@@ -133,7 +146,7 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
     # between eth_blockNumber and eth_syncing
     c.com.syncCurrent = header.blockNumber
 
-  transaction.commit()
+  dbTx.commit()
 
 # ------------------------------------------------------------------------------
 # Public `ChainDB` methods

@@ -30,7 +30,7 @@ proc validateBlock(com: CommonRef, blockNumber: BlockNumber): BlockNumber =
 
     let
       vmState = BaseVMState.new(parent, headers[i], com)
-      validationResult = vmState.processBlockNotPoA(headers[i], bodies[i])
+      validationResult = vmState.processBlock(headers[i], bodies[i])
 
     if validationResult != ValidationResult.OK:
       error "block validation error", validationResult, blockNumber = blockNumber + i.u256

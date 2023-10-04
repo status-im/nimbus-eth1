@@ -200,7 +200,7 @@ func w3Withdrawals*(x: Option[seq[common.Withdrawal]]):
   else: some(w3Withdrawals x.get)
 
 func w3Tx*(tx: common.Transaction): Web3Tx =
-  Web3Tx rlp.encode(tx.removeNetworkPayload)
+  Web3Tx rlp.encode(tx)
 
 func w3Txs*(list: openArray[common.Transaction]): seq[Web3Tx] =
   result = newSeqOfCap[Web3Tx](list.len)

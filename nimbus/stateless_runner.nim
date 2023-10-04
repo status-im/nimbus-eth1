@@ -48,7 +48,7 @@ proc statelesslyRunBlock*(asyncDataSource: AsyncDataSource, com: CommonRef, head
     info("statelessly running block", blockNumber=header.blockNumber, blockHash=blockHash, parentHash=header.parentHash, parentStateRoot=parentHeader.stateRoot, desiredNewStateRoot=header.stateRoot)
 
     let vmState = createVmStateForStatelessMode(com, header, body, parentHeader, asyncFactory).get
-    let vres = processBlockNotPoA(vmState, header, body)
+    let vres = processBlock(vmState, header, body)
 
     let elapsedTime = now() - t0
 

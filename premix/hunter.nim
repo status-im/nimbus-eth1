@@ -102,7 +102,7 @@ proc huntProblematicBlock(blockNumber: UInt256): ValidationResult =
   defer: transaction.dispose()
   let
     vmState = HunterVMState.new(parentBlock.header, thisBlock.header, com)
-    validationResult = vmState.processBlockNotPoA(thisBlock.header, thisBlock.body)
+    validationResult = vmState.processBlock(thisBlock.header, thisBlock.body)
 
   if validationResult != ValidationResult.OK:
     transaction.rollback()

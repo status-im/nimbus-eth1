@@ -143,15 +143,6 @@ proc newPayloadV3*(client: RpcClient,
   wrapTrySimpleRes:
     client.engine_newPayloadV3(payload, versionedHashes, parentBeaconBlockRoot)
 
-#proc newPayload*(client: RpcClient,
-#                 payload: ExecutionPayload,
-#                 version: Version):
-#                   Result[PayloadStatusV1, string] =
-#  if version == Version.V1:
-#    client.newPayloadV1(payload.V1)
-#  else:
-#    client.newPayloadV2(payload.V2)
-
 proc collectBlobHashes(list: openArray[Web3Tx]): seq[Web3Hash] =
   for w3tx in list:
     let tx = ethTx(w3Tx)
@@ -165,6 +156,9 @@ proc newPayload*(client: RpcClient,
   of Version.V1: return client.newPayloadV1(payload.V1)
   of Version.V2: return client.newPayloadV2(payload.V2)
   of Version.V3:
+    if beaconRoot.isNone:
+      # fallback
+      return client.newPayloadV2(payload.V2)
     let versionedHashes = collectBlobHashes(payload.transactions)
     return client.newPayloadV3(payload.V3,
       versionedHashes,

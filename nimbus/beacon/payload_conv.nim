@@ -18,18 +18,18 @@ import
 # ------------------------------------------------------------------------------
 
 func wdRoot(list: openArray[WithdrawalV1]): common.Hash256
-             {.gcsafe, raises:[CatchableError].} =
+             {.gcsafe, raises:[].} =
   {.nosideEffect.}:
     calcWithdrawalsRoot(ethWithdrawals list)
 
 func wdRoot(x: Option[seq[WithdrawalV1]]): Option[common.Hash256]
-             {.gcsafe, raises:[CatchableError].} =
+             {.gcsafe, raises:[].} =
   {.nosideEffect.}:
     if x.isNone: none(common.Hash256)
     else: some(wdRoot x.get)
 
 func txRoot(list: openArray[Web3Tx]): common.Hash256
-             {.gcsafe, raises:[CatchableError].} =
+             {.gcsafe, raises:[RlpError].} =
   {.nosideEffect.}:
     calcTxRoot(ethTxs list)
 

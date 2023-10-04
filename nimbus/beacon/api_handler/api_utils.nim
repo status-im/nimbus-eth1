@@ -163,6 +163,8 @@ proc latestValidHash*(db: CoreDbRef,
                       parent: common.BlockHeader,
                       ttd: DifficultyInt): common.Hash256
                        {.gcsafe, raises: [RlpError].} =
+  if parent.isGenesis:
+    return common.Hash256()
   let ptd = db.getScore(parent.parentHash)
   if ptd >= ttd:
     parent.blockHash

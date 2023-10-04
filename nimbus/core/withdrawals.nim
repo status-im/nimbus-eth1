@@ -20,7 +20,7 @@ proc validateWithdrawals*(
     header: BlockHeader,
     body: BlockBody
       ): Result[void, string]
-      {.gcsafe, raises: [CatchableError].} =
+      {.gcsafe, raises: [].} =
 
   if com.forkGTE(Shanghai):
     if header.withdrawalsRoot.isNone:

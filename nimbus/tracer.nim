@@ -182,7 +182,7 @@ proc dumpBlockState*(com: CommonRef, header: BlockHeader, body: BlockBody, dumpS
   for idx, uncle in body.uncles:
     before.captureAccount(stateBefore, uncle.coinbase, uncleName & $idx)
 
-  discard vmState.processBlockNotPoA(header, body)
+  discard vmState.processBlock(header, body)
 
   var stateAfter = vmState.stateDB
 

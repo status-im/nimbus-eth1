@@ -30,7 +30,7 @@ proc dumpDebug(com: CommonRef, blockNumber: UInt256) =
     vmState = BaseVMState.new(parent, header, captureCom)
 
   discard captureCom.db.setHead(parent, true)
-  discard vmState.processBlockNotPoA(header, body)
+  discard vmState.processBlock(header, body)
 
   transaction.rollback()
   dumpDebuggingMetaData(captureCom, header, body, vmState, false)
