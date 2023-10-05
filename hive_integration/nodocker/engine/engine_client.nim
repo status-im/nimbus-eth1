@@ -237,7 +237,7 @@ proc toTransactions(txs: openArray[JsonNode]): seq[Transaction] =
   for x in txs:
     result.add parseTransaction(x)
 
-proc toWithdrawal(wd: WithdrawalObject): Withdrawal =
+proc toWithdrawal(wd: rpc_types.WithdrawalObject): Withdrawal =
   Withdrawal(
     index: hexToInt(string wd.index, uint64),
     validatorIndex: hexToInt(string wd.validatorIndex, uint64),
@@ -245,12 +245,12 @@ proc toWithdrawal(wd: WithdrawalObject): Withdrawal =
     amount: hexToInt(string wd.amount, uint64),
   )
 
-proc toWithdrawals(list: seq[WithdrawalObject]): seq[Withdrawal] =
+proc toWithdrawals(list: seq[rpc_types.WithdrawalObject]): seq[Withdrawal] =
   result = newSeqOfCap[Withdrawal](list.len)
   for wd in list:
     result.add toWithdrawal(wd)
 
-proc toWithdrawals(list: Option[seq[WithdrawalObject]]): Option[seq[Withdrawal]] =
+proc toWithdrawals(list: Option[seq[rpc_types.WithdrawalObject]]): Option[seq[Withdrawal]] =
   if list.isNone:
     return none(seq[Withdrawal])
   some(toWithdrawals(list.get))
