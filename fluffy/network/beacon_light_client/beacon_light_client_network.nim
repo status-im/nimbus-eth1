@@ -177,15 +177,24 @@ proc new*(
     bootstrapRecords: openArray[Record] = [],
     portalConfig: PortalProtocolConfig = defaultPortalProtocolConfig): T =
   let
-    contentQueue = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
+    contentQueue = newAsyncQueue[(
+      Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
 
     stream = streamManager.registerNewStream(contentQueue)
+
+    # Need to adjust the radius to a static max value as for the Beacon chain
+    # network all data must be accepted currently.
+    portalConfigAdjusted = PortalProtocolConfig(
+      tableIpLimits: portalConfig.tableIpLimits,
+      bitsPerHop: portalConfig.bitsPerHop,
+      radiusConfig: RadiusConfig(kind: Static, logRadius: 256),
+      disablePoke: portalConfig.disablePoke)
 
     portalProtocol = PortalProtocol.new(
       baseProtocol, lightClientProtocolId,
       toContentIdHandler,
       createGetHandler(lightClientDb), stream, bootstrapRecords,
-      config = portalConfig)
+      config = portalConfigAdjusted)
 
   portalProtocol.dbPut = createStoreHandler(lightClientDb)
 
@@ -278,13 +287,6 @@ proc validateContent(
 
   return true
 
-proc neighborhoodGossipDiscardPeers(
-    p: PortalProtocol,
-    srcNodeId: Opt[NodeId],
-    contentKeys: ContentKeysList,
-    content: seq[seq[byte]]): Future[void] {.async.} =
-  discard await p.neighborhoodGossip(srcNodeId, contentKeys, content)
-
 proc processContentLoop(n: LightClientNetwork) {.async.} =
   try:
     while true:
@@ -296,7 +298,7 @@ proc processContentLoop(n: LightClientNetwork) {.async.} =
       # TODO: Differentiate between failures due to invalid data and failures
       # due to missing network data for validation.
       if await n.validateContent(contentKeys, contentItems):
-        asyncSpawn n.portalProtocol.neighborhoodGossipDiscardPeers(
+        asyncSpawn n.portalProtocol.randomGossipDiscardPeers(
           srcNodeId, contentKeys, contentItems
         )
 

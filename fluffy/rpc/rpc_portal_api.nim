@@ -205,3 +205,13 @@ proc installPortalApiHandlers*(
       numberOfPeers = await p.neighborhoodGossip(Opt.none(NodeId), contentKeys, @[content])
 
     return numberOfPeers
+
+  rpcServer.rpc("portal_" & network & "RandomGossip") do(
+      contentKey: string, contentValue: string) -> int:
+    let
+      key = hexToSeqByte(contentKey)
+      content = hexToSeqByte(contentValue)
+      contentKeys = ContentKeysList(@[ByteList.init(key)])
+      numberOfPeers = await p.randomGossip(Opt.none(NodeId), contentKeys, @[content])
+
+    return numberOfPeers
