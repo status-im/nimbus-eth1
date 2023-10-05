@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import std/times
-import ./nimbus/vm_compile_info
+import ../nimbus/vm_compile_info
 import macros, strutils, os, unittest2, osproc
 import threadpool
 
