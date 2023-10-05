@@ -57,3 +57,4 @@ proc portal_beaconLightClientRecursiveFindContent(contentKey: string): string
 proc portal_beaconLightClientStore(contentKey: string, contentValue: string): bool
 proc portal_beaconLightClientLocalContent(contentKey: string): string
 proc portal_beaconLightClientGossip(contentKey: string, contentValue: string): int
+proc portal_beaconLightClientRandomGossip(contentKey: string, contentValue: string): int

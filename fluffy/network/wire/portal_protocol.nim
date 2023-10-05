@@ -405,11 +405,11 @@ proc messageHandler(protocol: TalkProtocol, request: seq[byte],
     # order of lookups, etc.
     # Note: As third measure, could run a findNodes request with distance 0.
     if node.isSome():
-      discard p.routingTable.addNode(node.get())
+      discard p.addNode(node.get())
     else:
       let node = p.baseProtocol.getNode(srcId)
       if node.isSome():
-        discard p.routingTable.addNode(node.get())
+        discard p.addNode(node.get())
 
     portal_message_requests_incoming.inc(
       labelValues = [$p.protocolId, $message.kind])
@@ -486,7 +486,7 @@ proc new*(T: type PortalProtocol,
 
   proto
 
-# Sends the discv5 talkreq nessage with provided Portal message, awaits and
+# Sends the discv5 talkreq message with provided Portal message, awaits and
 # validates the proper response, and updates the Portal Network routing table.
 proc reqResponse[Request: SomeMessage, Response: SomeMessage](
     p: PortalProtocol,
@@ -878,8 +878,7 @@ proc lookupWorker(
     let nodes = nodesMessage.get()
     # Attempt to add all nodes discovered
     for n in nodes:
-      discard p.routingTable.addNode(n)
-
+      discard p.addNode(n)
     return nodes
   else:
     return @[]
@@ -1039,7 +1038,7 @@ proc contentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256):
 
         for n in content.nodes:
           if not seen.containsOrIncl(n.id):
-            discard p.routingTable.addNode(n)
+            discard p.addNode(n)
             # If it wasn't seen before, insert node while remaining sorted
             closestNodes.insert(n, closestNodes.lowerBound(n,
               proc(x: Node, n: Node): int =
@@ -1138,7 +1137,8 @@ proc neighborhoodGossip*(
     srcNodeId: Opt[NodeId],
     contentKeys: ContentKeysList,
     content: seq[seq[byte]]): Future[int] {.async.} =
-  ## Returns number of peers to which content was gossiped
+  ## Run neighborhood gossip for provided content.
+  ## Returns the number of peers to which content was attempted to be gossiped.
   if content.len() == 0:
     return 0
 
@@ -1202,6 +1202,44 @@ proc neighborhoodGossip*(
       await p.offerQueue.addLast(req)
     return numberOfGossipedNodes
 
+proc neighborhoodGossipDiscardPeers*(
+    p: PortalProtocol,
+    srcNodeId: Opt[NodeId],
+    contentKeys: ContentKeysList,
+    content: seq[seq[byte]]): Future[void] {.async.} =
+  discard await p.neighborhoodGossip(srcNodeId, contentKeys, content)
+
+proc randomGossip*(
+    p: PortalProtocol,
+    srcNodeId: Opt[NodeId],
+    contentKeys: ContentKeysList,
+    content: seq[seq[byte]]): Future[int] {.async.} =
+  ## Run random gossip for provided content.
+  ## Returns the number of peers to which content was attempted to be gossiped.
+  if content.len() == 0:
+    return 0
+
+  var contentList = List[ContentKV, contentKeysLimit].init(@[])
+  for i, contentItem in content:
+    let contentKV =
+      ContentKV(contentKey: contentKeys[i], content: contentItem)
+    discard contentList.add(contentKV)
+
+  const maxGossipNodes = 4
+  let nodes = p.routingTable.randomNodes(maxGossipNodes)
+
+  for node in nodes[0..<nodes.len()]:
+    let req = OfferRequest(dst: node, kind: Direct, contentList: contentList)
+    await p.offerQueue.addLast(req)
+  return nodes.len()
+
+proc randomGossipDiscardPeers*(
+    p: PortalProtocol,
+    srcNodeId: Opt[NodeId],
+    contentKeys: ContentKeysList,
+    content: seq[seq[byte]]): Future[void] {.async.} =
+  discard await p.randomGossip(srcNodeId, contentKeys, content)
+
 proc storeContent*(
     p: PortalProtocol,
     contentKey: ByteList,
@@ -1257,7 +1295,7 @@ proc revalidateNode*(p: PortalProtocol, n: Node) {.async.} =
       if nodesMessage.isOk():
         let nodes = nodesMessage.get()
         if nodes.len > 0: # Normally a node should only return 1 record actually
-          discard p.routingTable.addNode(nodes[0])
+          discard p.addNode(nodes[0])
 
 proc getNodeForRevalidation(p: PortalProtocol): Opt[Node] =
   let node = p.routingTable.nodeToRevalidate()

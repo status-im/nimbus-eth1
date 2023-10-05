@@ -35,7 +35,7 @@ const
   defaultRadiusConfig* = RadiusConfig(kind: Dynamic)
   defaultRadiusConfigDesc* = $defaultRadiusConfig.kind
   defaultDisablePoke* = false
-  revalidationTimeout* = chronos.seconds(30) 
+  revalidationTimeout* = chronos.seconds(30)
 
   defaultPortalProtocolConfig* = PortalProtocolConfig(
     tableIpLimits: DefaultTableIpLimits,

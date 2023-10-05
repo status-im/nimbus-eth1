@@ -750,13 +750,6 @@ proc validateContent(
 
   return true
 
-proc neighborhoodGossipDiscardPeers(
-    p: PortalProtocol,
-    srcNodeId: Opt[NodeId],
-    contentKeys: ContentKeysList,
-    content: seq[seq[byte]]): Future[void] {.async.} =
-  discard await p.neighborhoodGossip(srcNodeId, contentKeys, content)
-
 proc processContentLoop(n: HistoryNetwork) {.async.} =
   try:
     while true:
