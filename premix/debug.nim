@@ -29,7 +29,7 @@ proc executeBlock(blockEnv: JsonNode, memoryDB: CoreDbRef, blockNumber: UInt256)
 
   let
     vmState = BaseVMState.new(parent, header, com)
-    validationResult = vmState.processBlockNotPoA(header, body)
+    validationResult = vmState.processBlock(header, body)
 
   if validationResult != ValidationResult.OK:
     error "block validation error", validationResult

@@ -13,6 +13,7 @@
 import
   ../../common/common,
   ../../utils/utils,
+  ../../vm_types,
   ../pow,
   ../clique
 
@@ -37,39 +38,45 @@ type
       ## First block to when `extraValidation` will be applied (only
       ## effective if `extraValidation` is true.)
 
-# ------------------------------------------------------------------------------
-# Private constructor helper
-# ------------------------------------------------------------------------------
-
-proc initChain(c: ChainRef; com: CommonRef; extraValidation: bool) =
-  ## Constructor for the `Chain` descriptor object.
-  c.com = com
-
-  c.validateBlock = true
-  c.extraValidation = extraValidation
+    vmState: BaseVMState
+      ## If it's not nil, block validation will use this
+      ## If it's nil, a new vmState state will be created.
 
 # ------------------------------------------------------------------------------
 # Public constructors
 # ------------------------------------------------------------------------------
 
-proc newChain*(com: CommonRef, extraValidation: bool): ChainRef =
+proc newChain*(com: CommonRef,
+               extraValidation: bool, vmState = BaseVMState(nil)): ChainRef =
   ## Constructor for the `Chain` descriptor object.
   ## The argument `extraValidation` enables extra block
   ## chain validation if set `true`.
-  new result
-  result.initChain(com, extraValidation)
+  ChainRef(
+    com: com,
+    validateBlock: true,
+    extraValidation: extraValidation,
+    vmState: vmState,
+  )
 
 proc newChain*(com: CommonRef): ChainRef =
   ## Constructor for the `Chain` descriptor object. All sub-object descriptors
   ## are initialised with defaults. So is extra block chain validation
   ##  * `enabled` for PoA networks (such as Goerli)
   ##  * `disabled` for non-PaA networks
-  new result
-  result.initChain(com, com.consensus == ConsensusType.POA)
+  let extraValidation = com.consensus in {ConsensusType.POA, ConsensusType.POS}
+  ChainRef(
+    com: com,
+    validateBlock: true,
+    extraValidation: extraValidation,
+  )
 
 # ------------------------------------------------------------------------------
 # Public `Chain` getters
 # ------------------------------------------------------------------------------
+proc vmState*(c: ChainRef): BaseVMState =
+  ## Getter
+  c.vmState
+
 proc clique*(c: ChainRef): Clique =
   ## Getter
   c.com.poa

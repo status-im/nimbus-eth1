@@ -8,7 +8,7 @@
 # those terms.
 
 import
-  std/[typetraits, times],
+  std/[times],
   eth/common,
   stew/results,
   ../web3_eth_conv,

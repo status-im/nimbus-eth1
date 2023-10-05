@@ -173,10 +173,10 @@ proc runTxPoolCliqueTest*() =
 
     test "Store generated block in block chain database":
       xp.chain.clearAccounts
-      check xp.chain.vmState.processBlock(com.poa, blk.header, body).isOK
+      check xp.chain.vmState.processBlock(blk.header, body).isOK
 
       let vmstate2 = BaseVMState.new(blk.header, com)
-      check vmstate2.processBlock(com.poa, blk.header, body).isOK
+      check vmstate2.processBlock(blk.header, body).isOK
 
     test "Clique persistBlocks":
       let rr = chain.persistBlocks([blk.header], [body])
@@ -210,7 +210,7 @@ proc runTxPoolCliqueTest*() =
       os.sleep(com.cliquePeriod * 1000)
 
       xp.chain.clearAccounts
-      check xp.chain.vmState.processBlock(com.poa, blk.header, body).isOK
+      check xp.chain.vmState.processBlock(blk.header, body).isOK
       let rr = chain.persistBlocks([blk.header], [body])
       check rr == ValidationResult.OK
 

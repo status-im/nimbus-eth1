@@ -20,7 +20,7 @@ import
   ../nimbus/utils/[utils, debug],
   ../nimbus/evm/tracer/legacy_tracer,
   ../nimbus/evm/tracer/json_tracer,
-  ../nimbus/core/[executor, validate, pow/header],
+  ../nimbus/core/[validate, chain, pow/header],
   ../stateless/[tree_from_witness, witness_types],
   ../tools/common/helpers as chp,
   ../tools/evmstate/helpers,
@@ -52,9 +52,6 @@ type
     network      : string
     postStateHash: Hash256
     json         : bool
-
-var
-  trustedSetupLoaded = false
 
 proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = false, trace = false)
 
@@ -209,53 +206,32 @@ proc setupTracer(ctx: TestCtx): TracerRef =
     TracerRef()
 
 proc importBlock(ctx: var TestCtx, com: CommonRef,
-                 tb: TestBlock, checkSeal, validation: bool) =
-
-  let parentHeader = com.db.getBlockHeader(tb.header.parentHash)
-  let td = some(com.db.getScore(tb.header.parentHash))
-  com.hardForkTransition(tb.header.blockNumber, td, some(tb.header.timestamp))
-
-  if com.isCancunOrLater(tb.header.timestamp):
-    if not trustedSetupLoaded:
-      let res = loadKzgTrustedSetup()
-      if res.isErr:
-        echo "FATAL: ", res.error
-        quit(QuitFailure)
-      trustedSetupLoaded = true
-
+                 tb: TestBlock, checkSeal: bool) =
   if ctx.vmState.isNil or ctx.vmState.stateDB.isTopLevelClean.not:
-    let tracerInst = ctx.setupTracer()
+    let
+      parentHeader = com.db.getBlockHeader(tb.header.parentHash)
+      tracerInst = ctx.setupTracer()
     ctx.vmState = BaseVMState.new(
       parentHeader,
       tb.header,
       com,
       tracerInst,
     )
-  else:
-    doAssert(ctx.vmState.reinit(parentHeader, tb.header))
 
-  if validation:
-    let rc = com.validateHeaderAndKinship(
-      tb.header, tb.body, checkSeal)
-    if rc.isErr:
-      raise newException(
-        ValidationError, "validateHeaderAndKinship: " & rc.error)
+  let
+    chain = newChain(com, extraValidation = true, ctx.vmState)
+    res = chain.persistBlocks([tb.header], [tb.body])
 
-  let res = ctx.vmState.processBlockNotPoA(tb.header, tb.body)
   if res == ValidationResult.Error:
-    if not (tb.hasException or (not tb.goodBlock)):
-      raise newException(ValidationError, "process block validation")
+    raise newException(ValidationError, "persistBlocks validation")
   else:
     if ctx.vmState.generateWitness():
-     blockWitness(ctx.vmState, com.db)
-
-  discard com.db.persistHeaderToDb(tb.header,
-    com.consensus == ConsensusType.POS)
+      blockWitness(ctx.vmState, com.db)
 
 proc applyFixtureBlockToChain(ctx: var TestCtx, tb: var TestBlock,
-                              com: CommonRef, checkSeal, validation: bool) =
+                              com: CommonRef, checkSeal: bool) =
   decompose(tb.blockRLP, tb.header, tb.body)
-  ctx.importBlock(com, tb, checkSeal, validation)
+  ctx.importBlock(com, tb, checkSeal)
 
 func shouldCheckSeal(ctx: TestCtx): bool =
   if ctx.sealEngine.isSome:
@@ -285,19 +261,9 @@ proc runTestCtx(ctx: var TestCtx, com: CommonRef, testStatusIMPL: var TestStatus
   for idx, tb in ctx.blocks:
     if tb.goodBlock:
       try:
-        ctx.applyFixtureBlockToChain(
-          ctx.blocks[idx], com, checkSeal, validation = false)
 
-        # manually validating
-        let res = com.validateHeaderAndKinship(
-                    tb.header, tb.body, checkSeal)
-        check res.isOk
-        when defined(noisy):
-          if res.isErr:
-            debugEcho "blockNumber  : ", tb.header.blockNumber
-            debugEcho "fork         : ", com.toHardFork(tb.header.blockNumber)
-            debugEcho "error message: ", res.error
-            debugEcho "consensusType: ", com.consensus
+        ctx.applyFixtureBlockToChain(
+          ctx.blocks[idx], com, checkSeal)
 
       except CatchableError as ex:
         debugEcho "FATAL ERROR(WE HAVE BUG): ", ex.msg
@@ -306,7 +272,7 @@ proc runTestCtx(ctx: var TestCtx, com: CommonRef, testStatusIMPL: var TestStatus
       var noError = true
       try:
         ctx.applyFixtureBlockToChain(ctx.blocks[idx],
-          com, checkSeal, validation = true)
+          com, checkSeal)
       except ValueError, ValidationError, BlockNotFound, RlpError:
         # failure is expected on this bad block
         check (tb.hasException or (not tb.goodBlock))
@@ -399,7 +365,7 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
       elif lastBlockHash == ctx.lastBlockHash:
         # multiple chain, we are using the last valid canonical
         # state root to test against 'postState'
-        let stateDB = AccountsCache.init(memDB, header.stateRoot, pruneTrie)
+        let stateDB = AccountsCache.init(com.db, header.stateRoot, pruneTrie)
         verifyStateDB(fixture["postState"], ReadOnlyStateDB(stateDB))
 
       success = lastBlockHash == ctx.lastBlockHash
@@ -424,6 +390,11 @@ proc blockchainJsonMain*(debugMode = false) =
     newFolder = "eth_tests/BlockchainTests"
     #newFolder = "eth_tests/EIPTests/BlockchainTests"
     #newFolder = "eth_tests/EIPTests/Pyspecs/cancun"
+
+  let res = loadKzgTrustedSetup()
+  if res.isErr:
+    echo "FATAL: ", res.error
+    quit(QuitFailure)
 
   let config = test_config.getConfiguration()
   if config.testSubject == "" or not debugMode:

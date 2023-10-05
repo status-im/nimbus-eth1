@@ -110,7 +110,7 @@ proc procBlkPreamble(vmState: BaseVMState;
 
 proc procBlkEpilogue(vmState: BaseVMState;
                      header: BlockHeader; body: BlockBody): bool
-    {.gcsafe, raises: [CatchableError].} =
+    {.gcsafe, raises: [].} =
   # Reward beneficiary
   vmState.mutateStateDB:
     if vmState.generateWitness:
@@ -147,18 +147,19 @@ proc procBlkEpilogue(vmState: BaseVMState;
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc processBlockNotPoA*(
-    vmState: BaseVMState; ## Parent environment of header/body block
-    header:  BlockHeader; ## Header/body block to add to the blockchain
+proc processBlock*(
+    vmState: BaseVMState;  ## Parent environment of header/body block
+    header:  BlockHeader;  ## Header/body block to add to the blockchain
     body:    BlockBody): ValidationResult
     {.gcsafe, raises: [CatchableError].} =
-  ## Processes `(header,body)` pair for a non-PoA network, only. This function
-  ## will fail when applied to a PoA network like `Goerli`.
-  if vmState.com.consensus == ConsensusType.POA:
-    # PoA consensus engine unsupported, see the other version of
-    # processBlock() below
-    debug "Unsupported PoA request"
-    return ValidationResult.Error
+  ## Generalised function to processes `(header,body)` pair for any network,
+  ## regardless of PoA or not.
+  ##
+  ## Rather than calculating the PoA state change here, it is done with the
+  ## verification in the `chain/persist_blocks.persistBlocks()` method. So
+  ## the `poa` descriptor is currently unused and only provided for later
+  ## implementations (but can be savely removed, as well.)
+  ## variant of `processBlock()` where the `header` argument is explicitely set.
 
   var dbTx = vmState.com.db.beginTransaction()
   defer: dbTx.dispose()
@@ -178,47 +179,6 @@ proc processBlockNotPoA*(
   # trie keep intact, rather than destroyed by trie pruning. But the current
   # block will still get a pruned trie. If trie pruning deactivated,
   # `applyDeletes` have no effects.
-  dbTx.commit(applyDeletes = false)
-
-  ValidationResult.OK
-
-
-proc processBlock*(
-    vmState: BaseVMState;  ## Parent environment of header/body block
-    poa:     Clique;       ## PoA descriptor (if needed, at all)
-    header:  BlockHeader;  ## Header/body block to add to the blockchain
-    body:    BlockBody): ValidationResult
-    {.gcsafe, raises: [CatchableError].} =
-  ## Generalised function to processes `(header,body)` pair for any network,
-  ## regardless of PoA or not. Currently there is no mining support so this
-  ## function is mostly the same as `processBlockNotPoA()`.
-  ##
-  ## Rather than calculating the PoA state change here, it is done with the
-  ## verification in the `chain/persist_blocks.persistBlocks()` method. So
-  ## the `poa` descriptor is currently unused and only provided for later
-  ## implementations (but can be savely removed, as well.)
-  ## variant of `processBlock()` where the `header` argument is explicitely set.
-  ##
-  # # Process PoA state transition first so there is no need to re-wind on
-  # # an error.
-  # if vmState.chainDB.config.poaEngine and
-  #    not poa.updatePoaState(header, body):
-  #   debug "PoA update failed"
-  #   return ValidationResult.Error
-
-  var dbTx = vmState.com.db.beginTransaction()
-  defer: dbTx.dispose()
-
-  if not vmState.procBlkPreamble(header, body):
-    return ValidationResult.Error
-
-  # EIP-3675: no reward for miner in POA/POS
-  if vmState.com.consensus == ConsensusType.POW:
-    vmState.calculateReward(header, body)
-
-  if not vmState.procBlkEpilogue(header, body):
-    return ValidationResult.Error
-
   dbTx.commit(applyDeletes = false)
 
   ValidationResult.OK

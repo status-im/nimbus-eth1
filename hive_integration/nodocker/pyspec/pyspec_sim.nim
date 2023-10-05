@@ -25,8 +25,6 @@ import
 
 const
   baseFolder = "hive_integration/nodocker/pyspec"
-  #caseFolder = "tests/fixtures/eth_tests/EIPTests/Pyspecs/cancun"
-  caseFolder = baseFolder & "/testcases"
   supportedNetwork = [
     "Merge",
     "Shanghai",
@@ -37,17 +35,24 @@ const
 
 type
   Payload = object
+    badBlock: bool
     payload: ExecutionPayload
     beaconRoot: Option[common.Hash256]
 
-proc getPayload(node: JsonNode): Payload =
-  let
-    rlpBytes = hexToSeqByte(node.getStr)
-    blk = rlp.decode(rlpBytes, EthBlock)
-  Payload(
-    payload: executionPayload(blk),
-    beaconRoot: blk.header.parentBeaconBlockRoot,
-  )
+proc getPayload(node: JsonNode): Payload  =
+  try:
+    let
+      rlpBytes = hexToSeqByte(node.getStr)
+      blk = rlp.decode(rlpBytes, EthBlock)
+    Payload(
+      badBlock: false,
+      payload: executionPayload(blk),
+      beaconRoot: blk.header.parentBeaconBlockRoot,
+    )
+  except RlpError:
+    Payload(
+      badBlock: true,
+    )
 
 proc validatePostState(node: JsonNode, t: TestEnv): bool =
   # check nonce, balance & storage of accounts in final block against fixture values
@@ -125,8 +130,19 @@ proc runTest(node: JsonNode, network: string): TestStatus =
                            PayloadExecutionStatus.invalid
                          else:
                            PayloadExecutionStatus.valid
-    let payload = getPayload(blkNode["rlp"])
+    let
+      badBlock = blkNode.hasKey("expectException")
+      payload = getPayload(blkNode["rlp"])
+
+    if badBlock == payload.badBlock and badBlock == true:
+      # It could be the rlp decoding succeed, but the actual
+      # block validation is failed in engine api
+      # So, we skip newPayload call only if decoding is also
+      # failed
+      break
+
     latestVersion = payload.payload.version
+
     let res = t.rpcClient.newPayload(payload.payload, payload.beaconRoot)
     if res.isErr:
       result = TestStatus.Failed
@@ -165,6 +181,22 @@ proc runTest(node: JsonNode, network: string): TestStatus =
 
   t.stopELClient()
 
+const
+  skipName = [
+    "beacon_root_contract_timestamps.json",
+    "beacon_root_equal_to_timestamp.json",
+  ]
+
+  caseFolderCancun   = "tests/fixtures/eth_tests/EIPTests/Pyspecs/cancun"
+  caseFolderShanghai = baseFolder & "/testcases"
+
+proc collectTestVectors(): seq[string] =
+  for fileName in walkDirRec(caseFolderCancun):
+    result.add fileName
+
+  for fileName in walkDirRec(caseFolderShanghai):
+    result.add fileName
+
 proc main() =
   var stat: SimStat
   let start = getTime()
@@ -174,8 +206,16 @@ proc main() =
     echo "FATAL: ", res.error
     quit(QuitFailure)
 
-  for fileName in walkDirRec(caseFolder):
+  let testVectors = collectTestVectors()
+  for fileName in testVectors:
     if not fileName.endsWith(".json"):
+      continue
+
+    let suspect = splitPath(fileName)
+    if suspect.tail in skipName:
+      let fixtureTests = json.parseFile(fileName)
+      for name, fixture in fixtureTests:
+        stat.inc(name, TestStatus.Skipped)
       continue
 
     let fixtureTests = json.parseFile(fileName)

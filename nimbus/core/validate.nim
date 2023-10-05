@@ -13,10 +13,11 @@ import
   ../db/accounts_cache,
   ".."/[transaction, common/common],
   ".."/[errors],
+  ../utils/utils,
   "."/[dao, eip4844, gaslimit, withdrawals],
   ./pow/[difficulty, header],
   ./pow,
-  nimcrypto/utils,
+  nimcrypto/utils as cryptoutils,
   stew/[objects, results]
 
 from stew/byteutils
@@ -30,14 +31,6 @@ export
 const
   daoForkBlockExtraData* =
     byteutils.hexToByteArray[13](DAOForkBlockExtra).toSeq
-
-# ------------------------------------------------------------------------------
-# Private Helpers
-# ------------------------------------------------------------------------------
-
-func isGenesis(header: BlockHeader): bool =
-  header.blockNumber == 0.u256 and
-    header.parentHash == GENESIS_PARENT_HASH
 
 # ------------------------------------------------------------------------------
 # Pivate validator functions
@@ -76,7 +69,7 @@ proc validateHeader(
     body: BlockBody;
     checkSealOK: bool;
       ): Result[void,string]
-      {.gcsafe, raises: [CatchableError].} =
+      {.gcsafe, raises: [].} =
 
   template inDAOExtraRange(blockNumber: BlockNumber): bool =
     # EIP-799
@@ -129,29 +122,14 @@ proc validateHeader(
 
   ? com.validateWithdrawals(header, body)
   ? com.validateEip4844Header(header, parentHeader, body.transactions)
+  ? com.validateGasLimitOrBaseFee(header, parentHeader)
 
   ok()
 
-func validateUncle(currBlock, uncle, uncleParent: BlockHeader):
-                                               Result[void,string] =
-  if uncle.blockNumber >= currBlock.blockNumber:
-    return err("uncle block number larger than current block number")
-
-  if uncle.blockNumber != uncleParent.blockNumber + 1:
-    return err("Uncle number is not one above ancestor's number")
-
-  if uncle.timestamp.toUnix < uncleParent.timestamp.toUnix:
-    return err("Uncle timestamp is before ancestor's timestamp")
-
-  if uncle.gasUsed > uncle.gasLimit:
-    return err("Uncle's gas usage is above the limit")
-
-  result = ok()
-
-
 proc validateUncles(com: CommonRef; header: BlockHeader;
                     uncles: openArray[BlockHeader];
-                    checkSealOK: bool): Result[void,string] =
+                    checkSealOK: bool): Result[void,string]
+                      {.gcsafe, raises: [].} =
   let hasUncles = uncles.len > 0
   let shouldHaveUncles = header.ommersHash != EMPTY_UNCLE_HASH
 
@@ -206,6 +184,9 @@ proc validateUncles(com: CommonRef; header: BlockHeader;
        (uncle.parentHash == header.parentHash):
       return err("Uncle's parent is not an ancestor")
 
+    if uncle.blockNumber >= header.blockNumber:
+      return err("uncle block number larger than current block number")
+
     # check uncle against own parent
     var parent: BlockHeader
     if not chainDB.getBlockHeader(uncle.parentHash,parent):
@@ -224,11 +205,8 @@ proc validateUncles(com: CommonRef; header: BlockHeader;
     except BlockNotFound:
       return err("Uncle parent not found")
 
-    result = validateUncle(header, uncle, uncleParent)
-    if result.isErr:
-      return
-
-    result = com.validateGasLimitOrBaseFee(uncle, uncleParent)
+    result = com.validateHeader(uncle, uncleParent,
+                                BlockBody(), checkSealOK)
     if result.isErr:
       return
 
@@ -287,6 +265,9 @@ proc validateTxBasic*(
             "index=$1, len=$2" % [$i, $acl.storageKeys.len])
 
     if tx.txType >= TxEip4844:
+      if tx.networkPayload.isNil.not:
+        return err("invalid tx: network payload should not appear in block validation")
+
       if tx.to.isNone:
         return err("invalid tx: destination must be not empty")
 
@@ -399,7 +380,7 @@ proc validateHeaderAndKinship*(
     body: BlockBody;
     checkSealOK: bool;
       ): Result[void, string]
-      {.gcsafe, raises: [CatchableError].} =
+      {.gcsafe, raises: [].} =
   if header.isGenesis:
     if header.extraData.len > 32:
       return err("BlockHeader.extraData larger than 32 bytes")
@@ -419,14 +400,8 @@ proc validateHeaderAndKinship*(
   if body.uncles.len > MAX_UNCLES:
     return err("Number of uncles exceed limit.")
 
-  if not chainDB.exists(header.stateRoot):
-    return err("`state_root` was not found in the db.")
-
   if com.consensus != ConsensusType.POS:
     result = com.validateUncles(header, body.uncles, checkSealOK)
-
-  if result.isOk:
-    result = com.validateGasLimitOrBaseFee(header, parent)
 
 # ------------------------------------------------------------------------------
 # End

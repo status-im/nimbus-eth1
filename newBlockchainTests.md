@@ -496,11 +496,12 @@ OK: 23/23 Fail: 0/23 Skip: 0/23
 + gasLimitTooHigh2.json                                           OK
 + gasPrice0.json                                                  OK
 + log1_correct.json                                               OK
++ reentrencySuicide.json                                          OK
 + timeDiff12.json                                                 OK
 + timeDiff13.json                                                 OK
 + timeDiff14.json                                                 OK
 ```
-OK: 19/19 Fail: 0/19 Skip: 0/19
+OK: 20/20 Fail: 0/20 Skip: 0/20
 ## bcWalletTest
 ```diff
 + wallet2outOf3txs.json                                           OK
@@ -510,23 +511,65 @@ OK: 19/19 Fail: 0/19 Skip: 0/19
 + walletReorganizeOwners.json                                     OK
 ```
 OK: 5/5 Fail: 0/5 Skip: 0/5
-## eips
+## eip1344_chainid
 ```diff
-+ initcode_limit_contract_creating_tx.json                        OK
-+ initcode_limit_contract_creating_tx_gas_usage.json              OK
-+ initcode_limit_create2_opcode.json                              OK
-+ initcode_limit_create_opcode.json                               OK
-+ push0.json                                                      OK
++ chainid.json                                                    OK
+```
+OK: 1/1 Fail: 0/1 Skip: 0/1
+## eip2930_access_list
+```diff
++ access_list.json                                                OK
+```
+OK: 1/1 Fail: 0/1 Skip: 0/1
+## eip3651_warm_coinbase
+```diff
 + warm_coinbase_call_out_of_gas.json                              OK
 + warm_coinbase_gas_usage.json                                    OK
 ```
-OK: 7/7 Fail: 0/7 Skip: 0/7
-## example
-```diff
-+ access_list.json                                                OK
-+ yul.json                                                        OK
-```
 OK: 2/2 Fail: 0/2 Skip: 0/2
+## eip3855_push0
+```diff
++ push0_before_jumpdest.json                                      OK
++ push0_during_staticcall.json                                    OK
++ push0_fill_stack.json                                           OK
++ push0_gas_cost.json                                             OK
++ push0_key_sstore.json                                           OK
++ push0_stack_overflow.json                                       OK
++ push0_storage_overwrite.json                                    OK
+```
+OK: 7/7 Fail: 0/7 Skip: 0/7
+## eip3860_initcode
+```diff
++ contract_creating_tx.json                                       OK
++ create_opcode_initcode.json                                     OK
++ gas_usage.json                                                  OK
+```
+OK: 3/3 Fail: 0/3 Skip: 0/3
+## eip4895_withdrawals
+```diff
++ balance_within_block.json                                       OK
++ large_amount.json                                               OK
++ many_withdrawals.json                                           OK
++ multiple_withdrawals_same_address.json                          OK
++ newly_created_contract.json                                     OK
++ no_evm_execution.json                                           OK
++ self_destructing_account.json                                   OK
++ use_value_in_contract.json                                      OK
++ use_value_in_tx.json                                            OK
++ withdrawing_to_precompiles.json                                 OK
++ zero_amount.json                                                OK
+```
+OK: 11/11 Fail: 0/11 Skip: 0/11
+## opcodes
+```diff
++ dup.json                                                        OK
+```
+OK: 1/1 Fail: 0/1 Skip: 0/1
+## security
+```diff
++ tx_selfdestruct_balance_bug.json                                OK
+```
+OK: 1/1 Fail: 0/1 Skip: 0/1
 ## stArgsZeroOneBalance
 ```diff
 + addNonConst.json                                                OK
@@ -2921,6 +2964,10 @@ OK: 12/14 Fail: 0/14 Skip: 2/14
 + InternalCallHittingGasLimitSuccess.json                         OK
 + InternlCallStoreClearsOOG.json                                  OK
 + InternlCallStoreClearsSucces.json                               OK
++ NoSrcAccount.json                                               OK
++ NoSrcAccount1559.json                                           OK
++ NoSrcAccountCreate.json                                         OK
++ NoSrcAccountCreate1559.json                                     OK
 + Opcodes_TransactionInit.json                                    OK
 + OverflowGasRequire2.json                                        OK
 + PointAtInfinityECRecover.json                                   OK
@@ -2940,7 +2987,7 @@ OK: 12/14 Fail: 0/14 Skip: 2/14
 + TransactionToItself.json                                        OK
 + ValueOverflow.json                                              OK
 ```
-OK: 31/31 Fail: 0/31 Skip: 0/31
+OK: 35/35 Fail: 0/35 Skip: 0/35
 ## stTransitionTest
 ```diff
 + createNameRegistratorPerTxsAfter.json                           OK
@@ -3316,12 +3363,6 @@ OK: 133/133 Fail: 0/133 Skip: 0/133
 + ecmul_1-2_2_21000_96.json                                       OK
 ```
 OK: 130/130 Fail: 0/130 Skip: 0/130
-## vm
-```diff
-+ chain_id.json                                                   OK
-+ dup.json                                                        OK
-```
-OK: 2/2 Fail: 0/2 Skip: 0/2
 ## vmArithmeticTest
 ```diff
 + add.json                                                        OK
@@ -3410,20 +3451,11 @@ OK: 0/3 Fail: 0/3 Skip: 3/3
 + swap.json                                                       OK
 ```
 OK: 11/11 Fail: 0/11 Skip: 0/11
-## withdrawals
+## yul
 ```diff
-+ balance_within_block.json                                       OK
-+ large_amount.json                                               OK
-+ many_withdrawals.json                                           OK
-+ multiple_withdrawals_same_address.json                          OK
-+ newly_created_contract.json                                     OK
-+ no_evm_execution.json                                           OK
-+ self_destructing_account.json                                   OK
-+ use_value_in_contract.json                                      OK
-+ use_value_in_tx.json                                            OK
-+ zero_amount.json                                                OK
++ yul.json                                                        OK
 ```
-OK: 10/10 Fail: 0/10 Skip: 0/10
+OK: 1/1 Fail: 0/1 Skip: 0/1
 
 ---TOTAL---
-OK: 2934/3040 Fail: 0/3040 Skip: 106/3040
+OK: 2946/3052 Fail: 0/3052 Skip: 106/3052
