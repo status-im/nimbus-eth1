@@ -56,6 +56,7 @@ type
     executionPayload*: ExecutionPayload
     blockValue*: Option[UInt256]
     blobsBundle*: Option[BlobsBundleV1]
+    shouldOverrideBuilder*: Option[bool]
 
   Version* {.pure.} = enum
     V1
@@ -79,7 +80,7 @@ func version*(attr: PayloadAttributes): Version =
     Version.V1
 
 func version*(res: GetPayloadResponse): Version =
-  if res.blobsBundle.isSome:
+  if res.blobsBundle.isSome and res.shouldOverrideBuilder.isSome:
     Version.V3
   elif res.blockValue.isSome:
     Version.V2
@@ -349,5 +350,6 @@ func V3*(res: GetPayloadResponse): GetPayloadV3Response =
   GetPayloadV3Response(
     executionPayload: res.executionPayload.V3,
     blockValue: res.blockValue.get,
-    blobsBundle: res.blobsBundle.get
+    blobsBundle: res.blobsBundle.get,
+    shouldOverrideBuilder: res.shouldOverrideBuilder.get
   )

@@ -64,5 +64,6 @@ proc getPayloadV3*(ben: BeaconEngineRef, id: PayloadID): GetPayloadV3Response =
   GetPayloadV3Response(
     executionPayload: payload,
     blockValue: blockValue,
-    blobsBundle: blobsBundle
+    blobsBundle: blobsBundle,
+    shouldOverrideBuilder: false
   )
