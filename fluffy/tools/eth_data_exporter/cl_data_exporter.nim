@@ -208,9 +208,7 @@ proc exportLCFinalityUpdate*(
     when lcDataFork > LightClientDataFork.None:
       let
         finalizedSlot = forkyObject.finalized_header.beacon.slot
-        optimisticSlot = forkyObject.attested_header.beacon.slot
-        contentKey = encode(finalityUpdateContentKey(
-          finalizedSlot.uint64, optimisticSlot.uint64))
+        contentKey = encode(finalityUpdateContentKey(finalizedSlot.uint64))
         contentId = beacon_light_client_content.toContentId(contentKey)
         forkDigest = forkDigestAtEpoch(
           forkDigests[], epoch(forkyObject.attested_header.beacon.slot), cfg)
@@ -225,7 +223,7 @@ proc exportLCFinalityUpdate*(
       )
 
       var contentTable: JsonPortalContentTable
-      contentTable[$optimisticSlot] = portalContent
+      contentTable[$finalizedSlot] = portalContent
 
       writePortalContentToJson(fh, contentTable)
 

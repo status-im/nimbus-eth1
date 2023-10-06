@@ -51,12 +51,11 @@ type
   # this causes them also to be included in a request, which makes perhaps less
   # sense?
   LightClientFinalityUpdateKey* = object
-    optimisticSlot*: uint64 ## slot of attested header of the update
     finalizedSlot*: uint64 ## slot of finalized header of the update
 
   # TODO: Same remark as for `LightClientFinalityUpdateKey`
   LightClientOptimisticUpdateKey* = object
-    optimisticSlot*: uint64 ## slot of attested header of the update
+    optimisticSlot*: uint64 ## signature_slot of the update
 
   ContentKey* = object
     case contentType*: ContentType
@@ -159,7 +158,8 @@ func decodeForkedLightClientObject(
 
   withLcDataFork(lcDataForkAtConsensusFork(contextFork)):
     when lcDataFork > LightClientDataFork.None:
-      let res = decodeSsz(data.toOpenArray(4, len(data) - 1), ObjType.Forky(lcDataFork))
+      let res = decodeSsz(
+        data.toOpenArray(4, len(data) - 1), ObjType.Forky(lcDataFork))
       if res.isOk:
         # TODO:
         # How can we verify the Epoch vs fork, e.g. with `consensusForkAtEpoch`?
@@ -235,12 +235,10 @@ func updateContentKey*(startPeriod: uint64, count: uint64): ContentKey =
       startPeriod: startPeriod, count: count)
   )
 
-func finalityUpdateContentKey*(
-    finalizedSlot: uint64, optimisticSlot: uint64): ContentKey =
+func finalityUpdateContentKey*(finalizedSlot: uint64): ContentKey =
   ContentKey(
     contentType: lightClientFinalityUpdate,
     lightClientFinalityUpdateKey: LightClientFinalityUpdateKey(
-      optimisticSlot: optimisticSlot,
       finalizedSlot: finalizedSlot
     )
   )

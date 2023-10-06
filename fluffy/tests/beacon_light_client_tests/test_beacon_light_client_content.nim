@@ -136,12 +136,8 @@ suite "Beacon Light Client Content Encodings - Mainnet":
       let key = contentKey.value()
       withForkyObject(update):
         when lcDataFork > LightClientDataFork.None:
-          let attestedSlot = forkyObject.attested_header.beacon.slot
-          let finalizedSlot = forkyObject.finalized_header.beacon.slot
-
-          check:
-            attestedSlot == key.lightClientFinalityUpdateKey.optimisticSlot
-            finalizedSlot == key.lightClientFinalityUpdateKey.finalizedSlot
+          check forkyObject.finalized_header.beacon.slot ==
+            key.lightClientFinalityUpdateKey.finalizedSlot
 
       # re-encode content and content key
       let encoded = encodeForkedLightClientObject(update, forkDigests.capella)
@@ -174,10 +170,8 @@ suite "Beacon Light Client Content Encodings - Mainnet":
       let key = contentKey.value()
       withForkyObject(update):
         when lcDataFork > LightClientDataFork.None:
-          let attestedSlot = forkyObject.attested_header.beacon.slot
-
-          check:
-            attestedSlot == key.lightClientOptimisticUpdateKey.optimisticSlot
+          check forkyObject.attested_header.beacon.slot ==
+            key.lightClientOptimisticUpdateKey.optimisticSlot
 
       # re-encode content and content key
       let encoded = encodeForkedLightClientObject(update, forkDigests.capella)

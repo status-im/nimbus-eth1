@@ -93,8 +93,7 @@ procSuite "Beacon Light Client Content Network":
       optimisticHeaderSlot = optimisticUpdateData.attested_header.beacon.slot
 
       finalityUpdateKey = finalityUpdateContentKey(
-        distinctBase(finalizedHeaderSlot),
-        distinctBase(finalizedOptimisticHeaderSlot)
+        distinctBase(finalizedHeaderSlot)
       )
       finalityKeyEnc = encode(finalityUpdateKey)
       finalityUpdateId = toContentId(finalityKeyEnc)
@@ -123,7 +122,6 @@ procSuite "Beacon Light Client Content Network":
       finalityResult =
         await lcNode1.lightClientNetwork.getLightClientFinalityUpdate(
           distinctBase(finalizedHeaderSlot),
-          distinctBase(finalizedOptimisticHeaderSlot)
         )
       optimisticResult =
         await lcNode1.lightClientNetwork.getLightClientOptimisticUpdate(
