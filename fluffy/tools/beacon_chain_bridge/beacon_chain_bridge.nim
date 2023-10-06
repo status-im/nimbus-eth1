@@ -182,9 +182,7 @@ proc gossipLCFinalityUpdate*(
     when lcDataFork > LightClientDataFork.None:
       let
         finalizedSlot = forkyObject.finalized_header.beacon.slot
-        optimisticSlot = forkyObject.attested_header.beacon.slot
-        contentKey = encode(finalityUpdateContentKey(
-          finalizedSlot.uint64, optimisticSlot.uint64))
+        contentKey = encode(finalityUpdateContentKey(finalizedSlot.uint64))
         forkDigest = forkDigestAtEpoch(
           forkDigests[], epoch(forkyObject.attested_header.beacon.slot), cfg)
         content = encodeFinalityUpdateForked(
@@ -200,7 +198,7 @@ proc gossipLCFinalityUpdate*(
                 contentKeyHex,
                 content.toHex())
           info "Beacon LC finality update gossiped", peers,
-            contentKey = contentKeyHex, finalizedSlot, optimisticSlot
+            contentKey = contentKeyHex, finalizedSlot
           return ok()
         except CatchableError as e:
           return err("JSON-RPC error: " & $e.msg)

@@ -25,9 +25,6 @@ logScope:
 type
   Nothing = object
   ResponseError = object of CatchableError
-  SlotInfo = object
-    finalizedSlot: Slot
-    optimisticSlot: Slot
 
   NetRes*[T] = Result[T, void]
   Endpoint[K, V] =
@@ -39,7 +36,7 @@ type
       tuple[startPeriod: SyncCommitteePeriod, count: uint64],
       ForkedLightClientUpdate]
   FinalityUpdate =
-    Endpoint[SlotInfo, ForkedLightClientFinalityUpdate]
+    Endpoint[Slot, ForkedLightClientFinalityUpdate]
   OptimisticUpdate =
     Endpoint[Slot, ForkedLightClientOptimisticUpdate]
 
@@ -142,11 +139,10 @@ proc doRequest(
 proc doRequest(
     e: typedesc[FinalityUpdate],
     n: LightClientNetwork,
-    slotInfo: SlotInfo
+    finalizedSlot: Slot
 ): Future[NetRes[ForkedLightClientFinalityUpdate]] =
   n.getLightClientFinalityUpdate(
-    distinctBase(slotInfo.finalizedSlot),
-    distinctBase(slotInfo.optimisticSlot)
+    distinctBase(finalizedSlot)
   )
 
 # https://github.com/ethereum/consensus-specs/blob/v1.4.0-beta.1/specs/altair/light-client/p2p-interface.md#getlightclientoptimisticupdate
@@ -331,17 +327,8 @@ proc loop(self: LightClientManager) {.async.} =
           await self.query(UpdatesByRange,
             (startPeriod: syncTask.startPeriod, count: syncTask.count))
         of LcSyncKind.FinalityUpdate:
-          let
-            # TODO: This is tricky. The optimistic slot kinda depends on when
-            # the request for the finality update is send?
-            # How to resolve? Don't use the optimistic slot in the content key
-            # to begin with, does it add anything?
-            optimisticSlot = wallTime.slotOrZero() - 1
-            finalizedSlot = start_slot(epoch(wallTime.slotOrZero()) - 2)
-          await self.query(FinalityUpdate, SlotInfo(
-            finalizedSlot: finalizedSlot,
-            optimisticSlot: optimisticSlot
-          ))
+          let finalizedSlot = start_slot(epoch(wallTime.slotOrZero()) - 2)
+          await self.query(FinalityUpdate, finalizedSlot)
         of LcSyncKind.OptimisticUpdate:
           let optimisticSlot = wallTime.slotOrZero() - 1
           await self.query(OptimisticUpdate, optimisticSlot)

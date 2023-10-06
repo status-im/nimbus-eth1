@@ -650,9 +650,7 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
           update, slot = forkyObject.attested_header.beacon.slot
         let
           finalizedSlot = forkyObject.finalized_header.beacon.slot
-          optimisticSlot = forkyObject.attested_header.beacon.slot
-          contentKey = encode(finalityUpdateContentKey(
-            finalizedSlot.uint64, optimisticSlot.uint64))
+          contentKey = encode(finalityUpdateContentKey(finalizedSlot.uint64))
           contentId = beacon_light_client_content.toContentId(contentKey)
           forkDigest = forkDigestAtEpoch(
             forkDigests[], epoch(forkyObject.attested_header.beacon.slot), cfg)

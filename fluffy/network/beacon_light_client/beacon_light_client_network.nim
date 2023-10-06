@@ -8,7 +8,6 @@
 {.push raises: [].}
 
 import
-  std/[options, tables],
   stew/results, chronos, chronicles,
   eth/p2p/discoveryv5/[protocol, enr],
   beacon_chain/spec/forks,
@@ -38,38 +37,44 @@ type
 func toContentIdHandler(contentKey: ByteList): results.Opt[ContentId] =
   ok(toContentId(contentKey))
 
+proc getContent(
+    n: LightClientNetwork, contentKey: ContentKey):
+    Future[results.Opt[seq[byte]]] {.async.} =
+  let
+    contentKeyEncoded = encode(contentKey)
+    contentId = toContentId(contentKeyEncoded)
+    contentRes = await n.portalProtocol.contentLookup(
+      contentKeyEncoded, contentId)
+
+  if contentRes.isNone():
+    warn "Failed fetching content from the beacon chain network",
+      contentKey = contentKeyEncoded
+    return Opt.none(seq[byte])
+  else:
+    return Opt.some(contentRes.value().content)
+
 proc getLightClientBootstrap*(
     n: LightClientNetwork,
     trustedRoot: Digest):
     Future[results.Opt[ForkedLightClientBootstrap]] {.async.} =
   let
-    bk = LightClientBootstrapKey(blockHash: trustedRoot)
-    ck = ContentKey(
-      contentType: lightClientBootstrap,
-      lightClientBootstrapKey: bk
-    )
-    keyEncoded = encode(ck)
-    contentID = toContentId(keyEncoded)
+    contentKey = bootstrapContentKey(trustedRoot)
+    contentResult = await n.getContent(contentKey)
 
-  let bootstrapContentLookup =
-      await n.portalProtocol.contentLookup(keyEncoded, contentId)
-
-  if bootstrapContentLookup.isNone():
-      warn "Failed fetching LightClientBootstrap from the network",
-        trustedRoot, contentKey = keyEncoded
-      return Opt.none(ForkedLightClientBootstrap)
+  if contentResult.isNone():
+    return Opt.none(ForkedLightClientBootstrap)
 
   let
-    bootstrap = bootstrapContentLookup.unsafeGet()
+    bootstrap = contentResult.value()
     decodingResult = decodeLightClientBootstrapForked(
-      n.forkDigests, bootstrap.content)
+      n.forkDigests, bootstrap)
 
-  if decodingResult.isErr:
+  if decodingResult.isErr():
     return Opt.none(ForkedLightClientBootstrap)
   else:
     # TODO Not doing validation for now, as probably it should be done by layer
     # above
-    return Opt.some(decodingResult.get())
+    return Opt.some(decodingResult.value())
 
 proc getLightClientUpdatesByRange*(
     n: LightClientNetwork,
@@ -77,96 +82,66 @@ proc getLightClientUpdatesByRange*(
     count: uint64):
     Future[results.Opt[ForkedLightClientUpdateList]] {.async.} =
   let
-    bk = LightClientUpdateKey(
-      startPeriod: distinctBase(startPeriod), count: count)
-    ck = ContentKey(
-      contentType: lightClientUpdate,
-      lightClientUpdateKey: bk
-    )
-    keyEncoded = encode(ck)
-    contentID = toContentId(keyEncoded)
+    contentKey = updateContentKey(distinctBase(startPeriod), count)
+    contentResult = await n.getContent(contentKey)
 
-  let updatesResult =
-      await n.portalProtocol.contentLookup(keyEncoded, contentId)
-
-  if updatesResult.isNone():
-      warn "Failed fetching updates network", contentKey = keyEncoded
-      return Opt.none(ForkedLightClientUpdateList)
+  if contentResult.isNone():
+    return Opt.none(ForkedLightClientUpdateList)
 
   let
-    updates = updatesResult.unsafeGet()
+    updates = contentResult.value()
     decodingResult = decodeLightClientUpdatesByRange(
-      n.forkDigests, updates.content)
+      n.forkDigests, updates)
 
-  if decodingResult.isErr:
+  if decodingResult.isErr():
     return Opt.none(ForkedLightClientUpdateList)
   else:
     # TODO Not doing validation for now, as probably it should be done by layer
     # above
-    return Opt.some(decodingResult.get())
+    return Opt.some(decodingResult.value())
 
-proc getUpdate(
-    n: LightClientNetwork, ck: ContentKey):
-    Future[results.Opt[seq[byte]]] {.async.} =
-  let
-    keyEncoded = encode(ck)
-    contentID = toContentId(keyEncoded)
-    updateLookup = await n.portalProtocol.contentLookup(keyEncoded, contentId)
-
-  if updateLookup.isNone():
-    warn "Failed fetching update from the network", contentKey = keyEncoded
-    return Opt.none(seq[byte])
-
-  return ok(updateLookup.get().content)
-
-# TODO:
-# Currently both getLightClientFinalityUpdate and getLightClientOptimisticUpdate
-# are implemented in naive way as finding first peer with any of those updates
-# and treating it as latest. This will probably need to get improved.
 proc getLightClientFinalityUpdate*(
     n: LightClientNetwork,
-    currentFinalSlot: uint64,
-    currentOptimisticSlot: uint64
+    finalizedSlot: uint64
   ): Future[results.Opt[ForkedLightClientFinalityUpdate]] {.async.} =
-
   let
-    ck = finalityUpdateContentKey(currentFinalSlot, currentOptimisticSlot)
-    lookupResult = await n.getUpdate(ck)
+    contentKey = finalityUpdateContentKey(finalizedSlot)
+    contentResult = await n.getContent(contentKey)
 
-  if lookupResult.isErr:
+  if contentResult.isNone():
     return Opt.none(ForkedLightClientFinalityUpdate)
 
   let
-    finalityUpdate = lookupResult.get()
+    finalityUpdate = contentResult.value()
     decodingResult = decodeLightClientFinalityUpdateForked(
       n.forkDigests, finalityUpdate)
 
-  if decodingResult.isErr:
+  if decodingResult.isErr():
     return Opt.none(ForkedLightClientFinalityUpdate)
   else:
-    return Opt.some(decodingResult.get())
+    return Opt.some(decodingResult.value())
 
 proc getLightClientOptimisticUpdate*(
     n: LightClientNetwork,
-    currentOptimisticSlot: uint64
+    optimisticSlot: uint64
   ): Future[results.Opt[ForkedLightClientOptimisticUpdate]] {.async.} =
 
   let
-    ck = optimisticUpdateContentKey(currentOptimisticSlot)
-    lookupResult = await n.getUpdate(ck)
+    contentKey = optimisticUpdateContentKey(optimisticSlot)
+    contentResult = await n.getContent(contentKey)
 
-  if lookupResult.isErr:
+  if contentResult.isNone():
     return Opt.none(ForkedLightClientOptimisticUpdate)
 
   let
-    optimisticUpdate = lookupResult.get()
+    optimisticUpdate = contentResult.value()
     decodingResult = decodeLightClientOptimisticUpdateForked(
       n.forkDigests, optimisticUpdate)
 
-  if decodingResult.isErr:
+  if decodingResult.isErr():
     return Opt.none(ForkedLightClientOptimisticUpdate)
   else:
-    return Opt.some(decodingResult.get())
+    return Opt.some(decodingResult.value())
 
 proc new*(
     T: type LightClientNetwork,
@@ -306,7 +281,7 @@ proc processContentLoop(n: LightClientNetwork) {.async.} =
     trace "processContentLoop canceled"
 
 proc start*(n: LightClientNetwork) =
-  info "Starting portal light client network"
+  info "Starting portal beacon chain network"
   n.portalProtocol.start()
   n.processContentLoop = processContentLoop(n)
 
