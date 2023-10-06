@@ -170,7 +170,7 @@ suite "Beacon Light Client Content Encodings - Mainnet":
       let key = contentKey.value()
       withForkyObject(update):
         when lcDataFork > LightClientDataFork.None:
-          check forkyObject.attested_header.beacon.slot ==
+          check forkyObject.signature_slot ==
             key.lightClientOptimisticUpdateKey.optimisticSlot
 
       # re-encode content and content key

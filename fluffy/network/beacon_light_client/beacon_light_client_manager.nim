@@ -330,7 +330,7 @@ proc loop(self: LightClientManager) {.async.} =
           let finalizedSlot = start_slot(epoch(wallTime.slotOrZero()) - 2)
           await self.query(FinalityUpdate, finalizedSlot)
         of LcSyncKind.OptimisticUpdate:
-          let optimisticSlot = wallTime.slotOrZero() - 1
+          let optimisticSlot = wallTime.slotOrZero()
           await self.query(OptimisticUpdate, optimisticSlot)
 
     nextSyncTaskTime = wallTime + self.rng.nextLcSyncTaskDelay(

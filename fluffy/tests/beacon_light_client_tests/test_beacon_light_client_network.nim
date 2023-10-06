@@ -90,7 +90,7 @@ procSuite "Beacon Light Client Content Network":
         lightClientOptimisticUpdateBytes, altair.LightClientOptimisticUpdate)
       optimisticUpdate = ForkedLightClientOptimisticUpdate(
         kind: LightClientDataFork.Altair, altairData: optimisticUpdateData)
-      optimisticHeaderSlot = optimisticUpdateData.attested_header.beacon.slot
+      optimisticHeaderSlot = optimisticUpdateData.signature_slot
 
       finalityUpdateKey = finalityUpdateContentKey(
         distinctBase(finalizedHeaderSlot)
