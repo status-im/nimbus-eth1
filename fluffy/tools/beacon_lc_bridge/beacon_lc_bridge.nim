@@ -615,7 +615,7 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
           update, slot = forkyObject.attested_header.beacon.slot
 
         let
-          slot = forkyObject.attested_header.beacon.slot
+          slot = forkyObject.signature_slot
           contentKey = encode(optimisticUpdateContentKey(slot.uint64))
           contentId = beacon_light_client_content.toContentId(contentKey)
           forkDigest = forkDigestAtEpoch(
