@@ -8,10 +8,11 @@
 {.push raises: [].}
 
 import
-  std/[times, sequtils, typetraits],
+  std/[times, sequtils, strutils, typetraits],
   json_rpc/[rpcproxy, rpcserver], stew/byteutils,
   web3/conversions, # sigh, for FixedBytes marshalling
   eth/[common/eth_types, rlp],
+  beacon_chain/spec/forks,
   ../../nimbus/rpc/[rpc_types, hexstrings, filters],
   ../../nimbus/transaction,
   # TODO: this is a bit weird but having this import makes beacon_light_client
@@ -19,7 +20,8 @@ import
   # `vendor/nimbus-eth2/beacon_chain/spec/keystore.nim`. This is most probably
   # caused by `readValue` clashing ?
   # ../../nimbus/common/chain_config
-  ../network/history/[history_network, history_content]
+  ../network/history/[history_network, history_content],
+  ../network/beacon_light_client/beacon_light_client
 
 # Subset of Eth JSON-RPC API: https://eth.wiki/json-rpc/API
 # Supported subset will eventually be found here:
@@ -41,7 +43,7 @@ func toHash*(value: EthHashStr): Hash256 {.raises: [ValueError].} =
 
 func init*(
     T: type TransactionObject,
-    tx: Transaction, header: BlockHeader, txIndex: int):
+    tx: eth_types.Transaction, header: BlockHeader, txIndex: int):
     T {.raises: [ValidationError].} =
   TransactionObject(
     blockHash: some(header.blockHash),
@@ -116,7 +118,8 @@ func init*(
 proc installEthApiHandlers*(
     # Currently only HistoryNetwork needed, later we might want a master object
     # holding all the networks.
-    rpcServerWithProxy: var RpcProxy, historyNetwork: HistoryNetwork)
+    rpcServerWithProxy: var RpcProxy, historyNetwork: HistoryNetwork,
+    beaconLightClient: Opt[LightClient])
     {.raises: [CatchableError].} =
 
   # Supported API
@@ -217,25 +220,64 @@ proc installEthApiHandlers*(
 
     return some(BlockObject.init(header, body))
 
-  # TODO: add test to local testnet, it requires activating accumulator
-  # in testnet script
   rpcServerWithProxy.rpc("eth_getBlockByNumber") do(
       quantityTag: string, fullTransactions: bool) -> Option[BlockObject]:
-    # TODO: for now support only numeric queries, as it is not obvious how to
-    # retrieve pending or even latest block.
-    if not isValidHexQuantity(quantityTag):
-      raise newException(ValueError, "Provided tag should be valid hex number")
+    let tag = quantityTag.toLowerAscii
+    case tag
+    of "latest":
+      # TODO:
+      # I assume this would refer to the content in the latest optimistic update
+      # in case the majority treshold is not met. And if it is met it is the
+      # same as the safe version?
+      raise newException(ValueError, "Latest tag not yet implemented")
+    of "earliest":
+      raise newException(ValueError, "Earliest tag not yet implemented")
+    of "safe":
+      if beaconLightClient.isNone():
+        raise newException(ValueError, "Safe tag not yet implemented")
 
-    let
-      blockNumber = fromHex(UInt256, quantityTag)
-      maybeBlock = (await historyNetwork.getBlock(blockNumber)).valueOr:
-        raise newException(ValueError, error)
+      withForkyStore(beaconLightClient.value().store[]):
+        when lcDataFork > LightClientDataFork.Altair:
+          let
+            blockHash = forkyStore.optimistic_header.execution.block_hash
+            (header, body) = (await historyNetwork.getBlock(blockHash)).valueOr:
+              return none(BlockObject)
 
-    if maybeBlock.isNone():
-      return none(BlockObject)
+          return some(BlockObject.init(header, body))
+        else:
+          raise newException(
+            ValueError, "Not available before Capella - not synced?")
+    of "finalized":
+      if beaconLightClient.isNone():
+        raise newException(ValueError, "Finalized tag not yet implemented")
+
+      withForkyStore(beaconLightClient.value().store[]):
+        when lcDataFork > LightClientDataFork.Altair:
+          let
+            blockHash = forkyStore.finalized_header.execution.block_hash
+            (header, body) = (await historyNetwork.getBlock(blockHash)).valueOr:
+              return none(BlockObject)
+
+          return some(BlockObject.init(header, body))
+        else:
+          raise newException(
+            ValueError, "Not available before Capella - not synced?")
+    of "pending":
+      raise newException(ValueError, "Pending tag not yet implemented")
     else:
-      let (header, body) = maybeBlock.get()
-      return some(BlockObject.init(header, body))
+      if not isValidHexQuantity(quantityTag):
+        raise newException(ValueError, "Provided block number is not a hex number")
+
+      let
+        blockNumber = fromHex(UInt256, quantityTag)
+        maybeBlock = (await historyNetwork.getBlock(blockNumber)).valueOr:
+          raise newException(ValueError, error)
+
+      if maybeBlock.isNone():
+        return none(BlockObject)
+      else:
+        let (header, body) = maybeBlock.get()
+        return some(BlockObject.init(header, body))
 
   rpcServerWithProxy.rpc("eth_getBlockTransactionCountByHash") do(
       data: EthHashStr) -> HexQuantityStr:

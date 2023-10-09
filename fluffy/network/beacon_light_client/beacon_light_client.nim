@@ -32,7 +32,7 @@ type
     cfg: RuntimeConfig
     forkDigests: ref ForkDigests
     getBeaconTime*: GetBeaconTimeFn
-    store: ref ForkedLightClientStore
+    store*: ref ForkedLightClientStore
     processor*: ref LightClientProcessor
     manager: LightClientManager
     onFinalizedHeader*, onOptimisticHeader*: LightClientHeaderCallback

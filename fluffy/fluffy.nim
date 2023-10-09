@@ -265,7 +265,8 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
       rpcHttpServerWithProxy.installPortalApiHandlers(
         stateNetwork.get().portalProtocol, "state")
     if historyNetwork.isSome():
-      rpcHttpServerWithProxy.installEthApiHandlers(historyNetwork.get())
+      rpcHttpServerWithProxy.installEthApiHandlers(
+        historyNetwork.get(), beaconLightClient)
       rpcHttpServerWithProxy.installPortalApiHandlers(
         historyNetwork.get().portalProtocol, "history")
       rpcHttpServerWithProxy.installPortalDebugApiHandlers(
