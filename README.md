@@ -13,7 +13,7 @@ This repository contains development work on an execution-layer client to pair w
 
 This repository is also home to:
 -  [Fluffy](./fluffy/README.md), a
-[Portal Network](https://github.com/ethereum/stateless-ethereum-specs/blob/master/state-network.md)
+[Portal Network](https://github.com/ethereum/portal-network-specs/tree/master)
 light client.
 - [Nimbus Verified Proxy](./nimbus_verified_proxy/README.md)
 
