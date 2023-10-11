@@ -1128,6 +1128,21 @@ proc traceContentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256)
     respondedWith: seen.toSeq()
   )
 
+  metadata["0x" & $p.localNode.id] = NodeMetadata(
+    enr: p.localNode.record,
+    ip: getIp(p.localNode.address),
+    port: getPort(p.localNode.address),
+    distance: p.routingTable.distance(p.localNode.id, targetId)
+  )
+
+  for cn in closestNodes:
+    metadata["0x" & $cn.id] = NodeMetadata(
+      enr: cn.record,
+      ip: getIp(cn.address),
+      port: getPort(cn.address),
+      distance: p.routingTable.distance(cn.id, targetId)
+    )
+
   var pendingQueries = newSeqOfCap[Future[PortalResult[FoundContent]]](alpha)
   var pendingNodes = newSeq[Node]()
   var requestAmount = 0'i64
