@@ -81,11 +81,6 @@ const
     NewlyCreated
     }
 
-  ripemdAddr* = block:
-    proc initAddress(x: int): EthAddress {.compileTime.} =
-      result[19] = x.byte
-    initAddress(3)
-
 when debugAccountsCache:
   import
     stew/byteutils
@@ -560,7 +555,7 @@ proc clearEmptyAccounts(ac: AccountsCache) =
 
   # https://github.com/ethereum/EIPs/issues/716
   if ac.ripemdSpecial:
-    ac.deleteEmptyAccount(ripemdAddr)
+    ac.deleteEmptyAccount(RIPEMD_ADDR)
     ac.ripemdSpecial = false
 
 proc persist*(ac: AccountsCache,

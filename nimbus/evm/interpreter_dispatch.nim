@@ -121,7 +121,7 @@ proc afterExecCall(c: Computation) =
   ## also see: https://github.com/ethereum/EIPs/issues/716
 
   if c.isError or c.fork >= FkByzantium:
-    if c.msg.contractAddress == ripemdAddr:
+    if c.msg.contractAddress == RIPEMD_ADDR:
       # Special case to account for geth+parity bug
       c.vmState.stateDB.ripemdSpecial()
 

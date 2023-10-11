@@ -92,4 +92,9 @@ const
   # SystemAddress is where the system-transaction is sent from as per EIP-4788
   SystemAddress* = hexToByteArray[20]("0xfffffffffffffffffffffffffffffffffffffffe")
 
+  RIPEMD_ADDR* = block:
+    proc initAddress(x: int): EthAddress {.compileTime.} =
+      result[19] = x.byte
+    initAddress(3)
+
 # End
