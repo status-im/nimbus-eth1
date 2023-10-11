@@ -39,13 +39,13 @@ suite "Beacon Light Client Content Encodings - Mainnet":
 
   test "LightClientBootstrap":
     const file = testVectorDir & "bootstrap.json"
-    let res = readJsonType(file, JsonPortalContentTable)
+    let res = readJsonType(file, seq[JsonPortalContent])
     check res.isOk()
-    let content = res.get()
-    for k, v in content:
+    let contentList = res.value()
+    for c in contentList:
       let
-        contentKeyEncoded = v.content_key.hexToSeqByte()
-        contentValueEncoded = v.content_value.hexToSeqByte()
+        contentKeyEncoded = c.content_key.hexToSeqByte()
+        contentValueEncoded = c.content_value.hexToSeqByte()
 
       # Decode content and content key
       let
@@ -74,13 +74,13 @@ suite "Beacon Light Client Content Encodings - Mainnet":
 
   test "LightClientUpdates":
     const file = testVectorDir & "updates.json"
-    let res = readJsonType(file, JsonPortalContentTable)
+    let res = readJsonType(file, seq[JsonPortalContent])
     check res.isOk()
-    let content = res.get()
-    for k, v in content:
+    let contentList = res.value()
+    for c in contentList:
       let
-        contentKeyEncoded = v.content_key.hexToSeqByte()
-        contentValueEncoded = v.content_value.hexToSeqByte()
+        contentKeyEncoded = c.content_key.hexToSeqByte()
+        contentValueEncoded = c.content_value.hexToSeqByte()
 
       # Decode content and content key
       let
@@ -113,13 +113,13 @@ suite "Beacon Light Client Content Encodings - Mainnet":
 
   test "LightClientFinalityUpdate":
     const file = testVectorDir & "finality_update.json"
-    let res = readJsonType(file, JsonPortalContentTable)
+    let res = readJsonType(file, seq[JsonPortalContent])
     check res.isOk()
-    let content = res.get()
-    for k, v in content:
+    let contentList = res.value()
+    for c in contentList:
       let
-        contentKeyEncoded = v.content_key.hexToSeqByte()
-        contentValueEncoded = v.content_value.hexToSeqByte()
+        contentKeyEncoded = c.content_key.hexToSeqByte()
+        contentValueEncoded = c.content_value.hexToSeqByte()
 
       # Decode content and content key
       let
@@ -147,13 +147,13 @@ suite "Beacon Light Client Content Encodings - Mainnet":
 
   test "LightClientOptimisticUpdate":
     const file = testVectorDir & "optimistic_update.json"
-    let res = readJsonType(file, JsonPortalContentTable)
+    let res = readJsonType(file, seq[JsonPortalContent])
     check res.isOk()
-    let content = res.get()
-    for k, v in content:
+    let contentList = res.value()
+    for c in contentList:
       let
-        contentKeyEncoded = v.content_key.hexToSeqByte()
-        contentValueEncoded = v.content_value.hexToSeqByte()
+        contentKeyEncoded = c.content_key.hexToSeqByte()
+        contentValueEncoded = c.content_value.hexToSeqByte()
 
       # Decode content and content key
       let
