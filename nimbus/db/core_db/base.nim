@@ -431,6 +431,9 @@ proc recorder*(db: CoreDxCaptRef): CoreDbRc[CoreDbRef] =
   ## Getter
   db.methods.recorderFn()
 
+proc logDb*(db: CoreDxCaptRef): CoreDbRc[CoreDbRef] =
+  db.methods.logDbFn()
+
 proc flags*(db: CoreDxCaptRef): set[CoreDbCaptFlags] =
   ## Getter
   db.methods.getFlagsFn()
@@ -576,6 +579,9 @@ when ProvideCoreDbLegacyAPI:
 
   proc recorder*(db: CoreDbCaptRef): CoreDbRef =
     db.distinctBase.recorder().expect("db/recorder()")
+
+  proc logDb*(db: CoreDbCaptRef): CoreDbRef =
+    db.distinctBase.logDb().expect("db/logDb()")
 
   proc flags*(db: CoreDbCaptRef): set[CoreDbCaptFlags] =
     db.distinctBase.flags()

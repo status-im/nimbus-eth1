@@ -61,6 +61,7 @@ export
   isLegacy,
   isPruning,
   kvt,
+  logDb,
   merge,
   mptPrune,
   newAccMpt,
