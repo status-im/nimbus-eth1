@@ -13,14 +13,18 @@
 import
   std/options,
   eth/[common, trie/db],
-  "."/[base, core_apps, legacy_db]
+  ./backend/[legacy_db],
+  "."/[base, core_apps]
 
 export
   common,
   core_apps,
 
   # Not all symbols from the object sources will be exported by default
+  CoreDbAccount,
+  CoreDbApiError,
   CoreDbCaptFlags,
+  CoreDbErrorCode,
   CoreDbErrorRef,
   CoreDbCaptRef,
   CoreDbKvtRef,
@@ -30,6 +34,8 @@ export
   CoreDbTxID,
   CoreDbTxRef,
   CoreDbType,
+  CoreDbVidRef,
+  CoreDxAccRef,
   CoreDxCaptRef,
   CoreDxKvtRef,
   CoreDxMptRef,
@@ -44,26 +50,34 @@ export
   contains,
   dbType,
   del,
+  delete,
   dispose,
+  fetch,
+  finish,
   get,
+  getRoot,
   getTransactionID,
+  hash,
   isLegacy,
   isPruning,
   kvt,
+  logDb,
+  merge,
   mptPrune,
+  newAccMpt,
   newCapture,
   newMpt,
-  newMptPrune,
-  newPhkPrune,
   newTransaction,
   pairs,
   parent,
   phkPrune,
   put,
+  recast,
   recorder,
   replicate,
   rollback,
   rootHash,
+  rootVid,
   safeDispose,
   setTransactionID,
   toLegacy,
@@ -86,7 +100,9 @@ proc newCoreDbRef*(
   ##
   db.newLegacyPersistentCoreDbRef()
 
-proc newCoreDbRef*(dbType: static[CoreDbType]): CoreDbRef =
+proc newCoreDbRef*(
+    dbType: static[CoreDbType];      # Database type symbol
+      ): CoreDbRef =
   ## Constructor for volatile/memory type DB
   ##
   ## Note: Using legacy notation `newCoreDbRef()` rather than
@@ -96,7 +112,7 @@ proc newCoreDbRef*(dbType: static[CoreDbType]): CoreDbRef =
     newLegacyMemoryCoreDbRef()
 
   else:
-    {.error: "Unsupported dbType for memory newCoreDbRef()".}
+    {.error: "Unsupported dbType for memory-only newCoreDbRef()".}
 
 # ------------------------------------------------------------------------------
 # Public template wrappers

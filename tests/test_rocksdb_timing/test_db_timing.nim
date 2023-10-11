@@ -18,7 +18,7 @@ import
   unittest2,
   ../../nimbus/core/chain,
   ../../nimbus/db/core_db,
-  ../../nimbus/db/core_db/legacy_rocksdb,
+  ../../nimbus/db/core_db/persistent,
   ../../nimbus/sync/snap/range_desc,
   ../../nimbus/sync/snap/worker/db/[hexary_desc, rocky_bulk_load],
   ../../nimbus/utils/prettify,

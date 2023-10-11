@@ -24,57 +24,76 @@ type
     Ooops
     LegacyDbMemory
     LegacyDbPersistent
-    # AristoDbMemory
-    # AristoDbPersistent
+    AristoDbMemory            ## Memory backend emulator
+    AristoDbRocks             ## RocksDB backend
+    AristoDbVoid              ## No backend (to be prefered over `XxxDbMemory`)
 
 const
-  CoreDbPersistentTypes* = {LegacyDbPersistent}
+  CoreDbPersistentTypes* = {LegacyDbPersistent, AristoDbRocks}
 
 type
   CoreDbRc*[T] = Result[T,CoreDbErrorRef]
+
+  CoreDbAccount* = object
+    ## Generic account representation referencing an *MPT* sub-trie
+    nonce*:      AccountNonce ## Some `uint64` type
+    balance*:    UInt256
+    storageVid*: CoreDbVidRef ## Implies storage root sub-MPT
+    codeHash*:   Hash256
+
+  CoreDbErrorCode* = enum
+    Unspecified = 0
+    RlpException
+    KvtNotFound
+    MptNotFound
+    RootNotFound
 
   CoreDbCaptFlags* {.pure.} = enum
     PersistPut
     PersistDel
 
   # --------------------------------------------------
-  # Constructors
-  # --------------------------------------------------
-  CoreDbNewMptFn* =
-    proc(root: Hash256): CoreDbRc[CoreDxMptRef] {.noRaise.}
-  CoreDbNewLegaMptFn* =
-    proc(root: Hash256; prune: bool): CoreDbRc[CoreDxMptRef] {.noRaise.}
-  CoreDbNewTxGetIdFn* = proc(): CoreDbRc[CoreDxTxID] {.noRaise.}
-  CoreDbNewTxBeginFn* = proc(): CoreDbRc[CoreDxTxRef] {.noRaise.}
-  CoreDbNewCaptFn* =
-    proc(flgs: set[CoreDbCaptFlags]): CoreDbRc[CoreDxCaptRef] {.noRaise.}
-
-  CoreDbConstructorFns* = object
-    ## Constructors
-
-    # Hexary trie
-    mptFn*:       CoreDbNewMptFn
-    legacyMptFn*: CoreDbNewLegaMptFn   # Legacy handler, should go away
-
-    # Transactions
-    getIdFn*:     CoreDbNewTxGetIdFn
-    beginFn*:     CoreDbNewTxBeginFn
-
-    # capture/tracer
-    captureFn*:   CoreDbNewCaptFn
-
-
-  # --------------------------------------------------
   # Sub-descriptor: Misc methods for main descriptor
   # --------------------------------------------------
-  CoreDbBackendFn* = proc(): CoreDbBackendRef {.noRaise.}
-  CoreDbErrorPrintFn* = proc(e: CoreDbErrorRef): string {.noRaise.}
-  CoreDbInitLegaSetupFn* = proc() {.noRaise.}
+  CoreDbBaseBackendFn* = proc(): CoreDbBackendRef {.noRaise.}
+  CoreDbBaseDestroyFn* = proc(flush = true) {.noRaise.}
+  CoreDbBaseVidHashFn* =
+    proc(vid: CoreDbVidRef): Result[Hash256,void] {.noRaise.}
+  CoreDbBaseErrorPrintFn* = proc(e: CoreDbErrorRef): string {.noRaise.}
+  CoreDbBaseInitLegaSetupFn* = proc() {.noRaise.}
+  CoreDbBaseRootFn* =
+    proc(root: Hash256; createOk: bool): CoreDbRc[CoreDbVidRef] {.noRaise.}
+  CoreDbBaseKvtFn* = proc(): CoreDxKvtRef {.noRaise.}
+  CoreDbBaseMptFn* =
+    proc(root: CoreDbVidRef; prune: bool): CoreDbRc[CoreDxMptRef] {.noRaise.}
+  CoreDbBaseAccFn* =
+    proc(root: CoreDbVidRef; prune: bool): CoreDbRc[CoreDxAccRef] {.noRaise.}
+  CoreDbBaseTxGetIdFn* = proc(): CoreDbRc[CoreDxTxID] {.noRaise.}
+  CoreDbBaseTxBeginFn* = proc(): CoreDbRc[CoreDxTxRef] {.noRaise.}
+  CoreDbBaseCaptFn* =
+    proc(flgs: set[CoreDbCaptFlags]): CoreDbRc[CoreDxCaptRef] {.noRaise.}
 
-  CoreDbMiscFns* = object
-    backendFn*:     CoreDbBackendFn
-    errorPrintFn*:  CoreDbErrorPrintFn
-    legacySetupFn*: CoreDbInitLegaSetupFn
+  CoreDbBaseFns* = object
+    backendFn*:     CoreDbBaseBackendFn
+    destroyFn*:     CoreDbBaseDestroyFn
+    vidHashFn*:     CoreDbBaseVidHashFn
+    errorPrintFn*:  CoreDbBaseErrorPrintFn
+    legacySetupFn*: CoreDbBaseInitLegaSetupFn
+    getRootFn*:     CoreDbBaseRootFn
+
+    # Kvt constructor
+    newKvtFn*:      CoreDbBaseKvtFn
+
+    # Hexary trie constructors
+    newMptFn*:      CoreDbBaseMptFn
+    newAccFn*:      CoreDbBaseAccFn
+
+    # Transactions constructors
+    getIdFn*:       CoreDbBaseTxGetIdFn
+    beginFn*:       CoreDbBaseTxBeginFn
+
+    # capture/tracer constructors
+    captureFn*:     CoreDbBaseCaptFn
 
 
   # --------------------------------------------------
@@ -99,32 +118,59 @@ type
 
 
   # --------------------------------------------------
-  # Sub-descriptor: Mpt/hexary trie methods
+  # Sub-descriptor: generic  Mpt/hexary trie methods
   # --------------------------------------------------
   CoreDbMptBackendFn* = proc(): CoreDbMptBackendRef {.noRaise.}
-  CoreDbMptGetFn* =
+  CoreDbMptFetchFn* =
     proc(k: openArray[byte]): CoreDbRc[Blob] {.noRaise.}
-  CoreDbMptDelFn* =
+  CoreDbMptFetchAccountFn* =
+    proc(k: openArray[byte]): CoreDbRc[CoreDbAccount] {.noRaise.}
+  CoreDbMptDeleteFn* =
     proc(k: openArray[byte]): CoreDbRc[void] {.noRaise.}
-  CoreDbMptPutFn* =
-    proc(k: openArray[byte]; v: openArray[byte]): CoreDbRc[void ] {.noRaise.}
+  CoreDbMptMergeFn* =
+    proc(k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] {.noRaise.}
+  CoreDbMptMergeAccountFn* =
+    proc(k: openArray[byte]; v: CoreDbAccount): CoreDbRc[void] {.noRaise.}
   CoreDbMptContainsFn* = proc(k: openArray[byte]): CoreDbRc[bool] {.noRaise.}
-  CoreDbMptRootHashFn* = proc(): CoreDbRc[Hash256] {.noRaise.}
+  CoreDbMptRootVidFn* = proc(): CoreDbVidRef {.noRaise.}
   CoreDbMptIsPruningFn* = proc(): bool {.noRaise.}
   CoreDbMptPairsIt* = iterator(): (Blob,Blob) {.apiRaise.}
   CoreDbMptReplicateIt* = iterator(): (Blob,Blob) {.apiRaise.}
 
   CoreDbMptFns* = object
     ## Methods for trie objects
-    backendFn*:   CoreDbMptBackendFn
-    getFn*:       CoreDbMptGetFn
-    delFn*:       CoreDbMptDelFn
-    putFn*:       CoreDbMptPutFn
-    containsFn*:  CoreDbMptContainsFn
-    rootHashFn*:  CoreDbMptRootHashFn
-    pairsIt*:     CoreDbMptPairsIt
-    replicateIt*: CoreDbMptReplicateIt
-    isPruningFn*: CoreDbMptIsPruningFn # Legacy handler, should go away
+    backendFn*:    CoreDbMptBackendFn
+    fetchFn*:      CoreDbMptFetchFn
+    deleteFn*:     CoreDbMptDeleteFn
+    mergeFn*:      CoreDbMptMergeFn
+    containsFn*:   CoreDbMptContainsFn
+    rootVidFn*:    CoreDbMptRootVidFn
+    pairsIt*:      CoreDbMptPairsIt
+    replicateIt*:  CoreDbMptReplicateIt
+    isPruningFn*:  CoreDbMptIsPruningFn
+
+
+  # ----------------------------------------------------
+  # Sub-descriptor: Mpt/hexary trie methods for accounts
+  # ------------------------------------------------------
+  CoreDbAccBackendFn* = proc(): CoreDbAccBackendRef {.noRaise.}
+  CoreDbAccFetchFn* = proc(k: EthAddress): CoreDbRc[CoreDbAccount] {.noRaise.}
+  CoreDbAccDeleteFn* = proc(k: EthAddress): CoreDbRc[void] {.noRaise.}
+  CoreDbAccMergeFn* =
+    proc(k: EthAddress; v: CoreDbAccount): CoreDbRc[void] {.noRaise.}
+  CoreDbAccContainsFn* = proc(k: EthAddress): CoreDbRc[bool] {.noRaise.}
+  CoreDbAccRootVidFn* = proc(): CoreDbVidRef {.noRaise.}
+  CoreDbAccIsPruningFn* = proc(): bool {.noRaise.}
+
+  CoreDbAccFns* = object
+    ## Methods for trie objects
+    backendFn*:    CoreDbAccBackendFn
+    fetchFn*:      CoreDbAccFetchFn
+    deleteFn*:     CoreDbAccDeleteFn
+    mergeFn*:      CoreDbAccMergeFn
+    containsFn*:   CoreDbAccContainsFn
+    rootVidFn*:    CoreDbAccRootVidFn
+    isPruningFn*:  CoreDbAccIsPruningFn
 
 
   # --------------------------------------------------
@@ -156,10 +202,12 @@ type
   # Sub-descriptor: capture recorder methods
   # --------------------------------------------------
   CoreDbCaptRecorderFn* = proc(): CoreDbRc[CoreDbRef] {.noRaise.}
+  CoreDbCaptLogDbFn* = proc(): CoreDbRc[CoreDbRef] {.noRaise.}
   CoreDbCaptFlagsFn* = proc(): set[CoreDbCaptFlags] {.noRaise.}
 
   CoreDbCaptFns* = object
     recorderFn*: CoreDbCaptRecorderFn
+    logDbFn*: CoreDbCaptLogDbFn
     getFlagsFn*: CoreDbCaptFlagsFn
 
   # --------------------------------------------------
@@ -168,12 +216,11 @@ type
   CoreDbRef* = ref object of RootRef
     ## Database descriptor
     dbType*: CoreDbType
-    kvtRef*: CoreDxKvtRef
-    new*: CoreDbConstructorFns
-    methods*: CoreDbMiscFns
+    methods*: CoreDbBaseFns
 
   CoreDbErrorRef* = ref object of RootRef
     ## Generic error object
+    error*: CoreDbErrorCode
     parent*: CoreDbRef
 
   CoreDbBackendRef* = ref object of RootRef
@@ -188,6 +235,10 @@ type
     ## Backend wrapper for direct backend access
     parent*: CoreDbRef
 
+  CoreDbAccBackendRef* = ref object of RootRef
+    ## Backend wrapper for direct backend access
+    parent*: CoreDbRef
+
   CoreDxKvtRef* = ref object
     ## Statically initialised Key-Value pair table living in `CoreDbRef`
     parent*: CoreDbRef
@@ -199,10 +250,22 @@ type
     parent*: CoreDbRef
     methods*: CoreDbMptFns
 
+  CoreDxAccRef* = ref object
+    ## Similar to `CoreDxKvtRef`, only dealing with `CoreDbAccount` data
+    ## rather than `Blob` values.
+    parent*: CoreDbRef
+    methods*: CoreDbAccFns
+
+  CoreDbVidRef* = ref object of RootRef
+    ## Generic state root: `Hash256` for legacy, `VertexID` for Aristo. This
+    ## object makes only sense in the context od an *MPT*.
+    parent*: CoreDbRef
+    ready*: bool              ## Must be set `true` to enable
+
   CoreDxPhkRef* = ref object
     ## Similar to `CoreDbMptRef` but with pre-hashed keys. That is, any
-    ## argument key for `put()`, `get()` etc. will be hashed first before
-    ## being applied.
+    ## argument key for `merge()`, `fetch()` etc. will be hashed first
+    ## before being applied.
     fromMpt*: CoreDxMptRef
     methods*: CoreDbMptFns
 

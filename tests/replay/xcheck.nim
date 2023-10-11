@@ -10,34 +10,40 @@
 # distributed except according to those terms.
 
 import
-  std/[sequtils],
-  eth/common,
-  #../test_sync_snap/test_types,
-  ../replay/[pp]
+  unittest2
 
 # ------------------------------------------------------------------------------
-# Private helpers
+# Public workflow helpers
 # ------------------------------------------------------------------------------
 
-proc toPfx(indent: int): string =
-  "\n" & " ".repeat(indent)
+template xCheck*(expr: untyped): untyped =
+  ## Note: this check will invoke `expr` twice
+  if not (expr):
+    check expr
+    return
 
-# ------------------------------------------------------------------------------
-# Public pretty printing
-# ------------------------------------------------------------------------------
+template xCheck*(expr: untyped; ifFalse: untyped): untyped =
+  ## Note: this check will invoke `expr` twice
+  if not (expr):
+    ifFalse
+    check expr
+    return
 
-proc say*(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
-  if noisy:
-    if args.len == 0:
-      echo "*** ", pfx
-    elif 0 < pfx.len and pfx[^1] != ' ':
-      echo pfx, " ", args.toSeq.join
-    else:
-      echo pfx, args.toSeq.join
+template xCheckRc*(expr: untyped): untyped =
+  if rc.isErr:
+    xCheck(expr)
 
-# ------------------------------------------------------------------------------
-# Public helpers
-# ------------------------------------------------------------------------------
+template xCheckRc*(expr: untyped; ifFalse: untyped): untyped =
+  if rc.isErr:
+    xCheck(expr, ifFalse)
+
+template xCheckErr*(expr: untyped): untyped =
+  if rc.isOk:
+    xCheck(expr)
+
+template xCheckErr*(expr: untyped; ifFalse: untyped): untyped =
+  if rc.isOk:
+    xCheck(expr, ifFalse)
 
 # ------------------------------------------------------------------------------
 # End

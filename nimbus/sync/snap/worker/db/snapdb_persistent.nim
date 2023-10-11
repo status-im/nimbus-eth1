@@ -14,7 +14,8 @@ import
   std/[algorithm, tables],
   chronicles,
   eth/[common, trie/db],
-  ../../../../db/[core_db, core_db/legacy_db, kvstore_rocksdb],
+  results,
+  ../../../../db/[core_db, kvstore_rocksdb],
   ../../range_desc,
   "."/[hexary_desc, hexary_error, rocky_bulk_load, snapdb_desc]
 

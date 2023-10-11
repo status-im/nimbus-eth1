@@ -76,7 +76,7 @@ proc dumpMemoryDB*(node: JsonNode, db: CoreDbRef) =
   node["state"] = n
 
 proc dumpMemoryDB*(node: JsonNode, capture: CoreDbCaptRef) =
-  node.dumpMemoryDB capture.recorder
+  node.dumpMemoryDB capture.logDb
 
 const
   senderName = "sender"
