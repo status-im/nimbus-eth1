@@ -28,6 +28,7 @@ import
     aristo_persistent,
     aristo_transcode,
     aristo_vid],
+  ../replay/xcheck,
   ./test_helpers
 
 const

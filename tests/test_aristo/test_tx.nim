@@ -21,6 +21,7 @@ import
     aristo_check, aristo_debug, aristo_delete, aristo_desc, aristo_get,
     aristo_merge],
   ../../nimbus/db/[aristo, aristo/aristo_init/persistent],
+  ../replay/xcheck,
   ./test_helpers
 
 type

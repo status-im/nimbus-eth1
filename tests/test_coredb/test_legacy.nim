@@ -15,7 +15,7 @@ import
   results,
   unittest2,
   ../../nimbus/[core/chain],
-  ../replay/undump_blocks,
+  ../replay/[undump_blocks, xcheck],
   ./test_helpers
 
 # ------------------------------------------------------------------------------

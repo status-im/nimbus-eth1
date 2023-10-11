@@ -193,38 +193,5 @@ proc mapRootVid*(
     payload: it.payload))
 
 # ------------------------------------------------------------------------------
-# Public workflow helpers
-# ------------------------------------------------------------------------------
-
-template xCheck*(expr: untyped): untyped =
-  ## Note: this check will invoke `expr` twice
-  if not (expr):
-    check expr
-    return
-
-template xCheck*(expr: untyped; ifFalse: untyped): untyped =
-  ## Note: this check will invoke `expr` twice
-  if not (expr):
-    ifFalse
-    check expr
-    return
-
-template xCheckRc*(expr: untyped): untyped =
-  if rc.isErr:
-    xCheck(expr)
-
-template xCheckRc*(expr: untyped; ifFalse: untyped): untyped =
-  if rc.isErr:
-    xCheck(expr, ifFalse)
-
-template xCheckErr*(expr: untyped): untyped =
-  if rc.isOk:
-    xCheck(expr)
-
-template xCheckErr*(expr: untyped; ifFalse: untyped): untyped =
-  if rc.isOk:
-    xCheck(expr, ifFalse)
-
-# ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

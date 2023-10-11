@@ -23,6 +23,7 @@ import
   ../../nimbus/db/aristo,
   ../../nimbus/db/aristo/aristo_desc/desc_backend,
   ../../nimbus/db/aristo/aristo_filter/[filter_fifos, filter_scheduler],
+  ../replay/xcheck,
   ./test_helpers
 
 type
