@@ -10,9 +10,9 @@
 import
   std/tables,
   json_rpc/jsonmarshal,
-  chronos/timer,
   stew/results,
-  eth/p2p/discoveryv5/[routing_table, enr, node]
+  eth/p2p/discoveryv5/[routing_table, enr, node],
+  ../network/wire/portal_protocol
 
 export jsonmarshal, routing_table, enr, node
 
@@ -22,31 +22,9 @@ type
     responded_with*: seq[NodeId]
 
 type
-  NodeMetadata* = object
-    enr*: Record
-    ip*: string
-    port*: string
-    distance_to_content*: uint64 # TODO Actually it is UInt256, but it should be string representation of it
-    distance_log2*: uint16
-
-type
-  StartedAt* = object
-    secs_since_epoch*: int64
-    nanos_since_epoch*: int64
-
-type
-  TraceContainer* = object
-    received_content_from_node*: NodeId
-    origin*: NodeId
-    responses*: Table[string, TraceItem]
-    node_metadata*: Table[string, NodeMetadata]
-    started_at*: StartedAt
-    target_id*: string
-
-type
   TraceNodeInfo* = object
     content*: string
-    trace*: TraceContainer
+    trace*: TraceObject
 
 type
   NodeInfo* = object

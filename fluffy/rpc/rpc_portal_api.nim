@@ -8,7 +8,7 @@
 {.push raises: [].}
 
 import
-  std/[sequtils, strformat],
+  std/[sequtils, math],
   json_rpc/[rpcproxy, rpcserver], stew/byteutils,
   eth/p2p/discoveryv5/nodes_verification,
   ../network/wire/portal_protocol,
@@ -184,40 +184,9 @@ proc installPortalApiHandlers*(
       contentResult = (await p.traceContentLookup(key, contentId)).valueOr:
         return TraceNodeInfo(content: "0x")
 
-    var responses = initTable[string, TraceItem]()
-    var metadata = initTable[string, NodeMetadata]()
-    for i in contentResult.responses:
-      var ids = newSeq[NodeId]()
-
-      for n in i.respondedWith:
-        ids.add(n)
-
-      metadata[fmt("0x{i.nodeId}")] = NodeMetadata(
-        enr: i.enr,
-        ip: $i.ip,
-        port: $i.port,
-        distance_to_content: 0, # NOTE this field should be string representation of UInt256
-        distance_log2: i.distance_log2
-        )
-
-      responses[fmt("0x{i.nodeId}")] = TraceItem(
-        timestamp_millis: chronos.milliseconds(i.ts - contentResult.ts),
-        responded_with: ids
-      )
-
     return TraceNodeInfo(
         content: contentResult.content.to0xHex(),
-        trace: TraceContainer(
-          origin: contentResult.origin,
-          target_id: contentKey,
-          received_content_from_node: contentResult.receivedFrom,
-          started_at: StartedAt(
-            secs_since_epoch: chronos.epochSeconds(contentResult.ts),
-            nanos_since_epoch: chronos.epochNanoSeconds(contentResult.ts)
-          ),
-          responses: responses,
-          node_metadata: metadata
-        )
+        trace: contentResult.trace
       )
 
   rpcServer.rpc("portal_" & network & "Store") do(

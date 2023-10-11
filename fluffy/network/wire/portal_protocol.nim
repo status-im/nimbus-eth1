@@ -197,24 +197,26 @@ type
     nodesInterestedInContent*: seq[Node]
 
   TraceResponse* = object
-    nodeId*: NodeId
-    ts*: Moment
+    duration*: int64
     respondedWith*: seq[NodeId]
+
+  NodeMetadata* = object
     enr*: Record
-    ip*: ValidIpAddress
-    port*: Port
+    ip*: string
+    port*: string
     distance*: UInt256
-    distance_log2*: uint16
+
+  TraceObject* = object
+    origin*: NodeId
+    targetId: UInt256
+    receivedFrom*: NodeId
+    responses*: Table[string, TraceResponse]
+    metadata*: Table[string, NodeMetadata]
+    cancelled*: seq[NodeId]
 
   TraceContentLookupResult* = object
-    origin*: NodeId
-    receivedFrom*: NodeId
     content*: seq[byte]
-    ts*: Moment
-    responses*: seq[TraceResponse]
-    # List of nodes which do not have requested content, and for which
-    # content is in their range
-    nodesInterestedInContent*: seq[Node]
+    trace*: TraceObject
 
 proc init*(
   T: type ContentKV,
@@ -238,6 +240,12 @@ proc init*(
 
 func `$`(id: PortalProtocolId): string =
   id.toHex()
+
+proc getIp(address: Option[Address]): string =
+  address.map(proc (a:Address):string = $a.ip).get("0.0.0.0")
+
+proc getPort(address: Option[Address]): string =
+  address.map(proc (a:Address):string  = $a.port).get("0")
 
 proc addNode*(p: PortalProtocol, node: Node): NodeStatus =
   p.routingTable.addNode(node)
@@ -1106,7 +1114,8 @@ proc traceContentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256)
   p.baseProtocol.rng[].shuffle(closestNodes)
 
   let ts = now(chronos.Moment)
-  var responses = newSeq[TraceResponse]()
+  var responses = initTable[string, TraceResponse]()
+  var metadata = initTable[string, NodeMetadata]()
 
   var asked, seen = initHashSet[NodeId]()
   asked.incl(p.baseProtocol.localNode.id) # No need to ask our own node
@@ -1114,7 +1123,13 @@ proc traceContentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256)
   for node in closestNodes:
     seen.incl(node.id)
 
+  responses["0x" & $p.localNode.id] = TraceResponse(
+    duration: 0,
+    respondedWith: seen.toSeq()
+  )
+
   var pendingQueries = newSeqOfCap[Future[PortalResult[FoundContent]]](alpha)
+  var pendingNodes = newSeq[Node]()
   var requestAmount = 0'i64
 
   var nodesWithoutContent: seq[Node] = newSeq[Node]()
@@ -1127,6 +1142,7 @@ proc traceContentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256)
       let n = closestNodes[i]
       if not asked.containsOrIncl(n.id):
         pendingQueries.add(p.findContent(n, target))
+        pendingNodes.add(n)
         requestAmount.inc()
       inc i
 
@@ -1141,6 +1157,7 @@ proc traceContentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256)
     let index = pendingQueries.find(query)
     if index != -1:
       pendingQueries.del(index)
+      pendingNodes.del(index)
     else:
       error "Resulting query should have been in the pending queries"
 
@@ -1151,7 +1168,7 @@ proc traceContentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256)
 
       case content.kind
       of Nodes:
-        let ts = now(chronos.Moment)
+        let duration = chronos.milliseconds(now(chronos.Moment) - ts)
 
         let maybeRadius = p.radiusCache.get(content.src.id)
         if maybeRadius.isSome() and
@@ -1164,14 +1181,22 @@ proc traceContentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256)
         var respondedWith = newSeq[NodeId]()
 
         for n in content.nodes:
+          let dist = p.routingTable.distance(n.id, targetId)
+
+          metadata["0x" & $n.id] = NodeMetadata(
+            enr: n.record,
+            ip: getIp(n.address),
+            port: getPort(n.address),
+            distance: dist,
+          )
+          respondedWith.add(n.id)
+
           if not seen.containsOrIncl(n.id):
-            respondedWith.add(n.id)
             discard p.routingTable.addNode(n)
             # If it wasn't seen before, insert node while remaining sorted
             closestNodes.insert(n, closestNodes.lowerBound(n,
               proc(x: Node, n: Node): int =
-                cmp(p.routingTable.distance(x.id, targetId),
-                  p.routingTable.distance(n.id, targetId))
+                cmp(p.routingTable.distance(x.id, targetId), dist)
             ))
 
             if closestNodes.len > BUCKET_SIZE:
@@ -1181,20 +1206,21 @@ proc traceContentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256)
 
         let address = content.src.address.get()
 
-        responses.add(TraceResponse(
-          nodeId: content.src.id,
-          ts: ts,
+        responses["0x" & $content.src.id] = TraceResponse(
+          duration: duration,
           respondedWith: respondedWith,
+        )
+
+        metadata["0x" & $content.src.id] = NodeMetadata(
           enr: content.src.record,
-          ip: address.ip,
-          port: address.port,
+          ip: $address.ip,
+          port: $address.port,
           distance: distance,
-          distance_log2: stateLogDistance(content.src.id, targetId)
-        ))
+        )
 
       of Content:
-        let ts = now(chronos.Moment)
-
+        let duration = chronos.milliseconds(now(chronos.Moment) - ts)
+        
         # cancel any pending queries as the content has been found
         for f in pendingQueries:
           f.cancel()
@@ -1202,26 +1228,39 @@ proc traceContentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256)
 
         let distance = p.routingTable.distance(content.src.id, targetId)
 
-        let address = content.src.address.get()
-
-        responses.add(TraceResponse(
-          nodeId: content.src.id,
-          ts: ts,
+        responses["0x" & $content.src.id] = TraceResponse(
+          duration: duration,
           respondedWith: newSeq[NodeId](),
+        )
+
+        metadata["0x" & $content.src.id] = NodeMetadata(
           enr: content.src.record,
-          ip: address.ip,
-          port: address.port,
+          ip: getIp(content.src.address),
+          port: getPort(content.src.address),
           distance: distance,
-          distance_log2: stateLogDistance(content.src.id, targetId)
-        ))
+        )
+
+        var pendingNodeIds = newSeq[NodeId]()
+
+        for pn in pendingNodes:
+          pendingNodeIds.add(pn.id)
+          metadata["0x" & $pn.id] = NodeMetadata(
+            enr: pn.record,
+            ip: getIp(pn.address),
+            port: getPort(pn.address),
+            distance: p.routingTable.distance(pn.id, targetId)
+          )
 
         return Opt.some(TraceContentLookupResult(
-          ts: ts,
-          origin: localNode(p).id,
-          receivedFrom: content.src.id,
           content: content.content,
-          nodesInterestedInContent: nodesWithoutContent,
-          responses: responses
+          trace: TraceObject(
+            origin: p.localNode.id,
+            targetId: targetId,
+            receivedFrom: content.src.id,
+            responses: responses,
+            metadata: metadata,
+            cancelled: pendingNodeIds
+          )
         ))
     else:
       # TODO: Should we do something with the node that failed responding our
@@ -1595,3 +1634,5 @@ proc resolveWithRadius*(
       return Opt.some((node, maybeRadius.unsafeGet()))
   else:
     return Opt.none((Node, UInt256))
+
+
