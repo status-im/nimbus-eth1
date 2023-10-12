@@ -45,7 +45,7 @@ proc toGenesisHeader*(
     #
     # This kludge also fixes the initial crash described in
     # https://github.com/status-im/nimbus-eth1/issues/932.
-    if sdb.pruneTrie and 0 < account.storage.len:
+    if sdb.pruneTrie:
       sdb.db.compensateLegacySetup() # <-- kludge
 
     for k, v in account.storage:
