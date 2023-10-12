@@ -8,7 +8,7 @@
 {.push raises: [].}
 
 import
-  std/[sequtils, math],
+  std/sequtils,
   json_rpc/[rpcproxy, rpcserver], stew/byteutils,
   eth/p2p/discoveryv5/nodes_verification,
   ../network/wire/portal_protocol,

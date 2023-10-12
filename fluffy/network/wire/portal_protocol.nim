@@ -12,13 +12,12 @@
 
 import
   std/[sequtils, sets, algorithm, tables],
-  stew/[results, byteutils, leb128, endians2, shims/net], chronicles, chronos,
+  stew/[results, byteutils, leb128, endians2], chronicles, chronos,
   nimcrypto/hash, bearssl, ssz_serialization, metrics, faststreams,
   eth/rlp, eth/p2p/discoveryv5/[protocol, node, enr, routing_table, random2,
     nodes_verification, lru],
   ../../seed_db,
   "."/[portal_stream, portal_protocol_config],
-  ../state/state_distance,
   ./messages
 
 export messages, routing_table, protocol
@@ -238,12 +237,6 @@ proc init*(
 
 func `$`(id: PortalProtocolId): string =
   id.toHex()
-
-proc getIp(address: Option[Address]): string =
-  address.map(proc (a:Address):string = $a.ip).get("0.0.0.0")
-
-proc getPort(address: Option[Address]): string =
-  address.map(proc (a:Address):string  = $a.port).get("0")
 
 proc addNode*(p: PortalProtocol, node: Node): NodeStatus =
   p.routingTable.addNode(node)
@@ -1120,7 +1113,8 @@ proc traceContentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256)
   seen.incl(p.baseProtocol.localNode.id) # No need to discover our own node
   for node in closestNodes:
     seen.incl(node.id)
-
+  
+  # Local node should be part of the responses
   responses["0x" & $p.localNode.id] = TraceResponse(
     duration: 0,
     respondedWith: seen.toSeq()
@@ -1131,6 +1125,8 @@ proc traceContentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256)
     distance: p.routingTable.distance(p.localNode.id, targetId)
   )
 
+  # We should also have metadata for all the closes nodes
+  # in order to be able to show cancelled requests
   for cn in closestNodes:
     metadata["0x" & $cn.id] = NodeMetadata(
       enr: cn.record,
@@ -1635,5 +1631,3 @@ proc resolveWithRadius*(
       return Opt.some((node, maybeRadius.unsafeGet()))
   else:
     return Opt.none((Node, UInt256))
-
-
