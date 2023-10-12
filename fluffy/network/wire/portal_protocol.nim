@@ -202,8 +202,6 @@ type
 
   NodeMetadata* = object
     enr*: Record
-    ip*: string
-    port*: string
     distance*: UInt256
 
   TraceObject* = object
@@ -1130,16 +1128,12 @@ proc traceContentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256)
 
   metadata["0x" & $p.localNode.id] = NodeMetadata(
     enr: p.localNode.record,
-    ip: getIp(p.localNode.address),
-    port: getPort(p.localNode.address),
     distance: p.routingTable.distance(p.localNode.id, targetId)
   )
 
   for cn in closestNodes:
     metadata["0x" & $cn.id] = NodeMetadata(
       enr: cn.record,
-      ip: getIp(cn.address),
-      port: getPort(cn.address),
       distance: p.routingTable.distance(cn.id, targetId)
     )
 
@@ -1200,8 +1194,6 @@ proc traceContentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256)
 
           metadata["0x" & $n.id] = NodeMetadata(
             enr: n.record,
-            ip: getIp(n.address),
-            port: getPort(n.address),
             distance: dist,
           )
           respondedWith.add(n.id)
@@ -1228,8 +1220,6 @@ proc traceContentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256)
 
         metadata["0x" & $content.src.id] = NodeMetadata(
           enr: content.src.record,
-          ip: $address.ip,
-          port: $address.port,
           distance: distance,
         )
 
@@ -1250,8 +1240,6 @@ proc traceContentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256)
 
         metadata["0x" & $content.src.id] = NodeMetadata(
           enr: content.src.record,
-          ip: getIp(content.src.address),
-          port: getPort(content.src.address),
           distance: distance,
         )
 
@@ -1261,8 +1249,6 @@ proc traceContentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256)
           pendingNodeIds.add(pn.id)
           metadata["0x" & $pn.id] = NodeMetadata(
             enr: pn.record,
-            ip: getIp(pn.address),
-            port: getPort(pn.address),
             distance: p.routingTable.distance(pn.id, targetId)
           )
 
