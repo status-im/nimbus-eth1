@@ -196,7 +196,7 @@ type
     nodesInterestedInContent*: seq[Node]
 
   TraceResponse* = object
-    duration*: int64
+    durationMs*: int64
     respondedWith*: seq[NodeId]
 
   NodeMetadata* = object
@@ -1116,7 +1116,7 @@ proc traceContentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256)
   
   # Local node should be part of the responses
   responses["0x" & $p.localNode.id] = TraceResponse(
-    duration: 0,
+    durationMs: 0,
     respondedWith: seen.toSeq()
   )
 
@@ -1210,7 +1210,7 @@ proc traceContentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256)
         let address = content.src.address.get()
 
         responses["0x" & $content.src.id] = TraceResponse(
-          duration: duration,
+          durationMs: duration,
           respondedWith: respondedWith,
         )
 
@@ -1230,7 +1230,7 @@ proc traceContentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256)
         let distance = p.routingTable.distance(content.src.id, targetId)
 
         responses["0x" & $content.src.id] = TraceResponse(
-          duration: duration,
+          durationMs: duration,
           respondedWith: newSeq[NodeId](),
         )
 
