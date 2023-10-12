@@ -281,8 +281,8 @@ when isMainModule:
   setErrorLevel()
 
   # This one uses the readily available dump: `bulkTest0` and some huge replay
-  # dumps `bulkTest1`, `bulkTest2`, .. from the `nimbus-eth1-blobs` package.
-  # For specs see `tests/test_sync_snap/bulk_test_xx.nim`.
+  # dumps `bulkTest2`, `bulkTest3`, .. from the `nimbus-eth1-blobs` package.
+  # For specs see `tests/test_rocksdb_timing/bulk_test_xx.nim`.
   var testList = @[bulkTest0]
   when true and false:
     testList &= @[bulkTest1, bulkTest2, bulkTest3]
