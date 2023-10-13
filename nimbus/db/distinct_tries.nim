@@ -8,6 +8,8 @@
 # may want to put in assertions to make sure that the nodes for
 # the account are all present (in stateless mode), etc.
 
+{.push raises: [].}
+
 import
   eth/[common, trie/hexary],
   ./core_db
@@ -19,14 +21,15 @@ type
   DistinctTrie* = AccountsTrie | StorageTrie
 
 func toBase(t: DistinctTrie): CoreDbPhkRef =
-  ## Note that `CoreDbPhkRef` is a distinct variant of `CoreDxPhkRef`
+  ## Note that `CoreDbPhkRef` is a distinct variant of `CoreDxPhkRef` for
+  ## the legacy API.
   t.CoreDbPhkRef
 
 # I don't understand why "borrow" doesn't work here. --Adam
-proc rootHash*   (t: DistinctTrie): KeccakHash        = t.toBase.rootHash()
-proc rootHashHex*(t: DistinctTrie): string            = $t.toBase.rootHash()
-proc db*         (t: DistinctTrie): DB                = t.toBase.parent()
-proc isPruning*  (t: DistinctTrie): bool              = t.toBase.isPruning()
+proc rootHash*   (t: DistinctTrie): KeccakHash   = t.toBase.rootHash()
+proc rootHashHex*(t: DistinctTrie): string       = $t.toBase.rootHash()
+proc db*         (t: DistinctTrie): DB           = t.toBase.parent()
+proc isPruning*  (t: DistinctTrie): bool         = t.toBase.isPruning()
 proc mpt*        (t: DistinctTrie): CoreDbMptRef = t.toBase.toMpt()
 func phk*        (t: DistinctTrie): CoreDbPhkRef = t.toBase
 
@@ -40,7 +43,7 @@ template initAccountsTrie*(db: DB, isPruning = true): AccountsTrie =
 proc getAccountBytes*(trie: AccountsTrie, address: EthAddress): seq[byte] =
   CoreDbPhkRef(trie).get(address)
 
-proc maybeGetAccountBytes*(trie: AccountsTrie, address: EthAddress): Option[seq[byte]] =
+proc maybeGetAccountBytes*(trie: AccountsTrie, address: EthAddress): Option[Blob]  {.gcsafe, raises: [RlpError].} =
   let phk = CoreDbPhkRef(trie)
   if phk.parent.isLegacy:
     phk.backend.toLegacy.SecureHexaryTrie.maybeGet(address)
@@ -73,7 +76,7 @@ template createTrieKeyFromSlot*(slot: UInt256): auto =
 proc getSlotBytes*(trie: StorageTrie, slotAsKey: openArray[byte]): seq[byte] =
   CoreDbPhkRef(trie).get(slotAsKey)
 
-proc maybeGetSlotBytes*(trie: StorageTrie, slotAsKey: openArray[byte]): Option[seq[byte]] =
+proc maybeGetSlotBytes*(trie: StorageTrie, slotAsKey: openArray[byte]): Option[Blob] {.gcsafe, raises: [RlpError].} =
   let phk = CoreDbPhkRef(trie)
   if phk.parent.isLegacy:
     phk.backend.toLegacy.SecureHexaryTrie.maybeGet(slotAsKey)
