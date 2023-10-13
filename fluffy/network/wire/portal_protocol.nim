@@ -213,6 +213,7 @@ type
 
   TraceContentLookupResult* = object
     content*: seq[byte]
+    utpTransfer*: bool
     trace*: TraceObject
 
 proc init*(
@@ -1250,6 +1251,7 @@ proc traceContentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256)
 
         return Opt.some(TraceContentLookupResult(
           content: content.content,
+          utpTransfer: content.utpTransfer,
           trace: TraceObject(
             origin: p.localNode.id,
             targetId: targetId,

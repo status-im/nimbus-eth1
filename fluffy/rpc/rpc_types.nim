@@ -8,23 +8,12 @@
 {.push raises: [].}
 
 import
-  std/tables,
   json_rpc/jsonmarshal,
   stew/results,
   eth/p2p/discoveryv5/[routing_table, enr, node],
   ../network/wire/portal_protocol
 
 export jsonmarshal, routing_table, enr, node
-
-type
-  TraceItem* = object
-    timestamp_millis*: int64
-    responded_with*: seq[NodeId]
-
-type
-  TraceNodeInfo* = object
-    content*: string
-    trace*: TraceObject
 
 type
   NodeInfo* = object

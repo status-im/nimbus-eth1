@@ -24,6 +24,12 @@ type
     content: string
     utpTransfer: bool
 
+  TraceNodeInfo* = object
+    content*: string
+    utpTransfer: bool
+    trace*: TraceObject
+
+
 # Note:
 # Using a string for the network parameter will give an error in the rpc macro:
 # Error: Invalid node kind nnkInfix for macros.`$`
@@ -186,6 +192,7 @@ proc installPortalApiHandlers*(
 
     return TraceNodeInfo(
         content: contentResult.content.to0xHex(),
+        utpTransfer: contentResult.utpTransfer,
         trace: contentResult.trace
       )
 
