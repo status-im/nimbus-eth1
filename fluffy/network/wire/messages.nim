@@ -147,7 +147,7 @@ func decodeMessage*(body: openArray[byte]): Result[Message, string] =
     if body.len < 1: # TODO: This check should probably move a layer down
       return err("No message data, peer might not support this talk protocol")
     ok(SSZ.decode(body, Message))
-  except SszError as e:
+  except SerializationError as e:
     err("Invalid message encoding: " & e.msg)
 
 template innerMessage[T: SomeMessage](

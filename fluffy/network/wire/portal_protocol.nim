@@ -268,7 +268,7 @@ func handlePing(
   # pings from different nodes to clear the LRU.
   let customPayloadDecoded =
     try: SSZ.decode(ping.customPayload.asSeq(), CustomPayload)
-    except MalformedSszError, SszSizeMismatchError:
+    except SerializationError:
       # invalid custom payload, send empty back
       return @[]
   p.radiusCache.put(srcId, customPayloadDecoded.dataRadius)

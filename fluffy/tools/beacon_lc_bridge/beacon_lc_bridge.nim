@@ -92,14 +92,14 @@ import
 
 from stew/objects import checkedEnumAssign
 from stew/byteutils import readHexChar
-from web3/ethtypes import BlockHash
+from web3/ethtypes as web3types import BlockHash
 
 from beacon_chain/gossip_processing/block_processor import newExecutionPayload
 from beacon_chain/gossip_processing/eth2_processor import toValidationResult
 
 type Hash256 = etypes.Hash256
 
-template asEthHash(hash: ethtypes.BlockHash): Hash256 =
+template asEthHash(hash: web3types.BlockHash): Hash256 =
   Hash256(data: distinctBase(hash))
 
 # TODO: Ugh why isn't gasLimit and gasUsed a uint64 in nim-eth / nimbus-eth1 :(
@@ -451,8 +451,8 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
 
       withBlck(signedBlock):
         when consensusFork >= ConsensusFork.Bellatrix:
-          if blck.message.is_execution_block:
-            template payload(): auto = blck.message.body.execution_payload
+          if forkyBlck.message.is_execution_block:
+            template payload(): auto = forkyBlck.message.body.execution_payload
 
             # TODO: Get rid of the asEngineExecutionPayload step?
             let executionPayload = payload.asEngineExecutionPayload()

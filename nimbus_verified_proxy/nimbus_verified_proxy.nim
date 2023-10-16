@@ -109,8 +109,8 @@ proc run(config: VerifiedProxyConf) {.raises: [CatchableError].} =
         wallSlot = getBeaconTime().slotOrZero
       withBlck(signedBlock):
         when consensusFork >= ConsensusFork.Bellatrix:
-          if blck.message.is_execution_block:
-            template payload(): auto = blck.message.body.execution_payload
+          if forkyBlck.message.is_execution_block:
+            template payload(): auto = forkyBlck.message.body.execution_payload
             blockCache.add(asExecutionData(payload.asEngineExecutionPayload()))
         else: discard
       return

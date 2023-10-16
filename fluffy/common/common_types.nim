@@ -34,11 +34,11 @@ func decodeRlp*(input: openArray[byte], T: type): Result[T, string] =
 func decodeSsz*(input: openArray[byte], T: type): Result[T, string] =
   try:
     ok(SSZ.decode(input, T))
-  except SszError as e:
+  except SerializationError as e:
     err(e.msg)
 
 func decodeSszOrRaise*(input: openArray[byte], T: type): T =
   try:
     SSZ.decode(input, T)
-  except SszError as e:
+  except SerializationError as e:
     raiseAssert(e.msg)
