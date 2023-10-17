@@ -25,10 +25,10 @@ type
 
   ContentType* = enum
     newBlockHeader = 0x00
-    # TODO: remove or fix this temporary 
+    # TODO: remove or fix this temporary
     # dummySelector per latest spec.
     # This is temporary workaround
-    # to fool SSZ.isUnion    
+    # to fool SSZ.isUnion
     dummySelector  = 0x01
 
   NewBlockHeaderKey* = object
@@ -48,7 +48,7 @@ func encode*(contentKey: ContentKey): ByteList =
 func decode*(contentKey: ByteList): Option[ContentKey] =
   try:
     some(SSZ.decode(contentKey.asSeq(), ContentKey))
-  except SszError:
+  except SerializationError:
     return none[ContentKey]()
 
 func toContentId*(contentKey: ByteList): ContentId =

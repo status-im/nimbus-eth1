@@ -85,7 +85,7 @@ func encode*(contentKey: ContentKey): ByteList =
 func decode*(contentKey: ByteList): Opt[ContentKey] =
   try:
     Opt.some(SSZ.decode(contentKey.asSeq(), ContentKey))
-  except SszError:
+  except SerializationError:
     return Opt.none(ContentKey)
 
 func toContentId*(contentKey: ByteList): ContentId =

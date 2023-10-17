@@ -335,7 +335,7 @@ proc get(db: ContentDB, T: type BlockHeader, contentId: ContentId): Opt[T] =
     let headerWithProof =
       try:
         SSZ.decode(contentFromDB.get(), BlockHeaderWithProof)
-      except SszError as e:
+      except SerializationError as e:
         raiseAssert(e.msg)
 
     let res = decodeRlp(headerWithProof.header.asSeq(), T)
@@ -801,4 +801,4 @@ proc stop*(n: HistoryNetwork) =
   n.portalProtocol.stop()
 
   if not n.processContentLoop.isNil:
-    n.processContentLoop.cancel()
+    n.processContentLoop.cancelSoon()

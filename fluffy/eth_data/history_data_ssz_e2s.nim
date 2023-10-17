@@ -26,7 +26,7 @@ proc readAccumulator*(file: string): Result[FinishedAccumulator, string] =
 
   try:
     ok(SSZ.decode(encodedAccumulator, FinishedAccumulator))
-  except SszError as e:
+  except SerializationError as e:
     err("Failed decoding accumulator: " & e.msg)
 
 proc readEpochAccumulator*(file: string): Result[EpochAccumulator, string] =
@@ -34,7 +34,7 @@ proc readEpochAccumulator*(file: string): Result[EpochAccumulator, string] =
 
   try:
     ok(SSZ.decode(encodedAccumulator, EpochAccumulator))
-  except SszError as e:
+  except SerializationError as e:
     err("Decoding epoch accumulator failed: " & e.msg)
 
 proc readEpochAccumulatorCached*(file: string): Result[EpochAccumulatorCached, string] =
@@ -42,7 +42,7 @@ proc readEpochAccumulatorCached*(file: string): Result[EpochAccumulatorCached, s
 
   try:
     ok(SSZ.decode(encodedAccumulator, EpochAccumulatorCached))
-  except SszError as e:
+  except SerializationError as e:
     err("Decoding epoch accumulator failed: " & e.msg)
 
 # Reading data in e2s format

@@ -155,7 +155,7 @@ proc getSszDecoded(kv: KvStoreRef, key: openArray[byte], T: type auto): Opt[T] =
   if res.isSome():
     try:
       Opt.some(SSZ.decode(res.get(), T))
-    except SszError:
+    except SerializationError:
       raiseAssert("Stored data should always be serialized correctly")
   else:
     Opt.none(T)

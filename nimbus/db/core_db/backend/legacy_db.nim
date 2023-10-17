@@ -209,7 +209,7 @@ proc mptMethods(mpt: HexaryChildDbRef; db: LegacyDbRef): CoreDbMptFns =
     fetchFn: proc(k: openArray[byte]): CoreDbRc[Blob] =
       db.mapRlpException("legacy/mpt/get()"):
         return ok(mpt.trie.get(k))
-      discard,
+    ,
 
     deleteFn: proc(k: openArray[byte]): CoreDbRc[void] =
       db.mapRlpException("legacy/mpt/del()"):
@@ -224,7 +224,7 @@ proc mptMethods(mpt: HexaryChildDbRef; db: LegacyDbRef): CoreDbMptFns =
     containsFn: proc(k: openArray[byte]): CoreDbRc[bool] =
       db.mapRlpException("legacy/mpt/put()"):
         return ok(mpt.trie.contains(k))
-      discard,
+    ,
 
     rootVidFn: proc(): CoreDbVidRef =
       db.bless(LegacyCoreDbVid(vHash: mpt.trie.rootHash)),
@@ -236,13 +236,13 @@ proc mptMethods(mpt: HexaryChildDbRef; db: LegacyDbRef): CoreDbMptFns =
       reraiseRlpException("legacy/mpt/pairs()"):
         for k,v in mpt.trie.pairs():
           yield (k,v)
-      discard,
+    ,
 
     replicateIt: iterator: (Blob,Blob) {.gcsafe, raises: [LegacyApiRlpError].} =
       reraiseRlpException("legacy/mpt/replicate()"):
         for k,v in mpt.trie.replicate():
           yield (k,v)
-      discard)
+    )
 
 proc accMethods(mpt: HexaryChildDbRef; db: LegacyDbRef): CoreDbAccFns =
   ## Hexary trie database handlers
@@ -254,7 +254,7 @@ proc accMethods(mpt: HexaryChildDbRef; db: LegacyDbRef): CoreDbAccFns =
       const info = "legacy/mpt/getAccount()"
       db.mapRlpException info:
         return ok mpt.trie.get(k.keccakHash.data).toCoreDbAccount(db)
-      return err(db.bless LegacyCoreDbError(error: MptNotFound, ctx: info)),
+    ,
 
     deleteFn: proc(k: EthAddress): CoreDbRc[void] =
       db.mapRlpException("legacy/mpt/del()"):
@@ -269,7 +269,7 @@ proc accMethods(mpt: HexaryChildDbRef; db: LegacyDbRef): CoreDbAccFns =
     containsFn: proc(k: EthAddress): CoreDbRc[bool] =
       db.mapRlpException("legacy/mpt/put()"):
         return ok(mpt.trie.contains k.keccakHash.data)
-      discard,
+    ,
 
     rootVidFn: proc(): CoreDbVidRef =
       db.bless(LegacyCoreDbVid(vHash: mpt.trie.rootHash)),
@@ -329,7 +329,7 @@ proc baseMethods(
     destroyFn: proc(ignore: bool) =
       if not closeDb.isNil:
         closeDb()
-      discard,
+    ,
 
     vidHashFn: proc(vid: CoreDbVidRef): Result[Hash256,void] =
       ok(vid.lvHash),
