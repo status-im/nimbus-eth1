@@ -243,7 +243,7 @@ procSuite "History Content Network":
       # run immediatly in case of a "non async shortpath". This is no longer the
       # case and causes the content not yet to be validated and thus stored at
       # this step. Add an await here so that the store can happen.
-      await sleepAsync(1.milliseconds)
+      await sleepAsync(100.milliseconds)
 
       for i, contentKV in contentKVs:
         let id = toContentId(contentKV.contentKey)
@@ -312,6 +312,8 @@ procSuite "History Content Network":
     # Make sure the content got processed out of content queue
     while not historyNode2.historyNetwork.contentQueue.empty():
       await sleepAsync(1.milliseconds)
+
+    await sleepAsync(100.milliseconds)
 
     for contentKV in contentKVs:
       let id = toContentId(contentKV.contentKey)
