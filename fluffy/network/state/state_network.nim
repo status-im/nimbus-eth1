@@ -107,4 +107,4 @@ proc stop*(n: StateNetwork) =
   n.portalProtocol.stop()
 
   if not n.processContentLoop.isNil:
-    n.processContentLoop.cancel()
+    n.processContentLoop.cancelSoon()

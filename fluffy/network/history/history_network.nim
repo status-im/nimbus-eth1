@@ -801,4 +801,4 @@ proc stop*(n: HistoryNetwork) =
   n.portalProtocol.stop()
 
   if not n.processContentLoop.isNil:
-    n.processContentLoop.cancel()
+    n.processContentLoop.cancelSoon()

@@ -1052,7 +1052,7 @@ proc contentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256):
       of Content:
         # cancel any pending queries as the content has been found
         for f in pendingQueries:
-          f.cancel()
+          f.cancelSoon()
         portal_lookup_content_requests.observe(requestAmount)
         return Opt.some(ContentLookupResult.init(
           content.content, content.utpTransfer, nodesWithoutContent))
@@ -1357,12 +1357,12 @@ proc start*(p: PortalProtocol) =
 
 proc stop*(p: PortalProtocol) =
   if not p.revalidateLoop.isNil:
-    p.revalidateLoop.cancel()
+    p.revalidateLoop.cancelSoon()
   if not p.refreshLoop.isNil:
-    p.refreshLoop.cancel()
+    p.refreshLoop.cancelSoon()
 
   for worker in p.offerWorkers:
-    worker.cancel()
+    worker.cancelSoon()
   p.offerWorkers = @[]
 
 proc resolve*(p: PortalProtocol, id: NodeId): Future[Opt[Node]] {.async.} =
