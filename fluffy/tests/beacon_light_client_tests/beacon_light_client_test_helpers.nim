@@ -11,6 +11,7 @@ import
   beacon_chain/spec/forks,
   ../../network/wire/[portal_protocol, portal_stream],
   ../../network/beacon_light_client/[
+    beacon_light_client_init_loader,
     beacon_light_client_network
   ],
   ../test_helpers
@@ -19,24 +20,15 @@ type LightClientNode* = ref object
   discoveryProtocol*: discv5_protocol.Protocol
   lightClientNetwork*: LightClientNetwork
 
-const testForkDigests* =
-  ForkDigests(
-    phase0: ForkDigest([0'u8, 0, 0, 1]),
-    altair: ForkDigest([0'u8, 0, 0, 2]),
-    bellatrix: ForkDigest([0'u8, 0, 0, 3]),
-    capella: ForkDigest([0'u8, 0, 0, 4]),
-    deneb: ForkDigest([0'u8, 0, 0, 5])
-  )
-
 proc newLCNode*(
     rng: ref HmacDrbgContext,
     port: int,
-    forkDigests: ForkDigests = testForkDigests): LightClientNode =
+    networkData: NetworkInitData): LightClientNode =
   let
     node = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(port))
-    db = LightClientDb.new("", inMemory = true)
+    db = LightClientDb.new(networkData, "", inMemory = true)
     streamManager = StreamManager.new(node)
-    network = LightClientNetwork.new(node, db, streamManager, forkDigests)
+    network = LightClientNetwork.new(node, db, streamManager, networkData.forks)
 
   return LightClientNode(discoveryProtocol: node, lightClientNetwork: network)
 

@@ -11,7 +11,8 @@ import
   beacon_chain/spec/forks,
   beacon_chain/spec/datatypes/altair,
   ../../network/wire/portal_protocol,
-  ../../network/beacon_light_client/beacon_light_client_network,
+  ../../network/beacon_light_client/[beacon_light_client_network,
+    beacon_light_client_init_loader],
   "."/[light_client_test_data, beacon_light_client_test_helpers]
 
 procSuite "Beacon Light Client Content Network":
@@ -19,9 +20,10 @@ procSuite "Beacon Light Client Content Network":
 
   asyncTest "Get bootstrap by trusted block hash":
     let
-      lcNode1 = newLCNode(rng, 20302)
-      lcNode2 = newLCNode(rng, 20303)
-      forkDigests = testForkDigests
+      networkData = loadNetworkData("mainnet")
+      lcNode1 = newLCNode(rng, 20302, networkData)
+      lcNode2 = newLCNode(rng, 20303, networkData)
+      forkDigests = (newClone networkData.forks)[]
 
     check:
       lcNode1.portalProtocol().addNode(lcNode2.localNode()) == Added
@@ -66,9 +68,10 @@ procSuite "Beacon Light Client Content Network":
 
   asyncTest "Get latest optimistic and finality updates":
     let
-      lcNode1 = newLCNode(rng, 20302)
-      lcNode2 = newLCNode(rng, 20303)
-      forkDigests = testForkDigests
+      networkData = loadNetworkData("mainnet")
+      lcNode1 = newLCNode(rng, 20302, networkData)
+      lcNode2 = newLCNode(rng, 20303, networkData)
+      forkDigests = (newClone networkData.forks)[]
 
     check:
       lcNode1.portalProtocol().addNode(lcNode2.localNode()) == Added
@@ -139,9 +142,10 @@ procSuite "Beacon Light Client Content Network":
 
   asyncTest "Get range of light client updates":
     let
-      lcNode1 = newLCNode(rng, 20302)
-      lcNode2 = newLCNode(rng, 20303)
-      forkDigests = testForkDigests
+      networkData = loadNetworkData("mainnet")
+      lcNode1 = newLCNode(rng, 20302, networkData)
+      lcNode2 = newLCNode(rng, 20303, networkData)
+      forkDigests = (newClone networkData.forks)[]
 
     check:
       lcNode1.portalProtocol().addNode(lcNode2.localNode()) == Added

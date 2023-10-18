@@ -183,7 +183,14 @@ suite "Beacon Light Client Content Encodings":
   # TODO: These tests are less useful now and should instead be altered to
   # use the consensus test vectors to simply test if encoding / decoding works
   # fine for the different forks.
-  let forkDigests = testForkDigests
+  const forkDigests =
+    ForkDigests(
+      phase0: ForkDigest([0'u8, 0, 0, 1]),
+      altair: ForkDigest([0'u8, 0, 0, 2]),
+      bellatrix: ForkDigest([0'u8, 0, 0, 3]),
+      capella: ForkDigest([0'u8, 0, 0, 4]),
+      deneb: ForkDigest([0'u8, 0, 0, 5])
+    )
 
   test "LightClientBootstrap":
     let

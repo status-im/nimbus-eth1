@@ -43,7 +43,12 @@ proc getContent(
   let
     contentKeyEncoded = encode(contentKey)
     contentId = toContentId(contentKeyEncoded)
-    contentRes = await n.portalProtocol.contentLookup(
+    localContent = n.portalProtocol.dbGet(contentKeyEncoded, contentId)
+
+  if localContent.isSome():
+    return localContent
+
+  let contentRes = await n.portalProtocol.contentLookup(
       contentKeyEncoded, contentId)
 
   if contentRes.isNone():
@@ -196,6 +201,12 @@ proc validateContent(
       # Later on we need to either provide a list of acceptable bootstraps (not
       # really scalable and requires quite some configuration) or find some
       # way to proof these.
+      # They could be proven at moment of creation by checking finality update
+      # its finalized_header. And verifying the current_sync_committee with the
+      # header state root and current_sync_committee_branch?
+      # Perhaps can be expanded to being able to verify back fill by storing
+      # also the past beacon headers (This is sorta stored in a proof format
+      # for history network also)
       return true
     else:
       return false

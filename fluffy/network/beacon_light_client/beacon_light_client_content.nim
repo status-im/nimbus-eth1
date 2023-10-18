@@ -79,6 +79,10 @@ type
   ForkedLightClientUpdateList* =
     List[ForkedLightClientUpdate, MAX_REQUEST_LIGHT_CLIENT_UPDATES]
 
+func forkDigestAtEpoch*(
+    forkDigests: ForkDigests, epoch: Epoch, cfg: RuntimeConfig): ForkDigest =
+  forkDigests.atEpoch(epoch, cfg)
+
 func encode*(contentKey: ContentKey): ByteList =
   ByteList.init(SSZ.encode(contentKey))
 
