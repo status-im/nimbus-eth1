@@ -682,6 +682,7 @@ OK: 13/13 Fail: 0/13 Skip: 0/13
 ## stEIP158Specific
 ```diff
 + CALL_OneVCallSuicide.json                                       OK
++ CALL_OneVCallSuicide2.json                                      OK
 + CALL_ZeroVCallSuicide.json                                      OK
 + EXP_Empty.json                                                  OK
 + EXTCODESIZE_toEpmty.json                                        OK
@@ -689,7 +690,7 @@ OK: 13/13 Fail: 0/13 Skip: 0/13
 + callToEmptyThenCallError.json                                   OK
 + vitalikTransactionTest.json                                     OK
 ```
-OK: 7/7 Fail: 0/7 Skip: 0/7
+OK: 8/8 Fail: 0/8 Skip: 0/8
 ## stEIP2930
 ```diff
 + addressOpcodes.json                                             OK
@@ -765,9 +766,12 @@ OK: 12/12 Fail: 0/12 Skip: 0/12
 + extCodeHashDELEGATECALL.json                                    OK
 + extCodeHashDeletedAccount.json                                  OK
 + extCodeHashDeletedAccount1.json                                 OK
++ extCodeHashDeletedAccount1Cancun.json                           OK
 + extCodeHashDeletedAccount2.json                                 OK
++ extCodeHashDeletedAccount2Cancun.json                           OK
 + extCodeHashDeletedAccount3.json                                 OK
 + extCodeHashDeletedAccount4.json                                 OK
++ extCodeHashDeletedAccountCancun.json                            OK
 + extCodeHashDynamicArgument.json                                 OK
 + extCodeHashInInitCode.json                                      OK
 + extCodeHashMaxCodeSize.json                                     OK
@@ -779,9 +783,10 @@ OK: 12/12 Fail: 0/12 Skip: 0/12
 + extCodeHashSelfInInit.json                                      OK
 + extCodeHashSubcallOOG.json                                      OK
 + extCodeHashSubcallSuicide.json                                  OK
++ extCodeHashSubcallSuicideCancun.json                            OK
 + extcodehashEmpty.json                                           OK
 ```
-OK: 32/32 Fail: 0/32 Skip: 0/32
+OK: 36/36 Fail: 0/36 Skip: 0/36
 ## stHomesteadSpecific
 ```diff
 + contractCreationOOGdontLeaveEmptyContract.json                  OK
@@ -1030,9 +1035,10 @@ OK: 24/24 Fail: 0/24 Skip: 0/24
 + modexp.json                                                     OK
 + modexpTests.json                                                OK
 + precompsEIP2929.json                                            OK
++ precompsEIP2929Cancun.json                                      OK
 + sec80.json                                                      OK
 ```
-OK: 9/9 Fail: 0/9 Skip: 0/9
+OK: 10/10 Fail: 0/10 Skip: 0/10
 ## stPreCompiledContracts2
 ```diff
 + CALLBlake2f.json                                                OK
@@ -2394,6 +2400,10 @@ OK: 12/14 Fail: 0/14 Skip: 2/14
 + InternalCallHittingGasLimitSuccess.json                         OK
 + InternlCallStoreClearsOOG.json                                  OK
 + InternlCallStoreClearsSucces.json                               OK
++ NoSrcAccount.json                                               OK
++ NoSrcAccount1559.json                                           OK
++ NoSrcAccountCreate.json                                         OK
++ NoSrcAccountCreate1559.json                                     OK
 + Opcodes_TransactionInit.json                                    OK
 + OverflowGasRequire2.json                                        OK
 + PointAtInfinityECRecover.json                                   OK
@@ -2413,7 +2423,7 @@ OK: 12/14 Fail: 0/14 Skip: 2/14
 + TransactionToItself.json                                        OK
 + ValueOverflow.json                                              OK
 ```
-OK: 31/31 Fail: 0/31 Skip: 0/31
+OK: 35/35 Fail: 0/35 Skip: 0/35
 ## stTransitionTest
 ```diff
 + createNameRegistratorPerTxsAfter.json                           OK
@@ -2879,4 +2889,4 @@ OK: 1/3 Fail: 0/3 Skip: 2/3
 OK: 11/11 Fail: 0/11 Skip: 0/11
 
 ---TOTAL---
-OK: 2514/2617 Fail: 0/2617 Skip: 103/2617
+OK: 2524/2627 Fail: 0/2627 Skip: 103/2627

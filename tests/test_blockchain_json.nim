@@ -139,6 +139,10 @@ proc parseBlocks(blocks: JsonNode): seq[TestBlock] =
         doAssert(noError == false, "NOT A VALID TEST CASE")
       of "withdrawals":
         t.withdrawals = parseWithdrawals(value)
+      of "rlp_decoded":
+        # this field is intended for client who
+        # doesn't support rlp encoding(e.g. evmone)
+        discard
       else:
         doAssert("expectException" in key, key)
         t.hasException = true
@@ -387,9 +391,9 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
 proc blockchainJsonMain*(debugMode = false) =
   const
     legacyFolder = "eth_tests/LegacyTests/Constantinople/BlockchainTests"
-    #newFolder = "eth_tests/BlockchainTests"
+    newFolder = "eth_tests/BlockchainTests"
     #newFolder = "eth_tests/EIPTests/BlockchainTests"
-    newFolder = "eth_tests/EIPTests/Pyspecs/cancun"
+    #newFolder = "eth_tests/EIPTests/Pyspecs/cancun"
 
   let res = loadKzgTrustedSetup()
   if res.isErr:
