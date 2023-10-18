@@ -187,9 +187,9 @@ proc new*(
 
 proc validateContent(
     n: LightClientNetwork, content: seq[byte], contentKey: ByteList):
-    Future[bool] {.async.} =
+    Result[void, string] =
   let key = contentKey.decode().valueOr:
-    return false
+    return err("Error decoding content key")
 
   case key.contentType:
   of lightClientBootstrap:
@@ -207,9 +207,9 @@ proc validateContent(
       # Perhaps can be expanded to being able to verify back fill by storing
       # also the past beacon headers (This is sorta stored in a proof format
       # for history network also)
-      return true
+      ok()
     else:
-      return false
+      err("Error decoding content: " & decodingResult.error)
 
   of lightClientUpdate:
     let decodingResult = decodeLightClientUpdatesByRange(
@@ -219,35 +219,33 @@ proc validateContent(
       # Currently only verifying if the content can be decoded.
       # Eventually only new updates that can be verified because the local
       # node is synced should be accepted.
-      return true
+      ok()
     else:
-      return false
+      err("Error decoding content: " & decodingResult.error)
 
   of lightClientFinalityUpdate:
-    let decodingResult = decodeLightClientFinalityUpdateForked(
-      n.forkDigests, content)
-    if decodingResult.isOk:
-      let res = n.processor[].processLightClientFinalityUpdate(
-        MsgSource.gossip, decodingResult.get())
-      if res.isErr():
-        return false
-      else:
-        return true
+    let update = decodeLightClientFinalityUpdateForked(
+      n.forkDigests, content).valueOr:
+        return err("Error decoding content: " & error)
+
+    let res = n.processor[].processLightClientFinalityUpdate(
+      MsgSource.gossip, update)
+    if res.isErr():
+      err("Error processing update: " & $res.error[1])
     else:
-      return false
+      ok()
 
   of lightClientOptimisticUpdate:
-    let decodingResult = decodeLightClientOptimisticUpdateForked(
-      n.forkDigests, content)
-    if decodingResult.isOk:
-      let res = n.processor[].processLightClientOptimisticUpdate(
-        MsgSource.gossip, decodingResult.get())
-      if res.isErr():
-        return false
-      else:
-        return true
+    let update = decodeLightClientOptimisticUpdateForked(
+      n.forkDigests, content).valueOr:
+        return err("Error decoding content: " & error)
+
+    let res = n.processor[].processLightClientOptimisticUpdate(
+      MsgSource.gossip, update)
+    if res.isErr():
+      err("Error processing update: " & $res.error[1])
     else:
-      return false
+      ok()
 
 proc validateContent(
     n: LightClientNetwork,
@@ -255,8 +253,10 @@ proc validateContent(
     contentItems: seq[seq[byte]]): Future[bool] {.async.} =
   # content passed here can have less items then contentKeys, but not more.
   for i, contentItem in contentItems:
-    let contentKey = contentKeys[i]
-    if await n.validateContent(contentItem, contentKey):
+    let
+      contentKey = contentKeys[i]
+      validation = n.validateContent(contentItem, contentKey)
+    if validation.isOk():
       let contentIdOpt = n.portalProtocol.toContentId(contentKey)
       if contentIdOpt.isNone():
         error "Received offered content with invalid content key", contentKey
@@ -268,7 +268,8 @@ proc validateContent(
       info "Received offered content validated successfully", contentKey
 
     else:
-      error "Received offered content failed validation", contentKey
+      error "Received offered content failed validation",
+        contentKey, error = validation.error
       return false
 
   return true
