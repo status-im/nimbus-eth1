@@ -44,10 +44,6 @@ proc getBeaconData*(): (
 
   return (metadata.cfg, forkDigests, beaconClock)
 
-func forkDigestAtEpoch(
-    forkDigests: ForkDigests, epoch: Epoch, cfg: RuntimeConfig): ForkDigest =
-  forkDigests.atEpoch(epoch, cfg)
-
 proc exportLCBootstrapUpdate*(
     restUrl: string, dataDir: string,
     trustedBlockRoot: Eth2Digest,

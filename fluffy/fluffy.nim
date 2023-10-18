@@ -174,7 +174,7 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
           # Portal works only over mainnet data currently
           networkData = loadNetworkData("mainnet")
           beaconLightClientDb = LightClientDb.new(
-            config.dataDir / "db" / "beacon_lc_db")
+            networkData, config.dataDir / "db" / "beacon_lc_db")
           lightClientNetwork = LightClientNetwork.new(
             d,
             beaconLightClientDb,

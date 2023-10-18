@@ -38,8 +38,8 @@ procSuite "Portal Beacon Light Client":
       optimisticHeaders = newAsyncQueue[ForkedLightClientHeader]()
       # Test data is retrieved from mainnet
       networkData = loadNetworkData("mainnet")
-      lcNode1 = newLCNode(rng, 20302, networkData.forks)
-      lcNode2 = newLCNode(rng, 20303, networkData.forks)
+      lcNode1 = newLCNode(rng, 20302, networkData)
+      lcNode2 = newLCNode(rng, 20303, networkData)
       altairData = SSZ.decode(bootstrapBytes, altair.LightClientBootstrap)
       bootstrap = ForkedLightClientBootstrap(
         kind: LightClientDataFork.Altair, altairData: altairData)

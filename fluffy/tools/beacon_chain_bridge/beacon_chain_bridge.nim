@@ -40,11 +40,6 @@ import
 const
   restRequestsTimeout = 30.seconds
 
-# TODO: Move somewhere common
-func forkDigestAtEpoch(
-    forkDigests: ForkDigests, epoch: Epoch, cfg: RuntimeConfig): ForkDigest =
-  forkDigests.atEpoch(epoch, cfg)
-
 # TODO: From nimbus_binary_common, but we don't want to import that.
 proc sleepAsync(t: TimeDiff): Future[void] =
   sleepAsync(nanoseconds(

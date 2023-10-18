@@ -326,10 +326,6 @@ proc asPortalBlockData*(
 
   (hash, headerWithProof, body)
 
-func forkDigestAtEpoch(
-    forkDigests: ForkDigests, epoch: Epoch, cfg: RuntimeConfig): ForkDigest =
-  forkDigests.atEpoch(epoch, cfg)
-
 proc getBlockReceipts(
     client: RpcClient, transactions: seq[TypedTransaction], blockHash: Hash256):
     Future[Result[seq[Receipt], string]] {.async.} =

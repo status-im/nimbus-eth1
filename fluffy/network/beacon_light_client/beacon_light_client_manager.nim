@@ -15,7 +15,8 @@ import
   beacon_chain/spec/[forks_light_client, digest],
   beacon_chain/beacon_clock,
   beacon_chain/sync/light_client_sync_helpers,
-  "."/[beacon_light_client_network, beacon_light_client_content]
+  "."/[beacon_light_client_network, beacon_light_client_content,
+    beacon_light_client_db]
 
 from beacon_chain/consensus_object_pools/block_pools_types import VerifierError
 
@@ -221,6 +222,31 @@ proc workerTask[E](
                 warn "Received invalid value", endpoint = E.name
             return didProgress
         else:
+          # TODO:
+          # This is data coming from either the network or the database.
+          # Either way it comes in encoded and is passed along till here in its
+          # decoded format. It only gets stored in the database here as it is
+          # required to pass validation first ( didprogress == true). Next it
+          # gets encoded again before dropped in the database. Optimisations
+          # are possible here if the beacon_light_client_manager and the
+          # manager are better interfaced with each other.
+          when E.V is ForkedLightClientBootstrap:
+            withForkyObject(val):
+              when lcDataFork > LightClientDataFork.None:
+                self.network.lightClientDb.putBootstrap(key, val)
+              else:
+                notice "Received value from an unviable fork",
+                  endpoint = E.name
+          elif E.V is ForkedLightClientUpdate:
+            withForkyObject(val):
+              when lcDataFork > LightClientDataFork.None:
+                let period =
+                  forkyObject.attested_header.beacon.slot.sync_committee_period
+                self.network.lightClientDb.putUpdateIfBetter(period, val)
+              else:
+                notice "Received value from an unviable fork",
+                  endpoint = E.name
+
           didProgress = true
     else:
       debug "Failed to receive value on request", value, endpoint = E.name
@@ -323,7 +349,6 @@ proc loop(self: LightClientManager) {.async.} =
       didProgress =
         case syncTask.kind
         of LcSyncKind.UpdatesByRange:
-          discard
           await self.query(UpdatesByRange,
             (startPeriod: syncTask.startPeriod, count: syncTask.count))
         of LcSyncKind.FinalityUpdate:
