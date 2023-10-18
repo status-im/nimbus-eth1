@@ -141,17 +141,17 @@ proc coreDbMain*(noisy = defined(debug)) =
 when isMainModule:
   const
     noisy = defined(debug) or true
-    persDb = true
+    persDb = true and false
 
   setErrorLevel()
 
   # This one uses the readily available dump: `bulkTest0` and some huge replay
   # dumps `bulkTest2`, `bulkTest3`, .. from the `nimbus-eth1-blobs` package.
   # For specs see `tests/test_coredb/bulk_test_xx.nim`.
-  var testList = @[bulkTest0]
-  testList = @[bulkTest1] # This test supersedes `bulkTest0`
-  when true and false:
-    testList = @[bulkTest1, bulkTest2, bulkTest3]
+  var testList = @[bulkTest0] # This test is superseded by `bulkTest1` and `2`
+  # testList = @[failSample0]
+  when true: # and false:
+    testList = @[bulkTest2, bulkTest3]
 
   for n,capture in testList:
     noisy.legacyRunner(capture=capture, persistent=persDb)

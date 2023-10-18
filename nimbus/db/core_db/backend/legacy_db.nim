@@ -235,8 +235,7 @@ proc mptMethods(mpt: HexaryChildDbRef; db: LegacyDbRef): CoreDbMptFns =
     pairsIt: iterator: (Blob,Blob) {.gcsafe, raises: [LegacyApiRlpError].} =
       reraiseRlpException("legacy/mpt/pairs()"):
         for k,v in mpt.trie.pairs():
-          yield (k,v)
-    ,
+          yield (k,v),
 
     replicateIt: iterator: (Blob,Blob) {.gcsafe, raises: [LegacyApiRlpError].} =
       reraiseRlpException("legacy/mpt/replicate()"):

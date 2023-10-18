@@ -44,4 +44,16 @@ const
     file:      "mainnet332160.txt.gz",
     numBlocks: high(int))
 
+  failSample0* = CaptureSpecs(
+    name:      "fail-goerli",
+    network:   bulkTest0.network,
+    file:      bulkTest0.file,
+    numBlocks: 18004)
+
+  failSample1* = CaptureSpecs(
+    name:      "fail-main",
+    network:   bulkTest3.network,
+    file:      bulkTest3.file,
+    numBlocks: 51922)
+
 # End
