@@ -35,10 +35,6 @@ proc processTransactions*(vmState: BaseVMState;
   vmState.receipts = newSeq[Receipt](transactions.len)
   vmState.cumulativeGasUsed = 0
 
-  if header.parentBeaconBlockRoot.isSome:
-    vmState.processBeaconBlockRoot(header.parentBeaconBlockRoot.get).isOkOr:
-      return err(error)
-
   for txIndex, tx in transactions:
     var sender: EthAddress
     if not tx.getSender(sender):
@@ -69,6 +65,11 @@ proc procBlkPreamble(vmState: BaseVMState;
   else:
     if header.parentBeaconBlockRoot.isSome:
       raise ValidationError.newException("Pre-Cancun block header must not have parentBeaconBlockRoot")
+
+  if header.parentBeaconBlockRoot.isSome:
+    let r = vmState.processBeaconBlockRoot(header.parentBeaconBlockRoot.get)
+    if r.isErr:
+      error("error in processing beaconRoot", err=r.error)
 
   if header.txRoot != EMPTY_ROOT_HASH:
     if body.transactions.len == 0:

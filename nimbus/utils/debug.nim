@@ -76,6 +76,19 @@ proc dumpAccounts*(vmState: BaseVMState): JsonNode =
   for ac in vmState.stateDB.addresses:
     result[ac.toHex] = dumpAccount(vmState.stateDB, ac)
 
+proc debugAccounts*(stateDB: AccountsCache, addresses: openArray[string]): string =
+  var
+    accounts = newJObject()
+    accountList = newSeq[EthAddress]()
+
+  for address in addresses:
+    accountList.add hexToByteArray[20](address)
+
+  for ac in accountList:
+    accounts[ac.toHex] = dumpAccount(stateDB, ac)
+
+  accounts.pretty
+
 proc debugAccounts*(vmState: BaseVMState): string =
   var
     accounts = newJObject()
@@ -145,15 +158,15 @@ proc debug*(tx: Transaction): string =
   result.add "accessList    : " & $tx.accessList     & "\n"
   result.add "maxFeePerBlobGas: " & $tx.maxFeePerBlobGas & "\n"
   result.add "versionedHashes.len: " & $tx.versionedHashes.len & "\n"
-  
+
   if tx.networkPayload.isNil:
-    result.add "networkPaylod : nil\n" 
+    result.add "networkPaylod : nil\n"
   else:
     result.add "networkPaylod : \n"
     result.add " - blobs       : " & $tx.networkPayload.blobs.len & "\n"
     result.add " - commitments : " & $tx.networkPayload.commitments.len & "\n"
     result.add " - proofs      : " & $tx.networkPayload.proofs.len & "\n"
-       
+
   result.add "V             : " & $tx.V              & "\n"
   result.add "R             : " & $tx.R              & "\n"
   result.add "S             : " & $tx.S              & "\n"
