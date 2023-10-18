@@ -18,8 +18,6 @@ import
   ../wire/[portal_protocol, portal_stream, portal_protocol_config],
   "."/[history_content, accumulator]
 
-from std/times import toUnix
-
 logScope:
   topics = "portal_hist"
 
@@ -278,7 +276,7 @@ proc validateBlockBodyBytes*(
   ## header.
   ## TODO: improve this decoding in combination with the block body validation
   ## calls.
-  let timestamp = Moment.init(header.timestamp.toUnix(), Second)
+  let timestamp = Moment.init(header.timestamp.int64, Second)
   # TODO: The additional header checks are not needed as header is implicitly
   # verified by means of the accumulator? Except that we don't use this yet
   # post merge, so the checks are still useful, for now.
@@ -352,7 +350,7 @@ proc get(db: ContentDB, T: type BlockBody, contentId: ContentId,
     return Opt.none(T)
 
   let
-    timestamp = Moment.init(header.timestamp.toUnix(), Second)
+    timestamp = Moment.init(header.timestamp.int64, Second)
     body =
       if isShanghai(chainConfig, timestamp):
         BlockBody.fromPortalBlockBodyOrRaise(

@@ -113,7 +113,7 @@ func blockHeaderSize(
     blockNumber   : payload.blockNumber.distinctBase.u256,
     gasLimit      : payload.gasLimit.unsafeQuantityToInt64,
     gasUsed       : payload.gasUsed.unsafeQuantityToInt64,
-    timestamp     : fromUnix payload.timestamp.unsafeQuantityToInt64,
+    timestamp     : payload.timestamp.EthTime,
     extraData     : bytes payload.extraData,
     mixDigest     : payload.prevRandao.asEthHash,
     nonce         : default(etypes.BlockNonce),

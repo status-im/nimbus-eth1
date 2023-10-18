@@ -19,7 +19,6 @@
 ##
 
 import
-  std/[times],
   ./clique/[clique_cfg, clique_defs, clique_desc],
   ./clique/snapshot/[ballot, snapshot_desc],
   stew/results
@@ -44,7 +43,7 @@ type
 # Public
 # ------------------------------------------------------------------------------
 
-proc newClique*(db: CoreDbRef, cliquePeriod, cliqueEpoch: int): Clique =
+proc newClique*(db: CoreDbRef, cliquePeriod: EthTime, cliqueEpoch: int): Clique =
   ## Constructor for a new Clique proof-of-authority consensus engine. The
   ## initial state of the engine is `empty`, there are no authorised signers.
   ##
@@ -54,7 +53,7 @@ proc newClique*(db: CoreDbRef, cliquePeriod, cliqueEpoch: int): Clique =
 
   let cfg = db.newCliqueCfg
   if cliquePeriod > 0:
-    cfg.period = initDuration(seconds = cliquePeriod)
+    cfg.period = cliquePeriod
   if cliqueEpoch > 0:
     cfg.epoch = cliqueEpoch
   cfg.newClique

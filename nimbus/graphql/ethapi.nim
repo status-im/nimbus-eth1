@@ -8,7 +8,7 @@
 # those terms.
 
 import
-  std/[strutils, times],
+  std/[strutils],
   stew/[results, byteutils], stint,
   eth/common/eth_types_rlp, chronos,
   stew/shims/net,
@@ -967,7 +967,7 @@ proc blockGasUsed(ud: RootRef, params: Args, parent: Node): RespResult {.apiPrag
 proc blockTimestamp(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
   let h = HeaderNode(parent)
-  bigIntNode(h.header.timestamp.toUnix.uint64)
+  bigIntNode(h.header.timestamp.uint64)
 
 proc blockLogsBloom(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)

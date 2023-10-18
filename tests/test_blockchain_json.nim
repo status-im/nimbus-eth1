@@ -387,9 +387,9 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
 proc blockchainJsonMain*(debugMode = false) =
   const
     legacyFolder = "eth_tests/LegacyTests/Constantinople/BlockchainTests"
-    newFolder = "eth_tests/BlockchainTests"
+    #newFolder = "eth_tests/BlockchainTests"
     #newFolder = "eth_tests/EIPTests/BlockchainTests"
-    #newFolder = "eth_tests/EIPTests/Pyspecs/cancun"
+    newFolder = "eth_tests/EIPTests/Pyspecs/cancun"
 
   let res = loadKzgTrustedSetup()
   if res.isErr:

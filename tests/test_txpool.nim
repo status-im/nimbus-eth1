@@ -638,7 +638,7 @@ proc runTxPackerTests(noisy = true) =
 
         test &"Clear and re-pack bucket":
           # prepare for POS transition in txpool
-          xq.chain.com.pos.timestamp = getTime()
+          xq.chain.com.pos.timestamp = EthTime.now()
 
           let
             items0 = xq.toItems(txItemPacked)

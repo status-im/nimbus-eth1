@@ -213,7 +213,7 @@ proc validateHeader(ctx: LegacySyncRef, header: BlockHeader,
     return false
 
   if consensusType == ConsensusType.POA:
-    let period = initDuration(seconds = com.cliquePeriod)
+    let period = com.cliquePeriod
     # Timestamp diff between blocks is lower than PERIOD (clique)
     if parentHeader.timestamp + period > header.timestamp:
       trace "invalid timestamp diff (lower than period)",

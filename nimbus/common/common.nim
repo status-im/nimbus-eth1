@@ -10,7 +10,7 @@
 {.push raises: [].}
 
 import
-  std/[options, times],
+  std/[options],
   chronicles,
   eth/trie/trie_defs,
   ../core/[pow, clique, casper],
@@ -101,7 +101,7 @@ proc hardForkTransition*(
   com: CommonRef, forkDeterminer: ForkDeterminationInfo)
   {.gcsafe, raises: [].}
 
-func cliquePeriod*(com: CommonRef): int
+func cliquePeriod*(com: CommonRef): EthTime
 
 func cliqueEpoch*(com: CommonRef): int
 
@@ -158,7 +158,7 @@ proc init(com      : CommonRef,
   # set it before creating genesis block
   # TD need to be some(0.u256) because it can be the genesis
   # already at the MergeFork
-  const TimeZero = fromUnix(0)
+  const TimeZero = EthTime(0)
 
   # com.forkIds and com.blockZeroHash is set
   # by setForkId
@@ -432,9 +432,9 @@ func ttd*(com: CommonRef): Option[DifficultyInt] =
 # if you messing with clique period and
 # and epoch, it likely will fail clique verification
 # at epoch * blocknumber
-func cliquePeriod*(com: CommonRef): int =
+func cliquePeriod*(com: CommonRef): EthTime =
   if com.config.clique.period.isSome:
-    return com.config.clique.period.get()
+    return EthTime com.config.clique.period.get()
 
 func cliqueEpoch*(com: CommonRef): int =
   if com.config.clique.epoch.isSome:

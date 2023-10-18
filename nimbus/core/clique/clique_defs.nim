@@ -51,7 +51,7 @@ const
     ## Minimum difference in seconds between two consecutive block timestamps.
     ## Suggested time is 15s for the `testnet` to remain analogous to the
     ## `mainnet` ethash target.
-    initDuration(seconds = 15)
+    EthTime 15
 
   EXTRA_VANITY* = ##\
     ## Fixed number of extra-data prefix bytes reserved for signer vanity.

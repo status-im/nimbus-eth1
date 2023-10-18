@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  std/[json, strutils, times, tables, os, streams],
+  std/[json, strutils, tables, os, streams],
   eth/[rlp, trie, eip1559],
   stint, stew/results,
   "."/[config, types, helpers],

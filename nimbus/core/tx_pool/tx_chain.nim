@@ -107,11 +107,11 @@ proc prepareForSeal(dh: TxChainRef; header: var BlockHeader) {.gcsafe, raises: [
 proc getTimestamp(dh: TxChainRef, parent: BlockHeader): EthTime =
   case dh.com.consensus
   of ConsensusType.POW:
-    getTime().utc.toTime
+    EthTime.now()
   of ConsensusType.POA:
     let timestamp = parent.timestamp + dh.com.poa.cfg.period
-    if timestamp < getTime():
-      getTime()
+    if timestamp < EthTime.now():
+      EthTime.now()
     else:
       timestamp
   of ConsensusType.POS:

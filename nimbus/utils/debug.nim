@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  std/[options, times, json, strutils],
+  std/[options, json, strutils],
   ../common/common,
   stew/byteutils,
   ../vm_state,
@@ -43,7 +43,7 @@ proc debug*(h: BlockHeader): string =
   result.add "blockNumber    : " & $h.blockNumber & "\n"
   result.add "gasLimit       : " & $h.gasLimit    & "\n"
   result.add "gasUsed        : " & $h.gasUsed     & "\n"
-  result.add "timestamp      : " & $h.timestamp.toUnix   & "\n"
+  result.add "timestamp      : " & $h.timestamp   & "\n"
   result.add "extraData      : " & $h.extraData   & "\n"
   result.add "mixDigest      : " & $h.mixDigest   & "\n"
   result.add "nonce          : " & $h.nonce       & "\n"
@@ -97,7 +97,7 @@ proc debugAccounts*(vmState: BaseVMState): string =
 proc debug*(vms: BaseVMState): string =
   result.add "com.consensus    : " & $vms.com.consensus       & "\n"
   result.add "parent           : " & $vms.parent.blockHash    & "\n"
-  result.add "timestamp        : " & $vms.blockCtx.timestamp.toUnix & "\n"
+  result.add "timestamp        : " & $vms.blockCtx.timestamp  & "\n"
   result.add "gasLimit         : " & $vms.blockCtx.gasLimit   & "\n"
   result.add "fee              : " & $vms.blockCtx.fee        & "\n"
   result.add "prevRandao       : " & $vms.blockCtx.prevRandao & "\n"

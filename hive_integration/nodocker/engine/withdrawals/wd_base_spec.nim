@@ -1,5 +1,5 @@
 import
-  std/[times, options],
+  std/[options],
   stint,
   chronicles,
   chronos,
@@ -11,12 +11,13 @@ import
   ../test_env,
   ../engine_client,
   ../types,
-  ../../../tools/common/helpers,
   ../../../nimbus/common/common,
   ../../../nimbus/utils/utils,
   ../../../nimbus/common/chain_config,
   ../../../nimbus/beacon/execution_types,
   ../../../nimbus/beacon/web3_eth_conv
+
+import ../../../tools/common/helpers except LogLevel
 
 type
   WDBaseSpec* = ref object of BaseSpec
@@ -63,7 +64,7 @@ func getWithdrawalsForkTime(ws: WDBaseSpec): int =
 # Generates the fork config, including withdrawals fork timestamp.
 func getForkConfig*(ws: WDBaseSpec): ChainConfig =
   result = getChainConfig("Shanghai")
-  result.shanghaiTime = some(ws.getWithdrawalsForkTime().fromUnix)
+  result.shanghaiTime = some(ws.getWithdrawalsForkTime().EthTime)
 
 # Get the start account for all withdrawals.
 func getWithdrawalsStartAccount*(ws: WDBaseSpec): UInt256 =

@@ -19,7 +19,7 @@
 ##
 
 import
-  std/[sequtils, times],
+  std/[sequtils],
   eth/[common, keys],
   ../../constants,
   ./clique_cfg,
@@ -64,7 +64,7 @@ proc cliqueGenvote*(
     voter: EthAddress;             # new voter account/identity
     seal: PrivateKey;              # signature key
     parent: BlockHeader;
-    elapsed = initDuration();
+    elapsed = EthTime(0);
     voteInOk = false;              # vote in the new voter if `true`
     outOfTurn = false;
     checkPoint: seq[EthAddress] = @[]): BlockHeader =
@@ -124,7 +124,7 @@ proc cliqueGenvote*(
   ##    block is a block where the block number is a multiple of `c.cfg.epoch`.
   ##    Typically, `c.cfg.epoch` is initialised as `30'000`.
   ##
-  let timeElapsed = if elapsed == initDuration(): c.cfg.period  else: elapsed
+  let timeElapsed = if elapsed == EthTime(0): c.cfg.period  else: elapsed
 
   result = BlockHeader(
     parentHash:  parent.blockHash,
@@ -157,7 +157,7 @@ proc cliqueGenvote*(
 
 proc cliqueGenvote*(
     c: Clique; voter: EthAddress; seal: PrivateKey;
-    elapsed = initDuration();
+    elapsed = EthTime(0);
     voteInOk = false;
     outOfTurn = false;
     checkPoint: seq[EthAddress] = @[]): BlockHeader

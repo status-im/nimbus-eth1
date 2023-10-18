@@ -226,7 +226,7 @@ proc toBlockHeader(bc: eth_api.BlockObject): common.BlockHeader =
     mixDigest      : bc.mixHash,
     gasLimit       : hexToInt(string bc.gasLimit, GasInt),
     gasUsed        : hexToInt(string bc.gasUsed, GasInt),
-    timestamp      : initTime(hexToInt(string bc.timestamp, int64), 0),
+    timestamp      : EthTime hexToInt(string bc.timestamp, uint64),
     fee            : maybeU256(bc.baseFeePerGas),
     withdrawalsRoot: bc.withdrawalsRoot,
     blobGasUsed    : maybeU64(bc.blobGasUsed),

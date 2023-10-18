@@ -67,11 +67,11 @@ template getCoinbase*(c: Computation): EthAddress =
   else:
     c.vmState.coinbase
 
-template getTimestamp*(c: Computation): int64 =
+template getTimestamp*(c: Computation): uint64 =
   when evmc_enabled:
-    c.host.getTxContext().block_timestamp
+    cast[uint64](c.host.getTxContext().block_timestamp)
   else:
-    c.vmState.blockCtx.timestamp.toUnix
+    c.vmState.blockCtx.timestamp.uint64
 
 template getBlockNumber*(c: Computation): UInt256 =
   when evmc_enabled:

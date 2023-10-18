@@ -129,8 +129,8 @@ proc prepare*(c: Clique; parent: BlockHeader, header: var BlockHeader): CliqueOk
 
   # Ensure the timestamp has the correct delay
   header.timestamp = parent.timestamp + c.cfg.period
-  if header.timestamp < getTime():
-    header.timestamp = getTime()
+  if header.timestamp < EthTime.now():
+    header.timestamp = EthTime.now()
 
   ok()
 
@@ -182,7 +182,7 @@ proc seal*(c: Clique; ethBlock: var EthBlock):
 
   # For 0-period chains, refuse to seal empty blocks (no reward but would spin
   # sealing)
-  if c.cfg.period.isZero and ethBlock.txs.len == 0:
+  if c.cfg.period == 0 and ethBlock.txs.len == 0:
     info $nilCliqueSealNoBlockYet
     return err((nilCliqueSealNoBlockYet, ""))
 
@@ -207,21 +207,22 @@ proc seal*(c: Clique; ethBlock: var EthBlock):
       info $nilCliqueSealSignedRecently
       return err((nilCliqueSealSignedRecently, ""))
 
-  # Sweet, the protocol permits us to sign the block, wait for our time
-  var delay = header.timestamp - getTime()
-  if header.difficulty == DIFF_NOTURN:
-    # It's not our turn explicitly to sign, delay it a bit
-    let wiggle = c.snapshot.signersThreshold.int64 * WIGGLE_TIME
-    # Kludge for limited rand() argument range
-    if wiggle.inSeconds < (int.high div 1000).int64:
-      let rndWiggleMs = c.cfg.rand(wiggle.inMilliseconds.int)
-      delay += initDuration(milliseconds = rndWiggleMs)
-    else:
-      let rndWiggleSec = c.cfg.rand((wiggle.inSeconds and int.high).int)
-      delay += initDuration(seconds = rndWiggleSec)
+  when false:
+    # Sweet, the protocol permits us to sign the block, wait for our time
+    var delay = header.timestamp - EthTime.now()
+    if header.difficulty == DIFF_NOTURN:
+      # It's not our turn explicitly to sign, delay it a bit
+      let wiggle = c.snapshot.signersThreshold.int64 * WIGGLE_TIME
+      # Kludge for limited rand() argument range
+      if wiggle.inSeconds < (int.high div 1000).int64:
+        let rndWiggleMs = c.cfg.rand(wiggle.inMilliseconds.int)
+        delay += initDuration(milliseconds = rndWiggleMs)
+      else:
+        let rndWiggleSec = c.cfg.rand((wiggle.inSeconds and int.high).int)
+        delay += initDuration(seconds = rndWiggleSec)
 
-    trace "Out-of-turn signing requested",
-      wiggle = $wiggle
+      trace "Out-of-turn signing requested",
+        wiggle = $wiggle
 
   # Sign all the things!
   try:

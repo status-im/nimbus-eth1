@@ -1,10 +1,12 @@
 import
-  std/[options, times],
+  std/[options],
+  eth/common/eth_types,
   ./test_env,
   ./types,
   chronicles,
-  ../../tools/common/helpers,
   ../../nimbus/common/hardforks
+
+import ../../tools/common/helpers except LogLevel
 
 type
   ECSpec* = ref object of BaseSpec
@@ -50,11 +52,11 @@ proc ecCancun(env: TestEnv): bool =
 
 proc getCCShanghai(timestamp: int): ChainConfig =
   result = getChainConfig("Shanghai")
-  result.shanghaiTime = some(fromUnix(timestamp))
+  result.shanghaiTime = some(EthTime(timestamp))
 
 proc getCCCancun(timestamp: int): ChainConfig =
   result = getChainConfig("Cancun")
-  result.cancunTime = some(fromUnix(timestamp))
+  result.cancunTime = some(EthTime(timestamp))
 
 proc specExecute(ws: BaseSpec): bool =
   let ws = ECSpec(ws)

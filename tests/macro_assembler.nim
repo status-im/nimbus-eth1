@@ -1,5 +1,5 @@
 import
-  std/[macrocache, strutils, times],
+  std/[macrocache, strutils],
   eth/keys,
   unittest2,
   chronicles,
@@ -12,22 +12,22 @@ import
   ../nimbus/vm_internals,
   ../nimbus/transaction/[call_common, call_evm],
   ../nimbus/[vm_types, vm_state],
-  ../nimbus/core/pow/difficulty,
-  ../tools/common/helpers
+  ../nimbus/core/pow/difficulty
 
 # Ditto, for GasPrice.
 import ../nimbus/transaction except GasPrice
+import ../tools/common/helpers except LogLevel
 
 export byteutils
 {.experimental: "dynamicBindSym".}
 
 # backported from Nim 0.19.9
 # remove this when we use newer Nim
-proc newLitFixed*(arg: enum): NimNode {.compileTime.} =
-  result = newCall(
-    arg.type.getTypeInst[1],
-    newLit(int(arg))
-  )
+#proc newLitFixed*(arg: enum): NimNode {.compileTime.} =
+#  result = newCall(
+#    arg.type.getTypeInst[1],
+#    newLit(int(arg))
+#  )
 
 type
   VMWord* = array[32, byte]
@@ -271,7 +271,7 @@ proc initVMEnv*(network: string): BaseVMState =
       stateRoot: EMPTY_ROOT_HASH,
       parentHash: parentHash,
       coinbase: coinbase,
-      timestamp: fromUnix(0x1234),
+      timestamp: EthTime(0x1234),
       difficulty: 1003.u256,
       gasLimit: 100_000
     )

@@ -205,7 +205,7 @@ proc verifyHeaderFields(c: Clique; header: BlockHeader): CliqueOkResult =
   # clique/clique.go(250): number := header.Number.Uint64()
 
   # Don't waste time checking blocks from the future
-  if getTime() < header.timestamp:
+  if EthTime.now() < header.timestamp:
     return err((errFutureBlock,""))
 
   # Checkpoint blocks need to enforce zero beneficiary

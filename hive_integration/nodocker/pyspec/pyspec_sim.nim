@@ -183,8 +183,7 @@ proc runTest(node: JsonNode, network: string): TestStatus =
 
 const
   skipName = [
-    "beacon_root_contract_timestamps.json",
-    "beacon_root_equal_to_timestamp.json",
+    "nothing skipped",
   ]
 
   caseFolderCancun   = "tests/fixtures/eth_tests/EIPTests/Pyspecs/cancun"

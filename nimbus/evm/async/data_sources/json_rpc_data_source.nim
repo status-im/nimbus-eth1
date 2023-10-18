@@ -101,7 +101,7 @@ func blockHeaderFromBlockObject(o: BlockObject): BlockHeader =
     blockNumber: distinctBase(o.number).u256,
     gasLimit: int64(distinctBase(o.gasLimit)),
     gasUsed: int64(distinctBase(o.gasUsed)),
-    timestamp: initTime(int64(distinctBase(o.timestamp)), 0),
+    timestamp: EthTime(distinctBase(o.timestamp)),
     extraData: distinctBase(o.extraData),
     #mixDigest: o.mixHash.toHash, # AARDVARK what's this?
     nonce: nonce,

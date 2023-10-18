@@ -93,7 +93,7 @@ func init*(
     totalDifficulty: encodeQuantity(UInt256.low()),
     gasLimit: encodeQuantity(header.gasLimit.uint64),
     gasUsed: encodeQuantity(header.gasUsed.uint64),
-    timestamp: encodeQuantity(header.timestamp.toUnix.uint64)
+    timestamp: encodeQuantity(header.timestamp.uint64)
   )
 
   let size = sizeof(BlockHeader) - sizeof(Blob) + header.extraData.len
