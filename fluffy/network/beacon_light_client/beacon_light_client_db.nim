@@ -248,57 +248,55 @@ proc putUpdateIfBetter*(
 proc createGetHandler*(db: LightClientDb): DbGetHandler =
   return (
     proc(contentKey: ByteList, contentId: ContentId): results.Opt[seq[byte]] =
-      let contentKeyResult = decode(contentKey)
+      let contentKey = contentKey.decode().valueOr:
       # TODO: as this should not fail, maybe it is better to raiseAssert ?
-      if contentKeyResult.isNone():
         return Opt.none(seq[byte])
 
-      let ck = contentKeyResult.get()
-
-      if ck.contentType == lightClientUpdate:
+      case contentKey.contentType:
+      of lightClientBootstrap:
+        db.get(contentId)
+      of lightClientUpdate:
         let
           # TODO: add validation that startPeriod is not from the future,
           # this requires db to be aware off the current beacon time
-          startPeriod = ck.lightClientUpdateKey.startPeriod
+          startPeriod = contentKey.lightClientUpdateKey.startPeriod
           # get max 128 updates
           numOfUpdates = min(
             uint64(MAX_REQUEST_LIGHT_CLIENT_UPDATES),
-            ck.lightClientUpdateKey.count
+            contentKey.lightClientUpdateKey.count
           )
-          to = startPeriod + numOfUpdates
-          updates = db.getLightClientUpdates(startPeriod, to)
+          toPeriod = startPeriod + numOfUpdates # Not inclusive
+          updates = db.getLightClientUpdates(startPeriod, toPeriod)
 
         if len(updates) == 0:
-          return Opt.none(seq[byte])
+          Opt.none(seq[byte])
         else:
-          return ok(SSZ.encode(updates))
-      elif ck.contentType == lightClientFinalityUpdate:
+          Opt.some(SSZ.encode(updates))
+      of lightClientFinalityUpdate:
         # TODO:
         # Return only when the update is better than what is requested by
         # contentKey. This is currently not possible as the contentKey does not
         # include best update information.
         if db.finalityUpdateCache.isSome():
-          let slot = ck.lightClientFinalityUpdateKey.finalizedSlot
+          let slot = contentKey.lightClientFinalityUpdateKey.finalizedSlot
           let cache = db.finalityUpdateCache.get()
           if cache.lastFinalityUpdateSlot >= slot:
-            return Opt.some(cache.lastFinalityUpdate)
+            Opt.some(cache.lastFinalityUpdate)
           else:
-            return Opt.none(seq[byte])
+            Opt.none(seq[byte])
         else:
-          return Opt.none(seq[byte])
-      elif ck.contentType == lightClientOptimisticUpdate:
+          Opt.none(seq[byte])
+      of lightClientOptimisticUpdate:
         # TODO same as above applies here too.
         if db.optimisticUpdateCache.isSome():
-          let slot = ck.lightClientOptimisticUpdateKey.optimisticSlot
+          let slot = contentKey.lightClientOptimisticUpdateKey.optimisticSlot
           let cache = db.optimisticUpdateCache.get()
           if cache.lastOptimisticUpdateSlot >= slot:
-            return Opt.some(cache.lastOptimisticUpdate)
+            Opt.some(cache.lastOptimisticUpdate)
           else:
-            return Opt.none(seq[byte])
+            Opt.none(seq[byte])
         else:
-          return Opt.none(seq[byte])
-      else:
-        return db.get(contentId)
+          Opt.none(seq[byte])
   )
 
 proc createStoreHandler*(db: LightClientDb): DbStoreHandler =
@@ -306,43 +304,39 @@ proc createStoreHandler*(db: LightClientDb): DbStoreHandler =
       contentKey: ByteList,
       contentId: ContentId,
       content: seq[byte]) {.raises: [], gcsafe.} =
-    let contentKeyResult = decode(contentKey)
+    let contentKey = decode(contentKey).valueOr:
       # TODO: as this should not fail, maybe it is better to raiseAssert ?
-    if contentKeyResult.isNone():
       return
 
-    let ck = contentKeyResult.get()
+    case contentKey.contentType:
+    of lightClientBootstrap:
+      db.put(contentId, content)
+    of lightClientUpdate:
+      let updates =
+        decodeSsz(content, ForkedLightClientUpdateBytesList).valueOr:
+          return
 
-    if ck.contentType == lightClientUpdate:
       # Lot of assumptions here:
       # - that updates are continious i.e there is no period gaps
       # - that updates start from startPeriod of content key
-      var period = ck.lightClientUpdateKey.startPeriod
-
-      let updatesResult = decodeSsz(content, ForkedLightClientUpdateBytesList)
-
-      if updatesResult.isErr:
-        return
-
-      let updates = updatesResult.get()
-
+      var period = contentKey.lightClientUpdateKey.startPeriod
       for update in updates.asSeq():
         # Only put the update if it is better, although in currently a new offer
         # should not be accepted as it is based on only the period.
         db.putUpdateIfBetter(SyncCommitteePeriod(period), update.asSeq())
         inc period
-    elif ck.contentType == lightClientFinalityUpdate:
+    of lightClientFinalityUpdate:
       db.finalityUpdateCache =
         Opt.some(LightClientFinalityUpdateCache(
-          lastFinalityUpdateSlot: ck.lightClientFinalityUpdateKey.finalizedSlot,
+          lastFinalityUpdateSlot:
+            contentKey.lightClientFinalityUpdateKey.finalizedSlot,
           lastFinalityUpdate: content
         ))
-    elif ck.contentType == lightClientOptimisticUpdate:
+    of lightClientOptimisticUpdate:
       db.optimisticUpdateCache =
         Opt.some(LightClientOptimisticUpdateCache(
-          lastOptimisticUpdateSlot: ck.lightClientOptimisticUpdateKey.optimisticSlot,
+          lastOptimisticUpdateSlot:
+            contentKey.lightClientOptimisticUpdateKey.optimisticSlot,
           lastOptimisticUpdate: content
         ))
-    else:
-      db.put(contentId, content)
   )
