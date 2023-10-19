@@ -49,8 +49,8 @@ proc new*(_: type SkeletonRef, chain: ChainRef): SkeletonRef =
 # ------------------------------------------------------------------------------
 
 proc open*(sk: SkeletonRef): Result[void, string]  =
-  if sk.chain.com.ttd.isNone:
-    return err("Cannot create skeleton as ttd not set")
+  if sk.chain.com.ttd.isNone and sk.chain.com.ttdPassed.not:
+    return err("Cannot create skeleton as ttd and ttdPassed not set")
   sk.readProgress().isOkOr:
     return err(error)
   sk.started = getTime()

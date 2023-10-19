@@ -21,7 +21,28 @@ import
   ../../nimbus/sync/beacon/skeleton_main,
   ./setup_env
 
-proc ccm(cc: NetworkParams) =
+proc noTtdAndNoTtdPassed(cc: NetworkParams) =
+  cc.config.terminalTotalDifficultyPassed = none(bool)
+  cc.config.terminalTotalDifficulty = none(UInt256)
+  cc.genesis.difficulty = 1.u256
+
+proc ttdPassedNoTtd(cc: NetworkParams) =
+  cc.config.terminalTotalDifficultyPassed = some(true)
+  cc.config.terminalTotalDifficulty = none(UInt256)
+  cc.genesis.difficulty = 1.u256
+
+proc ttdNoTtdPassed(cc: NetworkParams) =
+  cc.config.terminalTotalDifficultyPassed = none(bool)
+  cc.config.terminalTotalDifficulty = some(0.u256)
+  cc.genesis.difficulty = 1.u256
+
+proc ttdAndTtdPassed(cc: NetworkParams) =
+  cc.config.terminalTotalDifficultyPassed = some(true)
+  cc.config.terminalTotalDifficulty = some(0.u256)
+  cc.genesis.difficulty = 1.u256
+
+proc ttdPassedFalseNoTtd(cc: NetworkParams) =
+  cc.config.terminalTotalDifficultyPassed = some(false)
   cc.config.terminalTotalDifficulty = none(UInt256)
   cc.genesis.difficulty = 1.u256
 
@@ -35,11 +56,34 @@ proc skeletonMain*() =
   test7()
   test8()
 
-  suite "skeleton open should error if ttd not set":
-    let env = setupEnv(extraValidation = true, ccm)
-    let skel = SkeletonRef.new(env.chain)
+  suite "test skeleton open":
+    test "skeleton open should error if both ttd and ttdPassed not set":
+      let env = setupEnv(extraValidation = true, noTtdAndNoTtdPassed)
+      let skel = SkeletonRef.new(env.chain)
+      let res = skel.open()
+      check res.isErr
 
-    test "skel open error":
+    test "skeleton open should ok if ttdPassed is set":
+      let env = setupEnv(extraValidation = true, ttdPassedNoTtd)
+      let skel = SkeletonRef.new(env.chain)
+      let res = skel.open()
+      check res.isOk
+
+    test "skeleton open should ok if ttd is set":
+      let env = setupEnv(extraValidation = true, ttdNoTtdPassed)
+      let skel = SkeletonRef.new(env.chain)
+      let res = skel.open()
+      check res.isOk
+
+    test "skeleton open should ok if both ttd and ttdPassed are set":
+      let env = setupEnv(extraValidation = true, ttdAndTtdPassed)
+      let skel = SkeletonRef.new(env.chain)
+      let res = skel.open()
+      check res.isOk
+
+    test "skeleton open should error if ttd not set and ttdPassed are false":
+      let env = setupEnv(extraValidation = true, ttdPassedFalseNoTtd)
+      let skel = SkeletonRef.new(env.chain)
       let res = skel.open()
       check res.isErr
 
