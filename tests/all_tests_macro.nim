@@ -5,10 +5,11 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import std/times
-import ../nimbus/vm_compile_info
-import macros, strutils, os, unittest2, osproc
-import threadpool
+import
+  std/[times, macros, strutils, os, osproc, threadpool],
+  unittest2,
+  ../nimbus/vm_compile_info,
+  ../nimbus/utils/utils
 
 export strutils, os, unittest2, osproc, threadpool
 
@@ -30,7 +31,7 @@ proc executeMyself(numModules: int, names: openArray[string]): int =
   var f = open("all_test.md", fmWrite)
   for i in 0..<numModules:
     f.write("* " & names[i])
-    f.write("  - " & $elpdList[i])
+    f.write("  - " & elpdList[i].short)
     f.write("\n")
   f.close()
 
