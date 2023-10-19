@@ -70,7 +70,6 @@ type
     limits: TxChainGasLimits ## Gas limits for packer and next header
     txEnv: TxChainPackerEnv  ## Assorted parameters, tx packer environment
     prepHeader: BlockHeader  ## Prepared Header from Consensus Engine
-    withdrawals: seq[Withdrawal] ## EIP-4895
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -232,7 +231,7 @@ proc getHeader*(dh: TxChainRef): BlockHeader
     excessBlobGas: dh.txEnv.excessBlobGas)
 
   if dh.com.forkGTE(Shanghai):
-    result.withdrawalsRoot = some(calcWithdrawalsRoot(dh.withdrawals))
+    result.withdrawalsRoot = some(calcWithdrawalsRoot(dh.com.pos.withdrawals))
 
   if dh.com.forkGTE(Cancun):
     result.parentBeaconBlockRoot = some(dh.com.pos.parentBeaconBlockRoot)
@@ -321,10 +320,6 @@ proc vmState*(dh: TxChainRef): BaseVMState =
   ## Getter, `BaseVmState` descriptor based on the current insertion point.
   dh.txEnv.vmState
 
-proc withdrawals*(dh: TxChainRef): seq[Withdrawal] =
-  ## Getter, `BaseVmState` descriptor based on the current insertion point.
-  dh.withdrawals
-
 # ------------------------------------------------------------------------------
 # Public functions, setters
 # ------------------------------------------------------------------------------
@@ -386,9 +381,6 @@ proc `stateRoot=`*(dh: TxChainRef; val: Hash256) =
 proc `txRoot=`*(dh: TxChainRef; val: Hash256) =
   ## Setter
   dh.txEnv.txRoot = val
-
-proc `withdrawals=`*(dh: TxChainRef, val: sink seq[Withdrawal]) =
-  dh.withdrawals = system.move(val)
 
 proc `excessBlobGas=`*(dh: TxChainRef; val: Option[uint64]) =
   ## Setter

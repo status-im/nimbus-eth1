@@ -34,12 +34,12 @@ type
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc setWithdrawals(xp: TxPoolRef, attrs: PayloadAttributes) =
+proc setWithdrawals(ctx: CasperRef, attrs: PayloadAttributes) =
   case attrs.version
   of Version.V2, Version.V3:
-    xp.withdrawals = ethWithdrawals attrs.withdrawals.get
+    ctx.withdrawals = ethWithdrawals attrs.withdrawals.get
   else:
-    xp.withdrawals = @[]
+    ctx.withdrawals = @[]
 
 template wrapException(body: untyped): auto =
   try:
@@ -159,7 +159,7 @@ proc generatePayload*(ben: BeaconEngineRef,
     if attrs.parentBeaconBlockRoot.isSome:
       pos.parentBeaconBlockRoot = ethHash attrs.parentBeaconBlockRoot.get
 
-    xp.setWithdrawals(attrs)
+    pos.setWithdrawals(attrs)
 
     if headBlock.blockHash != xp.head.blockHash:
        # reorg

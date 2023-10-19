@@ -87,10 +87,10 @@ const
   MAX_ALLOWED_BLOB* = MAX_BLOB_GAS_PER_BLOCK div GAS_PER_BLOB
 
   # EIP-4788 addresses
-  # BeaconRootsStorageAddress is the address where historical beacon roots are stored as per EIP-4788
-  BeaconRootsStorageAddress* = hexToByteArray[20]("0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02")
-  # SystemAddress is where the system-transaction is sent from as per EIP-4788
-  SystemAddress* = hexToByteArray[20]("0xfffffffffffffffffffffffffffffffffffffffe")
+  # BEACON_ROOTS_ADDRESS is the address where historical beacon roots are stored as per EIP-4788
+  BEACON_ROOTS_ADDRESS* = hexToByteArray[20]("0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02")
+  # SYSTEM_ADDRESS is where the system-transaction is sent from as per EIP-4788
+  SYSTEM_ADDRESS* = hexToByteArray[20]("0xfffffffffffffffffffffffffffffffffffffffe")
 
   RIPEMD_ADDR* = block:
     proc initAddress(x: int): EthAddress {.compileTime.} =

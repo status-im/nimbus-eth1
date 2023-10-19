@@ -436,7 +436,8 @@ import
   chronicles,
   eth/keys,
   stew/[keyed_queue, results],
-  ../common/common
+  ../common/common,
+  ./casper
 
 export
   TxItemRef,
@@ -627,12 +628,12 @@ proc ethBlock*(xp: TxPoolRef, someBaseFee: bool = false): EthBlock
 
   let com = xp.chain.com
   if com.forkGTE(Shanghai):
-    result.withdrawals = some(xp.chain.withdrawals)
+    result.withdrawals = some(com.pos.withdrawals)
 
   if someBaseFee:
     # make sure baseFee always has something
     result.header.fee = some(result.header.fee.get(0.u256))
-  
+
 proc gasCumulative*(xp: TxPoolRef): GasInt =
   ## Getter, retrieves the gas that will be burned in the block after
   ## retrieving it via `ethBlock`.
@@ -777,9 +778,6 @@ proc `minTipPrice=`*(xp: TxPoolRef; val: GasPrice) =
   if xp.pMinTipPrice != val:
     xp.pMinTipPrice = val
     xp.pDirtyBuckets = true
-
-proc `withdrawals=`*(xp: TxPoolRef, val: sink seq[Withdrawal]) =
-  xp.chain.withdrawals = system.move(val)
 
 # ------------------------------------------------------------------------------
 # Public functions, per-tx-item operations

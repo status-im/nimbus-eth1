@@ -21,7 +21,7 @@ import
   ../../../db/[accounts_cache, core_db],
   ../../../common/common,
   ../../../utils/utils,
-  "../.."/[dao, executor, validate, eip4844],
+  "../.."/[dao, executor, validate, eip4844, casper],
   ../../../transaction/call_evm,
   ../../../transaction,
   ../../../vm_state,
@@ -164,6 +164,11 @@ proc vmExecInit(xp: TxPoolRef): TxPackerStateRef
     xp.chain.vmState.mutateStateDB:
       db.applyDAOHardFork()
 
+  # EIP-4788
+  if xp.chain.nextFork >= FkCancun:
+    let beaconRoot = xp.chain.com.pos.parentBeaconBlockRoot
+    discard xp.chain.vmState.processBeaconBlockRoot(beaconRoot)
+
   TxPackerStateRef( # return value
     xp: xp,
     tr: newCoreDbRef(LegacyDbMemory).mptPrune,
@@ -225,7 +230,7 @@ proc vmExecCommit(pst: TxPackerStateRef)
 
   # EIP-4895
   if xp.chain.nextFork >= FkShanghai:
-    for withdrawal in xp.chain.withdrawals:
+    for withdrawal in xp.chain.com.pos.withdrawals:
       vmState.stateDB.addBalance(withdrawal.address, withdrawal.weiAmount)
 
   # EIP-3675: no reward for miner in POA/POS

@@ -455,7 +455,7 @@ proc subBalance*(ac: AccountsCache, address: EthAddress, delta: UInt256) {.inlin
     # This zero delta early exit is important as shown in EIP-4788.
     # If the account is created, it will change the state.
     # But early exit will prevent the account creation.
-    # In this case, the SystemAddress
+    # In this case, the SYSTEM_ADDRESS
     return
   ac.setBalance(address, ac.getBalance(address) - delta)
 

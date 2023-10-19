@@ -141,10 +141,10 @@ proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash256):
     statedb = vmState.stateDB
     call = CallParams(
       vmState  : vmState,
-      sender   : SystemAddress,
+      sender   : SYSTEM_ADDRESS,
       gasLimit : 30_000_000.GasInt,
       gasPrice : 0.GasInt,
-      to       : BeaconRootsStorageAddress,
+      to       : BEACON_ROOTS_ADDRESS,
       input    : @(beaconRoot.data),
 
       # It's a systemCall, no need for other knicks knacks

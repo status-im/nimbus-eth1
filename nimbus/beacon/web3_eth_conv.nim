@@ -86,7 +86,7 @@ func u256*(x: Web3Quantity): UInt256 =
   u256(x.uint64)
 
 func ethTime*(x: Web3Quantity): common.EthTime =
-  common.EthTime(x.unsafeQuantityToInt64)
+  common.EthTime(x)
 
 func ethHash*(x: Web3PrevRandao): common.Hash256 =
   common.Hash256(data: distinctBase x)
@@ -170,6 +170,12 @@ func w3Qty*(x: common.EthTime, y: int): Web3Quantity =
 
 func w3Qty*(x: Web3Quantity, y: int): Web3Quantity =
   Web3Quantity(x.uint64 + y.uint64)
+
+func w3Qty*(x: Web3Quantity, y: EthTime): Web3Quantity =
+  Web3Quantity(x.uint64 + y.uint64)
+
+func w3Qty*(x: Web3Quantity, y: uint64): Web3Quantity =
+  Web3Quantity(x.uint64 + y)
 
 func w3Qty*(x: Option[uint64]): Option[Web3Quantity] =
   if x.isNone: none(Web3Quantity)

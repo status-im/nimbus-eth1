@@ -26,12 +26,12 @@ type
 
 const
   BLS_MODULUS_STR = "52435875175126190479447740508185965837690552500527637822603658699938581184513"
-  BLS_MODULUS = parse(BLS_MODULUS_STR, UInt256, 10)
+  BLS_MODULUS* = parse(BLS_MODULUS_STR, UInt256, 10).toBytesBE
   PrecompileInputLength = 192
 
 proc pointEvaluationResult(): Bytes64 {.compileTime.} =
   result[0..<32] = FIELD_ELEMENTS_PER_BLOB.u256.toBytesBE[0..^1]
-  result[32..^1] = BLS_MODULUS.toBytesBE[0..^1]
+  result[32..^1] = BLS_MODULUS[0..^1]
 
 const
   PointEvaluationResult* = pointEvaluationResult()
@@ -39,7 +39,7 @@ const
 
 
 # kzgToVersionedHash implements kzg_to_versioned_hash from EIP-4844
-proc kzgToVersionedHash(kzg: kzg.KZGCommitment): VersionedHash =
+proc kzgToVersionedHash*(kzg: kzg.KZGCommitment): VersionedHash =
   result = sha256.digest(kzg)
   result.data[0] = VERSIONED_HASH_VERSION_KZG
 
