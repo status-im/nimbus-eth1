@@ -9,13 +9,14 @@
 # according to those terms.
 
 import
-  std/[options, json, strutils],
+  std/[options, json],
   ../common/common,
   stew/byteutils,
   ../vm_state,
   ../vm_types,
   ../db/accounts_cache,
-  ./utils
+  ./utils,
+  ./state_dump
 
 proc `$`(hash: Hash256): string =
   hash.data.toHex
@@ -60,51 +61,24 @@ proc debug*(h: BlockHeader): string =
     result.add "beaconRoot     : " & $h.parentBeaconBlockRoot.get() & "\n"
   result.add "blockHash      : " & $blockHash(h) & "\n"
 
-proc dumpAccount(stateDB: AccountsCache, address: EthAddress): JsonNode =
-  var storage = newJObject()
-  for k, v in stateDB.cachedStorage(address):
-    storage[k.toHex] = %v.toHex
-
-  result = %{
-    "nonce": %toHex(stateDB.getNonce(address)),
-    "balance": %stateDB.getBalance(address).toHex(),
-    "codehash": %($stateDB.getCodeHash(address)),
-    "storageRoot": %($stateDB.getStorageRoot(address)),
-    "storage": storage
-  }
-
 proc dumpAccounts*(vmState: BaseVMState): JsonNode =
-  result = newJObject()
-  for ac in vmState.stateDB.addresses:
-    result[ac.toHex] = dumpAccount(vmState.stateDB, ac)
+  %dumpAccounts(vmState.stateDB)
 
 proc debugAccounts*(stateDB: AccountsCache, addresses: openArray[string]): string =
-  var
-    accounts = newJObject()
-    accountList = newSeq[EthAddress]()
-
+  var accountList = newSeq[EthAddress]()
   for address in addresses:
     accountList.add hexToByteArray[20](address)
 
-  for ac in accountList:
-    accounts[ac.toHex] = dumpAccount(stateDB, ac)
-
-  accounts.pretty
+  (%dumpAccounts(stateDB, accountList)).pretty
 
 proc debugAccounts*(vmState: BaseVMState): string =
-  var
-    accounts = newJObject()
-    accountList = newSeq[EthAddress]()
-
+  var accountList = newSeq[EthAddress]()
   for address in vmState.stateDB.addresses:
     accountList.add address
 
-  for i, ac in accountList:
-    accounts[ac.toHex] = dumpAccount(vmState.stateDB, ac)
-
   let res = %{
     "rootHash": %($vmState.readOnlyStateDB.rootHash),
-    "accounts": accounts
+    "accounts": %dumpAccounts(vmState.stateDB, accountList),
   }
 
   res.pretty

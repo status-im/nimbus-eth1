@@ -22,6 +22,7 @@ import
   ../../nimbus/common/common,
   ../../nimbus/evm/tracer/json_tracer,
   ../../nimbus/core/eip4844,
+  ../../nimbus/utils/state_dump,
   ../common/helpers as chp,
   "."/[config, helpers],
   ../common/state_clearing
@@ -40,19 +41,6 @@ type
     tracerFlags: set[TracerFlags]
     error: string
     trustedSetupLoaded: bool
-
-  DumpAccount = ref object
-    balance : UInt256
-    nonce   : AccountNonce
-    root    : Hash256
-    codeHash: Hash256
-    code    : Blob
-    key     : Hash256
-    storage : Table[UInt256, UInt256]
-
-  StateDump = ref object
-    root: Hash256
-    accounts: Table[EthAddress, DumpAccount]
 
   StateResult = object
     name : string
@@ -93,46 +81,6 @@ proc verifyResult(ctx: var StateContext, vmState: BaseVMState) =
       [($actualLogsHash).toLowerAscii, $ctx.expectedLogs]
     return
 
-proc `%`(x: UInt256): JsonNode =
-  %("0x" & x.toHex)
-
-proc `%`(x: Blob): JsonNode =
-  %("0x" & x.toHex)
-
-proc `%`(x: Hash256): JsonNode =
-  %("0x" & x.data.toHex)
-
-proc `%`(x: AccountNonce): JsonNode =
-  %("0x" & x.toHex)
-
-proc `%`(x: Table[UInt256, UInt256]): JsonNode =
-  result = newJObject()
-  for k, v in x:
-    result["0x" & k.toHex] = %(v)
-
-proc `%`(x: DumpAccount): JsonNode =
-  result = %{
-    "balance" : %(x.balance),
-    "nonce"   : %(x.nonce),
-    "root"    : %(x.root),
-    "codeHash": %(x.codeHash),
-    "code"    : %(x.code),
-    "key"     : %(x.key)
-  }
-  if x.storage.len > 0:
-    result["storage"] = %(x.storage)
-
-proc `%`(x: Table[EthAddress, DumpAccount]): JsonNode =
-  result = newJObject()
-  for k, v in x:
-    result["0x" & k.toHex] = %(v)
-
-proc `%`(x: StateDump): JsonNode =
-  result = %{
-    "root": %(x.root),
-    "accounts": %(x.accounts)
-  }
-
 proc writeResultToStdout(stateRes: seq[StateResult]) =
   var n = newJArray()
   for res in stateRes:
@@ -149,26 +97,6 @@ proc writeResultToStdout(stateRes: seq[StateResult]) =
 
   stdout.write(n.pretty)
   stdout.write("\n")
-
-proc dumpAccounts(db: AccountsCache): Table[EthAddress, DumpAccount] =
-  for accAddr in db.addresses():
-    let acc = DumpAccount(
-      balance : db.getBalance(accAddr),
-      nonce   : db.getNonce(accAddr),
-      root    : db.getStorageRoot(accAddr),
-      codeHash: db.getCodeHash(accAddr),
-      code    : db.getCode(accAddr),
-      key     : keccakHash(accAddr)
-    )
-    for k, v in db.storage(accAddr):
-      acc.storage[k] = v
-    result[accAddr] = acc
-
-proc dumpState(vmState: BaseVMState): StateDump =
-  StateDump(
-    root: vmState.readOnlyStateDB.rootHash,
-    accounts: dumpAccounts(vmState.stateDB)
-  )
 
 proc writeRootHashToStderr(vmState: BaseVMState) =
   let stateRoot = %{
@@ -191,9 +119,9 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
       let res = loadKzgTrustedSetup()
       if res.isErr:
         echo "FATAL: ", res.error
-        quit(QuitFailure)      
+        quit(QuitFailure)
       ctx.trustedSetupLoaded = true
-    
+
   let vmState = TestVMState()
   vmState.init(
     parent = ctx.parent,
@@ -213,12 +141,12 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
     result = StateResult(
       name : ctx.name,
       pass : ctx.error.len == 0,
-      root : vmState.stateDB.rootHash,
+      root : vmState.readOnlyStateDB.rootHash,
       fork : ctx.forkStr,
       error: ctx.error
     )
     if conf.dumpEnabled:
-      result.state = dumpState(vmState)
+      result.state = dumpState(vmState.stateDB)
     if conf.jsonEnabled:
       writeRootHashToStderr(vmState)
 
