@@ -16,9 +16,12 @@ newBlockchainTests
 + withdrawalsAddressBounds.json                                   OK
 + withdrawalsAmountBounds.json                                    OK
 + withdrawalsIndexBounds.json                                     OK
++ withdrawalsRLPlessElements.json                                 OK
++ withdrawalsRLPmoreElements.json                                 OK
++ withdrawalsRLPnotAList.json                                     OK
 + withdrawalsValidatorIndexBounds.json                            OK
 ```
-OK: 15/15 Fail: 0/15 Skip: 0/15
+OK: 18/18 Fail: 0/18 Skip: 0/18
 ## bcArrowGlacierToMerge
 ```diff
 + difficultyFormula.json                                          OK
@@ -100,6 +103,21 @@ OK: 4/4 Fail: 0/4 Skip: 0/4
 + SuicideIssue.json                                               OK
 ```
 OK: 3/4 Fail: 0/4 Skip: 1/4
+## bcForgedTest
+```diff
++ bcBlockRLPAsList.json                                           OK
++ bcBlockRLPPrefixed0000.json                                     OK
++ bcBlockRLPRandomByte.json                                       OK
++ bcBlockRLPTooLarge.json                                         OK
++ bcBlockRLPZeroByte.json                                         OK
++ bcForkBlockTest.json                                            OK
++ bcInvalidRLPTest_BLOCK.json                                     OK
++ bcInvalidRLPTest_TRANSACT.json                                  OK
++ bcTransactRLPRandomByte.json                                    OK
++ bcTransactRLPTooLarge.json                                      OK
++ bcTransactRLPZeroByte.json                                      OK
+```
+OK: 11/11 Fail: 0/11 Skip: 0/11
 ## bcForkStressTest
 ```diff
 + AmIOnEIP150.json                                                OK
@@ -3440,4 +3458,4 @@ OK: 11/11 Fail: 0/11 Skip: 0/11
 OK: 1/1 Fail: 0/1 Skip: 0/1
 
 ---TOTAL---
-OK: 2932/3038 Fail: 0/3038 Skip: 106/3038
+OK: 2946/3052 Fail: 0/3052 Skip: 106/3052
