@@ -429,6 +429,9 @@ func daoForkSupport*(com: CommonRef): bool =
 func ttd*(com: CommonRef): Option[DifficultyInt] =
   com.config.terminalTotalDifficulty
 
+func ttdPassed*(com: CommonRef): bool =
+  com.config.terminalTotalDifficultyPassed.get(false)
+
 # if you messing with clique period and
 # and epoch, it likely will fail clique verification
 # at epoch * blocknumber
