@@ -14,7 +14,6 @@ type
   SyncSpec* = ref object of WDBaseSpec
     syncSteps*: int  # Sync block chunks that will be passed as head through FCUs to the syncing client
     syncShouldFail*: bool
-    timeoutSeconds*: int
     sleep*: int
 
 proc doSync(ws: SyncSpec, client: RpcClient, clMock: CLMocker): Future[bool] {.async.} =

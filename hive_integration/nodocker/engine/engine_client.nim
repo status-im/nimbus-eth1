@@ -81,7 +81,8 @@ proc getPayload*(client: RpcClient,
     ok(GetPayloadResponse(
       executionPayload: executionPayload(x.executionPayload),
       blockValue: some(x.blockValue),
-      blobsBundle: some(x.blobsBundle)
+      blobsBundle: some(x.blobsBundle),
+      shouldOverrideBuilder: some(x.shouldOverrideBuilder),
     ))
   elif version == Version.V2:
     let x = client.getPayloadV2(payloadId).valueOr:
@@ -231,6 +232,7 @@ proc toBlockHeader(bc: eth_api.BlockObject): common.BlockHeader =
     withdrawalsRoot: bc.withdrawalsRoot,
     blobGasUsed    : maybeU64(bc.blobGasUsed),
     excessBlobGas  : maybeU64(bc.excessBlobGas),
+    parentBeaconBlockRoot: bc.parentBeaconBlockRoot,
   )
 
 proc toTransactions(txs: openArray[JsonNode]): seq[Transaction] =
@@ -293,7 +295,7 @@ type
     s*: UInt256
     chainId*: Option[ChainId]
     accessList*: Option[seq[rpc_types.AccessTuple]]
-    maxFeePerBlobGas*: Option[GasInt]
+    maxFeePerBlobGas*: Option[UInt256]
     versionedHashes*: Option[VersionedHashes]
 
 proc toRPCReceipt(rec: eth_api.ReceiptObject): RPCReceipt =
@@ -336,7 +338,7 @@ proc toRPCTx(tx: eth_api.TransactionObject): RPCTx =
     s: UInt256.fromHex(string tx.s),
     chainId: maybeChainId(tx.chainId),
     accessList: tx.accessList,
-    maxFeePerBlobGas: maybeInt64(tx.maxFeePerBlobGas),
+    maxFeePerBlobGas: maybeU256(tx.maxFeePerBlobGas),
     versionedHashes: tx.versionedHashes,
   )
 

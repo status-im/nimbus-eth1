@@ -1,7 +1,7 @@
 import
   std/[options, typetraits, strutils],
   eth/common,
-  stew/byteutils,
+  stew/[byteutils, endians2],
   web3/ethtypes,
   web3/engine_api_types,
   ../../../nimbus/beacon/execution_types,
@@ -10,6 +10,18 @@ import
 type
   BaseSpec* = ref object of RootObj
     txType*: Option[TxType]
+
+    # CL Mocker configuration for slots to `safe` and `finalized` respectively
+    slotsToSafe*: int
+    slotsToFinalized*: int
+    safeSlotsToImportOptimistically*: int
+    blockTimestampIncrement*: int
+    timeoutSeconds*: int
+    mainFork*: string
+    genesisTimestamp*: int
+    forkHeight*: int
+    forkTime*: uint64
+    previousForkTime*: uint64
 
   TestDesc* = object
     name* : string
@@ -21,6 +33,29 @@ const
   DefaultTimeout* = 60 # seconds
   DefaultSleep* = 1
   prevRandaoContractAddr* = hexToByteArray[20]("0000000000000000000000000000000000000316")
+  GenesisTimestamp* = 0x1234
+  ForkParis*    = "Paris"
+  ForkShanghai* = "Shanghai"
+  ForkCancun*   = "Cancun"
+
+func toAddress*(x: UInt256): EthAddress =
+  var
+    mm = x.toByteArrayBE
+    x = 0
+  for i in 12..31:
+    result[x] = mm[i]
+    inc x
+
+func toHash*(x: UInt256): common.Hash256 =
+  common.Hash256(data: x.toByteArrayBE)
+
+func timestampToBeaconRoot*(timestamp: Quantity): FixedBytes[32] =
+  # Generates a deterministic hash from the timestamp
+  let h = keccakHash(timestamp.uint64.toBytesBE)
+  FixedBytes[32](h.data)
+
+func beaconRoot*(x: UInt256): FixedBytes[32] =
+  FixedBytes[32](x.toByteArrayBE)
 
 template testCond*(expr: untyped) =
   if not (expr):

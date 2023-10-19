@@ -1,6 +1,7 @@
 import
   chronicles,
   eth/keys,
+  stew/results,
   json_rpc/rpcclient,
   ../../../nimbus/config,
   ../../../nimbus/common,
@@ -90,6 +91,15 @@ proc addEngine*(env: TestEnv, addToCL: bool = true): EngineEnv =
     env.clMock.addEngine(eng)
   eng
 
+func engines*(env: TestEnv, idx: int): EngineEnv =
+  env.clients[idx]
+
+func numEngines*(env: TestEnv): int =
+  env.clients.len
+
+func accounts*(env: TestEnv, idx: int): TestAccount =
+  env.sender.getAccount(idx)
+
 proc makeTx*(env: TestEnv, tc: BaseTx, nonce: AccountNonce): Transaction =
   env.sender.makeTx(tc, nonce)
 
@@ -132,6 +142,12 @@ proc sendTx*(env: TestEnv, tx: Transaction): bool =
   let client = env.engine.client
   sendTx(client, tx)
 
+proc sendTx*(env: TestEnv, sender: TestAccount, eng: EngineEnv, tc: BlobTx): Result[Transaction, void] =
+  env.sender.sendTx(sender, eng.client, tc)
+  
+proc replaceTx*(env: TestEnv, sender: TestAccount, eng: EngineEnv, tc: BlobTx): Result[Transaction, void] =
+  env.sender.replaceTx(sender, eng.client, tc)
+  
 proc verifyPoWProgress*(env: TestEnv, lastBlockHash: common.Hash256): bool =
   let res = waitFor env.client.verifyPoWProgress(lastBlockHash)
   if res.isErr:
@@ -139,9 +155,3 @@ proc verifyPoWProgress*(env: TestEnv, lastBlockHash: common.Hash256): bool =
     return false
 
   true
-
-proc slotsToSafe*(env: TestEnv, x: int) =
-  env.clMock.slotsToSafe = x
-
-proc slotsToFinalized*(env: TestEnv, x: int) =
-  env.clMock.slotsToFinalized = x
