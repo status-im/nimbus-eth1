@@ -43,8 +43,12 @@ const
   defaultStorageSize* = uint32(1000 * 1000 * 100)
   defaultStorageSizeDesc* = $defaultStorageSize
 
-  defaultTableIpLimitDesc* = $DefaultTableIpLimit
-  defaultBucketIpLimitDesc* = $DefaultBucketIpLimit
+  defaultTableIpLimitDesc* =
+    $defaultPortalProtocolConfig.tableIpLimits.tableIpLimit
+  defaultBucketIpLimitDesc* =
+    $defaultPortalProtocolConfig.tableIpLimits.bucketIpLimit
+  defaultBitsPerHopDesc* =
+    $defaultPortalProtocolConfig.bitsPerHop
 
 type
   TrustedDigest* = MDigest[32 * 8]
@@ -180,25 +184,28 @@ type
       name: "proxy-uri" .}: ClientConfig
 
     tableIpLimit* {.
+      hidden
       desc: "Maximum amount of nodes with the same IP in the routing table. " &
           "This option is currently required as many nodes are running from " &
           "the same machines. The option will be removed/adjusted in the future"
-      defaultValue: DefaultTableIpLimit
+      defaultValue: defaultPortalProtocolConfig.tableIpLimits.tableIpLimit
       defaultValueDesc: $defaultTableIpLimitDesc
       name: "table-ip-limit" .}: uint
 
     bucketIpLimit* {.
+      hidden
       desc: "Maximum amount of nodes with the same IP in the routing table's buckets. " &
             "This option is currently required as many nodes are running from " &
             "the same machines. The option will be removed/adjusted in the future"
-      defaultValue: DefaultBucketIpLimit
+      defaultValue: defaultPortalProtocolConfig.tableIpLimits.bucketIpLimit
       defaultValueDesc: $defaultBucketIpLimitDesc
       name: "bucket-ip-limit" .}: uint
 
     bitsPerHop* {.
       hidden
       desc: "Kademlia's b variable, increase for less hops per lookup"
-      defaultValue: DefaultBitsPerHop
+      defaultValue: defaultPortalProtocolConfig.bitsPerHop
+      defaultValueDesc: $defaultBitsPerHopDesc
       name: "bits-per-hop" .}: int
 
     radiusConfig* {.

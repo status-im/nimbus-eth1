@@ -34,12 +34,12 @@ if [ ${PIPESTATUS[0]} != 4 ]; then
 fi
 
 OPTS="h:n:d"
-LONGOPTS="help,nodes:,data-dir:,enable-htop,log-level:,base-port:,base-rpc-port:,trusted-block-root:,beacon-chain-bridge,base-metrics-port:,reuse-existing-data-dir,timeout:,kill-old-processes"
+LONGOPTS="help,nodes:,data-dir:,run-tests,log-level:,base-port:,base-rpc-port:,trusted-block-root:,beacon-chain-bridge,base-metrics-port:,reuse-existing-data-dir,timeout:,kill-old-processes"
 
 # default values
 NUM_NODES="64"
 DATA_DIR="local_testnet_data"
-USE_HTOP="0"
+RUN_TESTS="0"
 LOG_LEVEL="INFO"
 BASE_PORT="9000"
 BASE_METRICS_PORT="8008"
@@ -66,7 +66,7 @@ E.g.: $(basename "$0") --nodes ${NUM_NODES} --data-dir "${DATA_DIR}" # defaults
   --base-metrics-port         bootstrap node's metrics server port (default: ${BASE_METRICS_PORT})
   --beacon-chain-bridge       run a beacon chain bridge attached to the bootstrap node
   --trusted-block-root        recent trusted finalized block root to initialize the consensus light client from
-  --enable-htop               use "htop" to see the fluffy processes without doing any tests
+  --run-tests                 when enabled run tests else use "htop" to see the fluffy processes without doing any tests
   --log-level                 set the log level (default: ${LOG_LEVEL})
   --reuse-existing-data-dir   instead of deleting and recreating the data dir, keep it and reuse everything we can from it
   --timeout                   timeout in seconds (default: ${TIMEOUT_DURATION} - no timeout)
@@ -96,8 +96,8 @@ while true; do
       DATA_DIR="$2"
       shift 2
       ;;
-    --enable-htop)
-      USE_HTOP="1"
+    --run-tests)
+      RUN_TESTS="1"
       shift
       ;;
     --log-level)
@@ -199,9 +199,12 @@ BINARIES="fluffy"
 if [[ "${BEACON_CHAIN_BRIDGE}" == "1" ]]; then
   BINARIES="${BINARIES} beacon_chain_bridge"
 fi
-TEST_BINARIES="test_portal_testnet"
 $MAKE -j ${NPROC} LOG_LEVEL=TRACE ${BINARIES}
-$MAKE -j ${NPROC} LOG_LEVEL=INFO ${TEST_BINARIES}
+
+if [[ "$RUN_TESTS" == "1" ]]; then
+  TEST_BINARIES="test_portal_testnet"
+  $MAKE -j ${NPROC} LOG_LEVEL=INFO ${TEST_BINARIES}
+fi
 
 # Kill child processes on Ctrl-C/SIGTERM/exit, passing the PID of this shell
 # instance as the parent and the target process name as a pattern to the
@@ -351,7 +354,7 @@ if [[ "$BG_JOBS" != "$NUM_JOBS" ]]; then
 fi
 
 # launch htop and run until `TIMEOUT_DURATION` or check the nodes and quit.
-if [[ "$USE_HTOP" == "1" ]]; then
+if [[ "$RUN_TESTS" == "0" ]]; then
   htop -p "$PIDS"
   cleanup
 else

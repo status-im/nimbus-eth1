@@ -38,7 +38,12 @@ const
   revalidationTimeout* = chronos.seconds(30)
 
   defaultPortalProtocolConfig* = PortalProtocolConfig(
-    tableIpLimits: DefaultTableIpLimits,
+    # TODO / IMPORTANT NOTE:
+    # This must be set back to `DefaultTableIpLimits` as soon as there are
+    # enough nodes in the Portal network that we don't need to rely on the
+    # Fluffy fleet. Currently, during development, convenience is taken above
+    # security, this must not remain.
+    tableIpLimits: TableIpLimits(tableIpLimit: 32, bucketIpLimit: 16),
     bitsPerHop: DefaultBitsPerHop,
     radiusConfig: defaultRadiusConfig
   )
