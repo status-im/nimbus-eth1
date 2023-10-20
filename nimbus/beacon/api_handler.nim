@@ -32,6 +32,10 @@ func validateVersionedHashed*(payload: ExecutionPayload,
   for x in payload.transactions:
     let tx = rlp.decode(distinctBase(x), Transaction)
     versionedHashes.add tx.versionedHashes
+
+  if versionedHashes.len != expected.len:
+    return false
+
   for i, x in expected:
     if distinctBase(x) != versionedHashes[i].data:
       return false

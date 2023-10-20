@@ -274,8 +274,8 @@ proc validateTxBasic*(
       if tx.versionedHashes.len == 0:
         return err("invalid tx: there must be at least one blob")
 
-      if tx.versionedHashes.len > MAX_ALLOWED_BLOB.int:
-        return err("invalid tx: versioned hashes len exceeds MAX_ALLOWED_BLOB=" & $MAX_ALLOWED_BLOB &
+      if tx.versionedHashes.len > MAX_BLOBS_PER_BLOCK:
+        return err("invalid tx: versioned hashes len exceeds MAX_BLOBS_PER_BLOCK=" & $MAX_BLOBS_PER_BLOCK &
           ". get=" & $tx.versionedHashes.len)
 
       for i, bv in tx.versionedHashes:
