@@ -85,7 +85,7 @@ import
   ../../../nimbus/rpc/rpc_types,
   ../../rpc/[portal_rpc_client, eth_rpc_client],
   ../../network/history/[history_content, history_network],
-  ../../network/beacon_light_client/beacon_light_client_content,
+  ../../network/beacon/beacon_content,
   ../../common/common_types,
   ../../nimbus/db/core_db,
   ./beacon_lc_bridge_conf
@@ -545,7 +545,7 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
         let
           root = hash_tree_root(forkyObject.header)
           contentKey = encode(bootstrapContentKey(root))
-          contentId = beacon_light_client_content.toContentId(contentKey)
+          contentId = beacon_content.toContentId(contentKey)
           forkDigest = forkDigestAtEpoch(
             forkDigests[], epoch(forkyObject.header.beacon.slot), cfg)
           content = encodeBootstrapForked(
@@ -557,7 +557,7 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
           try:
             let
               contentKeyHex = contentKey.asSeq().toHex()
-              peers = await portalRpcClient.portal_beaconLightClientGossip(
+              peers = await portalRpcClient.portal_beaconGossip(
                 contentKeyHex,
                 content.toHex())
             info "Beacon LC bootstrap gossiped", peers,
@@ -578,7 +578,7 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
         let
           period = forkyObject.attested_header.beacon.slot.sync_committee_period
           contentKey = encode(updateContentKey(period.uint64, uint64(1)))
-          contentId = beacon_light_client_content.toContentId(contentKey)
+          contentId = beacon_content.toContentId(contentKey)
           forkDigest = forkDigestAtEpoch(
             forkDigests[], epoch(forkyObject.attested_header.beacon.slot), cfg)
           content = encodeLightClientUpdatesForked(
@@ -590,7 +590,7 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
           try:
             let
               contentKeyHex = contentKey.asSeq().toHex()
-              peers = await portalRpcClient.portal_beaconLightClientGossip(
+              peers = await portalRpcClient.portal_beaconGossip(
                 contentKeyHex,
                 content.toHex())
             info "Beacon LC bootstrap gossiped", peers,
@@ -613,7 +613,7 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
         let
           slot = forkyObject.signature_slot
           contentKey = encode(optimisticUpdateContentKey(slot.uint64))
-          contentId = beacon_light_client_content.toContentId(contentKey)
+          contentId = beacon_content.toContentId(contentKey)
           forkDigest = forkDigestAtEpoch(
             forkDigests[], epoch(forkyObject.attested_header.beacon.slot), cfg)
           content = encodeOptimisticUpdateForked(
@@ -625,7 +625,7 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
           try:
             let
               contentKeyHex = contentKey.asSeq().toHex()
-              peers = await portalRpcClient.portal_beaconLightClientGossip(
+              peers = await portalRpcClient.portal_beaconGossip(
                 contentKeyHex,
                 content.toHex())
             info "Beacon LC bootstrap gossiped", peers,
@@ -647,7 +647,7 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
         let
           finalizedSlot = forkyObject.finalized_header.beacon.slot
           contentKey = encode(finalityUpdateContentKey(finalizedSlot.uint64))
-          contentId = beacon_light_client_content.toContentId(contentKey)
+          contentId = beacon_content.toContentId(contentKey)
           forkDigest = forkDigestAtEpoch(
             forkDigests[], epoch(forkyObject.attested_header.beacon.slot), cfg)
           content = encodeFinalityUpdateForked(
@@ -659,7 +659,7 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
           try:
             let
               contentKeyHex = contentKey.asSeq().toHex()
-              peers = await portalRpcClient.portal_beaconLightClientGossip(
+              peers = await portalRpcClient.portal_beaconGossip(
                 contentKeyHex,
                 content.toHex())
             info "Beacon LC bootstrap gossiped", peers,

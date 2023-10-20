@@ -11,11 +11,10 @@ import
   beacon_chain/spec/forks,
   beacon_chain/spec/datatypes/altair,
   ../../network/wire/portal_protocol,
-  ../../network/beacon_light_client/[beacon_light_client_network,
-    beacon_light_client_init_loader],
-  "."/[light_client_test_data, beacon_light_client_test_helpers]
+  ../../network/beacon/[beacon_network, beacon_init_loader],
+  "."/[light_client_test_data, beacon_test_helpers]
 
-procSuite "Beacon Light Client Content Network":
+procSuite "Beacon Content Network":
   let rng = newRng()
 
   asyncTest "Get bootstrap by trusted block hash":
@@ -55,7 +54,7 @@ procSuite "Beacon Light Client Content Network":
     )
 
     let bootstrapFromNetworkResult =
-      await lcNode1.lightClientNetwork.getLightClientBootstrap(
+      await lcNode1.beaconNetwork.getLightClientBootstrap(
         bootstrapHeaderHash
       )
 
@@ -123,11 +122,11 @@ procSuite "Beacon Light Client Content Network":
 
     let
       finalityResult =
-        await lcNode1.lightClientNetwork.getLightClientFinalityUpdate(
+        await lcNode1.beaconNetwork.getLightClientFinalityUpdate(
           distinctBase(finalizedHeaderSlot),
         )
       optimisticResult =
-        await lcNode1.lightClientNetwork.getLightClientOptimisticUpdate(
+        await lcNode1.beaconNetwork.getLightClientOptimisticUpdate(
           distinctBase(optimisticHeaderSlot)
         )
 
@@ -182,7 +181,7 @@ procSuite "Beacon Light Client Content Network":
     )
 
     let updatesResult =
-      await lcNode1.lightClientNetwork.getLightClientUpdatesByRange(
+      await lcNode1.beaconNetwork.getLightClientUpdatesByRange(
         startPeriod,
         uint64(2)
       )

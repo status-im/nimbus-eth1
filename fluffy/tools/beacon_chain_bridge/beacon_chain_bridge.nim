@@ -31,7 +31,7 @@ import
   stew/byteutils,
   eth/async_utils,
   beacon_chain/spec/eth2_apis/rest_beacon_client,
-  ../../network/beacon_light_client/beacon_light_client_content,
+  ../../network/beacon/beacon_content,
   ../../rpc/portal_rpc_client,
   ../../logging,
   ../eth_data_exporter/cl_data_exporter,
@@ -79,7 +79,7 @@ proc gossipLCBootstrapUpdate*(
         try:
           let
             contentKeyHex = contentKey.asSeq().toHex()
-            peers = await portalRpcClient.portal_beaconLightClientRandomGossip(
+            peers = await portalRpcClient.portal_beaconRandomGossip(
                 contentKeyHex,
                 content.toHex())
           info "Beacon LC bootstrap gossiped", peers,
@@ -133,7 +133,7 @@ proc gossipLCUpdates*(
           try:
             let
               contentKeyHex = contentKey.asSeq().toHex()
-              peers = await portalRpcClient.portal_beaconLightClientRandomGossip(
+              peers = await portalRpcClient.portal_beaconRandomGossip(
                 contentKeyHex,
                 content.toHex())
             info "Beacon LC update gossiped", peers,
@@ -189,7 +189,7 @@ proc gossipLCFinalityUpdate*(
         try:
           let
             contentKeyHex = contentKey.asSeq().toHex()
-            peers = await portalRpcClient.portal_beaconLightClientRandomGossip(
+            peers = await portalRpcClient.portal_beaconRandomGossip(
                 contentKeyHex,
                 content.toHex())
           info "Beacon LC finality update gossiped", peers,
@@ -239,7 +239,7 @@ proc gossipLCOptimisticUpdate*(
         try:
           let
             contentKeyHex = contentKey.asSeq().toHex()
-            peers = await portalRpcClient.portal_beaconLightClientRandomGossip(
+            peers = await portalRpcClient.portal_beaconRandomGossip(
                 contentKeyHex,
                 content.toHex())
           info "Beacon LC optimistic update gossiped", peers,

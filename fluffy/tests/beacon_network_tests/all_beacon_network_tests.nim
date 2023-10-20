@@ -8,6 +8,6 @@
 {. warning[UnusedImport]:off .}
 
 import
-  ./test_beacon_light_client_content,
-  ./test_beacon_light_client_network,
+  ./test_beacon_content,
+  ./test_beacon_network,
   ./test_beacon_light_client

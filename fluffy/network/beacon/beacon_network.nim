@@ -15,20 +15,20 @@ import
   beacon_chain/gossip_processing/light_client_processor,
   ../../../nimbus/constants,
   ../wire/[portal_protocol, portal_stream, portal_protocol_config],
-  "."/[beacon_light_client_content, beacon_light_client_db]
+  "."/[beacon_content, beacon_db]
 
-export beacon_light_client_content, beacon_light_client_db
+export beacon_content, beacon_db
 
 logScope:
-  topics = "portal_beacon_network"
+  topics = "beacon_network"
 
 const
   lightClientProtocolId* = [byte 0x50, 0x1A]
 
 type
-  LightClientNetwork* = ref object
+  BeaconNetwork* = ref object
     portalProtocol*: PortalProtocol
-    lightClientDb*: LightClientDb
+    beaconDb*: BeaconDb
     processor*: ref LightClientProcessor
     contentQueue*: AsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])]
     forkDigests*: ForkDigests
@@ -38,7 +38,7 @@ func toContentIdHandler(contentKey: ByteList): results.Opt[ContentId] =
   ok(toContentId(contentKey))
 
 proc getContent(
-    n: LightClientNetwork, contentKey: ContentKey):
+    n: BeaconNetwork, contentKey: ContentKey):
     Future[results.Opt[seq[byte]]] {.async.} =
   let
     contentKeyEncoded = encode(contentKey)
@@ -59,7 +59,7 @@ proc getContent(
     return Opt.some(contentRes.value().content)
 
 proc getLightClientBootstrap*(
-    n: LightClientNetwork,
+    n: BeaconNetwork,
     trustedRoot: Digest):
     Future[results.Opt[ForkedLightClientBootstrap]] {.async.} =
   let
@@ -82,7 +82,7 @@ proc getLightClientBootstrap*(
     return Opt.some(decodingResult.value())
 
 proc getLightClientUpdatesByRange*(
-    n: LightClientNetwork,
+    n: BeaconNetwork,
     startPeriod: SyncCommitteePeriod,
     count: uint64):
     Future[results.Opt[ForkedLightClientUpdateList]] {.async.} =
@@ -106,7 +106,7 @@ proc getLightClientUpdatesByRange*(
     return Opt.some(decodingResult.value())
 
 proc getLightClientFinalityUpdate*(
-    n: LightClientNetwork,
+    n: BeaconNetwork,
     finalizedSlot: uint64
   ): Future[results.Opt[ForkedLightClientFinalityUpdate]] {.async.} =
   let
@@ -127,7 +127,7 @@ proc getLightClientFinalityUpdate*(
     return Opt.some(decodingResult.value())
 
 proc getLightClientOptimisticUpdate*(
-    n: LightClientNetwork,
+    n: BeaconNetwork,
     optimisticSlot: uint64
   ): Future[results.Opt[ForkedLightClientOptimisticUpdate]] {.async.} =
 
@@ -149,9 +149,9 @@ proc getLightClientOptimisticUpdate*(
     return Opt.some(decodingResult.value())
 
 proc new*(
-    T: type LightClientNetwork,
+    T: type BeaconNetwork,
     baseProtocol: protocol.Protocol,
-    lightClientDb: LightClientDb,
+    beaconDb: BeaconDb,
     streamManager: StreamManager,
     forkDigests: ForkDigests,
     bootstrapRecords: openArray[Record] = [],
@@ -173,20 +173,20 @@ proc new*(
     portalProtocol = PortalProtocol.new(
       baseProtocol, lightClientProtocolId,
       toContentIdHandler,
-      createGetHandler(lightClientDb), stream, bootstrapRecords,
+      createGetHandler(beaconDb), stream, bootstrapRecords,
       config = portalConfigAdjusted)
 
-  portalProtocol.dbPut = createStoreHandler(lightClientDb)
+  portalProtocol.dbPut = createStoreHandler(beaconDb)
 
-  LightClientNetwork(
+  BeaconNetwork(
     portalProtocol: portalProtocol,
-    lightClientDb: lightClientDb,
+    beaconDb: beaconDb,
     contentQueue: contentQueue,
     forkDigests: forkDigests
   )
 
 proc validateContent(
-    n: LightClientNetwork, content: seq[byte], contentKey: ByteList):
+    n: BeaconNetwork, content: seq[byte], contentKey: ByteList):
     Result[void, string] =
   let key = contentKey.decode().valueOr:
     return err("Error decoding content key")
@@ -248,7 +248,7 @@ proc validateContent(
       ok()
 
 proc validateContent(
-    n: LightClientNetwork,
+    n: BeaconNetwork,
     contentKeys: ContentKeysList,
     contentItems: seq[seq[byte]]): Future[bool] {.async.} =
   # content passed here can have less items then contentKeys, but not more.
@@ -274,7 +274,7 @@ proc validateContent(
 
   return true
 
-proc processContentLoop(n: LightClientNetwork) {.async.} =
+proc processContentLoop(n: BeaconNetwork) {.async.} =
   try:
     while true:
       let (srcNodeId, contentKeys, contentItems) =
@@ -292,12 +292,12 @@ proc processContentLoop(n: LightClientNetwork) {.async.} =
   except CancelledError:
     trace "processContentLoop canceled"
 
-proc start*(n: LightClientNetwork) =
+proc start*(n: BeaconNetwork) =
   info "Starting portal beacon chain network"
   n.portalProtocol.start()
   n.processContentLoop = processContentLoop(n)
 
-proc stop*(n: LightClientNetwork) =
+proc stop*(n: BeaconNetwork) =
   n.portalProtocol.stop()
 
   if not n.processContentLoop.isNil:

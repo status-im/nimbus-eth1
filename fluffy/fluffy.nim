@@ -23,8 +23,8 @@ import
     rpc_portal_debug_api],
   ./network/state/[state_network, state_content],
   ./network/history/[history_network, history_content],
-  ./network/beacon_light_client/[
-    beacon_light_client_init_loader,
+  ./network/beacon/[
+    beacon_init_loader,
     beacon_light_client,
   ],
   ./network/wire/[portal_stream, portal_protocol_config],
@@ -173,30 +173,30 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
         let
           # Portal works only over mainnet data currently
           networkData = loadNetworkData("mainnet")
-          beaconLightClientDb = LightClientDb.new(
-            networkData, config.dataDir / "db" / "beacon_lc_db")
-          lightClientNetwork = LightClientNetwork.new(
+          beaconDb = BeaconDb.new(
+            networkData, config.dataDir / "db" / "beacon_db")
+          beaconNetwork = BeaconNetwork.new(
             d,
-            beaconLightClientDb,
+            beaconDb,
             streamManager,
             networkData.forks,
             bootstrapRecords = bootstrapRecords,
             portalConfig = portalConfig)
 
-        let lc = LightClient.new(
-          lightClientNetwork, rng, networkData,
+        let beaconLightClient = LightClient.new(
+          beaconNetwork, rng, networkData,
           LightClientFinalizationMode.Optimistic)
 
-        lc.onFinalizedHeader = onFinalizedHeader
-        lc.onOptimisticHeader = onOptimisticHeader
-        lc.trustedBlockRoot = config.trustedBlockRoot
+        beaconLightClient.onFinalizedHeader = onFinalizedHeader
+        beaconLightClient.onOptimisticHeader = onOptimisticHeader
+        beaconLightClient.trustedBlockRoot = config.trustedBlockRoot
 
         # TODO:
         # Quite dirty. Use register validate callbacks instead. Or, revisit
         # the object relationships regarding the beacon light client.
-        lightClientNetwork.processor = lc.processor
+        beaconNetwork.processor = beaconLightClient.processor
 
-        Opt.some(lc)
+        Opt.some(beaconLightClient)
       else:
         Opt.none(LightClient)
 
@@ -273,7 +273,7 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
         historyNetwork.get().portalProtocol, "history")
     if beaconLightClient.isSome():
       rpcHttpServerWithProxy.installPortalApiHandlers(
-        beaconLightClient.get().network.portalProtocol, "beaconLightClient")
+        beaconLightClient.get().network.portalProtocol, "beacon")
     # TODO: Test proxy with remote node over HTTPS
     waitFor rpcHttpServerWithProxy.start()
 

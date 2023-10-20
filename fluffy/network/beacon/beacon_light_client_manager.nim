@@ -15,8 +15,7 @@ import
   beacon_chain/spec/[forks_light_client, digest],
   beacon_chain/beacon_clock,
   beacon_chain/sync/light_client_sync_helpers,
-  "."/[beacon_light_client_network, beacon_light_client_content,
-    beacon_light_client_db]
+  "."/[beacon_network, beacon_content, beacon_db]
 
 from beacon_chain/consensus_object_pools/block_pools_types import VerifierError
 
@@ -60,7 +59,7 @@ type
     proc(): Slot {.gcsafe, raises: [].}
 
   LightClientManager* = object
-    network: LightClientNetwork
+    network: BeaconNetwork
     rng: ref HmacDrbgContext
     getTrustedBlockRoot: GetTrustedBlockRootCallback
     bootstrapVerifier: BootstrapVerifier
@@ -76,7 +75,7 @@ type
 
 func init*(
     T: type LightClientManager,
-    network: LightClientNetwork,
+    network: BeaconNetwork,
     rng: ref HmacDrbgContext,
     getTrustedBlockRoot: GetTrustedBlockRootCallback,
     bootstrapVerifier: BootstrapVerifier,
@@ -114,7 +113,7 @@ proc getOptimisticPeriod(self: LightClientManager): SyncCommitteePeriod =
 # https://github.com/ethereum/consensus-specs/blob/v1.4.0-beta.1/specs/altair/light-client/p2p-interface.md#getlightclientbootstrap
 proc doRequest(
     e: typedesc[Bootstrap],
-    n: LightClientNetwork,
+    n: BeaconNetwork,
     blockRoot: Eth2Digest
 ): Future[NetRes[ForkedLightClientBootstrap]] =
   n.getLightClientBootstrap(blockRoot)
@@ -123,7 +122,7 @@ proc doRequest(
 type LightClientUpdatesByRangeResponse = NetRes[ForkedLightClientUpdateList]
 proc doRequest(
     e: typedesc[UpdatesByRange],
-    n: LightClientNetwork,
+    n: BeaconNetwork,
     key: tuple[startPeriod: SyncCommitteePeriod, count: uint64]
 ): Future[LightClientUpdatesByRangeResponse] {.async.} =
   let (startPeriod, count) = key
@@ -139,7 +138,7 @@ proc doRequest(
 # https://github.com/ethereum/consensus-specs/blob/v1.4.0-beta.1/specs/altair/light-client/p2p-interface.md#getlightclientfinalityupdate
 proc doRequest(
     e: typedesc[FinalityUpdate],
-    n: LightClientNetwork,
+    n: BeaconNetwork,
     finalizedSlot: Slot
 ): Future[NetRes[ForkedLightClientFinalityUpdate]] =
   n.getLightClientFinalityUpdate(
@@ -149,7 +148,7 @@ proc doRequest(
 # https://github.com/ethereum/consensus-specs/blob/v1.4.0-beta.1/specs/altair/light-client/p2p-interface.md#getlightclientoptimisticupdate
 proc doRequest(
     e: typedesc[OptimisticUpdate],
-    n: LightClientNetwork,
+    n: BeaconNetwork,
     optimisticSlot: Slot
 ): Future[NetRes[ForkedLightClientOptimisticUpdate]] =
   n.getLightClientOptimisticUpdate(distinctBase(optimisticSlot))
@@ -233,7 +232,7 @@ proc workerTask[E](
           when E.V is ForkedLightClientBootstrap:
             withForkyObject(val):
               when lcDataFork > LightClientDataFork.None:
-                self.network.lightClientDb.putBootstrap(key, val)
+                self.network.beaconDb.putBootstrap(key, val)
               else:
                 notice "Received value from an unviable fork",
                   endpoint = E.name
@@ -242,7 +241,7 @@ proc workerTask[E](
               when lcDataFork > LightClientDataFork.None:
                 let period =
                   forkyObject.attested_header.beacon.slot.sync_committee_period
-                self.network.lightClientDb.putUpdateIfBetter(period, val)
+                self.network.beaconDb.putUpdateIfBetter(period, val)
               else:
                 notice "Received value from an unviable fork",
                   endpoint = E.name

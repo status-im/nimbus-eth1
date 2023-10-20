@@ -14,7 +14,7 @@ import
   beacon_chain/networking/network_metadata,
   beacon_chain/spec//eth2_apis/rest_beacon_client,
   beacon_chain/beacon_clock,
-  ../../network/beacon_light_client/beacon_light_client_content,
+  ../../network/beacon/beacon_content,
   ./exporter_common
 
 export beacon_clock
@@ -205,7 +205,7 @@ proc exportLCFinalityUpdate*(
       let
         finalizedSlot = forkyObject.finalized_header.beacon.slot
         contentKey = encode(finalityUpdateContentKey(finalizedSlot.uint64))
-        contentId = beacon_light_client_content.toContentId(contentKey)
+        contentId = beacon_content.toContentId(contentKey)
         forkDigest = forkDigestAtEpoch(
           forkDigests[], epoch(forkyObject.attested_header.beacon.slot), cfg)
         content = encodeFinalityUpdateForked(
@@ -262,7 +262,7 @@ proc exportLCOptimisticUpdate*(
       let
         slot = forkyObject.signature_slot
         contentKey = encode(optimisticUpdateContentKey(slot.uint64))
-        contentId = beacon_light_client_content.toContentId(contentKey)
+        contentId = beacon_content.toContentId(contentKey)
         forkDigest = forkDigestAtEpoch(
           forkDigests[], epoch(forkyObject.attested_header.beacon.slot), cfg)
         content = encodeOptimisticUpdateForked(
