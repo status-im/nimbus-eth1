@@ -10,40 +10,40 @@ import
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   beacon_chain/spec/forks,
   ../../network/wire/[portal_protocol, portal_stream],
-  ../../network/beacon_light_client/[
-    beacon_light_client_init_loader,
-    beacon_light_client_network
+  ../../network/beacon/[
+    beacon_init_loader,
+    beacon_network
   ],
   ../test_helpers
 
-type LightClientNode* = ref object
+type BeaconNode* = ref object
   discoveryProtocol*: discv5_protocol.Protocol
-  lightClientNetwork*: LightClientNetwork
+  beaconNetwork*: BeaconNetwork
 
 proc newLCNode*(
     rng: ref HmacDrbgContext,
     port: int,
-    networkData: NetworkInitData): LightClientNode =
+    networkData: NetworkInitData): BeaconNode =
   let
     node = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(port))
-    db = LightClientDb.new(networkData, "", inMemory = true)
+    db = BeaconDb.new(networkData, "", inMemory = true)
     streamManager = StreamManager.new(node)
-    network = LightClientNetwork.new(node, db, streamManager, networkData.forks)
+    network = BeaconNetwork.new(node, db, streamManager, networkData.forks)
 
-  return LightClientNode(discoveryProtocol: node, lightClientNetwork: network)
+  return BeaconNode(discoveryProtocol: node, beaconNetwork: network)
 
-func portalProtocol*(n: LightClientNode): PortalProtocol =
-  n.lightClientNetwork.portalProtocol
+func portalProtocol*(n: BeaconNode): PortalProtocol =
+  n.beaconNetwork.portalProtocol
 
-func localNode*(n: LightClientNode): Node =
+func localNode*(n: BeaconNode): Node =
   n.discoveryProtocol.localNode
 
-proc start*(n: LightClientNode) =
-  n.lightClientNetwork.start()
+proc start*(n: BeaconNode) =
+  n.beaconNetwork.start()
 
-proc stop*(n: LightClientNode) {.async.} =
-  n.lightClientNetwork.stop()
+proc stop*(n: BeaconNode) {.async.} =
+  n.beaconNetwork.stop()
   await n.discoveryProtocol.closeWait()
 
-proc containsId*(n: LightClientNode, contentId: ContentId): bool =
-  n.lightClientNetwork.lightClientDb.get(contentId).isSome()
+proc containsId*(n: BeaconNode, contentId: ContentId): bool =
+  n.beaconNetwork.beaconDb.get(contentId).isSome()

@@ -19,8 +19,8 @@ import
   beacon_chain/spec/datatypes/[phase0, altair, bellatrix],
   beacon_chain/spec/forks,
   beacon_chain/spec/forks_light_client,
-  ./beacon_light_client_content,
-  ./beacon_light_client_init_loader,
+  ./beacon_content,
+  ./beacon_init_loader,
   ../wire/portal_protocol
 
 from beacon_chain/spec/helpers import is_better_update, toMeta
@@ -34,7 +34,7 @@ type
     putStmt: SqliteStmt[(int64, seq[byte]), void]
     delStmt: SqliteStmt[int64, void]
 
-  LightClientDb* = ref object
+  BeaconDb* = ref object
     backend: SqStoreRef
     kv: KvStoreRef
     bestUpdates: BestLightClientUpdateStore
@@ -108,9 +108,9 @@ func close(store: var BestLightClientUpdateStore) =
   store.delStmt.disposeSafe()
 
 proc new*(
-    T: type LightClientDb, networkData: NetworkInitData,
+    T: type BeaconDb, networkData: NetworkInitData,
     path: string, inMemory = false):
-    LightClientDb =
+    BeaconDb =
   let
     db =
       if inMemory:
@@ -122,7 +122,7 @@ proc new*(
     kvStore = kvStore db.openKvStore().expectDb()
     bestUpdates = initBestUpdatesStore(db, "lcu").expectDb()
 
-  LightClientDb(
+  BeaconDb(
     backend: db,
     kv: kvStore,
     bestUpdates: bestUpdates,
@@ -139,24 +139,24 @@ proc get(kv: KvStoreRef, key: openArray[byte]): results.Opt[seq[byte]] =
 
   return res
 
-## Private LightClientDb calls
-proc get(db: LightClientDb, key: openArray[byte]): results.Opt[seq[byte]] =
+## Private BeaconDb calls
+proc get(db: BeaconDb, key: openArray[byte]): results.Opt[seq[byte]] =
   db.kv.get(key)
 
-proc put(db: LightClientDb, key, value: openArray[byte]) =
+proc put(db: BeaconDb, key, value: openArray[byte]) =
   db.kv.put(key, value).expectDb()
 
 ## Public ContentId based ContentDB calls
-proc get*(db: LightClientDb, key: ContentId):  results.Opt[seq[byte]] =
+proc get*(db: BeaconDb, key: ContentId):  results.Opt[seq[byte]] =
   # TODO: Here it is unfortunate that ContentId is a uint256 instead of Digest256.
   db.get(key.toBytesBE())
 
-proc put*(db: LightClientDb, key: ContentId, value: openArray[byte]) =
+proc put*(db: BeaconDb, key: ContentId, value: openArray[byte]) =
   db.put(key.toBytesBE(), value)
 
 # TODO Add checks that uint64 can be safely casted to int64
 proc getLightClientUpdates(
-    db: LightClientDb, start: uint64, to: uint64):
+    db: BeaconDb, start: uint64, to: uint64):
     ForkedLightClientUpdateBytesList =
   ## Get multiple consecutive LightClientUpdates for given periods
   var updates: ForkedLightClientUpdateBytesList
@@ -168,7 +168,7 @@ proc getLightClientUpdates(
   return updates
 
 proc getBestUpdate*(
-    db: LightClientDb, period: SyncCommitteePeriod):
+    db: BeaconDb, period: SyncCommitteePeriod):
     Result[ForkedLightClientUpdate, string] =
   ## Get the best ForkedLightClientUpdate for given period
   ## Note: Only the best one for a given period is being stored.
@@ -181,7 +181,7 @@ proc getBestUpdate*(
     return decodeLightClientUpdateForked(db.forkDigests, update)
 
 proc putBootstrap*(
-    db: LightClientDb,
+    db: BeaconDb,
     blockRoot: Digest, bootstrap: ForkedLightClientBootstrap) =
   # Put a ForkedLightClientBootstrap in the db.
   withForkyBootstrap(bootstrap):
@@ -196,13 +196,13 @@ proc putBootstrap*(
       db.put(contentId, encodedBootstrap)
 
 func putLightClientUpdate*(
-    db: LightClientDb, period: uint64, update: seq[byte]) =
+    db: BeaconDb, period: uint64, update: seq[byte]) =
   # Put an encoded ForkedLightClientUpdate in the db.
   let res = db.bestUpdates.putStmt.exec((period.int64, update))
   res.expect("SQL query OK")
 
 func putBestUpdate*(
-    db: LightClientDb, period: SyncCommitteePeriod,
+    db: BeaconDb, period: SyncCommitteePeriod,
     update: ForkedLightClientUpdate) =
   # Put a ForkedLightClientUpdate in the db.
   doAssert not db.backend.readOnly  # All `stmt` are non-nil
@@ -225,7 +225,7 @@ func putBestUpdate*(
       db.bestUpdates.delStmt.exec(period.int64).expect("SQL query OK")
 
 proc putUpdateIfBetter*(
-    db: LightClientDb,
+    db: BeaconDb,
     period: SyncCommitteePeriod, update: ForkedLightClientUpdate) =
   let currentUpdate = db.getBestUpdate(period).valueOr:
     # No current update for that period so we can just put this one
@@ -236,7 +236,7 @@ proc putUpdateIfBetter*(
     db.putBestUpdate(period, update)
 
 proc putUpdateIfBetter*(
-    db: LightClientDb, period: SyncCommitteePeriod, update: seq[byte]) =
+    db: BeaconDb, period: SyncCommitteePeriod, update: seq[byte]) =
   let newUpdate = decodeLightClientUpdateForked(db.forkDigests, update).valueOr:
     # TODO:
     # Need to go over the usage in offer/accept vs findcontent/content
@@ -245,7 +245,7 @@ proc putUpdateIfBetter*(
 
   db.putUpdateIfBetter(period, newUpdate)
 
-proc createGetHandler*(db: LightClientDb): DbGetHandler =
+proc createGetHandler*(db: BeaconDb): DbGetHandler =
   return (
     proc(contentKey: ByteList, contentId: ContentId): results.Opt[seq[byte]] =
       let contentKey = contentKey.decode().valueOr:
@@ -299,7 +299,7 @@ proc createGetHandler*(db: LightClientDb): DbGetHandler =
           Opt.none(seq[byte])
   )
 
-proc createStoreHandler*(db: LightClientDb): DbStoreHandler =
+proc createStoreHandler*(db: BeaconDb): DbStoreHandler =
   return (proc(
       contentKey: ByteList,
       contentId: ContentId,

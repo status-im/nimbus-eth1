@@ -39,22 +39,22 @@ proc portal_historyLocalContent(contentKey: string): string
 proc portal_historyGossip(contentKey: string, contentValue: string): int
 
 ## Portal Beacon Light Client Network json-rpc calls
-proc portal_beaconLightClientNodeInfo(): NodeInfo
-proc portal_beaconLightClientRoutingTableInfo(): RoutingTableInfo
-proc portal_beaconLightClientAddEnr(enr: Record): bool
-proc portal_beaconLightClientAddEnrs(enrs: seq[Record]): bool
-proc portal_beaconLightClientGetEnr(nodeId: NodeId): Record
-proc portal_beaconLightClientDeleteEnr(nodeId: NodeId): bool
-proc portal_beaconLightClientLookupEnr(nodeId: NodeId): Record
-proc portal_beaconLightClientPing(enr: Record): tuple[
+proc portal_beaconNodeInfo(): NodeInfo
+proc portal_beaconRoutingTableInfo(): RoutingTableInfo
+proc portal_beaconAddEnr(enr: Record): bool
+proc portal_beaconAddEnrs(enrs: seq[Record]): bool
+proc portal_beaconGetEnr(nodeId: NodeId): Record
+proc portal_beaconDeleteEnr(nodeId: NodeId): bool
+proc portal_beaconLookupEnr(nodeId: NodeId): Record
+proc portal_beaconPing(enr: Record): tuple[
   enrSeq: uint64, customPayload: string]
-proc portal_beaconLightClientFindNodes(enr: Record): seq[Record]
-proc portal_beaconLightClientFindContent(enr: Record, contentKey: string): JsonNode
-proc portal_beaconLightClientOffer(
+proc portal_beaconFindNodes(enr: Record): seq[Record]
+proc portal_beaconFindContent(enr: Record, contentKey: string): JsonNode
+proc portal_beaconOffer(
   enr: Record, contentKey: string, contentValue: string): string
-proc portal_beaconLightClientRecursiveFindNodes(nodeId: NodeId): seq[Record]
-proc portal_beaconLightClientRecursiveFindContent(contentKey: string): string
-proc portal_beaconLightClientStore(contentKey: string, contentValue: string): bool
-proc portal_beaconLightClientLocalContent(contentKey: string): string
-proc portal_beaconLightClientGossip(contentKey: string, contentValue: string): int
-proc portal_beaconLightClientRandomGossip(contentKey: string, contentValue: string): int
+proc portal_beaconRecursiveFindNodes(nodeId: NodeId): seq[Record]
+proc portal_beaconRecursiveFindContent(contentKey: string): string
+proc portal_beaconStore(contentKey: string, contentValue: string): bool
+proc portal_beaconLocalContent(contentKey: string): string
+proc portal_beaconGossip(contentKey: string, contentValue: string): int
+proc portal_beaconRandomGossip(contentKey: string, contentValue: string): int

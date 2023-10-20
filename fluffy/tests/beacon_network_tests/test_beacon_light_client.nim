@@ -14,9 +14,8 @@ import
   beacon_chain/spec/datatypes/altair,
   beacon_chain/spec/helpers,
   ../../network/wire/[portal_protocol, portal_stream],
-  ../../network/beacon_light_client/[beacon_light_client,
-    beacon_light_client_init_loader],
-  "."/[light_client_test_data, beacon_light_client_test_helpers]
+  ../../network/beacon/[beacon_init_loader, beacon_light_client],
+  "."/[light_client_test_data, beacon_test_helpers]
 
 procSuite "Portal Beacon Light Client":
   let rng = newRng()
@@ -71,7 +70,7 @@ procSuite "Portal Beacon Light Client":
     )
 
     let lc = LightClient.new(
-      lcNode1.lightClientNetwork, rng, networkData,
+      lcNode1.beaconNetwork, rng, networkData,
       LightClientFinalizationMode.Optimistic)
 
     lc.onFinalizedHeader = headerCallback(finalizedHeaders)

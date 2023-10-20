@@ -21,7 +21,7 @@ import
   # caused by `readValue` clashing ?
   # ../../nimbus/common/chain_config
   ../network/history/[history_network, history_content],
-  ../network/beacon_light_client/beacon_light_client
+  ../network/beacon/beacon_light_client
 
 # Subset of Eth JSON-RPC API: https://eth.wiki/json-rpc/API
 # Supported subset will eventually be found here:

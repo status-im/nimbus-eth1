@@ -19,4 +19,4 @@ import
   ./test_beacon_chain_block_proof_capella,
   ./test_beacon_chain_historical_roots,
   ./test_beacon_chain_historical_summaries,
-  ./beacon_light_client_tests/all_beacon_light_client_tests
+  ./beacon_network_tests/all_beacon_network_tests

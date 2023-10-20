@@ -13,14 +13,13 @@ import
   beacon_chain/gossip_processing/light_client_processor,
   beacon_chain/spec/datatypes/altair,
   beacon_chain/beacon_clock,
-  "."/[beacon_light_client_network, beacon_light_client_manager,
-    beacon_light_client_init_loader]
+  "."/[beacon_init_loader, beacon_network, beacon_light_client_manager]
 
 export
   LightClientFinalizationMode,
-  beacon_light_client_network, beacon_light_client_manager
+  beacon_network, beacon_light_client_manager
 
-logScope: topics = "portal_beacon_lc"
+logScope: topics = "beacon_lc"
 
 type
   LightClientHeaderCallback* =
@@ -28,7 +27,7 @@ type
       gcsafe, raises: [].}
 
   LightClient* = ref object
-    network*: LightClientNetwork
+    network*: BeaconNetwork
     cfg: RuntimeConfig
     forkDigests: ref ForkDigests
     getBeaconTime*: GetBeaconTimeFn
@@ -60,7 +59,7 @@ func optimisticHeader*(
 
 proc new*(
     T: type LightClient,
-    network: LightClientNetwork,
+    network: BeaconNetwork,
     rng: ref HmacDrbgContext,
     dumpEnabled: bool,
     dumpDirInvalid, dumpDirIncoming: string,
@@ -147,7 +146,7 @@ proc new*(
 
 proc new*(
     T: type LightClient,
-    network: LightClientNetwork,
+    network: BeaconNetwork,
     rng: ref HmacDrbgContext,
     networkData: NetworkInitData,
     finalizationMode: LightClientFinalizationMode): T =
