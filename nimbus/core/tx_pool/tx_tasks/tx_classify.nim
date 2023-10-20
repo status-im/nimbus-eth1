@@ -37,7 +37,11 @@ logScope:
 # ------------------------------------------------------------------------------
 
 proc checkTxBasic(xp: TxPoolRef; item: TxItemRef): bool =
-  validateTxBasic(item.tx, xp.chain.nextFork).isOk
+  let res = validateTxBasic(item.tx.removeNetworkPayload, xp.chain.nextFork)
+  if res.isOk:
+    return true
+  item.info = res.error
+  return false
 
 proc checkTxNonce(xp: TxPoolRef; item: TxItemRef): bool
     {.gcsafe,raises: [CatchableError].} =
@@ -224,7 +228,7 @@ proc classifyValidatePacked*(xp: TxPoolRef;
     tx = item.tx.eip1559TxNormalization(xp.chain.baseFee.GasInt)
     excessBlobGas = calcExcessBlobGas(vmState.parent)
 
-  roDB.validateTransaction(tx, item.sender, gasLimit, baseFee, excessBlobGas, fork).isOk
+  roDB.validateTransaction(tx.removeNetworkPayload, item.sender, gasLimit, baseFee, excessBlobGas, fork).isOk
 
 proc classifyPacked*(xp: TxPoolRef; gasBurned, moreBurned: GasInt): bool =
   ## Classifier for *packing* (i.e. adding up `gasUsed` values after executing

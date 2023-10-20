@@ -31,7 +31,7 @@ func wdRoot(x: Option[seq[WithdrawalV1]]): Option[common.Hash256]
 func txRoot(list: openArray[Web3Tx]): common.Hash256
              {.gcsafe, raises:[RlpError].} =
   {.nosideEffect.}:
-    calcTxRoot(ethTxs list)
+    calcTxRoot(ethTxs(list, removeBlobs = true))
 
 # ------------------------------------------------------------------------------
 # Public functions

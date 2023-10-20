@@ -7,7 +7,6 @@ import
   ../nimbus/core/clique/[clique_sealer, clique_desc],
   ../nimbus/[config, transaction, constants],
   ../nimbus/core/tx_pool,
-  ../nimbus/core/tx_pool/tx_item,
   ../nimbus/core/casper,
   ../nimbus/core/executor,
   ../nimbus/common/common,
@@ -268,11 +267,6 @@ proc runTxPoolPosTest*() =
       var sdb = newAccountStateDB(com.db, blk.header.stateRoot, pruneTrie = false)
       let bal = sdb.getBalance(feeRecipient)
       check not bal.isZero
-
-proc inPoolAndOk(txPool: TxPoolRef, txHash: Hash256): bool =
-  let res = txPool.getItem(txHash)
-  if res.isErr: return false
-  res.get().reject == txInfoOk
 
 proc runTxPoolBlobhashTest*() =
   var

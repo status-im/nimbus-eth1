@@ -159,7 +159,7 @@ proc cost*(tx: Transaction): UInt256 =
 proc effectiveGasTip*(tx: Transaction; baseFee: GasPrice): GasPriceEx =
   ## The effective miner gas tip for the globally argument `baseFee`. The
   ## result (which is a price per gas) might well be negative.
-  if tx.txType != TxEip1559:
+  if tx.txType < TxEip1559:
     (tx.gasPrice - baseFee.int64).GasPriceEx
   else:
     # London, EIP1559
@@ -205,6 +205,13 @@ proc tx*(item: TxItemRef): Transaction =
   ## Getter
   item.tx
 
+func rejectInfo*(item: TxItemRef): string =
+  ## Getter
+  result = $item.reject
+  if item.info.len > 0:
+    result.add ": "
+    result.add item.info
+
 # ------------------------------------------------------------------------------
 # Public functions, setters
 # ------------------------------------------------------------------------------
@@ -216,6 +223,10 @@ proc `status=`*(item: TxItemRef; val: TxItemStatus) =
 proc `reject=`*(item: TxItemRef; val: TxInfo) =
   ## Setter
   item.reject = val
+
+proc `info=`*(item: TxItemRef; val: string) =
+  ## Setter
+  item.info = val
 
 # ------------------------------------------------------------------------------
 # Public functions, pretty printing and debugging

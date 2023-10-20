@@ -1418,10 +1418,11 @@ proc sendRawTransaction(ud: RootRef, params: Args, parent: Node): RespResult {.a
 
     ctx.txPool.add(tx)
 
-    if ctx.txPool.inPoolAndOk(txHash):
+    let res = ctx.txPool.inPoolAndReason(txHash)
+    if res.isOk:
       return resp(txHash)
     else:
-      return err("transaction rejected by txpool")
+      return err(res.error)
 
   except CatchableError as em:
     return err("failed to process raw transaction: " & em.msg)

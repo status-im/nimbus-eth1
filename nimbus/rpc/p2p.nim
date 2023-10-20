@@ -274,8 +274,9 @@ proc setupEthRpc*(
       txHash   = rlpHash(signedTx)
 
     txPool.add(signedTx)
-    if not txPool.inPoolAndOk(txHash):
-      raise newException(ValueError, "transaction rejected by txpool")
+    let res = txPool.inPoolAndReason(txHash)
+    if res.isErr:
+      raise newException(ValueError, res.error)
     result = txHash.ethHashStr
 
   server.rpc("eth_call") do(call: EthCall, quantityTag: string) -> HexDataStr:
@@ -337,17 +338,19 @@ proc setupEthRpc*(
     ##
     ## data: hash of a transaction.
     ## Returns requested transaction information.
-    let txDetails = chainDB.getTransactionKey(data.toHash())
+    let txHash = data.toHash()
+    let res = txPool.getItem(txHash)
+    if res.isOk:
+      return some(populateTransactionObject(res.get().tx))
+
+    let txDetails = chainDB.getTransactionKey(txHash)
     if txDetails.index < 0:
       return none(TransactionObject)
 
     let header = chainDB.getBlockHeader(txDetails.blockNumber)
     var tx: Transaction
     if chainDB.getTransaction(header.txRoot, txDetails.index, tx):
-      result = some(populateTransactionObject(tx, header, txDetails.index))
-
-    # TODO: if the requested transaction not in blockchain
-    # try to look for pending transaction in txpool
+      result = some(populateTransactionObject(tx, some(header), some(txDetails.index)))
 
   server.rpc("eth_getTransactionByBlockHashAndIndex") do(data: EthHashStr, quantity: HexQuantityStr) -> Option[TransactionObject]:
     ## Returns information about a transaction by block hash and transaction index position.
@@ -362,7 +365,7 @@ proc setupEthRpc*(
 
     var tx: Transaction
     if chainDB.getTransaction(header.txRoot, index, tx):
-      result = some(populateTransactionObject(tx, header, index))
+      result = some(populateTransactionObject(tx, some(header), some(index)))
 
   server.rpc("eth_getTransactionByBlockNumberAndIndex") do(quantityTag: string, quantity: HexQuantityStr) -> Option[TransactionObject]:
     ## Returns information about a transaction by block number and transaction index position.
@@ -375,7 +378,7 @@ proc setupEthRpc*(
 
     var tx: Transaction
     if chainDB.getTransaction(header.txRoot, index, tx):
-      result = some(populateTransactionObject(tx, header, index))
+      result = some(populateTransactionObject(tx, some(header), some(index)))
 
   server.rpc("eth_getTransactionReceipt") do(data: EthHashStr) -> Option[ReceiptObject]:
     ## Returns the receipt of a transaction by transaction hash.
