@@ -164,11 +164,14 @@ proc toAccessTupleList(list: openArray[AccessPair]): seq[AccessTuple] =
   for x in list:
     result.add toAccessTuple(x)
 
-proc populateTransactionObject*(tx: Transaction, header: BlockHeader, txIndex: int): TransactionObject
+proc populateTransactionObject*(tx: Transaction, 
+                                header: Option[BlockHeader] = none(BlockHeader), 
+                                txIndex: Option[int] = none(int)): TransactionObject
     {.gcsafe, raises: [ValidationError].} =
   result.`type` = encodeQuantity(tx.txType.uint64)
-  result.blockHash = some(header.hash)
-  result.blockNumber = some(encodeQuantity(header.blockNumber))
+  if header.isSome:
+    result.blockHash = some(header.get().hash)
+    result.blockNumber = some(encodeQuantity(header.get().blockNumber))
   result.`from` = tx.getSender()
   result.gas = encodeQuantity(tx.gasLimit.uint64)
   result.gasPrice = encodeQuantity(tx.gasPrice.uint64)
@@ -176,7 +179,8 @@ proc populateTransactionObject*(tx: Transaction, header: BlockHeader, txIndex: i
   result.input = tx.payload
   result.nonce = encodeQuantity(tx.nonce.uint64)
   result.to = some(tx.destination)
-  result.transactionIndex = some(encodeQuantity(txIndex.uint64))
+  if txIndex.isSome:
+    result.transactionIndex = some(encodeQuantity(txIndex.get().uint64))
   result.value = encodeQuantity(tx.value)
   result.v = encodeQuantity(tx.V.uint)
   result.r = encodeQuantity(tx.R)
@@ -228,7 +232,7 @@ proc populateBlockObject*(header: BlockHeader, chain: CoreDbRef, fullTx: bool, i
     if fullTx:
       var i = 0
       for tx in chain.getBlockTransactions(header):
-        result.transactions.add %(populateTransactionObject(tx, header, i))
+        result.transactions.add %(populateTransactionObject(tx, some(header), some(i)))
         inc i
     else:
       for x in chain.getBlockTransactionHashes(header):

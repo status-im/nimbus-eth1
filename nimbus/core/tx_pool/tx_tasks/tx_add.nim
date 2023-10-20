@@ -45,7 +45,7 @@ type
     ## Temporary sorter list
     SortedSet[AccountNonce,TxItemRef]
 
-  AccouuntNonceTab = ##\
+  AccountNonceTab = ##\
     ## Temporary sorter table
     Table[EthAddress,NonceList]
 
@@ -56,7 +56,7 @@ logScope:
 # Private helper
 # ------------------------------------------------------------------------------
 
-proc getItemList(tab: var AccouuntNonceTab; key: EthAddress): var NonceList
+proc getItemList(tab: var AccountNonceTab; key: EthAddress): var NonceList
     {.gcsafe,raises: [KeyError].} =
   if not tab.hasKey(key):
     tab[key] = NonceList.init
@@ -176,18 +176,19 @@ proc addTxs*(xp: TxPoolRef;
   ##   basket, this list keeps the items with the highest nonce (handy for
   ##   chasing nonce gaps after a back-move of the block chain head.)
   ##
-  var accTab: AccouuntNonceTab
+  var accTab: AccountNonceTab
 
   for tx in txs.items:
     var reason: TxInfo
-    
+
     if tx.txType == TxEip4844:
       let res = tx.validateBlobTransactionWrapper()
       if res.isErr:
-        # move item to waste basket     
+        # move item to waste basket
         reason = txInfoErrInvalidBlob
         xp.txDB.reject(tx, reason, txItemPending, res.error)
         invalidTxMeter(1)
+        continue
 
     # Create tx item wrapper, preferably recovered from waste basket
     let rcTx = xp.recoverItem(tx, txItemPending, info)

@@ -921,6 +921,22 @@ proc inPoolAndOk*(xp: TxPoolRef; txHash: Hash256): bool =
   if res.isErr: return false
   res.get().reject == txInfoOk
 
+proc inPoolAndReason*(xp: TxPoolRef; txHash: Hash256): Result[void, string] =
+  let res = xp.getItem(txHash)
+  if res.isErr:
+    # try to look in rejecteds
+    let r = xp.txDB.byRejects.eq(txHash)
+    if r.isErr:
+      return err("cannot find tx in txpool")
+    else:
+      return err(r.get().rejectInfo)
+
+  let item = res.get()
+  if item.reject == txInfoOk:
+    return ok()
+  else:
+    return err(item.rejectInfo)
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

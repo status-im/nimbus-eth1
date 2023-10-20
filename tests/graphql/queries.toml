@@ -472,7 +472,7 @@ mutation {
   sendRawTransaction(data: "0xf86080018304cb2f94095e7baea6a6c7c4c2dfeb977efac326af552d870a801ba077c7cd36820c71821c1aed59de46e70e701c4a8dd89c9ba508ab722210f60da8a03f29825d40c7c3f7bff3ca69267e0f3fb74b2d18b8c2c4e3c135b5d3b06e288d")
 }
 """
-  errors = ["[2, 3]: Fatal: Field 'sendRawTransaction' cannot be resolved: \"transaction rejected by txpool\": @[\"sendRawTransaction\"]"]
+  errors = ["[2, 3]: Fatal: Field 'sendRawTransaction' cannot be resolved: \"Tx rejected by basic validator\": @[\"sendRawTransaction\"]"]
   result = """null"""
 
 [[units]]

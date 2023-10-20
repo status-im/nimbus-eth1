@@ -169,7 +169,7 @@ func validateEip4844Header*(
 
 proc validateBlobTransactionWrapper*(tx: Transaction):
                                      Result[void, string] {.raises: [].} =
-  if not tx.networkPayload.isNil:
+  if tx.networkPayload.isNil:
     return err("tx wrapper is none")
 
   # note: assert blobs are not malformatted
