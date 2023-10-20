@@ -81,7 +81,7 @@ func verifyBlob*(blobId: BlobID, blob: kzg.KzgBlob): bool =
 
   return true
 
-proc fillBlob(blobid: BlobID): KzgBlob =
+proc fillBlob(blobId: BlobID): KzgBlob =
   if blobId == 0:
     # Blob zero is empty blob, so leave as is
     return

@@ -19,7 +19,7 @@ import
 
 # Precalculate the first data gas cost increase
 const
-  DATA_GAS_COST_INCREMENT_EXCEED_BLOBS = getMinExcessBlobsForBlobGasPrice(2)
+  DATA_GAS_COST_INCREMENT_EXCEED_BLOBS = getMinExcessBlobsForBlobGasPrice(2).int
   TARGET_BLOBS_PER_BLOCK = int(TARGET_BLOB_GAS_PER_BLOCK div GAS_PER_BLOB)
 
 proc getGenesis(param: NetworkParams) =
@@ -56,7 +56,7 @@ proc specExecute(ws: BaseSpec): bool =
 
   result = true
   for stepId, step in cs.testSequence:
-    echo "INFO: Executing step", stepId+1, ": ", step.description()
+    echo "INFO: Executing step ", stepId+1, ": ", step.description()
     if not step.execute(blobTestCtx):
       fatal "FAIL: Error executing", step=stepId+1
       result = false
@@ -100,7 +100,7 @@ let cancunTestList* = [
         # We create the first payload, and verify that the blob transactions
         # are included in the payload.
         # We also verify that the blob transactions are included in the blobs bundle.
-        #[NewPayloads(
+        NewPayloads(
           expectedIncludedBlobCount: TARGET_BLOBS_PER_BLOCK,
           expectedBlobs:             getBlobList(0, TARGET_BLOBS_PER_BLOCK),
         ),
@@ -128,7 +128,7 @@ let cancunTestList* = [
         # But it will be included in the next payload
         NewPayloads(
           expectedIncludedBlobCount: MAX_BLOBS_PER_BLOCK,
-        ),]#
+        ),
       ]
     )
   ),

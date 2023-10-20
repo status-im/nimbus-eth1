@@ -332,26 +332,19 @@ proc getNextPayload(cl: CLMocker): bool =
 
   return true
 
-func versionedHashes(bb: BlobsBundleV1): seq[Web3Hash] =
-  #doAssert(bb.commitments.len > 0)
-  result = newSeqOfCap[BlockHash](bb.commitments.len)
-
-  for com in bb.commitments:
-    var h = keccakHash(com.bytes)
-    h.data[0] = VERSIONED_HASH_VERSION_KZG
-    result.add w3Hash h
+func versionedHashes(payload: ExecutionPayload): seq[Web3Hash] =
+  result = newSeqOfCap[BlockHash](payload.transactions.len)
+  for x in payload.transactions:
+    let tx = rlp.decode(distinctBase(x), Transaction)
+    for vs in tx.versionedHashes:
+      result.add w3Hash vs
 
 proc broadcastNewPayload(cl: CLMocker, payload: ExecutionPayload): Result[PayloadStatusV1, string] =
-  var versionedHashes: seq[Web3Hash]
-  if cl.latestBlobsBundle.isSome:
-    # Broadcast the blob bundle to all clients
-    versionedHashes = versionedHashes(cl.latestBlobsBundle.get)
-
   case payload.version
   of Version.V1: return cl.client.newPayloadV1(payload.V1)
   of Version.V2: return cl.client.newPayloadV2(payload.V2)
   of Version.V3: return cl.client.newPayloadV3(payload.V3,
-    versionedHashes,
+    versionedHashes(payload),
     cl.latestPayloadAttributes.parentBeaconBlockRoot.get)
 
 proc broadcastNextNewPayload(cl: CLMocker): bool =

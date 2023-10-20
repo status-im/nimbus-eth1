@@ -97,7 +97,7 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
   let
     hooks  = if enableAuth: @[httpJwtAuth(key)]
              else: @[]
-    server = newRpcHttpServer(["127.0.0.1:" & $conf.rpcPort], hooks)
+    server = newRpcHttpServerWithParams("127.0.0.1:" & $conf.rpcPort, hooks)
     sealer = SealingEngineRef.new(
               chain, ctx, conf.engineSigner,
               txPool, EngineStopped)
