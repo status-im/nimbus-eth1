@@ -350,6 +350,14 @@ proc handleFindContent(
     encodeMessage(ContentMessage(contentMessageType: enrsType, enrs: enrs))
 
 proc handleOffer(p: PortalProtocol, o: OfferMessage, srcId: NodeId): seq[byte] =
+  # Early return when our contentQueue is full. This means there is a backlog
+  # of content to process and potentially gossip around. Don't accept more
+  # data in this case.
+  if p.stream.contentQueue.full():
+    return encodeMessage(AcceptMessage(
+      connectionId: Bytes2([byte 0x00, 0x00]),
+      contentKeys: ContentKeysBitList.init(o.contentKeys.len)))
+
   var contentKeysBitList = ContentKeysBitList.init(o.contentKeys.len)
   var contentKeys = ContentKeysList.init(@[])
   # TODO: Do we need some protection against a peer offering lots (64x) of
@@ -370,7 +378,7 @@ proc handleOffer(p: PortalProtocol, o: OfferMessage, srcId: NodeId): seq[byte] =
       return @[]
 
   let connectionId =
-    if contentKeysBitList.countOnes() != 0 and not p.stream.contentQueue.full():
+    if contentKeysBitList.countOnes() != 0:
       p.stream.addContentOffer(srcId, contentKeys)
     else:
       # When the node does not accept any of the content offered, reply with an
