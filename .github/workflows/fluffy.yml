@@ -295,4 +295,4 @@ jobs:
 
       - name: Run fluffy testnet
         run: |
-          ./fluffy/scripts/launch_local_testnet.sh
+          ./fluffy/scripts/launch_local_testnet.sh --run-tests
