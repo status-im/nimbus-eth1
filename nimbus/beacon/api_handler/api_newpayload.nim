@@ -123,7 +123,7 @@ proc newPayload*(ben: BeaconEngineRef,
 
   trace "Inserting block without sethead",
     hash = blockHash, number = header.blockNumber
-  let body = blockBody(payload)
+  let body = blockBody(payload, removeBlobs = true)
   let vres = ben.chain.insertBlockWithoutSetHead(header, body)
   if vres != ValidationResult.OK:
     let blockHash = latestValidHash(db, parent, ttd)

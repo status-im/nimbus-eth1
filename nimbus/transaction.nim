@@ -139,7 +139,7 @@ proc validateTxEip4844(tx: Transaction) =
       (acl.storageKeys.len <= MAX_ACCESS_LIST_STORAGE_KEYS)
 
   isValid = isValid and
-    tx.versionedHashes.len <= MAX_ALLOWED_BLOB.int
+    tx.versionedHashes.len <= MAX_BLOBS_PER_BLOCK
 
   for bv in tx.versionedHashes:
     isValid = isValid and

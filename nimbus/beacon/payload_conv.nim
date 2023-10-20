@@ -105,20 +105,21 @@ func blockHeader*(p: ExecutionPayload,
     parentBeaconBlockRoot: beaconRoot
   )
 
-func blockBody*(p: ExecutionPayload):
+func blockBody*(p: ExecutionPayload, removeBlobs: bool):
                  common.BlockBody {.gcsafe, raises:[RlpError].} =
   common.BlockBody(
     uncles      : @[],
-    transactions: ethTxs p.transactions,
+    transactions: ethTxs(p.transactions, removeBlobs),
     withdrawals : ethWithdrawals p.withdrawals,
   )
 
 func ethBlock*(p: ExecutionPayload,
+               removeBlobs: bool,
                beaconRoot: Option[common.Hash256]):
                  common.EthBlock {.gcsafe, raises:[CatchableError].} =
   common.Ethblock(
     header     : blockHeader(p, beaconRoot),
     uncles     : @[],
-    txs        : ethTxs p.transactions,
+    txs        : ethTxs(p.transactions, removeBlobs),
     withdrawals: ethWithdrawals p.withdrawals,
   )
