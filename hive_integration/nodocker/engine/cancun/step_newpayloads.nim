@@ -131,9 +131,9 @@ proc verifyBlobBundle(step: NewPayloads,
       proofs=len(blobBundle.proofs),
       kzgs=len(blobBundle.commitments)
     return false
-
+    
   if len(blobBundle.blobs) != step.expectedIncludedBlobCount:
-    error "expected",
+    error "expected blobs",
       expect=step.expectedIncludedBlobCount,
       get=len(blobBundle.blobs)
     return false
@@ -168,9 +168,7 @@ proc verifyBlobBundle(step: NewPayloads,
     for expectedBlob in step.expectedBlobs:
       var found = false
       for blobData in blobDataInPayload:
-        if not expectedBlob.verifyBlob(blobData.blob):
-          return false
-        else:
+        if expectedBlob.verifyBlob(blobData.blob):
           found = true
           break
 

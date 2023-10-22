@@ -248,7 +248,7 @@ proc makeTx*(params: MakeTxParams, tc: BlobTx): Transaction =
                 else: gasTipPrice
 
   let unsignedTx = Transaction(
-    txType    : TxEIP4844,
+    txType    : TxEip4844,
     chainId   : params.chainId,
     nonce     : params.nonce,
     maxPriorityFee: gasTipCap,
