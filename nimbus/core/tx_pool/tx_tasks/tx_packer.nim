@@ -21,6 +21,7 @@ import
   ../../../db/[accounts_cache, core_db],
   ../../../common/common,
   ../../../utils/utils,
+  ../../../constants,
   "../.."/[dao, executor, validate, eip4844, casper],
   ../../../transaction/call_evm,
   ../../../transaction,
@@ -39,6 +40,7 @@ type
     cleanState: bool
     balance: UInt256
     blobGasUsed: uint64
+    numBlobPerBlock: int
 
 const
   receiptsExtensionSize = ##\
@@ -172,7 +174,9 @@ proc vmExecInit(xp: TxPoolRef): TxPackerStateRef
   TxPackerStateRef( # return value
     xp: xp,
     tr: newCoreDbRef(LegacyDbMemory).mptPrune,
-    balance: xp.chain.vmState.readOnlyStateDB.getBalance(xp.chain.feeRecipient))
+    balance: xp.chain.vmState.readOnlyStateDB.getBalance(xp.chain.feeRecipient),
+    numBlobPerBlock: 0,
+  )
 
 proc vmExecGrabItem(pst: TxPackerStateRef; item: TxItemRef): Result[bool,void]
     {.gcsafe,raises: [CatchableError].}  =
@@ -181,6 +185,11 @@ proc vmExecGrabItem(pst: TxPackerStateRef; item: TxItemRef): Result[bool,void]
   let
     xp = pst.xp
     vmState = xp.chain.vmState
+
+  # EIP-4844
+  if pst.numBlobPerBlock + item.tx.versionedHashes.len > MAX_BLOBS_PER_BLOCK:
+    return err() # stop collecting
+  pst.numBlobPerBlock += item.tx.versionedHashes.len
 
   # Verify we have enough gas in gasPool
   if vmState.gasPool < item.tx.gasLimit:
