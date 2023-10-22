@@ -14,7 +14,8 @@ import
   ./rpc/p2p,
   ./rpc/jwt_auth,
   ./rpc/cors,
-  ./rpc/hexstrings
+  ./rpc/hexstrings,
+  ./rpc/rpc_server
 
 export
   common,
@@ -23,4 +24,5 @@ export
   p2p,
   jwt_auth,
   cors,
-  hexstrings
+  hexstrings,
+  rpc_server

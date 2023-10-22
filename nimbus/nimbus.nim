@@ -270,8 +270,8 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
                 else:
                   @[httpCorsHook]
 
-    nimbus.rpcServer = newRpcHttpServer(
-      [initTAddress(conf.rpcAddress, conf.rpcPort)],
+    nimbus.rpcServer = newRpcHttpServerWithParams(
+      initTAddress(conf.rpcAddress, conf.rpcPort),
       authHooks = hooks
     )
     setupCommonRpc(nimbus.ethNode, conf, nimbus.rpcServer)
@@ -372,8 +372,8 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
   if conf.engineApiEnabled:
     #let maybeAsyncDataSource = maybeStatelessAsyncDataSource(nimbus, conf)
     if conf.engineApiPort != conf.rpcPort:
-      nimbus.engineApiServer = newRpcHttpServer(
-        [initTAddress(conf.engineApiAddress, conf.engineApiPort)],
+      nimbus.engineApiServer = newRpcHttpServerWithParams(
+        initTAddress(conf.engineApiAddress, conf.engineApiPort),
         authHooks = @[httpJwtAuthHook, httpCorsHook]
       )
       setupEngineAPI(nimbus.beaconEngine, nimbus.engineApiServer)
