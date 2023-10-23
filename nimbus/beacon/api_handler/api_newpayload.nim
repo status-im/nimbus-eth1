@@ -38,7 +38,7 @@ template validateVersion(com, timestamp, version, expectedVersion) =
       raise invalidParams("if timestamp is earlier than Shanghai, " &
         "payload must be ExecutionPayloadV1")
 
-  if version != expectedVersion:
+  if expectedVersion == Version.V3 and version != expectedVersion:
     raise invalidParams("newPayload" & $expectedVersion &
     " expect ExecutionPayload" & $expectedVersion &
     " but got ExecutionPayload" & $version)
@@ -53,6 +53,10 @@ proc newPayload*(ben: BeaconEngineRef,
     meth = "newPayload",
     number = payload.blockNumber,
     hash = payload.blockHash
+
+  if expectedVersion == Version.V3:
+    if beaconRoot.isNone:
+      raise invalidParams("newPayloadV3 expect beaconRoot but got none")
 
   let
     com = ben.com

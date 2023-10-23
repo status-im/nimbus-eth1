@@ -71,6 +71,9 @@ func w3PrevRandao*(): Web3PrevRandao =
 func w3Address*(): Web3Address =
   discard
 
+func w3Hash*(): Web3Hash =
+  discard
+
 # ------------------------------------------------------------------------------
 # Web3 types to Eth types
 # ------------------------------------------------------------------------------
@@ -143,6 +146,19 @@ func ethTxs*(list: openArray[Web3Tx], removeBlobs = false):
 
 func w3Hash*(x: common.Hash256): Web3Hash =
   Web3Hash x.data
+
+func w3Hashes*(list: openArray[common.Hash256]): seq[Web3Hash] =
+  for x in list:
+    result.add Web3Hash x.data
+
+func w3Hashes*(z: Option[seq[common.Hash256]]): Option[seq[Web3Hash]] =
+  if z.isNone: none(seq[Web3Hash])
+  else:
+    let list = z.get
+    var v = newSeq[Web3Hash](list.len)
+    for x in list:
+      v.add Web3Hash x.data
+    some(v)
 
 func w3Hash*(x: Option[common.Hash256]): Option[BlockHash] =
   if x.isNone: none(BlockHash)

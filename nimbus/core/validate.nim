@@ -226,16 +226,18 @@ func gasCost*(tx: Transaction): UInt256 =
 
 proc validateTxBasic*(
     tx:       Transaction;     ## tx to validate
-    fork:     EVMFork): Result[void, string] =
+    fork:     EVMFork,
+    validateFork: bool = true): Result[void, string] =
 
-  if tx.txType == TxEip2930 and fork < FkBerlin:
-    return err("invalid tx: Eip2930 Tx type detected before Berlin")
-
-  if tx.txType == TxEip1559 and fork < FkLondon:
-    return err("invalid tx: Eip1559 Tx type detected before London")
-
-  if tx.txType == TxEip4844 and fork < FkCancun:
-    return err("invalid tx: Eip4844 Tx type detected before Cancun")
+  if validateFork:
+    if tx.txType == TxEip2930 and fork < FkBerlin:
+      return err("invalid tx: Eip2930 Tx type detected before Berlin")
+  
+    if tx.txType == TxEip1559 and fork < FkLondon:
+      return err("invalid tx: Eip1559 Tx type detected before London")
+  
+    if tx.txType == TxEip4844 and fork < FkCancun:
+      return err("invalid tx: Eip4844 Tx type detected before Cancun")
 
   if fork >= FkShanghai and tx.contractCreation and tx.payload.len > EIP3860_MAX_INITCODE_SIZE:
     return err("invalid tx: initcode size exceeds maximum")
