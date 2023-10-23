@@ -44,17 +44,17 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
     return methods.filterIt(supportedMethods.contains(it))
 
   server.rpc("engine_newPayloadV1") do(payload: ExecutionPayloadV1) -> PayloadStatusV1:
-    return engine.newPayload(payload.executionPayload)
+    return engine.newPayload(Version.V1, payload.executionPayload)
 
   server.rpc("engine_newPayloadV2") do(payload: ExecutionPayload) -> PayloadStatusV1:
-    return engine.newPayload(payload)
+    return engine.newPayload(Version.V2, payload)
 
   server.rpc("engine_newPayloadV3") do(payload: ExecutionPayload,
                                        expectedBlobVersionedHashes: seq[Web3Hash],
                                        parentBeaconBlockRoot: Web3Hash) -> PayloadStatusV1:
     if not validateVersionedHashed(payload, expectedBlobVersionedHashes):
       return invalidStatus()
-    return engine.newPayload(payload, some(parentBeaconBlockRoot))
+    return engine.newPayload(Version.V3, payload, some(parentBeaconBlockRoot))
 
   server.rpc("engine_getPayloadV1") do(payloadId: PayloadID) -> ExecutionPayloadV1:
     return engine.getPayload(payloadId).executionPayload.V1
@@ -71,15 +71,15 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
 
   server.rpc("engine_forkchoiceUpdatedV1") do(update: ForkchoiceStateV1,
                     attrs: Option[PayloadAttributesV1]) -> ForkchoiceUpdatedResponse:
-    return engine.forkchoiceUpdated(update, attrs.payloadAttributes)
+    return engine.forkchoiceUpdated(Version.V1, update, attrs.payloadAttributes)
 
   server.rpc("engine_forkchoiceUpdatedV2") do(update: ForkchoiceStateV1,
                     attrs: Option[PayloadAttributes]) -> ForkchoiceUpdatedResponse:
-    return engine.forkchoiceUpdated(update, attrs)
+    return engine.forkchoiceUpdated(Version.V2, update, attrs)
 
   server.rpc("engine_forkchoiceUpdatedV3") do(update: ForkchoiceStateV1,
                     attrs: Option[PayloadAttributes]) -> ForkchoiceUpdatedResponse:
-    return engine.forkchoiceUpdated(update, attrs)
+    return engine.forkchoiceUpdated(Version.V3, update, attrs)
 
   server.rpc("engine_getPayloadBodiesByHashV1") do(hashes: seq[Web3Hash]) ->
                                                seq[Option[ExecutionPayloadBodyV1]]:

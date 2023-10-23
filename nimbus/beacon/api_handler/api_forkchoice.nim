@@ -19,7 +19,7 @@ import
 
 {.push gcsafe, raises:[CatchableError].}
 
-template validateVersion(attrsOpt, com) =
+template validateVersion(attrsOpt, com, expectedVersion) =
   if attrsOpt.isSome:
     let
       attr      = attrsOpt.get
@@ -39,7 +39,13 @@ template validateVersion(attrsOpt, com) =
         raise invalidParams("if timestamp is earlier than Shanghai," &
           " payloadAttributes must be PayloadAttributesV1")
 
+    if version != expectedVersion:
+      raise invalidParams("forkChoiceUpdated" & $expectedVersion &
+      " expect PayloadAttributes" & $expectedVersion &
+      " but got PayloadAttributes" & $version)
+
 proc forkchoiceUpdated*(ben: BeaconEngineRef,
+                        expectedVersion: Version,
                         update: ForkchoiceStateV1,
                         attrsOpt: Option[PayloadAttributes]):
                              ForkchoiceUpdatedResponse =
@@ -49,7 +55,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     chain = ben.chain
     blockHash = ethHash update.headBlockHash
 
-  validateVersion(attrsOpt, com)
+  validateVersion(attrsOpt, com, expectedVersion)
 
   if blockHash == common.Hash256():
     warn "Forkchoice requested update to zero hash"

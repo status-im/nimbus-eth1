@@ -19,7 +19,7 @@ import
 
 {.push gcsafe, raises:[CatchableError].}
 
-template validateVersion(com, timestamp, version) =
+template validateVersion(com, timestamp, version, expectedVersion) =
   if com.isCancunOrLater(timestamp):
     if version != Version.V3:
       raise invalidParams("if timestamp is Cancun or later, " &
@@ -38,7 +38,14 @@ template validateVersion(com, timestamp, version) =
       raise invalidParams("if timestamp is earlier than Shanghai, " &
         "payload must be ExecutionPayloadV1")
 
+  if version != expectedVersion:
+    raise invalidParams("newPayload" & $expectedVersion &
+    " expect ExecutionPayload" & $expectedVersion &
+    " but got ExecutionPayload" & $version)
+
+
 proc newPayload*(ben: BeaconEngineRef,
+                 expectedVersion: Version,
                  payload: ExecutionPayload,
                  beaconRoot = none(Web3Hash)): PayloadStatusV1 =
 
@@ -53,7 +60,7 @@ proc newPayload*(ben: BeaconEngineRef,
     timestamp = ethTime payload.timestamp
     version = payload.version
 
-  validateVersion(com, timestamp, version)
+  validateVersion(com, timestamp, version, expectedVersion)
 
   var header = blockHeader(payload, ethHash beaconRoot)
   let blockHash = ethHash payload.blockHash
