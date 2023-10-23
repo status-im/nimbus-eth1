@@ -3,6 +3,12 @@
 Fluffy is the Nimbus client implementation of the
 [Portal network specifications](https://github.com/ethereum/portal-network-specs/blob/master/portal-network.md).
 
+The Portal Network aims to deliver a reliable, sync-free, and decentralized
+access to the Ethereum blockchain. The network can be used by a light client to
+get access to Ethereum data and as such become a drop-in replacement for full
+nodes by providing that data through the existing
+[Ethereum JSON RPC Execution API](https://github.com/ethereum/execution-apis).
+
 This book describes how to build, run and monitor the Fluffy client, and how to
 use and test its currently implemented functionality.
 
