@@ -3,14 +3,19 @@
 Fluffy is the Nimbus client implementation of the
 [Portal network specifications](https://github.com/ethereum/portal-network-specs/blob/master/portal-network.md).
 
-The Portal Network is a project still in research phase.
-This client is thus still highly experimental.
-
-Some of the sub-networks are already operational and can be tested in a local
-setting or in the public testnet.
-
 This book describes how to build, run and monitor the Fluffy client, and how to
-test and use its currently implemented functionality.
+use and test its currently implemented functionality.
+
+To quickly get your Fluffy node up and running, follow the quickstart page:
+
+  - [Quickstart for Linux / macOS users](./quick-start.md)
+  - [Quickstart for Windows users](./quick-start-windows.md)
+
+# Development status
+The Portal Network is a project still in research phase.
+This client is thus still experimental.
+
+However, the Portal history and Portal beacon sub-networks are already operational and can be tested on the public testnet or in a local testnet.
 
 ## Get in touch
 
