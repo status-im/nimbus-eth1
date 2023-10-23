@@ -1,8 +1,38 @@
-# Seeding data into the Portal history network
+# Bridging content: Portal history network
 
-## Seeding from locally stored history data
+## From content bridges
 
-### Building and seeding epoch accumulators into the Portal history network
+### Seeding post-merge block data through the `beacon_lc_bridge`
+
+Run a Fluffy node with the JSON-RPC API enabled.
+
+```bash
+./build/fluffy --rpc
+```
+
+Build & run the `beacon_lc_bridge`:
+```bash
+make beacon_lc_bridge
+
+TRUSTED_BLOCK_ROOT=0x1234567890123456789012345678901234567890123456789012345678901234 # Replace with trusted block root.
+./build/beacon_lc_bridge --trusted-block-root=${TRUSTED_BLOCK_ROOT}
+```
+
+The `beacon_lc_bridge` will start with the consensus light client sync follow
+beacon block gossip. Once it is synced, the execution payload of new beacon
+blocks will be extracted and injected in the Portal network as execution headers
+and blocks.
+
+> Note: The execution headers will come without a proof for now.
+
+The injection into the Portal network is done via the
+`portal_historyGossip` JSON-RPC endpoint of the running Fluffy node.
+
+> Note: Backfilling of block bodies and headers is not yet supported.
+
+## From locally stored block data
+
+### Building and seeding epoch accumulators
 
 #### Step 1: Building the epoch accumulators
 1. Set-up access to an Ethereum JSON-RPC endpoint (e.g. local geth instance)
@@ -12,7 +42,7 @@ that can serve the data.
 *.e2s files arranged per epoch (8192 blocks):
 
 ```bash
-make fluffy-tools
+make eth_data_exporter
 
 ./build/eth_data_exporter history exportEpochHeaders --data-dir:"./user_data_dir/"
 ```
@@ -31,7 +61,7 @@ Run Fluffy and trigger the propagation of data with the
 `portal_history_propagateEpochAccumulators` JSON-RPC API call:
 
 ```bash
-./build/fluffy --rpc --table-ip-limit:1024 --bucket-ip-limit:24
+./build/fluffy --rpc
 
 # From another terminal
 curl -s -X POST -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":"1","method":"portal_history_propagateEpochAccumulators","params":["./user_data_dir/"]}' http://localhost:8545 | jq
@@ -44,15 +74,16 @@ accumulators are available on the history network:
 
 Make sure you still have a fluffy instance running, if not run:
 ```bash
-./build/fluffy --rpc --table-ip-limit:1024 --bucket-ip-limit:24
+./build/fluffy --rpc
 ```
 
 Run the `content_verifier` tool and see if all epoch accumulators are found:
 ```bash
+make content_verifier
 ./build/content_verifier
 ```
 
-### Downloading & seeding block data into the Portal network
+### Downloading & seeding block data
 
 1. Set-up access to an Ethereum JSON-RPC endpoint (e.g. local geth instance)
 that can serve the data.
@@ -61,7 +92,7 @@ JSON-RPC endpoint into the format which is suitable for reading data into
 Fluffy client and propagating into the network:
 
 ```bash
-make fluffy-tools
+make eth_data_exporter
 
 ./build/eth_data_exporter history exportBlockData--initial-block:1 --end-block:10 --data-dir:"/user_data_dir/"
 ```
@@ -73,38 +104,8 @@ This will store blocks 1 to 10 into a json file located at
 `portal_history_propagate` JSON-RPC API call:
 
 ```bash
-./build/fluffy --table-ip-limit:1024 --bucket-ip-limit:24 --log-level:info --rpc
+./build/fluffy --rpc
 
 # From another shell
 curl -s -X POST -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":"1","method":"portal_history_propagate","params":["./user_data_dir/eth-history-data.json"]}' http://localhost:8545 | jq
 ```
-
-## Seeding from content bridges
-
-### Seeding post-merge block headers and bodies through the beacon chain bridge
-
-Run a Fluffy node with the JSON-RPC API enabled.
-
-```bash
-./build/fluffy --rpc --table-ip-limit:1024 --bucket-ip-limit:24
-```
-
-Build & run the `beacon_lc_bridge`:
-```bash
-make beacon_lc_bridge
-
-TRUSTED_BLOCK_ROOT=0x1234567890123456789012345678901234567890123456789012345678901234 # Replace this
-./build/beacon_lc_bridge --trusted-block-root=${TRUSTED_BLOCK_ROOT}
-```
-
-The `beacon_lc_bridge` will start with the consensus light client sync follow
-beacon block gossip. Once it is synced, the execution payload of new beacon
-blocks will be extracted and injected in the Portal network as execution headers
-and blocks.
-
-> Note: The execution headers will come without a proof for now.
-
-The injection into the Portal network is done via the
-`portal_historyGossip` JSON-RPC endpoint of the running Fluffy node.
-
-> Note: Backfilling of block bodies and headers is not yet supported.

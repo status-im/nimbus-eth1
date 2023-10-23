@@ -121,26 +121,6 @@ Find more details on the usage and workings of the local testnet script
 Follow the steps outlined [here](../README.md#windows) to build fluffy on Windows.
 
 
-## Development tools and documentation
-
-The fluffy directory also holds several tools to help development of the Portal
-networks.
-
-Command to build the tools:
-
-```bash
-make fluffy-tools -j6
-```
-
-Additional documention on the tools or on what you can use them for:
-
-- [eth_data_exporter](./docs/eth_data_exporter.md): tool to extract content from
-EL or CL and prepare it as Portal content and content keys.
-- [Content seeding](./docs/content_seeding.md): Documentation on how to retrieve & generate history data and how to seed it into the network
-- [Manual protocol interop testing](./docs/protocol_interop.md): commands on how to manually test the discv5 and Portal protocol request and responses
-- [Local testnet script](./docs/local_testnet.md): Documentation on the local testnet script and how to use it
-
-
 ## The basics for developers
 
 When working on this repository, you can run the `env.sh` script to run a
