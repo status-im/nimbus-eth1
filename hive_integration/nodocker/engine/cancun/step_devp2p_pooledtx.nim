@@ -1,134 +1,114 @@
 import
-  ./step
+  std/strutils,
+  eth/common,
+  chronicles,
+  ./step_desc,
+  ./helpers,
+  ../types,
+  ../test_env,
+  ../../../../nimbus/utils/utils,
+  ../../../../nimbus/sync/protocol
 
 # A step that requests a Transaction hash via P2P and expects the correct full blob tx
-type DevP2PRequestPooledTransactionHash struct {
-  # Client index to request the transaction hash from
-  ClientIndex uint64
-  # Transaction Index to request
-  TransactionIndexes []uint64
-  # Wait for a new pooled transaction message before actually requesting the transaction
-  WaitForNewPooledTransaction bool
-}
+type
+  DevP2PRequestPooledTransactionHash* = ref object of TestStep
+    # Client index to request the transaction hash from
+    clientIndex*: int
+    # Transaction Index to request
+    transactionIndexes*: seq[int]
+    # Wait for a new pooled transaction message before actually requesting the transaction
+    waitForNewPooledTransaction*: bool
 
-func (step DevP2PRequestPooledTransactionHash) Execute(t *CancunTestContext) error {
+method execute*(step: DevP2PRequestPooledTransactionHash, ctx: CancunTestContext): bool =
   # Get client index's enode
-  if step.ClientIndex >= uint64(len(t.TestEngines)) {
-    return error "invalid client index %d", step.ClientIndex)
-  }
-  engine = t.Engines[step.ClientIndex]
-  conn, err = devp2p.PeerEngineClient(engine, env.clMock)
-  if err != nil {
-    return error "error peering engine client: %v", err)
-  }
-  defer conn.Close()
-  info "Connected to client %d, remote public key: %s", step.ClientIndex, conn.RemoteKey())
+  let env = ctx.env
+  doAssert(step.clientIndex < env.numEngines, "invalid client index" & $step.clientIndex)
+  let engine = env.engines(step.clientIndex)
+  let sec = env.addEngine(false, false)
 
-  var (
-    txHashes = make([]Hash256, len(step.TransactionIndexes))
-    txs      = make([]typ.Transaction, len(step.TransactionIndexes))
-    ok       bool
-  )
-  for i, txIndex = range step.TransactionIndexes {
-    txHashes[i], ok = t.TestBlobTxPool.HashesByIndex[txIndex]
-    if !ok {
-      return error "transaction index %d not found", step.TransactionIndexes[0])
-    }
-    txs[i], ok = t.TestBlobTxPool.transactions[txHashes[i]]
-    if !ok {
-      return error "transaction %s not found", txHashes[i].String())
-    }
-  }
+  engine.connect(sec.node)
 
-  # Timeout value for all requests
-  timeout = 20 * time.Second
+  var
+    txHashes = newSeq[common.Hash256](step.transactionIndexes.len)
+    txs      = newSeq[Transaction](step.transactionIndexes.len)
+
+  for i, txIndex in step.transactionIndexes:
+    if not ctx.txPool.hashesByIndex.hasKey(txIndex):
+      error "transaction not found", index=step.transactionIndexes[i]
+      return false
+
+    txHashes[i] = ctx.txPool.hashesByIndex[txIndex]
+
+    if not ctx.txPool.transactions.hasKey(txHashes[i]):
+      error "transaction not found", hash=txHashes[i].short
+      return false
+
+    txs[i] = ctx.txPool.transactions[txHashes[i]]
 
   # Wait for a new pooled transaction message
-  if step.WaitForNewPooledTransaction {
-    msg, err = conn.WaitForResponse(timeout, 0)
-    if err != nil {
-      return errors.Wrap(err, "error waiting for response")
-    }
-    switch msg = msg.(type) {
-    case *devp2p.NewPooledTransactionHashes:
-      if len(msg.Hashes) != len(txHashes) {
-        return error "expected %d hashes, got %d", len(txHashes), len(msg.Hashes))
-      }
-      if len(msg.Types) != len(txHashes) {
-        return error "expected %d types, got %d", len(txHashes), len(msg.Types))
-      }
-      if len(msg.Sizes) != len(txHashes) {
-        return error "expected %d sizes, got %d", len(txHashes), len(msg.Sizes))
-      }
-      for i = 0; i < len(txHashes); i++ {
-        hash, typ, size = msg.Hashes[i], msg.Types[i], msg.Sizes[i]
-        # Get the transaction
-        tx, ok = t.TestBlobTxPool.transactions[hash]
-        if !ok {
-          return error "transaction %s not found", hash.String())
-        }
+  if step.waitForNewPooledTransaction:
+    let period = chronos.seconds(1)
+    var loop = 0
 
-        if typ != tx.Type() {
-          return error "expected type %d, got %d", tx.Type(), typ)
-        }
+    while loop < 20:
+      if sec.numTxsInPool >= txs.len:
+        break
+      waitFor sleepAsync(period)
+      inc loop
 
-        b, err = tx.MarshalBinary()
-        if err != nil {
-          return errors.Wrap(err, "error marshaling transaction")
-        }
-        if size != uint32(len(b)) {
-          return error "expected size %d, got %d", len(b), size)
-        }
-      }
-    default:
-      return error "unexpected message type: %T", msg)
-    }
-  }
+    # those txs above should have been relayed to second client
+    # when it first connected
+    let secTxs = sec.getTxsInPool(txHashes)
+    if secTxs.len != txHashes.len:
+      error "expected txs from newPooledTxs num mismatch",
+        expect=txHashes.len,
+        get=secTxs.len
+      return false
+
+    for i, secTx in secTxs:
+      let secTxBytes = rlp.encode(secTx)
+      let localTxBytes = rlp.encode(txs[i])
+
+      if secTxBytes.len != localTxBytes.len:
+        error "expected tx from newPooledTxs size mismatch",
+          expect=localTxBytes.len,
+          get=secTxBytes.len
+        return false
+
+      if secTxBytes != localTxBytes:
+        error "expected tx from gnewPooledTxs bytes not equal"
+        return false
 
   # Send the request for the pooled transactions
-  getTxReq = &devp2p.GetPooledTransactions{
-    RequestId:                   1234,
-    GetPooledTransactionsPacket: txHashes,
-  }
-  if size, err = conn.Write(getTxReq); err != nil {
-    return errors.Wrap(err, "could not write to conn")
-  else:
-    info "Wrote %d bytes to conn", size)
-  }
+  let peer = sec.peer
+  let res = waitFor peer.getPooledTransactions(txHashes)
+  if res.isNone:
+    error "getPooledTransactions returns none"
+    return false
 
-  # Wait for the response
-  msg, err = conn.WaitForResponse(timeout, getTxReq.RequestId)
-  if err != nil {
-    return errors.Wrap(err, "error waiting for response")
-  }
-  switch msg = msg.(type) {
-  case *devp2p.PooledTransactions:
-    if len(msg.PooledTransactionsBytesPacket) != len(txHashes) {
-      return error "expected %d txs, got %d", len(txHashes), len(msg.PooledTransactionsBytesPacket))
-    }
-    for i, txBytes = range msg.PooledTransactionsBytesPacket {
-      tx = txs[i]
+  let remoteTxs = res.get
+  if remoteTxs.transactions.len != txHashes.len:
+    error "expected txs from getPooledTransactions num mismatch",
+      expect=txHashes.len,
+      get=remoteTxs.transactions.len
+    return false
 
-      expBytes, err = tx.MarshalBinary()
-      if err != nil {
-        return errors.Wrap(err, "error marshaling transaction")
-      }
+  for i, remoteTx in remoteTxs.transactions:
+    let remoteTxBytes = rlp.encode(remoteTx)
+    let localTxBytes = rlp.encode(txs[i])
 
-      if len(expBytes) != len(txBytes) {
-        return error "expected size %d, got %d", len(expBytes), len(txBytes))
-      }
+    if remoteTxBytes.len != localTxBytes.len:
+      error "expected tx from getPooledTransactions size mismatch",
+        expect=localTxBytes.len,
+        get=remoteTxBytes.len
+      return false
 
-      if !bytes.Equal(expBytes, txBytes) {
-        return error "expected tx %#x, got %#x", expBytes, txBytes)
-      }
+    if remoteTxBytes != localTxBytes:
+      error "expected tx from getPooledTransactions bytes not equal"
+      return false
 
-    }
-  default:
-    return error "unexpected message type: %T", msg)
-  }
-  return nil
-}
+  return true
 
-func (step DevP2PRequestPooledTransactionHash) Description() string {
-  return fmt.Sprintf("DevP2PRequestPooledTransactionHash: client %d, transaction indexes %v", step.ClientIndex, step.TransactionIndexes)
-}
+method description*(step: DevP2PRequestPooledTransactionHash): string =
+  "DevP2PRequestPooledTransactionHash: client $1, transaction indexes $1" % [
+    $step.clientIndex, $step.transactionIndexes]

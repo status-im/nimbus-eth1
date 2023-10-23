@@ -1,47 +1,30 @@
 import
-  ./step
+  std/strutils,
+  ./step_desc,
+  ../test_env
 
 # A step that launches a new client
-type LaunchClients struct {
-  client.EngineStarter
-  ClientCount              uint64
-  SkipConnectingToBootnode bool
-  SkipAddingToCLMock       bool
-}
+type
+  LaunchClients* = ref object of TestStep
+    clientCount*             : int
+    skipConnectingToBootnode*: bool
+    skipAddingToCLMock*      : bool
 
-func (step LaunchClients) GetClientCount() uint64 {
-  clientCount = step.ClientCount
-  if clientCount == 0 {
+func getClientCount(step: LaunchClients): int =
+  var clientCount = step.clientCount
+  if clientCount == 0:
     clientCount = 1
-  }
   return clientCount
-}
 
-func (step LaunchClients) Execute(t *CancunTestContext) error {
+method execute*(step: LaunchClients, ctx: CancunTestContext): bool =
   # Launch a new client
-  var (
-    client client.EngineClient
-    err    error
-  )
-  clientCount = step.GetClientCount()
-  for i = uint64(0); i < clientCount; i++ {
-    if !step.SkipConnectingToBootnode {
-      client, err = step.StartClient(t.T, t.TestContext, t.Genesis, t.ClientParams, t.ClientFiles, t.Engines[0])
-    else:
-      client, err = step.StartClient(t.T, t.TestContext, t.Genesis, t.ClientParams, t.ClientFiles)
-    }
-    if err != nil {
-      return err
-    }
-    t.Engines = append(t.Engines, client)
-    t.TestEngines = append(t.TestEngines, test.NewTestEngineClient(t.Env, client))
-    if !step.SkipAddingToCLMock {
-      env.clMock.AddEngineClient(client)
-    }
-  }
-  return nil
-}
+  let clientCount = step.getClientCount()
+  for i in 0..<clientCount:
+    let connectBootNode = not step.skipConnectingToBootnode
+    let addToClMock = not step.skipAddingToCLMock
+    discard ctx.env.addEngine(addToClMock, connectBootNode)
 
-func (step LaunchClients) Description() string {
-  return fmt.Sprintf("Launch %d new engine client(s)", step.GetClientCount())
-}
+  return true
+
+method description*(step: LaunchClients): string =
+  "Launch $1 new engine client(s)" % [$step.getClientCount()]

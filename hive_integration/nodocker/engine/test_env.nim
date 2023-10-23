@@ -82,11 +82,12 @@ func engine*(env: TestEnv): EngineEnv =
 proc setupCLMock*(env: TestEnv) =
   env.clmock = newCLMocker(env.engine, env.engine.com)
 
-proc addEngine*(env: TestEnv, addToCL: bool = true): EngineEnv =
+proc addEngine*(env: TestEnv, addToCL: bool = true, connectBootNode: bool = true): EngineEnv =
   doAssert(env.clMock.isNil.not)
   var conf = env.conf # clone the conf
   let eng = env.addEngine(conf)
-  eng.connect(env.engine.node)
+  if connectBootNode:
+    eng.connect(env.engine.node)
   if addToCL:
     env.clMock.addEngine(eng)
   eng
@@ -144,10 +145,10 @@ proc sendTx*(env: TestEnv, tx: Transaction): bool =
 
 proc sendTx*(env: TestEnv, sender: TestAccount, eng: EngineEnv, tc: BlobTx): Result[Transaction, void] =
   env.sender.sendTx(sender, eng.client, tc)
-  
+
 proc replaceTx*(env: TestEnv, sender: TestAccount, eng: EngineEnv, tc: BlobTx): Result[Transaction, void] =
   env.sender.replaceTx(sender, eng.client, tc)
-  
+
 proc verifyPoWProgress*(env: TestEnv, lastBlockHash: common.Hash256): bool =
   let res = waitFor env.client.verifyPoWProgress(lastBlockHash)
   if res.isErr:
