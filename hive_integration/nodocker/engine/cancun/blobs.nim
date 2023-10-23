@@ -26,6 +26,12 @@ func getBlobList*(startId: BlobID, count: int): BlobIDs =
   for i in 0..<count:
     result[i] = startId + BlobID(i)
 
+func getBlobList*(startId: BlobID, count: int, addition: BlobID): BlobIDs =
+  result = newSeq[BlobID](count+1)
+  for i in 0..<count:
+    result[i] = startId + BlobID(i)
+  result[^1] = addition
+    
 func getBlobListByIndex*(startIndex: BlobID, endIndex: BlobID): BlobIDs =
   var count = uint64(0)
   if endIndex > startIndex:

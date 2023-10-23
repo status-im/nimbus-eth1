@@ -43,6 +43,9 @@ type
     # Chain History
     headerHistory           : Table[uint64, common.BlockHeader]
 
+    # Payload ID History
+    payloadIDHistory        : Table[string, PayloadID]
+
     # PoS Chain History Information
     prevRandaoHistory*      : Table[uint64, common.Hash256]
     executedPayloadHistory* : Table[uint64, ExecutionPayload]
@@ -77,6 +80,21 @@ type
     onForkchoiceBroadcast*     : proc(): bool {.gcsafe.}
     onSafeBlockChange *        : proc(): bool {.gcsafe.}
     onFinalizedBlockChange*    : proc(): bool {.gcsafe.}
+
+
+proc collectBlobHashes(list: openArray[Web3Tx]): seq[common.Hash256] =
+  for w3tx in list:
+    let tx = ethTx(w3Tx)
+    for h in tx.versionedHashes:
+      result.add h
+
+func latestExecutableData*(cl: CLMocker): ExecutableData =
+  ExecutableData(
+    basePayload: cl.latestPayloadBuilt,
+    beaconRoot : ethHash cl.latestPayloadAttributes.parentBeaconBlockRoot,
+    attr       : cl.latestPayloadAttributes,
+    versionedHashes: some(collectBlobHashes(cl.latestPayloadBuilt.transactions)),
+  )
 
 func latestPayloadNumber*(h: Table[uint64, ExecutionPayload]): uint64 =
   result = 0'u64
@@ -165,6 +183,19 @@ proc isBlockPoS*(cl: CLMocker, bn: common.BlockNumber): bool =
   if number > bn:
     return false
 
+  return true
+
+proc addPayloadID*(cl: CLMocker, eng: EngineEnv, newPayloadID: PayloadID): bool =
+  # Check if payload ID has been used before
+  var zeroPayloadID: PayloadID
+  if cl.payloadIDHistory.getOrDefault(eng.ID(), zeroPayloadID) == newPayloadID:
+    error "reused payload ID", ID = newPayloadID.toHex
+    return false
+
+  # Add payload ID to history
+  cl.payloadIDHistory[eng.ID()] = newPayloadID
+  info "CLMocker: Added payload for client",
+    ID=newPayloadID.toHex, ID=eng.ID()
   return true
 
 # Return the per-block timestamp value increment
@@ -472,12 +503,14 @@ proc produceSingleBlock*(cl: CLMocker, cb: BlockProcessCallbacks): bool {.gcsafe
 
   if cb.onPayloadProducerSelected != nil:
     if not cb.onPayloadProducerSelected():
+      debugEcho "***PAYLOAD PRODUCER SELECTED ERROR***"
       return false
 
   cl.generatePayloadAttributes()
 
   if cb.onPayloadAttributesGenerated != nil:
     if not cb.onPayloadAttributesGenerated():
+      debugEcho "***ON PAYLOAD ATTRIBUTES ERROR***"
       return false
 
   if not cl.requestNextPayload():
@@ -487,6 +520,7 @@ proc produceSingleBlock*(cl: CLMocker, cb: BlockProcessCallbacks): bool {.gcsafe
 
   if cb.onRequestNextPayload != nil:
     if not cb.onRequestNextPayload():
+      debugEcho "***ON REQUEST NEXT PAYLOAD ERROR***"
       return false
 
   # Give the client a delay between getting the payload ID and actually retrieving the payload
@@ -494,18 +528,21 @@ proc produceSingleBlock*(cl: CLMocker, cb: BlockProcessCallbacks): bool {.gcsafe
     let period = chronos.seconds(cl.payloadProductionClientDelay)
     waitFor sleepAsync(period)
 
-  if not cl.getNextPayload():
+  if not cl.getNextPayload():    
     return false
 
   if cb.onGetPayload != nil:
     if not cb.onGetPayload():
+      debugEcho "***ON GET PAYLOAD ERROR***"
       return false
 
   if not cl.broadcastNextNewPayload():
+    debugEcho "***ON BROADCAST NEXT NEW PAYLOAD ERROR***"
     return false
 
   if cb.onNewPayloadBroadcast != nil:
     if not cb.onNewPayloadBroadcast():
+      debugEcho "***ON NEW PAYLOAD BROADCAST ERROR***"
       return false
 
   # Broadcast forkchoice updated with new HeadBlock to all clients
@@ -523,20 +560,24 @@ proc produceSingleBlock*(cl: CLMocker, cb: BlockProcessCallbacks): bool {.gcsafe
     cl.latestForkchoice.finalizedBlockHash = cl.headHashHistory[hhLen - cl.slotsToFinalized - 1]
 
   if not cl.broadcastLatestForkchoice():
+    debugEcho "***ON BROADCAST LATEST FORK CHOICE ERROR***"
     return false
 
   if cb.onForkchoiceBroadcast != nil:
     if not cb.onForkchoiceBroadcast():
+      debugEcho "***ON FORK CHOICE BROADCAST ERROR***"
       return false
 
   # Broadcast forkchoice updated with new SafeBlock to all clients
   if cb.onSafeBlockChange != nil and cl.latestForkchoice.safeBlockHash != previousForkchoice.safeBlockHash:
     if not cb.onSafeBlockChange():
+      debugEcho "***ON SAFE BLOCK CHANGE ERROR***"
       return false
 
   # Broadcast forkchoice updated with new FinalizedBlock to all clients
   if cb.onFinalizedBlockChange != nil and cl.latestForkchoice.finalizedBlockHash != previousForkchoice.finalizedBlockHash:
     if not cb.onFinalizedBlockChange():
+      debugEcho "***ON FINALIZED BLOCK CHANGE ERROR***"
       return false
 
   # Broadcast forkchoice updated with new FinalizedBlock to all clients

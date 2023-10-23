@@ -29,6 +29,12 @@ type
     run*  : proc(spec: BaseSpec): bool
     spec* : BaseSpec
 
+  ExecutableData* = object
+    basePayload*: ExecutionPayload
+    beaconRoot* : Option[common.Hash256]
+    attr*       : PayloadAttributes
+    versionedHashes*: Option[seq[common.Hash256]]
+
 const
   DefaultTimeout* = 60 # seconds
   DefaultSleep* = 1
@@ -152,3 +158,27 @@ template expectLatestValidHash*(res: untyped, expectedHash: Web3Hash) =
     error "Expect latest valid hash isSome"
   testCond s.latestValidHash.get == expectedHash:
     error "latest valid hash mismatch", expect=expectedHash, get=s.latestValidHash.get
+
+template expectErrorCode*(res: untyped, errCode: int, expectedDesc: string) =
+  testCond res.isErr:
+    error "unexpected result, want error, get ok"
+  testCond res.error.find($errCode) != -1:
+    fatal "DEBUG", msg=expectedDesc
+
+template expectNoError*(res: untyped, expectedDesc: string) =
+  testCond res.isOk:
+    fatal "DEBUG", msg=expectedDesc, err=res.error
+
+template expectPayloadStatus*(res: untyped, cond: PayloadExecutionStatus) =
+  testCond res.isOk:
+    error "Unexpected FCU Error", msg=res.error
+  let s = res.get()
+  testCond s.payloadStatus.status == cond:
+    error "Unexpected FCU status", expect=cond, get=s.payloadStatus.status
+
+template expectNPStatus*(res: untyped, cond: PayloadExecutionStatus) =
+  testCond res.isOk:
+    error "Unexpected newPayload error", msg=res.error
+  let s = res.get()
+  testCond s.status == cond:
+    error "Unexpected newPayload status", expect=cond, get=s.status

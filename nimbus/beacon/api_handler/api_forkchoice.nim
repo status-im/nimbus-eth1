@@ -39,7 +39,7 @@ template validateVersion(attrsOpt, com, expectedVersion) =
         raise invalidParams("if timestamp is earlier than Shanghai," &
           " payloadAttributes must be PayloadAttributesV1")
 
-    if version != expectedVersion:
+    if expectedVersion == Version.V3 and version != expectedVersion:
       raise invalidParams("forkChoiceUpdated" & $expectedVersion &
       " expect PayloadAttributes" & $expectedVersion &
       " but got PayloadAttributes" & $version)

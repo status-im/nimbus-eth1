@@ -11,6 +11,7 @@ import
     core/sealer,
     core/chain,
     core/tx_pool,
+    core/tx_pool/tx_item,
     core/block_import,
     rpc,
     sync/protocol,
@@ -34,6 +35,7 @@ type
     ttd    : DifficultyInt
     client : RpcHttpClient
     sync   : BeaconSyncRef
+    txPool : TxPoolRef
 
 const
   baseFolder  = "hive_integration/nodocker/engine"
@@ -135,7 +137,8 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
     server : server,
     sealer : sealer,
     client : client,
-    sync   : sync
+    sync   : sync,
+    txPool : txPool
   )
 
 proc close*(env: EngineEnv) =
@@ -169,3 +172,24 @@ func node*(env: EngineEnv): ENode =
 
 proc connect*(env: EngineEnv, node: ENode) =
   waitFor env.node.connectToNode(node)
+
+func ID*(env: EngineEnv): string =
+  $env.node.listeningAddress
+
+proc peer*(env: EngineEnv): Peer =
+  doAssert(env.node.numPeers > 0)
+  for peer in env.node.peers:
+    return peer
+
+proc getTxsInPool*(env: EngineEnv, txHashes: openArray[Hash256]): seq[Transaction] =
+  result = newSeqOfCap[Transaction](txHashes.len)
+  for txHash in txHashes:
+    let res = env.txPool.getItem(txHash)
+    if res.isErr: continue
+    let item = res.get
+    if item.reject == txInfoOk:
+      result.add item.tx
+
+proc numTxsInPool*(env: EngineEnv): int =
+  env.txPool.numTxs
+

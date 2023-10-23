@@ -3,6 +3,7 @@ import
   nimcrypto/sysrand,
   stew/byteutils,
   ./blobs,
+  ../types,
   ../tx_sender,
   ../../../../nimbus/constants,
   ../../../../nimbus/utils/utils,
@@ -19,7 +20,7 @@ method setEngineAPIVersionResolver*(cust: EngineAPIVersionResolver, v: CommonRef
   cust.com = v
 
 method forkchoiceUpdatedVersion*(cust: EngineAPIVersionResolver,
-  headTimestamp: uint64, payloadAttributesTimestamp: Option[uint64]): Version {.base.} =
+  headTimestamp: uint64, payloadAttributesTimestamp: Option[uint64] = none(uint64)): Version {.base.} =
   let ts = if payloadAttributesTimestamp.isNone: headTimestamp.EthTime
            else: payloadAttributesTimestamp.get().EthTime
   if cust.com.isCancunOrLater(ts):
@@ -59,8 +60,8 @@ method getExpectedError*(cust: GetPayloadCustomizer): int {.base.} =
 
 type
   BaseGetPayloadCustomizer* = ref object of GetPayloadCustomizer
-    customPayloadID: Option[PayloadID]
-    expectedError  : int
+    customPayloadID*: Option[PayloadID]
+    expectedError*  : int
 
 method getPayloadID(cust: BaseGetPayloadCustomizer,
          basePayloadID: PayloadID): PayloadID =
@@ -72,7 +73,7 @@ method getExpectedError(cust: BaseGetPayloadCustomizer): int =
   cust.expectedError
 
 type
-  UpgradegetPayloadVersion* = ref object of GetPayloadCustomizer
+  UpgradegetPayloadVersion* = ref object of BaseGetPayloadCustomizer
 
 method getPayloadVersion(cust: UpgradegetPayloadVersion, timestamp: uint64): Version =
   let version = procCall getPayloadVersion(cust.GetPayloadCustomizer, timestamp)
@@ -80,7 +81,7 @@ method getPayloadVersion(cust: UpgradegetPayloadVersion, timestamp: uint64): Ver
   version.succ
 
 type
-  DowngradegetPayloadVersion* = ref object of GetPayloadCustomizer
+  DowngradegetPayloadVersion* = ref object of BaseGetPayloadCustomizer
 
 method getPayloadVersion(cust: DowngradegetPayloadVersion, timestamp: uint64): Version =
   let version = procCall getPayloadVersion(cust.GetPayloadCustomizer, timestamp)
@@ -88,20 +89,20 @@ method getPayloadVersion(cust: DowngradegetPayloadVersion, timestamp: uint64): V
   version.pred
 
 type
-  PayloadAttributesCustomizer* = ref object of GetPayloadCustomizer
+  PayloadAttributesCustomizer* = ref object of BaseGetPayloadCustomizer
 
 method getPayloadAttributes*(cust: PayloadAttributesCustomizer, basePayloadAttributes: PayloadAttributes): PayloadAttributes {.base.} =
   doAssert(false, "getPayloadAttributes unimplemented")
 
 type
   BasePayloadAttributesCustomizer* = ref object of PayloadAttributesCustomizer
-    timestamp             : Option[uint64]
-    prevRandao            : Option[common.Hash256]
-    suggestedFeeRecipient : Option[common.EthAddress]
-    withdrawals           : Option[seq[Withdrawal]]
-    removeWithdrawals     : bool
-    beaconRoot            : Option[common.Hash256]
-    removeBeaconRoot      : bool
+    timestamp*             : Option[uint64]
+    prevRandao*            : Option[common.Hash256]
+    suggestedFeeRecipient* : Option[common.EthAddress]
+    withdrawals*           : Option[seq[Withdrawal]]
+    removeWithdrawals*     : bool
+    beaconRoot*            : Option[common.Hash256]
+    removeBeaconRoot*      : bool
 
 method getPayloadAttributes(cust: BasePayloadAttributesCustomizer, basePayloadAttributes: PayloadAttributes): PayloadAttributes =
   var customPayloadAttributes = PayloadAttributes(
@@ -134,15 +135,6 @@ method getPayloadAttributes(cust: BasePayloadAttributesCustomizer, basePayloadAt
   return customPayloadAttributes
 
 type
-  TimestampDeltaPayloadAttributesCustomizer* = ref object of BasePayloadAttributesCustomizer
-    timestampDelta: uint64
-
-method getPayloadAttributes(cust: TimestampDeltaPayloadAttributesCustomizer, basePayloadAttributes: PayloadAttributes): PayloadAttributes =
-  var customPayloadAttributes = procCall getPayloadAttributes(cust.BasePayloadAttributesCustomizer, basePayloadAttributes)
-  customPayloadAttributes.timestamp = w3Qty(customPayloadAttributes.timestamp, cust.timestampDelta)
-  return customPayloadAttributes
-
-type
   ForkchoiceUpdatedCustomizer* = ref object of BasePayloadAttributesCustomizer
 
 method getForkchoiceState*(cust: ForkchoiceUpdatedCustomizer,
@@ -156,8 +148,7 @@ method getExpectInvalidStatus*(cust: ForkchoiceUpdatedCustomizer): bool {.base.}
 # Used as base to other customizers.
 type
   BaseForkchoiceUpdatedCustomizer* = ref object of ForkchoiceUpdatedCustomizer
-    expectedError      : int
-    expectInvalidStatus: bool
+    expectInvalidStatus*: bool
 
 method getPayloadAttributes(cust: BaseForkchoiceUpdatedCustomizer, basePayloadAttributes: PayloadAttributes): PayloadAttributes =
   var customPayloadAttributes = procCall getPayloadAttributes(cust.BasePayloadAttributesCustomizer, basePayloadAttributes)
@@ -166,9 +157,6 @@ method getPayloadAttributes(cust: BaseForkchoiceUpdatedCustomizer, basePayloadAt
 method getForkchoiceState(cust: BaseForkchoiceUpdatedCustomizer, baseForkchoiceUpdate: ForkchoiceStateV1): ForkchoiceStateV1 =
   return baseForkchoiceUpdate
 
-method getExpectedError(cust: BaseForkchoiceUpdatedCustomizer): int =
-  return cust.expectedError
-
 method getExpectInvalidStatus(cust: BaseForkchoiceUpdatedCustomizer): bool =
   return cust.expectInvalidStatus
 
@@ -176,108 +164,120 @@ method getExpectInvalidStatus(cust: BaseForkchoiceUpdatedCustomizer): bool =
 type
   UpgradeforkchoiceUpdatedVersion* = ref object of BaseForkchoiceUpdatedCustomizer
 
-method forkchoiceUpdatedVersion(cust: UpgradeforkchoiceUpdatedVersion, headTimestamp: uint64, payloadAttributesTimestamp: Option[uint64]): Version =
+method forkchoiceUpdatedVersion(cust: UpgradeforkchoiceUpdatedVersion, headTimestamp:
+                                uint64, payloadAttributesTimestamp: Option[uint64] = none(uint64)): Version =
   let version = procCall forkchoiceUpdatedVersion(EngineAPIVersionResolver(cust), headTimestamp, payloadAttributesTimestamp)
   doAssert(version != Version.high, "cannot upgrade version " & $Version.high)
   version.succ
-
+  
 # Customizer that downgrades the version of the forkchoice directive call to the previous version.
 type
   DowngradeforkchoiceUpdatedVersion* = ref object of BaseForkchoiceUpdatedCustomizer
 
-method forkchoiceUpdatedVersion(cust: DowngradeforkchoiceUpdatedVersion, headTimestamp: uint64, payloadAttributesTimestamp: Option[uint64]): Version =
+method forkchoiceUpdatedVersion(cust: DowngradeforkchoiceUpdatedVersion, headTimestamp: uint64,
+                                payloadAttributesTimestamp: Option[uint64] = none(uint64)): Version =
   let version = procCall forkchoiceUpdatedVersion(EngineAPIVersionResolver(cust), headTimestamp, payloadAttributesTimestamp)
   doAssert(version != Version.V1, "cannot downgrade version 1")
   version.pred
 
 type
-  VersionedHashRef* = ref object of RootRef
-    blobs*: seq[BlobID]
-    hashVersions*: seq[byte]
+  TimestampDeltaPayloadAttributesCustomizer* = ref object of BaseForkchoiceUpdatedCustomizer
+    timestampDelta*: int
 
-proc getVersionedHashes*(v: VersionedHashRef): seq[common.Hash256] =
-  if v.blobs.len == 0:
-    return @[]
-
-  result = newSeq[common.Hash256](v.blobs.len)
-
-  var version: byte
-  for i, blobID in v.blobs:
-    if v.hashVersions.len > i:
-      version = v.hashVersions[i]
-    result[i] = blobID.getVersionedHash(version)
-
-proc description*(v: VersionedHashRef): string =
-  result = "VersionedHashes: "
-  for x in v.blobs:
-    result.add x.toHex
-
-  if v.hashVersions.len > 0:
-    result.add " with versions "
-    result.add v.hashVersions.toHex
-
+method getPayloadAttributes(cust: TimestampDeltaPayloadAttributesCustomizer, basePayloadAttributes: PayloadAttributes): PayloadAttributes =
+  var customPayloadAttributes = procCall getPayloadAttributes(cust.BasePayloadAttributesCustomizer, basePayloadAttributes)
+  customPayloadAttributes.timestamp = w3Qty(customPayloadAttributes.timestamp, cust.timestampDelta)
+  return customPayloadAttributes
+  
 type
   VersionedHashesCustomizer* = ref object of RootRef
+    blobs*: Option[seq[BlobID]]
+    hashVersions*: seq[byte]
+
+method getVersionedHashes*(cust: VersionedHashesCustomizer,
+                           baseVersionedHashes: openArray[common.Hash256]): Option[seq[common.Hash256]] {.base.} =
+  if cust.blobs.isNone:
+    return none(seq[common.Hash256])
+
+  let blobs = cust.blobs.get
+  var v = newSeq[common.Hash256](blobs.len)
+
+  var version: byte
+  for i, blobID in blobs:
+    if cust.hashVersions.len > i:
+      version = cust.hashVersions[i]
+    v[i] = blobID.getVersionedHash(version)
+  some(v)
+
+method description*(cust: VersionedHashesCustomizer): string {.base.} =
+  result = "VersionedHashes: "
+  if cust.blobs.isSome:
+    for x in cust.blobs.get:
+      result.add x.toHex
+
+  if cust.hashVersions.len > 0:
+    result.add " with versions "
+    result.add cust.hashVersions.toHex
+
+type
   IncreaseVersionVersionedHashes* = ref object of VersionedHashesCustomizer
 
-method getVersionedHashes*(cust: VersionedHashesCustomizer, baseVersionedHashes: openArray[common.Hash256]): seq[common.Hash256] {.base.} =
-  doAssert(false, "getVersionedHashes unimplemented")
-
-method getVersionedHashes(cust: IncreaseVersionVersionedHashes, baseVersionedHashes: openArray[common.Hash256]): seq[common.Hash256] =
+method getVersionedHashes(cust: IncreaseVersionVersionedHashes,
+                          baseVersionedHashes: openArray[common.Hash256]): Option[seq[common.Hash256]] =
   doAssert(baseVersionedHashes.len > 0, "no versioned hashes available for modification")
 
-  result = newSeq[common.Hash256](baseVersionedHashes.len)
+  var v = newSeq[common.Hash256](baseVersionedHashes.len)
   for i, h in baseVersionedHashes:
-    result[i] = h
-    result[i].data[0] = result[i].data[0] + 1
+    v[i] = h
+    v[i].data[0] = v[i].data[0] + 1
+  some(v)
 
 type
   CorruptVersionedHashes* = ref object of VersionedHashesCustomizer
 
-method getVersionedHashes(cust: CorruptVersionedHashes, baseVersionedHashes: openArray[common.Hash256]): seq[common.Hash256] =
+method getVersionedHashes(cust: CorruptVersionedHashes,
+                          baseVersionedHashes: openArray[common.Hash256]): Option[seq[common.Hash256]] =
   doAssert(baseVersionedHashes.len > 0, "no versioned hashes available for modification")
 
-  result = newSeq[common.Hash256](baseVersionedHashes.len)
+  var v = newSeq[common.Hash256](baseVersionedHashes.len)
   for i, h in baseVersionedHashes:
-    result[i] = h
-    result[i].data[h.data.len-1] = result[i].data[h.data.len-1] + 1
+    v[i] = h
+    v[i].data[h.data.len-1] = v[i].data[h.data.len-1] + 1
+  some(v)
 
 type
   RemoveVersionedHash* = ref object of VersionedHashesCustomizer
 
-method getVersionedHashes(cust: RemoveVersionedHash, baseVersionedHashes: openArray[common.Hash256]): seq[common.Hash256] =
+method getVersionedHashes(cust: RemoveVersionedHash,
+                          baseVersionedHashes: openArray[common.Hash256]): Option[seq[common.Hash256]] =
   doAssert(baseVersionedHashes.len > 0, "no versioned hashes available for modification")
 
-  result = newSeq[common.Hash256](baseVersionedHashes.len - 1)
+  var v = newSeq[common.Hash256](baseVersionedHashes.len - 1)
   for i, h in baseVersionedHashes:
     if i < baseVersionedHashes.len-1:
-      result[i] = h
-      result[i].data[h.data.len-1] = result[i].data[h.data.len-1] + 1
+      v[i] = h
+      v[i].data[h.data.len-1] = v[i].data[h.data.len-1] + 1
+  some(v)
 
 type
   ExtraVersionedHash* = ref object of VersionedHashesCustomizer
 
-method getVersionedHashes(cust: ExtraVersionedHash, baseVersionedHashes: openArray[common.Hash256]): seq[common.Hash256] =
-  result = newSeq[common.Hash256](baseVersionedHashes.len + 1)
+method getVersionedHashes(cust: ExtraVersionedHash,
+                          baseVersionedHashes: openArray[common.Hash256]): Option[seq[common.Hash256]] =
+  var v = newSeq[common.Hash256](baseVersionedHashes.len + 1)
   for i, h in baseVersionedHashes:
-    result[i] = h
+    v[i] = h
 
   var extraHash: common.Hash256
   doAssert randomBytes(extraHash.data) == 32
   extraHash.data[0] = VERSIONED_HASH_VERSION_KZG
-  result[^1] = extraHash
-
+  v[^1] = extraHash
+  some(v)
 
 type
   PayloadCustomizer* = ref object of EngineAPIVersionResolver
 
-  ExecutableData* = object
-    basePayload*: ExecutionPayload
-    beaconRoot* : Option[common.Hash256]
-    attr*       : PayloadAttributes
-    versionedHashes*: seq[common.Hash256]
-
-method customizePayload(cust: PayloadCustomizer, data: ExecutableData): ExecutableData {.base.} =
+method customizePayload*(cust: PayloadCustomizer, data: ExecutableData): ExecutableData {.base.} =
   doAssert(false, "customizePayload unimplemented")
 
 method getTimestamp(cust: PayloadCustomizer, basePayload: ExecutionPayload): uint64 {.base.} =
@@ -285,15 +285,17 @@ method getTimestamp(cust: PayloadCustomizer, basePayload: ExecutionPayload): uin
 
 type
   NewPayloadCustomizer* = ref object of PayloadCustomizer
+    expectedError*      : int
+    expectInvalidStatus*: bool
 
-method getExpectedError(cust: NewPayloadCustomizer): int {.base.} =
-  doAssert(false, "getExpectedError unimplemented")
+method getExpectedError*(cust: NewPayloadCustomizer): int {.base.} =
+  cust.expectedError
 
-method getExpectInvalidStatus(cust: NewPayloadCustomizer): bool {.base.} =
-  doAssert(false, "getExpectInvalidStatus unimplemented")
+method getExpectInvalidStatus*(cust: NewPayloadCustomizer): bool {.base.}=
+  cust.expectInvalidStatus
 
 type
-  CustomPayloadData = object
+  CustomPayloadData* = object
     parentHash*               : Option[common.Hash256]
     feeRecipient*             : Option[common.EthAddress]
     stateRoot*                : Option[common.Hash256]
@@ -408,29 +410,21 @@ proc customizePayload*(cust: CustomPayloadData, data: ExecutableData): Executabl
   )
 
   if cust.versionedHashesCustomizer.isNil.not:
-    result.versionedHashes = cust.versionedHashesCustomizer.getVersionedHashes(data.versionedHashes)
-
+    doAssert(data.versionedHashes.isSome)
+    result.versionedHashes = cust.versionedHashesCustomizer.getVersionedHashes(data.versionedHashes.get)
 
 # Base new payload directive call cust.
 # Used as base to other customizers.
 type
   BaseNewPayloadVersionCustomizer* = ref object of NewPayloadCustomizer
     payloadCustomizer*  : CustomPayloadData
-    expectedError*      : int
-    expectInvalidStatus*: bool
 
 method customizePayload(cust: BaseNewPayloadVersionCustomizer, data: ExecutableData): ExecutableData =
   cust.payloadCustomizer.customizePayload(data)
 
-method getExpectedError(cust: BaseNewPayloadVersionCustomizer): int =
-  cust.expectedError
-
-method getExpectInvalidStatus(cust: BaseNewPayloadVersionCustomizer): bool =
-  cust.expectInvalidStatus
-
 # Customizer that upgrades the version of the payload to the next version.
 type
-  UpgradeNewPayloadVersion* = ref object of NewPayloadCustomizer
+  UpgradeNewPayloadVersion* = ref object of BaseNewPayloadVersionCustomizer
 
 method newPayloadVersion(cust: UpgradeNewPayloadVersion, timestamp: uint64): Version =
   let version = procCall newPayloadVersion(EngineAPIVersionResolver(cust), timestamp)
@@ -439,7 +433,7 @@ method newPayloadVersion(cust: UpgradeNewPayloadVersion, timestamp: uint64): Ver
 
 # Customizer that downgrades the version of the payload to the previous version.
 type
-  DowngradeNewPayloadVersion* = ref object of NewPayloadCustomizer
+  DowngradeNewPayloadVersion* = ref object of BaseNewPayloadVersionCustomizer
 
 method newPayloadVersion(cust: DowngradeNewPayloadVersion, timestamp: uint64): Version =
   let version = procCall newPayloadVersion(EngineAPIVersionResolver(cust), timestamp)
@@ -609,22 +603,22 @@ proc generateInvalidPayload*(sender: TxSender, data: ExecutableData, payloadFiel
       excessBlobGas: some(modExcessBlobGas),
     )
   of InvalidVersionedHashesVersion:
-    doAssert(data.versionedHashes.len > 0, "no versioned hashes available for modification")
+    doAssert(data.versionedHashes.isNone, "no versioned hashes available for modification")
     customPayloadMod = CustomPayloadData(
       versionedHashesCustomizer: IncreaseVersionVersionedHashes(),
     )
   of InvalidVersionedHashes:
-    doAssert(data.versionedHashes.len > 0, "no versioned hashes available for modification")
+    doAssert(data.versionedHashes.isNone, "no versioned hashes available for modification")
     customPayloadMod = CustomPayloadData(
       versionedHashesCustomizer: CorruptVersionedHashes(),
     )
   of IncompleteVersionedHashes:
-    doAssert(data.versionedHashes.len > 0, "no versioned hashes available for modification")
+    doAssert(data.versionedHashes.isNone, "no versioned hashes available for modification")
     customPayloadMod = CustomPayloadData(
       versionedHashesCustomizer: RemoveVersionedHash(),
     )
   of ExtraVersionedHashes:
-    doAssert(data.versionedHashes.len > 0, "no versioned hashes available for modification")
+    doAssert(data.versionedHashes.isNone, "no versioned hashes available for modification")
     customPayloadMod = CustomPayloadData(
       versionedHashesCustomizer: ExtraVersionedHash(),
     )

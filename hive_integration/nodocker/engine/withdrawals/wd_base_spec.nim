@@ -231,7 +231,6 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
   # Produce any blocks necessary to reach withdrawals fork
   var pbRes = env.clMock.produceBlocks(ws.getPreWithdrawalsBlockCount, BlockProcessCallbacks(
     onPayloadProducerSelected: proc(): bool =
-
       # Send some transactions
       let numTx = ws.getTransactionCountPerPayload()
       for i in 0..<numTx:
@@ -262,8 +261,8 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
             withdrawals:           some(newSeq[WithdrawalV1]()),
           ))
         )
-        #r.ExpectationDescription = "Sent pre-shanghai Forkchoice using ForkchoiceUpdatedV2 + Withdrawals, error is expected"
-        r.expectErrorCode(engineApiInvalidParams)
+        let expectationDescription = "Sent pre-shanghai Forkchoice using ForkchoiceUpdatedV2 + Withdrawals, error is expected"
+        r.expectErrorCode(engineApiInvalidParams, expectationDescription)
 
         # Send a valid Pre-Shanghai request using ForkchoiceUpdatedV2
         # (clMock uses V1 by default)
@@ -278,8 +277,8 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
             withdrawals:           none(seq[WithdrawalV1]),
           ))
         )
-        #r.ExpectationDescription = "Sent pre-shanghai Forkchoice ForkchoiceUpdatedV2 + null withdrawals, no error is expected"
-        r.expectNoError()
+        let expectationDescription2 = "Sent pre-shanghai Forkchoice ForkchoiceUpdatedV2 + null withdrawals, no error is expected"
+        r.expectNoError(expectationDescription2)
 
       return true
     ,
@@ -351,8 +350,8 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
             withdrawals:           none(seq[WithdrawalV1]),
           ))
         )
-        #r.ExpectationDescription = "Sent shanghai fcu using PayloadAttributesV1, error is expected"
-        r.expectErrorCode(engineApiInvalidParams)
+        let expectationDescription = "Sent shanghai fcu using PayloadAttributesV1, error is expected"
+        r.expectErrorCode(engineApiInvalidParams, expectationDescription)
 
       # Send some withdrawals
       let wfb = ws.generateWithdrawalsForBlock(nextIndex, startAccount)

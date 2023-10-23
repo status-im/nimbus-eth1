@@ -37,7 +37,13 @@ logScope:
 # ------------------------------------------------------------------------------
 
 proc checkTxBasic(xp: TxPoolRef; item: TxItemRef): bool =
-  let res = validateTxBasic(item.tx.removeNetworkPayload, xp.chain.nextFork)
+  let res = validateTxBasic(
+    item.tx.removeNetworkPayload,
+    xp.chain.nextFork,
+    # A new transaction of the next fork may be
+    # coming before the fork activated
+    validateFork = false
+  )
   if res.isOk:
     return true
   item.info = res.error

@@ -8,7 +8,8 @@ import
   ../../../premix/parser,
   ../../../nimbus/rpc/hexstrings,
   ../../../nimbus/beacon/execution_types,
-  ../../../nimbus/beacon/web3_eth_conv
+  ../../../nimbus/beacon/web3_eth_conv,
+  ./types
 
 import web3/engine_api as web3_engine_api
 
@@ -144,6 +145,27 @@ proc newPayloadV3*(client: RpcClient,
   wrapTrySimpleRes:
     client.engine_newPayloadV3(payload, versionedHashes, parentBeaconBlockRoot)
 
+proc newPayloadV1*(client: RpcClient,
+      payload: ExecutionPayload):
+        Result[PayloadStatusV1, string] =
+  wrapTrySimpleRes:
+    client.engine_newPayloadV1(payload)
+
+proc newPayloadV2*(client: RpcClient,
+      payload: ExecutionPayload):
+        Result[PayloadStatusV1, string] =
+  wrapTrySimpleRes:
+    client.engine_newPayloadV2(payload)
+
+proc newPayloadV3*(client: RpcClient,
+      payload: ExecutionPayload,
+      versionedHashes: Option[seq[VersionedHash]],
+      parentBeaconBlockRoot: Option[FixedBytes[32]]
+      ):
+        Result[PayloadStatusV1, string] =
+  wrapTrySimpleRes:
+    client.engine_newPayloadV3(payload, versionedHashes, parentBeaconBlockRoot)
+
 proc collectBlobHashes(list: openArray[Web3Tx]): seq[Web3Hash] =
   for w3tx in list:
     let tx = ethTx(w3Tx)
@@ -164,6 +186,17 @@ proc newPayload*(client: RpcClient,
     return client.newPayloadV3(payload.V3,
       versionedHashes,
       w3Hash beaconRoot.get)
+
+proc newPayload*(client: RpcClient,
+                 version: Version,
+                 payload: ExecutableData): Result[PayloadStatusV1, string] =
+  case version
+  of Version.V1: return client.newPayloadV1(payload.basePayload)
+  of Version.V2: return client.newPayloadV2(payload.basePayload)
+  of Version.V3:
+    return client.newPayloadV3(payload.basePayload,
+      w3Hashes payload.versionedHashes,
+      w3Hash payload.beaconRoot)
 
 proc exchangeCapabilities*(client: RpcClient,
       methods: seq[string]):

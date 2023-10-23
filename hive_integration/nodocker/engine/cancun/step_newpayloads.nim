@@ -131,7 +131,7 @@ proc verifyBlobBundle(step: NewPayloads,
       proofs=len(blobBundle.proofs),
       kzgs=len(blobBundle.commitments)
     return false
-    
+
   if len(blobBundle.blobs) != step.expectedIncludedBlobCount:
     error "expected blobs",
       expect=step.expectedIncludedBlobCount,
@@ -202,75 +202,58 @@ method execute*(step: NewPayloads, ctx: CancunTestContext): bool =
     shadow.p = p
     let pbRes = env.clMock.produceSingleBlock(BlockProcessCallbacks(
       onPayloadAttributesGenerated: proc(): bool =
-        #[if step.fcUOnPayloadRequest != nil:
+        if step.fcUOnPayloadRequest != nil:
+          step.fcUOnPayloadRequest.setEngineAPIVersionResolver(env.engine.com)
+
           var
             payloadAttributes = env.clMock.latestPayloadAttributes
             forkchoiceState   = env.clMock.latestForkchoice
-            expectedError     *int
-            expectedStatus    = test.Valid
-            err               error
-          )
-          step.fcUOnPayloadRequest.setEngineAPIVersionResolver(t.ForkConfig)
-          testEngine = t.TestEngine.WithEngineAPIVersionResolver(step.FcUOnPayloadRequest)
+            expectedError     = step.fcUOnPayloadRequest.getExpectedError()
+            expectedStatus    = PayloadExecutionStatus.valid
+            timestamp         = env.clMock.latestHeader.timestamp.uint64
+            version           = step.fcUOnPayloadRequest.forkchoiceUpdatedVersion(timestamp)
 
-          payloadAttributes, err = step.FcUOnPayloadRequest.getPayloadAttributes(payloadAttributes)
-          if err != nil {
-            fatal "Error getting custom payload attributes (payload %d/%d): %v", payload=shadow.p+1, count=shadow.payloadCount, err)
+          payloadAttributes = step.fcUOnPayloadRequest.getPayloadAttributes(payloadAttributes)
 
-          expectedError, err = step.FcUOnPayloadRequest.getExpectedError()
-          if err != nil {
-            fatal "Error getting custom expected error (payload %d/%d): %v", payload=shadow.p+1, count=shadow.payloadCount, err)
+          if step.fcUOnPayloadRequest.getExpectInvalidStatus():
+            expectedStatus = PayloadExecutionStatus.invalid
 
-          if step.FcUOnPayloadRequest.getExpectInvalidStatus() {
-            expectedStatus = test.Invalid
-
-
-          r = env.client.ForkchoiceUpdated(&forkchoiceState, payloadAttributes, env.clMock.LatestHeader.Time)
-          r.ExpectationDescription = step.ExpectationDescription
-          if expectedError != nil {
-            r.ExpectErrorCode(*expectedError)
+          let r = env.engine.client.forkchoiceUpdated(version, forkchoiceState, some(payloadAttributes))
+          if expectedError != 0:
+            r.expectErrorCode(expectedError, step.expectationDescription)
           else:
-            r.ExpectNoError()
-            r.ExpectPayloadStatus(expectedStatus)
+            r.expectNoError(step.expectationDescription)
+            r.expectPayloadStatus(expectedStatus)
 
-          if r.Response.PayloadID != nil {
-            env.clMock.AddPayloadID(t.Engine, r.Response.PayloadID)
-       ]#
-       return true
+            if r.get().payloadID.isSome:
+              testCond env.clMock.addPayloadID(env.engine, r.get().payloadID.get())
+
+        return true
       ,
       onRequestNextPayload: proc(): bool =
         # Get the next payload
-        #[if step.GetPayloadCustomizer != nil {
-          var (
-            payloadAttributes = env.clMock.latestPayloadAttributes
-            payloadID         = env.clMock.NextPayloadID
-            expectedError     *int
-            err               error
-          )
+        if step.getPayloadCustomizer != nil:
+          step.getPayloadCustomizer.setEngineAPIVersionResolver(env.engine.com)
 
-          step.GetPayloadCustomizer.setEngineAPIVersionResolver(t.ForkConfig)
-          testEngine = t.TestEngine.WithEngineAPIVersionResolver(step.GetPayloadCustomizer)
+          var
+            payloadAttributes = env.clMock.latestPayloadAttributes
+            payloadID         = env.clMock.nextPayloadID
+            expectedError     = step.getPayloadCustomizer.getExpectedError()
+            timestamp         = payloadAttributes.timestamp.uint64
+            version           = step.getPayloadCustomizer.getPayloadVersion(timestamp)
+
+          payloadID = step.getPayloadCustomizer.getPayloadID(payloadID)
 
           # We are going to sleep twice because there is no way to skip the CL Mock's sleep
-          time.Sleep(time.Duration(step.GetPayloadDelay) * time.Second)
+          let period = chronos.seconds(step.getPayloadDelay)
+          waitFor sleepAsync(period)
 
-          payloadID, err = step.GetPayloadCustomizer.getPayloadID(payloadID)
-          if err != nil {
-            fatal "Error getting custom payload ID (payload %d/%d): %v", payload=shadow.p+1, count=shadow.payloadCount, err)
-          }
-
-          expectedError, err = step.GetPayloadCustomizer.getExpectedError()
-          if err != nil {
-            fatal "Error getting custom expected error (payload %d/%d): %v", payload=shadow.p+1, count=shadow.payloadCount, err)
-          }
-
-          r = env.client.GetPayload(payloadID, payloadAttributes)
-          r.ExpectationDescription = step.ExpectationDescription
-          if expectedError != nil {
-            r.ExpectErrorCode(*expectedError)
+          let r = env.engine.client.getPayload(payloadID, version)
+          if expectedError != 0:
+            r.expectErrorCode(expectedError, step.expectationDescription)
           else:
-            r.ExpectNoError()
-        ]#
+            r.expectNoError(step.expectationDescription)
+
         return true
       ,
       onGetPayload: proc(): bool =
@@ -301,69 +284,51 @@ method execute*(step: NewPayloads, ctx: CancunTestContext): bool =
         return true
       ,
       onNewPayloadBroadcast: proc(): bool =
-        #[if step.NewPayloadCustomizer != nil {
+        if step.newPayloadCustomizer != nil:
+          step.newPayloadCustomizer.setEngineAPIVersionResolver(env.engine.com)
           # Send a test NewPayload directive with either a modified payload or modifed versioned hashes
-          var (
-            payload        = env.clMock.latestPayloadBuilt
-            r              *test.NewPayloadResponseExpectObject
-            expectedError  *int
-            expectedStatus test.PayloadStatus = test.Valid
-            err            error
-          )
+          var
+            payload        = env.clMock.latestExecutableData
+            expectedError  = step.newPayloadCustomizer.getExpectedError()
+            expectedStatus = PayloadExecutionStatus.valid
 
           # Send a custom new payload
-          step.NewPayloadCustomizer.setEngineAPIVersionResolver(t.ForkConfig)
-          testEngine = t.TestEngine.WithEngineAPIVersionResolver(step.NewPayloadCustomizer)
+          payload = step.newPayloadCustomizer.customizePayload(payload)
+          let
+            version = step.newPayloadCustomizer.newPayloadVersion(payload.basePayload.timestamp.uint64)
 
-          payload, err = step.NewPayloadCustomizer.customizePayload(payload)
-          if err != nil {
-            fatal "Error customizing payload (payload %d/%d): %v", payload=shadow.p+1, count=shadow.payloadCount, err)
-          }
-          expectedError, err = step.NewPayloadCustomizer.getExpectedError()
-          if err != nil {
-            fatal "Error getting custom expected error (payload %d/%d): %v", payload=shadow.p+1, count=shadow.payloadCount, err)
-          }
-          if step.NewPayloadCustomizer.getExpectInvalidStatus() {
-            expectedStatus = test.Invalid
-          }
+          if step.newPayloadCustomizer.getExpectInvalidStatus():
+            expectedStatus = PayloadExecutionStatus.invalid
 
-          r = env.client.NewPayload(payload)
-          r.ExpectationDescription = step.ExpectationDescription
-          if expectedError != nil {
-            r.ExpectErrorCode(*expectedError)
+          let r = env.client.newPayload(version, payload)
+          if expectedError != 0:
+            r.expectErrorCode(expectedError, step.expectationDescription)
           else:
-            r.ExpectNoError()
-            r.ExpectStatus(expectedStatus)
-          }
-        }
+            r.expectNoError(step.expectationDescription)
+            r.expectNPStatus(expectedStatus)
 
-        if step.FcUOnHeadSet != nil {
-          var (
-            forkchoiceState api.ForkchoiceStateV1 = env.clMock.latestForkchoice
-            expectedError   *int
-            expectedStatus  test.PayloadStatus = test.Valid
-            err             error
-          )
-          step.FcUOnHeadSet.setEngineAPIVersionResolver(t.ForkConfig)
-          testEngine = t.TestEngine.WithEngineAPIVersionResolver(step.FcUOnHeadSet)
-          expectedError, err = step.FcUOnHeadSet.getExpectedError()
-          if err != nil {
-            fatal "Error getting custom expected error (payload %d/%d): %v", payload=shadow.p+1, count=shadow.payloadCount, err)
-          }
-          if step.FcUOnHeadSet.getExpectInvalidStatus() {
-            expectedStatus = test.Invalid
-          }
+        if step.fcUOnHeadSet != nil:
+          step.fcUOnHeadSet.setEngineAPIVersionResolver(env.engine.com)
 
-          forkchoiceState.HeadBlockHash = env.clMock.latestPayloadBuilt.blockHash
+          var
+            forkchoiceState = env.clMock.latestForkchoice
+            expectedError   = step.fcUOnHeadSet.getExpectedError()
+            expectedStatus  = PayloadExecutionStatus.valid
+            timestamp       = env.clMock.latestPayloadBuilt.timestamp.uint64
+            version         = step.fcUOnHeadSet.forkchoiceUpdatedVersion(timestamp)
 
-          r = env.client.ForkchoiceUpdated(&forkchoiceState, nil, env.clMock.latestPayloadBuilt.Timestamp)
-          r.ExpectationDescription = step.ExpectationDescription
-          if expectedError != nil {
-            r.ExpectErrorCode(*expectedError)
+          if step.fcUOnHeadSet.getExpectInvalidStatus():
+            expectedStatus = PayloadExecutionStatus.invalid
+
+          forkchoiceState.headBlockHash = env.clMock.latestPayloadBuilt.blockHash
+
+          let r = env.engine.client.forkchoiceUpdated(version, forkchoiceState)
+          if expectedError != 0:
+            r.expectErrorCode(expectedError, step.expectationDescription)
           else:
-            r.ExpectNoError()
-            r.ExpectPayloadStatus(expectedStatus)
-        ]#
+            r.expectNoError(step.expectationDescription)
+            r.expectPayloadStatus(expectedStatus)
+
         return true
       ,
       onForkchoiceBroadcast: proc(): bool =

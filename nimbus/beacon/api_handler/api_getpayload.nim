@@ -18,17 +18,25 @@ import
 
 {.push gcsafe, raises:[CatchableError].}
 
-proc getPayload*(ben: BeaconEngineRef, id: PayloadID): GetPayloadV2Response =
+proc getPayload*(ben: BeaconEngineRef,
+                 expectedVersion: Version,
+                 id: PayloadID): GetPayloadV2Response =
   trace "Engine API request received",
     meth = "GetPayload", id
 
-  var payload: ExecutionPayloadV1OrV2
+  var payloadGeneric: ExecutionPayload
   var blockValue: UInt256
-  if not ben.get(id, blockValue, payload):
+  if not ben.get(id, blockValue, payloadGeneric):
     raise unknownPayload("Unknown payload")
 
+  let version = payloadGeneric.version
+  if version > expectedVersion:
+    raise unsupportedFork("getPayload" & $expectedVersion &
+    " expect ExecutionPayload" & $expectedVersion &
+    " but get ExecutionPayload" & $version)
+
   GetPayloadV2Response(
-    executionPayload: payload,
+    executionPayload: payloadGeneric.V1V2,
     blockValue: blockValue
   )
 
@@ -36,11 +44,16 @@ proc getPayloadV3*(ben: BeaconEngineRef, id: PayloadID): GetPayloadV3Response =
   trace "Engine API request received",
     meth = "GetPayload", id
 
-  var payload: ExecutionPayloadV3
+  var payloadGeneric: ExecutionPayload
   var blockValue: UInt256
-  if not ben.get(id, blockValue, payload):
+  if not ben.get(id, blockValue, payloadGeneric):
     raise unknownPayload("Unknown payload")
 
+  let version = payloadGeneric.version
+  if version != Version.V3:
+    raise unsupportedFork("getPayloadV3 expect ExecutionPayloadV3 but get ExecutionPayload" & $version)
+
+  let payload = payloadGeneric.V3
   let com = ben.com
   if not com.isCancunOrLater(ethTime payload.timestamp):
     raise unsupportedFork("payload timestamp is less than Cancun activation")
