@@ -24,7 +24,7 @@ type
     content: string
     utpTransfer: bool
 
-  TraceNodeInfo* = object
+  TraceContentInfo* = object
     content*: string
     utpTransfer: bool
     trace*: TraceObject
@@ -180,7 +180,7 @@ proc installPortalApiHandlers*(
       )
 
   rpcServer.rpc("portal_historyTraceRecursiveFindContent") do(
-      contentKey: string) -> TraceNodeInfo:
+      contentKey: string) -> TraceContentInfo:
 
     let
       key = ByteList.init(hexToSeqByte(contentKey))
@@ -188,9 +188,9 @@ proc installPortalApiHandlers*(
         raise newException(ValueError, "Invalid content key")
 
       contentResult = (await p.traceContentLookup(key, contentId)).valueOr:
-        return TraceNodeInfo(content: "0x")
+        return TraceContentInfo(content: "0x")
 
-    return TraceNodeInfo(
+    return TraceContentInfo(
         content: contentResult.content.to0xHex(),
         utpTransfer: contentResult.utpTransfer,
         trace: contentResult.trace

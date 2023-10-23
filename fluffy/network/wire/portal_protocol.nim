@@ -210,6 +210,7 @@ type
     responses*: Table[string, TraceResponse]
     metadata*: Table[string, NodeMetadata]
     cancelled*: seq[NodeId]
+    startedAtMs*: int64
 
   TraceContentLookupResult* = object
     content*: seq[byte]
@@ -1258,7 +1259,8 @@ proc traceContentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256)
             receivedFrom: content.src.id,
             responses: responses,
             metadata: metadata,
-            cancelled: pendingNodeIds
+            cancelled: pendingNodeIds,
+            startedAtMs: chronos.epochNanoSeconds(ts) div 1_000_000 # nanoseconds to milliseconds
           )
         ))
     else:
