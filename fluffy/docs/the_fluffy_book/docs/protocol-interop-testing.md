@@ -1,17 +1,18 @@
-# Testing Client Protocol Interoperability
-This document shows some commands that can be used to test the individual
-protocol messages per network (Discovery v5 and Portal networks).
+# Protocol Interoperability Testing
+This document shows a set of commands that can be used to test the individual
+protocol messages per network (Discovery v5 and Portal networks), e.g. to test
+client protocol interoperability.
 
-Two ways are explained, the first by keeping a node running and interacting
-with it through the JSON-RPC service. The second by running cli applications
+Two ways are explained, the first, by keeping a node running and interacting
+with it through the JSON-RPC service. The second, by running cli applications
 that attempt to send 1 specific message and then shutdown.
 
-The first is more powerful and complete, the second might be easier to do some
-quick testing.
+The first is more powerful and complete, the second one might be easier to do
+some quick testing.
 
-## Run Fluffy and test protocol messages launched via JSON-RPC API
+## Run Fluffy and test protocol messages via JSON-RPC API
 
-First build Fluffy as explained [here](../README.md#build-fluffy-client).
+First build Fluffy as explained [here](./quick-start.md#build-the-fluffy-client).
 
 Next run it with the JSON-RPC server enabled:
 ```bash
@@ -59,7 +60,7 @@ curl -s -X POST -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":"1
 > The `portal_state_` prefix can be replaced for testing other networks such as
 `portal_history_`.
 
-## Test Discovery and Portal Wire protocol messages through cli tools
+## Test Discovery and Portal Wire protocol messages with cli tools
 
 ### Testing Discovery v5 Layer: dcli
 
@@ -90,7 +91,7 @@ and ENR.
 
 ```bash
 # Build portalcli
-make fluffy-tools
+make portalcli
 ```
 
 With the `portalcli` tool you can test the individual Portal wire protocol
@@ -107,7 +108,7 @@ messages, e.g.:
 # Test Portal wire FindContent, should print the returned content
 ./build/portalcli findcontent enr:<base64 encoding of ENR>
 
-# Default the State network is tested, but you can provide another protocol id
+# Default the history network is tested, but you can provide another protocol id
 ./build/portalcli ping enr:<base64 encoding of ENR> --protocol-id:0x500B
 ```
 
