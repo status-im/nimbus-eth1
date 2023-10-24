@@ -8,7 +8,7 @@
 # those terms.
 
 import
-  std/[options],
+  std/[options, strutils],
   eth/common,
   stew/endians2,
   json_serialization,
@@ -189,34 +189,44 @@ type
     name*: string
     time*: Option[EthTime]
 
+func countTimeFields(): int {.compileTime.} =
+  var z = Chainconfig()
+  for name, _ in fieldPairs(z[]):
+    if name.endsWith("Time"):
+      inc result
 
+func countBlockFields(): int {.compileTime.} =
+  var z = Chainconfig()
+  for name, _ in fieldPairs(z[]):
+    if name.endsWith("Block"):
+      inc result
+
+const
+  timeFieldsCount = countTimeFields()
+  blockFieldsCount = countBlockFields()
+
+func collectTimeFields(): array[timeFieldsCount, string] =
+  var z = Chainconfig()
+  var i = 0
+  for name, _ in fieldPairs(z[]):
+    if name.endsWith("Time"):
+      result[i] = name
+      inc i
+
+func collectBlockFields(): array[blockFieldsCount, string] =
+  var z = Chainconfig()
+  var i = 0
+  for name, _ in fieldPairs(z[]):
+    if name.endsWith("Block"):
+      result[i] = name
+      inc i
 
 const
   # this table is used for generate
   # code at compile time to check
   # the order of blok number in ChainConfig
-  forkBlockField* = [
-    "homesteadBlock",
-    "daoForkBlock",
-    "eip150Block",
-    "eip155Block",
-    "eip158Block",
-    "byzantiumBlock",
-    "constantinopleBlock",
-    "petersburgBlock",
-    "istanbulBlock",
-    "muirGlacierBlock",
-    "berlinBlock",
-    "londonBlock",
-    "arrowGlacierBlock",
-    "grayGlacierBlock",
-    "mergeForkBlock",
-  ]
-
-  forkTimeField* = [
-    "shanghaiTime",
-    "cancunTime",
-  ]
+  forkBlockField* = collectBlockFields()
+  forkTimeField* = collectTimeFields()
 
 
 func mergeForkTransitionThreshold*(conf: ChainConfig): MergeForkTransitionThreshold =
