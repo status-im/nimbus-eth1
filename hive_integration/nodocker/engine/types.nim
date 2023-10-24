@@ -163,7 +163,7 @@ template expectErrorCode*(res: untyped, errCode: int, expectedDesc: string) =
   testCond res.isErr:
     error "unexpected result, want error, get ok"
   testCond res.error.find($errCode) != -1:
-    fatal "DEBUG", msg=expectedDesc
+    fatal "DEBUG", msg=expectedDesc, got=res.error
 
 template expectNoError*(res: untyped, expectedDesc: string) =
   testCond res.isOk:

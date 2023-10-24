@@ -238,6 +238,7 @@ let cancunTestList* = [
       ]
     ),
   ),
+
   TestDesc(
     name: "Blob Transaction Ordering, Single Account 2",
     about: """
@@ -619,7 +620,7 @@ let cancunTestList* = [
     run: specExecute,
     spec: CancunSpec(
       mainFork: ForkCancun,
-      forkHeight: 1,
+      forkHeight: 2,
       testSequence: @[
         NewPayloads(
           fcUOnPayloadRequest: DowngradeForkchoiceUpdatedVersion(
@@ -651,11 +652,12 @@ let cancunTestList* = [
       testSequence: @[
         NewPayloads(
           fcUOnPayloadRequest: DowngradeForkchoiceUpdatedVersion(
+            beaconRoot: some(common.Hash256()),
             expectedError: engineApiInvalidParams,
           ),
           expectationDescription: """
           ForkchoiceUpdatedV2 after Cancun with beacon root field must return INVALID_PARAMS_ERROR (code $1)
-          """% [$engineApiInvalidParams],
+          """ % [$engineApiInvalidParams],
         ).TestStep,
       ]
     ),

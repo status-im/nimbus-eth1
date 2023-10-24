@@ -115,7 +115,7 @@ func V3*(attr: PayloadAttributes): PayloadAttributesV3 =
     timestamp: attr.timestamp,
     prevRandao: attr.prevRandao,
     suggestedFeeRecipient: attr.suggestedFeeRecipient,
-    withdrawals: attr.withdrawals.get,
+    withdrawals: attr.withdrawals.get(newSeq[WithdrawalV1]()),
     parentBeaconBlockRoot: attr.parentBeaconBlockRoot.get
   )
 

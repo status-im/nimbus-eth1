@@ -169,7 +169,7 @@ method forkchoiceUpdatedVersion(cust: UpgradeforkchoiceUpdatedVersion, headTimes
   let version = procCall forkchoiceUpdatedVersion(EngineAPIVersionResolver(cust), headTimestamp, payloadAttributesTimestamp)
   doAssert(version != Version.high, "cannot upgrade version " & $Version.high)
   version.succ
-  
+
 # Customizer that downgrades the version of the forkchoice directive call to the previous version.
 type
   DowngradeforkchoiceUpdatedVersion* = ref object of BaseForkchoiceUpdatedCustomizer
@@ -188,7 +188,7 @@ method getPayloadAttributes(cust: TimestampDeltaPayloadAttributesCustomizer, bas
   var customPayloadAttributes = procCall getPayloadAttributes(cust.BasePayloadAttributesCustomizer, basePayloadAttributes)
   customPayloadAttributes.timestamp = w3Qty(customPayloadAttributes.timestamp, cust.timestampDelta)
   return customPayloadAttributes
-  
+
 type
   VersionedHashesCustomizer* = ref object of RootRef
     blobs*: Option[seq[BlobID]]
