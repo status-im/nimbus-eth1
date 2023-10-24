@@ -306,7 +306,7 @@ proc exec(ctx: var TransContext,
   )
 
   if fork >= FkCancun:
-    result.result.currentBlobGasUsed = some blobGasUsed
+    result.result.blobGasUsed = some blobGasUsed
     if ctx.env.currentExcessBlobGas.isSome:
       result.result.currentExcessBlobGas = ctx.env.currentExcessBlobGas
     elif ctx.env.parentExcessBlobGas.isSome and ctx.env.parentBlobGasUsed.isSome:

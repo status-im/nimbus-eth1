@@ -443,7 +443,7 @@ proc `@@`*(x: ExecutionResult): JsonNode =
     result["currentBaseFee"] = @@(x.currentBaseFee)
   if x.withdrawalsRoot.isSome:
     result["withdrawalsRoot"] = @@(x.withdrawalsRoot)
-  if x.currentBlobGasUsed.isSome:
-    result["currentBlobGasUsed"] = @@(x.currentBlobGasUsed)
   if x.currentExcessBlobGas.isSome:
     result["currentExcessBlobGas"] = @@(x.currentExcessBlobGas)
+  if x.blobGasUsed.isSome:
+    result["blobGasUsed"] = @@(x.blobGasUsed)

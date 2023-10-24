@@ -97,7 +97,7 @@ type
     gasUsed*: GasInt
     currentBaseFee*: Option[UInt256]
     withdrawalsRoot*: Option[Hash256]
-    currentBlobGasUsed*: Option[uint64]
+    blobGasUsed*: Option[uint64]
     currentExcessBlobGas*: Option[uint64]
 
 const
