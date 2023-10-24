@@ -77,10 +77,7 @@ const
   # these are public network id
   MainNet*    = 1.NetworkId
   # No longer used: MordenNet = 2
-  RopstenNet* = 3.NetworkId
-  RinkebyNet* = 4.NetworkId
   GoerliNet*  = 5.NetworkId
-  KovanNet*   = 42.NetworkId
   SepoliaNet* = 11155111.NetworkId
 
 # ------------------------------------------------------------------------------
@@ -411,45 +408,6 @@ proc chainConfigForNetwork*(id: NetworkId): ChainConfig =
       terminalTotalDifficulty: some(mainNetTTD),
       shanghaiTime:        some(1_681_338_455.EthTime)
     )
-  of RopstenNet:
-    ChainConfig(
-      consensusType:       ConsensusType.POW,
-      chainId:             RopstenNet.ChainId,
-      # Genesis:                                           # 2016-11-20 11:48:50 UTC
-      homesteadBlock:      some(0.toBlockNumber),          # Included in genesis
-      daoForkSupport:      false,
-      eip150Block:         some(0.toBlockNumber),          # Included in genesis
-      eip150Hash:          toDigest("41941023680923e0fe4d74a34bdac8141f2540e3ae90623718e47d66d1ca4a2d"),
-      eip155Block:         some(10.toBlockNumber),         # Same as EIP-158
-      eip158Block:         some(10.toBlockNumber),         # 2016-11-20 11:50:44 UTC
-      byzantiumBlock:      some(1_700_000.toBlockNumber),  # 2017-09-19 01:08:28 UTC
-      constantinopleBlock: some(4_230_000.toBlockNumber),  # 2018-10-13 17:19:06 UTC
-      petersburgBlock:     some(4_939_394.toBlockNumber),  # 2019-02-02 07:39:08 UTC
-      istanbulBlock:       some(6_485_846.toBlockNumber),  # 2019-09-30 03:38:06 UTC
-      muirGlacierBlock:    some(7_117_117.toBlockNumber),  # 2020-01-13 06:37:37 UTC
-      berlinBlock:         some(9_812_189.toBlockNumber),  # 2021-03-10 13:32:08 UTC
-      londonBlock:         some(10_499_401.toBlockNumber), # 2021-06-24 02:03:37 UTC
-    )
-  of RinkebyNet:
-    ChainConfig(
-      clique:              CliqueOptions(period: some(15), epoch: some(30000)),
-      consensusType:       ConsensusType.POA,
-      chainId:             RinkebyNet.ChainId,
-      # Genesis:                                           # 2017-04-12 15:20:50 UTC
-      homesteadBlock:      some(1.toBlockNumber),          # 2017-04-12 15:20:58 UTC
-      daoForkSupport:      false,
-      eip150Block:         some(2.toBlockNumber),          # 2017-04-12 15:21:14 UTC
-      eip150Hash:          toDigest("9b095b36c15eaf13044373aef8ee0bd3a382a5abb92e402afa44b8249c3a90e9"),
-      eip155Block:         some(3.toBlockNumber),          # Same as EIP-158
-      eip158Block:         some(3.toBlockNumber),          # 2017-04-12 15:21:29 UTC
-      byzantiumBlock:      some(1_035_301.toBlockNumber),  # 2017-10-09 12:08:23 UTC
-      constantinopleBlock: some(3_660_663.toBlockNumber),  # 2019-01-09 13:00:55 UTC
-      petersburgBlock:     some(4_321_234.toBlockNumber),  # 2019-05-04 05:32:45 UTC
-      istanbulBlock:       some(5_435_345.toBlockNumber),  # 2019-11-13 18:21:53 UTC
-      muirGlacierBlock:    some(8_290_928.toBlockNumber),  # Skipped on Rinkeby
-      berlinBlock:         some(8_290_928.toBlockNumber),  # 2021-03-24 14:48:36 UTC
-      londonBlock:         some(8_897_988.toBlockNumber),  # 2021-07-08 01:27:32 UTC
-    )
   of GoerliNet:
     ChainConfig(
       clique:              CliqueOptions(period: some(15), epoch: some(30000)),
@@ -506,23 +464,6 @@ proc genesisBlockForNetwork*(id: NetworkId): Genesis
       gasLimit: 5000,
       difficulty: 17179869184.u256,
       alloc: decodePrealloc(mainnetAllocData)
-    )
-  of RopstenNet:
-    Genesis(
-      nonce: 66.toBlockNonce,
-      extraData: hexToSeqByte("0x3535353535353535353535353535353535353535353535353535353535353535"),
-      gasLimit: 16777216,
-      difficulty: 1048576.u256,
-      alloc: decodePrealloc(testnetAllocData)
-    )
-  of RinkebyNet:
-    Genesis(
-      nonce: 0.toBlockNonce,
-      timestamp: EthTime(0x58ee40ba),
-      extraData: hexToSeqByte("0x52657370656374206d7920617574686f7269746168207e452e436172746d616e42eb768f2244c8811c63729a21a3569731535f067ffc57839b00206d1ad20c69a1981b489f772031b279182d99e65703f0076e4812653aab85fca0f00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
-      gasLimit: 4700000,
-      difficulty: 1.u256,
-      alloc: decodePrealloc(rinkebyAllocData)
     )
   of GoerliNet:
     Genesis(

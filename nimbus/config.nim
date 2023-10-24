@@ -213,13 +213,10 @@ type
 
     network {.
       separator: "\pETHEREUM NETWORK OPTIONS:"
-      desc: "Name or id number of Ethereum network(mainnet(1), ropsten(3), rinkeby(4), goerli(5), kovan(42), sepolia(11155111), other=custom)"
+      desc: "Name or id number of Ethereum network(mainnet(1), goerli(5), sepolia(11155111), other=custom)"
       longDesc:
         "- mainnet: Ethereum main network\n" &
-        "- ropsten: Test network (proof-of-work, the one most like Ethereum mainnet)\n" &
-        "- rinkeby: Test network (proof-of-authority, for those running Geth clients)\n" &
         "- goerli:  Test network (proof-of-authority, works across all clients)\n" &
-        "- kovan:   Test network (proof-of-authority, for those running OpenEthereum clients)\n" &
         "- sepolia: Test network (proof-of-work)"
       defaultValue: "" # the default value is set in makeConfig
       defaultValueDesc: "mainnet(1)"
@@ -655,10 +652,7 @@ proc getNetworkId(conf: NimbusConf): Option[NetworkId] =
   let network = toLowerAscii(conf.network)
   case network
   of "mainnet": return some MainNet
-  of "ropsten": return some RopstenNet
-  of "rinkeby": return some RinkebyNet
   of "goerli" : return some GoerliNet
-  of "kovan"  : return some KovanNet
   of "sepolia": return some SepoliaNet
   else:
     try:
@@ -734,14 +728,8 @@ proc getBootNodes*(conf: NimbusConf): seq[ENode] =
     case conf.networkId
     of MainNet:
       bootstrapNodes.setBootnodes(MainnetBootnodes)
-    of RopstenNet:
-      bootstrapNodes.setBootnodes(RopstenBootnodes)
-    of RinkebyNet:
-      bootstrapNodes.setBootnodes(RinkebyBootnodes)
     of GoerliNet:
       bootstrapNodes.setBootnodes(GoerliBootnodes)
-    of KovanNet:
-      bootstrapNodes.setBootnodes(KovanBootnodes)
     of SepoliaNet:
       bootstrapNodes.setBootnodes(SepoliaBootnodes)
     else:

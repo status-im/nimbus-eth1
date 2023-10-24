@@ -4,10 +4,7 @@ import
 
 from ../nimbus/common/chain_config import
   MainNet,
-  RopstenNet,
-  RinkebyNet,
-  GoerliNet,
-  KovanNet
+  GoerliNet
 
 type
   ConfigStatus* = enum
@@ -64,10 +61,7 @@ proc processU256(val: string, o: var UInt256): ConfigStatus =
 proc processNetId(val: string, o: var NetworkId): ConfigStatus =
   case val.toLowerAscii()
   of "main": o = MainNet
-  of "ropsten": o = RopstenNet
-  of "rinkeby": o = RinkebyNet
   of "goerli": o = GoerliNet
-  of "kovan": o = KovanNet
 
 template checkArgument(fun, o, value: untyped) =
   ## Checks if arguments got processed successfully

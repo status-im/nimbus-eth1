@@ -451,7 +451,7 @@ func pruneTrie*(com: CommonRef): bool =
 # because some client do not make distinction
 # between them.
 # And popular networks such as MainNet
-# Goerli, Rinkeby add more confusion to this
+# Goerli add more confusion to this
 # by not make distinction too in their value.
 func chainId*(com: CommonRef): ChainId =
   com.config.chainId
