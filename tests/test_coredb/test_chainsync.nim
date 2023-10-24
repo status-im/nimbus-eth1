@@ -93,6 +93,7 @@ proc test_chainSync*(
       com.db.trackLegaApi = true
       com.db.trackNewApi = true
       com.db.trackLedgerApi = true
+      com.db.localDbOnly = true
     if lastOneExtra:
       let
         headers0 = headers9[0..0]

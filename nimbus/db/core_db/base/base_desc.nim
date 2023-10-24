@@ -216,6 +216,7 @@ type
     trackLegaApi*: bool    ## Debugging support
     trackNewApi*: bool     ## Debugging support
     trackLedgerApi*: bool  ## Debugging suggestion for subsequent ledger
+    localDbOnly*: bool     ## Debugging, suggestion to ignore async fetch
     methods*: CoreDbBaseFns
 
   CoreDbErrorRef* = ref object of RootRef
