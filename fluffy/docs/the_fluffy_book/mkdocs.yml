@@ -21,7 +21,8 @@ theme:
 # Support urls previously used by mdbook
 use_directory_urls: false
 repo_url: https://github.com/status-im/nimbus-eth1
-edit_uri: edit/unstable/docs/the_nimbus_book/src
+edit_uri: edit/master/fluffy/docs/the_fluffy_book/docs
+docs_dir: docs
 
 markdown_extensions:
   - admonition
@@ -49,14 +50,25 @@ nav:
     - 'quick-start-docker.md'
 
   - How-to:
-    # - 'install.md'
-    # - 'build.md'
+    - Installation:
+      - 'prerequisites.md'
+      - 'build-from-source.md'
+      - 'upgrade.md'
+      - 'metrics.md'
+    - Access the network:
+      - 'connect-to-portal.md'
+      - 'access-content.md'
     - Portal bridge:
       - 'history-content-bridging.md'
       - 'beacon-content-bridging.md'
+
+  - Developers:
+    - 'basics-for-developers.md'
+    - 'test-suite.md'
     - Local testnet:
       - 'run-local-testnet.md'
       - 'testnet-history-network.md'
       - 'testnet-beacon-network.md'
+    - 'fluffy-with-portal-hive.md'
     - 'protocol-interop-testing.md'
     - 'eth-data-exporter.md'
