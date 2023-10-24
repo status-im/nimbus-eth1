@@ -183,6 +183,19 @@ proc ledgerExtras(lc: impl.AccountsCache): LedgerExtras =
     rawRootHashFn: proc(): Hash256 =
       lc.rawTrie.rootHash())
 
+
+proc newLegacyAccountsCache(
+    db: CoreDbRef;
+    root: Hash256;
+    pruneTrie: bool): LedgerRef =
+  ## Constructor
+  let lc = impl.AccountsCache.init(db, root, pruneTrie)
+  wrp.AccountsCache(
+    ldgType:   LegacyAccountsCache,
+    ac:        lc,
+    extras:    lc.ledgerExtras(),
+    methods:   lc.ledgerMethods()).bless db
+
 # ------------------------------------------------------------------------------
 # Public iterators
 # ------------------------------------------------------------------------------
@@ -224,13 +237,7 @@ proc init*(
     db: CoreDbRef;
     root: Hash256;
     pruneTrie: bool): LedgerRef =
-  let lc = impl.AccountsCache.init(db, root, pruneTrie)
-  result = T(
-    ldgType:   LegacyAccountsCache,
-    ac:        lc,
-    extras:    lc.ledgerExtras(),
-    methods:   lc.ledgerMethods())
-  result.validate
+  db.newLegacyAccountsCache(root, pruneTrie)
 
 # ------------------------------------------------------------------------------
 # End

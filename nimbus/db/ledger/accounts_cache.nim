@@ -10,6 +10,7 @@
 
 import
   std/[tables, hashes, sets],
+  chronicles,
   eth/[common, rlp],
   ../../../stateless/multi_keys,
   ../../constants,

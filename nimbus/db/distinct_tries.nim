@@ -11,8 +11,10 @@
 {.push raises: [].}
 
 import
+  std/[algorithm, sequtils, strutils, tables],
   eth/[common, trie/hexary],
-  ./core_db
+  chronicles,
+  "."/[core_db, storage_types]
 
 type
   DB = CoreDbRef
@@ -20,10 +22,48 @@ type
   StorageTrie* = distinct CoreDbPhkRef
   DistinctTrie* = AccountsTrie | StorageTrie
 
+# ------------------------------------------------------------------------------
+# Private helper
+# ------------------------------------------------------------------------------
+
 func toBase(t: DistinctTrie): CoreDbPhkRef =
   ## Note that `CoreDbPhkRef` is a distinct variant of `CoreDxPhkRef` for
   ## the legacy API.
   t.CoreDbPhkRef
+
+# ------------------------------------------------------------------------------
+# Public debugging helpers
+# ------------------------------------------------------------------------------
+
+proc toSvp*(sl: StorageTrie): seq[(UInt256,UInt256)] =
+  ## Dump as slot id-value pair sequence
+  let
+    db = sl.toBase.parent
+    save = db.trackLegaApi
+  db.trackLegaApi = false
+  defer: db.trackLegaApi = save
+  let kvt = db.kvt
+  var kvp: Table[UInt256,UInt256]
+  try:
+    for (slotHash,val) in sl.toBase.toMpt.pairs:
+      if slotHash.len == 0:
+        kvp[high UInt256] = high UInt256
+      else:
+        let slotRlp = kvt.get(slotHashToSlotKey(slotHash).toOpenArray)
+        if slotRlp.len == 0:
+          kvp[high UInt256] = high UInt256
+        else:
+          kvp[rlp.decode(slotRlp,UInt256)] = rlp.decode(val,UInt256)
+  except CatchableError as e:
+    raiseAssert "Ooops(" & $e.name & "): " & e.msg
+  kvp.keys.toSeq.sorted.mapIt((it,kvp.getOrDefault(it,high UInt256)))
+
+proc toStr*(w: seq[(UInt256,UInt256)]): string =
+  "[" & w.mapIt("(" & it[0].toHex & "," & it[1].toHex & ")").join(", ") & "]"
+
+# ------------------------------------------------------------------------------
+# Public helpers
+# ------------------------------------------------------------------------------
 
 # I don't understand why "borrow" doesn't work here. --Adam
 proc rootHash*   (t: DistinctTrie): KeccakHash   = t.toBase.rootHash()
@@ -33,6 +73,9 @@ proc isPruning*  (t: DistinctTrie): bool         = t.toBase.isPruning()
 proc mpt*        (t: DistinctTrie): CoreDbMptRef = t.toBase.toMpt()
 func phk*        (t: DistinctTrie): CoreDbPhkRef = t.toBase
 
+# ------------------------------------------------------------------------------
+# Public functions: accounts trie
+# ------------------------------------------------------------------------------
 
 template initAccountsTrie*(db: DB, rootHash: KeccakHash, isPruning = true): AccountsTrie =
   AccountsTrie(db.phkPrune(rootHash, isPruning))
@@ -56,9 +99,11 @@ proc putAccountBytes*(trie: var AccountsTrie, address: EthAddress, value: openAr
 proc delAccountBytes*(trie: var AccountsTrie, address: EthAddress) =
   CoreDbPhkRef(trie).del(address)
 
+# ------------------------------------------------------------------------------
+# Public functions: storage trie
+# ------------------------------------------------------------------------------
 
-
-template initStorageTrie*(db: DB, rootHash: KeccakHash, isPruning = true): StorageTrie =
+proc initStorageTrie*(db: DB, rootHash: KeccakHash, isPruning = true): StorageTrie =
   StorageTrie(db.phkPrune(rootHash, isPruning))
 
 template initStorageTrie*(db: DB, isPruning = true): StorageTrie =
@@ -96,3 +141,7 @@ proc storageTrieForAccount*(trie: AccountsTrie, account: Account, isPruning = tr
   # it will create virtual container for each account.
   # see nim-eth#9
   initStorageTrie(trie.db, account.storageRoot, isPruning)
+
+# ------------------------------------------------------------------------------
+# End
+# ------------------------------------------------------------------------------

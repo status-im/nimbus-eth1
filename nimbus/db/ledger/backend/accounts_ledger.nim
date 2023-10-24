@@ -138,10 +138,10 @@ proc ledgerMethods(lc: impl.AccountsLedgerRef): LedgerFns =
     safeDisposeFn: proc(sp: LedgerSpRef) =
       lc.safeDispose(sp.savePoint),
 
-    selfDestruct6780Fn: proc(eAddr: EthAddress) =
+    selfDestructFn: proc(eAddr: EthAddress) =
       lc.selfDestruct(eAddr),
 
-    selfDestructFn: proc(eAddr: EthAddress) =
+    selfDestruct6780Fn: proc(eAddr: EthAddress) =
       lc.selfDestruct6780(eAddr),
 
     selfDestructLenFn: proc(): int =
@@ -169,6 +169,18 @@ proc ledgerExtras(lc: impl.AccountsLedgerRef): LedgerExtras =
   LedgerExtras(
     rawRootHashFn: proc(): Hash256 =
       lc.rawTrie.rootHash())
+
+
+proc newAccountsLedgerRef(
+    db: CoreDbRef;
+    root: Hash256;
+    pruneTrie: bool): LedgerRef =
+  let lc = impl.AccountsLedgerRef.init(db, root, pruneTrie)
+  wrp.AccountsLedgerRef(
+    ldgType:   LedgerCache,
+    ac:        lc,
+    extras:    lc.ledgerExtras(),
+    methods:   lc.ledgerMethods()).bless db
 
 # ------------------------------------------------------------------------------
 # Public iterators
@@ -210,13 +222,7 @@ proc init*(
     db: CoreDbRef;
     root: Hash256;
     pruneTrie: bool): LedgerRef =
-  let lc = impl.AccountsLedgerRef.init(db, root, pruneTrie)
-  result = T(
-    ldgType:   LedgerCache,
-    ac:        lc,
-    extras:    lc.ledgerExtras(),
-    methods:   lc.ledgerMethods())
-  result.validate
+  db.newAccountsLedgerRef(root, pruneTrie)
 
 # ------------------------------------------------------------------------------
 # End

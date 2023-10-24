@@ -16,6 +16,7 @@
 import
   std/[sequtils, strformat, strutils, tables, times],
   eth/common,
+  stew/byteutils,
   ../../nimbus/constants
 
 export
@@ -106,7 +107,7 @@ proc pp*(q: openArray[int]; itemsPerLine: int; lineSep: string): string =
 
 proc pp*(a: MDigest[256]; collapse = true): string =
   if not collapse:
-    a.data.mapIt(it.toHex(2)).join.toLowerAscii
+    a.data.toHex.toLowerAscii
   elif a == ZERO_HASH256:
     "ZERO_HASH256"
   elif a == EMPTY_ROOT_HASH:
@@ -118,7 +119,7 @@ proc pp*(a: MDigest[256]; collapse = true): string =
   elif a == ZERO_HASH256:
     "ZERO_HASH256"
   else:
-    a.data.mapIt(it.toHex(2)).join[56 .. 63].toLowerAscii
+    a.data.toHex.join[56 .. 63].toLowerAscii
 
 proc pp*(a: openArray[MDigest[256]]; collapse = true): string =
   "@[" & a.toSeq.mapIt(it.pp).join(" ") & "]"
@@ -132,7 +133,7 @@ proc pp*(q: openArray[byte]; noHash = false): string =
     for n in 0..31: a[n] = q[n]
     MDigest[256](data: a).pp
   else:
-    q.toSeq.mapIt(it.toHex(2)).join.toLowerAscii.pp(hex = true)
+    q.toHex.toLowerAscii.pp(hex = true)
 
 # ------------------------------------------------------------------------------
 # Elapsed time pretty printer

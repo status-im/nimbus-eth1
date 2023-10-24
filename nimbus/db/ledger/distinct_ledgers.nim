@@ -15,15 +15,43 @@
 ##
 
 import
-  std/typetraits,
+  std/[algorithm, sequtils, strutils, tables, typetraits],
+  chronicles,
   eth/common,
   results,
-  ../core_db
+  ".."/[core_db, storage_types]
 
 type
   AccountLedger* = distinct CoreDxAccRef
   StorageLedger* = distinct CoreDxPhkRef
   SomeLedger* = AccountLedger | StorageLedger
+
+# ------------------------------------------------------------------------------
+# Public debugging helpers
+# ------------------------------------------------------------------------------
+
+proc toSvp*(sl: StorageLedger): seq[(UInt256,UInt256)] =
+  ## Dump as slot id-value pair sequence
+  let
+    db = sl.distinctBase.parent
+    save = db.trackNewApi
+  db.trackNewApi = false
+  defer: db.trackNewApi = save
+  let kvt = db.newKvt
+  var kvp: Table[UInt256,UInt256]
+  try:
+    for (slotHash,val) in sl.distinctBase.toMpt.pairs:
+      let rc = kvt.get(slotHashToSlotKey(slotHash).toOpenArray)
+      if rc.isErr:
+        warn "StorageLedger.dump()", slotHash, error=($$rc.error)
+      else:
+        kvp[rlp.decode(rc.value,UInt256)] = rlp.decode(val,UInt256)
+  except CatchableError as e:
+    raiseAssert "Ooops(" & $e.name & "): " & e.msg
+  kvp.keys.toSeq.sorted.mapIt((it,kvp.getOrDefault(it,high UInt256)))
+
+proc toStr*(w: seq[(UInt256,UInt256)]): string =
+  "[" & w.mapIt("(" & it[0].toHex & "," & it[1].toHex & ")").join(", ") & "]"
 
 # ------------------------------------------------------------------------------
 # Public helpers

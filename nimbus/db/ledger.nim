@@ -28,8 +28,29 @@ import
 export
   AccountsCache,
   AccountsLedgerRef,
+  LedgerType,
   base,
   init
+
+# ------------------------------------------------------------------------------
+# Public constructor
+# ------------------------------------------------------------------------------
+
+proc init*(
+    ldgType: LedgerType;
+    db: CoreDbRef;
+    root: Hash256;
+    pruneTrie: bool;
+      ): LedgerRef =
+  case ldgType:
+  of LegacyAccountsCache:
+    result = AccountsCache.init(db, root, pruneTrie)
+
+  of LedgerCache:
+    result = AccountsLedgerRef.init(db, root, pruneTrie)
+
+  else:
+    raiseAssert: "Missing ledger type label"
 
 # ------------------------------------------------------------------------------
 # Public iterators
