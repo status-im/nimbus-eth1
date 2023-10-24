@@ -210,10 +210,10 @@ method execute*(step: NewPayloads, ctx: CancunTestContext): bool =
             forkchoiceState   = env.clMock.latestForkchoice
             expectedError     = step.fcUOnPayloadRequest.getExpectedError()
             expectedStatus    = PayloadExecutionStatus.valid
-            timestamp         = env.clMock.latestHeader.timestamp.uint64
-            version           = step.fcUOnPayloadRequest.forkchoiceUpdatedVersion(timestamp)
+            timestamp         = env.clMock.latestHeader.timestamp.uint64            
 
           payloadAttributes = step.fcUOnPayloadRequest.getPayloadAttributes(payloadAttributes)
+          let version = step.fcUOnPayloadRequest.forkchoiceUpdatedVersion(timestamp, some(payloadAttributes.timestamp.uint64))
 
           if step.fcUOnPayloadRequest.getExpectInvalidStatus():
             expectedStatus = PayloadExecutionStatus.invalid
