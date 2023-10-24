@@ -10,8 +10,7 @@
 import
   json_rpc/jsonmarshal,
   stew/results,
-  eth/p2p/discoveryv5/[routing_table, enr, node],
-  ../network/wire/portal_protocol
+  eth/p2p/discoveryv5/[routing_table, enr, node]
 
 export jsonmarshal, routing_table, enr, node
 
