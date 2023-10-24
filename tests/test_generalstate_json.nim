@@ -92,7 +92,7 @@ proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
 
   var gasUsed: GasInt
   let sender = ctx.tx.getSender()
-  let fork = com.toEVMFork(ctx.header.forkDeterminationInfoForHeader)
+  let fork = com.toEVMFork(ctx.header.forkDeterminationInfo)
 
   vmState.mutateStateDB:
     setupStateDB(ctx.pre, db)

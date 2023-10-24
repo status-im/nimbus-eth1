@@ -182,7 +182,7 @@ proc asyncProcessTransaction*(
     {.async, gcsafe.} =
   ## Variant of `asyncProcessTransaction()` with `*fork* derived
   ## from the `vmState` argument.
-  let fork = vmState.com.toEVMFork(header.forkDeterminationInfoForHeader)
+  let fork = vmState.com.toEVMFork(header.forkDeterminationInfo)
   return await vmState.asyncProcessTransaction(tx, sender, header, fork)
 
 proc processTransaction*(

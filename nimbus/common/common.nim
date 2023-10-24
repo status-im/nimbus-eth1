@@ -58,7 +58,7 @@ type
     forkTransitionTable: ForkTransitionTable
 
     # Eth wire protocol need this
-    forkIds: array[HardFork, ForkID]
+    forkIdCalculator: ForkIdCalculator
     networkId: NetworkId
 
     # synchronizer need this
@@ -117,10 +117,13 @@ proc consensusTransition(com: CommonRef, fork: HardFork) =
     # this could happen during reorg
     com.consensusType = com.config.consensusType
 
-proc setForkId(com: CommonRef, blockZero: BlockHeader) =
-  com.genesisHash = blockZero.blockHash
+proc setForkId(com: CommonRef, genesis: BlockHeader) =
+  com.genesisHash = genesis.blockHash
   let genesisCRC = crc32(0, com.genesisHash.data)
-  com.forkIds = calculateForkIds(com.config, genesisCRC)
+  com.forkIdCalculator = initForkIdCalculator(
+    com.forkTransitionTable,
+    genesisCRC,
+    genesis.timestamp.uint64)
 
 proc daoCheck(conf: ChainConfig) =
   if not conf.daoForkSupport or conf.daoForkBlock.isNone:
@@ -160,7 +163,7 @@ proc init(com      : CommonRef,
   # already at the MergeFork
   const TimeZero = EthTime(0)
 
-  # com.forkIds and com.blockZeroHash is set
+  # com.forkIdCalculator and com.genesisHash are set
   # by setForkId
   if genesis.isNil.not:
     com.hardForkTransition(ForkDeterminationInfo(
@@ -246,7 +249,7 @@ proc clone*(com: CommonRef, db: CoreDbRef): CommonRef =
     pruneTrie    : com.pruneTrie,
     config       : com.config,
     forkTransitionTable: com.forkTransitionTable,
-    forkIds      : com.forkIds,
+    forkIdCalculator: com.forkIdCalculator,
     genesisHash  : com.genesisHash,
     genesisHeader: com.genesisHeader,
     syncProgress : com.syncProgress,
@@ -315,7 +318,7 @@ func toEVMFork*(com: CommonRef): EVMFork =
 
 func isLondon*(com: CommonRef, number: BlockNumber): bool =
   # TODO: Fixme, use only London comparator
-  com.toHardFork(number.blockNumberToForkDeterminationInfo) >= London
+  com.toHardFork(number.forkDeterminationInfo) >= London
 
 func isLondon*(com: CommonRef, number: BlockNumber, timestamp: EthTime): bool =
   # TODO: Fixme, use only London comparator
@@ -339,10 +342,13 @@ proc minerAddress*(com: CommonRef; header: BlockHeader): EthAddress
 
   account.value
 
-func forkId*(com: CommonRef, forkDeterminer: ForkDeterminationInfo): ForkID {.gcsafe.} =
+func forkId*(com: CommonRef, head, time: uint64): ForkID {.gcsafe.} =
   ## EIP 2364/2124
-  let fork = com.toHardFork(forkDeterminer)
-  com.forkIds[fork]
+  com.forkIdCalculator.newID(head, time)
+
+func forkId*(com: CommonRef, head: BlockNumber, time: EthTime): ForkID {.gcsafe.} =
+  ## EIP 2364/2124
+  com.forkIdCalculator.newID(head.truncate(uint64), time.uint64)
 
 func isEIP155*(com: CommonRef, number: BlockNumber): bool =
   com.config.eip155Block.isSome and number >= com.config.eip155Block.get

@@ -84,13 +84,13 @@ type
   # is because it's perfectly fine, if mergeForkBlock is
   # set, to not bother with TTD anymore. But I'm not sure
   # it makes sense to allow time to be optional. See the
-  # comment below on blockNumberToForkDeterminationInfo.
+  # comment below on forkDeterminationInfo.
   ForkDeterminationInfo* = object
     blockNumber*: BlockNumber
     time*: Option[EthTime]
     td*: Option[DifficultyInt]
 
-func blockNumberToForkDeterminationInfo*(n: BlockNumber): ForkDeterminationInfo =
+func forkDeterminationInfo*(n: BlockNumber): ForkDeterminationInfo =
   # FIXME: All callers of this function are suspect; I'm guess we should
   # always be using both block number and time. But we have a few places,
   # like various tests, where we only have block number and the tests are
@@ -103,6 +103,10 @@ func forkDeterminationInfo*(n: BlockNumber, t: EthTime): ForkDeterminationInfo =
 # FIXME: Is this called anywhere?
 func forkDeterminationInfoIncludingTd*(n: BlockNumber, t: EthTime, td: DifficultyInt): ForkDeterminationInfo =
   ForkDeterminationInfo(blockNumber: n, time: some(t), td: some(td))
+
+func forkDeterminationInfo*(header: BlockHeader): ForkDeterminationInfo =
+  # FIXME-Adam-mightAlsoNeedTTD?
+  forkDeterminationInfo(header.blockNumber, header.timestamp)
 
 proc adjustForNextBlock*(n: BlockNumber): BlockNumber =
   n + 1
@@ -343,72 +347,74 @@ const
 # ------------------------------------------------------------------------------
 # Fork ID helpers
 # ------------------------------------------------------------------------------
+type
+  ForkIdCalculator* = object
+    byBlock: seq[uint64]
+    byTime: seq[uint64]
+    genesisCRC: uint32
 
-func toNextFork(n: Option[BlockNumber]): uint64 =
-  if n.isSome:
-    n.get.truncate(uint64)
-  else:
-    0'u64
+func newID*(calc: ForkIdCalculator, head, time: uint64): ForkID =
+  var hash = calc.genesisCRC
+  for fork in calc.byBlock:
+    if fork <= head:
+      # Fork already passed, checksum the previous hash and the fork number
+      hash = crc32(hash, fork.toBytesBE)
+      continue
+    return (hash, fork)
 
-# EIP-6122: ForkID now works with timestamps too.
-func toNextFork(t: Option[EthTime]): uint64 =
-  if t.isSome:
-    t.get.uint64
-  else:
-    0'u64
+  for fork in calc.byTime:
+    if fork <= time:
+      # Fork already passed, checksum the previous hash and fork timestamp
+      hash = crc32(hash, fork.toBytesBE)
+      continue
+    return (hash, fork)
 
-func arrayMappingHardForkToNextFork(c: ChainConfig): array[HardFork, uint64] =
-  return [
-    0'u64,
-    toNextFork(c.homesteadBlock),
-    toNextFork(c.daoForkBlock),
-    toNextFork(c.eip150Block),
-    toNextFork(c.eip158Block),
-    toNextFork(c.byzantiumBlock),
-    toNextFork(c.constantinopleBlock),
-    toNextFork(c.petersburgBlock),
-    toNextFork(c.istanbulBlock),
-    toNextFork(c.muirGlacierBlock),
-    toNextFork(c.berlinBlock),
-    toNextFork(c.londonBlock),
-    toNextFork(c.arrowGlacierBlock),
-    toNextFork(c.grayGlacierBlock),
-    toNextFork(c.mergeForkBlock),
-    toNextFork(c.shanghaiTime),
-    toNextFork(c.cancunTime),
-  ]
+  (hash, 0'u64)
 
-func getNextFork(next: array[HardFork, uint64], fork: HardFork): uint64 =
-  if fork == high(HardFork):
-    result = 0
-    return
+func initForkIdCalculator*(map: ForkTransitionTable,
+                           genesisCRC: uint32,
+                           genesisTime: uint64): ForkIdCalculator =
 
-  result = next[fork]
-  for x in fork..high(HardFork):
-    if result != next[x]:
-      result = next[x]
-      break
+  # Extract the fork rule block number aggregate it
+  var forksByBlock: seq[uint64]
+  for fork, val in map.blockNumberThresholds:
+    if val.isNone: continue
+    let val64 = val.get.truncate(uint64)
+    if forksByBlock.len == 0:
+      forksByBlock.add val64
+    elif forksByBlock[^1] != val64:
+      # Deduplicate fork identifiers applying multiple forks
+      forksByBlock.add val64
 
-func calculateForkId(next: array[HardFork, uint64], fork: HardFork,
-                     prevCRC: uint32, prevFork: uint64): ForkID =
-  result.nextFork = getNextFork(next, fork)
+  if map.mergeForkTransitionThreshold.blockNumber.isSome:
+    let val64 = map.mergeForkTransitionThreshold.blockNumber.get.truncate(uint64)
+    if forksByBlock.len == 0:
+      forksByBlock.add val64
+    elif forksByBlock[^1] != val64:
+      # Deduplicate fork identifiers applying multiple forks
+      forksByBlock.add val64
 
-  if result.nextFork != prevFork:
-    result.crc = crc32(prevCRC, toBytesBE(prevFork))
-  else:
-    result.crc = prevCRC
+  # Skip any forks in block 0, that's the genesis ruleset
+  if forksByBlock.len > 0 and forksByBlock[0] == 0:
+    forksByBlock.delete(0)
 
-func calculateForkIds*(c: ChainConfig,
-                      genesisCRC: uint32): array[HardFork, ForkID] =
-  let next = arrayMappingHardForkToNextFork(c)
+  # Extract the fork rule timestamp number aggregate it
+  var forksByTime: seq[uint64]
+  for fork, val in map.timeThresholds:
+    if val.isNone: continue
+    let val64 = val.get.uint64
+    if forksByTime.len == 0:
+      forksByTime.add val64
+    elif forksByTime[^1] != val64:
+      forksByTime.add val64
 
-  var prevCRC = genesisCRC
-  var prevFork = getNextFork(next, Frontier)
+  # Skip any forks before genesis.
+  while forksByTime.len > 0 and forksByTime[0] <= genesisTime:
+    forksByTime.delete(0)
 
-  for fork in HardFork:
-    result[fork] = calculateForkId(next, fork, prevCRC, prevFork)
-    prevFork = result[fork].nextFork
-    prevCRC = result[fork].crc
+  result.genesisCRC = genesisCRC
+  result.byBlock = system.move(forksByBlock)
+  result.byTime = system.move(forksByTime)
 
 # ------------------------------------------------------------------------------
 # End

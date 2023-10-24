@@ -25,7 +25,7 @@ type
 
   ChainForkId* = object
     forkHash*: array[4, byte] # The RLP encoding must be exactly 4 bytes.
-    forkNext*: BlockNumber    # The RLP encoding must be variable-length
+    forkNext*: uint64         # The RLP encoding must be variable-length
 
   EthWireBase* = ref object of RootRef
 

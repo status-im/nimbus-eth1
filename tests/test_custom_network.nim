@@ -212,7 +212,7 @@ proc genesisLoadRunner(noisy = true;
         params = params)
 
       check mcom.ttd.get == sSpcs.termTotalDff
-      check mcom.toHardFork(sSpcs.mergeFork.toBlockNumber.blockNumberToForkDeterminationInfo) == MergeFork
+      check mcom.toHardFork(sSpcs.mergeFork.toBlockNumber.forkDeterminationInfo) == MergeFork
 
     test &"Construct persistent ChainDBRef on {tmpDir}, {persistPruneInfo}":
       # Before allocating the database, the data directory needs to be
@@ -229,7 +229,7 @@ proc genesisLoadRunner(noisy = true;
         params = params)
 
       check dcom.ttd.get == sSpcs.termTotalDff
-      check dcom.toHardFork(sSpcs.mergeFork.toBlockNumber.blockNumberToForkDeterminationInfo) == MergeFork
+      check dcom.toHardFork(sSpcs.mergeFork.toBlockNumber.forkDeterminationInfo) == MergeFork
 
     test "Initialise in-memory Genesis":
       mcom.initializeEmptyDb

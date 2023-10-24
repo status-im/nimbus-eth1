@@ -392,7 +392,7 @@ method getStatus*(ctx: EthWireRef): EthState
     db = ctx.db
     com = ctx.chain.com
     bestBlock = db.getCanonicalHead()
-    forkId = com.forkId(bestBlock.forkDeterminationInfoForHeader)
+    forkId = com.forkId(bestBlock.blockNumber, bestBlock.timestamp)
 
   EthState(
     totalDifficulty: db.headTotalDifficulty,
@@ -400,7 +400,7 @@ method getStatus*(ctx: EthWireRef): EthState
     bestBlockHash: bestBlock.blockHash,
     forkId: ChainForkId(
       forkHash: forkId.crc.toBytesBE,
-      forkNext: forkId.nextFork.toBlockNumber
+      forkNext: forkId.nextFork
     )
   )
 
