@@ -46,9 +46,9 @@ const
 
   failSample0* = CaptureSpecs(
     name:      "fail-goerli",
-    network:   bulkTest0.network,
-    file:      bulkTest0.file,
-    numBlocks: 18004)
+    network:   bulkTest2.network,
+    file:      bulkTest2.file,
+    numBlocks: 147_621)
 
   failSample1* = CaptureSpecs(
     name:      "fail-main",

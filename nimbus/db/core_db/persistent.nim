@@ -32,9 +32,6 @@ proc newCoreDbRef*(
   when dbType == LegacyDbPersistent:
     newLegacyPersistentCoreDbRef path
 
-  elif dbType == AristoDbRocks:
-    newAristoRocksDbCoreDbRef path
-
   else:
     {.error: "Unsupported dbType for persistent newCoreDbRef()".}
 

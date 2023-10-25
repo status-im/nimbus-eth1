@@ -60,7 +60,7 @@ type
 proc pruneTrie*(db: AccountStateDB): bool =
   db.trie.isPruning
 
-func db*(db: AccountStateDB): CoreDbRef =
+proc db*(db: AccountStateDB): CoreDbRef =
   db.trie.db
 
 proc kvt*(db: AccountStateDB): CoreDbKvtRef =

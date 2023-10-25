@@ -18,6 +18,7 @@
 
 import
   std/[tables, hashes, sets],
+  chronicles,
   eth/[common, rlp],
   results,
   ../../../stateless/multi_keys,
@@ -54,7 +55,6 @@ type
     codeTouched*: bool
 
   AccountsLedgerRef* = ref object
-    kvt: CoreDbKvtRef # Legacy API is god enough here
     ledger: AccountLedger
     savePoint: LedgerSavePoint
     witnessCache: Table[EthAddress, WitnessData]
@@ -114,6 +114,9 @@ proc beginSavepoint*(ac: AccountsLedgerRef): LedgerSavePoint {.gcsafe.}
 # take this out once those are gone.
 proc rawTrie*(ac: AccountsLedgerRef): AccountLedger = ac.ledger
 
+proc db(ac: AccountsLedgerRef): CoreDbRef = ac.ledger.db
+proc kvt(ac: AccountsLedgerRef): CoreDbKvtRef = ac.db.kvt
+
 func newCoreDbAccount: CoreDbAccount =
   CoreDbAccount(
     nonce:      emptyAcc.nonce,
@@ -131,7 +134,6 @@ template noRlpException(info: static[string]; code: untyped) =
 proc init*(x: typedesc[AccountsLedgerRef], db: CoreDbRef,
            root: KeccakHash, pruneTrie = true): AccountsLedgerRef =
   new result
-  result.kvt = db.kvt
   result.ledger = AccountLedger.init(db, root, pruneTrie)
   result.witnessCache = initTable[EthAddress, WitnessData]()
   discard result.beginSavepoint

@@ -24,12 +24,9 @@ type
     Ooops
     LegacyDbMemory
     LegacyDbPersistent
-    AristoDbMemory            ## Memory backend emulator
-    AristoDbRocks             ## RocksDB backend
-    AristoDbVoid              ## No backend (to be prefered over `XxxDbMemory`)
 
 const
-  CoreDbPersistentTypes* = {LegacyDbPersistent, AristoDbRocks}
+  CoreDbPersistentTypes* = {LegacyDbPersistent}
 
 type
   CoreDbRc*[T] = Result[T,CoreDbErrorRef]
@@ -215,7 +212,11 @@ type
   # --------------------------------------------------
   CoreDbRef* = ref object of RootRef
     ## Database descriptor
-    dbType*: CoreDbType
+    dbType*: CoreDbType    ## Type of database backend
+    trackLegaApi*: bool    ## Debugging support
+    trackNewApi*: bool     ## Debugging support
+    trackLedgerApi*: bool  ## Debugging suggestion for subsequent ledger
+    localDbOnly*: bool     ## Debugging, suggestion to ignore async fetch
     methods*: CoreDbBaseFns
 
   CoreDbErrorRef* = ref object of RootRef

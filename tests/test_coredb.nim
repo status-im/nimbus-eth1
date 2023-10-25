@@ -17,9 +17,10 @@ import
   eth/common,
   results,
   unittest2,
-  ../../nimbus/[db/core_db/persistent, core/chain],
+  ../../nimbus/db/[core_db/persistent, ledger],
+  ../../nimbus/core/chain,
   ./replay/pp,
-  ./test_coredb/[coredb_test_xx, test_legacy]
+  ./test_coredb/[coredb_test_xx, test_chainsync]
 
 const
   baseDir = [".", "..", ".."/"..", $DirSep]
@@ -122,14 +123,14 @@ proc legacyRunner(
   suite "Legacy DB: test Core API interfaces"&
         &", capture={fileInfo}, {sayPersistent}":
 
-    test &"Legaci API, {numBlocksInfo} blocks":
+    test &"Ledger API, {numBlocksInfo} blocks":
       let
         com = openLegacyDB(persistent, dbDir, capture.network)
       defer:
         com.db.finish(flush = true)
         if persistent: dbDir.flushDbDir
 
-      check noisy.testChainSyncLegacyApi(filePath, com, numBlocks)
+      check noisy.testChainSync(filePath, com, numBlocks)
 
 # ------------------------------------------------------------------------------
 # Main function(s)
@@ -149,8 +150,8 @@ when isMainModule:
   # dumps `bulkTest2`, `bulkTest3`, .. from the `nimbus-eth1-blobs` package.
   # For specs see `tests/test_coredb/bulk_test_xx.nim`.
   var testList = @[bulkTest0] # This test is superseded by `bulkTest1` and `2`
-  # testList = @[failSample0]
-  when true: # and false:
+  testList = @[failSample0]
+  when true and false:
     testList = @[bulkTest2, bulkTest3]
 
   for n,capture in testList:

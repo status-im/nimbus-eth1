@@ -37,7 +37,7 @@ proc setErrorLevel {.used.} =
 # Public test function
 # ------------------------------------------------------------------------------
 
-proc test_chainSyncLegacyApi*(
+proc test_chainSync*(
     noisy: bool;
     filePath: string;
     com: CommonRef;
@@ -88,7 +88,12 @@ proc test_chainSyncLegacyApi*(
       xCheck runPersistBlocks1Rc == ValidationResult.OK
       dotsOrSpace = "   "
 
-    if noisy: setTraceLevel()
+    if noisy:
+      setTraceLevel()
+      com.db.trackLegaApi = true
+      com.db.trackNewApi = true
+      com.db.trackLedgerApi = true
+      com.db.localDbOnly = true
     if lastOneExtra:
       let
         headers0 = headers9[0..0]

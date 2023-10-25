@@ -29,6 +29,7 @@ type
   LedgerRef* = ref object of RootRef
     ## Root object with closures
     ldgType*: LedgerType    ## For debugging
+    trackApi*: bool         ## For debugging
     extras*: LedgerExtras   ## Support might go away
     methods*: LedgerFns
 

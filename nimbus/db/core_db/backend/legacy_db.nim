@@ -208,8 +208,7 @@ proc mptMethods(mpt: HexaryChildDbRef; db: LegacyDbRef): CoreDbMptFns =
 
     fetchFn: proc(k: openArray[byte]): CoreDbRc[Blob] =
       db.mapRlpException("legacy/mpt/get()"):
-        return ok(mpt.trie.get(k))
-    ,
+        return ok(mpt.trie.get(k)),
 
     deleteFn: proc(k: openArray[byte]): CoreDbRc[void] =
       db.mapRlpException("legacy/mpt/del()"):
@@ -223,8 +222,7 @@ proc mptMethods(mpt: HexaryChildDbRef; db: LegacyDbRef): CoreDbMptFns =
 
     containsFn: proc(k: openArray[byte]): CoreDbRc[bool] =
       db.mapRlpException("legacy/mpt/put()"):
-        return ok(mpt.trie.contains(k))
-    ,
+        return ok(mpt.trie.contains(k)),
 
     rootVidFn: proc(): CoreDbVidRef =
       db.bless(LegacyCoreDbVid(vHash: mpt.trie.rootHash)),
@@ -252,8 +250,7 @@ proc accMethods(mpt: HexaryChildDbRef; db: LegacyDbRef): CoreDbAccFns =
     fetchFn: proc(k: EthAddress): CoreDbRc[CoreDbAccount] =
       const info = "legacy/mpt/getAccount()"
       db.mapRlpException info:
-        return ok mpt.trie.get(k.keccakHash.data).toCoreDbAccount(db)
-    ,
+        return ok mpt.trie.get(k.keccakHash.data).toCoreDbAccount(db),
 
     deleteFn: proc(k: EthAddress): CoreDbRc[void] =
       db.mapRlpException("legacy/mpt/del()"):
@@ -267,8 +264,7 @@ proc accMethods(mpt: HexaryChildDbRef; db: LegacyDbRef): CoreDbAccFns =
 
     containsFn: proc(k: EthAddress): CoreDbRc[bool] =
       db.mapRlpException("legacy/mpt/put()"):
-        return ok(mpt.trie.contains k.keccakHash.data)
-    ,
+        return ok(mpt.trie.contains k.keccakHash.data),
 
     rootVidFn: proc(): CoreDbVidRef =
       db.bless(LegacyCoreDbVid(vHash: mpt.trie.rootHash)),
@@ -327,8 +323,7 @@ proc baseMethods(
 
     destroyFn: proc(ignore: bool) =
       if not closeDb.isNil:
-        closeDb()
-    ,
+        closeDb(),
 
     vidHashFn: proc(vid: CoreDbVidRef): Result[Hash256,void] =
       ok(vid.lvHash),
