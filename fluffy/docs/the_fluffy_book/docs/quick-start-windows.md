@@ -12,21 +12,15 @@ The guide assumes Windows is being used. For Linux/macOS users follow this
 ## Steps
 
 ### Prerequisites
-- Install & setup Mingw-w64:
-    - Download Mingw-w64 for your architecture using the "[MinGW-W64 Online
-    Installer](https://sourceforge.net/projects/mingw-w64/files/)" (first link
-    under the directory listing).
-    - Run it and select your architecture in the setup
-    menu ("i686" on 32-bit, "x86\_64" on 64-bit), set the threads to "win32" and
-    the exceptions to "dwarf" on 32-bit and "seh" on 64-bit. Change the
-    installation directory to "C:\mingw-w64".
-    - Add it to your system PATH in "My Computer"/"This PC" -> Properties ->
-    Advanced system settings -> Environment Variables -> Path -> Edit -> New -> C:\mingw-w64\mingw64\bin (it's "C:\mingw-w64\mingw32\bin" on 32-bit)
+- Developer tools (C compiler, Make, Bash, CMake, Git 2.9.4 or newer)
 
-- Install [cmake](https://cmake.org/).
+If you need help installing these tools, you can consult our
+[prerequisites page](./prerequisites.md).
 
-- Install [Git for Windows](https://gitforwindows.org/) and use a "Git Bash"
-shell to clone and build Fluffy in the next steps.
+!!! note
+    To build Fluffy on Windows, the MinGW-w64 build environment is recommended.
+    The build commands in the rest of this page assume the MinGW build
+    environment is used.
 
 ### Build the Fluffy client
 ```bash

@@ -9,7 +9,10 @@ The guide assumes Linux or macOS is being used. For Windows users follow this
 ## Steps
 
 ### Prerequisites
-- GNU Make, Bash and the usual POSIX utilities. Git 2.9.4 or newer.
+- Developer tools (C compiler, Make, Bash, CMake, Git 2.9.4 or newer)
+
+If you need help installing these tools, you can consult our
+[prerequisites page](./prerequisites.md).
 
 ### Build the Fluffy client
 ```bash

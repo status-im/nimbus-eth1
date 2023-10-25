@@ -14,7 +14,7 @@ E.g.:
 <!-- TODO: Add most important development tips from following page here and
 remove the link -->
 
-More [development tips](https://github.com/status-im/nimbus-eth1/README.md#devel-tips)
+More [development tips](https://github.com/status-im/nimbus-eth1/blob/master/README.md#devel-tips)
 can be found on the general nimbus-eth1 readme.
 
 The code follows the

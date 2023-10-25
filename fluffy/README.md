@@ -11,7 +11,7 @@
 ## Introduction
 
 Fluffy is the Nimbus client implementation of the
-[Portal network specifications](https://github.com/ethereum/portal-network-specs/blob/master/portal-network.md).
+[Portal network specifications](https://github.com/ethereum/portal-network-specs).
 
 You can find all the information you need to run a Fluffy node in
 [The Fluffy Book](https://status-im.github.io/nimbus-eth1).
