@@ -13,8 +13,10 @@
 import
   std/options,
   eth/[common, trie/db],
-  ./backend/[legacy_db],
-  "."/[base, core_apps]
+  ./backend/legacy_db,
+  ./base,
+  #./core_apps_legacy as core_apps
+  ./core_apps_newapi as core_apps
 
 export
   common,
