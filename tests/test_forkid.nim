@@ -57,6 +57,12 @@ const
     (number: 1735372'u64, time: 1677557088'u64, id: (crc: 0xf7f9bc08'u32, next: 0'u64)),          # First Shanghai block
   ]
 
+  HoleskyNetIDs = [
+    (number: 0'u64,   time: 0'u64, id: (crc: 0xc61a6098'u32, next: 1696000704'u64)), # Unsynced, last Frontier, Homestead, Tangerine, Spurious, Byzantium, Constantinople, Petersburg, Istanbul, Berlin, London, Paris block
+    (number: 123'u64, time: 0'u64, id: (crc: 0xc61a6098'u32, next: 1696000704'u64)), # First MergeNetsplit block
+    (number: 123'u64, time: 1696000704'u64, id: (crc: 0xfd4f016b'u32, next: 0'u64)), # Last MergeNetsplit block
+  ]
+
 template runTest(network: untyped, name: string) =
   test name:
     var
@@ -122,6 +128,7 @@ proc forkIdMain*() =
     runTest(MainNet, "MainNet")
     runTest(GoerliNet, "GoerliNet")
     runTest(SepoliaNet, "SepoliaNet")
+    runTest(HoleskyNet, "HoleskyNet")
     test "Genesis Time Fork ID":
       runGenesisTimeIdTests()
 

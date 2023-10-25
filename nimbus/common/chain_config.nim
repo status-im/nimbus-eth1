@@ -50,10 +50,6 @@ type
     config* : ChainConfig
     genesis*: Genesis
 
-  AddressBalance = object
-    address {.rlpCustomSerialization.}: EthAddress
-    account {.rlpCustomSerialization.}: GenesisAccount
-
   GenesisFile* = object
     config      : ChainConfig
     nonce*      : BlockNonce
@@ -76,9 +72,9 @@ const
   CustomNet*  = 0.NetworkId
   # these are public network id
   MainNet*    = 1.NetworkId
-  # No longer used: MordenNet = 2
   GoerliNet*  = 5.NetworkId
   SepoliaNet* = 11155111.NetworkId
+  HoleskyNet* = 17000.NetworkId
 
 # ------------------------------------------------------------------------------
 # Private helper functions
@@ -92,14 +88,61 @@ proc writeValue(writer: var JsonWriter, value: Option[EthTime])
   else:
     writer.writeValue JsonString("null")
 
-proc read(rlp: var Rlp, x: var AddressBalance, _: type EthAddress): EthAddress
-    {.gcsafe, raises: [RlpError].} =
-  let val = rlp.read(UInt256).toBytesBE()
-  result[0 .. ^1] = val.toOpenArray(12, val.high)
+type
+  Slots = object
+    key: UInt256
+    val: UInt256
 
-proc read(rlp: var Rlp, x: var AddressBalance, _: type GenesisAccount): GenesisAccount
-    {.gcsafe, raises: [RlpError].} =
-  GenesisAccount(balance: rlp.read(UInt256))
+  Misc = object
+    nonce: uint64
+    code : seq[byte]
+    storage: seq[Slots]
+
+  AddressBalance = object
+    address: EthAddress
+    account: GenesisAccount
+
+proc read*(rlp: var Rlp, T: type AddressBalance): T {.gcsafe, raises: [RlpError].}=
+  let listLen = rlp.listLen
+  rlp.tryEnterList()
+  let val = rlp.read(UInt256).toBytesBE()
+  result.address[0..^1] = val.toOpenArray(12, val.high)
+  result.account.balance = rlp.read(UInt256)
+  if listLen == 3:
+    var misc = rlp.read(Misc)
+    result.account.nonce = misc.nonce
+    result.account.code  = system.move(misc.code)
+    for x in misc.storage:
+      result.account.storage[x.key] = x.val
+
+proc append*(w: var RlpWriter, ab: AddressBalance) =
+  var listLen = 2
+  if ab.account.storage.len > 0 or
+    ab.account.nonce != 0.AccountNonce or
+    ab.account.code.len > 0:
+    inc listLen
+
+  w.startList(listLen)
+  var tmp: array[32, byte]
+  tmp[12..^1] = ab.address[0..^1]
+  var val = UInt256.fromBytesBE(tmp)
+  w.append(val)
+  w.append(ab.account.balance)
+  if listLen == 3:
+    var misc: Misc
+    misc.nonce = ab.account.nonce
+    misc.code = ab.account.code
+    for k, v in ab.account.storage:
+      misc.storage.add Slots(key:k, val: v)
+    w.append(misc)
+
+proc append*(w: var RlpWriter, ga: GenesisAlloc) =
+  var list: seq[AddressBalance]
+  for k, v in ga:
+    list.add AddressBalance(
+      address: k, account: v
+    )
+  w.append(list)
 
 func decodePrealloc*(data: seq[byte]): GenesisAlloc
     {.gcsafe, raises: [RlpError].} =
@@ -173,11 +216,15 @@ proc readValue(reader: var JsonReader, value: var BlockNonce)
   except ValueError as ex:
     reader.raiseUnexpectedValue(ex.msg)
 
-# genesis timestamp is in hex
+# genesis timestamp is in hex/dec
 proc readValue(reader: var JsonReader, value: var EthTime)
     {.gcsafe, raises: [SerializationError, IOError].} =
   try:
-    value = fromHex[int64](reader.readValue(string)).EthTime
+    let data = reader.readValue(string)
+    if data.len > 2 and data[1] == 'x':
+      value = fromHex[int64](data).EthTime
+    else:
+      value = parseInt(data).EthTime
   except ValueError as ex:
     reader.raiseUnexpectedValue(ex.msg)
 
@@ -446,7 +493,26 @@ proc chainConfigForNetwork*(id: NetworkId): ChainConfig =
       londonBlock:         some(0.toBlockNumber),
       mergeForkBlock:      some(1735371.toBlockNumber),
       terminalTotalDifficulty: some(sepoliaTTD),
-      shanghaiTime:        some(1_677_557_088.EthTime)
+      shanghaiTime:        some(1_677_557_088.EthTime),
+    )
+  of HoleskyNet:
+    ChainConfig(
+      consensusType:       ConsensusType.POS,
+      chainId:             HoleskyNet.ChainId,
+      homesteadBlock:      some(0.toBlockNumber),
+      eip150Block:         some(0.toBlockNumber),
+      eip155Block:         some(0.toBlockNumber),
+      eip158Block:         some(0.toBlockNumber),
+      byzantiumBlock:      some(0.toBlockNumber),
+      constantinopleBlock: some(0.toBlockNumber),
+      petersburgBlock:     some(0.toBlockNumber),
+      istanbulBlock:       some(0.toBlockNumber),
+      berlinBlock:         some(0.toBlockNumber),
+      londonBlock:         some(0.toBlockNumber),
+      mergeForkBlock:      some(0.toBlockNumber),
+      terminalTotalDifficulty: some(0.u256),
+      terminalTotalDifficultyPassed: some(true),
+      shanghaiTime:        some(1_696_000_704.EthTime),
     )
   else:
     ChainConfig()
@@ -479,6 +545,14 @@ proc genesisBlockForNetwork*(id: NetworkId): Genesis
       gasLimit: 0x1c9c380,
       difficulty: 0x20000.u256,
       alloc: decodePrealloc(sepoliaAllocData)
+    )
+  of HoleskyNet:
+    Genesis(
+      difficulty: 0x01.u256,
+      gasLimit: 0x17D7840,
+      nonce: 0x1234.toBlockNonce,
+      timestamp: EthTime(1_695_902_100),
+      alloc: decodePrealloc(holeskyAllocData)
     )
   else:
     Genesis()

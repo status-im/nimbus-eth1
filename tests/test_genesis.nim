@@ -34,6 +34,11 @@ proc genesisTest() =
       let b = makeGenesis(SepoliaNet)
       check b.blockHash == "25a5cc106eea7138acab33231d7160d69cb777ee0c2c553fcddf5138993e6dd9".toDigest
 
+    test "Correct holesky hash":
+      let b = makeGenesis(HoleskyNet)
+      check b.blockHash == "b5f7f912443c940f21fd611f12828d75b534364ed9e95ca4e307729a4661bde4".toDigest
+      check b.stateRoot == "69D8C9D72F6FA4AD42D4702B433707212F90DB395EB54DC20BC85DE253788783".toDigest
+
 proc customGenesisTest() =
   suite "Custom Genesis":
     test "loadCustomGenesis":
@@ -88,6 +93,16 @@ proc customGenesisTest() =
       check com.genesisHeader.blockHash == genesisHash
       check com.ttd.get == ttd
       check com.consensus == ConsensusType.POW
+
+    test "Holesky":
+      var cg: NetworkParams
+      check loadNetworkParams("holesky.json".findFilePath, cg)
+      let com = CommonRef.new(newCoreDbRef LegacyDbMemory, params = cg)
+      let stateRoot = "69D8C9D72F6FA4AD42D4702B433707212F90DB395EB54DC20BC85DE253788783".toDigest
+      let genesisHash = "b5f7f912443c940f21fd611f12828d75b534364ed9e95ca4e307729a4661bde4".toDigest
+      check com.genesisHeader.stateRoot == stateRoot
+      check com.genesisHeader.blockHash == genesisHash
+      check com.chainId == 17000.ChainId
 
 proc genesisMain*() =
   genesisTest()

@@ -213,11 +213,12 @@ type
 
     network {.
       separator: "\pETHEREUM NETWORK OPTIONS:"
-      desc: "Name or id number of Ethereum network(mainnet(1), goerli(5), sepolia(11155111), other=custom)"
+      desc: "Name or id number of Ethereum network(mainnet(1), goerli(5), sepolia(11155111), holesky(17000), other=custom)"
       longDesc:
         "- mainnet: Ethereum main network\n" &
         "- goerli:  Test network (proof-of-authority, works across all clients)\n" &
-        "- sepolia: Test network (proof-of-work)"
+        "- sepolia: Test network (proof-of-work)\n" &
+        "- holesky: The holesovice post-merge testnet"
       defaultValue: "" # the default value is set in makeConfig
       defaultValueDesc: "mainnet(1)"
       abbr: "i"
@@ -654,6 +655,7 @@ proc getNetworkId(conf: NimbusConf): Option[NetworkId] =
   of "mainnet": return some MainNet
   of "goerli" : return some GoerliNet
   of "sepolia": return some SepoliaNet
+  of "holesky": return some HoleskyNet
   else:
     try:
       some parseInt(network).NetworkId
@@ -732,6 +734,8 @@ proc getBootNodes*(conf: NimbusConf): seq[ENode] =
       bootstrapNodes.setBootnodes(GoerliBootnodes)
     of SepoliaNet:
       bootstrapNodes.setBootnodes(SepoliaBootnodes)
+    of HoleskyNet:
+      bootstrapNodes.setBootnodes(HoleskyBootnodes)
     else:
       # custom network id
       discard

@@ -4,7 +4,9 @@ import
 
 from ../nimbus/common/chain_config import
   MainNet,
-  GoerliNet
+  GoerliNet,
+  SepoliaNet,
+  HoleskyNet
 
 type
   ConfigStatus* = enum
@@ -62,6 +64,8 @@ proc processNetId(val: string, o: var NetworkId): ConfigStatus =
   case val.toLowerAscii()
   of "main": o = MainNet
   of "goerli": o = GoerliNet
+  of "sepolia": o = SepoliaNet
+  of "holesky": o = HoleskyNet
 
 template checkArgument(fun, o, value: untyped) =
   ## Checks if arguments got processed successfully
