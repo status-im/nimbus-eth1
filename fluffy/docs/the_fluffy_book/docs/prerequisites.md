@@ -46,10 +46,10 @@ installed:
         !!! note
             If the online installer isn't working you can try installing `mingw-w64` through [MSYS2](https://www.msys2.org/).
 
-    - Install [cmake](https://cmake.org/).
+    - Install [CMake](https://cmake.org/).
 
     - Install [Git for Windows](https://gitforwindows.org/) and use a "Git Bash"
-    shell to clone nimbus-eth1 and build fluffy.
+    shell to clone nimbus-eth1 and build Fluffy.
 
 
 === "Android"

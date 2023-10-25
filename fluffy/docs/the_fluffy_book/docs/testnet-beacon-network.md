@@ -22,7 +22,7 @@ activated.
 TRUSTED_BLOCK_ROOT=0x1234567890123456789012345678901234567890123456789012345678901234 # Replace with trusted block root.
 
 # Run the script, start 8 nodes + beacon_chain_bridge
-./fluffy/scripts/launch_local_testnet.sh -n8 --trusted-block-root ${TRUSTED_BLOCK_ROOT}--beacon-chain-bridge
+./fluffy/scripts/launch_local_testnet.sh -n8 --trusted-block-root ${TRUSTED_BLOCK_ROOT} --beacon-chain-bridge
 ```
 
 ## Run the local testnet script and launch the bridge manually
@@ -37,9 +37,11 @@ TRUSTED_BLOCK_ROOT=0x12345678901234567890123456789012345678901234567890123456789
 ./fluffy/scripts/launch_local_testnet.sh -n8 --trusted-block-root ${TRUSTED_BLOCK_ROOT}
 ```
 
-Next, start the `beacon_chain_bridge`
+Next, build and run the `beacon_chain_bridge`
 
 ```bash
+make beacon_chain_bridge
+
 # --rpc-port 10000 = default node0
 # --rest-url = access to beacon node API, default http://127.0.0.1:5052
 ./build/beacon_chain_bridge --trusted-block-root:${TRUSTED_BLOCK_ROOT} --rest-url:http://127.0.0.1:5052 --backfill-amount:128 --rpc-port:10000
