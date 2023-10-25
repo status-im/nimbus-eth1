@@ -17,7 +17,7 @@
 
 import
   ../aristo,
-  ./backend/[legacy_rocksdb],
+  ./backend/[aristo_rocksdb, legacy_rocksdb],
   ./memory_only
 
 export
@@ -35,7 +35,26 @@ proc newCoreDbRef*(
   when dbType == LegacyDbPersistent:
     newLegacyPersistentCoreDbRef path
 
+  elif dbType == AristoDbRocks:
+    newAristoRocksDbCoreDbRef path
+
   else:
     {.error: "Unsupported dbType for persistent newCoreDbRef()".}
+
+proc newCoreDbRef*(
+    dbType: static[CoreDbType];      # Database type symbol
+    path: string;                    # Storage path for database
+    qidLayout: QidLayoutRef;         # Optional for `Aristo`, ignored by others
+      ): CoreDbRef =
+  ## Constructor for persistent type DB
+  ##
+  ## Note: Using legacy notation `newCoreDbRef()` rather than
+  ## `CoreDbRef.init()` because of compiler coughing.
+  when dbType == AristoDbRocks:
+    newAristoRocksDbCoreDbRef(path, qlr)
+
+  else:
+    {.error: "Unsupported dbType for persistent newCoreDbRef()" &
+             " with qidLayout argument".}
 
 # End

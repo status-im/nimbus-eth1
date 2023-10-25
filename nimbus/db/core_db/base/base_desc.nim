@@ -24,9 +24,12 @@ type
     Ooops
     LegacyDbMemory
     LegacyDbPersistent
+    AristoDbMemory            ## Memory backend emulator
+    AristoDbRocks             ## RocksDB backend
+    AristoDbVoid              ## No backend
 
 const
-  CoreDbPersistentTypes* = {LegacyDbPersistent}
+  CoreDbPersistentTypes* = {LegacyDbPersistent, AristoDbRocks}
 
 type
   CoreDbRc*[T] = Result[T,CoreDbErrorRef]
