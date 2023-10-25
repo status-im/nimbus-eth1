@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022 Status Research & Development GmbH
+# Copyright (c) 2022-2023 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -16,7 +16,7 @@ import
   ../common/state_clearing,
   ../../nimbus/[vm_types, vm_state, transaction],
   ../../nimbus/common/common,
-  ../../nimbus/db/accounts_cache,
+  ../../nimbus/db/ledger,
   ../../nimbus/utils/utils,
   ../../nimbus/core/pow/difficulty,
   ../../nimbus/core/dao,
@@ -103,7 +103,7 @@ proc envToHeader(env: EnvStruct): BlockHeader =
     excessBlobGas: env.currentExcessBlobGas,
   )
 
-proc postState(db: AccountsCache, alloc: var GenesisAlloc) =
+proc postState(db: LedgerRef, alloc: var GenesisAlloc) =
   for accAddr in db.addresses():
     var acc = GenesisAccount(
       code: db.getCode(accAddr),
@@ -325,7 +325,7 @@ template wrapException(body: untyped) =
   else:
     body
 
-proc setupAlloc(stateDB: AccountsCache, alloc: GenesisAlloc) =
+proc setupAlloc(stateDB: LedgerRef, alloc: GenesisAlloc) =
   for accAddr, acc in alloc:
     stateDB.setNonce(accAddr, acc.nonce)
     stateDB.setCode(accAddr, acc.code)

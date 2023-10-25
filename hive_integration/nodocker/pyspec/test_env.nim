@@ -18,7 +18,7 @@ import
     config,
     constants,
     transaction,
-    db/accounts_cache,
+    db/ledger,
     core/chain,
     core/tx_pool,
     rpc,

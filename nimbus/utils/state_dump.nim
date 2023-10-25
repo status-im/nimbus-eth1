@@ -13,21 +13,21 @@ import
   stint,
   eth/common/eth_types,
   stew/byteutils,
-  ../db/accounts_cache
+  ../db/ledger
 
 type
-  DumpAccount = ref object
-    balance : UInt256
-    nonce   : AccountNonce
-    root    : Hash256
-    codeHash: Hash256
-    code    : Blob
-    key     : Hash256
-    storage : Table[UInt256, UInt256]
+  DumpAccount* = ref object
+    balance* : UInt256
+    nonce*   : AccountNonce
+    root*    : Hash256
+    codeHash*: Hash256
+    code*    : Blob
+    key*     : Hash256
+    storage* : Table[UInt256, UInt256]
 
   StateDump* = ref object
-    root: Hash256
-    accounts: Table[EthAddress, DumpAccount]
+    root*: Hash256
+    accounts*: Table[EthAddress, DumpAccount]
 
 proc `%`*(x: UInt256): JsonNode =
   %("0x" & x.toHex)
@@ -69,7 +69,7 @@ proc `%`*(x: StateDump): JsonNode =
     "accounts": %(x.accounts)
   }
 
-proc dumpAccount*(db: AccountsCache, acc: EthAddress): DumpAccount =
+proc dumpAccount*(db: LedgerRef, acc: EthAddress): DumpAccount =
   result = DumpAccount(
     balance : db.getBalance(acc),
     nonce   : db.getNonce(acc),
@@ -81,17 +81,17 @@ proc dumpAccount*(db: AccountsCache, acc: EthAddress): DumpAccount =
   for k, v in db.cachedStorage(acc):
     result.storage[k] = v
 
-proc dumpAccounts*(db: AccountsCache): Table[EthAddress, DumpAccount] =
+proc dumpAccounts*(db: LedgerRef): Table[EthAddress, DumpAccount] =
   for acc in db.addresses():
     result[acc] = dumpAccount(db, acc)
 
-proc dumpState*(db: AccountsCache): StateDump =
+proc dumpState*(db: LedgerRef): StateDump =
   StateDump(
     root: db.rootHash,
     accounts: dumpAccounts(db)
   )
 
-proc dumpAccounts*(stateDB: AccountsCache, addresses: openArray[EthAddress]): JsonNode =
+proc dumpAccounts*(stateDB: LedgerRef, addresses: openArray[EthAddress]): JsonNode =
   result = newJObject()
   for ac in addresses:
     result[ac.toHex] = %dumpAccount(stateDB, ac)

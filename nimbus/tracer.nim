@@ -11,7 +11,7 @@
 import
   std/[strutils, json],
   ./common/common,
-  ./db/[core_db, accounts_cache],
+  ./db/[core_db, ledger],
   ./utils/utils,
   ./evm/tracer/legacy_tracer,
   "."/[constants, vm_state, vm_types, transaction, core/executor],
@@ -54,7 +54,7 @@ proc toJson*(receipts: seq[Receipt]): JsonNode =
   for receipt in receipts:
     result.add receipt.toJson
 
-proc captureAccount(n: JsonNode, db: AccountsCache, address: EthAddress, name: string) =
+proc captureAccount(n: JsonNode, db: LedgerRef, address: EthAddress, name: string) =
   var jaccount = newJObject()
   jaccount["name"] = %name
   jaccount["address"] = %("0x" & $address)

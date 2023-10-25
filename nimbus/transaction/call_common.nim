@@ -1,6 +1,6 @@
 # Nimbus - Common entry point to the EVM from all different callers
 #
-# Copyright (c) 2018-2021 Status Research & Development GmbH
+# Copyright (c) 2018-2023 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -13,7 +13,7 @@ import
   chronos,
   ".."/[vm_types, vm_state, vm_computation, vm_state_transactions],
   ".."/[vm_internals, vm_precompiles, vm_gas_costs],
-  ".."/[db/accounts_cache],
+  ".."/[db/ledger],
   ../evm/async/operations,
   ../common/evmforks,
   ../core/eip4844,

@@ -11,7 +11,7 @@
 import
   ../../nimbus/common/common,
   ../../nimbus/[vm_state, vm_types],
-  ../../nimbus/db/accounts_cache
+  ../../nimbus/db/ledger
 
 proc coinbaseStateClearing*(vmState: BaseVMState,
                             miner: EthAddress,
@@ -31,7 +31,7 @@ proc coinbaseStateClearing*(vmState: BaseVMState,
     if touched:
       db.addBalance(miner, 0.u256)
 
-    # db.persist is an important step when using accounts_cache
+    # db.persist is an important step when using `db/ledger`
     # it will affect the account storage's location
     # during the next call to `getComittedStorage`
     # and the result of rootHash

@@ -14,7 +14,7 @@ import
   std/tables,
   eth/[common, eip1559],
   eth/trie/trie_defs,
-  ../db/[accounts_cache, core_db, distinct_tries, state_db/read_write],
+  ../db/[ledger, core_db, distinct_tries, state_db/read_write],
   ../constants,
   ./chain_config
 
@@ -114,7 +114,7 @@ proc initAccountsLedgerRef(db: CoreDbRef; pruneTrie: bool): GenesisLedgerRef =
         address: EthAddress;
         slot: UInt256;
         val: UInt256;
-          ) {.rlpRaise.} =
+          ) =
       ac.setStorage(address, slot, val),
 
     commit: proc() =
@@ -124,7 +124,7 @@ proc initAccountsLedgerRef(db: CoreDbRef; pruneTrie: bool): GenesisLedgerRef =
       ac.rootHash(),
 
     getTrie: proc(): CoreDbMptRef =
-      ac.rawTrie.mpt)
+      ac.getMpt)
 
 # ------------------------------------------------------------------------------
 # Public functions

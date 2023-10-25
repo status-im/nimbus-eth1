@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2022-2023 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -16,7 +16,7 @@ import
   std/times,
   ../../common/common,
   ../../constants,
-  ../../db/accounts_cache,
+  ../../db/ledger,
   ../../utils/utils,
   ../../vm_state,
   ../../vm_types,

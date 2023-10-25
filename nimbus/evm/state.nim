@@ -14,7 +14,7 @@ import
   std/[options, sets, strformat],
   eth/[keys],
   ../../stateless/[witness_from_tree, witness_types],
-  ../db/accounts_cache,
+  ../db/ledger,
   ../common/[common, evmforks],
   ./async/data_sources,
   ./interpreter/[op_codes, gas_costs],
@@ -22,7 +22,7 @@ import
 
 proc init(
       self:         BaseVMState;
-      ac:           AccountsCache;
+      ac:           LedgerRef,
       parent:       BlockHeader;
       blockCtx:     BlockContext;
       com:          CommonRef;
