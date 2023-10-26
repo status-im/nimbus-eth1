@@ -23,16 +23,9 @@ export
   # Not all symbols from the object sources will be exported by default
   CoreDbAccount,
   CoreDbApiError,
-  CoreDbCaptFlags,
   CoreDbErrorCode,
   CoreDbErrorRef,
-  CoreDbCaptRef,
-  CoreDbKvtRef,
-  CoreDbMptRef,
-  CoreDbPhkRef,
   CoreDbRef,
-  CoreDbTxID,
-  CoreDbTxRef,
   CoreDbType,
   CoreDbVidRef,
   CoreDxAccRef,
@@ -45,26 +38,26 @@ export
   `$$`,
   backend,
   beginTransaction,
-  capture,
   commit,
   compensateLegacySetup,
-  contains,
   del,
   delete,
   dispose,
   fetch,
+  fetchOrEmpty,
   finish,
   get,
+  getOrEmpty,
   getRoot,
   getTransactionID,
   hash,
+  hasKey,
   hashOrEmpty,
+  hasPath,
   isLegacy,
   isPruning,
-  kvt,
   logDb,
   merge,
-  mptPrune,
   newAccMpt,
   newCapture,
   newKvt,
@@ -72,13 +65,11 @@ export
   newTransaction,
   pairs,
   parent,
-  phkPrune,
   put,
   recast,
   recorder,
   replicate,
   rollback,
-  rootHash,
   rootVid,
   safeDispose,
   setTransactionID,
@@ -86,6 +77,27 @@ export
   toMpt,
   toPhk,
   toTransactionID
+
+when ProvideCoreDbLegacyAPI:
+  type
+    CoreDyTxID = CoreDxTxID|CoreDbTxID
+  export
+    CoreDbCaptFlags,
+    CoreDbCaptRef,
+    CoreDbKvtRef,
+    CoreDbMptRef,
+    CoreDbPhkRef,
+    CoreDbTxID,
+    CoreDbTxRef,
+    capture,
+    contains,
+    kvt,
+    mptPrune,
+    phkPrune,
+    rootHash
+else:
+  type
+    CoreDyTxID = CoreDxTxID
 
 # ------------------------------------------------------------------------------
 # Public constructor
@@ -120,7 +132,7 @@ proc newCoreDbRef*(
 # Public template wrappers
 # ------------------------------------------------------------------------------
 
-template shortTimeReadOnly*(id: CoreDxTxID|CoreDbTxID; body: untyped) =
+template shortTimeReadOnly*(id: CoreDyTxID; body: untyped) =
   proc action() =
     body
   id.shortTimeReadOnly action

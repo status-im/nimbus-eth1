@@ -48,7 +48,7 @@ proc validateMethodsDesc(kvt: CoreDbKvtFns) =
   doAssert not kvt.getFn.isNil
   doAssert not kvt.delFn.isNil
   doAssert not kvt.putFn.isNil
-  doAssert not kvt.containsFn.isNil
+  doAssert not kvt.hasKeyFn.isNil
   doAssert not kvt.pairsIt.isNil
 
 proc validateMethodsDesc(fns: CoreDbMptFns) =
@@ -56,7 +56,7 @@ proc validateMethodsDesc(fns: CoreDbMptFns) =
   doAssert not fns.fetchFn.isNil
   doAssert not fns.deleteFn.isNil
   doAssert not fns.mergeFn.isNil
-  doAssert not fns.containsFn.isNil
+  doAssert not fns.hasPathFn.isNil
   doAssert not fns.rootVidFn.isNil
   doAssert not fns.isPruningFn.isNil
   doAssert not fns.pairsIt.isNil
@@ -67,7 +67,7 @@ proc validateMethodsDesc(fns: CoreDbAccFns) =
   doAssert not fns.fetchFn.isNil
   doAssert not fns.deleteFn.isNil
   doAssert not fns.mergeFn.isNil
-  doAssert not fns.containsFn.isNil
+  doAssert not fns.hasPathFn.isNil
   doAssert not fns.rootVidFn.isNil
   doAssert not fns.isPruningFn.isNil
 
@@ -79,6 +79,7 @@ proc validateMethodsDesc(vid: CoreDbVidRef) =
   doAssert vid.ready == true
 
 proc validateMethodsDesc(e: CoreDbErrorRef) =
+  doAssert e.error != CoreDbErrorCode(0)
   doAssert not e.isNil
   doAssert not e.parent.isNil
 
