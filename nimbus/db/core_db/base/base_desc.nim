@@ -39,10 +39,12 @@ type
     codeHash*:   Hash256
 
   CoreDbErrorCode* = enum
-    Unspecified = 0
+    Unset = 0
+    Unspecified
     RlpException
     KvtNotFound
     MptNotFound
+    AccNotFound
     RootNotFound
 
   CoreDbCaptFlags* {.pure.} = enum
@@ -101,7 +103,7 @@ type
   CoreDbKvtDelFn* = proc(k: openArray[byte]): CoreDbRc[void] {.noRaise.}
   CoreDbKvtPutFn* =
     proc(k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] {.noRaise.}
-  CoreDbKvtContainsFn* = proc(k: openArray[byte]): CoreDbRc[bool] {.noRaise.}
+  CoreDbKvtHasKeyFn* = proc(k: openArray[byte]): CoreDbRc[bool] {.noRaise.}
   CoreDbKvtPairsIt* = iterator(): (Blob,Blob) {.apiRaise.}
 
   CoreDbKvtFns* = object
@@ -110,7 +112,7 @@ type
     getFn*:      CoreDbKvtGetFn
     delFn*:      CoreDbKvtDelFn
     putFn*:      CoreDbKvtPutFn
-    containsFn*: CoreDbKvtContainsFn
+    hasKeyFn*:   CoreDbKvtHasKeyFn
     pairsIt*:    CoreDbKvtPairsIt
 
 
@@ -128,7 +130,7 @@ type
     proc(k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] {.noRaise.}
   CoreDbMptMergeAccountFn* =
     proc(k: openArray[byte]; v: CoreDbAccount): CoreDbRc[void] {.noRaise.}
-  CoreDbMptContainsFn* = proc(k: openArray[byte]): CoreDbRc[bool] {.noRaise.}
+  CoreDbMptHasPathFn* = proc(k: openArray[byte]): CoreDbRc[bool] {.noRaise.}
   CoreDbMptRootVidFn* = proc(): CoreDbVidRef {.noRaise.}
   CoreDbMptIsPruningFn* = proc(): bool {.noRaise.}
   CoreDbMptPairsIt* = iterator(): (Blob,Blob) {.apiRaise.}
@@ -140,7 +142,7 @@ type
     fetchFn*:      CoreDbMptFetchFn
     deleteFn*:     CoreDbMptDeleteFn
     mergeFn*:      CoreDbMptMergeFn
-    containsFn*:   CoreDbMptContainsFn
+    hasPathFn*:    CoreDbMptHasPathFn
     rootVidFn*:    CoreDbMptRootVidFn
     pairsIt*:      CoreDbMptPairsIt
     replicateIt*:  CoreDbMptReplicateIt
@@ -155,7 +157,7 @@ type
   CoreDbAccDeleteFn* = proc(k: EthAddress): CoreDbRc[void] {.noRaise.}
   CoreDbAccMergeFn* =
     proc(k: EthAddress; v: CoreDbAccount): CoreDbRc[void] {.noRaise.}
-  CoreDbAccContainsFn* = proc(k: EthAddress): CoreDbRc[bool] {.noRaise.}
+  CoreDbAccHasPathFn* = proc(k: EthAddress): CoreDbRc[bool] {.noRaise.}
   CoreDbAccRootVidFn* = proc(): CoreDbVidRef {.noRaise.}
   CoreDbAccIsPruningFn* = proc(): bool {.noRaise.}
 
@@ -165,7 +167,7 @@ type
     fetchFn*:      CoreDbAccFetchFn
     deleteFn*:     CoreDbAccDeleteFn
     mergeFn*:      CoreDbAccMergeFn
-    containsFn*:   CoreDbAccContainsFn
+    hasPathFn*:    CoreDbAccHasPathFn
     rootVidFn*:    CoreDbAccRootVidFn
     isPruningFn*:  CoreDbAccIsPruningFn
 
