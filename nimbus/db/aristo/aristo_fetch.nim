@@ -18,6 +18,13 @@ import
   results,
   "."/[aristo_desc, aristo_hike]
 
+const
+  AcceptableHikeStops = {
+    HikeBranchTailEmpty,
+    HikeBranchBlindEdge,
+    HikeExtTailEmpty,
+    HikeExtTailMismatch}
+
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
@@ -29,6 +36,8 @@ proc fetchPayloadImpl(
     let vid =
       if rc.error[0].legs.len == 0: VertexID(0)
       else: rc.error[0].legs[^1].wp.vid
+    if rc.error[1] in  AcceptableHikeStops:
+      return err((vid, FetchPathNotFound))
     return err((vid, rc.error[1]))
   ok rc.value.legs[^1].wp.vtx.lData
 
@@ -63,7 +72,7 @@ proc fetchPayload*(
     return err((VertexID(0),LeafKeyInvalid))
   db.fetchPayloadImpl(root, path)
 
-proc contains*(
+proc hasPath*(
     db: AristoDbRef;                  # Database
     root: VertexID;
     path: openArray[byte];            # Key of database record
@@ -75,7 +84,9 @@ proc contains*(
   let rc = db.fetchPayloadImpl(root, path)
   if rc.isOk:
     return ok(true)
-  return ok(false)
+  if rc.error[1] == FetchPathNotFound:
+    return ok(false)
+  err(rc.error)
 
 # ------------------------------------------------------------------------------
 # End

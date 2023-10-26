@@ -204,7 +204,7 @@ type
     FilTrgTopSrcMismatch
     FilSiblingsCommitUnfinshed
 
-    # Get functions form `aristo_get.nim`
+    # Get functions from `aristo_get.nim`
     GetLeafNotFound
     GetVtxNotFound
     GetKeyNotFound
@@ -212,6 +212,9 @@ type
     GetFilNotFound
     GetIdgNotFound
     GetFqsNotFound
+
+    # Fetch functions from `aristo_fetch.nim`
+    FetchPathNotFound
 
     # RocksDB backend
     RdbBeCantCreateDataDir
