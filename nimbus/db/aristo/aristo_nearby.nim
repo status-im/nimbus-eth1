@@ -72,7 +72,7 @@ proc branchNibbleMax*(vtx: VertexRef; maxInx: int8): int8 =
 
 # ------------------
 
-proc toTLeafTiePayload(hike: Hike): (LeafTie,PayloadRef) =
+proc toLeafTiePayload(hike: Hike): (LeafTie,PayloadRef) =
   ## Shortcut for iterators. This function will gloriously crash unless the
   ## `hike` argument is complete.
   (LeafTie(root: hike.root, path: hike.to(NibblesSeq).pathToTag.value),
@@ -167,10 +167,15 @@ proc zeroAdjust(
       case root.vType:
       of Branch:
         # Find first non-dangling link and assign it
-        if hike.tail.len == 0:
-          break fail
-
-        let n = root.branchBorderNibble hike.tail[0].int8
+        let nibbleID = block:
+          when doLeast:
+            if hike.tail.len == 0: 0i8
+            else: hike.tail[0].int8
+          else:
+            if hike.tail.len == 0:
+              break fail
+            hike.tail[0].int8
+        let n = root.branchBorderNibble nibbleID
         if n < 0:
           # Before or after the database range
           return err((hike.root,NearbyBeyondRange))
@@ -179,26 +184,16 @@ proc zeroAdjust(
       of Extension:
         let ePfx = root.ePfx
         # Must be followed by a branch vertex
-        if hike.tail.len < 2 or not hike.accept(ePfx):
+        if not hike.accept ePfx:
           break fail
         let vtx = db.getVtx root.eVid
         if not vtx.isValid:
           break fail
-        let ePfxLen = ePfx.len
-        if hike.tail.len <= ePfxLen:
-          return err((root.eVid,NearbyPathTailInxOverflow))
-        let tailPfx = hike.tail.slice(0,ePfxLen)
-        when doLeast:
-          if ePfx < tailPfx:
-            return err((root.eVid,NearbyBeyondRange))
-        else:
-          if tailPfx < ePfx:
-            return err((root.eVid,NearbyBeyondRange))
         pfx =  ePfx
 
       of Leaf:
         pfx = root.lPfx
-        if not hike.accept(pfx):
+        if not hike.accept pfx:
           # Before or after the database range
           return err((hike.root,NearbyBeyondRange))
 
@@ -368,13 +363,12 @@ proc nearbyNext(
   # Handle some pathological cases
   hike.finalise(db, moveRight)
 
-
 proc nearbyNextLeafTie(
     lty: LeafTie;                       # Some `Patricia Trie` path
     db: AristoDbRef;                    # Database layer
     hikeLenMax: static[int];            # Beware of loops (if any)
     moveRight:static[bool];             # Direction of next vertex
-      ): Result[HashID,(VertexID,AristoError)] =
+      ): Result[PathID,(VertexID,AristoError)] =
   ## Variant of `nearbyNext()`, convenience wrapper
   let hike = ? lty.hikeUp(db).to(Hike).nearbyNext(db, hikeLenMax, moveRight)
 
@@ -383,7 +377,7 @@ proc nearbyNextLeafTie(
       return err((hike.legs[^1].wp.vid,NearbyLeafExpected))
     let rc = hike.legsTo(NibblesSeq).pathToKey
     if rc.isOk:
-      return ok rc.value.to(HashID)
+      return ok rc.value.to(PathID)
     return err((VertexID(0),rc.error))
 
   err((VertexID(0),NearbyLeafExpected))
@@ -411,7 +405,7 @@ proc right*(
     lty: LeafTie;                       # Some `Patricia Trie` path
     db: AristoDbRef;                    # Database layer
       ): Result[LeafTie,(VertexID,AristoError)] =
-  ## Variant of `nearbyRight()` working with a `HashID` argument instead
+  ## Variant of `nearbyRight()` working with a `LeafTie` argument instead
   ## of a `Hike`.
   ok LeafTie(
     root: lty.root,
@@ -428,14 +422,14 @@ iterator right*(
     rc = hike.right db
   while rc.isOK:
     hike = rc.value
-    let (key, pyl) = hike.toTLeafTiePayload
+    let (key, pyl) = hike.toLeafTiePayload
     yield (key, pyl)
-    if high(HashID) <= key.path:
+    if high(PathID) <= key.path:
       break
 
     # Increment `key` by one and update `hike`. In many cases, the current
     # `hike` can be modified and re-used which saves some database lookups.
-    block:
+    block reuseHike:
       let tail = hike.legs[^1].wp.vtx.lPfx
       if 0 < tail.len:
         let topNibble = tail[tail.len - 1]
@@ -443,16 +437,16 @@ iterator right*(
           let newNibble = @[topNibble+1].initNibbleRange.slice(1)
           hike.tail = tail.slice(0, tail.len - 1) & newNibble
           hike.legs.setLen(hike.legs.len - 1)
-          break
+          break reuseHike
       if 1 < tail.len:
         let nxtNibble = tail[tail.len - 2]
         if nxtNibble < 15:
           let dblNibble = @[((nxtNibble+1) shl 4) + 0].initNibbleRange
           hike.tail = tail.slice(0, tail.len - 2) & dblNibble
           hike.legs.setLen(hike.legs.len - 1)
-          break
+          break reuseHike
       # Fall back to default method
-      hike = (key + 1).hikeUp(db).to(Hike)
+      hike = key.next.hikeUp(db).to(Hike)
 
     rc = hike.right db
     # End while
@@ -473,7 +467,7 @@ proc left*(
     lty: LeafTie;                       # Some `Patricia Trie` path
     db: AristoDbRef;                    # Database layer
       ): Result[LeafTie,(VertexID,AristoError)] =
-  ## Similar to `nearbyRight()` for `HashID` argument instead of a `Hike`.
+  ## Similar to `nearbyRight()` for `LeafTie` argument instead of a `Hike`.
   ok LeafTie(
     root: lty.root,
     path: ? lty.nearbyNextLeafTie(db, 64, moveRight=false))
@@ -491,14 +485,14 @@ iterator left*(
     rc = hike.left db
   while rc.isOK:
     hike = rc.value
-    let (key, pyl) = hike.toTLeafTiePayload
+    let (key, pyl) = hike.toLeafTiePayload
     yield (key, pyl)
-    if key.path <= low(HashID):
+    if key.path <= low(PathID):
       break
 
     # Decrement `key` by one and update `hike`. In many cases, the current
     # `hike` can be modified and re-used which saves some database lookups.
-    block:
+    block reuseHike:
       let tail = hike.legs[^1].wp.vtx.lPfx
       if 0 < tail.len:
         let topNibble = tail[tail.len - 1]
@@ -506,16 +500,16 @@ iterator left*(
           let newNibble = @[topNibble - 1].initNibbleRange.slice(1)
           hike.tail = tail.slice(0, tail.len - 1) & newNibble
           hike.legs.setLen(hike.legs.len - 1)
-          break
+          break reuseHike
       if 1 < tail.len:
         let nxtNibble = tail[tail.len - 2]
         if 0 < nxtNibble:
           let dblNibble = @[((nxtNibble-1) shl 4) + 15].initNibbleRange
           hike.tail = tail.slice(0, tail.len - 2) & dblNibble
           hike.legs.setLen(hike.legs.len - 1)
-          break
+          break reuseHike
       # Fall back to default method
-      hike = (key - 1).hikeUp(db).to(Hike)
+      hike = key.prev.hikeUp(db).to(Hike)
 
     rc = hike.left db
     # End while

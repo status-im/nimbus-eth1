@@ -62,6 +62,7 @@ type
 
     # Path function `hikeUp()`
     HikeRootMissing
+    HikeEmptyPath
     HikeLeafTooEarly
     HikeBranchTailEmpty
     HikeBranchBlindEdge
@@ -70,6 +71,7 @@ type
 
     # Path/nibble/key conversions in `aisto_path.nim`
     PathExpected64Nibbles
+    PathAtMost64Nibbles
     PathExpectedLeaf
 
     # Merge leaf `merge()`
@@ -164,7 +166,6 @@ type
     NearbyLeafExpected
     NearbyNestingTooDeep
     NearbyPathTailUnexpected
-    NearbyPathTailInxOverflow
     NearbyUnexpectedVtx
     NearbyVidInvalid
 
@@ -204,7 +205,7 @@ type
     FilTrgTopSrcMismatch
     FilSiblingsCommitUnfinshed
 
-    # Get functions form `aristo_get.nim`
+    # Get functions from `aristo_get.nim`
     GetLeafNotFound
     GetVtxNotFound
     GetKeyNotFound
@@ -212,6 +213,9 @@ type
     GetFilNotFound
     GetIdgNotFound
     GetFqsNotFound
+
+    # Fetch functions from `aristo_fetch.nim`
+    FetchPathNotFound
 
     # RocksDB backend
     RdbBeCantCreateDataDir

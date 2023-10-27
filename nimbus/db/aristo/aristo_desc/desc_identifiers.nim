@@ -37,16 +37,23 @@ type
     ## backend of the database, there is no other reference to the node than
     ## the very same `VertexID`.
 
-  HashID* = distinct UInt256
-    ## Variant of a `Hash256` object that can be used in a order relation
-    ## (i.e. it can be sorted.) Among temporary conversions for sorting, the
-    ## `HashID` type is consistently used for addressing leaf vertices (see
-    ## below `LeafTie`.)
-
   HashKey* = distinct ByteArray32
     ## Dedicated `Hash256` object variant that is used for labelling the
     ## vertices of the `Patricia Trie` in order to make it a
     ## `Merkle Patricia Tree`.
+
+  PathID* = object
+    ## Path into the `Patricia Trie`. This is a chain of maximal 64 nibbles
+    ## (which is 32 bytes.) In most cases, the length is 64. So the path is
+    ## encoded as a numeric value which is often easier to handle than a
+    ## chain of nibbles.
+    ##
+    ## The path ID should be kept normalised, i.e.
+    ## * 0 <= `length` <= 64
+    ## * the unused trailing nibbles in `pfx` ar set to `0`
+    ##
+    pfx*: UInt256
+    length*: uint8
 
   # ----------
 
@@ -60,7 +67,7 @@ type
     ## Note that `LeafTie` objects have no representation in the `Aristo Trie`.
     ## They are used temporarily and in caches or backlog tables.
     root*: VertexID                  ## Root ID for the sub-trie
-    path*: HashID                    ## Path into the `Patricia Trie`
+    path*: PathID                    ## Path into the `Patricia Trie`
 
   HashLabel* = object
     ## Merkle hash key uniquely associated with a vertex ID. As hashes in a
@@ -127,162 +134,202 @@ func `-`*(a: FilterID; b: uint64): FilterID = (a.uint64-b).FilterID
 func `-`*(a, b: FilterID): uint64 = (a.uint64 - b.uint64)
 
 # ------------------------------------------------------------------------------
-# Public helpers: `HashID` scalar data model
+# Public helpers: `PathID` ordered scalar data model
 # ------------------------------------------------------------------------------
 
-func u256*(lp: HashID): UInt256 = lp.UInt256
-func low*(T: type HashID): T = low(UInt256).T
-func high*(T: type HashID): T = high(UInt256).T
+func high*(_: type PathID): PathID =
+  ## Highest possible `PathID` object for given root vertex.
+  PathID(pfx: high(UInt256), length: 64)
 
-func `+`*(a: HashID; b: UInt256): HashID = (a.u256+b).HashID
-func `-`*(a: HashID; b: UInt256): HashID = (a.u256-b).HashID
-func `-`*(a, b: HashID): UInt256 = (a.u256 - b.u256)
+func low*(_: type PathID): PathID =
+  ## Lowest possible `PathID` object for given root vertex.
+  PathID()
 
-func `==`*(a, b: HashID): bool = a.u256 == b.u256
-func `<=`*(a, b: HashID): bool = a.u256 <= b.u256
-func `<`*(a, b: HashID): bool = a.u256 < b.u256
+func next*(pid: PathID): PathID =
+  ## Return a `PathID` object with incremented path field. This function might
+  ## return also a modified `length` field.
+  ##
+  ## The function returns the argument `pid` if it is already at its
+  ## maximum value `high(PathID)`.
+  if pid.pfx == 0 and pid.length < 64:
+    PathID(length: pid.length + 1)
+  elif pid.pfx < high(UInt256):
+    PathID(pfx: pid.pfx + 1, length: 64)
+  else:
+    pid
 
-func cmp*(x, y: HashID): int = cmp(x.UInt256, y.UInt256)
+func prev*(pid: PathID): PathID =
+  ## Return a `PathID` object with decremented path field. This function might
+  ## return also a modified `length` field.
+  ##
+  ## The function returns the argument `pid` if it is already at its
+  ## minimum value `low(PathID)`.
+  if 0 < pid.pfx:
+    PathID(pfx: pid.pfx - 1, length: 64)
+  elif 0 < pid.length:
+    PathID(length: pid.length - 1)
+  else:
+    pid
+
+func `<`*(a, b: PathID): bool =
+  ## This function assumes that the arguments `a` and `b` are normalised
+  ## (see `normal()`.)
+  a.pfx < b.pfx or (a.pfx == b.pfx and a.length < b.length)
+
+func `<=`*(a, b: PathID): bool =
+  not (b < a)
+
+func `==`*(a, b: PathID): bool =
+  ## This function assumes that the arguments `a` and `b` are normalised
+  ## (see `normal()`.)
+  a.pfx == b.pfx and a.length == b.length
 
 # ------------------------------------------------------------------------------
-# Public helpers: `LeafTie`
+# Public helpers: `LeafTie` ordered scalar data model
 # ------------------------------------------------------------------------------
 
 func high*(_: type LeafTie; root = VertexID(1)): LeafTie =
   ## Highest possible `LeafTie` object for given root vertex.
-  LeafTie(root: root, path: high(HashID))
+  LeafTie(root: root, path: high(PathID))
 
 func low*(_: type LeafTie; root = VertexID(1)): LeafTie =
   ## Lowest possible `LeafTie` object for given root vertex.
-  LeafTie(root: root, path: low(HashID))
+  LeafTie(root: root, path: low(PathID))
 
-func `+`*(lty: LeafTie, n: int): LeafTie =
-  ## Return a `LeafTie` object with incremented path field. This function
-  ## will not check for a path field overflow. Neither it will verify that
-  ## the argument `n` is non-negative.
-  LeafTie(root: lty.root, path: HashID(lty.path.u256 + n.u256))
+func next*(lty: LeafTie): LeafTie =
+  ## Return a `LeafTie` object with the `next()` path field.
+  LeafTie(root: lty.root, path: lty.path.next)
 
-func `-`*(lty: LeafTie, n: int): LeafTie =
-  ## Return a `LeafTie` object with decremented path field. This function
-  ## will not check for a path field underflow. Neither it will verify that
-  ## the argument `n` is non-negative.
-  LeafTie(root: lty.root, path: HashID(lty.path.u256 - n.u256))
+func prev*(lty: LeafTie): LeafTie =
+  ## Return a `LeafTie` object with the `prev()` path field.
+  LeafTie(root: lty.root, path: lty.path.prev)
+
+func `<`*(a, b: LeafTie): bool =
+  ## This function assumes that the arguments `a` and `b` are normalised
+  ## (see `normal()`.)
+  a.root < b.root or (a.root == b.root and a.path < b.path)
+
+func `==`*(a, b: LeafTie): bool =
+  ## This function assumes that the arguments `a` and `b` are normalised
+  ## (see `normal()`.)
+  a.root == b.root and a.path == b.path
+
+func cmp*(a, b: LeafTie): int =
+  ## This function assumes that the arguments `a` and `b` are normalised
+  ## (see `normal()`.)
+  if a < b: -1 elif a == b: 0 else: 1
 
 # ------------------------------------------------------------------------------
-# Public helpers: Conversions between `HashID`, `HashKey`, `Hash256`
+# Public helpers: Reversible conversions between `PathID`, `HashKey`, etc.
 # ------------------------------------------------------------------------------
 
-func to*(hid: HashID; T: type Hash256): T =
-  result.data = hid.UInt256.toBytesBE
-
-func to*(hid: HashID; T: type HashKey): T =
-  hid.UInt256.toBytesBE.T
-
-func to*(key: HashKey; T: type HashID): T =
-  UInt256.fromBytesBE(key.ByteArray32).T
+proc to*(key: HashKey; T: type UInt256): T =
+  T.fromBytesBE key.ByteArray32
 
 func to*(key: HashKey; T: type Hash256): T =
   T(data: ByteArray32(key))
 
+func to*(key: HashKey; T: type PathID): T =
+  ## Not necessarily reversible for shorter lengths `PathID` values
+  T(pfx: UInt256.fromBytesBE key.ByteArray32, length: 64)
+
 func to*(hash: Hash256; T: type HashKey): T =
   hash.data.T
-
-func to*(key: Hash256; T: type HashID): T =
-  key.data.HashKey.to(T)
-
-# ------------------------------------------------------------------------------
-# Public helpers: Miscellaneous mappings
-# ------------------------------------------------------------------------------
 
 func to*(key: HashKey; T: type Blob): T =
   ## Representation of a `HashKey` as `Blob` (preserving full information)
   key.ByteArray32.toSeq
 
-func to*(hid: HashID; T: type Blob): T =
-  ## Representation of a `HashID` as `Blob` (preserving full information)
-  hid.UInt256.toBytesBE.toSeq
-
 func to*(key: HashKey; T: type NibblesSeq): T =
   ## Representation of a `HashKey` as `NibbleSeq` (preserving full information)
   key.ByteArray32.initNibbleRange()
 
-func to*(hid: HashID; T: type NibblesSeq): T =
+func to*(pid: PathID; T: type NibblesSeq): T =
   ## Representation of a `HashKey` as `NibbleSeq` (preserving full information)
-  ByteArray32(hid.to(HashKey)).initNibbleRange()
+  let nibbles = pid.pfx.UInt256.toBytesBE.toSeq.initNibbleRange()
+  if pid.length < 64:
+    nibbles.slice(0, pid.length.int)
+  else:
+    nibbles
 
-func to*(n: SomeUnsignedInt|UInt256; T: type HashID): T =
-  ## Representation of a scalar as `HashID` (preserving full information)
-  n.u256.T
+func to*(n: SomeUnsignedInt|UInt256; T: type PathID): T =
+  ## Representation of a scalar as `PathID` (preserving full information)
+  T(pfx: n.u256, length: 64)
+
+# ------------------------------------------------------------------------------
+# Public helpers: Miscellaneous mappings
+# ------------------------------------------------------------------------------
 
 func digestTo*(data: openArray[byte]; T: type HashKey): T =
   ## Keccak hash of a `Blob` like argument, represented as a `HashKey`
   keccakHash(data).data.T
 
+func normal*(a: PathID): PathID =
+  ## Normalise path ID representation
+  result = a
+  if 64 < a.length:
+    result.length = 64
+  elif a.length < 64:
+    result.pfx = a.pfx and not (1.u256 shl (4 * (64 - a.length))) - 1.u256
+
 # ------------------------------------------------------------------------------
 # Public helpers: `Tables` and `Rlp` support
 # ------------------------------------------------------------------------------
 
-func hash*(a: HashID): Hash =
+func hash*(a: PathID): Hash =
   ## Table/KeyedQueue mixin
-  a.to(HashKey).ByteArray32.hash
+  var h: Hash = 0
+  h = h !& a.pfx.toBytesBE.hash
+  h = h !& a.length.hash
+  !$h
 
-func hash*(a: HashKey): Hash =
-  ## Table/KeyedQueue mixin
-  a.ByteArray32.hash
+func hash*(a: HashKey): Hash {.borrow.}
 
-func `==`*(a, b: HashKey): bool =
-  ## Table/KeyedQueue mixin
-  a.ByteArray32 == b.ByteArray32
+func `==`*(a, b: HashKey): bool {.borrow.}
 
-func read*[T: HashID|HashKey](
-    rlp: var Rlp;
-    W: type T;
-      ): T
-      {.gcsafe, raises: [RlpError].} =
+func read*(rlp: var Rlp; T: type HashKey;): T {.gcsafe, raises: [RlpError].} =
   rlp.read(Hash256).to(T)
 
-func append*(writer: var RlpWriter, val: HashID|HashKey) =
+func append*(writer: var RlpWriter, val: HashKey) =
   writer.append(val.to(Hash256))
-
-# ------------------------------------------------------------------------------
-# Public helpers: `LeafTie` scalar data model
-# ------------------------------------------------------------------------------
-
-func `<`*(a, b: LeafTie): bool =
-  a.root < b.root or (a.root == b.root and a.path < b.path)
-
-func `==`*(a, b: LeafTie): bool =
-  a.root == b.root and a.path == b.path
-
-func cmp*(a, b: LeafTie): int =
-  if a < b: -1 elif a == b: 0 else: 1
-
-func `$`*(a: LeafTie): string =
-  let w = $a.root.uint64.toHex & ":" & $a.path.Uint256.toHex
-  w.strip(leading=true, trailing=false, chars={'0'}).toLowerAscii
 
 # ------------------------------------------------------------------------------
 # Miscellaneous helpers
 # ------------------------------------------------------------------------------
 
-func `$`*(hid: HashID): string =
-  if hid == high(HashID):
+func `$`*(key: HashKey): string =
+  let w = UInt256.fromBytesBE key.ByteArray32
+  if w == high(UInt256):
     "2^256-1"
-  elif hid == 0.u256.HashID:
+  elif w == 0.u256:
     "0"
-  elif hid == 2.u256.pow(255).HashID:
+  elif w == 2.u256.pow 255:
     "2^255" # 800...
-  elif hid == 2.u256.pow(254).HashID:
+  elif w == 2.u256.pow 254:
     "2^254" # 400..
-  elif hid == 2.u256.pow(253).HashID:
+  elif w == 2.u256.pow 253:
     "2^253" # 200...
-  elif hid == 2.u256.pow(251).HashID:
+  elif w == 2.u256.pow 251:
     "2^252" # 100...
   else:
-    hid.UInt256.toHex
+    w.toHex
 
-func `$`*(key: HashKey): string =
-  $key.to(HashID)
+func `$`*(a: PathID): string =
+  if a.pfx != 0:
+    result = ($a.pfx.toHex).strip(
+      leading=true, trailing=false, chars={'0'}).toLowerAscii
+  elif a.length != 0:
+    result = "0"
+  if a.length < 64:
+    result &= "(" & $a.length & ")"
+
+func `$`*(a: LeafTie): string =
+  if a.root != 0:
+    result = ($a.root.uint64.toHex).strip(
+      leading=true, trailing=false, chars={'0'}).toLowerAscii
+  else:
+    result = "0"
+  result &= ":" & $a.path
 
 # ------------------------------------------------------------------------------
 # End

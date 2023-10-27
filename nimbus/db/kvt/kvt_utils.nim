@@ -90,7 +90,7 @@ proc get*(
     return ok(data)
   db.getBE key
 
-proc contains*(
+proc hasKey*(
     db: KvtDbRef;                     # Database
     key: openArray[byte];             # Key of database record
       ): Result[bool,KvtError] =

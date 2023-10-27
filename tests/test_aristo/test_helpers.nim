@@ -162,7 +162,7 @@ proc to*(ua: seq[UndumpAccounts]; T: type seq[ProofTrieData]): T =
         kvpLst: w.data.accounts.mapIt(LeafTiePayload(
           leafTie: LeafTie(
             root:  rootVid,
-            path:  it.accKey.to(HashKey).to(HashID)),
+            path:  it.accKey.to(HashKey).to(PathID)),
           payload: PayloadRef(pType: RawData, rawBlob: it.accBlob))))
 
 proc to*(us: seq[UndumpStorages]; T: type seq[ProofTrieData]): T =
@@ -179,7 +179,7 @@ proc to*(us: seq[UndumpStorages]; T: type seq[ProofTrieData]): T =
           kvpLst: w.data.mapIt(LeafTiePayload(
             leafTie: LeafTie(
               root:  rootVid,
-              path:  it.slotHash.to(HashKey).to(HashID)),
+              path:  it.slotHash.to(HashKey).to(PathID)),
             payload: PayloadRef(pType: RawData, rawBlob: it.slotData))))
     if 0 < result.len:
       result[^1].proof = s.data.proof

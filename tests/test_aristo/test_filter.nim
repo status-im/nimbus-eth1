@@ -74,7 +74,7 @@ proc fList(be: BackendRef): seq[(QueueID,FilterRef)] =
 func ppFil(w: FilterRef; db = AristoDbRef(nil)): string =
   proc qq(key: HashKey; db: AristoDbRef): string =
     if db.isNil:
-      let n = key.to(HashID).UInt256
+      let n = key.to(UInt256)
       if n == 0: "£ø" else: "£" & $n
     else:
       HashLabel(root: VertexID(1), key: key).pp(db)
@@ -377,7 +377,7 @@ proc checkFilterTrancoderOk(
 # -------------------------
 
 func to(fid: FilterID; T: type HashKey): T =
-  fid.uint64.to(HashID).to(T)
+  fid.uint64.u256.toBytesBE.T
 
 proc qid2fidFn(be: BackendRef): QuFilMap =
   result = proc(qid: QueueID): FilterID =
@@ -491,12 +491,12 @@ proc validateFifo(
   ##        ..    |    ..      |   ..
   ##
   var
-    lastTrg = serial.u256.to(HashID)
+    lastTrg = serial.u256
     inx = 0
     lastFid = FilterID(serial+1)
 
   if hashesOk:
-    lastTrg = be.getKeyFn(VertexID(1)).get(otherwise = VOID_HASH_KEY).to(HashID)
+    lastTrg = be.getKeyFn(VertexID(1)).get(otherwise=VOID_HASH_KEY).to(UInt256)
 
   for chn,fifo in be.fifos:
     for (qid,filter) in fifo:
@@ -504,8 +504,8 @@ proc validateFifo(
       # Check filter objects
       xCheck chn == (qid.uint64 shr 62).int
       xCheck filter != FilterRef(nil)
-      xCheck filter.src.to(HashID) == lastTrg
-      lastTrg = filter.trg.to(HashID)
+      xCheck filter.src.to(UInt256) == lastTrg
+      lastTrg = filter.trg.to(UInt256)
 
       # Check random access
       xCheck qid == be.filters[inx]
