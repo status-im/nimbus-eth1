@@ -30,6 +30,11 @@ import
 export
   getKeyRc
 
+import
+  aristo/aristo_path
+export
+  pathAsBlob
+
 import aristo/aristo_desc/[desc_identifiers, desc_structural]
 export
   AristoAccount,

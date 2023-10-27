@@ -25,7 +25,8 @@ template xCheck*(expr: untyped): untyped =
 template xCheck*(expr: untyped; ifFalse: untyped): untyped =
   ## Note: this check will invoke `expr` twice
   if not (expr):
-    ifFalse
+    block:
+      ifFalse
     check expr
     return
 

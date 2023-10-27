@@ -11,7 +11,7 @@
 ## Aristo DB -- Patricia Trie builder, raw node insertion
 ## ======================================================
 ##
-## This module merges `HashID` values as hexary lookup paths into the
+## This module merges `PathID` values as hexary lookup paths into the
 ## `Patricia Trie`. When changing vertices (aka nodes without Merkle hashes),
 ## associated (but separated) Merkle hashes will be deleted unless locked.
 ## Instead of deleting locked hashes error handling is applied.
@@ -627,8 +627,8 @@ proc merge*(
 
     # Double check the result until the code is more reliable
     block:
-      let rc = okHike.to(NibblesSeq).pathToKey
-      if rc.isErr or rc.value != leafTie.path.to(HashKey):
+      let rc = okHike.to(NibblesSeq).pathToTag
+      if rc.isErr or rc.value != leafTie.path:
         return err(MergeAssemblyFailed) # Ooops
 
   # Update leaf acccess cache
@@ -640,12 +640,12 @@ proc merge*(
 proc merge*(
     db: AristoDbRef;                   # Database, top layer
     root: VertexID;                    # MPT state root
-    path: openArray[byte];             # Leaf item to add to the database
+    path: openArray[byte];             # Even nibbled byte path
     payload: PayloadRef;               # Payload value
       ): Result[bool,AristoError] =
   ## Variant of `merge()` for `(root,path)` arguments instead of a `LeafTie`
   ## object.
-  let lty = LeafTie(root: root, path: ? path.pathToTag)
+  let lty = LeafTie(root: root, path: ? path.initNibbleRange.pathToTag)
   db.merge(lty, payload).to(typeof result)
 
 proc merge*(
@@ -688,7 +688,7 @@ proc merge*(
 
 proc merge*(
     db: AristoDbRef;                   # Database, top layer
-    path: HashID;                      # Path into database
+    path: PathID;                      # Path into database
     rlpData: openArray[byte];          # RLP encoded payload data
       ): Result[bool,AristoError] =
   ## Variant of `merge()` for storing a single item with implicte state root
@@ -697,7 +697,7 @@ proc merge*(
   db.merge(
     LeafTie(
       root:    VertexID(1),
-      path:    path),
+      path:    path.normal),
     PayloadRef(
       pType:   RlpData,
       rlpBlob: @rlpData)).to(typeof result)

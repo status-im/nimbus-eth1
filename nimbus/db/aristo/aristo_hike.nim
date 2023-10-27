@@ -75,6 +75,8 @@ proc hikeUp*(
 
   if not root.isValid:
     return err((hike,HikeRootMissing))
+  if path.len == 0:
+    return err((hike,HikeEmptyPath))
 
   var vid = root
   while vid.isValid:

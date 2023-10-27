@@ -24,6 +24,15 @@ import
 # Private functions
 # ------------------------------------------------------------------------------
 
+proc toHex(w: VertexID): string =
+  w.uint64.toHex.toLowerAscii
+
+proc toHex(w: HashKey): string =
+  w.ByteArray32.toHex.toLowerAscii
+
+proc toHexLsb(w: int8): string =
+  $"0123456789abcdef"[w and 15]
+
 proc sortedKeys(lTab: Table[LeafTie,VertexID]): seq[LeafTie] =
   lTab.keys.toSeq.sorted(cmp = proc(a,b: LeafTie): int = cmp(a,b))
 
@@ -80,7 +89,7 @@ proc ppVid(vid: VertexID; pfx = true): string =
   if pfx:
     result = "$"
   if vid.isValid:
-    result &= vid.uint64.toHex.stripZeros.toLowerAscii
+    result &= vid.toHex.stripZeros.toLowerAscii
   else:
     result &= "ø"
 
@@ -110,7 +119,7 @@ proc ppQid(qid: QueueID): string =
       else:
         break here
       return
-  result &= qid.uint64.toHex.stripZeros.toLowerAscii
+  result &= qid.toHex.stripZeros.toLowerAscii
 
 proc ppVidList(vGen: openArray[VertexID]): string =
   "[" & vGen.mapIt(it.ppVid).join(",") & "]"
@@ -132,9 +141,7 @@ proc ppKey(key: HashKey): string =
   if key == VOID_HASH_KEY:
     return "£r"
 
-  "%" & key.ByteArray32
-           .mapIt(it.toHex(2)).join.tolowerAscii
-           .squeeze(hex=true,ignLen=true)
+  "%" & key.toHex.squeeze(hex=true,ignLen=true)
 
 proc ppLabel(lbl: HashLabel; db: AristoDbRef): string =
   if lbl.key == HashKey.default:
@@ -143,7 +150,7 @@ proc ppLabel(lbl: HashLabel; db: AristoDbRef): string =
     return "£r"
   
   let rid = if not lbl.root.isValid: "ø:"
-            else: ($lbl.root.uint64.toHex).stripZeros & ":"
+            else: ($lbl.root.toHex).stripZeros & ":"
   if not db.top.isNil:
     let vid = db.top.pAmk.getOrVoid lbl
     if vid.isValid:
@@ -153,9 +160,7 @@ proc ppLabel(lbl: HashLabel; db: AristoDbRef): string =
     if vid.isValid:
       return "£" & rid & vid.ppVid(pfx=false)
 
-  "%" & rid & lbl.key.ByteArray32
-                     .mapIt(it.toHex(2)).join.tolowerAscii
-                     .squeeze(hex=true,ignLen=true)
+  "%" & rid & lbl.key.toHex.squeeze(hex=true,ignLen=true)
 
 proc ppRootKey(a: HashKey): string =
   if a.isValid:
@@ -169,17 +174,14 @@ proc ppLeafTie(lty: LeafTie, db: AristoDbRef): string =
     let vid =  db.top.lTab.getOrVoid lty
     if vid.isValid:
       return "@" & vid.ppVid
-
-  "@" & ($lty.root.uint64.toHex).stripZeros & ":" &
-    lty.path.to(HashKey).ByteArray32
-            .mapIt(it.toHex(2)).join.squeeze(hex=true,ignLen=true)
+  "@" & $lty
 
 proc ppPathPfx(pfx: NibblesSeq): string =
   let s = $pfx
   if s.len < 20: s else: s[0 .. 5] & ".." & s[s.len-8 .. ^1] & ":" & $s.len
 
 proc ppNibble(n: int8): string =
-  if n < 0: "ø" elif n < 10: $n else: n.toHex(1).toLowerAscii
+  if n < 0: "ø" elif n < 10: $n else: n.toHexLsb
 
 proc ppPayload(p: PayloadRef, db: AristoDbRef): string =
   if p.isNil:

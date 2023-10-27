@@ -81,7 +81,6 @@ proc checkBE*(
     return RdbBackendRef.checkBE(db, cache=cache, relax=relax)
   of BackendVoid:
     return VoidBackendRef.checkBE(db, cache=cache, relax=relax)
-  ok()
 
 
 proc check*(

@@ -230,7 +230,7 @@ proc fwdWalkVerify(
     n = 0
   for (key,_) in db.right low(LeafTie,root):
     xCheck key in leftOver:
-      noisy.say "*** fwdWalkVerify", " id=", n + (nLeafs + 1) * debugID
+      noisy.say "*** fwdWalkVerify", "id=", n + (nLeafs + 1) * debugID
     leftOver.excl key
     last = key
     n.inc
@@ -239,13 +239,10 @@ proc fwdWalkVerify(
   if last.root == VertexID(0):
     last = low(LeafTie,root)
   elif last != high(LeafTie,root):
-    last = last + 1
+    last = last.next
   let rc = last.right db
-  if rc.isOk:
-    xCheck rc == WalkStopErr
-  else:
-    xCheck rc.error[1] == NearbyBeyondRange
-
+  xCheck rc.isErr
+  xCheck rc.error[1] == NearbyBeyondRange
   xCheck n == nLeafs
 
   true
@@ -274,13 +271,10 @@ proc revWalkVerify(
   if last.root == VertexID(0):
     last = high(LeafTie,root)
   elif last != low(LeafTie,root):
-    last = last - 1
+    last = last.prev
   let rc = last.left db
-  if rc.isOk:
-    xCheck rc == WalkStopErr
-  else:
-    xCheck rc.error[1] == NearbyBeyondRange
-
+  xCheck rc.isErr
+  xCheck rc.error[1] == NearbyBeyondRange
   xCheck n == nLeafs
 
   true
@@ -475,8 +469,8 @@ proc testTxSpanMultiInstances*(
     dx: seq[AristoDbRef]
 
   var genID = genBase
-  proc newHashID(): HashID =
-    result = HashID(genID.u256)
+  proc newPathID(): PathID =
+    result = PathID(pfx: genID.u256, length: 64)
     genID.inc
   proc newPayload(): Blob =
     result = @[genID].encode
@@ -501,7 +495,7 @@ proc testTxSpanMultiInstances*(
 
   # Add some data and first transaction
   block:
-    let rc = db.merge(newHashID(), newPayload())
+    let rc = db.merge(newPathID(), newPayload())
     xCheckRc rc.error == 0
   block:
     let rc = db.checkTop(relax=true)
@@ -515,7 +509,7 @@ proc testTxSpanMultiInstances*(
       xCheckRc rc.error == 0
       dx.add rc.value
     block:
-      let rc = dx[^1].merge(newHashID(), newPayload())
+      let rc = dx[^1].merge(newPathID(), newPayload())
       xCheckRc rc.error == 0
     block:
       let rc = db.checkTop(relax=true)
@@ -546,10 +540,10 @@ proc testTxSpanMultiInstances*(
 
   # Add more data ..
   block:
-    let rc = db.merge(newHashID(), newPayload())
+    let rc = db.merge(newPathID(), newPayload())
     xCheckRc rc.error == 0
   for n in 0 ..< dx.len:
-    let rc = dx[n].merge(newHashID(), newPayload())
+    let rc = dx[n].merge(newPathID(), newPayload())
     xCheckRc rc.error == 0
 
   #show(3)

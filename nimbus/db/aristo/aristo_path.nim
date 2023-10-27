@@ -30,14 +30,16 @@ import
 #
 # where the `ignored` part is typically expected a zero nibble.
 
+func pathPfxPad*(pfx: NibblesSeq; dblNibble: static[byte]): NibblesSeq
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc pathAsBlob*(keyOrTag: HashKey|HashID): Blob =
-  keyOrTag.pathAsNibbles.hexPrefixEncode(isLeaf=true)
+func pathAsBlob*(keyOrTag: HashKey|PathID): Blob =
+  keyOrTag.to(NibblesSeq).hexPrefixEncode(isLeaf=true)
 
-proc pathToKey*(partPath: NibblesSeq): Result[HashKey,AristoError] =
+func pathToKey*(partPath: NibblesSeq): Result[HashKey,AristoError] =
   var key: ByteArray32
   if partPath.len == 64:
     # Trailing dummy nibbles (aka no nibbles) force a nibble seq reorg
@@ -46,7 +48,7 @@ proc pathToKey*(partPath: NibblesSeq): Result[HashKey,AristoError] =
     return ok(key.HashKey)
   err(PathExpected64Nibbles)
 
-proc pathToKey*(
+func pathToKey*(
     partPath: openArray[byte];
       ): Result[HashKey,AristoError] =
   let (isLeaf,pathSegment) = partPath.hexPrefixDecode
@@ -54,14 +56,17 @@ proc pathToKey*(
     return pathSegment.pathToKey()
   err(PathExpectedLeaf)
 
-proc pathToTag*(
-    partPath: NibblesSeq|openArray[byte];
-      ): Result[HashID,AristoError] =
-  ok (? partPath.pathToKey).to(HashID)
+func pathToTag*(partPath: NibblesSeq): Result[PathID,AristoError] =
+  ## Nickname `tag` for `PathID`
+  if partPath.len <= 64:
+    return ok PathID(
+      pfx:    UInt256.fromBytesBE partPath.pathPfxPad(0).getBytes(),
+      length: partPath.len.uint8)
+  err(PathAtMost64Nibbles)
 
 # --------------------
 
-proc pathPfxPad*(pfx: NibblesSeq; dblNibble: static[byte]): NibblesSeq =
+func pathPfxPad*(pfx: NibblesSeq; dblNibble: static[byte]): NibblesSeq =
   ## Extend (or cut) the argument nibbles sequence `pfx` for generating a
   ## `NibblesSeq` with exactly 64 nibbles, the equivalent of a path key.
   ##
@@ -80,7 +85,7 @@ proc pathPfxPad*(pfx: NibblesSeq; dblNibble: static[byte]): NibblesSeq =
     let nope = seq[byte].default.initNibbleRange
     result = pfx.slice(0,64) & nope # nope forces re-alignment
 
-proc pathPfxPadKey*(pfx: NibblesSeq; dblNibble: static[byte]): HashKey =
+func pathPfxPadKey*(pfx: NibblesSeq; dblNibble: static[byte]): HashKey =
   ## Variant of `pathPfxPad()`.
   ##
   ## Extend (or cut) the argument nibbles sequence `pfx` for generating a
