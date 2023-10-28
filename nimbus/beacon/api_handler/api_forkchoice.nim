@@ -78,7 +78,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     # that should be fixed, not papered over.
     if not ben.get(blockHash, header):
       warn "Forkchoice requested unknown head",
-        hash = blockHash
+        hash = blockHash.short
       return simpleFCU(PayloadExecutionStatus.syncing)
 
     # Header advertised via a past newPayload request. Start syncing to it.
@@ -107,16 +107,16 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     if not db.getTd(blockHash, td) or (blockNumber > 0'u64 and not db.getTd(header.parentHash, ptd)):
       error "TDs unavailable for TTD check",
         number = blockNumber,
-        hash = blockHash,
+        hash = blockHash.short,
         td = td,
-        parent = header.parentHash,
+        parent = header.parentHash.short,
         ptd = ptd
       return simpleFCU(PayloadExecutionStatus.invalid, "TDs unavailable for TDD check")
 
     if td < ttd or (blockNumber > 0'u64 and ptd > ttd):
       error "Refusing beacon update to pre-merge",
         number = blockNumber,
-        hash = blockHash,
+        hash = blockHash.short,
         diff = header.difficulty,
         ptd = ptd,
         ttd = ttd
@@ -146,20 +146,20 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     var finalBlock: common.BlockHeader
     if not db.getBlockHeader(finalizedBlockHash, finalBlock):
       warn "Final block not available in database",
-        hash=finalizedBlockHash
+        hash=finalizedBlockHash.short
       raise invalidParams("finalized block header not available")
     var finalHash: common.Hash256
     if not db.getBlockHash(finalBlock.blockNumber, finalHash):
       warn "Final block not in canonical chain",
         number=finalBlock.blockNumber,
-        hash=finalizedBlockHash
+        hash=finalizedBlockHash.short
       raise invalidParams("finalized block hash not available")
     if finalHash != finalizedBlockHash:
       warn "Final block not in canonical chain",
         number=finalBlock.blockNumber,
-        expect=finalizedBlockHash,
-        get=finalHash
-      raise invalidParams("finalilized block not canonical")
+        expect=finalizedBlockHash.short,
+        get=finalHash.short
+      raise invalidParams("finalized block not canonical")
     db.finalizedHeaderHash(finalizedBlockHash)
 
   let safeBlockHash = ethHash update.safeBlockHash
@@ -167,18 +167,18 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     var safeBlock: common.BlockHeader
     if not db.getBlockHeader(safeBlockHash, safeBlock):
       warn "Safe block not available in database",
-        hash = safeBlockHash
+        hash = safeBlockHash.short
       raise invalidParams("safe head not available")
     var safeHash: common.Hash256
     if not db.getBlockHash(safeBlock.blockNumber, safeHash):
       warn "Safe block hash not available in database",
-        hash = safeHash
+        hash = safeHash.short
       raise invalidParams("safe block hash not available")
     if safeHash != safeBlockHash:
       warn "Safe block not in canonical chain",
         blockNumber=safeBlock.blockNumber,
-        expect=safeBlockHash,
-        get=safeHash
+        expect=safeBlockHash.short,
+        get=safeHash.short
       raise invalidParams("safe head not canonical")
     db.safeHeaderHash(safeBlockHash)
 

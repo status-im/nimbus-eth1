@@ -165,6 +165,9 @@ proc generatePayload*(ben: BeaconEngineRef,
        # reorg
        discard xp.smartHead(headBlock)
 
+    if pos.timestamp <= headBlock.timestamp:
+      return err "timestamp must be strictly later than parent"
+
     # someBaseFee = true: make sure blk.header
     # have the same blockHash with generated payload
     let blk = xp.ethBlock(someBaseFee = true)
