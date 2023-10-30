@@ -14,7 +14,7 @@ import
   std/tables,
   eth/[common, eip1559],
   eth/trie/trie_defs,
-  ../db/[ledger, core_db, distinct_tries, state_db/read_write],
+  ../db/[ledger, core_db, state_db/read_write],
   ../constants,
   ./chain_config
 
@@ -56,6 +56,11 @@ type
     rootHash: GenesisRootHashFn
     getTrie: GenesisGetTrieFn
 
+const
+  GenesisLedgerTypeDefault* = LedgerType(0)
+    ## Default ledger type to use, `LedgerType(0)` uses  `AccountStateDB`
+    ## rather than a `Ledger` variant.
+
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
@@ -93,8 +98,12 @@ proc initStateDbledgerRef(db: CoreDbRef; pruneTrie: bool): GenesisLedgerRef =
       sdb.getTrie())
 
 
-proc initAccountsLedgerRef(db: CoreDbRef; pruneTrie: bool): GenesisLedgerRef =
-  let ac = AccountsCache.init(db, emptyRlpHash, pruneTrie)
+proc initAccountsLedgerRef(
+    db: CoreDbRef;
+    pruneTrie: bool;
+    ledgerType: LedgerType;
+     ): GenesisLedgerRef =
+  let ac = ledgerType.init(db, emptyRlpHash, pruneTrie)
 
   GenesisLedgerRef(
     addAccount: proc(
@@ -124,7 +133,7 @@ proc initAccountsLedgerRef(db: CoreDbRef; pruneTrie: bool): GenesisLedgerRef =
       ac.rootHash(),
 
     getTrie: proc(): CoreDbMptRef =
-      ac.getMpt)
+      ac.getMpt())
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -133,12 +142,12 @@ proc initAccountsLedgerRef(db: CoreDbRef; pruneTrie: bool): GenesisLedgerRef =
 proc newStateDB*(
     db: CoreDbRef;
     pruneTrie: bool;
-    avoidStateDb = false;
+    ledgerType = LedgerType(0);
       ): GenesisLedgerRef =
-  ## The flag `avoidStateDb` is set `false` for compatibility with legacy apps
-  ## `(see `test_state_network`).
-  if avoidStateDb:
-    db.initAccountsLedgerRef pruneTrie
+  ## The flag `ledgerType` is set to zero for compatibility with legacy apps
+  ## (see `test_state_network`).
+  if ledgerType != LedgerType(0):
+    db.initAccountsLedgerRef(pruneTrie, ledgerType)
   else:
     db.initStateDbledgerRef pruneTrie
 
@@ -217,27 +226,27 @@ proc toGenesisHeader*(
     genesis: Genesis;
     fork: HardFork;
     db = CoreDbRef(nil);
-    avoidStateDb = false;
+    ledgerType = GenesisLedgerTypeDefault;
       ): BlockHeader
       {.gcsafe, raises: [CatchableError].} =
   ## Generate the genesis block header from the `genesis` and `config`
   ## argument value.
   let
     db  = if db.isNil: newCoreDbRef LegacyDbMemory else: db
-    sdb = newStateDB(db, pruneTrie = true, avoidStateDb)
+    sdb = newStateDB(db, pruneTrie = true, ledgerType)
   toGenesisHeader(genesis, sdb, fork)
 
 proc toGenesisHeader*(
     params: NetworkParams;
     db = CoreDbRef(nil);
-    avoidStateDb = false;
+    ledgerType = GenesisLedgerTypeDefault;
       ): BlockHeader
       {.raises: [CatchableError].} =
   ## Generate the genesis block header from the `genesis` and `config`
   ## argument value.
   let map  = toForkTransitionTable(params.config)
   let fork = map.toHardFork(forkDeterminationInfo(0.toBlockNumber, params.genesis.timestamp))
-  toGenesisHeader(params.genesis, fork, db, avoidStateDb)
+  toGenesisHeader(params.genesis, fork, db, ledgerType)
 
 # ------------------------------------------------------------------------------
 # End

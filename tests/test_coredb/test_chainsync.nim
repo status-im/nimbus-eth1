@@ -17,7 +17,7 @@ import
   unittest2,
   ../../nimbus/core/chain,
   ../../nimbus/db/ledger,
-  ../replay/[undump_blocks, xcheck],
+  ../replay/[pp, undump_blocks, xcheck],
   ./test_helpers
 
 type StopMoaningAboutLedger {.used.} = LedgerType
@@ -32,6 +32,11 @@ when CoreDbEnableApiProfiling or LedgerEnableApiProfiling:
 proc setTraceLevel {.used.} =
   when defined(chronicles_runtime_filtering) and loggingEnabled:
     setLogLevel(LogLevel.TRACE)
+
+proc setDebugLevel {.used.} =
+  discard
+  when defined(chronicles_runtime_filtering) and loggingEnabled:
+    setLogLevel(LogLevel.DEBUG)
 
 proc setErrorLevel {.used.} =
   when defined(chronicles_runtime_filtering) and loggingEnabled:
@@ -142,22 +147,26 @@ proc test_chainSync*(
       dotsOrSpace = "   "
 
     if noisy:
-      setTraceLevel()
+      setDebugLevel()
+      #setTraceLevel()
       com.db.trackLegaApi = true
       com.db.trackNewApi = true
       com.db.trackLedgerApi = true
       com.db.localDbOnly = true
+
     if lastOneExtra:
       let
         headers0 = headers9[0..0]
         bodies0 = bodies9[0..0]
       noisy.say "***", &"processing {dotsOrSpace}[#{lastBlock},#{lastBlock}]"
-      let runPersistBlocks0Rc = chain.persistBlocks(headers0, bodies0)
-      xCheck runPersistBlocks0Rc == ValidationResult.OK
+      noisy.showElapsed("@last block " & &"#{lastBlock}"):
+        let runPersistBlocks0Rc = chain.persistBlocks(headers0, bodies0)
+        xCheck runPersistBlocks0Rc == ValidationResult.OK
     else:
       noisy.say "***", &"processing {dotsOrSpace}[#{lastBlock},#{toBlock}]"
-      let runPersistBlocks9Rc = chain.persistBlocks(headers9, bodies9)
-      xCheck runPersistBlocks9Rc == ValidationResult.OK
+      noisy.showElapsed("@last blocks " & &"[#{lastBlock},#{toBlock}]"):
+        let runPersistBlocks9Rc = chain.persistBlocks(headers9, bodies9)
+        xCheck runPersistBlocks9Rc == ValidationResult.OK
 
     break
 

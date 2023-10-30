@@ -76,7 +76,7 @@ proc new*(
   ## with the `parent` block header.
   new result
   result.init(
-    ac       = AccountsCache.init(com.db, parent.stateRoot, com.pruneTrie),
+    ac       = com.ledgerType.init(com.db, parent.stateRoot, com.pruneTrie),
     parent   = parent,
     blockCtx = blockCtx,
     com      = com,
@@ -87,11 +87,11 @@ proc reinit*(self:     BaseVMState;     ## Object descriptor
              blockCtx: BlockContext
              ): bool
     {.gcsafe.} =
-  ## Re-initialise state descriptor. The `AccountsCache` database is
+  ## Re-initialise state descriptor. The `LedgerRef` database is
   ## re-initilaise only if its `rootHash` doe not point to `parent.stateRoot`,
   ## already. Accumulated state data are reset.
   ##
-  ## This function returns `true` unless the `AccountsCache` database could be
+  ## This function returns `true` unless the `LedgerRef` database could be
   ## queries about its `rootHash`, i.e. `isTopLevelClean` evaluated `true`. If
   ## this function returns `false`, the function argument `self` is left
   ## untouched.
@@ -101,7 +101,7 @@ proc reinit*(self:     BaseVMState;     ## Object descriptor
       com    = self.com
       db     = com.db
       ac     = if self.stateDB.rootHash == parent.stateRoot: self.stateDB
-               else: AccountsCache.init(db, parent.stateRoot, com.pruneTrie)
+               else: com.ledgerType.init(db, parent.stateRoot, com.pruneTrie)
     self[].reset
     self.init(
       ac       = ac,
@@ -156,7 +156,7 @@ proc init*(
   ## It requires the `header` argument properly initalised so that for PoA
   ## networks, the miner address is retrievable via `ecRecover()`.
   self.init(
-    ac       = AccountsCache.init(com.db, parent.stateRoot, com.pruneTrie),
+    ac       = com.ledgerType.init(com.db, parent.stateRoot, com.pruneTrie),
     parent   = parent,
     blockCtx = com.blockCtx(header),
     com      = com,
@@ -223,7 +223,7 @@ proc statelessInit*(
     tracer:       TracerRef = nil): bool
     {.gcsafe, raises: [CatchableError].} =
   vmState.init(
-    ac          = AccountsCache.init(com.db, parent.stateRoot, com.pruneTrie),
+    ac          = com.ledgerType.init(com.db, parent.stateRoot, com.pruneTrie),
     parent      = parent,
     blockCtx    = com.blockCtx(header),
     com         = com,

@@ -1,5 +1,4 @@
-# Nimbus - Types, data structures and shared utilities used in network sync
-#
+# Nimbus
 # Copyright (c) 2023 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
@@ -17,7 +16,7 @@ import
   eth/common,
   results,
   unittest2,
-  ../../nimbus/db/core_db/persistent,
+  ../../nimbus/db/[core_db/persistent, ledger],
   ../../nimbus/core/chain,
   ./replay/pp,
   ./test_coredb/[coredb_test_xx, test_chainsync, test_helpers]
@@ -85,18 +84,27 @@ proc setErrorLevel {.used.} =
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc openLegacyDB(
-    persistent: bool;
+proc initRunnerDB(
     path: string;
     network: NetworkId;
+    dbType: CoreDbType;
+    ldgType: LedgerType;
       ): CommonRef =
-  let coreDB = if not persistent: newCoreDbRef LegacyDbMemory
-               else: newCoreDbRef(LegacyDbPersistent, path)
+  let coreDB =
+    # Resolve for static `dbType`
+    case dbType:
+    of LegacyDbMemory: LegacyDbMemory.newCoreDbRef()
+    of LegacyDbPersistent: LegacyDbPersistent.newCoreDbRef path
+    of AristoDbMemory: AristoDbMemory.newCoreDbRef()
+    of AristoDbRocks: AristoDbRocks.newCoreDbRef path
+    of AristoDbVoid: AristoDbVoid.newCoreDbRef()
+    else: raiseAssert "Oops"
+
   result = CommonRef.new(
     db = coreDB,
     networkId = network,
     params = network.networkParams,
-    avoidStateDb = true)
+    ldgType = ldgType)
   result.initializeEmptyDb
 
 # ------------------------------------------------------------------------------
@@ -106,27 +114,27 @@ proc openLegacyDB(
 proc chainSyncRunner(
     noisy = true;
     capture = bChainCapture;
-    persistent = true;
+    dbType = LegacyDbMemory;
+    ldgType = LegacyAccountsCache;
       ) =
-  ## Test legacy backend database
+  ## Test backend database and ledger
   let
     fileInfo = capture.file.splitFile.name.split(".")[0]
     filePath = capture.file.findFilePath(baseDir,repoDir).value
-    baseDir = getTmpDir() / capture.name & "-legacy"
-    dbDir = if persistent: baseDir / "tmp" else: ""
-    sayPersistent = if persistent: "persistent DB" else: "mem DB only"
+    baseDir = getTmpDir() / capture.name & "-chain-sync"
+    dbDir = baseDir / "tmp"
     numBlocks = capture.numBlocks
     numBlocksInfo = if numBlocks == high(int): "all" else: $numBlocks
+    persistent = dbType in CoreDbPersistentTypes
 
   defer:
     if persistent: baseDir.flushDbDir
 
-  suite "CoreDB and LedgerRef API"&
-        &", capture={fileInfo}, {sayPersistent}":
+  suite &"CoreDB and LedgerRef API on {fileInfo}, {dbType}, {ldgType}":
 
-    test &"Ledger API, {numBlocksInfo} blocks":
+    test &"Ledger API {ldgType}, {numBlocksInfo} blocks":
       let
-        com = openLegacyDB(persistent, dbDir, capture.network)
+        com = initRunnerDB(dbDir, capture.network, dbType, ldgType)
       defer:
         com.db.finish(flush = true)
         noisy.testChainSyncProfilingPrint numBlocks
@@ -144,12 +152,11 @@ proc chainSyncRunner(
 # ------------------------------------------------------------------------------
 
 proc coreDbMain*(noisy = defined(debug)) =
-  noisy.chainSyncRunner()
+  noisy.chainSyncRunner(ldgType=LedgerCache)
 
 when isMainModule:
   const
     noisy = defined(debug) or true
-    persDb = true and false
 
   setErrorLevel()
 
@@ -164,7 +171,10 @@ when isMainModule:
   var state: (Duration, int)
   for n,capture in testList:
     noisy.profileSection("@testList #" & $n, state):
-      noisy.chainSyncRunner(capture=capture, persistent=persDb)
+      noisy.chainSyncRunner(
+        capture=capture,
+        dbType=AristoDbMemory,
+        ldgType=LedgerCache)
 
   noisy.say "***", "total elapsed: ", state[0].pp, " sections: ", state[1]
 
