@@ -5,7 +5,6 @@
 
 # Nimble packages
 /vendor/.nimble
-/vendor/
 
 # ntags/ctags output
 /tags
