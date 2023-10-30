@@ -36,10 +36,36 @@ func pathPfxPad*(pfx: NibblesSeq; dblNibble: static[byte]): NibblesSeq
 # Public functions
 # ------------------------------------------------------------------------------
 
-func pathAsBlob*(keyOrTag: HashKey|PathID): Blob =
-  keyOrTag.to(NibblesSeq).hexPrefixEncode(isLeaf=true)
+func pathAsBlob*(tag: PathID): Blob =
+  ## Convert the `tag` argument to a sequence of an even number of nibbles
+  ## represented by a `Blob`. If the argument `tag` represents an odd number
+  ## of nibbles, a zero nibble is appendend.
+  ##
+  ## This function is useful only if there is a tacit agreement that all paths
+  ## used to index database leaf values can be represented as `Blob`, i.e.
+  ## `HashKey` type paths or `PathID` or `NibblesSeq` type paths with an even
+  ## number of nibbles.
+  if 0 < tag.length:
+    let key = @(tag.pfx.UInt256.toBytesBE)
+    if 64 <= tag.length:
+      return key
+    else:
+      return key[0 .. (tag.length + 1) div 2]
+
+func pathAsHEP*(tag: PathID; isLeaf = false): Blob =
+  ## Convert the `tag` argument to a hex encoded partial path as used in `eth`
+  ## or `snap` protocol where full paths of nibble length 64 are encoded as 32
+  ## byte `Blob` and non-leaf partial paths are *compact encoded* (i.e. per
+  ## the Ethereum wire protocol.)
+  if 64 <= tag.length:
+    @(tag.pfx.UInt256.toBytesBE)
+  else:
+    tag.to(NibblesSeq).hexPrefixEncode(isLeaf=true)
 
 func pathToKey*(partPath: NibblesSeq): Result[HashKey,AristoError] =
+  ## Convert an argument `partPath` of exactly 64 nibbles to a `HashKey` type
+  ## value Arguments with the number of nibbles different from 64 will
+  ## cause an error.
   var key: ByteArray32
   if partPath.len == 64:
     # Trailing dummy nibbles (aka no nibbles) force a nibble seq reorg
@@ -48,20 +74,32 @@ func pathToKey*(partPath: NibblesSeq): Result[HashKey,AristoError] =
     return ok(key.HashKey)
   err(PathExpected64Nibbles)
 
-func pathToKey*(
-    partPath: openArray[byte];
-      ): Result[HashKey,AristoError] =
+func pathToKey*(partPath: openArray[byte]): Result[HashKey,AristoError] =
+  ## Variant of `pathToKey()` for an even numbered nibbles argument `partPath`
+  ## represented by a `Blob` or array.
   let (isLeaf,pathSegment) = partPath.hexPrefixDecode
   if isleaf:
     return pathSegment.pathToKey()
   err(PathExpectedLeaf)
 
 func pathToTag*(partPath: NibblesSeq): Result[PathID,AristoError] =
-  ## Nickname `tag` for `PathID`
+  ## Convert the argument `partPath`  to a `PathID` type value.
+  if partPath.len == 0:
+    return ok PathID()
   if partPath.len <= 64:
     return ok PathID(
       pfx:    UInt256.fromBytesBE partPath.pathPfxPad(0).getBytes(),
       length: partPath.len.uint8)
+  err(PathAtMost64Nibbles)
+
+func pathToTag*(partPath: openArray[byte]): Result[PathID,AristoError] =
+  ## Variant of `pathToTag()`
+  if partPath.len == 0:
+    return ok PathID()
+  if partPath.len <= 32:
+    return ok PathID(
+      pfx:    UInt256.fromBytesBE @partPath & 0u8.repeat(32-partPath.len),
+      length: 2 * partPath.len.uint8)
   err(PathAtMost64Nibbles)
 
 # --------------------

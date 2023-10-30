@@ -645,21 +645,18 @@ proc merge*(
       ): Result[bool,AristoError] =
   ## Variant of `merge()` for `(root,path)` arguments instead of a `LeafTie`
   ## object.
-  let lty = LeafTie(root: root, path: ? path.initNibbleRange.pathToTag)
+  let lty = LeafTie(root: root, path: ? path.pathToTag)
   db.merge(lty, payload).to(typeof result)
 
 proc merge*(
     db: AristoDbRef;                   # Database, top layer
     root: VertexID;                    # MPT state root
     path: openArray[byte];             # Leaf item to add to the database
-    data: openArray[byte];             # Payload value
+    data: openArray[byte];             # Raw data payload value
       ): Result[bool,AristoError] =
-  ## Variant of `merge()` for `(root,path)` arguments instead of a `LeafTie`
-  ## object. The payload argument `data` will be stored as `RlpData` if
-  ## the `root` argument is `VertexID(1)`, and as `RawData` otherwise.
-  let pyl = if root == VertexID(1): PayloadRef(pType: RlpData, rlpBlob: @data)
-            else:                   PayloadRef(pType: RawData, rawBlob: @data)
-  db.merge(root, path, pyl)
+  ## Variant of `merge()` for `(root,path)` arguments instead of a `LeafTie`.
+  ## The argument `data` is stored as-is as a a `RawData` payload value.
+  db.merge(root, path, PayloadRef(pType: RawData, rawBlob: @data))
 
 proc merge*(
     db: AristoDbRef;                   # Database, top layer
@@ -691,7 +688,7 @@ proc merge*(
     path: PathID;                      # Path into database
     rlpData: openArray[byte];          # RLP encoded payload data
       ): Result[bool,AristoError] =
-  ## Variant of `merge()` for storing a single item with implicte state root
+  ## Variant of `merge()` for storing a single item with implicit state root
   ## argument `VertexID(1)`.
   ##
   db.merge(
