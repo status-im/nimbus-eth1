@@ -179,7 +179,7 @@ proc installPortalApiHandlers*(
         utpTransfer: contentResult.utpTransfer
       )
 
-  rpcServer.rpc("portal_historyTraceRecursiveFindContent") do(
+  rpcServer.rpc("portal_" & network & "TraceRecursiveFindContent") do(
       contentKey: string) -> TraceContentInfo:
 
     let
