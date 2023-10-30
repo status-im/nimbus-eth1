@@ -20,8 +20,11 @@ import
   results,
   stew/byteutils,
   "../.."/[errors, constants],
-  ../storage_types,
+  ".."/[aristo, storage_types],
   "."/base
+
+when VerifyAristoForMerkleRootCalc: # set in `core_db/base.nim`
+  import ./core_apps_legacy as lega
 
 logScope:
   topics = "core_db-apps"
@@ -518,14 +521,12 @@ proc persistTransactions*(
   const
     info = "persistTransactions()"
   let
-    mpt = db.newMpt()
+    sig = merkleSignBegin()
     kvt = db.newKvt()
   for idx, tx in transactions:
     let
       encodedTx = rlp.encode(tx.removeNetworkPayload)
-    mpt.merge(rlp.encode(idx), encodedTx).isOkOr:
-      warn logTxt info, idx, action="merge()", error=($$error)
-      return EMPTY_ROOT_HASH
+    sig.merkleSignAdd(rlp.encode(idx), encodedTx)
     let
       txHash = rlpHash(tx) # beware EIP-4844
       blockKey = transactionHashToBlockKey(txHash)
@@ -533,8 +534,11 @@ proc persistTransactions*(
     kvt.put(blockKey.toOpenArray, rlp.encode(txKey)).isOkOr:
       warn logTxt info, txHash, action="put()", error=($$error)
       return EMPTY_ROOT_HASH
-  mpt.rootVid.hashOrEmpty()
-
+  result = sig.merkleSignCommit.value.to(Hash256)
+  when VerifyAristoForMerkleRootCalc:
+    let legaResult = lega.persistTransactions(db, blockNumber, transactions)
+    doAssert result == legaResult
+    warn logTxt info & " aristo/legacy root key OK"
 
 proc getTransaction*(
     db: CoreDbRef;
@@ -618,13 +622,14 @@ proc persistWithdrawals*(
       ): Hash256
       {.gcsafe, raises: [CatchableError].} =
   const info = "persistWithdrawals()"
-  var mpt = db.newMpt()
+  let sig = merkleSignBegin()
   for idx, wd in withdrawals:
-    let encodedWd = rlp.encode(wd)
-    mpt.merge(rlp.encode(idx), encodedWd).isOkOr:
-      warn logTxt info, idx, action="merge()", `error`=($$error)
-      return EMPTY_ROOT_HASH
-  mpt.rootVid.hashOrEmpty()
+    sig.merkleSignAdd(rlp.encode(idx), rlp.encode(wd))
+  result = sig.merkleSignCommit.value.to(Hash256)
+  when VerifyAristoForMerkleRootCalc:
+    let legaResult = lega.persistWithdrawals(db, withdrawals)
+    doAssert result == legaResult
+    warn logTxt info & " aristo/legacy root key OK"
 
 proc getWithdrawals*(
     db: CoreDbRef;
@@ -763,12 +768,15 @@ proc persistReceipts*(
     receipts: openArray[Receipt];
       ): Hash256
       {.gcsafe, raises: [CatchableError].} =
-  var mpt = db.newMpt()
+  const info = "persistReceipts()"
+  let sig = merkleSignBegin()
   for idx, rec in receipts:
-    mpt.merge(rlp.encode(idx), rlp.encode(rec)).isOkOr:
-      warn logTxt "persistReceipts()", idx, action="merge()", `error`=($$error)
-      return EMPTY_ROOT_HASH
-  mpt.rootVid.hashOrEmpty()
+    sig.merkleSignAdd(rlp.encode(idx), rlp.encode(rec))
+  result = sig.merkleSignCommit.value.to(Hash256)
+  when VerifyAristoForMerkleRootCalc:
+    let legaResult = lega.persistReceipts(db, receipts)
+    doAssert result == legaResult
+    warn logTxt info & " aristo/legacy root key OK"
 
 proc getReceipts*(
     db: CoreDbRef;
