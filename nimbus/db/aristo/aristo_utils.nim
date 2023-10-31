@@ -92,9 +92,14 @@ proc toNode*(
     vtx: VertexRef;                    # Vertex to convert
     db: AristoDbRef;                   # Database, top layer
     stopEarly = true;                  # Full list of missing links if `false`
+    beKeyOk = false;                   # Allow fetching DB backend keys
       ): Result[NodeRef,seq[VertexID]] =
   ## Convert argument the vertex `vtx` to a node type. Missing Merkle hash
   ## keys are searched for on the argument database `db`.
+  ##
+  ## If backend keys are allowed by passing `beKeyOk` as `true`, there is no
+  ## compact embedding of a small node into another rather than its hash
+  ## reference. In that case, the hash reference will always be used.
   ##
   ## On error, at least the vertex ID of the first missing Merkle hash key is
   ## returned. If the argument `stopEarly` is set `false`, all missing Merkle
@@ -108,10 +113,13 @@ proc toNode*(
       let vid = vtx.lData.account.storageID
       if vid.isValid:
         let key = db.getKey vid
-        if not key.isValid:
+        if key.isValid:
+          node.key[0] = key
+        else:
           return err(@[vid])
         node.key[0] = key
     return ok node
+
   of Branch:
     let node = NodeRef(vType: Branch, bVid: vtx.bVid)
     var missing: seq[VertexID]
@@ -121,24 +129,23 @@ proc toNode*(
         let key = db.getKey vid
         if key.isValid:
           node.key[n] = key
+        elif stopEarly:
+          return err(@[vid])
         else:
           missing.add vid
-          if stopEarly:
-            break
-      else:
-        node.key[n] = VOID_HASH_KEY
     if 0 < missing.len:
       return err(missing)
     return ok node
+
   of Extension:
     let
       vid = vtx.eVid
       key = db.getKey vid
-    if key.isValid:
-      let node = NodeRef(vType: Extension, ePfx: vtx.ePfx, eVid: vid)
-      node.key[0] = key
-      return ok node
-    return err(@[vid])
+    if not key.isValid:
+      return err(@[vid])
+    let node = NodeRef(vType: Extension, ePfx: vtx.ePfx, eVid: vid)
+    node.key[0] = key
+    return ok node
 
 # ------------------------------------------------------------------------------
 # End

@@ -15,15 +15,12 @@
 
 import aristo/[
   aristo_constants, aristo_delete, aristo_fetch, aristo_init, aristo_merge,
-  aristo_nearby, aristo_sign, aristo_tx, aristo_utils, aristo_walk]
+  aristo_nearby, aristo_serialise, aristo_sign, aristo_tx, aristo_utils,
+  aristo_walk]
 export
   aristo_constants, aristo_delete, aristo_fetch, aristo_init, aristo_merge,
-  aristo_nearby, aristo_sign, aristo_tx, aristo_utils, aristo_walk
-
-import
-  aristo/aristo_serialise
-export
-  append, read, serialise
+  aristo_nearby, aristo_serialise, aristo_sign, aristo_tx, aristo_utils,
+  aristo_walk
 
 import
   aristo/aristo_get
@@ -50,6 +47,7 @@ export
   AristoDbRef,
   AristoError,
   AristoTxRef,
+  MerkleSignRef,
   forget,
   isValid
 

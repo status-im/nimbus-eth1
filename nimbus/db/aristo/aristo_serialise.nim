@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/[sequtils, sets],
+  std/sequtils,
   eth/[common, rlp, trie/nibbles],
   results,
   "."/[aristo_constants, aristo_desc, aristo_get]
@@ -47,13 +47,13 @@ proc serialise(
     let
       vid = pyl.account.storageID
       key = block:
-        if not vid.isValid:
-          VOID_HASH_KEY
+        if vid.isValid:
+          vid.getKey.valueOr:
+            let w = (vid,error)
+            return err(w)
         else:
-          let rc = vid.getKey
-          if rc.isErr:
-            return err((vid,rc.error))
-          rc.value
+          VOID_HASH_KEY
+
     ok rlp.encode Account(
       nonce:       pyl.account.nonce,
       balance:     pyl.account.balance,
@@ -85,12 +85,11 @@ proc read*(rlp: var Rlp; T: type NodeRef): T {.gcsafe, raises: [RlpError].} =
         return aristoError(RlpBlobExpected)
       blobs[top] = rlp.read(Blob)
     of 2 .. 15:
-      if not links[top].init(rlp.read(Blob)):
-        return aristoError(RlpBranchLinkExpected)
+      let blob = rlp.read(Blob)
+      links[top] = HashKey.fromBytes(blob).valueOr:
+        return aristoError(RlpBranchHashKeyExpected)
     of 16:
-      if not w.isBlob:
-        return aristoError(RlpBlobExpected)
-      if 0 < rlp.read(Blob).len:
+      if not w.isBlob or 0 < rlp.read(Blob).len:
         return aristoError(RlpEmptyBlobExpected)
     else:
       return aristoError(Rlp2Or17ListEntries)
@@ -113,13 +112,13 @@ proc read*(rlp: var Rlp; T: type NodeRef): T {.gcsafe, raises: [RlpError].} =
       var node = NodeRef(
         vType: Extension,
         ePfx:  pathSegment)
-      if not node.key[0].init(blobs[1]):
-        return aristoError(RlpExtPathEncoding)
+      node.key[0] = HashKey.fromBytes(blobs[1]).valueOr:
+        return aristoError(RlpExtHashKeyExpected)
       return node
   of 17:
     for n in [0,1]:
-      if not links[n].init(blobs[n]):
-        return aristoError(RlpBranchLinkExpected)
+      links[n] = HashKey.fromBytes(blobs[n]).valueOr:
+        return aristoError(RlpBranchHashKeyExpected)
     return NodeRef(
       vType: Branch,
       key:   links)
@@ -132,11 +131,11 @@ proc read*(rlp: var Rlp; T: type NodeRef): T {.gcsafe, raises: [RlpError].} =
 proc append*(writer: var RlpWriter; node: NodeRef) =
   ## Mixin for RLP writer. Note that a `Dummy` node is encoded as an empty
   ## list.
-  proc addHashKey(writer: var RlpWriter; key: HashKey) =
-    if not key.isValid:
-      writer.append EmptyBlob
+  func addHashKey(w: var RlpWriter; key: HashKey) =
+    if 1 < key.len and key.len < 32:
+      w.appendRawBytes @key
     else:
-      writer.append key.to(Hash256)
+      w.append @key
 
   if node.error != AristoError(0):
     writer.startList(0)
@@ -163,9 +162,9 @@ proc append*(writer: var RlpWriter; node: NodeRef) =
 
 # ---------------------
 
-proc to*(node: NodeRef; T: type HashKey): T =
+proc digestTo*(node: NodeRef; T: type HashKey): T =
   ## Convert the argument `node` to the corresponding Merkle hash key
-  node.encode.digestTo T
+  rlp.encode(node).digestTo(HashKey)
 
 proc serialise*(
     db: AristoDbRef;

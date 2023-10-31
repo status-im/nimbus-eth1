@@ -93,7 +93,7 @@ proc getVtxFn(db: MemBackendRef): GetVtxFn =
 proc getKeyFn(db: MemBackendRef): GetKeyFn =
   result =
     proc(vid: VertexID): Result[HashKey,AristoError] =
-      let key = db.kMap.getOrDefault(vid, VOID_HASH_KEY)
+      let key = db.kMap.getOrVoid vid
       if key.isValid:
         return ok key
       err(GetKeyNotFound)
@@ -327,7 +327,7 @@ iterator walkKey*(
       ): tuple[n: int, vid: VertexID, key: HashKey] =
   ## Iteration over the Markle hash sub-table.
   for n,vid in be.kMap.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID):
-    let key = be.kMap.getOrDefault(vid, VOID_HASH_KEY)
+    let key = be.kMap.getOrVoid vid
     if key.isValid:
       yield (n, vid, key)
 
@@ -371,7 +371,7 @@ iterator walk*(
     n.inc
 
   for (_,vid,key) in be.walkKey:
-    yield (n, KeyPfx, vid.uint64, key.to(Blob))
+    yield (n, KeyPfx, vid.uint64, @key)
     n.inc
 
   if not be.noFq:

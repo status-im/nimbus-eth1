@@ -12,11 +12,11 @@
 
 import
   std/[algorithm, sequtils, sets, tables],
-  eth/common,
+  eth/[common, trie/nibbles],
   stew/interval_set,
   ../../aristo,
   ../aristo_walk/persistent,
-  ".."/[aristo_desc, aristo_get, aristo_serialise, aristo_vid]
+  ".."/[aristo_desc, aristo_get, aristo_vid]
 
 const
   Vid2 = @[VertexID(2)].toHashSet
@@ -98,6 +98,21 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
     let rc = db.getKeyBE vid
     if rc.isErr or not rc.value.isValid:
       return err((vid,CheckBeKeyMissing))
+    case vtx.vType:
+    of Leaf:
+      discard
+    of Branch:
+      block check42Links:
+        var seen = false
+        for n in 0 .. 15:
+          if vtx.bVid[n].isValid:
+            if seen:
+              break check42Links
+            seen = true
+        return err((vid,CheckBeVtxBranchLinksMissing))
+    of Extension:
+      if vtx.ePfx.len == 0:
+        return err((vid,CheckBeVtxExtPfxMissing))
 
   for (_,vid,key) in T.walkKeyBE db:
     if not key.isvalid:
@@ -109,7 +124,7 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
     if rx.isErr:
       return err((vid,CheckBeKeyCantCompile))
     if not relax:
-      let expected = rx.value.to(HashKey)
+      let expected = rx.value.digestTo(HashKey)
       if expected != key:
         return err((vid,CheckBeKeyMismatch))
     discard vids.reduce Interval[VertexID,uint64].new(vid,vid)
@@ -162,10 +177,11 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
        not db.backend.isNil and
        not db.backend.filters.isNil:
       var lastTrg = db.getKeyUBE(VertexID(1)).get(otherwise = VOID_HASH_KEY)
+                      .to(Hash256)
       for (qid,filter) in db.backend.T.walkFifoBe: # walk in fifo order
         if filter.src != lastTrg:
           return err((VertexID(0),CheckBeFifoSrcTrgMismatch))
-        if filter.trg != filter.kMap.getOrVoid VertexID(1):
+        if filter.trg != filter.kMap.getOrVoid(VertexID 1).to(Hash256):
           return err((VertexID(1),CheckBeFifoTrgNotStateRoot))
         lastTrg = filter.trg
 
@@ -180,7 +196,7 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
         let rc = vtx.toNode db # compile cache first
         if rc.isErr:
           return err((vid,CheckBeCacheKeyCantCompile))
-        let expected = rc.value.to(HashKey)
+        let expected = rc.value.digestTo(HashKey)
         if expected != lbl.key:
           return err((vid,CheckBeCacheKeyMismatch))
 
@@ -192,7 +208,10 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
     if 0 < delta.len:
       # Exclude fringe case when there is a single root vertex only
       if vGenExpected != Vid2 or 0 < vGen.len:
-        return err((delta.toSeq.sorted[^1],CheckBeCacheGarbledVGen))
+        let delta = delta.toSeq
+        # As happens with Merkle signature calculator: `root=VertexID(2)`
+        if delta.len != 1 or delta[0] != VertexID(1) or VertexID(1) in vGen:
+          return err((delta.sorted[^1],CheckBeCacheGarbledVGen))
 
   ok()
 

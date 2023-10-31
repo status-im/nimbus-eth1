@@ -388,7 +388,7 @@ assumed, i.e. the list with the single vertex ID *1*.
         88 +--+--+--+--+--+ .. --+
            ...                               -- more unused vertex ID
         N1 +--+--+--+--+
-           ||          |                     -- flg(3) + vtxLen(29), 1st triplet
+           ||          |                     -- flg(2) + vtxLen(30), 1st triplet
            +--+--+--+--+--+ .. --+
            |                     |           -- vertex ID of first triplet
            +--+--+--+--+--+ .. --+--+ .. --+
@@ -396,31 +396,30 @@ assumed, i.e. the list with the single vertex ID *1*.
            +--+--+--+--+--+ .. --+--+ .. --+
            ...                               -- optional vertex record
         N2 +--+--+--+--+
-           ||          |                     -- flg(3) + vtxLen(29), 2nd triplet
+           ||          |                     -- flg(2) + vtxLen(30), 2nd triplet
            +--+--+--+--+
            ...
            +--+
-           |  |                               -- marker(8), 0x7d
+           |  |                              -- marker(8), 0x7d
            +--+
 
         where
-          + minimum size of an empty filer is 72 bytes
+          + minimum size of an empty filter is 72 bytes
 
-          + the flg(3) represents the tuple (key-mode,vertex-mode) encoding
-            the serialised storage states
+          + the flg(2) represents a bit tuple encoding the serialised storage
+            modes for the optional 32 bytes hash key:
 
-              0 -- encoded and present
+              0 -- not encoded, to be ignored
               1 -- not encoded, void => considered deleted
-              2 -- not encoded, to be ignored
+              2 -- present, encoded as-is (32 bytes)
+              3 -- present, encoded as (len(1),data,zero-padding)
 
-            so, when encoded as
+          + the vtxLen(30) is the number of bytes of the optional vertex record
+            which has maximum size 2^30-2 which is short of 1 GiB. The value
+            2^30-1 (i.e. 0x3fffffff) is reserverd for indicating that there is
+            no vertex record following and it should be considered deleted.
 
-              flg(3) = key-mode * 3 + vertex-mode
-
-            the the tuple (2,2) will never occur and flg(3) < 9
-
-          + the vtxLen(29) is the number of bytes of the optional vertex record
-            which has maximum size 2^29-1 which is short of 512 MiB
+          + there is no blind entry, i.e. either flg(2) != 0 or vtxLen(30) != 0.
 
           + the marker(8) is the eight bit array *0111-1101*
 

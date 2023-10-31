@@ -15,7 +15,7 @@ import
   eth/[common, trie/nibbles],
   results,
   stew/endians2,
-  "."/[aristo_constants, aristo_desc]
+  ./aristo_desc
 
 # ------------------------------------------------------------------------------
 # Private helper
@@ -172,12 +172,16 @@ proc blobify*(filter: FilterRef; data: var Blob): Result[void,AristoError] =
   ##   ...            -- more triplets
   ##   0x7d           -- marker(8)
   ##
+  func blobify(lid: HashKey): Blob =
+    let n = lid.len
+    if n < 32: @[n.byte] & @lid & 0u8.repeat(31 - n) else: @lid
+
   if not filter.isValid:
     return err(BlobifyNilFilter)
   data.setLen(0)
   data &= filter.fid.uint64.toBytesBE.toSeq
-  data &= filter.src.ByteArray32.toSeq
-  data &= filter.trg.ByteArray32.toSeq
+  data &= @(filter.src.data)
+  data &= @(filter.trg.data)
 
   data &= filter.vGen.len.uint32.toBytesBE.toSeq
   data &= newSeq[byte](4) # place holder
@@ -196,30 +200,28 @@ proc blobify*(filter: FilterRef; data: var Blob): Result[void,AristoError] =
     leftOver.excl vid
 
     var
-      keyMode = 0u                 # present and usable
-      vtxMode = 0u                 # present and usable
+      keyMode = 0u                 # default: ignore that key
+      vtxLen  = 0u                 # default: ignore that vertex
       keyBlob: Blob
       vtxBlob: Blob
 
     let key = filter.kMap.getOrVoid vid
     if key.isValid:
-      keyBlob = key.ByteArray32.toSeq
+      keyBlob = key.blobify
+      keyMode = if key.len < 32: 0xc000_0000u else: 0x8000_0000u
     elif filter.kMap.hasKey vid:
-      keyMode = 1u                 # void hash key => considered deleted
-    else:
-      keyMode = 2u                 # ignore that hash key
+      keyMode = 0x4000_0000u       # void hash key => considered deleted
 
     if vtx.isValid:
       ? vtx.blobify vtxBlob
+      vtxLen = vtxBlob.len.uint
+      if 0x3fff_ffff <= vtxLen:
+        return err(BlobifyFilterRecordOverflow)
     else:
-      vtxMode = 1u                 # nil vertex => considered deleted
+      vtxLen = 0x3fff_ffff         # nil vertex => considered deleted
 
-    if (vtxBlob.len and not 0x1fffffff) != 0:
-      return err(BlobifyFilterRecordOverflow)
-
-    let pfx = ((keyMode * 3 + vtxMode) shl 29) or vtxBlob.len.uint
     data &=
-      pfx.uint32.toBytesBE.toSeq &
+      (keyMode or vtxLen).uint32.toBytesBE.toSeq &
       vid.uint64.toBytesBE.toSeq &
       keyBlob &
       vtxBlob
@@ -228,18 +230,18 @@ proc blobify*(filter: FilterRef; data: var Blob): Result[void,AristoError] =
   for vid in leftOver:
     n.inc
     var
-      mode = 2u                    # key present and usable, ignore vtx
+      keyMode = 0u                 # present and usable
       keyBlob: Blob
 
     let key = filter.kMap.getOrVoid vid
     if key.isValid:
-      keyBlob = key.ByteArray32.toSeq
+      keyBlob = key.blobify
+      keyMode = if key.len < 32: 0xc000_0000u else: 0x8000_0000u
     else:
-      mode = 5u                    # 1 * 3 + 2: void key, ignore vtx
+      keyMode = 0x4000_0000u       # void hash key => considered deleted
 
-    let pfx = (mode shl 29)
     data &=
-      pfx.uint32.toBytesBE.toSeq &
+      keyMode.uint32.toBytesBE.toSeq &
       vid.uint64.toBytesBE.toSeq &
       keyBlob
 
@@ -332,7 +334,7 @@ proc deblobify*(record: Blob; vtx: var VertexRef): Result[void,AristoError] =
   ## De-serialise a data record encoded with `blobify()`. The second
   ## argument `vtx` can be `nil`.
   if record.len < 3:                                  # minimum `Leaf` record
-    return err(DeblobTooShort)
+    return err(DeblobVtxTooShort)
 
   case record[^1] shr 6:
   of 0: # `Branch` vertex
@@ -434,10 +436,16 @@ proc deblobify*(data: Blob; filter: var FilterRef): Result[void,AristoError] =
   if data[^1] != 0x7d:
     return err(DeblobWrongType)
 
+  func deblob(data: openArray[byte]; shortKey: bool): Result[HashKey,void] =
+    if shortKey:
+      HashKey.fromBytes data[1 .. min(data[0],31)]
+    else:
+      HashKey.fromBytes data
+
   let f = FilterRef()
   f.fid = (uint64.fromBytesBE data[0 ..< 8]).FilterID
-  (addr f.src.ByteArray32[0]).copyMem(unsafeAddr data[8], 32)
-  (addr f.trg.ByteArray32[0]).copyMem(unsafeAddr data[40], 32)
+  (addr f.src.data[0]).copyMem(unsafeAddr data[8], 32)
+  (addr f.trg.data[0]).copyMem(unsafeAddr data[40], 32)
 
   let
     nVids = uint32.fromBytesBE data[72 ..< 76]
@@ -456,33 +464,33 @@ proc deblobify*(data: Blob; filter: var FilterRef): Result[void,AristoError] =
       return err(DeblobFilterTrpTooShort)
 
     let
-      flag = data[offs] shr 5 # double triplets: {0,1,2} x {0,1,2}
-      vLen = ((uint32.fromBytesBE data[offs ..< offs + 4]) and 0x1fffffff).int
-    if (vLen == 0) != ((flag mod 3) > 0):
-      return err(DeblobFilterTrpVtxSizeGarbled) # contadiction
+      keyFlag = data[offs] shr 6
+      vtxFlag = ((uint32.fromBytesBE data[offs ..< offs+4]) and 0x3fff_ffff).int
+      vLen = if vtxFlag == 0x3fff_ffff: 0 else: vtxFlag
+    if keyFlag == 0 and vtxFlag == 0:
+      return err(DeblobFilterTrpVtxSizeGarbled) # no blind records
     offs = offs + 4
 
     let vid = (uint64.fromBytesBE data[offs ..< offs + 8]).VertexID
     offs = offs + 8
 
-    if data.len < offs + (flag < 3).ord * 32 + vLen:
+    if data.len < offs + (1 < keyFlag).ord * 32 + vLen:
       return err(DeblobFilterTrpTooShort)
 
-    if flag < 3:                                        # {0} x {0,1,2}
-      var key: HashKey
-      (addr key.ByteArray32[0]).copyMem(unsafeAddr data[offs], 32)
-      f.kMap[vid] = key
+    if 1 < keyFlag:
+      f.kMap[vid] = data[offs ..< offs + 32].deblob(keyFlag == 3).valueOr:
+        return err(DeblobHashKeyExpected)
       offs = offs + 32
-    elif flag < 6:                                      # {0,1} x {0,1,2}
+    elif keyFlag == 1:
       f.kMap[vid] = VOID_HASH_KEY
 
-    if 0 < vLen:
+    if vtxFlag == 0x3fff_ffff:
+      f.sTab[vid] = VertexRef(nil)
+    elif 0 < vLen:
       var vtx: VertexRef
       ? data[offs ..< offs + vLen].deblobify vtx
       f.sTab[vid] = vtx
       offs = offs + vLen
-    elif (flag mod 3) == 1:                             # {0,1,2} x {1}
-      f.sTab[vid] = VertexRef(nil)
 
   if data.len != offs + 1:
     return err(DeblobFilterSizeGarbled)

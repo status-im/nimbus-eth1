@@ -12,7 +12,7 @@
 
 import
   std/[sequtils, sets, tables],
-  eth/common,
+  eth/[common, trie/nibbles],
   results,
   ".."/[aristo_desc, aristo_get, aristo_serialise, aristo_utils]
 
@@ -32,16 +32,17 @@ proc checkTopStrict*(
       let lbl = db.top.kMap.getOrVoid vid
       if not lbl.isValid:
         return err((vid,CheckStkVtxKeyMissing))
-      if lbl.key != rc.value.to(HashKey):
+      if lbl.key != rc.value.digestTo(HashKey):
         return err((vid,CheckStkVtxKeyMismatch))
 
-      let revVid = db.top.pAmk.getOrVoid lbl
-      if not revVid.isValid:
+      let revVids = db.top.pAmk.getOrVoid lbl
+      if not revVids.isValid:
         return err((vid,CheckStkRevKeyMissing))
-      if revVid != vid:
+      if vid notin revVids:
         return err((vid,CheckStkRevKeyMismatch))
 
-  if 0 < db.top.pAmk.len and db.top.pAmk.len < db.top.sTab.len:
+  let pAmkVtxCount = db.top.pAmk.values.toSeq.foldl(a + b.len, 0)
+  if 0 < pAmkVtxCount and pAmkVtxCount < db.top.sTab.len:
     # Cannot have less changes than cached entries
     return err((VertexID(0),CheckStkVtxCountMismatch))
 
@@ -62,13 +63,13 @@ proc checkTopRelaxed*(
         let lbl = db.top.kMap.getOrVoid vid
         if not lbl.isValid:
           return err((vid,CheckRlxVtxKeyMissing))
-        if lbl.key != rc.value.to(HashKey):
+        if lbl.key != rc.value.digestTo(HashKey):
           return err((vid,CheckRlxVtxKeyMismatch))
 
-        let revVid = db.top.pAmk.getOrVoid lbl
-        if not revVid.isValid:
+        let revVids = db.top.pAmk.getOrVoid lbl
+        if not revVids.isValid:
           return err((vid,CheckRlxRevKeyMissing))
-        if revVid != vid:
+        if vid notin revVids:
           return err((vid,CheckRlxRevKeyMismatch))
   else:
     for (vid,lbl) in db.top.kMap.pairs:
@@ -77,15 +78,13 @@ proc checkTopRelaxed*(
         if vtx.isValid:
           let rc = vtx.toNode db
           if rc.isOk:
-            if lbl.key != rc.value.to(HashKey):
+            if lbl.key != rc.value.digestTo(HashKey):
               return err((vid,CheckRlxVtxKeyMismatch))
 
-            let revVid = db.top.pAmk.getOrVoid lbl
-            if not revVid.isValid:
+            let revVids = db.top.pAmk.getOrVoid lbl
+            if not revVids.isValid:
               return err((vid,CheckRlxRevKeyMissing))
-            if revVid != vid:
-              return err((vid,CheckRlxRevKeyMissing))
-            if revVid != vid:
+            if vid notin revVids:
               return err((vid,CheckRlxRevKeyMismatch))
   ok()
 
@@ -101,7 +100,23 @@ proc checkTopCommon*(
   # Check deleted entries
   var nNilVtx = 0
   for (vid,vtx) in db.top.sTab.pairs:
-    if not vtx.isValid:
+    if vtx.isValid:
+      case vtx.vType:
+      of Leaf:
+        discard
+      of Branch:
+        block check42Links:
+          var seen = false
+          for n in 0 .. 15:
+            if vtx.bVid[n].isValid:
+              if seen:
+                break check42Links
+              seen = true
+          return err((vid,CheckAnyVtxBranchLinksMissing))
+      of Extension:
+        if vtx.ePfx.len == 0:
+          return err((vid,CheckAnyVtxExtPfxMissing))
+    else:
       nNilVtx.inc
       let rc = db.getVtxBE vid
       if rc.isErr:
@@ -116,14 +131,16 @@ proc checkTopCommon*(
   if kMapNilCount != 0 and kMapNilCount < nNilVtx:
     return err((VertexID(0),CheckAnyVtxEmptyKeyMismatch))
 
-  if db.top.pAmk.len != kMapCount:
+  let pAmkVtxCount = db.top.pAmk.values.toSeq.foldl(a + b.len, 0)
+  if pAmkVtxCount != kMapCount:
     var knownKeys: HashSet[VertexID]
-    for (key,vid) in db.top.pAmk.pairs:
-      if not db.top.kMap.hasKey(vid):
-        return err((vid,CheckAnyRevVtxMissing))
-      if vid in knownKeys:
-        return err((vid,CheckAnyRevVtxDup))
-      knownKeys.incl vid
+    for (key,vids) in db.top.pAmk.pairs:
+      for vid in vids:
+        if not db.top.kMap.hasKey(vid):
+          return err((vid,CheckAnyRevVtxMissing))
+        if vid in knownKeys:
+          return err((vid,CheckAnyRevVtxDup))
+        knownKeys.incl vid
     return err((VertexID(0),CheckAnyRevCountMismatch)) # should not apply(!)
 
   for vid in db.top.pPrf:

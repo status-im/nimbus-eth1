@@ -16,17 +16,8 @@
 import
   eth/common,
   results,
-  "."/[aristo_constants, aristo_desc, aristo_get, aristo_init, aristo_merge,
-       aristo_tx, aristo_vid]
-
-type
-  MerkleSignRef* = ref object
-    root: VertexID
-    db: AristoDbRef
-    tx: AristoTxRef
-    count: uint
-    error: AristoError
-    errKey: Blob
+  "."/[aristo_constants, aristo_desc, aristo_get, aristo_hashify, aristo_init,
+       aristo_merge, aristo_vid]
 
 # ------------------------------------------------------------------------------
 # Public functions, signature generator
@@ -39,13 +30,13 @@ proc merkleSignBegin*(): MerkleSignRef =
     vid = db.vidFetch # => 2
   MerkleSignRef(
     root: vid,
-    tx:   db.txBegin.value,
     db:   db)
 
 proc merkleSignAdd*(
-  sdb: MerkleSignRef;
-  key: openArray[byte];
-  val: openArray[byte]) =
+    sdb: MerkleSignRef;
+    key: openArray[byte];
+    val: openArray[byte];
+    ) =
   ## Add key-value item to the signature list. The order of the items to add
   ## is irrelevant.
   if sdb.error == AristoError(0):
@@ -63,22 +54,13 @@ proc merkleSignCommit*(
     return ok VOID_HASH_KEY
   if sdb.error != AristoError(0):
     return err((sdb.errKey, sdb.error))
-  sdb.tx.commit.isOkOr:
-    let w = (EmptyBlob, error)
+  discard sdb.db.hashify().valueOr:
+    let w = (EmptyBlob, error[1])
     return err(w)
   let hash = sdb.db.getKeyRc(sdb.root).valueOr:
     let w = (EmptyBlob, error)
     return err(w)
   ok hash
-
-
-# import ./aristo_debug,
-# proc dump*(sdb: MerkleSignRef): string =
-#   "dump MerkleSignRef" &
-#     " count=" & $sdb.count &
-#     " root=" & sdb.root.pp &
-#     " error=" & $sdb.error &
-#     "\n    db\n    " & sdb.db.pp()
 
 # ------------------------------------------------------------------------------
 # End

@@ -43,8 +43,7 @@ func pathAsBlob*(tag: PathID): Blob =
   ##
   ## This function is useful only if there is a tacit agreement that all paths
   ## used to index database leaf values can be represented as `Blob`, i.e.
-  ## `HashKey` type paths or `PathID` or `NibblesSeq` type paths with an even
-  ## number of nibbles.
+  ## `PathID` type paths with an even number of nibbles.
   if 0 < tag.length:
     let key = @(tag.pfx.UInt256.toBytesBE)
     if 64 <= tag.length:
@@ -61,26 +60,6 @@ func pathAsHEP*(tag: PathID; isLeaf = false): Blob =
     @(tag.pfx.UInt256.toBytesBE)
   else:
     tag.to(NibblesSeq).hexPrefixEncode(isLeaf=true)
-
-func pathToKey*(partPath: NibblesSeq): Result[HashKey,AristoError] =
-  ## Convert an argument `partPath` of exactly 64 nibbles to a `HashKey` type
-  ## value Arguments with the number of nibbles different from 64 will
-  ## cause an error.
-  var key: ByteArray32
-  if partPath.len == 64:
-    # Trailing dummy nibbles (aka no nibbles) force a nibble seq reorg
-    let path = (partPath & EmptyNibbleSeq).getBytes()
-    (addr key[0]).copyMem(unsafeAddr path[0], 32)
-    return ok(key.HashKey)
-  err(PathExpected64Nibbles)
-
-func pathToKey*(partPath: openArray[byte]): Result[HashKey,AristoError] =
-  ## Variant of `pathToKey()` for an even numbered nibbles argument `partPath`
-  ## represented by a `Blob` or array.
-  let (isLeaf,pathSegment) = partPath.hexPrefixDecode
-  if isleaf:
-    return pathSegment.pathToKey()
-  err(PathExpectedLeaf)
 
 func pathToTag*(partPath: NibblesSeq): Result[PathID,AristoError] =
   ## Convert the argument `partPath`  to a `PathID` type value.
@@ -122,14 +101,6 @@ func pathPfxPad*(pfx: NibblesSeq; dblNibble: static[byte]): NibblesSeq =
   else:
     let nope = seq[byte].default.initNibbleRange
     result = pfx.slice(0,64) & nope # nope forces re-alignment
-
-func pathPfxPadKey*(pfx: NibblesSeq; dblNibble: static[byte]): HashKey =
-  ## Variant of `pathPfxPad()`.
-  ##
-  ## Extend (or cut) the argument nibbles sequence `pfx` for generating a
-  ## `HashKey`.
-  let bytes = pfx.pathPfxPad(dblNibble).getBytes
-  (addr result.ByteArray32[0]).copyMem(unsafeAddr bytes[0], bytes.len)
 
 # ------------------------------------------------------------------------------
 # End

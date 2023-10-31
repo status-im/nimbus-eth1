@@ -14,6 +14,7 @@
 
 import
   std/[sequtils, tables],
+  eth/common,
   results,
   "."/[aristo_desc, aristo_get, aristo_vid],
   ./aristo_desc/desc_backend,
@@ -89,16 +90,16 @@ proc merge*(
   ## Merge the argument `filter` into the read-only filter layer. Note that
   ## this function has no control of the filter source. Having merged the
   ## argument `filter`, all the `top` and `stack` layers should be cleared.
-  let ubeRootKey = block:
+  let ubeRoot = block:
     let rc = db.getKeyUBE VertexID(1)
     if rc.isOk:
-      rc.value
+      rc.value.to(Hash256)
     elif rc.error == GetKeyNotFound:
-      VOID_HASH_KEY
+      EMPTY_ROOT_HASH
     else:
       return err((VertexID(1),rc.error))
 
-  db.roFilter = ? db.merge(filter, db.roFilter, ubeRootKey)
+  db.roFilter = ? db.merge(filter, db.roFilter, ubeRoot)
   ok()
 
 
