@@ -24,14 +24,17 @@ jobs:
           NEW_ARCHIVE_DIR="nimbus-eth1_Linux_amd64_$(date +%Y%m%d)_$(git rev-parse --short=8 HEAD)"
           mv ${ARCHIVE%.tar.gz} ${NEW_ARCHIVE_DIR}
           tar -czf ${NEW_ARCHIVE_DIR}.tar.gz ${NEW_ARCHIVE_DIR}
-          echo "::set-output name=archive::"${NEW_ARCHIVE_DIR}.tar.gz
-          echo "::set-output name=archive_dir::"${NEW_ARCHIVE_DIR}
+          cp ${NEW_ARCHIVE_DIR}.tar.gz nimbus-eth1_Linux_amd64_nightly_latest.tar.gz
+          echo "archive=${NEW_ARCHIVE_DIR}.tar.gz" >> $GITHUB_OUTPUT
+          echo "archive_dir=${NEW_ARCHIVE_DIR}" >> $GITHUB_OUTPUT
 
       - name: Upload archive artefact
         uses: actions/upload-artifact@v3
         with:
           name: Linux_amd64_archive
-          path: ./dist/${{ steps.make_dist.outputs.archive }}
+          path: |
+            ./dist/${{ steps.make_dist.outputs.archive }}
+            ./dist/nimbus-eth1_Linux_amd64_nightly_latest.tar.gz
           retention-days: 2
 
       - name: Upload checksum artefact
@@ -68,14 +71,17 @@ jobs:
           NEW_ARCHIVE_DIR="nimbus-eth1_Linux_arm64v8_$(date +%Y%m%d)_$(git rev-parse --short=8 HEAD)"
           mv ${ARCHIVE%.tar.gz} ${NEW_ARCHIVE_DIR}
           tar -czf ${NEW_ARCHIVE_DIR}.tar.gz ${NEW_ARCHIVE_DIR}
-          echo "::set-output name=archive::"${NEW_ARCHIVE_DIR}.tar.gz
-          echo "::set-output name=archive_dir::"${NEW_ARCHIVE_DIR}
+          cp ${NEW_ARCHIVE_DIR}.tar.gz nimbus-eth1_Linux_arm64_nightly_latest.tar.gz
+          echo "archive=${NEW_ARCHIVE_DIR}.tar.gz" >> $GITHUB_OUTPUT
+          echo "archive_dir=${NEW_ARCHIVE_DIR}" >> $GITHUB_OUTPUT
 
       - name: Upload archive artefact
         uses: actions/upload-artifact@v3
         with:
           name: Linux_arm64_archive
-          path: ./dist/${{ steps.make_dist.outputs.archive }}
+          path: |
+            ./dist/${{ steps.make_dist.outputs.archive }}
+            ./dist/nimbus-eth1_Linux_arm64_nightly_latest.tar.gz
           retention-days: 2
 
       - name: Upload checksum artefact
@@ -104,14 +110,17 @@ jobs:
           NEW_ARCHIVE_DIR="nimbus-eth1_Windows_amd64_$(date +%Y%m%d)_$(git rev-parse --short=8 HEAD)"
           mv ${ARCHIVE%.tar.gz} ${NEW_ARCHIVE_DIR}
           tar -czf ${NEW_ARCHIVE_DIR}.tar.gz ${NEW_ARCHIVE_DIR}
-          echo "::set-output name=archive::"${NEW_ARCHIVE_DIR}.tar.gz
-          echo "::set-output name=archive_dir::"${NEW_ARCHIVE_DIR}
+          cp ${NEW_ARCHIVE_DIR}.tar.gz nimbus-eth1_Windows_amd64_nightly_latest.tar.gz
+          echo "archive=${NEW_ARCHIVE_DIR}.tar.gz" >> $GITHUB_OUTPUT
+          echo "archive_dir=${NEW_ARCHIVE_DIR}" >> $GITHUB_OUTPUT
 
       - name: Upload archive artefact
         uses: actions/upload-artifact@v3
         with:
           name: Windows_amd64_archive
-          path: ./dist/${{ steps.make_dist.outputs.archive }}
+          path: |
+            ./dist/${{ steps.make_dist.outputs.archive }}
+            ./dist/nimbus-eth1_Windows_amd64_nightly_latest.tar.gz
           retention-days: 2
 
       - name: Upload checksum artefact
@@ -140,14 +149,17 @@ jobs:
           NEW_ARCHIVE_DIR="nimbus-eth1_macOS_amd64_$(date +%Y%m%d)_$(git rev-parse --short=8 HEAD)"
           mv ${ARCHIVE%.tar.gz} ${NEW_ARCHIVE_DIR}
           tar -czf ${NEW_ARCHIVE_DIR}.tar.gz ${NEW_ARCHIVE_DIR}
-          echo "::set-output name=archive::"${NEW_ARCHIVE_DIR}.tar.gz
-          echo "::set-output name=archive_dir::"${NEW_ARCHIVE_DIR}
+          cp ${NEW_ARCHIVE_DIR}.tar.gz nimbus-eth1_macOS_amd64_nightly_latest.tar.gz
+          echo "archive=${NEW_ARCHIVE_DIR}.tar.gz" >> $GITHUB_OUTPUT
+          echo "archive_dir=${NEW_ARCHIVE_DIR}" >> $GITHUB_OUTPUT
 
       - name: Upload archive artefact
         uses: actions/upload-artifact@v3
         with:
           name: macOS_amd64_archive
-          path: ./dist/${{ steps.make_dist.outputs.archive }}
+          path: |
+            ./dist/${{ steps.make_dist.outputs.archive }}
+            ./dist/nimbus-eth1_macOS_amd64_nightly_latest.tar.gz
           retention-days: 2
 
       - name: Upload checksum artefact
@@ -176,14 +188,17 @@ jobs:
           NEW_ARCHIVE_DIR="nimbus-eth1_macOS_arm64_$(date +%Y%m%d)_$(git rev-parse --short=8 HEAD)"
           mv ${ARCHIVE%.tar.gz} ${NEW_ARCHIVE_DIR}
           tar -czf ${NEW_ARCHIVE_DIR}.tar.gz ${NEW_ARCHIVE_DIR}
-          echo "::set-output name=archive::"${NEW_ARCHIVE_DIR}.tar.gz
-          echo "::set-output name=archive_dir::"${NEW_ARCHIVE_DIR}
+          cp ${NEW_ARCHIVE_DIR}.tar.gz nimbus-eth1_macOS_arm64_nightly_latest.tar.gz
+          echo "archive=${NEW_ARCHIVE_DIR}.tar.gz" >> $GITHUB_OUTPUT
+          echo "archive_dir=${NEW_ARCHIVE_DIR}" >> $GITHUB_OUTPUT
 
       - name: Upload archive artefact
         uses: actions/upload-artifact@v3
         with:
           name: macOS_arm64_archive
-          path: ./dist/${{ steps.make_dist.outputs.archive }}
+          path: |
+            ./dist/${{ steps.make_dist.outputs.archive }}
+            ./dist/nimbus-eth1_macOS_arm64_nightly_latest.tar.gz
           retention-days: 2
 
       - name: Upload checksum artefact
@@ -225,28 +240,24 @@ jobs:
           cat macOS_arm64_checksum/* >> release_notes.md
           echo '```' >> release_notes.md
 
-      - name: Delete tag
-        uses: dev-drprasad/delete-tag-and-release@v1.0.1
+      - name: Update Nightly Release
+        uses: andelf/nightly-release@main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          delete_release: true
           tag_name: nightly
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Create prerelease
-        run: |
-          gh release create nightly --prerelease --target master \
-            --title 'Nightly build ("master" branch)' --notes-file release_notes.md \
-            Linux_amd64_archive/* \
-            Linux_arm64_archive/* \
-            Windows_amd64_archive/* \
-            macOS_amd64_archive/* \
+          name: 'Nightly build ("master" branch)'
+          prerelease: true
+          body_path: release_notes.md
+          files: |
+            Linux_amd64_archive/*
+            Linux_arm64_archive/*
+            Windows_amd64_archive/*
+            macOS_amd64_archive/*
             macOS_arm64_archive/*
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Delete artefacts
-        uses: geekyeggo/delete-artifact@v1
+        uses: geekyeggo/delete-artifact@v2
         with:
           failOnError: false
           name: |
