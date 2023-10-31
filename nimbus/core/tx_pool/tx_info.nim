@@ -45,6 +45,9 @@ type
       ## Implied disposal, typically implied by greater nonces (fallback value)
       "implied disposal"
 
+    txInfoChainIdMismatch = ##\
+      ## Tx chainId does not match with network chainId
+      "chainId mismatch"
     # ------ Miscellaneous errors ----------------------------------------------
 
     txInfoErrUnspecified = ##\

@@ -27,7 +27,7 @@ import
   ../../../transaction,
   ../../../vm_state,
   ../../../vm_types,
-  ".."/[tx_chain, tx_desc, tx_item, tx_tabs, tx_tabs/tx_status],
+  ".."/[tx_chain, tx_desc, tx_item, tx_tabs, tx_tabs/tx_status, tx_info],
   "."/[tx_bucket, tx_classify]
 
 type
@@ -185,6 +185,10 @@ proc vmExecGrabItem(pst: TxPackerStateRef; item: TxItemRef): Result[bool,void]
   let
     xp = pst.xp
     vmState = xp.chain.vmState
+
+  if not item.tx.validateChainId(xp.chain.com.chainId):
+    discard xp.txDB.dispose(item, txInfoChainIdMismatch)
+    return ok(false) # continue with next account
 
   # EIP-4844
   if pst.numBlobPerBlock + item.tx.versionedHashes.len > MAX_BLOBS_PER_BLOCK:

@@ -191,6 +191,19 @@ proc signTransaction*(tx: Transaction, privateKey: PrivateKey, chainId: ChainId,
   result.R = UInt256.fromBytesBE(sig[0..31])
   result.S = UInt256.fromBytesBE(sig[32..63])
 
+# deriveChainId derives the chain id from the given v parameter
+func deriveChainId*(v: int64, chainId: ChainId): ChainId =
+  if v == 27 or v == 28:
+    chainId
+  else:
+    ((v - 35) div 2).ChainId
+
+func validateChainId*(tx: Transaction, chainId: ChainId): bool =
+  if tx.txType == TxLegacy:
+    chainId.uint64 == deriveChainId(tx.V, chainId).uint64
+  else:
+    chainId.uint64 == tx.chainId.uint64
+
 func eip1559TxNormalization*(tx: Transaction;
                              baseFee: GasInt): Transaction =
   ## This function adjusts a legacy transaction to EIP-1559 standard. This
