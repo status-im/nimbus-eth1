@@ -186,7 +186,7 @@ const
     "nothing skipped",
   ]
 
-  caseFolderCancun   = "tests/fixtures/eth_tests/EIPTests/Pyspecs/cancun"
+  caseFolderCancun   = "tests/fixtures/eth_tests/BlockchainTests/Pyspecs"
   caseFolderShanghai = baseFolder & "/testcases"
 
 proc collectTestVectors(): seq[string] =
