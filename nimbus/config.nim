@@ -290,8 +290,8 @@ type
 
     staticPeersFile {.
       desc: "Specifies a line-delimited file of trusted peers addresses(enode URL)" &
-            "to be added to the --staticPeers list. If the first line equals to the word `override`, "&
-            "the file contents will replace the --staticPeers list"
+            "to be added to the --static-peers list. If the first line equals to the word `override`, "&
+            "the file contents will replace the --static-peers list"
       defaultValue: ""
       name: "static-peers-file" }: InputFile
 
