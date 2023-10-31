@@ -21,3 +21,12 @@ func `[]`*(pool: ClientPool, idx: int): EngineEnv =
 iterator items*(pool: ClientPool): EngineEnv =
   for x in pool.clients:
     yield x
+
+proc remove*(pool: ClientPool, client: EngineEnv) =
+  var index = -1
+  for i, x in pool.clients:
+    if x == client:
+      index = i
+      break
+  if index != -1:
+    pool.clients.delete(index)

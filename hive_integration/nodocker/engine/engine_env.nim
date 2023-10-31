@@ -20,7 +20,9 @@ import
     beacon/beacon_engine,
     common
   ],
-  ../../../tests/test_helpers
+  ../../../tests/test_helpers,
+  ../../../nimbus/beacon/web3_eth_conv,
+  ../../../nimbus/beacon/execution_types
 
 export
   results
@@ -149,9 +151,9 @@ proc close*(env: EngineEnv) =
   waitFor env.sealer.stop()
   waitFor env.server.closeWait()
 
-proc setRealTTD*(env: EngineEnv, ttdValue: int64) =
+proc setRealTTD*(env: EngineEnv) =
   let genesis = env.com.genesisHeader
-  let realTTD = genesis.difficulty + ttdValue.u256
+  let realTTD = genesis.difficulty
   env.com.setTTD some(realTTD)
   env.ttd = realTTD
 
@@ -181,7 +183,7 @@ proc peer*(env: EngineEnv): Peer =
   for peer in env.node.peers:
     return peer
 
-proc getTxsInPool*(env: EngineEnv, txHashes: openArray[Hash256]): seq[Transaction] =
+proc getTxsInPool*(env: EngineEnv, txHashes: openArray[common.Hash256]): seq[Transaction] =
   result = newSeqOfCap[Transaction](txHashes.len)
   for txHash in txHashes:
     let res = env.txPool.getItem(txHash)
@@ -193,3 +195,16 @@ proc getTxsInPool*(env: EngineEnv, txHashes: openArray[Hash256]): seq[Transactio
 proc numTxsInPool*(env: EngineEnv): int =
   env.txPool.numTxs
 
+func version*(env: EngineEnv, time: EthTime): Version =
+  if env.com.isCancunOrLater(time):
+    Version.V3
+  elif env.com.isShanghaiOrlater(time):
+    Version.V2
+  else:
+    Version.V1
+
+func version*(env: EngineEnv, time: Web3Quantity): Version =
+  env.version(time.EthTime)
+
+func version*(env: EngineEnv, time: uint64): Version =
+  env.version(time.EthTime)

@@ -1,7 +1,6 @@
 import
   std/[tables],
   chronicles,
-  nimcrypto/sysrand,
   stew/[byteutils],
   eth/common, chronos,
   json_rpc/rpcclient,
@@ -131,6 +130,9 @@ proc newClMocker*(eng: EngineEnv, com: CommonRef): CLMocker =
 proc addEngine*(cl: CLMocker, eng: EngineEnv) =
   cl.clients.add eng
 
+proc removeEngine*(cl: CLMocker, eng: EngineEnv) =
+  cl.clients.remove eng
+
 proc waitForTTD*(cl: CLMocker): Future[bool] {.async.} =
   let ttd = cl.com.ttd()
   doAssert(ttd.isSome)
@@ -232,13 +234,13 @@ proc pickNextPayloadProducer(cl: CLMocker): bool =
 
     # Get latest header. Number and hash must coincide with our view of the chain,
     # and only then we can build on top of this client's chain
-    var latestHeader: common.BlockHeader
-    let res = cl.nextBlockProducer.client.latestHeader(latestHeader)
+    let res = cl.nextBlockProducer.client.latestHeader()
     if res.isErr:
       error "CLMocker: Could not get latest block header while selecting client for payload production",
         msg=res.error
       return false
 
+    let latestHeader = res.get
     let lastBlockHash = latestHeader.blockHash
     if cl.latestHeader.blockHash != lastBlockHash or
        cl.latestHeadNumber != latestHeader.blockNumber.truncate(uint64):
@@ -253,9 +255,7 @@ proc pickNextPayloadProducer(cl: CLMocker): bool =
 
 proc generatePayloadAttributes(cl: CLMocker) =
   # Generate a random value for the PrevRandao field
-  var nextPrevRandao: common.Hash256
-  doAssert randomBytes(nextPrevRandao.data) == 32
-
+  let nextPrevRandao = common.Hash256.randomBytes()
   let timestamp = Quantity cl.getNextBlockTimestamp.uint64
   cl.latestPayloadAttributes = PayloadAttributes(
     timestamp:             timestamp,
@@ -370,91 +370,97 @@ func versionedHashes(payload: ExecutionPayload): seq[Web3Hash] =
     for vs in tx.versionedHashes:
       result.add w3Hash vs
 
-proc broadcastNewPayload(cl: CLMocker, payload: ExecutionPayload): Result[PayloadStatusV1, string] =
+proc broadcastNewPayload(cl: CLMocker,
+                         eng: EngineEnv,
+                         payload: ExecutionPayload): Result[PayloadStatusV1, string] =
   case payload.version
-  of Version.V1: return cl.client.newPayloadV1(payload.V1)
-  of Version.V2: return cl.client.newPayloadV2(payload.V2)
-  of Version.V3: return cl.client.newPayloadV3(payload.V3,
+  of Version.V1: return eng.client.newPayloadV1(payload.V1)
+  of Version.V2: return eng.client.newPayloadV2(payload.V2)
+  of Version.V3: return eng.client.newPayloadV3(payload.V3,
     versionedHashes(payload),
     cl.latestPayloadAttributes.parentBeaconBlockRoot.get)
 
 proc broadcastNextNewPayload(cl: CLMocker): bool =
-  let res = cl.broadcastNewPayload(cl.latestPayloadBuilt)
-  if res.isErr:
-    error "CLMocker: broadcastNewPayload Error", msg=res.error
-    return false
-
-  let s = res.get()
-  if s.status == PayloadExecutionStatus.valid:
-    # The client is synced and the payload was immediately validated
-    # https:#github.com/ethereum/execution-apis/blob/main/src/engine/specification.md:
-    # - If validation succeeds, the response MUST contain {status: VALID, latestValidHash: payload.blockHash}
-    let blockHash = cl.latestPayloadBuilt.blockHash
-    if s.latestValidHash.isNone:
-      error "CLMocker: NewPayload returned VALID status with nil LatestValidHash",
-        expected=blockHash.toHex
+  for eng in cl.clients:
+    let res = cl.broadcastNewPayload(eng, cl.latestPayloadBuilt)
+    if res.isErr:
+      error "CLMocker: broadcastNewPayload Error", msg=res.error
       return false
 
-    let latestValidHash = s.latestValidHash.get()
-    if latestValidHash != BlockHash(blockHash):
-      error "CLMocker: NewPayload returned VALID status with incorrect LatestValidHash",
-        get=latestValidHash.toHex, expected=blockHash.toHex
-      return false
+    let s = res.get()
+    if s.status == PayloadExecutionStatus.valid:
+      # The client is synced and the payload was immediately validated
+      # https:#github.com/ethereum/execution-apis/blob/main/src/engine/specification.md:
+      # - If validation succeeds, the response MUST contain {status: VALID, latestValidHash: payload.blockHash}
+      let blockHash = cl.latestPayloadBuilt.blockHash
+      if s.latestValidHash.isNone:
+        error "CLMocker: NewPayload returned VALID status with nil LatestValidHash",
+          expected=blockHash.toHex
+        return false
 
-  elif s.status == PayloadExecutionStatus.accepted:
-    # The client is not synced but the payload was accepted
-    # https:#github.com/ethereum/execution-apis/blob/main/src/engine/specification.md:
-    # - {status: ACCEPTED, latestValidHash: null, validationError: null} if the following conditions are met:
-    # the blockHash of the payload is valid
-    # the payload doesn't extend the canonical chain
-    # the payload hasn't been fully validated.
-    let nullHash = BlockHash common.Hash256().data
-    let latestValidHash = s.latestValidHash.get(nullHash)
-    if s.latestValidHash.isSome and latestValidHash != nullHash:
-      error "CLMocker: NewPayload returned ACCEPTED status with incorrect LatestValidHash",
-        hash=latestValidHash.toHex
-      return false
+      let latestValidHash = s.latestValidHash.get()
+      if latestValidHash != BlockHash(blockHash):
+        error "CLMocker: NewPayload returned VALID status with incorrect LatestValidHash",
+          get=latestValidHash.toHex, expected=blockHash.toHex
+        return false
 
-  else:
-    error "CLMocker: broadcastNewPayload Response",
-      status=s.status
-    return false
+    elif s.status == PayloadExecutionStatus.accepted:
+      # The client is not synced but the payload was accepted
+      # https:#github.com/ethereum/execution-apis/blob/main/src/engine/specification.md:
+      # - {status: ACCEPTED, latestValidHash: null, validationError: null} if the following conditions are met:
+      # the blockHash of the payload is valid
+      # the payload doesn't extend the canonical chain
+      # the payload hasn't been fully validated.
+      let nullHash = BlockHash common.Hash256().data
+      let latestValidHash = s.latestValidHash.get(nullHash)
+      if s.latestValidHash.isSome and latestValidHash != nullHash:
+        error "CLMocker: NewPayload returned ACCEPTED status with incorrect LatestValidHash",
+          hash=latestValidHash.toHex
+        return false
+
+    else:
+      error "CLMocker: broadcastNewPayload Response",
+        status=s.status
+      return false
 
   cl.latestExecutedPayload = cl.latestPayloadBuilt
   let number = uint64 cl.latestPayloadBuilt.blockNumber
   cl.executedPayloadHistory[number] = cl.latestPayloadBuilt
   return true
 
-proc broadcastForkchoiceUpdated(cl: CLMocker,
+proc broadcastForkchoiceUpdated(cl: CLMocker, eng: EngineEnv,
       update: ForkchoiceStateV1): Result[ForkchoiceUpdatedResponse, string] =
   let version = cl.latestExecutedPayload.version
-  let client = cl.nextBlockProducer.client
-  client.forkchoiceUpdated(version, update, none(PayloadAttributes))
+  eng.client.forkchoiceUpdated(version, update, none(PayloadAttributes))
 
 proc broadcastLatestForkchoice(cl: CLMocker): bool =
-  let res = cl.broadcastForkchoiceUpdated(cl.latestForkchoice)
-  if res.isErr:
-    error "CLMocker: broadcastForkchoiceUpdated Error", msg=res.error
-    return false
+  for eng in cl.clients:
+    let res = cl.broadcastForkchoiceUpdated(eng, cl.latestForkchoice)
+    if res.isErr:
+      error "CLMocker: broadcastForkchoiceUpdated Error", msg=res.error
+      return false
 
-  let s = res.get()
-  if s.payloadStatus.status != PayloadExecutionStatus.valid:
-    error "CLMocker: broadcastForkchoiceUpdated Response",
-      status=s.payloadStatus.status
-    return false
+    let s = res.get()
+    if s.payloadStatus.status != PayloadExecutionStatus.valid:
+      error "CLMocker: broadcastForkchoiceUpdated Response",
+        status=s.payloadStatus.status
+      return false
 
-  if s.payloadStatus.latestValidHash.get != cl.latestForkchoice.headBlockHash:
-    error "CLMocker: Incorrect LatestValidHash from ForkchoiceUpdated",
-      get=s.payloadStatus.latestValidHash.get.toHex,
-      expect=cl.latestForkchoice.headBlockHash.toHex
+    if s.payloadStatus.latestValidHash.get != cl.latestForkchoice.headBlockHash:
+      error "CLMocker: Incorrect LatestValidHash from ForkchoiceUpdated",
+        get=s.payloadStatus.latestValidHash.get.toHex,
+        expect=cl.latestForkchoice.headBlockHash.toHex
+      return false
 
-  if s.payloadStatus.validationError.isSome:
-    error "CLMocker: Expected empty validationError",
-      msg=s.payloadStatus.validationError.get
+    if s.payloadStatus.validationError.isSome:
+      error "CLMocker: Expected empty validationError",
+        msg=s.payloadStatus.validationError.get
+      return false
 
-  if s.payloadID.isSome:
-    error "CLMocker: Expected empty PayloadID",
-      msg=s.payloadID.get.toHex
+    if s.payloadID.isSome:
+      error "CLMocker: Expected empty PayloadID",
+        msg=s.payloadID.get.toHex
+      return false
 
   return true
 
@@ -528,7 +534,7 @@ proc produceSingleBlock*(cl: CLMocker, cb: BlockProcessCallbacks): bool {.gcsafe
     let period = chronos.seconds(cl.payloadProductionClientDelay)
     waitFor sleepAsync(period)
 
-  if not cl.getNextPayload():    
+  if not cl.getNextPayload():
     return false
 
   if cb.onGetPayload != nil:
@@ -590,13 +596,13 @@ proc produceSingleBlock*(cl: CLMocker, cb: BlockProcessCallbacks): bool {.gcsafe
   cl.latestHeadNumber = cl.latestHeadNumber + 1
 
   # Check if any of the clients accepted the new payload
-  var newHeader: common.BlockHeader
-  let res = cl.client.headerByNumber(cl.latestHeadNumber, newHeader)
+  let res = cl.client.headerByNumber(cl.latestHeadNumber)
   if res.isErr:
     error "CLMock ProduceSingleBlock", msg=res.error
     return false
 
-  let newHash = BlockHash newHeader.blockHash.data
+  let newHeader = res.get
+  let newHash = w3Hash newHeader.blockHash
   if newHash != cl.latestPayloadBuilt.blockHash:
     error "CLMocker: None of the clients accepted the newly constructed payload",
       hash=newHash.toHex

@@ -1,6 +1,5 @@
 import
   std/[options, strutils, typetraits, random],
-  nimcrypto/sysrand,
   stew/byteutils,
   ./blobs,
   ../types,
@@ -268,8 +267,7 @@ method getVersionedHashes(cust: ExtraVersionedHash,
   for i, h in baseVersionedHashes:
     v[i] = h
 
-  var extraHash: common.Hash256
-  doAssert randomBytes(extraHash.data) == 32
+  var extraHash = common.Hash256.randomBytes()
   extraHash.data[0] = VERSIONED_HASH_VERSION_KZG
   v[^1] = extraHash
   some(v)
@@ -394,6 +392,11 @@ proc customizePayload*(cust: CustomPayloadData, data: ExecutableData): Executabl
   var blk = EthBlock(
     header: customHeader,
   )
+
+  if cust.transactions.isSome:
+    blk.txs = cust.transactions.get
+  else:
+    blk.txs = ethTxs data.basePayload.transactions
 
   if cust.removeWithdrawals:
     blk.withdrawals = none(seq[Withdrawal])
@@ -573,8 +576,7 @@ proc generateInvalidPayload*(sender: TxSender, data: ExecutableData, payloadFiel
   of InvalidPrevRandao:
     # This option potentially requires a transaction that uses the PREVRANDAO opcode.
     # Otherwise the payload will still be valid.
-    var randomHash: common.Hash256
-    doAssert randomBytes(randomHash.data) == 32
+    let randomHash = common.Hash256.randomBytes()
     customPayloadMod = CustomPayloadData(
       prevRandao: some(randomHash),
     )
@@ -645,7 +647,8 @@ proc generateInvalidPayload*(sender: TxSender, data: ExecutableData, payloadFiel
 
     case payloadField
     of InvalidTransactionSignature:
-      custTx.signature = some(baseTx.R - 1.u256)
+      var sig = CustSig(R: baseTx.R - 1.u256)
+      custTx.signature = some(sig)
     of InvalidTransactionNonce:
       custTx.nonce = some(baseTx.nonce - 1)
     of InvalidTransactionGas:
@@ -661,7 +664,8 @@ proc generateInvalidPayload*(sender: TxSender, data: ExecutableData, payloadFiel
       custTx.chainId = some(ChainId(baseTx.chainId.uint64 + 1))
     else: discard
 
-    let modifiedTx = sender.customizeTransaction(baseTx, custTx)
+    let acc = sender.getNextAccount()
+    let modifiedTx = sender.customizeTransaction(acc, baseTx, custTx)
     customPayloadMod = CustomPayloadData(
       transactions: some(@[modifiedTx]),
     )

@@ -15,10 +15,10 @@ proc specExecute[T](ws: BaseSpec): bool =
     ws   = T(ws)
     conf = envConfig(ws.getForkConfig())
 
-  discard ws.getGenesis(conf.networkParams)
+  ws.getGenesis(conf.networkParams)
 
   let env  = TestEnv.new(conf)
-  env.engine.setRealTTD(0)
+  env.engine.setRealTTD()
   env.setupCLMock()
   ws.configureCLMock(env.clMock)
   result = ws.execute(env)

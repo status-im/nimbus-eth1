@@ -4,14 +4,13 @@ import
   chronicles,
   chronos,
   stew/byteutils,
-  nimcrypto/sysrand,
   web3/ethtypes,
   ./wd_history,
-  ../helper,
   ../test_env,
   ../engine_client,
   ../types,
   ../base_spec,
+  ../cancun/customizer,
   ../../../nimbus/common/common,
   ../../../nimbus/utils/utils,
   ../../../nimbus/common/chain_config,
@@ -78,7 +77,7 @@ func getWithdrawableAccountCount*(ws: WDBaseSpec):int =
 
 # Append the accounts we are going to withdraw to, which should also include
 # bytecode for testing purposes.
-func getGenesis*(ws: WDBaseSpec, param: NetworkParams): NetworkParams =
+func getGenesis*(ws: WDBaseSpec, param: NetworkParams) =
   # Remove PoW altogether
   param.genesis.difficulty = 0.u256
   param.config.terminalTotalDifficulty = some(0.u256)
@@ -137,8 +136,6 @@ func getGenesis*(ws: WDBaseSpec, param: NetworkParams): NetworkParams =
     code:    @push0Code,
     balance: 0.u256,
   )
-
-  param
 
 func getTransactionCountPerPayload*(ws: WDBaseSpec): int =
   ws.txPerBlock.get(16)
@@ -211,22 +208,12 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
     # contain `withdrawalsRoot`, including genesis.
 
     # Genesis should not contain `withdrawalsRoot` either
-    var h: common.BlockHeader
-    let r = env.client.latestHeader(h)
-    testCond r.isOk:
-      error "failed to ge latest header", msg=r.error
-    testCond h.withdrawalsRoot.isNone:
-      error "genesis should not contains wdsRoot"
+    let r = env.client.latestHeader()
+    r.expectWithdrawalsRoot(none(common.Hash256))
   else:
     # Genesis is post shanghai, it should contain EmptyWithdrawalsRoot
-    var h: common.BlockHeader
-    let r = env.client.latestHeader(h)
-    testCond r.isOk:
-      error "failed to ge latest header", msg=r.error
-    testCond h.withdrawalsRoot.isSome:
-      error "genesis should contains wdsRoot"
-    testCond h.withdrawalsRoot.get == EMPTY_ROOT_HASH:
-      error "genesis should contains wdsRoot==EMPTY_ROOT_HASH"
+    let r = env.client.latestHeader()
+    r.expectWithdrawalsRoot(some(EMPTY_ROOT_HASH))
 
   # Produce any blocks necessary to reach withdrawals fork
   var pbRes = env.clMock.produceBlocks(ws.getPreWithdrawalsBlockCount, BlockProcessCallbacks(
@@ -292,11 +279,11 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
         # Send produced payload but try to include non-nil
         # `withdrawals`, it should fail.
         let emptyWithdrawalsList = newSeq[Withdrawal]()
-        let customizer = CustomPayload(
+        let customizer = CustomPayloadData(
           withdrawals: some(emptyWithdrawalsList),
-          beaconRoot: ethHash env.clMock.latestPayloadAttributes.parentBeaconBlockRoot
+          parentBeaconRoot: ethHash env.clMock.latestPayloadAttributes.parentBeaconBlockRoot
         )
-        let payloadPlusWithdrawals = customizePayload(env.clMock.latestPayloadBuilt, customizer)
+        let payloadPlusWithdrawals = customizer.customizePayload(env.clMock.latestExecutableData).basePayload
         var r = env.client.newPayloadV2(payloadPlusWithdrawals.V1V2)
         #r.ExpectationDescription = "Sent pre-shanghai payload using NewPayloadV2+Withdrawals, error is expected"
         r.expectErrorCode(engineApiInvalidParams)
@@ -304,18 +291,17 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
         # Send valid ExecutionPayloadV1 using engine_newPayloadV2
         r = env.client.newPayloadV2(env.clMock.latestPayloadBuilt.V1V2)
         #r.ExpectationDescription = "Sent pre-shanghai payload using NewPayloadV2, no error is expected"
-        r.expectStatus(valid)
+        r.expectStatus(PayloadExecutionStatus.valid)
       return true
     ,
     onNewPayloadBroadcast: proc(): bool =
       if not ws.skipBaseVerifications:
         # We sent a pre-shanghai FCU.
         # Keep expecting `nil` until Shanghai.
-        var h: common.BlockHeader
-        let r = env.client.latestHeader(h)
+        let r = env.client.latestHeader()
         #r.ExpectationDescription = "Requested "latest" block expecting block to contain
         #" withdrawalRoot=nil, because (block %d).timestamp < shanghaiTime
-        r.expectWithdrawalsRoot(h, none(common.Hash256))
+        r.expectWithdrawalsRoot(none(common.Hash256))
       return true
     ,
     onForkchoiceBroadcast: proc(): bool =
@@ -383,11 +369,11 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
         # with null, and client must respond with `InvalidParamsError`.
         # Note that StateRoot is also incorrect but null withdrawals should
         # be checked first instead of responding `INVALID`
-        let customizer = CustomPayload(
+        let customizer = CustomPayloadData(
           removeWithdrawals: true,
-          beaconRoot: ethHash env.clMock.latestPayloadAttributes.parentBeaconBlockRoot
+          parentBeaconRoot: ethHash env.clMock.latestPayloadAttributes.parentBeaconBlockRoot
         )
-        let nilWithdrawalsPayload = customizePayload(env.clMock.latestPayloadBuilt, customizer)
+        let nilWithdrawalsPayload = customizer.customizePayload(env.clMock.latestExecutableData).basePayload
         let r = env.client.newPayloadV2(nilWithdrawalsPayload.V1V2)
         #r.ExpectationDescription = "Sent shanghai payload using ExecutionPayloadV1, error is expected"
         r.expectErrorCode(engineApiInvalidParams)
@@ -439,14 +425,13 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
           var payload = env.clMock.latestExecutedPayload
 
           # Corrupt the hash
-          var randomHash: common.Hash256
-          testCond randomBytes(randomHash.data) == 32
+          let randomHash = common.Hash256.randomBytes()
           payload.blockHash = w3Hash randomHash
 
           # On engine_newPayloadV2 `INVALID_BLOCK_HASH` is deprecated
           # in favor of reusing `INVALID`
           let n = env.client.newPayloadV2(payload.V1V2)
-          n.expectStatus(invalid)
+          n.expectStatus(PayloadExecutionStatus.invalid)
       return true
     ,
     onForkchoiceBroadcast: proc(): bool =
@@ -477,13 +462,12 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
         let expectedWithdrawalsRoot = some(calcWithdrawalsRoot(wds.list))
 
         # Check the correct withdrawal root on `latest` block
-        var h: common.BlockHeader
-        let r = env.client.latestHeader(h)
+        let r = env.client.latestHeader()
         #r.ExpectationDescription = fmt.Sprintf(`
         #    Requested "latest" block after engine_forkchoiceUpdatedV2,
         #    to verify withdrawalsRoot with the following withdrawals:
         #    %s`, jsWithdrawals)
-        r.expectWithdrawalsRoot(h, expectedWithdrawalsRoot)
+        r.expectWithdrawalsRoot(expectedWithdrawalsRoot)
 
         let res = ws.verifyContractsStorage(env)
         testCond res.isOk:
@@ -504,9 +488,7 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
         error "verify wd error", msg=res.error
 
       # Check the correct withdrawal root on past blocks
-      var h: common.BlockHeader
-      let r = env.client.headerByNumber(bn, h)
-
+      let r = env.client.headerByNumber(bn)
       var expectedWithdrawalsRoot: Option[common.Hash256]
       if bn >= ws.forkHeight.uint64:
         let wds = ws.wdHistory.getWithdrawals(bn)
@@ -516,7 +498,7 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
       #      Requested block %d to verify withdrawalsRoot with the
       #      following withdrawals:
       #      %s`, block, jsWithdrawals)
-      r.expectWithdrawalsRoot(h, expectedWithdrawalsRoot)
+      r.expectWithdrawalsRoot(expectedWithdrawalsRoot)
 
     # Verify on `latest`
     let bnu = env.clMock.latestExecutedPayload.blockNumber.uint64

@@ -234,11 +234,6 @@ proc maybeChainId(n: Option[HexQuantityStr]): Option[ChainId] =
     return none(ChainId)
   some(hexToInt(string n.get, int).ChainId)
 
-proc maybeInt64(n: Option[HexQuantityStr]): Option[int64] =
-  if n.isNone:
-    return none(int64)
-  some(hexToInt(string n.get, int64))
-
 proc maybeInt(n: Option[HexQuantityStr]): Option[int] =
   if n.isNone:
     return none(int)
@@ -398,14 +393,13 @@ proc blockNumber*(client: RpcClient): Result[uint64, string] =
     let res = waitFor client.eth_blockNumber()
     return ok(hexToInt(string res, uint64))
 
-proc headerByNumber*(client: RpcClient, number: uint64, output: var common.BlockHeader): Result[void, string] =
+proc headerByNumber*(client: RpcClient, number: uint64): Result[common.BlockHeader, string] =
   wrapTry:
     let qty = encodeQuantity(number)
     let res = waitFor client.eth_getBlockByNumber(string qty, false)
     if res.isNone:
       return err("failed to get blockHeader: " & $number)
-    output = toBlockHeader(res.get())
-    return ok()
+    return ok(res.get.toBlockHeader)
 
 proc blockByNumber*(client: RpcClient, number: uint64, output: var common.EthBlock): Result[void, string] =
   wrapTry:
@@ -419,22 +413,19 @@ proc blockByNumber*(client: RpcClient, number: uint64, output: var common.EthBlo
     output.withdrawals = toWithdrawals(blk.withdrawals)
     return ok()
 
-proc headerByHash*(client: RpcClient, hash: Hash256, output: var common.BlockHeader): Result[void, string] =
+proc headerByHash*(client: RpcClient, hash: Hash256): Result[common.BlockHeader, string] =
   wrapTry:
     let res = waitFor client.eth_getBlockByHash(hash, false)
     if res.isNone:
       return err("failed to get block: " & hash.data.toHex)
-    let blk = res.get()
-    output = toBlockHeader(blk)
-    return ok()
+    return ok(res.get.toBlockHeader)
 
-proc latestHeader*(client: RpcClient, output: var common.BlockHeader): Result[void, string] =
+proc latestHeader*(client: RpcClient): Result[common.BlockHeader, string] =
   wrapTry:
     let res = waitFor client.eth_getBlockByNumber("latest", false)
     if res.isNone:
       return err("failed to get latest blockHeader")
-    output = toBlockHeader(res.get())
-    return ok()
+    return ok(res.get.toBlockHeader)
 
 proc latestBlock*(client: RpcClient, output: var common.EthBlock): Result[void, string] =
   wrapTry:
@@ -447,13 +438,12 @@ proc latestBlock*(client: RpcClient, output: var common.EthBlock): Result[void, 
     output.withdrawals = toWithdrawals(blk.withdrawals)
     return ok()
 
-proc namedHeader*(client: RpcClient, name: string, output: var common.BlockHeader): Result[void, string] =
+proc namedHeader*(client: RpcClient, name: string): Result[common.BlockHeader, string] =
   wrapTry:
     let res = waitFor client.eth_getBlockByNumber(name, false)
     if res.isNone:
       return err("failed to get named blockHeader")
-    output = toBlockHeader(res.get())
-    return ok()
+    return ok(res.get.toBlockHeader)
 
 proc sendTransaction*(client: RpcClient, tx: common.Transaction): Result[void, string] =
   wrapTry:

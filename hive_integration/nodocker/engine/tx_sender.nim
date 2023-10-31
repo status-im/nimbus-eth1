@@ -32,9 +32,9 @@ type
     blobCount* : int
 
   TestAccount* = object
-    key    : PrivateKey
-    address: EthAddress
-    index  : int
+    key*    : PrivateKey
+    address*: EthAddress
+    index*  : int
 
   TxSender* = ref object
     accounts: seq[TestAccount]
@@ -47,6 +47,11 @@ type
     key*    : PrivateKey
     nonce*  : AccountNonce
 
+  CustSig* = object
+    V*: int64
+    R*: UInt256
+    S*: UInt256
+
   CustomTransactionData* = object
     nonce*              : Option[uint64]
     gasPriceOrGasFeeCap*: Option[GasInt]
@@ -56,7 +61,7 @@ type
     value*              : Option[UInt256]
     data*               : Option[seq[byte]]
     chainId*            : Option[ChainId]
-    signature*          : Option[UInt256]
+    signature*          : Option[CustSig]
 
 const
   TestAccountCount = 1000
@@ -81,7 +86,7 @@ proc createAccounts(sender: TxSender) =
   for i in 0..<TestAccountCount:
     sender.accounts.add createAccount(i.int)
 
-proc getNextAccount(sender: TxSender): TestAccount =
+proc getNextAccount*(sender: TxSender): TestAccount =
   sender.accounts[sender.txSent mod sender.accounts.len]
 
 proc getNextNonce(sender: TxSender, address: EthAddress): uint64 =
@@ -99,7 +104,7 @@ proc fillBalance(sender: TxSender, params: NetworkParams) =
     )
 
 proc new*(_: type TxSender, params: NetworkParams): TxSender =
-  result = TxSender(chainId: params.config.chainId)
+  result = TxSender(chainId: params.config.chainID)
   result.createAccounts()
   result.fillBalance(params)
 
@@ -140,10 +145,10 @@ proc makeTx(params: MakeTxParams, tc: BaseTx): Transaction =
                to      : tc.recipient,
                value   : tc.amount,
                payload : tc.payload,
-               chainId : params.chainId
+               chainId : params.chainID
              )
 
-  signTransaction(tx, params.key, params.chainId, eip155 = true)
+  signTransaction(tx, params.key, params.chainID, eip155 = true)
 
 proc makeTx(params: MakeTxParams, tc: BigInitcodeTx): Transaction =
   var tx = tc
@@ -162,7 +167,7 @@ proc makeTx(params: MakeTxParams, tc: BigInitcodeTx): Transaction =
 proc makeTx*(sender: TxSender, tc: BaseTx, nonce: AccountNonce): Transaction =
   let acc = sender.getNextAccount()
   let params = MakeTxParams(
-    chainId: sender.chainId,
+    chainId: sender.chainID,
     key: acc.key,
     nonce: nonce
   )
@@ -171,7 +176,7 @@ proc makeTx*(sender: TxSender, tc: BaseTx, nonce: AccountNonce): Transaction =
 proc makeTx*(sender: TxSender, tc: BigInitcodeTx, nonce: AccountNonce): Transaction =
   let acc = sender.getNextAccount()
   let params = MakeTxParams(
-    chainId: sender.chainId,
+    chainId: sender.chainID,
     key: acc.key,
     nonce: nonce
   )
@@ -182,7 +187,7 @@ proc makeNextTx*(sender: TxSender, tc: BaseTx): Transaction =
     acc = sender.getNextAccount()
     nonce = sender.getNextNonce(acc.address)
     params = MakeTxParams(
-      chainId: sender.chainId,
+      chainId: sender.chainID,
       key: acc.key,
       nonce: nonce
     )
@@ -192,15 +197,17 @@ proc sendNextTx*(sender: TxSender, client: RpcClient, tc: BaseTx): bool =
   let tx = sender.makeNextTx(tc)
   let rr = client.sendTransaction(tx)
   if rr.isErr:
-    error "Unable to send transaction", msg=rr.error
+    error "sendNextTx: Unable to send transaction", msg=rr.error
     return false
+
+  inc sender.txSent
   return true
 
 proc sendTx*(sender: TxSender, client: RpcClient, tc: BaseTx, nonce: AccountNonce): bool =
   let
     acc = sender.getNextAccount()
     params = MakeTxParams(
-      chainId: sender.chainId,
+      chainId: sender.chainID,
       key: acc.key,
       nonce: nonce
     )
@@ -208,15 +215,17 @@ proc sendTx*(sender: TxSender, client: RpcClient, tc: BaseTx, nonce: AccountNonc
 
   let rr = client.sendTransaction(tx)
   if rr.isErr:
-    error "Unable to send transaction", msg=rr.error
+    error "sendTx: Unable to send transaction", msg=rr.error
     return false
+
+  inc sender.txSent
   return true
 
 proc sendTx*(sender: TxSender, client: RpcClient, tc: BigInitcodeTx, nonce: AccountNonce): bool =
   let
     acc = sender.getNextAccount()
     params = MakeTxParams(
-      chainId: sender.chainId,
+      chainId: sender.chainID,
       key: acc.key,
       nonce: nonce
     )
@@ -226,6 +235,8 @@ proc sendTx*(sender: TxSender, client: RpcClient, tc: BigInitcodeTx, nonce: Acco
   if rr.isErr:
     error "Unable to send transaction", msg=rr.error
     return false
+
+  inc sender.txSent
   return true
 
 proc sendTx*(client: RpcClient, tx: Transaction): bool =
@@ -249,7 +260,7 @@ proc makeTx*(params: MakeTxParams, tc: BlobTx): Transaction =
 
   let unsignedTx = Transaction(
     txType    : TxEip4844,
-    chainId   : params.chainId,
+    chainId   : params.chainID,
     nonce     : params.nonce,
     maxPriorityFee: gasTipCap,
     maxFee    : gasFeeCap,
@@ -261,7 +272,7 @@ proc makeTx*(params: MakeTxParams, tc: BlobTx): Transaction =
     versionedHashes: data.hashes,
   )
 
-  var tx = signTransaction(unsignedTx, params.key, params.chainId, eip155 = true)
+  var tx = signTransaction(unsignedTx, params.key, params.chainID, eip155 = true)
   tx.networkPayload = NetworkPayload(
     blobs      : data.blobs,
     commitments: data.commitments,
@@ -276,7 +287,7 @@ proc getAccount*(sender: TxSender, idx: int): TestAccount =
 proc sendTx*(sender: TxSender, acc: TestAccount, client: RpcClient, tc: BlobTx): Result[Transaction, void] =
   let
     params = MakeTxParams(
-      chainId: sender.chainId,
+      chainId: sender.chainID,
       key: acc.key,
       nonce: sender.getNextNonce(acc.address),
     )
@@ -286,12 +297,14 @@ proc sendTx*(sender: TxSender, acc: TestAccount, client: RpcClient, tc: BlobTx):
   if rr.isErr:
     error "Unable to send transaction", msg=rr.error
     return err()
+
+  inc sender.txSent
   return ok(tx)
 
 proc replaceTx*(sender: TxSender, acc: TestAccount, client: RpcClient, tc: BlobTx): Result[Transaction, void] =
   let
     params = MakeTxParams(
-      chainId: sender.chainId,
+      chainId: sender.chainID,
       key: acc.key,
       nonce: sender.getLastNonce(acc.address),
     )
@@ -301,7 +314,65 @@ proc replaceTx*(sender: TxSender, acc: TestAccount, client: RpcClient, tc: BlobT
   if rr.isErr:
     error "Unable to send transaction", msg=rr.error
     return err()
+
+  inc sender.txSent
   return ok(tx)
 
-proc customizeTransaction*(sender: TxSender, baseTx: Transaction, custTx: CustomTransactionData): Transaction =
-  discard
+proc makeTx*(sender: TxSender, tc: BaseTx, acc: TestAccount, nonce: AccountNonce): Transaction =
+  let
+    params = MakeTxParams(
+      chainId: sender.chainID,
+      key: acc.key,
+      nonce: nonce,
+    )
+  params.makeTx(tc)
+
+proc customizeTransaction*(sender: TxSender,
+                           acc: TestAccount,
+                           baseTx: Transaction,
+                           custTx: CustomTransactionData): Transaction =
+  # Create a modified transaction base, from the base transaction and custTx mix
+  var modTx = baseTx
+  if custTx.nonce.isSome:
+    modTx.nonce = custTx.nonce.get.AccountNonce
+
+  if custTx.gasPriceOrGasFeeCap.isSome:
+    modTx.gasPrice = custTx.gasPriceOrGasFeeCap.get.GasInt
+
+  if custTx.gas.isSome:
+    modTx.gasLimit = custTx.gas.get.GasInt
+
+  if custTx.to.isSome:
+    modTx.to = custTx.to
+
+  if custTx.value.isSome:
+    modTx.value = custTx.value.get
+
+  if custTx.data.isSome:
+    modTx.payload = custTx.data.get
+
+  if custTx.signature.isSome:
+    let signature = custTx.signature.get
+    modTx.V = signature.V
+    modTx.R = signature.R
+    modTx.S = signature.S
+
+  if baseTx.txType in {TxEip1559, TxEip4844}:
+    if custTx.chainID.isSome:
+      modTx.chainID = custTx.chainID.get
+
+    if custTx.gasPriceOrGasFeeCap.isSome:
+      modTx.maxFee = custTx.gasPriceOrGasFeeCap.get.GasInt
+
+    if custTx.gasTipCap.isSome:
+      modTx.maxPriorityFee = custTx.gasTipCap.get.GasInt
+
+  if baseTx.txType == TxEip4844:
+    if modTx.to.isNone:
+      var address: EthAddress
+      modTx.to = some(address)
+
+  if custTx.signature.isNone:
+    return signTransaction(modTx, acc.key, modTx.chainID, eip155 = true)
+
+  return modTx

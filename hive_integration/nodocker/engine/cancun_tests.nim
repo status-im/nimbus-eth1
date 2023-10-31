@@ -44,7 +44,7 @@ proc specExecute(ws: BaseSpec): bool =
 
   getGenesis(conf.networkParams)
   let env  = TestEnv.new(conf)
-  env.engine.setRealTTD(0)
+  env.engine.setRealTTD()
   env.setupCLMock()
   ws.configureCLMock(env.clMock)
 
@@ -1827,7 +1827,7 @@ func init() {
   }
   onlyBlobTxsSpec := test.BaseSpec{
     mainFork:            Cancun,
-    TestTransactionType: helper.BlobTxOnly,
+    TestTransactionType: BlobTxOnly,
   }
 
   # Payload Attributes
@@ -1865,30 +1865,30 @@ func init() {
   }
 
   # Invalid Payload Tests
-  for _, invalidField := range []helper.InvalidPayloadBlockField{
-    helper.InvalidParentBeaconBlockRoot,
-    helper.InvalidBlobGasUsed,
-    helper.InvalidBlobCountGasUsed,
-    helper.InvalidExcessBlobGas,
-    helper.InvalidVersionedHashes,
-    helper.InvalidVersionedHashesVersion,
-    helper.IncompleteVersionedHashes,
-    helper.ExtraVersionedHashes,
+  for _, invalidField := range []InvalidPayloadBlockField{
+    InvalidParentBeaconBlockRoot,
+    InvalidBlobGasUsed,
+    InvalidBlobCountGasUsed,
+    InvalidExcessBlobGas,
+    InvalidVersionedHashes,
+    InvalidVersionedHashesVersion,
+    IncompleteVersionedHashes,
+    ExtraVersionedHashes,
   } {
     for _, syncing := range []bool{false, true} {
       # Invalidity of payload can be detected even when syncing because the
       # blob gas only depends on the transactions contained.
-      invalidDetectedOnSync := (invalidField == helper.InvalidBlobGasUsed ||
-        invalidField == helper.InvalidBlobCountGasUsed ||
-        invalidField == helper.InvalidVersionedHashes ||
-        invalidField == helper.InvalidVersionedHashesVersion ||
-        invalidField == helper.IncompleteVersionedHashes ||
-        invalidField == helper.ExtraVersionedHashes)
+      invalidDetectedOnSync := (invalidField == InvalidBlobGasUsed ||
+        invalidField == InvalidBlobCountGasUsed ||
+        invalidField == InvalidVersionedHashes ||
+        invalidField == InvalidVersionedHashesVersion ||
+        invalidField == IncompleteVersionedHashes ||
+        invalidField == ExtraVersionedHashes)
 
-      nilLatestValidHash := (invalidField == helper.InvalidVersionedHashes ||
-        invalidField == helper.InvalidVersionedHashesVersion ||
-        invalidField == helper.IncompleteVersionedHashes ||
-        invalidField == helper.ExtraVersionedHashes)
+      nilLatestValidHash := (invalidField == InvalidVersionedHashes ||
+        invalidField == InvalidVersionedHashesVersion ||
+        invalidField == IncompleteVersionedHashes ||
+        invalidField == ExtraVersionedHashes)
 
       Tests = append(Tests, suite_engine.InvalidPayloadTestCase{
         BaseSpec:              onlyBlobTxsSpec,
@@ -1909,7 +1909,7 @@ func init() {
 
   Tests = append(Tests, suite_engine.PayloadBuildAfterInvalidPayloadTest{
     BaseSpec:     onlyBlobTxsSpec,
-    InvalidField: helper.InvalidParentBeaconBlockRoot,
+    InvalidField: InvalidParentBeaconBlockRoot,
   })
 
   # Suggested Fee Recipient Tests (New Transaction Type)

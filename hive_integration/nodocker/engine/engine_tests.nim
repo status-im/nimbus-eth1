@@ -1,368 +1,454 @@
 import
+  eth/common/eth_types,
   ./engine/engine_spec,
   ./types,
   ./test_env,
-  ./base_spec
+  ./base_spec,
+  ./cancun/customizer,
+  ../../nimbus/common/chain_config
+
+import
+  ./engine/misc,
+  ./engine/payload_attributes,
+  ./engine/invalid_ancestor,
+  ./engine/invalid_payload,
+  ./engine/bad_hash
+
+proc getGenesis(cs: EngineSpec, param: NetworkParams) =
+  # Set the terminal total difficulty
+  let realTTD = param.genesis.difficulty + cs.ttd.u256
+  param.config.terminalTotalDifficulty = some(realTTD)
+  if param.genesis.difficulty <= realTTD:
+    param.config.terminalTotalDifficultyPassed = some(true)
+
+  # Set the genesis timestamp if provided
+  if cs.genesisTimestamp != 0:
+    param.genesis.timestamp = cs.genesisTimestamp.EthTime
 
 proc specExecute(ws: BaseSpec): bool =
-  var
-    ws = EngineSpec(ws)
-    env = TestEnv.new(ws.chainFile, false)
+  let
+    cs = EngineSpec(ws)
+    forkConfig = ws.getForkConfig()
 
-  env.engine.setRealTTD(ws.ttd)
+  if forkConfig.isNil:
+    echo "because fork configuration is not possible, skip test: ", cs.getName()
+    return true
+
+  let conf = envConfig(forkConfig)
+  cs.getGenesis(conf.networkParams)
+  let env  = TestEnv.new(conf)
+  env.engine.setRealTTD()
   env.setupCLMock()
-  ws.configureCLMock(env.clMock)
-  result = ws.exec(env)
+  #cs.configureCLMock(env.clMock)
+  result = cs.execute(env)
   env.close()
 
-let engineTestList* = [
-  # Engine API Negative Test Cases
-  TestDesc(
-    name: "Invalid Terminal Block in ForkchoiceUpdated",
-    run: specExecute,
-    spec: EngineSpec(
-      exec: invalidTerminalBlockForkchoiceUpdated,
-      ttd: 1000000
-  ))#[,
-  TestDesc(
-    name: "Invalid GetPayload Under PoW",
-    run: specExecute,
-    spec: EngineSpec(
-      exec: invalidGetPayloadUnderPoW,
-      ttd: 1000000
-  )),
-  TestDesc(
-    name: "Invalid Terminal Block in NewPayload",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  invalidTerminalBlockNewPayload,
-      ttd:  1000000,
-  )),
-  TestDesc(
-    name: "Inconsistent Head in ForkchoiceState",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  inconsistentForkchoiceState1,
-  )),
-  TestDesc(
-    name: "Inconsistent Safe in ForkchoiceState",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  inconsistentForkchoiceState2,
-  )),
-  TestDesc(
-    name: "Inconsistent Finalized in ForkchoiceState",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  inconsistentForkchoiceState3,
-  )),
-  TestDesc(
-    name: "Unknown HeadBlockHash",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  unknownHeadBlockHash,
-  )),
-  TestDesc(
-    name: "Unknown SafeBlockHash",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  unknownSafeBlockHash,
-  )),
-  TestDesc(
-    name: "Unknown FinalizedBlockHash",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  unknownFinalizedBlockHash,
-  )),
-  TestDesc(
-    name: "ForkchoiceUpdated Invalid Payload Attributes",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  invalidPayloadAttributes1,
-  )),
-  TestDesc(
-    name: "ForkchoiceUpdated Invalid Payload Attributes (Syncing)",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  invalidPayloadAttributes2,
-  )),
-  TestDesc(
-    name: "Pre-TTD ForkchoiceUpdated After PoS Switch",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  preTTDFinalizedBlockHash,
-      ttd:  2,
-  )),
+# Execution specification reference:
+# https:#github.com/ethereum/execution-apis/blob/main/src/engine/specification.md
+
+#[var (
+  big0      = new(big.Int)
+  big1      = u256(1)
+  Head      *big.Int # Nil
+  Pending   = u256(-2)
+  Finalized = u256(-3)
+  Safe      = u256(-4)
+)
+]#
+
+# Register all test combinations for Paris
+proc makeEngineTest*(): seq[EngineSpec] =
+  # Misc Tests
+  # Pre-merge & merge fork occur at block 1, post-merge forks occur at block 2
+  result.add NonZeroPreMergeFork(forkHeight: 2)
+
+  # Payload Attributes Tests
+  block:
+    let list = [
+      InvalidPayloadAttributesTest(
+        description: "Zero timestamp",
+        customizer: BasePayloadAttributesCustomizer(
+          timestamp: some(0'u64),
+        ),
+      ),
+      InvalidPayloadAttributesTest(
+        description: "Parent timestamp",
+        customizer: TimestampDeltaPayloadAttributesCustomizer(
+          timestampDelta: -1,
+        ),
+      ),
+    ]
+
+    for x in list:
+      result.add x
+      let y = x.clone()
+      y.syncing = true
+      result.add y
+
+  # Invalid Transaction ChainID Tests
+  result.add InvalidTxChainIDTest(
+    txType: some(TxLegacy),
+  )
+
+  result.add InvalidTxChainIDTest(
+    txType: some(TxEip1559),
+  )
+
+  # Invalid Ancestor Re-Org Tests (Reveal Via NewPayload)
+  for invalidIndex in [1, 9, 10]:
+    for emptyTxs in [false, true]:
+      result.add InvalidMissingAncestorReOrgTest(
+        slotsToSafe:       32,
+        slotsToFinalized:  64,
+        sidechainLength:   10,
+        invalidIndex:      invalidIndex,
+        invalidField:      InvalidStateRoot,
+        emptyTransactions: emptyTxs,
+      )
+
   # Invalid Payload Tests
-  TestDesc(
-    name: "Bad Hash on NewPayload",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  badHashOnNewPayload1,
-  )),
-  TestDesc(
-    name: "Bad Hash on NewPayload Syncing",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  badHashOnNewPayload2,
-  )),
-  TestDesc(
-    name: "Bad Hash on NewPayload Side Chain",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  badHashOnNewPayload3,
-  )),
-  TestDesc(
-    name: "Bad Hash on NewPayload Side Chain Syncing",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  badHashOnNewPayload4,
-  )),
-  TestDesc(
-    name: "ParentHash==BlockHash on NewPayload",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  parentHashOnExecPayload,
-  )),
-  TestDesc(
-    name: "Invalid Transition Payload",
-    run: specExecute,
-    spec: EngineSpec(
-      exec: invalidTransitionPayload,
-      ttd: 393504,
-      chainFile: "blocks_2_td_393504.rlp",
-  )),
-  TestDesc(
-    name: "Invalid ParentHash NewPayload",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  invalidPayload1,
-  )),
-  TestDesc(
-    name: "Invalid StateRoot NewPayload",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  invalidPayload2,
-  )),
-  TestDesc(
-    name: "Invalid StateRoot NewPayload, Empty Transactions",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  invalidPayload3,
-  )),
-  TestDesc(
-    name: "Invalid ReceiptsRoot NewPayload",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  invalidPayload4,
-  )),
-  TestDesc(
-    name: "Invalid Number NewPayload",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  invalidPayload5,
-  )),
-  TestDesc(
-    name: "Invalid GasLimit NewPayload",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  invalidPayload6,
-  )),
-  TestDesc(
-    name: "Invalid GasUsed NewPayload",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  invalidPayload7,
-  )),
-  TestDesc(
-    name: "Invalid Timestamp NewPayload",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  invalidPayload8,
-  )),
-  TestDesc(
-    name: "Invalid PrevRandao NewPayload",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  invalidPayload9,
-  )),
-  TestDesc(
-    name: "Invalid Incomplete Transactions NewPayload",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  invalidPayload10,
-  )),
-  TestDesc(
-    name: "Invalid Transaction Signature NewPayload",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  invalidPayload11,
-  )),
-  TestDesc(
-    name: "Invalid Transaction Nonce NewPayload",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  invalidPayload12,
-  )),
-  TestDesc(
-    name: "Invalid Transaction GasPrice NewPayload",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  invalidPayload13,
-  )),
-  TestDesc(
-    name: "Invalid Transaction Gas NewPayload",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  invalidPayload14,
-  )),
-  TestDesc(
-    name: "Invalid Transaction Value NewPayload",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  invalidPayload15,
-  )),
+  const
+    invalidPayloadBlockFields = [
+      InvalidParentHash,
+      InvalidStateRoot,
+      InvalidReceiptsRoot,
+      InvalidNumber,
+      InvalidGasLimit,
+      InvalidGasUsed,
+      InvalidTimestamp,
+      InvalidPrevRandao,
+      RemoveTransaction,
+    ]
 
-  # Invalid Ancestor Re-Org Tests (Reveal via newPayload)
-  TestDesc(
-    name: "Invalid Ancestor Chain Re-Org, Invalid StateRoot, Invalid P1', Reveal using newPayload",
-    slotsToFinalized: 20,
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  invalidMissingAncestor1,
-  )),
-  TestDesc(
-    name: "Invalid Ancestor Chain Re-Org, Invalid StateRoot, Invalid P9', Reveal using newPayload",
-    slotsToFinalized: 20,
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  invalidMissingAncestor2,
-  )),
-  TestDesc(
-    name: "Invalid Ancestor Chain Re-Org, Invalid StateRoot, Invalid P10', Reveal using newPayload",
-    slotsToFinalized: 20,
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  invalidMissingAncestor3,
-  )),
+  for invalidField in invalidPayloadBlockFields:
+    for syncing in [false, true]:
+     if invalidField == InvalidStateRoot:
+       result.add InvalidPayloadTestCase(
+          invalidField:      invalidField,
+          syncing:           syncing,
+          emptyTransactions: true,
+       )
 
-  # Eth RPC Status on ForkchoiceUpdated Events
-  TestDesc(
-    name: "Latest Block after NewPayload",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  blockStatusExecPayload1,
-  )),
-  TestDesc(
-    name: "Latest Block after NewPayload (Transition Block)",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  blockStatusExecPayload2,
-      ttd:  5,
-  )),
-  TestDesc(
-    name: "Latest Block after New HeadBlock",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  blockStatusHeadBlock1,
-  )),
-  TestDesc(
-    name: "Latest Block after New HeadBlock (Transition Block)",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  blockStatusHeadBlock2,
-      ttd:  5,
-  )),
-  TestDesc(
-    name: "safe Block after New SafeBlockHash",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  blockStatusSafeBlock,
-      ttd:  5,
-  )),
-  TestDesc(
-    name: "finalized Block after New FinalizedBlockHash",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  blockStatusFinalizedBlock,
-      ttd:  5,
-  )),
-  TestDesc(
-    name: "Latest Block after Reorg",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  blockStatusReorg,
-  )),
+     result.add InvalidPayloadTestCase(
+        invalidField: invalidField,
+        syncing:      syncing,
+     )
 
-  # Payload Tests
-  TestDesc(
-    name: "Re-Execute Payload",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  reExecPayloads,
-  )),
-  TestDesc(
-    name: "Multiple New Payloads Extending Canonical Chain",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  multipleNewCanonicalPayloads,
-  )),
-  TestDesc(
-    name: "Out of Order Payload Execution",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  outOfOrderPayloads,
-  )),
+  # Register bad hash tests
+  for syncing in [false, true]:
+    for sidechain in [false, true]:
+      result.add BadHashOnNewPayload(
+        syncing:   syncing,
+        sidechain: sidechain,
+      )
 
-  # Transaction Reorg using Engine API
-  TestDesc(
-    name: "Transaction Reorg",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  transactionReorg,
-  )),
-  TestDesc(
-    name: "Sidechain Reorg",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  sidechainReorg,
-  )),
-  TestDesc(
-    name: "Re-Org Back into Canonical Chain",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  reorgBack,
-  )),
-  TestDesc(
-    name: "Re-Org Back to Canonical Chain From Syncing Chain",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  reorgBackFromSyncing,
-  )),
+  # Parent hash == block hash tests
+  result.add ParentHashOnNewPayload(syncing: false)
+  result.add ParentHashOnNewPayload(syncing: true)
 
-  # Suggested Fee Recipient in Payload creation
-  TestDesc(
-    name: "Suggested Fee Recipient Test",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  suggestedFeeRecipient,
-  )),
+  result.add PayloadBuildAfterInvalidPayloadTest(
+    invalidField: InvalidStateRoot,
+  )
+
+#[
+  const
+    invalidReorgList = [
+      InvalidStateRoot,
+      InvalidReceiptsRoot,
+      # TODO: InvalidNumber, Test is causing a panic on the secondary node, disabling for now.
+      InvalidGasLimit,
+      InvalidGasUsed,
+      InvalidTimestamp,
+      # TODO: InvalidPrevRandao, Test consistently fails with Failed to set invalid block: missing trie node.
+      RemoveTransaction,
+      InvalidTransactionSignature,
+      InvalidTransactionNonce,
+      InvalidTransactionGas,
+      InvalidTransactionGasPrice,
+      InvalidTransactionValue,
+      # InvalidOmmers, Unsupported now
+    ]
+
+    eightList = [
+      InvalidReceiptsRoot,
+      InvalidGasLimit,
+      InvalidGasUsed,
+      InvalidTimestamp,
+      InvalidPrevRandao
+    ]
+
+  # Invalid Ancestor Re-Org Tests (Reveal Via Sync)
+  for invalidField in invalidReorgList:
+    for reOrgFromCanonical in [false, true]:
+      var invalidIndex = 9
+      if invalidField in eightList:
+        invalidIndex = 8
+
+      if invalidField == InvalidStateRoot:
+        result.add InvalidMissingAncestorReOrgSyncTest(
+          timeoutSeconds:   60,
+          slotsToSafe:      32,
+          slotsToFinalized: 64,
+          invalidField:       invalidField,
+          reOrgFromCanonical: reOrgFromCanonical,
+          emptyTransactions:  true,
+          invalidIndex:       invalidIndex,
+        )
+
+      result.add InvalidMissingAncestorReOrgSyncTest(
+        timeoutSeconds:   60,
+        slotsToSafe:      32,
+        slotsToFinalized: 64,
+        invalidField:       invalidField,
+        reOrgFromCanonical: reOrgFromCanonical,
+        invalidIndex:       invalidIndex,
+      )
+]#
+#[
+  # Register RPC tests
+  for _, field := range []BlockStatusRPCCheckType(
+    LatestOnNewPayload,
+    LatestOnHeadBlockHash,
+    SafeOnSafeBlockHash,
+    FinalizedOnFinalizedBlockHash,
+  ) (
+    result.add BlockStatus(CheckType: field))
+  )
+
+  # Register ForkchoiceUpdate tests
+  for _, field := range []ForkchoiceStateField(
+    HeadBlockHash,
+    SafeBlockHash,
+    FinalizedBlockHash,
+  ) (
+    result.add
+      InconsistentForkchoiceTest(
+        Field: field,
+      ),
+      ForkchoiceUpdatedUnknownBlockHashTest(
+        Field: field,
+      ),
+    )
+  )
+
+  # Payload ID Tests
+  for _, payloadAttributeFieldChange := range []PayloadAttributesFieldChange(
+    PayloadAttributesIncreaseTimestamp,
+    PayloadAttributesRandom,
+    PayloadAttributesSuggestedFeeRecipient,
+  ) (
+    result.add UniquePayloadIDTest(
+      FieldModification: payloadAttributeFieldChange,
+    ))
+  )
+
+  # Endpoint Versions Tests
+  # Early upgrade of ForkchoiceUpdated when requesting a payload
+  result.add
+    ForkchoiceUpdatedOnPayloadRequestTest(
+      BaseSpec: test.BaseSpec(
+        Name: "Early upgrade",
+        About: `
+        Early upgrade of ForkchoiceUpdated when requesting a payload.
+        The test sets the fork height to 1, and the block timestamp increments to 2
+        seconds each block.
+        CL Mock prepares the payload attributes for the first block, which should contain
+        the attributes of the next fork.
+        The test then reduces the timestamp by 1, but still uses the next forkchoice updated
+        version, which should result in UNSUPPORTED_FORK_ERROR error.
+        `,
+        forkHeight:              1,
+        BlockTimestampIncrement: 2,
+      ),
+      ForkchoiceUpdatedcustomizer: UpgradeForkchoiceUpdatedVersion(
+        ForkchoiceUpdatedcustomizer: BaseForkchoiceUpdatedCustomizer(
+          PayloadAttributescustomizer: TimestampDeltaPayloadAttributesCustomizer(
+            PayloadAttributescustomizer: BasePayloadAttributesCustomizer(),
+            TimestampDelta:              -1,
+          ),
+          ExpectedError: globals.UNSUPPORTED_FORK_ERROR,
+        ),
+      ),
+    ),
+  )
+
+  # Payload Execution Tests
+  result.add
+    ReExecutePayloadTest(),
+    InOrderPayloadExecutionTest(),
+    MultiplePayloadsExtendingCanonicalChainTest(
+      SetHeadToFirstPayloadReceived: true,
+    ),
+    MultiplePayloadsExtendingCanonicalChainTest(
+      SetHeadToFirstPayloadReceived: false,
+    ),
+    NewPayloadOnSyncingClientTest(),
+    NewPayloadWithMissingFcUTest(),
+  )
+
+
+
+  # Invalid Transaction Payload Tests
+  for _, invalidField := range []InvalidPayloadBlockField(
+    InvalidTransactionSignature,
+    InvalidTransactionNonce,
+    InvalidTransactionGasPrice,
+    InvalidTransactionGasTipPrice,
+    InvalidTransactionGas,
+    InvalidTransactionValue,
+    InvalidTransactionChainID,
+  ) (
+    invalidDetectedOnSync := invalidField == InvalidTransactionChainID
+    for _, syncing in   [false, true) (
+      if invalidField != InvalidTransactionGasTipPrice (
+        for _, testTxType := range []TestTransactionType(TxLegacy, TxEip1559) (
+          result.add InvalidPayloadTestCase(
+            BaseSpec: test.BaseSpec(
+              txType: some( testTxType,
+            ),
+            InvalidField:          invalidField,
+            Syncing:               syncing,
+            InvalidDetectedOnSync: invalidDetectedOnSync,
+          ))
+        )
+      ) else (
+        result.add InvalidPayloadTestCase(
+          BaseSpec: test.BaseSpec(
+            txType: some( TxEip1559,
+          ),
+          InvalidField:          invalidField,
+          Syncing:               syncing,
+          InvalidDetectedOnSync: invalidDetectedOnSync,
+        ))
+      )
+    )
+
+  )
+
+  # Re-org using the Engine API tests
+
+  # Sidechain re-org tests
+  result.add
+    SidechainReOrgTest(),
+    ReOrgBackFromSyncingTest(
+      BaseSpec: test.BaseSpec(
+        slotsToSafe:      u256(32),
+        slotsToFinalized: u256(64),
+      ),
+    ),
+    ReOrgPrevValidatedPayloadOnSideChainTest(
+      BaseSpec: test.BaseSpec(
+        slotsToSafe:      u256(32),
+        slotsToFinalized: u256(64),
+      ),
+    ),
+    SafeReOrgToSideChainTest(
+      BaseSpec: test.BaseSpec(
+        slotsToSafe:      u256(1),
+        slotsToFinalized: u256(2),
+      ),
+    ),
+  )
+
+	// Re-org a transaction out of a block, or into a new block
+	result.add
+		TransactionReOrgTest{
+			Scenario: TransactionReOrgScenarioReOrgOut,
+		},
+		TransactionReOrgTest{
+			Scenario: TransactionReOrgScenarioReOrgDifferentBlock,
+		},
+		TransactionReOrgTest{
+			Scenario: TransactionReOrgScenarioNewPayloadOnRevert,
+		},
+		TransactionReOrgTest{
+			Scenario: TransactionReOrgScenarioReOrgBackIn,
+		},
+	)
+
+  # Re-Org back into the canonical chain tests
+  result.add
+    ReOrgBackToCanonicalTest(
+      BaseSpec: test.BaseSpec(
+        slotsToSafe:      u256(10),
+        slotsToFinalized: u256(20),
+        TimeoutSeconds:   60,
+      ),
+      TransactionPerPayload: 1,
+      ReOrgDepth:            5,
+    ),
+    ReOrgBackToCanonicalTest(
+      BaseSpec: test.BaseSpec(
+        slotsToSafe:      u256(32),
+        slotsToFinalized: u256(64),
+        TimeoutSeconds:   120,
+      ),
+      TransactionPerPayload:     50,
+      ReOrgDepth:                10,
+      ExecuteSidePayloadOnReOrg: true,
+    ),
+  )
+
+  # Suggested Fee Recipient Tests
+  result.add
+    SuggestedFeeRecipientTest(
+      BaseSpec: test.BaseSpec(
+        txType: some( TxLegacy,
+      ),
+      TransactionCount: 20,
+    ),
+    SuggestedFeeRecipientTest(
+      BaseSpec: test.BaseSpec(
+        txType: some( TxEip1559,
+      ),
+      TransactionCount: 20,
+    ),
+  )
 
   # PrevRandao opcode tests
-  TestDesc(
-    name: "PrevRandao Opcode Transactions",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  prevRandaoOpcodeTx,
-      ttd:  10,
-  )),
+  result.add
+    PrevRandaoTransactionTest(
+      BaseSpec: test.BaseSpec(
+        txType: some( TxLegacy,
+      ),
+    ),
+    PrevRandaoTransactionTest(
+      BaseSpec: test.BaseSpec(
+        txType: some( TxEip1559,
+      ),
+    ),
+  )
 
-  # Multi-Client Sync tests
-  TestDesc(
-    name: "Sync Client Post Merge",
-    run: specExecute,
-    spec: EngineSpec(
-      exec:  postMergeSync,
-      ttd:  10,
-  )),]#
-]
+  # Fork ID Tests
+  for genesisTimestamp := uint64(0); genesisTimestamp <= 1; genesisTimestamp++ (
+    for forkTime := uint64(0); forkTime <= 2; forkTime++ (
+      for prevForkTime := uint64(0); prevForkTime <= forkTime; prevForkTime++ (
+        for currentBlock := 0; currentBlock <= 1; currentBlock++ (
+          result.add
+            ForkIDSpec(
+              BaseSpec: test.BaseSpec(
+                MainFork:         config.Paris,
+                Genesistimestamp: pUint64(genesisTimestamp),
+                ForkTime:         forkTime,
+                PreviousForkTime: prevForkTime,
+              ),
+              ProduceBlocksBeforePeering: currentBlock,
+            ),
+          )
+        )
+      )
+    )
+  )
+]#
+
+
+proc fillEngineTests*(): seq[TestDesc] =
+  let list = makeEngineTest()
+  for x in list:
+    result.add TestDesc(
+      name: x.getName(),
+      run: specExecute,
+      spec: x,
+    )
+
+let engineTestList* = fillEngineTests()

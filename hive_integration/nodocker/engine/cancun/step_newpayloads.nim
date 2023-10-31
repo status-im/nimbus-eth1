@@ -210,7 +210,7 @@ method execute*(step: NewPayloads, ctx: CancunTestContext): bool =
             forkchoiceState   = env.clMock.latestForkchoice
             expectedError     = step.fcUOnPayloadRequest.getExpectedError()
             expectedStatus    = PayloadExecutionStatus.valid
-            timestamp         = env.clMock.latestHeader.timestamp.uint64            
+            timestamp         = env.clMock.latestHeader.timestamp.uint64
 
           payloadAttributes = step.fcUOnPayloadRequest.getPayloadAttributes(payloadAttributes)
           let version = step.fcUOnPayloadRequest.forkchoiceUpdatedVersion(timestamp, some(payloadAttributes.timestamp.uint64))
@@ -295,7 +295,7 @@ method execute*(step: NewPayloads, ctx: CancunTestContext): bool =
           # Send a custom new payload
           payload = step.newPayloadCustomizer.customizePayload(payload)
           let
-            version = step.newPayloadCustomizer.newPayloadVersion(payload.basePayload.timestamp.uint64)
+            version = step.newPayloadCustomizer.newPayloadVersion(payload.timestamp.uint64)
 
           if step.newPayloadCustomizer.getExpectInvalidStatus():
             expectedStatus = PayloadExecutionStatus.invalid
@@ -305,7 +305,7 @@ method execute*(step: NewPayloads, ctx: CancunTestContext): bool =
             r.expectErrorCode(expectedError, step.expectationDescription)
           else:
             r.expectNoError(step.expectationDescription)
-            r.expectNPStatus(expectedStatus)
+            r.expectStatus(expectedStatus)
 
         if step.fcUOnHeadSet != nil:
           step.fcUOnHeadSet.setEngineAPIVersionResolver(env.engine.com)

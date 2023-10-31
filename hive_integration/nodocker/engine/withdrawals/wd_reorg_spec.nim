@@ -168,7 +168,7 @@ proc execute*(ws: ReorgSpec, env: TestEnv): bool =
         sidechain.attr = some(attr)
         let r = sec.client.forkchoiceUpdated(fcState, attr)
         r.expectNoError()
-        r.testFCU(valid)
+        r.expectPayloadStatus(PayloadExecutionStatus.valid)
         testCond r.get().payloadID.isSome:
           error "Unable to get a payload ID on the sidechain"
         sidechain.payloadId = r.get().payloadID.get()
@@ -192,13 +192,13 @@ proc execute*(ws: ReorgSpec, env: TestEnv): bool =
         payload = env.clMock.latestPayloadBuilt
 
       let r = sec.client.newPayload(payload)
-      r.expectStatus(valid)
+      r.expectStatus(PayloadExecutionStatus.valid)
 
       let fcState = ForkchoiceStateV1(
         headBlockHash: payload.blockHash,
       )
       let p = sec.client.forkchoiceUpdated(payload.version, fcState)
-      p.testFCU(valid)
+      p.expectPayloadStatus(PayloadExecutionStatus.valid)
       return true
   ))
   testCond pbRes
@@ -234,19 +234,19 @@ proc execute*(ws: ReorgSpec, env: TestEnv): bool =
         )
 
       let r = sec.client.forkchoiceUpdatedV2(fcState, some(attr))
-      r.testFCU(valid)
+      r.expectPayloadStatus(PayloadExecutionStatus.valid)
 
       let p = sec.client.getPayloadV2(r.get().payloadID.get)
       p.expectNoError()
 
       let z = p.get()
       let s = sec.client.newPayloadV2(z.executionPayload)
-      s.expectStatus(valid)
+      s.expectStatus(PayloadExecutionStatus.valid)
 
       let fs = ForkchoiceStateV1(headBlockHash: z.executionPayload.blockHash)
 
       let q = sec.client.forkchoiceUpdatedV2(fs)
-      q.testFCU(valid)
+      q.expectPayloadStatus(PayloadExecutionStatus.valid)
 
       inc sidechain.height
       sidechain.sidechain[sidechain.height] = executionPayload(z.executionPayload)
@@ -279,9 +279,9 @@ proc execute*(ws: ReorgSpec, env: TestEnv): bool =
         error "Primary client invalidated side chain"
         return false
 
-      var header: common.BlockHeader
-      let b = env.client.latestHeader(header)
+      let b = env.client.latestHeader()
       testCond b.isOk
+      let header = b.get
       if header.blockHash == ethHash(sidehash):
         # sync successful
         break
@@ -303,11 +303,11 @@ proc execute*(ws: ReorgSpec, env: TestEnv): bool =
         parentHash=payload.parentHash.short
 
       let r = env.client.newPayload(payload)
-      r.expectStatusEither(valid, accepted)
+      r.expectStatusEither([PayloadExecutionStatus.valid, PayloadExecutionStatus.accepted])
 
       let fcState = ForkchoiceStateV1(headBlockHash: payload.blockHash)
       let p = env.client.forkchoiceUpdated(version, fcState)
-      p.testFCU(valid)
+      p.expectPayloadStatus(PayloadExecutionStatus.valid)
       inc payloadNumber
 
 
@@ -326,4 +326,4 @@ proc execute*(ws: ReorgSpec, env: TestEnv): bool =
   # Re-Org back to the canonical chain
   let fcState = ForkchoiceStateV1(headBlockHash: env.clMock.latestPayloadBuilt.blockHash)
   let r = env.client.forkchoiceUpdatedV2(fcState)
-  r.testFCU(valid)
+  r.expectPayloadStatus(PayloadExecutionStatus.valid)

@@ -77,7 +77,7 @@ proc specExecute(ws: BaseSpec): bool =
     ws  = AuthSpec(ws)
     env = TestEnv.new("", true)
 
-  env.engine.setRealTTD(0)
+  env.engine.setRealTTD()
   result = ws.exec(env)
   env.close()
 

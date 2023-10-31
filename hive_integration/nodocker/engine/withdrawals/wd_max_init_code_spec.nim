@@ -7,7 +7,7 @@ import
   ../test_env,
   ../engine_client,
   ../types,
-  ../helper,
+  ../cancun/customizer,
   ../../../nimbus/constants,
   ../../../nimbus/beacon/execution_types,
   ../../../nimbus/beacon/web3_eth_conv
@@ -82,7 +82,7 @@ proc execute*(ws: MaxInitcodeSizeSpec, env: TestEnv): bool =
       error "Invalid tx was not unknown to the client"
 
   # Try to include an invalid tx in new payload
-  let    
+  let
     validTx   = env.makeTx(validTxCreator, txIncluded)
     invalidTx = env.makeTx(invalidTxCreator, txIncluded)
 
@@ -100,14 +100,14 @@ proc execute*(ws: MaxInitcodeSizeSpec, env: TestEnv): bool =
         error "valid Tx bytes mismatch"
 
       # Customize the payload to include a tx with an invalid initcode
-      let customData = CustomPayload(
-        beaconRoot: ethHash env.clMock.latestPayloadAttributes.parentBeaconBlockRoot,
+      let customizer = CustomPayloadData(
+        parentBeaconRoot: ethHash env.clMock.latestPayloadAttributes.parentBeaconBlockRoot,
         transactions: some( @[invalidTx] ),
       )
 
-      let customPayload = customizePayload(env.clMock.latestPayloadBuilt, customData)
+      let customPayload = customizer.customizePayload(env.clMock.latestExecutableData).basePayload
       let res = env.client.newPayloadV2(customPayload.V1V2)
-      res.expectStatus(invalid)
+      res.expectStatus(PayloadExecutionStatus.invalid)
       res.expectLatestValidHash(env.clMock.latestPayloadBuilt.parentHash)
 
       return true

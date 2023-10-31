@@ -9,7 +9,9 @@ import
   ./engine_client,
   ./client_pool,
   ./engine_env,
-  ./tx_sender
+  ./tx_sender,
+  ./types,
+  ./cancun/customizer
 
 export
   clmock,
@@ -78,6 +80,9 @@ func client*(env: TestEnv): RpcHttpClient =
 
 func engine*(env: TestEnv): EngineEnv =
   env.clients.first
+
+func sender*(env: TesTenv): TxSender =
+  env.sender
 
 proc setupCLMock*(env: TestEnv) =
   env.clmock = newCLMocker(env.engine, env.engine.com)
@@ -148,6 +153,20 @@ proc sendTx*(env: TestEnv, sender: TestAccount, eng: EngineEnv, tc: BlobTx): Res
 
 proc replaceTx*(env: TestEnv, sender: TestAccount, eng: EngineEnv, tc: BlobTx): Result[Transaction, void] =
   env.sender.replaceTx(sender, eng.client, tc)
+
+proc makeTx*(env: TestEnv, tc: BaseTx, sender: TestAccount, nonce: AccountNonce): Transaction =
+  env.sender.makeTx(tc, sender, nonce)
+
+proc customizeTransaction*(env: TestEnv,
+                           acc: TestAccount,
+                           baseTx: Transaction,
+                           custTx: CustomTransactionData): Transaction =
+  env.sender.customizeTransaction(acc, baseTx, custTx)
+
+proc generateInvalidPayload*(env: TestEnv,
+                             data: ExecutableData,
+                             payloadField: InvalidPayloadBlockField): ExecutableData =
+  env.sender.generateInvalidPayload(data, payloadField)
 
 proc verifyPoWProgress*(env: TestEnv, lastBlockHash: common.Hash256): bool =
   let res = waitFor env.client.verifyPoWProgress(lastBlockHash)

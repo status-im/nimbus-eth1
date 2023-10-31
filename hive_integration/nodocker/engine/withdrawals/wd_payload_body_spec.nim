@@ -88,7 +88,7 @@ func (req GetPayloadBodyRequestByHashIndex) Verify(reqIndex int, testEngine *tes
       } else {
         # signal to request an unknown hash (random)
         randHash := common.Hash{}
-        rand.Read(randHash[:])
+        randomBytes(randHash[:])
         payloads = append(payloads, nil)
         hashes = append(hashes, randHash)
       }
@@ -102,7 +102,7 @@ func (req GetPayloadBodyRequestByHashIndex) Verify(reqIndex int, testEngine *tes
       } else {
         # signal to request an unknown hash (random)
         randHash := common.Hash{}
-        rand.Read(randHash[:])
+        randomBytes(randHash[:])
         payloads = append(payloads, nil)
         hashes = append(hashes, randHash)
       }
@@ -152,10 +152,10 @@ proc execute*(ws: GetPayloadBodiesSpec, t: TestEnv): bool =
         Withdrawals: nextWithdrawals,
       },
     )
-    f.expectPayloadStatus(test.Valid)
+    f.expectPayloadStatus(PayloadExecutionStatus.valid)
 
     # Wait for payload to be built
-    time.Sleep(time.Second)
+    await sleepAsync(time.Second)
 
     # Get the next canonical payload
     p := t.rpcClient.getPayloadV2(f.Response.PayloadID)
@@ -164,16 +164,16 @@ proc execute*(ws: GetPayloadBodiesSpec, t: TestEnv): bool =
 
     # Now we have an extra payload that follows the canonical chain,
     # but we need a side chain for the test.
-    customizer := &helper.CustomPayloadData{
-      Withdrawals: helper.RandomizeWithdrawalsOrder(t.clMock.latestExecutedPayload.Withdrawals),
+    customizer := CustomPayloadData(
+      Withdrawals: RandomizeWithdrawalsOrder(t.clMock.latestExecutedPayload.Withdrawals),
     }
     sidechainCurrent, _, err := customizer.CustomizePayload(&t.clMock.latestExecutedPayload, t.clMock.latestPayloadAttributes.BeaconRoot)
     if err != nil {
       error "Error obtaining custom sidechain payload: %v", t.TestName, err)
     }
-    customizer = &helper.CustomPayloadData{
+    customizer = CustomPayloadData(
       ParentHash:  &sidechainCurrent.BlockHash,
-      Withdrawals: helper.RandomizeWithdrawalsOrder(nextCanonicalPayload.Withdrawals),
+      Withdrawals: RandomizeWithdrawalsOrder(nextCanonicalPayload.Withdrawals),
     }
     sidechainHead, _, err := customizer.CustomizePayload(nextCanonicalPayload, t.clMock.latestPayloadAttributes.BeaconRoot)
     if err != nil {
@@ -182,9 +182,9 @@ proc execute*(ws: GetPayloadBodiesSpec, t: TestEnv): bool =
 
     # Send both sidechain payloads as engine_newPayloadV2
     n1 := t.rpcClient.newPayloadV2(sidechainCurrent)
-    n1.expectStatus(test.Valid)
+    n1.expectStatus(PayloadExecutionStatus.valid)
     n2 := t.rpcClient.newPayloadV2(sidechainHead)
-    n2.expectStatus(test.Valid)
+    n2.expectStatus(PayloadExecutionStatus.valid)
   } else if ws.AfterSync {
     # Spawn a secondary client which will need to sync to the primary client
     secondaryEngine, err := hive_rpc.HiveRPCEngineStarter{}.StartClient(t.T, t.TestContext, t.Genesis, t.ClientParams, t.ClientFiles, t.Engine)
@@ -207,10 +207,10 @@ proc execute*(ws: GetPayloadBodiesSpec, t: TestEnv): bool =
           &t.clMock.latestForkchoice,
           nil,
         )
-        if r.Response.PayloadStatus.Status == test.Valid {
+        if r.Response.PayloadStatus.Status == PayloadExecutionStatus.valid {
           break loop
         }
-        if r.Response.PayloadStatus.Status == test.Invalid {
+        if r.Response.PayloadStatus.Status == PayloadExecutionStatus.invalid {
           error "Syncing client rejected valid chain: %s", t.TestName, r.Response)
         }
       }

@@ -23,9 +23,9 @@ proc configureCLMock*(s: BaseSpec, cl: CLMocker) =
 
   cl.blockTimestampIncrement = some(s.getBlockTimeIncrements())
 
-func getMainFork*(s: BaseSpec): string =
+func getMainFork*(s: BaseSpec): EngineFork =
   let mainFork = s.mainFork
-  if mainFork == "":
+  if mainFork == ForkNone:
     return ForkParis
   return mainFork
 
@@ -44,27 +44,32 @@ func getForkTime*(s: BaseSpec): uint64 =
     forkTime = s.getBlockTime(s.forkHeight.uint64)
   return forkTime
 
-func getForkConfig*(s: BaseSpec): ChainConfig =
+method getForkConfig*(s: BaseSpec): ChainConfig {.base.} =
   let
     forkTime = s.getForkTime()
     previousForkTime = s.previousForkTime
     mainFork = s.getMainFork()
-    forkConfig = getChainConfig(mainFork)
+    forkConfig = getChainConfig($mainFork)
     genesisTimestamp = s.getGenesisTimestamp()
 
   doAssert(previousForkTime <= forkTime,
     "previous fork time cannot be greater than fork time")
 
   if mainFork == ForkParis:
-    let cond = forkTime > genesisTimestamp or previousForkTime != 0
-    doAssert(not cond, "Cannot configure a fork before Paris, skip test")
+    # Cannot configure a fork before Paris, skip test
+    if forkTime > genesisTimestamp or previousForkTime != 0:
+      debugEcho "forkTime: ", forkTime
+      debugEcho "genesisTime: ", genesisTimestamp
+      return nil
   elif mainFork == ForkShanghai:
-    doAssert(previousForkTime == 0, "Cannot configure a fork before Shanghai")
+    # Cannot configure a fork before Shanghai
+    if previousForkTime != 0:
+      return nil
     forkConfig.shanghaiTime = some(forkTime.EthTime)
   elif mainFork == ForkCancun:
     forkConfig.shanghaiTime = some(previousForkTime.EthTime)
     forkConfig.cancunTime = some(forkTime.EthTime)
   else:
-    doAssert(false, "unknown fork: " & mainFork)
+    doAssert(false, "unknown fork: " & $mainFork)
 
   return forkConfig

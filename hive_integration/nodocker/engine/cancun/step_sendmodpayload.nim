@@ -28,7 +28,7 @@ method execute*(step: SendModifiedLatestPayload, ctx: CancunTestContext): bool =
   step.newPayloadCustomizer.setEngineAPIVersionResolver(env.engine.com)
 
   payload = step.newPayloadCustomizer.customizePayload(payload)
-  let version = step.newPayloadCustomizer.newPayloadVersion(payload.basePayload.timestamp.uint64)
+  let version = step.newPayloadCustomizer.newPayloadVersion(payload.timestamp.uint64)
 
   if step.newPayloadCustomizer.getExpectInvalidStatus():
     expectedStatus = PayloadExecutionStatus.invalid
@@ -41,7 +41,7 @@ method execute*(step: SendModifiedLatestPayload, ctx: CancunTestContext): bool =
   if expectedError != 0:
     r.expectErrorCode(expectedError)
   else:
-    r.expectNPStatus(expectedStatus)
+    r.expectStatus(expectedStatus)
 
   return true
 
