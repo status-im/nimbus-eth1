@@ -156,8 +156,9 @@ proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash256):
     )
 
   # runComputation a.k.a syscall/evm.call
-  if call.runComputation().isError:
-    return err("processBeaconBlockRoot: syscall error")
+  let res = call.runComputation()
+  if res.isError:
+    return err("processBeaconBlockRoot: " & res.error)
 
   statedb.persist(clearEmptyAccount = true, clearCache = false)
   ok()

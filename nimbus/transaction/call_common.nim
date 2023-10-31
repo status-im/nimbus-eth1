@@ -47,13 +47,16 @@ type
   # Standard call result.  (Some fields are beyond what EVMC can return,
   # and must only be used from tests because they will not always be set).
   CallResult* = object
-    isError*:         bool              # True if the call failed.
+    error*:           string            # Something if the call failed.
     gasUsed*:         GasInt            # Gas used by the call.
     contractAddress*: EthAddress        # Created account (when `isCreate`).
     output*:          seq[byte]         # Output data.
     logEntries*:      seq[Log]          # Output logs.
     stack*:           Stack             # EVM stack on return (for test only).
     memory*:          Memory            # EVM memory on return (for test only).
+
+func isError*(cr: CallResult): bool =
+  cr.error.len > 0
 
 proc hostToComputationMessage*(msg: EvmcMessage): Message =
   Message(
@@ -182,7 +185,7 @@ proc setupHost(call: CallParams): TransactionHost =
     let cMsg = hostToComputationMessage(host.msg)
     host.computation = newComputation(vmState, call.sysCall, cMsg, code)
 
-    shallowCopy(host.code, code)
+    host.code = system.move(code)
 
   else:
     if call.input.len > 0:
@@ -284,9 +287,10 @@ proc finishRunningComputation(host: TransactionHost, call: CallParams): CallResu
   let gasUsed = host.msg.gas - gasRemaining
   host.vmState.captureEnd(c, c.output, gasUsed, c.errorOpt)
 
-  result.isError = c.isError
+  if c.isError:
+    result.error = c.error.info
   result.gasUsed = call.gasLimit - gasRemaining
-  shallowCopy(result.output, c.output)
+  result.output = system.move(c.output)
   result.contractAddress = if call.isCreate: c.msg.contractAddress
                            else: default(HostAddress)
   result.logEntries = host.vmState.stateDB.logEntries()

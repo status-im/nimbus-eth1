@@ -18,6 +18,9 @@ import
   ../common/common,
   ./call_common
 
+export
+  call_common
+
 type
   RpcCallData* = object
     source*        : Option[EthAddress]
