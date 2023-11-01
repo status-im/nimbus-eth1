@@ -1,3 +1,13 @@
+# Nimbus
+# Copyright (c) 2023 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+#    http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or
+#    http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed except
+# according to those terms.
+
 # The point of this file is just to give a little more type-safety
 # and clarity to our use of SecureHexaryTrie, by having distinct
 # types for the big trie containing all the accounts and the little
