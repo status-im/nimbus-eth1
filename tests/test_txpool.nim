@@ -621,7 +621,7 @@ proc runTxPackerTests(noisy = true) =
 
           # employ packer
           # xq.jobCommit(forceMaintenance = true)
-          xq.packerVmExec
+          check xq.packerVmExec.isOk
           check xq.verify.isOK
 
           # verify that the test did not degenerate
@@ -647,7 +647,7 @@ proc runTxPackerTests(noisy = true) =
 
           # re-pack bucket
           #xq.jobCommit(forceMaintenance = true)
-          xq.packerVmExec
+          check xq.packerVmExec.isOk
           check xq.verify.isOK
 
           let
@@ -677,7 +677,7 @@ proc runTxPackerTests(noisy = true) =
           # re-pack bucket, packer needs extra trigger because there is
           # not necessarily a buckets re-org resulting in a change
           #xq.jobCommit(forceMaintenance = true)
-          xq.packerVmExec
+          check xq.packerVmExec.isOk
           check xq.verify.isOK
 
           let
@@ -736,7 +736,7 @@ proc runTxPackerTests(noisy = true) =
       test &"Run packer, profitability will not increase with block size":
 
         xq.flags = xq.flags - {packItemsMaxGasLimit}
-        xq.packerVmExec
+        check xq.packerVmExec.isOk
         let
           smallerBlockProfitability = xq.profitability
           smallerBlockSize = xq.gasCumulative
@@ -748,7 +748,7 @@ proc runTxPackerTests(noisy = true) =
           " slack=", xq.trgGasLimit - xq.gasCumulative
 
         xq.flags = xq.flags + {packItemsMaxGasLimit}
-        xq.packerVmExec
+        check xq.packerVmExec.isOk
 
         noisy.say "***", "max-packing",
           " profitability=", xq.profitability,
@@ -787,8 +787,13 @@ proc runTxPackerTests(noisy = true) =
         xq.flags = xq.flags #+ {packItemsMaxGasLimit}
 
         # Invoke packer
-        let blk = xq.ethBlock
+        let r = xq.assembleBlock()
+        if r.isErr:
+          debugEcho r.error
+          check false
+          return
 
+        let blk = r.get
         # Make sure that there are at least two txs on the packed block so
         # this test does not degenerate.
         check 1 < xq.chain.receipts.len

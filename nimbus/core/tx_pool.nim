@@ -241,7 +241,7 @@
 ##    xq.add(txs)                            # add transactions ..
 ##    ..                                     # .. into the buckets
 ##
-##    let newBlock = xq.ethBlock             # fetch current mining block
+##    let newBlock = xq.assembleBlock        # fetch current mining block
 ##
 ##    ..
 ##    mineThatBlock(newBlock) ...            # external mining & signing process
@@ -607,7 +607,7 @@ proc dirtyBuckets*(xp: TxPoolRef): bool =
   ## flag is also set.
   xp.pDirtyBuckets
 
-proc ethBlock*(xp: TxPoolRef, someBaseFee: bool = false): EthBlock
+proc assembleBlock*(xp: TxPoolRef, someBaseFee: bool = false): Result[EthBlock, string]
     {.gcsafe,raises: [CatchableError].} =
   ## Getter, retrieves a packed block ready for mining and signing depending
   ## on the internally cached block chain head, the txs in the pool and some
@@ -621,18 +621,25 @@ proc ethBlock*(xp: TxPoolRef, someBaseFee: bool = false): EthBlock
   ## Note that this getter runs *ad hoc* all the txs through the VM in
   ## order to build the block.
 
-  xp.packerVmExec                            # updates vmState
-  result.header = xp.chain.getHeader         # uses updated vmState
+  xp.packerVmExec().isOkOr:                  # updates vmState
+    return err(error)
+
+  var blk = EthBlock(
+    header: xp.chain.getHeader               # uses updated vmState
+  )
+
   for (_,nonceList) in xp.txDB.packingOrderAccounts(txItemPacked):
-    result.txs.add toSeq(nonceList.incNonce).mapIt(it.tx)
+    blk.txs.add toSeq(nonceList.incNonce).mapIt(it.tx)
 
   let com = xp.chain.com
   if com.forkGTE(Shanghai):
-    result.withdrawals = some(com.pos.withdrawals)
+    blk.withdrawals = some(com.pos.withdrawals)
 
   if someBaseFee:
     # make sure baseFee always has something
-    result.header.fee = some(result.header.fee.get(0.u256))
+    blk.header.fee = some(blk.header.fee.get(0.u256))
+
+  ok(blk)
 
 proc gasCumulative*(xp: TxPoolRef): GasInt =
   ## Getter, retrieves the gas that will be burned in the block after

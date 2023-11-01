@@ -156,7 +156,13 @@ proc runTxPoolCliqueTest*() =
       check xp.nItems.total == 1
 
     test "TxPool ethBlock":
-      blk = xp.ethBlock()
+      let res = xp.assembleBlock()
+      if res.isErr:
+        debugEcho res.error
+        check false
+        return
+
+      blk = res.get
       body = BlockBody(
         transactions: blk.txs,
         uncles: blk.uncles
@@ -192,7 +198,13 @@ proc runTxPoolCliqueTest*() =
         return
       check xp.nItems.total == 1
 
-      blk = xp.ethBlock()
+      let r = xp.assembleBlock()
+      if r.isErr:
+        debugEcho r.error
+        check false
+        return
+
+      blk = r.get
       body = BlockBody(
         transactions: blk.txs,
         uncles: blk.uncles
@@ -241,8 +253,13 @@ proc runTxPoolPosTest*() =
       com.pos.feeRecipient = feeRecipient
       com.pos.timestamp = EthTime.now()
 
-      blk = xp.ethBlock()
+      let r = xp.assembleBlock()
+      if r.isErr:
+        debugEcho r.error
+        check false
+        return
 
+      blk = r.get
       check com.isBlockAfterTtd(blk.header)
 
       body = BlockBody(
@@ -299,8 +316,13 @@ proc runTxPoolBlobhashTest*() =
       com.pos.feeRecipient = feeRecipient
       com.pos.timestamp = EthTime.now()
 
-      blk = xp.ethBlock()
+      let r = xp.assembleBlock()
+      if r.isErr:
+        debugEcho r.error
+        check false
+        return
 
+      blk = r.get
       check com.isBlockAfterTtd(blk.header)
 
       body = BlockBody(
@@ -380,7 +402,13 @@ proc runTxHeadDelta*(noisy = true) =
           com.pos.timestamp  = timestamp
           com.pos.feeRecipient = feeRecipient
 
-          var blk = xp.ethBlock()
+          let r = xp.assembleBlock()
+          if r.isErr:
+            debugEcho r.error
+            check false
+            return
+
+          let blk = r.get
           check com.isBlockAfterTtd(blk.header)
 
           let body = BlockBody(

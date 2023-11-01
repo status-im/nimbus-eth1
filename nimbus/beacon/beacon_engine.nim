@@ -170,7 +170,9 @@ proc generatePayload*(ben: BeaconEngineRef,
 
     # someBaseFee = true: make sure blk.header
     # have the same blockHash with generated payload
-    let blk = xp.ethBlock(someBaseFee = true)
+    let blk = xp.assembleBlock(someBaseFee = true).valueOr:
+      return err(error)
+
     if blk.header.extraData.len > 32:
       return err "extraData length should not exceed 32 bytes"
 

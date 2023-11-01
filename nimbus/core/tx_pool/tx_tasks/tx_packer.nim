@@ -150,7 +150,7 @@ proc runTxCommit(pst: TxPackerStateRef; item: TxItemRef; gasBurned: GasInt)
 # Private functions: packer packerVmExec() helpers
 # ------------------------------------------------------------------------------
 
-proc vmExecInit(xp: TxPoolRef): TxPackerStateRef
+proc vmExecInit(xp: TxPoolRef): Result[TxPackerStateRef, string]
     {.gcsafe,raises: [CatchableError].} =
 
   # Flush `packed` bucket
@@ -169,14 +169,16 @@ proc vmExecInit(xp: TxPoolRef): TxPackerStateRef
   # EIP-4788
   if xp.chain.nextFork >= FkCancun:
     let beaconRoot = xp.chain.com.pos.parentBeaconBlockRoot
-    discard xp.chain.vmState.processBeaconBlockRoot(beaconRoot)
+    xp.chain.vmState.processBeaconBlockRoot(beaconRoot).isOkOr:
+      return err(error)
 
-  TxPackerStateRef( # return value
+  let packer = TxPackerStateRef( # return value
     xp: xp,
     tr: newCoreDbRef(LegacyDbMemory).mptPrune,
     balance: xp.chain.vmState.readOnlyStateDB.getBalance(xp.chain.feeRecipient),
     numBlobPerBlock: 0,
   )
+  ok(packer)
 
 proc vmExecGrabItem(pst: TxPackerStateRef; item: TxItemRef): Result[bool,void]
     {.gcsafe,raises: [CatchableError].}  =
@@ -288,14 +290,15 @@ proc vmExecCommit(pst: TxPackerStateRef)
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc packerVmExec*(xp: TxPoolRef) {.gcsafe,raises: [CatchableError].} =
+proc packerVmExec*(xp: TxPoolRef): Result[void, string] {.gcsafe,raises: [CatchableError].} =
   ## Rebuild `packed` bucket by selection items from the `staged` bucket
   ## after executing them in the VM.
   let db = xp.chain.com.db
   let dbTx = db.beginTransaction
   defer: dbTx.dispose()
 
-  var pst = xp.vmExecInit
+  var pst = xp.vmExecInit.valueOr:
+    return err(error)
 
   block loop:
     for (_,nonceList) in pst.xp.txDB.packingOrderAccounts(txItemStaged):
@@ -309,6 +312,7 @@ proc packerVmExec*(xp: TxPoolRef) {.gcsafe,raises: [CatchableError].} =
             break account # continue with next account
 
   pst.vmExecCommit
+  ok()
   # Block chain will roll back automatically
 
 # ------------------------------------------------------------------------------
