@@ -418,28 +418,28 @@ let cancunTestList* = [
         SendBlobTransactions( # Blob ID 0
           transactionCount:              1,
           blobTransactionMaxBlobGasCost: u256(1),
-          blobTransactionGasFeeCap:      GasInt(1 ^ 9),
-          blobTransactionGasTipCap:      GasInt(1 ^ 9),
+          blobTransactionGasFeeCap:      GasInt(10 ^ 9),
+          blobTransactionGasTipCap:      GasInt(10 ^ 9),
         ),
         SendBlobTransactions( # Blob ID 1
           transactionCount:              1,
-          blobTransactionMaxBlobGasCost: u256(1 ^ 2),
-          blobTransactionGasFeeCap:      GasInt(1 ^ 10),
-          blobTransactionGasTipCap:      GasInt(1 ^ 10),
+          blobTransactionMaxBlobGasCost: u256(10 ^ 2),
+          blobTransactionGasFeeCap:      GasInt(10 ^ 10),
+          blobTransactionGasTipCap:      GasInt(10 ^ 10),
           replaceTransactions:           true,
         ),
         SendBlobTransactions( # Blob ID 2
           transactionCount:              1,
-          blobTransactionMaxBlobGasCost: u256(1 ^ 3),
-          blobTransactionGasFeeCap:      GasInt(1 ^ 11),
-          blobTransactionGasTipCap:      GasInt(1 ^ 11),
+          blobTransactionMaxBlobGasCost: u256(10 ^ 3),
+          blobTransactionGasFeeCap:      GasInt(10 ^ 11),
+          blobTransactionGasTipCap:      GasInt(10 ^ 11),
           replaceTransactions:           true,
         ),
         SendBlobTransactions( # Blob ID 3
           transactionCount:              1,
-          blobTransactionMaxBlobGasCost: u256(1 ^ 4),
-          blobTransactionGasFeeCap:      GasInt(1 ^ 12),
-          blobTransactionGasTipCap:      GasInt(1 ^ 12),
+          blobTransactionMaxBlobGasCost: u256(10 ^ 4),
+          blobTransactionGasFeeCap:      GasInt(10 ^ 12),
+          blobTransactionGasTipCap:      GasInt(10 ^ 12),
           replaceTransactions:           true,
         ),
 
@@ -452,92 +452,6 @@ let cancunTestList* = [
       ]
     ),
   ),
-
-  #[TestDesc(
-    name: "Parallel Blob Transactions",
-    about: """
-      Test sending multiple blob transactions in parallel from different accounts.
-
-      Verify that a payload is created with the maximum number of blobs.
-      """,
-    run: specExecute,
-    spec: CancunSpec(
-      mainFork: ForkCancun,
-      testSequence: @[
-        # Send multiple blob transactions with the same nonce.
-        ParallelSteps{
-          Steps: []TestStep{
-            SendBlobTransactions(
-              transactionCount:              5,
-              blobsPerTransaction:           MAX_BLOBS_PER_BLOCK,
-              blobTransactionMaxBlobGasCost: u256(100),
-              accountIndex:                  0,
-            ),
-            SendBlobTransactions(
-              transactionCount:              5,
-              blobsPerTransaction:           MAX_BLOBS_PER_BLOCK,
-              blobTransactionMaxBlobGasCost: u256(100),
-              accountIndex:                  1,
-            ),
-            SendBlobTransactions(
-              transactionCount:              5,
-              blobsPerTransaction:           MAX_BLOBS_PER_BLOCK,
-              blobTransactionMaxBlobGasCost: u256(100),
-              accountIndex:                  2,
-            ),
-            SendBlobTransactions(
-              transactionCount:              5,
-              blobsPerTransaction:           MAX_BLOBS_PER_BLOCK,
-              blobTransactionMaxBlobGasCost: u256(100),
-              accountIndex:                  3,
-            ),
-            SendBlobTransactions(
-              transactionCount:              5,
-              blobsPerTransaction:           MAX_BLOBS_PER_BLOCK,
-              blobTransactionMaxBlobGasCost: u256(100),
-              accountIndex:                  4,
-            ),
-            SendBlobTransactions(
-              transactionCount:              5,
-              blobsPerTransaction:           MAX_BLOBS_PER_BLOCK,
-              blobTransactionMaxBlobGasCost: u256(100),
-              accountIndex:                  5,
-            ),
-            SendBlobTransactions(
-              transactionCount:              5,
-              blobsPerTransaction:           MAX_BLOBS_PER_BLOCK,
-              blobTransactionMaxBlobGasCost: u256(100),
-              accountIndex:                  6,
-            ),
-            SendBlobTransactions(
-              transactionCount:              5,
-              blobsPerTransaction:           MAX_BLOBS_PER_BLOCK,
-              blobTransactionMaxBlobGasCost: u256(100),
-              accountIndex:                  7,
-            ),
-            SendBlobTransactions(
-              transactionCount:              5,
-              blobsPerTransaction:           MAX_BLOBS_PER_BLOCK,
-              blobTransactionMaxBlobGasCost: u256(100),
-              accountIndex:                  8,
-            ),
-            SendBlobTransactions(
-              transactionCount:              5,
-              blobsPerTransaction:           MAX_BLOBS_PER_BLOCK,
-              blobTransactionMaxBlobGasCost: u256(100),
-              accountIndex:                  9,
-            ),
-          ),
-        ),
-
-        # We create the first payload, which is guaranteed to have the first MAX_BLOBS_PER_BLOCK blobs.
-        NewPayloads(
-          expectedIncludedBlobCount: MAX_BLOBS_PER_BLOCK,
-          expectedblobs:             getBlobList(0, MAX_BLOBS_PER_BLOCK),
-        ),
-      ]
-    ),
-  ),]#
 
   # ForkchoiceUpdatedV3 before cancun
   TestDesc(
@@ -847,35 +761,6 @@ let cancunTestList* = [
     ),
   ),
 
-  #[TestDescXXX(
-    name: "NewPayloadV3 Before Cancun, 0x00 ExcessBlobGas, Nil BlobGasUsed, Nil Versioned Hashes, Nil Beacon Root",
-    about: """
-      Test sending NewPayloadV3 Before Cancun with:
-      - 0x00 ExcessBlobGas
-      - nil BlobGasUsed
-      - nil Versioned Hashes Array
-      - nil Beacon Root
-      """,
-    run: specExecute,
-    spec: CancunSpec(
-      mainFork: ForkCancun,
-      forkHeight: 2,
-      testSequence: @[
-        NewPayloads(
-          newPayloadCustomizer: UpgradeNewPayloadVersion(
-            payloadCustomizer: CustomPayloadData(
-              excessBlobGas: some(0'u64),
-            ),
-            expectedError: engineApiInvalidParams,
-          ),
-          expectationDescription: """
-          NewPayloadV3 before Cancun with any nil field must return INVALID_PARAMS_ERROR (code $1)
-          """ % [$engineApiInvalidParams],
-        ).TestStep,
-      ]
-    ),
-  ),]#
-
   TestDesc(
     name: "NewPayloadV3 Before Cancun, Nil Data Fields, Empty Array Versioned Hashes, Nil Beacon Root",
     about: """
@@ -906,35 +791,6 @@ let cancunTestList* = [
       ]
     ),
   ),
-
-  #[TestDescXXX(
-    name: "NewPayloadV3 Before Cancun, Nil Data Fields, Nil Versioned Hashes, Zero Beacon Root",
-    about: """
-      Test sending NewPayloadV3 Before Cancun with:
-      - nil ExcessBlobGas
-      - nil BlobGasUsed
-      - nil Versioned Hashes Array
-      - Zero Beacon Root
-      """,
-    run: specExecute,
-    spec: CancunSpec(
-      mainFork: ForkCancun,
-      forkHeight: 2,
-      testSequence: @[
-        NewPayloads(
-          newPayloadCustomizer: UpgradeNewPayloadVersion(
-            payloadCustomizer: CustomPayloadData(
-              parentBeaconRoot: some(common.Hash256()),
-            ),
-            expectedError: engineApiInvalidParams,
-          ),
-          expectationDescription: """
-          NewPayloadV3 before Cancun with any nil field must return INVALID_PARAMS_ERROR (code $1)
-          """ % [$engineApiInvalidParams],
-        ).TestStep,
-      ]
-    ),
-  ),]#
 
   TestDesc(
     name: "NewPayloadV3 Before Cancun, 0x00 Data Fields, Empty Array Versioned Hashes, Zero Beacon Root",
@@ -969,64 +825,6 @@ let cancunTestList* = [
       ]
     ),
   ),
-
-  # NewPayloadV3 After Cancun, Negative Tests
-  #[TestDescXXX(
-    name: "NewPayloadV3 After Cancun, Nil ExcessBlobGas, 0x00 BlobGasUsed, Empty Array Versioned Hashes, Zero Beacon Root",
-    about: """
-      Test sending NewPayloadV3 After Cancun with:
-      - nil ExcessBlobGas
-      - 0x00 BlobGasUsed
-      - Empty Versioned Hashes Array
-      - Zero Beacon Root
-      """,
-    run: specExecute,
-    spec: CancunSpec(
-      mainFork: ForkCancun,
-      forkHeight: 1,
-      testSequence: @[
-        NewPayloads(
-          newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
-            payloadCustomizer: CustomPayloadData(
-              removeExcessBlobGas: true,
-            ),
-            expectedError: engineApiInvalidParams,
-          ),
-          expectationDescription: """
-          NewPayloadV3 after Cancun with nil ExcessBlobGas must return INVALID_PARAMS_ERROR (code $1)
-          """ % [$engineApiInvalidParams],
-        ).TestStep,
-      ]
-    ),
-  ),
-
-  TestDescXXX(
-    name: "NewPayloadV3 After Cancun, 0x00 ExcessBlobGas, Nil BlobGasUsed, Empty Array Versioned Hashes",
-    about: """
-      Test sending NewPayloadV3 After Cancun with:
-      - 0x00 ExcessBlobGas
-      - nil BlobGasUsed
-      - Empty Versioned Hashes Array
-      """,
-    run: specExecute,
-    spec: CancunSpec(
-      mainFork: ForkCancun,
-      forkHeight: 1,
-      testSequence: @[
-        NewPayloads(
-          newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
-            payloadCustomizer: CustomPayloadData(
-              removeblobGasUsed: true,
-            ),
-            expectedError: engineApiInvalidParams,
-          ),
-          expectationDescription: """
-          NewPayloadV3 after Cancun with nil BlobGasUsed must return INVALID_PARAMS_ERROR (code $1)
-          """ % [$engineApiInvalidParams],
-        ).TestStep,
-      ]
-    ),
-  ),]#
 
   TestDesc(
     name: "NewPayloadV3 After Cancun, 0x00 Blob Fields, Empty Array Versioned Hashes, Nil Beacon Root",
@@ -1820,6 +1618,209 @@ let cancunTestList* = [
       ]
     ),
   ),
+
+  # Need special rlp encoder
+  #[TestDescXXX(
+    name: "NewPayloadV3 Before Cancun, 0x00 ExcessBlobGas, Nil BlobGasUsed, Nil Versioned Hashes, Nil Beacon Root",
+    about: """
+      Test sending NewPayloadV3 Before Cancun with:
+      - 0x00 ExcessBlobGas
+      - nil BlobGasUsed
+      - nil Versioned Hashes Array
+      - nil Beacon Root
+      """,
+    run: specExecute,
+    spec: CancunSpec(
+      mainFork: ForkCancun,
+      forkHeight: 2,
+      testSequence: @[
+        NewPayloads(
+          newPayloadCustomizer: UpgradeNewPayloadVersion(
+            payloadCustomizer: CustomPayloadData(
+              excessBlobGas: some(0'u64),
+            ),
+            expectedError: engineApiInvalidParams,
+          ),
+          expectationDescription: """
+          NewPayloadV3 before Cancun with any nil field must return INVALID_PARAMS_ERROR (code $1)
+          """ % [$engineApiInvalidParams],
+        ).TestStep,
+      ]
+    ),
+  ),
+
+  TestDescXXX(
+    name: "NewPayloadV3 Before Cancun, Nil Data Fields, Nil Versioned Hashes, Zero Beacon Root",
+    about: """
+      Test sending NewPayloadV3 Before Cancun with:
+      - nil ExcessBlobGas
+      - nil BlobGasUsed
+      - nil Versioned Hashes Array
+      - Zero Beacon Root
+      """,
+    run: specExecute,
+    spec: CancunSpec(
+      mainFork: ForkCancun,
+      forkHeight: 2,
+      testSequence: @[
+        NewPayloads(
+          newPayloadCustomizer: UpgradeNewPayloadVersion(
+            payloadCustomizer: CustomPayloadData(
+              parentBeaconRoot: some(common.Hash256()),
+            ),
+            expectedError: engineApiInvalidParams,
+          ),
+          expectationDescription: """
+          NewPayloadV3 before Cancun with any nil field must return INVALID_PARAMS_ERROR (code $1)
+          """ % [$engineApiInvalidParams],
+        ).TestStep,
+      ]
+    ),
+  ),
+
+  # NewPayloadV3 After Cancun, Negative Tests
+  TestDescXXX(
+    name: "NewPayloadV3 After Cancun, Nil ExcessBlobGas, 0x00 BlobGasUsed, Empty Array Versioned Hashes, Zero Beacon Root",
+    about: """
+      Test sending NewPayloadV3 After Cancun with:
+      - nil ExcessBlobGas
+      - 0x00 BlobGasUsed
+      - Empty Versioned Hashes Array
+      - Zero Beacon Root
+      """,
+    run: specExecute,
+    spec: CancunSpec(
+      mainFork: ForkCancun,
+      forkHeight: 1,
+      testSequence: @[
+        NewPayloads(
+          newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
+            payloadCustomizer: CustomPayloadData(
+              removeExcessBlobGas: true,
+            ),
+            expectedError: engineApiInvalidParams,
+          ),
+          expectationDescription: """
+          NewPayloadV3 after Cancun with nil ExcessBlobGas must return INVALID_PARAMS_ERROR (code $1)
+          """ % [$engineApiInvalidParams],
+        ).TestStep,
+      ]
+    ),
+  ),
+
+  TestDescXXX(
+    name: "NewPayloadV3 After Cancun, 0x00 ExcessBlobGas, Nil BlobGasUsed, Empty Array Versioned Hashes",
+    about: """
+      Test sending NewPayloadV3 After Cancun with:
+      - 0x00 ExcessBlobGas
+      - nil BlobGasUsed
+      - Empty Versioned Hashes Array
+      """,
+    run: specExecute,
+    spec: CancunSpec(
+      mainFork: ForkCancun,
+      forkHeight: 1,
+      testSequence: @[
+        NewPayloads(
+          newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
+            payloadCustomizer: CustomPayloadData(
+              removeblobGasUsed: true,
+            ),
+            expectedError: engineApiInvalidParams,
+          ),
+          expectationDescription: """
+          NewPayloadV3 after Cancun with nil BlobGasUsed must return INVALID_PARAMS_ERROR (code $1)
+          """ % [$engineApiInvalidParams],
+        ).TestStep,
+      ]
+    ),
+  ),
+
+  TestDesc(
+    name: "Parallel Blob Transactions",
+    about: """
+      Test sending multiple blob transactions in parallel from different accounts.
+
+      Verify that a payload is created with the maximum number of blobs.
+      """,
+    run: specExecute,
+    spec: CancunSpec(
+      mainFork: ForkCancun,
+      testSequence: @[
+        # Send multiple blob transactions with the same nonce.
+        ParallelSteps{
+          Steps: []TestStep{
+            SendBlobTransactions(
+              transactionCount:              5,
+              blobsPerTransaction:           MAX_BLOBS_PER_BLOCK,
+              blobTransactionMaxBlobGasCost: u256(100),
+              accountIndex:                  0,
+            ),
+            SendBlobTransactions(
+              transactionCount:              5,
+              blobsPerTransaction:           MAX_BLOBS_PER_BLOCK,
+              blobTransactionMaxBlobGasCost: u256(100),
+              accountIndex:                  1,
+            ),
+            SendBlobTransactions(
+              transactionCount:              5,
+              blobsPerTransaction:           MAX_BLOBS_PER_BLOCK,
+              blobTransactionMaxBlobGasCost: u256(100),
+              accountIndex:                  2,
+            ),
+            SendBlobTransactions(
+              transactionCount:              5,
+              blobsPerTransaction:           MAX_BLOBS_PER_BLOCK,
+              blobTransactionMaxBlobGasCost: u256(100),
+              accountIndex:                  3,
+            ),
+            SendBlobTransactions(
+              transactionCount:              5,
+              blobsPerTransaction:           MAX_BLOBS_PER_BLOCK,
+              blobTransactionMaxBlobGasCost: u256(100),
+              accountIndex:                  4,
+            ),
+            SendBlobTransactions(
+              transactionCount:              5,
+              blobsPerTransaction:           MAX_BLOBS_PER_BLOCK,
+              blobTransactionMaxBlobGasCost: u256(100),
+              accountIndex:                  5,
+            ),
+            SendBlobTransactions(
+              transactionCount:              5,
+              blobsPerTransaction:           MAX_BLOBS_PER_BLOCK,
+              blobTransactionMaxBlobGasCost: u256(100),
+              accountIndex:                  6,
+            ),
+            SendBlobTransactions(
+              transactionCount:              5,
+              blobsPerTransaction:           MAX_BLOBS_PER_BLOCK,
+              blobTransactionMaxBlobGasCost: u256(100),
+              accountIndex:                  7,
+            ),
+            SendBlobTransactions(
+              transactionCount:              5,
+              blobsPerTransaction:           MAX_BLOBS_PER_BLOCK,
+              blobTransactionMaxBlobGasCost: u256(100),
+              accountIndex:                  8,
+            ),
+            SendBlobTransactions(
+              transactionCount:              5,
+              blobsPerTransaction:           MAX_BLOBS_PER_BLOCK,
+              blobTransactionMaxBlobGasCost: u256(100),
+              accountIndex:                  9,
+            ),
+          ),
+        ),
+
+        # We create the first payload, which is guaranteed to have the first MAX_BLOBS_PER_BLOCK blobs.
+        NewPayloads(
+          expectedIncludedBlobCount: MAX_BLOBS_PER_BLOCK,
+          expectedblobs:             getBlobList(0, MAX_BLOBS_PER_BLOCK),
+        ),
+      ]
+    ),
+  ),]#
 ]
 
 #[

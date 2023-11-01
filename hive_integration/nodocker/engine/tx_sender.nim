@@ -105,7 +105,9 @@ proc getNextNonce(sender: TxSender, address: EthAddress): uint64 =
   nonce
 
 proc getLastNonce(sender: TxSender, address: EthAddress): uint64 =
-  sender.nonceMap.getOrDefault(address, 0'u64)
+  if sender.nonceMap.hasKey(address):
+    return 0
+  sender.nonceMap[address] - 1
 
 proc fillBalance(sender: TxSender, params: NetworkParams) =
   for x in sender.accounts:
