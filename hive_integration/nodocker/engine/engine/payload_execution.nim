@@ -350,7 +350,7 @@ method execute(cs: NewPayloadOnSyncingClientTest, env: TestEnv): bool =
     onGetPayload: proc(): bool =
       # Send the new payload from the second client to the first, it won't be able to validate it
       r = env.engine.client.newPayload(env.clMock.latestPayloadBuilt)
-      r.expectStatusEither(test.Accepted, PayloadExecutionStatus.syncing)
+      r.expectStatusEither(PayloadExecutionStatus.accepted, PayloadExecutionStatus.syncing)
       r.expectLatestValidHash(nil)
 
       # Send the forkchoiceUpdated with a reference to the valid payload on the SYNCING client.

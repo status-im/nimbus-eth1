@@ -127,6 +127,9 @@ proc makeTxs*(env: TestEnv, tc: BaseTx, num: int): seq[Transaction] =
   for _ in 0..<num:
     result.add env.sender.makeNextTx(tc)
 
+proc makeNextTx*(env: TestEnv, tc: BaseTx): Transaction =
+  env.sender.makeNextTx(tc)
+
 proc sendNextTx*(env: TestEnv, eng: EngineEnv, tc: BaseTx): bool =
   env.sender.sendNextTx(eng.client, tc)
 

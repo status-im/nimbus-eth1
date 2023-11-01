@@ -437,16 +437,18 @@ proc latestHeader*(client: RpcClient): Result[common.BlockHeader, string] =
       return err("failed to get latest blockHeader")
     return ok(res.get.toBlockHeader)
 
-proc latestBlock*(client: RpcClient, output: var common.EthBlock): Result[void, string] =
+proc latestBlock*(client: RpcClient): Result[common.EthBlock, string] =
   wrapTry:
     let res = waitFor client.eth_getBlockByNumber("latest", true)
     if res.isNone:
       return err("failed to get latest blockHeader")
     let blk = res.get()
-    output.header = toBlockHeader(blk)
-    output.txs = toTransactions(blk.transactions)
-    output.withdrawals = toWithdrawals(blk.withdrawals)
-    return ok()
+    let output = EthBlock(
+      header: toBlockHeader(blk),
+      txs: toTransactions(blk.transactions),
+      withdrawals: toWithdrawals(blk.withdrawals),
+    )
+    return ok(output)
 
 proc namedHeader*(client: RpcClient, name: string): Result[common.BlockHeader, string] =
   wrapTry:

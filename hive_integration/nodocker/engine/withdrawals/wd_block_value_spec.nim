@@ -26,9 +26,9 @@ proc execute*(ws: BlockValueSpec, env: TestEnv): bool =
   testCond WDBaseSpec(ws).execute(env)
 
   # Get the latest block and the transactions included
-  var blk: EthBlock
-  let b = env.client.latestBlock(blk)
+  let b = env.client.latestBlock()
   b.expectNoError()
+  let blk = b.get
 
   var totalValue: UInt256
   testCond blk.txs.len > 0:

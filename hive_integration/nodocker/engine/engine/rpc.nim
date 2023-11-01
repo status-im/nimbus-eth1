@@ -13,7 +13,7 @@ import
   ./engine_spec
 
 type
-  BlockStatusRPCcheckType = enum
+  BlockStatusRPCcheckType* = enum
     LatestOnNewPayload            = "Latest Block on NewPayload"
     LatestOnHeadblockHash         = "Latest Block on HeadblockHash Update"
     SafeOnSafeblockHash           = "Safe Block on SafeblockHash Update"
@@ -21,7 +21,7 @@ type
 
 type
   BlockStatus* = ref object of EngineSpec
-    checkType: BlockStatusRPCcheckType
+    checkType*: BlockStatusRPCcheckType
     # TODO: Syncing   bool
 
 method withMainFork(cs: BlockStatus, fork: EngineFork): BaseSpec =
@@ -46,7 +46,7 @@ method execute(cs: BlockStatus, env: TestEnv): bool =
     else:
       number = Finalized
 
-    p = env.engine.client.TestHeaderByNumber(number)
+    p = env.engine.client.headerByNumber(number)
     p.expectError()
   )
 
@@ -59,22 +59,19 @@ method execute(cs: BlockStatus, env: TestEnv): bool =
       let tc = BaseTx(
           recipient:  &ZeroAddr,
           amount:     1.u256,
-          payload:    nil,
           txType:     cs.txType,
           gasLimit:   75000,
-          ForkConfig: t.ForkConfig,
         ),
 
-      tx, err = env.sendNextTx(
-      )
-      if err != nil (
+      let ok = env.sendNextTx(tc)
+      testCond ok:
         fatal "Error trying to send transaction: %v", err)
       )
     ),
   )
 
-  switch b.checkType (
-  case LatestOnNewPayload:
+  case b.checkType (
+  of LatestOnNewPayload:
     callbacks.onGetPayload = proc(): bool
       r = env.engine.client.latestHeader()
       r.expectHash(env.clMock.latestForkchoice.headblockHash)
@@ -88,27 +85,22 @@ method execute(cs: BlockStatus, env: TestEnv): bool =
       # Check that the receipt for the transaction we just sent is still not available
       q = env.engine.client.txReceipt(tx.Hash())
       q.expectError()
-    )
-  case LatestOnHeadblockHash:
+  of LatestOnHeadblockHash:
     callbacks.onForkchoiceBroadcast = proc(): bool
       r = env.engine.client.latestHeader()
       r.expectHash(env.clMock.latestForkchoice.headblockHash)
 
       s = env.engine.client.txReceipt(tx.Hash())
       s.ExpectTransactionHash(tx.Hash())
-    )
-  case SafeOnSafeblockHash:
+  of SafeOnSafeblockHash:
     callbacks.onSafeBlockChange = proc(): bool
-      r = env.engine.client.TestHeaderByNumber(Safe)
+      r = env.engine.client.headerByNumber(Safe)
       r.expectHash(env.clMock.latestForkchoice.safeblockHash)
-    )
-  case FinalizedOnFinalizedblockHash:
+  of FinalizedOnFinalizedblockHash:
     callbacks.onFinalizedBlockChange = proc(): bool
-      r = env.engine.client.TestHeaderByNumber(Finalized)
+      r = env.engine.client.headerByNumber(Finalized)
       r.expectHash(env.clMock.latestForkchoice.finalizedblockHash)
-    )
-  )
 
   # Perform the test
   env.clMock.produceSingleBlock(callbacks)
-)
+

@@ -10,11 +10,13 @@
 
 import
   std/strutils,
-  ./engine_spec
+  chronicles,
+  ./engine_spec,
+  ../../../../nimbus/transaction
 
 type
   SuggestedFeeRecipientTest* = ref object of EngineSpec
-    transactionCount: int
+    transactionCount*: int
 
 method withMainFork(cs: SuggestedFeeRecipientTest, fork: EngineFork): BaseSpec =
   var res = cs.clone()
@@ -38,54 +40,55 @@ method execute(cs: SuggestedFeeRecipientTest, env: TestEnv): bool =
     txRecipient = EthAddress.randomBytes()
 
   # Send multiple transactions
-  for i = 0; i < cs.transactionCount; i++ (
-    _, err = env.sendNextTx(
-      t.TestContext,
-      t.Engine,
-      &BaseTx(
-        recipient:  &txRecipient,
-        amount:     big0,
-        payload:    nil,
-        txType:     cs.txType,
-        gasLimit:   75000,
-      ),
+  for i in 0..<cs.transactionCount:
+    let tc = BaseTx(
+      recipient:  some(txRecipient),
+      amount:     0.u256,
+      txType:     cs.txType,
+      gasLimit:   75000,
     )
-    if err != nil (
-      fatal "Error trying to send transaction: %v", t.TestName, err)
-    )
-  )
+    let ok = env.sendNextTx(env.engine, tc)
+    testCond ok:
+      fatal "Error trying to send transaction"
+
   # Produce the next block with the fee recipient set
   env.clMock.nextFeeRecipient = feeRecipient
-  env.clMock.produceSingleBlock(BlockProcessCallbacks())
+  testCond env.clMock.produceSingleBlock(BlockProcessCallbacks())
 
   # Calculate the fees and check that they match the balance of the fee recipient
-  r = env.engine.client.TestBlockByNumber(Head)
-  r.ExpecttransactionCountEqual(cs.transactionCount)
-  r.ExpectCoinbase(feeRecipient)
-  blockIncluded = r.Block
+  let r = env.engine.client.latestblock()
+  testCond r.isOk:
+    error "cannot get latest header", msg=r.error
 
-  feeRecipientFees = big.NewInt(0)
-  for _, tx = range blockIncluded.Transactions() (
-    effGasTip, err = tx.EffectiveGasTip(blockIncluded.BaseFee())
-    if err != nil (
-      fatal "unable to obtain EffectiveGasTip: %v", t.TestName, err)
-    )
-    ctx, cancel = context.WithTimeout(t.TestContext, globals.RPCTimeout)
-    defer cancel()
-    receipt, err = t.Eth.TransactionReceipt(ctx, tx.Hash())
-    if err != nil (
-      fatal "unable to obtain receipt: %v", t.TestName, err)
-    )
-    feeRecipientFees = feeRecipientFees.Add(feeRecipientFees, effGasTip.Mul(effGasTip, big.NewInt(int64(receipt.GasUsed))))
-  )
+  let blockIncluded = r.get
 
-  s = env.engine.client.TestBalanceAt(feeRecipient, nil)
+  testCond blockIncluded.txs.len == cs.transactionCount:
+    error "expect transactions", get=blockIncluded.txs.len, expect=cs.transactionCount
+
+  testCond feeRecipient == blockIncluded.header.coinbase:
+    error "expect coinbase",
+      get=blockIncluded.header.coinbase,
+      expect=feeRecipient
+
+  var feeRecipientFees = 0.u256
+  for tx in blockIncluded.txs:
+    let effGasTip = tx.effectiveGasTip(blockIncluded.header.fee)
+
+    let r = env.engine.client.txReceipt(tx.rlpHash)
+    testCond r.isOk:
+      fatal "unable to obtain receipt", msg=r.error
+
+    let receipt = r.get
+    feeRecipientFees = feeRecipientFees + effGasTip.u256 * receipt.gasUsed.u256
+
+
+  var s = env.engine.client.balanceAt(feeRecipient)
   s.expectBalanceEqual(feeRecipientFees)
 
   # Produce another block without txns and get the balance again
   env.clMock.nextFeeRecipient = feeRecipient
-  env.clMock.produceSingleBlock(BlockProcessCallbacks())
+  testCond env.clMock.produceSingleBlock(BlockProcessCallbacks())
 
-  s = env.engine.client.TestBalanceAt(feeRecipient, nil)
+  s = env.engine.client.balanceAt(feeRecipient)
   s.expectBalanceEqual(feeRecipientFees)
-)
+  return true

@@ -10,11 +10,26 @@
 
 import
   std/strutils,
+  eth/common,
+  chronicles,
   ./engine_spec
 
 type
   PrevRandaoTransactionTest* = ref object of EngineSpec
-    blockCount int
+    blockCount*: int
+
+  Shadow = ref object
+    startBlockNumber: uint64
+    blockCount: int
+    currentTxIndex: int
+    txs: seq[Transaction]
+
+proc checkPrevRandaoValue(client: RpcClient, expectedPrevRandao: common.Hash256, blockNumber: uint64): bool =
+  let storageKey = blockNumber.u256
+  let r = client.storageAt(prevRandaoContractAddr, storageKey)
+  let expected = UInt256.fromBytesBE(expectedPrevRandao.data)
+  r.expectStorageEqual(expected)
+  return true
 
 method withMainFork(cs: PrevRandaoTransactionTest, fork: EngineFork): BaseSpec =
   var res = cs.clone()
@@ -22,66 +37,56 @@ method withMainFork(cs: PrevRandaoTransactionTest, fork: EngineFork): BaseSpec =
   return res
 
 method getName(cs: PrevRandaoTransactionTest): string =
-  return "PrevRandao Opcode Transactions Test (%s)", cs.txType)
-)
+  "PrevRandao Opcode Transactions Test ($1)" % [$cs.txType]
 
 method execute(cs: PrevRandaoTransactionTest, env: TestEnv): bool =
   let ok = waitFor env.clMock.waitForTTD()
   testCond ok
 
   # Create a single block to not having to build on top of genesis
-  env.clMock.produceSingleBlock(BlockProcessCallbacks())
+  testCond env.clMock.produceSingleBlock(BlockProcessCallbacks())
 
-  startBlockNumber = env.clMock.latestHeader.blockNumber.Uint64() + 1
+  var shadow = Shadow(
+    startBlockNumber: env.clMock.latestHeader.blockNumber.truncate(uint64) + 1,
+    # Send transactions in PoS, the value of the storage in these blocks must match the prevRandao value
+    blockCount: 10,
+    currentTxIndex: 0,
+  )
 
-  # Send transactions in PoS, the value of the storage in these blocks must match the prevRandao value
-  var (
-    blockCount     = 10
-    currentTxIndex = 0
-    txs            = make([]typ.Transaction, 0)
-  )
-  if cs.blockCount > 0 (
-    blockCount = cs.blockCount
-  )
-  env.clMock.produceBlocks(blockCount, BlockProcessCallbacks(
+  if cs.blockCount > 0:
+    shadow.blockCount = cs.blockCount
+
+  let pbRes = env.clMock.produceBlocks(shadow.blockCount, BlockProcessCallbacks(
     onPayloadProducerSelected: proc(): bool =
-      tx, err = env.sendNextTx(
-        t.TestContext,
-        t.Engine,
-        &BaseTx(
-          recipient:  prevRandaoContractAddr,
-          amount:     big0,
-          payload:    nil,
-          txType:     cs.txType,
-          gasLimit:   75000,
-        ),
+      let tc = BaseTx(
+        recipient:  some(prevRandaoContractAddr),
+        amount:     0.u256,
+        txType:     cs.txType,
+        gasLimit:   75000,
       )
-      if err != nil (
-        fatal "Error trying to send transaction: %v", t.TestName, err)
-      )
-      txs = append(txs, tx)
-      currentTxIndex++
-    ),
+      let tx = env.makeNextTx(tc)
+      let ok = env.sendTx(tx)
+      testCond ok:
+        fatal "Error trying to send transaction"
+
+      shadow.txs.add(tx)
+      inc shadow.currentTxIndex
+      return true
+    ,
     onForkchoiceBroadcast: proc(): bool =
       # Check the transaction tracing, which is client specific
-      expectedPrevRandao = env.clMock.prevRandaoHistory[env.clMock.latestHeader.blockNumber.Uint64()+1]
-      ctx, cancel = context.WithTimeout(t.TestContext, globals.RPCTimeout)
-      defer cancel()
-      if err = DebugPrevRandaoTransaction(ctx, t.Client.RPC(), t.Client.Type, txs[currentTxIndex-1],
-        &expectedPrevRandao); err != nil (
-        fatal "Error during transaction tracing: %v", t.TestName, err)
-      )
-    ),
+      let expectedPrevRandao = env.clMock.prevRandaoHistory[env.clMock.latestHeader.blockNumber.truncate(uint64)+1]
+      let res = debugPrevRandaoTransaction(env.engine.client, shadow.txs[shadow.currentTxIndex-1], expectedPrevRandao)
+      testCond res.isOk:
+        fatal "Error during transaction tracing", msg=res.error
+
+      return true
   ))
+  testCond pbRes
 
-  for i = uint64(startBlockNumber); i <= env.clMock.latestExecutedPayload.blockNumber; i++ (
-    checkPrevRandaoValue(t, env.clMock.prevRandaoHistory[i], i)
-  )
-)
+  for i in shadow.startBlockNumber..env.clMock.latestExecutedPayload.blockNumber.uint64:
+    if not checkPrevRandaoValue(env.engine.client, env.clMock.prevRandaoHistory[i], i):
+      fatal "wrong prev randao", index=i
+      return false
 
-func checkPrevRandaoValue(t *test.Env, expectedPrevRandao common.Hash, blockNumber uint64) (
-  storageKey = common.Hash256()
-  storageKey[31] = byte(blockNumber)
-  r = env.engine.client.TestStorageAt(globals.PrevRandaoContractAddr, storageKey, nil)
-  r.ExpectStorageEqual(expectedPrevRandao)
-)
+  return true

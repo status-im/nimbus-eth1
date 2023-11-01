@@ -603,7 +603,7 @@ method execute(cs: ReOrgBackFromSyncingTest, env: TestEnv): bool =
       # Re-org to the unavailable sidechain in the middle of block production
       # to be able to re-org back to the canonical chain
       r = env.engine.client.newPayload(sidechainPayloads[len(sidechainPayloads)-1])
-      r.expectStatusEither(PayloadExecutionStatus.syncing, test.Accepted)
+      r.expectStatusEither(PayloadExecutionStatus.syncing, PayloadExecutionStatus.accepted)
       r.expectLatestValidHash(nil)
       # We are going to send one of the alternative payloads and fcU to it
       forkchoiceUpdatedBack = api.ForkchoiceStateV1(
@@ -805,7 +805,7 @@ method execute(cs: SafeReOrgToSideChainTest, env: TestEnv): bool =
     onGetpayload: proc(): bool =
       for _, p = range sidechainPayloads (
         r = env.engine.client.newPayload(p)
-        r.expectStatusEither(PayloadExecutionStatus.valid, test.Accepted)
+        r.expectStatusEither(PayloadExecutionStatus.valid, PayloadExecutionStatus.accepted)
       )
       r = env.engine.client.forkchoiceUpdated(api.ForkchoiceStateV1(
         headBlockHash:      sidechainPayloads[1].blockHash,

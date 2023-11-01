@@ -18,11 +18,20 @@ import
   ../../nimbus/common/chain_config
 
 import
-  ./engine/misc,
+  ./engine/suggested_fee_recipient,
   ./engine/payload_attributes,
+  #./engine/payload_execution,
   ./engine/invalid_ancestor,
   ./engine/invalid_payload,
-  ./engine/bad_hash
+  ./engine/prev_randao,
+  #./engine/payload_id,
+  ./engine/forkchoice,
+  #./engine/versioning,
+  ./engine/bad_hash,
+  #./engine/fork_id,
+  #./engine/reorg,
+  ./engine/misc
+  #./engine/rpc
 
 proc getGenesis(cs: EngineSpec, param: NetworkParams) =
   # Set the terminal total difficulty
@@ -160,7 +169,48 @@ proc makeEngineTest*(): seq[EngineSpec] =
     invalidField: InvalidStateRoot,
   )
 
-#[
+  const forkchoiceStateField = [
+    HeadBlockHash,
+    SafeBlockHash,
+    FinalizedBlockHash,
+  ]
+
+  # Register ForkchoiceUpdate tests
+  for field in forkchoiceStateField:
+    result.add InconsistentForkchoiceTest(field: field)
+    result.add ForkchoiceUpdatedUnknownBlockHashTest(field: field)
+
+  # PrevRandao opcode tests
+  result.add PrevRandaoTransactionTest(
+    txType: some(TxLegacy)
+  )
+
+  result.add PrevRandaoTransactionTest(
+    txType: some(TxEip1559),
+  )
+
+  # Suggested Fee Recipient Tests
+  result.add SuggestedFeeRecipientTest(
+    txType: some(TxLegacy),
+    transactionCount: 20,
+  )
+
+  result.add SuggestedFeeRecipientTest(
+    txType: some(TxEip1559),
+    transactionCount: 20,
+  )
+
+  # Register RPC tests
+  #[let blockStatusRPCCheckType = [
+    LatestOnNewPayload,
+    LatestOnHeadBlockHash,
+    SafeOnSafeBlockHash,
+    FinalizedOnFinalizedBlockHash,
+  ]
+
+  for field in blockStatusRPCCheckType:
+    result.add BlockStatus(checkType: field)
+
   const
     invalidReorgList = [
       InvalidStateRoot,
@@ -215,32 +265,6 @@ proc makeEngineTest*(): seq[EngineSpec] =
       )
 ]#
 #[
-  # Register RPC tests
-  for _, field := range []BlockStatusRPCCheckType(
-    LatestOnNewPayload,
-    LatestOnHeadBlockHash,
-    SafeOnSafeBlockHash,
-    FinalizedOnFinalizedBlockHash,
-  ) (
-    result.add BlockStatus(CheckType: field))
-  )
-
-  # Register ForkchoiceUpdate tests
-  for _, field := range []ForkchoiceStateField(
-    HeadBlockHash,
-    SafeBlockHash,
-    FinalizedBlockHash,
-  ) (
-    result.add
-      InconsistentForkchoiceTest(
-        Field: field,
-      ),
-      ForkchoiceUpdatedUnknownBlockHashTest(
-        Field: field,
-      ),
-    )
-  )
-
   # Payload ID Tests
   for _, payloadAttributeFieldChange := range []PayloadAttributesFieldChange(
     PayloadAttributesIncreaseTimestamp,
@@ -396,36 +420,6 @@ proc makeEngineTest*(): seq[EngineSpec] =
       TransactionPerPayload:     50,
       ReOrgDepth:                10,
       ExecuteSidePayloadOnReOrg: true,
-    ),
-  )
-
-  # Suggested Fee Recipient Tests
-  result.add
-    SuggestedFeeRecipientTest(
-      BaseSpec: test.BaseSpec(
-        txType: some( TxLegacy,
-      ),
-      TransactionCount: 20,
-    ),
-    SuggestedFeeRecipientTest(
-      BaseSpec: test.BaseSpec(
-        txType: some( TxEip1559,
-      ),
-      TransactionCount: 20,
-    ),
-  )
-
-  # PrevRandao opcode tests
-  result.add
-    PrevRandaoTransactionTest(
-      BaseSpec: test.BaseSpec(
-        txType: some( TxLegacy,
-      ),
-    ),
-    PrevRandaoTransactionTest(
-      BaseSpec: test.BaseSpec(
-        txType: some( TxEip1559,
-      ),
     ),
   )
 

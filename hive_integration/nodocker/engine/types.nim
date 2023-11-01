@@ -228,6 +228,18 @@ template expectHash*(res: untyped, hash: common.Hash256) =
   testCond s.blockHash == hash:
     error "Unexpected expectHash", expect=hash.short, get=s.blockHash.short
 
+template expectStorageEqual*(res: untyped, expectedValue: UInt256) =
+  testCond res.isOk:
+    error "expectStorageEqual", msg=res.error
+  testCond res.get == expectedValue:
+    error "invalid storage", get=res.get, expect=expectedValue
+
+template expectBalanceEqual*(res: untyped, expectedBalance: UInt256) =
+  testCond res.isOk:
+    error "expectBalanceEqual", msg=res.error
+  testCond res.get == expectedBalance:
+    error "invalid balance", expect=expectedBalance, get=res.get
+
 func timestamp*(x: ExecutableData): auto =
   x.basePayload.timestamp
 
