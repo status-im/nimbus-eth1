@@ -240,6 +240,24 @@ template expectBalanceEqual*(res: untyped, expectedBalance: UInt256) =
   testCond res.get == expectedBalance:
     error "invalid balance", expect=expectedBalance, get=res.get
 
+template expectBlobGasUsed*(res: untyped, expected: uint64) =
+  testCond res.isOk:
+    error "expectBlobGasUsed", msg=res.error
+  let rec = res.get
+  testCond rec.blobGasUsed.isSome:
+    error "expect blobGasUsed isSome"
+  testCond rec.blobGasUsed.get == expected:
+    error "expectBlobGasUsed", expect=expected, get=rec.blobGasUsed.get
+
+template expectBlobGasPrice*(res: untyped, expected: UInt256) =
+  testCond res.isOk:
+    error "expectBlobGasPrice", msg=res.error
+  let rec = res.get
+  testCond rec.blobGasPrice.isSome:
+    error "expect blobGasPrice isSome"
+  testCond rec.blobGasPrice.get == expected:
+    error "expectBlobGasPrice", expect=expected, get=rec.blobGasPrice.get
+
 func timestamp*(x: ExecutableData): auto =
   x.basePayload.timestamp
 

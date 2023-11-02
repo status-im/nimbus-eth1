@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2023 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -9,11 +9,17 @@
 
 {.push raises: [].}
 
-import hexstrings, eth/[common, keys], stew/byteutils,
-  ../db/core_db, strutils, algorithm, options, json,
-  ../constants, stint, rpc_types,
+import
+  std/[strutils, algorithm, options, json],
+  ./hexstrings,
+  ./rpc_types,
+  eth/[common, keys],
+  stew/byteutils,
+  ../db/core_db,
+  ../constants, stint,
   ../utils/utils, ../transaction,
-  ../transaction/call_evm
+  ../transaction/call_evm,
+  ../core/eip4844
 
 const
   defaultTag = "latest"
@@ -164,8 +170,8 @@ proc toAccessTupleList(list: openArray[AccessPair]): seq[AccessTuple] =
   for x in list:
     result.add toAccessTuple(x)
 
-proc populateTransactionObject*(tx: Transaction, 
-                                header: Option[BlockHeader] = none(BlockHeader), 
+proc populateTransactionObject*(tx: Transaction,
+                                header: Option[BlockHeader] = none(BlockHeader),
                                 txIndex: Option[int] = none(int)): TransactionObject
     {.gcsafe, raises: [ValidationError].} =
   result.`type` = encodeQuantity(tx.txType.uint64)
@@ -304,3 +310,7 @@ proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction,
 
   let normTx = eip1559TxNormalization(tx, header.baseFee.truncate(GasInt))
   result.effectiveGasPrice = encodeQuantity(normTx.gasPrice.uint64)
+
+  if tx.txType == TxEip4844:
+    result.blobGasUsed = some(encodeQuantity(tx.versionedHashes.len.uint64 * GAS_PER_BLOB.uint64))
+    result.blobGasPrice = some(encodeQuantity(getBlobGasprice(header.excessBlobGas.get(0'u64))))

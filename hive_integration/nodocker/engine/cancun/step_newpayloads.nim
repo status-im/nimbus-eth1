@@ -106,8 +106,8 @@ proc verifyPayload(step: NewPayloads,
       let r = client.txReceipt(tx.rlpHash)
       let expectedBlobGasUsed = blobCount.uint64 * GAS_PER_BLOB
 
-      #r.ExpectBlobGasUsed(expectedBlobGasUsed)
-      #r.ExpectBlobGasPrice(expectedBlobGasPrice)
+      r.expectBlobGasUsed(expectedBlobGasUsed)
+      r.expectBlobGasPrice(expectedBlobGasPrice)
 
     if totalBlobCount != step.expectedIncludedBlobCount:
       error "expected blobs in transactions",

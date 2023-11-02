@@ -157,6 +157,9 @@ type
                                           # Before EIP-1559, this is equal to the transaction's gas price.
                                           # After, it is equal to baseFeePerGas + min(maxFeePerGas - baseFeePerGas, maxPriorityFeePerGas).
 
+    blobGasUsed*: Option[HexQuantityStr]  # uint64
+    blobGasPrice*: Option[HexQuantityStr] # UInt256
+    
   FilterOptions* = object
     # Parameter from user
     fromBlock*: Option[string]          # (optional, default: "latest") integer block number, or "latest" for the last mined block or "pending", "earliest" for not yet mined transactions.

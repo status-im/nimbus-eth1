@@ -312,6 +312,8 @@ type
     stateRoot*: Option[Hash256]
     status*: Option[bool]
     effectiveGasPrice*: GasInt
+    blobGasUsed*: Option[uint64]
+    blobGasPrice*: Option[UInt256]
 
   RPCTx* = object
     txType*: TxType
@@ -353,6 +355,8 @@ proc toRPCReceipt(rec: eth_api.ReceiptObject): RPCReceipt =
     stateRoot: rec.root,
     status: maybeBool(rec.status),
     effectiveGasPrice: hexToInt(string rec.effectiveGasPrice, GasInt),
+    blobGasUsed: maybeU64(rec.blobGasUsed),
+    blobGasPrice: maybeU256(rec.blobGasPrice),
   )
 
 proc toRPCTx(tx: eth_api.TransactionObject): RPCTx =
