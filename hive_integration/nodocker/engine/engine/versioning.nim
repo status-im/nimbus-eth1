@@ -11,6 +11,8 @@
 # Test versioning of the Engine API methods
 import
   std/strutils,
+  chronicles,
+  ../cancun/customizer,
   ./engine_spec
 
 type
@@ -25,7 +27,10 @@ method withMainFork(cs: EngineNewPayloadVersionTest, fork: EngineFork): BaseSpec
 # when the timestamp payload attribute does not match the upgraded/downgraded version.
 type
   ForkchoiceUpdatedOnPayloadRequestTest* = ref object of EngineSpec
-    ForkchoiceUpdatedCustomizer
+    name*: string
+    about*: string
+    forkchoiceUpdatedCustomizer*: ForkchoiceUpdatedCustomizer
+    payloadAttributesCustomizer*: PayloadAttributesCustomizer
 
 method withMainFork(cs: ForkchoiceUpdatedOnPayloadRequestTest, fork: EngineFork): BaseSpec =
   var res = cs.clone()
@@ -33,43 +38,35 @@ method withMainFork(cs: ForkchoiceUpdatedOnPayloadRequestTest, fork: EngineFork)
   return res
 
 method getName(cs: ForkchoiceUpdatedOnPayloadRequestTest): string =
-  return "ForkchoiceUpdated Version on Payload Request: " + cs.BaseSpec.GetName()
+  "ForkchoiceUpdated Version on Payload Request: " & cs.name
 
 method execute(cs: ForkchoiceUpdatedOnPayloadRequestTest, env: TestEnv): bool =
   # Wait until TTD is reached by this client
-  let ok = waitFor env.clMockWaitForTTD()
+  let ok = waitFor env.clMock.waitForTTD()
   testCond ok
 
-  env.clMock.produceSingleBlock(clmock.BlockProcessCallbacks(
+  let pbRes = env.clMock.produceSingleBlock(clmock.BlockProcessCallbacks(
     onPayloadAttributesGenerated: proc(): bool =
-      var (
-        payloadAttributes                    = &env.clMockLatestPayloadAttributes
-        expectedStatus    test.PayloadStatus = PayloadExecutionStatus.valid
-        expectedError     *int
-        err               error
-      )
-      cs.SetEngineAPIVersionResolver(t.ForkConfig)
-      testEngine = t.TestEngine.WithEngineAPIVersionResolver(cs.ForkchoiceUpdatedCustomizer)
-      payloadAttributes, err = cs.GetPayloadAttributes(payloadAttributes)
-      if err != nil (
-        t.Fatalf("FAIL: Error getting custom payload attributes: %v", err)
-      )
-      expectedError, err = cs.GetExpectedError()
-      if err != nil (
-        t.Fatalf("FAIL: Error getting custom expected error: %v", err)
-      )
-      if cs.GetExpectInvalidStatus() (
-        expectedStatus = PayloadExecutionStatus.invalid
-      )
+      var
+        attr = env.clMock.latestPayloadAttributes
+        expectedStatus = PayloadExecutionStatus.valid
 
-      r = env.engine.client.forkchoiceUpdated(env.clMockLatestForkchoice, payloadAttributes, env.clMockLatestHeader.Time)
-      r.ExpectationDescription = cs.Expectation
-      if expectedError != nil (
-        r.expectErrorCode(*expectedError)
+      attr = cs.payloadAttributesCustomizer.getPayloadAttributes(attr)
+
+      let expectedError = cs.forkchoiceUpdatedCustomizer.getExpectedError()
+      if cs.forkchoiceUpdatedCustomizer.getExpectInvalidStatus():
+        expectedStatus = PayloadExecutionStatus.invalid
+
+      cs.forkchoiceUpdatedCustomizer.setEngineAPIVersionResolver(env.engine.com)
+      let version = cs.forkchoiceUpdatedCustomizer.forkchoiceUpdatedVersion(env.clMock.latestHeader.timestamp.uint64)
+      let r = env.engine.client.forkchoiceUpdated(version, env.clMock.latestForkchoice, some(attr))
+      #r.ExpectationDescription = cs.Expectation
+      if expectedError != 0:
+        r.expectErrorCode(expectedError)
       else:
         r.expectNoError()
         r.expectPayloadStatus(expectedStatus)
-      )
-    ),
+      return true
   ))
-)
+  testCond pbRes
+  return true

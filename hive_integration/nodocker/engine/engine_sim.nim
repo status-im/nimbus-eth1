@@ -24,10 +24,10 @@ import
   ./cancun_tests
 
 proc combineTests(): seq[TestDesc] =
-  #result.add wdTestList
-  #result.add ecTestList
-  #result.add authTestList
-  #result.add engineTestList
+  result.add wdTestList
+  result.add ecTestList
+  result.add authTestList
+  result.add engineTestList
   result.add cancunTestList
 
 let

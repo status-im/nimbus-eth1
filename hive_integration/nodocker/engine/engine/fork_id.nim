@@ -10,11 +10,13 @@
 
 import
   std/strutils,
-  ./engine_spec
+  chronicles,
+  ./engine_spec,
+  ../../../../nimbus/common/hardforks
 
 type
   ForkIDSpec* = ref object of EngineSpec
-    produceBlocksBeforePeering: int
+    produceBlocksBeforePeering*: int
 
 method withMainFork(cs: ForkIDSpec, fork: EngineFork): BaseSpec =
   var res = cs.clone()
@@ -22,15 +24,25 @@ method withMainFork(cs: ForkIDSpec, fork: EngineFork): BaseSpec =
   return res
 
 method getName(cs: ForkIDSpec): string =
-  name = "Fork ID: Genesis at %d, %s at %d", cs.GetGenesistimestamp(), cs.mainFork, cs.ForkTime)
-  if cs.previousForkTime != 0 (
-    name += ", %s at %d", cs.mainFork.PreviousFork(), cs.previousForkTime)
-  )
-  if cs.produceBlocksBeforePeering > 0 (
-    name += ", Produce %d blocks before peering", cs.produceBlocksBeforePeering)
-  )
+  var name = "Fork ID: Genesis at $1, $2 at $3" % [$cs.getGenesistimestamp(), $cs.mainFork, $cs.forkTime]
+  if cs.previousForkTime != 0:
+    name.add ", $1 at $2" % [$cs.mainFork.pred, $cs.previousForkTime]
+
+  if cs.produceBlocksBeforePeering > 0:
+    name.add ", Produce $1 blocks before peering" % [$cs.produceBlocksBeforePeering]
+
   return name
-)
+
+method getForkConfig*(cs: ForkIDSpec): ChainConfig =
+  let forkConfig = procCall getForkConfig(BaseSpec(cs))
+  if forkConfig.isNil:
+    return nil
+
+  # Merge fork happen at block 0
+  let mainFork = cs.getMainFork()
+  if mainFork == ForkParis:
+    forkConfig.mergeForkBlock = some(0.u256)
+  return forkConfig
 
 method execute(cs: ForkIDSpec, env: TestEnv): bool =
   # Wait until TTD is reached by this client
@@ -38,41 +50,8 @@ method execute(cs: ForkIDSpec, env: TestEnv): bool =
   testCond ok
 
   # Produce blocks before starting the test if required
-  env.clMock.produceBlocks(cs.produceBlocksBeforePeering, BlockProcessCallbacks())
+  testCond env.clMock.produceBlocks(cs.produceBlocksBeforePeering, BlockProcessCallbacks())
 
   # Get client index's enode
-  engine = t.Engine
-  conn, err = devp2p.PeerEngineClient(engine, t.CLMock)
-  if err != nil (
-    fatal "Error peering engine client: %v", err)
-  )
-  defer conn.Close()
-  info "Connected to client, remote public key: %s", conn.RemoteKey())
-
-  # Sleep
-  await sleepAsync(1 * time.Second)
-
-  # Timeout value for all requests
-  timeout = 20 * time.Second
-
-  # Send a ping request to verify that we are not immediately disconnected
-  pingReq = &devp2p.Ping()
-  if size, err = conn.Write(pingReq); err != nil (
-    fatal "Could not write to connection: %v", err)
-  else:
-    info "Wrote %d bytes to conn", size)
-  )
-
-  # Finally wait for the pong response
-  msg, err = conn.WaitForResponse(timeout, 0)
-  if err != nil (
-    fatal "Error waiting for response: %v", err)
-  )
-  switch msg = msg.(type) (
-  case *devp2p.Pong:
-    info "Received pong response: %v", msg)
-  default:
-    fatal "Unexpected message type: %v", err)
-  )
-
-)
+  let engine = env.addEngine()
+  return true

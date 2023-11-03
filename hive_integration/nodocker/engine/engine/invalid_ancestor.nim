@@ -240,6 +240,10 @@ method execute(cs: InvalidMissingAncestorReOrgSyncTest, env: TestEnv): bool =
   # Append the common ancestor
   shadow.payloads.add env.clMock.latestExecutableData
 
+  if not cs.reOrgFromCanonical:
+    # Add back the original client before side chain production
+    env.cLMock.addEngine(env.engine)
+
   # Produce blocks but at the same time create an side chain which contains an invalid payload at some point (INV_P)
   # CommonAncestor◄─▲── P1 ◄─ P2 ◄─ P3 ◄─ ... ◄─ Pn
   #                 │

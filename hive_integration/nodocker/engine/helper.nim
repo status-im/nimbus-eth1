@@ -10,11 +10,21 @@
 
 import
   eth/[common, rlp],
+  chronicles,
   ../../../nimbus/beacon/execution_types,
-  ../../../nimbus/beacon/web3_eth_conv
+  ../../../nimbus/beacon/web3_eth_conv,
+  ./engine_client,
+  ./types
 
 proc txInPayload*(payload: ExecutionPayload, txHash: common.Hash256): bool =
   for txBytes in payload.transactions:
     let currTx = rlp.decode(common.Blob txBytes, Transaction)
     if rlpHash(currTx) == txHash:
       return true
+
+proc checkPrevRandaoValue*(client: RpcClient, expectedPrevRandao: common.Hash256, blockNumber: uint64): bool =
+  let storageKey = blockNumber.u256
+  let r = client.storageAt(prevRandaoContractAddr, storageKey)
+  let expected = UInt256.fromBytesBE(expectedPrevRandao.data)
+  r.expectStorageEqual(expected)
+  return true

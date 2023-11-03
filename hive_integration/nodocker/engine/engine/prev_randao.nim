@@ -12,7 +12,8 @@ import
   std/strutils,
   eth/common,
   chronicles,
-  ./engine_spec
+  ./engine_spec,
+  ../helper
 
 type
   PrevRandaoTransactionTest* = ref object of EngineSpec
@@ -23,13 +24,6 @@ type
     blockCount: int
     currentTxIndex: int
     txs: seq[Transaction]
-
-proc checkPrevRandaoValue(client: RpcClient, expectedPrevRandao: common.Hash256, blockNumber: uint64): bool =
-  let storageKey = blockNumber.u256
-  let r = client.storageAt(prevRandaoContractAddr, storageKey)
-  let expected = UInt256.fromBytesBE(expectedPrevRandao.data)
-  r.expectStorageEqual(expected)
-  return true
 
 method withMainFork(cs: PrevRandaoTransactionTest, fork: EngineFork): BaseSpec =
   var res = cs.clone()

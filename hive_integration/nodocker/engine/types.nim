@@ -62,6 +62,10 @@ const
   DefaultSleep* = 1
   prevRandaoContractAddr* = hexToByteArray[20]("0000000000000000000000000000000000000316")
   GenesisTimestamp* = 0x1234
+  Head*      = "latest"
+  Pending*   = "pending"
+  Finalized* = "finalized"
+  Safe*      = "safe"
 
 func toAddress*(x: UInt256): EthAddress =
   var
@@ -172,8 +176,12 @@ template expectLatestValidHash*(res: untyped) =
   testCond res.isOk:
     error "Unexpected error", msg=res.error
   let s = res.get
-  testCond s.latestValidHash.isNone:
-    error "Expect latest valid hash isNone"
+  when s is ForkchoiceUpdatedResponse:
+    testCond s.payloadStatus.latestValidHash.isNone:
+      error "Expect latest valid hash isNone"
+  else:
+    testCond s.latestValidHash.isNone:
+      error "Expect latest valid hash isNone"
 
 template expectErrorCode*(res: untyped, errCode: int, expectedDesc: string) =
   testCond res.isErr:
@@ -195,6 +203,17 @@ template expectStatusEither*(res: untyped, cond: openArray[PayloadExecutionStatu
   else:
     testCond s.payloadStatus.status in cond:
       error "Unexpected expectStatusEither status", expect=cond, get=s.payloadStatus.status
+
+template expectNoValidationError*(res: untyped) =
+  testCond res.isOk:
+    error "Unexpected expectNoValidationError error", msg=res.error
+  let s = res.get()
+  when s is PayloadStatusV1:
+    testCond s.validationError.isNone:
+      error "Unexpected validation error isSome"
+  else:
+    testCond s.payloadStatus.validationError.isNone:
+      error "Unexpected validation error isSome"
 
 template expectPayloadStatus*(res: untyped, cond: PayloadExecutionStatus) =
   testCond res.isOk:
@@ -257,6 +276,26 @@ template expectBlobGasPrice*(res: untyped, expected: UInt256) =
     error "expect blobGasPrice isSome"
   testCond rec.blobGasPrice.get == expected:
     error "expectBlobGasPrice", expect=expected, get=rec.blobGasPrice.get
+
+template expectNumber*(res: untyped, expected: uint64) =
+  testCond res.isOk:
+    error "expectNumber", msg=res.error
+  testCond res.get == expected:
+    error "expectNumber", expect=expected, get=res.get
+
+template expectTransactionHash*(res: untyped, expected: common.Hash256) =
+  testCond res.isOk:
+    error "expectTransactionHash", msg=res.error
+  let rec = res.get
+  testCond rec.txHash == expected:
+    error "expectTransactionHash", expect=expected.short, get=rec.txHash.short
+
+template expectPayloadParentHash*(res: untyped, expected: Web3Hash) =
+  testCond res.isOk:
+    error "expectPayloadParentHash", msg=res.error
+  let rec = res.get
+  testCond rec.executionPayload.parentHash == expected:
+    error "expectPayloadParentHash", expect=expected.short, get=rec.executionPayload.parentHash.short
 
 func timestamp*(x: ExecutableData): auto =
   x.basePayload.timestamp

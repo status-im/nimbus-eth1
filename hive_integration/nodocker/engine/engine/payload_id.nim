@@ -9,7 +9,8 @@
 # according to those terms.
 
 import
-  std/strutils,
+  std/[strutils, typetraits],
+  chronicles,
   ./engine_spec
 
 type
@@ -36,6 +37,16 @@ method withMainFork(cs: UniquePayloadIDTest, fork: EngineFork): BaseSpec =
 method getName(cs: UniquePayloadIDTest): string =
   "Unique Payload ID - " & $cs.fieldModification
 
+func plusOne(x: FixedBytes[32]): FixedBytes[32] =
+  var z = x.bytes
+  z[0] = z[0] + 1.byte
+  FixedBytes[32](z)
+
+func plusOne(x: Address): Address =
+  var z = distinctBase x
+  z[0] = z[0] + 1.byte
+  Address(z)
+
 # Check that the payload id returned on a forkchoiceUpdated call is different
 # when the attributes change
 method execute(cs: UniquePayloadIDTest, env: TestEnv): bool =
@@ -43,56 +54,63 @@ method execute(cs: UniquePayloadIDTest, env: TestEnv): bool =
   let ok = waitFor env.clMock.waitForTTD()
   testCond ok
 
-  env.clMock.produceSingleBlock(BlockProcessCallbacks(
+  let pbRes = env.clMock.produceSingleBlock(BlockProcessCallbacks(
     onPayloadAttributesGenerated: proc(): bool =
-      payloadAttributes = env.clMock.latestPayloadAttributes
-      case cs.fieldModification (
+      var attr = env.clMock.latestPayloadAttributes
+      case cs.fieldModification
       of PayloadAttributesIncreasetimestamp:
-        payloadAttributes.timestamp += 1
+        attr.timestamp = w3Qty(attr.timestamp, 1)
       of PayloadAttributesRandom:
-        payloadAttributes.Random[0] = payloadAttributes.Random[0] + 1
+        attr.prevRandao = attr.prevRandao.plusOne
       of PayloadAttributesSuggestedFeerecipient:
-        payloadAttributes.SuggestedFeeRecipient[0] = payloadAttributes.SuggestedFeeRecipient[0] + 1
+        attr.suggestedFeeRecipient = attr.suggestedFeeRecipient.plusOne
       of PayloadAttributesAddWithdrawal:
-        newWithdrawal = &types.Withdrawal()
-        payloadAttributes.Withdrawals = append(payloadAttributes.Withdrawals, newWithdrawal)
+        let newWithdrawal = WithdrawalV1()
+        var wd = attr.withdrawals.get
+        wd.add newWithdrawal
+        attr.withdrawals = some(wd)
       of PayloadAttributesRemoveWithdrawal:
-        payloadAttributes.Withdrawals = payloadAttributes.Withdrawals[1:]
+        var wd = attr.withdrawals.get
+        wd.delete(0)
+        attr.withdrawals = some(wd)
       of PayloadAttributesModifyWithdrawalAmount,
         PayloadAttributesModifyWithdrawalIndex,
         PayloadAttributesModifyWithdrawalValidator,
         PayloadAttributesModifyWithdrawalAddress:
-        if len(payloadAttributes.Withdrawals) == 0 (
-          fatal "Cannot modify withdrawal when there are no withdrawals")
-        )
-        modifiedWithdrawal = *payloadAttributes.Withdrawals[0]
-        case cs.fieldModification (
+        testCond attr.withdrawals.isSome:
+          fatal "Cannot modify withdrawal when there are no withdrawals"
+        var wds = attr.withdrawals.get
+        testCond wds.len > 0:
+          fatal "Cannot modify withdrawal when there are no withdrawals"
+
+        var wd = wds[0]
+        case cs.fieldModification
         of PayloadAttributesModifyWithdrawalAmount:
-          modifiedWithdrawal.Amount += 1
+          wd.amount = w3Qty(wd.amount, 1)
         of PayloadAttributesModifyWithdrawalIndex:
-          modifiedWithdrawal.Index += 1
+          wd.index = w3Qty(wd.index, 1)
         of PayloadAttributesModifyWithdrawalValidator:
-          modifiedWithdrawal.Validator += 1
+          wd.validatorIndex = w3Qty(wd.validatorIndex, 1)
         of PayloadAttributesModifyWithdrawalAddress:
-          modifiedWithdrawal.Address[0] = modifiedWithdrawal.Address[0] + 1
-        )
-        payloadAttributes.Withdrawals = append(types.Withdrawals(&modifiedWithdrawal), payloadAttributes.Withdrawals[1:]...)
+          wd.address = wd.address.plusOne
+        else:
+          fatal "Unknown field change", field=cs.fieldModification
+          return false
+
+        wds[0] = wd
+        attr.withdrawals = some(wds)
       of PayloadAttributesParentBeaconRoot:
-        if payloadAttributes.BeaconRoot == nil (
-          fatal "Cannot modify parent beacon root when there is no parent beacon root")
-        )
-        newBeaconRoot = *payloadAttributes.BeaconRoot
-        newBeaconRoot[0] = newBeaconRoot[0] + 1
-        payloadAttributes.BeaconRoot = &newBeaconRoot
-      default:
-        fatal "Unknown field change: %s", cs.fieldModification)
-      )
+        testCond attr.parentBeaconBlockRoot.isSome:
+          fatal "Cannot modify parent beacon root when there is no parent beacon root"
+        let newBeaconRoot = attr.parentBeaconBlockRoot.get.plusOne
+        attr.parentBeaconBlockRoot = some(newBeaconRoot)
 
       # Request the payload with the modified attributes and add the payload ID to the list of known IDs
       let version = env.engine.version(env.clMock.latestHeader.timestamp)
-      let r = env.engine.client.forkchoiceUpdated(version, env.clMock.latestForkchoice, some(payloadAttributes))
+      let r = env.engine.client.forkchoiceUpdated(version, env.clMock.latestForkchoice, some(attr))
       r.expectNoError()
-      env.clMock.addPayloadID(env.engine, r.get.payloadID.get)
-    ),
+      testCond env.clMock.addPayloadID(env.engine, r.get.payloadID.get)
+      return true
   ))
-)
+  testCond pbRes
+  return true

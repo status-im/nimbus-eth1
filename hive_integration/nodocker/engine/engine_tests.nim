@@ -20,18 +20,18 @@ import
 import
   ./engine/suggested_fee_recipient,
   ./engine/payload_attributes,
-  #./engine/payload_execution,
+  ./engine/payload_execution,
   ./engine/invalid_ancestor,
   ./engine/invalid_payload,
   ./engine/prev_randao,
-  #./engine/payload_id,
+  ./engine/payload_id,
   ./engine/forkchoice,
-  #./engine/versioning,
+  ./engine/versioning,
   ./engine/bad_hash,
-  #./engine/fork_id,
-  #./engine/reorg,
-  ./engine/misc
-  #./engine/rpc
+  ./engine/fork_id,
+  ./engine/reorg,
+  ./engine/misc,
+  ./engine/rpc
 
 proc getGenesis(cs: EngineSpec, param: NetworkParams) =
   # Set the terminal total difficulty
@@ -63,17 +63,7 @@ proc specExecute(ws: BaseSpec): bool =
   env.close()
 
 # Execution specification reference:
-# https:#github.com/ethereum/execution-apis/blob/main/src/engine/specification.md
-
-#[var (
-  big0      = new(big.Int)
-  big1      = u256(1)
-  Head      *big.Int # Nil
-  Pending   = u256(-2)
-  Finalized = u256(-3)
-  Safe      = u256(-4)
-)
-]#
+# https://github.com/ethereum/execution-apis/blob/main/src/engine/specification.md
 
 # Register all test combinations for Paris
 proc makeEngineTest*(): seq[EngineSpec] =
@@ -200,8 +190,87 @@ proc makeEngineTest*(): seq[EngineSpec] =
     transactionCount: 20,
   )
 
+  # Payload Execution Tests
+  result.add ReExecutePayloadTest()
+  result.add InOrderPayloadExecutionTest()
+  result.add MultiplePayloadsExtendingCanonicalChainTest(
+    setHeadToFirstPayloadReceived: true,
+  )
+
+  result.add MultiplePayloadsExtendingCanonicalChainTest(
+    setHeadToFirstPayloadReceived: false,
+  )
+
+  result.add NewPayloadOnSyncingClientTest()
+  result.add NewPayloadWithMissingFcUTest()
+
+  const invalidPayloadBlockField = [
+    InvalidTransactionSignature,
+    InvalidTransactionNonce,
+    InvalidTransactionGasPrice,
+    InvalidTransactionGasTipPrice,
+    InvalidTransactionGas,
+    InvalidTransactionValue,
+    InvalidTransactionChainID,
+  ]
+
+  # Invalid Transaction Payload Tests
+  for invalidField in invalidPayloadBlockField:
+    let invalidDetectedOnSync = invalidField == InvalidTransactionChainID
+    for syncing in [false, true]:
+      if invalidField != InvalidTransactionGasTipPrice:
+        for testTxType in [TxLegacy, TxEip1559]:
+          result.add InvalidPayloadTestCase(
+            txType:                some(testTxType),
+            invalidField:          invalidField,
+            syncing:               syncing,
+            invalidDetectedOnSync: invalidDetectedOnSync,
+          )
+      else:
+        result.add InvalidPayloadTestCase(
+          txType:                some(TxEip1559),
+          invalidField:          invalidField,
+          syncing:               syncing,
+          invalidDetectedOnSync: invalidDetectedOnSync,
+        )
+
+  const payloadAttributesFieldChange = [
+    PayloadAttributesIncreaseTimestamp,
+    PayloadAttributesRandom,
+    PayloadAttributesSuggestedFeeRecipient,
+  ]
+
+  # Payload ID Tests
+  for payloadAttributeFieldChange in payloadAttributesFieldChange:
+    result.add UniquePayloadIDTest(
+      fieldModification: payloadAttributeFieldChange,
+    )
+
+  # Endpoint Versions Tests
+  # Early upgrade of ForkchoiceUpdated when requesting a payload
+  result.add ForkchoiceUpdatedOnPayloadRequestTest(
+    name: "Early upgrade",
+    about: """
+      Early upgrade of ForkchoiceUpdated when requesting a payload.
+      The test sets the fork height to 1, and the block timestamp increments to 2
+      seconds each block.
+      CL Mock prepares the payload attributes for the first block, which should contain
+      the attributes of the next fork.
+      The test then reduces the timestamp by 1, but still uses the next forkchoice updated
+      version, which should result in UNSUPPORTED_FORK_ERROR error.
+    """,
+    forkHeight:              1,
+    blockTimestampIncrement: 2,
+    forkchoiceUpdatedCustomizer: UpgradeForkchoiceUpdatedVersion(
+      expectedError: engineApiUnsupportedFork,
+    ),
+    payloadAttributescustomizer: TimestampDeltaPayloadAttributesCustomizer(
+      timestampDelta:       -1,
+    ),
+  )
+
   # Register RPC tests
-  #[let blockStatusRPCCheckType = [
+  let blockStatusRPCCheckType = [
     LatestOnNewPayload,
     LatestOnHeadBlockHash,
     SafeOnSafeBlockHash,
@@ -211,6 +280,74 @@ proc makeEngineTest*(): seq[EngineSpec] =
   for field in blockStatusRPCCheckType:
     result.add BlockStatus(checkType: field)
 
+  # Fork ID Tests
+  for genesisTimestamp in 0..1:
+    for forkTime in 0..2:
+      for prevForkTime in 0..forkTime:
+        for currentBlock in 0..1:
+          result.add ForkIDSpec(
+            mainFork:         ForkParis,
+            genesistimestamp: genesisTimestamp,
+            forkTime:         forkTime.uint64,
+            previousForkTime: prevForkTime.uint64,
+            produceBlocksBeforePeering: currentBlock,
+          )
+
+  # Re-org using the Engine API tests
+
+  # Sidechain re-org tests
+  result.add SidechainReOrgTest()
+  result.add ReOrgBackFromSyncingTest(
+    slotsToSafe:      32,
+    slotsToFinalized: 64,
+  )
+
+  result.add ReOrgPrevValidatedPayloadOnSideChainTest(
+    slotsToSafe:      32,
+    slotsToFinalized: 64,
+  )
+
+  result.add SafeReOrgToSideChainTest(
+    slotsToSafe:      1,
+    slotsToFinalized: 2,
+  )
+
+  # Re-org a transaction out of a block, or into a new block
+  result.add TransactionReOrgTest(
+    scenario: TransactionReOrgScenarioReOrgOut,
+  )
+
+  result.add TransactionReOrgTest(
+    scenario: TransactionReOrgScenarioReOrgDifferentBlock,
+  )
+
+  result.add TransactionReOrgTest(
+    scenario: TransactionReOrgScenarioNewPayloadOnRevert,
+  )
+
+  result.add TransactionReOrgTest(
+    scenario: TransactionReOrgScenarioReOrgBackIn,
+  )
+
+  # Re-Org back into the canonical chain tests
+  result.add ReOrgBackToCanonicalTest(
+    slotsToSafe:      10,
+    slotsToFinalized: 20,
+    timeoutSeconds:   60,
+    transactionPerPayload: 1,
+    reOrgDepth:            5,
+  )
+
+  result.add ReOrgBackToCanonicalTest(
+    slotsToSafe:      32,
+    slotsToFinalized: 64,
+    timeoutSeconds:   120,
+    transactionPerPayload:     50,
+    reOrgDepth:                10,
+    executeSidePayloadOnReOrg: true,
+  )
+
+#[
   const
     invalidReorgList = [
       InvalidStateRoot,
@@ -263,186 +400,8 @@ proc makeEngineTest*(): seq[EngineSpec] =
         reOrgFromCanonical: reOrgFromCanonical,
         invalidIndex:       invalidIndex,
       )
-]#
-#[
-  # Payload ID Tests
-  for _, payloadAttributeFieldChange := range []PayloadAttributesFieldChange(
-    PayloadAttributesIncreaseTimestamp,
-    PayloadAttributesRandom,
-    PayloadAttributesSuggestedFeeRecipient,
-  ) (
-    result.add UniquePayloadIDTest(
-      FieldModification: payloadAttributeFieldChange,
-    ))
-  )
-
-  # Endpoint Versions Tests
-  # Early upgrade of ForkchoiceUpdated when requesting a payload
-  result.add
-    ForkchoiceUpdatedOnPayloadRequestTest(
-      BaseSpec: test.BaseSpec(
-        Name: "Early upgrade",
-        About: `
-        Early upgrade of ForkchoiceUpdated when requesting a payload.
-        The test sets the fork height to 1, and the block timestamp increments to 2
-        seconds each block.
-        CL Mock prepares the payload attributes for the first block, which should contain
-        the attributes of the next fork.
-        The test then reduces the timestamp by 1, but still uses the next forkchoice updated
-        version, which should result in UNSUPPORTED_FORK_ERROR error.
-        `,
-        forkHeight:              1,
-        BlockTimestampIncrement: 2,
-      ),
-      ForkchoiceUpdatedcustomizer: UpgradeForkchoiceUpdatedVersion(
-        ForkchoiceUpdatedcustomizer: BaseForkchoiceUpdatedCustomizer(
-          PayloadAttributescustomizer: TimestampDeltaPayloadAttributesCustomizer(
-            PayloadAttributescustomizer: BasePayloadAttributesCustomizer(),
-            TimestampDelta:              -1,
-          ),
-          ExpectedError: globals.UNSUPPORTED_FORK_ERROR,
-        ),
-      ),
-    ),
-  )
-
-  # Payload Execution Tests
-  result.add
-    ReExecutePayloadTest(),
-    InOrderPayloadExecutionTest(),
-    MultiplePayloadsExtendingCanonicalChainTest(
-      SetHeadToFirstPayloadReceived: true,
-    ),
-    MultiplePayloadsExtendingCanonicalChainTest(
-      SetHeadToFirstPayloadReceived: false,
-    ),
-    NewPayloadOnSyncingClientTest(),
-    NewPayloadWithMissingFcUTest(),
-  )
 
 
-
-  # Invalid Transaction Payload Tests
-  for _, invalidField := range []InvalidPayloadBlockField(
-    InvalidTransactionSignature,
-    InvalidTransactionNonce,
-    InvalidTransactionGasPrice,
-    InvalidTransactionGasTipPrice,
-    InvalidTransactionGas,
-    InvalidTransactionValue,
-    InvalidTransactionChainID,
-  ) (
-    invalidDetectedOnSync := invalidField == InvalidTransactionChainID
-    for _, syncing in   [false, true) (
-      if invalidField != InvalidTransactionGasTipPrice (
-        for _, testTxType := range []TestTransactionType(TxLegacy, TxEip1559) (
-          result.add InvalidPayloadTestCase(
-            BaseSpec: test.BaseSpec(
-              txType: some( testTxType,
-            ),
-            InvalidField:          invalidField,
-            Syncing:               syncing,
-            InvalidDetectedOnSync: invalidDetectedOnSync,
-          ))
-        )
-      ) else (
-        result.add InvalidPayloadTestCase(
-          BaseSpec: test.BaseSpec(
-            txType: some( TxEip1559,
-          ),
-          InvalidField:          invalidField,
-          Syncing:               syncing,
-          InvalidDetectedOnSync: invalidDetectedOnSync,
-        ))
-      )
-    )
-
-  )
-
-  # Re-org using the Engine API tests
-
-  # Sidechain re-org tests
-  result.add
-    SidechainReOrgTest(),
-    ReOrgBackFromSyncingTest(
-      BaseSpec: test.BaseSpec(
-        slotsToSafe:      u256(32),
-        slotsToFinalized: u256(64),
-      ),
-    ),
-    ReOrgPrevValidatedPayloadOnSideChainTest(
-      BaseSpec: test.BaseSpec(
-        slotsToSafe:      u256(32),
-        slotsToFinalized: u256(64),
-      ),
-    ),
-    SafeReOrgToSideChainTest(
-      BaseSpec: test.BaseSpec(
-        slotsToSafe:      u256(1),
-        slotsToFinalized: u256(2),
-      ),
-    ),
-  )
-
-	// Re-org a transaction out of a block, or into a new block
-	result.add
-		TransactionReOrgTest{
-			Scenario: TransactionReOrgScenarioReOrgOut,
-		},
-		TransactionReOrgTest{
-			Scenario: TransactionReOrgScenarioReOrgDifferentBlock,
-		},
-		TransactionReOrgTest{
-			Scenario: TransactionReOrgScenarioNewPayloadOnRevert,
-		},
-		TransactionReOrgTest{
-			Scenario: TransactionReOrgScenarioReOrgBackIn,
-		},
-	)
-
-  # Re-Org back into the canonical chain tests
-  result.add
-    ReOrgBackToCanonicalTest(
-      BaseSpec: test.BaseSpec(
-        slotsToSafe:      u256(10),
-        slotsToFinalized: u256(20),
-        TimeoutSeconds:   60,
-      ),
-      TransactionPerPayload: 1,
-      ReOrgDepth:            5,
-    ),
-    ReOrgBackToCanonicalTest(
-      BaseSpec: test.BaseSpec(
-        slotsToSafe:      u256(32),
-        slotsToFinalized: u256(64),
-        TimeoutSeconds:   120,
-      ),
-      TransactionPerPayload:     50,
-      ReOrgDepth:                10,
-      ExecuteSidePayloadOnReOrg: true,
-    ),
-  )
-
-  # Fork ID Tests
-  for genesisTimestamp := uint64(0); genesisTimestamp <= 1; genesisTimestamp++ (
-    for forkTime := uint64(0); forkTime <= 2; forkTime++ (
-      for prevForkTime := uint64(0); prevForkTime <= forkTime; prevForkTime++ (
-        for currentBlock := 0; currentBlock <= 1; currentBlock++ (
-          result.add
-            ForkIDSpec(
-              BaseSpec: test.BaseSpec(
-                MainFork:         config.Paris,
-                Genesistimestamp: pUint64(genesisTimestamp),
-                ForkTime:         forkTime,
-                PreviousForkTime: prevForkTime,
-              ),
-              ProduceBlocksBeforePeering: currentBlock,
-            ),
-          )
-        )
-      )
-    )
-  )
 ]#
 
 

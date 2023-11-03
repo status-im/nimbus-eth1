@@ -10,6 +10,9 @@
 
 import
   std/strutils,
+  eth/common,
+  chronicles,
+  ../cancun/customizer,
   ./engine_spec
 
 type
@@ -37,45 +40,49 @@ method execute(cs: ReExecutePayloadTest, env: TestEnv): bool =
   let pbRes = env.clMock.produceBlocks(payloadReExecCount, BlockProcessCallbacks(
     onPayloadProducerSelected: proc(): bool =
       # Send at least one transaction per payload
-      _, err = env.sendNextTx(
-        env.clMock.nextBlockProducer,
-        BaseTx(
-          txType:     cs.txType,
-          gasLimit:   75000,
-        ),
+      let tc = BaseTx(
+        txType:     cs.txType,
+        gasLimit:   75000,
       )
-      if err != nil (
-        fatal "Error trying to send transaction: %v", t.TestName, err)
-      )
-    ),
+      let ok = env.sendNextTx(env.clMock.nextBlockProducer, tc)
+      testCond ok:
+        fatal "Error trying to send transaction"
+      return true
+    ,
     onGetPayload: proc(): bool =
       # Check that the transaction was included
-      if len(env.clMock.latestPayloadBuilt.transactions) == 0 (
-        fatal "Client failed to include the expected transaction in payload built", t.TestName)
-      )
-    ),
+      testCond len(env.clMock.latestPayloadBuilt.transactions) != 0:
+        fatal "Client failed to include the expected transaction in payload built"
+      return true
   ))
 
+  testCond pbRes
+
   # Re-execute the payloads
-  r = env.engine.client.blockNumber()
+  let r = env.engine.client.blockNumber()
   r.expectNoError()
-  lastBlock = r.blockNumber
-  info "Started re-executing payloads at block: %v", t.TestName, lastBlock)
+  let lastBlock = r.get
+  info "Started re-executing payloads at block", number=lastBlock
 
-  for i = lastBlock - uint64(payloadReExecCount) + 1; i <= lastBlock; i++ (
-    payload, found = env.clMock.executedPayloadHistory[i]
-    if !found (
-      fatal "(test issue) Payload with index %d does not exist", i)
-    )
+  let start = lastBlock - uint64(payloadReExecCount) + 1
 
-    r = env.engine.client.newPayload(payload)
+  for i in start..lastBlock:
+    doAssert env.clMock.executedPayloadHistory.hasKey(i)
+    let payload = env.clMock.executedPayloadHistory[i]
+    let r = env.engine.client.newPayload(payload)
     r.expectStatus(PayloadExecutionStatus.valid)
     r.expectLatestValidHash(payload.blockHash)
-  )
-)
+
+  return true
 
 type
   InOrderPayloadExecutionTest* = ref object of EngineSpec
+  Shadow = ref object
+    recipient: EthAddress
+    amountPerTx: UInt256
+    txPerPayload: int
+    payloadCount: int
+    txsIncluded: int
 
 method withMainFork(cs: InOrderPayloadExecutionTest, fork: EngineFork): BaseSpec =
   var res = cs.clone()
@@ -92,93 +99,93 @@ method execute(cs: InOrderPayloadExecutionTest, env: TestEnv): bool =
   testCond ok
 
   # Send a single block to allow sending newer transaction types on the payloads
-  env.clMock.produceSingleBlock(BlockProcessCallbacks())
+  testCond env.clMock.produceSingleBlock(BlockProcessCallbacks())
 
   # First prepare payloads on a first client, which will also contain multiple transactions
 
   # We will be also verifying that the transactions are correctly interpreted in the canonical chain,
   # prepare a random account to receive funds.
-  recipient = EthAddress.randomBytes()
-  amountPerTx = big.NewInt(1000)
-  txPerPayload = 20
-  payloadCount = 10
-  txsIncluded = 0
+  var shadow = Shadow(
+    recipient: EthAddress.randomBytes(),
+    amountPerTx: 1000.u256,
+    txPerPayload: 20,
+    payloadCount: 10,
+    txsIncluded: 0,
+  )
 
-  env.clMock.produceBlocks(payloadCount, BlockProcessCallbacks(
+  let pbRes = env.clMock.produceBlocks(shadow.payloadCount, BlockProcessCallbacks(
     # We send the transactions after we got the Payload ID, before the CLMocker gets the prepared Payload
     onPayloadProducerSelected: proc(): bool =
-      _, err = env.sendNextTxs(
-        env.clMock.nextBlockProducer,
-        BaseTx(
-          recipient:  &recipient,
-          amount:     amountPerTx,
-          txType:     cs.txType,
-          gasLimit:   75000,
-        ),
-        uint64(txPerPayload),
+      let tc = BaseTx(
+        recipient:  some(shadow.recipient),
+        amount:     shadow.amountPerTx,
+        txType:     cs.txType,
+        gasLimit:   75000,
       )
-      if err != nil (
-        fatal "Error trying to send transaction: %v", t.TestName, err)
-      )
-    ),
+      let ok = env.sendNextTxs(env.clMock.nextBlockProducer, tc, shadow.txPerPayload)
+      testCond ok:
+        fatal "Error trying to send transaction"
+      return true
+    ,
     onGetPayload: proc(): bool =
-      if len(env.clMock.latestPayloadBuilt.Transactions) < (txPerPayload / 2) (
-        fatal "Client failed to include all the expected transactions in payload built: %d < %d", t.TestName, len(env.clMock.latestPayloadBuilt.Transactions), (txPerPayload / 2))
-      )
-      txsIncluded += len(env.clMock.latestPayloadBuilt.Transactions)
-    ),
+      if len(env.clMock.latestPayloadBuilt.transactions) < (shadow.txPerPayload div 2):
+        fatal "Client failed to include all the expected transactions in payload built"
+
+      shadow.txsIncluded += len(env.clMock.latestPayloadBuilt.transactions)
+      return true
   ))
 
-  expectedBalance = amountPerTx.Mul(amountPerTx, big.NewInt(int64(txsIncluded)))
+  testCond pbRes
+  let expectedBalance = shadow.amountPerTx * shadow.txsIncluded.u256
 
   # Check balance on this first client
-  r = env.engine.client.balanceAt(recipient, nil)
+  let r = env.engine.client.balanceAt(shadow.recipient)
   r.expectBalanceEqual(expectedBalance)
 
   # Start a second client to send newPayload consecutively without fcU
   let sec = env.addEngine(false, false)
 
   # Send the forkchoiceUpdated with the latestExecutedPayload hash, we should get SYNCING back
-  fcU = ForkchoiceStateV1(
+  let fcU = ForkchoiceStateV1(
     headblockHash:      env.clMock.latestExecutedPayload.blockHash,
     safeblockHash:      env.clMock.latestExecutedPayload.blockHash,
     finalizedblockHash: env.clMock.latestExecutedPayload.blockHash,
   )
 
-  s = sec.client.forkchoiceUpdated(fcU, nil, env.clMock.latestExecutedPayload.timestamp)
+  var version = sec.version(env.clMock.latestExecutedPayload.timestamp)
+  var s = sec.client.forkchoiceUpdated(version, fcU)
   s.expectPayloadStatus(PayloadExecutionStatus.syncing)
-  s.expectLatestValidHash(nil)
-  s.ExpectNoValidationError()
+  s.expectLatestValidHash()
+  s.expectNoValidationError()
 
   # Send all the payloads in the increasing order
-  for k = env.clMock.firstPoSBlockNumber.Uint64(); k <= env.clMock.latestExecutedPayload.blockNumber; k++ (
-    payload = env.clMock.executedPayloadHistory[k]
-
-    s = sec.client.newPayload(payload)
+  let start = env.clMock.firstPoSBlockNumber.get
+  for k in start..env.clMock.latestExecutedPayload.blockNumber.uint64:
+    let payload = env.clMock.executedPayloadHistory[k]
+    let s = sec.client.newPayload(payload)
     s.expectStatus(PayloadExecutionStatus.valid)
     s.expectLatestValidHash(payload.blockHash)
 
-  )
-
-  s = sec.client.forkchoiceUpdated(fcU, nil, env.clMock.latestExecutedPayload.timestamp)
+  version = sec.version(env.clMock.latestExecutedPayload.timestamp)
+  s = sec.client.forkchoiceUpdated(version, fcU)
   s.expectPayloadStatus(PayloadExecutionStatus.valid)
   s.expectLatestValidHash(fcU.headblockHash)
-  s.ExpectNoValidationError()
+  s.expectNoValidationError()
 
   # At this point we should have our funded account balance equal to the expected value.
-  q = sec.client.balanceAt(recipient, nil)
+  let q = sec.client.balanceAt(shadow.recipient)
   q.expectBalanceEqual(expectedBalance)
 
   # Add the client to the CLMocker
-  env.clMock.addEngine(secondaryClient)
+  env.clMock.addEngine(sec)
 
   # Produce a single block on top of the canonical chain, all clients must accept this
-  env.clMock.produceSingleBlock(BlockProcessCallbacks())
+  testCond env.clMock.produceSingleBlock(BlockProcessCallbacks())
 
   # Head must point to the latest produced payload
-  p = sec.client.TestHeaderByNumber(nil)
-  p.expectHash(env.clMock.latestExecutedPayload.blockHash)
-)
+  let p = sec.client.latestHeader()
+  p.expectHash(ethHash env.clMock.latestExecutedPayload.blockHash)
+  return true
 
 type
   MultiplePayloadsExtendingCanonicalChainTest* = ref object of EngineSpec
@@ -194,12 +201,10 @@ method withMainFork(cs: MultiplePayloadsExtendingCanonicalChainTest, fork: Engin
   return res
 
 method getName(cs: MultiplePayloadsExtendingCanonicalChainTest): string =
-  name = "Multiple New Payloads Extending Canonical Chain"
-  if s.SetHeadToFirstPayloadReceived (
-    name += " (FcU to first payload received)"
-  )
-  return name
-)
+  var name = "Multiple New Payloads Extending Canonical Chain"
+  if cs.setHeadToFirstPayloadReceived:
+    name.add " (FcU to first payload received)"
+  name
 
 # Consecutive Payload Execution: Secondary client should be able to set the forkchoiceUpdated to payloads received consecutively
 method execute(cs: MultiplePayloadsExtendingCanonicalChainTest, env: TestEnv): bool =
@@ -208,57 +213,48 @@ method execute(cs: MultiplePayloadsExtendingCanonicalChainTest, env: TestEnv): b
   testCond ok
 
   # Produce blocks before starting the test
-  env.clMock.produceBlocks(5, BlockProcessCallbacks())
+  testCond env.clMock.produceBlocks(5, BlockProcessCallbacks())
 
-  callbacks = BlockProcessCallbacks(
+  var callbacks = BlockProcessCallbacks(
     # We send the transactions after we got the Payload ID, before the CLMocker gets the prepared Payload
     onPayloadProducerSelected: proc(): bool =
       let recipient = EthAddress.randomBytes()
-      _, err = env.sendNextTx(
-        env.clMock.nextBlockProducer,
-        BaseTx(
-          recipient:  &recipient,
-          txType:     cs.txType,
-          gasLimit:   75000,
-        ),
+      let tc = BaseTx(
+        recipient:  some(recipient),
+        txType:     cs.txType,
+        gasLimit:   75000,
       )
-      if err != nil (
-        fatal "Error trying to send transaction: %v", t.TestName, err)
-      )
-    ),
+      let ok = env.sendNextTx(env.clMock.nextBlockProducer, tc)
+      testCond ok:
+        fatal "Error trying to send transaction"
+      return true
   )
 
-  reExecFunc = proc(): bool =
-    payloadCount = 80
-    if cs.payloadCount > 0 (
+  let reExecFunc = proc(): bool =
+    var payloadCount = 80
+    if cs.payloadCount > 0:
       payloadCount = cs.payloadCount
-    )
 
-    basePayload = env.clMock.latestPayloadBuilt
+    let basePayload = env.clMock.latestExecutableData
 
     # Check that the transaction was included
-    if len(basePayload.Transactions) == 0 (
-      fatal "Client failed to include the expected transaction in payload built", t.TestName)
-    )
+    testCond len(basePayload.basePayload.transactions)> 0:
+      fatal "Client failed to include the expected transaction in payload built"
 
     # Fabricate and send multiple new payloads by changing the PrevRandao field
-    for i = 0; i < payloadCount; i++ (
-      newPrevRandao = common.Hash256.randomBytes()
-      customizer = CustomPayloadData(
-        prevRandao: &newPrevRandao,
+    for i in 0..<payloadCount:
+      let newPrevRandao = common.Hash256.randomBytes()
+      let customizer = CustomPayloadData(
+        prevRandao: some(newPrevRandao),
       )
-      newPayload, err = customizePayload(basePayload)
-      if err != nil (
-        fatal "Unable to customize payload %v: %v", t.TestName, i, err)
-      )
-
-      r = env.engine.client.newPayload(newPayload)
+      let newPayload = customizer.customizePayload(basePayload)
+      let version = env.engine.version(newPayload.timestamp)
+      let r = env.engine.client.newPayload(version, newPayload)
       r.expectStatus(PayloadExecutionStatus.valid)
       r.expectLatestValidHash(newPayload.blockHash)
-    )
-  )
+    return true
 
-  if cs.SetHeadToFirstPayloadReceived (
+  if cs.setHeadToFirstPayloadReceived:
     # We are going to set the head of the chain to the first payload executed by the client
     # Therefore our re-execution function must be executed after the payload was broadcast
     callbacks.onNewPayloadBroadcast = reExecFunc
@@ -266,14 +262,17 @@ method execute(cs: MultiplePayloadsExtendingCanonicalChainTest, env: TestEnv): b
     # Otherwise, we execute the payloads after we get the canonical one so it's
     # executed last
     callbacks.onGetPayload = reExecFunc
-  )
 
-  env.clMock.produceSingleBlock(callbacks)
+  testCond env.clMock.produceSingleBlock(callbacks)
   # At the end the CLMocker continues to try to execute fcU with the original payload, which should not fail
-)
+  return true
 
 type
   NewPayloadOnSyncingClientTest* = ref object of EngineSpec
+
+  Shadow2 = ref object
+    recipient: EthAddress
+    previousPayload: ExecutionPayload
 
 method withMainFork(cs: NewPayloadOnSyncingClientTest, fork: EngineFork): BaseSpec =
   var res = cs.clone()
@@ -285,98 +284,94 @@ method getName(cs: NewPayloadOnSyncingClientTest): string =
 
 # Send a valid payload on a client that is currently SYNCING
 method execute(cs: NewPayloadOnSyncingClientTest, env: TestEnv): bool =
-  var
-      # Set a random transaction recipient
-  let recipient = EthAddress.randomBytes()
-    previousPayload ExecutableData
-  sec = env.addEngine()
+  var shadow = Shadow2(
+    # Set a random transaction recipient
+    recipient: EthAddress.randomBytes(),
+  )
+
+  var sec = env.addEngine()
 
   # Wait until TTD is reached by all clients
   let ok = waitFor env.clMock.waitForTTD()
   testCond ok
 
   # Produce blocks before starting the test
-  env.clMock.produceBlocks(5, BlockProcessCallbacks())
-
-
+  testCond env.clMock.produceBlocks(5, BlockProcessCallbacks())
 
   # Disconnect the first engine client from the CL Mocker and produce a block
   env.clMock.removeEngine(env.engine)
-  env.clMock.produceSingleBlock(BlockProcessCallbacks(
+  var pbRes = env.clMock.produceSingleBlock(BlockProcessCallbacks(
     onPayloadProducerSelected: proc(): bool =
       # Send at least one transaction per payload
-      _, err = env.sendNextTx(
-        env.clMock.nextBlockProducer,
-        BaseTx(
-          recipient:  &recipient,
-          txType:     cs.txType,
-          gasLimit:   75000,
-        ),
+      let tc = BaseTx(
+        recipient:  some(shadow.recipient),
+        txType:     cs.txType,
+        gasLimit:   75000,
       )
-      if err != nil (
-        fatal "Error trying to send transaction: %v", t.TestName, err)
-      )
-    ),
+      let ok = env.sendNextTx(env.clMock.nextBlockProducer, tc)
+      testCond ok:
+        fatal "Error trying to send transaction"
+      return true
+    ,
     onGetPayload: proc(): bool =
       # Check that the transaction was included
-      if len(env.clMock.latestPayloadBuilt.Transactions) == 0 (
-        fatal "Client failed to include the expected transaction in payload built", t.TestName)
-      )
-    ),
+      testCond len(env.clMock.latestPayloadBuilt.transactions) > 0:
+        fatal "Client failed to include the expected transaction in payload built"
+      return true
   ))
-
-  previousPayload = env.clMock.latestPayloadBuilt
+  testCond true
+  shadow.previousPayload = env.clMock.latestPayloadBuilt
 
   # Send the fcU to set it to syncing mode
-  r = env.engine.client.forkchoiceUpdated(env.clMock.latestForkchoice, nil, env.clMock.latestHeader.Time)
+  let version = env.engine.version(env.clMock.latestHeader.timestamp)
+  let r = env.engine.client.forkchoiceUpdated(version, env.clMock.latestForkchoice)
   r.expectPayloadStatus(PayloadExecutionStatus.syncing)
 
-  env.clMock.produceSingleBlock(BlockProcessCallbacks(
+  pbREs = env.clMock.produceSingleBlock(BlockProcessCallbacks(
     onPayloadProducerSelected: proc(): bool =
       # Send at least one transaction per payload
-      _, err = env.sendNextTx(
-        env.clMock.nextBlockProducer,
-        BaseTx(
-          recipient:  &recipient,
-          txType:     cs.txType,
-          gasLimit:   75000,
-        ),
+      let tc = BaseTx(
+        recipient:  some(shadow.recipient),
+        txType:     cs.txType,
+        gasLimit:   75000,
       )
-      if err != nil (
-        fatal "Error trying to send transaction: %v", t.TestName, err)
-      )
-    ),
+      let ok = env.sendNextTx(env.clMock.nextBlockProducer, tc)
+      testCond ok:
+        fatal "Error trying to send transaction"
+      return true
+    ,
     # Run test after the new payload has been obtained
     onGetPayload: proc(): bool =
       # Send the new payload from the second client to the first, it won't be able to validate it
-      r = env.engine.client.newPayload(env.clMock.latestPayloadBuilt)
-      r.expectStatusEither(PayloadExecutionStatus.accepted, PayloadExecutionStatus.syncing)
-      r.expectLatestValidHash(nil)
+      let r = env.engine.client.newPayload(env.clMock.latestPayloadBuilt)
+      r.expectStatusEither([PayloadExecutionStatus.accepted, PayloadExecutionStatus.syncing])
+      r.expectLatestValidHash()
 
       # Send the forkchoiceUpdated with a reference to the valid payload on the SYNCING client.
-      var (
-        random                = common.Hash256()
-        suggestedFeeRecipient = common.Address()
+      var
+        random                = w3Hash()
+        suggestedFeeRecipient = w3Address()
+
+      let customizer = BasePayloadAttributesCustomizer(
+        prevRandao: some(ethHash random),
+        suggestedFeerecipient: some(ethAddr suggestedFeeRecipient),
       )
-      payloadAttributesCustomizer = &BasePayloadAttributesCustomizer(
-        Random:                &random,
-        SuggestedFeerecipient: &suggestedFeeRecipient,
-      )
-      newPayloadAttributes, err = payloadAttributesCustomizer.GetPayloadAttributes(env.clMock.latestPayloadAttributes)
-      if err != nil (
-        fatal "Unable to customize payload attributes: %v", t.TestName, err)
-      )
-      s = env.engine.client.forkchoiceUpdated(ForkchoiceStateV1(
+
+      let newAttr = customizer.getPayloadAttributes(env.clMock.latestPayloadAttributes)
+      var fcu = ForkchoiceStateV1(
         headblockHash:      env.clMock.latestPayloadBuilt.blockHash,
         safeblockHash:      env.clMock.latestPayloadBuilt.blockHash,
         finalizedblockHash: env.clMock.latestPayloadBuilt.blockHash,
-      ), newPayloadAttributes, env.clMock.latestPayloadBuilt.timestamp)
+      )
+
+      var version = env.engine.version(env.clMock.latestPayloadBuilt.timestamp)
+      var s = env.engine.client.forkchoiceUpdated(version, fcu, some(newAttr))
       s.expectPayloadStatus(PayloadExecutionStatus.syncing)
 
       # Send the previous payload to be able to continue
-      p = env.engine.client.newPayload(previousPayload)
+      var p = env.engine.client.newPayload(shadow.previousPayload)
       p.expectStatus(PayloadExecutionStatus.valid)
-      p.expectLatestValidHash(previousPayload.blockHash)
+      p.expectLatestValidHash(shadow.previousPayload.blockHash)
 
       # Send the new payload again
 
@@ -384,14 +379,16 @@ method execute(cs: NewPayloadOnSyncingClientTest, env: TestEnv): bool =
       p.expectStatus(PayloadExecutionStatus.valid)
       p.expectLatestValidHash(env.clMock.latestPayloadBuilt.blockHash)
 
-      s = env.engine.client.forkchoiceUpdated(ForkchoiceStateV1(
+      fcu = ForkchoiceStateV1(
         headblockHash:      env.clMock.latestPayloadBuilt.blockHash,
         safeblockHash:      env.clMock.latestPayloadBuilt.blockHash,
         finalizedblockHash: env.clMock.latestPayloadBuilt.blockHash,
-      ), nil, env.clMock.latestPayloadBuilt.timestamp)
+      )
+      version = env.engine.version(env.clMock.latestPayloadBuilt.timestamp)
+      s = env.engine.client.forkchoiceUpdated(version, fcu)
       s.expectPayloadStatus(PayloadExecutionStatus.valid)
 
-    return true
+      return true
   ))
 
   testCond pbRes
@@ -415,59 +412,57 @@ method execute(cs: NewPayloadWithMissingFcUTest, env: TestEnv): bool =
   testCond ok
 
   # Get last genesis block hash
-  genesisHash = env.engine.client.latestHeader().Header.Hash()
+  let res = env.engine.client.latestHeader()
+  let genesisHash = res.get.blockHash
 
   # Produce blocks on the main client, these payloads will be replayed on the secondary client.
-  env.clMock.produceBlocks(5, BlockProcessCallbacks(
+  let pbRes = env.clMock.produceBlocks(5, BlockProcessCallbacks(
     onPayloadProducerSelected: proc(): bool =
-      var recipient common.Address
-      randomBytes(recipient[:])
+      let recipient = common.EthAddress.randomBytes()
+      let tc = BaseTx(
+        recipient:  some(recipient),
+        txType:     cs.txType,
+        gasLimit:   75000,
+      )
       # Send at least one transaction per payload
-      _, err = env.sendNextTx(
-        env.clMock.nextBlockProducer,
-        BaseTx(
-          recipient:  &recipient,
-          txType:     cs.txType,
-          gasLimit:   75000,
-        ),
-      )
-      if err != nil (
-        fatal "Error trying to send transaction: %v", t.TestName, err)
-      )
-    ),
+      let ok = env.sendNextTx(env.clMock.nextBlockProducer, tc)
+      testCond ok:
+        fatal "Error trying to send transaction"
+      return true
+    ,
     onGetPayload: proc(): bool =
       # Check that the transaction was included
-      if len(env.clMock.latestPayloadBuilt.Transactions) == 0 (
-        fatal "Client failed to include the expected transaction in payload built", t.TestName)
-      )
-    ),
+      testCond len(env.clMock.latestPayloadBuilt.transactions) > 0:
+        fatal "Client failed to include the expected transaction in payload built"
+      return true
   ))
+  testCond pbRes
 
   var sec = env.addEngine()
-
+  let start = env.clMock.firstPoSBlockNumber.get
   # Send each payload in the correct order but skip the ForkchoiceUpdated for each
-  for i = env.clMock.firstPoSBlockNumber.Uint64(); i <= env.clMock.latestHeadNumber.Uint64(); i++ (
-    payload = env.clMock.executedPayloadHistory[i]
-    p = sec.newPayload(payload)
+  for i in start..env.clMock.latestHeadNumber.uint64:
+    let payload = env.clMock.executedPayloadHistory[i]
+    let p = sec.client.newPayload(payload)
     p.expectStatus(PayloadExecutionStatus.valid)
     p.expectLatestValidHash(payload.blockHash)
-  )
 
   # Verify that at this point, the client's head still points to the last non-PoS block
-  r = sec.latestHeader()
+  let r = sec.client.latestHeader()
   r.expectHash(genesisHash)
 
   # Verify that the head correctly changes after the last ForkchoiceUpdated
-  fcU = ForkchoiceStateV1(
-    headblockHash:      env.clMock.executedPayloadHistory[env.clMock.latestHeadNumber.Uint64()].blockHash,
-    safeblockHash:      env.clMock.executedPayloadHistory[env.clMock.latestHeadNumber.Uint64()-1].blockHash,
-    finalizedblockHash: env.clMock.executedPayloadHistory[env.clMock.latestHeadNumber.Uint64()-2].blockHash,
+  let fcU = ForkchoiceStateV1(
+    headblockHash:      env.clMock.executedPayloadHistory[env.clMock.latestHeadNumber.uint64].blockHash,
+    safeblockHash:      env.clMock.executedPayloadHistory[env.clMock.latestHeadNumber.uint64-1].blockHash,
+    finalizedblockHash: env.clMock.executedPayloadHistory[env.clMock.latestHeadNumber.uint64-2].blockHash,
   )
-  p = sec.forkchoiceUpdated(fcU, nil, env.clMock.latestHeader.Time)
+  let version = sec.version(env.clMock.latestHeader.timestamp)
+  let p = sec.client.forkchoiceUpdated(version, fcU)
   p.expectPayloadStatus(PayloadExecutionStatus.valid)
   p.expectLatestValidHash(fcU.headblockHash)
 
   # Now the head should've changed to the latest PoS block
-  s = sec.latestHeader()
-  s.expectHash(fcU.headblockHash)
-)
+  let s = sec.client.latestHeader()
+  s.expectHash(ethHash fcU.headblockHash)
+  return true

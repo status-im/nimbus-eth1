@@ -72,7 +72,7 @@ type
     latestForkchoice*       : ForkchoiceStateV1
 
     # Merge related
-    firstPoSBlockNumber       : Option[uint64]
+    firstPoSBlockNumber*      : Option[uint64]
     ttdReached*               : bool
     transitionPayloadTimestamp: Option[int]
     chainTotalDifficulty      : UInt256

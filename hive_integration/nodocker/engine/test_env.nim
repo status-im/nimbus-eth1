@@ -133,6 +133,12 @@ proc makeNextTx*(env: TestEnv, tc: BaseTx): Transaction =
 proc sendNextTx*(env: TestEnv, eng: EngineEnv, tc: BaseTx): bool =
   env.sender.sendNextTx(eng.client, tc)
 
+proc sendNextTxs*(env: TestEnv, eng: EngineEnv, tc: BaseTx, num: int): bool =
+  for i in 0..<num:
+    if not env.sender.sendNextTx(eng.client, tc):
+      return false
+  return true
+
 proc sendTx*(env: TestEnv, eng: EngineEnv, tc: BaseTx, nonce: AccountNonce): bool =
   env.sender.sendTx(eng.client, tc, nonce)
 
