@@ -40,13 +40,12 @@ func getConfiguredChainId(networkMetadata: Eth2NetworkMetadata): Quantity =
   else:
     return networkMetadata.cfg.DEPOSIT_CHAIN_ID.Quantity
 
-type OnHeaderCallback* = proc (s: cstring) {.cdecl, raises: [], gcsafe.}
+type OnHeaderCallback* = proc (s: cstring, t: int) {.cdecl, raises: [], gcsafe.}
 
 proc run(config: VerifiedProxyConf, callbacks: varargs[OnHeaderCallback]) {.raises: [CatchableError], gcsafe.} =
-  var optimisticHeaderCallback, finalizedHeaderCallback: OnHeaderCallback
-  if len(callbacks) == 2:
-    optimisticHeaderCallback = callbacks[0]
-    finalizedHeaderCallback = callbacks[1]
+  var headerCallback: OnHeaderCallback
+  if len(callbacks) == 1:
+    headerCallback = callbacks[0]
 
   # Required as both Eth2Node and LightClient requires correct config type
   var lcConfig = config.asLightClientConf()
@@ -174,10 +173,10 @@ proc run(config: VerifiedProxyConf, callbacks: varargs[OnHeaderCallback]) {.rais
       when lcDataFork > LightClientDataFork.None:
         info "New LC finalized header",
           finalized_header = shortLog(forkyHeader)
-        if finalizedHeaderCallback != nil:
+        if headerCallback != nil:
           notice "### Invoking finalizedHeaderCallback"
           try:
-            finalizedHeaderCallback(Json.encode(finalizedHeader))
+            headerCallback(Json.encode(forkyHeader), 0)
           except SerializationError as e:
             notice "finalizedHeaderCallback exception"
 
@@ -189,12 +188,12 @@ proc run(config: VerifiedProxyConf, callbacks: varargs[OnHeaderCallback]) {.rais
         info "New LC optimistic header",
           optimistic_header = shortLog(forkyHeader)
         optimisticProcessor.setOptimisticHeader(forkyHeader.beacon)
-      if optimisticHeaderCallback != nil:
-        try:
-          notice "### Invoking optimisticHeaderCallback"
-          optimisticHeaderCallback(Json.encode(optimisticHeader))
-        except SerializationError as e:
-            notice "optimisticHeaderCallback exception"
+        if headerCallback != nil:
+          try:
+            notice "### Invoking optimisticHeaderCallback"
+            headerCallback(Json.encode(forkyHeader), 1)
+          except SerializationError as e:
+              notice "optimisticHeaderCallback exception"
 
 
   lightClient.onFinalizedHeader = onFinalizedHeader
@@ -295,8 +294,7 @@ type Context = object
   thread: Thread[ptr Context]
   configJson: cstring
   stop: bool
-  onOptimisticHeader: OnHeaderCallback
-  onFinalizedHeader: OnHeaderCallback
+  onHeader: OnHeaderCallback
 
 proc runContext(ctx: ptr Context) {.thread.} =
   let str = $ctx.configJson
@@ -322,7 +320,7 @@ proc runContext(ctx: ptr Context) {.thread.} =
       discv5Enabled: true,
     )
 
-    run(myConfig, ctx.onOptimisticHeader, ctx.onFinalizedHeader)
+    run(myConfig, ctx.onHeader)
   except Exception as err:
     echo "Exception when running ", getCurrentExceptionMsg(), err.getStackTrace() 
 
@@ -336,13 +334,12 @@ proc runContext(ctx: ptr Context) {.thread.} =
   # do cleanup
   node.stop()]#
 
-proc startLightClientProxy*(configJson: cstring, onOptimisticHeader: OnHeaderCallback, onFinalizedHeader: OnHeaderCallback): ptr Context {.exportc, dynlib.} =
+proc startLightClientProxy*(configJson: cstring, onHeader: OnHeaderCallback): ptr Context {.exportc, dynlib.} =
   initLib()
 
   let ctx = createShared(Context, 1)
   ctx.configJson = cast[cstring](allocShared0(len(configJson) + 1))
-  ctx.onOptimisticHeader = onOptimisticHeader
-  ctx.onFinalizedHeader = onFinalizedHeader
+  ctx.onHeader = onHeader
   copyMem(ctx.configJson, configJson, len(configJson))
 
   try:
