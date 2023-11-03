@@ -165,12 +165,16 @@ template expectLatestValidHash*(res: untyped, expectedHash: Web3Hash) =
     testCond s.latestValidHash.isSome:
       error "Expect latest valid hash isSome"
     testCond s.latestValidHash.get == expectedHash:
-      error "latest valid hash mismatch", expect=expectedHash, get=s.latestValidHash.get
+      error "latest valid hash mismatch",
+        expect=expectedHash.short,
+        get=s.latestValidHash.get.short
   else:
     testCond s.payloadStatus.latestValidHash.isSome:
       error "Expect latest valid hash isSome"
     testCond s.payloadStatus.latestValidHash.get == expectedHash:
-      error "latest valid hash mismatch", expect=expectedHash, get=s.payloadStatus.latestValidHash.get
+      error "latest valid hash mismatch",
+        expect=expectedHash.short,
+        get=s.payloadStatus.latestValidHash.get.short
 
 template expectLatestValidHash*(res: untyped) =
   testCond res.isOk:
@@ -296,6 +300,13 @@ template expectPayloadParentHash*(res: untyped, expected: Web3Hash) =
   let rec = res.get
   testCond rec.executionPayload.parentHash == expected:
     error "expectPayloadParentHash", expect=expected.short, get=rec.executionPayload.parentHash.short
+
+template expectBlockHash*(res: untyped, expected: common.Hash256) =
+  testCond res.isOk:
+    error "expectBlockHash", msg=res.error
+  let rec = res.get
+  testCond rec.blockHash == expected:
+    error "expectBlockHash", expect=expected.short, get=rec.blockHash.short
 
 func timestamp*(x: ExecutableData): auto =
   x.basePayload.timestamp

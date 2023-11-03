@@ -438,14 +438,18 @@ proc broadcastNextNewPayload(cl: CLMocker): bool =
   cl.executedPayloadHistory[number] = cl.latestPayloadBuilt
   return true
 
-proc broadcastForkchoiceUpdated(cl: CLMocker, eng: EngineEnv,
-      update: ForkchoiceStateV1): Result[ForkchoiceUpdatedResponse, string] =
-  let version = cl.latestExecutedPayload.version
+proc broadcastForkchoiceUpdated(cl: CLMocker,
+                                eng: EngineEnv,
+                                version: Version,
+                                update: ForkchoiceStateV1):
+                                  Result[ForkchoiceUpdatedResponse, string] =
   eng.client.forkchoiceUpdated(version, update, none(PayloadAttributes))
 
-proc broadcastLatestForkchoice(cl: CLMocker): bool =
+proc broadcastForkchoiceUpdated*(cl: CLMocker,
+                                 version: Version,
+                                 update: ForkchoiceStateV1): bool =
   for eng in cl.clients:
-    let res = cl.broadcastForkchoiceUpdated(eng, cl.latestForkchoice)
+    let res = cl.broadcastForkchoiceUpdated(eng, version, update)
     if res.isErr:
       error "CLMocker: broadcastForkchoiceUpdated Error", msg=res.error
       return false
@@ -473,6 +477,10 @@ proc broadcastLatestForkchoice(cl: CLMocker): bool =
       return false
 
   return true
+
+proc broadcastLatestForkchoice(cl: CLMocker): bool =
+  let version = cl.latestExecutedPayload.version
+  cl.broadcastForkchoiceUpdated(version, cl.latestForkchoice)
 
 func w3Address(x: int): Web3Address =
   var res: array[20, byte]

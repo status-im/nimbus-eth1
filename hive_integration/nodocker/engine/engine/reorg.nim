@@ -12,6 +12,7 @@ import
   std/strutils,
   eth/common,
   chronicles,
+  stew/byteutils,
   ./engine_spec,
   ../cancun/customizer,
   ../helper
@@ -115,7 +116,13 @@ type
 type
   TransactionReOrgTest* = ref object of EngineSpec
     transactionCount*: int
-    scenario*:         TransactionReOrgScenario
+    scenario*: TransactionReOrgScenario
+
+  ShadowTx = ref object
+    payload: ExecutionPayload
+    nextTx: Transaction
+    tx: Option[Transaction]
+    sendTransaction: proc(i: int): Transaction {.gcsafe.}
 
 method withMainFork(cs: TransactionReOrgTest, fork: EngineFork): BaseSpec =
   var res = cs.clone()
@@ -128,6 +135,9 @@ method getName(cs: TransactionReOrgTest): string =
     name.add ", " & $cs.scenario
   return name
 
+func txHash(shadow: ShadowTx): common.Hash256 =
+  shadow.tx.get.rlpHash
+
 # Test transaction status after a forkchoiceUpdated re-orgs to an alternative hash where a transaction is not present
 method execute(cs: TransactionReOrgTest, env: TestEnv): bool =
   # Wait until this client catches up with latest PoS
@@ -136,259 +146,218 @@ method execute(cs: TransactionReOrgTest, env: TestEnv): bool =
 
   # Produce blocks before starting the test (So we don't try to reorg back to the genesis block)
   testCond env.clMock.produceBlocks(5, BlockProcessCallbacks())
-#[
-  # Create transactions that modify the state in order to check after the reorg.
-  var (
-    err                error
-    txCount            = cs.transactionCount
-    sstoreContractAddr = common.HexToAddress("0000000000000000000000000000000000000317")
-  )
 
-  if txCount == 0 (
-    # Default is to send 5 transactions
-    txCount = 5
-  )
+  # Create transactions that modify the state in order to check after the reorg.
+  var shadow = ShadowTx()
 
   # Send a transaction on each payload of the canonical chain
-  sendTransaction = func(i int) (Transaction, error) (
-    data = common.LeftPadBytes([]byte(byte(i)), 32)
-    t.Logf("transactionReorg, i=%v, data=%v\n", i, data)
-    return t.sendNextTx(
-      t.Engine,
-      BaseTx(
-        recipient:  &sstoreContractAddr,
-        amount:     big0,
-        payload:    data,
-        txType:     cs.txType,
-        gasLimit:   75000,
-        ForkConfig: t.ForkConfig,
-      ),
+  shadow.sendTransaction = proc(i: int): Transaction {.gcsafe.} =
+    let sstoreContractAddr = hexToByteArray[20]("0000000000000000000000000000000000000317")
+    var data: array[32, byte]
+    data[^1] = i.byte
+    info "transactionReorg", idx=i
+    let tc = BaseTx(
+      recipient: some(sstoreContractAddr),
+      amount:    0.u256,
+      payload:   @data,
+      txType:    cs.txType,
+      gasLimit:  75000,
     )
+    var tx = env.makeNextTx(tc)
+    doAssert env.sendTx(tx)
+    tx
 
-  )
+  var txCount = cs.transactionCount
+  if txCount == 0:
+    # Default is to send 5 transactions
+    txCount = 5
 
-  var (
-    shadow.payload ExecutableData
-    nextTx     Transaction
-    tx         Transaction
-  )
-
-  for i = 0; i < txCount; i++ (
-
+  for i in 0..<txCount:
     # Generate two payloads, one with the transaction and the other one without it
-    env.clMock.produceSingleBlock(BlockProcessCallbacks(
-      OnPayloadAttributesGenerated: proc(): bool =
+    let pbRes = env.clMock.produceSingleBlock(BlockProcessCallbacks(
+      onPayloadAttributesGenerated: proc(): bool =
         # At this point we have not broadcast the transaction.
-        if cs.scenario == TransactionReOrgScenarioReOrgOut (
+        if cs.scenario == TransactionReOrgScenarioReOrgOut:
           # Any payload we get should not contain any
-          payloadAttributes = env.clMock.LatestPayloadAttributes
-          rand.Read(payloadAttributes.Random[:])
-          r = env.engine.client.forkchoiceUpdated(env.clMock.latestForkchoice, payloadAttributes, env.clMock.latestHeader.Time)
+          var attr = env.clMock.latestPayloadAttributes
+          attr.prevRandao = Web3Hash.randomBytes()
+
+          var version = env.engine.version(env.clMock.latestHeader.timestamp)
+          let r = env.engine.client.forkchoiceUpdated(version, env.clMock.latestForkchoice, some(attr))
           r.expectNoError()
-          if r.Response.PayloadID == nil (
-            fatal "No payload ID returned by forkchoiceUpdated", t.TestName)
-          )
-          g = env.engine.client.getPayload(r.Response.PayloadID, payloadAttributes)
+          testCond r.get.payloadID.isSome:
+            fatal "No payload ID returned by forkchoiceUpdated"
+
+          version = env.engine.version(attr.timestamp)
+          let g = env.engine.client.getPayload(r.get.payloadID.get, version)
           g.expectNoError()
-          shadow.payload = &g.Payload
+          shadow.payload = g.get.executionPayload
 
-          if len(shadow.payload.transactions) != 0 (
-            fatal "Empty payload contains transactions: %v", t.TestName, shadow.payload)
-          )
-        )
+          testCond len(shadow.payload.transactions) == 0:
+            fatal "Empty payload contains transactions"
 
-        if cs.scenario != TransactionReOrgScenarioReOrgBackIn (
+        if cs.scenario != TransactionReOrgScenarioReOrgBackIn:
           # At this point we can broadcast the transaction and it will be included in the next payload
           # Data is the key where a `1` will be stored
-          tx, err = sendTransaction(i)
-          testCond ok:
-            fatal "Error trying to send transaction: %v", t.TestName, err)
-          )
+          let tx = shadow.sendTransaction(i)
 
           # Get the receipt
-          ctx, cancel = context.WithTimeout(t.TestContext, globals.RPCTimeout)
-          defer cancel()
-          receipt, _ = t.Eth.TransactionReceipt(ctx, shadow.txHash)
-          if receipt != nil (
-            fatal "Receipt obtained before tx included in block: %v", t.TestName, receipt)
-          )
-        )
+          let receipt = env.engine.client.txReceipt(tx.rlpHash)
+          testCond receipt.isOk:
+            fatal "Receipt obtained before tx included in block"
 
-      ),
+        return true
+      ,
       onGetpayload: proc(): bool =
         # Check that indeed the payload contains the transaction
         if shadow.tx.isSome:
-          if !TransactionInPayload(env.clMock.latestPayloadBuilt, tx) (
-            fatal "Payload built does not contain the transaction: %v", t.TestName, env.clMock.latestPayloadBuilt)
-          )
-        )
+          testCond txInPayload(env.clMock.latestPayloadBuilt, shadow.txHash):
+            fatal "Payload built does not contain the transaction"
 
-        if cs.scenario == TransactionReOrgScenarioReOrgDifferentBlock || cs.scenario == TransactionReOrgScenarioNewPayloadOnRevert (
+        if cs.scenario in [TransactionReOrgScenarioReOrgDifferentBlock, TransactionReOrgScenarioNewPayloadOnRevert]:
           # Create side payload with different hash
-          var err error
-          customizer = &CustomPayloadData(
-            extraData: &([]byte(0x01)),
+          let customizer = CustomPayloadData(
+            extraData: some(@[0x01.byte])
           )
-          shadow.payload, err = customizer.customizePayload(env.clMock.latestPayloadBuilt)
-          testCond ok:
-            fatal "Error creating reorg payload %v", err)
-          )
+          shadow.payload = customizer.customizePayload(env.clMock.latestExecutableData).basePayload
 
-          if shadow.payload.parentHash != env.clMock.latestPayloadBuilt.parentHash (
-            fatal "Incorrect parent hash for payloads: %v != %v", t.TestName, shadow.payload.parentHash, env.clMock.latestPayloadBuilt.parentHash)
-          )
-          if shadow.payload.blockHash == env.clMock.latestPayloadBuilt.blockHash (
-            fatal "Incorrect hash for payloads: %v == %v", t.TestName, shadow.payload.blockHash, env.clMock.latestPayloadBuilt.blockHash)
-          )
-        elif cs.scenario == TransactionReOrgScenarioReOrgBackIn (
+          testCond shadow.payload.parentHash == env.clMock.latestPayloadBuilt.parentHash:
+            fatal "Incorrect parent hash for payloads"
+
+          testCond shadow.payload.blockHash != env.clMock.latestPayloadBuilt.blockHash:
+            fatal "Incorrect hash for payloads"
+
+        elif cs.scenario == TransactionReOrgScenarioReOrgBackIn:
           # At this point we broadcast the transaction and request a new payload from the client that must
           # contain the transaction.
           # Since we are re-orging out and back in on the next block, the verification of this transaction
           # being included happens on the next block
-          shadow.nextTx, err = sendTransaction(i)
-          testCond ok:
-            fatal "Error trying to send transaction: %v", t.TestName, err)
-          )
+          shadow.nextTx = shadow.sendTransaction(i)
 
-          if i == 0 (
+          if i == 0:
             # We actually can only do this once because the transaction carries over and we cannot
             # impede it from being included in the next payload
-            forkchoiceUpdated = env.clMock.latestForkchoice
-            payloadAttributes = env.clMock.LatestPayloadAttributes
-            rand.Read(payloadAttributes.SuggestedFeeRecipient[:])
-            f = env.engine.client.forkchoiceUpdated(
-              &forkchoiceUpdated,
-              &payloadAttributes,
-              env.clMock.latestHeader.Time,
-            )
+            var forkchoiceUpdated = env.clMock.latestForkchoice
+            var payloadAttributes = env.clMock.latestPayloadAttributes
+            payloadAttributes.suggestedFeeRecipient = w3Addr EthAddress.randomBytes()
+
+            var version = env.engine.version(env.clMock.latestHeader.timestamp)
+            let f = env.engine.client.forkchoiceUpdated(version, forkchoiceUpdated, some(payloadAttributes))
             f.expectPayloadStatus(PayloadExecutionStatus.valid)
 
             # Wait a second for the client to prepare the payload with the included transaction
+            let period = chronos.seconds(env.clMock.payloadProductionClientDelay)
+            waitFor sleepAsync(period)
 
-            await sleepAsync(env.clMock.PayloadProductionClientDelay)
-
-            g = env.engine.client.getPayload(f.Response.PayloadID, env.clMock.LatestPayloadAttributes)
+            version = env.engine.version(env.clMock.latestPayloadAttributes.timestamp)
+            let g = env.engine.client.getPayload(f.get.payloadID.get, version)
             g.expectNoError()
 
-            if !TransactionInPayload(g.Payload, shadow.nextTx) (
-              fatal "Payload built does not contain the transaction: %v", t.TestName, g.Payload)
-            )
+            let payload = g.get.executionPayload
+            testCond txInPayload(payload, shadow.nextTx.rlpHash):
+              fatal "Payload built does not contain the transaction"
 
             # Send the new payload and forkchoiceUpdated to it
-            n = env.engine.client.newPayload(g.Payload)
+            let n = env.engine.client.newPayload(payload)
             n.expectStatus(PayloadExecutionStatus.valid)
 
-            forkchoiceUpdated.headBlockHash = g.Payload.blockHash
+            forkchoiceUpdated.headBlockHash = payload.blockHash
 
-            s = env.engine.client.forkchoiceUpdated(forkchoiceUpdated, nil, g.Payload.timestamp)
+            version = env.engine.version(payload.timestamp)
+            let s = env.engine.client.forkchoiceUpdated(version, forkchoiceUpdated)
             s.expectPayloadStatus(PayloadExecutionStatus.valid)
-          )
-        )
-      ),
+        return true
+      ,
       onNewPayloadBroadcast: proc(): bool =
         if shadow.tx.isSome:
           # Get the receipt
-          ctx, cancel = context.WithTimeout(t.TestContext, globals.RPCTimeout)
-          defer cancel()
-          receipt, _ = t.Eth.TransactionReceipt(ctx, shadow.txHash)
-          if receipt != nil (
-            fatal "Receipt obtained before tx included in block (NewPayload): %v", t.TestName, receipt)
-          )
-        )
-      ),
+          let receipt = env.engine.client.txReceipt(shadow.txHash)
+          testCond receipt.isOk:
+            fatal "Receipt obtained before tx included in block (NewPayload)"
+        return true
+      ,
       onForkchoiceBroadcast: proc(): bool =
-        if cs.scenario != TransactionReOrgScenarioReOrgBackIn (
+        if cs.scenario != TransactionReOrgScenarioReOrgBackIn:
           # Transaction is now in the head of the canonical chain, re-org and verify it's removed
           # Get the receipt
-          txt = env.engine.client.txReceipt(shadow.txHash)
-          txt.expectBlockHash(env.clMock.latestForkchoice.headBlockHash)
+          var txt = env.engine.client.txReceipt(shadow.txHash)
+          txt.expectBlockHash(ethHash env.clMock.latestForkchoice.headBlockHash)
 
-          if shadow.payload.parentHash != env.clMock.latestPayloadBuilt.parentHash (
-            fatal "Incorrect parent hash for payloads: %v != %v", t.TestName, shadow.payload.parentHash, env.clMock.latestPayloadBuilt.parentHash)
-          )
-          if shadow.payload.blockHash == env.clMock.latestPayloadBuilt.blockHash (
-            fatal "Incorrect hash for payloads: %v == %v", t.TestName, shadow.payload.blockHash, env.clMock.latestPayloadBuilt.blockHash)
-          )
+          testCond shadow.payload.parentHash == env.clMock.latestPayloadBuilt.parentHash:
+            fatal "Incorrect parent hash for payloads"
 
-          if shadow.payload == nil (
-            fatal "No payload to re-org to", t.TestName)
-          )
-          r = env.engine.client.newPayload(shadow.payload)
+          testCond shadow.payload.blockHash != env.clMock.latestPayloadBuilt.blockHash:
+            fatal "Incorrect hash for payloads"
+
+          #if shadow.payload == nil (
+          #  fatal "No payload to re-org to", t.TestName)
+
+          let r = env.engine.client.newPayload(shadow.payload)
           r.expectStatus(PayloadExecutionStatus.valid)
           r.expectLatestValidHash(shadow.payload.blockHash)
 
-          s = env.engine.client.forkchoiceUpdated(api.ForkchoiceStateV1(
+          let fcu = ForkchoiceStateV1(
             headBlockHash:      shadow.payload.blockHash,
             safeBlockHash:      env.clMock.latestForkchoice.safeBlockHash,
             finalizedBlockHash: env.clMock.latestForkchoice.finalizedBlockHash,
-          ), nil, shadow.payload.timestamp)
+          )
+
+          var version = env.engine.version(shadow.payload.timestamp)
+          let s = env.engine.client.forkchoiceUpdated(version, fcu)
           s.expectPayloadStatus(PayloadExecutionStatus.valid)
 
-          p = env.engine.client.headerByNumber(Head)
-          p.expectHash(shadow.payload.blockHash)
+          let p = env.engine.client.namedHeader(Head)
+          p.expectHash(ethHash shadow.payload.blockHash)
 
           txt = env.engine.client.txReceipt(shadow.txHash)
-          if cs.scenario == TransactionReOrgScenarioReOrgOut (
-            if txt.Receipt != nil (
-              receiptJson, _ = json.MarshalIndent(txt.Receipt, "", "  ")
-              fatal "Receipt was obtained when the tx had been re-org'd out: %s", t.TestName, receiptJson)
-            )
-          elif cs.scenario == TransactionReOrgScenarioReOrgDifferentBlock || cs.scenario == TransactionReOrgScenarioNewPayloadOnRevert (
-            txt.expectBlockHash(shadow.payload.blockHash)
-          )
+          if cs.scenario == TransactionReOrgScenarioReOrgOut:
+            testCond txt.isErr:
+              fatal "Receipt was obtained when the tx had been re-org'd out"
+          elif cs.scenario in [TransactionReOrgScenarioReOrgDifferentBlock, TransactionReOrgScenarioNewPayloadOnRevert]:
+            txt.expectBlockHash(ethHash shadow.payload.blockHash)
 
           # Re-org back
-          if cs.scenario == TransactionReOrgScenarioNewPayloadOnRevert (
-            r = env.engine.client.newPayload(env.clMock.latestPayloadBuilt)
+          if cs.scenario == TransactionReOrgScenarioNewPayloadOnRevert:
+            let r = env.engine.client.newPayload(env.clMock.latestPayloadBuilt)
             r.expectStatus(PayloadExecutionStatus.valid)
             r.expectLatestValidHash(env.clMock.latestPayloadBuilt.blockHash)
-          )
-          env.clMock.BroadcastForkchoiceUpdated(env.clMock.latestForkchoice, nil, 1)
-        )
+
+          testCond env.clMock.broadcastForkchoiceUpdated(Version.V1, env.clMock.latestForkchoice)
 
         if shadow.tx.isSome:
           # Now it should be back with main payload
-          txt = env.engine.client.txReceipt(shadow.txHash)
-          txt.expectBlockHash(env.clMock.latestForkchoice.headBlockHash)
+          let txt = env.engine.client.txReceipt(shadow.txHash)
+          txt.expectBlockHash(ethHash env.clMock.latestForkchoice.headBlockHash)
 
-          if cs.scenario != TransactionReOrgScenarioReOrgBackIn (
-            tx = nil
-          )
-        )
+          if cs.scenario != TransactionReOrgScenarioReOrgBackIn:
+            shadow.tx = none(Transaction)
 
-        if cs.scenario == TransactionReOrgScenarioReOrgBackIn && i > 0 (
+        if cs.scenario == TransactionReOrgScenarioReOrgBackIn and i > 0:
           # Reasoning: Most of the clients do not re-add blob transactions to the pool
           # after a re-org, so we need to wait until the next tx is sent to actually
           # verify.
-          tx = shadow.nextTx
-        )
-
-      ),
+          shadow.tx = some(shadow.nextTx)
+        return true
     ))
-
-  )
+    testCond pbRes
 
   if shadow.tx.isSome:
     # Produce one last block and verify that the block contains the transaction
-    env.clMock.produceSingleBlock(BlockProcessCallbacks(
+    let pbRes = env.clMock.produceSingleBlock(BlockProcessCallbacks(
       onForkchoiceBroadcast: proc(): bool =
-        if !TransactionInPayload(env.clMock.latestPayloadBuilt, tx) (
-          fatal "Payload built does not contain the transaction: %v", t.TestName, env.clMock.latestPayloadBuilt)
-        )
+        testCond txInPayload(env.clMock.latestPayloadBuilt, shadow.txHash):
+          fatal "Payload built does not contain the transaction"
+
         # Get the receipt
-        ctx, cancel = context.WithTimeout(t.TestContext, globals.RPCTimeout)
-        defer cancel()
-        receipt, _ = t.Eth.TransactionReceipt(ctx, shadow.txHash)
-        if receipt == nil (
-          fatal "Receipt not obtained after tx included in block: %v", t.TestName, receipt)
-        )
-      ),
+        let receipt = env.engine.client.txReceipt(shadow.txHash)
+        testCond receipt.isErr:
+          fatal "Receipt not obtained after tx included in block"
+
+        return true
     ))
+    testCond pbRes
 
-  )
-
-)
-]#
+  return true
 
 # Test that performing a re-org back into a previous block of the canonical chain does not produce errors and the chain
 # is still capable of progressing.
@@ -400,6 +369,13 @@ type
     transactionPerPayload*: int
     # Whether to execute a sidechain payload on the re-org
     executeSidePayloadOnReOrg*: bool
+
+  ShadowCanon = ref object
+    previousHash: Web3Hash
+    previousTimestamp: Web3Quantity
+    payload: ExecutionPayload
+    parentForkchoice: ForkchoiceStateV1
+    parentTimestamp: uint64
 
 method withMainFork(cs: ReOrgBackToCanonicalTest, fork: EngineFork): BaseSpec =
   var res = cs.clone()
@@ -435,99 +411,99 @@ method execute(cs: ReOrgBackToCanonicalTest, env: TestEnv): bool =
   # Produce blocks before starting the test (So we don't try to reorg back to the genesis block)
   testCond env.clMock.produceBlocks(5, BlockProcessCallbacks())
 
-#[
   # We are going to reorg back to a previous hash several times
-  previousHash = env.clMock.latestForkchoice.headBlockHash
-  previousTimestamp = env.clMock.latestPayloadBuilt.timestamp
+  var shadow = ShadowCanon(
+    previousHash: env.clMock.latestForkchoice.headBlockHash,
+    previousTimestamp: env.clMock.latestPayloadBuilt.timestamp
+  )
 
-  if cs.executeSidePayloadOnReOrg (
-    var (
-      shadow.payload                 ExecutableData
-      shadow.parentForkchoice api.ForkchoiceStateV1
-      shadow.parentTimestamp  uint64
-    )
-    env.clMock.produceSingleBlock(BlockProcessCallbacks(
-      OnPayloadAttributesGenerated: proc(): bool =
-        payloadAttributes = env.clMock.LatestPayloadAttributes
-        rand.Read(payloadAttributes.Random[:])
-        r = env.engine.client.forkchoiceUpdated(env.clMock.latestForkchoice, payloadAttributes, env.clMock.latestHeader.Time)
+  if cs.executeSidePayloadOnReOrg:
+    var pbRes = env.clMock.produceSingleBlock(BlockProcessCallbacks(
+      onPayloadAttributesGenerated: proc(): bool =
+        var attr = env.clMock.latestPayloadAttributes
+        attr.prevRandao = Web3Hash.randomBytes()
+
+        var version = env.engine.version(env.clMock.latestHeader.timestamp)
+        let r = env.engine.client.forkchoiceUpdated(version, env.clMock.latestForkchoice, some(attr))
         r.expectNoError()
-        if r.Response.PayloadID == nil (
-          fatal "No payload ID returned by forkchoiceUpdated", t.TestName)
-        )
-        g = env.engine.client.getPayload(r.Response.PayloadID, payloadAttributes)
+        testcond r.get.payloadID.isSome:
+          fatal "No payload ID returned by forkchoiceUpdated"
+
+        version = env.engine.version(attr.timestamp)
+        let g = env.engine.client.getPayload(r.get.payloadID.get, version)
         g.expectNoError()
-        shadow.payload = &g.Payload
+
+        shadow.payload = g.get.executionPayload
         shadow.parentForkchoice = env.clMock.latestForkchoice
-        shadow.parentTimestamp = env.clMock.latestHeader.Time
-      ),
+        shadow.parentTimestamp = env.clMock.latestHeader.timestamp.uint64
+        return true
     ))
+    testCond pbRes
+
     # Continue producing blocks until we reach the depth of the re-org
-    testCond env.clMock.produceBlocks(int(cs.GetDepth()-1), BlockProcessCallbacks(
+    pbRes = env.clMock.produceBlocks(cs.getDepth()-1, BlockProcessCallbacks(
       onPayloadProducerSelected: proc(): bool =
         # Send a transaction on each payload of the canonical chain
-        var err error
-        _, err = t.sendNextTxs(
-          t.TestContext,
-          t.Engine,
-          BaseTx(
-            recipient:  &ZeroAddr,
-            amount:     big1,
-            payload:    nil,
-            txType:     cs.txType,
-            gasLimit:   75000,
-            ForkConfig: t.ForkConfig,
-          ),
-          cs.transactionPerPayload,
+        let tc = BaseTx(
+          recipient:  some(ZeroAddr),
+          amount:     1.u256,
+          txType:     cs.txType,
+          gasLimit:   75000,
         )
+        let ok = env.sendNextTxs(env.engine, tc, cs.transactionPerPayload)
         testCond ok:
-          fatal "Error trying to send transactions: %v", t.TestName, err)
-        )
-      ),
+          fatal "Error trying to send transactions"
+        return true
     ))
+    testCond pbRes
+
     # On the last block, before executing the next payload of the canonical chain,
     # re-org back to the parent of the side payload and execute the side payload first
-    env.clMock.produceSingleBlock(BlockProcessCallbacks(
+    pbRes = env.clMock.produceSingleBlock(BlockProcessCallbacks(
       onGetpayload: proc(): bool =
         # We are about to execute the new payload of the canonical chain, re-org back to
         # the side payload
-        f = env.engine.client.forkchoiceUpdated(shadow.parentForkchoice, nil, shadow.parentTimestamp)
+        var version = env.engine.version(shadow.parentTimestamp)
+        let f = env.engine.client.forkchoiceUpdated(version, shadow.parentForkchoice)
         f.expectPayloadStatus(PayloadExecutionStatus.valid)
         f.expectLatestValidHash(shadow.parentForkchoice.headBlockHash)
+
         # Execute the side payload
-        n = env.engine.client.newPayload(shadow.payload)
+        let n = env.engine.client.newPayload(shadow.payload)
         n.expectStatus(PayloadExecutionStatus.valid)
         n.expectLatestValidHash(shadow.payload.blockHash)
         # At this point the next canonical payload will be executed by the CL mock, so we can
         # continue producing blocks
-      ),
+        return true
     ))
+    testCond pbRes
   else:
-    testCond env.clMock.produceBlocks(int(cs.GetDepth()), BlockProcessCallbacks(
+    let pbRes = env.clMock.produceBlocks(cs.getDepth(), BlockProcessCallbacks(
       onForkchoiceBroadcast: proc(): bool =
         # Send a fcU with the headBlockHash pointing back to the previous block
-        forkchoiceUpdatedBack = api.ForkchoiceStateV1(
-          headBlockHash:      previousHash,
+        let fcu = ForkchoiceStateV1(
+          headBlockHash:      shadow.previousHash,
           safeBlockHash:      env.clMock.latestForkchoice.safeBlockHash,
           finalizedBlockHash: env.clMock.latestForkchoice.finalizedBlockHash,
         )
 
         # It is only expected that the client does not produce an error and the CL Mocker is able to progress after the re-org
-        r = env.engine.client.forkchoiceUpdated(forkchoiceUpdatedBack, nil, previousTimestamp)
+        var version = env.engine.version(shadow.previousTimestamp)
+        var r = env.engine.client.forkchoiceUpdated(version, fcu)
         r.expectNoError()
 
         # Re-send the ForkchoiceUpdated that the CLMock had sent
-        r = env.engine.client.forkchoiceUpdated(env.clMock.latestForkchoice, nil, env.clMock.LatestExecutedPayload.timestamp)
+        version = env.engine.version(env.clMock.latestExecutedPayload.timestamp)
+        r = env.engine.client.forkchoiceUpdated(version, env.clMock.latestForkchoice)
         r.expectNoError()
-      ),
+        return true
     ))
-  )
+    testCond pbRes
 
   # Verify that the client is pointing to the latest payload sent
-  r = env.engine.client.headerByNumber(Head)
-  r.expectHash(env.clMock.latestPayloadBuilt.blockHash)
-)
-]#
+  let r = env.engine.client.namedHeader(Head)
+  r.expectHash(ethHash env.clMock.latestPayloadBuilt.blockHash)
+  return true
 
 type
   ReOrgBackFromSyncingTest* = ref object of EngineSpec

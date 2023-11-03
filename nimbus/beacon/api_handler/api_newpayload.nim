@@ -126,8 +126,9 @@ proc newPayload*(ben: BeaconEngineRef,
 
   if header.timestamp <= parent.timestamp:
     warn "Invalid timestamp",
-      parent = header.timestamp, header = header.timestamp
-    return invalidStatus(db.getHeadBlockHash(), "Invalid timestamp")
+      number = header.blockNumber, parentNumber = parent.blockNumber,
+      parent = parent.timestamp, header = header.timestamp
+    return invalidStatus(parent.blockHash, "Invalid timestamp")
 
   if not db.haveBlockAndState(header.parentHash):
     ben.put(blockHash, header)

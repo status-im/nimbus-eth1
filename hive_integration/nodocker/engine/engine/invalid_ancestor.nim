@@ -39,13 +39,8 @@ method withMainFork(cs: InvalidMissingAncestorReOrgTest, fork: EngineFork): Base
   return res
 
 method getName(cs: InvalidMissingAncestorReOrgTest): string =
-  var desc = "Invalid Missing Ancestor ReOrg Invalid" & $cs.invalidField
-
-  if cs.emptyTransactions:
-   desc.add ", Empty Txs"
-
-  desc.add ", Invalid P" & $cs.invalidIndex & "'"
-  desc
+  "Invalid Missing Ancestor ReOrg, $1, EmptyTxs=$2, Invalid P$3" % [
+    $cs.invalidField, $cs.emptyTransactions, $cs.invalidIndex]
 
 method execute(cs: InvalidMissingAncestorReOrgTest, env: TestEnv): bool =
   # Wait until TTD is reached by this client
@@ -186,25 +181,14 @@ type
     # or start chain (if specified).
     reOrgFromCanonical*: bool
 
-
 method withMainFork(cs: InvalidMissingAncestorReOrgSyncTest, fork: EngineFork): BaseSpec =
   var res = cs.clone()
   res.mainFork = fork
   return res
 
 method getName(cs: InvalidMissingAncestorReOrgSyncTest): string =
-  var name = "Invalid Missing Ancestor ReOrg"
-  name.add ", Invalid " & $cs.invalidField
-
-  if cs.emptyTransactions:
-    name.add ", Empty Txs"
-
-  name.add ", Invalid P" & $cs.invalidIndex & "'"
-  name.add ", Reveal using sync"
-
-  if cs.reOrgFromCanonical:
-    name.add ", ReOrg from Canonical"
-  return name
+  "Invalid Missing Ancestor Syncing ReOrg, $1, EmptyTxs=$2, CanonicalReOrg=$3, Invalid P$4" % [
+    $cs.invalidField, $cs.emptyTransactions, $cs.reOrgFromCanonical, $cs.invalidIndex]
 
 method execute(cs: InvalidMissingAncestorReOrgSyncTest, env: TestEnv): bool =
   var sec = env.addEngine(true, cs.reOrgFromCanonical)
