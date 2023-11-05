@@ -135,7 +135,10 @@ method getName(cs: TransactionReOrgTest): string =
     name.add ", " & $cs.scenario
   return name
 
-func txHash(shadow: ShadowTx): common.Hash256 =
+proc txHash(shadow: ShadowTx): common.Hash256 =
+  if shadow.tx.isNone:
+    error "SHADOW TX IS NONE"
+    return
   shadow.tx.get.rlpHash
 
 # Test transaction status after a forkchoiceUpdated re-orgs to an alternative hash where a transaction is not present
@@ -199,11 +202,11 @@ method execute(cs: TransactionReOrgTest, env: TestEnv): bool =
         if cs.scenario != TransactionReOrgScenarioReOrgBackIn:
           # At this point we can broadcast the transaction and it will be included in the next payload
           # Data is the key where a `1` will be stored
-          let tx = shadow.sendTransaction(i)
+          shadow.tx = some(shadow.sendTransaction(i))
 
           # Get the receipt
-          let receipt = env.engine.client.txReceipt(tx.rlpHash)
-          testCond receipt.isOk:
+          let receipt = env.engine.client.txReceipt(shadow.txHash)
+          testCond receipt.isErr:
             fatal "Receipt obtained before tx included in block"
 
         return true
@@ -272,7 +275,7 @@ method execute(cs: TransactionReOrgTest, env: TestEnv): bool =
         if shadow.tx.isSome:
           # Get the receipt
           let receipt = env.engine.client.txReceipt(shadow.txHash)
-          testCond receipt.isOk:
+          testCond receipt.isErr:
             fatal "Receipt obtained before tx included in block (NewPayload)"
         return true
       ,
@@ -350,7 +353,7 @@ method execute(cs: TransactionReOrgTest, env: TestEnv): bool =
 
         # Get the receipt
         let receipt = env.engine.client.txReceipt(shadow.txHash)
-        testCond receipt.isErr:
+        testCond receipt.isOk:
           fatal "Receipt not obtained after tx included in block"
 
         return true

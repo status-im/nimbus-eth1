@@ -58,7 +58,8 @@ proc specExecute(ws: BaseSpec): bool =
   let env  = TestEnv.new(conf)
   env.engine.setRealTTD()
   env.setupCLMock()
-  #cs.configureCLMock(env.clMock)
+  if cs.enableConfigureCLMock:
+    cs.configureCLMock(env.clMock)
   result = cs.execute(env)
   env.close()
 
@@ -113,6 +114,7 @@ proc makeEngineTest*(): seq[EngineSpec] =
         invalidIndex:      invalidIndex,
         invalidField:      InvalidStateRoot,
         emptyTransactions: emptyTxs,
+        enableConfigureCLMock: true
       )
 
   # Invalid Payload Tests
@@ -300,16 +302,19 @@ proc makeEngineTest*(): seq[EngineSpec] =
   result.add ReOrgBackFromSyncingTest(
     slotsToSafe:      32,
     slotsToFinalized: 64,
+    enableConfigureCLMock: true,
   )
 
   result.add ReOrgPrevValidatedPayloadOnSideChainTest(
     slotsToSafe:      32,
     slotsToFinalized: 64,
+    enableConfigureCLMock: true,
   )
 
   result.add SafeReOrgToSideChainTest(
     slotsToSafe:      1,
     slotsToFinalized: 2,
+    enableConfigureCLMock: true,
   )
 
   # Re-org a transaction out of a block, or into a new block
@@ -336,6 +341,7 @@ proc makeEngineTest*(): seq[EngineSpec] =
     timeoutSeconds:   60,
     transactionPerPayload: 1,
     reOrgDepth:            5,
+    enableConfigureCLMock: true,
   )
 
   result.add ReOrgBackToCanonicalTest(
@@ -345,9 +351,9 @@ proc makeEngineTest*(): seq[EngineSpec] =
     transactionPerPayload:     50,
     reOrgDepth:                10,
     executeSidePayloadOnReOrg: true,
+    enableConfigureCLMock: true,
   )
 
-#[
   const
     invalidReorgList = [
       InvalidStateRoot,
@@ -390,6 +396,7 @@ proc makeEngineTest*(): seq[EngineSpec] =
           reOrgFromCanonical: reOrgFromCanonical,
           emptyTransactions:  true,
           invalidIndex:       invalidIndex,
+          enableConfigureCLMock: true,
         )
 
       result.add InvalidMissingAncestorReOrgSyncTest(
@@ -399,11 +406,8 @@ proc makeEngineTest*(): seq[EngineSpec] =
         invalidField:       invalidField,
         reOrgFromCanonical: reOrgFromCanonical,
         invalidIndex:       invalidIndex,
+        enableConfigureCLMock: true,
       )
-
-
-]#
-
 
 proc fillEngineTests*(): seq[TestDesc] =
   let list = makeEngineTest()

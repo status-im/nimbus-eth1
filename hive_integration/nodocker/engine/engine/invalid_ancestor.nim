@@ -14,7 +14,8 @@ import
   eth/common/eth_types_rlp,
   ./engine_spec,
   ../cancun/customizer,
-  ../../../../nimbus/utils/utils
+  ../../../../nimbus/utils/utils,
+  ../../../../nimbus/beacon/payload_conv
 
 # Attempt to re-org to a chain which at some point contains an unknown payload which is also invalid.
 # Then reveal the invalid payload and expect that the client rejects it and rejects forkchoice updated calls to this chain.
@@ -190,6 +191,9 @@ method getName(cs: InvalidMissingAncestorReOrgSyncTest): string =
   "Invalid Missing Ancestor Syncing ReOrg, $1, EmptyTxs=$2, CanonicalReOrg=$3, Invalid P$4" % [
     $cs.invalidField, $cs.emptyTransactions, $cs.reOrgFromCanonical, $cs.invalidIndex]
 
+proc executableDataToBlock(ex: ExecutableData): EthBlock =
+  ethBlock(ex.basePayload, true, ex.beaconRoot)
+
 method execute(cs: InvalidMissingAncestorReOrgSyncTest, env: TestEnv): bool =
   var sec = env.addEngine(true, cs.reOrgFromCanonical)
 
@@ -311,13 +315,13 @@ method execute(cs: InvalidMissingAncestorReOrgSyncTest, env: TestEnv): bool =
           s.expectStatusEither([PayloadExecutionStatus.valid, PayloadExecutionStatus.syncing])
 
         else:
-          debugEcho "i: ", i, " cs.invalidIndex: ", cs.invalidIndex
-          doAssert(false, "Should not happen")
-          #invalidBlock, err = ExecutableDataToBlock(*shadow.payloads[i])
-          #if err = secondaryClient.SetBlock(invalidBlock, shadow.payloads[i-1].blockNumber, shadow.payloads[i-1].StateRoot); err != nil (
-          #  fatal "TEST ISSUE - Failed to set invalid block: " err)
-          #)
-          #info "Invalid block successfully set %d (%s): " i, payloadValidStr, invalidBlock.Hash())
+          let invalidBlock = executableDataToBlock(shadow.payloads[i])
+          testCond sec.client.setBlock(invalidBlock, shadow.payloads[i-1].blockNumber, shadow.payloads[i-1].stateRoot):
+              fatal "TEST ISSUE - Failed to set invalid block"
+          info "Invalid block successfully set",
+            idx=i,
+            msg=payloadValidStr,
+            hash=invalidBlock.header.blockHash.short
 
       # Check that the second node has the correct head
       var res = sec.client.latestHeader()
@@ -348,76 +352,64 @@ method execute(cs: InvalidMissingAncestorReOrgSyncTest, env: TestEnv): bool =
           number=head.blockNumber
 
       # If we are syncing through p2p, we need to keep polling until the client syncs the missing payloads
-      #[for (
-        r = env.engine.client.newPayload(shadow.payloads[shadow.n])
-        info "Response from main client: " r.Status)
-        s = env.engine.client.forkchoiceUpdated(ForkchoiceStateV1(
-          headblockHash: shadow.payloads[shadow.n].blockHash,
-        ), nil, shadow.payloads[shadow.n].timestamp)
-        info "Response from main client fcu: " s.Response.PayloadStatus)
+      while true:
+        let version = env.engine.version(shadow.payloads[shadow.n].timestamp)
+        let r = env.engine.client.newPayload(version, shadow.payloads[shadow.n])
+        info "Response from main client", status=r.get.status
 
-        if r.Status.Status == PayloadExecutionStatus.invalid (
+        let fcu = ForkchoiceStateV1(
+          headblockHash: shadow.payloads[shadow.n].blockHash,
+        )
+        let s = env.engine.client.forkchoiceUpdated(version, fcu)
+        info "Response from main client fcu", status=s.get.payloadStatus.status
+
+        if r.get.status == PayloadExecutionStatus.invalid:
           # We also expect that the client properly returns the LatestValidHash of the block on the
           # side chain that is immediately prior to the invalid payload (or zero if parent is PoW)
-          var lvh common.Hash
-          if shadow.cAHeight != 0 || cs.invalidIndex != 1 (
+          var lvh: Web3Hash
+          if shadow.cAHeight != 0 or cs.invalidIndex != 1:
             # Parent is NOT Proof of Work
             lvh = shadow.payloads[cs.invalidIndex-1].blockHash
-          )
+
           r.expectLatestValidHash(lvh)
           # Response on ForkchoiceUpdated should be the same
           s.expectPayloadStatus(PayloadExecutionStatus.invalid)
           s.expectLatestValidHash(lvh)
           break
-        elif test.PayloadStatus(r.Status.Status) == PayloadExecutionStatus.valid (
-          ctx, cancel = context.WithTimeout(t.TestContext, globals.RPCTimeout)
-          defer cancel()
-          latestBlock, err = t.Eth.BlockByNumber(ctx, nil)
-          if err != nil (
-            fatal "Unable to get latest block: " err)
-          )
+        elif r.get.status == PayloadExecutionStatus.valid:
+          let res = env.engine.client.latestHeader()
+          testCond res.isOk:
+            fatal "Unable to get latest block: ", msg=res.error
 
           # Print last shadow.n blocks, for debugging
-          k = latestBlock.blockNumber().Int64() - int64(shadow.n)
-          if k < 0 (
-            k = 0
-          )
-          for ; k <= latestBlock.blockNumber().Int64(); k++ (
-            ctx, cancel = context.WithTimeout(t.TestContext, globals.RPCTimeout)
-            defer cancel()
-            latestBlock, err = t.Eth.BlockByNumber(ctx, big.NewInt(k))
-            if err != nil (
-              fatal "Unable to get block %d: " k, err)
-            )
-            js, _ = json.MarshalIndent(latestBlock.Header(), "", "  ")
-            info "Block %d: %s", t.TestName, k, js)
-          )
+          let latestNumber = res.get.blockNumber.truncate(int64)
+          var k = latestNumber - int64(shadow.n)
+          if k < 0: k = 0
 
-          fatal "Client returned VALID on an invalid chain: " r.Status)
-        )
+          while k <= latestNumber:
+            let res = env.engine.client.headerByNumber(k.uint64)
+            testCond res.isOk:
+              fatal "Unable to get block", number=k, msg=res.error
+            inc k
 
-        select (
-        case <-time.After(time.Second):
-          continue
-        case <-t.TimeoutContext.Done():
-          fatal "Timeout waiting for main client to detect invalid chain", t.TestName)
-        )
-      )
+          fatal "Client returned VALID on an invalid chain", status=r.get.status
+          return false
 
-      if !cs.reOrgFromCanonical (
+      if not cs.reOrgFromCanonical:
         # We need to send the canonical chain to the main client here
-        for i = env.clMock.firstPoSBlockNumber.Uint64(); i <= env.clMock.latestExecutedPayload.blockNumber; i++ (
-          if payload, ok = env.clMock.executedPayloadHistory[i]; ok (
-            r = env.engine.client.newPayload(payload)
+        let start = env.clMock.firstPoSBlockNumber.get
+        let stop = env.clMock.latestExecutedPayload.blockNumber.uint64
+        for i in start..stop:
+          if env.clMock.executedPayloadHistory.hasKey(i):
+            let payload = env.clMock.executedPayloadHistory[i]
+            let r = env.engine.client.newPayload(payload)
             r.expectStatus(PayloadExecutionStatus.valid)
-          )
-        )
-      )
 
       # Resend the latest correct fcU
-      r = env.engine.client.forkchoiceUpdated(env.clMock.latestForkchoice, nil, env.clMock.latestPayloadBuilt.timestamp)
+      let version = env.engine.version(env.clMock.latestPayloadBuilt.timestamp)
+      let r = env.engine.client.forkchoiceUpdated(version, env.clMock.latestForkchoice)
       r.expectNoError()
-      # After this point, the CL Mock will send the next payload of the canonical chain]#
+      # After this point, the CL Mock will send the next payload of the canonical chain
       return true
   ))
 
