@@ -780,6 +780,7 @@ proc statusLogLoop(n: HistoryNetwork) {.async.} =
         radius = radiusPercentage.toString(10) & "%",
         dbSize = $(n.contentDB.size() div 1000) & "kb",
         contentSize = $(n.contentDB.contentSize() div 1000) & "kb",
+        contentCount = n.contentDB.contentCount(),
         routingTableNodes = n.portalProtocol.routingTable.len()
 
       await sleepAsync(60.seconds)

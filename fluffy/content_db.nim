@@ -56,7 +56,8 @@ type
     maxSize: uint32
     sizeStmt: SqliteStmt[NoParams, int64]
     unusedSizeStmt: SqliteStmt[NoParams, int64]
-    vacStmt: SqliteStmt[NoParams, void]
+    vacuumStmt: SqliteStmt[NoParams, void]
+    contentCountStmt: SqliteStmt[NoParams, int64]
     contentSizeStmt: SqliteStmt[NoParams, int64]
     getAllOrderedByDistanceStmt: SqliteStmt[array[32, byte], RowInfo]
 
@@ -106,15 +107,15 @@ proc new*(
   db.registerCustomScalarFunction("xorDistance", xorDistance)
     .expect("Couldn't register custom xor function")
 
-  let getSizeStmt = db.prepareStmt(
+  let sizeStmt = db.prepareStmt(
     "SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size();",
     NoParams, int64).get()
 
-  let unusedSize = db.prepareStmt(
+  let unusedSizeStmt = db.prepareStmt(
     "SELECT freelist_count * page_size as size FROM pragma_freelist_count(), pragma_page_size();",
     NoParams, int64).get()
 
-  let vacStmt = db.prepareStmt(
+  let vacuumStmt = db.prepareStmt(
     "VACUUM;",
     NoParams, void).get()
 
@@ -122,21 +123,24 @@ proc new*(
 
   let contentSizeStmt = db.prepareStmt(
     "SELECT SUM(length(value)) FROM kvstore",
-    NoParams, int64
-  ).get()
+    NoParams, int64).get()
+
+  let contentCountStmt = db.prepareStmt(
+    "SELECT COUNT(key) FROM kvstore;",
+    NoParams, int64).get()
 
   let getAllOrderedByDistanceStmt = db.prepareStmt(
     "SELECT key, length(value), xorDistance(?, key) as distance FROM kvstore ORDER BY distance DESC",
-    array[32, byte], RowInfo
-  ).get()
+    array[32, byte], RowInfo).get()
 
   ContentDB(
     kv: kvStore,
     maxSize: maxSize,
-    sizeStmt: getSizeStmt,
-    vacStmt: vacStmt,
-    unusedSizeStmt: unusedSize,
+    sizeStmt: sizeStmt,
+    unusedSizeStmt: unusedSizeStmt,
+    vacuumStmt: vacuumStmt,
     contentSizeStmt: contentSizeStmt,
+    contentCountStmt: contentCountStmt,
     getAllOrderedByDistanceStmt: getAllOrderedByDistanceStmt
   )
 
@@ -185,7 +189,7 @@ proc reclaimSpace*(db: ContentDB): void =
   ## Ideal mode of operation, is to run it after several deletes.
   ## Another option would be to run 'PRAGMA auto_vacuum = FULL;' statement at
   ## the start of db to leave it up to sqlite to clean up
-  db.vacStmt.exec().expectDb()
+  db.vacuumStmt.exec().expectDb()
 
 proc size*(db: ContentDB): int64 =
   ## Retrun current size of DB as product of sqlite page_count and page_size
@@ -210,7 +214,7 @@ proc unusedSize(db: ContentDB): int64 =
     size = res).expectDb()
   return size
 
-proc realSize*(db: ContentDB): int64 =
+proc usedSize*(db: ContentDB): int64 =
   db.size() - db.unusedSize()
 
 proc contentSize*(db: ContentDB): int64 =
@@ -219,6 +223,12 @@ proc contentSize*(db: ContentDB): int64 =
   discard (db.contentSizeStmt.exec do(res: int64):
     size = res).expectDb()
   return size
+
+proc contentCount*(db: ContentDB): int64 =
+  var count: int64 = 0
+  discard (db.contentCountStmt.exec do(res: int64):
+    count = res).expectDb()
+  return count
 
 ## Public ContentId based ContentDB calls
 
@@ -296,7 +306,7 @@ proc put*(
   # 2. Deal with the edge case where a user configures max db size lower than
   # current db.size(). With such config the database would try to prune itself
   # with each addition.
-  let dbSize = db.realSize()
+  let dbSize = db.usedSize()
 
   if dbSize < int64(db.maxSize):
     return PutResult(kind: ContentStored)
