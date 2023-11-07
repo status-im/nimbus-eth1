@@ -9,12 +9,14 @@
 # according to those terms.
 
 import
-  std/[os, sequtils, strformat, strutils],
+  std/[os, strformat, strutils],
   eth/common,
-  nimcrypto/utils,
   stew/byteutils,
   ../../nimbus/sync/[protocol, snap/range_desc],
   ./gunzip
+
+import
+  nimcrypto/utils except toHex
 
 type
   UndumpState = enum
@@ -66,16 +68,16 @@ proc dumpStorages*(
       ): string =
   ## Dump account and storage data in parseable Ascii text
   proc ppStr(blob: Blob): string =
-    blob.mapIt(it.toHex(2)).join.toLowerAscii
+    blob.toHex
 
   proc ppStr(proof: SnapProof): string =
     proof.to(Blob).ppStr
 
   proc ppStr(hash: Hash256): string =
-    hash.data.mapIt(it.toHex(2)).join.toLowerAscii
+    hash.data.toHex
 
   proc ppStr(key: NodeKey): string =
-    key.ByteArray32.mapIt(it.toHex(2)).join.toLowerAscii
+    key.ByteArray32.toHex
 
   result = "storages " & $data.storages.len & " " & $data.proof.len & "\n"
   result &= root.ppStr & "\n"

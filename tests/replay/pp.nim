@@ -13,10 +13,11 @@
 ## ----------------------------------------------------
 
 import
-  std/[tables],
-  ./pp_light,
+  std/tables,
+  eth/common,
+  stew/byteutils,
   ../../nimbus/common/chain_config,
-  eth/common
+  ./pp_light
 
 export
   pp_light
@@ -26,16 +27,16 @@ export
 # ------------------------------------------------------------------------------
 
 proc pp*(b: Blob): string =
-  b.mapIt(it.toHex(2)).join.toLowerAscii.pp(hex = true)
+  b.toHex.pp(hex = true)
 
 proc pp*(a: EthAddress): string =
-  a.mapIt(it.toHex(2)).join[32 .. 39].toLowerAscii
+  a.toHex[32 .. 39]
 
 proc pp*(a: openArray[EthAddress]): string =
   "[" & a.mapIt(it.pp).join(" ") & "]"
 
 proc pp*(a: BlockNonce): string =
-  a.mapIt(it.toHex(2)).join.toLowerAscii
+  a.toHex
 
 proc pp*(h: BlockHeader; sep = " "): string =
   "" &
