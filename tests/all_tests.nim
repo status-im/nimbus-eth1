@@ -50,4 +50,5 @@ cliBuilder:
           ./test_txpool,
           ./test_merge,
           ./test_eip4844,
-          ./test_beacon/test_skeleton
+          ./test_beacon/test_skeleton,
+          ./test_eof

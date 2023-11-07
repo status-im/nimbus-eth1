@@ -11,10 +11,10 @@
 import
   ".."/[db/accounts_cache, constants],
   "."/[code_stream, memory, message, stack, state],
-  "."/[types],
+  "."/[types, validate],
   ./interpreter/[gas_meter, gas_costs, op_codes],
   ../common/[common, evmforks],
-  ../utils/utils,
+  ../utils/[utils, eof],
   chronicles, chronos,
   eth/[keys],
   sets
@@ -45,6 +45,7 @@ when defined(evmc_enabled):
 
 const
   evmc_enabled* = defined(evmc_enabled)
+  ErrLegacyCode* = "invalid code: EOF contract must not deploy legacy code"
 
 # ------------------------------------------------------------------------------
 # Helpers
@@ -225,7 +226,8 @@ proc newComputation*(vmState: BaseVMState, sysCall: bool, message: Message,
   result.msg = message
   result.memory = Memory()
   result.stack = newStack()
-  result.returnStack = @[]
+  # disable EIP-2315
+  # result.returnStack = @[]
   result.gasMeter.init(message.gas)
   result.sysCall = sysCall
 
@@ -237,6 +239,11 @@ proc newComputation*(vmState: BaseVMState, sysCall: bool, message: Message,
     result.code = newCodeStream(
       vmState.readOnlyStateDB.getCode(message.codeAddress))
 
+  # EIP-4750
+  result.returnStack = @[
+    ReturnContext(section: 0, pc: 0, stackHeight: 0)
+  ]
+
 proc newComputation*(vmState: BaseVMState, sysCall: bool,
                      message: Message, code: seq[byte]): Computation =
   new result
@@ -244,10 +251,16 @@ proc newComputation*(vmState: BaseVMState, sysCall: bool,
   result.msg = message
   result.memory = Memory()
   result.stack = newStack()
-  result.returnStack = @[]
+  # disable EIP-2315
+  # result.returnStack = @[]
   result.gasMeter.init(message.gas)
   result.code = newCodeStream(code)
   result.sysCall = sysCall
+
+  # EIP-4750
+  result.returnStack = @[
+    ReturnContext(section: 0, pc: 0, stackHeight: 0)
+  ]
 
 template gasCosts*(c: Computation): untyped =
   c.vmState.gasCosts
@@ -313,11 +326,29 @@ proc writeContract*(c: Computation)
   if len == 0:
     return
 
-  # EIP-3541 constraint (https://eips.ethereum.org/EIPS/eip-3541).
-  if fork >= FkLondon and c.output[0] == 0xEF.byte:
-    withExtra trace, "New contract code starts with 0xEF byte, not allowed by EIP-3541"
-    c.setError(EVMC_CONTRACT_VALIDATION_FAILURE, true)
+  # Reject legacy contract deployment from EOF.
+  if c.initCodeEOF and not hasEOFMagic(c.output):
+    c.setError(ErrLegacyCode, true)
     return
+
+  # EIP-3541 constraint (https://eips.ethereum.org/EIPS/eip-3541).
+  if hasEOFByte(c.output):
+    if fork >= FkEOF:
+      var con: Container
+      let res = con.decode(c.output)
+      if res.isErr:
+        c.setError("EOF retcode parse error: " & res.error.toString, true)
+        return
+
+      let vres = con.validateCode()
+      if vres.isErr:
+        c.setError("EOF retcode validate error: " & vres.error.toString, true)
+        return
+
+    elif fork >= FkLondon:
+      withExtra trace, "New contract code starts with 0xEF byte, not allowed by EIP-3541"
+      c.setError(EVMC_CONTRACT_VALIDATION_FAILURE, true)
+      return
 
   # EIP-170 constraint (https://eips.ethereum.org/EIPS/eip-3541).
   if fork >= FkSpurious and len > EIP170_MAX_CODE_SIZE:

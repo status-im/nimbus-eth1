@@ -24,7 +24,7 @@ import
   ./op_handlers/[oph_defs,
                  oph_arithmetic, oph_hash, oph_envinfo, oph_blockdata,
                  oph_memory, oph_push, oph_dup, oph_swap, oph_log,
-                 oph_create, oph_call, oph_sysops]
+                 oph_create, oph_call, oph_sysops, oph_function]
 
 const
   allHandlersList = @[
@@ -40,7 +40,8 @@ const
     (vm2OpExecLog,        "Log"),
     (vm2OpExecCreate,     "Create"),
     (vm2OpExecCall,       "Call"),
-    (vm2OpExecSysOp,      "SysOp")]
+    (vm2OpExecSysOp,      "SysOp"),
+    (vm2OpExecFunction,   "Function")]
 
 # ------------------------------------------------------------------------------
 # Helper
@@ -73,13 +74,6 @@ proc mkOpTable(selected: EVMFork): array[Op,Vm2OpExec] {.compileTime.} =
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
-
-#const
-#  vm2OpHandlers* = block:
-#    var rc: array[Fork, array[Op, Vm2OpExec]]
-#    for w in Fork:
-#      rc[w] = w.mkOpTable
-#    rc
 
 type
   vmOpHandlersRec* = tuple

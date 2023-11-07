@@ -28,3 +28,7 @@ const
   FkParis*          = EVMC_PARIS
   FkShanghai*       = EVMC_SHANGHAI
   FkCancun*         = EVMC_CANCUN
+
+
+  # Meta forks related to specific EIP
+  FkEOF*            = FkCancun

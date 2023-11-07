@@ -50,10 +50,14 @@ type
     Shanghai
     Cancun
 
-const lastPurelyBlockNumberBasedFork* = GrayGlacier
-# MergeFork is special because of TTD.
-const firstTimeBasedFork* = Shanghai
+const
+  lastPurelyBlockNumberBasedFork* = GrayGlacier
 
+  # MergeFork is special because of TTD.
+  firstTimeBasedFork* = Shanghai
+
+  # Meta Fork
+  EOFFork* = Cancun
 
 type
   CliqueOptions* = object

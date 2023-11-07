@@ -105,6 +105,14 @@ proc toCaseStmt(forkArg, opArg, k: NimNode): NimNode =
         quote do:
           `forkCaseSubExpr`
           break
+      of RetF:
+        quote do:
+          `forkCaseSubExpr`
+          # EIP-4750: If returning from top frame, exit cleanly.
+          let c = `k`.cpt
+          if c.fork >= FkEOF and
+             c.returnStack.len == 0:
+            break
       else:
         # FIXME-manyOpcodesNowRequireContinuations
         # We used to have another clause in this case statement for various
@@ -150,6 +158,11 @@ template genLowMemDispatcher*(fork: EVMFork; op: Op; k: Vm2Ctx) =
   case c.instr
   of Return, Revert, SelfDestruct:
     break
+  of RetF:
+    # EIP-4750: If returning from top frame, exit cleanly.
+    if fork >= FkEOF and
+       k.cpt.returnStack.len == 0:
+      break
   else:
     # FIXME-manyOpcodesNowRequireContinuations
     if not k.cpt.continuation.isNil:

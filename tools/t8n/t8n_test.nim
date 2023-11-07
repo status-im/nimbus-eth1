@@ -569,6 +569,15 @@ const
       output: T8nOutput(trace: true, result: true),
       expOut: "istanbul.txt",
     ),
+    TestSpec(
+      name: "Validate pre-allocated EOF code",
+      base: "testdata/01-501",
+      input: t8nInput(
+        "alloc.json", "txs.json", "env.json", "Cancun", "",
+      ),
+      output: T8nOutput(alloc: true, result: false),
+      expExitCode: 3,
+    ),
   ]
 
 proc main() =

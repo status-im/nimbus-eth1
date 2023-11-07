@@ -11,13 +11,14 @@
 import
   std/[json, strutils, tables, os, streams],
   eth/[rlp, trie, eip1559],
-  stint, stew/results,
+  stint, stew/[results, byteutils],
   "."/[config, types, helpers],
   ../common/state_clearing,
   ../../nimbus/[vm_types, vm_state, transaction],
   ../../nimbus/common/common,
   ../../nimbus/db/accounts_cache,
-  ../../nimbus/utils/utils,
+  ../../nimbus/evm/validate,
+  ../../nimbus/utils/[utils, eof],
   ../../nimbus/core/pow/difficulty,
   ../../nimbus/core/dao,
   ../../nimbus/core/executor/[process_transaction, executor_helpers],
@@ -428,6 +429,20 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
         ctx.env.currentBaseFee = some(calcBaseFee(ctx.env))
       else:
         raise newError(ErrorConfig, "EIP-1559 config but missing 'currentBaseFee' in env section")
+
+    if com.forkGTE(EOFFork):
+      for address, acc in ctx.alloc:
+        if not hasEOFByte(acc.code):
+          continue
+
+        var c: Container
+        var res = c.decode(acc.code)
+        if res.isOk:
+          res = c.validateCode()
+
+        if res.isErr:
+          raise newError(ErrorConfig, "code at $1 considered invalid: $2" %
+            [address.toHex, res.error.toString])
 
     if com.isShanghaiOrLater(ctx.env.currentTimestamp) and ctx.env.withdrawals.isNone:
       raise newError(ErrorConfig, "Shanghai config but missing 'withdrawals' in env section")

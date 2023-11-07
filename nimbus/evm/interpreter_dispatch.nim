@@ -15,12 +15,12 @@ const
 
 import
   std/[macros, strformat],
-  pkg/[chronicles, chronos, stew/byteutils],
   ".."/[constants, db/accounts_cache],
-  "."/[code_stream, computation],
+  "."/[code_stream, computation, validate],
   "."/[message, precompiles, state, types],
-  ./async/operations,
-  ./interpreter/[op_dispatcher, gas_costs]
+  ../utils/eof,
+  ./interpreter/[op_dispatcher, gas_costs],
+  pkg/[chronicles, chronos, eth/keys, stew/byteutils]
 
 {.push raises: [].}
 
@@ -108,12 +108,21 @@ proc selectVM(c: Computation, fork: EVMFork, shouldPrepareTracer: bool)
 
       genLowMemDispatcher(fork, c.instr, desc)
 
-proc beforeExecCall(c: Computation) =
+proc beforeExecCall(c: Computation): bool {.gcsafe, raises: [ValueError].} =
   c.snapshot()
   if c.msg.kind == EVMC_CALL:
     c.vmState.mutateStateDB:
       db.subBalance(c.msg.sender, c.msg.value)
       db.addBalance(c.msg.contractAddress, c.msg.value)
+
+  if c.fork >= FkEOF:
+    if c.code.hasEOFCode:
+      # Code was already validated, so no other errors should be possible.
+      # TODO: what should we do if there is really an error?
+      let res = c.code.parseEOF()
+      if res.isErr:
+        c.setError(res.error.toString, false)
+        return true
 
 proc afterExecCall(c: Computation) =
   ## Collect all of the accounts that *may* need to be deleted based on EIP161
@@ -144,6 +153,26 @@ proc beforeExecCreate(c: Computation): bool
     # back EIP2929
     if c.fork >= FkBerlin:
       db.accessList(c.msg.contractAddress)
+
+  let isCallerEOF = c.vmState.readOnlyStateDB.hasEOFCode(c.msg.sender)
+  c.initCodeEOF = c.code.hasEOFCode
+
+  if c.fork >= FkEOF:
+    if isCallerEOF and not c.initcodeEOF:
+      # Don't allow EOF contract to run legacy initcode.
+      c.setError(ErrLegacyCode, false)
+      return true
+    elif c.initcodeEOF:
+      # If the initcode is EOF, verify it is well-formed.
+      let res = c.code.parseEOF()
+      if res.isErr:
+        c.setError("EOF initcode parse error: " & res.error.toString, false)
+        return true
+
+      let vres = c.code.container.validateCode()
+      if vres.isErr:
+        c.setError("EOF initcode validation error: " & vres.error.toString, false)
+        return true
 
   c.snapshot()
 
@@ -206,7 +235,6 @@ proc beforeExec(c: Computation): bool
 
   if not c.msg.isCreate:
     c.beforeExecCall()
-    false
   else:
     c.beforeExecCreate()
 
@@ -337,6 +365,9 @@ else:
 # to write the async version of the iterative one, but this one is
 # a bit shorter and feels cleaner, so if it works just as well I'd
 # rather use this one. --Adam
+import
+  async/operations
+
 proc asyncExecCallOrCreate*(c: Computation): Future[void] {.async.} =
   defer: c.dispose()
 
