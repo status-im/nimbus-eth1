@@ -47,7 +47,7 @@ import
   eth/common,
   results,
   stew/interval_set,
-  "."/[aristo_desc, aristo_get, aristo_hike, aristo_transcode, aristo_utils,
+  "."/[aristo_desc, aristo_get, aristo_hike, aristo_serialise, aristo_utils,
        aristo_vid]
 
 type

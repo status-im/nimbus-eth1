@@ -16,7 +16,7 @@ import
   stew/interval_set,
   ../../aristo,
   ../aristo_walk/persistent,
-  ".."/[aristo_desc, aristo_get, aristo_vid, aristo_transcode]
+  ".."/[aristo_desc, aristo_get, aristo_serialise, aristo_vid]
 
 const
   Vid2 = @[VertexID(2)].toHashSet

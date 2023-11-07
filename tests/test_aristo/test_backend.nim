@@ -26,7 +26,7 @@ import
     aristo_init/memory_db,
     aristo_init/rocks_db,
     aristo_persistent,
-    aristo_transcode,
+    aristo_blobify,
     aristo_vid],
   ../replay/xcheck,
   ./test_helpers

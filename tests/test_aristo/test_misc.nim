@@ -20,7 +20,7 @@ import
   unittest2,
   ../../nimbus/db/aristo,
   ../../nimbus/db/aristo/[
-    aristo_debug, aristo_desc, aristo_transcode, aristo_vid],
+    aristo_debug, aristo_desc, aristo_blobify, aristo_vid],
   ../../nimbus/db/aristo/aristo_filter/filter_scheduler,
   ../replay/xcheck,
   ./test_helpers

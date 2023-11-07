@@ -21,7 +21,7 @@ export
   aristo_nearby, aristo_sign, aristo_tx, aristo_utils, aristo_walk
 
 import
-  aristo/aristo_transcode
+  aristo/aristo_serialise
 export
   append, read, serialise
 

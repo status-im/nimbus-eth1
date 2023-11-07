@@ -34,7 +34,7 @@ import
   ../aristo_constants,
   ../aristo_desc,
   ../aristo_desc/desc_backend,
-  ../aristo_transcode,
+  ../aristo_blobify,
   ./init_common
 
 type

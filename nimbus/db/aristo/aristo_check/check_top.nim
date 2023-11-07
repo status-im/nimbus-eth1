@@ -14,7 +14,7 @@ import
   std/[sequtils, sets, tables],
   eth/common,
   results,
-  ".."/[aristo_desc, aristo_get, aristo_transcode, aristo_utils]
+  ".."/[aristo_desc, aristo_get, aristo_serialise, aristo_utils]
 
 # ------------------------------------------------------------------------------
 # Public functions

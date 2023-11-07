@@ -19,7 +19,7 @@ import
   unittest2,
   ../../nimbus/db/aristo/[
     aristo_check, aristo_debug, aristo_desc, aristo_filter, aristo_get,
-    aristo_merge, aristo_persistent, aristo_transcode],
+    aristo_merge, aristo_persistent, aristo_blobify],
   ../../nimbus/db/aristo,
   ../../nimbus/db/aristo/aristo_desc/desc_backend,
   ../../nimbus/db/aristo/aristo_filter/[filter_fifos, filter_scheduler],
