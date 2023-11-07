@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -13,16 +13,6 @@ import
   ../network/state/state_content,
   ../content_db,
   ./test_helpers
-
-proc generateNRandomU256(rng: var HmacDrbgContext, n: int): seq[UInt256] =
-  var i = 0
-  var res = newSeq[UInt256]()
-  while i < n:
-    let bytes = rng.generateBytes(32)
-    let num = UInt256.fromBytesBE(bytes)
-    res.add(num)
-    inc i
-  return res
 
 suite "Content Database":
   let rng = newRng()
@@ -70,57 +60,56 @@ suite "Content Database":
     let size3 = db.size()
     discard db.put(u256(2), genByteSeq(numBytes), testId)
     let size4 = db.size()
-    let realSize = db.realSize()
+    let usedSize = db.usedSize()
 
     check:
       size2 > size1
       size3 > size2
       size3 == size4
-      realSize == size4
+      usedSize == size4
 
     db.del(u256(2))
     db.del(u256(1))
 
-    let realSize1 = db.realSize()
+    let usedSize1 = db.usedSize()
     let size5 = db.size()
 
     check:
       size4 == size5
-      # real size will be smaller as after del, there are free pages in sqlite
-      # which can be re-used for further additions
-      realSize1 < size5
+      # The real size will be smaller as after a deletion there are free pages
+      # in the db which can be re-used for further additions.
+      usedSize1 < size5
 
     db.reclaimSpace()
 
     let size6 = db.size()
-    let realSize2 = db.realSize()
+    let usedSize2 = db.usedSize()
 
     check:
-      # After space reclamation size of db should be equal to initial size
+      # After space reclamation the size of the db back to the initial size.
       size6 == size1
-      realSize2 == size6
+      usedSize2 == size6
 
   test "ContentDB pruning":
     let
       maxDbSize = uint32(100000)
       db = ContentDB.new("", maxDbSize, inMemory = true)
 
-    let furthestElement = u256(40)
-    let secondFurthest = u256(30)
-    let thirdFurthest = u256(20)
+      furthestElement = u256(40)
+      secondFurthest = u256(30)
+      thirdFurthest = u256(20)
 
-
-    let numBytes = 10000
-    let pr1 = db.put(u256(1), genByteSeq(numBytes), u256(0))
-    let pr2 = db.put(thirdFurthest, genByteSeq(numBytes), u256(0))
-    let pr3 = db.put(u256(3), genByteSeq(numBytes), u256(0))
-    let pr4 = db.put(u256(10), genByteSeq(numBytes), u256(0))
-    let pr5 = db.put(u256(5), genByteSeq(numBytes), u256(0))
-    let pr6 = db.put(u256(10), genByteSeq(numBytes), u256(0))
-    let pr7 = db.put(furthestElement, genByteSeq(numBytes), u256(0))
-    let pr8 = db.put(secondFurthest, genByteSeq(numBytes), u256(0))
-    let pr9 = db.put(u256(2), genByteSeq(numBytes), u256(0))
-    let pr10 = db.put(u256(4), genByteSeq(numBytes), u256(0))
+      numBytes = 10000
+      pr1 = db.put(u256(1), genByteSeq(numBytes), u256(0))
+      pr2 = db.put(thirdFurthest, genByteSeq(numBytes), u256(0))
+      pr3 = db.put(u256(3), genByteSeq(numBytes), u256(0))
+      pr4 = db.put(u256(10), genByteSeq(numBytes), u256(0))
+      pr5 = db.put(u256(5), genByteSeq(numBytes), u256(0))
+      pr6 = db.put(u256(10), genByteSeq(numBytes), u256(0))
+      pr7 = db.put(furthestElement, genByteSeq(numBytes), u256(0))
+      pr8 = db.put(secondFurthest, genByteSeq(numBytes), u256(0))
+      pr9 = db.put(u256(2), genByteSeq(numBytes), u256(0))
+      pr10 = db.put(u256(4), genByteSeq(numBytes), u256(0))
 
     check:
       pr1.kind == ContentStored
@@ -136,9 +125,9 @@ suite "Content Database":
 
     check:
       pr10.numOfDeletedElements == 2
-      uint32(db.realSize()) < maxDbSize
-      # With current settings 2 furthers elements will be delted i.e 30 and 40
-      # so the furthest non deleted one will be 20
+      uint32(db.usedSize()) < maxDbSize
+      # With the current settings the 2 furthest elements will be deleted,
+      # i.e key 30 and 40. The furthest non deleted one will have key 20.
       pr10.furthestStoredElementDistance == thirdFurthest
       db.get(furthestElement).isNone()
       db.get(secondFurthest).isNone()
