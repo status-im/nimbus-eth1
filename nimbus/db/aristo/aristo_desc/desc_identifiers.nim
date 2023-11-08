@@ -17,6 +17,7 @@
 import
   std/[sequtils, strutils, hashes],
   eth/[common, trie/nibbles],
+  stew/byteutils,
   results,
   stint
 
@@ -404,6 +405,12 @@ func `$`*(key: Hash256): string =
     "2^252" # 100...
   else:
     w.toHex
+
+func `$`*(key: HashKey): string =
+  if key.isHash:
+    $key.key
+  else:
+    key.blob.toHex & "[#" & $key.blob.len & "]"
 
 func `$`*(a: PathID): string =
   if a.pfx != 0:

@@ -25,14 +25,13 @@ proc checkTopStrict*(
       ): Result[void,(VertexID,AristoError)] =
   for (vid,vtx) in db.top.sTab.pairs:
     if vtx.isValid:
-      let rc = vtx.toNode db
-      if rc.isErr:
+      let node = vtx.toNode(db).valueOr:
         return err((vid,CheckStkVtxIncomplete))
 
       let lbl = db.top.kMap.getOrVoid vid
       if not lbl.isValid:
         return err((vid,CheckStkVtxKeyMissing))
-      if lbl.key != rc.value.digestTo(HashKey):
+      if lbl.key != node.digestTo(HashKey):
         return err((vid,CheckStkVtxKeyMismatch))
 
       let revVids = db.top.pAmk.getOrVoid lbl
@@ -56,14 +55,13 @@ proc checkTopRelaxed*(
     for vid in db.top.pPrf:
       let vtx = db.top.sTab.getOrVoid vid
       if vtx.isValid:
-        let rc = vtx.toNode db
-        if rc.isErr:
+        let node = vtx.toNode(db).valueOr:
           return err((vid,CheckRlxVtxIncomplete))
 
         let lbl = db.top.kMap.getOrVoid vid
         if not lbl.isValid:
           return err((vid,CheckRlxVtxKeyMissing))
-        if lbl.key != rc.value.digestTo(HashKey):
+        if lbl.key != node.digestTo(HashKey):
           return err((vid,CheckRlxVtxKeyMismatch))
 
         let revVids = db.top.pAmk.getOrVoid lbl
@@ -76,16 +74,16 @@ proc checkTopRelaxed*(
       if lbl.isValid:                              # Otherwise to be deleted
         let vtx = db.getVtx vid
         if vtx.isValid:
-          let rc = vtx.toNode db
-          if rc.isOk:
-            if lbl.key != rc.value.digestTo(HashKey):
-              return err((vid,CheckRlxVtxKeyMismatch))
+          let node = vtx.toNode(db).valueOr:
+            continue
+          if lbl.key != node.digestTo(HashKey):
+            return err((vid,CheckRlxVtxKeyMismatch))
 
-            let revVids = db.top.pAmk.getOrVoid lbl
-            if not revVids.isValid:
-              return err((vid,CheckRlxRevKeyMissing))
-            if vid notin revVids:
-              return err((vid,CheckRlxRevKeyMismatch))
+          let revVids = db.top.pAmk.getOrVoid lbl
+          if not revVids.isValid:
+            return err((vid,CheckRlxRevKeyMissing))
+          if vid notin revVids:
+            return err((vid,CheckRlxRevKeyMismatch))
   ok()
 
 
@@ -118,8 +116,7 @@ proc checkTopCommon*(
           return err((vid,CheckAnyVtxExtPfxMissing))
     else:
       nNilVtx.inc
-      let rc = db.getVtxBE vid
-      if rc.isErr:
+      discard db.getVtxBE(vid).valueOr:
         return err((vid,CheckAnyVidVtxMissing))
       if not db.top.kMap.hasKey vid:
         return err((vid,CheckAnyVtxEmptyKeyMissing))

@@ -118,7 +118,7 @@ proc updateHashKey(
   # If the vertex had been cached locally, there would be no locally cached
   # Merkle hash key. It will be created at the bottom end of the function.
   #
-  # So there remains tha case when vertex is available on the backend only.
+  # So there remains the case when vertex is available on the backend only.
   # The Merkle hash not cached locally. It might be overloaded (and eventually
   # overwitten.)
   if backend:
@@ -129,10 +129,9 @@ proc updateHashKey(
       if key == expected:
         return ok()
 
-      # This step is a error in the sense that something the on the backend
-      # is fishy. There should not be contradicting Merkle hashes. Throwing
-      # an error heres would lead to a deadlock so we correct it.
-      debug "correcting backend hash key mismatch", vid, key, expected
+      # Changes on the upper layers overload the lower layers. Some hash keys
+      # on the backend will have become obsolete which is corrected here.
+      #
       # Proceed `vidAttach()`, below
 
     elif rc.error != GetKeyNotFound:
