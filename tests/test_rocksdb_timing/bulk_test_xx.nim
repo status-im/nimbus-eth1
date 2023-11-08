@@ -35,7 +35,7 @@ const
   bulkTest2* = CaptureSpecs(
     name:      "more-goerli",
     network:   GoerliNet,
-    file:      "goerli482304.txt.gz",
+    file:      "goerli68161.txt.gz",
     numBlocks: high(int))
 
   bulkTest3* = CaptureSpecs(

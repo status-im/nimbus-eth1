@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2023 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -17,6 +17,7 @@
 import
   std/[sequtils, strutils, hashes],
   eth/[common, trie/nibbles],
+  stew/byteutils,
   results,
   stint
 
@@ -404,6 +405,12 @@ func `$`*(key: Hash256): string =
     "2^252" # 100...
   else:
     w.toHex
+
+func `$`*(key: HashKey): string =
+  if key.isHash:
+    $key.key
+  else:
+    key.blob.toHex & "[#" & $key.blob.len & "]"
 
 func `$`*(a: PathID): string =
   if a.pfx != 0:

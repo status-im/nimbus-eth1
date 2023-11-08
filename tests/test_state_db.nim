@@ -11,7 +11,7 @@ import
   unittest2,
   ../nimbus/db/state_db
 
-include ../nimbus/db/accounts_cache
+include ../nimbus/db/ledger/accounts_cache
 
 func initAddr(z: int): EthAddress =
   const L = sizeof(result)
