@@ -46,14 +46,6 @@ else:
   const AutoValidateDescriptors = true
 
 const
-  VerifyAristoForMerkleRootCalc* = true # and false
-    ## This flag advises external functions running the `Aristo` Merkle hash
-    ## signatures facility to verify results against the corresponding values
-    ## obtained from legacy functions.
-    ##
-    ## Note that enabling this flag also needs the `ProvideCoreDbLegacyAPI`
-    ## flag enabled.
-
   ProvideCoreDbLegacyAPI* = true # and false
 
   EnableApiTracking = true and false
@@ -65,11 +57,6 @@ const
 {.pragma:    noRaise, gcsafe, raises: [].}
 {.pragma:   apiRaise, gcsafe, raises: [CoreDbApiError].}
 {.pragma: catchRaise, gcsafe, raises: [CatchableError].}
-
-
-when VerifyAristoForMerkleRootCalc:
-  # Need legacy API, otherwise compiler will fail.
-  doAssert ProvideCoreDbLegacyAPI == true
 
 when ProvideCoreDbLegacyAPI:
   type

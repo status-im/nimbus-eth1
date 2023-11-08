@@ -25,7 +25,6 @@ export
 
   # Provide a standard interface for calculating merkle hash signatures,
   # here by quoting `Aristo` functions.
-  VerifyAristoForMerkleRootCalc,
   MerkleSignRef,
   merkleSignBegin,
   merkleSignAdd,

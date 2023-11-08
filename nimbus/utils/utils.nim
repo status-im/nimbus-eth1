@@ -21,22 +21,11 @@ import
 
 export eth_types_rlp
 
-when VerifyAristoForMerkleRootCalc: # set in `core_db/base.nim`
-  import chronicles
-  template logTxt(info: static[string]): static[string] =
-    "Utils " & info
-
 proc calcRootHash[T](items: openArray[T]): Hash256 {.gcsafe.} =
   let sig = merkleSignBegin()
   for i, t in items:
     sig.merkleSignAdd(rlp.encode(i), rlp.encode(t))
-  result = sig.merkleSignCommit.value.to(Hash256)
-  when VerifyAristoForMerkleRootCalc:
-    var tr = newCoreDbRef(LegacyDbMemory).mptPrune()
-    for i, t in items:
-      tr.put(rlp.encode(i), rlp.encode(t))
-    doAssert result == tr.rootHash
-    warn logTxt "calcRootHash() aristo/legacy root key OK"
+  sig.merkleSignCommit.value.to(Hash256)
 
 template calcTxRoot*(transactions: openArray[Transaction]): Hash256 =
   calcRootHash(transactions)
