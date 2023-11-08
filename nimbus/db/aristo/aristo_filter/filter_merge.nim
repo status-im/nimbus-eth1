@@ -10,6 +10,7 @@
 
 import
   std/tables,
+  eth/common,
   results,
   ".."/[aristo_desc, aristo_get]
 
@@ -21,7 +22,7 @@ proc merge*(
     db: AristoDbRef;
     upper: FilterRef;                          # Src filter, `nil` is ok
     lower: FilterRef;                          # Trg filter, `nil` is ok
-    beStateRoot: HashKey;                      # Merkle hash key
+    beStateRoot: Hash256;                      # Merkle hash key
       ): Result[FilterRef,(VertexID,AristoError)] =
   ## Merge argument `upper` into the `lower` filter instance.
   ##
@@ -88,7 +89,7 @@ proc merge*(
     elif newFilter.kMap.getOrVoid(vid).isValid:
       let rc = db.getKeyUBE vid
       if rc.isOk:
-        newFilter.kMap[vid] = key # VOID_HASH_KEY
+        newFilter.kMap[vid] = key
       elif rc.error == GetKeyNotFound:
         newFilter.kMap.del vid
       else:
@@ -113,9 +114,6 @@ proc merge*(
   ##                                   | (src1==trg0) --> newFilter --> trg2
   ##   (src1==trg0) --> lower --> trg1 |
   ##                                   |
-  const
-    noisy = false
-
   if upper.isNil or lower.isNil:
     return err((VertexID(0),FilNilFilterRejected))
 

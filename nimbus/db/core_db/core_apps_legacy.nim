@@ -8,6 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+## This file was renamed from `core_apps.nim`.
+
 {.push raises: [].}
 
 import

@@ -19,7 +19,7 @@ import
   unittest2,
   ../../nimbus/db/aristo/[
     aristo_check, aristo_debug, aristo_desc, aristo_filter, aristo_get,
-    aristo_merge, aristo_persistent, aristo_transcode],
+    aristo_merge, aristo_persistent, aristo_blobify],
   ../../nimbus/db/aristo,
   ../../nimbus/db/aristo/aristo_desc/desc_backend,
   ../../nimbus/db/aristo/aristo_filter/[filter_fifos, filter_scheduler],
@@ -72,12 +72,13 @@ proc fList(be: BackendRef): seq[(QueueID,FilterRef)] =
   check be.kind == BackendMemory or be.kind == BackendRocksDB
 
 func ppFil(w: FilterRef; db = AristoDbRef(nil)): string =
-  proc qq(key: HashKey; db: AristoDbRef): string =
+  proc qq(key: Hash256; db: AristoDbRef): string =
     if db.isNil:
       let n = key.to(UInt256)
       if n == 0: "£ø" else: "£" & $n
     else:
-      HashLabel(root: VertexID(1), key: key).pp(db)
+      let keyLink = HashKey.fromBytes(key.data).value
+      HashLabel(root: VertexID(1), key: keyLink).pp(db)
   "(" & w.fid.pp & "," & w.src.qq(db) & "->" & w.trg.qq(db) & ")"
 
 func pp(qf: (QueueID,FilterRef); db = AristoDbRef(nil)): string =
@@ -376,9 +377,6 @@ proc checkFilterTrancoderOk(
 
 # -------------------------
 
-func to(fid: FilterID; T: type HashKey): T =
-  fid.uint64.u256.toBytesBE.T
-
 proc qid2fidFn(be: BackendRef): QuFilMap =
   result = proc(qid: QueueID): FilterID =
     let rc = be.getFilFn qid
@@ -414,8 +412,8 @@ proc storeFilter(
   let fid = FilterID(serial)
   be.storeFilter FilterRef(
     fid: fid,
-    src: fid.to(HashKey),
-    trg: (fid-1).to(HashKey))
+    src: fid.to(Hash256),
+    trg: (fid-1).to(Hash256))
 
 proc fetchDelete(
     be: BackendRef;
@@ -496,7 +494,7 @@ proc validateFifo(
     lastFid = FilterID(serial+1)
 
   if hashesOk:
-    lastTrg = be.getKeyFn(VertexID(1)).get(otherwise=VOID_HASH_KEY).to(UInt256)
+    lastTrg = be.getKeyFn(VertexID(1)).get(otherwise=HashKey()).to(UInt256)
 
   for chn,fifo in be.fifos:
     for (qid,filter) in fifo:
@@ -750,8 +748,7 @@ proc testFilterBacklog*(
       s &= " n=" & $serial
     s &= " len=" & $be.filters.len
     s &= "" &
-      " root=" & be.getKeyFn(VertexID(1))
-                   .get(otherwise = VOID_HASH_KEY).pp &
+      " root=" & be.getKeyFn(VertexID(1)).get(otherwise=VOID_HASH_KEY).pp &
       "\n   state=" & be.filters.state.pp &
       "\n    fifo=" & be.fifos.pp(db) &
       "\n"

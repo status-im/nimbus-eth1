@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2023 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -13,26 +13,30 @@
 import
   std/options,
   eth/[common, trie/db],
-  ./backend/[legacy_db],
-  "."/[base, core_apps]
+  ../aristo,
+  ./backend/legacy_db,
+  ./base,
+  #./core_apps_legacy as core_apps
+  ./core_apps_newapi as core_apps
 
 export
   common,
   core_apps,
 
+  # Provide a standard interface for calculating merkle hash signatures,
+  # here by quoting `Aristo` functions.
+  MerkleSignRef,
+  merkleSignBegin,
+  merkleSignAdd,
+  merkleSignCommit,
+  to,
+
   # Not all symbols from the object sources will be exported by default
   CoreDbAccount,
   CoreDbApiError,
-  CoreDbCaptFlags,
   CoreDbErrorCode,
   CoreDbErrorRef,
-  CoreDbCaptRef,
-  CoreDbKvtRef,
-  CoreDbMptRef,
-  CoreDbPhkRef,
   CoreDbRef,
-  CoreDbTxID,
-  CoreDbTxRef,
   CoreDbType,
   CoreDbVidRef,
   CoreDxAccRef,
@@ -45,26 +49,26 @@ export
   `$$`,
   backend,
   beginTransaction,
-  capture,
   commit,
   compensateLegacySetup,
-  contains,
   del,
   delete,
   dispose,
   fetch,
+  fetchOrEmpty,
   finish,
   get,
+  getOrEmpty,
   getRoot,
   getTransactionID,
   hash,
+  hasKey,
   hashOrEmpty,
+  hasPath,
   isLegacy,
   isPruning,
-  kvt,
   logDb,
   merge,
-  mptPrune,
   newAccMpt,
   newCapture,
   newKvt,
@@ -72,13 +76,11 @@ export
   newTransaction,
   pairs,
   parent,
-  phkPrune,
   put,
   recast,
   recorder,
   replicate,
   rollback,
-  rootHash,
   rootVid,
   safeDispose,
   setTransactionID,
@@ -86,6 +88,27 @@ export
   toMpt,
   toPhk,
   toTransactionID
+
+when ProvideCoreDbLegacyAPI:
+  type
+    CoreDyTxID = CoreDxTxID|CoreDbTxID
+  export
+    CoreDbCaptFlags,
+    CoreDbCaptRef,
+    CoreDbKvtRef,
+    CoreDbMptRef,
+    CoreDbPhkRef,
+    CoreDbTxID,
+    CoreDbTxRef,
+    capture,
+    contains,
+    kvt,
+    mptPrune,
+    phkPrune,
+    rootHash
+else:
+  type
+    CoreDyTxID = CoreDxTxID
 
 # ------------------------------------------------------------------------------
 # Public constructor
@@ -120,7 +143,7 @@ proc newCoreDbRef*(
 # Public template wrappers
 # ------------------------------------------------------------------------------
 
-template shortTimeReadOnly*(id: CoreDxTxID|CoreDbTxID; body: untyped) =
+template shortTimeReadOnly*(id: CoreDyTxID; body: untyped) =
   proc action() =
     body
   id.shortTimeReadOnly action

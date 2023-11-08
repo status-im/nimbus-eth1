@@ -107,7 +107,7 @@ proc pp*(q: openArray[int]; itemsPerLine: int; lineSep: string): string =
 
 proc pp*(a: MDigest[256]; collapse = true): string =
   if not collapse:
-    a.data.toHex.toLowerAscii
+    a.data.toHex
   elif a == ZERO_HASH256:
     "ZERO_HASH256"
   elif a == EMPTY_ROOT_HASH:
@@ -119,7 +119,7 @@ proc pp*(a: MDigest[256]; collapse = true): string =
   elif a == ZERO_HASH256:
     "ZERO_HASH256"
   else:
-    a.data.toHex.join[56 .. 63].toLowerAscii
+    a.data.toHex.join[56 .. 63]
 
 proc pp*(a: openArray[MDigest[256]]; collapse = true): string =
   "@[" & a.toSeq.mapIt(it.pp).join(" ") & "]"
@@ -133,7 +133,7 @@ proc pp*(q: openArray[byte]; noHash = false): string =
     for n in 0..31: a[n] = q[n]
     MDigest[256](data: a).pp
   else:
-    q.toHex.toLowerAscii.pp(hex = true)
+    q.toHex.pp(hex = true)
 
 # ------------------------------------------------------------------------------
 # Elapsed time pretty printer

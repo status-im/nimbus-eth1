@@ -16,12 +16,16 @@ type
     # Rlp decoder, `read()`
     Rlp2Or17ListEntries
     RlpBlobExpected
-    RlpBranchLinkExpected
-    RlpExtPathEncoding
-    RlpNonEmptyBlobExpected
+    RlpBranchHashKeyExpected
     RlpEmptyBlobExpected
-    RlpRlpException
+    RlpExtHashKeyExpected
+    RlpHashKeyExpected
+    RlpNonEmptyBlobExpected
     RlpOtherException
+    RlpRlpException
+
+    # Serialise decoder
+    SerCantResolveStorageRoot
 
     # Data record transcoders, `deblobify()` and `blobify()`
     BlobifyNilFilter
@@ -34,7 +38,8 @@ type
 
     DeblobNilArgument
     DeblobUnknown
-    DeblobTooShort
+    DeblobVtxTooShort
+    DeblobHashKeyExpected
     DeblobBranchTooShort
     DeblobBranchSizeGarbled
     DeblobBranchInxOutOfRange
@@ -90,13 +95,15 @@ type
     MergeAssemblyFailed # Ooops, internal error
 
     MergeHashKeyInvalid
+    MergeHashKeyCachedAlready
+    MergeHashKeyDiffersFromCached
+    MergeHashKeyRevLookUpGarbled
     MergeRootVidInvalid
     MergeRootKeyInvalid
     MergeRevVidMustHaveBeenCached
-    MergeHashKeyCachedAlready
-    MergeHashKeyDiffersFromCached
     MergeNodeVtxDiffersFromExisting
     MergeRootKeyDiffersForVid
+    MergeNodeVtxDuplicates
 
     # Update `Merkle` hashes `hashify()`
     HashifyCannotComplete
@@ -128,15 +135,19 @@ type
     CheckAnyVtxEmptyKeyMissing
     CheckAnyVtxEmptyKeyExpected
     CheckAnyVtxEmptyKeyMismatch
+    CheckAnyVtxBranchLinksMissing
+    CheckAnyVtxExtPfxMissing
+    CheckAnyVtxLockWithoutKey
     CheckAnyRevVtxMissing
     CheckAnyRevVtxDup
     CheckAnyRevCountMismatch
-    CheckAnyVtxLockWithoutKey
 
     # Backend structural check `checkBE()`
     CheckBeVtxInvalid
-    CheckBeKeyInvalid
     CheckBeVtxMissing
+    CheckBeVtxBranchLinksMissing
+    CheckBeVtxExtPfxMissing
+    CheckBeKeyInvalid
     CheckBeKeyMissing
     CheckBeKeyCantCompile
     CheckBeKeyMismatch
@@ -229,6 +240,7 @@ type
     RdbBeAddSstWriter
     RdbBeFinishSstWriter
     RdbBeIngestSstWriter
+    RdbHashKeyExpected
 
     # Transaction wrappers
     TxArgStaleTx

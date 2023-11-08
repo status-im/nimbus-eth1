@@ -375,9 +375,9 @@ proc nearbyNextLeafTie(
   if 0 < hike.legs.len:
     if hike.legs[^1].wp.vtx.vType != Leaf:
       return err((hike.legs[^1].wp.vid,NearbyLeafExpected))
-    let rc = hike.legsTo(NibblesSeq).pathToKey
+    let rc = hike.legsTo(NibblesSeq).pathToTag
     if rc.isOk:
-      return ok rc.value.to(PathID)
+      return ok rc.value
     return err((VertexID(0),rc.error))
 
   err((VertexID(0),NearbyLeafExpected))

@@ -299,7 +299,10 @@ proc deleteImpl(
   if 1 < hike.legs.len:
 
     # Get current `Branch` vertex `br`
-    let br = hike.legs[^2].wp
+    let br = block:
+      var wp = hike.legs[^2].wp
+      wp.vtx = wp.vtx.dup # make sure that layers are not impliciteley modified
+      wp
     if br.vtx.vType != Branch:
       return err((br.vid,DelBranchExpexted))
 
@@ -376,7 +379,7 @@ proc delete*(
     db: AristoDbRef;
     root: VertexID;
     path: openArray[byte];
-      ): Result[void,(VertexID,AristoError)] =
+     ): Result[void,(VertexID,AristoError)] =
   ## Variant of `fetchPayload()`
   ##
   db.delete(? path.initNibbleRange.hikeUp(root, db).mapErr toVae)

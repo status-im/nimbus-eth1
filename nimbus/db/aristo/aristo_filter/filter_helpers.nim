@@ -9,7 +9,8 @@
 # except according to those terms.
 
 import
-  std/tables,
+  std/[sets, tables],
+  eth/common,
   results,
   ".."/[aristo_desc, aristo_desc/desc_backend, aristo_get],
   ./filter_scheduler
@@ -17,8 +18,8 @@ import
 type
   StateRootPair* = object
     ## Helper structure for analysing state roots.
-    be*: HashKey                   ## Backend state root
-    fg*: HashKey                   ## Layer or filter implied state root
+    be*: Hash256                   ## Backend state root
+    fg*: Hash256                   ## Layer or filter implied state root
 
   FilterIndexPair* = object
     ## Helper structure for fetching filters from cascaded fifo
@@ -39,7 +40,7 @@ proc getLayerStateRoots*(
   ##
   var spr: StateRootPair
 
-  spr.be = block:
+  let sprBeKey = block:
     let rc = db.getKeyBE VertexID(1)
     if rc.isOk:
       rc.value
@@ -47,15 +48,20 @@ proc getLayerStateRoots*(
       VOID_HASH_KEY
     else:
       return err(rc.error)
+  spr.be = sprBeKey.to(Hash256)
 
-  block:
-    spr.fg = layer.kMap.getOrVoid(VertexID 1).key
-    if spr.fg.isValid:
-      return ok(spr)
+  spr.fg = block:
+    let lbl = layer.kMap.getOrVoid VertexID(1)
+    if lbl.isValid:
+      lbl.key.to(Hash256)
+    else:
+      EMPTY_ROOT_HASH
+  if spr.fg.isValid:
+    return ok(spr)
 
   if chunkedMpt:
-    let vid = layer.pAmk.getOrVoid HashLabel(root: VertexID(1), key: spr.be)
-    if vid == VertexID(1):
+    let vids = layer.pAmk.getOrVoid HashLabel(root: VertexID(1), key: sprBeKey)
+    if VertexID(1) in vids:
       spr.fg = spr.be
       return ok(spr)
 

@@ -12,25 +12,14 @@
 
 import
   std/[bitops, sequtils, sets],
-  eth/[common, rlp, trie/nibbles],
+  eth/[common, trie/nibbles],
   results,
   stew/endians2,
-  "."/[aristo_constants, aristo_desc, aristo_get]
-
-# Annotation helper
-{.pragma: noRaise, gcsafe, raises: [].}
-
-type
-  ResolveVidFn = proc(vid: VertexID): Result[HashKey,AristoError] {.noRaise.}
-    ## Resolve storage root vertex ID
+  ./aristo_desc
 
 # ------------------------------------------------------------------------------
 # Private helper
 # ------------------------------------------------------------------------------
-
-proc aristoError(error: AristoError): NodeRef =
-  ## Allows returning de
-  NodeRef(vType: Leaf, error: error)
 
 proc load64(data: Blob; start: var int): Result[uint64,AristoError] =
   if data.len < start + 9:
@@ -45,154 +34,6 @@ proc load256(data: Blob; start: var int): Result[UInt256,AristoError] =
   let val = UInt256.fromBytesBE(data[start ..< start + 32])
   start += 32
   ok val
-
-proc serialise(
-    pyl: PayloadRef;
-    getKey: ResolveVidFn;
-      ): Result[Blob,(VertexID,AristoError)] =
-  ## Encode the data payload of the argument `pyl` as RLP `Blob` if it is of
-  ## account type, otherwise pass the data as is.
-  ##
-  case pyl.pType:
-  of RawData:
-    ok pyl.rawBlob
-  of RlpData:
-    ok pyl.rlpBlob
-  of AccountData:
-    let
-      vid = pyl.account.storageID
-      key = block:
-        if not vid.isValid:
-          VOID_HASH_KEY
-        else:
-          let rc = vid.getKey
-          if rc.isErr:
-            return err((vid,rc.error))
-          rc.value
-    ok rlp.encode Account(
-      nonce:       pyl.account.nonce,
-      balance:     pyl.account.balance,
-      storageRoot: key.to(Hash256),
-      codeHash:    pyl.account.codeHash)
-
-# ------------------------------------------------------------------------------
-# Public RLP transcoder mixins
-# ------------------------------------------------------------------------------
-
-proc read*(rlp: var Rlp; T: type NodeRef): T {.gcsafe, raises: [RlpError].} =
-  ## Mixin for RLP writer, see `fromRlpRecord()` for an encoder with detailed
-  ## error return code (if needed.) This reader is a jazzed up version which
-  ## reports some particular errors in the `Dummy` type node.
-  if not rlp.isList:
-    # Otherwise `rlp.items` would raise a `Defect`
-    return aristoError(Rlp2Or17ListEntries)
-
-  var
-    blobs = newSeq[Blob](2)         # temporary, cache
-    links: array[16,HashKey]        # reconstruct branch node
-    top = 0                         # count entries and positions
-
-  # Collect lists of either 2 or 17 blob entries.
-  for w in rlp.items:
-    case top
-    of 0, 1:
-      if not w.isBlob:
-        return aristoError(RlpBlobExpected)
-      blobs[top] = rlp.read(Blob)
-    of 2 .. 15:
-      if not links[top].init(rlp.read(Blob)):
-        return aristoError(RlpBranchLinkExpected)
-    of 16:
-      if not w.isBlob:
-        return aristoError(RlpBlobExpected)
-      if 0 < rlp.read(Blob).len:
-        return aristoError(RlpEmptyBlobExpected)
-    else:
-      return aristoError(Rlp2Or17ListEntries)
-    top.inc
-
-  # Verify extension data
-  case top
-  of 2:
-    if blobs[0].len == 0:
-      return aristoError(RlpNonEmptyBlobExpected)
-    let (isLeaf, pathSegment) = hexPrefixDecode blobs[0]
-    if isLeaf:
-      return NodeRef(
-        vType:     Leaf,
-        lPfx:      pathSegment,
-        lData:     PayloadRef(
-          pType:   RawData,
-          rawBlob: blobs[1]))
-    else:
-      var node = NodeRef(
-        vType: Extension,
-        ePfx:  pathSegment)
-      if not node.key[0].init(blobs[1]):
-        return aristoError(RlpExtPathEncoding)
-      return node
-  of 17:
-    for n in [0,1]:
-      if not links[n].init(blobs[n]):
-        return aristoError(RlpBranchLinkExpected)
-    return NodeRef(
-      vType: Branch,
-      key:   links)
-  else:
-    discard
-
-  aristoError(Rlp2Or17ListEntries)
-
-
-proc append*(writer: var RlpWriter; node: NodeRef) =
-  ## Mixin for RLP writer. Note that a `Dummy` node is encoded as an empty
-  ## list.
-  proc addHashKey(writer: var RlpWriter; key: HashKey) =
-    if not key.isValid:
-      writer.append EmptyBlob
-    else:
-      writer.append key.to(Hash256)
-
-  if node.error != AristoError(0):
-    writer.startList(0)
-  else:
-    case node.vType:
-    of Branch:
-      writer.startList(17)
-      for n in 0..15:
-        writer.addHashKey node.key[n]
-      writer.append EmptyBlob
-
-    of Extension:
-      writer.startList(2)
-      writer.append node.ePfx.hexPrefixEncode(isleaf = false)
-      writer.addHashKey node.key[0]
-
-    of Leaf:
-      proc getKey0(vid: VertexID): Result[HashKey,AristoError] {.noRaise.} =
-        ok(node.key[0]) # always succeeds
-
-      writer.startList(2)
-      writer.append node.lPfx.hexPrefixEncode(isleaf = true)
-      writer.append node.lData.serialise(getKey0).value
-
-# ---------------------
-
-proc to*(node: NodeRef; T: type HashKey): T =
-  ## Convert the argument `node` to the corresponding Merkle hash key
-  node.encode.digestTo T
-
-proc serialise*(
-    db: AristoDbRef;
-    pyl: PayloadRef;
-      ): Result[Blob,(VertexID,AristoError)] =
-  ## Encode the data payload of the argument `pyl` as RLP `Blob` if it is of
-  ## account type, otherwise pass the data as is.
-  ##
-  proc getKey(vid: VertexID): Result[HashKey,AristoError] =
-    db.getKeyRc(vid)
-
-  pyl.serialise getKey
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -331,12 +172,16 @@ proc blobify*(filter: FilterRef; data: var Blob): Result[void,AristoError] =
   ##   ...            -- more triplets
   ##   0x7d           -- marker(8)
   ##
+  func blobify(lid: HashKey): Blob =
+    let n = lid.len
+    if n < 32: @[n.byte] & @lid & 0u8.repeat(31 - n) else: @lid
+
   if not filter.isValid:
     return err(BlobifyNilFilter)
   data.setLen(0)
   data &= filter.fid.uint64.toBytesBE.toSeq
-  data &= filter.src.ByteArray32.toSeq
-  data &= filter.trg.ByteArray32.toSeq
+  data &= @(filter.src.data)
+  data &= @(filter.trg.data)
 
   data &= filter.vGen.len.uint32.toBytesBE.toSeq
   data &= newSeq[byte](4) # place holder
@@ -355,30 +200,28 @@ proc blobify*(filter: FilterRef; data: var Blob): Result[void,AristoError] =
     leftOver.excl vid
 
     var
-      keyMode = 0u                 # present and usable
-      vtxMode = 0u                 # present and usable
+      keyMode = 0u                 # default: ignore that key
+      vtxLen  = 0u                 # default: ignore that vertex
       keyBlob: Blob
       vtxBlob: Blob
 
     let key = filter.kMap.getOrVoid vid
     if key.isValid:
-      keyBlob = key.ByteArray32.toSeq
+      keyBlob = key.blobify
+      keyMode = if key.len < 32: 0xc000_0000u else: 0x8000_0000u
     elif filter.kMap.hasKey vid:
-      keyMode = 1u                 # void hash key => considered deleted
-    else:
-      keyMode = 2u                 # ignore that hash key
+      keyMode = 0x4000_0000u       # void hash key => considered deleted
 
     if vtx.isValid:
       ? vtx.blobify vtxBlob
+      vtxLen = vtxBlob.len.uint
+      if 0x3fff_ffff <= vtxLen:
+        return err(BlobifyFilterRecordOverflow)
     else:
-      vtxMode = 1u                 # nil vertex => considered deleted
+      vtxLen = 0x3fff_ffff         # nil vertex => considered deleted
 
-    if (vtxBlob.len and not 0x1fffffff) != 0:
-      return err(BlobifyFilterRecordOverflow)
-
-    let pfx = ((keyMode * 3 + vtxMode) shl 29) or vtxBlob.len.uint
     data &=
-      pfx.uint32.toBytesBE.toSeq &
+      (keyMode or vtxLen).uint32.toBytesBE.toSeq &
       vid.uint64.toBytesBE.toSeq &
       keyBlob &
       vtxBlob
@@ -387,18 +230,18 @@ proc blobify*(filter: FilterRef; data: var Blob): Result[void,AristoError] =
   for vid in leftOver:
     n.inc
     var
-      mode = 2u                    # key present and usable, ignore vtx
+      keyMode = 0u                 # present and usable
       keyBlob: Blob
 
     let key = filter.kMap.getOrVoid vid
     if key.isValid:
-      keyBlob = key.ByteArray32.toSeq
+      keyBlob = key.blobify
+      keyMode = if key.len < 32: 0xc000_0000u else: 0x8000_0000u
     else:
-      mode = 5u                    # 1 * 3 + 2: void key, ignore vtx
+      keyMode = 0x4000_0000u       # void hash key => considered deleted
 
-    let pfx = (mode shl 29)
     data &=
-      pfx.uint32.toBytesBE.toSeq &
+      keyMode.uint32.toBytesBE.toSeq &
       vid.uint64.toBytesBE.toSeq &
       keyBlob
 
@@ -491,7 +334,7 @@ proc deblobify*(record: Blob; vtx: var VertexRef): Result[void,AristoError] =
   ## De-serialise a data record encoded with `blobify()`. The second
   ## argument `vtx` can be `nil`.
   if record.len < 3:                                  # minimum `Leaf` record
-    return err(DeblobTooShort)
+    return err(DeblobVtxTooShort)
 
   case record[^1] shr 6:
   of 0: # `Branch` vertex
@@ -593,10 +436,16 @@ proc deblobify*(data: Blob; filter: var FilterRef): Result[void,AristoError] =
   if data[^1] != 0x7d:
     return err(DeblobWrongType)
 
+  func deblob(data: openArray[byte]; shortKey: bool): Result[HashKey,void] =
+    if shortKey:
+      HashKey.fromBytes data[1 .. min(data[0],31)]
+    else:
+      HashKey.fromBytes data
+
   let f = FilterRef()
   f.fid = (uint64.fromBytesBE data[0 ..< 8]).FilterID
-  (addr f.src.ByteArray32[0]).copyMem(unsafeAddr data[8], 32)
-  (addr f.trg.ByteArray32[0]).copyMem(unsafeAddr data[40], 32)
+  (addr f.src.data[0]).copyMem(unsafeAddr data[8], 32)
+  (addr f.trg.data[0]).copyMem(unsafeAddr data[40], 32)
 
   let
     nVids = uint32.fromBytesBE data[72 ..< 76]
@@ -615,33 +464,33 @@ proc deblobify*(data: Blob; filter: var FilterRef): Result[void,AristoError] =
       return err(DeblobFilterTrpTooShort)
 
     let
-      flag = data[offs] shr 5 # double triplets: {0,1,2} x {0,1,2}
-      vLen = ((uint32.fromBytesBE data[offs ..< offs + 4]) and 0x1fffffff).int
-    if (vLen == 0) != ((flag mod 3) > 0):
-      return err(DeblobFilterTrpVtxSizeGarbled) # contadiction
+      keyFlag = data[offs] shr 6
+      vtxFlag = ((uint32.fromBytesBE data[offs ..< offs+4]) and 0x3fff_ffff).int
+      vLen = if vtxFlag == 0x3fff_ffff: 0 else: vtxFlag
+    if keyFlag == 0 and vtxFlag == 0:
+      return err(DeblobFilterTrpVtxSizeGarbled) # no blind records
     offs = offs + 4
 
     let vid = (uint64.fromBytesBE data[offs ..< offs + 8]).VertexID
     offs = offs + 8
 
-    if data.len < offs + (flag < 3).ord * 32 + vLen:
+    if data.len < offs + (1 < keyFlag).ord * 32 + vLen:
       return err(DeblobFilterTrpTooShort)
 
-    if flag < 3:                                        # {0} x {0,1,2}
-      var key: HashKey
-      (addr key.ByteArray32[0]).copyMem(unsafeAddr data[offs], 32)
-      f.kMap[vid] = key
+    if 1 < keyFlag:
+      f.kMap[vid] = data[offs ..< offs + 32].deblob(keyFlag == 3).valueOr:
+        return err(DeblobHashKeyExpected)
       offs = offs + 32
-    elif flag < 6:                                      # {0,1} x {0,1,2}
+    elif keyFlag == 1:
       f.kMap[vid] = VOID_HASH_KEY
 
-    if 0 < vLen:
+    if vtxFlag == 0x3fff_ffff:
+      f.sTab[vid] = VertexRef(nil)
+    elif 0 < vLen:
       var vtx: VertexRef
       ? data[offs ..< offs + vLen].deblobify vtx
       f.sTab[vid] = vtx
       offs = offs + vLen
-    elif (flag mod 3) == 1:                             # {0,1,2} x {1}
-      f.sTab[vid] = VertexRef(nil)
 
   if data.len != offs + 1:
     return err(DeblobFilterSizeGarbled)

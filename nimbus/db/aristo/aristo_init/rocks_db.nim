@@ -34,7 +34,7 @@ import
   ../aristo_constants,
   ../aristo_desc,
   ../aristo_desc/desc_backend,
-  ../aristo_transcode,
+  ../aristo_blobify,
   ./init_common,
   ./rocks_db/[rdb_desc, rdb_get, rdb_init, rdb_put, rdb_walk]
 
@@ -124,9 +124,9 @@ proc getKeyFn(db: RdbBackendRef): GetKeyFn =
 
       # Decode data record
       if 0 < rc.value.len:
-        var key: HashKey
-        if key.init rc.value:
-          return ok key
+        let lid = HashKey.fromBytes(rc.value).valueOr:
+          return err(RdbHashKeyExpected)
+        return ok lid
 
       err(GetKeyNotFound)
 
@@ -224,7 +224,7 @@ proc putKeyFn(db: RdbBackendRef): PutKeyFn =
       if hdl.error.isNil:
         for (vid,key) in vkps:
           if key.isValid:
-            hdl.keyCache = (vid, key.to(Blob))
+            hdl.keyCache = (vid, @key)
           else:
             hdl.keyCache = (vid, EmptyBlob)
 
@@ -402,9 +402,9 @@ iterator walkKey*(
       ): tuple[n: int, vid: VertexID, key: HashKey] =
   ## Variant of `walk()` iteration over the Markle hash sub-table.
   for (n, xid, data) in be.rdb.walk KeyPfx:
-    var hashKey: HashKey
-    if hashKey.init data:
-      yield (n, VertexID(xid), hashKey)
+    let lid = HashKey.fromBytes(data).valueOr:
+      continue
+    yield (n, VertexID(xid), lid)
 
 iterator walkFil*(
     be: RdbBackendRef;

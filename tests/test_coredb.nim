@@ -17,7 +17,7 @@ import
   eth/common,
   results,
   unittest2,
-  ../../nimbus/db/[core_db/persistent, ledger],
+  ../../nimbus/db/core_db/persistent,
   ../../nimbus/core/chain,
   ./replay/pp,
   ./test_coredb/[coredb_test_xx, test_chainsync]
@@ -102,7 +102,7 @@ proc openLegacyDB(
 # Test Runners: accounts and accounts storages
 # ------------------------------------------------------------------------------
 
-proc legacyRunner(
+proc chainSyncRunner(
     noisy = true;
     capture = bChainCapture;
     persistent = true;
@@ -120,7 +120,7 @@ proc legacyRunner(
   defer:
     if persistent: baseDir.flushDbDir
 
-  suite "Legacy DB: test Core API interfaces"&
+  suite "CoreDB and LedgerRef API"&
         &", capture={fileInfo}, {sayPersistent}":
 
     test &"Ledger API, {numBlocksInfo} blocks":
@@ -137,7 +137,7 @@ proc legacyRunner(
 # ------------------------------------------------------------------------------
 
 proc coreDbMain*(noisy = defined(debug)) =
-  noisy.legacyRunner()
+  noisy.chainSyncRunner()
 
 when isMainModule:
   const
@@ -155,7 +155,7 @@ when isMainModule:
     testList = @[bulkTest2, bulkTest3]
 
   for n,capture in testList:
-    noisy.legacyRunner(capture=capture, persistent=persDb)
+    noisy.chainSyncRunner(capture=capture, persistent=persDb)
 
 # ------------------------------------------------------------------------------
 # End

@@ -46,6 +46,14 @@ type
     txUid*: uint                      ## Unique ID among transactions
     level*: int                       ## Stack index for this transaction
 
+  MerkleSignRef* = ref object
+    ## Simple Merkle signature calculatior for key-value lists
+    root*: VertexID
+    db*: AristoDbRef
+    count*: uint
+    error*: AristoError
+    errKey*: Blob
+
   DudesRef = ref object
     case rwOk: bool
     of true:
@@ -67,7 +75,7 @@ type
     dudes: DudesRef                   ## Related DB descriptors
 
     # Debugging data below, might go away in future
-    xMap*: Table[HashLabel,VertexID]  ## For pretty printing, extends `pAmk`
+    xMap*: VidsByLabel                ## For pretty printing, extends `pAmk`
 
   AristoDbAction* = proc(db: AristoDbRef) {.gcsafe, raises: [].}
     ## Generic call back function/closure.
@@ -82,11 +90,17 @@ func getOrVoid*[W](tab: Table[W,VertexRef]; w: W): VertexRef =
 func getOrVoid*[W](tab: Table[W,HashLabel]; w: W): HashLabel =
   tab.getOrDefault(w, VOID_HASH_LABEL)
 
+func getOrVoid*[W](tab: Table[W,NodeRef]; w: W): NodeRef =
+  tab.getOrDefault(w, NodeRef(nil))
+
 func getOrVoid*[W](tab: Table[W,HashKey]; w: W): HashKey =
   tab.getOrDefault(w, VOID_HASH_KEY)
 
 func getOrVoid*[W](tab: Table[W,VertexID]; w: W): VertexID =
   tab.getOrDefault(w, VertexID(0))
+
+func getOrVoid*[W](tab: Table[W,HashSet[VertexID]]; w: W): HashSet[VertexID] =
+  tab.getOrDefault(w, EmptyVidSet)
 
 # --------
 
@@ -102,14 +116,23 @@ func isValid*(pld: PayloadRef): bool =
 func isValid*(filter: FilterRef): bool =
   filter != FilterRef(nil)
 
-func isValid*(key: HashKey): bool =
-  key != VOID_HASH_KEY
+func isValid*(root: Hash256): bool =
+  root != EMPTY_ROOT_HASH
 
-func isValid*(lbl: HashLabel): bool =
-  lbl != VOID_HASH_LABEL
+func isValid*(key: HashKey): bool =
+  if key.len == 32:
+    key.to(Hash256).isValid
+  else:
+    0 < key.len
 
 func isValid*(vid: VertexID): bool =
   vid != VertexID(0)
+
+func isValid*(lbl: HashLabel): bool =
+  lbl.root.isValid and lbl.key.isValid
+
+func isValid*(sqv: HashSet[VertexID]): bool =
+  sqv != EmptyVidSet
 
 func isValid*(qid: QueueID): bool =
   qid != QueueID(0)
@@ -125,18 +148,6 @@ func isValid*(fid: FilterID): bool =
 func hash*(db: AristoDbRef): Hash =
   ## Table/KeyedQueue/HashSet mixin
   cast[pointer](db).hash
-
-# Note that the below `init()` function cannot go into `desc_identifiers` as
-# this would result in a circular import.
-func init*(key: var HashKey; data: openArray[byte]): bool =
-  ## Import argument `data` into `key` which must have length either `32`, or
-  ## `0`. The latter case is equivalent to an all zero byte array of size `32`.
-  if data.len == 32:
-    (addr key.ByteArray32[0]).copyMem(unsafeAddr data[0], data.len)
-    return true
-  if data.len == 0:
-    key = VOID_HASH_KEY
-    return true
 
 # ------------------------------------------------------------------------------
 # Public functions, `dude` related

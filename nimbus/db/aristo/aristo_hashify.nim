@@ -47,7 +47,7 @@ import
   eth/common,
   results,
   stew/interval_set,
-  "."/[aristo_desc, aristo_get, aristo_hike, aristo_transcode, aristo_utils,
+  "."/[aristo_desc, aristo_get, aristo_hike, aristo_serialise, aristo_utils,
        aristo_vid]
 
 type
@@ -144,6 +144,7 @@ proc updateHashKey(
       # Proceed `vidAttach()`, below
 
   # Othwise there is no Merkle hash, so create one with the `expected` key
+  # and write it to the top level `pAmk[]` and `kMap[]` tables.
   db.vidAttach(HashLabel(root: root, key: expected), vid)
   ok()
 
@@ -166,11 +167,9 @@ proc leafToRootHasher(
       continue
 
     # Check against existing key, or store new key
-    let
-      key = rc.value.to(HashKey)
-      rx = db.updateHashKey(hike.root, wp.vid, key, bg)
-    if rx.isErr:
-      return err((wp.vid,rx.error))
+    let key = rc.value.digestTo(HashKey)
+    db.updateHashKey(hike.root, wp.vid, key, bg).isOkOr:
+      return err((wp.vid,error))
 
   ok -1 # all could be hashed
 
@@ -197,7 +196,7 @@ proc deletedLeafHasher(
       let rc = wp.vtx.toNode(db, stopEarly=false)
       if rc.isOk:
         let
-          expected = rc.value.to(HashKey)
+          expected = rc.value.digestTo(HashKey)
           key = db.getKey wp.vid
         if key.isValid:
           if key != expected:
@@ -301,11 +300,9 @@ proc resolveStateRoots(
       let rc = fVal.vtx.toNode db
       if rc.isOk:
         # Update Merkle hash
-        let
-          key = rc.value.to(HashKey)
-          rx = db.updateHashKey(fVal.w.root, fVid, key, fVal.w.onBe)
-        if rx.isErr:
-          return err((fVid, rx.error))
+        let key = rc.value.digestTo(HashKey)
+        db.updateHashKey(fVal.w.root, fVid, key, fVal.w.onBe).isOkOr:
+          return err((fVid, error))
         changes = true
       else:
         # Cannot complete with this vertex, so dig deeper and do it later
@@ -440,11 +437,9 @@ proc hashify*(
 
       else:
         # Update Merkle hash
-        let
-          key = rc.value.to(HashKey)
-          rx = db.updateHashKey(val.root, vid, key, val.onBe)
-        if rx.isErr:
-          return err((vid,rx.error))
+        let key = rc.value.digestTo(HashKey)
+        db.updateHashKey(val.root, vid, key, val.onBe).isOkOr:
+          return err((vid,error))
 
         done.incl vid
 

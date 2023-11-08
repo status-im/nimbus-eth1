@@ -8,23 +8,24 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [].}
+
 import
   std/[math, times, strutils],
   eth/[rlp, common/eth_types_rlp],
   stew/byteutils,
   nimcrypto,
+  results,
   ../db/core_db,
   ../constants
 
 export eth_types_rlp
 
-{.push raises: [].}
-
 proc calcRootHash[T](items: openArray[T]): Hash256 {.gcsafe.} =
-  var tr = newCoreDbRef(LegacyDbMemory).mptPrune
+  let sig = merkleSignBegin()
   for i, t in items:
-    tr.put(rlp.encode(i), rlp.encode(t))
-  return tr.rootHash
+    sig.merkleSignAdd(rlp.encode(i), rlp.encode(t))
+  sig.merkleSignCommit.value.to(Hash256)
 
 template calcTxRoot*(transactions: openArray[Transaction]): Hash256 =
   calcRootHash(transactions)

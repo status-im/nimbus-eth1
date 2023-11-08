@@ -11,6 +11,7 @@
 {.push raises: [].}
 
 import
+  std/sets,
   eth/[common, trie/nibbles],
   ./aristo_desc/desc_identifiers
 
@@ -24,17 +25,20 @@ const
   EmptyVidSeq* = seq[VertexID].default
     ## Useful shortcut
 
-  EmptyQidPairSeq* = seq[(QueueID,QueueID)].default
+  EmptyVidSet* = EmptyVidSeq.toHashSet
     ## Useful shortcut
 
   VOID_CODE_HASH* = EMPTY_CODE_HASH
     ## Equivalent of `nil` for `Account` object code hash
 
-  VOID_HASH_KEY* = EMPTY_ROOT_HASH.to(HashKey)
+  VOID_HASH_KEY* = HashKey()
     ## Void equivalent for Merkle hash value
 
-  VOID_HASH_LABEL* = HashLabel(root: VertexID(0), key: VOID_HASH_KEY)
+  VOID_HASH_LABEL* = HashLabel()
     ## Void equivalent for Merkle hash value
+
+  EmptyQidPairSeq* = seq[(QueueID,QueueID)].default
+    ## Useful shortcut
 
   DEFAULT_QID_QUEUES* = [
     (128,   0), ## Consecutive list of 128 filter slots

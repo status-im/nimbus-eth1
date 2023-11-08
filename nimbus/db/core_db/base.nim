@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2023 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -16,6 +16,7 @@ import
   eth/common,
   results,
   "../.."/[constants, errors],
+  ../aristo/aristo_constants, # `EmptyBlob`
   ./base/[base_desc, validate]
 
 export
@@ -45,7 +46,7 @@ else:
   const AutoValidateDescriptors = true
 
 const
-  ProvideCoreDbLegacyAPI = true
+  ProvideCoreDbLegacyAPI* = true # and false
 
   EnableApiTracking = true and false
     ## When enabled, functions using this tracking facility need to import
@@ -106,34 +107,35 @@ template itNotImplemented(db: CoreDbRef, name: string) =
 when EnableApiTracking:
   import std/[sequtils, strutils], stew/byteutils
 
-  template newApiTxt(info: static[string]): static[string] =
-    logTxt "new API " & info
-
-  template legaApiTxt(info: static[string]): static[string] =
-    logTxt "legacy API " & info
-
   func getParent(w: CoreDxChldRefs): auto =
     ## Avoida inifinite call to `parent()` in `ifTrack*Api()` tmplates
     w.parent
 
-  template setTrackLegaApiOnly(w: CoreDbChldRefs|CoreDbRef) =
-    when typeof(w) is CoreDbRef:
-      let db = w
-    else:
-      let db = w.distinctBase.getParent
-    let save = db.trackNewApi
-    # Prevent from cascaded logging
-    db.trackNewApi = false
-    defer: db.trackNewApi = save
+  when ProvideCoreDbLegacyAPI:
+    template legaApiTxt(info: static[string]): static[string] =
+      logTxt "legacy API " & info
 
-  template ifTrackLegaApi(w: CoreDbChldRefs|CoreDbRef; code: untyped) =
-    block:
+    template setTrackLegaApiOnly(w: CoreDbChldRefs|CoreDbRef) =
       when typeof(w) is CoreDbRef:
         let db = w
       else:
         let db = w.distinctBase.getParent
-      if db.trackLegaApi:
-        code
+      let save = db.trackNewApi
+      # Prevent from cascaded logging
+      db.trackNewApi = false
+      defer: db.trackNewApi = save
+
+    template ifTrackLegaApi(w: CoreDbChldRefs|CoreDbRef; code: untyped) =
+      block:
+        when typeof(w) is CoreDbRef:
+          let db = w
+        else:
+          let db = w.distinctBase.getParent
+        if db.trackLegaApi:
+          code
+
+  template newApiTxt(info: static[string]): static[string] =
+    logTxt "new API " & info
 
   template ifTrackNewApi(w: CoreDxChldRefs|CoreDbRef; code: untyped) =
     block:
@@ -190,8 +192,9 @@ when EnableApiTracking:
   proc toStr(rc: CoreDbRc[CoreDxCaptRef]): string = rc.toStr "captRef"
 
 else:
-  template setTrackLegaApiOnly(w: CoreDbChldRefs|CoreDbRef) = discard
-  template ifTrackLegaApi(w: CoreDbChldRefs|CoreDbRef; code: untyped) = discard
+  when ProvideCoreDbLegacyAPI:
+    template setTrackLegaApiOnly(w: CoreDbChldRefs|CoreDbRef) = discard
+    template ifTrackLegaApi(w: CoreDbChldRefs|CoreDbRef; c: untyped) = discard
   template ifTrackNewApi(w: CoreDxChldRefs|CoreDbRef; code: untyped) = discard
 
 # ---------
@@ -214,9 +217,9 @@ func toCoreDxPhkRef(mpt: CoreDxMptRef): CoreDxPhkRef =
     proc(k:openArray[byte]; v: openArray[byte]): CoreDbRc[void] =
       mpt.methods.mergeFn(k.keccakHash.data, v)
 
-  result.methods.containsFn =
+  result.methods.hasPathFn =
     proc(k: openArray[byte]): CoreDbRc[bool] =
-      mpt.methods.containsFn(k.keccakHash.data)
+      mpt.methods.hasPathFn(k.keccakHash.data)
 
   result.methods.pairsIt =
     iterator(): (Blob, Blob) {.apiRaise.} =
@@ -244,6 +247,7 @@ proc bless*(db: CoreDbRef): CoreDbRef =
   db.ifTrackNewApi: info newApiTxt "CoreDbRef.init()", dbType=db.dbType
   db
 
+
 proc bless*(db: CoreDbRef; child: CoreDbVidRef): CoreDbVidRef =
   ## Complete sub-module descriptor, fill in `parent` and actvate it.
   child.parent = db
@@ -251,6 +255,7 @@ proc bless*(db: CoreDbRef; child: CoreDbVidRef): CoreDbVidRef =
   when AutoValidateDescriptors:
     child.validate
   child
+
 
 proc bless*(db: CoreDbRef; child: CoreDxKvtRef): CoreDxKvtRef =
   ## Complete sub-module descriptor, fill in `parent` and de-actvate
@@ -267,12 +272,24 @@ proc bless*(db: CoreDbRef; child: CoreDxKvtRef): CoreDxKvtRef =
   child
 
 
-proc bless*[T: CoreDxTrieRelated | CoreDbErrorRef | CoreDbBackends](
+proc bless*[T: CoreDxTrieRelated | CoreDbBackends](
     db: CoreDbRef;
     child: T;
       ): auto =
   ## Complete sub-module descriptor, fill in `parent`.
   child.parent = db
+  when AutoValidateDescriptors:
+    child.validate
+  child
+
+
+proc bless*(
+    db: CoreDbRef;
+    error: CoreDbErrorCode;
+    child: CoreDbErrorRef;
+      ): CoreDbErrorRef =
+  child.parent = db
+  child.error = error
   when AutoValidateDescriptors:
     child.validate
   child
@@ -315,7 +332,7 @@ proc finish*(db: CoreDbRef; flush = false) =
 proc `$$`*(e: CoreDbErrorRef): string =
   ## Pretty print error symbol, note that this directive may have side effects
   ## as it calls a backend function.
-  result = e.parent.methods.errorPrintFn(e)
+  result = $e.error & "(" & e.parent.methods.errorPrintFn(e) & ")"
   e.ifTrackNewApi: info newApiTxt "$$()", result
 
 proc hash*(vid: CoreDbVidRef): Result[Hash256,void] =
@@ -372,7 +389,7 @@ proc getRoot*(
   ## This function is intended to open a virtual accounts trie database as in:
   ## ::
   ##   proc openAccountLedger(db: CoreDbRef, rootHash: Hash256): CoreDxMptRef =
-  ##     let root = db.getRoot(rootHash).isOkOr:
+  ##     let root = db.getRoot(rootHash).valueOr:
   ##       # some error handling
   ##       return
   ##     db.newAccMpt root
@@ -391,9 +408,20 @@ proc newKvt*(db: CoreDbRef): CoreDxKvtRef =
   db.ifTrackNewApi: info newApiTxt "newKvt()"
 
 proc get*(kvt: CoreDxKvtRef; key: openArray[byte]): CoreDbRc[Blob] =
+  ## This function always returns a non-empty `Blob` or an error code.
   result = kvt.methods.getFn key
   kvt.ifTrackNewApi:
     info newApiTxt "kvt/get()", key=key.toStr, result=result.toStr
+
+proc getOrEmpty*(kvt: CoreDxKvtRef; key: openArray[byte]): CoreDbRc[Blob] =
+  ## This function sort of mimics the behaviour of the legacy database
+  ## returning an empty `Blob` if the argument `key` is not found on the
+  ## database.
+  result = kvt.methods.getFn key
+  if result.isErr and result.error.error == KvtNotFound:
+    result = CoreDbRc[Blob].ok(EmptyBlob)
+  kvt.ifTrackNewApi:
+    info newApiTxt "kvt/getOrEmpty()", key=key.toStr, result=result.toStr
 
 proc del*(kvt: CoreDxKvtRef; key: openArray[byte]): CoreDbRc[void] =
   result = kvt.methods.delFn key
@@ -409,10 +437,11 @@ proc put*(
   kvt.ifTrackNewApi: info newApiTxt "kvt/put()",
     key=key.toStr, val=val.toSeq.toStr, result=result.toStr
 
-proc contains*(kvt: CoreDxKvtRef; key: openArray[byte]): CoreDbRc[bool] =
-  result = kvt.methods.containsFn key
+proc hasKey*(kvt: CoreDxKvtRef; key: openArray[byte]): CoreDbRc[bool] =
+  ## Would be named `contains` if it returned `bool` rather than `Result[]`.
+  result = kvt.methods.hasKeyFn key
   kvt.ifTrackNewApi:
-    info newApiTxt "kvt/contains()", key=key.toStr, result=result.toStr
+    info newApiTxt "kvt/hasKey()", key=key.toStr, result=result.toStr
 
 iterator pairs*(kvt: CoreDxKvtRef): (Blob, Blob) {.apiRaise.} =
   ## Iterator supported on memory DB (otherwise implementation dependent)
@@ -427,8 +456,15 @@ iterator pairs*(kvt: CoreDxKvtRef): (Blob, Blob) {.apiRaise.} =
 proc newMpt*(db: CoreDbRef; root: CoreDbVidRef; prune = true): CoreDxMptRef =
   ## Constructor, will defect on failure (note that the legacy backend
   ## always succeeds)
-  result = db.methods.newMptFn(root, prune).valueOr: raiseAssert $$error
+  result = db.methods.newMptFn(root, prune).valueOr:
+    raiseAssert $$error
   db.ifTrackNewApi: info newApiTxt "newMpt", root=root.toStr, prune
+
+proc newMpt*(db: CoreDbRef; prune = true): CoreDxMptRef =
+  ## Shortcut for `db.newMpt CoreDbVidRef()`
+  result = db.methods.newMptFn(CoreDbVidRef(), prune).valueOr:
+    raiseAssert $$error
+  db.ifTrackNewApi: info newApiTxt "newMpt", prune
 
 proc newAccMpt*(db: CoreDbRef; root: CoreDbVidRef; prune = true): CoreDxAccRef =
   ## Similar to `newMpt()` for handling accounts. Although this sub-trie can
@@ -471,8 +507,18 @@ proc rootVid*(dsc: CoreDxTrieRefs | CoreDxAccRef): CoreDbVidRef =
 # ------------------------------------------------------------------------------
 
 proc fetch*(trie: CoreDxTrieRefs; key: openArray[byte]): CoreDbRc[Blob] =
-  ## Fetch data from the argument `trie`
+  ## Fetch data from the argument `trie`. The function always returns a
+  ## non-empty `Blob` or an error code.
   result = trie.methods.fetchFn(key)
+  trie.ifTrackNewApi:
+    info newApiTxt "trie/fetch()", key=key.toStr, result=result.toStr
+
+proc fetchOrEmpty*(trie: CoreDxTrieRefs; key: openArray[byte]): CoreDbRc[Blob] =
+  ## This function returns an empty `Blob` if the argument `key` is not found
+  ## on the database.
+  result = trie.methods.fetchFn(key)
+  if result.isErr and result.error.error == MptNotFound:
+    result = ok(EmptyBlob)
   trie.ifTrackNewApi:
     info newApiTxt "trie/fetch()", key=key.toStr, result=result.toStr
 
@@ -486,7 +532,7 @@ proc merge*(
     key: openArray[byte];
     val: openArray[byte];
       ): CoreDbRc[void] =
-  when trie is CoreDbMptRef:
+  when trie is CoreDxMptRef:
     const info = "mpt/merge()"
   else:
     const info = "phk/merge()"
@@ -494,10 +540,11 @@ proc merge*(
   trie.ifTrackNewApi: info newApiTxt info,
     key=key.toStr, val=val.toSeq.toStr, result=result.toStr
 
-proc contains*(trie: CoreDxTrieRefs; key: openArray[byte]): CoreDbRc[bool] =
-  result = trie.methods.containsFn key
+proc hasPath*(trie: CoreDxTrieRefs; key: openArray[byte]): CoreDbRc[bool] =
+  ## Would be named `contains` if it returned `bool` rather than `Result[]`.
+  result = trie.methods.hasPathFn key
   trie.ifTrackNewApi:
-    info newApiTxt "trie/contains()", key=key.toStr, result=result.toStr
+    info newApiTxt "trie/hasKey()", key=key.toStr, result=result.toStr
 
 iterator pairs*(mpt: CoreDxMptRef): (Blob, Blob) {.apiRaise.} =
   ## Trie traversal, only supported for `CoreDxMptRef`
@@ -516,7 +563,7 @@ iterator replicate*(mpt: CoreDxMptRef): (Blob, Blob) {.apiRaise.} =
 # ------------------------------------------------------------------------------
 
 proc fetch*(acc: CoreDxAccRef; address: EthAddress): CoreDbRc[CoreDbAccount] =
-  ## Fetch data from the argument `trie`
+  ## Fetch data from the argument `trie`.
   result = acc.methods.fetchFn address
   acc.ifTrackNewApi:
     info newApiTxt "acc/fetch()", address=address.toStr, result=result.toStr
@@ -535,10 +582,11 @@ proc merge*(
   acc.ifTrackNewApi:
     info newApiTxt "acc/merge()", address=address.toStr, result=result.toStr
 
-proc contains*(acc: CoreDxAccRef; address: EthAddress): CoreDbRc[bool] =
-  result = acc.methods.containsFn address
+proc hasPath*(acc: CoreDxAccRef; address: EthAddress): CoreDbRc[bool] =
+  ## Would be named `contains` if it returned `bool` rather than `Result[]`.
+  result = acc.methods.hasPathFn address
   acc.ifTrackNewApi:
-    info newApiTxt "acc/contains()", address=address.toStr, result=result.toStr
+    info newApiTxt "acc/hasKey()", address=address.toStr, result=result.toStr
 
 # ------------------------------------------------------------------------------
 # Public transaction related methods
@@ -630,7 +678,7 @@ when ProvideCoreDbLegacyAPI:
   proc get*(kvt: CoreDbKvtRef; key: openArray[byte]): Blob =
     kvt.setTrackLegaApiOnly
     const info = "kvt/get()"
-    result = kvt.distinctBase.get(key).expect info
+    result = kvt.distinctBase.getOrEmpty(key).expect info
     kvt.ifTrackLegaApi:
       info legaApiTxt info, key=key.toStr, result=result.toStr
 
@@ -650,7 +698,7 @@ when ProvideCoreDbLegacyAPI:
   proc contains*(kvt: CoreDbKvtRef; key: openArray[byte]): bool =
     kvt.setTrackLegaApiOnly
     const info = "kvt/contains()"
-    result = kvt.distinctBase.contains(key).expect info
+    result = kvt.distinctBase.hasKey(key).expect info
     kvt.ifTrackLegaApi: info legaApiTxt info, key=key.toStr, result
 
   iterator pairs*(kvt: CoreDbKvtRef): (Blob, Blob) {.apiRaise.} =
@@ -703,7 +751,7 @@ when ProvideCoreDbLegacyAPI:
   proc get*(trie: CoreDbTrieRefs; key: openArray[byte]): Blob =
     trie.setTrackLegaApiOnly
     const info = "trie/get()"
-    result = trie.distinctBase.fetch(key).expect "trie/get()"
+    result = trie.distinctBase.fetchOrEmpty(key).expect "trie/get()"
     trie.ifTrackLegaApi:
       info legaApiTxt info, key=key.toStr, result=result.toStr
 
@@ -726,7 +774,7 @@ when ProvideCoreDbLegacyAPI:
   proc contains*(trie: CoreDbTrieRefs; key: openArray[byte]): bool =
     trie.setTrackLegaApiOnly
     const info = "trie/contains()"
-    result = trie.distinctBase.contains(key).expect info
+    result = trie.distinctBase.hasPath(key).expect info
     trie.ifTrackLegaApi: info legaApiTxt info, key=key.toStr, result
 
   proc rootHash*(trie: CoreDbTrieRefs): Hash256 =

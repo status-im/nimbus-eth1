@@ -16,7 +16,8 @@ import
   std/[algorithm, sequtils, sets, strutils, tables, times],
   chronos,
   eth/[common, trie/nibbles],
-  stew/results,
+  stew/byteutils,
+  results,
   "../.."/[constants, range_desc],
   "."/[hexary_desc, hexary_error]
 
@@ -69,7 +70,7 @@ proc ppImpl(key: RepairKey; db: HexaryTreeDbRef): string =
       return db.keyPp(key)
   except CatchableError:
     discard
-  key.ByteArray33.toSeq.mapIt(it.toHex(2)).join.toLowerAscii
+  key.ByteArray33.toSeq.toHex.toLowerAscii
 
 proc ppImpl(key: NodeKey; db: HexaryTreeDbRef): string =
   key.to(RepairKey).ppImpl(db)
@@ -563,6 +564,9 @@ proc pp*(db: HexaryTreeDbRef; root: NodeKey; indent=4): string =
   ## Dump the entries from the a generic repair tree.
   db.pp(root, indent.toPfx)
 
+proc pp*(db: HexaryTreeDbRef; root: Hash256; indent=4): string =
+  ## Dump the entries from the a generic repair tree.
+  db.pp(root.to(NodeKey), indent.toPfx)
 
 proc pp*(m: Moment): string =
   ## Prints a moment in time similar to *chronicles* time format.

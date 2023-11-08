@@ -15,7 +15,7 @@
 {.push raises: [].}
 
 import
-  std/[sets, tables],
+  std/[hashes, sets, tables],
   eth/[common, trie/nibbles],
   "."/[desc_error, desc_identifiers]
 
@@ -75,7 +75,7 @@ type
   NodeRef* = ref object of VertexRef
     ## Combined record for a *traditional* ``Merkle Patricia Tree` node merged
     ## with a structural `VertexRef` type object.
-    error*: AristoError              ## Can be used for error signalling
+    error*: AristoError              ## Used for error signalling in RLP decoder
     key*: array[16,HashKey]          ## Merkle hash/es for vertices
 
   # ----------------------
@@ -83,11 +83,14 @@ type
   FilterRef* = ref object
     ## Delta layer with expanded sequences for quick access
     fid*: FilterID                   ## Filter identifier
-    src*: HashKey                    ## Applicable to this state root
-    trg*: HashKey                    ## Resulting state root (i.e. `kMap[1]`)
+    src*: Hash256                    ## Applicable to this state root
+    trg*: Hash256                    ## Resulting state root (i.e. `kMap[1]`)
     sTab*: Table[VertexID,VertexRef] ## Filter structural vertex table
     kMap*: Table[VertexID,HashKey]   ## Filter Merkle hash key mapping
     vGen*: seq[VertexID]             ## Filter unique vertex ID generator
+
+  VidsByLabel* = Table[HashLabel,HashSet[VertexID]]
+    ## Reverse lookup searching `VertexID` by the hash key/label.
 
   LayerRef* = ref object
     ## Hexary trie database layer structures. Any layer holds the full
@@ -95,7 +98,7 @@ type
     sTab*: Table[VertexID,VertexRef]  ## Structural vertex table
     lTab*: Table[LeafTie,VertexID]    ## Direct access, path to leaf vertex
     kMap*: Table[VertexID,HashLabel]  ## Merkle hash key mapping
-    pAmk*: Table[HashLabel,VertexID]  ## Reverse `kMap` entries, hash key lookup
+    pAmk*: VidsByLabel                ## Reverse `kMap` entries, hash key lookup
     pPrf*: HashSet[VertexID]          ## Locked vertices (proof nodes)
     vGen*: seq[VertexID]              ## Unique vertex ID generator
     txUid*: uint                      ## Transaction identifier if positive
@@ -136,8 +139,33 @@ func max(a, b, c: int): int =
   max(max(a,b),c)
 
 # ------------------------------------------------------------------------------
+# Public helpers: `Table[HashLabel,seq[VertexID]]`
+# ------------------------------------------------------------------------------
+
+proc append*(pAmk: var VidsByLabel; lbl: HashLabel; vid: VertexID) =
+  pAmk.withValue(lbl,value):
+    value[].incl vid
+  do: # else if not found
+    pAmk[lbl] = @[vid].toHashSet
+
+proc delete*(pAmk: var VidsByLabel; lbl: HashLabel; vid: VertexID) =
+  var deleteItem = false
+  pAmk.withValue(lbl,value):
+    value[].excl vid
+    if value[].len == 0:
+      deleteItem = true
+  if deleteItem:
+    pAmk.del lbl
+
+# ------------------------------------------------------------------------------
 # Public helpers: `NodeRef` and `PayloadRef`
 # ------------------------------------------------------------------------------
+
+func hash*(node: NodeRef): Hash =
+  ## Table/KeyedQueue/HashSet mixin
+  cast[pointer](node).hash
+
+# ---------------
 
 proc `==`*(a, b: PayloadRef): bool =
   ## Beware, potential deep comparison

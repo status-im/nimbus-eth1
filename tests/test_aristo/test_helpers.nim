@@ -14,19 +14,18 @@ import
   eth/common,
   rocksdb,
   ../../nimbus/db/aristo/[
-    aristo_constants, aristo_debug, aristo_desc,
-    aristo_filter/filter_scheduler, aristo_merge],
+    aristo_debug, aristo_desc, aristo_filter/filter_scheduler, aristo_merge],
   ../../nimbus/db/kvstore_rocksdb,
   ../../nimbus/sync/protocol/snap/snap_types,
   ../test_sync_snap/test_types,
   ../replay/[pp, undump_accounts, undump_storages]
 
 from ../../nimbus/sync/snap/range_desc
-  import NodeKey
+  import NodeKey, ByteArray32
 
 type
   ProofTrieData* = object
-    root*: HashKey
+    root*: Hash256
     id*: int
     proof*: seq[SnapProof]
     kvpLst*: seq[LeafTiePayload]
@@ -39,24 +38,29 @@ const
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc toPfx(indent: int): string =
+func toPfx(indent: int): string =
   "\n" & " ".repeat(indent)
 
-proc to(a: NodeKey; T: type HashKey): T =
-  a.T
+func to(a: NodeKey; T: type UInt256): T =
+  T.fromBytesBE ByteArray32(a)
+
+func to(a: NodeKey; T: type PathID): T =
+  a.to(UInt256).to(T)
 
 # ------------------------------------------------------------------------------
 # Public pretty printing
 # ------------------------------------------------------------------------------
 
-proc pp*(
+func pp*(
     w: ProofTrieData;
     rootID: VertexID;
     db: AristoDbRef;
     indent = 4;
       ): string =
-  let pfx = indent.toPfx
-  result = "(" & HashLabel(root: rootID, key: w.root).pp(db)
+  let
+    pfx = indent.toPfx
+    rootLink = w.root.to(HashKey)
+  result = "(" & HashLabel(root: rootID, key: rootLink).pp(db)
   result &= "," & $w.id & ",[" & $w.proof.len & "],"
   result &= pfx & " ["
   for n,kvp in w.kvpLst:
@@ -99,23 +103,35 @@ proc say*(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
 # Public helpers
 # ------------------------------------------------------------------------------
 
-proc `==`*[T: AristoError|VertexID](a: T, b: int): bool =
+func `==`*[T: AristoError|VertexID](a: T, b: int): bool =
   a == T(b)
 
-proc `==`*(a: (VertexID,AristoError), b: (int,int)): bool =
+func `==`*(a: (VertexID,AristoError), b: (int,int)): bool =
   (a[0].int,a[1].int) == b
 
-proc `==`*(a: (VertexID,AristoError), b: (int,AristoError)): bool =
+func `==`*(a: (VertexID,AristoError), b: (int,AristoError)): bool =
   (a[0].int,a[1]) == b
 
-proc `==`*(a: (int,AristoError), b: (int,int)): bool =
+func `==`*(a: (int,AristoError), b: (int,int)): bool =
   (a[0],a[1].int) == b
 
-proc `==`*(a: (int,VertexID,AristoError), b: (int,int,int)): bool =
+func `==`*(a: (int,VertexID,AristoError), b: (int,int,int)): bool =
   (a[0], a[1].int, a[2].int) == b
 
-proc `==`*(a: (QueueID,Hash), b: (int,Hash)): bool =
+func `==`*(a: (QueueID,Hash), b: (int,Hash)): bool =
   (a[0].int,a[1]) == b
+
+func to*(a: Hash256; T: type UInt256): T =
+  T.fromBytesBE a.data
+
+func to*(a: Hash256; T: type PathID): T =
+  a.to(UInt256).to(T)
+
+func to*(a: HashKey; T: type UInt256): T =
+  T.fromBytesBE 0u8.repeat(32 - a.len) & @a
+
+func to*(fid: FilterID; T: type Hash256): T =
+  result.data = fid.uint64.u256.toBytesBE
 
 proc to*(sample: AccountsSample; T: type seq[UndumpAccounts]): T =
   ## Convert test data into usable in-memory format
@@ -149,10 +165,10 @@ proc to*(sample: AccountsSample; T: type seq[UndumpStorages]): T =
       break
     result.add w
 
-proc to*(ua: seq[UndumpAccounts]; T: type seq[ProofTrieData]): T =
-  var (rootKey, rootVid) = (VOID_HASH_KEY, VertexID(0))
+func to*(ua: seq[UndumpAccounts]; T: type seq[ProofTrieData]): T =
+  var (rootKey, rootVid) = (Hash256(), VertexID(0))
   for w in ua:
-    let thisRoot = w.root.to(HashKey)
+    let thisRoot = w.root
     if rootKey != thisRoot:
       (rootKey, rootVid) = (thisRoot, VertexID(rootVid.uint64 + 1))
     if 0 < w.data.accounts.len:
@@ -162,14 +178,14 @@ proc to*(ua: seq[UndumpAccounts]; T: type seq[ProofTrieData]): T =
         kvpLst: w.data.accounts.mapIt(LeafTiePayload(
           leafTie: LeafTie(
             root:  rootVid,
-            path:  it.accKey.to(HashKey).to(PathID)),
+            path:  it.accKey.to(PathID)),
           payload: PayloadRef(pType: RawData, rawBlob: it.accBlob))))
 
-proc to*(us: seq[UndumpStorages]; T: type seq[ProofTrieData]): T =
-  var (rootKey, rootVid) = (VOID_HASH_KEY, VertexID(0))
+func to*(us: seq[UndumpStorages]; T: type seq[ProofTrieData]): T =
+  var (rootKey, rootVid) = (Hash256(), VertexID(0))
   for n,s in us:
     for w in s.data.storages:
-      let thisRoot = w.account.storageRoot.to(HashKey)
+      let thisRoot = w.account.storageRoot
       if rootKey != thisRoot:
         (rootKey, rootVid) = (thisRoot, VertexID(rootVid.uint64 + 1))
       if 0 < w.data.len:
@@ -179,12 +195,12 @@ proc to*(us: seq[UndumpStorages]; T: type seq[ProofTrieData]): T =
           kvpLst: w.data.mapIt(LeafTiePayload(
             leafTie: LeafTie(
               root:  rootVid,
-              path:  it.slotHash.to(HashKey).to(PathID)),
+              path:  it.slotHash.to(PathID)),
             payload: PayloadRef(pType: RawData, rawBlob: it.slotData))))
     if 0 < result.len:
       result[^1].proof = s.data.proof
 
-proc mapRootVid*(
+func mapRootVid*(
     a: openArray[LeafTiePayload];
     toVid: VertexID;
       ): seq[LeafTiePayload] =

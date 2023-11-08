@@ -388,7 +388,7 @@ proc testTxMergeProofAndKvpList*(
   var
     db = AristoDbRef()
     tx = AristoTxRef(nil)
-    rootKey: HashKey
+    rootKey: Hash256
     count = 0
   defer:
     db.finish(flush=true)

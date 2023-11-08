@@ -77,11 +77,10 @@ template mapRlpException(db: LegacyDbRef; info: static[string]; code: untyped) =
   try:
     code
   except RlpError as e:
-    return err(db.bless LegacyCoreDbError(
-      error: RlpException,
-      ctx:   info,
-      name:  $e.name,
-      msg:   e.msg))
+    return err(db.bless(RlpException, LegacyCoreDbError(
+      ctx:  info,
+      name: $e.name,
+      msg:  e.msg)))
 
 template reraiseRlpException(info: static[string]; code: untyped) =
   try:
@@ -183,7 +182,10 @@ proc kvtMethods(db: LegacyDbRef): CoreDbKvtFns =
       db.bless(LegacyCoreDbKvtBE(tdb: tdb)),
 
     getFn: proc(k: openArray[byte]): CoreDbRc[Blob] =
-      ok(tdb.get(k)),
+      let data = tdb.get(k)
+      if 0 < data.len:
+        return ok(data)
+      err(db.bless(KvtNotFound, LegacyCoreDbError(ctx: "getFn()"))),
 
     delFn: proc(k: openArray[byte]): CoreDbRc[void] =
       tdb.del(k)
@@ -193,7 +195,7 @@ proc kvtMethods(db: LegacyDbRef): CoreDbKvtFns =
       tdb.put(k,v)
       ok(),
 
-    containsFn: proc(k: openArray[byte]): CoreDbRc[bool] =
+    hasKeyFn: proc(k: openArray[byte]): CoreDbRc[bool] =
       ok(tdb.contains(k)),
 
     pairsIt: iterator(): (Blob, Blob) =
@@ -207,21 +209,24 @@ proc mptMethods(mpt: HexaryChildDbRef; db: LegacyDbRef): CoreDbMptFns =
       db.bless(LegacyCoreDbMptBE(mpt: mpt.trie)),
 
     fetchFn: proc(k: openArray[byte]): CoreDbRc[Blob] =
-      db.mapRlpException("legacy/mpt/get()"):
-        return ok(mpt.trie.get(k)),
+      db.mapRlpException("fetchFn()"):
+        let data = mpt.trie.get(k)
+        if 0 < data.len:
+          return ok(data)
+      err(db.bless(MptNotFound, LegacyCoreDbError(ctx: "fetchFn()"))),
 
     deleteFn: proc(k: openArray[byte]): CoreDbRc[void] =
-      db.mapRlpException("legacy/mpt/del()"):
+      db.mapRlpException("deleteFn()"):
         mpt.trie.del(k)
       ok(),
 
     mergeFn: proc(k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] =
-      db.mapRlpException("legacy/mpt/put()"):
+      db.mapRlpException("mergeFn()"):
         mpt.trie.put(k,v)
       ok(),
 
-    containsFn: proc(k: openArray[byte]): CoreDbRc[bool] =
-      db.mapRlpException("legacy/mpt/put()"):
+    hasPathFn: proc(k: openArray[byte]): CoreDbRc[bool] =
+      db.mapRlpException("hasPathFn()"):
         return ok(mpt.trie.contains(k)),
 
     rootVidFn: proc(): CoreDbVidRef =
@@ -231,15 +236,14 @@ proc mptMethods(mpt: HexaryChildDbRef; db: LegacyDbRef): CoreDbMptFns =
       mpt.trie.isPruning,
 
     pairsIt: iterator: (Blob,Blob) {.gcsafe, raises: [LegacyApiRlpError].} =
-      reraiseRlpException("legacy/mpt/pairs()"):
+      reraiseRlpException("pairsIt()"):
         for k,v in mpt.trie.pairs():
           yield (k,v),
 
     replicateIt: iterator: (Blob,Blob) {.gcsafe, raises: [LegacyApiRlpError].} =
-      reraiseRlpException("legacy/mpt/replicate()"):
+      reraiseRlpException("replicateIt()"):
         for k,v in mpt.trie.replicate():
-          yield (k,v)
-    )
+          yield (k,v))
 
 proc accMethods(mpt: HexaryChildDbRef; db: LegacyDbRef): CoreDbAccFns =
   ## Hexary trie database handlers
@@ -248,22 +252,24 @@ proc accMethods(mpt: HexaryChildDbRef; db: LegacyDbRef): CoreDbAccFns =
       db.bless(LegacyCoreDbAccBE(mpt: mpt.trie)),
 
     fetchFn: proc(k: EthAddress): CoreDbRc[CoreDbAccount] =
-      const info = "legacy/mpt/getAccount()"
-      db.mapRlpException info:
-        return ok mpt.trie.get(k.keccakHash.data).toCoreDbAccount(db),
+      db.mapRlpException "fetchFn()":
+        let data = mpt.trie.get(k.keccakHash.data)
+        if 0 < data.len:
+          return ok data.toCoreDbAccount(db)
+      err(db.bless(AccNotFound, LegacyCoreDbError(ctx: "fetchFn()"))),
 
     deleteFn: proc(k: EthAddress): CoreDbRc[void] =
-      db.mapRlpException("legacy/mpt/del()"):
+      db.mapRlpException("deleteFn()"):
         mpt.trie.del(k.keccakHash.data)
       ok(),
 
     mergeFn: proc(k: EthAddress; v: CoreDbAccount): CoreDbRc[void] =
-      db.mapRlpException("legacy/mpt/put()"):
+      db.mapRlpException("mergeFn()"):
         mpt.trie.put(k.keccakHash.data, rlp.encode v.toAccount)
       ok(),
 
-    containsFn: proc(k: EthAddress): CoreDbRc[bool] =
-      db.mapRlpException("legacy/mpt/put()"):
+    hasPathFn: proc(k: EthAddress): CoreDbRc[bool] =
+      db.mapRlpException("hasPath()"):
         return ok(mpt.trie.contains k.keccakHash.data),
 
     rootVidFn: proc(): CoreDbVidRef =
@@ -344,7 +350,7 @@ proc baseMethods(
       if createOk or tdb.contains(root.data):
         return ok(db.bless LegacyCoreDbVid(vHash: root))
 
-      err(db.bless LegacyCoreDbError(error: RootNotFound, ctx: "getRoot()")),
+      err(db.bless(RootNotFound, LegacyCoreDbError(ctx: "getRoot()"))),
 
     newKvtFn: proc(): CoreDxKvtRef =
       db.kvt,

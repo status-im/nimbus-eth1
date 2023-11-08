@@ -26,7 +26,7 @@ import
     aristo_init/memory_db,
     aristo_init/rocks_db,
     aristo_persistent,
-    aristo_transcode,
+    aristo_blobify,
     aristo_vid],
   ../replay/xcheck,
   ./test_helpers
@@ -45,8 +45,8 @@ func hash(filter: FilterRef): Hash =
   ##
   var h = BlindHash
   if not filter.isNil:
-    h = h !& filter.src.ByteArray32.hash
-    h = h !& filter.trg.ByteArray32.hash
+    h = h !& filter.src.hash
+    h = h !& filter.trg.hash
 
     for w in filter.vGen.vidReorg:
       h = h !& w.uint64.hash
@@ -56,7 +56,7 @@ func hash(filter: FilterRef): Hash =
       h = h !& (w.uint64.toBytesBE.toSeq & data).hash
 
     for w in filter.kMap.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID):
-      let data = filter.kMap.getOrVoid(w).ByteArray32.toSeq
+      let data = @(filter.kMap.getOrVoid(w))
       h = h !& (w.uint64.toBytesBE.toSeq & data).hash
 
   !$h
@@ -67,7 +67,7 @@ func hash(filter: FilterRef): Hash =
 
 proc mergeData(
     db: AristoDbRef;
-    rootKey: HashKey;
+    rootKey: Hash256;
     rootVid: VertexID;
     proof: openArray[SnapProof];
     leafs: openArray[LeafTiePayload];
@@ -201,11 +201,11 @@ proc testBackendConsistency*(
       ): bool =
   ## Import accounts
   var
-    filTab: Table[QueueID,Hash]             # Filter register
+    filTab: Table[QueueID,Hash]              # Filter register
     ndb = AristoDbRef()                      # Reference cache
     mdb = AristoDbRef()                      # Memory backend database
     rdb = AristoDbRef()                      # Rocks DB backend database
-    rootKey = HashKey.default
+    rootKey = Hash256()                      # Root key
     count = 0
 
   defer:
