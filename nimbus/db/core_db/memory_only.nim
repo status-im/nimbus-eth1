@@ -13,6 +13,7 @@
 import
   std/options,
   eth/[common, trie/db],
+  ../aristo,
   ./backend/legacy_db,
   ./base,
   #./core_apps_legacy as core_apps
@@ -21,6 +22,15 @@ import
 export
   common,
   core_apps,
+
+  # Provide a standard interface for calculating merkle hash signatures,
+  # here by quoting `Aristo` functions.
+  VerifyAristoForMerkleRootCalc,
+  MerkleSignRef,
+  merkleSignBegin,
+  merkleSignAdd,
+  merkleSignCommit,
+  to,
 
   # Not all symbols from the object sources will be exported by default
   CoreDbAccount,

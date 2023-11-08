@@ -8,23 +8,35 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [].}
+
 import
   std/[math, times, strutils],
   eth/[rlp, common/eth_types_rlp],
   stew/byteutils,
   nimcrypto,
+  results,
   ../db/core_db,
   ../constants
 
 export eth_types_rlp
 
-{.push raises: [].}
+when VerifyAristoForMerkleRootCalc: # set in `core_db/base.nim`
+  import chronicles
+  template logTxt(info: static[string]): static[string] =
+    "Utils " & info
 
 proc calcRootHash[T](items: openArray[T]): Hash256 {.gcsafe.} =
-  var tr = newCoreDbRef(LegacyDbMemory).mptPrune
+  let sig = merkleSignBegin()
   for i, t in items:
-    tr.put(rlp.encode(i), rlp.encode(t))
-  return tr.rootHash
+    sig.merkleSignAdd(rlp.encode(i), rlp.encode(t))
+  result = sig.merkleSignCommit.value.to(Hash256)
+  when VerifyAristoForMerkleRootCalc:
+    var tr = newCoreDbRef(LegacyDbMemory).mptPrune()
+    for i, t in items:
+      tr.put(rlp.encode(i), rlp.encode(t))
+    doAssert result == tr.rootHash
+    warn logTxt "calcRootHash() aristo/legacy root key OK"
 
 template calcTxRoot*(transactions: openArray[Transaction]): Hash256 =
   calcRootHash(transactions)
