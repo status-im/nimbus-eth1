@@ -173,7 +173,9 @@ proc new*(
     portalProtocol = PortalProtocol.new(
       baseProtocol, lightClientProtocolId,
       toContentIdHandler,
-      createGetHandler(beaconDb), stream, bootstrapRecords,
+      createGetHandler(beaconDb),
+      createContainsHandler(beaconDb),
+      stream, bootstrapRecords,
       config = portalConfigAdjusted)
 
   portalProtocol.dbPut = createStoreHandler(beaconDb)

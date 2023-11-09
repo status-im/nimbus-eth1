@@ -134,6 +134,9 @@ type
       contentId: ContentId,
       content: seq[byte]) {.raises: [], gcsafe.}
 
+  DbContainsHandler* =
+    proc(contentKey: ByteList, contentId: ContentId): bool {.raises: [], gcsafe.}
+
   PortalProtocolId* = array[2, byte]
 
   RadiusCache* = LRUCache[NodeId, UInt256]
@@ -160,6 +163,7 @@ type
     toContentId*: ToContentIdHandler
     dbGet*: DbGetHandler
     dbPut*: DbStoreHandler
+    dbContains*: DbContainsHandler
     radiusConfig: RadiusConfig
     dataRadius*: UInt256
     bootstrapRecords*: seq[Record]
@@ -392,7 +396,7 @@ proc handleOffer(p: PortalProtocol, o: OfferMessage, srcId: NodeId): seq[byte] =
     if contentIdResult.isOk():
       let contentId = contentIdResult.get()
       if p.inRange(contentId):
-        if p.dbGet(contentKey, contentId).isErr:
+        if not p.dbContains(contentKey, contentId):
           contentKeysBitList.setBit(i)
           discard contentKeys.add(contentKey)
     else:
@@ -484,6 +488,7 @@ proc new*(T: type PortalProtocol,
     protocolId: PortalProtocolId,
     toContentId: ToContentIdHandler,
     dbGet: DbGetHandler,
+    dbContains: DbContainsHandler,
     stream: PortalStream,
     bootstrapRecords: openArray[Record] = [],
     distanceCalculator: DistanceCalculator = XorDistanceCalculator,
@@ -501,6 +506,7 @@ proc new*(T: type PortalProtocol,
     baseProtocol: baseProtocol,
     toContentId: toContentId,
     dbGet: dbGet,
+    dbContains: dbContains,
     radiusConfig: config.radiusConfig,
     dataRadius: initialRadius,
     bootstrapRecords: @bootstrapRecords,

@@ -69,23 +69,26 @@ proc new*(
     streamManager: StreamManager,
     bootstrapRecords: openArray[Record] = [],
     portalConfig: PortalProtocolConfig = defaultPortalProtocolConfig): T =
+  let
+    contentQueue = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
 
-  let cq = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
+    stream = streamManager.registerNewStream(contentQueue)
 
-  let s = streamManager.registerNewStream(cq)
-
-  let portalProtocol = PortalProtocol.new(
-    baseProtocol, stateProtocolId,
-    toContentIdHandler, createGetHandler(contentDB), s,
-    bootstrapRecords, stateDistanceCalculator,
-    config = portalConfig)
+    portalProtocol = PortalProtocol.new(
+      baseProtocol, stateProtocolId,
+      toContentIdHandler,
+      createGetHandler(contentDB),
+      createContainsHandler(contentDB),
+      stream,
+      bootstrapRecords, stateDistanceCalculator,
+      config = portalConfig)
 
   portalProtocol.dbPut = createStoreHandler(contentDB, portalConfig.radiusConfig, portalProtocol)
 
   return StateNetwork(
     portalProtocol: portalProtocol,
     contentDB: contentDB,
-    contentQueue: cq
+    contentQueue: contentQueue
   )
 
 proc processContentLoop(n: StateNetwork) {.async.} =

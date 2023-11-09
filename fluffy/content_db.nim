@@ -404,3 +404,9 @@ proc createStoreHandler*(
         # so we will effectivly store fraction of the network
         db.put(contentId, content)
   )
+
+proc createContainsHandler*(db: ContentDB): DbContainsHandler =
+  return (
+    proc(contentKey: ByteList, contentId: ContentId): bool =
+      db.contains(contentId)
+  )

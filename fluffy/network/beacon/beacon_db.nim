@@ -146,6 +146,9 @@ proc get(db: BeaconDb, key: openArray[byte]): results.Opt[seq[byte]] =
 proc put(db: BeaconDb, key, value: openArray[byte]) =
   db.kv.put(key, value).expectDb()
 
+proc contains(db: BeaconDb, key: openArray[byte]): bool =
+  db.kv.contains(key).expectDb()
+
 ## Public ContentId based ContentDB calls
 proc get*(db: BeaconDb, key: ContentId):  results.Opt[seq[byte]] =
   # TODO: Here it is unfortunate that ContentId is a uint256 instead of Digest256.
@@ -153,6 +156,9 @@ proc get*(db: BeaconDb, key: ContentId):  results.Opt[seq[byte]] =
 
 proc put*(db: BeaconDb, key: ContentId, value: openArray[byte]) =
   db.put(key.toBytesBE(), value)
+
+proc contains*(db: BeaconDb, key: ContentId): bool =
+  db.contains(key.toBytesBE())
 
 # TODO Add checks that uint64 can be safely casted to int64
 proc getLightClientUpdates(
@@ -339,4 +345,53 @@ proc createStoreHandler*(db: BeaconDb): DbStoreHandler =
             contentKey.lightClientOptimisticUpdateKey.optimisticSlot,
           lastOptimisticUpdate: content
         ))
+  )
+
+proc createContainsHandler*(db: BeaconDb): DbContainsHandler =
+  return (
+    proc(contentKey: ByteList, contentId: ContentId): bool =
+      let contentKey = contentKey.decode().valueOr:
+        # TODO: as this should not fail, maybe it is better to raiseAssert ?
+        return true
+
+      case contentKey.contentType:
+      of lightClientBootstrap:
+        db.contains(contentId)
+      of lightClientUpdate:
+        let
+          # TODO: add validation that startPeriod is not from the future,
+          # this requires db to be aware off the current beacon time
+          startPeriod = contentKey.lightClientUpdateKey.startPeriod
+          # get max 128 updates
+          numOfUpdates = min(
+            uint64(MAX_REQUEST_LIGHT_CLIENT_UPDATES),
+            contentKey.lightClientUpdateKey.count
+          )
+          toPeriod = startPeriod + numOfUpdates # Not inclusive
+          updates = db.getLightClientUpdates(startPeriod, toPeriod)
+
+        if len(updates) == 0:
+          false
+        else:
+          true
+      of lightClientFinalityUpdate:
+        if db.finalityUpdateCache.isSome():
+          let slot = contentKey.lightClientFinalityUpdateKey.finalizedSlot
+          let cache = db.finalityUpdateCache.get()
+          if cache.lastFinalityUpdateSlot >= slot:
+            true
+          else:
+            false
+        else:
+          false
+      of lightClientOptimisticUpdate:
+        if db.optimisticUpdateCache.isSome():
+          let slot = contentKey.lightClientOptimisticUpdateKey.optimisticSlot
+          let cache = db.optimisticUpdateCache.get()
+          if cache.lastOptimisticUpdateSlot >= slot:
+            true
+          else:
+            false
+        else:
+          false
   )

@@ -715,7 +715,10 @@ proc new*(
 
     portalProtocol = PortalProtocol.new(
       baseProtocol, historyProtocolId,
-      toContentIdHandler, createGetHandler(contentDB), stream, bootstrapRecords,
+      toContentIdHandler,
+      createGetHandler(contentDB),
+      createContainsHandler(contentDB),
+      stream, bootstrapRecords,
       config = portalConfig)
 
   portalProtocol.dbPut = createStoreHandler(contentDB, portalConfig.radiusConfig, portalProtocol)
