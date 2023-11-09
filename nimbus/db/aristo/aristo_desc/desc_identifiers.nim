@@ -18,6 +18,7 @@ import
   std/[sequtils, strutils, hashes],
   eth/[common, trie/nibbles],
   stew/byteutils,
+  chronicles,
   results,
   stint
 
@@ -96,6 +97,13 @@ type
     ## tables.
     root*: VertexID                  ## Root ID for the sub-trie.
     key*: HashKey                     ## Merkle hash or encoded small node data
+
+# ------------------------------------------------------------------------------
+# Chronicles formatters
+# ------------------------------------------------------------------------------
+
+chronicles.formatIt(VertexID): $it
+chronicles.formatIt(QueueID): $it
 
 # ------------------------------------------------------------------------------
 # Private helpers
