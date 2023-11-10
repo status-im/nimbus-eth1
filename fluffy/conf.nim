@@ -29,8 +29,8 @@ proc defaultDataDir*(): string =
   getHomeDir() / dataDir
 
 const
-  defaultListenAddress* = (static ValidIpAddress.init("0.0.0.0"))
-  defaultAdminListenAddress* = (static ValidIpAddress.init("127.0.0.1"))
+  defaultListenAddress* = (static parseIpAddress("0.0.0.0"))
+  defaultAdminListenAddress* = (static parseIpAddress("127.0.0.1"))
   defaultProxyAddress* = (static "http://127.0.0.1:8546")
   defaultClientConfig* = getHttpClientConfig(defaultProxyAddress)
 
@@ -80,7 +80,7 @@ type
       defaultValue: defaultListenAddress
       defaultValueDesc: $defaultListenAddressDesc
       desc: "Listening address for the Discovery v5 traffic"
-      name: "listen-address" .}: ValidIpAddress
+      name: "listen-address" .}: IpAddress
 
     portalNetwork* {.
       desc:
@@ -150,7 +150,7 @@ type
       defaultValue: defaultAdminListenAddress
       defaultValueDesc: $defaultAdminListenAddressDesc
       desc: "Listening address of the metrics server"
-      name: "metrics-address" .}: ValidIpAddress
+      name: "metrics-address" .}: IpAddress
 
     metricsPort* {.
       defaultValue: 8008
@@ -171,7 +171,7 @@ type
       desc: "Listening address of the RPC server"
       defaultValue: defaultAdminListenAddress
       defaultValueDesc: $defaultAdminListenAddressDesc
-      name: "rpc-address" .}: ValidIpAddress
+      name: "rpc-address" .}: IpAddress
 
     # it makes little sense to have default value here in final release, but until then
     # it would be troublesome to add some fake uri param every time

@@ -20,7 +20,7 @@ import
   ../../rpc/rpc_discovery_api
 
 const
-  defaultListenAddress* = (static ValidIpAddress.init("127.0.0.1"))
+  defaultListenAddress* = (static parseIpAddress("127.0.0.1"))
 
 type AppConf* = object
   rpcPort* {.
@@ -36,12 +36,12 @@ type AppConf* = object
   udpListenAddress* {.
     defaultValue: defaultListenAddress
     desc: "UDP listening address"
-    name: "udp-listen-address" .}: ValidIpAddress
+    name: "udp-listen-address" .}: IpAddress
 
   rpcListenAddress* {.
     defaultValue: defaultListenAddress
     desc: "RPC listening address"
-    name: "rpc-listen-address" .}: ValidIpAddress
+    name: "rpc-listen-address" .}: IpAddress
 
 proc `%`*(value: enr.Record): JsonNode =
   newJString(value.toURI())

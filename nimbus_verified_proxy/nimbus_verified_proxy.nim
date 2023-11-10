@@ -32,8 +32,6 @@ func getConfiguredChainId(networkMetadata: Eth2NetworkMetadata): Quantity =
       net = networkMetadata.eth1Network.get()
       chainId = case net
         of mainnet: 1.Quantity
-        of ropsten: 3.Quantity
-        of rinkeby: 4.Quantity
         of goerli:  5.Quantity
         of sepolia: 11155111.Quantity
         of holesky: 17000.Quantity

@@ -1,4 +1,4 @@
-# Copyright (c) 2018-2022 Status Research & Development GmbH
+# Copyright (c) 2018-2023 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -92,8 +92,8 @@ const
   defaultEthGraphqlPort    = 8547
   defaultEngineApiPort     = 8550
   defaultEngineApiWsPort   = 8551
-  defaultListenAddress      = (static ValidIpAddress.init("0.0.0.0"))
-  defaultAdminListenAddress = (static ValidIpAddress.init("127.0.0.1"))
+  defaultListenAddress      = (static parseIpAddress("0.0.0.0"))
+  defaultAdminListenAddress = (static parseIpAddress("127.0.0.1"))
   defaultListenAddressDesc      = $defaultListenAddress & ", meaning all network interfaces"
   defaultAdminListenAddressDesc = $defaultAdminListenAddress & ", meaning local host only"
   logLevelDesc = getLogLevels()
@@ -316,7 +316,7 @@ type
       desc: "Listening IP address for Ethereum P2P and Discovery traffic"
       defaultValue: defaultListenAddress
       defaultValueDesc: $defaultListenAddressDesc
-      name: "listen-address" }: ValidIpAddress
+      name: "listen-address" }: IpAddress
 
     tcpPort* {.
       desc: "Ethereum P2P network listening TCP port"
@@ -395,7 +395,7 @@ type
         desc: "Listening IP address of the JSON-RPC server"
         defaultValue: defaultAdminListenAddress
         defaultValueDesc: $defaultAdminListenAddressDesc
-        name: "rpc-address" }: ValidIpAddress
+        name: "rpc-address" }: IpAddress
 
       rpcApi {.
         desc: "Enable specific set of RPC API (available: eth, debug)"
@@ -418,7 +418,7 @@ type
         desc: "Listening IP address of the Websocket JSON-RPC server"
         defaultValue: defaultAdminListenAddress
         defaultValueDesc: $defaultAdminListenAddressDesc
-        name: "ws-address" }: ValidIpAddress
+        name: "ws-address" }: IpAddress
 
       wsApi {.
         desc: "Enable specific set of Websocket RPC API (available: eth, debug)"
@@ -441,7 +441,7 @@ type
         desc: "Listening address for the Engine API"
         defaultValue: defaultAdminListenAddress
         defaultValueDesc: $defaultAdminListenAddressDesc
-        name: "engine-api-address" .}: ValidIpAddress
+        name: "engine-api-address" .}: IpAddress
 
       engineApiWsEnabled* {.
         desc: "Enable the WebSocket Engine API"
@@ -458,7 +458,7 @@ type
         desc: "Listening address for the WebSocket Engine API"
         defaultValue: defaultAdminListenAddress
         defaultValueDesc: $defaultAdminListenAddressDesc
-        name: "engine-api-ws-address" .}: ValidIpAddress
+        name: "engine-api-ws-address" .}: IpAddress
 
       terminalTotalDifficulty* {.
         desc: "The terminal total difficulty of the eth2 merge transition block." &
@@ -495,7 +495,7 @@ type
         desc: "Listening IP address of the GraphQL HTTP server"
         defaultValue: defaultAdminListenAddress
         defaultValueDesc: $defaultAdminListenAddressDesc
-        name: "graphql-address" }: ValidIpAddress
+        name: "graphql-address" }: IpAddress
 
       metricsEnabled* {.
         desc: "Enable the built-in metrics HTTP server"
@@ -512,7 +512,7 @@ type
         desc: "Listening IP address of the built-in metrics HTTP server"
         defaultValue: defaultAdminListenAddress
         defaultValueDesc: $defaultAdminListenAddressDesc
-        name: "metrics-address" }: ValidIpAddress
+        name: "metrics-address" }: IpAddress
 
       statelessModeDataSourceUrl* {.
         desc: "URL of the node to use as a data source for on-demand data fetching via the JSON-RPC API"

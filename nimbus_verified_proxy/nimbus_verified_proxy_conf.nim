@@ -87,7 +87,7 @@ type VerifiedProxyConf* = object
     desc: "Listening address of the JSON-RPC server"
     defaultValue: defaultAdminListenAddress
     defaultValueDesc: $defaultAdminListenAddressDesc
-    name: "rpc-address" .}: ValidIpAddress
+    name: "rpc-address" .}: IpAddress
 
   rpcPort* {.
     desc: "Listening port of the JSON-RPC server"
@@ -109,7 +109,7 @@ type VerifiedProxyConf* = object
     desc: "Listening address for the Ethereum LibP2P and Discovery v5 traffic"
     defaultValue: defaultListenAddress
     defaultValueDesc: $defaultListenAddressDesc
-    name: "listen-address" .}: ValidIpAddress
+    name: "listen-address" .}: IpAddress
 
   tcpPort* {.
     desc: "Listening TCP port for Ethereum LibP2P traffic"
