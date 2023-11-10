@@ -129,7 +129,7 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
   let
     db = ContentDB.new(config.dataDir / "db" / "contentdb_" &
       d.localNode.id.toBytesBE().toOpenArray(0, 8).toHex(),
-      maxSize = config.storageSize)
+      storageCapacity = config.storageCapacityMB * 1_000_000)
 
     portalConfig = PortalProtocolConfig.init(
       config.tableIpLimit,

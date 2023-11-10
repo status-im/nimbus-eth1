@@ -53,7 +53,7 @@ type
 
   ContentDB* = ref object
     kv: KvStoreRef
-    maxSize: uint32
+    storageCapacity*: uint64
     sizeStmt: SqliteStmt[NoParams, int64]
     unusedSizeStmt: SqliteStmt[NoParams, int64]
     vacuumStmt: SqliteStmt[NoParams, void]
@@ -95,8 +95,10 @@ template expectDb(x: auto): untyped =
   x.expect("working database (disk broken/full?)")
 
 proc new*(
-    T: type ContentDB, path: string, maxSize: uint32, inMemory = false):
+    T: type ContentDB, path: string, storageCapacity: uint64, inMemory = false):
     ContentDB =
+  doAssert(storageCapacity <= uint64(int64.high))
+
   let db =
     if inMemory:
       SqStoreRef.init("", "fluffy-test", inMemory = true).expect(
@@ -135,7 +137,7 @@ proc new*(
 
   ContentDB(
     kv: kvStore,
-    maxSize: maxSize,
+    storageCapacity: storageCapacity,
     sizeStmt: sizeStmt,
     unusedSizeStmt: unusedSizeStmt,
     vacuumStmt: vacuumStmt,
@@ -192,14 +194,14 @@ proc reclaimSpace*(db: ContentDB): void =
   db.vacuumStmt.exec().expectDb()
 
 proc size*(db: ContentDB): int64 =
-  ## Retrun current size of DB as product of sqlite page_count and page_size
+  ## Return current size of DB as product of sqlite page_count and page_size:
   ## https://www.sqlite.org/pragma.html#pragma_page_count
   ## https://www.sqlite.org/pragma.html#pragma_page_size
-  ## It returns total size of db i.e both data and metadata used to store content
-  ## also it is worth noting that when deleting content, size may lags behind due
+  ## It returns the total size of db on the disk, i.e both data and metadata
+  ## used to store content.
+  ## It is worth noting that when deleting content, the size may lag behind due
   ## to the way how deleting works in sqlite.
   ## Good description can be found in: https://www.sqlite.org/lang_vacuum.html
-
   var size: int64 = 0
   discard (db.sizeStmt.exec do(res: int64):
     size = res).expectDb()
@@ -208,17 +210,18 @@ proc size*(db: ContentDB): int64 =
 proc unusedSize(db: ContentDB): int64 =
   ## Returns the total size of the pages which are unused by the database,
   ## i.e they can be re-used for new content.
-
   var size: int64 = 0
   discard (db.unusedSizeStmt.exec do(res: int64):
     size = res).expectDb()
   return size
 
 proc usedSize*(db: ContentDB): int64 =
+  ## Returns the total size of the database (data + metadata) minus the unused
+  ## pages.
   db.size() - db.unusedSize()
 
 proc contentSize*(db: ContentDB): int64 =
-  ## Returns total size of content stored in DB
+  ## Returns total size of the content stored in DB.
   var size: int64 = 0
   discard (db.contentSizeStmt.exec do(res: int64):
     size = res).expectDb()
@@ -296,9 +299,10 @@ proc put*(
 
   db.put(key, value)
 
-  # We use real size for our pruning threshold, which means that database file
-  # will reach size specified in db.maxSize, and will stay that size thorough
-  # node life time, as after content deletion free pages will be re used.
+  # The used size is used as pruning threshold. This means that the database
+  # size will reach the size specified in db.storageCapacity and will stay
+  # around that size throughout the node's lifetime, as after content deletion
+  # due to pruning, the free pages will be re-used.
   # TODO:
   # 1. Devise vacuum strategy - after few pruning cycles database can become
   # fragmented which may impact performance, so at some point in time `VACUUM`
@@ -308,7 +312,7 @@ proc put*(
   # with each addition.
   let dbSize = db.usedSize()
 
-  if dbSize < int64(db.maxSize):
+  if dbSize < int64(db.storageCapacity):
     return PutResult(kind: ContentStored)
   else:
     # TODO Add some configuration for this magic number

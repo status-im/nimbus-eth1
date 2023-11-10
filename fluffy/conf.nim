@@ -38,10 +38,8 @@ const
   defaultAdminListenAddressDesc = $defaultAdminListenAddress
   defaultDataDirDesc = defaultDataDir()
   defaultClientConfigDesc = $(defaultClientConfig.httpUri)
-  # 100mb seems a bit smallish we may consider increasing defaults after some
-  # network measurements
-  defaultStorageSize* = uint32(1000 * 1000 * 100)
-  defaultStorageSizeDesc* = $defaultStorageSize
+  defaultStorageCapacity* = 2000'u32 # 2 GB default
+  defaultStorageCapacityDesc* = $defaultStorageCapacity
 
   defaultTableIpLimitDesc* =
     $defaultPortalProtocolConfig.tableIpLimits.tableIpLimit
@@ -220,12 +218,12 @@ type
 
     # TODO maybe it is worth defining minimal storage size and throw error if
     # value provided is smaller than minimum
-    storageSize* {.
-      desc: "Maximum amount (in bytes) of content which will be stored " &
+    storageCapacityMB* {.
+      desc: "Maximum amount (in megabytes) of content which will be stored " &
             "in the local database."
-      defaultValue: defaultStorageSize
-      defaultValueDesc: $defaultStorageSizeDesc
-      name: "storage-size" .}: uint32
+      defaultValue: defaultStorageCapacity
+      defaultValueDesc: $defaultStorageCapacityDesc
+      name: "storage-capacity" .}: uint64
 
     trustedBlockRoot* {.
       desc: "Recent trusted finalized block root to initialize the consensus light client from. " &
