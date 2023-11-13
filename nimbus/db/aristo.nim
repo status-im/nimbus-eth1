@@ -28,6 +28,11 @@ export
   getKeyRc
 
 import
+  aristo/aristo_hashify
+export
+  hashify
+
+import
   aristo/aristo_path
 export
   pathAsBlob

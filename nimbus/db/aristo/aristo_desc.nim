@@ -37,7 +37,7 @@ export
 
 type
   AristoDudes* = HashSet[AristoDbRef]
-    ## Descriptor peers asharing the same backend
+    ## Descriptor peers sharing the same backend
 
   AristoTxRef* = ref object
     ## Transaction descriptor
@@ -277,7 +277,7 @@ proc txSpanClear*(db: AristoDbRef) =
 
 proc fork*(
     db: AristoDbRef;
-    rawToplayer = false;
+    rawTopLayer = false;
       ): Result[AristoDbRef,AristoError] =
   ## This function creates a new empty descriptor accessing the same backend
   ## (if any) database as the argument `db`. This new descriptor joins the
@@ -288,7 +288,7 @@ proc fork*(
   ## also cost computing ressources for maintaining and updating backend
   ## filters when writing to the backend database .
   ##
-  ## If the argument `rawToplayer` is set `true` the function will provide an
+  ## If the argument `rawTopLayer` is set `true` the function will provide an
   ## uninitalised and inconsistent (!) top layer. This setting avoids some
   ## database lookup for cases where the top layer is redefined anyway.
   ##
@@ -296,7 +296,7 @@ proc fork*(
     top:      LayerRef(),
     backend:  db.backend)
 
-  if not rawToplayer:
+  if not rawTopLayer:
     let rc = clone.backend.getIdgFn()
     if rc.isOk:
       clone.top.vGen = rc.value

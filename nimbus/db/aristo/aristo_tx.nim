@@ -226,15 +226,27 @@ func to*(tx: AristoTxRef; T: type[AristoDbRef]): T =
   ## Getter, retrieves the parent database descriptor from argument `tx`
   tx.db
 
-
 proc forkTx*(
     tx: AristoTxRef;                  # Transaction descriptor
     dontHashify = false;              # Process/fix MPT hashes
       ): Result[AristoDbRef,AristoError] =
-  ## Clone a transaction into a new DB descriptor  accessing the same backend
-  ## (if any) database as the argument `db`. The new descriptor is linked to
+  ## Clone a transaction into a new DB descriptor accessing the same backend
+  ## database (if any) as the argument `db`. The new descriptor is linked to
   ## the transaction parent and is fully functional as a forked instance (see
   ## comments on `aristo_desc.reCentre()` for details.)
+  ##
+  ## Input situation:
+  ## ::
+  ##   tx -> db0   with tx is top transaction, tx.level > 0
+  ##
+  ## Output situation:
+  ## ::
+  ##   tx  -> db0 \
+  ##               >  share the same backend
+  ##   tx1 -> db1 /
+  ##
+  ## where `tx.level > 0`, `db1.level == 1` and `db1` is returned. The
+  ## transaction `tx1` can be retrieved via `db1.txTop()`.
   ##
   ## The new DB descriptor will contain a copy of the argument transaction
   ## `tx` as top layer of level 1 (i.e. this is he only transaction.) Rolling
@@ -259,7 +271,7 @@ proc forkTx*(
     return err(TxArgStaleTx)
   topLayer.txUid = 1
 
-  # Empty stack
+  # Provide new empty stack layer
   let stackLayer = block:
     let rc = db.getIdgBE()
     if rc.isOk:

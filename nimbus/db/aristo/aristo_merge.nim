@@ -710,22 +710,6 @@ proc merge*(
 
   (merged, dups, AristoError(0))
 
-proc merge*(
-    db: AristoDbRef;                   # Database, top layer
-    path: PathID;                      # Path into database
-    rlpData: openArray[byte];          # RLP encoded payload data
-      ): Result[bool,AristoError] =
-  ## Variant of `merge()` for storing a single item with implicit state root
-  ## argument `VertexID(1)`.
-  ##
-  db.merge(
-    LeafTie(
-      root:    VertexID(1),
-      path:    path.normal),
-    PayloadRef(
-      pType:   RlpData,
-      rlpBlob: @rlpData)).to(typeof result)
-
 # ---------------------
 
 proc merge*(

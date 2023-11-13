@@ -278,6 +278,24 @@ proc revWalkVerify(
 
   true
 
+proc mergeRlpData*(
+    db: AristoDbRef;                   # Database, top layer
+    path: PathID;                      # Path into database
+    rlpData: openArray[byte];          # RLP encoded payload data
+      ): Result[void,AristoError] =
+  block body:
+    discard db.merge(
+      LeafTie(
+        root:    VertexID(1),
+        path:    path.normal),
+      PayloadRef(
+        pType:   RlpData,
+        rlpBlob: @rlpData)).valueOr:
+          if error == MergeLeafPathCachedAlready:
+            break body
+          return err(error)
+  ok()
+
 # ------------------------------------------------------------------------------
 # Public test function
 # ------------------------------------------------------------------------------
@@ -494,7 +512,7 @@ proc testTxSpanMultiInstances*(
 
   # Add some data and first transaction
   block:
-    let rc = db.merge(newPathID(), newPayload())
+    let rc = db.mergeRlpData(newPathID(), newPayload())
     xCheckRc rc.error == 0
   block:
     let rc = db.checkTop(relax=true)
@@ -508,7 +526,7 @@ proc testTxSpanMultiInstances*(
       xCheckRc rc.error == 0
       dx.add rc.value
     block:
-      let rc = dx[^1].merge(newPathID(), newPayload())
+      let rc = dx[^1].mergeRlpData(newPathID(), newPayload())
       xCheckRc rc.error == 0
     block:
       let rc = db.checkTop(relax=true)
@@ -539,10 +557,10 @@ proc testTxSpanMultiInstances*(
 
   # Add more data ..
   block:
-    let rc = db.merge(newPathID(), newPayload())
+    let rc = db.mergeRlpData(newPathID(), newPayload())
     xCheckRc rc.error == 0
   for n in 0 ..< dx.len:
-    let rc = dx[n].merge(newPathID(), newPayload())
+    let rc = dx[n].mergeRlpData(newPathID(), newPayload())
     xCheckRc rc.error == 0
 
   #show(3)
