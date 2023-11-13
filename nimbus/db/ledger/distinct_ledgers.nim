@@ -71,7 +71,7 @@ proc db*(t: SomeLedger): CoreDbRef =
   t.distinctBase.parent
 
 proc rootHash*(t: SomeLedger): Hash256 =
-  t.distinctBase.rootVid().hash().expect "SomeLedger/rootHash()"
+  t.distinctBase.rootVid().hash(update=true).expect "SomeLedger/rootHash()"
 
 proc rootVid*(t: SomeLedger): CoreDbVidRef =
   t.distinctBase.rootVid

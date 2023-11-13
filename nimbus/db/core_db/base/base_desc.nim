@@ -46,6 +46,7 @@ type
     MptNotFound
     AccNotFound
     RootNotFound
+    HashNotAvailable
     StorageFailed
 
   CoreDbSaveFlags* = enum
@@ -63,7 +64,7 @@ type
   CoreDbBaseBackendFn* = proc(): CoreDbBackendRef {.noRaise.}
   CoreDbBaseDestroyFn* = proc(flush = true) {.noRaise.}
   CoreDbBaseVidHashFn* =
-    proc(vid: CoreDbVidRef): Result[Hash256,void] {.noRaise.}
+    proc(vid: CoreDbVidRef; update: bool): CoreDbRc[Hash256] {.noRaise.}
   CoreDbBaseErrorPrintFn* = proc(e: CoreDbErrorRef): string {.noRaise.}
   CoreDbBaseInitLegaSetupFn* = proc() {.noRaise.}
   CoreDbBaseRootFn* =

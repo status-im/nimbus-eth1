@@ -168,7 +168,7 @@ when EnableApiTracking:
     elif not p.ready:
       "vidRef(not-ready)"
     else:
-      let val = p.parent.methods.vidHashFn(p).valueOr: EMPTY_ROOT_HASH
+      let val = p.parent.methods.vidHashFn(p,false).valueOr: EMPTY_ROOT_HASH
       if val != EMPTY_ROOT_HASH:
         "vidRef(some-hash)"
       else:
@@ -194,11 +194,11 @@ when EnableApiTracking:
     if rc.isOk: "ok(Blob[" & $rc.value.len & "])"
     else: "err(" & $$rc.error & ")"
 
-  proc toStr(rc: Result[Hash256,void]): string =
-    if rc.isOk: "ok(" & rc.value.toStr & ")" else: "err()"
+  proc toStr(rc: CoreDbRc[Hash256]): string =
+    if rc.isOk: "ok(" & rc.value.toStr & ")" else: "err(" & $$rc.error & ")"
 
-  proc toStr(rc: Result[Account,void]): string =
-    if rc.isOk: "ok(Account)" else: "err()"
+  proc toStr(rc: CoreDbRc[Account]): string =
+    if rc.isOk: "ok(Account)" else: "err(" & $$rc.error & ")"
 
   proc toStr[T](rc: CoreDbRc[T]; ifOk: static[string]): string =
     if rc.isOk: "ok(" & ifOk & ")" else: "err(" & $$rc.error & ")"
@@ -353,7 +353,7 @@ proc `$$`*(e: CoreDbErrorRef): string =
   result = $e.error & "(" & e.parent.methods.errorPrintFn(e) & ")"
   e.ifTrackNewApi: info newApiTxt "$$()", result
 
-proc hash*(vid: CoreDbVidRef): Result[Hash256,void] =
+proc hash*(vid: CoreDbVidRef; update: bool): CoreDbRc[Hash256] =
   ## Getter (well, sort of), retrieves the hash for a `vid` argument. The
   ## function might fail if there is currently no hash available (e.g. on
   ## `Aristo`.) Note that this is different from succeeding with an
@@ -364,7 +364,7 @@ proc hash*(vid: CoreDbVidRef): Result[Hash256,void] =
   ##
   result = block:
     if not vid.isNil and vid.ready:
-      vid.parent.methods.vidHashFn vid
+      vid.parent.methods.vidHashFn(vid, update)
     else:
       ok EMPTY_ROOT_HASH
   # Note: tracker will be silent if `vid` is NIL
@@ -373,9 +373,9 @@ proc hash*(vid: CoreDbVidRef): Result[Hash256,void] =
 
 proc hashOrEmpty*(vid: CoreDbVidRef): Hash256 =
   ## Convenience wrapper, returns `EMPTY_ROOT_HASH` where `hash()` would fail.
-  vid.hash.valueOr: EMPTY_ROOT_HASH
+  vid.hash(update = true).valueOr: EMPTY_ROOT_HASH
 
-proc recast*(account: CoreDbAccount): Result[Account,void] =
+proc recast*(account: CoreDbAccount; update: bool): CoreDbRc[Account] =
   ## Convert the argument `account` to the portable Ethereum representation
   ## of an account. This conversion may fail if the storage root hash (see
   ## `hash()` above) is currently unavailable.
@@ -384,7 +384,7 @@ proc recast*(account: CoreDbAccount): Result[Account,void] =
   ##
   let vid = account.storageVid
   result = block:
-    let rc = vid.hash
+    let rc = vid.hash(update)
     if rc.isOk:
       ok Account(
         nonce:       account.nonce,
@@ -392,7 +392,7 @@ proc recast*(account: CoreDbAccount): Result[Account,void] =
         codeHash:    account.codeHash,
         storageRoot: rc.value)
     else:
-      err()
+      err(rc.error)
   vid.ifTrackNewApi: info newApiTxt "recast()", result=result.toStr
 
 proc getRoot*(
@@ -894,7 +894,7 @@ when ProvideCoreDbLegacyAPI:
   proc rootHash*(trie: CoreDbTrieRefs): Hash256 =
     trie.setTrackLegaApiOnly
     const info = "trie/rootHash()"
-    result = trie.distinctBase.rootVid().hash.expect info
+    result = trie.distinctBase.rootVid().hash(update=true).expect info
     trie.ifTrackLegaApi: info legaApiTxt info, result=result.toStr
 
   iterator pairs*(mpt: CoreDbMptRef): (Blob, Blob) {.apiRaise.} =

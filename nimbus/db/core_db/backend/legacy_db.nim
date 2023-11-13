@@ -340,7 +340,7 @@ proc baseMethods(
       if not closeDb.isNil:
         closeDb(),
 
-    vidHashFn: proc(vid: CoreDbVidRef): Result[Hash256,void] =
+    vidHashFn: proc(vid: CoreDbVidRef; update: bool): CoreDbRc[Hash256] =
       ok(vid.lvHash),
 
     errorPrintFn: proc(e: CoreDbErrorRef): string =

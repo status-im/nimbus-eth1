@@ -91,11 +91,6 @@ const
     NewlyCreated
     }
 
-  ripemdAddr* = block:
-    proc initAddress(x: int): EthAddress {.compileTime.} =
-      result[19] = x.byte
-    initAddress(3)
-
 when debugAccountsLedgerRef:
   import
     stew/byteutils
@@ -482,7 +477,7 @@ proc clearStorage*(ac: AccountsLedgerRef, address: EthAddress) =
 
   let acc = ac.getAccount(address)
   acc.flags.incl {Alive, NewlyCreated}
-  let accHash = acc.account.storageVid.hash.valueOr: return
+  let accHash = acc.account.storageVid.hash(update=true).valueOr: return
   if accHash != EMPTY_ROOT_HASH:
     # there is no point to clone the storage since we want to remove it
     let acc = ac.makeDirty(address, cloneStorage = false)
@@ -545,7 +540,7 @@ proc clearEmptyAccounts(ac: AccountsLedgerRef) =
 
   # https://github.com/ethereum/EIPs/issues/716
   if ac.ripemdSpecial:
-    ac.deleteEmptyAccount(ripemdAddr)
+    ac.deleteEmptyAccount(RIPEMD_ADDR)
     ac.ripemdSpecial = false
 
 proc persist*(ac: AccountsLedgerRef,
@@ -606,13 +601,13 @@ iterator accounts*(ac: AccountsLedgerRef): Account =
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
   for _, account in ac.savePoint.cache:
-    yield account.account.recast.value
+    yield account.account.recast(update=true).value
 
 iterator pairs*(ac: AccountsLedgerRef): (EthAddress, Account) =
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
   for address, account in ac.savePoint.cache:
-    yield (address, account.account.recast.value)
+    yield (address, account.account.recast(update=true).value)
 
 iterator storage*(ac: AccountsLedgerRef, address: EthAddress): (UInt256, UInt256) {.gcsafe, raises: [CoreDbApiError].} =
   # beware that if the account not persisted,
@@ -638,7 +633,7 @@ proc getStorageRoot*(ac: AccountsLedgerRef, address: EthAddress): Hash256 =
   # the storage root will not be updated
   let acc = ac.getAccount(address, false)
   if acc.isNil: EMPTY_ROOT_HASH
-  else: acc.account.storageVid.hash.valueOr: EMPTY_ROOT_HASH
+  else: acc.account.storageVid.hash(update=true).valueOr: EMPTY_ROOT_HASH
 
 func update(wd: var WitnessData, acc: RefAccount) =
   wd.codeTouched = CodeChanged in acc.flags
