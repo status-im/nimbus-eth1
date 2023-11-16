@@ -1115,7 +1115,7 @@ proc traceContentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256)
   seen.incl(p.baseProtocol.localNode.id) # No need to discover our own node
   for node in closestNodes:
     seen.incl(node.id)
-  
+
   # Local node should be part of the responses
   responses["0x" & $p.localNode.id] = TraceResponse(
     durationMs: 0,
@@ -1223,10 +1223,10 @@ proc traceContentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256)
 
       of Content:
         let duration = chronos.milliseconds(now(chronos.Moment) - ts)
-        
+
         # cancel any pending queries as the content has been found
         for f in pendingQueries:
-          f.cancel()
+          f.cancelSoon()
         portal_lookup_content_requests.observe(requestAmount)
 
         let distance = p.routingTable.distance(content.src.id, targetId)
