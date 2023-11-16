@@ -230,7 +230,7 @@ proc `==`*(a, b: NodeRef): bool =
 # Public helpers, miscellaneous functions
 # ------------------------------------------------------------------------------
 
-proc dup*(pld: PayloadRef): PayloadRef =
+func dup*(pld: PayloadRef): PayloadRef =
   ## Duplicate payload.
   case pld.pType:
   of RawData:
@@ -242,11 +242,11 @@ proc dup*(pld: PayloadRef): PayloadRef =
       pType:    RlpData,
       rlpBlob:  pld.rlpBlob)
   of AccountData:
-     PayloadRef(
-       pType:   AccountData,
-       account: pld.account)
+    PayloadRef(
+      pType:   AccountData,
+      account: pld.account)
 
-proc dup*(vtx: VertexRef): VertexRef =
+func dup*(vtx: VertexRef): VertexRef =
   ## Duplicate vertex.
   # Not using `deepCopy()` here (some `gc` needs `--deepcopy:on`.)
   if vtx.isNil:
@@ -268,7 +268,7 @@ proc dup*(vtx: VertexRef): VertexRef =
         vType: Branch,
         bVid:  vtx.bVid)
 
-proc dup*(node: NodeRef): NodeRef =
+func dup*(node: NodeRef): NodeRef =
   ## Duplicate node.
   # Not using `deepCopy()` here (some `gc` needs `--deepcopy:on`.)
   if node.isNil:
@@ -293,7 +293,7 @@ proc dup*(node: NodeRef): NodeRef =
         bVid:  node.bVid,
         key:   node.key)
 
-proc dup*(layer: LayerRef): LayerRef =
+func dup*(layer: LayerRef): LayerRef =
   ## Duplicate layer.
   result = LayerRef(
     lTab:  layer.lTab,

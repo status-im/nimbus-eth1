@@ -35,10 +35,10 @@ export
 iterator walkPairs*(
    T: type RdbBackendRef;
    db: KvtDbRef;
-     ): tuple[key: Blob, data: Blob] =
+     ): tuple[n: int, key: Blob, data: Blob] =
   ## Iterate over backend filters.
-  for (vid,vtx) in walkPairsImpl[T](db):
-    yield (vid,vtx)
+  for (n, vid,vtx) in walkPairsImpl[T](db):
+    yield (n, vid,vtx)
 
 # ------------------------------------------------------------------------------
 # End

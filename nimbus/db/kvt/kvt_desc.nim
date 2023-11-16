@@ -56,6 +56,11 @@ type
     txUidGen*: uint                   ## Tx-relative unique number generator
     dudes: DudesRef                   ## Related DB descriptors
 
+    # Debugging data below, might go away in future
+    xIdGen*: uint64
+    xMap*: Table[Blob,uint64]         ## For pretty printing
+    pAmx*: Table[uint64,Blob]         ## For pretty printing
+
   KvtDbAction* = proc(db: KvtDbRef) {.gcsafe, raises: [].}
     ## Generic call back function/closure.
 
@@ -97,10 +102,7 @@ func getCentre*(db: KvtDbRef): KvtDbRef =
   else:
     db.dudes.rwDb
 
-proc reCentre*(
-    db: KvtDbRef;
-    force = false;
-      ): Result[void,KvtError] =
+proc reCentre*(db: KvtDbRef) =
   ## Re-focus the `db` argument descriptor so that it becomes the centre.
   ## Nothing is done if the `db` descriptor is the centre, already.
   ##
@@ -113,11 +115,6 @@ proc reCentre*(
   ## destructed by `finish()` which also destructs all other descriptors
   ## accessing the same backend database. Descriptors where `isCentre()`
   ## returns `false` must be single destructed with `forget()`.
-  ##
-  ## If there is an open transaction spanning several descriptors, the `force`
-  ## flag must be set `true` (unless the argument `db` is centre, already.) The
-  ## argument `db` must be covered by the transaction span. Then the re-centred
-  ## descriptor will also be the centre of the transaction span.
   ##
   if not db.isCentre:
     let parent = db.dudes.rwDb
@@ -136,8 +133,6 @@ proc reCentre*(
 
     # Update dudes list (parent was alredy updated)
     db.dudes.roDudes.incl parent
-
-  ok()
 
 
 proc fork*(

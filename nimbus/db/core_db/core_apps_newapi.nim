@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2023 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -532,7 +532,7 @@ proc persistTransactions*(
     kvt.put(blockKey.toOpenArray, rlp.encode(txKey)).isOkOr:
       warn logTxt info, blockKey, action="put()", error=($$error)
       return EMPTY_ROOT_HASH
-  mpt.rootVid.hash.valueOr:
+  mpt.rootVid.hash(update=true).valueOr:
     warn logTxt info, action="hash()"
     return EMPTY_ROOT_HASH
 
@@ -623,7 +623,7 @@ proc persistWithdrawals*(
     mpt.merge(rlp.encode(idx), rlp.encode(wd)).isOkOr:
       warn logTxt info, idx, action="merge()", error=($$error)
       return EMPTY_ROOT_HASH
-  mpt.rootVid.hash.valueOr:
+  mpt.rootVid.hash(update=true).valueOr:
     warn logTxt info, action="hash()"
     return EMPTY_ROOT_HASH
 
@@ -769,7 +769,7 @@ proc persistReceipts*(
   for idx, rec in receipts:
     mpt.merge(rlp.encode(idx), rlp.encode(rec)).isOkOr:
       warn logTxt info, idx, action="merge()", error=($$error)
-  mpt.rootVid.hash.valueOr:
+  mpt.rootVid.hash(update=true).valueOr:
     warn logTxt info, action="hash()"
     return EMPTY_ROOT_HASH
 

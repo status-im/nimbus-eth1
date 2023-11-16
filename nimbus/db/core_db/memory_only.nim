@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2023 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -36,7 +36,10 @@ export
   CoreDbApiError,
   CoreDbErrorCode,
   CoreDbErrorRef,
+  CoreDbPersistentTypes,
   CoreDbRef,
+  CoreDbSaveFlags,
+  CoreDbTxID,
   CoreDbType,
   CoreDbVidRef,
   CoreDxAccRef,
@@ -44,7 +47,6 @@ export
   CoreDxKvtRef,
   CoreDxMptRef,
   CoreDxPhkRef,
-  CoreDxTxID,
   CoreDxTxRef,
   `$$`,
   backend,
@@ -86,12 +88,9 @@ export
   setTransactionID,
   toLegacy,
   toMpt,
-  toPhk,
-  toTransactionID
+  toPhk
 
 when ProvideCoreDbLegacyAPI:
-  type
-    CoreDyTxID = CoreDxTxID|CoreDbTxID
   export
     CoreDbCaptFlags,
     CoreDbCaptRef,
@@ -137,13 +136,13 @@ proc newCoreDbRef*(
     newLegacyMemoryCoreDbRef()
 
   else:
-    {.error: "Unsupported dbType for memory-only newCoreDbRef()".}
+    {.error: "Unsupported constructor " & $dbType & ".newCoreDbRef()".}
 
 # ------------------------------------------------------------------------------
 # Public template wrappers
 # ------------------------------------------------------------------------------
 
-template shortTimeReadOnly*(id: CoreDyTxID; body: untyped) =
+template shortTimeReadOnly*(id: CoreDbTxID; body: untyped) =
   proc action() =
     body
   id.shortTimeReadOnly action

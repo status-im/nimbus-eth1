@@ -56,6 +56,7 @@ type
 
   AccountsLedgerRef* = ref object
     ledger: AccountLedger
+    kvt: CoreDxKvtRef
     savePoint: LedgerSavePoint
     witnessCache: Table[EthAddress, WitnessData]
     isDirty: bool
@@ -91,11 +92,6 @@ const
     NewlyCreated
     }
 
-  ripemdAddr* = block:
-    proc initAddress(x: int): EthAddress {.compileTime.} =
-      result[19] = x.byte
-    initAddress(3)
-
 when debugAccountsLedgerRef:
   import
     stew/byteutils
@@ -108,14 +104,14 @@ when debugAccountsLedgerRef:
         debugEcho address.toHex, " ", acc.flags
       sp = sp.parentSavepoint
 
+template logTxt(info: static[string]): static[string] =
+  "AccountsLedgerRef " & info
+
 proc beginSavepoint*(ac: AccountsLedgerRef): LedgerSavePoint {.gcsafe.}
 
 # FIXME-Adam: this is only necessary because of my sanity checks on the latest rootHash;
 # take this out once those are gone.
 proc rawTrie*(ac: AccountsLedgerRef): AccountLedger = ac.ledger
-
-proc db(ac: AccountsLedgerRef): CoreDbRef = ac.ledger.db
-proc kvt(ac: AccountsLedgerRef): CoreDbKvtRef = ac.db.kvt
 
 func newCoreDbAccount: CoreDbAccount =
   CoreDbAccount(
@@ -135,6 +131,7 @@ proc init*(x: typedesc[AccountsLedgerRef], db: CoreDbRef,
            root: KeccakHash, pruneTrie = true): AccountsLedgerRef =
   new result
   result.ledger = AccountLedger.init(db, root, pruneTrie)
+  result.kvt = db.newKvt()
   result.witnessCache = initTable[EthAddress, WitnessData]()
   discard result.beginSavepoint
 
@@ -300,9 +297,14 @@ proc persistMode(acc: RefAccount): PersistMode =
 proc persistCode(acc: RefAccount, ac: AccountsLedgerRef) =
   if acc.code.len != 0:
     when defined(geth):
-      ac.kvt.put(acc.account.codeHash.data, acc.code)
+      let rc = ac.kvt.put(
+        acc.account.codeHash.data, acc.code)
     else:
-      ac.kvt.put(contractHashKey(acc.account.codeHash).toOpenArray, acc.code)
+      let rc = ac.kvt.put(
+        contractHashKey(acc.account.codeHash).toOpenArray, acc.code)
+    if rc.isErr:
+      warn logTxt "persistCode()",
+       codeHash=acc.account.codeHash, error=($$rc.error)
 
 proc persistStorage(acc: RefAccount, ac: AccountsLedgerRef, clearCache: bool) =
   if acc.overlayStorage.len == 0:
@@ -322,8 +324,12 @@ proc persistStorage(acc: RefAccount, ac: AccountsLedgerRef, clearCache: bool) =
     else:
       storageLedger.delete(slot)
 
-    let key = slot.toBytesBE.keccakHash.data.slotHashToSlotKey
-    ac.kvt.put(key.toOpenArray, rlp.encode(slot))
+    let
+      key = slot.toBytesBE.keccakHash.data.slotHashToSlotKey
+      rc = ac.kvt.put(key.toOpenArray, rlp.encode(slot))
+    if rc.isErr:
+      warn logTxt "persistStorage()", slot, error=($$rc.error)
+
 
   if not clearCache:
     # if we preserve cache, move the overlayStorage
@@ -373,14 +379,17 @@ proc getCode*(ac: AccountsLedgerRef, address: EthAddress): seq[byte] =
   if CodeLoaded in acc.flags or CodeChanged in acc.flags:
     result = acc.code
   else:
-    when defined(geth):
-      let data = ac.kvt.get(acc.account.codeHash.data)
+    let rc = block:
+      when defined(geth):
+        ac.kvt.get(acc.account.codeHash.data)
+      else:
+        ac.kvt.get(contractHashKey(acc.account.codeHash).toOpenArray)
+    if rc.isErr:
+      warn logTxt "getCode()", codeHash=acc.account.codeHash, error=($$rc.error)
     else:
-      let data = ac.kvt.get(contractHashKey(acc.account.codeHash).toOpenArray)
-
-    acc.code = data
-    acc.flags.incl CodeLoaded
-    result = acc.code
+      acc.code = rc.value
+      acc.flags.incl CodeLoaded
+      result = acc.code
 
 proc getCodeSize*(ac: AccountsLedgerRef, address: EthAddress): int =
   ac.getCode(address).len
@@ -482,7 +491,7 @@ proc clearStorage*(ac: AccountsLedgerRef, address: EthAddress) =
 
   let acc = ac.getAccount(address)
   acc.flags.incl {Alive, NewlyCreated}
-  let accHash = acc.account.storageVid.hash.valueOr: return
+  let accHash = acc.account.storageVid.hash(update=true).valueOr: return
   if accHash != EMPTY_ROOT_HASH:
     # there is no point to clone the storage since we want to remove it
     let acc = ac.makeDirty(address, cloneStorage = false)
@@ -545,7 +554,7 @@ proc clearEmptyAccounts(ac: AccountsLedgerRef) =
 
   # https://github.com/ethereum/EIPs/issues/716
   if ac.ripemdSpecial:
-    ac.deleteEmptyAccount(ripemdAddr)
+    ac.deleteEmptyAccount(RIPEMD_ADDR)
     ac.ripemdSpecial = false
 
 proc persist*(ac: AccountsLedgerRef,
@@ -606,13 +615,13 @@ iterator accounts*(ac: AccountsLedgerRef): Account =
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
   for _, account in ac.savePoint.cache:
-    yield account.account.recast.value
+    yield account.account.recast(update=true).value
 
 iterator pairs*(ac: AccountsLedgerRef): (EthAddress, Account) =
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
   for address, account in ac.savePoint.cache:
-    yield (address, account.account.recast.value)
+    yield (address, account.account.recast(update=true).value)
 
 iterator storage*(ac: AccountsLedgerRef, address: EthAddress): (UInt256, UInt256) {.gcsafe, raises: [CoreDbApiError].} =
   # beware that if the account not persisted,
@@ -622,9 +631,11 @@ iterator storage*(ac: AccountsLedgerRef, address: EthAddress): (UInt256, UInt256
     noRlpException "storage()":
       for slotHash, value in ac.ledger.storage acc.account:
         if slotHash.len == 0: continue
-        let keyData = ac.kvt.get(slotHashToSlotKey(slotHash).toOpenArray)
-        if keyData.len == 0: continue
-        yield (rlp.decode(keyData, UInt256), rlp.decode(value, UInt256))
+        let rc = ac.kvt.get(slotHashToSlotKey(slotHash).toOpenArray)
+        if rc.isErr:
+          warn logTxt "storage()", slotHash, error=($$rc.error)
+        else:
+          yield (rlp.decode(rc.value, UInt256), rlp.decode(value, UInt256))
 
 iterator cachedStorage*(ac: AccountsLedgerRef, address: EthAddress): (UInt256, UInt256) =
   let acc = ac.getAccount(address, false)
@@ -638,7 +649,7 @@ proc getStorageRoot*(ac: AccountsLedgerRef, address: EthAddress): Hash256 =
   # the storage root will not be updated
   let acc = ac.getAccount(address, false)
   if acc.isNil: EMPTY_ROOT_HASH
-  else: acc.account.storageVid.hash.valueOr: EMPTY_ROOT_HASH
+  else: acc.account.storageVid.hash(update=true).valueOr: EMPTY_ROOT_HASH
 
 func update(wd: var WitnessData, acc: RefAccount) =
   wd.codeTouched = CodeChanged in acc.flags

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2019 Status Research & Development GmbH
+# Copyright (c) 2021-2023 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -61,7 +61,7 @@ proc dumpBlocksBegin*(headers: openArray[BlockHeader]): string =
   & "transaction #{headers[0].blockNumber} {headers.len}"
 
 proc dumpBlocksList*(header: BlockHeader; body: BlockBody): string =
-  &"block {rlp.encode(header).toHex} {rlp.encode(body).toHex}"
+  & "block {rlp.encode(header).toHex} {rlp.encode(body).toHex}"
 
 proc dumpBlocksEnd*: string =
   "commit"

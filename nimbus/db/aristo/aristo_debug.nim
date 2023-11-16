@@ -617,6 +617,12 @@ proc pp*(kMap: Table[VertexID,Hashlabel]; db: AristoDbRef; indent = 4): string =
 proc pp*(pAmk: VidsByLabel; db: AristoDbRef; indent = 4): string =
   db.ppXMap(db.top.kMap, pAmk, indent)
 
+proc pp*(tx: AristoTxRef): string =
+  result = "(uid=" & $tx.txUid & ",lvl=" & $tx.level
+  if not tx.parent.isNil:
+    result &= ", par=" & $tx.parent.txUid
+  result &= ")"
+
 # ---------------------
 
 proc pp*(

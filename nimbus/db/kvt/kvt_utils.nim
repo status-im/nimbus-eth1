@@ -102,7 +102,7 @@ proc hasKey*(
   let data = db.top.tab.getOrVoid @key
   if data.isValid:
     return ok(true)
-  let rc = db.getBE(key)
+  let rc = db.getBE key
   if rc.isOk:
     return ok(true)
   if rc.error == GetNotFound:

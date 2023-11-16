@@ -37,7 +37,7 @@ export
 
 type
   AristoDudes* = HashSet[AristoDbRef]
-    ## Descriptor peers asharing the same backend
+    ## Descriptor peers sharing the same backend
 
   AristoTxRef* = ref object
     ## Transaction descriptor
@@ -58,7 +58,6 @@ type
     case rwOk: bool
     of true:
       roDudes: AristoDudes            ## Read-only peers
-      txDudes: AristoDudes            ## Other transaction peers
     else:
       rwDb: AristoDbRef               ## Link to writable descriptor
 
@@ -168,10 +167,7 @@ func getCentre*(db: AristoDbRef): AristoDbRef =
   else:
     db.dudes.rwDb
 
-proc reCentre*(
-    db: AristoDbRef;
-    force = false;
-      ): Result[void,AristoError] =
+proc reCentre*(db: AristoDbRef): Result[void,AristoError] =
   ## Re-focus the `db` argument descriptor so that it becomes the centre.
   ## Nothing is done if the `db` descriptor is the centre, already.
   ##
@@ -185,22 +181,8 @@ proc reCentre*(
   ## accessing the same backend database. Descriptors where `isCentre()`
   ## returns `false` must be single destructed with `forget()`.
   ##
-  ## If there is an open transaction spanning several descriptors, the `force`
-  ## flag must be set `true` (unless the argument `db` is centre, already.) The
-  ## argument `db` must be covered by the transaction span. Then the re-centred
-  ## descriptor will also be the centre of the transaction span.
-  ##
   if not db.isCentre:
     let parent = db.dudes.rwDb
-
-    # Check for multi-transactions
-    if 0 < parent.dudes.txDudes.len:
-      if not force:
-        return err(CentreTxLocked)
-      if db notin parent.dudes.txDudes:
-        return err(OutsideTxSpan)
-      if db.txRef.isNil or parent.txRef.isNil:
-        return err(GarbledTxSpan)
 
     # Steal dudes list from parent, make the rw-parent a read-only dude
     db.dudes = parent.dudes
@@ -217,67 +199,12 @@ proc reCentre*(
     # Update dudes list (parent was alredy updated)
     db.dudes.roDudes.incl parent
 
-    # Update transaction span
-    if 0 < db.dudes.txDudes.len:
-      db.dudes.txDudes.excl db
-      db.dudes.txDudes.incl parent
-
   ok()
 
 
-iterator txSpan*(db: AristoDbRef): AristoDbRef =
-  ## Interate over all descriptors belonging to the transaction span if there
-  ## is any. Note that the centre descriptor is aways part of the transaction
-  ## if there is any.
-  ##
-  if not db.dudes.isNil:
-    let parent = db.getCentre
-    if 0 < parent.dudes.txDudes.len:
-      yield parent
-      for dude in parent.dudes.txDudes.items:
-        yield dude
-
-func nTxSpan*(db: AristoDbRef): int =
-  ## Returns the number of descriptors belonging to the transaction span. This
-  ## function is a fast version of `db.txSpan.toSeq.len`. Note that the
-  ## returned numbe is never `1` (either `0` or at least `2`.)
-  ##
-  if not db.dudes.isNil:
-    let parent = db.getCentre
-    if 0 < parent.dudes.txDudes.len:
-      return 1 + db.getCentre.dudes.txDudes.len
-
-func inTxSpan*(db: AristoDbRef): bool =
-  ## Returns `true` if the argument descriptor `db` belongs to the transaction
-  ## span if there is any. Note that the centre descriptor is aways part of
-  ## the transaction if there is any.
-  ##
-  if not db.isCentre:
-    return db in db.dudes.rwDb.dudes.txDudes
-  elif not db.dudes.isNil:
-    return 0 < db.dudes.txDudes.len
-  false
-
-proc txSpanSet*(dudes: openArray[AristoDbRef]) =
-  ## Define the set of argument descriptors as transaction span.
-  ##
-  if 0 < dudes.len:
-    let parent = dudes[0].getCentre
-    if not parent.dudes.isNil:
-      parent.dudes.txDudes = dudes.toHashSet - [parent].toHashSet
-
-proc txSpanClear*(db: AristoDbRef) =
-  ## Remove all descriptors from the transaction span.
-  ##
-  if not db.isCentre:
-    db.dudes.rwDb.dudes.txDudes.clear
-  elif not db.dudes.isNil:
-    db.dudes.txDudes.clear
-      
-
 proc fork*(
     db: AristoDbRef;
-    rawToplayer = false;
+    rawTopLayer = false;
       ): Result[AristoDbRef,AristoError] =
   ## This function creates a new empty descriptor accessing the same backend
   ## (if any) database as the argument `db`. This new descriptor joins the
@@ -288,7 +215,7 @@ proc fork*(
   ## also cost computing ressources for maintaining and updating backend
   ## filters when writing to the backend database .
   ##
-  ## If the argument `rawToplayer` is set `true` the function will provide an
+  ## If the argument `rawTopLayer` is set `true` the function will provide an
   ## uninitalised and inconsistent (!) top layer. This setting avoids some
   ## database lookup for cases where the top layer is redefined anyway.
   ##
@@ -296,7 +223,7 @@ proc fork*(
     top:      LayerRef(),
     backend:  db.backend)
 
-  if not rawToplayer:
+  if not rawTopLayer:
     let rc = clone.backend.getIdgFn()
     if rc.isOk:
       clone.top.vGen = rc.value
@@ -345,7 +272,6 @@ proc forget*(db: AristoDbRef): Result[void,AristoError] =
       parent.dudes = DudesRef(nil)
     else:
       parent.dudes.roDudes.excl db
-      parent.dudes.txDudes.excl db # might be empty, anyway
 
     # Clear descriptor so it would not do harm if used wrongly
     db[] = AristoDbObj(top: LayerRef())
