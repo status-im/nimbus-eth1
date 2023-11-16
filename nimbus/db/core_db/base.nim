@@ -20,13 +20,13 @@ import
   ./base/[base_desc, validate]
 
 export
+  CoreDbAccBackendRef,
   CoreDbAccount,
   CoreDbApiError,
   CoreDbBackendRef,
   CoreDbCaptFlags,
   CoreDbErrorCode,
   CoreDbErrorRef,
-  CoreDbAccBackendRef,
   CoreDbKvtBackendRef,
   CoreDbMptBackendRef,
   CoreDbRef,
@@ -37,7 +37,6 @@ export
   CoreDxKvtRef,
   CoreDxMptRef,
   CoreDxPhkRef,
-  CoreDxTxID,
   CoreDxTxRef
 
 when defined(release):
@@ -592,19 +591,6 @@ proc hasPath*(acc: CoreDxAccRef; address: EthAddress): CoreDbRc[bool] =
 # Public transaction related methods
 # ------------------------------------------------------------------------------
 
-proc toTransactionID*(db: CoreDbRef): CoreDbRc[CoreDxTxID] =
-  ## Getter, current transaction state
-  result = db.methods.getIdFn()
-  db.ifTrackNewApi: info newApiTxt "toTransactionID()", result=result.toStr
-
-proc shortTimeReadOnly*(
-    id: CoreDxTxID;
-    action: proc() {.noRaise.};
-      ): CoreDbRc[void] =
-  ## Run `action()` in an earlier transaction environment.
-  result = id.methods.roWrapperFn action
-  id.ifTrackNewApi: info newApiTxt "shortTimeReadOnly()", result=result.toStr
-
 proc newTransaction*(db: CoreDbRef): CoreDbRc[CoreDxTxRef] =
   ## Constructor
   result = db.methods.beginFn()
@@ -802,7 +788,7 @@ when ProvideCoreDbLegacyAPI:
   proc getTransactionID*(db: CoreDbRef): CoreDbTxID =
     db.setTrackLegaApiOnly
     const info = "getTransactionID()"
-    result = (db.toTransactionID().expect info).CoreDbTxID
+    result = db.methods.getIdFn().expect(info).CoreDbTxID
     db.ifTrackLegaApi: info legaApiTxt info
 
   proc shortTimeReadOnly*(
@@ -819,7 +805,7 @@ when ProvideCoreDbLegacyAPI:
         oops = some(e)
       # Action has finished now
 
-    id.distinctBase.shortTimeReadOnly(safeFn).expect info
+    id.distinctBase.methods.roWrapperFn(safeFn).expect info
 
     # Delayed exception
     if oops.isSome:

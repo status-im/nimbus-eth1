@@ -51,7 +51,7 @@ type
   AccountStateDB* = ref object
     trie: AccountsTrie
     originalRoot: KeccakHash   # will be updated for every transaction
-    transactionID: CoreDbTxID
+    #transactionID: CoreDbTxID
     when aleth_compat:
       cleared: HashSet[EthAddress]
 
@@ -77,7 +77,7 @@ proc newAccountStateDB*(backingStore: CoreDbRef,
   result.new()
   result.trie = initAccountsTrie(backingStore, root, pruneTrie)
   result.originalRoot = root
-  result.transactionID = backingStore.getTransactionID()
+  #result.transactionID = backingStore.getTransactionID()
   when aleth_compat:
     result.cleared = initHashSet[EthAddress]()
 
@@ -251,29 +251,33 @@ proc isDeadAccount*(db: AccountStateDB, address: EthAddress): bool =
   else:
     result = true
 
-proc getCommittedStorage*(db: AccountStateDB, address: EthAddress, slot: UInt256): UInt256 =
-  let tmpHash = db.rootHash
-  db.rootHash = db.originalRoot
-  db.transactionID.shortTimeReadOnly():
-    when aleth_compat:
-      if address in db.cleared:
-        debug "Forced contract creation on existing account detected", address
-        result = 0.u256
-      else:
-        result = db.getStorage(address, slot)[0]
-    else:
-      result = db.getStorage(address, slot)[0]
-  db.rootHash = tmpHash
+# Note: `state_db.getCommittedStorage()` is nowhere used.
+#
+#proc getCommittedStorage*(db: AccountStateDB, address: EthAddress, slot: UInt256): UInt256 =
+#  let tmpHash = db.rootHash
+#  db.rootHash = db.originalRoot
+#  db.transactionID.shortTimeReadOnly():
+#    when aleth_compat:
+#      if address in db.cleared:
+#        debug "Forced contract creation on existing account detected", address
+#        result = 0.u256
+#      else:
+#        result = db.getStorage(address, slot)[0]
+#    else:
+#      result = db.getStorage(address, slot)[0]
+#  db.rootHash = tmpHash
 
-proc updateOriginalRoot*(db: AccountStateDB) =
-  ## this proc will be called for every transaction
-  db.originalRoot = db.rootHash
-  # no need to rollback or dispose
-  # transactionID, it will be handled elsewhere
-  db.transactionID = db.db.getTransactionID()
-
-  when aleth_compat:
-    db.cleared.clear()
+# Note: `state_db.updateOriginalRoot()` is nowhere used.
+#
+#proc updateOriginalRoot*(db: AccountStateDB) =
+#  ## this proc will be called for every transaction
+#  db.originalRoot = db.rootHash
+#  # no need to rollback or dispose
+#  # transactionID, it will be handled elsewhere
+#  db.transactionID = db.db.getTransactionID()
+#
+#  when aleth_compat:
+#    db.cleared.clear()
 
 proc rootHash*(db: ReadOnlyStateDB): KeccakHash {.borrow.}
 proc getAccount*(db: ReadOnlyStateDB, address: EthAddress): Account {.borrow.}
@@ -287,4 +291,4 @@ proc hasCodeOrNonce*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
 proc accountExists*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
 proc isDeadAccount*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
 proc isEmptyAccount*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
-proc getCommittedStorage*(db: ReadOnlyStateDB, address: EthAddress, slot: UInt256): UInt256 {.borrow.}
+#proc getCommittedStorage*(db: ReadOnlyStateDB, address: EthAddress, slot: UInt256): UInt256 {.borrow.}

@@ -37,6 +37,7 @@ export
   CoreDbErrorCode,
   CoreDbErrorRef,
   CoreDbRef,
+  CoreDbTxID,
   CoreDbType,
   CoreDbVidRef,
   CoreDxAccRef,
@@ -44,7 +45,6 @@ export
   CoreDxKvtRef,
   CoreDxMptRef,
   CoreDxPhkRef,
-  CoreDxTxID,
   CoreDxTxRef,
   `$$`,
   backend,
@@ -86,12 +86,9 @@ export
   setTransactionID,
   toLegacy,
   toMpt,
-  toPhk,
-  toTransactionID
+  toPhk
 
 when ProvideCoreDbLegacyAPI:
-  type
-    CoreDyTxID = CoreDxTxID|CoreDbTxID
   export
     CoreDbCaptFlags,
     CoreDbCaptRef,
@@ -143,7 +140,7 @@ proc newCoreDbRef*(
 # Public template wrappers
 # ------------------------------------------------------------------------------
 
-template shortTimeReadOnly*(id: CoreDyTxID; body: untyped) =
+template shortTimeReadOnly*(id: CoreDbTxID; body: untyped) =
   proc action() =
     body
   id.shortTimeReadOnly action
