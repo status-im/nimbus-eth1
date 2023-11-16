@@ -61,7 +61,7 @@ proc dumpBlocksBegin*(headers: openArray[BlockHeader]): string =
   & "transaction #{headers[0].blockNumber} {headers.len}"
 
 proc dumpBlocksList*(header: BlockHeader; body: BlockBody): string =
-  &"block {rlp.encode(header).toHex} {rlp.encode(body).toHex}"
+  & "block {rlp.encode(header).toHex} {rlp.encode(body).toHex}"
 
 proc dumpBlocksEnd*: string =
   "commit"
