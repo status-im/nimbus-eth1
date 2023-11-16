@@ -1,5 +1,5 @@
 # Nimbus - Portal Network
-# Copyright (c) 2021-2022 Status Research & Development GmbH
+# Copyright (c) 2021-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -325,11 +325,15 @@ procSuite "Portal Wire Protocol Tests":
     await node2.stopPortalProtocol()
 
   asyncTest "Adjusting radius after hitting full database":
+    # TODO: This test is extremely breakable when changing
+    # `contentDeletionFraction` and/or the used test values.
+    # Need to rework either this test, or the pruning mechanism, or probably
+    # both.
     let
       node1 = initDiscoveryNode(
         rng, PrivateKey.random(rng[]), localAddress(20303))
 
-      dbLimit = 100_000'u32
+      dbLimit = 400_000'u32
       db = ContentDB.new("", dbLimit, inMemory = true)
       m = StreamManager.new(node1)
       q = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
@@ -343,7 +347,7 @@ procSuite "Portal Wire Protocol Tests":
     let item = genByteSeq(10_000)
     var distances: seq[UInt256] = @[]
 
-    for i in 0..8:
+    for i in 0..<40:
       proto1.storeContent(ByteList.init(@[uint8(i)]), u256(i), item)
       distances.add(u256(i) xor proto1.localNode.id)
 
@@ -356,11 +360,12 @@ procSuite "Portal Wire Protocol Tests":
     check:
       db.get((distances[0] xor proto1.localNode.id)).isNone()
       db.get((distances[1] xor proto1.localNode.id)).isNone()
-      db.get((distances[2] xor proto1.localNode.id)).isSome()
+      db.get((distances[2] xor proto1.localNode.id)).isNone()
+      db.get((distances[3] xor proto1.localNode.id)).isSome()
       # The radius has been updated and is lower than the maximum start value.
       proto1.dataRadius < UInt256.high
       # Yet higher than or equal to the furthest non deleted element.
-      proto1.dataRadius >= distances[2]
+      proto1.dataRadius >= distances[3]
 
     proto1.stop()
     await node1.closeWait()

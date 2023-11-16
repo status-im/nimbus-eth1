@@ -91,25 +91,29 @@ suite "Content Database":
       usedSize2 == size6
 
   test "ContentDB pruning":
+    # TODO: This test is extremely breakable when changing
+    # `contentDeletionFraction` and/or the used test values.
+    # Need to rework either this test, or the pruning mechanism, or probably
+    # both.
     let
-      maxDbSize = uint32(100000)
+      maxDbSize = uint32(100_000)
       db = ContentDB.new("", maxDbSize, inMemory = true)
 
       furthestElement = u256(40)
       secondFurthest = u256(30)
       thirdFurthest = u256(20)
 
-      numBytes = 10000
+      numBytes = 10_000
       pr1 = db.put(u256(1), genByteSeq(numBytes), u256(0))
       pr2 = db.put(thirdFurthest, genByteSeq(numBytes), u256(0))
       pr3 = db.put(u256(3), genByteSeq(numBytes), u256(0))
       pr4 = db.put(u256(10), genByteSeq(numBytes), u256(0))
       pr5 = db.put(u256(5), genByteSeq(numBytes), u256(0))
-      pr6 = db.put(u256(10), genByteSeq(numBytes), u256(0))
-      pr7 = db.put(furthestElement, genByteSeq(numBytes), u256(0))
-      pr8 = db.put(secondFurthest, genByteSeq(numBytes), u256(0))
+      pr6 = db.put(u256(11), genByteSeq(numBytes), u256(0))
+      pr7 = db.put(furthestElement, genByteSeq(2000), u256(0))
+      pr8 = db.put(secondFurthest, genByteSeq(2000), u256(0))
       pr9 = db.put(u256(2), genByteSeq(numBytes), u256(0))
-      pr10 = db.put(u256(4), genByteSeq(numBytes), u256(0))
+      pr10 = db.put(u256(4), genByteSeq(12000), u256(0))
 
     check:
       pr1.kind == ContentStored
@@ -124,11 +128,11 @@ suite "Content Database":
       pr10.kind == DbPruned
 
     check:
-      pr10.numOfDeletedElements == 2
+      pr10.deletedElements == 2
       uint32(db.usedSize()) < maxDbSize
       # With the current settings the 2 furthest elements will be deleted,
       # i.e key 30 and 40. The furthest non deleted one will have key 20.
-      pr10.furthestStoredElementDistance == thirdFurthest
+      pr10.distanceOfFurthestElement == thirdFurthest
       db.get(furthestElement).isNone()
       db.get(secondFurthest).isNone()
       db.get(thirdFurthest).isSome()

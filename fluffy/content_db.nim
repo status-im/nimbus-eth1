@@ -33,23 +33,22 @@ export kvstore_sqlite3
 # thus depending on the network the right db needs to be selected.
 
 declareCounter portal_pruning_counter,
-  "Number of pruning event which happened during node lifetime",
+  "Number of pruning events which occured during the node's uptime",
   labels = ["protocol_id"]
 
 declareGauge portal_pruning_deleted_elements,
-  "Number of elements delted in last pruning",
+  "Number of elements deleted in the last pruning",
   labels = ["protocol_id"]
+
+const
+  contentDeletionFraction = 0.05 ## 5% of the content will be deleted when the
+  ## storage capacity is hit and radius gets adjusted.
 
 type
   RowInfo = tuple
     contentId: array[32, byte]
     payloadLength: int64
     distance: array[32, byte]
-
-  ObjInfo* = object
-    contentId*: array[32, byte]
-    payloadLength*: int64
-    distFrom*: UInt256
 
   ContentDB* = ref object
     kv: KvStoreRef
@@ -69,9 +68,9 @@ type
     of ContentStored:
       discard
     of DbPruned:
-      furthestStoredElementDistance*: UInt256
-      fractionOfDeletedContent*: float64
-      numOfDeletedElements*: int64
+      distanceOfFurthestElement*: UInt256
+      deletedFraction*: float64
+      deletedElements*: int64
 
 func xorDistance(
   a: openArray[byte],
@@ -181,9 +180,37 @@ proc del(db: ContentDB, key: openArray[byte]) =
   # TODO: Do we want to return the bool here too?
   discard db.kv.del(key).expectDb()
 
-proc getSszDecoded*(
+proc getSszDecoded(
     db: ContentDB, key: openArray[byte], T: type auto): Opt[T] =
   db.kv.getSszDecoded(key, T)
+
+## Public ContentId based ContentDB calls
+
+# TODO: Could also decide to use the ContentKey SSZ bytestring, as this is what
+# gets send over the network in requests, but that would be a bigger key. Or the
+# same hashing could be done on it here.
+# However ContentId itself is already derived through different digests
+# depending on the content type, and this ContentId typically needs to be
+# checked with the Radius/distance of the node anyhow. So lets see how we end up
+# using this mostly in the code.
+
+proc get*(db: ContentDB, key: ContentId): Opt[seq[byte]] =
+  # TODO: Here it is unfortunate that ContentId is a uint256 instead of Digest256.
+  db.get(key.toBytesBE())
+
+proc put*(db: ContentDB, key: ContentId, value: openArray[byte]) =
+  db.put(key.toBytesBE(), value)
+
+proc contains*(db: ContentDB, key: ContentId): bool =
+  db.contains(key.toBytesBE())
+
+proc del*(db: ContentDB, key: ContentId) =
+  db.del(key.toBytesBE())
+
+proc getSszDecoded*(db: ContentDB, key: ContentId, T: type auto): Opt[T] =
+  db.getSszDecoded(key.toBytesBE(), T)
+
+## Public database size, content and pruning related calls
 
 proc reclaimSpace*(db: ContentDB): void =
   ## Runs sqlite VACUUM commands which rebuilds the db, repacking it into a
@@ -233,39 +260,15 @@ proc contentCount*(db: ContentDB): int64 =
     count = res).expectDb()
   return count
 
-## Public ContentId based ContentDB calls
-
-# TODO: Could also decide to use the ContentKey SSZ bytestring, as this is what
-# gets send over the network in requests, but that would be a bigger key. Or the
-# same hashing could be done on it here.
-# However ContentId itself is already derived through different digests
-# depending on the content type, and this ContentId typically needs to be
-# checked with the Radius/distance of the node anyhow. So lets see how we end up
-# using this mostly in the code.
-
-proc get*(db: ContentDB, key: ContentId): Opt[seq[byte]] =
-  # TODO: Here it is unfortunate that ContentId is a uint256 instead of Digest256.
-  db.get(key.toBytesBE())
-
-proc put*(db: ContentDB, key: ContentId, value: openArray[byte]) =
-  db.put(key.toBytesBE(), value)
-
-proc contains*(db: ContentDB, key: ContentId): bool =
-  db.contains(key.toBytesBE())
-
-proc del*(db: ContentDB, key: ContentId) =
-  db.del(key.toBytesBE())
-
-proc getSszDecoded*(db: ContentDB, key: ContentId, T: type auto): Opt[T] =
-  db.getSszDecoded(key.toBytesBE(), T)
-
-proc deleteContentFraction(
+proc deleteContentFraction*(
   db: ContentDB,
   target: UInt256,
   fraction: float64): (UInt256, int64, int64, int64) =
   ## Deletes at most `fraction` percent of content form database.
-  ## First, content furthest from provided `target` is deleted.
-
+  ## Content furthest from provided `target` is deleted first.
+  # TODO: The usage of `db.contentSize()` for the deletion calculation versus
+  # `db.usedSize()` for the pruning threshold leads sometimes to some unexpected
+  # results of how much content gets up deleted.
   doAssert(
     fraction > 0 and fraction < 1,
     "Deleted fraction should be > 0 and < 1"
@@ -273,22 +276,22 @@ proc deleteContentFraction(
 
   let totalContentSize = db.contentSize()
   let bytesToDelete = int64(fraction * float64(totalContentSize))
-  var numOfDeletedElements: int64 = 0
+  var deletedElements: int64 = 0
 
   var ri: RowInfo
-  var bytesDeleted: int64 = 0
+  var deletedBytes: int64 = 0
   let targetBytes = target.toBytesBE()
   for e in db.getAllOrderedByDistanceStmt.exec(targetBytes, ri):
-    if bytesDeleted + ri.payloadLength < bytesToDelete:
+    if deletedBytes + ri.payloadLength <= bytesToDelete:
       db.del(ri.contentId)
-      bytesDeleted = bytesDeleted + ri.payloadLength
-      inc numOfDeletedElements
+      deletedBytes = deletedBytes + ri.payloadLength
+      inc deletedElements
     else:
       return (
         UInt256.fromBytesBE(ri.distance),
-        bytesDeleted,
+        deletedBytes,
         totalContentSize,
-        numOfDeletedElements
+        deletedElements
       )
 
 proc put*(
@@ -296,7 +299,6 @@ proc put*(
     key: ContentId,
     value: openArray[byte],
     target: UInt256): PutResult =
-
   db.put(key, value)
 
   # The used size is used as pruning threshold. This means that the database
@@ -315,55 +317,46 @@ proc put*(
   if dbSize < int64(db.storageCapacity):
     return PutResult(kind: ContentStored)
   else:
-    # TODO Add some configuration for this magic number
     let (
-      furthestNonDeletedElement,
+      distanceOfFurthestElement,
       deletedBytes,
       totalContentSize,
       deletedElements
     ) =
-      db.deleteContentFraction(target, 0.25)
+      db.deleteContentFraction(target, contentDeletionFraction)
 
     let deletedFraction = float64(deletedBytes) / float64(totalContentSize)
+    info "Deleted content fraction", deletedBytes, deletedElements, deletedFraction
 
     return PutResult(
       kind: DbPruned,
-      furthestStoredElementDistance: furthestNonDeletedElement,
-      fractionOfDeletedContent: deletedFraction,
-      numOfDeletedElements: deletedElements)
+      distanceOfFurthestElement: distanceOfFurthestElement,
+      deletedFraction: deletedFraction,
+      deletedElements: deletedElements)
 
 proc adjustRadius(
     p: PortalProtocol,
-    fractionOfDeletedContent: float64,
-    furthestElementInDbDistance: UInt256) =
-  if fractionOfDeletedContent == 0.0:
-    # even though pruning was triggered no content was deleted, it could happen
-    # in pathological case of really small database with really big values.
-    # log it as error as it should not happenn
-    error "Database pruning attempt resulted in no content deleted"
-    return
-
-  # we need to invert fraction as our Uin256 implementation does not support
+    deletedFraction: float64,
+    distanceOfFurthestElement: UInt256) =
+  # Invert fraction as the UInt256 implementation does not support
   # multiplication by float
-  let invertedFractionAsInt = int64(1.0 / fractionOfDeletedContent)
-
+  let invertedFractionAsInt = int64(1.0 / deletedFraction)
   let scaledRadius = p.dataRadius div u256(invertedFractionAsInt)
 
-  # Chose larger value to avoid situation, where furthestElementInDbDistance
-  # is super close to local id, so local radius would end up too small
-  # to accept any more data to local database
-  # If scaledRadius radius will be larger it will still contain all elements
-  let newRadius = max(scaledRadius, furthestElementInDbDistance)
+  # Choose a larger value to avoid the situation where the
+  # `distanceOfFurthestElement is very close to the local id so that the local
+  # radius would end up too small to accept any more data to the database.
+  # If scaledRadius radius will be larger it will still contain all elements.
+  let newRadius = max(scaledRadius, distanceOfFurthestElement)
 
-  debug "Database pruned",
+  info "Database radius adjusted",
     oldRadius = p.dataRadius,
     newRadius = newRadius,
-    furthestDistanceInDb = furthestElementInDbDistance,
-    fractionOfDeletedContent = fractionOfDeletedContent
+    distanceOfFurthestElement
 
-  # both scaledRadius and furthestElementInDbDistance are smaller than current
-  # dataRadius, so the radius will constantly decrease through the node
-  # life time
+  # Both scaledRadius and distanceOfFurthestElement are smaller than current
+  # dataRadius, so the radius will constantly decrease through the node its
+  # lifetime.
   p.dataRadius = newRadius
 
 proc createGetHandler*(db: ContentDB): DbGetHandler =
@@ -394,14 +387,21 @@ proc createStoreHandler*(
         if res.kind == DbPruned:
           portal_pruning_counter.inc(labelValues = [$p.protocolId])
           portal_pruning_deleted_elements.set(
-            res.numOfDeletedElements.int64,
+            res.deletedElements.int64,
             labelValues = [$p.protocolId]
           )
 
-          p.adjustRadius(
-            res.fractionOfDeletedContent,
-            res.furthestStoredElementDistance
-          )
+          if res.deletedFraction > 0.0:
+            p.adjustRadius(res.deletedFraction, res.distanceOfFurthestElement)
+          else:
+            # Note:
+            # This can occur when the furthest content is bigger than the fraction
+            # size. This is unlikely to happen as it would require either very
+            # small storage capacity or a very small `contentDeletionFraction`
+            # combined with some big content.
+            info "Database pruning attempt resulted in no content deleted"
+            return
+
       of Static:
         # If the config is set statically, radius is not adjusted, and is kept
         # constant thorugh node life time, also database max size is disabled
