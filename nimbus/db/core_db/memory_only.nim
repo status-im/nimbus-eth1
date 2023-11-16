@@ -36,7 +36,9 @@ export
   CoreDbApiError,
   CoreDbErrorCode,
   CoreDbErrorRef,
+  CoreDbPersistentTypes,
   CoreDbRef,
+  CoreDbSaveFlags,
   CoreDbTxID,
   CoreDbType,
   CoreDbVidRef,
@@ -134,7 +136,7 @@ proc newCoreDbRef*(
     newLegacyMemoryCoreDbRef()
 
   else:
-    {.error: "Unsupported dbType for memory-only newCoreDbRef()".}
+    {.error: "Unsupported constructor " & $dbType & ".newCoreDbRef()".}
 
 # ------------------------------------------------------------------------------
 # Public template wrappers

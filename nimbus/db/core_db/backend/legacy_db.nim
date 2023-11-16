@@ -198,6 +198,9 @@ proc kvtMethods(db: LegacyDbRef): CoreDbKvtFns =
     hasKeyFn: proc(k: openArray[byte]): CoreDbRc[bool] =
       ok(tdb.contains(k)),
 
+    destroyFn: proc(saveMode: CoreDbSaveFlags): CoreDbRc[void] =
+      ok(),
+
     pairsIt: iterator(): (Blob, Blob) =
       for k,v in tdb.pairsInMemoryDB:
         yield (k,v))
@@ -234,6 +237,9 @@ proc mptMethods(mpt: HexaryChildDbRef; db: LegacyDbRef): CoreDbMptFns =
 
     isPruningFn: proc(): bool =
       mpt.trie.isPruning,
+
+    destroyFn: proc(saveMode: CoreDbSaveFlags): CoreDbRc[void] =
+      ok(),
 
     pairsIt: iterator: (Blob,Blob) {.gcsafe, raises: [LegacyApiRlpError].} =
       reraiseRlpException("pairsIt()"):
@@ -276,7 +282,10 @@ proc accMethods(mpt: HexaryChildDbRef; db: LegacyDbRef): CoreDbAccFns =
       db.bless(LegacyCoreDbVid(vHash: mpt.trie.rootHash)),
 
     isPruningFn: proc(): bool =
-      mpt.trie.isPruning)
+      mpt.trie.isPruning,
+
+    destroyFn: proc(saveMode: CoreDbSaveFlags): CoreDbRc[void] =
+      ok())
 
 proc txMethods(tx: DbTransaction): CoreDbTxFns =
   CoreDbTxFns(
@@ -352,14 +361,22 @@ proc baseMethods(
 
       err(db.bless(RootNotFound, LegacyCoreDbError(ctx: "getRoot()"))),
 
-    newKvtFn: proc(): CoreDxKvtRef =
-      db.kvt,
+    newKvtFn: proc(saveMode: CoreDbSaveFlags): CoreDbRc[CoreDxKvtRef] =
+      ok(db.kvt),
 
-    newMptFn: proc(root: CoreDbVidRef, prune: bool): CoreDbRc[CoreDxMptRef] =
+    newMptFn: proc(
+        root: CoreDbVidRef,
+        prune: bool;
+        saveMode: CoreDbSaveFlags;
+          ): CoreDbRc[CoreDxMptRef] =
       let mpt = HexaryChildDbRef(trie: initHexaryTrie(tdb, root.lvHash, prune))
       ok(db.bless CoreDxMptRef(methods: mpt.mptMethods db)),
 
-    newAccFn: proc(root: CoreDbVidRef, prune: bool): CoreDbRc[CoreDxAccRef] =
+    newAccFn: proc(
+        root: CoreDbVidRef,
+        prune: bool;
+        saveMode: CoreDbSaveFlags;
+          ): CoreDbRc[CoreDxAccRef] =
       let mpt = HexaryChildDbRef(trie: initHexaryTrie(tdb, root.lvHash, prune))
       ok(db.bless CoreDxAccRef(methods: mpt.accMethods db)),
 

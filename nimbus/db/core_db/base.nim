@@ -29,7 +29,9 @@ export
   CoreDbErrorRef,
   CoreDbKvtBackendRef,
   CoreDbMptBackendRef,
+  CoreDbPersistentTypes,
   CoreDbRef,
+  CoreDbSaveFlags,
   CoreDbType,
   CoreDbVidRef,
   CoreDxAccRef,
@@ -47,7 +49,7 @@ else:
 const
   ProvideCoreDbLegacyAPI* = true # and false
 
-  EnableApiTracking = true and false
+  EnableApiTracking = true # and false
     ## When enabled, functions using this tracking facility need to import
     ## `chronicles`, as well. Tracking is enabled by setting the `trackLegaApi`
     ## and/or the `trackNewApi` flags to `true`.
@@ -91,6 +93,8 @@ type
                    CoreDbBackends | CoreDbErrorRef
     ## Shortcut, all descriptors with a `parent` entry.
 
+proc `$$`*(e: CoreDbErrorRef): string {.gcsafe.}
+
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
@@ -105,6 +109,7 @@ template itNotImplemented(db: CoreDbRef, name: string) =
 
 when EnableApiTracking:
   import std/[sequtils, strutils], stew/byteutils
+  {.warning: "*** Provided API logging for CoreDB (disabled by default)".}
 
   func getParent(w: CoreDxChldRefs): auto =
     ## Avoida inifinite call to `parent()` in `ifTrack*Api()` tmplates
@@ -133,6 +138,11 @@ when EnableApiTracking:
         if db.trackLegaApi:
           code
 
+    proc toStr(w: CoreDbKvtRef): string =
+      if w.distinctBase.isNil: "kvtRef(nil)" else: "kvtRef"
+
+    # End LegacyAPI
+
   template newApiTxt(info: static[string]): static[string] =
     logTxt "new API " & info
 
@@ -153,7 +163,16 @@ when EnableApiTracking:
     if w == EMPTY_ROOT_HASH: "EMPTY_ROOT_HASH" else: w.data.oaToStr
 
   proc toStr(p: CoreDbVidRef): string =
-    if p.isNil: "vidRef(nil)" else: "vidRef"
+    if p.isNil:
+      "vidRef(nil)"
+    elif not p.ready:
+      "vidRef(not-ready)"
+    else:
+      let val = p.parent.methods.vidHashFn(p).valueOr: EMPTY_ROOT_HASH
+      if val != EMPTY_ROOT_HASH:
+        "vidRef(some-hash)"
+      else:
+        "vidRef(empty-hash)"
 
   proc toStr(w: Blob): string =
     if 0 < w.len and w.len < 5: "<" & w.oaToStr & ">"
@@ -166,13 +185,14 @@ when EnableApiTracking:
     "Flags[" & $w.len & "]"
 
   proc toStr(rc: CoreDbRc[bool]): string =
-    if rc.isOk: "ok(" & $rc.value & ")" else: "err(..)"
+    if rc.isOk: "ok(" & $rc.value & ")" else: "err(" & $$rc.error & ")"
 
   proc toStr(rc: CoreDbRc[void]): string =
-    if rc.isOk: "ok()" else:"err()"
+    if rc.isOk: "ok()" else: "err(" & $$rc.error & ")"
 
   proc toStr(rc: CoreDbRc[Blob]): string =
-    if rc.isOk: "ok(Blob[" & $rc.value.len & "])" else: "err(..)"
+    if rc.isOk: "ok(Blob[" & $rc.value.len & "])"
+    else: "err(" & $$rc.error & ")"
 
   proc toStr(rc: Result[Hash256,void]): string =
     if rc.isOk: "ok(" & rc.value.toStr & ")" else: "err()"
@@ -181,7 +201,7 @@ when EnableApiTracking:
     if rc.isOk: "ok(Account)" else: "err()"
 
   proc toStr[T](rc: CoreDbRc[T]; ifOk: static[string]): string =
-    if rc.isOk: "ok(" & ifOk & ")" else: "err(..)"
+    if rc.isOk: "ok(" & ifOk & ")" else: "err(" & $$rc.error & ")"
 
   proc toStr(rc: CoreDbRc[CoreDbRef]): string = rc.toStr "dbRef"
   proc toStr(rc: CoreDbRc[CoreDbVidRef]): string = rc.toStr "vidRef"
@@ -243,7 +263,6 @@ proc bless*(db: CoreDbRef): CoreDbRef =
   ## Verify descriptor
   when AutoValidateDescriptors:
     db.validate
-  db.ifTrackNewApi: info newApiTxt "CoreDbRef.init()", dbType=db.dbType
   db
 
 
@@ -349,7 +368,8 @@ proc hash*(vid: CoreDbVidRef): Result[Hash256,void] =
     else:
       ok EMPTY_ROOT_HASH
   # Note: tracker will be silent if `vid` is NIL
-  vid.ifTrackNewApi: info newApiTxt "hash()", result=result.toStr
+  vid.ifTrackNewApi:
+    info newApiTxt "hash()", vid=vid.toStr, result=result.toStr
 
 proc hashOrEmpty*(vid: CoreDbVidRef): Hash256 =
   ## Convenience wrapper, returns `EMPTY_ROOT_HASH` where `hash()` would fail.
@@ -401,16 +421,46 @@ proc getRoot*(
 # Public key-value table methods
 # ------------------------------------------------------------------------------
 
-proc newKvt*(db: CoreDbRef): CoreDxKvtRef =
-  ## Getter (pseudo constructor)
-  result = db.methods.newKvtFn()
-  db.ifTrackNewApi: info newApiTxt "newKvt()"
+proc newKvt*(db: CoreDbRef; saveMode = AutoSave): CoreDxKvtRef =
+  ## Constructor, will defect on failure.
+  ##
+  ## Depending on the argument `saveMode`, the contructed object will have
+  ## the following properties.
+  ##
+  ## * `Cached`
+  ##   Subscribe to the common base object shared with other subscribed
+  ##   `AutoSave` or `Cached` descriptors. So any changes are immediately
+  ##   visible among subscribers. On automatic destruction (when the
+  ##   constructed object gets out of scope), changes are not saved to the
+  ##   backend database but are still available to subscribers.
+  ##
+  ## * `AutoSave`
+  ##   This mode works similar to `Cached` with the difference that changes
+  ##   are saved to the backend database on automatic destruction when this
+  ##   is permissible, i.e. there is a backend available and there is no
+  ##   pending transaction on the common base object.
+  ##
+  ## * `Companion`
+  ##   The contructed object will be a new descriptor separate from the common
+  ##   base object. It will be a copy of the current state of the common
+  ##   base object available to subscribers. On automatic destruction, changes
+  ##   will be discarded.
+  ##
+  ## The constructed object can be manually descructed (see `destroy()`) where
+  ## the `saveMode` behaviour can be overridden.
+  ##
+  ## The legacy backend always assumes `AutoSave` mode regardless of the
+  ## function argument.
+  ##
+  result = db.methods.newKvtFn(saveMode).valueOr:
+    raiseAssert $$error
+  db.ifTrackNewApi: info newApiTxt "newKvt()", saveMode
 
 proc get*(kvt: CoreDxKvtRef; key: openArray[byte]): CoreDbRc[Blob] =
   ## This function always returns a non-empty `Blob` or an error code.
   result = kvt.methods.getFn key
   kvt.ifTrackNewApi:
-    info newApiTxt "kvt/get()", key=key.toStr, result=result.toStr
+    info newApiTxt "get()", key=key.toStr, result=result.toStr
 
 proc getOrEmpty*(kvt: CoreDxKvtRef; key: openArray[byte]): CoreDbRc[Blob] =
   ## This function sort of mimics the behaviour of the legacy database
@@ -420,12 +470,12 @@ proc getOrEmpty*(kvt: CoreDxKvtRef; key: openArray[byte]): CoreDbRc[Blob] =
   if result.isErr and result.error.error == KvtNotFound:
     result = CoreDbRc[Blob].ok(EmptyBlob)
   kvt.ifTrackNewApi:
-    info newApiTxt "kvt/getOrEmpty()", key=key.toStr, result=result.toStr
+    info newApiTxt "getOrEmpty()", key=key.toStr, result=result.toStr
 
 proc del*(kvt: CoreDxKvtRef; key: openArray[byte]): CoreDbRc[void] =
   result = kvt.methods.delFn key
   kvt.ifTrackNewApi:
-    info newApiTxt "kvt/del()", key=key.toStr, result=result.toStr
+    info newApiTxt "del()", key=key.toStr, result=result.toStr
 
 proc put*(
     kvt: CoreDxKvtRef;
@@ -433,7 +483,7 @@ proc put*(
     val: openArray[byte];
       ): CoreDbRc[void] =
   result = kvt.methods.putFn(key, val)
-  kvt.ifTrackNewApi: info newApiTxt "kvt/put()",
+  kvt.ifTrackNewApi: info newApiTxt "put()",
     key=key.toStr, val=val.toSeq.toStr, result=result.toStr
 
 proc hasKey*(kvt: CoreDxKvtRef; key: openArray[byte]): CoreDbRc[bool] =
@@ -441,6 +491,29 @@ proc hasKey*(kvt: CoreDxKvtRef; key: openArray[byte]): CoreDbRc[bool] =
   result = kvt.methods.hasKeyFn key
   kvt.ifTrackNewApi:
     info newApiTxt "kvt/hasKey()", key=key.toStr, result=result.toStr
+
+proc destroy*(dsc: CoreDxKvtRef; saveMode = AutoSave): CoreDbRc[void] =
+  ## For the legacy database, this function has no effect and succeeds always.
+  ##
+  ## The function explicitely destructs the descriptor `dsc`. If the function
+  ## argument `saveMode` is not `AutoSave` the data object behind the argument
+  ## descriptor `dsc` is just discarded and the function returns success.
+  ##
+  ## Otherwise, the state of the descriptor object is saved to the database
+  ## backend if that is possible, or an error is returned.
+  ##
+  ## Subject to change
+  ## -----------------
+  ## * Saving an object which was created with the `Companion` flag (see
+  ##   `newKvt()`), the common base object will not reveal any change although
+  ##   the backend database will have persistently stored the data.
+  ## * Subsequent saving of the common base object may override that.
+  ##
+  ## When returnng an error, the argument descriptor `dsc` will have been
+  ## disposed nevertheless.
+  ##
+  result = dsc.methods.destroyFn saveMode
+  dsc.ifTrackNewApi: info newApiTxt "destroy()", saveMode, result=result.toStr
 
 iterator pairs*(kvt: CoreDxKvtRef): (Blob, Blob) {.apiRaise.} =
   ## Iterator supported on memory DB (otherwise implementation dependent)
@@ -452,26 +525,66 @@ iterator pairs*(kvt: CoreDxKvtRef): (Blob, Blob) {.apiRaise.} =
 # Public Merkle Patricia Tree, hexary trie constructors
 # ------------------------------------------------------------------------------
 
-proc newMpt*(db: CoreDbRef; root: CoreDbVidRef; prune = true): CoreDxMptRef =
-  ## Constructor, will defect on failure (note that the legacy backend
-  ## always succeeds)
-  result = db.methods.newMptFn(root, prune).valueOr:
+proc newMpt*(
+    db: CoreDbRef;
+    root: CoreDbVidRef;
+    prune = true;
+    saveMode = AutoSave;
+      ): CoreDxMptRef =
+  ## Constructor, will defect on failure. The argument `prune` is currently
+  ## effective only for the legacy backend.
+  ##
+  ## See the discussion at `newKvt()` for an explanation of the `saveMode`
+  ## argument.
+  ##
+  ## The constructed object can be manually descructed (see `destroy()`) where
+  ## the `saveMode` behaviour can be overridden.
+  ##
+  ## The legacy backend always assumes `AutoSave` mode regardless of the
+  ## function argument.
+  ##
+  result = db.methods.newMptFn(root, prune, saveMode).valueOr:
     raiseAssert $$error
-  db.ifTrackNewApi: info newApiTxt "newMpt", root=root.toStr, prune
+  db.ifTrackNewApi:
+    info newApiTxt "newMpt()", root=root.toStr, prune, saveMode
 
-proc newMpt*(db: CoreDbRef; prune = true): CoreDxMptRef =
+proc newMpt*(
+    db: CoreDbRef;
+    prune = true;
+    saveMode = AutoSave;
+      ): CoreDxMptRef =
   ## Shortcut for `db.newMpt CoreDbVidRef()`
-  result = db.methods.newMptFn(CoreDbVidRef(), prune).valueOr:
+  let root = CoreDbVidRef()
+  result = db.methods.newMptFn(root, prune, saveMode).valueOr:
     raiseAssert $$error
-  db.ifTrackNewApi: info newApiTxt "newMpt", prune
+  db.ifTrackNewApi: info newApiTxt "newMpt()", root=root.toStr, prune, saveMode
 
-proc newAccMpt*(db: CoreDbRef; root: CoreDbVidRef; prune = true): CoreDxAccRef =
-  ## Similar to `newMpt()` for handling accounts. Although this sub-trie can
-  ## be emulated by means of `newMpt(..).toPhk()`, it is recommended using
-  ## this constructor which implies its own subset of methods to handle that
-  ## trie.
-  result = db.methods.newAccFn(root, prune).valueOr: raiseAssert $$error
-  db.ifTrackNewApi: info newApiTxt "newAccMpt", root=root.toStr, prune
+proc newAccMpt*(
+    db: CoreDbRef;
+    root: CoreDbVidRef;
+    prune = true;
+    saveMode = AutoSave;
+      ): CoreDxAccRef =
+  ## This function works similar to `newMpt()` for handling accounts. Although
+  ## this sub-trie can be emulated by means of `newMpt(..).toPhk()`, it is
+  ## recommended using this particular constructor for accounts because it
+  ## provides its own subset of methods to handle accounts.
+  ##
+  ## The argument `prune` is currently effective only for the legacy backend.
+  ##
+  ## See the discussion at `newKvt()` for an explanation of the `saveMode`
+  ## argument.
+  ##
+  ## The constructed object can be manually descructed (see `destroy()`) where
+  ## the `saveMode` behaviour can be overridden.
+  ##
+  ## The legacy backend always assumes `AutoSave` mode regardless of the
+  ## function argument.
+  ##
+  result = db.methods.newAccFn(root, prune, saveMode).valueOr:
+    raiseAssert $$error
+  db.ifTrackNewApi:
+    info newApiTxt "newAccMpt()", root=root.toStr, prune, saveMode
 
 proc toMpt*(phk: CoreDxPhkRef): CoreDxMptRef =
   ## Replaces the pre-hashed argument trie `phk` by the non pre-hashed *MPT*.
@@ -501,6 +614,19 @@ proc rootVid*(dsc: CoreDxTrieRefs | CoreDxAccRef): CoreDbVidRef =
   result = dsc.methods.rootVidFn()
   dsc.ifTrackNewApi: info newApiTxt "rootVid()", result=result.toStr
 
+proc destroy*(
+    dsc: CoreDxTrieRefs | CoreDxAccRef;
+    saveMode = AutoSave;
+      ): CoreDbRc[void]
+      {.discardable.} =
+  ## For the legacy database, this function has no effect and succeeds always.
+  ##
+  ## See the discussion at `destroy()` for `CoreDxKvtRef` for an explanation
+  ## of the `saveMode` argument.
+  ##
+  result = dsc.methods.destroyFn saveMode
+  dsc.ifTrackNewApi: info newApiTxt "destroy()", result=result.toStr
+
 # ------------------------------------------------------------------------------
 # Public generic hexary trie database methods (`mpt` or `phk`)
 # ------------------------------------------------------------------------------
@@ -519,7 +645,7 @@ proc fetchOrEmpty*(trie: CoreDxTrieRefs; key: openArray[byte]): CoreDbRc[Blob] =
   if result.isErr and result.error.error == MptNotFound:
     result = ok(EmptyBlob)
   trie.ifTrackNewApi:
-    info newApiTxt "trie/fetch()", key=key.toStr, result=result.toStr
+    info newApiTxt "trie/fetchOrEmpty()", key=key.toStr, result=result.toStr
 
 proc delete*(trie: CoreDxTrieRefs; key: openArray[byte]): CoreDbRc[void] =
   result = trie.methods.deleteFn key
@@ -659,7 +785,7 @@ when ProvideCoreDbLegacyAPI:
     ## Legacy pseudo constructor, see `toKvt()` for production constructor
     db.setTrackLegaApiOnly
     result = db.newKvt().CoreDbKvtRef
-    db.ifTrackLegaApi: info legaApiTxt "kvt()"
+    db.ifTrackLegaApi: info legaApiTxt "kvt()", result=result.toStr
 
   proc get*(kvt: CoreDbKvtRef; key: openArray[byte]): Blob =
     kvt.setTrackLegaApiOnly
@@ -677,7 +803,9 @@ when ProvideCoreDbLegacyAPI:
   proc put*(kvt: CoreDbKvtRef; key: openArray[byte]; val: openArray[byte]) =
     kvt.setTrackLegaApiOnly
     const info = "kvt/put()"
-    kvt.distinctBase.put(key, val).expect info
+    let w = kvt.distinctBase.parent.newKvt()
+    w.put(key, val).expect info
+    #kvt.distinctBase.put(key, val).expect info
     kvt.ifTrackLegaApi:
       info legaApiTxt info, key=key.toStr, val=val.toSeq.toStr
 
@@ -737,7 +865,7 @@ when ProvideCoreDbLegacyAPI:
   proc get*(trie: CoreDbTrieRefs; key: openArray[byte]): Blob =
     trie.setTrackLegaApiOnly
     const info = "trie/get()"
-    result = trie.distinctBase.fetchOrEmpty(key).expect "trie/get()"
+    result = trie.distinctBase.fetchOrEmpty(key).expect info
     trie.ifTrackLegaApi:
       info legaApiTxt info, key=key.toStr, result=result.toStr
 
@@ -766,7 +894,7 @@ when ProvideCoreDbLegacyAPI:
   proc rootHash*(trie: CoreDbTrieRefs): Hash256 =
     trie.setTrackLegaApiOnly
     const info = "trie/rootHash()"
-    result = trie.distinctBase.rootVid().hash().expect info
+    result = trie.distinctBase.rootVid().hash.expect info
     trie.ifTrackLegaApi: info legaApiTxt info, result=result.toStr
 
   iterator pairs*(mpt: CoreDbMptRef): (Blob, Blob) {.apiRaise.} =

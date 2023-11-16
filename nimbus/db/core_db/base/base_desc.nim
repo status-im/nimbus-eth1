@@ -46,6 +46,12 @@ type
     MptNotFound
     AccNotFound
     RootNotFound
+    StorageFailed
+
+  CoreDbSaveFlags* = enum
+    Cached                    ## Shared, leaves changes in memory cache
+    AutoSave                  ## Shared, save changes on destruction
+    Companion                 ## Separate, leaves changes in memory cache
 
   CoreDbCaptFlags* {.pure.} = enum
     PersistPut
@@ -62,11 +68,14 @@ type
   CoreDbBaseInitLegaSetupFn* = proc() {.noRaise.}
   CoreDbBaseRootFn* =
     proc(root: Hash256; createOk: bool): CoreDbRc[CoreDbVidRef] {.noRaise.}
-  CoreDbBaseKvtFn* = proc(): CoreDxKvtRef {.noRaise.}
-  CoreDbBaseMptFn* =
-    proc(root: CoreDbVidRef; prune: bool): CoreDbRc[CoreDxMptRef] {.noRaise.}
-  CoreDbBaseAccFn* =
-    proc(root: CoreDbVidRef; prune: bool): CoreDbRc[CoreDxAccRef] {.noRaise.}
+  CoreDbBaseKvtFn* = proc(
+    saveMode: CoreDbSaveFlags): CoreDbRc[CoreDxKvtRef] {.noRaise.}
+  CoreDbBaseMptFn* = proc(
+    root: CoreDbVidRef; prune: bool; saveMode: CoreDbSaveFlags;
+    ): CoreDbRc[CoreDxMptRef] {.noRaise.}
+  CoreDbBaseAccFn* = proc(
+    root: CoreDbVidRef; prune: bool; saveMode: CoreDbSaveFlags;
+    ): CoreDbRc[CoreDxAccRef] {.noRaise.}
   CoreDbBaseTxGetIdFn* = proc(): CoreDbRc[CoreDxTxID] {.noRaise.}
   CoreDbBaseTxBeginFn* = proc(): CoreDbRc[CoreDxTxRef] {.noRaise.}
   CoreDbBaseCaptFn* =
@@ -103,6 +112,8 @@ type
   CoreDbKvtDelFn* = proc(k: openArray[byte]): CoreDbRc[void] {.noRaise.}
   CoreDbKvtPutFn* =
     proc(k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] {.noRaise.}
+  CoreDbKvtDestroyFn* = proc(
+    saveMode: CoreDbSaveFlags): CoreDbRc[void] {.noRaise.}
   CoreDbKvtHasKeyFn* = proc(k: openArray[byte]): CoreDbRc[bool] {.noRaise.}
   CoreDbKvtPairsIt* = iterator(): (Blob,Blob) {.apiRaise.}
 
@@ -113,6 +124,7 @@ type
     delFn*:      CoreDbKvtDelFn
     putFn*:      CoreDbKvtPutFn
     hasKeyFn*:   CoreDbKvtHasKeyFn
+    destroyFn*:  CoreDbKvtDestroyFn
     pairsIt*:    CoreDbKvtPairsIt
 
 
@@ -133,6 +145,8 @@ type
   CoreDbMptHasPathFn* = proc(k: openArray[byte]): CoreDbRc[bool] {.noRaise.}
   CoreDbMptRootVidFn* = proc(): CoreDbVidRef {.noRaise.}
   CoreDbMptIsPruningFn* = proc(): bool {.noRaise.}
+  CoreDbMptDestroyFn* = proc(
+    saveMode: CoreDbSaveFlags): CoreDbRc[void] {.noRaise.}
   CoreDbMptPairsIt* = iterator(): (Blob,Blob) {.apiRaise.}
   CoreDbMptReplicateIt* = iterator(): (Blob,Blob) {.apiRaise.}
 
@@ -144,9 +158,10 @@ type
     mergeFn*:      CoreDbMptMergeFn
     hasPathFn*:    CoreDbMptHasPathFn
     rootVidFn*:    CoreDbMptRootVidFn
+    isPruningFn*:  CoreDbMptIsPruningFn
+    destroyFn*:    CoreDbMptDestroyFn
     pairsIt*:      CoreDbMptPairsIt
     replicateIt*:  CoreDbMptReplicateIt
-    isPruningFn*:  CoreDbMptIsPruningFn
 
 
   # ----------------------------------------------------
@@ -160,6 +175,8 @@ type
   CoreDbAccHasPathFn* = proc(k: EthAddress): CoreDbRc[bool] {.noRaise.}
   CoreDbAccRootVidFn* = proc(): CoreDbVidRef {.noRaise.}
   CoreDbAccIsPruningFn* = proc(): bool {.noRaise.}
+  CoreDbAccDestroyFn* = proc(
+    saveMode: CoreDbSaveFlags): CoreDbRc[void] {.noRaise.}
 
   CoreDbAccFns* = object
     ## Methods for trie objects
@@ -170,7 +187,7 @@ type
     hasPathFn*:    CoreDbAccHasPathFn
     rootVidFn*:    CoreDbAccRootVidFn
     isPruningFn*:  CoreDbAccIsPruningFn
-
+    destroyFn*:    CoreDbAccDestroyFn
 
   # --------------------------------------------------
   # Sub-descriptor: Transaction frame management
@@ -242,18 +259,18 @@ type
     ## Backend wrapper for direct backend access
     parent*: CoreDbRef
 
-  CoreDxKvtRef* = ref object
+  CoreDxKvtRef* = ref object of RootRef
     ## Statically initialised Key-Value pair table living in `CoreDbRef`
     parent*: CoreDbRef
     methods*: CoreDbKvtFns
 
-  CoreDxMptRef* = ref object
+  CoreDxMptRef* = ref object of RootRef
     ## Hexary/Merkle-Patricia tree derived from `CoreDbRef`, will be
     ## initialised on-the-fly.
     parent*: CoreDbRef
     methods*: CoreDbMptFns
 
-  CoreDxAccRef* = ref object
+  CoreDxAccRef* = ref object of RootRef
     ## Similar to `CoreDxKvtRef`, only dealing with `CoreDbAccount` data
     ## rather than `Blob` values.
     parent*: CoreDbRef
