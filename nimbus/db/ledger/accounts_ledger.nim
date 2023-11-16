@@ -56,6 +56,7 @@ type
 
   AccountsLedgerRef* = ref object
     ledger: AccountLedger
+    kvt: CoreDxKvtRef
     savePoint: LedgerSavePoint
     witnessCache: Table[EthAddress, WitnessData]
     isDirty: bool
@@ -103,14 +104,14 @@ when debugAccountsLedgerRef:
         debugEcho address.toHex, " ", acc.flags
       sp = sp.parentSavepoint
 
+template logTxt(info: static[string]): static[string] =
+  "AccountsLedgerRef " & info
+
 proc beginSavepoint*(ac: AccountsLedgerRef): LedgerSavePoint {.gcsafe.}
 
 # FIXME-Adam: this is only necessary because of my sanity checks on the latest rootHash;
 # take this out once those are gone.
 proc rawTrie*(ac: AccountsLedgerRef): AccountLedger = ac.ledger
-
-proc db(ac: AccountsLedgerRef): CoreDbRef = ac.ledger.db
-proc kvt(ac: AccountsLedgerRef): CoreDbKvtRef = ac.db.kvt
 
 func newCoreDbAccount: CoreDbAccount =
   CoreDbAccount(
@@ -130,6 +131,7 @@ proc init*(x: typedesc[AccountsLedgerRef], db: CoreDbRef,
            root: KeccakHash, pruneTrie = true): AccountsLedgerRef =
   new result
   result.ledger = AccountLedger.init(db, root, pruneTrie)
+  result.kvt = db.newKvt()
   result.witnessCache = initTable[EthAddress, WitnessData]()
   discard result.beginSavepoint
 
@@ -295,9 +297,14 @@ proc persistMode(acc: RefAccount): PersistMode =
 proc persistCode(acc: RefAccount, ac: AccountsLedgerRef) =
   if acc.code.len != 0:
     when defined(geth):
-      ac.kvt.put(acc.account.codeHash.data, acc.code)
+      let rc = ac.kvt.put(
+        acc.account.codeHash.data, acc.code)
     else:
-      ac.kvt.put(contractHashKey(acc.account.codeHash).toOpenArray, acc.code)
+      let rc = ac.kvt.put(
+        contractHashKey(acc.account.codeHash).toOpenArray, acc.code)
+    if rc.isErr:
+      warn logTxt "persistCode()",
+       codeHash=acc.account.codeHash, error=($$rc.error)
 
 proc persistStorage(acc: RefAccount, ac: AccountsLedgerRef, clearCache: bool) =
   if acc.overlayStorage.len == 0:
@@ -317,8 +324,12 @@ proc persistStorage(acc: RefAccount, ac: AccountsLedgerRef, clearCache: bool) =
     else:
       storageLedger.delete(slot)
 
-    let key = slot.toBytesBE.keccakHash.data.slotHashToSlotKey
-    ac.kvt.put(key.toOpenArray, rlp.encode(slot))
+    let
+      key = slot.toBytesBE.keccakHash.data.slotHashToSlotKey
+      rc = ac.kvt.put(key.toOpenArray, rlp.encode(slot))
+    if rc.isErr:
+      warn logTxt "persistStorage()", slot, error=($$rc.error)
+
 
   if not clearCache:
     # if we preserve cache, move the overlayStorage
@@ -368,14 +379,17 @@ proc getCode*(ac: AccountsLedgerRef, address: EthAddress): seq[byte] =
   if CodeLoaded in acc.flags or CodeChanged in acc.flags:
     result = acc.code
   else:
-    when defined(geth):
-      let data = ac.kvt.get(acc.account.codeHash.data)
+    let rc = block:
+      when defined(geth):
+        ac.kvt.get(acc.account.codeHash.data)
+      else:
+        ac.kvt.get(contractHashKey(acc.account.codeHash).toOpenArray)
+    if rc.isErr:
+      warn logTxt "getCode()", codeHash=acc.account.codeHash, error=($$rc.error)
     else:
-      let data = ac.kvt.get(contractHashKey(acc.account.codeHash).toOpenArray)
-
-    acc.code = data
-    acc.flags.incl CodeLoaded
-    result = acc.code
+      acc.code = rc.value
+      acc.flags.incl CodeLoaded
+      result = acc.code
 
 proc getCodeSize*(ac: AccountsLedgerRef, address: EthAddress): int =
   ac.getCode(address).len
@@ -617,9 +631,11 @@ iterator storage*(ac: AccountsLedgerRef, address: EthAddress): (UInt256, UInt256
     noRlpException "storage()":
       for slotHash, value in ac.ledger.storage acc.account:
         if slotHash.len == 0: continue
-        let keyData = ac.kvt.get(slotHashToSlotKey(slotHash).toOpenArray)
-        if keyData.len == 0: continue
-        yield (rlp.decode(keyData, UInt256), rlp.decode(value, UInt256))
+        let rc = ac.kvt.get(slotHashToSlotKey(slotHash).toOpenArray)
+        if rc.isErr:
+          warn logTxt "storage()", slotHash, error=($$rc.error)
+        else:
+          yield (rlp.decode(rc.value, UInt256), rlp.decode(value, UInt256))
 
 iterator cachedStorage*(ac: AccountsLedgerRef, address: EthAddress): (UInt256, UInt256) =
   let acc = ac.getAccount(address, false)
