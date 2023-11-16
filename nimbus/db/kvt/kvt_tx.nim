@@ -221,7 +221,7 @@ proc collapse*(
   ##
   let db = ? tx.getDbDescFromTopTx()
 
-  # If commit, then leave the current layer and clear the stack, oterwise
+  # If commit, then leave the current layer and clear the stack, otherwise
   # install the stack bottom.
   if not commit:
     db.stack[0].swap db.top

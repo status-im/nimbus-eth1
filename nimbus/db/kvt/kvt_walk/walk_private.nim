@@ -20,20 +20,22 @@ import
 
 iterator walkPairsImpl*[T](
    db: KvtDbRef;                   # Database with top layer & backend filter
-     ): tuple[key: Blob, data: Blob] =
+     ): tuple[n: int, key: Blob, data: Blob] =
   ## Walk over all `(VertexID,VertexRef)` in the database. Note that entries
   ## are unsorted.
 
+  var i = 0
   for (key,data) in db.top.tab.pairs:
     if data.isValid:
-      yield (key,data)
+      yield (i,key,data)
+      inc i
 
   when T isnot VoidBackendRef:
     mixin walk
 
-    for (key,data) in db.backend.T.walk:
+    for (n,key,data) in db.backend.T.walk:
       if key notin db.top.tab and data.isValid:
-        yield (key,data)
+        yield (n+i,key,data)
 
 # ------------------------------------------------------------------------------
 # End
