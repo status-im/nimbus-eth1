@@ -9,7 +9,7 @@ import
   eth/trie/trie_defs,
   stew/[byteutils, endians2],
   unittest2,
-  ../nimbus/db/state_db
+  ../nimbus/db/state_db/read_write
 
 include ../nimbus/db/ledger/accounts_cache
 
