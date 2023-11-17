@@ -542,15 +542,17 @@ proc newMptHandler*(
       ): CoreDbRc[CoreDxMptRef] =
   base.gc()
 
+  let db = base.parent
+
   var rootID = root.to(VertexID)
   if not rootID.isValid:
     let rc = base.adb.getKeyRc VertexID(1)
-    if rc.isErr and rc.error == GetKeyNotFound:
+    if rc.isErr:
+      if rc.error != GetKeyNotFound:
+        return err(rc.error.toErrorImpl(db, info, RootNotFound))
       rootID = VertexID(1)
 
   let
-    db = base.parent
-
     (mode, mpt) = block:
       if saveMode == Companion:
         (saveMode, ? base.adb.forkTop.toRcImpl(db, info))
@@ -575,15 +577,26 @@ proc newMptHandler*(
 
 proc newAccHandler*(
     base: AristoBaseRef;
+    root: CoreDbVidRef;
     prune: bool;
     saveMode: CoreDbSaveFlags;
     info: static[string];
       ): CoreDbRc[CoreDxAccRef] =
   base.gc()
 
-  let
-    db = base.parent
+  let db = base.parent
 
+  if root.isValid:
+    let vid = root.to(VertexID)
+    if vid.isValid:
+      if vid != VertexID(1):
+        let error = (vid,AccountRootUnacceptable)
+        return err(error.toErrorImpl(db, info, RootUnacceptable))
+    elif root.createOk:
+      let error = AccountRootCannotCreate
+      return err(error.toErrorImpl(db, info, RootCannotCreate))
+
+  let
     (mode, mpt) = block:
       if saveMode == Companion:
         (saveMode, ? base.adb.forkTop.toRcImpl(db, info))

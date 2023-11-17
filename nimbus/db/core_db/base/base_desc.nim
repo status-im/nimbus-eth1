@@ -49,6 +49,8 @@ type
     MptNotFound
     AccNotFound
     RootNotFound
+    RootUnacceptable
+    RootCannotCreate
     HashNotAvailable
     StorageFailed
 

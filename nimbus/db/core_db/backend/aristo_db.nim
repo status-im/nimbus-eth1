@@ -173,7 +173,7 @@ proc baseMethods(
         saveMode: CoreDbSaveFlags;
           ): CoreDbRc[CoreDxAccRef] =
       db.kdbBase.gc()
-      ok(? db.adbBase.newAccHandler(prune, saveMode, "newAccFn()")),
+      ok(? db.adbBase.newAccHandler(root, prune, saveMode, "newAccFn()")),
 
     beginFn: proc(): CoreDbRc[CoreDxTxRef] =
       const info = "beginFn()"
