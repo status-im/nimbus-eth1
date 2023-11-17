@@ -172,6 +172,7 @@ type
   # Sub-descriptor: Mpt/hexary trie methods for accounts
   # ------------------------------------------------------
   CoreDbAccBackendFn* = proc(): CoreDbAccBackendRef {.noRaise.}
+  CoreDbAccNewMptFn* = proc(): CoreDbRc[CoreDxMptRef] {.noRaise.}
   CoreDbAccFetchFn* = proc(k: EthAddress): CoreDbRc[CoreDbAccount] {.noRaise.}
   CoreDbAccDeleteFn* = proc(k: EthAddress): CoreDbRc[void] {.noRaise.}
   CoreDbAccMergeFn* =
@@ -185,6 +186,7 @@ type
   CoreDbAccFns* = object
     ## Methods for trie objects
     backendFn*:    CoreDbAccBackendFn
+    newMptFn*:     CoreDbAccNewMptFn
     fetchFn*:      CoreDbAccFetchFn
     deleteFn*:     CoreDbAccDeleteFn
     mergeFn*:      CoreDbAccMergeFn

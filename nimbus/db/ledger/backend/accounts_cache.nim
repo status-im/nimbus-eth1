@@ -180,6 +180,9 @@ proc ledgerMethods(lc: impl.AccountsCache): LedgerFns =
 
 proc ledgerExtras(lc: impl.AccountsCache): LedgerExtras =
   LedgerExtras(
+    getMptFn: proc(): CoreDbMptRef =
+      lc.rawTrie.mpt,
+
     rawRootHashFn: proc(): Hash256 =
       lc.rawTrie.rootHash())
 

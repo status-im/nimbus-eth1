@@ -167,6 +167,9 @@ proc ledgerMethods(lc: impl.AccountsLedgerRef): LedgerFns =
 
 proc ledgerExtras(lc: impl.AccountsLedgerRef): LedgerExtras =
   LedgerExtras(
+    getMptFn: proc(): CoreDbMptRef =
+      lc.rawTrie.CoreDxAccRef.newMpt.CoreDbMptRef,
+
     rawRootHashFn: proc(): Hash256 =
       lc.rawTrie.rootHash())
 

@@ -66,6 +66,7 @@ proc validateMethodsDesc(fns: CoreDbMptFns) =
 
 proc validateMethodsDesc(fns: CoreDbAccFns) =
   doAssert not fns.backendFn.isNil
+  doAssert not fns.newMptFn.isNil
   doAssert not fns.fetchFn.isNil
   doAssert not fns.deleteFn.isNil
   doAssert not fns.mergeFn.isNil

@@ -257,6 +257,10 @@ proc accMethods(mpt: HexaryChildDbRef; db: LegacyDbRef): CoreDbAccFns =
     backendFn: proc(): CoreDbAccBackendRef =
       db.bless(LegacyCoreDbAccBE(mpt: mpt.trie)),
 
+    newMptFn: proc(): CoreDbRc[CoreDxMptRef] =
+      let xMpt = HexaryChildDbRef(trie: mpt.trie)
+      ok(db.bless CoreDxMptRef(methods: xMpt.mptMethods db)),
+
     fetchFn: proc(k: EthAddress): CoreDbRc[CoreDbAccount] =
       db.mapRlpException "fetchFn()":
         let data = mpt.trie.get(k.keccakHash.data)

@@ -302,6 +302,33 @@ proc accDelete(
     return rc.toVoidRcImpl(cMpt.base.parent, info)
   ok()
 
+# -------------------------------
+
+proc cloneMpt(
+    cMpt: AristoChildDbRef;
+    info: static[string];
+      ): CoreDbRc[CoreDxMptRef] =
+  let
+    base = cMpt.base
+    db = base.parent
+    adb = base.adb
+
+  base.gc()
+
+  let
+    cXpt = AristoChildDbRef(
+      base:     base,
+      root:     cMpt.root,
+      prune:    cMpt.prune,
+      mpt:      if cMpt.mpt == adb: adb else: ? adb.forkTop.toRcImpl(db, info),
+      saveMode: cMpt.saveMode)
+
+    dsc = AristoCoreDxMptRef(
+      ctx:      cXpt,
+      methods:  cXpt.mptMethods)
+
+  ok(db.bless dsc)
+
 # ------------------------------------------------------------------------------
 # Private database methods function tables
 # ------------------------------------------------------------------------------
@@ -326,8 +353,7 @@ proc mptMethods(cMpt: AristoChildDbRef): CoreDbMptFns =
       cMpt.mpt.hasPath(cMpt.root, k).toRcImpl(db, "hasPathFn()"),
 
     rootVidFn: proc(): CoreDbVidRef =
-      var w = AristoCoreDbVid(ctx: cMpt.mpt, aVid: cMpt.root)
-      db.bless(w),
+      db.bless(AristoCoreDbVid(ctx: cMpt.mpt, aVid: cMpt.root)),
 
     isPruningFn: proc(): bool =
       cMpt.prune,
@@ -350,6 +376,9 @@ proc accMethods(cMpt: AristoChildDbRef): CoreDbAccFns =
   CoreDbAccFns(
     backendFn: proc(): CoreDbAccBackendRef =
       db.bless(AristoCoreDbAccBE(adb: cMpt.mpt)),
+
+    newMptFn: proc(): CoreDbRc[CoreDxMptRef] =
+      cMpt.cloneMpt("newMptFn()"),
 
     fetchFn: proc(address: EthAddress): CoreDbRc[CoreDbAccount] =
       cMpt.accFetch(address, "fetchFn()"),

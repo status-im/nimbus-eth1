@@ -16,6 +16,7 @@ import
 proc validate*(ldg: LedgerRef) =
   doAssert ldg.ldgType != LedgerType(0)
 
+  doAssert not ldg.extras.getMptFn.isNil
   doAssert not ldg.extras.rawRootHashFn.isNil
 
   doAssert not ldg.methods.accessListFn.isNil
