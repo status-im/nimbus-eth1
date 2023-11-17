@@ -500,8 +500,8 @@ proc getVid*(
     db = base.parent
     adb = base.adb
 
-  if root == VOID_CODE_HASH:
-    return ok(db.bless AristoCoreDbVid())
+  if root == EMPTY_ROOT_HASH:
+    return ok(db.bless AristoCoreDbVid(createOk: createOk))
 
   block:
     base.gc() # update pending changes
