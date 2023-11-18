@@ -1,4 +1,4 @@
-# Nimbus
+# Fluffy
 # Copyright (c) 2021-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
@@ -10,12 +10,13 @@
 import
   chronicles,
   metrics,
-  eth/db/kvstore,
-  eth/db/kvstore_sqlite3,
   stint,
   stew/results,
+  eth/db/kvstore,
+  eth/db/kvstore_sqlite3,
   ./network/state/state_content,
-  "."/network/wire/[portal_protocol, portal_protocol_config]
+  "."/network/wire/[portal_protocol, portal_protocol_config],
+  ./content_db_custom_sql_functions
 
 export kvstore_sqlite3
 
@@ -51,7 +52,9 @@ type
     distance: array[32, byte]
 
   ContentDB* = ref object
+    backend: SqStoreRef
     kv: KvStoreRef
+    manualCheckpoint: bool
     storageCapacity*: uint64
     sizeStmt: SqliteStmt[NoParams, int64]
     unusedSizeStmt: SqliteStmt[NoParams, int64]
@@ -59,6 +62,7 @@ type
     contentCountStmt: SqliteStmt[NoParams, int64]
     contentSizeStmt: SqliteStmt[NoParams, int64]
     getAllOrderedByDistanceStmt: SqliteStmt[array[32, byte], RowInfo]
+    deleteOutOfRadiusStmt: SqliteStmt[(array[32, byte], array[32, byte]), void]
 
   PutResultType* = enum
     ContentStored, DbPruned
@@ -72,30 +76,14 @@ type
       deletedFraction*: float64
       deletedElements*: int64
 
-func xorDistance(
-  a: openArray[byte],
-  b: openArray[byte]
-): Result[seq[byte], cstring] {.cdecl.} =
-  var s: seq[byte] = newSeq[byte](32)
-
-  if len(a) != 32 or len(b) != 32:
-    return err("Blobs should have 32 byte length")
-
-  var i = 0
-  while i < 32:
-    s[i] = a[i] xor b[i]
-    inc i
-
-  return ok(s)
-
 template expectDb(x: auto): untyped =
   # There's no meaningful error handling implemented for a corrupt database or
   # full disk - this requires manual intervention, so we'll panic for now
   x.expect("working database (disk broken/full?)")
 
 proc new*(
-    T: type ContentDB, path: string, storageCapacity: uint64, inMemory = false):
-    ContentDB =
+    T: type ContentDB, path: string, storageCapacity: uint64,
+    inMemory = false, manualCheckpoint = false): ContentDB =
   doAssert(storageCapacity <= uint64(int64.high))
 
   let db =
@@ -103,10 +91,13 @@ proc new*(
       SqStoreRef.init("", "fluffy-test", inMemory = true).expect(
         "working database (out of memory?)")
     else:
-      SqStoreRef.init(path, "fluffy").expectDb()
+      SqStoreRef.init(path, "fluffy", manualCheckpoint = false).expectDb()
 
-  db.registerCustomScalarFunction("xorDistance", xorDistance)
-    .expect("Couldn't register custom xor function")
+  db.createCustomFunction("xorDistance", 2, xorDistance).expect(
+    "Custom function xorDistance creation OK")
+
+  db.createCustomFunction("isInRadius", 3, isInRadius).expect(
+    "Custom function isInRadius creation OK")
 
   let sizeStmt = db.prepareStmt(
     "SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size();",
@@ -134,16 +125,38 @@ proc new*(
     "SELECT key, length(value), xorDistance(?, key) as distance FROM kvstore ORDER BY distance DESC",
     array[32, byte], RowInfo).get()
 
+  let deleteOutOfRadiusStmt = db.prepareStmt(
+    "DELETE FROM kvstore WHERE isInRadius(?, key, ?) == 0",
+    (array[32, byte], array[32, byte]), void).get()
+
   ContentDB(
     kv: kvStore,
+    backend: db,
+    manualCheckpoint: manualCheckpoint,
     storageCapacity: storageCapacity,
     sizeStmt: sizeStmt,
     unusedSizeStmt: unusedSizeStmt,
     vacuumStmt: vacuumStmt,
     contentSizeStmt: contentSizeStmt,
     contentCountStmt: contentCountStmt,
-    getAllOrderedByDistanceStmt: getAllOrderedByDistanceStmt
+    getAllOrderedByDistanceStmt: getAllOrderedByDistanceStmt,
+    deleteOutOfRadiusStmt: deleteOutOfRadiusStmt
   )
+
+template disposeSafe(s: untyped): untyped =
+  if distinctBase(s) != nil:
+    s.dispose()
+    s = typeof(s)(nil)
+
+proc close*(db: ContentDB) =
+  db.sizeStmt.disposeSafe()
+  db.unusedSizeStmt.disposeSafe()
+  db.vacuumStmt.disposeSafe()
+  db.contentCountStmt.disposeSafe()
+  db.contentSizeStmt.disposeSafe()
+  db.getAllOrderedByDistanceStmt.disposeSafe()
+  db.deleteOutOfRadiusStmt.disposeSafe()
+  discard db.kv.close()
 
 ## Private KvStoreRef Calls
 
@@ -210,15 +223,7 @@ proc del*(db: ContentDB, key: ContentId) =
 proc getSszDecoded*(db: ContentDB, key: ContentId, T: type auto): Opt[T] =
   db.getSszDecoded(key.toBytesBE(), T)
 
-## Public database size, content and pruning related calls
-
-proc reclaimSpace*(db: ContentDB): void =
-  ## Runs sqlite VACUUM commands which rebuilds the db, repacking it into a
-  ## minimal amount of disk space.
-  ## Ideal mode of operation, is to run it after several deletes.
-  ## Another option would be to run 'PRAGMA auto_vacuum = FULL;' statement at
-  ## the start of db to leave it up to sqlite to clean up
-  db.vacuumStmt.exec().expectDb()
+## Public calls to get database size, content size and similar.
 
 proc size*(db: ContentDB): int64 =
   ## Return current size of DB as product of sqlite page_count and page_size:
@@ -260,12 +265,14 @@ proc contentCount*(db: ContentDB): int64 =
     count = res).expectDb()
   return count
 
+## Pruning related calls
+
 proc deleteContentFraction*(
   db: ContentDB,
   target: UInt256,
   fraction: float64): (UInt256, int64, int64, int64) =
-  ## Deletes at most `fraction` percent of content form database.
-  ## Content furthest from provided `target` is deleted first.
+  ## Deletes at most `fraction` percent of content from the database.
+  ## The content furthest from the provided `target` is deleted first.
   # TODO: The usage of `db.contentSize()` for the deletion calculation versus
   # `db.usedSize()` for the pruning threshold leads sometimes to some unexpected
   # results of how much content gets up deleted.
@@ -293,6 +300,38 @@ proc deleteContentFraction*(
         totalContentSize,
         deletedElements
       )
+
+proc reclaimSpace*(db: ContentDB): void =
+  ## Runs sqlite VACUUM commands which rebuilds the db, repacking it into a
+  ## minimal amount of disk space.
+  ## Ideal mode of operation is to run it after several deletes.
+  ## Another option would be to run 'PRAGMA auto_vacuum = FULL;' statement at
+  ## the start of db to leave it up to sqlite to clean up.
+  db.vacuumStmt.exec().expectDb()
+
+proc deleteContentOutOfRadius*(
+    db: ContentDB, localId: UInt256, radius: UInt256) =
+  ## Deletes all content that falls outside of the given radius range.
+  db.deleteOutOfRadiusStmt.exec(
+    (localId.toBytesBE(), radius.toBytesBE())).expect("SQL query OK")
+
+proc forcePrune*(db: ContentDB, localId: UInt256, radius: UInt256) =
+  ## Force prune the database to a statically set radius. This will also run
+  ## the reclaimSpace (vacuum) to free unused pages. As side effect this will
+  ## cause the pruned database size to double in size on disk (wal file will be
+  ## approximately the same size as the db). A truncate checkpoint is done to
+  ## clean that up. In order to be able do the truncate checkpoint, the db needs
+  ## to be initialized in with `manualCheckpoint` on, else this step will be
+  ## skipped.
+  notice "Starting the pruning of content"
+  db.deleteContentOutOfRadius(localId, radius)
+  notice "Reclaiming unused pages"
+  db.reclaimSpace()
+  if db.manualCheckpoint:
+    notice "Truncating WAL file"
+    db.backend.checkpoint(SqStoreCheckpointKind.truncate)
+  db.close()
+  notice "Finished database pruning"
 
 proc put*(
     db: ContentDB,

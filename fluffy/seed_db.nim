@@ -12,7 +12,8 @@ import
   strutils,
   eth/db/kvstore,
   eth/db/kvstore_sqlite3,
-  stint
+  stint,
+  ./content_db_custom_sql_functions
 
 export kvstore_sqlite3
 
@@ -33,22 +34,6 @@ type
     putStmt: SqliteStmt[(array[32, byte], seq[byte], seq[byte]), void]
     getStmt: SqliteStmt[array[32, byte], ContentData]
     getInRangeStmt: SqliteStmt[(array[32, byte], array[32, byte], int64, int64), ContentDataDist]
-
-func xorDistance(
-  a: openArray[byte],
-  b: openArray[byte]
-): Result[seq[byte], cstring] {.cdecl.} =
-  var s: seq[byte] = newSeq[byte](32)
-
-  if len(a) != 32 or len(b) != 32:
-    return err("Blobs should have 32 byte length")
-
-  var i = 0
-  while i < 32:
-    s[i] = a[i] xor b[i]
-    inc i
-
-  return ok(s)
 
 template expectDb(x: auto): untyped =
   # There's no meaningful error handling implemented for a corrupt database or
@@ -98,8 +83,8 @@ proc new*(T: type SeedDb, path: string, name: string, inMemory = false): SeedDb 
       ContentData
     ).get()
 
-  db.registerCustomScalarFunction("xorDistance", xorDistance)
-    .expect("Couldn't register custom xor function")
+  db.createCustomFunction("xorDistance", 2, xorDistance).expect(
+    "Custom function xorDistance creation OK")
 
   let getInRangeStmt =
     db.prepareStmt(
