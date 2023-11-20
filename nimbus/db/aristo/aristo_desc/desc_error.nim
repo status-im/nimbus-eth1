@@ -259,6 +259,8 @@ type
     # Miscelaneous handy helpers
     PayloadTypeUnsupported
     LeafKeyInvalid
+    AccountRootUnacceptable
+    AccountRootCannotCreate
     AccountRlpDecodingError
     AccountStorageKeyMissing
     AccountVtxUnsupported

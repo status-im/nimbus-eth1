@@ -15,7 +15,7 @@ import
   ../nimbus/[vm_state, vm_types],
   ../nimbus/utils/utils,
   ../nimbus/tracer,
-  ../nimbus/db/[core_db, state_db],
+  ../nimbus/db/[core_db, state_db/read_write],
   ../nimbus/core/executor,
   ../nimbus/common/common,
   "."/[configuration, downloader, parser, premixcore]

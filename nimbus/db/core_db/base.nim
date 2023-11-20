@@ -548,16 +548,23 @@ proc newMpt*(
   db.ifTrackNewApi:
     debug newApiTxt "newMpt()", root=root.toStr, prune, saveMode
 
-proc newMpt*(
-    db: CoreDbRef;
-    prune = true;
-    saveMode = AutoSave;
-      ): CoreDxMptRef =
+proc newMpt*(db: CoreDbRef; prune = true; saveMode = AutoSave): CoreDxMptRef =
   ## Shortcut for `db.newMpt CoreDbVidRef()`
   let root = CoreDbVidRef()
   result = db.methods.newMptFn(root, prune, saveMode).valueOr:
     raiseAssert $$error
   db.ifTrackNewApi: debug newApiTxt "newMpt()", root=root.toStr, prune, saveMode
+
+proc newMpt*(acc: CoreDxAccRef): CoreDxMptRef =
+  ## Constructor, will defect on failure. The argument `prune` is currently
+  ## effective only for the legacy backend.
+  ##
+  ## Variant of `newMpt()` where the input arguments are taken from the
+  ## current `acc` descriptor settings.
+  ##
+  result = acc.methods.newMptFn().valueOr:
+    raiseAssert $$error
+  acc.ifTrackNewApi: debug newApiTxt "acc/toMpt()"
 
 proc newAccMpt*(
     db: CoreDbRef;

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2023 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -14,7 +14,6 @@
 
 import
   eth/common,
-  chronicles,
   ../../../stateless/multi_keys,
   ../core_db,
   ./base/[base_desc, validate]
@@ -42,7 +41,7 @@ const
 # ------------------------------------------------------------------------------
 
 when EnableApiTracking:
-  import std/strutils, chronicles, stew/byteutils
+  import std/strutils, chronicles, chronicles, stew/byteutils
   {.warning: "*** Provided API logging for Ledger (disabled by default)".}
 
   template apiTxt(info: static[string]): static[string] =
@@ -61,6 +60,9 @@ when EnableApiTracking:
 
   proc toStr(w: Hash256): string =
     w.data.oaToStr
+
+  proc toStr(w: CoreDbMptRef): string =
+    if w.CoreDxMptRef.isNil: "MptRef(nil)" else: "MptRef"
 
   proc toStr(w: Blob): string =
     if 0 < w.len and w.len < 5: "<" & w.oaToStr & ">"
@@ -278,6 +280,10 @@ proc subBalance*(ldg: LedgerRef, eAddr: EthAddress, delta: UInt256) =
 # ------------------------------------------------------------------------------
 # Public methods, extensions to go away
 # ------------------------------------------------------------------------------
+
+proc getMpt*(ldg: LedgerRef): CoreDbMptRef =
+  result = ldg.extras.getMptFn()
+  ldg.ifTrackApi: debug apiTxt "getMpt()", result=result.toStr
 
 proc rawRootHash*(ldg: LedgerRef): Hash256 =
   result = ldg.extras.rawRootHashFn()

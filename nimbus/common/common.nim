@@ -137,8 +137,9 @@ proc init(com      : CommonRef,
           pruneTrie: bool,
           networkId: NetworkId,
           config   : ChainConfig,
-          genesis  : Genesis) {.gcsafe, raises: [CatchableError].} =
-
+          genesis  : Genesis,
+          avoidStateDb: bool
+            ) {.gcsafe, raises: [CatchableError].} =
   config.daoCheck()
 
   com.db          = db
@@ -172,7 +173,7 @@ proc init(com      : CommonRef,
       time: some(genesis.timestamp)
     ))
     com.genesisHeader = toGenesisHeader(genesis,
-      com.currentFork, com.db)
+      com.currentFork, com.db, avoidStateDb)
     com.setForkId(com.genesisHeader)
     com.pos.timestamp = genesis.timestamp
   else:
@@ -211,7 +212,9 @@ proc new*(_: type CommonRef,
           db: CoreDbRef,
           pruneTrie: bool = true,
           networkId: NetworkId = MainNet,
-          params = networkParams(MainNet)): CommonRef
+          params = networkParams(MainNet),
+          avoidStateDb = false
+            ): CommonRef
             {.gcsafe, raises: [CatchableError].} =
 
   ## If genesis data is present, the forkIds will be initialized
@@ -222,13 +225,16 @@ proc new*(_: type CommonRef,
     pruneTrie,
     networkId,
     params.config,
-    params.genesis)
+    params.genesis,
+    avoidStateDb)
 
 proc new*(_: type CommonRef,
           db: CoreDbRef,
           config: ChainConfig,
           pruneTrie: bool = true,
-          networkId: NetworkId = MainNet): CommonRef
+          networkId: NetworkId = MainNet,
+          avoidStateDb = false
+            ): CommonRef
             {.gcsafe, raises: [CatchableError].} =
 
   ## There is no genesis data present
@@ -239,7 +245,8 @@ proc new*(_: type CommonRef,
     pruneTrie,
     networkId,
     config,
-    nil)
+    nil,
+    avoidStateDb)
 
 proc clone*(com: CommonRef, db: CoreDbRef): CommonRef =
   ## clone but replace the db

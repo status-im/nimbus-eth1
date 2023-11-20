@@ -12,6 +12,7 @@
 
 import
   eth/common,
+  ../../core_db,
   ../../../../stateless/multi_keys
 
 # Annotation helpers
@@ -34,8 +35,10 @@ type
     methods*: LedgerFns
 
   RawRootHashFn* = proc(): Hash256 {.noRaise.}
+  GetMptFn* = proc(): CoreDbMptRef {.noRaise.}
 
   LedgerExtras* = object
+    getMptFn*: GetMptFn
     rawRootHashFn*: RawRootHashFn
 
   AccessListFn* = proc(eAddr: EthAddress) {.noRaise.}

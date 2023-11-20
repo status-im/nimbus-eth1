@@ -39,6 +39,8 @@ proc fetchPayloadImpl(
     if rc.error[1] in  AcceptableHikeStops:
       return err((vid, FetchPathNotFound))
     return err((vid, rc.error[1]))
+  if rc.value.legs.len == 0:
+    return err((VertexID(0), FetchPathNotFound))
   ok rc.value.legs[^1].wp.vtx.lData
 
 proc fetchPayloadImpl(

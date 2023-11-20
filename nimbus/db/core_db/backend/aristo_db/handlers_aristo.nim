@@ -302,6 +302,33 @@ proc accDelete(
     return rc.toVoidRcImpl(cMpt.base.parent, info)
   ok()
 
+# -------------------------------
+
+proc cloneMpt(
+    cMpt: AristoChildDbRef;
+    info: static[string];
+      ): CoreDbRc[CoreDxMptRef] =
+  let
+    base = cMpt.base
+    db = base.parent
+    adb = base.adb
+
+  base.gc()
+
+  let
+    cXpt = AristoChildDbRef(
+      base:     base,
+      root:     cMpt.root,
+      prune:    cMpt.prune,
+      mpt:      if cMpt.mpt == adb: adb else: ? adb.forkTop.toRcImpl(db, info),
+      saveMode: cMpt.saveMode)
+
+    dsc = AristoCoreDxMptRef(
+      ctx:      cXpt,
+      methods:  cXpt.mptMethods)
+
+  ok(db.bless dsc)
+
 # ------------------------------------------------------------------------------
 # Private database methods function tables
 # ------------------------------------------------------------------------------
@@ -326,8 +353,7 @@ proc mptMethods(cMpt: AristoChildDbRef): CoreDbMptFns =
       cMpt.mpt.hasPath(cMpt.root, k).toRcImpl(db, "hasPathFn()"),
 
     rootVidFn: proc(): CoreDbVidRef =
-      var w = AristoCoreDbVid(ctx: cMpt.mpt, aVid: cMpt.root)
-      db.bless(w),
+      db.bless(AristoCoreDbVid(ctx: cMpt.mpt, aVid: cMpt.root)),
 
     isPruningFn: proc(): bool =
       cMpt.prune,
@@ -350,6 +376,9 @@ proc accMethods(cMpt: AristoChildDbRef): CoreDbAccFns =
   CoreDbAccFns(
     backendFn: proc(): CoreDbAccBackendRef =
       db.bless(AristoCoreDbAccBE(adb: cMpt.mpt)),
+
+    newMptFn: proc(): CoreDbRc[CoreDxMptRef] =
+      cMpt.cloneMpt("newMptFn()"),
 
     fetchFn: proc(address: EthAddress): CoreDbRc[CoreDbAccount] =
       cMpt.accFetch(address, "fetchFn()"),
@@ -471,8 +500,8 @@ proc getVid*(
     db = base.parent
     adb = base.adb
 
-  if root == VOID_CODE_HASH:
-    return ok(db.bless AristoCoreDbVid())
+  if root == EMPTY_ROOT_HASH:
+    return ok(db.bless AristoCoreDbVid(createOk: createOk))
 
   block:
     base.gc() # update pending changes
@@ -513,15 +542,17 @@ proc newMptHandler*(
       ): CoreDbRc[CoreDxMptRef] =
   base.gc()
 
+  let db = base.parent
+
   var rootID = root.to(VertexID)
   if not rootID.isValid:
     let rc = base.adb.getKeyRc VertexID(1)
-    if rc.isErr and rc.error == GetKeyNotFound:
+    if rc.isErr:
+      if rc.error != GetKeyNotFound:
+        return err(rc.error.toErrorImpl(db, info, RootNotFound))
       rootID = VertexID(1)
 
   let
-    db = base.parent
-
     (mode, mpt) = block:
       if saveMode == Companion:
         (saveMode, ? base.adb.forkTop.toRcImpl(db, info))
@@ -546,15 +577,26 @@ proc newMptHandler*(
 
 proc newAccHandler*(
     base: AristoBaseRef;
+    root: CoreDbVidRef;
     prune: bool;
     saveMode: CoreDbSaveFlags;
     info: static[string];
       ): CoreDbRc[CoreDxAccRef] =
   base.gc()
 
-  let
-    db = base.parent
+  let db = base.parent
 
+  if root.isValid:
+    let vid = root.to(VertexID)
+    if vid.isValid:
+      if vid != VertexID(1):
+        let error = (vid,AccountRootUnacceptable)
+        return err(error.toErrorImpl(db, info, RootUnacceptable))
+    elif root.createOk:
+      let error = AccountRootCannotCreate
+      return err(error.toErrorImpl(db, info, RootCannotCreate))
+
+  let
     (mode, mpt) = block:
       if saveMode == Companion:
         (saveMode, ? base.adb.forkTop.toRcImpl(db, info))

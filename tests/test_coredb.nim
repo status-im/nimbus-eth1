@@ -95,7 +95,8 @@ proc openLegacyDB(
   result = CommonRef.new(
     db = coreDB,
     networkId = network,
-    params = network.networkParams)
+    params = network.networkParams,
+    avoidStateDb = true)
   result.initializeEmptyDb
 
 # ------------------------------------------------------------------------------

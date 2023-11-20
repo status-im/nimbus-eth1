@@ -264,7 +264,7 @@ proc newKvtHandler*(
     cKvt = KvtChildDbRef(
       base:     base,
       kvt:      kvt,
-      saveMode: saveMode)
+      saveMode: mode)
 
     dsc = KvtCoreDxKvtRef(
       ctx:      cKvt,

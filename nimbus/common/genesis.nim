@@ -8,29 +8,147 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [].}
+
 import
   std/tables,
   eth/[common, eip1559],
   eth/trie/trie_defs,
-  ../db/[core_db, state_db],
+  ../db/[accounts_cache, core_db, distinct_tries, state_db/read_write],
   ../constants,
   ./chain_config
 
-{.push raises: [].}
+# Annotation helpers
+{.pragma:    noRaise, gcsafe, raises: [].}
+{.pragma:   rlpRaise, gcsafe, raises: [RlpError].}
+{.pragma: catchRaise, gcsafe, raises: [CatchableError].}
+
+type
+  GenesisAddAccountFn = proc(
+    address: EthAddress; nonce: AccountNonce; balance: UInt256;
+    code: openArray[byte]) {.catchRaise.}
+
+  GenesisCompensateLegacySetupFn = proc() {.noRaise.}
+
+  GenesisSetStorageFn = proc(
+    address: EthAddress; slot: UInt256; val: UInt256) {.rlpRaise.}
+
+  GenesisCommitFn = proc() {.noRaise.}
+
+  GenesisRootHashFn = proc: Hash256 {.noRaise.}
+
+  GenesisGetTrieFn = proc: CoreDbMptRef {.noRaise.}
+
+  GenesisLedgerRef* = ref object
+    ## Exportable ledger DB just for initialising Genesis. This is needed
+    ## when using the `Aristo` backend which is not fully supported by the
+    ## `AccountStateDB` object.
+    ##
+    ## Currently, using other than the `AccountStateDB` ledgers are
+    ## experimental and test only. Eventually, the `GenesisLedgerRef` wrapper
+    ## should disappear so that the `Ledger` object (which encapsulates
+    ## `AccountsCache` and `AccountsLedger`) will prevail.
+    ##
+    addAccount: GenesisAddAccountFn
+    compensateLegacySetup: GenesisCompensateLegacySetupFn
+    setStorage: GenesisSetStorageFn
+    commit: GenesisCommitFn
+    rootHash: GenesisRootHashFn
+    getTrie: GenesisGetTrieFn
+
+# ------------------------------------------------------------------------------
+# Private functions
+# ------------------------------------------------------------------------------
+
+proc initStateDbledgerRef(db: CoreDbRef; pruneTrie: bool): GenesisLedgerRef =
+  let sdb = newAccountStateDB(db, emptyRlpHash, pruneTrie)
+
+  GenesisLedgerRef(
+    addAccount: proc(
+        address: EthAddress;
+        nonce: AccountNonce;
+        balance: UInt256;
+        code: openArray[byte];
+          ) {.catchRaise.} =
+      sdb.setAccount(address, newAccount(nonce, balance))
+      sdb.setCode(address, code),
+
+    compensateLegacySetup: proc() =
+      if pruneTrie: db.compensateLegacySetup(),
+
+    setStorage: proc(
+        address: EthAddress;
+        slot: UInt256;
+        val: UInt256;
+          ) {.rlpRaise.} =
+      sdb.setStorage(address, slot, val),
+
+    commit: proc() =
+      discard,
+
+    rootHash: proc(): Hash256 =
+      sdb.rootHash(),
+
+    getTrie: proc(): CoreDbMptRef =
+      sdb.getTrie())
+
+
+proc initAccountsLedgerRef(db: CoreDbRef; pruneTrie: bool): GenesisLedgerRef =
+  let ac = AccountsCache.init(db, emptyRlpHash, pruneTrie)
+
+  GenesisLedgerRef(
+    addAccount: proc(
+        address: EthAddress;
+        nonce: AccountNonce;
+        balance: UInt256;
+        code: openArray[byte];
+          ) {.catchRaise.} =
+      ac.setNonce(address, nonce)
+      ac.setBalance(address, balance)
+      ac.setCode(address, @code),
+
+    compensateLegacySetup: proc() =
+      if pruneTrie: db.compensateLegacySetup(),
+
+    setStorage: proc(
+        address: EthAddress;
+        slot: UInt256;
+        val: UInt256;
+          ) {.rlpRaise.} =
+      ac.setStorage(address, slot, val),
+
+    commit: proc() =
+      ac.persist(),
+
+    rootHash: proc(): Hash256 =
+      ac.rootHash(),
+
+    getTrie: proc(): CoreDbMptRef =
+      ac.rawTrie.mpt)
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
+
 proc newStateDB*(
     db: CoreDbRef;
     pruneTrie: bool;
-      ): AccountStateDB
-      {.gcsafe, raises: [].}=
-  newAccountStateDB(db, emptyRlpHash, pruneTrie)
+    avoidStateDb = false;
+      ): GenesisLedgerRef =
+  ## The flag `avoidStateDb` is set `false` for compatibility with legacy apps
+  ## `(see `test_state_network`).
+  if avoidStateDb:
+    db.initAccountsLedgerRef pruneTrie
+  else:
+    db.initStateDbledgerRef pruneTrie
+
+proc getTrie*(sdb: GenesisLedgerRef): CoreDbMptRef =
+  ## Getter, used in `test_state_network`
+  sdb.getTrie()
 
 proc toGenesisHeader*(
     g: Genesis;
-    sdb: AccountStateDB;
+    sdb: GenesisLedgerRef;
     fork: HardFork;
       ): BlockHeader
       {.gcsafe, raises: [CatchableError].} =
@@ -42,11 +160,10 @@ proc toGenesisHeader*(
 
   # The following kludge is needed for the `LegacyDbPersistent` type database
   # when `pruneTrie` is enabled. For other cases, this code is irrelevant.
-  sdb.db.compensateLegacySetup()
+  sdb.compensateLegacySetup()
 
   for address, account in g.alloc:
-    sdb.setAccount(address, newAccount(account.nonce, account.balance))
-    sdb.setCode(address, account.code)
+    sdb.addAccount(address, account.nonce, account.balance, account.code)
 
     # Kludge:
     #
@@ -55,11 +172,12 @@ proc toGenesisHeader*(
     #
     # This kludge also fixes the initial crash described in
     # https://github.com/status-im/nimbus-eth1/issues/932.
-    if sdb.pruneTrie:
-      sdb.db.compensateLegacySetup() # <-- kludge
+    sdb.compensateLegacySetup() # <-- kludge
 
     for k, v in account.storage:
       sdb.setStorage(address, k, v)
+
+  sdb.commit()
 
   result = BlockHeader(
     nonce: g.nonce,
@@ -69,7 +187,7 @@ proc toGenesisHeader*(
     difficulty: g.difficulty,
     mixDigest: g.mixHash,
     coinbase: g.coinbase,
-    stateRoot: sdb.rootHash,
+    stateRoot: sdb.rootHash(),
     parentHash: GENESIS_PARENT_HASH,
     txRoot: EMPTY_ROOT_HASH,
     receiptRoot: EMPTY_ROOT_HASH,
@@ -99,29 +217,27 @@ proc toGenesisHeader*(
     genesis: Genesis;
     fork: HardFork;
     db = CoreDbRef(nil);
+    avoidStateDb = false;
       ): BlockHeader
       {.gcsafe, raises: [CatchableError].} =
   ## Generate the genesis block header from the `genesis` and `config`
   ## argument value.
   let
     db  = if db.isNil: newCoreDbRef LegacyDbMemory else: db
-    sdb = newStateDB(db, pruneTrie = true)
+    sdb = newStateDB(db, pruneTrie = true, avoidStateDb)
   toGenesisHeader(genesis, sdb, fork)
 
 proc toGenesisHeader*(
     params: NetworkParams;
     db = CoreDbRef(nil);
+    avoidStateDb = false;
       ): BlockHeader
       {.raises: [CatchableError].} =
   ## Generate the genesis block header from the `genesis` and `config`
   ## argument value.
   let map  = toForkTransitionTable(params.config)
   let fork = map.toHardFork(forkDeterminationInfo(0.toBlockNumber, params.genesis.timestamp))
-  toGenesisHeader(params.genesis, fork, db)
-
-# End
-
-
+  toGenesisHeader(params.genesis, fork, db, avoidStateDb)
 
 # ------------------------------------------------------------------------------
 # End
