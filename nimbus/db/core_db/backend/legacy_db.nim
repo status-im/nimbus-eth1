@@ -354,8 +354,8 @@ proc baseMethods(
       db.tdb.put(EMPTY_ROOT_HASH.data, @[0x80u8]),
 
     getRootFn: proc(root: Hash256; createOk: bool): CoreDbRc[CoreDbVidRef] =
-      if root == EMPTY_CODE_HASH:
-        return ok(db.bless LegacyCoreDbVid(vHash: EMPTY_CODE_HASH))
+      if root == EMPTY_ROOT_HASH:
+        return ok(db.bless LegacyCoreDbVid(vHash: root))
 
       # Due to the way it is used for creating a ne root node, `createOk` must
       # be checked before `contains()` is run. Otherwise it might bail out in
