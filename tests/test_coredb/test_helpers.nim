@@ -9,10 +9,9 @@
 # distributed except according to those terms.
 
 import
-  std/[sequtils],
+  std/sequtils,
   eth/common,
-  #../test_sync_snap/test_types,
-  ../replay/[pp]
+  ../replay/pp
 
 # ------------------------------------------------------------------------------
 # Private helpers

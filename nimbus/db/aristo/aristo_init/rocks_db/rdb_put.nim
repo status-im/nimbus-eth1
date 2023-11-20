@@ -14,7 +14,7 @@
 {.push raises: [].}
 
 import
-  std/[algorithm, os, sequtils, sets, tables],
+  std/[algorithm, os, sequtils, strutils, sets, tables],
   chronicles,
   eth/common,
   rocksdb,
@@ -76,10 +76,14 @@ proc begin(
 
   var session = RdbPutSession(
     writer: rocksdb_sstfilewriter_create(rdb.envOpt, rdb.store.options),
-    sstPath: rdb.basePath / BaseFolder / TempFolder / SstCache)
+    sstPath: rdb.sstFilePath)
 
   if session.writer.isNil:
-    return err((RdbBeCreateSstWriter, "Cannot create sst writer session"))
+    let info = $csError
+    if "no such file or directory" in info.toLowerAscii:
+      # Somebody might have killed the "tmp" directory?
+      raiseAssert info
+    return err((RdbBeOpenSstWriter, info))
 
   session.sstPath.rmFileIgnExpt
 

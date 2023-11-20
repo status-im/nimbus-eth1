@@ -14,7 +14,7 @@
 {.push raises: [].}
 
 import
-  std/tables,
+  std/[tables, os],
   eth/common,
   rocksdb,
   stew/endians2,
@@ -37,17 +37,33 @@ type
     ## Combined table for caching data to be stored/updated
 
 const
-  BaseFolder* = "nimbus"         # Same as for Legacy DB
-  DataFolder* = "aristo"         # Legacy DB has "data"
-  BackupFolder* = "ahistory"     # Legacy DB has "backups"
-  SstCache* = "abulkput"         # Rocks DB bulk load file name in temp folder
-  TempFolder* = "tmp"            # Not used with legacy DB
+  BaseFolder* = "nimbus"           # Same as for Legacy DB
+  DataFolder* = "aristo"           # Legacy DB has "data"
+  BackupFolder* = "aristo-history" # Legacy DB has "backups"
+  SstCache* = "bulkput"            # Rocks DB bulk load file name in temp folder
+  TempFolder* = "tmp"              # No `tmp` directory used with legacy DB
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc toRdbKey*(id: uint64; pfx: StorageType): RdbKey =
+func baseDir*(rdb: RdbInst): string =
+  rdb.basePath / BaseFolder
+
+func dataDir*(rdb: RdbInst): string =
+  rdb.baseDir / DataFolder
+
+func backupsDir*(rdb: RdbInst): string =
+  rdb.basePath / BaseFolder / BackupFolder
+
+func cacheDir*(rdb: RdbInst): string =
+  rdb.dataDir / TempFolder
+
+func sstFilePath*(rdb: RdbInst): string =
+  rdb.cacheDir / SstCache
+
+
+func toRdbKey*(id: uint64; pfx: StorageType): RdbKey =
   let idKey = id.toBytesBE
   result[0] = pfx.ord.byte
   copyMem(addr result[1], unsafeAddr idKey, sizeof idKey)
