@@ -9,7 +9,7 @@
 
 import
   std/[os, strutils],
-  chronicles, chronicles/chronos_tools, chronos, confutils,
+  chronicles, chronos, confutils,
   eth/keys,
   json_rpc/rpcproxy,
   beacon_chain/el/el_manager,
