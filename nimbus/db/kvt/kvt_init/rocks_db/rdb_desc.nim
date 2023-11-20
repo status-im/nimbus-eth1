@@ -14,6 +14,7 @@
 {.push raises: [].}
 
 import
+  std/os,
   rocksdb
 
 type
@@ -28,9 +29,28 @@ type
 const
   BaseFolder* = "nimbus"         # Same as for Legacy DB
   DataFolder* = "kvt"            # Legacy DB has "data"
-  BackupFolder* = "khistory"     # Legacy DB has "backups"
-  SstCache* = "kbulkput"         # Rocks DB bulk load file name in temp folder
-  TempFolder* = "tmp"            # Not used with legacy DB (same for Aristo)
+  BackupFolder* = "kvt-history"  # Legacy DB has "backups"
+  SstCache* = "bulkput"          # Rocks DB bulk load file name in temp folder
+  TempFolder* = "tmp"            # No `tmp` directory used with legacy DB
+
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
+
+func baseDir*(rdb: RdbInst): string =
+  rdb.basePath / BaseFolder
+
+func dataDir*(rdb: RdbInst): string =
+  rdb.baseDir / DataFolder
+
+func backupsDir*(rdb: RdbInst): string =
+  rdb.basePath / BaseFolder / BackupFolder
+
+func cacheDir*(rdb: RdbInst): string =
+  rdb.dataDir / TempFolder
+
+func sstFilePath*(rdb: RdbInst): string =
+  rdb.cacheDir / SstCache
 
 # ------------------------------------------------------------------------------
 # End

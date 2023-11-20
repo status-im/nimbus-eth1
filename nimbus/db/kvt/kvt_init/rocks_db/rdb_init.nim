@@ -42,10 +42,11 @@ proc init*(
       ): Result[void,(KvtError,string)] =
   ## Constructor c ode inspired by `RocksStoreRef.init()` from
   ## kvstore_rocksdb.nim
+  rdb.basePath = basePath
+
   let
-    dataDir = basePath / BaseFolder / DataFolder
-    backupsDir = basePath /  BaseFolder / BackupFolder
-    tmpDir = basePath /  BaseFolder / TempFolder
+    dataDir = rdb.dataDir
+    backupsDir = rdb.backupsDir
 
   try:
     dataDir.createDir
@@ -56,7 +57,7 @@ proc init*(
   except OSError, IOError:
     return err((RdbBeCantCreateBackupDir, ""))
   try:
-    tmpDir.createDir
+    rdb.cacheDir.createDir
   except OSError, IOError:
     return err((RdbBeCantCreateTmpDir, ""))
 
@@ -72,8 +73,6 @@ proc init*(
   # The following is a default setup (subject to change)
   rdb.impOpt = rocksdb_ingestexternalfileoptions_create()
   rdb.envOpt = rocksdb_envoptions_create()
-
-  rdb.basePath = basePath
   ok()
 
 
@@ -83,21 +82,19 @@ proc destroy*(rdb: var RdbInst; flush: bool) =
   rdb.impOpt.rocksdb_ingestexternalfileoptions_destroy()
   rdb.store.close()
 
-  let
-    base = rdb.basePath / BaseFolder
   try:
-    (base / TempFolder).removeDir
+    rdb.cacheDir.removeDir
 
     if flush:
-      (base / DataFolder).removeDir
+      rdb.dataDir.removeDir
 
       # Remove the base folder if it is empty
       block done:
-        for w in base.walkDirRec:
+        for w in rdb.baseDir.walkDirRec:
           # Ignore backup files
           if 0 < w.len and w[^1] != '~':
             break done
-        base.removeDir
+        rdb.baseDir.removeDir
 
   except CatchableError:
     discard
