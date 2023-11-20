@@ -41,7 +41,7 @@ const
 # ------------------------------------------------------------------------------
 
 when EnableApiTracking:
-  import std/strutils, chronicles, chronicles, stew/byteutils
+  import std/strutils, chronicles, stew/byteutils
   {.warning: "*** Provided API logging for Ledger (disabled by default)".}
 
   template apiTxt(info: static[string]): static[string] =

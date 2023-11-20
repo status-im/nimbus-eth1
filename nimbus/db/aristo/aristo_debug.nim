@@ -476,7 +476,12 @@ proc ppLayer(
 # ------------------------------------------------------------------------------
 
 proc pp*(w: Hash256): string =
-  w.data.toHex.squeeze(hex=true,ignLen=true)
+  if w == EMPTY_ROOT_HASH:
+    "EMPTY_ROOT_HASH"
+  elif w == Hash256():
+    "Hash256()"
+  else:
+    w.data.toHex.squeeze(hex=true,ignLen=true)
 
 proc pp*(w: HashKey; sig: MerkleSignRef): string =
   w.ppKey(sig.db, sig.root)

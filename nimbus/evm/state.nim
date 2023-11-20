@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/[options, sets, strformat, tables],
+  std/[options, sets, strformat],
   eth/[keys],
   ../../stateless/[witness_from_tree, witness_types],
   ../db/accounts_cache,
