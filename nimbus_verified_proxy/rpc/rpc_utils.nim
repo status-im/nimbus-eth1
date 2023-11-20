@@ -9,6 +9,7 @@
 
 import
   std/typetraits,
+  chronicles, # Added for generic sandwich that hits in core_db :(
   eth/common/eth_types as etypes,
   eth/[trie, rlp],
   stint,
@@ -34,7 +35,8 @@ type
     withdrawals*: seq[WithdrawalV1]
 
 proc asExecutionData*(
-    payload: ExecutionPayloadV1 | ExecutionPayloadV2 | ExecutionPayloadV3): ExecutionData =
+    payload: ExecutionPayloadV1 | ExecutionPayloadV2 | ExecutionPayloadV3):
+    ExecutionData =
   when payload is ExecutionPayloadV1:
     return ExecutionData(
       parentHash: payload.parentHash,
@@ -84,7 +86,7 @@ template asEthHash(hash: BlockHash): etypes.Hash256 =
 
 proc calculateTransactionData(
     items: openArray[TypedTransaction]):
-    (etypes.Hash256, seq[TxHash], uint64) {.raises: [RlpError, CatchableError].} =
+    (etypes.Hash256, seq[TxHash], uint64) =
   ## returns tuple composed of
   ## - root of transactions trie
   ## - list of transactions hashes
@@ -122,7 +124,8 @@ func blockHeaderSize(
   return uint64(len(rlp.encode(bh)))
 
 proc asBlockObject*(
-    p: ExecutionData): BlockObject {.raises: [RlpError, ValueError, CatchableError].} =
+    p: ExecutionData): BlockObject
+    {.raises: [ValueError].} =
   # TODO: currently we always calculate txHashes as BlockObject does not have
   # option of returning full transactions. It needs fixing at nim-web3 library
   # level
