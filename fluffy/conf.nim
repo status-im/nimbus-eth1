@@ -231,6 +231,14 @@ type
       defaultValue: none(TrustedDigest)
       name: "trusted-block-root" .}: Option[TrustedDigest]
 
+    forcePrune* {.
+      hidden
+      desc: "Force the pruning of the database. This should be used when the " &
+            "database is decreased in size, e.g. when a lower static radius " &
+            "is set. Only supported for statically set radius."
+      defaultValue: false
+      name: "force-prune" .}: bool
+
     disablePoke* {.
       hidden
       desc: "Disable POKE functionality for gossip mechanisms testing"

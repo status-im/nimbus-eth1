@@ -123,6 +123,15 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
 
   d.open()
 
+  # Force pruning
+  if config.forcePrune and config.radiusConfig.kind == Static:
+    let db = ContentDB.new(config.dataDir / "db" / "contentdb_" &
+      d.localNode.id.toBytesBE().toOpenArray(0, 8).toHex(),
+      storageCapacity = config.storageCapacityMB * 1_000_000,
+      manualCheckpoint = true)
+    db.forcePrune(d.localNode.id, UInt256.fromLogRadius(config.radiusConfig.logRadius))
+    db.close()
+
   # Store the database at contentdb prefixed with the first 8 chars of node id.
   # This is done because the content in the db is dependant on the `NodeId` and
   # the selected `Radius`.
