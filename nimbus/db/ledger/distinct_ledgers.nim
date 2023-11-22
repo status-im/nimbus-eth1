@@ -87,14 +87,14 @@ proc init*(
     isPruning = true;
       ): T =
   let vid = db.getRoot(rootHash).expect "AccountLedger/getRoot()"
-  db.newAccMpt(vid, isPruning).T
+  db.newAccMpt(vid, isPruning, Shared).T
 
 proc init*(
     T: type AccountLedger;
     db: CoreDbRef;
     isPruning = true;
       ): T =
-  db.newAccMpt(CoreDbVidRef(nil), isPruning).AccountLedger
+  db.newAccMpt(CoreDbVidRef(nil), isPruning, Shared).AccountLedger
 
 proc fetch*(al: AccountLedger; eAddr: EthAddress): Result[CoreDbAccount,void] =
   ## Using `fetch()` for trie data retrieval
@@ -106,6 +106,9 @@ proc merge*(al: AccountLedger; eAddr: EthAddress; account: CoreDbAccount) =
 
 proc delete*(al: AccountLedger, eAddr: EthAddress) =
   al.distinctBase.delete(eAddr).expect "AccountLedger/delete()"
+
+proc persistent*(al: AccountLedger) =
+  al.distinctBase.persistent()
 
 # ------------------------------------------------------------------------------
 # Public functions: storage ledger
@@ -123,10 +126,11 @@ proc init*(
   ## `CoreDb` backend. Otherwise, pruning might kill some unwanted entries from
   ## storage tries ending up with an unstable database leading to crashes (see
   ## https://github.com/status-im/nimbus-eth1/issues/932.)
-  al.distinctBase.parent.newMpt(account.storageVid, isPruning).toPhk.T
+  echo ">>> StorageLedger init", " isPruning=", isPruning
+  al.distinctBase.parent.newMpt(account.storageVid, isPruning, Shared).toPhk.T
 
 #proc init*(T: type StorageLedger; db: CoreDbRef, isPruning = false): T =
-#  db.newMpt(CoreDbVidRef(nil), isPruning).toPhk.T
+#  db.newMpt(CoreDbVidRef(nil), isPruning, Shared).toPhk.T
 
 proc fetch*(sl: StorageLedger, slot: UInt256): Result[Blob,void] =
   sl.distinctBase.fetch(slot.toBytesBE).mapErr proc(ign: CoreDbErrorRef)=discard
@@ -143,7 +147,8 @@ iterator storage*(
       ): (Blob,Blob)
       {.gcsafe, raises: [CoreDbApiError].} =
   ## For given account, iterate over storage slots
-  for (key,val) in al.distinctBase.parent.newMpt(account.storageVid).pairs:
+  let vid = account.storageVid
+  for (key,val) in al.distinctBase.parent.newMpt(vid, saveMode=Shared).pairs:
     yield (key,val)
 
 # ------------------------------------------------------------------------------

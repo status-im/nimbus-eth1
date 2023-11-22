@@ -338,15 +338,17 @@ proc newKvt*(db: CoreDbRef; saveMode = AutoSave): CoreDxKvtRef =
   ## Depending on the argument `saveMode`, the contructed object will have
   ## the following properties.
   ##
-  ## * `Cached`
+  ## * `Shared`
   ##   Subscribe to the common base object shared with other subscribed
-  ##   `AutoSave` or `Cached` descriptors. So any changes are immediately
+  ##   `AutoSave` or `Shared` descriptors. So any changes are immediately
   ##   visible among subscribers. On automatic destruction (when the
   ##   constructed object gets out of scope), changes are not saved to the
   ##   backend database but are still available to subscribers.
   ##
+  ##   This mode would used for short time read-only database descriptors.
+  ##
   ## * `AutoSave`
-  ##   This mode works similar to `Cached` with the difference that changes
+  ##   This mode works similar to `Shared` with the difference that changes
   ##   are saved to the backend database on automatic destruction when this
   ##   is permissible, i.e. there is a backend available and there is no
   ##   pending transaction on the common base object.
@@ -362,8 +364,8 @@ proc newKvt*(db: CoreDbRef; saveMode = AutoSave): CoreDxKvtRef =
   ##   cache (similar to `TopShot` with empty cache and no pending
   ##   transactions.) On automatic destruction, changes will be discarded.
   ##
-  ## The constructed object can be manually descructed (see `destroy()`) where
-  ## the `saveMode` behaviour can be overridden.
+  ## The constructed object can be manually descructed (see `forget()`) without
+  ## saving and can be forced to save (see `persistent()`.)
   ##
   ## The legacy backend always assumes `AutoSave` mode regardless of the
   ## function argument.
@@ -412,29 +414,37 @@ proc hasKey*(kvt: CoreDxKvtRef; key: openArray[byte]): CoreDbRc[bool] =
   result = kvt.methods.hasKeyFn key
   kvt.ifTrackNewApi: debug newApiTxt, ctx, elapsed, key=key.toStr, result
 
-proc destroy*(dsc: CoreDxKvtRef; saveMode = AutoSave): CoreDbRc[void] =
+proc persistent*(dsc: CoreDxKvtRef): CoreDbRc[void] {.discardable.} =
   ## For the legacy database, this function has no effect and succeeds always.
   ##
-  ## The function explicitely destructs the descriptor `dsc`. If the function
-  ## argument `saveMode` is not `AutoSave` the data object behind the argument
-  ## descriptor `dsc` is just discarded and the function returns success.
-  ##
-  ## Otherwise, the state of the descriptor object is saved to the database
-  ## backend if that is possible, or an error is returned.
+  ## This function saves the current cache to the database if possible,
+  ## regardless of the save/share mode assigned to the constructor.
   ##
   ## Subject to change
   ## -----------------
   ## * Saving an object which was created with the `Companion` flag (see
-  ##   `newKvt()`), the common base object will not reveal any change although
-  ##   the backend database will have persistently stored the data.
-  ## * Subsequent saving of the common base object may override that.
+  ##   `newKvt()`) will currently fail.
   ##
-  ## When returnng an error, the argument descriptor `dsc` will have been
-  ## disposed nevertheless.
+  dsc.setTrackNewApi "persistent()"
+  result = dsc.methods.persistentFn()
+  dsc.ifTrackNewApi: debug newApiTxt, ctx, elapsed, result
+
+proc forget*(dsc: CoreDxKvtRef): CoreDbRc[void] {.discardable.} =
+  ## For the legacy database, this function has no effect and succeeds always.
   ##
-  dsc.setTrackNewApi "destroy()"
-  result = dsc.methods.destroyFn saveMode
-  dsc.ifTrackNewApi: debug newApiTxt, ctx, elapsed, saveMode, result
+  ## This function destroys the current descriptor without any further action
+  ## regardless of the save/share mode assigned to the constructor.
+  ##
+  ## For desciptors constructed with `saveMode` modes `Shared` or `AutoSave`,
+  ## nothing will change on the current database changes if there are other
+  ## descriptors referring to the same shared database view.
+  ##
+  ## For desciptors constructed with `saveMode` mode `Companion`, the latest
+  ## changes (after the last `persistent()` call) will be discarded.
+  ##
+  dsc.setTrackNewApi "forget()"
+  result = dsc.methods.forgetFn()
+  dsc.ifTrackNewApi: debug newApiTxt, ctx, elapsed, result
 
 iterator pairs*(kvt: CoreDxKvtRef): (Blob, Blob) {.apiRaise.} =
   ## Iterator supported on memory DB (otherwise implementation dependent)
@@ -453,16 +463,11 @@ proc newMpt*(
     saveMode = AutoSave;
       ): CoreDxMptRef =
   ## Constructor, will defect on failure. The argument `prune` is currently
-  ## effective only for the legacy backend.
+  ## ignored on other than the legacy backend. The legacy backend always
+  ## assumes `AutoSave` mode regardless of the function argument.
   ##
   ## See the discussion at `newKvt()` for an explanation of the `saveMode`
   ## argument.
-  ##
-  ## The constructed object can be manually descructed (see `destroy()`) where
-  ## the `saveMode` behaviour can be overridden.
-  ##
-  ## The legacy backend always assumes `AutoSave` mode regardless of the
-  ## function argument.
   ##
   db.setTrackNewApi "newMpt()"
   result = db.methods.newMptFn(root, prune, saveMode).valueOr:
@@ -479,8 +484,7 @@ proc newMpt*(db: CoreDbRef; prune = true; saveMode = AutoSave): CoreDxMptRef =
   db.ifTrackNewApi: debug newApiTxt, ctx, elapsed, prune, saveMode
 
 proc newMpt*(acc: CoreDxAccRef): CoreDxMptRef =
-  ## Constructor, will defect on failure. The argument `prune` is currently
-  ## effective only for the legacy backend.
+  ## Constructor, will defect on failure.
   ##
   ## Variant of `newMpt()` where the input arguments are taken from the
   ## current `acc` descriptor settings.
@@ -496,21 +500,17 @@ proc newAccMpt*(
     prune = true;
     saveMode = AutoSave;
       ): CoreDxAccRef =
+  ## Constructor, will defect on failure. The argument `prune` is currently
+  ## ignored on other than the legacy backend. The legacy backend always
+  ## assumes `AutoSave` mode regardless of the function argument.
+  ##
   ## This function works similar to `newMpt()` for handling accounts. Although
   ## this sub-trie can be emulated by means of `newMpt(..).toPhk()`, it is
   ## recommended using this particular constructor for accounts because it
   ## provides its own subset of methods to handle accounts.
   ##
-  ## The argument `prune` is currently effective only for the legacy backend.
-  ##
   ## See the discussion at `newKvt()` for an explanation of the `saveMode`
   ## argument.
-  ##
-  ## The constructed object can be manually descructed (see `destroy()`) where
-  ## the `saveMode` behaviour can be overridden.
-  ##
-  ## The legacy backend always assumes `AutoSave` mode regardless of the
-  ## function argument.
   ##
   db.setTrackNewApi "newAccMpt()"
   result = db.methods.newAccFn(root, prune, saveMode).valueOr:
@@ -553,18 +553,36 @@ proc rootVid*(dsc: CoreDxTrieRefs | CoreDxAccRef): CoreDbVidRef =
   result = dsc.methods.rootVidFn()
   dsc.ifTrackNewApi: debug newApiTxt, ctx, elapsed, result=result.toStr
 
-proc destroy*(
+proc persistent*(
     dsc: CoreDxTrieRefs | CoreDxAccRef;
-    saveMode = AutoSave;
       ): CoreDbRc[void]
       {.discardable.} =
   ## For the legacy database, this function has no effect and succeeds always.
   ##
-  ## See the discussion at `destroy()` for `CoreDxKvtRef` for an explanation
-  ## of the `saveMode` argument.
+  ## This function saves the current cache to the database if possible,
+  ## regardless of the save/share mode assigned to the constructor.
   ##
-  dsc.setTrackNewApi "destroy()"
-  result = dsc.methods.destroyFn saveMode
+  ## See the discussion at `persistent()` for a `CoreDxKvtRef` type argument
+  ## descriptor an explanation of how this function works.
+  ##
+  dsc.setTrackNewApi "persistent()"
+  result = dsc.methods.persistentFn()
+  dsc.ifTrackNewApi: debug newApiTxt, ctx, elapsed, result
+
+proc forget*(
+    dsc: CoreDxTrieRefs | CoreDxAccRef;
+      ): CoreDbRc[void]
+      {.discardable.} =
+  ## For the legacy database, this function has no effect and succeeds always.
+  ##
+  ## This function destroys the current descriptor without any further action
+  ## regardless of the save/share mode assigned to the constructor.
+  ##
+  ## See the discussion at `forget()` for a `CoreDxKvtRef` type argument
+  ## descriptor an explanation of how this function works.
+  ##
+  dsc.setTrackNewApi "forget()"
+  result = dsc.methods.forgetFn()
   dsc.ifTrackNewApi: debug newApiTxt, ctx, elapsed, result
 
 # ------------------------------------------------------------------------------

@@ -198,7 +198,10 @@ proc kvtMethods(db: LegacyDbRef): CoreDbKvtFns =
     hasKeyFn: proc(k: openArray[byte]): CoreDbRc[bool] =
       ok(tdb.contains(k)),
 
-    destroyFn: proc(saveMode: CoreDbSaveFlags): CoreDbRc[void] =
+    persistentFn: proc(): CoreDbRc[void] =
+      ok(),
+
+    forgetFn: proc(): CoreDbRc[void] =
       ok(),
 
     pairsIt: iterator(): (Blob, Blob) =
@@ -238,7 +241,10 @@ proc mptMethods(mpt: HexaryChildDbRef; db: LegacyDbRef): CoreDbMptFns =
     isPruningFn: proc(): bool =
       mpt.trie.isPruning,
 
-    destroyFn: proc(saveMode: CoreDbSaveFlags): CoreDbRc[void] =
+    persistentFn: proc(): CoreDbRc[void] =
+      ok(),
+
+    forgetFn: proc(): CoreDbRc[void] =
       ok(),
 
     pairsIt: iterator: (Blob,Blob) {.gcsafe, raises: [LegacyApiRlpError].} =
@@ -288,7 +294,10 @@ proc accMethods(mpt: HexaryChildDbRef; db: LegacyDbRef): CoreDbAccFns =
     isPruningFn: proc(): bool =
       mpt.trie.isPruning,
 
-    destroyFn: proc(saveMode: CoreDbSaveFlags): CoreDbRc[void] =
+    persistentFn: proc(): CoreDbRc[void] =
+      ok(),
+
+    forgetFn: proc(): CoreDbRc[void] =
       ok())
 
 proc txMethods(tx: DbTransaction): CoreDbTxFns =

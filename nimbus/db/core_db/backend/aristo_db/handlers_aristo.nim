@@ -25,19 +25,25 @@ type
     parent: CoreDbRef            ## Opaque top level descriptor
     adb: AristoDbRef             ## Aristo MPT database
     gq: seq[AristoChildDbRef]    ## Garbage queue, deferred disposal
+    accCache: CoreDxAccRef       ## Pre-configured accounts descriptor to share
+    mptCache: CoreDxMptRef       ## Pre-configured accounts descriptor to share
 
   AristoChildDbRef = ref AristoChildDbObj
   AristoChildDbObj = object
     ## Sub-handle for triggering destructor when it goes out of scope
     base: AristoBaseRef          ## Local base descriptor
     root: VertexID               ## State root
-    prune: bool                  ## Currently unused
     mpt: AristoDbRef             ## Descriptor, may be copy of `base.adb`
     saveMode: CoreDbSaveFlags    ## When to store/discard
+    txError: CoreDbErrorCode     ## Transaction error code: account or MPT
 
   AristoCoreDxMptRef = ref object of CoreDxMptRef
     ## Some extendion to recover embedded state
     ctx: AristoChildDbRef        ## Embedded state, typical var name: `cMpt`
+
+  AristoCoreDxAccRef = ref object of CoreDxAccRef
+    ## Some extendion to recover embedded state
+    ctx: AristoChildDbRef        ## Embedded state, typical var name: `cAcc`
 
   AristoCoreDbVid* = ref object of CoreDbVidRef
     ## Vertex ID wrapper, optinally with *MPT* context
@@ -64,6 +70,8 @@ proc gc*(base: AristoBaseRef) {.gcsafe.}
 template logTxt(info: static[string]): static[string] =
   "CoreDb/adb " & info
 
+# -------------------------------
+
 func isValid(vid: CoreDbVidRef): bool =
   not vid.isNil and vid.ready
 
@@ -75,7 +83,7 @@ func createOk(vid: CoreDbVidRef): bool =
   if vid.isValid:
     return vid.AristoCoreDbVid.createOk
 
-# --------------
+# -------------------------------
 
 func toCoreDbAccount(
     cMpt: AristoChildDbRef;
@@ -97,9 +105,9 @@ func toPayloadRef(acc: CoreDbAccount): PayloadRef =
       storageID: acc.storageVid.to(VertexID),
       codeHash:  acc.codeHash))
 
-# --------------
+# -------------------------------
 
-func toErrorImpl(
+func toError(
     e: AristoError;
     db: CoreDbRef;
     info: string;
@@ -110,20 +118,16 @@ func toErrorImpl(
     isAristo: true,
     aErr:     e))
 
-func toErrorImpl(
+# Forward declaration, see below in public section
+func toError*(
     e: (VertexID,AristoError);
     db: CoreDbRef;
     info: string;
     error = Unspecified;
-      ): CoreDbErrorRef =
-  db.bless(error, AristoCoreDbError(
-    ctx:      info,
-    isAristo: true,
-    aVid:     e[0],
-    aErr:     e[1]))
+      ): CoreDbErrorRef
 
 
-func toRcImpl[T](
+func toRc[T](
     rc: Result[T,(VertexID,AristoError)];
     db: CoreDbRef;
     info: string;
@@ -134,9 +138,9 @@ func toRcImpl[T](
       return ok()
     else:
       return ok(rc.value)
-  err rc.error.toErrorImpl(db, info, error)
+  err rc.error.toError(db, info, error)
 
-func toRcImpl[T](
+func toRc[T](
     rc: Result[T,AristoError];
     db: CoreDbRef;
     info: string;
@@ -147,10 +151,10 @@ func toRcImpl[T](
       return ok()
     else:
       return ok(rc.value)
-  err((VertexID(0),rc.error).toErrorImpl(db, info, error))
+  err((VertexID(0),rc.error).toError(db, info, error))
 
 
-func toVoidRcImpl[T](
+func toVoidRc[T](
     rc: Result[T,(VertexID,AristoError)];
     db: CoreDbRef;
     info: string;
@@ -158,187 +162,176 @@ func toVoidRcImpl[T](
       ): CoreDbRc[void] =
   if rc.isOk:
     return ok()
-  err rc.error.toErrorImpl(db, info, error)
-
-func toVoidRcImpl[T](
-    rc: Result[T,AristoError];
-    db: CoreDbRef;
-    info: string;
-    error = Unspecified;
-      ): CoreDbRc[void] =
-  if rc.isOk:
-    return ok()
-  err((VertexID(0),rc.error).toErrorImpl(db, info, error))
+  err rc.error.toError(db, info, error)
 
 # ------------------------------------------------------------------------------
-# Private call back functions  (too large for keeping inline)
+# Private auto destructor
 # ------------------------------------------------------------------------------
-
-proc finish(
-    cMpt: AristoChildDbRef;
-    info: static[string];
-      ): CoreDbRc[void] =
-  ## Hexary trie destructor to be called automagically when the argument
-  ## wrapper gets out of scope.
-  let
-    base = cMpt.base
-    db = base.parent
-
-  result = ok()
-
-  if cMpt.mpt != base.adb:
-    let rc = cMpt.mpt.forget()
-    if rc.isErr:
-      result = err(rc.error.toErrorImpl(db, info))
-    cMpt.mpt = AristoDbRef(nil) # disables `=destroy`
-
-  if cMpt.saveMode == AutoSave:
-    if base.adb.level == 0:
-      let rc = base.adb.stow(persistent = true)
-      if rc.isErr:
-        result = err(rc.error.toErrorImpl(db, info))
 
 proc `=destroy`(cMpt: var AristoChildDbObj) =
   ## Auto destructor
-  if not cMpt.mpt.isNil:
-    # Add to destructor batch queue unless direct reference
-    if cMpt.mpt != cMpt.base.adb or
-       cMpt.saveMode == AutoSave:
-      cMpt.base.gq.add AristoChildDbRef(
-        base:     cMpt.base,
-        mpt:      cMpt.mpt,
-        saveMode: cMpt.saveMode)
-
-# -------------------------------
-
-proc mptFetch(
-    cMpt: AristoChildDbRef;
-    k: openArray[byte];
-    info: static[string];
-      ): CoreDbRc[Blob] =
-  let
-    db = cMpt.base.parent
-    rc = cMpt.mpt.fetchPayload(cMpt.root, k)
-  if rc.isOk:
-    return cMpt.mpt.serialise(rc.value).toRcImpl(db, info)
-
-  if rc.error[1] != FetchPathNotFound:
-    return err(rc.error.toErrorImpl(db, info))
-
-  err rc.error.toErrorImpl(db, info, MptNotFound)
-
-
-proc mptMerge(
-    cMpt: AristoChildDbRef;
-    k: openArray[byte];
-    v: openArray[byte];
-    info: static[string];
-      ): CoreDbRc[void] =
-  let rc = cMpt.mpt.merge(cMpt.root, k, v)
-  if rc.isErr:
-    return err(rc.error.toErrorImpl(cMpt.base.parent, info))
-  ok()
-
-
-proc mptDelete(
-    cMpt: AristoChildDbRef;
-    k: openArray[byte];
-    info: static[string];
-      ): CoreDbRc[void] =
-  let rc = cMpt.mpt.delete(cMpt.root, k)
-  if rc.isErr:
-    return err(rc.error.toErrorImpl(cMpt.base.parent, info))
-  ok()
-
-# -------------------------------
-
-proc accFetch(
-    cMpt: AristoChildDbRef;
-    address: EthAddress;
-    info: static[string];
-      ): CoreDbRc[CoreDbAccount] =
-  let
-    db = cMpt.base.parent
-    pyl = block:
-      let rc = cMpt.mpt.fetchPayload(cMpt.root, address.keccakHash.data)
-      if rc.isOk:
-        rc.value
-      elif rc.error[1] != FetchPathNotFound:
-        return err(rc.error.toErrorImpl(db, info))
-      else:
-        return err(rc.error.toErrorImpl(db, info, AccNotFound))
-
-  if pyl.pType != AccountData:
-    let vePair = (pyl.account.storageID, PayloadTypeUnsupported)
-    return err(vePair.toErrorImpl(db, info & "/" & $pyl.pType))
-
-  ok cMpt.toCoreDbAccount pyl.account
-
-
-proc accMerge(
-    cMpt: AristoChildDbRef;
-    address: EthAddress;
-    acc: CoreDbAccount;
-    info: static[string];
-      ): CoreDbRc[void] =
-  let
-    key = address.keccakHash.data
-    val = acc.toPayloadRef()
-    rc = cMpt.mpt.merge(cMpt.root, key, val)
-  if rc.isErr:
-    return rc.toVoidRcImpl(cMpt.base.parent, info)
-  ok()
-
-
-proc accDelete(
-    cMpt: AristoChildDbRef;
-    address: EthAddress;
-    info: static[string];
-      ): CoreDbRc[void] =
-  let
-    key = address.keccakHash.data
-    rc = cMpt.mpt.delete(cMpt.root, key)
-  if rc.isErr:
-    return rc.toVoidRcImpl(cMpt.base.parent, info)
-  ok()
-
-# -------------------------------
-
-proc cloneMpt(
-    cMpt: AristoChildDbRef;
-    info: static[string];
-      ): CoreDbRc[CoreDxMptRef] =
   let
     base = cMpt.base
-    db = base.parent
-    adb = base.adb
+    mpt = cMpt.mpt
+  if not mpt.isNil:
+    block body:
+      # Do some heuristics to avoid duplicates:
+      block addToBatchQueue:
+        if mpt != base.adb:              # not base descriptor?
+          if mpt.level == 0:             # no transaction pending?
+            break addToBatchQueue        # add to destructor queue
+          else:
+            break body                   # ignore `mpt`
 
-  base.gc()
+        if cMpt.saveMode != AutoSave:    # is base descriptor and no auto-save?
+          break body                     # ignore `mpt`
 
-  let
-    cXpt = AristoChildDbRef(
-      base:     base,
-      root:     cMpt.root,
-      prune:    cMpt.prune,
-      mpt:      if cMpt.mpt == adb: adb else: ? adb.forkTop.toRcImpl(db, info),
-      saveMode: cMpt.saveMode)
+        if base.gq.len == 0:             # empty batch queue?
+          break addToBatchQueue          # add to destructor queue
 
-    dsc = AristoCoreDxMptRef(
-      ctx:      cXpt,
-      methods:  cXpt.mptMethods)
+        if base.gq[0].mpt == mpt or      # not the same as first entry?
+           base.gq[^1].mpt == mpt:       # not the same as last entry?
+          break body                     # ignore `mpt`
 
-  ok(db.bless dsc)
+      # Add to destructor batch queue. Note that the `adb` destructor might
+      # have a pending transaction which might be resolved while queued for
+      # persistent saving.
+      base.gq.add AristoChildDbRef(
+        base:     base,
+        mpt:      mpt,
+        saveMode: cMpt.saveMode)
+
+      # End body
 
 # ------------------------------------------------------------------------------
-# Private database methods function tables
+# Private `MPT` or account call back functions
+# ------------------------------------------------------------------------------
+
+proc rootVidFn(
+    cMpt: AristoChildDbRef;
+      ): CoreDbVidRef =
+  let
+    db = cMpt.base.parent
+    mpt = cMpt.mpt
+  db.bless AristoCoreDbVid(ctx: mpt, aVid: cMpt.root)
+
+proc persistent(
+    cMpt: AristoChildDbRef;
+    info: static[string];
+      ): CoreDbRc[void] =
+  let
+    base = cMpt.base
+    mpt = cMpt.mpt
+    db = base.parent
+    rc = mpt.stow(persistent = true)
+
+  # note that `gc()` may call `persistent()` so there is no `base.gc()` here
+  if rc.isOk:
+    ok()
+  elif mpt.level == 0:
+    err(rc.error.toError(db, info))
+  else:
+    err(rc.error.toError(db, info, cMpt.txError))
+
+proc forget(
+    cMpt: AristoChildDbRef;
+    info: static[string];
+      ): CoreDbRc[void] =
+  let
+    base = cMpt.base
+    mpt = cMpt.mpt
+  cMpt.mpt = AristoDbRef(nil) # disables `=destroy`
+  base.gc()
+  result = ok()
+
+  if mpt != base.adb:
+    let
+      db = base.parent
+      rc = cMpt.mpt.forget()
+    if rc.isErr:
+      result = err(rc.error.toError(db, info))
+
+# ------------------------------------------------------------------------------
+# Private `MPT` call back functions
 # ------------------------------------------------------------------------------
 
 proc mptMethods(cMpt: AristoChildDbRef): CoreDbMptFns =
   ## Hexary trie database handlers
-  let db = cMpt.base.parent
+
+  proc mptBackend(
+      cMpt: AristoChildDbRef;
+        ): CoreDbMptBackendRef =
+    let
+      db = cMpt.base.parent
+      mpt = cMpt.mpt
+    db.bless AristoCoreDbMptBE(adb: mpt)
+
+  proc mptPersistent(
+    cMpt: AristoChildDbRef;
+    info: static[string];
+      ): CoreDbRc[void] =
+    cMpt.base.gc() # note that `gc()` also may call `persistent()`
+    cMpt.persistent info
+
+  proc mptFetch(
+      cMpt: AristoChildDbRef;
+      k: openArray[byte];
+      info: static[string];
+        ): CoreDbRc[Blob] =
+    let
+      db = cMpt.base.parent
+      mpt = cMpt.mpt
+      rc = mpt.fetchPayload(cMpt.root, k)
+    if rc.isOk:
+      mpt.serialise(rc.value).toRc(db, info)
+    elif rc.error[1] != FetchPathNotFound:
+      err(rc.error.toError(db, info))
+    else:
+      err rc.error.toError(db, info, MptNotFound)
+
+  proc mptMerge(
+      cMpt: AristoChildDbRef;
+      k: openArray[byte];
+      v: openArray[byte];
+      info: static[string];
+        ): CoreDbRc[void] =
+    let
+      db = cMpt.base.parent
+      mpt = cMpt.mpt
+      rc = mpt.merge(cMpt.root, k, v)
+    if rc.isErr:
+      return err(rc.error.toError(db, info))
+    ok()
+
+  proc mptDelete(
+      cMpt: AristoChildDbRef;
+      k: openArray[byte];
+      info: static[string];
+        ): CoreDbRc[void] =
+    let
+      db = cMpt.base.parent
+      mpt = cMpt.mpt
+      rc = mpt.delete(cMpt.root, k)
+    if rc.isErr:
+      return err(rc.error.toError(db, info))
+    ok()
+
+  proc mptHasPath(
+      cMpt: AristoChildDbRef;
+      key: openArray[byte];
+      info: static[string];
+        ): CoreDbRc[bool] =
+    let
+      db = cMpt.base.parent
+      mpt = cMpt.mpt
+      rc = mpt.hasPath(cMpt.root, key)
+    if rc.isErr:
+      return err(rc.error.toError(db, info))
+    ok(rc.value)
+
   CoreDbMptFns(
     backendFn: proc(): CoreDbMptBackendRef =
-      AristoCoreDbMptBE(adb: cMpt.mpt),
+      cMpt.mptBackend(),
 
     fetchFn: proc(k: openArray[byte]): CoreDbRc[Blob] =
       cMpt.mptFetch(k, "fetchFn()"),
@@ -350,59 +343,155 @@ proc mptMethods(cMpt: AristoChildDbRef): CoreDbMptFns =
       cMpt.mptMerge(k, v, "mergeFn()"),
 
     hasPathFn: proc(k: openArray[byte]): CoreDbRc[bool] =
-      cMpt.mpt.hasPath(cMpt.root, k).toRcImpl(db, "hasPathFn()"),
+      cMpt.mptHasPath(k, "hasPathFn()"),
 
     rootVidFn: proc(): CoreDbVidRef =
-      db.bless(AristoCoreDbVid(ctx: cMpt.mpt, aVid: cMpt.root)),
+      cMpt.rootVidFn(),
 
     isPruningFn: proc(): bool =
-      cMpt.prune,
+      true,
 
-    destroyFn: proc(saveMode: CoreDbSaveFlags): CoreDbRc[void] =
-      cMpt.base.gc()
-      result = cMpt.finish "destroyFn()"
-      cMpt.mpt = AristoDbRef(nil), # Disables `=destroy()` action
+    persistentFn: proc(): CoreDbRc[void] =
+      cMpt.mptPersistent("persistentFn()"),
+
+    forgetFn: proc(): CoreDbRc[void] =
+      cMpt.forget("forgetFn()"),
 
     pairsIt: iterator: (Blob,Blob) =
       for (k,v) in cMpt.mpt.right LeafTie(root: cMpt.root):
         yield (k.path.pathAsBlob, cMpt.mpt.serialise(v).valueOr(EmptyBlob)),
 
-    replicateIt: iterator: (Blob,Blob) {.gcsafe, raises: [AristoApiRlpError].} =
+    replicateIt: iterator: (Blob,Blob) =
       discard)
 
-proc accMethods(cMpt: AristoChildDbRef): CoreDbAccFns =
+# ------------------------------------------------------------------------------
+# Private account call back functions
+# ------------------------------------------------------------------------------
+
+proc accMethods(cAcc: AristoChildDbRef): CoreDbAccFns =
   ## Hexary trie database handlers
-  let db = cMpt.base.parent
+
+  proc accBackend(
+      cAcc: AristoChildDbRef;
+        ): CoreDbAccBackendRef =
+    let
+      db = cAcc.base.parent
+      mpt = cAcc.mpt
+    db.bless AristoCoreDbAccBE(adb: mpt)
+
+  proc accPersistent(
+    cAcc: AristoChildDbRef;
+    info: static[string];
+      ): CoreDbRc[void] =
+    cAcc.base.gc() # note that `gc()` also may call `persistent()`
+    cAcc.persistent info
+
+  proc accCloneMpt(
+      cAcc: AristoChildDbRef;
+      info: static[string];
+        ): CoreDbRc[CoreDxMptRef] =
+    let base = cAcc.base
+    base.gc()
+    ok(base.mptCache)
+
+  proc accFetch(
+      cAcc: AristoChildDbRef;
+      address: EthAddress;
+      info: static[string];
+        ): CoreDbRc[CoreDbAccount] =
+    let
+      db = cAcc.base.parent
+      mpt = cAcc.mpt
+      pyl = block:
+        let
+          key = address.keccakHash.data
+          rc = mpt.fetchPayload(cAcc.root, key)
+        if rc.isOk:
+          rc.value
+        elif rc.error[1] != FetchPathNotFound:
+          return err(rc.error.toError(db, info))
+        else:
+          return err(rc.error.toError(db, info, AccNotFound))
+
+    if pyl.pType != AccountData:
+      let vePair = (pyl.account.storageID, PayloadTypeUnsupported)
+      return err(vePair.toError(db, info & "/" & $pyl.pType))
+    ok cAcc.toCoreDbAccount pyl.account
+
+  proc accMerge(
+      cAcc: AristoChildDbRef;
+      address: EthAddress;
+      acc: CoreDbAccount;
+      info: static[string];
+        ): CoreDbRc[void] =
+    let
+      db = cAcc.base.parent
+      mpt = cAcc.mpt
+      key = address.keccakHash.data
+      val = acc.toPayloadRef()
+      rc = mpt.merge(cAcc.root, key, val)
+    if rc.isErr:
+      return err(rc.error.toError(db, info))
+    ok()
+
+  proc accDelete(
+      cAcc: AristoChildDbRef;
+      address: EthAddress;
+      info: static[string];
+        ): CoreDbRc[void] =
+    let
+      db = cAcc.base.parent
+      mpt = cAcc.mpt
+      key = address.keccakHash.data
+      rc = mpt.delete(cAcc.root, key)
+    if rc.isErr:
+      return err(rc.error.toError(db, info))
+    ok()
+
+  proc accHasPath(
+      cAcc: AristoChildDbRef;
+      address: EthAddress;
+      info: static[string];
+        ): CoreDbRc[bool] =
+    let
+      db = cAcc.base.parent
+      mpt = cAcc.mpt
+      key = address.keccakHash.data
+      rc = mpt.hasPath(cAcc.root, key)
+    if rc.isErr:
+      return err(rc.error.toError(db, info))
+    ok(rc.value)
+
   CoreDbAccFns(
     backendFn: proc(): CoreDbAccBackendRef =
-      db.bless(AristoCoreDbAccBE(adb: cMpt.mpt)),
+      cAcc.accBackend(),
 
     newMptFn: proc(): CoreDbRc[CoreDxMptRef] =
-      cMpt.cloneMpt("newMptFn()"),
+      cAcc.accCloneMpt("newMptFn()"),
 
     fetchFn: proc(address: EthAddress): CoreDbRc[CoreDbAccount] =
-      cMpt.accFetch(address, "fetchFn()"),
+      cAcc.accFetch(address, "fetchFn()"),
 
     deleteFn: proc(address: EthAddress): CoreDbRc[void] =
-      cMpt.mptDelete(address, "deleteFn()"),
+      cAcc.accDelete(address, "deleteFn()"),
 
     mergeFn: proc(address: EthAddress; acc: CoreDbAccount): CoreDbRc[void] =
-      cMpt.accMerge(address, acc, "mergeFn()"),
+      cAcc.accMerge(address, acc, "mergeFn()"),
 
     hasPathFn: proc(address: EthAddress): CoreDbRc[bool] =
-      let key = address.keccakHash.data
-      cMpt.mpt.hasPath(cMpt.root, key).toRcImpl(db, "hasPathFn()"),
+      cAcc.accHasPath(address, "hasPathFn()"),
 
     rootVidFn: proc(): CoreDbVidRef =
-      db.bless(AristoCoreDbVid(ctx: cMpt.mpt, aVid: cMpt.root)),
+      cAcc.rootVidFn(),
 
     isPruningFn: proc(): bool =
-      cMpt.prune,
+      true,
 
-    destroyFn: proc(saveMode: CoreDbSaveFlags): CoreDbRc[void] =
-      cMpt.base.gc()
-      result = cMpt.finish "destroyFn()"
-      cMpt.mpt = AristoDbRef(nil)) # Disables `=destroy()` action
+    persistentFn: proc(): CoreDbRc[void] =
+      cAcc.accPersistent("persistentFn()"),
+
+    forgetFn: proc(): CoreDbRc[void] =
+      cAcc.forget("forgetFn()"))
 
 # ------------------------------------------------------------------------------
 # Public handlers and helpers
@@ -414,7 +503,11 @@ func toError*(
     info: string;
     error = Unspecified;
       ): CoreDbErrorRef =
-  e.toErrorImpl(db, info, error)
+  db.bless(error, AristoCoreDbError(
+    ctx:      info,
+    isAristo: true,
+    aVid:     e[0],
+    aErr:     e[1]))
 
 func toVoidRc*[T](
     rc: Result[T,AristoError];
@@ -422,7 +515,10 @@ func toVoidRc*[T](
     info: string;
     error = Unspecified;
       ): CoreDbRc[void] =
-  rc.toVoidRcImpl(db, info, error)
+  if rc.isOk:
+    return ok()
+  err((VertexID(0),rc.error).toError(db, info, error))
+
 
 proc gc*(base: AristoBaseRef) =
   ## Run deferred destructors when it is safe. It is needed to run the
@@ -434,13 +530,42 @@ proc gc*(base: AristoBaseRef) =
   ## Note: In practice the `db.gq` queue should not have much more than one
   ##       entry and mostly be empty.
   const info = "gc()"
-  while 0 < base.gq.len:
-    var q: typeof base.gq
-    base.gq.swap q # now `=destroy()` may refill while destructing, below
-    for cMpt in q:
-      cMpt.finish(info).isOkOr:
-        debug logTxt info, `error`=error.errorPrint
-        continue # terminates `isOkOr()`
+  var adbAutoSave = false
+
+  proc saveAndDestroy(cMpt: AristoChildDbRef): CoreDbRc[void] =
+    if cMpt.mpt != base.adb:
+      # FIXME: Currently no strategy for `Companion`
+      cMpt.forget info
+    elif cMpt.saveMode != AutoSave or adbAutoSave: # call only once:
+      ok()
+    else:
+      adbAutoSave = true
+      cMpt.persistent info
+
+  if 0 < base.gq.len:
+    # There might be a single queue item left over from the last run
+    # which can be ignored right away as the body below would not change
+    # anything.
+    if base.gq.len != 1 or base.gq[0].mpt.level == 0:
+      var later = AristoChildDbRef(nil)
+
+      while 0 < base.gq.len:
+        var q: seq[AristoChildDbRef]
+        base.gq.swap q # now `=destroy()` may refill while destructing, below
+        for cMpt in q:
+          if 0 < cMpt.mpt.level:
+            assert cMpt.mpt == base.adb and cMpt.saveMode == AutoSave
+            later = cMpt # do it later when there is no transaction pending
+            continue
+          cMpt.saveAndDestroy.isOkOr:
+            debug logTxt info, saveMode=cMpt.saveMode, `error`=error.errorPrint
+            continue # terminates `isOkOr()`
+
+      # Re-add pending transaction item
+      if not later.isNil:
+        base.gq.add later
+
+# ---------------------
 
 func mpt*(dsc: CoreDxMptRef): AristoDbRef =
   dsc.AristoCoreDxMptRef.ctx.mpt
@@ -448,20 +573,19 @@ func mpt*(dsc: CoreDxMptRef): AristoDbRef =
 func rootID*(dsc: CoreDxMptRef): VertexID  =
   dsc.AristoCoreDxMptRef.ctx.root
 
-# ---------------------
-
 func txTop*(
     base: AristoBaseRef;
     info: static[string];
       ): CoreDbRc[AristoTxRef] =
-  base.adb.txTop.toRcImpl(base.parent, info)
+  base.adb.txTop.toRc(base.parent, info)
 
 func txBegin*(
     base: AristoBaseRef;
     info: static[string];
       ): CoreDbRc[AristoTxRef] =
-  base.adb.txBegin.toRcImpl(base.parent, info)
+  base.adb.txBegin.toRc(base.parent, info)
 
+# ---------------------
 
 proc getHash*(
     base: AristoBaseRef;
@@ -478,13 +602,13 @@ proc getHash*(
 
   let mpt = vid.AristoCoreDbVid.ctx
   if update:
-    ? mpt.hashify.toVoidRcImpl(db, info, HashNotAvailable)
+    ? mpt.hashify.toVoidRc(db, info, HashNotAvailable)
 
   let key = block:
     let rc = mpt.getKeyRc aVid
     if rc.isErr:
       doAssert rc.error in {GetKeyNotFound,GetKeyTempLocked}
-      return err(rc.error.toErrorImpl(db, info, HashNotAvailable))
+      return err(rc.error.toError(db, info, HashNotAvailable))
     rc.value
 
   ok key.to(Hash256)
@@ -499,14 +623,12 @@ proc getVid*(
   let
     db = base.parent
     adb = base.adb
+  base.gc() # update pending changes
 
   if root == EMPTY_ROOT_HASH:
     return ok(db.bless AristoCoreDbVid(createOk: createOk))
 
-  block:
-    base.gc() # update pending changes
-    let rc = adb.hashify()
-    ? adb.hashify.toVoidRcImpl(db, info, HashNotAvailable)
+  ? adb.hashify.toVoidRc(db, info, HashNotAvailable)
 
   # Check whether hash is available as state root on main trie
   block:
@@ -527,7 +649,7 @@ proc getVid*(
   if createOk:
     return ok(db.bless AristoCoreDbVid(createOk: true, expHash: root))
 
-  err(aristo.GenericError.toErrorImpl(db, info, RootNotFound))
+  err(aristo.GenericError.toError(db, info, RootNotFound))
 
 # ------------------------------------------------------------------------------
 # Public constructors and related
@@ -536,7 +658,6 @@ proc getVid*(
 proc newMptHandler*(
     base: AristoBaseRef;
     root: CoreDbVidRef;
-    prune: bool;
     saveMode: CoreDbSaveFlags;
     info: static[string];
       ): CoreDbRc[CoreDxMptRef] =
@@ -549,24 +670,30 @@ proc newMptHandler*(
     let rc = base.adb.getKeyRc VertexID(1)
     if rc.isErr:
       if rc.error != GetKeyNotFound:
-        return err(rc.error.toErrorImpl(db, info, RootNotFound))
+        return err(rc.error.toError(db, info, RootNotFound))
       rootID = VertexID(1)
 
-  let
-    (mode, mpt) = block:
-      if saveMode == Companion:
-        (saveMode, ? base.adb.forkTop.toRcImpl(db, info))
-      elif base.adb.backend.isNil:
-        (Cached, base.adb)
+  let (mode, mpt) = case saveMode:
+    of TopShot:
+      (saveMode, ? base.adb.forkTop.toRc(db, info))
+    of Companion:
+      (saveMode, ? base.adb.fork.toRc(db, info))
+    of Shared, AutoSave:
+      if base.adb.backend.isNil:
+        (Shared, base.adb)
       else:
         (saveMode, base.adb)
 
+  if mode == Shared and rootID == VertexID(1):
+    return ok(base.mptCache)
+
+  let
     cMpt = AristoChildDbRef(
       base:     base,
       root:     rootID,
-      prune:    prune,
       mpt:      mpt,
-      saveMode: mode)
+      saveMode: mode,
+      txError:  MptNotFound)
 
     dsc = AristoCoreDxMptRef(
       ctx:      cMpt,
@@ -578,7 +705,6 @@ proc newMptHandler*(
 proc newAccHandler*(
     base: AristoBaseRef;
     root: CoreDbVidRef;
-    prune: bool;
     saveMode: CoreDbSaveFlags;
     info: static[string];
       ): CoreDbRc[CoreDxAccRef] =
@@ -591,37 +717,70 @@ proc newAccHandler*(
     if vid.isValid:
       if vid != VertexID(1):
         let error = (vid,AccountRootUnacceptable)
-        return err(error.toErrorImpl(db, info, RootUnacceptable))
+        return err(error.toError(db, info, RootUnacceptable))
     elif root.createOk:
       let error = AccountRootCannotCreate
-      return err(error.toErrorImpl(db, info, RootCannotCreate))
+      return err(error.toError(db, info, RootCannotCreate))
 
-  let
-    (mode, mpt) = block:
-      if saveMode == Companion:
-        (saveMode, ? base.adb.forkTop.toRcImpl(db, info))
-      elif base.adb.backend.isNil:
-        (Cached, base.adb)
+  let (mode, mpt) = case saveMode:
+    of TopShot:
+      (saveMode, ? base.adb.forkTop.toRc(db, info))
+    of Companion:
+      (saveMode, ? base.adb.fork.toRc(db, info))
+    of Shared, AutoSave:
+      if base.adb.backend.isNil:
+        (Shared, base.adb)
       else:
         (saveMode, base.adb)
 
-    cMpt = AristoChildDbRef(
+  if mode == Shared:
+    return ok(base.accCache)
+
+  let
+    cAcc = AristoChildDbRef(
       base:     base,
       root:     VertexID(1),
-      prune:    prune,
       mpt:      mpt,
-      saveMode: mode)
+      saveMode: mode,
+      txError:  AccNotFound)
 
-  ok(db.bless CoreDxAccRef(methods: cMpt.accMethods))
+    dsc = AristoCoreDxAccRef(
+      ctx:      cAcc,
+      methods:  cAcc.accMethods)
+
+  ok(db.bless dsc)
 
 
 proc destroy*(base: AristoBaseRef; flush: bool) =
+  # Don't recycle pre-configured shared handler
+  base.accCache.AristoCoreDxAccRef.ctx.mpt = AristoDbRef(nil)
+  base.mptCache.AristoCoreDxMptRef.ctx.mpt = AristoDbRef(nil)
+
+  # Clean up desctructor queue
   base.gc()
+
+  # Close descriptor
   base.adb.finish(flush)
 
 
 func init*(T: type AristoBaseRef; db: CoreDbRef; adb: AristoDbRef): T =
-  T(parent: db, adb: adb)
+  result = T(parent: db, adb: adb)
+
+  # Provide pre-configured handlers to share
+  let cXpt = AristoChildDbRef(
+    base:     result,
+    root:     VertexID(1),
+    mpt:      adb,
+    saveMode: Shared,
+    txError:  Unspecified)
+
+  result.mptCache = db.bless AristoCoreDxMptRef(
+    ctx:      cXpt,
+    methods:  cXpt.mptMethods)
+
+  result.accCache = db.bless AristoCoreDxAccRef(
+    ctx:      cXpt,
+    methods:  cXpt.accMethods)
 
 # ------------------------------------------------------------------------------
 # End

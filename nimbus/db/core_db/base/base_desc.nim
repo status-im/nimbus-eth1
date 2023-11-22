@@ -46,8 +46,11 @@ type
     Unspecified
     RlpException
     KvtNotFound
+    KvtTxPending
     MptNotFound
+    MptTxPending
     AccNotFound
+    AccTxPending
     RootNotFound
     RootUnacceptable
     RootCannotCreate
@@ -55,9 +58,10 @@ type
     StorageFailed
 
   CoreDbSaveFlags* = enum
-    Cached                    ## Shared, leaves changes in memory cache
+    Shared                    ## Shared, leaves changes in memory cache
     AutoSave                  ## Shared, save changes on destruction
-    Companion                 ## Separate, leaves changes in memory cache
+    TopShot                   ## Separate copy of shared cache
+    Companion                 ## Separate clean cache
 
   CoreDbCaptFlags* {.pure.} = enum
     PersistPut
@@ -118,20 +122,21 @@ type
   CoreDbKvtDelFn* = proc(k: openArray[byte]): CoreDbRc[void] {.noRaise.}
   CoreDbKvtPutFn* =
     proc(k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] {.noRaise.}
-  CoreDbKvtDestroyFn* = proc(
-    saveMode: CoreDbSaveFlags): CoreDbRc[void] {.noRaise.}
+  CoreDbKvtPersistentFn* = proc(): CoreDbRc[void] {.noRaise.}
+  CoreDbKvtForgetFn* = proc(): CoreDbRc[void] {.noRaise.}
   CoreDbKvtHasKeyFn* = proc(k: openArray[byte]): CoreDbRc[bool] {.noRaise.}
   CoreDbKvtPairsIt* = iterator(): (Blob,Blob) {.apiRaise.}
 
   CoreDbKvtFns* = object
     ## Methods for key-value table
-    backendFn*:  CoreDbKvtBackendFn
-    getFn*:      CoreDbKvtGetFn
-    delFn*:      CoreDbKvtDelFn
-    putFn*:      CoreDbKvtPutFn
-    hasKeyFn*:   CoreDbKvtHasKeyFn
-    destroyFn*:  CoreDbKvtDestroyFn
-    pairsIt*:    CoreDbKvtPairsIt
+    backendFn*:    CoreDbKvtBackendFn
+    getFn*:        CoreDbKvtGetFn
+    delFn*:        CoreDbKvtDelFn
+    putFn*:        CoreDbKvtPutFn
+    hasKeyFn*:     CoreDbKvtHasKeyFn
+    persistentFn*: CoreDbKvtPersistentFn
+    forgetFn*:     CoreDbKvtForgetFn
+    pairsIt*:      CoreDbKvtPairsIt
 
 
   # --------------------------------------------------
@@ -151,8 +156,8 @@ type
   CoreDbMptHasPathFn* = proc(k: openArray[byte]): CoreDbRc[bool] {.noRaise.}
   CoreDbMptRootVidFn* = proc(): CoreDbVidRef {.noRaise.}
   CoreDbMptIsPruningFn* = proc(): bool {.noRaise.}
-  CoreDbMptDestroyFn* = proc(
-    saveMode: CoreDbSaveFlags): CoreDbRc[void] {.noRaise.}
+  CoreDbMptPersistentFn* = proc(): CoreDbRc[void] {.noRaise.}
+  CoreDbMptForgetFn* = proc(): CoreDbRc[void] {.noRaise.}
   CoreDbMptPairsIt* = iterator(): (Blob,Blob) {.apiRaise.}
   CoreDbMptReplicateIt* = iterator(): (Blob,Blob) {.apiRaise.}
 
@@ -165,7 +170,8 @@ type
     hasPathFn*:    CoreDbMptHasPathFn
     rootVidFn*:    CoreDbMptRootVidFn
     isPruningFn*:  CoreDbMptIsPruningFn
-    destroyFn*:    CoreDbMptDestroyFn
+    persistentFn*: CoreDbMptPersistentFn
+    forgetFn*:     CoreDbMptForgetFn
     pairsIt*:      CoreDbMptPairsIt
     replicateIt*:  CoreDbMptReplicateIt
 
@@ -182,8 +188,8 @@ type
   CoreDbAccHasPathFn* = proc(k: EthAddress): CoreDbRc[bool] {.noRaise.}
   CoreDbAccRootVidFn* = proc(): CoreDbVidRef {.noRaise.}
   CoreDbAccIsPruningFn* = proc(): bool {.noRaise.}
-  CoreDbAccDestroyFn* = proc(
-    saveMode: CoreDbSaveFlags): CoreDbRc[void] {.noRaise.}
+  CoreDbAccPersistentFn* = proc(): CoreDbRc[void] {.noRaise.}
+  CoreDbAccForgetFn* = proc(): CoreDbRc[void] {.noRaise.}
 
   CoreDbAccFns* = object
     ## Methods for trie objects
@@ -195,7 +201,8 @@ type
     hasPathFn*:    CoreDbAccHasPathFn
     rootVidFn*:    CoreDbAccRootVidFn
     isPruningFn*:  CoreDbAccIsPruningFn
-    destroyFn*:    CoreDbAccDestroyFn
+    persistentFn*: CoreDbAccPersistentFn
+    forgetFn*:     CoreDbAccForgetFn
 
   # --------------------------------------------------
   # Sub-descriptor: Transaction frame management
