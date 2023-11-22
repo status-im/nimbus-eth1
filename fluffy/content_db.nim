@@ -63,6 +63,7 @@ type
     contentSizeStmt: SqliteStmt[NoParams, int64]
     getAllOrderedByDistanceStmt: SqliteStmt[array[32, byte], RowInfo]
     deleteOutOfRadiusStmt: SqliteStmt[(array[32, byte], array[32, byte]), void]
+    largestDistanceStmt: SqliteStmt[array[32, byte], array[32, byte]]
 
   PutResultType* = enum
     ContentStored, DbPruned
@@ -129,6 +130,10 @@ proc new*(
     "DELETE FROM kvstore WHERE isInRadius(?, key, ?) == 0",
     (array[32, byte], array[32, byte]), void).get()
 
+  let largestDistanceStmt = db.prepareStmt(
+    "SELECT max(xorDistance(?, key)) FROM kvstore",
+    array[32, byte], array[32, byte]).get()
+
   ContentDB(
     kv: kvStore,
     backend: db,
@@ -140,7 +145,8 @@ proc new*(
     contentSizeStmt: contentSizeStmt,
     contentCountStmt: contentCountStmt,
     getAllOrderedByDistanceStmt: getAllOrderedByDistanceStmt,
-    deleteOutOfRadiusStmt: deleteOutOfRadiusStmt
+    deleteOutOfRadiusStmt: deleteOutOfRadiusStmt,
+    largestDistanceStmt: largestDistanceStmt
   )
 
 template disposeSafe(s: untyped): untyped =
@@ -156,6 +162,7 @@ proc close*(db: ContentDB) =
   db.contentSizeStmt.disposeSafe()
   db.getAllOrderedByDistanceStmt.disposeSafe()
   db.deleteOutOfRadiusStmt.disposeSafe()
+  db.largestDistanceStmt.disposeSafe()
   discard db.kv.close()
 
 ## Private KvStoreRef Calls
@@ -267,6 +274,27 @@ proc contentCount*(db: ContentDB): int64 =
 
 ## Pruning related calls
 
+proc getLargestDistance*(db: ContentDB, localId: UInt256): UInt256 =
+  var distanceBytes: array[32, byte]
+  discard (db.largestDistanceStmt.exec(localId.toBytesBE(),
+      proc(res: array[32, byte]) =
+        distanceBytes = res
+      )).expectDb()
+
+  return UInt256.fromBytesBE(distanceBytes)
+
+func estimateNewRadius(
+    currentSize: uint64, storageCapacity: uint64,
+    currentRadius: UInt256): UInt256 =
+  let sizeRatio = currentSize div storageCapacity
+  if sizeRatio > 0:
+    currentRadius div sizeRatio.stuint(256)
+  else:
+    currentRadius
+
+func estimateNewRadius*(db: ContentDB, currentRadius: UInt256): UInt256 =
+  estimateNewRadius(uint64(db.usedSize()), db.storageCapacity, currentRadius)
+
 proc deleteContentFraction*(
   db: ContentDB,
   target: UInt256,
@@ -330,7 +358,6 @@ proc forcePrune*(db: ContentDB, localId: UInt256, radius: UInt256) =
   if db.manualCheckpoint:
     notice "Truncating WAL file"
     db.backend.checkpoint(SqStoreCheckpointKind.truncate)
-  db.close()
   notice "Finished database pruning"
 
 proc put*(
@@ -344,18 +371,28 @@ proc put*(
   # size will reach the size specified in db.storageCapacity and will stay
   # around that size throughout the node's lifetime, as after content deletion
   # due to pruning, the free pages will be re-used.
-  # TODO:
-  # 1. Devise vacuum strategy - after few pruning cycles database can become
-  # fragmented which may impact performance, so at some point in time `VACUUM`
-  # will need to be run to defragment the db.
-  # 2. Deal with the edge case where a user configures max db size lower than
-  # current db.size(). With such config the database would try to prune itself
-  # with each addition.
+  #
+  # Note:
+  # The `forcePrune` call must be used when database storage capacity is lowered
+  # either when setting a lower `storageCapacity` or when lowering a configured
+  # static radius.
+  # When not using the `forcePrune` functionality, pruning to the required
+  # capacity will not be very effictive and free pages will not be returned.
   let dbSize = db.usedSize()
 
   if dbSize < int64(db.storageCapacity):
     return PutResult(kind: ContentStored)
   else:
+    # Note:
+    # An approach of a deleting a full fraction is chosen here, in an attempt
+    # to not continiously require radius updates, which could have a negative
+    # impact on the network. However this should be further investigated, as
+    # doing a large fraction deletion could cause a temporary node performance
+    # degradation. The `contentDeletionFraction` might need further tuning or
+    # one could opt for a much more granular approach using sql statement
+    # in the trend of:
+    # "SELECT key FROM kvstore ORDER BY xorDistance(?, key) DESC LIMIT 1"
+    # Potential adjusting the LIMIT for how many items require deletion.
     let (
       distanceOfFurthestElement,
       deletedBytes,

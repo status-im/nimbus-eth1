@@ -1,4 +1,4 @@
-# Nimbus
+# Fluffy
 # Copyright (c) 2021-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
@@ -235,7 +235,7 @@ type
       hidden
       desc: "Force the pruning of the database. This should be used when the " &
             "database is decreased in size, e.g. when a lower static radius " &
-            "is set. Only supported for statically set radius."
+            "or a lower storage capacity is set."
       defaultValue: false
       name: "force-prune" .}: bool
 

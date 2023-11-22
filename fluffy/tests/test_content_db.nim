@@ -1,4 +1,4 @@
-# Nimbus
+# Fluffy
 # Copyright (c) 2021-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
@@ -96,8 +96,8 @@ suite "Content Database":
     # Need to rework either this test, or the pruning mechanism, or probably
     # both.
     let
-      maxDbSize = uint32(100_000)
-      db = ContentDB.new("", maxDbSize, inMemory = true)
+      storageCapacity = 100_000'u64
+      db = ContentDB.new("", storageCapacity, inMemory = true)
 
       furthestElement = u256(40)
       secondFurthest = u256(30)
@@ -129,10 +129,49 @@ suite "Content Database":
 
     check:
       pr10.deletedElements == 2
-      uint32(db.usedSize()) < maxDbSize
+      uint64(db.usedSize()) < storageCapacity
       # With the current settings the 2 furthest elements will be deleted,
       # i.e key 30 and 40. The furthest non deleted one will have key 20.
       pr10.distanceOfFurthestElement == thirdFurthest
       db.get(furthestElement).isNone()
       db.get(secondFurthest).isNone()
       db.get(thirdFurthest).isSome()
+
+  test "ContentDB force pruning":
+    const
+      # This start capacity doesn't really matter here as we are directly
+      # putting data in the db without additional size checks.
+      startCapacity = 14_159_872'u64
+      endCapacity = 500_000'u64
+      amountOfItems = 10_000
+
+    let
+      rng = newRng()
+      db = ContentDB.new("", startCapacity, inMemory = true)
+      localId = UInt256.fromHex(
+        "30994892f3e4889d99deb5340050510d1842778acc7a7948adffa475fed51d6e")
+      content = genByteSeq(1000)
+
+    # Note: We could randomly generate the above localId and the content keys
+    # that are added to the database below. However we opt for a more
+    # deterministic test case as the randomness makes it difficult to chose a
+    # reasonable value to check if pruning was succesful.
+    let
+      increment = UInt256.high div amountOfItems
+      remainder = UInt256.high mod amountOfItems
+    var id = u256(0)
+    while id < UInt256.high - remainder:
+      db.put(id, content)
+      id = id + increment
+
+    db.storageCapacity = endCapacity
+
+    let
+      oldRadiusApproximation = db.getLargestDistance(localId)
+      newRadius = db.estimateNewRadius(oldRadiusApproximation)
+
+    db.forcePrune(localId, newRadius)
+
+    let diff = abs(db.size() - int64(db.storageCapacity))
+    # Quite a big marging (20%) is added as it is all an approximation.
+    check diff <  int64(float(db.storageCapacity) * 0.20)

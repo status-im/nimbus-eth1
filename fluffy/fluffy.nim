@@ -124,12 +124,29 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
   d.open()
 
   # Force pruning
-  if config.forcePrune and config.radiusConfig.kind == Static:
+  if config.forcePrune:
     let db = ContentDB.new(config.dataDir / "db" / "contentdb_" &
       d.localNode.id.toBytesBE().toOpenArray(0, 8).toHex(),
       storageCapacity = config.storageCapacityMB * 1_000_000,
       manualCheckpoint = true)
-    db.forcePrune(d.localNode.id, UInt256.fromLogRadius(config.radiusConfig.logRadius))
+
+    let radius =
+      if config.radiusConfig.kind == Static:
+        UInt256.fromLogRadius(config.radiusConfig.logRadius)
+      else:
+        let oldRadiusApproximation = db.getLargestDistance(d.localNode.id)
+        db.estimateNewRadius(oldRadiusApproximation)
+
+    # Note: In the case of dynamical radius this is all an approximation that
+    # heavily relies on uniformly distributed content and thus will always
+    # have an error margin, either down or up of the requested capacity.
+    # TODO I: Perhaps we want to add an offset to counter the latter.
+    # TODO II: Perhaps for dynamical radius, we want to also apply the vacuum
+    # without the forcePrune flag and purely by checking the amount of free
+    # space versus the pruning fraction.
+    # TODO III: Adding Radius metadata to the db could be yet another way to
+    # decide whether or not to force prune, instead of this flag.
+    db.forcePrune(d.localNode.id, radius)
     db.close()
 
   # Store the database at contentdb prefixed with the first 8 chars of node id.
