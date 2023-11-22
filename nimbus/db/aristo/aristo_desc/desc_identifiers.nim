@@ -320,7 +320,7 @@ func `@`*(lid: HashKey): Blob =
 
 func to*(pid: PathID; T: type NibblesSeq): T =
   ## Representation of a `PathID` as `NibbleSeq` (preserving full information)
-  let nibbles = pid.pfx.UInt256.toBytesBE.toSeq.initNibbleRange()
+  let nibbles = pid.pfx.toBytesBE.toSeq.initNibbleRange()
   if pid.length < 64:
     nibbles.slice(0, pid.length.int)
   else:

@@ -38,8 +38,8 @@ proc squeeze(s: string; hex = false; ignLen = false): string =
       result &= "..(" & $s.len & ")"
     result &= ".." & s[s.len-16 .. ^1]
 
-proc stripZeros(a: string): string =
-  a.strip(leading=true, trailing=false, chars={'0'})
+#proc stripZeros(a: string): string =
+#  a.strip(leading=true, trailing=false, chars={'0'})
 
 proc toPfx(indent: int; offset = 0): string =
   if 0 < indent+offset: "\n" & " ".repeat(indent+offset) else: ""
@@ -73,9 +73,9 @@ proc keyID(key: Blob; db = KvtDbRef(nil)): uint64 =
       ctr.pAmx[db.xIdGen] = key
       ctr.xIdGen
 
-proc keyBlob(id: uint64; db = KvtDbRef(nil)): Blob =
-  if 0 < id and not db.isNil:
-    result = db.getCentre.pAmx.getOrVoid id
+#proc keyBlob(id: uint64; db = KvtDbRef(nil)): Blob =
+#  if 0 < id and not db.isNil:
+#    result = db.getCentre.pAmx.getOrVoid id
 
 
 proc ppID(id: uint64): string =

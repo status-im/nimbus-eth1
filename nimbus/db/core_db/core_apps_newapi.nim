@@ -115,8 +115,7 @@ iterator findNewAncestors(
 iterator getBlockTransactionData*(
     db: CoreDbRef;
     transactionRoot: Hash256;
-      ): seq[byte]
-      {.gcsafe, raises: [RlpError].} =
+      ): Blob =
   block body:
     let root = db.getRoot(transactionRoot).valueOr:
       warn logTxt "getBlockTransactionData()",
@@ -159,8 +158,7 @@ iterator getBlockTransactionHashes*(
 iterator getWithdrawalsData*(
     db: CoreDbRef;
     withdrawalsRoot: Hash256;
-      ): seq[byte]
-      {.gcsafe, raises: [RlpError].} =
+      ): Blob =
   block body:
     let root = db.getRoot(withdrawalsRoot).valueOr:
       warn logTxt "getWithdrawalsData()",
@@ -516,8 +514,7 @@ proc persistTransactions*(
     db: CoreDbRef;
     blockNumber: BlockNumber;
     transactions: openArray[Transaction];
-      ): Hash256
-      {.gcsafe, raises: [CatchableError].} =
+      ): Hash256 =
   const
     info = "persistTransactions()"
   let
@@ -564,8 +561,7 @@ proc getTransaction*(
 proc getTransactionCount*(
     db: CoreDbRef;
     txRoot: Hash256;
-      ): int
-      {.gcsafe, raises: [RlpError].} =
+      ): int =
   const
     info = "getTransactionCount()"
   let mpt = block:
@@ -618,8 +614,7 @@ proc getUncles*(
 proc persistWithdrawals*(
     db: CoreDbRef;
     withdrawals: openArray[Withdrawal];
-      ): Hash256
-      {.gcsafe, raises: [CatchableError].} =
+      ): Hash256 =
   const info = "persistWithdrawals()"
   let mpt = db.newMpt()
   for idx, wd in withdrawals:
@@ -765,8 +760,7 @@ proc setHead*(
 proc persistReceipts*(
     db: CoreDbRef;
     receipts: openArray[Receipt];
-      ): Hash256
-      {.gcsafe, raises: [CatchableError].} =
+      ): Hash256 =
   const info = "persistReceipts()"
   let mpt = db.newMpt()
   for idx, rec in receipts:

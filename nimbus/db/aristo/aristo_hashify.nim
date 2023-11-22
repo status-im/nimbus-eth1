@@ -83,14 +83,8 @@ template logTxt(info: static[string]): static[string] =
 func getOrVoid(tab: BackVidTab; vid: VertexID): BackVidValRef =
   tab.getOrDefault(vid, BackVidValRef(nil))
 
-func getOrVoid(tab: BackWVtxTab; vid: VertexID): BackWVtxRef =
-  tab.getOrDefault(vid, BackWVtxRef(nil))
-
 func isValid(brv: BackVidValRef): bool =
   brv != BackVidValRef(nil)
-
-func isValid(brv: BackWVtxRef): bool =
-  brv != BackWVtxRef(nil)
 
 # ------------------------------------------------------------------------------
 # Private functions

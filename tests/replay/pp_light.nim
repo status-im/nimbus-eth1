@@ -26,7 +26,7 @@ export
 # Helpers
 # ------------------------------------------------------------------------------
 
-proc reGroup(q: openArray[int]; itemsPerSegment = 16): seq[seq[int]] =
+func reGroup(q: openArray[int]; itemsPerSegment = 16): seq[seq[int]] =
   var top = 0
   while top < q.len:
     let w = top
@@ -37,7 +37,7 @@ proc reGroup(q: openArray[int]; itemsPerSegment = 16): seq[seq[int]] =
 # Public functions, units pretty printer
 # ------------------------------------------------------------------------------
 
-proc ppUs*(elapsed: Duration): string =
+func ppUs*(elapsed: Duration): string =
   result = $elapsed.inMicroseconds
   let ns = elapsed.inNanoseconds mod 1_000 # fraction of a micro second
   if ns != 0:
@@ -46,7 +46,7 @@ proc ppUs*(elapsed: Duration): string =
     result &= &".{du:02}"
   result &= "us"
 
-proc ppMs*(elapsed: Duration): string =
+func ppMs*(elapsed: Duration): string =
   result = $elapsed.inMilliseconds
   let ns = elapsed.inNanoseconds mod 1_000_000 # fraction of a milli second
   if ns != 0:
@@ -55,7 +55,7 @@ proc ppMs*(elapsed: Duration): string =
     result &= &".{dm:02}"
   result &= "ms"
 
-proc ppSecs*(elapsed: Duration): string =
+func ppSecs*(elapsed: Duration): string =
   result = $elapsed.inSeconds
   let ns = elapsed.inNanoseconds mod 1_000_000_000 # fraction of a second
   if ns != 0:
@@ -64,7 +64,7 @@ proc ppSecs*(elapsed: Duration): string =
     result &= &".{ds:02}"
   result &= "s"
 
-proc ppMins*(elapsed: Duration): string =
+func ppMins*(elapsed: Duration): string =
   result = $elapsed.inMinutes
   let ns = elapsed.inNanoseconds mod 60_000_000_000 # fraction of a minute
   if ns != 0:
@@ -73,8 +73,8 @@ proc ppMins*(elapsed: Duration): string =
     result &= &":{dm:02}"
   result &= "m"
 
-proc toKMG*[T](s: T): string =
-  proc subst(s: var string; tag, new: string): bool =
+func toKMG*[T](s: T): string =
+  func subst(s: var string; tag, new: string): bool =
     if tag.len < s.len and s[s.len - tag.len ..< s.len] == tag:
       s = s[0 ..< s.len - tag.len] & new
       return true
@@ -84,11 +84,24 @@ proc toKMG*[T](s: T): string =
     if not result.subst(w[0],w[1]):
       return
 
+func pp*(elapsed: Duration): string =
+  try:
+    if 0 < times.inMinutes(elapsed):
+      result = elapsed.ppMins
+    elif 0 < times.inSeconds(elapsed):
+      result = elapsed.ppSecs
+    elif 0 < times.inMilliSeconds(elapsed):
+      result = elapsed.ppMs
+    else:
+      result = elapsed.ppUs
+  except ValueError:
+    result = $elapsed
+
 # ------------------------------------------------------------------------------
 # Public functions,  pretty printer
 # ------------------------------------------------------------------------------
 
-proc pp*(s: string; hex = false): string =
+func pp*(s: string; hex = false): string =
   if hex:
     let n = (s.len + 1) div 2
     (if s.len < 20: s else: s[0 .. 5] & ".." & s[s.len-8 .. s.len-1]) &
@@ -99,13 +112,13 @@ proc pp*(s: string; hex = false): string =
     (if (s.len and 1) == 0: s[0 ..< 8] else: "0" & s[0 ..< 7]) &
       "..(" & $s.len & ").." & s[s.len-16 ..< s.len]
 
-proc pp*(q: openArray[int]; itemsPerLine: int; lineSep: string): string =
+func pp*(q: openArray[int]; itemsPerLine: int; lineSep: string): string =
   doAssert q == q.reGroup(itemsPerLine).concat
   q.reGroup(itemsPerLine)
    .mapIt(it.mapIt(&"0x{it:02x}").join(", "))
    .join("," & lineSep)
 
-proc pp*(a: MDigest[256]; collapse = true): string =
+func pp*(a: MDigest[256]; collapse = true): string =
   if not collapse:
     a.data.toHex
   elif a == ZERO_HASH256:
@@ -121,13 +134,13 @@ proc pp*(a: MDigest[256]; collapse = true): string =
   else:
     a.data.toHex.join[56 .. 63]
 
-proc pp*(a: openArray[MDigest[256]]; collapse = true): string =
+func pp*(a: openArray[MDigest[256]]; collapse = true): string =
   "@[" & a.toSeq.mapIt(it.pp).join(" ") & "]"
 
-proc pp*(q: openArray[int]; itemsPerLine: int; indent: int): string =
+func pp*(q: openArray[int]; itemsPerLine: int; indent: int): string =
   q.pp(itemsPerLine = itemsPerLine, lineSep = "\n" & " ".repeat(max(1,indent)))
 
-proc pp*(q: openArray[byte]; noHash = false): string =
+func pp*(q: openArray[byte]; noHash = false): string =
   if q.len == 32 and not noHash:
     var a: array[32,byte]
     for n in 0..31: a[n] = q[n]

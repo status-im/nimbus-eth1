@@ -104,7 +104,7 @@ template beginApi*(ldg: LedgerRef) =
 
 template endApiIf*(ldg: LedgerRef; code: untyped) =
   if ldg.trackApi:
-    let elapsed {.inject.} = getTime() - baStart
+    let elapsed {.inject,used.} = getTime() - baStart
     code
 
 # ------------------------------------------------------------------------------
