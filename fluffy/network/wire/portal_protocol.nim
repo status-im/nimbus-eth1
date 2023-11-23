@@ -66,7 +66,6 @@ declareCounter portal_gossip_without_lookup,
   "Portal wire protocol neighborhood gossip that did not require a node lookup",
   labels = ["protocol_id"]
 
-
 # Note: These metrics are to get some idea on how many enrs are send on average.
 # Relevant issue: https://github.com/ethereum/portal-network-specs/issues/136
 const enrsBuckets = [0.0, 1.0, 3.0, 5.0, 8.0, 9.0, Inf]
@@ -78,6 +77,17 @@ declareHistogram portal_nodes_enrs_packed,
 declareHistogram portal_content_enrs_packed,
   "Portal wire protocol amount of enrs packed in a content message",
   labels = ["protocol_id"], buckets = enrsBuckets
+
+const distanceBuckets =
+  [float64 239, 240, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250, 251, 252,
+  253, 254, 255, 256]
+declareHistogram portal_find_content_log_distance,
+  "Portal wire protocol logarithmic distance of requested content",
+  labels = ["protocol_id"], buckets = distanceBuckets
+
+declareHistogram portal_offer_log_distance,
+  "Portal wire protocol logarithmic distance of offered content",
+  labels = ["protocol_id"], buckets = distanceBuckets
 
 logScope:
   topics = "portal_wire"
@@ -349,6 +359,10 @@ proc handleFindContent(
     # discv5 layer.
     return @[]
 
+  let logDistance = p.routingTable.logDistance(contentId, p.localNode.id)
+  portal_find_content_log_distance.observe(
+    int64(logDistance), labelValues = [$p.protocolId])
+
   let contentResult = p.dbGet(fc.contentKey, contentId)
 
   if contentResult.isOk():
@@ -391,6 +405,11 @@ proc handleOffer(p: PortalProtocol, o: OfferMessage, srcId: NodeId): seq[byte] =
     let contentIdResult = p.toContentId(contentKey)
     if contentIdResult.isOk():
       let contentId = contentIdResult.get()
+
+      let logDistance = p.routingTable.logDistance(contentId, p.localNode.id)
+      portal_offer_log_distance.observe(
+        int64(logDistance), labelValues = [$p.protocolId])
+
       if p.inRange(contentId):
         if p.dbGet(contentKey, contentId).isErr:
           contentKeysBitList.setBit(i)

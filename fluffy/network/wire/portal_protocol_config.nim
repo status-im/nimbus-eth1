@@ -65,11 +65,11 @@ proc init*(
     disablePoke: disablePoke
   )
 
-proc fromLogRadius*(T: type UInt256, logRadius: uint16): T =
+func fromLogRadius*(T: type UInt256, logRadius: uint16): T =
   # Get the max value of the logRadius range
   pow((2).stuint(256), logRadius) - 1
 
-proc getInitialRadius*(rc: RadiusConfig): UInt256 =
+func getInitialRadius*(rc: RadiusConfig): UInt256 =
   case rc.kind
   of Static:
     return UInt256.fromLogRadius(rc.logRadius)
