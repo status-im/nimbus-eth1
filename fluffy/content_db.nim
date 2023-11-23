@@ -459,7 +459,7 @@ proc createStoreHandler*(
       of Dynamic:
         # In case of dynamic radius setting we obey storage limits and adjust
         # radius to store network fraction corresponding to those storage limits.
-        let res = db.put(contentId, content, p.baseProtocol.localNode.id)
+        let res = db.put(contentId, content, p.localNode.id)
         if res.kind == DbPruned:
           portal_pruning_counter.inc(labelValues = [$p.protocolId])
           portal_pruning_deleted_elements.set(
