@@ -60,6 +60,10 @@ func legsTo*(hike: Hike; T: type NibblesSeq): T =
   ## Convert back
   hike.getNibblesImpl()
 
+func legsTo*(hike: Hike; numLegs: int; T: type NibblesSeq): T =
+  ## variant of `legsTo()`
+  hike.getNibblesImpl(0, numLegs)
+
 # --------
 
 proc hikeUp*(
