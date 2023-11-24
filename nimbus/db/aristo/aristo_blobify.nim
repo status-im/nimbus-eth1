@@ -56,7 +56,7 @@ proc blobify*(pyl: PayloadRef): Blob =
 
     if high(uint64).u256 < pyl.account.balance:
       mask = mask or 0x08
-      result &= pyl.account.balance.UInt256.toBytesBE.toSeq
+      result &= pyl.account.balance.toBytesBE.toSeq
     elif 0 < pyl.account.balance:
       mask = mask or 0x04
       result &= pyl.account.balance.truncate(uint64).uint64.toBytesBE.toSeq
@@ -101,10 +101,8 @@ proc blobify*(vtx: VertexRef; data: var Blob): Result[void,AristoError] =
   case vtx.vType:
   of Branch:
     var
-      top = 0u64
       access = 0u16
       refs: Blob
-      keys: Blob
     for n in 0..15:
       if vtx.bVid[n].isValid:
         access = access or (1u16 shl n)

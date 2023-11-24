@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2023 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -42,7 +42,7 @@ const
 template logTxt(info: static[string]): static[string] =
   "RocksDB/put " & info
 
-proc getFileSize(fileName: string): int64 =
+proc getFileSize(fileName: string): int64 {.used.} =
   var f: File
   if f.open fileName:
     defer: f.close
@@ -137,8 +137,7 @@ proc commit(
       return err((RdbBeIngestSstWriter, $csError))
 
     when extraTraceMessages:
-      let fileSize = session.sstPath.getFileSize
-      trace logTxt "finished sst", fileSize
+      trace logTxt "finished sst", fileSize=session.sstPath.getFileSize
 
   session.destroy()
   ok()

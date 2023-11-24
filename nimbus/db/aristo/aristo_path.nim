@@ -45,7 +45,7 @@ func pathAsBlob*(tag: PathID): Blob =
   ## used to index database leaf values can be represented as `Blob`, i.e.
   ## `PathID` type paths with an even number of nibbles.
   if 0 < tag.length:
-    let key = @(tag.pfx.UInt256.toBytesBE)
+    let key = @(tag.pfx.toBytesBE)
     if 64 <= tag.length:
       return key
     else:
@@ -57,7 +57,7 @@ func pathAsHEP*(tag: PathID; isLeaf = false): Blob =
   ## byte `Blob` and non-leaf partial paths are *compact encoded* (i.e. per
   ## the Ethereum wire protocol.)
   if 64 <= tag.length:
-    @(tag.pfx.UInt256.toBytesBE)
+    @(tag.pfx.toBytesBE)
   else:
     tag.to(NibblesSeq).hexPrefixEncode(isLeaf=true)
 

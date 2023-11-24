@@ -39,14 +39,6 @@ func valBlob(vData: cstring, vLen: csize_t): Blob =
   if not vData.isNil and 0 < vLen:
     return vData.toOpenArrayByte(0,int(vLen)-1).toSeq
 
-
-# ------------------------------------------------------------------------------
-# Private debugging helpers
-# ------------------------------------------------------------------------------
-
-proc pp(kd: cstring, kl: csize_t): string =
-  if kd.isNil: "n/a" else: $kd.keyXid(kl)
-
 # ------------------------------------------------------------------------------
 # Public iterators
 # ------------------------------------------------------------------------------

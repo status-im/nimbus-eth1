@@ -26,65 +26,50 @@ export
   LedgerRef,
   LedgerSpRef
 
-when defined(release):
-  const AutoValidateDescriptors = false
-else:
-  const AutoValidateDescriptors = true
-
 const
+  AutoValidateDescriptors = defined(release).not
+
   EnableApiTracking = true and false
     ## When enabled, API functions are logged. Tracking is enabled by setting
     ## the `trackApi` flag to `true`.
+
+  apiTxt = "Ledger API"
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
 when EnableApiTracking:
-  import std/strutils, chronicles, stew/byteutils
   {.warning: "*** Provided API logging for Ledger (disabled by default)".}
 
-  template apiTxt(info: static[string]): static[string] =
-    "Ledger API " & info
+  import
+    std/times,
+    chronicles,
+    base/api_tracking
 
-  template ifTrackApi(ldg: LedgerRef; code: untyped) =
-    when EnableApiTracking:
-      if ldg.trackApi:
-        code
+  proc `$`(a: EthAddress): string {.used.} = a.toStr
+  proc `$`(e: Duration): string {.used.} = e.toStr
 
-  proc oaToStr(w: openArray[byte]): string =
-    w.toHex.toLowerAscii
+template beginTrackApi(ldg: LedgerRef; s: static[string]) =
+  when EnableApiTracking:
+    ldg.beginApi
+    let ctx {.inject.} = s
 
-  proc toStr(w: EthAddress): string =
-    w.oaToStr
-
-  proc toStr(w: Hash256): string =
-    w.data.oaToStr
-
-  proc toStr(w: CoreDbMptRef): string =
-    if w.CoreDxMptRef.isNil: "MptRef(nil)" else: "MptRef"
-
-  proc toStr(w: Blob): string =
-    if 0 < w.len and w.len < 5: "<" & w.oaToStr & ">"
-    else: "Blob[" & $w.len & "]"
-
-  proc toStr(w: seq[Log]): string =
-    "Logs[" & $w.len & "]"
-
-else:
-  template ifTrackApi(ldg: LedgerRef; code: untyped) = discard
+template ifTrackApi(ldg: LedgerRef; code: untyped) =
+  when EnableApiTracking:
+    ldg.endApiIf: code
 
 # ------------------------------------------------------------------------------
 # Public constructor helper
 # ------------------------------------------------------------------------------
 
 proc bless*(ldg: LedgerRef; db: CoreDbRef): LedgerRef =
+  ldg.beginTrackApi "LedgerRef.init()"
   when AutoValidateDescriptors:
     ldg.validate()
   when EnableApiTracking:
     ldg.trackApi = db.trackLedgerApi
-    if ldg.trackApi:
-      debug apiTxt "LedgerRef.init()", ldgType=ldg.ldgType
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed, ldgType=ldg.ldgType
   ldg
 
 # ------------------------------------------------------------------------------
@@ -92,202 +77,256 @@ proc bless*(ldg: LedgerRef; db: CoreDbRef): LedgerRef =
 # ------------------------------------------------------------------------------
 
 proc accessList*(ldg: LedgerRef, eAddr: EthAddress) =
-  ldg.methods.accessListFn(eAddr)
-  ldg.ifTrackApi: debug apiTxt "accessList()", eAddr=eAddr.toStr
+  ldg.beginTrackApi "accessList()"
+  ldg.methods.accessListFn eAddr
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed, eAddr
 
 proc accessList*(ldg: LedgerRef, eAddr: EthAddress, slot: UInt256) =
+  ldg.beginTrackApi "accessList()"
   ldg.methods.accessList2Fn(eAddr, slot)
-  ldg.ifTrackApi: debug apiTxt "accessList()", eAddr=eAddr.toStr, slot
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed, eAddr, slot
 
 proc accountExists*(ldg: LedgerRef, eAddr: EthAddress): bool =
-  result = ldg.methods.accountExistsFn(eAddr)
-  ldg.ifTrackApi: debug apiTxt "accountExists()", eAddr=eAddr.toStr, result
+  ldg.beginTrackApi "accountExists()"
+  result = ldg.methods.accountExistsFn eAddr
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed, eAddr, result
 
 proc addBalance*(ldg: LedgerRef, eAddr: EthAddress, delta: UInt256) =
+  ldg.beginTrackApi "addBalance()"
   ldg.methods.addBalanceFn(eAddr, delta)
-  ldg.ifTrackApi: debug apiTxt "addBalance()", eAddr=eAddr.toStr, delta
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed, eAddr, delta
 
 proc addLogEntry*(ldg: LedgerRef, log: Log) =
-  ldg.methods.addLogEntryFn(log)
-  ldg.ifTrackApi: debug apiTxt "addLogEntry()"
+  ldg.beginTrackApi "addLogEntry()"
+  ldg.methods.addLogEntryFn log
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed
 
 proc beginSavepoint*(ldg: LedgerRef): LedgerSpRef =
+  ldg.beginTrackApi "beginSavepoint()"
   result = ldg.methods.beginSavepointFn()
-  ldg.ifTrackApi: debug apiTxt "beginSavepoint()"
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed
 
 proc clearStorage*(ldg: LedgerRef, eAddr: EthAddress) =
-  ldg.methods.clearStorageFn(eAddr)
-  ldg.ifTrackApi: debug apiTxt "clearStorage()", eAddr=eAddr.toStr
+  ldg.beginTrackApi "clearStorage()"
+  ldg.methods.clearStorageFn eAddr
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed, eAddr
 
 proc clearTransientStorage*(ldg: LedgerRef) =
+  ldg.beginTrackApi "clearTransientStorage()"
   ldg.methods.clearTransientStorageFn()
-  ldg.ifTrackApi: debug apiTxt "clearTransientStorage()"
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed
 
 proc collectWitnessData*(ldg: LedgerRef) =
+  ldg.beginTrackApi "collectWitnessData()"
   ldg.methods.collectWitnessDataFn()
-  ldg.ifTrackApi: debug apiTxt "collectWitnessData()"
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed
 
 proc commit*(ldg: LedgerRef, sp: LedgerSpRef) =
-  ldg.methods.commitFn(sp)
-  ldg.ifTrackApi: debug apiTxt "commit()"
+  ldg.beginTrackApi "commit()"
+  ldg.methods.commitFn sp
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed
 
 proc deleteAccount*(ldg: LedgerRef, eAddr: EthAddress) =
-  ldg.methods.deleteAccountFn(eAddr)
-  ldg.ifTrackApi: debug apiTxt "deleteAccount()", eAddr=eAddr.toStr
+  ldg.beginTrackApi "deleteAccount()"
+  ldg.methods.deleteAccountFn eAddr
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed, eAddr
 
 proc dispose*(ldg: LedgerRef, sp: LedgerSpRef) =
-  ldg.methods.disposeFn(sp)
-  ldg.ifTrackApi: debug apiTxt "dispose()"
+  ldg.beginTrackApi "dispose()"
+  ldg.methods.disposeFn sp
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed
 
 proc getAndClearLogEntries*(ldg: LedgerRef): seq[Log] =
+  ldg.beginTrackApi "getAndClearLogEntries()"
   result = ldg.methods.getAndClearLogEntriesFn()
-  ldg.ifTrackApi: debug apiTxt "getAndClearLogEntries()"
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed
 
 proc getBalance*(ldg: LedgerRef, eAddr: EthAddress): UInt256 =
-  result = ldg.methods.getBalanceFn(eAddr)
-  ldg.ifTrackApi: debug apiTxt "getBalance()", eAddr=eAddr.toStr, result
+  ldg.beginTrackApi "getBalance()"
+  result = ldg.methods.getBalanceFn eAddr
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed, eAddr, result
 
 proc getCode*(ldg: LedgerRef, eAddr: EthAddress): Blob =
-  result = ldg.methods.getCodeFn(eAddr)
-  ldg.ifTrackApi:
-    debug apiTxt "getCode()", eAddr=eAddr.toStr, result=result.toStr
+  ldg.beginTrackApi "getCode()"
+  result = ldg.methods.getCodeFn eAddr
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed, eAddr, result=result.toStr
 
 proc getCodeHash*(ldg: LedgerRef, eAddr: EthAddress): Hash256  =
-  result = ldg.methods.getCodeHashFn(eAddr)
-  ldg.ifTrackApi:
-    debug apiTxt "getCodeHash()", eAddr=eAddr.toStr, result=result.toStr
+  ldg.beginTrackApi "getCodeHash()"
+  result = ldg.methods.getCodeHashFn eAddr
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed, eAddr, result=result.toStr
 
 proc getCodeSize*(ldg: LedgerRef, eAddr: EthAddress): int =
-  result = ldg.methods.getCodeSizeFn(eAddr)
-  ldg.ifTrackApi: debug apiTxt "getCodeSize()", eAddr=eAddr.toStr, result
+  ldg.beginTrackApi "getCodeSize()"
+  result = ldg.methods.getCodeSizeFn eAddr
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed, eAddr, result
 
-proc getCommittedStorage*(ldg: LedgerRef, eAddr: EthAddress, slot: UInt256): UInt256 =
+proc getCommittedStorage*(
+    ldg: LedgerRef;
+    eAddr: EthAddress;
+    slot: UInt256;
+      ): UInt256 =
+  ldg.beginTrackApi "getCommittedStorage()"
   result = ldg.methods.getCommittedStorageFn(eAddr, slot)
-  ldg.ifTrackApi:
-    debug apiTxt "getCommittedStorage()", eAddr=eAddr.toStr, slot, result
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed, eAddr, slot, result
 
 proc getNonce*(ldg: LedgerRef, eAddr: EthAddress): AccountNonce =
-  result = ldg.methods.getNonceFn(eAddr)
-  ldg.ifTrackApi: debug apiTxt "getNonce()", eAddr=eAddr.toStr, result
+  ldg.beginTrackApi "getNonce()"
+  result = ldg.methods.getNonceFn eAddr
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed, eAddr, result
 
 proc getStorage*(ldg: LedgerRef, eAddr: EthAddress, slot: UInt256): UInt256 =
+  ldg.beginTrackApi "getStorage()"
   result = ldg.methods.getStorageFn(eAddr, slot)
-  ldg.ifTrackApi: debug apiTxt "getStorage()", eAddr=eAddr.toStr, slot, result
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed, eAddr, slot, result
 
 proc getStorageRoot*(ldg: LedgerRef, eAddr: EthAddress): Hash256 =
-  result = ldg.methods.getStorageRootFn(eAddr)
-  ldg.ifTrackApi:
-    debug apiTxt "getStorageRoot()", eAddr=eAddr.toStr, result=result.toStr
+  ldg.beginTrackApi "getStorageRoot()"
+  result = ldg.methods.getStorageRootFn eAddr
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed, eAddr, result=result.toStr
 
-proc getTransientStorage*(ldg: LedgerRef, eAddr: EthAddress, slot: UInt256): UInt256 =
+proc getTransientStorage*(
+    ldg: LedgerRef;
+    eAddr: EthAddress;
+    slot: UInt256;
+      ): UInt256 =
+  ldg.beginTrackApi "getTransientStorage()"
   result = ldg.methods.getTransientStorageFn(eAddr, slot)
-  ldg.ifTrackApi:
-    debug apiTxt "getTransientStorage()", eAddr=eAddr.toStr, slot, result
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed, eAddr, slot, result
 
 proc hasCodeOrNonce*(ldg: LedgerRef, eAddr: EthAddress): bool =
-  result = ldg.methods.hasCodeOrNonceFn(eAddr)
-  ldg.ifTrackApi: debug apiTxt "hasCodeOrNonce()", eAddr=eAddr.toStr, result
+  ldg.beginTrackApi "hasCodeOrNonce()"
+  result = ldg.methods.hasCodeOrNonceFn eAddr
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed, eAddr, result
 
 proc inAccessList*(ldg: LedgerRef, eAddr: EthAddress): bool =
-  result = ldg.methods.inAccessListFn(eAddr)
-  ldg.ifTrackApi: debug apiTxt "inAccessList()", eAddr=eAddr.toStr, result
+  ldg.beginTrackApi "inAccessList()"
+  result = ldg.methods.inAccessListFn eAddr
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed, eAddr, result
 
 proc inAccessList*(ldg: LedgerRef, eAddr: EthAddress, slot: UInt256): bool =
+  ldg.beginTrackApi "inAccessList()"
   result = ldg.methods.inAccessList2Fn(eAddr, slot)
-  ldg.ifTrackApi: debug apiTxt "inAccessList()", eAddr=eAddr.toStr, slot, result
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed, eAddr, slot, result
 
 proc incNonce*(ldg: LedgerRef, eAddr: EthAddress) =
+  ldg.beginTrackApi "incNonce()"
   ldg.methods.incNonceFn(eAddr)
-  ldg.ifTrackApi: debug apiTxt "incNonce()", eAddr=eAddr.toStr
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed, eAddr
 
 proc isDeadAccount*(ldg: LedgerRef, eAddr: EthAddress): bool =
-  result = ldg.methods.isDeadAccountFn(eAddr)
-  ldg.ifTrackApi: debug apiTxt "isDeadAccount()", eAddr=eAddr.toStr, result
+  ldg.beginTrackApi "isDeadAccount()"
+  result = ldg.methods.isDeadAccountFn eAddr
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed, eAddr, result
 
 proc isEmptyAccount*(ldg: LedgerRef, eAddr: EthAddress): bool =
-  result = ldg.methods.isEmptyAccountFn(eAddr)
-  ldg.ifTrackApi: debug apiTxt "isEmptyAccount()", eAddr=eAddr.toStr, result
+  ldg.beginTrackApi "isEmptyAccount()"
+  result = ldg.methods.isEmptyAccountFn eAddr
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed, eAddr, result
 
 proc isTopLevelClean*(ldg: LedgerRef): bool =
+  ldg.beginTrackApi "isTopLevelClean()"
   result = ldg.methods.isTopLevelCleanFn()
-  ldg.ifTrackApi: debug apiTxt "isTopLevelClean()", result
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed, result
 
 proc logEntries*(ldg: LedgerRef): seq[Log] =
+  ldg.beginTrackApi "logEntries()"
   result = ldg.methods.logEntriesFn()
-  ldg.ifTrackApi: debug apiTxt "logEntries()", result=result.toStr
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed, result=result.toStr
 
 proc makeMultiKeys*(ldg: LedgerRef): MultikeysRef =
+  ldg.beginTrackApi "makeMultiKeys()"
   result = ldg.methods.makeMultiKeysFn()
-  ldg.ifTrackApi: debug apiTxt "makeMultiKeys()"
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed
 
 proc persist*(ldg: LedgerRef, clearEmptyAccount = false, clearCache = true) =
+  ldg.beginTrackApi "persist()"
   ldg.methods.persistFn(clearEmptyAccount, clearCache)
-  ldg.ifTrackApi: debug apiTxt "persist()", clearEmptyAccount, clearCache
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed, clearEmptyAccount, clearCache
 
 proc ripemdSpecial*(ldg: LedgerRef) =
+  ldg.beginTrackApi "ripemdSpecial()"
   ldg.methods.ripemdSpecialFn()
-  ldg.ifTrackApi: debug apiTxt "ripemdSpecial()"
+  ldg.ifTrackApi: debug apiTxt, ctx
 
 proc rollback*(ldg: LedgerRef, sp: LedgerSpRef) =
-  ldg.methods.rollbackFn(sp)
-  ldg.ifTrackApi: debug apiTxt "rollback()"
+  ldg.beginTrackApi "rollback()"
+  ldg.methods.rollbackFn sp
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed
 
 proc rootHash*(ldg: LedgerRef): Hash256 =
+  ldg.beginTrackApi "rootHash()"
   result = ldg.methods.rootHashFn()
-  ldg.ifTrackApi: debug apiTxt "rootHash()", result=result.toStr
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed, result=result.toStr
 
 proc safeDispose*(ldg: LedgerRef, sp: LedgerSpRef) =
-  ldg.methods.safeDisposeFn(sp)
-  ldg.ifTrackApi: debug apiTxt "safeDispose()"
+  ldg.beginTrackApi "safeDispose()"
+  ldg.methods.safeDisposeFn sp
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed
 
 proc selfDestruct*(ldg: LedgerRef, eAddr: EthAddress) =
-  ldg.methods.selfDestructFn(eAddr)
-  ldg.ifTrackApi: debug apiTxt "selfDestruct()"
+  ldg.beginTrackApi "selfDestruct()"
+  ldg.methods.selfDestructFn eAddr
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed
 
 proc selfDestruct6780*(ldg: LedgerRef, eAddr: EthAddress) =
-  ldg.methods.selfDestruct6780Fn(eAddr)
-  ldg.ifTrackApi: debug apiTxt "selfDestruct6780()"
+  ldg.beginTrackApi "selfDestruct6780()"
+  ldg.methods.selfDestruct6780Fn eAddr
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed
 
 proc selfDestructLen*(ldg: LedgerRef): int =
+  ldg.beginTrackApi "selfDestructLen()"
   result = ldg.methods.selfDestructLenFn()
-  ldg.ifTrackApi: debug apiTxt "selfDestructLen()", result
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed, result
 
 proc setBalance*(ldg: LedgerRef, eAddr: EthAddress, balance: UInt256) =
+  ldg.beginTrackApi "setBalance()"
   ldg.methods.setBalanceFn(eAddr, balance)
-  ldg.ifTrackApi: debug apiTxt "setBalance()", eAddr=eAddr.toStr, balance
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed, eAddr, balance
 
 proc setCode*(ldg: LedgerRef, eAddr: EthAddress, code: Blob) =
+  ldg.beginTrackApi "setCode()"
   ldg.methods.setCodeFn(eAddr, code)
-  ldg.ifTrackApi: debug apiTxt "setCode()", eAddr=eAddr.toStr, code=code.toStr
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed, eAddr, code=code.toStr
 
 proc setNonce*(ldg: LedgerRef, eAddr: EthAddress, nonce: AccountNonce) =
+  ldg.beginTrackApi "setNonce()"
   ldg.methods.setNonceFn(eAddr, nonce)
-  ldg.ifTrackApi: debug apiTxt "setNonce()", eAddr=eAddr.toStr, nonce
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed, eAddr, nonce
 
 proc setStorage*(ldg: LedgerRef, eAddr: EthAddress, slot, val: UInt256) =
+  ldg.beginTrackApi "setStorage()"
   ldg.methods.setStorageFn(eAddr, slot, val)
-  ldg.ifTrackApi: debug apiTxt "setStorage()", eAddr=eAddr.toStr, slot, val
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed, eAddr, slot, val
 
-proc setTransientStorage*(ldg: LedgerRef, eAddr: EthAddress, slot, val: UInt256) =
+proc setTransientStorage*(
+    ldg: LedgerRef;
+    eAddr: EthAddress;
+    slot: UInt256;
+    val: UInt256;
+      ) =
+  ldg.beginTrackApi "setTransientStorage()"
   ldg.methods.setTransientStorageFn(eAddr, slot, val)
-  ldg.ifTrackApi:
-    debug apiTxt "setTransientStorage()", eAddr=eAddr.toStr, slot, val
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed, eAddr, slot, val
 
 proc subBalance*(ldg: LedgerRef, eAddr: EthAddress, delta: UInt256) =
+  ldg.beginTrackApi "setTransientStorage()"
   ldg.methods.subBalanceFn(eAddr, delta)
-  ldg.ifTrackApi: debug apiTxt "setTransientStorage()", eAddr=eAddr.toStr, delta
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed, eAddr, delta
 
 # ------------------------------------------------------------------------------
 # Public methods, extensions to go away
 # ------------------------------------------------------------------------------
 
 proc getMpt*(ldg: LedgerRef): CoreDbMptRef =
+  ldg.beginTrackApi "getMpt()"
   result = ldg.extras.getMptFn()
-  ldg.ifTrackApi: debug apiTxt "getMpt()", result=result.toStr
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed, result=result.toStr
 
 proc rawRootHash*(ldg: LedgerRef): Hash256 =
+  ldg.beginTrackApi "rawRootHash()"
   result = ldg.extras.rawRootHashFn()
-  ldg.ifTrackApi: debug apiTxt "rawRootHash()", result=result.toStr
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed, result=result.toStr
 
 # ------------------------------------------------------------------------------
 # Public virtual read-only methods

@@ -25,6 +25,7 @@ type
     parent: CoreDbRef            ## Opaque top level descriptor
     kdb: KvtDbRef                ## Key-value table
     gq: seq[KvtChildDbRef]       ## Garbage queue, deferred disposal
+    cache: CoreDxKvtRef          ## Pre-configured descriptor to share
 
   KvtChildDbRef = ref KvtChildDbObj
   KvtChildDbObj = object
@@ -52,7 +53,9 @@ proc gc*(base: KvtBaseRef) {.gcsafe.}
 template logTxt(info: static[string]): static[string] =
   "CoreDb/kdb " & info
 
-func toErrorImpl(
+# -------------------------------
+
+func toError(
     e: KvtError;
     db: CoreDbRef;
     info: string;
@@ -63,7 +66,7 @@ func toErrorImpl(
     isAristo: false,
     kErr:     e))
 
-func toRcImpl[T](
+func toRc[T](
     rc: Result[T,KvtError];
     db: CoreDbRef;
     info: string;
@@ -74,102 +77,158 @@ func toRcImpl[T](
       return ok()
     else:
       return ok(rc.value)
-  err rc.error.toErrorImpl(db, info, error)
+  err rc.error.toError(db, info, error)
 
 # ------------------------------------------------------------------------------
-# Private call back functions  (too large for keeping inline)
+# Private auto destructor
 # ------------------------------------------------------------------------------
-
-proc finish(
-    cKvt: KvtChildDbRef;
-    info: static[string];
-      ): CoreDbRc[void] =
-  ## key-value table destructor to be called automagically when the argument
-  ## wrapper gets out of scope
-  let
-    base = cKvt.base
-    db = base.parent
-
-  result = ok()
-
-  if cKvt.kvt != base.kdb:
-    let rc = cKvt.kvt.forget()
-    if rc.isErr:
-      result = err(rc.error.toErrorImpl(db, info))
-    cKvt.kvt = KvtDbRef(nil) # Disables `=destroy()` action
-
-  if cKvt.saveMode == AutoSave:
-    if base.kdb.level == 0:
-      let rc = base.kdb.stow()
-      if rc.isErr:
-        result = err(rc.error.toErrorImpl(db, info))
 
 proc `=destroy`(cKvt: var KvtChildDbObj) =
   ## Auto destructor
-  if not cKvt.kvt.isNil:
-    # Add to destructor batch queue unless direct reference
-    if cKvt.kvt != cKvt.base.kdb or
-       cKvt.saveMode == AutoSave:
-      cKvt.base.gq.add KvtChildDbRef(
-        base:     cKvt.base,
-        kvt:      cKvt.kvt,
+  let
+    base = cKvt.base
+    kvt = cKvt.kvt
+  if not kvt.isNil:
+    block body:
+      # Do some heuristics to avoid duplicates:
+      block addToBatchQueue:
+        if kvt != base.kdb:              # not base descriptor?
+          if kvt.level == 0:             # no transaction pending?
+            break addToBatchQueue        # add to destructor queue
+          else:
+            break body                   # ignore `kvt`
+
+        if cKvt.saveMode != AutoSave:    # is base descriptor, no auto-save?
+          break body                     # ignore `kvt`
+
+        if base.gq.len == 0:             # empty batch queue?
+          break addToBatchQueue          # add to destructor queue
+
+        if base.gq[0].kvt == kvt or      # not the same as first entry?
+           base.gq[^1].kvt == kvt:       # not the same as last entry?
+          break body                     # ignore `kvt`
+
+      # Add to destructor batch queue. Note that the `adb` destructor might
+      # have a pending transaction which might be resolved while queued for
+      # persistent saving.
+      base.gq.add KvtChildDbRef(
+        base:     base,
+        kvt:      kvt,
         saveMode: cKvt.saveMode)
 
-# -------------------------------
-
-proc kvtGet(
-    cKvt: KvtChildDbRef;
-    k: openArray[byte];
-    info: static[string];
-      ): CoreDbRc[Blob] =
-  ## Member of `CoreDbKvtFns`
-  let rc = cKvt.kvt.get(k)
-  if rc.isErr:
-    let db = cKvt.base.parent
-    if rc.error == GetNotFound:
-      return err(rc.error.toErrorImpl(db, info, KvtNotFound))
-    else:
-      return rc.toRcImpl(db, info)
-  ok(rc.value)
-
-proc kvtPut(
-    cKvt: KvtChildDbRef;
-    k: openArray[byte];
-    v: openArray[byte];
-    info: static[string];
-      ): CoreDbRc[void] =
-  let rc = cKvt.kvt.put(k,v)
-  if rc.isErr:
-    return err(rc.error.toErrorImpl(cKvt.base.parent, info))
-  ok()
-
-proc kvtDel(
-    cKvt: KvtChildDbRef;
-    k: openArray[byte];
-    info: static[string];
-      ): CoreDbRc[void] =
-  let rc = cKvt.kvt.del k
-  if rc.isErr:
-    return err(rc.error.toErrorImpl(cKvt.base.parent, info))
-  ok()
-
-proc kvtHasKey(
-    cKvt: KvtChildDbRef;
-    k: openArray[byte];
-    info: static[string];
-      ): CoreDbRc[bool] =
-  cKvt.kvt.hasKey(k).toRcImpl(cKvt.base.parent, info)
+      # End body
 
 # ------------------------------------------------------------------------------
-# Private database methods function table
+# Private functions
+# ------------------------------------------------------------------------------
+
+proc persistent(
+    cKvt: KvtChildDbRef;
+    info: static[string];
+      ): CoreDbRc[void] =
+  let
+    base = cKvt.base
+    kvt = cKvt.kvt
+    db = base.parent
+    rc = kvt.stow()
+
+  # Note that `gc()` may call `persistent()` so there is no `base.gc()` here
+  if rc.isOk:
+    ok()
+  elif kvt.level == 0:
+    err(rc.error.toError(db, info))
+  else:
+    err(rc.error.toError(db, info, KvtTxPending))
+
+proc forget(
+    cKvt: KvtChildDbRef;
+    info: static[string];
+      ): CoreDbRc[void] =
+  let
+    base = cKvt.base
+    kvt = cKvt.kvt
+  cKvt.kvt = KvtDbRef(nil) # Disables `=destroy()` action
+  base.gc()
+  result = ok()
+
+  if kvt != base.kdb:
+    let
+      db = base.parent
+      rc = kvt.forget()
+    if rc.isErr:
+      result = err(rc.error.toError(db, info))
+
+# ------------------------------------------------------------------------------
+# Private `kvt` call back functions
 # ------------------------------------------------------------------------------
 
 proc kvtMethods(cKvt: KvtChildDbRef): CoreDbKvtFns =
   ## Key-value database table handlers
-  let db = cKvt.base.parent
+
+  proc kvtBackend(
+      cKvt: KvtChildDbRef;
+        ): CoreDbKvtBackendRef =
+    let
+      db = cKvt.base.parent
+      kvt = cKvt.kvt
+    db.bless AristoCoreDbKvtBE(kdb: kvt)
+
+  proc kvtPersistent(
+    cKvt: KvtChildDbRef;
+    info: static[string];
+      ): CoreDbRc[void] =
+    cKvt.base.gc()
+    cKvt.persistent info # note that `gc()` calls `persistent()`
+
+  proc kvtGet(
+      cKvt: KvtChildDbRef;
+      k: openArray[byte];
+      info: static[string];
+        ): CoreDbRc[Blob] =
+    ## Member of `CoreDbKvtFns`
+    let rc = cKvt.kvt.get(k)
+    if rc.isErr:
+      let db = cKvt.base.parent
+      if rc.error == GetNotFound:
+        return err(rc.error.toError(db, info, KvtNotFound))
+      else:
+        return rc.toRc(db, info)
+    ok(rc.value)
+
+  proc kvtPut(
+      cKvt: KvtChildDbRef;
+      k: openArray[byte];
+      v: openArray[byte];
+      info: static[string];
+        ): CoreDbRc[void] =
+    let rc = cKvt.kvt.put(k,v)
+    if rc.isErr:
+      return err(rc.error.toError(cKvt.base.parent, info))
+    ok()
+
+  proc kvtDel(
+      cKvt: KvtChildDbRef;
+      k: openArray[byte];
+      info: static[string];
+        ): CoreDbRc[void] =
+    let rc = cKvt.kvt.del k
+    if rc.isErr:
+      return err(rc.error.toError(cKvt.base.parent, info))
+    ok()
+
+  proc kvtHasKey(
+      cKvt: KvtChildDbRef;
+      k: openArray[byte];
+      info: static[string];
+        ): CoreDbRc[bool] =
+    let rc = cKvt.kvt.hasKey(k)
+    if rc.isErr:
+      return err(rc.error.toError(cKvt.base.parent, info))
+    ok(rc.value)
+
   CoreDbKvtFns(
     backendFn: proc(): CoreDbKvtBackendRef =
-      db.bless(AristoCoreDbKvtBE(kdb: cKvt.kvt)),
+      cKvt.kvtBackend(),
 
     getFn: proc(k: openArray[byte]): CoreDbRc[Blob] =
       cKvt.kvtGet(k, "getFn()"),
@@ -183,9 +242,11 @@ proc kvtMethods(cKvt: KvtChildDbRef): CoreDbKvtFns =
     hasKeyFn: proc(k: openArray[byte]): CoreDbRc[bool] =
       cKvt.kvtHasKey(k, "hasKeyFn()"),
 
-    destroyFn: proc(saveMode: CoreDbSaveFlags): CoreDbRc[void] =
-      cKvt.base.gc()
-      cKvt.finish("destroyFn()"),
+    persistentFn: proc(): CoreDbRc[void] =
+      cKvt.kvtPersistent("persistentFn()"),
+
+    forgetFn: proc(): CoreDbRc[void] =
+      cKvt.forget("forgetFn()"),
 
     pairsIt: iterator(): (Blob, Blob) =
       discard)
@@ -200,9 +261,10 @@ func toVoidRc*[T](
     info: string;
     error = Unspecified;
       ): CoreDbRc[void] =
-  if rc.isOk:
-    return ok()
-  err rc.error.toErrorImpl(db, info, error)
+  if rc.isErr:
+    return err(rc.error.toError(db, info, error))
+  ok()
+
 
 proc gc*(base: KvtBaseRef) =
   ## Run deferred destructors when it is safe. It is needed to run the
@@ -214,30 +276,57 @@ proc gc*(base: KvtBaseRef) =
   ## Note: In practice the garbage queue should not have much more than one
   ##       entry and mostly be empty.
   const info = "gc()"
-  while 0 < base.gq.len:
-    var q: typeof base.gq
-    base.gq.swap q # now `=destroy()` may refill while destructing, below
-    for cKvt in q:
-      cKvt.finish(info).isOkOr:
-        debug logTxt info, `error`=error.errorPrint
-        continue # terminates `isOkOr()`
+  var kdbAutoSave = false
+
+  proc saveAndDestroy(cKvt: KvtChildDbRef): CoreDbRc[void] =
+    if cKvt.kvt != base.kdb:
+      # FIXME: Currently no strategy for `Companion`
+      cKvt.forget info
+    elif cKvt.saveMode != AutoSave or kdbAutoSave: # call only once
+      ok()
+    else:
+      kdbAutoSave = true
+      cKvt.persistent info
+
+  if 0 < base.gq.len:
+    # There might be a single queue item left over from the last run
+    # which can be ignored right away as the body below would not change
+    # anything.
+    if base.gq.len != 1 or base.gq[0].kvt.level == 0:
+      var later = KvtChildDbRef(nil)
+
+      while 0 < base.gq.len:
+        var q: seq[KvtChildDbRef]
+        base.gq.swap q # now `=destroy()` may refill while destructing, below
+        for cKvt in q:
+          if 0 < cKvt.kvt.level:
+            assert cKvt.kvt == base.kdb and cKvt.saveMode == AutoSave
+            later = cKvt # do it later when no transaction pending
+            continue
+          cKvt.saveAndDestroy.isOkOr:
+            debug logTxt info, saveMode=cKvt.saveMode, `error`=error.errorPrint
+            continue # terminates `isOkOr()`
+
+      # Re-add pending transaction item
+      if not later.isNil:
+        base.gq.add later
+
+# ---------------------
 
 func kvt*(dsc: CoreDxKvtRef): KvtDbRef =
   dsc.KvtCoreDxKvtRef.ctx.kvt
-
-# ---------------------
 
 func txTop*(
     base: KvtBaseRef;
     info: static[string];
       ): CoreDbRc[KvtTxRef] =
-  base.kdb.txTop.toRcImpl(base.parent, info)
+  base.kdb.txTop.toRc(base.parent, info)
 
 func txBegin*(
     base: KvtBaseRef;
     info: static[string];
       ): CoreDbRc[KvtTxRef] =
-  base.kdb.txBegin.toRcImpl(base.parent, info)
+  base.kdb.txBegin.toRc(base.parent, info)
 
 # ------------------------------------------------------------------------------
 # Public constructors and related
@@ -253,14 +342,21 @@ proc newKvtHandler*(
   let
     db = base.parent
 
-    (mode, kvt) = block:
-      if saveMode == Companion:
-        (saveMode, ? base.kdb.forkTop.toRcImpl(db, info))
-      elif base.kdb.backend.isNil:
-        (Cached, base.kdb)
-      else:
-        (saveMode, base.kdb)
+    (mode, kvt) = case saveMode:
+      of TopShot:
+        (saveMode, ? base.kdb.forkTop.toRc(db, info))
+      of Companion:
+        (saveMode, ? base.kdb.fork.toRc(db, info))
+      of Shared, AutoSave:
+        if base.kdb.backend.isNil:
+          (Shared, base.kdb)
+        else:
+          (saveMode, base.kdb)
 
+  if mode == Shared:
+    return ok(base.cache)
+
+  let
     cKvt = KvtChildDbRef(
       base:     base,
       kvt:      kvt,
@@ -274,11 +370,28 @@ proc newKvtHandler*(
 
 
 proc destroy*(base: KvtBaseRef; flush: bool) =
+  # Don't recycle pre-configured shared handler
+  base.cache.KvtCoreDxKvtRef.ctx.kvt = KvtDbRef(nil)
+
+  # Clean up desctructor queue
   base.gc()
+
+  # Close descriptor
   base.kdb.finish(flush)
 
+
 func init*(T: type KvtBaseRef; db: CoreDbRef; kdb: KvtDbRef): T =
-  T(parent: db, kdb: kdb)
+  result = T(parent: db, kdb: kdb)
+
+  # Provide pre-configured handlers to share
+  let cKvt = KvtChildDbRef(
+    base:     result,
+    kvt:      kdb,
+    saveMode: Shared)
+
+  result.cache = db.bless KvtCoreDxKvtRef(
+    ctx:      cKvt,
+    methods:  cKvt.kvtMethods)
 
 # ------------------------------------------------------------------------------
 # End

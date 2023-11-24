@@ -143,14 +143,14 @@ proc resolveBackendFilter*(
   if db.roFilter.isNil:
     return ok()
 
-  let ubeRootKey = block:
-    let rc = db.getKeyUBE VertexID(1)
-    if rc.isOk:
-      rc.value
-    elif rc.error == GetKeyNotFound:
-      VOID_HASH_KEY
-    else:
-      return err(rc.error)
+  #let ubeRootKey = block:
+  #  let rc = db.getKeyUBE VertexID(1)
+  #  if rc.isOk:
+  #    rc.value
+  #  elif rc.error == GetKeyNotFound:
+  #    VOID_HASH_KEY
+  #  else:
+  #    return err(rc.error)
 
   let updateSiblings = ? UpdateSiblingsRef.init db
   defer: updateSiblings.rollback()
@@ -159,7 +159,7 @@ proc resolveBackendFilter*(
   let
     be = db.backend
     backLogOk = not be.filters.isNil           # otherwise disabled
-    revFilter = updateSiblings.rev
+    # revFilter = updateSiblings.rev
 
   # Compile instruction for updating filters on the cascaded fifos
   var instr = FifoInstr()

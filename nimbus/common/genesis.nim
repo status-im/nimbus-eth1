@@ -102,7 +102,7 @@ proc initAccountsLedgerRef(db: CoreDbRef; pruneTrie: bool): GenesisLedgerRef =
         nonce: AccountNonce;
         balance: UInt256;
         code: openArray[byte];
-          ) {.catchRaise.} =
+          ) =
       ac.setNonce(address, nonce)
       ac.setBalance(address, balance)
       ac.setCode(address, @code),

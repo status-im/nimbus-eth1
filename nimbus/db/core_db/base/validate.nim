@@ -36,6 +36,7 @@ proc validateMethodsDesc(base: CoreDbBaseFns) =
   doAssert not base.errorPrintFn.isNil
   doAssert not base.legacySetupFn.isNil
   doAssert not base.getRootFn.isNil
+  doAssert not base.levelFn.isNil
   doAssert not base.newKvtFn.isNil
   doAssert not base.newMptFn.isNil
   doAssert not base.newAccFn.isNil
@@ -48,7 +49,8 @@ proc validateMethodsDesc(kvt: CoreDbKvtFns) =
   doAssert not kvt.getFn.isNil
   doAssert not kvt.delFn.isNil
   doAssert not kvt.putFn.isNil
-  doAssert not kvt.destroyFn.isNil
+  doAssert not kvt.persistentFn.isNil
+  doAssert not kvt.forgetFn.isNil
   doAssert not kvt.hasKeyFn.isNil
   doAssert not kvt.pairsIt.isNil
 
@@ -60,7 +62,8 @@ proc validateMethodsDesc(fns: CoreDbMptFns) =
   doAssert not fns.hasPathFn.isNil
   doAssert not fns.rootVidFn.isNil
   doAssert not fns.isPruningFn.isNil
-  doAssert not fns.destroyFn.isNil
+  doAssert not fns.persistentFn.isNil
+  doAssert not fns.forgetFn.isNil
   doAssert not fns.pairsIt.isNil
   doAssert not fns.replicateIt.isNil
 
@@ -73,7 +76,8 @@ proc validateMethodsDesc(fns: CoreDbAccFns) =
   doAssert not fns.hasPathFn.isNil
   doAssert not fns.rootVidFn.isNil
   doAssert not fns.isPruningFn.isNil
-  doAssert not fns.destroyFn.isNil
+  doAssert not fns.persistentFn.isNil
+  doAssert not fns.forgetFn.isNil
 
 # ------------
 
@@ -120,6 +124,7 @@ proc validateMethodsDesc(cpt: CoreDxCaptRef) =
 proc validateMethodsDesc(tx: CoreDxTxRef) =
   doAssert not tx.isNil
   doAssert not tx.parent.isNil
+  doAssert not tx.methods.levelFn.isNil
   doAssert not tx.methods.commitFn.isNil
   doAssert not tx.methods.rollbackFn.isNil
   doAssert not tx.methods.disposeFn.isNil

@@ -127,8 +127,8 @@ proc ppQid(qid: QueueID): string =
 proc ppVidList(vGen: openArray[VertexID]): string =
   "[" & vGen.mapIt(it.ppVid).join(",") & "]"
 
-proc ppVidList(vGen: HashSet[VertexID]): string =
-  "{" & vGen.sortedKeys.mapIt(it.ppVid).join(",") & "}"
+#proc ppVidList(vGen: HashSet[VertexID]): string =
+#  "{" & vGen.sortedKeys.mapIt(it.ppVid).join(",") & "}"
 
 proc vidCode(lbl: HashLabel, db: AristoDbRef): uint64 =
   if lbl.isValid:

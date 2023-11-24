@@ -17,8 +17,8 @@ import
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc toPfx(indent: int): string =
-  "\n" & " ".repeat(indent)
+#proc toPfx(indent: int): string =
+#  "\n" & " ".repeat(indent)
 
 # ------------------------------------------------------------------------------
 # Public pretty printing

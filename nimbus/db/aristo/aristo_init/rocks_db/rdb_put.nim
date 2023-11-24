@@ -43,7 +43,7 @@ const
 template logTxt(info: static[string]): static[string] =
   "RocksDB/put " & info
 
-proc getFileSize(fileName: string): int64 =
+proc getFileSize(fileName: string): int64 {.used.} =
   var f: File
   if f.open fileName:
     defer: f.close
@@ -139,8 +139,7 @@ proc commit(
       return err((RdbBeIngestSstWriter, $csError))
 
     when extraTraceMessages:
-      let fileSize = session.sstPath.getFileSize
-      trace logTxt "finished sst", fileSize
+      trace logTxt "finished sst", fileSize=session.sstPath.getFileSize
 
   session.destroy()
   ok()

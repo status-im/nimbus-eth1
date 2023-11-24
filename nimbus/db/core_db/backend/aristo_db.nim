@@ -94,6 +94,9 @@ proc txMethods(
      ): CoreDbTxFns =
   ## To be constructed by some `CoreDbBaseFns` function
   CoreDbTxFns(
+    levelFn: proc(): int =
+      aTx.level,
+
     commitFn: proc(ignore: bool): CoreDbRc[void] =
       const info = "commitFn()"
       ? aTx.commit.toVoidRc(db, info)
@@ -133,6 +136,9 @@ proc baseMethods(
       db.adbBase.destroy(flush)
       db.kdbBase.destroy(flush),
 
+    levelFn: proc(): int =
+      db.adbBase.getLevel,
+
     vidHashFn: proc(vid: CoreDbVidRef; update: bool): CoreDbRc[Hash256] =
       db.adbBase.getHash(vid, update, "vidHashFn()"),
 
@@ -156,11 +162,11 @@ proc baseMethods(
 
     newMptFn: proc(
         root: CoreDbVidRef;
-        prune: bool;
+        prune: bool; # ignored
         saveMode: CoreDbSaveFlags;
           ): CoreDbRc[CoreDxMptRef] =
       db.kdbBase.gc()
-      let dsc = ? db.adbBase.newMptHandler(root, prune, saveMode, "newMptFn()")
+      let dsc = ? db.adbBase.newMptHandler(root, saveMode, "newMptFn()")
       when K is MemBackendRef:
         dsc.methods.replicateIt = iterator: (Blob,Blob) {.rlpRaise.} =
           for w in T.mptReplicate(dsc, "forkTop() for replicateIt()"):
@@ -169,11 +175,11 @@ proc baseMethods(
 
     newAccFn: proc(
         root: CoreDbVidRef;
-        prune: bool;
+        prune: bool; # ignored
         saveMode: CoreDbSaveFlags;
           ): CoreDbRc[CoreDxAccRef] =
       db.kdbBase.gc()
-      ok(? db.adbBase.newAccHandler(root, prune, saveMode, "newAccFn()")),
+      ok(? db.adbBase.newAccHandler(root, saveMode, "newAccFn()")),
 
     beginFn: proc(): CoreDbRc[CoreDxTxRef] =
       const info = "beginFn()"

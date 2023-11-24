@@ -57,15 +57,6 @@ proc xPfx(vtx: VertexRef): NibblesSeq =
   of Branch:
     doAssert vtx.vType != Branch # Ooops
 
-proc `xPfx=`(vtx: VertexRef, val: NibblesSeq) =
-  case vtx.vType:
-  of Leaf:
-    vtx.lPfx = val
-  of Extension:
-    vtx.ePfx = val
-  of Branch:
-    doAssert vtx.vType != Branch # Ooops
-
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
