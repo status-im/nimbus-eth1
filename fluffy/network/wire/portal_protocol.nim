@@ -369,27 +369,29 @@ proc handleFindContent(
   portal_find_content_log_distance.observe(
     int64(logDistance), labelValues = [$p.protocolId])
 
-  let contentResult = p.dbGet(fc.contentKey, contentId)
+  # Check first if content is in range, as this is a cheaper operation
+  if p.inRange(contentId):
+    let contentResult = p.dbGet(fc.contentKey, contentId)
+    if contentResult.isOk():
+      let content = contentResult.get()
+      if content.len <= maxPayloadSize:
+        return encodeMessage(ContentMessage(
+          contentMessageType: contentType, content: ByteList(content)))
+      else:
+        let connectionId = p.stream.addContentRequest(srcId, content)
 
-  if contentResult.isOk():
-    let content = contentResult.get()
-    if content.len <= maxPayloadSize:
-      encodeMessage(ContentMessage(
-        contentMessageType: contentType, content: ByteList(content)))
-    else:
-      let connectionId = p.stream.addContentRequest(srcId, content)
+        return encodeMessage(ContentMessage(
+          contentMessageType: connectionIdType, connectionId: connectionId))
 
-      encodeMessage(ContentMessage(
-        contentMessageType: connectionIdType, connectionId: connectionId))
-  else:
-    # Don't have the content, send closest neighbours to content id.
-    let
-      closestNodes = p.routingTable.neighbours(
-        NodeId(contentId), seenOnly = true)
-      enrs = truncateEnrs(closestNodes, maxPayloadSize, enrOverhead)
-    portal_content_enrs_packed.observe(enrs.len().int64)
+  # Node does not have the content, or content is not even in radius,
+  # send closest neighbours to the requested content id.
+  let
+    closestNodes = p.routingTable.neighbours(
+      NodeId(contentId), seenOnly = true)
+    enrs = truncateEnrs(closestNodes, maxPayloadSize, enrOverhead)
+  portal_content_enrs_packed.observe(enrs.len().int64)
 
-    encodeMessage(ContentMessage(contentMessageType: enrsType, enrs: enrs))
+  encodeMessage(ContentMessage(contentMessageType: enrsType, enrs: enrs))
 
 proc handleOffer(p: PortalProtocol, o: OfferMessage, srcId: NodeId): seq[byte] =
   # Early return when our contentQueue is full. This means there is a backlog
