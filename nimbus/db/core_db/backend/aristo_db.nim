@@ -94,6 +94,9 @@ proc txMethods(
      ): CoreDbTxFns =
   ## To be constructed by some `CoreDbBaseFns` function
   CoreDbTxFns(
+    levelFn: proc(): int =
+      aTx.level,
+
     commitFn: proc(ignore: bool): CoreDbRc[void] =
       const info = "commitFn()"
       ? aTx.commit.toVoidRc(db, info)
@@ -132,6 +135,9 @@ proc baseMethods(
     destroyFn: proc(flush: bool) =
       db.adbBase.destroy(flush)
       db.kdbBase.destroy(flush),
+
+    levelFn: proc(): int =
+      db.adbBase.getLevel,
 
     vidHashFn: proc(vid: CoreDbVidRef; update: bool): CoreDbRc[Hash256] =
       db.adbBase.getHash(vid, update, "vidHashFn()"),

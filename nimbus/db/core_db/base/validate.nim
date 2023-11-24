@@ -36,6 +36,7 @@ proc validateMethodsDesc(base: CoreDbBaseFns) =
   doAssert not base.errorPrintFn.isNil
   doAssert not base.legacySetupFn.isNil
   doAssert not base.getRootFn.isNil
+  doAssert not base.levelFn.isNil
   doAssert not base.newKvtFn.isNil
   doAssert not base.newMptFn.isNil
   doAssert not base.newAccFn.isNil
@@ -123,6 +124,7 @@ proc validateMethodsDesc(cpt: CoreDxCaptRef) =
 proc validateMethodsDesc(tx: CoreDxTxRef) =
   doAssert not tx.isNil
   doAssert not tx.parent.isNil
+  doAssert not tx.methods.levelFn.isNil
   doAssert not tx.methods.commitFn.isNil
   doAssert not tx.methods.rollbackFn.isNil
   doAssert not tx.methods.disposeFn.isNil

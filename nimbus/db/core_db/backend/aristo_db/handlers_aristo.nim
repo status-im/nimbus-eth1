@@ -587,6 +587,9 @@ func txBegin*(
 
 # ---------------------
 
+func getLevel*(base: AristoBaseRef): int =
+  base.adb.level
+
 proc getHash*(
     base: AristoBaseRef;
     vid: CoreDbVidRef;
@@ -693,7 +696,7 @@ proc newMptHandler*(
       root:     rootID,
       mpt:      mpt,
       saveMode: mode,
-      txError:  MptNotFound)
+      txError:  MptTxPending)
 
     dsc = AristoCoreDxMptRef(
       ctx:      cMpt,
@@ -742,7 +745,7 @@ proc newAccHandler*(
       root:     VertexID(1),
       mpt:      mpt,
       saveMode: mode,
-      txError:  AccNotFound)
+      txError:  AccTxPending)
 
     dsc = AristoCoreDxAccRef(
       ctx:      cAcc,
@@ -767,20 +770,28 @@ func init*(T: type AristoBaseRef; db: CoreDbRef; adb: AristoDbRef): T =
   result = T(parent: db, adb: adb)
 
   # Provide pre-configured handlers to share
-  let cXpt = AristoChildDbRef(
-    base:     result,
-    root:     VertexID(1),
-    mpt:      adb,
-    saveMode: Shared,
-    txError:  Unspecified)
+  let
+    cMpt = AristoChildDbRef(
+      base:     result,
+      root:     VertexID(1),
+      mpt:      adb,
+      saveMode: Shared,
+      txError:  MptTxPending)
+
+    cAcc = AristoChildDbRef(
+      base:     result,
+      root:     VertexID(1),
+      mpt:      adb,
+      saveMode: Shared,
+      txError:  AccTxPending)
 
   result.mptCache = db.bless AristoCoreDxMptRef(
-    ctx:      cXpt,
-    methods:  cXpt.mptMethods)
+    ctx:      cMpt,
+    methods:  cMpt.mptMethods)
 
   result.accCache = db.bless AristoCoreDxAccRef(
-    ctx:      cXpt,
-    methods:  cXpt.accMethods)
+    ctx:      cAcc,
+    methods:  cAcc.accMethods)
 
 # ------------------------------------------------------------------------------
 # End

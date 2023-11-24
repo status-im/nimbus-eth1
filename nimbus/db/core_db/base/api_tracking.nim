@@ -171,7 +171,7 @@ template endLegaApiIf*(w: CoreDbApiTrackRef; code: untyped) =
     else:
       let db = w.distinctBase.parent
     if db.trackLegaApi:
-      let elapsed {.inject.} = getTime() - blaStart
+      let elapsed {.inject,used.} = getTime() - blaStart
       code
 
 # ------------------------------------------------------------------------------
@@ -198,7 +198,7 @@ template endNewApiIf*(w: CoreDxApiTrackRef; code: untyped) =
       if w.isNil: break
       let db = w.parent
     if db.trackNewApi:
-      let elapsed {.inject.} = getTime() - bnaStart
+      let elapsed {.inject,used.} = getTime() - bnaStart
       code
 
 # ------------------------------------------------------------------------------

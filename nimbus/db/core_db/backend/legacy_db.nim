@@ -24,14 +24,20 @@ type
   # -----------
 
   LegacyDbRef* = ref object of CoreDbRef
-    kvt: CoreDxKvtRef    ## Cache, no need to rebuild methods descriptor
-    tdb: TrieDatabaseRef ## Copy of descriptor reference captured with closures
+    kvt: CoreDxKvtRef       ## Cache, no need to rebuild methods descriptor
+    tdb: TrieDatabaseRef    ## Descriptor reference copy captured with closures
+    top: LegacyCoreDxTxRef  ## Top transaction (if any)
 
   LegacyDbClose* = proc() {.gcsafe, raises: [].}
     ## Custom destructor
 
   HexaryChildDbRef = ref object
-    trie: HexaryTrie     ## needed for descriptor capturing with closures
+    trie: HexaryTrie        ## needed for descriptor capturing with closures
+
+  LegacyCoreDxTxRef = ref object of CoreDxTxRef
+    ltx: DbTransaction      ## Legacy transaction descriptor
+    back: LegacyCoreDxTxRef ## Previous transaction
+    level: int              ## Transaction level when positive
 
   RecorderRef = ref object of RootRef
     flags: set[CoreDbCaptFlags]
@@ -101,6 +107,10 @@ proc errorPrint(e: CoreDbErrorRef): string =
        result &= ", name=\"" & $e.name & "\""
      if e.msg != "":
        result &= ", msg=\"" & $e.msg & "\""
+
+func txLevel(db: LegacyDbRef): int =
+  if not db.top.isNil:
+    return db.top.level
 
 func lvHash(vid: CoreDbVidRef): Hash256 =
   if not vid.isNil and vid.ready:
@@ -199,6 +209,10 @@ proc kvtMethods(db: LegacyDbRef): CoreDbKvtFns =
       ok(tdb.contains(k)),
 
     persistentFn: proc(): CoreDbRc[void] =
+      # Emulate `Kvt` behaviour
+      if 0 < db.txLevel():
+        const info = "persistentFn()"
+        return err(db.bless(KvtTxPending, LegacyCoreDbError(ctx: info)))
       ok(),
 
     forgetFn: proc(): CoreDbRc[void] =
@@ -242,6 +256,10 @@ proc mptMethods(mpt: HexaryChildDbRef; db: LegacyDbRef): CoreDbMptFns =
       mpt.trie.isPruning,
 
     persistentFn: proc(): CoreDbRc[void] =
+      # Emulate `Aristo` behaviour
+      if 0 < db.txLevel():
+        const info = "persistentFn()"
+        return err(db.bless(MptTxPending, LegacyCoreDbError(ctx: info)))
       ok(),
 
     forgetFn: proc(): CoreDbRc[void] =
@@ -295,27 +313,46 @@ proc accMethods(mpt: HexaryChildDbRef; db: LegacyDbRef): CoreDbAccFns =
       mpt.trie.isPruning,
 
     persistentFn: proc(): CoreDbRc[void] =
+      # Emulate `Aristo` behaviour
+      if 0 < db.txLevel():
+        const info = "persistentFn()"
+        return err(db.bless(AccTxPending, LegacyCoreDbError(ctx: info)))
       ok(),
 
     forgetFn: proc(): CoreDbRc[void] =
       ok())
 
-proc txMethods(tx: DbTransaction): CoreDbTxFns =
+proc txMethods(tx: CoreDxTxRef): CoreDbTxFns =
+  let tx = tx.LegacyCoreDxTxRef
+
+  proc pop(tx: LegacyCoreDxTxRef) =
+    if 0 < tx.level:
+      tx.parent.LegacyDbRef.top = tx.back
+      tx.back = LegacyCoreDxTxRef(nil)
+      tx.level = -1
+
   CoreDbTxFns(
+    levelFn: proc(): int =
+      tx.level,
+
     commitFn: proc(applyDeletes: bool): CoreDbRc[void] =
-      tx.commit(applyDeletes)
+      tx.ltx.commit(applyDeletes)
+      tx.pop()
       ok(),
 
     rollbackFn: proc(): CoreDbRc[void] =
-      tx.rollback()
+      tx.ltx.rollback()
+      tx.pop()
       ok(),
 
     disposeFn: proc(): CoreDbRc[void] =
-      tx.dispose()
+      tx.ltx.dispose()
+      tx.pop()
       ok(),
 
     safeDisposeFn: proc(): CoreDbRc[void] =
-      tx.safeDispose()
+      tx.ltx.safeDispose()
+      tx.pop()
       ok())
 
 proc tidMethods(tid: TransactionID; tdb: TrieDatabaseRef): CoreDbTxIdFns =
@@ -348,6 +385,9 @@ proc baseMethods(
   CoreDbBaseFns(
     backendFn: proc(): CoreDbBackendRef =
       db.bless(LegacyCoreDbBE(base: db)),
+
+    levelFn: proc(): int =
+      db.txLevel(),
 
     destroyFn: proc(ignore: bool) =
       if not closeDb.isNil:
@@ -397,7 +437,12 @@ proc baseMethods(
       ok(db.bless CoreDxTxID(methods: tdb.getTransactionID.tidMethods(tdb))),
 
     beginFn: proc(): CoreDbRc[CoreDxTxRef] =
-      ok(db.bless CoreDxTxRef(methods: tdb.beginTransaction.txMethods)),
+      db.top = LegacyCoreDxTxRef(
+        ltx:   tdb.beginTransaction,
+        level: (if db.top.isNil: 1 else: db.top.level + 1),
+        back:  db.top)
+      db.top.methods = db.top.txMethods()
+      ok(db.bless db.top),
 
     captureFn: proc(flgs: set[CoreDbCaptFlags]): CoreDbRc[CoreDxCaptRef] =
       let fns = newRecorderRef(tdb, dbtype, flgs).cptMethods

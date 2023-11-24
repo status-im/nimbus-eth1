@@ -78,6 +78,7 @@ type
   CoreDbBaseInitLegaSetupFn* = proc() {.noRaise.}
   CoreDbBaseRootFn* =
     proc(root: Hash256; createOk: bool): CoreDbRc[CoreDbVidRef] {.noRaise.}
+  CoreDbBaseLevelFn* = proc(): int {.noRaise.}
   CoreDbBaseKvtFn* = proc(
     saveMode: CoreDbSaveFlags): CoreDbRc[CoreDxKvtRef] {.noRaise.}
   CoreDbBaseMptFn* = proc(
@@ -98,6 +99,7 @@ type
     errorPrintFn*:  CoreDbBaseErrorPrintFn
     legacySetupFn*: CoreDbBaseInitLegaSetupFn
     getRootFn*:     CoreDbBaseRootFn
+    levelFn*:       CoreDbBaseLevelFn
 
     # Kvt constructor
     newKvtFn*:      CoreDbBaseKvtFn
@@ -207,12 +209,14 @@ type
   # --------------------------------------------------
   # Sub-descriptor: Transaction frame management
   # --------------------------------------------------
+  CoreDbTxLevelFn* = proc(): int {.noRaise.}
   CoreDbTxCommitFn* = proc(applyDeletes: bool): CoreDbRc[void] {.noRaise.}
   CoreDbTxRollbackFn* = proc(): CoreDbRc[void] {.noRaise.}
   CoreDbTxDisposeFn* = proc(): CoreDbRc[void] {.noRaise.}
   CoreDbTxSafeDisposeFn* = proc(): CoreDbRc[void] {.noRaise.}
 
   CoreDbTxFns* = object
+    levelFn*:       CoreDbTxLevelFn
     commitFn*:      CoreDbTxCommitFn
     rollbackFn*:    CoreDbTxRollbackFn
     disposeFn*:     CoreDbTxDisposeFn
@@ -304,7 +308,7 @@ type
     fromMpt*: CoreDxMptRef
     methods*: CoreDbMptFns
 
-  CoreDxTxRef* = ref object
+  CoreDxTxRef* = ref object of RootRef
     ## Transaction descriptor derived from `CoreDbRef`
     parent*: CoreDbRef
     methods*: CoreDbTxFns
