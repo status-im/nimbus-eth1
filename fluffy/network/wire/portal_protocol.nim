@@ -216,14 +216,14 @@ type
   TraceObject* = object
     origin*: NodeId
     targetId: UInt256
-    receivedFrom*: NodeId
+    receivedFrom*: Opt[NodeId]
     responses*: Table[string, TraceResponse]
     metadata*: Table[string, NodeMetadata]
     cancelled*: seq[NodeId]
     startedAtMs*: int64
 
   TraceContentLookupResult* = object
-    content*: seq[byte]
+    content*: Opt[seq[byte]]
     utpTransfer*: bool
     trace*: TraceObject
 
@@ -1106,7 +1106,7 @@ proc contentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256):
   return Opt.none(ContentLookupResult)
 
 proc traceContentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256):
-    Future[Opt[TraceContentLookupResult]] {.async.} =
+    Future[TraceContentLookupResult] {.async.} =
   ## Perform a lookup for the given target, return the closest n nodes to the
   ## target. Maximum value for n is `BUCKET_SIZE`.
   # `closestNodes` holds the k closest nodes to target found, sorted by distance
@@ -1261,26 +1261,38 @@ proc traceContentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256)
             distance: p.distance(pn.id, targetId)
           )
 
-        return Opt.some(TraceContentLookupResult(
-          content: content.content,
+        return TraceContentLookupResult(
+          content: Opt.some(content.content),
           utpTransfer: content.utpTransfer,
           trace: TraceObject(
             origin: p.localNode.id,
             targetId: targetId,
-            receivedFrom: content.src.id,
+            receivedFrom: Opt.some(content.src.id),
             responses: responses,
             metadata: metadata,
             cancelled: pendingNodeIds,
             startedAtMs: chronos.epochNanoSeconds(ts) div 1_000_000 # nanoseconds to milliseconds
           )
-        ))
+        )
     else:
       # TODO: Should we do something with the node that failed responding our
       # query?
       discard
 
   portal_lookup_content_failures.inc()
-  return Opt.none(TraceContentLookupResult)
+  return TraceContentLookupResult(
+    content: Opt.none(seq[byte]),
+    utpTransfer: false,
+    trace: TraceObject(
+      origin: p.localNode.id,
+      targetId: targetId,
+      receivedFrom: Opt.none(NodeId),
+      responses: responses,
+      metadata: metadata,
+      cancelled: newSeq[NodeId](),
+      startedAtMs: chronos.epochNanoSeconds(ts) div 1_000_000 # nanoseconds to milliseconds
+      )
+  )
 
 proc query*(p: PortalProtocol, target: NodeId, k = BUCKET_SIZE): Future[seq[Node]]
     {.async.} =

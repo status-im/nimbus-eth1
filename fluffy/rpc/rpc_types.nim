@@ -9,7 +9,7 @@
 
 import
   json_rpc/jsonmarshal,
-  stew/results,
+  stew/[results, byteutils],
   eth/p2p/discoveryv5/[routing_table, enr, node]
 
 export jsonmarshal, routing_table, enr, node
@@ -61,6 +61,18 @@ func fromJson*(n: JsonNode, argName: string, result: var Record)
 
 func `%`*(value: NodeId): JsonNode =
   %("0x" & value.toHex())
+
+func `%`*(value: Opt[NodeId]): JsonNode =
+  if value.isSome():
+    %("0x" & value.get().toHex())
+  else:
+    %("0x")
+
+func `%`*(value: Opt[seq[byte]]): JsonNode =
+  if value.isSome():
+    %(value.get().to0xHex())
+  else:
+    %("0x")
 
 func fromJson*(n: JsonNode, argName: string, result: var NodeId)
     {.raises: [ValueError].} =

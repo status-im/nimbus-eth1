@@ -24,11 +24,6 @@ type
     content: string
     utpTransfer: bool
 
-  TraceContentInfo* = object
-    content*: string
-    utpTransfer: bool
-    trace*: TraceObject
-
 
 # Note:
 # Using a string for the network parameter will give an error in the rpc macro:
@@ -180,21 +175,14 @@ proc installPortalApiHandlers*(
       )
 
   rpcServer.rpc("portal_" & network & "TraceRecursiveFindContent") do(
-      contentKey: string) -> TraceContentInfo:
+      contentKey: string) -> TraceContentLookupResult:
 
     let
       key = ByteList.init(hexToSeqByte(contentKey))
       contentId = p.toContentId(key).valueOr:
         raise newException(ValueError, "Invalid content key")
 
-      contentResult = (await p.traceContentLookup(key, contentId)).valueOr:
-        return TraceContentInfo(content: "0x")
-
-    return TraceContentInfo(
-        content: contentResult.content.to0xHex(),
-        utpTransfer: contentResult.utpTransfer,
-        trace: contentResult.trace
-      )
+    await p.traceContentLookup(key, contentId)
 
   rpcServer.rpc("portal_" & network & "Store") do(
       contentKey: string, contentValue: string) -> bool:
