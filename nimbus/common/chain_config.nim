@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021-2023 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -23,6 +23,9 @@ export
 
 type
   Genesis* = ref object
+    # for geth compatibility
+    config*     : ChainConfig
+
     nonce*      : BlockNonce
     timestamp*  : EthTime
     extraData*  : seq[byte]
@@ -34,7 +37,7 @@ type
     number*     : BlockNumber
     gasUser*    : GasInt
     parentHash* : Hash256
-    baseFeePerGas*: Option[UInt256]
+    baseFeePerGas*: Option[UInt256]   # EIP-1559
     blobGasUsed*  : Option[uint64]    # EIP-4844
     excessBlobGas*: Option[uint64]    # EIP-4844
     parentBeaconBlockRoot*: Option[Hash256]   # EIP-4788
@@ -49,24 +52,6 @@ type
   NetworkParams* = object
     config* : ChainConfig
     genesis*: Genesis
-
-  GenesisFile* = object
-    config      : ChainConfig
-    nonce*      : BlockNonce
-    timestamp*  : EthTime
-    extraData*  : seq[byte]
-    gasLimit*   : GasInt
-    difficulty* : DifficultyInt
-    mixHash*    : Hash256
-    coinbase*   : EthAddress
-    alloc*      : GenesisAlloc
-    number*     : BlockNumber
-    gasUser*    : GasInt
-    parentHash* : Hash256
-    baseFeePerGas*: Option[UInt256]
-    blobGasUsed*  : Option[uint64]    # EIP-4844
-    excessBlobGas*: Option[uint64]    # EIP-4844
-    parentBeaconBlockRoot*: Option[Hash256]   # EIP-4788
 
 const
   CustomNet*  = 0.NetworkId
@@ -312,6 +297,10 @@ proc toHardFork*(map: ForkTransitionTable, forkDeterminer: ForkDeterminationInfo
 proc validateChainConfig*(conf: ChainConfig): bool =
   result = true
 
+  if conf.mergeNetsplitBlock.isSome:
+    # geth compatibility
+    conf.mergeForkBlock = conf.mergeNetsplitBlock
+
   # FIXME: factor this to remove the duplication between the
   # block-based ones and the time-based ones.
 
@@ -362,9 +351,41 @@ proc validateChainConfig*(conf: ChainConfig): bool =
      conf.clique.epoch.isSome:
     conf.consensusType = ConsensusType.POA
 
-proc validateNetworkParams*(params: var NetworkParams): bool =
+proc parseGenesis*(data: string): Genesis
+     {.gcsafe.} =
+  try:
+    result = Json.decode(data, Genesis, allowUnknownFields = true)
+  except JsonReaderError as e:
+    error "Invalid genesis config file format", msg=e.formatMsg("")
+    return nil
+  except CatchableError as e:
+    error "Error loading genesis data",
+      exception = e.name, msg = e.msg
+    return nil
+
+proc parseGenesisFile*(fileName: string): Genesis
+     {.gcsafe.} =
+  try:
+    result = Json.loadFile(fileName, Genesis, allowUnknownFields = true)
+  except IOError as e:
+    error "Genesis I/O error", fileName, msg=e.msg
+    return nil
+  except JsonReaderError as e:
+    error "Invalid genesis config file format", msg=e.formatMsg("")
+    return nil
+  except CatchableError as e:
+    error "Error loading genesis file",
+      fileName, exception = e.name, msg = e.msg
+    return nil
+
+proc validateNetworkParams(params: var NetworkParams, input: string, inputIsFile: bool): bool =
   if params.genesis.isNil:
-    warn "Loaded custom network contains no 'genesis' data"
+    # lets try with geth's format
+    let genesis = if inputIsFile: parseGenesisFile(input)
+                  else: parseGenesis(input)
+    if genesis.isNil:
+      return false
+    params.genesis = genesis
 
   if params.config.isNil:
     warn "Loaded custom network contains no 'config' data"
@@ -387,7 +408,7 @@ proc loadNetworkParams*(fileName: string, params: var NetworkParams):
       fileName, exception = e.name, msg = e.msg
     return false
 
-  validateNetworkParams(params)
+  validateNetworkParams(params, fileName, true)
 
 proc decodeNetworkParams*(jsonString: string, params: var NetworkParams): bool =
   try:
@@ -400,7 +421,7 @@ proc decodeNetworkParams*(jsonString: string, params: var NetworkParams): bool =
     error "Error decoding network params", msg
     return false
 
-  validateNetworkParams(params)
+  validateNetworkParams(params, jsonString, false)
 
 proc parseGenesisAlloc*(data: string, ga: var GenesisAlloc): bool
     {.gcsafe, raises: [CatchableError].} =
@@ -411,14 +432,6 @@ proc parseGenesisAlloc*(data: string, ga: var GenesisAlloc): bool
     return false
 
   return true
-
-proc parseGenesis*(data: string): Genesis
-     {.gcsafe, raises: [CatchableError].} =
-  try:
-    result = Json.decode(data, Genesis, allowUnknownFields = true)
-  except JsonReaderError as e:
-    error "Invalid genesis config file format", msg=e.formatMsg("")
-    return nil
 
 proc chainConfigForNetwork*(id: NetworkId): ChainConfig =
   # For some public networks, NetworkId and ChainId value are identical

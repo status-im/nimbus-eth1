@@ -104,9 +104,36 @@ proc customGenesisTest() =
       check com.ttd.get == ttd
       check com.consensus == ConsensusType.POW
 
+    test "Geth shadow fork 1":
+      # parse using geth format should produce the same result with nimbus format
+      var cg: NetworkParams
+      check loadNetworkParams("geth_mainshadow1.json".findFilePath, cg)
+      let com = CommonRef.new(newCoreDbRef LegacyDbMemory, params = cg)
+      let stateRoot = "d7f8974fb5ac78d9ac099b9ad5018bedc2ce0a72dad1827a1709da30580f0544".toDigest
+      let genesisHash = "d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3".toDigest
+      let ttd = "46_089_003_871_917_200_000_000".parse(Uint256)
+      check com.genesisHeader.stateRoot == stateRoot
+      check com.genesisHeader.blockHash == genesisHash
+      check com.ttd.get == ttd
+      check com.consensus == ConsensusType.POW
+      check cg.config.mergeNetsplitBlock.isSome
+      check cg.config.mergeNetsplitBlock.get == 14660963.toBlockNumber
+      check cg.config.mergeNetsplitBlock == cg.config.mergeForkBlock
+
     test "Holesky":
       var cg: NetworkParams
       check loadNetworkParams("holesky.json".findFilePath, cg)
+      let com = CommonRef.new(newCoreDbRef LegacyDbMemory, params = cg)
+      let stateRoot = "69D8C9D72F6FA4AD42D4702B433707212F90DB395EB54DC20BC85DE253788783".toDigest
+      let genesisHash = "b5f7f912443c940f21fd611f12828d75b534364ed9e95ca4e307729a4661bde4".toDigest
+      check com.genesisHeader.stateRoot == stateRoot
+      check com.genesisHeader.blockHash == genesisHash
+      check com.chainId == 17000.ChainId
+
+    test "Geth Holesky":
+      # parse using geth format should produce the same result with nimbus format
+      var cg: NetworkParams
+      check loadNetworkParams("geth_holesky.json".findFilePath, cg)
       let com = CommonRef.new(newCoreDbRef LegacyDbMemory, params = cg)
       let stateRoot = "69D8C9D72F6FA4AD42D4702B433707212F90DB395EB54DC20BC85DE253788783".toDigest
       let genesisHash = "b5f7f912443c940f21fd611f12828d75b534364ed9e95ca4e307729a4661bde4".toDigest

@@ -64,9 +64,9 @@ proc configurationMain*() =
       check bb.blocksFile.string == genesisFile
 
     test "custom-network loading config file with no genesis data":
-      # no genesis will result in nil, the database is not initialized
+      # no genesis will fallback to geth compatibility mode
       let conf = makeConfig(@["--custom-network:" & noGenesis])
-      check conf.networkParams.genesis.isNil
+      check conf.networkParams.genesis.isNil.not
 
     test "custom-network loading config file with no 'config'":
       # no config will result in empty config, CommonRef keep working

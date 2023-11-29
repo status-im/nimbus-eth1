@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022 Status Research & Development GmbH
+# Copyright (c) 2022-2023 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -174,6 +174,11 @@ type
     londonBlock*        : Option[BlockNumber]
     arrowGlacierBlock*  : Option[BlockNumber]
     grayGlacierBlock*   : Option[BlockNumber]
+
+    # mergeNetsplitBlock is an alias to mergeForkBlock
+    # and is used for geth compatibility layer
+    mergeNetsplitBlock* : Option[BlockNumber]
+
     mergeForkBlock*     : Option[BlockNumber]
     shanghaiTime*       : Option[EthTime]
     cancunTime*         : Option[EthTime]
@@ -202,7 +207,11 @@ func countTimeFields(): int {.compileTime.} =
 func countBlockFields(): int {.compileTime.} =
   var z = Chainconfig()
   for name, _ in fieldPairs(z[]):
-    if name.endsWith("Block"):
+    if name == "mergeNetsplitBlock":
+      # skip mergeForkBlock alias
+      # continue is not supported
+      discard
+    elif name.endsWith("Block"):
       inc result
 
 const
@@ -221,7 +230,11 @@ func collectBlockFields(): array[blockFieldsCount, string] =
   var z = Chainconfig()
   var i = 0
   for name, _ in fieldPairs(z[]):
-    if name.endsWith("Block"):
+    if name == "mergeNetsplitBlock":
+      # skip mergeForkBlock alias
+      # continue is not supported
+      discard
+    elif name.endsWith("Block"):
       result[i] = name
       inc i
 
