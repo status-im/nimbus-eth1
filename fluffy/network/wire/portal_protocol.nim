@@ -344,7 +344,8 @@ proc handleFindNodes(p: PortalProtocol, fn: FindNodesMessage): seq[byte] =
         enrOverhead = 4 # per added ENR, 4 bytes offset overhead
 
       let enrs = truncateEnrs(nodes, maxPayloadSize, enrOverhead)
-      portal_nodes_enrs_packed.observe(enrs.len().int64)
+      portal_nodes_enrs_packed.observe(
+        enrs.len().int64, labelValues = [$p.protocolId])
 
       encodeMessage(NodesMessage(total: 1, enrs: enrs))
     else:
@@ -389,7 +390,8 @@ proc handleFindContent(
     closestNodes = p.routingTable.neighbours(
       NodeId(contentId), seenOnly = true)
     enrs = truncateEnrs(closestNodes, maxPayloadSize, enrOverhead)
-  portal_content_enrs_packed.observe(enrs.len().int64)
+  portal_content_enrs_packed.observe(
+    enrs.len().int64, labelValues = [$p.protocolId])
 
   encodeMessage(ContentMessage(contentMessageType: enrsType, enrs: enrs))
 
@@ -787,7 +789,8 @@ proc offer(p: PortalProtocol, o: OfferRequest):
 
   debug "Offering content"
 
-  portal_content_keys_offered.observe(contentKeys.len().int64)
+  portal_content_keys_offered.observe(
+    contentKeys.len().int64, labelValues = [$p.protocolId])
 
   let acceptMessageResponse = await p.offerImpl(o.dst, contentKeys)
 
@@ -808,7 +811,8 @@ proc offer(p: PortalProtocol, o: OfferRequest):
       return err("Accepted content key bitlist has invalid size")
 
     let acceptedKeysAmount = m.contentKeys.countOnes()
-    portal_content_keys_accepted.observe(acceptedKeysAmount.int64)
+    portal_content_keys_accepted.observe(
+      acceptedKeysAmount.int64, labelValues = [$p.protocolId])
     if acceptedKeysAmount == 0:
       debug "No content accepted"
       # Don't open an uTP stream if no content was requested
@@ -980,7 +984,8 @@ proc lookup*(p: PortalProtocol, target: NodeId): Future[seq[Node]] {.async.} =
         if closestNodes.len > BUCKET_SIZE:
           closestNodes.del(closestNodes.high())
 
-  portal_lookup_node_requests.observe(requestAmount)
+  portal_lookup_node_requests.observe(
+    requestAmount, labelValues = [$p.protocolId])
   p.lastLookup = now(chronos.Moment)
   return closestNodes
 
@@ -1094,7 +1099,8 @@ proc contentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256):
         # cancel any pending queries as the content has been found
         for f in pendingQueries:
           f.cancelSoon()
-        portal_lookup_content_requests.observe(requestAmount)
+        portal_lookup_content_requests.observe(
+          requestAmount, labelValues = [$p.protocolId])
         return Opt.some(ContentLookupResult.init(
           content.content, content.utpTransfer, nodesWithoutContent))
     else:
@@ -1102,7 +1108,7 @@ proc contentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256):
       # query?
       discard
 
-  portal_lookup_content_failures.inc()
+  portal_lookup_content_failures.inc(labelValues = [$p.protocolId])
   return Opt.none(ContentLookupResult)
 
 proc traceContentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256):
@@ -1238,7 +1244,8 @@ proc traceContentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256)
         # cancel any pending queries as the content has been found
         for f in pendingQueries:
           f.cancelSoon()
-        portal_lookup_content_requests.observe(requestAmount)
+        portal_lookup_content_requests.observe(
+          requestAmount, labelValues = [$p.protocolId])
 
         let distance = p.distance(content.src.id, targetId)
 
@@ -1279,7 +1286,7 @@ proc traceContentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256)
       # query?
       discard
 
-  portal_lookup_content_failures.inc()
+  portal_lookup_content_failures.inc(labelValues = [$p.protocolId])
   return TraceContentLookupResult(
     content: Opt.none(seq[byte]),
     utpTransfer: false,
