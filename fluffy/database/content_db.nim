@@ -14,8 +14,8 @@ import
   stew/results,
   eth/db/kvstore,
   eth/db/kvstore_sqlite3,
-  ./network/state/state_content,
-  "."/network/wire/[portal_protocol, portal_protocol_config],
+  ../network/state/state_content,
+  ../network/wire/[portal_protocol, portal_protocol_config],
   ./content_db_custom_sql_functions
 
 export kvstore_sqlite3

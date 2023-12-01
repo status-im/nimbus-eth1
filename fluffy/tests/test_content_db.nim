@@ -11,7 +11,7 @@ import
   unittest2, stint,
   eth/keys,
   ../network/state/state_content,
-  ../content_db,
+  ../database/content_db,
   ./test_helpers
 
 suite "Content Database":

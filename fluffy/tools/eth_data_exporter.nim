@@ -1,4 +1,4 @@
-# Nimbus
+# Fluffy
 # Copyright (c) 2022-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
@@ -46,7 +46,7 @@ import
   eth/common/eth_types_json_serialization,
   json_rpc/rpcclient,
   ncli/e2store,
-  ../seed_db,
+  ../database/seed_db,
   ../../premix/[downloader, parser],
   ../network/history/[history_content, accumulator],
   ../eth_data/[history_data_json_store, history_data_ssz_e2s],

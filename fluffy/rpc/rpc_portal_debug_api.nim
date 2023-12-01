@@ -1,4 +1,4 @@
-# Nimbus
+# Fluffy
 # Copyright (c) 2022-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
@@ -12,7 +12,7 @@ import
   ../network/wire/portal_protocol,
   ../network/network_seed,
   ../eth_data/history_data_seeding,
-  ".."/[content_db, seed_db]
+  ../database/[content_db, seed_db]
 
 export rpcserver
 

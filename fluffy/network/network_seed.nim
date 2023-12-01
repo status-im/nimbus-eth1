@@ -1,4 +1,4 @@
-# Nimbus
+# Fluffy
 # Copyright (c) 2022-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
@@ -13,7 +13,7 @@ import
   eth/p2p/discoveryv5/[node, random2],
   ./wire/portal_protocol,
   ./history/[history_content, history_network],
-  ../seed_db
+  ../database/seed_db
 
 # Experimental module which implements different content seeding strategies.
 # Module is oblivious to content stored in seed database as all content related

@@ -1,4 +1,4 @@
-# Nimbus - Portal Network
+# Fluffy
 # Copyright (c) 2021-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
@@ -14,7 +14,7 @@ import
   eth/p2p/discoveryv5/[enr, node],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ../common/common_utils,
-  ../content_db,
+  ../database/content_db,
   ../network/wire/[portal_protocol, portal_stream, portal_protocol_config],
   ../network/history/[history_content, history_network]
 
