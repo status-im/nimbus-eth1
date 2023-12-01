@@ -1,4 +1,4 @@
-# Nimbus
+# Fluffy
 # Copyright (c) 2021-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
@@ -12,7 +12,7 @@ import
   eth/[common/eth_types_rlp, rlp],
   eth/p2p/discoveryv5/[protocol, enr],
   ../../common/common_types,
-  ../../content_db,
+  ../../database/content_db,
   ../../network_metadata,
   ../../../nimbus/[constants, db/core_db],
   ../wire/[portal_protocol, portal_stream, portal_protocol_config],

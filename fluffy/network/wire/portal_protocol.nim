@@ -1,4 +1,4 @@
-# Nimbus - Portal Network
+# Fluffy
 # Copyright (c) 2021-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
@@ -16,7 +16,6 @@ import
   nimcrypto/hash, bearssl, ssz_serialization, metrics, faststreams,
   eth/rlp, eth/p2p/discoveryv5/[protocol, node, enr, routing_table, random2,
     nodes_verification, lru],
-  ../../seed_db,
   "."/[portal_stream, portal_protocol_config],
   ./messages
 

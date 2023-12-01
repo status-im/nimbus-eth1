@@ -1,4 +1,4 @@
-# Nimbus
+# Fluffy
 # Copyright (c) 2021-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
@@ -19,7 +19,7 @@ import
     history_data_json_store,
     history_data_ssz_e2s],
   ../network/history/[history_content, accumulator],
-  ../seed_db,
+  ../database/seed_db,
   ../tests/test_history_util
 
 type

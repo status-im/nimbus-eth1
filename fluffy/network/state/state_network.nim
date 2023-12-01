@@ -1,5 +1,5 @@
-# Nimbus
-# Copyright (c) 2021-2022 Status Research & Development GmbH
+# Fluffy
+# Copyright (c) 2021-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -8,7 +8,7 @@
 import
   stew/results, chronos, chronicles,
   eth/p2p/discoveryv5/[protocol, enr],
-  ../../content_db,
+  ../../database/content_db,
   ../wire/[portal_protocol, portal_stream, portal_protocol_config],
   ./state_content,
   ./state_distance

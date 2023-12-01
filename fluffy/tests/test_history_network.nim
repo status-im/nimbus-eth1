@@ -1,4 +1,4 @@
-# Nimbus - Portal Network
+# Fluffy
 # Copyright (c) 2022-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
@@ -14,7 +14,7 @@ import
   ../network/wire/[portal_protocol, portal_stream, portal_protocol_config],
   ../network/history/[history_network, accumulator, history_content],
   ../../nimbus/constants,
-  ../content_db,
+  ../database/content_db,
   ./test_helpers
 
 type HistoryNode = ref object

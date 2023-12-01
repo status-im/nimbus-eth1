@@ -1,5 +1,5 @@
-# Nimbus - Portal Network
-# Copyright (c) 2021 Status Research & Development GmbH
+# Fluffy
+# Copyright (c) 2021-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -14,7 +14,7 @@ import
   ../../nimbus/common/[chain_config, genesis],
   ../network/wire/[portal_protocol, portal_stream],
   ../network/state/[state_content, state_network],
-  ../content_db,
+  ../database/content_db,
   ./test_helpers
 
 proc genesisToTrie(filePath: string): CoreDbMptRef =
