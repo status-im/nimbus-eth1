@@ -1,5 +1,5 @@
-# Nimbus - Portal Network
-# Copyright (c) 2021 Status Research & Development GmbH
+# Fluffy
+# Copyright (c) 2021-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -188,6 +188,21 @@ suite "Portal Wire Protocol Message Encodings":
       message.content.enrs.len() == 2
       message.content.enrs[0] == ByteList(e1.raw)
       message.content.enrs[1] == ByteList(e2.raw)
+
+  test "Content Response - empty enrs":
+    let
+      enrs = List[ByteList, 32].init(@[])
+      c = ContentMessage(contentMessageType: enrsType, enrs: enrs)
+    let encoded = encodeMessage(c)
+    check encoded.toHex == "0502"
+
+    let decoded = decodeMessage(encoded)
+    check decoded.isOk()
+    let message = decoded.get()
+    check:
+      message.kind == MessageKind.content
+      message.content.contentMessageType == enrsType
+      message.content.enrs.len() == 0
 
   test "Offer Request":
     let
