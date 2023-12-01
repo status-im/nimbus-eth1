@@ -11,10 +11,16 @@
 name: Nimbus CI
 on:
   push:
-    paths-ignore: ['doc/**', 'docs/**', '**/*.md', 'hive_integration/**',
-      'fluffy/**', '.github/workflows/fluffy.yml',
-      'nimbus_verified_proxy/**', '.github/workflows/nimbus_verified_proxy.yml',
-      ]
+    paths-ignore:
+      - 'doc/**'
+      - 'docs/**'
+      - '**/*.md'
+      'hive_integration/**'
+      'fluffy/**'
+      '.github/workflows/fluffy*.yml'
+      'nimbus_verified_proxy/**'
+      '.github/workflows/nimbus_verified_proxy.yml'
+
   # Disable `pull_request`.  Experimenting with using only `push` for PRs.
   #pull_request:
   #  paths-ignore: ['doc/**', 'docs/**', '**/*.md', 'hive_integration/**']
