@@ -96,7 +96,7 @@ type
     ## `Aristo Trie`. They are used temporarily and in caches or backlog
     ## tables.
     root*: VertexID                  ## Root ID for the sub-trie.
-    key*: HashKey                     ## Merkle hash or encoded small node data
+    key*: HashKey                    ## Merkle hash or encoded small node data
 
 # ------------------------------------------------------------------------------
 # Chronicles formatters

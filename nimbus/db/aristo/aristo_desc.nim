@@ -128,7 +128,7 @@ func isValid*(vid: VertexID): bool =
   vid != VertexID(0)
 
 func isValid*(lbl: HashLabel): bool =
-  lbl.root.isValid and lbl.key.isValid
+  lbl.key.isValid
 
 func isValid*(sqv: HashSet[VertexID]): bool =
   sqv != EmptyVidSet
