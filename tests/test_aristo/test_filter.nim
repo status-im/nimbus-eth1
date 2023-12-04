@@ -341,7 +341,9 @@ proc checkBeOk(
       cache = if forceCache: true else: not dx[n].top.dirty
       rc = dx[n].checkBE(relax=relax, cache=cache)
     xCheckRc rc.error == (0,0):
-      noisy.say "***", "db check failed", " n=", n, " cache=", cache
+      noisy.say "***", "db check failed",
+        " n=", n, "/", dx.len-1,
+        " cache=", cache
 
   true
 
@@ -356,19 +358,22 @@ proc checkFilterTrancoderOk(
         let rc = dx[n].roFilter.blobify()
         xCheckRc rc.error == 0:
           noisy.say "***", "db serialisation failed",
-            " n=", n, " error=", rc.error
+            " n=", n, "/", dx.len-1,
+            " error=", rc.error
         rc.value
 
       let dcdRoundTrip = block:
         let rc = data.deblobify FilterRef
         xCheckRc rc.error == 0:
           noisy.say "***", "db de-serialisation failed",
-            " n=", n, " error=", rc.error
+            " n=", n, "/", dx.len-1,
+            " error=", rc.error
         rc.value
 
       let roFilterExRoundTrip = dx[n].roFilter.isEq(dcdRoundTrip, dx[n], noisy)
       xCheck roFilterExRoundTrip:
         noisy.say "***", "checkFilterTrancoderOk failed",
+          " n=", n, "/", dx.len-1,
           "\n   roFilter=", dx[n].roFilter.pp(dx[n]),
           "\n   dcdRoundTrip=", dcdRoundTrip.pp(dx[n])
 

@@ -107,15 +107,11 @@ type
     MergeNodeVtxDuplicates
 
     # Update `Merkle` hashes `hashify()`
-    HashifyCannotComplete
-    HashifyCannotHashRoot
+    HashifyEmptyHike
     HashifyExistingHashMismatch
-    HashifyDownVtxlevelExceeded
-    HashifyDownVtxLeafUnexpected
+    HashifyNodeUnresolved
     HashifyRootHashMismatch
-    HashifyRootVidMismatch
-    HashifyVidCircularDependence
-    HashifyVtxMissing
+    HashifyRootNodeUnresolved
 
     # Cache checker `checkCache()`
     CheckStkVtxIncomplete
