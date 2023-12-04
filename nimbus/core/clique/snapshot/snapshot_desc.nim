@@ -19,15 +19,15 @@
 ##
 
 import
-  std/[tables],
-  ../../../db/storage_types,
+  std/tables,
+  chronicles,
+  eth/rlp,
+  results,
+  ../../../db/[core_db, storage_types],
   ../clique_cfg,
   ../clique_defs,
   ../clique_helpers,
-  ./ballot,
-  chronicles,
-  eth/[rlp],
-  stew/results
+  ./ballot
 
 export tables
 
@@ -60,6 +60,9 @@ logScope:
 # ------------------------------------------------------------------------------
 # Private functions needed to support RLP conversion
 # ------------------------------------------------------------------------------
+
+template logTxt(info: static[string]): static[string] =
+  "Clique " & info
 
 proc append[K,V](rw: var RlpWriter; tab: Table[K,V]) =
   rw.startList(tab.len)
@@ -144,19 +147,13 @@ proc loadSnapshot*(cfg: CliqueCfg; hash: Hash256):
   ## Load an existing snapshot from the database.
   var s = Snapshot(cfg: cfg)
   try:
-    let db = s.cfg.db.kvt
-    let rlpData = db.get(hash.cliqueSnapshotKey.toOpenArray)
-
-    # The following check is only needed for Github/CI for 64bit Windows (not
-    # reproducible on my local Win7 -- jordan). What normally happens when
-    # `rlpData == @[]` holds is that the library function `eth.readImpl()`
-    # throws an `RlpTypeMismatch` error as the inner function `isList()` fails.
-    # On Github CI for 64bit Windows, the unit test crashes with a segmentation
-    # fault.
-    if rlpData.len == 0:
+    let rc = s.cfg.db.newKvt(Shared).get(hash.cliqueSnapshotKey.toOpenArray)
+    if rc.isOk:
+      s.data = rc.value.decode(SnapshotData)
+    else:
+      if rc.error.error != KvtNotFound:
+        error logTxt "get() failed", error=($$rc.error)
       return err((errSnapshotLoad,""))
-
-    s.data = rlpData.decode(SnapshotData)
   except CatchableError as e:
     return err((errSnapshotLoad, $e.name & ": " & e.msg))
   ok(s)
@@ -168,8 +165,10 @@ proc storeSnapshot*(cfg: CliqueCfg; s: Snapshot): CliqueOkResult =
     let
       key = s.data.blockHash.cliqueSnapshotKey
       val = rlp.encode(s.data)
-      db  = s.cfg.db.kvt
-    db.put(key.toOpenArray, val)
+      db  = s.cfg.db.newKvt(Companion)
+    db.put(key.toOpenArray, val).isOkOr:
+      error logTxt "put() failed", `error`=($$error)
+    db.persistent()
 
     cfg.nSnaps.inc
     cfg.snapsData += val.len.uint

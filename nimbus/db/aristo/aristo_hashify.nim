@@ -55,7 +55,7 @@
 {.push raises: [].}
 
 import
-  std/[algorithm, sequtils, sets, strutils, tables],
+  std/[sequtils, sets, strutils, tables],
   chronicles,
   eth/common,
   results,
