@@ -15,7 +15,7 @@ import
   eth/[common, trie/nibbles],
   results,
   stew/byteutils,
-  "."/[aristo_constants, aristo_desc, aristo_hike],
+  "."/[aristo_constants, aristo_desc, aristo_get, aristo_hike],
   ./aristo_desc/desc_backend,
   ./aristo_init/[memory_db, memory_only, rocks_db],
   ./aristo_filter/filter_scheduler
@@ -85,8 +85,36 @@ proc squeeze(s: string; hex = false; ignLen = false): string =
       result &= "..(" & $s.len & ")"
     result &= ".." & s[s.len-16 .. ^1]
 
-proc stripZeros(a: string): string =
-  a.strip(leading=true, trailing=false, chars={'0'})
+proc stripZeros(a: string; toExp = false): string =
+  if 0 < a.len:
+    result = a.strip(leading=true, trailing=false, chars={'0'})
+    if result.len == 0:
+      result = "0"
+    elif result[^1] == '0' and toExp:
+      var n = 0
+      while result[^1] == '0':
+        let w = result.len
+        result.setLen(w-1)
+        n.inc
+      if n == 1:
+        result &= "0"
+      elif n == 2:
+        result &= "00"
+      elif 2 < n:
+        result &= "↑" & $n
+
+proc vidCode(lbl: HashLabel, db: AristoDbRef): uint64 =
+  if lbl.isValid:
+    if not db.top.isNil:
+      let vids = db.top.pAmk.getOrVoid lbl
+      if vids.isValid:
+        return vids.sortedKeys[0].uint64
+    block:
+      let vids = db.xMap.getOrVoid lbl
+      if vids.isValid:
+        return vids.sortedKeys[0].uint64
+
+# ---------------------
 
 proc ppVid(vid: VertexID; pfx = true): string =
   if pfx:
@@ -95,6 +123,15 @@ proc ppVid(vid: VertexID; pfx = true): string =
     result &= vid.toHex.stripZeros.toLowerAscii
   else:
     result &= "ø"
+
+func ppCodeHash(h: Hash256): string =
+  result = "¢"
+  if h == Hash256():
+    result &= "©"
+  elif h == EMPTY_CODE_HASH:
+    result &= "ø"
+  else:
+    result &= h.data.toHex.squeeze(hex=true,ignLen=true)
 
 proc ppFid(fid: FilterID): string =
   if not fid.isValid:
@@ -130,17 +167,6 @@ proc ppVidList(vGen: openArray[VertexID]): string =
 #proc ppVidList(vGen: HashSet[VertexID]): string =
 #  "{" & vGen.sortedKeys.mapIt(it.ppVid).join(",") & "}"
 
-proc vidCode(lbl: HashLabel, db: AristoDbRef): uint64 =
-  if lbl.isValid:
-    if not db.top.isNil:
-      let vids = db.top.pAmk.getOrVoid lbl
-      if vids.isValid:
-        return vids.sortedKeys[0].uint64
-    block:
-      let vids = db.xMap.getOrVoid lbl
-      if vids.isValid:
-        return vids.sortedKeys[0].uint64
-
 proc ppKey(key: HashKey; db: AristoDbRef; root: VertexID; pfx = true): string =
   proc getVids: HashSet[VertexID] =
     if not db.top.isNil:
@@ -153,10 +179,10 @@ proc ppKey(key: HashKey; db: AristoDbRef; root: VertexID; pfx = true): string =
         return vids
   if pfx:
     result = "£"
-  if key == VOID_HASH_KEY:
-    result &= "ø"
+  if key.len == 0 or key.to(Hash256) == Hash256():
+    result &= "©"
   elif not key.isValid:
-    result &= "r"
+    result &= "ø"
   else:
     let
       tag = if key.len < 32: "[#" & $key.len & "]" else: ""
@@ -179,11 +205,9 @@ proc ppLabel(lbl: HashLabel; db: AristoDbRef): string =
     "%ø"
 
 proc ppLeafTie(lty: LeafTie, db: AristoDbRef): string =
-  if not db.top.isNil:
-    let vid =  db.top.lTab.getOrVoid lty
-    if vid.isValid:
-      return "@" & vid.ppVid
-  "@" & $lty
+  let pfx = lty.path.to(NibblesSeq)
+  "@" & lty.root.ppVid(pfx=false) & ":" &
+    ($pfx).squeeze(hex=true,ignLen=(pfx.len==64))
 
 proc ppPathPfx(pfx: NibblesSeq): string =
   let s = $pfx
@@ -203,10 +227,10 @@ proc ppPayload(p: PayloadRef, db: AristoDbRef): string =
       result &= "[#" & p.rlpBlob.toHex.squeeze(hex=true) & "]"
     of AccountData:
       result = "("
-      result &= $p.account.nonce & ","
-      result &= $p.account.balance & ","
+      result &= ($p.account.nonce).stripZeros(toExp=true) & ","
+      result &= ($p.account.balance).stripZeros(toExp=true) & ","
       result &= p.account.storageID.ppVid & ","
-      result &= $p.account.codeHash & ")"
+      result &= p.account.codeHash.ppCodeHash & ")"
 
 proc ppVtx(nd: VertexRef, db: AristoDbRef, vid: VertexID): string =
   if not nd.isValid:
@@ -581,7 +605,7 @@ proc pp*(leg: Leg; db = AristoDbRef()): string =
       result &= lbl.ppLabel(db)
   result &= ","
   if leg.backend:
-    result &= "*"
+    result &= "¶"
   result &= ","
   if 0 <= leg.nibble:
     result &= $leg.nibble.ppNibble
@@ -627,6 +651,9 @@ proc pp*(tx: AristoTxRef): string =
   if not tx.parent.isNil:
     result &= ", par=" & $tx.parent.txUid
   result &= ")"
+
+proc pp*(wp: VidVtxPair; db: AristoDbRef): string =
+  "(" & wp.vid.pp & "," & wp.vtx.pp(db) & ")"
 
 # ---------------------
 
@@ -700,14 +727,15 @@ proc pp*(
 
 proc pp*(
     db: AristoDbRef;
-    backendOk = false;
     root = VertexID(1);
     indent = 4;
+    backendOk = false;
+    filterOk = true;
       ): string =
   result = db.top.pp(db, indent=indent) & indent.toPfx
   if backendOk:
     result &= db.backend.pp(db)
-  else:
+  elif filterOk:
     result &= db.roFilter.ppFilter(db, root, indent+1)
 
 proc pp*(sdb: MerkleSignRef; indent = 4): string =

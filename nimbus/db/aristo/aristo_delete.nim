@@ -214,13 +214,20 @@ proc collapseLeaf(
 
   if 2 < hike.legs.len:                                  # (1), (2), or (3)
     # Merge `br` into the leaf `vtx` and unlink `br`.
-    let par = hike.legs[^3].wp
+    let par = hike.legs[^3].wp.dup                       # Writable vertex
     case par.vtx.vType:
     of Branch:                                           # (1)
       # Replace `vtx` by `^2 & vtx` (use `lf` as-is)
       par.vtx.bVid[hike.legs[^3].nibble] = lf.vid
       db.top.sTab[par.vid] = par.vtx
       db.top.sTab[lf.vid] = lf.vtx
+      # Make sure that there is a cache enty in case the leaf was pulled from
+      # the backend.!
+      let
+        lfPath = hike.legsTo(hike.legs.len - 2, NibblesSeq) & lf.vtx.lPfx
+        tag = lfPath.pathToTag.valueOr:
+          return err((lf.vid,error))
+      db.top.lTab[LeafTie(root: hike.root, path: tag)] = lf.vid
       return ok()
 
     of Extension:                                        # (2) or (3)
@@ -230,13 +237,20 @@ proc collapseLeaf(
 
       if 3 < hike.legs.len:                              # (2)
         # Grandparent exists
-        let gpr = hike.legs[^4].wp
+        let gpr = hike.legs[^4].wp.dup                   # Writable vertex
         if gpr.vtx.vType != Branch:
           return err((gpr.vid,DelBranchExpexted))
         db.doneWith par.vid                              # `par` is obsolete now
         gpr.vtx.bVid[hike.legs[^4].nibble] = lf.vid
         db.top.sTab[gpr.vid] = gpr.vtx
         db.top.sTab[lf.vid] = lf.vtx
+        # Make sure that there is a cache enty in case the leaf was pulled from
+        # the backend.!
+        let
+          lfPath = hike.legsTo(hike.legs.len - 3, NibblesSeq) & lf.vtx.lPfx
+          tag = lfPath.pathToTag.valueOr:
+            return err((lf.vid,error))
+        db.top.lTab[LeafTie(root: hike.root, path: tag)] = lf.vid
         return ok()
 
       # No grandparent, so ^3 is root vertex             # (3)
@@ -264,6 +278,17 @@ proc collapseLeaf(
 
   # Clean up stale leaf vertex which has moved to root position
   db.doneWith lf.vid
+
+  # If some `Leaf` vertex was installed as root, there must be a an extra
+  # `LeafTie` lookup entry.
+  let rootVtx = db.getVtx hike.root
+  if rootVtx.isValid and
+     rootVtx != hike.legs[0].wp.vtx and
+     rootVtx.vType == Leaf:
+    let tag = rootVtx.lPfx.pathToTag.valueOr:
+      return err((hike.root,error))
+    db.top.lTab[LeafTie(root: hike.root, path: tag)] = hike.root
+
   ok()
 
 # -------------------------
@@ -380,7 +405,7 @@ proc delete*(
     root: VertexID;
     path: openArray[byte];
      ): Result[void,(VertexID,AristoError)] =
-  ## Variant of `fetchPayload()`
+  ## Variant of `delete()`
   ##
   db.delete(? path.initNibbleRange.hikeUp(root, db).mapErr toVae)
 

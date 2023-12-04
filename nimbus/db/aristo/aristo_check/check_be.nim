@@ -117,14 +117,12 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
   for (_,vid,key) in T.walkKeyBE db:
     if not key.isvalid:
       return err((vid,CheckBeKeyInvalid))
-    let rc = db.getVtxBE vid
-    if rc.isErr or not rc.value.isValid:
+    let vtx = db.getVtxBE(vid).valueOr:
       return err((vid,CheckBeVtxMissing))
-    let rx = rc.value.toNodeBE db # backend only
-    if rx.isErr:
+    let node = vtx.toNodeBE(db).valueOr: # backend links only
       return err((vid,CheckBeKeyCantCompile))
     if not relax:
-      let expected = rx.value.digestTo(HashKey)
+      let expected = node.digestTo(HashKey)
       if expected != key:
         return err((vid,CheckBeKeyMismatch))
     discard vids.reduce Interval[VertexID,uint64].new(vid,vid)
@@ -186,19 +184,21 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
         lastTrg = filter.trg
 
     # Check key table
+    var list: seq[VertexID]
     for (vid,lbl) in db.top.kMap.pairs:
+      list.add vid
       let vtx = db.getVtx vid
       if not db.top.sTab.hasKey(vid) and not vtx.isValid:
         return err((vid,CheckBeCacheKeyDangling))
-      if lbl.isValid and not relax:
-        if not vtx.isValid:
-          return err((vid,CheckBeCacheVtxDangling))
-        let rc = vtx.toNode db # compile cache first
-        if rc.isErr:
-          return err((vid,CheckBeCacheKeyCantCompile))
-        let expected = rc.value.digestTo(HashKey)
-        if expected != lbl.key:
-          return err((vid,CheckBeCacheKeyMismatch))
+      if not lbl.isValid or relax:
+        continue
+      if not vtx.isValid:
+        return err((vid,CheckBeCacheVtxDangling))
+      let node = vtx.toNode(db).valueOr: # compile cache first
+        return err((vid,CheckBeCacheKeyCantCompile))
+      let expected = node.digestTo(HashKey)
+      if expected != lbl.key:
+        return err((vid,CheckBeCacheKeyMismatch))
 
     # Check vGen
     let

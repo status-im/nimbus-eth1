@@ -80,8 +80,8 @@ type
     PathExpectedLeaf
 
     # Merge leaf `merge()`
-    MergeBrLinkLeafGarbled
-    MergeBrLinkVtxPfxTooShort
+    MergeBranchLinkLeafGarbled
+    MergeBranchLinkVtxPfxTooShort
     MergeBranchGarbledNibble
     MergeBranchGarbledTail
     MergeBranchLinkLockedKey
@@ -90,6 +90,7 @@ type
     MergeBranchRootExpected
     MergeLeafGarbledHike
     MergeLeafPathCachedAlready
+    MergeLeafPathOnBackendAlready
     MergeNonBranchProofModeLock
     MergeRootBranchLinkBusy
     MergeAssemblyFailed # Ooops, internal error
@@ -106,15 +107,11 @@ type
     MergeNodeVtxDuplicates
 
     # Update `Merkle` hashes `hashify()`
-    HashifyCannotComplete
-    HashifyCannotHashRoot
+    HashifyEmptyHike
     HashifyExistingHashMismatch
-    HashifyDownVtxlevelExceeded
-    HashifyDownVtxLeafUnexpected
+    HashifyNodeUnresolved
     HashifyRootHashMismatch
-    HashifyRootVidMismatch
-    HashifyVidCircularDependence
-    HashifyVtxMissing
+    HashifyRootNodeUnresolved
 
     # Cache checker `checkCache()`
     CheckStkVtxIncomplete
@@ -131,6 +128,8 @@ type
     CheckRlxRevKeyMissing
     CheckRlxRevKeyMismatch
 
+    CheckAnyLeafUnregistered
+    CheckAnyLeafVidDangling
     CheckAnyVidVtxMissing
     CheckAnyVtxEmptyKeyMissing
     CheckAnyVtxEmptyKeyExpected

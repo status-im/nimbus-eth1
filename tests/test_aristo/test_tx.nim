@@ -17,7 +17,8 @@ import
   unittest2,
   stew/endians2,
   ../../nimbus/db/aristo/[
-    aristo_check, aristo_delete, aristo_desc, aristo_get, aristo_merge],
+    aristo_check, aristo_debug, aristo_delete, aristo_desc, aristo_get,
+    aristo_merge],
   ../../nimbus/db/[aristo, aristo/aristo_init/persistent],
   ../replay/xcheck,
   ./test_helpers
@@ -156,7 +157,8 @@ proc saveToBackend(
 
   block:
     let rc = db.checkBE(relax=relax)
-    xCheckRc rc.error == (0,0)
+    xCheckRc rc.error == (0,0):
+      noisy.say "***", "saveToBackend (8)", " debugID=", debugID
 
   # Update layers to original level
   tx = db.txBegin().value.to(AristoDbRef).txBegin().value
@@ -331,8 +333,12 @@ proc testTxMergeAndDelete*(
     defer: db.innerCleanUp
 
     # Merge leaf data into main trie (w/vertex ID 1)
-    let kvpLeafs = w.kvpLst.mapRootVid VertexID(1)
-    for leaf in kvpLeafs:
+    let kvpLeafs = block:
+      var lst = w.kvpLst.mapRootVid VertexID(1)
+      # The list might be reduced for isolation of particular properties,
+      # e.g. lst.setLen(min(5,lst.len))
+      lst
+    for i,leaf in kvpLeafs:
       let rc = db.merge leaf
       xCheckRc rc.error == 0
 
@@ -358,13 +364,20 @@ proc testTxMergeAndDelete*(
         (leaf, lid) = lvp
 
       if doSaveBeOk:
-        if not tx.saveToBackend(
-            chunkedMpt=false, relax=relax, noisy=noisy, runID):
-          return
+        let saveBeOk = tx.saveToBackend(
+          chunkedMpt=false, relax=relax, noisy=noisy, runID)
+        xCheck saveBeOk:
+          noisy.say "***", "del(2)",
+            " u=", u,
+            " n=", n, "/", list.len,
+            "\n    leaf=", leaf.pp(db),
+            "\n    db\n    ", db.pp(backendOk=true),
+            "\n"
 
       # Delete leaf
-      let rc = db.delete leaf
-      xCheckRc rc.error == (0,0)
+      block:
+        let rc = db.delete leaf
+        xCheckRc rc.error == (0,0)
 
       # Update list of remaininf leafs
       leafsLeft.excl leaf
@@ -446,7 +459,7 @@ proc testTxMergeProofAndKvpList*(
       let rc = db.merge(rootKey, VertexID(1))
       xCheckRc rc.error == 0
 
-      proved = db.merge(w.proof, rc.value) # , noisy)
+      proved = db.merge(w.proof, rc.value)
 
       xCheck proved.error in {AristoError(0),MergeHashKeyCachedAlready}
       xCheck w.proof.len == proved.merged + proved.dups
@@ -468,8 +481,8 @@ proc testTxMergeProofAndKvpList*(
         return
 
     when true and false:
-      noisy.say "***", "proofs(6) <", n, "/", lstLen-1, ">",
-        " groups=", count, " proved=", proved.pp, " merged=", merged.pp
+      noisy.say "***", "proofs(9) <", n, "/", list.len-1, ">",
+        " groups=", count, " proved=", proved, " merged=", merged
   true
 
 # ------------------------------------------------------------------------------

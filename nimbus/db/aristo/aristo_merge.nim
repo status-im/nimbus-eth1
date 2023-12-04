@@ -68,7 +68,8 @@ proc to(
   ## Return code converter
   if rc.isOk:
     ok true
-  elif rc.error == MergeLeafPathCachedAlready:
+  elif rc.error in {MergeLeafPathCachedAlready,
+                    MergeLeafPathOnBackendAlready}:
     ok false
   else:
     err(rc.error)
@@ -130,7 +131,7 @@ proc insertBranch(
     # Should have been tackeld by `hikeUp()`, already
     return err(MergeLeafGarbledHike)
   if linkVtx.xPfx.len == n:
-    return err(MergeBrLinkVtxPfxTooShort)
+    return err(MergeBranchLinkVtxPfxTooShort)
 
   # Provide and install `forkVtx`
   let
@@ -158,7 +159,7 @@ proc insertBranch(
         rc = path.pathToTag()
       if rc.isErr:
         debug "Branch link leaf path garbled", linkID, path
-        return err(MergeBrLinkLeafGarbled)
+        return err(MergeBranchLinkLeafGarbled)
 
       let
         local = db.vidFetch(pristine = true)
@@ -453,22 +454,35 @@ proc updatePayload(
     payload: PayloadRef;               # Payload value
       ): Result[Hike,AristoError] =
   ## Update leaf vertex if payloads differ
-  let vtx = hike.legs[^1].wp.vtx
+  let leafLeg = hike.legs[^1]
 
   # Update payloads if they differ
-  if vtx.lData != payload:
-    let vid = hike.legs[^1].wp.vid
+  if leafLeg.wp.vtx.lData != payload:
 
-    # Will modify top level cache
+    # Update vertex and hike
+    let
+      vid = leafLeg.wp.vid
+      vtx = VertexRef(
+        vType: Leaf,
+        lPfx:  leafLeg.wp.vtx.lPfx,
+        lData: payload)
+    var hike = hike
+    hike.legs[^1].backend = false
+    hike.legs[^1].wp.vtx = vtx
+
+    # Modify top level cache
     db.top.dirty = true
-
-    vtx.lData = payload
     db.top.sTab[vid] = vtx
     db.top.dirty = true # Modified top level cache
     db.top.lTab[leafTie] = vid
     db.clearMerkleKeys(hike, vid)
+    ok hike
 
-  ok hike
+  elif leafLeg.backend:
+    err(MergeLeafPathOnBackendAlready)
+
+  else:
+    err(MergeLeafPathCachedAlready)
 
 # ------------------------------------------------------------------------------
 # Private functions: add Merkle proof node
@@ -501,6 +515,7 @@ proc mergeNodeImpl(
   ##
   ## has no result for all images of the argument `node` under `pAmk`:
   ##
+  # Check for error after RLP decoding
   doAssert node.error == AristoError(0)
   if not rootVid.isValid:
     return err(MergeRootKeyInvalid)
@@ -694,7 +709,8 @@ proc merge*(
     let rc = db.merge(w.leafTie, w.payload)
     if rc.isOk:
       merged.inc
-    elif rc.error == MergeLeafPathCachedAlready:
+    elif rc.error in {MergeLeafPathCachedAlready,
+                      MergeLeafPathOnBackendAlready}:
       dups.inc
     else:
       return (n,dups,rc.error)
