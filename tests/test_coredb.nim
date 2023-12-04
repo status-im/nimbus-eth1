@@ -116,7 +116,7 @@ proc chainSyncRunner(
     dbDir = if persistent: baseDir / "tmp" else: ""
     sayPersistent = if persistent: "persistent DB" else: "mem DB only"
     numBlocks = capture.numBlocks
-    numBlocksInfo = if numBlocks == high(int): "" else: $numBlocks & " "
+    numBlocksInfo = if numBlocks == high(int): "all" else: $numBlocks
 
   defer:
     if persistent: baseDir.flushDbDir
@@ -129,7 +129,13 @@ proc chainSyncRunner(
         com = openLegacyDB(persistent, dbDir, capture.network)
       defer:
         com.db.finish(flush = true)
+        noisy.testChainSyncProfilingPrint numBlocks
         if persistent: dbDir.flushDbDir
+
+      if noisy:
+        com.db.trackNewApi = true
+        com.db.trackNewApi = true
+        com.db.trackLedgerApi = true
 
       check noisy.testChainSync(filePath, com, numBlocks)
 
