@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2023 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -507,6 +507,10 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
       if gasParams.c_contractGas > high(GasInt).u256:
         raise newException(TypeError, "GasInt Overflow (" & $gasParams.kind & ") " & $gasParams.c_contractGas)
       result.gasRefund = gasParams.c_contractGas.truncate(GasInt)
+
+    if result.gasCost.u256 + result.gasRefund.u256 > high(GasInt).u256:
+      raise newException(TypeError, "GasInt overflow, gasCost=" &
+        $result.gasCost & ", gasRefund=" & $result.gasRefund)
 
     result.gasCost += result.gasRefund
 

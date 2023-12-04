@@ -15,11 +15,11 @@ on:
       - 'doc/**'
       - 'docs/**'
       - '**/*.md'
-      'hive_integration/**'
-      'fluffy/**'
-      '.github/workflows/fluffy*.yml'
-      'nimbus_verified_proxy/**'
-      '.github/workflows/nimbus_verified_proxy.yml'
+      - 'hive_integration/**'
+      - 'fluffy/**'
+      - '.github/workflows/fluffy*.yml'
+      - 'nimbus_verified_proxy/**'
+      - '.github/workflows/nimbus_verified_proxy.yml'
 
   # Disable `pull_request`.  Experimenting with using only `push` for PRs.
   #pull_request:

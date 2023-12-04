@@ -88,7 +88,7 @@ macro cliBuilder*(stmtList: typed): untyped =
       `caseStmt`
 
 # if you want to add new test module(s)
-# make sure you define an entry poin
+# make sure you define an entry point
 # e.g.
 # proc mytestMain*() =
 #   # put anything you want here
