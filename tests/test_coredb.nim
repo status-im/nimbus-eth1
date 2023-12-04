@@ -75,6 +75,11 @@ proc setTraceLevel {.used.} =
   when defined(chronicles_runtime_filtering) and loggingEnabled:
     setLogLevel(LogLevel.TRACE)
 
+proc setDebugLevel {.used.} =
+  discard
+  when defined(chronicles_runtime_filtering) and loggingEnabled:
+    setLogLevel(LogLevel.DEBUG)
+
 proc setErrorLevel {.used.} =
   discard
   when defined(chronicles_runtime_filtering) and loggingEnabled:
@@ -100,6 +105,12 @@ proc initRunnerDB(
     of AristoDbVoid: AristoDbVoid.newCoreDbRef()
     else: raiseAssert "Oops"
 
+  when false: # or true:
+    setDebugLevel()
+    coreDB.trackLegaApi = true
+    coreDB.trackNewApi = true
+    coreDB.localDbOnly = true
+
   result = CommonRef.new(
     db = coreDB,
     networkId = network,
@@ -116,6 +127,8 @@ proc chainSyncRunner(
     capture = bChainCapture;
     dbType = LegacyDbMemory;
     ldgType = LegacyAccountsCache;
+    enaLogging = false;
+    lastOneExtra = true;
       ) =
   ## Test backend database and ledger
   let
@@ -145,7 +158,8 @@ proc chainSyncRunner(
         com.db.trackNewApi = true
         com.db.trackLedgerApi = true
 
-      check noisy.testChainSync(filePath, com, numBlocks)
+      check noisy.testChainSync(filePath, com, numBlocks,
+        lastOneExtra=lastOneExtra, enaLogging=enaLogging)
 
 # ------------------------------------------------------------------------------
 # Main function(s)
@@ -173,8 +187,10 @@ when isMainModule:
     noisy.profileSection("@testList #" & $n, state):
       noisy.chainSyncRunner(
         capture=capture,
-        dbType=AristoDbMemory,
-        ldgType=LedgerCache)
+        #dbType=AristoDbMemory,
+        ldgType=LedgerCache,
+        #enaLogging=true
+      )
 
   noisy.say "***", "total elapsed: ", state[0].pp, " sections: ", state[1]
 

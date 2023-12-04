@@ -10,7 +10,7 @@
 # distributed except according to those terms.
 
 import
-  std/strformat,
+  std/[strformat, times],
   chronicles,
   eth/common,
   results,
@@ -23,7 +23,14 @@ import
 type StopMoaningAboutLedger {.used.} = LedgerType
 
 when CoreDbEnableApiProfiling or LedgerEnableApiProfiling:
-  import std/[algorithm, sequtils, strutils], ../replay/pp
+  import std/[algorithm, sequtils, strutils]
+
+
+const
+  EnableExtraLoggingControl = true
+var
+  logStartTime {.used.} = Time()
+  logSavedEnv {.used.}: (bool,bool,bool,bool)
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -34,13 +41,53 @@ proc setTraceLevel {.used.} =
     setLogLevel(LogLevel.TRACE)
 
 proc setDebugLevel {.used.} =
-  discard
   when defined(chronicles_runtime_filtering) and loggingEnabled:
     setLogLevel(LogLevel.DEBUG)
 
 proc setErrorLevel {.used.} =
   when defined(chronicles_runtime_filtering) and loggingEnabled:
     setLogLevel(LogLevel.ERROR)
+
+# --------------
+
+proc initLogging(com: CommonRef) =
+  when EnableExtraLoggingControl:
+    debug "start undumping into persistent blocks"
+    logStartTime = Time()
+    logSavedEnv = (com.db.trackLegaApi, com.db.trackNewApi,
+                   com.db.trackLedgerApi, com.db.localDbOnly)
+    setErrorLevel()
+    com.db.trackLegaApi = true
+    com.db.trackNewApi = true
+    com.db.trackLedgerApi = true
+    com.db.localDbOnly = true
+
+proc finishLogging(com: CommonRef) =
+  when EnableExtraLoggingControl:
+    setErrorLevel()
+    (com.db.trackLegaApi, com.db.trackNewApi,
+     com.db.trackLedgerApi, com.db.localDbOnly) = logSavedEnv
+
+
+proc startLogging(noisy: bool) =
+  when EnableExtraLoggingControl:
+    if noisy and logStartTime == Time():
+      logStartTime = getTime()
+      setDebugLevel()
+      debug "start logging ..."
+
+proc stopLogging(noisy: bool) =
+  when EnableExtraLoggingControl:
+    if logStartTime != Time():
+      debug "stop logging", elapsed=(getTime() - logStartTime).pp
+      logStartTime = Time()
+    setErrorLevel()
+
+template stopLoggingAfter(noisy: bool; code: untyped) =
+  ## Turn logging off after executing `block`
+  block:
+    defer: noisy.stopLogging()
+    code
 
 # --------------
 
@@ -99,14 +146,17 @@ proc test_chainSync*(
     filePath: string;
     com: CommonRef;
     numBlocks = high(int);
+    enaLogging = true;
     lastOneExtra = true
       ): bool =
   ## Store persistent blocks from dump into chain DB
   let
-    sayBlocks = 900.u256
+    sayBlocks = 900
     chain = com.newChain
-    lastBlock = max(1, numBlocks - 1).toBlockNumber
-    save = (com.db.trackLegaApi, com.db.trackNewApi, com.db.trackLedgerApi)
+    lastBlock = max(1, numBlocks).toBlockNumber
+
+  com.initLogging()
+  defer: com.finishLogging()
 
   for w in filePath.undumpBlocks:
     let (fromBlock, toBlock) = (w[0][0].blockNumber, w[0][^1].blockNumber)
@@ -116,14 +166,17 @@ proc test_chainSync*(
 
     if toBlock < lastBlock:
       # Message if `[fromBlock,toBlock]` contains a multiple of `sayBlocks`
-      if fromBlock + (toBlock mod sayBlocks) <= toBlock:
+      if fromBlock + (toBlock mod sayBlocks.u256) <= toBlock:
         noisy.say "***", &"processing ...[#{fromBlock},#{toBlock}]..."
-      let runPersistBlocksRc = chain.persistBlocks(w[0], w[1])
-      xCheck runPersistBlocksRc == ValidationResult.OK:
-        if noisy:
-          # Re-run with logging enabled
-          setTraceLevel()
-          discard chain.persistBlocks(w[0], w[1])
+        if enaLogging:
+          noisy.startLogging()
+      noisy.stopLoggingAfter():
+        let runPersistBlocksRc = chain.persistBlocks(w[0], w[1])
+        xCheck runPersistBlocksRc == ValidationResult.OK:
+          if noisy:
+            # Re-run with logging enabled
+            setTraceLevel()
+            discard chain.persistBlocks(w[0], w[1])
       continue
 
     # Make sure that the `lastBlock` is the first item of the argument batch.
@@ -146,31 +199,24 @@ proc test_chainSync*(
       xCheck runPersistBlocks1Rc == ValidationResult.OK
       dotsOrSpace = "   "
 
-    if noisy:
-      setDebugLevel()
-      #setTraceLevel()
-      com.db.trackLegaApi = true
-      com.db.trackNewApi = true
-      com.db.trackLedgerApi = true
-      com.db.localDbOnly = true
+    noisy.startLogging()
 
     if lastOneExtra:
       let
         headers0 = headers9[0..0]
         bodies0 = bodies9[0..0]
       noisy.say "***", &"processing {dotsOrSpace}[#{lastBlock},#{lastBlock}]"
-      noisy.showElapsed("@last block " & &"#{lastBlock}"):
+      noisy.stopLoggingAfter():
         let runPersistBlocks0Rc = chain.persistBlocks(headers0, bodies0)
         xCheck runPersistBlocks0Rc == ValidationResult.OK
     else:
       noisy.say "***", &"processing {dotsOrSpace}[#{lastBlock},#{toBlock}]"
-      noisy.showElapsed("@last blocks " & &"[#{lastBlock},#{toBlock}]"):
+      noisy.stopLoggingAfter():
         let runPersistBlocks9Rc = chain.persistBlocks(headers9, bodies9)
         xCheck runPersistBlocks9Rc == ValidationResult.OK
 
     break
 
-  (com.db.trackLegaApi, com.db.trackNewApi, com.db.trackLedgerApi) = save
   true
 
 # ------------------------------------------------------------------------------
