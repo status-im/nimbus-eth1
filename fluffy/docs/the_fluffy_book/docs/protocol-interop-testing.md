@@ -43,18 +43,18 @@ Testing the Portal wire protocol messages:
 
 ```bash
 # Ping / Pong
-curl -s -X POST -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":"1","method":"portal_state_ping","params":["enr:<base64 encoding of ENR>"]}' http://localhost:8545 | jq
+curl -s -X POST -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":"1","method":"portal_statePing","params":["enr:<base64 encoding of ENR>"]}' http://localhost:8545 | jq
 
 # FindNode / Nodes
 # Extra parameter is an array of requested logarithmic distances
-curl -s -X POST -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":"1","method":"portal_state_findNodes","params":["enr:<base64 encoding of ENR>", [254, 255, 256]]}' http://localhost:8545 | jq
+curl -s -X POST -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":"1","method":"portal_stateFindNodes","params":["enr:<base64 encoding of ENR>", [254, 255, 256]]}' http://localhost:8545 | jq
 
 # FindContent / Content
 # A request with an invalid content key will not receive a response
-curl -s -X POST -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":"1","method":"portal_state_findContent","params":["enr:<base64 encoding of ENR>", "02829bd824b016326a401d083b33d092293333a830d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d"]}' http://localhost:8545 | jq
+curl -s -X POST -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":"1","method":"portal_stateFindContent","params":["enr:<base64 encoding of ENR>", "02829bd824b016326a401d083b33d092293333a830d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d"]}' http://localhost:8545 | jq
 
 # Read out the Portal state network routing table contents
-curl -s -X POST -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":"1","method":"portal_state_routingTableInfo","params":[]}' http://localhost:8545 | jq
+curl -s -X POST -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":"1","method":"portal_stateRoutingTableInfo","params":[]}' http://localhost:8545 | jq
 ```
 
 > The `portal_state_` prefix can be replaced for testing other networks such as
