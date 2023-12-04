@@ -132,6 +132,8 @@ type
     CheckRlxRevKeyMissing
     CheckRlxRevKeyMismatch
 
+    CheckAnyLeafUnregistered
+    CheckAnyLeafVidDangling
     CheckAnyVidVtxMissing
     CheckAnyVtxEmptyKeyMissing
     CheckAnyVtxEmptyKeyExpected

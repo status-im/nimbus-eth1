@@ -40,9 +40,11 @@ proc checkTopStrict*(
       if vid notin revVids:
         return err((vid,CheckStkRevKeyMismatch))
 
-  let pAmkVtxCount = db.top.pAmk.values.toSeq.foldl(a + b.len, 0)
-  if 0 < pAmkVtxCount and pAmkVtxCount < db.top.sTab.len:
-    # Cannot have less changes than cached entries
+  let
+    pAmkVtxCount = db.top.pAmk.values.toSeq.foldl(a + b.len, 0)
+    sTabVtxCount = db.top.sTab.values.toSeq.filterIt(it.isValid).len
+  # Non-zero values mist sum up the same
+  if pAmkVtxCount < sTabVtxCount:
     return err((VertexID(0),CheckStkVtxCountMismatch))
 
   ok()
@@ -95,13 +97,17 @@ proc checkTopCommon*(
     kMapCount = db.top.kMap.values.toSeq.filterIt(it.isValid).len
     kMapNilCount = db.top.kMap.len - kMapCount
 
-  # Check deleted entries
-  var nNilVtx = 0
+  # Collect leafs and check deleted entries
+  var
+    nNilVtx = 0
+    leafs = db.top.lTab.values.toSeq.filterIt(it.isValid).toHashSet
   for (vid,vtx) in db.top.sTab.pairs:
     if vtx.isValid:
       case vtx.vType:
       of Leaf:
-        discard
+        if vid notin leafs:
+          return err((vid,CheckAnyLeafUnregistered))
+        leafs.excl vid
       of Branch:
         block check42Links:
           var seen = false
@@ -122,6 +128,10 @@ proc checkTopCommon*(
         return err((vid,CheckAnyVtxEmptyKeyMissing))
       if db.top.kMap.getOrVoid(vid).isValid:
         return err((vid,CheckAnyVtxEmptyKeyExpected))
+
+  # Check for dangling leaf records
+  if 0 < leafs.len:
+    return err((leafs.toSeq[0],CheckAnyLeafVidDangling))
 
   # If present, there are at least as many deleted hashes as there are deleted
   # vertices.
