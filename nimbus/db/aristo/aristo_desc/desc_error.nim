@@ -80,8 +80,8 @@ type
     PathExpectedLeaf
 
     # Merge leaf `merge()`
-    MergeBrLinkLeafGarbled
-    MergeBrLinkVtxPfxTooShort
+    MergeBranchLinkLeafGarbled
+    MergeBranchLinkVtxPfxTooShort
     MergeBranchGarbledNibble
     MergeBranchGarbledTail
     MergeBranchLinkLockedKey
@@ -90,6 +90,7 @@ type
     MergeBranchRootExpected
     MergeLeafGarbledHike
     MergeLeafPathCachedAlready
+    MergeLeafPathOnBackendAlready
     MergeNonBranchProofModeLock
     MergeRootBranchLinkBusy
     MergeAssemblyFailed # Ooops, internal error
