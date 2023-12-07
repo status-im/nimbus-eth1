@@ -12,7 +12,7 @@
 ## Testing `CoreDB` wrapper implementation
 
 import
-  std/[os, strformat, strutils],
+  std/[os, strformat, strutils, times],
   chronicles,
   eth/common,
   results,
@@ -20,7 +20,7 @@ import
   ../../nimbus/db/core_db/persistent,
   ../../nimbus/core/chain,
   ./replay/pp,
-  ./test_coredb/[coredb_test_xx, test_chainsync]
+  ./test_coredb/[coredb_test_xx, test_chainsync, test_helpers]
 
 const
   baseDir = [".", "..", ".."/"..", $DirSep]
@@ -161,8 +161,12 @@ when isMainModule:
   when true and false:
     testList = @[bulkTest2, bulkTest3]
 
+  var state: (Duration, int)
   for n,capture in testList:
-    noisy.chainSyncRunner(capture=capture, persistent=persDb)
+    noisy.profileSection("@testList #" & $n, state):
+      noisy.chainSyncRunner(capture=capture, persistent=persDb)
+
+  noisy.say "***", "total elapsed: ", state[0].pp, " sections: ", state[1]
 
 # ------------------------------------------------------------------------------
 # End

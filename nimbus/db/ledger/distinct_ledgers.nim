@@ -126,7 +126,6 @@ proc init*(
   ## `CoreDb` backend. Otherwise, pruning might kill some unwanted entries from
   ## storage tries ending up with an unstable database leading to crashes (see
   ## https://github.com/status-im/nimbus-eth1/issues/932.)
-  echo ">>> StorageLedger init", " isPruning=", isPruning
   al.distinctBase.parent.newMpt(account.storageVid, isPruning, Shared).toPhk.T
 
 #proc init*(T: type StorageLedger; db: CoreDbRef, isPruning = false): T =

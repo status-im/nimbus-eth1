@@ -16,10 +16,13 @@ import
   results,
   unittest2,
   ../../nimbus/core/chain,
+  ../../nimbus/db/ledger,
   ../replay/[undump_blocks, xcheck],
   ./test_helpers
 
-when CoreDbEnableApiProfiling:
+type StopMoaningAboutLedger {.used.} = LedgerType
+
+when CoreDbEnableApiProfiling or LedgerEnableApiProfiling:
   import std/[algorithm, sequtils, strutils], ../replay/pp
 
 # ------------------------------------------------------------------------------
@@ -51,6 +54,21 @@ proc coreDbProfResults(info: string; indent = 4): string =
       result &= pfx2 & $count & ": " &
         w.mapIt($it & coreDbProfTab.stats(it).pp).sorted.join(", ")
 
+proc ledgerProfResults(info: string; indent = 4): string =
+  when LedgerEnableApiProfiling:
+    let
+      pfx = indent.toPfx
+      pfx2 = pfx & "  "
+    result = "Ledger profiling results" & info & ":"
+    result &= "\n" & pfx & "by accumulated duration per procedure"
+    for (ela,w) in ledgerProfTab.byElapsed:
+      result &= pfx2 & ela.pp & ": " &
+        w.mapIt($it & ledgerProfTab.stats(it).pp(true)).sorted.join(", ")
+    result &=  "\n" & pfx & "by number of visits"
+    for (count,w) in ledgerProfTab.byVisits:
+      result &= pfx2 & $count & ": " &
+        w.mapIt($it & ledgerProfTab.stats(it).pp).sorted.join(", ")
+
 # ------------------------------------------------------------------------------
 # Public test function
 # ------------------------------------------------------------------------------
@@ -65,6 +83,9 @@ proc test_chainSyncProfilingPrint*(
       else: ""
     block:
       let s = info.coreDbProfResults()
+      if 0 < s.len: true.say "***", s, "\n"
+    block:
+      let s = info.ledgerProfResults()
       if 0 < s.len: true.say "***", s, "\n"
 
 
