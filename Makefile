@@ -1,4 +1,4 @@
-# Copyright (c) 2018-2022 Status Research & Development GmbH. Licensed under
+# Copyright (c) 2018-2023 Status Research & Development GmbH. Licensed under
 # either of:
 # - Apache License, version 2.0
 # - MIT license
@@ -71,7 +71,8 @@ FLUFFY_TOOLS := \
 	eth_data_exporter \
 	content_verifier \
 	blockwalk \
-	portalcli
+	portalcli \
+	fcli_db
 FLUFFY_TOOLS_DIRS := \
 	fluffy/tools/beacon_lc_bridge \
 	fluffy/tools/beacon_chain_bridge \
@@ -319,7 +320,7 @@ txparse: | build deps
 
 # usual cleaning
 clean: | clean-common
-	rm -rf build/{nimbus,fluffy,nimbus_verified_proxy,$(TOOLS_CSV),$(FLUFFY_TOOLS_CSV),all_tests,test_kvstore_rocksdb,test_rpc,all_fluffy_tests,all_fluffy_portal_spec_tests,test_portal_testnet,portalcli,blockwalk,eth_data_exporter,utp_test_app,utp_test,*.dSYM}
+	rm -rf build/{nimbus,fluffy,nimbus_verified_proxy,$(TOOLS_CSV),$(FLUFFY_TOOLS_CSV),all_tests,test_kvstore_rocksdb,test_rpc,all_fluffy_tests,all_fluffy_portal_spec_tests,test_portal_testnet,utp_test_app,utp_test,*.dSYM}
 	rm -rf tools/t8n/{t8n,t8n_test}
 	rm -rf tools/evmstate/{evmstate,evmstate_test}
 ifneq ($(USE_LIBBACKTRACE), 0)
