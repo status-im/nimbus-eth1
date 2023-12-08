@@ -17,7 +17,7 @@ import
   ../../db/core_db,
   ../../utils/utils,
   ../../common/common,
-  ../execution_types,
+  web3/execution_types,
   ../web3_eth_conv
 
 {.push gcsafe, raises:[].}

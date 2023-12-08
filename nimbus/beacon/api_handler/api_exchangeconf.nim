@@ -12,7 +12,7 @@ import
   eth/common,
   ../web3_eth_conv,
   ../beacon_engine,
-  ../execution_types,
+  web3/execution_types,
   chronicles
 
 {.push gcsafe, raises:[CatchableError].}

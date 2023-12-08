@@ -12,7 +12,7 @@ import
   stew/results,
   ../web3_eth_conv,
   ../beacon_engine,
-  ../execution_types,
+  web3/execution_types,
   ../payload_conv,
   ./api_utils,
   chronicles

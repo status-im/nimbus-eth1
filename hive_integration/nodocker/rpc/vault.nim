@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021-2023 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -15,7 +15,6 @@ import
   json_rpc/[rpcclient],
   ../../../nimbus/utils/utils,
   ../../../nimbus/transaction,
-  ../../../nimbus/rpc/hexstrings,
   ./client
 
 const

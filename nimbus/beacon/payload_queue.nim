@@ -10,7 +10,7 @@
 import
   eth/common,
   web3/engine_api_types,
-  ./execution_types
+  web3/execution_types
 
 const
   # maxTrackedPayloads is the maximum number of prepared payloads the execution

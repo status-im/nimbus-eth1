@@ -11,11 +11,10 @@ import
   std/[typetraits, sequtils, sets],
   stew/[byteutils],
   json_rpc/rpcserver,
-  web3/[conversions],
+  web3/[conversions, execution_types],
   ../beacon/api_handler,
   ../beacon/beacon_engine,
   ../beacon/web3_eth_conv,
-  ../beacon/execution_types,
   ../beacon/api_handler/api_utils
 
 {.push raises: [].}

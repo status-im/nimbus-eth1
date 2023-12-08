@@ -10,7 +10,7 @@
 import
   ./web3_eth_conv,
   ./payload_conv,
-  ./execution_types,
+  web3/execution_types,
   ./merge_tracker,
   ./payload_queue,
   ../db/core_db,

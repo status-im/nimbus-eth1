@@ -92,7 +92,7 @@ import
 
 from stew/objects import checkedEnumAssign
 from stew/byteutils import readHexChar
-from web3/ethtypes as web3types import BlockHash
+from web3/primitives as web3types import BlockHash
 
 from beacon_chain/gossip_processing/block_processor import newExecutionPayload
 from beacon_chain/gossip_processing/eth2_processor import toValidationResult
@@ -123,13 +123,8 @@ func hexToInt(
 
   res
 
-func asTxType(quantity: HexQuantityStr): Result[TxType, string] =
-  let value =
-    try:
-      hexToInt(quantity.string, uint8)
-    except ValueError as e:
-      return err("Invalid data for TxType: " & e.msg)
-
+func asTxType(quantity: Option[Quantity]): Result[TxType, string] =
+  let value = quantity.get(0.Quantity).uint8
   var txType: TxType
   if not checkedEnumAssign(txType, value):
     err("Invalid data for TxType: " & $value)
@@ -144,28 +139,19 @@ func asReceipt(
   var logs: seq[Log]
   if receiptObject.logs.len > 0:
     for log in receiptObject.logs:
-      var topics: seq[Topic]
+      var topics: seq[eth_types.Topic]
       for topic in log.topics:
-        topics.add(Topic(topic.data))
+        topics.add(eth_types.Topic(topic))
 
       logs.add(Log(
-        address: log.address,
+        address: ethAddr log.address,
         data: log.data,
         topics: topics
       ))
 
-  let cumulativeGasUsed =
-    try:
-      hexToInt(receiptObject.cumulativeGasUsed.string, GasInt)
-    except ValueError as e:
-      return err("Invalid data for cumulativeGasUsed: " & e.msg)
-
+  let cumulativeGasUsed = receiptObject.cumulativeGasUsed.GasInt
   if receiptObject.status.isSome():
-    let status =
-      try:
-        hexToInt(receiptObject.status.get().string, int)
-      except ValueError as e:
-        return err("Invalid data for status: " & e.msg)
+    let status = receiptObject.status.get().int
     ok(Receipt(
       receiptType: receiptType,
       isHash: false,
@@ -178,7 +164,7 @@ func asReceipt(
     ok(Receipt(
       receiptType: receiptType,
       isHash: true,
-      hash: receiptObject.root.get(),
+      hash: ethHash receiptObject.root.get(),
       cumulativeGasUsed: cumulativeGasUsed,
       bloom: BloomFilter(receiptObject.logsBloom),
       logs: logs
@@ -336,7 +322,7 @@ proc getBlockReceipts(
     let receiptObjects =
       # TODO: Add some retries depending on the failure
       try:
-        await client.eth_getBlockReceipts(blockHash)
+        await client.eth_getBlockReceipts(w3Hash blockHash)
       except CatchableError as e:
         await client.close()
         return err("JSON-RPC eth_getBlockReceipts failed: " & e.msg)
@@ -362,7 +348,7 @@ proc getBlockReceipts(
     let receiptObjectOpt =
       # TODO: Add some retries depending on the failure
       try:
-        await client.eth_getTransactionReceipt(txHash)
+        await client.eth_getTransactionReceipt(w3Hash txHash)
       except CatchableError as e:
         await client.close()
         return err("JSON-RPC eth_getTransactionReceipt failed: " & e.msg)

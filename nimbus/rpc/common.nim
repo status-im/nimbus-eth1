@@ -8,10 +8,12 @@
 # those terms.
 
 import
-  nimcrypto/utils, eth/common as eth_common,
+  eth/common,
   stint, json_rpc/server, json_rpc/errors,
   eth/p2p, eth/p2p/enode,
-  ../config, ./hexstrings
+  ../config,
+  ../beacon/web3_eth_conv,
+  web3/conversions
 
 {.push raises: [].}
 
@@ -31,9 +33,8 @@ proc setupCommonRpc*(node: EthereumNode, conf: NimbusConf, server: RpcServer) =
   server.rpc("web3_clientVersion") do() -> string:
     result = conf.agentString
 
-  server.rpc("web3_sha3") do(data: HexDataStr) -> string:
-    var rawdata = utils.fromHex(data.string[2 .. ^1])
-    result = "0x" & $keccakHash(rawdata)
+  server.rpc("web3_sha3") do(data: seq[byte]) -> Web3Hash:
+    result = w3Hash(keccakHash(data))
 
   server.rpc("net_version") do() -> string:
     result = $conf.networkId
@@ -42,9 +43,9 @@ proc setupCommonRpc*(node: EthereumNode, conf: NimbusConf, server: RpcServer) =
     let numPeers = node.numPeers
     result = numPeers < conf.maxPeers
 
-  server.rpc("net_peerCount") do() -> HexQuantityStr:
+  server.rpc("net_peerCount") do() -> Web3Quantity:
     let peerCount = uint node.numPeers
-    result = encodeQuantity(peerCount)
+    result = w3Qty(peerCount)
 
   server.rpc("admin_nodeInfo") do() -> NodeInfo:
     let

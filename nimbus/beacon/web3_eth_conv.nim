@@ -9,14 +9,17 @@
 
 import
   std/[options, typetraits],
-  web3/ethtypes,
+  web3/primitives as web3types,
+  web3/eth_api_types,
   web3/engine_api_types,
   eth/common/eth_types_rlp,
   stew/byteutils,
   ../utils/utils
 
-from web3/ethtypes as web3types import nil
 import eth/common/eth_types as common
+
+export
+  primitives
 
 type
   Web3Hash*       = web3types.Hash256
@@ -25,10 +28,11 @@ type
   Web3Quantity*   = web3types.Quantity
   Web3PrevRandao* = web3types.FixedBytes[32]
   Web3ExtraData*  = web3types.DynamicBytes[0, 32]
-  Web3Tx*         = web3types.TypedTransaction
-  Web3Blob*       = web3types.Blob
-  Web3KZGProof*   = web3types.KZGProof
-  Web3KZGCommitment* = web3types.KZGCommitment
+  Web3Topic*      = eth_api_types.Topic
+  Web3Tx*         = engine_api_types.TypedTransaction
+  Web3Blob*       = engine_api_types.Blob
+  Web3KZGProof*   = engine_api_types.KZGProof
+  Web3KZGCommitment* = engine_api_types.KZGCommitment
 
 {.push gcsafe, raises:[].}
 
@@ -48,14 +52,8 @@ proc `$`*(x: Option[PayloadID]): string =
   if x.isNone: "none"
   else: x.get().toHex
 
-proc `$`*[N](x: FixedBytes[N]): string =
-  x.toHex
-
 proc `$`*(x: Web3Quantity): string =
   $distinctBase(x)
-
-proc `$`*(x: Web3Address): string =
-  distinctBase(x).toHex
 
 proc short*(x: Web3Hash): string =
   let z = common.Hash256(data: distinctBase x)
@@ -98,8 +96,24 @@ func ethHash*(x: Option[Web3Hash]): Option[common.Hash256] =
   if x.isNone: none(common.Hash256)
   else: some(ethHash x.get)
 
+func ethHashes*(list: openArray[Web3Hash]): seq[common.Hash256] =
+  for x in list:
+    result.add ethHash(x)
+
+func ethHashes*(list: Option[seq[Web3Hash]]): Option[seq[common.Hash256]] =
+  if list.isNone: none(seq[common.Hash256])
+  else: some ethHashes(list.get)
+  
 func ethAddr*(x: Web3Address): common.EthAddress =
   EthAddress x
+
+func ethAddr*(x: Option[Web3Address]): Option[common.EthAddress] =
+  if x.isNone: none(common.EthAddress)
+  else: some(EthAddress x.get)
+
+func ethAddrs*(list: openArray[Web3Address]): seq[common.EthAddress] =
+  for x in list:
+    result.add ethAddr(x)
 
 func ethBloom*(x: Web3Bloom): common.BloomFilter =
   common.BloomFilter distinctBase x

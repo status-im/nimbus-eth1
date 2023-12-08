@@ -15,7 +15,7 @@ import
   json_rpc/[rpcproxy, rpcserver, rpcclient],
   eth/common/eth_types as etypes,
   web3,
-  web3/[ethhexstrings, ethtypes],
+  web3/[ethhexstrings, primitives],
   beacon_chain/el/el_manager,
   beacon_chain/networking/network_metadata,
   beacon_chain/spec/forks,

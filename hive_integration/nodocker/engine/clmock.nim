@@ -14,7 +14,7 @@ import
   stew/[byteutils],
   eth/common, chronos,
   json_rpc/rpcclient,
-  ../../../nimbus/beacon/execution_types,
+  web3/execution_types,
   ../../../nimbus/beacon/web3_eth_conv,
   ../../../nimbus/beacon/payload_conv,
   ../../../nimbus/[constants],
