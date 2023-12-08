@@ -14,7 +14,7 @@ import
   stint, stew/byteutils
 
 import ../nimbus/transaction, ../nimbus/utils/ec_recover
-from ../nimbus/rpc/hexstrings import encodeQuantity
+from web3/ethhexstrings import encodeQuantity
 
 func hexToInt*(s: string, T: typedesc[SomeInteger]): T =
   var i = 0

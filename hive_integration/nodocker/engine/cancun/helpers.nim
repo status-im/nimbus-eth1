@@ -21,7 +21,7 @@ import
   ../../../../nimbus/constants,
   ../../../../nimbus/core/eip4844,
   ../../../../nimbus/rpc/rpc_types,
-  ../../../../nimbus/beacon/execution_types,
+  web3/execution_types,
   ../../../../nimbus/beacon/web3_eth_conv,
   ./blobs
 
@@ -57,17 +57,17 @@ proc addBlobTransaction*(pool: TestBlobTxPool, tx: Transaction) =
   let txHash = rlpHash(tx)
   pool.transactions[txHash] = tx
 
-proc `==`(a: openArray[rpc_types.AccessTuple], b: openArray[AccessPair]): bool =
+proc `==`(a: openArray[AccessTuple], b: openArray[AccessPair]): bool =
   if a.len != b.len:
     return false
 
   for i in 0..<a.len:
-    if a[i].address != b[i].address:
+    if a[i].address != w3Addr b[i].address:
       return false
     if a[i].storageKeys.len != b[i].storageKeys.len:
       return false
     for j in 0..<a[i].storageKeys.len:
-      if a[i].storageKeys[j].data != b[i].storageKeys[j]:
+      if a[i].storageKeys[j].StorageKey != b[i].storageKeys[j]:
         return false
 
   return true

@@ -9,7 +9,7 @@
 
 import
   ./web3_eth_conv,
-  ./execution_types,
+  web3/execution_types,
   ../utils/utils,
   eth/common
 

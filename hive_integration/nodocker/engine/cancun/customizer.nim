@@ -19,7 +19,7 @@ import
   ../../../../nimbus/common as nimbus_common,
   ../../../../nimbus/beacon/web3_eth_conv,
   ../../../../nimbus/beacon/payload_conv,
-  ../../../../nimbus/beacon/execution_types
+  web3/execution_types
 
 type
   EngineAPIVersionResolver* = ref object of RootRef

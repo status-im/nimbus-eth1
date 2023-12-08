@@ -13,9 +13,9 @@ import
   eth/common,
   nimcrypto/sysrand,
   stew/[byteutils, endians2],
-  web3/ethtypes,
+  web3/eth_api_types,
   web3/engine_api_types,
-  ../../../nimbus/beacon/execution_types,
+  web3/execution_types,
   ../../../nimbus/beacon/web3_eth_conv,
   ../../../nimbus/utils/utils
 
@@ -118,9 +118,6 @@ proc `==`*(a: Option[BlockHash], b: Option[common.Hash256]): bool =
     return true
   if a.isSome and b.isSome:
     return a.get() == b.get().data.BlockHash
-
-proc `==`*(a, b: TypedTransaction): bool =
-  distinctBase(a) == distinctBase(b)
 
 template expectErrorCode*(res: untyped, errCode: int) =
   testCond res.isErr:

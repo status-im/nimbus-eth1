@@ -14,7 +14,7 @@ import
   chronicles,
   chronos,
   stew/byteutils,
-  web3/ethtypes,
+  web3/eth_api_types,
   ./wd_history,
   ../test_env,
   ../engine_client,
@@ -24,7 +24,7 @@ import
   ../../../nimbus/common/common,
   ../../../nimbus/utils/utils,
   ../../../nimbus/common/chain_config,
-  ../../../nimbus/beacon/execution_types,
+  web3/execution_types,
   ../../../nimbus/beacon/web3_eth_conv
 
 type

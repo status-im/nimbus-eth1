@@ -14,6 +14,7 @@ import
   eth/[trie, rlp],
   stint,
   web3,
+  web3/engine_api_types,
   ../../nimbus/db/core_db
 
 type
@@ -86,19 +87,19 @@ template asEthHash(hash: BlockHash): etypes.Hash256 =
 
 proc calculateTransactionData(
     items: openArray[TypedTransaction]):
-    (etypes.Hash256, seq[TxHash], uint64) =
+    (etypes.Hash256, seq[TxOrHash], uint64) =
   ## returns tuple composed of
   ## - root of transactions trie
   ## - list of transactions hashes
   ## - total size of transactions in block
   var tr = newCoreDbRef(LegacyDbMemory).mptPrune
-  var txHashes: seq[TxHash]
+  var txHashes: seq[TxOrHash]
   var txSize: uint64
   for i, t in items:
     let tx = distinctBase(t)
     txSize = txSize + uint64(len(tx))
     tr.put(rlp.encode(i), tx)
-    txHashes.add(toFixedBytes(keccakHash(tx)))
+    txHashes.add(txOrHash toFixedBytes(keccakHash(tx)))
   return (tr.rootHash(), txHashes, txSize)
 
 func blockHeaderSize(

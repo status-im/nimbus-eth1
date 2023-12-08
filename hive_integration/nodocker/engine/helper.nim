@@ -11,7 +11,7 @@
 import
   eth/[common, rlp],
   chronicles,
-  ../../../nimbus/beacon/execution_types,
+  web3/execution_types,
   ../../../nimbus/beacon/web3_eth_conv,
   ./engine_client,
   ./types

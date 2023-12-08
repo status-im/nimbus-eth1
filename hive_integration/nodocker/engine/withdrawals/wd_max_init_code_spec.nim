@@ -19,7 +19,7 @@ import
   ../types,
   ../cancun/customizer,
   ../../../nimbus/constants,
-  ../../../nimbus/beacon/execution_types,
+  web3/execution_types,
   ../../../nimbus/beacon/web3_eth_conv
 
 # EIP-3860 Shanghai Tests:

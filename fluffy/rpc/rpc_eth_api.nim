@@ -10,10 +10,10 @@
 import
   std/[times, sequtils, strutils, typetraits],
   json_rpc/[rpcproxy, rpcserver], stew/byteutils,
-  web3/conversions, # sigh, for FixedBytes marshalling
+  web3/[conversions, ethhexstrings], # sigh, for FixedBytes marshalling
   eth/[common/eth_types, rlp],
   beacon_chain/spec/forks,
-  ../../nimbus/rpc/[rpc_types, hexstrings, filters],
+  ../../nimbus/rpc/[rpc_types, filters],
   ../../nimbus/transaction,
   # TODO: this is a bit weird but having this import makes beacon_light_client
   # to fail compilation due throwing undeclared `CatchableError` in
@@ -35,83 +35,80 @@ import
 
 # Some similar code as from nimbus `rpc_utils`, but avoiding that import as it
 # brings in  a lot more. Should restructure `rpc_utils` a bit before using that.
-func toHash*(value: array[32, byte]): Hash256 =
-  result.data = value
-
-func toHash*(value: EthHashStr): Hash256 {.raises: [ValueError].} =
-  hexToPaddedByteArray[32](value.string).toHash
+func toHash*(value: rpc_types.Hash256): eth_types.Hash256 =
+  result.data = value.bytes
 
 func init*(
     T: type TransactionObject,
-    tx: eth_types.Transaction, header: BlockHeader, txIndex: int):
+    tx: eth_types.Transaction, header: eth_types.BlockHeader, txIndex: int):
     T {.raises: [ValidationError].} =
   TransactionObject(
-    blockHash: some(header.blockHash),
-    blockNumber: some(encodeQuantity(header.blockNumber)),
-    `from`: tx.getSender(),
-    gas: encodeQuantity(tx.gasLimit.uint64),
-    gasPrice: encodeQuantity(tx.gasPrice.uint64),
-    hash: tx.rlpHash,
+    blockHash: some(w3Hash header.blockHash),
+    blockNumber: some(Quantity(header.blockNumber.truncate(uint64))),
+    `from`: w3Addr tx.getSender(),
+    gas: Quantity(tx.gasLimit),
+    gasPrice: Quantity(tx.gasPrice),
+    hash: w3Hash tx.rlpHash,
     input: tx.payload,
-    nonce: encodeQuantity(tx.nonce.uint64),
-    to: some(tx.destination),
-    transactionIndex: some(encodeQuantity(txIndex.uint64)),
-    value: encodeQuantity(tx.value),
-    v: encodeQuantity(tx.V.uint),
-    r: encodeQuantity(tx.R),
-    s: encodeQuantity(tx.S),
-    `type`: encodeQuantity(tx.txType.uint64),
-    maxFeePerGas: encodeQuantity(tx.maxFee.uint64),
-    maxPriorityFeePerGas: encodeQuantity(tx.maxPriorityFee.uint64),
+    nonce: Quantity(tx.nonce),
+    to: some(w3Addr tx.destination),
+    transactionIndex: some(Quantity(txIndex)),
+    value: tx.value,
+    v: Quantity(tx.V),
+    r: tx.R,
+    s: tx.S,
+    `type`: some(Quantity(tx.txType)),
+    maxFeePerGas: some(Quantity(tx.maxFee)),
+    maxPriorityFeePerGas: some(Quantity(tx.maxPriorityFee)),
   )
 
 # Note: Similar as `populateBlockObject` from rpc_utils, but lacking the
 # total difficulty
 func init*(
     T: type BlockObject,
-    header: BlockHeader, body: BlockBody,
+    header: eth_types.BlockHeader, body: BlockBody,
     fullTx = true, isUncle = false):
     T {.raises: [ValidationError].} =
   let blockHash = header.blockHash
 
   var blockObject = BlockObject(
-    number: some(encodeQuantity(header.blockNumber)),
-    hash: some(blockHash),
-    parentHash: header.parentHash,
-    nonce: some(hexDataStr(header.nonce)),
-    sha3Uncles: header.ommersHash,
+    number: Quantity(header.blockNumber.truncate(uint64)),
+    hash: w3Hash blockHash,
+    parentHash: w3Hash header.parentHash,
+    nonce: some(FixedBytes[8](header.nonce)),
+    sha3Uncles: w3Hash header.ommersHash,
     logsBloom: FixedBytes[256] header.bloom,
-    transactionsRoot: header.txRoot,
-    stateRoot: header.stateRoot,
-    receiptsRoot: header.receiptRoot,
-    miner: header.coinbase,
-    difficulty: encodeQuantity(header.difficulty),
-    extraData: hexDataStr(header.extraData),
+    transactionsRoot: w3Hash header.txRoot,
+    stateRoot: w3Hash header.stateRoot,
+    receiptsRoot: w3Hash header.receiptRoot,
+    miner: w3Addr header.coinbase,
+    difficulty: header.difficulty,
+    extraData: HistoricExtraData header.extraData,
     # TODO: This is optional according to
     # https://playground.open-rpc.org/?schemaUrl=https://raw.githubusercontent.com/ethereum/eth1.0-apis/assembled-spec/openrpc.json
     # So we should probably change `BlockObject`.
-    totalDifficulty: encodeQuantity(UInt256.low()),
-    gasLimit: encodeQuantity(header.gasLimit.uint64),
-    gasUsed: encodeQuantity(header.gasUsed.uint64),
-    timestamp: encodeQuantity(header.timestamp.uint64)
+    totalDifficulty: UInt256.low(),
+    gasLimit: Quantity(header.gasLimit.uint64),
+    gasUsed: Quantity(header.gasUsed.uint64),
+    timestamp: Quantity(header.timestamp.uint64)
   )
 
   let size = sizeof(BlockHeader) - sizeof(Blob) + header.extraData.len
-  blockObject.size = encodeQuantity(size.uint)
+  blockObject.size = Quantity(size.uint)
 
   if not isUncle:
     blockObject.uncles =
-      body.uncles.map(proc(h: BlockHeader): Hash256 = h.blockHash)
+      body.uncles.map(proc(h: BlockHeader): rpc_types.Hash256 = w3Hash h.blockHash)
 
     if fullTx:
       var i = 0
       for tx in body.transactions:
         # ValidationError from tx.getSender in TransactionObject.init
-        blockObject.transactions.add %(TransactionObject.init(tx, header, i))
+        blockObject.transactions.add txOrHash(TransactionObject.init(tx, header, i))
         inc i
     else:
       for tx in body.transactions:
-        blockObject.transactions.add %(keccakHash(rlp.encode(tx)))
+        blockObject.transactions.add txOrHash(w3Hash keccakHash(rlp.encode(tx)))
 
   blockObject
 
@@ -199,13 +196,13 @@ proc installEthApiHandlers*(
 
   # Supported API through the Portal Network
 
-  rpcServerWithProxy.rpc("eth_chainId") do() -> HexQuantityStr:
+  rpcServerWithProxy.rpc("eth_chainId") do() -> Quantity:
     # The Portal Network can only support MainNet at the moment, so always return
     # 1
-    return encodeQuantity(uint64(1))
+    return Quantity(uint64(1))
 
   rpcServerWithProxy.rpc("eth_getBlockByHash") do(
-      data: EthHashStr, fullTransactions: bool) -> Option[BlockObject]:
+      data: rpc_types.Hash256, fullTransactions: bool) -> Option[BlockObject]:
     ## Returns information about a block by hash.
     ##
     ## data: Hash of a block.
@@ -265,7 +262,7 @@ proc installEthApiHandlers*(
     of "pending":
       raise newException(ValueError, "Pending tag not yet implemented")
     else:
-      if not isValidHexQuantity(quantityTag):
+      if not validate(quantityTag.HexQuantityStr):
         raise newException(ValueError, "Provided block number is not a hex number")
 
       let
@@ -280,7 +277,7 @@ proc installEthApiHandlers*(
         return some(BlockObject.init(header, body))
 
   rpcServerWithProxy.rpc("eth_getBlockTransactionCountByHash") do(
-      data: EthHashStr) -> HexQuantityStr:
+      data: rpc_types.Hash256) -> Quantity:
     ## Returns the number of transactions in a block from a block matching the
     ## given block hash.
     ##
@@ -295,7 +292,7 @@ proc installEthApiHandlers*(
     for tx in body.transactions:
       txCount.inc()
 
-    return encodeQuantity(txCount)
+    return Quantity(txCount)
 
   # Note: can't implement this yet as the fluffy node doesn't know the relation
   # of tx hash -> block number -> block hash, in order to get the receipt
@@ -312,7 +309,7 @@ proc installEthApiHandlers*(
       raise newException(ValueError,
         "Unsupported query: Only `blockHash` queries are currently supported")
 
-    let hash = filterOptions.blockHash.unsafeGet()
+    let hash = ethHash filterOptions.blockHash.unsafeGet()
 
     let header = (await historyNetwork.getVerifiedBlockHeader(hash)).valueOr:
       raise newException(ValueError,

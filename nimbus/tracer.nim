@@ -16,8 +16,9 @@ import
   ./evm/tracer/legacy_tracer,
   "."/[constants, vm_state, vm_types, transaction, core/executor],
   nimcrypto/utils as ncrutils,
-  ./rpc/hexstrings, ./launcher,
-  results
+  web3/conversions, ./launcher,
+  results,
+  ./beacon/web3_eth_conv
 
 when defined(geth):
   import db/geth_db
@@ -64,7 +65,7 @@ proc captureAccount(n: JsonNode, db: LedgerRef, address: EthAddress, name: strin
   let codeHash = db.getCodeHash(address)
   let storageRoot = db.getStorageRoot(address)
 
-  jaccount["nonce"] = %(encodeQuantity(nonce).string.toLowerAscii)
+  jaccount["nonce"] = %(nonce.Web3Quantity)
   jaccount["balance"] = %("0x" & balance.toHex)
 
   let code = db.getCode(address)
@@ -117,7 +118,7 @@ proc traceTransaction*(com: CommonRef, header: BlockHeader,
     before = newJArray()
     after = newJArray()
     stateDiff = %{"before": before, "after": after}
-    beforeRoot: Hash256
+    beforeRoot: common.Hash256
 
   let
     miner = vmState.coinbase()

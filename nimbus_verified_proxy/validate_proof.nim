@@ -15,7 +15,7 @@ import
   eth/common/eth_types_rlp,
   eth/rlp,
   eth/trie/[hexary, hexary_proof_verification],
-  web3/ethtypes
+  web3/eth_api_types
 
 export results
 

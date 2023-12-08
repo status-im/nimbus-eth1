@@ -11,7 +11,7 @@ import
   unittest2, testutils, confutils, chronos,
   stew/byteutils,
   eth/p2p/discoveryv5/random2, eth/keys,
-  ../../nimbus/rpc/[hexstrings, rpc_types],
+  ../../nimbus/rpc/[rpc_types],
   ../rpc/portal_rpc_client,
   ../rpc/eth_rpc_client,
   ../eth_data/[
@@ -270,7 +270,7 @@ procSuite "Portal testnet tests":
         let content = await retryUntil(
           proc (): Future[Option[BlockObject]] {.async.} =
             try:
-              let res = await client.eth_getBlockByHash(hash.ethHashStr(), false)
+              let res = await client.eth_getBlockByHash(w3Hash hash, false)
               await client.close()
               return res
             except CatchableError as exc:
@@ -283,15 +283,14 @@ procSuite "Portal testnet tests":
         )
         check content.isSome()
         let blockObj = content.get()
-        check blockObj.hash.get() == hash
+        check blockObj.hash == w3Hash hash
 
         for tx in blockObj.transactions:
-          var txObj: TransactionObject
-          tx.fromJson("tx", txObj)
-          check txObj.blockHash.get() == hash
+          doAssert(tx.kind == tohTx)
+          check tx.tx.blockHash.get == w3Hash hash
 
         let filterOptions = FilterOptions(
-          blockHash: some(hash)
+          blockHash: some(w3Hash hash)
         )
 
         let logs = await retryUntil(
@@ -311,7 +310,7 @@ procSuite "Portal testnet tests":
 
         for l in logs:
           check:
-            l.blockHash == some(hash)
+            l.blockHash == some(w3Hash hash)
 
         # TODO: Check ommersHash, need the headers and not just the hashes
         # for uncle in blockObj.uncles:

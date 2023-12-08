@@ -14,10 +14,12 @@ import
   std/strutils,
   confutils, chronicles, chronicles/topics_registry, stew/byteutils,
   eth/common/eth_types,
-  ../../nimbus/rpc/[hexstrings, rpc_types], ../../nimbus/errors,
+  ../../nimbus/rpc/[rpc_types], ../../nimbus/errors,
   ../rpc/eth_rpc_client
 
 type
+  Hash256 = eth_types.Hash256
+
   BlockWalkConf* = object
     logLevel* {.
       defaultValue: LogLevel.INFO
@@ -53,14 +55,14 @@ proc completeCmdArg*(T: type Hash256, val: string): seq[string] =
   return @[]
 
 proc walkBlocks(client: RpcClient, startHash: Hash256) {.async.} =
-  var parentHash = startHash
-  var blockNumber = ""
+  var parentHash = w3Hash startHash
+  var blockNumber: Quantity
 
   # Should be 0x0, but block 0 does not exist in the json data file
-  while blockNumber != "0x1":
+  while blockNumber != Quantity(0x1):
     let parentBlockOpt =
       try:
-        await client.eth_getBlockByHash(parentHash.ethHashStr(), false)
+        await client.eth_getBlockByHash(parentHash, false)
       except RpcPostError as e:
         # RpcPostError when for example timing out on the request. Could retry
         # in this case.
@@ -78,20 +80,14 @@ proc walkBlocks(client: RpcClient, startHash: Hash256) {.async.} =
     await client.close()
 
     if parentBlockOpt.isNone():
-      fatal "Failed getting parent block", hash = parentHash.data.toHex()
+      fatal "Failed getting parent block", hash = parentHash
       quit 1
 
     let parentBlock = parentBlockOpt.get()
-    if parentBlock.number.isNone() or parentBlock.hash.isNone():
-      fatal "Parent block cannot be a pending block",
-        hash = parentHash.data.toHex()
-      quit 1
-
-    blockNumber = parentBlock.number.get().string
+    blockNumber = parentBlock.number
     parentHash = parentBlock.parentHash
 
-    echo "Block " & $blockNumber.parseHexInt() & ": " &
-      parentBlock.hash.get().data.toHex()
+    echo "Block " & $blockNumber & ": " & $parentBlock.hash
 
 proc run(config: BlockWalkConf) {.async.} =
   let client = newRpcHttpClient()

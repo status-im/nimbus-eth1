@@ -9,7 +9,7 @@
 
 import
   std/tables,
-  web3/ethtypes,
+  web3/primitives,
   stew/[results, keyed_queue],
   ./rpc/rpc_utils
 

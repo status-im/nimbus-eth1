@@ -10,40 +10,23 @@
 {.push raises: [].}
 
 import
-  std/[strutils, algorithm, options, json],
-  ./hexstrings,
+  std/[strutils, algorithm, options],
   ./rpc_types,
   eth/[common, keys],
-  stew/byteutils,
+  web3/ethhexstrings,
   ../db/core_db,
   ../constants, stint,
-  ../utils/utils, ../transaction,
+  ../utils/utils,
+  ../transaction,
   ../transaction/call_evm,
-  ../core/eip4844
+  ../core/eip4844,
+  ../beacon/web3_eth_conv
 
 const
   defaultTag = "latest"
 
-func toAddress*(value: EthAddressStr): EthAddress
-    {.gcsafe, raises: [ValueError].} =
-  hexToPaddedByteArray[20](value.string)
-
-func toHash*(value: array[32, byte]): Hash256 =
-  result.data = value
-
-func toHash*(value: EthHashStr): Hash256
-    {.gcsafe, raises: [ValueError].} =
-  result = hexToPaddedByteArray[32](value.string).toHash
-
-func hexToInt*(s: string, T: typedesc[SomeInteger]): T
-    {.gcsafe, raises: [ValueError].} =
-  var i = 0
-  if s[i] == '0' and (s[i+1] in {'x', 'X'}): inc(i, 2)
-  if s.len - i > sizeof(T) * 2:
-    raise newException(ValueError, "input hex too big for destination int")
-  while i < s.len:
-    result = result shl 4 or readHexChar(s[i]).T
-    inc(i)
+type
+  BlockHeader = common.BlockHeader
 
 proc headerFromTag*(chain: CoreDbRef, blockTag: string): BlockHeader
     {.gcsafe, raises: [CatchableError].} =
@@ -57,15 +40,19 @@ proc headerFromTag*(chain: CoreDbRef, blockTag: string): BlockHeader
     #TODO: Implement get pending block
     raise newException(ValueError, "Pending tag not yet implemented")
   else:
-    # Raises are trapped and wrapped in JSON when returned to the user.
-    tag.validateHexQuantity
+    if not validate(tag.HexQuantityStr):
+      raise newException(ValueError, "Invalid hex of blockTag")
     let blockNum = stint.fromHex(UInt256, tag)
     result = chain.getBlockHeader(blockNum.toBlockNumber)
 
-proc headerFromTag*(chain: CoreDbRef, blockTag: Option[string]): BlockHeader
+proc headerFromTag*(chain: CoreDbRef, blockTag: Option[RtBlockIdentifier]): BlockHeader
     {.gcsafe, raises: [CatchableError].} =
   if blockTag.isSome():
-    return chain.headerFromTag(blockTag.unsafeGet())
+    let blockId = blockTag.get
+    if blockId.kind == bidAlias:
+      return chain.headerFromTag(blockId.alias)
+    else:
+      return chain.getBlockHeader(blockId.number.toBlockNumber)
   else:
     return chain.headerFromTag(defaultTag)
 
@@ -87,51 +74,50 @@ proc calculateMedianGasPrice*(chain: CoreDbRef): GasInt
     else:
       result = prices[middle]
 
-proc unsignedTx*(tx: TxSend, chain: CoreDbRef, defaultNonce: AccountNonce): Transaction
+proc unsignedTx*(tx: EthSend, chain: CoreDbRef, defaultNonce: AccountNonce): Transaction
     {.gcsafe, raises: [CatchableError].} =
   if tx.to.isSome:
-    result.to = some(toAddress(tx.to.get))
+    result.to = some(ethAddr(tx.to.get))
 
   if tx.gas.isSome:
-    result.gasLimit = hexToInt(tx.gas.get().string, GasInt)
+    result.gasLimit = tx.gas.get.GasInt
   else:
     result.gasLimit = 90000.GasInt
 
   if tx.gasPrice.isSome:
-    result.gasPrice = hexToInt(tx.gasPrice.get().string, GasInt)
+    result.gasPrice = tx.gasPrice.get.GasInt
   else:
     result.gasPrice = calculateMedianGasPrice(chain)
 
   if tx.value.isSome:
-    result.value = UInt256.fromHex(tx.value.get().string)
+    result.value = tx.value.get
   else:
     result.value = 0.u256
 
   if tx.nonce.isSome:
-    result.nonce = hexToInt(tx.nonce.get().string, AccountNonce)
+    result.nonce = tx.nonce.get.AccountNonce
   else:
     result.nonce = defaultNonce
 
-  result.payload = hexToSeqByte(tx.data.string)
+  result.payload = tx.data
 
 template optionalAddress(src, dst: untyped) =
   if src.isSome:
-    dst = some(toAddress(src.get))
+    dst = some(ethAddr src.get)
 
 template optionalGas(src, dst: untyped) =
   if src.isSome:
-    dst = some(hexToInt(src.get.string, GasInt))
+    dst = some(src.get.GasInt)
 
 template optionalU256(src, dst: untyped) =
   if src.isSome:
-    dst = some(UInt256.fromHex(src.get.string))
+    dst = some(src.get)
 
 template optionalBytes(src, dst: untyped) =
   if src.isSome:
-    dst = hexToSeqByte(src.get.string)
+    dst = src.get
 
-proc callData*(call: EthCall): RpcCallData
-    {.gcsafe, raises: [ValueError].} =
+proc callData*(call: EthCall): RpcCallData {.gcsafe, raises: [].} =
   optionalAddress(call.source, result.source)
   optionalAddress(call.to, result.to)
   optionalGas(call.gas, result.gasLimit)
@@ -143,10 +129,10 @@ proc callData*(call: EthCall): RpcCallData
 
 proc toWd(wd: Withdrawal): WithdrawalObject =
   WithdrawalObject(
-    index: encodeQuantity(wd.index),
-    validatorIndex: encodeQuantity(wd.validatorIndex),
-    address: wd.address,
-    amount: encodeQuantity(wd.amount),
+    index: w3Qty wd.index,
+    validatorIndex: w3Qty wd.validatorIndex,
+    address: w3Addr wd.address,
+    amount: w3Qty wd.amount,
   )
 
 proc toWdList(list: openArray[Withdrawal]): seq[WithdrawalObject] =
@@ -154,14 +140,14 @@ proc toWdList(list: openArray[Withdrawal]): seq[WithdrawalObject] =
   for x in list:
     result.add toWd(x)
 
-proc toHashList(list: openArray[StorageKey]): seq[Hash256] =
-  result = newSeqOfCap[Hash256](list.len)
+proc toHashList(list: openArray[StorageKey]): seq[Web3Hash] =
+  result = newSeqOfCap[Web3Hash](list.len)
   for x in list:
-    result.add Hash256(data: x)
+    result.add Web3Hash x
 
 proc toAccessTuple(ac: AccessPair): AccessTuple =
   AccessTuple(
-    address: ac.address,
+    address: w3Addr ac.address,
     storageKeys: toHashList(ac.storageKeys)
   )
 
@@ -171,115 +157,121 @@ proc toAccessTupleList(list: openArray[AccessPair]): seq[AccessTuple] =
     result.add toAccessTuple(x)
 
 proc populateTransactionObject*(tx: Transaction,
-                                header: Option[BlockHeader] = none(BlockHeader),
+                                optionalHeader: Option[BlockHeader] = none(BlockHeader),
                                 txIndex: Option[int] = none(int)): TransactionObject
     {.gcsafe, raises: [ValidationError].} =
-  result.`type` = encodeQuantity(tx.txType.uint64)
-  if header.isSome:
-    result.blockHash = some(header.get().hash)
-    result.blockNumber = some(encodeQuantity(header.get().blockNumber))
-  result.`from` = tx.getSender()
-  result.gas = encodeQuantity(tx.gasLimit.uint64)
-  result.gasPrice = encodeQuantity(tx.gasPrice.uint64)
-  result.hash = tx.rlpHash
+  result = TransactionObject()
+  result.`type` = some w3Qty(tx.txType.ord)
+  if optionalHeader.isSome:
+    let header = optionalHeader.get
+    result.blockHash = some(w3Hash header.hash)
+    result.blockNumber = some(w3Qty(header.blockNumber.truncate(uint64)))
+
+  result.`from` = w3Addr tx.getSender()
+  result.gas = w3Qty(tx.gasLimit)
+  result.gasPrice = w3Qty(tx.gasPrice)
+  result.hash = w3Hash tx.rlpHash
   result.input = tx.payload
-  result.nonce = encodeQuantity(tx.nonce.uint64)
-  result.to = some(tx.destination)
+  result.nonce = w3Qty(tx.nonce)
+  result.to = some(w3Addr tx.destination)
   if txIndex.isSome:
-    result.transactionIndex = some(encodeQuantity(txIndex.get().uint64))
-  result.value = encodeQuantity(tx.value)
-  result.v = encodeQuantity(tx.V.uint)
-  result.r = encodeQuantity(tx.R)
-  result.s = encodeQuantity(tx.S)
-  result.maxFeePerGas = encodeQuantity(tx.maxFee.uint64)
-  result.maxPriorityFeePerGas = encodeQuantity(tx.maxPriorityFee.uint64)
+    result.transactionIndex = some(w3Qty(txIndex.get))
+  result.value = tx.value
+  result.v = w3Qty(tx.V)
+  result.r = u256(tx.R)
+  result.s = u256(tx.S)
+  result.maxFeePerGas = some w3Qty(tx.maxFee)
+  result.maxPriorityFeePerGas = some w3Qty(tx.maxPriorityFee)
 
   if tx.txType >= TxEip2930:
-    result.chainId = some(encodeQuantity(tx.chainId.uint64))
+    result.chainId = some(Web3Quantity(tx.chainId))
     result.accessList = some(toAccessTupleList(tx.accessList))
 
   if tx.txType >= TxEIP4844:
-    result.maxFeePerBlobGas = some(encodeQuantity(tx.maxFeePerBlobGas))
-    result.versionedHashes = some(tx.versionedHashes)
+    result.maxFeePerBlobGas = some(tx.maxFeePerBlobGas)
+    result.blobVersionedHashes = some(w3Hashes tx.versionedHashes)
 
 proc populateBlockObject*(header: BlockHeader, chain: CoreDbRef, fullTx: bool, isUncle = false): BlockObject
     {.gcsafe, raises: [CatchableError].} =
   let blockHash = header.blockHash
+  result = BlockObject()
 
-  result.number = some(encodeQuantity(header.blockNumber))
-  result.hash = some(blockHash)
-  result.parentHash = header.parentHash
-  result.nonce = some(hexDataStr(header.nonce))
-  result.sha3Uncles = header.ommersHash
+  result.number = w3Qty(header.blockNumber)
+  result.hash = w3Hash blockHash
+  result.parentHash = w3Hash header.parentHash
+  result.nonce = some(FixedBytes[8] header.nonce)
+  result.sha3Uncles = w3Hash header.ommersHash
   result.logsBloom = FixedBytes[256] header.bloom
-  result.transactionsRoot = header.txRoot
-  result.stateRoot = header.stateRoot
-  result.receiptsRoot = header.receiptRoot
-  result.miner = header.coinbase
-  result.difficulty = encodeQuantity(header.difficulty)
-  result.extraData = hexDataStr(header.extraData)
-  result.mixHash = header.mixDigest
+  result.transactionsRoot = w3Hash header.txRoot
+  result.stateRoot = w3Hash header.stateRoot
+  result.receiptsRoot = w3Hash header.receiptRoot
+  result.miner = w3Addr header.coinbase
+  result.difficulty = header.difficulty
+  result.extraData = HistoricExtraData header.extraData
+  result.mixHash = w3Hash header.mixDigest
 
   # discard sizeof(seq[byte]) of extraData and use actual length
   let size = sizeof(BlockHeader) - sizeof(Blob) + header.extraData.len
-  result.size = encodeQuantity(size.uint)
+  result.size = w3Qty(size)
 
-  result.gasLimit  = encodeQuantity(header.gasLimit.uint64)
-  result.gasUsed   = encodeQuantity(header.gasUsed.uint64)
-  result.timestamp = encodeQuantity(header.timestamp.uint64)
+  result.gasLimit  = w3Qty(header.gasLimit)
+  result.gasUsed   = w3Qty(header.gasUsed)
+  result.timestamp = w3Qty(header.timestamp)
   result.baseFeePerGas = if header.fee.isSome:
-                           some(encodeQuantity(header.baseFee))
+                           some(header.baseFee)
                          else:
-                           none(HexQuantityStr)
+                           none(UInt256)
   if not isUncle:
-    result.totalDifficulty = encodeQuantity(chain.getScore(blockHash))
-    result.uncles = chain.getUncleHashes(header)
+    result.totalDifficulty = chain.getScore(blockHash)
+    result.uncles = w3Hashes chain.getUncleHashes(header)
 
     if fullTx:
       var i = 0
       for tx in chain.getBlockTransactions(header):
-        result.transactions.add %(populateTransactionObject(tx, some(header), some(i)))
+        result.transactions.add txOrHash(populateTransactionObject(tx, some(header), some(i)))
         inc i
     else:
       for x in chain.getBlockTransactionHashes(header):
-        result.transactions.add %(x)
+        result.transactions.add txOrHash(w3Hash(x))
 
   if header.withdrawalsRoot.isSome:
-    result.withdrawalsRoot = header.withdrawalsRoot
+    result.withdrawalsRoot = some(w3Hash header.withdrawalsRoot.get)
     result.withdrawals = some(toWdList(chain.getWithdrawals(header.withdrawalsRoot.get)))
 
   if header.blobGasUsed.isSome:
-    result.blobGasUsed = some(encodeQuantity(header.blobGasUsed.get))
+    result.blobGasUsed = some(w3Qty(header.blobGasUsed.get))
 
   if header.excessBlobGas.isSome:
-    result.excessBlobGas = some(encodeQuantity(header.excessBlobGas.get))
+    result.excessBlobGas = some(w3Qty(header.excessBlobGas.get))
 
-  result.parentBeaconBlockRoot = header.parentBeaconBlockRoot
+  if header.parentBeaconBlockRoot.isSome:
+    result.parentBeaconBlockRoot = some(w3Hash header.parentBeaconBlockRoot.get)
 
 proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction,
                       txIndex: int, header: BlockHeader): ReceiptObject
     {.gcsafe, raises: [ValidationError].} =
-  result.transactionHash = tx.rlpHash
-  result.transactionIndex = encodeQuantity(txIndex.uint)
-  result.blockHash = header.hash
-  result.blockNumber = encodeQuantity(header.blockNumber)
-  result.`from` = tx.getSender()
-  result.to = some(tx.destination)
-  result.cumulativeGasUsed = encodeQuantity(receipt.cumulativeGasUsed.uint64)
-  result.gasUsed = encodeQuantity(gasUsed.uint64)
-  result.`type` = encodeQuantity(uint(receipt.receiptType.ord))
+  result = ReceiptObject()
+  result.transactionHash = w3Hash tx.rlpHash
+  result.transactionIndex = w3Qty(txIndex)
+  result.blockHash = w3Hash header.hash
+  result.blockNumber = w3Qty(header.blockNumber)
+  result.`from` = w3Addr tx.getSender()
+  result.to = some(w3Addr tx.destination)
+  result.cumulativeGasUsed = w3Qty(receipt.cumulativeGasUsed)
+  result.gasUsed = w3Qty(gasUsed)
+  result.`type` = some w3Qty(receipt.receiptType.ord)
 
   if tx.contractCreation:
     var sender: EthAddress
     if tx.getSender(sender):
       let contractAddress = generateAddress(sender, tx.nonce)
-      result.contractAddress = some(contractAddress)
+      result.contractAddress = some(w3Addr contractAddress)
 
   for log in receipt.logs:
     # TODO: Work everywhere with either `Hash256` as topic or `array[32, byte]`
-    var topics: seq[Hash256]
+    var topics: seq[Web3Topic]
     for topic in log.topics:
-      topics.add(Hash256(data: topic))
+      topics.add Web3Topic(topic)
 
     let logObject = FilterLog(
       removed: false,
@@ -293,7 +285,7 @@ proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction,
       blockHash: some(result.blockHash),
       blockNumber: some(result.blockNumber),
       # The actual fields
-      address: log.address,
+      address: w3Addr log.address,
       data: log.data,
       topics: topics
     )
@@ -303,14 +295,14 @@ proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction,
 
   # post-transaction stateroot (pre Byzantium).
   if receipt.hasStateRoot:
-    result.root = some(receipt.stateRoot)
+    result.root = some(w3Hash receipt.stateRoot)
   else:
     # 1 = success, 0 = failure.
-    result.status = some(encodeQuantity(receipt.status.uint64))
+    result.status = some(w3Qty(receipt.status.uint64))
 
   let normTx = eip1559TxNormalization(tx, header.baseFee.truncate(GasInt))
-  result.effectiveGasPrice = encodeQuantity(normTx.gasPrice.uint64)
+  result.effectiveGasPrice = w3Qty(normTx.gasPrice)
 
   if tx.txType == TxEip4844:
-    result.blobGasUsed = some(encodeQuantity(tx.versionedHashes.len.uint64 * GAS_PER_BLOB.uint64))
-    result.blobGasPrice = some(encodeQuantity(getBlobGasprice(header.excessBlobGas.get(0'u64))))
+    result.blobGasUsed = some(w3Qty(tx.versionedHashes.len.uint64 * GAS_PER_BLOB.uint64))
+    result.blobGasPrice = some(getBlobGasprice(header.excessBlobGas.get(0'u64)))

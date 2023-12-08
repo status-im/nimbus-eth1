@@ -14,9 +14,13 @@ import
   nimcrypto/hash,
   stew/byteutils,
   ../nimbus/rpc/filters,
+  ../nimbus/beacon/web3_eth_conv,
   ./test_block_fixture
 
 let allLogs = deriveLogs(blockHeader4514995, blockBody4514995.transactions, receipts4514995)
+
+func w3Hash(x: string): Web3Hash =
+  Web3Hash hexToByteArray[32](x)
 
 proc filtersMain*() =
   # All magic numbers and addresses in following tests are confirmed with geth eth_getLogs,
@@ -29,10 +33,11 @@ proc filtersMain*() =
 
       for i, log in allLogs:
         check:
-          fromHex[int](distinctBase(log.logIndex.unsafeGet())) == i
+          log.logIndex.unsafeGet() == w3Qty(i.uint64)
 
     test "Filter with empty parameters should return all logs":
-      let filtered = filterLogs(allLogs, @[], @[])
+      let addrs = newSeq[EthAddress]()
+      let filtered = filterLogs(allLogs, addrs, @[])
       check:
         len(filtered) == len(allLogs)
 
@@ -43,7 +48,7 @@ proc filtersMain*() =
       check:
         headerBloomFilter(blockHeader4514995, @[address], @[])
         len(filteredLogs) == 1
-        filteredLogs[0].address == address
+        filteredLogs[0].address == w3Addr address
 
     test "Filter and BloomFilter for one address with multiple valid logs":
       let address = hexToByteArray[20]("0x878d7ed5c194349f37b18688964e8db1eb0fcca1")
@@ -55,7 +60,7 @@ proc filtersMain*() =
 
       for log in filteredLogs:
         check:
-          log.address == address
+          log.address == w3Addr address
 
     test "Filter and BloomFilter for multiple address with multiple valid logs":
       let address = hexToByteArray[20]("0x878d7ed5c194349f37b18688964e8db1eb0fcca1")
@@ -72,11 +77,11 @@ proc filtersMain*() =
           allLogs,
           @[],
           @[
-            none[seq[Hash256]](),
-            none[seq[Hash256]](),
-            none[seq[Hash256]](),
-            none[seq[Hash256]](),
-            none[seq[Hash256]]()
+            none[seq[Web3Hash]](),
+            none[seq[Web3Hash]](),
+            none[seq[Web3Hash]](),
+            none[seq[Web3Hash]](),
+            none[seq[Web3Hash]]()
           ]
         )
 
@@ -84,7 +89,7 @@ proc filtersMain*() =
         len(filteredLogs) == 0
 
     test "Filter topics, specific topic at first position":
-      let topic = hash.fromHex(MDigest[256], "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")
+      let topic = w3Hash("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")
 
       let filteredLogs =
         filterLogs(
@@ -102,8 +107,8 @@ proc filtersMain*() =
           log.topics[0] == topic
 
     test "Filter topics, specific topic at first position and second position":
-      let topic = hash.fromHex(MDigest[256], "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")
-      let topic1 = hash.fromHex(MDigest[256], "0x000000000000000000000000919040a01a0adcef25ed6ecbc6ab2a86ca6d77df")
+      let topic = w3Hash("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")
+      let topic1 = w3Hash("0x000000000000000000000000919040a01a0adcef25ed6ecbc6ab2a86ca6d77df")
 
       let filteredLogs =
         filterLogs(
@@ -122,14 +127,14 @@ proc filtersMain*() =
           log.topics[1] == topic1
 
     test "Filter topics, specific topic at first position and third position":
-      let topic = hash.fromHex(MDigest[256], "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")
-      let topic1 = hash.fromHex(MDigest[256], "0x000000000000000000000000fdc183d01a793613736cd40a5a578f49add1772b")
+      let topic = w3Hash("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")
+      let topic1 = w3Hash("0x000000000000000000000000fdc183d01a793613736cd40a5a578f49add1772b")
 
       let filteredLogs =
         filterLogs(
           allLogs,
           @[],
-          @[some(@[topic]), none[seq[Hash256]](), some(@[topic1])]
+          @[some(@[topic]), none[seq[Web3Hash]](), some(@[topic1])]
         )
 
       check:
@@ -141,8 +146,8 @@ proc filtersMain*() =
           log.topics[2] == topic1
 
     test "Filter topics, or query at first position":
-      let topic = hash.fromHex(MDigest[256], "0x4a504a94899432a9846e1aa406dceb1bcfd538bb839071d49d1e5e23f5be30ef")
-      let topic1 = hash.fromHex(MDigest[256], "0x526441bb6c1aba3c9a4a6ca1d6545da9c2333c8c48343ef398eb858d72b79236")
+      let topic = w3Hash("0x4a504a94899432a9846e1aa406dceb1bcfd538bb839071d49d1e5e23f5be30ef")
+      let topic1 = w3Hash("0x526441bb6c1aba3c9a4a6ca1d6545da9c2333c8c48343ef398eb858d72b79236")
 
       let filteredLogs =
         filterLogs(
@@ -161,11 +166,11 @@ proc filtersMain*() =
           log.topics[0] == topic or log.topics[0] == topic1
 
     test "Filter topics, or query at first position and or query at second position":
-      let topic = hash.fromHex(MDigest[256], "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")
-      let topic1 = hash.fromHex(MDigest[256], "0xa64da754fccf55aa65a1f0128a648633fade3884b236e879ee9f64c78df5d5d7")
+      let topic = w3Hash("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")
+      let topic1 = w3Hash("0xa64da754fccf55aa65a1f0128a648633fade3884b236e879ee9f64c78df5d5d7")
 
-      let topic2 = hash.fromHex(MDigest[256], "0x000000000000000000000000e16c02eac87920033ac72fc55ee1df3151c75786")
-      let topic3 = hash.fromHex(MDigest[256], "0x000000000000000000000000b626a5facc4de1c813f5293ec3be31979f1d1c78")
+      let topic2 = w3Hash("0x000000000000000000000000e16c02eac87920033ac72fc55ee1df3151c75786")
+      let topic3 = w3Hash("0x000000000000000000000000b626a5facc4de1c813f5293ec3be31979f1d1c78")
 
       let filteredLogs =
         filterLogs(

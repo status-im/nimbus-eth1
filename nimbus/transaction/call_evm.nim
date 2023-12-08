@@ -9,7 +9,7 @@
 {.push raises: [].}
 
 import
-  std/[options, times],
+  std/[options],
   chronicles,
   chronos,
   eth/common/eth_types_rlp,

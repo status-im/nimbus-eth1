@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2019 Status Research & Development GmbH
+# Copyright (c) 2018-2023 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -11,7 +11,7 @@
 
 import
   std/[times, tables, typetraits],
-  json_rpc/rpcserver, hexstrings, stint, stew/byteutils,
+  json_rpc/rpcserver, stint, stew/byteutils,
   json_serialization, web3/conversions, json_serialization/std/options,
   eth/common/eth_types_json_serialization,
   eth/[keys, rlp, p2p],
@@ -22,16 +22,21 @@ import
   ../core/tx_pool,
   ../common/[common, context],
   ../utils/utils,
+  ../beacon/web3_eth_conv,
   ./filters
 
 #[
   Note:
-    * Hexstring types (HexQuantitySt, HexDataStr, EthAddressStr, EthHashStr)
+    * Hexstring types (HexQuantitySt, HexDataStr, Web3Address, Web3Hash)
       are parsed to check format before the RPC blocks are executed and will
       raise an exception if invalid.
     * Many of the RPC calls do not validate hex string types when output, only
       type cast to avoid extra processing.
 ]#
+
+type
+  BlockHeader = eth_types.BlockHeader
+  Hash256 = eth_types.Hash256
 
 proc setupEthRpc*(
     node: EthereumNode, ctx: EthContext, com: CommonRef,
@@ -60,8 +65,8 @@ proc setupEthRpc*(
         return some($n.version)
     return none(string)
 
-  server.rpc("eth_chainId") do() -> HexQuantityStr:
-    return encodeQuantity(distinctBase(com.chainId))
+  server.rpc("eth_chainId") do() -> Web3Quantity:
+    return w3Qty(distinctBase(com.chainId))
 
   server.rpc("eth_syncing") do() -> JsonNode:
     ## Returns SyncObject or false when not syncing.
@@ -69,45 +74,45 @@ proc setupEthRpc*(
     # when we reach the recent block
     let numPeers = node.peerPool.connectedNodes.len
     if numPeers > 0:
-      var sync = SyncState(
-        startingBlock: encodeQuantity com.syncStart,
-        currentBlock : encodeQuantity com.syncCurrent,
-        highestBlock : encodeQuantity com.syncHighest
+      var sync = SyncObject(
+        startingBlock: w3Qty com.syncStart,
+        currentBlock : w3Qty com.syncCurrent,
+        highestBlock : w3Qty com.syncHighest
       )
       result = %sync
     else:
       result = newJBool(false)
 
-  server.rpc("eth_coinbase") do() -> EthAddress:
+  server.rpc("eth_coinbase") do() -> Web3Address:
     ## Returns the current coinbase address.
     # currently we don't have miner
-    result = default(EthAddress)
+    result = w3Address()
 
   server.rpc("eth_mining") do() -> bool:
     ## Returns true if the client is mining, otherwise false.
     # currently we don't have miner
     result = false
 
-  server.rpc("eth_hashrate") do() -> HexQuantityStr:
+  server.rpc("eth_hashrate") do() -> Web3Quantity:
     ## Returns the number of hashes per second that the node is mining with.
     # currently we don't have miner
-    result = encodeQuantity(0.uint)
+    result = w3Qty(0.uint)
 
-  server.rpc("eth_gasPrice") do() -> HexQuantityStr:
+  server.rpc("eth_gasPrice") do() -> Web3Quantity:
     ## Returns an integer of the current gas price in wei.
-    result = encodeQuantity(calculateMedianGasPrice(chainDB).uint64)
+    result = w3Qty(calculateMedianGasPrice(chainDB).uint64)
 
-  server.rpc("eth_accounts") do() -> seq[EthAddressStr]:
+  server.rpc("eth_accounts") do() -> seq[Web3Address]:
     ## Returns a list of addresses owned by client.
-    result = newSeqOfCap[EthAddressStr](ctx.am.numAccounts)
+    result = newSeqOfCap[Web3Address](ctx.am.numAccounts)
     for k in ctx.am.addresses:
-      result.add ethAddressStr(k)
+      result.add w3Addr(k)
 
-  server.rpc("eth_blockNumber") do() -> HexQuantityStr:
+  server.rpc("eth_blockNumber") do() -> Web3Quantity:
     ## Returns integer of the current block number the client is on.
-    result = encodeQuantity(chainDB.getCanonicalHead().blockNumber)
+    result = w3Qty(chainDB.getCanonicalHead().blockNumber)
 
-  server.rpc("eth_getBalance") do(data: EthAddressStr, quantityTag: string) -> HexQuantityStr:
+  server.rpc("eth_getBalance") do(data: Web3Address, quantityTag: string) -> UInt256:
     ## Returns the balance of the account of given address.
     ##
     ## data: address to check for balance.
@@ -115,11 +120,10 @@ proc setupEthRpc*(
     ## Returns integer of the current balance in wei.
     let
       accDB   = stateDBFromTag(quantityTag)
-      address = data.toAddress
-      balance = accDB.getBalance(address)
-    result = encodeQuantity(balance)
+      address = data.ethAddr
+    result = accDB.getBalance(address)
 
-  server.rpc("eth_getStorageAt") do(data: EthAddressStr, slot: HexDataStr, quantityTag: string) -> HexDataStr:
+  server.rpc("eth_getStorageAt") do(data: Web3Address, slot: UInt256, quantityTag: string) -> UInt256:
     ## Returns the value from a storage position at a given address.
     ##
     ## data: address of the storage.
@@ -128,34 +132,32 @@ proc setupEthRpc*(
     ## Returns: the value at this storage position.
     let
       accDB   = stateDBFromTag(quantityTag)
-      address = data.toAddress
-      key     = fromHex(UInt256, slot.string)
-      value   = accDB.getStorage(address, key)[0]
-    result = hexDataStr(value)
+      address = data.ethAddr
+    result = accDB.getStorage(address, slot)[0]
 
-  server.rpc("eth_getTransactionCount") do(data: EthAddressStr, quantityTag: string) -> HexQuantityStr:
+  server.rpc("eth_getTransactionCount") do(data: Web3Address, quantityTag: string) -> Web3Quantity:
     ## Returns the number of transactions sent from an address.
     ##
     ## data: address.
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns integer of the number of transactions send from this address.
     let
-      address = data.toAddress
+      address = data.ethAddr
       accDB   = stateDBFromTag(quantityTag)
-    result = encodeQuantity(accDB.getNonce(address))
+    result = w3Qty(accDB.getNonce(address))
 
-  server.rpc("eth_getBlockTransactionCountByHash") do(data: EthHashStr) -> HexQuantityStr:
+  server.rpc("eth_getBlockTransactionCountByHash") do(data: Web3Hash) -> Web3Quantity:
     ## Returns the number of transactions in a block from a block matching the given block hash.
     ##
     ## data: hash of a block
     ## Returns integer of the number of transactions in this block.
     let
-      blockHash = data.toHash
+      blockHash = data.ethHash
       header    = chainDB.getBlockHeader(blockHash)
       txCount   = chainDB.getTransactionCount(header.txRoot)
-    result = encodeQuantity(txCount.uint)
+    result = w3Qty(txCount)
 
-  server.rpc("eth_getBlockTransactionCountByNumber") do(quantityTag: string) -> HexQuantityStr:
+  server.rpc("eth_getBlockTransactionCountByNumber") do(quantityTag: string) -> Web3Quantity:
     ## Returns the number of transactions in a block matching the given block number.
     ##
     ## data: integer of a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.
@@ -163,20 +165,20 @@ proc setupEthRpc*(
     let
       header  = chainDB.headerFromTag(quantityTag)
       txCount = chainDB.getTransactionCount(header.txRoot)
-    result = encodeQuantity(txCount.uint)
+    result = w3Qty(txCount)
 
-  server.rpc("eth_getUncleCountByBlockHash") do(data: EthHashStr) -> HexQuantityStr:
+  server.rpc("eth_getUncleCountByBlockHash") do(data: Web3Hash) -> Web3Quantity:
     ## Returns the number of uncles in a block from a block matching the given block hash.
     ##
     ## data: hash of a block.
     ## Returns integer of the number of uncles in this block.
     let
-      blockHash   = data.toHash
+      blockHash   = data.ethHash
       header      = chainDB.getBlockHeader(blockHash)
       unclesCount = chainDB.getUnclesCount(header.ommersHash)
-    result = encodeQuantity(unclesCount.uint)
+    result = w3Qty(unclesCount)
 
-  server.rpc("eth_getUncleCountByBlockNumber") do(quantityTag: string) -> HexQuantityStr:
+  server.rpc("eth_getUncleCountByBlockNumber") do(quantityTag: string) -> Web3Quantity:
     ## Returns the number of uncles in a block from a block matching the given block number.
     ##
     ## quantityTag: integer of a block number, or the string "latest", "earliest" or "pending", see the default block parameter.
@@ -184,9 +186,9 @@ proc setupEthRpc*(
     let
       header      = chainDB.headerFromTag(quantityTag)
       unclesCount = chainDB.getUnclesCount(header.ommersHash)
-    result = encodeQuantity(unclesCount.uint)
+    result = w3Qty(unclesCount.uint)
 
-  server.rpc("eth_getCode") do(data: EthAddressStr, quantityTag: string) -> HexDataStr:
+  server.rpc("eth_getCode") do(data: Web3Address, quantityTag: string) -> seq[byte]:
     ## Returns code at a given address.
     ##
     ## data: address
@@ -194,16 +196,15 @@ proc setupEthRpc*(
     ## Returns the code from the given address.
     let
       accDB   = stateDBFromTag(quantityTag)
-      address = data.toAddress
-      storage = accDB.getCode(address)
-    result = hexDataStr(storage)
+      address = data.ethAddr
+    result = accDB.getCode(address)
 
-  template sign(privateKey: PrivateKey, message: string): string =
+  template sign(privateKey: PrivateKey, message: string): seq[byte] =
     # message length encoded as ASCII representation of decimal
     let msgData = "\x19Ethereum Signed Message:\n" & $message.len & message
-    $sign(privateKey, msgData.toBytes())
+    @(sign(privateKey, msgData.toBytes()).toRaw())
 
-  server.rpc("eth_sign") do(data: EthAddressStr, message: HexDataStr) -> HexDataStr:
+  server.rpc("eth_sign") do(data: Web3Address, message: seq[byte]) -> seq[byte]:
     ## The sign method calculates an Ethereum specific signature with: sign(keccak256("\x19Ethereum Signed Message:\n" + len(message) + message))).
     ## By adding a prefix to the message makes the calculated signature recognisable as an Ethereum specific signature.
     ## This prevents misuse where a malicious DApp can sign arbitrary data (e.g. transaction) and use the signature to impersonate the victim.
@@ -213,19 +214,18 @@ proc setupEthRpc*(
     ## message: message to sign.
     ## Returns signature.
     let
-      address = data.toAddress
+      address = data.ethAddr
       acc     = ctx.am.getAccount(address).tryGet()
-      msg     = hexToSeqByte(message.string)
 
     if not acc.unlocked:
       raise newException(ValueError, "Account locked, please unlock it first")
-    result = ("0x" & sign(acc.privateKey, cast[string](msg))).HexDataStr
+    result = sign(acc.privateKey, cast[string](message))
 
-  server.rpc("eth_signTransaction") do(data: TxSend) -> HexDataStr:
+  server.rpc("eth_signTransaction") do(data: EthSend) -> seq[byte]:
     ## Signs a transaction that can be submitted to the network at a later time using with
     ## eth_sendRawTransaction
     let
-      address = data.source.toAddress
+      address = data.`from`.ethAddr
       acc     = ctx.am.getAccount(address).tryGet()
 
     if not acc.unlocked:
@@ -236,18 +236,16 @@ proc setupEthRpc*(
       tx       = unsignedTx(data, chainDB, accDB.getNonce(address) + 1)
       eip155   = com.isEIP155(com.syncCurrent)
       signedTx = signTransaction(tx, acc.privateKey, com.chainId, eip155)
-      rlpTx    = rlp.encode(signedTx)
+    result    = rlp.encode(signedTx)
 
-    result = hexDataStr(rlpTx)
-
-  server.rpc("eth_sendTransaction") do(data: TxSend) -> EthHashStr:
+  server.rpc("eth_sendTransaction") do(data: EthSend) -> Web3Hash:
     ## Creates new message call transaction or a contract creation, if the data field contains code.
     ##
     ## obj: the transaction object.
     ## Returns the transaction hash, or the zero hash if the transaction is not yet available.
     ## Note: Use eth_getTransactionReceipt to get the contract address, after the transaction was mined, when you created a contract.
     let
-      address = data.source.toAddress
+      address = data.`from`.ethAddr
       acc     = ctx.am.getAccount(address).tryGet()
 
     if not acc.unlocked:
@@ -260,16 +258,15 @@ proc setupEthRpc*(
       signedTx = signTransaction(tx, acc.privateKey, com.chainId, eip155)
 
     txPool.add(signedTx)
-    result = rlpHash(signedTx).ethHashStr
+    result = rlpHash(signedTx).w3Hash
 
-  server.rpc("eth_sendRawTransaction") do(data: HexDataStr) -> EthHashStr:
+  server.rpc("eth_sendRawTransaction") do(txBytes: seq[byte]) -> Web3Hash:
     ## Creates new message call transaction or a contract creation for signed transactions.
     ##
     ## data: the signed transaction data.
     ## Returns the transaction hash, or the zero hash if the transaction is not yet available.
     ## Note: Use eth_getTransactionReceipt to get the contract address, after the transaction was mined, when you created a contract.
     let
-      txBytes  = hexToSeqByte(data.string)
       signedTx = decodeTx(txBytes)
       txHash   = rlpHash(signedTx)
 
@@ -277,9 +274,9 @@ proc setupEthRpc*(
     let res = txPool.inPoolAndReason(txHash)
     if res.isErr:
       raise newException(ValueError, res.error)
-    result = txHash.ethHashStr
+    result = txHash.w3Hash
 
-  server.rpc("eth_call") do(call: EthCall, quantityTag: string) -> HexDataStr:
+  server.rpc("eth_call") do(call: EthCall, quantityTag: string) -> seq[byte]:
     ## Executes a new message call immediately without creating a transaction on the block chain.
     ##
     ## call: the transaction call object.
@@ -289,9 +286,9 @@ proc setupEthRpc*(
       header   = headerFromTag(chainDB, quantityTag)
       callData = callData(call)
       res      = rpcCallEvm(callData, header, com)
-    result = hexDataStr(res.output)
+    result = res.output
 
-  server.rpc("eth_estimateGas") do(call: EthCall, quantityTag: string) -> HexQuantityStr:
+  server.rpc("eth_estimateGas") do(call: EthCall, quantityTag: string) -> Web3Quantity:
     ## Generates and returns an estimate of how much gas is necessary to allow the transaction to complete.
     ## The transaction will not be added to the blockchain. Note that the estimate may be significantly more than
     ## the amount of gas actually used by the transaction, for a variety of reasons including EVM mechanics and node performance.
@@ -304,9 +301,9 @@ proc setupEthRpc*(
       callData = callData(call)
       # TODO: DEFAULT_RPC_GAS_CAP should configurable
       gasUsed  = rpcEstimateGas(callData, header, com, DEFAULT_RPC_GAS_CAP)
-    result = encodeQuantity(gasUsed.uint64)
+    result = w3Qty(gasUsed)
 
-  server.rpc("eth_getBlockByHash") do(data: EthHashStr, fullTransactions: bool) -> Option[BlockObject]:
+  server.rpc("eth_getBlockByHash") do(data: Web3Hash, fullTransactions: bool) -> BlockObject:
     ## Returns information about a block by hash.
     ##
     ## data: Hash of a block.
@@ -314,14 +311,14 @@ proc setupEthRpc*(
     ## Returns BlockObject or nil when no block was found.
     var
       header: BlockHeader
-      hash = data.toHash
+      hash = data.ethHash
 
     if chainDB.getBlockHeader(hash, header):
-      result = some populateBlockObject(header, chainDB, fullTransactions)
+      result = populateBlockObject(header, chainDB, fullTransactions)
     else:
-      result = none BlockObject
+      result = nil
 
-  server.rpc("eth_getBlockByNumber") do(quantityTag: string, fullTransactions: bool) -> Option[BlockObject]:
+  server.rpc("eth_getBlockByNumber") do(quantityTag: string, fullTransactions: bool) -> BlockObject:
     ## Returns information about a block by block number.
     ##
     ## quantityTag: integer of a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.
@@ -329,71 +326,75 @@ proc setupEthRpc*(
     ## Returns BlockObject or nil when no block was found.
     try:
       let header = chainDB.headerFromTag(quantityTag)
-      result = some(populateBlockObject(header, chainDB, fullTransactions))
+      result = populateBlockObject(header, chainDB, fullTransactions)
     except CatchableError:
-      result = none(BlockObject)
+      result = nil
 
-  server.rpc("eth_getTransactionByHash") do(data: EthHashStr) -> Option[TransactionObject]:
+  server.rpc("eth_getTransactionByHash") do(data: Web3Hash) -> TransactionObject:
     ## Returns the information about a transaction requested by transaction hash.
     ##
     ## data: hash of a transaction.
     ## Returns requested transaction information.
-    let txHash = data.toHash()
+    let txHash = data.ethHash()
     let res = txPool.getItem(txHash)
     if res.isOk:
-      return some(populateTransactionObject(res.get().tx))
+      return populateTransactionObject(res.get().tx)
 
     let txDetails = chainDB.getTransactionKey(txHash)
     if txDetails.index < 0:
-      return none(TransactionObject)
+      return nil
 
     let header = chainDB.getBlockHeader(txDetails.blockNumber)
     var tx: Transaction
     if chainDB.getTransaction(header.txRoot, txDetails.index, tx):
-      result = some(populateTransactionObject(tx, some(header), some(txDetails.index)))
+      result = populateTransactionObject(tx, some(header), some(txDetails.index))
 
-  server.rpc("eth_getTransactionByBlockHashAndIndex") do(data: EthHashStr, quantity: HexQuantityStr) -> Option[TransactionObject]:
+  server.rpc("eth_getTransactionByBlockHashAndIndex") do(data: Web3Hash, quantity: Web3Quantity) -> TransactionObject:
     ## Returns information about a transaction by block hash and transaction index position.
     ##
     ## data: hash of a block.
     ## quantity: integer of the transaction index position.
     ## Returns  requested transaction information.
-    let index  = hexToInt(quantity.string, int)
+    let index  = int(quantity)
     var header: BlockHeader
-    if not chainDB.getBlockHeader(data.toHash(), header):
-      return none(TransactionObject)
+    if not chainDB.getBlockHeader(data.ethHash(), header):
+      return nil
 
     var tx: Transaction
     if chainDB.getTransaction(header.txRoot, index, tx):
-      result = some(populateTransactionObject(tx, some(header), some(index)))
+      result = populateTransactionObject(tx, some(header), some(index))
+    else:
+      result = nil
 
-  server.rpc("eth_getTransactionByBlockNumberAndIndex") do(quantityTag: string, quantity: HexQuantityStr) -> Option[TransactionObject]:
+  server.rpc("eth_getTransactionByBlockNumberAndIndex") do(quantityTag: string, quantity: Web3Quantity) -> TransactionObject:
     ## Returns information about a transaction by block number and transaction index position.
     ##
     ## quantityTag: a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.
     ## quantity: the transaction index position.
     let
       header = chainDB.headerFromTag(quantityTag)
-      index  = hexToInt(quantity.string, int)
+      index  = int(quantity)
 
     var tx: Transaction
     if chainDB.getTransaction(header.txRoot, index, tx):
-      result = some(populateTransactionObject(tx, some(header), some(index)))
+      result = populateTransactionObject(tx, some(header), some(index))
+    else:
+      result = nil
 
-  server.rpc("eth_getTransactionReceipt") do(data: EthHashStr) -> Option[ReceiptObject]:
+  server.rpc("eth_getTransactionReceipt") do(data: Web3Hash) -> ReceiptObject:
     ## Returns the receipt of a transaction by transaction hash.
     ##
     ## data: hash of a transaction.
     ## Returns transaction receipt.
 
-    let txDetails = chainDB.getTransactionKey(data.toHash())
+    let txDetails = chainDB.getTransactionKey(data.ethHash())
     if txDetails.index < 0:
-      return none(ReceiptObject)
+      return nil
 
     let header = chainDB.getBlockHeader(txDetails.blockNumber)
     var tx: Transaction
     if not chainDB.getTransaction(header.txRoot, txDetails.index, tx):
-      return none(ReceiptObject)
+      return nil
 
     var
       idx = 0
@@ -403,45 +404,43 @@ proc setupEthRpc*(
       let gasUsed = receipt.cumulativeGasUsed - prevGasUsed
       prevGasUsed = receipt.cumulativeGasUsed
       if idx == txDetails.index:
-        return some(populateReceipt(receipt, gasUsed, tx, txDetails.index, header))
+        return populateReceipt(receipt, gasUsed, tx, txDetails.index, header)
       idx.inc
 
-  server.rpc("eth_getUncleByBlockHashAndIndex") do(data: EthHashStr, quantity: HexQuantityStr) -> Option[BlockObject]:
+  server.rpc("eth_getUncleByBlockHashAndIndex") do(data: Web3Hash, quantity: Web3Quantity) -> BlockObject:
     ## Returns information about a uncle of a block by hash and uncle index position.
     ##
     ## data: hash of block.
     ## quantity: the uncle's index position.
     ## Returns BlockObject or nil when no block was found.
-    let index  = hexToInt(quantity.string, int)
+    let index  = int(quantity)
     var header: BlockHeader
-    if not chainDB.getBlockHeader(data.toHash(), header):
-      return none(BlockObject)
+    if not chainDB.getBlockHeader(data.ethHash(), header):
+      return nil
 
     let uncles = chainDB.getUncles(header.ommersHash)
     if index < 0 or index >= uncles.len:
-      return none(BlockObject)
+      return nil
 
-    var uncle = populateBlockObject(uncles[index], chainDB, false, true)
-    uncle.totalDifficulty = encodeQuantity(chainDB.getScore(header.hash))
-    result = some(uncle)
+    result = populateBlockObject(uncles[index], chainDB, false, true)
+    result.totalDifficulty = chainDB.getScore(header.hash)
 
-  server.rpc("eth_getUncleByBlockNumberAndIndex") do(quantityTag: string, quantity: HexQuantityStr) -> Option[BlockObject]:
+  server.rpc("eth_getUncleByBlockNumberAndIndex") do(quantityTag: string, quantity: Web3Quantity) -> BlockObject:
     # Returns information about a uncle of a block by number and uncle index position.
     ##
     ## quantityTag: a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.
     ## quantity: the uncle's index position.
     ## Returns BlockObject or nil when no block was found.
     let
-      index  = hexToInt(quantity.string, int)
+      index  = int(quantity)
       header = chainDB.headerFromTag(quantityTag)
       uncles = chainDB.getUncles(header.ommersHash)
 
     if index < 0 or index >= uncles.len:
-      return none(BlockObject)
+      return nil
 
-    var uncle = populateBlockObject(uncles[index], chainDB, false, true)
-    uncle.totalDifficulty = encodeQuantity(chainDB.getScore(header.hash))
-    result = some(uncle)
+    result = populateBlockObject(uncles[index], chainDB, false, true)
+    result.totalDifficulty = chainDB.getScore(header.hash)
 
   proc getLogsForBlock(
       chain: CoreDbRef,
@@ -493,7 +492,7 @@ proc setupEthRpc*(
     ## Both of those changes require improvements to the way how we keep our data
     ## in Nimbus.
     if filterOptions.blockHash.isSome():
-      let hash = filterOptions.blockHash.unsafeGet()
+      let hash = ethHash filterOptions.blockHash.unsafeGet()
       let header = chainDB.getBlockHeader(hash)
       return getLogsForBlock(chainDB, hash, header, filterOptions)
     else:

@@ -28,11 +28,11 @@ import
     sync/beacon,
     sync/handlers,
     beacon/beacon_engine,
+    beacon/web3_eth_conv,
     common
   ],
   ../../../tests/test_helpers,
-  ../../../nimbus/beacon/web3_eth_conv,
-  ../../../nimbus/beacon/execution_types
+  web3/execution_types
 
 export
   results

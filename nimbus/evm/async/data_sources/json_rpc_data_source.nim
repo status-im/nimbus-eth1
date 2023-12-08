@@ -24,111 +24,57 @@ import
   eth/p2p/private/p2p_types,
   ../../../sync/protocol,
   ../../../db/[core_db, distinct_tries, incomplete_db, storage_types],
-  ../data_sources
+  ../data_sources,
+  ../../../beacon/web3_eth_conv
 
 when defined(legacy_eth66_enabled):
   import
     ../../../sync/protocol/eth66 as proto_eth66
   from ../../../sync/protocol/eth66 import getNodeData
 
-from ../../../rpc/rpc_utils import toHash
 from web3 import Web3, BlockHash, BlockObject, FixedBytes, Address, ProofResponse, StorageProof, newWeb3, fromJson, fromHex, eth_getBlockByHash, eth_getBlockByNumber, eth_getCode, eth_getProof, blockId, `%`
-from web3/ethtypes import Quantity
-#from ../../../premix/downloader import request
-#from ../../../premix/parser import prefixHex, parseBlockHeader, parseReceipt, parseTransaction
-
-# Trying to do things the new web3 way:
-from ../../../nimbus_verified_proxy/validate_proof import getAccountFromProof
 
 export AsyncOperationFactory, AsyncDataSource
 
-
 var durationSpentDoingFetches*: times.Duration
 var fetchCounter*: int
-
-
-func toHash*(s: string): Hash256 {.raises: [ValueError].} =
-  hexToPaddedByteArray[32](s).toHash
-
-func toHash*(h: BlockHash): Hash256 {.raises: [].} =
-  distinctBase(h).toHash
-
-func toWeb3BlockHash*(h: Hash256): BlockHash =
-  BlockHash(h.data)
-
-func web3AddressToEthAddress(a: web3.Address): EthAddress =
-  distinctBase(a)
-
 
 proc makeAnRpcClient*(web3Url: string): Future[RpcClient] {.async.} =
   let myWeb3: Web3 = waitFor(newWeb3(web3Url))
   return myWeb3.provider
 
-
-#[
-  BlockObject* = ref object
-    number*: Quantity                 # the block number. null when its pending block.
-    hash*: Hash256                    # hash of the block. null when its pending block.
-    parentHash*: Hash256              # hash of the parent block.
-    sha3Uncles*: Hash256              # SHA3 of the uncles data in the block.
-    logsBloom*: FixedBytes[256]       # the bloom filter for the logs of the block. null when its pending block.
-    transactionsRoot*: Hash256        # the root of the transaction trie of the block.
-    stateRoot*: Hash256               # the root of the final state trie of the block.
-    receiptsRoot*: Hash256            # the root of the receipts trie of the block.
-    miner*: Address                   # the address of the beneficiary to whom the mining rewards were given.
-    difficulty*: UInt256              # integer of the difficulty for this block.
-    extraData*: DynamicBytes[0, 32]   # the "extra data" field of this block.
-    gasLimit*: Quantity               # the maximum gas allowed in this block.
-    gasUsed*: Quantity                # the total used gas by all transactions in this block.
-    timestamp*: Quantity              # the unix timestamp for when the block was collated.
-    nonce*: Option[FixedBytes[8]]     # hash of the generated proof-of-work. null when its pending block.
-    size*: Quantity                   # integer the size of this block in bytes.
-    totalDifficulty*: UInt256         # integer of the total difficulty of the chain until this block.
-    transactions*: seq[TxHash]        # list of transaction objects, or 32 Bytes transaction hashes depending on the last given parameter.
-    uncles*: seq[Hash256]             # list of uncle hashes.
-    baseFeePerGas*: Option[UInt256]   # EIP-1559
-    withdrawalsRoot*: Option[Hash256] # EIP-4895
-    excessBlobGas*:   Option[UInt256] # EIP-4844
-]#
-
-func fromQty(x: Option[Quantity]): Option[uint64] =
-  if x.isSome:
-    some(x.get().uint64)
-  else:
-    none(uint64)
-
 func blockHeaderFromBlockObject(o: BlockObject): BlockHeader =
   let nonce: BlockNonce = if o.nonce.isSome: distinctBase(o.nonce.get) else: default(BlockNonce)
   BlockHeader(
-    parentHash: o.parentHash.toHash,
-    ommersHash: o.sha3Uncles.toHash,
-    coinbase: o.miner.web3AddressToEthAddress,
-    stateRoot: o.stateRoot.toHash,
-    txRoot: o.transactionsRoot.toHash,
-    receiptRoot: o.receiptsRoot.toHash,
+    parentHash: o.parentHash.ethHash,
+    ommersHash: o.sha3Uncles.ethHash,
+    coinbase: o.miner.ethAddr,
+    stateRoot: o.stateRoot.ethHash,
+    txRoot: o.transactionsRoot.ethHash,
+    receiptRoot: o.receiptsRoot.ethHash,
     bloom: distinctBase(o.logsBloom),
     difficulty: o.difficulty,
-    blockNumber: distinctBase(o.number).u256,
-    gasLimit: int64(distinctBase(o.gasLimit)),
-    gasUsed: int64(distinctBase(o.gasUsed)),
+    blockNumber: o.number.u256,
+    gasLimit: GasInt(distinctBase(o.gasLimit)),
+    gasUsed: GasInt(distinctBase(o.gasUsed)),
     timestamp: EthTime(distinctBase(o.timestamp)),
     extraData: distinctBase(o.extraData),
-    #mixDigest: o.mixHash.toHash, # AARDVARK what's this?
+    #mixDigest: o.mixHash.ethHash, # AARDVARK what's this?
     nonce: nonce,
     fee: o.baseFeePerGas,
-    withdrawalsRoot: o.withdrawalsRoot.map(toHash),
-    blobGasUsed: fromQty(o.blobGasUsed),
-    excessBlobGas: fromQty(o.excessBlobGas)
+    withdrawalsRoot: ethHash o.withdrawalsRoot,
+    blobGasUsed: u64 o.blobGasUsed,
+    excessBlobGas: u64 o.excessBlobGas
   )
 
-proc fetchBlockHeaderWithHash*(rpcClient: RpcClient, h: Hash256): Future[BlockHeader] {.async.} =
+proc fetchBlockHeaderWithHash*(rpcClient: RpcClient, h: common.Hash256): Future[common.BlockHeader] {.async.} =
   let t0 = now()
-  let blockObject: BlockObject = await rpcClient.eth_getBlockByHash(h.toWeb3BlockHash, false)
+  let blockObject: BlockObject = await rpcClient.eth_getBlockByHash(h.w3Hash, false)
   durationSpentDoingFetches += now() - t0
   fetchCounter += 1
   return blockHeaderFromBlockObject(blockObject)
 
-proc fetchBlockHeaderWithNumber*(rpcClient: RpcClient, n: BlockNumber): Future[BlockHeader] {.async.} =
+proc fetchBlockHeaderWithNumber*(rpcClient: RpcClient, n: common.BlockNumber): Future[common.BlockHeader] {.async.} =
   let t0 = now()
   let bid = blockId(n.truncate(uint64))
   let blockObject: BlockObject = await rpcClient.eth_getBlockByNumber(bid, false)
@@ -142,7 +88,7 @@ proc parseBlockBodyAndFetchUncles(rpcClient: RpcClient, r: JsonNode): Future[Blo
   for tn in r["transactions"].getElems:
     body.transactions.add(parseTransaction(tn))
   for un in r["uncles"].getElems:
-    let uncleHash: Hash256 = un.getStr.toHash
+    let uncleHash: Hash256 = un.getStr.ethHash
     let uncleHeader = await fetchBlockHeaderWithHash(rpcClient, uncleHash)
     body.uncles.add(uncleHeader)
   return body
@@ -172,10 +118,10 @@ proc fetchBlockHeaderAndBodyWithNumber*(rpcClient: RpcClient, n: BlockNumber): F
   return (header, body)
 ]#
 
-proc fetchBlockHeaderAndBodyWithHash*(rpcClient: RpcClient, h: Hash256): Future[(BlockHeader, BlockBody)] {.async.} =
+proc fetchBlockHeaderAndBodyWithHash*(rpcClient: RpcClient, h: common.Hash256): Future[(common.BlockHeader, BlockBody)] {.async.} =
   doAssert(false, "AARDVARK not implemented")
 
-proc fetchBlockHeaderAndBodyWithNumber*(rpcClient: RpcClient, n: BlockNumber): Future[(BlockHeader, BlockBody)] {.async.} =
+proc fetchBlockHeaderAndBodyWithNumber*(rpcClient: RpcClient, n: common.BlockNumber): Future[(common.BlockHeader, BlockBody)] {.async.} =
   doAssert(false, "AARDVARK not implemented")
 
 func mdigestFromFixedBytes*(arg: FixedBytes[32]): MDigest[256] =
@@ -187,7 +133,7 @@ func mdigestFromString*(s: string): MDigest[256] =
 type
   AccountProof* = seq[seq[byte]]
 
-proc fetchAccountAndSlots*(rpcClient: RpcClient, address: EthAddress, slots: seq[UInt256], blockNumber: BlockNumber): Future[(Account, AccountProof, seq[StorageProof])] {.async.} =
+proc fetchAccountAndSlots*(rpcClient: RpcClient, address: EthAddress, slots: seq[UInt256], blockNumber: common.BlockNumber): Future[(Account, AccountProof, seq[StorageProof])] {.async.} =
   let t0 = now()
   debug "Got to fetchAccountAndSlots", address=address, slots=slots, blockNumber=blockNumber
   #let blockNumberHexStr: HexQuantityStr = encodeQuantity(blockNumber)
@@ -210,7 +156,7 @@ proc fetchAccountAndSlots*(rpcClient: RpcClient, address: EthAddress, slots: seq
   fetchCounter += 1
   return (acc, mptNodesBytes, proofResponse.storageProof)
 
-proc fetchCode*(client: RpcClient, blockNumber: BlockNumber, address: EthAddress): Future[seq[byte]] {.async.} =
+proc fetchCode*(client: RpcClient, blockNumber: common.BlockNumber, address: EthAddress): Future[seq[byte]] {.async.} =
   let t0 = now()
   let a = web3.Address(address)
   let bid = blockId(blockNumber.truncate(uint64))
@@ -222,14 +168,14 @@ proc fetchCode*(client: RpcClient, blockNumber: BlockNumber, address: EthAddress
 const bytesLimit = 2 * 1024 * 1024
 const maxNumberOfPeersToAttempt = 3
 
-proc fetchUsingGetTrieNodes(peer: Peer, stateRoot: Hash256, paths: seq[SnapTriePaths]): Future[seq[seq[byte]]] {.async.} =
+proc fetchUsingGetTrieNodes(peer: Peer, stateRoot: common.Hash256, paths: seq[SnapTriePaths]): Future[seq[seq[byte]]] {.async.} =
   let r = await peer.getTrieNodes(stateRoot, paths, bytesLimit)
   if r.isNone:
     raise newException(CatchableError, "AARDVARK: received None in GetTrieNodes response")
   else:
     return r.get.nodes
 
-proc fetchUsingGetNodeData(peer: Peer, nodeHashes: seq[Hash256]): Future[seq[seq[byte]]] {.async.} =
+proc fetchUsingGetNodeData(peer: Peer, nodeHashes: seq[common.Hash256]): Future[seq[seq[byte]]] {.async.} =
   #[
   let r: Option[seq[seq[byte]]] = none[seq[seq[byte]]]() # AARDVARK await peer.getNodeData(nodeHashes)
   if r.isNone:
@@ -262,7 +208,7 @@ proc findPeersAndMakeSomeCalls[R](peerPool: PeerPool, protocolName: string, prot
       break
   return attempts
 
-proc findPeersAndMakeSomeAttemptsToCallGetTrieNodes(peerPool: PeerPool, stateRoot: Hash256, paths: seq[SnapTriePaths]): Future[seq[Future[seq[seq[byte]]]]] =
+proc findPeersAndMakeSomeAttemptsToCallGetTrieNodes(peerPool: PeerPool, stateRoot: common.Hash256, paths: seq[SnapTriePaths]): Future[seq[Future[seq[seq[byte]]]]] =
   findPeersAndMakeSomeCalls(peerPool, "snap", protocol.snap, (proc(peer: Peer): Future[seq[seq[byte]]] = fetchUsingGetTrieNodes(peer, stateRoot, paths)))
 
 #[
@@ -270,7 +216,7 @@ proc findPeersAndMakeSomeAttemptsToCallGetNodeData(peerPool: PeerPool, stateRoot
   findPeersAndMakeSomeCalls(peerPool, "eth66", eth66, (proc(peer: Peer): Future[seq[seq[byte]]] = fetchUsingGetNodeData(peer, nodeHashes)))
 ]#
 
-proc fetchNodes(peerPool: PeerPool, stateRoot: Hash256, paths: seq[SnapTriePaths], nodeHashes: seq[Hash256]): Future[seq[seq[byte]]] {.async.} =
+proc fetchNodes(peerPool: PeerPool, stateRoot: common.Hash256, paths: seq[SnapTriePaths], nodeHashes: seq[common.Hash256]): Future[seq[seq[byte]]] {.async.} =
   let attempts = await findPeersAndMakeSomeAttemptsToCallGetTrieNodes(peerPool, stateRoot, paths)
   #let attempts = await findPeersAndMakeSomeAttemptsToCallGetNodeData(peerPool, stateRoot, nodeHashes)
   let completedAttempt = await one(attempts)
@@ -278,7 +224,7 @@ proc fetchNodes(peerPool: PeerPool, stateRoot: Hash256, paths: seq[SnapTriePaths
   info("AARDVARK: fetchNodes received nodes", nodes)
   return nodes
 
-proc verifyFetchedAccount(stateRoot: Hash256, address: EthAddress, acc: Account, accProof: seq[seq[byte]]): Result[void, string] =
+proc verifyFetchedAccount(stateRoot: common.Hash256, address: EthAddress, acc: Account, accProof: seq[seq[byte]]): Result[void, string] =
   let accKey = toSeq(keccakHash(address).data)
   let accEncoded = rlp.encode(acc)
   let accProofResult = verifyMptProof(accProof, stateRoot, accKey, accEncoded)
@@ -292,21 +238,21 @@ proc verifyFetchedAccount(stateRoot: Hash256, address: EthAddress, acc: Account,
     return err(accProofResult.errorMsg)
 
 type
-  CodeFetchingInfo = tuple[blockNumber: BlockNumber, address: EthAddress]
+  CodeFetchingInfo = tuple[blockNumber: common.BlockNumber, address: EthAddress]
 
 proc fetchCode(client: RpcClient, p: CodeFetchingInfo): Future[seq[byte]] {.async.} =
   let (blockNumber, address) = p
   let fetchedCode = await fetchCode(client, blockNumber, address)
   return fetchedCode
 
-proc verifyFetchedCode(fetchedCode: seq[byte], desiredCodeHash: Hash256): Result[void, Hash256] =
+proc verifyFetchedCode(fetchedCode: seq[byte], desiredCodeHash: common.Hash256): Result[void, common.Hash256] =
   let fetchedCodeHash = keccakHash(fetchedCode)
   if desiredCodeHash == fetchedCodeHash:
     ok()
   else:
     err(fetchedCodeHash)
 
-proc fetchAndVerifyCode(client: RpcClient, p: CodeFetchingInfo, desiredCodeHash: Hash256): Future[seq[byte]] {.async.} =
+proc fetchAndVerifyCode(client: RpcClient, p: CodeFetchingInfo, desiredCodeHash: common.Hash256): Future[seq[byte]] {.async.} =
     let fetchedCode: seq[byte] = await fetchCode(client, p)
     let verificationRes = verifyFetchedCode(fetchedCode, desiredCodeHash)
     if verificationRes.isOk():
@@ -316,19 +262,19 @@ proc fetchAndVerifyCode(client: RpcClient, p: CodeFetchingInfo, desiredCodeHash:
       error("code hash values do not match", p=p, desiredCodeHash=desiredCodeHash, fetchedCodeHash=fetchedCodeHash)
       raise newException(CatchableError, "async code received code for " & $(p.address) & " whose hash (" & $(fetchedCodeHash) & ") does not match the desired hash (" & $(desiredCodeHash) & ")")
 
-proc putCode*(db: CoreDbRef, codeHash: Hash256, code: seq[byte]) =
+proc putCode*(db: CoreDbRef, codeHash: common.Hash256, code: seq[byte]) =
   when defined(geth):
     db.kvt.put(codeHash.data, code)
   else:
     db.kvt.put(contractHashKey(codeHash).toOpenArray, code)
 
-proc putCode*(trie: AccountsTrie, codeHash: Hash256, code: seq[byte]) =
+proc putCode*(trie: AccountsTrie, codeHash: common.Hash256, code: seq[byte]) =
   putCode(trie.db, codeHash, code)
 
-proc storeCode(trie: AccountsTrie, p: CodeFetchingInfo, desiredCodeHash: Hash256, fetchedCode: seq[byte]) =
+proc storeCode(trie: AccountsTrie, p: CodeFetchingInfo, desiredCodeHash: common.Hash256, fetchedCode: seq[byte]) =
   trie.putCode(desiredCodeHash, fetchedCode)
 
-proc assertThatWeHaveStoredCode(trie: AccountsTrie, p: CodeFetchingInfo, codeHash: Hash256) =
+proc assertThatWeHaveStoredCode(trie: AccountsTrie, p: CodeFetchingInfo, codeHash: common.Hash256) =
   # FIXME-Adam: this is a bit wrong because we're not checking it against the blockNumber, only the address. (That is,
   # if the code for this address has *changed* (which is unlikely), this check isn't the right thing to do.)
   let maybeFoundCode = trie.maybeGetCode(p.address)
@@ -351,7 +297,7 @@ proc assertThatWeHaveStoredAccount(trie: AccountsTrie, address: EthAddress, fetc
   doAssert(trie.hasAllNodesForAccount(address), "Can I check the account this way, too?")
 
 
-proc verifyFetchedSlot(accountStorageRoot: Hash256, slot: UInt256, fetchedVal: UInt256, storageMptNodes: seq[seq[byte]]): Result[void, string] =
+proc verifyFetchedSlot(accountStorageRoot: common.Hash256, slot: UInt256, fetchedVal: UInt256, storageMptNodes: seq[seq[byte]]): Result[void, string] =
   if storageMptNodes.len == 0:
     # I think an empty storage proof is okay; I see lots of these
     # where the account is empty and the value is zero.
@@ -370,7 +316,7 @@ proc verifyFetchedSlot(accountStorageRoot: Hash256, slot: UInt256, fetchedVal: U
       return err(storageProofResult.errorMsg)
 
 
-proc assertThatWeHaveStoredSlot(trie: AccountsTrie, address: EthAddress, acc: Account, slot: UInt256, fetchedVal: UInt256, isForTheNewTrie: bool = false) =
+proc assertThatWeHaveStoredSlot(trie: AccountsTrie, address: EthAddress, acc: Account, slot: common.UInt256, fetchedVal: UInt256, isForTheNewTrie: bool = false) =
   if acc.storageRoot == EMPTY_ROOT_HASH and fetchedVal.isZero:
     # I believe this is okay.
     discard
@@ -381,16 +327,16 @@ proc assertThatWeHaveStoredSlot(trie: AccountsTrie, address: EthAddress, acc: Ac
       doAssert false, "slot didn't come out the same"
 
 
-proc verifyFetchedBlockHeader(fetchedHeader: BlockHeader, desiredBlockNumber: BlockNumber): Result[void, BlockNumber] =
+proc verifyFetchedBlockHeader(fetchedHeader: common.BlockHeader, desiredBlockNumber: common.BlockNumber): Result[void, common.BlockNumber] =
   # *Can* we do anything to verify this header, given that all we know
   # is the desiredBlockNumber and we want to run statelessly so we don't
   # know what block hash we want?
   ok()
 
-proc storeBlockHeader(chainDB: CoreDbRef, header: BlockHeader) =
+proc storeBlockHeader(chainDB: CoreDbRef, header: common.BlockHeader) =
   chainDB.persistHeaderToDbWithoutSetHeadOrScore(header)
 
-proc assertThatWeHaveStoredBlockHeader(chainDB: CoreDbRef, blockNumber: BlockNumber, header: BlockHeader) =
+proc assertThatWeHaveStoredBlockHeader(chainDB: CoreDbRef, blockNumber: common.BlockNumber, header: common.BlockHeader) =
   let h = chainDB.getBlockHash(blockNumber)
   doAssert(h == header.blockHash, "stored the block header for block " & $(blockNumber))
 
@@ -402,7 +348,7 @@ proc raiseExceptionIfError[V, E](whatAreWeVerifying: V, r: Result[void, E]) =
 const shouldDoUnnecessarySanityChecks = true
 
 # This proc fetches both the account and also optionally some of its slots, because that's what eth_getProof can do.
-proc ifNecessaryGetAccountAndSlots*(client: RpcClient, db: CoreDbRef, blockNumber: BlockNumber, stateRoot: Hash256, address: EthAddress, slots: seq[UInt256], justCheckingAccount: bool, justCheckingSlots: bool, newStateRootForSanityChecking: Hash256): Future[void] {.async.} =
+proc ifNecessaryGetAccountAndSlots*(client: RpcClient, db: CoreDbRef, blockNumber: common.BlockNumber, stateRoot: common.Hash256, address: EthAddress, slots: seq[UInt256], justCheckingAccount: bool, justCheckingSlots: bool, newStateRootForSanityChecking: common.Hash256): Future[void] {.async.} =
   let trie = initAccountsTrie(db, stateRoot, false)  # important for sanity checks
   let trie2 = initAccountsTrie(db, newStateRootForSanityChecking, false)  # important for sanity checks
   let doesAccountActuallyNeedToBeFetched = not trie.hasAllNodesForAccount(address)
@@ -454,7 +400,7 @@ proc ifNecessaryGetAccountAndSlots*(client: RpcClient, db: CoreDbRef, blockNumbe
           assertThatWeHaveStoredSlot(trie, address, acc, slot, fetchedVal, false)
           assertThatWeHaveStoredSlot(trie2, address, acc, slot, fetchedVal, true)
 
-proc ifNecessaryGetCode*(client: RpcClient, db: CoreDbRef, blockNumber: BlockNumber, stateRoot: Hash256, address: EthAddress, justChecking: bool, newStateRootForSanityChecking: Hash256): Future[void] {.async.} =
+proc ifNecessaryGetCode*(client: RpcClient, db: CoreDbRef, blockNumber: common.BlockNumber, stateRoot: common.Hash256, address: EthAddress, justChecking: bool, newStateRootForSanityChecking: common.Hash256): Future[void] {.async.} =
   await ifNecessaryGetAccountAndSlots(client, db, blockNumber, stateRoot, address, @[], false, false, newStateRootForSanityChecking)  # to make sure we've got the codeHash
   let trie = initAccountsTrie(db, stateRoot, false)  # important for sanity checks
 
@@ -470,7 +416,7 @@ proc ifNecessaryGetCode*(client: RpcClient, db: CoreDbRef, blockNumber: BlockNum
       if shouldDoUnnecessarySanityChecks:
         assertThatWeHaveStoredCode(trie, p, desiredCodeHash)
 
-proc ifNecessaryGetBlockHeaderByNumber*(client: RpcClient, chainDB: CoreDbRef, blockNumber: BlockNumber, justChecking: bool): Future[void] {.async.} =
+proc ifNecessaryGetBlockHeaderByNumber*(client: RpcClient, chainDB: CoreDbRef, blockNumber: common.BlockNumber, justChecking: bool): Future[void] {.async.} =
   let maybeHeaderAndHash = chainDB.getBlockHeaderWithHash(blockNumber)
   if maybeHeaderAndHash.isNone:
     let fetchedHeader = await fetchBlockHeaderWithNumber(client, blockNumber)
@@ -486,16 +432,16 @@ proc ifNecessaryGetBlockHeaderByNumber*(client: RpcClient, chainDB: CoreDbRef, b
 # Used in asynchronous on-demand-data-fetching mode.
 proc realAsyncDataSource*(peerPool: PeerPool, client: RpcClient, justChecking: bool): AsyncDataSource =
   AsyncDataSource(
-    ifNecessaryGetAccount: (proc(db: CoreDbRef, blockNumber: BlockNumber, stateRoot: Hash256, address: EthAddress, newStateRootForSanityChecking: Hash256): Future[void] {.async.} =
+    ifNecessaryGetAccount: (proc(db: CoreDbRef, blockNumber: common.BlockNumber, stateRoot: common.Hash256, address: EthAddress, newStateRootForSanityChecking: common.Hash256): Future[void] {.async.} =
       await ifNecessaryGetAccountAndSlots(client, db, blockNumber, stateRoot, address, @[], false, false, newStateRootForSanityChecking)
     ),
-    ifNecessaryGetSlots:   (proc(db: CoreDbRef, blockNumber: BlockNumber, stateRoot: Hash256, address: EthAddress, slots: seq[UInt256], newStateRootForSanityChecking: Hash256): Future[void] {.async.} =
+    ifNecessaryGetSlots:   (proc(db: CoreDbRef, blockNumber: common.BlockNumber, stateRoot: common.Hash256, address: EthAddress, slots: seq[UInt256], newStateRootForSanityChecking: common.Hash256): Future[void] {.async.} =
       await ifNecessaryGetAccountAndSlots(client, db, blockNumber, stateRoot, address, slots, false, false, newStateRootForSanityChecking)
     ),
-    ifNecessaryGetCode: (proc(db: CoreDbRef, blockNumber: BlockNumber, stateRoot: Hash256, address: EthAddress, newStateRootForSanityChecking: Hash256): Future[void] {.async.} =
+    ifNecessaryGetCode: (proc(db: CoreDbRef, blockNumber: common.BlockNumber, stateRoot: common.Hash256, address: EthAddress, newStateRootForSanityChecking: common.Hash256): Future[void] {.async.} =
       await ifNecessaryGetCode(client, db, blockNumber, stateRoot, address, justChecking, newStateRootForSanityChecking)
     ),
-    ifNecessaryGetBlockHeaderByNumber: (proc(chainDB: CoreDbRef, blockNumber: BlockNumber): Future[void] {.async.} =
+    ifNecessaryGetBlockHeaderByNumber: (proc(chainDB: CoreDbRef, blockNumber: common.BlockNumber): Future[void] {.async.} =
       await ifNecessaryGetBlockHeaderByNumber(client, chainDB, blockNumber, justChecking)
     ),
 
@@ -504,16 +450,16 @@ proc realAsyncDataSource*(peerPool: PeerPool, client: RpcClient, justChecking: b
     #  return await fetchNodes(peerPool, stateRoot, paths, nodeHashes)
     #),
 
-    fetchBlockHeaderWithHash: (proc(h: Hash256): Future[BlockHeader] {.async.} =
+    fetchBlockHeaderWithHash: (proc(h: common.Hash256): Future[common.BlockHeader] {.async.} =
       return await fetchBlockHeaderWithHash(client, h)
     ),
-    fetchBlockHeaderWithNumber: (proc(n: BlockNumber): Future[BlockHeader] {.async.} =
+    fetchBlockHeaderWithNumber: (proc(n: common.BlockNumber): Future[common.BlockHeader] {.async.} =
       return await fetchBlockHeaderWithNumber(client, n)
     ),
-    fetchBlockHeaderAndBodyWithHash: (proc(h: Hash256): Future[(BlockHeader, BlockBody)] {.async.} =
+    fetchBlockHeaderAndBodyWithHash: (proc(h: common.Hash256): Future[(common.BlockHeader, BlockBody)] {.async.} =
       return await fetchBlockHeaderAndBodyWithHash(client, h)
     ),
-    fetchBlockHeaderAndBodyWithNumber: (proc(n: BlockNumber): Future[(BlockHeader, BlockBody)] {.async.} =
+    fetchBlockHeaderAndBodyWithNumber: (proc(n: common.BlockNumber): Future[(common.BlockHeader, BlockBody)] {.async.} =
       return await fetchBlockHeaderAndBodyWithNumber(client, n)
     )
   )

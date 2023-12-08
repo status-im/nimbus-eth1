@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022 Status Research & Development GmbH
+# Copyright (c) 2022-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -10,19 +10,30 @@ import
   eth/common/[eth_types, eth_types_rlp],
   eth/bloom as bFilter,
   stint,
-  ./rpc_types,
-  ./hexstrings
+  ../beacon/web3_eth_conv,
+  ./rpc_types
 
 export rpc_types
 
+type
+  BlockHeader = eth_types.BlockHeader
+  Hash256 = eth_types.Hash256
+
 {.push raises: [].}
 
-proc topicToDigest(t: seq[Topic]): seq[Hash256] =
-  var resSeq: seq[Hash256] = @[]
+proc topicToDigest(t: seq[eth_types.Topic]): seq[Web3Topic] =
+  var resSeq: seq[Web3Topic] = @[]
   for top in t:
-    let ht = Hash256(data: top)
+    let ht = Web3Topic(top)
     resSeq.add(ht)
   return resSeq
+
+func ethTopics(topics: openArray[Option[seq[Web3Hash]]]): seq[Option[seq[Hash256]]] =
+  for x in topics:
+    if x.isSome:
+      result.add some(ethHashes(x.get))
+    else:
+      result.add none(seq[Hash256])
 
 proc deriveLogs*(header: BlockHeader, transactions: seq[Transaction], receipts: seq[Receipt]): seq[FilterLog] =
   ## Derive log fields, does not deal with pending log, only the logs with
@@ -40,12 +51,12 @@ proc deriveLogs*(header: BlockHeader, transactions: seq[Transaction], receipts: 
         # level, to keep track about potential re-orgs
         # - in fluffy there is no concept of re-org
         removed: false,
-        logIndex: some(encodeQuantity(uint32(logIndex))),
-        transactionIndex: some(encodeQuantity(uint32(i))),
-        transactionHash: some(transactions[i].rlpHash),
-        blockHash: some(header.blockHash),
-        blockNumber: some(encodeQuantity(header.blockNumber)),
-        address: log.address,
+        logIndex: some(w3Qty(logIndex)),
+        transactionIndex: some(w3Qty(i)),
+        transactionHash: some(w3Hash transactions[i].rlpHash),
+        blockHash: some(w3Hash header.blockHash),
+        blockNumber: some(w3Qty(header.blockNumber.truncate(uint64))),
+        address: w3Addr log.address,
         data: log.data,
         #  TODO topics should probably be kept as Hash256 in receipts
         topics: topicToDigest(log.topics)
@@ -99,6 +110,12 @@ proc headerBloomFilter*(
     topics: seq[Option[seq[Hash256]]]): bool =
   return bloomFilter(header.bloom, addresses, topics)
 
+proc headerBloomFilter*(
+    header: BlockHeader,
+    addresses: seq[Web3Address],
+    topics: seq[Option[seq[Web3Hash]]]): bool =
+  headerBloomFilter(header, addresses.ethAddrs, topics.ethTopics)
+
 proc matchTopics(log: FilterLog, topics: seq[Option[seq[Hash256]]]): bool =
   for i, sub in topics:
 
@@ -114,7 +131,7 @@ proc matchTopics(log: FilterLog, topics: seq[Option[seq[Hash256]]]): bool =
     var match = len(subTops) == 0
 
     for topic in subTops:
-      if log.topics[i] == topic :
+      if log.topics[i].ethHash == topic:
         match = true
         break
 
@@ -131,7 +148,7 @@ proc filterLogs*(
   var filteredLogs: seq[FilterLog] = newSeq[FilterLog]()
 
   for log in logs:
-    if len(addresses) > 0 and (not addresses.contains(log.address)):
+    if len(addresses) > 0 and (not addresses.contains(log.address.ethAddr)):
       continue
 
     if len(topics) > len(log.topics):
@@ -143,3 +160,9 @@ proc filterLogs*(
     filteredLogs.add(log)
 
   return filteredLogs
+
+proc filterLogs*(
+    logs: openArray[FilterLog],
+    addresses: seq[Web3Address],
+    topics: seq[Option[seq[Web3Hash]]]): seq[FilterLog] =
+  filterLogs(logs, addresses.ethAddrs, topics.ethTopics)
