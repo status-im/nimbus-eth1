@@ -1,3 +1,4 @@
-vendor/
 build/
-.git/
+vendor/*/vendor/*/bin/
+**/*.o
+**/*.a
