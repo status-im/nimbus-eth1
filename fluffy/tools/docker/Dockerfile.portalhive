@@ -2,25 +2,26 @@ FROM debian:stable-slim as build
 
 ENV DEBIAN_FRONTEND=noninteractive TZ="Etc/UTC"
 ENV NPROC=2
+ENV NIMFLAGS_COMMON="-d:disableMarchNative --gcc.options.debug:'-g1' --clang.options.debug:'-gline-tables-only'"
 
 RUN apt update \
   && apt install make bash build-essential git -y \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-COPY ../../ /fluffy
+COPY ../../ /nimbus-eth1
 
-WORKDIR /fluffy
+WORKDIR /nimbus-eth1
 
-RUN --mount=type=cache,target=/fluffy/vendor \
-    make deps -j${NPROC}
+RUN mv vendor vendor.orig
 
-RUN --mount=type=cache,target=/fluffy/vendor <<EOF
-  set -e
-  make fluffy -j${NPROC}
-  cp /fluffy/build/fluffy /usr/local/bin/fluffy
-EOF
+RUN  --mount=type=cache,target=/nimbus-eth1/build --mount=type=cache,target=/nimbus-eth1/vendor \
+  mv vendor.orig vendor && \
+  make -j${NPROC} NIMFLAGS="${NIMFLAGS_COMMON} --parallelBuild:${NPROC}" V=1 update
+
+RUN  --mount=type=cache,target=/nimbus-eth1/build --mount=type=cache,target=/nimbus-eth1/vendor \
+  make -j${NPROC} NIMFLAGS="${NIMFLAGS_COMMON} --parallelBuild:${NPROC}" fluffy && \
+  mv build/fluffy /usr/local/bin/fluffy
 
 FROM debian:stable-slim as app
-
 COPY --from=build /usr/local/bin/fluffy /usr/local/bin/fluffy
