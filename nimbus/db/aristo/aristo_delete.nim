@@ -20,6 +20,7 @@ import
   chronicles,
   eth/[common, trie/nibbles],
   results,
+  ./aristo_debug,
   "."/[aristo_desc, aristo_get, aristo_hike, aristo_layers, aristo_path,
        aristo_vid]
 
@@ -58,18 +59,22 @@ proc branchStillNeeded(vtx: VertexRef): Result[int,void] =
 proc nullifyKey(
     db: AristoDbRef;                   # Database, top layer
     vid: VertexID;                     # Vertex IDs to clear
+    noisy: bool;                       # <--- will go away
       ) =
   # Register for void hash (to be recompiled)
   db.layersResLabel vid
+  if noisy: echo ">>> nullifyKey vid=", vid.pp
 
 proc disposeOfVtx(
     db: AristoDbRef;                   # Database, top layer
     vid: VertexID;                     # Vertex IDs to clear
+    noisy: bool;                       # <------------- will go away
       ) =
   # Remove entry
   db.layersResVtx vid
   db.layersResLabel vid
   db.vidDispose vid                    # Recycle ID
+  if noisy: echo ">>> disposeOfVtx (1) reset vid=", vid.pp
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -79,6 +84,7 @@ proc collapseBranch(
     db: AristoDbRef;                   # Database, top layer
     hike: Hike;                        # Fully expanded path
     nibble: byte;                      # Applicable link for `Branch` vertex
+    noisy: bool;                       # <------------- will go away
      ): Result[void,(VertexID,AristoError)] =
   ## Convert/merge vertices:
   ## ::
@@ -111,7 +117,7 @@ proc collapseBranch(
 
     of Extension:                                        # (2)
       # Merge `br` into ^3 (update `xt`)
-      db.disposeOfVtx xt.vid
+      db.disposeOfVtx(xt.vid, noisy)
       xt.vid = par.vid
       xt.vtx.ePfx = par.vtx.ePfx & xt.vtx.ePfx
 
@@ -131,6 +137,7 @@ proc collapseExt(
     hike: Hike;                        # Fully expanded path
     nibble: byte;                      # Link for `Branch` vertex `^2`
     vtx: VertexRef;                    # Follow up extension vertex (nibble)
+    noisy: bool;                       # <------------- will go away
      ): Result[void,(VertexID,AristoError)] =
   ## Convert/merge vertices:
   ## ::
@@ -150,7 +157,7 @@ proc collapseExt(
       vType: Extension,
       ePfx:  @[nibble].initNibbleRange.slice(1) & vtx.ePfx,
       eVid:  vtx.eVid))
-  db.disposeOfVtx br.vtx.bVid[nibble]                    # `vtx` is obsolete now
+  db.disposeOfVtx(br.vtx.bVid[nibble], noisy)            # `vtx` is obsolete now
 
   if 2 < hike.legs.len:                                  # (1) or (2)
     let par = hike.legs[^3].wp
@@ -161,7 +168,7 @@ proc collapseExt(
 
     of Extension:                                        # (2)
       # Replace ^3 by `^3 & ^2 & vtx` (update `xt`)
-      db.disposeOfVtx xt.vid
+      db.disposeOfVtx(xt.vid, noisy)
       xt.vid = par.vid
       xt.vtx.ePfx = par.vtx.ePfx & xt.vtx.ePfx
 
@@ -181,6 +188,7 @@ proc collapseLeaf(
     hike: Hike;                        # Fully expanded path
     nibble: byte;                      # Link for `Branch` vertex `^2`
     vtx: VertexRef;                    # Follow up leaf vertex (from nibble)
+    noisy: bool;                       # <------------- will go away
      ): Result[void,(VertexID,AristoError)] =
   ## Convert/merge vertices:
   ## ::
@@ -203,14 +211,17 @@ proc collapseLeaf(
       vType: Leaf,
       lPfx:  @[nibble].initNibbleRange.slice(1) & vtx.lPfx,
       lData: vtx.lData))
-  db.nullifyKey lf.vid                                   # `vtx` was modified
+  db.nullifyKey(lf.vid, noisy)                           # `vtx` was modified
 
   if 2 < hike.legs.len:                                  # (1), (2), or (3)
-    db.disposeOfVtx br.vid                               # `br` is obsolete now
+    db.disposeOfVtx(br.vid, noisy)                       # `br` is obsolete now
     # Merge `br` into the leaf `vtx` and unlink `br`.
     let par = hike.legs[^3].wp.dup                       # Writable vertex
     case par.vtx.vType:
     of Branch:                                           # (1)
+      if noisy: echo ">>> collapseLeaf (1)",
+        " lf.vid=", lf.vid,
+        "\n    hike\n    ", hike.pp(db)
       # Replace `vtx` by `^2 & vtx` (use `lf` as-is)
       par.vtx.bVid[hike.legs[^3].nibble] = lf.vid
       db.layersPutVtx(par.vid, par.vtx)
@@ -222,19 +233,26 @@ proc collapseLeaf(
         tag = lfPath.pathToTag.valueOr:
           return err((lf.vid,error))
       db.top.final.lTab[LeafTie(root: hike.root, path: tag)] = lf.vid
+      if noisy: echo ">>> collapseLeaf (1.1)",
+        " lf.vid=", lf.vid,
+        "\n    tag=", tag,
+        "\n    hike\n    ", hike.pp(db),
+        "\n    top\n    ", db.pp(filterOk=false)
       return ok()
 
     of Extension:                                        # (2) or (3)
       # Merge `^3` into `lf` but keep the leaf vertex ID unchanged. This
       # avoids some `lTab[]` registry update.
       lf.vtx.lPfx = par.vtx.ePfx & lf.vtx.lPfx
+      if noisy: echo ">>> collapseLeaf (2)"
 
       if 3 < hike.legs.len:                              # (2)
+        if noisy: echo ">>> collapseLeaf (2.1)"
         # Grandparent exists
         let gpr = hike.legs[^4].wp.dup                   # Writable vertex
         if gpr.vtx.vType != Branch:
           return err((gpr.vid,DelBranchExpexted))
-        db.disposeOfVtx par.vid                          # `par` is obsolete now
+        db.disposeOfVtx(par.vid, noisy)                  # `par` is obsolete now
         gpr.vtx.bVid[hike.legs[^4].nibble] = lf.vid
         db.layersPutVtx(gpr.vid, gpr.vtx)
         db.layersPutVtx(lf.vid, lf.vtx)
@@ -245,19 +263,32 @@ proc collapseLeaf(
           tag = lfPath.pathToTag.valueOr:
             return err((lf.vid,error))
         db.top.final.lTab[LeafTie(root: hike.root, path: tag)] = lf.vid
+        if noisy: echo ">>> collapseLeaf (2.2)",
+          " lf.vid=", lf.vid,
+          "\n    tag=", tag,
+          "\n    hike\n    ", hike.pp(db),
+          "\n    top\n    ", db.pp(filterOk=false)
         return ok()
 
+      if noisy: echo ">>> collapseLeaf (2.3)",
+        " lf.vtx=", lf.vtx.pp(db)
       # No grandparent, so ^3 is root vertex             # (3)
       db.layersPutVtx(par.vid, lf.vtx)
       # Continue below
 
     of Leaf:
+      if noisy: echo ">>> collapseLeaf (3)"
       return err((par.vid,DelLeafUnexpected))
 
   else:                                                  # (4)
     # Replace ^2 by `^2 & vtx` (use `lf` as-is)          # `br` is root vertex
-    db.nullifyKey br.vid                                 # root was changed
+    db.nullifyKey(br.vid, noisy)                         # root was changed
     db.layersPutVtx(br.vid, lf.vtx)
+    if noisy: echo ">>> collapseLeaf (4)",
+      " lf.vtx=", lf.vtx.pp(db),
+      "\n    hike\n    ", hike.pp(db),
+      "\n    top\n    ", db.pp(filterOk=false),
+      ""
     # Continue below
 
   # Common part for setting up `lf` as root vertex       # Rest of (3) or (4)
@@ -272,7 +303,7 @@ proc collapseLeaf(
     db.top.final.lTab[lfTie] = lf.vid
 
   # Clean up stale leaf vertex which has moved to root position
-  db.disposeOfVtx lf.vid
+  db.disposeOfVtx(lf.vid, noisy)
 
   # If some `Leaf` vertex was installed as root, there must be a an extra
   # `LeafTie` lookup entry.
@@ -284,6 +315,12 @@ proc collapseLeaf(
       return err((hike.root,error))
     db.top.final.lTab[LeafTie(root: hike.root, path: tag)] = hike.root
 
+  if noisy: echo ">>> collapseLeaf (5)",
+    " lf.vid=", lf.vid.pp,
+    " root=", rootVtx.pp(db),
+    "\n    hike\n    ", hike.pp(db),
+    "\n    top\n    ", db.pp(filterOk=false)
+
   ok()
 
 # -------------------------
@@ -292,8 +329,12 @@ proc deleteImpl(
     db: AristoDbRef;                   # Database, top layer
     hike: Hike;                        # Fully expanded path
     lty: LeafTie;                      # `Patricia Trie` path root-to-leaf
+    noisy: bool;                       # <------------- will go away
       ): Result[void,(VertexID,AristoError)] =
   ## Implementation of *delete* functionality.
+  if noisy: echo ">>> deleteImpl (1)",
+    " leafKey=", lty.pp,
+    "\n    hike\n    ", hike.pp(db)
 
   # Remove leaf entry on the top
   let lf =  hike.legs[^1].wp
@@ -312,9 +353,11 @@ proc deleteImpl(
     else:
       rc.value
 
-  db.disposeOfVtx lf.vid
+  db.disposeOfVtx(lf.vid, noisy)
 
   if 1 < hike.legs.len:
+    if noisy: echo ">>> deleteImpl (2) nLegs=", hike.legs.len
+
     # Get current `Branch` vertex `br`
     let br = block:
       var wp = hike.legs[^2].wp
@@ -323,22 +366,43 @@ proc deleteImpl(
     if br.vtx.vType != Branch:
       return err((br.vid,DelBranchExpexted))
 
+    #if noisy: echo ">>> deleteImpl (3)",
+    #  " nLegs=", hike.legs.len,
+    #  "\n    cache\n    ", db.pp(filterOk=false),
+    #  ""
+
     # Unlink child vertex from structural table
     br.vtx.bVid[hike.legs[^2].nibble] = VertexID(0)
     db.layersPutVtx(br.vid, br.vtx)
+
+    #if noisy: echo ">>> deleteImpl (4)",
+    #  " nLegs=", hike.legs.len,
+    #  "\n    cache\n    ", db.pp(filterOk=false),
+    #  ""
 
     # Clear all keys up to the root key
     for n in 0 .. hike.legs.len - 2:
       let vid = hike.legs[n].wp.vid
       if vid in db.top.final.pPrf:
         return err((vid, DelBranchLocked))
-      db.nullifyKey vid
+      db.nullifyKey(vid, noisy)
+
+    #if noisy: echo ">>> deleteImpl (5)",
+    #  " nLegs=", hike.legs.len,
+    #  "\n    cache\n    ", db.pp(filterOk=false),
+    #  ""
 
     let nibble = block:
       let rc = br.vtx.branchStillNeeded()
       if rc.isErr:
         return err((br.vid,DelBranchWithoutRefs))
       rc.value
+
+    if noisy: echo ">>> deleteImpl (6)",
+      " nLegs=", hike.legs.len,
+      " nibble=", nibble,
+      " br=", br.pp(db),
+      "\n    cache\n    ", db.pp(filterOk=false)
 
     # Convert to `Extension` or `Leaf` vertex
     if 0 <= nibble:
@@ -352,11 +416,23 @@ proc deleteImpl(
       # Collapse `Branch` vertex `br` depending on `nxt` vertex type
       case nxt.vtx.vType:
       of Branch:
-        ? db.collapseBranch(hike, nibble.byte)
+        if noisy: echo ">>> deleteImpl (7.1) collapse branch",
+          " nLegs=", hike.legs.len,
+          " br=", br.vid.pp,
+          " nxt=", nxt.vid.pp
+        ? db.collapseBranch(hike, nibble.byte, noisy)
       of Extension:
-        ? db.collapseExt(hike, nibble.byte, nxt.vtx)
+        if noisy: echo ">>> deleteImpl (7.2) collapse ext",
+          " nLegs=", hike.legs.len,
+          " br=", br.vid.pp,
+          " nxt=", nxt.vid.pp
+        ? db.collapseExt(hike, nibble.byte, nxt.vtx, noisy)
       of Leaf:
-        ? db.collapseLeaf(hike, nibble.byte, nxt.vtx)
+        if noisy: echo ">>> deleteImpl (7.3) collapse leaf",
+          " nLegs=", hike.legs.len,
+          " br=", br.vid.pp,
+          " nxt=", nxt.vid.pp
+        ? db.collapseLeaf(hike, nibble.byte, nxt.vtx, noisy)
 
   # Delete leaf entry
   if leafVidBe.isValid:
@@ -365,6 +441,11 @@ proc deleteImpl(
   else:
     # No need to keep it any longer in cache
     db.top.final.lTab.del lty
+
+  if noisy: echo ">>> deleteImpl (9)",
+    " leafKey=", lty.pp, ""
+    #"\n    hike\n    ", hike.pp(db),
+    #"\n    cache\n    ", db.pp
 
   ok()
 
@@ -375,6 +456,7 @@ proc deleteImpl(
 proc delete*(
     db: AristoDbRef;                   # Database, top layer
     hike: Hike;                        # Fully expanded chain of vertices
+    noisy = false;                     # <------------- will go away
       ): Result[void,(VertexID,AristoError)] =
   ## Delete argument `hike` chain of vertices from the database
   ##
@@ -382,15 +464,16 @@ proc delete*(
   let lty = LeafTie(
     root: hike.root,
     path: ? hike.to(NibblesSeq).pathToTag().mapErr toVae)
-  db.deleteImpl(hike, lty)
+  db.deleteImpl(hike, lty, noisy)
 
 proc delete*(
     db: AristoDbRef;                   # Database, top layer
     lty: LeafTie;                      # `Patricia Trie` path root-to-leaf
+    noisy = false;                     # <------------- will go away
       ): Result[void,(VertexID,AristoError)] =
   ## Variant of `delete()`
   ##
-  db.deleteImpl(? lty.hikeUp(db).mapErr toVae, lty)
+  db.deleteImpl(? lty.hikeUp(db).mapErr toVae, lty, noisy)
 
 proc delete*(
     db: AristoDbRef;

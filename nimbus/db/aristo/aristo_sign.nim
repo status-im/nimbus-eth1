@@ -23,7 +23,9 @@ import
 # Public functions, signature generator
 # ------------------------------------------------------------------------------
 
-proc merkleSignBegin*(): MerkleSignRef =
+proc merkleSignBegin*(
+    noisy = false;                   # <------ will go away
+      ): MerkleSignRef =
   ## Start signature calculator for a list of key-value items.
   let
     db = AristoDbRef.init VoidBackendRef
@@ -36,25 +38,27 @@ proc merkleSignAdd*(
     sdb: MerkleSignRef;
     key: openArray[byte];
     val: openArray[byte];
+    noisy = false;                   # <------ will go away
     ) =
   ## Add key-value item to the signature list. The order of the items to add
   ## is irrelevant.
   if sdb.error == AristoError(0):
     sdb.count.inc
-    discard sdb.db.merge(sdb.root, key, val).valueOr:
+    discard sdb.db.merge(sdb.root, key, val, noisy).valueOr:
       sdb.`error` = error
       sdb.errKey = @key
       return
 
 proc merkleSignCommit*(
     sdb: MerkleSignRef;
+    noisy = false;                   # <------ will go away
       ): Result[HashKey,(Blob,AristoError)] =
   ## Finish with the list, calculate signature and return it.
   if sdb.count == 0:
     return ok VOID_HASH_KEY
   if sdb.error != AristoError(0):
     return err((sdb.errKey, sdb.error))
-  discard sdb.db.hashify().valueOr:
+  discard sdb.db.hashify(noisy=noisy).valueOr:
     let w = (EmptyBlob, error[1])
     return err(w)
   let hash = sdb.db.getKeyRc(sdb.root).valueOr:

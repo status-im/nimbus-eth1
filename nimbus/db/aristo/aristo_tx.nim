@@ -243,13 +243,14 @@ proc rollback*(
 
 proc commit*(
     tx: AristoTxRef;                  # Top transaction on database
+    noisy = false;                    # <---------- will go away
       ): Result[void,AristoError] =
   ## Given a *top level* handle, this function accepts all database operations
   ## performed through this handle and merges it to the previous layer. The
   ## previous transaction is returned if there was any.
   ##
   let db = ? tx.getDbDescFromTopTx()
-  discard db.hashify().valueOr:
+  discard db.hashify(noisy=noisy).valueOr:
     return err(error[1])
 
   # Pop layer from stack and merge database top layer onto it
@@ -309,6 +310,7 @@ proc stow*(
     db: AristoDbRef;                  # Database
     persistent = false;               # Stage only unless `true`
     chunkedMpt = false;               # Partial data (e.g. from `snap`)
+    noisy = false;                    # <---------- will go away
       ): Result[void,AristoError] =
   ## If there is no backend while the `persistent` argument is set `true`,
   ## the function returns immediately with an error. The same happens if there
@@ -332,7 +334,7 @@ proc stow*(
   if persistent and not db.canResolveBackendFilter():
     return err(TxBackendNotWritable)
 
-  discard db.hashify().valueOr:
+  discard db.hashify(noisy=noisy).valueOr:
     return err(error[1])
 
   let fwd = db.fwdFilter(db.top, chunkedMpt).valueOr:

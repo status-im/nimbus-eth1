@@ -20,6 +20,11 @@ import
   ../../base/base_desc,
   ./common_desc
 
+import
+  ../../../kvt/kvt_debug
+var
+  noisy* = false
+
 type
   KvtBaseRef* = ref object
     parent: CoreDbRef            ## Opaque top level descriptor
@@ -118,6 +123,15 @@ proc `=destroy`(cKvt: var KvtChildDbObj) =
 
       # End body
 
+    const noisy = false
+    if noisy: echo "*** kdb/=destroy",
+      " isKdb=", (kvt == base.kdb),
+      " saveMode=", cKvt.saveMode,
+      " nForked=", kvt.nForked,
+      " level=", kvt.level,
+      " #gq=", base.gq.len,
+      "" # , "\n    db\n    ", kvt.pp(backendOk=true)
+
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
@@ -131,6 +145,20 @@ proc persistent(
     kvt = cKvt.kvt
     db = base.parent
     rc = kvt.stow()
+
+  let noisy = false # cKvt.saveMode notin {AutoSave,Shared}
+  if noisy:
+    let dmp {.used.} =
+      if 0 < kvt.nForked or 0 < kvt.level: ""
+      else: "\n    db\n    " & kvt.pp(backendOk=true,keysOk=true)
+    echo "*** kdb/persistent",
+      " saveMode=", cKvt.saveMode,
+      " hasBackend=", not kvt.backend.isNil,
+      " gq=", base.gq.len,
+      " nForked=", kvt.nForked,
+      " level=", kvt.level,
+      " rc=", (if rc.isOk: "ok" else: $rc.error),
+      "" # , dmp
 
   # Note that `gc()` may call `persistent()` so there is no `base.gc()` here
   if rc.isOk:
@@ -157,6 +185,18 @@ proc forget(
       rc = kvt.forget()
     if rc.isErr:
       result = err(rc.error.toError(db, info))
+
+    if noisy:
+      let dmp {.used.} =
+        if 0 < kvt.nForked or 0 < kvt.level: ""
+        else: "\n    db\n    " & kvt.pp(backendOk=true,keysOk=true)
+      echo "*** kdb/forget",
+        " saveMode=", cKvt.saveMode,
+        " gq=", base.gq.len,
+        " nForked=", kvt.nForked,
+        " level=", kvt.level,
+        " result=", (if result.isOk: "ok" else: result.error.errorPrint),
+        "" # , dmp
 
 # ------------------------------------------------------------------------------
 # Private `kvt` call back functions
@@ -204,6 +244,11 @@ proc kvtMethods(cKvt: KvtChildDbRef): CoreDbKvtFns =
     let rc = cKvt.kvt.put(k,v)
     if rc.isErr:
       return err(rc.error.toError(cKvt.base.parent, info))
+    const noisy = false
+    if noisy: echo "*** kdb/putFn",
+      " saveMode=", cKvt.saveMode,
+      " nForked=", cKvt.kvt.nForked,
+      "" # , "\n    db\n    ", cKvt.kvt.pp(backendOk=true)
     ok()
 
   proc kvtDel(
@@ -224,6 +269,11 @@ proc kvtMethods(cKvt: KvtChildDbRef): CoreDbKvtFns =
     let rc = cKvt.kvt.hasKey(k)
     if rc.isErr:
       return err(rc.error.toError(cKvt.base.parent, info))
+    const noisy = false
+    if noisy: echo "*** kdb/hasKeyFn",
+      " result=", rc.value,
+      " nForked=", cKvt.base.kdb.nForked,
+      "" # , "\n    db\n    ", cKvt.base.kdb.pp(backendOk=true)
     ok(rc.value)
 
   CoreDbKvtFns(
@@ -299,6 +349,12 @@ proc gc*(base: KvtBaseRef) =
         var q: seq[KvtChildDbRef]
         base.gq.swap q # now `=destroy()` may refill while destructing, below
         for cKvt in q:
+          if noisy: echo "*** kdb/gc (1)",
+            " isKdb=", (cKvt.kvt == base.kdb),
+            " saveMode=", cKvt.saveMode,
+            " nForked=", cKvt.kvt.nForked,
+            " level=", cKvt.kvt.level,
+            " #gq=", q.len
           if 0 < cKvt.kvt.level:
             assert cKvt.kvt == base.kdb and cKvt.saveMode == AutoSave
             later = cKvt # do it later when no transaction pending
@@ -310,6 +366,7 @@ proc gc*(base: KvtBaseRef) =
       # Re-add pending transaction item
       if not later.isNil:
         base.gq.add later
+      if noisy: echo "*** kdb/gc (2)", " #gq=", base.gq.len
 
 # ---------------------
 

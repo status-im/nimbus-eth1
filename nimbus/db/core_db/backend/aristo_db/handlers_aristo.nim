@@ -20,6 +20,12 @@ import
   ../../base/base_desc,
   ./common_desc
 
+import
+  ../../../aristo/[aristo_check, aristo_debug, aristo_hashify]
+
+var
+  noisy* = false
+
 type
   AristoBaseRef* = ref object
     parent: CoreDbRef            ## Opaque top level descriptor
@@ -203,6 +209,15 @@ proc `=destroy`(cMpt: var AristoChildDbObj) =
 
       # End body
 
+    const noisy = false
+    if noisy: echo "*** adb/=destroy",
+      " isAdb=", (mpt == base.adb),
+      " saveMode=", cMpt.saveMode,
+      " nForked=", mpt.nForked,
+      " level=", mpt.level,
+      " #gq=", base.gq.len,
+      "" # , "\n    db\n    ", mdb.pp(backendOk=true)
+
 # ------------------------------------------------------------------------------
 # Private `MPT` or account call back functions
 # ------------------------------------------------------------------------------
@@ -224,6 +239,19 @@ proc persistent(
     mpt = cMpt.mpt
     db = base.parent
     rc = mpt.stow(persistent = true)
+
+  let noisy = false # cMpt.saveMode notin {AutoSave,Shared}
+  if noisy:
+    let dmp {.used.} = (if 0 < mpt.nForked or 0 < mpt.level: ""
+                        else: "\n    db\n    " & mpt.pp(backendOk=true))
+    echo "*** adb/persistent",
+      " saveMode=", cMpt.saveMode,
+      " txError=", cMpt.txError,
+      " #gq=", base.gq.len,
+      " nForked=", mpt.nForked,
+      " level=", mpt.level,
+      " rc=", (if rc.isOk: "ok" else: $rc.error),
+      "" # , dmp
 
   # note that `gc()` may call `persistent()` so there is no `base.gc()` here
   if rc.isOk:
@@ -250,6 +278,16 @@ proc forget(
       rc = cMpt.mpt.forget()
     if rc.isErr:
       result = err(rc.error.toError(db, info))
+
+    if noisy:
+      let dmp {.used.} = (if 0 < mpt.nForked or 0 < mpt.level: ""
+                          else: "\n    db\n    " & mpt.pp(backendOk=true))
+      echo "*** adb/forget",
+        " saveMode=", cMpt.saveMode,
+        " #gq=", cMpt.base.gq.len,
+        " nForked=", mpt.nForked,
+        " level=", mpt.level,
+        "" # ' dmp
 
 # ------------------------------------------------------------------------------
 # Private `MPT` call back functions
@@ -553,6 +591,12 @@ proc gc*(base: AristoBaseRef) =
         var q: seq[AristoChildDbRef]
         base.gq.swap q # now `=destroy()` may refill while destructing, below
         for cMpt in q:
+          if noisy: echo "*** adb/gc (1)",
+            " isAdb=", (cMpt.mpt == base.adb),
+            " saveMode=", cMpt.saveMode,
+            " nForked=", cMpt.mpt.nForked,
+            " level=", cMpt.mpt.level,
+            " #gq=", q.len
           if 0 < cMpt.mpt.level:
             assert cMpt.mpt == base.adb and cMpt.saveMode == AutoSave
             later = cMpt # do it later when there is no transaction pending
@@ -564,6 +608,7 @@ proc gc*(base: AristoBaseRef) =
       # Re-add pending transaction item
       if not later.isNil:
         base.gq.add later
+      if noisy: echo "*** adb/gc (2)", " #gq=", base.gq.len
 
 # ---------------------
 
@@ -600,16 +645,49 @@ proc getHash*(
     db = base.parent
     aVid = vid.to(VertexID)
 
+  #const noisy = false
+  if noisy:
+    let mpt = vid.AristoCoreDbVid.ctx
+    echo "*** adb/getHash (1)",
+      " aVid=", aVid.pp(),
+      " update=", update,
+      " level=", mpt.level,
+      " checkBE=", mpt.checkBE()
+
   if not aVid.isValid:
+    if noisy: echo "*** adb/getHash (2) ok"
     return ok(EMPTY_ROOT_HASH)
 
   let mpt = vid.AristoCoreDbVid.ctx
   if update:
-    ? mpt.hashify.toVoidRc(db, info, HashNotAvailable)
+    var preState = ""
+    if noisy:
+      preState = mpt.pp(backendOk=false)
+
+    let rc = mpt.hashify(noisy=noisy)
+
+    if rc.isErr:
+      if noisy: echo "*** adb/getHash (3)",
+        " rc=", rc,
+        " #gq=", base.gq.len,
+        " nForked=", mpt.nForked,
+        " level=", mpt.level,
+        " check=",  mpt.checkBE(),
+        "\n    preState\n    ", preState,
+        "\n    db\n    " & mpt.pp(backendOk=false),
+        "\n"
+      return err(rc.error.toError(db, info, HashNotAvailable))
+    # ? mpt.hashify.toVoidRc(db, info, HashNotAvailable)
 
   let key = block:
     let rc = mpt.getKeyRc aVid
     if rc.isErr:
+      if noisy:
+        let mpt = vid.AristoCoreDbVid.ctx
+        echo "*** adb/getHash (8)",
+          " aVid=", aVid.pp(),
+          " error=", rc.error,
+           "\n    state\n    ", mpt.pp()
       doAssert rc.error in {GetKeyNotFound,GetKeyUpdateNeeded}
       return err(rc.error.toError(db, info, HashNotAvailable))
     rc.value
@@ -628,19 +706,42 @@ proc getVid*(
     adb = base.adb
   base.gc() # update pending changes
 
+  const noisy = false
+  if noisy: echo "*** adb/getVid (1)",
+    " root=", root.pp,
+    " isEmpty=", root == EMPTY_ROOT_HASH,
+    " createOk=", createOk
+
   if root == EMPTY_ROOT_HASH:
     return ok(db.bless AristoCoreDbVid(createOk: createOk))
 
-  ? adb.hashify.toVoidRc(db, info, HashNotAvailable)
+  block:
+    if noisy: echo "*** adb/getVid (2)"
+    let rc = adb.hashify()
+    if rc.isErr:
+      if noisy: echo "*** adb/getVid (2.1)", " error=", rc.error
+      return err(rc.error.toError(db, info, HashNotAvailable))
+    # ? adb.hashify.toVoidRc(db, info, HashNotAvailable)
 
   # Check whether hash is available as state root on main trie
   block:
+    if noisy: echo "*** adb/getVid (3)"
     let rc = adb.getKeyRc VertexID(1)
     if rc.isErr:
+      if noisy: echo "*** adb/getVid (3.1)",
+        " error=", rc.error,
+        " #gq=", base.gq.len,
+        " nForked=", adb.nForked,
+        " level=", adb.level,
+        "\n    db\n    " & adb.pp(backendOk=true)
       doAssert rc.error == GetKeyNotFound
     elif rc.value == root.to(HashKey):
+      if noisy: echo "*** adb/getVid (3.2)"
       return ok(db.bless AristoCoreDbVid(aVid: VertexID(1), ctx: adb))
     else:
+      if noisy: echo "*** adb/getVid (3.3)",
+        " root=", root.pp,
+        " value=", rc.value.pp
       discard
 
   # Check whether the `root` is avalilable in backlog
@@ -650,8 +751,10 @@ proc getVid*(
 
   # Check whether the root vertex should be created
   if createOk:
+    if noisy: echo "*** adb/getVid (8)"
     return ok(db.bless AristoCoreDbVid(createOk: true, expHash: root))
 
+  if noisy: echo "*** adb/getVid (9)"
   err(aristo.GenericError.toError(db, info, RootNotFound))
 
 # ------------------------------------------------------------------------------

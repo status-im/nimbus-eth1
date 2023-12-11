@@ -55,11 +55,12 @@
 {.push raises: [].}
 
 import
-  std/[sequtils, sets, tables],
+  std/[algorithm, sequtils, strutils, sets, tables],
   chronicles,
   eth/common,
   results,
   stew/byteutils,
+  ./aristo_debug,
   "."/[aristo_desc, aristo_get, aristo_hike, aristo_layers, aristo_serialise,
        aristo_utils]
 
@@ -103,8 +104,62 @@ func contains(wff: WidthFirstForest; vid: VertexID): bool =
   vid in wff.base or vid in wff.pool or vid in wff.root or vid in wff.completed
 
 # ------------------------------------------------------------------------------
+# Private helper, debugging
+# ------------------------------------------------------------------------------
+
+func pp(w: FollowUpVid): string =
+  if w.isValid: "(" & w.root.pp & "," & w.toVid.pp & ")" else: "n/a"
+
+func pp(w: (VertexID,FollowUpVid)): string =
+  "(" & w[0].pp & "," & w[1].pp & ")"
+
+func pp(t: BackVidTab): string =
+  func pp(b: bool): string =
+    if b: "*" else: ""
+  "{" & t.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID)
+              .mapIt("(" & it.pp & "," & t.getOrVoid(it).pp & ")")
+              .join(",") & "}"
+
+func pp(wff: WidthFirstForest): string =
+  "(base=" & wff.base.pp &
+    ",pool=" & wff.pool.pp &
+    ",root=" & wff.root.pp &
+    ",completed=" & wff.completed.pp &
+    ")"
+
+# ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
+
+# # Note: The following is not needed and all covered by the updated
+# #       width-first forest schedule.
+# #
+# proc collectProofOrphans(
+#     db: AristoDbRef;                   # Database, top layer
+#     wff: WidthFirstForest;             # Width-first schedule to exclude
+#       ): Result[BackVidTab,(VertexID,AristoError)] =
+#   ## Return vertices fromn the `pPrf[]` list which might be needed in
+#   ## oder to resolve all vertices on the top layer cache.
+#   ##
+#   var collect: BackVidTab
+#   for vid in db.top.pPrf:
+#     if vid notin wff:
+#       # Work at cache level. Note that a cache layer vertex can only have
+#       # a valid key on the cache laye. And a backend level vertex always has
+#       # a backend key which may be overlayed by a cache layer key.
+#       var vtx = db.top.sTab.getOrVoid vid
+#       if not vtx.isValid:
+#         vtx = db.getVtxBE(vid).valueOr:
+#           return err((vid,HashifyProofVtxMissing))
+#         if db.getKey(vid).isValid:
+#           continue # nothing to register
+#       elif db.top.kMap.getOrVoid(vid).isValid:
+#         continue # nothing to register
+#
+#       for sub in vtx.subVids:
+#         collect[sub] = FollowUpVid(toVid: vid)
+#   ok collect
+
 
 proc cloudConnect(
     cloud: HashSet[VertexID];          # Vertex IDs to start connecting from
@@ -145,6 +200,7 @@ proc setNextLink(
     wff: var WidthFirstForest;         # Search tree to update
     redo: var BackVidTab;              # Temporary `base` list
     val: FollowUpVid;                  # Current vertex value to follow up
+    noisy: bool;                       # <------ will go away
       ) =
   ## Given the follow up argument `vid`, update the `redo[]` argument (an
   ## optional substitute for the `wff.base[]` list) so that the `redo[]`
@@ -170,6 +226,10 @@ proc setNextLink(
   if val.isValid:
     # Find follow up `from->to` vertex pair in `pool`
     let nextVal = wff.pool.getOrVoid val.toVid
+    if noisy: echo ">>> setNextLink (1)",
+       " next=", (val.toVid,nextVal).pp,
+       "\n    redo=", redo.pp,
+       "\n    wff=", wff.pp
     if nextVal.isValid:
 
       # Make sure that strict hierachial order is kept. If the successor
@@ -177,6 +237,10 @@ proc setNextLink(
       if nextVal.toVid in redo:
         wff.pool[nextVal.toVid] = redo.getOrVoid nextVal.toVid
         redo.del nextVal.toVid
+        if noisy: echo ">>> setNextLink (2)",
+          " next=", (val.toVid,nextVal).pp,
+          "\n    redo=", redo.pp,
+          "\n    wff=", wff.pp
 
       elif val.toVid in redo.values.toSeq.mapIt(it.toVid):
         # The follow up vertex ID is already a follow up ID for some
@@ -187,11 +251,17 @@ proc setNextLink(
       wff.pool.del val.toVid
       redo[val.toVid] = nextVal
 
+      if noisy: echo ">>> setNextLink (3)",
+        " next=", (val.toVid,nextVal).pp,
+        "\n    redo=", redo.pp,
+        "\n    wff=", wff.pp
+
 
 proc updateSchedule(
     wff: var WidthFirstForest;         # Search tree to update
     db: AristoDbRef;                   # Database, top layer
     hike: Hike;                        # Chain of vertices
+    noisy: bool;                       # <------ will go away
       ) =
   ## Use vertices from the `hike` argument and link them leaf-to-root in a way
   ## so so that they can be traversed later in a width-first search.
@@ -218,7 +288,11 @@ proc updateSchedule(
       db.layersPutLabel(vid, HashLabel(root: root, key: node.digestTo(HashKey)))
       # Clean up unnecessay leaf node from previous session
       wff.base.del vid
-      wff.setNextLink(wff.pool, wff.base.getOrVoid vid)
+      wff.setNextLink(wff.pool, wff.base.getOrVoid vid, noisy)
+
+    #if noisy: echo ">>> updateSchedule (1)",
+    #  "\n    wff=", wff.pp,
+    #  ""
 
     # If possible, compute a node from the current vertex with all links
     # resolved on the cache layer. If this is not possible, stop here and
@@ -231,6 +305,10 @@ proc updateSchedule(
         unresolved = error
         break findlegInx
 
+    #if noisy: echo ">>> updateSchedule (2)",
+    #  "\n    wff=", wff.pp,
+    #  ""
+
     # All done this `hike`
     if db.layersGetKeyOrVoid(root).isValid:
       wff.root.excl root
@@ -240,6 +318,12 @@ proc updateSchedule(
   # Unresolved root target to reach via width-first search
   if root notin wff.completed:
     wff.root.incl root
+
+  if noisy: echo ">>> updateSchedule (3)",
+    " legInx=", legInx,
+    " unresolved=", unresolved.pp,
+    "\n    wff=", wff.pp,
+    ""
 
   # Current situation:
   #
@@ -271,6 +355,10 @@ proc updateSchedule(
     wff.pool.del vid
     wff.base.del vid
 
+  #if noisy: echo ">>> updateSchedule (5)",
+  #  "\n    wff=", wff.pp,
+  #  ""
+
   assert 0 < unresolved.len # debugging, only
   let vid = hike.legs[legInx].wp.vid
   for sub in unresolved:
@@ -287,6 +375,8 @@ proc updateSchedule(
 
 proc hashify*(
     db: AristoDbRef;                   # Database, top layer
+    noisy = false;                     # <------ will go away
+    sorted = false;                    # <------ will go away
       ): Result[HashSet[VertexID],(VertexID,AristoError)] =
   ## Add keys to the  `Patricia Trie` so that it becomes a `Merkle Patricia
   ## Tree`. If successful, the function returns the keys (aka Merkle hash) of
@@ -298,7 +388,18 @@ proc hashify*(
   if not db.dirty:
     return ok wff.completed
 
-  for (lky,lfVid) in db.lTab.pairs:
+  # ------------ debugging, will go away --------------
+  let sorter =
+    if sorted:
+      proc(kvp: openArray[(LeafTie,VertexID)]): seq[(LeafTie,VertexID)] =
+        let t = kvp.toTable
+        kvp.toSeq.mapIt(it[0]).sorted.mapIt((it,t.getOrVoid it))
+    else:
+      proc(kvp: openArray[(LeafTie,VertexID)]): seq[(LeafTie,VertexID)] =
+        kvp.toSeq
+  # ------------ debugging, will go away --------------
+
+  for (lky,lfVid) in db.lTab.pairs.toSeq.sorter:
     let
       rc = lky.hikeUp db
       hike = rc.to(Hike)
@@ -315,11 +416,51 @@ proc hashify*(
         #        to the `wff` schedule?
         continue
       if rc.isErr:
+        if noisy: echo ">>> hashify (1) error",
+          " lfVid=", lfVid.pp,
+          " lky=", lky.pp(db),
+          "\n    hike\n    ", hike.pp(db)
         return err((lfVid,rc.error[1]))
       return err((hike.root,HashifyEmptyHike))
 
+    if noisy: echo ">>> hashify (2)",
+      "\n    wff=", wff.pp(),
+      "\n    hike\n    ", hike.pp(db),
+      #"\n    top\n    ", db.pp(filterOk=false),
+      ""
     # Compile width-first forest search schedule
-    wff.updateSchedule(db, hike)
+    wff.updateSchedule(db, hike, noisy)
+
+  if noisy: echo ">>> hashify (3)",
+    "\n    pPrf=", db.pPrf.pp,
+    "\n    wff=", wff.pp(),
+    "\n    top\n    ", db.pp(filterOk=false),
+    ""
+
+  # # Note: The following is not needed and all covered by the updated
+  # #       width-first forest schedule.
+  # #
+  # # There might be vertices on the `pPrf[]` list which might be needed in
+  # # order to resolve all vertices on the top layer cache. Put unresolved
+  # # child links on the `wff` schedule.
+  # #
+  # let orphans: HashSet[VertexID]         # Stand-alone `proof` nodes (if any)
+  # if 0 < db.top.pPrf.len:
+  #   for (vid,val) in (? db.collectProofOrphans wff).pairs:
+  #     let key = db.top.kMap.getOrVoid vid
+  #     if not key.isValid:
+  #       return err((vid,HashifyProofNodeIncomplete))
+  #     let
+  #       toVid = val.toVid
+  #       toVal = wff.base.getOrVoid toVid
+  #     if toVal.isValid:
+  #       # Make sure that `base[]` and `pool[]` are disjunkt, possibly moving
+  #       # `base[]` entries to the `pool[]`.
+  #       wff.pool[toVid] = toVal
+  #       wff.base.del toVid
+  #     elif db.getVtxRc(toVid).isErr:
+  #       return err((toVid,HashifyVtxMissing))
+  #     wff.base[vid] = val
 
   if deleted:
     # Update unresolved keys left over after delete operations when overlay
@@ -336,9 +477,16 @@ proc hashify*(
         let rc = db.layersGetVtx vid
         if rc.isErr or rc.value.isValid:
           unresolved.incl vid
+    if noisy: echo ">>> hashify (4)",
+      "\n    unresolved=", unresolved.pp,
+      "\n    wff=", wff.pp
 
     let glue = unresolved.cloudConnect(db, wff.base)
     if 0 < glue.unresolved.len:
+      if noisy: echo ">>> hashify (4.1)",
+        "\n    gluePaths=", glue.paths.pp,
+        "\n    glueUnresolved=", glue.unresolved.pp,
+        "\n    unresolved=", unresolved.pp
       return err((glue.unresolved.toSeq[0],HashifyNodeUnresolved))
     # Add glue items to `wff.base[]` and `wff.pool[]` tables
     for (vid,val) in glue.paths.base.pairs:
@@ -354,10 +502,25 @@ proc hashify*(
         wff.pool[toVid] = w
         toVid = w.toVid
 
+    if noisy: echo ">>> hashify (4.2)",
+      "\n    gluePaths=", glue.paths.pp,
+      "\n    glueUnresolved=", glue.unresolved.pp,
+      "\n    unresolved=", unresolved.pp,
+      ""
+
   # Traverse width-first schedule and update remaining hashes.
+  var n = -1 # for logging
   while 0 < wff.base.len:
+    n.inc
+    if noisy: echo "\n>>> hashify (5) lap#", n,
+      "\n    wff=", wff.pp,
+      "\n    kMap=", db.layersWalkLebal.toSeq.toTable.pp(db,8),
+      ""
+
     var redo: BackVidTab
     for (vid,val) in wff.base.pairs:
+      if noisy: echo ">>> hashify (5.1)",
+        " (vid,val)=", (vid,val).pp
 
       let vtx = db.getVtx vid
       if not vtx.isValid:
@@ -372,6 +535,11 @@ proc hashify*(
         # Try to convert the vertex to a node. This is possible only if all
         # link references have Merkle hash keys, already.
         let node = vtx.toNode(db, stopEarly=false).valueOr:
+          if noisy: echo ">>> hashify (5.2)",
+            " (vid,val)=", (vid,val).pp,
+            " missing=", error.pp,
+            "\n    redo=", redo.pp,
+            "\n    wff=", wff.pp
           # Cannot complete this vertex unless its child node keys are compiled.
           # So do this vertex later, i.e. add the vertex to the `pool[]`.
           wff.pool[vid] = val
@@ -387,23 +555,50 @@ proc hashify*(
         # Could resolve => update Merkle hash
         let key = node.digestTo(HashKey)
         db.layersPutLabel(vid, HashLabel(root: val.root, key: key))
+        if noisy: echo ">>> hashify (5.3)",
+          " (vid,val)=", (vid,val).pp
 
         # Set follow up link for next round
-        wff.setNextLink(redo, val)
+        wff.setNextLink(redo, val, noisy)
+
+      if noisy: echo ">>> hashify (5.4)",
+        " (vid,val)=", (vid,val).pp,
+        "\n    redo=", redo.pp,
+        "\n    wff=", wff.pp,
+        # "\n    top\n    ", db.pp(filterOk=false),
+        ""
+
+    if noisy: echo ">>> hashify (5.5)",
+      "\n    redo=", redo.pp,
+      "\n    wff=", wff.pp,
+      # "\n    top\n    ", db.pp(filterOk=false),
+      ""
 
     # Restart `wff.base[]`
     wff.base.swap redo
 
   # Update root nodes
   for vid in wff.root - db.pPrf:
+    if noisy: echo ">>> hashify (6)",
+      " root=", vid.pp
     # Convert root vertex to a node.
     let node = db.getVtx(vid).toNode(db,stopEarly=false).valueOr:
+      if noisy: echo ">>> hashify (6.1) fail",
+        " vid=", vid.pp,
+        " roots-left=", (wff.root - db.pPrf).pp,
+        " missing=", error.pp
       return err((vid,HashifyRootNodeUnresolved))
     db.layersPutLabel(vid, HashLabel(root: vid, key: node.digestTo(HashKey)))
     wff.completed.incl vid
 
   db.top.final.dirty = false
   db.top.final.lTab.clear
+
+  if noisy: echo ">>> hashify (9) done",
+    "\n    wff=", wff.pp,
+    "\n    top\n    ", db.pp(backendOk=false),
+    "\n"
+
   ok wff.completed
 
 # ------------------------------------------------------------------------------
