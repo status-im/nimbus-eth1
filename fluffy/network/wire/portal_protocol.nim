@@ -440,7 +440,7 @@ proc handleOffer(p: PortalProtocol, o: OfferMessage, srcId: NodeId): seq[byte] =
     AcceptMessage(connectionId: connectionId, contentKeys: contentKeysBitList))
 
 proc messageHandler(protocol: TalkProtocol, request: seq[byte],
-    srcId: NodeId, srcUdpAddress: Address, node: Opt[Node]): seq[byte] =
+    srcId: NodeId, srcUdpAddress: Address, nodeOpt: Opt[Node]): seq[byte] =
   doAssert(protocol of PortalProtocol)
 
   logScope:
@@ -462,12 +462,18 @@ proc messageHandler(protocol: TalkProtocol, request: seq[byte],
     # exists on the base layer, and it will also depend on the distance,
     # order of lookups, etc.
     # Note: As third measure, could run a findNodes request with distance 0.
-    if node.isSome():
-      discard p.addNode(node.get())
+    if nodeOpt.isSome():
+      let node = nodeOpt.value()
+      let status = p.addNode(node)
+      trace "Adding new node to routing table after incoming request",
+        status, node
     else:
-      let node = p.baseProtocol.getNode(srcId)
-      if node.isSome():
-        discard p.addNode(node.get())
+      let nodeOpt = p.baseProtocol.getNode(srcId)
+      if nodeOpt.isSome():
+        let node = nodeOpt.value()
+        let status = p.addNode(node)
+        trace "Adding new node to routing table after incoming request",
+          status, node
 
     portal_message_requests_incoming.inc(
       labelValues = [$p.protocolId, $message.kind])
