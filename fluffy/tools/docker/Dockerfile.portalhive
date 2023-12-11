@@ -23,6 +23,5 @@ RUN  --mount=type=cache,target=/nimbus-eth1/build --mount=type=cache,target=/nim
   make -j${NPROC} NIMFLAGS="${NIMFLAGS_COMMON} --parallelBuild:${NPROC}" fluffy && \
   mv build/fluffy /usr/local/bin/fluffy
 
-# FROM debian:stable-slim as app
-
-# COPY --from=build /usr/local/bin/fluffy /usr/local/bin/fluffy
+FROM debian:stable-slim as app
+COPY --from=build /usr/local/bin/fluffy /usr/local/bin/fluffy
