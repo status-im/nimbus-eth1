@@ -145,7 +145,7 @@ proc forkTx*(
     txUid: 1,
     level: 1)
 
-  if db.top.dirty and not dontHashify:
+  if not dontHashify:
     let rc = txClone.hashify()
     if rc.isErr:
       discard txClone.forget()
@@ -170,7 +170,7 @@ proc forkTop*(
     dbClone.roFilter = db.roFilter # no need to copy contents when updated
     dbClone.backend = db.backend
 
-    if db.top.dirty and not dontHashify:
+    if not dontHashify:
       let rc = dbClone.hashify()
       if rc.isErr:
         discard dbClone.forget()
@@ -246,20 +246,13 @@ proc rollback*(
 
 proc commit*(
     tx: AristoTxRef;                  # Top transaction on database
-    dontHashify = false;              # Process/fix MPT hashes
       ): Result[void,AristoError] =
   ## Given a *top level* handle, this function accepts all database operations
   ## performed through this handle and merges it to the previous layer. The
   ## previous transaction is returned if there was any.
   ##
-  ## Unless the argument `dontHashify` is set `true`, the function will process
-  ## Merkle Patricia Treee hashes unless there was no change to this layer.
-  ## This may produce additional errors (see `hashify()`.)
-  ##
   let db = ? tx.getDbDescFromTopTx()
-
-  if db.top.dirty and not dontHashify:
-    discard ? db.hashify().mapErr fromVae
+  discard ? db.hashify().mapErr fromVae
 
   # Keep top and discard layer below
   db.top.txUid = db.stack[^1].txUid
@@ -272,7 +265,6 @@ proc commit*(
 proc collapse*(
     tx: AristoTxRef;                  # Top transaction on database
     commit: bool;                     # Commit if `true`, otherwise roll back
-    dontHashify = false;              # Process/fix MPT hashes
       ): Result[void,AristoError] =
   ## Iterated application of `commit()` or `rollback()` performing the
   ## something similar to
@@ -282,24 +274,11 @@ proc collapse*(
   ##     if db.topTx.isErr: break
   ##     tx = db.topTx.value
   ##
-  ## The `dontHashify` flag is treated as described for `commit()`
-  ##
   let db = ? tx.getDbDescFromTopTx()
 
   if commit:
     # For commit, hashify the current layer if requested and install it
-    if db.top.dirty and not dontHashify:
-      discard ? db.hashify().mapErr fromVae
-  else:
-    # For rollback hashify the stack bottom layer if requested and install it
-    if db.top.dirty and not dontHashify:
-      db.stack[0].swap db.top
-
-      var restore = true
-      defer:
-        if restore: db.stack[0].swap db.top
-      discard ? db.hashify().mapErr fromVae
-      restore = false
+    discard ? db.hashify().mapErr fromVae
 
   db.top.txUid = 0
   db.stack.setLen(0)
@@ -313,14 +292,11 @@ proc collapse*(
 proc stow*(
     db: AristoDbRef;                  # Database
     persistent = false;               # Stage only unless `true`
-    dontHashify = false;              # Process/fix MPT hashes
     chunkedMpt = false;               # Partial data (e.g. from `snap`)
       ): Result[void,AristoError] =
   ## If there is no backend while the `persistent` argument is set `true`,
   ## the function returns immediately with an error. The same happens if there
   ## is a pending transaction.
-  ##
-  ## The `dontHashify` is treated as described for `commit()`.
   ##
   ## The function then merges the data from the top layer cache into the
   ## backend stage area. After that, the top layer cache is cleared.
@@ -340,8 +316,7 @@ proc stow*(
   if persistent and not db.canResolveBackendFilter():
     return err(TxBackendNotWritable)
 
-  if db.top.dirty and not dontHashify:
-    discard ? db.hashify().mapErr fromVae
+  discard ? db.hashify().mapErr fromVae
 
   let fwd = ? db.fwdFilter(db.top, chunkedMpt).mapErr fromVae
 
@@ -363,14 +338,12 @@ proc stow*(
 proc stow*(
     db: AristoDbRef;                  # Database
     stageLimit: int;                  # Policy based persistent storage
-    dontHashify = false;              # Process/fix MPT hashes
     chunkedMpt = false;               # Partial data (e.g. from `snap`)
       ): Result[void,AristoError] =
   ## Variant of `stow()` with the `persistent` argument replaced by
   ## `stageLimit < max(db.roFilter.bulk, db.top.bulk)`.
   db.stow(
     persistent = (stageLimit < max(db.roFilter.bulk, db.top.bulk)),
-    dontHashify = dontHashify,
     chunkedMpt = chunkedMpt)
 
 # ------------------------------------------------------------------------------
