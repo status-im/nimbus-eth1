@@ -52,30 +52,31 @@ proc branchStillNeeded(vtx: VertexRef): Result[int,void] =
   # Oops, degenerated branch node
   err()
 
-proc clearKey(
+# -----------
+
+proc nullifyKey(
     db: AristoDbRef;                   # Database, top layer
     vid: VertexID;                     # Vertex IDs to clear
       ) =
+  # Register for void hash (to be recompiled)
   let lbl = db.top.kMap.getOrVoid vid
-  if lbl.isValid:
-    db.top.kMap.del vid
-    db.top.pAmk.del lbl
-  elif db.getKeyBE(vid).isOK:
-    # Register for deleting on backend
-    db.top.kMap[vid] = VOID_HASH_LABEL
-    db.top.pAmk.del lbl
+  db.top.pAmk.del lbl
+  db.top.kMap[vid] = VOID_HASH_LABEL
+  db.top.dirty = true # Modified top level cache
 
-proc doneWith(
+proc disposeOfVtx(
     db: AristoDbRef;                   # Database, top layer
     vid: VertexID;                     # Vertex IDs to clear
       ) =
   # Remove entry
   if db.getVtxBE(vid).isOk:
     db.top.sTab[vid] = VertexRef(nil)  # Will be propagated to backend
+    db.nullifyKey vid
   else:
     db.top.sTab.del vid
+    db.top.kMap.del vid
+    db.top.dirty = true                # Modified top level cache
   db.vidDispose vid
-  db.clearKey vid
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -117,7 +118,7 @@ proc collapseBranch(
 
     of Extension:                                        # (2)
       # Merge `br` into ^3 (update `xt`)
-      db.doneWith xt.vid
+      db.disposeOfVtx xt.vid
       xt.vid = par.vid
       xt.vtx.ePfx = par.vtx.ePfx & xt.vtx.ePfx
 
@@ -156,7 +157,7 @@ proc collapseExt(
       vType: Extension,
       ePfx:  @[nibble].initNibbleRange.slice(1) & vtx.ePfx,
       eVid:  vtx.eVid))
-  db.doneWith br.vtx.bVid[nibble]                        # `vtx` is obsolete now
+  db.disposeOfVtx br.vtx.bVid[nibble]                    # `vtx` is obsolete now
 
   if 2 < hike.legs.len:                                  # (1) or (2)
     let par = hike.legs[^3].wp
@@ -167,7 +168,7 @@ proc collapseExt(
 
     of Extension:                                        # (2)
       # Replace ^3 by `^3 & ^2 & vtx` (update `xt`)
-      db.doneWith xt.vid
+      db.disposeOfVtx xt.vid
       xt.vid = par.vid
       xt.vtx.ePfx = par.vtx.ePfx & xt.vtx.ePfx
 
@@ -209,10 +210,10 @@ proc collapseLeaf(
       vType: Leaf,
       lPfx:  @[nibble].initNibbleRange.slice(1) & vtx.lPfx,
       lData: vtx.lData))
-  db.doneWith br.vid                                     # `br` is obsolete now
-  db.clearKey lf.vid                                     # `vtx` was modified
+  db.nullifyKey lf.vid                                   # `vtx` was modified
 
   if 2 < hike.legs.len:                                  # (1), (2), or (3)
+    db.disposeOfVtx br.vid                               # `br` is obsolete now
     # Merge `br` into the leaf `vtx` and unlink `br`.
     let par = hike.legs[^3].wp.dup                       # Writable vertex
     case par.vtx.vType:
@@ -240,7 +241,7 @@ proc collapseLeaf(
         let gpr = hike.legs[^4].wp.dup                   # Writable vertex
         if gpr.vtx.vType != Branch:
           return err((gpr.vid,DelBranchExpexted))
-        db.doneWith par.vid                              # `par` is obsolete now
+        db.disposeOfVtx par.vid                          # `par` is obsolete now
         gpr.vtx.bVid[hike.legs[^4].nibble] = lf.vid
         db.top.sTab[gpr.vid] = gpr.vtx
         db.top.sTab[lf.vid] = lf.vtx
@@ -261,7 +262,8 @@ proc collapseLeaf(
       return err((par.vid,DelLeafUnexpected))
 
   else:                                                  # (4)
-    # Replace ^2 by `^2 & vtx` (use `lf` as-is)
+    # Replace ^2 by `^2 & vtx` (use `lf` as-is)          # `br` is root vertex
+    db.nullifyKey br.vid                                 # root was changed
     db.top.sTab[br.vid] = lf.vtx
     # Continue below
 
@@ -277,7 +279,7 @@ proc collapseLeaf(
     db.top.lTab[lfTie] = lf.vid
 
   # Clean up stale leaf vertex which has moved to root position
-  db.doneWith lf.vid
+  db.disposeOfVtx lf.vid
 
   # If some `Leaf` vertex was installed as root, there must be a an extra
   # `LeafTie` lookup entry.
@@ -299,6 +301,7 @@ proc deleteImpl(
     lty: LeafTie;                      # `Patricia Trie` path root-to-leaf
       ): Result[void,(VertexID,AristoError)] =
   ## Implementation of *delete* functionality.
+
   # Remove leaf entry on the top
   let lf =  hike.legs[^1].wp
   if lf.vtx.vType != Leaf:
@@ -316,13 +319,9 @@ proc deleteImpl(
     else:
       rc.value
 
-  # Will modify top level cache
-  db.top.dirty = true
-
-  db.doneWith lf.vid
+  db.disposeOfVtx lf.vid
 
   if 1 < hike.legs.len:
-
     # Get current `Branch` vertex `br`
     let br = block:
       var wp = hike.legs[^2].wp
@@ -340,7 +339,7 @@ proc deleteImpl(
       let vid = hike.legs[n].wp.vid
       if vid in db.top.pPrf:
         return err((vid, DelBranchLocked))
-      db.clearKey vid
+      db.nullifyKey vid
 
     let nibble = block:
       let rc = br.vtx.branchStillNeeded()
