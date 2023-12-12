@@ -129,11 +129,11 @@ proc ppBe[T](be: T; db: KvtDbRef; indent: int): string =
 
 proc ppLayer(layer: LayerRef; db: KvtDbRef; indent = 4): string =
   let
-    tLen = layer.dTab.len
+    tLen = layer.delta.sTab.len
     info = "tab(" & $tLen & ")"
     pfx1 = indent.toPfx(1)
     pfx2 = if 0 < tLen: indent.toPfx(2) else: " "
-  "<layer>" & pfx1 & info & pfx2 & layer.dTab.ppTab(db,indent+2)
+  "<layer>" & pfx1 & info & pfx2 & layer.delta.sTab.ppTab(db,indent+2)
 
 # ------------------------------------------------------------------------------
 # Public functions

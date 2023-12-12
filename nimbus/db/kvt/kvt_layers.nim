@@ -11,9 +11,54 @@
 {.push raises: [].}
 
 import
-  std/tables,
+  std/[algorithm, sequtils, sets, tables],
   eth/common,
+  results,
   ./kvt_desc
+
+# ------------------------------------------------------------------------------
+# Public getters/helpers
+# ------------------------------------------------------------------------------
+
+func nLayersKeys*(db: KvtDbRef): int =
+  ## Number of vertex entries on the cache layers
+  db.stack.mapIt(it.delta.sTab.len).foldl(a + b, db.top.delta.sTab.len)
+
+# ------------------------------------------------------------------------------
+# Public functions: get function
+# ------------------------------------------------------------------------------
+
+proc layersHasKey*(db: KvtDbRef; key: openArray[byte]): bool =
+  ## Return `true` id the argument key is cached.
+  ##
+  if db.top.delta.sTab.hasKey @key:
+    return true
+
+  for w in db.stack.reversed:
+    if w.delta.sTab.hasKey @key:
+      return true
+
+
+proc layersGet*(db: KvtDbRef; key: openArray[byte]): Result[Blob,void] =
+  ## Find an item on the cache layers. An `ok()` result might contain an
+  ## empty value if it is stored on the cache  that way.
+  ##
+  if db.top.delta.sTab.hasKey @key:
+    return ok(db.top.delta.sTab.getOrVoid @key)
+
+  for w in db.stack.reversed:
+    if w.delta.sTab.hasKey @key:
+      return ok(w.delta.sTab.getOrVoid @key)
+
+  err()
+
+# ------------------------------------------------------------------------------
+# Public functions: put function
+# ------------------------------------------------------------------------------
+
+proc layersPut*(db: KvtDbRef; key: openArray[byte]; data: openArray[byte]) =
+  ## Store a (potentally empty) value on the top layer
+  db.top.delta.sTab[@key] = @data
 
 # ------------------------------------------------------------------------------
 # Public functions
