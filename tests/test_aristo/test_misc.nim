@@ -479,19 +479,21 @@ proc testShortKeys*(
       "da028094c94f5374fce5edbc8e2a8697c15331677e6ebf0b822710".x,
       "a95b9a7b58a6b3cb4001eb0be67951c5517141cb0183a255b5cae027a7b10b36".k)]]
 
+  let gossip = false # or noisy
+
   for n,sample in samples:
     let sig = merkleSignBegin()
     var inx = -1
     for (k,v,r) in sample:
       inx.inc
       sig.merkleSignAdd(k,v)
-      false.say "*** testShortkeys (1)", "n=", n, " inx=", inx,
+      gossip.say "*** testShortkeys (1)", "n=", n, " inx=", inx,
         "\n    k=", k.toHex, " v=", v.toHex,
         "\n    r=", r.pp(sig),
         "\n    ", sig.pp(),
         "\n"
       let w = sig.merkleSignCommit().value
-      false.say "*** testShortkeys (2)", "n=", n, " inx=", inx,
+      gossip.say "*** testShortkeys (2)", "n=", n, " inx=", inx,
         "\n    k=", k.toHex, " v=", v.toHex,
         "\n    r=", r.pp(sig),
         "\n    R=", w.pp(sig),

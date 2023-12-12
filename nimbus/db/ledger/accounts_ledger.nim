@@ -131,7 +131,7 @@ proc init*(x: typedesc[AccountsLedgerRef], db: CoreDbRef,
            root: KeccakHash, pruneTrie = true): AccountsLedgerRef =
   new result
   result.ledger = AccountLedger.init(db, root, pruneTrie)
-  result.kvt = db.newKvt()
+  result.kvt = db.newKvt(Shared) # save manually in `persist()`
   result.witnessCache = initTable[EthAddress, WitnessData]()
   discard result.beginSavepoint
 
@@ -315,6 +315,7 @@ proc persistStorage(acc: RefAccount, ac: AccountsLedgerRef, clearCache: bool) =
   if not clearCache and acc.originalStorage.isNil:
     acc.originalStorage = newTable[UInt256, UInt256]()
 
+  ac.ledger.db.compensateLegacySetup()
   var storageLedger = StorageLedger.init(ac.ledger, acc.account)
 
   for slot, value in acc.overlayStorage:
@@ -599,6 +600,10 @@ proc persist*(ac: AccountsLedgerRef,
       ac.savePoint.cache.del x
 
   ac.savePoint.selfDestruct.clear()
+
+  # Save kvt and ledger
+  ac.kvt.persistent()
+  ac.ledger.persistent()
 
   # EIP2929
   ac.savePoint.accessList.clear()

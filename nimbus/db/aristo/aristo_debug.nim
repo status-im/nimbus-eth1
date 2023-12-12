@@ -719,9 +719,9 @@ proc pp*(
   result = db.roFilter.ppFilter(db, root, indent+1) & indent.toPfx
   case be.kind:
   of BackendMemory:
-    result &= be.MemBackendRef.ppBe(db, root, indent)
+    result &= be.MemBackendRef.ppBe(db, root, indent+1)
   of BackendRocksDB:
-    result &= be.RdbBackendRef.ppBe(db, root, indent)
+    result &= be.RdbBackendRef.ppBe(db, root, indent+1)
   of BackendVoid:
     result &= "<NoBackend>"
 
