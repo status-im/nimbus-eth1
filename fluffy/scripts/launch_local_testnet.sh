@@ -34,7 +34,7 @@ if [ ${PIPESTATUS[0]} != 4 ]; then
 fi
 
 OPTS="h:n:d"
-LONGOPTS="help,nodes:,data-dir:,run-tests,log-level:,base-port:,base-rpc-port:,trusted-block-root:,beacon-chain-bridge,base-metrics-port:,reuse-existing-data-dir,timeout:,kill-old-processes"
+LONGOPTS="help,nodes:,data-dir:,run-tests,log-level:,base-port:,base-rpc-port:,trusted-block-root:,portal-bridge,base-metrics-port:,reuse-existing-data-dir,timeout:,kill-old-processes"
 
 # default values
 NUM_NODES="64"
@@ -48,9 +48,10 @@ REUSE_EXISTING_DATA_DIR="0"
 TIMEOUT_DURATION="0"
 KILL_OLD_PROCESSES="0"
 SCRIPTS_DIR="fluffy/scripts/"
-BEACON_CHAIN_BRIDGE="0"
+PORTAL_BRIDGE="0"
 TRUSTED_BLOCK_ROOT=""
-REST_URL="http://127.0.0.1:5052"
+# REST_URL="http://127.0.0.1:5052"
+REST_URL="http://testing.mainnet.beacon-api.nimbus.team"
 
 print_help() {
   cat <<EOF
@@ -64,7 +65,7 @@ E.g.: $(basename "$0") --nodes ${NUM_NODES} --data-dir "${DATA_DIR}" # defaults
   --base-port                 bootstrap node's discv5 port (default: ${BASE_PORT})
   --base-rpc-port             bootstrap node's RPC port (default: ${BASE_RPC_PORT})
   --base-metrics-port         bootstrap node's metrics server port (default: ${BASE_METRICS_PORT})
-  --beacon-chain-bridge       run a beacon chain bridge attached to the bootstrap node
+  --portal-bridge             run a portal bridge attached to the bootstrap node
   --trusted-block-root        recent trusted finalized block root to initialize the consensus light client from
   --run-tests                 when enabled run tests else use "htop" to see the fluffy processes without doing any tests
   --log-level                 set the log level (default: ${LOG_LEVEL})
@@ -116,8 +117,8 @@ while true; do
       TRUSTED_BLOCK_ROOT="$2"
       shift 2
       ;;
-    --beacon-chain-bridge)
-      BEACON_CHAIN_BRIDGE="1"
+    --portal-bridge)
+      PORTAL_BRIDGE="1"
       shift
       ;;
     --base-metrics-port)
@@ -196,8 +197,8 @@ fi
 
 # Build the binaries
 BINARIES="fluffy"
-if [[ "${BEACON_CHAIN_BRIDGE}" == "1" ]]; then
-  BINARIES="${BINARIES} beacon_chain_bridge"
+if [[ "${PORTAL_BRIDGE}" == "1" ]]; then
+  BINARIES="${BINARIES} portal_bridge"
 fi
 $MAKE -j ${NPROC} LOG_LEVEL=TRACE ${BINARIES}
 
@@ -242,7 +243,7 @@ if [[ "${TIMEOUT_DURATION}" != "0" ]]; then
 fi
 
 PIDS=""
-NUM_JOBS=$(( NUM_NODES + BEACON_CHAIN_BRIDGE ))
+NUM_JOBS=$(( NUM_NODES + PORTAL_BRIDGE ))
 
 dump_logs() {
   LOG_LINES=20
@@ -326,17 +327,17 @@ for NUM_NODE in $(seq 0 $(( NUM_NODES - 1 ))); do
   fi
 done
 
-if [[ "$BEACON_CHAIN_BRIDGE" == "1" ]]; then
+if [[ "$PORTAL_BRIDGE" == "1" ]]; then
   # Give the nodes time to connect before the bridge (node 0) starts gossip
-  sleep 5
-  echo "Starting beacon chain bridge."
-  ./build/beacon_chain_bridge \
+  sleep 10
+  echo "Starting portal bridge for beacon network."
+  ./build/portal_bridge beacon \
     --rest-url="${REST_URL}" \
     --rpc-address="127.0.0.1" \
     --rpc-port="${BASE_RPC_PORT}" \
     --backfill-amount=128 \
     ${TRUSTED_BLOCK_ROOT_ARG} \
-    > "${DATA_DIR}/log_beacon_chain_bridge.txt" 2>&1 &
+    > "${DATA_DIR}/log_portal_bridge.txt" 2>&1 &
 
   PIDS="${PIDS},$!"
 fi
