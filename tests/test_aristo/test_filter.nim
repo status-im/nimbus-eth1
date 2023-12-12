@@ -102,8 +102,6 @@ proc pp(q: seq[seq[(QueueID,FilterRef)]]; db = AristoDbRef(nil)): string =
 # -------------------------
 
 proc dump(pfx: string; dx: varargs[AristoDbRef]): string =
-  proc dump(db: AristoDbRef): string =
-    db.pp & "\n    " & db.backend.pp(db) & "\n"
   if 0 < dx.len:
     result = "\n   "
   var
@@ -118,7 +116,7 @@ proc dump(pfx: string; dx: varargs[AristoDbRef]): string =
     result &= pfx
     if 1 < dx.len:
       result &= $n1
-    result &= qfx & "\n    " & dx[n].dump
+    result &= qfx & "\n    " & dx[n].pp(backendOk=true) & "\n"
     if n1 < dx.len:
       result &= "   ==========\n   "
 
@@ -562,7 +560,7 @@ proc testDistributedAccess*(
         dx.cleanUp()
 
       when false: # or true:
-        noisy.say "*** testDistributedAccess (1)", "n=", n, dx.dump
+        noisy.say "*** testDistributedAccess (1)", "n=", n # , dx.dump
 
       # Clause (9) from `aristo/README.md` example
       block:
@@ -654,7 +652,7 @@ proc testDistributedAccess*(
         xCheck ok
 
       when false: # or true:
-        noisy.say "*** testDistributedAccess (9)", "n=", n, dy.dump
+        noisy.say "*** testDistributedAccess (9)", "n=", n # , dy.dump
 
   true
 
@@ -735,6 +733,7 @@ proc testFilterBacklog*(
     layout = QidSlotLyo;                   # Backend fifos layout
     reorgPercent = 40;                     # To be deleted and re-filled
     rdbPath = "";                          # Optional Rocks DB storage directory
+    sampleSize = 777;                      # Truncate `list`
        ): bool =
   let
     db = if 0 < rdbPath.len:
@@ -746,11 +745,11 @@ proc testFilterBacklog*(
     be = db.backend
   defer: db.finish(flush=true)
 
-  proc show(serial = -42) =
-    var s = ""
+  proc show(serial = -42, blurb = "") =
+    var s = blurb
     if 0 <= serial:
       s &= " n=" & $serial
-    s &= " len=" & $be.filters.len
+    s &= " nFilters=" & $be.filters.len
     s &= "" &
       " root=" & be.getKeyFn(VertexID(1)).get(otherwise=VOID_HASH_KEY).pp &
       "\n   state=" & be.filters.state.pp &
@@ -761,9 +760,10 @@ proc testFilterBacklog*(
   # -------------------
 
   # Load/store persistent data while producing backlog
-  var n = 0
-  for w in list.payload:
-    n.inc
+  let payloadList = list.payload.toSeq
+  for n,w in payloadList:
+    if sampleSize < n:
+      break
     block:
       let rc = db.merge w
       xCheckRc rc.error == 0
@@ -772,13 +772,16 @@ proc testFilterBacklog*(
       xCheckRc rc.error == 0
     let validateFifoOk = be.validateFifo(serial=n, hashesOk=true)
     xCheck validateFifoOk
+    when false: # or true:
+      if (n mod 111) == 3:
+        show(n, "testFilterBacklog (1)")
 
   # Verify
   block:
     let rc = db.check(relax=false)
     xCheckRc rc.error == (0,0)
 
-  #show(n)
+  #show(min(payloadList.len, sampleSize), "testFilterBacklog (2)")
 
   # -------------------
 
@@ -827,13 +830,7 @@ proc testFilterBacklog*(
       let rc = xb.check(relax=false)
       xCheckRc rc.error == (0,0)
 
-    when false: # or true:
-      echo ">>>",
-        "\n   xb\n    ", xb.pp,
-        "\n   db\n    ", db.pp(backendOk=true),
-        "\n"
-
-    #show(episode)
+    #show(episode, "testFilterBacklog (3)")
 
     # Note that the above process squashes the first `episode` entries into
     # a single one (summing up number gives an arithmetic series.)
