@@ -11,7 +11,7 @@ import
   ../nimbus/core/executor, test_config,
   ../nimbus/transaction,
   ../nimbus/[vm_state, vm_types],
-  ../nimbus/db/accounts_cache,
+  ../nimbus/db/ledger,
   ../nimbus/common/common,
   ../nimbus/utils/[utils, debug],
   ../nimbus/evm/tracer/legacy_tracer,
@@ -97,7 +97,7 @@ proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
   vmState.mutateStateDB:
     setupStateDB(ctx.pre, db)
 
-    # this is an important step when using accounts_cache
+    # this is an important step when using `db/ledger`
     # it will affect the account storage's location
     # during the next call to `getComittedStorage`
     db.persist()

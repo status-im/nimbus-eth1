@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2022-2023 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -13,10 +13,9 @@
 ##
 
 import
-  std/times,
   ../../common/common,
   ../../constants,
-  ../../db/accounts_cache,
+  ../../db/ledger,
   ../../utils/utils,
   ../../vm_state,
   ../../vm_types,
@@ -156,7 +155,7 @@ proc update(dh: TxChainRef; parent: BlockHeader)
   let
     timestamp = dh.getTimestamp(parent)
     db  = dh.com.db
-    acc = AccountsCache.init(db, parent.stateRoot, dh.com.pruneTrie)
+    acc = dh.com.ledgerType.init(db, parent.stateRoot, dh.com.pruneTrie)
     fee = if dh.com.isLondon(parent.blockNumber + 1, timestamp):
             some(dh.com.baseFeeGet(parent).uint64.u256)
           else:

@@ -14,7 +14,7 @@ import
   chronicles,
   eth/trie/trie_defs,
   ../core/[pow, clique, casper],
-  ../db/[core_db, storage_types],
+  ../db/[core_db, ledger, storage_types],
   ../utils/[utils, ec_recover],
   ".."/[constants, errors],
   "."/[chain_config, evmforks, genesis, hardforks]
@@ -93,6 +93,13 @@ type
     pos: CasperRef
       ## Proof Of Stake descriptor
 
+    ldgType: LedgerType
+      ## Optional suggestion for the ledger cache to be used as state DB
+
+const
+  CommonLedgerTypeDefault* = LegacyAccountsCache
+    ## Default ledger type to use, see `ldgType` above
+
 # ------------------------------------------------------------------------------
 # Forward declarations
 # ------------------------------------------------------------------------------
@@ -138,8 +145,9 @@ proc init(com      : CommonRef,
           networkId: NetworkId,
           config   : ChainConfig,
           genesis  : Genesis,
-          avoidStateDb: bool
+          ldgType  : LedgerType,
             ) {.gcsafe, raises: [CatchableError].} =
+
   config.daoCheck()
 
   com.db          = db
@@ -148,6 +156,7 @@ proc init(com      : CommonRef,
   com.forkTransitionTable = config.toForkTransitionTable()
   com.networkId   = networkId
   com.syncProgress= SyncProgress()
+  com.ldgType     = ldgType
 
   # Initalise the PoA state regardless of whether it is needed on the current
   # network. For non-PoA networks this descriptor is ignored.
@@ -173,7 +182,7 @@ proc init(com      : CommonRef,
       time: some(genesis.timestamp)
     ))
     com.genesisHeader = toGenesisHeader(genesis,
-      com.currentFork, com.db, avoidStateDb)
+      com.currentFork, com.db, com.ldgType)
     com.setForkId(com.genesisHeader)
     com.pos.timestamp = genesis.timestamp
   else:
@@ -208,14 +217,15 @@ proc getTdIfNecessary(com: CommonRef, blockHash: Hash256): Option[DifficultyInt]
 # Public constructors
 # ------------------------------------------------------------------------------
 
-proc new*(_: type CommonRef,
-          db: CoreDbRef,
-          pruneTrie: bool = true,
-          networkId: NetworkId = MainNet,
-          params = networkParams(MainNet),
-          avoidStateDb = false
-            ): CommonRef
-            {.gcsafe, raises: [CatchableError].} =
+proc new*(
+    _: type CommonRef;
+    db: CoreDbRef;
+    pruneTrie: bool = true;
+    networkId: NetworkId = MainNet;
+    params = networkParams(MainNet);
+    ldgType = CommonLedgerTypeDefault;
+      ): CommonRef
+      {.gcsafe, raises: [CatchableError].} =
 
   ## If genesis data is present, the forkIds will be initialized
   ## empty data base also initialized with genesis block
@@ -226,16 +236,17 @@ proc new*(_: type CommonRef,
     networkId,
     params.config,
     params.genesis,
-    avoidStateDb)
+    ldgType)
 
-proc new*(_: type CommonRef,
-          db: CoreDbRef,
-          config: ChainConfig,
-          pruneTrie: bool = true,
-          networkId: NetworkId = MainNet,
-          avoidStateDb = false
-            ): CommonRef
-            {.gcsafe, raises: [CatchableError].} =
+proc new*(
+    _: type CommonRef;
+    db: CoreDbRef;
+    config: ChainConfig;
+    pruneTrie: bool = true;
+    networkId: NetworkId = MainNet;
+    ldgType = CommonLedgerTypeDefault;
+      ): CommonRef
+      {.gcsafe, raises: [CatchableError].} =
 
   ## There is no genesis data present
   ## Mainly used for testing without genesis
@@ -246,7 +257,7 @@ proc new*(_: type CommonRef,
     networkId,
     config,
     nil,
-    avoidStateDb)
+    ldgType)
 
 proc clone*(com: CommonRef, db: CoreDbRef): CommonRef =
   ## clone but replace the db
@@ -265,7 +276,8 @@ proc clone*(com: CommonRef, db: CoreDbRef): CommonRef =
     consensusType: com.consensusType,
     pow          : com.pow,
     poa          : com.poa,
-    pos          : com.pos
+    pos          : com.pos,
+    ldgType      : com.ldgType
   )
 
 proc clone*(com: CommonRef): CommonRef =
@@ -494,6 +506,9 @@ func syncHighest*(com: CommonRef): BlockNumber =
 
 func syncReqRelaxV2*(com: CommonRef): bool =
   com.syncReqRelaxV2
+
+func ledgerType*(com: CommonRef): LedgerType =
+  com.ldgType
 
 # ------------------------------------------------------------------------------
 # Setters

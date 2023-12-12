@@ -17,7 +17,7 @@ import
   stew/shims/macros
 
 import
-  ../nimbus/db/[accounts_cache, distinct_tries],
+  ../nimbus/db/[ledger, distinct_tries],
   ../nimbus/evm/types,
   ../nimbus/vm_internals,
   ../nimbus/transaction/[call_common, call_evm],

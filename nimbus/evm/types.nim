@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2023 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -14,7 +14,7 @@ import
   "."/[stack, memory, code_stream],
   ./interpreter/[gas_costs, op_codes],
   ./async/data_sources,
-  ../db/accounts_cache,
+  ../db/ledger,
   ../common/[common, evmforks]
 
 # this import not guarded by `when defined(evmc_enabled)`
@@ -59,7 +59,7 @@ type
 
   BaseVMState* = ref object of RootObj
     com*              : CommonRef
-    stateDB*          : AccountsCache
+    stateDB*          : LedgerRef
     gasPool*          : GasInt
     parent*           : BlockHeader
     blockCtx*         : BlockContext
@@ -84,7 +84,7 @@ type
     output*:                seq[byte]
     returnData*:            seq[byte]
     error*:                 Error
-    savePoint*:             SavePoint
+    savePoint*:             LedgerSpRef
     instr*:                 Op
     opIndex*:               int
     when defined(evmc_enabled):

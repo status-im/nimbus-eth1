@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2023 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -8,8 +8,10 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [].}
+
 import
-  ".."/[db/accounts_cache, constants],
+  ".."/[db/ledger, constants],
   "."/[code_stream, memory, message, stack, state],
   "."/[types],
   ./interpreter/[gas_meter, gas_costs, op_codes],
@@ -21,8 +23,6 @@ import
 
 export
   common
-
-{.push raises: [].}
 
 logScope:
   topics = "vm computation"

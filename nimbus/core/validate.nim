@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2022 Status Research & Development GmbH
+# Copyright (c) 2018-2023 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -8,9 +8,11 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [].}
+
 import
   std/[sequtils, sets, strutils],
-  ../db/accounts_cache,
+  ../db/ledger,
   ".."/[transaction, common/common],
   ".."/[errors],
   ../utils/utils,
@@ -25,8 +27,6 @@ from stew/byteutils
 
 export
   results
-
-{.push raises: [].}
 
 const
   daoForkBlockExtraData* =

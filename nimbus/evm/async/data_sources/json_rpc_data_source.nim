@@ -444,7 +444,7 @@ proc ifNecessaryGetAccountAndSlots*(client: RpcClient, db: CoreDbRef, blockNumbe
         populateDbWithBranch(db, storageMptNodes)
 
         # I believe this is done so that we can iterate over the slots. See
-        # persistStorage in accounts_cache.nim.
+        # persistStorage in `db/ledger`.
         let slotAsKey = createTrieKeyFromSlot(slot)
         let slotHash = keccakHash(slotAsKey)
         let slotEncoded = rlp.encode(slot)

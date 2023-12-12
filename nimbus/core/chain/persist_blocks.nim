@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2023 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -11,6 +11,7 @@
 {.push raises: [].}
 
 import
+  ../../db/ledger,
   ../../vm_state,
   ../../vm_types,
   ../clique/clique_verify,
@@ -107,8 +108,11 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
     when not defined(release):
       if validationResult == ValidationResult.Error and
          body.transactions.calcTxRoot == header.txRoot:
-        dumpDebuggingMetaData(c.com, header, body, vmState)
-        warn "Validation error. Debugging metadata dumped."
+        if c.com.ledgerType == LegacyAccountsCache:
+          dumpDebuggingMetaData(c.com, header, body, vmState)
+          warn "Validation error. Debugging metadata dumped."
+        else:
+          warn "Validation error", blockNumber=header.blockNumber
 
     if validationResult != ValidationResult.OK:
       return validationResult

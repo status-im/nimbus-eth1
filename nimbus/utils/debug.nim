@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022 Status Research & Development GmbH
+# Copyright (c) 2022-2023 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -9,12 +9,12 @@
 # according to those terms.
 
 import
-  std/[options, json],
+  std/[options, json, strutils],
   ../common/common,
   stew/byteutils,
   ../vm_state,
   ../vm_types,
-  ../db/accounts_cache,
+  ../db/ledger,
   ./utils,
   ./state_dump
 
@@ -61,10 +61,23 @@ proc debug*(h: BlockHeader): string =
     result.add "beaconRoot     : " & $h.parentBeaconBlockRoot.get() & "\n"
   result.add "blockHash      : " & $blockHash(h) & "\n"
 
+proc dumpAccount(stateDB: LedgerRef, address: EthAddress): JsonNode =
+  var storage = newJObject()
+  for k, v in stateDB.cachedStorage(address):
+    storage[k.toHex] = %v.toHex
+
+  result = %{
+    "nonce": %toHex(stateDB.getNonce(address)),
+    "balance": %stateDB.getBalance(address).toHex(),
+    "codehash": %($stateDB.getCodeHash(address)),
+    "storageRoot": %($stateDB.getStorageRoot(address)),
+    "storage": storage
+  }
+
 proc dumpAccounts*(vmState: BaseVMState): JsonNode =
   %dumpAccounts(vmState.stateDB)
 
-proc debugAccounts*(stateDB: AccountsCache, addresses: openArray[string]): string =
+proc debugAccounts*(stateDB: LedgerRef, addresses: openArray[string]): string =
   var accountList = newSeq[EthAddress]()
   for address in addresses:
     accountList.add hexToByteArray[20](address)

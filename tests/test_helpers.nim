@@ -10,7 +10,7 @@ import
   stew/byteutils, net, eth/[keys, p2p], unittest2,
   testutils/markdown_reports,
   ../nimbus/[constants, config, transaction, errors],
-  ../nimbus/db/accounts_cache,
+  ../nimbus/db/ledger,
   ../nimbus/common/[context, common]
 
 func revmap(x: Table[EVMFork, string]): Table[string, EVMFork] =

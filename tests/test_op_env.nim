@@ -12,7 +12,7 @@ import
   macro_assembler, unittest2,
   stew/byteutils, ../nimbus/common/common,
   ../nimbus/[vm_state, constants],
-  ../nimbus/db/accounts_cache
+  ../nimbus/db/ledger
 
 proc opEnvMain*() =
   suite "Environmental Information Opcodes":

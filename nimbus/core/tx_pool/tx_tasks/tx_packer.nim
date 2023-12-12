@@ -18,7 +18,7 @@ import
   chronicles,
   eth/[keys, rlp],
   stew/sorted_set,
-  ../../../db/[accounts_cache, core_db],
+  ../../../db/[ledger, core_db],
   ../../../common/common,
   ../../../utils/utils,
   ../../../constants,

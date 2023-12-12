@@ -16,7 +16,7 @@ import
   chronicles,
   ".."/[types, memory, stack],
   ../interpreter/op_codes,
-  ../../db/accounts_cache,
+  ../../db/ledger,
   ../../errors
 
 type
