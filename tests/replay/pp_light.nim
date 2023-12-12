@@ -92,8 +92,10 @@ func pp*(elapsed: Duration): string =
       result = elapsed.ppSecs
     elif 0 < times.inMilliSeconds(elapsed):
       result = elapsed.ppMs
-    else:
+    elif 0 < times.inMicroSeconds(elapsed):
       result = elapsed.ppUs
+    else:
+      result = $elapsed.inNanoSeconds & "ns"
   except ValueError:
     result = $elapsed
 
@@ -154,11 +156,11 @@ func pp*(q: openArray[byte]; noHash = false): string =
 
 template showElapsed*(noisy: bool; info: string; code: untyped) =
   block:
-    let start = getTime()
+    let seStartTrackling = getTime()
     block:
       code
     if noisy:
-      let elpd {.inject.} = getTime() - start
+      let elpd {.inject.} = getTime() - seStartTrackling
       if 0 < times.inSeconds(elpd):
         echo "*** ", info, &": {elpd.ppSecs:>4}"
       else:
@@ -170,18 +172,42 @@ template showElapsed*(
     elapsed: Duration;
     code: untyped) =
   block:
-    let start = getTime()
+    let seStartTrackling = getTime()
     block:
       code
     block:
-      let now = getTime()
-      elapsed = now - start
+      elapsed = getTime() - seStartTrackling
       if noisy:
         let elpd {.inject.} = elapsed
         if 0 < times.inSeconds(elpd):
           echo "*** ", info, &": {elpd.ppSecs:>4}"
         else:
           echo "*** ", info, &": {elpd.ppMs:>4}"
+
+template profileSection*(
+    noisy: bool;
+    info: string;
+    state: var (Duration, int);
+    suspend: bool;
+    code: untyped) =
+  block:
+    let psStartProfiling = getTime()
+    block:
+      code
+    if not suspend:
+      let elpd = getTime() - psStartProfiling
+      if noisy:
+        echo "*** ", info, ": ", elpd.pp
+      state[0] += elpd
+      state[1].inc
+
+template profileSection*(
+    noisy: bool;
+    info: string;
+    state: var (Duration, int);
+    code: untyped) =
+  noisy.profileSection(info, state, suspend=false):
+    code
 
 template catchException*(info: string; trace: bool; code: untyped) =
   block:

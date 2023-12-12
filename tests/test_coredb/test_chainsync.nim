@@ -15,27 +15,79 @@ import
   eth/common,
   results,
   unittest2,
-  ../../nimbus/[core/chain],
+  ../../nimbus/core/chain,
+  ../../nimbus/db/ledger,
   ../replay/[undump_blocks, xcheck],
   ./test_helpers
+
+type StopMoaningAboutLedger {.used.} = LedgerType
+
+when CoreDbEnableApiProfiling or LedgerEnableApiProfiling:
+  import std/[algorithm, sequtils, strutils], ../replay/pp
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
 proc setTraceLevel {.used.} =
-  discard
   when defined(chronicles_runtime_filtering) and loggingEnabled:
     setLogLevel(LogLevel.TRACE)
 
 proc setErrorLevel {.used.} =
-  discard
   when defined(chronicles_runtime_filtering) and loggingEnabled:
     setLogLevel(LogLevel.ERROR)
+
+# --------------
+
+proc coreDbProfResults(info: string; indent = 4): string =
+  when CoreDbEnableApiProfiling:
+    let
+      pfx = indent.toPfx
+      pfx2 = pfx & "  "
+    result = "CoreDb profiling results" & info & ":"
+    result &= "\n" & pfx & "by accumulated duration per procedure"
+    for (ela,w) in coreDbProfTab.byElapsed:
+      result &= pfx2 & ela.pp & ": " &
+        w.mapIt($it & coreDbProfTab.stats(it).pp(true)).sorted.join(", ")
+    result &=  "\n" & pfx & "by number of visits"
+    for (count,w) in coreDbProfTab.byVisits:
+      result &= pfx2 & $count & ": " &
+        w.mapIt($it & coreDbProfTab.stats(it).pp).sorted.join(", ")
+
+proc ledgerProfResults(info: string; indent = 4): string =
+  when LedgerEnableApiProfiling:
+    let
+      pfx = indent.toPfx
+      pfx2 = pfx & "  "
+    result = "Ledger profiling results" & info & ":"
+    result &= "\n" & pfx & "by accumulated duration per procedure"
+    for (ela,w) in ledgerProfTab.byElapsed:
+      result &= pfx2 & ela.pp & ": " &
+        w.mapIt($it & ledgerProfTab.stats(it).pp(true)).sorted.join(", ")
+    result &=  "\n" & pfx & "by number of visits"
+    for (count,w) in ledgerProfTab.byVisits:
+      result &= pfx2 & $count & ": " &
+        w.mapIt($it & ledgerProfTab.stats(it).pp).sorted.join(", ")
 
 # ------------------------------------------------------------------------------
 # Public test function
 # ------------------------------------------------------------------------------
+
+proc test_chainSyncProfilingPrint*(
+    noisy = false;
+    nBlocks: int;
+      ) =
+  if noisy:
+    let info =
+      if 0 < nBlocks and nBlocks < high(int): " (" & $nBlocks & " blocks)"
+      else: ""
+    block:
+      let s = info.coreDbProfResults()
+      if 0 < s.len: true.say "***", s, "\n"
+    block:
+      let s = info.ledgerProfResults()
+      if 0 < s.len: true.say "***", s, "\n"
+
 
 proc test_chainSync*(
     noisy: bool;
@@ -49,6 +101,7 @@ proc test_chainSync*(
     sayBlocks = 900.u256
     chain = com.newChain
     lastBlock = max(1, numBlocks - 1).toBlockNumber
+    save = (com.db.trackLegaApi, com.db.trackNewApi, com.db.trackLedgerApi)
 
   for w in filePath.undumpBlocks:
     let (fromBlock, toBlock) = (w[0][0].blockNumber, w[0][^1].blockNumber)
@@ -108,6 +161,7 @@ proc test_chainSync*(
 
     break
 
+  (com.db.trackLegaApi, com.db.trackNewApi, com.db.trackLedgerApi) = save
   true
 
 # ------------------------------------------------------------------------------

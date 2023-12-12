@@ -112,14 +112,16 @@ type
     HashifyNodeUnresolved
     HashifyRootHashMismatch
     HashifyRootNodeUnresolved
+    HashifyLoop
 
     # Cache checker `checkCache()`
-    CheckStkVtxIncomplete
-    CheckStkVtxKeyMissing
-    CheckStkVtxKeyMismatch
-    CheckStkRevKeyMissing
+    CheckStkKeyStrayZeroEntry
     CheckStkRevKeyMismatch
+    CheckStkRevKeyMissing
     CheckStkVtxCountMismatch
+    CheckStkVtxIncomplete
+    CheckStkVtxKeyMismatch
+    CheckStkVtxKeyMissing
 
     CheckRlxVidVtxMismatch
     CheckRlxVtxIncomplete
@@ -128,8 +130,6 @@ type
     CheckRlxRevKeyMissing
     CheckRlxRevKeyMismatch
 
-    CheckAnyLeafUnregistered
-    CheckAnyLeafVidDangling
     CheckAnyVidVtxMissing
     CheckAnyVtxEmptyKeyMissing
     CheckAnyVtxEmptyKeyExpected

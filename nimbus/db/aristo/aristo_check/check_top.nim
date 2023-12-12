@@ -23,14 +23,22 @@ import
 proc checkTopStrict*(
     db: AristoDbRef;                   # Database, top layer
       ): Result[void,(VertexID,AristoError)] =
+  # No need to specify zero keys if implied by a leaf path with valid target
+  # vertex ID (i.e. not deleted).
+  var zeroKeys: HashSet[VertexID]
   for (vid,vtx) in db.top.sTab.pairs:
-    if vtx.isValid:
+    let lbl = db.top.kMap.getOrVoid vid
+
+    if not vtx.isValid:
+      if lbl.isValid:
+        return err((vid,CheckStkVtxKeyMismatch))
+      else: # Empty key flags key is for update
+        zeroKeys.incl vid
+
+    elif lbl.isValid:
+      # So `vtx` and `lbl` exist
       let node = vtx.toNode(db).valueOr:
         return err((vid,CheckStkVtxIncomplete))
-
-      let lbl = db.top.kMap.getOrVoid vid
-      if not lbl.isValid:
-        return err((vid,CheckStkVtxKeyMissing))
       if lbl.key != node.digestTo(HashKey):
         return err((vid,CheckStkVtxKeyMismatch))
 
@@ -40,17 +48,31 @@ proc checkTopStrict*(
       if vid notin revVids:
         return err((vid,CheckStkRevKeyMismatch))
 
+    elif not db.top.dirty or not db.top.kMap.hasKey vid:
+      # So `vtx` exists but not `lbl`, so cache is supposed dirty and the
+      # vertex has a zero entry.
+      return err((vid,CheckStkVtxKeyMissing))
+
+    else: # Empty key flags key is for update
+      zeroKeys.incl vid
+
+  for (vid,key) in db.top.kMap.pairs:
+    if not key.isValid and vid notin zeroKeys:
+      if not db.getVtx(vid).isValid:
+        return err((vid,CheckStkKeyStrayZeroEntry))
+
   let
     pAmkVtxCount = db.top.pAmk.values.toSeq.foldl(a + b.len, 0)
     sTabVtxCount = db.top.sTab.values.toSeq.filterIt(it.isValid).len
+
   # Non-zero values mist sum up the same
-  if pAmkVtxCount < sTabVtxCount:
+  if pAmkVtxCount + zeroKeys.len < sTabVtxCount:
     return err((VertexID(0),CheckStkVtxCountMismatch))
 
   ok()
 
 
-proc checkTopRelaxed*(
+proc checkTopProofMode*(
     db: AristoDbRef;                   # Database, top layer
       ): Result[void,(VertexID,AristoError)] =
   if 0 < db.top.pPrf.len:
@@ -98,16 +120,12 @@ proc checkTopCommon*(
     kMapNilCount = db.top.kMap.len - kMapCount
 
   # Collect leafs and check deleted entries
-  var
-    nNilVtx = 0
-    leafs = db.top.lTab.values.toSeq.filterIt(it.isValid).toHashSet
+  var nNilVtx = 0
   for (vid,vtx) in db.top.sTab.pairs:
     if vtx.isValid:
       case vtx.vType:
       of Leaf:
-        if vid notin leafs:
-          return err((vid,CheckAnyLeafUnregistered))
-        leafs.excl vid
+        discard
       of Branch:
         block check42Links:
           var seen = false
@@ -128,10 +146,6 @@ proc checkTopCommon*(
         return err((vid,CheckAnyVtxEmptyKeyMissing))
       if db.top.kMap.getOrVoid(vid).isValid:
         return err((vid,CheckAnyVtxEmptyKeyExpected))
-
-  # Check for dangling leaf records
-  if 0 < leafs.len:
-    return err((leafs.toSeq[0],CheckAnyLeafVidDangling))
 
   # If present, there are at least as many deleted hashes as there are deleted
   # vertices.

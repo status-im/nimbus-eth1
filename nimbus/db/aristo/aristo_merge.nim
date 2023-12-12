@@ -76,22 +76,31 @@ proc to(
 
 # -----------
 
+proc nullifyKey(
+    db: AristoDbRef;                   # Database, top layer
+    vid: VertexID;                     # Vertex IDs to clear
+      ) =
+  # Register for void hash (to be recompiled)
+  let lbl = db.top.kMap.getOrVoid vid
+  db.top.pAmk.del lbl
+  db.top.kMap[vid] = VOID_HASH_LABEL
+  db.top.dirty = true                  # Modified top level cache
+
 proc clearMerkleKeys(
     db: AristoDbRef;                   # Database, top layer
     hike: Hike;                        # Implied vertex IDs to clear hashes for
     vid: VertexID;                     # Additionall vertex IDs to clear
       ) =
-  for vid in hike.legs.mapIt(it.wp.vid) & @[vid]:
-    let lbl = db.top.kMap.getOrVoid vid
-    if lbl.isValid:
-      db.top.kMap.del vid
-      db.top.pAmk.del lbl
-      db.top.dirty = true # Modified top level cache
-    elif db.getKeyBE(vid).isOK:
-      # Register for deleting on backend
-      db.top.kMap[vid] = VOID_HASH_LABEL
-      db.top.pAmk.del lbl
-      db.top.dirty = true # Modified top level cache
+  for w in hike.legs.mapIt(it.wp.vid) & @[vid]:
+    db.nullifyKey w
+
+proc setVtxAndKey(
+    db: AristoDbRef;                   # Database, top layer
+    vid: VertexID;                     # Vertex IDs to add/clear
+    vtx: VertexRef;                    # Vertex to add
+      ) =
+  db.top.sTab[vid] = vtx
+  db.nullifyKey vid
 
 # -----------
 
@@ -164,8 +173,9 @@ proc insertBranch(
       let
         local = db.vidFetch(pristine = true)
         lty = LeafTie(root: hike.root, path: rc.value)
+
       db.top.lTab[lty] = local         # update leaf path lookup cache
-      db.top.sTab[local] = linkVtx
+      db.setVtxAndKey(local, linkVtx)
       linkVtx.lPfx = linkVtx.lPfx.slice(1+n)
       forkVtx.bVid[linkInx] = local
 
@@ -175,7 +185,7 @@ proc insertBranch(
 
     else:
       let local = db.vidFetch
-      db.top.sTab[local] = linkVtx
+      db.setVtxAndKey(local, linkVtx)
       linkVtx.ePfx = linkVtx.ePfx.slice(1+n)
       forkVtx.bVid[linkInx] = local
 
@@ -187,7 +197,7 @@ proc insertBranch(
       vType: Leaf,
       lPfx:  hike.tail.slice(1+n),
       lData: payload)
-    db.top.sTab[local] = leafLeg.wp.vtx
+    db.setVtxAndKey(local, leafLeg.wp.vtx)
 
   # Update branch leg, ready to append more legs
   var okHike = Hike(root: hike.root, legs: hike.legs)
@@ -199,7 +209,7 @@ proc insertBranch(
       ePfx:  hike.tail.slice(0,n),
       eVid:  db.vidFetch)
 
-    db.top.sTab[linkID] = extVtx
+    db.setVtxAndKey(linkID, extVtx)
 
     okHike.legs.add Leg(
       nibble: -1,
@@ -207,7 +217,7 @@ proc insertBranch(
         vid: linkID,
         vtx: extVtx))
 
-    db.top.sTab[extVtx.eVid] = forkVtx
+    db.setVtxAndKey(extVtx.eVid, forkVtx)
     okHike.legs.add Leg(
       nibble: leafInx.int8,
       wp:     VidVtxPair(
@@ -215,7 +225,7 @@ proc insertBranch(
         vtx: forkVtx))
 
   else:
-    db.top.sTab[linkID] = forkVtx
+    db.setVtxAndKey(linkID, forkVtx)
     okHike.legs.add Leg(
       nibble: leafInx.int8,
       wp:     VidVtxPair(
@@ -264,8 +274,8 @@ proc concatBranchAndLeaf(
       lPfx:  hike.tail.slice(1),
       lData: payload)
   brVtx.bVid[nibble] = vid
-  db.top.sTab[brVid] = brVtx
-  db.top.sTab[vid] = vtx
+  db.setVtxAndKey(brVid, brVtx)
+  db.setVtxAndKey(vid, vtx)
   okHike.legs.add Leg(wp: VidVtxPair(vtx: vtx, vid: vid), nibble: -1)
 
   ok okHike
@@ -313,7 +323,7 @@ proc topIsBranchAddLeaf(
       vType: Leaf,
       lPfx:  hike.tail,
       lData: payload)
-    db.top.sTab[linkID] = vtx
+    db.setVtxAndKey(linkID, vtx)
     var okHike = Hike(root: hike.root, legs: hike.legs)
     okHike.legs.add Leg(wp: VidVtxPair(vid: linkID, vtx: vtx), nibble: -1)
     return ok(okHike)
@@ -362,7 +372,7 @@ proc topIsExtAddLeaf(
       vType: Leaf,
       lPfx:  extVtx.ePfx & hike.tail,
       lData: payload)
-    db.top.sTab[extVid] = vtx
+    db.setVtxAndKey(extVid, vtx)
     okHike.legs[^1].wp.vtx = vtx
 
   elif brVtx.vType != Branch:
@@ -398,8 +408,8 @@ proc topIsExtAddLeaf(
         lPfx:  hike.tail.slice(1),
         lData: payload)
     brVtx.bVid[nibble] = vid
-    db.top.sTab[brVid] = brVtx
-    db.top.sTab[vid] = vtx
+    db.setVtxAndKey(brVid, brVtx)
+    db.setVtxAndKey(vid, vtx)
     db.top.dirty = true # Modified top level cache
     okHike.legs.add Leg(wp: VidVtxPair(vtx: brVtx, vid: brVid), nibble: nibble)
     okHike.legs.add Leg(wp: VidVtxPair(vtx: vtx, vid: vid), nibble: -1)
@@ -436,9 +446,8 @@ proc topIsEmptyAddLeaf(
         lPfx:  hike.tail.slice(1),
         lData: payload)
     rootVtx.bVid[nibble] = leafVid
-    db.top.sTab[hike.root] = rootVtx
-    db.top.sTab[leafVid] = leafVtx
-    db.top.dirty = true # Modified top level cache
+    db.setVtxAndKey(hike.root, rootVtx)
+    db.setVtxAndKey(leafVid, leafVtx)
     return ok Hike(
       root: hike.root,
       legs: @[Leg(wp: VidVtxPair(vtx: rootVtx, vid: hike.root), nibble: nibble),
@@ -472,8 +481,7 @@ proc updatePayload(
 
     # Modify top level cache
     db.top.dirty = true
-    db.top.sTab[vid] = vtx
-    db.top.dirty = true # Modified top level cache
+    db.setVtxAndKey(vid, vtx)
     db.top.lTab[leafTie] = vid
     db.clearMerkleKeys(hike, vid)
     ok hike
@@ -654,8 +662,7 @@ proc merge*(
           vType: Leaf,
           lPfx:  leafTie.path.to(NibblesSeq),
           lData: payload))
-      db.top.sTab[wp.vid] = wp.vtx
-      db.top.dirty = true # Modified top level cache
+      db.setVtxAndKey(wp.vid, wp.vtx)
       okHike = Hike(root: wp.vid, legs: @[Leg(wp: wp, nibble: -1)])
 
     # Double check the result until the code is more reliable

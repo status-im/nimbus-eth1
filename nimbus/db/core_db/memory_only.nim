@@ -15,101 +15,30 @@ import
   eth/[common, trie/db],
   ../aristo,
   ./backend/[aristo_db, legacy_db],
-  ./base,
   #./core_apps_legacy as core_apps
   ./core_apps_newapi as core_apps
 
+import
+  ./base except bless
+
 export
+  base,
   common,
   core_apps,
 
-  # Provide a standard interface for calculating merkle hash signatures,
-  # here by quoting `Aristo` functions.
+  # see `aristo_db`
+  toAristo,
+
+  # see `legacy_db`
+  isLegacy,
+  toLegacy,
+
+  # Standard interface for calculating merkle hash signatures (see `aristo`)
   MerkleSignRef,
   merkleSignBegin,
   merkleSignAdd,
   merkleSignCommit,
-  to,
-
-  # Not all symbols from the object sources will be exported by default
-  CoreDbAccount,
-  CoreDbApiError,
-  CoreDbErrorCode,
-  CoreDbErrorRef,
-  CoreDbPersistentTypes,
-  CoreDbRef,
-  CoreDbSaveFlags,
-  CoreDbTxID,
-  CoreDbType,
-  CoreDbVidRef,
-  CoreDxAccRef,
-  CoreDxCaptRef,
-  CoreDxKvtRef,
-  CoreDxMptRef,
-  CoreDxPhkRef,
-  CoreDxTxRef,
-  `$$`,
-  backend,
-  beginTransaction,
-  commit,
-  compensateLegacySetup,
-  del,
-  delete,
-  dispose,
-  fetch,
-  fetchOrEmpty,
-  finish,
-  forget,
-  get,
-  getOrEmpty,
-  getRoot,
-  getTransactionID,
-  hash,
-  hasKey,
-  hashOrEmpty,
-  hasPath,
-  isLegacy,
-  isPruning,
-  logDb,
-  merge,
-  newAccMpt,
-  newCapture,
-  newKvt,
-  newMpt,
-  newTransaction,
-  pairs,
-  parent,
-  persistent,
-  put,
-  recast,
-  recorder,
-  replicate,
-  rollback,
-  rootVid,
-  safeDispose,
-  setTransactionID,
-  toLegacy,
-  toMpt,
-  toPhk
-
-when ProvideCoreDbLegacyAPI:
-  export
-    CoreDbCaptFlags,
-    CoreDbCaptRef,
-    CoreDbKvtRef,
-    CoreDbMptRef,
-    CoreDbPhkRef,
-    CoreDbTxID,
-    CoreDbTxRef,
-    capture,
-    contains,
-    kvt,
-    mptPrune,
-    phkPrune,
-    rootHash
-else:
-  type
-    CoreDyTxID = CoreDxTxID
+  to
 
 # ------------------------------------------------------------------------------
 # Public constructor

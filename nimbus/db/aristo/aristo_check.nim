@@ -28,24 +28,24 @@ import
 
 proc checkTop*(
     db: AristoDbRef;                   # Database, top layer
-    relax = false;                     # Check existing hashes only
+    proofMode = false;                 # Has proof nodes
       ): Result[void,(VertexID,AristoError)] =
   ## Verify that the cache structure is correct as it would be after `merge()`
-  ## and `hashify()` operations. Unless `relaxed` is set `true` it would not
+  ## and `hashify()` operations. Unless `proofMode` is set `true` it would not
   ## fully check against the backend, which is typically not applicable after
   ## `delete()` operations.
   ##
   ## The following is verified:
   ##
   ## * Each `sTab[]` entry has a valid vertex which can be compiled as a node.
-  ##   If `relax` is set `false`, the Merkle hashes are recompiled and must
+  ##   If `proofMode` is set `false`, the Merkle hashes are recompiled and must
   ##   match.
   ##
   ## * The hash table `kMap[]` and its inverse lookup table `pAmk[]` must
   ##   correnspond.
   ##
-  if relax:
-    ? db.checkTopRelaxed()
+  if proofMode:
+    ? db.checkTopProofMode()
   else:
     ? db.checkTopStrict()
 
@@ -88,9 +88,10 @@ proc check*(
     relax = false;                     # Check existing hashes only
     cache = true;                      # Also verify against top layer cache
     fifos = true;                      # Also verify cascaded filter fifos
-     ): Result[void,(VertexID,AristoError)] =
+    proofMode = false;                 # Has proof nodes
+      ): Result[void,(VertexID,AristoError)] =
   ## Shortcut for running `checkTop()` followed by `checkBE()`
-  ? db.checkTop(relax = relax)
+  ? db.checkTop(proofMode = proofMode)
   ? db.checkBE(relax = relax, cache = cache)
   ok()
 
