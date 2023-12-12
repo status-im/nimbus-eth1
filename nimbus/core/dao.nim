@@ -8,7 +8,7 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import eth/common, stew/byteutils, ../db/accounts_cache
+import eth/common, stew/byteutils, ../db/ledger
 
 const
   # DAOForkBlockExtra is the block header extra-data field to set for the DAO fork
@@ -145,7 +145,7 @@ const
 # ApplyDAOHardFork modifies the state database according to the DAO hard-fork
 # rules, transferring all balances of a set of DAO accounts to a single refund
 # contract.
-proc applyDAOHardFork*(statedb: var AccountsCache) =
+proc applyDAOHardFork*(statedb: LedgerRef) =
   const zero = 0.u256
   # Move every DAO account and extra-balance account funds into the refund contract
   for address in DAODrainList:

@@ -15,7 +15,7 @@ import
   stint,
   stew/byteutils,
   ../../nimbus/transaction,
-  ../../nimbus/db/accounts_cache,
+  ../../nimbus/db/ledger,
   ../../nimbus/common/chain_config
 
 template fromJson(T: type EthAddress, n: JsonNode): EthAddress =
@@ -155,7 +155,7 @@ proc parseTx*(txData, index: JsonNode): Transaction =
     valIndex  = index["value"].getInt
   parseTx(txData, dataIndex, gasIndex, valIndex)
 
-proc setupStateDB*(wantedState: JsonNode, stateDB: AccountsCache) =
+proc setupStateDB*(wantedState: JsonNode, stateDB: LedgerRef) =
   for ac, accountData in wantedState:
     let account = hexToByteArray[20](ac)
     for slot, value in accountData{"storage"}:

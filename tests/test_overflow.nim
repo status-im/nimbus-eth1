@@ -17,7 +17,7 @@ import ../nimbus/vm_types
 import ../nimbus/transaction
 import ../nimbus/transaction/call_evm
 import ../nimbus/db/core_db
-import ../nimbus/db/accounts_cache
+import ../nimbus/db/ledger
 
 const
   data = [0x5b.uint8, 0x5a, 0x5a, 0x30, 0x30, 0x30, 0x30, 0x72, 0x00, 0x00, 0x00, 0x58,

@@ -13,7 +13,7 @@
 import
   std/strutils,
   ../../common/common,
-  ../../db/accounts_cache,
+  ../../db/ledger,
   ../../transaction/call_evm,
   ../../transaction/call_common,
   ../../transaction,
@@ -37,7 +37,7 @@ proc eip1559BaseFee(header: BlockHeader; fork: EVMFork): UInt256 =
     result = header.baseFee
 
 proc commitOrRollbackDependingOnGasUsed(
-    vmState: BaseVMState, accTx: SavePoint,
+    vmState: BaseVMState, accTx: LedgerSpRef,
     header: BlockHeader, tx: Transaction,
     gasBurned: GasInt, priorityFee: GasInt):
     Result[GasInt, string] {.raises: [].} =

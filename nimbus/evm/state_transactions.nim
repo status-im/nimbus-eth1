@@ -12,7 +12,7 @@ import
   chronos,
   eth/common/eth_types,
   ../constants,
-  ../db/accounts_cache,
+  ../db/ledger,
   ../transaction,
   ./computation,
   ./interpreter_dispatch,

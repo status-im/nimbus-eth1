@@ -11,7 +11,7 @@
 import
   std/[os, sequtils, strformat, strutils, tables],
   chronicles,
-  ../nimbus/db/accounts_cache,
+  ../nimbus/db/ledger,
   ../nimbus/common/common,
   ../nimbus/core/chain,
   ../nimbus/transaction,
@@ -111,7 +111,7 @@ proc getVmState(com: CommonRef; number: BlockNumber): BaseVMState =
 # Crash test function, finding out about how the transaction framework works ..
 # ------------------------------------------------------------------------------
 
-proc modBalance(ac: var AccountsCache, address: EthAddress) =
+proc modBalance(ac: LedgerRef, address: EthAddress) =
   ## This function is crucial for profucing the crash. If must
   ## modify the balance so that the database gets written.
   # ac.blindBalanceSetter(address)
@@ -185,9 +185,9 @@ proc runTrial3crash(vmState: BaseVMState; inx: int; noisy = false) =
     dbTx.rollback()
 
   # In order to survive without an exception in the next `persist()` call, the
-  # following function could be added to db/accounts_cache.nim:
+  # following function could be added to `db/ledger`:
   #
-  #   proc clobberRootHash*(ac: AccountsCache; root: KeccakHash; prune = true) =
+  #   proc clobberRootHash*(ac: LedgerRef; root: KeccakHash; prune = true) =
   #     ac.trie = initAccountsTrie(ac.db, rootHash, prune)
   #
   # Then, beginning this very function `runTrial3crash()` with

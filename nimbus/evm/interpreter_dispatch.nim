@@ -16,7 +16,7 @@ const
 import
   std/[macros, strformat],
   pkg/[chronicles, chronos, stew/byteutils],
-  ".."/[constants, db/accounts_cache],
+  ".."/[constants, db/ledger],
   "."/[code_stream, computation],
   "."/[message, precompiles, state, types],
   ./async/operations,

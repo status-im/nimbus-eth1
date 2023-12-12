@@ -116,11 +116,11 @@ proc flushDbDir(s: string) =
     let dataDir = s / "nimbus"
     if (dataDir / "data").dirExists:
       # Typically under Windows: there might be stale file locks.
-      try: dataDir.removeDir except: discard
+      try: dataDir.removeDir except CatchableError: discard
     block dontClearUnlessEmpty:
       for w in s.walkDir:
         break dontClearUnlessEmpty
-      try: s.removeDir except: discard
+      try: s.removeDir except CatchableError: discard
 
 proc say*(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
   if noisy:

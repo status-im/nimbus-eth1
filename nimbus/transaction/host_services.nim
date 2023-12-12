@@ -1,6 +1,6 @@
 # Nimbus - Services available to EVM code that is run for a transaction
 #
-# Copyright (c) 2019-2021 Status Research & Development GmbH
+# Copyright (c) 2019-2023 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -10,7 +10,7 @@
 
 import
   times, stint, chronicles,
-  eth/common/eth_types, ../db/accounts_cache,
+  eth/common/eth_types, ../db/ledger,
   ../common/[evmforks, common],
   ".."/[vm_state, vm_computation, vm_internals, vm_gas_costs],
   ./host_types, ./host_trace, ./host_call_nested

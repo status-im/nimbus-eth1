@@ -13,7 +13,7 @@ import
   eth/[common, rlp], eth/trie/trie_defs,
   stew/byteutils,
   ../tests/[test_helpers, test_config],
-  ../nimbus/db/[accounts_cache, core_db, distinct_tries], ./witness_types,
+  ../nimbus/db/[ledger, core_db, distinct_tries], ./witness_types,
   ../stateless/[witness_from_tree, tree_from_witness],
   ./multi_keys
 
@@ -56,7 +56,7 @@ proc testGetBranch(tester: Tester, rootHash: KeccakHash, testStatusIMPL: var Tes
 func parseHash256(n: JsonNode, name: string): Hash256 =
   hexToByteArray(n[name].getStr(), result.data)
 
-proc setupStateDB(tester: var Tester, wantedState: JsonNode, stateDB: var AccountsCache): Hash256 =
+proc setupStateDB(tester: var Tester, wantedState: JsonNode, stateDB: LedgerRef): Hash256 =
   var keys = newSeqOfCap[AccountKey](wantedState.len)
 
   for ac, accountData in wantedState:
