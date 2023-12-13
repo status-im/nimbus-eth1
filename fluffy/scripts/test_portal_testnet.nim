@@ -270,7 +270,7 @@ procSuite "Portal testnet tests":
         let content = await retryUntil(
           proc (): Future[Option[BlockObject]] {.async.} =
             try:
-              let res = await client.eth_getBlockByHash(w3Hash hash, false)
+              let res = await client.eth_getBlockByHash(w3Hash hash, true)
               await client.close()
               return res
             except CatchableError as exc:
@@ -406,7 +406,7 @@ procSuite "Portal testnet tests":
     #     let content = await retryUntil(
     #       proc (): Future[Option[BlockObject]] {.async.} =
     #         try:
-    #           let res = await client.eth_getBlockByHash(hash.ethHashStr(), false)
+    #           let res = await client.eth_getBlockByHash(hash.ethHashStr(), true)
     #           await client.close()
     #           return res
     #         except CatchableError as exc:
@@ -492,7 +492,7 @@ procSuite "Portal testnet tests":
     #     let content = await retryUntil(
     #       proc (): Future[Option[BlockObject]] {.async.} =
     #         try:
-    #           let res = await client.eth_getBlockByHash(hash.ethHashStr(), false)
+    #           let res = await client.eth_getBlockByHash(hash.ethHashStr(), true)
     #           await client.close()
     #           return res
     #         except CatchableError as exc:
