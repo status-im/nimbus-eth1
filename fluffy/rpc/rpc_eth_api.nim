@@ -1,4 +1,4 @@
-# Nimbus
+# Fluffy
 # Copyright (c) 2021-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
@@ -215,7 +215,7 @@ proc installEthApiHandlers*(
       (header, body) = (await historyNetwork.getBlock(blockHash)).valueOr:
         return none(BlockObject)
 
-    return some(BlockObject.init(header, body))
+    return some(BlockObject.init(header, body, fullTransactions))
 
   rpcServerWithProxy.rpc("eth_getBlockByNumber") do(
       quantityTag: string, fullTransactions: bool) -> Option[BlockObject]:
@@ -240,7 +240,7 @@ proc installEthApiHandlers*(
             (header, body) = (await historyNetwork.getBlock(blockHash)).valueOr:
               return none(BlockObject)
 
-          return some(BlockObject.init(header, body))
+          return some(BlockObject.init(header, body, fullTransactions))
         else:
           raise newException(
             ValueError, "Not available before Capella - not synced?")
@@ -255,7 +255,7 @@ proc installEthApiHandlers*(
             (header, body) = (await historyNetwork.getBlock(blockHash)).valueOr:
               return none(BlockObject)
 
-          return some(BlockObject.init(header, body))
+          return some(BlockObject.init(header, body, fullTransactions))
         else:
           raise newException(
             ValueError, "Not available before Capella - not synced?")
@@ -274,7 +274,7 @@ proc installEthApiHandlers*(
         return none(BlockObject)
       else:
         let (header, body) = maybeBlock.get()
-        return some(BlockObject.init(header, body))
+        return some(BlockObject.init(header, body, fullTransactions))
 
   rpcServerWithProxy.rpc("eth_getBlockTransactionCountByHash") do(
       data: rpc_types.Hash256) -> Quantity:
