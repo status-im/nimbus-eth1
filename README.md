@@ -93,8 +93,9 @@ build/nimbus --help
 build/nimbus
 
 # Update to latest version
-git pull
-make -j4 update
+git pull && make update
+# Build the newly downloaded version
+make -j4 nimbus
 
 # Run tests
 make test
