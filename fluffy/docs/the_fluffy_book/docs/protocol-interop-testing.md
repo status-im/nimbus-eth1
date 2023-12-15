@@ -74,14 +74,14 @@ e.g.:
 
 ```bash
 # Test Discovery Ping, should print the content of ping message
-./vendor/nim-eth/eth/p2p/discoveryv5/dcli ping enr:<base64 encoding of ENR>
+./vendor/nim-eth/tools/dcli ping enr:<base64 encoding of ENR>
 
 # Test Discovery FindNode, should print the content of the returned ENRs
 # Default a distance of 256 is requested, change this with --distance argument
-./vendor/nim-eth/eth/p2p/discoveryv5/dcli findnode enr:<base64 encoding of ENR>
+./vendor/nim-eth/tools/dcli findnode enr:<base64 encoding of ENR>
 
 # Test Discovery TalkReq, should print the TalkResp content
-./vendor/nim-eth/eth/p2p/discoveryv5/dcli talkreq enr:<base64 encoding of ENR>
+./vendor/nim-eth/tools/dcli talkreq enr:<base64 encoding of ENR>
 ```
 
 > Each `dcli` run will default generate a new network key and thus a new node id
