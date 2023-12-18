@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2023 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -14,6 +14,7 @@
 {.push raises: [].}
 
 import
+  std/algorithm,
   eth/common,
   results,
   ./kvt_desc/desc_backend,
@@ -23,7 +24,7 @@ import
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc getBE*(
+proc getBE(
     db: KvtDbRef;                     # Database
     key: openArray[byte];             # Key of database record
       ): Result[Blob,KvtError] =
@@ -51,7 +52,7 @@ proc put*(
   if data.len == 0:
     return err(DataInvalid)
 
-  db.top.tab[@key] = @data
+  db.top.delta.sTab[@key] = @data
   ok()
 
 
@@ -64,14 +65,22 @@ proc del*(
   if key.len == 0:
     return err(KeyInvalid)
 
-  let rc = db.getBE(key)
-  if rc.isOk:
-    db.top.tab[@key] = EmptyBlob
-  elif rc.error == GetNotFound:
-    db.top.tab.del @key
-  else:
-    return err(rc.error)
+  block haveKey:
+    for w in db.stack.reversed:
+      if w.delta.sTab.hasKey @key:
+        break haveKey
 
+    # Do this one last as it is the most expensive lookup
+    let rc = db.getBE key
+    if rc.isOk:
+      break haveKey
+    if rc.error != GetNotFound:
+      return err(rc.error)
+
+    db.top.delta.sTab.del @key        # No such key anywhere => delete now
+    return ok()
+
+  db.top.delta.sTab[@key] = EmptyBlob # Mark for deletion
   ok()
 
 # ------------
@@ -85,10 +94,20 @@ proc get*(
   ##
   if key.len == 0:
     return err(KeyInvalid)
-  let data = db.top.tab.getOrVoid @key
-  if data.isValid:
-    return ok(data)
+
+  block:
+    let data = db.top.delta.sTab.getOrVoid @key
+    if data.isValid:
+      return ok(data)
+
+  block:
+    for w in db.stack.reversed:
+      let data = w.delta.sTab.getOrVoid @key
+      if data.isValid:
+        return ok(data)
+
   db.getBE key
+
 
 proc hasKey*(
     db: KvtDbRef;                     # Database
@@ -99,9 +118,14 @@ proc hasKey*(
   ##
   if key.len == 0:
     return err(KeyInvalid)
-  let data = db.top.tab.getOrVoid @key
-  if data.isValid:
+
+  if db.top.delta.sTab.hasKey @key:
     return ok(true)
+
+  for w in db.stack.reversed:
+    if w.delta.sTab.haskey @key:
+      return ok(true)
+
   let rc = db.getBE key
   if rc.isOk:
     return ok(true)

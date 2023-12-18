@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2023 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -15,9 +15,10 @@
 
 import
   std/[sequtils, tables],
+  eth/common,
   results,
   ./kvt_desc/desc_backend,
-  ./kvt_desc
+  "."/[kvt_desc, kvt_layers]
 
 func isTop*(tx: KvtTxRef): bool
 
@@ -86,25 +87,21 @@ proc forkTx*(tx: KvtTxRef): Result[KvtDbRef,KvtError] =
   ##
   let db = tx.db
 
-  # Provide new top layer
-  var topLayer: LayerRef
+  # Verify `tx` argument
   if db.txRef == tx:
-    topLayer = db.top.dup
-  elif tx.level < db.stack.len:
-    topLayer = db.stack[tx.level].dup
-  else:
+    if db.top.txUid != tx.txUid:
+      return err(TxArgStaleTx)
+  elif db.stack.len <= tx.level:
     return err(TxArgStaleTx)
-  if topLayer.txUid != tx.txUid:
+  elif db.stack[tx.level].txUid != tx.txUid:
     return err(TxArgStaleTx)
-  topLayer.txUid = 1
-
-  let txClone = ? db.fork()
 
   # Set up clone associated to `db`
-  txClone.top = topLayer          # is a deep copy
-  txClone.stack = @[LayerRef()]
-  txClone.backend = db.backend
-  txClone.txUidGen = 1
+  let txClone = ? db.fork()
+  txClone.top = db.layersCc tx.level
+  txClone.stack = @[LayerRef()]          # Provide tx level 1 stack
+  txClone.top.txUid = 1
+  txClone.txUidGen = 1                   # Used value of `txClone.top.txUid`
 
   # Install transaction similar to `tx` on clone
   txClone.txRef = KvtTxRef(
@@ -122,10 +119,7 @@ proc forkTop*(db: KvtDbRef): Result[KvtDbRef,KvtError] =
   ##
   if db.txRef.isNil:
     let dbClone = ? db.fork()
-
-    dbClone.top = db.top.dup       # is a deep copy
-    dbClone.backend = db.backend
-
+    dbClone.top = db.layersCc
     return ok(dbClone)
 
   db.txRef.forkTx()
@@ -162,9 +156,8 @@ proc txBegin*(db: KvtDbRef): Result[KvtTxRef,KvtError] =
   if db.level != db.stack.len:
     return err(TxStackGarbled)
 
-  db.stack.add db.top.dup # push (save and use top later)
-  db.top.txUid = db.getTxUid()
-
+  db.stack.add db.top
+  db.top = LayerRef(txUid: db.getTxUid)
   db.txRef = KvtTxRef(
     db:     db,
     txUid:  db.top.txUid,
@@ -199,11 +192,19 @@ proc commit*(
   ##
   let db = ? tx.getDbDescFromTopTx()
 
-  # Keep top and discard layer below
-  db.top.txUid = db.stack[^1].txUid
-  db.stack.setLen(db.stack.len-1)
+  # Replace the top two layers by its merged version
+  let merged = db.stack[^1]
+  for (key,val) in db.top.delta.sTab.pairs:
+    merged.delta.sTab[key] = val
 
+  # Install `merged` layer
+  db.top = merged
+  db.stack.setLen(db.stack.len-1)
   db.txRef = tx.parent
+  if 0 < db.stack.len:
+    db.txRef.txUid = db.getTxUid
+    db.top.txUid = db.txRef.txUid
+
   ok()
 
 
@@ -221,12 +222,13 @@ proc collapse*(
   ##
   let db = ? tx.getDbDescFromTopTx()
 
-  # If commit, then leave the current layer and clear the stack, otherwise
-  # install the stack bottom.
-  if not commit:
-    db.stack[0].swap db.top
+  if commit:
+    db.top = db.layersCc
+  else:
+    db.top = db.stack[0]
+    db.top.txUid = 0
 
-  db.top.txUid = 0
+  # Clean up
   db.stack.setLen(0)
   db.txRef = KvtTxRef(nil)
   ok()
@@ -255,12 +257,11 @@ proc stow*(
 
   # Save structural and other table entries
   let txFrame = be.putBegFn()
-  be.putKvpFn(txFrame, db.top.tab.pairs.toSeq)
+  be.putKvpFn(txFrame, db.top.delta.sTab.pairs.toSeq)
   ? be.putEndFn txFrame
 
-  # Delete or clear stack and clear top
-  db.stack.setLen(0)
-  db.top = LayerRef(txUid: db.top.txUid)
+  # Clean up
+  db.top.delta.sTab.clear
 
   ok()
 

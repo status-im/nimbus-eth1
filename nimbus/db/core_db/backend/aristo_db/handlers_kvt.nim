@@ -322,7 +322,7 @@ func txTop*(
       ): CoreDbRc[KvtTxRef] =
   base.kdb.txTop.toRc(base.parent, info)
 
-func txBegin*(
+proc txBegin*(
     base: KvtBaseRef;
     info: static[string];
       ): CoreDbRc[KvtTxRef] =
