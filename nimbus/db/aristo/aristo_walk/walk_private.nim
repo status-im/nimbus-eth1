@@ -10,9 +10,9 @@
 # distributed except according to those terms.
 
 import
-  std/[algorithm, sequtils, tables],
+  std/[sequtils, sets, tables],
   results,
-  ".."/[aristo_desc, aristo_get, aristo_init, aristo_utils]
+  ".."/[aristo_desc, aristo_get, aristo_layers, aristo_init, aristo_utils]
 
 # ------------------------------------------------------------------------------
 # Public generic iterators
@@ -129,11 +129,13 @@ iterator walkPairsImpl*[T](
      ): tuple[vid: VertexID, vtx: VertexRef] =
   ## Walk over all `(VertexID,VertexRef)` in the database. Note that entries
   ## are unsorted.
-  for (vid,vtx) in db.top.sTab.pairs:
+  var seen: HashSet[VertexID]
+  for (vid,vtx) in db.layersWalkVtx seen:
     if vtx.isValid:
       yield (vid,vtx)
+
   for (_,vid,vtx) in walkVtxBeImpl[T](db):
-    if vid notin db.top.sTab and vtx.isValid:
+    if vid notin seen:
       yield (vid,vtx)
 
 iterator replicateImpl*[T](

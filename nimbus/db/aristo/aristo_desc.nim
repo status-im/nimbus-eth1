@@ -61,6 +61,10 @@ type
     else:
       rwDb: AristoDbRef               ## Link to writable descriptor
 
+  VidVtxPair* = object
+    vid*: VertexID                    ## Table lookup vertex ID (if any)
+    vtx*: VertexRef                   ## Reference to vertex
+
   AristoDbRef* = ref AristoDbObj
   AristoDbObj* = object
     ## Three tier database object supporting distributed instances.
@@ -74,7 +78,7 @@ type
     dudes: DudesRef                   ## Related DB descriptors
 
     # Debugging data below, might go away in future
-    xMap*: VidsByLabel                ## For pretty printing, extends `pAmk`
+    xMap*: VidsByLabelTab             ## For pretty printing, extends `pAmk`
 
   AristoDbAction* = proc(db: AristoDbRef) {.gcsafe, raises: [].}
     ## Generic call back function/closure.
@@ -148,6 +152,12 @@ func hash*(db: AristoDbRef): Hash =
   ## Table/KeyedQueue/HashSet mixin
   cast[pointer](db).hash
 
+func dup*(wp: VidVtxPair): VidVtxPair =
+  ## Safe copy of `wp` argument
+  VidVtxPair(
+    vid: wp.vid,
+    vtx: wp.vtx.dup)
+
 # ------------------------------------------------------------------------------
 # Public functions, `dude` related
 # ------------------------------------------------------------------------------
@@ -220,13 +230,13 @@ proc fork*(
   ## database lookup for cases where the top layer is redefined anyway.
   ##
   let clone = AristoDbRef(
-    top:      LayerRef(),
-    backend:  db.backend)
+    top:     LayerRef(),
+    backend: db.backend)
 
   if not rawTopLayer:
     let rc = clone.backend.getIdgFn()
     if rc.isOk:
-      clone.top.vGen = rc.value
+      clone.top.final.vGen = rc.value
     elif rc.error != GetIdgNotFound:
       return err(rc.error)
 

@@ -22,25 +22,6 @@ import
     filter_fifos, filter_helpers, filter_merge, filter_reverse, filter_siblings]
 
 # ------------------------------------------------------------------------------
-# Public helpers
-# ------------------------------------------------------------------------------
-
-func bulk*(filter: FilterRef): int =
-  ## Some measurement for the size of the filter calculated as the length of
-  ## the `sTab[]` table plus the lengthof the `kMap[]` table. This can be used
-  ## to set a threshold when to flush the staging area to the backend DB to
-  ## be used in `stow()`.
-  ##
-  ## The `filter` argument may be `nil`, i.e. `FilterRef(nil).bulk == 0`
-  if filter.isNil: 0 else: filter.sTab.len + filter.kMap.len
-
-func bulk*(layer: LayerRef): int =
-  ## Variant of `bulk()` for layers rather than filters.
-  ##
-  ## The `layer` argument may be `nil`, i.e. `LayerRef(nil).bulk == 0`
-  if layer.isNil: 0 else: layer.sTab.len + layer.kMap.len
-
-# ------------------------------------------------------------------------------
 # Public functions, construct filters
 # ------------------------------------------------------------------------------
 
@@ -64,7 +45,7 @@ proc fwdFilter*(
   # Register the Merkle hash keys of the MPT where this reverse filter will be
   # applicable: `be => fg`
   let (srcRoot, trgRoot) = block:
-    let rc = db.getLayerStateRoots(layer, chunkedMpt)
+    let rc = db.getLayerStateRoots(layer.delta, chunkedMpt)
     if rc.isOK:
       (rc.value.be, rc.value.fg)
     elif rc.error == FilPrettyPointlessLayer:
@@ -74,9 +55,9 @@ proc fwdFilter*(
 
   ok FilterRef(
     src:  srcRoot,
-    sTab: layer.sTab,
-    kMap: layer.kMap.pairs.toSeq.mapIt((it[0],it[1].key)).toTable,
-    vGen: layer.vGen.vidReorg, # Compact recycled IDs
+    sTab: layer.delta.sTab,
+    kMap: layer.delta.kMap.pairs.toSeq.mapIt((it[0],it[1].key)).toTable,
+    vGen: layer.final.vGen.vidReorg, # Compact recycled IDs
     trg:  trgRoot)
 
 # ------------------------------------------------------------------------------
@@ -212,7 +193,7 @@ proc forkBackLog*(
   let
     instr = ? be.fifosFetch(backSteps = episode+1)
     clone = ? db.fork(rawToplayer = true)
-  clone.top.vGen = instr.fil.vGen
+  clone.top.final.vGen = instr.fil.vGen
   clone.roFilter = instr.fil
   ok clone
 

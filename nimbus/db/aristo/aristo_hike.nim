@@ -20,7 +20,6 @@ type
     ## For constructing a `VertexPath`
     wp*: VidVtxPair                ## Vertex ID and data ref
     nibble*: int8                  ## Next vertex selector for `Branch` (if any)
-    backend*: bool                 ## Sources from backend if `true`
 
   Hike* = object
     ## Trie traversal path
@@ -86,16 +85,13 @@ proc hikeUp*(
   while vid.isValid:
     var leg = Leg(wp: VidVtxPair(vid: vid), nibble: -1)
 
-    # Fetch vertex to be checked on this lap
-    leg.wp.vtx = db.top.sTab.getOrVoid vid
-    if not leg.wp.vtx.isValid:
-
-      # Register vertex fetched from backend (if any)
-      let rc = db.getVtxBE vid
-      if rc.isErr:
-        break
-      leg.backend = true
-      leg.wp.vtx = rc.value
+    # Fetch next vertex
+    leg.wp.vtx = db.getVtxRc(vid).valueOr:
+      if error != GetVtxNotFound:
+        return err((hike,error))
+      if hike.legs.len == 0:
+        return err((hike,HikeEmptyPath))
+      break
 
     case leg.wp.vtx.vType:
     of Leaf:

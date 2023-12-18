@@ -31,8 +31,8 @@ import
   results,
   stew/keyed_queue,
   ../../sync/protocol/snap/snap_types,
-  "."/[aristo_desc, aristo_get, aristo_hike, aristo_path, aristo_serialise,
-       aristo_vid]
+  "."/[aristo_desc, aristo_get, aristo_hike, aristo_layers, aristo_path,
+       aristo_serialise, aristo_vid]
 
 logScope:
   topics = "aristo-merge"
@@ -81,10 +81,7 @@ proc nullifyKey(
     vid: VertexID;                     # Vertex IDs to clear
       ) =
   # Register for void hash (to be recompiled)
-  let lbl = db.top.kMap.getOrVoid vid
-  db.top.pAmk.del lbl
-  db.top.kMap[vid] = VOID_HASH_LABEL
-  db.top.dirty = true                  # Modified top level cache
+  db.layersResLabel vid
 
 proc clearMerkleKeys(
     db: AristoDbRef;                   # Database, top layer
@@ -99,8 +96,8 @@ proc setVtxAndKey(
     vid: VertexID;                     # Vertex IDs to add/clear
     vtx: VertexRef;                    # Vertex to add
       ) =
-  db.top.sTab[vid] = vtx
-  db.nullifyKey vid
+  db.layersPutVtx(vid, vtx)
+  db.layersResLabel vid
 
 # -----------
 
@@ -150,15 +147,12 @@ proc insertBranch(
   var
     leafLeg = Leg(nibble: -1)
 
-  # Will modify top level cache
-  db.top.dirty = true
-
   # Install `forkVtx`
   block:
     # Clear Merkle hashes (aka hash keys) unless proof mode.
-    if db.top.pPrf.len == 0:
+    if db.pPrf.len == 0:
       db.clearMerkleKeys(hike, linkID)
-    elif linkID in db.top.pPrf:
+    elif linkID in db.pPrf:
       return err(MergeNonBranchProofModeLock)
 
     if linkVtx.vType == Leaf:
@@ -174,7 +168,7 @@ proc insertBranch(
         local = db.vidFetch(pristine = true)
         lty = LeafTie(root: hike.root, path: rc.value)
 
-      db.top.lTab[lty] = local         # update leaf path lookup cache
+      db.top.final.lTab[lty] = local   # update leaf path lookup cache
       db.setVtxAndKey(local, linkVtx)
       linkVtx.lPfx = linkVtx.lPfx.slice(1+n)
       forkVtx.bVid[linkInx] = local
@@ -254,17 +248,14 @@ proc concatBranchAndLeaf(
     return err(MergeRootBranchLinkBusy)
 
   # Clear Merkle hashes (aka hash keys) unless proof mode.
-  if db.top.pPrf.len == 0:
+  if db.pPrf.len == 0:
     db.clearMerkleKeys(hike, brVid)
-  elif brVid in db.top.pPrf:
+  elif brVid in db.pPrf:
     return err(MergeBranchProofModeLock) # Ooops
 
   # Append branch vertex
   var okHike = Hike(root: hike.root, legs: hike.legs)
   okHike.legs.add Leg(wp: VidVtxPair(vtx: brVtx, vid: brVid), nibble: nibble)
-
-  # Will modify top level cache
-  db.top.dirty = true
 
   # Append leaf vertex
   let
@@ -310,13 +301,10 @@ proc topIsBranchAddLeaf(
     #
     #  <-------- immutable ------------> <---- mutable ----> ..
     #
-    if db.top.pPrf.len == 0:
+    if db.pPrf.len == 0:
       # Not much else that can be done here
       debug "Dangling leaf link, reused", branch=hike.legs[^1].wp.vid,
         nibble, linkID, leafPfx=hike.tail
-
-    # Will modify top level cache
-    db.top.dirty = true
 
     # Reuse placeholder entry in table
     let vtx = VertexRef(
@@ -365,9 +353,6 @@ proc topIsExtAddLeaf(
     #  <-------- immutable -------------->
     #
 
-    # Will modify top level cache
-    db.top.dirty = true
-
     let vtx = VertexRef(
       vType: Leaf,
       lPfx:  extVtx.ePfx & hike.tail,
@@ -392,13 +377,10 @@ proc topIsExtAddLeaf(
     if linkID.isValid:
       return err(MergeRootBranchLinkBusy)
 
-    # Will modify top level cache
-    db.top.dirty = true
-
     # Clear Merkle hashes (aka hash keys) unless proof mode
-    if db.top.pPrf.len == 0:
+    if db.pPrf.len == 0:
       db.clearMerkleKeys(hike, brVid)
-    elif brVid in db.top.pPrf:
+    elif brVid in db.pPrf:
       return err(MergeBranchProofModeLock)
 
     let
@@ -410,7 +392,6 @@ proc topIsExtAddLeaf(
     brVtx.bVid[nibble] = vid
     db.setVtxAndKey(brVid, brVtx)
     db.setVtxAndKey(vid, vtx)
-    db.top.dirty = true # Modified top level cache
     okHike.legs.add Leg(wp: VidVtxPair(vtx: brVtx, vid: brVid), nibble: nibble)
     okHike.legs.add Leg(wp: VidVtxPair(vtx: vtx, vid: vid), nibble: -1)
 
@@ -430,13 +411,10 @@ proc topIsEmptyAddLeaf(
     if rootVtx.bVid[nibble].isValid:
       return err(MergeRootBranchLinkBusy)
 
-    # Will modify top level cache
-    db.top.dirty = true
-
     # Clear Merkle hashes (aka hash keys) unless proof mode
-    if db.top.pPrf.len == 0:
+    if db.pPrf.len == 0:
       db.clearMerkleKeys(hike, hike.root)
-    elif hike.root in db.top.pPrf:
+    elif hike.root in db.pPrf:
       return err(MergeBranchProofModeLock)
 
     let
@@ -476,17 +454,15 @@ proc updatePayload(
         lPfx:  leafLeg.wp.vtx.lPfx,
         lData: payload)
     var hike = hike
-    hike.legs[^1].backend = false
     hike.legs[^1].wp.vtx = vtx
 
     # Modify top level cache
-    db.top.dirty = true
     db.setVtxAndKey(vid, vtx)
-    db.top.lTab[leafTie] = vid
+    db.top.final.lTab[leafTie] = vid
     db.clearMerkleKeys(hike, vid)
     ok hike
 
-  elif leafLeg.backend:
+  elif db.layersGetVtx(leafLeg.wp.vid).isErr:
     err(MergeLeafPathOnBackendAlready)
 
   else:
@@ -537,7 +513,7 @@ proc mergeNodeImpl(
   # order `root->.. ->leaf`.
   let
     hashLbl = HashLabel(root: rootVid, key: hashKey)
-    vids = db.top.pAmk.getOrVoid(hashLbl).toSeq
+    vids = db.layersGetLebalOrVoid(hashLbl).toSeq
     isRoot = rootVid in vids
   if vids.len == 0:
     return err(MergeRevVidMustHaveBeenCached)
@@ -546,11 +522,11 @@ proc mergeNodeImpl(
     return err(MergeHashKeyRevLookUpGarbled)
 
   # Use the first vertex ID from the `vis` list as representant for all others
-  let lbl = db.top.kMap.getOrVoid vids[0]
+  let lbl = db.layersGetLabelOrVoid vids[0]
   if lbl == hashLbl:
-    if db.top.sTab.hasKey vids[0]:
+    if db.layersGetVtx(vids[0]).isOk:
       for n in 1 ..< vids.len:
-        if not db.top.sTab.hasKey vids[n]:
+        if db.layersGetVtx(vids[n]).isErr:
           return err(MergeHashKeyRevLookUpGarbled)
       # This is tyically considered OK
       return err(MergeHashKeyCachedAlready)
@@ -572,7 +548,7 @@ proc mergeNodeImpl(
   # Verify that all `vids` entries are similar
   for n in 1 ..< vids.len:
     let w = vids[n]
-    if lbl != db.top.kMap.getOrVoid(w) or db.top.sTab.hasKey(w):
+    if lbl != db.layersGetLabelOrVoid(w) or db.layersGetVtx(w).isOk:
       return err(MergeHashKeyRevLookUpGarbled)
     if not hasVtx:
       # Prefer existing node which has all links available, already.
@@ -589,26 +565,27 @@ proc mergeNodeImpl(
       let eLbl = HashLabel(root: rootVid, key: node.key[0])
       if not hasVtx:
         # Brand new reverse lookup link for this vertex
-        vtx.eVid = db.vidAttach eLbl
+        vtx.eVid = db.vidFetch
+        db.layersPutLabel(vtx.eVid, eLbl)
       elif not vtx.eVid.isValid:
         return err(MergeNodeVtxDiffersFromExisting)
-      db.top.pAmk.append(eLbl, vtx.eVid)
+      db.layersPutLabel(vtx.eVid, eLbl)
   of Branch:
     for n in 0..15:
       if node.key[n].isValid:
         let bLbl = HashLabel(root: rootVid, key: node.key[n])
         if not hasVtx:
           # Brand new reverse lookup link for this vertex
-          vtx.bVid[n] = db.vidAttach bLbl
+          vtx.bVid[n] = db.vidFetch
+          db.layersPutLabel(vtx.bVid[n], bLbl)
         elif not vtx.bVid[n].isValid:
           return err(MergeNodeVtxDiffersFromExisting)
-        db.top.pAmk.append(bLbl, vtx.bVid[n])
+        db.layersPutLabel(vtx.bVid[n], bLbl)
 
   for w in vids:
-    db.top.pPrf.incl w
+    db.top.final.pPrf.incl w
     if not hasVtx or db.getKey(w) != hashKey:
-      db.top.sTab[w] = vtx.dup
-      db.top.dirty = true # Modified top level cache
+      db.layersPutVtx(w, vtx.dup)
 
   ok()
 
@@ -629,7 +606,7 @@ proc merge*(
   ##
   # Check whether the leaf is on the database and payloads match
   block:
-    let vid = db.top.lTab.getOrVoid leafTie
+    let vid = db.lTab.getOrVoid leafTie
     if vid.isValid:
       let vtx = db.getVtx vid
       if vtx.isValid and vtx.lData == payload:
@@ -672,7 +649,7 @@ proc merge*(
         return err(MergeAssemblyFailed) # Ooops
 
   # Update leaf acccess cache
-  db.top.lTab[leafTie] = okHike.legs[^1].wp.vid
+  db.top.final.lTab[leafTie] = okHike.legs[^1].wp.vid
 
   ok okHike
 
@@ -820,10 +797,9 @@ proc merge*(
   block:
     let
       lbl = HashLabel(root: rootVid, key: rootKey)
-      vids = db.top.pAmk.getOrVoid lbl
+      vids = db.layersGetLebalOrVoid lbl
     if not vids.isValid:
-      db.top.pAmk.append(lbl, rootVid)
-      db.top.dirty = true # Modified top level cache
+      db.layersPutlabel(rootVid, lbl)
 
   # Process over chains in reverse mode starting with the root node. This
   # allows the algorithm to find existing nodes on the backend.
@@ -875,7 +851,7 @@ proc merge*(
       return ok rootVid
 
     if not key.isValid:
-      db.vidAttach(HashLabel(root: rootVid, key: rootLink), rootVid)
+      db.layersPutLabel(rootVid, HashLabel(root: rootVid, key: rootLink))
       return ok rootVid
   else:
     let key = db.getKey VertexID(1)
@@ -884,13 +860,13 @@ proc merge*(
 
     # Otherwise assign unless valid
     if not key.isValid:
-      db.vidAttach(HashLabel(root: VertexID(1), key: rootLink), VertexID(1))
+      db.layersPutLabel(VertexID(1),HashLabel(root: VertexID(1), key: rootLink))
       return ok VertexID(1)
 
     # Create and assign a new root key
     if not rootVid.isValid:
       let vid = db.vidFetch
-      db.vidAttach(HashLabel(root: vid, key: rootLink), vid)
+      db.layersPutLabel(vid, HashLabel(root: vid, key: rootLink))
       return ok vid
 
   err(MergeRootKeyDiffersForVid)

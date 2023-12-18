@@ -579,7 +579,7 @@ func txTop*(
       ): CoreDbRc[AristoTxRef] =
   base.adb.txTop.toRc(base.parent, info)
 
-func txBegin*(
+proc txBegin*(
     base: AristoBaseRef;
     info: static[string];
       ): CoreDbRc[AristoTxRef] =
@@ -610,7 +610,7 @@ proc getHash*(
   let key = block:
     let rc = mpt.getKeyRc aVid
     if rc.isErr:
-      doAssert rc.error in {GetKeyNotFound,GetKeyTempLocked}
+      doAssert rc.error in {GetKeyNotFound,GetKeyUpdateNeeded}
       return err(rc.error.toError(db, info, HashNotAvailable))
     rc.value
 

@@ -18,7 +18,7 @@ import
   stew/endians2,
   ../../nimbus/db/aristo/[
     aristo_check, aristo_debug, aristo_delete, aristo_desc, aristo_get,
-    aristo_merge],
+    aristo_layers, aristo_merge],
   ../../nimbus/db/[aristo, aristo/aristo_init/persistent],
   ../replay/xcheck,
   ./test_helpers
@@ -88,7 +88,7 @@ proc randomisedLeafs(
     db: AristoDbRef;
     td: var PrngDesc;
        ): seq[(LeafTie,VertexID)] =
-  result = db.top.lTab.pairs.toSeq.filterIt(it[1].isvalid).sorted(
+  result = db.lTab.pairs.toSeq.filterIt(it[1].isvalid).sorted(
     cmp = proc(a,b: (LeafTie,VertexID)): int = cmp(a[0], b[0]))
   if 2 < result.len:
     for n in 0 ..< result.len-1:
@@ -102,6 +102,18 @@ proc innerCleanUp(db: AristoDbRef): bool {.discardable.}  =
     let rc = rx.value.collapse(commit=false)
     xCheckRc rc.error == 0
   db.finish(flush=true)
+
+proc schedStow(
+    db: AristoDbRef;                  # Database
+    chunkedMpt = false;               # Partial data (e.g. from `snap`)
+      ): Result[void,AristoError] =
+  ## Scheduled storage
+  let
+    layersMeter = db.nLayersVtx + db.nLayersLabel
+    filterMeter = if db.roFilter.isNil: 0
+                  else: db.roFilter.sTab.len + db.roFilter.kMap.len
+    persistent = MaxFilterBulk < max(layersMeter, filterMeter)
+  db.stow(persistent = persistent, chunkedMpt = chunkedMpt)
 
 proc saveToBackend(
     tx: var AristoTxRef;
@@ -125,7 +137,7 @@ proc saveToBackend(
     xCheckRc rc.error == 0
 
   # Make sure MPT hashes are OK
-  xCheck db.top.dirty == false
+  xCheck db.dirty == false
 
   block:
     let rc = db.txTop()
@@ -145,14 +157,14 @@ proc saveToBackend(
     xCheckRc rc.error == 0
 
   # Make sure MPT hashes are OK
-  xCheck db.top.dirty == false
+  xCheck db.dirty == false
 
   block:
     let rc = db.txTop()
     xCheckErr rc.value.level < 0 # force error
 
   block:
-    let rc = db.stow(stageLimit=MaxFilterBulk, chunkedMpt=chunkedMpt)
+    let rc = db.schedStow(chunkedMpt=chunkedMpt)
     xCheckRc rc.error == 0
 
   block:
@@ -183,7 +195,7 @@ proc saveToBackendWithOops(
     xCheckRc rc.error == 0
 
   # Make sure MPT hashes are OK
-  xCheck db.top.dirty == false
+  xCheck db.dirty == false
 
   block:
     let rc = db.txTop()
@@ -199,14 +211,14 @@ proc saveToBackendWithOops(
     xCheckRc rc.error == 0
 
   # Make sure MPT hashes are OK
-  xCheck db.top.dirty == false
+  xCheck db.dirty == false
 
   block:
     let rc = db.txTop()
     xCheckErr rc.value.level < 0 # force error
 
   block:
-    let rc = db.stow(stageLimit=MaxFilterBulk, chunkedMpt=chunkedMpt)
+    let rc = db.schedStow(chunkedMpt=chunkedMpt)
     xCheckRc rc.error == 0
 
   # Update layers to original level
@@ -449,8 +461,8 @@ proc testTxMergeProofAndKvpList*(
       testId = idPfx & "#" & $w.id & "." & $n
       runID = n
       lstLen = list.len
-      sTabLen = db.top.sTab.len
-      lTabLen = db.top.lTab.len
+      sTabLen = db.nLayersVtx()
+      lTabLen = db.lTab.len
       leafs = w.kvpLst.mapRootVid VertexID(1) # merge into main trie
 
     var
@@ -463,14 +475,14 @@ proc testTxMergeProofAndKvpList*(
 
       xCheck proved.error in {AristoError(0),MergeHashKeyCachedAlready}
       xCheck w.proof.len == proved.merged + proved.dups
-      xCheck db.top.lTab.len == lTabLen
-      xCheck db.top.sTab.len <= proved.merged + sTabLen
-      xCheck proved.merged < db.top.pAmk.len
+      xCheck db.lTab.len == lTabLen
+      xCheck db.nLayersVtx() <= proved.merged + sTabLen
+      xCheck proved.merged < db.nLayersLebal()
 
     let
       merged = db.merge leafs
 
-    xCheck db.top.lTab.len == lTabLen + merged.merged
+    xCheck db.lTab.len == lTabLen + merged.merged
     xCheck merged.merged + merged.dups == leafs.len
     xCheck merged.error in {AristoError(0), MergeLeafPathCachedAlready}
 

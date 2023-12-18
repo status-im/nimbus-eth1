@@ -32,7 +32,7 @@ type
 
 proc getLayerStateRoots*(
     db: AristoDbRef;
-    layer: LayerRef;
+    delta: LayerDelta;
     chunkedMpt: bool;
       ): Result[StateRootPair,AristoError] =
   ## Get the Merkle hash key for target state root to arrive at after this
@@ -51,7 +51,7 @@ proc getLayerStateRoots*(
   spr.be = sprBeKey.to(Hash256)
 
   spr.fg = block:
-    let lbl = layer.kMap.getOrVoid VertexID(1)
+    let lbl = delta.kMap.getOrVoid VertexID(1)
     if lbl.isValid:
       lbl.key.to(Hash256)
     else:
@@ -60,14 +60,14 @@ proc getLayerStateRoots*(
     return ok(spr)
 
   if chunkedMpt:
-    let vids = layer.pAmk.getOrVoid HashLabel(root: VertexID(1), key: sprBeKey)
-    if VertexID(1) in vids:
+    let lbl = HashLabel(root: VertexID(1), key: sprBeKey)
+    if VertexID(1) in delta.pAmk.getOrVoid lbl:
       spr.fg = spr.be
       return ok(spr)
 
-  if layer.sTab.len == 0 and
-     layer.kMap.len == 0 and
-     layer.pAmk.len == 0:
+  if delta.sTab.len == 0 and
+     delta.kMap.len == 0 and
+     delta.pAmk.len == 0:
     return err(FilPrettyPointlessLayer)
 
   err(FilStateRootMismatch)

@@ -16,7 +16,7 @@ import
   stew/interval_set,
   ../../aristo,
   ../aristo_walk/persistent,
-  ".."/[aristo_desc, aristo_get, aristo_vid]
+  ".."/[aristo_desc, aristo_get, aristo_layers, aristo_vid]
 
 const
   Vid2 = @[VertexID(2)].toHashSet
@@ -148,24 +148,23 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
 
   # Check top layer cache against backend
   if cache:
-    if db.top.dirty:
+    if db.dirty:
       return err((VertexID(0),CheckBeCacheIsDirty))
 
     # Check structural table
-    for (vid,vtx) in db.top.sTab.pairs:
-      # A `kMap[]` entry must exist.
-      if not db.top.kMap.hasKey vid:
+    for (vid,vtx) in db.layersWalkVtx:
+      let lbl = db.layersGetLabel(vid).valueOr:
+        # A `kMap[]` entry must exist.
         return err((vid,CheckBeCacheKeyMissing))
       if vtx.isValid:
         # Register existing vid against backend generator state
         discard vids.reduce Interval[VertexID,uint64].new(vid,vid)
       else:
         # Some vertex is to be deleted, the key must be empty
-        let lbl = db.top.kMap.getOrVoid vid
         if lbl.isValid:
           return err((vid,CheckBeCacheKeyNonEmpty))
-        # There must be a representation on the backend DB
-        if db.getVtxBE(vid).isErr:
+        # There must be a representation on the backend DB unless in a TX
+        if db.getVtxBE(vid).isErr and db.stack.len == 0:
           return err((vid,CheckBeCacheVidUnsynced))
         # Register deleted vid against backend generator state
         discard vids.merge Interval[VertexID,uint64].new(vid,vid)
@@ -185,10 +184,10 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
 
     # Check key table
     var list: seq[VertexID]
-    for (vid,lbl) in db.top.kMap.pairs:
+    for (vid,lbl) in db.layersWalkLabel:
       list.add vid
       let vtx = db.getVtx vid
-      if not db.top.sTab.hasKey(vid) and not vtx.isValid:
+      if db.layersGetVtx(vid).isErr and not vtx.isValid:
         return err((vid,CheckBeCacheKeyDangling))
       if not lbl.isValid or relax:
         continue
@@ -202,7 +201,7 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
 
     # Check vGen
     let
-      vGen = db.top.vGen.vidReorg.toHashSet
+      vGen = db.vGen.vidReorg.toHashSet
       vGenExpected = vids.invTo(HashSet[VertexID])
       delta = vGenExpected -+- vGen # symmetric difference
     if 0 < delta.len:

@@ -42,7 +42,7 @@ proc newAristoRdbDbRef(
         be.closeFn(flush = false)
         return err(rc.error)
       rc.value
-  ok AristoDbRef(top: LayerRef(vGen: vGen), backend: be)
+  ok AristoDbRef(top: LayerRef(final: LayerFinal(vGen: vGen)), backend: be)
 
 # ------------------------------------------------------------------------------
 # Public database constuctors, destructor

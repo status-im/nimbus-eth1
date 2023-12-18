@@ -11,10 +11,10 @@
 {.push raises: [].}
 
 import
-  std/[sequtils, sets, tables],
+  std/[sequtils, sets],
   eth/[common, trie/nibbles],
   results,
-  ".."/[aristo_desc, aristo_get, aristo_serialise, aristo_utils]
+  ".."/[aristo_desc, aristo_get, aristo_layers, aristo_serialise, aristo_utils]
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -26,8 +26,8 @@ proc checkTopStrict*(
   # No need to specify zero keys if implied by a leaf path with valid target
   # vertex ID (i.e. not deleted).
   var zeroKeys: HashSet[VertexID]
-  for (vid,vtx) in db.top.sTab.pairs:
-    let lbl = db.top.kMap.getOrVoid vid
+  for (vid,vtx) in db.layersWalkVtx:
+    let lbl = db.layersGetLabelOrVoid vid
 
     if not vtx.isValid:
       if lbl.isValid:
@@ -42,13 +42,13 @@ proc checkTopStrict*(
       if lbl.key != node.digestTo(HashKey):
         return err((vid,CheckStkVtxKeyMismatch))
 
-      let revVids = db.top.pAmk.getOrVoid lbl
+      let revVids = db.layersGetLebalOrVoid lbl
       if not revVids.isValid:
         return err((vid,CheckStkRevKeyMissing))
       if vid notin revVids:
         return err((vid,CheckStkRevKeyMismatch))
 
-    elif not db.top.dirty or not db.top.kMap.hasKey vid:
+    elif not db.dirty or db.layersGetLabel(vid).isErr:
       # So `vtx` exists but not `lbl`, so cache is supposed dirty and the
       # vertex has a zero entry.
       return err((vid,CheckStkVtxKeyMissing))
@@ -56,14 +56,14 @@ proc checkTopStrict*(
     else: # Empty key flags key is for update
       zeroKeys.incl vid
 
-  for (vid,key) in db.top.kMap.pairs:
+  for (vid,key) in db.layersWalkLabel:
     if not key.isValid and vid notin zeroKeys:
       if not db.getVtx(vid).isValid:
         return err((vid,CheckStkKeyStrayZeroEntry))
 
   let
-    pAmkVtxCount = db.top.pAmk.values.toSeq.foldl(a + b.len, 0)
-    sTabVtxCount = db.top.sTab.values.toSeq.filterIt(it.isValid).len
+    pAmkVtxCount = db.layersWalkLebal.toSeq.mapIt(it[1]).foldl(a + b.len, 0)
+    sTabVtxCount = db.layersWalkVtx.toSeq.mapIt(it[1]).filterIt(it.isValid).len
 
   # Non-zero values mist sum up the same
   if pAmkVtxCount + zeroKeys.len < sTabVtxCount:
@@ -75,26 +75,26 @@ proc checkTopStrict*(
 proc checkTopProofMode*(
     db: AristoDbRef;                   # Database, top layer
       ): Result[void,(VertexID,AristoError)] =
-  if 0 < db.top.pPrf.len:
-    for vid in db.top.pPrf:
-      let vtx = db.top.sTab.getOrVoid vid
+  if 0 < db.pPrf.len:
+    for vid in db.pPrf:
+      let vtx = db.layersGetVtxOrVoid vid
       if vtx.isValid:
         let node = vtx.toNode(db).valueOr:
           return err((vid,CheckRlxVtxIncomplete))
 
-        let lbl = db.top.kMap.getOrVoid vid
+        let lbl = db.layersGetlabelOrVoid vid
         if not lbl.isValid:
           return err((vid,CheckRlxVtxKeyMissing))
         if lbl.key != node.digestTo(HashKey):
           return err((vid,CheckRlxVtxKeyMismatch))
 
-        let revVids = db.top.pAmk.getOrVoid lbl
+        let revVids = db.layersGetLebalOrVoid lbl
         if not revVids.isValid:
           return err((vid,CheckRlxRevKeyMissing))
         if vid notin revVids:
           return err((vid,CheckRlxRevKeyMismatch))
   else:
-    for (vid,lbl) in db.top.kMap.pairs:
+    for (vid,lbl) in db.layersWalkLabel:
       if lbl.isValid:                              # Otherwise to be deleted
         let vtx = db.getVtx vid
         if vtx.isValid:
@@ -103,25 +103,24 @@ proc checkTopProofMode*(
           if lbl.key != node.digestTo(HashKey):
             return err((vid,CheckRlxVtxKeyMismatch))
 
-          let revVids = db.top.pAmk.getOrVoid lbl
+          let revVids = db.layersGetLebalOrVoid lbl
           if not revVids.isValid:
             return err((vid,CheckRlxRevKeyMissing))
           if vid notin revVids:
             return err((vid,CheckRlxRevKeyMismatch))
   ok()
 
-
 proc checkTopCommon*(
     db: AristoDbRef;                   # Database, top layer
       ): Result[void,(VertexID,AristoError)] =
   # Some `kMap[]` entries may ne void indicating backend deletion
   let
-    kMapCount = db.top.kMap.values.toSeq.filterIt(it.isValid).len
-    kMapNilCount = db.top.kMap.len - kMapCount
+    kMapCount = db.layersWalkLabel.toSeq.mapIt(it[1]).filterIt(it.isValid).len
+    kMapNilCount = db.layersWalkLabel.toSeq.len - kMapCount
 
   # Collect leafs and check deleted entries
   var nNilVtx = 0
-  for (vid,vtx) in db.top.sTab.pairs:
+  for (vid,vtx) in db.layersWalkVtx:
     if vtx.isValid:
       case vtx.vType:
       of Leaf:
@@ -140,11 +139,10 @@ proc checkTopCommon*(
           return err((vid,CheckAnyVtxExtPfxMissing))
     else:
       nNilVtx.inc
-      discard db.getVtxBE(vid).valueOr:
-        return err((vid,CheckAnyVidVtxMissing))
-      if not db.top.kMap.hasKey vid:
+      let rc = db.layersGetLabel vid
+      if rc.isErr:
         return err((vid,CheckAnyVtxEmptyKeyMissing))
-      if db.top.kMap.getOrVoid(vid).isValid:
+      if rc.value.isValid:
         return err((vid,CheckAnyVtxEmptyKeyExpected))
 
   # If present, there are at least as many deleted hashes as there are deleted
@@ -152,20 +150,20 @@ proc checkTopCommon*(
   if kMapNilCount != 0 and kMapNilCount < nNilVtx:
     return err((VertexID(0),CheckAnyVtxEmptyKeyMismatch))
 
-  let pAmkVtxCount = db.top.pAmk.values.toSeq.foldl(a + b.len, 0)
+  let pAmkVtxCount = db.layersWalkLebal.toSeq.mapIt(it[1]).foldl(a + b.len, 0)
   if pAmkVtxCount != kMapCount:
     var knownKeys: HashSet[VertexID]
-    for (key,vids) in db.top.pAmk.pairs:
+    for (key,vids) in db.layersWalkLebal:
       for vid in vids:
-        if not db.top.kMap.hasKey(vid):
+        if db.layersGetLabel(vid).isErr:
           return err((vid,CheckAnyRevVtxMissing))
         if vid in knownKeys:
           return err((vid,CheckAnyRevVtxDup))
         knownKeys.incl vid
     return err((VertexID(0),CheckAnyRevCountMismatch)) # should not apply(!)
 
-  for vid in db.top.pPrf:
-    if not db.top.kMap.hasKey(vid):
+  for vid in db.pPrf:
+    if db.layersGetLabel(vid).isErr:
       return err((vid,CheckAnyVtxLockWithoutKey))
   ok()
 

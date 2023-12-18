@@ -14,8 +14,8 @@
 {.push raises: [].}
 
 import
-  std/[algorithm, sequtils, tables],
-  ./aristo_desc
+  std/[algorithm, sequtils],
+  "."/[aristo_desc, aristo_layers]
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -30,45 +30,44 @@ proc vidFetch*(db: AristoDbRef; pristine = false): VertexID =
   ## When the argument `pristine` is set `true`, the function guarantees to
   ## return a non-recycled, brand new vertex *ID* which is the preferred mode
   ## when creating leaf vertices.
-  let top = db.top
-  if top.vGen.len == 0:
+  if db.vGen.len == 0:
     # Note that `VertexID(1)` is the root of the main trie
-    top.vGen = @[VertexID(3)]
+    db.top.final.vGen = @[VertexID(3)]
     result = VertexID(2)
-  elif top.vGen.len == 1 or pristine:
-    result = top.vGen[^1]
-    top.vGen[^1] = result + 1
+  elif db.vGen.len == 1 or pristine:
+    result = db.vGen[^1]
+    db.top.final.vGen[^1] = result + 1
   else:
-    result = top.vGen[^2]
-    top.vGen[^2] = top.vGen[^1]
-    top.vGen.setLen(top.vGen.len-1)
+    result = db.vGen[^2]
+    db.top.final.vGen[^2] = db.top.final.vGen[^1]
+    db.top.final.vGen.setLen(db.vGen.len-1)
 
 
 proc vidPeek*(db: AristoDbRef): VertexID =
   ## Like `new()` without consuming this *ID*. It will return the *ID* that
   ## would be returned by the `new()` function.
-  case db.top.vGen.len:
+  case db.vGen.len:
   of 0:
     VertexID(2)
   of 1:
-    db.top.vGen[^1]
+    db.vGen[^1]
   else:
-    db.top.vGen[^2]
+    db.vGen[^2]
 
 
 proc vidDispose*(db: AristoDbRef; vid: VertexID) =
   ## Recycle the argument `vtxID` which is useful after deleting entries from
   ## the vertex table to prevent the `VertexID` type key values small.
   if VertexID(1) < vid:
-    if db.top.vGen.len == 0:
-      db.top.vGen = @[vid]
+    if db.vGen.len == 0:
+      db.top.final.vGen = @[vid]
     else:
-      let topID = db.top.vGen[^1]
+      let topID = db.vGen[^1]
       # Only store smaller numbers: all numberts larger than `topID`
       # are free numbers
       if vid < topID:
-        db.top.vGen[^1] = vid
-        db.top.vGen.add topID
+        db.top.final.vGen[^1] = vid
+        db.top.final.vGen.add topID
 
 proc vidReorg*(vGen: seq[VertexID]): seq[VertexID] =
   ## Return a compacted version of the argument vertex ID generator state
@@ -94,17 +93,6 @@ proc vidReorg*(vGen: seq[VertexID]): seq[VertexID] =
     return @[lst[0]]
 
   vGen
-
-proc vidAttach*(db: AristoDbRef; lbl: HashLabel; vid: VertexID) =
-  ## Attach (i.r. register) a Merkle hash key to a vertex ID.
-  db.top.pAmk.append(lbl, vid)
-  db.top.kMap[vid] = lbl
-  db.top.dirty = true # Modified top level cache
-
-proc vidAttach*(db: AristoDbRef; lbl: HashLabel): VertexID {.discardable.} =
-  ## Variant of `vidAttach()` with auto-generated vertex ID
-  result = db.vidFetch
-  db.vidAttach(lbl, result)
 
 # ------------------------------------------------------------------------------
 # End
