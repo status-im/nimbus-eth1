@@ -253,6 +253,8 @@ proc createGetHandler*(db: BeaconDb): DbGetHandler =
         return Opt.none(seq[byte])
 
       case contentKey.contentType:
+      of unused:
+        raiseAssert "Should not be used and fail at decoding"
       of lightClientBootstrap:
         db.get(contentId)
       of lightClientUpdate:
@@ -309,6 +311,8 @@ proc createStoreHandler*(db: BeaconDb): DbStoreHandler =
       return
 
     case contentKey.contentType:
+    of unused:
+      raiseAssert "Should not be used and fail at decoding"
     of lightClientBootstrap:
       db.put(contentId, content)
     of lightClientUpdate:

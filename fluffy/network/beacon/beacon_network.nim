@@ -192,6 +192,8 @@ proc validateContent(
     return err("Error decoding content key")
 
   case key.contentType:
+  of unused:
+    raiseAssert "Should not be used and fail at decoding"
   of lightClientBootstrap:
     let decodingResult = decodeLightClientBootstrapForked(
       n.forkDigests, content)

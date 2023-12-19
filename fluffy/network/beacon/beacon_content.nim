@@ -1,4 +1,4 @@
-# Nimbus - Portal Network
+# Fluffy - Portal Network
 # Copyright (c) 2022-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
@@ -30,10 +30,12 @@ const
 
 type
   ContentType* = enum
-    lightClientBootstrap = 0x00
-    lightClientUpdate = 0x01
-    lightClientFinalityUpdate = 0x02
-    lightClientOptimisticUpdate = 0x03
+    # Note: See same note as for state_content.nim
+    unused = 0x00
+    lightClientBootstrap = 0x10
+    lightClientUpdate = 0x11
+    lightClientFinalityUpdate = 0x12
+    lightClientOptimisticUpdate = 0x13
 
   # TODO: Consider how we will gossip bootstraps?
   # In consensus light client operation a node trusts only one bootstrap hash,
@@ -59,6 +61,8 @@ type
 
   ContentKey* = object
     case contentType*: ContentType
+    of unused:
+      discard
     of lightClientBootstrap:
       lightClientBootstrapKey*: LightClientBootstrapKey
     of lightClientUpdate:
@@ -84,7 +88,16 @@ func forkDigestAtEpoch*(
   forkDigests.atEpoch(epoch, cfg)
 
 func encode*(contentKey: ContentKey): ByteList =
+  doAssert(contentKey.contentType != unused)
   ByteList.init(SSZ.encode(contentKey))
+
+proc readSszBytes*(
+    data: openArray[byte], val: var ContentKey) {.raises: [SszError].} =
+  mixin readSszValue
+  if data.len() > 0 and data[0] == ord(unused):
+    raise newException(MalformedSszError, "SSZ selector unused value")
+
+  readSszValue(data, val)
 
 func decode*(contentKey: ByteList): Opt[ContentKey] =
   try:

@@ -1,5 +1,5 @@
-# Nimbus
-# Copyright (c) 2021-2022 Status Research & Development GmbH
+# Fluffy
+# Copyright (c) 2021-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -31,7 +31,7 @@ suite "State ContentKey Encodings":
 
     # Output
       contentKeyHex =
-        "0044000000b8be7903aee73b8f6a59cd44a1f52c62148e1f376c0dfa1f5f773a98666efc2bd1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d01020001"
+        "2044000000b8be7903aee73b8f6a59cd44a1f52c62148e1f376c0dfa1f5f773a98666efc2bd1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d01020001"
       contentId =
         "41237096982860596884042712109427867048220765019203857308279863638242761605893"
       # or
@@ -67,7 +67,7 @@ suite "State ContentKey Encodings":
 
     # Output
       contentKeyHex =
-        "01829bd824b016326a401d083b33d092293333a830580000003e190b68719aecbcb28ed2271014dd25f2aa633184988eb414189ce0899cade5d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d01000f0e0c00"
+        "21829bd824b016326a401d083b33d092293333a830580000003e190b68719aecbcb28ed2271014dd25f2aa633184988eb414189ce0899cade5d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d01000f0e0c00"
       contentId =
         "43529358882110548041037387588279806363134301284609868141745095118932570363585"
       # or
@@ -100,7 +100,7 @@ suite "State ContentKey Encodings":
     # Output
     const
       contentKeyHex =
-        "02829bd824b016326a401d083b33d092293333a830d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d"
+        "22829bd824b016326a401d083b33d092293333a830d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d"
       contentId =
         "45301550050471302973396879294932122279426162994178563319590607565171451545101"
       # or
@@ -135,7 +135,7 @@ suite "State ContentKey Encodings":
 
     # Output
       contentKeyHex =
-        "03829bd824b016326a401d083b33d092293333a830c8a6030000000000000000000000000000000000000000000000000000000000d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d"
+        "23829bd824b016326a401d083b33d092293333a830c8a6030000000000000000000000000000000000000000000000000000000000d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d"
       contentId =
         "80413803151602881485894828440259195604313253842905231566803078625935967002376"
       # or
@@ -172,7 +172,7 @@ suite "State ContentKey Encodings":
     # Output
     const
       contentKeyHex =
-        "04829bd824b016326a401d083b33d092293333a830d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d"
+        "24829bd824b016326a401d083b33d092293333a830d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d"
       contentId =
         "9243655320250466575533858917172702581481192615849913473767356296630272634800"
       # or
@@ -199,3 +199,27 @@ suite "State ContentKey Encodings":
       toContentId(contentKey) == parse(contentId, StUint[256], 10)
       # In stint this does BE hex string
       toContentId(contentKey).toHex() == contentIdHexBE
+
+  test "Invalid prefix - 0 value":
+    let encoded =  ByteList.init(@[byte 0x00])
+    let decoded = decode(encoded)
+
+    check decoded.isNone()
+
+  test "Invalid prefix - before valid range":
+    let encoded = ByteList.init(@[byte 0x01])
+    let decoded = decode(encoded)
+
+    check decoded.isNone()
+
+  test "Invalid prefix - after valid range":
+    let encoded = ByteList.init(@[byte 0x25])
+    let decoded = decode(encoded)
+
+    check decoded.isNone()
+
+  test "Invalid key - empty input":
+    let encoded = ByteList.init(@[])
+    let decoded = decode(encoded)
+
+    check decoded.isNone()
