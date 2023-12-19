@@ -15,9 +15,9 @@ import
   eth/common,
   results,
   stew/byteutils,
-  ./kvt_desc,
   ./kvt_desc/desc_backend,
-  ./kvt_init/[memory_db, memory_only, rocks_db]
+  ./kvt_init/[memory_db, memory_only, rocks_db],
+  "."/[kvt_desc, kvt_layers]
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -127,18 +127,17 @@ proc ppBe[T](be: T; db: KvtDbRef; indent: int): string =
     spc = if 0 < data.len: pfx2 else: " "
   "<" & $be.kind & ">" & pfx1 & "tab" & spc & "{" & data & "}"
 
-# ------------------------------------------------------------------------------
-# Public functions
-# ------------------------------------------------------------------------------
-
-proc pp*(layer: LayerRef; db: KvtDbRef; indent = 4): string =
+proc ppLayer(layer: LayerRef; db: KvtDbRef; indent = 4): string =
   let
-    tLen = layer.tab.len
+    tLen = layer.dTab.len
     info = "tab(" & $tLen & ")"
     pfx1 = indent.toPfx(1)
     pfx2 = if 0 < tLen: indent.toPfx(2) else: " "
-  "<layer>" & pfx1 & info & pfx2 & layer.tab.ppTab(db,indent+2)
+  "<layer>" & pfx1 & info & pfx2 & layer.dTab.ppTab(db,indent+2)
 
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
 
 proc pp*(
   be: BackendRef;
@@ -162,7 +161,7 @@ proc pp*(
   let
     pfx = indent.toPfx
     pfx1 = indent.toPfx(1)
-  result = db.top.pp(db, indent=indent)
+  result = db.layersCc.ppLayer(db, indent=indent)
   if backendOk:
     result &= pfx & db.backend.pp(db, indent=indent)
   if keysOk:

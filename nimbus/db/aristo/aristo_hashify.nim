@@ -60,8 +60,8 @@ import
   eth/common,
   results,
   stew/byteutils,
-  "."/[aristo_desc, aristo_get, aristo_hike, aristo_serialise, aristo_utils,
-       aristo_vid]
+  "."/[aristo_desc, aristo_get, aristo_hike, aristo_layers, aristo_serialise,
+       aristo_utils]
 
 type
   FollowUpVid = object
@@ -213,8 +213,9 @@ proc updateSchedule(
         unresolved = error
         break findlegInx
       vid = leaf.vid
-    if not db.top.kMap.getOrVoid(vid).key.isValid:
-      db.vidAttach(HashLabel(root: root, key: node.digestTo(HashKey)), vid)
+
+    if not db.layersGetKeyOrVoid(vid).isValid:
+      db.layersPutLabel(vid, HashLabel(root: root, key: node.digestTo(HashKey)))
       # Clean up unnecessay leaf node from previous session
       wff.base.del vid
       wff.setNextLink(wff.pool, wff.base.getOrVoid vid)
@@ -231,7 +232,7 @@ proc updateSchedule(
         break findlegInx
 
     # All done this `hike`
-    if db.top.kMap.getOrVoid(root).key.isValid:
+    if db.layersGetKeyOrVoid(root).isValid:
       wff.root.excl root
     wff.completed.incl root
     return
@@ -294,10 +295,10 @@ proc hashify*(
     deleted = false                    # Need extra check for orphaned vertices
     wff: WidthFirstForest              # Leaf-to-root traversal structure
 
-  if not db.top.dirty:
+  if not db.dirty:
     return ok wff.completed
 
-  for (lky,lfVid) in db.top.lTab.pairs:
+  for (lky,lfVid) in db.lTab.pairs:
     let
       rc = lky.hikeUp db
       hike = rc.to(Hike)
@@ -329,11 +330,12 @@ proc hashify*(
     # is the task to search for unresolved node keys and add glue paths to
     # the width-first schedule.
     var unresolved: HashSet[VertexID]
-    for (vid,lbl) in db.top.kMap.pairs:
+    for (vid,lbl) in db.layersWalkLabel:
       if not lbl.isValid and
-         vid notin wff and
-         (vid notin db.top.sTab or db.top.sTab.getOrVoid(vid).isValid):
-        unresolved.incl vid
+         vid notin wff:
+        let rc = db.layersGetVtx vid
+        if rc.isErr or rc.value.isValid:
+          unresolved.incl vid
 
     let glue = unresolved.cloudConnect(db, wff.base)
     if 0 < glue.unresolved.len:
@@ -376,7 +378,7 @@ proc hashify*(
           # Add the child vertices to `redo[]` for the schedule `base[]` list.
           for w in error:
             if w notin wff.base:
-              if not db.top.sTab.hasKey w:
+              if db.layersGetVtx(w).isErr:
                 # Ooops, should have been marked for update
                 return err((w,HashifyNodeUnresolved))
               redo[w] = FollowUpVid(root: val.root, toVid: vid)
@@ -384,7 +386,7 @@ proc hashify*(
 
         # Could resolve => update Merkle hash
         let key = node.digestTo(HashKey)
-        db.vidAttach(HashLabel(root: val.root, key: key), vid)
+        db.layersPutLabel(vid, HashLabel(root: val.root, key: key))
 
         # Set follow up link for next round
         wff.setNextLink(redo, val)
@@ -393,15 +395,15 @@ proc hashify*(
     wff.base.swap redo
 
   # Update root nodes
-  for vid in wff.root - db.top.pPrf:
+  for vid in wff.root - db.pPrf:
     # Convert root vertex to a node.
     let node = db.getVtx(vid).toNode(db,stopEarly=false).valueOr:
       return err((vid,HashifyRootNodeUnresolved))
-    db.vidAttach(HashLabel(root: vid, key: node.digestTo(HashKey)), vid)
+    db.layersPutLabel(vid, HashLabel(root: vid, key: node.digestTo(HashKey)))
     wff.completed.incl vid
 
-  db.top.dirty = false
-  db.top.lTab.clear
+  db.top.final.dirty = false
+  db.top.final.lTab.clear
   ok wff.completed
 
 # ------------------------------------------------------------------------------

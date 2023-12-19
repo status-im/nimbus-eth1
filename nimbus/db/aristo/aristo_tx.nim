@@ -15,7 +15,7 @@
 
 import
   results,
-  "."/[aristo_desc, aristo_filter, aristo_get, aristo_hashify]
+  "."/[aristo_desc, aristo_filter, aristo_get, aristo_layers, aristo_hashify]
 
 func isTop*(tx: AristoTxRef): bool
 func level*(db: AristoDbRef): int
@@ -23,10 +23,6 @@ func level*(db: AristoDbRef): int
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
-
-func fromVae(err: (VertexID,AristoError)): AristoError =
-  ## Map error pair to error reason component
-  err[1]
 
 func getDbDescFromTopTx(tx: AristoTxRef): Result[AristoDbRef,AristoError] =
   if not tx.isTop():
@@ -108,35 +104,32 @@ proc forkTx*(
   ##
   let db = tx.db
 
-  # Provide new top layer
-  var topLayer: LayerRef
+  # Verify `tx` argument
   if db.txRef == tx:
-    topLayer = db.top.dup
-  elif tx.level < db.stack.len:
-    topLayer = db.stack[tx.level].dup
-  else:
+    if db.top.txUid != tx.txUid:
+      return err(TxArgStaleTx)
+  elif db.stack.len <= tx.level:
     return err(TxArgStaleTx)
-  if topLayer.txUid != tx.txUid:
+  elif db.stack[tx.level].txUid != tx.txUid:
     return err(TxArgStaleTx)
-  topLayer.txUid = 1
 
   # Provide new empty stack layer
   let stackLayer = block:
     let rc = db.getIdgBE()
     if rc.isOk:
-      LayerRef(vGen: rc.value)
+      LayerRef(final: LayerFinal(vGen: rc.value))
     elif rc.error == GetIdgNotFound:
       LayerRef()
     else:
       return err(rc.error)
 
-  let txClone = ? db.fork(rawToplayer = true)
-
   # Set up clone associated to `db`
-  txClone.top = topLayer          # is a deep copy
-  txClone.stack = @[stackLayer]
-  txClone.roFilter = db.roFilter  # no need to copy contents (done when updated)
+  let txClone = ? db.fork(rawToplayer = true)
+  txClone.top = db.layersCc tx.level      # Provide tx level 1 stack
+  txClone.stack = @[stackLayer]           # Zero level stack
+  txClone.roFilter = db.roFilter          # No need to copy (done when updated)
   txClone.backend = db.backend
+  txClone.top.txUid = 1
   txClone.txUidGen = 1
 
   # Install transaction similar to `tx` on clone
@@ -146,10 +139,9 @@ proc forkTx*(
     level: 1)
 
   if not dontHashify:
-    let rc = txClone.hashify()
-    if rc.isErr:
+    discard txClone.hashify().valueOr:
       discard txClone.forget()
-      return err(rc.error.fromVae)
+      return err(error[1])
 
   ok(txClone)
 
@@ -166,15 +158,14 @@ proc forkTop*(
   if db.txRef.isNil:
     let dbClone = ? db.fork(rawToplayer = true)
 
-    dbClone.top = db.top.dup       # is a deep copy
-    dbClone.roFilter = db.roFilter # no need to copy contents when updated
+    dbClone.top = db.layersCc      # Is a deep copy
+    dbClone.roFilter = db.roFilter # No need to copy contents when updated
     dbClone.backend = db.backend
 
     if not dontHashify:
-      let rc = dbClone.hashify()
-      if rc.isErr:
+      discard dbClone.hashify().valueOr:
         discard dbClone.forget()
-        return err(rc.error.fromVae)
+        return err(error[1])
     return ok(dbClone)
 
   db.txRef.forkTx dontHashify
@@ -215,8 +206,10 @@ proc txBegin*(db: AristoDbRef): Result[AristoTxRef,AristoError] =
   if db.level != db.stack.len:
     return err(TxStackGarbled)
 
-  db.stack.add db.top.dup # push (save and use top later)
-  db.top.txUid = db.getTxUid()
+  db.stack.add db.top
+  db.top = LayerRef(
+    final: db.top.final,
+    txUid: db.getTxUid)
 
   db.txRef = AristoTxRef(
     db:     db,
@@ -252,13 +245,20 @@ proc commit*(
   ## previous transaction is returned if there was any.
   ##
   let db = ? tx.getDbDescFromTopTx()
-  discard ? db.hashify().mapErr fromVae
+  discard db.hashify().valueOr:
+    return err(error[1])
 
-  # Keep top and discard layer below
-  db.top.txUid = db.stack[^1].txUid
+  # Replace the top two layers by its merged version
+  let merged = db.top.layersMergeOnto db.stack[^1]
+
+  # Install `merged` layer
+  db.top = merged
   db.stack.setLen(db.stack.len-1)
+  db.txRef = tx.parent
+  if 0 < db.stack.len:
+    db.txRef.txUid = db.getTxUid
+    db.top.txUid = db.txRef.txUid
 
-  db.txRef = db.txRef.parent
   ok()
 
 
@@ -278,7 +278,8 @@ proc collapse*(
 
   if commit:
     # For commit, hashify the current layer if requested and install it
-    discard ? db.hashify().mapErr fromVae
+    discard db.hashify().valueOr:
+      return err(error[1])
 
   db.top.txUid = 0
   db.stack.setLen(0)
@@ -316,35 +317,28 @@ proc stow*(
   if persistent and not db.canResolveBackendFilter():
     return err(TxBackendNotWritable)
 
-  discard ? db.hashify().mapErr fromVae
+  discard db.hashify().valueOr:
+    return err(error[1])
 
-  let fwd = ? db.fwdFilter(db.top, chunkedMpt).mapErr fromVae
+  let fwd = db.fwdFilter(db.top, chunkedMpt).valueOr:
+    return err(error[1])
 
   if fwd.isValid:
     # Merge `top` layer into `roFilter`
-    ? db.merge(fwd).mapErr fromVae
-    db.top = LayerRef(vGen: db.roFilter.vGen)
+    db.merge(fwd).isOkOr:
+      return err(error[1])
+    db.top = LayerRef(final: LayerFinal(vGen:  db.roFilter.vGen))
 
   if persistent:
     ? db.resolveBackendFilter()
     db.roFilter = FilterRef(nil)
 
-  # Delete or clear stack and clear top
-  db.stack.setLen(0)
-  db.top = LayerRef(vGen: db.top.vGen, txUid: db.top.txUid)
+  # Delete/clear top
+  db.top = LayerRef(
+    final: LayerFinal(vGen: db.vGen),
+    txUid: db.top.txUid)
 
   ok()
-
-proc stow*(
-    db: AristoDbRef;                  # Database
-    stageLimit: int;                  # Policy based persistent storage
-    chunkedMpt = false;               # Partial data (e.g. from `snap`)
-      ): Result[void,AristoError] =
-  ## Variant of `stow()` with the `persistent` argument replaced by
-  ## `stageLimit < max(db.roFilter.bulk, db.top.bulk)`.
-  db.stow(
-    persistent = (stageLimit < max(db.roFilter.bulk, db.top.bulk)),
-    chunkedMpt = chunkedMpt)
 
 # ------------------------------------------------------------------------------
 # End

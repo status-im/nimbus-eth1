@@ -130,7 +130,6 @@ type
     CheckRlxRevKeyMissing
     CheckRlxRevKeyMismatch
 
-    CheckAnyVidVtxMissing
     CheckAnyVtxEmptyKeyMissing
     CheckAnyVtxEmptyKeyExpected
     CheckAnyVtxEmptyKeyMismatch
@@ -216,10 +215,12 @@ type
     FilSiblingsCommitUnfinshed
 
     # Get functions from `aristo_get.nim`
+    GetLeafMissing
+    GetKeyUpdateNeeded
+
     GetLeafNotFound
     GetVtxNotFound
     GetKeyNotFound
-    GetKeyTempLocked
     GetFilNotFound
     GetIdgNotFound
     GetFqsNotFound

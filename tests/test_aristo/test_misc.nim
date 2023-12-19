@@ -19,7 +19,8 @@ import
   unittest2,
   ../../nimbus/db/aristo,
   ../../nimbus/db/aristo/[
-    aristo_check, aristo_debug, aristo_desc, aristo_blobify, aristo_vid],
+    aristo_check, aristo_debug, aristo_desc, aristo_blobify, aristo_layers,
+    aristo_vid],
   ../../nimbus/db/aristo/aristo_filter/filter_scheduler,
   ../replay/xcheck,
   ./test_helpers
@@ -275,41 +276,41 @@ proc testVidRecycleLists*(noisy = true; seed = 42): bool =
       expectedVids += (vid < first).ord
       db.vidDispose vid
 
-    xCheck db.top.vGen.len == expectedVids
-    noisy.say "***", "vids=", db.top.vGen.len, " discarded=", count-expectedVids
+    xCheck db.vGen.len == expectedVids
+    noisy.say "***", "vids=", db.vGen.len, " discarded=", count-expectedVids
 
   # Serialise/deserialise
   block:
-    let dbBlob = db.top.vGen.blobify
+    let dbBlob = db.vGen.blobify
 
     # Deserialise
     let
       db1 = AristoDbRef.init()
       rc = dbBlob.deblobify seq[VertexID]
     xCheckRc rc.error == 0
-    db1.top.vGen = rc.value
+    db1.top.final.vGen = rc.value
 
-    xCheck db.top.vGen == db1.top.vGen
+    xCheck db.vGen == db1.vGen
 
   # Make sure that recycled numbers are fetched first
-  let topVid = db.top.vGen[^1]
-  while 1 < db.top.vGen.len:
+  let topVid = db.vGen[^1]
+  while 1 < db.vGen.len:
     let w = db.vidFetch()
     xCheck w < topVid
-  xCheck db.top.vGen.len == 1 and db.top.vGen[0] == topVid
+  xCheck db.vGen.len == 1 and db.vGen[0] == topVid
 
   # Get some consecutive vertex IDs
   for n in 0 .. 5:
     let w = db.vidFetch()
     xCheck w == topVid + n
-    xCheck db.top.vGen.len == 1
+    xCheck db.vGen.len == 1
 
   # Repeat last test after clearing the cache
-  db.top.vGen.setLen(0)
+  db.top.final.vGen.setLen(0)
   for n in 0 .. 5:
     let w = db.vidFetch()
     xCheck w == VertexID(2) + n # VertexID(1) is default root ID
-    xCheck db.top.vGen.len == 1
+    xCheck db.vGen.len == 1
 
   # Recycling and re-org tests
   func toVQ(a: seq[int]): seq[VertexID] = a.mapIt(VertexID(it))
@@ -491,6 +492,8 @@ proc testShortKeys*(
         "\n    k=", k.toHex, " v=", v.toHex,
         "\n    r=", r.pp(sig),
         "\n    ", sig.pp(),
+        "\n",
+        "\n    pAmk=", sig.db.layersWalkLebal.toSeq.toTable.pp(sig.db),
         "\n"
       let w = sig.merkleSignCommit().value
       gossip.say "*** testShortkeys (2)", "n=", n, " inx=", inx,
@@ -498,6 +501,8 @@ proc testShortKeys*(
         "\n    r=", r.pp(sig),
         "\n    R=", w.pp(sig),
         "\n    ", sig.pp(),
+        "\n",
+        "\n    pAmk=", sig.db.layersWalkLebal.toSeq.toTable.pp(sig.db),
         "\n",
         "\n    ----------------",
         "\n"

@@ -15,14 +15,44 @@ import
   eth/[common, trie/nibbles],
   results,
   stew/byteutils,
-  "."/[aristo_constants, aristo_desc, aristo_get, aristo_hike],
   ./aristo_desc/desc_backend,
   ./aristo_init/[memory_db, memory_only, rocks_db],
-  ./aristo_filter/filter_scheduler
+  ./aristo_filter/filter_scheduler,
+  "."/[aristo_constants, aristo_desc, aristo_hike, aristo_layers]
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
+
+proc orDefault(db: AristoDbRef): AristoDbRef =
+  if db.isNil: AristoDbRef(top: LayerRef()) else: db
+
+proc del(xMap: var VidsByLabelTab; lbl: HashLabel; vid: VertexID) =
+  # Update `xMap`
+  var vidsLen = -1
+  xMap.withValue(lbl,value):
+    value[].excl vid
+    vidsLen = value[].len
+  if vidsLen == 0:
+    xMap.del lbl
+
+proc del(xMap: var VidsByLabelTab; lbl: HashLabel; vids: HashSet[VertexID]) =
+  for vid in vids:
+    xMap.del(lbl, vid)
+
+proc add(xMap: var VidsByLabelTab; lbl: HashLabel; vid: VertexID) =
+  xMap.withValue(lbl,value):
+    value[].incl vid
+  do: # else if not found
+    xMap[lbl] = @[vid].toHashSet
+
+func cmp(a, b: HashLabel): int =
+  if a.root != b.root:
+    a.root.cmp b.root
+  else:
+    a.key.cmp b.key
+
+# --------------------------
 
 proc toHex(w: VertexID): string =
   w.uint64.toHex
@@ -45,30 +75,15 @@ proc sortedKeys(sTab: Table[VertexID,VertexRef]): seq[VertexID] =
 proc sortedKeys(pPrf: HashSet[VertexID]): seq[VertexID] =
   pPrf.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID)
 
+proc sortedKeys(pAmk: Table[HashLabel,VertexID]): seq[HashLabel] =
+  pAmk.keys.toSeq.sorted cmp
+
+proc sortedKeys(pAmk: VidsByLabelTab): seq[HashLabel] =
+  pAmk.keys.toSeq.sorted cmp
+
+
 proc toPfx(indent: int; offset = 0): string =
   if 0 < indent+offset: "\n" & " ".repeat(indent+offset) else: ""
-
-proc lidVidUpdate(
-    db: AristoDbRef;
-    root: VertexID;
-    lid: HashKey;
-    vid: VertexID;
-      ): string =
-  if lid.isValid and vid.isValid:
-    let lbl = HashLabel(root: root, key: lid)
-    if not db.top.isNil:
-      let vids = db.top.pAmk.getOrVoid lbl
-      if vids.isValid:
-        if vid notin vids:
-          result = "(!)"
-        return
-    block:
-      let vids = db.xMap.getOrVoid lbl
-      if vids.isValid:
-        if vid notin vids:
-          result = "(!)"
-        return
-    db.xMap.append(lbl, vid)
 
 proc squeeze(s: string; hex = false; ignLen = false): string =
   ## For long strings print `begin..end` only
@@ -105,9 +120,10 @@ proc stripZeros(a: string; toExp = false): string =
 
 proc vidCode(lbl: HashLabel, db: AristoDbRef): uint64 =
   if lbl.isValid:
-    if not db.top.isNil:
-      let vids = db.top.pAmk.getOrVoid lbl
+    block:
+      let vids = db.layersGetLebalOrVoid lbl
       if vids.isValid:
+        db.xMap.del(lbl, vids)
         return vids.sortedKeys[0].uint64
     block:
       let vids = db.xMap.getOrVoid lbl
@@ -116,6 +132,29 @@ proc vidCode(lbl: HashLabel, db: AristoDbRef): uint64 =
 
 # ---------------------
 
+proc ppLabelOk(
+    db: AristoDbRef;
+    root: VertexID;
+    key: HashKey;
+    vid: VertexID;
+      ): string =
+  if key.isValid and vid.isValid:
+    let
+      lbl = HashLabel(root: root, key: key)
+      vids = db.layersGetLebalOrVoid lbl
+    if vids.isValid:
+      db.xMap.del(lbl, vids)
+      if vid notin vids:
+        result = "(!)"
+      return
+    block:
+      let vids = db.xMap.getOrVoid lbl
+      if vids.isValid:
+        if vid notin vids:
+          result = "(!)"
+        return
+    db.xMap.add(lbl,vid)
+
 proc ppVid(vid: VertexID; pfx = true): string =
   if pfx:
     result = "$"
@@ -123,6 +162,15 @@ proc ppVid(vid: VertexID; pfx = true): string =
     result &= vid.toHex.stripZeros.toLowerAscii
   else:
     result &= "ø"
+
+proc ppVids(vids: HashSet[VertexID]): string =
+  result = "{"
+  for vid in vids.toSeq.sorted:
+    result = "$"
+    if vid.isValid:
+      result &= vid.toHex.stripZeros.toLowerAscii
+    else:
+      result &= "ø"
 
 func ppCodeHash(h: Hash256): string =
   result = "¢"
@@ -168,15 +216,17 @@ proc ppVidList(vGen: openArray[VertexID]): string =
 #  "{" & vGen.sortedKeys.mapIt(it.ppVid).join(",") & "}"
 
 proc ppKey(key: HashKey; db: AristoDbRef; root: VertexID; pfx = true): string =
-  proc getVids: HashSet[VertexID] =
-    if not db.top.isNil:
-      let vids = db.top.pAmk.getOrVoid HashLabel(root: root, key: key)
-      if vids.isValid:
-        return vids
+  proc getVids(): tuple[vids: HashSet[VertexID], xMapTag: string] =
+    let lbl = HashLabel(root: root, key: key)
     block:
-      let vids = db.xMap.getOrVoid HashLabel(root: root, key: key)
+      let vids = db.layersGetLebalOrVoid lbl
       if vids.isValid:
-        return vids
+        db.xMap.del(lbl, vids)
+        return (vids, "")
+    block:
+      let vids = db.xMap.getOrVoid lbl
+      if vids.isValid:
+        return (vids, "+")
   if pfx:
     result = "£"
   if key.len == 0 or key.to(Hash256) == Hash256():
@@ -186,12 +236,12 @@ proc ppKey(key: HashKey; db: AristoDbRef; root: VertexID; pfx = true): string =
   else:
     let
       tag = if key.len < 32: "[#" & $key.len & "]" else: ""
-      vids = getVids()
+      (vids, xMapTag) = getVids()
     if vids.isValid:
       if not pfx and 0 < tag.len:
         result &= "$"
       if 1 < vids.len: result &= "{"
-      result &= vids.sortedKeys.mapIt(it.ppVid(pfx=false)).join(",")
+      result &= vids.sortedKeys.mapIt(it.ppVid(pfx=false) & xMapTag).join(",")
       if 1 < vids.len: result &= "}"
       result &= tag
       return
@@ -236,9 +286,9 @@ proc ppVtx(nd: VertexRef, db: AristoDbRef, vid: VertexID): string =
   if not nd.isValid:
     result = "ø"
   else:
-    if db.top.isNil or not vid.isValid or vid in db.top.pPrf:
+    if not vid.isValid or vid in db.pPrf:
       result = ["L(", "X(", "B("][nd.vType.ord]
-    elif vid in db.top.kMap:
+    elif db.layersGetLabel(vid).isOk:
       result = ["l(", "x(", "b("][nd.vType.ord]
     else:
       result = ["ł(", "€(", "þ("][nd.vType.ord]
@@ -257,7 +307,7 @@ proc ppVtx(nd: VertexRef, db: AristoDbRef, vid: VertexID): string =
 
 proc ppSTab(
     sTab: Table[VertexID,VertexRef];
-    db = AristoDbRef();
+    db: AristoDbRef;
     indent = 4;
       ): string =
   "{" & sTab.sortedKeys
@@ -267,9 +317,9 @@ proc ppSTab(
 
 proc ppLTab(
     lTab: Table[LeafTie,VertexID];
+    db: AristoDbRef;
     indent = 4;
       ): string =
-  let db = AristoDbRef()
   "{" & lTab.sortedKeys
             .mapIt((it, lTab.getOrVoid it))
             .mapIt("(" & it[0].ppLeafTie(db) & "," & it[1].ppVid & ")")
@@ -281,16 +331,25 @@ proc ppPPrf(pPrf: HashSet[VertexID]): string =
 proc ppXMap*(
     db: AristoDbRef;
     kMap: Table[VertexID,HashLabel];
-    pAmk: Table[HashLabel,HashSet[VertexID]];
+    pAmk: VidsByLabelTab;
     indent: int;
       ): string =
 
   let pfx = indent.toPfx(1)
 
-  var dups: HashSet[VertexID]
-  for vids in pAmk.values:
-    if 1 < vids.len:
-      dups = dups + vids
+  var
+    multi: HashSet[VertexID]
+    oops: HashSet[VertexID]
+  block:
+    var vids: HashSet[VertexID]
+    for w in pAmk.values:
+      for v in w:
+        if v in vids:
+          oops.incl v
+        else:
+          vids.incl v
+      if 1 < w.len:
+        multi = multi + w
 
   # Vertex IDs without forward mapping `kMap: VertexID -> HashLabel`
   var revOnly: Table[VertexID,HashLabel]
@@ -347,7 +406,7 @@ proc ppXMap*(
   for vid in kMap.sortedKeys:
     let lbl = kMap.getOrVoid vid
     if lbl.isValid:
-      cache.add (vid.uint64, lbl.vidCode(db), vid in dups)
+      cache.add (vid.uint64, lbl.vidCode(db), vid in multi)
       let vids = pAmk.getOrVoid lbl
       if (0 < vids.len and vid notin vids) or lbl.key.len < 32:
         cache[^1][2] = true
@@ -452,7 +511,7 @@ proc ppLayer(
   proc doPrefix(s: string; dataOk: bool): string =
     var rc: string
     if tagOk:
-      rc = pfy & s & (if dataOk: pfx2 else: " ")
+      rc = pfy & s & (if dataOk: pfx2 else: "")
       pfy = pfx1
     else:
       rc = pfy
@@ -464,35 +523,35 @@ proc ppLayer(
       result &= "<layer>".doPrefix(false)
     if vGenOk:
       let
-        tLen = layer.vGen.len
+        tLen = layer.final.vGen.len
         info = "vGen(" & $tLen & ")"
-      result &= info.doPrefix(0 < tLen) & layer.vGen.ppVidList
+      result &= info.doPrefix(0 < tLen) & layer.final.vGen.ppVidList
     if sTabOk:
       let
-        tLen = layer.sTab.len
+        tLen = layer.delta.sTab.len
         info = "sTab(" & $tLen & ")"
-      result &= info.doPrefix(0 < tLen) & layer.sTab.ppSTab(db,indent+2)
+      result &= info.doPrefix(0 < tLen) & layer.delta.sTab.ppSTab(db,indent+2)
     if lTabOk:
       let
-        tlen = layer.lTab.len
+        tlen = layer.final.lTab.len
         info = "lTab(" & $tLen & ")"
-      result &= info.doPrefix(0 < tLen) & layer.lTab.ppLTab(indent+2)
+      result &= info.doPrefix(0 < tLen) & layer.final.lTab.ppLTab(db,indent+2)
     if kMapOk:
       let
-        tLen = layer.kMap.len
-        ulen = layer.pAmk.len
+        tLen = layer.delta.kMap.len
+        ulen = layer.delta.pAmk.len
         lInf = if tLen == uLen: $tLen else: $tLen & "," & $ulen
         info = "kMap(" & lInf & ")"
       result &= info.doPrefix(0 < tLen + uLen)
-      result &= db.ppXMap(layer.kMap, layer.pAmk, indent+2)
+      result &= db.ppXMap(layer.delta.kMap, layer.delta.pAmk, indent+2)
     if pPrfOk:
       let
-        tLen = layer.pPrf.len
+        tLen = layer.final.pPrf.len
         info = "pPrf(" & $tLen & ")"
-      result &= info.doPrefix(0 < tLen) & layer.pPrf.ppPPrf
+      result &= info.doPrefix(0 < tLen) & layer.final.pPrf.ppPPrf
     if 0 < nOKs:
       let
-        info = if layer.dirty: "dirty" else: "clean"
+        info = if layer.final.dirty: "dirty" else: "clean"
       result &= info.doPrefix(false)
 
 # ------------------------------------------------------------------------------
@@ -510,14 +569,14 @@ proc pp*(w: Hash256): string =
 proc pp*(w: HashKey; sig: MerkleSignRef): string =
   w.ppKey(sig.db, sig.root)
 
-proc pp*(w: HashKey; db = AristoDbRef(); root = VertexID(1)): string =
-  w.ppKey(db, root)
+proc pp*(w: HashKey; db = AristoDbRef(nil); root = VertexID(1)): string =
+  w.ppKey(db.orDefault, root)
 
-proc pp*(lbl: HashLabel, db = AristoDbRef()): string =
-  lbl.ppLabel(db)
+proc pp*(lbl: HashLabel, db = AristoDbRef(nil)): string =
+  lbl.ppLabel(db.orDefault)
 
-proc pp*(lty: LeafTie, db = AristoDbRef()): string =
-  lty.ppLeafTie(db)
+proc pp*(lty: LeafTie, db = AristoDbRef(nil)): string =
+  lty.ppLeafTie(db.orDefault)
 
 proc pp*(vid: VertexID): string =
   vid.ppVid
@@ -540,11 +599,11 @@ proc pp*(a: openArray[QidAction]): string =
 proc pp*(vGen: openArray[VertexID]): string =
   vGen.ppVidList
 
-proc pp*(p: PayloadRef, db = AristoDbRef()): string =
-  p.ppPayload(db)
+proc pp*(p: PayloadRef, db = AristoDbRef(nil)): string =
+  p.ppPayload(db.orDefault)
 
-proc pp*(nd: VertexRef, db = AristoDbRef()): string =
-  nd.ppVtx(db, VertexID(0))
+proc pp*(nd: VertexRef, db = AristoDbRef(nil)): string =
+  nd.ppVtx(db.orDefault, VertexID(0))
 
 proc pp*(nd: NodeRef; root: VertexID; db: AristoDbRef): string =
   if not nd.isValid:
@@ -560,14 +619,14 @@ proc pp*(nd: NodeRef; root: VertexID; db: AristoDbRef): string =
     of Extension:
       result &= $nd.ePfx.ppPathPfx & "," & nd.eVid.ppVid & ","
       result &= nd.key[0].ppKey(db,root)
-      result &= db.lidVidUpdate(root, nd.key[0], nd.eVid)
+      result &= db.ppLabelOk(root, nd.key[0], nd.eVid)
 
     of Branch:
       result &= "["
       for n in 0..15:
         if nd.bVid[n].isValid or nd.key[n].isValid:
           result &= nd.bVid[n].ppVid
-        result &= db.lidVidUpdate(root, nd.key[n], nd.bVid[n]) & ","
+        result &= db.ppLabelOk(root, nd.key[n], nd.bVid[n]) & ","
       result[^1] = ']'
 
       result &= ",["
@@ -579,40 +638,43 @@ proc pp*(nd: NodeRef; root: VertexID; db: AristoDbRef): string =
   result &= ")"
 
 proc pp*(nd: NodeRef): string =
-  var db = AristoDbRef()
-  nd.pp(db)
+  nd.pp(AristoDbRef(nil).orDefault)
 
 proc pp*(
     sTab: Table[VertexID,VertexRef];
-    db = AristoDbRef();
+    db = AristoDbRef(nil);
     indent = 4;
       ): string =
-  sTab.ppSTab
+  sTab.ppSTab(db.orDefault)
 
-proc pp*(lTab: Table[LeafTie,VertexID]; indent = 4): string =
-  lTab.ppLTab
+proc pp*(
+    lTab: Table[LeafTie,VertexID];
+    db = AristoDbRef(nil);
+    indent = 4;
+      ): string =
+  lTab.ppLTab(db.orDefault, indent)
 
 proc pp*(pPrf: HashSet[VertexID]): string =
   pPrf.ppPPrf
 
-proc pp*(leg: Leg; db = AristoDbRef()): string =
+proc pp*(leg: Leg; db = AristoDbRef(nil)): string =
+  let db = db.orDefault()
   result = "(" & leg.wp.vid.ppVid & ","
-  if not db.top.isNil:
-    let lbl = db.top.kMap.getOrVoid leg.wp.vid
+  block:
+    let lbl = db.layersGetLabelOrVoid leg.wp.vid
     if not lbl.isValid:
       result &= "ø"
-    elif leg.wp.vid notin db.top.pAmk.getOrVoid lbl:
+    elif leg.wp.vid notin db.layersGetLebalOrVoid lbl:
       result &= lbl.ppLabel(db)
-  result &= ","
-  if leg.backend:
-    result &= "¶"
   result &= ","
   if 0 <= leg.nibble:
     result &= $leg.nibble.ppNibble
   result &= "," & leg.wp.vtx.pp(db) & ")"
 
-proc pp*(hike: Hike; db = AristoDbRef(); indent = 4): string =
-  let pfx = indent.toPfx(1)
+proc pp*(hike: Hike; db = AristoDbRef(nil); indent = 4): string =
+  let
+    db = db.orDefault()
+    pfx = indent.toPfx(1)
   result = "["
   if hike.legs.len == 0:
     result &= "(" & hike.root.ppVid & ")"
@@ -624,30 +686,37 @@ proc pp*(hike: Hike; db = AristoDbRef(); indent = 4): string =
   result &= "]"
 
 proc pp*(kMap: Table[VertexID,Hashlabel]; indent = 4): string =
-  let db = AristoDbRef()
+  let db =  AristoDbRef(nil).orDefault
   "{" & kMap.sortedKeys
-            .mapIt((it,kMap.getOrVoid it))
-            .filterIt(it[1].isValid)
+            .mapIt((it, kMap.getOrVoid it))
             .mapIt("(" & it[0].ppVid & "," & it[1].ppLabel(db) & ")")
             .join("," & indent.toPfx(1)) & "}"
 
-proc pp*(pAmk: Table[Hashlabel,VertexID]; indent = 4): string =
-  let db = AristoDbRef()
-  var rev = pAmk.pairs.toSeq.mapIt((it[1],it[0])).toTable
-  "{" & rev.sortedKeys
-           .mapIt((it,rev.getOrVoid it))
-           .filterIt(it[1].isValid)
-           .mapIt("(" & it[1].ppLabel(db) & "," & it[0].ppVid & ")")
-           .join("," & indent.toPfx(1)) & "}"
-
 proc pp*(kMap: Table[VertexID,Hashlabel]; db: AristoDbRef; indent = 4): string =
-  db.ppXMap(kMap, db.top.pAmk, indent)
+  db.ppXMap(kMap, db.layersCc.delta.pAmk, indent)
 
-proc pp*(pAmk: VidsByLabel; db: AristoDbRef; indent = 4): string =
-  db.ppXMap(db.top.kMap, pAmk, indent)
+proc pp*(
+    pAmk: Table[HashLabel,VertexID];
+    db = AristoDbRef(nil);
+    indent = 4;
+      ): string =
+  let db = db.orDefault
+  "{" & pAmk.sortedkeys
+            .mapIt((it, pAmk.getOrVoid it))
+            .mapIt("(" & it[0].ppLabel(db) & "," & it[1].ppVid & ")")
+            .join("," & indent.toPfx(1)) & "}"
+
+proc pp*(pAmk: VidsByLabelTab; db = AristoDbRef(nil); indent = 4): string =
+  let db = db.orDefault
+  "{" & pAmk.sortedkeys
+            .mapIt((it, pAmk.getOrVoid it))
+            .mapIt("(" & it[0].ppLabel(db) & "," & it[1].ppVids & ")")
+            .join("," & indent.toPfx(1)) & "}"
+
+# ---------------------
 
 proc pp*(tx: AristoTxRef): string =
-  result = "(uid=" & $tx.txUid & ",lvl=" & $tx.level
+  result = "(uid=" & $tx.txUid & ",level=" & $tx.level
   if not tx.parent.isNil:
     result &= ", par=" & $tx.parent.txUid
   result &= ")"
@@ -655,7 +724,6 @@ proc pp*(tx: AristoTxRef): string =
 proc pp*(wp: VidVtxPair; db: AristoDbRef): string =
   "(" & wp.vid.pp & "," & wp.vtx.pp(db) & ")"
 
-# ---------------------
 
 proc pp*(
     layer: LayerRef;
@@ -691,7 +759,7 @@ proc pp*(
     xTabOk: bool;
     indent = 4;
       ): string =
-  db.top.pp(db, xTabOk=xTabOk, indent=indent)
+  db.layersCc.pp(db, xTabOk=xTabOk, indent=indent)
 
 proc pp*(
     db: AristoDbRef;
@@ -700,15 +768,15 @@ proc pp*(
     other = false;
     indent = 4;
       ): string =
-  db.top.pp(db, xTabOk=xTabOk, kMapOk=kMapOk, other=other, indent=indent)
+  db.layersCc.pp(db, xTabOk=xTabOk, kMapOk=kMapOk, other=other, indent=indent)
 
 proc pp*(
     filter: FilterRef;
-    db = AristoDbRef();
+    db = AristoDbRef(nil);
     root = VertexID(1);
     indent = 4;
       ): string =
-  filter.ppFilter(db, root, indent)
+  filter.ppFilter(db.orDefault(), root, indent)
 
 proc pp*(
   be: BackendRef;
@@ -732,7 +800,9 @@ proc pp*(
     backendOk = false;
     filterOk = true;
       ): string =
-  result = db.top.pp(db, indent=indent) & indent.toPfx
+  result = db.layersCc.pp(db, indent=indent) & indent.toPfx
+  if 0 < db.stack.len:
+    result &= " level=" & $db.stack.len & indent.toPfx
   if backendOk:
     result &= db.backend.pp(db)
   elif filterOk:

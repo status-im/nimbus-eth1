@@ -16,7 +16,7 @@
 import
   eth/common,
   results,
-  "."/[aristo_desc, aristo_get]
+  "."/[aristo_desc, aristo_get, aristo_layers]
 
 # ------------------------------------------------------------------------------
 # Public functions, converters
@@ -106,10 +106,13 @@ proc toNode*(
   ## storage root.
   ##
   proc getKey(db: AristoDbRef; vid: VertexID; beOk: bool): HashKey =
-    block:
-      let lbl = db.top.kMap.getOrVoid vid
+    block body:
+      let lbl = db.layersGetLabel(vid).valueOr:
+        break body
       if lbl.isValid:
         return lbl.key
+      else:
+        return VOID_HASH_KEY
     if beOk:
       let rc = db.getKeyBE vid
       if rc.isOk:
@@ -137,7 +140,7 @@ proc toNode*(
     for n in 0 .. 15:
       let vid = vtx.bVid[n]
       if vid.isValid:
-        let key = db.getKey(vid, beKeyOk)
+        let key = db.getKey(vid, beOk=beKeyOk)
         if key.isValid:
           node.key[n] = key
         elif stopEarly:
@@ -151,7 +154,7 @@ proc toNode*(
   of Extension:
     let
       vid = vtx.eVid
-      key = db.getKey(vid, beKeyOk)
+      key = db.getKey(vid, beOk=beKeyOk)
     if not key.isValid:
       return err(@[vid])
     let node = NodeRef(vType: Extension, ePfx: vtx.ePfx, eVid: vid)

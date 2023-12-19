@@ -33,20 +33,7 @@ type
     codeHash*:  Hash256
 
   PayloadType* = enum
-    ## Type of leaf data. On the Aristo backend, data are serialised as
-    ## follows:
-    ##
-    ## * Opaque data => opaque data, marked `0xff`
-    ## * `Account` object => RLP encoded data, marked `0xaa`
-    ## * `AristoAccount` object => serialised account, marked `0x99` or smaller
-    ##
-    ## On deserialisation from the Aristo backend, there is no reverese for an
-    ## `Account` object. It rather is kept as an RLP encoded `Blob`.
-    ##
-    ## * opaque data, marked `0xff` => `RawData`
-    ## * RLP encoded data, marked `0xaa` => `RlpData`
-    ## * erialised account, marked `0x99` or smaller => `AccountData`
-    ##
+    ## Type of leaf data.
     RawData                          ## Generic data
     RlpData                          ## Marked RLP encoded
     AccountData                      ## `Aristo account` with vertex IDs links
@@ -81,7 +68,7 @@ type
   # ----------------------
 
   FilterRef* = ref object
-    ## Delta layer with expanded sequences for quick access
+    ## Delta layer with expanded sequences for quick access.
     fid*: FilterID                   ## Filter identifier
     src*: Hash256                    ## Applicable to this state root
     trg*: Hash256                    ## Resulting state root (i.e. `kMap[1]`)
@@ -89,20 +76,55 @@ type
     kMap*: Table[VertexID,HashKey]   ## Filter Merkle hash key mapping
     vGen*: seq[VertexID]             ## Filter unique vertex ID generator
 
-  VidsByLabel* = Table[HashLabel,HashSet[VertexID]]
+  VidsByLabelTab* = Table[HashLabel,HashSet[VertexID]]
     ## Reverse lookup searching `VertexID` by the hash key/label.
+
+  LayerDelta* = object
+    ## Delta layers are stacked implying a tables hierarchy. Table entries on
+    ## a higher level take precedence over lower layer table entries. So an
+    ## existing key-value table entry of a layer on top supersedes same key
+    ## entries on all lower layers. A missing entry on a higher layer indicates
+    ## that the key-value pair might be fond on some lower layer.
+    ##
+    ## A zero value (`nil`, empty hash etc.) is considered am missing key-value
+    ## pair. Tables on the `LayerDelta` may have stray zero key-value pairs for
+    ## missing entries due to repeated transactions while adding and deleting
+    ## entries. There is no need to purge redundant zero entries.
+    ##
+    ## As for `kMap[]` entries, there might be a zero value entriy relating
+    ## (i.e. indexed by the same vertex ID) to an `sMap[]` non-zero value entry
+    ## (of the same layer or a lower layer whatever comes first.) This entry
+    ## is kept as a reminder that the hash value of the `kMap[]` entry needs
+    ## to be re-compiled.
+    ##
+    ## The reasoning behind the above scenario is that every vertex held on the
+    ## `sTab[]` tables must correspond to a hash entry held on the `kMap[]`
+    ## tables. So a corresponding zero value or missing entry produces an
+    ## inconsistent state that must be resolved.
+    ##
+    sTab*: Table[VertexID,VertexRef] ## Structural vertex table
+    kMap*: Table[VertexID,HashLabel] ## Merkle hash key mapping
+    pAmk*: VidsByLabelTab            ## Reverse `kMap` entries, hash key lookup
+
+  LayerFinal* = object
+    ## Final tables fully supersede tables on lower layers when stacked as a
+    ## whole. Missing entries on a higher layers are the final state (for the
+    ## the top layer version of the table.)
+    ##
+    ## These structures are used for tables which are typically smaller then
+    ## the ones on the `LayerDelta` object.
+    ##
+    lTab*: Table[LeafTie,VertexID]   ## Access path to leaf vertex
+    pPrf*: HashSet[VertexID]         ## Locked vertices (proof nodes)
+    vGen*: seq[VertexID]             ## Unique vertex ID generator
+    dirty*: bool                     ## Needs to be hashified if `true`
 
   LayerRef* = ref object
     ## Hexary trie database layer structures. Any layer holds the full
     ## change relative to the backend.
-    sTab*: Table[VertexID,VertexRef]  ## Structural vertex table
-    lTab*: Table[LeafTie,VertexID]    ## Direct access, path to leaf vertex
-    kMap*: Table[VertexID,HashLabel]  ## Merkle hash key mapping
-    pAmk*: VidsByLabel                ## Reverse `kMap` entries, hash key lookup
-    pPrf*: HashSet[VertexID]          ## Locked vertices (proof nodes)
-    vGen*: seq[VertexID]              ## Unique vertex ID generator
-    txUid*: uint                      ## Transaction identifier if positive
-    dirty*: bool                      ## Needs to be hashified if `true`
+    delta*: LayerDelta               ## Most structural tables held as deltas
+    final*: LayerFinal               ## Stored as latest version
+    txUid*: uint                     ## Transaction identifier if positive
 
   # ----------------------
 
@@ -137,25 +159,6 @@ const
 
 func max(a, b, c: int): int =
   max(max(a,b),c)
-
-# ------------------------------------------------------------------------------
-# Public helpers: `Table[HashLabel,seq[VertexID]]`
-# ------------------------------------------------------------------------------
-
-proc append*(pAmk: var VidsByLabel; lbl: HashLabel; vid: VertexID) =
-  pAmk.withValue(lbl,value):
-    value[].incl vid
-  do: # else if not found
-    pAmk[lbl] = @[vid].toHashSet
-
-proc delete*(pAmk: var VidsByLabel; lbl: HashLabel; vid: VertexID) =
-  var deleteItem = false
-  pAmk.withValue(lbl,value):
-    value[].excl vid
-    if value[].len == 0:
-      deleteItem = true
-  if deleteItem:
-    pAmk.del lbl
 
 # ------------------------------------------------------------------------------
 # Public helpers: `NodeRef` and `PayloadRef`
@@ -292,18 +295,6 @@ func dup*(node: NodeRef): NodeRef =
         vType: Branch,
         bVid:  node.bVid,
         key:   node.key)
-
-func dup*(layer: LayerRef): LayerRef =
-  ## Duplicate layer.
-  result = LayerRef(
-    lTab:  layer.lTab,
-    kMap:  layer.kMap,
-    pAmk:  layer.pAmk,
-    pPrf:  layer.pPrf,
-    vGen:  layer.vGen,
-    txUid: layer.txUid)
-  for (k,v) in layer.sTab.pairs:
-    result.sTab[k] = v.dup
 
 # ---------------
 

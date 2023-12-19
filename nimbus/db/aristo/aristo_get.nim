@@ -16,21 +16,7 @@
 import
   std/tables,
   results,
-  ./aristo_desc
-
-type
-  VidVtxPair* = object
-    vid*: VertexID                 ## Table lookup vertex ID (if any)
-    vtx*: VertexRef                ## Reference to vertex
-
-# ------------------------------------------------------------------------------
-# Public helpers
-# ------------------------------------------------------------------------------
-
-func dup*(wp: VidVtxPair): VidVtxPair =
-  VidVtxPair(
-    vid: wp.vid,
-    vtx: wp.vtx.dup)
+  "."/[aristo_desc, aristo_layers]
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -124,17 +110,21 @@ proc getLeaf*(
     db: AristoDbRef;
     lty: LeafTie;
       ): Result[VidVtxPair,AristoError] =
-  ## Get the vertex from the top layer by the `Patricia Trie` path. This
-  ## function does not search on the `backend` layer.
-  let vid = db.top.lTab.getOrVoid lty
+  ## Get the leaf path from the cache layers and look up the database for a
+  ## leaf node.
+  let vid = db.lTab.getOrVoid lty
   if not vid.isValid:
     return err(GetLeafNotFound)
 
-  let vtx = db.top.sTab.getOrVoid vid
-  if not vtx.isValid:
-    return err(GetVtxNotFound)
+  block body:
+    let vtx = db.layersGetVtx(vid).valueOr:
+      break body
+    if vtx.isValid:
+      return ok(VidVtxPair(vid: vid, vtx: vtx))
 
-  ok VidVtxPair(vid: vid, vtx: vtx)
+  # The leaf node cannot be on the backend. It was produced by a `merge()`
+  # action. So this is a system problem.
+  err(GetLeafMissing)
 
 proc getLeafVtx*(db: AristoDbRef; lty: LeafTie): VertexRef =
   ## Variant of `getLeaf()` returning `nil` on error (while ignoring the
@@ -147,44 +137,59 @@ proc getLeafVtx*(db: AristoDbRef; lty: LeafTie): VertexRef =
 # ------------------
 
 proc getVtxRc*(db: AristoDbRef; vid: VertexID): Result[VertexRef,AristoError] =
-  ## Cascaded attempt to fetch a vertex from the top layer or the backend.
+  ## Cascaded attempt to fetch a vertex from the cache layers or the backend.
   ##
-  if db.top.sTab.hasKey vid:
-    # If the vertex is to be deleted on the backend, a `VertexRef(nil)` entry
-    # is kept in the local table in which case it is OK to return this value.
-    let vtx = db.top.sTab.getOrVoid vid
+  block body:
+    # If the vertex marked is to be deleted on the backend, a `VertexRef(nil)`
+    # entry is kept in the local table in which case it isis returned as the
+    # error symbol `GetVtxNotFound`.
+    let vtx = db.layersGetVtx(vid).valueOr:
+      break body
     if vtx.isValid:
-      return ok(vtx)
-    return err(GetVtxNotFound)
+      return ok vtx
+    else:
+      return err(GetVtxNotFound)
+
   db.getVtxBE vid
 
 proc getVtx*(db: AristoDbRef; vid: VertexID): VertexRef =
-  ## Cascaded attempt to fetch a vertex from the top layer or the backend.
+  ## Cascaded attempt to fetch a vertex from the cache layers or the backend.
   ## The function returns `nil` on error or failure.
   ##
-  let rc = db.getVtxRc vid
-  if rc.isOk:
-    return rc.value
-  VertexRef(nil)
+  db.getVtxRc(vid).valueOr: VertexRef(nil)
+
 
 proc getKeyRc*(db: AristoDbRef; vid: VertexID): Result[HashKey,AristoError] =
-  ## Cascaded attempt to fetch a Merkle hash from the top layer or the backend.
+  ## Cascaded attempt to fetch a Merkle hash from the cache layers or the
+  ## backend.
   ##
-  if db.top.kMap.hasKey vid:
-    # If the key is to be deleted on the backend, a `VOID_HASH_LABEL` entry
-    # is kept on the local table in which case it is OK to return this value.
-    let lbl = db.top.kMap.getOrVoid vid
-    if lbl.isValid:
-      return ok lbl.key
-    return err(GetKeyTempLocked)
+  block body:
+    let key = db.layersGetKey(vid).valueOr:
+      break body
+    # If there is a zero value label, the entry is either marked for being
+    # updated or for deletion on the database. So check below.
+    if key.isValid:
+      return ok key
+
+    # The zero value label does not refer to an update mark if there is no
+    # valid vertex (either on the cache or the backend whatever comes first.)
+    let vtx = db.layersGetVtx(vid).valueOr:
+      # There was no vertex on the cache. So there must be one the backend (the
+      # reason for the key lable to exists, at all.)
+      return err(GetKeyUpdateNeeded)
+    if vtx.isValid:
+      return err(GetKeyUpdateNeeded)
+    else:
+      # The vertex is to be deleted. So is the value label.
+      return err(GetVtxNotFound)
+
   db.getKeyBE vid
 
 proc getKey*(db: AristoDbRef; vid: VertexID): HashKey =
-  ## Cascaded attempt to fetch a vertex from the top layer or the backend.
+  ## Cascaded attempt to fetch a vertex from the cache layers or the backend.
   ## The function returns `nil` on error or failure.
   ##
-  db.getKeyRc(vid).valueOr:
-    return VOID_HASH_KEY
+  db.getKeyRc(vid).valueOr: VOID_HASH_KEY
 
 # ------------------------------------------------------------------------------
 # End

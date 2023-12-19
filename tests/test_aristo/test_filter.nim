@@ -18,7 +18,7 @@ import
   unittest2,
   ../../nimbus/db/aristo/[
     aristo_check, aristo_debug, aristo_desc, aristo_filter, aristo_get,
-    aristo_merge, aristo_persistent, aristo_blobify],
+    aristo_layers, aristo_merge, aristo_persistent, aristo_blobify],
   ../../nimbus/db/aristo,
   ../../nimbus/db/aristo/aristo_desc/desc_backend,
   ../../nimbus/db/aristo/aristo_filter/[filter_fifos, filter_scheduler],
@@ -336,7 +336,7 @@ proc checkBeOk(
   ## ..
   for n in 0 ..< dx.len:
     let
-      cache = if forceCache: true else: not dx[n].top.dirty
+      cache = if forceCache: true else: not dx[n].dirty
       rc = dx[n].checkBE(relax=relax, cache=cache)
     xCheckRc rc.error == (0,0):
       noisy.say "***", "db check failed",

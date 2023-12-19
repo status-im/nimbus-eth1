@@ -107,7 +107,7 @@ proc verify(
 
   for vid in beSTab.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID):
     let
-      nVtx = ly.sTab.getOrVoid vid
+      nVtx = ly.delta.sTab.getOrVoid vid
       mVtx = beSTab.getOrVoid vid
 
     xCheck (nVtx != VertexRef(nil))
@@ -119,8 +119,8 @@ proc verify(
         " nVtx=", nVtx.pp,
         " mVtx=", mVtx.pp
 
-    xCheck beSTab.len == ly.sTab.len
-    xCheck beKMap.len == ly.kMap.len
+    xCheck beSTab.len == ly.delta.sTab.len
+    xCheck beKMap.len == ly.delta.kMap.len
 
   true
 

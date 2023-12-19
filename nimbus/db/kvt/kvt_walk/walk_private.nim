@@ -1,6 +1,5 @@
-# Nimbus - Types, data structures and shared utilities used in network sync
-#
-# Copyright (c) 2018-2021 Status Research & Development GmbH
+# Nimbus-eth1
+# Copyright (c) 2023 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -10,7 +9,7 @@
 # distributed except according to those terms.
 
 import
-  std/tables,
+  std/[algorithm, sets, tables],
   eth/common,
   ".."/[kvt_desc, kvt_init]
 
@@ -24,17 +23,28 @@ iterator walkPairsImpl*[T](
   ## Walk over all `(VertexID,VertexRef)` in the database. Note that entries
   ## are unsorted.
 
-  var i = 0
-  for (key,data) in db.top.tab.pairs:
+  var
+    seen: HashSet[Blob]
+    i = 0
+  for (key,data) in db.top.delta.sTab.pairs:
     if data.isValid:
       yield (i,key,data)
-      inc i
+      i.inc
+    seen.incl key
+
+  for w in db.stack.reversed:
+    for (key,data) in w.delta.sTab.pairs:
+      if key notin seen:
+        if data.isValid:
+          yield (i,key,data)
+          i.inc
+        seen.incl key
 
   when T isnot VoidBackendRef:
     mixin walk
 
     for (n,key,data) in db.backend.T.walk:
-      if key notin db.top.tab and data.isValid:
+      if key notin seen and data.isValid:
         yield (n+i,key,data)
 
 # ------------------------------------------------------------------------------
