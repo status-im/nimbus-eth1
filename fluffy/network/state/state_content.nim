@@ -1,4 +1,4 @@
-# Nimbus
+# Fluffy
 # Copyright (c) 2021-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
@@ -23,11 +23,19 @@ type
   Address* = array[20, byte]
 
   ContentType* = enum
-    accountTrieNode = 0x00
-    contractStorageTrieNode = 0x01
-    accountTrieProof = 0x02
-    contractStorageTrieProof = 0x03
-    contractBytecode = 0x04
+    # Note: Need to add this unused value as a case object with an enum without
+    # a 0 valueis not allowed: "low(contentType) must be 0 for discriminant".
+    # For prefix values that are in the enum gap, the deserialization will fail
+    # at runtime as is wanted.
+    # In the future it might be possible that this will fail at compile time for
+    # the SSZ Union type, but currently it is allowed in the implementation, and
+    # the SSZ spec is not explicit about disallowing this.
+    unused = 0x00
+    accountTrieNode = 0x20
+    contractStorageTrieNode = 0x21
+    accountTrieProof = 0x22
+    contractStorageTrieProof = 0x23
+    contractBytecode = 0x24
 
   AccountTrieNodeKey* = object
     path*: ByteList
@@ -55,6 +63,8 @@ type
 
   ContentKey* = object
     case contentType*: ContentType
+    of unused:
+      discard
     of accountTrieNode:
       accountTrieNodeKey*: AccountTrieNodeKey
     of contractStorageTrieNode:
@@ -67,7 +77,17 @@ type
       contractBytecodeKey*: ContractBytecodeKey
 
 func encode*(contentKey: ContentKey): ByteList =
+  doAssert(contentKey.contentType != unused)
   ByteList.init(SSZ.encode(contentKey))
+
+proc readSszBytes*(
+    data: openArray[byte], val: var ContentKey
+) {.raises: [SszError].} =
+  mixin readSszValue
+  if data.len() > 0 and data[0] == ord(unused):
+    raise newException(MalformedSszError, "SSZ selector is unused value")
+
+  readSszValue(data, val)
 
 func decode*(contentKey: ByteList): Opt[ContentKey] =
   try:
@@ -84,6 +104,8 @@ template computeContentId*(digestCtxType: type, body: untyped): ContentId =
 
 func toContentId*(contentKey: ContentKey): ContentId =
   case contentKey.contentType:
+  of unused:
+    raiseAssert "Should not be used and fail at decoding"
   of accountTrieNode: # sha256(path | node_hash)
     let key = contentKey.accountTrieNodeKey
     computeContentId sha256:
