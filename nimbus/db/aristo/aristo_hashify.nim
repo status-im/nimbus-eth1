@@ -377,7 +377,7 @@ proc hashify*(
           wff.pool[vid] = val
           # Add the child vertices to `redo[]` for the schedule `base[]` list.
           for w in error:
-            if w notin wff.base:
+            if w notin wff.base and w notin redo:
               if db.layersGetVtx(w).isErr:
                 # Ooops, should have been marked for update
                 return err((w,HashifyNodeUnresolved))
