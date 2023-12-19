@@ -118,9 +118,11 @@ proc forkTx*(
   let stackLayer = block:
     let rc = db.getIdgBE()
     if rc.isOk:
-      LayerRef(final: LayerFinal(vGen: rc.value))
+      LayerRef(
+        delta: LayerDeltaRef(),
+        final: LayerFinalRef(vGen: rc.value))
     elif rc.error == GetIdgNotFound:
-      LayerRef()
+      LayerRef.init()
     else:
       return err(rc.error)
 
@@ -209,7 +211,8 @@ proc txBegin*(db: AristoDbRef): Result[AristoTxRef,AristoError] =
 
   db.stack.add db.top
   db.top = LayerRef(
-    final: db.top.final,
+    delta: LayerDeltaRef(),
+    final: db.top.final.dup,
     txUid: db.getTxUid)
 
   db.txRef = AristoTxRef(
@@ -255,7 +258,7 @@ proc commit*(
        db.top.delta.kMap.len == 0 and
        db.top.delta.pAmk.len == 0:
       # Avoid `layersMergeOnto()`
-      db.top.delta.shallowCopy db.stack[^1].delta
+      db.top.delta = db.stack[^1].delta
       db.stack.setLen(db.stack.len-1)
       db.top
     else:
@@ -339,7 +342,9 @@ proc stow*(
     # Merge `top` layer into `roFilter`
     db.merge(fwd).isOkOr:
       return err(error[1])
-    db.top = LayerRef(final: LayerFinal(vGen:  db.roFilter.vGen))
+    db.top = LayerRef(
+      delta: LayerDeltaRef(),
+      final: LayerFinalRef(vGen:  db.roFilter.vGen))
 
   if persistent:
     ? db.resolveBackendFilter()
@@ -347,7 +352,8 @@ proc stow*(
 
   # Delete/clear top
   db.top = LayerRef(
-    final: LayerFinal(vGen: db.vGen),
+    delta: LayerDeltaRef(),
+    final: LayerFinalRef(vGen: db.vGen),
     txUid: db.top.txUid)
 
   ok()

@@ -79,7 +79,7 @@ type
   VidsByLabelTab* = Table[HashLabel,HashSet[VertexID]]
     ## Reverse lookup searching `VertexID` by the hash key/label.
 
-  LayerDelta* = object
+  LayerDeltaRef* = ref object
     ## Delta layers are stacked implying a tables hierarchy. Table entries on
     ## a higher level take precedence over lower layer table entries. So an
     ## existing key-value table entry of a layer on top supersedes same key
@@ -106,7 +106,7 @@ type
     kMap*: Table[VertexID,HashLabel] ## Merkle hash key mapping
     pAmk*: VidsByLabelTab            ## Reverse `kMap` entries, hash key lookup
 
-  LayerFinal* = object
+  LayerFinalRef* = ref object
     ## Final tables fully supersede tables on lower layers when stacked as a
     ## whole. Missing entries on a higher layers are the final state (for the
     ## the top layer version of the table.)
@@ -123,8 +123,8 @@ type
   LayerObj* = object
     ## Hexary trie database layer structures. Any layer holds the full
     ## change relative to the backend.
-    delta*: LayerDelta               ## Most structural tables held as deltas
-    final*: LayerFinal               ## Stored as latest version
+    delta*: LayerDeltaRef            ## Most structural tables held as deltas
+    final*: LayerFinalRef            ## Stored as latest version
     txUid*: uint                     ## Transaction identifier if positive
 
   # ----------------------
@@ -164,6 +164,11 @@ func max(a, b, c: int): int =
 # ------------------------------------------------------------------------------
 # Public helpers: `NodeRef` and `PayloadRef`
 # ------------------------------------------------------------------------------
+
+func init*(T: type LayerRef): T =
+  ## Constructor, returns empty layer
+  T(delta: LayerDeltaRef(),
+    final: LayerFinalRef())
 
 func hash*(node: NodeRef): Hash =
   ## Table/KeyedQueue/HashSet mixin
@@ -296,6 +301,14 @@ func dup*(node: NodeRef): NodeRef =
         vType: Branch,
         bVid:  node.bVid,
         key:   node.key)
+
+func dup*(final: LayerFinalRef): LayerFinalRef =
+  ## Duplicate final layer.
+  LayerFinalRef(
+    lTab:  final.lTab,
+    pPrf:  final.pPrf,
+    vGen:  final.vGen,
+    dirty: final.dirty)
 
 # ---------------
 

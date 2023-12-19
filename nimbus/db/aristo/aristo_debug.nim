@@ -25,7 +25,7 @@ import
 # ------------------------------------------------------------------------------
 
 proc orDefault(db: AristoDbRef): AristoDbRef =
-  if db.isNil: AristoDbRef(top: LayerRef()) else: db
+  if db.isNil: AristoDbRef(top: LayerRef.init()) else: db
 
 proc del(xMap: var VidsByLabelTab; lbl: HashLabel; vid: VertexID) =
   # Update `xMap`

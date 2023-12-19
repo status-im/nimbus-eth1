@@ -230,7 +230,7 @@ proc fork*(
   ## database lookup for cases where the top layer is redefined anyway.
   ##
   let clone = AristoDbRef(
-    top:     LayerRef(),
+    top:     LayerRef.init(),
     backend: db.backend)
 
   if not rawTopLayer:
@@ -284,7 +284,7 @@ proc forget*(db: AristoDbRef): Result[void,AristoError] =
       parent.dudes.roDudes.excl db
 
     # Clear descriptor so it would not do harm if used wrongly
-    db[] = AristoDbObj(top: LayerRef())
+    db[] = AristoDbObj(top: LayerRef.init())
   ok()
 
 proc forgetOthers*(db: AristoDbRef): Result[void,AristoError] =
@@ -296,7 +296,7 @@ proc forgetOthers*(db: AristoDbRef): Result[void,AristoError] =
 
   if not db.dudes.isNil:
     for dude in db.dudes.roDudes.items:
-      dude[] = AristoDbObj(top: LayerRef())
+      dude[] = AristoDbObj(top: LayerRef.init())
 
     db.dudes = DudesRef(nil)
   ok()

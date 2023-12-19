@@ -32,7 +32,7 @@ type
 
 proc getLayerStateRoots*(
     db: AristoDbRef;
-    delta: LayerDelta;
+    delta: LayerDeltaRef;
     chunkedMpt: bool;
       ): Result[StateRootPair,AristoError] =
   ## Get the Merkle hash key for target state root to arrive at after this

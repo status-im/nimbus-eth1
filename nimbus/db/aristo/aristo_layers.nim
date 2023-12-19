@@ -246,8 +246,8 @@ func layersCc*(db: AristoDbRef; level = high(int)): LayerRef =
 
   # Set up initial layer (bottom layer)
   result = LayerRef(
-    final: layers[^1].final,                   # Pre-merged/final values
-    delta: LayerDelta(
+    final: layers[^1].final.dup,               # Pre-merged/final values
+    delta: LayerDeltaRef(
       sTab: layers[0].delta.sTab.dup,          # explicit dup for ref values
       kMap: layers[0].delta.kMap))
 
