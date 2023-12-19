@@ -102,8 +102,8 @@ proc verify(
   ## ..
 
   let
-    beSTab = be.walkVtx.toSeq.mapIt((it[1],it[2])).toTable
-    beKMap = be.walkKey.toSeq.mapIt((it[1],it[2])).toTable
+    beSTab = be.walkVtx.toSeq.mapIt((it[0],it[1])).toTable
+    beKMap = be.walkKey.toSeq.mapIt((it[0],it[1])).toTable
 
   for vid in beSTab.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID):
     let
@@ -154,7 +154,7 @@ proc verifyFiltersImpl[T](
       ): bool =
   ## Compare stored filters against registered ones
   var n = 0
-  for (_,fid,filter) in be.walkFilBe:
+  for (fid,filter) in be.walkFilBe:
     let
       filterHash = filter.hash
       registered = tab.getOrDefault(fid, BlindHash)

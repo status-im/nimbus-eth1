@@ -368,7 +368,7 @@ proc rocksDbBackend*(
 
 iterator walk*(
     be: RdbBackendRef;
-      ): tuple[n: int, pfx: StorageType, xid: uint64, data: Blob] =
+      ): tuple[pfx: StorageType, xid: uint64, data: Blob] =
   ## Walk over all key-value pairs of the database.
   ##
   ## Non-decodable entries are stepped over while the counter `n` of the
@@ -390,31 +390,31 @@ iterator walk*(
 
 iterator walkVtx*(
     be: RdbBackendRef;
-      ): tuple[n: int, vid: VertexID, vtx: VertexRef] =
+      ): tuple[vid: VertexID, vtx: VertexRef] =
   ## Variant of `walk()` iteration over the vertex sub-table.
-  for (n, xid, data) in be.rdb.walk VtxPfx:
+  for (xid, data) in be.rdb.walk VtxPfx:
     let rc = data.deblobify VertexRef
     if rc.isOk:
-      yield (n, VertexID(xid), rc.value)
+      yield (VertexID(xid), rc.value)
 
 iterator walkKey*(
     be: RdbBackendRef;
-      ): tuple[n: int, vid: VertexID, key: HashKey] =
+      ): tuple[vid: VertexID, key: HashKey] =
   ## Variant of `walk()` iteration over the Markle hash sub-table.
-  for (n, xid, data) in be.rdb.walk KeyPfx:
+  for (xid, data) in be.rdb.walk KeyPfx:
     let lid = HashKey.fromBytes(data).valueOr:
       continue
-    yield (n, VertexID(xid), lid)
+    yield (VertexID(xid), lid)
 
 iterator walkFil*(
     be: RdbBackendRef;
-      ): tuple[n: int, qid: QueueID, filter: FilterRef] =
+      ): tuple[qid: QueueID, filter: FilterRef] =
   ## Variant of `walk()` iteration over the filter sub-table.
   if not be.noFq:
-    for (n, xid, data) in be.rdb.walk FilPfx:
+    for (xid, data) in be.rdb.walk FilPfx:
       let rc = data.deblobify FilterRef
       if rc.isOk:
-        yield (n, QueueID(xid), rc.value)
+        yield (QueueID(xid), rc.value)
 
 # ------------------------------------------------------------------------------
 # End

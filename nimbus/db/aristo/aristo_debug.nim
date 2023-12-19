@@ -483,12 +483,22 @@ proc ppBe[T](be: T; db: AristoDbRef; root: VertexID; indent: int): string =
   result = "<" & $be.kind & ">"
   result &= pfx & "vGen" & pfx1 & "[" &
     be.getIdgFn().get(otherwise = EmptyVidSeq).mapIt(it.ppVid).join(",") & "]"
-  result &= pfx & "sTab" & pfx1 & "{" & be.walkVtx.toSeq.mapIt(
-      $(1+it[0]) & "(" & it[1].ppVid & "," & it[2].ppVtx(db,it[1]) & ")"
-    ).join(pfx2) & "}"
-  result &= pfx & "kMap" & pfx1 & "{" & be.walkKey.toSeq.mapIt(
-      $(1+it[0]) & "(" & it[1].ppVid & "," & it[2].ppKey(db,root) & ")"
-    ).join(pfx2) & "}"
+  block:
+    result &= pfx & "sTab" & pfx1 & "{"
+    var n = 0
+    for (vid,vtx) in be.walkVtx:
+      if 0 < n: result &= pfx2
+      n.inc
+      result &= $n & "(" & vid.ppVid & "," & vtx.ppVtx(db,vid) & ")"
+    result &= "}"
+  block:
+    result &= pfx & "kMap" & pfx1 & "{"
+    var n = 0
+    for (vid,key) in be.walkKey:
+      if 0 < n: result &= pfx2
+      n.inc
+      result &= $n & "(" & vid.ppVid & "," & key.ppKey(db,root) & ")"
+    result &= "}"
 
 proc ppLayer(
     layer: LayerRef;

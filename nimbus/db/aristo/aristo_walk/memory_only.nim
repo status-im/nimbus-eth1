@@ -28,27 +28,27 @@ export
 iterator walkVtxBe*[T: MemBackendRef|VoidBackendRef](
    _: type T;
    db: AristoDbRef;
-     ): tuple[n: int, vid: VertexID, vtx: VertexRef] =
+     ): tuple[vid: VertexID, vtx: VertexRef] =
   ## Iterate over filtered memory backend or backend-less vertices. This
   ## function depends on the particular backend type name which must match
   ## the backend descriptor.
-  for (n,vid,vtx) in walkVtxBeImpl[T](db):
-    yield (n,vid,vtx)
+  for (vid,vtx) in walkVtxBeImpl[T](db):
+    yield (vid,vtx)
 
 iterator walkKeyBe*[T: MemBackendRef|VoidBackendRef](
    _: type T;
    db: AristoDbRef;
-     ): tuple[n: int, vid: VertexID, key: HashKey] =
+     ): tuple[vid: VertexID, key: HashKey] =
   ## Similar to `walkVtxBe()` but for keys.
-  for (n,vid,key) in walkKeyBeImpl[T](db):
-    yield (n,vid,key)
+  for (vid,key) in walkKeyBeImpl[T](db):
+    yield (vid,key)
 
 iterator walkFilBe*[T: MemBackendRef|VoidBackendRef](
    be: T;
-     ): tuple[n: int, qid: QueueID, filter: FilterRef] =
+     ): tuple[qid: QueueID, filter: FilterRef] =
   ## Iterate over backend filters.
-  for (n,qid,filter) in walkFilBeImpl[T](be):
-    yield (n,qid,filter)
+  for (qid,filter) in walkFilBeImpl[T](be):
+    yield (qid,filter)
 
 iterator walkFifoBe*[T: MemBackendRef|VoidBackendRef](
    be: T;

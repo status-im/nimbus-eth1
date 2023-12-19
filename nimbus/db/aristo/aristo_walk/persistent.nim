@@ -34,26 +34,26 @@ export
 iterator walkVtxBe*(
    T: type RdbBackendRef;
    db: AristoDbRef;
-     ): tuple[n: int, vid: VertexID, vtx: VertexRef] =
+     ): tuple[vid: VertexID, vtx: VertexRef] =
   ## Iterate over filtered RocksDB backend vertices. This function depends on
   ## the particular backend type name which must match the backend descriptor.
-  for (n,vid,vtx) in walkVtxBeImpl[T](db):
-    yield (n,vid,vtx)
+  for (vid,vtx) in walkVtxBeImpl[T](db):
+    yield (vid,vtx)
 
 iterator walkKeyBe*(
    T: type RdbBackendRef;
    db: AristoDbRef;
-     ): tuple[n: int, vid: VertexID, key: HashKey] =
+     ): tuple[vid: VertexID, key: HashKey] =
   ## Similar to `walkVtxBe()` but for keys.
-  for (n,vid,key) in walkKeyBeImpl[T](db):
-    yield (n,vid,key)
+  for (vid,key) in walkKeyBeImpl[T](db):
+    yield (vid,key)
 
 iterator walkFilBe*(
    be: RdbBackendRef;
-     ): tuple[n: int, qid: QueueID, filter: FilterRef] =
+     ): tuple[qid: QueueID, filter: FilterRef] =
   ## Iterate over backend filters.
-  for (n,qid,filter) in be.walkFilBeImpl:
-    yield (n,qid,filter)
+  for (qid,filter) in be.walkFilBeImpl:
+    yield (qid,filter)
 
 iterator walkFifoBe*(
    be: RdbBackendRef;
