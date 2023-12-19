@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -25,7 +25,7 @@ import
 # ------------------------------------------------------------------------------
 
 proc orDefault(db: AristoDbRef): AristoDbRef =
-  if db.isNil: AristoDbRef(top: LayerRef()) else: db
+  if db.isNil: AristoDbRef(top: LayerRef.init()) else: db
 
 proc del(xMap: var VidsByLabelTab; lbl: HashLabel; vid: VertexID) =
   # Update `xMap`

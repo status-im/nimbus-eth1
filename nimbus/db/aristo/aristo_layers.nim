@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -246,8 +246,8 @@ func layersCc*(db: AristoDbRef; level = high(int)): LayerRef =
 
   # Set up initial layer (bottom layer)
   result = LayerRef(
-    final: layers[^1].final,                   # Pre-merged/final values
-    delta: LayerDelta(
+    final: layers[^1].final.dup,               # Pre-merged/final values
+    delta: LayerDeltaRef(
       sTab: layers[0].delta.sTab.dup,          # explicit dup for ref values
       kMap: layers[0].delta.kMap))
 
