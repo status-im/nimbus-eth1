@@ -14,6 +14,7 @@
 {.push raises: [].}
 
 import
+  std/tables,
   results,
   "."/[aristo_desc, aristo_filter, aristo_get, aristo_layers, aristo_hashify]
 
@@ -248,12 +249,23 @@ proc commit*(
   discard db.hashify().valueOr:
     return err(error[1])
 
-  # Replace the top two layers by its merged version
-  let merged = db.top.layersMergeOnto db.stack[^1]
+  # Pop layer from stack and merge database top layer onto it
+  let merged = block:
+    if db.top.delta.sTab.len == 0 and
+       db.top.delta.kMap.len == 0 and
+       db.top.delta.pAmk.len == 0:
+      # Avoid `layersMergeOnto()`
+      db.top.delta.shallowCopy db.stack[^1].delta
+      db.stack.setLen(db.stack.len-1)
+      db.top
+    else:
+      let layer = db.stack[^1]
+      db.stack.setLen(db.stack.len-1)
+      db.top.layersMergeOnto(layer[], db.stack)
+      layer
 
-  # Install `merged` layer
+  # Install `merged` stack top layer and update stack
   db.top = merged
-  db.stack.setLen(db.stack.len-1)
   db.txRef = tx.parent
   if 0 < db.stack.len:
     db.txRef.txUid = db.getTxUid

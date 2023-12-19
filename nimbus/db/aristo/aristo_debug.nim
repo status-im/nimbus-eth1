@@ -812,7 +812,24 @@ proc pp*(
       ): string =
   result = db.layersCc.pp(db, indent=indent) & indent.toPfx
   if 0 < db.stack.len:
-    result &= " level=" & $db.stack.len & indent.toPfx
+    result &= " level=" & $db.stack.len
+    when false: # or true:
+      let layers = @[db.top] & db.stack.reversed
+      var lStr = ""
+      for n,w in layers:
+        let
+          m = layers.len - n - 1
+          l = db.layersCc m
+          a = w.delta.kMap.values.toSeq.filterIt(not it.isValid).len
+          b = w.delta.pAmk.values.toSeq.filterIt(not it.isValid).len
+          c = l.delta.kMap.values.toSeq.filterIt(not it.isValid).len
+          d = l.delta.pAmk.values.toSeq.filterIt(not it.isValid).len
+        result &= " (" & $(w.delta.kMap.len - a) & "," & $a
+        result &= ";" & $(w.delta.pAmk.len - b) & "," & $b & ")"
+        lStr &= " " & $m & "=(" & $(l.delta.kMap.len - c) & "," & $c
+        lStr &= ";" & $(l.delta.pAmk.len - d) & "," & $d & ")"
+      result &= " --" & lStr
+    result &= indent.toPfx
   if backendOk:
     result &= db.backend.pp(db)
   elif filterOk:
