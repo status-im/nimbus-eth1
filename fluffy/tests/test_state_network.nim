@@ -6,7 +6,9 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/os,
+  std/[os, json, sequtils, strutils],
+  stew/byteutils,
+  nimcrypto/hash,
   testutils/unittests, chronos,
   eth/[common/eth_hash, keys],
   eth/p2p/discoveryv5/protocol as discv5_protocol, eth/p2p/discoveryv5/routing_table,
@@ -32,6 +34,76 @@ proc genesisToTrie(filePath: string): CoreDbMptRef =
 
 procSuite "State Content Network":
   let rng = newRng()
+
+  asyncTest "Decode and use proofs":
+    let file = "./fluffy/tests/state_data/proofs.full.block.0.json"
+    var content: JsonNode
+    try:
+      content = io.readFile(file).parseJson()
+    except Exception as e:
+      echo "Skipping file ", file, " because of error"
+      quit(1)
+
+    let
+      node1 = initDiscoveryNode(
+        rng, PrivateKey.random(rng[]), localAddress(20302))
+      sm1 = StreamManager.new(node1)
+      node2 = initDiscoveryNode(
+        rng, PrivateKey.random(rng[]), localAddress(20303))
+      sm2 = StreamManager.new(node2)
+
+      proto1 = StateNetwork.new(node1, ContentDB.new("", uint32.high, inMemory = true), sm1)
+      proto2 = StateNetwork.new(node2, ContentDB.new("", uint32.high, inMemory = true), sm2)
+
+      state_root = hexToByteArray[sizeof(Bytes32)](content["state_root"].getStr())
+
+    check proto2.portalProtocol.addNode(node1.localNode) == Added
+
+
+    for proof in content["proofs"]:
+      let
+        address = hexToByteArray[sizeof(state_content.Address)](proof["address"].getStr())
+        key = AccountTrieProofKey(
+          address: address,
+          stateRoot: state_root)
+        contentKey = ContentKey(
+          contentType: state_content.ContentType.accountTrieProof,
+          accountTrieProofKey: key)
+
+      var accountTrieProof = AccountTrieProof(@[])
+      for witness in proof["proof"]:
+        let witnessNode = ByteList(hexToSeqByte(witness.getStr()))
+        discard accountTrieProof.add(witnessNode)
+      let
+        state = proof["state"]
+        accountState = AccountState(
+          nonce: state["nonce"].getInt().uint64(),
+          balance: UInt256.fromHex(state["balance"].getStr()),
+          storageHash: MDigest[256].fromHex(state["storage_hash"].getStr()),
+          codeHash: MDigest[256].fromHex(state["code_hash"].getStr()),
+          stateRoot: MDigest[256].fromHex(content["state_root"].getStr()),
+          proof: accountTrieProof)
+        encodedValue = SSZ.encode(accountState)
+
+      discard proto1.contentDB.put(contentKey.toContentId(), encodedValue, proto1.portalProtocol.localNode.id)
+
+      let foundContent = await proto2.getContent(contentKey)
+
+      check foundContent.isSome()
+
+      var decoded = decodeSsz(foundContent.get(), AccountState).get()
+      check decoded.nonce == 0
+      check decoded.balance.toHex() == "ad78ebc5ac6200000"
+      check toLowerAscii($decoded.storageHash) == "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
+      check toLowerAscii($decoded.codeHash) == "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+      check toLowerAscii($decoded.stateRoot) == "d7f8974fb5ac78d9ac099b9ad5018bedc2ce0a72dad1827a1709da30580f0544"
+
+      # echo ">>> decoded: ", decoded
+
+    await node1.closeWait()
+    await node2.closeWait()
+
+
   asyncTest "Test Share Full State":
     let
       trie = genesisToTrie("fluffy" / "tests" / "custom_genesis" / "chainid7.json")

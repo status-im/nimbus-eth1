@@ -7,6 +7,7 @@
 
 import
   stew/results, chronos, chronicles,
+  eth/rlp,
   eth/p2p/discoveryv5/[protocol, enr],
   ../../database/content_db,
   ../wire/[portal_protocol, portal_stream, portal_protocol_config],
@@ -25,7 +26,7 @@ type StateNetwork* = ref object
   contentQueue*: AsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])]
   processContentLoop: Future[void]
 
-func toContentIdHandler(contentKey: ByteList): results.Opt[ContentId] =
+proc toContentIdHandler(contentKey: ByteList): results.Opt[ContentId] =
   toContentId(contentKey)
 
 proc getContent*(n: StateNetwork, key: ContentKey):
@@ -59,8 +60,45 @@ proc getContent*(n: StateNetwork, key: ContentKey):
   # domain types.
   return Opt.some(contentResult.content)
 
-proc validateContent(content: openArray[byte], contentKey: ByteList): bool =
-  true
+proc validateContent(
+  n: StateNetwork,
+  contentKey: ByteList,
+  conetentValue: seq[byte]): Future[bool] {.async.} =
+  let key = contentKey.decode().valueOr:
+    return false
+
+  case key.contentType:
+    of accountTrieNode:
+      return true
+    of contractStorageTrieNode:
+      return true
+    of accountTrieProof:
+      var decodedValue = decodeSsz(conetentValue, AccountState).valueOr:
+        warn "Received invalid account trie proof", error
+        return false
+      return true
+    of contractStorageTrieProof:
+      return true
+    of contractBytecode:
+      return true
+
+proc validateContent(
+  n: StateNetwork,
+  contentKeys: ContentKeysList,
+  contentValues: seq[seq[byte]]): Future[bool] {.async.} =
+  for i, contentValue in contentValues:
+    let contentKey = contentKeys[i]
+    if await n.validateContent(contentKey, contentValue):
+      let contentId = n.portalProtocol.toContentId(contentKey).valueOr:
+        error "Received offered content with invalid content key", contentKey
+        return false
+
+      n.portalProtocol.storeContent(contentKey, contentId, contentValue)
+
+      info "Received offered content validated successfully", contentKey
+    else:
+      error "Received offered content failed validation", contentKey
+      return false
 
 proc new*(
     T: type StateNetwork,
@@ -91,8 +129,11 @@ proc new*(
 proc processContentLoop(n: StateNetwork) {.async.} =
   try:
     while true:
-      # Just dropping state date for now
-      discard await n.contentQueue.popFirst()
+      let (maybeContentId, contentKeys, contentValues) = await n.contentQueue.popFirst()
+      if await n.validateContent(contentKeys, contentValues):
+        asyncSpawn n.portalProtocol.neighborhoodGossipDiscardPeers(
+          maybeContentId, contentKeys, contentValues
+        )
   except CancelledError:
     trace "processContentLoop canceled"
 
