@@ -87,5 +87,38 @@ proc layersCc*(db: KvtDbRef; level = high(int)): LayerRef =
         result.delta.sTab[key] = val
 
 # ------------------------------------------------------------------------------
+# Public iterators
+# ------------------------------------------------------------------------------
+
+iterator layersWalk*(
+    db: KvtDbRef;
+    seen: var HashSet[Blob];
+      ): tuple[key: Blob, data: Blob] =
+  ## Walk over all key-value pairs on the cache layers. Note that
+  ## entries are unsorted.
+  ##
+  ## The argument `seen` collects a set of all visited vertex IDs including
+  ## the one with a zero vertex which are othewise skipped by the iterator.
+  ## The `seen` argument must not be modified while the iterator is active.
+  ##
+  for (key,val) in db.top.delta.sTab.pairs:
+    yield (key,val)
+    seen.incl key
+
+  for w in db.stack.reversed:
+    for (key,val) in w.delta.sTab.pairs:
+      if key notin seen:
+        yield (key,val)
+        seen.incl key
+
+iterator layersWalk*(
+    db: KvtDbRef;
+      ): tuple[key: Blob, data: Blob] =
+  ## Variant of `layersWalk()`.
+  var seen: HashSet[Blob]
+  for (key,val) in db.layersWalk seen:
+    yield (key,val)
+
+# ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

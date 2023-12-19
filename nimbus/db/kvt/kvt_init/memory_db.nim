@@ -27,7 +27,7 @@
 {.push raises: [].}
 
 import
-  std/[algorithm, sequtils, tables],
+  std/tables,
   chronicles,
   eth/common,
   results,
@@ -140,14 +140,13 @@ proc memoryBackend*: BackendRef =
 
 iterator walk*(
     be: MemBackendRef;
-      ): tuple[n: int, key: Blob, data: Blob] =
+      ): tuple[key: Blob, data: Blob] =
   ## Walk over all key-value pairs of the database.
-  for n,key in be.tab.keys.toSeq.sorted:
-    let data = be.tab.getOrVoid key
-    if data.len == 0:
-      debug logTxt "walk() skip empty", n, key
+  for (key,data) in be.tab.pairs:
+    if data.isValid:
+      yield (key, data)
     else:
-      yield (n, key, data)
+      debug logTxt "walk() skip empty", key
 
 # ------------------------------------------------------------------------------
 # End
