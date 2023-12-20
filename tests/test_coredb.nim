@@ -178,7 +178,7 @@ when isMainModule:
   # dumps `bulkTest2`, `bulkTest3`, .. from the `nimbus-eth1-blobs` package.
   # For specs see `tests/test_coredb/bulk_test_xx.nim`.
   var testList = @[bulkTest0] # This test is superseded by `bulkTest1` and `2`
-  #testList = @[failSample0]
+  testList = @[failSample0]
   when true and false:
     testList = @[bulkTest2, bulkTest3]
 
@@ -187,7 +187,7 @@ when isMainModule:
     noisy.profileSection("@testList #" & $n, state):
       noisy.chainSyncRunner(
         capture=capture,
-        #dbType=AristoDbMemory,
+        dbType=AristoDbMemory,
         ldgType=LedgerCache,
         #enaLogging=true
       )

@@ -25,6 +25,11 @@ type StopMoaningAboutLedger {.used.} = LedgerType
 when CoreDbEnableApiProfiling or LedgerEnableApiProfiling:
   import std/[algorithm, sequtils, strutils]
 
+# Noisy sources
+import
+  ../../nimbus/db/core_db/backend/aristo_db/[handlers_aristo, handlers_kvt],
+  ../../nimbus/core/executor/process_block,
+  ../../nimbus/core/chain/persist_blocks
 
 const
   EnableExtraLoggingControl = true
@@ -61,6 +66,9 @@ proc initLogging(com: CommonRef) =
     com.db.trackNewApi = true
     com.db.trackLedgerApi = true
     com.db.localDbOnly = true
+
+    #persist_blocks.noisy = true
+    #process_block.noisy = true
 
 proc finishLogging(com: CommonRef) =
   when EnableExtraLoggingControl:
@@ -164,6 +172,7 @@ proc test_chainSync*(
       xCheck w[0][0] == com.db.getBlockHeader(0.u256)
       continue
 
+    # Process groups of blocks ...
     if toBlock < lastBlock:
       # Message if `[fromBlock,toBlock]` contains a multiple of `sayBlocks`
       if fromBlock + (toBlock mod sayBlocks.u256) <= toBlock:
@@ -179,6 +188,8 @@ proc test_chainSync*(
             discard chain.persistBlocks(w[0], w[1])
       continue
 
+    # Last group or single block
+    #
     # Make sure that the `lastBlock` is the first item of the argument batch.
     # So It might be necessary to Split off all blocks smaller than `lastBlock`
     # and execute them first. Then the next batch starts with the `lastBlock`.
@@ -200,6 +211,7 @@ proc test_chainSync*(
       dotsOrSpace = "   "
 
     noisy.startLogging()
+    #handlers_aristo.noisy = true
 
     if lastOneExtra:
       let
@@ -216,6 +228,78 @@ proc test_chainSync*(
         xCheck runPersistBlocks9Rc == ValidationResult.OK
 
     break
+
+  when false:
+    noisy.say "***", "Profiling results:",
+      "\n    ", "persistBlocks", "\n     ",
+      " total elapsed: ", pbsProfTotal[0].pp,
+      " sections: ", pbsProfTotal[1],
+
+      #"\n    ", "persistBlocks.vmState", "\n     ",
+      #" total elapsed: ", pbsProfGetVmState[0].pp,
+      #" sections: ", pbsProfGetVmState[1],
+
+      #"\n    ", "persistBlocks.for", "\n     ",
+      #" total elapsed: ", pbsProfFor[0].pp,
+      #" sections: ", pbsProfFor[1],
+
+      "\n    ", "persistBlocks.for.processBlock", "\n     ",
+      " total elapsed: ", pbsProfForProcessBlock[0].pp,
+      " sections: ", pbsProfForProcessBlock[1],
+
+      #"\n    ", "persistBlocks.commit", "\n     ",
+      #" total elapsed: ", pbsProfCommit[0].pp,
+      #" sections: ", pbsProfCommit[1],
+
+      "\n    ", "processBlock.total", "\n     ",
+      " total elapsed: ", pbProfTotal[0].pp,
+      " sections: ", pbProfTotal[1],
+
+      "\n    ", "processBlock.beginTransaction", "\n     ",
+      " total elapsed: ", pbProfBeginTransaction[0].pp,
+      " sections: ", pbProfBeginTransaction[1],
+
+      #"\n    ", "processBlock.procBlkPreamble", "\n     ",
+      #" total elapsed: ", pbProfProcBlkPreamble[0].pp,
+      #" sections: ", pbProfProcBlkPreamble[1],
+
+      #"\n    ", "processBlock.calculateReward", "\n     ",
+      #" total elapsed: ", pbProfCalculateReward[0].pp,
+      #" sections: ", pbProfCalculateReward[1],
+
+      "\n    ", "processBlock.procBlkEpilogue", "\n     ",
+      " total elapsed: ", pbProfProcBlkEpilogue[0].pp,
+      " sections: ", pbProfProcBlkEpilogue[1],
+
+      #"\n    ", "processBlock.procBlkEpilogue.generateWitness", "\n     ",
+      #" total elapsed: ", pbProfProcBlkEpilogueGenerateWitness[0].pp,
+      #" sections: ", pbProfProcBlkEpilogueGenerateWitness[1],
+
+      "\n    ", "processBlock.procBlkEpilogue.stateRoot", "\n     ",
+      " total elapsed: ", pbProfProcBlkEpilogueStateRoot[0].pp,
+      " sections: ", pbProfProcBlkEpilogueStateRoot[1],
+
+      "\n    ", "processBlock.procBlkEpilogue.rootHash", "\n     ",
+      " total elapsed: ", pbProfProcBlkEpilogueRootHash[0].pp,
+      " sections: ", pbProfProcBlkEpilogueRootHash[1],
+
+      #"\n    ", "processBlock.procBlkEpilogue.bloom", "\n     ",
+      #" total elapsed: ", pbProfProcBlkEpilogueBloom[0].pp,
+      #" sections: ", pbProfProcBlkEpilogueBloom[1],
+
+      #"\n    ", "processBlock.procBlkEpilogue.receiptRoot", "\n     ",
+      #" total elapsed: ", pbProfProcBlkEpilogueReceiptRoot[0].pp,
+      #" sections: ", pbProfProcBlkEpilogueReceiptRoot[1],
+
+      #"\n    ", "processBlock.commit", "\n     ",
+      #" total elapsed: ", pbProfCommit[0].pp,
+      #" sections: ", pbProfCommit[1],
+
+      #"\n    ", "processBlock.", "\n     ",
+      #" total elapsed: ", pbProf[0].pp,
+      #" sections: ", pbProf[1],
+
+      "\n"
 
   true
 

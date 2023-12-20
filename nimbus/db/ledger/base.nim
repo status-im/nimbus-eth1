@@ -22,7 +22,7 @@ const
   AutoValidateDescriptors = defined(release).not
     ## No validatinon needed for production suite.
 
-  EnableApiTracking = false
+  EnableApiTracking = false or true
     ## When enabled, API functions are logged. Tracking is enabled by setting
     ## the `trackApi` flag to `true`.
 

@@ -26,6 +26,24 @@ import
 
 {.push raises: [].}
 
+import
+  std/times,
+  ../../../tests/replay/pp
+
+var
+  noisy* = false
+  pbProfTotal*: (Duration, int)
+  pbProfBeginTransaction*: (Duration, int)
+  pbProfProcBlkPreamble*: (Duration, int)
+  pbProfCalculateReward*: (Duration, int)
+  pbProfProcBlkEpilogue*: (Duration, int)
+  pbProfProcBlkEpilogueGenerateWitness*: (Duration, int)
+  pbProfProcBlkEpilogueStateRoot*: (Duration, int)
+  pbProfProcBlkEpilogueRootHash*: (Duration, int)
+  pbProfProcBlkEpilogueBloom*: (Duration, int)
+  pbProfProcBlkEpilogueReceiptRoot*: (Duration, int)
+  pbProfCommit*: (Duration, int)
+
 # Factored this out of procBlkPreamble so that it can be used directly for
 # stateless execution of specific transactions.
 proc processTransactions*(vmState: BaseVMState;
@@ -112,35 +130,52 @@ proc procBlkPreamble(vmState: BaseVMState;
 proc procBlkEpilogue(vmState: BaseVMState;
                      header: BlockHeader; body: BlockBody): bool
     {.gcsafe, raises: [].} =
+
   # Reward beneficiary
-  vmState.mutateStateDB:
-    if vmState.generateWitness:
-      db.collectWitnessData()
-    let clearEmptyAccount = vmState.determineFork >= FkSpurious
-    db.persist(clearEmptyAccount, ClearCache in vmState.flags)
+  noisy.profileSection(
+      "procBlkEpilogue.generateWitness", pbProfProcBlkEpilogueGenerateWitness):
+    vmState.mutateStateDB:
+      if vmState.generateWitness:
+        db.collectWitnessData()
+      let clearEmptyAccount = vmState.determineFork >= FkSpurious
+      db.persist(clearEmptyAccount, ClearCache in vmState.flags)
 
   let stateDb = vmState.stateDB
-  if header.stateRoot != stateDb.rootHash:
+
+  var stateRoot: Hash256
+  noisy.profileSection(
+      "procBlkEpilogue.stateRoot", pbProfProcBlkEpilogueStateRoot):
+    stateRoot = header.stateRoot
+
+  var rootHash: Hash256
+  noisy.profileSection(
+      "procBlkEpilogue.rootHash", pbProfProcBlkEpiloguerootHash):
+    rootHash = stateDb.rootHash
+
+  if stateRoot != rootHash:
     debug "wrong state root in block",
       blockNumber = header.blockNumber,
-      expected = header.stateRoot,
-      actual = stateDb.rootHash,
+      expected = stateRoot,
+      actual = rootHash,
       arrivedFrom = vmState.com.db.getCanonicalHead().stateRoot
     return false
 
-  let bloom = createBloom(vmState.receipts)
-  if header.bloom != bloom:
-    debug "wrong bloom in block",
-      blockNumber = header.blockNumber
-    return false
+  noisy.profileSection("procBlkEpilogue..bloom", pbProfProcBlkEpilogueBloom):
+    let bloom = createBloom(vmState.receipts)
+    if header.bloom != bloom:
+      debug "wrong bloom in block",
+        blockNumber = header.blockNumber
+      return false
 
-  let receiptRoot = calcReceiptRoot(vmState.receipts)
-  if header.receiptRoot != receiptRoot:
-    debug "wrong receiptRoot in block",
-      blockNumber = header.blockNumber,
-      actual = receiptRoot,
-      expected = header.receiptRoot
-    return false
+  noisy.profileSection(
+      "procBlkEpilogue..receiptRoot", pbProfProcBlkEpilogueReceiptRoot):
+    let receiptRoot = calcReceiptRoot(vmState.receipts)
+    if header.receiptRoot != receiptRoot:
+      debug "wrong receiptRoot in block",
+        blockNumber = header.blockNumber,
+        actual = receiptRoot,
+        expected = header.receiptRoot
+      return false
 
   true
 
@@ -162,25 +197,35 @@ proc processBlock*(
   ## implementations (but can be savely removed, as well.)
   ## variant of `processBlock()` where the `header` argument is explicitely set.
 
-  var dbTx = vmState.com.db.beginTransaction()
-  defer: dbTx.dispose()
+  noisy.profileSection("processBlock", pbProfTotal):
+    var dbTx: CoreDbTxRef
+    noisy.profileSection(
+        "processBlock.beginTransaction", pbProfBeginTransaction):
+      dbTx = vmState.com.db.beginTransaction()
+    defer: dbTx.dispose()
 
-  if not vmState.procBlkPreamble(header, body):
-    return ValidationResult.Error
+    noisy.profileSection("procBlkPreamble", pbProfProcBlkPreamble):
+      if not vmState.procBlkPreamble(header, body):
+        if noisy: echo "+++ processBlock (1) fail #", header.blockNumber
+        return ValidationResult.Error
 
-  # EIP-3675: no reward for miner in POA/POS
-  if vmState.com.consensus == ConsensusType.POW:
-    vmState.calculateReward(header, body)
+    # EIP-3675: no reward for miner in POA/POS
+    noisy.profileSection("calculateReward", pbProfCalculateReward):
+      if vmState.com.consensus == ConsensusType.POW:
+        vmState.calculateReward(header, body)
 
-  if not vmState.procBlkEpilogue(header, body):
-    return ValidationResult.Error
+    noisy.profileSection("procBlkEpilogue", pbProfProcBlkEpilogue):
+      if not vmState.procBlkEpilogue(header, body):
+        if noisy: echo "+++ processBlock (2) fail #", header.blockNumber
+        return ValidationResult.Error
 
-  # `applyDeletes = false`
-  # If the trie pruning activated, each of the block will have its own state
-  # trie keep intact, rather than destroyed by trie pruning. But the current
-  # block will still get a pruned trie. If trie pruning deactivated,
-  # `applyDeletes` have no effects.
-  dbTx.commit(applyDeletes = false)
+    # `applyDeletes = false`
+    # If the trie pruning activated, each of the block will have its own state
+    # trie keep intact, rather than destroyed by trie pruning. But the current
+    # block will still get a pruned trie. If trie pruning deactivated,
+    # `applyDeletes` have no effects.
+    noisy.profileSection("processBlock.commit", pbProfCommit):
+      dbTx.commit(applyDeletes = false)
 
   ValidationResult.OK
 

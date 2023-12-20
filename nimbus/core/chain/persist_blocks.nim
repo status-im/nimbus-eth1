@@ -27,6 +27,17 @@ when not defined(release):
     ../../tracer,
     ../../utils/utils
 
+import
+  std/times,
+  ../../../tests/replay/pp
+var
+  noisy* = false
+  pbsProfTotal*: (Duration, int)
+  pbsProfGetVmState*: (Duration, int)
+  pbsProfFor*: (Duration, int)
+  pbsProfForProcessBlock*: (Duration, int)
+  pbsProfCommit*: (Duration, int)
+
 type
   PersistBlockFlag = enum
     NoPersistHeader
@@ -58,7 +69,6 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
                        flags: PersistBlockFlags = {}): ValidationResult
                           # wildcard exception, wrapped below in public section
                           {.inline, raises: [CatchableError].} =
-
   let dbTx = c.db.beginTransaction()
   defer: dbTx.dispose()
 
@@ -68,89 +78,95 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
   c.com.hardForkTransition(headers[0])
 
   # Note that `0 < headers.len`, assured when called from `persistBlocks()`
-  let vmState = c.getVmState(headers[0]).valueOr:
-    return ValidationResult.Error
+  var vmState: BaseVMState
+  noisy.profileSection("persistBlocks.vmState", pbsProfGetVmState):
+    vmState = c.getVmState(headers[0]).valueOr:
+      return ValidationResult.Error
 
   trace "Persisting blocks",
     fromBlock = headers[0].blockNumber,
     toBlock = headers[^1].blockNumber
 
-  for i in 0 ..< headers.len:
-    let
-      (header, body) = (headers[i], bodies[i])
+  noisy.profileSection("persistBlocks.for", pbsProfFor):
+    for i in 0 ..< headers.len:
+      let
+        (header, body) = (headers[i], bodies[i])
 
-    c.com.hardForkTransition(header)
+      c.com.hardForkTransition(header)
 
-    if not vmState.reinit(header):
-      debug "Cannot update VmState",
-        blockNumber = header.blockNumber,
-        item = i
-      return ValidationResult.Error
+      if not vmState.reinit(header):
+        debug "Cannot update VmState",
+          blockNumber = header.blockNumber,
+          item = i
+        return ValidationResult.Error
 
-    if c.validateBlock and c.extraValidation and
-       c.verifyFrom <= header.blockNumber:
+      if c.validateBlock and c.extraValidation and
+         c.verifyFrom <= header.blockNumber:
 
-      if c.com.consensus != ConsensusType.POA:
-        let res = c.com.validateHeaderAndKinship(
-          header,
-          body,
-          checkSealOK = false) # TODO: how to checkseal from here
-        if res.isErr:
-          debug "block validation error",
-            msg = res.error
-          return ValidationResult.Error
+        if c.com.consensus != ConsensusType.POA:
+          let res = c.com.validateHeaderAndKinship(
+            header,
+            body,
+            checkSealOK = false) # TODO: how to checkseal from here
+          if res.isErr:
+            debug "block validation error",
+              msg = res.error
+            return ValidationResult.Error
 
-    let
-      validationResult = if c.validateBlock:
-                           vmState.processBlock(header, body)
-                         else:
-                           ValidationResult.OK
-    when not defined(release):
-      if validationResult == ValidationResult.Error and
-         body.transactions.calcTxRoot == header.txRoot:
-        if c.com.ledgerType == LegacyAccountsCache:
-          dumpDebuggingMetaData(c.com, header, body, vmState)
-          warn "Validation error. Debugging metadata dumped."
-        else:
-          warn "Validation error", blockNumber=header.blockNumber
+      var validationResult: ValidationResult
+      noisy.profileSection(
+          "persistBlocks.for.processBlock", pbsProfForProcessBlock):
+        validationResult = if c.validateBlock:
+                             vmState.processBlock(header, body)
+                           else:
+                             ValidationResult.OK
+      when not defined(release):
+        if validationResult == ValidationResult.Error and
+           body.transactions.calcTxRoot == header.txRoot:
+          if c.com.ledgerType == LegacyAccountsCache:
+            dumpDebuggingMetaData(c.com, header, body, vmState)
+            warn "Validation error. Debugging metadata dumped."
+          else:
+            warn "Validation error", blockNumber=header.blockNumber
 
-    if validationResult != ValidationResult.OK:
-      return validationResult
+      if validationResult != ValidationResult.OK:
+        return validationResult
 
-    if c.validateBlock and c.extraValidation and
-       c.verifyFrom <= header.blockNumber:
+      if c.validateBlock and c.extraValidation and
+         c.verifyFrom <= header.blockNumber:
 
-      if c.com.consensus == ConsensusType.POA:
-        var parent = if 0 < i: @[headers[i-1]] else: @[]
-        let rc = c.clique.cliqueVerify(c.com, header,parent)
-        if rc.isOk:
-          # mark it off so it would not auto-restore previous state
-          c.clique.cliqueDispose(cliqueState)
-        else:
-          debug "PoA header verification failed",
-            blockNumber = header.blockNumber,
-            msg = $rc.error
-          return ValidationResult.Error
+        if c.com.consensus == ConsensusType.POA:
+          var parent = if 0 < i: @[headers[i-1]] else: @[]
+          let rc = c.clique.cliqueVerify(c.com, header,parent)
+          if rc.isOk:
+            # mark it off so it would not auto-restore previous state
+            c.clique.cliqueDispose(cliqueState)
+          else:
+            debug "PoA header verification failed",
+              blockNumber = header.blockNumber,
+              msg = $rc.error
+            return ValidationResult.Error
 
-    if NoPersistHeader notin flags:
-      discard c.db.persistHeaderToDb(
-        header, c.com.consensus == ConsensusType.POS, c.com.startOfHistory)
+      if NoPersistHeader notin flags:
+        discard c.db.persistHeaderToDb(
+          header, c.com.consensus == ConsensusType.POS, c.com.startOfHistory)
 
-    if NoSaveTxs notin flags:
-      discard c.db.persistTransactions(header.blockNumber, body.transactions)
+      if NoSaveTxs notin flags:
+        discard c.db.persistTransactions(header.blockNumber, body.transactions)
 
-    if NoSaveReceipts notin flags:
-      discard c.db.persistReceipts(vmState.receipts)
+      if NoSaveReceipts notin flags:
+        discard c.db.persistReceipts(vmState.receipts)
 
-    if NoSaveWithdrawals notin flags and body.withdrawals.isSome:
-      discard c.db.persistWithdrawals(body.withdrawals.get)
+      if NoSaveWithdrawals notin flags and body.withdrawals.isSome:
+        discard c.db.persistWithdrawals(body.withdrawals.get)
 
-    # update currentBlock *after* we persist it
-    # so the rpc return consistent result
-    # between eth_blockNumber and eth_syncing
-    c.com.syncCurrent = header.blockNumber
+      # update currentBlock *after* we persist it
+      # so the rpc return consistent result
+      # between eth_blockNumber and eth_syncing
+      c.com.syncCurrent = header.blockNumber
 
-  dbTx.commit()
+  noisy.profileSection("persistBlocks.commit", pbsProfCommit):
+    dbTx.commit()
 
 # ------------------------------------------------------------------------------
 # Public `ChainDB` methods
@@ -203,7 +219,8 @@ proc persistBlocks*(c: ChainRef; headers: openArray[BlockHeader];
     debug "Nothing to do"
     return ValidationResult.OK
 
-  c.persistBlocksImpl(headers,bodies)
+  noisy.profileSection("persistBlocks", pbsProfTotal):
+    result = c.persistBlocksImpl(headers,bodies)
 
 # ------------------------------------------------------------------------------
 # End

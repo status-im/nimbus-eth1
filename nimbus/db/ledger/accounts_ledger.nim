@@ -27,6 +27,9 @@ import
   ".."/[core_db, storage_types, transient_storage],
   ./distinct_ledgers
 
+var
+  noisy = false
+
 const
   debugAccountsLedgerRef = false
 
@@ -558,6 +561,7 @@ proc clearEmptyAccounts(ac: AccountsLedgerRef) =
     ac.deleteEmptyAccount(RIPEMD_ADDR)
     ac.ripemdSpecial = false
 
+import stew/byteutils
 proc persist*(ac: AccountsLedgerRef,
               clearEmptyAccount: bool = false,
               clearCache: bool = true) =
@@ -580,6 +584,7 @@ proc persist*(ac: AccountsLedgerRef,
         # storageRoot must be updated first
         # before persisting account into merkle trie
         acc.persistStorage(ac, clearCache)
+      if noisy: echo ">>> persist StorageChanged", " address=", address.toHex
       ac.ledger.merge(address, acc.account)
     of Remove:
       ac.ledger.delete address
