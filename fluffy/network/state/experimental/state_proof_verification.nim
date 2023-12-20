@@ -10,27 +10,20 @@
 import
   std/sequtils,
   stint,
-  eth/common,
-  eth/rlp,
-  eth/trie/hexary_proof_verification,
+  eth/[common, rlp, trie/hexary_proof_verification],
   stew/results
-
 
 type
   MptProof = seq[seq[byte]]
   AccountProof* = distinct MptProof
   StorageProof* = distinct MptProof
 
-
 proc verifyAccount*(
     trustedStateRoot: KeccakHash,
     address: EthAddress,
     account: Account,
     proof: AccountProof): Result[void, string] =
-  doAssert(trustedStateRoot.data.len() > 0)
-  doAssert(address.len() > 0)
-  doAssert(proof.MptProof.len() > 0)
-
+  
   let key = toSeq(keccakHash(address).data)
   let value = rlp.encode(account)
 
@@ -45,14 +38,11 @@ proc verifyAccount*(
   of InvalidProof:
     err(proofResult.errorMsg)
 
-
 proc verifyContractStorageSlot*(
     trustedStorageRoot: KeccakHash,
     slotKey: UInt256,
     slotValue: UInt256,
     proof: StorageProof): Result[void, string] =
-  doAssert(trustedStorageRoot.data.len() > 0)
-  doAssert(proof.MptProof.len() > 0)
 
   let key = toSeq(keccakHash(toBytesBE(slotKey)).data)
   let value = rlp.encode(slotValue)
@@ -68,11 +58,9 @@ proc verifyContractStorageSlot*(
   of InvalidProof:
     err(proofResult.errorMsg)
 
-
-proc verifyContractBytecode*(trustedCodeHash: KeccakHash, bytecode: seq[byte]): Result[void, string] =
-  doAssert(trustedCodeHash.data.len() > 0)
-  doAssert(bytecode.len() > 0)
-
+func verifyContractBytecode*(
+    trustedCodeHash: KeccakHash, 
+    bytecode: openArray[byte]): Result[void, string] =
   if trustedCodeHash == keccakHash(bytecode):
     ok()
   else:
