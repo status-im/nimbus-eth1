@@ -21,7 +21,10 @@ import
 # ------------------------------------------------------------------------------
 
 func nLayersKeys*(db: KvtDbRef): int =
-  ## Number of vertex entries on the cache layers
+  ## Maximum number of ley/value entries on the cache layers. This is an upper
+  ## bound for the number of effective key/value mappings held on the cache
+  ## layers as there might be duplicate entries for the same key on different
+  ## layers.
   db.stack.mapIt(it.delta.sTab.len).foldl(a + b, db.top.delta.sTab.len)
 
 # ------------------------------------------------------------------------------
@@ -68,23 +71,16 @@ proc layersCc*(db: KvtDbRef; level = high(int)): LayerRef =
   ## Provide a collapsed copy of layers up to a particular transaction level.
   ## If the `level` argument is too large, the maximum transaction level is
   ## returned. For the result layer, the `txUid` value set to `0`.
-  let level = min(level, db.stack.len)
+  let layers = if db.stack.len <= level: db.stack & @[db.top]
+               else:                     db.stack[0 .. level]
 
-  # Merge stack into its bottom layer
-  if level <= 0 and db.stack.len == 0:
-    result = LayerRef(delta: LayerDelta(sTab: db.top.delta.sTab))
-  else:
-    # now: 0 < level <= db.stack.len
-    result = LayerRef(delta: LayerDelta(sTab: db.stack[0].delta.sTab))
+  # Set up initial layer (bottom layer)
+  result = LayerRef(delta: LayerDelta(sTab: layers[0].delta.sTab))
 
-    for n in 1 ..< level:
-      for (key,val) in db.stack[n].delta.sTab.pairs:
-        result.delta.sTab[key] = val
-
-    # Merge top layer if needed
-    if level == db.stack.len:
-      for (key,val) in db.top.delta.sTab.pairs:
-        result.delta.sTab[key] = val
+  # Consecutively merge other layers on top
+  for n in 1 ..< layers.len:
+    for (key,val) in layers[n].delta.sTab.pairs:
+      result.delta.sTab[key] = val
 
 # ------------------------------------------------------------------------------
 # Public iterators
