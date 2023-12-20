@@ -121,19 +121,24 @@ proc ppBe[T](be: T; db: KvtDbRef; indent: int): string =
     pfx1 = indent.toPfx(1)
     pfx2 = indent.toPfx(2)
     pfx3 = indent.toPfx(3)
-    data = be.walk.toSeq.mapIt(
-        $(1+it[0]) & "(" & it[1].ppKey(db) & "," & it[2].ppValue & ")"
-      ).join(pfx3)
-    spc = if 0 < data.len: pfx2 else: " "
+  var
+    data = ""
+    n = 0
+  for (key,val) in be.walk:
+    if 0 < n: data &= pfx3
+    n.inc
+    data &= $n & "(" & key.ppKey(db) & "," & val.ppValue & ")"
+  var
+    spc = if 0 < n: pfx2 else: " "
   "<" & $be.kind & ">" & pfx1 & "tab" & spc & "{" & data & "}"
 
 proc ppLayer(layer: LayerRef; db: KvtDbRef; indent = 4): string =
   let
-    tLen = layer.dTab.len
+    tLen = layer.delta.sTab.len
     info = "tab(" & $tLen & ")"
     pfx1 = indent.toPfx(1)
     pfx2 = if 0 < tLen: indent.toPfx(2) else: " "
-  "<layer>" & pfx1 & info & pfx2 & layer.dTab.ppTab(db,indent+2)
+  "<layer>" & pfx1 & info & pfx2 & layer.delta.sTab.ppTab(db,indent+2)
 
 # ------------------------------------------------------------------------------
 # Public functions

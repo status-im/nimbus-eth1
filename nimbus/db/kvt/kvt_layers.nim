@@ -11,9 +11,57 @@
 {.push raises: [].}
 
 import
-  std/tables,
+  std/[algorithm, sequtils, sets, tables],
   eth/common,
+  results,
   ./kvt_desc
+
+# ------------------------------------------------------------------------------
+# Public getters/helpers
+# ------------------------------------------------------------------------------
+
+func nLayersKeys*(db: KvtDbRef): int =
+  ## Maximum number of ley/value entries on the cache layers. This is an upper
+  ## bound for the number of effective key/value mappings held on the cache
+  ## layers as there might be duplicate entries for the same key on different
+  ## layers.
+  db.stack.mapIt(it.delta.sTab.len).foldl(a + b, db.top.delta.sTab.len)
+
+# ------------------------------------------------------------------------------
+# Public functions: get function
+# ------------------------------------------------------------------------------
+
+proc layersHasKey*(db: KvtDbRef; key: openArray[byte]): bool =
+  ## Return `true` id the argument key is cached.
+  ##
+  if db.top.delta.sTab.hasKey @key:
+    return true
+
+  for w in db.stack.reversed:
+    if w.delta.sTab.hasKey @key:
+      return true
+
+
+proc layersGet*(db: KvtDbRef; key: openArray[byte]): Result[Blob,void] =
+  ## Find an item on the cache layers. An `ok()` result might contain an
+  ## empty value if it is stored on the cache  that way.
+  ##
+  if db.top.delta.sTab.hasKey @key:
+    return ok(db.top.delta.sTab.getOrVoid @key)
+
+  for w in db.stack.reversed:
+    if w.delta.sTab.hasKey @key:
+      return ok(w.delta.sTab.getOrVoid @key)
+
+  err()
+
+# ------------------------------------------------------------------------------
+# Public functions: put function
+# ------------------------------------------------------------------------------
+
+proc layersPut*(db: KvtDbRef; key: openArray[byte]; data: openArray[byte]) =
+  ## Store a (potentally empty) value on the top layer
+  db.top.delta.sTab[@key] = @data
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -23,23 +71,49 @@ proc layersCc*(db: KvtDbRef; level = high(int)): LayerRef =
   ## Provide a collapsed copy of layers up to a particular transaction level.
   ## If the `level` argument is too large, the maximum transaction level is
   ## returned. For the result layer, the `txUid` value set to `0`.
-  let level = min(level, db.stack.len)
+  let layers = if db.stack.len <= level: db.stack & @[db.top]
+               else:                     db.stack[0 .. level]
 
-  # Merge stack into its bottom layer
-  if level <= 0 and db.stack.len == 0:
-    result = LayerRef(delta: LayerDelta(sTab: db.top.delta.sTab))
-  else:
-    # now: 0 < level <= db.stack.len
-    result = LayerRef(delta: LayerDelta(sTab: db.stack[0].delta.sTab))
+  # Set up initial layer (bottom layer)
+  result = LayerRef(delta: LayerDelta(sTab: layers[0].delta.sTab))
 
-    for n in 1 ..< level:
-      for (key,val) in db.stack[n].delta.sTab.pairs:
-        result.delta.sTab[key] = val
+  # Consecutively merge other layers on top
+  for n in 1 ..< layers.len:
+    for (key,val) in layers[n].delta.sTab.pairs:
+      result.delta.sTab[key] = val
 
-    # Merge top layer if needed
-    if level == db.stack.len:
-      for (key,val) in db.top.delta.sTab.pairs:
-        result.delta.sTab[key] = val
+# ------------------------------------------------------------------------------
+# Public iterators
+# ------------------------------------------------------------------------------
+
+iterator layersWalk*(
+    db: KvtDbRef;
+    seen: var HashSet[Blob];
+      ): tuple[key: Blob, data: Blob] =
+  ## Walk over all key-value pairs on the cache layers. Note that
+  ## entries are unsorted.
+  ##
+  ## The argument `seen` collects a set of all visited vertex IDs including
+  ## the one with a zero vertex which are othewise skipped by the iterator.
+  ## The `seen` argument must not be modified while the iterator is active.
+  ##
+  for (key,val) in db.top.delta.sTab.pairs:
+    yield (key,val)
+    seen.incl key
+
+  for w in db.stack.reversed:
+    for (key,val) in w.delta.sTab.pairs:
+      if key notin seen:
+        yield (key,val)
+        seen.incl key
+
+iterator layersWalk*(
+    db: KvtDbRef;
+      ): tuple[key: Blob, data: Blob] =
+  ## Variant of `layersWalk()`.
+  var seen: HashSet[Blob]
+  for (key,val) in db.layersWalk seen:
+    yield (key,val)
 
 # ------------------------------------------------------------------------------
 # End

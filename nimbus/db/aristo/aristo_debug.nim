@@ -483,12 +483,22 @@ proc ppBe[T](be: T; db: AristoDbRef; root: VertexID; indent: int): string =
   result = "<" & $be.kind & ">"
   result &= pfx & "vGen" & pfx1 & "[" &
     be.getIdgFn().get(otherwise = EmptyVidSeq).mapIt(it.ppVid).join(",") & "]"
-  result &= pfx & "sTab" & pfx1 & "{" & be.walkVtx.toSeq.mapIt(
-      $(1+it[0]) & "(" & it[1].ppVid & "," & it[2].ppVtx(db,it[1]) & ")"
-    ).join(pfx2) & "}"
-  result &= pfx & "kMap" & pfx1 & "{" & be.walkKey.toSeq.mapIt(
-      $(1+it[0]) & "(" & it[1].ppVid & "," & it[2].ppKey(db,root) & ")"
-    ).join(pfx2) & "}"
+  block:
+    result &= pfx & "sTab" & pfx1 & "{"
+    var n = 0
+    for (vid,vtx) in be.walkVtx:
+      if 0 < n: result &= pfx2
+      n.inc
+      result &= $n & "(" & vid.ppVid & "," & vtx.ppVtx(db,vid) & ")"
+    result &= "}"
+  block:
+    result &= pfx & "kMap" & pfx1 & "{"
+    var n = 0
+    for (vid,key) in be.walkKey:
+      if 0 < n: result &= pfx2
+      n.inc
+      result &= $n & "(" & vid.ppVid & "," & key.ppKey(db,root) & ")"
+    result &= "}"
 
 proc ppLayer(
     layer: LayerRef;
@@ -802,7 +812,24 @@ proc pp*(
       ): string =
   result = db.layersCc.pp(db, indent=indent) & indent.toPfx
   if 0 < db.stack.len:
-    result &= " level=" & $db.stack.len & indent.toPfx
+    result &= " level=" & $db.stack.len
+    when false: # or true:
+      let layers = @[db.top] & db.stack.reversed
+      var lStr = ""
+      for n,w in layers:
+        let
+          m = layers.len - n - 1
+          l = db.layersCc m
+          a = w.delta.kMap.values.toSeq.filterIt(not it.isValid).len
+          b = w.delta.pAmk.values.toSeq.filterIt(not it.isValid).len
+          c = l.delta.kMap.values.toSeq.filterIt(not it.isValid).len
+          d = l.delta.pAmk.values.toSeq.filterIt(not it.isValid).len
+        result &= " (" & $(w.delta.kMap.len - a) & "," & $a
+        result &= ";" & $(w.delta.pAmk.len - b) & "," & $b & ")"
+        lStr &= " " & $m & "=(" & $(l.delta.kMap.len - c) & "," & $c
+        lStr &= ";" & $(l.delta.pAmk.len - d) & "," & $d & ")"
+      result &= " --" & lStr
+    result &= indent.toPfx
   if backendOk:
     result &= db.backend.pp(db)
   elif filterOk:

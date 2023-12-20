@@ -169,13 +169,11 @@ proc rocksDbBackend*(
 
 iterator walk*(
     be: RdbBackendRef;
-      ): tuple[n: int, key: Blob, data: Blob] =
+      ): tuple[key: Blob, data: Blob] =
   ## Walk over all key-value pairs of the database.
   ##
-  var n = 0
   for (k,v) in be.rdb.walk:
-    yield (n, k,v)
-    n.inc
+    yield (k,v)
 
 # ------------------------------------------------------------------------------
 # End

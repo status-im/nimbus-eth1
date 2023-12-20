@@ -25,17 +25,21 @@ func dup(sTab: Table[VertexID,VertexRef]): Table[VertexID,VertexRef] =
   for (k,v) in sTab.pairs:
     result[k] = v.dup
 
-func dup(delta: LayerDelta): LayerDelta =
-  result = LayerDelta(
-    sTab: delta.sTab.dup,            # explicit dup for ref values
-    kMap: delta.kMap,
-    pAmk: delta.pAmk)
-
-func stackGetLebalOrVoid(db: AristoDbRef; lbl: HashLabel): HashSet[VertexID] =
+func getLebalOrVoid(stack: seq[LayerRef]; lbl: HashLabel): HashSet[VertexID] =
   # Helper: get next set of vertex IDs from stack.
-  for w in db.stack.reversed:
+  for w in stack.reversed:
     w.delta.pAmk.withValue(lbl,value):
       return value[]
+
+proc recalcLebal(layer: var LayerObj) =
+  ## Calculate reverse `kMap[]` for final (aka zero) layer
+  layer.delta.pAmk.clear
+  for (vid,lbl) in layer.delta.kMap.pairs:
+    if lbl.isValid:
+      layer.delta.pAmk.withValue(lbl, value):
+        value[].incl vid
+      do:
+        layer.delta.pAmk[lbl] = @[vid].toHashSet
 
 # ------------------------------------------------------------------------------
 # Public getters: lazy value lookup for read only versions
@@ -58,15 +62,24 @@ func dirty*(db: AristoDbRef): bool =
 # ------------------------------------------------------------------------------
 
 func nLayersVtx*(db: AristoDbRef): int =
-  ## Number of vertex entries on the cache layers
+  ## Number of vertex ID/vertex entries on the cache layers. This is an upper
+  ## bound for the number of effective vertex ID mappings held on the cache
+  ## layers as there might be duplicate entries for the same vertex ID on
+  ## different layers.
   db.stack.mapIt(it.delta.sTab.len).foldl(a + b, db.top.delta.sTab.len)
 
 func nLayersLabel*(db: AristoDbRef): int =
-  ## Number of key/label entries on the cache layers
+  ## Number of vertex ID/label entries on the cache layers. This is an upper
+  ## bound for the number of effective vertex ID mappingss held on the cache
+  ## layers as there might be duplicate entries for the same vertex ID on
+  ## different layers.
   db.stack.mapIt(it.delta.kMap.len).foldl(a + b, db.top.delta.kMap.len)
 
 func nLayersLebal*(db: AristoDbRef): int =
-  ## Number of key/label reverse lookup entries on the cache layers
+  ## Number of label/vertex IDs reverse lookup entries on the cache layers.
+  ## This is an upper bound for the number of effective label mappingss held
+  ## on the cache layers as there might be duplicate entries for the same label
+  ## on different layers.
   db.stack.mapIt(it.delta.pAmk.len).foldl(a + b, db.top.delta.pAmk.len)
 
 # ------------------------------------------------------------------------------
@@ -170,17 +183,25 @@ proc layersPutLabel*(db: AristoDbRef; vid: VertexID; lbl: HashLabel) =
 
   # Clear previous value on reverse table if it has changed
   if blb.isValid and blb != lbl:
+    var vidsLen = -1
     db.top.delta.pAmk.withValue(blb, value):
       value[].excl vid
+      vidsLen = value[].len
     do: # provide empty lookup
-      db.top.delta.pAmk[blb] = db.stackGetLebalOrVoid(blb) - @[vid].toHashSet
+      let vids = db.stack.getLebalOrVoid(blb)
+      if vids.isValid and vid in vids:
+        # This entry supersedes non-emtpty changed ones from lower levels
+        db.top.delta.pAmk[blb] = vids - @[vid].toHashSet
+    if vidsLen == 0 and not db.stack.getLebalOrVoid(blb).isValid:
+      # There is no non-emtpty entry on lower levels, so ledete this one
+      db.top.delta.pAmk.del blb
 
   # Add updated value on reverse table if non-zero
   if lbl.isValid:
     db.top.delta.pAmk.withValue(lbl, value):
       value[].incl vid
     do: # else if not found: need to merge with value set from lower layer
-      db.top.delta.pAmk[lbl] = db.stackGetLebalOrVoid(lbl) + @[vid].toHashSet
+      db.top.delta.pAmk[lbl] = db.stack.getLebalOrVoid(lbl) + @[vid].toHashSet
 
 
 proc layersResLabel*(db: AristoDbRef; vid: VertexID) =
@@ -192,48 +213,53 @@ proc layersResLabel*(db: AristoDbRef; vid: VertexID) =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc layersMergeOnto*(src: LayerRef; trg: LayerRef): LayerRef {.discardable.} =
+proc layersMergeOnto*(src: LayerRef; trg: var LayerObj; stack: seq[LayerRef]) =
   ## Merges the argument `src` into the argument `trg` and returns `trg`. For
   ## the result layer, the `txUid` value set to `0`.
+  ##
   trg.final = src.final
   trg.txUid = 0
 
   for (vid,vtx) in src.delta.sTab.pairs:
     trg.delta.sTab[vid] = vtx
-
   for (vid,lbl) in src.delta.kMap.pairs:
     trg.delta.kMap[vid] = lbl
 
-  for (lbl,vids) in src.delta.pAmk.pairs:
-    trg.delta.pAmk.withValue(lbl, value):
-      value[] = value[] + vids
-    do:
-      trg.delta.pAmk[lbl] = vids
+  if stack.len == 0:
+    # Re-calculate `pAmk[]`
+    trg.recalcLebal()
+  else:
+    # Merge reverse `kMap[]` layers. Empty label image sets are ignored unless
+    # they supersede non-empty values on the argument `stack[]`.
+    for (lbl,vids) in src.delta.pAmk.pairs:
+      if 0 < vids.len or stack.getLebalOrVoid(lbl).isValid:
+        trg.delta.pAmk[lbl] = vids
 
-  trg
 
-
-proc layersCc*(db: AristoDbRef; level = high(int)): LayerRef =
+func layersCc*(db: AristoDbRef; level = high(int)): LayerRef =
   ## Provide a collapsed copy of layers up to a particular transaction level.
   ## If the `level` argument is too large, the maximum transaction level is
   ## returned. For the result layer, the `txUid` value set to `0`.
-  let level = min(level, db.stack.len)
+  ##
+  let layers = if db.stack.len <= level: db.stack & @[db.top]
+               else:                     db.stack[0 .. level]
 
-  result = LayerRef(final: db.top.final)       # Pre-merged/final values
+  # Set up initial layer (bottom layer)
+  result = LayerRef(
+    final: layers[^1].final,                   # Pre-merged/final values
+    delta: LayerDelta(
+      sTab: layers[0].delta.sTab.dup,          # explicit dup for ref values
+      kMap: layers[0].delta.kMap))
 
-  # Merge stack into its bottom layer
-  if level <= 0 and db.stack.len == 0:
-    result.delta = db.top.delta.dup            # Explicit dup for ref values
-  else:
-    # now: 0 < level <= db.stack.len
-    result.delta = db.stack[0].delta.dup       # Explicit dup for ref values
+  # Consecutively merge other layers on top
+  for n in 1 ..< layers.len:
+    for (vid,vtx) in layers[n].delta.sTab.pairs:
+      result.delta.sTab[vid] = vtx
+    for (vid,lbl) in layers[n].delta.kMap.pairs:
+      result.delta.kMap[vid] = lbl
 
-    # Merge stack: structural vertex table and hash key mapping
-    for w in db.stack.reversed:
-      w.layersMergeOnto result
-
-    # Merge top layer
-    db.top.layersMergeOnto result
+  # Re-calculate `pAmk[]`
+  result[].recalcLebal()
 
 # ------------------------------------------------------------------------------
 # Public iterators

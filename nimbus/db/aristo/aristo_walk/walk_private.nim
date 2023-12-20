@@ -12,7 +12,7 @@
 import
   std/[sequtils, sets, tables],
   results,
-  ".."/[aristo_desc, aristo_get, aristo_layers, aristo_init, aristo_utils]
+  ".."/[aristo_desc, aristo_get, aristo_init, aristo_layers, aristo_utils]
 
 # ------------------------------------------------------------------------------
 # Public generic iterators
@@ -20,10 +20,8 @@ import
 
 iterator walkVtxBeImpl*[T](
     db: AristoDbRef;                   # Database with optional backend filter
-      ): tuple[n: int, vid: VertexID, vtx: VertexRef] =
+      ): tuple[vid: VertexID, vtx: VertexRef] =
   ## Generic iterator
-  var n = 0
-
   when T is VoidBackendRef:
     let filter = if db.roFilter.isNil: FilterRef() else: db.roFilter
 
@@ -34,30 +32,25 @@ iterator walkVtxBeImpl*[T](
     if not db.roFilter.isNil:
       filter.sTab = db.roFilter.sTab # copy table
 
-    for (_,vid,vtx) in db.backend.T.walkVtx:
+    for (vid,vtx) in db.backend.T.walkVtx:
       if filter.sTab.hasKey vid:
         let fVtx = filter.sTab.getOrVoid vid
         if fVtx.isValid:
-          yield (n,vid,fVtx)
-          n.inc
+          yield (vid,fVtx)
         filter.sTab.del vid
       else:
-        yield (n,vid,vtx)
-        n.inc
+        yield (vid,vtx)
 
   for vid in filter.sTab.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID):
     let vtx = filter.sTab.getOrVoid vid
     if vtx.isValid:
-      yield (n,vid,vtx)
-      n.inc
+      yield (vid,vtx)
 
 
 iterator walkKeyBeImpl*[T](
     db: AristoDbRef;                   # Database with optional backend filter
-      ): tuple[n: int, vid: VertexID, key: HashKey] =
+      ): tuple[vid: VertexID, key: HashKey] =
   ## Generic iterator
-  var n = 0
-
   when T is VoidBackendRef:
     let filter = if db.roFilter.isNil: FilterRef() else: db.roFilter
 
@@ -68,33 +61,30 @@ iterator walkKeyBeImpl*[T](
     if not db.roFilter.isNil:
       filter.kMap = db.roFilter.kMap # copy table
 
-    for (_,vid,key) in db.backend.T.walkKey:
+    for (vid,key) in db.backend.T.walkKey:
       if filter.kMap.hasKey vid:
         let fKey = filter.kMap.getOrVoid vid
         if fKey.isValid:
-          yield (n,vid,fKey)
-          n.inc
+          yield (vid,fKey)
         filter.kMap.del vid
       else:
-        yield (n,vid,key)
-        n.inc
+        yield (vid,key)
 
   for vid in filter.kMap.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID):
     let key = filter.kMap.getOrVoid vid
     if key.isValid:
-      yield (n,vid,key)
-      n.inc
+      yield (vid,key)
 
 
 iterator walkFilBeImpl*[T](
     be: T;                             # Backend descriptor
-      ): tuple[n: int, qid: QueueID, filter: FilterRef] =
+      ): tuple[qid: QueueID, filter: FilterRef] =
   ## Generic filter iterator
   when T isnot VoidBackendRef:
     mixin walkFil
 
-    for (n,qid,filter) in be.walkFil:
-      yield (n,qid,filter)
+    for (qid,filter) in be.walkFil:
+      yield (qid,filter)
 
 
 iterator walkFifoBeImpl*[T](

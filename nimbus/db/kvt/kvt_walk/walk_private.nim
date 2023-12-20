@@ -9,9 +9,9 @@
 # distributed except according to those terms.
 
 import
-  std/[algorithm, sets, tables],
+  std/[sets, tables],
   eth/common,
-  ".."/[kvt_desc, kvt_init]
+  ".."/[kvt_desc, kvt_init, kvt_layers]
 
 # ------------------------------------------------------------------------------
 # Public generic iterators
@@ -19,33 +19,20 @@ import
 
 iterator walkPairsImpl*[T](
    db: KvtDbRef;                   # Database with top layer & backend filter
-     ): tuple[n: int, key: Blob, data: Blob] =
+     ): tuple[key: Blob, data: Blob] =
   ## Walk over all `(VertexID,VertexRef)` in the database. Note that entries
   ## are unsorted.
-
-  var
-    seen: HashSet[Blob]
-    i = 0
-  for (key,data) in db.top.delta.sTab.pairs:
+  var seen: HashSet[Blob]
+  for (key,data) in db.layersWalk seen:
     if data.isValid:
-      yield (i,key,data)
-      i.inc
-    seen.incl key
-
-  for w in db.stack.reversed:
-    for (key,data) in w.delta.sTab.pairs:
-      if key notin seen:
-        if data.isValid:
-          yield (i,key,data)
-          i.inc
-        seen.incl key
+      yield (key,data)
 
   when T isnot VoidBackendRef:
     mixin walk
 
-    for (n,key,data) in db.backend.T.walk:
+    for (_,key,data) in db.backend.T.walk:
       if key notin seen and data.isValid:
-        yield (n+i,key,data)
+        yield (key,data)
 
 # ------------------------------------------------------------------------------
 # End

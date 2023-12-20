@@ -112,7 +112,6 @@ type
     HashifyNodeUnresolved
     HashifyRootHashMismatch
     HashifyRootNodeUnresolved
-    HashifyLoop
 
     # Cache checker `checkCache()`
     CheckStkKeyStrayZeroEntry

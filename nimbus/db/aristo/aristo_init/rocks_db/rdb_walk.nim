@@ -45,16 +45,14 @@ func valBlob(vData: cstring, vLen: csize_t): Blob =
 
 iterator walk*(
     rdb: RdbInst;
-      ): tuple[n: int, pfx: StorageType, xid: uint64, data: Blob] =
+      ): tuple[pfx: StorageType, xid: uint64, data: Blob] =
   ## Walk over all key-value pairs of the database.
   ##
-  ## Non-decodable entries are stepped over while the counter `n` of the
-  ## yield record is still incremented.
+  ## Non-decodable entries are stepped over and ignored.
   let rit = rdb.store.db.rocksdb_create_iterator(rdb.store.readOptions)
   defer: rit.rocksdb_iter_destroy()
 
   rit.rocksdb_iter_seek_to_first()
-  var count = 0
 
   while rit.rocksdb_iter_valid() != 0:
     var kLen: csize_t
@@ -72,23 +70,21 @@ iterator walk*(
 
         let val = vData.valBlob(vLen)
         if 0 < val.len:
-          yield (count, pfx.StorageType, xid, val)
+          yield (pfx.StorageType, xid, val)
 
     # Update Iterator (might overwrite kData/vdata)
     rit.rocksdb_iter_next()
-    count.inc
     # End while
 
 
 iterator walk*(
     rdb: RdbInst;
     pfx: StorageType;
-      ): tuple[n: int, xid: uint64, data: Blob] =
+      ): tuple[xid: uint64, data: Blob] =
   ## Walk over key-value pairs of the table referted to by the argument `pfx`
   ## whic must be different from `Oops` and `AdmPfx`.
   ##
-  ## Non-decodable entries are stepped over while the counter `n` of the
-  ## yield record is still incremented.
+  ## Non-decodable entries are stepped over and ignored.
   ##
   block walkBody:
     if pfx in {Oops, AdmPfx}:
@@ -99,7 +95,6 @@ iterator walk*(
     defer: rit.rocksdb_iter_destroy()
 
     var
-      count = 0
       kLen: csize_t
       kData: cstring
 
@@ -139,14 +134,13 @@ iterator walk*(
 
         let val = vData.valBlob(vLen)
         if 0 < val.len:
-          yield (count, xid, val)
+          yield (xid, val)
 
       # Update Iterator
       rit.rocksdb_iter_next()
       if rit.rocksdb_iter_valid() == 0:
         break walkBody
 
-      count.inc
       # End while
 
 # ------------------------------------------------------------------------------

@@ -119,7 +119,8 @@ type
     vGen*: seq[VertexID]             ## Unique vertex ID generator
     dirty*: bool                     ## Needs to be hashified if `true`
 
-  LayerRef* = ref object
+  LayerRef* = ref LayerObj
+  LayerObj* = object
     ## Hexary trie database layer structures. Any layer holds the full
     ## change relative to the backend.
     delta*: LayerDelta               ## Most structural tables held as deltas

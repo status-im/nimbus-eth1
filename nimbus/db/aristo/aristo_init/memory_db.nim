@@ -311,7 +311,7 @@ proc memoryBackend*(qidLayout: QidLayoutRef): BackendRef =
 
 iterator walkVtx*(
     be: MemBackendRef;
-      ): tuple[n: int, vid: VertexID, vtx: VertexRef] =
+      ): tuple[vid: VertexID, vtx: VertexRef] =
   ##  Iteration over the vertex sub-table.
   for n,vid in be.sTab.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID):
     let data = be.sTab.getOrDefault(vid, EmptyBlob)
@@ -320,20 +320,20 @@ iterator walkVtx*(
       if rc.isErr:
         debug logTxt "walkVtxFn() skip", n, vid, error=rc.error
       else:
-        yield (n, vid, rc.value)
+        yield (vid, rc.value)
 
 iterator walkKey*(
     be: MemBackendRef;
-      ): tuple[n: int, vid: VertexID, key: HashKey] =
+      ): tuple[vid: VertexID, key: HashKey] =
   ## Iteration over the Markle hash sub-table.
-  for n,vid in be.kMap.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID):
+  for vid in be.kMap.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID):
     let key = be.kMap.getOrVoid vid
     if key.isValid:
-      yield (n, vid, key)
+      yield (vid, key)
 
 iterator walkFil*(
     be: MemBackendRef;
-      ): tuple[n: int, qid: QueueID, filter: FilterRef] =
+      ): tuple[qid: QueueID, filter: FilterRef] =
   ##  Iteration over the vertex sub-table.
   if not be.noFq:
     for n,qid in be.rFil.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.QueueID):
@@ -341,45 +341,38 @@ iterator walkFil*(
       if 0 < data.len:
         let rc = data.deblobify FilterRef
         if rc.isErr:
-          debug logTxt "walkFilFn() skip", n,qid, error=rc.error
+          debug logTxt "walkFilFn() skip", n, qid, error=rc.error
         else:
-          yield (n, qid, rc.value)
+          yield (qid, rc.value)
 
 
 iterator walk*(
     be: MemBackendRef;
-      ): tuple[n: int, pfx: StorageType, xid: uint64, data: Blob] =
+      ): tuple[pfx: StorageType, xid: uint64, data: Blob] =
   ## Walk over all key-value pairs of the database.
   ##
   ## Non-decodable entries are stepped over while the counter `n` of the
   ## yield record is still incremented.
-  var n = 0
-
   if be.vGen.isSome:
-    yield(0, AdmPfx, AdmTabIdIdg.uint64, be.vGen.unsafeGet.blobify)
-    n.inc
+    yield(AdmPfx, AdmTabIdIdg.uint64, be.vGen.unsafeGet.blobify)
 
   if not be.noFq:
     if be.vFqs.isSome:
-      yield(0, AdmPfx, AdmTabIdFqs.uint64, be.vFqs.unsafeGet.blobify)
-      n.inc
+      yield(AdmPfx, AdmTabIdFqs.uint64, be.vFqs.unsafeGet.blobify)
 
   for vid in be.sTab.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID):
     let data = be.sTab.getOrDefault(vid, EmptyBlob)
     if 0 < data.len:
-      yield (n, VtxPfx, vid.uint64, data)
-    n.inc
+      yield (VtxPfx, vid.uint64, data)
 
-  for (_,vid,key) in be.walkKey:
-    yield (n, KeyPfx, vid.uint64, @key)
-    n.inc
+  for (vid,key) in be.walkKey:
+    yield (KeyPfx, vid.uint64, @key)
 
   if not be.noFq:
     for lid in be.rFil.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.QueueID):
       let data = be.rFil.getOrDefault(lid, EmptyBlob)
       if 0 < data.len:
-        yield (n, FilPfx, lid.uint64, data)
-      n.inc
+        yield (FilPfx, lid.uint64, data)
 
 # ------------------------------------------------------------------------------
 # End

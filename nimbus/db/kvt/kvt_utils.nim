@@ -14,11 +14,10 @@
 {.push raises: [].}
 
 import
-  std/algorithm,
   eth/common,
   results,
   ./kvt_desc/desc_backend,
-  ./kvt_desc
+  "."/[kvt_desc, kvt_layers]
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -52,7 +51,7 @@ proc put*(
   if data.len == 0:
     return err(DataInvalid)
 
-  db.top.delta.sTab[@key] = @data
+  db.layersPut(key, data)
   ok()
 
 
@@ -65,22 +64,7 @@ proc del*(
   if key.len == 0:
     return err(KeyInvalid)
 
-  block haveKey:
-    for w in db.stack.reversed:
-      if w.delta.sTab.hasKey @key:
-        break haveKey
-
-    # Do this one last as it is the most expensive lookup
-    let rc = db.getBE key
-    if rc.isOk:
-      break haveKey
-    if rc.error != GetNotFound:
-      return err(rc.error)
-
-    db.top.delta.sTab.del @key        # No such key anywhere => delete now
-    return ok()
-
-  db.top.delta.sTab[@key] = EmptyBlob # Mark for deletion
+  db.layersPut(key, EmptyBlob)
   ok()
 
 # ------------
@@ -95,18 +79,10 @@ proc get*(
   if key.len == 0:
     return err(KeyInvalid)
 
-  block:
-    let data = db.top.delta.sTab.getOrVoid @key
-    if data.isValid:
-      return ok(data)
+  let data = db.layersGet(key).valueOr:
+    return db.getBE key
 
-  block:
-    for w in db.stack.reversed:
-      let data = w.delta.sTab.getOrVoid @key
-      if data.isValid:
-        return ok(data)
-
-  db.getBE key
+  return ok(data)
 
 
 proc hasKey*(
@@ -119,12 +95,8 @@ proc hasKey*(
   if key.len == 0:
     return err(KeyInvalid)
 
-  if db.top.delta.sTab.hasKey @key:
+  if db.layersHasKey @key:
     return ok(true)
-
-  for w in db.stack.reversed:
-    if w.delta.sTab.haskey @key:
-      return ok(true)
 
   let rc = db.getBE key
   if rc.isOk:
