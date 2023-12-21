@@ -12,7 +12,7 @@ import
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ../network/history/[accumulator, history_content],
   ../network/state/experimental/state_proof_generation,
-  ../../nimbus/[config, db/core_db],
+  ../../nimbus/db/core_db,
   ../../nimbus/common/[chain_config],
   ../database/content_db
 
@@ -126,8 +126,8 @@ proc toState*(alloc: GenesisAlloc):
   var storageStates = initTable[EthAddress, StorageState]()
 
   for address, genAccount in alloc:
-    var account = newAccount(genAccount.nonce, genAccount.balance)
-    account.codeHash = keccakHash(genAccount.code)
+    var storageRoot = EMPTY_ROOT_HASH
+    var codeHash = EMPTY_CODE_HASH
 
     if genAccount.code.len() > 0:
       var storageTrie = initHexaryTrie(newMemoryDB())
@@ -136,8 +136,14 @@ proc toState*(alloc: GenesisAlloc):
         let value = rlp.encode(slotValue)
         storageTrie.put(key, value)
       storageStates[address] = storageTrie.StorageState
-      account.storageRoot = storageTrie.rootHash()
+      storageRoot = storageTrie.rootHash()
+      codeHash = keccakHash(genAccount.code)
 
+    let account = Account(
+        nonce: genAccount.nonce, 
+        balance: genAccount.balance,
+        storageRoot: storageRoot,
+        codeHash: codeHash)
     let key = keccakHash(address).data
     let value = rlp.encode(account)
     accountTrie.put(key, value)

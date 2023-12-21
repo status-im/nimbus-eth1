@@ -26,7 +26,6 @@ proc checkValidProofsForExistingLeafs(
     var acc = newAccount(account.nonce, account.balance)
     acc.codeHash = keccakHash(account.code)
     let codeResult = verifyContractBytecode(acc.codeHash, account.code)
-    #echo codeResult
     check codeResult.isOk()
     
     if account.code.len() > 0:
@@ -36,12 +35,10 @@ proc checkValidProofsForExistingLeafs(
       for slotKey, slotValue in account.storage :
         let storageProof = storageState.generateStorageProof(slotKey)
         let proofResult = verifyContractStorageSlot(acc.storageRoot, slotKey, slotValue, storageProof)
-        #echo proofResult
         check proofResult.isOk()
 
     let accountProof = accountState.generateAccountProof(address)
     let proofResult = verifyAccount(accountState.rootHash(), address, acc, accountProof)
-    #echo proofResult
     check proofResult.isOk()
 
 proc checkValidProofsForMissingLeafs(
@@ -71,7 +68,6 @@ proc checkValidProofsForMissingLeafs(
 
         let storageProof = storageState.generateStorageProof(slotKey)
         let proofResult = verifyContractStorageSlot(acc.storageRoot, slotKey, slotValue, storageProof)
-        #echo proofResult
         check proofResult.isOk()
 
     accountState.del(keccakHash(address).data) # delete the account from the state
@@ -79,7 +75,6 @@ proc checkValidProofsForMissingLeafs(
 
     let accountProof = accountState.generateAccountProof(address)
     let proofResult = verifyAccount(accountState.rootHash(), address, acc, accountProof)
-    #echo proofResult
     check proofResult.isOk()
 
 proc checkInvalidProofsWithBadStateRoot(
@@ -103,7 +98,6 @@ proc checkInvalidProofsWithBadStateRoot(
 
         let storageProof = storageState.generateStorageProof(slotKey)
         let proofResult = verifyContractStorageSlot(badHash, slotKey, slotValue, storageProof)
-        #echo proofResult
         check: 
           proofResult.isErr()
           proofResult.error() == "missing expected node"
@@ -136,7 +130,6 @@ proc checkInvalidProofsWithBadValue(
         let badSlotValue = slotValue + 1 # bad slot value
 
         let proofResult = verifyContractStorageSlot(acc.storageRoot, slotKey, badSlotValue, storageProof)
-        #echo proofResult
         check: 
           proofResult.isErr()
           proofResult.error() == "proof does not contain expected value"

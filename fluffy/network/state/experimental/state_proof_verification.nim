@@ -65,3 +65,4 @@ func verifyContractBytecode*(
     ok()
   else:
     err("hash of bytecode doesn't match the expected code hash")
+    
