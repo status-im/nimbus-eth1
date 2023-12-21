@@ -13,6 +13,8 @@ import
   eth/[common, rlp, trie/hexary_proof_verification],
   stew/results
 
+export results
+
 type
   MptProof = seq[seq[byte]]
   AccountProof* = distinct MptProof
@@ -65,4 +67,3 @@ func verifyContractBytecode*(
     ok()
   else:
     err("hash of bytecode doesn't match the expected code hash")
-    
