@@ -12,6 +12,7 @@
 
 import
   nimcrypto/[hash, sha2, keccak], stew/[objects, results, endians2], stint,
+  eth/common/eth_types,
   ssz_serialization,
   ../../common/common_types
 
@@ -20,7 +21,6 @@ export ssz_serialization, common_types, hash, results
 type
   NodeHash*    = MDigest[32 * 8] # keccak256
   CodeHash*    = MDigest[32 * 8] # keccak256
-  StorageHash* = MDigest[32 * 8] # keccak256
   StateRoot*   = MDigest[32 * 8] # keccak256
   Address*     = array[20, byte]
 
@@ -67,11 +67,7 @@ type
   AccountTrieProof* = List[WitnessNode, 32]
 
   AccountState* = object
-    nonce*: uint64
-    balance*: UInt256
-    storageHash*: StorageHash # is it NodeHash?
-    codeHash*: CodeHash
-    stateRoot*: StateRoot
+    account*: Account
     proof*: AccountTrieProof
 
   ContentKey* = object

@@ -28,8 +28,9 @@ import
   confutils, confutils/std/net, chronicles, chronicles/topics_registry,
   json_rpc/clients/httpclient,
   chronos,
-  stew/byteutils,
+  stew/[byteutils, io2],
   eth/async_utils,
+  eth/common/eth_types,
   ../../network/state/state_content,
   ../../rpc/portal_rpc_client,
   ../../logging,
@@ -37,6 +38,23 @@ import
   ./state_bridge_conf
 
 const restRequestsTimeout = 30.seconds
+
+type JsonAccount* = object
+  nonce*: int
+  balance*: string
+  storage_hash*: string
+  code_hash*: string
+
+type JsonProof* = object
+  address*: string
+  state*: JsonAccount
+  proof*: seq[string]
+
+type JsonProofVector* = object
+  `block`*: int
+  block_hash*: string
+  state_root*: string
+  proofs*: seq[JsonProof]
 
 # TODO: From nimbus_binary_common, but we don't want to import that.
 proc sleepAsync(t: TimeDiff): Future[void] =
@@ -56,36 +74,41 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
     await portalRpcClient.connect(config.rpcAddress, Port(config.rpcPort), false)
     let files = collect(for f in walkDir(config.dataDir): f.path)
     for file in files:
-      try:
-        let content = io.readFile(file).parseJson()
-        let state_root = hexToByteArray[sizeof(Bytes32)](content["state_root"].getStr())
-        for proof in content["proofs"]:
-          let address = hexToByteArray[sizeof(state_content.Address)](proof["address"].getStr())
-          let key = AccountTrieProofKey(
-            address: address,
-            stateRoot: state_root)
-          let contentKey = ContentKey(
-            contentType: ContentType.accountTrieProof,
-            accountTrieProofKey: key)
-          let encodedKey = encode(contentKey)
-
-          var accountTrieProof = AccountTrieProof(@[])
-          for witness in proof["proof"]:
-            let witnessNode = ByteList(hexToSeqByte(witness.getStr()))
-            discard accountTrieProof.add(witnessNode)
-          let state = proof["state"]
-          let accountState = AccountState(
-            nonce: state["nonce"].getInt().uint64(),
-            balance: UInt256.fromHex(state["balance"].getStr()),
-            storageHash: MDigest[256].fromHex(state["storage_hash"].getStr()),
-            codeHash: MDigest[256].fromHex(state["code_hash"].getStr()),
-            stateRoot: MDigest[256].fromHex(content["state_root"].getStr()),
-            proof: accountTrieProof)
-          let encodedValue = SSZ.encode(accountState)
-          discard await portalRpcClient.portal_stateGossip(encodedKey.asSeq().toHex(), encodedValue.toHex())
-      except Exception as e:
-        echo "Skipping file ", file, " because of error \n", e.msg
+      let content = readAllFile(file).valueOr:
+        echo "Skipping file ", file, " because of error \n", error
         continue
+      let decoded =
+        try:
+          Json.decode(content, state_bridge.JsonProofVector)
+        except SerializationError as e:
+          echo "Skipping file ", file, " because of error \n", e.msg
+          continue
+      let state_root = hexToByteArray[sizeof(Bytes32)](decoded.state_root)
+      for proof in decoded.proofs:
+        let address = hexToByteArray[sizeof(state_content.Address)](proof.address)
+        let key = AccountTrieProofKey(
+          address: address,
+          stateRoot: state_root)
+        let contentKey = ContentKey(
+          contentType: ContentType.accountTrieProof,
+          accountTrieProofKey: key)
+        let encodedKey = encode(contentKey)
+
+        var accountTrieProof = AccountTrieProof(@[])
+        for witness in proof.proof:
+          let witnessNode = ByteList(hexToSeqByte(witness))
+          discard accountTrieProof.add(witnessNode)
+        let state = proof.state
+        let account = Account(
+          nonce: state.nonce.uint64(),
+          balance: UInt256.fromHex(state.balance),
+          storageRoot: MDigest[256].fromHex(state.storage_hash),
+          codeHash: MDigest[256].fromHex(state.code_hash))
+        let accountState = AccountState(
+          account: account,
+          proof: accountTrieProof)
+        let encodedValue = SSZ.encode(accountState)
+        discard await portalRpcClient.portal_stateGossip(encodedKey.asSeq().toHex(), encodedValue.toHex())
     await portalRpcClient.close()
     notice "Backfill done..."
 

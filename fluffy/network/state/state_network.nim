@@ -6,8 +6,10 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  stew/results, chronos, chronicles,
-  eth/rlp,
+  std/sequtils,
+  stew/[results, byteutils], chronos, chronicles,
+  eth/[rlp, common],
+  eth/trie/hexary_proof_verification,
   eth/p2p/discoveryv5/[protocol, enr],
   ../../database/content_db,
   ../wire/[portal_protocol, portal_stream, portal_protocol_config],
@@ -61,9 +63,9 @@ proc getContent*(n: StateNetwork, key: ContentKey):
   return Opt.some(contentResult.content)
 
 proc validateContent(
-  n: StateNetwork,
-  contentKey: ByteList,
-  conetentValue: seq[byte]): Future[bool] {.async.} =
+    n: StateNetwork,
+    contentKey: ByteList,
+    contentValue: seq[byte]): Future[bool] {.async.} =
   let key = contentKey.decode().valueOr:
     return false
 
@@ -73,9 +75,15 @@ proc validateContent(
     of contractStorageTrieNode:
       return true
     of accountTrieProof:
-      var decodedValue = decodeSsz(conetentValue, AccountState).valueOr:
+      var decodedValue = decodeSsz(contentValue, AccountState).valueOr:
         warn "Received invalid account trie proof", error
         return false
+      # var decodedProof = seq[seq[byte]](@[])
+      # for path in decodedValue.proof:
+      #   decodedProof.add(path.asSeq())
+      # let value = rlp.encode(decodedValue.account)
+      # var result = verifyMptProof(decodedProof, keccakHash(key.accountTrieProofKey.stateRoot), toSeq(key.accountTrieProofKey.address), value)
+      # echo ">>> verifyMptProof result", result
       return true
     of contractStorageTrieProof:
       return true
@@ -83,9 +91,9 @@ proc validateContent(
       return true
 
 proc validateContent(
-  n: StateNetwork,
-  contentKeys: ContentKeysList,
-  contentValues: seq[seq[byte]]): Future[bool] {.async.} =
+    n: StateNetwork,
+    contentKeys: ContentKeysList,
+    contentValues: seq[seq[byte]]): Future[bool] {.async.} =
   for i, contentValue in contentValues:
     let contentKey = contentKeys[i]
     if await n.validateContent(contentKey, contentValue):
