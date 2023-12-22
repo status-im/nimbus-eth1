@@ -47,7 +47,7 @@ type
 
     dataDir* {.
       desc: "Data directory to lookup state data"
-      defaultValue: "./fluffy/tests/state_data/"
+      defaultValue: "./vendor/portal-spec-tests/tests/mainnet/state/"
       name: "data-dir".}: string
 
     blockAmount* {.

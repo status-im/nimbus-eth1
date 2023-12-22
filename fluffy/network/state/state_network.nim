@@ -78,12 +78,12 @@ proc validateContent(
       var decodedValue = decodeSsz(contentValue, AccountState).valueOr:
         warn "Received invalid account trie proof", error
         return false
-      # var decodedProof = seq[seq[byte]](@[])
-      # for path in decodedValue.proof:
-      #   decodedProof.add(path.asSeq())
-      # let value = rlp.encode(decodedValue.account)
-      # var result = verifyMptProof(decodedProof, keccakHash(key.accountTrieProofKey.stateRoot), toSeq(key.accountTrieProofKey.address), value)
-      # echo ">>> verifyMptProof result", result
+      var decodedProof = seq[seq[byte]](@[])
+      for path in decodedValue.proof:
+        decodedProof.add(path.asSeq())
+      let value = rlp.encode(decodedValue.account)
+      var result = verifyMptProof(decodedProof, keccakHash(key.accountTrieProofKey.stateRoot), toSeq(key.accountTrieProofKey.address), value)
+      echo ">>> verifyMptProof result", result
       return true
     of contractStorageTrieProof:
       return true

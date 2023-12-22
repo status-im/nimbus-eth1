@@ -21,6 +21,9 @@ import
   ../database/content_db,
   ./test_helpers
 
+const testVectorDir =
+  "./vendor/portal-spec-tests/tests/mainnet/state/"
+
 proc genesisToTrie(filePath: string): CoreDbMptRef =
   # TODO: Doing our best here with API that exists, to be improved.
   var cn: NetworkParams
@@ -38,7 +41,7 @@ procSuite "State Content Network":
   let rng = newRng()
 
   asyncTest "Decode and use proofs":
-    let file = "./fluffy/tests/state_data/proofs.full.block.0.json"
+    let file = testVectorDir & "/proofs.full.block.0.json"
     let content = readAllFile(file).valueOr:
       quit(1)
 
