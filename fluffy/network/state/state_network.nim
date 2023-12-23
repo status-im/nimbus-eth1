@@ -75,16 +75,23 @@ proc validateContent(
     of contractStorageTrieNode:
       return true
     of accountTrieProof:
-      var decodedValue = decodeSsz(contentValue, AccountState).valueOr:
+      var decodedProof = decodeSsz(contentValue, AccountTrieProof).valueOr:
         warn "Received invalid account trie proof", error
         return false
-      var decodedProof = seq[seq[byte]](@[])
-      for path in decodedValue.proof:
-        decodedProof.add(path.asSeq())
-      let value = rlp.encode(decodedValue.account)
-      var result = verifyMptProof(decodedProof, keccakHash(key.accountTrieProofKey.stateRoot), toSeq(key.accountTrieProofKey.address), value)
-      echo ">>> verifyMptProof result", result
-      return true
+      var proof: seq[seq[byte]]
+      for p in decodedProof:
+        proof.add(p.toSeq())
+      let
+        trieKey = keccakHash(key.accountTrieProofKey.address).data.toSeq()
+        value = proof[^1].decode(seq[seq[byte]])[^1]
+        stateRoot = MDigest[256](data: key.accountTrieProofKey.stateRoot)
+        result = verifyMptProof(proof, stateRoot, trieKey, value)
+      case result.kind:
+        of ValidProof:
+          return true
+        else:
+          warn "Received invalid account trie proof"
+          return false
     of contractStorageTrieProof:
       return true
     of contractBytecode:

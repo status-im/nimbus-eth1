@@ -19,10 +19,9 @@ import
 export ssz_serialization, common_types, hash, results
 
 type
-  NodeHash*    = MDigest[32 * 8] # keccak256
-  CodeHash*    = MDigest[32 * 8] # keccak256
-  StateRoot*   = MDigest[32 * 8] # keccak256
-  Address*     = array[20, byte]
+  NodeHash* = MDigest[32 * 8] # keccak256
+  CodeHash* = MDigest[32 * 8] # keccak256
+  Address* = array[20, byte]
 
   ContentType* = enum
     # Note: Need to add this unused value as a case object with an enum without
@@ -65,10 +64,6 @@ type
 
   WitnessNode* = ByteList
   AccountTrieProof* = List[WitnessNode, 32]
-
-  AccountState* = object
-    account*: Account
-    proof*: AccountTrieProof
 
   ContentKey* = object
     case contentType*: ContentType
