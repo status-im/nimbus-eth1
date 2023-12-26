@@ -23,9 +23,6 @@ export
 
 type
   Genesis* = ref object
-    # for geth compatibility
-    config*     : ChainConfig
-
     nonce*      : BlockNonce
     timestamp*  : EthTime
     extraData*  : seq[byte]
@@ -148,17 +145,17 @@ proc readValue(reader: var JsonReader, value: var UInt256)
   ## to `BlockNumber` fields as well as generic `UInt265` fields like the
   ## account `balance`.
   var (accu, ok) = (0.u256, true)
-  if reader.lexer.lazyTok == tkNumeric:
+  let tokKind = reader.tokKind
+  if tokKind == JsonValueKind.Number:
     try:
-      reader.lexer.customIntValueIt:
+      reader.customIntValueIt:
         accu = accu * 10 + it.u256
-      ok = reader.lexer.lazyTok == tkExInt # non-negative wanted
     except CatchableError:
       ok = false
-  elif reader.lexer.lazyTok == tkQuoted:
+  elif tokKind == JsonValueKind.String:
     try:
       var (sLen, base) = (0, 10)
-      reader.lexer.customTextValueIt:
+      reader.customStringValueIt:
         if ok:
           var num = it.fromHex
           if base <= num:
@@ -184,7 +181,6 @@ proc readValue(reader: var JsonReader, value: var UInt256)
   if not ok:
     reader.raiseUnexpectedValue("Uint256 parse error")
   value = accu
-  reader.lexer.next()
 
 proc readValue(reader: var JsonReader, value: var ChainId)
     {.gcsafe, raises: [SerializationError, IOError].} =
@@ -215,18 +211,15 @@ proc readValue(reader: var JsonReader, value: var EthTime)
 
 # but shanghaiTime and cancunTime in config is in int literal
 proc readValue(reader: var JsonReader, value: var Option[EthTime])
-    {.gcsafe, raises: [IOError].} =
-  let tok = reader.lexer.lazyTok
-  if tok == tkNull:
+    {.gcsafe, raises: [IOError, JsonReaderError].} =
+  if reader.tokKind == JsonValueKind.Null:
     reset value
-    reader.lexer.next()
+    reader.parseNull()
   else:
     # both readValue(GasInt/AccountNonce) will be called if
     # we use readValue(int64/uint64)
-    let tok {.used.} = reader.lexer.tok # resove lazy token
-    let val = EthTime reader.lexer.absIntVal
+    let val = EthTime reader.parseInt(uint64)
     value = some val
-    reader.lexer.next()
 
 proc readValue(reader: var JsonReader, value: var seq[byte])
     {.gcsafe, raises: [SerializationError, IOError].} =
