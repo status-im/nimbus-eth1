@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/[os, json, sequtils, strutils],
+  std/[os, json, sequtils, strutils, sugar],
   stew/[byteutils, io2],
   nimcrypto/hash,
   testutils/unittests, chronos,
@@ -41,7 +41,7 @@ proc genesisToTrie(filePath: string): CoreDbMptRef =
 procSuite "State Content Network":
   let rng = newRng()
 
-  asyncTest "Encode/decode accountTrieProofKey":
+  test "Encode/decode accountTrieProofKey":
     const
       address = "0x000d836201318ec6899a67540690382780743280"
       stateRoot = "0xd7f8974fb5ac78d9ac099b9ad5018bedc2ce0a72dad1827a1709da30580f0544"
@@ -49,7 +49,7 @@ procSuite "State Content Network":
 
     let
       addressBytes = hexToByteArray[20](address)
-      stateRootBytes = hexToByteArray[sizeof(state_content.StateRoot)](stateRoot)
+      stateRootBytes = hexToByteArray[sizeof(state_content.AccountTrieProofKey.stateRoot)](stateRoot)
       key = AccountTrieProofKey(address: addressBytes, stateRoot: stateRootBytes)
 
     let encodedKey = SSZ.encode(key)
@@ -68,14 +68,16 @@ procSuite "State Content Network":
       except SerializationError:
         quit(1)
 
+    let proof = decoded.proofs[0].proof.map(hexToSeqByte)
+
     var accountTrieProof = AccountTrieProof(@[])
-    for witness in proof.proof:
-      let witnessNode = ByteList(hexToSeqByte(witness))
+    for witness in proof:
+      let witnessNode = ByteList(witness)
       discard accountTrieProof.add(witnessNode)
-    
+
     let
       encodedProof = SSZ.encode(accountTrieProof)
-      decodedProof = decodeSsz(encodedProof, AccountTrieProof)
+      decodedProof = decodeSsz(encodedProof, AccountTrieProof).get()
 
     check decodedProof == accountTrieProof
 
@@ -121,7 +123,7 @@ procSuite "State Content Network":
       proto1 = StateNetwork.new(node1, ContentDB.new("", uint32.high, inMemory = true), sm1)
       proto2 = StateNetwork.new(node2, ContentDB.new("", uint32.high, inMemory = true), sm2)
 
-      state_root = hexToByteArray[sizeof(state_content.StateRoot)](decoded.state_root)
+      state_root = hexToByteArray[sizeof(state_content.AccountTrieProofKey.stateRoot)](decoded.state_root)
 
     check proto2.portalProtocol.addNode(node1.localNode) == Added
 
