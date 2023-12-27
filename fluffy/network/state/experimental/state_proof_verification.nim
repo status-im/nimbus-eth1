@@ -35,8 +35,7 @@ proc verifyAccount*(
   of ValidProof:
     ok()
   of MissingKey:
-    # For an account that doesn't exist yet, which is fine.
-    ok()
+    err("missing key")
   of InvalidProof:
     err(proofResult.errorMsg)
 
@@ -55,8 +54,7 @@ proc verifyContractStorageSlot*(
   of ValidProof:
     ok()
   of MissingKey:
-    # This is for a slot that doesn't have anything stored at it, but that's fine.
-    ok()
+    err("missing key")
   of InvalidProof:
     err(proofResult.errorMsg)
 

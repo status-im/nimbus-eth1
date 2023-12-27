@@ -11,23 +11,23 @@ import
   std/os,
   unittest2,
   stew/results,
-  eth/trie, 
+  eth/trie,
   ../../nimbus/db/core_db,
   ../../nimbus/common/[chain_config],
   ../network/state/experimental/[state_proof_generation, state_proof_verification],
   ./test_helpers
 
 proc checkValidProofsForExistingLeafs(
-    genAccounts: GenesisAlloc, 
-    accountState: AccountState, 
-    storageStates: Table[EthAddress, StorageState]) {.raises: [KeyError, RlpError].} = 
+    genAccounts: GenesisAlloc,
+    accountState: AccountState,
+    storageStates: Table[EthAddress, StorageState]) {.raises: [KeyError, RlpError].} =
 
   for address, account in genAccounts:
     var acc = newAccount(account.nonce, account.balance)
     acc.codeHash = keccakHash(account.code)
     let codeResult = verifyContractBytecode(acc.codeHash, account.code)
     check codeResult.isOk()
-    
+
     if account.code.len() > 0:
       let storageState = storageStates[address]
       acc.storageRoot = storageState.rootHash()
@@ -42,9 +42,9 @@ proc checkValidProofsForExistingLeafs(
     check proofResult.isOk()
 
 proc checkValidProofsForMissingLeafs(
-    genAccounts: GenesisAlloc, 
-    accountState: var AccountState, 
-    storageStates: Table[EthAddress, StorageState]) {.raises: [KeyError, RlpError].} = 
+    genAccounts: GenesisAlloc,
+    accountState: var AccountState,
+    storageStates: Table[EthAddress, StorageState]) {.raises: [KeyError, RlpError].} =
   var remainingAccounts = genAccounts.len()
 
   for address, account in genAccounts:
@@ -68,19 +68,19 @@ proc checkValidProofsForMissingLeafs(
 
         let storageProof = storageState.generateStorageProof(slotKey)
         let proofResult = verifyContractStorageSlot(acc.storageRoot, slotKey, slotValue, storageProof)
-        check proofResult.isOk()
+        check proofResult.isErr()
 
     accountState.del(keccakHash(address).data) # delete the account from the state
     dec remainingAccounts
 
     let accountProof = accountState.generateAccountProof(address)
     let proofResult = verifyAccount(accountState.rootHash(), address, acc, accountProof)
-    check proofResult.isOk()
+    check proofResult.isErr()
 
 proc checkInvalidProofsWithBadStateRoot(
-    genAccounts: GenesisAlloc, 
-    accountState: AccountState, 
-    storageStates: Table[EthAddress, StorageState]) {.raises: [KeyError, RlpError].} = 
+    genAccounts: GenesisAlloc,
+    accountState: AccountState,
+    storageStates: Table[EthAddress, StorageState]) {.raises: [KeyError, RlpError].} =
   let badHash = toDigest("2cb1b80b285d09e0570fdbbb808e1d14e4ac53e36dcd95dbc268deec2915b3e7")
 
   for address, account in genAccounts:
@@ -98,20 +98,20 @@ proc checkInvalidProofsWithBadStateRoot(
 
         let storageProof = storageState.generateStorageProof(slotKey)
         let proofResult = verifyContractStorageSlot(badHash, slotKey, slotValue, storageProof)
-        check: 
+        check:
           proofResult.isErr()
           proofResult.error() == "missing expected node"
 
     let accountProof = accountState.generateAccountProof(address)
     let proofResult = verifyAccount(badHash, address, acc, accountProof)
-    check: 
+    check:
       proofResult.isErr()
-      proofResult.error() == "missing expected node" 
+      proofResult.error() == "missing expected node"
 
 proc checkInvalidProofsWithBadValue(
-    genAccounts: GenesisAlloc, 
-    accountState: AccountState, 
-    storageStates: Table[EthAddress, StorageState]) {.raises: [KeyError, RlpError].} = 
+    genAccounts: GenesisAlloc,
+    accountState: AccountState,
+    storageStates: Table[EthAddress, StorageState]) {.raises: [KeyError, RlpError].} =
 
   for address, account in genAccounts:
     var acc = newAccount(account.nonce, account.balance)
@@ -130,16 +130,16 @@ proc checkInvalidProofsWithBadValue(
         let badSlotValue = slotValue + 1 # bad slot value
 
         let proofResult = verifyContractStorageSlot(acc.storageRoot, slotKey, badSlotValue, storageProof)
-        check: 
+        check:
           proofResult.isErr()
           proofResult.error() == "proof does not contain expected value"
 
     let accountProof = accountState.generateAccountProof(address)
     inc acc.balance # bad account balance
     let proofResult = verifyAccount(accountState.rootHash(), address, acc, accountProof)
-    check: 
+    check:
       proofResult.isErr()
-      proofResult.error() == "proof does not contain expected value" 
+      proofResult.error() == "proof does not contain expected value"
 
 
 suite "State Proof Verification Tests":
@@ -163,7 +163,7 @@ suite "State Proof Verification Tests":
       let accounts = getGenesisAlloc("fluffy" / "tests" / "custom_genesis" / file)
       var state = accounts.toState()
       checkInvalidProofsWithBadStateRoot(accounts, state[0], state[1])
- 
+
   test "Invalid proofs with bad value":
     for file in genesisFiles:
       let accounts = getGenesisAlloc("fluffy" / "tests" / "custom_genesis" / file)
