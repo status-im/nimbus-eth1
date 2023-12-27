@@ -11,21 +11,18 @@ import
   std/sequtils,
   stint,
   eth/[common, rlp, trie/hexary_proof_verification],
-  stew/results
+  stew/results,
+  ./state_proof_types
 
 export results
 
-type
-  MptProof = seq[seq[byte]]
-  AccountProof* = distinct MptProof
-  StorageProof* = distinct MptProof
 
 proc verifyAccount*(
     trustedStateRoot: KeccakHash,
     address: EthAddress,
     account: Account,
     proof: AccountProof): Result[void, string] =
-  
+
   let key = toSeq(keccakHash(address).data)
   let value = rlp.encode(account)
 
@@ -59,7 +56,7 @@ proc verifyContractStorageSlot*(
     err(proofResult.errorMsg)
 
 func verifyContractBytecode*(
-    trustedCodeHash: KeccakHash, 
+    trustedCodeHash: KeccakHash,
     bytecode: openArray[byte]): Result[void, string] =
   if trustedCodeHash == keccakHash(bytecode):
     ok()

@@ -10,21 +10,18 @@
 import
   stint,
   eth/[common, trie],
-  ./state_proof_verification
+  ./state_proof_types
 
-type  
-  AccountState* = HexaryTrie
-  StorageState* = HexaryTrie
 
 proc generateAccountProof*(
-      state: AccountState, 
-      address: EthAddress): AccountProof {.raises: [RlpError].} = 
+    state: AccountState,
+    address: EthAddress): AccountProof {.raises: [RlpError].} =
   let key = keccakHash(address).data
   state.getBranch(key).AccountProof
 
 proc generateStorageProof*(
-      state: StorageState, 
-      slotKey: UInt256): StorageProof {.raises: [RlpError].} = 
+    state: StorageState,
+    slotKey: UInt256): StorageProof {.raises: [RlpError].} =
   let key = keccakHash(toBytesBE(slotKey)).data
-  state.getBranch(key).StorageProof  
+  state.getBranch(key).StorageProof
 

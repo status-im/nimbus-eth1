@@ -14,7 +14,7 @@ import
   eth/trie,
   ../../nimbus/db/core_db,
   ../../nimbus/common/[chain_config],
-  ../network/state/experimental/[state_proof_generation, state_proof_verification],
+  ../network/state/experimental/[state_proof_types, state_proof_generation, state_proof_verification],
   ./test_helpers
 
 proc checkValidProofsForExistingLeafs(
@@ -63,14 +63,14 @@ proc checkValidProofsForMissingLeafs(
         if (remainingSlots == 1):
           break # can't generate proofs from an empty state
 
-        storageState.del(keccakHash(toBytesBE(slotKey)).data) # delete the slot from the state
+        storageState.HexaryTrie.del(keccakHash(toBytesBE(slotKey)).data) # delete the slot from the state
         dec remainingSlots
 
         let storageProof = storageState.generateStorageProof(slotKey)
         let proofResult = verifyContractStorageSlot(acc.storageRoot, slotKey, slotValue, storageProof)
         check proofResult.isErr()
 
-    accountState.del(keccakHash(address).data) # delete the account from the state
+    accountState.HexaryTrie.del(keccakHash(address).data) # delete the account from the state
     dec remainingAccounts
 
     let accountProof = accountState.generateAccountProof(address)

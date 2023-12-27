@@ -11,7 +11,7 @@ import
   eth/p2p/discoveryv5/[enr, node, routing_table],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ../network/history/[accumulator, history_content],
-  ../network/state/experimental/state_proof_generation,
+  ../network/state/experimental/state_proof_types,
   ../../nimbus/db/core_db,
   ../../nimbus/common/[chain_config],
   ../database/content_db
@@ -120,7 +120,7 @@ proc getGenesisAlloc*(filePath: string): GenesisAlloc =
 
   cn.genesis.alloc
 
-proc toState*(alloc: GenesisAlloc): 
+proc toState*(alloc: GenesisAlloc):
     (AccountState, Table[EthAddress, StorageState]) {.raises: [RlpError].} =
   var accountTrie = initHexaryTrie(newMemoryDB())
   var storageStates = initTable[EthAddress, StorageState]()
@@ -140,7 +140,7 @@ proc toState*(alloc: GenesisAlloc):
       codeHash = keccakHash(genAccount.code)
 
     let account = Account(
-        nonce: genAccount.nonce, 
+        nonce: genAccount.nonce,
         balance: genAccount.balance,
         storageRoot: storageRoot,
         codeHash: codeHash)
