@@ -8,14 +8,14 @@
 {.push raises: [].}
 
 import
-  std/strutils,
+  std/[strutils, typetraits],
   stint,
   stew/[byteutils, results],
   chronicles,
   json_rpc/[rpcproxy, rpcserver, rpcclient],
   eth/common/eth_types as etypes,
   web3,
-  web3/[ethhexstrings, primitives],
+  web3/[primitives, eth_api_types],
   beacon_chain/el/el_manager,
   beacon_chain/networking/network_metadata,
   beacon_chain/spec/forks,
@@ -30,18 +30,6 @@ logScope:
 
 proc `==`(x, y: Quantity): bool {.borrow, noSideEffect.}
 
-template encodeQuantity(value: UInt256): HexQuantityStr =
-  hexQuantityStr("0x" & value.toHex())
-
-template encodeHexData(value: UInt256): HexDataStr =
-  hexDataStr("0x" & toBytesBE(value).toHex)
-
-template bytesToHex(bytes: seq[byte]): HexDataStr =
-  hexDataStr("0x" & toHex(bytes))
-
-template encodeQuantity(value: Quantity): HexQuantityStr =
-  hexQuantityStr(encodeQuantity(value.uint64))
-
 type
   VerifiedRpcProxy* = ref object
     proxy: RpcProxy
@@ -51,6 +39,8 @@ type
   QuantityTagKind = enum
     LatestBlock, BlockNumber
 
+  BlockTag = eth_api_types.RtBlockIdentifier
+
   QuantityTag = object
     case kind: QuantityTagKind
     of LatestBlock:
@@ -58,27 +48,16 @@ type
     of BlockNumber:
       blockNumber: Quantity
 
-func parseHexIntResult(tag: string): Result[uint64, string] =
-  try:
-    ok(parseHexInt(tag).uint64)
-  except ValueError as e:
-    err(e.msg)
-
-func parseHexQuantity(tag: string): Result[Quantity, string] =
-  let hexQuantity = hexQuantityStr(tag)
-  if validate(hexQuantity):
-    let parsed = ? parseHexIntResult(tag)
-    return ok(Quantity(parsed))
+func parseQuantityTag(blockTag: BlockTag): Result[QuantityTag, string] =
+  if blockTag.kind == bidAlias:
+    let tag = blockTag.alias.toLowerAscii
+    case tag
+    of "latest":
+      return ok(QuantityTag(kind: LatestBlock))
+    else:
+      return err("Unsupported blockTag: " & tag)
   else:
-    return err("Invalid hex quantity.")
-
-func parseQuantityTag(blockTag: string): Result[QuantityTag, string] =
-  let tag = blockTag.toLowerAscii
-  case tag
-  of "latest":
-    return ok(QuantityTag(kind: LatestBlock))
-  else:
-    let quantity = ? parseHexQuantity(tag)
+    let quantity = blockTag.number.Quantity
     return ok(QuantityTag(kind: BlockNumber, blockNumber: quantity))
 
 template checkPreconditions(proxy: VerifiedRpcProxy) =
@@ -90,7 +69,7 @@ template rpcClient(lcProxy: VerifiedRpcProxy): RpcClient =
 
 proc getPayloadByTag(
     proxy: VerifiedRpcProxy,
-    quantityTag: string):
+    quantityTag: BlockTag):
     results.Opt[ExecutionData] {.raises: [ValueError].} =
   checkPreconditions(proxy)
 
@@ -110,27 +89,27 @@ proc getPayloadByTag(
 
 proc getPayloadByTagOrThrow(
     proxy: VerifiedRpcProxy,
-    quantityTag: string): ExecutionData {.raises: [ValueError].} =
+    quantityTag: BlockTag): ExecutionData {.raises: [ValueError].} =
 
   let tagResult = getPayloadByTag(proxy, quantityTag)
 
   if tagResult.isErr:
-    raise newException(ValueError, "No block stored for given tag " & quantityTag)
+    raise newException(ValueError, "No block stored for given tag " & $quantityTag)
 
   return tagResult.get()
 
 proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
-  lcProxy.proxy.rpc("eth_chainId") do() -> HexQuantityStr:
-    return encodeQuantity(lcProxy.chainId)
+  lcProxy.proxy.rpc("eth_chainId") do() -> Quantity:
+    return lcProxy.chainId
 
-  lcProxy.proxy.rpc("eth_blockNumber") do() -> HexQuantityStr:
+  lcProxy.proxy.rpc("eth_blockNumber") do() -> Quantity:
     ## Returns the number of the most recent block.
     checkPreconditions(lcProxy)
 
-    return encodeQuantity(lcProxy.blockCache.latest.get.blockNumber)
+    return lcProxy.blockCache.latest.get.blockNumber
 
   lcProxy.proxy.rpc("eth_getBalance") do(
-      address: Address, quantityTag: string) -> HexQuantityStr:
+      address: Address, quantityTag: BlockTag) -> UInt256:
     # When requesting state for `latest` block number, we need to translate
     # `latest` to actual block number as `latest` on proxy and on data provider
     # can mean different blocks and ultimatly piece received piece of state
@@ -155,32 +134,31 @@ proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
     )
 
     if accountResult.isOk():
-      return encodeQuantity(accountResult.get.balance)
+      return accountResult.get.balance
     else:
       raise newException(ValueError, accountResult.error)
 
   lcProxy.proxy.rpc("eth_getStorageAt") do(
-      address: Address, slot: HexDataStr, quantityTag: string) -> HexDataStr:
+      address: Address, slot: UInt256, quantityTag: BlockTag) -> UInt256:
     let
       executionPayload = lcProxy.getPayloadByTagOrThrow(quantityTag)
-      uslot = UInt256.fromHex(slot.string)
       blockNumber = executionPayload.blockNumber.uint64
 
     info "Forwarding eth_getStorageAt", blockNumber
 
     let proof = await lcProxy.rpcClient.eth_getProof(
-      address, @[uslot], blockId(blockNumber))
+      address, @[slot], blockId(blockNumber))
 
-    let dataResult = getStorageData(executionPayload.stateRoot, uslot, proof)
+    let dataResult = getStorageData(executionPayload.stateRoot, slot, proof)
 
     if dataResult.isOk():
       let slotValue = dataResult.get()
-      return encodeHexData(slotValue)
+      return slotValue
     else:
       raise newException(ValueError, dataResult.error)
 
   lcProxy.proxy.rpc("eth_getTransactionCount") do(
-      address: Address, quantityTag: string) -> HexQuantityStr:
+      address: Address, quantityTag: BlockTag) -> Quantity:
     let
       executionPayload = lcProxy.getPayloadByTagOrThrow(quantityTag)
       blockNumber = executionPayload.blockNumber.uint64
@@ -201,12 +179,12 @@ proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
     )
 
     if accountResult.isOk():
-      return hexQuantityStr(encodeQuantity(accountResult.get.nonce))
+      return Quantity(accountResult.get.nonce)
     else:
       raise newException(ValueError, accountResult.error)
 
   lcProxy.proxy.rpc("eth_getCode") do(
-      address: Address, quantityTag: string) -> HexDataStr:
+      address: Address, quantityTag: BlockTag) -> seq[byte]:
     let
       executionPayload = lcProxy.getPayloadByTagOrThrow(quantityTag)
       blockNumber = executionPayload.blockNumber.uint64
@@ -231,7 +209,7 @@ proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
 
     if account.codeHash == etypes.EMPTY_CODE_HASH:
       # account does not have any code, return empty hex data
-      return hexDataStr("0x")
+      return @[]
 
     info "Forwarding eth_getCode", blockNumber
 
@@ -241,7 +219,7 @@ proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
     )
 
     if isValidCode(account, code):
-      return bytesToHex(code)
+      return code
     else:
       raise newException(ValueError,
         "Received code which does not match the account code hash")
@@ -257,7 +235,7 @@ proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
   # TODO currently we do not handle fullTransactions flag. It require updates on
   # nim-web3 side
   lcProxy.proxy.rpc("eth_getBlockByNumber") do(
-      quantityTag: string, fullTransactions: bool) -> Option[BlockObject]:
+      quantityTag: BlockTag, fullTransactions: bool) -> Option[BlockObject]:
     let executionPayload = lcProxy.getPayloadByTag(quantityTag)
 
     if executionPayload.isErr:

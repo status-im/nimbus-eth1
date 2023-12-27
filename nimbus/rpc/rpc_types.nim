@@ -18,3 +18,7 @@ export
 
 type
   FilterLog* = eth_api_types.LogObject
+
+  # BlockTag instead of BlockId:
+  # prevent type clash with eth2 BlockId in fluffy/verified_proxy
+  BlockTag* = eth_api_types.RtBlockIdentifier

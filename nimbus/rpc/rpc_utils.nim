@@ -13,7 +13,6 @@ import
   std/[strutils, algorithm, options],
   ./rpc_types,
   eth/[common, keys],
-  web3/ethhexstrings,
   ../db/core_db,
   ../constants, stint,
   ../utils/utils,
@@ -23,38 +22,34 @@ import
   ../beacon/web3_eth_conv
 
 const
-  defaultTag = "latest"
+  defaultTag = blockId("latest")
 
 type
   BlockHeader = common.BlockHeader
 
-proc headerFromTag*(chain: CoreDbRef, blockTag: string): BlockHeader
+proc headerFromTag*(chain: CoreDbRef, blockId: BlockTag): BlockHeader
     {.gcsafe, raises: [CatchableError].} =
-  let tag = blockTag.toLowerAscii
-  case tag
-  of "latest": result = chain.getCanonicalHead()
-  of "earliest": result = chain.getBlockHeader(GENESIS_BLOCK_NUMBER)
-  of "safe": result = chain.safeHeader()
-  of "finalized": result = chain.finalizedHeader()
-  of "pending":
-    #TODO: Implement get pending block
-    raise newException(ValueError, "Pending tag not yet implemented")
-  else:
-    if not validate(tag.HexQuantityStr):
-      raise newException(ValueError, "Invalid hex of blockTag")
-    let blockNum = stint.fromHex(UInt256, tag)
-    result = chain.getBlockHeader(blockNum.toBlockNumber)
 
-proc headerFromTag*(chain: CoreDbRef, blockTag: Option[RtBlockIdentifier]): BlockHeader
-    {.gcsafe, raises: [CatchableError].} =
-  if blockTag.isSome():
-    let blockId = blockTag.get
-    if blockId.kind == bidAlias:
-      return chain.headerFromTag(blockId.alias)
+  if blockId.kind == bidAlias:
+    let tag = blockId.alias.toLowerAscii
+    case tag
+    of "latest": result = chain.getCanonicalHead()
+    of "earliest": result = chain.getBlockHeader(GENESIS_BLOCK_NUMBER)
+    of "safe": result = chain.safeHeader()
+    of "finalized": result = chain.finalizedHeader()
+    of "pending":
+      #TODO: Implement get pending block
+      raise newException(ValueError, "Pending tag not yet implemented")
     else:
-      return chain.getBlockHeader(blockId.number.toBlockNumber)
+      raise newException(ValueError, "Unsupported block tag " & tag)
   else:
-    return chain.headerFromTag(defaultTag)
+    let blockNum = blockId.number.toBlockNumber
+    result = chain.getBlockHeader(blockNum)
+
+proc headerFromTag*(chain: CoreDbRef, blockTag: Option[BlockTag]): BlockHeader
+    {.gcsafe, raises: [CatchableError].} =
+  let blockId = blockTag.get(defaultTag)
+  chain.headerFromTag(blockId)
 
 proc calculateMedianGasPrice*(chain: CoreDbRef): GasInt
     {.gcsafe, raises: [CatchableError].} =

@@ -10,7 +10,7 @@
 import
   std/[times, sequtils, strutils, typetraits],
   json_rpc/[rpcproxy, rpcserver], stew/byteutils,
-  web3/[conversions, ethhexstrings], # sigh, for FixedBytes marshalling
+  web3/[conversions], # sigh, for FixedBytes marshalling
   eth/[common/eth_types, rlp],
   beacon_chain/spec/forks,
   ../../nimbus/rpc/[rpc_types, filters],
@@ -218,55 +218,56 @@ proc installEthApiHandlers*(
     return some(BlockObject.init(header, body, fullTransactions))
 
   rpcServerWithProxy.rpc("eth_getBlockByNumber") do(
-      quantityTag: string, fullTransactions: bool) -> Option[BlockObject]:
-    let tag = quantityTag.toLowerAscii
-    case tag
-    of "latest":
-      # TODO:
-      # I assume this would refer to the content in the latest optimistic update
-      # in case the majority treshold is not met. And if it is met it is the
-      # same as the safe version?
-      raise newException(ValueError, "Latest tag not yet implemented")
-    of "earliest":
-      raise newException(ValueError, "Earliest tag not yet implemented")
-    of "safe":
-      if beaconLightClient.isNone():
-        raise newException(ValueError, "Safe tag not yet implemented")
+      quantityTag: BlockTag, fullTransactions: bool) -> Option[BlockObject]:
 
-      withForkyStore(beaconLightClient.value().store[]):
-        when lcDataFork > LightClientDataFork.Altair:
-          let
-            blockHash = forkyStore.optimistic_header.execution.block_hash
-            (header, body) = (await historyNetwork.getBlock(blockHash)).valueOr:
-              return none(BlockObject)
+    if quantityTag.kind == bidAlias:
+      let tag = quantityTag.alias.toLowerAscii
+      case tag
+      of "latest":
+        # TODO:
+        # I assume this would refer to the content in the latest optimistic update
+        # in case the majority treshold is not met. And if it is met it is the
+        # same as the safe version?
+        raise newException(ValueError, "Latest tag not yet implemented")
+      of "earliest":
+        raise newException(ValueError, "Earliest tag not yet implemented")
+      of "safe":
+        if beaconLightClient.isNone():
+          raise newException(ValueError, "Safe tag not yet implemented")
 
-          return some(BlockObject.init(header, body, fullTransactions))
-        else:
-          raise newException(
-            ValueError, "Not available before Capella - not synced?")
-    of "finalized":
-      if beaconLightClient.isNone():
-        raise newException(ValueError, "Finalized tag not yet implemented")
+        withForkyStore(beaconLightClient.value().store[]):
+          when lcDataFork > LightClientDataFork.Altair:
+            let
+              blockHash = forkyStore.optimistic_header.execution.block_hash
+              (header, body) = (await historyNetwork.getBlock(blockHash)).valueOr:
+                return none(BlockObject)
 
-      withForkyStore(beaconLightClient.value().store[]):
-        when lcDataFork > LightClientDataFork.Altair:
-          let
-            blockHash = forkyStore.finalized_header.execution.block_hash
-            (header, body) = (await historyNetwork.getBlock(blockHash)).valueOr:
-              return none(BlockObject)
+            return some(BlockObject.init(header, body, fullTransactions))
+          else:
+            raise newException(
+              ValueError, "Not available before Capella - not synced?")
+      of "finalized":
+        if beaconLightClient.isNone():
+          raise newException(ValueError, "Finalized tag not yet implemented")
 
-          return some(BlockObject.init(header, body, fullTransactions))
-        else:
-          raise newException(
-            ValueError, "Not available before Capella - not synced?")
-    of "pending":
-      raise newException(ValueError, "Pending tag not yet implemented")
+        withForkyStore(beaconLightClient.value().store[]):
+          when lcDataFork > LightClientDataFork.Altair:
+            let
+              blockHash = forkyStore.finalized_header.execution.block_hash
+              (header, body) = (await historyNetwork.getBlock(blockHash)).valueOr:
+                return none(BlockObject)
+
+            return some(BlockObject.init(header, body, fullTransactions))
+          else:
+            raise newException(
+              ValueError, "Not available before Capella - not synced?")
+      of "pending":
+        raise newException(ValueError, "Pending tag not yet implemented")
+      else:
+        raise newException(ValueError, "Unsupported block tag " & tag)
     else:
-      if not validate(quantityTag.HexQuantityStr):
-        raise newException(ValueError, "Provided block number is not a hex number")
-
       let
-        blockNumber = fromHex(UInt256, quantityTag)
+        blockNumber = quantityTag.number.toBlockNumber
         maybeBlock = (await historyNetwork.getBlock(blockNumber)).valueOr:
           raise newException(ValueError, error)
 

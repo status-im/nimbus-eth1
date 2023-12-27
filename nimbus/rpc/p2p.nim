@@ -25,15 +25,6 @@ import
   ../beacon/web3_eth_conv,
   ./filters
 
-#[
-  Note:
-    * Hexstring types (HexQuantitySt, HexDataStr, Web3Address, Web3Hash)
-      are parsed to check format before the RPC blocks are executed and will
-      raise an exception if invalid.
-    * Many of the RPC calls do not validate hex string types when output, only
-      type cast to avoid extra processing.
-]#
-
 type
   BlockHeader = eth_types.BlockHeader
   Hash256 = eth_types.Hash256
@@ -49,9 +40,9 @@ proc setupEthRpc*(
     let ac = newAccountStateDB(chainDB, header.stateRoot, com.pruneTrie)
     result = ReadOnlyStateDB(ac)
 
-  proc stateDBFromTag(tag: string, readOnly = true): ReadOnlyStateDB
+  proc stateDBFromTag(quantityTag: BlockTag, readOnly = true): ReadOnlyStateDB
       {.gcsafe, raises: [CatchableError].} =
-    result = getStateDB(chainDB.headerFromTag(tag))
+    result = getStateDB(chainDB.headerFromTag(quantityTag))
 
   server.rpc("eth_protocolVersion") do() -> Option[string]:
     # Old Ethereum wiki documents this as returning a decimal string.
@@ -112,7 +103,7 @@ proc setupEthRpc*(
     ## Returns integer of the current block number the client is on.
     result = w3Qty(chainDB.getCanonicalHead().blockNumber)
 
-  server.rpc("eth_getBalance") do(data: Web3Address, quantityTag: string) -> UInt256:
+  server.rpc("eth_getBalance") do(data: Web3Address, quantityTag: BlockTag) -> UInt256:
     ## Returns the balance of the account of given address.
     ##
     ## data: address to check for balance.
@@ -123,7 +114,7 @@ proc setupEthRpc*(
       address = data.ethAddr
     result = accDB.getBalance(address)
 
-  server.rpc("eth_getStorageAt") do(data: Web3Address, slot: UInt256, quantityTag: string) -> UInt256:
+  server.rpc("eth_getStorageAt") do(data: Web3Address, slot: UInt256, quantityTag: BlockTag) -> UInt256:
     ## Returns the value from a storage position at a given address.
     ##
     ## data: address of the storage.
@@ -135,7 +126,7 @@ proc setupEthRpc*(
       address = data.ethAddr
     result = accDB.getStorage(address, slot)[0]
 
-  server.rpc("eth_getTransactionCount") do(data: Web3Address, quantityTag: string) -> Web3Quantity:
+  server.rpc("eth_getTransactionCount") do(data: Web3Address, quantityTag: BlockTag) -> Web3Quantity:
     ## Returns the number of transactions sent from an address.
     ##
     ## data: address.
@@ -157,7 +148,7 @@ proc setupEthRpc*(
       txCount   = chainDB.getTransactionCount(header.txRoot)
     result = w3Qty(txCount)
 
-  server.rpc("eth_getBlockTransactionCountByNumber") do(quantityTag: string) -> Web3Quantity:
+  server.rpc("eth_getBlockTransactionCountByNumber") do(quantityTag: BlockTag) -> Web3Quantity:
     ## Returns the number of transactions in a block matching the given block number.
     ##
     ## data: integer of a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.
@@ -178,7 +169,7 @@ proc setupEthRpc*(
       unclesCount = chainDB.getUnclesCount(header.ommersHash)
     result = w3Qty(unclesCount)
 
-  server.rpc("eth_getUncleCountByBlockNumber") do(quantityTag: string) -> Web3Quantity:
+  server.rpc("eth_getUncleCountByBlockNumber") do(quantityTag: BlockTag) -> Web3Quantity:
     ## Returns the number of uncles in a block from a block matching the given block number.
     ##
     ## quantityTag: integer of a block number, or the string "latest", "earliest" or "pending", see the default block parameter.
@@ -188,7 +179,7 @@ proc setupEthRpc*(
       unclesCount = chainDB.getUnclesCount(header.ommersHash)
     result = w3Qty(unclesCount.uint)
 
-  server.rpc("eth_getCode") do(data: Web3Address, quantityTag: string) -> seq[byte]:
+  server.rpc("eth_getCode") do(data: Web3Address, quantityTag: BlockTag) -> seq[byte]:
     ## Returns code at a given address.
     ##
     ## data: address
@@ -232,7 +223,7 @@ proc setupEthRpc*(
       raise newException(ValueError, "Account locked, please unlock it first")
 
     let
-      accDB    = stateDBFromTag("latest")
+      accDB    = stateDBFromTag(blockId("latest"))
       tx       = unsignedTx(data, chainDB, accDB.getNonce(address) + 1)
       eip155   = com.isEIP155(com.syncCurrent)
       signedTx = signTransaction(tx, acc.privateKey, com.chainId, eip155)
@@ -252,7 +243,7 @@ proc setupEthRpc*(
       raise newException(ValueError, "Account locked, please unlock it first")
 
     let
-      accDB    = stateDBFromTag("latest")
+      accDB    = stateDBFromTag(blockId("latest"))
       tx       = unsignedTx(data, chainDB, accDB.getNonce(address) + 1)
       eip155   = com.isEIP155(com.syncCurrent)
       signedTx = signTransaction(tx, acc.privateKey, com.chainId, eip155)
@@ -276,7 +267,7 @@ proc setupEthRpc*(
       raise newException(ValueError, res.error)
     result = txHash.w3Hash
 
-  server.rpc("eth_call") do(call: EthCall, quantityTag: string) -> seq[byte]:
+  server.rpc("eth_call") do(call: EthCall, quantityTag: BlockTag) -> seq[byte]:
     ## Executes a new message call immediately without creating a transaction on the block chain.
     ##
     ## call: the transaction call object.
@@ -288,7 +279,7 @@ proc setupEthRpc*(
       res      = rpcCallEvm(callData, header, com)
     result = res.output
 
-  server.rpc("eth_estimateGas") do(call: EthCall, quantityTag: string) -> Web3Quantity:
+  server.rpc("eth_estimateGas") do(call: EthCall, quantityTag: BlockTag) -> Web3Quantity:
     ## Generates and returns an estimate of how much gas is necessary to allow the transaction to complete.
     ## The transaction will not be added to the blockchain. Note that the estimate may be significantly more than
     ## the amount of gas actually used by the transaction, for a variety of reasons including EVM mechanics and node performance.
@@ -318,7 +309,7 @@ proc setupEthRpc*(
     else:
       result = nil
 
-  server.rpc("eth_getBlockByNumber") do(quantityTag: string, fullTransactions: bool) -> BlockObject:
+  server.rpc("eth_getBlockByNumber") do(quantityTag: BlockTag, fullTransactions: bool) -> BlockObject:
     ## Returns information about a block by block number.
     ##
     ## quantityTag: integer of a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.
@@ -366,7 +357,7 @@ proc setupEthRpc*(
     else:
       result = nil
 
-  server.rpc("eth_getTransactionByBlockNumberAndIndex") do(quantityTag: string, quantity: Web3Quantity) -> TransactionObject:
+  server.rpc("eth_getTransactionByBlockNumberAndIndex") do(quantityTag: BlockTag, quantity: Web3Quantity) -> TransactionObject:
     ## Returns information about a transaction by block number and transaction index position.
     ##
     ## quantityTag: a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.
@@ -425,7 +416,7 @@ proc setupEthRpc*(
     result = populateBlockObject(uncles[index], chainDB, false, true)
     result.totalDifficulty = chainDB.getScore(header.hash)
 
-  server.rpc("eth_getUncleByBlockNumberAndIndex") do(quantityTag: string, quantity: Web3Quantity) -> BlockObject:
+  server.rpc("eth_getUncleByBlockNumberAndIndex") do(quantityTag: BlockTag, quantity: Web3Quantity) -> BlockObject:
     # Returns information about a uncle of a block by number and uncle index position.
     ##
     ## quantityTag: a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.

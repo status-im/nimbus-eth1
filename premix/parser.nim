@@ -14,7 +14,17 @@ import
   stint, stew/byteutils
 
 import ../nimbus/transaction, ../nimbus/utils/ec_recover
-from web3/ethhexstrings import encodeQuantity
+
+template stripLeadingZeros(value: string): string =
+  var cidx = 0
+  # ignore the last character so we retain '0' on zero value
+  while cidx < value.len - 1 and value[cidx] == '0':
+    cidx.inc
+  value[cidx .. ^1]
+
+func encodeQuantity(value: SomeUnsignedInt): string =
+  var hValue = value.toHex.stripLeadingZeros
+  result = "0x" & hValue.toLowerAscii
 
 func hexToInt*(s: string, T: typedesc[SomeInteger]): T =
   var i = 0

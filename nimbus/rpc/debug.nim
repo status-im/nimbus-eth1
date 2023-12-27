@@ -9,7 +9,9 @@
 
 import
   std/json,
-  json_rpc/rpcserver, rpc_utils,
+  json_rpc/rpcserver, 
+  ./rpc_utils,
+  ./rpc_types,
   ../tracer, ../vm_types,
   ../common/common,
   ../beacon/web3_eth_conv,
@@ -63,7 +65,7 @@ proc setupDebugRpc*(com: CommonRef, rpcsrv: RpcServer) =
 
     result = traceTransaction(com, blockHeader, blockBody, txDetails.index, flags)
 
-  rpcsrv.rpc("debug_dumpBlockStateByNumber") do(quantityTag: string) -> JsonNode:
+  rpcsrv.rpc("debug_dumpBlockStateByNumber") do(quantityTag: BlockTag) -> JsonNode:
     ## Retrieves the state that corresponds to the block number and returns
     ## a list of accounts (including storage and code).
     ##
@@ -89,7 +91,7 @@ proc setupDebugRpc*(com: CommonRef, rpcsrv: RpcServer) =
 
     result = dumpBlockState(com, header, body)
 
-  rpcsrv.rpc("debug_traceBlockByNumber") do(quantityTag: string, options: Option[TraceOptions]) -> JsonNode:
+  rpcsrv.rpc("debug_traceBlockByNumber") do(quantityTag: BlockTag, options: Option[TraceOptions]) -> JsonNode:
     ## The traceBlock method will return a full stack trace of all invoked opcodes of all transaction
     ## that were included included in this block.
     ##
@@ -119,7 +121,7 @@ proc setupDebugRpc*(com: CommonRef, rpcsrv: RpcServer) =
 
     result = traceBlock(com, header, body, flags)
 
-  rpcsrv.rpc("debug_setHead") do(quantityTag: string) -> bool:
+  rpcsrv.rpc("debug_setHead") do(quantityTag: BlockTag) -> bool:
     ## Sets the current head of the local chain by block number.
     ## Note, this is a destructive action and may severely damage your chain.
     ## Use with extreme caution.

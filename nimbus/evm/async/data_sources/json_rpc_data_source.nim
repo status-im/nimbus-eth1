@@ -136,7 +136,6 @@ type
 proc fetchAccountAndSlots*(rpcClient: RpcClient, address: EthAddress, slots: seq[UInt256], blockNumber: common.BlockNumber): Future[(Account, AccountProof, seq[StorageProof])] {.async.} =
   let t0 = now()
   debug "Got to fetchAccountAndSlots", address=address, slots=slots, blockNumber=blockNumber
-  #let blockNumberHexStr: HexQuantityStr = encodeQuantity(blockNumber)
   let blockNumberUint64 = blockNumber.truncate(uint64)
   let a = web3.Address(address)
   let bid = blockId(blockNumber.truncate(uint64))
