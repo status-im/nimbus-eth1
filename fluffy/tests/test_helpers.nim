@@ -5,6 +5,8 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+{.push raises: [].}
+
 import
   stew/shims/net,
   eth/[common, keys, rlp, trie, trie/db],
@@ -16,7 +18,7 @@ import
   ../../nimbus/common/[chain_config],
   ../database/content_db
 
-proc localAddress*(port: int): Address =
+proc localAddress*(port: int): Address {.raises: [ValueError].} =
   Address(ip: parseIpAddress("127.0.0.1"), port: Port(port))
 
 proc initDiscoveryNode*(
@@ -25,7 +27,7 @@ proc initDiscoveryNode*(
     address: Address,
     bootstrapRecords: openArray[Record] = [],
     localEnrFields: openArray[(string, seq[byte])] = [],
-    previousRecord = none[enr.Record]()): discv5_protocol.Protocol =
+    previousRecord = none[enr.Record]()): discv5_protocol.Protocol {.raises: [CatchableError].} =
   # set bucketIpLimit to allow bucket split
   let config = DiscoveryConfig.init(1000, 24, 5)
 
