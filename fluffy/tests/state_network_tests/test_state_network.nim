@@ -14,13 +14,13 @@ import
   eth/keys,
   eth/common/[eth_types, eth_hash],
   eth/p2p/discoveryv5/protocol as discv5_protocol, eth/p2p/discoveryv5/routing_table,
-  ../tools/state_bridge/state_bridge,
-  ../../nimbus/[config, db/core_db, db/state_db],
-  ../../nimbus/common/[chain_config, genesis],
-  ../network/wire/[portal_protocol, portal_stream],
-  ../network/state/[state_content, state_network],
-  ../database/content_db,
-  ./test_helpers
+  ../../tools/state_bridge/state_bridge,
+  ../../../nimbus/[config, db/core_db, db/state_db],
+  ../../../nimbus/common/[chain_config, genesis],
+  ../../network/wire/[portal_protocol, portal_stream],
+  ../../network/state/[state_content, state_network],
+  ../../database/content_db,
+  .././test_helpers
 
 const testVectorDir =
   "./vendor/portal-spec-tests/tests/mainnet/state/"
@@ -38,51 +38,10 @@ proc genesisToTrie(filePath: string): CoreDbMptRef =
 
   sdb.getTrie
 
-procSuite "State Content Network":
+procSuite "State Network":
   let rng = newRng()
 
-  test "Encode/decode accountTrieProofKey":
-    const
-      address = "0x000d836201318ec6899a67540690382780743280"
-      stateRoot = "0xd7f8974fb5ac78d9ac099b9ad5018bedc2ce0a72dad1827a1709da30580f0544"
-      hexKey = "0x000d836201318ec6899a67540690382780743280d7f8974fb5ac78d9ac099b9ad5018bedc2ce0a72dad1827a1709da30580f0544"
-
-    let
-      addressBytes = hexToByteArray[20](address)
-      stateRootBytes = hexToByteArray[sizeof(state_content.AccountTrieProofKey.stateRoot)](stateRoot)
-      key = AccountTrieProofKey(address: addressBytes, stateRoot: stateRootBytes)
-
-    let encodedKey = SSZ.encode(key)
-    check encodedKey.to0xHex() == hexKey
-    let decodedKey = decodeSsz(encodedKey, AccountTrieProofKey)
-    check decodedKey.isOk()
-
-  asyncTest "Encode/decode accountTrieProof":
-    let file = testVectorDir & "/proofs.full.block.0.json"
-    let content = readAllFile(file).valueOr:
-      quit(1)
-
-    let decoded =
-      try:
-        Json.decode(content, state_bridge.JsonProofVector)
-      except SerializationError:
-        quit(1)
-
-    let proof = decoded.proofs[0].proof.map(hexToSeqByte)
-
-    var accountTrieProof = AccountTrieProof(@[])
-    for witness in proof:
-      let witnessNode = ByteList(witness)
-      discard accountTrieProof.add(witnessNode)
-
-    let
-      encodedProof = SSZ.encode(accountTrieProof)
-      decodedProof = decodeSsz(encodedProof, AccountTrieProof).get()
-
-    check decodedProof == accountTrieProof
-
-
-  asyncTest "Test account state proof":
+  test "Test account state proof":
     let file = testVectorDir & "/proofs.full.block.0.json"
     let content = readAllFile(file).valueOr:
       quit(1)

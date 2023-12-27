@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/sequtils,
+  std/[sequtils, sugar],
   stew/[results, byteutils], chronos, chronicles,
   eth/[rlp, common],
   eth/trie/hexary_proof_verification,
@@ -28,7 +28,7 @@ type StateNetwork* = ref object
   contentQueue*: AsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])]
   processContentLoop: Future[void]
 
-proc toContentIdHandler(contentKey: ByteList): results.Opt[ContentId] =
+func toContentIdHandler(contentKey: ByteList): results.Opt[ContentId] =
   toContentId(contentKey)
 
 proc getContent*(n: StateNetwork, key: ContentKey):
@@ -71,31 +71,29 @@ proc validateContent(
 
   case key.contentType:
     of accountTrieNode:
-      return true
+      true
     of contractStorageTrieNode:
-      return true
+      true
     of accountTrieProof:
-      var decodedProof = decodeSsz(contentValue, AccountTrieProof).valueOr:
+      let decodedProof = decodeSsz(contentValue, AccountTrieProof).valueOr:
         warn "Received invalid account trie proof", error
         return false
-      var proof: seq[seq[byte]]
-      for p in decodedProof:
-        proof.add(p.toSeq())
       let
+        proof = decodedProof.asSeq().map((p: ByteList) => p.toSeq())
         trieKey = keccakHash(key.accountTrieProofKey.address).data.toSeq()
         value = proof[^1].decode(seq[seq[byte]])[^1]
         stateRoot = MDigest[256](data: key.accountTrieProofKey.stateRoot)
-        result = verifyMptProof(proof, stateRoot, trieKey, value)
-      case result.kind:
+        verificationResult = verifyMptProof(proof, stateRoot, trieKey, value)
+      case verificationResult.kind:
         of ValidProof:
-          return true
+          true
         else:
           warn "Received invalid account trie proof"
-          return false
+          false
     of contractStorageTrieProof:
-      return true
+      true
     of contractBytecode:
-      return true
+      true
 
 proc validateContent(
     n: StateNetwork,

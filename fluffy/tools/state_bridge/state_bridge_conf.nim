@@ -17,10 +17,10 @@ export net
 type
   TrustedDigest* = MDigest[32 * 8]
 
-  BeaconBridgeCmd* = enum
+  StateBridgeCmd* = enum
     noCommand
 
-  BeaconBridgeConf* = object
+  StateBridgeConf* = object
     # Logging
     logLevel* {.
       desc: "Sets the log level"
@@ -57,7 +57,7 @@ type
 
     case cmd* {.
       command
-      defaultValue: noCommand .}: BeaconBridgeCmd
+      defaultValue: noCommand .}: StateBridgeCmd
     of noCommand:
       discard
 

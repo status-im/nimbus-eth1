@@ -143,7 +143,7 @@ func toContentId*(contentKey: ContentKey): ContentId =
       h.update(key.address)
       h.update(key.codeHash.data)
 
-proc toContentId*(contentKey: ByteList): results.Opt[ContentId] =
+func toContentId*(contentKey: ByteList): results.Opt[ContentId] =
   let key = decode(contentKey)
   if key.isSome():
     ok(key.get().toContentId())

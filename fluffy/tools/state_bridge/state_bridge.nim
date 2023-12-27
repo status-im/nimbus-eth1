@@ -5,21 +5,7 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-# Portal bridge to inject beacon chain content into the network
-# The bridge act as a middle man between a consensus full node, through the,
-# Eth Beacon Node API REST-API), and a Portal node, through the Portal
-# JSON-RPC API.
-#
-# Portal Network <-> Portal Client (e.g. fluffy) <--JSON-RPC--> bridge <--REST--> consensus client (e.g. Nimbus-eth2)
-#
-# The Consensus client must support serving the Beacon LC data.
-#
-# Bootstraps and updates can be backfilled, however how to do this for multiple
-# bootstraps is still unsolved.
-#
-# Updates, optimistic updates and finality updates are injected as they become
-# available.
-#
+# This is a fake bridge that reads state from a directory and backfills it to the portal state network.
 
 {.push raises: [].}
 
@@ -54,7 +40,7 @@ type JsonProofVector* = object
   state_root*: string
   proofs*: seq[JsonProof]
 
-proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
+proc run(config: StateBridgeConf) {.raises: [CatchableError].} =
   setupLogging(config.logLevel, config.logStdout)
 
   notice "Launching Fluffy fake state bridge",
@@ -105,9 +91,9 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
 
 when isMainModule:
   {.pop.}
-  let config = BeaconBridgeConf.load()
+  let config = StateBridgeConf.load()
   {.push raises: [].}
 
   case config.cmd
-  of BeaconBridgeCmd.noCommand:
+  of StateBridgeCmd.noCommand:
     run(config)
