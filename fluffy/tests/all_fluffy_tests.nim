@@ -9,8 +9,9 @@
 
 import
   ./test_portal_wire_protocol,
-  ./test_state_distance,
-  ./test_state_network,
+  ./state_network_tests/test_state_distance,
+  ./state_network_tests/test_state_network,
+  ./state_network_tests/test_state_content,
   ./test_state_proof_verification,
   ./test_accumulator,
   ./test_history_network,

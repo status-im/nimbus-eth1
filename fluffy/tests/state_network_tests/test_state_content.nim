@@ -35,7 +35,7 @@ procSuite "State Content":
     let decodedKey = decodeSsz(encodedKey, AccountTrieProofKey)
     check decodedKey.isOk()
 
-  test "Encode/decode accountTrieProof":
+  test "Encode/decode accountTrieProof itself":
     let file = testVectorDir & "/proofs.full.block.0.json"
     let content = readAllFile(file).valueOr:
       quit(1)
