@@ -70,6 +70,9 @@ proc validateContent(
     return false
 
   case key.contentType:
+    of unused:
+      warn "Received content with unused content type"
+      false
     of accountTrieNode:
       true
     of contractStorageTrieNode:
