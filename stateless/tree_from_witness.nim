@@ -35,7 +35,7 @@ type
     db: DB
     root: KeccakHash
     flags: WitnessFlags
-    keys: seq[AccountAndSlots]
+    keys*: seq[AccountAndSlots]
 
 # this TreeBuilder support short node parsing
 # but a block witness should not contains short node

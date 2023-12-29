@@ -7,8 +7,7 @@
 
 {.push raises: [].}
 
-import
-  eth/trie
+import eth/[common, trie]
 
 
 type
@@ -18,6 +17,13 @@ type
   MptProof* = seq[seq[byte]]
   AccountProof* = distinct MptProof
   StorageProof* = distinct MptProof
+
+  Witness* = seq[byte]
+
+  AccountData* = object
+    account*: Account
+    code*   : seq[byte]
+    storage*: TableRef[UInt256, UInt256]
 
 
 proc getBranch*(
