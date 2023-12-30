@@ -14,7 +14,8 @@ import
   ../../database/content_db,
   ../wire/[portal_protocol, portal_stream, portal_protocol_config],
   ./state_content,
-  ./state_distance
+  ./state_distance,
+  ./state_proof_verification
 
 logScope:
   topics = "portal_state"
@@ -83,16 +84,9 @@ proc validateContent(
         return false
       let
         proof = decodedProof.asSeq().map((p: ByteList) => p.toSeq())
-        trieKey = keccakHash(key.accountTrieProofKey.address).data.toSeq()
-        value = proof[^1].decode(seq[seq[byte]])[^1]
         stateRoot = MDigest[256](data: key.accountTrieProofKey.stateRoot)
-        verificationResult = verifyMptProof(proof, stateRoot, trieKey, value)
-      case verificationResult.kind:
-        of ValidProof:
-          true
-        else:
-          warn "Received invalid account trie proof"
-          false
+        verificationResult = verifyAccount(stateRoot, key.accountTrieProofKey.address, AccountProof(proof))
+      verificationResult.isOk()
     of contractStorageTrieProof:
       true
     of contractBytecode:

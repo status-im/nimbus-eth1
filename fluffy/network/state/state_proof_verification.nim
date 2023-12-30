@@ -5,8 +5,6 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-{.push raises: [].}
-
 import
   std/sequtils,
   stint,
@@ -17,19 +15,19 @@ export results
 
 type
   MptProof = seq[seq[byte]]
-  AccountProof* = distinct MptProof
+  AccountProof* = distinct MptProof # I'm not really sure how I feel about this
   StorageProof* = distinct MptProof
 
 proc verifyAccount*(
     trustedStateRoot: KeccakHash,
     address: EthAddress,
-    account: Account,
-    proof: AccountProof): Result[void, string] =
+    proof: AccountProof
+    ): Result[void, string] =
   
-  let key = toSeq(keccakHash(address).data)
-  let value = rlp.encode(account)
-
-  let proofResult = verifyMptProof(proof.MptProof, trustedStateRoot, key, value)
+  let 
+    key = keccakHash(address).data.toSeq()
+    value = proof.MptProof[^1].decode(seq[seq[byte]])[^1] # TODO this is undefined in spec. Update when the specs gets updated
+    proofResult = verifyMptProof(proof.MptProof, trustedStateRoot, key, value)
 
   case proofResult.kind
   of ValidProof:
