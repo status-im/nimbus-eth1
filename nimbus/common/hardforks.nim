@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2023 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -199,13 +199,13 @@ type
     time*: Option[EthTime]
 
 func countTimeFields(): int {.compileTime.} =
-  var z = Chainconfig()
+  var z = ChainConfig()
   for name, _ in fieldPairs(z[]):
     if name.endsWith("Time"):
       inc result
 
 func countBlockFields(): int {.compileTime.} =
-  var z = Chainconfig()
+  var z = ChainConfig()
   for name, _ in fieldPairs(z[]):
     if name == "mergeNetsplitBlock":
       # skip mergeForkBlock alias
@@ -219,7 +219,7 @@ const
   blockFieldsCount = countBlockFields()
 
 func collectTimeFields(): array[timeFieldsCount, string] =
-  var z = Chainconfig()
+  var z = ChainConfig()
   var i = 0
   for name, _ in fieldPairs(z[]):
     if name.endsWith("Time"):
@@ -227,7 +227,7 @@ func collectTimeFields(): array[timeFieldsCount, string] =
       inc i
 
 func collectBlockFields(): array[blockFieldsCount, string] =
-  var z = Chainconfig()
+  var z = ChainConfig()
   var i = 0
   for name, _ in fieldPairs(z[]):
     if name == "mergeNetsplitBlock":

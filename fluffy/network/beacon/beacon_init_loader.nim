@@ -1,5 +1,5 @@
 # Nimbus - Portal Network
-# Copyright (c) 2022-2023 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -8,6 +8,7 @@
 {.push raises: [].}
 
 import
+  chronicles,
   beacon_chain/networking/network_metadata,
   beacon_chain/spec/forks,
   beacon_chain/spec/datatypes/altair,
@@ -38,7 +39,10 @@ proc loadNetworkData*(
       except CatchableError as err:
         raiseAssert "Invalid baked-in state: " & err.msg
 
-    beaconClock = BeaconClock.init(getStateField(genesisState[], genesis_time))
+    genesisTime = getStateField(genesisState[], genesis_time)
+    beaconClock = BeaconClock.init(genesisTime).valueOr:
+      error "Invalid genesis time in state", genesisTime
+      quit QuitFailure
 
     genesis_validators_root =
       getStateField(genesisState[], genesis_validators_root)

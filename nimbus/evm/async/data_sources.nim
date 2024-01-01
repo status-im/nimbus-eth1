@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -43,17 +43,21 @@ proc asyncFactoryWithNoDataSource*(): AsyncOperationFactory =
 #   - some kind of "what are we fetching" tuple, so that this is just one thing
 
 proc ifNecessaryGetSlots*(asyncFactory: AsyncOperationFactory, db: CoreDbRef, blockNumber: BlockNumber, stateRoot: Hash256, address: EthAddress, slots: seq[UInt256], newStateRootForSanityChecking: Hash256): Future[void] {.async.} =
-  if asyncFactory.maybeDataSource.isSome:
-    await asyncFactory.maybeDataSource.get.ifNecessaryGetSlots(db, blockNumber, stateRoot, address, slots, newStateRootForSanityChecking)
+  #if asyncFactory.maybeDataSource.isSome:
+  #  await asyncFactory.maybeDataSource.get.ifNecessaryGetSlots(db, blockNumber, stateRoot, address, slots, newStateRootForSanityChecking)
+  discard
 
 proc ifNecessaryGetCode*(asyncFactory: AsyncOperationFactory, db: CoreDbRef, blockNumber: BlockNumber, stateRoot: Hash256, address: EthAddress, newStateRootForSanityChecking: Hash256): Future[void] {.async.} =
-  if asyncFactory.maybeDataSource.isSome:
-    await asyncFactory.maybeDataSource.get.ifNecessaryGetCode(db, blockNumber, stateRoot, address, newStateRootForSanityChecking)
+  #if asyncFactory.maybeDataSource.isSome:
+  #  await asyncFactory.maybeDataSource.get.ifNecessaryGetCode(db, blockNumber, stateRoot, address, newStateRootForSanityChecking)
+  discard
 
 proc ifNecessaryGetAccount*(asyncFactory: AsyncOperationFactory, db: CoreDbRef, blockNumber: BlockNumber, stateRoot: Hash256, address: EthAddress, newStateRootForSanityChecking: Hash256): Future[void] {.async.} =
-  if asyncFactory.maybeDataSource.isSome:
-    await asyncFactory.maybeDataSource.get.ifNecessaryGetAccount(db, blockNumber, stateRoot, address, newStateRootForSanityChecking)
+  #if asyncFactory.maybeDataSource.isSome:
+  #  await asyncFactory.maybeDataSource.get.ifNecessaryGetAccount(db, blockNumber, stateRoot, address, newStateRootForSanityChecking)
+  discard
 
 proc ifNecessaryGetBlockHeaderByNumber*(asyncFactory: AsyncOperationFactory, coreDb: CoreDbRef, blockNumber: BlockNumber): Future[void] {.async.} =
-  if asyncFactory.maybeDataSource.isSome:
-    await asyncFactory.maybeDataSource.get.ifNecessaryGetBlockHeaderByNumber(coreDb, blockNumber)
+  #if asyncFactory.maybeDataSource.isSome:
+  #  await asyncFactory.maybeDataSource.get.ifNecessaryGetBlockHeaderByNumber(coreDb, blockNumber)
+  discard

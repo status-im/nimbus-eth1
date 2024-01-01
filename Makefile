@@ -1,4 +1,4 @@
-# Copyright (c) 2018-2023 Status Research & Development GmbH. Licensed under
+# Copyright (c) 2018-2024 Status Research & Development GmbH. Licensed under
 # either of:
 # - Apache License, version 2.0
 # - MIT license
@@ -115,6 +115,7 @@ GIT_SUBMODULE_UPDATE := git -c submodule."vendor/nimbus-eth2".update=none submod
   git submodule update --init vendor/eth2-networks; \
   git submodule update --init vendor/holesky; \
   git submodule update --init vendor/sepolia; \
+  git submodule update --init vendor/goerli; \
   git submodule update --init vendor/gnosis-chain-configs; \
   git submodule update --init --recursive vendor/nim-kzg4844; \
   cd ../..
