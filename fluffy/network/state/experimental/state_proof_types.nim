@@ -18,7 +18,7 @@ type
   AccountProof* = distinct MptProof
   StorageProof* = distinct MptProof
 
-  Witness* = seq[byte]
+  BlockWitness* = seq[byte]
 
   AccountData* = object
     account*: Account
@@ -37,3 +37,7 @@ proc getBranch*(
     key: openArray[byte]): seq[seq[byte]] {.borrow.}
 
 proc rootHash*(self: StorageState): KeccakHash {.borrow.}
+
+proc len*(self: AccountProof): int {.borrow.}
+
+proc len*(self: StorageProof): int {.borrow.}

@@ -23,6 +23,8 @@ proc verifyAccount*(
     address: EthAddress,
     account: Account,
     proof: AccountProof): Result[void, string] =
+  if proof.len() == 0:
+    return err("proof is empty")
 
   let key = toSeq(keccakHash(address).data)
   let value = rlp.encode(account)
@@ -42,6 +44,8 @@ proc verifyContractStorageSlot*(
     slotKey: UInt256,
     slotValue: UInt256,
     proof: StorageProof): Result[void, string] =
+  if proof.len() == 0:
+    return err("proof is empty")
 
   let key = toSeq(keccakHash(toBytesBE(slotKey)).data)
   let value = rlp.encode(slotValue)
@@ -93,7 +97,9 @@ proc buildAccountsTableFromKeys(
 
 proc verifyWitness*(
     trustedStateRoot: KeccakHash,
-    witness: Witness): Result[TableRef[EthAddress, AccountData], string] =
+    witness: BlockWitness): Result[TableRef[EthAddress, AccountData], string] =
+  if witness.len() == 0:
+    return err("witness is empty")
 
   let db: CoreDbRef = newCoreDbRef(LegacyDbMemory)
   var tb = initTreeBuilder(witness, db, {wfEIP170}) # what flags to use here?
@@ -108,11 +114,3 @@ proc verifyWitness*(
     ok(accounts)
   except Exception as e:
     err(e.msg)
-
-
-
-
-
-
-
-
