@@ -79,7 +79,7 @@ proc buildAccountsTableFromKeys(
     let code = if key.codeLen > 0:
         db.AccountStateDB.kvt().get(account.codeHash.data)
       else: @[]
-    var storage = newTable[UInt256, UInt256]()
+    var storage = initTable[UInt256, UInt256]()
 
     if code.len() > 0:
       for slot in key.slots:

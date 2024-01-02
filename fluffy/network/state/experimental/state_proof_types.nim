@@ -23,7 +23,7 @@ type
   AccountData* = object
     account*: Account
     code*   : seq[byte]
-    storage*: TableRef[UInt256, UInt256]
+    storage*: Table[UInt256, UInt256]
 
 
 proc getBranch*(
