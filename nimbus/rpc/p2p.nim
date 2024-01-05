@@ -503,6 +503,41 @@ proc setupEthRpc*(
       )
       return logs
 
+  server.rpc("eth_getProof") do(data: Web3Address, slots: seq[UInt256], quantityTag: BlockTag) -> ProofResponse:
+    ## Returns information about an account and storage slots (if the account is a contract
+    ## and the slots are requested) along with account and storage proofs which proof the
+    ## existence of the values in the state.
+    ## See EIP spec here: https://eips.ethereum.org/EIPS/eip-1186
+    ##
+    ## data: address of the account.
+    ## slots: integers of the positions in the storage to return with storage proofs.
+    ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
+    ## Returns: the proof response containing the account, account proof and a list of storage proofs
+
+    let
+      accDB   = stateDBFromTag(quantityTag)
+      address = data.ethAddr
+      acc = accDB.getAccount(address)
+
+    var storageProof = newSeqOfCap[StorageProof](slots.len)
+
+    for slotKey in slots:
+      let (slotValue, _) = accDB.getStorage(address, u256(slotKey))
+      storageProof.add(StorageProof(
+          key: u256(slotKey),
+          value: slotValue)
+          # proof: # TODO: return slot proof
+          )
+
+    return ProofResponse(
+          address: w3Addr(address),
+          # accountProof: # TODO: return account proof
+          balance: acc.balance,
+          nonce: w3Qty(acc.nonce),
+          codeHash: w3Hash(acc.codeHash),
+          storageHash: w3Hash(acc.storageRoot),
+          storageProof: storageProof)
+
 #[
   server.rpc("eth_newFilter") do(filterOptions: FilterOptions) -> int:
     ## Creates a filter object, based on filter options, to notify when the state changes (logs).

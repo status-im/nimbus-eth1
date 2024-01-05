@@ -6,13 +6,12 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/[json, tables, os, typetraits, times],
+  std/[json, os, typetraits, times],
   asynctest, web3/eth_api,
-  nimcrypto/[hash], stew/byteutils,
+  stew/byteutils,
   json_rpc/[rpcserver, rpcclient],
-  eth/[rlp, keys, p2p/private/p2p_types],
-  ../nimbus/[constants, transaction, config,
-             vm_state, vm_types, version],
+  eth/[rlp, keys],
+  ../nimbus/[constants, transaction, config, vm_state, vm_types, version],
   ../nimbus/db/[ledger, storage_types],
   ../nimbus/sync/protocol,
   ../nimbus/core/[tx_pool, chain, executor, executor/executor_helpers, pow/difficulty],
@@ -47,6 +46,12 @@ func w3Addr(x: string): Web3Address =
 func w3Hash(x: string): Web3Hash =
   Web3Hash hexToByteArray[32](x)
 
+func emptyCodeHash(): Web3Hash =
+  w3Hash("0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470")
+
+func emptyStorageHash(): Web3Hash =
+  w3Hash("0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
+
 proc persistFixtureBlock(chainDB: CoreDbRef) =
   let header = getBlockHeader4514995()
   # Manually inserting header to avoid any parent checks
@@ -77,7 +82,11 @@ proc setupEnv(com: CommonRef, signer, ks2: EthAddress, ctx: EthContext): TestEnv
       header    = vmHeader,
       com       = com)
 
+  vmState.stateDB.addBalance(ks2, 1_000_000_000.u256)
+  vmState.stateDB.setNonce(ks2, 2.uint64)
   vmState.stateDB.setCode(ks2, code)
+  vmState.stateDB.setStorage(ks2, u256(0), u256(1234))
+  vmState.stateDB.setStorage(ks2, u256(1), u256(2345))
   vmState.stateDB.addBalance(signer, 9_000_000_000.u256)
 
   let
@@ -525,6 +534,112 @@ proc rpcMain*() =
 
       check:
         len(logs) == 2
+
+    test "eth_getProof - Non existent account and storage slots":
+      block:
+        # account doesn't exist
+        let
+          address = w3Addr("0x000000000000987da6ef773fde8d01b9f23d481f")
+          proofResponse = await client.eth_getProof(address, @[], blockId(1'u64))
+          storageProof = proofResponse.storageProof
+
+        check:
+          proofResponse.address == address
+          proofResponse.balance == 0.u256
+          proofResponse.codeHash == emptyCodeHash()
+          proofResponse.nonce == w3Qty(0.uint64)
+          proofResponse.storageHash == emptyStorageHash()
+          storageProof.len() == 0
+
+      block:
+        # account exists but requested slots don't exist
+        let
+          address = w3Addr("0xfff33a3bd36abdbd412707b8e310d6011454a7ae")
+          slot1Key = 0.u256
+          slot2Key = 1.u256
+          proofResponse = await client.eth_getProof(address, @[slot1Key, slot2Key], blockId(1'u64))
+          storageProof = proofResponse.storageProof
+
+        check:
+          proofResponse.address == address
+          proofResponse.balance == UInt256.fromHex("0x1b1ae4d6e2ef5000000")
+          proofResponse.codeHash == emptyCodeHash()
+          proofResponse.nonce == w3Qty(0.uint64)
+          proofResponse.storageHash == emptyStorageHash()
+          storageProof.len() == 2
+          storageProof[0].key == slot1Key
+          storageProof[0].value == 0.u256
+          storageProof[1].key == slot2Key
+          storageProof[1].value == 0.u256
+
+    test "eth_getProof - Existing account and storage slots":
+      block:
+        # contract account
+        let
+          address = w3Addr("0xa3b2222afa5c987da6ef773fde8d01b9f23d481f")
+          slot1Key = 0.u256
+          slot2Key = 1.u256
+          proofResponse = await client.eth_getProof(address, @[slot1Key, slot2Key], blockId(1'u64))
+          storageProof = proofResponse.storageProof
+
+        check:
+          proofResponse.address == address
+          proofResponse.balance == 1_000_000_000.u256
+          proofResponse.codeHash == w3Hash("0x09044b55d7aba83cb8ac3d2c9c8d8bcadbfc33f06f1be65e8cc1e4ddab5f3074")
+          proofResponse.nonce == w3Qty(2.uint64)
+          proofResponse.storageHash == w3Hash("0x2ed06ec37dad4cd8c8fc1a1172d633a8973987fa6995b14a7c0a50c0e8d1a9c3")
+          storageProof.len() == 2
+          storageProof[0].key == slot1Key
+          storageProof[0].value == 1234.u256
+          storageProof[1].key == slot2Key
+          storageProof[1].value == 2345.u256
+
+      block:
+        # externally owned account
+        let
+          address = w3Addr("0xfff33a3bd36abdbd412707b8e310d6011454a7ae")
+          proofResponse = await client.eth_getProof(address, @[], blockId(1'u64))
+          storageProof = proofResponse.storageProof
+
+        check:
+          proofResponse.address == address
+          proofResponse.balance == UInt256.fromHex("0x1b1ae4d6e2ef5000000")
+          proofResponse.codeHash == emptyCodeHash()
+          proofResponse.nonce == w3Qty(0.uint64)
+          proofResponse.storageHash == emptyStorageHash()
+          storageProof.len() == 0
+
+    test "eth_getProof - Multiple blocks":
+      block:
+        # block 0 - empty account
+        let
+          address = w3Addr("0xa3b2222afa5c987da6ef773fde8d01b9f23d481f")
+          proofResponse = await client.eth_getProof(address, @[], blockId(0'u64))
+          storageProof = proofResponse.storageProof
+
+        check:
+          proofResponse.address == address
+          proofResponse.balance == 0.u256
+          proofResponse.codeHash == emptyCodeHash()
+          proofResponse.nonce == w3Qty(0.uint64)
+          proofResponse.storageHash == emptyStorageHash()
+          storageProof.len() == 0
+
+      block:
+        # block 1 - account has balance, code and storage
+        let
+          address = w3Addr("0xa3b2222afa5c987da6ef773fde8d01b9f23d481f")
+          proofResponse = await client.eth_getProof(address, @[], blockId(1'u64))
+          storageProof = proofResponse.storageProof
+
+        check:
+          proofResponse.address == address
+          proofResponse.balance == 1_000_000_000.u256
+          proofResponse.codeHash == w3Hash("0x09044b55d7aba83cb8ac3d2c9c8d8bcadbfc33f06f1be65e8cc1e4ddab5f3074")
+          proofResponse.nonce == w3Qty(2.uint64)
+          proofResponse.storageHash == w3Hash("0x2ed06ec37dad4cd8c8fc1a1172d633a8973987fa6995b14a7c0a50c0e8d1a9c3")
+          storageProof.len() == 0
+
 
     rpcServer.stop()
     rpcServer.close()
