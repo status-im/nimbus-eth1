@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -505,38 +505,39 @@ proc setupEthRpc*(
 
   server.rpc("eth_getProof") do(data: Web3Address, slots: seq[UInt256], quantityTag: BlockTag) -> ProofResponse:
     ## Returns information about an account and storage slots (if the account is a contract
-    ## and the slots are requested) along with account and storage proofs which proof the
+    ## and the slots are requested) along with account and storage proofs which prove the
     ## existence of the values in the state.
-    ## See EIP spec here: https://eips.ethereum.org/EIPS/eip-1186
+    ## See spec here: https://eips.ethereum.org/EIPS/eip-1186
     ##
     ## data: address of the account.
     ## slots: integers of the positions in the storage to return with storage proofs.
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
-    ## Returns: the proof response containing the account, account proof and a list of storage proofs
+    ## Returns: the proof response containing the account, account proof and storage proof
 
     let
-      accDB   = stateDBFromTag(quantityTag)
+      accDB = stateDBFromTag(quantityTag)
       address = data.ethAddr
       acc = accDB.getAccount(address)
+      accountProof = accDB.getAccountProof(address)
+      slotProofs = accDB.getStorageProof(address, slots)
 
-    var storageProof = newSeqOfCap[StorageProof](slots.len)
+    var storage = newSeqOfCap[StorageProof](slots.len)
 
-    for slotKey in slots:
+    for i, slotKey in slots:
       let (slotValue, _) = accDB.getStorage(address, u256(slotKey))
-      storageProof.add(StorageProof(
+      storage.add(StorageProof(
           key: u256(slotKey),
-          value: slotValue)
-          # proof: # TODO: return slot proof
-          )
+          value: slotValue,
+          proof: seq[RlpEncodedBytes](slotProofs[i])))
 
     return ProofResponse(
           address: w3Addr(address),
-          # accountProof: # TODO: return account proof
+          accountProof: seq[RlpEncodedBytes](accountProof),
           balance: acc.balance,
           nonce: w3Qty(acc.nonce),
           codeHash: w3Hash(acc.codeHash),
           storageHash: w3Hash(acc.storageRoot),
-          storageProof: storageProof)
+          storageProof: storage)
 
 #[
   server.rpc("eth_newFilter") do(filterOptions: FilterOptions) -> int:

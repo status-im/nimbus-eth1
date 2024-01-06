@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE)
 #    or http://www.apache.org/licenses/LICENSE-2.0)
@@ -28,6 +28,8 @@ proc hasCodeOrNonce*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
 proc accountExists*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
 proc isDeadAccount*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
 proc isEmptyAccount*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
+proc getAccountProof*(db: ReadOnlyStateDB, address: EthAddress): AccountProof {.borrow.}
+proc getStorageProof*(db: ReadOnlyStateDB, address: EthAddress, slots: seq[UInt256]): seq[SlotProof] {.borrow.}
 #proc getCommittedStorage*(db: ReadOnlyStateDB, address: EthAddress, slot: UInt256): UInt256 {.borrow.}
 
 # End

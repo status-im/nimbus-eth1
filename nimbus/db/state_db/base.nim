@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -54,6 +54,10 @@ type
     #transactionID: CoreDbTxID
     when aleth_compat:
       cleared: HashSet[EthAddress]
+
+  MptNodeRlpBytes* = seq[byte]
+  AccountProof* = seq[MptNodeRlpBytes]
+  SlotProof* = seq[MptNodeRlpBytes]
 
 proc pruneTrie*(db: AccountStateDB): bool =
   db.trie.isPruning
@@ -248,6 +252,21 @@ proc isDeadAccount*(db: AccountStateDB, address: EthAddress): bool =
       account.nonce == 0
   else:
     result = true
+
+proc getAccountProof*(db: AccountStateDB, address: EthAddress): AccountProof =
+  let key = keccakHash(address).data
+  db.trie.getBranch(key)
+
+proc getStorageProof*(db: AccountStateDB, address: EthAddress, slots: seq[UInt256]): seq[SlotProof] =
+  var account = db.getAccount(address)
+  var storageTrie = getStorageTrie(db, account)
+
+  var slotProofs = newSeqOfCap[SlotProof](slots.len())
+  for slot in slots:
+    let key = keccakHash(toBytesBE(slot)).data
+    slotProofs.add(storageTrie.getBranch(key))
+
+  slotProofs
 
 # Note: `state_db.getCommittedStorage()` is nowhere used.
 #
