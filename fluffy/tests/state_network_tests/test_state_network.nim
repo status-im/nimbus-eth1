@@ -14,7 +14,6 @@ import
   eth/keys,
   eth/common/[eth_types, eth_hash],
   eth/p2p/discoveryv5/protocol as discv5_protocol, eth/p2p/discoveryv5/routing_table,
-  ../../tools/state_bridge/state_bridge,
   ../../../nimbus/[config, db/core_db, db/state_db],
   ../../../nimbus/common/[chain_config, genesis],
   ../../network/wire/[portal_protocol, portal_stream],
@@ -48,7 +47,7 @@ procSuite "State Network":
 
     let decoded =
       try:
-        Json.decode(content, state_bridge.JsonProofVector)
+        Json.decode(content, state_content.JsonProofVector)
       except SerializationError:
         quit(1)
     let
@@ -67,7 +66,7 @@ procSuite "State Network":
 
     let decoded =
       try:
-        Json.decode(content, state_bridge.JsonProofVector)
+        Json.decode(content, state_content.JsonProofVector)
       except SerializationError:
         quit(1)
 

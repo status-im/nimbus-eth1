@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2021-2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -11,12 +11,28 @@
 {.push raises: [].}
 
 import
-  nimcrypto/[hash, sha2, keccak], stew/[objects, results, endians2], stint,
-  eth/common/eth_types,
+  nimcrypto/[hash, sha2, keccak], stew/[objects, results], stint,
   ssz_serialization,
   ../../common/common_types
 
 export ssz_serialization, common_types, hash, results
+
+type JsonAccount* = object
+  nonce*: int
+  balance*: string
+  storage_hash*: string
+  code_hash*: string
+
+type JsonProof* = object
+  address*: string
+  state*: JsonAccount
+  proof*: seq[string]
+
+type JsonProofVector* = object
+  `block`*: int
+  block_hash*: string
+  state_root*: string
+  proofs*: seq[JsonProof]
 
 type
   NodeHash* = MDigest[32 * 8] # keccak256

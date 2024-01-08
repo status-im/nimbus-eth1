@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -23,23 +23,6 @@ import
   ../eth_data_exporter/cl_data_exporter,
   ./state_bridge_conf
 
-type JsonAccount* = object
-  nonce*: int
-  balance*: string
-  storage_hash*: string
-  code_hash*: string
-
-type JsonProof* = object
-  address*: string
-  state*: JsonAccount
-  proof*: seq[string]
-
-type JsonProofVector* = object
-  `block`*: int
-  block_hash*: string
-  state_root*: string
-  proofs*: seq[JsonProof]
-
 proc run(config: StateBridgeConf) {.raises: [CatchableError].} =
   setupLogging(config.logLevel, config.logStdout)
 
@@ -49,19 +32,19 @@ proc run(config: StateBridgeConf) {.raises: [CatchableError].} =
   let portalRpcClient = newRpcHttpClient()
 
   proc backfill(rpcAddress: string, rpcPort: Port) {.async raises: [OSError].} =
-    echo "Backfilling...", config.rpcAddress, ":", config.rpcPort
+    # info "Backfilling...", config.rpcAddress, ":", config.rpcPort
     await portalRpcClient.connect(config.rpcAddress, Port(config.rpcPort), false)
     let files = collect(for f in walkDir(config.dataDir): f.path)
     for file in files:
       let
         content = readAllFile(file).valueOr:
-          echo "Skipping file ", file, " because of error \n", error
+          warn "Skipping file because of error \n", file=file, error=($error)
           continue
         decoded =
           try:
-            Json.decode(content, state_bridge.JsonProofVector)
+            Json.decode(content, JsonProofVector)
           except SerializationError as e:
-            echo "Skipping file ", file, " because of error \n", e.msg
+            warn "Skipping file because of error \n", file=file, error = e.msg
             continue
         state_root = hexToByteArray[sizeof(Bytes32)](decoded.state_root)
 

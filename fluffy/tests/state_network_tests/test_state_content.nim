@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2021-2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -10,7 +10,6 @@ import
   testutils/unittests,
   stew/[byteutils, io2],
   eth/keys,
-  ../../tools/state_bridge/state_bridge,
   ../../network/state/state_content
 
 const testVectorDir =
@@ -19,30 +18,14 @@ const testVectorDir =
 procSuite "State Content":
   let rng = newRng()
 
-  test "Encode/decode accountTrieProofKey":
-    const
-      address = "0x000d836201318ec6899a67540690382780743280"
-      stateRoot = "0xd7f8974fb5ac78d9ac099b9ad5018bedc2ce0a72dad1827a1709da30580f0544"
-      hexKey = "0x000d836201318ec6899a67540690382780743280d7f8974fb5ac78d9ac099b9ad5018bedc2ce0a72dad1827a1709da30580f0544"
-
-    let
-      addressBytes = hexToByteArray[20](address)
-      stateRootBytes = hexToByteArray[sizeof(state_content.AccountTrieProofKey.stateRoot)](stateRoot)
-      key = AccountTrieProofKey(address: addressBytes, stateRoot: stateRootBytes)
-
-    let encodedKey = SSZ.encode(key)
-    check encodedKey.to0xHex() == hexKey
-    let decodedKey = decodeSsz(encodedKey, AccountTrieProofKey)
-    check decodedKey.isOk()
-
-  test "Encode/decode accountTrieProof itself":
+  test "Encode/decode accountTrieProof":
     let file = testVectorDir & "/proofs.full.block.0.json"
     let content = readAllFile(file).valueOr:
       quit(1)
 
     let decoded =
       try:
-        Json.decode(content, state_bridge.JsonProofVector)
+        Json.decode(content, state_content.JsonProofVector)
       except SerializationError:
         quit(1)
 
