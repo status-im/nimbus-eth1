@@ -8,7 +8,7 @@
 import
   std/[sets, strformat],
   chronicles,
-  eth/[common, rlp],
+  eth/[common, rlp, trie/trie_defs],
   ../../constants,
   ../../utils/utils,
   ".."/[core_db, distinct_tries, storage_types]
@@ -253,9 +253,15 @@ proc isDeadAccount*(db: AccountStateDB, address: EthAddress): bool =
   else:
     result = true
 
+proc removeEmptyRlpNode(branch: var seq[MptNodeRlpBytes]) =
+  if branch.len() == 1 and branch[0] == emptyRlp:
+    branch.del(0)
+
 proc getAccountProof*(db: AccountStateDB, address: EthAddress): AccountProof =
   let key = keccakHash(address).data
-  db.trie.getBranch(key)
+  var branch = db.trie.getBranch(key)
+  removeEmptyRlpNode(branch)
+  return branch
 
 proc getStorageProof*(db: AccountStateDB, address: EthAddress, slots: seq[UInt256]): seq[SlotProof] =
   var account = db.getAccount(address)
@@ -264,7 +270,9 @@ proc getStorageProof*(db: AccountStateDB, address: EthAddress, slots: seq[UInt25
   var slotProofs = newSeqOfCap[SlotProof](slots.len())
   for slot in slots:
     let key = keccakHash(toBytesBE(slot)).data
-    slotProofs.add(storageTrie.getBranch(key))
+    var branch = storageTrie.getBranch(key)
+    removeEmptyRlpNode(branch)
+    slotProofs.add(branch)
 
   slotProofs
 
