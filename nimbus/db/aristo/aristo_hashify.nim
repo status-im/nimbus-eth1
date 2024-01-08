@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -377,7 +377,9 @@ proc hashify*(
           wff.pool[vid] = val
           # Add the child vertices to `redo[]` for the schedule `base[]` list.
           for w in error:
-            if w notin wff.base and w notin redo:
+            if w notin wff.base and
+               w notin redo and
+               w notin wff.base.values.toSeq.mapit(it.toVid):
               if db.layersGetVtx(w).isErr:
                 # Ooops, should have been marked for update
                 return err((w,HashifyNodeUnresolved))
