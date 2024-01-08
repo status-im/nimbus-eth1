@@ -109,15 +109,25 @@ proc setupEnv(com: CommonRef, signer, ks2: EthAddress, ctx: EthContext): TestEnv
       header    = vmHeader,
       com       = com)
 
+  vmState.stateDB.setCode(ks2, code)
   vmState.stateDB.addBalance(signer, 9_000_000_000.u256)
 
-  vmState.stateDB.addBalance(ks2, 1_000_000_000.u256)
-  vmState.stateDB.setNonce(ks2, 2.uint64)
-  vmState.stateDB.setCode(ks2, code)
-  vmState.stateDB.setStorage(ks2, u256(0), u256(1234))
-  vmState.stateDB.setStorage(ks2, u256(1), u256(2345))
 
-  vmState.stateDB.setCode(ethAddr("0xfff33a3bd36abdbd412707b8e310d60100000000"), code)
+  # Test data created for eth_getProof tests
+  let regularAcc = ethAddr("0x0000000000000000000000000000000000000001")
+  vmState.stateDB.addBalance(regularAcc, 2_000_000_000.u256)
+  vmState.stateDB.setNonce(regularAcc, 1.uint64)
+
+  let contractAccWithStorage = ethAddr("0x0000000000000000000000000000000000000002")
+  vmState.stateDB.addBalance(contractAccWithStorage, 1_000_000_000.u256)
+  vmState.stateDB.setNonce(contractAccWithStorage, 2.uint64)
+  vmState.stateDB.setCode(contractAccWithStorage, code)
+  vmState.stateDB.setStorage(contractAccWithStorage, u256(0), u256(1234))
+  vmState.stateDB.setStorage(contractAccWithStorage, u256(1), u256(2345))
+
+  let contractAccNoStorage = ethAddr("0x0000000000000000000000000000000000000003")
+  vmState.stateDB.setCode(contractAccNoStorage, code)
+
 
   let
     unsignedTx1 = Transaction(
@@ -571,7 +581,7 @@ proc rpcMain*() =
       block:
         # account doesn't exist
         let
-          address = w3Addr("0x000000000000987da6ef773fde8d01b9f23d481f")
+          address = w3Addr("0x0000000000000000000000000000000000000004")
           proofResponse = await client.eth_getProof(address, @[], blockId(1'u64))
           storageProof = proofResponse.storageProof
 
@@ -587,7 +597,7 @@ proc rpcMain*() =
       block:
         # account exists but requested slots don't exist
         let
-          address = w3Addr("0xfff33a3bd36abdbd412707b8e310d6011454a7ae")
+          address = w3Addr("0x0000000000000000000000000000000000000001")
           slot1Key = 0.u256
           slot2Key = 1.u256
           proofResponse = await client.eth_getProof(address, @[slot1Key, slot2Key], blockId(1'u64))
@@ -596,9 +606,9 @@ proc rpcMain*() =
         check:
           proofResponse.address == address
           verifyAccountProof(blockData.stateRoot, proofResponse).isValid()
-          proofResponse.balance == UInt256.fromHex("0x1b1ae4d6e2ef5000000")
+          proofResponse.balance == 2_000_000_000.u256
           proofResponse.codeHash == emptyCodeHash()
-          proofResponse.nonce == w3Qty(0.uint64)
+          proofResponse.nonce == w3Qty(1.uint64)
           proofResponse.storageHash == emptyStorageHash()
           storageProof.len() == 2
           storageProof[0].key == slot1Key
@@ -611,7 +621,7 @@ proc rpcMain*() =
       block:
         # contract account with no storage slots
         let
-          address = w3Addr("0xfff33a3bd36abdbd412707b8e310d60100000000")
+          address = w3Addr("0x0000000000000000000000000000000000000003")
           slot1Key = 0.u256 # Doesn't exist
           proofResponse = await client.eth_getProof(address, @[slot1Key], blockId(1'u64))
           storageProof = proofResponse.storageProof
@@ -634,7 +644,7 @@ proc rpcMain*() =
       block:
         # contract account with storage slots
         let
-          address = w3Addr("0xa3b2222afa5c987da6ef773fde8d01b9f23d481f")
+          address = w3Addr("0x0000000000000000000000000000000000000002")
           slot1Key = 0.u256
           slot2Key = 1.u256
           slot3Key = 2.u256 # Doesn't exist
@@ -665,16 +675,16 @@ proc rpcMain*() =
       block:
         # externally owned account
         let
-          address = w3Addr("0xfff33a3bd36abdbd412707b8e310d6011454a7ae")
+          address = w3Addr("0x0000000000000000000000000000000000000001")
           proofResponse = await client.eth_getProof(address, @[], blockId(1'u64))
           storageProof = proofResponse.storageProof
 
         check:
           proofResponse.address == address
           verifyAccountProof(blockData.stateRoot, proofResponse).isValid()
-          proofResponse.balance == UInt256.fromHex("0x1b1ae4d6e2ef5000000")
+          proofResponse.balance == 2_000_000_000.u256
           proofResponse.codeHash == emptyCodeHash()
-          proofResponse.nonce == w3Qty(0.uint64)
+          proofResponse.nonce == w3Qty(1.uint64)
           proofResponse.storageHash == emptyStorageHash()
           storageProof.len() == 0
 
@@ -684,7 +694,7 @@ proc rpcMain*() =
       block:
         # block 0 - empty account
         let
-          address = w3Addr("0xa3b2222afa5c987da6ef773fde8d01b9f23d481f")
+          address = w3Addr("0x0000000000000000000000000000000000000002")
           slot1Key = 100.u256
           proofResponse = await client.eth_getProof(address, @[slot1Key], blockId(0'u64))
           storageProof = proofResponse.storageProof
@@ -702,7 +712,7 @@ proc rpcMain*() =
       block:
         # block 1 - account has balance, code and storage
         let
-          address = w3Addr("0xa3b2222afa5c987da6ef773fde8d01b9f23d481f")
+          address = w3Addr("0x0000000000000000000000000000000000000002")
           slot2Key = 1.u256
           proofResponse = await client.eth_getProof(address, @[slot2Key], blockId(1'u64))
           storageProof = proofResponse.storageProof

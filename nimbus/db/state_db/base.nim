@@ -261,7 +261,7 @@ proc getAccountProof*(db: AccountStateDB, address: EthAddress): AccountProof =
   let key = keccakHash(address).data
   var branch = db.trie.phk().getBranch(key)
   removeEmptyRlpNode(branch)
-  return branch
+  branch
 
 proc getStorageProof*(db: AccountStateDB, address: EthAddress, slots: seq[UInt256]): seq[SlotProof] =
   var account = db.getAccount(address)
