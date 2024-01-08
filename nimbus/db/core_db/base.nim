@@ -215,6 +215,9 @@ func toCoreDxPhkRef(mpt: CoreDxMptRef): CoreDxPhkRef =
 func parent(phk: CoreDxPhkRef): CoreDbRef =
   phk.fromMpt.parent
 
+proc prettyText(e: CoreDbErrorRef): string =
+  $e.error & "(" & e.parent.methods.errorPrintFn(e) & ")"
+
 # ------------------------------------------------------------------------------
 # Public constructor helper
 # ------------------------------------------------------------------------------
@@ -329,7 +332,7 @@ proc `$$`*(e: CoreDbErrorRef): string =
   ## as it calls a backend function.
   ##
   e.setTrackNewApi ErrorPrintFn
-  result = $e.error & "(" & e.parent.methods.errorPrintFn(e) & ")"
+  result = e.prettyText()
   e.ifTrackNewApi: debug newApiTxt, ctx, elapsed, result
 
 proc hash*(vid: CoreDbVidRef; update: bool): CoreDbRc[Hash256] =
@@ -446,7 +449,7 @@ proc newKvt*(db: CoreDbRef; saveMode = AutoSave): CoreDxKvtRef =
   ##
   db.setTrackNewApi BaseNewKvtFn
   result = db.methods.newKvtFn(saveMode).valueOr:
-    raiseAssert $$error
+    raiseAssert error.prettyText()
   db.ifTrackNewApi: debug newApiTxt, ctx, elapsed, saveMode
 
 proc get*(kvt: CoreDxKvtRef; key: openArray[byte]): CoreDbRc[Blob] =
@@ -549,7 +552,7 @@ proc newMpt*(
   ##
   db.setTrackNewApi BaseNewMptFn
   result = db.methods.newMptFn(root, prune, saveMode).valueOr:
-    raiseAssert $$error
+    raiseAssert error.prettyText()
   db.ifTrackNewApi: debug newApiTxt, ctx, elapsed, root, prune, saveMode
 
 proc newMpt*(db: CoreDbRef; prune = true; saveMode = AutoSave): CoreDxMptRef =
@@ -558,7 +561,7 @@ proc newMpt*(db: CoreDbRef; prune = true; saveMode = AutoSave): CoreDxMptRef =
   db.setTrackNewApi BaseNewMptFn
   let root = CoreDbVidRef()
   result = db.methods.newMptFn(root, prune, saveMode).valueOr:
-    raiseAssert $$error
+    raiseAssert error.prettyText()
   db.ifTrackNewApi: debug newApiTxt, ctx, elapsed, prune, saveMode
 
 proc newMpt*(acc: CoreDxAccRef): CoreDxMptRef =
@@ -569,7 +572,7 @@ proc newMpt*(acc: CoreDxAccRef): CoreDxMptRef =
   ##
   acc.setTrackNewApi AccToMptFn
   result = acc.methods.newMptFn().valueOr:
-    raiseAssert $$error
+    raiseAssert error.prettyText()
   acc.ifTrackNewApi: debug newApiTxt, ctx, elapsed
 
 proc newAccMpt*(
@@ -592,7 +595,7 @@ proc newAccMpt*(
   ##
   db.setTrackNewApi BaseNewAccFn
   result = db.methods.newAccFn(root, prune, saveMode).valueOr:
-    raiseAssert $$error
+    raiseAssert error.prettyText()
   db.ifTrackNewApi: debug newApiTxt, ctx, elapsed, root, prune, saveMode
 
 proc toMpt*(phk: CoreDxPhkRef): CoreDxMptRef =
