@@ -11,7 +11,7 @@ import
   eth/[common, rlp, trie/trie_defs],
   ../../constants,
   ../../utils/utils,
-  ".."/[core_db, distinct_tries, storage_types]
+  ".."/[core_db, distinct_tries, storage_types, trie_get_branch]
 
 logScope:
   topics = "state_db"
@@ -259,7 +259,7 @@ proc removeEmptyRlpNode(branch: var seq[MptNodeRlpBytes]) =
 
 proc getAccountProof*(db: AccountStateDB, address: EthAddress): AccountProof =
   let key = keccakHash(address).data
-  var branch = db.trie.getBranch(key)
+  var branch = db.trie.phk().getBranch(key)
   removeEmptyRlpNode(branch)
   return branch
 
@@ -270,7 +270,7 @@ proc getStorageProof*(db: AccountStateDB, address: EthAddress, slots: seq[UInt25
   var slotProofs = newSeqOfCap[SlotProof](slots.len())
   for slot in slots:
     let key = keccakHash(toBytesBE(slot)).data
-    var branch = storageTrie.getBranch(key)
+    var branch = storageTrie.phk().getBranch(key)
     removeEmptyRlpNode(branch)
     slotProofs.add(branch)
 
