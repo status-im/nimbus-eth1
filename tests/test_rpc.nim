@@ -47,6 +47,9 @@ func w3Addr(x: string): Web3Address =
 func w3Hash(x: string): Web3Hash =
   Web3Hash hexToByteArray[32](x)
 
+func zeroHash(): Web3Hash =
+  w3Hash("0x0000000000000000000000000000000000000000000000000000000000000000")
+
 func emptyCodeHash(): Web3Hash =
   w3Hash("0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470")
 
@@ -589,9 +592,9 @@ proc rpcMain*() =
           proofResponse.address == address
           verifyAccountProof(blockData.stateRoot, proofResponse).isMissing()
           proofResponse.balance == 0.u256
-          proofResponse.codeHash == emptyCodeHash()
+          proofResponse.codeHash == zeroHash()
           proofResponse.nonce == w3Qty(0.uint64)
-          proofResponse.storageHash == emptyStorageHash()
+          proofResponse.storageHash == zeroHash()
           storageProof.len() == 0
 
       block:
@@ -692,7 +695,7 @@ proc rpcMain*() =
       let blockData = await client.eth_getBlockByNumber("latest", true)
 
       block:
-        # block 0 - empty account
+        # block 0 - account doesn't exist yet
         let
           address = w3Addr("0x0000000000000000000000000000000000000002")
           slot1Key = 100.u256
@@ -703,9 +706,9 @@ proc rpcMain*() =
           proofResponse.address == address
           verifyAccountProof(blockData.stateRoot, proofResponse).kind == InvalidProof
           proofResponse.balance == 0.u256
-          proofResponse.codeHash == emptyCodeHash()
+          proofResponse.codeHash == zeroHash()
           proofResponse.nonce == w3Qty(0.uint64)
-          proofResponse.storageHash == emptyStorageHash()
+          proofResponse.storageHash == zeroHash()
           storageProof.len() == 1
           verifySlotProof(proofResponse.storageHash, storageProof[0]).kind == InvalidProof
 

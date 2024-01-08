@@ -518,6 +518,7 @@ proc setupEthRpc*(
       accDB = stateDBFromTag(quantityTag)
       address = data.ethAddr
       acc = accDB.getAccount(address)
+      accExists = accDB.accountExists(address)
       accountProof = accDB.getAccountProof(address)
       slotProofs = accDB.getStorageProof(address, slots)
 
@@ -530,14 +531,20 @@ proc setupEthRpc*(
           value: slotValue,
           proof: seq[RlpEncodedBytes](slotProofs[i])))
 
-    return ProofResponse(
-          address: w3Addr(address),
-          accountProof: seq[RlpEncodedBytes](accountProof),
-          balance: acc.balance,
-          nonce: w3Qty(acc.nonce),
-          codeHash: w3Hash(acc.codeHash),
-          storageHash: w3Hash(acc.storageRoot),
-          storageProof: storage)
+    if accExists:
+      ProofResponse(
+            address: w3Addr(address),
+            accountProof: seq[RlpEncodedBytes](accountProof),
+            balance: acc.balance,
+            nonce: w3Qty(acc.nonce),
+            codeHash: w3Hash(acc.codeHash),
+            storageHash: w3Hash(acc.storageRoot),
+            storageProof: storage)
+    else:
+      ProofResponse(
+            address: w3Addr(address),
+            accountProof: seq[RlpEncodedBytes](accountProof),
+            storageProof: storage)
 
 #[
   server.rpc("eth_newFilter") do(filterOptions: FilterOptions) -> int:
