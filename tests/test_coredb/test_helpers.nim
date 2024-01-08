@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -38,11 +38,16 @@ func pp*(
     w: tuple[n: int, mean: Duration, stdDev: Duration, devRatio: float];
     spaced = false;
       ): string =
-  let
-    dr = if 0.2 < w.devRatio: w.devRatio.toPC(0) else: w.devRatio.toPC(1)
-    comma = if spaced: ", " else: ","
-    plusminus = if spaced: " ± " else: "±"
-  "(" & $w.n & comma & w.mean.pp & plusminus & dr & ")"
+  result = "("
+  if w.n < 2:
+    result &= w.mean.pp
+  else:
+    let space = if spaced: " " else: ""
+    result &= $w.n & "," & space & w.mean.pp
+    if w.devRatio != 0.0: # when all items are the same
+      let dr = if 0.2 < w.devRatio: w.devRatio.toPC(0) else: w.devRatio.toPC(1)
+      result &= space & "±" & space & dr
+  result &= ")"
 
 # ------------------------------------------------------------------------------
 # Public helpers
