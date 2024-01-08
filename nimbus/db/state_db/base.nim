@@ -258,19 +258,17 @@ proc removeEmptyRlpNode(branch: var seq[MptNodeRlpBytes]) =
     branch.del(0)
 
 proc getAccountProof*(db: AccountStateDB, address: EthAddress): AccountProof =
-  let key = keccakHash(address).data
-  var branch = db.trie.phk().getBranch(key)
+  var branch = db.trie.phk().getBranch(address)
   removeEmptyRlpNode(branch)
   branch
 
 proc getStorageProof*(db: AccountStateDB, address: EthAddress, slots: seq[UInt256]): seq[SlotProof] =
   var account = db.getAccount(address)
-  var storageTrie = getStorageTrie(db, account)
+  var storageTrie = db.getStorageTrie(account)
 
   var slotProofs = newSeqOfCap[SlotProof](slots.len())
   for slot in slots:
-    let key = keccakHash(toBytesBE(slot)).data
-    var branch = storageTrie.phk().getBranch(key)
+    var branch = storageTrie.phk().getBranch(createTrieKeyFromSlot(slot))
     removeEmptyRlpNode(branch)
     slotProofs.add(branch)
 

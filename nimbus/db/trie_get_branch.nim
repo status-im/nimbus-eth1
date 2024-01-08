@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -86,9 +86,12 @@ proc getBranchAux(
   else:
     raise newException(RlpError, "node has an unexpected number of children")
 
-proc getBranch*(self: CoreDbPhkRef; key: openArray[byte]): seq[seq[byte]] {.raises: [RlpError].} =
+proc getBranch*(
+    self: CoreDbPhkRef;
+    key: openArray[byte]): seq[seq[byte]] {.raises: [RlpError].} =
+  let keyHash = keccakHash(key).data
   result = @[]
-  var node = keyToLocalBytes(self.parent(),
-      TrieNodeKey(hash: self.rootHash(), usedBytes: self.rootHash().data.len().uint8))
+  var node = keyToLocalBytes(self.parent(), TrieNodeKey(
+        hash: self.rootHash(), usedBytes: self.rootHash().data.len().uint8))
   result.add node
-  getBranchAux(self.parent(), node, initNibbleRange(key), 0, result)
+  getBranchAux(self.parent(), node, initNibbleRange(keyHash), 0, result)
