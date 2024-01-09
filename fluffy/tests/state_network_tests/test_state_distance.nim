@@ -10,7 +10,7 @@
 import
   std/sequtils,
   stint, unittest2,
-  ../network/state/state_distance
+  ../../network/state/state_distance
 
 suite "State network custom distance function":
   test "Calculate distance according to spec":

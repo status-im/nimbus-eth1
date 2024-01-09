@@ -6,16 +6,23 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/os,
+  std/[os, json, sequtils, strutils, sugar],
+  stew/[byteutils, io2],
+  nimcrypto/hash,
   testutils/unittests, chronos,
-  eth/[common/eth_hash, keys],
+  eth/trie/hexary_proof_verification,
+  eth/keys,
+  eth/common/[eth_types, eth_hash],
   eth/p2p/discoveryv5/protocol as discv5_protocol, eth/p2p/discoveryv5/routing_table,
-  ../../nimbus/[config, db/core_db, db/state_db],
-  ../../nimbus/common/[chain_config, genesis],
-  ../network/wire/[portal_protocol, portal_stream],
-  ../network/state/[state_content, state_network],
-  ../database/content_db,
-  ./test_helpers
+  ../../../nimbus/[config, db/core_db, db/state_db],
+  ../../../nimbus/common/[chain_config, genesis],
+  ../../network/wire/[portal_protocol, portal_stream],
+  ../../network/state/[state_content, state_network],
+  ../../database/content_db,
+  .././test_helpers
+
+const testVectorDir =
+  "./vendor/portal-spec-tests/tests/mainnet/state/"
 
 proc genesisToTrie(filePath: string): CoreDbMptRef =
   # TODO: Doing our best here with API that exists, to be improved.
@@ -30,8 +37,84 @@ proc genesisToTrie(filePath: string): CoreDbMptRef =
 
   sdb.getTrie
 
-procSuite "State Content Network":
+procSuite "State Network":
   let rng = newRng()
+
+  test "Test account state proof":
+    let file = testVectorDir & "/proofs.full.block.0.json"
+    let content = readAllFile(file).valueOr:
+      quit(1)
+
+    let decoded =
+      try:
+        Json.decode(content, state_content.JsonProofVector)
+      except SerializationError:
+        quit(1)
+    let
+      proof = decoded.proofs[0].proof.map(hexToSeqByte)
+      stateRoot = MDigest[256].fromHex(decoded.state_root)
+      address = hexToByteArray[20](decoded.proofs[0].address)
+      key = keccakHash(address).data.toSeq()
+      value = proof[^1].decode(seq[seq[byte]])[^1]
+      proofResult = verifyMptProof(proof, stateRoot, key, value)
+    check proofResult.kind == ValidProof
+
+  asyncTest "Decode and use proofs":
+    let file = testVectorDir & "/proofs.full.block.0.json"
+    let content = readAllFile(file).valueOr:
+      quit(1)
+
+    let decoded =
+      try:
+        Json.decode(content, state_content.JsonProofVector)
+      except SerializationError:
+        quit(1)
+
+    let
+      node1 = initDiscoveryNode(
+        rng, PrivateKey.random(rng[]), localAddress(20302))
+      sm1 = StreamManager.new(node1)
+      node2 = initDiscoveryNode(
+        rng, PrivateKey.random(rng[]), localAddress(20303))
+      sm2 = StreamManager.new(node2)
+
+      proto1 = StateNetwork.new(node1, ContentDB.new("", uint32.high, inMemory = true), sm1)
+      proto2 = StateNetwork.new(node2, ContentDB.new("", uint32.high, inMemory = true), sm2)
+
+      state_root = hexToByteArray[sizeof(state_content.AccountTrieProofKey.stateRoot)](decoded.state_root)
+
+    check proto2.portalProtocol.addNode(node1.localNode) == Added
+
+
+    for proof in decoded.proofs:
+      let
+        address = hexToByteArray[sizeof(state_content.Address)](proof.address)
+        key = AccountTrieProofKey(
+          address: address,
+          stateRoot: state_root)
+        contentKey = ContentKey(
+          contentType: state_content.ContentType.accountTrieProof,
+          accountTrieProofKey: key)
+
+      var accountTrieProof = AccountTrieProof(@[])
+      for witness in proof.proof:
+        let witnessNode = ByteList(hexToSeqByte(witness))
+        discard accountTrieProof.add(witnessNode)
+      
+      let encodedValue = SSZ.encode(accountTrieProof)
+
+      discard proto1.contentDB.put(contentKey.toContentId(), encodedValue, proto1.portalProtocol.localNode.id)
+
+      let foundContent = await proto2.getContent(contentKey)
+
+      check foundContent.isSome()
+
+      check decodeSsz(foundContent.get(), AccountTrieProof).isOk()
+
+    await node1.closeWait()
+    await node2.closeWait()
+
+
   asyncTest "Test Share Full State":
     let
       trie = genesisToTrie("fluffy" / "tests" / "custom_genesis" / "chainid7.json")

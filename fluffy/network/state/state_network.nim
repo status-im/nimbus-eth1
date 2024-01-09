@@ -1,12 +1,15 @@
 # Fluffy
-# Copyright (c) 2021-2023 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
+  std/[sequtils, sugar],
   stew/results, chronos, chronicles,
+  eth/[rlp, common],
+  eth/trie/hexary_proof_verification,
   eth/p2p/discoveryv5/[protocol, enr],
   ../../database/content_db,
   ../wire/[portal_protocol, portal_stream, portal_protocol_config],
@@ -59,8 +62,59 @@ proc getContent*(n: StateNetwork, key: ContentKey):
   # domain types.
   return Opt.some(contentResult.content)
 
-proc validateContent(content: openArray[byte], contentKey: ByteList): bool =
-  true
+proc validateContent(
+    n: StateNetwork,
+    contentKey: ByteList,
+    contentValue: seq[byte]): Future[bool] {.async.} =
+  let key = contentKey.decode().valueOr:
+    return false
+
+  case key.contentType:
+    of unused:
+      warn "Received content with unused content type"
+      false
+    of accountTrieNode:
+      true
+    of contractStorageTrieNode:
+      true
+    of accountTrieProof:
+      let decodedProof = decodeSsz(contentValue, AccountTrieProof).valueOr:
+        warn "Received invalid account trie proof", error
+        return false
+      let
+        proof = decodedProof.asSeq().map((p: ByteList) => p.toSeq())
+        trieKey = keccakHash(key.accountTrieProofKey.address).data.toSeq()
+        value = proof[^1].decode(seq[seq[byte]])[^1]
+        stateRoot = MDigest[256](data: key.accountTrieProofKey.stateRoot)
+        verificationResult = verifyMptProof(proof, stateRoot, trieKey, value)
+      case verificationResult.kind:
+        of ValidProof:
+          true
+        else:
+          warn "Received invalid account trie proof"
+          false
+    of contractStorageTrieProof:
+      true
+    of contractBytecode:
+      true
+
+proc validateContent(
+    n: StateNetwork,
+    contentKeys: ContentKeysList,
+    contentValues: seq[seq[byte]]): Future[bool] {.async.} =
+  for i, contentValue in contentValues:
+    let contentKey = contentKeys[i]
+    if await n.validateContent(contentKey, contentValue):
+      let contentId = n.portalProtocol.toContentId(contentKey).valueOr:
+        error "Received offered content with invalid content key", contentKey
+        return false
+
+      n.portalProtocol.storeContent(contentKey, contentId, contentValue)
+
+      info "Received offered content validated successfully", contentKey
+    else:
+      error "Received offered content failed validation", contentKey
+      return false
 
 proc new*(
     T: type StateNetwork,
@@ -91,8 +145,11 @@ proc new*(
 proc processContentLoop(n: StateNetwork) {.async.} =
   try:
     while true:
-      # Just dropping state date for now
-      discard await n.contentQueue.popFirst()
+      let (maybeContentId, contentKeys, contentValues) = await n.contentQueue.popFirst()
+      if await n.validateContent(contentKeys, contentValues):
+        asyncSpawn n.portalProtocol.neighborhoodGossipDiscardPeers(
+          maybeContentId, contentKeys, contentValues
+        )
   except CancelledError:
     trace "processContentLoop canceled"
 
