@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -176,6 +176,12 @@ proc parseTestCtx(fixture: JsonNode, testStatusIMPL: var TestStatus): TestCtx =
 proc blockWitness(vmState: BaseVMState, chainDB: CoreDbRef) =
   let rootHash = vmState.stateDB.rootHash
   let witness = vmState.buildWitness()
+
+  if witness.len() == 0:
+    if vmState.stateDB.makeMultiKeys().keys.len() != 0:
+      raise newException(ValidationError, "Invalid trie generated from block witness")
+    return
+
   let fork = vmState.fork
   let flags = if fork >= FKSpurious: {wfEIP170} else: {}
 
@@ -221,6 +227,7 @@ proc importBlock(ctx: var TestCtx, com: CommonRef,
       com,
       tracerInst,
     )
+    ctx.vmState.generateWitness = true # Enable saving witness data
 
   let
     chain = newChain(com, extraValidation = true, ctx.vmState)
@@ -229,8 +236,7 @@ proc importBlock(ctx: var TestCtx, com: CommonRef,
   if res == ValidationResult.Error:
     raise newException(ValidationError, "persistBlocks validation")
   else:
-    if ctx.vmState.generateWitness():
-      blockWitness(ctx.vmState, com.db)
+    blockWitness(chain.vmState, com.db)
 
 proc applyFixtureBlockToChain(ctx: var TestCtx, tb: var TestBlock,
                               com: CommonRef, checkSeal: bool) =

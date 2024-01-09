@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -27,7 +27,8 @@ proc init(
       blockCtx:     BlockContext;
       com:          CommonRef;
       tracer:       TracerRef,
-      asyncFactory: AsyncOperationFactory = AsyncOperationFactory(maybeDataSource: none[AsyncDataSource]()))
+      asyncFactory: AsyncOperationFactory = AsyncOperationFactory(maybeDataSource: none[AsyncDataSource]()),
+      flags:        set[VMFlag] = self.flags)
     {.gcsafe.} =
   ## Initialisation helper
   self.parent = parent
@@ -37,6 +38,7 @@ proc init(
   self.tracer = tracer
   self.stateDB = ac
   self.asyncFactory = asyncFactory
+  self.flags = flags
 
 func blockCtx(com: CommonRef, header: BlockHeader):
                 BlockContext {.gcsafe, raises: [CatchableError].} =
@@ -102,13 +104,15 @@ proc reinit*(self:     BaseVMState;     ## Object descriptor
       db     = com.db
       ac     = if self.stateDB.rootHash == parent.stateRoot: self.stateDB
                else: com.ledgerType.init(db, parent.stateRoot, com.pruneTrie)
+      flags  = self.flags
     self[].reset
     self.init(
       ac       = ac,
       parent   = parent,
       blockCtx = blockCtx,
       com      = com,
-      tracer   = tracer)
+      tracer   = tracer,
+      flags    = flags)
     return true
   # else: false
 
@@ -283,14 +287,18 @@ proc generateWitness*(vmState: BaseVMState): bool =
   GenerateWitness in vmState.flags
 
 proc `generateWitness=`*(vmState: BaseVMState, status: bool) =
- if status: vmState.flags.incl GenerateWitness
- else: vmState.flags.excl GenerateWitness
+  if status: vmState.flags.incl GenerateWitness
+  else: vmState.flags.excl GenerateWitness
 
 proc buildWitness*(vmState: BaseVMState): seq[byte]
     {.raises: [CatchableError].} =
   let rootHash = vmState.stateDB.rootHash
   let mkeys = vmState.stateDB.makeMultiKeys()
   let flags = if vmState.fork >= FkSpurious: {wfEIP170} else: {}
+
+  # A valid block having no transactions should return an empty witness
+  if mkeys.keys.len() == 0:
+    return @[]
 
   # build witness from tree
   var wb = initWitnessBuilder(vmState.com.db, rootHash, flags)
