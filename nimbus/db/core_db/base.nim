@@ -335,7 +335,7 @@ proc `$$`*(e: CoreDbErrorRef): string =
   result = e.prettyText()
   e.ifTrackNewApi: debug newApiTxt, ctx, elapsed, result
 
-proc hash*(vid: CoreDbVidRef; update: bool): CoreDbRc[Hash256] =
+proc hash*(vid: CoreDbVidRef): CoreDbRc[Hash256] =
   ## Getter (well, sort of), retrieves the hash for a `vid` argument. The
   ## function might fail if there is currently no hash available (e.g. on
   ## `Aristo`.) Note that this is different from succeeding with an
@@ -347,7 +347,7 @@ proc hash*(vid: CoreDbVidRef; update: bool): CoreDbRc[Hash256] =
   vid.setTrackNewApi VidHashFn
   result = block:
     if not vid.isNil and vid.ready:
-      vid.parent.methods.vidHashFn(vid, update)
+      vid.parent.methods.vidHashFn vid
     else:
       ok EMPTY_ROOT_HASH
   # Note: tracker will be silent if `vid` is NIL
@@ -355,7 +355,7 @@ proc hash*(vid: CoreDbVidRef; update: bool): CoreDbRc[Hash256] =
 
 proc hashOrEmpty*(vid: CoreDbVidRef): Hash256 =
   ## Convenience wrapper, returns `EMPTY_ROOT_HASH` where `hash()` would fail.
-  vid.hash(update = true).valueOr: EMPTY_ROOT_HASH
+  vid.hash().valueOr: EMPTY_ROOT_HASH
 
 func isValid*(vid: CoreDbVidRef): bool =
   ## This function returns `true` if the argument `vid` exists and is properly
@@ -363,7 +363,7 @@ func isValid*(vid: CoreDbVidRef): bool =
   ##
   not vid.isNil and vid.ready
 
-proc recast*(account: CoreDbAccount; update: bool): CoreDbRc[Account] =
+proc recast*(account: CoreDbAccount): CoreDbRc[Account] =
   ## Convert the argument `account` to the portable Ethereum representation
   ## of an account. This conversion may fail if the storage root hash (see
   ## `hash()` above) is currently unavailable.
@@ -373,7 +373,7 @@ proc recast*(account: CoreDbAccount; update: bool): CoreDbRc[Account] =
   let vid = account.storageVid
   vid.setTrackNewApi EthAccRecastFn
   result = block:
-    let rc = vid.hash(update)
+    let rc = vid.hash()
     if rc.isOk:
       ok Account(
         nonce:       account.nonce,
@@ -1048,12 +1048,12 @@ when ProvideLegacyAPI:
 
   proc rootHash*(mpt: CoreDbMptRef): Hash256 =
     mpt.setTrackLegaApi LegaMptRootHashFn
-    result = mpt.distinctBase.rootVid().hash(update=true).expect $ctx
+    result = mpt.distinctBase.rootVid().hash().expect $ctx
     mpt.ifTrackLegaApi: debug legaApiTxt, ctx, elapsed, result=result.toStr
 
   proc rootHash*(phk: CoreDbPhkRef): Hash256 =
     phk.setTrackLegaApi LegaPhkRootHashFn
-    result = phk.distinctBase.rootVid().hash(update=true).expect $ctx
+    result = phk.distinctBase.rootVid().hash().expect $ctx
     phk.ifTrackLegaApi: debug legaApiTxt, ctx, elapsed, result=result.toStr
 
 

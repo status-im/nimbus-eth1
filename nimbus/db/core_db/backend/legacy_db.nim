@@ -396,7 +396,7 @@ proc baseMethods(
     tryHashFn: proc(vid: CoreDbVidRef): CoreDbRc[Hash256] =
       ok(vid.lvHash),
 
-    vidHashFn: proc(vid: CoreDbVidRef; update: bool): CoreDbRc[Hash256] =
+    vidHashFn: proc(vid: CoreDbVidRef): CoreDbRc[Hash256] =
       ok(vid.lvHash),
 
     errorPrintFn: proc(e: CoreDbErrorRef): string =

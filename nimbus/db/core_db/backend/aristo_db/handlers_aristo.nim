@@ -615,7 +615,6 @@ proc tryHash*(
 proc getHash*(
     base: AristoBaseRef;
     vid: CoreDbVidRef;
-    update: bool;
     info: static[string];
       ): CoreDbRc[Hash256] =
   let
@@ -626,8 +625,7 @@ proc getHash*(
     return ok(EMPTY_ROOT_HASH)
 
   let mpt = vid.AristoCoreDbVid.ctx
-  if update:
-    ? mpt.hashify.toVoidRc(db, info, HashNotAvailable)
+  ? mpt.hashify.toVoidRc(db, info, HashNotAvailable)
 
   let key = block:
     let rc = mpt.getKeyRc aVid

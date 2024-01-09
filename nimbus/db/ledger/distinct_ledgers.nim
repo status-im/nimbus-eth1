@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -71,7 +71,7 @@ proc db*(t: SomeLedger): CoreDbRef =
   t.distinctBase.parent
 
 proc rootHash*(t: SomeLedger): Hash256 =
-  t.distinctBase.rootVid().hash(update=true).expect "SomeLedger/rootHash()"
+  t.distinctBase.rootVid().hash().expect "SomeLedger/rootHash()"
 
 proc rootVid*(t: SomeLedger): CoreDbVidRef =
   t.distinctBase.rootVid

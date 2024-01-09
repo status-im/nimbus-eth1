@@ -142,8 +142,8 @@ proc baseMethods(
     tryHashFn: proc(vid: CoreDbVidRef): CoreDbRc[Hash256] =
       db.adbBase.tryHash(vid, "tryHashFn()"),
 
-    vidHashFn: proc(vid: CoreDbVidRef; update: bool): CoreDbRc[Hash256] =
-      db.adbBase.getHash(vid, update, "vidHashFn()"),
+    vidHashFn: proc(vid: CoreDbVidRef): CoreDbRc[Hash256] =
+      db.adbBase.getHash(vid, "vidHashFn()"),
 
     errorPrintFn: proc(e: CoreDbErrorRef): string =
       e.errorPrint(),
