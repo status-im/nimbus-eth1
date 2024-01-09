@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -15,7 +15,7 @@ import
   eth/common,
   results,
   ../../../aristo,
-  ../../../aristo/aristo_desc,
+  ../../../aristo/[aristo_desc, aristo_vid],
   ../../base,
   ../../base/base_desc,
   ./common_desc
@@ -32,7 +32,7 @@ type
   AristoChildDbObj = object
     ## Sub-handle for triggering destructor when it goes out of scope
     base: AristoBaseRef          ## Local base descriptor
-    root: VertexID               ## State root
+    root: VertexID               ## State root, may be zero unless account
     mpt: AristoDbRef             ## Descriptor, may be copy of `base.adb`
     saveMode: CoreDbSaveFlags    ## When to store/discard
     txError: CoreDbErrorCode     ## Transaction error code: account or MPT
@@ -49,7 +49,6 @@ type
     ## Vertex ID wrapper, optinally with *MPT* context
     ctx: AristoDbRef             ## Optional *MPT* context, might be `nil`
     aVid: VertexID               ## Refers to root vertex
-    createOk: bool               ## Create new root vertex when appropriate
     expHash: Hash256             ## Deferred validation
 
   AristoCoreDbMptBE* = ref object of CoreDbMptBackendRef
@@ -72,16 +71,9 @@ template logTxt(info: static[string]): static[string] =
 
 # -------------------------------
 
-func isValid(vid: CoreDbVidRef): bool =
-  not vid.isNil and vid.ready
-
 func to*(vid: CoreDbVidRef; T: type VertexID): T =
   if vid.isValid:
     return vid.AristoCoreDbVid.aVid
-
-func createOk(vid: CoreDbVidRef): bool =
-  if vid.isValid:
-    return vid.AristoCoreDbVid.createOk
 
 # -------------------------------
 
@@ -298,8 +290,18 @@ proc mptMethods(cMpt: AristoChildDbRef): CoreDbMptFns =
     let
       db = cMpt.base.parent
       mpt = cMpt.mpt
-      rc = mpt.merge(cMpt.root, k, v)
+      rootOk = cMpt.root.isValid
+
+    # Provide root ID on-the-fly
+    if not rootOk:
+      cMpt.root = mpt.vidFetch(pristine=true)
+
+    let rc = mpt.merge(cMpt.root, k, v)
     if rc.isErr:
+      # Re-cycle unused ID (prevents from leaking IDs)
+      if not rootOk:
+        mpt.vidDispose cMpt.root
+        cMpt.root = VertexID(0)
       return err(rc.error.toError(db, info))
     ok()
 
@@ -620,7 +622,6 @@ proc getHash*(
 proc getVid*(
     base: AristoBaseRef;
     root: Hash256;
-    createOk: bool;
     info: static[string];
       ): CoreDbRc[CoreDbVidRef] =
   let
@@ -629,7 +630,7 @@ proc getVid*(
   base.gc() # update pending changes
 
   if root == EMPTY_ROOT_HASH:
-    return ok(db.bless AristoCoreDbVid(createOk: createOk))
+    return ok(db.bless AristoCoreDbVid())
 
   ? adb.hashify.toVoidRc(db, info, HashNotAvailable)
 
@@ -643,14 +644,10 @@ proc getVid*(
     else:
       discard
 
-  # Check whether the `root` is avalilable in backlog
+  # Check whether the `root` is avalilable on cache
   block:
     # ..
     discard
-
-  # Check whether the root vertex should be created
-  if createOk:
-    return ok(db.bless AristoCoreDbVid(createOk: true, expHash: root))
 
   err(aristo.GenericError.toError(db, info, RootNotFound))
 
@@ -666,26 +663,19 @@ proc newMptHandler*(
       ): CoreDbRc[CoreDxMptRef] =
   base.gc()
 
-  let db = base.parent
-
-  var rootID = root.to(VertexID)
-  if not rootID.isValid:
-    let rc = base.adb.getKeyRc VertexID(1)
-    if rc.isErr:
-      if rc.error != GetKeyNotFound:
-        return err(rc.error.toError(db, info, RootNotFound))
-      rootID = VertexID(1)
-
-  let (mode, mpt) = case saveMode:
-    of TopShot:
-      (saveMode, ? base.adb.forkTop.toRc(db, info))
-    of Companion:
-      (saveMode, ? base.adb.fork.toRc(db, info))
-    of Shared, AutoSave:
-      if base.adb.backend.isNil:
-        (Shared, base.adb)
-      else:
-        (saveMode, base.adb)
+  let
+    db = base.parent
+    rootID = root.to(VertexID)
+    (mode, mpt) = case saveMode:
+      of TopShot:
+        (saveMode, ? base.adb.forkTop.toRc(db, info))
+      of Companion:
+        (saveMode, ? base.adb.fork.toRc(db, info))
+      of Shared, AutoSave:
+        if base.adb.backend.isNil:
+          (Shared, base.adb)
+        else:
+          (saveMode, base.adb)
 
   if mode == Shared and rootID == VertexID(1):
     return ok(base.mptCache)
@@ -717,13 +707,9 @@ proc newAccHandler*(
 
   if root.isValid:
     let vid = root.to(VertexID)
-    if vid.isValid:
-      if vid != VertexID(1):
-        let error = (vid,AccountRootUnacceptable)
-        return err(error.toError(db, info, RootUnacceptable))
-    elif root.createOk:
-      let error = AccountRootCannotCreate
-      return err(error.toError(db, info, RootCannotCreate))
+    if vid.isValid and vid != VertexID(1):
+      let error = (vid,AccountRootUnacceptable)
+      return err(error.toError(db, info, RootUnacceptable))
 
   let (mode, mpt) = case saveMode:
     of TopShot:

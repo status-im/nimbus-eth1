@@ -260,7 +260,6 @@ type
     PayloadTypeUnsupported
     LeafKeyInvalid
     AccountRootUnacceptable
-    AccountRootCannotCreate
     AccountRlpDecodingError
     AccountStorageKeyMissing
     AccountVtxUnsupported

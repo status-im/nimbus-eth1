@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -219,7 +219,6 @@ func parent(phk: CoreDxPhkRef): CoreDbRef =
 # Public constructor helper
 # ------------------------------------------------------------------------------
 
-
 proc bless*(db: CoreDbRef): CoreDbRef =
   ## Verify descriptor
   when AutoValidateDescriptors:
@@ -278,7 +277,8 @@ proc bless*(
 # ------------------------------------------------------------------------------
 
 proc dbType*(db: CoreDbRef): CoreDbType =
-  ## Getter
+  ## Getter, print DB type identifier
+  ##
   db.setTrackNewApi BaseDbTypeFn
   result = db.dbType
   db.ifTrackNewApi: debug newApiTxt, ctx, elapsed, result
@@ -293,7 +293,8 @@ proc compensateLegacySetup*(db: CoreDbRef) =
   db.ifTrackNewApi: debug newApiTxt, ctx, elapsed
 
 proc level*(db: CoreDbRef): int =
-  ## Print transaction level, zero if there is no pending transaction
+  ## Getter, retrieve transaction level (zero if there is no pending
+  ## transaction)
   ##
   db.setTrackNewApi BaseLevelFn
   result = db.methods.levelFn()
@@ -306,6 +307,7 @@ proc parent*(cld: CoreDxChldRefs): CoreDbRef =
 
 proc backend*(dsc: CoreDxKvtRef | CoreDxTrieRelated | CoreDbRef): auto =
   ## Getter, retrieves the *raw* backend object for special/localised support.
+  ##
   dsc.setTrackNewApi AnyBackendFn
   result = dsc.methods.backendFn()
   dsc.ifTrackNewApi: debug newApiTxt, ctx, elapsed
@@ -352,6 +354,12 @@ proc hashOrEmpty*(vid: CoreDbVidRef): Hash256 =
   ## Convenience wrapper, returns `EMPTY_ROOT_HASH` where `hash()` would fail.
   vid.hash(update = true).valueOr: EMPTY_ROOT_HASH
 
+func isValid*(vid: CoreDbVidRef): bool =
+  ## This function returns `true` if the argument `vid` exists and is properly
+  ## initialised.
+  ##
+  not vid.isNil and vid.ready
+
 proc recast*(account: CoreDbAccount; update: bool): CoreDbRc[Account] =
   ## Convert the argument `account` to the portable Ethereum representation
   ## of an account. This conversion may fail if the storage root hash (see
@@ -376,7 +384,6 @@ proc recast*(account: CoreDbAccount; update: bool): CoreDbRc[Account] =
 proc getRoot*(
     db: CoreDbRef;
     root: Hash256;
-    createOk = false;
       ): CoreDbRc[CoreDbVidRef] =
   ## Find root node with argument hash `root` in database and return the
   ## corresponding `CoreDbVidRef` object. If the `root` arguent is set
@@ -392,7 +399,7 @@ proc getRoot*(
   ##     db.newAccMpt root
   ##
   db.setTrackNewApi BaseGetRootFn
-  result = db.methods.getRootFn(root, createOk)
+  result = db.methods.getRootFn root
   db.ifTrackNewApi: debug newApiTxt, ctx, elapsed, root=root.toStr, result
 
 # ------------------------------------------------------------------------------
@@ -957,7 +964,7 @@ when ProvideLegacyAPI:
 
   proc mptPrune*(db: CoreDbRef; root: Hash256; prune = true): CoreDbMptRef =
     db.setTrackLegaApi LegaNewMptFn
-    let vid = db.getRoot(root, createOk=true).expect $ctx
+    let vid = db.getRoot(root).expect $ctx
     result = db.newMpt(vid, prune).CoreDbMptRef
     db.ifTrackLegaApi: debug legaApiTxt, ctx, elapsed, root=root.toStr, prune
 
@@ -973,7 +980,7 @@ when ProvideLegacyAPI:
 
   proc phkPrune*(db: CoreDbRef; root: Hash256; prune = true): CoreDbPhkRef =
     db.setTrackLegaApi LegaNewPhkFn
-    let vid = db.getRoot(root, createOk=true).expect $ctx
+    let vid = db.getRoot(root).expect $ctx
     result = db.newMpt(vid, prune).toCoreDxPhkRef.CoreDbPhkRef
     db.ifTrackLegaApi: debug legaApiTxt, ctx, elapsed, root=root.toStr, prune
 

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -402,17 +402,8 @@ proc baseMethods(
     legacySetupFn: proc() =
       db.tdb.put(EMPTY_ROOT_HASH.data, @[0x80u8]),
 
-    getRootFn: proc(root: Hash256; createOk: bool): CoreDbRc[CoreDbVidRef] =
-      if root == EMPTY_ROOT_HASH:
-        return ok(db.bless LegacyCoreDbVid(vHash: root))
-
-      # Due to the way it is used for creating a ne root node, `createOk` must
-      # be checked before `contains()` is run. Otherwise it might bail out in
-      # the assertion of the above trace/recorder mixin `contains()` function.
-      if createOk or tdb.contains(root.data):
-        return ok(db.bless LegacyCoreDbVid(vHash: root))
-
-      err(db.bless(RootNotFound, LegacyCoreDbError(ctx: "getRoot()"))),
+    getRootFn: proc(root: Hash256): CoreDbRc[CoreDbVidRef] =
+      ok(db.bless LegacyCoreDbVid(vHash: root)),
 
     newKvtFn: proc(saveMode: CoreDbSaveFlags): CoreDbRc[CoreDxKvtRef] =
       ok(db.kvt),
