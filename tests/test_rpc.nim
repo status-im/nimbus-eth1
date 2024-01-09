@@ -1,18 +1,18 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/[json, tables, os, typetraits, times],
+  std/[json, os, typetraits, times, sequtils],
   asynctest, web3/eth_api,
-  nimcrypto/[hash], stew/byteutils,
+  stew/byteutils,
   json_rpc/[rpcserver, rpcclient],
-  eth/[rlp, keys, p2p/private/p2p_types],
-  ../nimbus/[constants, transaction, config,
-             vm_state, vm_types, version],
+  nimcrypto/[keccak, hash],
+  eth/[rlp, keys, trie/hexary_proof_verification],
+  ../nimbus/[constants, transaction, config, vm_state, vm_types, version],
   ../nimbus/db/[ledger, storage_types],
   ../nimbus/sync/protocol,
   ../nimbus/core/[tx_pool, chain, executor, executor/executor_helpers, pow/difficulty],
@@ -47,6 +47,41 @@ func w3Addr(x: string): Web3Address =
 func w3Hash(x: string): Web3Hash =
   Web3Hash hexToByteArray[32](x)
 
+func zeroHash(): Web3Hash =
+  w3Hash("0x0000000000000000000000000000000000000000000000000000000000000000")
+
+func emptyCodeHash(): Web3Hash =
+  w3Hash("0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470")
+
+func emptyStorageHash(): Web3Hash =
+  w3Hash("0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
+
+proc verifyAccountProof(trustedStateRoot: Web3Hash, res: ProofResponse): MptProofVerificationResult =
+  let
+    key = toSeq(keccakHash(res.address.ethAddr).data)
+    value = rlp.encode(Account(
+        nonce: res.nonce.uint64,
+        balance: res.balance,
+        storageRoot: fromHex(Hash256, res.storageHash.toHex()),
+        codeHash: fromHex(Hash256, res.codeHash.toHex())))
+
+  verifyMptProof(
+    seq[seq[byte]](res.accountProof),
+    fromHex(KeccakHash, trustedStateRoot.toHex()),
+    key,
+    value)
+
+proc verifySlotProof(trustedStateRoot: Web3Hash, slot: StorageProof): MptProofVerificationResult =
+  let
+    key = toSeq(keccakHash(toBytesBE(slot.key)).data)
+    value = rlp.encode(slot.value)
+
+  verifyMptProof(
+    seq[seq[byte]](slot.proof),
+    fromHex(KeccakHash, trustedStateRoot.toHex()),
+    key,
+    value)
+
 proc persistFixtureBlock(chainDB: CoreDbRef) =
   let header = getBlockHeader4514995()
   # Manually inserting header to avoid any parent checks
@@ -79,6 +114,23 @@ proc setupEnv(com: CommonRef, signer, ks2: EthAddress, ctx: EthContext): TestEnv
 
   vmState.stateDB.setCode(ks2, code)
   vmState.stateDB.addBalance(signer, 9_000_000_000.u256)
+
+
+  # Test data created for eth_getProof tests
+  let regularAcc = ethAddr("0x0000000000000000000000000000000000000001")
+  vmState.stateDB.addBalance(regularAcc, 2_000_000_000.u256)
+  vmState.stateDB.setNonce(regularAcc, 1.uint64)
+
+  let contractAccWithStorage = ethAddr("0x0000000000000000000000000000000000000002")
+  vmState.stateDB.addBalance(contractAccWithStorage, 1_000_000_000.u256)
+  vmState.stateDB.setNonce(contractAccWithStorage, 2.uint64)
+  vmState.stateDB.setCode(contractAccWithStorage, code)
+  vmState.stateDB.setStorage(contractAccWithStorage, u256(0), u256(1234))
+  vmState.stateDB.setStorage(contractAccWithStorage, u256(1), u256(2345))
+
+  let contractAccNoStorage = ethAddr("0x0000000000000000000000000000000000000003")
+  vmState.stateDB.setCode(contractAccNoStorage, code)
+
 
   let
     unsignedTx1 = Transaction(
@@ -525,6 +577,158 @@ proc rpcMain*() =
 
       check:
         len(logs) == 2
+
+    test "eth_getProof - Non existent account and storage slots":
+      let blockData = await client.eth_getBlockByNumber("latest", true)
+
+      block:
+        # account doesn't exist
+        let
+          address = w3Addr("0x0000000000000000000000000000000000000004")
+          proofResponse = await client.eth_getProof(address, @[], blockId(1'u64))
+          storageProof = proofResponse.storageProof
+
+        check:
+          proofResponse.address == address
+          verifyAccountProof(blockData.stateRoot, proofResponse).isMissing()
+          proofResponse.balance == 0.u256
+          proofResponse.codeHash == zeroHash()
+          proofResponse.nonce == w3Qty(0.uint64)
+          proofResponse.storageHash == zeroHash()
+          storageProof.len() == 0
+
+      block:
+        # account exists but requested slots don't exist
+        let
+          address = w3Addr("0x0000000000000000000000000000000000000001")
+          slot1Key = 0.u256
+          slot2Key = 1.u256
+          proofResponse = await client.eth_getProof(address, @[slot1Key, slot2Key], blockId(1'u64))
+          storageProof = proofResponse.storageProof
+
+        check:
+          proofResponse.address == address
+          verifyAccountProof(blockData.stateRoot, proofResponse).isValid()
+          proofResponse.balance == 2_000_000_000.u256
+          proofResponse.codeHash == emptyCodeHash()
+          proofResponse.nonce == w3Qty(1.uint64)
+          proofResponse.storageHash == emptyStorageHash()
+          storageProof.len() == 2
+          storageProof[0].key == slot1Key
+          storageProof[0].proof.len() == 0
+          storageProof[0].value == 0.u256
+          storageProof[1].key == slot2Key
+          storageProof[1].proof.len() == 0
+          storageProof[1].value == 0.u256
+
+      block:
+        # contract account with no storage slots
+        let
+          address = w3Addr("0x0000000000000000000000000000000000000003")
+          slot1Key = 0.u256 # Doesn't exist
+          proofResponse = await client.eth_getProof(address, @[slot1Key], blockId(1'u64))
+          storageProof = proofResponse.storageProof
+
+        check:
+          proofResponse.address == address
+          verifyAccountProof(blockData.stateRoot, proofResponse).isValid()
+          proofResponse.balance == 0.u256
+          proofResponse.codeHash == w3Hash("0x09044b55d7aba83cb8ac3d2c9c8d8bcadbfc33f06f1be65e8cc1e4ddab5f3074")
+          proofResponse.nonce == w3Qty(0.uint64)
+          proofResponse.storageHash == emptyStorageHash()
+          storageProof.len() == 1
+          storageProof[0].key == slot1Key
+          storageProof[0].proof.len() == 0
+          storageProof[0].value == 0.u256
+
+    test "eth_getProof - Existing accounts and storage slots":
+      let blockData = await client.eth_getBlockByNumber("latest", true)
+
+      block:
+        # contract account with storage slots
+        let
+          address = w3Addr("0x0000000000000000000000000000000000000002")
+          slot1Key = 0.u256
+          slot2Key = 1.u256
+          slot3Key = 2.u256 # Doesn't exist
+          proofResponse = await client.eth_getProof(address, @[slot1Key, slot2Key, slot3Key], blockId(1'u64))
+          storageProof = proofResponse.storageProof
+
+        check:
+          proofResponse.address == address
+          verifyAccountProof(blockData.stateRoot, proofResponse).isValid()
+          proofResponse.balance == 1_000_000_000.u256
+          proofResponse.codeHash == w3Hash("0x09044b55d7aba83cb8ac3d2c9c8d8bcadbfc33f06f1be65e8cc1e4ddab5f3074")
+          proofResponse.nonce == w3Qty(2.uint64)
+          proofResponse.storageHash == w3Hash("0x2ed06ec37dad4cd8c8fc1a1172d633a8973987fa6995b14a7c0a50c0e8d1a9c3")
+          storageProof.len() == 3
+          storageProof[0].key == slot1Key
+          storageProof[0].proof.len() > 0
+          storageProof[0].value == 1234.u256
+          storageProof[1].key == slot2Key
+          storageProof[1].proof.len() > 0
+          storageProof[1].value == 2345.u256
+          storageProof[2].key == slot3Key
+          storageProof[2].proof.len() > 0
+          storageProof[2].value == 0.u256
+          verifySlotProof(proofResponse.storageHash, storageProof[0]).isValid()
+          verifySlotProof(proofResponse.storageHash, storageProof[1]).isValid()
+          verifySlotProof(proofResponse.storageHash, storageProof[2]).isMissing()
+
+      block:
+        # externally owned account
+        let
+          address = w3Addr("0x0000000000000000000000000000000000000001")
+          proofResponse = await client.eth_getProof(address, @[], blockId(1'u64))
+          storageProof = proofResponse.storageProof
+
+        check:
+          proofResponse.address == address
+          verifyAccountProof(blockData.stateRoot, proofResponse).isValid()
+          proofResponse.balance == 2_000_000_000.u256
+          proofResponse.codeHash == emptyCodeHash()
+          proofResponse.nonce == w3Qty(1.uint64)
+          proofResponse.storageHash == emptyStorageHash()
+          storageProof.len() == 0
+
+    test "eth_getProof - Multiple blocks":
+      let blockData = await client.eth_getBlockByNumber("latest", true)
+
+      block:
+        # block 0 - account doesn't exist yet
+        let
+          address = w3Addr("0x0000000000000000000000000000000000000002")
+          slot1Key = 100.u256
+          proofResponse = await client.eth_getProof(address, @[slot1Key], blockId(0'u64))
+          storageProof = proofResponse.storageProof
+
+        check:
+          proofResponse.address == address
+          verifyAccountProof(blockData.stateRoot, proofResponse).kind == InvalidProof
+          proofResponse.balance == 0.u256
+          proofResponse.codeHash == zeroHash()
+          proofResponse.nonce == w3Qty(0.uint64)
+          proofResponse.storageHash == zeroHash()
+          storageProof.len() == 1
+          verifySlotProof(proofResponse.storageHash, storageProof[0]).kind == InvalidProof
+
+      block:
+        # block 1 - account has balance, code and storage
+        let
+          address = w3Addr("0x0000000000000000000000000000000000000002")
+          slot2Key = 1.u256
+          proofResponse = await client.eth_getProof(address, @[slot2Key], blockId(1'u64))
+          storageProof = proofResponse.storageProof
+
+        check:
+          proofResponse.address == address
+          verifyAccountProof(blockData.stateRoot, proofResponse).isValid()
+          proofResponse.balance == 1_000_000_000.u256
+          proofResponse.codeHash == w3Hash("0x09044b55d7aba83cb8ac3d2c9c8d8bcadbfc33f06f1be65e8cc1e4ddab5f3074")
+          proofResponse.nonce == w3Qty(2.uint64)
+          proofResponse.storageHash == w3Hash("0x2ed06ec37dad4cd8c8fc1a1172d633a8973987fa6995b14a7c0a50c0e8d1a9c3")
+          storageProof.len() == 1
+          verifySlotProof(proofResponse.storageHash, storageProof[0]).isValid()
 
     rpcServer.stop()
     rpcServer.close()

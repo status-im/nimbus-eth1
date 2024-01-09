@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -8,10 +8,10 @@
 import
   std/[sets, strformat],
   chronicles,
-  eth/[common, rlp],
+  eth/[common, rlp, trie/trie_defs],
   ../../constants,
   ../../utils/utils,
-  ".."/[core_db, distinct_tries, storage_types]
+  ".."/[core_db, distinct_tries, storage_types, trie_get_branch]
 
 logScope:
   topics = "state_db"
@@ -54,6 +54,10 @@ type
     #transactionID: CoreDbTxID
     when aleth_compat:
       cleared: HashSet[EthAddress]
+
+  MptNodeRlpBytes* = seq[byte]
+  AccountProof* = seq[MptNodeRlpBytes]
+  SlotProof* = seq[MptNodeRlpBytes]
 
 proc pruneTrie*(db: AccountStateDB): bool =
   db.trie.isPruning
@@ -248,6 +252,27 @@ proc isDeadAccount*(db: AccountStateDB, address: EthAddress): bool =
       account.nonce == 0
   else:
     result = true
+
+proc removeEmptyRlpNode(branch: var seq[MptNodeRlpBytes]) =
+  if branch.len() == 1 and branch[0] == emptyRlp:
+    branch.del(0)
+
+proc getAccountProof*(db: AccountStateDB, address: EthAddress): AccountProof =
+  var branch = db.trie.phk().getBranch(address)
+  removeEmptyRlpNode(branch)
+  branch
+
+proc getStorageProof*(db: AccountStateDB, address: EthAddress, slots: seq[UInt256]): seq[SlotProof] =
+  var account = db.getAccount(address)
+  var storageTrie = db.getStorageTrie(account)
+
+  var slotProofs = newSeqOfCap[SlotProof](slots.len())
+  for slot in slots:
+    var branch = storageTrie.phk().getBranch(createTrieKeyFromSlot(slot))
+    removeEmptyRlpNode(branch)
+    slotProofs.add(branch)
+
+  slotProofs
 
 # Note: `state_db.getCommittedStorage()` is nowhere used.
 #
