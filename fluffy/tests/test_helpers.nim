@@ -5,18 +5,20 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+{.push raises: [].}
+
 import
   stew/shims/net,
   eth/[common, keys, rlp, trie, trie/db],
   eth/p2p/discoveryv5/[enr, node, routing_table],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ../network/history/[accumulator, history_content],
-  ../network/state/experimental/state_proof_generation,
+  ../network/state/experimental/state_proof_types,
   ../../nimbus/db/core_db,
   ../../nimbus/common/[chain_config],
   ../database/content_db
 
-proc localAddress*(port: int): Address =
+proc localAddress*(port: int): Address {.raises: [ValueError].} =
   Address(ip: parseIpAddress("127.0.0.1"), port: Port(port))
 
 proc initDiscoveryNode*(
@@ -25,7 +27,7 @@ proc initDiscoveryNode*(
     address: Address,
     bootstrapRecords: openArray[Record] = [],
     localEnrFields: openArray[(string, seq[byte])] = [],
-    previousRecord = none[enr.Record]()): discv5_protocol.Protocol =
+    previousRecord = none[enr.Record]()): discv5_protocol.Protocol {.raises: [CatchableError].} =
   # set bucketIpLimit to allow bucket split
   let config = DiscoveryConfig.init(1000, 24, 5)
 
@@ -120,7 +122,7 @@ proc getGenesisAlloc*(filePath: string): GenesisAlloc =
 
   cn.genesis.alloc
 
-proc toState*(alloc: GenesisAlloc): 
+proc toState*(alloc: GenesisAlloc):
     (AccountState, Table[EthAddress, StorageState]) {.raises: [RlpError].} =
   var accountTrie = initHexaryTrie(newMemoryDB())
   var storageStates = initTable[EthAddress, StorageState]()
@@ -140,7 +142,7 @@ proc toState*(alloc: GenesisAlloc):
       codeHash = keccakHash(genAccount.code)
 
     let account = Account(
-        nonce: genAccount.nonce, 
+        nonce: genAccount.nonce,
         balance: genAccount.balance,
         storageRoot: storageRoot,
         codeHash: codeHash)
