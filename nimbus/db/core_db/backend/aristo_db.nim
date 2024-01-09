@@ -139,6 +139,9 @@ proc baseMethods(
     levelFn: proc(): int =
       db.adbBase.getLevel,
 
+    tryHashFn: proc(vid: CoreDbVidRef): CoreDbRc[Hash256] =
+      db.adbBase.tryHash(vid, "tryHashFn()"),
+
     vidHashFn: proc(vid: CoreDbVidRef; update: bool): CoreDbRc[Hash256] =
       db.adbBase.getHash(vid, update, "vidHashFn()"),
 

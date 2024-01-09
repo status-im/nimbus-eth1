@@ -592,6 +592,26 @@ proc txBegin*(
 func getLevel*(base: AristoBaseRef): int =
   base.adb.level
 
+
+proc tryHash*(
+    base: AristoBaseRef;
+    vid: CoreDbVidRef;
+    info: static[string];
+      ): CoreDbRc[Hash256] =
+  let aVid = vid.to(VertexID)
+  if not aVid.isValid:
+    return ok(EMPTY_ROOT_HASH)
+
+  let
+    mpt = vid.AristoCoreDbVid.ctx
+    rc = mpt.getKeyRc aVid
+  if rc.isErr:
+    let db = base.parent
+    return err(rc.error.toError(db, info, HashNotAvailable))
+
+  ok rc.value.to(Hash256)
+
+
 proc getHash*(
     base: AristoBaseRef;
     vid: CoreDbVidRef;

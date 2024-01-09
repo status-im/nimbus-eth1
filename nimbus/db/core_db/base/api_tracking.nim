@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -226,7 +226,7 @@ proc toStr*(p: CoreDbVidRef): string =
   elif not p.ready:
     "vidRef(not-ready)"
   else:
-    let val = p.parent.methods.vidHashFn(p,false).valueOr: EMPTY_ROOT_HASH
+    let val = p.parent.methods.tryHashFn(p).valueOr: EMPTY_ROOT_HASH
     if val != EMPTY_ROOT_HASH:
       "vidRef(some-hash)"
     else:
