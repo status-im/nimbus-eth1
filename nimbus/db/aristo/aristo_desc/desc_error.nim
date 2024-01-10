@@ -264,6 +264,9 @@ type
     AccountStorageKeyMissing
     AccountVtxUnsupported
     AccountNodeUnsupported
+    MptRootUnacceptable
+    MptContextMissing
+    VidContextLocked
     NotImplemented
 
 # End

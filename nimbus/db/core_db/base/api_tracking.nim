@@ -270,6 +270,8 @@ proc toStr*(rc: CoreDbRc[CoreDbAccount]): string = rc.toStr "accRef"
 proc toStr*(rc: CoreDbRc[CoreDxTxID]): string = rc.toStr "txId"
 proc toStr*(rc: CoreDbRc[CoreDxTxRef]): string = rc.toStr "txRef"
 proc toStr*(rc: CoreDbRc[CoreDxCaptRef]): string = rc.toStr "captRef"
+proc toStr*(rc: CoreDbRc[CoreDxMptRef]): string = rc.toStr "mptRef"
+proc toStr*(rc: CoreDbRc[CoreDxAccRef]): string = rc.toStr "accRef"
 
 func toStr*(elapsed: Duration): string =
   try:

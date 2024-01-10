@@ -11,8 +11,10 @@
 {.push raises: [].}
 
 import
+  std/strutils,
   chronicles,
   eth/common,
+  stew/byteutils,
   results,
   ../../../aristo,
   ../../../aristo/[aristo_desc, aristo_vid],
@@ -47,9 +49,12 @@ type
 
   AristoCoreDbVid* = ref object of CoreDbVidRef
     ## Vertex ID wrapper, optinally with *MPT* context
-    ctx: AristoDbRef             ## Optional *MPT* context, might be `nil`
     aVid: VertexID               ## Refers to root vertex
-    expHash: Hash256             ## Deferred validation
+    case haveCtx: bool
+    of true:
+      ctx: AristoChildDbRef      ## *MPT* context, not `nil`
+    else:
+      base: AristoBaseRef        ## Unless context, not `nil`
 
   AristoCoreDbMptBE* = ref object of CoreDbMptBackendRef
     adb*: AristoDbRef
@@ -71,6 +76,9 @@ template logTxt(info: static[string]): static[string] =
 
 # -------------------------------
 
+func isValid(vid: CoreDbVidRef): bool =
+  not vid.isNil and vid.ready
+
 func to*(vid: CoreDbVidRef; T: type VertexID): T =
   if vid.isValid:
     return vid.AristoCoreDbVid.aVid
@@ -86,7 +94,10 @@ func toCoreDbAccount(
     nonce:      acc.nonce,
     balance:    acc.balance,
     codeHash:   acc.codeHash,
-    storageVid: db.bless AristoCoreDbVid(ctx: cMpt.mpt, aVid: acc.storageID))
+    storageVid: db.bless AristoCoreDbVid(
+      haveCtx: true,
+      ctx:     cMpt,
+      aVid:    acc.storageID))
 
 func toPayloadRef(acc: CoreDbAccount): PayloadRef =
   PayloadRef(
@@ -202,10 +213,10 @@ proc `=destroy`(cMpt: var AristoChildDbObj) =
 proc rootVidFn(
     cMpt: AristoChildDbRef;
       ): CoreDbVidRef =
-  let
-    db = cMpt.base.parent
-    mpt = cMpt.mpt
-  db.bless AristoCoreDbVid(ctx: mpt, aVid: cMpt.root)
+  cMpt.base.parent.bless AristoCoreDbVid(
+    haveCtx: true,
+    ctx:     cMpt,
+    aVid:    cMpt.root)
 
 proc persistent(
     cMpt: AristoChildDbRef;
@@ -594,37 +605,43 @@ func getLevel*(base: AristoBaseRef): int =
 
 
 proc tryHash*(
-    base: AristoBaseRef;
     vid: CoreDbVidRef;
     info: static[string];
       ): CoreDbRc[Hash256] =
+  let vid = vid.AristoCoreDbVid
+  if not vid.haveCtx:
+    let db = vid.base.parent
+    return err(MptContextMissing.toError(db, info, HashNotAvailable))
+
   let aVid = vid.to(VertexID)
   if not aVid.isValid:
     return ok(EMPTY_ROOT_HASH)
 
-  let
-    mpt = vid.AristoCoreDbVid.ctx
-    rc = mpt.getKeyRc aVid
+  let rc = vid.ctx.mpt.getKeyRc aVid
   if rc.isErr:
-    let db = base.parent
+    let db = vid.ctx.base.parent
     return err(rc.error.toError(db, info, HashNotAvailable))
 
   ok rc.value.to(Hash256)
 
 
 proc getHash*(
-    base: AristoBaseRef;
     vid: CoreDbVidRef;
     info: static[string];
       ): CoreDbRc[Hash256] =
+  let vid = vid.AristoCoreDbVid
+  if not vid.haveCtx:
+    let db = vid.base.parent
+    return err(MptContextMissing.toError(db, info, HashNotAvailable))
+
   let
-    db = base.parent
+    mpt = vid.ctx.mpt
     aVid = vid.to(VertexID)
 
   if not aVid.isValid:
     return ok(EMPTY_ROOT_HASH)
 
-  let mpt = vid.AristoCoreDbVid.ctx
+  let db = vid.ctx.base.parent
   ? mpt.hashify.toVoidRc(db, info, HashNotAvailable)
 
   let key = block:
@@ -647,8 +664,8 @@ proc getVid*(
     adb = base.adb
   base.gc() # update pending changes
 
-  if root == EMPTY_ROOT_HASH:
-    return ok(db.bless AristoCoreDbVid())
+  if not root.isValid:
+    return ok(db.bless AristoCoreDbVid(haveCtx: false, base: base))
 
   ? adb.hashify.toVoidRc(db, info, HashNotAvailable)
 
@@ -658,7 +675,10 @@ proc getVid*(
     if rc.isErr:
       doAssert rc.error == GetKeyNotFound
     elif rc.value == root.to(HashKey):
-      return ok(db.bless AristoCoreDbVid(aVid: VertexID(1), ctx: adb))
+      return ok(db.bless AristoCoreDbVid(
+        haveCtx: false,
+        base:    base,
+        aVid:    VertexID(1)))
     else:
       discard
 
@@ -683,50 +703,15 @@ proc newMptHandler*(
 
   let
     db = base.parent
-    rootID = root.to(VertexID)
-    (mode, mpt) = case saveMode:
-      of TopShot:
-        (saveMode, ? base.adb.forkTop.toRc(db, info))
-      of Companion:
-        (saveMode, ? base.adb.fork.toRc(db, info))
-      of Shared, AutoSave:
-        if base.adb.backend.isNil:
-          (Shared, base.adb)
-        else:
-          (saveMode, base.adb)
+    rID = root.to(VertexID)
 
-  if mode == Shared and rootID == VertexID(1):
-    return ok(base.mptCache)
-
-  let
-    cMpt = AristoChildDbRef(
-      base:     base,
-      root:     rootID,
-      mpt:      mpt,
-      saveMode: mode,
-      txError:  MptTxPending)
-
-    dsc = AristoCoreDxMptRef(
-      ctx:      cMpt,
-      methods:  cMpt.mptMethods)
-
-  ok(db.bless dsc)
-
-
-proc newAccHandler*(
-    base: AristoBaseRef;
-    root: CoreDbVidRef;
-    saveMode: CoreDbSaveFlags;
-    info: static[string];
-      ): CoreDbRc[CoreDxAccRef] =
-  base.gc()
-
-  let db = base.parent
-
-  if root.isValid:
-    let vid = root.to(VertexID)
-    if vid.isValid and vid != VertexID(1):
-      let error = (vid,AccountRootUnacceptable)
+  # Update `root` argument, handle default settings
+  var rVid = AristoCoreDbVid(nil)
+  if not rID.isValid:
+    if root.isNil:
+      rVid = AristoCoreDbVid(haveCtx: false, base: base)
+    else:
+      let error = (rID, MptRootUnacceptable)
       return err(error.toError(db, info, RootUnacceptable))
 
   let (mode, mpt) = case saveMode:
@@ -740,22 +725,85 @@ proc newAccHandler*(
       else:
         (saveMode, base.adb)
 
-  if mode == Shared:
-    return ok(base.accCache)
+  if mode == Shared and rID == VertexID(1):
+    let dsc = AristoCoreDxMptRef(base.mptCache)
+    if not rVid.haveCtx:
+      rVid.haveCtx = true
+      rVid.ctx = dsc.ctx
+    if rVid.ctx == dsc.ctx:
+      return ok(dsc)
+
+  # Make sure that the root object is usable on this MPT descriptor
+  if rVid.haveCtx:
+    return err(VidContextLocked.toError(db, info, VidLocked))
+
+  rVid.haveCtx = true
+  rVid.ctx = AristoChildDbRef(
+    base:     base,
+    root:     rID,
+    mpt:      mpt,
+    saveMode: mode,
+    txError:  MptTxPending)
+
+  ok(db.bless AristoCoreDxMptRef(
+    ctx:     rVid.ctx,
+    methods: rVid.ctx.mptMethods()))
+
+
+proc newAccHandler*(
+    base: AristoBaseRef;
+    root: CoreDbVidRef;
+    saveMode: CoreDbSaveFlags;
+    info: static[string];
+      ): CoreDbRc[CoreDxAccRef] =
+  base.gc()
 
   let
-    cAcc = AristoChildDbRef(
-      base:     base,
-      root:     VertexID(1),
-      mpt:      mpt,
-      saveMode: mode,
-      txError:  AccTxPending)
+    db = base.parent
+    rID = root.to(VertexID)
 
-    dsc = AristoCoreDxAccRef(
-      ctx:      cAcc,
-      methods:  cAcc.accMethods)
+  # Update `root` argument, handle default settings
+  var rVid = root.AristoCoreDbVid
+  if root.isNil:
+    rVid = AristoCoreDbVid(haveCtx: false, base: base, aVid: VertexID(1))
+  elif rID != VertexID(1):
+    let error = (rID,AccountRootUnacceptable)
+    return err(error.toError(db, info, RootUnacceptable))
 
-  ok(db.bless dsc)
+  let (mode, mpt) = case saveMode:
+    of TopShot:
+      (saveMode, ? base.adb.forkTop.toRc(db, info))
+    of Companion:
+      (saveMode, ? base.adb.fork.toRc(db, info))
+    of Shared, AutoSave:
+      if base.adb.backend.isNil:
+        (Shared, base.adb)
+      else:
+        (saveMode, base.adb)
+
+  if mode == Shared:
+    let dsc = AristoCoreDxAccRef(base.accCache)
+    if not rVid.haveCtx:
+      rVid.haveCtx = true
+      rVid.ctx = dsc.ctx
+    if rVid.ctx == dsc.ctx:
+      return ok(dsc)
+
+  # Make sure that the root object is usable on this account descriptor
+  if rVid.haveCtx:
+    return err(VidContextLocked.toError(db, info, VidLocked))
+
+  rVid.haveCtx = true
+  rVid.ctx = AristoChildDbRef(
+    base:     base,
+    root:     VertexID(1),
+    mpt:      mpt,
+    saveMode: mode,
+    txError:  AccTxPending)
+
+  ok(db.bless AristoCoreDxAccRef(
+    ctx:     rVid.ctx,
+    methods: rVid.ctx.accMethods()))
 
 
 proc destroy*(base: AristoBaseRef; flush: bool) =
@@ -790,12 +838,12 @@ func init*(T: type AristoBaseRef; db: CoreDbRef; adb: AristoDbRef): T =
       txError:  AccTxPending)
 
   result.mptCache = db.bless AristoCoreDxMptRef(
-    ctx:      cMpt,
-    methods:  cMpt.mptMethods)
+    ctx:     cMpt,
+    methods: cMpt.mptMethods())
 
   result.accCache = db.bless AristoCoreDxAccRef(
-    ctx:      cAcc,
-    methods:  cAcc.accMethods)
+    ctx:     cAcc,
+    methods: cAcc.accMethods())
 
 # ------------------------------------------------------------------------------
 # End

@@ -54,6 +54,7 @@ type
     RootNotFound
     RootUnacceptable
     HashNotAvailable
+    VidLocked
     StorageFailed
 
   CoreDbSaveFlags* = enum

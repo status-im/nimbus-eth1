@@ -140,10 +140,10 @@ proc baseMethods(
       db.adbBase.getLevel,
 
     tryHashFn: proc(vid: CoreDbVidRef): CoreDbRc[Hash256] =
-      db.adbBase.tryHash(vid, "tryHashFn()"),
+      vid.tryHash("tryHashFn()"),
 
     vidHashFn: proc(vid: CoreDbVidRef): CoreDbRc[Hash256] =
-      db.adbBase.getHash(vid, "vidHashFn()"),
+      vid.getHash("vidHashFn()"),
 
     errorPrintFn: proc(e: CoreDbErrorRef): string =
       e.errorPrint(),

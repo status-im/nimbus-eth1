@@ -16,8 +16,10 @@ import
   eth/common,
   results,
   "../.."/[constants, errors],
-  ../aristo/aristo_constants, # `EmptyBlob`
   ./base/[api_new_desc, api_tracking, base_desc]
+
+from ../aristo
+  import EmptyBlob, isValid
 
 const
   ProvideLegacyAPI = true
@@ -117,7 +119,7 @@ when EnableApiTracking:
   proc `$`(t: Duration): string = t.toStr
   proc `$`(e: EthAddress): string = e.toStr
   proc `$`(v: CoreDbVidRef): string = v.toStr
-
+  proc `$`(h: Hash256): string = h.toStr
 
 when ProvideLegacyAPI:
   when EnableApiTracking:
@@ -351,7 +353,7 @@ proc hash*(vid: CoreDbVidRef): CoreDbRc[Hash256] =
     else:
       ok EMPTY_ROOT_HASH
   # Note: tracker will be silent if `vid` is NIL
-  vid.ifTrackNewApi: debug newApiTxt, ctx, elapsed, vid=vid.toStr, result
+  vid.ifTrackNewApi: debug newApiTxt, ctx, elapsed, vid, result
 
 proc hashOrEmpty*(vid: CoreDbVidRef): Hash256 =
   ## Convenience wrapper, returns `EMPTY_ROOT_HASH` where `hash()` would fail.
@@ -403,7 +405,7 @@ proc getRoot*(
   ##
   db.setTrackNewApi BaseGetRootFn
   result = db.methods.getRootFn root
-  db.ifTrackNewApi: debug newApiTxt, ctx, elapsed, root=root.toStr, result
+  db.ifTrackNewApi: debug newApiTxt, ctx, elapsed, root, result
 
 # ------------------------------------------------------------------------------
 # Public key-value table methods
@@ -542,27 +544,32 @@ proc newMpt*(
     root: CoreDbVidRef;
     prune = true;
     saveMode = AutoSave;
-      ): CoreDxMptRef =
+      ): CoreDbRc[CoreDxMptRef] =
   ## Constructor, will defect on failure. The argument `prune` is currently
   ## ignored on other than the legacy backend. The legacy backend always
   ## assumes `AutoSave` mode regardless of the function argument.
+  ##
+  ## If the `root` argument is `nil`, a new sub-trie root will be created
+  ## on-the-fly. In order to access that root so that it can be used at a
+  ## later stage, the function `rootVid()` can be used after at least one
+  ## data item was successfully merged (using `merge()`) to that sub-trie.
   ##
   ## See the discussion at `newKvt()` for an explanation of the `saveMode`
   ## argument.
   ##
   db.setTrackNewApi BaseNewMptFn
-  result = db.methods.newMptFn(root, prune, saveMode).valueOr:
-    raiseAssert error.prettyText()
-  db.ifTrackNewApi: debug newApiTxt, ctx, elapsed, root, prune, saveMode
+  result = db.methods.newMptFn(root, prune, saveMode)
+  db.ifTrackNewApi: debug newApiTxt, ctx, elapsed, root, prune, saveMode, result
 
-proc newMpt*(db: CoreDbRef; prune = true; saveMode = AutoSave): CoreDxMptRef =
-  ## Shortcut for `db.newMpt CoreDbVidRef()`
+proc newMpt*(db: CoreDbRef; prune=true; saveMode=AutoSave): CoreDxMptRef =
+  ## Shortcut for `newMpt(CoreDbVidRef(nil), prune, saveMode)`. This function
+  ## will always return a non-nil descriptor or throw an exception.
   ##
   db.setTrackNewApi BaseNewMptFn
-  let root = CoreDbVidRef()
-  result = db.methods.newMptFn(root, prune, saveMode).valueOr:
+  result = db.methods.newMptFn(CoreDbVidRef(nil), prune, saveMode).valueOr:
     raiseAssert error.prettyText()
   db.ifTrackNewApi: debug newApiTxt, ctx, elapsed, prune, saveMode
+
 
 proc newMpt*(acc: CoreDxAccRef): CoreDxMptRef =
   ## Constructor, will defect on failure.
@@ -575,15 +582,33 @@ proc newMpt*(acc: CoreDxAccRef): CoreDxMptRef =
     raiseAssert error.prettyText()
   acc.ifTrackNewApi: debug newApiTxt, ctx, elapsed
 
+
 proc newAccMpt*(
     db: CoreDbRef;
     root: CoreDbVidRef;
     prune = true;
     saveMode = AutoSave;
-      ): CoreDxAccRef =
+      ): CoreDbRc[CoreDxAccRef] =
   ## Constructor, will defect on failure. The argument `prune` is currently
   ## ignored on other than the legacy backend. The legacy backend always
   ## assumes `AutoSave` mode regardless of the function argument.
+  ##
+  ## For a `saveMode` argument value `Shared`, the `root` descriptor argument
+  ## might be pre-set (i.e. non-nil). Other arguments will be rejected by the
+  ## `Aristo` backend and should be avoided for other backends. The pre-set
+  ## `root` argument must refer to the state root for the accounts sub-trie
+  ## which can be retrieved by `getRoot()`.
+  ##
+  ## Example:
+  ## ::
+  ##   let vid = db.getRoot(<some-hash>).valueOr:
+  ##     ... # No node with <some-hash>
+  ##     return
+  ##
+  ##   let acc = db.newAccMpt(vid, saveMode=Shared)
+  ##     ... # Was not the state root for the accounts sub-trie
+  ##     return
+  ##
   ##
   ## This function works similar to `newMpt()` for handling accounts. Although
   ## this sub-trie can be emulated by means of `newMpt(..).toPhk()`, it is
@@ -594,9 +619,18 @@ proc newAccMpt*(
   ## argument.
   ##
   db.setTrackNewApi BaseNewAccFn
-  result = db.methods.newAccFn(root, prune, saveMode).valueOr:
+  result = db.methods.newAccFn(root, prune, saveMode)
+  db.ifTrackNewApi: debug newApiTxt, ctx, elapsed, root, prune, saveMode, result
+
+proc newAccMpt*(db: CoreDbRef; prune=true; saveMode=AutoSave): CoreDxAccRef =
+  ## Shortcut for `newAccMpt(CoreDbVidRef(nil), prune, saveMode)`. This function
+  ## will always return a non-nil descriptor or throw an exception.
+  ##
+  db.setTrackNewApi BaseNewAccFn
+  result = db.methods.newAccFn(CoreDbVidRef(nil), prune, saveMode).valueOr:
     raiseAssert error.prettyText()
-  db.ifTrackNewApi: debug newApiTxt, ctx, elapsed, root, prune, saveMode
+  db.ifTrackNewApi: debug newApiTxt, ctx, elapsed, prune, saveMode
+
 
 proc toMpt*(phk: CoreDxPhkRef): CoreDxMptRef =
   ## Replaces the pre-hashed argument trie `phk` by the non pre-hashed *MPT*.
@@ -967,12 +1001,19 @@ when ProvideLegacyAPI:
 
   proc mptPrune*(db: CoreDbRef; root: Hash256; prune = true): CoreDbMptRef =
     db.setTrackLegaApi LegaNewMptFn
-    let vid = db.getRoot(root).expect $ctx
-    result = db.newMpt(vid, prune).CoreDbMptRef
-    db.ifTrackLegaApi: debug legaApiTxt, ctx, elapsed, root=root.toStr, prune
+    let
+      vid = block:
+        if root.isValid: db.getRoot(root).expect $ctx
+        else: CoreDbVidRef(nil)
+      mpt = db.newMpt(vid, prune).valueOr:
+        raiseAssert error.prettyText()
+    result = mpt.CoreDbMptRef
+    db.ifTrackLegaApi: debug legaApiTxt, ctx, elapsed, root, prune
 
   proc mptPrune*(db: CoreDbRef; prune = true): CoreDbMptRef =
-    db.newMpt(CoreDbVidRef(nil), prune).CoreDbMptRef
+    db.setTrackLegaApi LegaNewMptFn
+    result = db.newMpt(prune).CoreDbMptRef
+    db.ifTrackLegaApi: debug legaApiTxt, ctx, elapsed, prune
 
   # ----------------
 
@@ -983,12 +1024,19 @@ when ProvideLegacyAPI:
 
   proc phkPrune*(db: CoreDbRef; root: Hash256; prune = true): CoreDbPhkRef =
     db.setTrackLegaApi LegaNewPhkFn
-    let vid = db.getRoot(root).expect $ctx
-    result = db.newMpt(vid, prune).toCoreDxPhkRef.CoreDbPhkRef
-    db.ifTrackLegaApi: debug legaApiTxt, ctx, elapsed, root=root.toStr, prune
+    let
+      vid = block:
+        if root.isValid: db.getRoot(root).expect $ctx
+        else: CoreDbVidRef(nil)
+      phk = db.newMpt(vid, prune).valueOr:
+        raiseAssert error.prettyText()
+    result = phk.toCoreDxPhkRef.CoreDbPhkRef
+    db.ifTrackLegaApi: debug legaApiTxt, ctx, elapsed, root, prune
 
   proc phkPrune*(db: CoreDbRef; prune = true): CoreDbPhkRef =
-    db.newMpt(CoreDbVidRef(nil), prune).toCoreDxPhkRef.CoreDbPhkRef
+    db.setTrackLegaApi LegaNewPhkFn
+    result = db.newMpt(prune).toCoreDxPhkRef.CoreDbPhkRef
+    db.ifTrackLegaApi: debug legaApiTxt, ctx, elapsed, prune
 
   # ----------------
 
