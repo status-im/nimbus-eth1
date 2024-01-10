@@ -14,7 +14,7 @@ import
   stew/results,
   ./state_proof_types,
   ../../../../stateless/[tree_from_witness, witness_types],
-  ../../../../nimbus/db/[core_db, state_db, state_db/base]
+  ../../../../nimbus/db/[core_db, state_db]
 
 export results
 
@@ -77,7 +77,7 @@ proc buildAccountsTableFromKeys(
   for key in keys:
     let account = db.getAccount(key.address)
     let code = if key.codeLen > 0:
-        db.AccountStateDB.kvt().get(account.codeHash.data)
+        db.getTrie().parent().kvt().get(account.codeHash.data)
       else: @[]
     var storage = initTable[UInt256, UInt256]()
 
@@ -101,7 +101,7 @@ proc verifyWitness*(
   if witness.len() == 0:
     return err("witness is empty")
 
-  let db: CoreDbRef = newCoreDbRef(LegacyDbMemory)
+  let db = newCoreDbRef(LegacyDbMemory)
   var tb = initTreeBuilder(witness, db, {wfEIP170}) # what flags to use here?
 
   try:
