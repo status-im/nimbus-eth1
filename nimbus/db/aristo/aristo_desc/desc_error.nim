@@ -68,11 +68,11 @@ type
     # Path function `hikeUp()`
     HikeRootMissing
     HikeEmptyPath
-    HikeLeafTooEarly
     HikeBranchTailEmpty
     HikeBranchBlindEdge
     HikeExtTailEmpty
     HikeExtTailMismatch
+    HikeLeafUnexpected
 
     # Path/nibble/key conversions in `aisto_path.nim`
     PathExpected64Nibbles
