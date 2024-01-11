@@ -13,6 +13,7 @@
 import
   std/options,
   eth/[common, rlp, trie/db, trie/hexary],
+  stew/byteutils,
   results,
   ../../../errors,
   ".."/[base, base/base_desc]
@@ -99,7 +100,7 @@ template reraiseRlpException(info: static[string]; code: untyped) =
 # Private helpers, other functions
 # ------------------------------------------------------------------------------
 
-proc errorPrint(e: CoreDbErrorRef): string =
+func errorPrint(e: CoreDbErrorRef): string =
    if not e.isNil:
      let e = e.LegacyCoreDbError
      result &= "ctx=\"" & $e.ctx & "\""
@@ -107,6 +108,15 @@ proc errorPrint(e: CoreDbErrorRef): string =
        result &= ", name=\"" & $e.name & "\""
      if e.msg != "":
        result &= ", msg=\"" & $e.msg & "\""
+
+func vidPrint(vid: CoreDbVidRef): string =
+  if not vid.isNil:
+    if not vid.ready:
+      result = "$?"
+    elif vid.LegacyCoreDbVid.vHash != EMPTY_ROOT_HASH:
+      result = "£" & vid.LegacyCoreDbVid.vHash.data.toHex
+    else:
+      result &= "£ø"
 
 func txLevel(db: LegacyDbRef): int =
   if not db.top.isNil:
@@ -129,7 +139,7 @@ proc toCoreDbAccount(
     codeHash:   acc.codeHash,
     storageVid: db.bless LegacyCoreDbVid(vHash: acc.storageRoot))
 
-proc toAccount(
+func toAccount(
     account: CoreDbAccount
       ): Account =
   ## Fast rewrite of `recast()` from base which reures to `vidHashFn()`
@@ -398,6 +408,9 @@ proc baseMethods(
 
     vidHashFn: proc(vid: CoreDbVidRef): CoreDbRc[Hash256] =
       ok(vid.lvHash),
+
+    vidPrintFn: proc(vid: CoreDbVidRef): string =
+      vid.vidPrint(),
 
     errorPrintFn: proc(e: CoreDbErrorRef): string =
       e.errorPrint(),

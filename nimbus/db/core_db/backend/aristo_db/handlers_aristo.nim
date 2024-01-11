@@ -625,6 +625,22 @@ proc tryHash*(
   ok rc.value.to(Hash256)
 
 
+proc vidPrint*(vid: CoreDbVidRef): string =
+  if not vid.isNil:
+    if not vid.ready:
+      result &= "$?"
+    else:
+      let
+        vid = vid.AristoCoreDbVid
+        rc = vid.tryHash("vidPrint()")
+      result = "($" & vid.aVid.uint64.toHex & ", "
+      if rc.isErr:
+        result &= $rc.error.AristoCoreDbError.aErr
+      else:
+        result &= "£" & (if rc.value.isValid: rc.value.data.toHex else: "ø")
+      result &= ")"
+
+
 proc getHash*(
     vid: CoreDbVidRef;
     info: static[string];

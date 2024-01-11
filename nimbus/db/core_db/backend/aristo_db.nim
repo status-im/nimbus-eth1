@@ -145,6 +145,9 @@ proc baseMethods(
     vidHashFn: proc(vid: CoreDbVidRef): CoreDbRc[Hash256] =
       vid.getHash("vidHashFn()"),
 
+    vidPrintFn: proc(vid: CoreDbVidRef): string =
+      vid.vidPrint(),
+
     errorPrintFn: proc(e: CoreDbErrorRef): string =
       e.errorPrint(),
 

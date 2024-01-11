@@ -74,6 +74,7 @@ type
   CoreDbBaseDestroyFn* = proc(flush = true) {.noRaise.}
   CoreDbBaseTryHashFn* = proc(vid: CoreDbVidRef): CoreDbRc[Hash256] {.noRaise.}
   CoreDbBaseVidHashFn* = proc(vid: CoreDbVidRef): CoreDbRc[Hash256] {.noRaise.}
+  CoreDbBaseVidPrintFn* = proc(vid: CoreDbVidRef): string {.noRaise.}
   CoreDbBaseErrorPrintFn* = proc(e: CoreDbErrorRef): string {.noRaise.}
   CoreDbBaseInitLegaSetupFn* = proc() {.noRaise.}
   CoreDbBaseRootFn* =
@@ -97,6 +98,7 @@ type
     destroyFn*:     CoreDbBaseDestroyFn
     tryHashFn*:     CoreDbBaseTryHashFn
     vidHashFn*:     CoreDbBaseVidHashFn
+    vidPrintFn*:    CoreDbBaseVidPrintFn
     errorPrintFn*:  CoreDbBaseErrorPrintFn
     legacySetupFn*: CoreDbBaseInitLegaSetupFn
     getRootFn*:     CoreDbBaseRootFn

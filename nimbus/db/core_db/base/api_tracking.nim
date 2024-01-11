@@ -138,6 +138,7 @@ type
     TxSaveDisposeFn     = "tx/safeDispose"
 
     VidHashFn           = "vid/hash"
+    VidPrintFn          = "$$"
 
   CoreDbProfFnInx* = array[CoreDbFnInx,(float,float,int)]
   CoreDbProfEla* = seq[(Duration,seq[CoreDbFnInx])]

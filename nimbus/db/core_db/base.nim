@@ -220,6 +220,9 @@ func parent(phk: CoreDxPhkRef): CoreDbRef =
 proc prettyText(e: CoreDbErrorRef): string =
   $e.error & "(" & e.parent.methods.errorPrintFn(e) & ")"
 
+proc prettyText(vid: CoreDbVidRef): string =
+  if vid.isNil or not vid.ready: "$ø" else: vid.parent.methods.vidPrintFn(vid)
+
 # ------------------------------------------------------------------------------
 # Public constructor helper
 # ------------------------------------------------------------------------------
@@ -336,6 +339,14 @@ proc `$$`*(e: CoreDbErrorRef): string =
   e.setTrackNewApi ErrorPrintFn
   result = e.prettyText()
   e.ifTrackNewApi: debug newApiTxt, ctx, elapsed, result
+
+proc `$$`*(vid: CoreDbVidRef): string =
+  ## Pretty print vertex ID symbol, note that this directive may have side
+  ## effects as it calls a backend function.
+  ##
+  vid.setTrackNewApi VidPrintFn
+  result = vid.prettyText()
+  vid.ifTrackNewApi: debug newApiTxt, ctx, elapsed, result
 
 proc hash*(vid: CoreDbVidRef): CoreDbRc[Hash256] =
   ## Getter (well, sort of), retrieves the hash for a `vid` argument. The

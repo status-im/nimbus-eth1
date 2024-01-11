@@ -34,6 +34,7 @@ proc validateMethodsDesc(base: CoreDbBaseFns) =
   doAssert not base.destroyFn.isNil
   doAssert not base.tryHashFn.isNil
   doAssert not base.vidHashFn.isNil
+  doAssert not base.vidPrintFn.isNil
   doAssert not base.errorPrintFn.isNil
   doAssert not base.legacySetupFn.isNil
   doAssert not base.getRootFn.isNil
