@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -32,7 +32,9 @@ type
 proc validateMethodsDesc(base: CoreDbBaseFns) =
   doAssert not base.backendFn.isNil
   doAssert not base.destroyFn.isNil
+  doAssert not base.tryHashFn.isNil
   doAssert not base.vidHashFn.isNil
+  doAssert not base.vidPrintFn.isNil
   doAssert not base.errorPrintFn.isNil
   doAssert not base.legacySetupFn.isNil
   doAssert not base.getRootFn.isNil

@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -42,7 +42,11 @@ proc newAristoRdbDbRef(
         be.closeFn(flush = false)
         return err(rc.error)
       rc.value
-  ok AristoDbRef(top: LayerRef(final: LayerFinal(vGen: vGen)), backend: be)
+  ok AristoDbRef(
+    top: LayerRef(
+      delta: LayerDeltaRef(),
+      final: LayerFinalRef(vGen: vGen)),
+    backend: be)
 
 # ------------------------------------------------------------------------------
 # Public database constuctors, destructor

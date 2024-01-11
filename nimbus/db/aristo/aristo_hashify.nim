@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -204,13 +204,21 @@ proc updateSchedule(
   # Find the index `legInx` of the first vertex that could not be compiled as
   # node all from the top layer cache keys.
   block findlegInx:
-    # Directly set leaf vertex key
+    # Directly set tail vertex key (typically a leaf vertex)
     let
       leaf = hike.legs[^1].wp
       node = leaf.vtx.toNode(db, stopEarly=false, beKeyOk=false).valueOr:
         # Oops, depends on unresolved storage trie?
         legInx = hike.legs.len - 1
         unresolved = error
+        if leaf.vtx.vType == Leaf:
+          let stoRoot = unresolved.toSeq[0]
+          if stoRoot notin wff.base and
+             stoRoot notin wff.pool:
+            wff.root.incl stoRoot
+            wff.base[stoRoot] = FollowUpVid(
+              root:  stoRoot,
+              toVid: leaf.vid)
         break findlegInx
       vid = leaf.vid
 
@@ -377,7 +385,9 @@ proc hashify*(
           wff.pool[vid] = val
           # Add the child vertices to `redo[]` for the schedule `base[]` list.
           for w in error:
-            if w notin wff.base and w notin redo:
+            if w notin wff.base and
+               w notin redo and
+               w notin wff.base.values.toSeq.mapit(it.toVid):
               if db.layersGetVtx(w).isErr:
                 # Ooops, should have been marked for update
                 return err((w,HashifyNodeUnresolved))
@@ -393,6 +403,11 @@ proc hashify*(
 
     # Restart `wff.base[]`
     wff.base.swap redo
+
+  # Make sure that all keys exist (actually, that set should be empty anyway)
+  for vid in wff.pool.keys:
+    discard db.getKeyRc(vid).valueOr:
+      return err((vid,HashifyNodeUnresolved))
 
   # Update root nodes
   for vid in wff.root - db.pPrf:

@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -68,11 +68,11 @@ type
     # Path function `hikeUp()`
     HikeRootMissing
     HikeEmptyPath
-    HikeLeafTooEarly
     HikeBranchTailEmpty
     HikeBranchBlindEdge
     HikeExtTailEmpty
     HikeExtTailMismatch
+    HikeLeafUnexpected
 
     # Path/nibble/key conversions in `aisto_path.nim`
     PathExpected64Nibbles
@@ -93,6 +93,7 @@ type
     MergeLeafPathOnBackendAlready
     MergeNonBranchProofModeLock
     MergeRootBranchLinkBusy
+    MergeRootMissing
     MergeAssemblyFailed # Ooops, internal error
 
     MergeHashKeyInvalid
@@ -259,11 +260,13 @@ type
     PayloadTypeUnsupported
     LeafKeyInvalid
     AccountRootUnacceptable
-    AccountRootCannotCreate
     AccountRlpDecodingError
     AccountStorageKeyMissing
     AccountVtxUnsupported
     AccountNodeUnsupported
+    MptRootUnacceptable
+    MptContextMissing
+    VidContextLocked
     NotImplemented
 
 # End

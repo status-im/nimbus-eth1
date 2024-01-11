@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -138,6 +138,7 @@ type
     TxSaveDisposeFn     = "tx/safeDispose"
 
     VidHashFn           = "vid/hash"
+    VidPrintFn          = "$$"
 
   CoreDbProfFnInx* = array[CoreDbFnInx,(float,float,int)]
   CoreDbProfEla* = seq[(Duration,seq[CoreDbFnInx])]
@@ -226,7 +227,7 @@ proc toStr*(p: CoreDbVidRef): string =
   elif not p.ready:
     "vidRef(not-ready)"
   else:
-    let val = p.parent.methods.vidHashFn(p,false).valueOr: EMPTY_ROOT_HASH
+    let val = p.parent.methods.tryHashFn(p).valueOr: EMPTY_ROOT_HASH
     if val != EMPTY_ROOT_HASH:
       "vidRef(some-hash)"
     else:
@@ -270,6 +271,8 @@ proc toStr*(rc: CoreDbRc[CoreDbAccount]): string = rc.toStr "accRef"
 proc toStr*(rc: CoreDbRc[CoreDxTxID]): string = rc.toStr "txId"
 proc toStr*(rc: CoreDbRc[CoreDxTxRef]): string = rc.toStr "txRef"
 proc toStr*(rc: CoreDbRc[CoreDxCaptRef]): string = rc.toStr "captRef"
+proc toStr*(rc: CoreDbRc[CoreDxMptRef]): string = rc.toStr "mptRef"
+proc toStr*(rc: CoreDbRc[CoreDxAccRef]): string = rc.toStr "accRef"
 
 func toStr*(elapsed: Duration): string =
   try:

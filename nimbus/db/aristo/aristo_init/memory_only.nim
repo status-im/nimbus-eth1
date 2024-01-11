@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -60,7 +60,7 @@ proc init*(
   ## layouts might render the filter history data unmanageable.
   ##
   when B is MemBackendRef:
-    AristoDbRef(top: LayerRef(), backend: memoryBackend(qidLayout))
+    AristoDbRef(top: LayerRef.init(), backend: memoryBackend(qidLayout))
 
 proc init*(
     T: type AristoDbRef;                      # Target type
@@ -74,11 +74,11 @@ proc init*(
   ## layouts might render the filter history data unmanageable.
   ##
   when B is VoidBackendRef:
-    AristoDbRef(top: LayerRef())
+    AristoDbRef(top: LayerRef.init())
 
   elif B is MemBackendRef:
     let qidLayout = DEFAULT_QID_QUEUES.to(QidLayoutRef)
-    AristoDbRef(top: LayerRef(), backend: memoryBackend(qidLayout))
+    AristoDbRef(top: LayerRef.init(), backend: memoryBackend(qidLayout))
 
 proc init*(
     T: type AristoDbRef;                      # Target type
@@ -104,7 +104,7 @@ proc finish*(db: AristoDbRef; flush = false) =
 
     let lebo = db.getCentre
     discard lebo.forgetOthers()
-    lebo[] = AristoDbObj(top: LayerRef())
+    lebo[] = AristoDbObj(top: LayerRef.init())
 
 # ------------------------------------------------------------------------------
 # End

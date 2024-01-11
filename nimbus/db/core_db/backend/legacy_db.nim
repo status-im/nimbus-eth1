@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -13,6 +13,7 @@
 import
   std/options,
   eth/[common, rlp, trie/db, trie/hexary],
+  stew/byteutils,
   results,
   ../../../errors,
   ".."/[base, base/base_desc]
@@ -99,7 +100,7 @@ template reraiseRlpException(info: static[string]; code: untyped) =
 # Private helpers, other functions
 # ------------------------------------------------------------------------------
 
-proc errorPrint(e: CoreDbErrorRef): string =
+func errorPrint(e: CoreDbErrorRef): string =
    if not e.isNil:
      let e = e.LegacyCoreDbError
      result &= "ctx=\"" & $e.ctx & "\""
@@ -107,6 +108,15 @@ proc errorPrint(e: CoreDbErrorRef): string =
        result &= ", name=\"" & $e.name & "\""
      if e.msg != "":
        result &= ", msg=\"" & $e.msg & "\""
+
+func vidPrint(vid: CoreDbVidRef): string =
+  if not vid.isNil:
+    if not vid.ready:
+      result = "$?"
+    elif vid.LegacyCoreDbVid.vHash != EMPTY_ROOT_HASH:
+      result = "£" & vid.LegacyCoreDbVid.vHash.data.toHex
+    else:
+      result &= "£ø"
 
 func txLevel(db: LegacyDbRef): int =
   if not db.top.isNil:
@@ -129,7 +139,7 @@ proc toCoreDbAccount(
     codeHash:   acc.codeHash,
     storageVid: db.bless LegacyCoreDbVid(vHash: acc.storageRoot))
 
-proc toAccount(
+func toAccount(
     account: CoreDbAccount
       ): Account =
   ## Fast rewrite of `recast()` from base which reures to `vidHashFn()`
@@ -393,8 +403,14 @@ proc baseMethods(
       if not closeDb.isNil:
         closeDb(),
 
-    vidHashFn: proc(vid: CoreDbVidRef; update: bool): CoreDbRc[Hash256] =
+    tryHashFn: proc(vid: CoreDbVidRef): CoreDbRc[Hash256] =
       ok(vid.lvHash),
+
+    vidHashFn: proc(vid: CoreDbVidRef): CoreDbRc[Hash256] =
+      ok(vid.lvHash),
+
+    vidPrintFn: proc(vid: CoreDbVidRef): string =
+      vid.vidPrint(),
 
     errorPrintFn: proc(e: CoreDbErrorRef): string =
       e.errorPrint(),
@@ -402,17 +418,8 @@ proc baseMethods(
     legacySetupFn: proc() =
       db.tdb.put(EMPTY_ROOT_HASH.data, @[0x80u8]),
 
-    getRootFn: proc(root: Hash256; createOk: bool): CoreDbRc[CoreDbVidRef] =
-      if root == EMPTY_ROOT_HASH:
-        return ok(db.bless LegacyCoreDbVid(vHash: root))
-
-      # Due to the way it is used for creating a ne root node, `createOk` must
-      # be checked before `contains()` is run. Otherwise it might bail out in
-      # the assertion of the above trace/recorder mixin `contains()` function.
-      if createOk or tdb.contains(root.data):
-        return ok(db.bless LegacyCoreDbVid(vHash: root))
-
-      err(db.bless(RootNotFound, LegacyCoreDbError(ctx: "getRoot()"))),
+    getRootFn: proc(root: Hash256): CoreDbRc[CoreDbVidRef] =
+      ok(db.bless LegacyCoreDbVid(vHash: root)),
 
     newKvtFn: proc(saveMode: CoreDbSaveFlags): CoreDbRc[CoreDxKvtRef] =
       ok(db.kvt),

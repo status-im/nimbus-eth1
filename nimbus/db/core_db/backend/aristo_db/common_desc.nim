@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -11,6 +11,7 @@
 {.push raises: [].}
 
 import
+  std/strutils,
   ../../../../errors,
   "../../.."/[aristo, kvt],
   ../../base/base_desc
@@ -36,17 +37,25 @@ type
 func isAristo*(be: CoreDbRef): bool =
   be.dbType in {AristoDbMemory, AristoDbRocks}
 
+func toStr*(n: VertexID): string =
+  result = "$"
+  if n.isValid:
+    result &= n.uint64.toHex.strip(
+      leading=true, trailing=false, chars={'0'}).toLowerAscii
+  else:
+    result &= "ø"
+
 func errorPrint*(e: CoreDbErrorRef): string =
   if not e.isNil:
     let e = e.AristoCoreDbError
     result = if e.isAristo: "Aristo: " else: "Kvt: "
-    result &= "ctx=\"" & $e.ctx & "\"" & ", "
+    result &= "ctx=" & $e.ctx & ", "
     if e.isAristo:
       if e.aVid.isValid:
-        result &= "vid=\"" & $e.aVid & "\"" & ", "
-      result &= "error=\"" & $e.aErr & "\""
+        result &= "vid=" & e.aVid.toStr & ", "
+      result &= "error=" & $e.aErr
     else:
-      result &= "error=\"" & $e.kErr & "\""
+      result &= "error=" & $e.kErr
 
 # ------------------------------------------------------------------------------
 # End

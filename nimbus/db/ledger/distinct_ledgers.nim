@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -30,6 +30,9 @@ import
   eth/common,
   results,
   ".."/[core_db, storage_types]
+
+from ../aristo
+  import isValid
 
 type
   AccountLedger* = distinct CoreDxAccRef
@@ -71,7 +74,7 @@ proc db*(t: SomeLedger): CoreDbRef =
   t.distinctBase.parent
 
 proc rootHash*(t: SomeLedger): Hash256 =
-  t.distinctBase.rootVid().hash(update=true).expect "SomeLedger/rootHash()"
+  t.distinctBase.rootVid().hash().expect "SomeLedger/rootHash()"
 
 proc rootVid*(t: SomeLedger): CoreDbVidRef =
   t.distinctBase.rootVid
@@ -86,15 +89,29 @@ proc init*(
     rootHash: Hash256;
     isPruning = true;
       ): T =
-  let vid = db.getRoot(rootHash).expect "AccountLedger/getRoot()"
-  db.newAccMpt(vid, isPruning, Shared).T
+  const info = "AccountLedger/getRoot(): "
+
+  var vid = CoreDbVidRef(nil)
+  if rootHash.isValid:
+    let rc = db.getRoot(rootHash)
+    if rc.isErr:
+      raiseAssert info & $$rc.error
+    vid = rc.value
+
+  let acc = block:
+    let rc = db.newAccMpt(vid, isPruning, Shared)
+    if rc.isErr:
+      raiseAssert info & $$rc.error
+    rc.value
+
+  acc.T
 
 proc init*(
     T: type AccountLedger;
     db: CoreDbRef;
     isPruning = true;
       ): T =
-  db.newAccMpt(CoreDbVidRef(nil), isPruning, Shared).AccountLedger
+  db.newAccMpt(isPruning, Shared).AccountLedger
 
 proc fetch*(al: AccountLedger; eAddr: EthAddress): Result[CoreDbAccount,void] =
   ## Using `fetch()` for trie data retrieval
@@ -126,7 +143,16 @@ proc init*(
   ## `CoreDb` backend. Otherwise, pruning might kill some unwanted entries from
   ## storage tries ending up with an unstable database leading to crashes (see
   ## https://github.com/status-im/nimbus-eth1/issues/932.)
-  al.distinctBase.parent.newMpt(account.storageVid, isPruning, Shared).toPhk.T
+  const
+    info = "StorageLedger/init(): "
+  let
+    vid = account.storageVid
+    mpt = block:
+      let rc = al.distinctBase.parent.newMpt(vid, isPruning, Shared)
+      if rc.isErr:
+        raiseAssert info & $$rc.error
+      rc.value
+  mpt.toPhk.T
 
 #proc init*(T: type StorageLedger; db: CoreDbRef, isPruning = false): T =
 #  db.newMpt(CoreDbVidRef(nil), isPruning, Shared).toPhk.T
@@ -146,8 +172,13 @@ iterator storage*(
       ): (Blob,Blob)
       {.gcsafe, raises: [CoreDbApiError].} =
   ## For given account, iterate over storage slots
-  let vid = account.storageVid
-  for (key,val) in al.distinctBase.parent.newMpt(vid, saveMode=Shared).pairs:
+  const
+    info = "storage(): "
+  let
+    vid = account.storageVid
+    mpt = al.distinctBase.parent.newMpt(vid, saveMode=Shared).valueOr:
+      raiseAssert info & $$error
+  for (key,val) in mpt.pairs:
     yield (key,val)
 
 # ------------------------------------------------------------------------------

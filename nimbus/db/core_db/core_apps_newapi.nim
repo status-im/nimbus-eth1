@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -117,11 +117,15 @@ iterator getBlockTransactionData*(
     transactionRoot: Hash256;
       ): Blob =
   block body:
-    let root = db.getRoot(transactionRoot).valueOr:
-      warn logTxt "getBlockTransactionData()",
-        transactionRoot, action="getRoot()", `error`=($$error)
-      break body
-    let transactionDb = db.newMpt root
+    let
+      root = db.getRoot(transactionRoot).valueOr:
+        warn logTxt "getBlockTransactionData()",
+          transactionRoot, action="getRoot()", `error`=($$error)
+        break body
+      transactionDb = db.newMpt(root).valueOr:
+        warn logTxt "getBlockTransactionData()", transactionRoot,
+          action="fetch()", error=($$error)
+        break body
     var transactionIdx = 0
     while true:
       let transactionKey = rlp.encode(transactionIdx)
@@ -160,11 +164,15 @@ iterator getWithdrawalsData*(
     withdrawalsRoot: Hash256;
       ): Blob =
   block body:
-    let root = db.getRoot(withdrawalsRoot).valueOr:
-      warn logTxt "getWithdrawalsData()",
-        withdrawalsRoot, action="getRoot()", error=($$error)
-      break body
-    let wddb = db.newMpt root
+    let
+      root = db.getRoot(withdrawalsRoot).valueOr:
+        warn logTxt "getWithdrawalsData()",
+          withdrawalsRoot, action="getRoot()", error=($$error)
+        break body
+      wddb = db.newMpt(root).valueOr:
+        warn logTxt "getWithdrawalsData()",
+          withdrawalsRoot, action="getRoot()", error=($$error)
+        break body
     var idx = 0
     while true:
       let wdKey = rlp.encode(idx)
@@ -183,11 +191,15 @@ iterator getReceipts*(
       ): Receipt
       {.gcsafe, raises: [RlpError].} =
   block body:
-    let root = db.getRoot(receiptRoot).valueOr:
-      warn logTxt "getWithdrawalsData()",
-        receiptRoot, action="getRoot()", error=($$error)
-      break body
-    var receiptDb = db.newMpt root
+    let
+      root = db.getRoot(receiptRoot).valueOr:
+        warn logTxt "getWithdrawalsData()",
+          receiptRoot, action="getRoot()", error=($$error)
+        break body
+      receiptDb = db.newMpt(root).valueOr:
+        warn logTxt "getWithdrawalsData()",
+          receiptRoot, action="getRoot()", error=($$error)
+        break body
     var receiptIdx = 0
     while true:
       let receiptKey = rlp.encode(receiptIdx)
@@ -532,7 +544,7 @@ proc persistTransactions*(
     kvt.put(blockKey.toOpenArray, rlp.encode(txKey)).isOkOr:
       warn logTxt info, blockKey, action="put()", error=($$error)
       return EMPTY_ROOT_HASH
-  mpt.rootVid.hash(update=true).valueOr:
+  mpt.rootVid.hash().valueOr:
     warn logTxt info, action="hash()"
     return EMPTY_ROOT_HASH
 
@@ -546,11 +558,12 @@ proc getTransaction*(
   const
     info = "getTransaction()"
   let
-    mpt = block:
-      let root = db.getRoot(txRoot).valueOr:
-        warn logTxt info, txRoot, action="getRoot()", `error`=($$error)
-        return false
-      db.newMpt root
+    root = db.getRoot(txRoot).valueOr:
+      warn logTxt info, txRoot, action="getRoot()", `error`=($$error)
+      return false
+    mpt = db.newMpt(root).valueOr:
+      warn logTxt info, txRoot, action="getRoot()", `error`=($$error)
+      return false
     txData = mpt.fetch(rlp.encode(txIndex)).valueOr:
       if error.error != MptNotFound:
         warn logTxt info, txIndex, action="fetch()", `error`=($$error)
@@ -564,11 +577,13 @@ proc getTransactionCount*(
       ): int =
   const
     info = "getTransactionCount()"
-  let mpt = block:
-    let root = db.getRoot(txRoot).valueOr:
+  let
+    root = db.getRoot(txRoot).valueOr:
       warn logTxt info, txRoot, action="getRoot()", `error`=($$error)
       return 0
-    db.newMpt root
+    mpt = db.newMpt(root).valueOr:
+      warn logTxt info, txRoot, action="getRoot()", `error`=($$error)
+      return 0
   var txCount = 0
   while true:
     let hasPath = mpt.hasPath(rlp.encode(txCount)).valueOr:
@@ -621,7 +636,7 @@ proc persistWithdrawals*(
     mpt.merge(rlp.encode(idx), rlp.encode(wd)).isOkOr:
       warn logTxt info, idx, action="merge()", error=($$error)
       return EMPTY_ROOT_HASH
-  mpt.rootVid.hash(update=true).valueOr:
+  mpt.rootVid.hash().valueOr:
     warn logTxt info, action="hash()"
     return EMPTY_ROOT_HASH
 
@@ -766,7 +781,7 @@ proc persistReceipts*(
   for idx, rec in receipts:
     mpt.merge(rlp.encode(idx), rlp.encode(rec)).isOkOr:
       warn logTxt info, idx, action="merge()", error=($$error)
-  mpt.rootVid.hash(update=true).valueOr:
+  mpt.rootVid.hash().valueOr:
     warn logTxt info, action="hash()"
     return EMPTY_ROOT_HASH
 

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -139,8 +139,14 @@ proc baseMethods(
     levelFn: proc(): int =
       db.adbBase.getLevel,
 
-    vidHashFn: proc(vid: CoreDbVidRef; update: bool): CoreDbRc[Hash256] =
-      db.adbBase.getHash(vid, update, "vidHashFn()"),
+    tryHashFn: proc(vid: CoreDbVidRef): CoreDbRc[Hash256] =
+      vid.tryHash("tryHashFn()"),
+
+    vidHashFn: proc(vid: CoreDbVidRef): CoreDbRc[Hash256] =
+      vid.getHash("vidHashFn()"),
+
+    vidPrintFn: proc(vid: CoreDbVidRef): string =
+      vid.vidPrint(),
 
     errorPrintFn: proc(e: CoreDbErrorRef): string =
       e.errorPrint(),
@@ -148,8 +154,8 @@ proc baseMethods(
     legacySetupFn: proc() =
       discard,
 
-    getRootFn: proc(root: Hash256; createOk: bool): CoreDbRc[CoreDbVidRef] =
-      db.adbBase.getVid(root, createOk, "getRootFn()"),
+    getRootFn: proc(root: Hash256): CoreDbRc[CoreDbVidRef] =
+      db.adbBase.getVid(root, "getRootFn()"),
 
     newKvtFn: proc(saveMode: CoreDbSaveFlags): CoreDbRc[CoreDxKvtRef] =
       db.kdbBase.gc()
