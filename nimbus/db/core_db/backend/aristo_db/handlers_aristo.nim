@@ -633,7 +633,7 @@ proc vidPrint*(vid: CoreDbVidRef): string =
       let
         vid = vid.AristoCoreDbVid
         rc = vid.tryHash("vidPrint()")
-      result = "($" & vid.aVid.uint64.toHex & ", "
+      result = "(" & vid.aVid.toStr & ", "
       if rc.isErr:
         result &= $rc.error.AristoCoreDbError.aErr
       else:
