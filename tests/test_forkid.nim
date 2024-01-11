@@ -55,8 +55,9 @@ const
     (number: 5062604'u64, time: 0'u64, id: (crc: 0x757a1c47'u32, next: 5062605'u64)), # Last Berlin block
     (number: 5062605'u64, time: 0'u64, id: (crc: 0xb8c6299d'u32, next: 1678832736'u64)),         # First London block
     (number: 6000000'u64, time: 1678832735'u64, id: (crc: 0xB8C6299D'u32, next: 1678832736'u64)), # Last London block
-    (number: 6000001'u64, time: 1678832736'u64, id: (crc: 0xf9843abf'u32, next: 0'u64)),          # First Shanghai block
-    (number: 6500000'u64, time: 2678832736'u64, id: (crc: 0xf9843abf'u32, next: 0'u64)),          # Future Shanghai block
+    (number: 6000001'u64, time: 1678832736'u64, id: (crc: 0xf9843abf'u32, next: 1705473120'u64)), # First Shanghai block
+    (number: 6500000'u64, time: 1705473119'u64, id: (crc: 0xf9843abf'u32, next: 1705473120'u64)), # Last Shanghai block
+    (number: 6500000'u64, time: 1705473120'u64, id: (crc: 0x70cc14e2'u32, next: 0'u64)), # First Cancun block
   ]
 
   SepoliaNetIDs = [
@@ -64,13 +65,17 @@ const
     (number: 1735370'u64, time: 0'u64, id: (crc: 0xfe3366e7'u32, next: 1735371'u64)),             # Last London block
     (number: 1735371'u64, time: 0'u64, id: (crc: 0xb96cbd13'u32, next: 1677557088'u64)),          # First MergeNetsplit block
     (number: 1735372'u64, time: 1677557087'u64, id: (crc: 0xb96cbd13'u32, next: 1677557088'u64)), # Last MergeNetsplit block
-    (number: 1735372'u64, time: 1677557088'u64, id: (crc: 0xf7f9bc08'u32, next: 0'u64)),          # First Shanghai block
+    (number: 1735372'u64, time: 1677557088'u64, id: (crc: 0xf7f9bc08'u32, next: 1706655072'u64)), # First Shanghai block
+    (number: 1735372'u64, time: 1706655071'u64, id: (crc: 0xf7f9bc08'u32, next: 1706655072'u64)), # Last Shanghai block
+    (number: 1735372'u64, time: 1706655072'u64, id: (crc: 0x88cf81d9'u32, next: 0'u64)),          # First Cancun block
   ]
 
   HoleskyNetIDs = [
     (number: 0'u64,   time: 0'u64, id: (crc: 0xc61a6098'u32, next: 1696000704'u64)), # Unsynced, last Frontier, Homestead, Tangerine, Spurious, Byzantium, Constantinople, Petersburg, Istanbul, Berlin, London, Paris block
     (number: 123'u64, time: 0'u64, id: (crc: 0xc61a6098'u32, next: 1696000704'u64)), # First MergeNetsplit block
-    (number: 123'u64, time: 1696000704'u64, id: (crc: 0xfd4f016b'u32, next: 0'u64)), # Last MergeNetsplit block
+    (number: 123'u64, time: 1696000704'u64, id: (crc: 0xfd4f016b'u32, next: 1707305664'u64)), # First Shanghai block
+    (number: 123'u64, time: 1707305663'u64, id: (crc: 0xfd4f016b'u32, next: 1707305664'u64)), # Last Shanghai block
+    (number: 123'u64, time: 1707305664'u64, id: (crc: 0x9b192ad0'u32, next: 0'u64)), # First Cancun block
   ]
 
 template runTest(network: untyped, name: string) =
