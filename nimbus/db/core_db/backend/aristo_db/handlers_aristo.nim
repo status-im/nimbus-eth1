@@ -742,13 +742,18 @@ proc newMptHandler*(
       else:
         (saveMode, base.adb)
 
-  if mode == Shared and rID == VertexID(1):
-    let dsc = AristoCoreDxMptRef(base.mptCache)
-    if not rVid.haveCtx:
-      rVid.haveCtx = true
-      rVid.ctx = dsc.ctx
-    if rVid.ctx == dsc.ctx:
-      return ok(dsc)
+  if mode == Shared:
+    if rID == VertexID(1):
+      let dsc = AristoCoreDxMptRef(base.mptCache)
+      if not rVid.haveCtx:
+        rVid.haveCtx = true
+        rVid.ctx = dsc.ctx
+      if rVid.ctx == dsc.ctx:
+        return ok(dsc)
+    elif rID.isValid and rVid.haveCtx:
+      return ok(db.bless AristoCoreDxMptRef(
+        ctx:     rVid.ctx,
+        methods: rVid.ctx.mptMethods()))
 
   # Make sure that the root object is usable on this MPT descriptor
   if rVid.haveCtx:
