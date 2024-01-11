@@ -723,12 +723,13 @@ proc newMptHandler*(
 
   # Update `root` argument, handle default settings
   var rVid = AristoCoreDbVid(nil)
-  if not rID.isValid:
-    if root.isNil:
-      rVid = AristoCoreDbVid(haveCtx: false, base: base)
-    else:
-      let error = (rID, MptRootUnacceptable)
-      return err(error.toError(db, info, RootUnacceptable))
+  if rID.isValid:
+    rVid = root.AristoCoreDbVid
+  elif root.isNil:
+    rVid = AristoCoreDbVid(haveCtx: false, base: base)
+  else:
+    let error = (rID, MptRootUnacceptable)
+    return err(error.toError(db, info, RootUnacceptable))
 
   let (mode, mpt) = case saveMode:
     of TopShot:
@@ -780,7 +781,9 @@ proc newAccHandler*(
 
   # Update `root` argument, handle default settings
   var rVid = root.AristoCoreDbVid
-  if root.isNil:
+  if rID.isValid:
+    rVid = root.AristoCoreDbVid
+  elif root.isNil:
     rVid = AristoCoreDbVid(haveCtx: false, base: base, aVid: VertexID(1))
   elif rID != VertexID(1):
     let error = (rID,AccountRootUnacceptable)
