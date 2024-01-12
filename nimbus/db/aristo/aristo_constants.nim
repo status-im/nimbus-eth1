@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -45,5 +45,8 @@ const
     ( 64,  63), ## Overflow list, 64 filters, skipping 63 filters in-between
     ( 64, 127), ## ..
     ( 64, 255)]
+
+  SUB_TREE_DISPOSAL_MAX* = 200_000
+    ## Some limit for disposing sub-trees in one go using `delete()`.
 
 # End

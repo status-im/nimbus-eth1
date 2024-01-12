@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -205,11 +205,17 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
       vGenExpected = vids.invTo(HashSet[VertexID])
       delta = vGenExpected -+- vGen # symmetric difference
     if 0 < delta.len:
-      # Exclude fringe case when there is a single root vertex only
-      if vGenExpected != Vid2 or 0 < vGen.len:
+      if vGen == Vid2 and vGenExpected.len == 0:
+        # Fringe case when the database is empty
+        discard
+      elif vGen.len == 0 and vGenExpected == Vid2:
+        # Fringe case when there is a single root vertex only
+        discard
+      else:
         let delta = delta.toSeq
         # As happens with Merkle signature calculator: `root=VertexID(2)`
-        if delta.len != 1 or delta[0] != VertexID(1) or VertexID(1) in vGen:
+        if delta.len != 1 or
+           delta[0] != VertexID(1) or VertexID(1) in vGen:
           return err((delta.sorted[^1],CheckBeCacheGarbledVGen))
 
   ok()

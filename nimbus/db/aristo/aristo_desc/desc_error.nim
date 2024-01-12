@@ -188,6 +188,8 @@ type
     DelBranchWithoutRefs
     DelExtLocked
     DelVidStaleVtx
+    DelSubTreeTooBig
+    DelSubTreeVoidRoot
 
     # Functions from  `aristo_filter.nim`
     FilBackendMissing
@@ -213,6 +215,7 @@ type
     FilTrgSrcMismatch
     FilTrgTopSrcMismatch
     FilSiblingsCommitUnfinshed
+    FilSrcTrgInconsistent
 
     # Get functions from `aristo_get.nim`
     GetLeafMissing

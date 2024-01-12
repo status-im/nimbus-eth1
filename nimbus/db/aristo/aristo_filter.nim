@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -71,6 +71,7 @@ proc merge*(
   ## Merge the argument `filter` into the read-only filter layer. Note that
   ## this function has no control of the filter source. Having merged the
   ## argument `filter`, all the `top` and `stack` layers should be cleared.
+  ##
   let ubeRoot = block:
     let rc = db.getKeyUBE VertexID(1)
     if rc.isOk:
@@ -81,6 +82,9 @@ proc merge*(
       return err((VertexID(1),rc.error))
 
   db.roFilter = ? db.merge(filter, db.roFilter, ubeRoot)
+  if db.roFilter.src == db.roFilter.trg:
+    db.roFilter = FilterRef(nil)
+
   ok()
 
 

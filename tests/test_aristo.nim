@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -121,8 +121,11 @@ proc accountsRunner(
       else:
         skip()
 
-    test &"Delete accounts database, successively {accLst.len} entries":
-      check noisy.testTxMergeAndDelete(accLst, dbDir)
+    test &"Delete accounts database successively, {accLst.len} lists":
+      check noisy.testTxMergeAndDeleteOneByOne(accLst, dbDir)
+
+    test &"Delete accounts database sub-trees, {accLst.len} lists":
+      check noisy.testTxMergeAndDeleteSubTree(accLst, dbDir)
 
     test &"Distributed backend access {accLst.len} entries":
       check noisy.testDistributedAccess(accLst, dbDir)
@@ -162,8 +165,11 @@ proc storagesRunner(
       else:
         skip()
 
-    test &"Delete storage database, successively {stoLst.len} entries":
-      check noisy.testTxMergeAndDelete(stoLst, dbDir)
+    test &"Delete storage database successively, {stoLst.len} lists":
+      check noisy.testTxMergeAndDeleteOneByOne(stoLst, dbDir)
+
+    test &"Delete storage database sub-trees, {stoLst.len} lists":
+      check noisy.testTxMergeAndDeleteSubTree(stoLst, dbDir)
 
     test &"Distributed backend access {stoLst.len} entries":
       check noisy.testDistributedAccess(stoLst, dbDir)
