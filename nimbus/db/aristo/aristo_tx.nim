@@ -344,7 +344,17 @@ proc stow*(
       return err(error[1])
     db.top = LayerRef(
       delta: LayerDeltaRef(),
-      final: LayerFinalRef(vGen:  db.roFilter.vGen))
+      final: LayerFinalRef())
+    if db.roFilter.isValid:
+      db.top.final.vGen = db.roFilter.vGen
+    else:
+      let rc = db.getIdgUBE()
+      if rc.isOk:
+        db.top.final.vGen = rc.value
+      else:
+        # It is OK if there was no `Idg`. Otherwise something serious happened
+        # and there is no way to recover easily.
+        doAssert rc.error == GetIdgNotFound
 
   if persistent:
     ? db.resolveBackendFilter()

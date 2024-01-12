@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -163,10 +163,13 @@ proc toNode*(
 
 
 proc subVids*(vtx: VertexRef): seq[VertexID] =
-  ## Returns the list of all sub-vertex IDs for the argument `vtx`
+  ## Returns the list of all sub-vertex IDs for the argument `vtx`.
   case vtx.vType:
   of Leaf:
-    discard
+    if vtx.lData.pType == AccountData:
+      let vid = vtx.lData.account.storageID
+      if vid.isValid:
+        result.add vid
   of Branch:
     for vid in vtx.bVid:
       if vid.isValid:

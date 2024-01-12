@@ -59,6 +59,14 @@ proc getLayerStateRoots*(
   if spr.fg.isValid:
     return ok(spr)
 
+  if not delta.kMap.hasKey(VertexID(1)) and
+     not delta.sTab.hasKey(VertexID(1)):
+    # This layer is unusable, need both: vertex and key
+    return err(FilPrettyPointlessLayer)
+  elif not delta.sTab.getOrVoid(VertexID(1)).isValid:
+    # Root key and vertex has been deleted
+    return ok(spr)
+
   if chunkedMpt:
     let lbl = HashLabel(root: VertexID(1), key: sprBeKey)
     if VertexID(1) in delta.pAmk.getOrVoid lbl:
