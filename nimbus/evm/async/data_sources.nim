@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -17,10 +17,10 @@ import
 
 type
   AsyncDataSource* = ref object of RootObj
-    ifNecessaryGetSlots*:       proc(db: CoreDbRef, blockNumber: BlockNumber, stateRoot: Hash256, address: EthAddress, slots: seq[UInt256], newStateRootForSanityChecking: Hash256): Future[void] {.gcsafe.}
-    ifNecessaryGetCode*:        proc(db: CoreDbRef, blockNumber: BlockNumber, stateRoot: Hash256, address: EthAddress, newStateRootForSanityChecking: Hash256): Future[void] {.gcsafe.}
-    ifNecessaryGetAccount*:     proc(db: CoreDbRef, blockNumber: BlockNumber, stateRoot: Hash256, address: EthAddress, newStateRootForSanityChecking: Hash256): Future[void] {.gcsafe.}
-    ifNecessaryGetBlockHeaderByNumber*: proc(coreDb: CoreDbRef, blockNumber: BlockNumber): Future[void] {.gcsafe.}
+    ifNecessaryGetSlots*:       proc(db: CoreDbRef, blockNumber: BlockNumber, stateRoot: Hash256, address: EthAddress, slots: seq[UInt256], newStateRootForSanityChecking: Hash256): Future[void] {.gcsafe, raises: [].}
+    ifNecessaryGetCode*:        proc(db: CoreDbRef, blockNumber: BlockNumber, stateRoot: Hash256, address: EthAddress, newStateRootForSanityChecking: Hash256): Future[void] {.gcsafe, raises: [].}
+    ifNecessaryGetAccount*:     proc(db: CoreDbRef, blockNumber: BlockNumber, stateRoot: Hash256, address: EthAddress, newStateRootForSanityChecking: Hash256): Future[void] {.gcsafe, raises: [].}
+    ifNecessaryGetBlockHeaderByNumber*: proc(coreDb: CoreDbRef, blockNumber: BlockNumber): Future[void] {.gcsafe, raises: [].}
     # FIXME-Adam: Later.
     #fetchNodes*: proc(stateRoot: Hash256, paths: seq[seq[seq[byte]]], nodeHashes: seq[Hash256]): Future[seq[seq[byte]]] {.gcsafe.}
     fetchBlockHeaderWithHash*: proc(h: Hash256): Future[BlockHeader] {.gcsafe.}
@@ -49,6 +49,7 @@ proc ifNecessaryGetSlots*(asyncFactory: AsyncOperationFactory, db: CoreDbRef, bl
 proc ifNecessaryGetCode*(asyncFactory: AsyncOperationFactory, db: CoreDbRef, blockNumber: BlockNumber, stateRoot: Hash256, address: EthAddress, newStateRootForSanityChecking: Hash256): Future[void] {.async.} =
   if asyncFactory.maybeDataSource.isSome:
     await asyncFactory.maybeDataSource.get.ifNecessaryGetCode(db, blockNumber, stateRoot, address, newStateRootForSanityChecking)
+
 
 proc ifNecessaryGetAccount*(asyncFactory: AsyncOperationFactory, db: CoreDbRef, blockNumber: BlockNumber, stateRoot: Hash256, address: EthAddress, newStateRootForSanityChecking: Hash256): Future[void] {.async.} =
   if asyncFactory.maybeDataSource.isSome:

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -186,7 +186,7 @@ proc fetchUsingGetNodeData(peer: Peer, nodeHashes: seq[common.Hash256]): Future[
   # AARDVARK whatever
   return @[]
 
-proc findPeersAndMakeSomeCalls[R](peerPool: PeerPool, protocolName: string, protocolType: typedesc, initiateAttempt: (proc(p: Peer): Future[R] {.gcsafe.})): Future[seq[Future[R]]] {.async.} =
+proc findPeersAndMakeSomeCalls[R](peerPool: PeerPool, protocolName: string, protocolType: typedesc, initiateAttempt: (proc(p: Peer): Future[R] {.gcsafe, raises: [].})): Future[seq[Future[R]]] {.async.} =
   var attempts: seq[Future[R]]
   while true:
     #info("AARDVARK: findPeersAndMakeSomeCalls about to loop through the peer pool", count=peerPool.connectedNodes.len)
