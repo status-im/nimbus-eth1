@@ -12,6 +12,7 @@
 
 import
   nimcrypto/[hash, sha2, keccak], stew/[objects, results], stint,
+  eth/common/eth_types,
   ssz_serialization,
   ../../common/common_types
 
@@ -35,9 +36,8 @@ type JsonProofVector* = object
   proofs*: seq[JsonProof]
 
 type
-  NodeHash* = MDigest[32 * 8] # keccak256
-  CodeHash* = MDigest[32 * 8] # keccak256
-  Address* = array[20, byte]
+  NodeHash* = KeccakHash
+  CodeHash* = KeccakHash
 
   ContentType* = enum
     # Note: Need to add this unused value as a case object with an enum without
@@ -49,37 +49,57 @@ type
     # the SSZ spec is not explicit about disallowing this.
     unused = 0x00
     accountTrieNode = 0x20
-    contractStorageTrieNode = 0x21
-    accountTrieProof = 0x22
+    contractTrieNode = 0x21
+    contractCode = 0x22
+    # NOTE unused
     contractStorageTrieProof = 0x23
-    contractBytecode = 0x24
+    # NOTE unused
+    accountTrieProof = 0x24
+
+  ContentKind* = enum
+    forOffer = 0x00
+    forRetrival = 0x01
+
+  NibblePair* = byte
+  Nibbles* = object
+    packedNibbles*: List[NibblePair, 32]
+    isOddLength*: bool
+
+  WitnessNode* = List[byte, 1024]
+  Witness* = List[WitnessNode, 1024]
+
+  StateWitness* = object
+    key*: Nibbles
+    proof*: Witness
+
+  StorageWitness* = object
+    key*: Nibbles
+    proof*: Witness
+    stateProof*: StateWitness
 
   AccountTrieNodeKey* = object
-    path*: ByteList
+    path*: Nibbles
     nodeHash*: NodeHash
-    stateRoot*: Bytes32
 
-  ContractStorageTrieNodeKey* = object
-    address*: Address
-    path*: ByteList
+  ContractTrieNodeKey* = object
+    address*: EthAddress
+    path*: Nibbles
     nodeHash*: NodeHash
-    stateRoot*: Bytes32
 
-  AccountTrieProofKey* = object
-    address*: Address
-    stateRoot*: Bytes32
+  ContractCodeKey* = object
+    address*: EthAddress
+    codeHash*: CodeHash
 
+  # NOTE unused
   ContractStorageTrieProofKey* = object
-    address*: Address
+    address*: EthAddress
     slot*: UInt256
     stateRoot*: Bytes32
 
-  ContractBytecodeKey* = object
-    address*: Address
-    codeHash*: CodeHash
-
-  WitnessNode* = ByteList
-  AccountTrieProof* = List[WitnessNode, 32]
+  # NOTE unused
+  AccountTrieProofKey* = object
+    address*: EthAddress
+    stateRoot*: Bytes32
 
   ContentKey* = object
     case contentType*: ContentType
@@ -87,14 +107,41 @@ type
       discard
     of accountTrieNode:
       accountTrieNodeKey*: AccountTrieNodeKey
-    of contractStorageTrieNode:
-      contractStorageTrieNodeKey*: ContractStorageTrieNodeKey
-    of accountTrieProof:
-      accountTrieProofKey*: AccountTrieProofKey
+    of contractTrieNode:
+      contractTrieNodeKey*: ContractTrieNodeKey
+    of contractCode:
+      contractCodeKey*: ContractCodeKey
+    # NOTE unsed
     of contractStorageTrieProof:
-      contractStorageTrieProofKey*: ContractStorageTrieProofKey
-    of contractBytecode:
-      contractBytecodeKey*: ContractBytecodeKey
+         contractStorageTrieProofKey*: ContractStorageTrieProofKey
+    # NOTE unsed
+    of accountTrieProof:
+          accountTrieProofKey*: AccountTrieProofKey
+
+  AccountTrieNode* = object
+    case contentKind*: ContentKind
+    of forOffer:
+      proof*: StateWitness
+      blockHash*: Bytes32 # NOTE is it KeccakHash?
+    of forRetrival:
+      node*: WitnessNode
+
+  StorageTrieNode* = object
+    case contentKind*: ContentKind
+    of forOffer:
+      proof*: StorageWitness
+      blockHash*: Bytes32 # NOTE is it KeccakHash?
+    of forRetrival:
+      node*: WitnessNode
+
+  ContractCode* = object
+    code*: ByteList
+    case contentKind*: ContentKind
+    of forOffer:
+      accountProof*: StateWitness
+      blockHash*: Bytes32 # NOTE is it KeccakHash?
+    else:
+      discard
 
 func encode*(contentKey: ContentKey): ByteList =
   doAssert(contentKey.contentType != unused)
@@ -122,46 +169,11 @@ template computeContentId*(digestCtxType: type, body: untyped): ContentId =
   let idHash = finish(h)
   readUintBE[256](idHash.data)
 
+# NOTE: will this contentKey contain selector byte?
+func toContentId*(contentKey: ByteList): ContentId =
+  # TODO: Should we try to parse the content key here for invalid ones?
+  let idHash = sha2.sha256.digest(contentKey.asSeq())
+  readUintBE[256](idHash.data)
+
 func toContentId*(contentKey: ContentKey): ContentId =
-  case contentKey.contentType:
-  of unused:
-    raiseAssert "Should not be used and fail at decoding"
-  of accountTrieNode: # sha256(path | node_hash)
-    let key = contentKey.accountTrieNodeKey
-    computeContentId sha256:
-      h.update(key.path.asSeq())
-      h.update(key.nodeHash.data)
-  of contractStorageTrieNode: # sha256(address | path | node_hash)
-    let key = contentKey.contractStorageTrieNodeKey
-    computeContentId sha256:
-      h.update(key.address)
-      h.update(key.path.asSeq())
-      h.update(key.nodeHash.data)
-  of accountTrieProof: # keccak(address)
-    let key = contentKey.accountTrieProofKey
-    computeContentId keccak256:
-      h.update(key.address)
-  of contractStorageTrieProof: # (keccak(address) + keccak(slot)) % 2**256
-    # TODO: Why is keccak run on slot, when it can be used directly?
-    # Also, value to LE or BE? Not mentioned in specification.
-    let key = contentKey.contractStorageTrieProofKey
-    let n1 =
-      block: computeContentId keccak256:
-        h.update(key.address)
-    let n2 =
-      block: computeContentId keccak256:
-        h.update(toBytesBE(key.slot))
-
-    n1 + n2 # uint256 will wrap arround, practically applying the modulo 256
-  of contractBytecode: # sha256(address | code_hash)
-    let key = contentKey.contractBytecodeKey
-    computeContentId sha256:
-      h.update(key.address)
-      h.update(key.codeHash.data)
-
-func toContentId*(contentKey: ByteList): results.Opt[ContentId] =
-  let key = decode(contentKey)
-  if key.isSome():
-    ok(key.get().toContentId())
-  else:
-    Opt.none(ContentId)
+  toContentId(encode(contentKey))
