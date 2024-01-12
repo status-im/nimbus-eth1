@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2023 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -477,7 +477,8 @@ proc chainConfigForNetwork*(id: NetworkId): ChainConfig =
       berlinBlock:         some(4_460_644.toBlockNumber),  # 2021-03-18 05:29:51 UTC
       londonBlock:         some(5_062_605.toBlockNumber),  # 2021-07-01 03:19:39 UTC
       terminalTotalDifficulty: some(10790000.u256),
-      shanghaiTime:        some(1_678_832_736.EthTime)
+      shanghaiTime:        some(1_678_832_736.EthTime),
+      cancunTime:          some(1_705_473_120.EthTime), # 2024-01-17 06:32:00
     )
   of SepoliaNet:
     const sepoliaTTD = parse("17000000000000000",UInt256)
@@ -500,6 +501,7 @@ proc chainConfigForNetwork*(id: NetworkId): ChainConfig =
       mergeForkBlock:      some(1735371.toBlockNumber),
       terminalTotalDifficulty: some(sepoliaTTD),
       shanghaiTime:        some(1_677_557_088.EthTime),
+      cancunTime:          some(1_706_655_072.EthTime), # 2024-01-30 22:51:12
     )
   of HoleskyNet:
     ChainConfig(
@@ -519,6 +521,7 @@ proc chainConfigForNetwork*(id: NetworkId): ChainConfig =
       terminalTotalDifficulty: some(0.u256),
       terminalTotalDifficultyPassed: some(true),
       shanghaiTime:        some(1_696_000_704.EthTime),
+      cancunTime:          some(1_707_305_664.EthTime), # 2024-02-07 11:34:24
     )
   else:
     ChainConfig()
