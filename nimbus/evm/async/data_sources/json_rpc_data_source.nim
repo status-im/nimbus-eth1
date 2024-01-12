@@ -186,26 +186,25 @@ proc fetchUsingGetNodeData(peer: Peer, nodeHashes: seq[common.Hash256]): Future[
   # AARDVARK whatever
   return @[]
 
-proc findPeersAndMakeSomeCalls[R](peerPool: PeerPool, protocolName: string, protocolType: typedesc, initiateAttempt: (proc(p: Peer): Future[R] {.gcsafe.})): Future[seq[Future[R]]] {.async.} =
+proc findPeersAndMakeSomeCalls[R](peerPool: PeerPool, protocolName: string, protocolType: typedesc, initiateAttempt: (proc(p: Peer): Future[R] {.gcsafe, raises: [].})): Future[seq[Future[R]]] {.async.} =
   var attempts: seq[Future[R]]
-  when false:
-    while true:
-      #info("AARDVARK: findPeersAndMakeSomeCalls about to loop through the peer pool", count=peerPool.connectedNodes.len)
-      for nodeOfSomeSort, peer in peerPool.connectedNodes:
-        if peer.supports(protocolType):
-          info("AARDVARK: findPeersAndMakeSomeCalls calling peer", protocolName, peer)
-          attempts.add(initiateAttempt(peer))
-          if attempts.len >= maxNumberOfPeersToAttempt:
-            break
-        #else:
-        #  info("AARDVARK: peer does not support protocol", protocolName, peer)
-      if attempts.len == 0:
-        warn("AARDVARK: findPeersAndMakeSomeCalls did not find any peers; waiting and trying again", protocolName, totalPeerPoolSize=peerPool.connectedNodes.len)
-        await sleepAsync(5000)
-      else:
-        if attempts.len < maxNumberOfPeersToAttempt:
-          warn("AARDVARK: findPeersAndMakeSomeCalls did not find enough peers, but found some", protocolName, totalPeerPoolSize=peerPool.connectedNodes.len, found=attempts.len)
-        break
+  while true:
+    #info("AARDVARK: findPeersAndMakeSomeCalls about to loop through the peer pool", count=peerPool.connectedNodes.len)
+    for nodeOfSomeSort, peer in peerPool.connectedNodes:
+      if peer.supports(protocolType):
+        info("AARDVARK: findPeersAndMakeSomeCalls calling peer", protocolName, peer)
+        attempts.add(initiateAttempt(peer))
+        if attempts.len >= maxNumberOfPeersToAttempt:
+          break
+      #else:
+      #  info("AARDVARK: peer does not support protocol", protocolName, peer)
+    if attempts.len == 0:
+      warn("AARDVARK: findPeersAndMakeSomeCalls did not find any peers; waiting and trying again", protocolName, totalPeerPoolSize=peerPool.connectedNodes.len)
+      await sleepAsync(5000)
+    else:
+      if attempts.len < maxNumberOfPeersToAttempt:
+        warn("AARDVARK: findPeersAndMakeSomeCalls did not find enough peers, but found some", protocolName, totalPeerPoolSize=peerPool.connectedNodes.len, found=attempts.len)
+      break
   return attempts
 
 proc findPeersAndMakeSomeAttemptsToCallGetTrieNodes(peerPool: PeerPool, stateRoot: common.Hash256, paths: seq[SnapTriePaths]): Future[seq[Future[seq[seq[byte]]]]] =
@@ -349,107 +348,100 @@ const shouldDoUnnecessarySanityChecks = true
 
 # This proc fetches both the account and also optionally some of its slots, because that's what eth_getProof can do.
 proc ifNecessaryGetAccountAndSlots*(client: RpcClient, db: CoreDbRef, blockNumber: common.BlockNumber, stateRoot: common.Hash256, address: EthAddress, slots: seq[UInt256], justCheckingAccount: bool, justCheckingSlots: bool, newStateRootForSanityChecking: common.Hash256): Future[void] {.async.} =
-  when false:
-    let trie = initAccountsTrie(db, stateRoot, false)  # important for sanity checks
-    let trie2 = initAccountsTrie(db, newStateRootForSanityChecking, false)  # important for sanity checks
-    let doesAccountActuallyNeedToBeFetched = not trie.hasAllNodesForAccount(address)
-    let slotsToActuallyFetch = slots.filter(proc(slot: UInt256): bool = not (trie.hasAllNodesForStorageSlot(address, slot)))
-    if (not doesAccountActuallyNeedToBeFetched) and (slotsToActuallyFetch.len == 0):
-      # Already have them, no need to fetch either the account or the slots
+  let trie = initAccountsTrie(db, stateRoot, false)  # important for sanity checks
+  let trie2 = initAccountsTrie(db, newStateRootForSanityChecking, false)  # important for sanity checks
+  let doesAccountActuallyNeedToBeFetched = not trie.hasAllNodesForAccount(address)
+  let slotsToActuallyFetch = slots.filter(proc(slot: UInt256): bool = not (trie.hasAllNodesForStorageSlot(address, slot)))
+  if (not doesAccountActuallyNeedToBeFetched) and (slotsToActuallyFetch.len == 0):
+    # Already have them, no need to fetch either the account or the slots
+    discard
+  else:
+    let (acc, accProof, storageProofs) = await fetchAccountAndSlots(client, address, slotsToActuallyFetch, blockNumber)
+
+    # We need to verify the proof even if we already had this account,
+    # to make sure the data is valid.
+    let accountVerificationRes = verifyFetchedAccount(stateRoot, address, acc, accProof)
+    let whatAreWeVerifying = ("account proof", address, acc)
+    raiseExceptionIfError(whatAreWeVerifying, accountVerificationRes)
+
+    if not doesAccountActuallyNeedToBeFetched:
+      # We already had the account, no need to populate the DB with it again.
       discard
     else:
-      let (acc, accProof, storageProofs) = await fetchAccountAndSlots(client, address, slotsToActuallyFetch, blockNumber)
-  
-      # We need to verify the proof even if we already had this account,
-      # to make sure the data is valid.
-      let accountVerificationRes = verifyFetchedAccount(stateRoot, address, acc, accProof)
-      let whatAreWeVerifying = ("account proof", address, acc)
-      raiseExceptionIfError(whatAreWeVerifying, accountVerificationRes)
-  
-      if not doesAccountActuallyNeedToBeFetched:
-        # We already had the account, no need to populate the DB with it again.
-        discard
-      else:
-        if not justCheckingAccount:
-          populateDbWithBranch(db, accProof)
-          if shouldDoUnnecessarySanityChecks:
-            assertThatWeHaveStoredAccount(trie, address, acc, false)
-            if doesAccountActuallyNeedToBeFetched: # this second check makes no sense if it's not the first time
-              assertThatWeHaveStoredAccount(trie2, address, acc, true)
-  
-      doAssert(slotsToActuallyFetch.len == storageProofs.len, "We should get back the same number of storage proofs as slots that we asked for. I think.")
-  
-      for storageProof in storageProofs:
-        let slot: UInt256 = storageProof.key
-        let fetchedVal: UInt256 = storageProof.value
-        let storageMptNodes: seq[seq[byte]] = storageProof.proof.mapIt(distinctBase(it))
-        let storageVerificationRes = verifyFetchedSlot(acc.storageRoot, slot, fetchedVal, storageMptNodes)
-        let whatAreWeVerifying = ("storage proof", address, acc, slot, fetchedVal)
-        raiseExceptionIfError(whatAreWeVerifying, storageVerificationRes)
-  
-        if not justCheckingSlots:
-          populateDbWithBranch(db, storageMptNodes)
-  
-          # I believe this is done so that we can iterate over the slots. See
-          # persistStorage in `db/ledger`.
-          let slotAsKey = createTrieKeyFromSlot(slot)
-          let slotHash = keccakHash(slotAsKey)
-          let slotEncoded = rlp.encode(slot)
-          db.kvt.put(slotHashToSlotKey(slotHash.data).toOpenArray, slotEncoded)
-  
-          if shouldDoUnnecessarySanityChecks:
-            assertThatWeHaveStoredSlot(trie, address, acc, slot, fetchedVal, false)
-            assertThatWeHaveStoredSlot(trie2, address, acc, slot, fetchedVal, true)
+      if not justCheckingAccount:
+        populateDbWithBranch(db, accProof)
+        if shouldDoUnnecessarySanityChecks:
+          assertThatWeHaveStoredAccount(trie, address, acc, false)
+          if doesAccountActuallyNeedToBeFetched: # this second check makes no sense if it's not the first time
+            assertThatWeHaveStoredAccount(trie2, address, acc, true)
+
+    doAssert(slotsToActuallyFetch.len == storageProofs.len, "We should get back the same number of storage proofs as slots that we asked for. I think.")
+
+    for storageProof in storageProofs:
+      let slot: UInt256 = storageProof.key
+      let fetchedVal: UInt256 = storageProof.value
+      let storageMptNodes: seq[seq[byte]] = storageProof.proof.mapIt(distinctBase(it))
+      let storageVerificationRes = verifyFetchedSlot(acc.storageRoot, slot, fetchedVal, storageMptNodes)
+      let whatAreWeVerifying = ("storage proof", address, acc, slot, fetchedVal)
+      raiseExceptionIfError(whatAreWeVerifying, storageVerificationRes)
+
+      if not justCheckingSlots:
+        populateDbWithBranch(db, storageMptNodes)
+
+        # I believe this is done so that we can iterate over the slots. See
+        # persistStorage in `db/ledger`.
+        let slotAsKey = createTrieKeyFromSlot(slot)
+        let slotHash = keccakHash(slotAsKey)
+        let slotEncoded = rlp.encode(slot)
+        db.kvt.put(slotHashToSlotKey(slotHash.data).toOpenArray, slotEncoded)
+
+        if shouldDoUnnecessarySanityChecks:
+          assertThatWeHaveStoredSlot(trie, address, acc, slot, fetchedVal, false)
+          assertThatWeHaveStoredSlot(trie2, address, acc, slot, fetchedVal, true)
 
 proc ifNecessaryGetCode*(client: RpcClient, db: CoreDbRef, blockNumber: common.BlockNumber, stateRoot: common.Hash256, address: EthAddress, justChecking: bool, newStateRootForSanityChecking: common.Hash256): Future[void] {.async.} =
-  when false:
-    await ifNecessaryGetAccountAndSlots(client, db, blockNumber, stateRoot, address, @[], false, false, newStateRootForSanityChecking)  # to make sure we've got the codeHash
-    let trie = initAccountsTrie(db, stateRoot, false)  # important for sanity checks
-  
-    let acc = ifNodesExistGetAccount(trie, address).get
-    let desiredCodeHash = acc.codeHash
-  
-    let p = (blockNumber, address)
-    if not(trie.hasAllNodesForCode(address)):
-      let fetchedCode = await fetchAndVerifyCode(client, p, desiredCodeHash)
-  
-      if not justChecking:
-        storeCode(trie, p, desiredCodeHash, fetchedCode)
-        if shouldDoUnnecessarySanityChecks:
-          assertThatWeHaveStoredCode(trie, p, desiredCodeHash)
+  await ifNecessaryGetAccountAndSlots(client, db, blockNumber, stateRoot, address, @[], false, false, newStateRootForSanityChecking)  # to make sure we've got the codeHash
+  let trie = initAccountsTrie(db, stateRoot, false)  # important for sanity checks
+
+  let acc = ifNodesExistGetAccount(trie, address).get
+  let desiredCodeHash = acc.codeHash
+
+  let p = (blockNumber, address)
+  if not(trie.hasAllNodesForCode(address)):
+    let fetchedCode = await fetchAndVerifyCode(client, p, desiredCodeHash)
+
+    if not justChecking:
+      storeCode(trie, p, desiredCodeHash, fetchedCode)
+      if shouldDoUnnecessarySanityChecks:
+        assertThatWeHaveStoredCode(trie, p, desiredCodeHash)
 
 proc ifNecessaryGetBlockHeaderByNumber*(client: RpcClient, chainDB: CoreDbRef, blockNumber: common.BlockNumber, justChecking: bool): Future[void] {.async.} =
-  when false:
-    let maybeHeaderAndHash = chainDB.getBlockHeaderWithHash(blockNumber)
-    if maybeHeaderAndHash.isNone:
-      let fetchedHeader = await fetchBlockHeaderWithNumber(client, blockNumber)
-      let headerVerificationRes = verifyFetchedBlockHeader(fetchedHeader, blockNumber)
-      let whatAreWeVerifying = ("block header by number", blockNumber, fetchedHeader)
-      raiseExceptionIfError(whatAreWeVerifying, headerVerificationRes)
-  
-      if not justChecking:
-        storeBlockHeader(chainDB, fetchedHeader)
-        if shouldDoUnnecessarySanityChecks:
-          assertThatWeHaveStoredBlockHeader(chainDB, blockNumber, fetchedHeader)
+  let maybeHeaderAndHash = chainDB.getBlockHeaderWithHash(blockNumber)
+  if maybeHeaderAndHash.isNone:
+    let fetchedHeader = await fetchBlockHeaderWithNumber(client, blockNumber)
+    let headerVerificationRes = verifyFetchedBlockHeader(fetchedHeader, blockNumber)
+    let whatAreWeVerifying = ("block header by number", blockNumber, fetchedHeader)
+    raiseExceptionIfError(whatAreWeVerifying, headerVerificationRes)
+
+    if not justChecking:
+      storeBlockHeader(chainDB, fetchedHeader)
+      if shouldDoUnnecessarySanityChecks:
+        assertThatWeHaveStoredBlockHeader(chainDB, blockNumber, fetchedHeader)
 
 # Used in asynchronous on-demand-data-fetching mode.
 proc realAsyncDataSource*(peerPool: PeerPool, client: RpcClient, justChecking: bool): AsyncDataSource =
   AsyncDataSource(
     ifNecessaryGetAccount: (proc(db: CoreDbRef, blockNumber: common.BlockNumber, stateRoot: common.Hash256, address: EthAddress, newStateRootForSanityChecking: common.Hash256): Future[void] {.async.} =
-      #await ifNecessaryGetAccountAndSlots(client, db, blockNumber, stateRoot, address, @[], false, false, newStateRootForSanityChecking)
-      discard
+      await ifNecessaryGetAccountAndSlots(client, db, blockNumber, stateRoot, address, @[], false, false, newStateRootForSanityChecking)
     ),
     ifNecessaryGetSlots:   (proc(db: CoreDbRef, blockNumber: common.BlockNumber, stateRoot: common.Hash256, address: EthAddress, slots: seq[UInt256], newStateRootForSanityChecking: common.Hash256): Future[void] {.async.} =
-      #await ifNecessaryGetAccountAndSlots(client, db, blockNumber, stateRoot, address, slots, false, false, newStateRootForSanityChecking)
-      discard
+      await ifNecessaryGetAccountAndSlots(client, db, blockNumber, stateRoot, address, slots, false, false, newStateRootForSanityChecking)
     ),
     ifNecessaryGetCode: (proc(db: CoreDbRef, blockNumber: common.BlockNumber, stateRoot: common.Hash256, address: EthAddress, newStateRootForSanityChecking: common.Hash256): Future[void] {.async.} =
-      #await ifNecessaryGetCode(client, db, blockNumber, stateRoot, address, justChecking, newStateRootForSanityChecking)
-      discard
+      await ifNecessaryGetCode(client, db, blockNumber, stateRoot, address, justChecking, newStateRootForSanityChecking)
     ),
     ifNecessaryGetBlockHeaderByNumber: (proc(chainDB: CoreDbRef, blockNumber: common.BlockNumber): Future[void] {.async.} =
-      #await ifNecessaryGetBlockHeaderByNumber(client, chainDB, blockNumber, justChecking)
-      discard
+      await ifNecessaryGetBlockHeaderByNumber(client, chainDB, blockNumber, justChecking)
     ),
 
     # FIXME-Adam: This will be needed later, but for now let's just get the basic methods in place.
