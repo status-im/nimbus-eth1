@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2023 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -8,13 +8,17 @@
 {.push raises: [].}
 
 import
-  std/sequtils,
-  json_rpc/[rpcproxy, rpcserver], stew/byteutils,
+  std/[sequtils, json],
+  json_rpc/[rpcproxy, rpcserver],
+  json_serialization/std/tables,
+  stew/byteutils,
   eth/p2p/discoveryv5/nodes_verification,
   ../network/wire/portal_protocol,
   ./rpc_types
 
-export rpcserver
+export
+  rpcserver,
+  tables
 
 # Portal Network JSON-RPC impelentation as per specification:
 # https://github.com/ethereum/portal-network-specs/tree/master/jsonrpc
@@ -24,6 +28,11 @@ type
     content: string
     utpTransfer: bool
 
+ContentInfo.useDefaultSerializationIn JrpcConv
+TraceContentLookupResult.useDefaultSerializationIn JrpcConv
+TraceObject.useDefaultSerializationIn JrpcConv
+NodeMetadata.useDefaultSerializationIn JrpcConv
+TraceResponse.useDefaultSerializationIn JrpcConv
 
 # Note:
 # Using a string for the network parameter will give an error in the rpc macro:
@@ -87,7 +96,7 @@ proc installPortalApiHandlers*(
       raise newException(ValueError, "Record not found in DHT lookup.")
 
   rpcServer.rpc("portal_" & network & "Ping") do(
-      enr: Record) -> tuple[enrSeq: uint64, dataRadius: UInt256]:
+      enr: Record) -> PingResult:
     let
       node = toNodeWithAddress(enr)
       pong = await p.ping(node)
@@ -119,7 +128,7 @@ proc installPortalApiHandlers*(
       return nodes.get().map(proc(n: Node): Record = n.record)
 
   rpcServer.rpc("portal_" & network & "FindContent") do(
-      enr: Record, contentKey: string) -> JsonNode:
+      enr: Record, contentKey: string) -> JsonString:
     let
       node = toNodeWithAddress(enr)
       foundContentResult = await p.findContent(
@@ -131,14 +140,15 @@ proc installPortalApiHandlers*(
       let foundContent = foundContentResult.get()
       case foundContent.kind:
       of Content:
-        return %ContentInfo(
+        let res = ContentInfo(
           content: foundContent.content.to0xHex(),
           utpTransfer: foundContent.utpTransfer
         )
+        return JrpcConv.encode(res).JsonString
       of Nodes:
-        var rpcRes = newJObject()
-        rpcRes["enrs"] = %foundContent.nodes.map(proc(n: Node): Record = n.record)
-        return rpcRes
+        let enrs = foundContent.nodes.map(proc(n: Node): Record = n.record)
+        let jsonEnrs = JrpcConv.encode(enrs)
+        return ("{\"enrs\":" & jsonEnrs & "}").JsonString
 
   rpcServer.rpc("portal_" & network & "Offer") do(
       enr: Record, contentKey: string, contentValue: string) -> string:

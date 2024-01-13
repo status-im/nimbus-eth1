@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -25,6 +25,6 @@ proc txInPayload*(payload: ExecutionPayload, txHash: common.Hash256): bool =
 proc checkPrevRandaoValue*(client: RpcClient, expectedPrevRandao: common.Hash256, blockNumber: uint64): bool =
   let storageKey = blockNumber.u256
   let r = client.storageAt(prevRandaoContractAddr, storageKey)
-  let expected = UInt256.fromBytesBE(expectedPrevRandao.data)
+  let expected = FixedBytes[32](expectedPrevRandao.data)
   r.expectStorageEqual(expected)
   return true

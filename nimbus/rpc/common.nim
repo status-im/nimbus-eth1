@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -28,6 +28,9 @@ type
     enode : string # Enode string
     ip    : string # address string
     ports : NodePorts
+
+NodePorts.useDefaultSerializationIn JrpcConv
+NodeInfo.useDefaultSerializationIn JrpcConv
 
 proc setupCommonRpc*(node: EthereumNode, conf: NimbusConf, server: RpcServer) =
   server.rpc("web3_clientVersion") do() -> string:

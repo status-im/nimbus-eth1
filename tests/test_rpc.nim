@@ -289,14 +289,13 @@ proc rpcMain*() =
 
     test "eth_syncing":
       let res = await client.eth_syncing()
-      if res.kind == JBool:
+      if res.syncing == false:
         let syncing = ethNode.peerPool.connectedNodes.len > 0
-        check res.getBool() == syncing
+        check syncing == false
       else:
-        check res.kind == JObject
-        check com.syncStart == UInt256.fromHex(res["startingBlock"].getStr())
-        check com.syncCurrent == UInt256.fromHex(res["currentBlock"].getStr())
-        check com.syncHighest == UInt256.fromHex(res["highestBlock"].getStr())
+        check com.syncStart == res.syncObject.startingBlock.uint64.u256
+        check com.syncCurrent == res.syncObject.currentBlock.uint64.u256
+        check com.syncHighest == res.syncObject.highestBlock.uint64.u256
 
     test "eth_coinbase":
       let res = await client.eth_coinbase()
@@ -337,7 +336,7 @@ proc rpcMain*() =
 
     test "eth_getStorageAt":
       let res = await client.eth_getStorageAt(w3Addr("0xfff33a3bd36abdbd412707b8e310d6011454a7ae"), 0.u256, blockId(0'u64))
-      check 0.u256 == res
+      check w3Hash() == res
 
     test "eth_getTransactionCount":
       let res = await client.eth_getTransactionCount(w3Addr("0xfff7ac99c8e4feb60c9750054bdc14ce1857f181"), blockId(0'u64))
@@ -369,7 +368,7 @@ proc rpcMain*() =
       let msg = "hello world"
       let msgBytes = @(msg.toOpenArrayByte(0, msg.len-1))
 
-      expect ValueError:
+      expect JsonRpcError:
         discard await client.eth_sign(w3Addr(ks2), msgBytes)
 
       let res = await client.eth_sign(w3Addr(signer), msgBytes)
@@ -404,7 +403,7 @@ proc rpcMain*() =
 
     test "eth_call":
       var ec = EthCall(
-        source: w3Addr(signer).some,
+        `from`: w3Addr(signer).some,
         to: w3Addr(ks2).some,
         gas: w3Qty(100000'u).some,
         gasPrice: none(Quantity),
@@ -416,14 +415,14 @@ proc rpcMain*() =
 
     test "eth_estimateGas":
       var ec = EthCall(
-        source: w3Addr(signer).some,
+        `from`: w3Addr(signer).some,
         to: w3Addr(ks3).some,
         gas: w3Qty(42000'u).some,
         gasPrice: w3Qty(100'u).some,
         value: some 100.u256
         )
 
-      let res = await client.eth_estimateGas(ec, "latest")
+      let res = await client.eth_estimateGas(ec)
       check res == w3Qty(21000'u64)
 
     test "eth_getBlockByHash":
@@ -535,7 +534,7 @@ proc rpcMain*() =
           l.logIndex.unsafeGet() == w3Qty(i.uint64)
         inc i
 
-    test "eth_getLogs by blockhash, filter logs at specific postions":
+    test "eth_getLogs by blockhash, filter logs at specific positions":
       let testHeader = getBlockHeader4514995()
       let testHash = testHeader.blockHash
 
@@ -544,7 +543,11 @@ proc rpcMain*() =
 
       let filterOptions = FilterOptions(
         blockHash: some(w3Hash testHash),
-        topics: @[some(@[topic]), none[seq[Web3Hash]](), some(@[topic1])]
+        topics: @[
+          TopicOrList(kind: slkList, list: @[topic]),
+          TopicOrList(kind: slkNull),
+          TopicOrList(kind: slkList, list: @[topic1])
+        ]
       )
 
       let logs = await client.eth_getLogs(filterOptions)
@@ -568,8 +571,8 @@ proc rpcMain*() =
       let filterOptions = FilterOptions(
         blockHash: some(w3Hash testHash),
         topics: @[
-          some(@[topic, topic1]),
-          some(@[topic2, topic3])
+          TopicOrList(kind: slkList, list: @[topic, topic1]),
+          TopicOrList(kind: slkList, list: @[topic2, topic3])
         ]
       )
 

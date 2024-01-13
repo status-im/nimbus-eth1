@@ -1,5 +1,5 @@
 # Nimbus - Portal Network
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -48,7 +48,8 @@ procSuite "Discovery RPC":
 
   asyncTest "Get local node info":
     let tc = await setupTest(rng)
-    let resp = await tc.client.call("discv5_nodeInfo", %[])
+    let jsonBytes = await tc.client.call("discv5_nodeInfo", %[])
+    let resp = JrpcConv.decode(jsonBytes.string, JsonNode)
 
     check:
       resp.contains("nodeId")

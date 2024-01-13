@@ -126,7 +126,9 @@ proc run(config: VerifiedProxyConf) {.raises: [CatchableError].} =
   verifiedProxy.installEthApiHandlers()
 
   info "Listening to incoming network requests"
-  network.initBeaconSync(cfg, forkDigests, genesisBlockRoot, getBeaconTime)
+  network.registerProtocol(
+    PeerSync, PeerSync.NetworkState.init(
+      cfg, forkDigests, genesisBlockRoot, getBeaconTime))
   network.addValidator(
     getBeaconBlocksTopic(forkDigests.phase0),
     proc (signedBlock: phase0.SignedBeaconBlock): ValidationResult =

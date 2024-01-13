@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -101,7 +101,7 @@ proc validatePostState(node: JsonNode, t: TestEnv): bool =
           echo sRes.error
           return false
 
-        if val != sRes.value:
+        if val.w3FixedBytes != sRes.value:
           echo "storage recieved from account 0x",
             account.toHex,
             " at slot 0x",

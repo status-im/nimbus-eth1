@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -14,6 +14,7 @@ import
   chronicles,
   nimcrypto/[hmac],
   web3/engine_api_types,
+  web3/conversions,
   json_rpc/[rpcclient],
   ./types
 
@@ -22,6 +23,9 @@ const
   defaultJwtTokenSecretBytes = "secretsecretsecretsecretsecretse"
   maxTimeDriftSeconds        = 60'i64
   defaultProtectedHeader     = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9"
+
+createRpcSigsFromNim(RpcClient):
+  proc engine_exchangeTransitionConfigurationV1(transitionConfiguration: TransitionConfigurationV1): TransitionConfigurationV1
 
 proc base64urlEncode(x: auto): string =
   base64.encode(x, safe = true).replace("=", "")
@@ -62,7 +66,7 @@ template genAuthTest(procName: untyped, timeDriftSeconds: int64, customAuthSecre
     let client = getClient(env, token)
 
     try:
-      discard waitFor client.call("engine_exchangeTransitionConfigurationV1", %[%tConf])
+      discard waitFor client.engine_exchangeTransitionConfigurationV1(tConf)
       testCond authOk:
         error "Authentication was supposed to fail authentication but passed"
     except CatchableError:

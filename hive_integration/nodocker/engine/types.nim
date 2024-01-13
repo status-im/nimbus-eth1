@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -85,9 +85,6 @@ func timestampToBeaconRoot*(timestamp: Quantity): FixedBytes[32] =
   # Generates a deterministic hash from the timestamp
   let h = keccakHash(timestamp.uint64.toBytesBE)
   FixedBytes[32](h.data)
-
-func beaconRoot*(x: UInt256): FixedBytes[32] =
-  FixedBytes[32](x.toByteArrayBE)
 
 proc randomBytes*(_: type common.Hash256): common.Hash256 =
   doAssert randomBytes(result.data) == 32
@@ -248,7 +245,7 @@ template expectHash*(res: untyped, hash: common.Hash256) =
   testCond s.blockHash == hash:
     error "Unexpected expectHash", expect=hash.short, get=s.blockHash.short
 
-template expectStorageEqual*(res: untyped, expectedValue: UInt256) =
+template expectStorageEqual*(res: untyped, expectedValue: FixedBytes[32]) =
   testCond res.isOk:
     error "expectStorageEqual", msg=res.error
   testCond res.get == expectedValue:

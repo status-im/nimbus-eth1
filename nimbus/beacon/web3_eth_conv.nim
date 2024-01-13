@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -86,6 +86,9 @@ func u64*(x: Option[Web3Quantity]): Option[uint64] =
 func u256*(x: Web3Quantity): UInt256 =
   u256(x.uint64)
 
+func u256*(x: FixedBytes[32]): UInt256 =
+  UInt256.fromBytesBE(x.bytes)
+
 func ethTime*(x: Web3Quantity): common.EthTime =
   common.EthTime(x)
 
@@ -103,7 +106,7 @@ func ethHashes*(list: openArray[Web3Hash]): seq[common.Hash256] =
 func ethHashes*(list: Option[seq[Web3Hash]]): Option[seq[common.Hash256]] =
   if list.isNone: none(seq[common.Hash256])
   else: some ethHashes(list.get)
-  
+
 func ethAddr*(x: Web3Address): common.EthAddress =
   EthAddress x
 
@@ -217,6 +220,9 @@ func w3Qty*(x: Option[uint64]): Option[Web3Quantity] =
 
 func w3Qty*(x: uint64): Web3Quantity =
   Web3Quantity(x)
+
+func w3FixedBytes*(x: UInt256): FixedBytes[32] =
+  FixedBytes[32](x.toBytesBE)
 
 func w3ExtraData*(x: common.Blob): Web3ExtraData =
   Web3ExtraData x

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2020-2023 Status Research & Development GmbH
+# Copyright (c) 2020-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -36,12 +36,14 @@ proc request*(
     params: JsonNode,
     client: Option[RpcClient] = none[RpcClient]()): JsonNode =
   if client.isSome():
-    result = waitFor client.unsafeGet().call(methodName, params)
+    let res = waitFor client.unsafeGet().call(methodName, params)
+    result = JrpcConv.decode(res.string, JsonNode)
   else:
     var client = newRpcHttpClient()
     #client.httpMethod(MethodPost)
     waitFor client.connect("127.0.0.1", Port(8545), false)
-    result = waitFor client.call(methodName, params)
+    let res = waitFor client.call(methodName, params)
+    result = JrpcConv.decode(res.string, JsonNode)
     waitFor client.close()
 
 proc requestBlockBody(

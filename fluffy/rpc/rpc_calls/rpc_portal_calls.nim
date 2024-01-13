@@ -1,3 +1,10 @@
+# Nimbus
+# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Licensed and distributed under either of
+#   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
 ## Portal State Network json-rpc calls
 proc portal_stateNodeInfo(): NodeInfo
 proc portal_stateRoutingTableInfo(): RoutingTableInfo
@@ -6,8 +13,7 @@ proc portal_stateAddEnrs(enrs: seq[Record]): bool
 proc portal_stateGetEnr(nodeId: NodeId): Record
 proc portal_stateDeleteEnr(nodeId: NodeId): bool
 proc portal_stateLookupEnr(nodeId: NodeId): Record
-proc portal_statePing(enr: Record): tuple[
-  enrSeq: uint64, customPayload: string]
+proc portal_statePing(enr: Record): PingResult
 proc portal_stateFindNodes(enr: Record): seq[Record]
 proc portal_stateFindContent(enr: Record, contentKey: string): JsonNode
 proc portal_stateOffer(
@@ -26,8 +32,7 @@ proc portal_historyAddEnrs(enrs: seq[Record]): bool
 proc portal_historyGetEnr(nodeId: NodeId): Record
 proc portal_historyDeleteEnr(nodeId: NodeId): bool
 proc portal_historyLookupEnr(nodeId: NodeId): Record
-proc portal_historyPing(enr: Record): tuple[
-  enrSeq: uint64, customPayload: string]
+proc portal_historyPing(enr: Record): PingResult
 proc portal_historyFindNodes(enr: Record): seq[Record]
 proc portal_historyFindContent(enr: Record, contentKey: string): JsonNode
 proc portal_historyOffer(
@@ -46,8 +51,7 @@ proc portal_beaconAddEnrs(enrs: seq[Record]): bool
 proc portal_beaconGetEnr(nodeId: NodeId): Record
 proc portal_beaconDeleteEnr(nodeId: NodeId): bool
 proc portal_beaconLookupEnr(nodeId: NodeId): Record
-proc portal_beaconPing(enr: Record): tuple[
-  enrSeq: uint64, customPayload: string]
+proc portal_beaconPing(enr: Record): PingResult
 proc portal_beaconFindNodes(enr: Record): seq[Record]
 proc portal_beaconFindContent(enr: Record, contentKey: string): JsonNode
 proc portal_beaconOffer(

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -8,10 +8,10 @@
 # those terms.
 
 import
-  std/[json, os, strutils, typetraits],
+  std/[json, os, typetraits],
   unittest2,
   json_rpc/[rpcserver, rpcclient],
-  web3/[engine_api_types],
+  web3/[engine_api_types, conversions],
   ../nimbus/sync/protocol,
   ../nimbus/rpc,
   ../nimbus/common,
@@ -26,53 +26,38 @@ const
   stepsFile = baseDir / "steps.json"
 
 type
-  Step = ref object
+  StepObj = object
     name: string
-    meth: string
+    `method`: string
     params: JSonNode
-    expect: JsonNode
-    error : bool
+    expect: JsonString
+    error : JsonString
 
-  Steps = ref object
-    list: seq[Step]
+  Step = ref StepObj
+  Steps = seq[Step]
 
-proc parseStep(s: Step, node: JsonNode) =
-  for k, v in node:
-    case k
-    of "name": s.name = v.getStr()
-    of "method": s.meth = v.getStr()
-    of "params": s.params = v
-    of "expect": s.expect = v
-    of "error": s.error = true
-    else:
-      doAssert(false, "unknown key: " & k)
-
-proc parseSteps(node: JsonNode): Steps =
-  let ss = Steps(list: @[])
-  for n in node:
-    let s = Step()
-    s.parseStep(n)
-    ss.list.add s
-  ss
+StepObj.useDefaultSerializationIn JrpcConv
 
 proc forkChoiceUpdate(step: Step, client: RpcClient, testStatusIMPL: var TestStatus) =
-  let arg = step.params[1]
-  if arg.kind == JNull:
-    step.params.elems.setLen(1)
-
-  let res = waitFor client.call(step.meth, step.params)
-  check toLowerAscii($res) == toLowerAscii($step.expect)
+  let jsonBytes = waitFor client.call(step.`method`, step.params)
+  let resA = JrpcConv.decode(jsonBytes.string, ForkchoiceUpdatedResponse)
+  let resB = JrpcConv.decode(step.expect.string, ForkchoiceUpdatedResponse)
+  check resA == resB
 
 proc getPayload(step: Step, client: RpcClient, testStatusIMPL: var TestStatus) =
   try:
-    let res = waitFor client.call(step.meth, step.params)
-    check toLowerAscii($res) == toLowerAscii($step.expect)
+    let jsonBytes = waitFor client.call(step.`method`, step.params)
+    let resA = JrpcConv.decode(jsonBytes.string, ExecutionPayloadV1)
+    let resB = JrpcConv.decode(step.expect.string, ExecutionPayloadV1)
+    check resA == resB
   except CatchableError:
-    check step.error == true
+    check step.error.string.len > 0
 
 proc newPayload(step: Step, client: RpcClient, testStatusIMPL: var TestStatus) =
-  let res = waitFor client.call(step.meth, step.params)
-  check toLowerAscii($res) == toLowerAscii($step.expect)
+  let jsonBytes = waitFor client.call(step.`method`, step.params)
+  let resA = JrpcConv.decode(jsonBytes.string, PayloadStatusV1)
+  let resB = JrpcConv.decode(step.expect.string, PayloadStatusV1)
+  check resA == resB
 
 proc runTest(steps: Steps) =
   let
@@ -107,9 +92,9 @@ proc runTest(steps: Steps) =
   waitFor client.connect("127.0.0.1", conf.rpcPort)
 
   suite "Engine API tests":
-    for i, step in steps.list:
+    for i, step in steps:
       test $i & " " & step.name:
-        case step.meth
+        case step.`method`
         of "engine_forkchoiceUpdatedV1":
           forkChoiceUpdate(step, client, testStatusIMPL)
         of "engine_getPayloadV1":
@@ -117,7 +102,7 @@ proc runTest(steps: Steps) =
         of "engine_newPayloadV1":
           newPayload(step, client, testStatusIMPL)
         else:
-          doAssert(false, "unknown method: " & step.meth)
+          doAssert(false, "unknown method: " & step.`method`)
 
   waitFor client.close()
   waitFor sealingEngine.stop()
@@ -125,8 +110,7 @@ proc runTest(steps: Steps) =
   waitFor rpcServer.closeWait()
 
 proc testEngineAPI() =
-  let node = parseJSON(readFile(stepsFile))
-  let steps = parseSteps(node)
+  let steps = JrpcConv.loadFile(stepsFile, Steps)
   runTest(steps)
 
 proc toId(x: int): PayloadId =

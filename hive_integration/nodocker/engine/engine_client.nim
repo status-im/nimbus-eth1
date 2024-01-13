@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -522,12 +522,12 @@ proc txByHash*(client: RpcClient, txHash: Hash256): Result[RPCTx, string] =
       return err("failed to get transaction: " & txHash.data.toHex)
     return ok(res.toRPCTx)
 
-proc storageAt*(client: RpcClient, address: EthAddress, slot: UInt256): Result[UInt256, string] =
+proc storageAt*(client: RpcClient, address: EthAddress, slot: UInt256): Result[FixedBytes[32], string] =
   wrapTry:
     let res = waitFor client.eth_getStorageAt(w3Addr(address), slot, blockId("latest"))
     return ok(res)
 
-proc storageAt*(client: RpcClient, address: EthAddress, slot: UInt256, number: common.BlockNumber): Result[UInt256, string] =
+proc storageAt*(client: RpcClient, address: EthAddress, slot: UInt256, number: common.BlockNumber): Result[FixedBytes[32], string] =
   wrapTry:
     let res = waitFor client.eth_getStorageAt(w3Addr(address), slot, blockId(number.truncate(uint64)))
     return ok(res)
@@ -562,19 +562,30 @@ proc verifyPoWProgress*(client: RpcClient, lastBlockHash: Hash256): Future[Resul
 
   return err("verify PoW Progress timeout")
 
+type
+  TraceOpts = object
+    disableStorage: bool
+    disableMemory: bool
+    disableState: bool
+    disableStateDiff: bool
+
+TraceOpts.useDefaultSerializationIn JrpcConv
+
+createRpcSigsFromNim(RpcClient):
+  proc debug_traceTransaction(hash: TxHash, opts: TraceOpts): JsonNode
 
 proc debugPrevRandaoTransaction*(client: RpcClient, tx: Transaction, expectedPrevRandao: Hash256): Result[void, string] =
   wrapTry:
     let hash = w3Hash tx.rlpHash
     # we only interested in stack, disable all other elems
-    let opts = %* {
-      "disableStorage": true,
-      "disableMemory": true,
-      "disableState": true,
-      "disableStateDiff": true
-    }
+    let opts = TraceOpts(
+      disableStorage: true,
+      disableMemory: true,
+      disableState: true,
+      disableStateDiff: true
+    )
 
-    let res = waitFor client.call("debug_traceTransaction", %[%hash, opts])
+    let res = waitFor client.debug_traceTransaction(hash, opts)
     let structLogs = res["structLogs"]
 
     var prevRandaoFound = false
@@ -607,8 +618,8 @@ template expectBalanceEqual*(res: Result[UInt256, string], account: EthAddress,
     return err("invalid wd balance at $1, expect $2, get $3" % [
       account.toHex, $expectedBalance, $res.get])
 
-template expectStorageEqual*(res: Result[UInt256, string], account: EthAddress,
-                             expectedValue: UInt256): auto =
+template expectStorageEqual*(res: Result[FixedBytes[32], string], account: EthAddress,
+                             expectedValue: FixedBytes[32]): auto =
   if res.isErr:
     return err(res.error)
   if res.get != expectedValue:

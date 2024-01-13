@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -208,19 +208,19 @@ proc verifyBeaconRootStorage*(client: RpcClient, payload: ExecutionPayload): boo
     error "verifyBeaconRootStorage", msg=r.error
     return false
 
-  if r.get != payload.timestamp.uint64.u256:
+  if r.get.u256 != payload.timestamp.uint64.u256:
     error "verifyBeaconRootStorage storage 1",
       expect=payload.timestamp.uint64.u256,
-      get=r.get
+      get=r.get.u256
     return false
 
   # Verify the beacon root key
   r = client.storageAt(precompileAddress, beaconRootKey, blockNumber)
   let parentBeaconBlockRoot = timestampToBeaconRoot(payload.timestamp)
-  if parentBeaconBlockRoot != beaconRoot(r.get):
+  if parentBeaconBlockRoot != r.get:
     error "verifyBeaconRootStorage storage 2",
       expect=parentBeaconBlockRoot.toHex,
-      get=beaconRoot(r.get).toHex
+      get=r.get.toHex
     return false
 
   return true

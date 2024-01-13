@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2023 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -21,6 +21,8 @@ type
     recipientIP: string
     recipientPort: uint16
 
+PongResponse.useDefaultSerializationIn JrpcConv
+
 proc installDiscoveryApiHandlers*(rpcServer: RpcServer|RpcProxy,
     d: discv5_protocol.Protocol) =
   ## Discovery v5 JSON-RPC API such as defined here:
@@ -30,7 +32,7 @@ proc installDiscoveryApiHandlers*(rpcServer: RpcServer|RpcProxy,
     return d.routingTable.getNodeInfo()
 
   rpcServer.rpc("discv5_updateNodeInfo") do(
-      kvPairs: seq[tuple[key: string, value: string]]) -> NodeInfo:
+      kvPairs: seq[(string, string)]) -> NodeInfo:
     # TODO: Not according to spec, as spec only allows socket address.
     # portal-specs PR has been created with suggested change as is here.
     let enrFields = kvPairs.map(

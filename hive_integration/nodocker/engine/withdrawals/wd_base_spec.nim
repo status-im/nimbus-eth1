@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -162,12 +162,12 @@ proc verifyContractsStorage(ws: WDBaseSpec, env: TestEnv): Result[void, string] 
 
   if latestPayloadNumber.truncate(int) >= ws.forkHeight:
     # Shanghai
-    r.expectStorageEqual(WARM_COINBASE_ADDRESS, 100.u256)    # WARM_STORAGE_READ_COST
-    p.expectStorageEqual(PUSH0_ADDRESS, latestPayloadNumber) # tx succeeded
+    r.expectStorageEqual(WARM_COINBASE_ADDRESS, 100.u256.w3FixedBytes)    # WARM_STORAGE_READ_COST
+    p.expectStorageEqual(PUSH0_ADDRESS, latestPayloadNumber.w3FixedBytes) # tx succeeded
   else:
     # Pre-Shanghai
-    r.expectStorageEqual(WARM_COINBASE_ADDRESS, 2600.u256) # COLD_ACCOUNT_ACCESS_COST
-    p.expectStorageEqual(PUSH0_ADDRESS, 0.u256)            # tx must've failed
+    r.expectStorageEqual(WARM_COINBASE_ADDRESS, 2600.u256.w3FixedBytes) # COLD_ACCOUNT_ACCESS_COST
+    p.expectStorageEqual(PUSH0_ADDRESS, 0.u256.w3FixedBytes)            # tx must've failed
 
   ok()
 

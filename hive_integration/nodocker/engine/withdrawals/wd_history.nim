@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -14,7 +14,8 @@ import
   json_rpc/[rpcclient],
   stew/[byteutils, results],
   ../engine_client,
-  ../../../nimbus/utils/utils
+  ../../../nimbus/utils/utils,
+  ../../../nimbus/beacon/web3_eth_conv
 
 type
   Withdrawals* = ref object
@@ -93,7 +94,7 @@ proc verifyWithdrawals*(wh: WDHistory, blockNumber: uint64, rpcBlock: Option[UIn
               client.storageAt(account, 0.u256, rpcBlock.get)
             else:
               client.storageAt(account, 0.u256)
-    s.expectStorageEqual(account, 0.u256)
+    s.expectStorageEqual(account, 0.u256.w3FixedBytes)
   ok()
 
 # Create a new copy of the withdrawals history

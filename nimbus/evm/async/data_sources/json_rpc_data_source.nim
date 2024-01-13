@@ -25,16 +25,19 @@ import
   ../../../sync/protocol,
   ../../../db/[core_db, distinct_tries, incomplete_db, storage_types],
   ../data_sources,
-  ../../../beacon/web3_eth_conv
+  ../../../beacon/web3_eth_conv,
+  web3/conversions,
+  web3
 
 when defined(legacy_eth66_enabled):
   import
     ../../../sync/protocol/eth66 as proto_eth66
   from ../../../sync/protocol/eth66 import getNodeData
 
-from web3 import Web3, BlockHash, BlockObject, FixedBytes, Address, ProofResponse, StorageProof, newWeb3, fromJson, fromHex, eth_getBlockByHash, eth_getBlockByNumber, eth_getCode, eth_getProof, blockId, `%`
-
 export AsyncOperationFactory, AsyncDataSource
+
+type
+  BlockHeader = eth_types.BlockHeader
 
 var durationSpentDoingFetches*: times.Duration
 var fetchCounter*: int

@@ -1,4 +1,4 @@
-# Copyright (c) 2022-2023 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -8,10 +8,9 @@
 
 
 import
-  std/[options, strutils, typetraits],
+  std/[options, typetraits],
   unittest2,
   eth/[common/eth_types],
-  nimcrypto/hash,
   stew/byteutils,
   ../nimbus/rpc/filters,
   ../nimbus/beacon/web3_eth_conv,
@@ -36,52 +35,52 @@ proc filtersMain*() =
           log.logIndex.unsafeGet() == w3Qty(i.uint64)
 
     test "Filter with empty parameters should return all logs":
-      let addrs = newSeq[EthAddress]()
-      let filtered = filterLogs(allLogs, addrs, @[])
+      let addrs = newSeq[Address]()
+      let filtered = filterLogs(allLogs, AddressOrList(kind: slkList, list: addrs), @[])
       check:
         len(filtered) == len(allLogs)
 
     test "Filter and BloomFilter for one address with one valid log":
-      let address = hexToByteArray[20]("0x0e0989b1f9b8a38983c2ba8053269ca62ec9b195")
-      let filteredLogs = filterLogs(allLogs, @[address], @[])
+      let address = Address.fromHex("0x0e0989b1f9b8a38983c2ba8053269ca62ec9b195")
+      let filteredLogs = filterLogs(allLogs, AddressOrList(kind: slkList, list: @[address]), @[])
 
       check:
-        headerBloomFilter(blockHeader4514995, @[address], @[])
+        headerBloomFilter(blockHeader4514995, AddressOrList(kind: slkList, list:  @[address]), @[])
         len(filteredLogs) == 1
-        filteredLogs[0].address == w3Addr address
+        filteredLogs[0].address == address
 
     test "Filter and BloomFilter for one address with multiple valid logs":
-      let address = hexToByteArray[20]("0x878d7ed5c194349f37b18688964e8db1eb0fcca1")
-      let filteredLogs = filterLogs(allLogs, @[address], @[])
+      let address = Address.fromHex("0x878d7ed5c194349f37b18688964e8db1eb0fcca1")
+      let filteredLogs = filterLogs(allLogs, AddressOrList(kind: slkSingle, single: address), @[])
 
       check:
-        headerBloomFilter(blockHeader4514995, @[address], @[])
+        headerBloomFilter(blockHeader4514995, AddressOrList(kind: slkList, list: @[address]), @[])
         len(filteredLogs) == 2
 
       for log in filteredLogs:
         check:
-          log.address == w3Addr address
+          log.address == address
 
     test "Filter and BloomFilter for multiple address with multiple valid logs":
-      let address = hexToByteArray[20]("0x878d7ed5c194349f37b18688964e8db1eb0fcca1")
-      let address1 = hexToByteArray[20]("0x0e0989b1f9b8a38983c2ba8053269ca62ec9b195")
-      let filteredLogs = filterLogs(allLogs, @[address, address1], @[])
+      let address = Address.fromHex("0x878d7ed5c194349f37b18688964e8db1eb0fcca1")
+      let address1 = Address.fromHex("0x0e0989b1f9b8a38983c2ba8053269ca62ec9b195")
+      let filteredLogs = filterLogs(allLogs, AddressOrList(kind: slkList, list: @[address, address1]), @[])
 
       check:
-        headerBloomFilter(blockHeader4514995, @[address, address1], @[])
+        headerBloomFilter(blockHeader4514995, AddressOrList(kind: slkList, list: @[address, address1]), @[])
         len(filteredLogs) == 3
 
     test "Filter topics, too many filters":
       let filteredLogs =
         filterLogs(
           allLogs,
-          @[],
+          AddressOrList(kind: slkList, list: @[]),
           @[
-            none[seq[Web3Hash]](),
-            none[seq[Web3Hash]](),
-            none[seq[Web3Hash]](),
-            none[seq[Web3Hash]](),
-            none[seq[Web3Hash]]()
+            TopicOrList(kind: slkNull),
+            TopicOrList(kind: slkNull),
+            TopicOrList(kind: slkNull),
+            TopicOrList(kind: slkNull),
+            TopicOrList(kind: slkNull)
           ]
         )
 
@@ -94,8 +93,8 @@ proc filtersMain*() =
       let filteredLogs =
         filterLogs(
           allLogs,
-          @[],
-          @[some(@[topic])]
+          AddressOrList(kind: slkList, list: @[]),
+          @[TopicOrList(kind: slkList, list: @[topic])]
         )
 
       check:
@@ -113,8 +112,8 @@ proc filtersMain*() =
       let filteredLogs =
         filterLogs(
           allLogs,
-          @[],
-          @[some(@[topic]), some(@[topic1])]
+          AddressOrList(kind: slkList, list: @[]),
+          @[TopicOrList(kind: slkList, list: @[topic]), TopicOrList(kind: slkList, list: @[topic1])]
         )
 
       check:
@@ -133,8 +132,12 @@ proc filtersMain*() =
       let filteredLogs =
         filterLogs(
           allLogs,
-          @[],
-          @[some(@[topic]), none[seq[Web3Hash]](), some(@[topic1])]
+          AddressOrList(kind: slkList, list: @[]),
+          @[
+            TopicOrList(kind: slkList, list: @[topic]),
+            TopicOrList(kind: slkNull),
+            TopicOrList(kind: slkList, list: @[topic1])
+          ]
         )
 
       check:
@@ -152,9 +155,9 @@ proc filtersMain*() =
       let filteredLogs =
         filterLogs(
           allLogs,
-          @[],
+          AddressOrList(kind: slkList, list: @[]),
           @[
-            some(@[topic, topic1])
+            TopicOrList(kind: slkList, list: @[topic, topic1])
           ]
         )
 
@@ -175,10 +178,10 @@ proc filtersMain*() =
       let filteredLogs =
         filterLogs(
           allLogs,
-          @[],
+          AddressOrList(kind: slkNull),
           @[
-            some(@[topic, topic1]),
-            some(@[topic2, topic3])
+            TopicOrList(kind: slkList, list: @[topic, topic1]),
+            TopicOrList(kind: slkList, list: @[topic2, topic3])
           ]
         )
 
@@ -193,7 +196,7 @@ proc filtersMain*() =
     # general propety based tests
     test "Specific address query should provide results only with given address":
       for log in allLogs:
-        let filtered = filterLogs(allLogs, @[log.address], @[])
+        let filtered = filterLogs(allLogs, AddressOrList(kind: slkSingle, single: log.address), @[])
 
         check:
           len(filtered) > 0

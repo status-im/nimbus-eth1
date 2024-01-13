@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2019-2023 Status Research & Development GmbH
+# Copyright (c) 2019-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -65,7 +65,7 @@ proc captureAccount(n: JsonNode, db: LedgerRef, address: EthAddress, name: strin
   let codeHash = db.getCodeHash(address)
   let storageRoot = db.getStorageRoot(address)
 
-  jaccount["nonce"] = %(nonce.Web3Quantity)
+  jaccount["nonce"] = %(conversions.`$`(nonce.Web3Quantity))
   jaccount["balance"] = %("0x" & balance.toHex)
 
   let code = db.getCode(address)

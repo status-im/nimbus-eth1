@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -9,7 +9,7 @@
 
 import
   std/json,
-  json_rpc/rpcserver, 
+  json_rpc/rpcserver,
   ./rpc_utils,
   ./rpc_types,
   ../tracer, ../vm_types,
@@ -26,6 +26,8 @@ type
     disableStack: Option[bool]
     disableState: Option[bool]
     disableStateDiff: Option[bool]
+
+TraceOptions.useDefaultSerializationIn JrpcConv
 
 proc isTrue(x: Option[bool]): bool =
   result = x.isSome and x.get() == true

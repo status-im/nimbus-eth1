@@ -1,4 +1,4 @@
-# Copyright (c) 2022-2023 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -17,7 +17,8 @@ import
   eth/p2p/discoveryv5/enr,
   eth/utp/[utp_discv5_protocol, utp_router],
   eth/keys,
-  ../../rpc/rpc_discovery_api
+  ../../rpc/rpc_discovery_api,
+  ./utp_rpc_types
 
 const
   defaultListenAddress* = (static parseIpAddress("127.0.0.1"))
@@ -43,49 +44,14 @@ type AppConf* = object
     desc: "RPC listening address"
     name: "rpc-listen-address" .}: IpAddress
 
-proc `%`*(value: enr.Record): JsonNode =
-  newJString(value.toURI())
+proc writeValue*(w: var JsonWriter[JrpcConv], v: Record)
+      {.gcsafe, raises: [IOError].} =
+  w.writeValue(v.toURI())
 
-proc fromJson*(n: JsonNode, argName: string, result: var Record)
-    {.raises: [ValueError].} =
-  n.kind.expect(JString, argName)
-  echo "ENr looks " & n.getStr()
-
-  if not fromURI(result, n.getStr()):
-    raise newException(ValueError, "Invalid ENR")
-
-type SKey = object
-  id: uint16
-  nodeId: NodeId
-
-proc `%`*(value: SKey): JsonNode =
-  let hex = value.nodeId.toBytesBE().toHex()
-  let numId = value.id.toBytesBE().toHex()
-  let finalStr = hex & numId
-  newJString(finalStr)
-
-proc fromJson*(n: JsonNode, argName: string, result: var SKey)
-    {.raises: [ValueError].} =
-  n.kind.expect(JString, argName)
-  let str = n.getStr()
-  let strLen = len(str)
-  if (strLen >= 64):
-    let nodeIdStr = str.substr(0, 63)
-    let connIdStr = str.substr(64)
-    let nodeId = NodeId.fromHex(nodeIdStr)
-    let connId = uint16.fromBytesBE(connIdStr.hexToSeqByte())
-    result = SKey(nodeId: nodeId, id: connId)
-  else:
-    raise newException(ValueError, "Too short string")
-
-proc hash(x: SKey): Hash =
-  var h = 0
-  h = h !& x.id.hash
-  h = h !& x.nodeId.hash
-  !$h
-
-func toSKey(k: UtpSocketKey[NodeAddress]): SKey =
-  SKey(id: k.rcvId, nodeId: k.remoteAddress.nodeId)
+proc readValue*(r: var JsonReader[JrpcConv], val: var Record)
+       {.gcsafe, raises: [IOError, JsonReaderError].} =
+  if not fromURI(val, r.parseString()):
+    r.raiseUnexpectedValue("Invalid ENR")
 
 proc installUtpHandlers(
   srv: RpcHttpServer,

@@ -59,7 +59,7 @@ proc setupEthRpc*(
   server.rpc("eth_chainId") do() -> Web3Quantity:
     return w3Qty(distinctBase(com.chainId))
 
-  server.rpc("eth_syncing") do() -> JsonNode:
+  server.rpc("eth_syncing") do() -> SyncingStatus:
     ## Returns SyncObject or false when not syncing.
     # TODO: make sure we are not syncing
     # when we reach the recent block
@@ -70,9 +70,9 @@ proc setupEthRpc*(
         currentBlock : w3Qty com.syncCurrent,
         highestBlock : w3Qty com.syncHighest
       )
-      result = %sync
+      result = SyncingStatus(syncing: true, syncObject: sync)
     else:
-      result = newJBool(false)
+      result = SyncingStatus(syncing: false)
 
   server.rpc("eth_coinbase") do() -> Web3Address:
     ## Returns the current coinbase address.
@@ -114,7 +114,7 @@ proc setupEthRpc*(
       address = data.ethAddr
     result = accDB.getBalance(address)
 
-  server.rpc("eth_getStorageAt") do(data: Web3Address, slot: UInt256, quantityTag: BlockTag) -> UInt256:
+  server.rpc("eth_getStorageAt") do(data: Web3Address, slot: UInt256, quantityTag: BlockTag) -> FixedBytes[32]:
     ## Returns the value from a storage position at a given address.
     ##
     ## data: address of the storage.
@@ -124,7 +124,7 @@ proc setupEthRpc*(
     let
       accDB   = stateDBFromTag(quantityTag)
       address = data.ethAddr
-    result = accDB.getStorage(address, slot)[0]
+    result = accDB.getStorage(address, slot)[0].w3FixedBytes
 
   server.rpc("eth_getTransactionCount") do(data: Web3Address, quantityTag: BlockTag) -> Web3Quantity:
     ## Returns the number of transactions sent from an address.
@@ -279,7 +279,7 @@ proc setupEthRpc*(
       res      = rpcCallEvm(callData, header, com)
     result = res.output
 
-  server.rpc("eth_estimateGas") do(call: EthCall, quantityTag: BlockTag) -> Web3Quantity:
+  server.rpc("eth_estimateGas") do(call: EthCall) -> Web3Quantity:
     ## Generates and returns an estimate of how much gas is necessary to allow the transaction to complete.
     ## The transaction will not be added to the blockchain. Note that the estimate may be significantly more than
     ## the amount of gas actually used by the transaction, for a variety of reasons including EVM mechanics and node performance.
@@ -288,7 +288,8 @@ proc setupEthRpc*(
     ## quantityTag:  integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns the amount of gas used.
     let
-      header   = chainDB.headerFromTag(quantityTag)
+      # TODO: use latest spec EthCall
+      header   = chainDB.headerFromTag(blockId("latest"))
       callData = callData(call)
       # TODO: DEFAULT_RPC_GAS_CAP should configurable
       gasUsed  = rpcEstimateGas(callData, header, com, DEFAULT_RPC_GAS_CAP)
@@ -492,7 +493,7 @@ proc setupEthRpc*(
       # would operate on this enum instead of raw strings. This change would need
       # to be done on every endpoint to be consistent.
       let fromHeader = chainDB.headerFromTag(filterOptions.fromBlock)
-      let toHeader = chainDB.headerFromTag(filterOptions.fromBlock)
+      let toHeader = chainDB.headerFromTag(filterOptions.toBlock)
 
       # Note: if fromHeader.blockNumber > toHeader.blockNumber, no logs will be
       # returned. This is consistent with, what other ethereum clients return

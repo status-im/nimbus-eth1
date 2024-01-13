@@ -1,4 +1,4 @@
-# Copyright (c) 2022-2023 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -8,37 +8,39 @@
 
 
 import
-  std/hashes,
+  std/[hashes, json],
   json_rpc/jsonmarshal,
   stew/[byteutils, endians2],
   eth/p2p/discoveryv5/node,
   eth/utp/[utp_discv5_protocol, utp_router]
 
-export jsonmarshal
+export jsonmarshal, json
 
 type SKey* = object
   id*: uint16
   nodeId*: NodeId
 
-proc `%`*(value: SKey): JsonNode =
-  let hex = value.nodeId.toBytesBE().toHex()
-  let numId = value.id.toBytesBE().toHex()
+proc writeValue*(w: var JsonWriter[JrpcConv], v: SKey)
+      {.gcsafe, raises: [IOError].} =
+  let hex = v.nodeId.toBytesBE().toHex()
+  let numId = v.id.toBytesBE().toHex()
   let finalStr = hex & numId
-  newJString(finalStr)
+  w.writeValue(finalStr)
 
-proc fromJson*(n: JsonNode, argName: string, result: var SKey)
-    {.raises: [ValueError].} =
-  n.kind.expect(JString, argName)
-  let str = n.getStr()
-  let strLen = len(str)
-  if (strLen >= 64):
+proc readValue*(r: var JsonReader[JrpcConv], val: var SKey)
+       {.gcsafe, raises: [IOError, JsonReaderError].} =
+  let str = r.parseString()
+  if str.len < 64:
+    r.raiseUnexpectedValue("SKey: too short string")
+
+  try:
     let nodeIdStr = str.substr(0, 63)
     let connIdStr = str.substr(64)
     let nodeId = NodeId.fromHex(nodeIdStr)
     let connId = uint16.fromBytesBE(connIdStr.hexToSeqByte())
-    result = SKey(nodeId: nodeId, id: connId)
-  else:
-    raise newException(ValueError, "Too short string")
+    val = SKey(nodeId: nodeId, id: connId)
+  except ValueError as exc:
+    r.raiseUnexpectedValue("Skey parser error: " & exc.msg)
 
 proc hash*(x: SKey): Hash =
   var h = 0
