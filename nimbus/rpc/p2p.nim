@@ -29,6 +29,40 @@ type
   BlockHeader = eth_types.BlockHeader
   Hash256 = eth_types.Hash256
 
+proc getProof*(
+    accDB: ReadOnlyStateDB,
+    address: EthAddress,
+    slots: seq[UInt256]): ProofResponse {.raises: [RlpError].} =
+  let
+    acc = accDB.getAccount(address)
+    accExists = accDB.accountExists(address)
+    accountProof = accDB.getAccountProof(address)
+    slotProofs = accDB.getStorageProof(address, slots)
+
+  var storage = newSeqOfCap[StorageProof](slots.len)
+
+  for i, slotKey in slots:
+    let (slotValue, _) = accDB.getStorage(address, u256(slotKey))
+    storage.add(StorageProof(
+        key: u256(slotKey),
+        value: slotValue,
+        proof: seq[RlpEncodedBytes](slotProofs[i])))
+
+  if accExists:
+    ProofResponse(
+          address: w3Addr(address),
+          accountProof: seq[RlpEncodedBytes](accountProof),
+          balance: acc.balance,
+          nonce: w3Qty(acc.nonce),
+          codeHash: w3Hash(acc.codeHash),
+          storageHash: w3Hash(acc.storageRoot),
+          storageProof: storage)
+  else:
+    ProofResponse(
+          address: w3Addr(address),
+          accountProof: seq[RlpEncodedBytes](accountProof),
+          storageProof: storage)
+
 proc setupEthRpc*(
     node: EthereumNode, ctx: EthContext, com: CommonRef,
     txPool: TxPoolRef, server: RpcServer) =
@@ -504,6 +538,8 @@ proc setupEthRpc*(
       )
       return logs
 
+
+
   server.rpc("eth_getProof") do(data: Web3Address, slots: seq[UInt256], quantityTag: BlockTag) -> ProofResponse:
     ## Returns information about an account and storage slots (if the account is a contract
     ## and the slots are requested) along with account and storage proofs which prove the
@@ -518,34 +554,8 @@ proc setupEthRpc*(
     let
       accDB = stateDBFromTag(quantityTag)
       address = data.ethAddr
-      acc = accDB.getAccount(address)
-      accExists = accDB.accountExists(address)
-      accountProof = accDB.getAccountProof(address)
-      slotProofs = accDB.getStorageProof(address, slots)
 
-    var storage = newSeqOfCap[StorageProof](slots.len)
-
-    for i, slotKey in slots:
-      let (slotValue, _) = accDB.getStorage(address, u256(slotKey))
-      storage.add(StorageProof(
-          key: u256(slotKey),
-          value: slotValue,
-          proof: seq[RlpEncodedBytes](slotProofs[i])))
-
-    if accExists:
-      ProofResponse(
-            address: w3Addr(address),
-            accountProof: seq[RlpEncodedBytes](accountProof),
-            balance: acc.balance,
-            nonce: w3Qty(acc.nonce),
-            codeHash: w3Hash(acc.codeHash),
-            storageHash: w3Hash(acc.storageRoot),
-            storageProof: storage)
-    else:
-      ProofResponse(
-            address: w3Addr(address),
-            accountProof: seq[RlpEncodedBytes](accountProof),
-            storageProof: storage)
+    getProof(accDB, address, slots)
 
 #[
   server.rpc("eth_newFilter") do(filterOptions: FilterOptions) -> int:
