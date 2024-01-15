@@ -18,14 +18,6 @@ type
   AccountProof* = distinct MptProof
   StorageProof* = distinct MptProof
 
-  BlockWitness* = seq[byte]
-
-  AccountData* = object
-    account*: Account
-    code*   : seq[byte]
-    storage*: Table[UInt256, UInt256]
-
-
 proc getBranch*(
     self: AccountState;
     key: openArray[byte]): seq[seq[byte]] {.borrow.}
