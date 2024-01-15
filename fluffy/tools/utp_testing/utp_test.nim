@@ -1,5 +1,5 @@
-# Nimbus
-# Copyright (c) 2022-2023 Status Research & Development GmbH
+# Fluffy
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -10,13 +10,13 @@ import
   unittest2, testutils, chronos,
   json_rpc/rpcclient, stew/byteutils,
   eth/keys,
-  ./utp_test_client
+  ./utp_test_rpc_client
 
 proc generateBytesHex(rng: var HmacDrbgContext, length: int): string =
   rng.generateBytes(length).toHex()
 
-# Before running the test suite, there need to be two instances of the
-# utp_test_app running under provided ports (9042, 9041).
+# Before running this test suite, there need to be two instances of the
+# utp_test_app running under the tested ports: 9042, 9041.
 # Those could be launched locally by running either
 # ./utp_test_app --udp-listen-address=127.0.0.1 --rpc-listen-address=0.0.0.0 --udp-port=9041 --rpc-port=9041
 # ./utp_test_app --udp-listen-address=127.0.0.1 --rpc-listen-address=0.0.0.0 --udp-port=9042 --rpc-port=9042
@@ -24,13 +24,15 @@ proc generateBytesHex(rng: var HmacDrbgContext, length: int): string =
 # running from docker dir:
 # 1. docker build -t test-utp --no-cache --build-arg BRANCH_NAME=branch-name .
 # 2. SCENARIO="scenario name and params " docker-compose up
-procSuite "uTP integration tests":
-  let rng = newRng()
-  let clientContainerAddress = "127.0.0.1"
-  let clientContainerPort = Port(9042)
 
-  let serverContainerAddress = "127.0.0.1"
-  let serverContainerPort = Port(9041)
+procSuite "uTP network simulator tests":
+  const
+    clientContainerAddress = "127.0.0.1"
+    clientContainerPort = Port(9042)
+    serverContainerAddress = "127.0.0.1"
+    serverContainerPort = Port(9041)
+
+  let rng = newRng()
 
   type
     FutureCallback[A] = proc (): Future[A] {.gcsafe, raises: [].}
@@ -56,9 +58,9 @@ procSuite "uTP integration tests":
         raise canc
 
   proc findServerConnection(
-    connections: openArray[SKey],
-    clientId: NodeId,
-    clientConnectionId: uint16): Option[Skey] =
+      connections: openArray[SKey],
+      clientId: NodeId,
+      clientConnectionId: uint16): Option[Skey] =
     let conns: seq[SKey] =
       connections.filter((key:Skey) => key.id == (clientConnectionId + 1) and
         key.nodeId == clientId)
@@ -75,20 +77,20 @@ procSuite "uTP integration tests":
     await client.connect(clientContainerAddress, clientContainerPort, false)
     await server.connect(serverContainerAddress, serverContainerPort, false)
 
-    # we may need to retry few times if the simm is not ready yet
+    # we may need to retry few times if the sim is not ready yet
     let clientInfo = await repeatTillSuccess(() => client.discv5_nodeInfo(), 10)
-
     let serverInfo = await repeatTillSuccess(() => server.discv5_nodeInfo(), 10)
 
-    # nodes need to have established session before the utp try
+    # nodes need to have an established discv5 session before the uTP test
     discard await repeatTillSuccess(() => client.discv5_ping(serverInfo.enr))
 
     return (client, clientInfo, server, serverInfo)
 
-  asyncTest "Transfer 100k bytes of data over utp stream from client to server":
-    let (client, clientInfo, server, serverInfo) = await setupTest()
-    let numOfBytes = 100000
+  asyncTest "100kb transfer from client to server":
+    const amountOfBytes = 100_000
+
     let
+      (client, clientInfo, server, serverInfo) = await setupTest()
       clientConnectionKey = await repeatTillSuccess(() =>
         client.utp_connect(serverInfo.enr))
       serverConnections = await repeatTillSuccess(() =>
@@ -99,24 +101,24 @@ procSuite "uTP integration tests":
     check:
       maybeServerConnectionKey.isSome()
 
-    let serverConnectionKey = maybeServerConnectionKey.unsafeGet()
-
     let
-      bytesToWrite = generateBytesHex(rng[], numOfBytes)
+      serverConnectionKey = maybeServerConnectionKey.unsafeGet()
+      bytesToWrite = generateBytesHex(rng[], amountOfBytes)
       writeRes = await client.utp_write(clientConnectionKey, bytesToWrite)
-      readData = await server.utp_read(serverConnectionKey, numOfBytes)
+      dataRead = await server.utp_read(serverConnectionKey, amountOfBytes)
 
     check:
       writeRes == true
-      readData == bytesToWrite
+      dataRead == bytesToWrite
 
-  asyncTest "Transfer 100k bytes of data over utp stream from server to client":
+  asyncTest "100kb transfer from server to client":
     # In classic uTP this would not be possible, as when uTP works over UDP the
     # client needs to transfer first, but when working over discv5 it should be
     # possible to transfer data from server to client from the start.
-    let (client, clientInfo, server, serverInfo) = await setupTest()
-    let numOfBytes = 100000
+    const amountOfBytes = 100_000
+
     let
+      (client, clientInfo, server, serverInfo) = await setupTest()
       clientConnectionKey = await repeatTillSuccess(() =>
         client.utp_connect(serverInfo.enr))
       serverConnections = await repeatTillSuccess(() =>
@@ -127,21 +129,23 @@ procSuite "uTP integration tests":
     check:
       maybeServerConnectionKey.isSome()
 
-    let serverConnectionKey = maybeServerConnectionKey.unsafeGet()
-
     let
-      bytesToWrite = generateBytesHex(rng[], numOfBytes)
+      serverConnectionKey = maybeServerConnectionKey.unsafeGet()
+      bytesToWrite = generateBytesHex(rng[], amountOfBytes)
       writeRes = await server.utp_write(serverConnectionKey, bytesToWrite)
-      readData = await client.utp_read(clientConnectionKey, numOfBytes)
+      dataRead = await client.utp_read(clientConnectionKey, amountOfBytes)
 
     check:
       writeRes == true
-      readData == bytesToWrite
+      dataRead == bytesToWrite
 
-  asyncTest "Multiple 10k bytes transfers over utp stream":
-    let (client, clientInfo, server, serverInfo) = await setupTest()
-    let numOfBytes = 10000
+  asyncTest "Multiple 10kb transfers from client to server":
+    const
+      amountOfBytes = 10_000
+      amountOfTransfers = 3
+
     let
+      (client, clientInfo, server, serverInfo) = await setupTest()
       clientConnectionKey = await repeatTillSuccess(() =>
         client.utp_connect(serverInfo.enr))
       serverConnections = await repeatTillSuccess(() =>
@@ -154,71 +158,47 @@ procSuite "uTP integration tests":
 
     let serverConnectionKey = maybeServerConnectionKey.unsafeGet()
 
-    let
-      bytesToWrite = generateBytesHex(rng[], numOfBytes)
-      bytesToWrite1 = generateBytesHex(rng[], numOfBytes)
-      bytesToWrite2 = generateBytesHex(rng[], numOfBytes)
-      writeRes = await client.utp_write(clientConnectionKey, bytesToWrite)
-      writeRes1 = await client.utp_write(clientConnectionKey, bytesToWrite1)
-      writeRes2 = await client.utp_write(clientConnectionKey, bytesToWrite2)
-      readData = await server.utp_read(serverConnectionKey, numOfBytes * 3)
+    var totalBytesToWrite: string
+    for i in 0..<amountOfTransfers:
+      let
+        bytesToWrite = generateBytesHex(rng[], amountOfBytes)
+        writeRes = await client.utp_write(clientConnectionKey, bytesToWrite)
 
-    let writtenData = join(@[bytesToWrite, bytesToWrite1, bytesToWrite2])
+      check writeRes == true
+      totalBytesToWrite.add(bytesToWrite)
 
-    check:
-      writeRes == true
-      writeRes1 == true
-      writeRes2 == true
-      readData == writtenData
+    let dataRead = await server.utp_read(
+      serverConnectionKey, amountOfBytes * amountOfTransfers)
 
-  asyncTest "Handle mulitplie sockets over one utp server instance ":
+    check dataRead == totalBytesToWrite
+
+  asyncTest "Multiple 10kb transfers over multiple sockets from client to server":
+    const
+      amountOfBytes = 10_000
+      amountOfSockets = 3
+
     let (client, clientInfo, server, serverInfo) = await setupTest()
-    let numOfBytes = 10000
-    let
-      clientConnectionKey1 = await repeatTillSuccess(() =>
-        client.utp_connect(serverInfo.enr))
-      clientConnectionKey2 = await repeatTillSuccess(() =>
-        client.utp_connect(serverInfo.enr))
-      clientConnectionKey3 = await repeatTillSuccess(() =>
-        client.utp_connect(serverInfo.enr))
-      serverConnections = await repeatTillSuccess(() =>
-        server.utp_get_connections())
 
-      maybeServerConnectionKey1 = serverConnections.findServerConnection(
-        clientInfo.nodeId, clientConnectionKey1.id)
-      maybeServerConnectionKey2 = serverConnections.findServerConnection(
-        clientInfo.nodeId, clientConnectionKey2.id)
-      maybeServerConnectionKey3 = serverConnections.findServerConnection(
-        clientInfo.nodeId, clientConnectionKey3.id)
+    var connectionKeys: seq[(SKey, SKey)]
+    for i in 0..<amountOfSockets:
+      let
+        clientConnectionKey = await repeatTillSuccess(() =>
+          client.utp_connect(serverInfo.enr))
+        serverConnections = await repeatTillSuccess(() =>
+          server.utp_get_connections())
+        serverConnectionKeyRes = serverConnections.findServerConnection(
+          clientInfo.nodeId, clientConnectionKey.id)
 
-    check:
-      maybeServerConnectionKey1.isSome()
-      maybeServerConnectionKey2.isSome()
-      maybeServerConnectionKey3.isSome()
+      check serverConnectionKeyRes.isSome()
 
-    let serverConnectionKey1 = maybeServerConnectionKey1.unsafeGet()
-    let serverConnectionKey2 = maybeServerConnectionKey2.unsafeGet()
-    let serverConnectionKey3 = maybeServerConnectionKey3.unsafeGet()
+      connectionKeys.add((clientConnectionKey, serverConnectionKeyRes.unsafeGet()))
 
-    let
-      bytesToWrite1 = generateBytesHex(rng[], numOfBytes)
-      bytesToWrite2 = generateBytesHex(rng[], numOfBytes)
-      bytesToWrite3 = generateBytesHex(rng[], numOfBytes)
+    for (clientConnectionKey, serverConnectionKey) in connectionKeys:
+      let
+        bytesToWrite = generateBytesHex(rng[], amountOfBytes)
+        writeRes = await client.utp_write(clientConnectionKey, bytesToWrite)
+        dataRead = await server.utp_read(serverConnectionKey, amountOfBytes)
 
-      writeRes1 = await client.utp_write(clientConnectionKey1, bytesToWrite1)
-      writeRes2 = await client.utp_write(clientConnectionKey2, bytesToWrite2)
-      writeRes3 = await client.utp_write(clientConnectionKey3, bytesToWrite3)
-
-      readData1 = await server.utp_read(serverConnectionKey1, numOfBytes)
-      readData2 = await server.utp_read(serverConnectionKey2, numOfBytes)
-      readData3 = await server.utp_read(serverConnectionKey3, numOfBytes)
-
-    check:
-      writeRes1 == true
-      writeRes2 == true
-      writeRes3 == true
-
-      # all data was delivered to correct sockets
-      readData1 == bytesToWrite1
-      readData2 == bytesToWrite2
-      readData3 == bytesToWrite3
+      check:
+        writeRes == true
+        dataRead == bytesToWrite

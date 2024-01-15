@@ -1,9 +1,9 @@
-# uTP testing infrastructure 
+# uTP testing infrastructure
 
 Testing infrastructure which enables to test uTP implementation over different
-network conditions on local machine.
+network conditions on a local machine.
 
-Highly based on tools developed to test quic protocol:
+Uses following tools developed to test the QUIC protocol:
 
 [quic-interop-runner](https://github.com/marten-seemann/quic-interop-runner)
 
@@ -11,19 +11,20 @@ Highly based on tools developed to test quic protocol:
 
 ## Prerequisities
 
-- Machine with docker installed
+- Machine with Docker installed
 
 - nimbus-eth1 set-up to run `make utp_test`
 
 ## How it works
 
-Test setup uses docker compose to start 3 docker containers:
-- client - which is instance of uTP test app
-- server - which is instance of uTP test app
-- sim - which is instance with ns3 network simulator with several pre-compiled scenarios
+Test setup uses Docker Compose to start 3 Docker containers:
+- uTP client - which is an instance of the `utp_test_app`
+- uTP server - which is an instance of the `utp_test_app`
+- sim - which is an instance of the ns3 network simulator with several pre-compiled scenarios
 
-The networking is setup in such way that network traffic is routed from client to server
-and server to client thorugh sim which decideds what to do with flowing packets
+The networking is set up in such way that network traffic is routed from client to server
+and server to client through the simulator.
+The simulator decides what to do with packets passing through based on the selected scneario.
 
 Explanation from [quic-network-simulator](https://github.com/marten-seemann/quic-network-simulator):
 
@@ -38,9 +39,9 @@ simulation sits in the middle and forwards packets between `leftnet` and
 
 ## Practicalities
 
-For now process is semi-manual (TODO automate this as much as possible)
+For now the process is semi-manual (TODO automate this as much as possible)
 
-To run integration testing scenarios with different network conditions
+To run integration testing scenarios with different network conditions:
 
 ```
 1. cd nimbus-eth1/
