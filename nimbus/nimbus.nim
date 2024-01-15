@@ -283,6 +283,8 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
       setupEthRpc(nimbus.ethNode, nimbus.ctx, com, nimbus.txPool, nimbus.rpcServer)
     if RpcFlag.Debug in rpcFlags:
       setupDebugRpc(com, nimbus.rpcServer)
+    if RpcFlag.Exp in rpcFlags:
+      setupExpRpc(com, nimbus.rpcServer)
 
     nimbus.rpcServer.rpc("admin_quit") do() -> string:
       {.gcsafe.}:
@@ -322,6 +324,8 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
       setupEthRpc(nimbus.ethNode, nimbus.ctx, com, nimbus.txPool, nimbus.wsRpcServer)
     if RpcFlag.Debug in wsFlags:
       setupDebugRpc(com, nimbus.wsRpcServer)
+    if RpcFlag.Exp in wsFlags:
+      setupExpRpc(com, nimbus.rpcServer)
 
     nimbus.wsRpcServer.start()
 

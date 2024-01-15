@@ -538,8 +538,6 @@ proc setupEthRpc*(
       )
       return logs
 
-
-
   server.rpc("eth_getProof") do(data: Web3Address, slots: seq[UInt256], quantityTag: BlockTag) -> ProofResponse:
     ## Returns information about an account and storage slots (if the account is a contract
     ## and the slots are requested) along with account and storage proofs which prove the

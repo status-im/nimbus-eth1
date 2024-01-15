@@ -26,16 +26,11 @@ import
   ../../stateless/witness_verification,
   ./p2p
 
-
-
 type
   BlockHeader = eth_types.BlockHeader
   ReadOnlyStateDB = state_db.ReadOnlyStateDB
 
-
-proc setupExpRpc*(
-    node: EthereumNode, ctx: EthContext, com: CommonRef,
-    txPool: TxPoolRef, server: RpcServer) =
+proc setupExpRpc*(com: CommonRef, server: RpcServer) =
 
   let chainDB = com.db
 
