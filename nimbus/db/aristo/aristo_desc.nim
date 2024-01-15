@@ -116,6 +116,9 @@ func isValid*(nd: NodeRef): bool =
 func isValid*(pld: PayloadRef): bool =
   pld != PayloadRef(nil)
 
+func isValid*(pid: PathID): bool =
+  pid != VOID_PATH_ID
+
 func isValid*(filter: FilterRef): bool =
   filter != FilterRef(nil)
 

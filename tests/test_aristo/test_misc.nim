@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -309,11 +309,11 @@ proc testVidRecycleLists*(noisy = true; seed = 42): bool =
   db.top.final.vGen.setLen(0)
   for n in 0 .. 5:
     let w = db.vidFetch()
-    xCheck w == VertexID(2) + n # VertexID(1) is default root ID
+    xCheck w == VertexID(LEAST_FREE_VID) + n # VertexID(1) is default root ID
     xCheck db.vGen.len == 1
 
   # Recycling and re-org tests
-  func toVQ(a: seq[int]): seq[VertexID] = a.mapIt(VertexID(it))
+  func toVQ(a: seq[int]): seq[VertexID] = a.mapIt(VertexID(LEAST_FREE_VID+it))
 
   xCheck @[8, 7,  3, 4, 5,  9]    .toVQ.vidReorg == @[3, 4, 5,  7] .toVQ
   xCheck @[8, 7, 6,  3, 4, 5,  9] .toVQ.vidReorg == @[3]           .toVQ

@@ -177,7 +177,7 @@ proc layersPutLabel*(db: AristoDbRef; vid: VertexID; lbl: HashLabel) =
   # Get previous label
   let blb = db.top.delta.kMap.getOrVoid vid
 
-  # Update label on `label->vid` mappiing table
+  # Update label on `label->vid` mapping table
   db.top.delta.kMap[vid] = lbl
   db.top.final.dirty = true # Modified top cache layers
 

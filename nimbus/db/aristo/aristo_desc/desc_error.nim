@@ -94,6 +94,10 @@ type
     MergeNonBranchProofModeLock
     MergeRootBranchLinkBusy
     MergeRootMissing
+    MergeAccountPathMissing
+    MergeAccountUnaccessible
+    MergeAccountPathWithoutLeaf
+    MergeAccountWrongStorageRoot
     MergeAssemblyFailed # Ooops, internal error
 
     MergeHashKeyInvalid

@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -17,7 +17,7 @@ import
   eth/common,
   results,
   "."/[aristo_constants, aristo_desc, aristo_get, aristo_hashify, aristo_init,
-       aristo_merge, aristo_vid]
+       aristo_merge]
 
 # ------------------------------------------------------------------------------
 # Public functions, signature generator
@@ -27,7 +27,7 @@ proc merkleSignBegin*(): MerkleSignRef =
   ## Start signature calculator for a list of key-value items.
   let
     db = AristoDbRef.init VoidBackendRef
-    vid = db.vidFetch # => 2
+    vid = VertexID(2)
   MerkleSignRef(
     root: vid,
     db:   db)
@@ -41,7 +41,7 @@ proc merkleSignAdd*(
   ## is irrelevant.
   if sdb.error == AristoError(0):
     sdb.count.inc
-    discard sdb.db.merge(sdb.root, key, val).valueOr:
+    discard sdb.db.merge(sdb.root, key, val, VOID_PATH_ID).valueOr:
       sdb.`error` = error
       sdb.errKey = @key
       return

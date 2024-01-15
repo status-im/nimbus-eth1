@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -67,7 +67,7 @@ type
     ##
     ## The path ID should be kept normalised, i.e.
     ## * 0 <= `length` <= 64
-    ## * the unused trailing nibbles in `pfx` ar set to `0`
+    ## * the unused trailing nibbles in `pfx` are set to `0`
     ##
     pfx*: UInt256
     length*: uint8

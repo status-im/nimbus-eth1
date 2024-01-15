@@ -298,15 +298,16 @@ proc mergeRlpData*(
       ): Result[void,AristoError] =
   block body:
     discard db.merge(
-      LeafTie(
-        root:    VertexID(1),
-        path:    path.normal),
-      PayloadRef(
-        pType:   RlpData,
-        rlpBlob: @rlpData)).valueOr:
-          if error == MergeLeafPathCachedAlready:
-            break body
-          return err(error)
+      LeafTiePayload(
+        leafTie: LeafTie(
+          root:    VertexID(1),
+          path:    path.normal),
+        payload: PayloadRef(
+          pType:   RlpData,
+          rlpBlob: @rlpData))).valueOr:
+      if error in {MergeLeafPathCachedAlready,MergeLeafPathOnBackendAlready}:
+        break body
+      return err(error)
   ok()
 
 # ------------------------------------------------------------------------------
@@ -559,7 +560,7 @@ proc testTxMergeProofAndKvpList*(
       xCheck proved.merged < db.nLayersLebal()
 
     let
-      merged = db.merge leafs
+      merged = db.mergeList leafs
 
     xCheck db.lTab.len == lTabLen + merged.merged
     xCheck merged.merged + merged.dups == leafs.len

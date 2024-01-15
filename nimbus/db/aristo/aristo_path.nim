@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -64,7 +64,7 @@ func pathAsHEP*(tag: PathID; isLeaf = false): Blob =
 func pathToTag*(partPath: NibblesSeq): Result[PathID,AristoError] =
   ## Convert the argument `partPath`  to a `PathID` type value.
   if partPath.len == 0:
-    return ok PathID()
+    return ok VOID_PATH_ID
   if partPath.len <= 64:
     return ok PathID(
       pfx:    UInt256.fromBytesBE partPath.pathPfxPad(0).getBytes(),
@@ -74,7 +74,7 @@ func pathToTag*(partPath: NibblesSeq): Result[PathID,AristoError] =
 func pathToTag*(partPath: openArray[byte]): Result[PathID,AristoError] =
   ## Variant of `pathToTag()`
   if partPath.len == 0:
-    return ok PathID()
+    return ok VOID_PATH_ID
   if partPath.len <= 32:
     return ok PathID(
       pfx:    UInt256.fromBytesBE @partPath & 0u8.repeat(32-partPath.len),

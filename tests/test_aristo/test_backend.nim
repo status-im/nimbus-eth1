@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -81,7 +81,7 @@ proc mergeData(
     let proved = db.merge(proof, rc.value)
     xCheck proved.error in {AristoError(0),MergeHashKeyCachedAlready}
 
-  let merged = db.merge leafs
+  let merged = db.mergeList leafs
   xCheck merged.error in {AristoError(0), MergeLeafPathCachedAlready}
 
   block:
