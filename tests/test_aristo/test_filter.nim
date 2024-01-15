@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -169,7 +169,7 @@ proc dbTriplet(w: LeafQuartet; rdbPath: string): Result[DbTriplet,AristoError] =
 
   # Fill backend
   block:
-    let report = db.merge w[0]
+    let report = db.mergeList w[0]
     if report.error != 0:
       db.finish(flush=true)
       check report.error == 0
@@ -183,7 +183,7 @@ proc dbTriplet(w: LeafQuartet; rdbPath: string): Result[DbTriplet,AristoError] =
 
   # Clause (9) from `aristo/README.md` example
   for n in 0 ..< dx.len:
-    let report = dx[n].merge w[n+1]
+    let report = dx[n].mergeList w[n+1]
     if report.error != 0:
       db.finish(flush=true)
       check (n, report.error) == (n,0)

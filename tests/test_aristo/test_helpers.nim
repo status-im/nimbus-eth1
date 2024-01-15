@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -206,6 +206,27 @@ func mapRootVid*(
   a.mapIt(LeafTiePayload(
     leafTie: LeafTie(root: toVid, path: it.leafTie.path),
     payload: it.payload))
+
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
+
+proc mergeList*(
+    db: AristoDbRef;                   # Database, top layer
+    leafs: openArray[LeafTiePayload];  # Leaf items to add to the database
+      ): tuple[merged: int, dups: int, error: AristoError] =
+  ## Variant of `merge()` for leaf lists.
+  var (merged, dups) = (0, 0)
+  for n,w in leafs:
+    let rc = db.merge(w.leafTie, w.payload, VOID_PATH_ID)
+    if rc.isOk:
+      merged.inc
+    elif rc.error in {MergeLeafPathCachedAlready,MergeLeafPathOnBackendAlready}:
+      dups.inc
+    else:
+      return (n,dups,rc.error)
+
+  (merged, dups, AristoError(0))
 
 # ------------------------------------------------------------------------------
 # End

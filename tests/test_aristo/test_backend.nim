@@ -81,7 +81,7 @@ proc mergeData(
     let proved = db.merge(proof, rc.value)
     xCheck proved.error in {AristoError(0),MergeHashKeyCachedAlready}
 
-  let merged = db.merge leafs
+  let merged = db.mergeList leafs
   xCheck merged.error in {AristoError(0), MergeLeafPathCachedAlready}
 
   block:
