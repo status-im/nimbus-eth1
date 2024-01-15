@@ -1,6 +1,6 @@
 version: "3.5"
 
-# TODO Add possibility to configure ports by env vcariables 
+# TODO Add possibility to configure ports by env variables
 services:
   sim:
     # TODO for now we are using simulator which is also used in quic, ultimatly
@@ -14,7 +14,7 @@ services:
       - ./logs/sim:/logs
     environment:
       - SCENARIO=$SCENARIO
-    cap_add: 
+    cap_add:
       - NET_ADMIN
     expose:
       - "57832"
@@ -30,8 +30,6 @@ services:
     # TODO add building of docker images based on variable
     # build: ./$SERVER
     image: test-utp
-    # this arg will go to container entry point
-    command: "--udp-listen-address=193.167.100.100 --rpc-listen-address=0.0.0.0 --udp-port=9041 --rpc-port=9041"
     container_name: server
     hostname: server
     stdin_open: true
@@ -43,7 +41,7 @@ services:
       - CLIENT_PARAMS=--udp-listen-address=193.167.100.100 --rpc-listen-address=0.0.0.0 --udp-port=9041 --rpc-port=9041
     depends_on:
       - sim
-    cap_add: 
+    cap_add:
       - NET_ADMIN
     ports:
       - "9041:9041"
@@ -60,7 +58,6 @@ services:
   client:
     # build: ./$CLIENT
     image: test-utp
-    command: "--udp-listen-address=193.167.0.100 --rpc-listen-address=0.0.0.0 --udp-port=9042 --rpc-port=9042"
     container_name: client
     hostname: client
     stdin_open: true
@@ -72,7 +69,7 @@ services:
       - CLIENT_PARAMS=--udp-listen-address=193.167.0.100 --rpc-listen-address=0.0.0.0 --udp-port=9042 --rpc-port=9042
     depends_on:
       - sim
-    cap_add: 
+    cap_add:
       - NET_ADMIN
     ports:
       - "9042:9042"
