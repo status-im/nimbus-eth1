@@ -17,7 +17,7 @@ import
   ../db/state_db,
   rpc_types, rpc_utils,
   ../core/tx_pool,
-  ../common/[common, context],
+  ../common/common,
   ../utils/utils,
   ../beacon/web3_eth_conv,
   ./filters,
@@ -29,6 +29,32 @@ import
 type
   BlockHeader = eth_types.BlockHeader
   ReadOnlyStateDB = state_db.ReadOnlyStateDB
+
+proc getBlockWitness*(
+    com: CommonRef,
+    blockHeader: BlockHeader): (KeccakHash, BlockWitness)
+    {.raises: [BlockNotFound, RlpError, ValueError, CatchableError].} =
+  # TODO: test behaviour of failure scenarios and improve error handling
+
+  let
+    chainDB = com.db
+    blockHash = chainDB.getBlockHash(blockHeader.blockNumber)
+    blockBody = chainDB.getBlockBody(blockHash)
+    vmState = BaseVMState.new(blockHeader, com)
+
+  vmState.generateWitness = true # Enable saving witness data
+
+  # Execute the block of transactions and collect the keys of the touched account state
+  let processBlockResult = processBlock(vmState, blockHeader, blockBody, commit = false)
+  doAssert processBlockResult == ValidationResult.OK
+
+  let mkeys = vmState.stateDB.makeMultiKeys()
+
+  # Reset state to what it was before executing the block of transactions
+  let initialState = BaseVMState.new(blockHeader, com)
+
+  # Build witness using collected keys
+  return (initialState.stateDB.rootHash, initialState.buildWitness(mkeys))
 
 proc setupExpRpc*(com: CommonRef, server: RpcServer) =
 
@@ -44,48 +70,29 @@ proc setupExpRpc*(com: CommonRef, server: RpcServer) =
       {.gcsafe, raises: [CatchableError].} =
     result = getStateDB(chainDB.headerFromTag(quantityTag))
 
-  proc getBlockWitness(
-      chainDB: CoreDbRef,
-      quantityTag: BlockTag): (KeccakHash, BlockWitness) {.raises: [CatchableError].} =
+  server.rpc("exp_getBlockWitness") do(quantityTag: BlockTag) -> seq[byte]:
+    ## Returns the block witness for a block by block number or tag.
+    ##
+    ## quantityTag: integer of a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.
+    ## Returns seq[byte] or nil when no block was found.
+    let
+      blockHeader = headerFromTag(chainDB, quantityTag)
+      (_, witness) = getBlockWitness(com, blockHeader)
+
+    return witness
+
+  server.rpc("exp_getBlockProofs") do(quantityTag: BlockTag) -> seq[ProofResponse]:
+    ## Returns the block proofs for a block by block number or tag.
+    ##
+    ## quantityTag: integer of a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.
+    ## Returns seq[byte] or nil when no block was found.
 
     let
       blockHeader = headerFromTag(chainDB, quantityTag)
-      blockNum = quantityTag.number.toBlockNumber
-      blockHash = chainDB.getBlockHash(blockNum)
-      blockBody = chainDB.getBlockBody(blockHash)
-      vmState = BaseVMState.new(blockHeader, com)
-
-    vmState.generateWitness = true # Enable saving witness data
-
-    # Execute the block of transactions and collect the keys of the touched account state
-    let processBlockResult = processBlock(vmState, blockHeader, blockBody, commit = false)
-    doAssert processBlockResult == ValidationResult.OK
-
-    let mkeys = vmState.stateDB.makeMultiKeys()
-
-    # Reset state to what it was before executing the block of transactions
-    let initialState = BaseVMState.new(blockHeader, com)
-
-    # Build witness using collected keys
-    return (initialState.stateDB.rootHash, initialState.buildWitness(mkeys))
-
-  server.rpc("exp_getBlockWitness") do(quantityTag: BlockTag) -> seq[byte]:
-    ## TODO: documentation
-    ##
-
-    let (_, witness) = getBlockWitness(chainDB, quantityTag)
-    return witness
-
-
-  server.rpc("exp_getBlockProofs") do(quantityTag: BlockTag) -> seq[ProofResponse]:
-    ## TODO: documentation
-    ##
-
-    let
-      (stateRoot, witness) = getBlockWitness(chainDB, quantityTag)
       accDB = stateDBFromTag(quantityTag)
+      (stateRoot, witness) = getBlockWitness(com, blockHeader)
+      verifyWitnessResult = verifyWitness(stateRoot, witness)
 
-    let verifyWitnessResult = verifyWitness(stateRoot, witness)
     doAssert verifyWitnessResult.isOk()
 
     var blockProofs = newSeqOfCap[ProofResponse](verifyWitnessResult.value().len())
