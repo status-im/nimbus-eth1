@@ -69,29 +69,34 @@ proc checkWitnessDataMatchesAccounts(
     check genAccount.balance == accountData.account.balance
     check genAccount.nonce == accountData.account.nonce
 
-suite "Witness Verification Tests":
+proc witnessVerificationMain*() =
+  suite "Witness verification json tests":
 
-  let genesisFiles = ["berlin2000.json", "chainid1.json", "chainid7.json", "merge.json", "devnet4.json", "devnet5.json", "holesky.json"]
+    let genesisFiles = ["berlin2000.json", "chainid1.json", "chainid7.json", "merge.json", "devnet4.json", "devnet5.json", "holesky.json"]
 
-  test "Block witness verification with valid state root":
-    for file in genesisFiles:
+    test "Block witness verification with valid state root":
+      for file in genesisFiles:
 
-      let
-        accounts = getGenesisAlloc("tests" / "customgenesis" / file)
-        (stateRoot, witness) = buildWitness(accounts)
-        verifyResult = verifyWitness(stateRoot, witness)
+        let
+          accounts = getGenesisAlloc("tests" / "customgenesis" / file)
+          (stateRoot, witness) = buildWitness(accounts)
+          verifyResult = verifyWitness(stateRoot, witness)
 
-      check verifyResult.isOk()
-      checkWitnessDataMatchesAccounts(accounts, verifyResult.get())
+        check verifyResult.isOk()
+        checkWitnessDataMatchesAccounts(accounts, verifyResult.get())
 
-  test "Block witness verification with invalid state root":
-    let badStateRoot = toDigest("2cb1b80b285d09e0570fdbbb808e1d14e4ac53e36dcd95dbc268deec2915b3e7")
+    test "Block witness verification with invalid state root":
+      let badStateRoot = toDigest("2cb1b80b285d09e0570fdbbb808e1d14e4ac53e36dcd95dbc268deec2915b3e7")
 
-    for file in genesisFiles:
-      let
-        accounts = getGenesisAlloc("tests" / "customgenesis" / file)
-        (_, witness) = buildWitness(accounts)
-        verifyResult = verifyWitness(badStateRoot, witness)
+      for file in genesisFiles:
+        let
+          accounts = getGenesisAlloc("tests" / "customgenesis" / file)
+          (_, witness) = buildWitness(accounts)
+          verifyResult = verifyWitness(badStateRoot, witness)
 
-      check verifyResult.isErr()
-      check verifyResult.error() == "witness stateRoot doesn't match trustedStateRoot"
+        check verifyResult.isErr()
+        check verifyResult.error() == "witness stateRoot doesn't match trustedStateRoot"
+
+when isMainModule:
+  witnessVerificationMain()
+

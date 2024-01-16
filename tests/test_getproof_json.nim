@@ -124,34 +124,36 @@ proc checkProofsForMissingLeafs(
     if account.storage.len() > 0:
       check verifySlotProof(proofResponse2.storageHash.toHash256(), slotProofs[0]).isMissing()
 
+proc getProofJsonMain*() =
+  suite "Get proof json tests":
 
-suite "Get Proof Tests":
+    let genesisFiles = ["berlin2000.json", "chainid1.json", "chainid7.json", "merge.json", "devnet4.json", "devnet5.json", "holesky.json"]
 
-  let genesisFiles = ["berlin2000.json", "chainid1.json", "chainid7.json", "merge.json", "devnet4.json", "devnet5.json", "holesky.json"]
+    test "Get proofs for existing leafs":
+      for file in genesisFiles:
 
-  test "Get proofs for existing leafs":
-    for file in genesisFiles:
+        let
+          accounts = getGenesisAlloc("tests" / "customgenesis" / file)
+          coreDb = newCoreDbRef(LegacyDbMemory)
+          accountsCache = AccountsCache.init(coreDb, emptyRlpHash, false)
+          stateRootHash = setupStateDB(accounts, accountsCache)
+          accountDb = newAccountStateDB(coreDb, stateRootHash, false)
+          readOnlyDb = ReadOnlyStateDB(accountDb)
 
-      let
-        accounts = getGenesisAlloc("tests" / "customgenesis" / file)
-        coreDb = newCoreDbRef(LegacyDbMemory)
-        accountsCache = AccountsCache.init(coreDb, emptyRlpHash, false)
-        stateRootHash = setupStateDB(accounts, accountsCache)
-        accountDb = newAccountStateDB(coreDb, stateRootHash, false)
-        readOnlyDb = ReadOnlyStateDB(accountDb)
+        checkProofsForExistingLeafs(accounts, readOnlyDb, stateRootHash)
 
-      checkProofsForExistingLeafs(accounts, readOnlyDb, stateRootHash)
+    test "Get proofs for missing leafs":
+      for file in genesisFiles:
 
-  test "Get proofs for missing leafs":
-    for file in genesisFiles:
+        let
+          accounts = getGenesisAlloc("tests" / "customgenesis" / file)
+          coreDb = newCoreDbRef(LegacyDbMemory)
+          accountsCache = AccountsCache.init(coreDb, emptyRlpHash, false)
+          stateRootHash = setupStateDB(accounts, accountsCache)
+          accountDb = newAccountStateDB(coreDb, stateRootHash, false)
+          readOnlyDb = ReadOnlyStateDB(accountDb)
 
-      let
-        accounts = getGenesisAlloc("tests" / "customgenesis" / file)
-        coreDb = newCoreDbRef(LegacyDbMemory)
-        accountsCache = AccountsCache.init(coreDb, emptyRlpHash, false)
-        stateRootHash = setupStateDB(accounts, accountsCache)
-        accountDb = newAccountStateDB(coreDb, stateRootHash, false)
-        readOnlyDb = ReadOnlyStateDB(accountDb)
+        checkProofsForMissingLeafs(accounts, readOnlyDb, stateRootHash)
 
-      checkProofsForMissingLeafs(accounts, readOnlyDb, stateRootHash)
-
+when isMainModule:
+  getProofJsonMain()
