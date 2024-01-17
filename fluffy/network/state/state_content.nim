@@ -48,17 +48,16 @@ type
     # the SSZ Union type, but currently it is allowed in the implementation, and
     # the SSZ spec is not explicit about disallowing this.
     unused = 0x00
-    accountTrieNode = 0x20
-    contractTrieNode = 0x21
-    contractCode = 0x22
+    accountTrieNodeOffer = 0x20
+    accountTrieNodeRetrival = 0x21
+    contractTrieNodeOffer = 0x22
+    contractTrieNodeRetrival = 0x23
+    contractCodeOffer = 0x24
+    contractCodeRetrival = 0x25
     # NOTE unused
-    contractStorageTrieProof = 0x23
+    contractStorageTrieProof = 0x26
     # NOTE unused
-    accountTrieProof = 0x24
-
-  ContentKind* = enum
-    forOffer = 0x00
-    forRetrival = 0x01
+    accountTrieProof = 0x27
 
   NibblePair* = byte
   Nibbles* = object
@@ -75,7 +74,7 @@ type
   StorageWitness* = object
     key*: Nibbles
     proof*: Witness
-    stateProof*: StateWitness
+    stateWitness*: StateWitness
 
   AccountTrieNodeKey* = object
     path*: Nibbles
@@ -105,12 +104,18 @@ type
     case contentType*: ContentType
     of unused:
       discard
-    of accountTrieNode:
-      accountTrieNodeKey*: AccountTrieNodeKey
-    of contractTrieNode:
-      contractTrieNodeKey*: ContractTrieNodeKey
-    of contractCode:
-      contractCodeKey*: ContractCodeKey
+    of accountTrieNodeOffer:
+      accountTrieNodeKeyOffer*: AccountTrieNodeKey
+    of accountTrieNodeRetrival:
+      accountTrieNodeKeyRetribal*: AccountTrieNodeKey
+    of contractTrieNodeOffer:
+      contractTrieNodeKeyOffer*: ContractTrieNodeKey
+    of contractTrieNodeRetrival:
+      contractTrieNodeKeyRetrival*: ContractTrieNodeKey
+    of contractCodeOffer:
+      contractCodeKeyOffer*: ContractCodeKey
+    of contractCodeRetrival:
+      contractCodeKeyRetrival*: ContractCodeKey
     # NOTE unsed
     of contractStorageTrieProof:
          contractStorageTrieProofKey*: ContractStorageTrieProofKey
@@ -118,30 +123,27 @@ type
     of accountTrieProof:
           accountTrieProofKey*: AccountTrieProofKey
 
-  AccountTrieNode* = object
-    case contentKind*: ContentKind
-    of forOffer:
-      proof*: StateWitness
-      blockHash*: Bytes32 # NOTE is it KeccakHash?
-    of forRetrival:
-      node*: WitnessNode
+  AccountTrieNodeOffer* = object
+    proof*: StateWitness
+    nodeHash*: NodeHash
 
-  StorageTrieNode* = object
-    case contentKind*: ContentKind
-    of forOffer:
-      proof*: StorageWitness
-      blockHash*: Bytes32 # NOTE is it KeccakHash?
-    of forRetrival:
-      node*: WitnessNode
+  AccountTrieNodeRetrival* = object
+    node*: WitnessNode
 
-  ContractCode* = object
+  ContractTrieNodeOffer* = object
+    proof*: StorageWitness
+    blockHash*: BlockHash
+
+  ContractTrieNodeRetrival* = object
+    node*: WitnessNode
+
+  ContractCodeOffer* = object
     code*: ByteList
-    case contentKind*: ContentKind
-    of forOffer:
-      accountProof*: StateWitness
-      blockHash*: Bytes32 # NOTE is it KeccakHash?
-    else:
-      discard
+    accountProof*: StateWitness
+    blockHash*: BlockHash
+
+  ContractCodeRetrival* = object
+    code*: ByteList
 
 func encode*(contentKey: ContentKey): ByteList =
   doAssert(contentKey.contentType != unused)
