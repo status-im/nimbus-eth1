@@ -38,6 +38,7 @@ type JsonProofVector* = object
 type
   NodeHash* = KeccakHash
   CodeHash* = KeccakHash
+  Address*  = EthAddress
 
   ContentType* = enum
     # Note: Need to add this unused value as a case object with an enum without
@@ -81,23 +82,23 @@ type
     nodeHash*: NodeHash
 
   ContractTrieNodeKey* = object
-    address*: EthAddress
+    address*: Address
     path*: Nibbles
     nodeHash*: NodeHash
 
   ContractCodeKey* = object
-    address*: EthAddress
+    address*: Address
     codeHash*: CodeHash
 
   # NOTE unused
   ContractStorageTrieProofKey* = object
-    address*: EthAddress
+    address*: Address
     slot*: UInt256
     stateRoot*: Bytes32
 
   # NOTE unused
   AccountTrieProofKey* = object
-    address*: EthAddress
+    address*: Address
     stateRoot*: Bytes32
 
   ContentKey* = object
