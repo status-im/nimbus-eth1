@@ -23,7 +23,7 @@ import
   ./filters,
   ../core/executor/process_block,
   ../db/ledger,
-  ../../stateless/witness_verification,
+  ../../stateless/[witness_verification, witness_types],
   ./p2p
 
 type
@@ -32,7 +32,7 @@ type
 
 proc getBlockWitness*(
     com: CommonRef,
-    blockHeader: BlockHeader): (KeccakHash, BlockWitness)
+    blockHeader: BlockHeader): (KeccakHash, BlockWitness, WitnessFlags)
     {.raises: [BlockNotFound, RlpError, ValueError, CatchableError].} =
   # TODO: test behaviour of failure scenarios and improve error handling
 
@@ -41,6 +41,7 @@ proc getBlockWitness*(
     blockHash = chainDB.getBlockHash(blockHeader.blockNumber)
     blockBody = chainDB.getBlockBody(blockHash)
     vmState = BaseVMState.new(blockHeader, com)
+    flags = if vmState.fork >= FKSpurious: {wfEIP170} else: {}
 
   vmState.generateWitness = true # Enable saving witness data
 
@@ -54,7 +55,31 @@ proc getBlockWitness*(
   let initialState = BaseVMState.new(blockHeader, com)
 
   # Build witness using collected keys
-  return (initialState.stateDB.rootHash, initialState.buildWitness(mkeys))
+  return (initialState.stateDB.rootHash, initialState.buildWitness(mkeys), flags)
+
+proc getBlockProofs*(
+    accDB: ReadOnlyStateDB,
+    witnessRoot: KeccakHash,
+    witness: BlockWitness,
+    flags: WitnessFlags): seq[ProofResponse] {.raises: [RlpError].} =
+
+  if witness.len() == 0:
+    return @[]
+
+  let verifyWitnessResult = verifyWitness(witnessRoot, witness, flags)
+  doAssert verifyWitnessResult.isOk()
+
+  var blockProofs = newSeqOfCap[ProofResponse](verifyWitnessResult.value().len())
+
+  for address, account in verifyWitnessResult.value():
+    var slots = newSeqOfCap[UInt256](account.storage.len())
+
+    for slotKey, _ in account.storage:
+      slots.add(slotKey)
+
+    blockProofs.add(getProof(accDB, address, slots))
+
+  return blockProofs
 
 proc setupExpRpc*(com: CommonRef, server: RpcServer) =
 
@@ -75,9 +100,10 @@ proc setupExpRpc*(com: CommonRef, server: RpcServer) =
     ##
     ## quantityTag: integer of a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.
     ## Returns seq[byte] or nil when no block was found.
+
     let
       blockHeader = headerFromTag(chainDB, quantityTag)
-      (_, witness) = getBlockWitness(com, blockHeader)
+      (_, witness, _) = getBlockWitness(com, blockHeader)
 
     return witness
 
@@ -90,23 +116,6 @@ proc setupExpRpc*(com: CommonRef, server: RpcServer) =
     let
       blockHeader = headerFromTag(chainDB, quantityTag)
       accDB = stateDBFromTag(quantityTag)
-      (stateRoot, witness) = getBlockWitness(com, blockHeader)
-      verifyWitnessResult = verifyWitness(stateRoot, witness)
+      (witnessRoot, witness, flags) = getBlockWitness(com, blockHeader)
 
-    doAssert verifyWitnessResult.isOk()
-
-    var blockProofs = newSeqOfCap[ProofResponse](verifyWitnessResult.value().len())
-
-    for address, account in verifyWitnessResult.value():
-      var slots = newSeqOfCap[UInt256](account.storage.len())
-
-      for slotKey, slotValue in account.storage:
-        slots.add(slotKey)
-
-      blockProofs.add(getProof(accDB, address, slots))
-
-    return blockProofs
-
-
-
-
+    return getBlockProofs(accDB, witnessRoot, witness, flags)

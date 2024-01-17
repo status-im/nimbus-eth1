@@ -80,7 +80,7 @@ proc witnessVerificationMain*() =
         let
           accounts = getGenesisAlloc("tests" / "customgenesis" / file)
           (stateRoot, witness) = buildWitness(accounts)
-          verifyResult = verifyWitness(stateRoot, witness)
+          verifyResult = verifyWitness(stateRoot, witness, {wfEIP170})
 
         check verifyResult.isOk()
         checkWitnessDataMatchesAccounts(accounts, verifyResult.get())
@@ -92,7 +92,7 @@ proc witnessVerificationMain*() =
         let
           accounts = getGenesisAlloc("tests" / "customgenesis" / file)
           (_, witness) = buildWitness(accounts)
-          verifyResult = verifyWitness(badStateRoot, witness)
+          verifyResult = verifyWitness(badStateRoot, witness, {wfEIP170})
 
         check verifyResult.isErr()
         check verifyResult.error() == "witness stateRoot doesn't match trustedStateRoot"

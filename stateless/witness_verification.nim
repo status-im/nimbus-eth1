@@ -54,12 +54,13 @@ proc buildAccountsTableFromKeys(
 
 proc verifyWitness*(
     trustedStateRoot: KeccakHash,
-    witness: BlockWitness): Result[TableRef[EthAddress, AccountData], string] =
+    witness: BlockWitness,
+    flags: WitnessFlags = {wfEIP170}): Result[TableRef[EthAddress, AccountData], string] =
   if witness.len() == 0:
     return err("witness is empty")
 
   let db = newCoreDbRef(LegacyDbMemory)
-  var tb = initTreeBuilder(witness, db, {wfEIP170}) # what flags to use here?
+  var tb = initTreeBuilder(witness, db, flags)
 
   try:
     let stateRoot = tb.buildTree()
