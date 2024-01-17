@@ -37,58 +37,67 @@ procSuite "State Content":
     check encoded.toHex() == oddNibbles
     # echo ">>>", encoded.toHex()
 
-  const accountTrieNodeKeyEncoded = "24000000d7f8974fb5ac78d9ac099b9ad5018bedc2ce0a72dad1827a1709da30580f05440500000000123456789abc"
+  const accountTrieNodeKeyEncoded = "2024000000cafebabe000000000000000000000000000000000000000000000000000000000500000000123456789abc"
   test "Encode/decode AccountTrieNodeKey":
     let
       packedNibbles = @[NibblePair 0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC]
       isOddLength = false
-      nodeHash = "d7f8974fb5ac78d9ac099b9ad5018bedc2ce0a72dad1827a1709da30580f0544"
+      nodeHash = "cafebabe"
 
       nibbles = Nibbles(packedNibbles: Nibbles.packedNibbles.init(packedNibbles), isOddLength: isOddLength)
       accountTrieNodeKey = AccountTrieNodeKey(path: nibbles, nodeHash: NodeHash.fromHex(nodeHash))
-      encoded = SSZ.encode(accountTrieNodeKey)
-    # echo ">>>", encoded.toHex()
-    check encoded.toHex() == accountTrieNodeKeyEncoded
+      contentKey = ContentKey(contentType: accountTrieNode, accountTrieNodeKey: accountTrieNodeKey)
+      encoded = contentKey.encode()
+    # echo ">>>", $encoded
+    check $encoded == accountTrieNodeKeyEncoded
 
-    let decoded = SSZ.decode(encoded, AccountTrieNodeKey)
-    check decoded.nodeHash == NodeHash.fromHex(nodeHash)
-    check decoded.path.isOddLength == isOddLength
-    check decoded.path.packedNibbles == Nibbles.packedNibbles.init(packedNibbles)
+    let decoded = encoded.decode().valueOr:
+      raiseAssert "Cannot decode AccountTrieNodeKey"
+    check decoded.contentType == accountTrieNode
+    check decoded.accountTrieNodeKey.nodeHash == NodeHash.fromHex(nodeHash)
+    check decoded.accountTrieNodeKey.path.isOddLength == isOddLength
+    check decoded.accountTrieNodeKey.path.packedNibbles == Nibbles.packedNibbles.init(packedNibbles)
 
-  const contractTrieNodeKeyEncoded = "000d836201318ec6899a6754069038278074328038000000d7f8974fb5ac78d9ac099b9ad5018bedc2ce0a72dad1827a1709da30580f05440500000000123456789abc"
+  const contractTrieNodeKeyEncoded = "21000d836201318ec6899a6754069038278074328038000000cafebabe000000000000000000000000000000000000000000000000000000000500000000123456789abc"
   test "Encode/decode ContractTrieNodeKey":
     let
       address = "000d836201318ec6899a67540690382780743280"
       packedNibbles = @[NibblePair 0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC]
       isOddLength = false
-      nodeHash = "d7f8974fb5ac78d9ac099b9ad5018bedc2ce0a72dad1827a1709da30580f0544"
+      nodeHash = "cafebabe"
 
       nibbles = Nibbles(packedNibbles: Nibbles.packedNibbles.init(packedNibbles), isOddLength: isOddLength)
       contractTrieNodeKey = ContractTrieNodeKey(address: Address.fromHex(address), path: nibbles, nodeHash: NodeHash.fromHex(nodeHash))
-      encoded = SSZ.encode(contractTrieNodeKey)
-    # echo ">>>", encoded.toHex()
-    check encoded.toHex() == contractTrieNodeKeyEncoded
+      contentKey = ContentKey(contentType: contractTrieNode, contractTrieNodeKey: contractTrieNodeKey)
+      encoded = contentKey.encode()
+    # echo ">>>", $encoded
+    check $encoded == contractTrieNodeKeyEncoded
 
-    let decoded = SSZ.decode(encoded, ContractTrieNodeKey)
-    check decoded.nodeHash == NodeHash.fromHex(nodeHash)
-    check decoded.address == Address.fromHex(address)
-    check decoded.path.isOddLength == isOddLength
-    check decoded.path.packedNibbles == Nibbles.packedNibbles.init(packedNibbles)
+    let decoded = encoded.decode().valueOr:
+      raiseAssert "Cannot decode ContractTrieNodeKey"
+    check decoded.contentType == contractTrieNode
+    check decoded.contractTrieNodeKey.nodeHash == NodeHash.fromHex(nodeHash)
+    check decoded.contractTrieNodeKey.address == Address.fromHex(address)
+    check decoded.contractTrieNodeKey.path.isOddLength == isOddLength
+    check decoded.contractTrieNodeKey.path.packedNibbles == Nibbles.packedNibbles.init(packedNibbles)
 
-  const contractCodeKeyEncoded = "000d836201318ec6899a67540690382780743280c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+  const contractCodeKeyEncoded = "22000d836201318ec6899a67540690382780743280cafebabe00000000000000000000000000000000000000000000000000000000"
   test "Encode/decode ContractCodeKey":
     let
       address = "000d836201318ec6899a67540690382780743280"
-      codeHash = "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+      codeHash = "cafebabe"
       
       contractCodeKey = ContractCodeKey(address: Address.fromHex(address), codeHash: CodeHash.fromHex(codeHash))
-      encoded = SSZ.encode(contractCodeKey)
-    # echo ">>>", encoded.toHex()
-    check encoded.toHex() == contractCodeKeyEncoded
+      contentKey = ContentKey(contentType: contractCode, contractCodeKey: contractCodeKey)
+      encoded = contentKey.encode()
+    # echo ">>>", $encoded
+    check $encoded == contractCodeKeyEncoded
 
-    let decoded = SSZ.decode(encoded, ContractCodeKey)
-    check decoded.address == Address.fromHex(address)
-    check decoded.codeHash == CodeHash.fromHex(codeHash)
+    let decoded = encoded.decode().valueOr:
+      raiseAssert "Cannot decode ContractCodeKey"
+    check decoded.contentType == contractCode
+    check decoded.contractCodeKey.address == Address.fromHex(address)
+    check decoded.contractCodeKey.codeHash == CodeHash.fromHex(codeHash)
 
   const accountTrieNodeOfferEncoded = "24000000d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa308000000130000000500000000123456789abc04000000010203040506"
   test "Encode/decode AccountTrieNodeOffer":
@@ -111,17 +120,17 @@ procSuite "State Content":
     check decoded.proof.key.packedNibbles == Nibbles.packedNibbles.init(packedNibbles)
     check decoded.proof.proof == proof
 
-  const accountTrieNodeRetrivalEncoded = "04000000010203040506"
-  test "Encode/decode AccountTrieNodeRetrival":
+  const accountTrieNodeRetrievalEncoded = "04000000010203040506"
+  test "Encode/decode AccountTrieNodeRetrieval":
     let
       witnessNode = WitnessNode(@[byte 0x01, 0x02, 0x03, 0x04, 0x05, 0x06])
 
-      accountTrieNodeRetrival = AccountTrieNodeRetrival(node: witnessNode)
-      encoded = SSZ.encode(accountTrieNodeRetrival)
+      accountTrieNodeRetrieval = AccountTrieNodeRetrieval(node: witnessNode)
+      encoded = SSZ.encode(accountTrieNodeRetrieval)
     # echo ">>>", encoded.toHex()
-    check encoded.toHex() == accountTrieNodeRetrivalEncoded
+    check encoded.toHex() == accountTrieNodeRetrievalEncoded
 
-    let decoded = SSZ.decode(encoded, AccountTrieNodeRetrival)
+    let decoded = SSZ.decode(encoded, AccountTrieNodeRetrieval)
     check decoded.node == witnessNode
 
   const contractTrieNodeOfferEncoded = "24000000d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa30c00000017000000220000000500000000123456789abc040000000102030405060708000000150000000500000000123456789abcdef104000000010203040506070809"
@@ -155,17 +164,17 @@ procSuite "State Content":
     check decoded.proof.stateWitness.key.packedNibbles == Nibbles.packedNibbles.init(stateWitnessKeyPackedNibbles)
     check decoded.proof.stateWitness.proof == stateWitnessProof
 
-  const contractTrieNodeRetrivalEncoded = "04000000010203040506"
-  test "Encode/decode ContractTrieNodeRetrival":
+  const contractTrieNodeRetrievalEncoded = "04000000010203040506"
+  test "Encode/decode ContractTrieNodeRetrieval":
     let
       witnessNode = WitnessNode(@[byte 0x01, 0x02, 0x03, 0x04, 0x05, 0x06])
 
-      contractTrieNodeRetrival = ContractTrieNodeRetrival(node: witnessNode)
-      encoded = SSZ.encode(contractTrieNodeRetrival)
+      contractTrieNodeRetrieval = ContractTrieNodeRetrieval(node: witnessNode)
+      encoded = SSZ.encode(contractTrieNodeRetrieval)
     # echo ">>>", encoded.toHex()
-    check encoded.toHex() == contractTrieNodeRetrivalEncoded
+    check encoded.toHex() == contractTrieNodeRetrievalEncoded
 
-    let decoded = SSZ.decode(encoded, ContractTrieNodeRetrival)
+    let decoded = SSZ.decode(encoded, ContractTrieNodeRetrieval)
     check decoded.node == witnessNode
 
   const contractCodeOfferEncoded = "2800000036000000d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3010203040506070809a0a1a2a3a408000000130000000500000000123456789abc04000000010203040506"
@@ -191,19 +200,18 @@ procSuite "State Content":
     check decoded.accountProof.key.packedNibbles == Nibbles.packedNibbles.init(@[NibblePair 0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC])
     check decoded.accountProof.proof == accountProofWitness
 
-  const contractCodeRetrivalEncoded = "04000000010203040506070809a0a1a2a3a4"
-  test "Encode/decode ContractCodeRetrival":
+  const contractCodeRetrievalEncoded = "04000000010203040506070809a0a1a2a3a4"
+  test "Encode/decode ContractCodeRetrieval":
     let
       code = @[byte 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0xA0, 0xA1, 0xA2, 0xA3, 0xA4]
 
-      contractCodeRetrival = ContractCodeRetrival(code: ByteList.init(code))
-      encoded = SSZ.encode(contractCodeRetrival)
+      contractCodeRetrieval = ContractCodeRetrieval(code: ByteList.init(code))
+      encoded = SSZ.encode(contractCodeRetrieval)
     # echo ">>>", encoded.toHex()
-    check encoded.toHex() == contractCodeRetrivalEncoded
+    check encoded.toHex() == contractCodeRetrievalEncoded
 
-    let decoded = SSZ.decode(encoded, ContractCodeRetrival)
+    let decoded = SSZ.decode(encoded, ContractCodeRetrieval)
     check decoded.code == ByteList.init(code)
-
 
   test "Invalid prefix - 0 value":
     let encoded =  ByteList.init(@[byte 0x00])

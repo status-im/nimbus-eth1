@@ -49,16 +49,13 @@ type
     # the SSZ Union type, but currently it is allowed in the implementation, and
     # the SSZ spec is not explicit about disallowing this.
     unused = 0x00
-    accountTrieNodeOffer = 0x20
-    accountTrieNodeRetrival = 0x21
-    contractTrieNodeOffer = 0x22
-    contractTrieNodeRetrival = 0x23
-    contractCodeOffer = 0x24
-    contractCodeRetrival = 0x25
+    accountTrieNode = 0x20
+    contractTrieNode = 0x21
+    contractCode = 0x22
     # NOTE unused
-    contractStorageTrieProof = 0x26
+    contractStorageTrieProof = 0x23
     # NOTE unused
-    accountTrieProof = 0x27
+    accountTrieProof = 0x24
 
   NibblePair* = byte
   Nibbles* = object
@@ -105,18 +102,12 @@ type
     case contentType*: ContentType
     of unused:
       discard
-    of accountTrieNodeOffer:
-      accountTrieNodeKeyOffer*: AccountTrieNodeKey
-    of accountTrieNodeRetrival:
-      accountTrieNodeKeyRetribal*: AccountTrieNodeKey
-    of contractTrieNodeOffer:
-      contractTrieNodeKeyOffer*: ContractTrieNodeKey
-    of contractTrieNodeRetrival:
-      contractTrieNodeKeyRetrival*: ContractTrieNodeKey
-    of contractCodeOffer:
-      contractCodeKeyOffer*: ContractCodeKey
-    of contractCodeRetrival:
-      contractCodeKeyRetrival*: ContractCodeKey
+    of accountTrieNode:
+      accountTrieNodeKey*: AccountTrieNodeKey
+    of contractTrieNode:
+      contractTrieNodeKey*: ContractTrieNodeKey
+    of contractCode:
+      contractCodeKey*: ContractCodeKey
     # NOTE unsed
     of contractStorageTrieProof:
          contractStorageTrieProofKey*: ContractStorageTrieProofKey
@@ -128,14 +119,14 @@ type
     proof*: StateWitness
     nodeHash*: NodeHash
 
-  AccountTrieNodeRetrival* = object
+  AccountTrieNodeRetrieval* = object
     node*: WitnessNode
 
   ContractTrieNodeOffer* = object
     proof*: StorageWitness
     blockHash*: BlockHash
 
-  ContractTrieNodeRetrival* = object
+  ContractTrieNodeRetrieval* = object
     node*: WitnessNode
 
   ContractCodeOffer* = object
@@ -143,7 +134,7 @@ type
     accountProof*: StateWitness
     blockHash*: BlockHash
 
-  ContractCodeRetrival* = object
+  ContractCodeRetrieval* = object
     code*: ByteList
 
 func encode*(contentKey: ContentKey): ByteList =
@@ -172,7 +163,6 @@ template computeContentId*(digestCtxType: type, body: untyped): ContentId =
   let idHash = finish(h)
   readUintBE[256](idHash.data)
 
-# NOTE: will this contentKey contain selector byte?
 func toContentId*(contentKey: ByteList): ContentId =
   # TODO: Should we try to parse the content key here for invalid ones?
   let idHash = sha2.sha256.digest(contentKey.asSeq())

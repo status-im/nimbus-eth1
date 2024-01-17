@@ -72,17 +72,11 @@ proc validateContent(
     of unused:
       warn "Received content with unused content type"
       false
-    of accountTrieNodeOffer:
+    of accountTrieNode:
       true
-    of accountTrieNodeRetrival:
+    of contractTrieNode:
       true
-    of contractTrieNodeOffer:
-      true
-    of contractTrieNodeRetrival:
-      true
-    of contractCodeOffer:
-      true
-    of contractCodeRetrival:
+    of contractCode:
       true
     # NOTE unsed
     of accountTrieProof:
