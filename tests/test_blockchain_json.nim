@@ -206,7 +206,7 @@ proc testGetBlockWitness(chain: ChainRef, parentHeader, currentHeader: BlockHead
     raise newException(ValidationError, "Expected currentStateRoot == currentHeader.stateRoot")
 
   # run getBlockWitness and check that the witnessRoot matches the parent stateRoot
-  let (witnessRoot, witness, flags) = getBlockWitness(chain.com, currentHeader)
+  let (witnessRoot, witness, flags) = getBlockWitness(chain.com, currentHeader, false)
   if witnessRoot != parentHeader.stateRoot:
     raise newException(ValidationError, "Expected witnessRoot == parentHeader.stateRoot")
 
