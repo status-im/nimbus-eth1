@@ -55,7 +55,7 @@ proc buildAccountsTableFromKeys(
 proc verifyWitness*(
     trustedStateRoot: KeccakHash,
     witness: BlockWitness,
-    flags: WitnessFlags = {wfEIP170}): Result[TableRef[EthAddress, AccountData], string] =
+    flags: WitnessFlags): Result[TableRef[EthAddress, AccountData], string] =
   if witness.len() == 0:
     return err("witness is empty")
 

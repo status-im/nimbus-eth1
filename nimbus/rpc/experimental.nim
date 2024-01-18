@@ -32,9 +32,9 @@ type
 
 proc getBlockWitness*(
     com: CommonRef,
-    blockHeader: BlockHeader): (KeccakHash, BlockWitness, WitnessFlags)
-    {.raises: [BlockNotFound, RlpError, ValueError, CatchableError].} =
-  # TODO: test behaviour of failure scenarios and improve error handling
+    blockHeader: BlockHeader,
+    statePostExecution: bool): (KeccakHash, BlockWitness, WitnessFlags)
+    {.raises: [CatchableError].} =
 
   let
     chainDB = com.db
@@ -51,11 +51,12 @@ proc getBlockWitness*(
 
   let mkeys = vmState.stateDB.makeMultiKeys()
 
-  # Reset state to what it was before executing the block of transactions
-  let initialState = BaseVMState.new(blockHeader, com)
-
-  # Build witness using collected keys
-  return (initialState.stateDB.rootHash, initialState.buildWitness(mkeys), flags)
+  if statePostExecution:
+    (vmState.stateDB.rootHash, vmState.buildWitness(mkeys), flags)
+  else:
+    # Reset state to what it was before executing the block of transactions
+    let initialState = BaseVMState.new(blockHeader, com)
+    (initialState.stateDB.rootHash, initialState.buildWitness(mkeys), flags)
 
 proc getBlockProofs*(
     accDB: ReadOnlyStateDB,
@@ -91,31 +92,33 @@ proc setupExpRpc*(com: CommonRef, server: RpcServer) =
     let ac = newAccountStateDB(chainDB, header.stateRoot, com.pruneTrie)
     result = ReadOnlyStateDB(ac)
 
-  proc stateDBFromTag(quantityTag: BlockTag, readOnly = true): ReadOnlyStateDB
-      {.gcsafe, raises: [CatchableError].} =
-    result = getStateDB(chainDB.headerFromTag(quantityTag))
-
-  server.rpc("exp_getBlockWitness") do(quantityTag: BlockTag) -> seq[byte]:
+  server.rpc("exp_getWitnessByBlockNumber") do(quantityTag: BlockTag, statePostExecution: bool) -> seq[byte]:
     ## Returns the block witness for a block by block number or tag.
     ##
     ## quantityTag: integer of a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.
-    ## Returns seq[byte] or nil when no block was found.
+    ## statePostExecution: bool which indicates whether to return the witness based on the state before or after executing the block.
+    ## Returns seq[byte]
 
     let
-      blockHeader = headerFromTag(chainDB, quantityTag)
-      (_, witness, _) = getBlockWitness(com, blockHeader)
+      blockHeader = chainDB.headerFromTag(quantityTag)
+      (_, witness, _) = getBlockWitness(com, blockHeader, statePostExecution)
 
     return witness
 
-  server.rpc("exp_getBlockProofs") do(quantityTag: BlockTag) -> seq[ProofResponse]:
+  server.rpc("exp_getProofsByBlockNumber") do(quantityTag: BlockTag, statePostExecution: bool) -> seq[ProofResponse]:
     ## Returns the block proofs for a block by block number or tag.
     ##
     ## quantityTag: integer of a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.
-    ## Returns seq[byte] or nil when no block was found.
+    ## statePostExecution: bool which indicates whether to return the proofs based on the state before or after executing the block.
+    ## Returns seq[ProofResponse]
 
     let
-      blockHeader = headerFromTag(chainDB, quantityTag)
-      accDB = stateDBFromTag(quantityTag)
-      (witnessRoot, witness, flags) = getBlockWitness(com, blockHeader)
+      blockHeader = chainDB.headerFromTag(quantityTag)
+      (witnessRoot, witness, flags) = getBlockWitness(com, blockHeader, statePostExecution)
+
+    let accDB = if statePostExecution:
+      getStateDB(blockHeader)
+    else:
+      getStateDB(chainDB.getBlockHeader(blockHeader.parentHash))
 
     return getBlockProofs(accDB, witnessRoot, witness, flags)
