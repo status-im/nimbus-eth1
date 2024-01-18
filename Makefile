@@ -68,7 +68,6 @@ TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(TOOLS))
 FLUFFY_TOOLS := \
 	portal_bridge \
 	beacon_lc_bridge \
-	state_bridge \
 	eth_data_exporter \
 	content_verifier \
 	blockwalk \
