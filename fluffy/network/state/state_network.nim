@@ -78,12 +78,6 @@ proc validateContent(
       true
     of contractCode:
       true
-    # NOTE unsed
-    of accountTrieProof:
-      true
-    # NOTE unsed
-    of contractStorageTrieProof:
-      true
 
 proc validateContent(
     n: StateNetwork,

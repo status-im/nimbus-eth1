@@ -11,29 +11,12 @@
 {.push raises: [].}
 
 import
-  nimcrypto/[hash, sha2, keccak], stew/[objects, results], stint,
+  nimcrypto/[hash, sha2, keccak], stew/results, stint,
   eth/common/eth_types,
   ssz_serialization,
   ../../common/common_types
 
 export ssz_serialization, common_types, hash, results
-
-type JsonAccount* = object
-  nonce*: int
-  balance*: string
-  storage_hash*: string
-  code_hash*: string
-
-type JsonProof* = object
-  address*: string
-  state*: JsonAccount
-  proof*: seq[string]
-
-type JsonProofVector* = object
-  `block`*: int
-  block_hash*: string
-  state_root*: string
-  proofs*: seq[JsonProof]
 
 type
   NodeHash* = KeccakHash
@@ -52,15 +35,11 @@ type
     accountTrieNode = 0x20
     contractTrieNode = 0x21
     contractCode = 0x22
-    # NOTE unused
-    contractStorageTrieProof = 0x23
-    # NOTE unused
-    accountTrieProof = 0x24
 
   NibblePair* = byte
   Nibbles* = object
-    packedNibbles*: List[NibblePair, 32]
     isOddLength*: bool
+    packedNibbles*: List[NibblePair, 32]
 
   WitnessNode* = List[byte, 1024]
   Witness* = List[WitnessNode, 1024]
@@ -87,17 +66,6 @@ type
     address*: Address
     codeHash*: CodeHash
 
-  # NOTE unused
-  ContractStorageTrieProofKey* = object
-    address*: Address
-    slot*: UInt256
-    stateRoot*: Bytes32
-
-  # NOTE unused
-  AccountTrieProofKey* = object
-    address*: Address
-    stateRoot*: Bytes32
-
   ContentKey* = object
     case contentType*: ContentType
     of unused:
@@ -108,16 +76,10 @@ type
       contractTrieNodeKey*: ContractTrieNodeKey
     of contractCode:
       contractCodeKey*: ContractCodeKey
-    # NOTE unsed
-    of contractStorageTrieProof:
-         contractStorageTrieProofKey*: ContractStorageTrieProofKey
-    # NOTE unsed
-    of accountTrieProof:
-          accountTrieProofKey*: AccountTrieProofKey
 
   AccountTrieNodeOffer* = object
     proof*: StateWitness
-    nodeHash*: NodeHash
+    blockHash*: BlockHash
 
   AccountTrieNodeRetrieval* = object
     node*: WitnessNode
@@ -155,13 +117,6 @@ func decode*(contentKey: ByteList): Opt[ContentKey] =
     Opt.some(SSZ.decode(contentKey.asSeq(), ContentKey))
   except SerializationError:
     return Opt.none(ContentKey)
-
-template computeContentId*(digestCtxType: type, body: untyped): ContentId =
-  var h {.inject.}: digestCtxType
-  init(h)
-  body
-  let idHash = finish(h)
-  readUintBE[256](idHash.data)
 
 func toContentId*(contentKey: ByteList): ContentId =
   # TODO: Should we try to parse the content key here for invalid ones?
