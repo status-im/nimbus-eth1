@@ -151,8 +151,7 @@ proc procBlkEpilogue(vmState: BaseVMState;
 proc processBlock*(
     vmState: BaseVMState;  ## Parent environment of header/body block
     header:  BlockHeader;  ## Header/body block to add to the blockchain
-    body:    BlockBody,
-    commit = true): ValidationResult
+    body:    BlockBody): ValidationResult
     {.gcsafe, raises: [CatchableError].} =
   ## Generalised function to processes `(header,body)` pair for any network,
   ## regardless of PoA or not.
@@ -176,13 +175,12 @@ proc processBlock*(
   if not vmState.procBlkEpilogue(header, body):
     return ValidationResult.Error
 
-  if commit:
-    # `applyDeletes = false`
-    # If the trie pruning activated, each of the block will have its own state
-    # trie keep intact, rather than destroyed by trie pruning. But the current
-    # block will still get a pruned trie. If trie pruning deactivated,
-    # `applyDeletes` have no effects.
-    dbTx.commit(applyDeletes = false)
+  # `applyDeletes = false`
+  # If the trie pruning activated, each of the block will have its own state
+  # trie keep intact, rather than destroyed by trie pruning. But the current
+  # block will still get a pruned trie. If trie pruning deactivated,
+  # `applyDeletes` have no effects.
+  dbTx.commit(applyDeletes = false)
 
   ValidationResult.OK
 

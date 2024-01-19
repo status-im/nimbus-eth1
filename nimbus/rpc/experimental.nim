@@ -42,21 +42,26 @@ proc getBlockWitness*(
     blockBody = chainDB.getBlockBody(blockHash)
     vmState = BaseVMState.new(blockHeader, com)
     flags = if vmState.fork >= FKSpurious: {wfEIP170} else: {}
-
   vmState.generateWitness = true # Enable saving witness data
 
+  var dbTx = vmState.com.db.beginTransaction()
+  defer: dbTx.dispose()
+
   # Execute the block of transactions and collect the keys of the touched account state
-  let processBlockResult = processBlock(vmState, blockHeader, blockBody, commit = false)
+  let processBlockResult = processBlock(vmState, blockHeader, blockBody)
   doAssert processBlockResult == ValidationResult.OK
 
   let mkeys = vmState.stateDB.makeMultiKeys()
 
   if statePostExecution:
-    (vmState.stateDB.rootHash, vmState.buildWitness(mkeys), flags)
+    result = (vmState.stateDB.rootHash, vmState.buildWitness(mkeys), flags)
   else:
     # Reset state to what it was before executing the block of transactions
     let initialState = BaseVMState.new(blockHeader, com)
-    (initialState.stateDB.rootHash, initialState.buildWitness(mkeys), flags)
+    result = (initialState.stateDB.rootHash, initialState.buildWitness(mkeys), flags)
+
+  dbTx.rollback()
+
 
 proc getBlockProofs*(
     accDB: ReadOnlyStateDB,
