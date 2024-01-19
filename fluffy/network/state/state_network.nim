@@ -13,8 +13,7 @@ import
   eth/p2p/discoveryv5/[protocol, enr],
   ../../database/content_db,
   ../wire/[portal_protocol, portal_stream, portal_protocol_config],
-  ./state_content,
-  ./state_distance
+  ./state_content
 
 logScope:
   topics = "portal_state"
@@ -29,7 +28,7 @@ type StateNetwork* = ref object
   processContentLoop: Future[void]
 
 func toContentIdHandler(contentKey: ByteList): results.Opt[ContentId] =
-  toContentId(contentKey)
+  ok(toContentId(contentKey))
 
 proc getContent*(n: StateNetwork, key: ContentKey):
     Future[Opt[seq[byte]]] {.async.} =
@@ -75,27 +74,9 @@ proc validateContent(
       false
     of accountTrieNode:
       true
-    of contractStorageTrieNode:
+    of contractTrieNode:
       true
-    of accountTrieProof:
-      let decodedProof = decodeSsz(contentValue, AccountTrieProof).valueOr:
-        warn "Received invalid account trie proof", error
-        return false
-      let
-        proof = decodedProof.asSeq().map((p: ByteList) => p.toSeq())
-        trieKey = keccakHash(key.accountTrieProofKey.address).data.toSeq()
-        value = proof[^1].decode(seq[seq[byte]])[^1]
-        stateRoot = MDigest[256](data: key.accountTrieProofKey.stateRoot)
-        verificationResult = verifyMptProof(proof, stateRoot, trieKey, value)
-      case verificationResult.kind:
-        of ValidProof:
-          true
-        else:
-          warn "Received invalid account trie proof"
-          false
-    of contractStorageTrieProof:
-      true
-    of contractBytecode:
+    of contractCode:
       true
 
 proc validateContent(
@@ -131,8 +112,7 @@ proc new*(
   let portalProtocol = PortalProtocol.new(
     baseProtocol, stateProtocolId,
     toContentIdHandler, createGetHandler(contentDB), s,
-    bootstrapRecords, stateDistanceCalculator,
-    config = portalConfig)
+    bootstrapRecords, config = portalConfig)
 
   portalProtocol.dbPut = createStoreHandler(contentDB, portalConfig.radiusConfig, portalProtocol)
 

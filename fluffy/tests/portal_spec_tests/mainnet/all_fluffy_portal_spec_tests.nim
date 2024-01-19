@@ -13,5 +13,4 @@ import
   ./test_history_content,
   ./test_history_content_validation,
   ./test_header_content,
-  ./test_state_content,
   ./test_accumulator_root
