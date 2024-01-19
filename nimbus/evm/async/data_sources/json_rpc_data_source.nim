@@ -203,7 +203,7 @@ proc findPeersAndMakeSomeCalls[R](peerPool: PeerPool, protocolName: string, prot
       #  info("AARDVARK: peer does not support protocol", protocolName, peer)
     if attempts.len == 0:
       warn("AARDVARK: findPeersAndMakeSomeCalls did not find any peers; waiting and trying again", protocolName, totalPeerPoolSize=peerPool.connectedNodes.len)
-      await sleepAsync(5000)
+      await sleepAsync(chronos.seconds(5))
     else:
       if attempts.len < maxNumberOfPeersToAttempt:
         warn("AARDVARK: findPeersAndMakeSomeCalls did not find enough peers, but found some", protocolName, totalPeerPoolSize=peerPool.connectedNodes.len, found=attempts.len)

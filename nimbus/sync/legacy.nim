@@ -1,5 +1,5 @@
-# nim-eth
-# Copyright (c) 2018-2022 Status Research & Development GmbH
+# Nimbus
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -875,13 +875,14 @@ proc startSyncWithPeer(ctx: LegacySyncRef, peer: Peer) =
 
     ctx.busyPeers.incl(peer)
     let f = ctx.startSyncWithPeerImpl(peer)
-    f.callback = proc(data: pointer) {.gcsafe.} =
+    let cb = proc(data: pointer) {.gcsafe.} =
       if f.failed:
         if f.error of TransportError:
           debug "Transport got closed during startSyncWithPeer"
         else:
           error "startSyncWithPeer failed", msg = f.readError.msg, peer
       ctx.busyPeers.excl(peer)
+    f.addCallback(cb)
     asyncSpawn f
 
   except TransportError:
@@ -895,13 +896,14 @@ proc startObtainBlocks(ctx: LegacySyncRef, peer: Peer) =
 
     ctx.busyPeers.incl(peer)
     let f = ctx.obtainBlocksFromPeer(peer)
-    f.callback = proc(data: pointer) {.gcsafe.} =
+    let cb = proc(data: pointer) {.gcsafe.} =
       if f.failed:
         if f.error of TransportError:
           debug "Transport got closed during startObtainBlocks"
         else:
           error "startObtainBlocks failed", msg = f.readError.msg, peer
       ctx.busyPeers.excl(peer)
+    f.addCallback(cb)
     asyncSpawn f
 
   except TransportError:
