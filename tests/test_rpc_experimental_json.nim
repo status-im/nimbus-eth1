@@ -25,7 +25,7 @@ func ethAddr*(x: Address): EthAddress =
 template toHash256(hash: untyped): Hash256 =
   fromHex(Hash256, hash.toHex())
 
-proc importBlockData(node: JsonNode): (CommonRef, Hash256, Hash256, UInt256) =
+proc importBlockData(node: JsonNode): (CommonRef, Hash256, Hash256, UInt256) {. raises: [Exception].} =
   var
     blockNumber = UInt256.fromHex(node["blockNumber"].getStr())
     memoryDB    = newCoreDbRef LegacyDbMemory
@@ -88,6 +88,13 @@ proc checkAndValidateWitnessAgainstProofs(
         storageData.contains(slotProof.key)
         storageData[slotProof.key] == slotProof.value
 
+proc importBlockDataFromFile(file: string): (CommonRef, Hash256, Hash256, UInt256) {. raises: [].} =
+  try:
+    let
+      fileJson = json.parseFile("tests" / "fixtures" / "PersistBlockTests" / file)
+    return importBlockData(fileJson)
+  except Exception as ex:
+    doAssert false, ex.msg
 
 proc rpcExperimentalJsonMain*() =
 
@@ -104,20 +111,18 @@ proc rpcExperimentalJsonMain*() =
       "block48712.json"
       ]
 
-    let RPC_PORT = 8545
+    let RPC_PORT = 0 # let the OS choose a port
     var
       rpcServer = newRpcSocketServer(["127.0.0.1:" & $RPC_PORT])
       client = newRpcSocketClient()
 
     rpcServer.start()
-    waitFor client.connect("127.0.0.1", Port(RPC_PORT))
+    waitFor client.connect(rpcServer.localAddress[0])
 
 
     test "exp_getWitnessByBlockNumber and exp_getProofsByBlockNumber - latest block pre-execution state":
       for file in importFiles:
-        let
-          fileJson = json.parseFile("tests" / "fixtures" / "PersistBlockTests" / file)
-          (com, parentStateRoot, _, _) = importBlockData(fileJson)
+        let (com, parentStateRoot, _, _) = importBlockDataFromFile(file)
 
         setupExpRpc(com, rpcServer)
 
@@ -129,9 +134,7 @@ proc rpcExperimentalJsonMain*() =
 
     test "exp_getWitnessByBlockNumber and exp_getProofsByBlockNumber - latest block post-execution state":
       for file in importFiles:
-        let
-          fileJson = json.parseFile("tests" / "fixtures" / "PersistBlockTests" / file)
-          (com, _, stateRoot, _) = importBlockData(fileJson)
+        let (com, _, stateRoot, _) = importBlockDataFromFile(file)
 
         setupExpRpc(com, rpcServer)
 
@@ -144,8 +147,7 @@ proc rpcExperimentalJsonMain*() =
     test "exp_getWitnessByBlockNumber and exp_getProofsByBlockNumber - block by number pre-execution state":
       for file in importFiles:
         let
-          fileJson = json.parseFile("tests" / "fixtures" / "PersistBlockTests" / file)
-          (com, parentStateRoot, _, blockNumber) = importBlockData(fileJson)
+          (com, parentStateRoot, _, blockNumber) = importBlockDataFromFile(file)
           blockNum = blockId(blockNumber.truncate(uint64))
 
         setupExpRpc(com, rpcServer)
@@ -159,8 +161,7 @@ proc rpcExperimentalJsonMain*() =
     test "exp_getWitnessByBlockNumber and exp_getProofsByBlockNumber - block by number post-execution state":
       for file in importFiles:
         let
-          fileJson = json.parseFile("tests" / "fixtures" / "PersistBlockTests" / file)
-          (com, _, stateRoot, blockNumber) = importBlockData(fileJson)
+          (com, _, stateRoot, blockNumber) = importBlockDataFromFile(file)
           blockNum = blockId(blockNumber.truncate(uint64))
 
         setupExpRpc(com, rpcServer)
@@ -174,22 +175,21 @@ proc rpcExperimentalJsonMain*() =
     test "exp_getWitnessByBlockNumber and exp_getProofsByBlockNumber - block by number that doesn't exist":
       for file in importFiles:
         let
-          fileJson = json.parseFile("tests" / "fixtures" / "PersistBlockTests" / file)
-          (com, _, stateRoot, blockNumber) = importBlockData(fileJson)
+          (com, _, _, blockNumber) = importBlockDataFromFile(file)
           blockNum = blockId(blockNumber.truncate(uint64) + 1) # doesn't exist
 
         setupExpRpc(com, rpcServer)
 
-        expect ValueError:
+        expect JsonRpcError:
           discard await client.exp_getWitnessByBlockNumber(blockNum, false)
 
-        expect ValueError:
+        expect JsonRpcError:
           discard await client.exp_getProofsByBlockNumber(blockNum, false)
 
-        expect ValueError:
+        expect JsonRpcError:
           discard await client.exp_getWitnessByBlockNumber(blockNum, true)
 
-        expect ValueError:
+        expect JsonRpcError:
           discard await client.exp_getProofsByBlockNumber(blockNum, true)
 
 

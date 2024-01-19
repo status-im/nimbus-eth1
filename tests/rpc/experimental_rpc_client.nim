@@ -6,7 +6,6 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/os,
   json_rpc/rpcclient,
   json_rpc/errors,
   web3/eth_api
@@ -17,4 +16,6 @@ export
   eth_api_types,
   conversions
 
-createRpcSigs(RpcClient, currentSourcePath.parentDir / "experimental_rpc_calls.nim")
+createRpcSigsFromNim(RpcClient):
+  proc exp_getWitnessByBlockNumber(blockId: BlockIdentifier, statePostExecution: bool): seq[byte]
+  proc exp_getProofsByBlockNumber(blockId: BlockIdentifier, statePostExecution: bool): seq[ProofResponse]
