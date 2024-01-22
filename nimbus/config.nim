@@ -129,6 +129,7 @@ type
     ## RPC flags
     Eth                           ## enable eth_ set of RPC API
     Debug                         ## enable debug_ set of RPC API
+    Exp                           ## enable exp_ set of RPC API
 
   DiscoveryType* {.pure.} = enum
     None
@@ -689,6 +690,7 @@ proc getRpcFlags(api: openArray[string]): set[RpcFlag] =
     case item.toLowerAscii()
     of "eth": result.incl RpcFlag.Eth
     of "debug": result.incl RpcFlag.Debug
+    of "exp": result.incl RpcFlag.Exp
     else:
       error "Unknown RPC API: ", name=item
       quit QuitFailure

@@ -8,13 +8,11 @@
 {.push raises: [].}
 
 import
-  std/[sequtils, tables],
+  std/sequtils,
   stint,
   eth/[common, rlp, trie/hexary_proof_verification],
   stew/results,
-  ./state_proof_types,
-  ../../../../stateless/[tree_from_witness, witness_types],
-  ../../../../nimbus/db/[core_db, state_db]
+  ./state_proof_types
 
 export results
 
@@ -67,50 +65,3 @@ func verifyContractBytecode*(
     ok()
   else:
     err("hash of bytecode doesn't match the expected code hash")
-
-proc buildAccountsTableFromKeys(
-    db: ReadOnlyStateDB,
-    keys: openArray[AccountAndSlots]): TableRef[EthAddress, AccountData] {.raises: [RlpError].} =
-
-  var accounts = newTable[EthAddress, AccountData]()
-
-  for key in keys:
-    let account = db.getAccount(key.address)
-    let code = if key.codeLen > 0:
-        db.getTrie().parent().kvt().get(account.codeHash.data)
-      else: @[]
-    var storage = initTable[UInt256, UInt256]()
-
-    if code.len() > 0:
-      for slot in key.slots:
-        let slotKey = fromBytesBE(UInt256, slot)
-        let (slotValue, slotExists) = db.getStorage(key.address, slotKey)
-        if slotExists:
-          storage[slotKey] = slotValue
-
-    accounts[key.address] = AccountData(
-        account: account,
-        code: code,
-        storage: storage)
-
-  return accounts
-
-proc verifyWitness*(
-    trustedStateRoot: KeccakHash,
-    witness: BlockWitness): Result[TableRef[EthAddress, AccountData], string] =
-  if witness.len() == 0:
-    return err("witness is empty")
-
-  let db = newCoreDbRef(LegacyDbMemory)
-  var tb = initTreeBuilder(witness, db, {wfEIP170}) # what flags to use here?
-
-  try:
-    let stateRoot = tb.buildTree()
-    if stateRoot != trustedStateRoot:
-      return err("witness stateRoot doesn't match trustedStateRoot")
-
-    let ac = newAccountStateDB(db, trustedStateRoot, false)
-    let accounts = buildAccountsTableFromKeys(ReadOnlyStateDB(ac), tb.keys)
-    ok(accounts)
-  except Exception as e:
-    err(e.msg)

@@ -16,7 +16,7 @@ import
   ./test_helpers, ./test_allowed_to_fail,
   ../premix/parser, test_config,
   ../nimbus/[vm_state, vm_types, errors, constants],
-  ../nimbus/db/ledger,
+  ../nimbus/db/[ledger, state_db],
   ../nimbus/utils/[utils, debug],
   ../nimbus/evm/tracer/legacy_tracer,
   ../nimbus/evm/tracer/json_tracer,
@@ -25,7 +25,8 @@ import
   ../tools/common/helpers as chp,
   ../tools/evmstate/helpers,
   ../nimbus/common/common,
-  ../nimbus/core/eip4844
+  ../nimbus/core/eip4844,
+  ../nimbus/rpc/experimental
 
 type
   SealEngine = enum
@@ -198,6 +199,36 @@ proc blockWitness(vmState: BaseVMState, chainDB: CoreDbRef) =
   if root != rootHash:
     raise newException(ValidationError, "Invalid trie generated from block witness")
 
+proc testGetBlockWitness(chain: ChainRef, parentHeader, currentHeader: BlockHeader) =
+  # check that current state matches current header
+  let currentStateRoot = chain.vmstate.stateDB.rootHash
+  if currentStateRoot != currentHeader.stateRoot:
+    raise newException(ValidationError, "Expected currentStateRoot == currentHeader.stateRoot")
+
+  # run getBlockWitness and check that the witnessRoot matches the parent stateRoot
+  let (witnessRoot, witness, flags) = getBlockWitness(chain.com, currentHeader, false)
+  if witnessRoot != parentHeader.stateRoot:
+    raise newException(ValidationError, "Expected witnessRoot == parentHeader.stateRoot")
+
+  # check that the vmstate hasn't changed after call to getBlockWitness
+  if chain.vmstate.stateDB.rootHash != currentHeader.stateRoot:
+    raise newException(ValidationError, "Expected chain.vmstate.stateDB.rootHash == currentHeader.stateRoot")
+
+  # check the witnessRoot against the witness tree if the witness isn't empty
+  if witness.len() > 0:
+    let fgs = if chain.vmState.fork >= FKSpurious: {wfEIP170} else: {}
+    var tb = initTreeBuilder(witness, chain.com.db, fgs)
+    let treeRoot = tb.buildTree()
+    if treeRoot != witnessRoot:
+      raise newException(ValidationError, "Expected treeRoot == witnessRoot")
+
+  # use the witness to build the block proofs
+  let
+    ac = newAccountStateDB(chain.com.db, currentHeader.stateRoot, chain.com.pruneTrie)
+    blockProofs = getBlockProofs(state_db.ReadOnlyStateDB(ac), witnessRoot, witness, flags)
+  if witness.len() == 0 and blockProofs.len() != 0:
+    raise newException(ValidationError, "Expected blockProofs.len() == 0")
+
 proc setupTracer(ctx: TestCtx): TracerRef =
   if ctx.trace:
     if ctx.json:
@@ -237,6 +268,7 @@ proc importBlock(ctx: var TestCtx, com: CommonRef,
     raise newException(ValidationError, "persistBlocks validation")
   else:
     blockWitness(chain.vmState, com.db)
+    testGetBlockWitness(chain, chain.vmState.parent, tb.header)
 
 proc applyFixtureBlockToChain(ctx: var TestCtx, tb: var TestBlock,
                               com: CommonRef, checkSeal: bool) =
@@ -376,7 +408,7 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
         # multiple chain, we are using the last valid canonical
         # state root to test against 'postState'
         let stateDB = AccountsCache.init(memDB, header.stateRoot, pruneTrie)
-        verifyStateDB(fixture["postState"], ReadOnlyStateDB(stateDB))
+        verifyStateDB(fixture["postState"], ledger.ReadOnlyStateDB(stateDB))
 
       success = lastBlockHash == ctx.lastBlockHash
     except ValidationError as E:

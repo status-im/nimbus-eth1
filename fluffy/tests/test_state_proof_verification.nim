@@ -12,9 +12,7 @@ import
   unittest2,
   stew/results,
   eth/[common, rlp, trie, trie/trie_defs],
-  ../../nimbus/db/[ledger, core_db],
   ../../nimbus/common/chain_config,
-  ../../stateless/[witness_from_tree, multi_keys, witness_types],
   ../network/state/experimental/[state_proof_types, state_proof_generation, state_proof_verification],
   ./test_helpers
 
@@ -142,52 +140,6 @@ proc checkInvalidProofsWithBadValue(
       proofResult.isErr()
       proofResult.error() == "proof does not contain expected value"
 
-proc setupStateDB(
-  genAccounts: GenesisAlloc,
-  stateDB: LedgerRef): (Hash256, MultikeysRef) =
-
-  var keys = newSeqOfCap[AccountKey](genAccounts.len)
-
-  for address, genAccount in genAccounts:
-    var storageKeys = newSeqOfCap[StorageSlot](genAccount.storage.len)
-
-    for slotKey, slotValue in genAccount.storage:
-      storageKeys.add(slotKey.toBytesBE)
-      stateDB.setStorage(address, slotKey, slotValue)
-
-    stateDB.setNonce(address, genAccount.nonce)
-    stateDB.setCode(address, genAccount.code)
-    stateDB.setBalance(address, genAccount.balance)
-
-    let sKeys = if storageKeys.len != 0: newMultiKeys(storageKeys) else: MultikeysRef(nil)
-    let codeTouched = genAccount.code.len > 0
-    keys.add(AccountKey(address: address, codeTouched: codeTouched, storageKeys: sKeys))
-
-  stateDB.persist()
-  (stateDB.rootHash, newMultiKeys(keys))
-
-proc buildWitness(
-  genAccounts: GenesisAlloc): (KeccakHash, BlockWitness) {.raises: [CatchableError].} =
-
-  let
-    coreDb = newCoreDbRef(LegacyDbMemory)
-    accountsCache = AccountsCache.init(coreDb, emptyRlpHash, true)
-    (rootHash, multiKeys) = setupStateDB(genAccounts, accountsCache)
-
-  var wb = initWitnessBuilder(coreDb, rootHash, {wfEIP170})
-  (rootHash, wb.buildWitness(multiKeys))
-
-proc checkWitnessDataMatchesAccounts(
-  genAccounts: GenesisAlloc,
-  witnessData: TableRef[EthAddress, AccountData]) {.raises: [CatchableError].} =
-
-  for address, genAccount in genAccounts:
-    let accountData = witnessData[address]
-    check genAccount.code == accountData.code
-    check genAccount.storage == accountData.storage
-    check genAccount.balance == accountData.account.balance
-    check genAccount.nonce == accountData.account.nonce
-
 suite "State Proof Verification Tests":
 
   let genesisFiles = ["berlin2000.json", "chainid1.json", "chainid7.json", "merge.json"]
@@ -215,25 +167,3 @@ suite "State Proof Verification Tests":
       let accounts = getGenesisAlloc("fluffy" / "tests" / "custom_genesis" / file)
       var state = accounts.toState()
       checkInvalidProofsWithBadValue(accounts, state[0], state[1])
-
-  test "Block witness verification with valid state root":
-    for file in genesisFiles:
-      let
-        accounts = getGenesisAlloc("fluffy" / "tests" / "custom_genesis" / file)
-        (stateRoot, witness) = buildWitness(accounts)
-        verifyResult = verifyWitness(stateRoot, witness)
-
-      check verifyResult.isOk()
-      checkWitnessDataMatchesAccounts(accounts, verifyResult.get())
-
-  test "Block witness verification with invalid state root":
-    let badStateRoot = toDigest("2cb1b80b285d09e0570fdbbb808e1d14e4ac53e36dcd95dbc268deec2915b3e7")
-
-    for file in genesisFiles:
-      let
-        accounts = getGenesisAlloc("fluffy" / "tests" / "custom_genesis" / file)
-        (stateRoot, witness) = buildWitness(accounts)
-        verifyResult = verifyWitness(badStateRoot, witness)
-
-      check verifyResult.isErr()
-      check verifyResult.error() == "witness stateRoot doesn't match trustedStateRoot"

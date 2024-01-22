@@ -14,7 +14,8 @@ import
   ./rpc/p2p,
   ./rpc/jwt_auth,
   ./rpc/cors,
-  ./rpc/rpc_server
+  ./rpc/rpc_server,
+  ./rpc/experimental
 
 export
   common,
@@ -23,4 +24,5 @@ export
   p2p,
   jwt_auth,
   cors,
-  rpc_server
+  rpc_server,
+  experimental

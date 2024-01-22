@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -42,6 +42,7 @@ cliBuilder:
           ../stateless/test_witness_keys,
           ../stateless/test_block_witness,
           ../stateless/test_witness_json,
+          ../stateless/test_witness_verification,
           ./test_misc,
           ./test_graphql,
           ./test_clique,
@@ -52,4 +53,6 @@ cliBuilder:
           ./test_merge,
           ./test_eip4844,
           ./test_beacon/test_skeleton,
-          ./test_overflow
+          ./test_overflow,
+          ./test_getproof_json,
+          ./test_rpc_experimental_json

@@ -196,12 +196,12 @@ proc writeCode(t: var TreeBuilder, code: openArray[byte]): Hash256 =
   result = keccakHash(code)
   put(t.db.kvt, result.data, code)
 
-proc branchNode(t: var TreeBuilder, depth: int, storageMode: bool): NodeKey
-proc extensionNode(t: var TreeBuilder, depth: int, storageMode: bool): NodeKey
-proc accountNode(t: var TreeBuilder, depth: int): NodeKey
-proc accountStorageLeafNode(t: var TreeBuilder, depth: int): NodeKey
-proc hashNode(t: var TreeBuilder, depth: int, storageMode: bool): NodeKey
-proc treeNode(t: var TreeBuilder, depth: int = 0, storageMode = false): NodeKey
+proc branchNode(t: var TreeBuilder, depth: int, storageMode: bool): NodeKey {.gcsafe.}
+proc extensionNode(t: var TreeBuilder, depth: int, storageMode: bool): NodeKey {.gcsafe.}
+proc accountNode(t: var TreeBuilder, depth: int): NodeKey {.gcsafe.}
+proc accountStorageLeafNode(t: var TreeBuilder, depth: int): NodeKey {.gcsafe.}
+proc hashNode(t: var TreeBuilder, depth: int, storageMode: bool): NodeKey {.gcsafe.}
+proc treeNode(t: var TreeBuilder, depth: int = 0, storageMode = false): NodeKey {.gcsafe.}
 
 proc buildTree*(t: var TreeBuilder): KeccakHash
     {.raises: [ParsingError, Exception].} =

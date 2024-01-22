@@ -71,14 +71,14 @@ proc verifyAccountProof(trustedStateRoot: Web3Hash, res: ProofResponse): MptProo
     key,
     value)
 
-proc verifySlotProof(trustedStateRoot: Web3Hash, slot: StorageProof): MptProofVerificationResult =
+proc verifySlotProof(trustedStorageRoot: Web3Hash, slot: StorageProof): MptProofVerificationResult =
   let
     key = toSeq(keccakHash(toBytesBE(slot.key)).data)
     value = rlp.encode(slot.value)
 
   verifyMptProof(
     seq[seq[byte]](slot.proof),
-    fromHex(KeccakHash, trustedStateRoot.toHex()),
+    fromHex(KeccakHash, trustedStorageRoot.toHex()),
     key,
     value)
 
