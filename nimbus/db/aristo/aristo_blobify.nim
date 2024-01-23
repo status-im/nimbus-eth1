@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/[bitops, sequtils, sets],
+  std/[bitops, sequtils, sets, tables],
   eth/[common, trie/nibbles],
   results,
   stew/endians2,
