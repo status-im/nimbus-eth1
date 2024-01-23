@@ -55,7 +55,7 @@ proc buildWitness(
     accountsCache = AccountsCache.init(coreDb, emptyRlpHash, true)
     (rootHash, multiKeys) = setupStateDB(genAccounts, accountsCache)
 
-  var wb = initWitnessBuilder(coreDb, rootHash, {wfEIP170})
+  var wb = initWitnessBuilder(coreDb, rootHash, {wfNoFlag})
   (rootHash, wb.buildWitness(multiKeys))
 
 proc checkWitnessDataMatchesAccounts(
@@ -80,7 +80,7 @@ proc witnessVerificationMain*() =
         let
           accounts = getGenesisAlloc("tests" / "customgenesis" / file)
           (stateRoot, witness) = buildWitness(accounts)
-          verifyResult = verifyWitness(stateRoot, witness, {wfEIP170})
+          verifyResult = verifyWitness(stateRoot, witness, {wfNoFlag})
 
         check verifyResult.isOk()
         checkWitnessDataMatchesAccounts(accounts, verifyResult.get())
@@ -92,7 +92,7 @@ proc witnessVerificationMain*() =
         let
           accounts = getGenesisAlloc("tests" / "customgenesis" / file)
           (_, witness) = buildWitness(accounts)
-          verifyResult = verifyWitness(badStateRoot, witness, {wfEIP170})
+          verifyResult = verifyWitness(badStateRoot, witness, {wfNoFlag})
 
         check verifyResult.isErr()
         check verifyResult.error() == "witness stateRoot doesn't match trustedStateRoot"

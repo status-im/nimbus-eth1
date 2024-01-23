@@ -60,7 +60,7 @@ proc checkAndValidateWitnessAgainstProofs(
     witness: seq[byte],
     proofs: seq[ProofResponse]) =
 
-  let verifyWitnessResult = verifyWitness(expectedStateRoot, witness, {wfEIP170})
+  let verifyWitnessResult = verifyWitness(expectedStateRoot, witness, {wfNoFlag})
   check verifyWitnessResult.isOk()
   let witnessData = verifyWitnessResult.value()
 

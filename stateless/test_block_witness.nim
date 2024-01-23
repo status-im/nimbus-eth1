@@ -24,7 +24,7 @@ type
 
 proc testGetBranch(tester: Tester, rootHash: KeccakHash, testStatusIMPL: var TestStatus) =
   var trie = initAccountsTrie(tester.memdb, rootHash)
-  let flags = {wfEIP170}
+  let flags = {wfNoFlag}
 
   try:
     var wb = initWitnessBuilder(tester.memdb, rootHash, flags)

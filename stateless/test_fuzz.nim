@@ -19,7 +19,7 @@ import
 test:
   var db = newCoreDbRef(LegacyDbMemory)
   try:
-    var tb = initTreeBuilder(payload, db, {wfEIP170})
+    var tb = initTreeBuilder(payload, db, {wfNoFlag})
     let root = tb.buildTree()
   except ParsingError, ContractCodeError:
     debugEcho "Error detected ", getCurrentExceptionMsg()
