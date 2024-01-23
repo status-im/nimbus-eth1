@@ -313,7 +313,7 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
       authHooks = hooks,
       # yuck, we should remove this ugly cast when
       # we fix nim-websock
-      rng = cast[ws.Rng](nimbus.ctx.rng)
+      rng = nimbus.ctx.rng
     )
     setupCommonRpc(nimbus.ethNode, conf, nimbus.wsRpcServer)
 
