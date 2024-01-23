@@ -311,8 +311,6 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
     nimbus.wsRpcServer = newRpcWebSocketServer(
       initTAddress(conf.wsAddress, conf.wsPort),
       authHooks = hooks,
-      # yuck, we should remove this ugly cast when
-      # we fix nim-websock
       rng = nimbus.ctx.rng
     )
     setupCommonRpc(nimbus.ethNode, conf, nimbus.wsRpcServer)
