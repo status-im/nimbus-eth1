@@ -657,7 +657,9 @@ proc getStorageRoot*(ac: AccountsLedgerRef, address: EthAddress): Hash256 =
   else: acc.account.storageVid.hash().valueOr: EMPTY_ROOT_HASH
 
 func update(wd: var WitnessData, acc: RefAccount) =
-  wd.codeTouched = CodeChanged in acc.flags
+  # once the code is touched make sure it doesn't get reset back to false in another update
+  if not wd.codeTouched:
+    wd.codeTouched = CodeChanged in acc.flags or CodeLoaded in acc.flags
 
   if not acc.originalStorage.isNil:
     for k, v in acc.originalStorage:
