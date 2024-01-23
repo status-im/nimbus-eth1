@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -311,9 +311,7 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
     nimbus.wsRpcServer = newRpcWebSocketServer(
       initTAddress(conf.wsAddress, conf.wsPort),
       authHooks = hooks,
-      # yuck, we should remove this ugly cast when
-      # we fix nim-websock
-      rng = cast[ws.Rng](nimbus.ctx.rng)
+      rng = nimbus.ctx.rng
     )
     setupCommonRpc(nimbus.ethNode, conf, nimbus.wsRpcServer)
 
