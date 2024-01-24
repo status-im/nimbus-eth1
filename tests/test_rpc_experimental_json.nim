@@ -130,7 +130,7 @@ proc rpcExperimentalJsonMain*() =
       "block248032.json",
       "block299804.json",
       "block420301.json",
-      #"block512335.json",
+      "block512335.json",
       "block652148.json",
       "block668910.json",
       "block1017395.json",
@@ -139,24 +139,27 @@ proc rpcExperimentalJsonMain*() =
       "block1317742.json",
       "block1352922.json",
       "block1368834.json",
-      #"block1417555.json",
-      # "block1431916.json",
+      "block1417555.json",
+       "block1431916.json",
       "block1487668.json",
-      # "block1920000.json",
-      # "block1927662.json",
-      # "block2463413.json",
-      # "block2675000.json",
-      "block2675002.json"
-      # "block4370000.json"
+      "block1920000.json",
+      "block1927662.json",
+      "block2463413.json",
+      "block2675000.json",
+      "block2675002.json",
+      "block4370000.json"
     ]
 
-    let RPC_PORT = 0 # let the OS choose a port
+    let
+      RPC_HOST = "127.0.0.1"
+      RPC_PORT = 0 # let the OS choose a port
+
     var
-      rpcServer = newRpcSocketServer(["127.0.0.1:" & $RPC_PORT])
-      client = newRpcSocketClient()
+      rpcServer = newRpcHttpServerWithParams(initTAddress(RPC_HOST, RPC_PORT))
+      client = newRpcHttpClient()
 
     rpcServer.start()
-    waitFor client.connect(rpcServer.localAddress[0])
+    waitFor client.connect(RPC_HOST, rpcServer.localAddress[0].port, secure = false)
 
 
     test "exp_getWitnessByBlockNumber and exp_getProofsByBlockNumber - latest block pre-execution state":
@@ -232,8 +235,8 @@ proc rpcExperimentalJsonMain*() =
           discard await client.exp_getProofsByBlockNumber(blockNum, true)
 
 
-    rpcServer.stop()
-    rpcServer.close()
+    waitFor rpcServer.stop()
+    waitFor rpcServer.closeWait()
 
 when isMainModule:
   rpcExperimentalJsonMain()
