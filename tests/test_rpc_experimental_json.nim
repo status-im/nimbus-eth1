@@ -140,7 +140,7 @@ proc rpcExperimentalJsonMain*() =
       "block1352922.json",
       "block1368834.json",
       "block1417555.json",
-       "block1431916.json",
+      "block1431916.json",
       "block1487668.json",
       "block1920000.json",
       "block1927662.json",
@@ -233,6 +233,28 @@ proc rpcExperimentalJsonMain*() =
 
         expect JsonRpcError:
           discard await client.exp_getProofsByBlockNumber(blockNum, true)
+
+    test "Contract storage updated - bytecode should exist in witness":
+      for file in importFiles:
+        let
+          (com, parentStateRoot, stateRoot, blockNumber) = importBlockDataFromFile(file)
+          blockNum = blockId(blockNumber.truncate(uint64))
+
+        setupExpRpc(com, rpcServer)
+
+        let
+          witness = await client.exp_getWitnessByBlockNumber(blockNum, false)
+          proofs = await client.exp_getProofsByBlockNumber(blockNum, true)
+          verifyWitnessResult = verifyWitness(parentStateRoot, witness, {wfNoFlag})
+
+        check verifyWitnessResult.isOk()
+        let witnessData = verifyWitnessResult.value()
+
+        for proof in proofs:
+          let address = ethAddr(proof.address)
+          # if the storage was updated on an existing contract
+          if proof.storageProof.len() > 0 and witnessData.contains(address):
+            check witnessData[address].code.len() > 0
 
 
     waitFor rpcServer.stop()
