@@ -1,4 +1,4 @@
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -14,7 +14,8 @@ import
     strutils,
     times,
     os,
-    uri
+    uri,
+    net
   ],
   pkg/[
     chronicles,
@@ -23,14 +24,13 @@ import
     stew/byteutils,
     confutils/std/net
   ],
-  stew/shims/net as stewNet,
   eth/[common, net/nat, p2p/bootnodes, p2p/enode, p2p/discoveryv5/enr],
   "."/[db/select_backend,
     constants, vm_compile_info, version
   ],
   common/chain_config
 
-export stewNet
+export net
 
 const
   # TODO: fix this agent-string format to match other

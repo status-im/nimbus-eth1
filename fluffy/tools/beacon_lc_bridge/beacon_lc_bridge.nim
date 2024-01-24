@@ -314,7 +314,7 @@ proc asPortalBlockData*(
 
 proc getBlockReceipts(
     client: RpcClient, transactions: seq[TypedTransaction], blockHash: Hash256):
-    Future[Result[seq[Receipt], string]] {.async.} =
+    Future[Result[seq[Receipt], string]] {.async: (raises: [CancelledError]).} =
   ## Note: This makes use of `eth_getBlockReceipts` JSON-RPC endpoint which is
   ## only supported by Alchemy.
   var receipts: seq[Receipt]
@@ -324,10 +324,7 @@ proc getBlockReceipts(
       try:
         await client.eth_getBlockReceipts(w3Hash blockHash)
       except CatchableError as e:
-        await client.close()
         return err("JSON-RPC eth_getBlockReceipts failed: " & e.msg)
-
-    await client.close()
 
     for receiptObject in receiptObjects:
       let receipt = asReceipt(receiptObject).valueOr:
@@ -426,7 +423,7 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
         Opt.some(client)
 
     optimisticHandler = proc(signedBlock: ForkedMsgTrustedSignedBeaconBlock):
-        Future[void] {.async.} =
+        Future[void] {.async: (raises: [CancelledError]).} =
       # TODO: Should not be gossiping optimistic blocks, but instead store them
       # in a cache and only gossip them after they are confirmed due to an LC
       # finalized header.
@@ -459,8 +456,11 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
                     contentKey = encodedContentKey.toHex()
               except CatchableError as e:
                 error "JSON-RPC error", error = $e.msg
-
-              await portalRpcClient.close()
+              # TODO: clean-up when json-rpc gets async raises annotations
+              try:
+                await portalRpcClient.close()
+              except CatchableError:
+                discard
 
             # For bodies to get verified, the header needs to be available on
             # the network. Wait a little to get the headers propagated through
@@ -480,17 +480,32 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
               except CatchableError as e:
                 error "JSON-RPC error", error = $e.msg
 
-            await portalRpcClient.close()
+              # TODO: clean-up when json-rpc gets async raises annotations
+              try:
+                await portalRpcClient.close()
+              except CatchableError:
+                discard
 
             if web3Client.isSome():
+              let client = web3Client.get()
               # get receipts
               let receipts =
-                (await web3Client.get().getBlockReceipts(
+                (await client.getBlockReceipts(
                     executionPayload.transactions, hash)).valueOr:
                 # (await web3Client.get().getBlockReceipts(
                 #     executionPayload.transactions)).valueOr:
                   error "Error getting block receipts", error
+                  # TODO: clean-up when json-rpc gets async raises annotations
+                  try:
+                    await client.close()
+                  except CatchableError:
+                    discard
                   return
+              # TODO: clean-up when json-rpc gets async raises annotations
+              try:
+                await client.close()
+              except CatchableError:
+                discard
 
               let portalReceipts = PortalReceipts.fromReceipts(receipts)
               if validateReceipts(portalReceipts, payload.receiptsRoot).isErr():
@@ -511,7 +526,11 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
               except CatchableError as e:
                 error "JSON-RPC error for portal_historyGossip", error = $e.msg
 
-              await portalRpcClient.close()
+              # TODO: clean-up when json-rpc gets async raises annotations
+              try:
+                await portalRpcClient.close()
+              except CatchableError:
+                discard
 
       return
 

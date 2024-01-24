@@ -12,7 +12,6 @@ import
   json_rpc/[rpcproxy, rpcserver],
   json_serialization/std/tables,
   stew/byteutils,
-  eth/p2p/discoveryv5/nodes_verification,
   ../network/wire/portal_protocol,
   ./rpc_types
 

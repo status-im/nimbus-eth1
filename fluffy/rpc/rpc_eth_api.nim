@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2021-2023 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -9,7 +9,7 @@
 
 import
   std/[times, sequtils, strutils, typetraits],
-  json_rpc/[rpcproxy, rpcserver], stew/byteutils,
+  json_rpc/[rpcproxy, rpcserver],
   web3/[conversions], # sigh, for FixedBytes marshalling
   eth/[common/eth_types, rlp],
   beacon_chain/spec/forks,

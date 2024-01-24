@@ -8,7 +8,7 @@
 {.used.}
 
 import
-  chronos, testutils/unittests, stew/shims/net,
+  chronos, testutils/unittests,
   json_rpc/[rpcproxy, rpcserver], json_rpc/clients/httpclient,
   stint,eth/p2p/discoveryv5/enr, eth/keys,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
