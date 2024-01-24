@@ -737,7 +737,10 @@ proc rpcMain*() =
         let recs = await client.eth_getBlockReceipts(blockId("latest"))
         check recs.isSome
         if recs.isSome:
-          check recs.get.len == 2
+          let receipts = recs.get
+          check receipts.len == 2
+          check receipts[0].transactionIndex == 0.Quantity
+          check receipts[1].transactionIndex == 1.Quantity
 
     rpcServer.stop()
     rpcServer.close()

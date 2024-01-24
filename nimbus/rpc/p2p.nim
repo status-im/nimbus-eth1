@@ -571,6 +571,7 @@ proc setupEthRpc*(
         let gasUsed = receipt.cumulativeGasUsed - prevGasUsed
         prevGasUsed = receipt.cumulativeGasUsed
         recs.add populateReceipt(receipt, gasUsed, txs[index], index, header)
+        inc index
 
       return some(recs)
     except CatchableError:
