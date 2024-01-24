@@ -322,7 +322,7 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
     if RpcFlag.Debug in wsFlags:
       setupDebugRpc(com, nimbus.wsRpcServer)
     if RpcFlag.Exp in wsFlags:
-      setupExpRpc(com, nimbus.rpcServer)
+      setupExpRpc(com, nimbus.wsRpcServer)
 
     nimbus.wsRpcServer.start()
 

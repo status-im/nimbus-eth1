@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2020-2023 Status Research & Development GmbH
+# Copyright (c) 2020-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -132,7 +132,7 @@ proc runTest(filePath, fileName: string) =
     let t = parseTester(filePath, testStatusIMPL)
     var db = newCoreDbRef(LegacyDbMemory)
     try:
-      var tb = initTreeBuilder(t.output, db, {wfEIP170})
+      var tb = initTreeBuilder(t.output, db, {wfNoFlag})
       let root = tb.buildTree()
       if t.error:
         check root != t.rootHash
@@ -149,7 +149,7 @@ proc writeFuzzData(filePath, fileName: string) =
 
   # this block below check the parsed json
   var db = newCoreDbRef(LegacyDbMemory)
-  var tb = initTreeBuilder(t.output, db, {wfEIP170})
+  var tb = initTreeBuilder(t.output, db, {wfNoFlag})
   discard tb.buildTree()
 
   writeFile(filename, t.output)

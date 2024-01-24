@@ -34,12 +34,15 @@ proc getBlockWitness*(
     com: CommonRef,
     blockHeader: BlockHeader,
     statePostExecution: bool): (KeccakHash, BlockWitness, WitnessFlags)
-    {.raises: [CatchableError].} =
+    {.raises: [RlpError, BlockNotFound, ValueError, CatchableError].} =
 
   let
     chainDB = com.db
     blockHash = chainDB.getBlockHash(blockHeader.blockNumber)
     blockBody = chainDB.getBlockBody(blockHash)
+    # Initializing the VM will throw a Defect if the state doesn't exist.
+    # Once we enable pruning we will need to check if the block state has been pruned
+    # before trying to initialize the VM as we do here.
     vmState = BaseVMState.new(blockHeader, com)
     flags = if vmState.fork >= FKSpurious: {wfEIP170} else: {}
   vmState.generateWitness = true # Enable saving witness data

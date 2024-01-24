@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2020-2023 Status Research & Development GmbH
+# Copyright (c) 2020-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -101,14 +101,14 @@ proc runTest(numPairs: int, testStatusIMPL: var TestStatus,
   var mkeys = newMultiKeys(addrs)
   let rootHash = trie.rootHash
 
-  var wb = initWitnessBuilder(memDB, rootHash, {wfEIP170})
+  var wb = initWitnessBuilder(memDB, rootHash, {wfNoFlag})
   var witness = wb.buildWitness(mkeys)
   var db = newCoreDbRef(LegacyDbMemory)
   when defined(useInputStream):
     var input = memoryInput(witness)
-    var tb = initTreeBuilder(input, db, {wfEIP170})
+    var tb = initTreeBuilder(input, db, {wfNoFlag})
   else:
-    var tb = initTreeBuilder(witness, db, {wfEIP170})
+    var tb = initTreeBuilder(witness, db, {wfNoFlag})
   let root = tb.buildTree()
   check root.data == rootHash.data
 
@@ -150,7 +150,7 @@ proc initMultiKeys(keys: openArray[string], storageMode: bool = false): Multikey
 proc parseInvalidInput(payload: openArray[byte]): bool =
   var db = newCoreDbRef(LegacyDbMemory)
   try:
-    var tb = initTreeBuilder(payload, db, {wfEIP170})
+    var tb = initTreeBuilder(payload, db, {wfNoFlag})
     discard tb.buildTree()
   except ParsingError, ContractCodeError:
     result = true
@@ -285,10 +285,10 @@ proc witnessKeysMain*() =
       var mkeys = newMultiKeys(addrs)
       let rootHash = trie.rootHash
 
-      var wb = initWitnessBuilder(memDB, rootHash, {wfEIP170})
+      var wb = initWitnessBuilder(memDB, rootHash, {wfNoFlag})
       var witness = wb.buildWitness(mkeys)
       var db = newCoreDbRef(LegacyDbMemory)
-      var tb = initTreeBuilder(witness, db, {wfEIP170})
+      var tb = initTreeBuilder(witness, db, {wfNoFlag})
       let root = tb.buildTree()
       check root.data == rootHash.data
 

@@ -60,7 +60,7 @@ proc checkAndValidateWitnessAgainstProofs(
     witness: seq[byte],
     proofs: seq[ProofResponse]) =
 
-  let verifyWitnessResult = verifyWitness(expectedStateRoot, witness, {wfEIP170})
+  let verifyWitnessResult = verifyWitness(expectedStateRoot, witness, {wfNoFlag})
   check verifyWitnessResult.isOk()
   let witnessData = verifyWitnessResult.value()
 
@@ -100,6 +100,8 @@ proc rpcExperimentalJsonMain*() =
 
   suite "rpc experimental json tests":
 
+    # The commented out json files below are failing due to hitting the RPC client and
+    # server defaultMaxRequestLength. Currently the limit is set to around 128kb.
     let importFiles = [
       "block97.json",
       "block98.json",
@@ -108,16 +110,56 @@ proc rpcExperimentalJsonMain*() =
       "block46402.json",
       "block47205.json",
       "block47216.json",
-      "block48712.json"
-      ]
+      "block48712.json",
+      "block48915.json",
+      "block49018.json",
+      "block49439.json",
+      "block49891.json",
+      "block50111.json",
+      "block78458.json",
+      "block81383.json",
+      "block81666.json",
+      "block85858.json",
+      "block146675.json",
+      "block116524.json",
+      "block196647.json",
+      "block226147.json",
+      "block226522.json",
+      "block231501.json",
+      "block243826.json",
+      "block248032.json",
+      "block299804.json",
+      "block420301.json",
+      "block512335.json",
+      "block652148.json",
+      "block668910.json",
+      "block1017395.json",
+      "block1149150.json",
+      "block1155095.json",
+      "block1317742.json",
+      "block1352922.json",
+      "block1368834.json",
+      "block1417555.json",
+      "block1431916.json",
+      "block1487668.json",
+      "block1920000.json",
+      "block1927662.json",
+      "block2463413.json",
+      "block2675000.json",
+      "block2675002.json",
+      "block4370000.json"
+    ]
 
-    let RPC_PORT = 0 # let the OS choose a port
+    let
+      RPC_HOST = "127.0.0.1"
+      RPC_PORT = 0 # let the OS choose a port
+
     var
-      rpcServer = newRpcSocketServer(["127.0.0.1:" & $RPC_PORT])
-      client = newRpcSocketClient()
+      rpcServer = newRpcHttpServerWithParams(initTAddress(RPC_HOST, RPC_PORT))
+      client = newRpcHttpClient()
 
     rpcServer.start()
-    waitFor client.connect(rpcServer.localAddress[0])
+    waitFor client.connect(RPC_HOST, rpcServer.localAddress[0].port, secure = false)
 
 
     test "exp_getWitnessByBlockNumber and exp_getProofsByBlockNumber - latest block pre-execution state":
@@ -192,9 +234,31 @@ proc rpcExperimentalJsonMain*() =
         expect JsonRpcError:
           discard await client.exp_getProofsByBlockNumber(blockNum, true)
 
+    test "Contract storage updated - bytecode should exist in witness":
+      for file in importFiles:
+        let
+          (com, parentStateRoot, stateRoot, blockNumber) = importBlockDataFromFile(file)
+          blockNum = blockId(blockNumber.truncate(uint64))
 
-    rpcServer.stop()
-    rpcServer.close()
+        setupExpRpc(com, rpcServer)
+
+        let
+          witness = await client.exp_getWitnessByBlockNumber(blockNum, false)
+          proofs = await client.exp_getProofsByBlockNumber(blockNum, true)
+          verifyWitnessResult = verifyWitness(parentStateRoot, witness, {wfNoFlag})
+
+        check verifyWitnessResult.isOk()
+        let witnessData = verifyWitnessResult.value()
+
+        for proof in proofs:
+          let address = ethAddr(proof.address)
+          # if the storage was updated on an existing contract
+          if proof.storageProof.len() > 0 and witnessData.contains(address):
+            check witnessData[address].code.len() > 0
+
+
+    waitFor rpcServer.stop()
+    waitFor rpcServer.closeWait()
 
 when isMainModule:
   rpcExperimentalJsonMain()

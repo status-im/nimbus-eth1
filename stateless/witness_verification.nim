@@ -38,12 +38,11 @@ proc buildAccountsTableFromKeys(
       else: @[]
     var storage = initTable[UInt256, UInt256]()
 
-    if code.len() > 0:
-      for slot in key.slots:
-        let slotKey = fromBytesBE(UInt256, slot)
-        let (slotValue, slotExists) = db.getStorage(key.address, slotKey)
-        if slotExists:
-          storage[slotKey] = slotValue
+    for slot in key.slots:
+      let slotKey = fromBytesBE(UInt256, slot)
+      let (slotValue, slotExists) = db.getStorage(key.address, slotKey)
+      if slotExists:
+        storage[slotKey] = slotValue
 
     accounts[key.address] = AccountData(
         account: account,
