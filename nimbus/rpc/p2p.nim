@@ -555,6 +555,27 @@ proc setupEthRpc*(
 
     getProof(accDB, address, slots)
 
+  server.rpc("eth_getBlockReceipts") do(quantityTag: BlockTag) -> Option[seq[ReceiptObject]]:
+    try:
+      let header = chainDB.headerFromTag(quantityTag)
+      var
+        prevGasUsed = GasInt(0)
+        recs: seq[ReceiptObject]
+        txs: seq[Transaction]
+        index = 0
+
+      for tx in chainDB.getBlockTransactions(header):
+        txs.add tx
+
+      for receipt in chainDB.getReceipts(header.receiptRoot):
+        let gasUsed = receipt.cumulativeGasUsed - prevGasUsed
+        prevGasUsed = receipt.cumulativeGasUsed
+        recs.add populateReceipt(receipt, gasUsed, txs[index], index, header)
+        inc index
+
+      return some(recs)
+    except CatchableError:
+      return none(seq[ReceiptObject])
 #[
   server.rpc("eth_newFilter") do(filterOptions: FilterOptions) -> int:
     ## Creates a filter object, based on filter options, to notify when the state changes (logs).

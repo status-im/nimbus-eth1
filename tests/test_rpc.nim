@@ -733,6 +733,15 @@ proc rpcMain*() =
           storageProof.len() == 1
           verifySlotProof(proofResponse.storageHash, storageProof[0]).isValid()
 
+      test "eth_getBlockReceipts":
+        let recs = await client.eth_getBlockReceipts(blockId("latest"))
+        check recs.isSome
+        if recs.isSome:
+          let receipts = recs.get
+          check receipts.len == 2
+          check receipts[0].transactionIndex == 0.Quantity
+          check receipts[1].transactionIndex == 1.Quantity
+
     rpcServer.stop()
     rpcServer.close()
 
