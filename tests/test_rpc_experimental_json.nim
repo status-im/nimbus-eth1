@@ -100,6 +100,8 @@ proc rpcExperimentalJsonMain*() =
 
   suite "rpc experimental json tests":
 
+    # The commented out json files below are failing due to hitting the RPC client and
+    # server defaultMaxRequestLength. Currently the limit is set to around 128kb.
     let importFiles = [
       "block97.json",
       "block98.json",
@@ -108,8 +110,45 @@ proc rpcExperimentalJsonMain*() =
       "block46402.json",
       "block47205.json",
       "block47216.json",
-      "block48712.json"
-      ]
+      "block48712.json",
+      "block48915.json",
+      "block49018.json",
+      "block49439.json",
+      "block49891.json",
+      "block50111.json",
+      "block78458.json",
+      "block81383.json",
+      "block81666.json",
+      "block85858.json",
+      "block146675.json",
+      "block116524.json",
+      "block196647.json",
+      "block226147.json",
+      "block226522.json",
+      "block231501.json",
+      "block243826.json",
+      "block248032.json",
+      "block299804.json",
+      "block420301.json",
+      #"block512335.json",
+      "block652148.json",
+      "block668910.json",
+      "block1017395.json",
+      "block1149150.json",
+      "block1155095.json",
+      "block1317742.json",
+      "block1352922.json",
+      "block1368834.json",
+      #"block1417555.json",
+      # "block1431916.json",
+      "block1487668.json",
+      # "block1920000.json",
+      # "block1927662.json",
+      # "block2463413.json",
+      # "block2675000.json",
+      "block2675002.json"
+      # "block4370000.json"
+    ]
 
     let RPC_PORT = 0 # let the OS choose a port
     var
