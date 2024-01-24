@@ -1,3 +1,10 @@
+# nimbus
+# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Licensed and distributed under either of
+#   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
 mode = ScriptMode.Verbose
 
 packageName   = "nimbus"
@@ -83,10 +90,10 @@ task fluffy_test, "Run fluffy tests":
   test "fluffy/tests", "all_fluffy_tests", "-d:chronicles_log_level=ERROR -d:nimbus_db_backend=sqlite -d:mergeBlockNumber:38130"
 
 task utp_test_app, "Build uTP test app":
-  buildBinary "utp_test_app", "fluffy/tools/utp_testing/", "-d:chronicles_log_level=TRACE -d:chronosStrictException"
+  buildBinary "utp_test_app", "fluffy/tools/utp_testing/", "-d:chronicles_log_level=TRACE"
 
 task utp_test, "Run uTP integration tests":
-  test "fluffy/tools/utp_testing", "utp_test", "-d:chronicles_log_level=ERROR -d:chronosStrictException"
+  test "fluffy/tools/utp_testing", "utp_test", "-d:chronicles_log_level=ERROR"
 
 task test_portal_testnet, "Build test_portal_testnet":
   buildBinary "test_portal_testnet", "fluffy/scripts/", "-d:chronicles_log_level=DEBUG -d:unittest2DisableParamFiltering"

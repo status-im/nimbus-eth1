@@ -104,7 +104,7 @@ proc run(config: VerifiedProxyConf) {.raises: [CatchableError].} =
     verifiedProxy = VerifiedRpcProxy.new(rpcProxy, blockCache, chainId)
 
     optimisticHandler = proc(signedBlock: ForkedMsgTrustedSignedBeaconBlock):
-        Future[void] {.async.} =
+        Future[void] {.async: (raises: [CancelledError]).} =
       notice "New LC optimistic block",
         opt = signedBlock.toBlockId(),
         wallSlot = getBeaconTime().slotOrZero

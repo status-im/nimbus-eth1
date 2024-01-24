@@ -11,7 +11,6 @@ import
   std/[strutils],
   stew/[results, byteutils], stint,
   eth/common/eth_types_rlp, chronos,
-  stew/shims/net,
   graphql, graphql/graphql as context,
   graphql/common/types, graphql/httpserver,
   graphql/instruments/query_complexity,

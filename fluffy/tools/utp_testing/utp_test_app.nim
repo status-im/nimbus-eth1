@@ -7,11 +7,10 @@
 {.push raises: [].}
 
 import
-  std/[hashes, tables],
+  std/[hashes, tables, net],
   chronos, chronicles, confutils,
   confutils/std/net as confNet,
   stew/[byteutils, endians2],
-  stew/shims/net,
   json_rpc/servers/httpserver,
   eth/p2p/discoveryv5/protocol,
   eth/p2p/discoveryv5/enr,

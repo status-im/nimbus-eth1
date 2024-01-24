@@ -6,7 +6,6 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/[os, json, sequtils],
   testutils/unittests,
   stew/[byteutils, io2],
   eth/keys,
@@ -24,7 +23,7 @@ suite "State Content Keys":
       encoded = SSZ.encode(nibbles)
     check encoded.toHex() == evenNibles
     # echo ">>>", encoded.toHex()
-      
+
   const oddNibbles = "0105000000123456789abc0d"
   test "Encode/decode odd nibbles":
     const
@@ -85,7 +84,7 @@ suite "State Content Keys":
     const
       address = Address.fromHex("000d836201318ec6899a67540690382780743280")
       codeHash = CodeHash.fromHex("c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470")
-      
+
     let
       contractCodeKey = ContractCodeKey(address: address, codeHash: codeHash)
       contentKey = ContentKey(contentType: contractCode, contractCodeKey: contractCodeKey)
@@ -166,7 +165,7 @@ suite "State Content Values":
       contractWitnessProof = Witness(@[WitnessNode(@[byte 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07])])
       stateWitnessKeyPackedNibbles = @[NibblePair 0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF1]
       stateWitnessProof = Witness(@[WitnessNode(@[byte 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09])])
-      
+
       contractTrieNodeOffer = ContractTrieNodeOffer(
         blockHash: BlockHash.fromHex(blockHash),
         proof: StorageWitness(

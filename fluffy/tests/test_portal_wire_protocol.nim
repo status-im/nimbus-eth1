@@ -9,7 +9,7 @@
 
 import
   std/[algorithm, sequtils],
-  chronos, testutils/unittests, stew/shims/net,
+  chronos, testutils/unittests,
   stew/results,
   eth/keys, eth/p2p/discoveryv5/routing_table, nimcrypto/[hash, sha2],
   eth/p2p/discoveryv5/protocol as discv5_protocol,

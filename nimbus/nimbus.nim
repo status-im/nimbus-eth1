@@ -19,7 +19,6 @@ import
   json_rpc/rpcserver,
   metrics,
   metrics/[chronos_httpserver, chronicles_support],
-  stew/shims/net as stewNet,
   websock/websock as ws,
   kzg4844/kzg_ex as kzg,
   ./core/eip4844,
