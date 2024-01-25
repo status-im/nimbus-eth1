@@ -23,7 +23,7 @@ const
   restRequestsTimeout = 30.seconds
 
 proc getBeaconData*(): (
-    RuntimeConfig, ref ForkDigests, BeaconClock) {.raises: [IOError].} =
+    RuntimeConfig, ref ForkDigests, BeaconClock) =
   let
     metadata = getMetadataForNetwork("mainnet")
     genesisState =
@@ -32,7 +32,7 @@ proc getBeaconData*(): (
         newClone(readSszForkedHashedBeaconState(
           metadata.cfg,
           genesisData.toOpenArray(genesisData.low, genesisData.high)))
-      except CatchableError as err:
+      except SerializationError as err:
         raiseAssert "Invalid baked-in state: " & err.msg
     genesis_validators_root =
       getStateField(genesisState[], genesis_validators_root)
@@ -60,14 +60,12 @@ proc exportLCBootstrapUpdate*(
       fatal "Error occured while closing file", error = e.msg
       quit 1
 
-  var
+  let
     client = RestClientRef.new(restUrl).valueOr:
       error "Cannot connect to server", error = error
       quit 1
 
-  var contentTable: JsonPortalContentTable
-
-  var update =
+  let update =
     try:
       notice "Downloading LC bootstrap"
       awaitWithTimeout(
@@ -118,14 +116,12 @@ proc exportLCUpdates*(
       fatal "Error occured while closing file", error = e.msg
       quit 1
 
-  var
+  let
     client = RestClientRef.new(restUrl).valueOr:
       error "Cannot connect to server", error = error
       quit 1
 
-  var contentTable: JsonPortalContentTable
-
-  var updates =
+  let updates =
     try:
       notice "Downloading LC updates"
       awaitWithTimeout(
@@ -181,14 +177,12 @@ proc exportLCFinalityUpdate*(
       fatal "Error occured while closing file", error = e.msg
       quit 1
 
-  var
+  let
     client = RestClientRef.new(restUrl).valueOr:
       error "Cannot connect to server", error = error
       quit 1
 
-  var contentTable: JsonPortalContentTable
-
-  var update =
+  let update =
     try:
       notice "Downloading LC finality update"
       awaitWithTimeout(
@@ -207,7 +201,6 @@ proc exportLCFinalityUpdate*(
       let
         finalizedSlot = forkyObject.finalized_header.beacon.slot
         contentKey = encode(finalityUpdateContentKey(finalizedSlot.uint64))
-        contentId = beacon_content.toContentId(contentKey)
         forkDigest = forkDigestAtEpoch(
           forkDigests[], epoch(forkyObject.attested_header.beacon.slot), cfg)
         content = encodeFinalityUpdateForked(
@@ -238,14 +231,12 @@ proc exportLCOptimisticUpdate*(
       fatal "Error occured while closing file", error = e.msg
       quit 1
 
-  var
+  let
     client = RestClientRef.new(restUrl).valueOr:
       error "Cannot connect to server", error = error
       quit 1
 
-  var contentTable: JsonPortalContentTable
-
-  var update =
+  let update =
     try:
       notice "Downloading LC optimistic update"
       awaitWithTimeout(
@@ -264,7 +255,6 @@ proc exportLCOptimisticUpdate*(
       let
         slot = forkyObject.signature_slot
         contentKey = encode(optimisticUpdateContentKey(slot.uint64))
-        contentId = beacon_content.toContentId(contentKey)
         forkDigest = forkDigestAtEpoch(
           forkDigests[], epoch(forkyObject.attested_header.beacon.slot), cfg)
         content = encodeOptimisticUpdateForked(

@@ -1,5 +1,5 @@
-# beacon hain light client
-# Copyright (c) 2022-2023 Status Research & Development GmbH
+# fluffy
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -274,41 +274,6 @@ proc query[E](
   # content gets validated. This is improvement to do for all Portal content
   # requests however, see: https://github.com/status-im/nimbus-eth1/issues/1769
   self.workerTask(e, key)
-
-template query[E](
-    self: LightClientManager,
-    e: typedesc[E]
-): Future[bool] =
-  self.query(e, Nothing())
-
-type SchedulingMode = enum
-  Soon,
-  CurrentPeriod,
-  NextPeriod
-
-func fetchTime(
-    self: LightClientManager,
-    wallTime: BeaconTime,
-    schedulingMode: SchedulingMode
-): BeaconTime =
-  let
-    remainingTime =
-      case schedulingMode:
-      of Soon:
-        chronos.seconds(0)
-      of CurrentPeriod:
-        let
-          wallPeriod = wallTime.slotOrZero().sync_committee_period
-          deadlineSlot = (wallPeriod + 1).start_slot - 1
-          deadline = deadlineSlot.start_beacon_time()
-        chronos.nanoseconds((deadline - wallTime).nanoseconds)
-      of NextPeriod:
-        chronos.seconds(
-          (SLOTS_PER_SYNC_COMMITTEE_PERIOD * SECONDS_PER_SLOT).int64)
-    minDelay = max(remainingTime div 8, chronos.seconds(10))
-    jitterSeconds = (minDelay * 2).seconds
-    jitterDelay = chronos.seconds(self.rng[].rand(jitterSeconds).int64)
-  return wallTime + minDelay + jitterDelay
 
 # https://github.com/ethereum/consensus-specs/blob/v1.4.0-beta.1/specs/altair/light-client/light-client.md#light-client-sync-process
 proc loop(self: LightClientManager) {.async.} =

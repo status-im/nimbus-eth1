@@ -1,4 +1,4 @@
-# Nimbus
+# fluffy
 # Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
@@ -40,8 +40,7 @@ TraceResponse.useDefaultSerializationIn JrpcConv
 # as the proc becomes generic, where the rpc macro from router.nim can no longer
 # be found, which is why we export rpcserver which should export router.
 proc installPortalApiHandlers*(
-    rpcServer: RpcServer|RpcProxy, p: PortalProtocol, network: static string)
-    {.raises: [CatchableError].} =
+    rpcServer: RpcServer|RpcProxy, p: PortalProtocol, network: static string) =
 
   rpcServer.rpc("portal_" & network & "NodeInfo") do() -> NodeInfo:
     return p.routingTable.getNodeInfo()

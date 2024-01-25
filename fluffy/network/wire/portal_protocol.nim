@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2021-2023 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -291,7 +291,9 @@ func truncateEnrs(
   for n in nodes:
     let enr = ByteList.init(n.record.raw)
     if totalSize + enr.len() + enrOverhead <= maxSize:
-      let res = enrs.add(enr) # 32 limit will not be reached
+      let res = enrs.add(enr)
+      # With max payload of discv5 and the sizes of ENRs this should not occur.
+      doAssert(res, "32 limit will not be reached")
       totalSize = totalSize + enr.len()
     else:
       break
@@ -857,6 +859,8 @@ proc offer(p: PortalProtocol, o: OfferRequest):
             # No point in trying to continue writing data
             socket.close()
             return err("Error writing requested data")
+
+          trace "Offered content item send", dataWritten = dataWritten
     of Database:
       for i, b in m.contentKeys:
         if b:
@@ -884,6 +888,7 @@ proc offer(p: PortalProtocol, o: OfferRequest):
               socket.close()
               return err("Error writing requested data")
 
+            trace "Offered content item send", dataWritten = dataWritten
     await socket.closeWait()
     debug "Content successfully offered"
 
@@ -1230,8 +1235,6 @@ proc traceContentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256)
               closestNodes.del(closestNodes.high())
 
         let distance = p.distance(content.src.id, targetId)
-
-        let address = content.src.address.get()
 
         responses["0x" & $content.src.id] = TraceResponse(
           durationMs: duration,

@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2021-2023 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -260,9 +260,10 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
     lc.start()
 
     proc onSecond(time: Moment) =
-      let wallSlot = lc.getBeaconTime().slotOrZero()
+      discard
       # TODO:
       # Figure out what to do with this one.
+      # let wallSlot = lc.getBeaconTime().slotOrZero()
       # lc.updateGossipStatus(wallSlot + 1)
 
     proc runOnSecondLoop() {.async.} =
