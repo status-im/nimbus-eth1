@@ -10,12 +10,6 @@ proc NimMain() {.importc.}
 
 var initialized: Atomic[bool]
 
-type Context* = object
-  thread*: Thread[ptr Context]
-  configJson*: cstring
-  stop*: bool
-  onHeader*: OnHeaderCallback
-
 proc initLib() =
    if not initialized.exchange(true):
      NimMain() # Every Nim library needs to call `NimMain` once exactly
@@ -50,9 +44,11 @@ proc runContext(ctx: ptr Context) {.thread.} =
       discv5Enabled: true,
     )
 
-    run(myConfig, ctx.onHeader)
+    run(myConfig, ctx)
   except Exception as err:
     echo "Exception when running ", getCurrentExceptionMsg(), err.getStackTrace() 
+    ctx.onHeader(getCurrentExceptionMsg(), 3)
+    ctx.cleanup()
 
 
   #[let node = parseConfigAndRun(ctx.configJson)
@@ -64,7 +60,7 @@ proc runContext(ctx: ptr Context) {.thread.} =
   # do cleanup
   node.stop()]#
 
-proc startLightClientProxy*(configJson: cstring, onHeader: OnHeaderCallback): ptr Context {.exportc, dynlib.} =
+proc startVerifProxy*(configJson: cstring, onHeader: OnHeaderCallback): ptr Context {.exportc, dynlib.} =
   initLib()
 
   let ctx = createShared(Context, 1)
@@ -76,6 +72,11 @@ proc startLightClientProxy*(configJson: cstring, onHeader: OnHeaderCallback): pt
     createThread(ctx.thread, runContext, ctx)
   except Exception as err:
     echo "Exception when attempting to invoke createThread ", getCurrentExceptionMsg(), err.getStackTrace() 
+    ctx.onHeader(getCurrentExceptionMsg(), 3)
+    ctx.cleanup()
   return ctx
+
+proc stopVerifProxy*(ctx: ptr Context) {.exportc, dynlib.} =
+  ctx.stop = true
 
 
