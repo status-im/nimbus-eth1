@@ -21,5 +21,6 @@
 typedef struct VerifProxyContext VerifProxyContext;
 typedef void (*onHeaderCallback)(NCSTRING s, int t);
 void quit(void);
-VerifProxyContext* startLightClientProxy(NCSTRING configJson, onHeaderCallback onHeader);
+VerifProxyContext* startVerifProxy(NCSTRING configJson, onHeaderCallback onHeader);
+void stopVerifProxy(VerifProxyContext*);
 #endif /* __verifproxy__ */

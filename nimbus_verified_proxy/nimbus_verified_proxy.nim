@@ -27,6 +27,16 @@ from beacon_chain/gossip_processing/block_processor import newExecutionPayload
 from beacon_chain/gossip_processing/eth2_processor import toValidationResult
 
 type OnHeaderCallback* = proc (s: cstring, t: int) {.cdecl, raises: [], gcsafe.}
+type Context* = object
+  thread*: Thread[ptr Context]
+  configJson*: cstring
+  stop*: bool
+  onHeader*: OnHeaderCallback
+
+proc cleanup*(ctx: ptr Context) =
+  dealloc(ctx.configJson)
+  freeShared(ctx)
+
 
 func getConfiguredChainId(networkMetadata: Eth2NetworkMetadata): Quantity =
   if networkMetadata.eth1Network.isSome():
@@ -41,10 +51,10 @@ func getConfiguredChainId(networkMetadata: Eth2NetworkMetadata): Quantity =
   else:
     return networkMetadata.cfg.DEPOSIT_CHAIN_ID.Quantity
 
-proc run*(config: VerifiedProxyConf, callbacks: varargs[OnHeaderCallback]) {.raises: [CatchableError], gcsafe.} =
+proc run*(config: VerifiedProxyConf, ctx: ptr Context) {.raises: [CatchableError], gcsafe.} =
   var headerCallback: OnHeaderCallback
-  if len(callbacks) == 1:
-    headerCallback = callbacks[0]
+  if ctx != nil:
+    headerCallback = ctx.onHeader
 
   # Required as both Eth2Node and LightClient requires correct config type
   var lcConfig = config.asLightClientConf()
@@ -178,7 +188,6 @@ proc run*(config: VerifiedProxyConf, callbacks: varargs[OnHeaderCallback]) {.rai
         info "New LC finalized header",
           finalized_header = shortLog(forkyHeader)
         if headerCallback != nil:
-          notice "### Invoking finalizedHeaderCallback"
           try:
             headerCallback(Json.encode(forkyHeader), 0)
           except SerializationError as e:
@@ -194,7 +203,6 @@ proc run*(config: VerifiedProxyConf, callbacks: varargs[OnHeaderCallback]) {.rai
         optimisticProcessor.setOptimisticHeader(forkyHeader.beacon)
         if headerCallback != nil:
           try:
-            notice "### Invoking optimisticHeaderCallback"
             headerCallback(Json.encode(forkyHeader), 1)
           except SerializationError as e:
               notice "optimisticHeaderCallback exception"
@@ -276,10 +284,18 @@ proc run*(config: VerifiedProxyConf, callbacks: varargs[OnHeaderCallback]) {.rai
   asyncSpawn runOnSecondLoop()
   while true:
     poll()
+    if ctx != nil and ctx.stop:
+      # Cleanup
+      waitFor network.stop()
+      waitFor rpcProxy.stop()
+      ctx.cleanup()
+      # Notify client that cleanup is finished
+      headerCallback(nil, 2)
+      break
 
-when isMainModule and appType != "lib":
+when isMainModule:
   {.pop.}
   var config = makeBannerAndConfig(
     "Nimbus verified proxy " & fullVersionStr, VerifiedProxyConf)
   {.push raises: [].}
-  run(config)
+  run(config, nil)
