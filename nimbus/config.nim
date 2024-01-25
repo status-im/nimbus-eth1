@@ -206,6 +206,11 @@ type
       defaultValueDesc: ""
       name: "verify-from" }: Option[uint64]
 
+    generateWitness* {.
+      desc: "Enable experimental generation and storage of block witnesses"
+      defaultValue: false
+      name: "generate-witness" }: bool
+
     evm* {.
       desc: "Load alternative EVM from EVMC-compatible shared library" & sharedLibText
       defaultValue: ""

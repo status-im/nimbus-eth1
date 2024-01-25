@@ -734,6 +734,12 @@ proc haveBlockAndState*(db: CoreDbRef, headerHash: Hash256): bool =
   # see if stateRoot exists
   db.exists(header.stateRoot)
 
+proc getBlockWitness*(db: CoreDbRef, blockHash: Hash256): seq[byte] {.gcsafe.} =
+  db.kvt.get(blockHashToBlockWitnessKey(blockHash).toOpenArray)
+
+proc setBlockWitness*(db: CoreDbRef, blockHash: Hash256, witness: seq[byte]) =
+  db.kvt.put(blockHashToBlockWitnessKey(blockHash).toOpenArray, witness)
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

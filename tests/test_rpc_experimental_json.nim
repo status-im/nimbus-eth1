@@ -100,8 +100,6 @@ proc rpcExperimentalJsonMain*() =
 
   suite "rpc experimental json tests":
 
-    # The commented out json files below are failing due to hitting the RPC client and
-    # server defaultMaxRequestLength. Currently the limit is set to around 128kb.
     let importFiles = [
       "block97.json",
       "block98.json",
