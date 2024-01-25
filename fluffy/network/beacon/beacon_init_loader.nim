@@ -1,4 +1,4 @@
-# Nimbus - Portal Network
+# fluffy
 # Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
@@ -18,25 +18,19 @@ import
 type
   NetworkInitData* = object
     clock*: BeaconClock
-    metaData*: Eth2NetworkMetadata
+    metadata*: Eth2NetworkMetadata
     forks*: ForkDigests
     genesis_validators_root*: Eth2Digest
 
-proc loadNetworkData*(
-    networkName: string): NetworkInitData {.raises: [CatchableError].} =
+proc loadNetworkData*(networkName: string): NetworkInitData =
   let
-    metadata =
-      try:
-        loadEth2Network(some("mainnet"))
-      except CatchableError as exc:
-        raiseAssert(exc.msg)
-
+    metadata = loadEth2Network(some("mainnet"))
     genesisState =
       try:
         template genesisData(): auto = metadata.genesis.bakedBytes
         newClone(readSszForkedHashedBeaconState(
           metadata.cfg, genesisData.toOpenArray(genesisData.low, genesisData.high)))
-      except CatchableError as err:
+      except SerializationError as err:
         raiseAssert "Invalid baked-in state: " & err.msg
 
     genesisTime = getStateField(genesisState[], genesis_time)
@@ -51,7 +45,7 @@ proc loadNetworkData*(
 
   return NetworkInitData(
     clock: beaconClock,
-    metaData: metaData,
+    metadata: metadata,
     forks: forks[],
     genesis_validators_root: genesis_validators_root
   )

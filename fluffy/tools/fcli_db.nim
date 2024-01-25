@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -108,7 +108,7 @@ proc cmdBench(conf: DbConf) =
 
   for key in keys:
     withTimer(timers[tDbGet]):
-      let val = db.get(key)
+      let _ = db.get(key)
 
   for key in keys:
     withTimer(timers[tDbContains]):
@@ -120,17 +120,17 @@ proc cmdBench(conf: DbConf) =
 
   for i in 0..<conf.samples:
     withTimer(timers[tDbSize]):
-      let size = db.size()
+      let _ = db.size()
     withTimer(timers[tDbUsedSize]):
-      let size = db.usedSize()
+      let _ = db.usedSize()
     withTimer(timers[tDbContentSize]):
-      let size = db.contentSize()
+      let _ = db.contentSize()
     withTimer(timers[tDbContentCount]):
-      let count = db.contentCount()
+      let _ = db.contentCount()
     withTimer(timers[tDbLargestDistance]):
       # The selected local ID doesn't matter here as it currently needs to
       # iterate over all content for this call.
-      let distance = db.getLargestDistance(u256(0))
+      let _ = db.getLargestDistance(u256(0))
 
   printTimers(timers)
 

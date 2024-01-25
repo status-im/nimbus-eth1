@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2021-2023 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -261,10 +261,7 @@ proc run(config: PortalCliConf) =
     else:
       echo nodes.error
   of findContent:
-    proc random(T: type UInt256, rng: var HmacDrbgContext): T =
-      rng.generate(T)
-
-    # For now just some random bytes
+    # For now just some bogus bytes
     let contentKey = ByteList.init(@[1'u8])
 
     let foundContent = waitFor portal.findContent(config.findContentTarget,

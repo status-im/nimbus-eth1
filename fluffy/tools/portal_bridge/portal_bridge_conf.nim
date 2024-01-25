@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -60,7 +60,7 @@ type
         name: "rest-url" .}: string
 
       # Backfill options
-      backFillAmount* {.
+      backfillAmount* {.
         desc: "Amount of beacon LC updates to backfill gossip into the network"
         defaultValue: 64
         name: "backfill-amount" .}: uint64

@@ -66,7 +66,7 @@ proc run(config: VerifiedProxyConf) {.raises: [CatchableError].} =
       except CatchableError as err:
         raiseAssert "Invalid baked-in state: " & err.msg
 
-    genesistime = getStateField(genesisState[], genesis_time)
+    genesisTime = getStateField(genesisState[], genesis_time)
     beaconClock = BeaconClock.init(genesisTime).valueOr:
       error "Invalid genesis time in state", genesisTime
       quit QuitFailure
