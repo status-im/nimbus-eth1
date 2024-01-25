@@ -294,7 +294,7 @@ func truncateEnrs(
       let res = enrs.add(enr)
       # With max payload of discv5 and the sizes of ENRs this should not occur.
       doAssert(res, "32 limit will not be reached")
-      totalSize = totalSize + enr.len()
+      totalSize = totalSize + enr.len() + enrOverhead
     else:
       break
 
