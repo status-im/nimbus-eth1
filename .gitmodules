@@ -65,7 +65,7 @@
   branch = master
 [submodule "vendor/nim-confutils"]
   path = vendor/nim-confutils
-	url = https://github.com/siphiuel/nim-confutils.git
+  url = https://github.com/status-im/nim-confutils.git
   ignore = dirty
   branch = master
 [submodule "vendor/nim-blscurve"]

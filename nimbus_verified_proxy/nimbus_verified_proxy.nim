@@ -64,9 +64,9 @@ proc run*(config: VerifiedProxyConf, ctx: ptr Context) {.raises: [CatchableError
 
     try:
       notice "Launching Nimbus verified proxy",
-        version = fullVersionStr, cmdParams = getCLIParams(), config
+        version = fullVersionStr, cmdParams = commandLineParams(), config
     except Exception:
-      notice "getCLIParams() exception"
+      notice "commandLineParams() exception"
 
   let
     metadata = loadEth2Network(config.eth2Network)
