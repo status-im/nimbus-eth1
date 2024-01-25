@@ -47,7 +47,7 @@ proc getBlockWitness*(
     flags = if vmState.fork >= FKSpurious: {wfEIP170} else: {}
   vmState.generateWitness = true # Enable saving witness data
 
-  var dbTx = vmState.com.db.beginTransaction()
+  let dbTx = vmState.com.db.beginTransaction()
   defer: dbTx.dispose()
 
   # Execute the block of transactions and collect the keys of the touched account state

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -100,8 +100,11 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
             msg = res.error
           return ValidationResult.Error
 
+    if c.generateWitness:
+      vmState.generateWitness = true
+
     let
-      validationResult = if c.validateBlock:
+      validationResult = if c.validateBlock or c.generateWitness:
                            vmState.processBlock(header, body)
                          else:
                            ValidationResult.OK
@@ -131,6 +134,22 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
             blockNumber = header.blockNumber,
             msg = $rc.error
           return ValidationResult.Error
+
+    if c.generateWitness:
+      let dbTx = c.db.beginTransaction()
+      defer: dbTx.dispose()
+
+      let
+        mkeys = vmState.stateDB.makeMultiKeys()
+        # Reset state to what it was before executing the block of transactions
+        initialState = BaseVMState.new(header, c.com)
+        witness = initialState.buildWitness(mkeys)
+
+      dbTx.rollback()
+
+      let blockHash = c.db.getBlockHash(header.blockNumber)
+      c.db.setBlockWitness(blockHash, witness)
+
 
     if NoPersistHeader notin flags:
       discard c.db.persistHeaderToDb(
