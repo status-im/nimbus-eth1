@@ -81,14 +81,15 @@ FLUFFY_TOOLS_DIRS := \
 # comma-separated values for the "clean" target
 FLUFFY_TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(FLUFFY_TOOLS))
 
-OS = $(shell $(CC) -dumpmachine)
-ifneq (, $(findstring darwin, $(OS)))
-  SHAREDLIBEXT = dylib
+# Namespaced variables to avoid conflicts with other makefiles
+VERIF_PROXY_OS = $(shell $(CC) -dumpmachine)
+ifneq (, $(findstring darwin, $(VERIF_PROXY_OS)))
+  VERIF_PROXY_SHAREDLIBEXT = dylib
 else
-ifneq (, $(findstring mingw, $(OS))$(findstring cygwin, $(OS))$(findstring msys, $(OS)))
-  SHAREDLIBEXT = dll
+ifneq (, $(findstring mingw, $(VERIF_PROXY_OS))$(findstring cygwin, $(VERIF_PROXY_OS))$(findstring msys, $(VERIF_PROXY_OS)))
+  VERIF_PROXY_SHAREDLIBEXT = dll
 else
-  SHAREDLIBEXT = so
+  VERIF_PROXY_SHAREDLIBEXT = so
 endif
 endif
 
@@ -319,7 +320,7 @@ nimbus-verified-proxy-test: | build deps
 libverifproxy: | build deps
 	+ echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim --version && \
-		$(ENV_SCRIPT) nim c --app:lib -d:"libp2p_pki_schemes=secp256k1" --noMain:on --threads:on --nimcache:nimcache/libverifproxy -o:$(VERIF_PROXY_OUT_PATH)/$@.$(SHAREDLIBEXT) $(NIM_PARAMS) nimbus_verified_proxy/libverifproxy/verifproxy.nim
+		$(ENV_SCRIPT) nim c --app:lib -d:"libp2p_pki_schemes=secp256k1" --noMain:on --threads:on --nimcache:nimcache/libverifproxy -o:$(VERIF_PROXY_OUT_PATH)/$@.$(VERIF_PROXY_SHAREDLIBEXT) $(NIM_PARAMS) nimbus_verified_proxy/libverifproxy/verifproxy.nim
 	cp nimbus_verified_proxy/libverifproxy/verifproxy.h $(VERIF_PROXY_OUT_PATH)/
 	cp vendor/nimbus-build-system/vendor/Nim-csources-v1/c_code/nimbase.h $(VERIF_PROXY_OUT_PATH)/
 	echo -e $(BUILD_END_MSG) "build/$@"
