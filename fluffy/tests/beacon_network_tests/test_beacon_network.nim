@@ -1,5 +1,5 @@
-# Nimbus - Portal Network
-# Copyright (c) 2022-2023 Status Research & Development GmbH
+# fluffy
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -10,8 +10,14 @@ import
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   beacon_chain/spec/forks,
   beacon_chain/spec/datatypes/altair,
+  # Test helpers
+  beacon_chain/../tests/testblockutil,
+  beacon_chain/../tests/mocking/mock_genesis,
+  beacon_chain/../tests/consensus_spec/fixtures_utils,
+
   ../../network/wire/portal_protocol,
-  ../../network/beacon/[beacon_network, beacon_init_loader],
+  ../../network/beacon/[beacon_network, beacon_init_loader,
+    beacon_chain_historical_summaries],
   "."/[light_client_test_data, beacon_test_helpers]
 
 procSuite "Beacon Content Network":
@@ -194,6 +200,108 @@ procSuite "Beacon Content Network":
     check:
       updatesFromPeer.asSeq()[0].altairData == updates[0].altairData
       updatesFromPeer.asSeq()[1].altairData == updates[1].altairData
+
+    await lcNode1.stop()
+    await lcNode2.stop()
+
+  asyncTest "Get HistoricalSummaries":
+    let
+      cfg = genesisTestRuntimeConfig(ConsensusFork.Capella)
+      state = newClone(initGenesisState(cfg = cfg))
+    var cache = StateCache()
+
+    var blocks: seq[capella.SignedBeaconBlock]
+    # Note:
+    # Adding 8192 blocks. First block is genesis block and not one of these.
+    # Then one extra block is needed to get the historical summaries, block
+    # roots and state roots processed.
+    # index i = 0 is second block.
+    # index i = 8190 is 8192th block and last one that is part of the first
+    # historical root
+    for i in 0..<SLOTS_PER_HISTORICAL_ROOT:
+      blocks.add(addTestBlock(state[], cache, cfg = cfg).capellaData)
+
+    let (content, slot, root) =
+      withState(state[]):
+        when consensusFork >= ConsensusFork.Capella:
+          let historical_summaries = forkyState.data.historical_summaries
+          let res = buildProof(state[])
+          check res.isOk()
+          let
+            proof = res.get()
+
+            historicalSummariesWithProof = HistoricalSummariesWithProof(
+              finalized_slot: forkyState.data.slot,
+              historical_summaries: historical_summaries,
+              proof: proof
+            )
+
+            content = SSZ.encode(historicalSummariesWithProof)
+
+          (content, forkyState.data.slot, forkyState.root)
+        else:
+          raiseAssert("Not implemented pre-Capella")
+    let
+      networkData = loadNetworkData("mainnet")
+      lcNode1 = newLCNode(rng, 20302, networkData)
+      lcNode2 = newLCNode(rng, 20303, networkData)
+      forkDigests = (newClone networkData.forks)[]
+
+    check:
+      lcNode1.portalProtocol().addNode(lcNode2.localNode()) == Added
+      lcNode2.portalProtocol().addNode(lcNode1.localNode()) == Added
+
+      (await lcNode1.portalProtocol().ping(lcNode2.localNode())).isOk()
+      (await lcNode2.portalProtocol().ping(lcNode1.localNode())).isOk()
+
+    let
+      contentKeyEncoded = historicalSummariesContentKey().encode()
+      contentId = toContentId(contentKeyEncoded)
+
+    lcNode2.portalProtocol().storeContent(
+      contentKeyEncoded,
+      contentId,
+      content
+    )
+
+    block:
+      let res = await lcNode1.beaconNetwork.getHistoricalSummaries()
+      # Should fail as it cannot validate
+      check res.isErr()
+
+    block:
+      # Add a (fake) finality update but with correct slot and state root
+      # so that node 1 can do the validation of the historical summaries.
+      let
+        dummyFinalityUpdate = capella.LightClientFinalityUpdate(
+          finalized_header: capella.LightClientHeader(
+            beacon: BeaconBlockHeader(slot: slot, state_root: root)
+        ))
+        finalityUpdateForked = ForkedLightClientFinalityUpdate(
+          kind: LightClientDataFork.Capella, capellaData: dummyFinalityUpdate)
+        forkDigest = forkDigestAtEpoch(
+            forkDigests, epoch(slot), cfg)
+        content = encodeFinalityUpdateForked(
+          forkDigest,finalityUpdateForked)
+        contentKey = finalityUpdateContentKey(slot.distinctBase())
+        contentKeyEncoded = encode(contentKey)
+        contentId = toContentId(contentKeyEncoded)
+
+      lcNode1.portalProtocol().storeContent(
+        contentKeyEncoded,
+        contentId,
+        content
+      )
+
+    block:
+      let res = await lcNode1.beaconNetwork.getHistoricalSummaries()
+      check:
+        res.isOk()
+        withState(state[]):
+          when consensusFork >= ConsensusFork.Capella:
+            res.get() == forkyState.data.historical_summaries
+          else:
+            false
 
     await lcNode1.stop()
     await lcNode2.stop()

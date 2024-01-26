@@ -1,5 +1,5 @@
-# Nimbus - Portal Network
-# Copyright (c) 2022-2023 Status Research & Development GmbH
+# fluffy
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -15,7 +15,7 @@ import
   beacon_chain/gossip_processing/light_client_processor,
   ../../../nimbus/constants,
   ../wire/[portal_protocol, portal_stream, portal_protocol_config],
-  "."/[beacon_content, beacon_db]
+  "."/[beacon_content, beacon_db, beacon_chain_historical_summaries]
 
 export beacon_content, beacon_db
 
@@ -36,6 +36,29 @@ type
 
 func toContentIdHandler(contentKey: ByteList): results.Opt[ContentId] =
   ok(toContentId(contentKey))
+
+proc validateHistoricalSummaries(
+    n: BeaconNetwork,
+    summariesWithProof: HistoricalSummariesWithProof
+    ): Result[void, string] =
+  let
+    finalityUpdate = getLastFinalityUpdate(n.beaconDb).valueOr:
+      return err("Require finality update for verification")
+
+    # TODO: compare slots first
+    stateRoot =
+      withForkyFinalityUpdate(finalityUpdate):
+        when lcDataFork > LightClientDataFork.None:
+          forkyFinalityUpdate.finalized_header.beacon.state_root
+        else:
+          # Note: this should always be the case as historical_summaries was
+          # introduced in Capella.
+          return err("Require Altair or > for verification")
+
+  if summariesWithProof.verifyProof(stateRoot):
+    ok()
+  else:
+    err("Failed verifying historical_summaries proof")
 
 proc getContent(
     n: BeaconNetwork, contentKey: ContentKey):
@@ -148,6 +171,23 @@ proc getLightClientOptimisticUpdate*(
   else:
     return Opt.some(decodingResult.value())
 
+proc getHistoricalSummaries*(
+    n: BeaconNetwork
+  ): Future[results.Opt[HistoricalSummaries]] {.async.} =
+  # Note: when taken from the db, it does not need to verify the proof.
+  let
+    contentKey = historicalSummariesContentKey()
+    content = ? await n.getContent(contentKey)
+
+    summariesWithProof = decodeSsz(content, HistoricalSummariesWithProof).valueOr:
+      return Opt.none(HistoricalSummaries)
+
+  if n.validateHistoricalSummaries(summariesWithProof).isOk():
+    return Opt.some(summariesWithProof.historical_summaries)
+  else:
+    return Opt.none(HistoricalSummaries)
+
+
 proc new*(
     T: type BeaconNetwork,
     baseProtocol: protocol.Protocol,
@@ -248,6 +288,10 @@ proc validateContent(
       err("Error processing update: " & $res.error[1])
     else:
       ok()
+  of beacon_content.ContentType.historicalSummaries:
+    let summariesWithProof = ? decodeSsz(content, HistoricalSummariesWithProof)
+
+    n.validateHistoricalSummaries(summariesWithProof)
 
 proc validateContent(
     n: BeaconNetwork,

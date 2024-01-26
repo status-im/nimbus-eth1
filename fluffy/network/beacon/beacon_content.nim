@@ -1,5 +1,5 @@
 # Fluffy - Portal Network
-# Copyright (c) 2022-2023 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -36,6 +36,7 @@ type
     lightClientUpdate = 0x11
     lightClientFinalityUpdate = 0x12
     lightClientOptimisticUpdate = 0x13
+    historicalSummaries = 0x14
 
   # TODO: Consider how we will gossip bootstraps?
   # In consensus light client operation a node trusts only one bootstrap hash,
@@ -59,6 +60,8 @@ type
   LightClientOptimisticUpdateKey* = object
     optimisticSlot*: uint64 ## signature_slot of the update
 
+  HistoricalSummariesKey* = uint8
+
   ContentKey* = object
     case contentType*: ContentType
     of unused:
@@ -71,6 +74,8 @@ type
       lightClientFinalityUpdateKey*: LightClientFinalityUpdateKey
     of lightClientOptimisticUpdate:
       lightClientOptimisticUpdateKey*: LightClientOptimisticUpdateKey
+    of historicalSummaries:
+      historicalSummariesKey*: HistoricalSummariesKey
 
   # TODO:
   # ForkedLightClientUpdateBytesList can get pretty big and is send in one go.
@@ -266,4 +271,10 @@ func optimisticUpdateContentKey*(optimisticSlot: uint64): ContentKey =
     lightClientOptimisticUpdateKey: LightClientOptimisticUpdateKey(
       optimisticSlot: optimisticSlot
     )
+  )
+
+func historicalSummariesContentKey*(): ContentKey =
+  ContentKey(
+    contentType: historicalSummaries,
+    historicalSummariesKey: 0
   )
