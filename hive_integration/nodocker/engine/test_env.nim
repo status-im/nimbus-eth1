@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -36,28 +36,28 @@ type
     chainFile : string
     enableAuth: bool
     port      : int
-    rpcPort   : int
+    httpPort  : int
     clients   : ClientPool
     sender    : TxSender
     clMock*   : CLMocker
 
 proc makeEnv(conf: NimbusConf): TestEnv =
   TestEnv(
-    conf   : conf,
-    port   : 30303,
-    rpcPort: 8545,
-    clients: ClientPool(),
-    sender : TxSender.new(conf.networkParams),
+    conf    : conf,
+    port    : 30303,
+    httpPort: 8545,
+    clients : ClientPool(),
+    sender  : TxSender.new(conf.networkParams),
   )
 
 proc addEngine(env: TestEnv, conf: var NimbusConf): EngineEnv =
   conf.tcpPort = Port env.port
   conf.udpPort = Port env.port
-  conf.rpcPort = Port env.rpcPort
+  conf.httpPort = Port env.httpPort
   let engine = newEngineEnv(conf, env.chainFile, env.enableAuth)
   env.clients.add engine
   inc env.port
-  inc env.rpcPort
+  inc env.httpPort
   engine
 
 proc setup(env: TestEnv, conf: var NimbusConf, chainFile: string, enableAuth: bool) =

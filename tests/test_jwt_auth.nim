@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2023 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -15,12 +15,12 @@ import
   std/[base64, json, options, os, strutils, times],
   ../nimbus/config,
   ../nimbus/rpc/jwt_auth,
+  ../nimbus/rpc/rpc_server,
   ./replay/pp,
   chronicles,
   chronos/apps/http/httpclient as chronoshttpclient,
   chronos/apps/http/httptable,
   eth/[common, keys, p2p],
-  json_rpc/rpcserver,
   nimcrypto/[hmac, utils],
   stew/results,
   stint,
@@ -115,7 +115,7 @@ proc getHttpAuthReqHeader2(secret: JwtSharedKey; time: uint64): HttpTable =
   let bearer = secret.UnGuardedKey.getSignedToken2($getIatToken(time))
   result.add("aUtHoRiZaTiOn", "Bearer " & bearer)
 
-proc createServer(serverAddress: TransportAddress, authHooks: seq[HttpAuthHook] = @[]): GraphqlHttpServerRef =
+proc createServer(serverAddress: TransportAddress, authHooks: seq[AuthHook] = @[]): GraphqlHttpServerRef =
   let socketFlags = {ServerFlags.TcpNoDelay, ServerFlags.ReuseAddr}
   var ctx = GraphqlRef.new()
 

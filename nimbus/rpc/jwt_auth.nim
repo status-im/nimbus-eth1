@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -12,20 +12,21 @@
 #   nimbus-eth2/beacon_chain/spec/engine_authentication.nim
 #   go-ethereum/node/jwt_handler.go
 
-{.push raises: [].}
+{.push gcsafe, raises: [].}
 
 import
-  std/[base64, json, options, os, strutils, times],
+  std/[base64, options, strutils, times],
   bearssl/rand,
   chronicles,
   chronos,
-  chronos/apps/http/[httptable, httpserver],
-  json_rpc/rpcserver,
+  chronos/apps/http/httptable,
+  chronos/apps/http/httpserver,
   httputils,
-  websock/websock as ws,
   nimcrypto/[hmac, utils],
   stew/[byteutils, objects, results],
-  ../config
+  ../config,
+  ./jwt_auth_helper,
+  ./rpc_server
 
 logScope:
   topics = "Jwt/HS256 auth"
@@ -70,14 +71,7 @@ type
     jwtMethodUnsupported = "token protected header provides unsupported method"
     jwtTimeValidationError = "token time validation failed"
     jwtTokenValidationError = "token signature validation failed"
-
-  JwtHeader = object ##\
-    ## Template used for JSON unmarshalling
-    typ, alg: string
-
-  JwtIatPayload = object ##\
-    ## Template used for JSON unmarshalling
-    iat: uint64
+    jwtCreationError = "Cannot create jwt secret"
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -113,7 +107,7 @@ proc verifyTokenHS256(token: string; key: JwtSharedKey): Result[void,JwtError] =
       let jsonHeader = p[0].base64urlDecode
 
       error = jwtProtHeaderInvJson
-      let jwtHeader = jsonHeader.parseJson.to(JwtHeader)
+      let jwtHeader = jsonHeader.decodeJwtHeader()
 
       # The following JSON decoded object is required
       if jwtHeader.typ != "JWT" and jwtHeader.alg != "HS256":
@@ -124,18 +118,16 @@ proc verifyTokenHS256(token: string; key: JwtSharedKey): Result[void,JwtError] =
     let jsonPayload = p[1].base64urlDecode
 
     error = jwtIatPayloadInvJson
-    let jwtPayload = jsonPayload.parseJson.to(JwtIatPayload)
+    let jwtPayload = jsonPayload.decodeJwtIatPayload()
     time = jwtPayload.iat.int64
   except CatchableError as e:
+    discard e
     debug "JWT token decoding error",
       protectedHeader = p[0],
       payload = p[1],
       msg = e.msg,
       error
     return err(error)
-  except Exception as e:
-    {.warning: "Kludge(BareExcept): `parseJson()` in vendor package needs to be updated".}
-    raiseAssert "Ooops verifyTokenHS256(): name=" & $e.name & " msg=" & e.msg
 
   # github.com/ethereum/
   #  /execution-apis/blob/v1.0.0-beta.3/src/engine/authentication.md#jwt-claims
@@ -195,8 +187,7 @@ proc jwtGenSecret*(rng: ref rand.HmacDrbgContext): JwtGenSecret =
 proc jwtSharedSecret*(
     rndSecret: JwtGenSecret;
     config: NimbusConf;
-      ): Result[JwtSharedKey, JwtError]
-      {.gcsafe, raises: [CatchableError].}=
+      ): Result[JwtSharedKey, JwtError] =
   ## Return a key for jwt authentication preferable from the argument file
   ## `config.jwtSecret` (which contains at least 32 bytes hex encoded random
   ## data.) Otherwise it creates a key and stores it in the `config.dataDir`.
@@ -226,18 +217,19 @@ proc jwtSharedSecret*(
     # github.com/ethereum/
     #   /execution-apis/blob/v1.0.0-alpha.8/src/engine/
     #   /authentication.md#key-distribution
-    let
-      jwtSecretPath = config.dataDir.string / jwtSecretFile
-      newSecret = rndSecret()
+    let jwtSecretPath = config.dataDir.string & "/" & jwtSecretFile
     try:
+      let newSecret = rndSecret()
       jwtSecretPath.writeFile(newSecret.JwtSharedKeyRaw.to0xHex)
+      return ok(newSecret)
     except IOError as e:
       # Allow continuing to run, though this is effectively fatal for a merge
       # client using authentication. This keeps it lower-risk initially.
       warn "Could not write JWT secret to data directory",
         jwtSecretPath
       discard e
-    return ok(newSecret)
+    except CatchableError:
+      return err(jwtCreationError)
 
   try:
     let lines = config.jwtSecret.get.string.readLines(1)
@@ -254,13 +246,16 @@ proc jwtSharedSecret*(
     return err(jwtKeyInvalidHexString)
 
 proc jwtSharedSecret*(rng: ref rand.HmacDrbgContext; config: NimbusConf):
-                    Result[JwtSharedKey, JwtError]
-    {.gcsafe, raises: [CatchableError].} =
+                    Result[JwtSharedKey, JwtError] =
   ## Variant of `jwtSharedSecret()` with explicit random generator argument.
-  rng.jwtGenSecret.jwtSharedSecret(config)
+  try:
+    rng.jwtGenSecret.jwtSharedSecret(config)
+  except CatchableError:
+    return err(jwtCreationError)
 
-proc httpJwtAuth*(key: JwtSharedKey): HttpAuthHook =
-  proc handler(req: HttpRequestRef): Future[HttpResponseRef] {.async.} =
+proc httpJwtAuth*(key: JwtSharedKey): RpcAuthHook =
+  proc handler(req: HttpRequestRef): Future[HttpResponseRef] 
+         {.gcsafe, async: (raises: [CatchableError]).} =
     let auth = req.headers.getString("Authorization", "?")
     if auth.len < 9 or auth[0..6].cmpIgnoreCase("Bearer ") != 0:
       return await req.respond(Http403, "Missing authorization token")
@@ -278,31 +273,7 @@ proc httpJwtAuth*(key: JwtSharedKey): HttpAuthHook =
     else:
       return await req.respond(Http403, "Malformed token")
 
-  result = HttpAuthHook(handler)
-
-proc wsJwtAuth*(key: JwtSharedKey): WsAuthHook =
-  proc handler(req: ws.HttpRequest): Future[bool] {.async.} =
-    let auth = req.headers.getString("Authorization", "?")
-    if auth.len < 9 or auth[0..6].cmpIgnoreCase("Bearer ") != 0:
-      await req.sendResponse(code = Http403, data = "Missing authorization token")
-      return false
-
-    let rc = auth[7..^1].strip.verifyTokenHS256(key)
-    if rc.isOk:
-      return true
-
-    debug "Could not authenticate",
-      error = rc.error
-
-    case rc.error:
-    of jwtTokenValidationError, jwtMethodUnsupported:
-      await req.sendResponse(code = Http403, data = "Unauthorized access")
-    else:
-      await req.sendResponse(code = Http403, data = "Malformed token")
-
-    return false
-
-  result = WsAuthHook(handler)
+  result = handler
 
 # ------------------------------------------------------------------------------
 # End

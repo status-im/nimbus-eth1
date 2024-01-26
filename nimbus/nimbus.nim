@@ -13,23 +13,25 @@ import
 import
   std/[os, strutils, net],
   chronicles,
-  chronos,
-  eth/[keys, net/nat],
-  eth/p2p as eth_p2p,
-  json_rpc/rpcserver,
+  eth/keys,
+  eth/net/nat,
   metrics,
-  metrics/[chronos_httpserver, chronicles_support],
-  websock/websock as ws,
+  metrics/chronicles_support,
   kzg4844/kzg_ex as kzg,
+  ./rpc,
+  ./version,
+  ./constants,
+  ./nimbus_desc,
   ./core/eip4844,
-  "."/[config, constants, version, rpc, common],
-  ./db/[core_db/persistent, select_backend],
-  ./graphql/ethapi,
-  ./core/[chain, sealer, clique/clique_desc,
-    clique/clique_sealer, tx_pool, block_import],
-  ./beacon/beacon_engine,
-  ./sync/[beacon, legacy, full, protocol, snap, stateless,
-    protocol/les_protocol, handlers, peers],
+  ./core/block_import,
+  ./db/select_backend,
+  ./db/core_db/persistent,
+  ./core/clique/clique_desc,
+  ./core/clique/clique_sealer,
+  ./sync/protocol,
+  ./sync/handlers,
+  ./sync/stateless,
+  ./sync/protocol/les_protocol,
   ./evm/async/data_sources/json_rpc_data_source
 
 when defined(evmc_enabled):
@@ -39,31 +41,6 @@ when defined(evmc_enabled):
 ## * No IPv6 support
 ## * No multiple bind addresses support
 ## * No database support
-
-type
-  NimbusState = enum
-    Starting, Running, Stopping
-
-  NimbusNode = ref object
-    rpcServer: RpcHttpServer
-    engineApiServer: RpcHttpServer
-    engineApiWsServer: RpcWebSocketServer
-    ethNode: EthereumNode
-    state: NimbusState
-    graphqlServer: GraphqlHttpServerRef
-    wsRpcServer: RpcWebSocketServer
-    sealingEngine: SealingEngineRef
-    ctx: EthContext
-    chainRef: ChainRef
-    txPool: TxPoolRef
-    networkLoop: Future[void]
-    peerManager: PeerManagerRef
-    legaSyncRef: LegacySyncRef
-    snapSyncRef: SnapSyncRef
-    fullSyncRef: FullSyncRef
-    beaconSyncRef: BeaconSyncRef
-    statelessSyncRef: StatelessSyncRef
-    beaconEngine: BeaconEngineRef
 
 proc importBlocks(conf: NimbusConf, com: CommonRef) =
   if string(conf.blocksFile).len > 0:
@@ -244,97 +221,7 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
       discard setTimer(Moment.fromNow(conf.logMetricsInterval.seconds), logMetrics)
     discard setTimer(Moment.fromNow(conf.logMetricsInterval.seconds), logMetrics)
 
-  # Provide JWT authentication handler for rpcHttpServer
-  let jwtKey = block:
-    # Create or load shared secret
-    let rc = nimbus.ctx.rng.jwtSharedSecret(conf)
-    if rc.isErr:
-      fatal "Failed create or load shared secret",
-        msg = $(rc.unsafeError) # avoid side effects
-      quit(QuitFailure)
-    rc.value
-  let allowedOrigins = conf.getAllowedOrigins()
-
-  # Provide JWT authentication handler for rpcHttpServer
-  let httpJwtAuthHook = httpJwtAuth(jwtKey)
-  let httpCorsHook = httpCors(allowedOrigins)
-
-  # Creating RPC Server
-  if conf.rpcEnabled:
-    let enableAuthHook = conf.engineApiEnabled and
-                         conf.engineApiPort == conf.rpcPort
-
-    let hooks = if enableAuthHook:
-                  @[httpJwtAuthHook, httpCorsHook]
-                else:
-                  @[httpCorsHook]
-
-    nimbus.rpcServer = newRpcHttpServerWithParams(
-      initTAddress(conf.rpcAddress, conf.rpcPort),
-      authHooks = hooks
-    )
-    setupCommonRpc(nimbus.ethNode, conf, nimbus.rpcServer)
-
-    # Enable RPC APIs based on RPC flags and protocol flags
-    let rpcFlags = conf.getRpcFlags()
-    if (RpcFlag.Eth in rpcFlags and ProtocolFlag.Eth in protocols) or
-       (conf.engineApiPort == conf.rpcPort):
-      setupEthRpc(nimbus.ethNode, nimbus.ctx, com, nimbus.txPool, nimbus.rpcServer)
-    if RpcFlag.Debug in rpcFlags:
-      setupDebugRpc(com, nimbus.rpcServer)
-    if RpcFlag.Exp in rpcFlags:
-      setupExpRpc(com, nimbus.rpcServer)
-
-    nimbus.rpcServer.rpc("admin_quit") do() -> string:
-      {.gcsafe.}:
-        nimbus.state = Stopping
-      result = "EXITING"
-
-    nimbus.rpcServer.start()
-
-  # Provide JWT authentication handler for rpcWebsocketServer
-  let wsJwtAuthHook = wsJwtAuth(jwtKey)
-  let wsCorsHook = wsCors(allowedOrigins)
-
-  # Creating Websocket RPC Server
-  if conf.wsEnabled:
-    let enableAuthHook = conf.engineApiWsEnabled and
-                         conf.engineApiWsPort == conf.wsPort
-
-    let hooks = if enableAuthHook:
-                  @[wsJwtAuthHook, wsCorsHook]
-                else:
-                  @[wsCorsHook]
-
-    # Construct server object
-    nimbus.wsRpcServer = newRpcWebSocketServer(
-      initTAddress(conf.wsAddress, conf.wsPort),
-      authHooks = hooks,
-      rng = nimbus.ctx.rng
-    )
-    setupCommonRpc(nimbus.ethNode, conf, nimbus.wsRpcServer)
-
-    # Enable Websocket RPC APIs based on RPC flags and protocol flags
-    let wsFlags = conf.getWsFlags()
-    if (RpcFlag.Eth in wsFlags and ProtocolFlag.Eth in protocols) or
-       (conf.engineApiWsPort == conf.wsPort):
-      setupEthRpc(nimbus.ethNode, nimbus.ctx, com, nimbus.txPool, nimbus.wsRpcServer)
-    if RpcFlag.Debug in wsFlags:
-      setupDebugRpc(com, nimbus.wsRpcServer)
-    if RpcFlag.Exp in wsFlags:
-      setupExpRpc(com, nimbus.wsRpcServer)
-
-    nimbus.wsRpcServer.start()
-
-  if conf.graphqlEnabled:
-    nimbus.graphqlServer = setupGraphqlHttpServer(
-      conf,
-      com,
-      nimbus.ethNode,
-      nimbus.txPool,
-      @[httpCorsHook]
-    )
-    nimbus.graphqlServer.start()
+  nimbus.setupRpc(conf, com, protocols)
 
   if conf.engineSigner != ZERO_ADDRESS and not com.forkGTE(MergeFork):
     let res = nimbus.ctx.am.getAccount(conf.engineSigner)
@@ -370,40 +257,16 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
     if conf.engineSigner != ZERO_ADDRESS:
       nimbus.sealingEngine.start()
 
-  if conf.engineApiEnabled:
-    #let maybeAsyncDataSource = maybeStatelessAsyncDataSource(nimbus, conf)
-    if conf.engineApiPort != conf.rpcPort:
-      nimbus.engineApiServer = newRpcHttpServerWithParams(
-        initTAddress(conf.engineApiAddress, conf.engineApiPort),
-        authHooks = @[httpJwtAuthHook, httpCorsHook]
-      )
-      setupEngineAPI(nimbus.beaconEngine, nimbus.engineApiServer)
-      setupEthRpc(nimbus.ethNode, nimbus.ctx, com, nimbus.txPool, nimbus.engineApiServer)
-      nimbus.engineApiServer.start()
-    else:
-      setupEngineAPI(nimbus.beaconEngine, nimbus.rpcServer)
-
-    info "Starting engine API server", port = conf.engineApiPort
-
-  if conf.engineApiWsEnabled:
-    #let maybeAsyncDataSource = maybeStatelessAsyncDataSource(nimbus, conf)
-    if conf.engineApiWsPort != conf.wsPort:
-      nimbus.engineApiWsServer = newRpcWebSocketServer(
-        initTAddress(conf.engineApiWsAddress, conf.engineApiWsPort),
-        authHooks = @[wsJwtAuthHook, wsCorsHook]
-      )
-      setupEngineAPI(nimbus.beaconEngine, nimbus.engineApiWsServer)
-      setupEthRpc(nimbus.ethNode, nimbus.ctx, com, nimbus.txPool, nimbus.engineApiWsServer)
-      nimbus.engineApiWsServer.start()
-    else:
-      setupEngineAPI(nimbus.beaconEngine, nimbus.wsRpcServer)
-
-    info "Starting WebSocket engine API server", port = conf.engineApiWsPort
-
   # metrics server
   if conf.metricsEnabled:
     info "Starting metrics HTTP server", address = conf.metricsAddress, port = conf.metricsPort
-    startMetricsHttpServer($conf.metricsAddress, conf.metricsPort)
+    let res = MetricsHttpServerRef.new($conf.metricsAddress, conf.metricsPort)
+    if res.isErr:
+      fatal "Failed to create metrics server", msg=res.error
+      quit(QuitFailure)
+
+    nimbus.metricsServer = res.get
+    waitFor nimbus.metricsServer.start()
 
 proc start(nimbus: NimbusNode, conf: NimbusConf) =
   ## logging
@@ -468,42 +331,13 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
       of SyncMode.Snap:
         nimbus.snapSyncRef.start
 
-    if nimbus.state == Starting:
+    if nimbus.state == NimbusState.Starting:
       # it might have been set to "Stopping" with Ctrl+C
-      nimbus.state = Running
-
-proc stop*(nimbus: NimbusNode, conf: NimbusConf) {.async, gcsafe.} =
-  trace "Graceful shutdown"
-  if conf.rpcEnabled:
-    await nimbus.rpcServer.stop()
-  # nimbus.engineApiServer can be nil if conf.engineApiPort == conf.rpcPort
-  if conf.engineApiEnabled and nimbus.engineApiServer.isNil.not:
-    await nimbus.engineApiServer.stop()
-  if conf.wsEnabled:
-    nimbus.wsRpcServer.stop()
-  # nimbus.engineApiWsServer can be nil if conf.engineApiWsPort == conf.wsPort
-  if conf.engineApiWsEnabled and nimbus.engineApiWsServer.isNil.not:
-    nimbus.engineApiWsServer.stop()
-  if conf.graphqlEnabled:
-    await nimbus.graphqlServer.stop()
-  if conf.engineSigner != ZERO_ADDRESS and nimbus.sealingEngine.isNil.not:
-    await nimbus.sealingEngine.stop()
-  if conf.maxPeers > 0:
-    await nimbus.networkLoop.cancelAndWait()
-  if nimbus.peerManager.isNil.not:
-    await nimbus.peerManager.stop()
-  if nimbus.statelessSyncRef.isNil.not:
-    nimbus.statelessSyncRef.stop()
-  if nimbus.snapSyncRef.isNil.not:
-    nimbus.snapSyncRef.stop()
-  if nimbus.fullSyncRef.isNil.not:
-    nimbus.fullSyncRef.stop()
-  if nimbus.beaconSyncRef.isNil.not:
-    nimbus.beaconSyncRef.stop()
+      nimbus.state = NimbusState.Running
 
 proc process*(nimbus: NimbusNode, conf: NimbusConf) =
   # Main event loop
-  while nimbus.state == Running:
+  while nimbus.state == NimbusState.Running:
     try:
       poll()
     except CatchableError as e:
@@ -514,14 +348,14 @@ proc process*(nimbus: NimbusNode, conf: NimbusConf) =
   waitFor nimbus.stop(conf)
 
 when isMainModule:
-  var nimbus = NimbusNode(state: Starting, ctx: newEthContext())
+  var nimbus = NimbusNode(state: NimbusState.Starting, ctx: newEthContext())
 
   ## Ctrl+C handling
   proc controlCHandler() {.noconv.} =
     when defined(windows):
       # workaround for https://github.com/nim-lang/Nim/issues/4057
       setupForeignThreadGc()
-    nimbus.state = Stopping
+    nimbus.state = NimbusState.Stopping
     echo "\nCtrl+C pressed. Waiting for a graceful shutdown."
   setControlCHook(controlCHandler)
 

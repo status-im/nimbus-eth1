@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -7,12 +7,13 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-{.push raises: [].}
+{.push gcsafe, raises: [].}
 
 import
   std/[os, json, tables, strutils],
   stew/[byteutils, results],
-  eth/[keyfile, common, keys]
+  eth/[keyfile, common, keys],
+  json_serialization
 
 from nimcrypto/utils import burnMem
 
@@ -28,31 +29,17 @@ type
 proc init*(_: type AccountsManager): AccountsManager =
   discard
 
-proc loadKeystores*(am: var AccountsManager, path: string): Result[void, string]
-    {.gcsafe, raises: [OSError].}=
+proc loadKeystores*(am: var AccountsManager, path: string): 
+                      Result[void, string] =
   try:
     createDir(path)
-  except OSError, IOError:
-    return err("keystore: cannot create directory")
-
-  for filename in walkDirRec(path):
-    try:
-      var data = json.parseFile(filename)
+    for filename in walkDirRec(path):
+      var data = Json.loadFile(filename, JsonNode)
       let address: EthAddress = hexToByteArray[20](data["address"].getStr())
       am.accounts[address] = NimbusAccount(keystore: data, unlocked: false)
-    except JsonParsingError:
-      return err("keystore: json parsing error " & filename)
-    except ValueError:
-      return err("keystore: data parsing error")
-    except IOError:
-      return err("keystore: data read error")
-    except CatchableError as e: # json raises Exception
-      return err("keystore: " & e.msg)
-    except Exception as e:
-      {.warning: "Kludge(BareExcept): `parseFile()` in json vendor package needs to be updated".}
-      raiseAssert "Ooops loadKeystores(): name=" & $e.name & " msg=" & e.msg
-
-
+  except CatchableError as exc:
+    return err("loadKeystrores: " & exc.msg)
+  
   ok()
 
 proc getAccount*(am: var AccountsManager, address: EthAddress): Result[NimbusAccount, string] =
@@ -110,3 +97,5 @@ proc importPrivateKey*(am: var AccountsManager, fileName: string): Result[void, 
     return ok()
   except CatchableError as ex:
     return err(ex.msg)
+
+{.pop.}

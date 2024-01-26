@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -11,12 +11,12 @@
 import
   std/[uri],
   chronos,
-  chronos/apps/http/[httptable, httpserver],
-  json_rpc/rpcserver,
+  chronos/apps/http/httptable,
+  chronos/apps/http/httpserver,
   httputils,
-  websock/websock as ws
+  ./rpc_server
 
-{.push raises: [].}
+{.push gcsafe, raises: [].}
 
 proc sameOrigin(a, b: Uri): bool =
   a.hostname == b.hostname and
@@ -30,8 +30,9 @@ proc containsOrigin(list: seq[Uri], origin: Uri): bool =
 const
   HookOK = HttpResponseRef(nil)
 
-proc httpCors*(allowedOrigins: seq[Uri]): HttpAuthHook =
-  proc handler(req: HttpRequestRef): Future[HttpResponseRef] {.async.} =
+proc httpCors*(allowedOrigins: seq[Uri]): RpcAuthHook =
+  proc handler(req: HttpRequestRef): Future[HttpResponseRef]
+        {.gcsafe, async: (raises: [CatchableError]).} =
     let origins = req.headers.getList("Origin")
     let everyOriginAllowed = allowedOrigins.len == 0
 
@@ -87,12 +88,4 @@ proc httpCors*(allowedOrigins: seq[Uri]): HttpAuthHook =
     # the rest of response in server
     return HookOK
 
-  result = HttpAuthHook(handler)
-
-proc wsCors*(allowedOrigins: seq[Uri]): WsAuthHook =
-  proc handler(req: ws.HttpRequest): Future[bool] {.async.} =
-    # TODO: implement websock equivalent of
-    # request.getResponse
-    return true
-
-  result = WsAuthHook(handler)
+  result = handler
