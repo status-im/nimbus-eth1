@@ -94,15 +94,16 @@ jobs:
           sudo dpkg --add-architecture i386
           sudo apt-fast update -qq
           sudo DEBIAN_FRONTEND='noninteractive' apt-fast install \
-            --no-install-recommends -yq gcc-multilib g++-multilib
+            --no-install-recommends -yq gcc-multilib g++-multilib \
+            libz-dev:i386 libbz2-dev:i386 libssl-dev:i386 libpcre3-dev:i386
           mkdir -p external/bin
           cat << EOF > external/bin/gcc
           #!/bin/bash
-          exec $(which gcc) -m32 -mno-adx "\$@"
+          exec $(which gcc) -m32 "\$@"
           EOF
           cat << EOF > external/bin/g++
           #!/bin/bash
-          exec $(which g++) -m32 -mno-adx "\$@"
+          exec $(which g++) -m32 "\$@"
           EOF
           chmod 755 external/bin/gcc external/bin/g++
           echo '${{ github.workspace }}/external/bin' >> $GITHUB_PATH
@@ -178,12 +179,12 @@ jobs:
         id: nim-cache
         uses: actions/cache@v3
         with:
-          path: NimBinaries
+          path: NimBinCache
           key: 'nim-${{ matrix.target.os }}-${{ matrix.target.cpu }}-${{ steps.versions.outputs.nimbus_build_system }}-verified-proxy'
 
       - name: Build Nim and Nimbus-eth1 dependencies
         run: |
-          make -j${ncpu} ARCH_OVERRIDE=${PLATFORM} CI_CACHE=NimBinaries update-from-ci
+          make V=1 -j${ncpu} ARCH_OVERRIDE=${PLATFORM} CI_CACHE=NimBinCache update-from-ci
 
       - name: Run verified proxy tests (Windows)
         if: runner.os == 'Windows'
