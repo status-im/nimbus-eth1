@@ -95,7 +95,7 @@ proc runBeacon(config: PortalBridgeConf) {.raises: [CatchableError].} =
       currentPeriod =
         wallSlot div (SLOTS_PER_EPOCH * EPOCHS_PER_SYNC_COMMITTEE_PERIOD)
       requestAmount = backfillAmount div updatesPerRequest
-      leftOver = backFillAmount mod updatesPerRequest
+      leftOver = backfillAmount mod updatesPerRequest
 
     for i in 0..<requestAmount:
       await portalRpcClient.connect(rpcAddress, rpcPort, false)

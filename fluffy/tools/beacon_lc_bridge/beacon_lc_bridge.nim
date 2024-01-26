@@ -106,23 +106,6 @@ template asEthHash(hash: web3types.BlockHash): Hash256 =
 template unsafeQuantityToInt64(q: Quantity): int64 =
   int64 q
 
-# TODO: Cannot use the `hexToInt` from rpc_utils as it importing that causes a
-# strange "Exception can raise an unlisted exception: Exception` compile error.
-func hexToInt(
-    s: string, T: typedesc[SomeInteger]): T {.raises: [ValueError].} =
-  var i = 0
-  if s[i] == '0' and (s[i+1] in {'x', 'X'}):
-    inc(i, 2)
-  if s.len - i > sizeof(T) * 2:
-    raise newException(ValueError, "Input hex too big for destination int")
-
-  var res: T = 0
-  while i < s.len:
-    res = res shl 4 or readHexChar(s[i]).T
-    inc(i)
-
-  res
-
 func asTxType(quantity: Option[Quantity]): Result[TxType, string] =
   let value = quantity.get(0.Quantity).uint8
   var txType: TxType
@@ -553,7 +536,6 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
         let
           root = hash_tree_root(forkyObject.header)
           contentKey = encode(bootstrapContentKey(root))
-          contentId = beacon_content.toContentId(contentKey)
           forkDigest = forkDigestAtEpoch(
             forkDigests[], epoch(forkyObject.header.beacon.slot), cfg)
           content = encodeBootstrapForked(
@@ -586,7 +568,6 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
         let
           period = forkyObject.attested_header.beacon.slot.sync_committee_period
           contentKey = encode(updateContentKey(period.uint64, uint64(1)))
-          contentId = beacon_content.toContentId(contentKey)
           forkDigest = forkDigestAtEpoch(
             forkDigests[], epoch(forkyObject.attested_header.beacon.slot), cfg)
           content = encodeLightClientUpdatesForked(
@@ -621,7 +602,6 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
         let
           slot = forkyObject.signature_slot
           contentKey = encode(optimisticUpdateContentKey(slot.uint64))
-          contentId = beacon_content.toContentId(contentKey)
           forkDigest = forkDigestAtEpoch(
             forkDigests[], epoch(forkyObject.attested_header.beacon.slot), cfg)
           content = encodeOptimisticUpdateForked(
@@ -655,7 +635,6 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
         let
           finalizedSlot = forkyObject.finalized_header.beacon.slot
           contentKey = encode(finalityUpdateContentKey(finalizedSlot.uint64))
-          contentId = beacon_content.toContentId(contentKey)
           forkDigest = forkDigestAtEpoch(
             forkDigests[], epoch(forkyObject.attested_header.beacon.slot), cfg)
           content = encodeFinalityUpdateForked(

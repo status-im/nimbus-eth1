@@ -116,8 +116,7 @@ proc installEthApiHandlers*(
     # Currently only HistoryNetwork needed, later we might want a master object
     # holding all the networks.
     rpcServerWithProxy: var RpcProxy, historyNetwork: HistoryNetwork,
-    beaconLightClient: Opt[LightClient])
-    {.raises: [CatchableError].} =
+    beaconLightClient: Opt[LightClient]) =
 
   # Supported API
   rpcServerWithProxy.registerProxyMethod("eth_blockNumber")
