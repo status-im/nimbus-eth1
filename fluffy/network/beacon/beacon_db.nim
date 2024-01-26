@@ -20,6 +20,7 @@ import
   beacon_chain/spec/forks,
   beacon_chain/spec/forks_light_client,
   ./beacon_content,
+  ./beacon_chain_historical_summaries,
   ./beacon_init_loader,
   ../wire/portal_protocol
 
@@ -245,6 +246,12 @@ proc putUpdateIfBetter*(
 
   db.putUpdateIfBetter(period, newUpdate)
 
+proc getLastFinalityUpdate*(db: BeaconDb): Opt[ForkedLightClientFinalityUpdate] =
+  db.finalityUpdateCache.map(
+    proc(x: LightClientFinalityUpdateCache): ForkedLightClientFinalityUpdate =
+      decodeLightClientFinalityUpdateForked(db.forkDigests, x.lastFinalityUpdate).valueOr:
+        raiseAssert "Stored finality update must be valid")
+
 proc createGetHandler*(db: BeaconDb): DbGetHandler =
   return (
     proc(contentKey: ByteList, contentId: ContentId): results.Opt[seq[byte]] =
@@ -299,6 +306,8 @@ proc createGetHandler*(db: BeaconDb): DbGetHandler =
             Opt.none(seq[byte])
         else:
           Opt.none(seq[byte])
+      of beacon_content.ContentType.historicalSummaries:
+        db.get(contentId)
   )
 
 proc createStoreHandler*(db: BeaconDb): DbStoreHandler =
@@ -343,4 +352,18 @@ proc createStoreHandler*(db: BeaconDb): DbStoreHandler =
             contentKey.lightClientOptimisticUpdateKey.optimisticSlot,
           lastOptimisticUpdate: content
         ))
+    of beacon_content.ContentType.historicalSummaries:
+      # TODO: Its probably better to use the kvstore here and instead use a sql
+      # table with slot as index and move the slot logic to the db store handler.
+      let current = db.get(contentId)
+      if current.isSome():
+        let summariesWithProof =
+          decodeSszOrRaise(current.get(), HistoricalSummariesWithProof)
+        let newSummariesWithProof =
+          decodeSsz(content, HistoricalSummariesWithProof).valueOr:
+            return
+        if newSummariesWithProof.finalized_slot > summariesWithProof.finalized_slot:
+          db.put(contentId, content)
+      else:
+        db.put(contentId, content)
   )
