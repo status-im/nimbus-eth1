@@ -105,13 +105,13 @@ jobs:
           exec $(which g++) -m32 -mno-adx "\$@"
           EOF
           chmod 755 external/bin/gcc external/bin/g++
-          echo "${{ github.workspace }}/external/bin" >> $GITHUB_PATH
+          echo '${{ github.workspace }}/external/bin' >> $GITHUB_PATH
 
-      # Required for running the local testnet script
-      - name: Install build dependencies (MacOS)
-        if: runner.os == 'macOS'
+      - name: Install build dependencies (Macos)
+        # Some home brew modules were reported missing
+        if: runner.os == 'Macos'
         run: |
-          brew install gnu-getopt
+          HOMEBREW_NO_INSTALL_CLEANUP=1 brew install gnu-getopt
           brew link --force gnu-getopt
 
       - name: Restore llvm-mingw (Windows) from cache
@@ -141,7 +141,7 @@ jobs:
             MINGW_URL="$MINGW_BASE/llvm-mingw-20230905-ucrt-x86_64.zip"
             ARCH=64
           else
-            MINGW_URL="$MINGW_BASE/llvm-mingw-20230905-ucrt-x86_64.zip"
+            MINGW_URL="$MINGW_BASE/llvm-mingw-20230905-ucrt-i686.zip"
             ARCH=32
           fi
           curl -L "$MINGW_URL" -o "external/mingw-${{ matrix.target.cpu }}.zip"
@@ -174,7 +174,7 @@ jobs:
           nbsHash=$(getHash status-im/nimbus-build-system)
           echo "nimbus_build_system=$nbsHash" >> $GITHUB_OUTPUT
 
-      - name: Restore prebuilt Nim binaries from cache
+      - name: Restore prebuilt Nim from cache
         id: nim-cache
         uses: actions/cache@v3
         with:
@@ -190,7 +190,7 @@ jobs:
         run: |
           gcc --version
           DEFAULT_MAKE_FLAGS="-j${ncpu}"
-          mingw32-make ${DEFAULT_MAKE_FLAGS} nimbus_verified_proxy
+          mingw32-make ${DEFAULT_MAKE_FLAGS} nimbus_verified_proxy libverifproxy
           build/nimbus_verified_proxy.exe --help
           mingw32-make ${DEFAULT_MAKE_FLAGS} nimbus-verified-proxy-test
 
@@ -199,7 +199,7 @@ jobs:
         run: |
           export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/lib"
           DEFAULT_MAKE_FLAGS="-j${ncpu}"
-          env CC=gcc make ${DEFAULT_MAKE_FLAGS} nimbus_verified_proxy
+          env CC=gcc make ${DEFAULT_MAKE_FLAGS} nimbus_verified_proxy libverifproxy
           build/nimbus_verified_proxy --help
           # CC is needed to select correct compiler 32/64 bit
           env CC=gcc CXX=g++ make ${DEFAULT_MAKE_FLAGS} nimbus-verified-proxy-test
@@ -208,7 +208,7 @@ jobs:
         if: runner.os == 'Macos'
         run: |
           DEFAULT_MAKE_FLAGS="-j${ncpu}"
-          make ${DEFAULT_MAKE_FLAGS} nimbus_verified_proxy
+          make ${DEFAULT_MAKE_FLAGS} nimbus_verified_proxy libverifproxy
           build/nimbus_verified_proxy --help
           # "-static" option will not work for osx unless static system libraries are provided
           make ${DEFAULT_MAKE_FLAGS} nimbus-verified-proxy-test

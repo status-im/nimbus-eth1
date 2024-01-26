@@ -81,6 +81,19 @@ FLUFFY_TOOLS_DIRS := \
 # comma-separated values for the "clean" target
 FLUFFY_TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(FLUFFY_TOOLS))
 
+OS = $(shell $(CC) -dumpmachine)
+ifneq (, $(findstring darwin, $(OS)))
+  SHAREDLIBEXT = dylib
+else
+ifneq (, $(findstring mingw, $(OS))$(findstring cygwin, $(OS))$(findstring msys, $(OS)))
+  SHAREDLIBEXT = dll
+else
+  SHAREDLIBEXT = so
+endif
+endif
+
+VERIF_PROXY_OUT_PATH ?= build/libverifproxy/
+
 .PHONY: \
 	all \
 	$(TOOLS) \
@@ -301,6 +314,16 @@ nimbus_verified_proxy: | build deps
 nimbus-verified-proxy-test: | build deps
 	$(ENV_SCRIPT) nim nimbus_verified_proxy_test $(NIM_PARAMS) nimbus.nims
 
+# Shared library for verified proxy
+
+libverifproxy: | build deps
+	+ echo -e $(BUILD_MSG) "build/$@" && \
+		$(ENV_SCRIPT) nim --version && \
+		$(ENV_SCRIPT) nim c --app:lib -d:"libp2p_pki_schemes=secp256k1" --noMain:on --threads:on --nimcache:nimcache/libverifproxy -o:$(VERIF_PROXY_OUT_PATH)/$@.$(SHAREDLIBEXT) $(NIM_PARAMS) nimbus_verified_proxy/libverifproxy/verifproxy.nim
+	cp nimbus_verified_proxy/libverifproxy/verifproxy.h $(VERIF_PROXY_OUT_PATH)/
+	cp vendor/nimbus-build-system/vendor/Nim-csources-v1/c_code/nimbase.h $(VERIF_PROXY_OUT_PATH)/
+	echo -e $(BUILD_END_MSG) "build/$@"
+
 # builds transition tool
 t8n: | build deps
 	$(ENV_SCRIPT) nim c $(NIM_PARAMS) $(T8N_PARAMS) "tools/t8n/$@.nim"
@@ -320,28 +343,6 @@ evmstate_test: | build deps evmstate
 # builds txparse tool
 txparse: | build deps
 	$(ENV_SCRIPT) nim c $(NIM_PARAMS) "tools/txparse/$@.nim"
-
-# Shared library for verified proxy
-OS = $(shell $(CC) -dumpmachine)
-ifneq (, $(findstring darwin, $(OS)))
-  SHAREDLIBEXT = dylib
-else
-ifneq (, $(findstring mingw, $(OS))$(findstring cygwin, $(OS))$(findstring msys, $(OS)))
-  SHAREDLIBEXT = dll
-else
-  SHAREDLIBEXT = so
-endif
-endif
-
-VERIF_PROXY_OUT_PATH ?= build/libverifproxy/
-
-libverifproxy: | build deps
-	+ echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim --version && \
-		$(ENV_SCRIPT) nim c --app:lib -d:"libp2p_pki_schemes=secp256k1" --noMain:on --threads:on --nimcache:nimcache/libverifproxy -o:$(VERIF_PROXY_OUT_PATH)/$@.$(SHAREDLIBEXT) $(NIM_PARAMS) nimbus_verified_proxy/libverifproxy/verifproxy.nim
-	cp nimbus_verified_proxy/libverifproxy/verifproxy.h $(VERIF_PROXY_OUT_PATH)/
-	cp vendor/nimbus-build-system/vendor/Nim-csources-v1/c_code/nimbase.h $(VERIF_PROXY_OUT_PATH)/
-	echo -e $(BUILD_END_MSG) "build/$@"
 
 # usual cleaning
 clean: | clean-common
