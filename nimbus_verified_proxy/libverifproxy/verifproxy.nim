@@ -3,10 +3,10 @@ import
   ../nimbus_verified_proxy,
   ../nimbus_verified_proxy_conf
 
-proc quit*() {.exportc, dynlib.} = 
+proc quit*() {.exportc, dynlib.} =
   echo "Quitting"
 
-proc NimMain() {.importc.}
+proc NimMain() {.importc, exportc, dynlib.}
 
 var initialized: Atomic[bool]
 
@@ -27,9 +27,9 @@ proc runContext(ctx: ptr Context) {.thread.} =
 
     let rpcAddr = jsonNode["RpcAddress"].getStr()
     let myConfig = VerifiedProxyConf(
-      rpcAddress: ValidIpAddress.init(rpcAddr), 
-      listenAddress: defaultListenAddress, 
-      eth2Network: some(jsonNode["Eth2Network"].getStr()), 
+      rpcAddress: ValidIpAddress.init(rpcAddr),
+      listenAddress: defaultListenAddress,
+      eth2Network: some(jsonNode["Eth2Network"].getStr()),
       trustedBlockRoot: Eth2Digest.fromHex(jsonNode["TrustedBlockRoot"].getStr()),
       web3Url: parseCmdArg(Web3Url, jsonNode["Web3Url"].getStr()),
       rpcPort: Port(jsonNode["RpcPort"].getInt()),
@@ -46,7 +46,7 @@ proc runContext(ctx: ptr Context) {.thread.} =
 
     run(myConfig, ctx)
   except Exception as err:
-    echo "Exception when running ", getCurrentExceptionMsg(), err.getStackTrace() 
+    echo "Exception when running ", getCurrentExceptionMsg(), err.getStackTrace()
     ctx.onHeader(getCurrentExceptionMsg(), 3)
     ctx.cleanup()
 
@@ -71,7 +71,7 @@ proc startVerifProxy*(configJson: cstring, onHeader: OnHeaderCallback): ptr Cont
   try:
     createThread(ctx.thread, runContext, ctx)
   except Exception as err:
-    echo "Exception when attempting to invoke createThread ", getCurrentExceptionMsg(), err.getStackTrace() 
+    echo "Exception when attempting to invoke createThread ", getCurrentExceptionMsg(), err.getStackTrace()
     ctx.onHeader(getCurrentExceptionMsg(), 3)
     ctx.cleanup()
   return ctx
