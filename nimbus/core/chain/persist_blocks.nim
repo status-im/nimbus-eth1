@@ -147,8 +147,7 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
 
       dbTx.rollback()
 
-      let blockHash = c.db.getBlockHash(header.blockNumber)
-      c.db.setBlockWitness(blockHash, witness)
+      c.db.setBlockWitness(header.blockHash(), witness)
 
 
     if NoPersistHeader notin flags:
