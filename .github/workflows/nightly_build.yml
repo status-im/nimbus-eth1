@@ -1,3 +1,13 @@
+# Nimbus
+# Copyright (c) 2020-2024 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+#    http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or
+#    http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed except
+# according to those terms.
+
 name: Nightly build
 on:
   schedule:
@@ -10,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: ${{ github.ref }}
 
@@ -29,7 +39,7 @@ jobs:
           echo "archive_dir=${NEW_ARCHIVE_DIR}" >> $GITHUB_OUTPUT
 
       - name: Upload archive artefact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: Linux_amd64_archive
           path: |
@@ -38,7 +48,7 @@ jobs:
           retention-days: 2
 
       - name: Upload checksum artefact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: Linux_amd64_checksum
           path: ./dist/${{ steps.make_dist.outputs.archive_dir }}/build/nimbus.sha512sum
@@ -57,7 +67,7 @@ jobs:
           sudo apt-get -qq -y install binfmt-support qemu-user-static
 
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: ${{ github.ref }}
 
@@ -76,7 +86,7 @@ jobs:
           echo "archive_dir=${NEW_ARCHIVE_DIR}" >> $GITHUB_OUTPUT
 
       - name: Upload archive artefact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: Linux_arm64_archive
           path: |
@@ -85,7 +95,7 @@ jobs:
           retention-days: 2
 
       - name: Upload checksum artefact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: Linux_arm64_checksum
           path: ./dist/${{ steps.make_dist.outputs.archive_dir }}/build/nimbus.sha512sum
@@ -96,7 +106,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: ${{ github.ref }}
 
@@ -115,7 +125,7 @@ jobs:
           echo "archive_dir=${NEW_ARCHIVE_DIR}" >> $GITHUB_OUTPUT
 
       - name: Upload archive artefact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: Windows_amd64_archive
           path: |
@@ -124,7 +134,7 @@ jobs:
           retention-days: 2
 
       - name: Upload checksum artefact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: Windows_amd64_checksum
           path: ./dist/${{ steps.make_dist.outputs.archive_dir }}/build/nimbus.sha512sum
@@ -135,7 +145,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: ${{ github.ref }}
 
@@ -154,7 +164,7 @@ jobs:
           echo "archive_dir=${NEW_ARCHIVE_DIR}" >> $GITHUB_OUTPUT
 
       - name: Upload archive artefact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: macOS_amd64_archive
           path: |
@@ -163,7 +173,7 @@ jobs:
           retention-days: 2
 
       - name: Upload checksum artefact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: macOS_amd64_checksum
           path: ./dist/${{ steps.make_dist.outputs.archive_dir }}/build/nimbus.sha512sum
@@ -174,7 +184,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: ${{ github.ref }}
 
@@ -193,7 +203,7 @@ jobs:
           echo "archive_dir=${NEW_ARCHIVE_DIR}" >> $GITHUB_OUTPUT
 
       - name: Upload archive artefact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: macOS_arm64_archive
           path: |
@@ -202,7 +212,7 @@ jobs:
           retention-days: 2
 
       - name: Upload checksum artefact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: macOS_arm64_checksum
           path: ./dist/${{ steps.make_dist.outputs.archive_dir }}/build/nimbus.sha512sum
@@ -214,12 +224,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: ${{ github.ref }}
 
       - name: Download artefacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
 
       - name: Create release notes
         run: |
