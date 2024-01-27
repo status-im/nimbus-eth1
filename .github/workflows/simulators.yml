@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Get latest nimbus-build-system commit hash
         id: versions
@@ -25,7 +25,7 @@ jobs:
           echo "nimbus_build_system=$nbsHash" >> $GITHUB_OUTPUT
 
       - name: Restore prebuilt Nim from cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: NimBinaries
           key: 'nim-linux-amd64-${{ steps.versions.outputs.nimbus_build_system }}-sim'
@@ -43,7 +43,7 @@ jobs:
           ${SIM_SCRIPT} "Linux-amd64"
 
       - name: Upload artefact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: linux_amd64_stat
           path: ./simulators.md
@@ -54,7 +54,7 @@ jobs:
     runs-on: macos-11
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Get latest nimbus-build-system commit hash
         id: versions
@@ -66,7 +66,7 @@ jobs:
           echo "nimbus_build_system=$nbsHash" >> $GITHUB_OUTPUT
 
       - name: Restore prebuilt Nim from cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: NimBinaries
           key: 'nim-macos-amd64-${{ steps.versions.outputs.nimbus_build_system }}-sim'
@@ -84,7 +84,7 @@ jobs:
           ${SIM_SCRIPT} "MacOS-amd64"
 
       - name: Upload artefact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: macos_amd64_stat
           path: ./simulators.md
@@ -98,12 +98,12 @@ jobs:
         shell: bash
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Restore llvm-mingw (Windows) from cache
         if: runner.os == 'Windows'
         id: windows-mingw-cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: external/mingw-amd64
           key: 'mingw-llvm-17-sim'
@@ -136,7 +136,7 @@ jobs:
           echo "nimbus_build_system=$nbsHash" >> $GITHUB_OUTPUT
 
       - name: Restore prebuilt Nim from cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: NimBinaries
           key: 'nim-windows-amd64-${{ steps.versions.outputs.nimbus_build_system }}-sim'
@@ -153,7 +153,7 @@ jobs:
           ${SIM_SCRIPT} "Windows-amd64"
 
       - name: Upload artefact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: windows_amd64_stat
           path: ./simulators.md
@@ -165,12 +165,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: master
 
       - name: Download artefacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
 
       - name: Create statistics notes
         run: |

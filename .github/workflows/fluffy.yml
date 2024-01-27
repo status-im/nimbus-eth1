@@ -43,7 +43,7 @@ jobs:
     if: github.event_name == 'push'
     steps:
       - name: Checkout nimbus-eth1
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install modprobe
         run: |
@@ -65,7 +65,7 @@ jobs:
 
       - name: Restore prebuilt Nim binaries from cache
         id: nim-cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: NimBinaries
           key: 'nim-linux-amd64-${{ steps.versions.outputs.nimbus_build_system }}-fluffy'
@@ -133,7 +133,7 @@ jobs:
     runs-on: ${{ matrix.builder }}
     steps:
       - name: Checkout nimbus-eth1
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Derive environment variables
         run: |
@@ -194,7 +194,7 @@ jobs:
       - name: Restore llvm-mingw (Windows) from cache
         if: runner.os == 'Windows'
         id: windows-mingw-cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: external/mingw-${{ matrix.target.cpu }}
           key: 'mingw-llvm-17-${{ matrix.target.cpu }}'
@@ -202,7 +202,7 @@ jobs:
       - name: Restore Nim DLLs dependencies (Windows) from cache
         if: runner.os == 'Windows'
         id: windows-dlls-cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: external/dlls-${{ matrix.target.cpu }}
           key: 'dlls-${{ matrix.target.cpu }}-fluffy'
@@ -253,7 +253,7 @@ jobs:
 
       - name: Restore prebuilt Nim binaries from cache
         id: nim-cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: NimBinaries
           key: 'nim-${{ matrix.target.os }}-${{ matrix.target.cpu }}-${{ steps.versions.outputs.nimbus_build_system }}-fluffy'
