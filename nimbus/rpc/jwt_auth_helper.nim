@@ -20,18 +20,26 @@ type
     ## Template used for JSON unmarshalling
     iat*: uint64
 
+createJsonFlavor JAuth,
+  automaticObjectSerialization = false,
+  requireAllFields = false,
+  allowUnknownFields = true
+
+JwtHeader.useDefaultSerializationIn JAuth
+JwtIatPayload.useDefaultSerializationIn JAuth
+
 # This file separated from jwt_auth.nim
 # is to prevent generic resolution clash between
 # json_serialization and base64
 
 {.push gcsafe, raises: [].}
 
-func decodeJwtHeader*(jsonBytes: string): JwtHeader
+proc decodeJwtHeader*(jsonBytes: string): JwtHeader
         {.gcsafe, raises: [SerializationError].} =
-  Json.decode(jsonBytes, JwtHeader)
+  JAuth.decode(jsonBytes, JwtHeader)
 
-func decodeJwtIatPayload*(jsonBytes: string): JwtIatPayload
+proc decodeJwtIatPayload*(jsonBytes: string): JwtIatPayload
         {.gcsafe, raises: [SerializationError].} =
-  Json.decode(jsonBytes, JwtIatPayload)
+  JAuth.decode(jsonBytes, JwtIatPayload)
 
 {.pop.}

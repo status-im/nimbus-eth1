@@ -15,7 +15,6 @@ import
   std/[base64, json, options, os, strutils, times],
   ../nimbus/config,
   ../nimbus/rpc/jwt_auth,
-  ../nimbus/rpc/rpc_server,
   ./replay/pp,
   chronicles,
   chronos/apps/http/httpclient as chronoshttpclient,
