@@ -145,6 +145,9 @@ proc addHttpServices(handlers: var seq[RpcHandlerProc],
                      com: CommonRef, protocols: set[ProtocolFlag]) =
 
   # The order is important: graphql, ws, rpc
+  # graphql depends on /graphl path
+  # ws depends on Sec-WebSocket-Version header
+  # json-rpc have no reliable identification
 
   if conf.graphqlEnabled:
     let ctx = setupGraphqlContext(com, nimbus.ethNode, nimbus.txPool)

@@ -15,6 +15,7 @@ import
   std/[base64, json, options, os, strutils, times],
   ../nimbus/config,
   ../nimbus/rpc/jwt_auth,
+  ../nimbus/rpc {.all.},
   ./replay/pp,
   chronicles,
   chronos/apps/http/httpclient as chronoshttpclient,
@@ -25,7 +26,9 @@ import
   stint,
   unittest2,
   graphql,
-  graphql/[httpserver, httpclient]
+  websock/websock,
+  graphql/[httpserver, httpclient],
+  json_rpc/[rpcserver, rpcclient]
 
 type
   UnGuardedKey =
@@ -139,6 +142,48 @@ proc createServer(serverAddress: TransportAddress, authHooks: seq[AuthHook] = @[
 
 proc setupClient(address: TransportAddress): GraphqlHttpClientRef =
   GraphqlHttpClientRef.new(address, secure = false).get()
+
+func localAddress(server: GraphqlHttpServerRef): TransportAddress =
+  server.server.instance.localAddress()
+
+# ------------------------------------------------------------------------------
+# Http combo helpers
+# ------------------------------------------------------------------------------
+
+proc newGraphqlHandler(): GraphqlHttpHandlerRef =
+  const schema = """type Query {name: String}"""
+
+  let ctx = GraphqlRef.new()
+  let r = ctx.parseSchema(schema)
+  if r.isErr:
+    debugEcho r.error
+    # continue with empty schema
+
+  GraphqlHttpHandlerRef.new(ctx)
+
+proc installRPC(server: RpcServer) =
+  server.rpc("rpc_echo") do(input: int) -> string:
+    result = "hello: " & $input
+
+proc setupComboServer(hooks: sink seq[RpcAuthHook]): HttpResult[NimbusHttpServerRef] =
+  var handlers: seq[RpcHandlerProc]
+
+  let qlServer = newGraphqlHandler()
+  handlers.addHandler(qlServer)
+
+  let wsServer = newRpcWebsocketHandler()
+  wsServer.installRPC()
+  handlers.addHandler(wsServer)
+
+  let rpcServer = newRpcHttpHandler()
+  rpcServer.installRPC()
+  handlers.addHandler(rpcServer)
+
+  let address = initTAddress("127.0.0.1:0")
+  newHttpServerWithParams(address, hooks, handlers)
+
+createRpcSigsFromNim(RpcClient):
+  proc rpc_echo(input: int): string
 
 # ------------------------------------------------------------------------------
 # Test Runners
@@ -254,7 +299,7 @@ proc runJwtAuth(noisy = true; keyFile = jwtKeyFile) =
     authHook = secret.value.httpJwtAuth
 
   const
-    serverAddress = initTAddress("127.0.0.1:8547")
+    serverAddress = initTAddress("127.0.0.1:0")
     query = """{ __type(name: "ID") { kind }}"""
 
   suite "EngineAuth: Http/rpc authentication mechanics":
@@ -282,7 +327,7 @@ proc runJwtAuth(noisy = true; keyFile = jwtKeyFile) =
       setTraceLevel()
 
       # Run http authorisation request
-      let client = setupClient(serverAddress)
+      let client = setupClient(server.localAddress)
       let res = waitFor client.sendRequest(query, req.toList)
       check res.isOk
       if res.isErr:
@@ -308,7 +353,7 @@ proc runJwtAuth(noisy = true; keyFile = jwtKeyFile) =
       setTraceLevel()
 
       # Run http authorisation request
-      let client = setupClient(serverAddress)
+      let client = setupClient(server.localAddress)
       let res = waitFor client.sendRequest(query, req.toList)
       check res.isOk
       if res.isErr:
@@ -321,6 +366,73 @@ proc runJwtAuth(noisy = true; keyFile = jwtKeyFile) =
       check resp.response == """{"data":{"__type":{"kind":"SCALAR"}}}"""
 
       setErrorLevel()
+
+    waitFor server.closeWait()
+
+  suite "Test combo http server":
+    let res = setupComboServer(@[authHook])
+    if res.isErr:
+      debugEcho res.error
+      quit(QuitFailure)
+
+    let
+      server = res.get
+      time = getTime().toUnix.uint64
+      req = secret.value.getHttpAuthReqHeader(time)
+
+    server.start()
+
+    test "Graphql query no auth":
+      let client = setupClient(server.localAddress)
+      let res = waitFor client.sendRequest(query)
+      check res.isOk
+      let resp = res.get()
+      check resp.status == 403
+      check resp.reason == "Forbidden"
+      check resp.response == "Missing authorization token"
+
+    test "Graphql query with auth":
+      let client = setupClient(server.localAddress)
+      let res = waitFor client.sendRequest(query, req.toList)
+      check res.isOk
+      let resp = res.get()
+      check resp.status == 200
+      check resp.reason == "OK"
+      check resp.response == """{"data":{"__type":{"kind":"SCALAR"}}}"""
+
+    test "rpc query no auth":
+      let client = newRpcHttpClient()
+      waitFor client.connect("http://" & $server.localAddress)
+      try:
+        let res = waitFor client.rpc_echo(100)
+        discard res
+        check false
+      except ErrorResponse as exc:
+        check exc.msg == "Forbidden"
+
+    test "rpc query with uth":
+      proc authHeaders(): seq[(string, string)] =
+        req.toList
+      let client = newRpcHttpClient(getHeaders = authHeaders)
+      waitFor client.connect("http://" & $server.localAddress)
+      let res = waitFor client.rpc_echo(100)
+      check res == "hello: 100"
+
+    test "ws query no auth":
+      let client = newRpcWebSocketClient()
+      expect WSFailedUpgradeError:
+        waitFor client.connect("ws://" & $server.localAddress)
+
+    test "ws query with auth":
+      proc authHeaders(): seq[(string, string)] =
+        req.toList
+      let client = newRpcWebSocketClient(authHeaders)
+      waitFor client.connect("ws://" & $server.localAddress)
+      let res = waitFor client.rpc_echo(123)
+      check res == "hello: 123"
+
+      let res2 = waitFor client.rpc_echo(145)
+      check res2 == "hello: 145"
 
     waitFor server.closeWait()
 

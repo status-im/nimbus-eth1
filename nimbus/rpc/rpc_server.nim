@@ -302,6 +302,9 @@ proc stop*(server: NimbusHttpServerRef) {.async: (raises: []).} =
 proc closeWait*(server: NimbusHttpServerRef) {.async: (raises: []).} =
   await server.server.closeWait()
 
+func localAddress*(server: NimbusHttpServerRef): TransportAddress =
+  server.server.instance.localAddress()
+
 proc addServer*(server: RpcHttpServer,
                 address: TransportAddress,
                 params: RpcHttpServerParams): Result[void, string] =
