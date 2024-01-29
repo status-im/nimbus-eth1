@@ -77,7 +77,9 @@ CliqueOptions.useDefaultReaderIn JGenesis
 # ------------------------------------------------------------------------------
 # Private helper functions
 # ------------------------------------------------------------------------------
-proc writeValue(writer: var JsonWriter[JGenesis], value: Option[EthTime])
+
+# used by chronicles json writer
+proc writeValue(writer: var JsonWriter, value: Option[EthTime])
      {.gcsafe, raises: [IOError].} =
   mixin writeValue
 
