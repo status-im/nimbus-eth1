@@ -14,7 +14,6 @@ import
   eth/[common, rlp, p2p], stint, stew/[byteutils],
   json_serialization, chronicles,
   json_serialization/std/options as jsoptions,
-  json_serialization/std/tables as jstable,
   json_serialization/lexer,
   "."/[genesis_alloc, hardforks]
 
@@ -40,9 +39,10 @@ type
     parentBeaconBlockRoot*: Option[Hash256]   # EIP-4788
 
   GenesisAlloc* = Table[EthAddress, GenesisAccount]
+  GenesisStorage* = Table[UInt256, UInt256]
   GenesisAccount* = object
     code*   : seq[byte]
-    storage*: Table[UInt256, UInt256]
+    storage*: GenesisStorage
     balance*: UInt256
     nonce*  : AccountNonce
 
@@ -58,9 +58,27 @@ const
   SepoliaNet* = 11155111.NetworkId
   HoleskyNet* = 17000.NetworkId
 
+createJsonFlavor JGenesis,
+  automaticObjectSerialization = false,
+  requireAllFields = false,
+  omitOptionalFields = true,
+  allowUnknownFields = true,
+  skipNullFields = true
+
+template derefType(T: type): untyped =
+  typeof(T()[])
+
+NetworkParams.useDefaultReaderIn JGenesis
+GenesisAccount.useDefaultReaderIn JGenesis
+derefType(Genesis).useDefaultReaderIn JGenesis
+derefType(ChainConfig).useDefaultReaderIn JGenesis
+CliqueOptions.useDefaultReaderIn JGenesis
+
 # ------------------------------------------------------------------------------
 # Private helper functions
 # ------------------------------------------------------------------------------
+
+# used by chronicles json writer
 proc writeValue(writer: var JsonWriter, value: Option[EthTime])
      {.gcsafe, raises: [IOError].} =
   mixin writeValue
@@ -139,9 +157,15 @@ proc fromHex(c: char): int =
   of 'A'..'F': ord(c) - ord('A') + 10
   else: -1
 
-proc readValue(reader: var JsonReader, value: var UInt256)
+template wrapError(body: untyped) =
+  try:
+    body
+  except ValueError as ex:
+    raiseUnexpectedValue(reader, ex.msg)
+
+proc readValue(reader: var JsonReader[JGenesis], value: var UInt256)
     {.gcsafe, raises: [SerializationError, IOError].} =
-  ## Mixin for `Json.loadFile()`. Note that this driver applies the same
+  ## Mixin for `JGenesis.loadFile()`. Note that this driver applies the same
   ## to `BlockNumber` fields as well as generic `UInt265` fields like the
   ## account `balance`.
   var (accu, ok) = (0.u256, true)
@@ -182,35 +206,31 @@ proc readValue(reader: var JsonReader, value: var UInt256)
     reader.raiseUnexpectedValue("Uint256 parse error")
   value = accu
 
-proc readValue(reader: var JsonReader, value: var ChainId)
+proc readValue(reader: var JsonReader[JGenesis], value: var ChainId)
     {.gcsafe, raises: [SerializationError, IOError].} =
   value = reader.readValue(int).ChainId
 
-proc readValue(reader: var JsonReader, value: var Hash256)
+proc readValue(reader: var JsonReader[JGenesis], value: var Hash256)
     {.gcsafe, raises: [SerializationError, IOError].} =
   value = Hash256.fromHex(reader.readValue(string))
 
-proc readValue(reader: var JsonReader, value: var BlockNonce)
+proc readValue(reader: var JsonReader[JGenesis], value: var BlockNonce)
     {.gcsafe, raises: [SerializationError, IOError].} =
-  try:
+  wrapError:
     value = fromHex[uint64](reader.readValue(string)).toBlockNonce
-  except ValueError as ex:
-    reader.raiseUnexpectedValue(ex.msg)
 
 # genesis timestamp is in hex/dec
-proc readValue(reader: var JsonReader, value: var EthTime)
+proc readValue(reader: var JsonReader[JGenesis], value: var EthTime)
     {.gcsafe, raises: [SerializationError, IOError].} =
-  try:
+  wrapError:
     let data = reader.readValue(string)
     if data.len > 2 and data[1] == 'x':
       value = fromHex[int64](data).EthTime
     else:
       value = parseInt(data).EthTime
-  except ValueError as ex:
-    reader.raiseUnexpectedValue(ex.msg)
 
 # but shanghaiTime and cancunTime in config is in int literal
-proc readValue(reader: var JsonReader, value: var Option[EthTime])
+proc readValue(reader: var JsonReader[JGenesis], value: var Option[EthTime])
     {.gcsafe, raises: [IOError, JsonReaderError].} =
   if reader.tokKind == JsonValueKind.Null:
     reset value
@@ -221,41 +241,37 @@ proc readValue(reader: var JsonReader, value: var Option[EthTime])
     let val = EthTime reader.parseInt(uint64)
     value = some val
 
-proc readValue(reader: var JsonReader, value: var seq[byte])
+proc readValue(reader: var JsonReader[JGenesis], value: var seq[byte])
     {.gcsafe, raises: [SerializationError, IOError].} =
-  try:
+  wrapError:
     value = hexToSeqByte(reader.readValue(string))
-  except ValueError as ex:
-    reader.raiseUnexpectedValue(ex.msg)
 
-proc readValue(reader: var JsonReader, value: var GasInt)
+proc readValue(reader: var JsonReader[JGenesis], value: var GasInt)
     {.gcsafe, raises: [SerializationError, IOError].} =
-  try:
+  wrapError:
     value = fromHex[GasInt](reader.readValue(string))
-  except ValueError as ex:
-    reader.raiseUnexpectedValue(ex.msg)
 
-proc readValue(reader: var JsonReader, value: var EthAddress)
+proc readValue(reader: var JsonReader[JGenesis], value: var EthAddress)
     {.gcsafe, raises: [SerializationError, IOError].} =
-  try:
+  wrapError:
     value = parseAddress(reader.readValue(string))
-  except ValueError as ex:
-    reader.raiseUnexpectedValue(ex.msg)
 
-proc readValue(reader: var JsonReader, value: var AccountNonce)
+proc readValue(reader: var JsonReader[JGenesis], value: var AccountNonce)
     {.gcsafe, raises: [SerializationError, IOError].} =
-  try:
+  wrapError:
     value = fromHex[uint64](reader.readValue(string))
-  except ValueError as ex:
-    reader.raiseUnexpectedValue(ex.msg)
 
-template to(a: string, b: type EthAddress): EthAddress =
-  # json_serialization decode table stuff
-  parseAddress(a)
+proc readValue(reader: var JsonReader[JGenesis], value: var GenesisStorage)
+    {.gcsafe, raises: [SerializationError, IOError].} =
+  wrapError:
+    for key in reader.readObjectFields:
+      value[UInt256.fromHex(key)] = reader.readValue(UInt256)
 
-template to(a: string, b: type UInt256): UInt256 =
-  # json_serialization decode table stuff
-  UInt256.fromHex(a)
+proc readValue(reader: var JsonReader[JGenesis], value: var GenesisAlloc)
+    {.gcsafe, raises: [SerializationError, IOError].} =
+  wrapError:
+    for key in reader.readObjectFields:
+      value[parseAddress(key)] = reader.readValue(GenesisAccount)
 
 macro fillArrayOfBlockNumberBasedForkOptionals(conf, tmp: typed): untyped =
   result = newStmtList()
@@ -347,7 +363,7 @@ proc validateChainConfig*(conf: ChainConfig): bool =
 proc parseGenesis*(data: string): Genesis
      {.gcsafe.} =
   try:
-    result = Json.decode(data, Genesis, allowUnknownFields = true)
+    result = JGenesis.decode(data, Genesis, allowUnknownFields = true)
   except JsonReaderError as e:
     error "Invalid genesis config file format", msg=e.formatMsg("")
     return nil
@@ -359,7 +375,7 @@ proc parseGenesis*(data: string): Genesis
 proc parseGenesisFile*(fileName: string): Genesis
      {.gcsafe.} =
   try:
-    result = Json.loadFile(fileName, Genesis, allowUnknownFields = true)
+    result = JGenesis.loadFile(fileName, Genesis, allowUnknownFields = true)
   except IOError as e:
     error "Genesis I/O error", fileName, msg=e.msg
     return nil
@@ -389,7 +405,7 @@ proc validateNetworkParams(params: var NetworkParams, input: string, inputIsFile
 proc loadNetworkParams*(fileName: string, params: var NetworkParams):
     bool =
   try:
-    params = Json.loadFile(fileName, NetworkParams, allowUnknownFields = true)
+    params = JGenesis.loadFile(fileName, NetworkParams, allowUnknownFields = true)
   except IOError as e:
     error "Network params I/O error", fileName, msg=e.msg
     return false
@@ -405,7 +421,7 @@ proc loadNetworkParams*(fileName: string, params: var NetworkParams):
 
 proc decodeNetworkParams*(jsonString: string, params: var NetworkParams): bool =
   try:
-    params = Json.decode(jsonString, NetworkParams, allowUnknownFields = true)
+    params = JGenesis.decode(jsonString, NetworkParams, allowUnknownFields = true)
   except JsonReaderError as e:
     error "Invalid network params format", msg=e.formatMsg("")
     return false
@@ -419,7 +435,7 @@ proc decodeNetworkParams*(jsonString: string, params: var NetworkParams): bool =
 proc parseGenesisAlloc*(data: string, ga: var GenesisAlloc): bool
     {.gcsafe, raises: [CatchableError].} =
   try:
-    ga = Json.decode(data, GenesisAlloc, allowUnknownFields = true)
+    ga = JGenesis.decode(data, GenesisAlloc, allowUnknownFields = true)
   except JsonReaderError as e:
     error "Invalid genesis config file format", msg=e.formatMsg("")
     return false
