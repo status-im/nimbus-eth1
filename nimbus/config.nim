@@ -87,11 +87,8 @@ const
   defaultDataDirDesc = defaultDataDir()
   defaultPort              = 30303
   defaultMetricsServerPort = 9093
-  defaultEthRpcPort        = 8545
-  defaultEthWsPort         = 8546
-  defaultEthGraphqlPort    = 8547
+  defaultHttpPort          = 8545
   defaultEngineApiPort     = 8550
-  defaultEngineApiWsPort   = 8551
   defaultListenAddress      = (static parseIpAddress("0.0.0.0"))
   defaultAdminListenAddress = (static parseIpAddress("127.0.0.1"))
   defaultListenAddressDesc      = $defaultListenAddress & ", meaning all network interfaces"
@@ -380,26 +377,26 @@ type
       defaultValue: NimbusCmd.noCommand }: NimbusCmd
 
     of noCommand:
+      httpPort* {.
+        separator: "\pLOCAL SERVICES OPTIONS:"
+        desc: "Listening port of the HTTP server(rpc, ws, graphql)"
+        defaultValue: defaultHttpPort
+        defaultValueDesc: $defaultHttpPort
+        name: "http-port" }: Port
+
+      httpAddress* {.
+        desc: "Listening IP address of the HTTP server(rpc, ws, graphql)"
+        defaultValue: defaultAdminListenAddress
+        defaultValueDesc: $defaultAdminListenAddressDesc
+        name: "http-address" }: IpAddress
+
       rpcEnabled* {.
-        separator: "\pLOCAL SERVICE OPTIONS:"
         desc: "Enable the JSON-RPC server"
         defaultValue: false
         name: "rpc" }: bool
 
-      rpcPort* {.
-        desc: "Listening port of the JSON-RPC server"
-        defaultValue: defaultEthRpcPort
-        defaultValueDesc: $defaultEthRpcPort
-        name: "rpc-port" }: Port
-
-      rpcAddress* {.
-        desc: "Listening IP address of the JSON-RPC server"
-        defaultValue: defaultAdminListenAddress
-        defaultValueDesc: $defaultAdminListenAddressDesc
-        name: "rpc-address" }: IpAddress
-
       rpcApi {.
-        desc: "Enable specific set of RPC API (available: eth, debug)"
+        desc: "Enable specific set of RPC API (available: eth, debug, exp)"
         defaultValue: @[]
         defaultValueDesc: $RpcFlag.Eth
         name: "rpc-api" }: seq[string]
@@ -409,23 +406,16 @@ type
         defaultValue: false
         name: "ws" }: bool
 
-      wsPort* {.
-        desc: "Listening port of the Websocket JSON-RPC server"
-        defaultValue: defaultEthWsPort
-        defaultValueDesc: $defaultEthWsPort
-        name: "ws-port" }: Port
-
-      wsAddress* {.
-        desc: "Listening IP address of the Websocket JSON-RPC server"
-        defaultValue: defaultAdminListenAddress
-        defaultValueDesc: $defaultAdminListenAddressDesc
-        name: "ws-address" }: IpAddress
-
       wsApi {.
-        desc: "Enable specific set of Websocket RPC API (available: eth, debug)"
+        desc: "Enable specific set of Websocket RPC API (available: eth, debug, exp)"
         defaultValue: @[]
         defaultValueDesc: $RpcFlag.Eth
         name: "ws-api" }: seq[string]
+
+      graphqlEnabled* {.
+        desc: "Enable the GraphQL HTTP server"
+        defaultValue: false
+        name: "graphql" }: bool
 
       engineApiEnabled* {.
         desc: "Enable the Engine API"
@@ -433,13 +423,13 @@ type
         name: "engine-api" .}: bool
 
       engineApiPort* {.
-        desc: "Listening port for the Engine API"
+        desc: "Listening port for the Engine API(http and ws)"
         defaultValue: defaultEngineApiPort
         defaultValueDesc: $defaultEngineApiPort
         name: "engine-api-port" .}: Port
 
       engineApiAddress* {.
-        desc: "Listening address for the Engine API"
+        desc: "Listening address for the Engine API(http and ws)"
         defaultValue: defaultAdminListenAddress
         defaultValueDesc: $defaultAdminListenAddressDesc
         name: "engine-api-address" .}: IpAddress
@@ -448,18 +438,6 @@ type
         desc: "Enable the WebSocket Engine API"
         defaultValue: false
         name: "engine-api-ws" .}: bool
-
-      engineApiWsPort* {.
-        desc: "Listening port for the WebSocket Engine API"
-        defaultValue: defaultEngineApiWsPort
-        defaultValueDesc: $defaultEngineApiWsPort
-        name: "engine-api-ws-port" .}: Port
-
-      engineApiWsAddress* {.
-        desc: "Listening address for the WebSocket Engine API"
-        defaultValue: defaultAdminListenAddress
-        defaultValueDesc: $defaultAdminListenAddressDesc
-        name: "engine-api-ws-address" .}: IpAddress
 
       terminalTotalDifficulty* {.
         desc: "The terminal total difficulty of the eth2 merge transition block." &
@@ -480,23 +458,6 @@ type
           " is auto-generated."
         defaultValueDesc: "\"jwt.hex\" in the data directory (see --data-dir)"
         name: "jwt-secret" .}: Option[InputFile]
-
-      graphqlEnabled* {.
-        desc: "Enable the GraphQL HTTP server"
-        defaultValue: false
-        name: "graphql" }: bool
-
-      graphqlPort* {.
-        desc: "Listening port of the GraphQL HTTP server"
-        defaultValue: defaultEthGraphqlPort
-        defaultValueDesc: $defaultEthGraphqlPort
-        name: "graphql-port" }: Port
-
-      graphqlAddress* {.
-        desc: "Listening IP address of the GraphQL HTTP server"
-        defaultValue: defaultAdminListenAddress
-        defaultValueDesc: $defaultAdminListenAddressDesc
-        name: "graphql-address" }: IpAddress
 
       metricsEnabled* {.
         desc: "Enable the built-in metrics HTTP server"
@@ -685,7 +646,7 @@ proc getProtocolFlags*(conf: NimbusConf): set[ProtocolFlag] =
 proc getRpcFlags(api: openArray[string]): set[RpcFlag] =
   if api.len == 0:
     return {RpcFlag.Eth}
-
+    
   for item in repeatingList(api):
     case item.toLowerAscii()
     of "eth": result.incl RpcFlag.Eth
@@ -719,7 +680,7 @@ proc fromEnr*(T: type ENode, r: enr.Record): ENodeResult[ENode] =
   ok(ENode(
     pubkey: pk,
     address: Address(
-      ip: ipv4(tr.ip.get()),
+      ip: utils.ipv4(tr.ip.get()),
       udpPort: Port(tr.udp.get()),
       tcpPort: Port(tr.tcp.get())
     )
@@ -779,6 +740,18 @@ proc getAllowedOrigins*(conf: NimbusConf): seq[Uri] =
   for item in repeatingList(conf.allowedOrigins):
     result.add parseUri(item)
 
+func engineApiServerEnabled*(conf: NimbusConf): bool =
+  conf.engineApiEnabled or conf.engineApiWsEnabled
+
+func shareServerWithEngineApi*(conf: NimbusConf): bool =
+  conf.engineApiServerEnabled and
+    conf.engineApiPort == conf.httpPort
+
+func httpServerEnabled*(conf: NimbusConf): bool =
+  conf.graphqlEnabled or
+    conf.wsEnabled or
+    conf.rpcEnabled 
+
 # KLUDGE: The `load()` template does currently not work within any exception
 #         annotated environment.
 {.pop.}
@@ -833,13 +806,6 @@ proc makeConfig*(cmdLine = commandLineParams()): NimbusConf
     if result.udpPort == Port(0):
       # if udpPort not set in cli, then
       result.udpPort = result.tcpPort
-
-    # enable rpc server or ws server if they share common port with engine api
-    let rpcMustEnabled = result.engineApiEnabled and (result.engineApiPort == result.rpcPort)
-    let wsMustEnabled = result.engineApiWsEnabled and (result.engineApiWsPort == result.wsPort)
-
-    result.rpcEnabled = result.rpcEnabled or rpcMustEnabled
-    result.wsEnabled = result.wsEnabled or wsMustEnabled
 
   # see issue #1346
   if result.keyStore.string == defaultKeystoreDir() and

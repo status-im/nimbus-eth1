@@ -17,9 +17,6 @@ import
   ../nimbus/common/[chain_config, context],
   ./test_helpers
 
-proc `==`(a, b: ChainId): bool =
-  a.int == b.int
-
 proc configurationMain*() =
   suite "configuration test suite":
     const
@@ -226,32 +223,64 @@ proc configurationMain*() =
       check conf.getBootnodes().len == 0
 
     test "json-rpc enabled when json-engine api enabled and share same port":
-      let conf = makeConfig(@["--engine-api", "--engine-api-port:8545", "--rpc-port:8545"])
-      check conf.engineApiEnabled
-      check conf.rpcEnabled
-      check conf.wsEnabled == false
-      check conf.engineApiWsEnabled == false
+      let conf = makeConfig(@["--engine-api", "--engine-api-port:8545", "--http-port:8545"])
+      check:
+        conf.engineApiEnabled == true
+        conf.rpcEnabled == false
+        conf.wsEnabled == false
+        conf.engineApiWsEnabled == false
+        conf.graphqlEnabled == false
+        conf.engineApiServerEnabled
+        conf.httpServerEnabled == false
+        conf.shareServerWithEngineApi
 
     test "ws-rpc enabled when ws-engine api enabled and share same port":
-      let conf = makeConfig(@["--engine-api-ws", "--engine-api-ws-port:8546", "--ws-port:8546"])
-      check conf.engineApiWsEnabled
-      check conf.wsEnabled
-      check conf.engineApiEnabled == false
-      check conf.rpcEnabled == false
+      let conf = makeConfig(@["--ws", "--engine-api-ws", "--engine-api-port:8546", "--http-port:8546"])
+      check:
+        conf.engineApiWsEnabled
+        conf.wsEnabled
+        conf.engineApiEnabled == false
+        conf.rpcEnabled == false
+        conf.graphqlEnabled == false
+        conf.engineApiServerEnabled
+        conf.httpServerEnabled
+        conf.shareServerWithEngineApi
 
     test "json-rpc stay enabled when json-engine api enabled and using different port":
-      let conf = makeConfig(@["--rpc", "--engine-api", "--engine-api-port:8550", "--rpc-port:8545"])
-      check conf.engineApiEnabled
-      check conf.rpcEnabled
-      check conf.engineApiWsEnabled == false
-      check conf.wsEnabled == false
+      let conf = makeConfig(@["--rpc", "--engine-api", "--engine-api-port:8550", "--http-port:8545"])
+      check:
+        conf.engineApiEnabled
+        conf.rpcEnabled
+        conf.engineApiWsEnabled == false
+        conf.wsEnabled == false
+        conf.graphqlEnabled == false
+        conf.httpServerEnabled
+        conf.engineApiServerEnabled
+        conf.shareServerWithEngineApi == false
 
     test "ws-rpc stay enabled when ws-engine api enabled and using different port":
-      let conf = makeConfig(@["--ws", "--engine-api-ws", "--engine-api-ws-port:8551", "--ws-port:8546"])
-      check conf.engineApiWsEnabled
-      check conf.wsEnabled
-      check conf.engineApiEnabled == false
-      check conf.rpcEnabled == false
+      let conf = makeConfig(@["--ws", "--engine-api-ws", "--engine-api-port:8551", "--http-port:8546"])
+      check:
+        conf.engineApiWsEnabled
+        conf.wsEnabled
+        conf.engineApiEnabled == false
+        conf.rpcEnabled == false
+        conf.graphqlEnabled == false
+        conf.httpServerEnabled
+        conf.engineApiServerEnabled
+        conf.shareServerWithEngineApi == false
+
+    test "graphql enabled. ws, rpc, and engine api not enabled":
+      let conf = makeConfig(@["--graphql"])
+      check:
+        conf.engineApiWsEnabled == false
+        conf.wsEnabled == false
+        conf.engineApiEnabled == false
+        conf.rpcEnabled == false
+        conf.graphqlEnabled == true
+        conf.httpServerEnabled == true
+        conf.engineApiServerEnabled == false
+        conf.shareServerWithEngineApi == false
 
     let ctx = newEthContext()
     test "net-key random":

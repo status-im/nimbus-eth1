@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -111,7 +111,10 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
   let
     hooks  = if enableAuth: @[httpJwtAuth(key)]
              else: @[]
-    server = newRpcHttpServerWithParams("127.0.0.1:" & $conf.rpcPort, hooks)
+    server = newRpcHttpServerWithParams("127.0.0.1:" & $conf.httpPort, hooks).valueOr:
+      echo "Failed to create rpc server: ", error
+      quit(QuitFailure)
+
     sealer = SealingEngineRef.new(
               chain, ctx, conf.engineSigner,
               txPool, EngineStopped)
@@ -135,7 +138,7 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
   server.start()
 
   let client = newRpcHttpClient()
-  waitFor client.connect("127.0.0.1", conf.rpcPort, false)
+  waitFor client.connect("127.0.0.1", conf.httpPort, false)
 
   if com.ttd().isSome:
     sync.start()
@@ -167,8 +170,8 @@ proc setRealTTD*(env: EngineEnv) =
   env.com.setTTD some(realTTD)
   env.ttd = realTTD
 
-func rpcPort*(env: EngineEnv): Port =
-  env.conf.rpcPort
+func httpPort*(env: EngineEnv): Port =
+  env.conf.httpPort
 
 func client*(env: EngineEnv): RpcHttpClient =
   env.client

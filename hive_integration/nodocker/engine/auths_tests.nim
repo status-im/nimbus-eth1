@@ -42,7 +42,7 @@ proc getClient(env: TestEnv, token: string): RpcHttpClient =
     @[("Authorization", "Bearer " & token)]
 
   let client = newRpcHttpClient(getHeaders = authHeaders)
-  waitFor client.connect("127.0.0.1", env.engine.rpcPort, false)
+  waitFor client.connect("127.0.0.1", env.engine.httpPort, false)
   return client
 
 template genAuthTest(procName: untyped, timeDriftSeconds: int64, customAuthSecretBytes: string, authOK: bool) =

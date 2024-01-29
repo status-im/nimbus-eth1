@@ -46,17 +46,7 @@ proc manageAccounts(ctx: EthContext, conf: NimbusConf) =
 proc setupRpcServer(ctx: EthContext, com: CommonRef,
                     ethNode: EthereumNode, txPool: TxPoolRef,
                     conf: NimbusConf): RpcServer  =
-  let rpcServer = newRpcHttpServer([initTAddress(conf.rpcAddress, conf.rpcPort)])
-  setupCommonRpc(ethNode, conf, rpcServer)
-  setupEthRpc(ethNode, ctx, com, txPool, rpcServer)
-
-  rpcServer.start()
-  rpcServer
-
-proc setupWsRpcServer(ctx: EthContext, com: CommonRef,
-                      ethNode: EthereumNode, txPool: TxPoolRef,
-                      conf: NimbusConf): RpcServer  =
-  let rpcServer = newRpcWebSocketServer(initTAddress(conf.wsAddress, conf.wsPort))
+  let rpcServer = newRpcHttpServer([initTAddress(conf.httpAddress, conf.httpPort)])
   setupCommonRpc(ethNode, conf, rpcServer)
   setupEthRpc(ethNode, ctx, com, txPool, rpcServer)
 
@@ -66,11 +56,6 @@ proc setupWsRpcServer(ctx: EthContext, com: CommonRef,
 proc stopRpcHttpServer(srv: RpcServer) =
   let rpcServer = RpcHttpServer(srv)
   waitFor rpcServer.stop()
-  waitFor rpcServer.closeWait()
-
-proc stopRpcWsServer(srv: RpcServer) =
-  let rpcServer = RpcWebSocketServer(srv)
-  rpcServer.stop()
   waitFor rpcServer.closeWait()
 
 proc setupEnv*(): TestEnv =
@@ -83,12 +68,8 @@ proc setupEnv*(): TestEnv =
     "--custom-network:" & initPath / "genesis.json",
     "--rpc",
     "--rpc-api:eth,debug",
-    # "--rpc-address:0.0.0.0",
-    "--rpc-port:8545",
-    "--ws",
-    "--ws-api:eth,debug",
-    # "--ws-address:0.0.0.0",
-    "--ws-port:8546"
+    # "--http-address:0.0.0.0",
+    "--http-port:8545",
   ])
 
   let

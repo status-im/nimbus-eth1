@@ -1459,23 +1459,10 @@ proc setupGraphqlContext*(com: CommonRef,
   ctx.initEthApi()
   ctx
 
-proc setupGraphqlHttpServer*(conf: NimbusConf,
-                             com: CommonRef,
-                             ethNode: EthereumNode,
-                             txPool: TxPoolRef,
-                             authHooks: seq[AuthHook] = @[]): GraphqlHttpServerRef =
-  let socketFlags = {ServerFlags.TcpNoDelay, ServerFlags.ReuseAddr}
+proc setupGraphqlHttpHandler*(com: CommonRef,
+                              ethNode: EthereumNode,
+                              txPool: TxPoolRef): GraphqlHttpHandlerRef =
   let ctx = setupGraphqlContext(com, ethNode, txPool)
-  let address = initTAddress(conf.graphqlAddress, conf.graphqlPort)
-  let sres = GraphqlHttpServerRef.new(
-      ctx,
-      address,
-      socketFlags = socketFlags,
-      authHooks = authHooks
-  )
-  if sres.isErr():
-    echo sres.error
-    quit(QuitFailure)
-  sres.get()
+  GraphqlHttpHandlerRef.new(ctx)
 
 {.pop.}

@@ -155,7 +155,9 @@ proc rpcExperimentalJsonMain*() =
       RPC_PORT = 0 # let the OS choose a port
 
     var
-      rpcServer = newRpcHttpServerWithParams(initTAddress(RPC_HOST, RPC_PORT))
+      rpcServer = newRpcHttpServerWithParams(initTAddress(RPC_HOST, RPC_PORT)).valueOr:
+        echo "Failed to create RPC server: ", error
+        quit(QuitFailure)
       client = newRpcHttpClient()
 
     rpcServer.start()
