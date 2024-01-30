@@ -16,6 +16,9 @@ import
   ../../range_desc,
   "."/[hexary_desc, hexary_error, snapdb_desc, snapdb_persistent]
 
+import
+  ../../../../db/select_backend
+  
 logScope:
   topics = "snap-db"
 
@@ -46,15 +49,16 @@ proc persistentContracts(
       ): Result[void,HexaryError]
       {.gcsafe, raises: [OSError,IOError,KeyError].} =
   ## Store contract codes onto permanent database
-  if ps.rockDb.isNil:
-    let rc = data.persistentContractPut ps.kvDb
-    if rc.isErr:
-      return rc
-  else:
-    let rc = data.persistentContractPut ps.rockDb
-    if rc.isErr:
-      return rc
-  ok()
+  when dbBackend == rocksdb:
+    if ps.rockDb.isNil:
+      let rc = data.persistentContractPut ps.kvDb
+      if rc.isErr:
+        return rc
+    else:
+      let rc = data.persistentContractPut ps.rockDb
+      if rc.isErr:
+        return rc
+    ok()
 
 # ------------------------------------------------------------------------------
 # Public constructor

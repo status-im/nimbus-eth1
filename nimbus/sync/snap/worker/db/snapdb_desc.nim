@@ -35,7 +35,9 @@ type
     ## Global, re-usable descriptor
     keyMap: Table[RepairKey,uint]    ## For debugging only (will go away)
     db: CoreDbRef                    ## General database
-    rocky: RocksStoreRef             ## Set if rocksdb is available
+    # Allow hive sim to compile with dbBackend == none
+    when dbBackend == rocksdb:
+      rocky: RocksStoreRef             ## Set if rocksdb is available
 
   SnapDbBaseRef* = ref object of RootRef
     ## Session descriptor
@@ -69,14 +71,15 @@ proc keyPp(a: RepairKey; pv: SnapDbRef): string =
 # Private helper
 # ------------------------------------------------------------------------------
 
-proc clearRockyCacheFile(rocky: RocksStoreRef): bool =
-  if not rocky.isNil:
-    # A cache file might hang about from a previous crash
-    try:
-      discard rocky.clearCacheFile(RockyBulkCache)
-      return true
-    except OSError as e:
-      error "Cannot clear rocksdb cache", exception=($e.name), msg=e.msg
+when dbBackend == rocksdb:
+  proc clearRockyCacheFile(rocky: RocksStoreRef): bool =
+    if not rocky.isNil:
+      # A cache file might hang about from a previous crash
+      try:
+        discard rocky.clearCacheFile(RockyBulkCache)
+        return true
+      except OSError as e:
+        error "Cannot clear rocksdb cache", exception=($e.name), msg=e.msg
 
 # ------------------------------------------------------------------------------
 # Public constructor
@@ -87,7 +90,8 @@ proc init*(
     db: CoreDbRef
       ): T =
   ## Main object constructor
-  T(db: db, rocky: db.backend.toRocksStoreRef)
+  when dbBackend == rocksdb:
+    T(db: db, rocky: db.backend.toRocksStoreRef)
 
 proc init*(
     T: type HexaryTreeDbRef;
@@ -134,13 +138,14 @@ proc hexaDb*(ps: SnapDbBaseRef): HexaryTreeDbRef =
   ## Getter, low level access to underlying session DB
   ps.xDb
 
-proc rockDb*(ps: SnapDbBaseRef): RocksStoreRef =
-  ## Getter, low level access to underlying persistent rock DB interface
-  ps.base.rocky
+when dbBackend == rocksdb:
+  proc rockDb*(ps: SnapDbBaseRef): RocksStoreRef =
+    ## Getter, low level access to underlying persistent rock DB interface
+    ps.base.rocky
 
-proc rockDb*(pv: SnapDbRef): RocksStoreRef =
-  ## Getter  variant
-  pv.rocky
+  proc rockDb*(pv: SnapDbRef): RocksStoreRef =
+    ## Getter  variant
+    pv.rocky
 
 proc kvDb*(ps: SnapDbBaseRef): CoreDbRef =
   ## Getter, low level access to underlying persistent key-value DB
@@ -193,11 +198,13 @@ template toOpenArray*(k: ByteArray33): openArray[byte] =
 
 proc dbBackendRocksDb*(pv: SnapDbRef): bool =
   ## Returns `true` if rocksdb features are available
-  not pv.rocky.isNil
+  when dbBackend == rocksdb:
+    not pv.rocky.isNil
 
 proc dbBackendRocksDb*(ps: SnapDbBaseRef): bool =
   ## Returns `true` if rocksdb features are available
-  not ps.base.rocky.isNil
+  when dbBackend == rocksdb:
+    not ps.base.rocky.isNil
 
 proc mergeProofs*(
     xDb: HexaryTreeDbRef;     ## Session database

@@ -21,6 +21,9 @@ import
        hexary_inspect, hexary_interpolate, hexary_paths, snapdb_desc,
        snapdb_persistent]
 
+import
+  ../../../../db/select_backend
+
 logScope:
   topics = "snap-db"
 
@@ -60,13 +63,14 @@ proc persistentStorageSlots(
       ): Result[void,HexaryError]
       {.gcsafe, raises: [OSError,IOError,KeyError].} =
   ## Store accounts trie table on databse
-  if ps.rockDb.isNil:
-    let rc = db.persistentStorageSlotsPut(ps.kvDb)
-    if rc.isErr: return rc
-  else:
-    let rc = db.persistentStorageSlotsPut(ps.rockDb)
-    if rc.isErr: return rc
-  ok()
+  when dbBackend == rocksdb:
+    if ps.rockDb.isNil:
+      let rc = db.persistentStorageSlotsPut(ps.kvDb)
+      if rc.isErr: return rc
+    else:
+      let rc = db.persistentStorageSlotsPut(ps.rockDb)
+      if rc.isErr: return rc
+    ok()
 
 
 proc collectStorageSlots(

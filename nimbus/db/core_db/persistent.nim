@@ -16,13 +16,20 @@
 {.push raises: [].}
 
 import
-  ../aristo,
-  ./backend/[aristo_rocksdb, legacy_rocksdb],
-  ./memory_only
+  ../aristo,  
+  ./memory_only,
+  ../select_backend
 
 export
-  memory_only,
-  toRocksStoreRef
+  memory_only
+
+# Allow hive sim to compile with dbBackend == none
+when dbBackend == rocksdb:
+  import 
+    ./backend/[aristo_rocksdb, legacy_rocksdb]
+    
+  export
+    toRocksStoreRef
 
 proc newCoreDbRef*(
     dbType: static[CoreDbType];      # Database type symbol
@@ -32,14 +39,15 @@ proc newCoreDbRef*(
   ##
   ## Note: Using legacy notation `newCoreDbRef()` rather than
   ## `CoreDbRef.init()` because of compiler coughing.
-  when dbType == LegacyDbPersistent:
-    newLegacyPersistentCoreDbRef path
-
-  elif dbType == AristoDbRocks:
-    newAristoRocksDbCoreDbRef path
-
-  else:
-    {.error: "Unsupported dbType for persistent newCoreDbRef()".}
+  when dbBackend == rocksdb:
+    when dbType == LegacyDbPersistent:
+      newLegacyPersistentCoreDbRef path
+  
+    elif dbType == AristoDbRocks:
+      newAristoRocksDbCoreDbRef path
+  
+    else:
+      {.error: "Unsupported dbType for persistent newCoreDbRef()".}
 
 proc newCoreDbRef*(
     dbType: static[CoreDbType];      # Database type symbol
@@ -50,11 +58,12 @@ proc newCoreDbRef*(
   ##
   ## Note: Using legacy notation `newCoreDbRef()` rather than
   ## `CoreDbRef.init()` because of compiler coughing.
-  when dbType == AristoDbRocks:
-    newAristoRocksDbCoreDbRef(path, qlr)
-
-  else:
-    {.error: "Unsupported dbType for persistent newCoreDbRef()" &
-             " with qidLayout argument".}
+  when dbBackend == rocksdb:
+    when dbType == AristoDbRocks:
+      newAristoRocksDbCoreDbRef(path, qlr)
+  
+    else:
+      {.error: "Unsupported dbType for persistent newCoreDbRef()" &
+              " with qidLayout argument".}
 
 # End
