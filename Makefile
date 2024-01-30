@@ -58,9 +58,11 @@ EXCLUDED_NIM_PACKAGES := 	\
 
 # debugging tools + testing tools
 TOOLS := \
-	test_tools_build
+	test_tools_build \
+	persist
 TOOLS_DIRS := \
-	tests
+	tests \
+	premix
 # comma-separated values for the "clean" target
 TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(TOOLS))
 
