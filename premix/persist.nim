@@ -37,7 +37,7 @@ else:
 
 template persistToDb(db: CoreDbRef, body: untyped) =
   block: body
- 
+
 proc main() {.used.} =
   # 97 block with uncles
   # 46147 block with first transaction
@@ -58,12 +58,13 @@ proc main() {.used.} =
 
   # move head to block number ...
   if conf.head != 0.u256:
-    var parentBlock = requestBlock(conf.head)
+    var parentBlock = requestBlock(conf.head, { DownloadAndValidate })
     discard com.db.setHead(parentBlock.header)
 
   if canonicalHeadHashKey().toOpenArray notin com.db.kvt:
     persistToDb(com.db):
       com.initializeEmptyDb()
+      com.db.compensateLegacySetup()
     doAssert(canonicalHeadHashKey().toOpenArray in com.db.kvt)
 
   var head = com.db.getCanonicalHead()
@@ -80,7 +81,7 @@ proc main() {.used.} =
   var counter = 0
 
   while true:
-    var thisBlock = requestBlock(blockNumber)
+    var thisBlock = requestBlock(blockNumber, { DownloadAndValidate })
 
     headers.add thisBlock.header
     bodies.add thisBlock.body
