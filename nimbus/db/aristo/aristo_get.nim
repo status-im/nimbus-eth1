@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -181,7 +181,7 @@ proc getKeyRc*(db: AristoDbRef; vid: VertexID): Result[HashKey,AristoError] =
       return err(GetKeyUpdateNeeded)
     else:
       # The vertex is to be deleted. So is the value label.
-      return err(GetVtxNotFound)
+      return err(GetKeyNotFound)
 
   db.getKeyBE vid
 
