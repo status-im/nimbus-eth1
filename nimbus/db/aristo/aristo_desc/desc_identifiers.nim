@@ -106,22 +106,6 @@ chronicles.formatIt(VertexID): $it
 chronicles.formatIt(QueueID): $it
 
 # ------------------------------------------------------------------------------
-# Private helpers
-# ------------------------------------------------------------------------------
-
-func to(lid: HashKey; T: type PathID): T =
-  ## Helper to bowrrow certain properties from `PathID`
-  if lid.isHash:
-    PathID(pfx: UInt256.fromBytesBE lid.key.data, length: 64)
-  elif 0 < lid.blob.len:
-    doAssert lid.blob.len < 32
-    var a32: array[32,byte]
-    (addr a32[0]).copyMem(unsafeAddr lid.blob[0], lid.blob.len)
-    PathID(pfx: UInt256.fromBytesBE a32, length: 2 * lid.blob.len.uint8)
-  else:
-    PathID()
-
-# ------------------------------------------------------------------------------
 # Public helpers: `VertexID` scalar data model
 # ------------------------------------------------------------------------------
 
@@ -222,6 +206,18 @@ func `==`*(a, b: PathID): bool =
 
 func cmp*(a, b: PathID): int =
   if a < b: -1 elif b < a: 1 else: 0
+
+func to*(lid: HashKey; T: type PathID): T =
+  ## Helper to bowrrow certain properties from `PathID`
+  if lid.isHash:
+    PathID(pfx: UInt256.fromBytesBE lid.key.data, length: 64)
+  elif 0 < lid.blob.len:
+    doAssert lid.blob.len < 32
+    var a32: array[32,byte]
+    (addr a32[0]).copyMem(unsafeAddr lid.blob[0], lid.blob.len)
+    PathID(pfx: UInt256.fromBytesBE a32, length: 2 * lid.blob.len.uint8)
+  else:
+    PathID()
 
 # ------------------------------------------------------------------------------
 # Public helpers: `HashKey` ordered scalar data model
