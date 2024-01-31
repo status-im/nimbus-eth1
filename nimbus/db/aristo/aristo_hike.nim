@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -90,7 +90,7 @@ proc hikeUp*(
       if error != GetVtxNotFound:
         return err((hike,error))
       if hike.legs.len == 0:
-        return err((hike,HikeEmptyPath))
+        return err((hike,HikeNoLegs))
       break
 
     case leg.wp.vtx.vType:
@@ -113,7 +113,7 @@ proc hikeUp*(
         nextVid = leg.wp.vtx.bVid[nibble]
 
       if not nextVid.isValid:
-        return err((hike,HikeBranchBlindEdge))
+        return err((hike,HikeBranchMissingEdge))
 
       leg.nibble = nibble
       hike.legs.add leg

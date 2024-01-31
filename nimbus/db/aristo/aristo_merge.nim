@@ -481,7 +481,7 @@ proc registerStorageRootAccount(
   if not stoRoot.isValid:
     return err(MergeRootMissing)
   if not accPath.isValid:
-    return err(MergeAccountPathMissing)
+    return err(MergeAccPathMissing)
 
   # Check whether the account is marked for re-hash, already
   let lty = LeafTie(root: VertexID(1), path: accPath)
@@ -490,17 +490,17 @@ proc registerStorageRootAccount(
 
   # Get account leaf with account data
   let hike = lty.hikeUp(db).valueOr:
-    return err(MergeAccountUnaccessible)
+    return err(MergeAccUnaccessible)
   let wp = hike.legs[^1].wp
   if wp.vtx.vType != Leaf:
-    return err(MergeAccountPathWithoutLeaf)
+    return err(MergeAccPathWithoutLeaf)
   if wp.vtx.lData.pType != AccountData:
     return ok() # nothing to do
 
   # Need to flag for re-hash
   let stoID = wp.vtx.lData.account.storageID
   if stoID.isValid and stoID != stoRoot:
-    return err(MergeAccountWrongStorageRoot)
+    return err(MergeAccWrongStorageRoot)
 
   # Clear Merkle keys and store leaf record
   for w in hike.legs.mapIt(it.wp.vid):
