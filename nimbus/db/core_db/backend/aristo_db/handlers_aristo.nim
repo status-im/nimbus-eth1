@@ -368,14 +368,7 @@ proc mptMethods(cMpt: AristoChildDbRef): CoreDbMptFns =
       cMpt.mptPersistent("persistentFn()"),
 
     forgetFn: proc(): CoreDbRc[void] =
-      cMpt.forget("forgetFn()"),
-
-    pairsIt: iterator: (Blob,Blob) =
-      for (k,v) in cMpt.mpt.right LeafTie(root: cMpt.root):
-        yield (k.path.pathAsBlob, cMpt.mpt.serialise(v).valueOr(EmptyBlob)),
-
-    replicateIt: iterator: (Blob,Blob) =
-      discard)
+      cMpt.forget("forgetFn()"))
 
 # ------------------------------------------------------------------------------
 # Private account call back functions
@@ -580,8 +573,8 @@ proc gc*(base: AristoBaseRef) =
 
 # ---------------------
 
-func mpt*(dsc: CoreDxMptRef): AristoDbRef =
-  dsc.AristoCoreDxMptRef.ctx.mpt
+func to*(dsc: CoreDxMptRef, T: type AristoDbRef): T =
+  AristoCoreDxMptRef(dsc).ctx.mpt
 
 func rootID*(dsc: CoreDxMptRef): VertexID  =
   dsc.AristoCoreDxMptRef.ctx.root

@@ -13,6 +13,12 @@
 ## applications by importing `db/code_db/memory_only` (rather than
 ## `db/core_db/persistent`.)
 ##
+## The right way to use this file on a conditional mode is to import it as in
+## ::
+##   import ./path/to/core_db
+##   when ..condition..
+##     import ./path/to/core_db/persistent
+##
 {.push raises: [].}
 
 import
@@ -23,13 +29,24 @@ import
 export
   memory_only
 
+# This file is currently inconsistent due to the `dbBackend == rocksdb` hack
+# which will be removed, soon (must go to the test base where such a compile
+# time flag induced mechanism might be useful.)
+#
+# The `Aristo` backend has no business with `dbBackend` and will be extended
+# in future.
+{.warning: "Inconsistent API file needs to be de-uglified".}
+
 # Allow hive sim to compile with dbBackend == none
 when dbBackend == rocksdb:
   import 
+    base_iterators_persistent,
     ./backend/[aristo_rocksdb, legacy_rocksdb]
     
   export
+    base_iterators_persistent,
     toRocksStoreRef
+
 
 proc newCoreDbRef*(
     dbType: static[CoreDbType];      # Database type symbol
@@ -48,6 +65,8 @@ proc newCoreDbRef*(
   
     else:
       {.error: "Unsupported dbType for persistent newCoreDbRef()".}
+  else:
+    {.error: "Unsupported dbBackend setting for persistent newCoreDbRef()".}
 
 proc newCoreDbRef*(
     dbType: static[CoreDbType];      # Database type symbol
@@ -65,5 +84,8 @@ proc newCoreDbRef*(
     else:
       {.error: "Unsupported dbType for persistent newCoreDbRef()" &
               " with qidLayout argument".}
+  else:
+    {.error: "Unsupported dbBackend setting for persistent newCoreDbRef()" &
+            " with qidLayout argument".}
 
 # End

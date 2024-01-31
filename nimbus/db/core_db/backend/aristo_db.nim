@@ -13,10 +13,13 @@
 import
   eth/common,
   results,
-  "../.."/[aristo, aristo/aristo_desc, aristo/aristo_init/memory_only],
+  "../.."/[aristo, aristo/aristo_desc, aristo/aristo_walk],
   "../.."/[kvt, kvt/kvt_desc, kvt/kvt_init/memory_only],
   ".."/[base, base/base_desc],
   ./aristo_db/[common_desc, handlers_aristo, handlers_kvt]
+
+include
+  ./aristo_db/aristo_replicate
 
 # Annotation helpers
 {.pragma:  noRaise, gcsafe, raises: [].}
@@ -39,9 +42,6 @@ type
 # Private helpers
 # ------------------------------------------------------------------------------
 
-template valueOrApiError[U,V](rc: Result[U,V]; info: static[string]): U =
-  rc.valueOr: raise (ref AristoApiRlpError)(msg: info)
-
 func notImplemented[T](
     _: typedesc[T];
     db: AristoCoreDbRef;
@@ -49,39 +49,6 @@ func notImplemented[T](
       ): CoreDbRc[T] {.gcsafe.} =
   ## Applies only to `Aristo` methods
   err((VertexID(0),aristo.NotImplemented).toError(db, info))
-
-# ------------------------------------------------------------------------------
-# Private call back functions (too large for embedding to maintain)
-# ------------------------------------------------------------------------------
-
-iterator kvtPairs(
-    T: typedesc;
-    dsc: CoreDxKvtRef;
-    info: static[string];
-      ): (Blob,Blob) =
-  let p = dsc.kvt.forkTop.valueOrApiError info
-  defer: discard p.forget()
-
-  dsc.methods.pairsIt = iterator(): (Blob, Blob) =
-    for (n,k,v) in T.walkPairs p:
-      yield (k,v)
-
-
-iterator mptReplicate(
-    T: typedesc;
-    dsc: CoreDxMptRef;
-    info: static[string];
-      ): (Blob,Blob)
-      {.rlpRaise.} =
-  let p = dsc.mpt.forkTop.valueOrApiError info
-  defer: discard p.forget()
-
-  let root = dsc.root
-  for (vid,key,vtx,node) in T.replicate p:
-    if key.len == 32:
-      yield (@key, node.encode)
-    elif vid == root:
-      yield (@(key.to(Hash256).data), node.encode)
 
 # ------------------------------------------------------------------------------
 # Private tx and base methods
@@ -159,12 +126,7 @@ proc baseMethods(
 
     newKvtFn: proc(saveMode: CoreDbSaveFlags): CoreDbRc[CoreDxKvtRef] =
       db.kdbBase.gc()
-      let dsc = ? db.kdbBase.newKvtHandler(saveMode, "newKvtFn()")
-      when K is MemBackendRef:
-        dsc.methods.pairsIt = iterator(): (Blob, Blob) =
-          for (n,k,v) in K.kvtPairs dsc:
-            yield (k,v)
-      ok(dsc),
+      ok(? db.kdbBase.newKvtHandler(saveMode, "newKvtFn()")),
 
     newMptFn: proc(
         root: CoreDbVidRef;
@@ -172,12 +134,7 @@ proc baseMethods(
         saveMode: CoreDbSaveFlags;
           ): CoreDbRc[CoreDxMptRef] =
       db.kdbBase.gc()
-      let dsc = ? db.adbBase.newMptHandler(root, saveMode, "newMptFn()")
-      when K is MemBackendRef:
-        dsc.methods.replicateIt = iterator: (Blob,Blob) {.rlpRaise.} =
-          for w in T.mptReplicate(dsc, "forkTop() for replicateIt()"):
-            yield w
-      ok(dsc),
+      ok(? db.adbBase.newMptHandler(root, saveMode, "newMptFn()")),
 
     newAccFn: proc(
         root: CoreDbVidRef;
@@ -291,6 +248,31 @@ func toAristo*(be: CoreDbMptBackendRef): AristoDbRef =
 func toAristo*(be: CoreDbAccBackendRef): AristoDbRef =
   if be.parent.isAristo:
     return be.AristoCoreDbAccBE.adb
+
+# ------------------------------------------------------------------------------
+# Public aristo iterators
+# ------------------------------------------------------------------------------
+
+iterator aristoKvtPairs*(dsc: CoreDxKvtRef): (Blob,Blob) {.rlpRaise.} =
+  let p = dsc.to(KvtDbRef).forkTop.valueOrApiError "aristoKvtPairs()"
+  defer: discard p.forget()
+  for (k,v) in kvt.MemBackendRef.walkPairs p:
+    yield (k,v)
+
+iterator aristoMptPairs*(dsc: CoreDxMptRef): (Blob,Blob) {.rlpRaise.} =
+  let mpt = dsc.to(AristoDbRef)
+  for (k,v) in mpt.right LeafTie(root: dsc.rootID):
+    yield (k.path.pathAsBlob, mpt.serialise(v).valueOr(EmptyBlob))
+
+iterator aristoReplicateMem*(dsc: CoreDxMptRef): (Blob,Blob) {.rlpRaise.} =
+  ## Instantiation for `MemBackendRef`
+  for k,v in aristoReplicate[aristo.MemBackendRef](dsc):
+    yield (k,v)
+
+iterator aristoReplicateVoid*(dsc: CoreDxMptRef): (Blob,Blob) {.rlpRaise.} =
+  ## Instantiation for `VoidBackendRef`
+  for k,v in aristoReplicate[aristo.VoidBackendRef](dsc):
+    yield (k,v)
 
 # ------------------------------------------------------------------------------
 # End

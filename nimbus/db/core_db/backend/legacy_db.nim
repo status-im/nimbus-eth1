@@ -226,11 +226,7 @@ proc kvtMethods(db: LegacyDbRef): CoreDbKvtFns =
       ok(),
 
     forgetFn: proc(): CoreDbRc[void] =
-      ok(),
-
-    pairsIt: iterator(): (Blob, Blob) =
-      for k,v in tdb.pairsInMemoryDB:
-        yield (k,v))
+      ok())
 
 proc mptMethods(mpt: HexaryChildDbRef; db: LegacyDbRef): CoreDbMptFns =
   ## Hexary trie database handlers
@@ -273,17 +269,7 @@ proc mptMethods(mpt: HexaryChildDbRef; db: LegacyDbRef): CoreDbMptFns =
       ok(),
 
     forgetFn: proc(): CoreDbRc[void] =
-      ok(),
-
-    pairsIt: iterator: (Blob,Blob) {.gcsafe, raises: [LegacyApiRlpError].} =
-      reraiseRlpException("pairsIt()"):
-        for k,v in mpt.trie.pairs():
-          yield (k,v),
-
-    replicateIt: iterator: (Blob,Blob) {.gcsafe, raises: [LegacyApiRlpError].} =
-      reraiseRlpException("replicateIt()"):
-        for k,v in mpt.trie.replicate():
-          yield (k,v))
+      ok())
 
 proc accMethods(mpt: HexaryChildDbRef; db: LegacyDbRef): CoreDbAccFns =
   ## Hexary trie database handlers
@@ -508,6 +494,30 @@ func toLegacy*(be: CoreDbMptBackendRef): HexaryTrie =
 func toLegacy*(be: CoreDbAccBackendRef): HexaryTrie =
   if be.parent.isLegacy:
     return be.LegacyCoreDbAccBE.mpt
+
+# ------------------------------------------------------------------------------
+# Public legacy iterators
+# ------------------------------------------------------------------------------
+
+iterator legaKvtPairs*(kvt: CoreDxKvtRef): (Blob, Blob) =
+  for k,v in kvt.parent.LegacyDbRef.tdb.pairsInMemoryDB:
+    yield (k,v)
+
+iterator legaMptPairs*(
+    mpt: CoreDxMptRef;
+      ): (Blob,Blob)
+      {.gcsafe, raises: [LegacyApiRlpError].} =
+  reraiseRlpException("legaMptPairs()"):
+    for k,v in mpt.methods.backendFn().LegacyCoreDbMptBE.mpt.pairs():
+      yield (k,v)
+
+iterator legaReplicate*(
+    mpt: CoreDxMptRef;
+      ): (Blob,Blob)
+      {.gcsafe, raises: [LegacyApiRlpError].} =
+  reraiseRlpException("legaReplicate()"):
+    for k,v in mpt.methods.backendFn().LegacyCoreDbMptBE.mpt.replicate():
+      yield (k,v)
 
 # ------------------------------------------------------------------------------
 # End
