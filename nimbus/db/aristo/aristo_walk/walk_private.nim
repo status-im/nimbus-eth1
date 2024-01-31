@@ -1,6 +1,6 @@
 # Nimbus - Types, data structures and shared utilities used in network sync
 #
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -10,7 +10,7 @@
 # distributed except according to those terms.
 
 import
-  std/[sequtils, sets, tables],
+  std/[algorithm, sequtils, sets, tables],
   results,
   ".."/[aristo_desc, aristo_get, aristo_init, aristo_layers, aristo_utils]
 
@@ -124,7 +124,7 @@ iterator walkPairsImpl*[T](
     if vtx.isValid:
       yield (vid,vtx)
 
-  for (_,vid,vtx) in walkVtxBeImpl[T](db):
+  for (vid,vtx) in walkVtxBeImpl[T](db):
     if vid notin seen:
       yield (vid,vtx)
 
