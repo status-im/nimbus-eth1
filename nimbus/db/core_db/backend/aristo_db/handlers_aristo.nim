@@ -791,7 +791,7 @@ proc newAccHandler*(
   elif root.isNil:
     rVid = AristoCoreDbVid(haveCtx: false, base: base, aVid: VertexID(1))
   elif rID != VertexID(1):
-    let error = (rID,AccountRootUnacceptable)
+    let error = (rID,AccRootUnacceptable)
     return err(error.toError(db, info, RootUnacceptable))
 
   let (mode, mpt) = case saveMode:

@@ -34,7 +34,7 @@ proc toAccount*(
     try:
       return ok(rlp.decode(payload.rlpBlob, Account))
     except RlpError:
-      return err(AccountRlpDecodingError)
+      return err(AccRlpDecodingError)
   of AccountData:
     var acc = Account(
       nonce:       payload.account.nonce,
@@ -56,7 +56,7 @@ proc toAccount*(
   ## Variant of `toAccount()` for a `Leaf` vertex.
   if vtx.isValid and vtx.vType == Leaf:
     return vtx.lData.toAccount db
-  err AccountVtxUnsupported
+  err AccVtxUnsupported
 
 proc toAccount*(
     node: NodeRef;
@@ -69,7 +69,7 @@ proc toAccount*(
       try:
         return ok(rlp.decode(node.lData.rlpBlob, Account))
       except RlpError:
-        return err(AccountRlpDecodingError)
+        return err(AccRlpDecodingError)
     of AccountData:
       var acc = Account(
         nonce:       node.lData.account.nonce,
@@ -78,13 +78,13 @@ proc toAccount*(
         storageRoot: EMPTY_ROOT_HASH)
       if node.lData.account.storageID.isValid:
         if not node.key[0].isValid:
-          return err(AccountStorageKeyMissing)
+          return err(AccStorageKeyMissing)
         acc.storageRoot = node.key[0].to(Hash256)
       return ok(acc)
     else:
       return err(PayloadTypeUnsupported)
 
-  err AccountNodeUnsupported
+  err AccNodeUnsupported
 
 # ---------------------
 
