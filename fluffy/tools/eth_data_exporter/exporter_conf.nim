@@ -61,6 +61,8 @@ type
       "Export block headers from an Ethereum JSON RPC Execution endpoint to *.e2s files (unlimited amount)"
     exportHeadersWithProof =
       "Export block headers with proof from *.e2s headers file and epochAccumulator files"
+    exportEra1 = "Export historical data to era1 store"
+    verifyEra1 = "Read and verify historical data from era1 store"
 
   BeaconCmd* = enum
     exportLCBootstrap = "Export Light Client Bootstrap"
@@ -159,6 +161,18 @@ type
         endBlockNumber2* {.
           desc: "Number of the last block header to be exported"
           name: "end-block" .}: uint64
+      of exportEra1:
+        era* {.
+          defaultValue: 0
+          desc: "The era number to write".}: uint64
+        eraCount* {.
+          defaultValue: 0
+          name: "count"
+          desc: "Number of eras to write (0=all)".}: uint64
+      of verifyEra1:
+        era1FileName* {.
+          desc: "Era1 file to read and verify"
+          name: "era1-file-name" .}: string
     of ExporterCmd.beacon:
       restUrl* {.
         desc: "URL of the beacon node REST service"

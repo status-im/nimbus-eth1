@@ -45,11 +45,12 @@ import
   eth/[common, rlp], chronos,
   eth/common/eth_types_json_serialization,
   json_rpc/rpcclient,
+  snappy,
   ncli/e2store,
   ../database/seed_db,
   ../../premix/[downloader, parser],
   ../network/history/[history_content, accumulator],
-  ../eth_data/[history_data_json_store, history_data_ssz_e2s],
+  ../eth_data/[history_data_json_store, history_data_ssz_e2s, era1],
   eth_data_exporter/[exporter_conf, exporter_common, cl_data_exporter]
 
 # Need to be selective due to the `Block` type conflict from downloader
@@ -185,13 +186,184 @@ proc connectRpcClient(
   of HttpUrl:
     try:
       await RpcHttpClient(client).connect(web3Url.url)
+      ok()
     except CatchableError as e:
       return err(e.msg)
   of WsUrl:
     try:
       await RpcWebSocketClient(client).connect(web3Url.url)
+      ok()
     except CatchableError as e:
       return err(e.msg)
+
+proc cmdExportEra1(config: ExporterConf) =
+  let client = newRpcClient(config.web3Url)
+  try:
+    let connectRes = waitFor client.connectRpcClient(config.web3Url)
+    if connectRes.isErr():
+      fatal "Failed connecting to JSON-RPC client", error = connectRes.error
+      quit 1
+  except CatchableError as e:
+    # TODO: Add async raises to get rid of this.
+    fatal "Failed connecting to JSON-RPC client", error = e.msg
+    quit 1
+
+  var era = Era1(config.era)
+  while config.eraCount == 0 or era < Era1(config.era) + config.eraCount:
+    defer: era += 1
+
+    let
+      firstBlock = era.uint64 * SLOTS_PER_HISTORICAL_ROOT
+      endBlock =
+        if (era + 1) * SLOTS_PER_HISTORICAL_ROOT - 1'u64 >= mergeBlockNumber:
+          # The incomplete era just before the merge
+          mergeBlockNumber - 1'u64
+        else:
+          (era + 1) * SLOTS_PER_HISTORICAL_ROOT - 1'u64
+
+    if firstBlock >= mergeBlockNumber:
+      info "Stopping era as it is after the merge"
+      break
+
+    var accumulatorRoot = default(Digest)
+    let tmpName = era1FileName("mainnet", era, default(Digest)) & ".tmp"
+
+    info "Writing era1", tmpName
+
+    var completed = false
+    block writeFileBlock:
+      let e2 = openFile(tmpName, {OpenFlags.Write, OpenFlags.Create, OpenFlags.Truncate}).get()
+      defer: discard closeFile(e2)
+
+      # TODO: Not checking the result of init, update or finish here, as all
+      # error cases are fatal. But maybe we could throw proper errors still.
+      var group = Era1Group.init(e2, firstBlock).get()
+
+      # Keeping the headers and ttds to build the accumulator root
+      var headers: seq[BlockHeader]
+      var ttds: seq[UInt256]
+
+      for blockNumber in firstBlock..endBlock:
+        let blck =
+          try:
+            # TODO: Not sure about the errors that can occur here. But the whole
+            # block requests over json-rpc should be reworked here (and can be
+            # used in the bridge also then)
+            requestBlock(blockNumber.u256, flags = {DownloadReceipts}, client = some(client))
+          except CatchableError:
+            error "Failed retrieving block, skip creation of era1 file", blockNumber, era
+            break writeFileBlock
+
+        var ttd: UInt256
+        try:
+          blck.jsonData.fromJson "totalDifficulty", ttd
+        except ValueError:
+          break writeFileBlock
+
+        headers.add(blck.header)
+        ttds.add(ttd)
+
+        group.update(
+          e2, blockNumber, blck.header, blck.body, blck.receipts, ttd).get()
+
+      accumulatorRoot = buildEpochAccumulatorRoot(headers, ttds)
+
+      group.finish(e2, accumulatorRoot, endBlock).get()
+      completed = true
+    if completed:
+      let name = era1FileName("mainnet", era, accumulatorRoot)
+      # We cannot check for the exact file any earlier as we need to know the
+      # accumulator root.
+      # TODO: Could scan for file with era number in it.
+      if isFile(name):
+        info "Era1 file already exists", era, name
+        if (let e = io2.removeFile(tmpName); e.isErr):
+          warn "Failed to clean up tmp era1 file", tmpName, error = e.error
+        continue
+
+      try:
+        moveFile(tmpName, name)
+      except Exception as e: # TODO
+        warn "Failed to rename era1 file to its final name",
+          name, tmpName, error = e.msg
+
+      info "Writing era1 completed", name
+    else:
+      error "Failed creating the era1 file", era
+      if (let e = io2.removeFile(tmpName); e.isErr):
+        warn "Failed to clean up incomplete era1 file", tmpName, error = e.error
+
+proc cmdVerifyEra1(config: ExporterConf) =
+  let f = openFile(config.era1FileName, {OpenFlags.Read}).valueOr:
+    error "Can't open ", file = config.era1FileName
+    quit 1
+  defer: discard closeFile(f)
+
+  var
+    headers = 0
+    bodies = 0
+    receipts = 0
+    ttds = 0
+    others = 0
+
+    data: seq[byte]
+
+  while true:
+    let header = readRecord(f, data).valueOr:
+      info "Read record failed", error
+      break
+
+    if header.typ == CompressedHeader:
+      let uncompressed = decodeFramed(data, checkIntegrity = false)
+      let header =
+        try:
+          rlp.decode(uncompressed, BlockHeader)
+        except RlpError as e:
+          error "Invalid block header", msg = e.msg, blockNumber = headers
+          quit 1
+
+      headers += 1
+
+    elif header.typ == CompressedBody:
+      let uncompressed = decodeFramed(data, checkIntegrity = false)
+      let body =
+        try:
+          rlp.decode(uncompressed, BlockBody)
+        except RlpError as e:
+          error "Invalid block body", msg = e.msg, blockNumber = bodies
+          quit 1
+
+      # TODO: verify txRoot & ommersHash
+
+      bodies += 1
+    elif header.typ == CompressedReceipts:
+      let uncompressed = decodeFramed(data, checkIntegrity = false)
+      let body =
+        try:
+          rlp.decode(uncompressed, seq[Receipt])
+        except RlpError as e:
+          error "Invalid receipts", msg = e.msg, blockNumber = receipts
+          quit 1
+
+      # TODO: verify receiptRoot
+
+      receipts += 1
+    elif header.typ == TotalDifficulty:
+      if data.len != 32:
+        error "TTD is not 32 bytes", blockNumber = ttds
+        quit 1
+
+      ttds += 1
+    elif header.typ == era1.Accumulator:
+      info "Accumulator root", data = data.to0xHex()
+
+      # Note: could bake in the master accumulator and check roots
+
+    else:
+      info "Skipping record", typ = toHex(header.typ)
+      others += 1
+
+  notice "Done", headers, bodies, receipts, ttds, others
 
 when isMainModule:
   {.pop.}
@@ -538,6 +710,11 @@ when isMainModule:
       except IOError as e:
         fatal "Error occured while closing file", error = e.msg
         quit 1
+
+    of HistoryCmd.exportEra1:
+      cmdExportEra1(config)
+    of HistoryCmd.verifyEra1:
+      cmdVerifyEra1(config)
 
   of ExporterCmd.beacon:
     let (cfg, forkDigests, _) = getBeaconData()

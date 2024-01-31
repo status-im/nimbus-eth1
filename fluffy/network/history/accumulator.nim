@@ -73,6 +73,21 @@ func init*(T: type Accumulator): T =
     currentEpoch: EpochAccumulator.init(@[])
   )
 
+func buildEpochAccumulatorRoot*(
+    headers: openArray[BlockHeader],
+    ttds: openArray[UInt256]
+  ): Digest =
+  doAssert(headers.len() == ttds.len(), "Headers and TTDs must be same length")
+
+  var epochAccumulator = EpochAccumulator.init(@[])
+  for i in 0..<headers.len():
+    discard epochAccumulator.add(HeaderRecord(
+      blockHash: headers[i].blockHash(),
+      totalDifficulty: ttds[i]
+    ))
+
+  hash_tree_root(epochAccumulator)
+
 func updateAccumulator*(
     a: var Accumulator, header: BlockHeader) =
   doAssert(header.blockNumber.truncate(uint64) < mergeBlockNumber,
