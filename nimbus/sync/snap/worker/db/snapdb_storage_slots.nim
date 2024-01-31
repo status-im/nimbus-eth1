@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -20,6 +20,9 @@ import
   "."/[hexary_desc, hexary_error, hexary_envelope, hexary_import,
        hexary_inspect, hexary_interpolate, hexary_paths, snapdb_desc,
        snapdb_persistent]
+
+import
+  ../../../../db/select_backend
 
 logScope:
   topics = "snap-db"
@@ -60,13 +63,14 @@ proc persistentStorageSlots(
       ): Result[void,HexaryError]
       {.gcsafe, raises: [OSError,IOError,KeyError].} =
   ## Store accounts trie table on databse
-  if ps.rockDb.isNil:
-    let rc = db.persistentStorageSlotsPut(ps.kvDb)
-    if rc.isErr: return rc
-  else:
-    let rc = db.persistentStorageSlotsPut(ps.rockDb)
-    if rc.isErr: return rc
-  ok()
+  when dbBackend == rocksdb:
+    if ps.rockDb.isNil:
+      let rc = db.persistentStorageSlotsPut(ps.kvDb)
+      if rc.isErr: return rc
+    else:
+      let rc = db.persistentStorageSlotsPut(ps.rockDb)
+      if rc.isErr: return rc
+    ok()
 
 
 proc collectStorageSlots(
