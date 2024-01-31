@@ -242,7 +242,9 @@ proc updateSchedule(
     # All done this `hike`
     if db.layersGetKeyOrVoid(root).isValid:
       wff.root.excl root
-    wff.completed.incl root
+      wff.completed.incl root
+    else:
+      wff.root.incl root
     return
 
   # Unresolved root target to reach via width-first search
