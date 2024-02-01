@@ -13,13 +13,16 @@
 ##
 
 import
-  std/[sequtils, tables],
+  std/[sequtils, sets, tables],
   eth/common,
   results,
   "."/[aristo_desc, aristo_get, aristo_vid],
   ./aristo_desc/desc_backend,
   ./aristo_filter/[
     filter_fifos, filter_helpers, filter_merge, filter_reverse, filter_siblings]
+
+import
+  ./aristo_debug
 
 # ------------------------------------------------------------------------------
 # Public functions, construct filters
@@ -29,7 +32,7 @@ proc fwdFilter*(
     db: AristoDbRef;                   # Database
     layer: LayerRef;                   # Layer to derive filter from
     chunkedMpt = false;                # Relax for snap/proof scenario
-      ): Result[FilterRef,(VertexID,AristoError)] =
+     ): Result[FilterRef,(VertexID,AristoError)] =
   ## Assemble forward delta, i.e. changes to the backend equivalent to applying
   ## the current top layer.
   ##
@@ -83,7 +86,12 @@ proc merge*(
 
   db.roFilter = ? db.merge(filter, db.roFilter, ubeRoot)
   if db.roFilter.src == db.roFilter.trg:
-    db.roFilter = FilterRef(nil)
+    # Under normal conditions, the root keys cannot be the same unless the
+    # database is empty. This changes if there is a fixed root vertex as
+    # used with the `snap` sync protocol boundaty proof. In that case, there
+    # can be no history chain and the filter is just another cache.
+    if VertexID(1) notin db.top.final.pPrf:
+      db.roFilter = FilterRef(nil)
 
   ok()
 

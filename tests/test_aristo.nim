@@ -106,6 +106,8 @@ proc accountsRunner(
     baseDir = getTmpDir() / sample.name & "-accounts"
     dbDir = if persistent: baseDir / "tmp" else: ""
     isPersistent = if persistent: "persistent DB" else: "mem DB only"
+    doRdbOk = (cmpBackends and 0 < dbDir.len)
+    cmpBeInfo = if doRdbOk: "persistent" else: "memory"
 
   defer:
     try: baseDir.removeDir except CatchableError: discard
@@ -115,11 +117,9 @@ proc accountsRunner(
     test &"Merge {accLst.len} proof & account lists to database":
       check noisy.testTxMergeProofAndKvpList(accLst, dbDir, resetDb)
 
-    test &"Compare {accLst.len} account lists on different database backends":
-      if cmpBackends and 0 < dbDir.len:
-        check noisy.testBackendConsistency(accLst, dbDir, resetDb)
-      else:
-        skip()
+    test &"Compare {accLst.len} account lists on {cmpBeInfo}" &
+        " db backend vs. cache":
+      check noisy.testBackendConsistency(accLst, dbDir, resetDb)
 
     test &"Delete accounts database successively, {accLst.len} lists":
       check noisy.testTxMergeAndDeleteOneByOne(accLst, dbDir)
@@ -149,6 +149,8 @@ proc storagesRunner(
     baseDir = getTmpDir() / sample.name & "-storage"
     dbDir = if persistent: baseDir / "tmp" else: ""
     isPersistent = if persistent: "persistent DB" else: "mem DB only"
+    doRdbOk = (cmpBackends and 0 < dbDir.len)
+    cmpBeInfo = if doRdbOk: "persistent" else: "memory"
 
   defer:
     try: baseDir.removeDir except CatchableError: discard
@@ -159,11 +161,9 @@ proc storagesRunner(
       check noisy.testTxMergeProofAndKvpList(
         stoLst, dbDir, resetDb, fileInfo, oops)
 
-    test &"Compare {stoLst.len} slot lists on different database backends":
-      if cmpBackends and 0 < dbDir.len:
-        check noisy.testBackendConsistency(stoLst, dbDir, resetDb)
-      else:
-        skip()
+    test &"Compare {stoLst.len} slot lists on {cmpBeInfo}" &
+        " db backend vs. cache":
+      check noisy.testBackendConsistency(stoLst, dbDir, resetDb)
 
     test &"Delete storage database successively, {stoLst.len} lists":
       check noisy.testTxMergeAndDeleteOneByOne(stoLst, dbDir)
@@ -218,7 +218,7 @@ when isMainModule:
         noisy.storagesRunner(sam, resetDb=true, oops=knownFailures)
 
   when true: # and false:
-    let persistent = false
+    let persistent = false # or true
     noisy.showElapsed("@snap_test_list"):
       for n,sam in snapTestList:
         noisy.accountsRunner(sam, persistent=persistent)
