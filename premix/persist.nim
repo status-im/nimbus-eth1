@@ -11,6 +11,7 @@
 # use this module to quickly populate db with data from geth/parity
 
 import
+  std/os,
   chronicles,
   ../nimbus/errors,
   ../nimbus/core/chain,
@@ -79,9 +80,21 @@ proc main() {.used.} =
 
   var numBlocks = 0
   var counter = 0
+  var retryCount = 0
 
   while true:
-    var thisBlock = requestBlock(blockNumber, { DownloadAndValidate })
+
+    var thisBlock: Block
+    try:
+      thisBlock = requestBlock(blockNumber, { DownloadAndValidate })
+    except CatchableError as e:
+      if retryCount < 3:
+        warn "Unable to block data via JSON-RPC API", error = e.msg
+        inc retryCount
+        sleep(1000)
+        continue
+      else:
+        raise e
 
     headers.add thisBlock.header
     bodies.add thisBlock.body
