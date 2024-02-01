@@ -48,8 +48,8 @@ func toStr*(n: VertexID): string =
 func errorPrint*(e: CoreDbErrorRef): string =
   if not e.isNil:
     let e = e.AristoCoreDbError
-    result = if e.isAristo: "Aristo: " else: "Kvt: "
-    result &= "ctx=" & $e.ctx & ", "
+    result = if e.isAristo: "Aristo" else: "Kvt"
+    result &= ", ctx=" & $e.ctx & ", "
     if e.isAristo:
       if e.aVid.isValid:
         result &= "vid=" & e.aVid.toStr & ", "

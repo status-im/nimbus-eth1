@@ -30,6 +30,7 @@ type
 # ------------------------------------------------------------------------------
 
 proc validateMethodsDesc(base: CoreDbBaseFns) =
+  doAssert not base.verifyFn.isNil
   doAssert not base.backendFn.isNil
   doAssert not base.destroyFn.isNil
   doAssert not base.tryHashFn.isNil

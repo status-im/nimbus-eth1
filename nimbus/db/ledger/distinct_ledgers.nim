@@ -125,7 +125,7 @@ proc delete*(al: AccountLedger, eAddr: EthAddress) =
   al.distinctBase.delete(eAddr).expect "AccountLedger/delete()"
 
 proc persistent*(al: AccountLedger) =
-  al.distinctBase.persistent()
+  discard al.distinctBase.persistent()
 
 # ------------------------------------------------------------------------------
 # Public functions: storage ledger

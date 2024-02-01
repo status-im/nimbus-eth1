@@ -69,6 +69,7 @@ type
   # --------------------------------------------------
   # Sub-descriptor: Misc methods for main descriptor
   # --------------------------------------------------
+  CoreDbBaseVerifyFn* = proc(trie: CoreDbVidRef): bool {.noRaise.}
   CoreDbBaseBackendFn* = proc(): CoreDbBackendRef {.noRaise.}
   CoreDbBaseDestroyFn* = proc(flush = true) {.noRaise.}
   CoreDbBaseTryHashFn* = proc(vid: CoreDbVidRef): CoreDbRc[Hash256] {.noRaise.}
@@ -93,6 +94,7 @@ type
     proc(flgs: set[CoreDbCaptFlags]): CoreDbRc[CoreDxCaptRef] {.noRaise.}
 
   CoreDbBaseFns* = object
+    verifyFn*:      CoreDbBaseVerifyFn
     backendFn*:     CoreDbBaseBackendFn
     destroyFn*:     CoreDbBaseDestroyFn
     tryHashFn*:     CoreDbBaseTryHashFn

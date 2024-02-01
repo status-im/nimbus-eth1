@@ -87,10 +87,8 @@ when EnableApiTracking and EnableApiProfiling:
 # More settings
 const
   logTxt = "CoreDb "
-
   legaApiTxt = logTxt & "legacy API"
-
-  newApiTxt = logTxt & "new API"
+  newApiTxt = logTxt & "API"
 
 # Annotation helpers
 {.pragma:   apiRaise, gcsafe, raises: [CoreDbApiError].}
@@ -107,7 +105,7 @@ when EnableApiTracking:
     {.warning: "*** Provided API logging for CoreDB (disabled by default)".}
 
   import
-    std/[sequtils, times]
+    std/times
 
   proc `$`[T](rc: CoreDbRc[T]): string = rc.toStr
   proc `$`(q: set[CoreDbCaptFlags]): string = q.toStr
@@ -115,6 +113,7 @@ when EnableApiTracking:
   proc `$`(e: EthAddress): string = e.toStr
   proc `$`(v: CoreDbVidRef): string = v.toStr
   proc `$`(h: Hash256): string = h.toStr
+  proc `$`(b: Blob): string = b.toLenStr
 
 when ProvideLegacyAPI:
   when EnableApiTracking:
@@ -204,12 +203,6 @@ func toCoreDxPhkRef(mpt: CoreDxMptRef): CoreDxPhkRef =
 func parent(phk: CoreDxPhkRef): CoreDbRef =
   phk.fromMpt.parent
 
-proc prettyText(e: CoreDbErrorRef): string =
-  $e.error & "(" & e.parent.methods.errorPrintFn(e) & ")"
-
-proc prettyText(vid: CoreDbVidRef): string =
-  if vid.isNil or not vid.ready: "$ø" else: vid.parent.methods.vidPrintFn(vid)
-
 # ------------------------------------------------------------------------------
 # Public constructor helper
 # ------------------------------------------------------------------------------
@@ -259,6 +252,20 @@ proc bless*(
   when AutoValidateDescriptors:
     child.validate
   child
+
+
+proc prettyText*(e: CoreDbErrorRef): string =
+  ## Pretty print argument object (for tracking use `$$()`)
+  if e.isNil: "$ø" else: e.toStr()
+
+proc prettyText*(trie: CoreDbVidRef): string =
+  ## Pretty print argument object (for tracking use `$$()`)
+  if trie.isNil or not trie.ready: "$ø" else: trie.toStr()
+
+proc verify*(trie: CoreDbVidRef): bool =
+  ## Verify that the `trie` argument is `nil` or properly initialised. This
+  ## function is for debugging and subject to change.
+  trie.isNil or (trie.ready and trie.parent.methods.verifyFn trie)
 
 # ------------------------------------------------------------------------------
 # Public main descriptor methods
@@ -324,18 +331,19 @@ proc `$$`*(vid: CoreDbVidRef): string =
   ## Pretty print vertex ID symbol, note that this directive may have side
   ## effects as it calls a backend function.
   ##
-  vid.setTrackNewApi VidPrintFn
+  #vid.setTrackNewApi VidPrintFn
   result = vid.prettyText()
-  vid.ifTrackNewApi: debug newApiTxt, ctx, elapsed, result
+  #vid.ifTrackNewApi: debug newApiTxt, ctx, elapsed, result
 
 proc hash*(vid: CoreDbVidRef): CoreDbRc[Hash256] =
-  ## Getter (well, sort of), retrieves the hash for a `vid` argument. The
-  ## function might fail if there is currently no hash available (e.g. on
-  ## `Aristo`.) Note that this is different from succeeding with an
-  ## `EMPTY_ROOT_HASH` value.
+  ## Getter (well, sort of), retrieves the root hash for the argument `vid`
+  ## descriptor. The function might fail if there is currently no hash
+  ## available (e.g. on `Aristo`.) Note that a failure to retrieve the hash
+  ## (which returns an error) is different from succeeding with an
+  ## `EMPTY_ROOT_HASH` value for an empty trie.
   ##
-  ## The value `EMPTY_ROOT_HASH` is also returned on an empty `vid` argument
-  ## `CoreDbVidRef(nil)`, say.
+  ## The value `EMPTY_ROOT_HASH` is also returned on a void `vid` descriptor
+  ## argument `CoreDbVidRef(nil)`.
   ##
   vid.setTrackNewApi VidHashFn
   result = block:
@@ -365,8 +373,10 @@ proc recast*(account: CoreDbAccount): CoreDbRc[Account] =
   ##
   let vid = account.storageVid
   vid.setTrackNewApi EthAccRecastFn
-  result = block:
-    let rc = vid.hash()
+  let rc =
+    if vid.isNil or not vid.ready: CoreDbRc[Hash256].ok(EMPTY_ROOT_HASH)
+    else: vid.parent.methods.vidHashFn vid
+  result =
     if rc.isOk:
       ok Account(
         nonce:       account.nonce,
@@ -375,7 +385,8 @@ proc recast*(account: CoreDbAccount): CoreDbRc[Account] =
         storageRoot: rc.value)
     else:
       err(rc.error)
-  vid.ifTrackNewApi: debug newApiTxt, ctx, elapsed, result
+  vid.ifTrackNewApi: debug newApiTxt, ctx, elapsed, vid, result
+
 
 proc getRoot*(
     db: CoreDbRef;
@@ -419,9 +430,9 @@ proc newKvt*(db: CoreDbRef; saveMode = AutoSave): CoreDxKvtRef =
   ##
   ## * `AutoSave`
   ##   This mode works similar to `Shared` with the difference that changes
-  ##   are saved to the backend database on automatic destruction when this
-  ##   is permissible, i.e. there is a backend available and there is no
-  ##   pending transaction on the common base object.
+  ##   are saved to the backend database some time after automatic destruction
+  ##   when this becomes permissible, i.e. there is a backend available and
+  ##   there is no pending transaction on the common base object.
   ##
   ## * `TopShot`
   ##   The contructed object will be a new descriptor with a separate snapshot
@@ -475,7 +486,7 @@ proc put*(
   kvt.setTrackNewApi KvtPutFn
   result = kvt.methods.putFn(key, val)
   kvt.ifTrackNewApi:
-    debug newApiTxt, ctx, elapsed, key=key.toStr, val=val.toSeq.toStr, result
+    debug newApiTxt, ctx, elapsed, key=key.toStr, val=val.toLenStr, result
 
 proc hasKey*(kvt: CoreDxKvtRef; key: openArray[byte]): CoreDbRc[bool] =
   ## Would be named `contains` if it returned `bool` rather than `Result[]`.
@@ -530,14 +541,14 @@ proc newMpt*(
     prune = true;
     saveMode = AutoSave;
       ): CoreDbRc[CoreDxMptRef] =
-  ## Constructor, will defect on failure. The argument `prune` is currently
+  ## MPT sub-trie object incarnation. The argument `prune` is currently
   ## ignored on other than the legacy backend. The legacy backend always
   ## assumes `AutoSave` mode regardless of the function argument.
   ##
-  ## If the `root` argument is `nil`, a new sub-trie root will be created
-  ## on-the-fly. In order to access that root so that it can be used at a
-  ## later stage, the function `rootVid()` can be used after at least one
-  ## data item was successfully merged (using `merge()`) to that sub-trie.
+  ## If the `trie` argument was created for an `EMPTY_ROOT_HASH` sub-trie, the
+  ## sub-trie database will be flushed. There is no need to keep the `trie`
+  ## argument. It can always be rerieved for this particular incarnation unsing
+  ## the function `getRoot()` on this MPT.
   ##
   ## See the discussion at `newKvt()` for an explanation of the `saveMode`
   ## argument.
@@ -546,7 +557,11 @@ proc newMpt*(
   result = db.methods.newMptFn(root, prune, saveMode)
   db.ifTrackNewApi: debug newApiTxt, ctx, elapsed, root, prune, saveMode, result
 
-proc newMpt*(db: CoreDbRef; prune=true; saveMode=AutoSave): CoreDxMptRef =
+proc newMpt*(
+    db: CoreDbRef;
+    prune = true;
+    saveMode = AutoSave;
+      ): CoreDxMptRef =
   ## Shortcut for `newMpt(CoreDbVidRef(nil), prune, saveMode)`. This function
   ## will always return a non-nil descriptor or throw an exception.
   ##
@@ -565,7 +580,9 @@ proc newMpt*(acc: CoreDxAccRef): CoreDxMptRef =
   acc.setTrackNewApi AccToMptFn
   result = acc.methods.newMptFn().valueOr:
     raiseAssert error.prettyText()
-  acc.ifTrackNewApi: debug newApiTxt, ctx, elapsed
+  acc.ifTrackNewApi:
+    let root = result.methods.rootVidFn()
+    debug newApiTxt, ctx, elapsed, root
 
 
 proc newAccMpt*(
@@ -594,7 +611,6 @@ proc newAccMpt*(
   ##     ... # Was not the state root for the accounts sub-trie
   ##     return
   ##
-  ##
   ## This function works similar to `newMpt()` for handling accounts. Although
   ## this sub-trie can be emulated by means of `newMpt(..).toPhk()`, it is
   ## recommended using this particular constructor for accounts because it
@@ -607,7 +623,11 @@ proc newAccMpt*(
   result = db.methods.newAccFn(root, prune, saveMode)
   db.ifTrackNewApi: debug newApiTxt, ctx, elapsed, root, prune, saveMode, result
 
-proc newAccMpt*(db: CoreDbRef; prune=true; saveMode=AutoSave): CoreDxAccRef =
+proc newAccMpt*(
+    db: CoreDbRef;
+    prune = true;
+    saveMode = AutoSave;
+      ): CoreDxAccRef =
   ## Shortcut for `newAccMpt(CoreDbVidRef(nil), prune, saveMode)`. This function
   ## will always return a non-nil descriptor or throw an exception.
   ##
@@ -624,7 +644,9 @@ proc toMpt*(phk: CoreDxPhkRef): CoreDxMptRef =
   ##
   phk.setTrackNewApi PhkToMptFn
   result = phk.fromMpt
-  phk.ifTrackNewApi: debug newApiTxt, ctx, elapsed
+  phk.ifTrackNewApi:
+    let root = result.methods.rootVidFn()
+    debug newApiTxt, ctx, elapsed, root
 
 proc toPhk*(mpt: CoreDxMptRef): CoreDxPhkRef =
   ## Replaces argument `mpt` by a pre-hashed *MPT*.
@@ -633,7 +655,9 @@ proc toPhk*(mpt: CoreDxMptRef): CoreDxPhkRef =
   ##
   mpt.setTrackNewApi MptToPhkFn
   result = mpt.toCoreDxPhkRef
-  mpt.ifTrackNewApi: debug newApiTxt, ctx, elapsed
+  mpt.ifTrackNewApi:
+    let root = result.methods.rootVidFn()
+    debug newApiTxt, ctx, elapsed, root
 
 # ------------------------------------------------------------------------------
 # Public common methods for all hexary trie databases (`mpt`, `phk`, or `acc`)
@@ -667,7 +691,7 @@ proc rootVid*(phk: CoreDxPhkRef): CoreDbVidRef =
   phk.ifTrackNewApi: debug newApiTxt, ctx, elapsed, result
 
 
-proc persistent*(acc: CoreDxAccRef): CoreDbRc[void] {.discardable.} =
+proc persistent*(acc: CoreDxAccRef): CoreDbRc[void] =
   ## For the legacy database, this function has no effect and succeeds always.
   ## It will nevertheless return a discardable error if there is a pending
   ## transaction.
@@ -689,13 +713,17 @@ proc persistent*(mpt: CoreDxMptRef): CoreDbRc[void] {.discardable.} =
   ## Variant of `persistent()`
   mpt.setTrackNewApi MptPersistentFn
   result = mpt.methods.persistentFn()
-  mpt.ifTrackNewApi: debug newApiTxt, ctx, elapsed, result
+  mpt.ifTrackNewApi:
+    let root = mpt.methods.rootVidFn()
+    debug newApiTxt, ctx, elapsed, root, result
 
 proc persistent*(phk: CoreDxPhkRef): CoreDbRc[void] {.discardable.} =
   ## Variant of `persistent()`
   phk.setTrackNewApi PhkPersistentFn
   result = phk.methods.persistentFn()
-  phk.ifTrackNewApi: debug newApiTxt, ctx, elapsed, result
+  phk.ifTrackNewApi:
+    let root = phk.methods.rootVidFn()
+    debug newApiTxt, ctx, elapsed, root, result
 
 
 proc forget*(acc: CoreDxAccRef): CoreDbRc[void] {.discardable.} =
@@ -715,13 +743,17 @@ proc forget*(mpt: CoreDxMptRef): CoreDbRc[void] {.discardable.} =
   ## Variant of `forget()`
   mpt.setTrackNewApi MptForgetFn
   result = mpt.methods.forgetFn()
-  mpt.ifTrackNewApi: debug newApiTxt, ctx, elapsed, result
+  mpt.ifTrackNewApi:
+    let root = mpt.methods.rootVidFn()
+    debug newApiTxt, ctx, elapsed, root, result
 
 proc forget*(phk: CoreDxPhkRef): CoreDbRc[void] {.discardable.} =
   ## Variant of `forget()`
   phk.setTrackNewApi PhkForgetFn
   result = phk.methods.forgetFn()
-  phk.ifTrackNewApi: debug newApiTxt, ctx, elapsed, result
+  phk.ifTrackNewApi:
+    let root = phk.methods.rootVidFn()
+    debug newApiTxt, ctx, elapsed, root, result
 
 # ------------------------------------------------------------------------------
 # Public generic hexary trie database methods (`mpt` or `phk`)
@@ -733,13 +765,17 @@ proc fetch*(mpt: CoreDxMptRef; key: openArray[byte]): CoreDbRc[Blob] =
   ##
   mpt.setTrackNewApi MptFetchFn
   result = mpt.methods.fetchFn key
-  mpt.ifTrackNewApi: debug newApiTxt, ctx, elapsed, key=key.toStr, result
+  mpt.ifTrackNewApi:
+    let root = mpt.methods.rootVidFn()
+    debug newApiTxt, ctx, elapsed, root, key=key.toStr, result
 
 proc fetch*(phk: CoreDxPhkRef; key: openArray[byte]): CoreDbRc[Blob] =
   ## Variant of `fetch()"
   phk.setTrackNewApi PhkFetchFn
   result = phk.methods.fetchFn key
-  phk.ifTrackNewApi: debug newApiTxt, ctx, elapsed, key=key.toStr, result
+  phk.ifTrackNewApi:
+    let root = phk.methods.rootVidFn()
+    debug newApiTxt, ctx, elapsed, root, key=key.toStr, result
 
 
 proc fetchOrEmpty*(mpt: CoreDxMptRef; key: openArray[byte]): CoreDbRc[Blob] =
@@ -750,7 +786,9 @@ proc fetchOrEmpty*(mpt: CoreDxMptRef; key: openArray[byte]): CoreDbRc[Blob] =
   result = mpt.methods.fetchFn key
   if result.isErr and result.error.error == MptNotFound:
     result = CoreDbRc[Blob].ok(EmptyBlob)
-  mpt.ifTrackNewApi: debug newApiTxt, ctx, elapsed, key=key.toStr, result
+  mpt.ifTrackNewApi:
+    let root = mpt.methods.rootVidFn()
+    debug newApiTxt, ctx, elapsed, root, key=key.toStr, result
 
 proc fetchOrEmpty*(phk: CoreDxPhkRef; key: openArray[byte]): CoreDbRc[Blob] =
   ## Variant of `fetchOrEmpty()`
@@ -758,18 +796,24 @@ proc fetchOrEmpty*(phk: CoreDxPhkRef; key: openArray[byte]): CoreDbRc[Blob] =
   result = phk.methods.fetchFn key
   if result.isErr and result.error.error == MptNotFound:
     result = CoreDbRc[Blob].ok(EmptyBlob)
-  phk.ifTrackNewApi: debug newApiTxt, ctx, elapsed, key=key.toStr, result
+  phk.ifTrackNewApi:
+    let root = phk.methods.rootVidFn()
+    debug newApiTxt, ctx, elapsed, root, key=key.toStr, result
 
 
 proc delete*(mpt: CoreDxMptRef; key: openArray[byte]): CoreDbRc[void] =
   mpt.setTrackNewApi MptDeleteFn
   result = mpt.methods.deleteFn key
-  mpt.ifTrackNewApi: debug newApiTxt, ctx, elapsed, key=key.toStr, result
+  mpt.ifTrackNewApi:
+    let root = mpt.methods.rootVidFn()
+    debug newApiTxt, ctx, elapsed, root, key=key.toStr, result
 
 proc delete*(phk: CoreDxPhkRef; key: openArray[byte]): CoreDbRc[void] =
   phk.setTrackNewApi PhkDeleteFn
   result = phk.methods.deleteFn key
-  phk.ifTrackNewApi: debug newApiTxt, ctx, elapsed, key=key.toStr, result
+  phk.ifTrackNewApi:
+    let root = phk.methods.rootVidFn()
+    debug newApiTxt, ctx, elapsed, root, key=key.toStr, result
 
 
 proc merge*(
@@ -780,7 +824,8 @@ proc merge*(
   mpt.setTrackNewApi MptMergeFn
   result = mpt.methods.mergeFn(key, val)
   mpt.ifTrackNewApi:
-    debug newApiTxt, ctx, elapsed, key=key.toStr, val=val.toSeq.toStr, result
+    let root = mpt.methods.rootVidFn()
+    debug newApiTxt, ctx, elapsed, root, key=key.toStr, val=val.toLenStr, result
 
 proc merge*(
     phk: CoreDxPhkRef;
@@ -790,7 +835,8 @@ proc merge*(
   phk.setTrackNewApi PhkMergeFn
   result = phk.methods.mergeFn(key, val)
   phk.ifTrackNewApi:
-    debug newApiTxt, ctx, elapsed, key=key.toStr, val=val.toSeq.toStr, result
+    let root = phk.methods.rootVidFn()
+    debug newApiTxt, ctx, elapsed, root, key=key.toStr, val=val.toLenStr, result
 
 
 proc hasPath*(mpt: CoreDxMptRef; key: openArray[byte]): CoreDbRc[bool] =
@@ -799,13 +845,17 @@ proc hasPath*(mpt: CoreDxMptRef; key: openArray[byte]): CoreDbRc[bool] =
   ##
   mpt.setTrackNewApi MptHasPathFn
   result = mpt.methods.hasPathFn key
-  mpt.ifTrackNewApi: debug newApiTxt, ctx, elapsed, key=key.toStr, result
+  mpt.ifTrackNewApi:
+    let root = mpt.methods.rootVidFn()
+    debug newApiTxt, ctx, elapsed, root, key=key.toStr, result
 
 proc hasPath*(phk: CoreDxPhkRef; key: openArray[byte]): CoreDbRc[bool] =
   ## Variant of `hasPath()`
   phk.setTrackNewApi PhkHasPathFn
   result = phk.methods.hasPathFn key
-  phk.ifTrackNewApi: debug newApiTxt, ctx, elapsed, key=key.toStr, result
+  phk.ifTrackNewApi:
+    let root = phk.methods.rootVidFn()
+    debug newApiTxt, ctx, elapsed, root, key=key.toStr, result
 
 # ------------------------------------------------------------------------------
 # Public trie database methods for accounts
@@ -816,7 +866,10 @@ proc fetch*(acc: CoreDxAccRef; address: EthAddress): CoreDbRc[CoreDbAccount] =
   ##
   acc.setTrackNewApi AccFetchFn
   result = acc.methods.fetchFn address
-  acc.ifTrackNewApi: debug newApiTxt, ctx, elapsed, address, result
+  acc.ifTrackNewApi:
+    let stoTrie = if result.isErr: "n/a"
+                  else: result.value.storageVid.prettyText()
+    debug newApiTxt, ctx, elapsed, address, stoTrie, result
 
 proc delete*(acc: CoreDxAccRef; address: EthAddress): CoreDbRc[void] =
   acc.setTrackNewApi AccDeleteFn
@@ -938,8 +991,7 @@ when ProvideLegacyAPI:
   proc get*(kvt: CoreDbKvtRef; key: openArray[byte]): Blob =
     kvt.setTrackLegaApi LegaKvtGetFn
     result = kvt.distinctBase.getOrEmpty(key).expect $ctx
-    kvt.ifTrackLegaApi:
-      debug legaApiTxt, ctx, elapsed, key=key.toStr, result=result.toStr
+    kvt.ifTrackLegaApi: debug legaApiTxt, ctx, elapsed, key=key.toStr, result
 
   proc del*(kvt: CoreDbKvtRef; key: openArray[byte]): void =
     kvt.setTrackLegaApi LegaKvtDelFn
@@ -950,7 +1002,7 @@ when ProvideLegacyAPI:
     kvt.setTrackLegaApi LegaKvtPutFn
     kvt.distinctBase.parent.newKvt().put(key, val).expect $ctx
     kvt.ifTrackLegaApi:
-      debug legaApiTxt, ctx, elapsed, key=key.toStr, val=val.toSeq.toStr
+      debug legaApiTxt, ctx, elapsed, key=key.toStr, val=val.toLenStr
 
   proc contains*(kvt: CoreDbKvtRef; key: openArray[byte]): bool =
     kvt.setTrackLegaApi LegaKvtContainsFn
@@ -964,14 +1016,14 @@ when ProvideLegacyAPI:
     result = phk.distinctBase.toMpt.CoreDbMptRef
     phk.ifTrackLegaApi: debug legaApiTxt, ctx, elapsed
 
-  proc mptPrune*(db: CoreDbRef; root: Hash256; prune = true): CoreDbMptRef =
+  proc mptPrune*(db: CoreDbRef; rootHash: Hash256; prune = true): CoreDbMptRef =
     db.setTrackLegaApi LegaNewMptFn
     let
-      vid = block:
-        if root.isValid: db.getRoot(root).expect $ctx
+      root = block:
+        if rootHash.isValid: db.getRoot(rootHash).expect $ctx
         else: CoreDbVidRef(nil)
-      mpt = db.newMpt(vid, prune).valueOr:
-        raiseAssert error.prettyText()
+      mpt = db.newMpt(root, prune).valueOr:
+        raiseAssert error.prettyText() & ": " & $ctx
     result = mpt.CoreDbMptRef
     db.ifTrackLegaApi: debug legaApiTxt, ctx, elapsed, root, prune
 
@@ -987,14 +1039,14 @@ when ProvideLegacyAPI:
     result = mpt.distinctBase.toPhk.CoreDbPhkRef
     mpt.ifTrackLegaApi: debug legaApiTxt, ctx, elapsed
 
-  proc phkPrune*(db: CoreDbRef; root: Hash256; prune = true): CoreDbPhkRef =
+  proc phkPrune*(db: CoreDbRef; rootHash: Hash256; prune = true): CoreDbPhkRef =
     db.setTrackLegaApi LegaNewPhkFn
     let
-      vid = block:
-        if root.isValid: db.getRoot(root).expect $ctx
+      root = block:
+        if rootHash.isValid: db.getRoot(rootHash).expect $ctx
         else: CoreDbVidRef(nil)
-      phk = db.newMpt(vid, prune).valueOr:
-        raiseAssert error.prettyText()
+      phk = db.newMpt(root, prune).valueOr:
+        raiseAssert error.prettyText() & ": " & $ctx
     result = phk.toCoreDxPhkRef.CoreDbPhkRef
     db.ifTrackLegaApi: debug legaApiTxt, ctx, elapsed, root, prune
 
@@ -1014,14 +1066,13 @@ when ProvideLegacyAPI:
   proc get*(mpt: CoreDbMptRef; key: openArray[byte]): Blob =
     mpt.setTrackLegaApi LegaMptGetFn
     result = mpt.distinctBase.fetchOrEmpty(key).expect $ctx
-    mpt.ifTrackLegaApi:
-      debug legaApiTxt, ctx, elapsed, key=key.toStr, result=result.toStr
+    mpt.ifTrackLegaApi: debug legaApiTxt, ctx, elapsed, key=key.toStr, result
 
   proc get*(phk: CoreDbPhkRef; key: openArray[byte]): Blob =
     phk.setTrackLegaApi LegaPhkGetFn
     result = phk.distinctBase.fetchOrEmpty(key).expect $ctx
     phk.ifTrackLegaApi:
-      debug legaApiTxt, ctx, elapsed, key=key.toStr, result=result.toStr
+      debug legaApiTxt, ctx, elapsed, key=key.toStr, result
 
 
   proc del*(mpt: CoreDbMptRef; key: openArray[byte]) =
@@ -1039,13 +1090,13 @@ when ProvideLegacyAPI:
     mpt.setTrackLegaApi LegaMptPutFn
     mpt.distinctBase.merge(key, val).expect $ctx
     mpt.ifTrackLegaApi:
-      debug legaApiTxt, ctx, elapsed, key=key.toStr, val=val.toSeq.toStr
+      debug legaApiTxt, ctx, elapsed, key=key.toStr, val=val.toLenStr
 
   proc put*(phk: CoreDbPhkRef; key: openArray[byte]; val: openArray[byte]) =
     phk.setTrackLegaApi LegaPhkPutFn
     phk.distinctBase.merge(key, val).expect $ctx
     phk.ifTrackLegaApi:
-      debug legaApiTxt, ctx, elapsed, key=key.toStr, val=val.toSeq.toStr
+      debug legaApiTxt, ctx, elapsed, key=key.toStr, val=val.toLenStr
 
 
   proc contains*(mpt: CoreDbMptRef; key: openArray[byte]): bool =
@@ -1061,13 +1112,15 @@ when ProvideLegacyAPI:
 
   proc rootHash*(mpt: CoreDbMptRef): Hash256 =
     mpt.setTrackLegaApi LegaMptRootHashFn
-    result = mpt.distinctBase.rootVid().hash().expect $ctx
-    mpt.ifTrackLegaApi: debug legaApiTxt, ctx, elapsed, result=result.toStr
+    result = mpt.distinctBase.methods.rootVidFn().hash().valueOr:
+      raiseAssert error.prettyText() & ": " & $ctx
+    mpt.ifTrackLegaApi: debug legaApiTxt, ctx, elapsed, result
 
   proc rootHash*(phk: CoreDbPhkRef): Hash256 =
     phk.setTrackLegaApi LegaPhkRootHashFn
-    result = phk.distinctBase.rootVid().hash().expect $ctx
-    phk.ifTrackLegaApi: debug legaApiTxt, ctx, elapsed, result=result.toStr
+    result = phk.distinctBase.methods.rootVidFn().hash().valueOr:
+      raiseAssert error.prettyText() & ": " & $ctx
+    phk.ifTrackLegaApi: debug legaApiTxt, ctx, elapsed, result
 
   # ----------------
 
@@ -1096,7 +1149,7 @@ when ProvideLegacyAPI:
       let
         e = oops.unsafeGet
         msg = "delayed and reraised" &
-          ", name=\"" & $e.name & "\", msg=\"" & e.msg & "\""
+          ", name=" & $e.name & ", msg=\"" & e.msg & "\""
       raise (ref TxWrapperApiError)(msg: msg)
     id.ifTrackLegaApi: debug legaApiTxt, ctx, elapsed
 

@@ -21,7 +21,7 @@ import
 include
   ./aristo_db/aristo_replicate
 
-# Annotation helpers
+# Annotation helper(s)
 {.pragma:  noRaise, gcsafe, raises: [].}
 {.pragma: rlpRaise, gcsafe, raises: [AristoApiRlpError].}
 
@@ -94,8 +94,10 @@ proc baseMethods(
     A:  typedesc;
     K:  typedesc;
       ): CoreDbBaseFns =
-  let db = db
   CoreDbBaseFns(
+    verifyFn: proc(vid: CoreDbVidRef): bool =
+      db.adbBase.verify(vid),
+
     backendFn: proc(): CoreDbBackendRef =
       db.bless(AristoCoreDbBE()),
 

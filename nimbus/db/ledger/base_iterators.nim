@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -46,7 +46,7 @@ iterator accounts*(ldg: LedgerRef): Account =
     for w in ldg.AccountsLedgerRef.accountsIt():
       yield w
   else:
-    raiseAssert: "Missing ledger type label"
+    raiseAssert: "Unsupported ledger type: " & $ldg.ldgType
   ldg.ifTrackApi: debug apiTxt, ctx, elapsed
 
 
@@ -60,7 +60,7 @@ iterator addresses*(ldg: LedgerRef): EthAddress =
     for w in ldg.AccountsLedgerRef.addressesIt():
       yield w
   else:
-    raiseAssert: "Missing ledger type label"
+    raiseAssert: "Unsupported ledger type: " & $ldg.ldgType
   ldg.ifTrackApi: debug apiTxt, ctx, elapsed
 
 
@@ -74,7 +74,7 @@ iterator cachedStorage*(ldg: LedgerRef, eAddr: EthAddress): (UInt256,UInt256) =
     for w in ldg.AccountsLedgerRef.cachedStorageIt(eAddr):
       yield w
   else:
-    raiseAssert: "Missing ledger type label"
+    raiseAssert: "Unsupported ledger type: " & $ldg.ldgType
   ldg.ifTrackApi: debug apiTxt, ctx, elapsed, eAddr
 
 
@@ -88,7 +88,7 @@ iterator pairs*(ldg: LedgerRef): (EthAddress,Account) =
     for w in ldg.AccountsLedgerRef.pairsIt():
       yield w
   else:
-    raiseAssert: "Missing ledger type label"
+    raiseAssert: "Unsupported ledger type: " & $ldg.ldgType
   ldg.ifTrackApi: debug apiTxt, ctx, elapsed
 
 
@@ -106,7 +106,7 @@ iterator storage*(
     for w in ldg.AccountsLedgerRef.storageIt(eAddr):
       yield w
   else:
-    raiseAssert: "Missing ledger type label"
+    raiseAssert: "Unsupported ledger type: " & $ldg.ldgType
   ldg.ifTrackApi: debug apiTxt, ctx, elapsed, eAddr
 
 # ------------------------------------------------------------------------------

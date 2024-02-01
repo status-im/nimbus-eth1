@@ -702,6 +702,9 @@ proc getVid*(
 # Public constructors and related
 # ------------------------------------------------------------------------------
 
+proc verify*(base: AristoBaseRef; trie: CoreDbVidRef): bool =
+  true
+
 proc newMptHandler*(
     base: AristoBaseRef;
     root: CoreDbVidRef;

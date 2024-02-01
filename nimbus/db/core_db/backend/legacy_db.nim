@@ -11,7 +11,6 @@
 {.push raises: [].}
 
 import
-  std/options,
   eth/[common, rlp, trie/db, trie/hexary],
   stew/byteutils,
   results,
@@ -379,6 +378,9 @@ proc baseMethods(
       ): CoreDbBaseFns =
   let tdb = db.tdb
   CoreDbBaseFns(
+    verifyFn: proc(trie: CoreDbVidRef): bool =
+      true,
+
     backendFn: proc(): CoreDbBackendRef =
       db.bless(LegacyCoreDbBE(base: db)),
 
