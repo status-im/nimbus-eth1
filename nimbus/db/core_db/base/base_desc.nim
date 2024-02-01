@@ -37,7 +37,7 @@ type
     ## Generic account representation referencing an *MPT* sub-trie
     nonce*:      AccountNonce ## Some `uint64` type
     balance*:    UInt256
-    storageVid*: CoreDbVidRef ## Implies storage root sub-MPT
+    stoTrie*:    CoreDbTrieRef ## Implies storage root sub-MPT
     codeHash*:   Hash256
 
   CoreDbErrorCode* = enum
@@ -49,12 +49,21 @@ type
     MptNotFound
     MptTxPending
     AccNotFound
+    AccAddrMissing
     AccTxPending
     RootNotFound
     RootUnacceptable
     HashNotAvailable
-    VidLocked
+    TrieLocked
     StorageFailed
+
+  CoreDbSubTrie* = enum
+    StorageTrie = 0
+    AccountsTrie
+    GenericTrie
+    ReceiptsTrie
+    TxTrie
+    WithdrawalsTrie
 
   CoreDbSaveFlags* = enum
     Shared                    ## Shared, leaves changes in memory cache
@@ -69,24 +78,26 @@ type
   # --------------------------------------------------
   # Sub-descriptor: Misc methods for main descriptor
   # --------------------------------------------------
-  CoreDbBaseVerifyFn* = proc(trie: CoreDbVidRef): bool {.noRaise.}
+  CoreDbBaseVerifyFn* = proc(trie: CoreDbTrieRef): bool {.noRaise.}
   CoreDbBaseBackendFn* = proc(): CoreDbBackendRef {.noRaise.}
   CoreDbBaseDestroyFn* = proc(flush = true) {.noRaise.}
-  CoreDbBaseTryHashFn* = proc(vid: CoreDbVidRef): CoreDbRc[Hash256] {.noRaise.}
-  CoreDbBaseVidHashFn* = proc(vid: CoreDbVidRef): CoreDbRc[Hash256] {.noRaise.}
-  CoreDbBaseVidPrintFn* = proc(vid: CoreDbVidRef): string {.noRaise.}
+  CoreDbBaseTryHashFn* = proc(vid: CoreDbTrieRef): CoreDbRc[Hash256] {.noRaise.}
+  CoreDbBaseRootHashFn* = proc(
+    trie: CoreDbTrieRef): CoreDbRc[Hash256] {.noRaise.}
+  CoreDbBaseTriePrintFn* = proc(vid: CoreDbTrieRef): string {.noRaise.}
   CoreDbBaseErrorPrintFn* = proc(e: CoreDbErrorRef): string {.noRaise.}
   CoreDbBaseInitLegaSetupFn* = proc() {.noRaise.}
-  CoreDbBaseRootFn* =
-    proc(root: Hash256): CoreDbRc[CoreDbVidRef] {.noRaise.}
+  CoreDbBaseGetTrieFn* = proc(
+    trie: CoreDbSubTrie; root: Hash256; address: Option[EthAddress];
+    ): CoreDbRc[CoreDbTrieRef] {.noRaise.}
   CoreDbBaseLevelFn* = proc(): int {.noRaise.}
   CoreDbBaseKvtFn* = proc(
     saveMode: CoreDbSaveFlags): CoreDbRc[CoreDxKvtRef] {.noRaise.}
   CoreDbBaseMptFn* = proc(
-    root: CoreDbVidRef; prune: bool; saveMode: CoreDbSaveFlags;
+    root: CoreDbTrieRef; prune: bool; saveMode: CoreDbSaveFlags;
     ): CoreDbRc[CoreDxMptRef] {.noRaise.}
   CoreDbBaseAccFn* = proc(
-    root: CoreDbVidRef; prune: bool; saveMode: CoreDbSaveFlags;
+    root: CoreDbTrieRef; prune: bool; saveMode: CoreDbSaveFlags;
     ): CoreDbRc[CoreDxAccRef] {.noRaise.}
   CoreDbBaseTxGetIdFn* = proc(): CoreDbRc[CoreDxTxID] {.noRaise.}
   CoreDbBaseTxBeginFn* = proc(): CoreDbRc[CoreDxTxRef] {.noRaise.}
@@ -98,11 +109,11 @@ type
     backendFn*:     CoreDbBaseBackendFn
     destroyFn*:     CoreDbBaseDestroyFn
     tryHashFn*:     CoreDbBaseTryHashFn
-    vidHashFn*:     CoreDbBaseVidHashFn
-    vidPrintFn*:    CoreDbBaseVidPrintFn
+    rootHashFn*:    CoreDbBaseRootHashFn
+    triePrintFn*:   CoreDbBaseTriePrintFn
     errorPrintFn*:  CoreDbBaseErrorPrintFn
     legacySetupFn*: CoreDbBaseInitLegaSetupFn
-    getRootFn*:     CoreDbBaseRootFn
+    getTrieFn*:     CoreDbBaseGetTrieFn
     levelFn*:       CoreDbBaseLevelFn
 
     # Kvt constructor
@@ -158,7 +169,7 @@ type
   CoreDbMptMergeAccountFn* =
     proc(k: openArray[byte]; v: CoreDbAccount): CoreDbRc[void] {.noRaise.}
   CoreDbMptHasPathFn* = proc(k: openArray[byte]): CoreDbRc[bool] {.noRaise.}
-  CoreDbMptRootVidFn* = proc(): CoreDbVidRef {.noRaise.}
+  CoreDbMptGetTrieFn* = proc(): CoreDbTrieRef {.noRaise.}
   CoreDbMptIsPruningFn* = proc(): bool {.noRaise.}
   CoreDbMptPersistentFn* = proc(): CoreDbRc[void] {.noRaise.}
   CoreDbMptForgetFn* = proc(): CoreDbRc[void] {.noRaise.}
@@ -170,7 +181,7 @@ type
     deleteFn*:     CoreDbMptDeleteFn
     mergeFn*:      CoreDbMptMergeFn
     hasPathFn*:    CoreDbMptHasPathFn
-    rootVidFn*:    CoreDbMptRootVidFn
+    getTrieFn*:    CoreDbMptGetTrieFn
     isPruningFn*:  CoreDbMptIsPruningFn
     persistentFn*: CoreDbMptPersistentFn
     forgetFn*:     CoreDbMptForgetFn
@@ -186,7 +197,7 @@ type
   CoreDbAccMergeFn* =
     proc(k: EthAddress; v: CoreDbAccount): CoreDbRc[void] {.noRaise.}
   CoreDbAccHasPathFn* = proc(k: EthAddress): CoreDbRc[bool] {.noRaise.}
-  CoreDbAccRootVidFn* = proc(): CoreDbVidRef {.noRaise.}
+  CoreDbAccGetTrieFn* = proc(): CoreDbTrieRef {.noRaise.}
   CoreDbAccIsPruningFn* = proc(): bool {.noRaise.}
   CoreDbAccPersistentFn* = proc(): CoreDbRc[void] {.noRaise.}
   CoreDbAccForgetFn* = proc(): CoreDbRc[void] {.noRaise.}
@@ -199,7 +210,7 @@ type
     deleteFn*:     CoreDbAccDeleteFn
     mergeFn*:      CoreDbAccMergeFn
     hasPathFn*:    CoreDbAccHasPathFn
-    rootVidFn*:    CoreDbAccRootVidFn
+    getTrieFn*:    CoreDbAccGetTrieFn
     isPruningFn*:  CoreDbAccIsPruningFn
     persistentFn*: CoreDbAccPersistentFn
     forgetFn*:     CoreDbAccForgetFn
@@ -293,7 +304,7 @@ type
     parent*: CoreDbRef
     methods*: CoreDbAccFns
 
-  CoreDbVidRef* = ref object of RootRef
+  CoreDbTrieRef* = ref object of RootRef
     ## Generic state root: `Hash256` for legacy, `VertexID` for Aristo. This
     ## object makes only sense in the context od an *MPT*.
     parent*: CoreDbRef

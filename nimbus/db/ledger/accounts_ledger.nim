@@ -115,10 +115,10 @@ proc rawTrie*(ac: AccountsLedgerRef): AccountLedger = ac.ledger
 
 func newCoreDbAccount: CoreDbAccount =
   CoreDbAccount(
-    nonce:      emptyAcc.nonce,
-    balance:    emptyAcc.balance,
-    codeHash:   emptyAcc.codeHash,
-    storageVid: CoreDbVidRef(nil))
+    nonce:    emptyAcc.nonce,
+    balance:  emptyAcc.balance,
+    codeHash: emptyAcc.codeHash,
+    stoTrie:  CoreDbTrieRef(nil))
 
 template noRlpException(info: static[string]; code: untyped) =
   try:
@@ -342,7 +342,7 @@ proc persistStorage(acc: RefAccount, ac: AccountsLedgerRef, clearCache: bool) =
         acc.originalStorage.del(slot)
     acc.overlayStorage.clear()
 
-  acc.account.storageVid = storageLedger.rootVid
+  acc.account.stoTrie = storageLedger.getTrie()
 
 proc makeDirty(ac: AccountsLedgerRef, address: EthAddress, cloneStorage = true): RefAccount =
   ac.isDirty = true
@@ -492,11 +492,11 @@ proc clearStorage*(ac: AccountsLedgerRef, address: EthAddress) =
 
   let acc = ac.getAccount(address)
   acc.flags.incl {Alive, NewlyCreated}
-  let accHash = acc.account.storageVid.hash().valueOr: return
+  let accHash = acc.account.stoTrie.rootHash().valueOr: return
   if accHash != EMPTY_ROOT_HASH:
     # there is no point to clone the storage since we want to remove it
     let acc = ac.makeDirty(address, cloneStorage = false)
-    acc.account.storageVid = CoreDbVidRef(nil)
+    acc.account.stoTrie = CoreDbTrieRef(nil)
     if acc.originalStorage.isNil.not:
       # also clear originalStorage cache, otherwise
       # both getStorage and getCommittedStorage will
@@ -654,7 +654,7 @@ proc getStorageRoot*(ac: AccountsLedgerRef, address: EthAddress): Hash256 =
   # the storage root will not be updated
   let acc = ac.getAccount(address, false)
   if acc.isNil: EMPTY_ROOT_HASH
-  else: acc.account.storageVid.hash().valueOr: EMPTY_ROOT_HASH
+  else: acc.account.stoTrie.rootHash().valueOr: EMPTY_ROOT_HASH
 
 func update(wd: var WitnessData, acc: RefAccount) =
   # once the code is touched make sure it doesn't get reset back to false in another update

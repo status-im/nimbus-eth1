@@ -31,9 +31,6 @@ import
   results,
   ".."/[core_db, storage_types]
 
-from ../aristo
-  import isValid
-
 type
   AccountLedger* = distinct CoreDxAccRef
   StorageLedger* = distinct CoreDxPhkRef
@@ -74,10 +71,10 @@ proc db*(t: SomeLedger): CoreDbRef =
   t.distinctBase.parent
 
 proc rootHash*(t: SomeLedger): Hash256 =
-  t.distinctBase.rootVid().hash().expect "SomeLedger/rootHash()"
+  t.distinctBase.getTrie().rootHash().expect "SomeLedger/rootHash()"
 
-proc rootVid*(t: SomeLedger): CoreDbVidRef =
-  t.distinctBase.rootVid
+proc getTrie*(t: SomeLedger): CoreDbTrieRef =
+  t.distinctBase.getTrie()
 
 # ------------------------------------------------------------------------------
 # Public functions: accounts ledger
@@ -86,25 +83,10 @@ proc rootVid*(t: SomeLedger): CoreDbVidRef =
 proc init*(
     T: type AccountLedger;
     db: CoreDbRef;
-    rootHash: Hash256;
+    root: Hash256;
     isPruning = true;
       ): T =
-  const info = "AccountLedger/getRoot(): "
-
-  var vid = CoreDbVidRef(nil)
-  if rootHash.isValid:
-    let rc = db.getRoot(rootHash)
-    if rc.isErr:
-      raiseAssert info & $$rc.error
-    vid = rc.value
-
-  let acc = block:
-    let rc = db.newAccMpt(vid, isPruning, Shared)
-    if rc.isErr:
-      raiseAssert info & $$rc.error
-    rc.value
-
-  acc.T
+  db.newAccMpt(root, isPruning, Shared).T
 
 proc init*(
     T: type AccountLedger;
@@ -146,7 +128,7 @@ proc init*(
   const
     info = "StorageLedger/init(): "
   let
-    vid = account.storageVid
+    vid = account.stoTrie
     mpt = block:
       let rc = al.distinctBase.parent.newMpt(vid, isPruning, Shared)
       if rc.isErr:
@@ -155,7 +137,7 @@ proc init*(
   mpt.toPhk.T
 
 #proc init*(T: type StorageLedger; db: CoreDbRef, isPruning = false): T =
-#  db.newMpt(CoreDbVidRef(nil), isPruning, Shared).toPhk.T
+#  db.newMpt(CoreDbTrieRef(nil), isPruning, Shared).toPhk.T
 
 proc fetch*(sl: StorageLedger, slot: UInt256): Result[Blob,void] =
   sl.distinctBase.fetch(slot.toBytesBE).mapErr proc(ign: CoreDbErrorRef)=discard
@@ -175,7 +157,7 @@ iterator storage*(
   const
     info = "storage(): "
   let
-    vid = account.storageVid
+    vid = account.stoTrie
     mpt = al.distinctBase.parent.newMpt(vid, saveMode=Shared).valueOr:
       raiseAssert info & $$error
   for (key,val) in mpt.pairs:

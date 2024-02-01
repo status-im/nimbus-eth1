@@ -32,12 +32,14 @@ type
     ## Custom destructor
 
   HexaryChildDbRef = ref object
-    trie: HexaryTrie        ## needed for descriptor capturing with closures
+    trie: HexaryTrie              ## For closure descriptor for capturing
+    when CoreDbEnableApiTracking:
+      kind: CoreDbSubTrie         ## Current sub-trie
 
   LegacyCoreDxTxRef = ref object of CoreDxTxRef
-    ltx: DbTransaction      ## Legacy transaction descriptor
-    back: LegacyCoreDxTxRef ## Previous transaction
-    level: int              ## Transaction level when positive
+    ltx: DbTransaction            ## Legacy transaction descriptor
+    back: LegacyCoreDxTxRef       ## Previous transaction
+    level: int                    ## Transaction level when positive
 
   RecorderRef = ref object of RootRef
     flags: set[CoreDbCaptFlags]
@@ -45,13 +47,15 @@ type
     logger: LegacyDbRef
     appDb: LegacyDbRef
 
-  LegacyCoreDbVid* = ref object of CoreDbVidRef
-    vHash: Hash256       ## Hash key
+  LegacyCoreDbTrie* = ref object of CoreDbTrieRef
+    root: Hash256                 ## Hash key
+    when CoreDbEnableApiTracking:
+      kind: CoreDbSubTrie         ## Current sub-trie
 
   LegacyCoreDbError = ref object of CoreDbErrorRef
-    ctx: string          ## Context where the exception or error occured
-    name: string         ## name of exception
-    msg: string          ## Exception info
+    ctx: string                   ## Exception or error context info
+    name: string                  ## name of exception
+    msg: string                   ## Exception info
 
   # ------------
 
@@ -92,7 +96,7 @@ template reraiseRlpException(info: static[string]; code: untyped) =
   try:
     code
   except RlpError as e:
-    let msg = info & ", name=\"" & $e.name & "\", msg=\"" & e.msg & "\""
+    let msg = info & ", name=" & $e.name & ", msg=\"" & e.msg & "\""
     raise (ref LegacyApiRlpError)(msg: msg)
 
 # ------------------------------------------------------------------------------
@@ -102,51 +106,61 @@ template reraiseRlpException(info: static[string]; code: untyped) =
 func errorPrint(e: CoreDbErrorRef): string =
    if not e.isNil:
      let e = e.LegacyCoreDbError
-     result &= "ctx=\"" & $e.ctx & "\""
+     result &= "ctx=" & $e.ctx
      if e.name != "":
        result &= ", name=\"" & $e.name & "\""
      if e.msg != "":
        result &= ", msg=\"" & $e.msg & "\""
 
-func vidPrint(vid: CoreDbVidRef): string =
-  if not vid.isNil:
-    if not vid.ready:
+func triePrint(trie: CoreDbTrieRef): string =
+  if not trie.isNil:
+    if not trie.ready:
       result = "$?"
-    elif vid.LegacyCoreDbVid.vHash != EMPTY_ROOT_HASH:
-      result = "£" & vid.LegacyCoreDbVid.vHash.data.toHex
     else:
-      result &= "£ø"
+      var trie = LegacyCoreDbTrie(trie)
+      when CoreDbEnableApiTracking:
+        result = "(" & $trie.kind & ","
+      if trie.root != EMPTY_ROOT_HASH:
+        result &= "£" & trie.root.data.toHex
+      else:
+        result &= "£ø"
+      when CoreDbEnableApiTracking:
+        result &= ")"
 
 func txLevel(db: LegacyDbRef): int =
   if not db.top.isNil:
     return db.top.level
 
-func lvHash(vid: CoreDbVidRef): Hash256 =
-  if not vid.isNil and vid.ready:
-    return vid.LegacyCoreDbVid.vHash
+func lroot(trie: CoreDbTrieRef): Hash256 =
+  if not trie.isNil and trie.ready:
+    return trie.LegacyCoreDbTrie.root
   EMPTY_ROOT_HASH
 
+
 proc toCoreDbAccount(
-    data: Blob;
     db: LegacyDbRef;
+    data: Blob;
+    address: EthAddress;
       ): CoreDbAccount
       {.gcsafe, raises: [RlpError].} =
   let acc = rlp.decode(data, Account)
-  CoreDbAccount(
-    nonce:      acc.nonce,
-    balance:    acc.balance,
-    codeHash:   acc.codeHash,
-    storageVid: db.bless LegacyCoreDbVid(vHash: acc.storageRoot))
+  result = CoreDbAccount(
+    nonce:    acc.nonce,
+    balance:  acc.balance,
+    codeHash: acc.codeHash)
+  if acc.storageRoot != EMPTY_ROOT_HASH:
+    result.stoTrie = db.bless LegacyCoreDbTrie(root: acc.storageRoot)
 
-func toAccount(
-    account: CoreDbAccount
+
+proc toAccount(
+    acc: CoreDbAccount;
       ): Account =
-  ## Fast rewrite of `recast()` from base which reures to `vidHashFn()`
+  ## Fast rewrite of `recast()`
   Account(
-    nonce:       account.nonce,
-    balance:     account.balance,
-    codeHash:    account.codeHash,
-    storageRoot: account.storageVid.lvHash)
+    nonce:       acc.nonce,
+    balance:     acc.balance,
+    codeHash:    acc.codeHash,
+    storageRoot: acc.stoTrie.lroot)
 
 # ------------------------------------------------------------------------------
 # Private mixin methods for `trieDB` (backport from capturedb/tracer sources)
@@ -254,8 +268,11 @@ proc mptMethods(mpt: HexaryChildDbRef; db: LegacyDbRef): CoreDbMptFns =
       db.mapRlpException("hasPathFn()"):
         return ok(mpt.trie.contains(k)),
 
-    rootVidFn: proc(): CoreDbVidRef =
-      db.bless(LegacyCoreDbVid(vHash: mpt.trie.rootHash)),
+    getTrieFn: proc(): CoreDbTrieRef =
+      var trie = LegacyCoreDbTrie(root: mpt.trie.rootHash)
+      when CoreDbEnableApiTracking:
+        trie.kind = mpt.kind
+      db.bless(trie),
 
     isPruningFn: proc(): bool =
       mpt.trie.isPruning,
@@ -284,7 +301,7 @@ proc accMethods(mpt: HexaryChildDbRef; db: LegacyDbRef): CoreDbAccFns =
       db.mapRlpException "fetchFn()":
         let data = mpt.trie.get(k.keccakHash.data)
         if 0 < data.len:
-          return ok data.toCoreDbAccount(db)
+          return ok db.toCoreDbAccount(data,k)
       err(db.bless(AccNotFound, LegacyCoreDbError(ctx: "fetchFn()"))),
 
     deleteFn: proc(k: EthAddress): CoreDbRc[void] =
@@ -301,8 +318,11 @@ proc accMethods(mpt: HexaryChildDbRef; db: LegacyDbRef): CoreDbAccFns =
       db.mapRlpException("hasPath()"):
         return ok(mpt.trie.contains k.keccakHash.data),
 
-    rootVidFn: proc(): CoreDbVidRef =
-      db.bless(LegacyCoreDbVid(vHash: mpt.trie.rootHash)),
+    getTrieFn: proc(): CoreDbTrieRef =
+      var trie = LegacyCoreDbTrie(root: mpt.trie.rootHash)
+      when CoreDbEnableApiTracking:
+        trie.kind = mpt.kind
+      db.bless(trie),
 
     isPruningFn: proc(): bool =
       mpt.trie.isPruning,
@@ -378,7 +398,7 @@ proc baseMethods(
       ): CoreDbBaseFns =
   let tdb = db.tdb
   CoreDbBaseFns(
-    verifyFn: proc(trie: CoreDbVidRef): bool =
+    verifyFn: proc(trie: CoreDbTrieRef): bool =
       true,
 
     backendFn: proc(): CoreDbBackendRef =
@@ -391,14 +411,14 @@ proc baseMethods(
       if not closeDb.isNil:
         closeDb(),
 
-    tryHashFn: proc(vid: CoreDbVidRef): CoreDbRc[Hash256] =
-      ok(vid.lvHash),
+    tryHashFn: proc(trie: CoreDbTrieRef): CoreDbRc[Hash256] =
+      ok(trie.lroot),
 
-    vidHashFn: proc(vid: CoreDbVidRef): CoreDbRc[Hash256] =
-      ok(vid.lvHash),
+    rootHashFn: proc(trie: CoreDbTrieRef): CoreDbRc[Hash256] =
+      ok(trie.lroot),
 
-    vidPrintFn: proc(vid: CoreDbVidRef): string =
-      vid.vidPrint(),
+    triePrintFn: proc(trie: CoreDbTrieRef): string =
+      trie.triePrint(),
 
     errorPrintFn: proc(e: CoreDbErrorRef): string =
       e.errorPrint(),
@@ -406,26 +426,45 @@ proc baseMethods(
     legacySetupFn: proc() =
       db.tdb.put(EMPTY_ROOT_HASH.data, @[0x80u8]),
 
-    getRootFn: proc(root: Hash256): CoreDbRc[CoreDbVidRef] =
-      ok(db.bless LegacyCoreDbVid(vHash: root)),
+    getTrieFn: proc(
+        kind: CoreDbSubTrie;
+        root: Hash256;
+        address: Option[EthAddress];
+          ): CoreDbRc[CoreDbTrieRef] =
+      var trie = LegacyCoreDbTrie(root: root)
+      when CoreDbEnableApiTracking:
+        trie.kind = kind
+      ok(db.bless trie),
 
     newKvtFn: proc(saveMode: CoreDbSaveFlags): CoreDbRc[CoreDxKvtRef] =
       ok(db.kvt),
 
     newMptFn: proc(
-        root: CoreDbVidRef,
+        trie: CoreDbTrieRef,
         prune: bool;
         saveMode: CoreDbSaveFlags;
           ): CoreDbRc[CoreDxMptRef] =
-      let mpt = HexaryChildDbRef(trie: initHexaryTrie(tdb, root.lvHash, prune))
+      var mpt = HexaryChildDbRef(trie: initHexaryTrie(tdb, trie.lroot, prune))
+      when CoreDbEnableApiTracking:
+        if not trie.isNil and trie.ready:
+          let trie = trie.LegacyCoreDbTrie
+          mpt.kind = trie.kind
       ok(db.bless CoreDxMptRef(methods: mpt.mptMethods db)),
 
     newAccFn: proc(
-        root: CoreDbVidRef,
+        trie: CoreDbTrieRef,
         prune: bool;
         saveMode: CoreDbSaveFlags;
           ): CoreDbRc[CoreDxAccRef] =
-      let mpt = HexaryChildDbRef(trie: initHexaryTrie(tdb, root.lvHash, prune))
+      var mpt = HexaryChildDbRef(trie: initHexaryTrie(tdb, trie.lroot, prune))
+      when CoreDbEnableApiTracking:
+        if not trie.isNil and trie.ready:
+          if trie.LegacyCoreDbTrie.kind != AccountsTrie:
+            let ctx = LegacyCoreDbError(
+              ctx: "newAccFn()",
+              msg: "got " & $trie.LegacyCoreDbTrie.kind)
+            return err(db.bless(RootUnacceptable, ctx))
+          mpt.kind = AccountsTrie
       ok(db.bless CoreDxAccRef(methods: mpt.accMethods db)),
 
     getIdFn: proc(): CoreDbRc[CoreDxTxID] =

@@ -62,7 +62,7 @@ iterator pairs*(mpt: CoreDxMptRef): (Blob, Blob) {.apiRaise.} =
   else:
     raiseAssert: "Unsupported database type: " & $mpt.parent.dbType
   mpt.ifTrackNewApi:
-    let trie = mpt.methods.rootVidFn()
+    let trie = mpt.methods.getTrieFn()
     debug newApiTxt, ctx, elapsed, trie
 
 iterator replicate*(mpt: CoreDxMptRef): (Blob, Blob) {.apiRaise.} =
@@ -82,7 +82,7 @@ iterator replicate*(mpt: CoreDxMptRef): (Blob, Blob) {.apiRaise.} =
   else:
     raiseAssert: "Unsupported database type: " & $mpt.parent.dbType
   mpt.ifTrackNewApi:
-    let trie = mpt.methods.rootVidFn()
+    let trie = mpt.methods.getTrieFn()
     debug newApiTxt, ctx, elapsed, trie
 
 when ProvideLegacyAPI:

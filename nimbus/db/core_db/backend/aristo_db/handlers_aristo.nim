@@ -40,16 +40,19 @@ type
     txError: CoreDbErrorCode     ## Transaction error code: account or MPT
 
   AristoCoreDxMptRef = ref object of CoreDxMptRef
-    ## Some extendion to recover embedded state
+    ## Some extension to recover embedded state
     ctx: AristoChildDbRef        ## Embedded state, typical var name: `cMpt`
 
   AristoCoreDxAccRef = ref object of CoreDxAccRef
-    ## Some extendion to recover embedded state
+    ## Some extension to recover embedded account. Note that the `cached`
+    ## version shares the `ctx` entry referred to entry with
+    ## `mptCache[AccountsTrie].ctx` from the cache array.
     ctx: AristoChildDbRef        ## Embedded state, typical var name: `cAcc`
 
-  AristoCoreDbVid* = ref object of CoreDbVidRef
+  AristoCoreDbTrie* = ref object of CoreDbTrieRef
     ## Vertex ID wrapper, optinally with *MPT* context
-    aVid: VertexID               ## Refers to root vertex
+    kind: CoreDbSubTrie          ## Current sub-trie
+    root: VertexID               ## Refers to root vertex
     case haveCtx: bool
     of true:
       ctx: AristoChildDbRef      ## *MPT* context, not `nil`
@@ -76,12 +79,15 @@ template logTxt(info: static[string]): static[string] =
 
 # -------------------------------
 
-func isValid(vid: CoreDbVidRef): bool =
-  not vid.isNil and vid.ready
+func isValid(trie: CoreDbTrieRef): bool =
+  not trie.isNil and trie.ready
 
-func to*(vid: CoreDbVidRef; T: type VertexID): T =
-  if vid.isValid:
-    return vid.AristoCoreDbVid.aVid
+func to*(trie: CoreDbTrieRef; T: type VertexID): T =
+  if trie.isValid:
+    return trie.AristoCoreDbTrie.root
+
+func to(address: EthAddress; T: type PathID): T =
+  HashKey.fromBytes(address.keccakHash.data).value.to(T)
 
 # -------------------------------
 
@@ -91,13 +97,13 @@ func toCoreDbAccount(
       ): CoreDbAccount =
   let db = cMpt.base.parent
   CoreDbAccount(
-    nonce:      acc.nonce,
-    balance:    acc.balance,
-    codeHash:   acc.codeHash,
-    storageVid: db.bless AristoCoreDbVid(
+    nonce:     acc.nonce,
+    balance:   acc.balance,
+    codeHash:  acc.codeHash,
+    stoTrie:   db.bless AristoCoreDbTrie(
       haveCtx: true,
       ctx:     cMpt,
-      aVid:    acc.storageID))
+      root:    acc.storageID))
 
 func toPayloadRef(acc: CoreDbAccount): PayloadRef =
   PayloadRef(
@@ -105,7 +111,7 @@ func toPayloadRef(acc: CoreDbAccount): PayloadRef =
     account: AristoAccount(
       nonce:     acc.nonce,
       balance:   acc.balance,
-      storageID: acc.storageVid.to(VertexID),
+      storageID: acc.stoTrie.to(VertexID),
       codeHash:  acc.codeHash))
 
 # -------------------------------
@@ -212,11 +218,11 @@ proc `=destroy`(cMpt: var AristoChildDbObj) =
 
 proc rootVidFn(
     cMpt: AristoChildDbRef;
-      ): CoreDbVidRef =
-  cMpt.base.parent.bless AristoCoreDbVid(
+      ): CoreDbTrieRef =
+  cMpt.base.parent.bless AristoCoreDbTrie(
     haveCtx: true,
     ctx:     cMpt,
-    aVid:    cMpt.root)
+    root:    cMpt.root)
 
 proc persistent(
     cMpt: AristoChildDbRef;
@@ -358,7 +364,7 @@ proc mptMethods(cMpt: AristoChildDbRef): CoreDbMptFns =
     hasPathFn: proc(k: openArray[byte]): CoreDbRc[bool] =
       cMpt.mptHasPath(k, "hasPathFn()"),
 
-    rootVidFn: proc(): CoreDbVidRef =
+    getTrieFn: proc(): CoreDbTrieRef =
       cMpt.rootVidFn(),
 
     isPruningFn: proc(): bool =
@@ -487,7 +493,7 @@ proc accMethods(cAcc: AristoChildDbRef): CoreDbAccFns =
     hasPathFn: proc(address: EthAddress): CoreDbRc[bool] =
       cAcc.accHasPath(address, "hasPathFn()"),
 
-    rootVidFn: proc(): CoreDbVidRef =
+    getTrieFn: proc(): CoreDbTrieRef =
       cAcc.rootVidFn(),
 
     isPruningFn: proc(): bool =
@@ -512,7 +518,7 @@ func toError*(
   db.bless(error, AristoCoreDbError(
     ctx:      info,
     isAristo: true,
-    aVid:     e[0],
+    root:     e[0],
     aErr:     e[1]))
 
 func toVoidRc*[T](
@@ -598,19 +604,19 @@ func getLevel*(base: AristoBaseRef): int =
 
 
 proc tryHash*(
-    vid: CoreDbVidRef;
+    vid: CoreDbTrieRef;
     info: static[string];
       ): CoreDbRc[Hash256] =
-  let vid = vid.AristoCoreDbVid
+  let vid = vid.AristoCoreDbTrie
   if not vid.haveCtx:
     let db = vid.base.parent
     return err(MptContextMissing.toError(db, info, HashNotAvailable))
 
-  let aVid = vid.to(VertexID)
-  if not aVid.isValid:
+  let root = vid.to(VertexID)
+  if not root.isValid:
     return ok(EMPTY_ROOT_HASH)
 
-  let rc = vid.ctx.mpt.getKeyRc aVid
+  let rc = vid.ctx.mpt.getKeyRc root
   if rc.isErr:
     let db = vid.ctx.base.parent
     return err(rc.error.toError(db, info, HashNotAvailable))
@@ -618,15 +624,15 @@ proc tryHash*(
   ok rc.value.to(Hash256)
 
 
-proc vidPrint*(vid: CoreDbVidRef): string =
+proc vidPrint*(vid: CoreDbTrieRef): string =
   if not vid.isNil:
     if not vid.ready:
       result &= "$?"
     else:
       let
-        vid = vid.AristoCoreDbVid
+        vid = vid.AristoCoreDbTrie
         rc = vid.tryHash("vidPrint()")
-      result = "(" & vid.aVid.toStr & ", "
+      result = "(" & vid.root.toStr & ", "
       if rc.isErr:
         result &= $rc.error.AristoCoreDbError.aErr
       else:
@@ -635,26 +641,26 @@ proc vidPrint*(vid: CoreDbVidRef): string =
 
 
 proc getHash*(
-    vid: CoreDbVidRef;
+    vid: CoreDbTrieRef;
     info: static[string];
       ): CoreDbRc[Hash256] =
-  let vid = vid.AristoCoreDbVid
+  let vid = vid.AristoCoreDbTrie
   if not vid.haveCtx:
     let db = vid.base.parent
     return err(MptContextMissing.toError(db, info, HashNotAvailable))
 
   let
     mpt = vid.ctx.mpt
-    aVid = vid.to(VertexID)
+    root = vid.to(VertexID)
 
-  if not aVid.isValid:
+  if not root.isValid:
     return ok(EMPTY_ROOT_HASH)
 
   let db = vid.ctx.base.parent
   ? mpt.hashify.toVoidRc(db, info, HashNotAvailable)
 
   let key = block:
-    let rc = mpt.getKeyRc aVid
+    let rc = mpt.getKeyRc root
     if rc.isErr:
       doAssert rc.error in {GetKeyNotFound,GetKeyUpdateNeeded}
       return err(rc.error.toError(db, info, HashNotAvailable))
@@ -663,19 +669,29 @@ proc getHash*(
   ok key.to(Hash256)
 
 
-proc getVid*(
+proc getTrie*(
     base: AristoBaseRef;
+    kind: CoreDbSubTrie;
     root: Hash256;
+    address: Option[EthAddress];
     info: static[string];
-      ): CoreDbRc[CoreDbVidRef] =
+      ): CoreDbRc[CoreDbTrieRef] =
   let
     db = base.parent
     adb = base.adb
+    ethAddr = (if address.isNone: EthAddress.default else: address.unsafeGet)
+    path = (if address.isNone: VOID_PATH_ID else: ethAddr.to(PathID))
   base.gc() # update pending changes
 
-  if not root.isValid:
-    return ok(db.bless AristoCoreDbVid(haveCtx: false, base: base))
+  if kind == StorageTrie and not path.isValid:
+    return err(aristo.MergeAccPathMissing.toError(db, info, AccAddrMissing))
 
+  if not root.isValid:
+    return ok(db.bless AristoCoreDbTrie(
+      kind:    kind,
+      haveCtx: false,
+      base:    base))
+ 
   ? adb.hashify.toVoidRc(db, info, HashNotAvailable)
 
   # Check whether hash is available as state root on main trie
@@ -684,10 +700,11 @@ proc getVid*(
     if rc.isErr:
       doAssert rc.error == GetKeyNotFound
     elif rc.value == root.to(HashKey):
-      return ok(db.bless AristoCoreDbVid(
+      return ok(db.bless AristoCoreDbTrie(
+        kind:    kind,
         haveCtx: false,
         base:    base,
-        aVid:    VertexID(1)))
+        root:    VertexID(1)))
     else:
       discard
 
@@ -702,12 +719,12 @@ proc getVid*(
 # Public constructors and related
 # ------------------------------------------------------------------------------
 
-proc verify*(base: AristoBaseRef; trie: CoreDbVidRef): bool =
+proc verify*(base: AristoBaseRef; trie: CoreDbTrieRef): bool =
   true
 
 proc newMptHandler*(
     base: AristoBaseRef;
-    root: CoreDbVidRef;
+    root: CoreDbTrieRef;
     saveMode: CoreDbSaveFlags;
     info: static[string];
       ): CoreDbRc[CoreDxMptRef] =
@@ -718,11 +735,11 @@ proc newMptHandler*(
     rID = root.to(VertexID)
 
   # Update `root` argument, handle default settings
-  var rVid = AristoCoreDbVid(nil)
+  var rVid = AristoCoreDbTrie(nil)
   if rID.isValid:
-    rVid = root.AristoCoreDbVid
+    rVid = root.AristoCoreDbTrie
   elif root.isNil:
-    rVid = AristoCoreDbVid(haveCtx: false, base: base)
+    rVid = AristoCoreDbTrie(haveCtx: false, base: base)
   else:
     let error = (rID, MptRootUnacceptable)
     return err(error.toError(db, info, RootUnacceptable))
@@ -753,7 +770,7 @@ proc newMptHandler*(
 
   # Make sure that the root object is usable on this MPT descriptor
   if rVid.haveCtx:
-    return err(VidContextLocked.toError(db, info, VidLocked))
+    return err(VidContextLocked.toError(db, info, TrieLocked))
 
   rVid.haveCtx = true
   rVid.ctx = AristoChildDbRef(
@@ -770,7 +787,7 @@ proc newMptHandler*(
 
 proc newAccHandler*(
     base: AristoBaseRef;
-    root: CoreDbVidRef;
+    root: CoreDbTrieRef;
     saveMode: CoreDbSaveFlags;
     info: static[string];
       ): CoreDbRc[CoreDxAccRef] =
@@ -781,11 +798,11 @@ proc newAccHandler*(
     rID = root.to(VertexID)
 
   # Update `root` argument, handle default settings
-  var rVid = root.AristoCoreDbVid
+  var rVid = root.AristoCoreDbTrie
   if rID.isValid:
-    rVid = root.AristoCoreDbVid
+    rVid = root.AristoCoreDbTrie
   elif root.isNil:
-    rVid = AristoCoreDbVid(haveCtx: false, base: base, aVid: VertexID(1))
+    rVid = AristoCoreDbTrie(haveCtx: false, base: base, root: VertexID(1))
   elif rID != VertexID(1):
     let error = (rID,AccRootUnacceptable)
     return err(error.toError(db, info, RootUnacceptable))
@@ -811,7 +828,7 @@ proc newAccHandler*(
 
   # Make sure that the root object is usable on this account descriptor
   if rVid.haveCtx:
-    return err(VidContextLocked.toError(db, info, VidLocked))
+    return err(VidContextLocked.toError(db, info, TrieLocked))
 
   rVid.haveCtx = true
   rVid.ctx = AristoChildDbRef(
