@@ -47,7 +47,7 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus) =
 
   let
     blockHash = memoryDB.getBlockHash(blockNumber)
-    witness = memoryDB.getBlockWitness(blockHash)
+    witness = memoryDB.getBlockWitness(blockHash).value()
     verifyWitnessResult = verifyWitness(parent.stateRoot, witness, {wfNoFlag})
 
   check verifyWitnessResult.isOk()
