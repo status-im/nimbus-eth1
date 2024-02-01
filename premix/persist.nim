@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2020-2023 Status Research & Development GmbH
+# Copyright (c) 2020-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -11,6 +11,7 @@
 # use this module to quickly populate db with data from geth/parity
 
 import
+  std/os,
   chronicles,
   ../nimbus/errors,
   ../nimbus/core/chain,
@@ -37,7 +38,7 @@ else:
 
 template persistToDb(db: CoreDbRef, body: untyped) =
   block: body
- 
+
 proc main() {.used.} =
   # 97 block with uncles
   # 46147 block with first transaction
@@ -58,12 +59,13 @@ proc main() {.used.} =
 
   # move head to block number ...
   if conf.head != 0.u256:
-    var parentBlock = requestBlock(conf.head)
+    var parentBlock = requestBlock(conf.head, { DownloadAndValidate })
     discard com.db.setHead(parentBlock.header)
 
   if canonicalHeadHashKey().toOpenArray notin com.db.kvt:
     persistToDb(com.db):
       com.initializeEmptyDb()
+      com.db.compensateLegacySetup()
     doAssert(canonicalHeadHashKey().toOpenArray in com.db.kvt)
 
   var head = com.db.getCanonicalHead()
@@ -78,9 +80,21 @@ proc main() {.used.} =
 
   var numBlocks = 0
   var counter = 0
+  var retryCount = 0
 
   while true:
-    var thisBlock = requestBlock(blockNumber)
+
+    var thisBlock: Block
+    try:
+      thisBlock = requestBlock(blockNumber, { DownloadAndValidate })
+    except CatchableError as e:
+      if retryCount < 3:
+        warn "Unable to get block data via JSON-RPC API", error = e.msg
+        inc retryCount
+        sleep(1000)
+        continue
+      else:
+        raise e
 
     headers.add thisBlock.header
     bodies.add thisBlock.body
@@ -111,7 +125,9 @@ when isMainModule:
 
   ## Processing command line arguments
   if configuration.processArguments(message) != Success:
-    echo message
+    if len(message) > 0:
+      echo message
+    echo "Usage: persist --datadir=<DATA_DIR> --maxblocks=<MAX_BLOCKS> --head=<HEAD> --numcommits=<NUM_COMMITS> --netid=<NETWORK_ID>"
     quit(QuitFailure)
   else:
     if len(message) > 0:

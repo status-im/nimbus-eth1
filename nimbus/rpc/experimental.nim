@@ -45,7 +45,9 @@ proc getBlockWitness*(
     # before trying to initialize the VM as we do here.
     vmState = BaseVMState.new(blockHeader, com)
     flags = if vmState.fork >= FKSpurious: {wfEIP170} else: {}
+
   vmState.generateWitness = true # Enable saving witness data
+  vmState.com.hardForkTransition(blockHeader)
 
   var dbTx = vmState.com.db.beginTransaction()
   defer: dbTx.dispose()
