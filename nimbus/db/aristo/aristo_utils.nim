@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -34,7 +34,7 @@ proc toAccount*(
     try:
       return ok(rlp.decode(payload.rlpBlob, Account))
     except RlpError:
-      return err(AccountRlpDecodingError)
+      return err(AccRlpDecodingError)
   of AccountData:
     var acc = Account(
       nonce:       payload.account.nonce,
@@ -56,7 +56,7 @@ proc toAccount*(
   ## Variant of `toAccount()` for a `Leaf` vertex.
   if vtx.isValid and vtx.vType == Leaf:
     return vtx.lData.toAccount db
-  err AccountVtxUnsupported
+  err AccVtxUnsupported
 
 proc toAccount*(
     node: NodeRef;
@@ -69,7 +69,7 @@ proc toAccount*(
       try:
         return ok(rlp.decode(node.lData.rlpBlob, Account))
       except RlpError:
-        return err(AccountRlpDecodingError)
+        return err(AccRlpDecodingError)
     of AccountData:
       var acc = Account(
         nonce:       node.lData.account.nonce,
@@ -78,13 +78,13 @@ proc toAccount*(
         storageRoot: EMPTY_ROOT_HASH)
       if node.lData.account.storageID.isValid:
         if not node.key[0].isValid:
-          return err(AccountStorageKeyMissing)
+          return err(AccStorageKeyMissing)
         acc.storageRoot = node.key[0].to(Hash256)
       return ok(acc)
     else:
       return err(PayloadTypeUnsupported)
 
-  err AccountNodeUnsupported
+  err AccNodeUnsupported
 
 # ---------------------
 
@@ -163,10 +163,13 @@ proc toNode*(
 
 
 proc subVids*(vtx: VertexRef): seq[VertexID] =
-  ## Returns the list of all sub-vertex IDs for the argument `vtx`
+  ## Returns the list of all sub-vertex IDs for the argument `vtx`.
   case vtx.vType:
   of Leaf:
-    discard
+    if vtx.lData.pType == AccountData:
+      let vid = vtx.lData.account.storageID
+      if vid.isValid:
+        result.add vid
   of Branch:
     for vid in vtx.bVid:
       if vid.isValid:

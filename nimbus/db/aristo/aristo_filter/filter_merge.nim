@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -94,6 +94,11 @@ proc merge*(
         newFilter.kMap.del vid
       else:
         return err((vid,rc.error))
+
+  # Check consistency
+  if (newFilter.src == newFilter.trg) !=
+       (newFilter.sTab.len == 0 and newFilter.kMap.len == 0):
+    return err((VertexID(0),FilSrcTrgInconsistent))
 
   ok newFilter
 

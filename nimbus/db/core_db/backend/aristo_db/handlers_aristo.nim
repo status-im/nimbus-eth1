@@ -307,7 +307,7 @@ proc mptMethods(cMpt: AristoChildDbRef): CoreDbMptFns =
     if not rootOk:
       cMpt.root = mpt.vidFetch(pristine=true)
 
-    let rc = mpt.merge(cMpt.root, k, v)
+    let rc = mpt.merge(cMpt.root, k, v, VOID_PATH_ID)
     if rc.isErr:
       # Re-cycle unused ID (prevents from leaking IDs)
       if not rootOk:
@@ -442,7 +442,7 @@ proc accMethods(cAcc: AristoChildDbRef): CoreDbAccFns =
       mpt = cAcc.mpt
       key = address.keccakHash.data
       val = acc.toPayloadRef()
-      rc = mpt.merge(cAcc.root, key, val)
+      rc = mpt.merge(cAcc.root, key, val, VOID_PATH_ID)
     if rc.isErr:
       return err(rc.error.toError(db, info))
     ok()
@@ -791,7 +791,7 @@ proc newAccHandler*(
   elif root.isNil:
     rVid = AristoCoreDbVid(haveCtx: false, base: base, aVid: VertexID(1))
   elif rID != VertexID(1):
-    let error = (rID,AccountRootUnacceptable)
+    let error = (rID,AccRootUnacceptable)
     return err(error.toError(db, info, RootUnacceptable))
 
   let (mode, mpt) = case saveMode:

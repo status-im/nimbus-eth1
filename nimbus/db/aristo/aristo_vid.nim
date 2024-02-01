@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -14,7 +14,7 @@
 {.push raises: [].}
 
 import
-  std/[algorithm, sequtils],
+  std/[algorithm, sequtils, typetraits],
   "."/[aristo_desc, aristo_layers]
 
 # ------------------------------------------------------------------------------
@@ -32,8 +32,8 @@ proc vidFetch*(db: AristoDbRef; pristine = false): VertexID =
   ## when creating leaf vertices.
   if db.vGen.len == 0:
     # Note that `VertexID(1)` is the root of the main trie
-    db.top.final.vGen = @[VertexID(3)]
-    result = VertexID(2)
+    db.top.final.vGen = @[VertexID(LEAST_FREE_VID+1)]
+    result = VertexID(LEAST_FREE_VID)
   elif db.vGen.len == 1 or pristine:
     result = db.vGen[^1]
     db.top.final.vGen[^1] = result + 1
@@ -41,6 +41,7 @@ proc vidFetch*(db: AristoDbRef; pristine = false): VertexID =
     result = db.vGen[^2]
     db.top.final.vGen[^2] = db.top.final.vGen[^1]
     db.top.final.vGen.setLen(db.vGen.len-1)
+  doAssert LEAST_FREE_VID <= result.distinctBase
 
 
 proc vidPeek*(db: AristoDbRef): VertexID =
@@ -48,7 +49,7 @@ proc vidPeek*(db: AristoDbRef): VertexID =
   ## would be returned by the `new()` function.
   case db.vGen.len:
   of 0:
-    VertexID(2)
+    VertexID(LEAST_FREE_VID)
   of 1:
     db.vGen[^1]
   else:
@@ -58,7 +59,7 @@ proc vidPeek*(db: AristoDbRef): VertexID =
 proc vidDispose*(db: AristoDbRef; vid: VertexID) =
   ## Recycle the argument `vtxID` which is useful after deleting entries from
   ## the vertex table to prevent the `VertexID` type key values small.
-  if VertexID(1) < vid:
+  if LEAST_FREE_VID <= vid.distinctBase:
     if db.vGen.len == 0:
       db.top.final.vGen = @[vid]
     else:

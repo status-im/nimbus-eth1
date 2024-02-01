@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/[algorithm, sequtils, sets, tables],
+  std/[algorithm, sequtils, sets, tables, typetraits],
   eth/[common, trie/nibbles],
   stew/interval_set,
   ../../aristo,
@@ -19,22 +19,23 @@ import
   ".."/[aristo_desc, aristo_get, aristo_layers, aristo_vid]
 
 const
-  Vid2 = @[VertexID(2)].toHashSet
+  Vid2 = @[VertexID(LEAST_FREE_VID)].toHashSet
 
 # ------------------------------------------------------------------------------
 # Private helper
 # ------------------------------------------------------------------------------
 
-proc invTo(s: IntervalSetRef[VertexID,uint64]; T: type HashSet[VertexID]): T =
-  ## Convert the complement of the argument list `s` to a set of vertex IDs
-  ## as it would appear with a vertex generator state list.
+proc to(s: IntervalSetRef[VertexID,uint64]; T: type HashSet[VertexID]): T =
+  ## Convert the argument list `s` to a set of vertex IDs as it would appear
+  ## with a vertex generator state list.
   if s.total < high(uint64):
     for w in s.increasing:
       if w.maxPt == high(VertexID):
         result.incl w.minPt # last interval
       else:
         for pt in w.minPt .. w.maxPt:
-          result.incl pt
+          if LEAST_FREE_VID <= pt.distinctBase:
+            result.incl pt
 
 proc toNodeBE(
     vtx: VertexRef;                    # Vertex to convert
@@ -90,7 +91,8 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
   ## Make sure that each vertex has a Merkle hash and vice versa. Also check
   ## the vertex ID generator state.
   let vids = IntervalSetRef[VertexID,uint64].init()
-  discard vids.merge Interval[VertexID,uint64].new(VertexID(1),high(VertexID))
+  discard vids.merge Interval[VertexID,uint64].new(
+    VertexID(LEAST_FREE_VID),high(VertexID))
 
   for (vid,vtx) in T.walkVtxBE db:
     if not vtx.isValid:
@@ -139,7 +141,7 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
       else:
         return err((VertexID(0),rc.error))
     let
-      vGenExpected = vids.invTo(HashSet[VertexID])
+      vGenExpected = vids.to(HashSet[VertexID])
       delta = vGenExpected -+- vGen # symmetric difference
     if 0 < delta.len:
       # Exclude fringe case when there is a single root vertex only
@@ -202,14 +204,19 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
     # Check vGen
     let
       vGen = db.vGen.vidReorg.toHashSet
-      vGenExpected = vids.invTo(HashSet[VertexID])
+      vGenExpected = vids.to(HashSet[VertexID])
       delta = vGenExpected -+- vGen # symmetric difference
     if 0 < delta.len:
-      # Exclude fringe case when there is a single root vertex only
-      if vGenExpected != Vid2 or 0 < vGen.len:
+      if vGen == Vid2 and vGenExpected.len == 0:
+        # Fringe case when the database is empty
+        discard
+      elif vGen.len == 0 and vGenExpected == Vid2:
+        # Fringe case when there is a single root vertex only
+        discard
+      else:
         let delta = delta.toSeq
-        # As happens with Merkle signature calculator: `root=VertexID(2)`
-        if delta.len != 1 or delta[0] != VertexID(1) or VertexID(1) in vGen:
+        if delta.len != 1 or
+           delta[0] != VertexID(1) or VertexID(1) in vGen:
           return err((delta.sorted[^1],CheckBeCacheGarbledVGen))
 
   ok()

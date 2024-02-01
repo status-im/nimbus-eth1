@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -21,10 +21,14 @@ import
   eth/[common, trie/nibbles],
   results,
   "."/[aristo_desc, aristo_get, aristo_hike, aristo_layers, aristo_path,
-       aristo_vid]
+       aristo_utils, aristo_vid]
 
 logScope:
   topics = "aristo-delete"
+
+type
+  SaveToVaeVidFn =
+    proc(err: AristoError): (VertexID,AristoError) {.gcsafe, raises: [].}
 
 # ------------------------------------------------------------------------------
 # Private heplers
@@ -33,6 +37,12 @@ logScope:
 func toVae(err: AristoError): (VertexID,AristoError) =
   ## Map single error to error pair with dummy vertex
   (VertexID(0),err)
+
+func toVae(vid: VertexID): SaveToVaeVidFn =
+  ## Map single error to error pair with argument vertex
+  result =
+    proc(err: AristoError): (VertexID,AristoError) =
+      return (vid,err)
 
 func toVae(err: (Hike,AristoError)): (VertexID,AristoError) =
   if 0 < err[0].legs.len:
@@ -268,7 +278,7 @@ proc collapseLeaf(
   # No need to update the cache unless `lf` is present there. The leaf path
   # as well as the value associated with the leaf path has not been changed.
   let lfTie = LeafTie(root: hike.root, path: rc.value)
-  if db.top.final.lTab.hasKey lfTie:
+  if db.lTab.hasKey lfTie:
     db.top.final.lTab[lfTie] = lf.vid
 
   # Clean up stale leaf vertex which has moved to root position
@@ -287,6 +297,39 @@ proc collapseLeaf(
   ok()
 
 # -------------------------
+
+proc delSubTree(
+    db: AristoDbRef;                   # Database, top layer
+    root: VertexID;                    # Root vertex
+      ): Result[void,(VertexID,AristoError)] =
+  ## Implementation of *delete* sub-trie.
+  if not root.isValid:
+    return err((root,DelSubTreeVoidRoot))
+  var
+    dispose = @[root]
+    rootVtx = db.getVtxRc(root).valueOr:
+      if error == GetVtxNotFound:
+        return ok()
+      return err((root,error))
+    follow = @[rootVtx]
+
+  # Collect list of nodes to delete
+  while 0 < follow.len:
+    var redo: seq[VertexRef]
+    for vtx in follow:
+      for vid in vtx.subVids:
+        let vtx = ? db.getVtxRc(vid).mapErr toVae(vid)
+        redo.add vtx
+        dispose.add vid
+      if SUB_TREE_DISPOSAL_MAX < dispose.len:
+        return err((VertexID(0),DelSubTreeTooBig))
+    redo.swap follow
+
+  # Mark nodes deleted
+  for vid in dispose:
+    db.disposeOfVtx vid
+  ok()
+
 
 proc deleteImpl(
     db: AristoDbRef;                   # Database, top layer
@@ -366,6 +409,13 @@ proc deleteImpl(
     # No need to keep it any longer in cache
     db.top.final.lTab.del lty
 
+  # Delete dependent leaf node storage tree if there is any
+  let data = lf.vtx.lData
+  if data.pType == AccountData:
+    let vid = data.account.storageID
+    if vid.isValid:
+      return db.delSubTree vid
+
   ok()
 
 # ------------------------------------------------------------------------------
@@ -374,9 +424,27 @@ proc deleteImpl(
 
 proc delete*(
     db: AristoDbRef;                   # Database, top layer
+    root: VertexID;                    # Root vertex
+      ): Result[void,(VertexID,AristoError)] =
+  ## Delete sub-trie below `root`. The maximum supported sub-tree size is
+  ## `SUB_TREE_DISPOSAL_MAX`. Larger tries must be disposed by walk-deleting
+  ## leaf nodes using `left()` or `right()` traversal functions.
+  ##
+  ## Caveat:
+  ##   There is no way to quickly verify that the `root` argument is isolated.
+  ##   Deleting random sub-trees might lead to an inconsistent database.
+  ##
+  db.delSubTree root
+
+proc delete*(
+    db: AristoDbRef;                   # Database, top layer
     hike: Hike;                        # Fully expanded chain of vertices
       ): Result[void,(VertexID,AristoError)] =
-  ## Delete argument `hike` chain of vertices from the database
+  ## Delete argument `hike` chain of vertices from the database.
+  ##
+  ## Note:
+  ##  If the leaf node has an account payload referring to a storage sub-trie,
+  ##  this one will be deleted as well.
   ##
   # Need path in order to remove it from `lTab[]`
   let lty = LeafTie(

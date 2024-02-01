@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -37,6 +37,9 @@ const
   VOID_HASH_LABEL* = HashLabel(key: VOID_HASH_KEY)
     ## Void equivalent for Merkle hash value
 
+  VOID_PATH_ID* = PathID()
+    ## Void equivalent for Merkle hash value
+
   EmptyQidPairSeq* = seq[(QueueID,QueueID)].default
     ## Useful shortcut
 
@@ -45,5 +48,18 @@ const
     ( 64,  63), ## Overflow list, 64 filters, skipping 63 filters in-between
     ( 64, 127), ## ..
     ( 64, 255)]
+
+  SUB_TREE_DISPOSAL_MAX* = 200_000
+    ## Some limit for disposing sub-trees in one go using `delete()`.
+
+  LEAST_FREE_VID* = 100
+    ## Vids smaller are used as known state roots and cannot be recycled. Only
+    ## the `VertexID(1)` state root is used by the `Aristo` methods. The other
+    ## numbers smaller than `LEAST_FREE_VID` may be used by application
+    ## functions with fixed assignments of the type of a state root (e.g. for
+    ## a receipt or a transaction root.)
+
+static:
+  doAssert 1 < LEAST_FREE_VID # must stay away from `VertexID(1)`
 
 # End

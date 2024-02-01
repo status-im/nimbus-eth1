@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -298,22 +298,23 @@ proc mergeRlpData*(
       ): Result[void,AristoError] =
   block body:
     discard db.merge(
-      LeafTie(
-        root:    VertexID(1),
-        path:    path.normal),
-      PayloadRef(
-        pType:   RlpData,
-        rlpBlob: @rlpData)).valueOr:
-          if error == MergeLeafPathCachedAlready:
-            break body
-          return err(error)
+      LeafTiePayload(
+        leafTie: LeafTie(
+          root:    VertexID(1),
+          path:    path.normal),
+        payload: PayloadRef(
+          pType:   RlpData,
+          rlpBlob: @rlpData))).valueOr:
+      if error in {MergeLeafPathCachedAlready,MergeLeafPathOnBackendAlready}:
+        break body
+      return err(error)
   ok()
 
 # ------------------------------------------------------------------------------
 # Public test function
 # ------------------------------------------------------------------------------
 
-proc testTxMergeAndDelete*(
+proc testTxMergeAndDeleteOneByOne*(
     noisy: bool;
     list: openArray[ProofTrieData];
     rdbPath: string;                          # Rocks DB storage directory
@@ -384,7 +385,7 @@ proc testTxMergeAndDelete*(
             " n=", n, "/", list.len,
             "\n    leaf=", leaf.pp(db),
             "\n    db\n    ", db.pp(backendOk=true),
-            "\n"
+            ""
 
       # Delete leaf
       block:
@@ -410,6 +411,85 @@ proc testTxMergeAndDelete*(
             if not db.revWalkVerify(leaf.root, leafsLeft, noisy, runID):
               return
 
+    when true and false:
+      noisy.say "***", "del(9) n=", n, "/", list.len, " nLeafs=", kvpLeafs.len
+
+  true
+
+
+proc testTxMergeAndDeleteSubTree*(
+    noisy: bool;
+    list: openArray[ProofTrieData];
+    rdbPath: string;                          # Rocks DB storage directory
+       ): bool =
+  var
+    prng = PrngDesc.init 42
+    db = AristoDbRef()
+    fwdRevVfyToggle = true
+  defer:
+    db.finish(flush=true)
+
+  for n,w in list:
+    # Start with brand new persistent database.
+    db = block:
+      if 0 < rdbPath.len:
+        let rc = AristoDbRef.init(RdbBackendRef, rdbPath, qidLayout=TxQidLyo)
+        xCheckRc rc.error == 0
+        rc.value
+      else:
+        AristoDbRef.init(MemBackendRef, qidLayout=TxQidLyo)
+
+    # Start transaction (double frame for testing)
+    xCheck db.txTop.isErr
+    var tx = db.txBegin().value.to(AristoDbRef).txBegin().value
+    xCheck tx.isTop()
+    xCheck tx.level == 2
+
+    # Reset database so that the next round has a clean setup
+    defer: db.innerCleanUp
+
+    # Merge leaf data into main trie (w/vertex ID 1)
+    let kvpLeafs = block:
+      var lst = w.kvpLst.mapRootVid VertexID(1)
+      # The list might be reduced for isolation of particular properties,
+      # e.g. lst.setLen(min(5,lst.len))
+      lst
+    for i,leaf in kvpLeafs:
+      let rc = db.merge leaf
+      xCheckRc rc.error == 0
+
+    # List of all leaf entries that should be on the database
+    var leafsLeft = kvpLeafs.mapIt(it.leafTie).toHashSet
+
+    # Provide a (reproducible) peudo-random copy of the leafs list
+    let leafVidPairs = db.randomisedLeafs prng
+    xCheck leafVidPairs.len == leafsLeft.len
+
+    # === delete sub-tree ===
+    block:
+      let saveBeOk = tx.saveToBackend(
+        chunkedMpt=false, relax=false, noisy=noisy, 1 + list.len * n)
+      xCheck saveBeOk:
+        noisy.say "***", "del(1)",
+          " n=", n, "/", list.len,
+          "\n    db\n    ", db.pp(backendOk=true),
+          ""
+    # Delete sub-tree
+    block:
+      let rc = db.delete VertexID(1)
+      xCheckRc rc.error == (0,0):
+        noisy.say "***", "del(2)",
+          " n=", n, "/", list.len,
+          "\n    db\n    ", db.pp(backendOk=true),
+          ""
+    block:
+      let saveBeOk = tx.saveToBackend(
+        chunkedMpt=false, relax=false, noisy=noisy, 2 + list.len * n)
+      xCheck saveBeOk:
+        noisy.say "***", "del(3)",
+          " n=", n, "/", list.len,
+          "\n    db\n    ", db.pp(backendOk=true),
+          ""
     when true and false:
       noisy.say "***", "del(9) n=", n, "/", list.len, " nLeafs=", kvpLeafs.len
 
@@ -480,7 +560,7 @@ proc testTxMergeProofAndKvpList*(
       xCheck proved.merged < db.nLayersLebal()
 
     let
-      merged = db.merge leafs
+      merged = db.mergeList leafs
 
     xCheck db.lTab.len == lTabLen + merged.merged
     xCheck merged.merged + merged.dups == leafs.len

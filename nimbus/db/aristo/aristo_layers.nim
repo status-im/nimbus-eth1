@@ -110,10 +110,13 @@ proc layersGetLabel*(db: AristoDbRef; vid: VertexID): Result[HashLabel,void] =
   ## cache that way.
   ##
   if db.top.delta.kMap.hasKey vid:
+    # This is ok regardless of the `dirty` flag. If this vertex has become
+    # dirty, there is an empty `kMap[]` entry on this layer.
     return ok(db.top.delta.kMap.getOrVoid vid)
 
   for w in db.stack.reversed:
     if w.delta.kMap.hasKey vid:
+      # Same reasoning as above regarding the `dirty` flag.
       return ok(w.delta.kMap.getOrVoid vid)
 
   err()
@@ -177,7 +180,7 @@ proc layersPutLabel*(db: AristoDbRef; vid: VertexID; lbl: HashLabel) =
   # Get previous label
   let blb = db.top.delta.kMap.getOrVoid vid
 
-  # Update label on `label->vid` mappiing table
+  # Update label on `label->vid` mapping table
   db.top.delta.kMap[vid] = lbl
   db.top.final.dirty = true # Modified top cache layers
 

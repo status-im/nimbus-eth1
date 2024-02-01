@@ -66,13 +66,14 @@ type
     CacheMissingNodekeys
 
     # Path function `hikeUp()`
-    HikeRootMissing
-    HikeEmptyPath
+    HikeBranchMissingEdge
     HikeBranchTailEmpty
-    HikeBranchBlindEdge
+    HikeEmptyPath
     HikeExtTailEmpty
     HikeExtTailMismatch
     HikeLeafUnexpected
+    HikeNoLegs
+    HikeRootMissing
 
     # Path/nibble/key conversions in `aisto_path.nim`
     PathExpected64Nibbles
@@ -94,6 +95,10 @@ type
     MergeNonBranchProofModeLock
     MergeRootBranchLinkBusy
     MergeRootMissing
+    MergeAccPathMissing
+    MergeAccUnaccessible
+    MergeAccPathWithoutLeaf
+    MergeAccWrongStorageRoot
     MergeAssemblyFailed # Ooops, internal error
 
     MergeHashKeyInvalid
@@ -188,6 +193,8 @@ type
     DelBranchWithoutRefs
     DelExtLocked
     DelVidStaleVtx
+    DelSubTreeTooBig
+    DelSubTreeVoidRoot
 
     # Functions from  `aristo_filter.nim`
     FilBackendMissing
@@ -213,6 +220,7 @@ type
     FilTrgSrcMismatch
     FilTrgTopSrcMismatch
     FilSiblingsCommitUnfinshed
+    FilSrcTrgInconsistent
 
     # Get functions from `aristo_get.nim`
     GetLeafMissing
@@ -227,6 +235,7 @@ type
 
     # Fetch functions from `aristo_fetch.nim`
     FetchPathNotFound
+    LeafKeyInvalid
 
     # RocksDB backend
     RdbBeCantCreateDataDir
@@ -252,21 +261,23 @@ type
     TxStackUnderflow
     TxGarbledSpan
 
-    # Functions from `aristo_desc`
+    # Functions from `aristo_desc.nim`
     MustBeOnCentre
     NotAllowedOnCentre
 
-    # Miscelaneous handy helpers
+    # Functions from `aristo_utils.nim`
+    AccRlpDecodingError
+    AccStorageKeyMissing
+    AccVtxUnsupported
+    AccNodeUnsupported
     PayloadTypeUnsupported
-    LeafKeyInvalid
-    AccountRootUnacceptable
-    AccountRlpDecodingError
-    AccountStorageKeyMissing
-    AccountVtxUnsupported
-    AccountNodeUnsupported
-    MptRootUnacceptable
+    
+    # Miscelaneous handy helpers
+    AccRootUnacceptable
     MptContextMissing
-    VidContextLocked
+    MptRootUnacceptable
     NotImplemented
+    VidContextLocked
+    VidRootMissing
 
 # End
