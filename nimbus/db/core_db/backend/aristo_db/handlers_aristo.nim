@@ -119,6 +119,7 @@ func toCoreDbAccount(
       ): CoreDbAccount =
   let db = cMpt.base.parent
   result = CoreDbAccount(
+    address:  address,
     nonce:    acc.nonce,
     balance:  acc.balance,
     codeHash: acc.codeHash)
@@ -537,14 +538,13 @@ proc accMethods(cAcc: AristoChildDbRef): CoreDbAccFns =
 
   proc accMerge(
       cAcc: AristoChildDbRef;
-      address: EthAddress;
       acc: CoreDbAccount;
       info: static[string];
         ): CoreDbRc[void] =
     let
       db = cAcc.base.parent
       mpt = cAcc.mpt
-      key = address.keccakHash.data
+      key = acc.address.keccakHash.data
       val = acc.toPayloadRef()
       rc = mpt.merge(cAcc.root, key, val, VOID_PATH_ID)
     if rc.isErr:
@@ -592,8 +592,8 @@ proc accMethods(cAcc: AristoChildDbRef): CoreDbAccFns =
     deleteFn: proc(address: EthAddress): CoreDbRc[void] =
       cAcc.accDelete(address, "deleteFn()"),
 
-    mergeFn: proc(address: EthAddress; acc: CoreDbAccount): CoreDbRc[void] =
-      cAcc.accMerge(address, acc, "mergeFn()"),
+    mergeFn: proc(acc: CoreDbAccount): CoreDbRc[void] =
+      cAcc.accMerge(acc, "mergeFn()"),
 
     hasPathFn: proc(address: EthAddress): CoreDbRc[bool] =
       cAcc.accHasPath(address, "hasPathFn()"),

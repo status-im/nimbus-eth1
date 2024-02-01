@@ -113,8 +113,9 @@ proc beginSavepoint*(ac: AccountsLedgerRef): LedgerSavePoint {.gcsafe.}
 # take this out once those are gone.
 proc rawTrie*(ac: AccountsLedgerRef): AccountLedger = ac.ledger
 
-func newCoreDbAccount: CoreDbAccount =
+func newCoreDbAccount(address: EthAddress): CoreDbAccount =
   CoreDbAccount(
+    address:  address,
     nonce:    emptyAcc.nonce,
     balance:  emptyAcc.balance,
     codeHash: emptyAcc.codeHash,
@@ -221,7 +222,7 @@ proc getAccount(ac: AccountsLedgerRef, address: EthAddress, shouldCreate = true)
 
   elif shouldCreate:
     result = RefAccount(
-      account: newCoreDbAccount(),
+      account: address.newCoreDbAccount(),
       flags: {Alive, IsNew})
 
   else:
@@ -272,11 +273,11 @@ proc storageValue(acc: RefAccount, slot: UInt256, ac: AccountsLedgerRef): UInt25
   do:
     result = acc.originalStorageValue(slot, ac)
 
-proc kill(acc: RefAccount) =
+proc kill(acc: RefAccount, address: EthAddress) =
   acc.flags.excl Alive
   acc.overlayStorage.clear()
   acc.originalStorage = nil
-  acc.account = newCoreDbAccount()
+  acc.account = address.newCoreDbAccount()
   acc.code = default(seq[byte])
 
 type
@@ -507,7 +508,7 @@ proc deleteAccount*(ac: AccountsLedgerRef, address: EthAddress) =
   # make sure all savepoints already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
   let acc = ac.getAccount(address)
-  acc.kill()
+  acc.kill(address)
 
 proc selfDestruct*(ac: AccountsLedgerRef, address: EthAddress) =
   ac.setBalance(address, 0.u256)
@@ -545,13 +546,13 @@ proc deleteEmptyAccount(ac: AccountsLedgerRef, address: EthAddress) =
     return
   if not acc.exists:
     return
-  acc.kill()
+  acc.kill(address)
 
 proc clearEmptyAccounts(ac: AccountsLedgerRef) =
   for address, acc in ac.savePoint.cache:
     if Touched in acc.flags and
         acc.isEmpty and acc.exists:
-      acc.kill()
+      acc.kill(address)
 
   # https://github.com/ethereum/EIPs/issues/716
   if ac.ripemdSpecial:
@@ -580,7 +581,7 @@ proc persist*(ac: AccountsLedgerRef,
         # storageRoot must be updated first
         # before persisting account into merkle trie
         acc.persistStorage(ac, clearCache)
-      ac.ledger.merge(address, acc.account)
+      ac.ledger.merge(acc.account)
     of Remove:
       ac.ledger.delete address
       if not clearCache:

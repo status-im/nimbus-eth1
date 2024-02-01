@@ -99,9 +99,9 @@ proc fetch*(al: AccountLedger; eAddr: EthAddress): Result[CoreDbAccount,void] =
   ## Using `fetch()` for trie data retrieval
   al.distinctBase.fetch(eAddr).mapErr(proc(ign: CoreDbErrorRef) = discard)
 
-proc merge*(al: AccountLedger; eAddr: EthAddress; account: CoreDbAccount) =
+proc merge*(al: AccountLedger; account: CoreDbAccount) =
   ## Using `merge()` for trie data storage
-  al.distinctBase.merge(eAddr, account).expect "AccountLedger/merge()"
+  al.distinctBase.merge(account).expect "AccountLedger/merge()"
 
 proc delete*(al: AccountLedger, eAddr: EthAddress) =
   al.distinctBase.delete(eAddr).expect "AccountLedger/delete()"

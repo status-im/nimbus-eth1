@@ -35,7 +35,8 @@ type
 
   CoreDbAccount* = object
     ## Generic account representation referencing an *MPT* sub-trie
-    nonce*:    AccountNonce ## Some `uint64` type
+    address*:  EthAddress    ## Reverse reference for storage trie path
+    nonce*:    AccountNonce  ## Some `uint64` type
     balance*:  UInt256
     stoTrie*:  CoreDbTrieRef ## Implies storage root sub-MPT
     codeHash*: Hash256
@@ -195,8 +196,7 @@ type
   CoreDbAccNewMptFn* = proc(): CoreDbRc[CoreDxMptRef] {.noRaise.}
   CoreDbAccFetchFn* = proc(k: EthAddress): CoreDbRc[CoreDbAccount] {.noRaise.}
   CoreDbAccDeleteFn* = proc(k: EthAddress): CoreDbRc[void] {.noRaise.}
-  CoreDbAccMergeFn* =
-    proc(k: EthAddress; v: CoreDbAccount): CoreDbRc[void] {.noRaise.}
+  CoreDbAccMergeFn* = proc(v: CoreDbAccount): CoreDbRc[void] {.noRaise.}
   CoreDbAccHasPathFn* = proc(k: EthAddress): CoreDbRc[bool] {.noRaise.}
   CoreDbAccGetTrieFn* = proc(): CoreDbTrieRef {.noRaise.}
   CoreDbAccIsPruningFn* = proc(): bool {.noRaise.}

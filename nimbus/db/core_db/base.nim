@@ -913,12 +913,13 @@ proc delete*(acc: CoreDxAccRef; address: EthAddress): CoreDbRc[void] =
 
 proc merge*(
     acc: CoreDxAccRef;
-    address: EthAddress;
     account: CoreDbAccount;
       ): CoreDbRc[void] =
   acc.setTrackNewApi AccMergeFn
-  result = acc.methods.mergeFn(address, account)
-  acc.ifTrackNewApi: debug newApiTxt, ctx, elapsed, address, result
+  result = acc.methods.mergeFn account
+  acc.ifTrackNewApi:
+    let address = account.address
+    debug newApiTxt, ctx, elapsed, address, result
 
 proc hasPath*(acc: CoreDxAccRef; address: EthAddress): CoreDbRc[bool] =
   ## Would be named `contains` if it returned `bool` rather than `Result[]`.

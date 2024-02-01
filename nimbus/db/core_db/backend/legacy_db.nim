@@ -156,6 +156,7 @@ proc toCoreDbAccount(
       {.gcsafe, raises: [RlpError].} =
   let acc = rlp.decode(data, Account)
   result = CoreDbAccount(
+    address:  address,
     nonce:    acc.nonce,
     balance:  acc.balance,
     codeHash: acc.codeHash)
@@ -326,9 +327,9 @@ proc accMethods(mpt: HexaryChildDbRef; db: LegacyDbRef): CoreDbAccFns =
         mpt.trie.del(k.keccakHash.data)
       ok(),
 
-    mergeFn: proc(k: EthAddress; v: CoreDbAccount): CoreDbRc[void] =
+    mergeFn: proc(v: CoreDbAccount): CoreDbRc[void] =
       db.mapRlpException("mergeFn()"):
-        mpt.trie.put(k.keccakHash.data, rlp.encode v.toAccount)
+        mpt.trie.put(v.address.keccakHash.data, rlp.encode v.toAccount)
       ok(),
 
     hasPathFn: proc(k: EthAddress): CoreDbRc[bool] =
