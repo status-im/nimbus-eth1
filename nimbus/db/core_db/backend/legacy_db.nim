@@ -35,6 +35,8 @@ type
     trie: HexaryTrie              ## For closure descriptor for capturing
     when CoreDbEnableApiTracking:
       kind: CoreDbSubTrie         ## Current sub-trie
+      address: Option[EthAddress] ## For storage tree debugging
+      accPath: Blob               ## For storage tree debugging
 
   LegacyCoreDxTxRef = ref object of CoreDxTxRef
     ltx: DbTransaction            ## Legacy transaction descriptor
@@ -51,6 +53,8 @@ type
     root: Hash256                 ## Hash key
     when CoreDbEnableApiTracking:
       kind: CoreDbSubTrie         ## Current sub-trie
+      address: Option[EthAddress] ## For storage tree debugging
+      accPath: Blob               ## For storage tree debugging
 
   LegacyCoreDbError = ref object of CoreDbErrorRef
     ctx: string                   ## Exception or error context info
@@ -120,6 +124,13 @@ func triePrint(trie: CoreDbTrieRef): string =
       var trie = LegacyCoreDbTrie(trie)
       when CoreDbEnableApiTracking:
         result = "(" & $trie.kind & ","
+        if trie.address.isSome:
+          result &= "@"
+          if trie.accPath.len == 0:
+            result &= "ø"
+          else:
+            result &= trie.accPath.toHex & ","
+          result &= "%" & trie.address.unsafeGet.toHex & ","
       if trie.root != EMPTY_ROOT_HASH:
         result &= "£" & trie.root.data.toHex
       else:
@@ -150,6 +161,10 @@ proc toCoreDbAccount(
     codeHash: acc.codeHash)
   if acc.storageRoot != EMPTY_ROOT_HASH:
     result.stoTrie = db.bless LegacyCoreDbTrie(root: acc.storageRoot)
+    when CoreDbEnableApiTracking:
+      result.stoTrie.LegacyCoreDbTrie.kind = StorageTrie # redundant, ord() = 0
+      result.stoTrie.LegacyCoreDbTrie.address = some(address)
+      result.stoTrie.LegacyCoreDbTrie.accPath = @(address.keccakHash.data)
 
 
 proc toAccount(
@@ -272,6 +287,8 @@ proc mptMethods(mpt: HexaryChildDbRef; db: LegacyDbRef): CoreDbMptFns =
       var trie = LegacyCoreDbTrie(root: mpt.trie.rootHash)
       when CoreDbEnableApiTracking:
         trie.kind = mpt.kind
+        trie.address = mpt.address
+        trie.accPath = mpt.accPath
       db.bless(trie),
 
     isPruningFn: proc(): bool =
@@ -322,6 +339,8 @@ proc accMethods(mpt: HexaryChildDbRef; db: LegacyDbRef): CoreDbAccFns =
       var trie = LegacyCoreDbTrie(root: mpt.trie.rootHash)
       when CoreDbEnableApiTracking:
         trie.kind = mpt.kind
+        trie.address = mpt.address
+        trie.accPath = mpt.accPath
       db.bless(trie),
 
     isPruningFn: proc(): bool =
@@ -399,6 +418,13 @@ proc baseMethods(
   let tdb = db.tdb
   CoreDbBaseFns(
     verifyFn: proc(trie: CoreDbTrieRef): bool =
+      when CoreDbEnableApiTracking:
+        let trie = trie.LegacyCoreDbTrie
+        if trie.kind == StorageTrie:
+          if trie.root != EMPTY_ROOT_HASH and trie.address.isNone:
+            return false
+        else:
+          discard # at the moment
       true,
 
     backendFn: proc(): CoreDbBackendRef =
@@ -434,6 +460,9 @@ proc baseMethods(
       var trie = LegacyCoreDbTrie(root: root)
       when CoreDbEnableApiTracking:
         trie.kind = kind
+        trie.address = address
+        if address.isSome:
+          trie.accPath = @(address.unsafeGet.keccakHash.data)
       ok(db.bless trie),
 
     newKvtFn: proc(saveMode: CoreDbSaveFlags): CoreDbRc[CoreDxKvtRef] =
@@ -449,6 +478,8 @@ proc baseMethods(
         if not trie.isNil and trie.ready:
           let trie = trie.LegacyCoreDbTrie
           mpt.kind = trie.kind
+          mpt.address = trie.address
+          mpt.accPath = trie.accPath
       ok(db.bless CoreDxMptRef(methods: mpt.mptMethods db)),
 
     newAccFn: proc(

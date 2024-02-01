@@ -38,6 +38,8 @@ type
     ## Sub-handle for triggering destructor when it goes out of scope.
     base: AristoBaseRef          ## Local base descriptor
     root: VertexID               ## State root, may be zero unless account
+    when CoreDbEnableApiTracking:
+      address: EthAddress        ## For storage tree debugging
     accPath: PathID              ## Needed for storage tries
     mpt: AristoDbRef             ## Descriptor, may be copy of `base.adb`
     saveMode: CoreDbSaveFlags    ## When to store/discard
@@ -57,6 +59,8 @@ type
     ## Vertex ID wrapper, optinally with *MPT* context
     kind: CoreDbSubTrie          ## Current sub-trie
     root: VertexID               ## State root, (may differ from `kind.ord`)
+    when CoreDbEnableApiTracking:
+      address: EthAddress        ## For storage tree debugging
     accPath: PathID              ## Needed for storage tries
     ctx: AristoChildDbRef        ## *MPT* context, may be `nil`
     reset: bool                  ## Delete request
@@ -124,6 +128,8 @@ func toCoreDbAccount(
       root:    acc.storageID,
       accPath: address.to(PathID),
       ctx:     cMpt)
+    when CoreDbEnableApiTracking:
+      result.stoTrie.AristoCoreDbTrie.address = address
 
 
 func toPayloadRef(acc: CoreDbAccount): PayloadRef =
@@ -268,6 +274,8 @@ proc newTrieCtx(
     mpt:      mpt,
     saveMode: mode,
     txError:  MptTxPending)
+  when CoreDbEnableApiTracking:
+    trie.AristoCoreDbTrie.ctx.address = trie.address
 
   ok((db.bless trie).AristoCoreDbTrie)
 
@@ -316,6 +324,8 @@ proc getTrieFn(
     root:      root,
     accPath:   cMpt.accPath,
     ctx:       cMpt)
+  when CoreDbEnableApiTracking:
+    result.AristoCoreDbTrie.address = cMpt.address
 
 
 proc persistent(
@@ -728,6 +738,9 @@ proc triePrint*(
         result &= ",@" & $trie.accPath
       elif trie.kind == StorageTrie:
         result &= ",@ø"
+      when CoreDbEnableApiTracking:
+        if trie.address != EthAddress.default:
+          result &= ",%" & $trie.address.toHex
       if rc.isErr:
         result &= "," & $rc.error.AristoCoreDbError.aErr
       else:
@@ -785,11 +798,14 @@ proc getTrie*(
     return err(aristo.MergeAccPathMissing.toError(db, info, AccAddrMissing))
 
   if not root.isValid:
-    return ok(db.bless AristoCoreDbTrie(
+    var trie = AristoCoreDbTrie(
       kind:    kind,
       root:    VertexID(kind),
       accPath: path,
-      reset:   AccountsTrie < kind))
+      reset:   AccountsTrie < kind)
+    when CoreDbEnableApiTracking:
+      trie.address = ethAddr
+    return ok(db.bless trie)
 
   ? adb.hashify.toVoidRc(db, info, HashNotAvailable)
 
@@ -799,10 +815,13 @@ proc getTrie*(
     if rc.isErr:
       doAssert rc.error == GetKeyNotFound
     elif rc.value == root.to(HashKey):
-      return ok(db.bless AristoCoreDbTrie(
+      var trie = AristoCoreDbTrie(
         kind:    kind,
         root:    VertexID(kind),
-        accPath: path))
+        accPath: path)
+      when CoreDbEnableApiTracking:
+        trie.address = ethAddr
+      return ok(db.bless trie)
     else:
       discard
 
