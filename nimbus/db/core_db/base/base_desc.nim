@@ -35,10 +35,10 @@ type
 
   CoreDbAccount* = object
     ## Generic account representation referencing an *MPT* sub-trie
-    nonce*:      AccountNonce ## Some `uint64` type
-    balance*:    UInt256
-    stoTrie*:    CoreDbTrieRef ## Implies storage root sub-MPT
-    codeHash*:   Hash256
+    nonce*:    AccountNonce ## Some `uint64` type
+    balance*:  UInt256
+    stoTrie*:  CoreDbTrieRef ## Implies storage root sub-MPT
+    codeHash*: Hash256
 
   CoreDbErrorCode* = enum
     Unset = 0
@@ -52,6 +52,7 @@ type
     AccAddrMissing
     AccTxPending
     RootNotFound
+    AutoFlushFailed
     RootUnacceptable
     HashNotAvailable
     TrieLocked

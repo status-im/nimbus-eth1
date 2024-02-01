@@ -110,13 +110,13 @@ proc baseMethods(
       db.adbBase.getLevel,
 
     tryHashFn: proc(trie: CoreDbTrieRef): CoreDbRc[Hash256] =
-      trie.tryHash("tryHashFn()"),
+      db.adbBase.tryHash(trie, "tryHashFn()"),
 
     rootHashFn: proc(trie: CoreDbTrieRef): CoreDbRc[Hash256] =
-      trie.getHash("rootHashFn()"),
+      db.adbBase.rootHash(trie, "rootHashFn()"),
 
-    triePrintFn: proc(trie: CoreDbTrieRef): string =
-      trie.vidPrint(),
+    triePrintFn: proc(vid: CoreDbTrieRef): string =
+      db.adbBase.triePrint(vid),
 
     errorPrintFn: proc(e: CoreDbErrorRef): string =
       e.errorPrint(),
