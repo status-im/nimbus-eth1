@@ -55,6 +55,7 @@ import
 
 # Need to be selective due to the `Block` type conflict from downloader
 from ../network/history/history_network import encode
+from ../../nimbus/utils/utils import calcTxRoot, calcReceiptRoot
 
 chronicles.formatIt(IoErrorCode): $it
 
@@ -293,6 +294,9 @@ proc cmdExportEra1(config: ExporterConf) =
       if (let e = io2.removeFile(tmpName); e.isErr):
         warn "Failed to clean up incomplete era1 file", tmpName, error = e.error
 
+
+# TODO: This is rather a quick version for testing but will be replaced with one
+# that makes use of the block index. There are some flaws in it currently.
 proc cmdVerifyEra1(config: ExporterConf) =
   let f = openFile(config.era1FileName, {OpenFlags.Read}).valueOr:
     error "Can't open ", file = config.era1FileName
@@ -300,17 +304,18 @@ proc cmdVerifyEra1(config: ExporterConf) =
   defer: discard closeFile(f)
 
   var
-    headers = 0
-    bodies = 0
-    receipts = 0
-    ttds = 0
-    others = 0
+    headerRecords = 0
+    bodyRecords = 0
+    receiptsRecords = 0
+    ttdsRecords = 0
+    otherRecords = 0
 
     data: seq[byte]
+    headers: seq[BlockHeader]
+    ttds: seq[UInt256]
 
   while true:
     let header = readRecord(f, data).valueOr:
-      info "Read record failed", error
       break
 
     if header.typ == CompressedHeader:
@@ -319,10 +324,12 @@ proc cmdVerifyEra1(config: ExporterConf) =
         try:
           rlp.decode(uncompressed, BlockHeader)
         except RlpError as e:
-          error "Invalid block header", msg = e.msg, blockNumber = headers
+          error "Invalid block header", msg = e.msg, blockNumber = headerRecords
           quit 1
 
-      headers += 1
+      headers.add(header)
+
+      headerRecords += 1
 
     elif header.typ == CompressedBody:
       let uncompressed = decodeFramed(data, checkIntegrity = false)
@@ -330,40 +337,60 @@ proc cmdVerifyEra1(config: ExporterConf) =
         try:
           rlp.decode(uncompressed, BlockBody)
         except RlpError as e:
-          error "Invalid block body", msg = e.msg, blockNumber = bodies
+          error "Invalid block body", msg = e.msg, blockNumber = bodyRecords
           quit 1
 
-      # TODO: verify txRoot & ommersHash
+      let txRoot = calcTxRoot(body.transactions)
+      let ommershHash = keccakHash(rlp.encode(body.uncles))
 
-      bodies += 1
+      if txRoot != headers[^1].txRoot:
+        error "Invalid txs root", blockNumber = bodyRecords
+        quit 1
+
+      if ommershHash != headers[^1].ommersHash:
+        error "Invalid ommers hash", blockNumber = bodyRecords
+        quit 1
+
+      bodyRecords += 1
     elif header.typ == CompressedReceipts:
       let uncompressed = decodeFramed(data, checkIntegrity = false)
-      let body =
+      let receipts =
         try:
           rlp.decode(uncompressed, seq[Receipt])
         except RlpError as e:
-          error "Invalid receipts", msg = e.msg, blockNumber = receipts
+          error "Invalid receipts", msg = e.msg, blockNumber = receiptsRecords
           quit 1
 
-      # TODO: verify receiptRoot
+      let receiptRoot = calcReceiptRoot(receipts)
 
-      receipts += 1
-    elif header.typ == TotalDifficulty:
-      if data.len != 32:
-        error "TTD is not 32 bytes", blockNumber = ttds
+      if receiptRoot != headers[^1].receiptRoot:
+        error "Invalid receipts root", blockNumber = receiptsRecords
         quit 1
 
-      ttds += 1
-    elif header.typ == era1.Accumulator:
-      info "Accumulator root", data = data.to0xHex()
+      receiptsRecords += 1
+    elif header.typ == TotalDifficulty:
+      if data.len != 32:
+        error "TTD is not 32 bytes", blockNumber = ttdsRecords
+        quit 1
 
-      # Note: could bake in the master accumulator and check roots
+      ttds.add(UInt256.fromBytesLE(data))
+
+      ttdsRecords += 1
+    elif header.typ == era1.Accumulator:
+      let accumulatorRoot = buildEpochAccumulatorRoot(headers, ttds)
+      if data == accumulatorRoot.data:
+        info "Accumulator root matches", data = data.to0xHex()
+      else:
+        error "Accumulator root does not match", data = data.to0xHex()
+
+      # Note: could bake in the master accumulator and check actual value of the
+      # roots
 
     else:
       info "Skipping record", typ = toHex(header.typ)
-      others += 1
+      otherRecords += 1
 
-  notice "Done", headers, bodies, receipts, ttds, others
+  notice "Done", headerRecords, bodyRecords, receiptsRecords, ttdsRecords, otherRecords
 
 when isMainModule:
   {.pop.}
