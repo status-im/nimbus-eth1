@@ -10,7 +10,10 @@
 
 import
   std/[os, parseopt, strutils],
-  eth/common, stint, ../nimbus/config
+  eth/common,
+  stint,
+  chronicles,
+  ../nimbus/config
 
 from ../nimbus/common/chain_config import
   MainNet,
@@ -101,10 +104,12 @@ proc processArguments*(msg: var string): ConfigStatus =
   for kind, key, value in opt.getopt():
     case kind
     of cmdArgument:
-      discard
+      return EmptyOption
     of cmdLongOption, cmdShortOption:
       inc(length)
       case key.toLowerAscii()
+      of "help":
+        return EmptyOption
       of "datadir": config.dataDir = value
       of "maxblocks":
         checkArgument(processInteger, config.maxBlocks, value)
@@ -118,9 +123,14 @@ proc processArguments*(msg: var string): ConfigStatus =
       else:
         msg = "Unknown option " & key
         if value.len > 0: msg = msg & " : " & value
-        result = ErrorUnknownOption
-        break
+        return ErrorUnknownOption
     of cmdEnd:
       msg = "Error processing option [" & key & "]"
-      result = ErrorParseOption
-      break
+      return ErrorParseOption
+
+  info "Using configuration parameters: ",
+      datadir = config.dataDir,
+      maxblocks = config.maxBlocks,
+      head = config.head,
+      numcommits = config.numCommits,
+      netid = config.netId

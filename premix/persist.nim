@@ -112,7 +112,9 @@ when isMainModule:
 
   ## Processing command line arguments
   if configuration.processArguments(message) != Success:
-    echo message
+    if len(message) > 0:
+      echo message
+    echo "Usage: persist --datadir=<DATA_DIR> --maxblocks=<MAX_BLOCKS> --head=<HEAD> --numcommits=<NUM_COMMITS> --netid=<NETWORK_ID>"
     quit(QuitFailure)
   else:
     if len(message) > 0:
