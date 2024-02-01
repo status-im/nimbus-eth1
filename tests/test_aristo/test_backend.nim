@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -94,35 +94,45 @@ proc mergeData(
 
   true
 
+
 proc verify(
     ly: LayerRef;                            # Database layer
-    be: MemBackendRef|RdbBackendRef;         # Backend
+    be: BackendRef;                          # Backend
     noisy: bool;
       ): bool =
-  ## ..
 
-  let
-    beSTab = be.walkVtx.toSeq.mapIt((it[0],it[1])).toTable
-    beKMap = be.walkKey.toSeq.mapIt((it[0],it[1])).toTable
-
-  for vid in beSTab.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID):
+  proc verifyImpl[T](noisy: bool; ly: LayerRef; be: T): bool =
+    ## ..
     let
-      nVtx = ly.delta.sTab.getOrVoid vid
-      mVtx = beSTab.getOrVoid vid
+      beSTab = be.walkVtx.toSeq.mapIt((it[0],it[1])).toTable
+      beKMap = be.walkKey.toSeq.mapIt((it[0],it[1])).toTable
 
-    xCheck (nVtx != VertexRef(nil))
-    xCheck (mVtx != VertexRef(nil))
-    xCheck nVtx == mVtx:
-      noisy.say "***", "verify",
-        " beType=", be.typeof,
-        " vid=", vid.pp,
-        " nVtx=", nVtx.pp,
-        " mVtx=", mVtx.pp
+    for vid in beSTab.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID):
+      let
+        nVtx = ly.delta.sTab.getOrVoid vid
+        mVtx = beSTab.getOrVoid vid
 
-    xCheck beSTab.len == ly.delta.sTab.len
-    xCheck beKMap.len == ly.delta.kMap.len
+      xCheck (nVtx != VertexRef(nil))
+      xCheck (mVtx != VertexRef(nil))
+      xCheck nVtx == mVtx:
+        noisy.say "***", "verify",
+          " beType=", be.typeof,
+          " vid=", vid.pp,
+          " nVtx=", nVtx.pp,
+          " mVtx=", mVtx.pp
 
-  true
+      xCheck beSTab.len == ly.delta.sTab.len
+      xCheck beKMap.len == ly.delta.kMap.len
+
+    true
+
+  case be.kind:
+  of BackendMemory:
+    noisy.verifyImpl(ly, be.MemBackendRef)
+  of BackendRocksDB:
+    noisy.verifyImpl(ly, be.RdbBackendRef)
+  else:
+    raiseAssert "Oops, unsupported backend " & $be.kind
 
 # -----------
 
@@ -147,46 +157,42 @@ proc collectFilter(
 
   true
 
-proc verifyFiltersImpl[T](
-    be: T;
-    tab: Table[QueueID,Hash];
-    noisy: bool;
-      ): bool =
-  ## Compare stored filters against registered ones
-  var n = 0
-  for (fid,filter) in be.walkFilBe:
-    let
-      filterHash = filter.hash
-      registered = tab.getOrDefault(fid, BlindHash)
-
-    xCheck (registered != BlindHash)
-    xCheck registered == filterHash:
-      noisy.say "***", "verifyFiltersImpl",
-        " n=", n+1,
-        " fid=", fid.pp,
-        " filterHash=", filterHash.int.toHex,
-        " registered=", registered.int.toHex
-
-    n.inc
-
-  xCheck n == tab.len
-  true
-
 proc verifyFilters(
     db: AristoDbRef;
     tab: Table[QueueID,Hash];
     noisy: bool;
       ): bool =
+
+  proc verifyImpl[T](noisy: bool; tab: Table[QueueID,Hash]; be: T): bool =
+    ## Compare stored filters against registered ones
+    var n = 0
+    for (fid,filter) in walkFilBe(be):
+      let
+        filterHash = filter.hash
+        registered = tab.getOrDefault(fid, BlindHash)
+
+      xCheck (registered != BlindHash)
+      xCheck registered == filterHash:
+        noisy.say "***", "verifyFiltersImpl",
+          " n=", n+1,
+          " fid=", fid.pp,
+          " filterHash=", filterHash.int.toHex,
+          " registered=", registered.int.toHex
+
+      n.inc
+
+    xCheck n == tab.len
+    true
+
   ## Wrapper
   let be = db.backend
   case be.kind:
   of BackendMemory:
-    return be.MemBackendRef.verifyFiltersImpl(tab, noisy)
+    noisy.verifyImpl(tab, be.MemBackendRef)
   of BackendRocksDB:
-    return be.RdbBackendRef.verifyFiltersImpl(tab, noisy)
+    noisy.verifyImpl(tab, be.RdbBackendRef)
   else:
-    discard
-  check db.backend.kind == BackendMemory or db.backend.kind == BackendRocksDB
+    raiseAssert "Oops, unsupported backend " & $be.kind
 
 # ------------------------------------------------------------------------------
 # Public test function
@@ -195,9 +201,8 @@ proc verifyFilters(
 proc testBackendConsistency*(
     noisy: bool;
     list: openArray[ProofTrieData];          # Test data
-    rdbPath: string;                         # Rocks DB storage directory
+    rdbPath = "";                            # Rocks DB storage directory
     resetDb = false;
-    doRdbOk = true;
       ): bool =
   ## Import accounts
   var
@@ -211,8 +216,6 @@ proc testBackendConsistency*(
   defer:
     rdb.finish(flush=true)
 
-  xCheck rdbPath != ""
-
   for n,w in list:
     if w.root != rootKey or resetDB:
       rootKey = w.root
@@ -220,71 +223,66 @@ proc testBackendConsistency*(
       ndb = AristoDbRef.init()
       mdb = AristoDbRef.init MemBackendRef
 
-      if doRdbOk:
-        if not rdb.backend.isNil: # ignore bootstrap
-          let verifyFiltersOk = rdb.verifyFilters(filTab, noisy)
-          xCheck verifyFiltersOk
-          filTab.clear
-        rdb.finish(flush=true)
+      if not rdb.backend.isNil: # ignore bootstrap
+        let verifyFiltersOk = rdb.verifyFilters(filTab, noisy)
+        xCheck verifyFiltersOk
+        filTab.clear
+      rdb.finish(flush=true)
+      if 0 < rdbPath.len:
         let rc = AristoDbRef.init(RdbBackendRef, rdbPath)
         xCheckRc rc.error == 0
         rdb = rc.value
+      else:
+        rdb = AristoDbRef.init MemBackendRef # fake `rdb` database
 
-        # Disable automated filter management, still allow filter table access
-        # for low level read/write testing.
-        rdb.backend.filters = QidSchedRef(nil)
+      # Disable automated filter management, still allow filter table access
+      # for low level read/write testing.
+      rdb.backend.filters = QidSchedRef(nil)
     count.inc
 
     xCheck ndb.backend.isNil
     xCheck not mdb.backend.isNil
-    xCheck doRdbOk or not rdb.backend.isNil
 
     when true and false:
-      noisy.say "***", "beCon(1) <", n, "/", list.len-1, ">", " groups=", count
+      noisy.say "***", "beCon(1) <", n, "/", list.len-1, ">",
+        " groups=", count,
+        "\n    ndb\n    ", ndb.pp(backendOk = true),
+        "\n    -------------",
+        "\n    mdb\n    ", mdb.pp(backendOk = true),
+        "\n    -------------",
+        "\n    rdb\n    ", rdb.pp(backendOk = true),
+        "\n    -------------"
 
     block:
       let
         rootVid = VertexID(1)
-        leafs = w.kvpLst.mapRootVid VertexID(1) # for merging it into main trie
+        leafs = w.kvpLst.mapRootVid rootVid # for merging it into main trie
 
-      block:
-        let ndbOk = ndb.mergeData(
-          rootKey, rootVid, w.proof, leafs, noisy=false)
-        xCheck ndbOk
-      block:
-        let mdbOk = mdb.mergeData(
-          rootKey, rootVid, w.proof, leafs, noisy=false)
-        xCheck mdbOk
-      if doRdbOk: # optional
-        let rdbOk = rdb.mergeData(
-          rootKey, rootVid, w.proof, leafs, noisy=false)
-        xCheck rdbOk
+      let ndbOk = ndb.mergeData(rootKey, rootVid, w.proof, leafs, noisy=false)
+      xCheck ndbOk
 
-      when true and false:
-        noisy.say "***", "beCon(2) <", n, "/", list.len-1, ">",
-          " groups=", count,
-          "\n    cache dump\n    ", ndb.pp,
-          "\n    backend dump\n    ", ndb.backend.pp(ndb),
-          "\n    -------------",
-          "\n    mdb cache\n    ", mdb.pp,
-          "\n    mdb backend\n    ", mdb.backend.pp(ndb),
-          "\n    -------------",
-          "\n    rdb cache\n    ", rdb.pp,
-          "\n    rdb backend\n    ", rdb.backend.pp(ndb),
-          "\n    -------------"
+      let mdbOk = mdb.mergeData(rootKey, rootVid, w.proof, leafs, noisy=false)
+      xCheck mdbOk
+
+      let rdbOk = rdb.mergeData(rootKey, rootVid, w.proof, leafs, noisy=false)
+      xCheck rdbOk
 
     when true and false:
-      noisy.say "***", "beCon(4) <", n, "/", list.len-1, ">", " groups=", count
+      noisy.say "***", "beCon(2) <", n, "/", list.len-1, ">",
+        " groups=", count,
+        "\n    ndb\n    ", ndb.pp(backendOk = true),
+        "\n    -------------",
+        "\n    mdb\n    ", mdb.pp(backendOk = true),
+        #"\n    -------------",
+        #"\n    rdb\n    ", rdb.pp(backendOk = true),
+        "\n    -------------"
 
     var
-      mdbPreSaveCache, mdbPreSaveBackend: string
-      rdbPreSaveCache, rdbPreSaveBackend: string
-    when true: # and false:
-      #mdbPreSaveCache = mdb.pp
-      #mdbPreSaveBackend = mdb.backend.pp(mdb)
-      rdbPreSaveCache = rdb.pp
-      rdbPreSaveBackend = rdb.backend.pp(rdb)
-
+      mdbPreSave = ""
+      rdbPreSave = ""
+    when true and false:
+      mdbPreSave = mdb.pp(backendOk = true)
+      rdbPreSave = rdb.pp(backendOk = true)
 
     # Provide filter, store filter on permanent BE, and register filter digest
     block:
@@ -298,44 +296,35 @@ proc testBackendConsistency*(
       #noisy.say "***", "db-dump\n    ", mdb.pp
       let rc = mdb.stow(persistent=true, chunkedMpt=true)
       xCheckRc rc.error == 0
-
-    if doRdbOk:
+    block:
       let rc = rdb.stow(persistent=true, chunkedMpt=true)
       xCheckRc rc.error == 0
 
     block:
-      let mdbVerifyOk = ndb.top.verify(mdb.backend.MemBackendRef, noisy)
+      let mdbVerifyOk = ndb.top.verify(mdb.backend, noisy)
       xCheck mdbVerifyOk:
         when true and false:
           noisy.say "***", "beCon(4) <", n, "/", list.len-1, ">",
             " groups=", count,
-            "\n    ndb cache\n    ", ndb.pp,
-            "\n    ndb backend=", ndb.backend.isNil.not,
+            "\n    ndb\n    ", ndb.pp(backendOk = true),
             #"\n    -------------",
-            #"\n    mdb pre-save cache\n    ", mdbPreSaveCache,
-            #"\n    mdb pre-save backend\n    ", mdbPreSaveBackend,
+            #"\n    mdb pre-stow\n    ", mdbPreSave,
             "\n    -------------",
-            "\n    mdb cache\n    ", mdb.pp,
-            "\n    mdb backend\n    ", mdb.backend.pp(ndb),
+            "\n    mdb\n    ", mdb.pp(backendOk = true),
             "\n    -------------"
 
-    if doRdbOk:
-      let rdbVerifyOk = ndb.top.verify(rdb.backend.RdbBackendRef, noisy)
+      let rdbVerifyOk = ndb.top.verify(rdb.backend, noisy)
       xCheck rdbVerifyOk:
         when true and false:
-          noisy.say "***", "beCon(4) <", n, "/", list.len-1, ">",
+          noisy.say "***", "beCon(5) <", n, "/", list.len-1, ">",
             " groups=", count,
-            "\n    ndb cache\n    ", ndb.pp,
-            "\n    ndb backend=", ndb.backend.isNil.not,
+            "\n    ndb\n    ", ndb.pp(backendOk = true),
             "\n    -------------",
-            "\n    rdb pre-save cache\n    ", rdbPreSaveCache,
-            "\n    rdb pre-save backend\n    ", rdbPreSaveBackend,
+            "\n    rdb pre-stow\n    ", rdbPreSave,
             "\n    -------------",
-            "\n    rdb cache\n    ", rdb.pp,
-            "\n    rdb backend\n    ", rdb.backend.pp(ndb),
+            "\n    rdb\n    ", rdb.pp(backendOk = true),
             #"\n    -------------",
-            #"\n    mdb cache\n    ", mdb.pp,
-            #"\n    mdb backend\n    ", mdb.backend.pp(ndb),
+            #"\n    mdb\n    ", mdb.pp(backendOk = true),
             "\n    -------------"
 
     when true and false:
