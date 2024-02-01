@@ -89,7 +89,7 @@ proc main() {.used.} =
       thisBlock = requestBlock(blockNumber, { DownloadAndValidate })
     except CatchableError as e:
       if retryCount < 3:
-        warn "Unable to block data via JSON-RPC API", error = e.msg
+        warn "Unable to get block data via JSON-RPC API", error = e.msg
         inc retryCount
         sleep(1000)
         continue
