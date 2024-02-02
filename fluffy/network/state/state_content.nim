@@ -13,7 +13,6 @@
 import
   nimcrypto/[hash, sha2, keccak], stew/results, stint,
   eth/common/eth_types,
-  eth/trie/nibbles,
   ssz_serialization,
   ../../common/common_types
 
@@ -129,9 +128,8 @@ func toContentId*(contentKey: ByteList): ContentId =
 func toContentId*(contentKey: ContentKey): ContentId =
   toContentId(encode(contentKey))
 
-func packNibbles*(nibbles: seq[byte]): Nibbles {.raises: ValueError} =
-  if nibbles.len() > MAX_UNPACKED_NIBBLES_LEN:
-    raise newException(ValueError, "Can't pack more than 64 nibbles")
+func packNibbles*(nibbles: seq[byte]): Nibbles =
+  doAssert(nibbles.len() <= MAX_UNPACKED_NIBBLES_LEN, "Can't pack more than 64 nibbles")
   
   let
     isOddLength = (nibbles.len() %% 2 == 1)
@@ -152,9 +150,8 @@ func packNibbles*(nibbles: seq[byte]): Nibbles {.raises: ValueError} =
 
   Nibbles(isOddLength: isOddLength, packedNibbles: Nibbles.packedNibbles.init(output))
 
-func unpackNibbles*(nibbles: Nibbles): seq[byte] {.raises: ValueError} =
-  if nibbles.packedNibbles.len() > MAX_PACKED_NIBBLES_LEN:
-    raise newException(ValueError, "Can't unpack more than 32 nibbles")
+func unpackNibbles*(nibbles: Nibbles): seq[byte] =
+  doAssert(nibbles.packedNibbles.len() <= MAX_PACKED_NIBBLES_LEN, "Can't unpack more than 32 nibbles")
 
   var output = newSeq[byte]()
 
