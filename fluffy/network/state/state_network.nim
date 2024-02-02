@@ -94,6 +94,38 @@ proc validateContent(
       error "Received offered content failed validation", contentKey
       return false
 
+# proc recursiveGossip(
+#     n: StateNetwork,
+#     contentKey: ContentKey,
+#     contentValue: seq[byte]): Future[void] {.async.} =
+#     # TODO Implement recursive gossiping
+
+# proc gossipContent(
+#     n: StateNetwork,
+#     contentKey: ContentKey,
+#     contentValue: seq[byte]): Future[void] {.async.} =
+#   let key = contentKey.decode().valueOr:
+#     return false
+#   case key.contentType:
+#     of unused:
+#       doAssert(true, "Gossiping content with unused content type")
+#     of accountTrieNode:
+#       await recursiveGossip(n.portalProtocol, contentKey, contentValue)
+#     of contractTrieNode:
+#       await recursiveGossip(n.portalProtocol, contentKey, contentValue)
+#     of contractCode:
+#       asyncSpawn n.portalProtocol.neighborhoodGossipDiscardPeers(
+#         maybeContentId, contentKeys, contentValues
+#       )
+
+# proc gossipContent(
+#     n: StateNetwork,
+#     contentKeys: ContentKeysList,
+#     contentValues: seq[seq[byte]]): Future[void] {.async.} =
+#   for i, contentValue in contentValues:
+#     let contentKey = contentKeys[i]
+#     await gossipContent(n.portalProtocol, contentKey, contentValue)
+
 proc new*(
     T: type StateNetwork,
     baseProtocol: protocol.Protocol,
