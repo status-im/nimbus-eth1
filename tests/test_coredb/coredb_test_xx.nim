@@ -48,12 +48,12 @@ const
     name:      "fail-goerli",
     network:   bulkTest2.network,
     file:      bulkTest2.file,
-    numBlocks: 147_621)
+    numBlocks: 12_842)
 
   failSample1* = CaptureSpecs(
     name:      "fail-main",
     network:   bulkTest3.network,
     file:      bulkTest3.file,
-    numBlocks: 51922)
+    numBlocks: 100_000)
 
 # End
