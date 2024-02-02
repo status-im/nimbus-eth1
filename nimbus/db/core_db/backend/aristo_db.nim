@@ -18,17 +18,19 @@ import
   ".."/[base, base/base_desc],
   ./aristo_db/[common_desc, handlers_aristo, handlers_kvt]
 
+import
+  ../../aristo/aristo_init/memory_only as aristo_memory_only
+
 include
   ./aristo_db/aristo_replicate
 
-# Annotation helpers
+# Annotation helper(s)
 {.pragma:  noRaise, gcsafe, raises: [].}
 {.pragma: rlpRaise, gcsafe, raises: [AristoApiRlpError].}
 
 export
   AristoApiRlpError,
-  AristoCoreDbKvtBE,
-  memory_only
+  AristoCoreDbKvtBE
 
 type
   AristoCoreDbRef* = ref object of CoreDbRef
@@ -88,14 +90,15 @@ proc txMethods(
       if kTx.isTop: ? kTx.rollback.toVoidRc(db, info)
       ok())
 
-
 proc baseMethods(
     db: AristoCoreDbRef;
     A:  typedesc;
     K:  typedesc;
       ): CoreDbBaseFns =
-  let db = db
   CoreDbBaseFns(
+    verifyFn: proc(trie: CoreDbTrieRef): bool =
+      db.adbBase.verify(trie),
+
     backendFn: proc(): CoreDbBackendRef =
       db.bless(AristoCoreDbBE()),
 
@@ -106,14 +109,14 @@ proc baseMethods(
     levelFn: proc(): int =
       db.adbBase.getLevel,
 
-    tryHashFn: proc(vid: CoreDbVidRef): CoreDbRc[Hash256] =
-      vid.tryHash("tryHashFn()"),
+    tryHashFn: proc(trie: CoreDbTrieRef): CoreDbRc[Hash256] =
+      db.adbBase.tryHash(trie, "tryHashFn()"),
 
-    vidHashFn: proc(vid: CoreDbVidRef): CoreDbRc[Hash256] =
-      vid.getHash("vidHashFn()"),
+    rootHashFn: proc(trie: CoreDbTrieRef): CoreDbRc[Hash256] =
+      db.adbBase.rootHash(trie, "rootHashFn()"),
 
-    vidPrintFn: proc(vid: CoreDbVidRef): string =
-      vid.vidPrint(),
+    triePrintFn: proc(vid: CoreDbTrieRef): string =
+      db.adbBase.triePrint(vid),
 
     errorPrintFn: proc(e: CoreDbErrorRef): string =
       e.errorPrint(),
@@ -121,28 +124,32 @@ proc baseMethods(
     legacySetupFn: proc() =
       discard,
 
-    getRootFn: proc(root: Hash256): CoreDbRc[CoreDbVidRef] =
-      db.adbBase.getVid(root, "getRootFn()"),
+    getTrieFn: proc(
+        kind: CoreDbSubTrie;
+        root: Hash256;
+        address: Option[EthAddress];
+          ): CoreDbRc[CoreDbTrieRef] =
+      db.adbBase.getTrie(kind, root, address, "getTrieFn()"),
 
     newKvtFn: proc(saveMode: CoreDbSaveFlags): CoreDbRc[CoreDxKvtRef] =
       db.kdbBase.gc()
-      ok(? db.kdbBase.newKvtHandler(saveMode, "newKvtFn()")),
+      db.kdbBase.newKvtHandler(saveMode, "newKvtFn()"),
 
     newMptFn: proc(
-        root: CoreDbVidRef;
+        trie: CoreDbTrieRef;
         prune: bool; # ignored
         saveMode: CoreDbSaveFlags;
           ): CoreDbRc[CoreDxMptRef] =
-      db.kdbBase.gc()
-      ok(? db.adbBase.newMptHandler(root, saveMode, "newMptFn()")),
+      db.adbBase.gc()
+      db.adbBase.newMptHandler(trie, saveMode, "newMptFn()"),
 
     newAccFn: proc(
-        root: CoreDbVidRef;
+        trie: CoreDbTrieRef;
         prune: bool; # ignored
         saveMode: CoreDbSaveFlags;
           ): CoreDbRc[CoreDxAccRef] =
-      db.kdbBase.gc()
-      ok(? db.adbBase.newAccHandler(root, saveMode, "newAccFn()")),
+      db.adbBase.gc()
+      ok(? db.adbBase.newAccHandler(trie, saveMode, "newAccFn()")),
 
     beginFn: proc(): CoreDbRc[CoreDxTxRef] =
       const info = "beginFn()"

@@ -31,9 +31,6 @@ import
   results,
   ".."/[core_db, storage_types]
 
-from ../aristo
-  import isValid
-
 type
   AccountLedger* = distinct CoreDxAccRef
   StorageLedger* = distinct CoreDxPhkRef
@@ -74,10 +71,10 @@ proc db*(t: SomeLedger): CoreDbRef =
   t.distinctBase.parent
 
 proc rootHash*(t: SomeLedger): Hash256 =
-  t.distinctBase.rootVid().hash().expect "SomeLedger/rootHash()"
+  t.distinctBase.getTrie().rootHash().expect "SomeLedger/rootHash()"
 
-proc rootVid*(t: SomeLedger): CoreDbVidRef =
-  t.distinctBase.rootVid
+proc getTrie*(t: SomeLedger): CoreDbTrieRef =
+  t.distinctBase.getTrie()
 
 # ------------------------------------------------------------------------------
 # Public functions: accounts ledger
@@ -86,46 +83,36 @@ proc rootVid*(t: SomeLedger): CoreDbVidRef =
 proc init*(
     T: type AccountLedger;
     db: CoreDbRef;
-    rootHash: Hash256;
-    isPruning = true;
+    root: Hash256;
+    pruneOk = true;
       ): T =
-  const info = "AccountLedger/getRoot(): "
-
-  var vid = CoreDbVidRef(nil)
-  if rootHash.isValid:
-    let rc = db.getRoot(rootHash)
-    if rc.isErr:
-      raiseAssert info & $$rc.error
-    vid = rc.value
-
-  let acc = block:
-    let rc = db.newAccMpt(vid, isPruning, Shared)
-    if rc.isErr:
-      raiseAssert info & $$rc.error
-    rc.value
-
-  acc.T
+  db.newAccMpt(root, pruneOk, Shared).T
 
 proc init*(
     T: type AccountLedger;
     db: CoreDbRef;
-    isPruning = true;
+    pruneOk = true;
       ): T =
-  db.newAccMpt(isPruning, Shared).AccountLedger
+  db.newAccMpt(EMPTY_ROOT_HASH, pruneOk, Shared).AccountLedger
 
 proc fetch*(al: AccountLedger; eAddr: EthAddress): Result[CoreDbAccount,void] =
   ## Using `fetch()` for trie data retrieval
   al.distinctBase.fetch(eAddr).mapErr(proc(ign: CoreDbErrorRef) = discard)
 
-proc merge*(al: AccountLedger; eAddr: EthAddress; account: CoreDbAccount) =
+proc merge*(al: AccountLedger; account: CoreDbAccount) =
   ## Using `merge()` for trie data storage
-  al.distinctBase.merge(eAddr, account).expect "AccountLedger/merge()"
+  al.distinctBase.merge(account).expect "AccountLedger/merge()"
 
 proc delete*(al: AccountLedger, eAddr: EthAddress) =
   al.distinctBase.delete(eAddr).expect "AccountLedger/delete()"
 
 proc persistent*(al: AccountLedger) =
-  al.distinctBase.persistent()
+  let rc = al.distinctBase.persistent()
+  if rc.isErr:
+    if rc.error.error != AccTxPending:
+      raiseAssert "persistent oops, error=" & $$rc.error
+    discard al.distinctBase.getTrie.rootHash.valueOr:
+      raiseAssert "re-hash oops, error=" & $$error
 
 # ------------------------------------------------------------------------------
 # Public functions: storage ledger
@@ -135,27 +122,33 @@ proc init*(
     T: type StorageLedger;
     al: AccountLedger;
     account: CoreDbAccount;
-    isPruning = false;
+    reHashOk = true;
+    pruneOk = false;
       ): T =
   ## Storage trie constructor.
   ##
-  ## Note that the argument `isPruning` should be left `false` on the legacy
+  ## Note that the argument `pruneOk` should be left `false` on the legacy
   ## `CoreDb` backend. Otherwise, pruning might kill some unwanted entries from
   ## storage tries ending up with an unstable database leading to crashes (see
   ## https://github.com/status-im/nimbus-eth1/issues/932.)
   const
     info = "StorageLedger/init(): "
   let
-    vid = account.storageVid
+    db = al.distinctBase.parent
+    stt = account.stoTrie
+
+  if not stt.isNil and reHashOk:
+    let rc = al.distinctBase.getTrie.rootHash
+    if rc.isErr:
+      raiseAssert "re-hash oops, error=" & $$rc.error
+  let
+    trie = if stt.isNil: db.getTrie(account.address) else: stt
     mpt = block:
-      let rc = al.distinctBase.parent.newMpt(vid, isPruning, Shared)
+      let rc = db.newMpt(trie, pruneOk, Shared)
       if rc.isErr:
         raiseAssert info & $$rc.error
       rc.value
   mpt.toPhk.T
-
-#proc init*(T: type StorageLedger; db: CoreDbRef, isPruning = false): T =
-#  db.newMpt(CoreDbVidRef(nil), isPruning, Shared).toPhk.T
 
 proc fetch*(sl: StorageLedger, slot: UInt256): Result[Blob,void] =
   sl.distinctBase.fetch(slot.toBytesBE).mapErr proc(ign: CoreDbErrorRef)=discard
@@ -174,12 +167,12 @@ iterator storage*(
   ## For given account, iterate over storage slots
   const
     info = "storage(): "
-  let
-    vid = account.storageVid
-    mpt = al.distinctBase.parent.newMpt(vid, saveMode=Shared).valueOr:
+  let trie = account.stoTrie
+  if not trie.isNil:
+    let mpt = al.distinctBase.parent.newMpt(trie, saveMode=Shared).valueOr:
       raiseAssert info & $$error
-  for (key,val) in mpt.pairs:
-    yield (key,val)
+    for (key,val) in mpt.pairs:
+      yield (key,val)
 
 # ------------------------------------------------------------------------------
 # End

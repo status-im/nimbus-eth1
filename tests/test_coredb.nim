@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -37,11 +37,11 @@ const
 # ------------------------------------------------------------------------------
 
 proc findFilePath(
-     file: string;
-     baseDir: openArray[string] = baseDir;
-     repoDir: openArray[string] = repoDir;
-     subDir: openArray[string] = subDir;
-       ): Result[string,void] =
+    file: string;
+    baseDir: openArray[string] = baseDir;
+    repoDir: openArray[string] = repoDir;
+    subDir: openArray[string] = subDir;
+      ): Result[string,void] =
   for dir in baseDir:
     if dir.dirExists:
       for repo in repoDir:
@@ -116,7 +116,13 @@ proc initRunnerDB(
     networkId = network,
     params = network.networkParams,
     ldgType = ldgType)
+
   result.initializeEmptyDb
+
+  setErrorLevel()
+  coreDB.trackLegaApi = false
+  coreDB.trackNewApi = false
+  coreDB.localDbOnly = false
 
 # ------------------------------------------------------------------------------
 # Test Runners: accounts and accounts storages
@@ -157,6 +163,7 @@ proc chainSyncRunner(
         com.db.trackNewApi = true
         com.db.trackNewApi = true
         com.db.trackLedgerApi = true
+        com.db.localDbOnly = true
 
       check noisy.testChainSync(filePath, com, numBlocks,
         lastOneExtra=lastOneExtra, enaLogging=enaLogging)
@@ -178,7 +185,7 @@ when isMainModule:
   # dumps `bulkTest2`, `bulkTest3`, .. from the `nimbus-eth1-blobs` package.
   # For specs see `tests/test_coredb/bulk_test_xx.nim`.
   var testList = @[bulkTest0] # This test is superseded by `bulkTest1` and `2`
-  #testList = @[failSample0]
+  testList = @[failSample0]
   when true and false:
     testList = @[bulkTest2, bulkTest3]
 
@@ -187,7 +194,7 @@ when isMainModule:
     noisy.profileSection("@testList #" & $n, state):
       noisy.chainSyncRunner(
         capture=capture,
-        #dbType=AristoDbMemory,
+        dbType=AristoDbMemory,
         ldgType=LedgerCache,
         #enaLogging=true
       )

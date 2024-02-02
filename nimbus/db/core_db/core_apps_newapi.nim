@@ -118,13 +118,13 @@ iterator getBlockTransactionData*(
       ): Blob =
   block body:
     let
-      root = db.getRoot(transactionRoot).valueOr:
+      trie = db.getTrie(TxTrie, transactionRoot).valueOr:
         warn logTxt "getBlockTransactionData()",
-          transactionRoot, action="getRoot()", `error`=($$error)
+          transactionRoot, action="getTrie()", `error`=($$error)
         break body
-      transactionDb = db.newMpt(root).valueOr:
+      transactionDb = db.newMpt(trie).valueOr:
         warn logTxt "getBlockTransactionData()", transactionRoot,
-          action="fetch()", error=($$error)
+          action="newMpt()", trie=($$trie), error=($$error)
         break body
     var transactionIdx = 0
     while true:
@@ -165,13 +165,13 @@ iterator getWithdrawalsData*(
       ): Blob =
   block body:
     let
-      root = db.getRoot(withdrawalsRoot).valueOr:
+      trie = db.getTrie(WithdrawalsTrie, withdrawalsRoot).valueOr:
         warn logTxt "getWithdrawalsData()",
-          withdrawalsRoot, action="getRoot()", error=($$error)
+          withdrawalsRoot, action="getTrie()", error=($$error)
         break body
-      wddb = db.newMpt(root).valueOr:
+      wddb = db.newMpt(trie).valueOr:
         warn logTxt "getWithdrawalsData()",
-          withdrawalsRoot, action="getRoot()", error=($$error)
+          withdrawalsRoot, action="newMpt()", trie=($$trie), error=($$error)
         break body
     var idx = 0
     while true:
@@ -192,13 +192,13 @@ iterator getReceipts*(
       {.gcsafe, raises: [RlpError].} =
   block body:
     let
-      root = db.getRoot(receiptRoot).valueOr:
+      trie = db.getTrie(ReceiptsTrie, receiptRoot).valueOr:
         warn logTxt "getWithdrawalsData()",
-          receiptRoot, action="getRoot()", error=($$error)
+          receiptRoot, action="getTrie()", error=($$error)
         break body
-      receiptDb = db.newMpt(root).valueOr:
+      receiptDb = db.newMpt(trie).valueOr:
         warn logTxt "getWithdrawalsData()",
-          receiptRoot, action="getRoot()", error=($$error)
+          receiptRoot, action="newMpt()", trie=($$trie), error=($$error)
         break body
     var receiptIdx = 0
     while true:
@@ -530,21 +530,22 @@ proc persistTransactions*(
   const
     info = "persistTransactions()"
   let
-    mpt = db.newMpt()
+    mpt = db.newMpt(TxTrie)
     kvt = db.newKvt()
   for idx, tx in transactions:
     let
+      encodedKey = rlp.encode(idx)
       encodedTx = rlp.encode(tx.removeNetworkPayload)
       txHash = rlpHash(tx) # beware EIP-4844
       blockKey = transactionHashToBlockKey(txHash)
       txKey: TransactionKey = (blockNumber, idx)
-    mpt.merge(rlp.encode(idx), encodedTx).isOkOr:
+    mpt.merge(encodedKey, encodedTx).isOkOr:
       warn logTxt info, idx, action="merge()", error=($$error)
       return EMPTY_ROOT_HASH
     kvt.put(blockKey.toOpenArray, rlp.encode(txKey)).isOkOr:
       warn logTxt info, blockKey, action="put()", error=($$error)
       return EMPTY_ROOT_HASH
-  mpt.rootVid.hash().valueOr:
+  mpt.getTrie.rootHash.valueOr:
     warn logTxt info, action="hash()"
     return EMPTY_ROOT_HASH
 
@@ -558,15 +559,16 @@ proc getTransaction*(
   const
     info = "getTransaction()"
   let
-    root = db.getRoot(txRoot).valueOr:
-      warn logTxt info, txRoot, action="getRoot()", `error`=($$error)
+    trie = db.getTrie(TxTrie, txRoot).valueOr:
+      warn logTxt info, txRoot, action="getTrie()", error=($$error)
       return false
-    mpt = db.newMpt(root).valueOr:
-      warn logTxt info, txRoot, action="getRoot()", `error`=($$error)
+    mpt = db.newMpt(trie).valueOr:
+      warn logTxt info,
+        txRoot, action="newMpt()", trie=($$trie), error=($$error)
       return false
     txData = mpt.fetch(rlp.encode(txIndex)).valueOr:
       if error.error != MptNotFound:
-        warn logTxt info, txIndex, action="fetch()", `error`=($$error)
+        warn logTxt info, txIndex, action="fetch()", error=($$error)
       return false
   res = rlp.decode(txData, Transaction)
   true
@@ -578,16 +580,17 @@ proc getTransactionCount*(
   const
     info = "getTransactionCount()"
   let
-    root = db.getRoot(txRoot).valueOr:
-      warn logTxt info, txRoot, action="getRoot()", `error`=($$error)
+    trie = db.getTrie(TxTrie, txRoot).valueOr:
+      warn logTxt info, txRoot, action="getTrie()", error=($$error)
       return 0
-    mpt = db.newMpt(root).valueOr:
-      warn logTxt info, txRoot, action="getRoot()", `error`=($$error)
+    mpt = db.newMpt(trie).valueOr:
+      warn logTxt info, txRoot,
+        action="newMpt()", trie=($$trie), error=($$error)
       return 0
   var txCount = 0
   while true:
     let hasPath = mpt.hasPath(rlp.encode(txCount)).valueOr:
-      warn logTxt info, txCount, action="hasPath()", `error`=($$error)
+      warn logTxt info, txCount, action="hasPath()", error=($$error)
       return 0
     if hasPath:
       inc txCount
@@ -631,12 +634,12 @@ proc persistWithdrawals*(
     withdrawals: openArray[Withdrawal];
       ): Hash256 =
   const info = "persistWithdrawals()"
-  let mpt = db.newMpt()
+  let mpt = db.newMpt(WithdrawalsTrie)
   for idx, wd in withdrawals:
     mpt.merge(rlp.encode(idx), rlp.encode(wd)).isOkOr:
       warn logTxt info, idx, action="merge()", error=($$error)
       return EMPTY_ROOT_HASH
-  mpt.rootVid.hash().valueOr:
+  mpt.getTrie.rootHash.valueOr:
     warn logTxt info, action="hash()"
     return EMPTY_ROOT_HASH
 
@@ -777,11 +780,11 @@ proc persistReceipts*(
     receipts: openArray[Receipt];
       ): Hash256 =
   const info = "persistReceipts()"
-  let mpt = db.newMpt()
+  let mpt = db.newMpt(ReceiptsTrie)
   for idx, rec in receipts:
     mpt.merge(rlp.encode(idx), rlp.encode(rec)).isOkOr:
       warn logTxt info, idx, action="merge()", error=($$error)
-  mpt.rootVid.hash().valueOr:
+  mpt.getTrie.rootHash.valueOr:
     warn logTxt info, action="hash()"
     return EMPTY_ROOT_HASH
 

@@ -29,11 +29,11 @@ type
     AccDeleteFn         = "acc/delete"
     AccFetchFn          = "acc/fetch"
     AccForgetFn         = "acc/forget"
+    AccGetTrieFn        = "acc/getTrie"
     AccHasPathFn        = "acc/hasPath"
     AccMergeFn          = "acc/merge"
     AccNewMptFn         = "acc/newMpt"
     AccPersistentFn     = "acc/persistent"
-    AccRootVidFn        = "acc/toPhk"
     AccToMptFn          = "acc/toMpt"
 
     AnyBackendFn        = "any/backend"
@@ -42,7 +42,7 @@ type
     BaseCaptureFn       = "newCapture"
     BaseDbTypeFn        = "dbType"
     BaseFinishFn        = "finish"
-    BaseGetRootFn       = "getRoot"
+    BaseGetTrieFn       = "getTrie"
     BaseLegacySetupFn   = "compensateLegacySetup"
     BaseLevelFn         = "level"
     BaseNewAccFn        = "newAccMpt"
@@ -113,32 +113,32 @@ type
     MptFetchFn          = "mpt/fetch"
     MptFetchOrEmptyFn   = "mpt/fetchOrEmpty"
     MptForgetFn         = "mpt/forget"
+    MptGetTrieFn        = "mpt/getTrie"
     MptHasPathFn        = "mpt/hasPath"
     MptMergeFn          = "mpt/merge"
     MptPairsIt          = "mpt/pairs"
     MptPersistentFn     = "mpt/persistent"
     MptReplicateIt      = "mpt/replicate"
-    MptRootVidFn        = "mpt/rootVid"
     MptToPhkFn          = "mpt/toPhk"
 
     PhkDeleteFn         = "phk/delete"
     PhkFetchFn          = "phk/fetch"
     PhkFetchOrEmptyFn   = "phk/fetchOrEmpty"
     PhkForgetFn         = "phk/forget"
+    PhkGetTrieFn        = "phk/getTrie"
     PhkHasPathFn        = "phk/hasPath"
     PhkMergeFn          = "phk/merge"
     PhkPersistentFn     = "pkk/persistent"
-    PhkRootVidFn        = "phk/toPhk"
     PhkToMptFn          = "phk/toMpt"
+
+    RootHashFn          = "rootHash"
+    TriePrintFn         = "$$"
 
     TxCommitFn          = "tx/commit"
     TxDisposeFn         = "tx/dispose"
     TxLevelFn           = "tx/level"
     TxRollbackFn        = "tx/rollback"
     TxSaveDisposeFn     = "tx/safeDispose"
-
-    VidHashFn           = "vid/hash"
-    VidPrintFn          = "$$"
 
   CoreDbProfFnInx* = array[CoreDbFnInx,(float,float,int)]
   CoreDbProfEla* = seq[(Duration,seq[CoreDbFnInx])]
@@ -174,9 +174,6 @@ proc updateTotal(t: var CoreDbProfFnInx; fnInx: CoreDbFnInx) =
 
 func oaToStr(w: openArray[byte]): string =
   w.toHex.toLowerAscii
-
-proc toStr(e: CoreDbErrorRef): string =
-  $e.error & "(" & e.parent.methods.errorPrintFn(e) & ")"
 
 func ppUs(elapsed: Duration): string {.gcsafe, raises: [ValueError].} =
   result = $elapsed.inMicroseconds
@@ -221,22 +218,23 @@ func ppMins(elapsed: Duration): string {.gcsafe, raises: [ValueError].} =
 func toStr*(w: Hash256): string =
   if w == EMPTY_ROOT_HASH: "EMPTY_ROOT_HASH" else: w.data.oaToStr
 
-proc toStr*(p: CoreDbVidRef): string =
-  if p.isNil:
-    "vidRef(nil)"
-  elif not p.ready:
-    "vidRef(not-ready)"
-  else:
-    let val = p.parent.methods.tryHashFn(p).valueOr: EMPTY_ROOT_HASH
-    if val != EMPTY_ROOT_HASH:
-      "vidRef(some-hash)"
-    else:
-      "vidRef(empty-hash)"
+proc toStr*(e: CoreDbErrorRef): string =
+  $e.error & "(" & e.parent.methods.errorPrintFn(e) & ")"
+
+proc toStr*(p: CoreDbTrieRef): string =
+  let
+    w = if p.isNil or not p.ready: "nil" else: p.parent.methods.triePrintFn(p)
+    (a,b) = if 0 < w.len and w[0] == '(': ("","") else: ("(",")")
+  "Trie" & a & w & b
 
 func toStr*(w: CoreDbKvtRef): string =
-  if w.distinctBase.isNil: "kvtRef(nil)" else: "kvtRef"
+  if w.distinctBase.isNil: "kvt(nil)" else: "kvt"
 
-func toStr*(w: Blob): string =
+func toLenStr*(w: openArray[byte]): string =
+  if 0 < w.len and w.len < 5: "<" & w.oaToStr & ">"
+  else: "openArray[" & $w.len & "]"
+
+func toLenStr*(w: Blob): string =
   if 0 < w.len and w.len < 5: "<" & w.oaToStr & ">"
   else: "Blob[" & $w.len & "]"
 
@@ -259,20 +257,22 @@ proc toStr*(rc: CoreDbRc[Blob]): string =
 proc toStr*(rc: CoreDbRc[Hash256]): string =
   if rc.isOk: "ok(" & rc.value.toStr & ")" else: "err(" & rc.error.toStr & ")"
 
+proc toStr*(rc: CoreDbRc[CoreDbTrieRef]): string =
+  if rc.isOk: "ok(" & rc.value.toStr & ")" else: "err(" & rc.error.toStr & ")"
+
 proc toStr*(rc: CoreDbRc[Account]): string =
   if rc.isOk: "ok(Account)" else: "err(" & rc.error.toStr & ")"
 
 proc toStr[T](rc: CoreDbRc[T]; ifOk: static[string]): string =
   if rc.isOk: "ok(" & ifOk & ")" else: "err(" & rc.error.toStr & ")"
 
-proc toStr*(rc: CoreDbRc[CoreDbRef]): string = rc.toStr "dbRef"
-proc toStr*(rc: CoreDbRc[CoreDbVidRef]): string = rc.toStr "vidRef"
-proc toStr*(rc: CoreDbRc[CoreDbAccount]): string = rc.toStr "accRef"
+proc toStr*(rc: CoreDbRc[CoreDbRef]): string = rc.toStr "db"
+proc toStr*(rc: CoreDbRc[CoreDbAccount]): string = rc.toStr "acc"
 proc toStr*(rc: CoreDbRc[CoreDxTxID]): string = rc.toStr "txId"
-proc toStr*(rc: CoreDbRc[CoreDxTxRef]): string = rc.toStr "txRef"
-proc toStr*(rc: CoreDbRc[CoreDxCaptRef]): string = rc.toStr "captRef"
-proc toStr*(rc: CoreDbRc[CoreDxMptRef]): string = rc.toStr "mptRef"
-proc toStr*(rc: CoreDbRc[CoreDxAccRef]): string = rc.toStr "accRef"
+proc toStr*(rc: CoreDbRc[CoreDxTxRef]): string = rc.toStr "tx"
+proc toStr*(rc: CoreDbRc[CoreDxCaptRef]): string = rc.toStr "capt"
+proc toStr*(rc: CoreDbRc[CoreDxMptRef]): string = rc.toStr "mpt"
+proc toStr*(rc: CoreDbRc[CoreDxAccRef]): string = rc.toStr "acc"
 
 func toStr*(elapsed: Duration): string =
   try:

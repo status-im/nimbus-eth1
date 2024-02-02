@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -48,12 +48,12 @@ const
     name:      "fail-goerli",
     network:   bulkTest2.network,
     file:      bulkTest2.file,
-    numBlocks: 147_621)
+    numBlocks: 12_842)
 
   failSample1* = CaptureSpecs(
     name:      "fail-main",
     network:   bulkTest3.network,
     file:      bulkTest3.file,
-    numBlocks: 51922)
+    numBlocks: 100_000)
 
 # End

@@ -1,6 +1,5 @@
-# Nimbus - Types, data structures and shared utilities used in network sync
-#
-# Copyright (c) 2023 Status Research & Development GmbH
+# Nimbus
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -24,7 +23,6 @@ type StopMoaningAboutLedger {.used.} = LedgerType
 
 when CoreDbEnableApiProfiling or LedgerEnableApiProfiling:
   import std/[algorithm, sequtils, strutils]
-
 
 const
   EnableExtraLoggingControl = true
@@ -50,9 +48,11 @@ proc setErrorLevel {.used.} =
 
 # --------------
 
-proc initLogging(com: CommonRef) =
+template initLogging(noisy: bool, com: CommonRef) =
   when EnableExtraLoggingControl:
-    debug "start undumping into persistent blocks"
+    if noisy:
+      setDebugLevel()
+      debug "start undumping into persistent blocks"
     logStartTime = Time()
     logSavedEnv = (com.db.trackLegaApi, com.db.trackNewApi,
                    com.db.trackLedgerApi, com.db.localDbOnly)
@@ -69,14 +69,21 @@ proc finishLogging(com: CommonRef) =
      com.db.trackLedgerApi, com.db.localDbOnly) = logSavedEnv
 
 
-proc startLogging(noisy: bool) =
+template startLogging(noisy: bool; num: BlockNumber) =
+  when EnableExtraLoggingControl:
+    if noisy and logStartTime == Time():
+      logStartTime = getTime()
+      setDebugLevel()
+      debug "start logging ...", blockNumber=num
+
+template startLogging(noisy: bool) =
   when EnableExtraLoggingControl:
     if noisy and logStartTime == Time():
       logStartTime = getTime()
       setDebugLevel()
       debug "start logging ..."
 
-proc stopLogging(noisy: bool) =
+template stopLogging(noisy: bool) =
   when EnableExtraLoggingControl:
     if logStartTime != Time():
       debug "stop logging", elapsed=(getTime() - logStartTime).pp
@@ -155,7 +162,7 @@ proc test_chainSync*(
     chain = com.newChain
     lastBlock = max(1, numBlocks).toBlockNumber
 
-  com.initLogging()
+  noisy.initLogging com
   defer: com.finishLogging()
 
   for w in filePath.undumpBlocks:
@@ -164,21 +171,27 @@ proc test_chainSync*(
       xCheck w[0][0] == com.db.getBlockHeader(0.u256)
       continue
 
+    # Process groups of blocks ...
     if toBlock < lastBlock:
       # Message if `[fromBlock,toBlock]` contains a multiple of `sayBlocks`
       if fromBlock + (toBlock mod sayBlocks.u256) <= toBlock:
         noisy.say "***", &"processing ...[#{fromBlock},#{toBlock}]..."
         if enaLogging:
-          noisy.startLogging()
+          noisy.startLogging(w[0][0].blockNumber)
       noisy.stopLoggingAfter():
         let runPersistBlocksRc = chain.persistBlocks(w[0], w[1])
         xCheck runPersistBlocksRc == ValidationResult.OK:
           if noisy:
             # Re-run with logging enabled
             setTraceLevel()
+            com.db.trackLegaApi = false
+            com.db.trackNewApi = false
+            com.db.trackLedgerApi = false
             discard chain.persistBlocks(w[0], w[1])
       continue
 
+    # Last group or single block
+    #
     # Make sure that the `lastBlock` is the first item of the argument batch.
     # So It might be necessary to Split off all blocks smaller than `lastBlock`
     # and execute them first. Then the next batch starts with the `lastBlock`.
@@ -199,7 +212,7 @@ proc test_chainSync*(
       xCheck runPersistBlocks1Rc == ValidationResult.OK
       dotsOrSpace = "   "
 
-    noisy.startLogging()
+    noisy.startLogging(headers9[0].blockNumber)
 
     if lastOneExtra:
       let
@@ -214,8 +227,8 @@ proc test_chainSync*(
       noisy.stopLoggingAfter():
         let runPersistBlocks9Rc = chain.persistBlocks(headers9, bodies9)
         xCheck runPersistBlocks9Rc == ValidationResult.OK
-
     break
+
 
   true
 
