@@ -13,6 +13,7 @@
 import
   nimcrypto/[hash, sha2, keccak], stew/results, stint,
   eth/common/eth_types,
+  eth/trie/nibbles,
   ssz_serialization,
   ../../common/common_types
 
@@ -157,7 +158,7 @@ func packNibbles*(nibbles: seq[byte]): Nibbles =
   Nibbles(output)
 
 func unpackNibbles*(nibbles: Nibbles): seq[byte] =
-  doAssert(nibbles.len() <= MAX_PACKED_NIBBLES_LEN, "Can't unpack more than 32 nibbles")
+  doAssert(nibbles.len() <= MAX_PACKED_NIBBLES_LEN, "Packed nibbles length is too long")
 
   var output = newSeq[byte]()
 
