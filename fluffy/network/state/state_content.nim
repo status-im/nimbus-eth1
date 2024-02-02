@@ -13,7 +13,6 @@
 import
   nimcrypto/[hash, sha2, keccak], stew/results, stint,
   eth/common/eth_types,
-  eth/trie/nibbles,
   ssz_serialization,
   ../../common/common_types
 
