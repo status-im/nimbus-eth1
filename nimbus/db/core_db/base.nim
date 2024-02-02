@@ -100,11 +100,6 @@ const
 # Private helpers
 # ------------------------------------------------------------------------------
 
-template itNotImplemented(db: CoreDbRef, name: string) =
-  warn logTxt & "iterator not implemented", dbType=db.dbType, meth=name
-
-# ---------
-
 when EnableApiTracking:
   when EnableApiProfiling:
     {.warning: "*** Provided API profiling for CoreDB (disabled by default)".}
@@ -137,14 +132,14 @@ when ProvideLegacyAPI:
       code
     const ctx {.inject,used.} = s
 
-  template setTrackLegaApi(
+  template setTrackLegaApi*(
       w: CoreDbApiTrackRef;
       s: static[CoreDbFnInx];
         ) =
     w.setTrackLegaApi(s):
       discard
 
-  template ifTrackLegaApi(w: CoreDbApiTrackRef; code: untyped) =
+  template ifTrackLegaApi*(w: CoreDbApiTrackRef; code: untyped) =
     when EnableApiTracking:
       w.endLegaApiIf:
         when EnableApiProfiling:
@@ -164,14 +159,14 @@ template setTrackNewApi(
     code
   const ctx {.inject,used.} = s
 
-template setTrackNewApi(
+template setTrackNewApi*(
     w: CoreDxApiTrackRef;
     s: static[CoreDbFnInx];
       ) =
   w.setTrackNewApi(s):
     discard
 
-template ifTrackNewApi(w: CoreDxApiTrackRef; code: untyped) =
+template ifTrackNewApi*(w: CoreDxApiTrackRef; code: untyped) =
   when EnableApiTracking:
     w.endNewApiIf:
       when EnableApiProfiling:
@@ -201,14 +196,6 @@ func toCoreDxPhkRef(mpt: CoreDxMptRef): CoreDxPhkRef =
   result.methods.hasPathFn =
     proc(k: openArray[byte]): CoreDbRc[bool] =
       mpt.methods.hasPathFn(k.keccakHash.data)
-
-  result.methods.pairsIt =
-    iterator(): (Blob, Blob) =
-      mpt.parent.itNotImplemented("phk/pairs()")
-
-  result.methods.replicateIt =
-    iterator(): (Blob, Blob) =
-      mpt.parent.itNotImplemented("phk/replicate()")
 
   when AutoValidateDescriptors:
     result.validate
@@ -244,15 +231,8 @@ proc bless*(db: CoreDbRef; child: CoreDbVidRef): CoreDbVidRef =
 
 
 proc bless*(db: CoreDbRef; child: CoreDxKvtRef): CoreDxKvtRef =
-  ## Complete sub-module descriptor, fill in `parent` and de-actvate
-  ## iterator for persistent database.
+  ## Complete sub-module descriptor, fill in `parent`
   child.parent = db
-
-  # Disable interator for non-memory instances
-  if db.dbType in CoreDbPersistentTypes:
-    child.methods.pairsIt = iterator(): (Blob, Blob) =
-      db.itNotImplemented "pairs/kvt"
-
   when AutoValidateDescriptors:
     child.validate
   child
@@ -539,12 +519,6 @@ proc forget*(dsc: CoreDxKvtRef): CoreDbRc[void] {.discardable.} =
   dsc.setTrackNewApi KvtForgetFn
   result = dsc.methods.forgetFn()
   dsc.ifTrackNewApi: debug newApiTxt, ctx, elapsed, result
-
-iterator pairs*(kvt: CoreDxKvtRef): (Blob, Blob) {.apiRaise.} =
-  ## Iterator supported on memory DB (otherwise implementation dependent)
-  kvt.setTrackNewApi KvtPairsIt
-  for k,v in kvt.methods.pairsIt(): yield (k,v)
-  kvt.ifTrackNewApi: debug newApiTxt, ctx, elapsed
 
 # ------------------------------------------------------------------------------
 # Public Merkle Patricia Tree, hexary trie constructors
@@ -833,21 +807,6 @@ proc hasPath*(phk: CoreDxPhkRef; key: openArray[byte]): CoreDbRc[bool] =
   result = phk.methods.hasPathFn key
   phk.ifTrackNewApi: debug newApiTxt, ctx, elapsed, key=key.toStr, result
 
-
-iterator pairs*(mpt: CoreDxMptRef): (Blob, Blob) {.apiRaise.} =
-  ## Trie traversal, only supported for `CoreDxMptRef`
-  ##
-  mpt.setTrackNewApi MptPairsIt
-  for k,v in mpt.methods.pairsIt(): yield (k,v)
-  mpt.ifTrackNewApi: debug newApiTxt, ctx, elapsed
-
-iterator replicate*(mpt: CoreDxMptRef): (Blob, Blob) {.apiRaise.} =
-  ## Low level trie dump, only supported for `CoreDxMptRef`
-  ##
-  mpt.setTrackNewApi MptReplicateIt
-  for k,v in mpt.methods.replicateIt(): yield (k,v)
-  mpt.ifTrackNewApi: debug newApiTxt, ctx, elapsed
-
 # ------------------------------------------------------------------------------
 # Public trie database methods for accounts
 # ------------------------------------------------------------------------------
@@ -998,11 +957,6 @@ when ProvideLegacyAPI:
     result = kvt.distinctBase.hasKey(key).expect $ctx
     kvt.ifTrackLegaApi: debug legaApiTxt, ctx, elapsed, key=key.toStr, result
 
-  iterator pairs*(kvt: CoreDbKvtRef): (Blob, Blob) {.apiRaise.} =
-    kvt.setTrackLegaApi LegaKvtPairsIt
-    for k,v in kvt.distinctBase.pairs(): yield (k,v)
-    kvt.ifTrackLegaApi: debug legaApiTxt, ctx, elapsed
-
   # ----------------
 
   proc toMpt*(phk: CoreDbPhkRef): CoreDbMptRef =
@@ -1114,19 +1068,6 @@ when ProvideLegacyAPI:
     phk.setTrackLegaApi LegaPhkRootHashFn
     result = phk.distinctBase.rootVid().hash().expect $ctx
     phk.ifTrackLegaApi: debug legaApiTxt, ctx, elapsed, result=result.toStr
-
-
-  iterator pairs*(mpt: CoreDbMptRef): (Blob, Blob) {.apiRaise.} =
-    ## Trie traversal, not supported for `CoreDbPhkRef`
-    mpt.setTrackLegaApi LegaMptPairsIt
-    for k,v in mpt.distinctBase.pairs(): yield (k,v)
-    mpt.ifTrackLegaApi: debug legaApiTxt, ctx
-
-  iterator replicate*(mpt: CoreDbMptRef): (Blob, Blob) {.apiRaise.} =
-    ## Low level trie dump, not supported for `CoreDbPhkRef`
-    mpt.setTrackLegaApi LegaMptReplicateIt
-    for k,v in mpt.distinctBase.replicate(): yield (k,v)
-    mpt.ifTrackLegaApi: debug legaApiTxt, ctx, elapsed
 
   # ----------------
 

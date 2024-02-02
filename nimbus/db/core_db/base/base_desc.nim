@@ -12,8 +12,7 @@
 
 import
   eth/common,
-  results,
-  ../../../errors
+  results
 
 # Annotation helpers
 {.pragma:  noRaise, gcsafe, raises: [].}
@@ -130,7 +129,6 @@ type
   CoreDbKvtPersistentFn* = proc(): CoreDbRc[void] {.noRaise.}
   CoreDbKvtForgetFn* = proc(): CoreDbRc[void] {.noRaise.}
   CoreDbKvtHasKeyFn* = proc(k: openArray[byte]): CoreDbRc[bool] {.noRaise.}
-  CoreDbKvtPairsIt* = iterator(): (Blob,Blob) {.apiRaise.}
 
   CoreDbKvtFns* = object
     ## Methods for key-value table
@@ -141,7 +139,6 @@ type
     hasKeyFn*:     CoreDbKvtHasKeyFn
     persistentFn*: CoreDbKvtPersistentFn
     forgetFn*:     CoreDbKvtForgetFn
-    pairsIt*:      CoreDbKvtPairsIt
 
 
   # --------------------------------------------------
@@ -163,8 +160,6 @@ type
   CoreDbMptIsPruningFn* = proc(): bool {.noRaise.}
   CoreDbMptPersistentFn* = proc(): CoreDbRc[void] {.noRaise.}
   CoreDbMptForgetFn* = proc(): CoreDbRc[void] {.noRaise.}
-  CoreDbMptPairsIt* = iterator(): (Blob,Blob) {.apiRaise.}
-  CoreDbMptReplicateIt* = iterator(): (Blob,Blob) {.apiRaise.}
 
   CoreDbMptFns* = object
     ## Methods for trie objects
@@ -177,8 +172,6 @@ type
     isPruningFn*:  CoreDbMptIsPruningFn
     persistentFn*: CoreDbMptPersistentFn
     forgetFn*:     CoreDbMptForgetFn
-    pairsIt*:      CoreDbMptPairsIt
-    replicateIt*:  CoreDbMptReplicateIt
 
 
   # ----------------------------------------------------

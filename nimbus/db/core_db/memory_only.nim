@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -14,15 +14,19 @@ import
   std/options,
   eth/[common, trie/db],
   ../aristo,
-  ./backend/[aristo_db, legacy_db],
-  #./core_apps_legacy as core_apps
-  ./core_apps_newapi as core_apps
+  ./backend/[aristo_db, legacy_db]
 
 import
+  #./core_apps_legacy as core_apps
+  ./core_apps_newapi as core_apps
+import
   ./base except bless
+import
+  ./base_iterators
 
 export
   base,
+  base_iterators,
   common,
   core_apps,
 
@@ -41,7 +45,7 @@ export
   to
 
 # ------------------------------------------------------------------------------
-# Public constructor
+# Public constructors
 # ------------------------------------------------------------------------------
 
 proc newCoreDbRef*(

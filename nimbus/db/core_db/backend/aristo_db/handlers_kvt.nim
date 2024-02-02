@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -246,10 +246,7 @@ proc kvtMethods(cKvt: KvtChildDbRef): CoreDbKvtFns =
       cKvt.kvtPersistent("persistentFn()"),
 
     forgetFn: proc(): CoreDbRc[void] =
-      cKvt.forget("forgetFn()"),
-
-    pairsIt: iterator(): (Blob, Blob) =
-      discard)
+      cKvt.forget("forgetFn()"))
 
 # ------------------------------------------------------------------------------
 # Public handlers and helpers
@@ -313,8 +310,8 @@ proc gc*(base: KvtBaseRef) =
 
 # ---------------------
 
-func kvt*(dsc: CoreDxKvtRef): KvtDbRef =
-  dsc.KvtCoreDxKvtRef.ctx.kvt
+func to*(dsc: CoreDxKvtRef; T: type KvtDbRef): T =
+  KvtCoreDxKvtRef(dsc).ctx.kvt
 
 func txTop*(
     base: KvtBaseRef;

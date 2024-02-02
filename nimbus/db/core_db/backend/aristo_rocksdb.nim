@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -13,9 +13,19 @@
 import
   eth/common,
   results,
-  "../.."/[aristo, aristo/aristo_persistent, kvt, kvt/kvt_persistent],
+  ../../aristo,
+  ../../aristo/[aristo_persistent, aristo_walk/persistent],
+  ../../kvt,
+  ../../kvt/kvt_persistent,
   ../base,
-  ./aristo_db
+  ./aristo_db,
+  ./aristo_db/handlers_aristo
+
+include
+  ./aristo_db/aristo_replicate
+
+# Annotation helper(s)
+{.pragma: rlpRaise, gcsafe, raises: [AristoApiRlpError].}
 
 # ------------------------------------------------------------------------------
 # Public constructor
@@ -32,6 +42,15 @@ proc newAristoRocksDbCoreDbRef*(path: string): CoreDbRef =
     kvt_persistent.RdbBackendRef,
     aristo_persistent.RdbBackendRef,
     path)
+
+# ------------------------------------------------------------------------------
+# Public aristo iterators
+# ------------------------------------------------------------------------------
+
+iterator aristoReplicateRdb*(dsc: CoreDxMptRef): (Blob,Blob) {.rlpRaise.} =
+  ## Instantiation for `VoidBackendRef`
+  for k,v in aristoReplicate[aristo_persistent.RdbBackendRef](dsc):
+    yield (k,v)
 
 # ------------------------------------------------------------------------------
 # End
