@@ -16,14 +16,13 @@ import
   ../[transaction, vm_state, constants, vm_types],
   ../db/state_db,
   rpc_types, rpc_utils,
-  ../core/tx_pool,
   ../common/common,
   ../utils/utils,
   ../beacon/web3_eth_conv,
   ./filters,
   ../core/executor/process_block,
   ../db/ledger,
-  ../../stateless/[witness_verification, witness_types],
+  ../../stateless/[witness_verification, witness_types, multi_keys],
   ./p2p
 
 type
@@ -33,7 +32,7 @@ type
 proc getBlockWitness*(
     com: CommonRef,
     blockHeader: BlockHeader,
-    statePostExecution: bool): (KeccakHash, BlockWitness, WitnessFlags)
+    statePostExecution: bool): (MultikeysRef, BlockWitness)
     {.raises: [RlpError, BlockNotFound, ValueError, CatchableError].} =
 
   let
@@ -59,34 +58,27 @@ proc getBlockWitness*(
   let mkeys = vmState.stateDB.makeMultiKeys()
 
   if statePostExecution:
-    result = (vmState.stateDB.rootHash, vmState.buildWitness(mkeys), flags)
+    result = (mkeys, vmState.buildWitness(mkeys))
   else:
     # Reset state to what it was before executing the block of transactions
     let initialState = BaseVMState.new(blockHeader, com)
-    result = (initialState.stateDB.rootHash, initialState.buildWitness(mkeys), flags)
+    result = (mkeys, initialState.buildWitness(mkeys))
 
   dbTx.rollback()
 
-
 proc getBlockProofs*(
     accDB: ReadOnlyStateDB,
-    witnessRoot: KeccakHash,
-    witness: BlockWitness,
-    flags: WitnessFlags): seq[ProofResponse] {.raises: [RlpError].} =
+    mkeys: MultikeysRef): seq[ProofResponse] {.raises: [RlpError].} =
 
-  if witness.len() == 0:
-    return @[]
+  var blockProofs = newSeq[ProofResponse]()
 
-  let verifyWitnessResult = verifyWitness(witnessRoot, witness, flags)
-  doAssert verifyWitnessResult.isOk()
+  for keyData in mkeys.keys:
+    let address = keyData.address
+    var slots = newSeq[UInt256]()
 
-  var blockProofs = newSeqOfCap[ProofResponse](verifyWitnessResult.value().len())
-
-  for address, account in verifyWitnessResult.value():
-    var slots = newSeqOfCap[UInt256](account.storage.len())
-
-    for slotKey, _ in account.storage:
-      slots.add(slotKey)
+    if not keyData.storageKeys.isNil and accDB.accountExists(address):
+      for slotData in keyData.storageKeys.keys:
+        slots.add(fromBytesBE(UInt256, slotData.storageSlot))
 
     blockProofs.add(getProof(accDB, address, slots))
 
@@ -111,7 +103,7 @@ proc setupExpRpc*(com: CommonRef, server: RpcServer) =
 
     let
       blockHeader = chainDB.headerFromTag(quantityTag)
-      (_, witness, _) = getBlockWitness(com, blockHeader, statePostExecution)
+      (_, witness) = getBlockWitness(com, blockHeader, statePostExecution)
 
     return witness
 
@@ -124,11 +116,11 @@ proc setupExpRpc*(com: CommonRef, server: RpcServer) =
 
     let
       blockHeader = chainDB.headerFromTag(quantityTag)
-      (witnessRoot, witness, flags) = getBlockWitness(com, blockHeader, statePostExecution)
+      (mkeys, _) = getBlockWitness(com, blockHeader, statePostExecution)
 
     let accDB = if statePostExecution:
       getStateDB(blockHeader)
     else:
       getStateDB(chainDB.getBlockHeader(blockHeader.parentHash))
 
-    return getBlockProofs(accDB, witnessRoot, witness, flags)
+    return getBlockProofs(accDB, mkeys)

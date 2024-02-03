@@ -205,10 +205,7 @@ proc testGetBlockWitness(chain: ChainRef, parentHeader, currentHeader: BlockHead
   if currentStateRoot != currentHeader.stateRoot:
     raise newException(ValidationError, "Expected currentStateRoot == currentHeader.stateRoot")
 
-  # run getBlockWitness and check that the witnessRoot matches the parent stateRoot
-  let (witnessRoot, witness, flags) = getBlockWitness(chain.com, currentHeader, false)
-  if witnessRoot != parentHeader.stateRoot:
-    raise newException(ValidationError, "Expected witnessRoot == parentHeader.stateRoot")
+  let (mkeys, witness) = getBlockWitness(chain.com, currentHeader, false)
 
   # check that the vmstate hasn't changed after call to getBlockWitness
   if chain.vmstate.stateDB.rootHash != currentHeader.stateRoot:
@@ -218,14 +215,14 @@ proc testGetBlockWitness(chain: ChainRef, parentHeader, currentHeader: BlockHead
   if witness.len() > 0:
     let fgs = if chain.vmState.fork >= FKSpurious: {wfEIP170} else: {}
     var tb = initTreeBuilder(witness, chain.com.db, fgs)
-    let treeRoot = tb.buildTree()
-    if treeRoot != witnessRoot:
-      raise newException(ValidationError, "Expected treeRoot == witnessRoot")
+    let witnessRoot = tb.buildTree()
+    if witnessRoot != parentHeader.stateRoot:
+      raise newException(ValidationError, "Expected witnessRoot == parentHeader.stateRoot")
 
-  # use the witness to build the block proofs
+  # use the MultikeysRef to build the block proofs
   let
     ac = newAccountStateDB(chain.com.db, currentHeader.stateRoot, chain.com.pruneTrie)
-    blockProofs = getBlockProofs(state_db.ReadOnlyStateDB(ac), witnessRoot, witness, flags)
+    blockProofs = getBlockProofs(state_db.ReadOnlyStateDB(ac), mkeys)
   if witness.len() == 0 and blockProofs.len() != 0:
     raise newException(ValidationError, "Expected blockProofs.len() == 0")
 

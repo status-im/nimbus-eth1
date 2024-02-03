@@ -74,44 +74,50 @@ proc checkAndValidateWitnessAgainstProofs(
     witness.len() > 0
     proofs.len() > 0
     witnessData.len() > 0
-    witnessData.len() == proofs.len()
 
   for proof in proofs:
     let
       address = proof.address.ethAddr()
       slotProofs = proof.storageProof
-      storageData = witnessData[address].storage
-      code = witnessData[address].code
 
-    check:
-      witnessData.contains(address)
-      witnessData[address].account.balance == proof.balance
-      witnessData[address].account.nonce == proof.nonce.uint64
-      witnessData[address].account.codeHash == proof.codeHash.toHash256()
-      storageData.len() == slotProofs.len()
+    if witnessData.contains(address):
+      let
+        storageData = witnessData[address].storage
+        code = witnessData[address].code
+
+      check:
+        witnessData[address].account.balance == proof.balance
+        witnessData[address].account.nonce == proof.nonce.uint64
+        witnessData[address].account.codeHash == proof.codeHash.toHash256()
+
+      for slotProof in slotProofs:
+        if storageData.contains(slotProof.key):
+          check storageData[slotProof.key] == slotProof.value
+
+      if code.len() > 0:
+        stateDB.setCode(address, code)
 
     stateDB.setBalance(address, proof.balance)
     stateDB.setNonce(address, proof.nonce.uint64)
 
-    if code.len() > 0:
-      stateDB.setCode(address, code)
-
     for slotProof in slotProofs:
-      check:
-        storageData.contains(slotProof.key)
-        storageData[slotProof.key] == slotProof.value
       stateDB.setStorage(address, slotProof.key, slotProof.value)
 
-    check:
-      stateDB.getBalance(address) == proof.balance
-      stateDB.getNonce(address) == proof.nonce.uint64
-      stateDB.getCodeHash(address) == proof.codeHash.toHash256()
-      stateDB.getStorageRoot(address) == proof.storageHash.toHash256()
+    if proof.codeHash.toHash256() == ZERO_HASH256 and
+        proof.storageHash.toHash256() == ZERO_HASH256:
+      stateDB.deleteAccount(address)
 
-  stateDB.persist()
+    stateDB.persist()
 
-  check:
-    stateDB.rootHash == expectedStateRoot
+    check stateDB.getBalance(address) == proof.balance
+    check stateDB.getNonce(address) == proof.nonce.uint64
+    if proof.codeHash.toHash256() == ZERO_HASH256:
+      check stateDB.getCode(address).len() == 0
+      check stateDB.getCodeHash(address) == EMPTY_SHA3
+    if proof.storageHash.toHash256() == ZERO_HASH256:
+      check stateDB.getStorageRoot(address) == EMPTY_ROOT_HASH
+
+  check stateDB.rootHash == expectedStateRoot
 
 proc importBlockDataFromFile(file: string): (CommonRef, Hash256, Hash256, UInt256) {. raises: [].} =
   try:
@@ -277,7 +283,7 @@ proc rpcExperimentalJsonMain*() =
 
         for proof in proofs:
           let address = ethAddr(proof.address)
-          # if the storage was updated on an existing contract
+          # if the storage was read or updated on an existing contract
           if proof.storageProof.len() > 0 and witnessData.contains(address):
             check witnessData[address].code.len() > 0
 
