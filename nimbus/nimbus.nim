@@ -291,7 +291,7 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
 
   let protocols = conf.getProtocolFlags()
 
-  if conf.trustedSetupFile.isSome:
+  if conf.cmd != NimbusCmd.`import` and conf.trustedSetupFile.isSome:
     let fileName = conf.trustedSetupFile.get()
     let res = Kzg.loadTrustedSetup(fileName)
     if res.isErr:
