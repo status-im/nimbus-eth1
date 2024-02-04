@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -18,7 +18,7 @@ import
   eth/[common/eth_types, p2p],
   ./core/chain/chain_desc,
   ./core/executor/process_block,
-  ./db/[core_db, select_backend, ledger],
+  ./db/[core_db, ledger],
   ./evm/async/[data_sources, operations, data_sources/json_rpc_data_source],
   "."/[vm_state, vm_types]
 

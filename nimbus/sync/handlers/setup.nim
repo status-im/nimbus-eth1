@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2021 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -12,7 +12,6 @@
 
 import
   eth/p2p,
-  ../../db/select_backend,
   ../../core/[chain, tx_pool],
   ../protocol,
   ./eth as handlers_eth
@@ -47,21 +46,20 @@ proc addEthHandlerCapability*(
 # Public functions: convenience mappings for `snap`
 # ------------------------------------------------------------------------------
 
-when dbBackend != select_backend.none:
-  import
-    ./snap as handlers_snap
+import
+  ./snap as handlers_snap
 
-  proc addSnapHandlerCapability*(
-      node: EthereumNode;
-      peerPool: PeerPool;
-      chain = ChainRef(nil);
-        ) =
-    ## Install `snap` handlers,Passing `chein` as `nil` installs the handler
-    ## in minimal/outbound mode.
-    if chain.isNil:
-      node.addCapability protocol.snap
-    else:
-      node.addCapability(protocol.snap, SnapWireRef.init(chain, peerPool))
+proc addSnapHandlerCapability*(
+    node: EthereumNode;
+    peerPool: PeerPool;
+    chain = ChainRef(nil);
+      ) =
+  ## Install `snap` handlers,Passing `chein` as `nil` installs the handler
+  ## in minimal/outbound mode.
+  if chain.isNil:
+    node.addCapability protocol.snap
+  else:
+    node.addCapability(protocol.snap, SnapWireRef.init(chain, peerPool))
 
 # ------------------------------------------------------------------------------
 # End

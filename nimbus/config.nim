@@ -25,9 +25,7 @@ import
     confutils/std/net
   ],
   eth/[common, net/utils, net/nat, p2p/bootnodes, p2p/enode, p2p/discoveryv5/enr],
-  "."/[db/select_backend,
-    constants, vm_compile_info, version
-  ],
+  "."/[constants, vm_compile_info, version],
   common/chain_config
 
 export net
@@ -35,12 +33,11 @@ export net
 const
   # TODO: fix this agent-string format to match other
   # eth clients format
-  NimbusIdent* = "$# v$# [$#: $#, $#, $#, $#]" % [
+  NimbusIdent* = "$# v$# [$#: $#, $#, $#]" % [
     NimbusName,
     NimbusVersion,
     hostOS,
     hostCPU,
-    nimbus_db_backend,
     VmName,
     GitRevision
   ]
