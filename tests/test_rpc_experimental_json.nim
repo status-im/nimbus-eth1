@@ -78,6 +78,10 @@ proc checkAndValidateWitnessAgainstProofs(
   for proof in proofs:
     let
       address = proof.address.ethAddr()
+      balance = proof.balance
+      nonce = proof.nonce.uint64
+      codeHash = proof.codeHash.toHash256()
+      storageHash = proof.storageHash.toHash256()
       slotProofs = proof.storageProof
 
     if witnessData.contains(address):
@@ -86,9 +90,9 @@ proc checkAndValidateWitnessAgainstProofs(
         code = witnessData[address].code
 
       check:
-        witnessData[address].account.balance == proof.balance
-        witnessData[address].account.nonce == proof.nonce.uint64
-        witnessData[address].account.codeHash == proof.codeHash.toHash256()
+        witnessData[address].account.balance == balance
+        witnessData[address].account.nonce == nonce
+        witnessData[address].account.codeHash == codeHash
 
       for slotProof in slotProofs:
         if storageData.contains(slotProof.key):
@@ -97,25 +101,31 @@ proc checkAndValidateWitnessAgainstProofs(
       if code.len() > 0:
         stateDB.setCode(address, code)
 
-    stateDB.setBalance(address, proof.balance)
-    stateDB.setNonce(address, proof.nonce.uint64)
+    stateDB.setBalance(address, balance)
+    stateDB.setNonce(address, nonce)
 
     for slotProof in slotProofs:
       stateDB.setStorage(address, slotProof.key, slotProof.value)
 
-    if proof.codeHash.toHash256() == ZERO_HASH256 and
-        proof.storageHash.toHash256() == ZERO_HASH256:
+    # the account doesn't exist due to a self destruct
+    if codeHash == ZERO_HASH256 and storageHash == ZERO_HASH256:
       stateDB.deleteAccount(address)
 
     stateDB.persist()
 
-    check stateDB.getBalance(address) == proof.balance
-    check stateDB.getNonce(address) == proof.nonce.uint64
-    if proof.codeHash.toHash256() == ZERO_HASH256:
+    check stateDB.getBalance(address) == balance
+    check stateDB.getNonce(address) == nonce
+
+    if codeHash == ZERO_HASH256 or codeHash == EMPTY_SHA3:
       check stateDB.getCode(address).len() == 0
       check stateDB.getCodeHash(address) == EMPTY_SHA3
-    if proof.storageHash.toHash256() == ZERO_HASH256:
+    else:
+      check stateDB.getCodeHash(address) == codeHash
+
+    if storageHash == ZERO_HASH256 or storageHash == EMPTY_ROOT_HASH:
       check stateDB.getStorageRoot(address) == EMPTY_ROOT_HASH
+    else:
+      check stateDB.getStorageRoot(address) == storageHash
 
   check stateDB.rootHash == expectedStateRoot
 
