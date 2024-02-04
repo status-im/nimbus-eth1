@@ -9,19 +9,13 @@
 # except according to those terms.
 
 import
-  ../db/select_backend,
   ./handlers/eth as handlers_eth,
-  ./handlers/setup as handlers_setup
+  ./handlers/setup as handlers_setup,
+  ./handlers/snap as handlers_snap
 
 export
-  handlers_eth, handlers_setup
-
-when dbBackend != select_backend.none:
-  import
-    ./handlers/snap as handlers_snap
-
-  export
-    handlers_snap
+  handlers_eth, handlers_setup,
+  handlers_snap
 
 static:
   type

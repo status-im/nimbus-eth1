@@ -22,31 +22,15 @@
 {.push raises: [].}
 
 import
-  ../aristo,  
+  ../aristo,
   ./memory_only,
-  ../select_backend
+  base_iterators_persistent,
+  ./backend/[aristo_rocksdb, legacy_rocksdb]
 
 export
-  memory_only
-
-# This file is currently inconsistent due to the `dbBackend == rocksdb` hack
-# which will be removed, soon (must go to the test base where such a compile
-# time flag induced mechanism might be useful.)
-#
-# The `Aristo` backend has no business with `dbBackend` and will be extended
-# in future.
-{.warning: "Inconsistent API file needs to be de-uglified".}
-
-# Allow hive sim to compile with dbBackend == none
-when dbBackend == rocksdb:
-  import 
-    base_iterators_persistent,
-    ./backend/[aristo_rocksdb, legacy_rocksdb]
-    
-  export
-    base_iterators_persistent,
-    toRocksStoreRef
-
+  memory_only,
+  base_iterators_persistent,
+  toRocksStoreRef
 
 proc newCoreDbRef*(
     dbType: static[CoreDbType];      # Database type symbol
@@ -56,17 +40,14 @@ proc newCoreDbRef*(
   ##
   ## Note: Using legacy notation `newCoreDbRef()` rather than
   ## `CoreDbRef.init()` because of compiler coughing.
-  when dbBackend == rocksdb:
-    when dbType == LegacyDbPersistent:
-      newLegacyPersistentCoreDbRef path
-  
-    elif dbType == AristoDbRocks:
-      newAristoRocksDbCoreDbRef path
-  
-    else:
-      {.error: "Unsupported dbType for persistent newCoreDbRef()".}
+  when dbType == LegacyDbPersistent:
+    newLegacyPersistentCoreDbRef path
+
+  elif dbType == AristoDbRocks:
+    newAristoRocksDbCoreDbRef path
+
   else:
-    {.error: "Unsupported dbBackend setting for persistent newCoreDbRef()".}
+    {.error: "Unsupported dbType for persistent newCoreDbRef()".}
 
 proc newCoreDbRef*(
     dbType: static[CoreDbType];      # Database type symbol
@@ -77,15 +58,11 @@ proc newCoreDbRef*(
   ##
   ## Note: Using legacy notation `newCoreDbRef()` rather than
   ## `CoreDbRef.init()` because of compiler coughing.
-  when dbBackend == rocksdb:
-    when dbType == AristoDbRocks:
-      newAristoRocksDbCoreDbRef(path, qlr)
-  
-    else:
-      {.error: "Unsupported dbType for persistent newCoreDbRef()" &
-              " with qidLayout argument".}
+  when dbType == AristoDbRocks:
+    newAristoRocksDbCoreDbRef(path, qlr)
+
   else:
-    {.error: "Unsupported dbBackend setting for persistent newCoreDbRef()" &
+    {.error: "Unsupported dbType for persistent newCoreDbRef()" &
             " with qidLayout argument".}
 
 # End

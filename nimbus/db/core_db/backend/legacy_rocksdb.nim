@@ -12,39 +12,51 @@
 
 import
   eth/trie/db,
+  eth/db/kvstore,
   rocksdb,
-  "../.."/select_backend,
   ../base,
-  ./legacy_db
+  ./legacy_db,
+  ../../kvstore_rocksdb
 
 type
   LegaPersDbRef = ref object of LegacyDbRef
     rdb: RocksStoreRef     # for backend access with legacy mode
 
-# No other backend supported
-doAssert nimbus_db_backend == "rocksdb"
+  ChainDB = ref object of RootObj
+    kv: KvStoreRef
+    rdb: RocksStoreRef
+
+# TODO KvStore is a virtual interface and TrieDB is a virtual interface - one
+#      will be enough eventually - unless the TrieDB interface gains operations
+#      that are not typical to KvStores
+proc get(db: ChainDB, key: openArray[byte]): seq[byte] =
+  var res: seq[byte]
+  proc onData(data: openArray[byte]) = res = @data
+  if db.kv.get(key, onData).expect("working database"):
+    return res
+
+proc put(db: ChainDB, key, value: openArray[byte]) =
+  db.kv.put(key, value).expect("working database")
+
+proc contains(db: ChainDB, key: openArray[byte]): bool =
+  db.kv.contains(key).expect("working database")
+
+proc del(db: ChainDB, key: openArray[byte]): bool =
+  db.kv.del(key).expect("working database")
+
+proc newChainDB(path: string): KvResult[ChainDB] =
+  let rdb = RocksStoreRef.init(path, "nimbus").valueOr:
+    return err(error)
+  ok(ChainDB(kv: kvStore rdb, rdb: rdb))
 
 # ------------------------------------------------------------------------------
 # Public constructor and low level data retrieval, storage & transation frame
 # ------------------------------------------------------------------------------
 
 proc newLegacyPersistentCoreDbRef*(path: string): CoreDbRef =
-  # Kludge: Compiler bails out on `results.tryGet()` with
-  # ::
-  #   fatal.nim(54)            sysFatal
-  #   Error: unhandled exception: types.nim(1251, 10) \
-  #     `b.kind in {tyObject} + skipPtrs`  [AssertionDefect]
-  #
-  # when running `select_backend.newChainDB(path)`. The culprit seems to be
-  # the `ResultError` exception (or any other `CatchableError`). So this is
-  # converted to a `Defect`.
-  var backend: ChainDB
-  try:
-    {.push warning[Deprecated]: off.}
-    backend = newChainDB path
-    {.pop.}
-  except CatchableError as e:
-    let msg = "DB initialisation error(" & $e.name & "): " & e.msg
+  # when running `newChainDB(path)`. converted to a `Defect`.
+  let backend = newChainDB(path).valueOr:
+    let msg = "DB initialisation : " & error
     raise (ref ResultDefect)(msg: msg)
 
   proc done() =

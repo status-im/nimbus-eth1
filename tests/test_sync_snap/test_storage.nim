@@ -14,7 +14,6 @@ import
   std/[sequtils, tables],
   eth/[common, p2p],
   unittest2,
-  ../../nimbus/db/select_backend,
   ../../nimbus/sync/snap/range_desc,
   ../../nimbus/sync/snap/worker/db/[
     hexary_desc, hexary_error, hexary_inspect,

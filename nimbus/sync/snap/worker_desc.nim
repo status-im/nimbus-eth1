@@ -12,7 +12,6 @@
 
 import
   eth/[common, p2p],
-  ../../db/select_backend,
   ../misc/ticker,
   ../sync_desc,
   ./worker/get/get_error,

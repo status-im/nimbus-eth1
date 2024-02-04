@@ -24,7 +24,6 @@ import
   ./nimbus_desc,
   ./core/eip4844,
   ./core/block_import,
-  ./db/select_backend,
   ./db/core_db/persistent,
   ./core/clique/clique_desc,
   ./core/clique/clique_sealer,

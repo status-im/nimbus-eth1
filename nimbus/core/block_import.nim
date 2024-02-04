@@ -11,7 +11,6 @@ import
   chronicles,
   eth/rlp, stew/io2,
   ./chain,
-  ../db/select_backend,
   ../common/common,
   ../utils/utils
 

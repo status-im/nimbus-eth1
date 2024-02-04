@@ -60,7 +60,6 @@ import
   std/algorithm,
   eth/[common, p2p],
   unittest2,
-  ../../nimbus/db/select_backend,
   ../../nimbus/sync/protocol,
   ../../nimbus/sync/snap/range_desc,
   ../../nimbus/sync/snap/worker/db/[

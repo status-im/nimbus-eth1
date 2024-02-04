@@ -14,7 +14,6 @@ import
   chronicles,
   chronos,
   eth/p2p,
-  ../db/select_backend,
   ../core/chain,
   ./snap/[worker, worker_desc],
   "."/[protocol, sync_sched]
