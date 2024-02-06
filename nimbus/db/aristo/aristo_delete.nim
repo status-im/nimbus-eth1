@@ -223,7 +223,7 @@ proc collapseLeaf(
       db.layersPutVtx(par.vid, par.vtx)
       db.layersPutVtx(lf.vid, lf.vtx)
       # Make sure that there is a cache enty in case the leaf was pulled from
-      # the backend.!
+      # the backend.
       let
         lfPath = hike.legsTo(hike.legs.len - 2, NibblesSeq) & lf.vtx.lPfx
         tag = lfPath.pathToTag.valueOr:
@@ -246,7 +246,7 @@ proc collapseLeaf(
         db.layersPutVtx(gpr.vid, gpr.vtx)
         db.layersPutVtx(lf.vid, lf.vtx)
         # Make sure that there is a cache enty in case the leaf was pulled from
-        # the backend.!
+        # the backend.
         let
           lfPath = hike.legsTo(hike.legs.len - 3, NibblesSeq) & lf.vtx.lPfx
           tag = lfPath.pathToTag.valueOr:
@@ -398,13 +398,9 @@ proc deleteImpl(
       of Leaf:
         ? db.collapseLeaf(hike, nibble.byte, nxt.vtx)
 
-  # Delete leaf entry
-  if leafVidBe.isValid:
-    # To be recorded on change history
-    db.top.final.lTab[lty] = VertexID(0)
-  else:
-    # No need to keep it any longer in cache
-    db.top.final.lTab.del lty
+  # Make sure that there is a cache entry so the hasher can label this path
+  # at a later state.
+  db.top.final.lTab[lty] = VertexID(0)
 
   # Delete dependent leaf node storage tree if there is any
   let data = lf.vtx.lData
