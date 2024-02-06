@@ -32,21 +32,14 @@ export e2store.readRecord
 # CompressedBody     = { type: 0x04,   data: snappyFramed(rlp(body)) }
 # CompressedReceipts = { type: 0x05,   data: snappyFramed(rlp(receipts)) }
 # TotalDifficulty    = { type: 0x06,   data: uint256(header.total_difficulty) }
-# Accumulator        = { type: 0x07,   data: hash_tree_root(List(HeaderRecord, 8192)) }
+# AccumulatorRoot    = { type: 0x07,   data: hash_tree_root(List(HeaderRecord, 8192)) }
 # BlockIndex         = { type: 0x3266, data: block-index }
 
-# TODO:
-# Current unresolved issue:
-# - Snappy does not give the same compression result as the implementation used
-# by geth for some block headers and block bodies. This is an issue if we want
-# to rely on sha256sum as checksum for the individual era1 files as is suggested
-# in https://github.com/ethereum/go-ethereum/pull/26621
-#
-# Possible suggestions:
-# - change the format to something like:
-# era1 := Version | block-tuple* | other-entries* | Accumulator | BlockIndex? | BlockIndex(accumulator)
-# or similar to have easy access to the accumulator root.
-# - Name Accumulator type instead AccumulatorRoot
+# Important note:
+# Snappy does not give the same compression result as the implementation used
+# by go-ethereum for some block headers and block bodies. This means that we
+# cannot rely on the secondary verification mechanism that is based on doing the
+# sha256sum of the full era1 files.
 #
 
 const
@@ -56,7 +49,7 @@ const
   CompressedBody*     = [byte 0x04, 0x00]
   CompressedReceipts* = [byte 0x05, 0x00]
   TotalDifficulty*    = [byte 0x06, 0x00]
-  Accumulator*        = [byte 0x07, 0x00]
+  AccumulatorRoot*    = [byte 0x07, 0x00]
   E2BlockIndex*       = [byte 0x66, 0x32]
 
 type
@@ -195,7 +188,7 @@ proc readBlockIndex*(f: IoHandle): Result[BlockIndex, string] =
   if uint64(count) != uint64.fromBytesLE(buf): return err("invalid count")
 
   # technically not an error, but we'll throw this sanity check in here..
-  if blockNumber > int32.high().uint64: return err("fishy slot")
+  if blockNumber > int32.high().uint64: return err("fishy block number")
 
   ok(BlockIndex(startNumber: blockNumber, offsets: offsets))
 
@@ -243,8 +236,7 @@ proc update*(
 proc finish*(
     g: var Era1Group, f: IoHandle, accumulatorRoot: Digest, lastBlockNumber: uint64
   ):Result[void, string] =
-  let
-    accumulatorRootPos = ? f.appendRecord(Accumulator, accumulatorRoot.data)
+  let accumulatorRootPos = ? f.appendRecord(AccumulatorRoot, accumulatorRoot.data)
 
   if lastBlockNumber > 0:
     discard ? f.appendRecord(g.blockIndex)
@@ -372,3 +364,24 @@ proc getBlockTuple*(
     totalDifficulty = ? getTotalDifficulty(f)
 
   ok((blockHeader, blockBody, receipts, totalDifficulty))
+
+# TODO: Should we add this perhaps in the Era1File object and grab it in open()?
+proc getAccumulatorRoot*(f: Era1File): Result[Digest, string] =
+  # Get position of BlockIndex
+  ? f[].handle.get().setFilePos(0, SeekPosition.SeekEnd).mapErr(ioErrorMsg)
+  let blockIdxPos = ? f[].handle.get().findIndexStartOffset()
+
+  # Accumulator root is 40 bytes before the BlockIndex
+  let accumulatorRootPos = blockIdxPos - 40 # 8 + 32
+  ? f[].handle.get().setFilePos(accumulatorRootPos, SeekPosition.SeekCurrent).mapErr(ioErrorMsg)
+
+  var bytes: seq[byte]
+  let header = ? f[].handle.get().readRecord(bytes)
+
+  if header.typ != AccumulatorRoot:
+    return err("Invalid era file: didn't find accumulator root at index position")
+
+  if bytes.len != 32:
+    return err("invalid accumulator root")
+
+  ok(Digest(data: array[32, byte].initCopyFrom(bytes)))

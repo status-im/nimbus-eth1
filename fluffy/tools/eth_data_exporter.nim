@@ -251,8 +251,8 @@ proc cmdExportEra1(config: ExporterConf) =
             # block requests over json-rpc should be reworked here (and can be
             # used in the bridge also then)
             requestBlock(blockNumber.u256, flags = {DownloadReceipts}, client = some(client))
-          except CatchableError:
-            error "Failed retrieving block, skip creation of era1 file", blockNumber, era
+          except CatchableError as e:
+            error "Failed retrieving block, skip creation of era1 file", blockNumber, era, error = e.msg
             break writeFileBlock
 
         var ttd: UInt256
@@ -376,7 +376,7 @@ proc cmdVerifyEra1(config: ExporterConf) =
       ttds.add(UInt256.fromBytesLE(data))
 
       ttdsRecords += 1
-    elif header.typ == era1.Accumulator:
+    elif header.typ == era1.AccumulatorRoot:
       let accumulatorRoot = buildEpochAccumulatorRoot(headers, ttds)
       if data == accumulatorRoot.data:
         info "Accumulator root matches", data = data.to0xHex()
