@@ -44,11 +44,8 @@ func toVae(vid: VertexID): SaveToVaeVidFn =
     proc(err: AristoError): (VertexID,AristoError) =
       return (vid,err)
 
-func toVae(err: (Hike,AristoError)): (VertexID,AristoError) =
-  if 0 < err[0].legs.len:
-    (err[0].legs[^1].wp.vid, err[1])
-  else:
-    (VertexID(0), err[1])
+func toVae(err: (VertexID,AristoError,Hike)): (VertexID,AristoError) =
+  (err[0], err[1])
 
 proc branchStillNeeded(vtx: VertexRef): Result[int,void] =
   ## Returns the nibble if there is only one reference left.
@@ -467,7 +464,12 @@ proc delete*(
      ): Result[void,(VertexID,AristoError)] =
   ## Variant of `delete()`
   ##
-  db.delete(? path.initNibbleRange.hikeUp(root, db).mapErr toVae)
+  let rc = path.initNibbleRange.hikeUp(root, db)
+  if rc.isOk:
+    return db.delete(rc.value)
+  if rc.error[1] in HikeAcceptableStopsNotFound:
+    return err((rc.error[0], DelPathNotFound))
+  err((rc.error[0],rc.error[1]))
 
 # ------------------------------------------------------------------------------
 # End

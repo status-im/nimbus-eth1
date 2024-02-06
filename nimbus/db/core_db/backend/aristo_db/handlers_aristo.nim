@@ -438,6 +438,8 @@ proc mptMethods(cMpt: AristoChildDbRef): CoreDbMptFns =
       mpt = cMpt.mpt
       rc = mpt.delete(cMpt.root, k)
     if rc.isErr:
+      if rc.error[1] ==  DelPathNotFound:
+        return err(rc.error.toError(db, info, MptNotFound))
       return err(rc.error.toError(db, info))
     ok()
 
@@ -562,6 +564,8 @@ proc accMethods(cAcc: AristoChildDbRef): CoreDbAccFns =
       key = address.keccakHash.data
       rc = mpt.delete(cAcc.root, key)
     if rc.isErr:
+      if rc.error[1] ==  DelPathNotFound:
+        return err(rc.error.toError(db, info, AccNotFound))
       return err(rc.error.toError(db, info))
     ok()
 

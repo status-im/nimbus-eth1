@@ -195,6 +195,7 @@ type
     DelVidStaleVtx
     DelSubTreeTooBig
     DelSubTreeVoidRoot
+    DelPathNotFound
 
     # Functions from  `aristo_filter.nim`
     FilBackendMissing
