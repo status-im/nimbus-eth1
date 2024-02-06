@@ -71,7 +71,11 @@ proc db*(t: SomeLedger): CoreDbRef =
   t.distinctBase.parent
 
 proc rootHash*(t: SomeLedger): Hash256 =
-  t.distinctBase.getTrie().rootHash().expect "SomeLedger/rootHash()"
+  const info = "SomeLedger/rootHash(): "
+  let rc = t.distinctBase.getTrie().rootHash()
+  if rc.isErr:
+    raiseAssert info & $$rc.error
+  rc.value
 
 proc getTrie*(t: SomeLedger): CoreDbTrieRef =
   t.distinctBase.getTrie()
@@ -97,14 +101,23 @@ proc init*(
 
 proc fetch*(al: AccountLedger; eAddr: EthAddress): Result[CoreDbAccount,void] =
   ## Using `fetch()` for trie data retrieval
-  al.distinctBase.fetch(eAddr).mapErr(proc(ign: CoreDbErrorRef) = discard)
+  let rc = al.distinctBase.fetch(eAddr)
+  if rc.isErr:
+    return err()
+  ok rc.value
 
 proc merge*(al: AccountLedger; account: CoreDbAccount) =
   ## Using `merge()` for trie data storage
-  al.distinctBase.merge(account).expect "AccountLedger/merge()"
+  const info =  "AccountLedger/merge(): "
+  al.distinctBase.merge(account).isOkOr:
+    raiseAssert info & $$error
 
 proc delete*(al: AccountLedger, eAddr: EthAddress) =
-  al.distinctBase.delete(eAddr).expect "AccountLedger/delete()"
+  const info = "AccountLedger/delete()"
+  al.distinctBase.delete(eAddr).isOkOr:
+    if error.error == MptNotFound:
+      return
+    raiseAssert info & $$error
 
 proc persistent*(al: AccountLedger) =
   let rc = al.distinctBase.persistent()
@@ -151,13 +164,22 @@ proc init*(
   mpt.toPhk.T
 
 proc fetch*(sl: StorageLedger, slot: UInt256): Result[Blob,void] =
-  sl.distinctBase.fetch(slot.toBytesBE).mapErr proc(ign: CoreDbErrorRef)=discard
+  let rc = sl.distinctBase.fetch(slot.toBytesBE)
+  if rc.isErr:
+    return err()
+  ok rc.value
 
 proc merge*(sl: StorageLedger, slot: UInt256, value: openArray[byte]) =
-  sl.distinctBase.merge(slot.toBytesBE, value).expect "StorageLedger/merge()"
+  const info = "StorageLedger/merge(): "
+  sl.distinctBase.merge(slot.toBytesBE, value).isOkOr:
+    raiseAssert info & $$error
 
 proc delete*(sl: StorageLedger, slot: UInt256) =
-  sl.distinctBase.delete(slot.toBytesBE).expect "StorageLedger/delete()"
+  const info = "StorageLedger/delete(): "
+  sl.distinctBase.delete(slot.toBytesBE).isOkOr:
+    if error.error == MptNotFound:
+      return
+    raiseAssert info & $$error
 
 iterator storage*(
     al: AccountLedger;
