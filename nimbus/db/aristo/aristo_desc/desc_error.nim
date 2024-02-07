@@ -113,7 +113,6 @@ type
     MergeNodeVtxDuplicates
 
     # Update `Merkle` hashes `hashify()`
-    HashifyEmptyHike
     HashifyExistingHashMismatch
     HashifyNodeUnresolved
     HashifyRootHashMismatch

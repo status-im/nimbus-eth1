@@ -222,12 +222,6 @@ proc updateSchedule(
         break findlegInx
       vid = leaf.vid
 
-    if not db.layersGetKeyOrVoid(vid).isValid:
-      db.layersPutLabel(vid, HashLabel(root: root, key: node.digestTo(HashKey)))
-      # Clean up unnecessay leaf node from previous session
-      wff.base.del vid
-      wff.setNextLink(wff.pool, wff.base.getOrVoid vid)
-
     # If possible, compute a node from the current vertex with all links
     # resolved on the cache layer. If this is not possible, stop here and
     # return the list of vertex IDs that could not be resolved (see option
@@ -324,9 +318,8 @@ proc hashify*(
         # FIXME: Is there a case for adding unresolved child-to-root links
         #        to the `wff` schedule?
         continue
-      if rc.isErr:
-        return err((lfVid,rc.error[1]))
-      return err((hike.root,HashifyEmptyHike))
+      doAssert rc.isErr # see implementation of `hikeUp()`
+      return err((lfVid,rc.error[1]))
 
     # Compile width-first forest search schedule
     wff.updateSchedule(db, hike)
