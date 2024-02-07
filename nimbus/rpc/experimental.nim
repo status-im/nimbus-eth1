@@ -43,7 +43,6 @@ proc getBlockWitness*(
     # Once we enable pruning we will need to check if the block state has been pruned
     # before trying to initialize the VM as we do here.
     vmState = BaseVMState.new(blockHeader, com)
-    flags = if vmState.fork >= FKSpurious: {wfEIP170} else: {}
 
   vmState.generateWitness = true # Enable saving witness data
   vmState.com.hardForkTransition(blockHeader)
@@ -60,7 +59,7 @@ proc getBlockWitness*(
   if statePostExecution:
     result = (mkeys, vmState.buildWitness(mkeys))
   else:
-    # Reset state to what it was before executing the block of transactions
+    # Use the initial state from prior to executing the block of transactions
     let initialState = BaseVMState.new(blockHeader, com)
     result = (mkeys, initialState.buildWitness(mkeys))
 
@@ -76,7 +75,8 @@ proc getBlockProofs*(
     let address = keyData.address
     var slots = newSeq[UInt256]()
 
-    if not keyData.storageKeys.isNil and accDB.accountExists(address):
+    if not keyData.storageKeys.isNil and accDB.accountExists(address) and
+        accDB.getStorageRoot(address) != EMPTY_ROOT_HASH:
       for slotData in keyData.storageKeys.keys:
         slots.add(fromBytesBE(UInt256, slotData.storageSlot))
 
