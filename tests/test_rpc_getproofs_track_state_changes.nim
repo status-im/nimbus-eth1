@@ -6,41 +6,34 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/[json, os, tables],
+  std/tables,
   unittest2,
   web3/eth_api,
-  json_rpc/[rpcclient, rpcserver],
+  json_rpc/rpcclient,
   stew/byteutils,
   ../nimbus/core/chain,
   ../nimbus/common/common,
   ../nimbus/rpc,
-  ../../nimbus/db/[ledger, core_db],
-  ../../nimbus/db/[core_db/persistent, storage_types],
+  ../../nimbus/db/[core_db, core_db/persistent, state_db/base],
   ../stateless/[witness_verification, witness_types],
   ./rpc/experimental_rpc_client
 
 type
   Hash256 = eth_types.Hash256
 
-func ethAddr*(x: Address): EthAddress =
+template ethAddr*(x: Address): EthAddress =
   EthAddress x
 
 template toHash256(hash: untyped): Hash256 =
   fromHex(Hash256, hash.toHex())
 
-
-proc checkAndValidateWitnessAgainstProofs(
-    db: CoreDbRef,
-    parentStateRoot: Hash256,
+proc updateStateUsingProofsAndCheckStateRoot(
+    stateDB: AccountStateDB,
     expectedStateRoot: Hash256,
     witness: seq[byte],
-    proofs: seq[ProofResponse],
-    stateDB: LedgerRef,
-    i: uint64) =
+    proofs: seq[ProofResponse]) =
 
-  let
-    verifyWitnessResult = verifyWitness(expectedStateRoot, witness, {wfNoFlag})
-
+  let verifyWitnessResult = verifyWitness(expectedStateRoot, witness, {wfNoFlag})
   check verifyWitnessResult.isOk()
   let witnessData = verifyWitnessResult.value()
 
@@ -59,6 +52,7 @@ proc checkAndValidateWitnessAgainstProofs(
       slotProofs = proof.storageProof
 
     if witnessData.contains(address):
+
       let
         storageData = witnessData[address].storage
         code = witnessData[address].code
@@ -72,34 +66,24 @@ proc checkAndValidateWitnessAgainstProofs(
         if storageData.contains(slotProof.key):
           check storageData[slotProof.key] == slotProof.value
 
-      #if code.len() > 0:
-      stateDB.setCode(address, code)
+      if code.len() > 0:
+        stateDB.setCode(address, code)
 
-    # stateDB.setBalance(address, balance)
-    # stateDB.setNonce(address, nonce)
-
-    # for slotProof in slotProofs:
-    #   stateDB.setStorage(address, slotProof.key, slotProof.value)
-
-    # # the account doesn't exist due to a self destruct
-    # if (codeHash == ZERO_HASH256 and storageHash == ZERO_HASH256) or
-    #     (balance == 0 and nonce == 0 and codeHash == EMPTY_SHA3 and storageHash == EMPTY_ROOT_HASH):
-    #   stateDB.selfDestruct(address)
-
-    # the account doesn't exist due to a self destruct
-    if (codeHash == ZERO_HASH256 and storageHash == ZERO_HASH256):
-      stateDB.selfDestruct(address)
+    if (balance == 0 and nonce == 0 and codeHash == ZERO_HASH256 and storageHash == ZERO_HASH256):
+      stateDB.setCode(address, @[])
+      stateDB.clearStorage(address)
+      stateDB.deleteAccount(address)
     elif (balance == 0 and nonce == 0 and codeHash == EMPTY_SHA3 and storageHash == EMPTY_ROOT_HASH):
-      stateDB.setBalance(address, balance)
-      stateDB.setNonce(address, nonce)
+      stateDB.setCode(address, @[])
+      stateDB.clearStorage(address)
+      stateDB.setBalance(address, 0.u256)
+      stateDB.setNonce(address, 0)
       stateDB.clearStorage(address)
     else:
       stateDB.setBalance(address, balance)
       stateDB.setNonce(address, nonce)
       for slotProof in slotProofs:
         stateDB.setStorage(address, slotProof.key, slotProof.value)
-
-    stateDB.persist(clearEmptyAccount = i >= 2_675_000, clearCache = false) # vmState.determineFork >= FkSpurious
 
     check stateDB.getBalance(address) == balance
     check stateDB.getNonce(address) == nonce
@@ -117,56 +101,48 @@ proc checkAndValidateWitnessAgainstProofs(
 
   check stateDB.rootHash == expectedStateRoot
 
-
-proc rpcExperimentalJsonMain*() =
+proc rpcGetProofsTrackStateChangesMain*() =
 
   suite "rpc getProofs track state changes tests":
 
-    let
+    const
       RPC_HOST = "127.0.0.1"
-      RPC_PORT = 0 # let the OS choose a port
+      RPC_PORT = Port(8545)
+      DATABASE_PATH = "."
 
-    var client = newRpcHttpClient()
+    let client = newRpcHttpClient()
+    waitFor client.connect(RPC_HOST, RPC_PORT, secure = false)
 
-    waitFor client.connect(RPC_HOST, Port(8545), secure = false)
+    test "Test tracking the changes introduced in every block":
 
-    test "Test track the changes introduced in every block":
-
-      let com = CommonRef.new(
-        newCoreDbRef(LegacyDbPersistent, "."), false)
-
+      let com = CommonRef.new(newCoreDbRef(LegacyDbPersistent, DATABASE_PATH), false)
       com.initializeEmptyDb()
       com.db.compensateLegacySetup()
 
-      let startBlock = 190_000 # 116_525
-      let endBlock = 200_000
-      let blockHeader = waitFor client.eth_getBlockByNumber(blockId(startBlock.uint64), false)
-
-      var stateDB = AccountsCache.init(com.db, blockHeader.stateRoot.toHash256(), false)
+      let
+        startBlock = 644_000
+        endBlock = 1_000_000
+        blockHeader = waitFor client.eth_getBlockByNumber(blockId(startBlock.uint64), false)
+        stateDB = newAccountStateDB(com.db, blockHeader.stateRoot.toHash256(), false)
 
       for i in startBlock..endBlock:
         let
           blockNum = blockId(i.uint64)
-          parentHeader = waitFor client.eth_getBlockByNumber(blockId(i.uint64 - 1), false)
-          blockHeader = waitFor client.eth_getBlockByNumber(blockId(i.uint64), false)
+          blockHeader: BlockObject = waitFor client.eth_getBlockByNumber(blockNum, false)
           witness = waitFor client.exp_getWitnessByBlockNumber(blockNum, true)
           proofs = waitFor client.exp_getProofsByBlockNumber(blockNum, true)
-        checkAndValidateWitnessAgainstProofs(
-          com.db, parentHeader.stateRoot.toHash256(), blockHeader.stateRoot.toHash256(), witness, proofs, stateDB, i.uint64)
 
-        if i mod 10000 == 0:
-          let blockHeader = waitFor client.eth_getBlockByNumber(blockNum, false)
+        updateStateUsingProofsAndCheckStateRoot(
+            stateDB,
+            blockHeader.stateRoot.toHash256(),
+            witness,
+            proofs)
 
-          for p in proofs:
-            let address = p.address.ethAddr
-            discard stateDB.accountExists(address)
-
-          stateDB.persist(clearEmptyAccount = i >= 2_675_000, clearCache = true) # vmState.determineFork >= FkSpurious
-
-          echo "Block Number = ", i, " Current State Root = ", stateDB.rootHash
+        if i mod 1000 == 0:
+          echo "Block number: ", i
           echo "Expected block stateRoot: ", blockHeader.stateRoot
+          echo "Actual block stateRoot: ", stateDB.rootHash
           doAssert blockHeader.stateRoot.toHash256() == stateDB.rootHash
 
-
 when isMainModule:
-  rpcExperimentalJsonMain()
+  rpcGetProofsTrackStateChangesMain()
