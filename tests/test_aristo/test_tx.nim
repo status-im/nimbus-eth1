@@ -389,7 +389,7 @@ proc testTxMergeAndDeleteOneByOne*(
 
       # Delete leaf
       block:
-        let rc = db.delete leaf
+        let rc = db.delete(leaf, VOID_PATH_ID)
         xCheckRc rc.error == (0,0)
 
       # Update list of remaininf leafs

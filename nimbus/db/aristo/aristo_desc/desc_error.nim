@@ -95,10 +95,6 @@ type
     MergeNonBranchProofModeLock
     MergeRootBranchLinkBusy
     MergeRootMissing
-    MergeAccPathMissing
-    MergeAccUnaccessible
-    MergeAccPathWithoutLeaf
-    MergeAccWrongStorageRoot
     MergeAssemblyFailed # Ooops, internal error
 
     MergeHashKeyInvalid
@@ -111,6 +107,13 @@ type
     MergeNodeVtxDiffersFromExisting
     MergeRootKeyDiffersForVid
     MergeNodeVtxDuplicates
+
+    # Utils
+    UtilsAccPathMissing
+    UtilsAccPathWithoutLeaf
+    UtilsAccUnaccessible
+    UtilsAccWrongStorageRoot
+    UtilsStoRootMissing
 
     # Update `Merkle` hashes `hashify()`
     HashifyExistingHashMismatch

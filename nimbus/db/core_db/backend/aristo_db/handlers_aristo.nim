@@ -436,7 +436,7 @@ proc mptMethods(cMpt: AristoChildDbRef): CoreDbMptFns =
     let
       db = cMpt.base.parent
       mpt = cMpt.mpt
-      rc = mpt.delete(cMpt.root, k)
+      rc = mpt.delete(cMpt.root, k, cMpt.accPath)
     if rc.isErr:
       if rc.error[1] ==  DelPathNotFound:
         return err(rc.error.toError(db, info, MptNotFound))
@@ -562,7 +562,7 @@ proc accMethods(cAcc: AristoChildDbRef): CoreDbAccFns =
       db = cAcc.base.parent
       mpt = cAcc.mpt
       key = address.keccakHash.data
-      rc = mpt.delete(cAcc.root, key)
+      rc = mpt.delete(cAcc.root, key, VOID_PATH_ID)
     if rc.isErr:
       if rc.error[1] ==  DelPathNotFound:
         return err(rc.error.toError(db, info, AccNotFound))
@@ -799,7 +799,7 @@ proc getTrie*(
   base.gc() # update pending changes
 
   if kind == StorageTrie and not path.isValid:
-    return err(aristo.MergeAccPathMissing.toError(db, info, AccAddrMissing))
+    return err(aristo.UtilsAccPathMissing.toError(db, info, AccAddrMissing))
 
   if not root.isValid:
     var trie = AristoCoreDbTrie(
