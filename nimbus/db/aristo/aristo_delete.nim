@@ -11,7 +11,7 @@
 ## Aristo DB -- Patricia Trie delete funcionality
 ## ==============================================
 ##
-## Deleate by `Hike` type chain of vertices.
+## Delete by `Hike` type chain of vertices.
 
 {.push raises: [].}
 
