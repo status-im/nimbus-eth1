@@ -25,7 +25,7 @@ type
     ctx*: string     ## Context where the exception or error occured
     case isAristo*: bool
     of true:
-      root*: VertexID
+      vid*: VertexID
       aErr*: AristoError
     else:
       kErr*: KvtError
@@ -51,8 +51,8 @@ func errorPrint*(e: CoreDbErrorRef): string =
     result = if e.isAristo: "Aristo" else: "Kvt"
     result &= ", ctx=" & $e.ctx & ", "
     if e.isAristo:
-      if e.root.isValid:
-        result &= "root=" & e.root.toStr & ", "
+      if e.vid.isValid:
+        result &= "vid=" & e.vid.toStr & ", "
       result &= "error=" & $e.aErr
     else:
       result &= "error=" & $e.kErr

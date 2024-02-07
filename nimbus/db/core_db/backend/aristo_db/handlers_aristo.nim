@@ -633,7 +633,7 @@ func toError*(
   db.bless(error, AristoCoreDbError(
     ctx:      info,
     isAristo: true,
-    root:     e[0],
+    vid:      e[0],
     aErr:     e[1]))
 
 func toVoidRc*[T](
