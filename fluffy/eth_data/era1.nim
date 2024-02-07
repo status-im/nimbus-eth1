@@ -14,9 +14,11 @@ import
   eth/common/eth_types_rlp,
   beacon_chain/spec/beacon_time,
   ssz_serialization,
-  ncli/e2store
+  ncli/e2store,
+  ../network/history/accumulator
 
 from nimcrypto/hash import fromHex
+from ../../nimbus/utils/utils import calcTxRoot, calcReceiptRoot
 
 export e2store.readRecord
 
@@ -51,6 +53,8 @@ const
   TotalDifficulty*    = [byte 0x06, 0x00]
   AccumulatorRoot*    = [byte 0x07, 0x00]
   E2BlockIndex*       = [byte 0x66, 0x32]
+
+  MaxEra1Size* = 8192
 
 type
   BlockIndex* = object
@@ -192,8 +196,27 @@ proc readBlockIndex*(f: IoHandle): Result[BlockIndex, string] =
 
   ok(BlockIndex(startNumber: blockNumber, offsets: offsets))
 
+func startNumber*(era: Era1): uint64 =
+  era * MaxEra1Size
+
+func endNumber*(era: Era1): uint64 =
+  if (era + 1) * MaxEra1Size - 1'u64 >= mergeBlockNumber:
+    # The incomplete era just before the merge
+    mergeBlockNumber - 1'u64
+  else:
+    (era + 1) * MaxEra1Size - 1'u64
+
+func endNumber*(blockIdx: BlockIndex): uint64 =
+  blockIdx.startNumber + blockIdx.offsets.lenu64() - 1
+
 proc toCompressedRlpBytes(item: auto): seq[byte] =
   snappy.encodeFramed(rlp.encode(item))
+
+proc fromCompressedRlpBytes(bytes: openArray[byte], T: type): Result[T, string] =
+  try:
+    ok(rlp.decode(decodeFramed(bytes, checkIntegrity = false), T))
+  except RlpError as e:
+    err("Invalid Compressed RLP data" & e.msg)
 
 proc init*(
     T: type Era1Group, f: IoHandle, startNumber: uint64
@@ -282,10 +305,11 @@ proc open*(_: type Era1File, name: string): Result[Era1File, string] =
     blockIdxPos = ? f[].findIndexStartOffset()
   ? f[].setFilePos(blockIdxPos, SeekPosition.SeekCurrent).mapErr(ioErrorMsg)
 
-  let
-    blockIdx = ? f[].readBlockIndex()
-  if blockIdx.offsets.len() != 8192:
-    return err("Block index length invalid")
+  let blockIdx = ? f[].readBlockIndex()
+  # Note: Could do an additional offset.len check here by calculating what it
+  # should be based on mergeBlockNumber. It is however not necessary as the
+  # accumulator root will fail if to many blocks are added (it will take a bit
+  # longer though).
 
   let res = Era1File(handle: f, blockIdx: blockIdx)
   reset(f)
@@ -303,10 +327,7 @@ proc getBlockHeader(f: Era1File): Result[BlockHeader, string] =
   if header.typ != CompressedHeader:
     return err("Invalid era file: didn't find block header at index position")
 
-  try:
-    ok(rlp.decode(decodeFramed(bytes, checkIntegrity = false), BlockHeader))
-  except RlpError as e:
-    err("Invalid block header" & e.msg)
+  fromCompressedRlpBytes(bytes, BlockHeader)
 
 proc getBlockBody(f: Era1File): Result[BlockBody, string] =
   var bytes: seq[byte]
@@ -315,10 +336,7 @@ proc getBlockBody(f: Era1File): Result[BlockBody, string] =
   if header.typ != CompressedBody:
     return err("Invalid era file: didn't find block body at index position")
 
-  try:
-    ok(rlp.decode(decodeFramed(bytes, checkIntegrity = false), BlockBody))
-  except RlpError as e:
-    err("Invalid block body" & e.msg)
+  fromCompressedRlpBytes(bytes, BlockBody)
 
 proc getReceipts(f: Era1File): Result[seq[Receipt], string] =
   var bytes: seq[byte]
@@ -327,10 +345,7 @@ proc getReceipts(f: Era1File): Result[seq[Receipt], string] =
   if header.typ != CompressedReceipts:
     return err("Invalid era file: didn't find receipts at index position")
 
-  try:
-    ok(rlp.decode(decodeFramed(bytes, checkIntegrity = false), seq[Receipt]))
-  except RlpError as e:
-    err("Invalid receipts" & e.msg)
+  fromCompressedRlpBytes(bytes, seq[Receipt])
 
 proc getTotalDifficulty(f: Era1File): Result[UInt256, string] =
   var bytes: seq[byte]
@@ -344,18 +359,10 @@ proc getTotalDifficulty(f: Era1File): Result[UInt256, string] =
 
   ok(UInt256.fromBytesLE(bytes))
 
-proc getBlockTuple*(
-    f: Era1File, blockNumber: uint64
+proc getNextBlockTuple*(
+    f: Era1File
   ): Result[(BlockHeader, BlockBody, seq[Receipt], UInt256), string] =
   doAssert not isNil(f) and f[].handle.isSome
-  doAssert(
-    blockNumber >= f[].blockIdx.startNumber and
-    blockNumber < f[].blockIdx.startNumber + 8192,
-    "Wrong era1 file for selected block number")
-
-  let pos = f[].blockIdx.offsets[blockNumber - f[].blockIdx.startNumber]
-
-  ? f[].handle.get().setFilePos(pos, SeekPosition.SeekBegin).mapErr(ioErrorMsg)
 
   let
     blockHeader = ? getBlockHeader(f)
@@ -364,6 +371,21 @@ proc getBlockTuple*(
     totalDifficulty = ? getTotalDifficulty(f)
 
   ok((blockHeader, blockBody, receipts, totalDifficulty))
+
+proc getBlockTuple*(
+    f: Era1File, blockNumber: uint64
+  ): Result[(BlockHeader, BlockBody, seq[Receipt], UInt256), string] =
+  doAssert not isNil(f) and f[].handle.isSome
+  doAssert(
+    blockNumber >= f[].blockIdx.startNumber and
+    blockNumber <= f[].blockIdx.endNumber,
+    "Wrong era1 file for selected block number")
+
+  let pos = f[].blockIdx.offsets[blockNumber - f[].blockIdx.startNumber]
+
+  ? f[].handle.get().setFilePos(pos, SeekPosition.SeekBegin).mapErr(ioErrorMsg)
+
+  getNextBlockTuple(f)
 
 # TODO: Should we add this perhaps in the Era1File object and grab it in open()?
 proc getAccumulatorRoot*(f: Era1File): Result[Digest, string] =
@@ -385,3 +407,38 @@ proc getAccumulatorRoot*(f: Era1File): Result[Digest, string] =
     return err("invalid accumulator root")
 
   ok(Digest(data: array[32, byte].initCopyFrom(bytes)))
+
+proc verify*(f: Era1File): Result[Digest, string] =
+  let
+    startNumber = f.blockIdx.startNumber
+    endNumber = f.blockIdx.endNumber()
+
+  var headerRecords: seq[HeaderRecord]
+  for blockNumber in startNumber..endNumber:
+    let
+      (blockHeader, blockBody, receipts, totalDifficulty) =
+        ? f.getBlockTuple(blockNumber)
+
+      txRoot = calcTxRoot(blockBody.transactions)
+      ommershHash = keccakHash(rlp.encode(blockBody.uncles))
+
+    if blockHeader.txRoot != txRoot:
+      return err("Invalid transactions root")
+
+    if blockHeader.ommersHash != ommershHash:
+      return err("Invalid ommers hash")
+
+    if blockHeader.receiptRoot != calcReceiptRoot(receipts):
+      return err("Invalid receipts root")
+
+    headerRecords.add(HeaderRecord(
+      blockHash: blockHeader.blockHash(),
+      totalDifficulty: totalDifficulty))
+
+  let expectedRoot = ? f.getAccumulatorRoot()
+  let accumulatorRoot = getEpochAccumulatorRoot(headerRecords)
+
+  if accumulatorRoot != expectedRoot:
+    err("Invalid accumulator root")
+  else:
+    ok(accumulatorRoot)

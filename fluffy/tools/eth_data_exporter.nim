@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2022-2023 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -214,15 +214,10 @@ proc cmdExportEra1(config: ExporterConf) =
     defer: era += 1
 
     let
-      firstBlock = era.uint64 * SLOTS_PER_HISTORICAL_ROOT
-      endBlock =
-        if (era + 1) * SLOTS_PER_HISTORICAL_ROOT - 1'u64 >= mergeBlockNumber:
-          # The incomplete era just before the merge
-          mergeBlockNumber - 1'u64
-        else:
-          (era + 1) * SLOTS_PER_HISTORICAL_ROOT - 1'u64
+      startNumber = era.startNumber()
+      endNumber = era.endNumber()
 
-    if firstBlock >= mergeBlockNumber:
+    if startNumber >= mergeBlockNumber:
       info "Stopping era as it is after the merge"
       break
 
@@ -238,13 +233,11 @@ proc cmdExportEra1(config: ExporterConf) =
 
       # TODO: Not checking the result of init, update or finish here, as all
       # error cases are fatal. But maybe we could throw proper errors still.
-      var group = Era1Group.init(e2, firstBlock).get()
+      var group = Era1Group.init(e2, startNumber).get()
 
-      # Keeping the headers and ttds to build the accumulator root
-      var headers: seq[BlockHeader]
-      var ttds: seq[UInt256]
-
-      for blockNumber in firstBlock..endBlock:
+      # Header records to build the accumulator root
+      var headerRecords: seq[accumulator.HeaderRecord]
+      for blockNumber in startNumber..endNumber:
         let blck =
           try:
             # TODO: Not sure about the errors that can occur here. But the whole
@@ -261,15 +254,16 @@ proc cmdExportEra1(config: ExporterConf) =
         except ValueError:
           break writeFileBlock
 
-        headers.add(blck.header)
-        ttds.add(ttd)
+        headerRecords.add(accumulator.HeaderRecord(
+          blockHash: blck.header.blockHash(),
+          totalDifficulty: ttd))
 
         group.update(
           e2, blockNumber, blck.header, blck.body, blck.receipts, ttd).get()
 
-      accumulatorRoot = buildEpochAccumulatorRoot(headers, ttds)
+      accumulatorRoot = getEpochAccumulatorRoot(headerRecords)
 
-      group.finish(e2, accumulatorRoot, endBlock).get()
+      group.finish(e2, accumulatorRoot, endNumber).get()
       completed = true
     if completed:
       let name = era1FileName("mainnet", era, accumulatorRoot)
@@ -294,103 +288,19 @@ proc cmdExportEra1(config: ExporterConf) =
       if (let e = io2.removeFile(tmpName); e.isErr):
         warn "Failed to clean up incomplete era1 file", tmpName, error = e.error
 
-
-# TODO: This is rather a quick version for testing but will be replaced with one
-# that makes use of the block index. There are some flaws in it currently.
 proc cmdVerifyEra1(config: ExporterConf) =
-  let f = openFile(config.era1FileName, {OpenFlags.Read}).valueOr:
-    error "Can't open ", file = config.era1FileName
+  let f = Era1File.open(config.era1FileName).valueOr:
+    warn "Failed to open era file", error = error
     quit 1
-  defer: discard closeFile(f)
+  defer: close(f)
 
-  var
-    headerRecords = 0
-    bodyRecords = 0
-    receiptsRecords = 0
-    ttdsRecords = 0
-    otherRecords = 0
+  let root = f.verify.valueOr:
+    warn "Verification of era file failed", error = error
+    quit 1
 
-    data: seq[byte]
-    headers: seq[BlockHeader]
-    ttds: seq[UInt256]
-
-  while true:
-    let header = readRecord(f, data).valueOr:
-      break
-
-    if header.typ == CompressedHeader:
-      let uncompressed = decodeFramed(data, checkIntegrity = false)
-      let header =
-        try:
-          rlp.decode(uncompressed, BlockHeader)
-        except RlpError as e:
-          error "Invalid block header", msg = e.msg, blockNumber = headerRecords
-          quit 1
-
-      headers.add(header)
-
-      headerRecords += 1
-
-    elif header.typ == CompressedBody:
-      let uncompressed = decodeFramed(data, checkIntegrity = false)
-      let body =
-        try:
-          rlp.decode(uncompressed, BlockBody)
-        except RlpError as e:
-          error "Invalid block body", msg = e.msg, blockNumber = bodyRecords
-          quit 1
-
-      let txRoot = calcTxRoot(body.transactions)
-      let ommershHash = keccakHash(rlp.encode(body.uncles))
-
-      if txRoot != headers[^1].txRoot:
-        error "Invalid txs root", blockNumber = bodyRecords
-        quit 1
-
-      if ommershHash != headers[^1].ommersHash:
-        error "Invalid ommers hash", blockNumber = bodyRecords
-        quit 1
-
-      bodyRecords += 1
-    elif header.typ == CompressedReceipts:
-      let uncompressed = decodeFramed(data, checkIntegrity = false)
-      let receipts =
-        try:
-          rlp.decode(uncompressed, seq[Receipt])
-        except RlpError as e:
-          error "Invalid receipts", msg = e.msg, blockNumber = receiptsRecords
-          quit 1
-
-      let receiptRoot = calcReceiptRoot(receipts)
-
-      if receiptRoot != headers[^1].receiptRoot:
-        error "Invalid receipts root", blockNumber = receiptsRecords
-        quit 1
-
-      receiptsRecords += 1
-    elif header.typ == TotalDifficulty:
-      if data.len != 32:
-        error "TTD is not 32 bytes", blockNumber = ttdsRecords
-        quit 1
-
-      ttds.add(UInt256.fromBytesLE(data))
-
-      ttdsRecords += 1
-    elif header.typ == era1.AccumulatorRoot:
-      let accumulatorRoot = buildEpochAccumulatorRoot(headers, ttds)
-      if data == accumulatorRoot.data:
-        info "Accumulator root matches", data = data.to0xHex()
-      else:
-        error "Accumulator root does not match", data = data.to0xHex()
-
-      # Note: could bake in the master accumulator and check actual value of the
-      # roots
-
-    else:
-      info "Skipping record", typ = toHex(header.typ)
-      otherRecords += 1
-
-  notice "Done", headerRecords, bodyRecords, receiptsRecords, ttdsRecords, otherRecords
+  notice "Era1 file succesfully verified",
+    accumulatorRoot = root.data.to0xHex(),
+    file = config.era1FileName
 
 when isMainModule:
   {.pop.}

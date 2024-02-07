@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2023 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -73,18 +73,10 @@ func init*(T: type Accumulator): T =
     currentEpoch: EpochAccumulator.init(@[])
   )
 
-func buildEpochAccumulatorRoot*(
-    headers: openArray[BlockHeader],
-    ttds: openArray[UInt256]
+func getEpochAccumulatorRoot*(
+    headerRecords: openArray[HeaderRecord]
   ): Digest =
-  doAssert(headers.len() == ttds.len(), "Headers and TTDs must be same length")
-
-  var epochAccumulator = EpochAccumulator.init(@[])
-  for i in 0..<headers.len():
-    discard epochAccumulator.add(HeaderRecord(
-      blockHash: headers[i].blockHash(),
-      totalDifficulty: ttds[i]
-    ))
+  let epochAccumulator = EpochAccumulator.init(@headerRecords)
 
   hash_tree_root(epochAccumulator)
 
