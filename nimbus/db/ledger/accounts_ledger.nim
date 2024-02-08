@@ -707,11 +707,6 @@ proc update(wd: var WitnessData, acc: AccountRef) =
       wd.storageKeys.incl k
 
   for k, v in acc.overlayStorage:
-    if v.isZero and k notin wd.storageKeys:
-      continue
-    if v.isZero and k in wd.storageKeys:
-      wd.storageKeys.excl k
-      continue
     wd.storageKeys.incl k
 
 proc witnessData(acc: AccountRef): WitnessData =

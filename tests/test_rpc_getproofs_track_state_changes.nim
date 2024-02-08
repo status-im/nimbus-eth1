@@ -5,6 +5,23 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+# This test is intended to be run manually against a running instance of Nimbus-Eth1
+# so it should not be added to the test runner or to the CI test suite.
+#
+# It uses the exp_getProofsByBlockNumber endpoint to get the list of state updates
+# for each block, it then applies these updates against a local test state and
+# then checks the state root against the expected state root which is pulled from
+# the block header. The local test state is persisted to disk so that the data can
+# be re-used between separate test runs. The default database directory is the
+# current directory but this can be changed by setting the DATABASE_PATH const below.
+#
+# To run the test:
+# 1. Sync Nimbus up to or past the block number/s that you wish to test against.
+#    You can use the premix persist tool to do this if Nimbus is not able to sync.
+# 2. Start Nimbus with the http RPC-API enabled with the 'eth' and 'exp' namespaces
+#    turned on using this command: build/nimbus --rpc --rpc-api=eth,exp
+# 3. Start the test.
+
 import
   std/tables,
   unittest2,
@@ -17,6 +34,13 @@ import
   ../../nimbus/db/[core_db, core_db/persistent, state_db/base],
   ../stateless/[witness_verification, witness_types],
   ./rpc/experimental_rpc_client
+
+const
+  RPC_HOST = "127.0.0.1"
+  RPC_PORT = Port(8545)
+  DATABASE_PATH = "."
+  START_BLOCK = 330_000
+  END_BLOCK = 1_000_000
 
 type
   Hash256 = eth_types.Hash256
@@ -70,16 +94,25 @@ proc updateStateUsingProofsAndCheckStateRoot(
         stateDB.setCode(address, code)
 
     if (balance == 0 and nonce == 0 and codeHash == ZERO_HASH256 and storageHash == ZERO_HASH256):
+      # Account doesn't exist:
+      # The account was deleted due to a self destruct and the data no longer exists in the state.
+      # The RPC API correctly returns zeroed values in this scenario which is the same behavior
+      # implemented by geth.
       stateDB.setCode(address, @[])
       stateDB.clearStorage(address)
       stateDB.deleteAccount(address)
     elif (balance == 0 and nonce == 0 and codeHash == EMPTY_SHA3 and storageHash == EMPTY_ROOT_HASH):
+      # Account exists but is empty:
+      # The account was deleted due to a self destruct or the storage was cleared/set to zero
+      # and the bytecode is empty.
+      # The RPC API correctly returns codeHash == EMPTY_SHA3 and storageHash == EMPTY_ROOT_HASH
+      # in this scenario which is the same behavior implemented by geth.
       stateDB.setCode(address, @[])
       stateDB.clearStorage(address)
       stateDB.setBalance(address, 0.u256)
       stateDB.setNonce(address, 0)
-      stateDB.clearStorage(address)
     else:
+      # Account exists and is not empty:
       stateDB.setBalance(address, balance)
       stateDB.setNonce(address, nonce)
       for slotProof in slotProofs:
@@ -105,11 +138,6 @@ proc rpcGetProofsTrackStateChangesMain*() =
 
   suite "rpc getProofs track state changes tests":
 
-    const
-      RPC_HOST = "127.0.0.1"
-      RPC_PORT = Port(8545)
-      DATABASE_PATH = "."
-
     let client = newRpcHttpClient()
     waitFor client.connect(RPC_HOST, RPC_PORT, secure = false)
 
@@ -120,12 +148,10 @@ proc rpcGetProofsTrackStateChangesMain*() =
       com.db.compensateLegacySetup()
 
       let
-        startBlock = 644_000
-        endBlock = 1_000_000
-        blockHeader = waitFor client.eth_getBlockByNumber(blockId(startBlock.uint64), false)
+        blockHeader = waitFor client.eth_getBlockByNumber(blockId(START_BLOCK), false)
         stateDB = newAccountStateDB(com.db, blockHeader.stateRoot.toHash256(), false)
 
-      for i in startBlock..endBlock:
+      for i in START_BLOCK..END_BLOCK:
         let
           blockNum = blockId(i.uint64)
           blockHeader: BlockObject = waitFor client.eth_getBlockByNumber(blockNum, false)
