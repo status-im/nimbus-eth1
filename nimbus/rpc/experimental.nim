@@ -75,8 +75,7 @@ proc getBlockProofs*(
     let address = keyData.address
     var slots = newSeq[UInt256]()
 
-    if not keyData.storageKeys.isNil and accDB.accountExists(address) and
-        accDB.getStorageRoot(address) != EMPTY_ROOT_HASH:
+    if not keyData.storageKeys.isNil and accDB.accountExists(address):
       for slotData in keyData.storageKeys.keys:
         slots.add(fromBytesBE(UInt256, slotData.storageSlot))
 
