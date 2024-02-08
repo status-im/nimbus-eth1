@@ -209,6 +209,17 @@ func endNumber*(era: Era1): uint64 =
 func endNumber*(blockIdx: BlockIndex): uint64 =
   blockIdx.startNumber + blockIdx.offsets.lenu64() - 1
 
+func era*(blockNumber: uint64): Era1 =
+  Era1(blockNumber div MaxEra1Size)
+
+func offsetsLen(startNumber: uint64): int =
+  # For the era where the merge happens the era files only holds the blocks
+  # until the merge block so the offsets length needs to be adapted too.
+  if startNumber.era() >= mergeBlockNumber.era():
+    int((mergeBlockNumber) mod MaxEra1Size)
+  else:
+    MaxEra1Size
+
 proc toCompressedRlpBytes(item: auto): seq[byte] =
   snappy.encodeFramed(rlp.encode(item))
 
@@ -226,7 +237,7 @@ proc init*(
   ok(Era1Group(
     blockIndex: BlockIndex(
       startNumber: startNumber,
-      offsets: newSeq[int64](8192.int64)
+      offsets: newSeq[int64](startNumber.offsetsLen())
   )))
 
 proc update*(
@@ -306,10 +317,8 @@ proc open*(_: type Era1File, name: string): Result[Era1File, string] =
   ? f[].setFilePos(blockIdxPos, SeekPosition.SeekCurrent).mapErr(ioErrorMsg)
 
   let blockIdx = ? f[].readBlockIndex()
-  # Note: Could do an additional offset.len check here by calculating what it
-  # should be based on mergeBlockNumber. It is however not necessary as the
-  # accumulator root will fail if to many blocks are added (it will take a bit
-  # longer though).
+  if blockIdx.offsets.len() != blockIdx.startNumber.offsetsLen():
+    return err("Block index length invalid")
 
   let res = Era1File(handle: f, blockIdx: blockIdx)
   reset(f)
