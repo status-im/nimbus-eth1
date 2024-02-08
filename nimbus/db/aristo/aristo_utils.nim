@@ -14,7 +14,7 @@
 {.push raises: [].}
 
 import
-  std/sequtils,
+  std/[sequtils, tables],
   eth/common,
   results,
   "."/[aristo_desc, aristo_get, aristo_hike, aristo_layers]
