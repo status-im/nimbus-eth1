@@ -120,12 +120,13 @@ proc requestBlock*(
 
   if DownloadReceipts in flags:
     result.receipts   = requestReceipts(header, client)
-    let
-      receiptRoot   = calcReceiptRoot(result.receipts).prefixHex
-      receiptRootOK = result.header.receiptRoot.prefixHex
-    if receiptRoot != receiptRootOK:
-      debug "wrong receipt root", receiptRoot, receiptRootOK, blockNumber
-      raise newException(ValueError, "Error when validating receipt root")
+    if DownloadAndValidate in flags:
+      let
+        receiptRoot   = calcReceiptRoot(result.receipts).prefixHex
+        receiptRootOK = result.header.receiptRoot.prefixHex
+      if receiptRoot != receiptRootOK:
+        debug "wrong receipt root", receiptRoot, receiptRootOK, blockNumber
+        raise newException(ValueError, "Error when validating receipt root")
 
   if DownloadAndValidate in flags:
     let

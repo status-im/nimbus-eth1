@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2020-2023 Status Research & Development GmbH
+# Copyright (c) 2020-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -14,6 +14,8 @@ import
   stint, stew/byteutils
 
 import ../nimbus/transaction, ../nimbus/utils/ec_recover
+
+from stew/objects import checkedEnumAssign
 
 template stripLeadingZeros(value: string): string =
   var cidx = 0
@@ -225,7 +227,15 @@ proc parseLogs(n: JsonNode): seq[Log] =
     result = @[]
 
 proc parseReceipt*(n: JsonNode): Receipt =
-  var rec = Receipt(receiptType: LegacyReceipt)
+  var recType: byte
+  n.fromJson "type", recType
+  var txVal: ReceiptType
+  var rec =
+    if checkedEnumAssign(txVal, recType):
+      Receipt(receiptType: txVal)
+    else:
+      raise newException(ValueError, "Unknown receipt type")
+
   if n.hasKey("root"):
     var hash: Hash256
     n.fromJson "root", hash
