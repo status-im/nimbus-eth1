@@ -436,8 +436,16 @@ proc mptMethods(cMpt: AristoChildDbRef): CoreDbMptFns =
     let
       db = cMpt.base.parent
       mpt = cMpt.mpt
-      rc = mpt.delete(cMpt.root, k)
+
+    if not cMpt.root.isValid and cMpt.accPath.isValid:
+      # This is insane but legit. A storage trie was announced for an account
+      # but no data have been added, yet.
+      return ok()
+
+    let rc = mpt.delete(cMpt.root, k, cMpt.accPath)
     if rc.isErr:
+      if rc.error[1] == DelPathNotFound:
+        return err(rc.error.toError(db, info, MptNotFound))
       return err(rc.error.toError(db, info))
     ok()
 
@@ -560,8 +568,10 @@ proc accMethods(cAcc: AristoChildDbRef): CoreDbAccFns =
       db = cAcc.base.parent
       mpt = cAcc.mpt
       key = address.keccakHash.data
-      rc = mpt.delete(cAcc.root, key)
+      rc = mpt.delete(cAcc.root, key, VOID_PATH_ID)
     if rc.isErr:
+      if rc.error[1] ==  DelPathNotFound:
+        return err(rc.error.toError(db, info, AccNotFound))
       return err(rc.error.toError(db, info))
     ok()
 
@@ -623,7 +633,7 @@ func toError*(
   db.bless(error, AristoCoreDbError(
     ctx:      info,
     isAristo: true,
-    root:     e[0],
+    vid:      e[0],
     aErr:     e[1]))
 
 func toVoidRc*[T](
@@ -795,7 +805,7 @@ proc getTrie*(
   base.gc() # update pending changes
 
   if kind == StorageTrie and not path.isValid:
-    return err(aristo.MergeAccPathMissing.toError(db, info, AccAddrMissing))
+    return err(aristo.UtilsAccPathMissing.toError(db, info, AccAddrMissing))
 
   if not root.isValid:
     var trie = AristoCoreDbTrie(

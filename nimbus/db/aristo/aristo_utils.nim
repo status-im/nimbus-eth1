@@ -14,9 +14,10 @@
 {.push raises: [].}
 
 import
+  std/[sequtils, tables],
   eth/common,
   results,
-  "."/[aristo_desc, aristo_get, aristo_layers]
+  "."/[aristo_desc, aristo_get, aristo_hike, aristo_layers]
 
 # ------------------------------------------------------------------------------
 # Public functions, converters
@@ -176,6 +177,52 @@ proc subVids*(vtx: VertexRef): seq[VertexID] =
         result.add vid
   of Extension:
     result.add vtx.eVid
+
+# ---------------------
+
+proc registerAccount*(
+    db: AristoDbRef;                   # Database, top layer
+    stoRoot: VertexID;                 # Storage root ID
+    accPath: PathID;                   # Needed for accounts payload
+       ): Result[void,AristoError] =
+  ## Verify that the `stoRoot` argument is properly referred to by the
+  ## account data (if any) implied to by the `accPath` argument.
+  ##
+  # Verify storage root and account path
+  if not stoRoot.isValid:
+    return err(UtilsStoRootMissing)
+  if not accPath.isValid:
+    return err(UtilsAccPathMissing)
+
+  # Check whether the account is marked for re-hash, already
+  let lty = LeafTie(root: VertexID(1), path: accPath)
+  if db.lTab.hasKey lty:
+    return ok()
+
+  # Get account leaf with account data
+  let rc = lty.hikeUp(db)
+  let hike = block:
+    if rc.isErr:
+      return err(UtilsAccUnaccessible)
+    rc.value
+
+  let wp = hike.legs[^1].wp
+  if wp.vtx.vType != Leaf:
+    return err(UtilsAccPathWithoutLeaf)
+  if wp.vtx.lData.pType != AccountData:
+    return ok() # nothing to do
+
+  # Need to flag for re-hash
+  let stoID = wp.vtx.lData.account.storageID
+  if stoID.isValid and stoID != stoRoot:
+    return err(UtilsAccWrongStorageRoot)
+
+  # Clear Merkle keys and store leaf record
+  for w in hike.legs.mapIt(it.wp.vid):
+    db.layersResLabel w
+  db.top.final.lTab[lty] = wp.vid
+
+  ok()
 
 # ------------------------------------------------------------------------------
 # End

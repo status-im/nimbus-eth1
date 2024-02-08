@@ -95,10 +95,6 @@ type
     MergeNonBranchProofModeLock
     MergeRootBranchLinkBusy
     MergeRootMissing
-    MergeAccPathMissing
-    MergeAccUnaccessible
-    MergeAccPathWithoutLeaf
-    MergeAccWrongStorageRoot
     MergeAssemblyFailed # Ooops, internal error
 
     MergeHashKeyInvalid
@@ -112,8 +108,14 @@ type
     MergeRootKeyDiffersForVid
     MergeNodeVtxDuplicates
 
+    # Utils
+    UtilsAccPathMissing
+    UtilsAccPathWithoutLeaf
+    UtilsAccUnaccessible
+    UtilsAccWrongStorageRoot
+    UtilsStoRootMissing
+
     # Update `Merkle` hashes `hashify()`
-    HashifyEmptyHike
     HashifyExistingHashMismatch
     HashifyNodeUnresolved
     HashifyRootHashMismatch
@@ -195,6 +197,7 @@ type
     DelVidStaleVtx
     DelSubTreeTooBig
     DelSubTreeVoidRoot
+    DelPathNotFound
 
     # Functions from  `aristo_filter.nim`
     FilBackendMissing

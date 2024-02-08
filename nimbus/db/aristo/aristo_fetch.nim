@@ -18,31 +18,17 @@ import
   results,
   "."/[aristo_desc, aristo_hike]
 
-const
-  AcceptableHikeStops = {
-    HikeBranchTailEmpty,
-    HikeBranchMissingEdge,
-    HikeExtTailEmpty,
-    HikeExtTailMismatch,
-    HikeLeafUnexpected,
-    HikeNoLegs}
-
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
 proc fetchPayloadImpl(
-    rc: Result[Hike,(Hike,AristoError)];
+    rc: Result[Hike,(VertexID,AristoError,Hike)];
       ): Result[PayloadRef,(VertexID,AristoError)] =
   if rc.isErr:
-    let vid =
-      if rc.error[0].legs.len == 0: VertexID(0)
-      else: rc.error[0].legs[^1].wp.vid
-    if rc.error[1] in  AcceptableHikeStops:
-      return err((vid, FetchPathNotFound))
-    return err((vid, rc.error[1]))
-  if rc.value.legs.len == 0:
-    return err((VertexID(0), FetchPathNotFound))
+    if rc.error[1] in HikeAcceptableStopsNotFound:
+      return err((rc.error[0], FetchPathNotFound))
+    return err((rc.error[0], rc.error[1]))
   ok rc.value.legs[^1].wp.vtx.lData
 
 proc fetchPayloadImpl(

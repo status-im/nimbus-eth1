@@ -61,7 +61,7 @@ import
   results,
   stew/byteutils,
   "."/[aristo_desc, aristo_get, aristo_hike, aristo_layers, aristo_serialise,
-       aristo_utils]
+       aristo_utils, aristo_vid]
 
 type
   FollowUpVid = object
@@ -222,12 +222,6 @@ proc updateSchedule(
         break findlegInx
       vid = leaf.vid
 
-    if not db.layersGetKeyOrVoid(vid).isValid:
-      db.layersPutLabel(vid, HashLabel(root: root, key: node.digestTo(HashKey)))
-      # Clean up unnecessay leaf node from previous session
-      wff.base.del vid
-      wff.setNextLink(wff.pool, wff.base.getOrVoid vid)
-
     # If possible, compute a node from the current vertex with all links
     # resolved on the cache layer. If this is not possible, stop here and
     # return the list of vertex IDs that could not be resolved (see option
@@ -324,9 +318,8 @@ proc hashify*(
         # FIXME: Is there a case for adding unresolved child-to-root links
         #        to the `wff` schedule?
         continue
-      if rc.isErr:
-        return err((lfVid,rc.error[1]))
-      return err((hike.root,HashifyEmptyHike))
+      doAssert rc.isErr # see implementation of `hikeUp()`
+      return err((lfVid,rc.error[1]))
 
     # Compile width-first forest search schedule
     wff.updateSchedule(db, hike)
@@ -419,8 +412,10 @@ proc hashify*(
     db.layersPutLabel(vid, HashLabel(root: vid, key: node.digestTo(HashKey)))
     wff.completed.incl vid
 
-  db.top.final.dirty = false
-  db.top.final.lTab.clear
+  db.top.final.dirty = false              # Mark top layer clean
+  db.top.final.lTab.clear                 # Done with leafs
+  db.top.final.vGen = db.vGen.vidReorg()  # Squeze list of recycled vertex IDs
+
   ok wff.completed
 
 # ------------------------------------------------------------------------------

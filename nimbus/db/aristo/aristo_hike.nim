@@ -27,6 +27,18 @@ type
     legs*: seq[Leg]                ## Chain of vertices and IDs
     tail*: NibblesSeq              ## Portion of non completed path
 
+const
+  HikeAcceptableStopsNotFound* = {
+      HikeBranchTailEmpty,
+      HikeBranchMissingEdge,
+      HikeExtTailEmpty,
+      HikeExtTailMismatch,
+      HikeLeafUnexpected,
+      HikeNoLegs}
+    ## When trying to find a leaf vertex the Patricia tree, there are several
+    ## conditions where the search stops which do not constitute a problem
+    ## with the trie (aka sysetm error.)
+
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
@@ -47,9 +59,9 @@ func getNibblesImpl(hike: Hike; start = 0; maxLen = high(int)): NibblesSeq =
 # Public functions
 # ------------------------------------------------------------------------------
 
-func to*(rc: Result[Hike,(Hike,AristoError)]; T: type Hike): T =
+func to*(rc: Result[Hike,(VertexID,AristoError,Hike)]; T: type Hike): T =
   ## Extract `Hike` from either ok ot error part of argument `rc`.
-  if rc.isOk: rc.value else: rc.error[0]
+  if rc.isOk: rc.value else: rc.error[2]
 
 func to*(hike: Hike; T: type NibblesSeq): T =
   ## Convert back
@@ -69,7 +81,7 @@ proc hikeUp*(
     path: NibblesSeq;                            # Partial path
     root: VertexID;                              # Start vertex
     db: AristoDbRef;                             # Database
-      ): Result[Hike,(Hike,AristoError)] =
+      ): Result[Hike,(VertexID,AristoError,Hike)] =
   ## For the argument `path`, find and return the logest possible path in the
   ## argument database `db`.
   var hike = Hike(
@@ -77,9 +89,9 @@ proc hikeUp*(
     tail: path)
 
   if not root.isValid:
-    return err((hike,HikeRootMissing))
+    return err((VertexID(0),HikeRootMissing,hike))
   if path.len == 0:
-    return err((hike,HikeEmptyPath))
+    return err((VertexID(0),HikeEmptyPath,hike))
 
   var vid = root
   while vid.isValid:
@@ -88,9 +100,9 @@ proc hikeUp*(
     # Fetch next vertex
     leg.wp.vtx = db.getVtxRc(vid).valueOr:
       if error != GetVtxNotFound:
-        return err((hike,error))
+        return err((vid,error,hike))
       if hike.legs.len == 0:
-        return err((hike,HikeNoLegs))
+        return err((vid,HikeNoLegs,hike))
       break
 
     case leg.wp.vtx.vType:
@@ -101,19 +113,19 @@ proc hikeUp*(
         hike.tail = EmptyNibbleSeq
         break
 
-      return err((hike,HikeLeafUnexpected))
+      return err((vid,HikeLeafUnexpected,hike))
 
     of Branch:
       if hike.tail.len == 0:
         hike.legs.add leg
-        return err((hike,HikeBranchTailEmpty))
+        return err((vid,HikeBranchTailEmpty,hike))
 
       let
         nibble = hike.tail[0].int8
         nextVid = leg.wp.vtx.bVid[nibble]
 
       if not nextVid.isValid:
-        return err((hike,HikeBranchMissingEdge))
+        return err((vid,HikeBranchMissingEdge,hike))
 
       leg.nibble = nibble
       hike.legs.add leg
@@ -124,10 +136,10 @@ proc hikeUp*(
       if hike.tail.len == 0:
         hike.legs.add leg
         hike.tail = EmptyNibbleSeq
-        return err((hike,HikeExtTailEmpty))    # Well, somehow odd
+        return err((vid,HikeExtTailEmpty,hike))    # Well, somehow odd
 
       if leg.wp.vtx.ePfx.len != hike.tail.sharedPrefixLen(leg.wp.vtx.ePfx):
-        return err((hike,HikeExtTailMismatch)) # Need to branch from here
+        return err((vid,HikeExtTailMismatch,hike)) # Need to branch from here
 
       hike.legs.add leg
       hike.tail = hike.tail.slice(leg.wp.vtx.ePfx.len)
@@ -135,7 +147,10 @@ proc hikeUp*(
 
   ok hike
 
-proc hikeUp*(lty: LeafTie; db: AristoDbRef): Result[Hike,(Hike,AristoError)] =
+proc hikeUp*(
+    lty: LeafTie;
+    db: AristoDbRef;
+      ): Result[Hike,(VertexID,AristoError,Hike)] =
   ## Variant of `hike()`
   lty.path.to(NibblesSeq).hikeUp(lty.root, db)
 

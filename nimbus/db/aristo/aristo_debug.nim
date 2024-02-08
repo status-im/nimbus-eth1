@@ -647,6 +647,15 @@ proc pp*(nd: NodeRef; root: VertexID; db: AristoDbRef): string =
       result[^1] = ']'
   result &= ")"
 
+proc pp*[T](rc: Result[T,(VertexID,AristoError)]): string =
+  if rc.isOk:
+    result = "ok("
+    when T isnot void:
+      result &= ".."
+    result &= ")"
+  else:
+    result = "err((" & rc.error[0].pp & "," & $rc.error[1] & "))"
+
 proc pp*(nd: NodeRef): string =
   nd.pp(AristoDbRef(nil).orDefault)
 

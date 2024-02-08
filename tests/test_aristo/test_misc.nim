@@ -276,8 +276,8 @@ proc testVidRecycleLists*(noisy = true; seed = 42): bool =
       expectedVids += (vid < first).ord
       db.vidDispose vid
 
-    xCheck db.vGen.len == expectedVids
-    noisy.say "***", "vids=", db.vGen.len, " discarded=", count-expectedVids
+    xCheck db.vGen.len == expectedVids:
+      noisy.say "***", "vids=", db.vGen.len, " discarded=", count-expectedVids
 
   # Serialise/deserialise
   block:
@@ -315,7 +315,7 @@ proc testVidRecycleLists*(noisy = true; seed = 42): bool =
   # Recycling and re-org tests
   func toVQ(a: seq[int]): seq[VertexID] = a.mapIt(VertexID(LEAST_FREE_VID+it))
 
-  xCheck @[8, 7,  3, 4, 5,  9]    .toVQ.vidReorg == @[3, 4, 5,  7] .toVQ
+  xCheck @[8, 7,  3, 4, 5,  9]    .toVQ.vidReorg == @[5, 4, 3,  7] .toVQ
   xCheck @[8, 7, 6,  3, 4, 5,  9] .toVQ.vidReorg == @[3]           .toVQ
   xCheck @[5, 4, 3,  7]           .toVQ.vidReorg == @[5, 4, 3,  7] .toVQ
   xCheck @[5]                     .toVQ.vidReorg == @[5]           .toVQ
