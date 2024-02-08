@@ -436,9 +436,15 @@ proc mptMethods(cMpt: AristoChildDbRef): CoreDbMptFns =
     let
       db = cMpt.base.parent
       mpt = cMpt.mpt
-      rc = mpt.delete(cMpt.root, k, cMpt.accPath)
+
+    if not cMpt.root.isValid and cMpt.accPath.isValid:
+      # This is insane but legit. A storage trie was announced for an account
+      # but no data have been added, yet.
+      return ok()
+
+    let rc = mpt.delete(cMpt.root, k, cMpt.accPath)
     if rc.isErr:
-      if rc.error[1] ==  DelPathNotFound:
+      if rc.error[1] == DelPathNotFound:
         return err(rc.error.toError(db, info, MptNotFound))
       return err(rc.error.toError(db, info))
     ok()
