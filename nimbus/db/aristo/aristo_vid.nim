@@ -72,26 +72,26 @@ proc vidDispose*(db: AristoDbRef; vid: VertexID) =
 
 proc vidReorg*(vGen: seq[VertexID]): seq[VertexID] =
   ## Return a compacted version of the argument vertex ID generator state
-  ## `vGen`. The function removes redundant items from the recycle queue.
+  ## `vGen`. The function removes redundant items from the recycle queue and
+  ## orders it in a way so that smaller `VertexID` numbers are re-used first.
+  ##
   if 1 < vGen.len:
-    let lst = vGen.mapIt(uint64(it)).sorted.mapIt(VertexID(it))
-    for n in (lst.len-1).countDown(1):
-      if lst[n-1].uint64 + 1 != lst[n].uint64:
-        # All elements larger than `lst[n-1]` are in increasing order. For
-        # the last continuously increasing sequence, only the smallest item
-        # is needed and the rest can be removed
+    let lst = vGen.mapIt(uint64(it)).sorted(Descending).mapIt(VertexID(it))
+    for n in 0 .. lst.len-2:
+      if lst[n].uint64 != lst[n+1].uint64 + 1:
+        # All elements of the sequence `lst[0]`..`lst[n]` are in decreasing
+        # order with distance 1. Only the smallest item is needed and the
+        # rest can be removed (as long as distance is 1.)
         #
         # Example:
-        #         ..3, 5, 6, 7     =>   ..3, 5
-        #              ^
-        #              |
-        #              n
+        #         7, 6, 5, 3..  =>   5, 3..   =>   @[3..] & @[5]
+        #               ^
+        #               |
+        #               n
         #
-        if n < lst.len-1:
-          return lst[0..n]
-        return vGen
-    # All entries are continuously increasing
-    return @[lst[0]]
+        return lst[n+1 .. lst.len-1] & @[lst[n]]
+    # Entries decrease continuously
+    return @[lst[^1]]
 
   vGen
 

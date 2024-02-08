@@ -61,7 +61,7 @@ import
   results,
   stew/byteutils,
   "."/[aristo_desc, aristo_get, aristo_hike, aristo_layers, aristo_serialise,
-       aristo_utils]
+       aristo_utils, aristo_vid]
 
 type
   FollowUpVid = object
@@ -412,8 +412,10 @@ proc hashify*(
     db.layersPutLabel(vid, HashLabel(root: vid, key: node.digestTo(HashKey)))
     wff.completed.incl vid
 
-  db.top.final.dirty = false
-  db.top.final.lTab.clear
+  db.top.final.dirty = false              # Mark top layer clean
+  db.top.final.lTab.clear                 # Done with leafs
+  db.top.final.vGen = db.vGen.vidReorg()  # Squeze list of recycled vertex IDs
+
   ok wff.completed
 
 # ------------------------------------------------------------------------------
