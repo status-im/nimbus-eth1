@@ -61,72 +61,6 @@ type
     startNumber*: uint64
     offsets*: seq[int64] # Absolute positions in file
 
-template lenu64(x: untyped): untyped =
-  uint64(len(x))
-
-## Following procs are more e2s specific and copied from e2store.nim
-## TODO: Split up e2store.nim between e2s and era1 specific parts and reuse
-## e2s code.
-
-proc toString(v: IoErrorCode): string =
-  try: ioErrorMsg(v)
-  except Exception as e: raiseAssert e.msg
-
-proc append(f: IoHandle, data: openArray[byte]): Result[void, string] =
-  if (? writeFile(f, data).mapErr(toString)) != data.len.uint:
-    return err("could not write data")
-  ok()
-
-proc appendHeader(f: IoHandle, typ: Type, dataLen: int): Result[int64, string] =
-  if dataLen.uint64 > uint32.high:
-    return err("entry does not fit 32-bit length")
-
-  let start = ? getFilePos(f).mapErr(toString)
-
-  ? append(f, typ)
-  ? append(f, toBytesLE(dataLen.uint32))
-  ? append(f, [0'u8, 0'u8])
-
-  ok(start)
-
-proc checkBytesLeft(f: IoHandle, expected: int64): Result[void, string] =
-  let size = ? getFileSize(f).mapErr(toString)
-  if expected > size:
-    return err("Record extends past end of file")
-
-  let pos = ? getFilePos(f).mapErr(toString)
-  if expected > size - pos:
-    return err("Record extends past end of file")
-
-  ok()
-
-proc readFileExact(f: IoHandle, buf: var openArray[byte]): Result[void, string] =
-  if (? f.readFile(buf).mapErr(toString)) != buf.len().uint:
-    return err("missing data")
-  ok()
-
-proc readHeader(f: IoHandle): Result[Header, string] =
-  var buf: array[10, byte]
-  ? readFileExact(f, buf.toOpenArray(0, 7))
-
-  var
-    typ: Type
-  discard typ.copyFrom(buf)
-
-  # Conversion safe because we had only 4 bytes of length data
-  let len = (uint32.fromBytesLE(buf.toOpenArray(2, 5))).int64
-
-  # No point reading these..
-  if len > int.high(): return err("header length exceeds int.high")
-
-  # Must have at least that much data, or header is invalid
-  ? f.checkBytesLeft(len)
-
-  ok(Header(typ: typ, len: int(len)))
-
-## Following types & procs are era1 specific
-
-type
   Era1* = distinct uint64 # Period of 8192 blocks (not an exact time unit)
 
   Era1Group* = object
@@ -135,9 +69,14 @@ type
 # As stated, not really a time unit but nevertheless, need the borrows
 ethTimeUnit Era1
 
-# Note: appendIndex, appendRecord and readIndex for BlockIndex are only
-# different from its consensus layer counter parts because of usage of slot vs
-# blockNumber. In practise, they do the same thing.
+template lenu64(x: untyped): untyped =
+  uint64(len(x))
+
+# Note: appendIndex, appendRecord and readIndex for BlockIndex are very similar
+# to its consensus layer counter parts. The difference lies in the naming of
+# slots vs block numbers and there is different behavior for the first era
+# (first slot) and the last era (era1 ends at merge block).
+
 proc appendIndex*(
     f: IoHandle, startNumber: uint64, offsets: openArray[int64]):
     Result[int64, string] =
