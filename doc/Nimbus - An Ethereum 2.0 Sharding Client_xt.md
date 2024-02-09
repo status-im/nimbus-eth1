@@ -347,7 +347,7 @@ A reference to:
 # Ideas Considered for Implementation
 
 1. Create [devp2p](https://github.com/ethereum/wiki/wiki/%C3%90%CE%9EVp2p-Wire-Protocol) and an abstraction to allow for
-   [libp2p](https://github.com/Agorise/c-libp2p), [Node
+   [libp2p](https://git.agorise.net/agorise/c-libp2p), [Node
    Discovery](https://github.com/ethereum/wiki/wiki/Node-discovery-protocol),
    [RLP encoding](https://github.com/ethereum/wiki/wiki/RLP), [Modified Patricia Merkle Tree](https://easythereentropy.wordpress.com/2014/06/04/understanding-the-ethereum-trie/), [bigint’s](https://github.com/def-/nim-bigints), [keccak256](https://github.com/ethereum/eth-hash), and
    [secp256k1](https://en.bitcoin.it/wiki/Secp256k1).
