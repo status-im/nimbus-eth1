@@ -213,7 +213,6 @@ proc test_chainSync*(
       dotsOrSpace = "   "
 
     noisy.startLogging(headers9[0].blockNumber)
-
     if lastOneExtra:
       let
         headers0 = headers9[0..0]
@@ -228,7 +227,6 @@ proc test_chainSync*(
         let runPersistBlocks9Rc = chain.persistBlocks(headers9, bodies9)
         xCheck runPersistBlocks9Rc == ValidationResult.OK
     break
-
 
   true
 

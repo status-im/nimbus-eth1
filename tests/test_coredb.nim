@@ -11,7 +11,7 @@
 ## Testing `CoreDB` wrapper implementation
 
 import
-  std/[os, strformat, strutils, times],
+  std/[algorithm, os, strformat, strutils, times],
   chronicles,
   eth/common,
   results,
@@ -22,12 +22,18 @@ import
   ./test_coredb/[coredb_test_xx, test_chainsync, test_helpers]
 
 const
+  # If `true`, this compile time option set up `unittest2` for manual parsing
+  unittest2DisableParamFiltering {.booldefine.} = false
+
   baseDir = [".", "..", ".."/"..", $DirSep]
   repoDir = [".", "tests", "nimbus-eth1-blobs"]
   subDir = ["replay", "test_coredb", "custom-network", "customgenesis"]
 
   # Reference file for finding some database directory base
   sampleDirRefFile = "coredb_test_xx.nim"
+
+  dbTypeDefault = LegacyDbMemory
+  ldgTypeDefault = LegacyAccountsCache
 
 let
   # Standard test sample
@@ -37,26 +43,58 @@ let
 # Helpers
 # ------------------------------------------------------------------------------
 
+when unittest2DisableParamFiltering:
+  # Filter out local options and pass on the rest to `unittest2`
+  proc cmdLineConfig(): tuple[samples: seq[CaptureSpecs]] =
+
+    # Define sample list from the command line (if any)
+    const optPfx =  "--sample=" # Custom option with sample list
+
+    proc parseError(s = "") =
+      let msg = if 0 < s.len: "Unsupported \"" & optPfx & "\" list item: " & s
+                else: "Empty \"" & optPfx & " list"
+      echo "*** ", getAppFilename().splitFile.name, ": ", msg
+      echo "    Available: ", allSamples.mapIt(it.name).sorted.join(" ")
+      quit(99)
+
+    var other: seq[string] # Options for manual parsing by `unittest2`
+
+    for arg in commandLineParams():
+      if optPfx.len <= arg.len and arg[0 ..< optPfx.len] == optPfx:
+        for w in arg[optPfx.len ..< arg.len].split(",").mapIt(it.strip):
+          block findSample:
+            for sample in allSamples:
+              if w.cmpIgnoreCase(sample.name) == 0:
+                result.samples.add sample
+                break findSample
+            w.parseError()
+        if result.samples.len == 0:
+          parseError()
+      else:
+        other.add arg
+
+    # Setup `unittest2`
+    other.parseParameters
+
+else:
+  # Kill the compilation process iff the directive `cmdLineConfig()` is used
+  template cmdLineConfig(): untyped =
+    {.error: "cmdLineConfig() needs compiler option "&
+      " -d:unittest2DisableParamFiltering".}
+
+
 proc findFilePath(
     file: string;
     baseDir: openArray[string] = baseDir;
     repoDir: openArray[string] = repoDir;
     subDir: openArray[string] = subDir;
       ): Result[string,void] =
-  for dir in baseDir:
-    if dir.dirExists:
-      for repo in repoDir:
-        if (dir / repo).dirExists:
-          for sub in subDir:
-            if (dir / repo / sub).dirExists:
-              let path = dir / repo / sub / file
-              if path.fileExists:
-                return ok(path)
-  echo "*** File not found \"", file, "\"."
-  err()
+  file.findFilePathHelper(baseDir, repoDir, subDir)
+
 
 proc getTmpDir(sampleDir = sampleDirRefFile): string =
   sampleDir.findFilePath.value.splitFile.dir
+
 
 proc flushDbDir(s: string) =
   if s != "":
@@ -142,8 +180,8 @@ proc initRunnerDB(
 proc chainSyncRunner(
     noisy = true;
     capture = bChainCapture;
-    dbType = LegacyDbMemory;
-    ldgType = LegacyAccountsCache;
+    dbType = CoreDbType(0);
+    ldgType = ldgTypeDefault;
     enaLogging = false;
     lastOneExtra = true;
       ) =
@@ -156,6 +194,16 @@ proc chainSyncRunner(
     dbDir = baseDir / "tmp"
     numBlocks = capture.numBlocks
     numBlocksInfo = if numBlocks == high(int): "all" else: $numBlocks
+
+    dbType = block:
+      # Decreasing priority: dbType, capture.dbType, dbTypeDefault
+      var effDbType = dbTypeDefault
+      if dbType != CoreDbType(0):
+        effDbType = dbType
+      elif capture.dbType != CoreDbType(0):
+        effDbType = capture.dbType
+      effDbType
+
     persistent = dbType in CoreDbPersistentTypes
 
   defer:
@@ -168,7 +216,7 @@ proc chainSyncRunner(
         com = initRunnerDB(dbDir, capture, dbType, ldgType)
       defer:
         com.db.finish(flush = true)
-        noisy.testChainSyncProfilingPrint numBlocks
+        #noisy.testChainSyncProfilingPrint numBlocks
         if persistent: dbDir.flushDbDir
 
       if noisy:
@@ -190,25 +238,30 @@ proc coreDbMain*(noisy = defined(debug)) =
 when isMainModule:
   const
     noisy = defined(debug) or true
+  var
+    sampleList: seq[CaptureSpecs]
 
   setErrorLevel()
 
   # This one uses the readily available dump: `bulkTest0` and some huge replay
   # dumps `bulkTest2`, `bulkTest3`, .. from the `nimbus-eth1-blobs` package.
   # For specs see `tests/test_coredb/bulk_test_xx.nim`.
-  var testList = @[bulkTest0] # This test is superseded by `bulkTest1` and `2`
-  #testList = @[failSample0]
-  when true and false:
-    testList = @[bulkTest2, bulkTest3]
+
+  sampleList = cmdLineConfig().samples
+  if sampleList.len == 0:
+    sampleList = @[bulkTest0]
+    when true:
+      sampleList = @[bulkTest2, bulkTest3]
+    sampleList = @[ariTest1] # debugging
 
   var state: (Duration, int)
-  for n,capture in testList:
+  for n,capture in sampleList:
     noisy.profileSection("@testList #" & $n, state):
       noisy.chainSyncRunner(
         capture=capture,
-        dbType=AristoDbMemory,
+        #dbType = ...,
         ldgType=LedgerCache,
-        #enaLogging=true
+        #enaLogging = true
       )
 
   noisy.say "***", "total elapsed: ", state[0].pp, " sections: ", state[1]

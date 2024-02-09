@@ -9,8 +9,9 @@
 # distributed except according to those terms.
 
 import
-  std/[sequtils, times],
+  std/[os, sequtils, times],
   eth/common,
+  results,
   ../../nimbus/utils/prettify,
   ../replay/pp
 
@@ -52,6 +53,24 @@ func pp*(
 # ------------------------------------------------------------------------------
 # Public helpers
 # ------------------------------------------------------------------------------
+
+proc findFilePathHelper*(
+    file: string;
+    baseDir: openArray[string];
+    repoDir: openArray[string];
+    subDir: openArray[string];
+      ): Result[string,void] =
+  for dir in baseDir:
+    if dir.dirExists:
+      for repo in repoDir:
+        if (dir / repo).dirExists:
+          for sub in subDir:
+            if (dir / repo / sub).dirExists:
+              let path = dir / repo / sub / file
+              if path.fileExists:
+                return ok(path)
+  echo "*** File not found \"", file, "\"."
+  err()
 
 # ------------------------------------------------------------------------------
 # End
