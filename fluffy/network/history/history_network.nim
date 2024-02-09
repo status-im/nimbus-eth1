@@ -207,11 +207,14 @@ func validateBlockHeaderBytes*(
 
   let header = ? decodeRlp(bytes, BlockHeader)
 
-  if header.excessBlobGas.isSome:
-    return err("EIP-4844 not yet implemented")
-
-  # TODO: Verify timestamp with Shanghai timestamp to if isSome()
-  # TODO 2: Verify block number with merge block to check ommerhash
+  # Note:
+  # One could do additional quick-checks here such as timestamp vs the optional
+  # (later forks) added fields. E.g. Shanghai field, Cancun fields,
+  # zero ommersHash, etc.
+  # However, the block hash comparison will obviously catch these and it is
+  # pretty trivial to provide a non-canonical valid header.
+  # It might be somewhat more useful if just done (temporarily) for the headers
+  # post-merge which are currently provided without proof.
 
   if not (header.blockHash() == hash):
     err("Block header hash does not match")
