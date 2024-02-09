@@ -11,7 +11,7 @@
 ## Testing `CoreDB` wrapper implementation
 
 import
-  std/[algorithm, os, strformat, strutils, times],
+  std/[algorithm, os, strformat, strutils, times, json],
   chronicles,
   eth/common,
   results,
@@ -19,6 +19,7 @@ import
   ../nimbus/db/core_db/persistent,
   ../nimbus/db/ledger,
   ../nimbus/core/chain,
+  ../../nimbus/tracer,
   ./replay/pp,
   ./test_coredb/[coredb_test_xx, test_chainsync, test_helpers]
 
@@ -201,7 +202,7 @@ proc chainSyncRunner(
     dbType = CoreDbType(0);
     ldgType = ldgTypeDefault;
     profilingOk = false;
-    finalDiskCleanUpOk = true;
+    finalDiskCleanUpOk = false;
     enaLoggingOk = false;
     lastOneExtraOk = true;
       ) =
@@ -210,8 +211,8 @@ proc chainSyncRunner(
   let
     fileInfo = capture.files[0].splitFile.name.split(".")[0]
     filePaths = capture.files.mapIt(it.findFilePath(baseDir,repoDir).value)
-    baseDir = getTmpDir() / capture.name & "-chain-sync"
-    dbDir = baseDir / "tmp"
+    baseDir = "../testResults"
+    dbDir = baseDir / now().format("yyyy-MM-dd-HH-mm-ss")
     numBlocks = capture.numBlocks
     numBlocksInfo = if numBlocks == high(int): "all" else: $numBlocks
 
@@ -226,8 +227,8 @@ proc chainSyncRunner(
 
     persistent = dbType in CoreDbPersistentTypes
 
-  defer:
-    if persistent: baseDir.flushDbDir
+  #defer:
+  #  if persistent: baseDir.flushDbDir
 
   suite &"CoreDB and LedgerRef API on {fileInfo}, {dbType}, {ldgType}":
 
@@ -266,23 +267,17 @@ when isMainModule:
   # This one uses the readily available dump: `bulkTest0` and some huge replay
   # dumps `bulkTest2`, `bulkTest3`, .. from the `nimbus-eth1-blobs` package.
   # For specs see `tests/test_coredb/bulk_test_xx.nim`.
-
-  sampleList = cmdLineConfig().samples
-  if sampleList.len == 0:
-    sampleList = @[bulkTest0]
-    when true:
-      sampleList = @[bulkTest2, bulkTest3]
-    sampleList = @[ariTest1] # debugging
+  var testList = @[bulkTest3] # This test is superseded by `bulkTest1` and `2`
 
   var state: (Duration, int)
-  for n,capture in sampleList:
+  for n,capture in testList:
     noisy.profileSection("@testList #" & $n, state):
       noisy.chainSyncRunner(
-        capture = capture,
-        #dbType = ..,
-        ldgType=LedgerCache,
-        #profilingOk = ..,
+        capture=capture,
+        dbType=LegacyDbPersistent,
+        ldgType=LegacyAccountsCache,
         finalDiskCleanUpOk = false,
+        #profilingOk = ..,
         #enaLoggingOk = ..,
         #lastOneExtraOk = ..,
       )

@@ -19,8 +19,8 @@ import
   ../../kvstore_rocksdb
 
 type
-  LegaPersDbRef = ref object of LegacyDbRef
-    rdb: RocksStoreRef     # for backend access with legacy mode
+  LegaPersDbRef* = ref object of LegacyDbRef
+    rdb*: RocksStoreRef     # for backend access with legacy mode
 
   ChainDB = ref object of RootObj
     kv: KvStoreRef

@@ -35,6 +35,9 @@ nimcache
 # local testnet files
 /local_testnet_data
 
+# test results / temporary data
+testResults/*
+
 # Nimble user files
 nimble.develop
 nimble.paths

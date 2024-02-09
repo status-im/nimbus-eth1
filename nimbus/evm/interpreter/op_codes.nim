@@ -70,7 +70,7 @@ type
 
     # 30s: Environmental Information
     Address =        0x30, ## Get address of currently executing account.
-    Balance =        0x31, ## Get balance of the given account.
+    Balance =        0x31, ## Get balance of the given account.                 DANIEL - to handle
     Origin =         0x32, ## Get execution origination address.
     Caller =         0x33, ## Get caller address.
     CallValue =      0x34, ## Get deposited value by the
@@ -84,16 +84,16 @@ type
     CodeCopy =       0x39, ## Copy code running in current environment to
                            ## memory.
     GasPrice =       0x3a, ## Get price of gas in current environment.
-    ExtCodeSize =    0x3b, ## Get size of an account's code
-    ExtCodeCopy =    0x3c, ## Copy an account's code to memory.
+    ExtCodeSize =    0x3b, ## Get size of an account's code                     DANIEL - to handle
+    ExtCodeCopy =    0x3c, ## Copy an account's code to memory.                 DANIEL - to handle
     ReturnDataSize = 0x3d, ## Get size of output data from the previous call
                            ## from the current environment.
     ReturnDataCopy = 0x3e, ## Copy output data from the previous call to
                            ## memory.
-    ExtCodeHash =    0x3f, ## Returns the keccak256 hash of a contract’s code
+    ExtCodeHash =    0x3f, ## Returns the keccak256 hash of a contract’s code   DANIEL - to handle
 
     # 40s: Block Information
-    Blockhash =      0x40, ## Get the hash of one of the 256 most recent
+    Blockhash =      0x40, ## Get the hash of one of the 256 most recent        DANIEL - to handle -- pending decision!
                            ## complete blocks.
     Coinbase =       0x41, ## Get the block's beneficiary address.
     Timestamp =      0x42, ## Get the block's timestamp.
@@ -102,7 +102,7 @@ type
     GasLimit =       0x45, ## Get the block's gas limit.
 
     ChainIdOp =      0x46, ## Get current chain’s EIP-155 unique identifier.
-    SelfBalance =    0x47, ## Get current contract's balance.
+    SelfBalance =    0x47, ## Get current contract's balance.                   ?? to handle? Note: db is not accessed if vmState.com.db.localDbOnly == true
     BaseFee =        0x48, ## Get block’s base fee. EIP-3198
     BlobHash =       0x49, ## Get transaction's versionedHash. EIP-4844
     BlobBaseFee =    0x4A, ## Returns the current data-blob base-fee
@@ -115,8 +115,8 @@ type
     Mload =          0x51, ## Load word from memory.
     Mstore =         0x52, ## Save word to memory.
     Mstore8 =        0x53, ## Save byte to memory.
-    Sload =          0x54, ## Load word from storage.
-    Sstore =         0x55, ## Save word to storage.
+    Sload =          0x54, ## Load word from storage.                           DANIEL - to handle
+    Sstore =         0x55, ## Save word to storage.                             DANIEL - to handle
     Jump =           0x56, ## Alter the program counter.
     JumpI =          0x57, ## Conditionally alter the program counter.
     Pc =             0x58, ## Get the value of the program counter prior to
@@ -128,10 +128,10 @@ type
     JumpDest =       0x5b, ## Mark a valid destination for jumps. This
                            ## operation has no effect on machine state during
                            ## execution.
-    Tload =          0x5c, ## Load word from transient storage.
-    Tstore =         0x5d, ## Save word to transient storage.
+    Tload =          0x5c, ## Load word from transient storage.                 DANIEL - no need (?)
+    Tstore =         0x5d, ## Save word to transient storage.                   DANIEL - no need (?)
 
-    Mcopy =          0x5e, ## Memory copy
+    Mcopy =          0x5e, ## Memory copy                                       DANIEL - no need!
 
     # 5f, 60s & 70s: Push Operations.
     Push0 =          0x5f, ## Place 0 on stack. EIP-3855
@@ -189,27 +189,27 @@ type
     Nop0xED, Nop0xEE, Nop0xEF, ## ..
 
     # f0s: System operations
-    Create =         0xf0, ## Create a new account with associated code.
-    Call =           0xf1, ## Message-call into an account.
-    CallCode =       0xf2, ## Message-call into this account with an
+    Create =         0xf0, ## Create a new account with associated code.        DANIEL - to handle
+    Call =           0xf1, ## Message-call into an account.                     DANIEL - to handle (call reads target account code)
+    CallCode =       0xf2, ## Message-call into this account with an            DANIEL - to handle
                            ## alternative account's code.
     Return =         0xf3, ## Halt execution returning output data.
-    DelegateCall =   0xf4, ## Message-call into this account with an
+    DelegateCall =   0xf4, ## Message-call into this account with an            DANIEL - to handle
                            ## alternative account's code, but persisting the
                            ## current values for sender and value.
-    Create2 =        0xf5, ## Behaves identically to CREATE, except using
+    Create2 =        0xf5, ## Behaves identically to CREATE, except using       DANIEL - to handle
                            ## keccak256
 
     Nop0xF6, Nop0xF7, Nop0xF8, Nop0xF9,  ## ..
 
-    StaticCall =     0xfa, ## Static message-call into an account.
+    StaticCall =     0xfa, ## Static message-call into an account.              DANIEL - to handle
 
     Nop0xFB, Nop0xFC, ## ..
 
     Revert =         0xfd, ## Halt execution reverting state changes but
                            ## returning data and remaining gas.
     Invalid =        0xfe, ## Designated invalid instruction.
-    SelfDestruct =   0xff  ## Halt execution and register account for later
+    SelfDestruct =   0xff  ## Halt execution and register account for later     DANIEL - no need, assuming this opcode is being deprecated?
                            ## deletion.
 
 const

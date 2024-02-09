@@ -9,15 +9,23 @@
 # distributed except according to those terms.
 
 import
-  std/[strformat, times],
+  std/[strformat, times, streams, sets],
   chronicles,
   eth/common,
   results,
   unittest2,
   ../../nimbus/core/chain,
-  ../../nimbus/db/ledger,
+  ../../nimbus/db/[ledger],
+  ../../nimbus/db/ledger/accounts_cache,
+  ../../nimbus/db/ledger/base/base_desc,
+  ../../nimbus/db/core_db/base/base_desc,
+  ../../nimbus/db/core_db/backend/legacy_rocksdb,
+  ../../nimbus/db/core_db/base_iterators,
+  ../../nimbus/evm/types,
   ../replay/[pp, undump_blocks, xcheck],
-  ./test_helpers
+  ./test_helpers,
+  ../../vendor/nim-rocksdb/rocksdb,
+  ../../vendor/nim-stew/stew/byteutils
 
 type StopMoaningAboutLedger {.used.} = LedgerType
 
@@ -128,6 +136,46 @@ proc ledgerProfResults(info: string; indent = 4): string =
       result &= pfx2 & $count & ": " &
         w.mapIt($it & ledgerProfTab.stats(it).pp).sorted.join(", ")
 
+
+proc createFileAndLogBlockHeaders(lastBlock: BlockHeader, vmState: BaseVMState, name: string): Stream =
+  let blockNumber = lastBlock.blockNumber.truncate(uint)
+  let baseDir = cast[LegaPersDbRef](vmState.com.db).rdb.store.dbPath
+  let path = &"{baseDir}/{name}_at_block_{blockNumber}.dump"
+  let stream = newFileStream(path, fmWrite)
+  stream.writeLine(&"# Block number: {blockNumber}")
+  stream.writeLine(&"# Block time: {lastBlock.timestamp.int64.fromUnix.utc}")
+  stream.writeLine(&"# Block root hash: {$lastBlock.stateRoot}")
+  stream.writeLine("#")
+  echo &"Block {blockNumber} reached; dumping world state key-values into {path}"
+  return stream
+
+
+proc dumpWorldStateKvs(lastBlock: BlockHeader, vmState: BaseVMState) =
+  let stream = createFileAndLogBlockHeaders(lastBlock, vmState, "all_kvs")
+  defer:
+    try: stream.close() except: discard
+  let mpt = cast[CoreDxMptRef](vmState.stateDB.extras.getMptFn())
+  for kvp in mpt.pairs():
+    let key: Blob = kvp[0]
+    let value: Blob = kvp[1]
+    stream.writeLine(&"key={key.toHex}  value={value.toHex}")
+
+
+proc dumpWorldStateMptAccounts(lastBlock: BlockHeader, vmState: BaseVMState) =
+  let stream = createFileAndLogBlockHeaders(lastBlock, vmState, "mpt_accounts")
+  defer:
+    try: stream.close() except: discard
+  let accMethods = vmState.stateDB.methods
+  for address in ALL_ACCOUNTS_QUERIED.items:
+    let addressHash = address.keccakHash.data
+    let balance: UInt256 = accMethods.getBalanceFn(address)
+    let nonce: AccountNonce = accMethods.getNonceFn(address)
+    let codeHash: Hash256 = accMethods.getCodeHashFn(address)
+    let codeSize: int = accMethods.getCodeSizeFn(address)
+    let storageRoot: Hash256 = accMethods.getStorageRootFn(address)
+    stream.writeLine(&"address={address.toHex}  addrHash={addressHash.toHex}  balance={balance.toHex:>22}  nonce={nonce:>6}  codeHash={$codeHash}  codeSize={codeSize:>6}  storageRoot={$storageRoot}")
+
+
 # ------------------------------------------------------------------------------
 # Public test function
 # ------------------------------------------------------------------------------
@@ -165,6 +213,9 @@ proc test_chainSync*(
   noisy.initLogging com
   defer: com.finishLogging()
 
+  var dataDumpsPerformed = 0
+  const blocksBetweenDataDumps = 20_000
+
   for w in filePaths.undumpBlocks:
     let (fromBlock, toBlock) = (w[0][0].blockNumber, w[0][^1].blockNumber)
     if fromBlock == 0.u256:
@@ -179,7 +230,7 @@ proc test_chainSync*(
         if enaLogging:
           noisy.startLogging(w[0][0].blockNumber)
       noisy.stopLoggingAfter():
-        let runPersistBlocksRc = chain.persistBlocks(w[0], w[1])
+        let (runPersistBlocksRc, vmState) = chain.persistBlocksAndReturnVmState(w[0], w[1])
         xCheck runPersistBlocksRc == ValidationResult.OK:
           if noisy:
             # Re-run with logging enabled
@@ -188,6 +239,13 @@ proc test_chainSync*(
             com.db.trackNewApi = false
             com.db.trackLedgerApi = false
             discard chain.persistBlocks(w[0], w[1])
+
+        # Optionally dump the world state
+        if w[0][^1].blockNumber.truncate(int) >= (dataDumpsPerformed+1) * blocksBetweenDataDumps:
+          inc dataDumpsPerformed
+          dumpWorldStateKvs(w[0][^1], vmState)
+          dumpWorldStateMptAccounts(w[0][^1], vmState)
+
       continue
 
     # Last group or single block

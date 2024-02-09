@@ -179,7 +179,13 @@ proc safeDispose*(ac: AccountsCache, sp: SavePoint) {.inline.} =
   if (not isNil(sp)) and (sp.state == Pending):
     ac.rollback(sp)
 
+
+var ALL_ACCOUNTS_QUERIED* {.threadvar.}: HashSet[EthAddress]
+
+
 proc getAccount(ac: AccountsCache, address: EthAddress, shouldCreate = true): RefAccount =
+  ALL_ACCOUNTS_QUERIED.incl address
+  
   # search account from layers of cache
   var sp = ac.savePoint
   while sp != nil:

@@ -112,6 +112,7 @@ proc flushDbDir(s: string; subDir = "") =
 
 
 proc flushDbs(db: TestDbs) =
+  echo "tests/test_rocksdb_timing.nim: flushDbs" & getStackTrace()
   if db.persistent:
     for n in 0 ..< nTestDbInstances:
       if db.cdb[n].isNil or db.cdb[n].dbType != LegacyDbPersistent:

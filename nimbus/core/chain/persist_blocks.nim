@@ -55,7 +55,7 @@ proc getVmState(c: ChainRef, header: BlockHeader):
 
 proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
                        bodies: openArray[BlockBody],
-                       flags: PersistBlockFlags = {}): ValidationResult
+                       flags: PersistBlockFlags = {}): tuple[status: ValidationResult, vmState: BaseVMState]
                           # wildcard exception, wrapped below in public section
                           {.inline, raises: [CatchableError].} =
 
@@ -69,7 +69,7 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
 
   # Note that `0 < headers.len`, assured when called from `persistBlocks()`
   let vmState = c.getVmState(headers[0]).valueOr:
-    return ValidationResult.Error
+    return (ValidationResult.Error, nil)
 
   trace "Persisting blocks",
     fromBlock = headers[0].blockNumber,
@@ -81,11 +81,15 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
 
     c.com.hardForkTransition(header)
 
+    trace "Processing block",
+      number = header.blockNumber,
+      time = header.timestamp.int64.fromUnix.utc
+
     if not vmState.reinit(header):
       debug "Cannot update VmState",
         blockNumber = header.blockNumber,
         item = i
-      return ValidationResult.Error
+      return (ValidationResult.Error, nil)
 
     if c.validateBlock and c.extraValidation and
        c.verifyFrom <= header.blockNumber:
@@ -98,7 +102,7 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
         if res.isErr:
           debug "block validation error",
             msg = res.error
-          return ValidationResult.Error
+          return (ValidationResult.Error, nil)
 
     if c.generateWitness:
       vmState.generateWitness = true
@@ -118,7 +122,7 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
           warn "Validation error", blockNumber=header.blockNumber
 
     if validationResult != ValidationResult.OK:
-      return validationResult
+      return (validationResult, nil)
 
     if c.validateBlock and c.extraValidation and
        c.verifyFrom <= header.blockNumber:
@@ -133,7 +137,7 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
           debug "PoA header verification failed",
             blockNumber = header.blockNumber,
             msg = $rc.error
-          return ValidationResult.Error
+          return (ValidationResult.Error, nil)
 
     if c.generateWitness:
       let dbTx = c.db.beginTransaction()
@@ -169,6 +173,7 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
     c.com.syncCurrent = header.blockNumber
 
   dbTx.commit()
+  (ValidationResult.OK, vmState)
 
 # ------------------------------------------------------------------------------
 # Public `ChainDB` methods
@@ -178,7 +183,7 @@ proc insertBlockWithoutSetHead*(c: ChainRef, header: BlockHeader,
                                 body: BlockBody): ValidationResult
                                 {.gcsafe, raises: [CatchableError].} =
   result = c.persistBlocksImpl(
-    [header], [body], {NoPersistHeader, NoSaveReceipts})
+    [header], [body], {NoPersistHeader, NoSaveReceipts}).status
   if result == ValidationResult.OK:
     c.db.persistHeaderToDbWithoutSetHead(header, c.com.startOfHistory)
 
@@ -195,7 +200,7 @@ proc setCanonical*(c: ChainRef, header: BlockHeader): ValidationResult
       hash = header.blockHash
     return ValidationResult.Error
 
-  result = c.persistBlocksImpl([header], [body], {NoPersistHeader, NoSaveTxs})
+  result = c.persistBlocksImpl([header], [body], {NoPersistHeader, NoSaveTxs}).status
   if result == ValidationResult.OK:
     discard c.db.setHead(header.blockHash)
 
@@ -209,19 +214,25 @@ proc setCanonical*(c: ChainRef, blockHash: Hash256): ValidationResult
 
   setCanonical(c, header)
 
-proc persistBlocks*(c: ChainRef; headers: openArray[BlockHeader];
-                      bodies: openArray[BlockBody]): ValidationResult
+proc persistBlocksAndReturnVmState*(c: ChainRef; headers: openArray[BlockHeader];
+    bodies: openArray[BlockBody]): tuple[status: ValidationResult, vmState: BaseVMState]
                         {.gcsafe, raises: [CatchableError].} =
   # Run the VM here
   if headers.len != bodies.len:
     debug "Number of headers not matching number of bodies"
-    return ValidationResult.Error
+    return (ValidationResult.Error, nil)
 
   if headers.len == 0:
     debug "Nothing to do"
-    return ValidationResult.OK
+    return (ValidationResult.OK, nil)
 
   c.persistBlocksImpl(headers,bodies)
+
+proc persistBlocks*(c: ChainRef; headers: openArray[BlockHeader];
+                      bodies: openArray[BlockBody]): ValidationResult
+                        {.gcsafe, raises: [CatchableError].} =
+  persistBlocksAndReturnVmState(c, headers, bodies).status
+
 
 # ------------------------------------------------------------------------------
 # End
