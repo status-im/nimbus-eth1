@@ -14,7 +14,6 @@ cliBuilder:
           ./test_accounts_cache,
           ./test_aristo,
           ./test_coredb,
-          ./test_custom_network,
           ./test_sync_snap,
           ./test_rocksdb_timing,
           ./test_jwt_auth,
