@@ -24,11 +24,12 @@ import
 const
   baseDir = [".", "..", ".."/"..", $DirSep]
   repoDir = [".", "tests", "nimbus-eth1-blobs"]
-  subDir = ["replay", "test_coredb"]
+  subDir = ["replay", "test_coredb", "custom-network", "customgenesis"]
 
   # Reference file for finding some database directory base
   sampleDirRefFile = "coredb_test_xx.nim"
 
+let
   # Standard test sample
   bChainCapture = bulkTest0
 
@@ -91,7 +92,7 @@ proc setErrorLevel {.used.} =
 
 proc initRunnerDB(
     path: string;
-    network: NetworkId;
+    specs: CaptureSpecs;
     dbType: CoreDbType;
     ldgType: LedgerType;
       ): CommonRef =
@@ -111,10 +112,20 @@ proc initRunnerDB(
     coreDB.trackNewApi = true
     coreDB.localDbOnly = true
 
+  var
+    params: NetworkParams
+    networkId: NetworkId
+  if specs.builtIn:
+    networkId = specs.network
+    params = networkId.networkParams()
+  else:
+    doAssert specs.genesis.findFilePath.value.loadNetworkParams(params)
+    networkId = params.config.chainId.NetworkId
+
   result = CommonRef.new(
     db = coreDB,
-    networkId = network,
-    params = network.networkParams,
+    networkId = networkId,
+    params = params,
     ldgType = ldgType)
 
   result.initializeEmptyDb
@@ -136,10 +147,11 @@ proc chainSyncRunner(
     enaLogging = false;
     lastOneExtra = true;
       ) =
+
   ## Test backend database and ledger
   let
-    fileInfo = capture.file.splitFile.name.split(".")[0]
-    filePath = capture.file.findFilePath(baseDir,repoDir).value
+    fileInfo = capture.files[0].splitFile.name.split(".")[0]
+    filePaths = capture.files.mapIt(it.findFilePath(baseDir,repoDir).value)
     baseDir = getTmpDir() / capture.name & "-chain-sync"
     dbDir = baseDir / "tmp"
     numBlocks = capture.numBlocks
@@ -153,7 +165,7 @@ proc chainSyncRunner(
 
     test &"Ledger API {ldgType}, {numBlocksInfo} blocks":
       let
-        com = initRunnerDB(dbDir, capture.network, dbType, ldgType)
+        com = initRunnerDB(dbDir, capture, dbType, ldgType)
       defer:
         com.db.finish(flush = true)
         noisy.testChainSyncProfilingPrint numBlocks
@@ -165,7 +177,7 @@ proc chainSyncRunner(
         com.db.trackLedgerApi = true
         com.db.localDbOnly = true
 
-      check noisy.testChainSync(filePath, com, numBlocks,
+      check noisy.testChainSync(filePaths, com, numBlocks,
         lastOneExtra=lastOneExtra, enaLogging=enaLogging)
 
 # ------------------------------------------------------------------------------
@@ -185,7 +197,7 @@ when isMainModule:
   # dumps `bulkTest2`, `bulkTest3`, .. from the `nimbus-eth1-blobs` package.
   # For specs see `tests/test_coredb/bulk_test_xx.nim`.
   var testList = @[bulkTest0] # This test is superseded by `bulkTest1` and `2`
-  testList = @[failSample0]
+  #testList = @[failSample0]
   when true and false:
     testList = @[bulkTest2, bulkTest3]
 

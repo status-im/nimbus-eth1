@@ -150,7 +150,7 @@ proc test_chainSyncProfilingPrint*(
 
 proc test_chainSync*(
     noisy: bool;
-    filePath: string;
+    filePaths: seq[string];
     com: CommonRef;
     numBlocks = high(int);
     enaLogging = true;
@@ -165,7 +165,7 @@ proc test_chainSync*(
   noisy.initLogging com
   defer: com.finishLogging()
 
-  for w in filePath.undumpBlocks:
+  for w in filePaths.undumpBlocks:
     let (fromBlock, toBlock) = (w[0][0].blockNumber, w[0][^1].blockNumber)
     if fromBlock == 0.u256:
       xCheck w[0][0] == com.db.getBlockHeader(0.u256)

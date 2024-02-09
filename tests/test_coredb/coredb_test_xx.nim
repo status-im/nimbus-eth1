@@ -14,46 +14,66 @@ import
 
 type
   CaptureSpecs* = object
-    name*: string   ## sample name, also used as sub-directory for db separation
-    network*: NetworkId
-    file*: string   ## name of capture file
-    numBlocks*: int ## Number of blocks to load
+    name*: string            ## Sample name, also used as db directory
+    case builtIn*: bool
+    of true:
+      network*: NetworkId    ## Built-in network ID (unless `config` below)
+    else:
+      genesis*: string       ## Optional config file (instead of `network`)
+    files*: seq[string]      ## Names of capture files
+    numBlocks*: int          ## Number of blocks to load
 
-const
+# Must not use `const` here, see `//github.com/nim-lang/Nim/issues/23295`
+# Waiting for fix `//github.com/nim-lang/Nim/pull/23297` (or similar) to
+# appear on local `Nim` compiler version.
+let
   bulkTest0* = CaptureSpecs(
-    name: "some-goerli",
-    network: GoerliNet,
-    file: "goerli68161.txt.gz",
+    name:      "some-goerli",
+    builtIn:   true,
+    network:   GoerliNet,
+    files:     @["goerli68161.txt.gz"],
     numBlocks: 1_000)
 
   bulkTest1* = CaptureSpecs(
-    name:      "full-goerli",
-    network:   bulkTest0.network,
-    file:      bulkTest0.file,
+    name:      "more-goerli",
+    builtIn:   true,
+    network:   GoerliNet,
+    files:     @["goerli68161.txt.gz"],
     numBlocks: high(int))
 
   bulkTest2* = CaptureSpecs(
-    name:      "more-goerli",
+    name:      "much-goerli",
+    builtIn:   true,
     network:   GoerliNet,
-    file:      "goerli68161.txt.gz",
+    files:     @[
+      "goerli482304.txt.gz",              # on nimbus-eth1-blobs/replay
+      "goerli482305-504192.txt.gz"],
     numBlocks: high(int))
 
   bulkTest3* = CaptureSpecs(
     name:      "mainnet",
+    builtIn:   true,
     network:   MainNet,
-    file:      "mainnet332160.txt.gz",
+    files:     @[
+      "mainnet332160.txt.gz",             # on nimbus-eth1-blobs/replay
+      "mainnet332161-550848.txt.gz",
+      "mainnet550849-719232.txt.gz",
+      "mainnet719233-843841.txt.gz"],
     numBlocks: high(int))
+
 
   failSample0* = CaptureSpecs(
     name:      "fail-goerli",
-    network:   bulkTest2.network,
-    file:      bulkTest2.file,
-    numBlocks: 12_842)
+    builtIn:   true,
+    network:   GoerliNet,
+    files:     bulkTest2.files,
+    numBlocks: 301_375 + 1)               # +1 => crash on Aristo only
 
   failSample1* = CaptureSpecs(
     name:      "fail-main",
-    network:   bulkTest3.network,
-    file:      bulkTest3.file,
-    numBlocks: 100_000)
+    builtIn:   true,
+    network:   MainNet,
+    files:     bulkTest3.files,
+    numBlocks: 257_280 + 512)
 
 # End
