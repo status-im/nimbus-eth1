@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2022-2023 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -45,15 +45,17 @@ import
   eth/[common, rlp], chronos,
   eth/common/eth_types_json_serialization,
   json_rpc/rpcclient,
+  snappy,
   ncli/e2store,
   ../database/seed_db,
   ../../premix/[downloader, parser],
   ../network/history/[history_content, accumulator],
-  ../eth_data/[history_data_json_store, history_data_ssz_e2s],
+  ../eth_data/[history_data_json_store, history_data_ssz_e2s, era1],
   eth_data_exporter/[exporter_conf, exporter_common, cl_data_exporter]
 
 # Need to be selective due to the `Block` type conflict from downloader
 from ../network/history/history_network import encode
+from ../../nimbus/utils/utils import calcTxRoot, calcReceiptRoot
 
 chronicles.formatIt(IoErrorCode): $it
 
@@ -185,13 +187,120 @@ proc connectRpcClient(
   of HttpUrl:
     try:
       await RpcHttpClient(client).connect(web3Url.url)
+      ok()
     except CatchableError as e:
       return err(e.msg)
   of WsUrl:
     try:
       await RpcWebSocketClient(client).connect(web3Url.url)
+      ok()
     except CatchableError as e:
       return err(e.msg)
+
+proc cmdExportEra1(config: ExporterConf) =
+  let client = newRpcClient(config.web3Url)
+  try:
+    let connectRes = waitFor client.connectRpcClient(config.web3Url)
+    if connectRes.isErr():
+      fatal "Failed connecting to JSON-RPC client", error = connectRes.error
+      quit 1
+  except CatchableError as e:
+    # TODO: Add async raises to get rid of this.
+    fatal "Failed connecting to JSON-RPC client", error = e.msg
+    quit 1
+
+  var era = Era1(config.era)
+  while config.eraCount == 0 or era < Era1(config.era) + config.eraCount:
+    defer: era += 1
+
+    let
+      startNumber = era.startNumber()
+      endNumber = era.endNumber()
+
+    if startNumber >= mergeBlockNumber:
+      info "Stopping era as it is after the merge"
+      break
+
+    var accumulatorRoot = default(Digest)
+    let tmpName = era1FileName("mainnet", era, default(Digest)) & ".tmp"
+
+    info "Writing era1", tmpName
+
+    var completed = false
+    block writeFileBlock:
+      let e2 = openFile(tmpName, {OpenFlags.Write, OpenFlags.Create, OpenFlags.Truncate}).get()
+      defer: discard closeFile(e2)
+
+      # TODO: Not checking the result of init, update or finish here, as all
+      # error cases are fatal. But maybe we could throw proper errors still.
+      var group = Era1Group.init(e2, startNumber).get()
+
+      # Header records to build the accumulator root
+      var headerRecords: seq[accumulator.HeaderRecord]
+      for blockNumber in startNumber..endNumber:
+        let blck =
+          try:
+            # TODO: Not sure about the errors that can occur here. But the whole
+            # block requests over json-rpc should be reworked here (and can be
+            # used in the bridge also then)
+            requestBlock(blockNumber.u256, flags = {DownloadReceipts}, client = some(client))
+          except CatchableError as e:
+            error "Failed retrieving block, skip creation of era1 file", blockNumber, era, error = e.msg
+            break writeFileBlock
+
+        var ttd: UInt256
+        try:
+          blck.jsonData.fromJson "totalDifficulty", ttd
+        except ValueError:
+          break writeFileBlock
+
+        headerRecords.add(accumulator.HeaderRecord(
+          blockHash: blck.header.blockHash(),
+          totalDifficulty: ttd))
+
+        group.update(
+          e2, blockNumber, blck.header, blck.body, blck.receipts, ttd).get()
+
+      accumulatorRoot = getEpochAccumulatorRoot(headerRecords)
+
+      group.finish(e2, accumulatorRoot, endNumber).get()
+      completed = true
+    if completed:
+      let name = era1FileName("mainnet", era, accumulatorRoot)
+      # We cannot check for the exact file any earlier as we need to know the
+      # accumulator root.
+      # TODO: Could scan for file with era number in it.
+      if isFile(name):
+        info "Era1 file already exists", era, name
+        if (let e = io2.removeFile(tmpName); e.isErr):
+          warn "Failed to clean up tmp era1 file", tmpName, error = e.error
+        continue
+
+      try:
+        moveFile(tmpName, name)
+      except Exception as e: # TODO
+        warn "Failed to rename era1 file to its final name",
+          name, tmpName, error = e.msg
+
+      info "Writing era1 completed", name
+    else:
+      error "Failed creating the era1 file", era
+      if (let e = io2.removeFile(tmpName); e.isErr):
+        warn "Failed to clean up incomplete era1 file", tmpName, error = e.error
+
+proc cmdVerifyEra1(config: ExporterConf) =
+  let f = Era1File.open(config.era1FileName).valueOr:
+    warn "Failed to open era file", error = error
+    quit 1
+  defer: close(f)
+
+  let root = f.verify.valueOr:
+    warn "Verification of era file failed", error = error
+    quit 1
+
+  notice "Era1 file succesfully verified",
+    accumulatorRoot = root.data.to0xHex(),
+    file = config.era1FileName
 
 when isMainModule:
   {.pop.}
@@ -538,6 +647,11 @@ when isMainModule:
       except IOError as e:
         fatal "Error occured while closing file", error = e.msg
         quit 1
+
+    of HistoryCmd.exportEra1:
+      cmdExportEra1(config)
+    of HistoryCmd.verifyEra1:
+      cmdVerifyEra1(config)
 
   of ExporterCmd.beacon:
     let (cfg, forkDigests, _) = getBeaconData()
