@@ -46,3 +46,9 @@ type JsonContractBytecode* = object
   content_id*: string
   content_value_offer*: string
   content_value_retrieval*: string
+
+type JsonGossipKVPair* = object
+  content_key*: string
+  content_value*: string
+
+type JsonRecursiveGossip* = seq[JsonGossipKVPair]

@@ -6,7 +6,11 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
+  std/[sugar, strutils, sequtils],
   stew/results, chronos, chronicles,
+  eth/common/eth_hash,
+  eth/[rlp, common],
+  eth/trie/hexary_proof_verification,
   eth/p2p/discoveryv5/[protocol, enr],
   ../../database/content_db,
   ../wire/[portal_protocol, portal_stream, portal_protocol_config],
@@ -58,31 +62,60 @@ proc getContent*(n: StateNetwork, key: ContentKey):
   # domain types.
   return Opt.some(contentResult.content)
 
-proc validateContent(
+proc validateAccountTrieNode(key: ContentKey, contentValue: seq[byte]): bool =
+  let
+    value = decodeSsz(contentValue, AccountTrieNodeOffer).valueOr:
+      warn "Received invalid account trie proof", error
+      return false
+  let
+    proof = value.proof.asSeq().map((x) => x.asSeq())
+    trieKey = proof[^1].decode(seq[seq[byte]])[0]
+    trieValue = proof[^1].decode(seq[seq[byte]])[^1]
+    stateRoot = MDigest[256](data: value.blockHash.data)
+    verificationResult = verifyMptProof(proof, stateRoot, trieKey, trieValue)
+
+  echo ">>> Verification result: ", verificationResult.kind
+  echo ">>> State root: ", stateRoot
+  echo ">>> Block hash: ", key.accountTrieNodeKey.nodeHash
+  # echo ">>> Trie key: ", trieKey
+  # echo ">>> Trie value: ", trieValue
+  verificationResult.kind == ValidProof
+
+proc validateContractTrieNode(key: ContentKey, contentValue: seq[byte]): bool =
+  let value = decodeSsz(contentValue, ContractTrieNodeOffer).valueOr:
+    return false
+  true
+
+proc validateContractCode(key: ContentKey, contentValue: seq[byte]): bool =
+  let value = decodeSsz(contentValue, ContractCodeOffer).valueOr:
+    return false
+  true
+
+proc validateContent*(
     n: StateNetwork,
     contentKey: ByteList,
-    contentValue: seq[byte]): Future[bool] {.async.} =
+    contentValue: seq[byte]): bool =
   let key = contentKey.decode().valueOr:
     return false
-
+  
   case key.contentType:
     of unused:
       warn "Received content with unused content type"
       false
     of accountTrieNode:
-      true
+      validateAccountTrieNode(key, contentValue)
     of contractTrieNode:
-      true
+      validateContractTrieNode(key, contentValue)
     of contractCode:
-      true
+      validateContractCode(key, contentValue)
 
 proc validateContent(
     n: StateNetwork,
     contentKeys: ContentKeysList,
-    contentValues: seq[seq[byte]]): Future[bool] {.async.} =
+    contentValues: seq[seq[byte]]): bool =
   for i, contentValue in contentValues:
     let contentKey = contentKeys[i]
-    if await n.validateContent(contentKey, contentValue):
+    if n.validateContent(contentKey, contentValue):
       let contentId = n.portalProtocol.toContentId(contentKey).valueOr:
         error "Received offered content with invalid content key", contentKey
         return false
@@ -94,37 +127,78 @@ proc validateContent(
       error "Received offered content failed validation", contentKey
       return false
 
-# proc recursiveGossip(
-#     n: StateNetwork,
-#     contentKey: ContentKey,
-#     contentValue: seq[byte]): Future[void] {.async.} =
-#     # TODO Implement recursive gossiping
+proc recursiveGossipAccountTrieNode(
+    p: PortalProtocol,
+    maybeSrcNodeId: Opt[NodeId],
+    decodedKey: ContentKey,
+    contentValue: seq[byte],
+    gossipProc: proc(
+      p: PortalProtocol,
+      maybeSrcNodeId: Opt[NodeId],
+      contentKeys: ContentKeysList,
+      contentValues: seq[seq[byte]]) {.async, gcsafe, closure.}
+    ): Future[void] {.async.} =
+      var nibbles = decodedKey.accountTrieNodeKey.path.unpackNibbles()
+      let decodedValue = decodeSsz(contentValue, AccountTrieNodeOffer).valueOr:
+        return
+      var proof = decodedValue.proof
+      discard nibbles.pop()
+      discard (distinctBase proof).pop()
+      let
+        updatedValue = AccountTrieNodeOffer(
+          proof: proof,
+          blockHash: decodedValue.blockHash,
+        )
+        updatedNodeHash = keccakHash(distinctBase proof[^1])
+        encodedValue = SSZ.encode(updatedValue)
+        updatedKey = AccountTrieNodeKey(path: nibbles.packNibbles(), nodeHash: updatedNodeHash)
+        encodedKey = ContentKey(accountTrieNodeKey: updatedKey, contentType: accountTrieNode).encode()
 
-# proc gossipContent(
-#     n: StateNetwork,
-#     contentKey: ContentKey,
-#     contentValue: seq[byte]): Future[void] {.async.} =
-#   let key = contentKey.decode().valueOr:
-#     return false
-#   case key.contentType:
-#     of unused:
-#       doAssert(true, "Gossiping content with unused content type")
-#     of accountTrieNode:
-#       await recursiveGossip(n.portalProtocol, contentKey, contentValue)
-#     of contractTrieNode:
-#       await recursiveGossip(n.portalProtocol, contentKey, contentValue)
-#     of contractCode:
-#       asyncSpawn n.portalProtocol.neighborhoodGossipDiscardPeers(
-#         maybeContentId, contentKeys, contentValues
-#       )
+      await gossipProc(
+        p, maybeSrcNodeId, ContentKeysList.init(@[encodedKey]), @[encodedValue]
+      )
 
-# proc gossipContent(
-#     n: StateNetwork,
-#     contentKeys: ContentKeysList,
-#     contentValues: seq[seq[byte]]): Future[void] {.async.} =
-#   for i, contentValue in contentValues:
-#     let contentKey = contentKeys[i]
-#     await gossipContent(n.portalProtocol, contentKey, contentValue)
+proc recursiveGossipContractTrieNode(
+    p: PortalProtocol,
+    maybeSrcNodeId: Opt[NodeId],
+    decodedKey: ContentKey,
+    contentValue: seq[byte],
+    gossipProc: proc(
+      p: PortalProtocol,
+      maybeSrcNodeId: Opt[NodeId],
+      contentKeys: ContentKeysList,
+      contentValues: seq[seq[byte]]) {.async, gcsafe, closure.}
+    ): Future[void] {.async.} =
+      return
+
+proc gossipContent*(
+    p: PortalProtocol,
+    maybeSrcNodeId: Opt[NodeId],
+    contentKeys: ContentKeysList,
+    contentValues: seq[seq[byte]],
+    gossipProc: proc(
+      p: PortalProtocol,
+      maybeSrcNodeId: Opt[NodeId],
+      contentKeysList: ContentKeysList,
+      contentValues: seq[seq[byte]]) {.async, gcsafe, closure.}
+    ): Future[void] {.async.} =
+  for i, contentValue in contentValues:
+    let
+      contentKey = contentKeys[i]
+      decodedKey = contentKey.decode().valueOr:
+        continue
+    case decodedKey.contentType:
+      of unused:
+        warn("Gossiping content with unused content type")
+        continue
+      of accountTrieNode:
+        discard recursiveGossipAccountTrieNode(p, maybeSrcNodeId, decodedKey, contentValue, gossipProc)
+      of contractTrieNode:
+        discard recursiveGossipContractTrieNode(p, maybeSrcNodeId, decodedKey, contentValue, gossipProc)
+      of contractCode:
+        await p.neighborhoodGossipDiscardPeers(
+          maybeSrcNodeId, ContentKeysList.init(@[contentKey]), @[contentValue]
+        )
 
 proc new*(
     T: type StateNetwork,
@@ -154,11 +228,15 @@ proc new*(
 proc processContentLoop(n: StateNetwork) {.async.} =
   try:
     while true:
-      let (maybeContentId, contentKeys, contentValues) = await n.contentQueue.popFirst()
-      if await n.validateContent(contentKeys, contentValues):
-        asyncSpawn n.portalProtocol.neighborhoodGossipDiscardPeers(
-          maybeContentId, contentKeys, contentValues
-        )
+      let (maybeSrcNodeId, contentKeys, contentValues) = await n.contentQueue.popFirst()
+      if n.validateContent(contentKeys, contentValues):
+        asyncSpawn gossipContent(
+          n.portalProtocol,
+          maybeSrcNodeId,
+          contentKeys,
+          contentValues,
+          neighborhoodGossipDiscardPeers
+          )
   except CancelledError:
     trace "processContentLoop canceled"
 

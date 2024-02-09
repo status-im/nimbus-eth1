@@ -11,6 +11,7 @@ import
   ./test_portal_wire_protocol,
   ./state_network_tests/test_state_content_keys,
   ./state_network_tests/test_state_content_values,
+  ./state_network_tests/test_state_network_gossip,
   ./test_state_proof_verification,
   ./test_accumulator,
   ./test_history_network,
