@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2020-2023 Status Research & Development GmbH
+# Copyright (c) 2020-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -166,7 +166,7 @@ proc writeHashNode(wb: var WitnessBuilder, node: openArray[byte], depth: int, st
 
 proc writeShortRlp(wb: var WitnessBuilder, node: openArray[byte], depth: int, storageMode: bool)
     {.gcsafe, raises: [IOError].} =
-  doAssert(node.len < 32 and depth >= 9 and storageMode)
+  doAssert(node.len < 32 and storageMode)
   wb.writeByte(HashNodeType)
   wb.writeByte(ShortRlpPrefix)
   wb.writeByte(node.len)
