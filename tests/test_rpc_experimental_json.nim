@@ -13,6 +13,7 @@ import
   ../nimbus/core/chain,
   ../nimbus/common/common,
   ../nimbus/rpc,
+  ../../nimbus/db/[ledger, core_db],
   ../stateless/[witness_verification, witness_types],
   ./rpc/experimental_rpc_client
 
@@ -56,11 +57,16 @@ proc importBlockData(node: JsonNode): (CommonRef, Hash256, Hash256, UInt256) {. 
   return (com, parent.stateRoot, header.stateRoot, blockNumber)
 
 proc checkAndValidateWitnessAgainstProofs(
+    db: CoreDbRef,
+    parentStateRoot: KeccakHash,
     expectedStateRoot: KeccakHash,
     witness: seq[byte],
     proofs: seq[ProofResponse]) =
 
-  let verifyWitnessResult = verifyWitness(expectedStateRoot, witness, {wfNoFlag})
+  let
+    stateDB = AccountsCache.init(db, parentStateRoot, false)
+    verifyWitnessResult = verifyWitness(expectedStateRoot, witness, {wfNoFlag})
+
   check verifyWitnessResult.isOk()
   let witnessData = verifyWitnessResult.value()
 
@@ -68,25 +74,60 @@ proc checkAndValidateWitnessAgainstProofs(
     witness.len() > 0
     proofs.len() > 0
     witnessData.len() > 0
-    witnessData.len() == proofs.len()
 
   for proof in proofs:
     let
       address = proof.address.ethAddr()
+      balance = proof.balance
+      nonce = proof.nonce.uint64
+      codeHash = proof.codeHash.toHash256()
+      storageHash = proof.storageHash.toHash256()
       slotProofs = proof.storageProof
-      storageData = witnessData[address].storage
 
-    check:
-      witnessData.contains(address)
-      witnessData[address].account.balance == proof.balance
-      witnessData[address].account.nonce == proof.nonce.uint64
-      witnessData[address].account.codeHash == proof.codeHash.toHash256()
-      storageData.len() == slotProofs.len()
+    if witnessData.contains(address):
+      let
+        storageData = witnessData[address].storage
+        code = witnessData[address].code
+
+      check:
+        witnessData[address].account.balance == balance
+        witnessData[address].account.nonce == nonce
+        witnessData[address].account.codeHash == codeHash
+
+      for slotProof in slotProofs:
+        if storageData.contains(slotProof.key):
+          check storageData[slotProof.key] == slotProof.value
+
+      if code.len() > 0:
+        stateDB.setCode(address, code)
+
+    stateDB.setBalance(address, balance)
+    stateDB.setNonce(address, nonce)
 
     for slotProof in slotProofs:
-      check:
-        storageData.contains(slotProof.key)
-        storageData[slotProof.key] == slotProof.value
+      stateDB.setStorage(address, slotProof.key, slotProof.value)
+
+    # the account doesn't exist due to a self destruct
+    if codeHash == ZERO_HASH256 and storageHash == ZERO_HASH256:
+      stateDB.deleteAccount(address)
+
+    stateDB.persist()
+
+    check stateDB.getBalance(address) == balance
+    check stateDB.getNonce(address) == nonce
+
+    if codeHash == ZERO_HASH256 or codeHash == EMPTY_SHA3:
+      check stateDB.getCode(address).len() == 0
+      check stateDB.getCodeHash(address) == EMPTY_SHA3
+    else:
+      check stateDB.getCodeHash(address) == codeHash
+
+    if storageHash == ZERO_HASH256 or storageHash == EMPTY_ROOT_HASH:
+      check stateDB.getStorageRoot(address) == EMPTY_ROOT_HASH
+    else:
+      check stateDB.getStorageRoot(address) == storageHash
+
+  check stateDB.rootHash == expectedStateRoot
 
 proc importBlockDataFromFile(file: string): (CommonRef, Hash256, Hash256, UInt256) {. raises: [].} =
   try:
@@ -100,8 +141,6 @@ proc rpcExperimentalJsonMain*() =
 
   suite "rpc experimental json tests":
 
-    # The commented out json files below are failing due to hitting the RPC client and
-    # server defaultMaxRequestLength. Currently the limit is set to around 128kb.
     let importFiles = [
       "block97.json",
       "block98.json",
@@ -174,11 +213,11 @@ proc rpcExperimentalJsonMain*() =
           witness = await client.exp_getWitnessByBlockNumber("latest", false)
           proofs = await client.exp_getProofsByBlockNumber("latest", false)
 
-        checkAndValidateWitnessAgainstProofs(parentStateRoot, witness, proofs)
+        checkAndValidateWitnessAgainstProofs(com.db, parentStateRoot, parentStateRoot, witness, proofs)
 
     test "exp_getWitnessByBlockNumber and exp_getProofsByBlockNumber - latest block post-execution state":
       for file in importFiles:
-        let (com, _, stateRoot, _) = importBlockDataFromFile(file)
+        let (com, parentStateRoot, stateRoot, _) = importBlockDataFromFile(file)
 
         setupExpRpc(com, rpcServer)
 
@@ -186,7 +225,7 @@ proc rpcExperimentalJsonMain*() =
           witness = await client.exp_getWitnessByBlockNumber("latest", true)
           proofs = await client.exp_getProofsByBlockNumber("latest", true)
 
-        checkAndValidateWitnessAgainstProofs(stateRoot, witness, proofs)
+        checkAndValidateWitnessAgainstProofs(com.db, parentStateRoot, stateRoot, witness, proofs)
 
     test "exp_getWitnessByBlockNumber and exp_getProofsByBlockNumber - block by number pre-execution state":
       for file in importFiles:
@@ -200,12 +239,12 @@ proc rpcExperimentalJsonMain*() =
           witness = await client.exp_getWitnessByBlockNumber(blockNum, false)
           proofs = await client.exp_getProofsByBlockNumber(blockNum, false)
 
-        checkAndValidateWitnessAgainstProofs(parentStateRoot, witness, proofs)
+        checkAndValidateWitnessAgainstProofs(com.db, parentStateRoot, parentStateRoot, witness, proofs)
 
     test "exp_getWitnessByBlockNumber and exp_getProofsByBlockNumber - block by number post-execution state":
       for file in importFiles:
         let
-          (com, _, stateRoot, blockNumber) = importBlockDataFromFile(file)
+          (com, parentStateRoot, stateRoot, blockNumber) = importBlockDataFromFile(file)
           blockNum = blockId(blockNumber.truncate(uint64))
 
         setupExpRpc(com, rpcServer)
@@ -214,7 +253,7 @@ proc rpcExperimentalJsonMain*() =
           witness = await client.exp_getWitnessByBlockNumber(blockNum, true)
           proofs = await client.exp_getProofsByBlockNumber(blockNum, true)
 
-        checkAndValidateWitnessAgainstProofs(stateRoot, witness, proofs)
+        checkAndValidateWitnessAgainstProofs(com.db, parentStateRoot, stateRoot, witness, proofs)
 
     test "exp_getWitnessByBlockNumber and exp_getProofsByBlockNumber - block by number that doesn't exist":
       for file in importFiles:
@@ -254,10 +293,9 @@ proc rpcExperimentalJsonMain*() =
 
         for proof in proofs:
           let address = ethAddr(proof.address)
-          # if the storage was updated on an existing contract
+          # if the storage was read or updated on an existing contract
           if proof.storageProof.len() > 0 and witnessData.contains(address):
             check witnessData[address].code.len() > 0
-
 
     waitFor rpcServer.stop()
     waitFor rpcServer.closeWait()

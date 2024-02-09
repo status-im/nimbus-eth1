@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -664,11 +664,6 @@ func update(wd: var WitnessData, acc: RefAccount) =
       wd.storageKeys.incl k
 
   for k, v in acc.overlayStorage:
-    if v.isZero and k notin wd.storageKeys:
-      continue
-    if v.isZero and k in wd.storageKeys:
-      wd.storageKeys.excl k
-      continue
     wd.storageKeys.incl k
 
 func witnessData(acc: RefAccount): WitnessData =
