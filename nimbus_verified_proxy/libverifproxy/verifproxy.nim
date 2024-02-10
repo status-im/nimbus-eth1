@@ -18,14 +18,14 @@ proc NimMain() {.importc, exportc, dynlib.}
 var initialized: Atomic[bool]
 
 proc initLib() =
-   if not initialized.exchange(true):
-     NimMain() # Every Nim library needs to call `NimMain` once exactly
-   when declared(setupForeignThreadGc): setupForeignThreadGc()
-   when declared(nimGC_setStackBottom):
-     var locals {.volatile, noinit.}: pointer
-     locals = addr(locals)
-     nimGC_setStackBottom(locals)
-
+  if not initialized.exchange(true):
+    NimMain() # Every Nim library needs to call `NimMain` once exactly
+  when declared(setupForeignThreadGc):
+    setupForeignThreadGc()
+  when declared(nimGC_setStackBottom):
+    var locals {.volatile, noinit.}: pointer
+    locals = addr(locals)
+    nimGC_setStackBottom(locals)
 
 proc runContext(ctx: ptr Context) {.thread.} =
   let str = $ctx.configJson
@@ -57,7 +57,6 @@ proc runContext(ctx: ptr Context) {.thread.} =
     ctx.onHeader(getCurrentExceptionMsg(), 3)
     ctx.cleanup()
 
-
   #[let node = parseConfigAndRun(ctx.configJson)
 
   while not ctx[].stop: # and node.running:
@@ -67,7 +66,9 @@ proc runContext(ctx: ptr Context) {.thread.} =
   # do cleanup
   node.stop()]#
 
-proc startVerifProxy*(configJson: cstring, onHeader: OnHeaderCallback): ptr Context {.exportc, dynlib.} =
+proc startVerifProxy*(
+    configJson: cstring, onHeader: OnHeaderCallback
+): ptr Context {.exportc, dynlib.} =
   initLib()
 
   let ctx = createShared(Context, 1)
@@ -78,12 +79,11 @@ proc startVerifProxy*(configJson: cstring, onHeader: OnHeaderCallback): ptr Cont
   try:
     createThread(ctx.thread, runContext, ctx)
   except Exception as err:
-    echo "Exception when attempting to invoke createThread ", getCurrentExceptionMsg(), err.getStackTrace()
+    echo "Exception when attempting to invoke createThread ",
+      getCurrentExceptionMsg(), err.getStackTrace()
     ctx.onHeader(getCurrentExceptionMsg(), 3)
     ctx.cleanup()
   return ctx
 
 proc stopVerifProxy*(ctx: ptr Context) {.exportc, dynlib.} =
   ctx.stop = true
-
-

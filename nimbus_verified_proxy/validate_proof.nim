@@ -27,13 +27,12 @@ func emptyAccount(): etypes.Account =
     nonce: uint64(0),
     balance: UInt256.zero,
     storageRoot: etypes.EMPTY_ROOT_HASH,
-    codeHash: etypes.EMPTY_CODE_HASH
+    codeHash: etypes.EMPTY_CODE_HASH,
   )
 
 proc isValidProof(
-    branch: seq[seq[byte]],
-    rootHash: KeccakHash,
-    key, value: seq[byte]): bool =
+    branch: seq[seq[byte]], rootHash: KeccakHash, key, value: seq[byte]
+): bool =
   try:
     # TODO: Investigate if this handles proof of non-existence.
     # Probably not as bool is not expressive enough to say if proof is valid,
@@ -49,8 +48,8 @@ proc getAccountFromProof*(
     accountNonce: Quantity,
     accountCodeHash: CodeHash,
     accountStorageRootHash: StorageHash,
-    mptNodes: seq[RlpEncodedBytes]
-    ): Result[etypes.Account, string] =
+    mptNodes: seq[RlpEncodedBytes],
+): Result[etypes.Account, string] =
   let
     mptNodesBytes = mptNodes.mapIt(distinctBase(it))
     keccakStateRootHash = toMDigest(stateRoot)
@@ -58,17 +57,13 @@ proc getAccountFromProof*(
       nonce: distinctBase(accountNonce),
       balance: accountBalance,
       storageRoot: toMDigest(accountStorageRootHash),
-      codeHash: toMDigest(accountCodeHash)
+      codeHash: toMDigest(accountCodeHash),
     )
     accountEncoded = rlp.encode(acc)
     accountKey = toSeq(keccakHash(distinctBase(accountAddress)).data)
 
-  let proofResult = verifyMptProof(
-    mptNodesBytes,
-    keccakStateRootHash,
-    accountKey,
-    accountEncoded
-  )
+  let proofResult =
+    verifyMptProof(mptNodesBytes, keccakStateRootHash, accountKey, accountEncoded)
 
   case proofResult.kind
   of MissingKey:
@@ -79,14 +74,14 @@ proc getAccountFromProof*(
     return err(proofResult.errorMsg)
 
 proc getStorageData(
-    account: etypes.Account,
-    storageProof: StorageProof): Result[UInt256, string] =
+    account: etypes.Account, storageProof: StorageProof
+): Result[UInt256, string] =
   let
     storageMptNodes = storageProof.proof.mapIt(distinctBase(it))
     key = toSeq(keccakHash(toBytesBE(storageProof.key)).data)
     encodedValue = rlp.encode(storageProof.value)
-    proofResult = verifyMptProof(
-      storageMptNodes, account.storageRoot, key, encodedValue)
+    proofResult =
+      verifyMptProof(storageMptNodes, account.storageRoot, key, encodedValue)
 
   case proofResult.kind
   of MissingKey:
@@ -97,19 +92,13 @@ proc getStorageData(
     return err(proofResult.errorMsg)
 
 proc getStorageData*(
-    stateRoot: FixedBytes[32],
-    requestedSlot: UInt256,
-    proof: ProofResponse): Result[UInt256, string] =
-
-  let account = ?getAccountFromProof(
-    stateRoot,
-    proof.address,
-    proof.balance,
-    proof.nonce,
-    proof.codeHash,
-    proof.storageHash,
-    proof.accountProof
-  )
+    stateRoot: FixedBytes[32], requestedSlot: UInt256, proof: ProofResponse
+): Result[UInt256, string] =
+  let account =
+    ?getAccountFromProof(
+      stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
+      proof.storageHash, proof.accountProof
+    )
 
   if account.storageRoot == etypes.EMPTY_ROOT_HASH:
     # valid account with empty storage, in that case getStorageAt
@@ -130,4 +119,4 @@ proc getStorageData*(
   return getStorageData(account, sproof)
 
 func isValidCode*(account: etypes.Account, code: openArray[byte]): bool =
-   return account.codeHash == keccakHash(code)
+  return account.codeHash == keccakHash(code)

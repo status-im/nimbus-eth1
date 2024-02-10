@@ -7,12 +7,7 @@
 
 {.push raises: [].}
 
-import
-  std/tables,
-  web3/primitives,
-  stew/[results, keyed_queue],
-  ./rpc/rpc_utils
-
+import std/tables, web3/primitives, stew/[results, keyed_queue], ./rpc/rpc_utils
 
 ## Cache for payloads received through block gossip and validated by the
 ## consensus light client.
@@ -27,8 +22,7 @@ proc `==`(x, y: Quantity): bool {.borrow, noSideEffect.}
 proc new*(T: type BlockCache, max: uint32): T =
   let maxAsInt = int(max)
   return BlockCache(
-    max: maxAsInt,
-    blocks: KeyedQueue[BlockHash, ExecutionData].init(maxAsInt)
+    max: maxAsInt, blocks: KeyedQueue[BlockHash, ExecutionData].init(maxAsInt)
   )
 
 func len*(self: BlockCache): int =
@@ -42,18 +36,15 @@ proc add*(self: BlockCache, payload: ExecutionData) =
     return
 
   if len(self.blocks) >= self.max:
-   discard self.blocks.shift()
+    discard self.blocks.shift()
 
   discard self.blocks.append(payload.blockHash, payload)
 
 proc latest*(self: BlockCache): results.Opt[ExecutionData] =
-  let latestPair = ? self.blocks.last()
+  let latestPair = ?self.blocks.last()
   return Opt.some(latestPair.data)
 
-proc getByNumber*(
-    self: BlockCache,
-    number: Quantity): Opt[ExecutionData] =
-
+proc getByNumber*(self: BlockCache, number: Quantity): Opt[ExecutionData] =
   var payloadResult: Opt[ExecutionData]
 
   for payload in self.blocks.prevValues:
@@ -63,7 +54,5 @@ proc getByNumber*(
 
   return payloadResult
 
-proc getPayloadByHash*(
-    self: BlockCache,
-    hash: BlockHash): Opt[ExecutionData] =
+proc getPayloadByHash*(self: BlockCache, hash: BlockHash): Opt[ExecutionData] =
   return self.blocks.eq(hash)

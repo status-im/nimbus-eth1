@@ -37,7 +37,8 @@ type
     chainId: Quantity
 
   QuantityTagKind = enum
-    LatestBlock, BlockNumber
+    LatestBlock
+    BlockNumber
 
   BlockTag = eth_api_types.RtBlockIdentifier
 
@@ -68,9 +69,8 @@ template rpcClient(lcProxy: VerifiedRpcProxy): RpcClient =
   lcProxy.proxy.getClient()
 
 proc getPayloadByTag(
-    proxy: VerifiedRpcProxy,
-    quantityTag: BlockTag):
-    results.Opt[ExecutionData] {.raises: [ValueError].} =
+    proxy: VerifiedRpcProxy, quantityTag: BlockTag
+): results.Opt[ExecutionData] {.raises: [ValueError].} =
   checkPreconditions(proxy)
 
   let tagResult = parseQuantityTag(quantityTag)
@@ -88,9 +88,8 @@ proc getPayloadByTag(
     return proxy.blockCache.getByNumber(tag.blockNumber)
 
 proc getPayloadByTagOrThrow(
-    proxy: VerifiedRpcProxy,
-    quantityTag: BlockTag): ExecutionData {.raises: [ValueError].} =
-
+    proxy: VerifiedRpcProxy, quantityTag: BlockTag
+): ExecutionData {.raises: [ValueError].} =
   let tagResult = getPayloadByTag(proxy, quantityTag)
 
   if tagResult.isErr:
@@ -109,7 +108,8 @@ proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
     return lcProxy.blockCache.latest.get.blockNumber
 
   lcProxy.proxy.rpc("eth_getBalance") do(
-      address: Address, quantityTag: BlockTag) -> UInt256:
+    address: Address, quantityTag: BlockTag
+  ) -> UInt256:
     # When requesting state for `latest` block number, we need to translate
     # `latest` to actual block number as `latest` on proxy and on data provider
     # can mean different blocks and ultimatly piece received piece of state
@@ -120,17 +120,11 @@ proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
 
     info "Forwarding eth_getBalance call", blockNumber
 
-    let proof = await lcProxy.rpcClient.eth_getProof(
-      address, @[], blockId(blockNumber))
+    let proof = await lcProxy.rpcClient.eth_getProof(address, @[], blockId(blockNumber))
 
     let accountResult = getAccountFromProof(
-      executionPayload.stateRoot,
-      proof.address,
-      proof.balance,
-      proof.nonce,
-      proof.codeHash,
-      proof.storageHash,
-      proof.accountProof
+      executionPayload.stateRoot, proof.address, proof.balance, proof.nonce,
+      proof.codeHash, proof.storageHash, proof.accountProof
     )
 
     if accountResult.isOk():
@@ -139,15 +133,16 @@ proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
       raise newException(ValueError, accountResult.error)
 
   lcProxy.proxy.rpc("eth_getStorageAt") do(
-      address: Address, slot: UInt256, quantityTag: BlockTag) -> UInt256:
+    address: Address, slot: UInt256, quantityTag: BlockTag
+  ) -> UInt256:
     let
       executionPayload = lcProxy.getPayloadByTagOrThrow(quantityTag)
       blockNumber = executionPayload.blockNumber.uint64
 
     info "Forwarding eth_getStorageAt", blockNumber
 
-    let proof = await lcProxy.rpcClient.eth_getProof(
-      address, @[slot], blockId(blockNumber))
+    let proof =
+      await lcProxy.rpcClient.eth_getProof(address, @[slot], blockId(blockNumber))
 
     let dataResult = getStorageData(executionPayload.stateRoot, slot, proof)
 
@@ -158,24 +153,19 @@ proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
       raise newException(ValueError, dataResult.error)
 
   lcProxy.proxy.rpc("eth_getTransactionCount") do(
-      address: Address, quantityTag: BlockTag) -> Quantity:
+    address: Address, quantityTag: BlockTag
+  ) -> Quantity:
     let
       executionPayload = lcProxy.getPayloadByTagOrThrow(quantityTag)
       blockNumber = executionPayload.blockNumber.uint64
 
     info "Forwarding eth_getTransactionCount", blockNumber
 
-    let proof = await lcProxy.rpcClient.eth_getProof(
-      address, @[], blockId(blockNumber))
+    let proof = await lcProxy.rpcClient.eth_getProof(address, @[], blockId(blockNumber))
 
     let accountResult = getAccountFromProof(
-      executionPayload.stateRoot,
-      proof.address,
-      proof.balance,
-      proof.nonce,
-      proof.codeHash,
-      proof.storageHash,
-      proof.accountProof
+      executionPayload.stateRoot, proof.address, proof.balance, proof.nonce,
+      proof.codeHash, proof.storageHash, proof.accountProof
     )
 
     if accountResult.isOk():
@@ -184,22 +174,17 @@ proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
       raise newException(ValueError, accountResult.error)
 
   lcProxy.proxy.rpc("eth_getCode") do(
-      address: Address, quantityTag: BlockTag) -> seq[byte]:
+    address: Address, quantityTag: BlockTag
+  ) -> seq[byte]:
     let
       executionPayload = lcProxy.getPayloadByTagOrThrow(quantityTag)
       blockNumber = executionPayload.blockNumber.uint64
 
     let
-      proof = await lcProxy.rpcClient.eth_getProof(
-        address, @[], blockId(blockNumber))
+      proof = await lcProxy.rpcClient.eth_getProof(address, @[], blockId(blockNumber))
       accountResult = getAccountFromProof(
-        executionPayload.stateRoot,
-        proof.address,
-        proof.balance,
-        proof.nonce,
-        proof.codeHash,
-        proof.storageHash,
-        proof.accountProof
+        executionPayload.stateRoot, proof.address, proof.balance, proof.nonce,
+        proof.codeHash, proof.storageHash, proof.accountProof
       )
 
     if accountResult.isErr():
@@ -213,16 +198,14 @@ proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
 
     info "Forwarding eth_getCode", blockNumber
 
-    let code = await lcProxy.rpcClient.eth_getCode(
-      address,
-      blockId(blockNumber)
-    )
+    let code = await lcProxy.rpcClient.eth_getCode(address, blockId(blockNumber))
 
     if isValidCode(account, code):
       return code
     else:
-      raise newException(ValueError,
-        "Received code which does not match the account code hash")
+      raise newException(
+        ValueError, "Received code which does not match the account code hash"
+      )
 
   # TODO:
   # Following methods are forwarded directly to the web3 provider and therefore
@@ -235,7 +218,8 @@ proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
   # TODO currently we do not handle fullTransactions flag. It require updates on
   # nim-web3 side
   lcProxy.proxy.rpc("eth_getBlockByNumber") do(
-      quantityTag: BlockTag, fullTransactions: bool) -> Option[BlockObject]:
+    quantityTag: BlockTag, fullTransactions: bool
+  ) -> Option[BlockObject]:
     let executionPayload = lcProxy.getPayloadByTag(quantityTag)
 
     if executionPayload.isErr:
@@ -244,7 +228,8 @@ proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
     return some(asBlockObject(executionPayload.get()))
 
   lcProxy.proxy.rpc("eth_getBlockByHash") do(
-      blockHash: BlockHash, fullTransactions: bool) -> Option[BlockObject]:
+    blockHash: BlockHash, fullTransactions: bool
+  ) -> Option[BlockObject]:
     let executionPayload = lcProxy.blockCache.getPayloadByHash(blockHash)
 
     if executionPayload.isErr:
@@ -253,22 +238,16 @@ proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
     return some(asBlockObject(executionPayload.get()))
 
 proc new*(
-    T: type VerifiedRpcProxy,
-    proxy: RpcProxy,
-    blockCache: BlockCache,
-    chainId: Quantity): T =
-  VerifiedRpcProxy(
-    proxy: proxy,
-    blockCache: blockCache,
-    chainId: chainId)
+    T: type VerifiedRpcProxy, proxy: RpcProxy, blockCache: BlockCache, chainId: Quantity
+): T =
+  VerifiedRpcProxy(proxy: proxy, blockCache: blockCache, chainId: chainId)
 
 # Used to be in eth1_monitor.nim; not sure why it was deleted,
 # so I copied it here. --Adam
-template awaitWithRetries*[T](lazyFutExpr: Future[T],
-                              retries = 3,
-                              timeout = 60.seconds): untyped =
-  const
-    reqType = astToStr(lazyFutExpr)
+template awaitWithRetries*[T](
+    lazyFutExpr: Future[T], retries = 3, timeout = 60.seconds
+): untyped =
+  const reqType = astToStr(lazyFutExpr)
   var
     retryDelayMs = 16000
     f: Future[T]
@@ -281,7 +260,8 @@ template awaitWithRetries*[T](lazyFutExpr: Future[T],
       await cancelAndWait(f)
     elif f.failed:
       when not (f.error of CatchableError):
-        static: doAssert false, "f.error not CatchableError"
+        static:
+          doAssert false, "f.error not CatchableError"
       debug "Web3 request failed", req = reqType, err = f.error.msg
     else:
       break
@@ -289,7 +269,8 @@ template awaitWithRetries*[T](lazyFutExpr: Future[T],
     inc attempts
     if attempts >= retries:
       var errorMsg = reqType & " failed " & $retries & " times"
-      if f.failed: errorMsg &= ". Last error: " & f.error.msg
+      if f.failed:
+        errorMsg &= ". Last error: " & f.error.msg
       raise newException(DataProviderFailure, errorMsg)
 
     await sleepAsync(chronos.milliseconds(retryDelayMs))
@@ -302,20 +283,15 @@ proc verifyChaindId*(p: VerifiedRpcProxy): Future[void] {.async.} =
 
   # retry 2 times, if the data provider fails despite the re-tries, propagate
   # exception to the caller.
-  let providerId = awaitWithRetries(
-    p.rpcClient.eth_chainId(),
-    retries = 2,
-    timeout = seconds(30)
-  )
+  let providerId =
+    awaitWithRetries(p.rpcClient.eth_chainId(), retries = 2, timeout = seconds(30))
 
   # This is a chain/network mismatch error between the Nimbus verified proxy and
   # the application using it. Fail fast to avoid misusage. The user must fix
   # the configuration.
   if localId != providerId:
     fatal "The specified data provider serves data for a different chain",
-      expectedChain = distinctBase(localId),
-      providerChain = distinctBase(providerId)
+      expectedChain = distinctBase(localId), providerChain = distinctBase(providerId)
     quit 1
 
   return
-
