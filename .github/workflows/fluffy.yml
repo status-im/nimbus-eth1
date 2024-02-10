@@ -305,3 +305,17 @@ jobs:
       - name: Run fluffy testnet
         run: |
           ./fluffy/scripts/launch_local_testnet.sh --run-tests
+
+  lint:
+    name: "Lint Fluffy"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2  # In PR, has extra merge commit: ^1 = PR, ^2 = base
+
+      - name: Check copyright year
+        if: ${{ !cancelled() }} && github.event_name == 'pull_request'
+        run: |
+          bash scripts/check_copyright_year.sh
