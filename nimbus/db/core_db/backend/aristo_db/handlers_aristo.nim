@@ -869,7 +869,11 @@ proc newMptHandler*(
     if rc.isErr:
       return err(rc.error[1].toError(db, info, AccNotFound))
   if trie.reset:
-    let rc = trie.ctx.mpt.delete(trie.root)
+    # Note that `reset` only applies to non-dynamic trie roots with vertex ID
+    # beween `VertexID(2) ..< LEAST_FREE_VID`. At the moment, this applies to
+    # `GenericTrie` type sub-tries somehow emulating the behaviour of a new
+    # empty MPT on the legacy database (handle with care, though.)
+    let rc = trie.ctx.mpt.delete(trie.root, VOID_PATH_ID)
     if rc.isErr:
       return err(rc.error.toError(db, info, AutoFlushFailed))
     trie.reset = false

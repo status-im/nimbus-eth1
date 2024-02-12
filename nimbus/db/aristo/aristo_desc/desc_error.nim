@@ -186,18 +186,19 @@ type
     NearbyVidInvalid
 
     # Deletion of vertices, `delete()`
-    DelPathTagError
-    DelLeafExpexted
-    DelLeafLocked
-    DelLeafUnexpected
     DelBranchExpexted
     DelBranchLocked
     DelBranchWithoutRefs
+    DelDanglingStoTrie
     DelExtLocked
-    DelVidStaleVtx
+    DelLeafExpexted
+    DelLeafLocked
+    DelLeafUnexpected
+    DelPathNotFound
+    DelPathTagError
     DelSubTreeTooBig
     DelSubTreeVoidRoot
-    DelPathNotFound
+    DelVidStaleVtx
 
     # Functions from  `aristo_filter.nim`
     FilBackendMissing

@@ -298,10 +298,16 @@ proc collapseLeaf(
 proc delSubTree(
     db: AristoDbRef;                   # Database, top layer
     root: VertexID;                    # Root vertex
+    accPath: PathID;                   # Needed for real storage tries
       ): Result[void,(VertexID,AristoError)] =
   ## Implementation of *delete* sub-trie.
   if not root.isValid:
     return err((root,DelSubTreeVoidRoot))
+
+  if LEAST_FREE_VID <= root.distinctBase:
+    db.registerAccount(root, accPath).isOkOr:
+      return err((root,error))
+
   var
     dispose = @[root]
     rootVtx = db.getVtxRc(root).valueOr:
@@ -333,7 +339,7 @@ proc deleteImpl(
     hike: Hike;                        # Fully expanded path
     lty: LeafTie;                      # `Patricia Trie` path root-to-leaf
     accPath: PathID;                   # Needed for accounts payload
-      ): Result[void,(VertexID,AristoError)] =
+      ): Result[bool,(VertexID,AristoError)] =
   ## Implementation of *delete* functionality.
 
   if LEAST_FREE_VID <= lty.root.distinctBase:
@@ -347,15 +353,13 @@ proc deleteImpl(
   if lf.vid in db.pPrf:
     return err((lf.vid, DelLeafLocked))
 
-  # Will be needed at the end. Just detect an error early enouhh
-  let leafVidBe = block:
-    let rc = db.getVtxBE lf.vid
-    if rc.isErr:
-      if rc.error != GetVtxNotFound:
-        return err((lf.vid, rc.error))
-      VertexRef(nil)
-    else:
-      rc.value
+  # Verify thet there is no dangling storage trie
+  block:
+    let data = lf.vtx.lData
+    if data.pType == AccountData:
+      let vid = data.account.storageID
+      if vid.isValid and db.getVtx(vid).isValid:
+        return err((vid,DelDanglingStoTrie))
 
   db.disposeOfVtx lf.vid
 
@@ -407,14 +411,7 @@ proc deleteImpl(
   # at a later state.
   db.top.final.lTab[lty] = VertexID(0)
 
-  # Delete dependent leaf node storage tree if there is any
-  let data = lf.vtx.lData
-  if data.pType == AccountData:
-    let vid = data.account.storageID
-    if vid.isValid:
-      return db.delSubTree vid
-
-  ok()
+  ok(not db.getVtx(hike.root).isValid)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -423,22 +420,25 @@ proc deleteImpl(
 proc delete*(
     db: AristoDbRef;                   # Database, top layer
     root: VertexID;                    # Root vertex
+    accPath: PathID;                   # Needed for real storage tries
       ): Result[void,(VertexID,AristoError)] =
   ## Delete sub-trie below `root`. The maximum supported sub-tree size is
   ## `SUB_TREE_DISPOSAL_MAX`. Larger tries must be disposed by walk-deleting
   ## leaf nodes using `left()` or `right()` traversal functions.
   ##
-  ## Caveat:
-  ##   There is no way to quickly verify that the `root` argument is isolated.
-  ##   Deleting random sub-trees might lead to an inconsistent database.
+  ## For a `root` argument greater than `LEAST_FREE_VID`, the sub-tree spanned
+  ## by `root` is considered a storage trie linked to an account leaf referred
+  ## to by a valid `accPath` (i.e. different from `VOID_PATH_ID`.) In that
+  ## case, an account must exists. If there is payload of type `AccountData`,
+  ## its `storageID` field must be unset or equal to the `hike.root` vertex ID.
   ##
-  db.delSubTree root
+  db.delSubTree(root, accPath)
 
 proc delete*(
     db: AristoDbRef;                   # Database, top layer
     hike: Hike;                        # Fully expanded chain of vertices
     accPath: PathID;                   # Needed for accounts payload
-      ): Result[void,(VertexID,AristoError)] =
+      ): Result[bool,(VertexID,AristoError)] =
   ## Delete argument `hike` chain of vertices from the database.
   ##
   ## For a `hike.root` with `VertexID` greater than `LEAST_FREE_VID`, the
@@ -448,9 +448,7 @@ proc delete*(
   ## of type `AccountData`, its `storageID` field must be unset or equal to the
   ## `hike.root` vertex ID.
   ##
-  ## Note:
-  ##  If the leaf node has an account payload referring to a storage sub-trie,
-  ##  this one will be deleted as well.
+  ## The return code is `true` iff the trie has become empty.
   ##
   # Need path in order to remove it from `lTab[]`
   let lty = LeafTie(
@@ -462,7 +460,7 @@ proc delete*(
     db: AristoDbRef;                   # Database, top layer
     lty: LeafTie;                      # `Patricia Trie` path root-to-leaf
     accPath: PathID;                   # Needed for accounts payload
-      ): Result[void,(VertexID,AristoError)] =
+      ): Result[bool,(VertexID,AristoError)] =
   ## Variant of `delete()`
   ##
   db.deleteImpl(? lty.hikeUp(db).mapErr toVae, lty, accPath)
@@ -472,7 +470,7 @@ proc delete*(
     root: VertexID;
     path: openArray[byte];
     accPath: PathID;                   # Needed for accounts payload
-      ): Result[void,(VertexID,AristoError)] =
+      ): Result[bool,(VertexID,AristoError)] =
   ## Variant of `delete()`
   ##
   let rc = path.initNibbleRange.hikeUp(root, db)
