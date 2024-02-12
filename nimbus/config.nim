@@ -643,7 +643,7 @@ proc getProtocolFlags*(conf: NimbusConf): set[ProtocolFlag] =
 proc getRpcFlags(api: openArray[string]): set[RpcFlag] =
   if api.len == 0:
     return {RpcFlag.Eth}
-    
+
   for item in repeatingList(api):
     case item.toLowerAscii()
     of "eth": result.incl RpcFlag.Eth
@@ -747,7 +747,7 @@ func shareServerWithEngineApi*(conf: NimbusConf): bool =
 func httpServerEnabled*(conf: NimbusConf): bool =
   conf.graphqlEnabled or
     conf.wsEnabled or
-    conf.rpcEnabled 
+    conf.rpcEnabled
 
 # KLUDGE: The `load()` template does currently not work within any exception
 #         annotated environment.
@@ -768,9 +768,6 @@ proc makeConfig*(cmdLine = commandLineParams()): NimbusConf
     {.pop.}
   except CatchableError as e:
     raise e
-  except Exception as e:
-   {.warning: "Kludge(BareExcept): `load()` template in vendor package needs to be updated"}
-   raiseAssert "Ooops makeConfig(): name=" & $e.name & " msg=" & e.msg
 
   var networkId = result.getNetworkId()
 
