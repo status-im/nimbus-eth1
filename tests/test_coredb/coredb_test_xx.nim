@@ -9,7 +9,9 @@
 # distributed except according to those terms.
 
 import
+  std/strutils,
   eth/common,
+  ../../nimbus/db/core_db,
   ../../nimbus/common/chain_config
 
 type
@@ -22,28 +24,29 @@ type
       genesis*: string       ## Optional config file (instead of `network`)
     files*: seq[string]      ## Names of capture files
     numBlocks*: int          ## Number of blocks to load
+    dbType*: CoreDbType      ## Use `CoreDbType(0)` for default
 
 # Must not use `const` here, see `//github.com/nim-lang/Nim/issues/23295`
 # Waiting for fix `//github.com/nim-lang/Nim/pull/23297` (or similar) to
 # appear on local `Nim` compiler version.
 let
   bulkTest0* = CaptureSpecs(
-    name:      "some-goerli",
     builtIn:   true,
+    name:      "goerli-some",
     network:   GoerliNet,
     files:     @["goerli68161.txt.gz"],
     numBlocks: 1_000)
 
   bulkTest1* = CaptureSpecs(
-    name:      "more-goerli",
     builtIn:   true,
+    name:      "goerli-more",
     network:   GoerliNet,
     files:     @["goerli68161.txt.gz"],
     numBlocks: high(int))
 
   bulkTest2* = CaptureSpecs(
-    name:      "much-goerli",
     builtIn:   true,
+    name:      "goerli",
     network:   GoerliNet,
     files:     @[
       "goerli482304.txt.gz",              # on nimbus-eth1-blobs/replay
@@ -51,8 +54,8 @@ let
     numBlocks: high(int))
 
   bulkTest3* = CaptureSpecs(
-    name:      "mainnet",
     builtIn:   true,
+    name:      "main",
     network:   MainNet,
     files:     @[
       "mainnet332160.txt.gz",             # on nimbus-eth1-blobs/replay
@@ -62,18 +65,53 @@ let
     numBlocks: high(int))
 
 
-  failSample0* = CaptureSpecs(
-    name:      "fail-goerli",
+  # Test samples with all the problems one can expect
+  ariTest0* = CaptureSpecs(
     builtIn:   true,
-    network:   GoerliNet,
+    name:      bulkTest2.name & "-am",
+    network:   bulkTest2.network,
     files:     bulkTest2.files,
-    numBlocks: 301_375 + 1)               # +1 => crash on Aristo only
+    numBlocks: high(int),
+    dbType:    AristoDbMemory)
 
-  failSample1* = CaptureSpecs(
-    name:      "fail-main",
+  ariTest1* = CaptureSpecs(
     builtIn:   true,
-    network:   MainNet,
+    name:      bulkTest2.name & "-ar",
+    network:   bulkTest2.network,
+    files:     bulkTest2.files,
+    numBlocks: high(int),
+    dbType:    AristoDbRocks)
+
+  ariTest2* = CaptureSpecs(
+    builtIn:   true,
+    name:      bulkTest3.name & "-ar",
+    network:   bulkTest3.network,
     files:     bulkTest3.files,
-    numBlocks: 257_280 + 512)
+    numBlocks: high(int),
+    dbType:    AristoDbRocks)
+
+
+  # To be compared against the proof-of-concept implementation as reference
+  legaTest1* = CaptureSpecs(
+    builtIn:   true,
+    name:      ariTest1.name.replace("-ar", "-lp"),
+    network:   ariTest1.network,
+    files:     ariTest1.files,
+    numBlocks: ariTest1.numBlocks,
+    dbType:    LegacyDbPersistent)
+
+  legaTest2* = CaptureSpecs(
+    builtIn:   true,
+    name:      ariTest2.name.replace("-ar", "-lp"),
+    files:     ariTest2.files,
+    numBlocks: ariTest2.numBlocks,
+    dbType:    LegacyDbPersistent)
+
+  # ------------------
+
+  allSamples* = [
+    bulkTest0, bulkTest1, bulkTest2, bulkTest3,
+    ariTest0, ariTest1, ariTest2,
+    legaTest1, legaTest2]
 
 # End

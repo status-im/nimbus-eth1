@@ -476,7 +476,7 @@ proc testTxMergeAndDeleteSubTree*(
           ""
     # Delete sub-tree
     block:
-      let rc = db.delete VertexID(1)
+      let rc = db.delete(VertexID(1), VOID_PATH_ID)
       xCheckRc rc.error == (0,0):
         noisy.say "***", "del(2)",
           " n=", n, "/", list.len,

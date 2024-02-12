@@ -188,7 +188,6 @@ type
     persistentFn*: CoreDbMptPersistentFn
     forgetFn*:     CoreDbMptForgetFn
 
-
   # ----------------------------------------------------
   # Sub-descriptor: Mpt/hexary trie methods for accounts
   # ------------------------------------------------------
@@ -196,6 +195,7 @@ type
   CoreDbAccNewMptFn* = proc(): CoreDbRc[CoreDxMptRef] {.noRaise.}
   CoreDbAccFetchFn* = proc(k: EthAddress): CoreDbRc[CoreDbAccount] {.noRaise.}
   CoreDbAccDeleteFn* = proc(k: EthAddress): CoreDbRc[void] {.noRaise.}
+  CoreDbAccStoFlushFn* = proc(k: EthAddress): CoreDbRc[void] {.noRaise.}
   CoreDbAccMergeFn* = proc(v: CoreDbAccount): CoreDbRc[void] {.noRaise.}
   CoreDbAccHasPathFn* = proc(k: EthAddress): CoreDbRc[bool] {.noRaise.}
   CoreDbAccGetTrieFn* = proc(): CoreDbTrieRef {.noRaise.}
@@ -209,6 +209,7 @@ type
     newMptFn*:     CoreDbAccNewMptFn
     fetchFn*:      CoreDbAccFetchFn
     deleteFn*:     CoreDbAccDeleteFn
+    stoFlushFn*:   CoreDbAccStoFlushFn
     mergeFn*:      CoreDbAccMergeFn
     hasPathFn*:    CoreDbAccHasPathFn
     getTrieFn*:    CoreDbAccGetTrieFn

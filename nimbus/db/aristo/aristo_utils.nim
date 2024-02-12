@@ -14,10 +14,10 @@
 {.push raises: [].}
 
 import
-  std/[sequtils, tables],
+  std/[sequtils, tables, typetraits],
   eth/common,
   results,
-  "."/[aristo_desc, aristo_get, aristo_hike, aristo_layers]
+  "."/[aristo_constants, aristo_desc, aristo_get, aristo_hike, aristo_layers]
 
 # ------------------------------------------------------------------------------
 # Public functions, converters
@@ -128,10 +128,16 @@ proc toNode*(
       let vid = vtx.lData.account.storageID
       if vid.isValid:
         let key = db.getKey vid
-        if key.isValid:
-          node.key[0] = key
-        else:
-          return err(@[vid])
+        if not key.isValid:
+          block looseCoupling:
+            when LOOSE_STORAGE_TRIE_COUPLING:
+              # Stale storage trie?
+              if LEAST_FREE_VID <= vid.distinctBase and
+                 not db.getVtx(vid).isValid:
+                node.lData.account.storageID = VertexID(0)
+                break looseCoupling
+            # Otherwise this is a stale storage trie.
+            return err(@[vid])
         node.key[0] = key
     return ok node
 

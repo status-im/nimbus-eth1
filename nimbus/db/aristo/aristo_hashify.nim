@@ -366,9 +366,7 @@ proc hashify*(
       if not vtx.isValid:
         # This might happen when proof nodes (see `snap` protocol) are on
         # an incomplete trie where this `vid` has a key but no vertex yet.
-        # Also, the key (as part of the proof data) must be on the backend
-        # by the way `leafToRootCrawler()` works. So it is enough to verify
-        # the key there.
+        # Also, the key (as part of the proof data) must be on the backend.
         discard db.getKeyBE(vid).valueOr:
           return err((vid,HashifyNodeUnresolved))
       else:

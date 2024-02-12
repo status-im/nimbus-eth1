@@ -327,6 +327,9 @@ proc accMethods(mpt: HexaryChildDbRef; db: LegacyDbRef): CoreDbAccFns =
         mpt.trie.del(k.keccakHash.data)
       ok(),
 
+    stoFlushFn: proc(k: EthAddress): CoreDbRc[void] =
+      ok(),
+
     mergeFn: proc(v: CoreDbAccount): CoreDbRc[void] =
       db.mapRlpException("mergeFn()"):
         mpt.trie.put(v.address.keccakHash.data, rlp.encode v.toAccount)
