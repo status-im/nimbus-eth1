@@ -13,7 +13,7 @@ import
 
 
 suite "State Content Keys":
-  const evenNibles = "00050000008679e8ed"
+  const evenNibles = "008679e8ed"
   test "Encode/decode even nibbles":
     const
       nibbles: seq[byte] = @[8, 6, 7, 9, 14, 8, 14, 13]
@@ -26,20 +26,20 @@ suite "State Content Keys":
     check encoded.toHex() == evenNibles
     check unpackedNibbles == nibbles
 
-  const oddNibbles = "0105000000018679e8ed"
+  const oddNibbles = "138679e8ed"
   test "Encode/decode odd nibbles":
     const
-      nibbles: seq[byte] = @[1, 8, 6, 7, 9, 14, 8, 14, 13]
+      nibbles: seq[byte] = @[3, 8, 6, 7, 9, 14, 8, 14, 13]
       packedNibbles = packNibbles(nibbles)
       unpackedNibbles = unpackNibbles(packedNibbles)
 
     let
       encoded = SSZ.encode(packedNibbles)
-
+    
     check encoded.toHex() == oddNibbles
     check unpackedNibbles == nibbles
 
-  const accountTrieNodeKeyEncoded = "20240000006225fcc63b22b80301d9f2582014e450e91f9b329b7cc87ad16894722fff529600050000008679e8ed"
+  const accountTrieNodeKeyEncoded = "20240000006225fcc63b22b80301d9f2582014e450e91f9b329b7cc87ad16894722fff5296008679e8ed"
   test "Encode/decode AccountTrieNodeKey":
     const
       nibbles: seq[byte] = @[8, 6, 7, 9, 14, 8, 14, 13]
@@ -58,13 +58,12 @@ suite "State Content Keys":
       decoded.contentType == accountTrieNode
       decoded.accountTrieNodeKey == AccountTrieNodeKey(path: packedNibbles, nodeHash: nodeHash)
 
-  const contractTrieNodeKeyEncoded = "21c02aaa39b223fe8d0a0e5c4f27ead9083c756cc238000000eb43d68008d216e753fef198cf51077f5a89f406d9c244119d1643f0f2b190110005000000405787"
+  const contractTrieNodeKeyEncoded = "21c02aaa39b223fe8d0a0e5c4f27ead9083c756cc238000000eb43d68008d216e753fef198cf51077f5a89f406d9c244119d1643f0f2b1901100405787"
   test "Encode/decode ContractTrieNodeKey":
     const
       nibbles: seq[byte] = @[4, 0, 5, 7, 8, 7]
       packedNibbles = packNibbles(nibbles)
       address = Address.fromHex("c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2")
-      isOddLength = false
       nodeHash = NodeHash.fromHex("eb43d68008d216e753fef198cf51077f5a89f406d9c244119d1643f0f2b19011")
 
     let

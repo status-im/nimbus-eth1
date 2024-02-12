@@ -19,7 +19,7 @@ import
 export ssz_serialization, common_types, hash, results
 
 const
-  MAX_PACKED_NIBBLES_LEN   = 32
+  MAX_PACKED_NIBBLES_LEN   = 33
   MAX_UNPACKED_NIBBLES_LEN = 64
 
   MAX_TRIE_NODE_LEN  = 1024
@@ -44,10 +44,7 @@ type
     contractTrieNode = 0x21
     contractCode = 0x22
 
-  NibblePair* = byte
-  Nibbles* = object
-    isOddLength*: bool
-    packedNibbles*: List[NibblePair, MAX_PACKED_NIBBLES_LEN]
+  Nibbles* = List[byte, MAX_PACKED_NIBBLES_LEN]
 
   TrieNode*  = List[byte, MAX_TRIE_NODE_LEN]
   TrieProof* = List[TrieNode, MAX_TRIE_PROOF_LEN]
@@ -130,41 +127,53 @@ func toContentId*(contentKey: ContentKey): ContentId =
 
 func packNibbles*(nibbles: seq[byte]): Nibbles =
   doAssert(nibbles.len() <= MAX_UNPACKED_NIBBLES_LEN, "Can't pack more than 64 nibbles")
+
+  if nibbles.len() == 0:
+    return Nibbles(@[byte(0x00)])
   
   let
     isOddLength = (nibbles.len() %% 2 == 1)
     outputLength = (nibbles.len() + 1) div 2
 
   var
-    output = newSeq[NibblePair]()
+    output = newSeq[byte]()
     highNibble = not isOddLength
     currentByte: byte = 0
 
-  for nibble in nibbles:
+  if isOddLength:
+    currentByte = 0x10
+
+  if not isOddLength:
+    output.add(0x00)
+
+  for i, nibble in nibbles:
     if highNibble:
       currentByte = nibble shl 4
     else:
-      output.add(NibblePair(currentByte or nibble))
+      output.add(currentByte or nibble)
       currentByte = 0
     highNibble = not highNibble
 
-  Nibbles(isOddLength: isOddLength, packedNibbles: Nibbles.packedNibbles.init(output))
+  Nibbles(output)
 
 func unpackNibbles*(nibbles: Nibbles): seq[byte] =
-  doAssert(nibbles.packedNibbles.len() <= MAX_PACKED_NIBBLES_LEN, "Can't unpack more than 32 nibbles")
+  doAssert(nibbles.len() <= MAX_PACKED_NIBBLES_LEN, "Can't unpack more than 32 nibbles")
 
   var output = newSeq[byte]()
 
-  for pair in nibbles.packedNibbles:
+  for i, pair in nibbles:
+    if i == 0 and pair == 0x00:
+      continue
+
     let
       first = (pair and 0xF0) shr 4
       second = pair and 0x0F
-  
-    output.add(first)
-    output.add(second)
-  
-  if nibbles.isOddLength:
-    output.delete(0)
+
+    if i == 0 and first == 0x01:
+      output.add(second)
+    else:
+      output.add(first)
+      output.add(second)
 
   output
 
