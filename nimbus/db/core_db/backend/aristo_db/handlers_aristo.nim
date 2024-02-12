@@ -447,6 +447,11 @@ proc mptMethods(cMpt: AristoChildDbRef): CoreDbMptFns =
       if rc.error[1] == DelPathNotFound:
         return err(rc.error.toError(db, info, MptNotFound))
       return err(rc.error.toError(db, info))
+
+    if rc.value:
+      # Trie has become empty
+      cMpt.root = VoidTrieID
+
     ok()
 
   proc mptHasPath(
@@ -575,6 +580,27 @@ proc accMethods(cAcc: AristoChildDbRef): CoreDbAccFns =
       return err(rc.error.toError(db, info))
     ok()
 
+  proc accStoFlush(
+      cAcc: AristoChildDbRef;
+      address: EthAddress;
+      info: static[string];
+        ): CoreDbRc[void] =
+    let
+      db = cAcc.base.parent
+      mpt = cAcc.mpt
+      key = address.keccakHash.data
+      pyl = mpt.fetchPayload(cAcc.root, key).valueOr:
+        return ok()
+
+    # Use storage ID from account and delete that sub-trie
+    if pyl.pType == AccountData:
+      let stoID = pyl.account.storageID
+      if stoID.isValid:
+        let rc = mpt.delete(stoID, address.to(PathID))
+        if rc.isErr:
+          return err(rc.error.toError(db, info))
+    ok()
+
   proc accHasPath(
       cAcc: AristoChildDbRef;
       address: EthAddress;
@@ -601,6 +627,9 @@ proc accMethods(cAcc: AristoChildDbRef): CoreDbAccFns =
 
     deleteFn: proc(address: EthAddress): CoreDbRc[void] =
       cAcc.accDelete(address, "deleteFn()"),
+
+    stoFlushFn: proc(address: EthAddress): CoreDbRc[void] =
+      cAcc.accStoFlush(address, "stoFlushFn()"),
 
     mergeFn: proc(acc: CoreDbAccount): CoreDbRc[void] =
       cAcc.accMerge(acc, "mergeFn()"),

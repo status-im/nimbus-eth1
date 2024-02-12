@@ -114,6 +114,10 @@ proc merge*(al: AccountLedger; account: CoreDbAccount) =
 
 proc delete*(al: AccountLedger, eAddr: EthAddress) =
   const info = "AccountLedger/delete()"
+  # Flush associated storage trie
+  al.distinctBase.stoFlush(eAddr).isOkOr:
+    raiseAssert info & $$error
+  # Clear account
   al.distinctBase.delete(eAddr).isOkOr:
     if error.error == MptNotFound:
       return

@@ -34,6 +34,7 @@ type
     AccMergeFn          = "acc/merge"
     AccNewMptFn         = "acc/newMpt"
     AccPersistentFn     = "acc/persistent"
+    AccStoFlushFn       = "acc/stoFlush"
     AccToMptFn          = "acc/toMpt"
 
     AnyBackendFn        = "any/backend"
