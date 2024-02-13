@@ -47,7 +47,7 @@ proc getBlockWitness*(
   vmState.generateWitness = true # Enable saving witness data
   vmState.com.hardForkTransition(blockHeader)
 
-  var dbTx = vmState.com.db.beginTransaction()
+  let dbTx = vmState.com.db.beginTransaction()
   defer: dbTx.dispose()
 
   # Execute the block of transactions and collect the keys of the touched account state

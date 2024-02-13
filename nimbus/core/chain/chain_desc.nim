@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -32,6 +32,10 @@ type
 
     extraValidation: bool ##\
       ## Trigger extra validation, currently within `persistBlocks()`
+      ## function only.
+
+    generateWitness: bool ##\
+      ## Enable generation of block witness, currently within `persistBlocks()`
       ## function only.
 
     verifyFrom: BlockNumber ##\
@@ -101,6 +105,10 @@ proc extraValidation*(c: ChainRef): bool =
   ## Getter
   c.extraValidation
 
+proc generateWitness*(c: ChainRef): bool =
+  ## Getter
+  c.generateWitness
+
 proc verifyFrom*(c: ChainRef): BlockNumber =
   ## Getter
   c.verifyFrom
@@ -124,6 +132,11 @@ proc `extraValidation=`*(c: ChainRef; extraValidation: bool) =
   ## Setter. If set `true`, the assignment value `extraValidation` enables
   ## extra block chain validation.
   c.extraValidation = extraValidation
+
+proc `generateWitness=`*(c: ChainRef; generateWitness: bool) =
+  ## Setter. If set `true`, the assignment value `generateWitness` enables
+  ## block witness generation.
+  c.generateWitness = generateWitness
 
 proc `verifyFrom=`*(c: ChainRef; verifyFrom: BlockNumber) =
   ## Setter. The  assignment value `verifyFrom` defines the first block where

@@ -54,4 +54,5 @@ cliBuilder:
           ./test_beacon/test_skeleton,
           ./test_overflow,
           ./test_getproof_json,
-          ./test_rpc_experimental_json
+          ./test_rpc_experimental_json,
+          ./test_persistblock_witness_json

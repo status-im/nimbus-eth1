@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -733,6 +733,12 @@ proc haveBlockAndState*(db: CoreDbRef, headerHash: Hash256): bool =
     return false
   # see if stateRoot exists
   db.exists(header.stateRoot)
+
+proc getBlockWitness*(db: CoreDbRef, blockHash: Hash256): seq[byte] {.gcsafe.} =
+  db.kvt.get(blockHashToBlockWitnessKey(blockHash).toOpenArray)
+
+proc setBlockWitness*(db: CoreDbRef, blockHash: Hash256, witness: seq[byte]) =
+  db.kvt.put(blockHashToBlockWitnessKey(blockHash).toOpenArray, witness)
 
 # ------------------------------------------------------------------------------
 # End
