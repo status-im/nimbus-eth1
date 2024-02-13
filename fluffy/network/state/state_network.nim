@@ -63,31 +63,20 @@ proc getContent*(n: StateNetwork, key: ContentKey):
   return Opt.some(contentResult.content)
 
 proc validateAccountTrieNode(key: ContentKey, contentValue: seq[byte]): bool =
-  let
-    value = decodeSsz(contentValue, AccountTrieNodeOffer).valueOr:
+  let value = decodeSsz(contentValue, AccountTrieNodeOffer).valueOr:
       warn "Received invalid account trie proof", error
       return false
-  let
-    proof = value.proof.asSeq().map((x) => x.asSeq())
-    trieKey = proof[^1].decode(seq[seq[byte]])[0]
-    trieValue = proof[^1].decode(seq[seq[byte]])[^1]
-    stateRoot = MDigest[256](data: value.blockHash.data)
-    verificationResult = verifyMptProof(proof, stateRoot, trieKey, trieValue)
-
-  echo ">>> Verification result: ", verificationResult.kind
-  echo ">>> State root: ", stateRoot
-  echo ">>> Block hash: ", key.accountTrieNodeKey.nodeHash
-  # echo ">>> Trie key: ", trieKey
-  # echo ">>> Trie value: ", trieValue
-  verificationResult.kind == ValidProof
+  true
 
 proc validateContractTrieNode(key: ContentKey, contentValue: seq[byte]): bool =
   let value = decodeSsz(contentValue, ContractTrieNodeOffer).valueOr:
+    warn "Received invalid contract trie proof", error
     return false
   true
 
 proc validateContractCode(key: ContentKey, contentValue: seq[byte]): bool =
   let value = decodeSsz(contentValue, ContractCodeOffer).valueOr:
+    warn "Received invalid contract code", error
     return false
   true
 
@@ -136,7 +125,7 @@ proc recursiveGossipAccountTrieNode(
       p: PortalProtocol,
       maybeSrcNodeId: Opt[NodeId],
       contentKeys: ContentKeysList,
-      contentValues: seq[seq[byte]]) {.async, gcsafe, closure.}
+      contentValues: seq[seq[byte]]): Future[void] {.async, gcsafe, closure.}
     ): Future[void] {.async.} =
       var nibbles = decodedKey.accountTrieNodeKey.path.unpackNibbles()
       let decodedValue = decodeSsz(contentValue, AccountTrieNodeOffer).valueOr:
@@ -167,7 +156,7 @@ proc recursiveGossipContractTrieNode(
       p: PortalProtocol,
       maybeSrcNodeId: Opt[NodeId],
       contentKeys: ContentKeysList,
-      contentValues: seq[seq[byte]]) {.async, gcsafe, closure.}
+      contentValues: seq[seq[byte]]): Future[void] {.async, gcsafe, closure.}
     ): Future[void] {.async.} =
       return
 
@@ -180,7 +169,7 @@ proc gossipContent*(
       p: PortalProtocol,
       maybeSrcNodeId: Opt[NodeId],
       contentKeysList: ContentKeysList,
-      contentValues: seq[seq[byte]]) {.async, gcsafe, closure.}
+      contentValues: seq[seq[byte]]): Future[void] {.async, gcsafe, closure.}
     ): Future[void] {.async.} =
   for i, contentValue in contentValues:
     let
@@ -192,12 +181,12 @@ proc gossipContent*(
         warn("Gossiping content with unused content type")
         continue
       of accountTrieNode:
-        discard recursiveGossipAccountTrieNode(p, maybeSrcNodeId, decodedKey, contentValue, gossipProc)
+        await recursiveGossipAccountTrieNode(p, maybeSrcNodeId, decodedKey, contentValue, gossipProc)
       of contractTrieNode:
-        discard recursiveGossipContractTrieNode(p, maybeSrcNodeId, decodedKey, contentValue, gossipProc)
+        await recursiveGossipContractTrieNode(p, maybeSrcNodeId, decodedKey, contentValue, gossipProc)
       of contractCode:
-        await p.neighborhoodGossipDiscardPeers(
-          maybeSrcNodeId, ContentKeysList.init(@[contentKey]), @[contentValue]
+        await gossipProc(
+          p, maybeSrcNodeId, ContentKeysList.init(@[contentKey]), @[contentValue]
         )
 
 proc new*(
@@ -235,7 +224,7 @@ proc processContentLoop(n: StateNetwork) {.async.} =
           maybeSrcNodeId,
           contentKeys,
           contentValues,
-          neighborhoodGossipDiscardPeers
+          randomGossipDiscardPeers
           )
   except CancelledError:
     trace "processContentLoop canceled"

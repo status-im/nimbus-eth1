@@ -10,7 +10,6 @@ import
   stew/[byteutils, results],
   testutils/unittests,
   chronos,
-  eth/rlp,
   eth/common/eth_hash,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   eth/p2p/discoveryv5/routing_table,
@@ -37,39 +36,34 @@ procSuite "State Network Gossip":
   #     proto1 = StateNetwork.new(node1, ContentDB.new("", uint32.high, inMemory = true), sm1)
   #     proto2 = StateNetwork.new(node2, ContentDB.new("", uint32.high, inMemory = true), sm2)
 
-  #     srcNodeId = protoVy1.portalProtocol.localNode.id
-
   #     blockContent = readJsonType(testVectorDir & "block.json", JsonBlock).valueOr:
   #       raiseAssert "Cannot read test vector: " & error
-  #     accountTrieNode = readJsonType(testVectorDir & "account_trie_node.json", JsonAccountTrieNode).valueOr:
+  #     recursiveGossipSteps = readJsonType(testVectorDir & "recursive_gossip.json", JsonRecursiveGossip).valueOr:
   #       raiseAssert "Cannot read test vector: " & error
 
-  #     blockHash = BlockHash.fromHex(blockContent.`block`.block_hash)
-  #     proof = TrieProof.init(blockContent.account_proof.map((hex) => TrieNode.init(hex.hexToSeqByte())))
-  #     accountTrieNodeOffer = AccountTrieNodeOffer(blockHash: blockHash, proof: proof)
-
-  #     encodedValue = SSZ.encode(accountTrieNodeOffer)
-    
   #   check proto2.portalProtocol.addNode(node1.localNode) == Added
+  #   check (await node2.ping(node1.localNode)).isOk()
 
-  #   let gossiped = await proto1.portalProtocol.neighborhoodGossip(Opt.none(NodeId), ContentKeysList.init(@[encodedKey]), @[encodedValue])
+  #   let
+  #     pair = recursiveGossipSteps[0]
+  #     key = ByteList.init(pair.content_key.hexToSeqByte())
+  #     decodedKey = key.decode().valueOr:
+  #       raiseAssert "Cannot decode key"
+  #     value = pair.content_value.hexToSeqByte()
 
-  #   check gossiped > 0
+  #   await proto1.portalProtocol.gossipContent(Opt.none(NodeId), ContentKeysList.init(@[key]), @[value], neighborhoodGossipDiscardPeers)
+  #   let gossipedValue = await proto2.getContent(decodedKey)
+
+  #   check gossipedValue.isSome()
+  #   check gossipedValue.get() == value
+
 
   #   await node1.closeWait()
   #   await node2.closeWait()
 
-  proc dumpRlp(rlpNode: RlpNode, depth: string): void =
-    case rlpNode.kind
-    of rlpBlob:
-      echo depth & ">>", rlpNode.bytes.toHex()
-    of rlpList:
-      for node in rlpNode.elems:
-        dumpRlp(node, depth & "--")
-
-  test "Test validateContent method":
+  asyncTest "Test gossipContent method":
     let
-      node = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20301))
+      node = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20302))
       sm = StreamManager.new(node)
       proto = StateNetwork.new(node, ContentDB.new("", uint32.high, inMemory = true), sm)
       srcNodeId = proto.portalProtocol.localNode.id
@@ -79,53 +73,16 @@ procSuite "State Network Gossip":
       recursiveGossipSteps = readJsonType(testVectorDir & "recursive_gossip.json", JsonRecursiveGossip).valueOr:
         raiseAssert "Cannot read test vector: " & error
 
-    let
-      pair = recursiveGossipSteps[0]
-      key = ByteList.init(pair.content_key.hexToSeqByte())
-      # nextKey = ByteList.init(recursiveGossipSteps[i + 1].content_key.hexToSeqByte())
-      value = pair.content_value.hexToSeqByte()
-      # nextValue = recursiveGossipSteps[i + 1].content_value.hexToSeqByte()
-      decodedValue = SSZ.decode(value, AccountTrieNodeOffer)
-      decodedKey = key.decode().valueOr:
-        raiseAssert "Cannot decode key"
+    for i, pair in recursiveGossipSteps[0..^2]:
+      let
+        key = ByteList.init(pair.content_key.hexToSeqByte())
+        nextKey = ByteList.init(recursiveGossipSteps[i + 1].content_key.hexToSeqByte())
+        value = pair.content_value.hexToSeqByte()
+        nextValue = recursiveGossipSteps[i + 1].content_value.hexToSeqByte()
 
-    echo ">>> nodeHash:", decodedKey.accountTrieNodeKey.nodeHash
-    echo ">>> blockHash:", decodedValue.blockHash
-    echo "Decoded key:", decodedKey.accountTrieNodeKey.path.unpackNibbles()
+      proc gossipProc(p: PortalProtocol, nid: Opt[NodeId], keys: ContentKeysList, values: seq[seq[byte]]): Future[void] {.async} =
+        check (distinctBase keys)[0] == nextKey
+        check values[0] == nextValue
+        return
 
-    let v = rlp.decode(decodedValue.proof[^1].asSeq()).elems[1].bytes
-    dumpRlp(rlp.decode(v), "")
-
-    # for i, node in decodedValue.proof:
-    #   let decodedNode = rlp.decode(node.asSeq())
-    #   echo i, "-----------------"
-    #   dumpRlp(decodedNode, "")
-
-    check false
-    # check validateContent(proto, key, value) == true
-
-  # asyncTest "Test gossipContent method":
-  #   let
-  #     node = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20302))
-  #     sm = StreamManager.new(node)
-  #     proto = StateNetwork.new(node, ContentDB.new("", uint32.high, inMemory = true), sm)
-  #     srcNodeId = proto.portalProtocol.localNode.id
-
-  #     blockContent = readJsonType(testVectorDir & "block.json", JsonBlock).valueOr:
-  #       raiseAssert "Cannot read test vector: " & error
-  #     recursiveGossipSteps = readJsonType(testVectorDir & "recursive_gossip.json", JsonRecursiveGossip).valueOr:
-  #       raiseAssert "Cannot read test vector: " & error
-
-  #   for i, pair in recursiveGossipSteps[0..^2]:
-  #     let
-  #       key = ByteList.init(pair.content_key.hexToSeqByte())
-  #       nextKey = ByteList.init(recursiveGossipSteps[i + 1].content_key.hexToSeqByte())
-  #       value = pair.content_value.hexToSeqByte()
-  #       nextValue = recursiveGossipSteps[i + 1].content_value.hexToSeqByte()
-
-  #     proc gossipProc(p: PortalProtocol, nid: Opt[NodeId], keys: ContentKeysList, values: seq[seq[byte]]): Future[void] {.async} =
-  #       check (distinctBase keys)[0] == nextKey
-  #       check values[0] == nextValue
-  #       return
-
-  #     await gossipContent(proto.portalProtocol, Opt.some(srcNodeId), ContentKeysList.init(@[key]), @[value], gossipProc)
+      await gossipContent(proto.portalProtocol, Opt.some(srcNodeId), ContentKeysList.init(@[key]), @[value], gossipProc)

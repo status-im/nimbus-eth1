@@ -6,6 +6,8 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import 
+  eth/rlp,
+  nimcrypto/utils,
   ../../network/state/state_content
 
 type JsonBlockInfo* = object
@@ -52,3 +54,15 @@ type JsonGossipKVPair* = object
   content_value*: string
 
 type JsonRecursiveGossip* = seq[JsonGossipKVPair]
+
+proc dumpRlp*(rlpNode: RlpNode, prefix: string): void =
+  case rlpNode.kind
+  of rlpBlob:
+    echo prefix & ">>", rlpNode.bytes.toHex()
+  of rlpList:
+    for node in rlpNode.elems:
+      dumpRlp(node, prefix & "--")
+
+proc dumpRlp*(rlpNode: RlpNode): void =
+  dumpRlp(rlpNode, "")
+
