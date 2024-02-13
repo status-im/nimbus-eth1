@@ -217,7 +217,7 @@ proc updateSchedule(
              stoRoot notin wff.pool:
             wff.root.incl stoRoot
             wff.base[stoRoot] = FollowUpVid(
-              root:  stoRoot,
+              root:  root, # Jump to main tree
               toVid: leaf.vid)
         break findlegInx
       vid = leaf.vid
@@ -374,18 +374,20 @@ proc hashify*(
         # link references have Merkle hash keys, already.
         let node = vtx.toNode(db, stopEarly=false).valueOr:
           # Cannot complete this vertex unless its child node keys are compiled.
-          # So do this vertex later, i.e. add the vertex to the `pool[]`.
-          wff.pool[vid] = val
-          # Add the child vertices to `redo[]` for the schedule `base[]` list.
           for w in error:
             if w notin wff.base and
                w notin redo and
-               w notin wff.base.values.toSeq.mapit(it.toVid):
+               w notin wff.base.values.toSeq.mapit(it.toVid) and
+               w notin wff.pool.values.toSeq.mapit(it.toVid):
               if db.layersGetVtx(w).isErr:
                 # Ooops, should have been marked for update
                 return err((w,HashifyNodeUnresolved))
+              # Add the child vertex to `redo[]` for the schedule `base[]` list.
               redo[w] = FollowUpVid(root: val.root, toVid: vid)
-          continue # terminates error clause
+          # Do this vertex later, i.e. add the vertex to the `pool[]`.
+          wff.pool[vid] = val
+          continue
+          # End `valueOr` terminates error clause
 
         # Could resolve => update Merkle hash
         let key = node.digestTo(HashKey)
@@ -393,6 +395,7 @@ proc hashify*(
 
         # Set follow up link for next round
         wff.setNextLink(redo, val)
+      # End `for (vid,val)..`
 
     # Restart `wff.base[]`
     wff.base.swap redo
