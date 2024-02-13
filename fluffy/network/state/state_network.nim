@@ -219,7 +219,7 @@ proc processContentLoop(n: StateNetwork) {.async.} =
     while true:
       let (maybeSrcNodeId, contentKeys, contentValues) = await n.contentQueue.popFirst()
       if n.validateContent(contentKeys, contentValues):
-        asyncSpawn gossipContent(
+        await gossipContent(
           n.portalProtocol,
           maybeSrcNodeId,
           contentKeys,
