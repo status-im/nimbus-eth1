@@ -46,7 +46,24 @@ let
 when unittest2DisableParamFiltering:
   # Filter out local options and pass on the rest to `unittest2`
   proc cmdLineConfig(): tuple[samples: seq[CaptureSpecs]] =
-
+    ## This helper allows to pass additional command line options to the
+    ## unit test.
+    ##
+    ## Example:
+    ## ::
+    ##   nim c -r ...\
+    ##    -d:unittest2DisableParamFiltering \
+    ##    ./tests/test_coredb.nim \
+    ##       --output-level=VERBOSE \
+    ##       --sample=goerli-lp,goerli-ar
+    ## or
+    ## ::
+    ##   nim c ... -d:unittest2DisableParamFiltering ./tests/test_coredb.nim
+    ##   ./tests/test_coredb.out --output-level=VERBOSE --sample=goerli-ar
+    ##   ...
+    ##
+    ## At the moment, only the `--sample=` additional option is provided.
+    ##
     # Define sample list from the command line (if any)
     const optPfx =  "--sample=" # Custom option with sample list
 
@@ -182,8 +199,10 @@ proc chainSyncRunner(
     capture = bChainCapture;
     dbType = CoreDbType(0);
     ldgType = ldgTypeDefault;
-    enaLogging = false;
-    lastOneExtra = true;
+    profilingOk = false;
+    finalDiskCleanUpOk = true;
+    enaLoggingOk = false;
+    lastOneExtraOk = true;
       ) =
 
   ## Test backend database and ledger
@@ -215,9 +234,9 @@ proc chainSyncRunner(
       let
         com = initRunnerDB(dbDir, capture, dbType, ldgType)
       defer:
-        com.db.finish(flush = true)
-        #noisy.testChainSyncProfilingPrint numBlocks
-        if persistent: dbDir.flushDbDir
+        com.db.finish(flush = finalDiskCleanUpOk)
+        if profilingOk: noisy.testChainSyncProfilingPrint numBlocks
+        if persistent and finalDiskCleanUpOk: dbDir.flushDbDir
 
       if noisy:
         com.db.trackNewApi = true
@@ -226,7 +245,7 @@ proc chainSyncRunner(
         com.db.localDbOnly = true
 
       check noisy.testChainSync(filePaths, com, numBlocks,
-        lastOneExtra=lastOneExtra, enaLogging=enaLogging)
+        lastOneExtra=lastOneExtraOk, enaLogging=enaLoggingOk)
 
 # ------------------------------------------------------------------------------
 # Main function(s)
@@ -258,10 +277,13 @@ when isMainModule:
   for n,capture in sampleList:
     noisy.profileSection("@testList #" & $n, state):
       noisy.chainSyncRunner(
-        capture=capture,
-        #dbType = ...,
+        capture = capture,
+        #dbType = ..,
         ldgType=LedgerCache,
-        #enaLogging = true
+        #profilingOk = ..,
+        #finalDiskCleanUpOk = ..,
+        #enaLoggingOk = ..,
+        #lastOneExtraOk = ..,
       )
 
   noisy.say "***", "total elapsed: ", state[0].pp, " sections: ", state[1]

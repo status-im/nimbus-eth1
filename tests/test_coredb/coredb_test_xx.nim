@@ -92,6 +92,14 @@ let
 
 
   # To be compared against the proof-of-concept implementation as reference
+  legaTest0* = CaptureSpecs(
+    builtIn:   true,
+    name:      ariTest0.name.replace("-am", "-lm"),
+    network:   ariTest0.network,
+    files:     ariTest0.files,
+    numBlocks: ariTest0.numBlocks,
+    dbType:    LegacyDbMemory)
+
   legaTest1* = CaptureSpecs(
     builtIn:   true,
     name:      ariTest1.name.replace("-ar", "-lp"),
@@ -112,6 +120,6 @@ let
   allSamples* = [
     bulkTest0, bulkTest1, bulkTest2, bulkTest3,
     ariTest0, ariTest1, ariTest2,
-    legaTest1, legaTest2]
+    legaTest0, legaTest1, legaTest2]
 
 # End
