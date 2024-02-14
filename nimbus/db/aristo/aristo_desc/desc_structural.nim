@@ -76,7 +76,7 @@ type
     kMap*: Table[VertexID,HashKey]   ## Filter Merkle hash key mapping
     vGen*: seq[VertexID]             ## Filter unique vertex ID generator
 
-  VidsByLabelTab* = Table[HashLabel,HashSet[VertexID]]
+  VidsByKeyTab* = Table[HashKey,HashSet[VertexID]]
     ## Reverse lookup searching `VertexID` by the hash key/label.
 
   LayerDeltaRef* = ref object
@@ -104,7 +104,7 @@ type
     ##
     sTab*: Table[VertexID,VertexRef] ## Structural vertex table
     kMap*: Table[VertexID,HashLabel] ## Merkle hash key mapping
-    pAmk*: VidsByLabelTab            ## Reverse `kMap` entries, hash key lookup
+    pAmk*: VidsByKeyTab              ## Reverse `kMap` entries, hash key lookup
 
   LayerFinalRef* = ref object
     ## Final tables fully supersede tables on lower layers when stacked as a

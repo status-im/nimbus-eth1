@@ -25,10 +25,10 @@ func dup(sTab: Table[VertexID,VertexRef]): Table[VertexID,VertexRef] =
   for (k,v) in sTab.pairs:
     result[k] = v.dup
 
-func getLebalOrVoid(stack: seq[LayerRef]; lbl: HashLabel): HashSet[VertexID] =
+func getLebalOrVoid(stack: seq[LayerRef]; key: HashKey): HashSet[VertexID] =
   # Helper: get next set of vertex IDs from stack.
   for w in stack.reversed:
-    w.delta.pAmk.withValue(lbl,value):
+    w.delta.pAmk.withValue(key,value):
       return value[]
 
 proc recalcLebal(layer: var LayerObj) =
@@ -36,10 +36,10 @@ proc recalcLebal(layer: var LayerObj) =
   layer.delta.pAmk.clear
   for (vid,lbl) in layer.delta.kMap.pairs:
     if lbl.isValid:
-      layer.delta.pAmk.withValue(lbl, value):
+      layer.delta.pAmk.withValue(lbl.key, value):
         value[].incl vid
       do:
-        layer.delta.pAmk[lbl] = @[vid].toHashSet
+        layer.delta.pAmk[lbl.key] = @[vid].toHashSet
 
 # ------------------------------------------------------------------------------
 # Public getters: lazy value lookup for read only versions
@@ -141,23 +141,23 @@ proc layersGetKeyOrVoid*(db: AristoDbRef; vid: VertexID): HashKey =
 
 proc layersGetLebal*(
     db: AristoDbRef;
-    lbl: HashLabel;
+    key: HashKey;
       ): Result[HashSet[VertexID],void] =
   ## Inverse of `layersGetKey()`. For a given argumnt `lbl`, find all vertex
   ## IDs that have `layersGetLbl()` return this very `lbl` value for the these
   ## vertex IDs.
-  if db.top.delta.pAmk.hasKey lbl:
-    return ok(db.top.delta.pAmk.getOrVoid lbl)
+  if db.top.delta.pAmk.hasKey key:
+    return ok(db.top.delta.pAmk.getOrVoid key)
 
   for w in db.stack.reversed:
-    if w.delta.pAmk.hasKey lbl:
-      return ok(w.delta.pAmk.getOrVoid lbl)
+    if w.delta.pAmk.hasKey key:
+      return ok(w.delta.pAmk.getOrVoid key)
 
   err()
 
-proc layersGetLebalOrVoid*(db: AristoDbRef; lbl: HashLabel): HashSet[VertexID] =
+proc layersGetLebalOrVoid*(db: AristoDbRef; key: HashKey): HashSet[VertexID] =
   ## Simplified version of `layersGetVidsOrVoid()`
-  db.layersGetLebal(lbl).valueOr: EmptyVidSet
+  db.layersGetLebal(key).valueOr: EmptyVidSet
 
 # ------------------------------------------------------------------------------
 # Public functions: put variants
@@ -178,33 +178,35 @@ proc layersPutLabel*(db: AristoDbRef; vid: VertexID; lbl: HashLabel) =
   ## Store a (potentally void) hash label on the top layer
 
   # Get previous label
-  let blb = db.top.delta.kMap.getOrVoid vid
-
+  let prvLbl = db.top.delta.kMap.getOrVoid vid
+    
   # Update label on `label->vid` mapping table
   db.top.delta.kMap[vid] = lbl
   db.top.final.dirty = true # Modified top cache layers
 
   # Clear previous value on reverse table if it has changed
-  if blb.isValid and blb != lbl:
+  if prvLbl.isValid and prvLbl != lbl:
+    let prvKey = prvLbl.key
     var vidsLen = -1
-    db.top.delta.pAmk.withValue(blb, value):
+    db.top.delta.pAmk.withValue(prvKey, value):
       value[].excl vid
       vidsLen = value[].len
     do: # provide empty lookup
-      let vids = db.stack.getLebalOrVoid(blb)
+      let vids = db.stack.getLebalOrVoid(prvKey)
       if vids.isValid and vid in vids:
         # This entry supersedes non-emtpty changed ones from lower levels
-        db.top.delta.pAmk[blb] = vids - @[vid].toHashSet
-    if vidsLen == 0 and not db.stack.getLebalOrVoid(blb).isValid:
+        db.top.delta.pAmk[prvKey] = vids - @[vid].toHashSet
+    if vidsLen == 0 and not db.stack.getLebalOrVoid(prvKey).isValid:
       # There is no non-emtpty entry on lower levels, so ledete this one
-      db.top.delta.pAmk.del blb
+      db.top.delta.pAmk.del prvKey
 
   # Add updated value on reverse table if non-zero
   if lbl.isValid:
-    db.top.delta.pAmk.withValue(lbl, value):
+    let key = lbl.key
+    db.top.delta.pAmk.withValue(key, value):
       value[].incl vid
     do: # else if not found: need to merge with value set from lower layer
-      db.top.delta.pAmk[lbl] = db.stack.getLebalOrVoid(lbl) + @[vid].toHashSet
+      db.top.delta.pAmk[key] = db.stack.getLebalOrVoid(key) + @[vid].toHashSet
 
 
 proc layersResLabel*(db: AristoDbRef; vid: VertexID) =
@@ -317,18 +319,18 @@ iterator layersWalkLabel*(
 
 iterator layersWalkLebal*(
     db: AristoDbRef;
-      ): tuple[lbl: HashLabel, vids: HashSet[VertexID]] =
+      ): tuple[key: HashKey, vids: HashSet[VertexID]] =
   ## Walk over `(HashLabel,HashSet[VertexID])` pairs.
-  var seen: HashSet[HashLabel]
-  for (lbl,vids) in db.top.delta.pAmk.pairs:
-    yield (lbl,vids)
-    seen.incl lbl
+  var seen: HashSet[HashKey]
+  for (key,vids) in db.top.delta.pAmk.pairs:
+    yield (key,vids)
+    seen.incl key
 
   for w in db.stack.reversed:
-    for  (lbl,vids) in w.delta.pAmk.pairs:
-      if lbl notin seen:
-        yield (lbl,vids)
-        seen.incl lbl
+    for  (key,vids) in w.delta.pAmk.pairs:
+      if key notin seen:
+        yield (key,vids)
+        seen.incl key
 
 # ------------------------------------------------------------------------------
 # End

@@ -68,8 +68,7 @@ proc getLayerStateRoots*(
     return ok(spr)
 
   if chunkedMpt:
-    let lbl = HashLabel(root: VertexID(1), key: sprBeKey)
-    if VertexID(1) in delta.pAmk.getOrVoid lbl:
+    if VertexID(1) in delta.pAmk.getOrVoid sprBeKey:
       spr.fg = spr.be
       return ok(spr)
 

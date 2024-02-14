@@ -512,8 +512,7 @@ proc mergeNodeImpl(
   # already. This is provided for if the `nodes` are processed in the right
   # order `root->.. ->leaf`.
   let
-    hashLbl = HashLabel(root: rootVid, key: hashKey)
-    vids = db.layersGetLebalOrVoid(hashLbl).toSeq
+    vids = db.layersGetLebalOrVoid(hashKey).toSeq
     isRoot = rootVid in vids
   if vids.len == 0:
     return err(MergeRevVidMustHaveBeenCached)
@@ -523,7 +522,7 @@ proc mergeNodeImpl(
 
   # Use the first vertex ID from the `vis` list as representant for all others
   let lbl = db.layersGetLabelOrVoid vids[0]
-  if lbl == hashLbl:
+  if lbl.key == hashKey:
     if db.layersGetVtx(vids[0]).isOk:
       for n in 1 ..< vids.len:
         if db.layersGetVtx(vids[n]).isErr:
@@ -826,11 +825,9 @@ proc merge*(
 
   # Make sure that the reverse lookup for the root vertex label is available.
   block:
-    let
-      lbl = HashLabel(root: rootVid, key: rootKey)
-      vids = db.layersGetLebalOrVoid lbl
+    let vids = db.layersGetLebalOrVoid rootKey
     if not vids.isValid:
-      db.layersPutlabel(rootVid, lbl)
+      db.layersPutlabel(rootVid, HashLabel(root: rootVid, key: rootKey))
 
   # Process over chains in reverse mode starting with the root node. This
   # allows the algorithm to find existing nodes on the backend.

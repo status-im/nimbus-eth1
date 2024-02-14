@@ -42,7 +42,7 @@ proc checkTopStrict*(
       if lbl.key != node.digestTo(HashKey):
         return err((vid,CheckStkVtxKeyMismatch))
 
-      let revVids = db.layersGetLebalOrVoid lbl
+      let revVids = db.layersGetLebalOrVoid lbl.key
       if not revVids.isValid:
         return err((vid,CheckStkRevKeyMissing))
       if vid notin revVids:
@@ -88,7 +88,7 @@ proc checkTopProofMode*(
         if lbl.key != node.digestTo(HashKey):
           return err((vid,CheckRlxVtxKeyMismatch))
 
-        let revVids = db.layersGetLebalOrVoid lbl
+        let revVids = db.layersGetLebalOrVoid lbl.key
         if not revVids.isValid:
           return err((vid,CheckRlxRevKeyMissing))
         if vid notin revVids:
@@ -103,7 +103,7 @@ proc checkTopProofMode*(
           if lbl.key != node.digestTo(HashKey):
             return err((vid,CheckRlxVtxKeyMismatch))
 
-          let revVids = db.layersGetLebalOrVoid lbl
+          let revVids = db.layersGetLebalOrVoid lbl.key
           if not revVids.isValid:
             return err((vid,CheckRlxRevKeyMissing))
           if vid notin revVids:

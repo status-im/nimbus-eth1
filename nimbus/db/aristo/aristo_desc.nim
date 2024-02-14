@@ -78,7 +78,7 @@ type
     dudes: DudesRef                   ## Related DB descriptors
 
     # Debugging data below, might go away in future
-    xMap*: VidsByLabelTab             ## For pretty printing, extends `pAmk`
+    xMap*: VidsByKeyTab               ## For pretty printing, extends `pAmk`
 
   AristoDbAction* = proc(db: AristoDbRef) {.gcsafe, raises: [].}
     ## Generic call back function/closure.
