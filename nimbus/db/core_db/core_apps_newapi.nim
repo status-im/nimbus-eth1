@@ -532,6 +532,8 @@ proc persistTransactions*(
   let
     mpt = db.newMpt(TxTrie)
     kvt = db.newKvt()
+  # Prevent DB from coughing.
+  db.compensateLegacySetup()
   for idx, tx in transactions:
     let
       encodedKey = rlp.encode(idx)

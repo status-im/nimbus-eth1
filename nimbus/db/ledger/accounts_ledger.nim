@@ -372,10 +372,6 @@ proc persistStorage(acc: AccountRef, ac: AccountsLedgerRef, clearCache: bool) =
         acc.originalStorage.del(slot)
     acc.overlayStorage.clear()
 
-  # FIXME: debugging only
-  discard ac.ledger.getTrie().rootHash().valueOr:
-    raiseAssert "persistStorage re-hash oops, error=" & $$error
-
   acc.statement.stoTrie = storageLedger.getTrie()
 
 proc makeDirty(ac: AccountsLedgerRef, address: EthAddress, cloneStorage = true): AccountRef =
@@ -617,10 +613,6 @@ proc persist*(ac: AccountsLedgerRef,
         # before persisting account into merkle trie
         acc.persistStorage(ac, clearCache)
       ac.ledger.merge(acc.statement)
-
-      # FIXME: debugging only
-      discard ac.ledger.getTrie().rootHash().valueOr:
-        raiseAssert "persist StorageChanged re-hash oops, error=" & $$error
     of Remove:
       ac.ledger.delete address
       if not clearCache:

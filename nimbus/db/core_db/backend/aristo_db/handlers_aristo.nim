@@ -393,8 +393,15 @@ proc mptMethods(cMpt: AristoChildDbRef): CoreDbMptFns =
       k: openArray[byte];
       info: static[string];
         ): CoreDbRc[Blob] =
+    let db = cMpt.base.parent
+
+    # Some pathological behaviour observed with storage tries due to lazy
+    # update. The `fetchPayload()` does not now about this and would complain
+    # an error different from `FetchPathNotFound`.
+    if not cMpt.root.isValid:
+      return err((VoidTrieID,MptRootMissing).toError(db, info, MptNotFound))
+
     let
-      db = cMpt.base.parent
       mpt = cMpt.mpt
       rc = mpt.fetchPayload(cMpt.root, k)
     if rc.isOk:

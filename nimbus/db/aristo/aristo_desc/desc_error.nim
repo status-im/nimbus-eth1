@@ -280,8 +280,8 @@ type
     AccRootUnacceptable
     MptContextMissing
     MptRootUnacceptable
+    MptRootMissing
     NotImplemented
     VidContextLocked
-    VidRootMissing
 
 # End
