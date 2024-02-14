@@ -56,7 +56,7 @@ proc fwdFilter*(
   ok FilterRef(
     src:  srcRoot,
     sTab: layer.delta.sTab,
-    kMap: layer.delta.kMap.pairs.toSeq.mapIt((it[0],it[1].key)).toTable,
+    kMap: layer.delta.kMap,
     vGen: layer.final.vGen.vidReorg, # Compact recycled IDs
     trg:  trgRoot)
 

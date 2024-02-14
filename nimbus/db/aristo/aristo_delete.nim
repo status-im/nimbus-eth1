@@ -67,7 +67,7 @@ proc nullifyKey(
     vid: VertexID;                     # Vertex IDs to clear
       ) =
   # Register for void hash (to be recompiled)
-  db.layersResLabel vid
+  db.layersResKey vid
 
 proc disposeOfVtx(
     db: AristoDbRef;                   # Database, top layer
@@ -75,7 +75,7 @@ proc disposeOfVtx(
       ) =
   # Remove entry
   db.layersResVtx vid
-  db.layersResLabel vid
+  db.layersResKey vid
   db.vidDispose vid                    # Recycle ID
 
 # ------------------------------------------------------------------------------

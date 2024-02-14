@@ -59,7 +59,7 @@ func pp*(
   let
     pfx = indent.toPfx
     rootLink = w.root.to(HashKey)
-  result = "(" & HashLabel(root: rootID, key: rootLink).pp(db)
+  result = "(" & rootLink.pp(db)
   result &= "," & $w.id & ",[" & $w.proof.len & "],"
   result &= pfx & " ["
   for n,kvp in w.kvpLst:

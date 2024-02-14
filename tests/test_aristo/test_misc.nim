@@ -493,7 +493,7 @@ proc testShortKeys*(
         "\n    r=", r.pp(sig),
         "\n    ", sig.pp(),
         "\n",
-        "\n    pAmk=", sig.db.layersWalkLebal.toSeq.toTable.pp(sig.db),
+        "\n    pAmk=", sig.db.layersWalkYek.toSeq.toTable.pp(sig.db),
         "\n"
       let w = sig.merkleSignCommit().value
       gossip.say "*** testShortkeys (2)", "n=", n, " inx=", inx,
@@ -502,7 +502,7 @@ proc testShortKeys*(
         "\n    R=", w.pp(sig),
         "\n    ", sig.pp(),
         "\n",
-        "\n    pAmk=", sig.db.layersWalkLebal.toSeq.toTable.pp(sig.db),
+        "\n    pAmk=", sig.db.layersWalkYek.toSeq.toTable.pp(sig.db),
         "\n",
         "\n    ----------------",
         "\n"

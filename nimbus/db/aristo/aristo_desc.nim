@@ -78,7 +78,7 @@ type
     dudes: DudesRef                   ## Related DB descriptors
 
     # Debugging data below, might go away in future
-    xMap*: VidsByLabelTab             ## For pretty printing, extends `pAmk`
+    xMap*: VidsByKeyTab               ## For pretty printing, extends `pAmk`
 
   AristoDbAction* = proc(db: AristoDbRef) {.gcsafe, raises: [].}
     ## Generic call back function/closure.
@@ -89,9 +89,6 @@ type
 
 func getOrVoid*[W](tab: Table[W,VertexRef]; w: W): VertexRef =
   tab.getOrDefault(w, VertexRef(nil))
-
-func getOrVoid*[W](tab: Table[W,HashLabel]; w: W): HashLabel =
-  tab.getOrDefault(w, VOID_HASH_LABEL)
 
 func getOrVoid*[W](tab: Table[W,NodeRef]; w: W): NodeRef =
   tab.getOrDefault(w, NodeRef(nil))
@@ -133,9 +130,6 @@ func isValid*(key: HashKey): bool =
 
 func isValid*(vid: VertexID): bool =
   vid != VertexID(0)
-
-func isValid*(lbl: HashLabel): bool =
-  lbl.key.isValid
 
 func isValid*(sqv: HashSet[VertexID]): bool =
   sqv != EmptyVidSet

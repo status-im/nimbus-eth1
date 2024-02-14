@@ -25,7 +25,7 @@
 ##   `lTab[]` entry with `(root-vertex,path,VertexID(0))`.
 ##
 ## * All vertices where the key (aka Merkle hash) has changed must have a
-##   top layer cache `kMap[]` entry `(vertex-ID,VOID_HASH_LABEL)` indicating
+##   top layer cache `kMap[]` entry `(vertex-ID,VOID_HASH_KEY)` indicating
 ##   that there is no key available for this vertex. This also applies for
 ##   backend verices where the key has changed while the structural logic
 ##   did not change.
@@ -333,8 +333,8 @@ proc hashify*(
     # is the task to search for unresolved node keys and add glue paths to
     # the width-first schedule.
     var unresolved: HashSet[VertexID]
-    for (vid,lbl) in db.layersWalkLabel:
-      if not lbl.isValid and
+    for (vid,key) in db.layersWalkKey:
+      if not key.isValid and
          vid notin wff:
         let rc = db.layersGetVtx vid
         if rc.isErr or rc.value.isValid:
@@ -390,8 +390,7 @@ proc hashify*(
           # End `valueOr` terminates error clause
 
         # Could resolve => update Merkle hash
-        let key = node.digestTo(HashKey)
-        db.layersPutLabel(vid, HashLabel(root: val.root, key: key))
+        db.layersPutKey(vid, node.digestTo HashKey)
 
         # Set follow up link for next round
         wff.setNextLink(redo, val)
@@ -410,7 +409,7 @@ proc hashify*(
     # Convert root vertex to a node.
     let node = db.getVtx(vid).toNode(db,stopEarly=false).valueOr:
       return err((vid,HashifyRootNodeUnresolved))
-    db.layersPutLabel(vid, HashLabel(root: vid, key: node.digestTo(HashKey)))
+    db.layersPutKey(vid, node.digestTo(HashKey))
     wff.completed.incl vid
 
   db.top.final.dirty = false              # Mark top layer clean

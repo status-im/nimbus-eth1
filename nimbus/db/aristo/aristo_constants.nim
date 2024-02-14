@@ -34,9 +34,6 @@ const
   VOID_HASH_KEY* = HashKey()
     ## Void equivalent for Merkle hash value
 
-  VOID_HASH_LABEL* = HashLabel(key: VOID_HASH_KEY)
-    ## Void equivalent for Merkle hash value
-
   VOID_PATH_ID* = PathID()
     ## Void equivalent for Merkle hash value
 

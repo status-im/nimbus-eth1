@@ -166,12 +166,12 @@ proc getKeyRc*(db: AristoDbRef; vid: VertexID): Result[HashKey,AristoError] =
   block body:
     let key = db.layersGetKey(vid).valueOr:
       break body
-    # If there is a zero value label, the entry is either marked for being
+    # If there is a zero key value, the entry is either marked for being
     # updated or for deletion on the database. So check below.
     if key.isValid:
       return ok key
 
-    # The zero value label does not refer to an update mark if there is no
+    # The zero key value does not refer to an update mark if there is no
     # valid vertex (either on the cache or the backend whatever comes first.)
     let vtx = db.layersGetVtx(vid).valueOr:
       # There was no vertex on the cache. So there must be one the backend (the
@@ -180,7 +180,7 @@ proc getKeyRc*(db: AristoDbRef; vid: VertexID): Result[HashKey,AristoError] =
     if vtx.isValid:
       return err(GetKeyUpdateNeeded)
     else:
-      # The vertex is to be deleted. So is the value label.
+      # The vertex is to be deleted. So is the value key.
       return err(GetKeyNotFound)
 
   db.getKeyBE vid

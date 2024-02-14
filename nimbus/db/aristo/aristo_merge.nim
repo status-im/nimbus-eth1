@@ -81,7 +81,7 @@ proc nullifyKey(
     vid: VertexID;                     # Vertex IDs to clear
       ) =
   # Register for void hash (to be recompiled)
-  db.layersResLabel vid
+  db.layersResKey vid
 
 proc clearMerkleKeys(
     db: AristoDbRef;                   # Database, top layer
@@ -97,7 +97,7 @@ proc setVtxAndKey(
     vtx: VertexRef;                    # Vertex to add
       ) =
   db.layersPutVtx(vid, vtx)
-  db.layersResLabel vid
+  db.layersResKey vid
 
 # -----------
 
@@ -512,8 +512,7 @@ proc mergeNodeImpl(
   # already. This is provided for if the `nodes` are processed in the right
   # order `root->.. ->leaf`.
   let
-    hashLbl = HashLabel(root: rootVid, key: hashKey)
-    vids = db.layersGetLebalOrVoid(hashLbl).toSeq
+    vids = db.layersGetYekOrVoid(hashKey).toSeq
     isRoot = rootVid in vids
   if vids.len == 0:
     return err(MergeRevVidMustHaveBeenCached)
@@ -522,8 +521,8 @@ proc mergeNodeImpl(
     return err(MergeHashKeyRevLookUpGarbled)
 
   # Use the first vertex ID from the `vis` list as representant for all others
-  let lbl = db.layersGetLabelOrVoid vids[0]
-  if lbl == hashLbl:
+  let key = db.layersGetKeyOrVoid vids[0]
+  if key == hashKey:
     if db.layersGetVtx(vids[0]).isOk:
       for n in 1 ..< vids.len:
         if db.layersGetVtx(vids[n]).isErr:
@@ -531,7 +530,7 @@ proc mergeNodeImpl(
       # This is tyically considered OK
       return err(MergeHashKeyCachedAlready)
     # Otherwise proceed
-  elif lbl.isValid:
+  elif key.isValid:
     # Different key assigned => error
     return err(MergeHashKeyDiffersFromCached)
 
@@ -548,7 +547,7 @@ proc mergeNodeImpl(
   # Verify that all `vids` entries are similar
   for n in 1 ..< vids.len:
     let w = vids[n]
-    if lbl != db.layersGetLabelOrVoid(w) or db.layersGetVtx(w).isOk:
+    if key != db.layersGetKeyOrVoid(w) or db.layersGetVtx(w).isOk:
       return err(MergeHashKeyRevLookUpGarbled)
     if not hasVtx:
       # Prefer existing node which has all links available, already.
@@ -556,31 +555,31 @@ proc mergeNodeImpl(
       if u.isValid:
         (vtx, hasVtx) = (u, true)
 
-  # The `vertexID <-> hashLabel` mappings need to be set up now (if any)
+  # The `vertexID <-> hashKey` mappings need to be set up now (if any)
   case node.vType:
   of Leaf:
     discard
   of Extension:
     if node.key[0].isValid:
-      let eLbl = HashLabel(root: rootVid, key: node.key[0])
+      let eKey = node.key[0]
       if not hasVtx:
         # Brand new reverse lookup link for this vertex
         vtx.eVid = db.vidFetch
-        db.layersPutLabel(vtx.eVid, eLbl)
+        db.layersPutKey(vtx.eVid, eKey)
       elif not vtx.eVid.isValid:
         return err(MergeNodeVtxDiffersFromExisting)
-      db.layersPutLabel(vtx.eVid, eLbl)
+      db.layersPutKey(vtx.eVid, eKey)
   of Branch:
     for n in 0..15:
       if node.key[n].isValid:
-        let bLbl = HashLabel(root: rootVid, key: node.key[n])
+        let bKey = node.key[n]
         if not hasVtx:
           # Brand new reverse lookup link for this vertex
           vtx.bVid[n] = db.vidFetch
-          db.layersPutLabel(vtx.bVid[n], bLbl)
+          db.layersPutKey(vtx.bVid[n], bKey)
         elif not vtx.bVid[n].isValid:
           return err(MergeNodeVtxDiffersFromExisting)
-        db.layersPutLabel(vtx.bVid[n], bLbl)
+        db.layersPutKey(vtx.bVid[n], bKey)
 
   for w in vids:
     db.top.final.pPrf.incl w
@@ -824,13 +823,11 @@ proc merge*(
     if 0 < chain.len and chain[^1] == rootKey:
       chains.add chain
 
-  # Make sure that the reverse lookup for the root vertex label is available.
+  # Make sure that the reverse lookup for the root vertex key is available.
   block:
-    let
-      lbl = HashLabel(root: rootVid, key: rootKey)
-      vids = db.layersGetLebalOrVoid lbl
+    let vids = db.layersGetYekOrVoid rootKey
     if not vids.isValid:
-      db.layersPutlabel(rootVid, lbl)
+      db.layersPutKey(rootVid, rootKey)
 
   # Process over chains in reverse mode starting with the root node. This
   # allows the algorithm to find existing nodes on the backend.
@@ -882,7 +879,7 @@ proc merge*(
       return ok rootVid
 
     if not key.isValid:
-      db.layersPutLabel(rootVid, HashLabel(root: rootVid, key: rootLink))
+      db.layersPutKey(rootVid, rootLink)
       return ok rootVid
   else:
     let key = db.getKey VertexID(1)
@@ -891,13 +888,13 @@ proc merge*(
 
     # Otherwise assign unless valid
     if not key.isValid:
-      db.layersPutLabel(VertexID(1),HashLabel(root: VertexID(1), key: rootLink))
+      db.layersPutKey(VertexID(1), rootLink)
       return ok VertexID(1)
 
     # Create and assign a new root key
     if not rootVid.isValid:
       let vid = db.vidFetch
-      db.layersPutLabel(vid, HashLabel(root: vid, key: rootLink))
+      db.layersPutKey(vid, rootLink)
       return ok vid
 
   err(MergeRootKeyDiffersForVid)

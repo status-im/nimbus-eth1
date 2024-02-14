@@ -76,8 +76,7 @@ func ppFil(w: FilterRef; db = AristoDbRef(nil)): string =
       let n = key.to(UInt256)
       if n == 0: "£ø" else: "£" & $n
     else:
-      let keyLink = HashKey.fromBytes(key.data).value
-      HashLabel(root: VertexID(1), key: keyLink).pp(db)
+      HashKey.fromBytes(key.data).value.pp(db)
   "(" & w.fid.pp & "," & w.src.qq(db) & "->" & w.trg.qq(db) & ")"
 
 func pp(qf: (QueueID,FilterRef); db = AristoDbRef(nil)): string =
