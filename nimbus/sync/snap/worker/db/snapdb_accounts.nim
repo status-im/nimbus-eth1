@@ -132,7 +132,7 @@ proc dup*(
       ): SnapDbAccountsRef =
   ## Resume an accounts session with different `root` key and `peer`.
   new result
-  result[].shallowCopy(ps[])
+  result.copyWithoutRoot(ps)
   result.root = root.to(NodeKey)
   result.peer = peer
 
@@ -142,7 +142,7 @@ proc dup*(
       ): SnapDbAccountsRef =
   ## Variant of `dup()` without the `peer` argument.
   new result
-  result[].shallowCopy(ps[])
+  result.copyWithoutRoot(ps)
   result.root = root.to(NodeKey)
 
 # ------------------------------------------------------------------------------

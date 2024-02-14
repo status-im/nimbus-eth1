@@ -16,8 +16,9 @@ import
   eth/common,
   results,
   unittest2,
-  ../../nimbus/db/[core_db/persistent, ledger],
-  ../../nimbus/core/chain,
+  ../nimbus/db/core_db/persistent,
+  ../nimbus/db/ledger,
+  ../nimbus/core/chain,
   ./replay/pp,
   ./test_coredb/[coredb_test_xx, test_chainsync, test_helpers]
 

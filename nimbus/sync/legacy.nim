@@ -696,11 +696,11 @@ proc obtainBlocksFromPeer(ctx: LegacySyncRef, peer: Peer) {.async.} =
       trace trEthSendSendingGetBlockHeaders, peer,
         startBlock=request.startBlock.number, max=request.maxResults,
         step=traceStep(request)
-      let results = await peer.getBlockHeaders(request)
+      var results = await peer.getBlockHeaders(request)
       if results.isSome:
         trace trEthRecvReceivedBlockHeaders, peer,
           count=results.get.headers.len, requested=request.maxResults
-        shallowCopy(workItem.headers, results.get.headers)
+        workItem.headers = system.move(results.get.headers)
 
         var
           reqBodies  = newSeqOfCap[bool](workItem.headers.len)

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2021 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -188,7 +188,7 @@ method getAccountRange*(
     limit: openArray[byte];
     replySizeMax: uint64;
       ): (seq[SnapAccount], SnapProofNodes)
-      {.base, raises: [CatchableError].} =
+      {.base, gcsafe, raises: [CatchableError].} =
   notImplemented("getAccountRange")
 
 method getStorageRanges*(
@@ -199,7 +199,7 @@ method getStorageRanges*(
     limit: openArray[byte];
     replySizeMax: uint64;
       ): (seq[seq[SnapStorage]], SnapProofNodes)
-      {.base, raises: [CatchableError].} =
+      {.base, gcsafe, raises: [CatchableError].} =
   notImplemented("getStorageRanges")
 
 method getByteCodes*(
@@ -207,7 +207,7 @@ method getByteCodes*(
     nodes: openArray[Hash256];
     replySizeMax: uint64;
       ): seq[Blob]
-      {.base, raises: [CatchableError].} =
+      {.base, gcsafe, raises: [CatchableError].} =
   notImplemented("getByteCodes")
 
 method getTrieNodes*(
@@ -216,7 +216,7 @@ method getTrieNodes*(
     pathGroups: openArray[SnapTriePaths];
     replySizeMax: uint64;
       ): seq[Blob]
-      {.base, raises: [CatchableError].} =
+      {.base, gcsafe, raises: [CatchableError].} =
   notImplemented("getTrieNodes")
 
 # ------------------------------------------------------------------------------

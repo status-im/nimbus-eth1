@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2021 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -370,7 +370,7 @@ proc fetchHeaders(
 
   # Import into `wi.headers`
   else:
-    wi.headers.shallowCopy(hdrResp.get.headers)
+    wi.headers = system.move(hdrResp.get.headers)
 
   # Calculate block header hashes and verify it against parent links. If
   # necessary, cut off some offending block headers tail.

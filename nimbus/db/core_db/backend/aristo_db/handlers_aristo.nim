@@ -110,6 +110,38 @@ func to(vid: CoreDbTrieRef; T: type VertexID): T =
 func to(address: EthAddress; T: type PathID): T =
   HashKey.fromBytes(address.keccakHash.data).value.to(T)
 
+# ------------------------------------------------------------------------------
+# Auto destructor should appear before constructor
+# to prevent cannot bind another `=destroy` error
+# ------------------------------------------------------------------------------
+
+proc `=destroy`(cMpt: var AristoChildDbObj) =
+  ## Auto destructor
+  let mpt = cMpt.mpt
+  if not mpt.isNil:
+    let base = cMpt.base
+    if mpt != base.adb:                 # Not the shared descriptor?
+      #
+      # The argument `cMpt` will be deleted, so provide another one. The
+      # `mpt` descriptor must be added to the GC queue which will be
+      # destructed later on a clean environment.
+      #
+      base.gq.add AristoChildDbRef(
+        base:     base,
+        mpt:      mpt,
+        saveMode: cMpt.saveMode)
+    elif cMpt.saveMode == AutoSave:     # Otherwise there is nothing to do
+      #
+      # Prepend cached entry. There is only one needed as it refers to
+      # the same shared `mpt` descriptor.
+      #
+      if base.gq.len == 0 or
+         base.gq[0].saveMode != AutoSave:
+        base.gq = AristoChildDbRef(
+          base:     base,
+          mpt:      mpt,
+          saveMode: cMpt.saveMode) & base.gq
+
 # -------------------------------
 
 func toCoreDbAccount(
@@ -202,7 +234,7 @@ func toVoidRc[T](
   err rc.error.toError(db, info, error)
 
 # ------------------------------------------------------------------------------
-# Private constructor and auto destructor
+# Private constructor
 # ------------------------------------------------------------------------------
 
 proc newTrieCtx(
@@ -279,34 +311,6 @@ proc newTrieCtx(
     trie.AristoCoreDbTrie.ctx.address = trie.address
 
   ok((db.bless trie).AristoCoreDbTrie)
-
-
-proc `=destroy`(cMpt: var AristoChildDbObj) =
-  ## Auto destructor
-  let mpt = cMpt.mpt
-  if not mpt.isNil:
-    let base = cMpt.base
-    if mpt != base.adb:                 # Not the shared descriptor?
-      #
-      # The argument `cMpt` will be deleted, so provide another one. The
-      # `mpt` descriptor must be added to the GC queue which will be
-      # destructed later on a clean environment.
-      #
-      base.gq.add AristoChildDbRef(
-        base:     base,
-        mpt:      mpt,
-        saveMode: cMpt.saveMode)
-    elif cMpt.saveMode == AutoSave:     # Otherwise there is nothing to do
-      #
-      # Prepend cached entry. There is only one needed as it refers to
-      # the same shared `mpt` descriptor.
-      #
-      if base.gq.len == 0 or
-         base.gq[0].saveMode != AutoSave:
-        base.gq = AristoChildDbRef(
-          base:     base,
-          mpt:      mpt,
-          saveMode: cMpt.saveMode) & base.gq
 
 # ------------------------------------------------------------------------------
 # Private `MPT` or account call back functions

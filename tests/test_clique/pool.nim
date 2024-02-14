@@ -410,7 +410,7 @@ proc appendVoter*(ap: TesterPool;
     checkPoint = voter.checkpoint.mapIt(ap.address(it)).sorted(EthAscending))
 
   if 0 < voter.checkpoint.len:
-    doAssert (header.blockNumber mod ap.clique.cfg.epoch) == 0
+    doAssert (header.blockNumber mod ap.clique.cfg.epoch).isZero
 
   # Register for debugging
   let

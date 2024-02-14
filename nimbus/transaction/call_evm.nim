@@ -1,6 +1,6 @@
 # Nimbus - Various ways of calling the EVM
 #
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -204,7 +204,7 @@ proc callParamsForTx(tx: Transaction, sender: EthAddress, vmState: BaseVMState, 
     input:        tx.payload
   )
   if tx.txType > TxLegacy:
-    shallowCopy(result.accessList, tx.accessList)
+    result.accessList = tx.accessList
 
   if tx.txType >= TxEip4844:
     result.versionedHashes = tx.versionedHashes
@@ -225,7 +225,7 @@ proc callParamsForTest(tx: Transaction, sender: EthAddress, vmState: BaseVMState
     noRefund:     true, # Don't apply gas refund/burn rule.
   )
   if tx.txType > TxLegacy:
-    shallowCopy(result.accessList, tx.accessList)
+    result.accessList = tx.accessList
 
   if tx.txType >= TxEip4844:
     result.versionedHashes = tx.versionedHashes

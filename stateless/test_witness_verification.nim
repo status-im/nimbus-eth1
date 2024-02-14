@@ -12,8 +12,8 @@ import
   unittest2,
   stew/results,
   eth/[common, trie/trie_defs],
-  ../../nimbus/db/[ledger, core_db],
-  ../../nimbus/common/chain_config,
+  ../nimbus/db/[ledger, core_db],
+  ../nimbus/common/chain_config,
   ./[witness_from_tree, multi_keys, witness_types, witness_verification]
 
 proc getGenesisAlloc(filePath: string): GenesisAlloc =

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -57,7 +57,7 @@ method getReceipts*(ctx: EthWireBase, hashes: openArray[Hash256]): seq[seq[Recei
     {.base, gcsafe, raises: [CatchableError].} =
   notImplemented("getReceipts")
 
-method getPooledTxs*(ctx: EthWireBase, hashes: openArray[Hash256]): seq[Transaction] {.base.} =
+method getPooledTxs*(ctx: EthWireBase, hashes: openArray[Hash256]): seq[Transaction] {.base, gcsafe.} =
   notImplemented("getPooledTxs")
 
 method getBlockBodies*(ctx: EthWireBase, hashes: openArray[Hash256]): seq[BlockBody] {.base, gcsafe, raises: [CatchableError].} =
@@ -75,7 +75,8 @@ method handleAnnouncedTxs*(ctx: EthWireBase, peer: Peer, txs: openArray[Transact
     {.base, gcsafe, raises: [CatchableError].} =
   notImplemented("handleAnnouncedTxs")
 
-method handleAnnouncedTxsHashes*(ctx: EthWireBase, peer: Peer, txHashes: openArray[Hash256]) {.base.} =
+method handleAnnouncedTxsHashes*(ctx: EthWireBase, peer: Peer, txHashes: openArray[Hash256])
+    {.base, gcsafe.} =
   notImplemented("handleAnnouncedTxsHashes")
 
 method handleNewBlockHashes*(ctx: EthWireBase, peer: Peer, hashes: openArray[NewBlockHashesAnnounce])
@@ -83,8 +84,8 @@ method handleNewBlockHashes*(ctx: EthWireBase, peer: Peer, hashes: openArray[New
   notImplemented("handleNewBlockHashes")
 
 when defined(legacy_eth66_enabled):
-  method getStorageNodes*(ctx: EthWireBase, hashes: openArray[Hash256]): seq[Blob] {.base.} =
+  method getStorageNodes*(ctx: EthWireBase, hashes: openArray[Hash256]): seq[Blob] {.base, gcsafe.} =
     notImplemented("getStorageNodes")
 
-  method handleNodeData*(ctx: EthWireBase, peer: Peer, data: openArray[Blob]) {.base.} =
+  method handleNodeData*(ctx: EthWireBase, peer: Peer, data: openArray[Blob]) {.base, gcsafe.} =
     notImplemented("handleNodeData")

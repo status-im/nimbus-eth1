@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -139,7 +139,7 @@ proc verifySeal(c: Clique; header: BlockHeader): CliqueOkResult =
 
 # clique/clique.go(314): func (c *Clique) verifyCascadingFields(chain [..]
 proc verifyCascadingFields(c: Clique; com: CommonRef; header: BlockHeader;
-                           parents: var seq[BlockHeader]): CliqueOkResult
+                           parents: HeadersHolderRef): CliqueOkResult
                                 {.gcsafe, raises: [CatchableError].} =
   ## Verify all the header fields that are not standalone, rather depend on a
   ## batch of previous headers. The caller may optionally pass in a batch of
@@ -264,7 +264,7 @@ proc verifyHeaderFields(c: Clique; header: BlockHeader): CliqueOkResult =
 
 # clique/clique.go(246): func (c *Clique) verifyHeader(chain [..]
 proc cliqueVerifyImpl(c: Clique; com: CommonRef; header: BlockHeader;
-                      parents: var seq[BlockHeader]): CliqueOkResult
+                      parents: HeadersHolderRef): CliqueOkResult
                   {.gcsafe, raises: [CatchableError].} =
   ## Check whether a header conforms to the consensus rules. The caller may
   ## optionally pass in a batch of parents (ascending order) to avoid looking
@@ -292,7 +292,7 @@ proc cliqueVerifyImpl(c: Clique; com: CommonRef; header: BlockHeader;
     c.failed = (header.blockHash, result.error)
 
 proc cliqueVerifySeq*(c: Clique; com: CommonRef; header: BlockHeader;
-                      parents: var seq[BlockHeader]): CliqueOkResult
+                      parents: HeadersHolderRef): CliqueOkResult
                   {.gcsafe, raises: [CatchableError].} =
   ## Check whether a header conforms to the consensus rules. The caller may
   ## optionally pass in a batch of parents (ascending order) to avoid looking
@@ -321,7 +321,7 @@ proc cliqueVerifySeq*(c: Clique; com: CommonRef; header: BlockHeader;
   ok()
 
 proc cliqueVerifySeq(c: Clique; com: CommonRef;
-                 headers: var seq[BlockHeader]): CliqueOkResult
+                 headers: HeadersHolderRef): CliqueOkResult
                  {.gcsafe, raises: [CatchableError].} =
   ## This function verifies a batch of headers checking each header for
   ## consensus rules conformance. The `headers` list is supposed to
@@ -338,16 +338,17 @@ proc cliqueVerifySeq(c: Clique; com: CommonRef;
   ## Note that the sequence argument must be write-accessible, even though it
   ## will be left untouched by this function.
   if 0 < headers.len:
-    headers.shallow
 
     block:
-      var blind: seq[BlockHeader]
+      let blind = HeadersHolderRef()
       let rc = c.cliqueVerifyImpl(com, headers[0],blind)
       if rc.isErr:
         return rc
 
     for n in 1 ..< headers.len:
-      var parent = headers[n-1 .. n-1] # is actually a single item squence
+      let parent = HeadersHolderRef(
+        headers: headers.headers[n-1 .. n-1] # is actually a single item squence
+      )
       let rc = c.cliqueVerifyImpl(com, headers[n],parent)
       if rc.isErr:
         return rc
@@ -384,14 +385,16 @@ proc cliqueVerify*(c: Clique; com: CommonRef; header: BlockHeader;
   ##
   ## Use the directives `cliqueSave()`, `cliqueDispose()`, and/or
   ## `cliqueRestore()` for transaction.
-  var list = toSeq(parents)
+  let list = HeadersHolderRef(
+    headers: toSeq(parents)
+  )
   c.cliqueVerifySeq(com, header, list)
 
 # clique/clique.go(217): func (c *Clique) VerifyHeader(chain [..]
 proc cliqueVerify*(c: Clique; com: CommonRef; header: BlockHeader): CliqueOkResult
                         {.gcsafe, raises: [CatchableError].} =
   ## Consensus rules verifier without optional parents list.
-  var blind: seq[BlockHeader]
+  let blind = HeadersHolderRef()
   c.cliqueVerifySeq(com, header, blind)
 
 proc cliqueVerify*(c: Clique; com: CommonRef;
@@ -413,7 +416,9 @@ proc cliqueVerify*(c: Clique; com: CommonRef;
   ##
   ## Use the directives `cliqueSave()`, `cliqueDispose()`, and/or
   ## `cliqueRestore()` for transaction.
-  var list = toSeq(headers)
+  let list = HeadersHolderRef(
+    headers: toSeq(headers)
+  )
   c.cliqueVerifySeq(com, list)
 
 # ------------------------------------------------------------------------------

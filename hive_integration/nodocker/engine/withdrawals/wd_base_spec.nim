@@ -21,11 +21,11 @@ import
   ../types,
   ../base_spec,
   ../cancun/customizer,
-  ../../../nimbus/common/common,
-  ../../../nimbus/utils/utils,
-  ../../../nimbus/common/chain_config,
+  ../../../../nimbus/common/common,
+  ../../../../nimbus/utils/utils,
+  ../../../../nimbus/common/chain_config,
   web3/execution_types,
-  ../../../nimbus/beacon/web3_eth_conv
+  ../../../../nimbus/beacon/web3_eth_conv
 
 type
   WDBaseSpec* = ref object of BaseSpec

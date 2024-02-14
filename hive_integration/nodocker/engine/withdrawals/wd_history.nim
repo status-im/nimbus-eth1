@@ -14,8 +14,8 @@ import
   json_rpc/[rpcclient],
   stew/[byteutils, results],
   ../engine_client,
-  ../../../nimbus/utils/utils,
-  ../../../nimbus/beacon/web3_eth_conv
+  ../../../../nimbus/utils/utils,
+  ../../../../nimbus/beacon/web3_eth_conv
 
 type
   Withdrawals* = ref object

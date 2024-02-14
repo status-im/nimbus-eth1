@@ -13,7 +13,7 @@ import
   ../nimbus/core/chain,
   ../nimbus/common/common,
   ../nimbus/rpc,
-  ../../nimbus/db/[ledger, core_db],
+  ../nimbus/db/[ledger, core_db],
   ../stateless/[witness_verification, witness_types],
   ./rpc/experimental_rpc_client
 

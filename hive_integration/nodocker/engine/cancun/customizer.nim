@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -25,11 +25,11 @@ type
   EngineAPIVersionResolver* = ref object of RootRef
     com: CommonRef
 
-method setEngineAPIVersionResolver*(cust: EngineAPIVersionResolver, v: CommonRef) {.base.} =
+method setEngineAPIVersionResolver*(cust: EngineAPIVersionResolver, v: CommonRef) {.base, gcsafe.} =
   cust.com = v
 
 method forkchoiceUpdatedVersion*(cust: EngineAPIVersionResolver,
-  headTimestamp: uint64, payloadAttributesTimestamp: Option[uint64] = none(uint64)): Version {.base.} =
+  headTimestamp: uint64, payloadAttributesTimestamp: Option[uint64] = none(uint64)): Version {.base, gcsafe.} =
   let ts = if payloadAttributesTimestamp.isNone: headTimestamp.EthTime
            else: payloadAttributesTimestamp.get().EthTime
   if cust.com.isCancunOrLater(ts):
@@ -39,7 +39,7 @@ method forkchoiceUpdatedVersion*(cust: EngineAPIVersionResolver,
   else:
     Version.V1
 
-method newPayloadVersion*(cust: EngineAPIVersionResolver, timestamp: uint64): Version {.base.} =
+method newPayloadVersion*(cust: EngineAPIVersionResolver, timestamp: uint64): Version {.base, gcsafe.} =
   let ts = timestamp.EthTime
   if cust.com.isCancunOrLater(ts):
     Version.V3
@@ -48,7 +48,7 @@ method newPayloadVersion*(cust: EngineAPIVersionResolver, timestamp: uint64): Ve
   else:
     Version.V1
 
-method getPayloadVersion*(cust: EngineAPIVersionResolver, timestamp: uint64): Version {.base.} =
+method getPayloadVersion*(cust: EngineAPIVersionResolver, timestamp: uint64): Version {.base, gcsafe.} =
   let ts = timestamp.EthTime
   if cust.com.isCancunOrLater(ts):
     Version.V3
@@ -61,10 +61,10 @@ type
   GetPayloadCustomizer* = ref object of EngineAPIVersionResolver
 
 method getPayloadID*(cust: GetPayloadCustomizer,
-         basePayloadID: PayloadID): PayloadID {.base.} =
+         basePayloadID: PayloadID): PayloadID {.base, gcsafe.} =
   doAssert(false, "getPayloadID unimplemented")
 
-method getExpectedError*(cust: GetPayloadCustomizer): int {.base.} =
+method getExpectedError*(cust: GetPayloadCustomizer): int {.base, gcsafe.} =
   doAssert(false, "getExpectedError unimplemented")
 
 type
@@ -100,7 +100,7 @@ method getPayloadVersion(cust: DowngradegetPayloadVersion, timestamp: uint64): V
 type
   PayloadAttributesCustomizer* = ref object of BaseGetPayloadCustomizer
 
-method getPayloadAttributes*(cust: PayloadAttributesCustomizer, basePayloadAttributes: PayloadAttributes): PayloadAttributes {.base.} =
+method getPayloadAttributes*(cust: PayloadAttributesCustomizer, basePayloadAttributes: PayloadAttributes): PayloadAttributes {.base, gcsafe.} =
   doAssert(false, "getPayloadAttributes unimplemented")
 
 type
@@ -147,10 +147,10 @@ type
   ForkchoiceUpdatedCustomizer* = ref object of BasePayloadAttributesCustomizer
 
 method getForkchoiceState*(cust: ForkchoiceUpdatedCustomizer,
-  baseForkchoiceUpdate: ForkchoiceStateV1): ForkchoiceStateV1 {.base.} =
+  baseForkchoiceUpdate: ForkchoiceStateV1): ForkchoiceStateV1 {.base, gcsafe.} =
   doAssert(false, "getForkchoiceState unimplemented")
 
-method getExpectInvalidStatus*(cust: ForkchoiceUpdatedCustomizer): bool {.base.} =
+method getExpectInvalidStatus*(cust: ForkchoiceUpdatedCustomizer): bool {.base, gcsafe.} =
   doAssert(false, "getExpectInvalidStatus unimplemented")
 
 # Customizer that makes no modifications to the forkchoice directive call.
@@ -204,7 +204,7 @@ type
     hashVersions*: seq[byte]
 
 method getVersionedHashes*(cust: VersionedHashesCustomizer,
-                           baseVersionedHashes: openArray[common.Hash256]): Option[seq[common.Hash256]] {.base.} =
+                           baseVersionedHashes: openArray[common.Hash256]): Option[seq[common.Hash256]] {.base, gcsafe.} =
   if cust.blobs.isNone:
     return none(seq[common.Hash256])
 
@@ -218,7 +218,7 @@ method getVersionedHashes*(cust: VersionedHashesCustomizer,
     v[i] = blobID.getVersionedHash(version)
   some(v)
 
-method description*(cust: VersionedHashesCustomizer): string {.base.} =
+method description*(cust: VersionedHashesCustomizer): string {.base, gcsafe.} =
   result = "VersionedHashes: "
   if cust.blobs.isSome:
     for x in cust.blobs.get:
@@ -285,10 +285,10 @@ method getVersionedHashes(cust: ExtraVersionedHash,
 type
   PayloadCustomizer* = ref object of EngineAPIVersionResolver
 
-method customizePayload*(cust: PayloadCustomizer, data: ExecutableData): ExecutableData {.base.} =
+method customizePayload*(cust: PayloadCustomizer, data: ExecutableData): ExecutableData {.base, gcsafe.} =
   doAssert(false, "customizePayload unimplemented")
 
-method getTimestamp(cust: PayloadCustomizer, basePayload: ExecutionPayload): uint64 {.base.} =
+method getTimestamp(cust: PayloadCustomizer, basePayload: ExecutionPayload): uint64 {.base, gcsafe.} =
   doAssert(false, "getTimestamp unimplemented")
 
 type
@@ -296,10 +296,10 @@ type
     expectedError*      : int
     expectInvalidStatus*: bool
 
-method getExpectedError*(cust: NewPayloadCustomizer): int {.base.} =
+method getExpectedError*(cust: NewPayloadCustomizer): int {.base, gcsafe.} =
   cust.expectedError
 
-method getExpectInvalidStatus*(cust: NewPayloadCustomizer): bool {.base.}=
+method getExpectInvalidStatus*(cust: NewPayloadCustomizer): bool {.base, gcsafe.}=
   cust.expectInvalidStatus
 
 type
@@ -335,7 +335,7 @@ func getTimestamp*(cust: CustomPayloadData, basePayload: ExecutionPayload): uint
 
 # Construct a customized payload by taking an existing payload as base and mixing it CustomPayloadData
 # blockHash is calculated automatically.
-proc customizePayload*(cust: CustomPayloadData, data: ExecutableData): ExecutableData =
+proc customizePayload*(cust: CustomPayloadData, data: ExecutableData): ExecutableData {.gcsafe.} =
   var customHeader = blockHeader(data.basePayload, data.beaconRoot)
 
   if cust.transactions.isSome:

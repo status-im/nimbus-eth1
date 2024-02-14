@@ -251,12 +251,6 @@ template expectStorageEqual*(res: untyped, expectedValue: FixedBytes[32]) =
   testCond res.get == expectedValue:
     error "invalid storage", get=res.get, expect=expectedValue
 
-template expectBalanceEqual*(res: untyped, expectedBalance: UInt256) =
-  testCond res.isOk:
-    error "expectBalanceEqual", msg=res.error
-  testCond res.get == expectedBalance:
-    error "invalid balance", expect=expectedBalance, get=res.get
-
 template expectBlobGasUsed*(res: untyped, expected: uint64) =
   testCond res.isOk:
     error "expectBlobGasUsed", msg=res.error
