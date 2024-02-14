@@ -6,11 +6,9 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/[sugar, strutils, sequtils],
   stew/results, chronos, chronicles,
   eth/common/eth_hash,
-  eth/[rlp, common],
-  eth/trie/hexary_proof_verification,
+  eth/common,
   eth/p2p/discoveryv5/[protocol, enr],
   ../../database/content_db,
   ../wire/[portal_protocol, portal_stream, portal_protocol_config],
@@ -129,7 +127,7 @@ proc recursiveGossipAccountTrieNode(
     ): Future[void] {.async.} =
       var nibbles = decodedKey.accountTrieNodeKey.path.unpackNibbles()
       let decodedValue = decodeSsz(contentValue, AccountTrieNodeOffer).valueOr:
-        return
+        raiseAssert "Received offered content failed validation"
       var proof = decodedValue.proof
       discard nibbles.pop()
       discard (distinctBase proof).pop()
@@ -175,7 +173,7 @@ proc gossipContent*(
     let
       contentKey = contentKeys[i]
       decodedKey = contentKey.decode().valueOr:
-        continue
+        raiseAssert "Received offered content with invalid content key"
     case decodedKey.contentType:
       of unused:
         warn("Gossiping content with unused content type")

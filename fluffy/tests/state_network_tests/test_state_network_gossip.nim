@@ -6,11 +6,9 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/[sugar, sequtils],
   stew/[byteutils, results],
   testutils/unittests,
   chronos,
-  eth/common/eth_hash,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   eth/p2p/discoveryv5/routing_table,
   ./helpers,
@@ -25,8 +23,7 @@ const testVectorDir = "./vendor/portal-spec-tests/tests/mainnet/state/"
 procSuite "State Network Gossip":
   let rng = newRng()
 
-  asyncTest "Test Gossip of Contract Code":
-    const encodedKey = ByteList.init("20240000006225fcc63b22b80301d9f2582014e450e91f9b329b7cc87ad16894722fff529600050000008679e8ed".hexToSeqByte())
+  asyncTest "Test Gossip of Account Trie Node":
     let
       node1 = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20402))
       sm1 = StreamManager.new(node1)
@@ -36,8 +33,6 @@ procSuite "State Network Gossip":
       proto1 = StateNetwork.new(node1, ContentDB.new("", uint32.high, inMemory = true), sm1)
       proto2 = StateNetwork.new(node2, ContentDB.new("", uint32.high, inMemory = true), sm2)
 
-      blockContent = readJsonType(testVectorDir & "block.json", JsonBlock).valueOr:
-        raiseAssert "Cannot read test vector: " & error
       recursiveGossipSteps = readJsonType(testVectorDir & "recursive_gossip.json", JsonRecursiveGossip).valueOr:
         raiseAssert "Cannot read test vector: " & error
       pair = recursiveGossipSteps[0]
@@ -61,14 +56,7 @@ procSuite "State Network Gossip":
     proto1.start()
     proto2.start()
 
-    proc do_gossip(
-      p: PortalProtocol,
-      maybeSrcNodeId: Opt[NodeId],
-      contentKeysList: ContentKeysList,
-      contentValues: seq[seq[byte]]): Future[void] {.async, gcsafe, closure.} =
-        await p.randomGossipDiscardPeers(maybeSrcNodeId, contentKeysList, contentValues)
-
-    await proto1.portalProtocol.gossipContent(Opt.none(NodeId), ContentKeysList.init(@[key]), @[value], do_gossip)
+    await proto1.portalProtocol.gossipContent(Opt.none(NodeId), ContentKeysList.init(@[key]), @[value], randomGossipDiscardPeers)
     await sleepAsync(1.seconds) # TODO not sure how to avoid this
     let gossipedValue = await proto2.getContent(decodedNextKey)
 
@@ -86,8 +74,6 @@ procSuite "State Network Gossip":
       proto = StateNetwork.new(node, ContentDB.new("", uint32.high, inMemory = true), sm)
       srcNodeId = proto.portalProtocol.localNode.id
 
-      blockContent = readJsonType(testVectorDir & "block.json", JsonBlock).valueOr:
-        raiseAssert "Cannot read test vector: " & error
       recursiveGossipSteps = readJsonType(testVectorDir & "recursive_gossip.json", JsonRecursiveGossip).valueOr:
         raiseAssert "Cannot read test vector: " & error
 
