@@ -51,9 +51,9 @@ proc getLayerStateRoots*(
   spr.be = sprBeKey.to(Hash256)
 
   spr.fg = block:
-    let lbl = delta.kMap.getOrVoid VertexID(1)
-    if lbl.isValid:
-      lbl.key.to(Hash256)
+    let key = delta.kMap.getOrVoid VertexID(1)
+    if key.isValid:
+      key.to(Hash256)
     else:
       EMPTY_ROOT_HASH
   if spr.fg.isValid:

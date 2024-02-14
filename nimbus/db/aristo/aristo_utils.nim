@@ -108,10 +108,10 @@ proc toNode*(
   ##
   proc getKey(db: AristoDbRef; vid: VertexID; beOk: bool): HashKey =
     block body:
-      let lbl = db.layersGetLabel(vid).valueOr:
+      let key = db.layersGetKey(vid).valueOr:
         break body
-      if lbl.isValid:
-        return lbl.key
+      if key.isValid:
+        return key
       else:
         return VOID_HASH_KEY
     if beOk:
@@ -225,7 +225,7 @@ proc registerAccount*(
 
   # Clear Merkle keys and store leaf record
   for w in hike.legs.mapIt(it.wp.vid):
-    db.layersResLabel w
+    db.layersResKey w
   db.top.final.lTab[lty] = wp.vid
 
   ok()

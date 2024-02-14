@@ -77,7 +77,7 @@ type
     vGen*: seq[VertexID]             ## Filter unique vertex ID generator
 
   VidsByKeyTab* = Table[HashKey,HashSet[VertexID]]
-    ## Reverse lookup searching `VertexID` by the hash key/label.
+    ## Reverse lookup searching `VertexID` by the hash key.
 
   LayerDeltaRef* = ref object
     ## Delta layers are stacked implying a tables hierarchy. Table entries on
@@ -103,7 +103,7 @@ type
     ## inconsistent state that must be resolved.
     ##
     sTab*: Table[VertexID,VertexRef] ## Structural vertex table
-    kMap*: Table[VertexID,HashLabel] ## Merkle hash key mapping
+    kMap*: Table[VertexID,HashKey]   ## Merkle hash key mapping
     pAmk*: VidsByKeyTab              ## Reverse `kMap` entries, hash key lookup
 
   LayerFinalRef* = ref object

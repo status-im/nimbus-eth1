@@ -281,7 +281,7 @@ when isMainModule:
         #dbType = ..,
         ldgType=LedgerCache,
         #profilingOk = ..,
-        #finalDiskCleanUpOk = ..,
+        finalDiskCleanUpOk = false,
         #enaLoggingOk = ..,
         #lastOneExtraOk = ..,
       )

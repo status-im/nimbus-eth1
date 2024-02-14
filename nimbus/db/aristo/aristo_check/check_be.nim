@@ -155,7 +155,7 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
 
     # Check structural table
     for (vid,vtx) in db.layersWalkVtx:
-      let lbl = db.layersGetLabel(vid).valueOr:
+      let key = db.layersGetKey(vid).valueOr:
         # A `kMap[]` entry must exist.
         return err((vid,CheckBeCacheKeyMissing))
       if vtx.isValid:
@@ -163,7 +163,7 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
         discard vids.reduce Interval[VertexID,uint64].new(vid,vid)
       else:
         # Some vertex is to be deleted, the key must be empty
-        if lbl.isValid:
+        if key.isValid:
           return err((vid,CheckBeCacheKeyNonEmpty))
         # There must be a representation on the backend DB unless in a TX
         if db.getVtxBE(vid).isErr and db.stack.len == 0:
@@ -186,19 +186,19 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
 
     # Check key table
     var list: seq[VertexID]
-    for (vid,lbl) in db.layersWalkLabel:
+    for (vid,key) in db.layersWalkKey:
       list.add vid
       let vtx = db.getVtx vid
       if db.layersGetVtx(vid).isErr and not vtx.isValid:
         return err((vid,CheckBeCacheKeyDangling))
-      if not lbl.isValid or relax:
+      if not key.isValid or relax:
         continue
       if not vtx.isValid:
         return err((vid,CheckBeCacheVtxDangling))
       let node = vtx.toNode(db).valueOr: # compile cache first
         return err((vid,CheckBeCacheKeyCantCompile))
       let expected = node.digestTo(HashKey)
-      if expected != lbl.key:
+      if expected != key:
         return err((vid,CheckBeCacheKeyMismatch))
 
     # Check vGen

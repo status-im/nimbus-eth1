@@ -109,7 +109,7 @@ proc schedStow(
       ): Result[void,AristoError] =
   ## Scheduled storage
   let
-    layersMeter = db.nLayersVtx + db.nLayersLabel
+    layersMeter = db.nLayersVtx() + db.nLayersKey()
     filterMeter = if db.roFilter.isNil: 0
                   else: db.roFilter.sTab.len + db.roFilter.kMap.len
     persistent = MaxFilterBulk < max(layersMeter, filterMeter)
@@ -557,7 +557,7 @@ proc testTxMergeProofAndKvpList*(
       xCheck w.proof.len == proved.merged + proved.dups
       xCheck db.lTab.len == lTabLen
       xCheck db.nLayersVtx() <= proved.merged + sTabLen
-      xCheck proved.merged < db.nLayersLebal()
+      xCheck proved.merged < db.nLayersYek()
 
     let
       merged = db.mergeList leafs

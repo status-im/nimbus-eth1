@@ -86,18 +86,6 @@ type
     root*: VertexID                  ## Root ID for the sub-trie
     path*: PathID                    ## Path into the `Patricia Trie`
 
-  HashLabel* = object
-    ## Merkle hash key uniquely associated with a vertex ID. As hashes in a
-    ## `Merkle Patricia Tree` are unique only on a particular sub-trie, the
-    ## hash key is paired with the top vertex of the relevant sub-trie. This
-    ## construction is similar to the one of a `LeafTie` object.
-    ##
-    ## Note that `HashLabel` objects have no representation in the
-    ## `Aristo Trie`. They are used temporarily and in caches or backlog
-    ## tables.
-    root*: VertexID                  ## Root ID for the sub-trie.
-    key*: HashKey                    ## Merkle hash or encoded small node data
-
 # ------------------------------------------------------------------------------
 # Chronicles formatters
 # ------------------------------------------------------------------------------
@@ -380,13 +368,6 @@ func hash*(a: HashKey): Hash =
     h = h !& a.key.hash
   else:
     h = h !& a.blob.hash
-  !$h
-
-func hash*(lbl: HashLabel): Hash =
-  ## Table/KeyedQueue/HashSet mixin
-  var h: Hash = 0
-  h = h !& lbl.root.hash
-  h = h !& lbl.key.hash
   !$h
 
 # ------------------------------------------------------------------------------
