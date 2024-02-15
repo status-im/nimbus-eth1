@@ -5,9 +5,6 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import 
-  ../../network/state/state_content
-
 type JsonBlockInfo* = object
   number*: uint64
   block_hash*: string
@@ -46,3 +43,9 @@ type JsonContractBytecode* = object
   content_id*: string
   content_value_offer*: string
   content_value_retrieval*: string
+
+type JsonGossipKVPair* = object
+  content_key*: string
+  content_value*: string
+
+type JsonRecursiveGossip* = seq[JsonGossipKVPair]
