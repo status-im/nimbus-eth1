@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -24,9 +24,9 @@ type
 proc `$`*(b: byte): string =
   $(b.int)
 
-proc newCodeStream*(codeBytes: seq[byte]): CodeStream =
+proc newCodeStream*(codeBytes: sink seq[byte]): CodeStream =
   new(result)
-  shallowCopy(result.bytes, codeBytes)
+  result.bytes = system.move(codeBytes)
   result.pc = 0
   result.invalidPositions = initHashSet[int]()
   result.depthProcessed = 0

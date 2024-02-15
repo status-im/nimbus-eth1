@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -230,7 +230,7 @@ method execute(cs: MultiplePayloadsExtendingCanonicalChainTest, env: TestEnv): b
       return true
   )
 
-  let reExecFunc = proc(): bool =
+  let reExecFunc = proc(): bool {.gcsafe.} =
     var payloadCount = 80
     if cs.payloadCount > 0:
       payloadCount = cs.payloadCount
@@ -238,7 +238,7 @@ method execute(cs: MultiplePayloadsExtendingCanonicalChainTest, env: TestEnv): b
     let basePayload = env.clMock.latestExecutableData
 
     # Check that the transaction was included
-    testCond len(basePayload.basePayload.transactions)> 0:
+    testCond len(basePayload.basePayload.transactions) > 0:
       fatal "Client failed to include the expected transaction in payload built"
 
     # Fabricate and send multiple new payloads by changing the PrevRandao field

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -321,13 +321,13 @@ p2pProtocol les(version = lesVersion,
     if announceType == AnnounceType.Signed:
       let signature = values.getValue(keyAnnounceSignature, Blob)
       if signature.isNone:
-        error "missing announce signature"
+        chronicles.error "missing announce signature"
         return
       let sig = Signature.fromRaw(signature.get).tryGet()
       let sigMsg = rlp.encodeList(headHash, headNumber, headTotalDifficulty)
       let signerKey = recover(sig, sigMsg).tryGet()
       if signerKey.toNodeId != peer.remote.id:
-        error "invalid announce signature"
+        chronicles.error "invalid announce signature"
         # TODO: should we disconnect this peer?
         return
 

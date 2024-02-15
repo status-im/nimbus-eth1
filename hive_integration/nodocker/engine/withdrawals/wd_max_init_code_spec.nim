@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -18,9 +18,9 @@ import
   ../engine_client,
   ../types,
   ../cancun/customizer,
-  ../../../nimbus/constants,
+  ../../../../nimbus/constants,
   web3/execution_types,
-  ../../../nimbus/beacon/web3_eth_conv
+  ../../../../nimbus/beacon/web3_eth_conv
 
 # EIP-3860 Shanghai Tests:
 # Send transactions overflowing the MAX_INITCODE_SIZE

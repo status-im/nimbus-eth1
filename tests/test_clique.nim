@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2023 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -78,7 +78,7 @@ proc setErrorLevel =
 
 # clique/snapshot_test.go(99): func TestClique(t *testing.T) {
 proc runCliqueSnapshot(noisy = true; postProcessOk = false;
-                       testIds = {0 .. 999}; skipIds = {0}-{0}) =
+                       testIds = {0'u16 .. 999'u16}; skipIds = {0'u16}-{0'u16}) =
   ## Clique PoA Snapshot
   ## ::
   ##    Tests that Clique signer voting is evaluated correctly for various
@@ -96,13 +96,13 @@ proc runCliqueSnapshot(noisy = true; postProcessOk = false;
       setTraceLevel()
 
     # clique/snapshot_test.go(379): for i, tt := range tests {
-    for voterSample in voterSamples.filterIt(it.id in testIds):
+    for voterSample in voterSamples.filterIt(it.id.uint16 in testIds):
       let tt = voterSample
       test &"Snapshots {tt.id:2}: {tt.info.substr(0,50)}...":
         pool.say "\n"
 
         # Noisily skip this test
-        if tt.id in skipIds:
+        if tt.id.uint16 in skipIds:
           skip()
 
         else:
@@ -133,7 +133,7 @@ proc runCliqueSnapshot(noisy = true; postProcessOk = false;
             # Verify the final list of signers against the expected ones
             check snapResult == expected
 
-proc runCliqueSnapshot(noisy = true; postProcessOk = false; testId: int) =
+proc runCliqueSnapshot(noisy = true; postProcessOk = false; testId: uint16) =
   noisy.runCliqueSnapshot(postProcessOk, testIds = {testId})
 
 

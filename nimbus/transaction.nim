@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -120,7 +120,7 @@ proc validateTxLegacy(tx: Transaction, fork: EVMFork) =
     raise newException(ValidationError, "Invalid legacy transaction")
 
 proc validateTxEip2930(tx: Transaction) =
-  var isValid = tx.V in {0'i64, 1'i64}
+  var isValid = tx.V == 0'i64 or tx.V == 1'i64
   isValid = isValid and tx.S >= UInt256.one
   isValid = isValid and tx.S < SECPK1_N
   isValid = isValid and tx.R < SECPK1_N

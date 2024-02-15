@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -175,7 +175,15 @@ proc effectiveGasTip*(tx: Transaction; baseFee: UInt256): GasPriceEx =
 
 proc dup*(item: TxItemRef): TxItemRef =
   ## Getter, provide contents copy
-  item.deepCopy
+  TxItemRef(
+    tx: item.tx,
+    itemID: item.itemID,
+    timeStamp: item.timeStamp,
+    sender: item.sender,
+    info: item.info,
+    status: item.status,
+    reject: item.reject
+  )
 
 proc info*(item: TxItemRef): string =
   ## Getter

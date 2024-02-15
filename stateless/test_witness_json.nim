@@ -10,7 +10,7 @@
 
 import
   eth/common, json, os, unittest2,
-  ../../nimbus/db/core_db,
+  ../nimbus/db/core_db,
   ./tree_from_witness, parseopt,
   ./witness_types, stew/byteutils
 

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -15,7 +15,7 @@ import
   stew/endians2,
   nimcrypto/sha2,
   stew/results,
-  ../../../nimbus/core/eip4844
+  ../../../../nimbus/core/eip4844
 
 type
   BlobID* = uint64
@@ -41,7 +41,7 @@ func getBlobList*(startId: BlobID, count: int, addition: BlobID): BlobIDs =
   for i in 0..<count:
     result[i] = startId + BlobID(i)
   result[^1] = addition
-    
+
 func getBlobListByIndex*(startIndex: BlobID, endIndex: BlobID): BlobIDs =
   var count = uint64(0)
   if endIndex > startIndex:

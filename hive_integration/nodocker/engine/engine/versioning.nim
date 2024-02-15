@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -46,7 +46,7 @@ method execute(cs: ForkchoiceUpdatedOnPayloadRequestTest, env: TestEnv): bool =
   testCond ok
 
   let pbRes = env.clMock.produceSingleBlock(clmock.BlockProcessCallbacks(
-    onPayloadAttributesGenerated: proc(): bool =
+    onPayloadAttributesGenerated: proc(): bool {.gcsafe.} =
       var
         attr = env.clMock.latestPayloadAttributes
         expectedStatus = PayloadExecutionStatus.valid

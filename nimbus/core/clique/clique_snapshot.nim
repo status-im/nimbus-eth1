@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -49,8 +49,10 @@ type
     start:   LocalPivot        ## start here searching for checkpoints
     trail:   LocalPath         ## snapshot location
     subChn:  LocalSubChain     ## chain[] sub-range
-    parents: seq[BlockHeader]  ## explicit parents
+    parents: HeadersHolderRef  ## explicit parents
 
+  HeadersHolderRef* = ref object
+    headers*: seq[BlockHeader]
 
 {.push raises: [].}
 
@@ -149,6 +151,15 @@ proc isSnapshotPosition(d: var LocalSnaps; number: BlockNumber): bool =
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
+
+func len*(list: HeadersHolderRef): int =
+  list.headers.len
+
+func `[]`*(list: HeadersHolderRef, idx: int): BlockHeader =
+  list.headers[idx]
+
+func `[]`*(list: HeadersHolderRef, idx: BackwardsIndex): BlockHeader =
+  list.headers[list.headers.len - int(idx)]
 
 proc findSnapshot(d: var LocalSnaps): bool =
   ## Search for a snapshot starting at current header starting at the pivot
@@ -324,7 +335,7 @@ proc updateSnapshot(d: var LocalSnaps): SnapshotResult
 # ------------------------------------------------------------------------------
 
 proc cliqueSnapshotSeq*(c: Clique; header: BlockHeader;
-                        parents: var seq[BlockHeader]): SnapshotResult
+                        parents: HeadersHolderRef): SnapshotResult
                            {.gcsafe, raises: [CatchableError].} =
   ## Create authorisation state snapshot of a given point in the block chain
   ## and store it in the `Clique` descriptor to be retrievable as `c.snapshot`
@@ -343,7 +354,6 @@ proc cliqueSnapshotSeq*(c: Clique; header: BlockHeader;
       return ok(rc.value)
 
   # Avoid deep copy, sequence will not be changed by `updateSnapshot()`
-  parents.shallow
 
   var snaps = LocalSnaps(
     c:       c,
@@ -360,7 +370,7 @@ proc cliqueSnapshotSeq*(c: Clique; header: BlockHeader;
 
 
 proc cliqueSnapshotSeq*(c: Clique; hash: Hash256;
-                        parents: var seq[BlockHeader]): SnapshotResult
+                        parents: HeadersHolderRef): SnapshotResult
                           {.gcsafe,raises: [CatchableError].} =
   ## Create authorisation state snapshot of a given point in the block chain
   ## and store it in the `Clique` descriptor to be retrievable as  `c.snapshot`
@@ -383,7 +393,6 @@ proc cliqueSnapshotSeq*(c: Clique; hash: Hash256;
     return err((errUnknownHash,""))
 
   # Avoid deep copy, sequence will not be changed by `updateSnapshot()`
-  parents.shallow
 
   var snaps = LocalSnaps(
     c:       c,
@@ -403,26 +412,30 @@ proc cliqueSnapshotSeq*(c: Clique; hash: Hash256;
 proc cliqueSnapshot*(c: Clique; header: BlockHeader;
                      parents: var seq[BlockHeader]): SnapshotResult
                          {.gcsafe, raises: [CatchableError].} =
-  var list = toSeq(parents)
+  let list = HeadersHolderRef(
+    headers: toSeq(parents)
+  )
   c.cliqueSnapshotSeq(header,list)
 
 proc cliqueSnapshot*(c: Clique;hash: Hash256;
                      parents: openArray[BlockHeader]): SnapshotResult
                          {.gcsafe, raises: [CatchableError].} =
-  var list = toSeq(parents)
+  let list = HeadersHolderRef(
+    headers: toSeq(parents)
+  )
   c.cliqueSnapshotSeq(hash,list)
 
 proc cliqueSnapshot*(c: Clique; header: BlockHeader): SnapshotResult
                          {.gcsafe,raises: [CatchableError].} =
   ## Short for `cliqueSnapshot(c,header,@[])`
-  var blind: seq[BlockHeader]
+  let blind = HeadersHolderRef()
   c.cliqueSnapshotSeq(header, blind)
 
 proc cliqueSnapshot*(c: Clique; hash: Hash256): SnapshotResult
                          {.gcsafe,raises: [CatchableError].} =
   ## Short for `cliqueSnapshot(c,hash,@[])`
-  var blind: seq[BlockHeader]
-  c.cliqueSnapshot(hash, blind)
+  let blind = HeadersHolderRef()
+  c.cliqueSnapshotSeq(hash, blind)
 
 # ------------------------------------------------------------------------------
 # End

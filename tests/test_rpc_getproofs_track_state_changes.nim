@@ -31,7 +31,9 @@ import
   ../nimbus/core/chain,
   ../nimbus/common/common,
   ../nimbus/rpc,
-  ../../nimbus/db/[core_db, core_db/persistent, state_db/base],
+  ../nimbus/db/core_db,
+  ../nimbus/db/core_db/persistent,
+  ../nimbus/db/state_db/base,
   ../stateless/[witness_verification, witness_types],
   ./rpc/experimental_rpc_client
 

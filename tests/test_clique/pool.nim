@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2023 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -410,7 +410,7 @@ proc appendVoter*(ap: TesterPool;
     checkPoint = voter.checkpoint.mapIt(ap.address(it)).sorted(EthAscending))
 
   if 0 < voter.checkpoint.len:
-    doAssert (header.blockNumber mod ap.clique.cfg.epoch) == 0
+    doAssert (header.blockNumber mod ap.clique.cfg.epoch).isZero
 
   # Register for debugging
   let

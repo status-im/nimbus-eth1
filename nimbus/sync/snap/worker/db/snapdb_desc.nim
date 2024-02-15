@@ -126,6 +126,10 @@ proc init*(
   new result
   result.init(ps.base, root)
 
+proc copyWithoutRoot*(a, b: SnapDbBaseRef) =
+  a.xDb = b.xDb
+  a.base = b.base
+    
 # ------------------------------------------------------------------------------
 # Public getters
 # ------------------------------------------------------------------------------

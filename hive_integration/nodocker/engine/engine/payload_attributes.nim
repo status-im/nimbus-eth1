@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -42,7 +42,7 @@ method execute(cs: InvalidPayloadAttributesTest, env: TestEnv): bool =
 
   # Send a forkchoiceUpdated with invalid PayloadAttributes
   let pbRes = env.clMock.produceSingleBlock(BlockProcessCallbacks(
-    onNewPayloadBroadcast: proc(): bool =
+    onNewPayloadBroadcast: proc(): bool {.gcsafe.} =
       # Try to apply the new payload with invalid attributes
       var fcu = env.clMock.latestForkchoice
       if cs.syncing:
