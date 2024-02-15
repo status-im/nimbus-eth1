@@ -23,70 +23,48 @@ const testVectorDir = "./vendor/portal-spec-tests/tests/mainnet/state/"
 procSuite "State Network Gossip":
   let rng = newRng()
 
-  asyncTest "Test Gossip of Account Trie Node":
+  asyncTest "Test Gossip of Account Trie Node Offer":
     let
-      node1 = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20402))
-      sm1 = StreamManager.new(node1)
-      node2 = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20403))
-      sm2 = StreamManager.new(node2)
-
-      proto1 = StateNetwork.new(node1, ContentDB.new("", uint32.high, inMemory = true), sm1)
-      proto2 = StateNetwork.new(node2, ContentDB.new("", uint32.high, inMemory = true), sm2)
-
       recursiveGossipSteps = readJsonType(testVectorDir & "recursive_gossip.json", JsonRecursiveGossip).valueOr:
         raiseAssert "Cannot read test vector: " & error
-      pair = recursiveGossipSteps[0]
-      key = ByteList.init(pair.content_key.hexToSeqByte())
-      decodedKey = key.decode().valueOr:
-        raiseAssert "Cannot decode key"
-      nextKey = ByteList.init(recursiveGossipSteps[1].content_key.hexToSeqByte())
-      decodedNextKey = nextKey.decode().valueOr:
-        raiseAssert "Cannot decode key"
-      value = pair.content_value.hexToSeqByte()
-      nextValue = recursiveGossipSteps[1].content_value.hexToSeqByte()
+      numOfClients = recursiveGossipSteps.len() - 1
 
-    check:
-      proto1.portalProtocol.addNode(proto2.portalProtocol.localNode) == Added
-      proto2.portalProtocol.addNode(proto1.portalProtocol.localNode) == Added
+    var clients: seq[StateNetwork]
 
-      (await proto1.portalProtocol.ping(proto2.portalProtocol.localNode)).isOk()
-      (await proto2.portalProtocol.ping(proto1.portalProtocol.localNode)).isOk()
-
-    # Need to run start to get the processContentLoop running
-    proto1.start()
-    proto2.start()
-
-    await proto1.portalProtocol.gossipContent(Opt.none(NodeId), ContentKeysList.init(@[key]), @[value], randomGossipDiscardPeers)
-    await sleepAsync(1.seconds) # TODO not sure how to avoid this
-    let gossipedValue = await proto2.getContent(decodedNextKey)
-
-    check gossipedValue.isSome()
-    check gossipedValue.get() == nextValue
-
-
-    await node1.closeWait()
-    await node2.closeWait()
-
-  asyncTest "Test gossipContent method":
-    let
-      node = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20404))
-      sm = StreamManager.new(node)
-      proto = StateNetwork.new(node, ContentDB.new("", uint32.high, inMemory = true), sm)
-      srcNodeId = proto.portalProtocol.localNode.id
-
-      recursiveGossipSteps = readJsonType(testVectorDir & "recursive_gossip.json", JsonRecursiveGossip).valueOr:
-        raiseAssert "Cannot read test vector: " & error
+    for i in 0..numOfClients:
+      let
+        node = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20400 + i))
+        sm = StreamManager.new(node)
+        proto = StateNetwork.new(node, ContentDB.new("", uint32.high, inMemory = true), sm)
+      proto.start()
+      clients.add(proto)
 
     for i, pair in recursiveGossipSteps[0..^2]:
       let
+        currentNode = clients[i]
+        nextNode = clients[i+1]
         key = ByteList.init(pair.content_key.hexToSeqByte())
-        nextKey = ByteList.init(recursiveGossipSteps[i + 1].content_key.hexToSeqByte())
+        decodedKey = key.decode().valueOr:
+          raiseAssert "Cannot decode key"
+        nextKey = ByteList.init(recursiveGossipSteps[1].content_key.hexToSeqByte())
+        decodedNextKey = nextKey.decode().valueOr:
+          raiseAssert "Cannot decode key"
         value = pair.content_value.hexToSeqByte()
-        nextValue = recursiveGossipSteps[i + 1].content_value.hexToSeqByte()
+        nextValue = recursiveGossipSteps[1].content_value.hexToSeqByte()
 
-      proc gossipProc(p: PortalProtocol, nid: Opt[NodeId], keys: ContentKeysList, values: seq[seq[byte]]): Future[void] {.async} =
-        check (distinctBase keys)[0] == nextKey
-        check values[0] == nextValue
-        return
+      check:
+        currentNode.portalProtocol.addNode(nextNode.portalProtocol.localNode) == Added
+        (await currentNode.portalProtocol.ping(nextNode.portalProtocol.localNode)).isOk()
 
-      await gossipContent(proto.portalProtocol, Opt.some(srcNodeId), ContentKeysList.init(@[key]), @[value], gossipProc)
+      await currentNode.portalProtocol.gossipContent(Opt.none(NodeId), ContentKeysList.init(@[key]), @[value])
+      await sleepAsync(100.milliseconds)
+      let gossipedValue = await nextNode.getContent(decodedNextKey)
+
+      check:
+        gossipedValue.isSome()
+        gossipedValue.get() == nextValue
+
+    for i in 0..numOfClients:
+      await clients[i].portalProtocol.baseProtocol.closeWait()
+
+  # TODO Add tests for Contract Trie Node Offer & Contract Code Offer

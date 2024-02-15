@@ -118,12 +118,7 @@ proc recursiveGossipAccountTrieNode(
     p: PortalProtocol,
     maybeSrcNodeId: Opt[NodeId],
     decodedKey: ContentKey,
-    contentValue: seq[byte],
-    gossipProc: proc(
-      p: PortalProtocol,
-      maybeSrcNodeId: Opt[NodeId],
-      contentKeys: ContentKeysList,
-      contentValues: seq[seq[byte]]): Future[void] {.async, gcsafe, closure.}
+    contentValue: seq[byte]
     ): Future[void] {.async.} =
       var nibbles = decodedKey.accountTrieNodeKey.path.unpackNibbles()
       let decodedValue = decodeSsz(contentValue, AccountTrieNodeOffer).valueOr:
@@ -141,7 +136,7 @@ proc recursiveGossipAccountTrieNode(
         updatedKey = AccountTrieNodeKey(path: nibbles.packNibbles(), nodeHash: updatedNodeHash)
         encodedKey = ContentKey(accountTrieNodeKey: updatedKey, contentType: accountTrieNode).encode()
 
-      await gossipProc(
+      await neighborhoodGossipDiscardPeers(
         p, maybeSrcNodeId, ContentKeysList.init(@[encodedKey]), @[encodedValue]
       )
 
@@ -149,12 +144,7 @@ proc recursiveGossipContractTrieNode(
     p: PortalProtocol,
     maybeSrcNodeId: Opt[NodeId],
     decodedKey: ContentKey,
-    contentValue: seq[byte],
-    gossipProc: proc(
-      p: PortalProtocol,
-      maybeSrcNodeId: Opt[NodeId],
-      contentKeys: ContentKeysList,
-      contentValues: seq[seq[byte]]): Future[void] {.async, gcsafe, closure.}
+    contentValue: seq[byte]
     ): Future[void] {.async.} =
       return
 
@@ -162,12 +152,7 @@ proc gossipContent*(
     p: PortalProtocol,
     maybeSrcNodeId: Opt[NodeId],
     contentKeys: ContentKeysList,
-    contentValues: seq[seq[byte]],
-    gossipProc: proc(
-      p: PortalProtocol,
-      maybeSrcNodeId: Opt[NodeId],
-      contentKeysList: ContentKeysList,
-      contentValues: seq[seq[byte]]): Future[void] {.async, gcsafe, closure.}
+    contentValues: seq[seq[byte]]
     ): Future[void] {.async.} =
   for i, contentValue in contentValues:
     let
@@ -179,11 +164,11 @@ proc gossipContent*(
         warn("Gossiping content with unused content type")
         continue
       of accountTrieNode:
-        await recursiveGossipAccountTrieNode(p, maybeSrcNodeId, decodedKey, contentValue, gossipProc)
+        await recursiveGossipAccountTrieNode(p, maybeSrcNodeId, decodedKey, contentValue)
       of contractTrieNode:
-        await recursiveGossipContractTrieNode(p, maybeSrcNodeId, decodedKey, contentValue, gossipProc)
+        await recursiveGossipContractTrieNode(p, maybeSrcNodeId, decodedKey, contentValue)
       of contractCode:
-        await gossipProc(
+        await neighborhoodGossipDiscardPeers(
           p, maybeSrcNodeId, ContentKeysList.init(@[contentKey]), @[contentValue]
         )
 
@@ -221,8 +206,7 @@ proc processContentLoop(n: StateNetwork) {.async.} =
           n.portalProtocol,
           maybeSrcNodeId,
           contentKeys,
-          contentValues,
-          randomGossipDiscardPeers
+          contentValues
           )
   except CancelledError:
     trace "processContentLoop canceled"
