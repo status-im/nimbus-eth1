@@ -74,14 +74,14 @@ proc new*(T: type SeedDb, path: string, name: string, inMemory = false): SeedDb 
     db.prepareStmt(
       "INSERT OR REPLACE INTO seed_data (contentid, contentkey, content) VALUES (?, ?, ?);",
       (array[32, byte], seq[byte], seq[byte]),
-      void).get()
+      void)[]
 
   let getStmt =
     db.prepareStmt(
       "SELECT contentid, contentkey, content FROM seed_data WHERE contentid = ?;",
       array[32, byte],
       ContentData
-    ).get()
+    )[]
 
   db.createCustomFunction("xorDistance", 2, xorDistance).expect(
     "Custom function xorDistance creation OK")
@@ -97,7 +97,7 @@ proc new*(T: type SeedDb, path: string, name: string, inMemory = false): SeedDb 
       """,
       (array[32, byte], array[32, byte], int64, int64),
       ContentDataDist
-    ).get()
+    )[]
 
   SeedDb(
     store: db,

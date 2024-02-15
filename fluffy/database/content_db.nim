@@ -102,37 +102,37 @@ proc new*(
 
   let sizeStmt = db.prepareStmt(
     "SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size();",
-    NoParams, int64).get()
+    NoParams, int64)[]
 
   let unusedSizeStmt = db.prepareStmt(
     "SELECT freelist_count * page_size as size FROM pragma_freelist_count(), pragma_page_size();",
-    NoParams, int64).get()
+    NoParams, int64)[]
 
   let vacuumStmt = db.prepareStmt(
     "VACUUM;",
-    NoParams, void).get()
+    NoParams, void)[]
 
   let kvStore = kvStore db.openKvStore().expectDb()
 
   let contentSizeStmt = db.prepareStmt(
     "SELECT SUM(length(value)) FROM kvstore",
-    NoParams, int64).get()
+    NoParams, int64)[]
 
   let contentCountStmt = db.prepareStmt(
     "SELECT COUNT(key) FROM kvstore;",
-    NoParams, int64).get()
+    NoParams, int64)[]
 
   let getAllOrderedByDistanceStmt = db.prepareStmt(
     "SELECT key, length(value), xorDistance(?, key) as distance FROM kvstore ORDER BY distance DESC",
-    array[32, byte], RowInfo).get()
+    array[32, byte], RowInfo)[]
 
   let deleteOutOfRadiusStmt = db.prepareStmt(
     "DELETE FROM kvstore WHERE isInRadius(?, key, ?) == 0",
-    (array[32, byte], array[32, byte]), void).get()
+    (array[32, byte], array[32, byte]), void)[]
 
   let largestDistanceStmt = db.prepareStmt(
     "SELECT max(xorDistance(?, key)) FROM kvstore",
-    array[32, byte], array[32, byte]).get()
+    array[32, byte], array[32, byte])[]
 
   ContentDB(
     kv: kvStore,
