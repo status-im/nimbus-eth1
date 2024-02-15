@@ -1,5 +1,5 @@
 # nimbus_verified_proxy
-# Copyright (c) 2022-2023 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -17,27 +17,26 @@ import
   web3/engine_api_types,
   ../../nimbus/db/core_db
 
-type
-  ExecutionData* = object
-    parentHash*: BlockHash
-    feeRecipient*: Address
-    stateRoot*: BlockHash
-    receiptsRoot*: BlockHash
-    logsBloom*: FixedBytes[256]
-    prevRandao*: FixedBytes[32]
-    blockNumber*: Quantity
-    gasLimit*: Quantity
-    gasUsed*: Quantity
-    timestamp*: Quantity
-    extraData*: DynamicBytes[0, 32]
-    baseFeePerGas*: UInt256
-    blockHash*: BlockHash
-    transactions*: seq[TypedTransaction]
-    withdrawals*: seq[WithdrawalV1]
+type ExecutionData* = object
+  parentHash*: BlockHash
+  feeRecipient*: Address
+  stateRoot*: BlockHash
+  receiptsRoot*: BlockHash
+  logsBloom*: FixedBytes[256]
+  prevRandao*: FixedBytes[32]
+  blockNumber*: Quantity
+  gasLimit*: Quantity
+  gasUsed*: Quantity
+  timestamp*: Quantity
+  extraData*: DynamicBytes[0, 32]
+  baseFeePerGas*: UInt256
+  blockHash*: BlockHash
+  transactions*: seq[TypedTransaction]
+  withdrawals*: seq[WithdrawalV1]
 
 proc asExecutionData*(
-    payload: ExecutionPayloadV1 | ExecutionPayloadV2 | ExecutionPayloadV3):
-    ExecutionData =
+    payload: ExecutionPayloadV1 | ExecutionPayloadV2 | ExecutionPayloadV3
+): ExecutionData =
   when payload is ExecutionPayloadV1:
     return ExecutionData(
       parentHash: payload.parentHash,
@@ -54,7 +53,7 @@ proc asExecutionData*(
       baseFeePerGas: payload.baseFeePerGas,
       blockHash: payload.blockHash,
       transactions: payload.transactions,
-      withdrawals: @[]
+      withdrawals: @[],
     )
   else:
     # TODO: Deal with different payload types
@@ -73,7 +72,7 @@ proc asExecutionData*(
       baseFeePerGas: payload.baseFeePerGas,
       blockHash: payload.blockHash,
       transactions: payload.transactions,
-      withdrawals: payload.withdrawals
+      withdrawals: payload.withdrawals,
     )
 
 template unsafeQuantityToInt64(q: Quantity): int64 =
@@ -86,8 +85,8 @@ template asEthHash(hash: BlockHash): etypes.Hash256 =
   etypes.Hash256(data: distinctBase(hash))
 
 proc calculateTransactionData(
-    items: openArray[TypedTransaction]):
-    (etypes.Hash256, seq[TxOrHash], uint64) =
+    items: openArray[TypedTransaction]
+): (etypes.Hash256, seq[TxOrHash], uint64) =
   ## returns tuple composed of
   ## - root of transactions trie
   ## - list of transactions hashes
@@ -102,31 +101,28 @@ proc calculateTransactionData(
     txHashes.add(txOrHash toFixedBytes(keccakHash(tx)))
   return (tr.rootHash(), txHashes, txSize)
 
-func blockHeaderSize(
-    payload: ExecutionData, txRoot: etypes.Hash256): uint64 =
+func blockHeaderSize(payload: ExecutionData, txRoot: etypes.Hash256): uint64 =
   let bh = etypes.BlockHeader(
-    parentHash    : payload.parentHash.asEthHash,
-    ommersHash    : etypes.EMPTY_UNCLE_HASH,
-    coinbase      : etypes.EthAddress payload.feeRecipient,
-    stateRoot     : payload.stateRoot.asEthHash,
-    txRoot        : txRoot,
-    receiptRoot   : payload.receiptsRoot.asEthHash,
-    bloom         : distinctBase(payload.logsBloom),
-    difficulty    : default(etypes.DifficultyInt),
-    blockNumber   : payload.blockNumber.distinctBase.u256,
-    gasLimit      : payload.gasLimit.unsafeQuantityToInt64,
-    gasUsed       : payload.gasUsed.unsafeQuantityToInt64,
-    timestamp     : payload.timestamp.EthTime,
-    extraData     : bytes payload.extraData,
-    mixDigest     : payload.prevRandao.asEthHash,
-    nonce         : default(etypes.BlockNonce),
-    fee           : some payload.baseFeePerGas
+    parentHash: payload.parentHash.asEthHash,
+    ommersHash: etypes.EMPTY_UNCLE_HASH,
+    coinbase: etypes.EthAddress payload.feeRecipient,
+    stateRoot: payload.stateRoot.asEthHash,
+    txRoot: txRoot,
+    receiptRoot: payload.receiptsRoot.asEthHash,
+    bloom: distinctBase(payload.logsBloom),
+    difficulty: default(etypes.DifficultyInt),
+    blockNumber: payload.blockNumber.distinctBase.u256,
+    gasLimit: payload.gasLimit.unsafeQuantityToInt64,
+    gasUsed: payload.gasUsed.unsafeQuantityToInt64,
+    timestamp: payload.timestamp.EthTime,
+    extraData: bytes payload.extraData,
+    mixDigest: payload.prevRandao.asEthHash,
+    nonce: default(etypes.BlockNonce),
+    fee: some payload.baseFeePerGas,
   )
   return uint64(len(rlp.encode(bh)))
 
-proc asBlockObject*(
-    p: ExecutionData): BlockObject
-    {.raises: [ValueError].} =
+proc asBlockObject*(p: ExecutionData): BlockObject {.raises: [ValueError].} =
   # TODO: currently we always calculate txHashes as BlockObject does not have
   # option of returning full transactions. It needs fixing at nim-web3 library
   # level
@@ -156,6 +152,5 @@ proc asBlockObject*(
     totalDifficulty: UInt256.zero,
     transactions: txHashes,
     uncles: @[],
-    baseFeePerGas: some(p.baseFeePerGas)
+    baseFeePerGas: some(p.baseFeePerGas),
   )
-

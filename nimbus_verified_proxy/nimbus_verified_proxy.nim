@@ -9,7 +9,9 @@
 
 import
   std/[atomics, json, os, strutils],
-  chronicles, chronos, confutils,
+  chronicles,
+  chronos,
+  confutils,
   eth/keys,
   json_rpc/rpcproxy,
   beacon_chain/el/el_manager,
@@ -17,7 +19,7 @@ import
   beacon_chain/networking/topic_params,
   beacon_chain/spec/beaconstate,
   beacon_chain/spec/datatypes/[phase0, altair, bellatrix],
-  beacon_chain/[light_client,nimbus_binary_common, version],
+  beacon_chain/[light_client, nimbus_binary_common, version],
   ../nimbus/rpc/cors,
   "."/rpc/[rpc_eth_api, rpc_utils],
   ./nimbus_verified_proxy_conf,
@@ -26,7 +28,7 @@ import
 from beacon_chain/gossip_processing/block_processor import newExecutionPayload
 from beacon_chain/gossip_processing/eth2_processor import toValidationResult
 
-type OnHeaderCallback* = proc (s: cstring, t: int) {.cdecl, raises: [], gcsafe.}
+type OnHeaderCallback* = proc(s: cstring, t: int) {.cdecl, raises: [], gcsafe.}
 type Context* = object
   thread*: Thread[ptr Context]
   configJson*: cstring
@@ -37,21 +39,23 @@ proc cleanup*(ctx: ptr Context) =
   dealloc(ctx.configJson)
   freeShared(ctx)
 
-
 func getConfiguredChainId(networkMetadata: Eth2NetworkMetadata): Quantity =
   if networkMetadata.eth1Network.isSome():
     let
       net = networkMetadata.eth1Network.get()
-      chainId = case net
+      chainId =
+        case net
         of mainnet: 1.Quantity
-        of goerli:  5.Quantity
+        of goerli: 5.Quantity
         of sepolia: 11155111.Quantity
         of holesky: 17000.Quantity
     return chainId
   else:
     return networkMetadata.cfg.DEPOSIT_CHAIN_ID.Quantity
 
-proc run*(config: VerifiedProxyConf, ctx: ptr Context) {.raises: [CatchableError], gcsafe.} =
+proc run*(
+    config: VerifiedProxyConf, ctx: ptr Context
+) {.raises: [CatchableError], gcsafe.} =
   var headerCallback: OnHeaderCallback
   if ctx != nil:
     headerCallback = ctx.onHeader
@@ -75,26 +79,32 @@ proc run*(config: VerifiedProxyConf, ctx: ptr Context) {.raises: [CatchableError
   for node in metadata.bootstrapNodes:
     lcConfig.bootstrapNodes.add node
 
-  template cfg(): auto = metadata.cfg
+  template cfg(): auto =
+    metadata.cfg
 
   let
     genesisState =
       try:
-        template genesisData(): auto = metadata.genesis.bakedBytes
-        newClone(readSszForkedHashedBeaconState(
-          cfg, genesisData.toOpenArray(genesisData.low, genesisData.high)))
+        template genesisData(): auto =
+          metadata.genesis.bakedBytes
+
+        newClone(
+          readSszForkedHashedBeaconState(
+            cfg, genesisData.toOpenArray(genesisData.low, genesisData.high)
+          )
+        )
       except CatchableError as err:
         raiseAssert "Invalid baked-in state: " & err.msg
 
     genesisTime = getStateField(genesisState[], genesis_time)
-    beaconClock = BeaconClock.init(genesisTime).valueOr:
-      error "Invalid genesis time in state", genesisTime
-      quit QuitFailure
+    beaconClock =
+      BeaconClock.init(genesisTime).valueOr:
+        error "Invalid genesis time in state", genesisTime
+        quit QuitFailure
 
     getBeaconTime = beaconClock.getBeaconTimeFn()
 
-    genesis_validators_root =
-      getStateField(genesisState[], genesis_validators_root)
+    genesis_validators_root = getStateField(genesisState[], genesis_validators_root)
     forkDigests = newClone ForkDigests.init(cfg, genesis_validators_root)
 
     genesisBlockRoot = get_initial_beacon_block(genesisState[]).root
@@ -104,8 +114,7 @@ proc run*(config: VerifiedProxyConf, ctx: ptr Context) {.raises: [CatchableError
     netKeys = getRandomNetKeys(rng[])
 
     network = createEth2Node(
-      rng, lcConfig, netKeys, cfg,
-      forkDigests, getBeaconTime, genesis_validators_root
+      rng, lcConfig, netKeys, cfg, forkDigests, getBeaconTime, genesis_validators_root
     )
 
     blockCache = BlockCache.new(uint32(64))
@@ -116,64 +125,71 @@ proc run*(config: VerifiedProxyConf, ctx: ptr Context) {.raises: [CatchableError
     clientConfig = config.web3url.asClientConfig()
 
     rpcProxy = RpcProxy.new(
-      [initTAddress(config.rpcAddress, config.rpcPort)],
-      clientConfig,
-      authHooks
+      [initTAddress(config.rpcAddress, config.rpcPort)], clientConfig, authHooks
     )
 
     verifiedProxy = VerifiedRpcProxy.new(rpcProxy, blockCache, chainId)
 
-    optimisticHandler = proc(signedBlock: ForkedMsgTrustedSignedBeaconBlock):
-        Future[void] {.async: (raises: [CancelledError]).} =
+    optimisticHandler = proc(
+        signedBlock: ForkedMsgTrustedSignedBeaconBlock
+    ): Future[void] {.async: (raises: [CancelledError]).} =
       notice "New LC optimistic block",
-        opt = signedBlock.toBlockId(),
-        wallSlot = getBeaconTime().slotOrZero
+        opt = signedBlock.toBlockId(), wallSlot = getBeaconTime().slotOrZero
       withBlck(signedBlock):
         when consensusFork >= ConsensusFork.Bellatrix:
           if forkyBlck.message.is_execution_block:
-            template payload(): auto = forkyBlck.message.body.execution_payload
+            template payload(): auto =
+              forkyBlck.message.body.execution_payload
+
             blockCache.add(asExecutionData(payload.asEngineExecutionPayload()))
-        else: discard
+        else:
+          discard
       return
 
-    optimisticProcessor = initOptimisticProcessor(
-      getBeaconTime, optimisticHandler)
+    optimisticProcessor = initOptimisticProcessor(getBeaconTime, optimisticHandler)
 
     lightClient = createLightClient(
-      network, rng, lcConfig, cfg, forkDigests, getBeaconTime,
-      genesis_validators_root, LightClientFinalizationMode.Optimistic)
+      network, rng, lcConfig, cfg, forkDigests, getBeaconTime, genesis_validators_root,
+      LightClientFinalizationMode.Optimistic
+    )
 
   verifiedProxy.installEthApiHandlers()
 
   info "Listening to incoming network requests"
   network.registerProtocol(
-    PeerSync, PeerSync.NetworkState.init(
-      cfg, forkDigests, genesisBlockRoot, getBeaconTime))
+    PeerSync,
+    PeerSync.NetworkState.init(cfg, forkDigests, genesisBlockRoot, getBeaconTime),
+  )
   network.addValidator(
     getBeaconBlocksTopic(forkDigests.phase0),
-    proc (signedBlock: phase0.SignedBeaconBlock): ValidationResult =
-      toValidationResult(
-        optimisticProcessor.processSignedBeaconBlock(signedBlock)))
+    proc(signedBlock: phase0.SignedBeaconBlock): ValidationResult =
+      toValidationResult(optimisticProcessor.processSignedBeaconBlock(signedBlock))
+    ,
+  )
   network.addValidator(
     getBeaconBlocksTopic(forkDigests.altair),
-    proc (signedBlock: altair.SignedBeaconBlock): ValidationResult =
-      toValidationResult(
-        optimisticProcessor.processSignedBeaconBlock(signedBlock)))
+    proc(signedBlock: altair.SignedBeaconBlock): ValidationResult =
+      toValidationResult(optimisticProcessor.processSignedBeaconBlock(signedBlock))
+    ,
+  )
   network.addValidator(
     getBeaconBlocksTopic(forkDigests.bellatrix),
-    proc (signedBlock: bellatrix.SignedBeaconBlock): ValidationResult =
-      toValidationResult(
-        optimisticProcessor.processSignedBeaconBlock(signedBlock)))
+    proc(signedBlock: bellatrix.SignedBeaconBlock): ValidationResult =
+      toValidationResult(optimisticProcessor.processSignedBeaconBlock(signedBlock))
+    ,
+  )
   network.addValidator(
     getBeaconBlocksTopic(forkDigests.capella),
-    proc (signedBlock: capella.SignedBeaconBlock): ValidationResult =
-      toValidationResult(
-        optimisticProcessor.processSignedBeaconBlock(signedBlock)))
+    proc(signedBlock: capella.SignedBeaconBlock): ValidationResult =
+      toValidationResult(optimisticProcessor.processSignedBeaconBlock(signedBlock))
+    ,
+  )
   network.addValidator(
     getBeaconBlocksTopic(forkDigests.deneb),
-    proc (signedBlock: deneb.SignedBeaconBlock): ValidationResult =
-      toValidationResult(
-        optimisticProcessor.processSignedBeaconBlock(signedBlock)))
+    proc(signedBlock: deneb.SignedBeaconBlock): ValidationResult =
+      toValidationResult(optimisticProcessor.processSignedBeaconBlock(signedBlock))
+    ,
+  )
   lightClient.installMessageValidators()
 
   waitFor network.startListening()
@@ -182,31 +198,29 @@ proc run*(config: VerifiedProxyConf, ctx: ptr Context) {.raises: [CatchableError
   waitFor verifiedProxy.verifyChaindId()
 
   proc onFinalizedHeader(
-      lightClient: LightClient, finalizedHeader: ForkedLightClientHeader) =
+      lightClient: LightClient, finalizedHeader: ForkedLightClientHeader
+  ) =
     withForkyHeader(finalizedHeader):
       when lcDataFork > LightClientDataFork.None:
-        info "New LC finalized header",
-          finalized_header = shortLog(forkyHeader)
+        info "New LC finalized header", finalized_header = shortLog(forkyHeader)
         if headerCallback != nil:
           try:
             headerCallback(Json.encode(forkyHeader), 0)
           except SerializationError as e:
             notice "finalizedHeaderCallback exception"
 
-
   proc onOptimisticHeader(
-      lightClient: LightClient, optimisticHeader: ForkedLightClientHeader) =
+      lightClient: LightClient, optimisticHeader: ForkedLightClientHeader
+  ) =
     withForkyHeader(optimisticHeader):
       when lcDataFork > LightClientDataFork.None:
-        info "New LC optimistic header",
-          optimistic_header = shortLog(forkyHeader)
+        info "New LC optimistic header", optimistic_header = shortLog(forkyHeader)
         optimisticProcessor.setOptimisticHeader(forkyHeader.beacon)
         if headerCallback != nil:
           try:
             headerCallback(Json.encode(forkyHeader), 1)
           except SerializationError as e:
-              notice "optimisticHeaderCallback exception"
-
+            notice "optimisticHeaderCallback exception"
 
   lightClient.onFinalizedHeader = onFinalizedHeader
   lightClient.onOptimisticHeader = onOptimisticHeader
@@ -229,18 +243,19 @@ proc run*(config: VerifiedProxyConf, ctx: ptr Context) {.raises: [CatchableError
 
       targetGossipState = getTargetGossipState(
         slot.epoch, cfg.ALTAIR_FORK_EPOCH, cfg.BELLATRIX_FORK_EPOCH,
-        cfg.CAPELLA_FORK_EPOCH, cfg.DENEB_FORK_EPOCH, isBehind)
+        cfg.CAPELLA_FORK_EPOCH, cfg.DENEB_FORK_EPOCH, isBehind
+      )
 
-    template currentGossipState(): auto = blocksGossipState
+    template currentGossipState(): auto =
+      blocksGossipState
+
     if currentGossipState == targetGossipState:
       return
 
     if currentGossipState.card == 0 and targetGossipState.card > 0:
-      debug "Enabling blocks topic subscriptions",
-        wallSlot = slot, targetGossipState
+      debug "Enabling blocks topic subscriptions", wallSlot = slot, targetGossipState
     elif currentGossipState.card > 0 and targetGossipState.card == 0:
-      debug "Disabling blocks topic subscriptions",
-        wallSlot = slot
+      debug "Disabling blocks topic subscriptions", wallSlot = slot
     else:
       # Individual forks added / removed
       discard
@@ -256,8 +271,8 @@ proc run*(config: VerifiedProxyConf, ctx: ptr Context) {.raises: [CatchableError
     for gossipFork in newGossipForks:
       let forkDigest = forkDigests[].atConsensusFork(gossipFork)
       network.subscribe(
-        getBeaconBlocksTopic(forkDigest), blocksTopicParams,
-        enableTopicMetrics = true)
+        getBeaconBlocksTopic(forkDigest), blocksTopicParams, enableTopicMetrics = true
+      )
 
     blocksGossipState = targetGossipState
 
@@ -295,7 +310,7 @@ proc run*(config: VerifiedProxyConf, ctx: ptr Context) {.raises: [CatchableError
 
 when isMainModule:
   {.pop.}
-  var config = makeBannerAndConfig(
-    "Nimbus verified proxy " & fullVersionStr, VerifiedProxyConf)
+  var config =
+    makeBannerAndConfig("Nimbus verified proxy " & fullVersionStr, VerifiedProxyConf)
   {.push raises: [].}
   run(config, nil)
