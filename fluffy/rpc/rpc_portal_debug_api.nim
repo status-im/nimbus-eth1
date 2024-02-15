@@ -16,10 +16,31 @@ import
 
 export rpcserver
 
-# Non-spec-RPCs that are (currently) useful for testing & debugging
+# Non-spec-RPCs that are used for testing, debugging and seeding data without a
+# bridge.
 proc installPortalDebugApiHandlers*(
     rpcServer: RpcServer|RpcProxy, p: PortalProtocol, network: static string) =
 
+  ## Portal debug API calls related to storage and seeding from Era1 files.
+  rpcServer.rpc("portal_" & network & "GossipHeaders") do(
+      era1File: string, epochAccumulatorFile: Opt[string]) -> bool:
+    let res = await p.historyGossipHeadersWithProof(
+      era1File, epochAccumulatorFile)
+    if res.isOk():
+      return true
+    else:
+      raise newException(ValueError, $res.error)
+
+  rpcServer.rpc("portal_" & network & "GossipBlockContent") do(
+      era1File: string) -> bool:
+    let res = await p.historyGossipBlockContent(era1File)
+    if res.isOk():
+      return true
+    else:
+      raise newException(ValueError, $res.error)
+
+  ## Portal debug API calls related to storage and seeding
+  ## TODO: To be removed/replaced with the Era1 versions where applicable.
   rpcServer.rpc("portal_" & network & "_storeContent") do(
       dataFile: string) -> bool:
     let res = p.historyStore(dataFile)
