@@ -246,6 +246,11 @@ type
       defaultValueDesc: $defaultDisablePoke
       name: "disable-poke" .}: bool
 
+    stateNetworkEnabled* {.
+      desc: "Enable State Network"
+      defaultValue: false
+      name: "state" .}: bool
+
     case cmd* {.
       command
       defaultValue: noCommand .}: PortalCmd
