@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -67,14 +67,15 @@ const
 template logTxt(info: static[string]): static[string] =
   "Accounts heal " & info
 
-proc `$`(node: NodeSpecs): string =
-  node.partialPath.toHex
+when false:
+  proc `$`(node: NodeSpecs): string =
+    node.partialPath.toHex
+
+  proc `$`(iv: NodeTagRange): string =
+    iv.fullPC3
 
 proc `$`(rs: NodeTagRangeSet): string =
   rs.fullPC3
-
-proc `$`(iv: NodeTagRange): string =
-  iv.fullPC3
 
 proc toPC(w: openArray[NodeSpecs]; n: static[int] = 3): string =
   let sumUp = w.mapIt(it.hexaryEnvelope.len).foldl(a+b, 0.u256)
@@ -194,6 +195,8 @@ proc getNodesFromNetwork(
     when extraTraceMessages:
       trace logTxt "reply error", peer, ctx=buddy.healingCtx(env),
          error, stop=ok
+    else:
+      discard ok
 
   return @[]
 

@@ -59,7 +59,6 @@ import
   chronicles,
   eth/common,
   results,
-  stew/byteutils,
   "."/[aristo_desc, aristo_get, aristo_hike, aristo_layers, aristo_serialise,
        aristo_utils, aristo_vid]
 
@@ -89,9 +88,9 @@ logScope:
 # Private helpers
 # ------------------------------------------------------------------------------
 
-template logTxt(info: static[string]): static[string] =
-  "Hashify " & info
-
+when false:
+  template logTxt(info: static[string]): static[string] =
+    "Hashify " & info
 
 func getOrVoid(tab: BackVidTab; vid: VertexID): FollowUpVid =
   tab.getOrDefault(vid, FollowUpVid())
@@ -220,7 +219,6 @@ proc updateSchedule(
               root:  root, # Jump to main tree
               toVid: leaf.vid)
         break findlegInx
-      vid = leaf.vid
 
     # If possible, compute a node from the current vertex with all links
     # resolved on the cache layer. If this is not possible, stop here and

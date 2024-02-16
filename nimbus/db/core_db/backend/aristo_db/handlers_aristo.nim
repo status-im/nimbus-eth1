@@ -287,7 +287,9 @@ proc newTrieCtx(
         break body
 
       # Use cached descriptor
-      let ctx = AristoCoreDxMptRef(base.mptCache[trie.kind]).ctx
+      # AristoCoreDxMptRef(base.mptCache[trie.kind])
+
+      let ctx = base.mptCache[trie.kind].ctx
       if not trie.ctx.isValid:
         trie.ctx = ctx
         return ok(trie)
@@ -946,7 +948,8 @@ proc destroy*(base: AristoBaseRef; flush: bool) =
   # Don't recycle pre-configured shared handler
   base.accCache.AristoCoreDxAccRef.ctx.mpt = AristoDbRef(nil)
   for w in base.mptCache:
-    w.AristoCoreDxMptRef.ctx.mpt = AristoDbRef(nil)
+    # w is a AristoCoreDxMptRef
+    w.ctx.mpt = AristoDbRef(nil)
 
   # Clean up desctructor queue
   base.gc()

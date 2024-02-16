@@ -47,7 +47,7 @@ template noExceptionOops(info: static[string]; code: untyped) =
     code
   except RlpError:
     return err(RlpEncoding)
-  except CatchableError as e:
+  except CatchableError:
     return err(SlotsNotFound)
 
 # ------------------------------------------------------------------------------
@@ -115,7 +115,7 @@ proc importStorageSlots(
     data: AccountSlots;        ## Account storage descriptor
     proof: seq[SnapProof];    ## Storage slots proof data
       ): Result[seq[NodeSpecs],HexaryError]
-      {.gcsafe, raises: [CatchableError,KeyError].} =
+      {.gcsafe, raises: [CatchableError].} =
   ## Process storage slots for a particular storage root. See `importAccounts()`
   ## for comments on the return value.
   let

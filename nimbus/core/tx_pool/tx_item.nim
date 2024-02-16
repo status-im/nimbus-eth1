@@ -13,8 +13,9 @@
 ##
 
 import
-  std/[hashes, sequtils, strutils, times],
+  std/[hashes, times],
   ../../utils/ec_recover,
+  ../../utils/utils,
   ./tx_info,
   eth/[common, keys],
   stew/results
@@ -242,7 +243,7 @@ proc `info=`*(item: TxItemRef; val: string) =
 
 proc `$`*(w: TxItemRef): string =
   ## Visualise item ID (use for debugging)
-  "<" & w.itemID.data.mapIt(it.toHex(2)).join[24 .. 31].toLowerAscii & ">"
+  "<" & w.itemID.short & ">"
 
 # ------------------------------------------------------------------------------
 # End

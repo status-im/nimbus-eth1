@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -65,8 +65,9 @@ const
 # Private logging helpers
 # ------------------------------------------------------------------------------
 
-template logTxt(info: static[string]): static[string] =
-  "Swap-in " & info
+when false:
+  template logTxt(info: static[string]): static[string] =
+    "Swap-in " & info
 
 proc `$`(node: NodeSpecs): string =
   node.partialPath.toHex
@@ -142,6 +143,8 @@ proc uncoveredEnvelopes(
     trace logTxt "unprocessed envelopes", processed,
       nProcessed=processed.chunks, decomposed,
       nResult=result.len, result=result.toPC
+  else:
+    discard decomposed
 
 
 proc otherProcessedRanges(
@@ -227,7 +230,7 @@ proc swapIn(
             merged += processed.merge iv       # Import range as processed
             unprocessed.reduce iv              # No need to re-fetch
 
-      if merged == 0:                          # Loop control
+      if merged.isZero:                        # Loop control
         break
 
       lapCount.inc

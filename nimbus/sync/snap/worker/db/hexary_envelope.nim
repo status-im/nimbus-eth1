@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -103,12 +103,12 @@ proc toNodeSpecs(nodeKey: Blob; partialPath: Blob): NodeSpecs =
     nodeKey:     nodeKey.convertTo(NodeKey),
     partialPath: partialPath)
 
-
-template noKeyErrorOops(info: static[string]; code: untyped) =
-  try:
-    code
-  except KeyError as e:
-    raiseAssert "Impossible KeyError (" & info & "): " & e.msg
+when false:
+  template noKeyErrorOops(info: static[string]; code: untyped) =
+    try:
+      code
+    except KeyError as e:
+      raiseAssert "Impossible KeyError (" & info & "): " & e.msg
 
 template noRlpErrorOops(info: static[string]; code: untyped) =
   try:
@@ -355,7 +355,7 @@ proc hexaryEnvelopeTouchedBy*(
   let probe = partialPath.hexaryEnvelope
 
   # `probe.len==0`(mod 2^256) => `probe==[0,high]` as `probe` cannot be empty
-  if probe.len == 0:
+  if probe.len.isZero:
     return rangeSet.clone
 
   result = NodeTagRangeSet.init() # return empty set unless coverage

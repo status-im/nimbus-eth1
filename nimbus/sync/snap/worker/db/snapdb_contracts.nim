@@ -23,18 +23,20 @@ type
   SnapDbContractsRef* = ref object of SnapDbBaseRef
     peer: Peer               ## For log messages
 
-const
-  extraTraceMessages = false or true
+when false:
+  const
+    extraTraceMessages = false or true
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
-template noExceptionOops(info: static[string]; code: untyped) =
-  try:
-    code
-  except CatchableError as e:
-    raiseAssert "Not possible -- " & info & ": " & e.msg
+when false:
+  template noExceptionOops(info: static[string]; code: untyped) =
+    try:
+      code
+    except CatchableError as e:
+      raiseAssert "Not possible -- " & info & ": " & e.msg
 
 # ------------------------------------------------------------------------------
 # Private functions

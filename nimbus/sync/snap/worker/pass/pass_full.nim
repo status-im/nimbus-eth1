@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -116,8 +116,8 @@ proc processStaged(buddy: SnapBuddyRef): bool =
   let
     ctx = buddy.ctx
     peer = buddy.peer
-    chainDb = buddy.ctx.chain.db
-    chain = buddy.ctx.chain
+    chainDb = ctx.chain.db
+    chain = ctx.chain
     bq = buddy.only.pass.queue
 
     # Get a work item, a list of headers + bodies

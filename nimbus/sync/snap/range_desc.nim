@@ -233,7 +233,7 @@ proc isEmpty*(iv: NodeTagRange): bool =
 proc isFull*(lrs: NodeTagRangeSet): bool =
   ## Returns `true` if the argument set `lrs` contains of the single
   ## interval [low(NodeTag),high(NodeTag)].
-  lrs.total == 0 and 0 < lrs.chunks
+  lrs.total.isZero and 0 < lrs.chunks
 
 proc isFull*(lrs: openArray[NodeTagRangeSet]): bool =
   ## Variant of `isFull()` where intervals are distributed across several
@@ -423,7 +423,7 @@ proc dump*(
         if n != iv.len and not moan.isNil:
           moan(iv.len - n, iv)
 
-  if 0 == cache.total and 0 < cache.chunks:
+  if cache.total.isZero and 0 < cache.chunks:
     result = "2^256"
     if not ivCarry:
       result &= ":" & $ivTotal

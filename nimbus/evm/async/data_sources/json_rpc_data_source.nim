@@ -22,7 +22,7 @@ import
   eth/p2p,
   eth/p2p/rlpx,
   eth/p2p/private/p2p_types,
-  ../../../sync/protocol,
+  #../../../sync/protocol,
   ../../../db/[core_db, distinct_tries, incomplete_db, storage_types],
   ../data_sources,
   ../../../beacon/web3_eth_conv,
@@ -30,8 +30,8 @@ import
   web3
 
 when defined(legacy_eth66_enabled):
-  import
-    ../../../sync/protocol/eth66 as proto_eth66
+  #import
+    #../../../sync/protocol/eth66 as proto_eth66
   from ../../../sync/protocol/eth66 import getNodeData
 
 export AsyncOperationFactory, AsyncDataSource
@@ -139,7 +139,7 @@ type
 proc fetchAccountAndSlots*(rpcClient: RpcClient, address: EthAddress, slots: seq[UInt256], blockNumber: common.BlockNumber): Future[(Account, AccountProof, seq[StorageProof])] {.async.} =
   let t0 = now()
   debug "Got to fetchAccountAndSlots", address=address, slots=slots, blockNumber=blockNumber
-  let blockNumberUint64 = blockNumber.truncate(uint64)
+  #let blockNumberUint64 = blockNumber.truncate(uint64)
   let a = web3.Address(address)
   let bid = blockId(blockNumber.truncate(uint64))
   debug "About to call eth_getProof", address=address, slots=slots, blockNumber=blockNumber
@@ -167,6 +167,7 @@ proc fetchCode*(client: RpcClient, blockNumber: common.BlockNumber, address: Eth
   fetchCounter += 1
   return fetchedCode
 
+#[
 const bytesLimit = 2 * 1024 * 1024
 const maxNumberOfPeersToAttempt = 3
 
@@ -178,14 +179,14 @@ proc fetchUsingGetTrieNodes(peer: Peer, stateRoot: common.Hash256, paths: seq[Sn
     return r.get.nodes
 
 proc fetchUsingGetNodeData(peer: Peer, nodeHashes: seq[common.Hash256]): Future[seq[seq[byte]]] {.async.} =
-  #[
+
   let r: Option[seq[seq[byte]]] = none[seq[seq[byte]]]() # AARDVARK await peer.getNodeData(nodeHashes)
   if r.isNone:
     raise newException(CatchableError, "AARDVARK: received None in GetNodeData response")
   else:
     echo "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA fetchUsingGetNodeData received nodes: " & $(r.get.data)
     return r.get.data
-  ]#
+
   # AARDVARK whatever
   return @[]
 
@@ -213,10 +214,8 @@ proc findPeersAndMakeSomeCalls[R](peerPool: PeerPool, protocolName: string, prot
 proc findPeersAndMakeSomeAttemptsToCallGetTrieNodes(peerPool: PeerPool, stateRoot: common.Hash256, paths: seq[SnapTriePaths]): Future[seq[Future[seq[seq[byte]]]]] =
   findPeersAndMakeSomeCalls(peerPool, "snap", protocol.snap, (proc(peer: Peer): Future[seq[seq[byte]]] = fetchUsingGetTrieNodes(peer, stateRoot, paths)))
 
-#[
 proc findPeersAndMakeSomeAttemptsToCallGetNodeData(peerPool: PeerPool, stateRoot: Hash256, nodeHashes: seq[Hash256]): Future[seq[Future[seq[seq[byte]]]]] =
   findPeersAndMakeSomeCalls(peerPool, "eth66", eth66, (proc(peer: Peer): Future[seq[seq[byte]]] = fetchUsingGetNodeData(peer, nodeHashes)))
-]#
 
 proc fetchNodes(peerPool: PeerPool, stateRoot: common.Hash256, paths: seq[SnapTriePaths], nodeHashes: seq[common.Hash256]): Future[seq[seq[byte]]] {.async.} =
   let attempts = await findPeersAndMakeSomeAttemptsToCallGetTrieNodes(peerPool, stateRoot, paths)
@@ -225,6 +224,7 @@ proc fetchNodes(peerPool: PeerPool, stateRoot: common.Hash256, paths: seq[SnapTr
   let nodes: seq[seq[byte]] = completedAttempt.read
   info("AARDVARK: fetchNodes received nodes", nodes)
   return nodes
+]#
 
 proc verifyFetchedAccount(stateRoot: common.Hash256, address: EthAddress, acc: Account, accProof: seq[seq[byte]]): Result[void, string] =
   let accKey = toSeq(keccakHash(address).data)

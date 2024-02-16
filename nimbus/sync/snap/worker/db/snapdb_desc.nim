@@ -69,14 +69,15 @@ proc keyPp(a: RepairKey; pv: SnapDbRef): string =
 # Private helper
 # ------------------------------------------------------------------------------
 
-proc clearRockyCacheFile(rocky: RocksStoreRef): bool =
-  if not rocky.isNil:
-    # A cache file might hang about from a previous crash
-    try:
-      discard rocky.clearCacheFile(RockyBulkCache)
-      return true
-    except OSError as e:
-      error "Cannot clear rocksdb cache", exception=($e.name), msg=e.msg
+when false:
+  proc clearRockyCacheFile(rocky: RocksStoreRef): bool =
+    if not rocky.isNil:
+      # A cache file might hang about from a previous crash
+      try:
+        discard rocky.clearCacheFile(RockyBulkCache)
+        return true
+      except OSError as e:
+        error "Cannot clear rocksdb cache", exception=($e.name), msg=e.msg
 
 # ------------------------------------------------------------------------------
 # Public constructor

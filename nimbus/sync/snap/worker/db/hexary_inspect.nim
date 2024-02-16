@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -14,7 +14,7 @@ import
   std/[sequtils, strutils, tables],
   chronicles,
   eth/[common, trie/nibbles],
-  stew/results,
+  stew/[results, byteutils],
   "../.."/[constants, range_desc],
   "."/[hexary_desc, hexary_nodes_helper, hexary_paths]
 
@@ -50,7 +50,7 @@ when extraTraceMessages:
 
 proc ppDangling(a: seq[NodeSpecs]; maxItems = 30): string =
   proc ppBlob(w: Blob): string =
-    w.mapIt(it.toHex(2)).join.toLowerAscii
+    w.toHex.toLowerAscii
   let
     q = a.mapIt(it.partialPath.ppBlob)[0 ..< min(maxItems,a.len)]
     andMore = if maxItems < a.len: ", ..[#" & $a.len & "].." else: ""

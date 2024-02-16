@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -40,11 +40,12 @@ proc pivotMothball*(env: SnapPivotRef) {.gcsafe.}
 template logTxt(info: static[string]): static[string] =
   "Pivot " & info
 
-template ignExceptionOops(info: static[string]; code: untyped) =
-  try:
-    code
-  except CatchableError as e:
-    trace logTxt "Ooops", `info`=info, name=($e.name), msg=(e.msg)
+when false:
+  template ignExceptionOops(info: static[string]; code: untyped) {.used.} =
+    try:
+      code
+    except CatchableError as e:
+      trace logTxt "Ooops", `info`=info, name=($e.name), msg=(e.msg)
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -451,7 +452,7 @@ proc pivotApprovePeer*(buddy: SnapBuddyRef) {.async.} =
     pivotHeader = beaconHeader
 
   # Not ready yet?
-  if pivotHeader.blockNumber == 0:
+  if pivotHeader.blockNumber.isZero:
     buddy.ctrl.stopped = true
 
 # ------------------------------------------------------------------------------

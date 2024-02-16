@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -64,15 +64,9 @@ const
 # Private helpers, logging
 # ------------------------------------------------------------------------------
 
-template logTxt(info: static[string]): static[string] =
-  "Persistent db " & info
-
-# ------------------------------------------------------------------------------
-# Private helpers, logging
-# ------------------------------------------------------------------------------
-
-template logTxt(info: static[string]): static[string] =
-  "Persistent db " & info
+when false:
+  template logTxt(info: static[string]): static[string] =
+    "Persistent db " & info
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -196,7 +190,7 @@ proc persistentContractPut*(
     data: seq[(NodeKey,Blob)];
     base: CoreDbRef;
       ): Result[void,HexaryError]
-      {.gcsafe, raises: [OSError,IOError,KeyError].} =
+      {.gcsafe, raises: [].} =
   ## SST based bulk load on `rocksdb`.
   let dbTx = base.beginTransaction
   defer: dbTx.commit
@@ -229,7 +223,7 @@ proc persistentStateRootPut*(
     let
       rootEntryData = rlp.encode StateRootRegistry(key: backKey, data: data)
       zeroEntryData = rlp.encode StateRootRegistry(key: root)
-      
+
     # Store a new top entry
     db.kvt.put(root.toStateRootKey.toOpenArray, rootEntryData)
 

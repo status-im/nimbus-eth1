@@ -19,6 +19,6 @@ export
 
 static:
   type
-    StopMoaningAboutUnusedEth = EthWireRef
+    StopMoaningAboutUnusedEth {.used.} = EthWireRef
 
 # End

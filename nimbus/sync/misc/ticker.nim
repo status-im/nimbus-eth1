@@ -1,6 +1,6 @@
 # Nimbus - Fetch account and storage states from peers efficiently
 #
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -104,8 +104,9 @@ proc toStr(a: Option[int]): string =
 # Private functions: printing ticker messages
 # ------------------------------------------------------------------------------
 
-template logTxt(info: static[string]): static[string] =
-  "Ticker " & info
+when false:
+  template logTxt(info: static[string]): static[string] =
+    "Ticker " & info
 
 template noFmtError(info: static[string]; code: untyped) =
   try:

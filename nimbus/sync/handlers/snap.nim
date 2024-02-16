@@ -523,7 +523,6 @@ method getTrieNodes*(
   var
     dataAllocated = 0
     timeExceeded = false
-    logPartPath: seq[Blob]
 
   for (stateKey,getFn,partPath,n) in ctx.doTrieNodeSpecs(rootKey, pathGroups):
     # Special case: no data available
