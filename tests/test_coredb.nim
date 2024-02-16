@@ -45,8 +45,10 @@ let
 # ------------------------------------------------------------------------------
 
 when unittest2DisableParamFiltering:
+  import algorithm
+  
   # Filter out local options and pass on the rest to `unittest2`
-  proc cmdLineConfig(): tuple[samples: seq[CaptureSpecs]] =
+  proc cmdLineConfig(): tuple[samples: seq[CaptureSpecs]] {.used.} =
     ## This helper allows to pass additional command line options to the
     ## unit test.
     ##
