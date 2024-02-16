@@ -247,6 +247,7 @@ type
       name: "disable-poke" .}: bool
 
     stateNetworkEnabled* {.
+      hidden
       desc: "Enable State Network"
       defaultValue: false
       name: "state" .}: bool
