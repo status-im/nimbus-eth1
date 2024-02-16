@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -17,6 +17,7 @@ import
   ./interpreter/[gas_meter, gas_costs, op_codes],
   ../common/[common, evmforks],
   ../utils/utils,
+  stew/byteutils,
   chronicles, chronos,
   eth/[keys],
   sets
@@ -26,9 +27,6 @@ export
 
 logScope:
   topics = "vm computation"
-
-when defined(chronicles_log_level):
-  import stew/byteutils
 
 when defined(evmc_enabled):
   import

@@ -55,7 +55,6 @@ proc toNodeBE(
     return ok node
   of Branch:
     let node = NodeRef(vType: Branch, bVid: vtx.bVid)
-    var missing: seq[VertexID]
     for n in 0 .. 15:
       let vid = vtx.bVid[n]
       if vid.isValid:

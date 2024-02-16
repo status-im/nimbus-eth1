@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -88,7 +88,7 @@ proc ppImpl(w: openArray[Blob]; db: HexaryTreeDbRef): string =
 
 proc ppStr(blob: Blob): string =
   if blob.len == 0: ""
-  else: blob.mapIt(it.toHex(2)).join.toLowerAscii.ppImpl(hex = true)
+  else: blob.toHex.toLowerAscii.ppImpl(hex = true)
 
 proc ppImpl(n: RNodeRef; db: HexaryTreeDbRef): string =
   let so = n.state.ord
@@ -111,14 +111,18 @@ proc ppImpl(n: XNodeObj; db: HexaryTreeDbRef): string =
   of Branch:
     "b(" & n.bLink[0..15].ppImpl(db) & "," &  n.bLink[16].ppStr & ")"
 
+func hex(x: int8): string =
+  result.add char((x and 0x0F'i8) + '0'.int8)
+  result = result.toLowerAscii
+
 proc ppImpl(w: RPathStep; db: HexaryTreeDbRef): string =
   let
-    nibble = if 0 <= w.nibble: w.nibble.toHex(1).toLowerAscii else: "ø"
+    nibble = if 0 <= w.nibble: w.nibble.hex else: "ø"
     key = w.key.ppImpl(db)
   "(" & key & "," & nibble & "," & w.node.ppImpl(db) & ")"
 
 proc ppImpl(w: XPathStep; db: HexaryTreeDbRef): string =
-  let nibble = if 0 <= w.nibble: w.nibble.toHex(1).toLowerAscii else: "ø"
+  let nibble = if 0 <= w.nibble: w.nibble.hex else: "ø"
   var key: RepairKey
   discard key.init(w.key)
   "(" & key.ppImpl(db) & "," & $nibble & "," & w.node.ppImpl(db) & ")"

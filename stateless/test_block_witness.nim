@@ -114,7 +114,6 @@ proc blockWitnessMain*(debugMode = false) =
   const
     legacyGSTFolder = "eth_tests" / "LegacyTests" / "Constantinople" / "GeneralStateTests"
     newGSTFolder = "eth_tests" / "GeneralStateTests"
-    legacyBCFolder = "eth_tests" / "LegacyTests" / "Constantinople" / "BlockchainTests"
     newBCFolder = "eth_tests" / "BlockchainTests"
 
   if paramCount() == 0 or not debugMode:

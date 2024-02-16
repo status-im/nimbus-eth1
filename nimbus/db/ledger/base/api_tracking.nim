@@ -211,7 +211,7 @@ proc byElapsed*(t: var LedgerProfFnInx): LedgerProfEla =
   var u: Table[Duration,seq[LedgerFnInx]]
   for fn in LedgerFnInx:
     t.updateTotal fn
-    let (secs,sqSum,count) = t[fn]
+    let (secs,_,count) = t[fn]
     if 0 < count:
       let ela = secs.toDuration
       u.withValue(ela,val):
@@ -230,7 +230,7 @@ proc byMean*(t: var LedgerProfFnInx): LedgerProfMean =
   var u: Table[Duration,seq[LedgerFnInx]]
   for fn in LedgerFnInx:
     t.updateTotal fn
-    let (secs,sqSum,count) = t[fn]
+    let (secs,_,count) = t[fn]
     if 0 < count:
       let ela = (secs / count.float).toDuration
       u.withValue(ela,val):
@@ -250,9 +250,8 @@ proc byVisits*(t: var LedgerProfFnInx): LedgerProfCount =
   var u: Table[int,seq[LedgerFnInx]]
   for fn in LedgerFnInx:
     t.updateTotal fn
-    let (secs,sqSum,count) = t[fn]
+    let (_,_,count) = t[fn]
     if 0 < count:
-      let ela = secs.toDuration
       u.withValue(count,val):
         val[].add fn
       do:

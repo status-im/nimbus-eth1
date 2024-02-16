@@ -74,7 +74,7 @@ func ppFil(w: FilterRef; db = AristoDbRef(nil)): string =
   proc qq(key: Hash256; db: AristoDbRef): string =
     if db.isNil:
       let n = key.to(UInt256)
-      if n == 0: "£ø" else: "£" & $n
+      if n.isZero: "£ø" else: "£" & $n
     else:
       HashKey.fromBytes(key.data).value.pp(db)
   "(" & w.fid.pp & "," & w.src.qq(db) & "->" & w.trg.qq(db) & ")"
@@ -82,8 +82,9 @@ func ppFil(w: FilterRef; db = AristoDbRef(nil)): string =
 func pp(qf: (QueueID,FilterRef); db = AristoDbRef(nil)): string =
   "(" & qf[0].pp & "," & (if qf[1].isNil: "ø" else: qf[1].ppFil(db)) & ")"
 
-proc pp(q: openArray[(QueueID,FilterRef)]; db = AristoDbRef(nil)): string =
-  "{" & q.mapIt(it.pp(db)).join(",") & "}"
+when false:
+  proc pp(q: openArray[(QueueID,FilterRef)]; db = AristoDbRef(nil)): string =
+    "{" & q.mapIt(it.pp(db)).join(",") & "}"
 
 proc pp(q: seq[seq[(QueueID,FilterRef)]]; db = AristoDbRef(nil)): string =
   result = "["

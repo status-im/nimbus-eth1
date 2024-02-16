@@ -352,7 +352,7 @@ proc byElapsed*(t: var CoreDbProfFnInx): CoreDbProfEla =
   var u: Table[Duration,seq[CoreDbFnInx]]
   for fn in CoreDbFnInx:
     t.updateTotal fn
-    let (secs,sqSum,count) = t[fn]
+    let (secs,_,count) = t[fn]
     if 0 < count:
       let ela = secs.toDuration
       u.withValue(ela,val):
@@ -371,7 +371,7 @@ proc byMean*(t: var CoreDbProfFnInx): CoreDbProfMean =
   var u: Table[Duration,seq[CoreDbFnInx]]
   for fn in CoreDbFnInx:
     t.updateTotal fn
-    let (secs,sqSum,count) = t[fn]
+    let (secs,_,count) = t[fn]
     if 0 < count:
       let ela = (secs / count.float).toDuration
       u.withValue(ela,val):
@@ -391,9 +391,8 @@ proc byVisits*(t: var CoreDbProfFnInx): CoreDbProfCount =
   var u: Table[int,seq[CoreDbFnInx]]
   for fn in CoreDbFnInx:
     t.updateTotal fn
-    let (secs,sqSum,count) = t[fn]
+    let (_,_,count) = t[fn]
     if 0 < count:
-      let ela = secs.toDuration
       u.withValue(count,val):
         val[].add fn
       do:

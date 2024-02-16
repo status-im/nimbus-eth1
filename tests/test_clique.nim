@@ -133,10 +133,6 @@ proc runCliqueSnapshot(noisy = true; postProcessOk = false;
             # Verify the final list of signers against the expected ones
             check snapResult == expected
 
-proc runCliqueSnapshot(noisy = true; postProcessOk = false; testId: uint16) =
-  noisy.runCliqueSnapshot(postProcessOk, testIds = {testId})
-
-
 proc runGoerliReplay(noisy = true; showElapsed = false,
                      captureFile = goerliCapture,
                      startAtBlock = 0u64; stopAfterBlock = 0u64) =

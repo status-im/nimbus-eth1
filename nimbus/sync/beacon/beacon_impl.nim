@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -80,7 +80,7 @@ proc jobDone(buddy: BeaconBuddyRef) =
 proc mapBodiesToHeader(buddy: BeaconBuddyRef,
                        job: BeaconJob,
                        bodies: openArray[BlockBody],
-                       reqBodies: openArray[bool]) {.raises: [CatchableError].} =
+                       reqBodies: openArray[bool]) {.raises: [].} =
   var
     headers = system.move(job.getBlocksJob.headers)
     map = initTable[Hash256, int]()
@@ -389,9 +389,6 @@ proc executeGetBodiesJob*(buddy: BeaconBuddyRef, job: BeaconJob): Future[void] {
   buddy.jobDone()
 
 proc executeJob*(buddy: BeaconBuddyRef, job: BeaconJob): Future[void] {.async.} =
-  let
-    ctx = buddy.ctx
-
   try:
     case job.mode
     of bjmGetBody:

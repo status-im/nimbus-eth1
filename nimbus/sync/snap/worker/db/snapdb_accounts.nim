@@ -50,7 +50,7 @@ template noExceptionOops(info: static[string]; code: untyped) =
     raiseAssert "Not possible -- " & info & ": " & e.msg
   except RlpError:
     return err(RlpEncoding)
-  except CatchableError as e:
+  except CatchableError:
     return err(AccountNotFound)
 
 # ------------------------------------------------------------------------------

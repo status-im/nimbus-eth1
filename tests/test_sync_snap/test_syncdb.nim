@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2023 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -96,7 +96,7 @@ proc test_syncdbImportChainBlocks*(
   ## Import block chain (intended use for preparing database dumps)
   var count = 0
   for (h,b) in filePath.undumpBlocks:
-    if h.len == 1 and h[0].blockNumber == 0:
+    if h.len == 1 and h[0].blockNumber.isZero:
       continue
     if h[^1].blockNumber < lastNumber.toBlockNumber:
       check chn.persistBlocks(h,b).isOk

@@ -22,9 +22,12 @@ when CoreDbEnableApiTracking:
 
 const
   ProvideLegacyAPI = CoreDbProvideLegacyAPI
-  logTxt = "CoreDb/itp "
-  legaApiTxt = logTxt & "legacy API"
-  newApiTxt = logTxt & "API"
+
+when ProvideLegacyAPI and CoreDbEnableApiTracking:
+  const
+    logTxt = "CoreDb/itp "
+    legaApiTxt = logTxt & "legacy API"
+    newApiTxt = logTxt & "API"
 
 # Annotation helper(s)
 {.pragma: rlpRaise, gcsafe, raises: [AristoApiRlpError, LegacyApiRlpError].}

@@ -1,6 +1,6 @@
 # Nimbus - Binary compatibility on the host side of the EVMC API interface
 #
-# Copyright (c) 2019-2021 Status Research & Development GmbH
+# Copyright (c) 2019-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -21,12 +21,12 @@ proc accountExists(p: evmc_host_context, address: var evmc_address): c99bool {.c
 
 proc getStorage(p: evmc_host_context, address: var evmc_address,
                 key: var evmc_bytes32): evmc_bytes32
-    {.cdecl, raises: [RlpError].} =
+    {.cdecl, raises: [].} =
   toHost(p).getStorage(address.fromEvmc, key.flip256.fromEvmc).toEvmc.flip256
 
 proc setStorage(p: evmc_host_context, address: var evmc_address,
                 key, value: var evmc_bytes32): evmc_storage_status
-    {.cdecl, raises: [RlpError].} =
+    {.cdecl, raises: [].} =
   toHost(p).setStorage(address.fromEvmc, key.flip256.fromEvmc, value.flip256.fromEvmc)
 
 proc getBalance(p: evmc_host_context,

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -197,7 +197,7 @@ proc fetch*(
   let
     jv = rc.value
     iv = block:
-      if maxLen == 0 or (0 < jv.len and jv.len <= maxLen):
+      if maxLen.isZero or (0 < jv.len and jv.len <= maxLen):
         jv
       else:
         # Note that either:
@@ -217,7 +217,7 @@ proc verify*(q: var UnprocessedRanges): bool =
     # At least one set is empty
     return true
   # So neither set is empty
-  if q[0].total == 0 or q[1].total == 0:
+  if q[0].total.isZero or q[1].total.isZero:
     # At least one set is maximal and the other non-empty
     return false
   # So neither set is empty, not full

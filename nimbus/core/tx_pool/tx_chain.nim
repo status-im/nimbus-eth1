@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2023 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -204,7 +204,7 @@ proc getNonce*(dh: TxChainRef; account: EthAddress): AccountNonce =
   dh.roAcc.getNonce(account)
 
 proc getHeader*(dh: TxChainRef): BlockHeader
-    {.gcsafe,raises: [CatchableError].} =
+    {.gcsafe,raises: [].} =
   ## Generate a new header, a child of the cached `head`
   let gasUsed = if dh.txEnv.receipts.len == 0: 0.GasInt
                 else: dh.txEnv.receipts[^1].cumulativeGasUsed

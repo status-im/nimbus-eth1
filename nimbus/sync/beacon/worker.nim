@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -81,7 +81,7 @@ proc runDaemon*(ctx: BeaconCtxRef) {.async.} =
 
   # Just wake up after long sleep (e.g. client terminated)
   if bmResumeSync in ctx.pool.mode:
-    let ok = await ctx.resumeSync()
+    discard await ctx.resumeSync()
     ctx.pool.mode.excl bmResumeSync
 
   # We get order from engine API

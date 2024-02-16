@@ -266,7 +266,7 @@ iterator aristoKvtPairs*(dsc: CoreDxKvtRef): (Blob,Blob) {.rlpRaise.} =
   for (k,v) in kvt.MemBackendRef.walkPairs p:
     yield (k,v)
 
-iterator aristoMptPairs*(dsc: CoreDxMptRef): (Blob,Blob) {.rlpRaise.} =
+iterator aristoMptPairs*(dsc: CoreDxMptRef): (Blob,Blob) {.noRaise.} =
   let mpt = dsc.to(AristoDbRef)
   for (k,v) in mpt.right LeafTie(root: dsc.rootID):
     yield (k.path.pathAsBlob, mpt.serialise(v).valueOr(EmptyBlob))

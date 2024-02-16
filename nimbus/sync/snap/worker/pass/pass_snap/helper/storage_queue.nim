@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -26,11 +26,6 @@ type
   StoQuSlotsKVP* = KeyedQueuePair[Hash256,SlotsQueueItemRef]
     ## Key-value return code from `SnapSlotsQueue` handler
 
-  StoQuPartialSlotsQueue = object
-    ## Return type for `getOrMakePartial()`
-    stoQu: SlotsQueueItemRef
-    isCompleted: bool
-
 const
   extraTraceMessages = false # or true
     ## Enabled additional logging noise
@@ -39,8 +34,9 @@ const
 # Private helpers
 # ------------------------------------------------------------------------------
 
-template logTxt(info: static[string]): static[string] =
-  "Storage queue " & info
+when false:
+  template logTxt(info: static[string]): static[string] =
+    "Storage queue " & info
 
 proc `$`(rs: NodeTagRangeSet): string =
   rs.fullPC3
@@ -115,6 +111,8 @@ proc updatePartial(
     trace logTxt "updated partially", accKey, iv, jv,
       processed=slots.processed, unprocessed=slots.unprocessed,
       noFullEntry, newEntry, newPartEntry
+  else:
+    discard newPartEntry
 
   env.parkedStorage.excl accKey             # Un-park (if any)
   newEntry
@@ -179,6 +177,7 @@ proc reducePartial(
     iv = acc.subRange.get(otherwise = FullNodeTagRange)
     rc = env.fetchStoragePart.lruFetch stoRoot
 
+  discard notFull
   var entryRemoved = false
   if rc.isErr:
     # This was the last missing range anyway. So there is no need to

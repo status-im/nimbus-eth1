@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2023 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  std/[options, json, strutils],
+  std/[options, json],
   ../common/common,
   stew/byteutils,
   ../vm_state,
@@ -60,19 +60,6 @@ proc debug*(h: BlockHeader): string =
   if h.parentBeaconBlockRoot.isSome:
     result.add "beaconRoot     : " & $h.parentBeaconBlockRoot.get() & "\n"
   result.add "blockHash      : " & $blockHash(h) & "\n"
-
-proc dumpAccount(stateDB: LedgerRef, address: EthAddress): JsonNode =
-  var storage = newJObject()
-  for k, v in stateDB.cachedStorage(address):
-    storage[k.toHex] = %v.toHex
-
-  result = %{
-    "nonce": %toHex(stateDB.getNonce(address)),
-    "balance": %stateDB.getBalance(address).toHex(),
-    "codehash": %($stateDB.getCodeHash(address)),
-    "storageRoot": %($stateDB.getStorageRoot(address)),
-    "storage": storage
-  }
 
 proc dumpAccounts*(vmState: BaseVMState): JsonNode =
   %dumpAccounts(vmState.stateDB)

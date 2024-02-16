@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2023 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -16,8 +16,6 @@ import
   unittest2
 
 const
-  usedStrutils = newSeq[string]().join(" ")
-
   lruCacheLimit = 10
   lruCacheModulo = 13
 
@@ -43,14 +41,15 @@ type
 # Debugging
 # ------------------------------------------------------------------------------
 
-proc `$`(rc: KeyedQueuePair[uint,uint]): string =
-  "(" & $rc.key & "," & $rc.data & ")"
+when false:
+  proc `$`(rc: KeyedQueuePair[uint,uint]): string =
+    "(" & $rc.key & "," & $rc.data & ")"
 
-proc `$`(rc: Result[KeyedQueuePair[uint,uint],void]): string =
-  result = "<"
-  if rc.isOK:
-    result &= $rc.value.key & "," & $rc.value.data
-  result &= ">"
+  proc `$`(rc: Result[KeyedQueuePair[uint,uint],void]): string =
+    result = "<"
+    if rc.isOK:
+      result &= $rc.value.key & "," & $rc.value.data
+    result &= ">"
 
 proc `$`(rc: Result[uint,void]): string =
   result = "<"
@@ -74,8 +73,9 @@ proc say(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
 proc toValue(n: int): uint =
   (n + 1000).uint
 
-proc fromValue(n: uint): int =
-  (n - 1000).int
+when false:
+  proc fromValue(n: uint): int =
+    (n - 1000).int
 
 proc toKey(n: int): uint =
   n.uint
@@ -104,64 +104,56 @@ proc toQueue(a: openArray[int]): KUQueue =
   for n in a:
     result[n.toKey] = n.toValue
 
-proc toUnique(a: openArray[int]): seq[uint] =
-  var q = a.toQueue
-  toSeq(q.nextKeys)
+when false:
+  proc addOrFlushGroupwise(rq: var KUQueue;
+                          grpLen: int; seen: var seq[int]; n: int;
+                          noisy = true) =
+    seen.add n
+    if seen.len < grpLen:
+      return
 
-proc addOrFlushGroupwise(rq: var KUQueue;
-                         grpLen: int; seen: var seq[int]; n: int;
-                         noisy = true) =
-  seen.add n
-  if seen.len < grpLen:
-    return
+    # flush group-wise
+    let rqLen = rq.len
+    noisy.say "updateSeen: deleting ", seen.mapIt($it).join(" ")
+    for a in seen:
+      doAssert rq.delete(a.toKey).value.data == a.toValue
+    doAssert rqLen == seen.len + rq.len
+    seen.setLen(0)
 
-  # flush group-wise
-  let rqLen = rq.len
-  noisy.say "updateSeen: deleting ", seen.mapIt($it).join(" ")
-  for a in seen:
-    doAssert rq.delete(a.toKey).value.data == a.toValue
-  doAssert rqLen == seen.len + rq.len
-  seen.setLen(0)
-
-proc compileGenericFunctions(rq: var KUQueue) =
+proc compileGenericFunctions(rq: var KUQueue) {.used.} =
   ## Verifies that functions compile, at all
   rq.del(0)
   rq[0] = 0 # so `rq[0]` works
   discard rq[0]
 
-  let ignoreValues = (
+  let ignoreValues {.used.} = (
     (rq.append(0,0), rq.push(0,0),
-     rq.replace(0,0),
-     rq.prepend(0,0), rq.unshift(0,0),
-     rq.shift, rq.shiftKey, rq.shiftValue,
-     rq.pop, rq.popKey, rq.popValue,
-     rq.delete(0)),
+    rq.replace(0,0),
+    rq.prepend(0,0), rq.unshift(0,0),
+    rq.shift, rq.shiftKey, rq.shiftValue,
+    rq.pop, rq.popKey, rq.popValue,
+    rq.delete(0)),
 
     (rq.hasKey(0), rq.eq(0)),
 
     (rq.firstKey, rq.secondKey, rq.beforeLastKey, rq.lastKey,
-     rq.nextKey(0), rq.prevKey(0)),
+    rq.nextKey(0), rq.prevKey(0)),
 
     (rq.first, rq.second, rq.beforeLast, rq.last,
-     rq.next(0), rq.prev(0)),
+    rq.next(0), rq.prev(0)),
 
     (rq.firstValue, rq.secondValue, rq.beforeLastValue, rq.lastValue),
 
     (rq == rq, rq.len),
 
     (toSeq(rq.nextKeys), toSeq(rq.nextValues), toSeq(rq.nextPairs),
-     toSeq(rq.prevKeys), toSeq(rq.prevValues), toSeq(rq.prevPairs)))
+    toSeq(rq.prevKeys), toSeq(rq.prevValues), toSeq(rq.prevPairs)))
 
 # ------------------------------------------------------------------------------
 # Test Runners
 # ------------------------------------------------------------------------------
 
 proc runKeyedQueueRlp(noisy = true) =
-  let
-    uniqueKeys = keyList.toUnique
-    numUniqeKeys = keyList.toSeq.mapIt((it,false)).toTable.len
-    numKeyDups = keyList.len - numUniqeKeys
-
   suite "KeyedQueue: RLP stuff":
 
     test &"Simple rlp serialise + reload":
@@ -186,10 +178,10 @@ proc runKeyedQueueRlp(noisy = true) =
 
     block:
       proc append(rw: var RlpWriter; lru: LruCache)
-            {.inline, raises: [KeyError].} =
+            {.used, inline, raises: [KeyError].} =
         rw.append((lru.size,lru.q))
       proc read(rlp: var Rlp; Q: type LruCache): Q
-            {.inline, raises: [KeyError, RlpError].} =
+            {.inline, raises: [RlpError].} =
         (result.size, result.q) = rlp.read((type result.size, type result.q))
 
       test "Rlp serialise & load, append":
@@ -217,7 +209,7 @@ proc runKeyedQueueRlp(noisy = true) =
               c1 = keyList.toLruCache
               value = c1.lruValue(77)
               queue = toSeq(c1.q.nextPairs).mapIt(it.key)
-              values = toSeq(c1.q.nextPairs).mapIt(it.data)
+              values {.used.} = toSeq(c1.q.nextPairs).mapIt(it.data)
 
             noisy.say &"c1: append {value} => {queue}"
             var

@@ -623,7 +623,7 @@ proc fetchBodies(ctx: LegacySyncRef, peer: Peer,
     if bodiesLen == 0:
       raise newException(CatchableError, "Zero block bodies received for request")
     elif bodiesLen < hashes.len:
-      hashes.delete(0, bodiesLen - 1)
+      hashes.delete(0 ..< bodiesLen)
     elif bodiesLen == hashes.len:
       hashes.setLen(0)
     else:

@@ -11,7 +11,7 @@
 ## Testing `CoreDB` wrapper implementation
 
 import
-  std/[algorithm, os, strformat, strutils, times],
+  std/[os, strformat, strutils],
   chronicles,
   eth/common,
   results,
@@ -45,8 +45,10 @@ let
 # ------------------------------------------------------------------------------
 
 when unittest2DisableParamFiltering:
+  import algorithm
+  
   # Filter out local options and pass on the rest to `unittest2`
-  proc cmdLineConfig(): tuple[samples: seq[CaptureSpecs]] =
+  proc cmdLineConfig(): tuple[samples: seq[CaptureSpecs]] {.used.} =
     ## This helper allows to pass additional command line options to the
     ## unit test.
     ##
@@ -96,7 +98,7 @@ when unittest2DisableParamFiltering:
 
 else:
   # Kill the compilation process iff the directive `cmdLineConfig()` is used
-  template cmdLineConfig(): untyped =
+  template cmdLineConfig(): untyped {.used.} =
     {.error: "cmdLineConfig() needs compiler option "&
       " -d:unittest2DisableParamFiltering".}
 

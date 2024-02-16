@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -54,19 +54,20 @@ logScope:
 # Private helpers
 # ------------------------------------------------------------------------------
 
-#template safeExecutor(info: string; code: untyped) =
-#  try:
-#    code
-#  except CatchableError as e:
-#    raise (ref CatchableError)(msg: e.msg)
-#  except Defect as e:
-#    raise (ref Defect)(msg: e.msg)
-#  except:
-#    let e = getCurrentException()
-#    raise newException(TxPackerError, info & "(): " & $e.name & " -- " & e.msg)
+when false:
+  template safeExecutor(info: string; code: untyped) =
+    try:
+      code
+    except CatchableError as e:
+      raise (ref CatchableError)(msg: e.msg)
+    except Defect as e:
+      raise (ref Defect)(msg: e.msg)
+    except:
+      let e = getCurrentException()
+      raise newException(TxPackerError, info & "(): " & $e.name & " -- " & e.msg)
 
 proc persist(pst: TxPackerStateRef)
-    {.gcsafe,raises: [CatchableError].} =
+    {.gcsafe,raises: [].} =
   ## Smart wrapper
   if not pst.cleanState:
     let fork = pst.xp.chain.nextFork
@@ -238,7 +239,7 @@ proc vmExecGrabItem(pst: TxPackerStateRef; item: TxItemRef): Result[bool,void]
 
 
 proc vmExecCommit(pst: TxPackerStateRef)
-    {.gcsafe,raises: [CatchableError].} =
+    {.gcsafe,raises: [].} =
   let
     xp = pst.xp
     vmState = xp.chain.vmState

@@ -22,7 +22,7 @@ import
   ./filters,
   ../core/executor/process_block,
   ../db/ledger,
-  ../../stateless/[witness_verification, witness_types, multi_keys],
+  ../../stateless/[witness_verification, multi_keys],
   ./p2p
 
 type

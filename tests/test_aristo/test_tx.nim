@@ -34,9 +34,6 @@ const
   MaxFilterBulk = 150_000
     ## Policy settig for `pack()`
 
-  WalkStopErr =
-    Result[LeafTie,(VertexID,AristoError)].err((VertexID(0),NearbyBeyondRange))
-
 let
   TxQidLyo = QidSlotLyo.to(QidLayoutRef)
     ## Cascaded filter slots layout for testing
@@ -425,7 +422,7 @@ proc testTxMergeAndDeleteSubTree*(
   var
     prng = PrngDesc.init 42
     db = AristoDbRef()
-    fwdRevVfyToggle = true
+
   defer:
     db.finish(flush=true)
 
@@ -540,7 +537,6 @@ proc testTxMergeProofAndKvpList*(
     let
       testId = idPfx & "#" & $w.id & "." & $n
       runID = n
-      lstLen = list.len
       sTabLen = db.nLayersVtx()
       lTabLen = db.lTab.len
       leafs = w.kvpLst.mapRootVid VertexID(1) # merge into main trie

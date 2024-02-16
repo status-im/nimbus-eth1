@@ -209,7 +209,7 @@ proc validate(db: QTabRef; scd: QidSchedRef; serial: int; relax: bool): bool =
   for chn,queue in db.fifos scd:
     step *= scd.ctx.q[chn].width + 1        # defined by schedule layout
     for kvp in queue:
-      let (qid,val) = (kvp[0], kvp[1])
+      let val = kvp[1]
       if not relax:
         xCheck not val.isNil                # Entries must exist
         xCheck val.fid + step == lastVal    # Item distances must match

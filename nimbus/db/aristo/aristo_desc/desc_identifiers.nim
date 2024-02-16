@@ -159,7 +159,7 @@ func next*(pid: PathID): PathID =
   ##
   ## The function returns the argument `pid` if it is already at its
   ## maximum value `high(PathID)`.
-  if pid.pfx == 0 and pid.length < 64:
+  if pid.pfx.isZero and pid.length < 64:
     PathID(length: pid.length + 1)
   elif pid.pfx < high(UInt256):
     PathID(pfx: pid.pfx + 1, length: 64)
@@ -398,7 +398,7 @@ func `$`*(key: HashKey): string =
     key.blob.toHex & "[#" & $key.blob.len & "]"
 
 func `$`*(a: PathID): string =
-  if a.pfx != 0:
+  if a.pfx.isZero.not:
     var dgts = $a.pfx.toHex
     if a.length < 64:
       dgts = dgts[0 ..< a.length]

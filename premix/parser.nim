@@ -41,7 +41,7 @@ proc prefixHex*(x: Hash256): string =
   "0x" & toLowerAscii($x)
 
 proc prefixHex*(x: int64 | uint64 | byte | int): string =
-  toLowerAscii(encodeQuantity(x.uint64).string)
+  toLowerAscii(encodeQuantity(x.uint64))
 
 proc prefixHex*(x: openArray[byte]): string =
   "0x" & toHex(x, true)

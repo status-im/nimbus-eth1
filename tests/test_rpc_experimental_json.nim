@@ -278,7 +278,7 @@ proc rpcExperimentalJsonMain*() =
     test "Contract storage updated - bytecode should exist in witness":
       for file in importFiles:
         let
-          (com, parentStateRoot, stateRoot, blockNumber) = importBlockDataFromFile(file)
+          (com, parentStateRoot, _, blockNumber) = importBlockDataFromFile(file)
           blockNum = blockId(blockNumber.truncate(uint64))
 
         setupExpRpc(com, rpcServer)
