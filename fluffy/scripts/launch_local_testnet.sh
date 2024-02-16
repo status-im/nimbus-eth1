@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Copyright (c) 2021-2023 Status Research & Development GmbH. Licensed under
+# Copyright (c) 2021-2024 Status Research & Development GmbH. Licensed under
 # either of:
 # - Apache License, version 2.0
 # - MIT license
@@ -315,6 +315,7 @@ for NUM_NODE in $(seq 0 $(( NUM_NODES - 1 ))); do
     --table-ip-limit=1024 \
     --bucket-ip-limit=24 \
     --bits-per-hop=1 \
+    --state=1 \
     ${TRUSTED_BLOCK_ROOT_ARG} \
     ${RADIUS_ARG} \
     ${EXTRA_ARGS} \

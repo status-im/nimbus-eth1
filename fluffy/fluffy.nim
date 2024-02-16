@@ -166,10 +166,14 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
     )
     streamManager = StreamManager.new(d)
 
-    stateNetwork = Opt.some(StateNetwork.new(
-      d, db, streamManager,
-      bootstrapRecords = bootstrapRecords,
-      portalConfig = portalConfig))
+    stateNetwork =
+      if config.stateNetworkEnabled:
+        Opt.some(StateNetwork.new(
+            d, db, streamManager,
+            bootstrapRecords = bootstrapRecords,
+            portalConfig = portalConfig))
+      else:
+        Opt.none(StateNetwork)
 
     accumulator =
       # Building an accumulator from header epoch files takes > 2m30s and is
