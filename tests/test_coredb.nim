@@ -11,7 +11,7 @@
 ## Testing `CoreDB` wrapper implementation
 
 import
-  std/[algorithm, os, strformat, strutils, times],
+  std/[os, strformat, strutils],
   chronicles,
   eth/common,
   results,
@@ -96,7 +96,7 @@ when unittest2DisableParamFiltering:
 
 else:
   # Kill the compilation process iff the directive `cmdLineConfig()` is used
-  template cmdLineConfig(): untyped =
+  template cmdLineConfig(): untyped {.used.} =
     {.error: "cmdLineConfig() needs compiler option "&
       " -d:unittest2DisableParamFiltering".}
 

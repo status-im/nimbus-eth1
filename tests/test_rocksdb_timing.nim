@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2023 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -11,7 +11,7 @@
 ## Snap sync components tester and TDD environment
 
 import
-  std/[distros, os, strformat, strutils, tables],
+  std/[os, strformat, strutils, tables],
   chronicles,
   eth/[common, p2p],
   rocksdb,
@@ -22,6 +22,9 @@ import
   ../nimbus/sync/snap/worker/db/hexary_desc,
   ./replay/pp,
   ./test_rocksdb_timing/[bulk_test_xx, test_db_timing]
+
+when not defined(windows):
+  import distros
 
 const
   baseDir = [".", "..", ".."/"..", $DirSep]

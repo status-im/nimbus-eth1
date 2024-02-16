@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -72,8 +72,9 @@ template logTxt(info: static[string]): static[string] =
 proc `$`(rs: NodeTagRangeSet): string =
   rs.fullPC3
 
-proc `$`(iv: NodeTagRange): string =
-  iv.fullPC3
+when false:
+  proc `$`(iv: NodeTagRange): string =
+    iv.fullPC3
 
 proc fetchCtx(
     buddy: SnapBuddyRef;

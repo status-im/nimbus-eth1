@@ -76,12 +76,13 @@ template startLogging(noisy: bool; num: BlockNumber) =
       setDebugLevel()
       debug "start logging ...", blockNumber=num
 
-template startLogging(noisy: bool) =
-  when EnableExtraLoggingControl:
-    if noisy and logStartTime == Time():
-      logStartTime = getTime()
-      setDebugLevel()
-      debug "start logging ..."
+when false:
+  template startLogging(noisy: bool) =
+    when EnableExtraLoggingControl:
+      if noisy and logStartTime == Time():
+        logStartTime = getTime()
+        setDebugLevel()
+        debug "start logging ..."
 
 template stopLogging(noisy: bool) =
   when EnableExtraLoggingControl:

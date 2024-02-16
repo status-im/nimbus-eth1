@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2023 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -169,12 +169,16 @@ proc test_calcTrieNodeTranscode*() =
       @[@[9.byte]]]
 
   # cook it
-  proc append(w: var RlpWriter; p: SnapTriePaths) = w.snapAppend p
+  proc append(w: var RlpWriter; p: SnapTriePaths) {.used.} =
+    w.snapAppend p
+
   let cooked = rlp.encode raw
   check cooked == rlp.encode cured
 
   # reverse
-  proc read(rlp: var Rlp; T: type SnapTriePaths): T = rlp.snapRead T
+  proc read(rlp: var Rlp; T: type SnapTriePaths): T {.used.} =
+    rlp.snapRead T
+
   check raw == rlp.decode(cooked, seq[SnapTriePaths])
   check cured == rlp.decode(cooked, seq[seq[Blob]])
 

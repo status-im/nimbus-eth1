@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2023 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -105,7 +105,7 @@ proc test_inspectSingleAccountsPersistent*(
     # Must match earlier all-in-one result
     check dangling.len == piecemeal.len
     check dangling.toHashSet == piecemeal
- 
+
 proc test_inspectAccountsInMemDb*(
     inList: seq[seq[UndumpAccounts]];
     memBase: SnapDbRef;
@@ -146,7 +146,6 @@ proc test_inspectAccountsPersistent*(
     let
       root = accList[0].root
       rootKey = root.to(NodeKey)
-      rootSet = [rootKey].toHashSet
       desc = perDesc.dup(root,Peer())
     for w in accList:
       check desc.importAccounts(w.base, w.data, persistent=true).isImportOk

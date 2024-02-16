@@ -82,8 +82,9 @@ func ppFil(w: FilterRef; db = AristoDbRef(nil)): string =
 func pp(qf: (QueueID,FilterRef); db = AristoDbRef(nil)): string =
   "(" & qf[0].pp & "," & (if qf[1].isNil: "ø" else: qf[1].ppFil(db)) & ")"
 
-proc pp(q: openArray[(QueueID,FilterRef)]; db = AristoDbRef(nil)): string =
-  "{" & q.mapIt(it.pp(db)).join(",") & "}"
+when false:
+  proc pp(q: openArray[(QueueID,FilterRef)]; db = AristoDbRef(nil)): string =
+    "{" & q.mapIt(it.pp(db)).join(",") & "}"
 
 proc pp(q: seq[seq[(QueueID,FilterRef)]]; db = AristoDbRef(nil)): string =
   result = "["

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2023 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -59,10 +59,6 @@ type
     info: string
     file: string
     chn: ChainRef
-
-var
-  xTmpDir: string
-  xDbs: TestDbs                   # for repeated storage/overwrite tests
 
 # ------------------------------------------------------------------------------
 # Helpers
@@ -273,7 +269,7 @@ proc storagesRunner(
     noisy = true;
     persistent = true;
     sample = storSample;
-    knownFailures: seq[(string,seq[(int,HexaryError)])] = @[]) =
+    knownFailures: seq[(string,seq[(int,HexaryError)])] = @[]) {.used.} =
   let
     accLst = sample.to(seq[UndumpAccounts])
     stoLst = sample.to(seq[UndumpStorages])
@@ -380,7 +376,7 @@ proc miscRunner(noisy = true) =
       test_calcBlockBodyTranscode()
 
 
-proc snapRunner(noisy = true; specs: SnapSyncSpecs) =
+proc snapRunner(noisy = true; specs: SnapSyncSpecs) {.used.} =
   let
     tailInfo = specs.tailBlocks.splitPath.tail.replace(".txt.gz","")
     tailPath = specs.tailBlocks.findFilePath.value
