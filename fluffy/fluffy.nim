@@ -308,15 +308,19 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
     let
       address = config.metricsAddress
       port = config.metricsPort
-    info "Starting metrics HTTP server",
       url = "http://" & $address & ":" & $port & "/metrics"
+
+      server = MetricsHttpServerRef.new($address, port).valueOr:
+        error "Could not instantiate metrics HTTP server", url, error
+        quit QuitFailure
+
+    info "Starting metrics HTTP server", url
     try:
-      chronos_httpserver.startMetricsHttpServer($address, port)
-    except CatchableError as exc:
-      raise exc
-    # TODO: Ideally we don't have the Exception here
-    except Exception as exc:
-      raiseAssert exc.msg
+      waitFor server.start()
+    except MetricsError as exc:
+      fatal "Could not start metrics HTTP server",
+        url, error_msg = exc.msg, error_name = exc.name
+      quit QuitFailure
 
   ## Starting the different networks.
   d.start()
