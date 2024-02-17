@@ -20,12 +20,14 @@ import
   ../../nimbus/db/ledger/base/base_desc,
   ../../nimbus/db/core_db/base/base_desc,
   ../../nimbus/db/core_db/backend/legacy_rocksdb,
+  ../../nimbus/db/core_db/backend/legacy_db,
   ../../nimbus/db/core_db/base_iterators,
   ../../nimbus/evm/types,
   ../replay/[pp, undump_blocks, xcheck],
   ./test_helpers,
   ../../vendor/nim-rocksdb/rocksdb,
-  ../../vendor/nim-stew/stew/byteutils
+  ../../vendor/nim-stew/stew/byteutils,
+  ../../vendor/nim-eth/eth/trie/hexary
 
 type StopMoaningAboutLedger {.used.} = LedgerType
 
@@ -137,21 +139,21 @@ proc ledgerProfResults(info: string; indent = 4): string =
         w.mapIt($it & ledgerProfTab.stats(it).pp).sorted.join(", ")
 
 
-proc createFileAndLogBlockHeaders(lastBlock: BlockHeader, vmState: BaseVMState, name: string): Stream =
+proc createFileAndLogBlockHeaders(lastBlock: BlockHeader, vmState: BaseVMState, name: string): tuple[stream: Stream, path: string] =
   let blockNumber = lastBlock.blockNumber.truncate(uint)
   let baseDir = cast[LegaPersDbRef](vmState.com.db).rdb.store.dbPath
-  let path = &"{baseDir}/{name}_at_block_{blockNumber}.dump"
+  let path = &"{baseDir}/_block_{blockNumber}_dump_{name}.txt"
   let stream = newFileStream(path, fmWrite)
   stream.writeLine(&"# Block number: {blockNumber}")
   stream.writeLine(&"# Block time: {lastBlock.timestamp.int64.fromUnix.utc}")
   stream.writeLine(&"# Block root hash: {$lastBlock.stateRoot}")
   stream.writeLine("#")
-  echo &"Block {blockNumber} reached; dumping world state key-values into {path}"
-  return stream
+  return (stream, path)
 
 
 proc dumpWorldStateKvs(lastBlock: BlockHeader, vmState: BaseVMState) =
-  let stream = createFileAndLogBlockHeaders(lastBlock, vmState, "all_kvs")
+  let (stream, path) = createFileAndLogBlockHeaders(lastBlock, vmState, "all_kvs")
+  echo &"Block {lastBlock.blockNumber} reached; dumping world state key-values into {path}"
   defer:
     try: stream.close() except: discard
   let mpt = cast[CoreDxMptRef](vmState.stateDB.extras.getMptFn())
@@ -162,7 +164,8 @@ proc dumpWorldStateKvs(lastBlock: BlockHeader, vmState: BaseVMState) =
 
 
 proc dumpWorldStateMptAccounts(lastBlock: BlockHeader, vmState: BaseVMState) =
-  let stream = createFileAndLogBlockHeaders(lastBlock, vmState, "mpt_accounts")
+  let (stream, path) = createFileAndLogBlockHeaders(lastBlock, vmState, "mpt_accounts")
+  echo &"Block {lastBlock.blockNumber} reached; dumping world state accounts into {path}"
   defer:
     try: stream.close() except: discard
   let accMethods = vmState.stateDB.methods
@@ -173,8 +176,25 @@ proc dumpWorldStateMptAccounts(lastBlock: BlockHeader, vmState: BaseVMState) =
     let codeHash: Hash256 = accMethods.getCodeHashFn(address)
     let codeSize: int = accMethods.getCodeSizeFn(address)
     let storageRoot: Hash256 = accMethods.getStorageRootFn(address)
-    stream.writeLine(&"address={address.toHex}  addrHash={addressHash.toHex}  balance={balance.toHex:>22}  nonce={nonce:>6}  codeHash={$codeHash}  codeSize={codeSize:>6}  storageRoot={$storageRoot}")
+    let code: Blob = accMethods.getCodeFn(address)
+    var storage: string = "|"
+    if storageRoot != EMPTY_ROOT_HASH:
+      for i in 0..<10:
+        storage.add $accMethods.getStorageFn(address, i.u256)
+        storage.add '|'
+    stream.writeLine(&"address={address.toHex}  addrHash={addressHash.toHex}  balance={balance.toHex:>22}  nonce={nonce:>6}  codeHash={$codeHash}  codeSize={codeSize:>6}  storageRoot={$storageRoot}  code={code.toHex}  storage={storage}...")
 
+
+proc dumpWorldStateTree(lastBlock: BlockHeader, vmState: BaseVMState) =
+  let (stream, path) = createFileAndLogBlockHeaders(lastBlock, vmState, "mpt_tree")
+  echo &"Block {lastBlock.blockNumber} reached; dumping world state tree into {path}"
+  defer:
+    try: stream.close() except: discard
+  var ldbref: LegacyDbRef = vmState.com.db.LegacyDbRef
+  let tdb = ldbref.tdb
+  var trie: CoreDbTrieRef = LegacyCoreDbTrie(root: lastBlock.stateRoot)
+  var mpt = HexaryChildDbRef(trie: initHexaryTrie(tdb, trie.LegacyCoreDbTrie.root, false))
+  mpt.trie.dumpTree(stream)
 
 # ------------------------------------------------------------------------------
 # Public test function
@@ -245,6 +265,7 @@ proc test_chainSync*(
           inc dataDumpsPerformed
           dumpWorldStateKvs(w[0][^1], vmState)
           dumpWorldStateMptAccounts(w[0][^1], vmState)
+          dumpWorldStateTree(w[0][^1], vmState)
 
       continue
 

@@ -25,14 +25,14 @@ type
 
   LegacyDbRef* = ref object of CoreDbRef
     kvt: CoreDxKvtRef       ## Cache, no need to rebuild methods descriptor
-    tdb: TrieDatabaseRef    ## Descriptor reference copy captured with closures
+    tdb*: TrieDatabaseRef    ## Descriptor reference copy captured with closures
     top: LegacyCoreDxTxRef  ## Top transaction (if any)
 
   LegacyDbClose* = proc() {.gcsafe, raises: [].}
     ## Custom destructor
 
-  HexaryChildDbRef = ref object
-    trie: HexaryTrie              ## For closure descriptor for capturing
+  HexaryChildDbRef* = ref object
+    trie*: HexaryTrie              ## For closure descriptor for capturing
     when CoreDbEnableApiTracking:
       kind: CoreDbSubTrie         ## Current sub-trie
       address: Option[EthAddress] ## For storage tree debugging
@@ -50,7 +50,7 @@ type
     appDb: LegacyDbRef
 
   LegacyCoreDbTrie* = ref object of CoreDbTrieRef
-    root: Hash256                 ## Hash key
+    root*: Hash256                 ## Hash key
     when CoreDbEnableApiTracking:
       kind: CoreDbSubTrie         ## Current sub-trie
       address: Option[EthAddress] ## For storage tree debugging
