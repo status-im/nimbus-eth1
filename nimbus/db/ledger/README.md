@@ -1,3 +1,111 @@
+`accounts_cache.nim` class diagram
+==================================
+
+```mermaid
+classDiagram
+
+  class AccountsCache {
+    AccountsTrie
+    SavePoint
+    WitnessCache
+    isDirty: bool
+    %% ripemdSpecial: bool
+  }
+  AccountsCache *-- SavePoint
+  AccountsCache *-- WitnessCache
+
+    %% TBD: AccountsTrie
+
+    class SavePoint {
+      parent Savepoint
+      cache
+      selfDestruct: EthAddress []
+      %% logEntries: Log []
+      %% AccessList
+      TransientStorage
+      TransactionState
+    }
+    SavePoint o-- SavePoint
+    SavePoint *-- cache
+    SavePoint *-- TransientStorage
+    SavePoint *-- TransactionState
+
+      class cache {
+        EthAddress → RefAccount
+        EthAddress → RefAccount
+        ...
+      }
+      cache o-- "*" RefAccount
+
+        class RefAccount {
+          Account
+          AccountFlags
+          code: seq[byte]
+          original: StorageTable
+          overlay: StorageTable
+        }
+        RefAccount o-- Account
+        RefAccount *-- "*" AccountFlag
+        RefAccount *-- StorageTable
+
+          class Account {
+            nonce
+            balance
+            storageRoot
+            codeHash
+          }
+
+          class AccountFlag {
+            <<enumeration>>
+            Alive
+            IsNew
+            Dirty
+            Touched
+            CodeLoaded
+            CodeChanged
+            StorageChanged
+            NewlyCreated
+          }
+
+      class TransientStorage {
+        EthAddress → StorageTable
+        EthAddress → StorageTable
+        ...
+      }
+      TransientStorage *-- "*" StorageTable
+
+      class StorageTable {
+        UInt256 → UInt256
+        UInt256 → UInt256
+        ...
+      }
+
+      class TransactionState {
+        <<enumeration>>
+        Pending
+        Committed
+        RolledBack
+      }
+
+    class WitnessCache {
+      EthAddress → WitnessData
+      EthAddress → WitnessData
+      ...
+    }
+    WitnessCache *-- WitnessData
+
+      class WitnessData {
+        storageKeys: UInt256[]
+        codeTouched: bool
+      }
+
+
+
+```
+
+<!-- To edit live in VSCode, download the Markdown Preview Mermaid Support extension -->
+
+
 The file `accounts_cache.nim` has been relocated
 ================================================
 
