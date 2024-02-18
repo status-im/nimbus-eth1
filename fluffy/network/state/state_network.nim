@@ -134,8 +134,8 @@ proc gossipContent*(
     of contractTrieNode:
       await recursiveGossipContractTrieNode(p, maybeSrcNodeId, decodedKey, decodedValue)
     of contractCode:
-      await neighborhoodGossipDiscardPeers(
-        p, maybeSrcNodeId, ContentKeysList.init(@[contentKey]), @[contentValue]
+      await p.neighborhoodGossipDiscardPeers(
+        maybeSrcNodeId, ContentKeysList.init(@[contentKey]), @[contentValue]
       )
 
 proc new*(
@@ -163,31 +163,6 @@ proc new*(
     contentQueue: cq
   )
 
-proc decodeKV(contentKey: ByteList, contentValue: seq[byte]): Opt[(ContentKey, OfferContentValue)] =
-  const empty = Opt.none((ContentKey, OfferContentValue))
-  let
-    key = contentKey.decode().valueOr:
-      warn "Cant decode content key"
-      return empty
-    value = case key.contentType:
-      of unused:
-        warn "Received content with unused content type"
-        return Opt.none((ContentKey, OfferContentValue))
-      of accountTrieNode:
-        let val = decodeSsz(contentValue, AccountTrieNodeOffer).valueOr:
-          return empty
-        OfferContentValue(contentType: accountTrieNode, accountTrieNode: val)
-      of contractTrieNode:
-        let val = decodeSsz(contentValue, ContractTrieNodeOffer).valueOr:
-          return empty
-        OfferContentValue(contentType: contractTrieNode, contractTrieNode: val)
-      of contractCode:
-        let val = decodeSsz(contentValue, ContractCodeOffer).valueOr:
-          return empty
-        OfferContentValue(contentType: contractCode, contractCode: val)
-
-  Opt.some((key, value))
-
 proc processContentLoop(n: StateNetwork) {.async.} =
   try:
     while true:
@@ -196,13 +171,14 @@ proc processContentLoop(n: StateNetwork) {.async.} =
         let
           contentKey = contentKeys[i]
           (decodedKey, decodedValue) = decodeKV(contentKey, contentValue).valueOr:
-            warn "Unable to decode offered Key/Value"
-            continue
-          contentId = n.portalProtocol.toContentId(contentKey).valueOr:
-            error "Received offered content with invalid content key", contentKey
+            error "Unable to decode offered Key/Value"
             continue
         if validateContent(decodedKey, decodedValue):
-          let valueForRetrieval = decodedValue.offerContentToRetrievalContent().encode()
+          let
+            valueForRetrieval = decodedValue.offerContentToRetrievalContent().encode()
+            contentId = n.portalProtocol.toContentId(contentKey).valueOr:
+              error "Received offered content with invalid content key", contentKey
+              continue
 
           n.portalProtocol.storeContent(contentKey, contentId, valueForRetrieval)
 
