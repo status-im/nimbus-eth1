@@ -167,16 +167,19 @@ macro outgoingRequestDecorator(n: untyped): untyped =
     trackOutgoingRequest(peer.networkState(les),
                          peer.state(les),
                          perProtocolMsgId, reqId, `costQuantity`)
-  # echo result.repr
+  #echo "outgoingRequestDecorator: ", result.repr
 
 macro incomingResponseDecorator(n: untyped): untyped =
   result = n
 
   let trackingCall = quote do:
-    trackIncomingResponse(peer.state(les), reqId, msg.bufValue)
+    try:
+      trackIncomingResponse(peer.state(les), reqId, msg.bufValue)
+    except KeyError as exc:
+      raise newException(EthP2PError, exc.msg)
 
   result.body.insert(n.body.len - 1, trackingCall)
-  # echo result.repr
+  #echo "incomingResponseDecorator: ", result.repr
 
 macro incomingRequestDecorator(n: untyped): untyped =
   result = n
@@ -195,8 +198,9 @@ macro incomingRequestDecorator(n: untyped): untyped =
                                perProtocolMsgId,
                                requestCostQuantity): return
 
-  result.body.insert(1, getAst(acceptStep(costQuantity, maxQuantity)))
-  # echo result.repr
+  let zero = result.body[0][0]
+  zero.insert(1, getAst(acceptStep(costQuantity, maxQuantity)))
+  #echo "incomingRequestDecorator: ", result.repr
 
 template updateBV: BufValueInt =
   bufValueAfterRequest(lesNetwork, lesPeer,
