@@ -152,16 +152,28 @@ func toContentId*(contentKey: ByteList): ContentId =
 func toContentId*(contentKey: ContentKey): ContentId =
   toContentId(encode(contentKey))
 
-func offerContentToEncodedRetrievalContent*(offerContent: OfferContentValue): seq[byte] =
+func offerContentToRetrievalContent*(offerContent: OfferContentValue): RetrievalContentValue =
   case offerContent.contentType:
     of unused:
-      raiseAssert "Gossiping content with unused content type"
+      raiseAssert "Converting content with unused content type"
     of accountTrieNode:
-      SSZ.encode(AccountTrieNodeRetrieval(node: offerContent.accountTrieNode.proof[^1])) # TODO implement properly
+      RetrievalContentValue(contentType: accountTrieNode, accountTrieNode: AccountTrieNodeRetrieval(node: offerContent.accountTrieNode.proof[^1])) # TODO implement properly
     of contractTrieNode:
-      SSZ.encode(ContractTrieNodeRetrieval(node: offerContent.contractTrieNode.storageProof[^1])) # TODO implement properly
+      RetrievalContentValue(contentType: contractTrieNode, contractTrieNode: ContractTrieNodeRetrieval(node: offerContent.contractTrieNode.storageProof[^1])) # TODO implement properly
     of contractCode:
-      SSZ.encode(ContractCodeRetrieval(code: offerContent.contractCode.code))
+      RetrievalContentValue(contentType: contractCode, contractCode: ContractCodeRetrieval(code: offerContent.contractCode.code))
+
+func encode*(content: RetrievalContentValue): seq[byte] =
+  case content.contentType:
+    of unused:
+      raiseAssert "Encoding content with unused content type"
+    of accountTrieNode:
+      SSZ.encode(content.accountTrieNode)
+    of contractTrieNode:
+      SSZ.encode(content.contractTrieNode)
+    of contractCode:
+      SSZ.encode(content.contractCode)
+
 
 func packNibbles*(nibbles: seq[byte]): Nibbles =
   doAssert(nibbles.len() <= MAX_UNPACKED_NIBBLES_LEN, "Can't pack more than 64 nibbles")

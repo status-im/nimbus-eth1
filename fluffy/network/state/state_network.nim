@@ -202,7 +202,7 @@ proc processContentLoop(n: StateNetwork) {.async.} =
             error "Received offered content with invalid content key", contentKey
             continue
         if validateContent(decodedKey, decodedValue):
-          let valueForRetrieval = decodedValue.offerContentToEncodedRetrievalContent()
+          let valueForRetrieval = decodedValue.offerContentToRetrievalContent().encode()
 
           n.portalProtocol.storeContent(contentKey, contentId, valueForRetrieval)
 
