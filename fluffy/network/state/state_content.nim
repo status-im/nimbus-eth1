@@ -98,6 +98,33 @@ type
   ContractCodeRetrieval* = object
     code*: Bytecode
 
+  OfferContentValueType* = enum
+    accountTrieNodeOffer,
+    contractTrieNodeOffer,
+    contractCodeOffer,
+
+  OfferContentValue* = object
+    case contentType*: ContentType
+    of unused:
+      discard
+    of accountTrieNode:
+      accountTrieNode*: AccountTrieNodeOffer
+    of contractTrieNode:
+      contractTrieNode*: ContractTrieNodeOffer
+    of contractCode:
+      contractCode*: ContractCodeOffer
+
+  RetrievalContentValue* = object
+    case contentType*: ContentType
+    of unused:
+      discard
+    of accountTrieNode:
+      accountTrieNode*: AccountTrieNodeRetrieval
+    of contractTrieNode:
+      contractTrieNode*: ContractTrieNodeRetrieval
+    of contractCode:
+      contractCode*: ContractCodeRetrieval
+
 func encode*(contentKey: ContentKey): ByteList =
   doAssert(contentKey.contentType != unused)
   ByteList.init(SSZ.encode(contentKey))
@@ -124,6 +151,60 @@ func toContentId*(contentKey: ByteList): ContentId =
 
 func toContentId*(contentKey: ContentKey): ContentId =
   toContentId(encode(contentKey))
+
+func offerContentToRetrievalContent*(offerContent: OfferContentValue): RetrievalContentValue =
+  case offerContent.contentType:
+    of unused:
+      raiseAssert "Converting content with unused content type"
+    of accountTrieNode:
+      RetrievalContentValue(
+        contentType: accountTrieNode,
+        accountTrieNode: AccountTrieNodeRetrieval(node: offerContent.accountTrieNode.proof[^1])
+        ) # TODO implement properly
+    of contractTrieNode:
+      RetrievalContentValue(
+        contentType: contractTrieNode,
+        contractTrieNode: ContractTrieNodeRetrieval(node: offerContent.contractTrieNode.storageProof[^1])
+        ) # TODO implement properly
+    of contractCode:
+      RetrievalContentValue(
+        contentType: contractCode,
+        contractCode: ContractCodeRetrieval(code: offerContent.contractCode.code)
+        )
+
+func encode*(content: RetrievalContentValue): seq[byte] =
+  case content.contentType:
+    of unused:
+      raiseAssert "Encoding content with unused content type"
+    of accountTrieNode:
+      SSZ.encode(content.accountTrieNode)
+    of contractTrieNode:
+      SSZ.encode(content.contractTrieNode)
+    of contractCode:
+      SSZ.encode(content.contractCode)
+
+func decodeKV*(contentKey: ByteList, contentValue: seq[byte]): Opt[(ContentKey, OfferContentValue)] =
+  const empty = Opt.none((ContentKey, OfferContentValue))
+  let
+    key = contentKey.decode().valueOr:
+      return empty
+    value = case key.contentType:
+      of unused:
+        return empty
+      of accountTrieNode:
+        let val = decodeSsz(contentValue, AccountTrieNodeOffer).valueOr:
+          return empty
+        OfferContentValue(contentType: accountTrieNode, accountTrieNode: val)
+      of contractTrieNode:
+        let val = decodeSsz(contentValue, ContractTrieNodeOffer).valueOr:
+          return empty
+        OfferContentValue(contentType: contractTrieNode, contractTrieNode: val)
+      of contractCode:
+        let val = decodeSsz(contentValue, ContractCodeOffer).valueOr:
+          return empty
+        OfferContentValue(contentType: contractCode, contractCode: val)
+
+  Opt.some((key, value))
 
 func packNibbles*(nibbles: seq[byte]): Nibbles =
   doAssert(nibbles.len() <= MAX_UNPACKED_NIBBLES_LEN, "Can't pack more than 64 nibbles")

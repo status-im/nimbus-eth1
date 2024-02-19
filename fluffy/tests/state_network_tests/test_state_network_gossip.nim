@@ -39,30 +39,49 @@ procSuite "State Network Gossip":
       proto.start()
       clients.add(proto)
 
-    for i, pair in recursiveGossipSteps[0..^2]:
+    for i in 0..numOfClients-1:
       let
         currentNode = clients[i]
         nextNode = clients[i+1]
-        key = ByteList.init(pair.content_key.hexToSeqByte())
-        decodedKey = key.decode().valueOr:
-          raiseAssert "Cannot decode key"
-        nextKey = ByteList.init(recursiveGossipSteps[1].content_key.hexToSeqByte())
-        decodedNextKey = nextKey.decode().valueOr:
-          raiseAssert "Cannot decode key"
-        value = pair.content_value.hexToSeqByte()
-        nextValue = recursiveGossipSteps[1].content_value.hexToSeqByte()
-
       check:
         currentNode.portalProtocol.addNode(nextNode.portalProtocol.localNode) == Added
         (await currentNode.portalProtocol.ping(nextNode.portalProtocol.localNode)).isOk()
 
-      await currentNode.portalProtocol.gossipContent(Opt.none(NodeId), ContentKeysList.init(@[key]), @[value])
-      await sleepAsync(100.milliseconds)
-      let gossipedValue = await nextNode.getContent(decodedNextKey)
+    for i in 0..numOfClients-1:
+      let
+        pair = recursiveGossipSteps[i]
+        currentNode = clients[i]
+        nextNode = clients[i+1]
 
-      check:
-        gossipedValue.isSome()
-        gossipedValue.get() == nextValue
+        key = ByteList.init(pair.content_key.hexToSeqByte())
+        decodedKey = key.decode().valueOr:
+          raiseAssert "Cannot decode key"
+
+        nextKey = ByteList.init(recursiveGossipSteps[1].content_key.hexToSeqByte())
+        decodedNextKey = nextKey.decode().valueOr:
+          raiseAssert "Cannot decode key"
+
+        value = pair.content_value.hexToSeqByte()
+        decodedValue = SSZ.decode(value, AccountTrieNodeOffer)
+        offerValue = OfferContentValue(contentType: accountTrieNode, accountTrieNode: decodedValue)
+
+        nextValue = recursiveGossipSteps[1].content_value.hexToSeqByte()
+        nextDecodedValue = SSZ.decode(nextValue, AccountTrieNodeOffer)
+        nextOfferValue = OfferContentValue(contentType: accountTrieNode, accountTrieNode: nextDecodedValue)
+        nextRetrievalValue = nextOfferValue.offerContentToRetrievalContent().encode()
+
+      if i == 0:
+        await currentNode.portalProtocol.gossipContent(
+          Opt.none(NodeId),
+          key,
+          decodedKey,
+          value,
+          offerValue
+          )
+
+      await sleepAsync(100.milliseconds) #TODO figure out how to get rid of this sleep
+
+      check (await nextNode.getContent(decodedNextKey)) == Opt.some(nextRetrievalValue)
 
     for i in 0..numOfClients:
       await clients[i].portalProtocol.baseProtocol.closeWait()
