@@ -29,7 +29,7 @@ const
   AutoValidateApiHooks = defined(release).not
     ## No validatinon needed for production suite.
 
-  AristoPersistentBackendOk = false
+  AristoPersistentBackendOk = false or true
     ## Set true for persistent backend profiling (which needs an extra
     ## link library.)
 

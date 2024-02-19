@@ -24,11 +24,18 @@ import
   std/tables,
   eth/[common, trie/nibbles],
   results,
+  ./aristo_debug,
   "."/[aristo_desc, aristo_get, aristo_hike, aristo_path]
+
+var noisy* = false
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
+
+proc selfNoisy(w: bool): bool {.discardable.} =
+  result = noisy
+  noisy = w
 
 proc `<=`(a, b: NibblesSeq): bool =
   ## Compare nibbles, different lengths are padded to the right with zeros
@@ -96,14 +103,28 @@ proc complete(
     vid = vid
     vtx = db.getVtx vid
     uHike = Hike(root: hike.root, legs: hike.legs)
+  if noisy: echo ">>> complete (1)",
+    " vid=", vid.pp,
+    "\n    vtx=", vtx.pp(db),
+    "\n    uHike\n    ", uHike.pp(db)
   if not vtx.isValid:
+    if noisy: echo ">>> complete (1a)",
+      "\n    db\n    ", db.pp(backendOk = true),
+      "\n    --------"
     return err((vid,GetVtxNotFound))
 
   while uHike.legs.len < hikeLenMax:
     var leg = Leg(wp: VidVtxPair(vid: vid, vtx: vtx), nibble: -1)
+
+    if noisy: echo ">>> complete (2)",
+      " leg=", leg.pp(db),
+      " uHike\n    ", uHike.pp(db)
+
     case vtx.vType:
     of Leaf:
       uHike.legs.add leg
+      if noisy: echo ">>> complete (3)",
+        " uHike=", uHike.pp(db)
       return ok(uHike) # done
 
     of Extension:
@@ -160,6 +181,10 @@ proc zeroAdjust(
   if 0 < hike.legs.len:
     return ok(hike)
 
+  if noisy: echo ">>> zeroAdjust (1)",
+    "\n    hike\n    ", hike.pp(db),
+    "\n    db\n    ", db.pp(backendOK = true)
+
   let root = db.getVtx hike.root
   if root.isValid:
     block fail:
@@ -173,11 +198,13 @@ proc zeroAdjust(
             else: hike.tail[0].int8
           else:
             if hike.tail.len == 0:
+              if noisy: echo ">>> zeroAdjust (2)"
               break fail
             hike.tail[0].int8
         let n = root.branchBorderNibble nibbleID
         if n < 0:
           # Before or after the database range
+          if noisy: echo ">>> zeroAdjust (3)"
           return err((hike.root,NearbyBeyondRange))
         pfx = @[n.byte].initNibbleRange.slice(1)
 
@@ -185,22 +212,43 @@ proc zeroAdjust(
         let ePfx = root.ePfx
         # Must be followed by a branch vertex
         if not hike.accept ePfx:
+          if noisy: echo ">>> zeroAdjust (4)"
           break fail
         let vtx = db.getVtx root.eVid
         if not vtx.isValid:
+          if noisy: echo ">>> zeroAdjust (5)"
           break fail
+
+        #let ePfxLen = ePfx.len
+        #if hike.tail.len <= ePfxLen:
+        #  if noisy: echo ">>> zeroAdjust (6)"
+        #  return err((root.eVid,NearbyPathTailInxOverflow))
+        #let tailPfx = hike.tail.slice(0,ePfxLen)
+        #if noisy: echo ">>> zeroAdjust (7)",
+        #  " ePfx=", ePfx,
+        #  " tailPfx=", tailPfx
+        #when doLeast:
+        #  if ePfx < tailPfx:
+        #    return err((root.eVid,NearbyBeyondRange))
+        #else:
+        #  if tailPfx < ePfx:
+        #    return err((root.eVid,NearbyBeyondRange))
+
         pfx =  ePfx
 
       of Leaf:
         pfx = root.lPfx
         if not hike.accept pfx:
           # Before or after the database range
+          if noisy: echo ">>> zeroAdjust (8)"
           return err((hike.root,NearbyBeyondRange))
 
       var newHike = pfx.toHike(hike.root, db)
       if 0 < newHike.legs.len:
+        if noisy: echo ">>> zeroAdjust (9) pfx=", pfx
         return ok(newHike)
 
+  if noisy: echo ">>> zeroAdjust (8)"
   err((VertexID(0),NearbyEmptyHike))
 
 
@@ -221,6 +269,10 @@ proc finalise(
       w.branchNibbleMax 15
     else:
       w.branchNibbleMin 0
+
+  if noisy: echo ">>> finalise (1)",
+    " moveRight=", moveRight,
+    " hike\n    ", hike.pp(db)
 
   # Just for completeness (this case should have been handled, already)
   if hike.legs.len == 0:
@@ -286,27 +338,53 @@ proc nearbyNext(
     else:
       w.branchNibbleMax(n - 1)
 
+  if noisy: echo "\n+++\n\n>>> nearbyNext (1)",
+    " moveRight=", moveRight,
+    " hike\n    ", hike.pp(db)
+
   # Some easy cases
-  let hike = ? hike.zeroAdjust(db, doLeast=moveRight)
+  let hike = block:
+    var rc = hike.zeroAdjust(db, doLeast=moveRight)
+    if rc.isErr:
+      if noisy: echo ">>> nearbyNext (2)",
+        " moveRight=", moveRight,
+        " error=(", rc.error[0].pp, ",", rc.error[1], ")",
+        " hike\n    ", hike.pp(db)
+      return err(rc.error)
+    rc.value
+
+  if noisy: echo ">>> nearbyNext (3) adjusted",
+     " moveRight=", moveRight,
+     "\n    hike\n    ", hike.pp(db),
+     "\n    db\n    ", db.pp(backendOK = true)
 
   if hike.legs[^1].wp.vtx.vType == Extension:
     let vid = hike.legs[^1].wp.vtx.eVid
+    if noisy: echo ">>> nearbyNext (4)",
+      " vid=", vid.pp
     return hike.complete(vid, db, hikeLenMax, doLeast=moveRight)
 
   var
     uHike = hike
     start = true
   while 0 < uHike.legs.len:
+    if noisy: echo ">>> nearbyNext (5) loop",
+      " moveRight=", moveRight,
+      " start=", start,
+      " uHike\n    ", uHike.pp(db)
+
     let top = uHike.legs[^1]
     case top.wp.vtx.vType:
     of Leaf:
       return ok(uHike)
     of Branch:
       if top.nibble < 0 or uHike.tail.len == 0:
+        if noisy: echo ">>> nearbyNext (6)"
         return err((top.wp.vid,NearbyUnexpectedVtx))
     of Extension:
       uHike.tail = top.wp.vtx.ePfx & uHike.tail
       uHike.legs.setLen(uHike.legs.len - 1)
+      if noisy: echo ">>> nearbyNext (7)"
       continue
 
     var
@@ -315,11 +393,15 @@ proc nearbyNext(
       uHikeLen = uHike.legs.len # in case of backtracking
       uHikeTail = uHike.tail    # in case of backtracking
 
+    if noisy: echo ">>> nearbyNext (8)"
+
     # Look ahead checking next vertex
     if start:
       let vid = top.wp.vtx.bVid[top.nibble]
       if not vid.isValid:
         return err((top.wp.vid,NearbyDanglingLink)) # error
+
+      if noisy: echo ">>> nearbyNext (9)"
 
       let vtx = db.getVtx vid
       if not vtx.isValid:
@@ -327,12 +409,15 @@ proc nearbyNext(
 
       case vtx.vType
       of Leaf:
+        if noisy: echo ">>> nearbyNext (a)"
         if uHike.accept vtx.lPfx:
           return uHike.complete(vid, db, hikeLenMax, doLeast=moveRight)
       of Extension:
+        if noisy: echo ">>> nearbyNext (b)"
         if uHike.accept vtx.ePfx:
           return uHike.complete(vid, db, hikeLenMax, doLeast=moveRight)
       of Branch:
+        if noisy: echo ">>> nearbyNext (c)"
         let nibble = uHike.tail[0].int8
         if start and accept nibble:
           # Step down and complete with a branch link on the child vertex
@@ -343,6 +428,7 @@ proc nearbyNext(
     let n = step.wp.vtx.branchNibbleNext step.nibble
     if 0 <= n:
       uHike.legs[^1].nibble = n
+      if noisy: echo ">>> nearbyNext (d)"
       return uHike.complete(
         step.wp.vtx.bVid[n], db, hikeLenMax, doLeast=moveRight)
 
@@ -361,7 +447,8 @@ proc nearbyNext(
     # End while
 
   # Handle some pathological cases
-  hike.finalise(db, moveRight)
+  result = hike.finalise(db, moveRight)
+  if noisy: echo ">>> nearbyNext (e)"
 
 proc nearbyNextLeafTie(
     lty: LeafTie;                       # Some `Patricia Trie` path
@@ -370,17 +457,42 @@ proc nearbyNextLeafTie(
     moveRight:static[bool];             # Direction of next vertex
       ): Result[PathID,(VertexID,AristoError)] =
   ## Variant of `nearbyNext()`, convenience wrapper
-  let hike = ? lty.hikeUp(db).to(Hike).nearbyNext(db, hikeLenMax, moveRight)
+  if noisy: echo ">>> nearbyNextLeafTie (1)"
+  let hike = block:
+    let rc = lty.hikeUp(db).to(Hike).nearbyNext(db, hikeLenMax, moveRight)
+    if rc.isErr:
+      if noisy: echo ">>> nearbyNextLeafTie (2)",
+        " error=", rc.error[1]
+      return err(rc.error)
+    rc.value
 
+  if noisy: echo ">>> nearbyNextLeafTie (3)"
   if 0 < hike.legs.len:
     if hike.legs[^1].wp.vtx.vType != Leaf:
+      if noisy: echo ">>> nearbyNextLeafTie (4)"
       return err((hike.legs[^1].wp.vid,NearbyLeafExpected))
     let rc = hike.legsTo(NibblesSeq).pathToTag
     if rc.isOk:
+      if noisy: echo ">>> nearbyNextLeafTie (5)"
       return ok rc.value
+    if noisy: echo ">>> nearbyNextLeafTie (6)"
     return err((VertexID(0),rc.error))
 
+  if noisy: echo ">>> nearbyNextLeafTie (7)"
   err((VertexID(0),NearbyLeafExpected))
+
+# ------------------------------------------------------------------------------
+# Public debugging helpers
+# ------------------------------------------------------------------------------
+
+proc setNoisy*(w: bool): bool {.discardable.} =
+  w.selfNoisy
+
+template exec*(noisy: bool; code: untyped): untyped =
+  block:
+    let save = selfNoisy noisy
+    defer: selfNoisy save
+    code
 
 # ------------------------------------------------------------------------------
 # Public functions, moving and right boundary proof
@@ -399,7 +511,9 @@ proc right*(
   ##
   ## This code is intended to be used for verifying a left-bound proof to
   ## verify that there is no leaf vertex *right* of a boundary path value.
-  hike.nearbyNext(db, 64, moveRight=true)
+  if noisy: echo ">>> right Hike (1)"
+  result = hike.nearbyNext(db, 64, moveRight=true)
+  if noisy: echo ">>> right Hike (2)"
 
 proc right*(
     lty: LeafTie;                       # Some `Patricia Trie` path
@@ -407,9 +521,16 @@ proc right*(
       ): Result[LeafTie,(VertexID,AristoError)] =
   ## Variant of `nearbyRight()` working with a `LeafTie` argument instead
   ## of a `Hike`.
-  ok LeafTie(
+  if noisy: echo ">>> right LeafTie (1)"
+  let rc = lty.nearbyNextLeafTie(db, 64, moveRight=true)
+  if rc.isErr:
+    if noisy: echo ">>> right LeafTie (2)",
+      " error=", rc.error[1]
+    return err(rc.error)
+  result = ok LeafTie(
     root: lty.root,
-    path: ? lty.nearbyNextLeafTie(db, 64, moveRight=true))
+    path: rc.value)
+  if noisy: echo ">>> right LeafTie (3)"
 
 iterator rightPairs*(
     db: AristoDbRef;                    # Database layer
@@ -419,12 +540,16 @@ iterator rightPairs*(
   ## order.
   var
     hike = start.hikeUp(db).to(Hike)
-    rc = hike.right db
+    rc = hike.right(db)
+  if noisy: echo ">>> right (1)",
+     " rc=", (if rc.isOk: "ok" else: $rc.error[1]),
+     " start=", $start
   while rc.isOK:
     hike = rc.value
     let (key, pyl) = hike.toLeafTiePayload
     yield (key, pyl)
     if high(PathID) <= key.path:
+      if noisy: echo ">>> right (2)"
       break
 
     # Increment `key` by one and update `hike`. In many cases, the current
@@ -434,6 +559,7 @@ iterator rightPairs*(
       if 0 < tail.len:
         let topNibble = tail[tail.len - 1]
         if topNibble < 15:
+          if noisy: echo ">>> right (3)"
           let newNibble = @[topNibble+1].initNibbleRange.slice(1)
           hike.tail = tail.slice(0, tail.len - 1) & newNibble
           hike.legs.setLen(hike.legs.len - 1)
@@ -441,13 +567,16 @@ iterator rightPairs*(
       if 1 < tail.len:
         let nxtNibble = tail[tail.len - 2]
         if nxtNibble < 15:
+          if noisy: echo ">>> right (4)"
           let dblNibble = @[((nxtNibble+1) shl 4) + 0].initNibbleRange
           hike.tail = tail.slice(0, tail.len - 2) & dblNibble
           hike.legs.setLen(hike.legs.len - 1)
           break reuseHike
       # Fall back to default method
+      if noisy: echo ">>> right (5)"
       hike = key.next.hikeUp(db).to(Hike)
 
+    if noisy: echo ">>> right (6)"
     rc = hike.right db
     # End while
 
@@ -483,11 +612,13 @@ iterator leftPairs*(
   var
     hike = start.hikeUp(db).to(Hike)
     rc = hike.left db
+  if noisy: echo ">>> left (1)"
   while rc.isOK:
     hike = rc.value
     let (key, pyl) = hike.toLeafTiePayload
     yield (key, pyl)
     if key.path <= low(PathID):
+      if noisy: echo ">>> left (2)"
       break
 
     # Decrement `key` by one and update `hike`. In many cases, the current
@@ -497,6 +628,7 @@ iterator leftPairs*(
       if 0 < tail.len:
         let topNibble = tail[tail.len - 1]
         if 0 < topNibble:
+          if noisy: echo ">>> left (3)"
           let newNibble = @[topNibble - 1].initNibbleRange.slice(1)
           hike.tail = tail.slice(0, tail.len - 1) & newNibble
           hike.legs.setLen(hike.legs.len - 1)
@@ -504,13 +636,16 @@ iterator leftPairs*(
       if 1 < tail.len:
         let nxtNibble = tail[tail.len - 2]
         if 0 < nxtNibble:
+          if noisy: echo ">>> left (4)"
           let dblNibble = @[((nxtNibble-1) shl 4) + 15].initNibbleRange
           hike.tail = tail.slice(0, tail.len - 2) & dblNibble
           hike.legs.setLen(hike.legs.len - 1)
           break reuseHike
       # Fall back to default method
+      if noisy: echo ">>> left (5)"
       hike = key.prev.hikeUp(db).to(Hike)
 
+    if noisy: echo ">>> left (6)"
     rc = hike.left db
     # End while
 

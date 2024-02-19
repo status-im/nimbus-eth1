@@ -22,9 +22,27 @@ func isTop*(tx: AristoTxRef): bool {.gcsafe.}
 func level*(db: AristoDbRef): int {.gcsafe.}
 proc txBegin*(db: AristoDbRef): Result[AristoTxRef,AristoError] {.gcsafe.}
 
+
+import
+  ./aristo_debug
+
+var noisy* = false
+
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
+
+proc selfNoisy(w: bool): bool {.discardable.} =
+  result = noisy
+  noisy = w
+
+proc hashifyNoisy(w: bool): bool {.discardable.} =
+  when declared(aristo_hashify.noisy):
+    aristo_hashify.setNoisy w
+  else:
+    false
+
+# ------------------
 
 func getDbDescFromTopTx(tx: AristoTxRef): Result[AristoDbRef,AristoError] =
   if not tx.isTop():
@@ -45,10 +63,20 @@ iterator txWalk(tx: AristoTxRef): (AristoTxRef,LayerRef,AristoError) =
   let db = tx.db
   var tx = tx
 
+  if noisy: echo "*** ari/txWalk (1)",
+    " filter=", (if db.roFilter.isNil: "n/a" else: "yes"),
+    " nForked=", db.nForked,
+    " stack=", db.pp(topOk=false,filterOk=false),
+    ""
   block body:
     # Start at top layer if tx refers to that
     if tx.level == db.stack.len:
       if tx.txUid != db.top.txUid:
+        if noisy: echo "*** ari/txWalk (2) oops",
+          " tx.level=", tx.level,
+          " tx.txUid=", tx.txUid,
+          " top.txUid=", db.top.txUid,
+          ""
         yield (tx,db.top,TxStackGarbled)
         break body
 
@@ -59,11 +87,21 @@ iterator txWalk(tx: AristoTxRef): (AristoTxRef,LayerRef,AristoError) =
     for level in  (tx.level-1).countDown(1):
       tx = tx.parent
       if tx.isNil or tx.level != level:
+        if noisy: echo "*** ari/txWalk (3) oops",
+          " level=", level,
+          " tx.level=", (if tx.isNil: "n/a" else: $tx.level),
+          " tx.isNil=", tx.isNil,
+          ""
         yield (tx,LayerRef(nil),TxStackGarbled)
         break body
 
       var layer = db.stack[level]
       if tx.txUid != layer.txUid:
+        if noisy: echo "*** ari/txWalk (4) oops",
+          " level=", level,
+          " tx.txUid=", tx.txUid,
+          " layer.txUid=", layer.txUid,
+          ""
         yield (tx,layer,TxStackGarbled)
         break body
 
@@ -97,6 +135,21 @@ func level*(db: AristoDbRef): int =
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
+
+proc setNoisy*(w: bool): bool {.discardable.} =
+  w.selfNoisy
+
+template exec*(noisy: bool; code: untyped): untyped =
+  block:
+    let
+      save = selfNoisy noisy
+      save1 = hashifyNoisy noisy
+    defer:
+      selfNoisy save
+      hashifyNoisy save1
+    code
+
+# ------------------
 
 func to*(tx: AristoTxRef; T: type[AristoDbRef]): T =
   ## Getter, retrieves the parent database descriptor from argument `tx`
@@ -247,45 +300,91 @@ proc forkWith*(
   ##
   if not vid.isValid or
      not key.isValid:
+    if noisy: echo "*** ari/forkWith (1) error",
+      " vid=", vid.pp(),
+      " key=", key.pp(db),
+      ""
     return err(TxArgsUseless)
 
   if db.txRef.isNil:
     # Try `(vid,key)` on top layer
     let topKey = db.top.delta.kMap.getOrVoid vid
     if topKey == key:
+      if noisy: echo "*** ari/forkWith (3)",
+        " vid=", vid.pp(),
+        " key=", key.pp(db),
+        ""
       return db.forkTop dontHashify
-
+    if noisy: echo "*** ari/forkWith (3.1)",
+      " vid=", vid.pp(),
+      " key=", key.pp(db),
+      " try=", topKey.pp(db),
+      ""
   else:
     # Find `(vid,key)` on transaction layers
     for (tx,layer,error) in db.txRef.txWalk:
       if error != AristoError(0):
+        if noisy: echo "*** ari/forkWith (2)",
+          " level=", tx.level,
+          " error=", error,
+          ""
         return err(error)
       if layer.delta.kMap.getOrVoid(vid) == key:
+        if noisy: echo "*** ari/forkWith (2.1)",
+          " level=", tx.level,
+          " kMap[", vid.pp(), "]=", layer.delta.kMap.getOrVoid(vid).pp(db),
+          ""
         return tx.forkTx dontHashify
-
+      if noisy: echo "*** ari/forkWith (2.2)",
+        " level=", tx.level,
+        ""
     # Try bottom layer
     let botKey = db.stack[0].delta.kMap.getOrVoid vid
     if botKey == key:
+      if noisy: echo "*** ari/forkWith (2.3)",
+        " vid=", vid.pp(),
+        " key=", key.pp(db),
+        ""
       return db.forkBase dontHashify
-
+    if noisy: echo "*** ari/forkWith (2.4)",
+      " vid=", vid.pp(),
+      " key=", key.pp(db),
+      " try=", botKey.pp(db),
+      ""
   # Try `(vid,key)` on filter
   if not db.roFilter.isNil:
     let roKey = db.roFilter.kMap.getOrVoid vid
     if roKey == key:
+      if noisy: echo "*** ari/forkWith (4)",
+        " vid=", vid.pp(),
+        " key=", key.pp(db),
+        ""
       let rc = db.fork(noFilter = false)
       if rc.isOk:
         discard rc.value.txBegin
       return rc
-
+    if noisy: echo "*** ari/forkWith (4.1)",
+      " vid=", vid.pp(),
+      " key=", key.pp(db),
+      " try=", roKey.pp(db),
+      ""
   # Try `(vid,key)` on unfiltered backend
   block:
     let beKey = db.getKeyUBE(vid).valueOr: VOID_HASH_KEY
     if beKey == key:
+      if noisy: echo "*** ari/forkWith (5)",
+        " vid=", vid.pp(),
+        " key=", key.pp(db),
+        ""
       let rc = db.fork(noFilter = true)
       if rc.isOk:
         discard rc.value.txBegin
       return rc
-
+    if noisy: echo "*** ari/forkWith (5.1)",
+      " vid=", vid.pp(),
+      " key=", key.pp(db),
+      " try=", beKey.pp(db),
+      ""
   err(TxNotFound)
 
 # ------------------------------------------------------------------------------
@@ -345,8 +444,12 @@ proc commit*(
   ## performed through this handle and merges it to the previous layer. The
   ## previous transaction is returned if there was any.
   ##
+  if noisy: echo "*** ari/commit (1)"
+
   let db = ? tx.getDbDescFromTopTx()
   db.hashify().isOkOr:
+    if noisy: echo "*** ari/commit (2)",
+      " error=(", error[0].pp, ",", error[1], ")"
     return err(error[1])
 
   # Pop layer from stack and merge database top layer onto it
@@ -369,6 +472,8 @@ proc commit*(
   if 0 < db.stack.len:
     db.txRef.txUid = db.getTxUid
     db.top.txUid = db.txRef.txUid
+
+  if noisy: echo "*** ari/commit (9) ok"
   ok()
 
 
@@ -453,6 +558,7 @@ proc stow*(
         # It is OK if there was no `Idg`. Otherwise something serious happened
         # and there is no way to recover easily.
         doAssert rc.error == GetIdgNotFound
+    # if noisy: echo ">>> stow (3)", " fwd=", fwd.pp(db)
 
   if persistent:
     ? db.resolveBackendFilter()

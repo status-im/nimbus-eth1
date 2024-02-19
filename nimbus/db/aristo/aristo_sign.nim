@@ -19,11 +19,49 @@ import
   "."/[aristo_constants, aristo_desc, aristo_get, aristo_hashify, aristo_init,
        aristo_merge]
 
+var noisy* = false
+
+# ------------------------------------------------------------------------------
+# Private helpers
+# ------------------------------------------------------------------------------
+
+proc selfNoisy(w: bool): bool {.discardable.} =
+  result = noisy
+  noisy = w
+
+proc hashifyNoisy(w: bool): bool {.discardable.} =
+  when declared(aristo_hashify.noisy):
+    aristo_hashify.setNoisy w
+  else:
+    false
+
+proc mergeNoisy(w: bool): bool =
+  when declared(aristo_merge.noisy):
+    aristo_merge.setNoisy w
+  else:
+    false
+
 # ------------------------------------------------------------------------------
 # Public functions, signature generator
 # ------------------------------------------------------------------------------
 
-proc merkleSignBegin*(): MerkleSignRef =
+proc setNoisy*(w: bool): bool {.discardable.} =
+  w.selfNoisy
+
+template exec*(noisy: bool; code: untyped): untyped =
+  block:
+    let
+      save = selfNoisy noisy
+      save1 = hashifyNoisy noisy
+      save2 = mergeNoisy noisy
+    defer:
+        selfNoisy save
+        hashifyNoisy save1
+        mergeNoisy save2
+    code
+
+proc merkleSignBegin*(
+      ): MerkleSignRef =
   ## Start signature calculator for a list of key-value items.
   let
     db = AristoDbRef.init VoidBackendRef

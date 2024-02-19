@@ -20,6 +20,7 @@ import
   chronicles,
   eth/[common, trie/nibbles],
   results,
+  ./aristo_debug,
   "."/[aristo_desc, aristo_get, aristo_hike, aristo_layers, aristo_path,
        aristo_utils, aristo_vid]
 
@@ -30,9 +31,15 @@ type
   SaveToVaeVidFn =
     proc(err: AristoError): (VertexID,AristoError) {.gcsafe, raises: [].}
 
+var noisy* = false
+
 # ------------------------------------------------------------------------------
 # Private heplers
 # ------------------------------------------------------------------------------
+
+proc selfNoisy(w: bool): bool {.discardable.} =
+  result = noisy
+  noisy = w
 
 func toVae(err: AristoError): (VertexID,AristoError) =
   ## Map single error to error pair with dummy vertex
@@ -71,6 +78,7 @@ proc disposeOfVtx(
   db.layersResVtx(root, vid)
   db.layersResKey(root, vid)
   db.vidDispose vid                    # Recycle ID
+  if noisy: echo ">>> disposeOfVtx (1) reset vid=", vid.pp
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -216,14 +224,21 @@ proc collapseLeaf(
       par.vtx.bVid[hike.legs[^3].nibble] = lf.vid
       db.layersPutVtx(hike.root, par.vid, par.vtx)
       db.layersPutVtx(hike.root, lf.vid, lf.vtx)
+      if noisy: echo ">>> collapseLeaf (1)",
+        " lf.vid=", lf.vid,
+        "\n    hike\n    ", hike.pp(db),
+        #"\n    top\n    ", db.pp(filterOk=false),
+        ""
       return ok()
 
     of Extension:                                        # (2) or (3)
       # Merge `^3` into `lf` but keep the leaf vertex ID unchanged. This
       # can avoid some extra updates.
       lf.vtx.lPfx = par.vtx.ePfx & lf.vtx.lPfx
+      if noisy: echo ">>> collapseLeaf (2)"
 
       if 3 < hike.legs.len:                              # (2)
+        if noisy: echo ">>> collapseLeaf (2.1)"
         # Grandparent exists
         let gpr = hike.legs[^4].wp.dup                   # Writable vertex
         if gpr.vtx.vType != Branch:
@@ -232,24 +247,42 @@ proc collapseLeaf(
         gpr.vtx.bVid[hike.legs[^4].nibble] = lf.vid
         db.layersPutVtx(hike.root, gpr.vid, gpr.vtx)
         db.layersPutVtx(hike.root, lf.vid, lf.vtx)
+        if noisy: echo ">>> collapseLeaf (2.2)",
+          " lf.vid=", lf.vid,
+          "\n    hike\n    ", hike.pp(db),
+          #"\n    top\n    ", db.pp(filterOk=false),
+          ""
         return ok()
 
+      if noisy: echo ">>> collapseLeaf (2.3)",
+        " lf.vtx=", lf.vtx.pp(db)
       # No grandparent, so ^3 is root vertex             # (3)
       db.layersPutVtx(hike.root, par.vid, lf.vtx)
       # Continue below
 
     of Leaf:
+      if noisy: echo ">>> collapseLeaf (3)"
       return err((par.vid,DelLeafUnexpected))
 
   else:                                                  # (4)
     # Replace ^2 by `^2 & vtx` (use `lf` as-is)          # `br` is root vertex
     db.layersResKey(hike.root, br.vid)                   # root was changed
     db.layersPutVtx(hike.root, br.vid, lf.vtx)
+    if noisy: echo ">>> collapseLeaf (4)",
+      " lf.vtx=", lf.vtx.pp(db),
+      "\n    hike\n    ", hike.pp(db),
+      #"\n    top\n    ", db.pp(filterOk=false),
+      ""
     # Continue below
 
   # Clean up stale leaf vertex which has moved to root position
   db.disposeOfVtx(hike.root, lf.vid)
 
+  if noisy: echo ">>> collapseLeaf (5)",
+    " lf.vid=", lf.vid.pp,
+    "\n    hike\n    ", hike.pp(db),
+    #"\n    top\n    ", db.pp(filterOk=false),
+    ""
   ok()
 
 # -------------------------
@@ -260,6 +293,9 @@ proc delSubTreeImpl(
     accPath: PathID;                   # Needed for real storage tries
       ): Result[void,(VertexID,AristoError)] =
   ## Implementation of *delete* sub-trie.
+  if noisy: echo ">>> delSubTree (1)",
+    " root=", root.pp,
+    ""
   if not root.isValid:
     return err((root,DelSubTreeVoidRoot))
 
@@ -303,6 +339,9 @@ proc deleteImpl(
     accPath: PathID;                   # Needed for accounts payload
       ): Result[bool,(VertexID,AristoError)] =
   ## Implementation of *delete* functionality.
+  if noisy: echo ">>> deleteImpl (1)",
+    " leafKey=", lty.pp,
+    "\n    hike\n    ", hike.pp(db)
 
   if LEAST_FREE_VID <= lty.root.distinctBase:
     db.registerAccount(lty.root, accPath).isOkOr:
@@ -321,11 +360,19 @@ proc deleteImpl(
     if data.pType == AccountData:
       let vid = data.account.storageID
       if vid.isValid and db.getVtx(vid).isValid:
+        const noisy = true
+        if noisy: echo ">>> deleteImpl (1.1)",
+          " leafKey=", lty.pp,
+          "\n    hike\n    ", hike.pp(db),
+          "\n    db\n    ", db.pp(filterOk=false),
+          ""
         return err((vid,DelDanglingStoTrie))
 
   db.disposeOfVtx(hike.root, lf.vid)
 
   if 1 < hike.legs.len:
+    if noisy: echo ">>> deleteImpl (2) nLegs=", hike.legs.len
+
     # Get current `Branch` vertex `br`
     let br = block:
       var wp = hike.legs[^2].wp
@@ -334,9 +381,19 @@ proc deleteImpl(
     if br.vtx.vType != Branch:
       return err((br.vid,DelBranchExpexted))
 
+    #if noisy: echo ">>> deleteImpl (3)",
+    #  " nLegs=", hike.legs.len,
+    #  "\n    db\n    ", db.pp(filterOk=false),
+    #  ""
+
     # Unlink child vertex from structural table
     br.vtx.bVid[hike.legs[^2].nibble] = VertexID(0)
     db.layersPutVtx(hike.root, br.vid, br.vtx)
+
+    #if noisy: echo ">>> deleteImpl (4)",
+    #  " nLegs=", hike.legs.len,
+    #  "\n    db\n    ", db.pp(filterOk=false),
+    #  ""
 
     # Clear all keys up to the root key
     for n in 0 .. hike.legs.len - 2:
@@ -345,11 +402,23 @@ proc deleteImpl(
         return err((vid, DelBranchLocked))
       db.layersResKey(hike.root, vid)
 
+    #if noisy: echo ">>> deleteImpl (5)",
+    #  " nLegs=", hike.legs.len,
+    #  "\n    top\n    ", db.pp(filterOk=false),
+    #  ""
+
     let nibble = block:
       let rc = br.vtx.branchStillNeeded()
       if rc.isErr:
         return err((br.vid,DelBranchWithoutRefs))
       rc.value
+
+    if noisy: echo ">>> deleteImpl (6)",
+      " nLegs=", hike.legs.len,
+      " nibble=", nibble,
+      " br=", br.pp(db),
+      #"\n    db\n    ", db.pp(filterOk=false),
+      ""
 
     # Convert to `Extension` or `Leaf` vertex
     if 0 <= nibble:
@@ -363,14 +432,32 @@ proc deleteImpl(
       # Collapse `Branch` vertex `br` depending on `nxt` vertex type
       case nxt.vtx.vType:
       of Branch:
+        if noisy: echo ">>> deleteImpl (7.1) collapse branch",
+          " nLegs=", hike.legs.len,
+          " br=", br.vid.pp,
+          " nxt=", nxt.vid.pp
         ? db.collapseBranch(hike, nibble.byte)
       of Extension:
+        if noisy: echo ">>> deleteImpl (7.2) collapse ext",
+          " nLegs=", hike.legs.len,
+          " br=", br.vid.pp,
+          " nxt=", nxt.vid.pp
         ? db.collapseExt(hike, nibble.byte, nxt.vtx)
       of Leaf:
+        if noisy: echo ">>> deleteImpl (7.3) collapse leaf",
+          " nLegs=", hike.legs.len,
+          " br=", br.vid.pp,
+          " nxt=", nxt.vid.pp
         ? db.collapseLeaf(hike, nibble.byte, nxt.vtx)
 
   let emptySubTreeOk = not db.getVtx(hike.root).isValid
 
+  if noisy: echo ">>> deleteImpl (9)",
+    " leafKey=", lty.pp,
+    " empty=", not db.getVtx(hike.root).isValid,
+    #"\n    hike\n    ", hike.pp(db),
+    #"\n    db\n    ", db.pp,
+    ""
   # Squeze list of recycled vertex IDs
   db.top.final.vGen = db.vGen.vidReorg()
   ok(emptySubTreeOk)
@@ -378,6 +465,15 @@ proc deleteImpl(
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
+
+proc setNoisy*(w: bool): bool {.discardable.} =
+  w.selfNoisy
+
+template exec*(noisy: bool; code: untyped): untyped =
+  block:
+    let save = selfNoisy noisy
+    defer: selfNoisy save
+    code
 
 proc delTree*(
     db: AristoDbRef;                   # Database, top layer

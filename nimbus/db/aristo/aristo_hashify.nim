@@ -33,7 +33,7 @@
 {.push raises: [].}
 
 import
-  std/[algorithm, sequtils, sets, tables],
+  std/[algorithm, sequtils, strutils, sets, tables],
   chronicles,
   eth/common,
   results,
@@ -51,12 +51,59 @@ type
 logScope:
   topics = "aristo-hashify"
 
+
+import
+  ./aristo_debug
+
+var noisy* = false
+
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
 func getOrVoid(tab: Table[VertexID,VertexID]; vid: VertexID): VertexID =
   tab.getOrDefault(vid, VertexID(0))
+
+# ------------------------------------------------------------------------------
+# Private helper, debugging
+# ------------------------------------------------------------------------------
+
+proc selfNoisy(w: bool): bool {.discardable.} =
+  result = noisy
+  noisy = w
+
+func pp(w: (VertexID,VertexID)): string =
+  "(" & w[0].pp & "," & w[1].pp & ")"
+
+func pp(t: Table[VertexID,VertexID]): string =
+  func pp(b: bool): string =
+    if b: "*" else: ""
+  "{" & t.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID)
+              .mapIt("(" & it.pp & "," & t.getOrVoid(it).pp & ")")
+              .join(",") & "}"
+
+func pp(t: Table[VertexID,HashSet[VertexID]]): string =
+  func pp(b: bool): string =
+    if b: "*" else: ""
+  "{" & t.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID)
+              .mapIt("(" & it.pp & "," & t.getOrVoid(it).pp & ")")
+              .join(",") & "}"
+
+func pp(wff: WidthFirstForest): string =
+  var comma = ""
+  result = "("
+  if 0 < wff.base.len:
+    result &= "base=" & wff.base.pp
+    comma = ","
+  if 0 < wff.pool.len:
+    result &= comma & "pool=" & wff.pool.pp
+    comma = ","
+  if 0 < wff.root.len:
+    result &= comma & "root=" & wff.root.pp
+    comma = ","
+  if 0 < wff.leaf.len:
+    result &= comma & "leaf=" & wff.leaf.pp
+    comma = ","
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -80,6 +127,7 @@ func hasValue(
       return true
 
 
+var serial = 0
 proc pedigree(
     db: AristoDbRef;                   # Database, top layer
     ancestors: HashSet[VertexID];      # Vertex IDs to start connecting from
@@ -89,6 +137,14 @@ proc pedigree(
   ## grand child vertices and build a forest (of trees) starting from the
   ## grand child vertices.
   ##
+  serial.inc
+  var lap = 0
+
+  if noisy: echo ">>> pedigree (1)",
+    " ancestors=", ancestors.pp,
+    "\n    proofs=", proofs.pp,
+    #"\n    db\n    ", db.pp(backendOk=true),
+    ""
   var
     wff: WidthFirstForest
     leafs: HashSet[VertexID]
@@ -162,6 +218,12 @@ proc pedigree(
 
   # Recursively step down and collect unlabelled vertices
   while 0 < leafs.len:
+    lap.inc
+    if noisy: echo ">>> pedigree (4)",
+      " lap=", lap,
+      "\n    leafs=", leafs.pp,
+      "\n    wff=", wff.pp,
+      ""
     var redo: typeof(leafs)
 
     for parent in leafs:
@@ -171,12 +233,21 @@ proc pedigree(
       let vtx = db.getVtx parent
       if not vtx.isNil:
         let children = vtx.subVids.filterIt(not db.getKey(it).isValid)
+        if noisy: echo ">>> pedigree (6)",
+          "\n    parent=", parent.pp,
+          "\n    children=", children.pp,
+          #"\n    wff=", wff.pp,
+          ""
         if 0 < children.len:
           for child in children:
             redo.incl child
             wff.register(child, parent)
           continue
 
+      if noisy: echo ">>> pedigree (7)",
+        "\n    parent=", parent.pp,
+        "\n    wff.pool=", wff.pool.pp,
+        ""
       if parent notin wff.base:
         # The buck stops here:
         #   move `(parent,granny)` from `pool[]` to `base[]`
@@ -186,6 +257,26 @@ proc pedigree(
         wff.pool.del parent
 
     redo.swap leafs
+
+  when false:
+    let
+      keys = wff.base.keys.toSeq.toHashSet
+      values = wff.base.values.toSeq.toHashSet
+    if (keys * values) != EmptyVidSet:
+      const noisy = true
+      if noisy: echo ">>> pedigree (8) oops",
+        " serial=", serial,
+        " delta=", keys * values,
+        #"\n    keys=", keys.pp,
+        #"\n    values=", values.pp,
+        "\n    wff=", wff.pp,
+        "\n"
+      doAssert (keys * values) == EmptyVidSet
+
+  if noisy: echo ">>> pedigree (9)",
+    " serial=", serial,
+    "\n    wff=", wff.pp,
+    "\n"
 
   ok wff
 
@@ -201,16 +292,32 @@ proc createSched(
   var wff = ? db.pedigree(db.dirty, db.pPrf)
 
   if 0 < wff.leaf.len:
+    if noisy: echo ">>> createSched2 (1)",
+      " leaf=", wff.leaf.pp,
+      ""
     for vid in wff.leaf:
       let node = db.getVtx(vid).toNode(db, beKeyOk=false).valueOr:
         # Make sure that all those nodes are reachable
         for needed in error:
           if needed notin wff.base and
              needed notin wff.pool:
+            const noisy = true
+            if noisy: echo ">>> createSched2 (2) oops",
+              " vid=", needed.pp,
+              " inPool=", needed in wff.pool,
+              "\n    error=", error.pp,
+              "\n    wff=", wff.pp,
+              #"\n    top\n    ", db.pp(backendOk=true),
+              ""
             return err((needed,HashifyVtxUnresolved))
         continue
       db.layersPutKey(VertexID(1), vid, node.digestTo(HashKey))
 
+  if noisy: echo ">>> createSched2 (9)",
+    "\n    pPrf=", db.pPrf.pp,
+    "\n    wff=", wff.pp(),
+    #"\n    top\n    ", db.pp(backendOk=true),
+    ""
   ok wff
 
 
@@ -220,12 +327,23 @@ proc processSched(
       ): Result[void,(VertexID,AristoError)] =
   ## Traverse width-first schedule and update vertex hash labels.
   ##
+  var n = -1
   while 0 < wff.base.len:
+    n.inc
+    if noisy: echo "\n>>> processSched (1) ----- lap#", n,
+      " ---------------",
+      "\n    wff=", wff.pp,
+      ""
     var
       accept = false
       redo: typeof(wff.base)
-
     for (vid,toVid) in wff.base.pairs:
+      if noisy: echo ">>> processSched (2) for",
+        " acccept=", accept,
+        " (vid,toVid)=", (vid,toVid).pp,
+        "\n    redo=", redo.pp,
+        "\n    wff=", wff.pp,
+        ""
       let vtx = db.getVtx vid
       assert vtx.isValid
 
@@ -238,12 +356,25 @@ proc processSched(
           accept = true # `redo[]` will be fifferent from `base[]`
         else:
           redo[vid] = toVid
+        if noisy: echo ">>> processSched (3.3)",
+          " acccept=", accept,
+          " (vid,toVid)=", (vid,toVid).pp,
+          " missing=", error.pp,
+          "\n    redo=", redo.pp,
+          "\n    wff=", wff.pp,
+          ""
         continue
         # End `valueOr` terminates error clause
 
       # Could resolve => update Merkle hash
       db.layersPutKey(VertexID(1), vid, node.digestTo HashKey)
 
+      if noisy: echo ">>> processSched (3.4)",
+        " acccept=", accept,
+        " (vid,toVid)=", (vid,toVid).pp,
+        "\n    redo=", redo.pp,
+        #"\n    wff=", wff.pp,
+        ""
       # Set follow up link for next round
       let toToVid = wff.pool.getOrVoid toVid
       if toToVid.isValid:
@@ -257,7 +388,21 @@ proc processSched(
         redo[toVid] = toToVid
 
       accept = true # `redo[]` will be fifferent from `base[]`
+
+      if noisy: echo ">>> processSched (4)",
+        " acccept=", accept,
+        " (vid,toVid)=", (vid,toVid).pp,
+        "\n    redo=", redo.pp,
+        #"\n    wff=", wff.pp,
+        # "\n    top\n    ", db.pp(filterOk=false),
+        ""
       # End `for (vid,toVid)..`
+
+    if noisy: echo ">>> processSched (5)",
+      "\n    redo=", redo.pp,
+      "\n    wff=", wff.pp,
+      # "\n    top\n    ", db.pp(filterOk=false),
+      ""
 
     # Make sure that `base[]` is different from `redo[]`
     if not accept:
@@ -275,9 +420,17 @@ proc finaliseRoots(
       ): Result[void,(VertexID,AristoError)] =
   ## Process root vertices after all other vertices are done.
   ##
+  if noisy: echo ">>> finaliseRoots (1)",
+    "\n    wff=", wff.pp,
+    #"\n    top\n    ", db.pp(filterOk=false),
+    ""
   # Make sure that the pool has been exhausted
   if 0 < wff.pool.len:
     let vid = wff.pool.keys.toSeq.sorted[0]
+    if noisy: echo ">>> finaliseRoots (2)",
+       " vid=", vid.pp,
+       " error=HashifyNodeUnresolved",
+       ""
     return err((vid,HashifyVtxUnresolved))
 
   # Update or verify root nodes
@@ -285,18 +438,39 @@ proc finaliseRoots(
     # Calculate hash key
     let
       node = db.getVtx(vid).toNode(db).valueOr:
+        if noisy: echo ">>> finaliseRoots (3) fail",
+          " vid=", vid.pp,
+          " missing=", error.pp,
+          "\n    wff=", wff.pp,
+          #"\n    top\n    ", db.pp(backendOk=false),
+          "\n"
         return err((vid,HashifyRootVtxUnresolved))
       key = node.digestTo(HashKey)
     if vid notin db.pPrf:
       db.layersPutKey(VertexID(1), vid, key)
     elif key != db.getKey vid:
+      if noisy: echo ">>> finaliseRoots (4) mismatch",
+        " vid=", vid.pp,
+        "\n    wff=", wff.pp,
+        #"\n    top\n    ", db.pp(backendOk=false),
+        "\n"
       return err((vid,HashifyProofHashMismatch))
 
+  if noisy: echo ">>> finaliseRoots (9)"
   ok()
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
+
+proc setNoisy*(w: bool): bool {.discardable.} =
+  w.selfNoisy
+
+template exec*(noisy: bool; code: untyped): untyped =
+  block:
+    let save = selfNoisy noisy
+    defer: selfNoisy save
+    code
 
 proc hashify*(
     db: AristoDbRef;                   # Database, top layer
@@ -315,6 +489,10 @@ proc hashify*(
     ? wff.finaliseRoots db
 
     db.top.final.dirty.clear               # Mark top layer clean
+
+  if noisy: echo ">>> hashify (9) done",
+    #"\n    top\n    ", db.pp(backendOk=false),
+    "\n"
 
   ok()
 

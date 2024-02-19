@@ -17,7 +17,31 @@ import
   std/[sequtils, sets, typetraits],
   eth/common,
   results,
+  ./aristo_debug,
   "."/[aristo_constants, aristo_desc, aristo_get, aristo_hike, aristo_layers]
+
+var noisy* = false
+
+# ------------------------------------------------------------------------------
+# Private helpers
+# ------------------------------------------------------------------------------
+
+proc selfNoisy(w: bool): bool {.discardable.} =
+  result = noisy
+  noisy = w
+
+# ------------------------------------------------------------------------------
+# Public helpers
+# ------------------------------------------------------------------------------
+
+proc setNoisy*(w: bool): bool {.discardable.} =
+  w.selfNoisy
+
+template exec*(noisy: bool; code: untyped): untyped =
+  block:
+    let save = selfNoisy noisy
+    defer: selfNoisy save
+    code
 
 # ------------------------------------------------------------------------------
 # Public functions, converters
@@ -202,12 +226,21 @@ proc registerAccount*(
 
   # Get account leaf with account data
   let hike = LeafTie(root: VertexID(1), path: accPath).hikeUp(db).valueOr:
+    if noisy: echo ">>> registerAccount (3)",
+       " stoRoot=", stoRoot.pp,
+       " path=",accPath,
+       " error=", error[1],
+       "\n    hike\n    ", error[2].pp(db),
+       ""
     return err(UtilsAccUnaccessible)
 
   let wp = hike.legs[^1].wp
   if wp.vtx.vType != Leaf:
     return err(UtilsAccPathWithoutLeaf)
   if wp.vtx.lData.pType != AccountData:
+    if noisy: echo ">>> registerAccount (7)",
+      " pType=", wp.vtx.lData.pType,
+      " vid=", wp.vid.pp
     return ok() # nothing to do
 
   # Need to flag for re-hash
@@ -223,6 +256,8 @@ proc registerAccount*(
   db.top.final.dirty.incl hike.root
   db.top.final.dirty.incl wp.vid
 
+  if noisy: echo ">>> registerAccount (9)",
+    " vid=", wp.vid.pp
   ok()
 
 # ------------------------------------------------------------------------------

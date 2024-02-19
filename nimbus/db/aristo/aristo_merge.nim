@@ -29,8 +29,9 @@ import
   chronicles,
   eth/[common, trie/nibbles],
   results,
-  stew/keyed_queue,
+  stew/[byteutils, keyed_queue],
   ../../sync/protocol/snap/snap_types,
+  ./aristo_debug,
   "."/[aristo_desc, aristo_get, aristo_hike, aristo_layers,
        aristo_path, aristo_serialise, aristo_utils, aristo_vid]
 
@@ -43,6 +44,36 @@ type
     ## sub-trie with `root=VertexID(1)`.
     leafTie*: LeafTie                  ## Full `Patricia Trie` path root-to-leaf
     payload*: PayloadRef               ## Leaf data payload
+
+var
+  noisy* = false
+  serial = 0
+
+# ------------------------------------------------------------------------------
+# Private helper, debugging
+# ------------------------------------------------------------------------------
+
+proc selfNoisy(w: bool): bool {.discardable.} =
+  result = noisy
+  noisy = w
+
+proc toPfx(indent: int): string =
+  if 0 < indent: "\n" & " ".repeat(indent) else: ""
+
+proc ppChain(q: openArray[HashKey]; db: AristoDbRef): string =
+  "[" & q.toSeq.mapIt(it.pp(db)).join(" -> ") & "]"
+
+proc pp(q: openArray[seq[HashKey]]; db: AristoDbRef): string =
+  q.mapIt(it.ppChain(db)).join("\n       ")
+
+proc pp(t: Table[HashKey,NodeRef]; db: AristoDbRef): string =
+  "{" & t.keys.toSeq.mapIt(it.pp(db)).join(",") & "}"
+
+proc pp(rc: Result[Hike,AristoError]; db: AristoDbRef; indent = 4): string =
+  if rc.isOk:
+    rc.value.pp(db,indent)
+  else:
+    "*" & $rc.error & "*"
 
 # ------------------------------------------------------------------------------
 # Private getters & setters
@@ -169,6 +200,14 @@ proc insertBranch(
   if linkVtx.xPfx.len == n:
     return err(MergeBranchLinkVtxPfxTooShort)
 
+  if noisy: echo ">>> insertBranch (1)",
+    " n=", n, " linkID=", linkID.pp,
+    "\n    linkVtx=", linkVtx.pp(db),
+    "\n    payload=", payload.pp(db),
+    "\n    hike=", hike.pp(db),
+    #"\n    db\n    ", db.pp(),
+    ""
+
   # Provide and install `forkVtx`
   let
     forkVtx = VertexRef(vType: Branch)
@@ -195,21 +234,34 @@ proc insertBranch(
         return err(MergeBranchLinkLeafGarbled)
 
       let local = db.vidFetch(pristine = true)
+      if noisy: echo ">>> insertBranch (2)",
+         " n=", n, " linkID=", linkID.pp,
+         "\n    linkVtx=", linkVtx.pp(db),
+         "\n    forkVtx=", forkVtx.pp(db),
+         "\n    local=", local.pp,
+         "\n    db\n    ", db.pp(),
+         ""
       db.setVtxAndKey(hike.root, local, linkVtx)
       linkVtx.lPfx = linkVtx.lPfx.slice(1+n)
       forkVtx.bVid[linkInx] = local
 
     elif linkVtx.ePfx.len == n + 1:
+      if noisy: echo ">>> insertBranch (3)"
       # This extension `linkVtx` becomes obsolete
       forkVtx.bVid[linkInx] = linkVtx.eVid
 
     else:
+      if noisy: echo ">>> insertBranch (4)"
       let local = db.vidFetch
       db.setVtxAndKey(hike.root, local, linkVtx)
       linkVtx.ePfx = linkVtx.ePfx.slice(1+n)
       forkVtx.bVid[linkInx] = local
 
   block:
+    if noisy: echo ">>> insertBranch (5)",
+      " n=", n, " linkID=", linkID.pp,
+      "\n    db\n    ", db.pp(),
+      ""
     let local = db.vidFetch(pristine = true)
     forkVtx.bVid[leafInx] = local
     leafLeg.wp.vid = local
@@ -219,6 +271,12 @@ proc insertBranch(
       lData: payload)
     db.setVtxAndKey(hike.root, local, leafLeg.wp.vtx)
 
+  if noisy: echo ">>> insertBranch (6)",
+     " n=", n, " linkID=", linkID.pp,
+     "\n    forkVtx=", forkVtx.pp(db),
+     "\n    leafLeg=", leafLeg.pp(db),
+     #"\n    db\n    ", db.pp(),
+     ""
   # Update branch leg, ready to append more legs
   var okHike = Hike(root: hike.root, legs: hike.legs)
 
@@ -229,6 +287,10 @@ proc insertBranch(
       ePfx:  hike.tail.slice(0,n),
       eVid:  db.vidFetch)
 
+    if noisy: echo ">>> insertBranch (7)",
+      " n=", n, " linkID=", linkID.pp,
+      "\n    extVtx=", extVtx.pp(db),
+      ""
     db.setVtxAndKey(hike.root, linkID, extVtx)
 
     okHike.legs.add Leg(
@@ -245,6 +307,7 @@ proc insertBranch(
         vtx: forkVtx))
 
   else:
+    if noisy: echo ">>> insertBranch (8)"
     db.setVtxAndKey(hike.root, linkID, forkVtx)
     okHike.legs.add Leg(
       nibble: leafInx.int8,
@@ -252,6 +315,13 @@ proc insertBranch(
         vid: linkID,
         vtx: forkVtx))
 
+  if noisy: echo ">>> insertBranch (9)",
+    " n=", n, " linkID=", linkID.pp,
+    "\n    forkVtx=", forkVtx.pp(db),
+    "\n    leafLeg=", leafLeg.pp(db),
+    "\n    result=", result.pp(db),
+    #"\n    db\n    ", db.pp(),
+    ""
   okHike.legs.add leafLeg
   ok okHike
 
@@ -316,6 +386,9 @@ proc topIsBranchAddLeaf(
   if nibble < 0:
     return err(MergeBranchGarbledNibble)
 
+  if noisy: echo ">>> topIsBranchAddLeaf (1)",
+    " nibble=", nibble,
+    ""
   let
     parent = hike.legs[^1].wp.vid
     branch = hike.legs[^1].wp.vtx
@@ -341,6 +414,11 @@ proc topIsBranchAddLeaf(
     db.setVtxAndKey(hike.root, linkID, vtx)
     var okHike = Hike(root: hike.root, legs: hike.legs)
     okHike.legs.add Leg(wp: VidVtxPair(vid: linkID, vtx: vtx), nibble: -1)
+    if noisy: echo ">>> topIsBranchAddLeaf (2)",
+      " parent=", parent.pp,
+      " linkID=", linkID.pp,
+      "\n    okHike\n    ", okHike.pp,
+      ""
     if parent notin db.pPrf:
       db.layersResKey(hike.root, parent)
     return ok(okHike)
@@ -352,8 +430,15 @@ proc topIsBranchAddLeaf(
     #
     #  <-------- immutable ------------> <---- mutable ----> ..
     #
+    if noisy: echo ">>> topIsBranchAddLeaf (3) is branch",
+      " linkID=", linkID.pp,
+      ""
     return db.concatBranchAndLeaf(hike, linkID, linkVtx, payload)
 
+  if noisy: echo ">>> topIsBranchAddLeaf (4) is ext or leaf",
+    " nibble=", nibble,
+    " linkID=", linkID.pp,
+    ""
   db.insertBranch(hike, linkID, linkVtx, payload)
 
 
@@ -436,6 +521,8 @@ proc topIsEmptyAddLeaf(
   ## Append a `Leaf` vertex derived from the argument `payload` after the
   ## argument vertex `rootVtx` and append both the empty arguent `hike`.
   if rootVtx.vType == Branch:
+    if noisy: echo ">>> topIsEmptyAddLeaf (1)"
+
     let nibble = hike.tail[0].int8
     if rootVtx.bVid[nibble].isValid:
       return err(MergeRootBranchLinkBusy)
@@ -460,6 +547,7 @@ proc topIsEmptyAddLeaf(
       legs: @[Leg(wp: VidVtxPair(vtx: rootVtx, vid: hike.root), nibble: nibble),
               Leg(wp: VidVtxPair(vtx: leafVtx, vid: leafVid), nibble: -1)])
 
+  if noisy: echo ">>> topIsEmptyAddLeaf (2)"
   db.insertBranch(hike, hike.root, rootVtx, payload)
 
 
@@ -474,6 +562,10 @@ proc updatePayload(
 
   # Update payloads if they differ
   if db.differ(leafLeg.wp.vtx.lData, payload):
+    if noisy: echo ">>> updatePayload (1)",
+      " lData=", leafLeg.wp.vtx.lData.pp,
+      " payload=", payload.pp,
+      ""
     let vid = leafLeg.wp.vid
     if vid in db.pPrf:
       return err(MergeLeafProofModeLock)
@@ -489,12 +581,20 @@ proc updatePayload(
     # Modify top level cache
     db.setVtxAndKey(hike.root, vid, vtx)
     db.clearMerkleKeys(hike, vid)
+    if noisy: echo ">>> updatePayload (2)",
+      " vid=", leafLeg.wp.vid.pp
     ok hike
 
   elif db.layersGetVtx(leafLeg.wp.vid).isErr:
+    if noisy: echo ">>> updatePayload (3)",
+      " vid=", leafLeg.wp.vid.pp,
+      " error=MergeLeafPathOnBackendAlready"
     err(MergeLeafPathOnBackendAlready)
 
   else:
+    if noisy: echo ">>> updatePayload (4)",
+      " vid=", leafLeg.wp.vid.pp,
+      " error=MergeLeafPathCachedAlready"
     err(MergeLeafPathCachedAlready)
 
 # ------------------------------------------------------------------------------
@@ -523,6 +623,11 @@ proc mergeNodeImpl(
   ##   Proof of concept, not in production yet.
   ##
   # Check for error after RLP decoding
+  if node.error != AristoError(0):
+    if noisy: echo ">>> mergeNodeImpl (1)",
+      " serial=", serial,
+      " error=", node.error,
+      ""
   doAssert node.error == AristoError(0)
 
   # Verify arguments
@@ -534,11 +639,22 @@ proc mergeNodeImpl(
   # Make sure that the `vid<->key` reverse mapping is updated.
   let vid = db.layerGetProofVidOrVoid hashKey
   if not vid.isValid:
+    if noisy: echo ">>> mergeNodeImpl (2) not in cache",
+       " serial=", serial,
+       " vid=", vid.pp,
+       " rootVid=", rootVid.pp,
+       " hashKey=", hashKey.pp(db),
+       "\n    node=", node.pp(db),
+       ""
     return err(MergeRevVidMustHaveBeenCached)
 
   # Use the vertex ID `vid` to be populated by the argument root node
   let key = db.layersGetKeyOrVoid vid
   if key.isValid and key != hashKey:
+    if noisy: echo ">>> mergeNodeImpl (5) differs",
+      " serial=", serial,
+      " vid=", vid.pp,
+      ""
     return err(MergeHashKeyDiffersFromCached)
 
   # Set up vertex.
@@ -552,6 +668,14 @@ proc mergeNodeImpl(
   # The `vertexID <-> hashKey` mappings need to be set up now (if any)
   case node.vType:
   of Leaf:
+    #if noisy: echo ">>> mergeNodeImpl (7.1) leaf",
+    #  " serial=", serial,
+    #  " rootVid=", rootVid.pp,
+    #  " newVtxFromNode=", newVtxFromNode,
+    #  " vid=", vid.pp,
+    #  " node=", node.pp(db),
+    #  #"\n    fRpp\n    ", db.top.final.fRpp.keys.toSeq.sorted.pp(db),
+    #  ""
     # Check whether there is need to convert the payload to `Account` payload
     if rootVid == VertexID(1) and newVtxFromNode:
       try:
@@ -573,6 +697,12 @@ proc mergeNodeImpl(
         vtx.lData = pyl
       except RlpError:
         return err(MergeNodeAccountPayloadError)
+      if noisy: echo ">>> mergeNodeImpl (7.2) leaf",
+        " serial=", serial,
+        " rootVid=", rootVid.pp,
+        " vid=", vid.pp,
+        " node=", vtx.pp(db),
+        ""
   of Extension:
     if node.key[0].isValid:
       let eKey = node.key[0]
@@ -582,12 +712,21 @@ proc mergeNodeImpl(
           # Brand new reverse lookup link for this vertex
           vtx.eVid = db.vidFetch
       elif not vtx.eVid.isValid:
+        if noisy: echo ">>> mergeNodeImpl (7.3) ext fail",
+          " serial=", serial,
+          ""
         return err(MergeNodeVidMissing)
       else:
         let yEke = db.getKey vtx.eVid
         if yEke.isValid and eKey != yEke:
+          if noisy: echo ">>> mergeNodeImpl (7.4) ext fail"
           return err(MergeNodeVtxDiffersFromExisting)
       db.layersPutProof(vtx.eVid, eKey)
+      if noisy: echo ">>> mergeNodeImpl (7.5) ext rev lookup",
+        " serial=", serial,
+        " vid=", vid.pp,
+        " => ", vtx.eVid.pp,
+        ""
   of Branch:
     for n in 0..15:
       if node.key[n].isValid:
@@ -598,20 +737,47 @@ proc mergeNodeImpl(
             # Brand new reverse lookup link for this vertex
             vtx.bVid[n] = db.vidFetch
         elif not vtx.bVid[n].isValid:
+          if noisy: echo ">>> mergeNodeImpl (7.6) ext fail",
+            " serial=", serial,
+            ""
           return err(MergeNodeVidMissing)
         else:
           let yEkb = db.getKey vtx.bVid[n]
           if yEkb.isValid and yEkb != bKey:
+            if noisy: echo ">>> mergeNodeImpl (7.7) ext fail",
+              " serial=", serial,
+              ""
             return err(MergeNodeVtxDiffersFromExisting)
         db.layersPutProof(vtx.bVid[n], bKey)
+        # if noisy: echo ">>> mergeNodeImpl (7.8) rev lookup",
+        #   " serial=", serial,
+        #   " vid=", vid.pp,
+        #   " bVid[", n, "]=", vtx.bVid[n].pp,
+        #   ""
 
   # Store and lock vertex
   db.layersPutProof(vid, key, vtx)
+  if noisy: echo ">>> mergeNodeImpl (9) done ok",
+    " serial=", serial,
+    " vid=", vid.pp,
+    " key=", key.pp(db),
+    " vtx=", vtx.pp(db),
+    " vGen=", db.vGen.pp,
+    ""
   ok()
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
+
+proc setNoisy*(w: bool): bool {.discardable.} =
+  w.selfNoisy
+
+template exec*(noisy: bool; code: untyped): untyped =
+  block:
+    let save = selfNoisy noisy
+    defer: selfNoisy save
+    code
 
 proc mergePayload*(
     db: AristoDbRef;                   # Database, top layer
@@ -633,30 +799,42 @@ proc mergePayload*(
   ## `payload.root` vertex ID.
   ##
   if LEAST_FREE_VID <= leafTie.root.distinctBase:
+    if noisy: echo "<<< mergeImpl (1)",
+      " accPath=", accPath,
+      " leafTie=", leafTie.pp
     ? db.registerAccount(leafTie.root, accPath)
   elif not leafTie.root.isValid:
+    if noisy: echo "<<< mergeImpl (1.1)",
+      " accPath=", accPath,
+      " leafTie=", leafTie.pp
     return err(MergeRootMissing)
 
   let hike = leafTie.hikeUp(db).to(Hike)
+  if noisy: echo "<<< mergeImpl (2)", "\n    ", hike.pp(db)
   var okHike: Hike
   if 0 < hike.legs.len:
     case hike.legs[^1].wp.vtx.vType:
     of Branch:
+      if noisy: echo ">>> mergeImpl (3)"
       okHike = ? db.topIsBranchAddLeaf(hike, payload)
     of Leaf:
+      if noisy: echo ">>> mergeImpl (4)"
       if 0 < hike.tail.len:          # `Leaf` vertex problem?
         return err(MergeLeafGarbledHike)
       okHike = ? db.updatePayload(hike, leafTie, payload)
     of Extension:
+      if noisy: echo ">>> mergeImpl (5)"
       okHike = ? db.topIsExtAddLeaf(hike, payload)
 
   else:
     # Empty hike
     let rootVtx = db.getVtx hike.root
     if rootVtx.isValid:
+      if noisy: echo ">>> mergeImpl (6)"
       okHike = ? db.topIsEmptyAddLeaf(hike,rootVtx, payload)
 
     else:
+      if noisy: echo ">>> mergeImpl (7)"
       # Bootstrap for existing root ID
       let wp = VidVtxPair(
         vid: hike.root,
@@ -673,6 +851,9 @@ proc mergePayload*(
       if rc.isErr or rc.value != leafTie.path:
         return err(MergeAssemblyFailed) # Ooops
 
+  if noisy: echo ">>> mergeImpl (9)",
+    "\n    db\n    ", db.pp(),
+    "\n"
   ok okHike
 
 
@@ -755,6 +936,8 @@ proc merge*(
         discard todo.append node
         seen[lid] = node
 
+  serial.inc # <-- debugging
+
   let rootKey = block:
     if rootVid.isValid:
       let vidKey = db.getKey rootVid
@@ -776,6 +959,11 @@ proc merge*(
       key = w.Blob.digestTo(HashKey)
       node = rlp.decode(w.Blob,NodeRef)
     if node.error != AristoError(0):
+      if noisy: echo ">>> merge/proof (1)",
+        " serial=", serial,
+        " error=", node.error,
+        " data=", w.Blob.toHex,
+        ""
       return err(node.error)
     nodeTab[key] = node
     rootKeys.incl key
@@ -842,6 +1030,7 @@ proc merge*(
         let vid2 = VertexID(count)
         count.inc
         if not db.getKey(vid2).isValid:
+          doAssert not db.layerGetProofVidOrVoid(key).isValid
           db.layersPutProof(vid2, key)
           roots[key] = vid2
           break
@@ -868,6 +1057,16 @@ proc merge*(
       else:
         chains.add chain
 
+  proc noisyDump(n: int) =
+    if noisy: echo ">>> merge/proof noisyDump (", n, ")",
+      " serial=", serial,
+      " rootKeys=", rootKeys.toSeq.pp(db),
+      " nodeKeys=", nodeTab.pp(db),
+      "\n     proof={", nodeTab.keys.toSeq.mapIt(it.pp(db)).join(","), "}",
+      "\n     chains\n       ", chains.pp(db),
+      ""
+  #noisyDump(2)
+
   # Process over chains in reverse mode starting with the root node. This
   # allows the algorithm to find existing nodes on the backend.
   var
@@ -876,14 +1075,29 @@ proc merge*(
   # Process the root ID which is common to all chains
   for chain in chains & accounts:
     let chainRootVid = roots.getOrVoid chain[^1]
+    if noisy: echo ">>> merge/proof (3)",
+      " serial=", serial,
+      " chainRootVid=", chainRootVid.pp,
+      " chain=", chain.pp(db),
+      " vGen=", db.vGen.pp,
+      ""
     for key in chain.reversed:
       if key notin seen:
         seen.incl key
         let node = nodeTab.getOrVoid key
         db.mergeNodeImpl(key, node, chainRootVid).isOkOr:
+          if noisy: echo ">>> merge/proof (5)",
+            " serial=", serial,
+            " processed ", key.pp(db),
+            " error=", error,
+            " type=", node.vType,
+            #"\n    db\n    ", db.pp(filterOk=false),
+            ""
+          noisyDump(6)
           return err(error)
         merged.inc
 
+  noisyDump(9)
   ok merged
 
 
@@ -913,28 +1127,35 @@ proc merge*(
     if key.isValid:
       if rootKey.isValid and key != rootKey:
         # Cannot use installed root key differing from hash argument
+        if noisy: echo ">>> merge/root (1)"
         return err(MergeRootKeyDiffersForVid)
       # Confirm root ID and key for proof nodes processing
       db.layersPutProof(rootVid, key) # note that `rootKey` might be void
+      if noisy: echo ">>> merge/root (2)"
       return ok rootVid
 
     if not rootHash.isValid:
+      if noisy: echo ">>> merge/root (3)"
       return err(MergeRootArgsIncomplete)
     if db.getVtx(rootVid).isValid:
       # Cannot use verify root key for existing root vertex
+      if noisy: echo ">>> merge/root (4)"
       return err(MergeRootKeyMissing)
 
     # Confirm root ID and hash key for proof nodes processing
     db.layersPutProof(rootVid, rootKey)
+    if noisy: echo ">>> merge/root (5)"
     return ok rootVid
 
   if not rootHash.isValid:
+    if noisy: echo ">>> merge/root (6)"
     return err(MergeRootArgsIncomplete)
 
   # Now there is no root vertex ID, only the hash argument.
   # So Create and assign a new root key.
   let vid = db.vidFetch
   db.layersPutProof(vid, rootKey)
+  if noisy: echo ">>> merge/root (9)"
   return ok vid
 
 

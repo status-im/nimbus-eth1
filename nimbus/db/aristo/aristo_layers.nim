@@ -16,9 +16,15 @@ import
   results,
   ./aristo_desc
 
+var noisy* = false
+
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
+
+proc selfNoisy(w: bool): bool {.discardable.} =
+  result = noisy
+  noisy = w
 
 func dup(sTab: Table[VertexID,VertexRef]): Table[VertexID,VertexRef] =
   ## Explicit dup for `VertexRef` values
@@ -57,6 +63,19 @@ func nLayersKey*(db: AristoDbRef): int =
   ## different layers.
   ##
   db.stack.mapIt(it.delta.kMap.len).foldl(a + b, db.top.delta.kMap.len)
+
+# ------------------------------------------------------------------------------
+# Public functions (debugging)
+# ------------------------------------------------------------------------------
+
+proc setNoisy*(w: bool): bool {.discardable.} =
+  w.selfNoisy
+
+template exec*(noisy: bool; code: untyped): untyped =
+  block:
+    let save = selfNoisy noisy
+    defer: selfNoisy save
+    code
 
 # ------------------------------------------------------------------------------
 # Public functions: getter variants
