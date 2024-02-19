@@ -84,6 +84,14 @@ let
 
   ariTest2* = CaptureSpecs(
     builtIn:   true,
+    name:      bulkTest3.name & "-am",
+    network:   bulkTest3.network,
+    files:     bulkTest3.files,
+    numBlocks: 500_000,
+    dbType:    AristoDbMemory)
+
+  ariTest3* = CaptureSpecs(
+    builtIn:   true,
     name:      bulkTest3.name & "-ar",
     network:   bulkTest3.network,
     files:     bulkTest3.files,
@@ -110,16 +118,25 @@ let
 
   legaTest2* = CaptureSpecs(
     builtIn:   true,
-    name:      ariTest2.name.replace("-ar", "-lp"),
+    name:      ariTest2.name.replace("-ar", "-lm"),
+    network:   ariTest2.network,
     files:     ariTest2.files,
     numBlocks: ariTest2.numBlocks,
+    dbType:    LegacyDbMemory)
+
+  legaTest3* = CaptureSpecs(
+    builtIn:   true,
+    name:      ariTest3.name.replace("-ar", "-lp"),
+    network:   ariTest3.network,
+    files:     ariTest3.files,
+    numBlocks: ariTest3.numBlocks,
     dbType:    LegacyDbPersistent)
 
   # ------------------
 
   allSamples* = [
     bulkTest0, bulkTest1, bulkTest2, bulkTest3,
-    ariTest0, ariTest1, ariTest2,
-    legaTest0, legaTest1, legaTest2]
+    ariTest0, ariTest1, ariTest2, ariTest3,
+    legaTest0, legaTest1, legaTest2, legaTest3]
 
 # End

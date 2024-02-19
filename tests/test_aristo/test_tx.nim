@@ -18,7 +18,7 @@ import
   stew/endians2,
   ../../nimbus/db/aristo/[
     aristo_check, aristo_debug, aristo_delete, aristo_desc, aristo_get,
-    aristo_layers, aristo_merge],
+    aristo_hike, aristo_layers, aristo_merge],
   ../../nimbus/db/[aristo, aristo/aristo_init/persistent],
   ../replay/xcheck,
   ./test_helpers
@@ -83,14 +83,22 @@ proc rand(td: var PrngDesc; top: int): int =
 
 proc randomisedLeafs(
     db: AristoDbRef;
+    ltys: HashSet[LeafTie];
     td: var PrngDesc;
-       ): seq[(LeafTie,VertexID)] =
-  result = db.lTab.pairs.toSeq.filterIt(it[1].isValid).sorted(
-    cmp = proc(a,b: (LeafTie,VertexID)): int = cmp(a[0], b[0]))
-  if 2 < result.len:
-    for n in 0 ..< result.len-1:
-      let r = n + td.rand(result.len - n)
-      result[n].swap result[r]
+       ): Result[seq[(LeafTie,VertexID)],(VertexID,AristoError)] =
+  var lvp: seq[(LeafTie,VertexID)]
+  for lty in ltys:
+    let hike = lty.hikeUp(db).valueOr:
+      return err((error[0],error[1]))
+    lvp.add (lty,hike.legs[^1].wp.vid)
+
+  var lvp2 = lvp.sorted(
+    cmp = proc(a,b: (LeafTie,VertexID)): int = cmp(a[0],b[0]))
+  if 2 < lvp2.len:
+    for n in 0 ..< lvp2.len-1:
+      let r = n + td.rand(lvp2.len - n)
+      lvp2[n].swap lvp2[r]
+  ok lvp2
 
 proc innerCleanUp(db: AristoDbRef): bool {.discardable.}  =
   ## Defer action
@@ -134,7 +142,7 @@ proc saveToBackend(
     xCheckRc rc.error == 0
 
   # Make sure MPT hashes are OK
-  xCheck db.dirty == false
+  xCheck db.dirty.len == 0
 
   block:
     let rc = db.txTop()
@@ -154,7 +162,7 @@ proc saveToBackend(
     xCheckRc rc.error == 0
 
   # Make sure MPT hashes are OK
-  xCheck db.dirty == false
+  xCheck db.dirty.len == 0
 
   block:
     let rc = db.txTop()
@@ -192,7 +200,7 @@ proc saveToBackendWithOops(
     xCheckRc rc.error == 0
 
   # Make sure MPT hashes are OK
-  xCheck db.dirty == false
+  xCheck db.dirty.len == 0
 
   block:
     let rc = db.txTop()
@@ -208,7 +216,7 @@ proc saveToBackendWithOops(
     xCheckRc rc.error == 0
 
   # Make sure MPT hashes are OK
-  xCheck db.dirty == false
+  xCheck db.dirty.len == 0
 
   block:
     let rc = db.txTop()
@@ -356,8 +364,10 @@ proc testTxMergeAndDeleteOneByOne*(
     var leafsLeft = kvpLeafs.mapIt(it.leafTie).toHashSet
 
     # Provide a (reproducible) peudo-random copy of the leafs list
-    let leafVidPairs = db.randomisedLeafs prng
-    xCheck leafVidPairs.len == leafsLeft.len
+    let leafVidPairs = block:
+      let rc = db.randomisedLeafs(leafsLeft, prng)
+      xCheckRc rc.error == (0,0)
+      rc.value
 
     # Trigger subsequent saving tasks in loop below
     let (saveMod, saveRest, relax) = block:
@@ -459,8 +469,10 @@ proc testTxMergeAndDeleteSubTree*(
     var leafsLeft = kvpLeafs.mapIt(it.leafTie).toHashSet
 
     # Provide a (reproducible) peudo-random copy of the leafs list
-    let leafVidPairs = db.randomisedLeafs prng
-    xCheck leafVidPairs.len == leafsLeft.len
+    let leafVidPairs = block:
+      let rc = db.randomisedLeafs(leafsLeft, prng)
+      xCheckRc rc.error == (0,0)
+      rc.value
 
     # === delete sub-tree ===
     block:
@@ -538,7 +550,6 @@ proc testTxMergeProofAndKvpList*(
       testId = idPfx & "#" & $w.id & "." & $n
       runID = n
       sTabLen = db.nLayersVtx()
-      lTabLen = db.lTab.len
       leafs = w.kvpLst.mapRootVid VertexID(1) # merge into main trie
 
     var
@@ -551,14 +562,12 @@ proc testTxMergeProofAndKvpList*(
 
       xCheck proved.error in {AristoError(0),MergeHashKeyCachedAlready}
       xCheck w.proof.len == proved.merged + proved.dups
-      xCheck db.lTab.len == lTabLen
       xCheck db.nLayersVtx() <= proved.merged + sTabLen
       xCheck proved.merged < db.nLayersYek()
 
     let
       merged = db.mergeList leafs
 
-    xCheck db.lTab.len == lTabLen + merged.merged
     xCheck merged.merged + merged.dups == leafs.len
     xCheck merged.error in {AristoError(0), MergeLeafPathCachedAlready}
 

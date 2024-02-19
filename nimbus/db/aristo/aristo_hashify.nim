@@ -206,16 +206,7 @@ proc createSched(
       ): Result[WidthFirstForest,(VertexID,AristoError)] =
   ## Create width-first search schedule (aka forest)
   ##
-  var wff = ? db.pedigree(db.lTab.keys.toSeq.mapIt(it.root).toHashSet, db.pPrf)
-
-  # Additional nodes to consider if proof nodes are in place
-  if 0 < db.pPrf.len:
-    for vid in db.lTab.values:
-      if vid.isValid and
-         vid notin wff.base and
-         vid notin wff.pool and
-         not db.getKey(vid).isValid:
-        wff.leaf.incl vid
+  var wff = ? db.pedigree(db.dirty, db.pPrf)
 
   if 0 < wff.leaf.len:
     for vid in wff.leaf:
@@ -226,7 +217,7 @@ proc createSched(
              needed notin wff.pool:
             return err((needed,HashifyVtxUnresolved))
         continue
-      db.layersPutKey(vid, node.digestTo(HashKey))
+      db.layersPutKey(VertexID(1), vid, node.digestTo(HashKey))
 
   ok wff
 
@@ -259,7 +250,7 @@ proc processSched(
         # End `valueOr` terminates error clause
 
       # Could resolve => update Merkle hash
-      db.layersPutKey(vid, node.digestTo HashKey)
+      db.layersPutKey(VertexID(1), vid, node.digestTo HashKey)
 
       # Set follow up link for next round
       let toToVid = wff.pool.getOrVoid toVid
@@ -305,7 +296,7 @@ proc finaliseRoots(
         return err((vid,HashifyRootVtxUnresolved))
       key = node.digestTo(HashKey)
     if vid notin db.pPrf:
-      db.layersPutKey(vid, key)
+      db.layersPutKey(VertexID(1), vid, key)
     elif key != db.getKey vid:
       return err((vid,HashifyProofHashMismatch))
 
@@ -322,7 +313,7 @@ proc hashify*(
   ## Tree`. If successful, the function returns the keys (aka Merkle hash) of
   ## the root vertices.
   ##
-  if db.dirty:
+  if 0 < db.dirty.len:
     # Set up widh-first traversal schedule
     var wff = ? db.createSched()
 
@@ -332,8 +323,7 @@ proc hashify*(
     # Do/complete state root vertices
     ? wff.finaliseRoots db
 
-    db.top.final.dirty = false             # Mark top layer clean
-    db.top.final.lTab.clear                # Done with leafs
+    db.top.final.dirty.clear               # Mark top layer clean
     db.top.final.vGen = db.vGen.vidReorg() # Squeze list of recycled vertex IDs
 
   ok()

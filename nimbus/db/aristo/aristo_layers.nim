@@ -45,17 +45,14 @@ proc recalcLebal(layer: var LayerObj) =
 # Public getters: lazy value lookup for read only versions
 # ------------------------------------------------------------------------------
 
-func lTab*(db: AristoDbRef): Table[LeafTie,VertexID] =
-  db.top.final.lTab
+func dirty*(db: AristoDbRef): HashSet[VertexID] =
+  db.top.final.dirty
 
 func pPrf*(db: AristoDbRef): HashSet[VertexID] =
   db.top.final.pPrf
 
 func vGen*(db: AristoDbRef): seq[VertexID] =
   db.top.final.vGen
-
-func dirty*(db: AristoDbRef): bool =
-  db.top.final.dirty
 
 # ------------------------------------------------------------------------------
 # Public getters/helpers
@@ -150,18 +147,32 @@ proc layersGetYekOrVoid*(db: AristoDbRef; key: HashKey): HashSet[VertexID] =
 # Public functions: put variants
 # ------------------------------------------------------------------------------
 
-proc layersPutVtx*(db: AristoDbRef; vid: VertexID; vtx: VertexRef) =
+proc layersPutVtx*(
+    db: AristoDbRef;
+    root: VertexID;
+    vid: VertexID;
+    vtx: VertexRef;
+      ) =
   ## Store a (potentally empty) vertex on the top layer
   db.top.delta.sTab[vid] = vtx
-  db.top.final.dirty = true # Modified top cache layers
+  db.top.final.dirty.incl root
 
-proc layersResVtx*(db: AristoDbRef; vid: VertexID) =
+proc layersResVtx*(
+    db: AristoDbRef;
+    root: VertexID;
+    vid: VertexID;
+      ) =
   ## Shortcut for `db.layersPutVtx(vid, VertexRef(nil))`. It is sort of the
   ## equivalent of a delete function.
-  db.layersPutVtx(vid, VertexRef(nil))
+  db.layersPutVtx(root, vid, VertexRef(nil))
 
 
-proc layersPutKey*(db: AristoDbRef; vid: VertexID; key: HashKey) =
+proc layersPutKey*(
+    db: AristoDbRef;
+    root: VertexID;
+    vid: VertexID;
+    key: HashKey;
+      ) =
   ## Store a (potentally void) hash key on the top layer
 
   # Get previous key
@@ -169,7 +180,7 @@ proc layersPutKey*(db: AristoDbRef; vid: VertexID; key: HashKey) =
     
   # Update key on `kMap:key->vid` mapping table
   db.top.delta.kMap[vid] = key
-  db.top.final.dirty = true # Modified top cache layers
+  db.top.final.dirty.incl root # Modified top cache layers
 
   # Clear previous value on reverse table if it has changed
   if prvKey.isValid and prvKey != key:
@@ -194,10 +205,10 @@ proc layersPutKey*(db: AristoDbRef; vid: VertexID; key: HashKey) =
       db.top.delta.pAmk[key] = db.stack.getLebalOrVoid(key) + @[vid].toHashSet
 
 
-proc layersResKey*(db: AristoDbRef; vid: VertexID) =
+proc layersResKey*(db: AristoDbRef; root: VertexID; vid: VertexID) =
   ## Shortcut for `db.layersPutKey(vid, VOID_HASH_KEY)`. It is sort of the
   ## equivalent of a delete function.
-  db.layersPutKey(vid, VOID_HASH_KEY)
+  db.layersPutKey(root, vid, VOID_HASH_KEY)
 
 # ------------------------------------------------------------------------------
 # Public functions

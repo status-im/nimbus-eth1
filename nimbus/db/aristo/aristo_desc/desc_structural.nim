@@ -114,10 +114,9 @@ type
     ## These structures are used for tables which are typically smaller then
     ## the ones on the `LayerDelta` object.
     ##
-    lTab*: Table[LeafTie,VertexID]   ## Access path to leaf vertex
     pPrf*: HashSet[VertexID]         ## Locked vertices (proof nodes)
     vGen*: seq[VertexID]             ## Unique vertex ID generator
-    dirty*: bool                     ## Needs to be hashified if `true`
+    dirty*: HashSet[VertexID]        ## Start nodes to re-hashiy from
 
   LayerRef* = ref LayerObj
   LayerObj* = object
@@ -305,7 +304,6 @@ func dup*(node: NodeRef): NodeRef =
 func dup*(final: LayerFinalRef): LayerFinalRef =
   ## Duplicate final layer.
   LayerFinalRef(
-    lTab:  final.lTab,
     pPrf:  final.pPrf,
     vGen:  final.vGen,
     dirty: final.dirty)

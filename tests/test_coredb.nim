@@ -210,7 +210,9 @@ proc chainSyncRunner(
 
   ## Test backend database and ledger
   let
-    fileInfo = capture.files[0].splitFile.name.split(".")[0]
+    fileInfo = capture.files[0]
+                      .splitFile.name.split(".")[0]
+                      .strip(leading=false, chars={'0'..'9'})
     filePaths = capture.files.mapIt(it.findFilePath(baseDir,repoDir).value)
     baseDir = getTmpDir() / capture.name & "-chain-sync"
     dbDir = baseDir / "tmp"
@@ -278,18 +280,18 @@ when isMainModule:
 
   var state: (Duration, int)
   for n,capture in sampleList:
-    noisy.profileSection("@testList #" & $n, state):
+    noisy.profileSection("@sample #" & $n, state):
       noisy.chainSyncRunner(
         capture = capture,
         #dbType = ..,
         ldgType=LedgerCache,
-        #profilingOk = ..,
-        finalDiskCleanUpOk = false,
+        #profilingOk = true,
+        #finalDiskCleanUpOk = false,
         #enaLoggingOk = ..,
         #lastOneExtraOk = ..,
       )
 
-  noisy.say "***", "total elapsed: ", state[0].pp, " sections: ", state[1]
+  noisy.say "***", "total: ", state[0].pp, " sections: ", state[1]
 
 # ------------------------------------------------------------------------------
 # End

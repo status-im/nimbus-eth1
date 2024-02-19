@@ -149,7 +149,7 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
 
   # Check top layer cache against backend
   if cache:
-    if db.dirty:
+    if 0 < db.dirty.len:
       return err((VertexID(0),CheckBeCacheIsDirty))
 
     # Check structural table

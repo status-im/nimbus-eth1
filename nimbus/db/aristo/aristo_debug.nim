@@ -54,9 +54,6 @@ proc toHex(w: VertexID): string =
 proc toHexLsb(w: int8): string =
   $"0123456789abcdef"[w and 15]
 
-proc sortedKeys(lTab: Table[LeafTie,VertexID]): seq[LeafTie] =
-  lTab.keys.toSeq.sorted(cmp = proc(a,b: LeafTie): int = cmp(a,b))
-
 proc sortedKeys[T](tab: Table[VertexID,T]): seq[VertexID] =
   tab.keys.toSeq.sorted
 
@@ -290,16 +287,6 @@ proc ppSTab(
             .mapIt("(" & it[0].ppVid & "," & it[1].ppVtx(db,it[0]) & ")")
             .join(indent.toPfx(1)) & "}"
 
-proc ppLTab(
-    lTab: Table[LeafTie,VertexID];
-    db: AristoDbRef;
-    indent = 4;
-      ): string =
-  "{" & lTab.sortedKeys
-            .mapIt((it, lTab.getOrVoid it))
-            .mapIt("(" & it[0].ppLeafTie(db) & "," & it[1].ppVid & ")")
-            .join(indent.toPfx(1)) & "}"
-
 proc ppPPrf(pPrf: HashSet[VertexID]): string =
   "{" & pPrf.sortedKeys.mapIt(it.ppVid).join(",") & "}"
 
@@ -478,7 +465,6 @@ proc ppLayer(
     db: AristoDbRef;
     vGenOk: bool;
     sTabOk: bool;
-    lTabOk: bool;
     kMapOk: bool;
     pPrfOk: bool;
     indent = 4;
@@ -486,7 +472,7 @@ proc ppLayer(
   let
     pfx1 = indent.toPfx(1)
     pfx2 = indent.toPfx(2)
-    nOKs = sTabOk.ord + lTabOk.ord + kMapOk.ord + pPrfOk.ord + vGenOk.ord
+    nOKs = sTabOk.ord + kMapOk.ord + pPrfOk.ord + vGenOk.ord
     tagOk = 1 < nOKs
   var
     pfy = ""
@@ -514,11 +500,6 @@ proc ppLayer(
         tLen = layer.delta.sTab.len
         info = "sTab(" & $tLen & ")"
       result &= info.doPrefix(0 < tLen) & layer.delta.sTab.ppSTab(db,indent+2)
-    if lTabOk:
-      let
-        tLen = layer.final.lTab.len
-        info = "lTab(" & $tLen & ")"
-      result &= info.doPrefix(0 < tLen) & layer.final.lTab.ppLTab(db,indent+2)
     if kMapOk:
       let
         tLen = layer.delta.kMap.len
@@ -534,7 +515,8 @@ proc ppLayer(
       result &= info.doPrefix(0 < tLen) & layer.final.pPrf.ppPPrf
     if 0 < nOKs:
       let
-        info = if layer.final.dirty: "dirty" else: "clean"
+        info = if layer.final.dirty.len == 0: "clean"
+               else: "dirty{" & layer.final.dirty.ppVids & "}"
       result &= info.doPrefix(false)
 
 # ------------------------------------------------------------------------------
@@ -636,13 +618,6 @@ proc pp*(
       ): string =
   sTab.ppSTab(db.orDefault)
 
-proc pp*(
-    lTab: Table[LeafTie,VertexID];
-    db = AristoDbRef(nil);
-    indent = 4;
-      ): string =
-  lTab.ppLTab(db.orDefault, indent)
-
 proc pp*(pPrf: HashSet[VertexID]): string =
   pPrf.ppPPrf
 
@@ -720,7 +695,7 @@ proc pp*(
     indent = 4;
       ): string =
   layer.ppLayer(
-    db, vGenOk=true, sTabOk=true, lTabOk=true, kMapOk=true, pPrfOk=true)
+    db, vGenOk=true, sTabOk=true, kMapOk=true, pPrfOk=true)
 
 proc pp*(
     layer: LayerRef;
@@ -729,7 +704,7 @@ proc pp*(
     indent = 4;
       ): string =
   layer.ppLayer(
-    db, vGenOk=true, sTabOk=xTabOk, lTabOk=xTabOk, kMapOk=true, pPrfOk=true)
+    db, vGenOk=true, sTabOk=xTabOk, kMapOk=true, pPrfOk=true)
 
 proc pp*(
     layer: LayerRef;
@@ -740,7 +715,7 @@ proc pp*(
     indent = 4;
       ): string =
   layer.ppLayer(
-    db, vGenOk=other, sTabOk=xTabOk, lTabOk=xTabOk, kMapOk=kMapOk, pPrfOk=other)
+    db, vGenOk=other, sTabOk=xTabOk, kMapOk=kMapOk, pPrfOk=other)
 
 
 proc pp*(
