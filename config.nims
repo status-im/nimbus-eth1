@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -148,9 +148,6 @@ switch("warning", "ObservableStores:off")
 
 # Too many false positives for "Warning: method has lock level <unknown>, but another method has 0 [LockLevel]"
 switch("warning", "LockLevel:off")
-
-# nimbus-eth1 doesn't use 'news' nor ws client, only websock server. set the backend package to websock.
-switch("define", "json_rpc_websocket_package:websock")
 
 if defined(windows) and defined(i386):
   # avoid undefined reference to 'sqrx_mont_384x' when compiling in 32 bit mode
