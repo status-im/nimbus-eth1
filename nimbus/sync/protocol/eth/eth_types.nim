@@ -12,6 +12,7 @@
 
 import
   chronicles,
+  results,
   eth/[common, p2p, p2p/private/p2p_types],
   ../../types
 
@@ -49,43 +50,73 @@ const
 proc notImplemented(name: string) =
   debug "Method not implemented", meth = name
 
-method getStatus*(ctx: EthWireBase): EthState
-    {.base, gcsafe, raises: [CatchableError].} =
+method getStatus*(ctx: EthWireBase): Result[EthState, string]
+    {.base, gcsafe.} =
   notImplemented("getStatus")
 
-method getReceipts*(ctx: EthWireBase, hashes: openArray[Hash256]): seq[seq[Receipt]]
-    {.base, gcsafe, raises: [CatchableError].} =
+method getReceipts*(ctx: EthWireBase,
+                    hashes: openArray[Hash256]):
+                      Result[seq[seq[Receipt]], string]
+    {.base, gcsafe.} =
   notImplemented("getReceipts")
 
-method getPooledTxs*(ctx: EthWireBase, hashes: openArray[Hash256]): seq[Transaction] {.base, gcsafe.} =
+method getPooledTxs*(ctx: EthWireBase,
+                     hashes: openArray[Hash256]):
+                       Result[seq[Transaction], string]
+    {.base, gcsafe.} =
   notImplemented("getPooledTxs")
 
-method getBlockBodies*(ctx: EthWireBase, hashes: openArray[Hash256]): seq[BlockBody] {.base, gcsafe, raises: [CatchableError].} =
+method getBlockBodies*(ctx: EthWireBase,
+                       hashes: openArray[Hash256]):
+                         Result[seq[BlockBody], string]
+    {.base, gcsafe.} =
   notImplemented("getBlockBodies")
 
-method getBlockHeaders*(ctx: EthWireBase, req: BlocksRequest): seq[BlockHeader]
-    {.base, gcsafe, raises: [CatchableError].} =
+method getBlockHeaders*(ctx: EthWireBase,
+                        req: BlocksRequest):
+                          Result[seq[BlockHeader], string]
+    {.base, gcsafe.} =
   notImplemented("getBlockHeaders")
 
-method handleNewBlock*(ctx: EthWireBase, peer: Peer, blk: EthBlock, totalDifficulty: DifficultyInt)
-    {.base, gcsafe, raises: [CatchableError].} =
+method handleNewBlock*(ctx: EthWireBase,
+                       peer: Peer,
+                       blk: EthBlock,
+                       totalDifficulty: DifficultyInt):
+                         Result[void, string]
+    {.base, gcsafe.} =
   notImplemented("handleNewBlock")
 
-method handleAnnouncedTxs*(ctx: EthWireBase, peer: Peer, txs: openArray[Transaction])
-    {.base, gcsafe, raises: [CatchableError].} =
+method handleAnnouncedTxs*(ctx: EthWireBase,
+                           peer: Peer,
+                           txs: openArray[Transaction]):
+                             Result[void, string]
+    {.base, gcsafe.} =
   notImplemented("handleAnnouncedTxs")
 
-method handleAnnouncedTxsHashes*(ctx: EthWireBase, peer: Peer, txHashes: openArray[Hash256])
+method handleAnnouncedTxsHashes*(ctx: EthWireBase,
+                                 peer: Peer,
+                                 txHashes: openArray[Hash256]):
+                                   Result[void, string]
     {.base, gcsafe.} =
   notImplemented("handleAnnouncedTxsHashes")
 
-method handleNewBlockHashes*(ctx: EthWireBase, peer: Peer, hashes: openArray[NewBlockHashesAnnounce])
-    {.base, gcsafe, raises: [CatchableError].} =
+method handleNewBlockHashes*(ctx: EthWireBase,
+                             peer: Peer,
+                             hashes: openArray[NewBlockHashesAnnounce]):
+                               Result[void, string]
+    {.base, gcsafe.} =
   notImplemented("handleNewBlockHashes")
 
 when defined(legacy_eth66_enabled):
-  method getStorageNodes*(ctx: EthWireBase, hashes: openArray[Hash256]): seq[Blob] {.base, gcsafe.} =
+  method getStorageNodes*(ctx: EthWireBase,
+                          hashes: openArray[Hash256]):
+                            Result[seq[Blob], string]
+      {.base, gcsafe.} =
     notImplemented("getStorageNodes")
 
-  method handleNodeData*(ctx: EthWireBase, peer: Peer, data: openArray[Blob]) {.base, gcsafe.} =
+  method handleNodeData*(ctx: EthWireBase,
+                         peer: Peer,
+                         data: openArray[Blob]):
+                           Result[void, string]
+      {.base, gcsafe.} =
     notImplemented("handleNodeData")

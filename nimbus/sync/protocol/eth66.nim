@@ -76,6 +76,10 @@ const
   trEthSendNewBlockHashes* =
     ">> " & prettyEthProtoName & " Sending NewBlockHashes"
 
+template handleHandlerError(x: untyped) =
+  if x.isErr:
+    raise newException(EthP2PError, x.error)
+
 p2pProtocol eth66(version = ethVersion,
                   rlpxName = "eth",
                   peerState = EthPeerState,
@@ -86,7 +90,9 @@ p2pProtocol eth66(version = ethVersion,
     let
       network   = peer.network
       ctx       = peer.networkState
-      status    = ctx.getStatus()
+      statusRes = ctx.getStatus()
+    handleHandlerError(statusRes)
+    let status = statusRes.get
 
     trace trEthSendSending & "Status (0x00)", peer,
       td        = status.totalDifficulty,
@@ -150,7 +156,8 @@ p2pProtocol eth66(version = ethVersion,
         hashes=hashes.len
 
     let ctx = peer.networkState()
-    ctx.handleNewBlockHashes(peer, hashes)
+    let res = ctx.handleNewBlockHashes(peer, hashes)
+    handleHandlerError(res)
 
   # User message 0x02: Transactions.
   proc transactions(peer: Peer, transactions: openArray[Transaction]) =
@@ -159,7 +166,8 @@ p2pProtocol eth66(version = ethVersion,
         transactions=transactions.len
 
     let ctx = peer.networkState()
-    ctx.handleAnnouncedTxs(peer, transactions)
+    let res = ctx.handleAnnouncedTxs(peer, transactions)
+    handleHandlerError(res)
 
   requestResponse:
     # User message 0x03: GetBlockHeaders.
@@ -176,14 +184,15 @@ p2pProtocol eth66(version = ethVersion,
 
       let ctx = peer.networkState()
       let headers = ctx.getBlockHeaders(request)
-      if headers.len > 0:
+      handleHandlerError(headers)
+      if headers.get.len > 0:
         trace trEthSendReplying & "with BlockHeaders (0x04)", peer,
-          sent=headers.len, requested=request.maxResults
+          sent=headers.get.len, requested=request.maxResults
       else:
         trace trEthSendReplying & "EMPTY BlockHeaders (0x04)", peer,
           sent=0, requested=request.maxResults
 
-      await response.send(headers)
+      await response.send(headers.get)
 
     # User message 0x04: BlockHeaders.
     proc blockHeaders(p: Peer, headers: openArray[BlockHeader])
@@ -201,14 +210,15 @@ p2pProtocol eth66(version = ethVersion,
 
       let ctx = peer.networkState()
       let bodies = ctx.getBlockBodies(hashes)
-      if bodies.len > 0:
+      handleHandlerError(bodies)
+      if bodies.get.len > 0:
         trace trEthSendReplying & "with BlockBodies (0x06)", peer,
-          sent=bodies.len, requested=hashes.len
+          sent=bodies.get.len, requested=hashes.len
       else:
         trace trEthSendReplying & "EMPTY BlockBodies (0x06)", peer,
           sent=0, requested=hashes.len
 
-      await response.send(bodies)
+      await response.send(bodies.get)
 
     # User message 0x06: BlockBodies.
     proc blockBodies(peer: Peer, blocks: openArray[BlockBody])
@@ -224,7 +234,8 @@ p2pProtocol eth66(version = ethVersion,
         blockDifficulty = blk.header.difficulty
 
     let ctx = peer.networkState()
-    ctx.handleNewBlock(peer, blk, totalDifficulty)
+    let res = ctx.handleNewBlock(peer, blk, totalDifficulty)
+    handleHandlerError(res)
 
   # User message 0x08: NewPooledTransactionHashes.
   proc newPooledTransactionHashes(peer: Peer, txHashes: openArray[Hash256]) =
@@ -233,7 +244,8 @@ p2pProtocol eth66(version = ethVersion,
         hashes=txHashes.len
 
     let ctx = peer.networkState()
-    ctx.handleAnnouncedTxsHashes(peer, txHashes)
+    let res = ctx.handleAnnouncedTxsHashes(peer, txHashes)
+    handleHandlerError(res)
 
   requestResponse:
     # User message 0x09: GetPooledTransactions.
@@ -243,14 +255,15 @@ p2pProtocol eth66(version = ethVersion,
 
       let ctx = peer.networkState()
       let txs = ctx.getPooledTxs(txHashes)
-      if txs.len > 0:
+      handleHandlerError(txs)
+      if txs.get.len > 0:
         trace trEthSendReplying & "with PooledTransactions (0x0a)", peer,
-          sent=txs.len, requested=txHashes.len
+          sent=txs.get.len, requested=txHashes.len
       else:
         trace trEthSendReplying & "EMPTY PooledTransactions (0x0a)", peer,
           sent=0, requested=txHashes.len
 
-      await response.send(txs)
+      await response.send(txs.get)
 
     # User message 0x0a: PooledTransactions.
     proc pooledTransactions(peer: Peer, transactions: openArray[Transaction])
@@ -264,18 +277,20 @@ p2pProtocol eth66(version = ethVersion,
 
     let ctx = peer.networkState()
     let data = ctx.getStorageNodes(nodeHashes)
+    handleHandlerError(data)
 
     trace trEthSendReplying & "NodeData (0x0e)", peer,
-      sent=data.len, requested=nodeHashes.len
+      sent=data.get.len, requested=nodeHashes.len
 
-    await peer.nodeData(data)
+    await peer.nodeData(data.get)
 
   # User message 0x0e: NodeData.
   proc nodeData(peer: Peer, data: openArray[Blob]) =
     trace trEthRecvReceived & "NodeData (0x0e)", peer,
         bytes=data.len
     let ctx = peer.networkState()
-    ctx.handleNodeData(peer, data)
+    let res = ctx.handleNodeData(peer, data)
+    handleHandlerError(res)
 
   requestResponse:
     # User message 0x0f: GetReceipts.
@@ -285,14 +300,15 @@ p2pProtocol eth66(version = ethVersion,
 
       let ctx = peer.networkState()
       let rec = ctx.getReceipts(hashes)
-      if rec.len > 0:
+      handleHandlerError(rec)
+      if rec.get.len > 0:
         trace trEthSendReplying & "with Receipts (0x10)", peer,
-          sent=rec.len, requested=hashes.len
+          sent=rec.get.len, requested=hashes.len
       else:
         trace trEthSendReplying & "EMPTY Receipts (0x10)", peer,
           sent=0, requested=hashes.len
 
-      await response.send(rec)
+      await response.send(rec.get)
 
     # User message 0x10: Receipts.
     proc receipts(peer: Peer, receipts: openArray[seq[Receipt]])
