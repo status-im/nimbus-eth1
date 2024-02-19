@@ -22,9 +22,11 @@ import
     aristo_debug,
     aristo_desc,
     aristo_desc/desc_backend,
+    aristo_get,
     aristo_hashify,
     aristo_init/memory_db,
     aristo_init/rocks_db,
+    aristo_layers,
     aristo_persistent,
     aristo_blobify,
     aristo_vid],
@@ -37,6 +39,13 @@ const
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
+
+when not declared(aristo_hashify.noisy):
+  proc hashify(
+      db: AristoDbRef;
+      noisy: bool;
+        ): Result[void,(VertexID,AristoError)] =
+    aristo_hashify.hashify(db)
 
 func hash(filter: FilterRef): Hash =
   ## Unique hash/filter -- cannot use de/blobify as the expressions
@@ -65,36 +74,6 @@ func hash(filter: FilterRef): Hash =
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc mergeData(
-    db: AristoDbRef;
-    rootKey: Hash256;
-    rootVid: VertexID;
-    proof: openArray[SnapProof];
-    leafs: openArray[LeafTiePayload];
-    noisy: bool;
-      ): bool =
-  ## Simplified loop body of `test_mergeProofAndKvpList()`
-  if 0 < proof.len:
-    let rc = db.merge(rootKey, rootVid)
-    xCheckRc rc.error == 0
-
-    let proved = db.merge(proof, rc.value)
-    xCheck proved.error in {AristoError(0),MergeHashKeyCachedAlready}
-
-  let merged = db.mergeList leafs
-  xCheck merged.error in {AristoError(0), MergeLeafPathCachedAlready}
-
-  block:
-    let rc = db.hashify # (noisy, true)
-    xCheckRc rc.error == (0,0):
-      noisy.say "***", "dataMerge(9)",
-        " nLeafs=", leafs.len,
-        "\n    cache dump\n    ", db.pp,
-        "\n    backend dump\n    ", db.backend.pp(db)
-
-  true
-
-
 proc verify(
     ly: LayerRef;                            # Database layer
     be: BackendRef;                          # Backend
@@ -121,8 +100,13 @@ proc verify(
           " nVtx=", nVtx.pp,
           " mVtx=", mVtx.pp
 
-      xCheck beSTab.len == ly.delta.sTab.len
-      xCheck beKMap.len == ly.delta.kMap.len
+    xCheck beSTab.len == ly.delta.sTab.len
+    xCheck beKMap.len == ly.delta.kMap.len:
+      let
+        a = ly.delta.kMap.keys.toSeq.toHashSet
+        b = beKMap.keys.toSeq.toHashSet
+      noisy.say "***", "verify",
+        " delta=", (a -+- b).pp
 
     true
 
@@ -134,28 +118,6 @@ proc verify(
   else:
     raiseAssert "Oops, unsupported backend " & $be.kind
 
-# -----------
-
-proc collectFilter(
-    db: AristoDbRef;
-    filter: FilterRef;
-    tab: var Table[QueueID,Hash];
-    noisy: bool;
-      ): bool =
-  ## Store filter on permanent BE and register digest
-  if not filter.isNil:
-    let
-      fid = QueueID(7 * (tab.len + 1)) # just some number
-      be = db.backend
-      tx = be.putBegFn()
-
-    be.putFilFn(tx, @[(fid,filter)])
-    let rc = be.putEndFn tx
-    xCheckRc rc.error == 0
-
-    tab[fid] = filter.hash
-
-  true
 
 proc verifyFilters(
     db: AristoDbRef;
@@ -193,6 +155,98 @@ proc verifyFilters(
     noisy.verifyImpl(tab, be.RdbBackendRef)
   else:
     raiseAssert "Oops, unsupported backend " & $be.kind
+
+
+proc verifyKeys(
+    db: AristoDbRef;
+    noisy: bool;
+      ): bool =
+
+  proc verifyImpl[T](noisy: bool; db: AristoDbRef): bool =
+    ## Check for zero keys
+    var zeroKeys: seq[VertexID]
+    for (vid,vtx) in T.walkPairs(db):
+      if vtx.isValid and not db.getKey(vid).isValid:
+        zeroKeys.add vid
+
+    xCheck zeroKeys == EmptyVidSeq:
+      const noisy = true
+      noisy.say "***", "verifyKeys(1)",
+        "\n    zeroKeys=", zeroKeys.pp,
+        #"\n    db\n    ", db.pp(backendOk=true),
+        ""
+    true
+
+  ## Wrapper
+  let be = db.backend
+  case be.kind:
+  of BackendVoid:
+    verifyImpl[VoidBackendRef](noisy, db)
+  of BackendMemory:
+    verifyImpl[MemBackendRef](noisy, db)
+  of BackendRocksDB:
+    verifyImpl[RdbBackendRef](noisy, db)
+
+# -----------
+
+proc collectFilter(
+    db: AristoDbRef;
+    filter: FilterRef;
+    tab: var Table[QueueID,Hash];
+    noisy: bool;
+      ): bool =
+  ## Store filter on permanent BE and register digest
+  if not filter.isNil:
+    let
+      fid = QueueID(7 * (tab.len + 1)) # just some number
+      be = db.backend
+      tx = be.putBegFn()
+
+    be.putFilFn(tx, @[(fid,filter)])
+    let rc = be.putEndFn tx
+    xCheckRc rc.error == 0
+
+    tab[fid] = filter.hash
+
+  true
+
+
+proc mergeData(
+    db: AristoDbRef;
+    rootKey: Hash256;
+    rootVid: VertexID;
+    proof: openArray[SnapProof];
+    leafs: openArray[LeafTiePayload];
+    noisy: bool;
+      ): bool =
+  ## Simplified loop body of `test_mergeProofAndKvpList()`
+  if 0 < proof.len:
+    let rc = db.merge(rootKey, rootVid)
+    xCheckRc rc.error == 0
+
+    let proved = db.merge(proof, rc.value) # , noisy=noisy)
+    xCheck proved.error in {AristoError(0),MergeHashKeyCachedAlready}
+
+  let merged = db.mergeList(leafs, noisy=noisy)
+  xCheck merged.error in {AristoError(0), MergeLeafPathCachedAlready}
+
+  block:
+    let rc = db.hashify(noisy = noisy)
+    xCheckRc rc.error == (0,0):
+      noisy.say "***", "dataMerge (8)",
+        " nProof=", proof.len,
+        " nLeafs=", leafs.len,
+        " error=", rc.error,
+        #"\n    db\n    ", db.pp(backendOk=true),
+        ""
+  block:
+    xCheck db.verifyKeys(noisy):
+      noisy.say "***", "dataMerge (9)",
+        " nProof=", proof.len,
+        " nLeafs=", leafs.len,
+        #"\n    db\n    ", db.pp(backendOk=true),
+        ""
+  true
 
 # ------------------------------------------------------------------------------
 # Public test function
@@ -249,8 +303,8 @@ proc testBackendConsistency*(
         "\n    ndb\n    ", ndb.pp(backendOk = true),
         "\n    -------------",
         "\n    mdb\n    ", mdb.pp(backendOk = true),
-        "\n    -------------",
-        "\n    rdb\n    ", rdb.pp(backendOk = true),
+        #"\n    -------------",
+        #"\n    rdb\n    ", rdb.pp(backendOk = true),
         "\n    -------------"
 
     block:
@@ -281,8 +335,8 @@ proc testBackendConsistency*(
       mdbPreSave = ""
       rdbPreSave = ""
     when true and false:
-      mdbPreSave = mdb.pp(backendOk = true)
-      rdbPreSave = rdb.pp(backendOk = true)
+      mdbPreSave = mdb.pp() # backendOk = true)
+      rdbPreSave = rdb.pp() # backendOk = true)
 
     # Provide filter, store filter on permanent BE, and register filter digest
     block:
@@ -301,14 +355,18 @@ proc testBackendConsistency*(
       xCheckRc rc.error == 0
 
     block:
+      ndb.top.final.pPrf.clear # let it look like mdb/rdb
+      xCheck mdb.pPrf.len == 0
+      xCheck rdb.pPrf.len == 0
+
       let mdbVerifyOk = ndb.top.verify(mdb.backend, noisy)
       xCheck mdbVerifyOk:
-        when true and false:
+        when true: # and false:
           noisy.say "***", "beCon(4) <", n, "/", list.len-1, ">",
             " groups=", count,
             "\n    ndb\n    ", ndb.pp(backendOk = true),
-            #"\n    -------------",
-            #"\n    mdb pre-stow\n    ", mdbPreSave,
+            "\n    -------------",
+            "\n    mdb pre-stow\n    ", mdbPreSave,
             "\n    -------------",
             "\n    mdb\n    ", mdb.pp(backendOk = true),
             "\n    -------------"

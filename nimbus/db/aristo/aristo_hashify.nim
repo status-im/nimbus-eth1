@@ -12,74 +12,43 @@
 ## ========================================
 ##
 ## For the current state of the `Patricia Trie`, keys (equivalent to hashes)
-## are associated with the vertex IDs. Existing key associations are checked
-## (i.e. recalculated and compared) unless the ID is locked. In the latter
-## case, the key is assumed to be correct without checking.
+## are associated with the vertex IDs. Existing key associations are taken
+## as-is/unchecked unless the ID is marked a proof node. In the latter case,
+## the key is assumed to be correct after re-calculation.
 ##
-## The folllowing properties are required from the top layer cache.
+## The labelling algorithm works roughly as follows:
 ##
-## * All recently (i.e. not saved to backend) added entries must have an
-##   `lTab[]` entry with `(root-vertex,path,leaf-vertex-ID)`.
+## * Given a set of start or root vertices, build the forest (of trees)
+##   downwards towards leafs vertices so that none of these vertices has a
+##   Merkle hash label.
 ##
-## * All recently (i.e. not saved to backend) deleted entries must have an
-##   `lTab[]` entry with `(root-vertex,path,VertexID(0))`.
+## * Starting at the leaf vertices in width-first fashion, calculate the
+##   Merkle hashes and label the leaf vertices. Recursively work up labelling
+##   vertices up until the root nodes are reached.
 ##
-## * All vertices where the key (aka Merkle hash) has changed must have a
-##   top layer cache `kMap[]` entry `(vertex-ID,VOID_HASH_KEY)` indicating
-##   that there is no key available for this vertex. This also applies for
-##   backend verices where the key has changed while the structural logic
-##   did not change.
-##
-## The association algorithm is an optimised version of:
-##
-## * For all leaf vertices which have all child links on the top layer cache
-##   where the node keys (aka hashes) can be compiled, proceed with the parent
-##   vertex. Note that a top layer cache vertex can only have a key on the top
-##   top layer cache (whereas a bachend b
-##
-##   Apparently, keys (aka hashes) can be compiled for leaf vertices. The same
-##   holds for follow up vertices where the child keys were available, alteady.
-##   This process stops when a vertex has children on the backend or children
-##   lead to a chain not sorted, yet.
-##
-## * For the remaining vertex chains (where the process stopped) up to the root
-##   vertex, set up a width-first schedule starting at the vertex where the
-##   previous chain broke off and follow up to the root vertex.
-##
-## * Follow the width-first schedule fo labelling all vertices with a hash key.
-##
-## Note that there are some tweaks for `proof` nodes with incomplete tries and
-## handling of possible stray vertices on the top layer cache left over from
-## deletion processes.
+## Note that there are some tweaks for `proof` node vertices which lead to
+## incomplete trees in a way that the algoritm handles existing Merkle hash
+## labels for missing vertices.
 ##
 {.push raises: [].}
 
 import
-  std/[sequtils, sets, tables],
+  std/[algorithm, sequtils, sets, tables],
   chronicles,
   eth/common,
   results,
-  "."/[aristo_desc, aristo_get, aristo_hike, aristo_layers, aristo_serialise,
+  stew/byteutils,
+  "."/[aristo_desc, aristo_get, aristo_layers, aristo_serialise,
        aristo_utils, aristo_vid]
 
 type
-  FollowUpVid = object
-    ## Link item: VertexID -> VertexID
-    root: VertexID                  ## Root vertex, might be void unless known
-    toVid: VertexID                 ## Valid next/follow up vertex
-
-  BackVidTab =
-    Table[VertexID,FollowUpVid]
-
   WidthFirstForest = object
     ## Collected width first search trees
-    completed: HashSet[VertexID]    ## Top level, root targets reached
-    root: HashSet[VertexID]         ## Top level, root targets not reached yet
-    pool: BackVidTab                ## Upper links pool
-    base: BackVidTab                ## Width-first leaf level links
-
-const
-  SubTreeSearchDepthMax = 64
+    root: HashSet[VertexID]                ## Top level, root targets
+    pool: Table[VertexID,VertexID]         ## Upper links pool
+    base: Table[VertexID,VertexID]         ## Width-first leaf level links
+    leaf: HashSet[VertexID]                ## Stans-alone leaf to process
+    rev: Table[VertexID,HashSet[VertexID]] ## Reverse look up table
 
 logScope:
   topics = "aristo-hashify"
@@ -88,200 +57,259 @@ logScope:
 # Private helpers
 # ------------------------------------------------------------------------------
 
-when false:
-  template logTxt(info: static[string]): static[string] =
-    "Hashify " & info
+template logTxt(info: static[string]): static[string] =
+  "Hashify " & info
 
-func getOrVoid(tab: BackVidTab; vid: VertexID): FollowUpVid =
-  tab.getOrDefault(vid, FollowUpVid())
-
-func isValid(w: FollowUpVid): bool =
-  w.toVid.isValid
+func getOrVoid(tab: Table[VertexID,VertexID]; vid: VertexID): VertexID =
+  tab.getOrDefault(vid, VertexID(0))
 
 func contains(wff: WidthFirstForest; vid: VertexID): bool =
-  vid in wff.base or vid in wff.pool or vid in wff.root or vid in wff.completed
+  vid in wff.base or vid in wff.pool or vid in wff.root
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc cloudConnect(
-    cloud: HashSet[VertexID];          # Vertex IDs to start connecting from
-    db: AristoDbRef;                   # Database, top layer
-    target: BackVidTab;                # Vertices to arrive to
-      ): tuple[paths: WidthFirstForest, unresolved: HashSet[VertexID]] =
-  ## For each vertex ID from argument `cloud` find a chain of `FollowUpVid`
-  ## type links reaching into argument `target`. The `paths` entry from the
-  ## `result` tuple contains the connections to the `target` argument and the
-  ## `unresolved` entries the IDs left over from `cloud`.
-  if 0 < cloud.len:
-    result.unresolved = cloud
-    var hold = target
-    while 0 < hold.len:
-      # Greedily trace back `bottomUp[]` entries for finding parents of
-      # unresolved vertices from `cloud`
-      var redo: BackVidTab
-      for (vid,val) in hold.pairs:
-        let vtx = db.getVtx vid
-        if vtx.isValid:
-          result.paths.pool[vid] = val
-          # Grab child links
-          for sub in vtx.subVids:
-            let w = FollowUpVid(
-              root:  val.root,
-              toVid: vid)
-            if sub notin cloud:
-              redo[sub] = w
-            else:
-              result.paths.base[sub] = w # ok, use this
-              result.unresolved.excl sub
-              if result.unresolved.len == 0:
-                return
-      redo.swap hold
-
-
-proc setNextLink(
-    wff: var WidthFirstForest;         # Search tree to update
-    redo: var BackVidTab;              # Temporary `base` list
-    val: FollowUpVid;                  # Current vertex value to follow up
-      ) =
-  ## Given the follow up argument `vid`, update the `redo[]` argument (an
-  ## optional substitute for the `wff.base[]` list) so that the `redo[]`
-  ## list contains the next `from->to` vertex pair from the `wff.pool[]`
-  ## list.
-  ##
-  ## Unless the `redo` argument is passed as `wff.base`, this function
-  ## supports the following construct:
+func hasValue(
+    wffTable: Table[VertexID,VertexID];
+    vid: VertexID;
+    wff: WidthFirstForest;
+      ): bool =
+  ## Helper for efficient `value` access:
   ## ::
-  ##   while 0 < wff.base.len:
-  ##     var redo: BackVidTab
-  ##     for (vid,val) in wff.base.pairs:
-  ##       ...
-  ##       wff.setNextLink(redo, val)
-  ##     wff.base.swap redo
+  ##   wffTable.hasValue(wff, vid)
   ##
-  ## Otherwise, one would use the function as in
+  ## instead of
   ## ::
-  ##   wff.base.del vid
-  ##   wff.setNextLink(wff.pool, val)
+  ##   vid in wffTable.values.toSeq
   ##
-  # Get current `from->to` vertex pair
-  if val.isValid:
-    # Find follow up `from->to` vertex pair in `pool`
-    let nextVal = wff.pool.getOrVoid val.toVid
-    if nextVal.isValid:
-
-      # Make sure that strict hierachial order is kept. If the successor
-      # is in the temporary `redo[]` base list, move it to the `pool[]`.
-      if nextVal.toVid in redo:
-        wff.pool[nextVal.toVid] = redo.getOrVoid nextVal.toVid
-        redo.del nextVal.toVid
-
-      elif val.toVid in redo.values.toSeq.mapIt(it.toVid):
-        # The follow up vertex ID is already a follow up ID for some
-        # `from->to` vertex pair in the temporary `redo[]` base list.
-        return
-
-      # Move next `from->to vertex`  pair to `redo[]`
-      wff.pool.del val.toVid
-      redo[val.toVid] = nextVal
+  for w in wff.rev.getOrVoid vid:
+    if w in wffTable:
+      return true
 
 
-proc updateSchedule(
-    wff: var WidthFirstForest;         # Search tree to update
+proc pedigree(
     db: AristoDbRef;                   # Database, top layer
-    hike: Hike;                        # Chain of vertices
-      ) =
-  ## Use vertices from the `hike` argument and link them leaf-to-root in a way
-  ## so so that they can be traversed later in a width-first search.
+    ancestors: HashSet[VertexID];      # Vertex IDs to start connecting from
+    proofs: HashSet[VertexID];         # Additional proof nodes to start from
+      ): Result[WidthFirstForest,(VertexID,AristoError)] =
+  ## For each vertex ID from the argument set `ancestors` find all un-labelled
+  ## grand child vertices and build a forest (of trees) starting from the
+  ## grand child vertices.
   ##
-  let
-    root = hike.root
   var
-    legInx = 0                 # find index of first unresolved vertex
-    unresolved: seq[VertexID]  # vtx links, reason for unresolved vertex
-  # Find the index `legInx` of the first vertex that could not be compiled as
-  # node all from the top layer cache keys.
-  block findlegInx:
-    # Directly set tail vertex key (typically a leaf vertex)
-    let
-      leaf = hike.legs[^1].wp
-      node = leaf.vtx.toNode(db, stopEarly=false, beKeyOk=false).valueOr:
-        # Oops, depends on unresolved storage trie?
-        legInx = hike.legs.len - 1
-        unresolved = error
-        if leaf.vtx.vType == Leaf:
-          let stoRoot = unresolved.toSeq[0]
-          if stoRoot notin wff.base and
-             stoRoot notin wff.pool:
-            wff.root.incl stoRoot
-            wff.base[stoRoot] = FollowUpVid(
-              root:  root, # Jump to main tree
-              toVid: leaf.vid)
-        break findlegInx
+    wff: WidthFirstForest
+    leafs: HashSet[VertexID]
 
-    # If possible, compute a node from the current vertex with all links
-    # resolved on the cache layer. If this is not possible, stop here and
-    # return the list of vertex IDs that could not be resolved (see option
-    # `stopEarly=false`.)
-    for n in (hike.legs.len-2).countDown(0):
-      let vtx = hike.legs[n].wp.vtx
-      discard vtx.toNode(db, stopEarly=false, beKeyOk=false).valueOr:
-        legInx = n
-        unresolved = error
-        break findlegInx
-
-    # All done this `hike`
-    if db.layersGetKeyOrVoid(root).isValid:
-      wff.root.excl root
-      wff.completed.incl root
+  proc register(wff: var WidthFirstForest; fromVid, toVid: VertexID) =
+    if toVid in wff.base:
+      # * there is `toVid->*` in `base[]`
+      # * so ``toVid->*` moved to `pool[]`
+      wff.pool[toVid] = wff.base.getOrVoid toVid
+      wff.base.del toVid
+    if wff.base.hasValue(fromVid, wff):
+      # * there is `*->fromVid` in `base[]`
+      # * so store `fromVid->toVid` in `pool[]`
+      wff.pool[fromVid] = toVid
     else:
-      wff.root.incl root
-    return
+      # store  `fromVid->toVid` in `base[]`
+      wff.base[fromVid] = toVid
 
-  # Unresolved root target to reach via width-first search
-  if root notin wff.completed:
-    wff.root.incl root
+    # Register reverse pair for quick table value lookup
+    wff.rev.withValue(toVid, val):
+      val[].incl fromVid
+    do:
+      wff.rev[toVid] = @[fromVid].toHashSet
 
-  # Current situation:
+    # Remove unnecessarey sup-trie roots (e.g. for a storage root)
+    wff.root.excl fromVid
+
+  # Initialise greedy search which will keep a set of current leafs in the
+  # `leafs{}` set and follow up links in the `pool[]` table, leading all the
+  # way up to the `root{}` set.
   #
-  #                 ..unresolved hash keys.. | ..all set here..
-  #                                          |
-  #                                          |
-  # hike.legs: (leg[0], leg[1], ..leg[legInx], ..)
-  #               |       |         | |
-  #               | <---- |  <----- | +-------+----    \
-  #               |                 |         |        |
-  #               |   wff.pool[]    |         +----    | vertices from the
-  #                                           :        | `unresoved` set
-  #                                                    |
-  #                                           +----    /
+  # Process root nodes if they are unlabelled
+  var rootWasDeleted = VertexID(0)
+  for root in ancestors:
+    let vtx = db.getVtx root
+    if vtx.isNil:
+      if VertexID(LEAST_FREE_VID) <= root:
+        # There must be a another root, as well (e.g. `$1` for a storage
+        # root). Only the last one of some will be reported with error code.
+        rootWasDeleted = root
+    elif not db.getKey(root).isValid:
+      # Need to process `root` node
+      let children = vtx.subVids
+      if children.len == 0:
+        # This is an isolated leaf node
+        wff.leaf.incl root
+      else:
+        wff.root.incl root
+        for child in vtx.subVids:
+          if not db.getKey(child).isValid:
+            leafs.incl child
+            wff.register(child, root)
+  if rootWasDeleted.isValid and
+     wff.root.len == 0 and
+     wff.leaf.len == 0:
+    return err((rootWasDeleted,HashifyRootVtxUnresolved))
 
-  # Add unresolved nodes for top level links
-  for u in 1 .. legInx:
-    let vid = hike.legs[u].wp.vid
-    # Make sure that `base[]` and `pool[]` are disjunkt, possibly moving
-    # `base[]` entries to the `pool[]`.
-    wff.base.del vid
-    wff.pool[vid] = FollowUpVid(
-      root:  root,
-      toVid: hike.legs[u-1].wp.vid)
+  # Initialisation for `proof` nodes which are sort of similar to `root` nodes.
+  for proof in proofs:
+    let vtx = db.getVtx proof
+    if vtx.isNil or not db.getKey(proof).isValid:
+      return err((proof,HashifyVtxUnresolved))
+    let children = vtx.subVids
+    if 0 < children.len:
+      # To be treated as a root node
+      wff.root.incl proof
+      for child in vtx.subVids:
+        if not db.getKey(child).isValid:
+          leafs.incl child
+          wff.register(child, proof)
 
-  # These ones have been resolved, already
-  for u in legInx+1 ..< hike.legs.len:
-    let vid = hike.legs[u].wp.vid
-    wff.pool.del vid
-    wff.base.del vid
+  # Recursively step down and collect unlabelled vertices
+  while 0 < leafs.len:
+    var redo: typeof(leafs)
 
-  assert 0 < unresolved.len # debugging, only
-  let vid = hike.legs[legInx].wp.vid
-  for sub in unresolved:
-    # Update request for unresolved sub-links by adding a new tail
-    # entry (unless registered, already.)
-    if sub notin wff:
-      wff.base[sub] = FollowUpVid(
-        root:  root,
-        toVid: vid)
+    for parent in leafs:
+      assert parent.isValid
+      assert not db.getKey(parent).isValid
+
+      let vtx = db.getVtx parent
+      if not vtx.isNil:
+        let children = vtx.subVids.filterIt(not db.getKey(it).isValid)
+        if 0 < children.len:
+          for child in children:
+            redo.incl child
+            wff.register(child, parent)
+          continue
+
+      if parent notin wff.base:
+        # The buck stops here:
+        #   move `(parent,granny)` from `pool[]` to `base[]`
+        let granny = wff.pool.getOrVoid parent
+        assert granny.isValid
+        wff.register(parent, granny)
+        wff.pool.del parent
+
+    redo.swap leafs
+
+  ok wff
+
+# ------------------------------------------------------------------------------
+# Private functions, tree traversal
+# ------------------------------------------------------------------------------
+
+proc createSched(
+    db: AristoDbRef;                   # Database, top layer
+      ): Result[WidthFirstForest,(VertexID,AristoError)] =
+  ## Create width-first search schedule (aka forest)
+  ##
+  var wff = ? db.pedigree(db.lTab.keys.toSeq.mapIt(it.root).toHashSet, db.pPrf)
+
+  # Additional nodes to consider if proof nodes are in place
+  if 0 < db.pPrf.len:
+    for vid in db.lTab.values:
+      if vid.isValid and
+         vid notin wff.base and
+         vid notin wff.pool and
+         not db.getKey(vid).isValid:
+        wff.leaf.incl vid
+
+  if 0 < wff.leaf.len:
+    for vid in wff.leaf:
+      let node = db.getVtx(vid).toNode(db, beKeyOk=false).valueOr:
+        # Make sure that all those nodes are reachable
+        for needed in error:
+          if needed notin wff.base and
+             needed notin wff.pool:
+            return err((needed,HashifyVtxUnresolved))
+        continue
+      db.layersPutKey(vid, node.digestTo(HashKey))
+
+  ok wff
+
+
+proc processSched(
+    wff: var WidthFirstForest;         # Search tree to process
+    db: AristoDbRef;                   # Database, top layer
+      ): Result[void,(VertexID,AristoError)] =
+  ## Traverse width-first schedule and update vertex hash labels.
+  ##
+  while 0 < wff.base.len:
+    var
+      accept = false
+      redo: typeof(wff.base)
+
+    for (vid,toVid) in wff.base.pairs:
+      let vtx = db.getVtx vid
+      assert vtx.isValid
+
+      # Try to convert the vertex to a node. This is possible only if all
+      # link references have Merkle hash keys, already.
+      let node = vtx.toNode(db, stopEarly=false).valueOr:
+        # Do this vertex later, again
+        if wff.pool.hasValue(vid, wff):
+          wff.pool[vid] = toVid
+          accept = true # `redo[]` will be fifferent from `base[]`
+        else:
+          redo[vid] = toVid
+        continue
+        # End `valueOr` terminates error clause
+
+      # Could resolve => update Merkle hash
+      db.layersPutKey(vid, node.digestTo HashKey)
+
+      # Set follow up link for next round
+      let toToVid = wff.pool.getOrVoid toVid
+      if toToVid.isValid:
+        if toToVid in redo:
+          # Got predecessor `(toVid,toToVid)` of `(toToVid,xxx)`,
+          # so move `(toToVid,xxx)` from `redo[]` to `pool[]`
+          wff.pool[toToVid] = redo.getOrVoid toToVid
+          redo.del toToVid
+        # Move `(toVid,toToVid)` from `pool[]` to `redo[]`
+        wff.pool.del toVid
+        redo[toVid] = toToVid
+
+      accept = true # `redo[]` will be fifferent from `base[]`
+      # End `for (vid,toVid)..`
+
+    # Make sure that `base[]` is different from `redo[]`
+    if not accept:
+      let vid = wff.base.keys.toSeq[0]
+      return err((vid,HashifyVtxUnresolved))
+    # Restart `wff.base[]`
+    wff.base.swap redo
+
+  ok()
+
+
+proc finaliseRoots(
+    wff: var WidthFirstForest;         # Search tree to process
+    db: AristoDbRef;                   # Database, top layer
+      ): Result[void,(VertexID,AristoError)] =
+  ## Process root vertices after all other vertices are done.
+  ##
+  # Make sure that the pool has been exhausted
+  if 0 < wff.pool.len:
+    let vid = wff.pool.keys.toSeq.sorted[0]
+    return err((vid,HashifyVtxUnresolved))
+
+  # Update or verify root nodes
+  for vid in wff.root:
+    # Calculate hash key
+    let
+      node = db.getVtx(vid).toNode(db).valueOr:
+        return err((vid,HashifyRootVtxUnresolved))
+      key = node.digestTo(HashKey)
+    if vid notin db.pPrf:
+      db.layersPutKey(vid, key)
+    elif key != db.getKey vid:
+      return err((vid,HashifyProofHashMismatch))
+
+  ok()
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -289,132 +317,26 @@ proc updateSchedule(
 
 proc hashify*(
     db: AristoDbRef;                   # Database, top layer
-      ): Result[HashSet[VertexID],(VertexID,AristoError)] =
+      ): Result[void,(VertexID,AristoError)] =
   ## Add keys to the  `Patricia Trie` so that it becomes a `Merkle Patricia
   ## Tree`. If successful, the function returns the keys (aka Merkle hash) of
   ## the root vertices.
-  var
-    deleted = false                    # Need extra check for orphaned vertices
-    wff: WidthFirstForest              # Leaf-to-root traversal structure
+  ##
+  if db.dirty:
+    # Set up widh-first traversal schedule
+    var wff = ? db.createSched()
 
-  if not db.dirty:
-    return ok wff.completed
+    # Traverse tree spanned by `wff` and label remaining vertices.
+    ? wff.processSched db
 
-  for (lky,lfVid) in db.lTab.pairs:
-    let
-      rc = lky.hikeUp db
-      hike = rc.to(Hike)
+    # Do/complete state root vertices
+    ? wff.finaliseRoots db
 
-    if not lfVid.isValid:
-      # Remember that there are left overs from a delete proedure which have
-      # to be eventually found before starting width-first processing.
-      deleted = true
+    db.top.final.dirty = false             # Mark top layer clean
+    db.top.final.lTab.clear                # Done with leafs
+    db.top.final.vGen = db.vGen.vidReorg() # Squeze list of recycled vertex IDs
 
-    if hike.legs.len == 0:
-      # Ignore left over path from deleted entry.
-      if not lfVid.isValid:
-        # FIXME: Is there a case for adding unresolved child-to-root links
-        #        to the `wff` schedule?
-        continue
-      doAssert rc.isErr # see implementation of `hikeUp()`
-      return err((lfVid,rc.error[1]))
-
-    # Compile width-first forest search schedule
-    wff.updateSchedule(db, hike)
-
-  if deleted:
-    # Update unresolved keys left over after delete operations when overlay
-    # vertices have been added and there was no `hike` path to capture them.
-    #
-    # Considering a list of updated paths to these vertices after deleting
-    # a `Leaf` vertex is deemed too expensive and more error prone. So it
-    # is the task to search for unresolved node keys and add glue paths to
-    # the width-first schedule.
-    var unresolved: HashSet[VertexID]
-    for (vid,key) in db.layersWalkKey:
-      if not key.isValid and
-         vid notin wff:
-        let rc = db.layersGetVtx vid
-        if rc.isErr or rc.value.isValid:
-          unresolved.incl vid
-
-    let glue = unresolved.cloudConnect(db, wff.base)
-    if 0 < glue.unresolved.len:
-      return err((glue.unresolved.toSeq[0],HashifyNodeUnresolved))
-    # Add glue items to `wff.base[]` and `wff.pool[]` tables
-    for (vid,val) in glue.paths.base.pairs:
-      # Add vid to `wff.base[]` list
-      wff.base[vid] = val
-      # Move tail of VertexID chain to `wff.pool[]`
-      var toVid = val.toVid
-      while true:
-        let w = glue.paths.pool.getOrVoid toVid
-        if not w.isValid:
-          break
-        wff.base.del toVid
-        wff.pool[toVid] = w
-        toVid = w.toVid
-
-  # Traverse width-first schedule and update remaining hashes.
-  while 0 < wff.base.len:
-    var redo: BackVidTab
-    for (vid,val) in wff.base.pairs:
-
-      let vtx = db.getVtx vid
-      if not vtx.isValid:
-        # This might happen when proof nodes (see `snap` protocol) are on
-        # an incomplete trie where this `vid` has a key but no vertex yet.
-        # Also, the key (as part of the proof data) must be on the backend.
-        discard db.getKeyBE(vid).valueOr:
-          return err((vid,HashifyNodeUnresolved))
-      else:
-        # Try to convert the vertex to a node. This is possible only if all
-        # link references have Merkle hash keys, already.
-        let node = vtx.toNode(db, stopEarly=false).valueOr:
-          # Cannot complete this vertex unless its child node keys are compiled.
-          for w in error:
-            if w notin wff.base and
-               w notin redo and
-               w notin wff.base.values.toSeq.mapit(it.toVid) and
-               w notin wff.pool.values.toSeq.mapit(it.toVid):
-              if db.layersGetVtx(w).isErr:
-                # Ooops, should have been marked for update
-                return err((w,HashifyNodeUnresolved))
-              # Add the child vertex to `redo[]` for the schedule `base[]` list.
-              redo[w] = FollowUpVid(root: val.root, toVid: vid)
-          # Do this vertex later, i.e. add the vertex to the `pool[]`.
-          wff.pool[vid] = val
-          continue
-          # End `valueOr` terminates error clause
-
-        # Could resolve => update Merkle hash
-        db.layersPutKey(vid, node.digestTo HashKey)
-
-        # Set follow up link for next round
-        wff.setNextLink(redo, val)
-      # End `for (vid,val)..`
-
-    # Restart `wff.base[]`
-    wff.base.swap redo
-
-  # Make sure that all keys exist (actually, that set should be empty anyway)
-  for vid in wff.pool.keys:
-    discard db.getKeyRc(vid).valueOr:
-      return err((vid,HashifyNodeUnresolved))
-
-  # Update root nodes
-  for vid in wff.root - db.pPrf:
-    # Convert root vertex to a node.
-    let node = db.getVtx(vid).toNode(db,stopEarly=false).valueOr:
-      return err((vid,HashifyRootNodeUnresolved))
-    db.layersPutKey(vid, node.digestTo(HashKey))
-    wff.completed.incl vid
-
-  db.top.final.dirty = false              # Mark top layer clean
-  db.top.final.lTab.clear                 # Done with leafs
-  db.top.final.vGen = db.vGen.vidReorg()  # Squeze list of recycled vertex IDs
-
-  ok wff.completed
+  ok()
 
 # ------------------------------------------------------------------------------
 # End

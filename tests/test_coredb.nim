@@ -11,7 +11,7 @@
 ## Testing `CoreDB` wrapper implementation
 
 import
-  std/[os, strformat, strutils],
+  std/[os, strformat, strutils, times],
   chronicles,
   eth/common,
   results,
@@ -238,7 +238,7 @@ proc chainSyncRunner(
         com = initRunnerDB(dbDir, capture, dbType, ldgType)
       defer:
         com.db.finish(flush = finalDiskCleanUpOk)
-        if profilingOk: noisy.testChainSyncProfilingPrint numBlocks
+        if profilingOk: noisy.test_chainSyncProfilingPrint numBlocks
         if persistent and finalDiskCleanUpOk: dbDir.flushDbDir
 
       if noisy:
@@ -247,7 +247,7 @@ proc chainSyncRunner(
         com.db.trackLedgerApi = true
         com.db.localDbOnly = true
 
-      check noisy.testChainSync(filePaths, com, numBlocks,
+      check noisy.test_chainSync(filePaths, com, numBlocks,
         lastOneExtra=lastOneExtraOk, enaLogging=enaLoggingOk)
 
 # ------------------------------------------------------------------------------

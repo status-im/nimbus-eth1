@@ -58,10 +58,10 @@ proc sortedKeys(lTab: Table[LeafTie,VertexID]): seq[LeafTie] =
   lTab.keys.toSeq.sorted(cmp = proc(a,b: LeafTie): int = cmp(a,b))
 
 proc sortedKeys[T](tab: Table[VertexID,T]): seq[VertexID] =
-  tab.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID)
+  tab.keys.toSeq.sorted
 
 proc sortedKeys(pPrf: HashSet[VertexID]): seq[VertexID] =
-  pPrf.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID)
+  pPrf.toSeq.sorted
 
 proc sortedKeys[T](pAmk: Table[HashKey,T]): seq[HashKey] =
   pAmk.keys.toSeq.sorted cmp
@@ -332,9 +332,8 @@ proc ppXMap*(
     for vid in vids:
       if not kMap.hasKey vid:
         revOnly[vid] = key
-  let revKeys =
-    revOnly.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID)
 
+  let revKeys =revOnly.keys.toSeq.sorted
   proc ppNtry(n: uint64): string =
     var s = VertexID(n).ppVid
     let key = kMap.getOrVoid VertexID(n)

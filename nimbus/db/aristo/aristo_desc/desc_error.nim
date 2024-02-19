@@ -116,10 +116,9 @@ type
     UtilsStoRootMissing
 
     # Update `Merkle` hashes `hashify()`
-    HashifyExistingHashMismatch
-    HashifyNodeUnresolved
-    HashifyRootHashMismatch
-    HashifyRootNodeUnresolved
+    HashifyVtxUnresolved
+    HashifyRootVtxUnresolved
+    HashifyProofHashMismatch
 
     # Cache checker `checkCache()`
     CheckStkKeyStrayZeroEntry

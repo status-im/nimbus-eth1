@@ -295,7 +295,7 @@ proc collapseLeaf(
 
 # -------------------------
 
-proc delSubTree(
+proc delSubTreeImpl(
     db: AristoDbRef;                   # Database, top layer
     root: VertexID;                    # Root vertex
     accPath: PathID;                   # Needed for real storage tries
@@ -432,7 +432,7 @@ proc delete*(
   ## case, an account must exists. If there is payload of type `AccountData`,
   ## its `storageID` field must be unset or equal to the `hike.root` vertex ID.
   ##
-  db.delSubTree(root, accPath)
+  db.delSubTreeImpl(root, accPath)
 
 proc delete*(
     db: AristoDbRef;                   # Database, top layer

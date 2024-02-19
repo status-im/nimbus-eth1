@@ -15,7 +15,7 @@
 {.push raises: [].}
 
 import
-  std/[sequtils, strutils, hashes],
+  std/[algorithm, sequtils, sets, strutils, hashes],
   eth/[common, trie/nibbles],
   stew/byteutils,
   chronicles,
@@ -101,7 +101,10 @@ func `<`*(a, b: VertexID): bool {.borrow.}
 func `<=`*(a, b: VertexID): bool {.borrow.}
 func `==`*(a, b: VertexID): bool {.borrow.}
 func cmp*(a, b: VertexID): int {.borrow.}
-func `$`*(a: VertexID): string {.borrow.}
+
+func `$`*(vid: VertexID): string =
+  "$" & (if vid == VertexID(0): "ø"
+         else: vid.uint64.toHex.strip(trailing=false,chars={'0'}).toLowerAscii)
 
 func `==`*(a: VertexID; b: static[uint]): bool = (a == VertexID(b))
 
@@ -373,6 +376,16 @@ func hash*(a: HashKey): Hash =
 # ------------------------------------------------------------------------------
 # Miscellaneous helpers
 # ------------------------------------------------------------------------------
+
+func `$`*(vids: seq[VertexID]): string =
+  "[" & vids.toSeq.mapIt(
+    "$" & it.uint64.toHex.strip(trailing=false,chars={'0'})
+    ).join(",") & "]"
+
+func `$`*(vids: HashSet[VertexID]): string =
+  "{" & vids.toSeq.sorted.mapIt(
+    "$" & it.uint64.toHex.strip(trailing=false,chars={'0'})
+    ).join(",") & "}"
 
 func `$`*(key: Hash256): string =
   let w = UInt256.fromBytesBE key.data

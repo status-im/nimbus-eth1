@@ -54,7 +54,7 @@ proc merkleSignCommit*(
     return ok VOID_HASH_KEY
   if sdb.error != AristoError(0):
     return err((sdb.errKey, sdb.error))
-  discard sdb.db.hashify().valueOr:
+  sdb.db.hashify().isOkOr:
     let w = (EmptyBlob, error[1])
     return err(w)
   let hash = sdb.db.getKeyRc(sdb.root).valueOr:

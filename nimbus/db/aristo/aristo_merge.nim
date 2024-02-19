@@ -291,6 +291,7 @@ proc topIsBranchAddLeaf(
     return err(MergeBranchGarbledNibble)
 
   let
+    parent = hike.legs[^1].wp.vid
     branch = hike.legs[^1].wp.vtx
     linkID = branch.bVid[nibble]
     linkVtx = db.getVtx linkID
@@ -314,6 +315,8 @@ proc topIsBranchAddLeaf(
     db.setVtxAndKey(linkID, vtx)
     var okHike = Hike(root: hike.root, legs: hike.legs)
     okHike.legs.add Leg(wp: VidVtxPair(vid: linkID, vtx: vtx), nibble: -1)
+    if parent notin db.pPrf:
+      db.nullifyKey parent
     return ok(okHike)
 
   if linkVtx.vType == Branch:
@@ -528,6 +531,7 @@ proc mergeNodeImpl(
         if db.layersGetVtx(vids[n]).isErr:
           return err(MergeHashKeyRevLookUpGarbled)
       # This is tyically considered OK
+      db.top.final.pPrf = db.pPrf + vids.toHashSet
       return err(MergeHashKeyCachedAlready)
     # Otherwise proceed
   elif key.isValid:
