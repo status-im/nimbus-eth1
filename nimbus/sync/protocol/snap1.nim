@@ -1,6 +1,6 @@
 # Nimbus - Ethereum Snap Protocol (SNAP), version 1
 #
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -71,6 +71,9 @@ proc append(writer: var RlpWriter; stn: SnapTriePaths) =
   ## RLP mixin, encoding
   writer.snapAppend stn
 
+template handleHandlerError(x: untyped) =
+  if x.isErr:
+    raise newException(EthP2PError, x.error)
 
 p2pProtocol snap1(version = snapVersion,
                   rlpxName = "snap",
@@ -92,9 +95,12 @@ p2pProtocol snap1(version = snapVersion,
 
       let
         ctx = peer.networkState()
-        (accounts, proof) = ctx.getAccountRange(
+        res = ctx.getAccountRange(
           root, origin, limit, replySizeMax)
+      handleHandlerError(res)
 
+      let
+        (accounts, proof) = res.get
         # For logging only
         nAccounts = accounts.len
         nProof = proof.nodes.len
@@ -130,9 +136,12 @@ p2pProtocol snap1(version = snapVersion,
 
       let
         ctx = peer.networkState()
-        (slots, proof) = ctx.getStorageRanges(
+        res = ctx.getStorageRanges(
           root, accounts, origin, limit, replySizeMax)
+      handleHandlerError(res)
 
+      let
+        (slots, proof) = res.get
         # For logging only
         nSlots = slots.len
         nProof = proof.nodes.len
@@ -167,15 +176,18 @@ p2pProtocol snap1(version = snapVersion,
         ctx = peer.networkState()
         codes = ctx.getByteCodes(nodes, replySizeMax)
 
+      handleHandlerError(codes)
+
+      let
         # For logging only
-        nCodes = codes.len
+        nCodes = codes.get.len
 
       if nCodes == 0:
         trace trSnapSendReplying & "EMPTY ByteCodes (0x05)", peer
       else:
         trace trSnapSendReplying & "ByteCodes (0x05)", peer, nCodes
-        
-      await response.send(codes)
+
+      await response.send(codes.get)
 
     # User message 0x05: ByteCodes.
     proc byteCodes(
@@ -198,15 +210,18 @@ p2pProtocol snap1(version = snapVersion,
         ctx = peer.networkState()
         nodes = ctx.getTrieNodes(root, pathGroups, replySizeMax)
 
+      handleHandlerError(nodes)
+
+      let
         # For logging only
-        nNodes = nodes.len
+        nNodes = nodes.get.len
 
       if nNodes == 0:
         trace trSnapSendReplying & "EMPTY TrieNodes (0x07)", peer
       else:
         trace trSnapSendReplying & "TrieNodes (0x07)", peer, nNodes
 
-      await response.send(nodes)
+      await response.send(nodes.get)
 
     # User message 0x07: TrieNodes.
     proc trieNodes(

@@ -340,39 +340,41 @@ method getAccountRange*(
     origin: openArray[byte];
     limit: openArray[byte];
     replySizeMax: uint64;
-      ): (seq[SnapAccount], SnapProofNodes)
-      {.gcsafe, raises: [CatchableError].} =
+      ): Result[(seq[SnapAccount], SnapProofNodes), string]
+      {.gcsafe.} =
   ## Fetch accounts list from database
   let sizeMax = min(replySizeMax, ctx.dataSizeMax.uint64).int
   if sizeMax <= estimatedProofSize:
     when extraTraceMessages:
       trace logTxt "getAccountRange: max data size too small",
         origin=origin.toHex, limit=limit.toHex, sizeMax
-    return # package size too small
+    return ok((@[], SnapProofNodes())) # package size too small
 
-  let
-    rootKey = root.to(NodeKey)
-    iv = block: # Calculate effective accounts range (if any)
-      let rc = origin.mkNodeTagRange limit
-      if rc.isErr:
-        return # malformed interval
-      rc.value
+  try:
+    let
+      rootKey = root.to(NodeKey)
+      iv = block: # Calculate effective accounts range (if any)
+        let rc = origin.mkNodeTagRange limit
+        if rc.isErr:
+          return ok((@[], SnapProofNodes())) # malformed interval
+        rc.value
 
-    stopAt = Moment.now() + ctx.elaFetchMax
-    rc = ctx.fetchLeafRange(ctx.getAccountFn, rootKey, iv, sizeMax, stopAt)
+      stopAt = Moment.now() + ctx.elaFetchMax
+      rc = ctx.fetchLeafRange(ctx.getAccountFn, rootKey, iv, sizeMax, stopAt)
 
-  if rc.isErr:
-    return # extraction failed
-  let
-    accounts = rc.value.leafs.mapIt(it.to(SnapAccount))
-    proof = rc.value.proof
+    if rc.isErr:
+      return ok((@[], SnapProofNodes())) # extraction failed
+    let
+      accounts = rc.value.leafs.mapIt(it.to(SnapAccount))
+      proof = rc.value.proof
 
-  #when extraTraceMessages:
-  #  trace logTxt "getAccountRange: done", iv, replySizeMax,
-  #    nAccounts=accounts.len, nProof=proof.len
+    #when extraTraceMessages:
+    #  trace logTxt "getAccountRange: done", iv, replySizeMax,
+    #    nAccounts=accounts.len, nProof=proof.len
 
-  (accounts, SnapProofNodes(nodes: proof))
-
+    return ok((accounts, SnapProofNodes(nodes: proof)))
+  except CatchableError as exc:
+    return err(exc.msg)
 
 method getStorageRanges*(
     ctx: SnapWireRef;
@@ -381,21 +383,21 @@ method getStorageRanges*(
     origin: openArray[byte];
     limit: openArray[byte];
     replySizeMax: uint64;
-      ): (seq[seq[SnapStorage]], SnapProofNodes)
-      {.gcsafe, raises: [CatchableError].} =
+      ): Result[(seq[seq[SnapStorage]], SnapProofNodes), string]
+      {.gcsafe.} =
   ## Fetch storage slots list from database
   let sizeMax = min(replySizeMax, ctx.dataSizeMax.uint64).int
   if sizeMax <= estimatedProofSize:
     when extraTraceMessages:
       trace logTxt "getStorageRanges: max data size too small",
         origin=origin.toHex, limit=limit.toHex, sizeMax
-    return # package size too small
+    return ok((@[], SnapProofNodes())) # package size too small
 
   let
     iv = block: # Calculate effective slots range (if any)
       let rc = origin.mkNodeTagRange(limit, accounts.len)
       if rc.isErr:
-        return # malformed interval
+        return ok((@[], SnapProofNodes())) # malformed interval
       rc.value
 
     rootKey = root.to(NodeKey)
@@ -408,62 +410,65 @@ method getStorageRanges*(
     timeExceeded = false
     slotLists: seq[seq[SnapStorage]]
     proof: seq[SnapProof]
-  for accHash in accounts:
-    let sp = block:
-      let rc = ctx.getSlotsSpecs(rootKey, accGetFn, accHash.to(NodeKey))
-      if rc.isErr:
-        slotLists.add emptySnapStorageList
-        dataAllocated.inc # empty list
-        continue
-      rc.value
 
-    # Collect data slots for this account => `rangeProof`
-    let
-      sizeLeft = sizeMax - dataAllocated
-      rangeProof = block:
-        let rc = ctx.fetchLeafRange(sp.slotFn, sp.stoRoot, iv, sizeLeft, stopAt)
+  try:
+    for accHash in accounts:
+      let sp = block:
+        let rc = ctx.getSlotsSpecs(rootKey, accGetFn, accHash.to(NodeKey))
         if rc.isErr:
-          when extraTraceMessages:
-            trace logTxt "getStorageRanges: failed", iv, sizeMax, sizeLeft,
-              accKey=accHash.to(NodeKey), stoRoot=sp.stoRoot, error=rc.error
-          return # extraction failed
+          slotLists.add emptySnapStorageList
+          dataAllocated.inc # empty list
+          continue
         rc.value
 
-    # Process data slots for this account
-    dataAllocated += rangeProof.leafsSize
+      # Collect data slots for this account => `rangeProof`
+      let
+        sizeLeft = sizeMax - dataAllocated
+        rangeProof = block:
+          let rc = ctx.fetchLeafRange(sp.slotFn, sp.stoRoot, iv, sizeLeft, stopAt)
+          if rc.isErr:
+            when extraTraceMessages:
+              trace logTxt "getStorageRanges: failed", iv, sizeMax, sizeLeft,
+                accKey=accHash.to(NodeKey), stoRoot=sp.stoRoot, error=rc.error
+            return ok((@[], SnapProofNodes())) # extraction failed
+          rc.value
+
+      # Process data slots for this account
+      dataAllocated += rangeProof.leafsSize
+
+      when extraTraceMessages:
+        trace logTxt "getStorageRanges: data slots", iv, sizeMax, dataAllocated,
+          nAccounts=accounts.len, accKey=accHash.to(NodeKey), stoRoot=sp.stoRoot,
+          nSlots=rangeProof.leafs.len, nProof=rangeProof.proof.len
+
+      slotLists.add rangeProof.leafs.mapIt(it.to(SnapStorage))
+      if 0 < rangeProof.proof.len:
+        proof = rangeProof.proof
+        break # only last entry has a proof
+
+      # Stop unless there is enough space left
+      if sizeMax - dataAllocated <= estimatedProofSize:
+        break
+
+      if stopAt <= Moment.now():
+        timeExceeded = true
+        break
 
     when extraTraceMessages:
-      trace logTxt "getStorageRanges: data slots", iv, sizeMax, dataAllocated,
-        nAccounts=accounts.len, accKey=accHash.to(NodeKey), stoRoot=sp.stoRoot,
-        nSlots=rangeProof.leafs.len, nProof=rangeProof.proof.len
+      trace logTxt "getStorageRanges: done", iv, sizeMax, dataAllocated,
+        nAccounts=accounts.len, nLeafLists=slotLists.len, nProof=proof.len,
+        timeExceeded
 
-    slotLists.add rangeProof.leafs.mapIt(it.to(SnapStorage))
-    if 0 < rangeProof.proof.len:
-      proof = rangeProof.proof
-      break # only last entry has a proof
-
-    # Stop unless there is enough space left
-    if sizeMax - dataAllocated <= estimatedProofSize:
-      break
-
-    if stopAt <= Moment.now():
-      timeExceeded = true
-      break
-
-  when extraTraceMessages:
-    trace logTxt "getStorageRanges: done", iv, sizeMax, dataAllocated,
-      nAccounts=accounts.len, nLeafLists=slotLists.len, nProof=proof.len,
-      timeExceeded
-
-  (slotLists, SnapProofNodes(nodes: proof))
-
+    return ok((slotLists, SnapProofNodes(nodes: proof)))
+  except CatchableError as exc:
+    return err(exc.msg)
 
 method getByteCodes*(
     ctx: SnapWireRef;
     nodes: openArray[Hash256];
     replySizeMax: uint64;
-      ): seq[Blob]
-      {.gcsafe, raises: [CatchableError].} =
+      ): Result[seq[Blob], string]
+      {.gcsafe.} =
   ## Fetch contract codes from  the database
   let
     sizeMax = min(replySizeMax, ctx.dataSizeMax.uint64).int
@@ -475,38 +480,43 @@ method getByteCodes*(
   var
     dataAllocated = 0
     timeExceeded = false
+    list: seq[Blob]
 
   when extraTraceMessages:
     trace logTxt "getByteCodes", sizeMax, nNodes=nodes.len
 
-  for w in nodes:
-    let data = w.data.toSeq.getFn
-    if 0 < data.len:
-      let effDataLen = hexaryRangeRlpSize data.len
-      if effSizeMax - effDataLen < dataAllocated:
+  try:
+    for w in nodes:
+      let data = w.data.toSeq.getFn
+      if 0 < data.len:
+        let effDataLen = hexaryRangeRlpSize data.len
+        if effSizeMax - effDataLen < dataAllocated:
+          break
+        dataAllocated += effDataLen
+        list.add data
+      else:
+        when extraTraceMessages:
+          trace logTxt "getByteCodes: empty record", sizeMax, nNodes=nodes.len,
+            key=w
+      if stopAt <= Moment.now():
+        timeExceeded = true
         break
-      dataAllocated += effDataLen
-      result.add data
-    else:
-      when extraTraceMessages:
-        trace logTxt "getByteCodes: empty record", sizeMax, nNodes=nodes.len,
-           key=w
-    if stopAt <= Moment.now():
-      timeExceeded = true
-      break
 
-  when extraTraceMessages:
-    trace logTxt "getByteCodes: done", sizeMax, dataAllocated,
-      nNodes=nodes.len, nResult=result.len, timeExceeded
+    when extraTraceMessages:
+      trace logTxt "getByteCodes: done", sizeMax, dataAllocated,
+        nNodes=nodes.len, nResult=list.len, timeExceeded
 
+    return ok(list)
+  except CatchableError as exc:
+    return err(exc.msg)
 
 method getTrieNodes*(
     ctx: SnapWireRef;
     root: Hash256;
     pathGroups: openArray[SnapTriePaths];
     replySizeMax: uint64;
-      ): seq[Blob]
-      {.gcsafe, raises: [CatchableError].} =
+      ): Result[seq[Blob], string]
+      {.gcsafe.} =
   ## Fetch nodes from the database
   let
     sizeMax = min(replySizeMax, ctx.dataSizeMax.uint64).int
@@ -515,7 +525,7 @@ method getTrieNodes*(
     when extraTraceMessages:
       trace logTxt "getTrieNodes: max data size too small",
         root=root.to(NodeKey), nPathGroups=pathGroups.len, sizeMax, someSlack
-    return # package size too small
+    return ok(newSeq[Blob]()) # package size too small
   let
     rootKey = root.to(NodeKey)
     effSizeMax = sizeMax - someSlack
@@ -523,36 +533,42 @@ method getTrieNodes*(
   var
     dataAllocated = 0
     timeExceeded = false
+    list: seq[Blob]
 
-  for (stateKey,getFn,partPath,n) in ctx.doTrieNodeSpecs(rootKey, pathGroups):
-    # Special case: no data available
-    if getFn.isNil:
-      if effSizeMax < dataAllocated + n:
-        break # no need to add trailing empty nodes
-      result &= EmptyBlob.repeat(n)
-      dataAllocated += n
-      continue
+  try:
+    for (stateKey,getFn,partPath,n) in ctx.doTrieNodeSpecs(rootKey, pathGroups):
+      # Special case: no data available
+      if getFn.isNil:
+        if effSizeMax < dataAllocated + n:
+          break # no need to add trailing empty nodes
+        list &= EmptyBlob.repeat(n)
+        dataAllocated += n
+        continue
 
-    # Fetch node blob
-    let node = block:
-      let steps = partPath.hexPrefixDecode[1].hexaryPath(stateKey, getFn)
-      if 0 < steps.path.len and
-         steps.tail.len == 0 and steps.path[^1].nibble < 0:
-        steps.path[^1].node.convertTo(Blob)
-      else:
-        EmptyBlob
+      # Fetch node blob
+      let node = block:
+        let steps = partPath.hexPrefixDecode[1].hexaryPath(stateKey, getFn)
+        if 0 < steps.path.len and
+          steps.tail.len == 0 and steps.path[^1].nibble < 0:
+          steps.path[^1].node.convertTo(Blob)
+        else:
+          EmptyBlob
 
-    if effSizeMax < dataAllocated + node.len:
-      break
-    if stopAt <= Moment.now():
-      timeExceeded = true
-      break
-    result &= node
+      if effSizeMax < dataAllocated + node.len:
+        break
+      if stopAt <= Moment.now():
+        timeExceeded = true
+        break
+      list &= node
 
-  when extraTraceMessages:
-    trace logTxt "getTrieNodes: done", sizeMax, dataAllocated,
-      nGroups=pathGroups.mapIt(max(1,it.slotPaths.len)).foldl(a+b,0),
-      nPaths=pathGroups.len, nResult=result.len, timeExceeded
+    when extraTraceMessages:
+      trace logTxt "getTrieNodes: done", sizeMax, dataAllocated,
+        nGroups=pathGroups.mapIt(max(1,it.slotPaths.len)).foldl(a+b,0),
+        nPaths=pathGroups.len, nResult=list.len, timeExceeded
+
+    return ok(list)
+  except CatchableError as exc:
+    return err(exc.msg)
 
 # ------------------------------------------------------------------------------
 # End

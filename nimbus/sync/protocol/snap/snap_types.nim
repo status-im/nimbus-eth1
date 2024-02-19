@@ -12,6 +12,7 @@
 
 import
   std/[hashes, sequtils],
+  results,
   chronicles,
   eth/common,
   ../../../constants
@@ -187,8 +188,8 @@ method getAccountRange*(
     origin: openArray[byte];
     limit: openArray[byte];
     replySizeMax: uint64;
-      ): (seq[SnapAccount], SnapProofNodes)
-      {.base, gcsafe, raises: [CatchableError].} =
+      ): Result[(seq[SnapAccount], SnapProofNodes), string]
+      {.base, gcsafe.} =
   notImplemented("getAccountRange")
 
 method getStorageRanges*(
@@ -198,16 +199,16 @@ method getStorageRanges*(
     origin: openArray[byte];
     limit: openArray[byte];
     replySizeMax: uint64;
-      ): (seq[seq[SnapStorage]], SnapProofNodes)
-      {.base, gcsafe, raises: [CatchableError].} =
+      ): Result[(seq[seq[SnapStorage]], SnapProofNodes), string]
+      {.base, gcsafe.} =
   notImplemented("getStorageRanges")
 
 method getByteCodes*(
     ctx: SnapWireBase;
     nodes: openArray[Hash256];
     replySizeMax: uint64;
-      ): seq[Blob]
-      {.base, gcsafe, raises: [CatchableError].} =
+      ): Result[seq[Blob], string]
+      {.base, gcsafe.} =
   notImplemented("getByteCodes")
 
 method getTrieNodes*(
@@ -215,8 +216,8 @@ method getTrieNodes*(
     root: Hash256;
     pathGroups: openArray[SnapTriePaths];
     replySizeMax: uint64;
-      ): seq[Blob]
-      {.base, gcsafe, raises: [CatchableError].} =
+      ): Result[seq[Blob], string]
+      {.base, gcsafe.} =
   notImplemented("getTrieNodes")
 
 # ------------------------------------------------------------------------------

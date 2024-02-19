@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -386,125 +386,167 @@ proc txPoolEnabled*(ctx: EthWireRef): bool {.gcsafe, raises: [].} =
 # Public functions: eth wire protocol handlers
 # ------------------------------------------------------------------------------
 
-method getStatus*(ctx: EthWireRef): EthState
-    {.gcsafe, raises: [RlpError,EVMError].} =
-  let
-    db = ctx.db
-    com = ctx.chain.com
-    bestBlock = db.getCanonicalHead()
-    forkId = com.forkId(bestBlock.blockNumber, bestBlock.timestamp)
+method getStatus*(ctx: EthWireRef): Result[EthState, string]
+    {.gcsafe.} =
+  try:
+    let
+      db = ctx.db
+      com = ctx.chain.com
+      bestBlock = db.getCanonicalHead()
+      forkId = com.forkId(bestBlock.blockNumber, bestBlock.timestamp)
 
-  EthState(
-    totalDifficulty: db.headTotalDifficulty,
-    genesisHash: com.genesisHash,
-    bestBlockHash: bestBlock.blockHash,
-    forkId: ChainForkId(
-      forkHash: forkId.crc.toBytesBE,
-      forkNext: forkId.nextFork
-    )
-  )
+    return ok(EthState(
+      totalDifficulty: db.headTotalDifficulty,
+      genesisHash: com.genesisHash,
+      bestBlockHash: bestBlock.blockHash,
+      forkId: ChainForkId(
+        forkHash: forkId.crc.toBytesBE,
+        forkNext: forkId.nextFork
+      )
+    ))
+  except EVMError as exc:
+    # TODO: Why an EVM Error in database?
+    return err(exc.msg)
+  except RlpError as exc:
+    return err(exc.msg)
 
-method getReceipts*(ctx: EthWireRef, hashes: openArray[Hash256]): seq[seq[Receipt]]
-    {.gcsafe, raises: [RlpError].} =
-  let db = ctx.db
-  var header: BlockHeader
-  for blockHash in hashes:
-    if db.getBlockHeader(blockHash, header):
-      result.add db.getReceipts(header.receiptRoot)
-    else:
-      result.add @[]
-      trace "handlers.getReceipts: blockHeader not found", blockHash
+method getReceipts*(ctx: EthWireRef,
+                    hashes: openArray[Hash256]):
+                      Result[seq[seq[Receipt]], string]
+    {.gcsafe.} =
+  try:
+    let db = ctx.db
+    var header: BlockHeader
+    var list: seq[seq[Receipt]]
+    for blockHash in hashes:
+      if db.getBlockHeader(blockHash, header):
+        list.add db.getReceipts(header.receiptRoot)
+      else:
+        list.add @[]
+        trace "handlers.getReceipts: blockHeader not found", blockHash
+    return ok(list)
+  except RlpError as exc:
+    return err(exc.msg)
 
-method getPooledTxs*(ctx: EthWireRef, hashes: openArray[Hash256]): seq[Transaction] =
+method getPooledTxs*(ctx: EthWireRef,
+                     hashes: openArray[Hash256]):
+                       Result[seq[Transaction], string]
+    {.gcsafe.} =
   let txPool = ctx.txPool
+  var list: seq[Transaction]
   for txHash in hashes:
     let res = txPool.getItem(txHash)
     if res.isOk:
-      result.add res.value.tx
+      list.add res.value.tx
     else:
       trace "handlers.getPooledTxs: tx not found", txHash
+  ok(list)
 
-method getBlockBodies*(ctx: EthWireRef, hashes: openArray[Hash256]): seq[BlockBody]
-    {.gcsafe, raises: [RlpError].} =
-  let db = ctx.db
-  var body: BlockBody
-  for blockHash in hashes:
-    if db.getBlockBody(blockHash, body):
-      result.add body
-    else:
-      result.add BlockBody()
-      trace "handlers.getBlockBodies: blockBody not found", blockHash
-
-method getBlockHeaders*(ctx: EthWireRef, req: BlocksRequest): seq[BlockHeader]
-    {.gcsafe, raises: [RlpError].} =
-  let db = ctx.db
-  var foundBlock: BlockHeader
-  result = newSeqOfCap[BlockHeader](req.maxResults)
-
-  if db.blockHeader(req.startBlock, foundBlock):
-    result.add foundBlock
-
-    while uint64(result.len) < req.maxResults:
-      if not req.reverse:
-        if not db.successorHeader(foundBlock, foundBlock, req.skip):
-          break
+method getBlockBodies*(ctx: EthWireRef,
+                       hashes: openArray[Hash256]):
+                        Result[seq[BlockBody], string]
+    {.gcsafe.} =
+  try:
+    let db = ctx.db
+    var body: BlockBody
+    var list: seq[BlockBody]
+    for blockHash in hashes:
+      if db.getBlockBody(blockHash, body):
+        list.add body
       else:
-        if not db.ancestorHeader(foundBlock, foundBlock, req.skip):
-          break
-      result.add foundBlock
+        list.add BlockBody()
+        trace "handlers.getBlockBodies: blockBody not found", blockHash
+    return ok(list)
+  except RlpError as exc:
+    return err(exc.msg)
 
-method handleAnnouncedTxs*(ctx: EthWireRef, peer: Peer, txs: openArray[Transaction])
-    {.gcsafe, raises: [CatchableError].} =
-  if ctx.enableTxPool != Enabled:
-    when trMissingOrDisabledGossipOk:
-      notEnabled("handleAnnouncedTxs")
-    return
+method getBlockHeaders*(ctx: EthWireRef,
+                        req: BlocksRequest):
+                          Result[seq[BlockHeader], string]
+    {.gcsafe.} =
+  try:
+    let db = ctx.db
+    var foundBlock: BlockHeader
+    var list = newSeqOfCap[BlockHeader](req.maxResults)
 
-  if txs.len == 0:
-    return
+    if db.blockHeader(req.startBlock, foundBlock):
+      list.add foundBlock
 
-  debug "received new transactions",
-    number = txs.len
+      while uint64(list.len) < req.maxResults:
+        if not req.reverse:
+          if not db.successorHeader(foundBlock, foundBlock, req.skip):
+            break
+        else:
+          if not db.ancestorHeader(foundBlock, foundBlock, req.skip):
+            break
+        list.add foundBlock
+    return ok(list)
+  except RlpError as exc:
+    return err(exc.msg)
 
-  if ctx.lastCleanup - getTime() > POOLED_STORAGE_TIME_LIMIT:
-    ctx.cleanupKnownByPeer()
+method handleAnnouncedTxs*(ctx: EthWireRef,
+                           peer: Peer,
+                           txs: openArray[Transaction]):
+                             Result[void, string]
+    {.gcsafe.} =
 
-  var txHashes = newSeqOfCap[Hash256](txs.len)
-  for tx in txs:
-    txHashes.add rlpHash(tx)
+  try:
+    if ctx.enableTxPool != Enabled:
+      when trMissingOrDisabledGossipOk:
+        notEnabled("handleAnnouncedTxs")
+      return ok()
 
-  ctx.addToKnownByPeer(txHashes, peer)
-  ctx.txPool.add(txs)
+    if txs.len == 0:
+      return ok()
 
-  var newTxHashes = newSeqOfCap[Hash256](txHashes.len)
-  var validTxs = newSeqOfCap[Transaction](txHashes.len)
-  for i, txHash in txHashes:
-    # Nodes must not automatically broadcast blob transactions to
-    # their peers. per EIP-4844 spec
-    if ctx.txPool.inPoolAndOk(txHash) and txs[i].txType != TxEip4844:
-      newTxHashes.add txHash
-      validTxs.add txs[i]
+    debug "received new transactions",
+      number = txs.len
 
-  let
-    peers = ctx.getPeers(peer)
-    numPeers = peers.len
-    sendFull = max(1, numPeers div NUM_PEERS_REBROADCAST_QUOTIENT)
+    if ctx.lastCleanup - getTime() > POOLED_STORAGE_TIME_LIMIT:
+      ctx.cleanupKnownByPeer()
 
-  if numPeers == 0 or validTxs.len == 0:
-    return
+    var txHashes = newSeqOfCap[Hash256](txs.len)
+    for tx in txs:
+      txHashes.add rlpHash(tx)
 
-  asyncSpawn ctx.sendTransactions(txHashes, validTxs, peers[0..<sendFull])
+    ctx.addToKnownByPeer(txHashes, peer)
+    ctx.txPool.add(txs)
 
-  asyncSpawn ctx.sendNewTxHashes(newTxHashes, peers[sendFull..^1])
+    var newTxHashes = newSeqOfCap[Hash256](txHashes.len)
+    var validTxs = newSeqOfCap[Transaction](txHashes.len)
+    for i, txHash in txHashes:
+      # Nodes must not automatically broadcast blob transactions to
+      # their peers. per EIP-4844 spec
+      if ctx.txPool.inPoolAndOk(txHash) and txs[i].txType != TxEip4844:
+        newTxHashes.add txHash
+        validTxs.add txs[i]
 
-method handleAnnouncedTxsHashes*(ctx: EthWireRef, peer: Peer, txHashes: openArray[Hash256]) =
+    let
+      peers = ctx.getPeers(peer)
+      numPeers = peers.len
+      sendFull = max(1, numPeers div NUM_PEERS_REBROADCAST_QUOTIENT)
+
+    if numPeers == 0 or validTxs.len == 0:
+      return ok()
+
+    asyncSpawn ctx.sendTransactions(txHashes, validTxs, peers[0..<sendFull])
+
+    asyncSpawn ctx.sendNewTxHashes(newTxHashes, peers[sendFull..^1])
+    return ok()
+  except CatchableError as exc:
+    return err(exc.msg)
+
+method handleAnnouncedTxsHashes*(ctx: EthWireRef,
+                                 peer: Peer,
+                                 txHashes: openArray[Hash256]):
+                                   Result[void, string] =
   if ctx.enableTxPool != Enabled:
     when trMissingOrDisabledGossipOk:
       notEnabled("handleAnnouncedTxsHashes")
-    return
+    return ok()
 
   if txHashes.len == 0:
-    return
+    return ok()
 
   if ctx.lastCleanup - getTime() > POOLED_STORAGE_TIME_LIMIT:
     ctx.cleanupKnownByPeer()
@@ -517,7 +559,7 @@ method handleAnnouncedTxsHashes*(ctx: EthWireRef, peer: Peer, txHashes: openArra
     reqHashes.add txHash
 
   if reqHashes.len == 0:
-    return
+    return ok()
 
   debug "handleAnnouncedTxsHashes: received new tx hashes",
     number = reqHashes.len
@@ -526,45 +568,69 @@ method handleAnnouncedTxsHashes*(ctx: EthWireRef, peer: Peer, txHashes: openArra
     ctx.pending.incl txHash
 
   asyncSpawn ctx.fetchTransactions(reqHashes, peer)
+  return ok()
 
-method handleNewBlock*(ctx: EthWireRef, peer: Peer, blk: EthBlock, totalDifficulty: DifficultyInt)
-    {.gcsafe, raises: [CatchableError].} =
-  if ctx.chain.com.forkGTE(MergeFork):
-    debug "Dropping peer for sending NewBlock after merge (EIP-3675)",
-      peer, blockNumber=blk.header.blockNumber,
-      blockHash=blk.header.blockHash, totalDifficulty
-    asyncSpawn banPeer(ctx.peerPool, peer, PEER_LONG_BANTIME)
-    return
+method handleNewBlock*(ctx: EthWireRef,
+                       peer: Peer,
+                       blk: EthBlock,
+                       totalDifficulty: DifficultyInt):
+                         Result[void, string]
+    {.gcsafe.} =
+  try:
+    if ctx.chain.com.forkGTE(MergeFork):
+      debug "Dropping peer for sending NewBlock after merge (EIP-3675)",
+        peer, blockNumber=blk.header.blockNumber,
+        blockHash=blk.header.blockHash, totalDifficulty
+      asyncSpawn banPeer(ctx.peerPool, peer, PEER_LONG_BANTIME)
+      return ok()
 
-  if not ctx.newBlockHandler.handler.isNil:
-    ctx.newBlockHandler.handler(
-      ctx.newBlockHandler.arg,
-      peer, blk, totalDifficulty
-    )
+    if not ctx.newBlockHandler.handler.isNil:
+      ctx.newBlockHandler.handler(
+        ctx.newBlockHandler.arg,
+        peer, blk, totalDifficulty
+      )
+    return ok()
+  except CatchableError as exc:
+    return err(exc.msg)
 
-method handleNewBlockHashes*(ctx: EthWireRef, peer: Peer, hashes: openArray[NewBlockHashesAnnounce])
-    {.gcsafe, raises: [CatchableError].} =
-  if ctx.chain.com.forkGTE(MergeFork):
-    debug "Dropping peer for sending NewBlockHashes after merge (EIP-3675)",
-      peer, numHashes=hashes.len
-    asyncSpawn banPeer(ctx.peerPool, peer, PEER_LONG_BANTIME)
-    return
+method handleNewBlockHashes*(ctx: EthWireRef,
+                             peer: Peer,
+                             hashes: openArray[NewBlockHashesAnnounce]):
+                               Result[void, string]
+    {.gcsafe.} =
+  try:
+    if ctx.chain.com.forkGTE(MergeFork):
+      debug "Dropping peer for sending NewBlockHashes after merge (EIP-3675)",
+        peer, numHashes=hashes.len
+      asyncSpawn banPeer(ctx.peerPool, peer, PEER_LONG_BANTIME)
+      return ok()
 
-  if not ctx.newBlockHashesHandler.handler.isNil:
-    ctx.newBlockHashesHandler.handler(
-      ctx.newBlockHashesHandler.arg,
-      peer,
-      hashes
-    )
+    if not ctx.newBlockHashesHandler.handler.isNil:
+      ctx.newBlockHashesHandler.handler(
+        ctx.newBlockHashesHandler.arg,
+        peer,
+        hashes
+      )
+    return ok()
+  except CatchableError as exc:
+    return err(exc.msg)
 
 when defined(legacy_eth66_enabled):
-  method getStorageNodes*(ctx: EthWireRef, hashes: openArray[Hash256]): seq[Blob] {.gcsafe.} =
+  method getStorageNodes*(ctx: EthWireRef,
+                          hashes: openArray[Hash256]):
+                            Result[seq[Blob], string] {.gcsafe.} =
     let db = ctx.db.kvt
+    var list: seq[Blob]
     for hash in hashes:
-      result.add db.get(hash.data)
+      list.add db.get(hash.data)
+    ok(list)
 
-  method handleNodeData*(ctx: EthWireRef, peer: Peer, data: openArray[Blob]) {.gcsafe.} =
+  method handleNodeData*(ctx: EthWireRef,
+                         peer: Peer,
+                         data: openArray[Blob]):
+                           Result[void, string] {.gcsafe.} =
     notImplemented("handleNodeData")
+    ok()
 
 # ------------------------------------------------------------------------------
 # End
