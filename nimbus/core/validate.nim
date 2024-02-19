@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -232,10 +232,10 @@ proc validateTxBasic*(
   if validateFork:
     if tx.txType == TxEip2930 and fork < FkBerlin:
       return err("invalid tx: Eip2930 Tx type detected before Berlin")
-  
+
     if tx.txType == TxEip1559 and fork < FkLondon:
       return err("invalid tx: Eip1559 Tx type detected before London")
-  
+
     if tx.txType == TxEip4844 and fork < FkCancun:
       return err("invalid tx: Eip4844 Tx type detected before Cancun")
 

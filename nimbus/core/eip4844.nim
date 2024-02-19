@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -111,10 +111,10 @@ proc getTotalBlobGas*(tx: Transaction): uint64 =
   GAS_PER_BLOB * tx.versionedHashes.len.uint64
 
 proc getTotalBlobGas*(versionedHashesLen: int): uint64 =
-  GAS_PER_BLOB * versionedHasheslen.uint64
+  GAS_PER_BLOB * versionedHashesLen.uint64
 
 # getBlobGasPrice implements get_data_gas_price from EIP-4844
-func getBlobGasprice*(excessBlobGas: uint64): UInt256 =
+func getBlobGasPrice*(excessBlobGas: uint64): UInt256 =
   fakeExponential(
     MIN_BLOB_GASPRICE.u256,
     excessBlobGas.u256,
@@ -124,7 +124,7 @@ func getBlobGasprice*(excessBlobGas: uint64): UInt256 =
 proc calcDataFee*(versionedHashesLen: int,
                   excessBlobGas: uint64): UInt256 =
   getTotalBlobGas(versionedHashesLen).u256 *
-    getBlobGasprice(excessBlobGas)
+    getBlobGasPrice(excessBlobGas)
 
 func blobGasUsed(txs: openArray[Transaction]): uint64 =
   for tx in txs:

@@ -114,7 +114,7 @@ proc blobify*(vtx: VertexRef; data: var Blob): Result[void,AristoError] =
     let
       pSegm = vtx.ePfx.hexPrefixEncode(isleaf = false)
       psLen = pSegm.len.byte
-    if psLen == 0 or 33 < pslen:
+    if psLen == 0 or 33 < psLen:
       return err(BlobifyExtPathOverflow)
     if not vtx.eVid.isValid:
       return err(BlobifyExtMissingRefs)
@@ -325,7 +325,7 @@ proc deblobify(data: Blob; pyl: var PayloadRef): Result[void,AristoError] =
   else:
     return err(DeblobCodeLenUnsupported)
 
-  pyl = pacc
+  pyl = pAcc
   ok()
 
 proc deblobify*(record: Blob; vtx: var VertexRef): Result[void,AristoError] =
@@ -365,10 +365,10 @@ proc deblobify*(record: Blob; vtx: var VertexRef): Result[void,AristoError] =
   of 2: # `Extension` vertex
     let
       sLen = record[^1].int and 0x3f                  # length of path segment
-      rlen = record.len - 1                           # `vertexID` + path segm
+      rLen = record.len - 1                           # `vertexID` + path segm
     if record.len < 10:
       return err(DeblobExtTooShort)
-    if 8 + sLen != rlen:                              # => slen is at least 1
+    if 8 + sLen != rLen:                              # => slen is at least 1
       return err(DeblobExtSizeGarbled)
     let (isLeaf, pathSegment) = hexPrefixDecode record[8 ..< rLen]
     if isLeaf:
@@ -381,15 +381,15 @@ proc deblobify*(record: Blob; vtx: var VertexRef): Result[void,AristoError] =
   of 3: # `Leaf` vertex
     let
       sLen = record[^1].int and 0x3f                  # length of path segment
-      rlen = record.len - 1                           # payload + path segment
+      rLen = record.len - 1                           # payload + path segment
       pLen = rLen - sLen                              # payload length
-    if rlen < sLen:
+    if rLen < sLen:
       return err(DeblobLeafSizeGarbled)
     let (isLeaf, pathSegment) = hexPrefixDecode record[pLen ..< rLen]
     if not isLeaf:
       return err(DeblobLeafGotExtPrefix)
     var pyl: PayloadRef
-    ? record[0 ..< plen].deblobify(pyl)
+    ? record[0 ..< pLen].deblobify(pyl)
     vtx = VertexRef(
       vType: Leaf,
       lPfx:  pathSegment,

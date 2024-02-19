@@ -86,7 +86,7 @@ proc toAccountsKey(a: RepairKey): auto =
 proc toStorageSlotsKey(a: RepairKey): auto =
   a.convertTo(NodeKey).toStorageSlotsKey
 
-proc stateRootGet*(db: CoreDbRef; nodeKey: Nodekey): Blob =
+proc stateRootGet*(db: CoreDbRef; nodeKey: NodeKey): Blob =
   if db.isLegacy:
     return db.kvt.backend.toLegacy.get(nodeKey.toStateRootKey.toOpenArray)
 
@@ -196,7 +196,7 @@ proc persistentContractPut*(
   defer: dbTx.commit
 
   for (key,val) in data:
-    base.kvt.put(key.toContracthashKey.toOpenArray,val)
+    base.kvt.put(key.toContractHashKey.toOpenArray,val)
   ok()
 
 
@@ -378,7 +378,7 @@ proc persistentContractPut*(
     let
       nodeKey = nodeTag.to(NodeKey)
       data = lookup[nodeKey]
-    if not bulker.add(nodeKey.toContracthashKey.toOpenArray, data):
+    if not bulker.add(nodeKey.toContractHashKey.toOpenArray, data):
       let error = AddBulkItemFailed
       when extraTraceMessages:
         trace logTxt "rocksdb bulk load failure",

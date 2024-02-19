@@ -832,7 +832,7 @@ const txProcs = {
   "maxPriorityFeePerGas": txMaxPriorityFeePerGas,
   "effectiveGasPrice": txEffectiveGasPrice,
   "chainID": txChainId,
-  "maxFeePerBlobGas": txmaxFeePerBlobGas,
+  "maxFeePerBlobGas": txMaxFeePerBlobGas,
   "versionedHashes": txVersionedHashes,
   "raw": txRaw,
   "rawReceipt": txRawReceipt
@@ -1113,7 +1113,7 @@ proc blockBlobGasUsed(ud: RootRef, params: Args, parent: Node): RespResult {.api
   else:
     ok(respNull())
 
-proc blockexcessBlobGas(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+proc blockExcessBlobGas(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let h = HeaderNode(parent)
   if h.header.excessBlobGas.isSome:
     longNode(h.header.excessBlobGas.get)

@@ -152,7 +152,8 @@ template getPtr(z: untyped): untyped =
 proc mp_init_multi(mp: mp_int): mp_err {.mp_abi, varargs.}
 
 # free a bignum
-proc mp_clear(a: mp_int) {.mp_abi.}
+when false:
+  proc mp_clear(a: mp_int) {.mp_abi.}
 
 # clear multiple mp_ints, terminated with nil
 proc mp_clear_multi(mp: mp_int) {.mp_abi, varargs.}

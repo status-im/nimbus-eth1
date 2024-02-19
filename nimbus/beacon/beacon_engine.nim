@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -73,7 +73,7 @@ proc reachTTD*(ben: BeaconEngineRef) =
 proc finalizePoS*(ben: BeaconEngineRef) =
   ## FinalizePoS is called whenever the first FinalisedBlock message received
   ## from the consensus-layer.
-  ben.merge.finalizePos()
+  ben.merge.finalizePoS()
 
 proc put*(ben: BeaconEngineRef,
           hash: common.Hash256, header: common.BlockHeader) =

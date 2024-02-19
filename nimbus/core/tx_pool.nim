@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -554,7 +554,7 @@ proc smartHead*(xp: TxPoolRef; pos: BlockHeader; blindMode = false): bool
   ## simply set ignoring all changes. This mode makes sense only in very
   ## particular circumstances.
   if blindMode:
-    xp.sethead(pos)
+    xp.setHead(pos)
     return true
 
   let rcDiff = xp.headDiff(pos)
@@ -563,7 +563,7 @@ proc smartHead*(xp: TxPoolRef; pos: BlockHeader; blindMode = false): bool
 
     # Need to move head before adding txs which may rightly be rejected in
     # `addTxs()` otherwise.
-    xp.sethead(pos)
+    xp.setHead(pos)
 
     # Re-inject transactions, do that via job queue
     if 0 < changes.addTxs.len:
@@ -817,7 +817,7 @@ iterator okPairs*(xp: TxPoolRef): (Hash256, TxItemRef) =
 proc numTxs*(xp: TxPoolRef): int =
   xp.txDB.byItemID.len
 
-proc disposeAll*(xp: TxpoolRef) {.gcsafe,raises: [CatchableError].} =
+proc disposeAll*(xp: TxPoolRef) {.gcsafe,raises: [CatchableError].} =
   let numTx = xp.numTxs
   var list = newSeqOfCap[TxItemRef](numTx)
   for x in nextPairs(xp.txDB.byItemID):

@@ -266,7 +266,7 @@ func dup*(vtx: VertexRef): VertexRef =
       VertexRef(
         vType: Leaf,
         lPfx:  vtx.lPfx,
-        lData: vtx.ldata.dup)
+        lData: vtx.lData.dup)
     of Extension:
       VertexRef(
         vType: Extension,
@@ -288,7 +288,7 @@ func dup*(node: NodeRef): NodeRef =
       NodeRef(
         vType: Leaf,
         lPfx:  node.lPfx,
-        lData: node.ldata.dup,
+        lData: node.lData.dup,
         key:   node.key)
     of Extension:
       NodeRef(

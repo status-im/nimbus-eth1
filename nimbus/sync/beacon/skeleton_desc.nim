@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -61,7 +61,7 @@ type
     filling* : bool         # Whether we are actively filling the canonical chain
     started* : Time         # Timestamp when the skeleton syncer was created
     logged*  : Time         # Timestamp when progress was last logged to user
-    db*      : CoreDBRef
+    db*      : CoreDbRef
     chain*   : ChainRef
     conf*    : SkeletonConfig
     fillLogIndex*: uint64

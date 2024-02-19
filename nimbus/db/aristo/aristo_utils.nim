@@ -40,7 +40,7 @@ proc toAccount*(
     var acc = Account(
       nonce:       payload.account.nonce,
       balance:     payload.account.balance,
-      codeHash:    payload.account.codehash,
+      codeHash:    payload.account.codeHash,
       storageRoot: EMPTY_ROOT_HASH)
     if payload.account.storageID.isValid:
       acc.storageRoot = (? db.getKeyRc payload.account.storageID).to(Hash256)
@@ -75,7 +75,7 @@ proc toAccount*(
       var acc = Account(
         nonce:       node.lData.account.nonce,
         balance:     node.lData.account.balance,
-        codeHash:    node.lData.account.codehash,
+        codeHash:    node.lData.account.codeHash,
         storageRoot: EMPTY_ROOT_HASH)
       if node.lData.account.storageID.isValid:
         if not node.key[0].isValid:

@@ -514,7 +514,7 @@ proc baseMethods(
       ok(db.bless db.top),
 
     captureFn: proc(flgs: set[CoreDbCaptFlags]): CoreDbRc[CoreDxCaptRef] =
-      let fns = newRecorderRef(tdb, dbtype, flgs).cptMethods
+      let fns = newRecorderRef(tdb, dbType, flgs).cptMethods
       ok(db.bless CoreDxCaptRef(methods: fns)))
 
 # ------------------------------------------------------------------------------

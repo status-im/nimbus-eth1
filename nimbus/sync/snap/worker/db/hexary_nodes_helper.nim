@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -90,7 +90,7 @@ proc getNode*(
       return ok(nodeRlp.toBranchNode)
     of 2:
       let (isLeaf,pfx) = hexPrefixDecode nodeRlp.listElem(0).toBytes
-      if isleaf:
+      if isLeaf:
         return ok(nodeRlp.toLeafNode pfx)
       else:
         return ok(nodeRlp.toExtensionNode pfx)
@@ -138,7 +138,7 @@ proc padPartialPath*(pfx: NibblesSeq; dblNibble: byte): NodeKey =
 
   let padLen = 64 - pfx.len
   if 0 <= padLen:
-    padded = pfx & dblNibble.repeat(padlen div 2).initNibbleRange
+    padded = pfx & dblNibble.repeat(padLen div 2).initNibbleRange
     if (padLen and 1) == 1:
       padded = padded & @[dblNibble].initNibbleRange.slice(1)
   else:

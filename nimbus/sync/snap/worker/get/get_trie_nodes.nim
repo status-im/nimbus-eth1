@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2021 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -83,7 +83,7 @@ proc processReplyStep(
     maxLen = min(nSlotPaths, nodeBlobs.len - startInx)
 
   # Fill up nodes
-  for n in 0 ..< maxlen:
+  for n in 0 ..< maxLen:
     let nodeBlob = nodeBlobs[startInx + n]
     if 0 < nodeBlob.len:
       result.nodes.add NodeSpecs(

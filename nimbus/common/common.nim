@@ -533,7 +533,7 @@ proc setTTD*(com: CommonRef, ttd: Option[DifficultyInt]) =
   # rebuild the MergeFork piece of the forkTransitionTable
   com.forkTransitionTable.mergeForkTransitionThreshold = com.config.mergeForkTransitionThreshold
 
-proc setFork*(com: CommonRef, fork: HardFork): Hardfork =
+proc setFork*(com: CommonRef, fork: HardFork): HardFork =
   ## useful for testing
   result = com.currentFork
   com.currentFork = fork

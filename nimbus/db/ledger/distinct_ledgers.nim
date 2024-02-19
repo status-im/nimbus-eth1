@@ -67,18 +67,18 @@ proc toStr*(w: seq[(UInt256,UInt256)]): string =
 # Public helpers
 # ------------------------------------------------------------------------------
 
-proc db*(t: SomeLedger): CoreDbRef =
-  t.distinctBase.parent
+proc db*(led: SomeLedger): CoreDbRef =
+  led.distinctBase.parent
 
-proc rootHash*(t: SomeLedger): Hash256 =
+proc rootHash*(led: SomeLedger): Hash256 =
   const info = "SomeLedger/rootHash(): "
-  let rc = t.distinctBase.getTrie().rootHash()
+  let rc = led.distinctBase.getTrie().rootHash()
   if rc.isErr:
     raiseAssert info & $$rc.error
   rc.value
 
-proc getTrie*(t: SomeLedger): CoreDbTrieRef =
-  t.distinctBase.getTrie()
+proc getTrie*(led: SomeLedger): CoreDbTrieRef =
+  led.distinctBase.getTrie()
 
 # ------------------------------------------------------------------------------
 # Public functions: accounts ledger

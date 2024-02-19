@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -425,11 +425,11 @@ proc processNewHead*(sk: SkeletonRef, head: BlockHeader,
   elif last.head >= number:
     # Check if its duplicate announcement, if not trim the head and
     # let the match run after this if block
-    let mayBeDupBlock = sk.getHeader(number).valueOr:
+    let maybeDupBlock = sk.getHeader(number).valueOr:
       return err(error)
 
-    let maybeDupHash = mayBeDupBlock.blockHash
-    if mayBeDupBlock.isSome and mayBeDupHash == headHash:
+    let maybeDupHash = maybeDupBlock.blockHash
+    if maybeDupBlock.isSome and maybeDupHash == headHash:
       debug "Skeleton duplicate announcement",
         tail=last.tail, head=last.head, number, hash=headHash.short
       return ok(false)
@@ -441,7 +441,7 @@ proc processNewHead*(sk: SkeletonRef, head: BlockHeader,
           tail=last.tail,
           head=last.head,
           number=number,
-          expected=mayBeDupHash.short,
+          expected=maybeDupHash.short,
           actual=headHash.short
       else:
         debug "Skeleton stale announcement",
