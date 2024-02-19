@@ -75,7 +75,7 @@ proc runTest(steps: Steps) =
   com.initializeEmptyDb()
 
   var
-    rpcServer = newRpcSocketServer(["127.0.0.1:" & $conf.httpPort])
+    rpcServer = newRpcSocketServer(["127.0.0.1:0"])
     client = newRpcSocketClient()
     txPool = TxPoolRef.new(com, conf.engineSigner)
     sealingEngine = SealingEngineRef.new(
@@ -89,7 +89,7 @@ proc runTest(steps: Steps) =
 
   sealingEngine.start()
   rpcServer.start()
-  waitFor client.connect("127.0.0.1", conf.httpPort)
+  waitFor client.connect(rpcServer.localAddress()[0])
 
   suite "Engine API tests":
     for i, step in steps:
@@ -104,7 +104,6 @@ proc runTest(steps: Steps) =
         else:
           doAssert(false, "unknown method: " & step.`method`)
 
-  waitFor client.close()
   waitFor sealingEngine.stop()
   rpcServer.stop()
   waitFor rpcServer.closeWait()
