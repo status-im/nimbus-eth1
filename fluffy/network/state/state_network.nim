@@ -87,19 +87,18 @@ proc recursiveGossipAccountTrieNode(
     p: PortalProtocol,
     maybeSrcNodeId: Opt[NodeId],
     decodedKey: ContentKey,
-    decodedValue: OfferContentValue
+    decodedValue: AccountTrieNodeOffer
     ): Future[void] {.async.} =
-      let value = decodedValue.accountTrieNode
       var
         nibbles = decodedKey.accountTrieNodeKey.path.unpackNibbles()
-        proof = value.proof
+        proof = decodedValue.proof
 
       discard nibbles.pop()
       discard (distinctBase proof).pop()
       let
         updatedValue = AccountTrieNodeOffer(
           proof: proof,
-          blockHash: value.blockHash,
+          blockHash: decodedValue.blockHash,
         )
         updatedNodeHash = keccakHash(distinctBase proof[^1])
         encodedValue = SSZ.encode(updatedValue)
@@ -114,7 +113,7 @@ proc recursiveGossipContractTrieNode(
     p: PortalProtocol,
     maybeSrcNodeId: Opt[NodeId],
     decodedKey: ContentKey,
-    decodedValue: OfferContentValue
+    decodedValue: ContractTrieNodeOffer
     ): Future[void] {.async.} =
       return
 
@@ -130,9 +129,9 @@ proc gossipContent*(
     of unused:
       raiseAssert "Gossiping content with unused content type"
     of accountTrieNode:
-      await recursiveGossipAccountTrieNode(p, maybeSrcNodeId, decodedKey, decodedValue)
+      await recursiveGossipAccountTrieNode(p, maybeSrcNodeId, decodedKey, decodedValue.accountTrieNode)
     of contractTrieNode:
-      await recursiveGossipContractTrieNode(p, maybeSrcNodeId, decodedKey, decodedValue)
+      await recursiveGossipContractTrieNode(p, maybeSrcNodeId, decodedKey, decodedValue.contractTrieNode)
     of contractCode:
       await p.neighborhoodGossipDiscardPeers(
         maybeSrcNodeId, ContentKeysList.init(@[contentKey]), @[contentValue]
@@ -181,7 +180,6 @@ proc processContentLoop(n: StateNetwork) {.async.} =
               continue
 
           n.portalProtocol.storeContent(contentKey, contentId, valueForRetrieval)
-
           info "Received offered content validated successfully", contentKey
 
           await gossipContent(
