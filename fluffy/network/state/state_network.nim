@@ -29,6 +29,83 @@ type StateNetwork* = ref object
 func toContentIdHandler(contentKey: ByteList): results.Opt[ContentId] =
   ok(toContentId(contentKey))
 
+func decodeKV*(contentKey: ByteList, contentValue: seq[byte]): Opt[(ContentKey, OfferContentValue)] =
+  const empty = Opt.none((ContentKey, OfferContentValue))
+  let
+    key = contentKey.decode().valueOr:
+      return empty
+    value = case key.contentType:
+      of unused:
+        return empty
+      of accountTrieNode:
+        let val = decodeSsz(contentValue, AccountTrieNodeOffer).valueOr:
+          return empty
+        OfferContentValue(contentType: accountTrieNode, accountTrieNode: val)
+      of contractTrieNode:
+        let val = decodeSsz(contentValue, ContractTrieNodeOffer).valueOr:
+          return empty
+        OfferContentValue(contentType: contractTrieNode, contractTrieNode: val)
+      of contractCode:
+        let val = decodeSsz(contentValue, ContractCodeOffer).valueOr:
+          return empty
+        OfferContentValue(contentType: contractCode, contractCode: val)
+
+  Opt.some((key, value))
+
+func decodeValue*(contentKey: ContentKey, contentValue: seq[byte]): Opt[RetrievalContentValue] =
+  const empty = Opt.none(RetrievalContentValue)
+  let
+    value = case contentKey.contentType:
+      of unused:
+        return empty
+      of accountTrieNode:
+        let val = decodeSsz(contentValue, AccountTrieNodeRetrieval).valueOr:
+          return empty
+        RetrievalContentValue(contentType: accountTrieNode, accountTrieNode: val)
+      of contractTrieNode:
+        let val = decodeSsz(contentValue, ContractTrieNodeRetrieval).valueOr:
+          return empty
+        RetrievalContentValue(contentType: contractTrieNode, contractTrieNode: val)
+      of contractCode:
+        let val = decodeSsz(contentValue, ContractCodeRetrieval).valueOr:
+          return empty
+        RetrievalContentValue(contentType: contractCode, contractCode: val)
+
+  Opt.some(value)
+
+proc validateAccountTrieNode(
+  n: StateNetwork,
+  key: ContentKey,
+  contentValue: RetrievalContentValue): bool =
+    true
+
+proc validateContractTrieNode(
+  n: StateNetwork,
+  key: ContentKey,
+  contentValue: RetrievalContentValue): bool =
+    true
+
+proc validateContractCode(
+  n: StateNetwork,
+  key: ContentKey,
+  contentValue: RetrievalContentValue): bool =
+    true
+
+proc validateContent*(
+  n: StateNetwork,
+  contentKey: ContentKey,
+  contentValue: RetrievalContentValue): bool =
+    case contentKey.contentType:
+      of unused:
+        warn "Received content with unused content type"
+        false
+      of accountTrieNode:
+        validateAccountTrieNode(n, contentKey, contentValue)
+      of contractTrieNode:
+        validateContractTrieNode(n, contentKey, contentValue)
+      of contractCode:
+        validateContractCode(n, contentKey, contentValue)
+
 proc getContent*(n: StateNetwork, key: ContentKey):
     Future[Opt[seq[byte]]] {.async.} =
   let
@@ -47,7 +124,14 @@ proc getContent*(n: StateNetwork, key: ContentKey):
   if content.isNone():
     return Opt.none(seq[byte])
 
-  let contentResult = content.get()
+  let
+    contentResult = content.get()
+    decodedValue = decodeValue(key, contentResult.content).valueOr:
+      error "Unable to decode offered Key/Value"
+      return Opt.none(seq[byte])
+
+  if not validateContent(n, key, decodedValue):
+    return Opt.none(seq[byte])
 
   # When content is found on the network and is in the radius range, store it.
   if content.isSome() and contentInRange:
@@ -60,28 +144,38 @@ proc getContent*(n: StateNetwork, key: ContentKey):
   # domain types.
   return Opt.some(contentResult.content)
 
-proc validateAccountTrieNode(key: ContentKey, contentValue: OfferContentValue): bool =
-  true
+proc validateAccountTrieNode(
+  n: StateNetwork,
+  key: ContentKey,
+  contentValue: OfferContentValue): bool =
+    true
 
-proc validateContractTrieNode(key: ContentKey, contentValue: OfferContentValue): bool =
-  true
+proc validateContractTrieNode(
+  n: StateNetwork,
+  key: ContentKey,
+  contentValue: OfferContentValue): bool =
+    true
 
-proc validateContractCode(key: ContentKey, contentValue: OfferContentValue): bool =
-  true
+proc validateContractCode(
+  n: StateNetwork,
+  key: ContentKey,
+  contentValue: OfferContentValue): bool =
+    true
 
 proc validateContent*(
-    contentKey: ContentKey,
-    contentValue: OfferContentValue): bool =
-  case contentKey.contentType:
-    of unused:
-      warn "Received content with unused content type"
-      false
-    of accountTrieNode:
-      validateAccountTrieNode(contentKey, contentValue)
-    of contractTrieNode:
-      validateContractTrieNode(contentKey, contentValue)
-    of contractCode:
-      validateContractCode(contentKey, contentValue)
+  n: StateNetwork,
+  contentKey: ContentKey,
+  contentValue: OfferContentValue): bool =
+    case contentKey.contentType:
+      of unused:
+        warn "Received content with unused content type"
+        false
+      of accountTrieNode:
+        validateAccountTrieNode(n, contentKey, contentValue)
+      of contractTrieNode:
+        validateContractTrieNode(n, contentKey, contentValue)
+      of contractCode:
+        validateContractCode(n, contentKey, contentValue)
 
 proc recursiveGossipAccountTrieNode(
     p: PortalProtocol,
@@ -172,7 +266,7 @@ proc processContentLoop(n: StateNetwork) {.async.} =
           (decodedKey, decodedValue) = decodeKV(contentKey, contentValue).valueOr:
             error "Unable to decode offered Key/Value"
             continue
-        if validateContent(decodedKey, decodedValue):
+        if validateContent(n, decodedKey, decodedValue):
           let
             valueForRetrieval = decodedValue.offerContentToRetrievalContent().encode()
             contentId = n.portalProtocol.toContentId(contentKey).valueOr:

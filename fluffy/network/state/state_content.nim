@@ -183,29 +183,6 @@ func encode*(content: RetrievalContentValue): seq[byte] =
     of contractCode:
       SSZ.encode(content.contractCode)
 
-func decodeKV*(contentKey: ByteList, contentValue: seq[byte]): Opt[(ContentKey, OfferContentValue)] =
-  const empty = Opt.none((ContentKey, OfferContentValue))
-  let
-    key = contentKey.decode().valueOr:
-      return empty
-    value = case key.contentType:
-      of unused:
-        return empty
-      of accountTrieNode:
-        let val = decodeSsz(contentValue, AccountTrieNodeOffer).valueOr:
-          return empty
-        OfferContentValue(contentType: accountTrieNode, accountTrieNode: val)
-      of contractTrieNode:
-        let val = decodeSsz(contentValue, ContractTrieNodeOffer).valueOr:
-          return empty
-        OfferContentValue(contentType: contractTrieNode, contractTrieNode: val)
-      of contractCode:
-        let val = decodeSsz(contentValue, ContractCodeOffer).valueOr:
-          return empty
-        OfferContentValue(contentType: contractCode, contractCode: val)
-
-  Opt.some((key, value))
-
 func packNibbles*(nibbles: seq[byte]): Nibbles =
   doAssert(nibbles.len() <= MAX_UNPACKED_NIBBLES_LEN, "Can't pack more than 64 nibbles")
 
