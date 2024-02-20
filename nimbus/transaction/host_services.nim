@@ -274,7 +274,7 @@ proc emitLog(host: TransactionHost, address: HostAddress,
     copyMem(log.data[0].addr, data, data_size.int)
 
   log.address = address
-  host.vmState.stateDB.addlogEntry(log)
+  host.vmState.stateDB.addLogEntry(log)
 
 proc accessAccount(host: TransactionHost, address: HostAddress): EvmcAccessStatus {.show.} =
   host.vmState.mutateStateDB:
@@ -304,7 +304,7 @@ proc setTransientStorage(host: TransactionHost, address: HostAddress,
 
 when use_evmc_glue:
   {.pop: inline.}
-  const included_from_host_services = true
+  const included_from_host_services {.used.} = true
   include ./evmc_host_glue
 else:
   export

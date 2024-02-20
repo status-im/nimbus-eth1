@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -198,7 +198,7 @@ when defined(evmc_enabled):
     e[EVMC_STORAGE_ADDED_DELETED]     = StorageStoreCost(gasCost: c.warmAccess,
       gasRefund: c.sset - c.warmAccess)
     e[EVMC_STORAGE_MODIFIED_RESTORED] = StorageStoreCost(gasCost: c.warmAccess,
-      gasRefund: c.reset - c.warm_access)
+      gasRefund: c.reset - c.warmAccess)
 
   proc storageStoreCost(): array[EVMFork, array[evmc_storage_status, StorageStoreCost]] {.compileTime.} =
     const tbl = storageCostSpec()
@@ -313,7 +313,7 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
   func `prefix gasSstore`(value: UInt256, gasParams: GasParams): GasResult {.nimcall.} =
     ## Value is word to save
     when defined(evmc_enabled):
-      const c = SStoreCost[fork]
+      const c = SstoreCost[fork]
       let sc  = c[gasParams.s_status]
       result.gasCost   = sc.gasCost
       result.gasRefund = sc.gasRefund

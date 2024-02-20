@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2023 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -150,7 +150,7 @@ proc staticCallParams(c: Computation):  LocalParams =
 when evmc_enabled:
   template execSubCall(c: Computation; msg: ref nimbus_message; p: LocalParams) =
     c.chainTo(msg):
-      c.returnData = @(makeOpenArray(c.res.outputData, c.res.outputSize.int))
+      c.returnData = @(makeOpenArray(c.res.output_data, c.res.output_size.int))
 
       let actualOutputSize = min(p.memOutLen, c.returnData.len)
       if actualOutputSize > 0:

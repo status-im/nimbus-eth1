@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2023 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -43,7 +43,6 @@ when not defined(evmc_enabled):
 when evmc_enabled:
   proc sstoreEvmc(c: Computation, slot, newValue: UInt256, coldAccess = 0.GasInt) =
     let
-      currentValue = c.getStorage(slot)
       status   = c.host.setStorage(c.msg.contractAddress, slot, newValue)
       gasParam = GasParams(kind: Op.Sstore, s_status: status)
       gasCost  = c.gasCosts[Sstore].c_handler(newValue, gasParam)[0] + coldAccess

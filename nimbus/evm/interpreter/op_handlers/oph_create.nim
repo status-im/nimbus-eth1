@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2023 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -52,7 +52,7 @@ when evmc_enabled:
         c.stack.top(c.res.create_address)
       elif c.res.status_code == EVMC_REVERT:
         # From create, only use `outputData` if child returned with `REVERT`.
-        c.returnData = @(makeOpenArray(c.res.outputData, c.res.outputSize.int))
+        c.returnData = @(makeOpenArray(c.res.output_data, c.res.output_size.int))
       if not c.res.release.isNil:
         c.res.release(c.res)
 
