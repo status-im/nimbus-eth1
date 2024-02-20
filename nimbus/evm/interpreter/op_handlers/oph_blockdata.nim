@@ -69,14 +69,13 @@ const
     k.cpt.stack.push:
       k.cpt.getChainId
 
-proc selfBalanceOp(k: var Vm2Ctx) {.gcsafe, raises:[].} =
+  selfBalanceOp: Vm2OpFn = proc (k: var Vm2Ctx) {.gcsafe, raises:[].} =
     ## 0x47, Get current contract's balance.
     let cpt = k.cpt
     cpt.asyncChainToRaise(ifNecessaryGetAccount(cpt.vmState, cpt.msg.contractAddress), [CatchableError]):
       cpt.stack.push:
         cpt.getBalance(cpt.msg.contractAddress)
 
-const
   baseFeeOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x48, Get the block's base fee.
     k.cpt.stack.push:
@@ -168,7 +167,7 @@ const
      name: "selfBalance",
      info: "Get current contract's balance",
      exec: (prep: vm2OpIgnore,
-            run:  Vm2OpFn selfBalanceOp,
+            run:  selfBalanceOp,
             post: vm2OpIgnore)),
 
     (opCode: BaseFee,         ## 0x48, EIP-1559 Block base fee.

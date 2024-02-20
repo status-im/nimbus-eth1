@@ -280,12 +280,11 @@ const
     k.cpt.stack.push:
       k.cpt.gasMeter.gasRemaining
 
-proc jumpDestOp(k: var Vm2Ctx) {.gcsafe, raises:[].} =
+  jumpDestOp: Vm2OpFn = proc (k: var Vm2Ctx) {.gcsafe, raises:[].} =
     ## 0x5b, Mark a valid destination for jumps. This operation has no effect
     ##       on machine state during execution.
     discard
 
-const
   tloadOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x5c, Load word from transient storage.
     let
@@ -502,7 +501,7 @@ const
      name: "jumpDest",
      info: "Mark a valid destination for jumps",
      exec: (prep: vm2OpIgnore,
-            run:  Vm2OpFn jumpDestOp,
+            run:  jumpDestOp,
             post: vm2OpIgnore)),
 
     (opCode: Tload,     ## 0x5c, Load word from transient storage.

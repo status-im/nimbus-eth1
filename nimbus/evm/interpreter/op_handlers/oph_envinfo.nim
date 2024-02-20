@@ -123,7 +123,7 @@ const
     k.cpt.memory.writePadded(k.cpt.msg.data, memPos, copyPos, len)
 
 
-proc codeSizeOp(k: var Vm2Ctx) {.gcsafe, raises:[].} =
+  codeSizeOp: Vm2OpFn = proc (k: var Vm2Ctx) {.gcsafe, raises:[].} =
     ## 0x38, Get size of code running in current environment.
     let cpt = k.cpt
     cpt.asyncChainToRaise(ifNecessaryGetCode(cpt.vmState, cpt.msg.contractAddress), [FullStack]):
@@ -131,7 +131,7 @@ proc codeSizeOp(k: var Vm2Ctx) {.gcsafe, raises:[].} =
         cpt.code.len
 
 
-proc codeCopyOp(k: var Vm2Ctx) {.gcsafe, raises:[].} =
+  codeCopyOp: Vm2OpFn = proc (k: var Vm2Ctx) {.gcsafe, raises:[].} =
     ## 0x39, Copy code running in current environment to memory.
     let cpt = k.cpt
     cpt.asyncChainToRaise(ifNecessaryGetCode(cpt.vmState, cpt.msg.contractAddress), [CatchableError]):
@@ -147,7 +147,6 @@ proc codeCopyOp(k: var Vm2Ctx) {.gcsafe, raises:[].} =
 
       cpt.memory.writePadded(cpt.code.bytes, memPos, copyPos, len)
 
-const
   gasPriceOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x3A, Get price of gas in current environment.
     k.cpt.stack.push:
@@ -347,7 +346,7 @@ const
      name: "codeSize",
      info: "Get size of code running in current environment",
      exec: (prep: vm2OpIgnore,
-            run:  Vm2OpFn codeSizeOp,
+            run:  codeSizeOp,
             post: vm2OpIgnore)),
 
     (opCode: CodeCopy,       ## 0x39, Copy code to memory.
@@ -355,7 +354,7 @@ const
      name: "codeCopy",
      info: "Copy code running in current environment to memory",
      exec: (prep: vm2OpIgnore,
-            run:  Vm2OpFn codeCopyOp,
+            run:  codeCopyOp,
             post: vm2OpIgnore)),
 
     (opCode: GasPrice,       ## 0x3a, Gas price
