@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -19,18 +19,18 @@ import
 
 func wdRoot(list: openArray[WithdrawalV1]): common.Hash256
              {.gcsafe, raises:[].} =
-  {.nosideEffect.}:
+  {.noSideEffect.}:
     calcWithdrawalsRoot(ethWithdrawals list)
 
 func wdRoot(x: Option[seq[WithdrawalV1]]): Option[common.Hash256]
              {.gcsafe, raises:[].} =
-  {.nosideEffect.}:
+  {.noSideEffect.}:
     if x.isNone: none(common.Hash256)
     else: some(wdRoot x.get)
 
 func txRoot(list: openArray[Web3Tx]): common.Hash256
              {.gcsafe, raises:[RlpError].} =
-  {.nosideEffect.}:
+  {.noSideEffect.}:
     calcTxRoot(ethTxs(list, removeBlobs = true))
 
 # ------------------------------------------------------------------------------

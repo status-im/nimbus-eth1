@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -182,16 +182,16 @@ proc afterExecCreate(c: Computation)
 
 const
   MsgKindToOp: array[CallKind, Op] = [
-    CALL,
-    DELEGATECALL,
-    CALLCODE,
-    CREATE,
-    CREATE2
+    Call,
+    DelegateCall,
+    CallCode,
+    Create,
+    Create2
   ]
 
 func msgToOp(msg: Message): Op =
   if EVMC_STATIC in msg.flags:
-    return STATICCALL
+    return StaticCall
   MsgKindToOp[msg.kind]
 
 proc beforeExec(c: Computation): bool

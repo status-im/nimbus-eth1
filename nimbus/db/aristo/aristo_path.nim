@@ -95,7 +95,7 @@ func pathPfxPad*(pfx: NibblesSeq; dblNibble: static[byte]): NibblesSeq =
 
   let padLen = 64 - pfx.len
   if 0 <= padLen:
-    result = pfx & dblNibble.repeat(padlen div 2).mapIt(it.byte).initNibbleRange
+    result = pfx & dblNibble.repeat(padLen div 2).mapIt(it.byte).initNibbleRange
     if (padLen and 1) == 1:
       result = result & @[dblNibble.byte].initNibbleRange.slice(1)
   else:

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -152,7 +152,8 @@ template getPtr(z: untyped): untyped =
 proc mp_init_multi(mp: mp_int): mp_err {.mp_abi, varargs.}
 
 # free a bignum
-proc mp_clear(a: mp_int) {.mp_abi.}
+when false:
+  proc mp_clear(a: mp_int) {.mp_abi.}
 
 # clear multiple mp_ints, terminated with nil
 proc mp_clear_multi(mp: mp_int) {.mp_abi, varargs.}
