@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2023 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -46,26 +46,26 @@ when not defined(evmc_enabled):
 
 when evmc_enabled:
   template execSubCreate(c: Computation; msg: ref nimbus_message) =
-    c.chainTo(msg):
+    c.chainTo(msg, shouldRaise = true):
       c.gasMeter.returnGas(c.res.gas_left)
       if c.res.status_code == EVMC_SUCCESS:
         c.stack.top(c.res.create_address)
       elif c.res.status_code == EVMC_REVERT:
         # From create, only use `outputData` if child returned with `REVERT`.
-        c.returnData = @(makeOpenArray(c.res.outputData, c.res.outputSize.int))
+        c.returnData = @(makeOpenArray(c.res.output_data, c.res.output_size.int))
       if not c.res.release.isNil:
         c.res.release(c.res)
 
 else:
   proc execSubCreate(c: Computation; childMsg: Message;
-                    salt: ContractSalt = ZERO_CONTRACTSALT) =
+                    salt: ContractSalt = ZERO_CONTRACTSALT) {.raises: [].} =
     ## Create new VM -- helper for `Create`-like operations
 
     # need to provide explicit <c> and <child> for capturing in chainTo proc()
     var
       child = newComputation(c.vmState, false, childMsg, salt)
 
-    c.chainTo(child):
+    c.chainTo(child, shouldRaise = false):
       if not child.shouldBurnGas:
         c.gasMeter.returnGas(child.gasMeter.gasRemaining)
 

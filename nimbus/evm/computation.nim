@@ -73,7 +73,7 @@ template getTimestamp*(c: Computation): uint64 =
 
 template getBlockNumber*(c: Computation): UInt256 =
   when evmc_enabled:
-    c.host.getTxContext().blockNumber.u256
+    c.host.getBlockNumber()
   else:
     c.vmState.blockNumber.blockNumberToVmWord
 
@@ -95,11 +95,11 @@ template getBaseFee*(c: Computation): UInt256 =
   else:
     c.vmState.blockCtx.fee.get(0.u256)
 
-template getChainId*(c: Computation): uint =
+template getChainId*(c: Computation): uint64 =
   when evmc_enabled:
-    UInt256.fromEvmc(c.host.getTxContext().chainId).truncate(uint)
+    c.host.getChainId()
   else:
-    c.vmState.com.chainId.uint
+    c.vmState.com.chainId.uint64
 
 template getOrigin*(c: Computation): EthAddress =
   when evmc_enabled:
@@ -351,24 +351,49 @@ proc writeContract*(c: Computation)
     # The account already has zero-length code to handle nested calls.
     withExtra trace, "New contract given empty code by pre-Homestead rules"
 
-template chainTo*(c: Computation, toChild: typeof(c.child), after: untyped) =
+template chainTo*(c: Computation,
+                  toChild: typeof(c.child),
+                  shouldRaise: static[bool],
+                  after: untyped) =
+
+  when shouldRaise:
+    {.pragma: chainToPragma, gcsafe, raises: [CatchableError].}
+  else:
+    {.pragma: chainToPragma, gcsafe, raises: [].}
+
   c.child = toChild
-  c.continuation = proc() =
+  c.continuation = proc() {.chainToPragma.} =
     c.continuation = nil
     after
 
 # Register an async operation to be performed before the continuation is called.
-template asyncChainTo*(c: Computation, asyncOperation: Future[void], after: untyped) =
+template asyncChainTo*(c: Computation,
+                       asyncOperation: Future[void],
+                       after: untyped) =
   c.pendingAsyncOperation = asyncOperation
-  c.continuation = proc() =
+  c.continuation = proc() {.gcsafe, raises: [].} =
+    c.continuation = nil
+    after
+
+template asyncChainToRaise*(c: Computation,
+                       asyncOperation: Future[void],
+                       RaisesTypes: untyped,
+                       after: untyped) =
+  c.pendingAsyncOperation = asyncOperation
+  c.continuation = proc() {.gcsafe, raises: RaisesTypes.} =
     c.continuation = nil
     after
 
 proc merge*(c, child: Computation) =
   c.gasMeter.refundGas(child.gasMeter.gasRefunded)
 
+when evmc_enabled:
+  {.pragma: selfDesructPragma, gcsafe, raises: [CatchableError].}
+else:
+  {.pragma: selfDesructPragma, gcsafe, raises: [].}
+
 proc execSelfDestruct*(c: Computation, beneficiary: EthAddress)
-    {.gcsafe, raises: [CatchableError].} =
+    {.selfDesructPragma.} =
 
   c.vmState.mutateStateDB:
     let localBalance = c.getBalance(c.msg.contractAddress)

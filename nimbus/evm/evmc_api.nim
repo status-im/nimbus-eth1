@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2019 Status Research & Development GmbH
+# Copyright (c) 2019-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -146,7 +146,7 @@ proc copyCode*(ctx: HostContext, address: EthAddress, codeOffset: int = 0): seq[
         codeOffset, result[0].addr, result.len)
     doAssert(read == result.len)
 
-proc selfdestruct*(ctx: HostContext, address, beneficiary: EthAddress)
+proc selfDestruct*(ctx: HostContext, address, beneficiary: EthAddress)
     {.gcsafe, raises: [CatchableError].} =
   ctx.host.selfdestruct(ctx.context, address, beneficiary)
 
@@ -183,3 +183,12 @@ proc setTransientStorage*(ctx: HostContext, address: EthAddress,
     key = toEvmc(key)
     value = toEvmc(value)
   ctx.host.set_transient_storage(ctx.context, address, key.addr, value.addr)
+
+# The following two templates put here because the stupid style checker
+# complaints about block_number vs blockNumber and chain_id vs chainId
+# if they are written directly in computation.nim
+template getBlockNumber*(ctx: HostContext): UInt256 =
+  ctx.getTxContext().block_number.u256
+
+template getChainId*(ctx: HostContext): uint64 =
+  UInt256.fromEvmc(ctx.getTxContext().chain_id).truncate(uint64)

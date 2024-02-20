@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -49,7 +49,7 @@ const
     ## 0x31, Get balance of the given account.
     let cpt = k.cpt
     let address = cpt.stack.popAddress
-    cpt.asyncChainTo(ifNecessaryGetAccount(cpt.vmState, address)):
+    cpt.asyncChainToRaise(ifNecessaryGetAccount(cpt.vmState, address), [CatchableError]):
       cpt.stack.push:
         cpt.getBalance(address)
 
@@ -58,7 +58,7 @@ const
     let cpt = k.cpt
     let address = cpt.stack.popAddress()
 
-    cpt.asyncChainTo(ifNecessaryGetAccount(cpt.vmState, address)):
+    cpt.asyncChainToRaise(ifNecessaryGetAccount(cpt.vmState, address), [CatchableError]):
       let gasCost = cpt.gasEip2929AccountCheck(address)
       cpt.opcodeGastCost(Balance, gasCost, reason = "Balance EIP2929")
       cpt.stack.push:
@@ -123,18 +123,18 @@ const
     k.cpt.memory.writePadded(k.cpt.msg.data, memPos, copyPos, len)
 
 
-  codeSizeOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+  codeSizeOp: Vm2OpFn = proc (k: var Vm2Ctx) {.gcsafe, raises:[].} =
     ## 0x38, Get size of code running in current environment.
     let cpt = k.cpt
-    cpt.asyncChainTo(ifNecessaryGetCode(cpt.vmState, cpt.msg.contractAddress)):
+    cpt.asyncChainToRaise(ifNecessaryGetCode(cpt.vmState, cpt.msg.contractAddress), [FullStack]):
       cpt.stack.push:
         cpt.code.len
 
 
-  codeCopyOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+  codeCopyOp: Vm2OpFn = proc (k: var Vm2Ctx) {.gcsafe, raises:[].} =
     ## 0x39, Copy code running in current environment to memory.
     let cpt = k.cpt
-    cpt.asyncChainTo(ifNecessaryGetCode(cpt.vmState, cpt.msg.contractAddress)):
+    cpt.asyncChainToRaise(ifNecessaryGetCode(cpt.vmState, cpt.msg.contractAddress), [CatchableError]):
       let (memStartPos, copyStartPos, size) = cpt.stack.popInt(3)
 
       # TODO tests: https://github.com/status-im/nimbus/issues/67
@@ -147,7 +147,6 @@ const
 
       cpt.memory.writePadded(cpt.code.bytes, memPos, copyPos, len)
 
-
   gasPriceOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x3A, Get price of gas in current environment.
     k.cpt.stack.push:
@@ -159,7 +158,7 @@ const
     ## 0x3b, Get size of an account's code
     let cpt = k.cpt
     let address = k.cpt.stack.popAddress()
-    cpt.asyncChainTo(ifNecessaryGetCode(cpt.vmState, address)):
+    cpt.asyncChainToRaise(ifNecessaryGetCode(cpt.vmState, address), [CatchableError]):
       cpt.stack.push:
         cpt.getCodeSize(address)
 
@@ -168,7 +167,7 @@ const
     let cpt = k.cpt
     let address = cpt.stack.popAddress()
 
-    cpt.asyncChainTo(ifNecessaryGetCode(cpt.vmState, address)):
+    cpt.asyncChainToRaise(ifNecessaryGetCode(cpt.vmState, address), [CatchableError]):
       let gasCost = cpt.gasEip2929AccountCheck(address)
       cpt.opcodeGastCost(ExtCodeSize, gasCost, reason = "ExtCodeSize EIP2929")
       cpt.stack.push:
@@ -181,7 +180,7 @@ const
     let cpt = k.cpt
     let address = cpt.stack.popAddress()
 
-    cpt.asyncChainTo(ifNecessaryGetCode(cpt.vmState, address)):
+    cpt.asyncChainToRaise(ifNecessaryGetCode(cpt.vmState, address), [CatchableError]):
       let (memStartPos, codeStartPos, size) = cpt.stack.popInt(3)
       let (memPos, codePos, len) =
         (memStartPos.cleanMemRef, codeStartPos.cleanMemRef, size.cleanMemRef)
@@ -199,7 +198,7 @@ const
     let cpt = k.cpt
     let address = cpt.stack.popAddress()
 
-    cpt.asyncChainTo(ifNecessaryGetCode(cpt.vmState, address)):
+    cpt.asyncChainToRaise(ifNecessaryGetCode(cpt.vmState, address), [CatchableError]):
       let (memStartPos, codeStartPos, size) = cpt.stack.popInt(3)
       let (memPos, codePos, len) = (memStartPos.cleanMemRef,
                                     codeStartPos.cleanMemRef, size.cleanMemRef)
@@ -246,7 +245,7 @@ const
     ## 0x3f, Returns the keccak256 hash of a contract’s code
     let cpt = k.cpt
     let address = k.cpt.stack.popAddress()
-    cpt.asyncChainTo(ifNecessaryGetCode(cpt.vmState, address)):
+    cpt.asyncChainToRaise(ifNecessaryGetCode(cpt.vmState, address), [CatchableError]):
       cpt.stack.push:
         cpt.getCodeHash(address)
 
@@ -255,7 +254,7 @@ const
     let cpt = k.cpt
     let address = k.cpt.stack.popAddress()
 
-    cpt.asyncChainTo(ifNecessaryGetCode(cpt.vmState, address)):
+    cpt.asyncChainToRaise(ifNecessaryGetCode(cpt.vmState, address), [CatchableError]):
       let gasCost = cpt.gasEip2929AccountCheck(address)
       cpt.opcodeGastCost(ExtCodeHash, gasCost, reason = "ExtCodeHash EIP2929")
 

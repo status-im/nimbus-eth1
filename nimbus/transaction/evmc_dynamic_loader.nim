@@ -1,6 +1,6 @@
 # Nimbus - Dynamic loader for EVM modules as shared libraries / DLLs
 #
-# Copyright (c) 2019-2021 Status Research & Development GmbH
+# Copyright (c) 2019-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -71,7 +71,7 @@ proc evmcLoadVMGetCreateFn(): (evmc_create_vm_name_fn, string) =
 
   # Search for the built function name.
   symbolName = "evmc_create_" & symbolName
-  var sym = symAddr(lib, symbolName)
+  var sym = symAddr(lib, symbolName.cstring)
   if sym.isNil:
     const fallback = "evmc_create"
     sym = symAddr(lib, fallback)

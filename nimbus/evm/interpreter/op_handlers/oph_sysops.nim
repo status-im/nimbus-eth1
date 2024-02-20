@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2023 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -79,15 +79,19 @@ const
     ## 0xff, Halt execution and register account for later deletion.
     let cpt = k.cpt
     let beneficiary = cpt.stack.popAddress()
-    cpt.asyncChainTo(ifNecessaryGetAccount(cpt.vmState, beneficiary)):
-      cpt.selfDestruct(beneficiary)
+    when defined(evmc_enabled):
+      cpt.asyncChainToRaise(ifNecessaryGetAccount(cpt.vmState, beneficiary), [CatchableError]):
+        cpt.selfDestruct(beneficiary)
+    else:
+      cpt.asyncChainTo(ifNecessaryGetAccount(cpt.vmState, beneficiary)):
+        cpt.selfDestruct(beneficiary)
 
 
   selfDestructEIP150Op: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## selfDestructEip150 (auto generated comment)
     let cpt = k.cpt
     let beneficiary = cpt.stack.popAddress()
-    cpt.asyncChainTo(ifNecessaryGetAccount(cpt.vmState, beneficiary)):
+    cpt.asyncChainToRaise(ifNecessaryGetAccount(cpt.vmState, beneficiary), [CatchableError]):
       let gasParams = GasParams(
         kind: SelfDestruct,
         sd_condition: not cpt.accountExists(beneficiary))
@@ -105,7 +109,7 @@ const
     checkInStaticContext(cpt)
 
     let beneficiary = cpt.stack.popAddress()
-    cpt.asyncChainTo(ifNecessaryGetAccount(cpt.vmState, beneficiary)):
+    cpt.asyncChainToRaise(ifNecessaryGetAccount(cpt.vmState, beneficiary), [CatchableError]):
       let
         isDead = not cpt.accountExists(beneficiary)
         balance = cpt.getBalance(cpt.msg.contractAddress)
@@ -127,7 +131,7 @@ const
     checkInStaticContext(cpt)
 
     let beneficiary = cpt.stack.popAddress()
-    cpt.asyncChainTo(ifNecessaryGetAccount(cpt.vmState, beneficiary)):
+    cpt.asyncChainToRaise(ifNecessaryGetAccount(cpt.vmState, beneficiary), [CatchableError]):
       let
         isDead = not cpt.accountExists(beneficiary)
         balance = cpt.getBalance(cpt.msg.contractAddress)

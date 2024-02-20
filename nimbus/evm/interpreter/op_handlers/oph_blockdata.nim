@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -35,7 +35,7 @@ const
     ## 0x40, Get the hash of one of the 256 most recent complete blocks.
     let cpt = k.cpt
     let (blockNumber) = cpt.stack.popInt(1)
-    cpt.asyncChainTo(ifNecessaryGetBlockHeaderByNumber(cpt.vmState, blockNumber)):
+    cpt.asyncChainToRaise(ifNecessaryGetBlockHeaderByNumber(cpt.vmState, blockNumber), [CatchableError]):
       cpt.stack.push:
         cpt.getBlockHash(blockNumber)
 
@@ -69,10 +69,10 @@ const
     k.cpt.stack.push:
       k.cpt.getChainId
 
-  selfBalanceOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+  selfBalanceOp: Vm2OpFn = proc (k: var Vm2Ctx) {.gcsafe, raises:[].} =
     ## 0x47, Get current contract's balance.
     let cpt = k.cpt
-    cpt.asyncChainTo(ifNecessaryGetAccount(cpt.vmState, cpt.msg.contractAddress)):
+    cpt.asyncChainToRaise(ifNecessaryGetAccount(cpt.vmState, cpt.msg.contractAddress), [CatchableError]):
       cpt.stack.push:
         cpt.getBalance(cpt.msg.contractAddress)
 
