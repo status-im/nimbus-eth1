@@ -79,8 +79,12 @@ const
     ## 0xff, Halt execution and register account for later deletion.
     let cpt = k.cpt
     let beneficiary = cpt.stack.popAddress()
-    cpt.asyncChainTo(ifNecessaryGetAccount(cpt.vmState, beneficiary)):
-      cpt.selfDestruct(beneficiary)
+    when defined(evmc_enabled):
+      cpt.asyncChainToRaise(ifNecessaryGetAccount(cpt.vmState, beneficiary), [CatchableError]):
+        cpt.selfDestruct(beneficiary)
+    else:
+      cpt.asyncChainTo(ifNecessaryGetAccount(cpt.vmState, beneficiary)):
+        cpt.selfDestruct(beneficiary)
 
 
   selfDestructEIP150Op: Vm2OpFn = proc(k: var Vm2Ctx) =

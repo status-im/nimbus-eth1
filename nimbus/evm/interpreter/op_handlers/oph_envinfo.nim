@@ -49,7 +49,7 @@ const
     ## 0x31, Get balance of the given account.
     let cpt = k.cpt
     let address = cpt.stack.popAddress
-    cpt.asyncChainToRaise(ifNecessaryGetAccount(cpt.vmState, address), [FullStack]):
+    cpt.asyncChainToRaise(ifNecessaryGetAccount(cpt.vmState, address), [CatchableError]):
       cpt.stack.push:
         cpt.getBalance(address)
 
@@ -58,8 +58,7 @@ const
     let cpt = k.cpt
     let address = cpt.stack.popAddress()
 
-    cpt.asyncChainToRaise(ifNecessaryGetAccount(cpt.vmState, address),
-                          [OutOfGas, FullStack, ValueError]):
+    cpt.asyncChainToRaise(ifNecessaryGetAccount(cpt.vmState, address), [CatchableError]):
       let gasCost = cpt.gasEip2929AccountCheck(address)
       cpt.opcodeGastCost(Balance, gasCost, reason = "Balance EIP2929")
       cpt.stack.push:
@@ -160,7 +159,7 @@ const
     ## 0x3b, Get size of an account's code
     let cpt = k.cpt
     let address = k.cpt.stack.popAddress()
-    cpt.asyncChainToRaise(ifNecessaryGetCode(cpt.vmState, address), [FullStack]):
+    cpt.asyncChainToRaise(ifNecessaryGetCode(cpt.vmState, address), [CatchableError]):
       cpt.stack.push:
         cpt.getCodeSize(address)
 
@@ -169,7 +168,7 @@ const
     let cpt = k.cpt
     let address = cpt.stack.popAddress()
 
-    cpt.asyncChainToRaise(ifNecessaryGetCode(cpt.vmState, address), [OutOfGas, ValueError, FullStack]):
+    cpt.asyncChainToRaise(ifNecessaryGetCode(cpt.vmState, address), [CatchableError]):
       let gasCost = cpt.gasEip2929AccountCheck(address)
       cpt.opcodeGastCost(ExtCodeSize, gasCost, reason = "ExtCodeSize EIP2929")
       cpt.stack.push:
@@ -247,7 +246,7 @@ const
     ## 0x3f, Returns the keccak256 hash of a contract’s code
     let cpt = k.cpt
     let address = k.cpt.stack.popAddress()
-    cpt.asyncChainToRaise(ifNecessaryGetCode(cpt.vmState, address), [FullStack]):
+    cpt.asyncChainToRaise(ifNecessaryGetCode(cpt.vmState, address), [CatchableError]):
       cpt.stack.push:
         cpt.getCodeHash(address)
 
