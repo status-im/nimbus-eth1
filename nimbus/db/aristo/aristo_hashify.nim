@@ -38,8 +38,8 @@ import
   eth/common,
   results,
   stew/byteutils,
-  "."/[aristo_desc, aristo_get, aristo_layers, aristo_serialise,
-       aristo_utils, aristo_vid]
+  ./aristo_debug,
+  "."/[aristo_desc, aristo_get, aristo_layers, aristo_serialise, aristo_utils]
 
 type
   WidthFirstForest = object
@@ -324,7 +324,6 @@ proc hashify*(
     ? wff.finaliseRoots db
 
     db.top.final.dirty.clear               # Mark top layer clean
-    db.top.final.vGen = db.vGen.vidReorg() # Squeze list of recycled vertex IDs
 
   ok()
 

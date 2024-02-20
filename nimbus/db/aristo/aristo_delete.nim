@@ -303,6 +303,8 @@ proc delSubTreeImpl(
   for vid in dispose:
     db.disposeOfVtx(root, vid)
 
+  # Squeze list of recycled vertex IDs
+  db.top.final.vGen = db.vGen.vidReorg()
   ok()
 
 
@@ -378,6 +380,9 @@ proc deleteImpl(
         ? db.collapseExt(hike, nibble.byte, nxt.vtx)
       of Leaf:
         ? db.collapseLeaf(hike, nibble.byte, nxt.vtx)
+
+  # Squeze list of recycled vertex IDs
+  db.top.final.vGen = db.vGen.vidReorg()
 
   ok(not db.getVtx(hike.root).isValid)
 
