@@ -149,7 +149,7 @@ proc staticCallParams(c: Computation):  LocalParams =
 
 when evmc_enabled:
   template execSubCall(c: Computation; msg: ref nimbus_message; p: LocalParams) =
-    c.chainTo(msg):
+    c.chainTo(msg, shouldRaise = true):
       c.returnData = @(makeOpenArray(c.res.output_data, c.res.output_size.int))
 
       let actualOutputSize = min(p.memOutLen, c.returnData.len)
@@ -166,7 +166,7 @@ when evmc_enabled:
         c.res.release(c.res)
 
 else:
-  proc execSubCall(c: Computation; childMsg: Message; memPos, memLen: int) =
+  proc execSubCall(c: Computation; childMsg: Message; memPos, memLen: int) {.raises: [].} =
     ## Call new VM -- helper for `Call`-like operations
 
     # need to provide explicit <c> and <child> for capturing in chainTo proc()
@@ -174,7 +174,7 @@ else:
     var
       child = newComputation(c.vmState, false, childMsg)
 
-    c.chainTo(child):
+    c.chainTo(child, shouldRaise = true):
       if not child.shouldBurnGas:
         c.gasMeter.returnGas(child.gasMeter.gasRemaining)
 
@@ -205,7 +205,7 @@ const
       p = cpt.callParams
 
     cpt.asyncChainTo(ifNecessaryGetAccounts(cpt.vmState, @[p.sender])):
-      cpt.asyncChainTo(ifNecessaryGetCodeForAccounts(cpt.vmState, @[p.contractAddress, p.codeAddress])):
+      cpt.asyncChainToRaise(ifNecessaryGetCodeForAccounts(cpt.vmState, @[p.contractAddress, p.codeAddress]), [CatchableError]):
         var (gasCost, childGasLimit) = cpt.gasCosts[Call].c_handler(
           p.value,
           GasParams(
@@ -284,7 +284,7 @@ const
       p = cpt.callCodeParams
 
     cpt.asyncChainTo(ifNecessaryGetAccounts(cpt.vmState, @[p.sender])):
-      cpt.asyncChainTo(ifNecessaryGetCodeForAccounts(cpt.vmState, @[p.contractAddress, p.codeAddress])):
+      cpt.asyncChainToRaise(ifNecessaryGetCodeForAccounts(cpt.vmState, @[p.contractAddress, p.codeAddress]), [CatchableError]):
         var (gasCost, childGasLimit) = cpt.gasCosts[CallCode].c_handler(
           p.value,
           GasParams(
@@ -364,7 +364,7 @@ const
       p = cpt.delegateCallParams
 
     cpt.asyncChainTo(ifNecessaryGetAccounts(cpt.vmState, @[p.sender])):
-      cpt.asyncChainTo(ifNecessaryGetCodeForAccounts(cpt.vmState, @[p.contractAddress, p.codeAddress])):
+      cpt.asyncChainToRaise(ifNecessaryGetCodeForAccounts(cpt.vmState, @[p.contractAddress, p.codeAddress]), [CatchableError]):
         var (gasCost, childGasLimit) = cpt.gasCosts[DelegateCall].c_handler(
           p.value,
           GasParams(
@@ -438,7 +438,7 @@ const
       p = cpt.staticCallParams
 
     cpt.asyncChainTo(ifNecessaryGetAccounts(cpt.vmState, @[p.sender])):
-      cpt.asyncChainTo(ifNecessaryGetCodeForAccounts(cpt.vmState, @[p.contractAddress, p.codeAddress])):
+      cpt.asyncChainToRaise(ifNecessaryGetCodeForAccounts(cpt.vmState, @[p.contractAddress, p.codeAddress]), [CatchableError]):
         var (gasCost, childGasLimit) = cpt.gasCosts[StaticCall].c_handler(
           p.value,
           GasParams(

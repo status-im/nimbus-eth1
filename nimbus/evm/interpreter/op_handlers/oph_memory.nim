@@ -171,7 +171,7 @@ const
     ## 0x54, Load word from storage.
     let cpt = k.cpt  # so it can safely be captured by the asyncChainTo closure below
     let (slot) = cpt.stack.popInt(1)
-    cpt.asyncChainTo(ifNecessaryGetSlot(cpt.vmState, cpt.msg.contractAddress, slot)):
+    cpt.asyncChainToRaise(ifNecessaryGetSlot(cpt.vmState, cpt.msg.contractAddress, slot), [CatchableError]):
       cpt.stack.push:
         cpt.getStorage(slot)
 
@@ -180,7 +180,7 @@ const
     let cpt = k.cpt
     let (slot) = cpt.stack.popInt(1)
 
-    cpt.asyncChainTo(ifNecessaryGetSlot(cpt.vmState, cpt.msg.contractAddress, slot)):
+    cpt.asyncChainToRaise(ifNecessaryGetSlot(cpt.vmState, cpt.msg.contractAddress, slot), [CatchableError]):
       let gasCost = cpt.gasEip2929AccountCheck(cpt.msg.contractAddress, slot)
       cpt.opcodeGastCost(Sload, gasCost, reason = "sloadEIP2929")
       cpt.stack.push:
@@ -194,7 +194,7 @@ const
     let (slot, newValue) = cpt.stack.popInt(2)
 
     checkInStaticContext(cpt)
-    cpt.asyncChainTo(ifNecessaryGetSlot(cpt.vmState, cpt.msg.contractAddress, slot)):
+    cpt.asyncChainToRaise(ifNecessaryGetSlot(cpt.vmState, cpt.msg.contractAddress, slot), [CatchableError]):
       sstoreEvmcOrSstore(cpt, slot, newValue)
 
 
@@ -204,7 +204,7 @@ const
     let (slot, newValue) = cpt.stack.popInt(2)
 
     checkInStaticContext(cpt)
-    cpt.asyncChainTo(ifNecessaryGetSlot(cpt.vmState, cpt.msg.contractAddress, slot)):
+    cpt.asyncChainToRaise(ifNecessaryGetSlot(cpt.vmState, cpt.msg.contractAddress, slot), [CatchableError]):
       sstoreEvmcOrNetGasMetering(cpt, slot, newValue)
 
 
@@ -221,7 +221,7 @@ const
         OutOfGas,
         "Gas not enough to perform EIP2200 SSTORE")
 
-    cpt.asyncChainTo(ifNecessaryGetSlot(cpt.vmState, cpt.msg.contractAddress, slot)):
+    cpt.asyncChainToRaise(ifNecessaryGetSlot(cpt.vmState, cpt.msg.contractAddress, slot), [CatchableError]):
       sstoreEvmcOrNetGasMetering(cpt, slot, newValue)
 
 
@@ -237,7 +237,7 @@ const
     if cpt.gasMeter.gasRemaining <= SentryGasEIP2200:
       raise newException(OutOfGas, "Gas not enough to perform EIP2200 SSTORE")
 
-    cpt.asyncChainTo(ifNecessaryGetSlot(cpt.vmState, cpt.msg.contractAddress, slot)):
+    cpt.asyncChainToRaise(ifNecessaryGetSlot(cpt.vmState, cpt.msg.contractAddress, slot), [CatchableError]):
       var coldAccessGas = 0.GasInt
       when evmc_enabled:
         if cpt.host.accessStorage(cpt.msg.contractAddress, slot) == EVMC_ACCESS_COLD:
@@ -280,11 +280,12 @@ const
     k.cpt.stack.push:
       k.cpt.gasMeter.gasRemaining
 
-  jumpDestOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+proc jumpDestOp(k: var Vm2Ctx) {.gcsafe, raises:[].} =
     ## 0x5b, Mark a valid destination for jumps. This operation has no effect
     ##       on machine state during execution.
     discard
 
+const
   tloadOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x5c, Load word from transient storage.
     let
@@ -501,7 +502,7 @@ const
      name: "jumpDest",
      info: "Mark a valid destination for jumps",
      exec: (prep: vm2OpIgnore,
-            run:  jumpDestOp,
+            run:  Vm2OpFn jumpDestOp,
             post: vm2OpIgnore)),
 
     (opCode: Tload,     ## 0x5c, Load word from transient storage.

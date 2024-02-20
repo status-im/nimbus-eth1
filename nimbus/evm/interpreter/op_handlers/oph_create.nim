@@ -46,7 +46,7 @@ when not defined(evmc_enabled):
 
 when evmc_enabled:
   template execSubCreate(c: Computation; msg: ref nimbus_message) =
-    c.chainTo(msg):
+    c.chainTo(msg, shouldRaise = true):
       c.gasMeter.returnGas(c.res.gas_left)
       if c.res.status_code == EVMC_SUCCESS:
         c.stack.top(c.res.create_address)
@@ -58,14 +58,14 @@ when evmc_enabled:
 
 else:
   proc execSubCreate(c: Computation; childMsg: Message;
-                    salt: ContractSalt = ZERO_CONTRACTSALT) =
+                    salt: ContractSalt = ZERO_CONTRACTSALT) {.raises: [].} =
     ## Create new VM -- helper for `Create`-like operations
 
     # need to provide explicit <c> and <child> for capturing in chainTo proc()
     var
       child = newComputation(c.vmState, false, childMsg, salt)
 
-    c.chainTo(child):
+    c.chainTo(child, shouldRaise = false):
       if not child.shouldBurnGas:
         c.gasMeter.returnGas(child.gasMeter.gasRemaining)
 
