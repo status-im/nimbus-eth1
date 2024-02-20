@@ -73,7 +73,7 @@ template getTimestamp*(c: Computation): uint64 =
 
 template getBlockNumber*(c: Computation): UInt256 =
   when evmc_enabled:
-    c.host.getTxContext().block_number.u256
+    c.host.getBlockNumber()
   else:
     c.vmState.blockNumber.blockNumberToVmWord
 
@@ -95,11 +95,11 @@ template getBaseFee*(c: Computation): UInt256 =
   else:
     c.vmState.blockCtx.fee.get(0.u256)
 
-template getChainId*(c: Computation): uint =
+template getChainId*(c: Computation): uint64 =
   when evmc_enabled:
-    UInt256.fromEvmc(c.host.getTxContext().chain_id).truncate(uint)
+    c.host.getChainId()
   else:
-    c.vmState.com.chainId.uint
+    c.vmState.com.chainId.uint64
 
 template getOrigin*(c: Computation): EthAddress =
   when evmc_enabled:

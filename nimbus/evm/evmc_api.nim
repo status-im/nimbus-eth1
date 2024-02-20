@@ -183,3 +183,12 @@ proc setTransientStorage*(ctx: HostContext, address: EthAddress,
     key = toEvmc(key)
     value = toEvmc(value)
   ctx.host.set_transient_storage(ctx.context, address, key.addr, value.addr)
+
+# The following two templates put here because the stupid style checker
+# complaints about block_number vs blockNumber and chain_id vs chainId
+# if they are written directly in computation.nim
+template getBlockNumber*(ctx: HostContext): UInt256 =
+  ctx.getTxContext().block_number.u256
+
+template getChainId*(ctx: HostContext): uint64 =
+  UInt256.fromEvmc(ctx.getTxContext().chain_id).truncate(uint64)
