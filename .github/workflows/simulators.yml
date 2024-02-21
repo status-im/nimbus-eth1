@@ -61,7 +61,7 @@ jobs:
 
   build-macos-amd64:
     name: Macos-amd64
-    runs-on: macos-11
+    runs-on: macos-12
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
