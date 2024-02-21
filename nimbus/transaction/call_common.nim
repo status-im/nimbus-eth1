@@ -134,7 +134,7 @@ proc setupHost(call: CallParams): TransactionHost =
       origin         : call.origin.get(call.sender),
       gasPrice       : call.gasPrice,
       versionedHashes: call.versionedHashes,
-      blobBaseFee    : getBlobGasPrice(vmState.blockCtx.excessBlobGas),
+      blobBaseFee    : getBlobBaseFee(vmState.blockCtx.excessBlobGas),
     ),
     forkOverride = call.forkOverride
   )

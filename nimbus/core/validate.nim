@@ -362,7 +362,7 @@ proc validateTransaction*(
 
     if tx.txType >= TxEip4844:
       # ensure that the user was willing to at least pay the current data gasprice
-      let blobGasPrice = getBlobGasPrice(excessBlobGas)
+      let blobGasPrice = getBlobBaseFee(excessBlobGas)
       if tx.maxFeePerBlobGas < blobGasPrice:
         return err("invalid tx: maxFeePerBlobGas smaller than blobGasPrice. " &
           "maxFeePerBlobGas=$1, blobGasPrice=$2" % [$tx.maxFeePerBlobGas, $blobGasPrice])

@@ -113,8 +113,8 @@ proc getTotalBlobGas*(tx: Transaction): uint64 =
 proc getTotalBlobGas*(versionedHashesLen: int): uint64 =
   GAS_PER_BLOB * versionedHashesLen.uint64
 
-# getBlobGasPrice implements get_data_gas_price from EIP-4844
-func getBlobGasPrice*(excessBlobGas: uint64): UInt256 =
+# getBlobBaseFee implements get_data_gas_price from EIP-4844
+func getBlobBaseFee*(excessBlobGas: uint64): UInt256 =
   fakeExponential(
     MIN_BLOB_GASPRICE.u256,
     excessBlobGas.u256,
@@ -124,7 +124,7 @@ func getBlobGasPrice*(excessBlobGas: uint64): UInt256 =
 proc calcDataFee*(versionedHashesLen: int,
                   excessBlobGas: uint64): UInt256 =
   getTotalBlobGas(versionedHashesLen).u256 *
-    getBlobGasPrice(excessBlobGas)
+    getBlobBaseFee(excessBlobGas)
 
 func blobGasUsed(txs: openArray[Transaction]): uint64 =
   for tx in txs:
