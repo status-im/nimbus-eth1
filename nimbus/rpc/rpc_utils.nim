@@ -300,4 +300,4 @@ proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction,
 
   if tx.txType == TxEip4844:
     result.blobGasUsed = some(w3Qty(tx.versionedHashes.len.uint64 * GAS_PER_BLOB.uint64))
-    result.blobGasPrice = some(getBlobGasPrice(header.excessBlobGas.get(0'u64)))
+    result.blobGasPrice = some(getBlobBaseFee(header.excessBlobGas.get(0'u64)))
