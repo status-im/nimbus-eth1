@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2019-2023 Status Research & Development GmbH
+# Copyright (c) 2019-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -371,7 +371,7 @@ proc opEnvMain*() =
         STOP
       stack:
         "0x0000000000000000000000000000000000000000000000000000000000000000"
-      fork: Merge
+      fork: Paris
 
     assembler:
       title: "EIP-4399 PrevRandao: EMPTY_UNCLE_HASH"
@@ -382,7 +382,7 @@ proc opEnvMain*() =
         STOP
       stack:
         "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
-      fork: Merge
+      fork: Paris
 
     assembler:
       title: "EIP-4844: BlobHash 1"
