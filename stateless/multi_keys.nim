@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2020-2023 Status Research & Development GmbH
+# Copyright (c) 2020-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -22,14 +22,14 @@ type
     of true:
       storageSlot*: StorageSlot
     of false:
-      storageKeys*: MultikeysRef
+      storageKeys*: MultiKeysRef
       address*: EthAddress
       codeTouched*: bool
 
-  Multikeys* = object
+  MultiKeys* = object
     keys*: seq[KeyData]
 
-  MultikeysRef* = ref Multikeys
+  MultiKeysRef* = ref MultiKeys
 
   Group* = object
     first*, last*: int16
@@ -41,7 +41,7 @@ type
   AccountKey* = object
     address*: EthAddress
     codeTouched*: bool
-    storageKeys*: MultikeysRef
+    storageKeys*: MultiKeysRef
 
   MatchGroup* = object
     match*: bool
@@ -73,8 +73,8 @@ func compareNibbles(x: openArray[byte], start: int, n: NibblesSeq): bool =
     inc i
   result = true
 
-proc newMultiKeys*(keys: openArray[AccountKey]): MultikeysRef =
-  result = new Multikeys
+proc newMultiKeys*(keys: openArray[AccountKey]): MultiKeysRef =
+  result = new MultiKeysRef
   result.keys = newSeq[KeyData](keys.len)
   for i, a in keys:
     result.keys[i] = KeyData(
@@ -85,15 +85,15 @@ proc newMultiKeys*(keys: openArray[AccountKey]): MultikeysRef =
       storageKeys: a.storageKeys)
   result.keys.sort(cmpHash)
 
-proc newMultiKeys*(keys: openArray[StorageSlot]): MultikeysRef =
-  result = new Multikeys
+proc newMultiKeys*(keys: openArray[StorageSlot]): MultiKeysRef =
+  result = new MultiKeysRef
   result.keys = newSeq[KeyData](keys.len)
   for i, a in keys:
     result.keys[i] = KeyData(storageMode: true, hash: keccakHash(a).data, storageSlot: a)
   result.keys.sort(cmpHash)
 
 # never mix storageMode!
-proc add*(m: MultikeysRef, address: EthAddress, codeTouched: bool, storageKeys = MultikeysRef(nil)) =
+proc add*(m: MultiKeysRef, address: EthAddress, codeTouched: bool, storageKeys = MultiKeysRef(nil)) =
   m.keys.add KeyData(
     storageMode: false,
     hash: keccakHash(address).data,
@@ -101,17 +101,17 @@ proc add*(m: MultikeysRef, address: EthAddress, codeTouched: bool, storageKeys =
     codeTouched: codeTouched,
     storageKeys: storageKeys)
 
-proc add*(m: MultikeysRef, slot: StorageSlot) =
+proc add*(m: MultiKeysRef, slot: StorageSlot) =
   m.keys.add KeyData(storageMode: true, hash: keccakHash(slot).data, storageSlot: slot)
 
-proc sort*(m: MultikeysRef) =
+proc sort*(m: MultiKeysRef) =
   m.keys.sort(cmpHash)
 
-func initGroup*(m: MultikeysRef): Group =
+func initGroup*(m: MultiKeysRef): Group =
   type T = type result.last
   result = Group(first: 0.T, last: (m.keys.len - 1).T)
 
-func groups*(m: MultikeysRef, parentGroup: Group, depth: int): BranchGroup =
+func groups*(m: MultiKeysRef, parentGroup: Group, depth: int): BranchGroup =
   # similar to a branch node, the product of this func
   # is a 16 bits bitmask and an array of max 16 groups
   # if the bit is set, the n-th elem of array have a group
@@ -133,7 +133,7 @@ func groups*(m: MultikeysRef, parentGroup: Group, depth: int): BranchGroup =
   setBranchMaskBit(result.mask, nibble.int)
   result.groups[nibble.int] = g
 
-func groups*(m: MultikeysRef, depth: int, n: NibblesSeq, parentGroup: Group): MatchGroup =
+func groups*(m: MultiKeysRef, depth: int, n: NibblesSeq, parentGroup: Group): MatchGroup =
   # using common-prefix comparison, this func
   # will produce one match group or no match at all
   var g = Group(first: parentGroup.first)
@@ -178,7 +178,7 @@ func groups*(m: MultikeysRef, depth: int, n: NibblesSeq, parentGroup: Group): Ma
 func isValidMatch(mg: MatchGroup): bool {.inline.} =
   result = mg.match and mg.group.first == mg.group.last
 
-proc visitMatch*(m: var MultikeysRef, mg: MatchGroup, depth: int): KeyData =
+proc visitMatch*(m: var MultiKeysRef, mg: MatchGroup, depth: int): KeyData =
   doAssert(mg.isValidMatch, "Multiple identical keys are not allowed")
   m.keys[mg.group.first].visited = true
   result = m.keys[mg.group.first]

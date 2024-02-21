@@ -18,7 +18,7 @@ import
 type
    DB = CoreDbRef
 
-   StorageKeys = tuple[storageRoot: Hash256, keys: MultikeysRef]
+   StorageKeys = tuple[storageRoot: Hash256, keys: MultiKeysRef]
 
    AccountDef = object
     storageKeys: MultiKeysRef
@@ -47,7 +47,7 @@ proc randCode(db: DB): Hash256 =
 
 proc randStorage(db: DB): StorageKeys =
   if rand(0..1) == 0:
-    result = (emptyRlpHash, MultikeysRef(nil))
+    result = (emptyRlpHash, MultiKeysRef(nil))
   else:
     var trie = initStorageTrie(db)
     let numPairs = rand(1..10)
@@ -58,9 +58,9 @@ proc randStorage(db: DB): StorageKeys =
       trie.putSlotBytes(keys[i], rlp.encode(randU256()))
 
     if rand(0..1) == 0:
-      result = (trie.rootHash, MultikeysRef(nil))
+      result = (trie.rootHash, MultiKeysRef(nil))
     else:
-      var m = newMultikeys(keys)
+      var m = newMultiKeys(keys)
       result = (trie.rootHash, m)
 
 proc randAccount(db: DB): AccountDef =
@@ -132,7 +132,7 @@ proc runTest(numPairs: int, testStatusIMPL: var TestStatus,
     for kd in mkeys.keys:
       check kd.visited == true
 
-proc initMultiKeys(keys: openArray[string], storageMode: bool = false): MultikeysRef =
+proc initMultiKeys(keys: openArray[string], storageMode: bool = false): MultiKeysRef =
   result.new
   if storageMode:
     for i, x in keys:

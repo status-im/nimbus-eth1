@@ -28,7 +28,7 @@ type
   StackElem = object
     node: seq[byte]
     parentGroup: Group
-    keys: MultikeysRef
+    keys: MultiKeysRef
     depth: int
     storageMode: bool
 
@@ -333,7 +333,7 @@ proc getBranchRecurse(wb: var WitnessBuilder, z: var StackElem) =
     raise newException(CorruptedTrieDatabase,
                        "HexaryTrie node with an unexpected number of children")
 
-proc buildWitness*(wb: var WitnessBuilder, keys: MultikeysRef): string =
+proc buildWitness*(wb: var WitnessBuilder, keys: MultiKeysRef): string =
 
   # witness version
   wb.writeByte(BlockWitnessVersion, "version")

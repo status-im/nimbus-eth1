@@ -19,15 +19,15 @@ import
 
 type
   Tester = object
-    keys: MultikeysRef
+    keys: MultiKeysRef
     memDB: CoreDbRef
 
 proc testGetBranch(tester: Tester, rootHash: KeccakHash, testStatusIMPL: var TestStatus) =
-  var trie = initAccountsTrie(tester.memdb, rootHash)
+  var trie = initAccountsTrie(tester.memDB, rootHash)
   let flags = {wfNoFlag}
 
   try:
-    var wb = initWitnessBuilder(tester.memdb, rootHash, flags)
+    var wb = initWitnessBuilder(tester.memDB, rootHash, flags)
     var witness = wb.buildWitness(tester.keys)
 
     var db = newCoreDbRef(LegacyDbMemory)
@@ -77,7 +77,7 @@ proc setupStateDB(tester: var Tester, wantedState: JsonNode, stateDB: LedgerRef)
     stateDB.setCode(account, code)
     stateDB.setBalance(account, balance)
 
-    let sKeys = if storageKeys.len != 0: newMultiKeys(storageKeys) else: MultikeysRef(nil)
+    let sKeys = if storageKeys.len != 0: newMultiKeys(storageKeys) else: MultiKeysRef(nil)
     let codeTouched = code.len > 0
     keys.add(AccountKey(address: account, codeTouched: codeTouched, storageKeys: sKeys))
 

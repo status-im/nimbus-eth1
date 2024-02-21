@@ -179,7 +179,7 @@ proc configurationMain*() =
 
     test "bootstrap-node and bootstrap-file":
       let conf = makeTestConfig()
-      let bootnodes = conf.getBootnodes()
+      let bootnodes = conf.getBootNodes()
       let bootNodeLen = bootnodes.len
       check bootNodeLen > 0 # mainnet bootnodes
 
@@ -220,7 +220,7 @@ proc configurationMain*() =
       let conf = makeConfig(@["--custom-network:" & chainid1])
       check conf.networkId == 1.NetworkId
       check conf.networkParams.config.londonBlock.get() == 1337
-      check conf.getBootnodes().len == 0
+      check conf.getBootNodes().len == 0
 
     test "json-rpc enabled when json-engine api enabled and share same port":
       let conf = makeConfig(@["--engine-api", "--engine-api-port:8545", "--http-port:8545"])

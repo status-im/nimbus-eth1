@@ -400,7 +400,7 @@ proc snapRunner(noisy = true; specs: SnapSyncSpecs) {.used.} =
       pruneTrie = true,
       params = specs.network.networkParams).newChain)
 
-  dsc.chn.com.initializeEmptyDB()
+  dsc.chn.com.initializeEmptyDb()
 
   suite &"SyncSnap: verify \"{dsc.info}\" snapshot against full sync":
 

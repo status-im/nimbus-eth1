@@ -40,7 +40,7 @@ proc del(xMap: var VidsByKeyTab; key: HashKey; vids: HashSet[VertexID]) =
   for vid in vids:
     xMap.del(key, vid)
 
-proc add(xMap: var VidsByKeyTab; key: Hashkey; vid: VertexID) =
+proc add(xMap: var VidsByKeyTab; key: HashKey; vid: VertexID) =
   xMap.withValue(key,value):
     value[].incl vid
   do: # else if not found
@@ -354,7 +354,7 @@ proc ppXMap*(
   # Extra reverse lookups
   if 0 < revKeys.len:
     proc ppRevKey(vid: VertexID): string =
-      "(ø," & revOnly.getOrVoid(vid).ppkey(db) & ")"
+      "(ø," & revOnly.getOrVoid(vid).ppKey(db) & ")"
     var (i, r) = (0, revKeys[0])
     result &= revKeys[0].ppRevKey
     for n in 1 ..< revKeys.len:
@@ -517,14 +517,14 @@ proc ppLayer(
       result &= info.doPrefix(0 < tLen) & layer.delta.sTab.ppSTab(db,indent+2)
     if lTabOk:
       let
-        tlen = layer.final.lTab.len
+        tLen = layer.final.lTab.len
         info = "lTab(" & $tLen & ")"
       result &= info.doPrefix(0 < tLen) & layer.final.lTab.ppLTab(db,indent+2)
     if kMapOk:
       let
         tLen = layer.delta.kMap.len
-        ulen = layer.delta.pAmk.len
-        lInf = if tLen == uLen: $tLen else: $tLen & "," & $ulen
+        uLen = layer.delta.pAmk.len
+        lInf = if tLen == uLen: $tLen else: $tLen & "," & $uLen
         info = "kMap(" & lInf & ")"
       result &= info.doPrefix(0 < tLen + uLen)
       result &= db.ppXMap(layer.delta.kMap, layer.delta.pAmk, indent+2)
@@ -691,14 +691,14 @@ proc pp*(
     indent = 4;
       ): string =
   let db = db.orDefault
-  "{" & pAmk.sortedkeys
+  "{" & pAmk.sortedKeys
             .mapIt((it, pAmk.getOrVoid it))
             .mapIt("(" & it[0].ppKey(db) & "," & it[1].ppVid & ")")
             .join("," & indent.toPfx(1)) & "}"
 
 proc pp*(pAmk: VidsByKeyTab; db = AristoDbRef(nil); indent = 4): string =
   let db = db.orDefault
-  "{" & pAmk.sortedkeys
+  "{" & pAmk.sortedKeys
             .mapIt((it, pAmk.getOrVoid it))
             .mapIt("(" & it[0].ppKey(db) & "," & it[1].ppVids & ")")
             .join("," & indent.toPfx(1)) & "}"

@@ -292,7 +292,7 @@ proc `generateWitness=`*(vmState: BaseVMState, status: bool) =
 
 proc buildWitness*(
     vmState: BaseVMState,
-    mkeys: MultikeysRef): seq[byte] {.raises: [CatchableError].} =
+    mkeys: MultiKeysRef): seq[byte] {.raises: [CatchableError].} =
   let rootHash = vmState.stateDB.rootHash
   let flags = if vmState.fork >= FkSpurious: {wfEIP170} else: {}
 

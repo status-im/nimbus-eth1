@@ -266,7 +266,7 @@ proc logEntries*(ldg: LedgerRef): seq[Log] =
   result = ldg.methods.logEntriesFn()
   ldg.ifTrackApi: debug apiTxt, ctx, elapsed, result
 
-proc makeMultiKeys*(ldg: LedgerRef): MultikeysRef =
+proc makeMultiKeys*(ldg: LedgerRef): MultiKeysRef =
   ldg.beginTrackApi LdgMakeMultiKeysFn
   result = ldg.methods.makeMultiKeysFn()
   ldg.ifTrackApi: debug apiTxt, ctx, elapsed

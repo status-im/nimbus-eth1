@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2023 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -324,7 +324,7 @@ proc test_NodeRangeDecompose*(
     rootKey = root.to(NodeKey)
     baseTag = accKeys[0].to(NodeTag) + 1.u256
     firstTag = baseTag.hexaryNearbyRight(rootKey, db).get(
-                  otherwise = low(Nodetag))
+                  otherwise = low(NodeTag))
     lastTag = accKeys[^2].to(NodeTag)
     topTag = accKeys[^1].to(NodeTag) - 1.u256
 
@@ -514,11 +514,11 @@ proc test_NodeRangeProof*(
             " proof=", proof.ppNodeKeys(dbg),
             "\n\n   ",
             " base=", iv.minPt,
-            "\n    ", iv.minPt.hexaryPath(rootKey,db).ppHexpath(dbg),
+            "\n    ", iv.minPt.hexaryPath(rootKey,db).ppHexPath(dbg),
             "\n\n   ",
             " pfx=", pfxNbls,
             " nPfx=", nPfxNblsLen,
-            "\n    ", pfxNbls.hexaryPath(rootKey,db).ppHexpath(dbg),
+            "\n    ", pfxNbls.hexaryPath(rootKey,db).ppHexPath(dbg),
             "\n"
 
           check rx == typeof(rx).ok()

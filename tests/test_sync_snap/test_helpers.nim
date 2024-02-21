@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2023 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -39,7 +39,7 @@ template isImportOk*(rc: Result[SnapAccountsGaps,HexaryError]): bool =
 proc lastTwo*(a: openArray[string]): seq[string] =
   if 1 < a.len: @[a[^2],a[^1]] else: a.toSeq
 
-proc isOK*(rc: ValidationResult): bool =
+proc isOk*(rc: ValidationResult): bool =
   rc == ValidationResult.OK
 
 # ------------------------------------------------------------------------------

@@ -680,14 +680,14 @@ proc collectWitnessData*(ac: AccountsCache) =
     do:
       ac.witnessCache[address] = witnessData(acc)
 
-func multiKeys(slots: HashSet[UInt256]): MultikeysRef =
+func multiKeys(slots: HashSet[UInt256]): MultiKeysRef =
   if slots.len == 0: return
   new result
   for x in slots:
     result.add x.toBytesBE
   result.sort()
 
-proc makeMultiKeys*(ac: AccountsCache): MultikeysRef =
+proc makeMultiKeys*(ac: AccountsCache): MultiKeysRef =
   # this proc is called after we done executing a block
   new result
   for k, v in ac.witnessCache:

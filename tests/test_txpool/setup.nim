@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2023 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -47,7 +47,7 @@ proc blockChainForTesting*(network: NetworkID): CommonRef =
     networkId = network,
     params = network.networkParams)
 
-  result.initializeEmptyDB
+  result.initializeEmptyDb
 
 proc toTxPool*(
     com: CommonRef;                   ## to be modified
@@ -187,7 +187,7 @@ proc toTxPool*(
         let itemID = item.itemID
         doAssert result.nItems.disposed == 0
         timeGap = result.getItem(itemID).value.timeStamp + middleOfTimeGap
-        let t = timegap.format(tFmt, utc())
+        let t = timeGap.format(tFmt, utc())
         noisy.say &"{delayMSecs}ms time gap centered around {t}"
         delayMSecs.sleep
 

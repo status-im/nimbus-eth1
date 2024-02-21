@@ -18,7 +18,7 @@ import
 type
    DB = TrieDatabaseRef
 
-   StorageKeys = tuple[storageRoot: Hash256, keys: MultikeysRef]
+   StorageKeys = tuple[storageRoot: Hash256, keys: MultiKeysRef]
 
    AccountDef = object
     storageKeys: MultiKeysRef
@@ -47,7 +47,7 @@ proc randCode(db: DB): Hash256 =
 
 proc randStorage(db: DB, numSlots: int): StorageKeys =
   if rand(0..1) == 0 or numSlots == 0:
-    result = (emptyRlpHash, MultikeysRef(nil))
+    result = (emptyRlpHash, MultiKeysRef(nil))
   else:
     var trie = initStorageTrie(db)
     var keys = newSeq[StorageSlot](numSlots)
@@ -57,7 +57,7 @@ proc randStorage(db: DB, numSlots: int): StorageKeys =
       trie.putSlotBytes(keys[i], rlp.encode(randU256()))
 
     if rand(0..1) == 0:
-      result = (trie.rootHash, MultikeysRef(nil))
+      result = (trie.rootHash, MultiKeysRef(nil))
     else:
       var m = newMultikeys(keys)
       result = (trie.rootHash, m)

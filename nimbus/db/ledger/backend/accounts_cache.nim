@@ -129,7 +129,7 @@ proc ledgerMethods(lc: impl.AccountsCache): LedgerFns =
     logEntriesFn: proc(): seq[Log] =
       lc.logEntries(),
 
-    makeMultiKeysFn: proc(): MultikeysRef =
+    makeMultiKeysFn: proc(): MultiKeysRef =
       lc.makeMultiKeys(),
 
     persistFn: proc(clearEmptyAccount: bool, clearCache: bool) =

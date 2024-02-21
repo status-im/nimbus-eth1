@@ -217,7 +217,7 @@ proc testBackendConsistency*(
     rdb.finish(flush=true)
 
   for n,w in list:
-    if w.root != rootKey or resetDB:
+    if w.root != rootKey or resetDb:
       rootKey = w.root
       count = 0
       ndb = AristoDbRef.init()
