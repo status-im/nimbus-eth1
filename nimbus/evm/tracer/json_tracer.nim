@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -163,7 +163,7 @@ method captureOpStart*(ctx: JsonTracer, c: Computation,
     for v in c.stack.values:
       ctx.stack.add(%(v.encodeHex))
 
-  if TracerFlags.DisableStorage notin ctx.flags and op == SSTORE:
+  if TracerFlags.DisableStorage notin ctx.flags and op == Sstore:
     try:
       if c.stack.values.len > 1:
         ctx.rememberStorageKey(c.msg.depth, c.stack[^1, UInt256])

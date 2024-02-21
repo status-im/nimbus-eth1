@@ -1,10 +1,128 @@
 newGeneralStateTests
 ===
+## eip1153_tstore
+```diff
++ contract_creation.json                                          OK
++ gas_usage.json                                                  OK
++ reentrant_call.json                                             OK
++ reentrant_selfdestructing_call.json                             OK
++ run_until_out_of_gas.json                                       OK
++ subcall.json                                                    OK
++ tload_after_sstore.json                                         OK
++ tload_after_tstore.json                                         OK
++ tload_after_tstore_is_zero.json                                 OK
++ transient_storage_unset_values.json                             OK
+```
+OK: 10/10 Fail: 0/10 Skip: 0/10
+## eip1344_chainid
+```diff
++ chainid.json                                                    OK
+```
+OK: 1/1 Fail: 0/1 Skip: 0/1
+## eip198_modexp_precompile
+```diff
++ modexp.json                                                     OK
+```
+OK: 1/1 Fail: 0/1 Skip: 0/1
 ## eip2930_access_list
 ```diff
 + access_list.json                                                OK
 ```
 OK: 1/1 Fail: 0/1 Skip: 0/1
+## eip3651_warm_coinbase
+```diff
++ warm_coinbase_call_out_of_gas.json                              OK
++ warm_coinbase_gas_usage.json                                    OK
+```
+OK: 2/2 Fail: 0/2 Skip: 0/2
+## eip3855_push0
+```diff
++ push0_before_jumpdest.json                                      OK
++ push0_during_staticcall.json                                    OK
++ push0_fill_stack.json                                           OK
++ push0_gas_cost.json                                             OK
++ push0_key_sstore.json                                           OK
++ push0_stack_overflow.json                                       OK
++ push0_storage_overwrite.json                                    OK
+```
+OK: 7/7 Fail: 0/7 Skip: 0/7
+## eip3860_initcode
+```diff
++ contract_creating_tx.json                                       OK
++ create_opcode_initcode.json                                     OK
++ gas_usage.json                                                  OK
+```
+OK: 3/3 Fail: 0/3 Skip: 0/3
+## eip4788_beacon_root
+```diff
++ beacon_root_contract_calls.json                                 OK
++ beacon_root_contract_timestamps.json                            OK
++ beacon_root_equal_to_timestamp.json                             OK
++ beacon_root_selfdestruct.json                                   OK
++ calldata_lengths.json                                           OK
++ invalid_beacon_root_calldata_value.json                         OK
++ tx_to_beacon_root_contract.json                                 OK
+```
+OK: 7/7 Fail: 0/7 Skip: 0/7
+## eip4844_blobs
+```diff
++ blob_gas_subtraction_tx.json                                    OK
++ blob_tx_attribute_calldata_opcodes.json                         OK
++ blob_tx_attribute_gasprice_opcode.json                          OK
++ blob_tx_attribute_opcodes.json                                  OK
++ blob_tx_attribute_value_opcode.json                             OK
++ blob_type_tx_pre_fork.json                                      OK
++ insufficient_balance_blob_tx.json                               OK
++ invalid_blob_hash_versioning_single_tx.json                     OK
++ invalid_normal_gas.json                                         OK
++ invalid_precompile_calls.json                                   OK
++ invalid_tx_blob_count.json                                      OK
++ invalid_tx_max_fee_per_blob_gas_state.json                      OK
++ point_evaluation_precompile_before_fork.json                    OK
++ point_evaluation_precompile_calls.json                          OK
++ point_evaluation_precompile_external_vectors.json               OK
++ point_evaluation_precompile_gas_tx_to.json                      OK
++ point_evaluation_precompile_gas_usage.json                      OK
++ sufficient_balance_blob_tx.json                                 OK
++ valid_precompile_calls.json                                     OK
+```
+OK: 19/19 Fail: 0/19 Skip: 0/19
+## eip5656_mcopy
+```diff
++ mcopy_huge_memory_expansion.json                                OK
++ mcopy_memory_expansion.json                                     OK
++ mcopy_on_empty_memory.json                                      OK
++ no_memory_corruption_on_upper_call_stack_levels.json            OK
++ valid_mcopy_operations.json                                     OK
+```
+OK: 5/5 Fail: 0/5 Skip: 0/5
+## eip6780_selfdestruct
+```diff
++ create_selfdestruct_same_tx.json                                OK
++ delegatecall_from_new_contract_to_pre_existing_contract.json    OK
++ delegatecall_from_pre_existing_contract_to_new_contract.json    OK
++ dynamic_create2_selfdestruct_collision.json                     OK
++ reentrancy_selfdestruct_revert.json                             OK
++ self_destructing_initcode.json                                  OK
++ self_destructing_initcode_create_tx.json                        OK
++ selfdestruct_created_in_same_tx_with_revert.json                OK
++ selfdestruct_not_created_in_same_tx_with_revert.json            OK
++ selfdestruct_pre_existing.json                                  OK
+```
+OK: 10/10 Fail: 0/10 Skip: 0/10
+## eip7516_blobgasfee
+```diff
++ blobbasefee_before_fork.json                                    OK
++ blobbasefee_out_of_gas.json                                     OK
++ blobbasefee_stack_overflow.json                                 OK
+```
+OK: 3/3 Fail: 0/3 Skip: 0/3
+## opcodes
+```diff
++ dup.json                                                        OK
++ value_transfer_gas_calculation.json                             OK
+```
+OK: 2/2 Fail: 0/2 Skip: 0/2
 ## stArgsZeroOneBalance
 ```diff
 + addNonConst.json                                                OK
@@ -3027,6 +3145,11 @@ OK: 1/3 Fail: 0/3 Skip: 2/3
 + swap.json                                                       OK
 ```
 OK: 11/11 Fail: 0/11 Skip: 0/11
+## yul
+```diff
++ yul.json                                                        OK
+```
+OK: 1/1 Fail: 0/1 Skip: 0/1
 
 ---TOTAL---
-OK: 2648/2751 Fail: 0/2751 Skip: 103/2751
+OK: 2719/2822 Fail: 0/2822 Skip: 103/2822

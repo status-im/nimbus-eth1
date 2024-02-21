@@ -103,7 +103,7 @@ func getChainConfig*(network: string, c: ChainConfig) =
     c.assignNumber(HardFork.ArrowGlacier, BlockNumberZero)
   of $TestFork.GrayGlacier:
     c.assignNumber(HardFork.GrayGlacier, BlockNumberZero)
-  of $TestFork.Paris:
+  of $TestFork.Merge, $TestFork.Paris:
     c.assignNumber(HardFork.MergeFork, BlockNumberZero)
   of $TestFork.ArrowGlacierToParisAtDiffC0000:
     c.assignNumber(HardFork.GrayGlacier, BlockNumberZero)
