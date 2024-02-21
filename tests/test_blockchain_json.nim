@@ -184,7 +184,7 @@ proc blockWitness(vmState: BaseVMState, chainDB: CoreDbRef) =
     return
 
   let fork = vmState.fork
-  let flags = if fork >= FKSpurious: {wfEIP170} else: {}
+  let flags = if fork >= FkSpurious: {wfEIP170} else: {}
 
   # build tree from witness
   var db = newCoreDbRef LegacyDbMemory
@@ -201,19 +201,19 @@ proc blockWitness(vmState: BaseVMState, chainDB: CoreDbRef) =
 
 proc testGetBlockWitness(chain: ChainRef, parentHeader, currentHeader: BlockHeader) =
   # check that current state matches current header
-  let currentStateRoot = chain.vmstate.stateDB.rootHash
+  let currentStateRoot = chain.vmState.stateDB.rootHash
   if currentStateRoot != currentHeader.stateRoot:
     raise newException(ValidationError, "Expected currentStateRoot == currentHeader.stateRoot")
 
   let (mkeys, witness) = getBlockWitness(chain.com, currentHeader, false)
 
   # check that the vmstate hasn't changed after call to getBlockWitness
-  if chain.vmstate.stateDB.rootHash != currentHeader.stateRoot:
+  if chain.vmState.stateDB.rootHash != currentHeader.stateRoot:
     raise newException(ValidationError, "Expected chain.vmstate.stateDB.rootHash == currentHeader.stateRoot")
 
   # check the witnessRoot against the witness tree if the witness isn't empty
   if witness.len() > 0:
-    let fgs = if chain.vmState.fork >= FKSpurious: {wfEIP170} else: {}
+    let fgs = if chain.vmState.fork >= FkSpurious: {wfEIP170} else: {}
     var tb = initTreeBuilder(witness, chain.com.db, fgs)
     let witnessRoot = tb.buildTree()
     if witnessRoot != parentHeader.stateRoot:

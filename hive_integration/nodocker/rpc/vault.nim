@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2023 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -9,9 +9,9 @@
 
 import
   std/[tables, strutils],
-  eth/[common, keys, rlp],
-  chronos, stint,
+  eth/[common, keys],
   stew/byteutils,
+  chronos, stint,
   json_rpc/[rpcclient],
   ../../../nimbus/utils/utils,
   ../../../nimbus/transaction,
@@ -41,7 +41,7 @@ type
     accounts: Table[EthAddress, PrivateKey]
 
     rng: ref HmacDrbgContext
-    chainID: ChainID
+    chainId: ChainID
     gasPrice: GasInt
     vaultKey: PrivateKey
     client:   RpcClient
@@ -49,7 +49,7 @@ type
 proc newVault*(chainID: ChainID, gasPrice: GasInt, client: RpcClient): Vault =
   new(result)
   result.rng      = newRng()
-  result.chainID  = chainID
+  result.chainId  = chainID
   result.gasPrice = gasPrice
   result.vaultKey = PrivateKey.fromHex("63b508a03c3b5937ceb903af8b1b0c191012ef6eb7e9c3fb7afa94e5d214d376").get()
   result.client   = client

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -103,14 +103,14 @@ func getChainConfig*(network: string, c: ChainConfig) =
     c.assignNumber(HardFork.ArrowGlacier, BlockNumberZero)
   of $TestFork.GrayGlacier:
     c.assignNumber(HardFork.GrayGlacier, BlockNumberZero)
-  of $TestFork.Merge:
+  of $TestFork.Paris:
     c.assignNumber(HardFork.MergeFork, BlockNumberZero)
-  of $TestFork.ArrowGlacierToMergeAtDiffC0000:
+  of $TestFork.ArrowGlacierToParisAtDiffC0000:
     c.assignNumber(HardFork.GrayGlacier, BlockNumberZero)
     c.terminalTotalDifficulty = some(0xC0000.u256)
   of $TestFork.Shanghai:
     c.assignTime(HardFork.Shanghai, TimeZero)
-  of $TestFork.MergeToShanghaiAtTime15k:
+  of $TestFork.ParisToShanghaiAtTime15k:
     c.assignTime(HardFork.Shanghai, EthTime(15000))
   of $TestFork.Cancun:
     c.assignTime(HardFork.Cancun, TimeZero)

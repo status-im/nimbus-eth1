@@ -172,7 +172,7 @@ proc newPayloadV3*(client: RpcClient,
 
 proc collectBlobHashes(list: openArray[Web3Tx]): seq[Web3Hash] =
   for w3tx in list:
-    let tx = ethTx(w3Tx)
+    let tx = ethTx(w3tx)
     for h in tx.versionedHashes:
       result.add w3Hash(h)
 

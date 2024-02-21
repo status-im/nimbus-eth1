@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 202-2023 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -9,7 +9,6 @@
 
 import
   std/[typetraits, sequtils, sets],
-  stew/[byteutils],
   json_rpc/rpcserver,
   web3/[conversions, execution_types],
   ../beacon/api_handler,
