@@ -268,7 +268,7 @@ proc resetChainDb(ap: TesterPool; extraData: Blob; debug = false) =
     networkId = ap.networkId,
     params = ap.boot)
   ap.chain = newChain(com)
-  com.initializeEmptyDB()
+  com.initializeEmptyDb()
   ap.noisy = debug
 
 proc initTesterPool(ap: TesterPool): TesterPool {.discardable.} =

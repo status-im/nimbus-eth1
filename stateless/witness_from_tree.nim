@@ -29,7 +29,7 @@ type
   StackElem = object
     node: seq[byte]
     parentGroup: Group
-    keys: MultikeysRef
+    keys: MultiKeysRef
     depth: int
     storageMode: bool
 
@@ -319,7 +319,7 @@ proc getBranchRecurse(wb: var WitnessBuilder, z: var StackElem) =
     for i in nonEmpty(branchMask):
       let branch = nodeRlp.listElem(i)
       if branchMaskBitIsSet(path.mask, i):
-        # it is a match between multikeys and Branch Node elem
+        # it is a match between MultiKeysRef and Branch Node elem
         var zz = StackElem(
           node: branch.getNode,
           parentGroup: path.groups[i],
@@ -345,7 +345,7 @@ proc getBranchRecurse(wb: var WitnessBuilder, z: var StackElem) =
     raise newException(CorruptedTrieDatabase,
                        "HexaryTrie node with an unexpected number of children")
 
-proc buildWitness*(wb: var WitnessBuilder, keys: MultikeysRef): seq[byte]
+proc buildWitness*(wb: var WitnessBuilder, keys: MultiKeysRef): seq[byte]
   {.raises: [CatchableError].} =
 
   # witness version

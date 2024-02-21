@@ -32,7 +32,7 @@ type
 proc getBlockWitness*(
     com: CommonRef,
     blockHeader: BlockHeader,
-    statePostExecution: bool): (MultikeysRef, BlockWitness)
+    statePostExecution: bool): (MultiKeysRef, BlockWitness)
     {.raises: [RlpError, BlockNotFound, ValueError, CatchableError].} =
 
   let
@@ -67,7 +67,7 @@ proc getBlockWitness*(
 
 proc getBlockProofs*(
     accDB: ReadOnlyStateDB,
-    mkeys: MultikeysRef): seq[ProofResponse] {.raises: [RlpError].} =
+    mkeys: MultiKeysRef): seq[ProofResponse] {.raises: [RlpError].} =
 
   var blockProofs = newSeq[ProofResponse]()
 

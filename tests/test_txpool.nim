@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -173,12 +173,12 @@ proc runTxLoader(noisy = true; capture = loadSpecs) =
       check capture.numTxs == xp.nItems.total
 
       # Set txs to pseudo random status
-      check xp.verify.isOK
+      check xp.verify.isOk
       xp.setItemStatusFromInfo
 
       # Boundary conditions regarding nonces might be violated by running
       # setItemStatusFromInfo() => xp.txDB.verify() rather than xp.verify()
-      check xp.txDB.verify.isOK
+      check xp.txDB.verify.isOk
 
       check txList.len == 0
       check xp.nItems.disposed == 0
@@ -230,12 +230,12 @@ proc runTxPoolTests(noisy = true) =
         # Set txs to pseudo random status
         xq.setItemStatusFromInfo
 
-        check xq.txDB.verify.isOK
+        check xq.txDB.verify.isOk
         elapNoisy.showElapsed("Forward delete-walk ID queue"):
           for item in xq.txDB.byItemID.nextValues:
             if not xq.addOrFlushGroupwise(groupLen, seen, item, veryNoisy):
               break
-        check xq.txDB.verify.isOK
+        check xq.txDB.verify.isOk
         check seen.len == xq.nItems.total
         check seen.len < groupLen
 
@@ -248,12 +248,12 @@ proc runTxPoolTests(noisy = true) =
         # Set txs to pseudo random status
         xq.setItemStatusFromInfo
 
-        check xq.txDB.verify.isOK
+        check xq.txDB.verify.isOk
         elapNoisy.showElapsed("Revese delete-walk ID queue"):
           for item in xq.txDB.byItemID.nextValues:
             if not xq.addOrFlushGroupwise(groupLen, seen, item, veryNoisy):
               break
-        check xq.txDB.verify.isOK
+        check xq.txDB.verify.isOk
         check seen.len == xq.nItems.total
         check seen.len < groupLen
 
@@ -367,7 +367,7 @@ proc runTxPoolTests(noisy = true) =
           evictedItems = (evictionMeter.value - evictedBase).int
           impliedItems = (impliedEvictionMeter.value - impliedBase).int
 
-        check xq.txDB.verify.isOK
+        check xq.txDB.verify.isOk
         check disposedItems + disposedBase + xq.nItems.total == txList.len
         check 0 < evictedItems
         check evictedItems <= disposedItems
@@ -447,7 +447,7 @@ proc runTxPoolTests(noisy = true) =
             check xq.txDB.reassign(item, toBucket)
             if moveNumItems <= count:
               break collect
-        check xq.txDB.verify.isOK
+        check xq.txDB.verify.isOk
 
         case fromBucket
         of txItemPending:
@@ -515,7 +515,7 @@ proc runTxPoolTests(noisy = true) =
         # verify that a new item was derived from the waste basket pivot item
         let wbItem = xq.getItem(thisItem.itemID).value
         check thisItem.info == wbItem.info
-        check thisItem.timestamp < wbItem.timestamp
+        check thisItem.timeStamp < wbItem.timeStamp
 
 
 proc runTxPackerTests(noisy = true) =
@@ -548,7 +548,7 @@ proc runTxPackerTests(noisy = true) =
       var nextKey = ntBaseFee
       for _ in [1, 2, 3]:
         let rcNextKey = feesList.gt(nextKey.GasPriceEx)
-        check rcNextKey.isOK
+        check rcNextKey.isOk
         nextKey = rcNextKey.value.key.uint64.GasPrice
 
       ntNextFee = nextKey + keyStep.GasPrice
@@ -595,7 +595,7 @@ proc runTxPackerTests(noisy = true) =
           xq.triggerReorg
 
           # now, xq should look like xr
-          check xq.verify.isOK
+          check xq.verify.isOk
           check xq.nItems == xr.nItems
 
       block:
@@ -622,7 +622,7 @@ proc runTxPackerTests(noisy = true) =
           # employ packer
           # xq.jobCommit(forceMaintenance = true)
           check xq.packerVmExec.isOk
-          check xq.verify.isOK
+          check xq.verify.isOk
 
           # verify that the test did not degenerate
           check 0 < xq.gasTotals.packed
@@ -648,7 +648,7 @@ proc runTxPackerTests(noisy = true) =
           # re-pack bucket
           #xq.jobCommit(forceMaintenance = true)
           check xq.packerVmExec.isOk
-          check xq.verify.isOK
+          check xq.verify.isOk
 
           let
             items1 = xq.toItems(txItemPacked)
@@ -668,7 +668,7 @@ proc runTxPackerTests(noisy = true) =
 
           # delete last item from packed bucket
           xq.disposeItems(lastItem)
-          check xq.verify.isOK
+          check xq.verify.isOk
 
           # set new minimum target price
           xq.minPreLondonGasPrice = lowerPrice
@@ -678,7 +678,7 @@ proc runTxPackerTests(noisy = true) =
           # not necessarily a buckets re-org resulting in a change
           #xq.jobCommit(forceMaintenance = true)
           check xq.packerVmExec.isOk
-          check xq.verify.isOK
+          check xq.verify.isOk
 
           let
             items = xq.toItems(txItemPacked)
@@ -835,13 +835,13 @@ proc runTxPackerTests(noisy = true) =
         # Test low-level function for adding the new block to the database
         #xq.chain.maxMode = (packItemsMaxGasLimit in xq.flags)
         xq.chain.clearAccounts
-        check xq.chain.vmState.processBlock(hdr, bdy).isOK
+        check xq.chain.vmState.processBlock(hdr, bdy).isOk
 
         setErrorLevel()
 
         # Re-allocate using VM environment from `persistBlocks()`
         let vmstate2 = BaseVMState.new(hdr, bcCom)
-        check vmstate2.processBlock(hdr, bdy).isOK
+        check vmstate2.processBlock(hdr, bdy).isOk
 
         # This should not have changed
         check canonicalHead == xq.chain.com.db.getCanonicalHead
@@ -850,7 +850,7 @@ proc runTxPackerTests(noisy = true) =
         # turning off header verification.
         let c = bcCom.newChain(extraValidation = false)
 
-        check c.persistBlocks(@[hdr], @[bdy]).isOK
+        check c.persistBlocks(@[hdr], @[bdy]).isOk
 
         if bcCom.consensus == ConsensusType.POS:
           # PoS consensus will force the new blockheader as head

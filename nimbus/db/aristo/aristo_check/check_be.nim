@@ -93,7 +93,7 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
   discard vids.merge Interval[VertexID,uint64].new(
     VertexID(LEAST_FREE_VID),high(VertexID))
 
-  for (vid,vtx) in T.walkVtxBE db:
+  for (vid,vtx) in T.walkVtxBe db:
     if not vtx.isValid:
       return err((vid,CheckBeVtxInvalid))
     let rc = db.getKeyBE vid
@@ -115,8 +115,8 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
       if vtx.ePfx.len == 0:
         return err((vid,CheckBeVtxExtPfxMissing))
 
-  for (vid,key) in T.walkKeyBE db:
-    if not key.isvalid:
+  for (vid,key) in T.walkKeyBe db:
+    if not key.isValid:
       return err((vid,CheckBeKeyInvalid))
     let vtx = db.getVtxBE(vid).valueOr:
       return err((vid,CheckBeVtxMissing))

@@ -73,7 +73,7 @@ type
   IsEmptyAccountFn* = proc(eAddr: EthAddress): bool {.noRaise.}
   IsTopLevelCleanFn* = proc(): bool {.noRaise.}
   LogEntriesFn* = proc(): seq[Log] {.noRaise.}
-  MakeMultiKeysFn* = proc(): MultikeysRef {.noRaise.}
+  MakeMultiKeysFn* = proc(): MultiKeysRef {.noRaise.}
   PersistFn* = proc(clearEmptyAccount: bool, clearCache: bool) {.noRaise.}
   RipemdSpecialFn* = proc() {.noRaise.}
   RollbackFn* = proc(sp: LedgerSpRef) {.noRaise.}

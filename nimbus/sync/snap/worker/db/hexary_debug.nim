@@ -61,7 +61,7 @@ proc ppImpl(s: string; hex = false): string =
 proc ppImpl(key: RepairKey; db: HexaryTreeDbRef): string =
   if key.isZero:
     return "ø"
-  if not key.isNodekey:
+  if not key.isNodeKey:
     var num: uint64
     (addr num).copyMem(unsafeAddr key.ByteArray33[25], 8)
     return "%" & $num
@@ -146,7 +146,7 @@ proc ppImpl(db: HexaryTreeDbRef; root: NodeKey): seq[string] =
     accu.add @[(0u64, "($0" & "," & root.ppImpl(db) & ")")]
   for key,node in db.tab.pairs:
     accu.add (
-      key.ppImpl(db).tokey,
+      key.ppImpl(db).toKey,
       "(" & key.ppImpl(db) & "," & node.ppImpl(db) & ")")
 
   accu.sorted(cmpIt).mapIt(it[1])
@@ -420,7 +420,7 @@ proc fillFromLeft(
 
   # Find first least path
   var
-    here = XPath(root: rootKey).pathLeast(rootkey.to(Blob), getFn)
+    here = XPath(root: rootKey).pathLeast(rootKey.to(Blob), getFn)
     countSteps = 0
 
   if 0 < here.path.len:
@@ -456,7 +456,7 @@ proc fillFromRight(
 
   # Find first least path
   var
-    here = XPath(root: rootKey).pathMost(rootkey.to(Blob), getFn)
+    here = XPath(root: rootKey).pathMost(rootKey.to(Blob), getFn)
     countSteps = 0
 
   if 0 < here.path.len:

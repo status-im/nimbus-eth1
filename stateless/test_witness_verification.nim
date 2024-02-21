@@ -25,7 +25,7 @@ proc getGenesisAlloc(filePath: string): GenesisAlloc =
 
 proc setupStateDB(
   genAccounts: GenesisAlloc,
-  stateDB: LedgerRef): (Hash256, MultikeysRef) =
+  stateDB: LedgerRef): (Hash256, MultiKeysRef) =
 
   var keys = newSeqOfCap[AccountKey](genAccounts.len)
 
@@ -40,7 +40,7 @@ proc setupStateDB(
     stateDB.setCode(address, genAccount.code)
     stateDB.setBalance(address, genAccount.balance)
 
-    let sKeys = if storageKeys.len != 0: newMultiKeys(storageKeys) else: MultikeysRef(nil)
+    let sKeys = if storageKeys.len != 0: newMultiKeys(storageKeys) else: MultiKeysRef(nil)
     let codeTouched = genAccount.code.len > 0
     keys.add(AccountKey(address: address, codeTouched: codeTouched, storageKeys: sKeys))
 

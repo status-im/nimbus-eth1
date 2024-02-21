@@ -85,7 +85,7 @@ proc randomisedLeafs(
     db: AristoDbRef;
     td: var PrngDesc;
        ): seq[(LeafTie,VertexID)] =
-  result = db.lTab.pairs.toSeq.filterIt(it[1].isvalid).sorted(
+  result = db.lTab.pairs.toSeq.filterIt(it[1].isValid).sorted(
     cmp = proc(a,b: (LeafTie,VertexID)): int = cmp(a[0], b[0]))
   if 2 < result.len:
     for n in 0 ..< result.len-1:

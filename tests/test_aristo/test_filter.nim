@@ -38,7 +38,7 @@ type
 
 proc fifosImpl[T](be: T): seq[seq[(QueueID,FilterRef)]] =
   var lastChn = -1
-  for (qid,val) in be.walkFifoBE:
+  for (qid,val) in be.walkFifoBe:
     let chn = (qid.uint64 shr 62).int
     while lastChn < chn:
       lastChn.inc
@@ -310,7 +310,7 @@ proc isEq(a, b: FilterRef; db: AristoDbRef; noisy = true): bool =
   for (vid,aKey) in a.kMap.pairs:
     if b.kMap.hasKey vid:
       let bKey = b.kMap.getOrVoid vid
-      if aKey != bkey:
+      if aKey != bKey:
         noisy.say "***", "not isEq:",
           " vid=", vid.pp,
           " aKey=", aKey.pp,

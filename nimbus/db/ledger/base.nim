@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -266,7 +266,7 @@ proc logEntries*(ldg: LedgerRef): seq[Log] =
   result = ldg.methods.logEntriesFn()
   ldg.ifTrackApi: debug apiTxt, ctx, elapsed, result
 
-proc makeMultiKeys*(ldg: LedgerRef): MultikeysRef =
+proc makeMultiKeys*(ldg: LedgerRef): MultiKeysRef =
   ldg.beginTrackApi LdgMakeMultiKeysFn
   result = ldg.methods.makeMultiKeysFn()
   ldg.ifTrackApi: debug apiTxt, ctx, elapsed

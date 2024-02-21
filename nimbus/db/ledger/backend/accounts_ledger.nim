@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -27,7 +27,7 @@ func savePoint(sp: LedgerSpRef): impl.LedgerSavePoint =
   wrp.LedgerSavePoint(sp).sp
 
 # ----------------
-  
+
 proc ledgerMethods(lc: impl.AccountsLedgerRef): LedgerFns =
   LedgerFns(
     accessListFn: proc(eAddr: EthAddress) =
@@ -47,7 +47,7 @@ proc ledgerMethods(lc: impl.AccountsLedgerRef): LedgerFns =
 
     beginSavepointFn: proc(): LedgerSpRef =
       wrp.LedgerSavePoint(sp: lc.beginSavepoint()),
-  
+
     clearStorageFn: proc(eAddr: EthAddress) =
       lc.clearStorage(eAddr),
 
@@ -120,7 +120,7 @@ proc ledgerMethods(lc: impl.AccountsLedgerRef): LedgerFns =
     logEntriesFn: proc(): seq[Log] =
       lc.logEntries(),
 
-    makeMultiKeysFn: proc(): MultikeysRef =
+    makeMultiKeysFn: proc(): MultiKeysRef =
       lc.makeMultiKeys(),
 
     persistFn: proc(clearEmptyAccount: bool, clearCache: bool) =

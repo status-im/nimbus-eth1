@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -129,7 +129,7 @@ proc ledgerMethods(lc: impl.AccountsCache): LedgerFns =
     logEntriesFn: proc(): seq[Log] =
       lc.logEntries(),
 
-    makeMultiKeysFn: proc(): MultikeysRef =
+    makeMultiKeysFn: proc(): MultiKeysRef =
       lc.makeMultiKeys(),
 
     persistFn: proc(clearEmptyAccount: bool, clearCache: bool) =

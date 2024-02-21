@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2023 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -188,10 +188,10 @@ proc runTxPoolCliqueTest*() =
 
     test "Store generated block in block chain database":
       xp.chain.clearAccounts
-      check xp.chain.vmState.processBlock(blk.header, body).isOK
+      check xp.chain.vmState.processBlock(blk.header, body).isOk
 
       let vmstate2 = BaseVMState.new(blk.header, com)
-      check vmstate2.processBlock(blk.header, body).isOK
+      check vmstate2.processBlock(blk.header, body).isOk
 
     test "Clique persistBlocks":
       let rr = chain.persistBlocks([blk.header], [body])
@@ -231,7 +231,7 @@ proc runTxPoolCliqueTest*() =
       os.sleep(com.cliquePeriod.int * 1000)
 
       xp.chain.clearAccounts
-      check xp.chain.vmState.processBlock(blk.header, body).isOK
+      check xp.chain.vmState.processBlock(blk.header, body).isOk
       let rr = chain.persistBlocks([blk.header], [body])
       check rr == ValidationResult.OK
 

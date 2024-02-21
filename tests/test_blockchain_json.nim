@@ -219,7 +219,7 @@ proc testGetBlockWitness(chain: ChainRef, parentHeader, currentHeader: BlockHead
     if witnessRoot != parentHeader.stateRoot:
       raise newException(ValidationError, "Expected witnessRoot == parentHeader.stateRoot")
 
-  # use the MultikeysRef to build the block proofs
+  # use the MultiKeysRef to build the block proofs
   let
     ac = newAccountStateDB(chain.com.db, currentHeader.stateRoot, chain.com.pruneTrie)
     blockProofs = getBlockProofs(state_db.ReadOnlyStateDB(ac), mkeys)

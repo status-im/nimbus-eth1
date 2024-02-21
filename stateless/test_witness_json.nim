@@ -152,7 +152,7 @@ proc writeFuzzData(filePath, fileName: string) =
   var tb = initTreeBuilder(t.output, db, {wfNoFlag})
   discard tb.buildTree()
 
-  writeFile(filename, t.output)
+  writeFile(fileName, t.output)
 
 proc fuzzTool(): bool {.used.} =
   var filename: string
