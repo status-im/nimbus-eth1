@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -55,6 +55,13 @@ method getAncestorHash*(vmState: BaseVMState; blockNumber: BlockNumber): Hash256
   else:
     return keccakHash(toBytes($blockNumber))
 
+func normalizeFileName(x: string): string =
+  const invalidChars = ['/', '\\', '?', '%', '*', ':', '|', '"', '<', '>', ',', ';', '=']
+  result = newStringOfCap(x.len)
+  for c in x:
+    if c in invalidChars: result.add '_'
+    else: result.add c
+
 proc dumpDebugData(ctx: TestCtx, vmState: BaseVMState, gasUsed: GasInt, success: bool) =
   let tracerInst = LegacyTracer(vmState.tracer)
   let tracingResult = if ctx.trace: tracerInst.getTracingResult() else: %[]
@@ -64,7 +71,8 @@ proc dumpDebugData(ctx: TestCtx, vmState: BaseVMState, gasUsed: GasInt, success:
     "accounts": vmState.dumpAccounts()
   }
   let status = if success: "_success" else: "_failed"
-  writeFile(ctx.name & "_" & ctx.fork & "_" & $ctx.index & status & ".json", debugData.pretty())
+  let fileName = normalizeFileName(ctx.name)
+  writeFile(fileName & "_" & ctx.fork & "_" & $ctx.index & status & ".json", debugData.pretty())
 
 proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
   let
