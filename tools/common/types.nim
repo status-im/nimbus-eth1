@@ -30,6 +30,7 @@ type
     London
     ArrowGlacier
     GrayGlacier
+    Merge
     Paris
     ArrowGlacierToParisAtDiffC0000
     Shanghai

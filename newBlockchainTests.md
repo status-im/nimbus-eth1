@@ -510,6 +510,185 @@ OK: 17/17 Fail: 0/17 Skip: 0/17
 + walletReorganizeOwners.json                                     OK
 ```
 OK: 5/5 Fail: 0/5 Skip: 0/5
+## eip1153_tstore
+```diff
++ contract_creation.json                                          OK
++ gas_usage.json                                                  OK
++ reentrant_call.json                                             OK
++ reentrant_selfdestructing_call.json                             OK
++ run_until_out_of_gas.json                                       OK
++ subcall.json                                                    OK
++ tload_after_sstore.json                                         OK
++ tload_after_tstore.json                                         OK
++ tload_after_tstore_is_zero.json                                 OK
++ transient_storage_unset_values.json                             OK
+```
+OK: 10/10 Fail: 0/10 Skip: 0/10
+## eip1344_chainid
+```diff
++ chainid.json                                                    OK
+```
+OK: 1/1 Fail: 0/1 Skip: 0/1
+## eip198_modexp_precompile
+```diff
++ modexp.json                                                     OK
+```
+OK: 1/1 Fail: 0/1 Skip: 0/1
+## eip2930_access_list
+```diff
++ access_list.json                                                OK
+```
+OK: 1/1 Fail: 0/1 Skip: 0/1
+## eip3651_warm_coinbase
+```diff
++ warm_coinbase_call_out_of_gas.json                              OK
++ warm_coinbase_gas_usage.json                                    OK
+```
+OK: 2/2 Fail: 0/2 Skip: 0/2
+## eip3855_push0
+```diff
++ push0_before_jumpdest.json                                      OK
++ push0_during_staticcall.json                                    OK
++ push0_fill_stack.json                                           OK
++ push0_gas_cost.json                                             OK
++ push0_key_sstore.json                                           OK
++ push0_stack_overflow.json                                       OK
++ push0_storage_overwrite.json                                    OK
+```
+OK: 7/7 Fail: 0/7 Skip: 0/7
+## eip3860_initcode
+```diff
++ contract_creating_tx.json                                       OK
++ create_opcode_initcode.json                                     OK
++ gas_usage.json                                                  OK
+```
+OK: 3/3 Fail: 0/3 Skip: 0/3
+## eip4788_beacon_root
+```diff
++ beacon_root_contract_calls.json                                 OK
++ beacon_root_contract_deploy.json                                OK
++ beacon_root_contract_timestamps.json                            OK
++ beacon_root_equal_to_timestamp.json                             OK
++ beacon_root_selfdestruct.json                                   OK
++ beacon_root_transition.json                                     OK
++ calldata_lengths.json                                           OK
++ invalid_beacon_root_calldata_value.json                         OK
++ multi_block_beacon_root_timestamp_calls.json                    OK
++ no_beacon_root_contract_at_transition.json                      OK
++ tx_to_beacon_root_contract.json                                 OK
+```
+OK: 11/11 Fail: 0/11 Skip: 0/11
+## eip4844_blobs
+```diff
++ blob_gas_subtraction_tx.json                                    OK
++ blob_tx_attribute_calldata_opcodes.json                         OK
++ blob_tx_attribute_gasprice_opcode.json                          OK
++ blob_tx_attribute_opcodes.json                                  OK
++ blob_tx_attribute_value_opcode.json                             OK
++ blob_type_tx_pre_fork.json                                      OK
++ blobhash_gas_cost.json                                          OK
++ blobhash_invalid_blob_index.json                                OK
++ blobhash_multiple_txs_in_block.json                             OK
++ blobhash_opcode_contexts.json                                   OK
++ blobhash_scenarios.json                                         OK
++ correct_decreasing_blob_gas_costs.json                          OK
++ correct_excess_blob_gas_calculation.json                        OK
++ correct_increasing_blob_gas_costs.json                          OK
++ fork_transition_excess_blob_gas.json                            OK
++ insufficient_balance_blob_tx.json                               OK
++ insufficient_balance_blob_tx_combinations.json                  OK
++ invalid_blob_gas_used_in_header.json                            OK
++ invalid_blob_hash_versioning_multiple_txs.json                  OK
++ invalid_blob_hash_versioning_single_tx.json                     OK
++ invalid_blob_tx_contract_creation.json                          OK
++ invalid_block_blob_count.json                                   OK
++ invalid_excess_blob_gas_above_target_change.json                OK
++ invalid_excess_blob_gas_change.json                             OK
++ invalid_excess_blob_gas_target_blobs_increase_from_zero.json    OK
++ invalid_negative_excess_blob_gas.json                           OK
++ invalid_non_multiple_excess_blob_gas.json                       OK
++ invalid_normal_gas.json                                         OK
++ invalid_post_fork_block_without_blob_fields.json                OK
++ invalid_pre_fork_block_with_blob_fields.json                    OK
++ invalid_precompile_calls.json                                   OK
++ invalid_static_excess_blob_gas.json                             OK
++ invalid_static_excess_blob_gas_from_zero_on_blobs_above_target. OK
++ invalid_tx_blob_count.json                                      OK
++ invalid_tx_max_fee_per_blob_gas.json                            OK
++ invalid_zero_excess_blob_gas_in_header.json                     OK
++ point_evaluation_precompile_before_fork.json                    OK
++ point_evaluation_precompile_calls.json                          OK
++ point_evaluation_precompile_during_fork.json                    OK
++ point_evaluation_precompile_external_vectors.json               OK
++ point_evaluation_precompile_gas_tx_to.json                      OK
++ point_evaluation_precompile_gas_usage.json                      OK
++ reject_valid_full_blob_in_block_rlp.json                        OK
++ sufficient_balance_blob_tx.json                                 OK
++ sufficient_balance_blob_tx_pre_fund_tx.json                     OK
++ valid_blob_tx_combinations.json                                 OK
++ valid_precompile_calls.json                                     OK
+```
+OK: 47/47 Fail: 0/47 Skip: 0/47
+## eip4895_withdrawals
+```diff
++ balance_within_block.json                                       OK
++ large_amount.json                                               OK
++ many_withdrawals.json                                           OK
++ multiple_withdrawals_same_address.json                          OK
++ newly_created_contract.json                                     OK
++ no_evm_execution.json                                           OK
++ self_destructing_account.json                                   OK
++ use_value_in_contract.json                                      OK
++ use_value_in_tx.json                                            OK
++ withdrawing_to_precompiles.json                                 OK
++ zero_amount.json                                                OK
+```
+OK: 11/11 Fail: 0/11 Skip: 0/11
+## eip5656_mcopy
+```diff
++ mcopy_huge_memory_expansion.json                                OK
++ mcopy_memory_expansion.json                                     OK
++ mcopy_on_empty_memory.json                                      OK
++ no_memory_corruption_on_upper_call_stack_levels.json            OK
++ valid_mcopy_operations.json                                     OK
+```
+OK: 5/5 Fail: 0/5 Skip: 0/5
+## eip6780_selfdestruct
+```diff
++ create_selfdestruct_same_tx.json                                OK
++ delegatecall_from_new_contract_to_pre_existing_contract.json    OK
++ delegatecall_from_pre_existing_contract_to_new_contract.json    OK
++ dynamic_create2_selfdestruct_collision.json                     OK
++ dynamic_create2_selfdestruct_collision_multi_tx.json            OK
++ recreate_self_destructed_contract_different_txs.json            OK
++ reentrancy_selfdestruct_revert.json                             OK
++ self_destructing_initcode.json                                  OK
++ self_destructing_initcode_create_tx.json                        OK
++ selfdestruct_created_in_same_tx_with_revert.json                OK
++ selfdestruct_created_same_block_different_tx.json               OK
++ selfdestruct_not_created_in_same_tx_with_revert.json            OK
++ selfdestruct_pre_existing.json                                  OK
+```
+OK: 13/13 Fail: 0/13 Skip: 0/13
+## eip7516_blobgasfee
+```diff
++ blobbasefee_before_fork.json                                    OK
++ blobbasefee_during_fork.json                                    OK
++ blobbasefee_out_of_gas.json                                     OK
++ blobbasefee_stack_overflow.json                                 OK
+```
+OK: 4/4 Fail: 0/4 Skip: 0/4
+## opcodes
+```diff
++ dup.json                                                        OK
++ value_transfer_gas_calculation.json                             OK
+```
+OK: 2/2 Fail: 0/2 Skip: 0/2
+## security
+```diff
++ tx_selfdestruct_balance_bug.json                                OK
+```
+OK: 1/1 Fail: 0/1 Skip: 0/1
 ## stArgsZeroOneBalance
 ```diff
 + addNonConst.json                                                OK
@@ -3532,6 +3711,11 @@ OK: 0/3 Fail: 0/3 Skip: 3/3
 + swap.json                                                       OK
 ```
 OK: 11/11 Fail: 0/11 Skip: 0/11
+## yul
+```diff
++ yul.json                                                        OK
+```
+OK: 1/1 Fail: 0/1 Skip: 0/1
 
 ---TOTAL---
-OK: 3042/3148 Fail: 0/3148 Skip: 106/3148
+OK: 3162/3268 Fail: 0/3268 Skip: 106/3268
