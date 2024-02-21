@@ -42,12 +42,6 @@ proc checkTopStrict*(
       if key != node.digestTo(HashKey):
         return err((vid,CheckStkVtxKeyMismatch))
 
-      let revVids = db.layersGetYekOrVoid key
-      if not revVids.isValid:
-        return err((vid,CheckStkRevKeyMissing))
-      if vid notin revVids:
-        return err((vid,CheckStkRevKeyMismatch))
-
     elif db.dirty.len == 0 or db.layersGetKey(vid).isErr:
       # So `vtx` exists but not `key`, so cache is supposed dirty and the
       # vertex has a zero entry.
@@ -60,14 +54,6 @@ proc checkTopStrict*(
     if not key.isValid and vid notin zeroKeys:
       if not db.getVtx(vid).isValid:
         return err((vid,CheckStkKeyStrayZeroEntry))
-
-  let
-    pAmkVtxCount = db.layersWalkYek.toSeq.mapIt(it[1]).foldl(a + b.len, 0)
-    sTabVtxCount = db.layersWalkVtx.toSeq.mapIt(it[1]).filterIt(it.isValid).len
-
-  # Non-zero values mist sum up the same
-  if pAmkVtxCount + zeroKeys.len < sTabVtxCount:
-    return err((VertexID(0),CheckStkVtxCountMismatch))
 
   ok()
 
@@ -87,12 +73,6 @@ proc checkTopProofMode*(
           return err((vid,CheckRlxVtxKeyMissing))
         if key != node.digestTo(HashKey):
           return err((vid,CheckRlxVtxKeyMismatch))
-
-        let revVids = db.layersGetYekOrVoid key
-        if not revVids.isValid:
-          return err((vid,CheckRlxRevKeyMissing))
-        if vid notin revVids:
-          return err((vid,CheckRlxRevKeyMismatch))
   else:
     for (vid,key) in db.layersWalkKey:
       if key.isValid:                              # Otherwise to be deleted
@@ -102,13 +82,8 @@ proc checkTopProofMode*(
             continue
           if key != node.digestTo(HashKey):
             return err((vid,CheckRlxVtxKeyMismatch))
-
-          let revVids = db.layersGetYekOrVoid key
-          if not revVids.isValid:
-            return err((vid,CheckRlxRevKeyMissing))
-          if vid notin revVids:
-            return err((vid,CheckRlxRevKeyMismatch))
   ok()
+
 
 proc checkTopCommon*(
     db: AristoDbRef;                   # Database, top layer
@@ -149,18 +124,6 @@ proc checkTopCommon*(
   # vertices.
   if kMapNilCount != 0 and kMapNilCount < nNilVtx:
     return err((VertexID(0),CheckAnyVtxEmptyKeyMismatch))
-
-  let pAmkVtxCount = db.layersWalkYek.toSeq.mapIt(it[1]).foldl(a + b.len, 0)
-  if pAmkVtxCount != kMapCount:
-    var knownKeys: HashSet[VertexID]
-    for (key,vids) in db.layersWalkYek:
-      for vid in vids:
-        if db.layersGetKey(vid).isErr:
-          return err((vid,CheckAnyRevVtxMissing))
-        if vid in knownKeys:
-          return err((vid,CheckAnyRevVtxDup))
-        knownKeys.incl vid
-    return err((VertexID(0),CheckAnyRevCountMismatch)) # should not apply(!)
 
   for vid in db.pPrf:
     if db.layersGetKey(vid).isErr:

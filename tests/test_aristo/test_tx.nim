@@ -552,24 +552,23 @@ proc testTxMergeProofAndKvpList*(
       sTabLen = db.nLayersVtx()
       leafs = w.kvpLst.mapRootVid VertexID(1) # merge into main trie
 
-    var
-      proved: tuple[merged: int, dups: int, error: AristoError]
     if 0 < w.proof.len:
-      let rc = db.merge(rootKey, VertexID(1))
-      xCheckRc rc.error == 0
+      let root = block:
+        let rc = db.merge(rootKey, VertexID(1))
+        xCheckRc rc.error == 0
+        rc.value
 
-      proved = db.merge(w.proof, rc.value)
+      let nMerged = block:
+        let rc = db.merge(w.proof, root)
+        xCheckRc rc.error == 0
+        rc.value
 
-      xCheck proved.error in {AristoError(0),MergeHashKeyCachedAlready}
-      xCheck w.proof.len == proved.merged + proved.dups
-      xCheck db.nLayersVtx() <= proved.merged + sTabLen
-      xCheck proved.merged < db.nLayersYek()
+      xCheck w.proof.len == nMerged
+      xCheck db.nLayersVtx() <= nMerged + sTabLen
 
-    let
-      merged = db.mergeList leafs
-
-    xCheck merged.merged + merged.dups == leafs.len
+    let merged = db.mergeList leafs
     xCheck merged.error in {AristoError(0), MergeLeafPathCachedAlready}
+    xCheck merged.merged + merged.dups == leafs.len
 
     block:
       let oops = oopsTab.getOrDefault(testId,(0,AristoError(0)))
@@ -580,6 +579,7 @@ proc testTxMergeProofAndKvpList*(
     when true and false:
       noisy.say "***", "proofs(9) <", n, "/", list.len-1, ">",
         " groups=", count, " proved=", proved, " merged=", merged
+
   true
 
 # ------------------------------------------------------------------------------

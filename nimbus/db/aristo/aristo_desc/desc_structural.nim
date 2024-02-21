@@ -76,9 +76,6 @@ type
     kMap*: Table[VertexID,HashKey]   ## Filter Merkle hash key mapping
     vGen*: seq[VertexID]             ## Filter unique vertex ID generator
 
-  VidsByKeyTab* = Table[HashKey,HashSet[VertexID]]
-    ## Reverse lookup searching `VertexID` by the hash key.
-
   LayerDeltaRef* = ref object
     ## Delta layers are stacked implying a tables hierarchy. Table entries on
     ## a higher level take precedence over lower layer table entries. So an
@@ -104,7 +101,6 @@ type
     ##
     sTab*: Table[VertexID,VertexRef] ## Structural vertex table
     kMap*: Table[VertexID,HashKey]   ## Merkle hash key mapping
-    pAmk*: VidsByKeyTab              ## Reverse `kMap` entries, hash key lookup
 
   LayerFinalRef* = ref object
     ## Final tables fully supersede tables on lower layers when stacked as a
@@ -115,7 +111,8 @@ type
     ## the ones on the `LayerDelta` object.
     ##
     pPrf*: HashSet[VertexID]         ## Locked vertices (proof nodes)
-    vGen*: seq[VertexID]             ## Unique vertex ID generator
+    fRpp*: Table[HashKey,VertexID]   ## Key lookup for `pPrf[]` (proof nodes)
+    vGen*: seq[VertexID]             ## Recycling state for vertex IDs
     dirty*: HashSet[VertexID]        ## Start nodes to re-hashiy from
 
   LayerRef* = ref LayerObj
@@ -305,6 +302,7 @@ func dup*(final: LayerFinalRef): LayerFinalRef =
   ## Duplicate final layer.
   LayerFinalRef(
     pPrf:  final.pPrf,
+    fRpp:  final.fRpp,
     vGen:  final.vGen,
     dirty: final.dirty)
 

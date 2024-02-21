@@ -326,7 +326,10 @@ func to*(lid: HashKey; T: type Hash256): T =
 func to*(key: Hash256; T: type HashKey): T =
   ## This is an efficient version of `HashKey.fromBytes(key.data).value`, not
   ## to be confused with `digestTo(HashKey)`.
-  T(isHash: true, key: key)
+  if key == EMPTY_ROOT_HASH:
+    T()
+  else:
+    T(isHash: true, key: key)
 
 func to*(n: SomeUnsignedInt|UInt256; T: type PathID): T =
   ## Representation of a scalar as `PathID` (preserving full information)

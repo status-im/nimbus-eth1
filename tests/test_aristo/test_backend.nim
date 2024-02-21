@@ -170,7 +170,6 @@ proc verifyKeys(
         zeroKeys.add vid
 
     xCheck zeroKeys == EmptyVidSeq:
-      const noisy = true
       noisy.say "***", "verifyKeys(1)",
         "\n    zeroKeys=", zeroKeys.pp,
         #"\n    db\n    ", db.pp(backendOk=true),
@@ -210,7 +209,6 @@ proc collectFilter(
 
   true
 
-
 proc mergeData(
     db: AristoDbRef;
     rootKey: Hash256;
@@ -221,11 +219,15 @@ proc mergeData(
       ): bool =
   ## Simplified loop body of `test_mergeProofAndKvpList()`
   if 0 < proof.len:
-    let rc = db.merge(rootKey, rootVid)
-    xCheckRc rc.error == 0
+    let root = block:
+      let rc = db.merge(rootKey, rootVid)
+      xCheckRc rc.error == 0
+      rc.value
 
-    let proved = db.merge(proof, rc.value) # , noisy=noisy)
-    xCheck proved.error in {AristoError(0),MergeHashKeyCachedAlready}
+    let nMerged = block:
+      let rc = db.merge(proof, root) # , noisy=noisy)
+      xCheckRc rc.error == 0
+      rc.value
 
   let merged = db.mergeList(leafs, noisy=noisy)
   xCheck merged.error in {AristoError(0), MergeLeafPathCachedAlready}

@@ -78,7 +78,7 @@ type
     dudes: DudesRef                   ## Related DB descriptors
 
     # Debugging data below, might go away in future
-    xMap*: VidsByKeyTab               ## For pretty printing, extends `pAmk`
+    xMap*: Table[HashKey,HashSet[VertexID]] ## For pretty printing/debugging
 
   AristoDbAction* = proc(db: AristoDbRef) {.gcsafe, raises: [].}
     ## Generic call back function/closure.
@@ -123,10 +123,8 @@ func isValid*(root: Hash256): bool =
   root != EMPTY_ROOT_HASH
 
 func isValid*(key: HashKey): bool =
-  if key.len == 32:
-    key.to(Hash256).isValid
-  else:
-    0 < key.len
+  assert key.len != 32 or key.to(Hash256).isValid
+  0 < key.len
 
 func isValid*(vid: VertexID): bool =
   vid != VertexID(0)

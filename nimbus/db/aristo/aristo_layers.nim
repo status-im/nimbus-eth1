@@ -25,22 +25,6 @@ func dup(sTab: Table[VertexID,VertexRef]): Table[VertexID,VertexRef] =
   for (k,v) in sTab.pairs:
     result[k] = v.dup
 
-func getLebalOrVoid(stack: seq[LayerRef]; key: HashKey): HashSet[VertexID] =
-  # Helper: get next set of vertex IDs from stack.
-  for w in stack.reversed:
-    w.delta.pAmk.withValue(key,value):
-      return value[]
-
-proc recalcLebal(layer: var LayerObj) =
-  ## Calculate reverse `kMap[]` for final (aka zero) layer
-  layer.delta.pAmk.clear
-  for (vid,key) in layer.delta.kMap.pairs:
-    if key.isValid:
-      layer.delta.pAmk.withValue(key, value):
-        value[].incl vid
-      do:
-        layer.delta.pAmk[key] = @[vid].toHashSet
-
 # ------------------------------------------------------------------------------
 # Public getters: lazy value lookup for read only versions
 # ------------------------------------------------------------------------------
@@ -59,29 +43,23 @@ func vGen*(db: AristoDbRef): seq[VertexID] =
 # ------------------------------------------------------------------------------
 
 func nLayersVtx*(db: AristoDbRef): int =
-  ## Number of vertex ID/vertex entries on the cache layers. This is an upper bound
-  ## for the number of effective vertex ID mappings held on the cache layers as
-  ## there might be duplicate entries for the same vertex ID on different layers.
+  ## Number of vertex ID/vertex entries on the cache layers. This is an upper
+  ## bound for the number of effective vertex ID mappings held on the cache
+  ## layers as there might be duplicate entries for the same vertex ID on
+  ## different layers.
   ##
   db.stack.mapIt(it.delta.sTab.len).foldl(a + b, db.top.delta.sTab.len)
 
 func nLayersKey*(db: AristoDbRef): int =
-  ## Number of vertex ID/key entries on the cache layers. This is an upper bound
-  ## for the number of effective vertex ID mappingss held on the cache layers as
-  ## there might be duplicate entries for the same vertex ID on different layers.
+  ## Number of vertex ID/key entries on the cache layers. This is an upper
+  ## bound for the number of effective vertex ID mappingss held on the cache
+  ## layers as there might be duplicate entries for the same vertex ID on
+  ## different layers.
   ##
   db.stack.mapIt(it.delta.kMap.len).foldl(a + b, db.top.delta.kMap.len)
 
-func nLayersYek*(db: AristoDbRef): int =
-  ## Number of key/vertex IDs reverse lookup entries on the cache layers. This
-  ## is an upper bound for the number of effective key mappingss held on the
-  ## cache layers as there might be duplicate entries for the same key on
-  ## different layers.
-  ##
-  db.stack.mapIt(it.delta.pAmk.len).foldl(a + b, db.top.delta.pAmk.len)
-
 # ------------------------------------------------------------------------------
-# Public functions: get variants
+# Public functions: getter variants
 # ------------------------------------------------------------------------------
 
 proc layersGetVtx*(db: AristoDbRef; vid: VertexID): Result[VertexRef,void] =
@@ -123,28 +101,21 @@ proc layersGetKeyOrVoid*(db: AristoDbRef; vid: VertexID): HashKey =
   db.layersGetKey(vid).valueOr: VOID_HASH_KEY
 
 
-proc layersGetYek*(
-    db: AristoDbRef;
-    key: HashKey;
-      ): Result[HashSet[VertexID],void] =
-  ## Inverse of `layersGetKey()`. For a given argumnt `key`, finds all vertex IDs
-  ## that have `layersGetKey()` return this very `key` value for the argument
-  ## vertex IDs.
-  if db.top.delta.pAmk.hasKey key:
-    return ok(db.top.delta.pAmk.getOrVoid key)
+proc layerGetProofKeyOrVoid*(db: AristoDbRef; vid: VertexID): HashKey =
+  ## Get the hash key of a proof node if it was registered as such.
+  if vid in db.top.final.pPrf:
+    db.top.delta.kMap.getOrVoid vid
+  else:
+    VOID_HASH_KEY
 
-  for w in db.stack.reversed:
-    if w.delta.pAmk.hasKey key:
-      return ok(w.delta.pAmk.getOrVoid key)
-
-  err()
-
-proc layersGetYekOrVoid*(db: AristoDbRef; key: HashKey): HashSet[VertexID] =
-  ## Simplified version of `layersGetVidsOrVoid()`
-  db.layersGetYek(key).valueOr: EmptyVidSet
+proc layerGetProofVidOrVoid*(db: AristoDbRef; key: HashKey): VertexID =
+  ## Reverse look up for a registered proof node or a link key for such a
+  ## node. The vertex for a returned vertex ID might not exist if the
+  ## argument `key` refers to a link key of a registered proof node.
+  db.top.final.fRpp.getOrVoid key
 
 # ------------------------------------------------------------------------------
-# Public functions: put variants
+# Public functions: setter variants
 # ------------------------------------------------------------------------------
 
 proc layersPutVtx*(
@@ -174,35 +145,8 @@ proc layersPutKey*(
     key: HashKey;
       ) =
   ## Store a (potentally void) hash key on the top layer
-
-  # Get previous key
-  let prvKey = db.top.delta.kMap.getOrVoid vid
-    
-  # Update key on `kMap:key->vid` mapping table
   db.top.delta.kMap[vid] = key
-  db.top.final.dirty.incl root # Modified top cache layers
-
-  # Clear previous value on reverse table if it has changed
-  if prvKey.isValid and prvKey != key:
-    var vidsLen = -1
-    db.top.delta.pAmk.withValue(prvKey, value):
-      value[].excl vid
-      vidsLen = value[].len
-    do: # provide empty lookup
-      let vids = db.stack.getLebalOrVoid(prvKey)
-      if vids.isValid and vid in vids:
-        # This entry supersedes non-emtpty changed ones from lower levels
-        db.top.delta.pAmk[prvKey] = vids - @[vid].toHashSet
-    if vidsLen == 0 and not db.stack.getLebalOrVoid(prvKey).isValid:
-      # There is no non-emtpty entry on lower levels, so ledete this one
-      db.top.delta.pAmk.del prvKey
-
-  # Add updated value on reverse table if non-zero
-  if key.isValid:
-    db.top.delta.pAmk.withValue(key, value):
-      value[].incl vid
-    do: # else if not found: need to merge with value set from lower layer
-      db.top.delta.pAmk[key] = db.stack.getLebalOrVoid(key) + @[vid].toHashSet
+  db.top.final.dirty.incl root # Modified top cache layers => hashify
 
 
 proc layersResKey*(db: AristoDbRef; root: VertexID; vid: VertexID) =
@@ -210,11 +154,32 @@ proc layersResKey*(db: AristoDbRef; root: VertexID; vid: VertexID) =
   ## equivalent of a delete function.
   db.layersPutKey(root, vid, VOID_HASH_KEY)
 
+
+proc layersPutProof*(db: AristoDbRef; vid: VertexID; key: HashKey) =
+  ## Register a link key of a proof node.
+  let lKey = db.layersGetKeyOrVoid vid
+  if not lKey.isValid or lKey != key:
+    db.top.delta.kMap[vid] = key
+  db.top.final.fRpp[key] = vid
+
+proc layersPutProof*(
+    db: AristoDbRef;
+    vid: VertexID;
+    key: HashKey;
+    vtx: VertexRef;
+      ) =
+  ## Register a full proof node (not only a link key.)
+  let lVtx = db.layersGetVtxOrVoid vid
+  if not lVtx.isValid or lVtx != vtx:
+    db.top.delta.sTab[vid] = vtx
+  db.top.final.pPrf.incl vid
+  db.layersPutProof(vid, key)
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc layersMergeOnto*(src: LayerRef; trg: var LayerObj; stack: seq[LayerRef]) =
+proc layersMergeOnto*(src: LayerRef; trg: var LayerObj) =
   ## Merges the argument `src` into the argument `trg` and returns `trg`. For
   ## the result layer, the `txUid` value set to `0`.
   ##
@@ -225,16 +190,6 @@ proc layersMergeOnto*(src: LayerRef; trg: var LayerObj; stack: seq[LayerRef]) =
     trg.delta.sTab[vid] = vtx
   for (vid,key) in src.delta.kMap.pairs:
     trg.delta.kMap[vid] = key
-
-  if stack.len == 0:
-    # Re-calculate `pAmk[]`
-    trg.recalcLebal()
-  else:
-    # Merge reverse `kMap[]` layers. Empty key set images are ignored unless
-    # they supersede non-empty values on the argument `stack[]`.
-    for (key,vids) in src.delta.pAmk.pairs:
-      if 0 < vids.len or stack.getLebalOrVoid(key).isValid:
-        trg.delta.pAmk[key] = vids
 
 
 func layersCc*(db: AristoDbRef; level = high(int)): LayerRef =
@@ -258,9 +213,6 @@ func layersCc*(db: AristoDbRef; level = high(int)): LayerRef =
       result.delta.sTab[vid] = vtx
     for (vid,key) in layers[n].delta.kMap.pairs:
       result.delta.kMap[vid] = key
-
-  # Re-calculate `pAmk[]`
-  result[].recalcLebal()
 
 # ------------------------------------------------------------------------------
 # Public iterators
@@ -311,22 +263,6 @@ iterator layersWalkKey*(
       if vid notin seen:
         yield (vid,key)
         seen.incl vid
-
-
-iterator layersWalkYek*(
-    db: AristoDbRef;
-      ): tuple[key: HashKey, vids: HashSet[VertexID]] =
-  ## Walk over `(HashKey,HashSet[VertexID])` pairs.
-  var seen: HashSet[HashKey]
-  for (key,vids) in db.top.delta.pAmk.pairs:
-    yield (key,vids)
-    seen.incl key
-
-  for w in db.stack.reversed:
-    for  (key,vids) in w.delta.pAmk.pairs:
-      if key notin seen:
-        yield (key,vids)
-        seen.incl key
 
 # ------------------------------------------------------------------------------
 # End

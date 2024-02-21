@@ -41,9 +41,6 @@ proc checkTop*(
   ##   If `proofMode` is set `false`, the Merkle hashes are recompiled and must
   ##   match.
   ##
-  ## * The hash table `kMap[]` and its inverse lookup table `pAmk[]` must
-  ##   correnspond.
-  ##
   if proofMode:
     ? db.checkTopProofMode()
   else:

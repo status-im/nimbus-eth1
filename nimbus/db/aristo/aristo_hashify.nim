@@ -38,7 +38,6 @@ import
   eth/common,
   results,
   stew/byteutils,
-  ./aristo_debug,
   "."/[aristo_desc, aristo_get, aristo_layers, aristo_serialise, aristo_utils]
 
 type

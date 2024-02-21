@@ -9,7 +9,7 @@
 # except according to those terms.
 
 import
-  std/[sets, tables],
+  std/tables,
   eth/common,
   results,
   ".."/[aristo_desc, aristo_desc/desc_backend, aristo_get],
@@ -68,13 +68,12 @@ proc getLayerStateRoots*(
     return ok(spr)
 
   if chunkedMpt:
-    if VertexID(1) in delta.pAmk.getOrVoid sprBeKey:
+    if sprBeKey == delta.kMap.getOrVoid VertexID(1):
       spr.fg = spr.be
       return ok(spr)
 
   if delta.sTab.len == 0 and
-     delta.kMap.len == 0 and
-     delta.pAmk.len == 0:
+     delta.kMap.len == 0:
     return err(FilPrettyPointlessLayer)
 
   err(FilStateRootMismatch)

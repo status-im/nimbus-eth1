@@ -255,8 +255,7 @@ proc commit*(
   # Pop layer from stack and merge database top layer onto it
   let merged = block:
     if db.top.delta.sTab.len == 0 and
-       db.top.delta.kMap.len == 0 and
-       db.top.delta.pAmk.len == 0:
+       db.top.delta.kMap.len == 0:
       # Avoid `layersMergeOnto()`
       db.top.delta = db.stack[^1].delta
       db.stack.setLen(db.stack.len-1)
@@ -264,7 +263,7 @@ proc commit*(
     else:
       let layer = db.stack[^1]
       db.stack.setLen(db.stack.len-1)
-      db.top.layersMergeOnto(layer[], db.stack)
+      db.top.layersMergeOnto layer[]
       layer
 
   # Install `merged` stack top layer and update stack
