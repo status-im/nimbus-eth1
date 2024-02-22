@@ -58,7 +58,7 @@ proc main() {.used.} =
   # nimbus --rpcapi: eth, debug --prune: archive
 
   var conf = makeConfig()
-  let db = newCoreDbRef(LegacyDbPersistent, string conf.dataDir)
+  let db = newCoreDbRef(DefaultDbPersistent, string conf.dataDir)
   let com = CommonRef.new(db, false)
 
   com.dumpTest(97)
