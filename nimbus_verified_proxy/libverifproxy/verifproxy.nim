@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/[atomics, json, os, strutils],
+  std/[atomics, json, os, strutils, net],
   ../nimbus_verified_proxy,
   ../nimbus_verified_proxy_conf
 
@@ -34,7 +34,7 @@ proc runContext(ctx: ptr Context) {.thread.} =
 
     let rpcAddr = jsonNode["RpcAddress"].getStr()
     let myConfig = VerifiedProxyConf(
-      rpcAddress: ValidIpAddress.init(rpcAddr),
+      rpcAddress: parseIpAddress(rpcAddr),
       listenAddress: defaultListenAddress,
       eth2Network: some(jsonNode["Eth2Network"].getStr()),
       trustedBlockRoot: Eth2Digest.fromHex(jsonNode["TrustedBlockRoot"].getStr()),
