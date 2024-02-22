@@ -97,8 +97,9 @@ type
       ## Optional suggestion for the ledger cache to be used as state DB
 
 const
-  CommonLedgerTypeDefault* = LegacyAccountsCache
-    ## Default ledger type to use, see `ldgType` above
+  CommonLegacyDbLedgerTypeDefault = LegacyAccountsCache
+    ## Default ledger type to use, see `ldgType` above. This default will be
+    ## superseded by `LedgerCache` as default for `Aristo` type deb backend.
 
 # ------------------------------------------------------------------------------
 # Forward declarations
@@ -156,7 +157,14 @@ proc init(com      : CommonRef,
   com.forkTransitionTable = config.toForkTransitionTable()
   com.networkId   = networkId
   com.syncProgress= SyncProgress()
-  com.ldgType     = ldgType
+  com.ldgType     = block:
+    if ldgType != LedgerType(0):
+      ldgType
+    elif db.dbType in {AristoDbMemory,AristoDbRocks,AristoDbVoid}:
+      # The `Aristo` backend does not work well with the `LegacyAccountsCache`
+      LedgerCache
+    else:
+      CommonLegacyDbLedgerTypeDefault
 
   # Initalise the PoA state regardless of whether it is needed on the current
   # network. For non-PoA networks this descriptor is ignored.
@@ -223,7 +231,7 @@ proc new*(
     pruneTrie: bool = true;
     networkId: NetworkId = MainNet;
     params = networkParams(MainNet);
-    ldgType = CommonLedgerTypeDefault;
+    ldgType = LedgerType(0);
       ): CommonRef
       {.gcsafe, raises: [CatchableError].} =
 
@@ -244,7 +252,7 @@ proc new*(
     config: ChainConfig;
     pruneTrie: bool = true;
     networkId: NetworkId = MainNet;
-    ldgType = CommonLedgerTypeDefault;
+    ldgType = LedgerType(0);
       ): CommonRef
       {.gcsafe, raises: [CatchableError].} =
 
