@@ -12,6 +12,9 @@ import
   std/[macros, strutils],
   macro_assembler, unittest2
 
+# Currently fails on `AristoDb*`
+macro_assembler.coreDbType = LegacyDbMemory
+
 proc opMemoryMain*() =
   suite "Memory Opcodes":
     assembler: # PUSH1 OP
