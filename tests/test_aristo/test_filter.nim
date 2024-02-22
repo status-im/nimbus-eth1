@@ -336,7 +336,7 @@ proc checkBeOk(
   ## ..
   for n in 0 ..< dx.len:
     let
-      cache = if forceCache: true else: not dx[n].dirty
+      cache = if forceCache: true else: dx[n].dirty.len == 0
       rc = dx[n].checkBE(relax=relax, cache=cache)
     xCheckRc rc.error == (0,0):
       noisy.say "***", "db check failed",

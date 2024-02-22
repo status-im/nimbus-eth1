@@ -46,6 +46,26 @@ func to(a: NodeKey; T: type UInt256): T =
 func to(a: NodeKey; T: type PathID): T =
   a.to(UInt256).to(T)
 
+when not declared(aristo_merge.noisy):
+  import  ../../nimbus/db/aristo/aristo_hike
+  proc merge(
+      db: AristoDbRef;
+      root: VertexID;
+      path: openArray[byte];
+      data: openArray[byte];
+      accPath: PathID;
+      noisy: bool;
+        ): Result[bool, AristoError] =
+    aristo_merge.merge(db, root, path, data, accPath)
+  proc merge(
+      db: AristoDbRef;
+      lty: LeafTie;
+      pyl: PayloadRef;
+      accPath: PathID;
+      noisy: bool;
+        ): Result[Hike, AristoError] =
+    aristo_merge.merge(db, lty, pyl, accPath)
+
 # ------------------------------------------------------------------------------
 # Public pretty printing
 # ------------------------------------------------------------------------------
@@ -214,11 +234,18 @@ func mapRootVid*(
 proc mergeList*(
     db: AristoDbRef;                   # Database, top layer
     leafs: openArray[LeafTiePayload];  # Leaf items to add to the database
+    noisy = false;
       ): tuple[merged: int, dups: int, error: AristoError] =
   ## Variant of `merge()` for leaf lists.
   var (merged, dups) = (0, 0)
   for n,w in leafs:
-    let rc = db.merge(w.leafTie, w.payload, VOID_PATH_ID)
+    noisy.say "*** mergeList",
+      " n=", n, "/", leafs.len
+    let rc = db.merge(w.leafTie, w.payload, VOID_PATH_ID, noisy=noisy)
+    noisy.say "*** mergeList",
+      " n=", n, "/", leafs.len,
+      " rc=", (if rc.isOk: "ok" else: $rc.error),
+      "\n    -------------\n"
     if rc.isOk:
       merged.inc
     elif rc.error in {MergeLeafPathCachedAlready,MergeLeafPathOnBackendAlready}:

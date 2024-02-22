@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -19,7 +19,7 @@ import
   stew/interval_set,
   results,
   ./aristo_walk/persistent,
-  "."/[aristo_desc, aristo_get, aristo_init, aristo_vid, aristo_utils],
+  "."/[aristo_desc, aristo_get, aristo_init, aristo_utils],
   ./aristo_check/[check_be, check_top]
 
 # ------------------------------------------------------------------------------
@@ -40,9 +40,6 @@ proc checkTop*(
   ## * Each `sTab[]` entry has a valid vertex which can be compiled as a node.
   ##   If `proofMode` is set `false`, the Merkle hashes are recompiled and must
   ##   match.
-  ##
-  ## * The hash table `kMap[]` and its inverse lookup table `pAmk[]` must
-  ##   correnspond.
   ##
   if proofMode:
     ? db.checkTopProofMode()

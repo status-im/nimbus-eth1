@@ -14,7 +14,7 @@
 {.push raises: [].}
 
 import
-  std/[sequtils, tables, typetraits],
+  std/[sequtils, sets, typetraits],
   eth/common,
   results,
   "."/[aristo_constants, aristo_desc, aristo_get, aristo_hike, aristo_layers]
@@ -200,17 +200,9 @@ proc registerAccount*(
   if not accPath.isValid:
     return err(UtilsAccPathMissing)
 
-  # Check whether the account is marked for re-hash, already
-  let lty = LeafTie(root: VertexID(1), path: accPath)
-  if db.lTab.hasKey lty:
-    return ok()
-
   # Get account leaf with account data
-  let rc = lty.hikeUp(db)
-  let hike = block:
-    if rc.isErr:
-      return err(UtilsAccUnaccessible)
-    rc.value
+  let hike = LeafTie(root: VertexID(1), path: accPath).hikeUp(db).valueOr:
+    return err(UtilsAccUnaccessible)
 
   let wp = hike.legs[^1].wp
   if wp.vtx.vType != Leaf:
@@ -223,10 +215,13 @@ proc registerAccount*(
   if stoID.isValid and stoID != stoRoot:
     return err(UtilsAccWrongStorageRoot)
 
-  # Clear Merkle keys and store leaf record
+  # Clear Merkle keys so that `hasify()` can calculate the re-hash forest/tree
   for w in hike.legs.mapIt(it.wp.vid):
-    db.layersResKey w
-  db.top.final.lTab[lty] = wp.vid
+    db.layersResKey(hike.root, w)
+
+  # Signal to `hashify()` where to start rebuilding Merkel hashes
+  db.top.final.dirty.incl hike.root
+  db.top.final.dirty.incl wp.vid
 
   ok()
 

@@ -16,7 +16,7 @@
 {.push raises: [].}
 
 import
-  std/[sets, tables, typetraits],
+  std/[sets, typetraits],
   chronicles,
   eth/[common, trie/nibbles],
   results,
@@ -62,20 +62,14 @@ proc branchStillNeeded(vtx: VertexRef): Result[int,void] =
 
 # -----------
 
-proc nullifyKey(
-    db: AristoDbRef;                   # Database, top layer
-    vid: VertexID;                     # Vertex IDs to clear
-      ) =
-  # Register for void hash (to be recompiled)
-  db.layersResKey vid
-
 proc disposeOfVtx(
     db: AristoDbRef;                   # Database, top layer
+    root: VertexID;
     vid: VertexID;                     # Vertex IDs to clear
       ) =
   # Remove entry
-  db.layersResVtx vid
-  db.layersResKey vid
+  db.layersResVtx(root, vid)
+  db.layersResKey(root, vid)
   db.vidDispose vid                    # Recycle ID
 
 # ------------------------------------------------------------------------------
@@ -118,7 +112,7 @@ proc collapseBranch(
 
     of Extension:                                        # (2)
       # Merge `br` into ^3 (update `xt`)
-      db.disposeOfVtx xt.vid
+      db.disposeOfVtx(hike.root, xt.vid)
       xt.vid = par.vid
       xt.vtx.ePfx = par.vtx.ePfx & xt.vtx.ePfx
 
@@ -129,7 +123,7 @@ proc collapseBranch(
     # Replace `br` (use `xt` as-is)
     discard
 
-  db.layersPutVtx(xt.vid, xt.vtx)
+  db.layersPutVtx(hike.root, xt.vid, xt.vtx)
   ok()
 
 
@@ -157,7 +151,7 @@ proc collapseExt(
       vType: Extension,
       ePfx:  @[nibble].initNibbleRange.slice(1) & vtx.ePfx,
       eVid:  vtx.eVid))
-  db.disposeOfVtx br.vtx.bVid[nibble]                    # `vtx` is obsolete now
+  db.disposeOfVtx(hike.root, br.vtx.bVid[nibble])        # `vtx` is obsolete now
 
   if 2 < hike.legs.len:                                  # (1) or (2)
     let par = hike.legs[^3].wp
@@ -168,7 +162,7 @@ proc collapseExt(
 
     of Extension:                                        # (2)
       # Replace ^3 by `^3 & ^2 & vtx` (update `xt`)
-      db.disposeOfVtx xt.vid
+      db.disposeOfVtx(hike.root, xt.vid)
       xt.vid = par.vid
       xt.vtx.ePfx = par.vtx.ePfx & xt.vtx.ePfx
 
@@ -179,7 +173,7 @@ proc collapseExt(
     # Replace ^2 by `^2 & vtx` (use `xt` as-is)
     discard
 
-  db.layersPutVtx(xt.vid, xt.vtx)
+  db.layersPutVtx(hike.root, xt.vid, xt.vtx)
   ok()
 
 
@@ -210,30 +204,29 @@ proc collapseLeaf(
       vType: Leaf,
       lPfx:  @[nibble].initNibbleRange.slice(1) & vtx.lPfx,
       lData: vtx.lData))
-  db.nullifyKey lf.vid                                   # `vtx` was modified
+  db.layersResKey(hike.root, lf.vid)                     # `vtx` was modified
 
   if 2 < hike.legs.len:                                  # (1), (2), or (3)
-    db.disposeOfVtx br.vid                               # `br` is obsolete now
+    db.disposeOfVtx(hike.root, br.vid)                   # `br` is obsolete now
     # Merge `br` into the leaf `vtx` and unlink `br`.
     let par = hike.legs[^3].wp.dup                       # Writable vertex
     case par.vtx.vType:
     of Branch:                                           # (1)
       # Replace `vtx` by `^2 & vtx` (use `lf` as-is)
       par.vtx.bVid[hike.legs[^3].nibble] = lf.vid
-      db.layersPutVtx(par.vid, par.vtx)
-      db.layersPutVtx(lf.vid, lf.vtx)
+      db.layersPutVtx(hike.root, par.vid, par.vtx)
+      db.layersPutVtx(hike.root, lf.vid, lf.vtx)
       # Make sure that there is a cache enty in case the leaf was pulled from
       # the backend.
       let
         lfPath = hike.legsTo(hike.legs.len - 2, NibblesSeq) & lf.vtx.lPfx
         tag = lfPath.pathToTag.valueOr:
           return err((lf.vid,error))
-      db.top.final.lTab[LeafTie(root: hike.root, path: tag)] = lf.vid
       return ok()
 
     of Extension:                                        # (2) or (3)
       # Merge `^3` into `lf` but keep the leaf vertex ID unchanged. This
-      # avoids some `lTab[]` registry update.
+      # can avoid some extra updates.
       lf.vtx.lPfx = par.vtx.ePfx & lf.vtx.lPfx
 
       if 3 < hike.legs.len:                              # (2)
@@ -241,21 +234,20 @@ proc collapseLeaf(
         let gpr = hike.legs[^4].wp.dup                   # Writable vertex
         if gpr.vtx.vType != Branch:
           return err((gpr.vid,DelBranchExpexted))
-        db.disposeOfVtx par.vid                          # `par` is obsolete now
+        db.disposeOfVtx(hike.root, par.vid)              # `par` is obsolete now
         gpr.vtx.bVid[hike.legs[^4].nibble] = lf.vid
-        db.layersPutVtx(gpr.vid, gpr.vtx)
-        db.layersPutVtx(lf.vid, lf.vtx)
+        db.layersPutVtx(hike.root, gpr.vid, gpr.vtx)
+        db.layersPutVtx(hike.root, lf.vid, lf.vtx)
         # Make sure that there is a cache enty in case the leaf was pulled from
         # the backend.
         let
           lfPath = hike.legsTo(hike.legs.len - 3, NibblesSeq) & lf.vtx.lPfx
           tag = lfPath.pathToTag.valueOr:
             return err((lf.vid,error))
-        db.top.final.lTab[LeafTie(root: hike.root, path: tag)] = lf.vid
         return ok()
 
       # No grandparent, so ^3 is root vertex             # (3)
-      db.layersPutVtx(par.vid, lf.vtx)
+      db.layersPutVtx(hike.root, par.vid, lf.vtx)
       # Continue below
 
     of Leaf:
@@ -263,39 +255,18 @@ proc collapseLeaf(
 
   else:                                                  # (4)
     # Replace ^2 by `^2 & vtx` (use `lf` as-is)          # `br` is root vertex
-    db.nullifyKey br.vid                                 # root was changed
-    db.layersPutVtx(br.vid, lf.vtx)
+    db.layersResKey(hike.root, br.vid)                   # root was changed
+    db.layersPutVtx(hike.root, br.vid, lf.vtx)
     # Continue below
 
-  # Common part for setting up `lf` as root vertex       # Rest of (3) or (4)
-  let rc = lf.vtx.lPfx.pathToTag
-  if rc.isErr:
-    return err((br.vid,rc.error))
-  #
-  # No need to update the cache unless `lf` is present there. The leaf path
-  # as well as the value associated with the leaf path has not been changed.
-  let lfTie = LeafTie(root: hike.root, path: rc.value)
-  if db.lTab.hasKey lfTie:
-    db.top.final.lTab[lfTie] = lf.vid
-
   # Clean up stale leaf vertex which has moved to root position
-  db.disposeOfVtx lf.vid
-
-  # If some `Leaf` vertex was installed as root, there must be a an extra
-  # `LeafTie` lookup entry.
-  let rootVtx = db.getVtx hike.root
-  if rootVtx.isValid and
-     rootVtx != hike.legs[0].wp.vtx and
-     rootVtx.vType == Leaf:
-    let tag = rootVtx.lPfx.pathToTag.valueOr:
-      return err((hike.root,error))
-    db.top.final.lTab[LeafTie(root: hike.root, path: tag)] = hike.root
+  db.disposeOfVtx(hike.root, lf.vid)
 
   ok()
 
 # -------------------------
 
-proc delSubTree(
+proc delSubTreeImpl(
     db: AristoDbRef;                   # Database, top layer
     root: VertexID;                    # Root vertex
     accPath: PathID;                   # Needed for real storage tries
@@ -330,7 +301,10 @@ proc delSubTree(
 
   # Mark nodes deleted
   for vid in dispose:
-    db.disposeOfVtx vid
+    db.disposeOfVtx(root, vid)
+
+  # Squeze list of recycled vertex IDs
+  db.top.final.vGen = db.vGen.vidReorg()
   ok()
 
 
@@ -361,7 +335,7 @@ proc deleteImpl(
       if vid.isValid and db.getVtx(vid).isValid:
         return err((vid,DelDanglingStoTrie))
 
-  db.disposeOfVtx lf.vid
+  db.disposeOfVtx(hike.root, lf.vid)
 
   if 1 < hike.legs.len:
     # Get current `Branch` vertex `br`
@@ -374,14 +348,14 @@ proc deleteImpl(
 
     # Unlink child vertex from structural table
     br.vtx.bVid[hike.legs[^2].nibble] = VertexID(0)
-    db.layersPutVtx(br.vid, br.vtx)
+    db.layersPutVtx(hike.root, br.vid, br.vtx)
 
     # Clear all keys up to the root key
     for n in 0 .. hike.legs.len - 2:
       let vid = hike.legs[n].wp.vid
       if vid in db.top.final.pPrf:
         return err((vid, DelBranchLocked))
-      db.nullifyKey vid
+      db.layersResKey(hike.root, vid)
 
     let nibble = block:
       let rc = br.vtx.branchStillNeeded()
@@ -407,9 +381,8 @@ proc deleteImpl(
       of Leaf:
         ? db.collapseLeaf(hike, nibble.byte, nxt.vtx)
 
-  # Make sure that there is a cache entry so the hasher can label this path
-  # at a later state.
-  db.top.final.lTab[lty] = VertexID(0)
+  # Squeze list of recycled vertex IDs
+  db.top.final.vGen = db.vGen.vidReorg()
 
   ok(not db.getVtx(hike.root).isValid)
 
@@ -432,7 +405,7 @@ proc delete*(
   ## case, an account must exists. If there is payload of type `AccountData`,
   ## its `storageID` field must be unset or equal to the `hike.root` vertex ID.
   ##
-  db.delSubTree(root, accPath)
+  db.delSubTreeImpl(root, accPath)
 
 proc delete*(
     db: AristoDbRef;                   # Database, top layer
@@ -450,7 +423,6 @@ proc delete*(
   ##
   ## The return code is `true` iff the trie has become empty.
   ##
-  # Need path in order to remove it from `lTab[]`
   let lty = LeafTie(
     root: hike.root,
     path: ? hike.to(NibblesSeq).pathToTag().mapErr toVae)

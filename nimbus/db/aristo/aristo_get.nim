@@ -106,36 +106,6 @@ proc getKeyBE*(
 
 # ------------------
 
-proc getLeaf*(
-    db: AristoDbRef;
-    lty: LeafTie;
-      ): Result[VidVtxPair,AristoError] =
-  ## Get the leaf path from the cache layers and look up the database for a
-  ## leaf node.
-  let vid = db.lTab.getOrVoid lty
-  if not vid.isValid:
-    return err(GetLeafNotFound)
-
-  block body:
-    let vtx = db.layersGetVtx(vid).valueOr:
-      break body
-    if vtx.isValid:
-      return ok(VidVtxPair(vid: vid, vtx: vtx))
-
-  # The leaf node cannot be on the backend. It was produced by a `merge()`
-  # action. So this is a system problem.
-  err(GetLeafMissing)
-
-proc getLeafVtx*(db: AristoDbRef; lty: LeafTie): VertexRef =
-  ## Variant of `getLeaf()` returning `nil` on error (while ignoring the
-  ## detailed error type information.)
-  ##
-  let rc = db.getLeaf lty
-  if rc.isOk:
-    return rc.value.vtx
-
-# ------------------
-
 proc getVtxRc*(db: AristoDbRef; vid: VertexID): Result[VertexRef,AristoError] =
   ## Cascaded attempt to fetch a vertex from the cache layers or the backend.
   ##

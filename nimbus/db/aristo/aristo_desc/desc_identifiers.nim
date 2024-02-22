@@ -15,7 +15,7 @@
 {.push raises: [].}
 
 import
-  std/[sequtils, strutils, hashes],
+  std/[algorithm, sequtils, sets, strutils, hashes],
   eth/[common, trie/nibbles],
   stew/byteutils,
   chronicles,
@@ -101,7 +101,10 @@ func `<`*(a, b: VertexID): bool {.borrow.}
 func `<=`*(a, b: VertexID): bool {.borrow.}
 func `==`*(a, b: VertexID): bool {.borrow.}
 func cmp*(a, b: VertexID): int {.borrow.}
-func `$`*(a: VertexID): string {.borrow.}
+
+func `$`*(vid: VertexID): string =
+  "$" & (if vid == VertexID(0): "ø"
+         else: vid.uint64.toHex.strip(trailing=false,chars={'0'}).toLowerAscii)
 
 func `==`*(a: VertexID; b: static[uint]): bool = (a == VertexID(b))
 
@@ -323,7 +326,10 @@ func to*(lid: HashKey; T: type Hash256): T =
 func to*(key: Hash256; T: type HashKey): T =
   ## This is an efficient version of `HashKey.fromBytes(key.data).value`, not
   ## to be confused with `digestTo(HashKey)`.
-  T(isHash: true, key: key)
+  if key == EMPTY_ROOT_HASH:
+    T()
+  else:
+    T(isHash: true, key: key)
 
 func to*(n: SomeUnsignedInt|UInt256; T: type PathID): T =
   ## Representation of a scalar as `PathID` (preserving full information)
@@ -373,6 +379,16 @@ func hash*(a: HashKey): Hash =
 # ------------------------------------------------------------------------------
 # Miscellaneous helpers
 # ------------------------------------------------------------------------------
+
+func `$`*(vids: seq[VertexID]): string =
+  "[" & vids.toSeq.mapIt(
+    "$" & it.uint64.toHex.strip(trailing=false,chars={'0'})
+    ).join(",") & "]"
+
+func `$`*(vids: HashSet[VertexID]): string =
+  "{" & vids.toSeq.sorted.mapIt(
+    "$" & it.uint64.toHex.strip(trailing=false,chars={'0'})
+    ).join(",") & "}"
 
 func `$`*(key: Hash256): string =
   let w = UInt256.fromBytesBE key.data

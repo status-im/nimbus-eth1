@@ -315,12 +315,18 @@ proc testVidRecycleLists*(noisy = true; seed = 42): bool =
   # Recycling and re-org tests
   func toVQ(a: seq[int]): seq[VertexID] = a.mapIt(VertexID(LEAST_FREE_VID+it))
 
-  xCheck @[8, 7,  3, 4, 5,  9]    .toVQ.vidReorg == @[5, 4, 3,  7] .toVQ
-  xCheck @[8, 7, 6,  3, 4, 5,  9] .toVQ.vidReorg == @[3]           .toVQ
-  xCheck @[5, 4, 3,  7]           .toVQ.vidReorg == @[5, 4, 3,  7] .toVQ
-  xCheck @[5]                     .toVQ.vidReorg == @[5]           .toVQ
-  xCheck @[3, 5]                  .toVQ.vidReorg == @[3, 5]        .toVQ
-  xCheck @[4, 5]                  .toVQ.vidReorg == @[4]           .toVQ
+  # Heuristic prevents from re-org
+  xCheck @[8, 7, 3, 4, 5, 9]    .toVQ.vidReorg == @[8, 7, 3, 4, 5, 9]   .toVQ
+  xCheck @[8, 7, 6, 3, 4, 5, 9] .toVQ.vidReorg == @[8, 7, 6, 3, 4, 5, 9].toVQ
+  xCheck @[5, 4, 3, 7]          .toVQ.vidReorg == @[5, 4, 3, 7]         .toVQ
+  xCheck @[5]                   .toVQ.vidReorg == @[5]                  .toVQ
+  xCheck @[3, 5]                .toVQ.vidReorg == @[3, 5]               .toVQ
+  xCheck @[4, 5]                .toVQ.vidReorg == @[4, 5]               .toVQ
+
+  # performing re-org
+  xCheck @[5, 7, 3, 4, 8, 9]    .toVQ.vidReorg == @[5, 4, 3, 7] .toVQ
+  xCheck @[5, 7, 6, 3, 4, 8, 9] .toVQ.vidReorg == @[3]          .toVQ
+  xCheck @[3, 4, 5, 7]          .toVQ.vidReorg == @[5, 4, 3, 7] .toVQ
 
   xCheck newSeq[VertexID](0).vidReorg().len == 0
 
@@ -492,8 +498,6 @@ proc testShortKeys*(
         "\n    k=", k.toHex, " v=", v.toHex,
         "\n    r=", r.pp(sig),
         "\n    ", sig.pp(),
-        "\n",
-        "\n    pAmk=", sig.db.layersWalkYek.toSeq.toTable.pp(sig.db),
         "\n"
       let w = sig.merkleSignCommit().value
       gossip.say "*** testShortkeys (2)", "n=", n, " inx=", inx,
@@ -501,9 +505,6 @@ proc testShortKeys*(
         "\n    r=", r.pp(sig),
         "\n    R=", w.pp(sig),
         "\n    ", sig.pp(),
-        "\n",
-        "\n    pAmk=", sig.db.layersWalkYek.toSeq.toTable.pp(sig.db),
-        "\n",
         "\n    ----------------",
         "\n"
       let rc = sig.db.check

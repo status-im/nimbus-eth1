@@ -142,7 +142,7 @@ proc forkTx*(
     level: 1)
 
   if not dontHashify:
-    discard txClone.hashify().valueOr:
+    txClone.hashify().isOkOr:
       discard txClone.forget()
       return err(error[1])
 
@@ -166,7 +166,7 @@ proc forkTop*(
     dbClone.backend = db.backend
 
     if not dontHashify:
-      discard dbClone.hashify().valueOr:
+      dbClone.hashify().isOkOr:
         discard dbClone.forget()
         return err(error[1])
     return ok(dbClone)
@@ -249,14 +249,13 @@ proc commit*(
   ## previous transaction is returned if there was any.
   ##
   let db = ? tx.getDbDescFromTopTx()
-  discard db.hashify().valueOr:
+  db.hashify().isOkOr:
     return err(error[1])
 
   # Pop layer from stack and merge database top layer onto it
   let merged = block:
     if db.top.delta.sTab.len == 0 and
-       db.top.delta.kMap.len == 0 and
-       db.top.delta.pAmk.len == 0:
+       db.top.delta.kMap.len == 0:
       # Avoid `layersMergeOnto()`
       db.top.delta = db.stack[^1].delta
       db.stack.setLen(db.stack.len-1)
@@ -264,7 +263,7 @@ proc commit*(
     else:
       let layer = db.stack[^1]
       db.stack.setLen(db.stack.len-1)
-      db.top.layersMergeOnto(layer[], db.stack)
+      db.top.layersMergeOnto layer[]
       layer
 
   # Install `merged` stack top layer and update stack
@@ -293,7 +292,7 @@ proc collapse*(
 
   if commit:
     # For commit, hashify the current layer if requested and install it
-    discard db.hashify().valueOr:
+    db.hashify().isOkOr:
       return err(error[1])
 
   db.top.txUid = 0
@@ -332,7 +331,7 @@ proc stow*(
   if persistent and not db.canResolveBackendFilter():
     return err(TxBackendNotWritable)
 
-  discard db.hashify().valueOr:
+  db.hashify().isOkOr:
     return err(error[1])
 
   let fwd = db.fwdFilter(db.top, chunkedMpt).valueOr:

@@ -70,12 +70,21 @@ proc vidDispose*(db: AristoDbRef; vid: VertexID) =
         db.top.final.vGen[^1] = vid
         db.top.final.vGen.add topID
 
+
 proc vidReorg*(vGen: seq[VertexID]): seq[VertexID] =
   ## Return a compacted version of the argument vertex ID generator state
   ## `vGen`. The function removes redundant items from the recycle queue and
   ## orders it in a way so that smaller `VertexID` numbers are re-used first.
   ##
-  if 1 < vGen.len:
+  # Apply heuristic test to avoid unnecessary sorting
+  var reOrgOk = false
+  if 2 < vGen.len and vGen[0] < vGen[^2]:
+    if vGen.len < 10:
+      reOrgOk = true
+    elif vGen[0] < vGen[1] and vGen[^3] < vGen[^2]:
+      reOrgOk = true
+
+  if reOrgOk:
     let lst = vGen.mapIt(uint64(it)).sorted(Descending).mapIt(VertexID(it))
     for n in 0 .. lst.len-2:
       if lst[n].uint64 != lst[n+1].uint64 + 1:

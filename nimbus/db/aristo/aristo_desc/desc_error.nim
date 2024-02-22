@@ -98,15 +98,17 @@ type
     MergeAssemblyFailed # Ooops, internal error
 
     MergeHashKeyInvalid
-    MergeHashKeyCachedAlready
     MergeHashKeyDiffersFromCached
     MergeHashKeyRevLookUpGarbled
     MergeRootVidInvalid
     MergeRootKeyInvalid
+    MergeProofInitMissing
     MergeRevVidMustHaveBeenCached
     MergeNodeVtxDiffersFromExisting
     MergeRootKeyDiffersForVid
     MergeNodeVtxDuplicates
+    MergeRootKeyMissing
+    MergeRootArgsIncomplete
 
     # Utils
     UtilsAccPathMissing
@@ -116,16 +118,12 @@ type
     UtilsStoRootMissing
 
     # Update `Merkle` hashes `hashify()`
-    HashifyExistingHashMismatch
-    HashifyNodeUnresolved
-    HashifyRootHashMismatch
-    HashifyRootNodeUnresolved
+    HashifyVtxUnresolved
+    HashifyRootVtxUnresolved
+    HashifyProofHashMismatch
 
     # Cache checker `checkCache()`
     CheckStkKeyStrayZeroEntry
-    CheckStkRevKeyMismatch
-    CheckStkRevKeyMissing
-    CheckStkVtxCountMismatch
     CheckStkVtxIncomplete
     CheckStkVtxKeyMismatch
     CheckStkVtxKeyMissing
@@ -134,8 +132,6 @@ type
     CheckRlxVtxIncomplete
     CheckRlxVtxKeyMissing
     CheckRlxVtxKeyMismatch
-    CheckRlxRevKeyMissing
-    CheckRlxRevKeyMismatch
 
     CheckAnyVtxEmptyKeyMissing
     CheckAnyVtxEmptyKeyExpected
@@ -143,9 +139,6 @@ type
     CheckAnyVtxBranchLinksMissing
     CheckAnyVtxExtPfxMissing
     CheckAnyVtxLockWithoutKey
-    CheckAnyRevVtxMissing
-    CheckAnyRevVtxDup
-    CheckAnyRevCountMismatch
 
     # Backend structural check `checkBE()`
     CheckBeVtxInvalid

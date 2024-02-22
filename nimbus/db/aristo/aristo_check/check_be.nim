@@ -16,7 +16,7 @@ import
   stew/interval_set,
   ../../aristo,
   ../aristo_walk/persistent,
-  ".."/[aristo_desc, aristo_get, aristo_layers, aristo_vid]
+  ".."/[aristo_desc, aristo_get, aristo_layers]
 
 const
   Vid2 = @[VertexID(LEAST_FREE_VID)].toHashSet
@@ -76,6 +76,17 @@ proc toNodeBE(
       return ok node
     return err(vid)
 
+proc vidReorgAlways(vGen: seq[VertexID]): seq[VertexID] =
+  ## See `vidReorg()`, this one always sorts and optimises
+  ##
+  if 1 < vGen.len:
+    let lst = vGen.mapIt(uint64(it)).sorted(Descending).mapIt(VertexID(it))
+    for n in 0 .. lst.len-2:
+      if lst[n].uint64 != lst[n+1].uint64 + 1:
+        return lst[n+1 .. lst.len-1] & @[lst[n]]
+    return @[lst[^1]]
+  vGen
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -134,7 +145,7 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
     let vGen = block:
       let rc = db.getIdgBE()
       if rc.isOk:
-        rc.value.toHashSet
+        rc.value.vidReorgAlways.toHashSet
       elif rc.error == GetIdgNotFound:
         EmptyVidSeq.toHashSet
       else:
@@ -149,7 +160,7 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
 
   # Check top layer cache against backend
   if cache:
-    if db.dirty:
+    if 0 < db.dirty.len:
       return err((VertexID(0),CheckBeCacheIsDirty))
 
     # Check structural table
@@ -202,7 +213,7 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
 
     # Check vGen
     let
-      vGen = db.vGen.vidReorg.toHashSet
+      vGen = db.vGen.vidReorgAlways.toHashSet
       vGenExpected = vids.to(HashSet[VertexID])
       delta = vGenExpected -+- vGen # symmetric difference
     if 0 < delta.len:
@@ -214,8 +225,7 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
         discard
       else:
         let delta = delta.toSeq
-        if delta.len != 1 or
-           delta[0] != VertexID(1) or VertexID(1) in vGen:
+        if delta.len != 1 or delta[0] != VertexID(1) or VertexID(1) in vGen:
           return err((delta.sorted[^1],CheckBeCacheGarbledVGen))
 
   ok()
