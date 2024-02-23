@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2023 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -130,7 +130,7 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
     fork    = com.toEVMFork(ctx.header.forkDeterminationInfo)
     stream  = newFileStream(stderr)
     tracer  = if conf.jsonEnabled:
-                newJSonTracer(stream, ctx.tracerFlags, conf.pretty)
+                newJsonTracer(stream, ctx.tracerFlags, conf.pretty)
               else:
                 JsonTracer(nil)
 
@@ -185,13 +185,13 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
     echo "FATAL: ", ex.msg
     quit(QuitFailure)
 
-proc toTracerFlags(conf: Stateconf): set[TracerFlags] =
+proc toTracerFlags(conf: StateConf): set[TracerFlags] =
   result = {
     TracerFlags.DisableStateDiff
   }
 
   if conf.disableMemory    : result.incl TracerFlags.DisableMemory
-  if conf.disablestack     : result.incl TracerFlags.DisableStack
+  if conf.disableStack     : result.incl TracerFlags.DisableStack
   if conf.disableReturnData: result.incl TracerFlags.DisableReturnData
   if conf.disableStorage   : result.incl TracerFlags.DisableStorage
 

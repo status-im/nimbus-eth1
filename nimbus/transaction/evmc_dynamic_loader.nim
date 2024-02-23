@@ -14,7 +14,7 @@ import
   evmc/evmc, ../config
 
 # The built-in Nimbus EVM, via imported C function.
-proc evmc_create_nimbus_evm(): ptr evmc_vm {.cdecl, importc.}
+proc evmc_create_nimbus_evm(): ptr evmc_vm {.cdecl, importc, raises: [].}
 
 # Import this module to link in the definition of `evmc_create_nimbus_evm`.
 # Nim thinks the module is unused because the function is only called via
@@ -83,21 +83,14 @@ proc evmcLoadVMGetCreateFn(): (evmc_create_vm_name_fn, string) =
 
   return (cast[evmc_create_vm_name_fn](sym), path)
 
-proc evmcLoadVMShowDetail(): ptr evmc_vm {.raises: [CatchableError].} =
+proc evmcLoadVMShowDetail(): ptr evmc_vm {.raises: [].} =
   let (vmCreate, vmDescription) = evmcLoadVMGetCreateFn()
   if vmCreate.isNil:
     return nil
 
   var vm: ptr evmc_vm
-  try:
-    {.gcsafe.}:
-      vm = vmCreate()
-  except CatchableError as e:
-    raise e
-  except Exception as e:
-    {.warning: "Kludge(BareExcept): `evmc_create_nimbus_evm()` in vendor package needs to be double checked and updated".}
-    raiseAssert "Ooops evmcLoadVMShowDetail(): name=" &
-      $e.name & " msg=" & e.msg
+  {.gcsafe.}:
+    vm = vmCreate()
 
   if vm.isNil:
     warn "The loaded EVM did not create a VM when requested",

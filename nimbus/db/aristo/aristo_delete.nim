@@ -220,8 +220,10 @@ proc collapseLeaf(
       # the backend.
       let
         lfPath = hike.legsTo(hike.legs.len - 2, NibblesSeq) & lf.vtx.lPfx
-        tag = lfPath.pathToTag.valueOr:
-          return err((lf.vid,error))
+
+      lfPath.pathToTag.isOkOr:
+        return err((lf.vid,error))
+
       return ok()
 
     of Extension:                                        # (2) or (3)
@@ -242,8 +244,10 @@ proc collapseLeaf(
         # the backend.
         let
           lfPath = hike.legsTo(hike.legs.len - 3, NibblesSeq) & lf.vtx.lPfx
-          tag = lfPath.pathToTag.valueOr:
+
+        lfPath.pathToTag.isOKOr:
             return err((lf.vid,error))
+
         return ok()
 
       # No grandparent, so ^3 is root vertex             # (3)

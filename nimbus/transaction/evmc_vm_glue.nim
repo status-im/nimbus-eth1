@@ -1,6 +1,6 @@
 # Nimbus - Binary compatibility on the VM side of the EVMC API interface
 #
-# Copyright (c) 2019-2021 Status Research & Development GmbH
+# Copyright (c) 2019-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -19,7 +19,7 @@ proc evmcExecute(vm: ptr evmc_vm, hostInterface: ptr evmc_host_interface,
                  hostContext: evmc_host_context, rev: evmc_revision,
                  msg: var evmc_message, code: ptr byte,
                  code_size: csize_t): evmc_result
-    {.cdecl, raises: [CatchableError].} =
+    {.cdecl, raises: [].} =
   # TODO: Obviously we are cheating here at the moment, knowing the caller type.
   # TODO: This lets the host read extra results needed for tests, but it
   # means the Nimbus EVM cannot be used by a non-Nimbus host, yet.
@@ -38,10 +38,13 @@ proc evmcExecute(vm: ptr evmc_vm, hostInterface: ptr evmc_host_interface,
   #  host.computation = c
 
   c.host.init(cast[ptr nimbus_host_interface](hostInterface), hostContext)
-  if c.sysCall:
-    execSysCall(c)
-  else:
-    execComputation(c)
+  try:
+    if c.sysCall:
+      execSysCall(c)
+    else:
+      execComputation(c)
+  except CatchableError as exc:
+    c.setError(exc.msg)
 
   # When output size is zero, output data pointer may be null.
   var output_data: ptr byte

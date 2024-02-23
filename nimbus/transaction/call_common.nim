@@ -224,12 +224,7 @@ when defined(evmc_enabled):
                                      callResult.output_size.int))
     if not callResult.release.isNil:
       {.gcsafe.}:
-        try:
-          callResult.release(callResult)
-        except Exception as e:
-          {.warning: "Kludge(BareExcept): `evmc_release_fn` in vendor package needs to be updated"}
-          raiseAssert "Ooops evmcExecComputation(): name=" &
-            $e.name & " msg=" & e.msg
+        callResult.release(callResult)
 
 # FIXME-awkwardFactoring: the factoring out of the pre and
 # post parts feels awkward to me, but for now I'd really like
