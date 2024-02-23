@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -24,5 +24,21 @@ import
   ./core_db/memory_only
 export
   memory_only
+
+# Default database backend selection. Note that an `Aristo` type backend
+# should run on a `LedgerCache` type ledger (will not work with
+# `LegacyAccountsCache`.) The `common` module automatically sets that up
+# (unless overridden.) Practically, these constants are mainly used for
+# setting up DB agnostic unit/integration tests.
+#
+# Uncomment the below symbols in order to activate the `Aristo` database.
+#const DefaultDbMemory* = AristoDbMemory
+#const DefaultDbPersistent* = AristoDbRocks
+
+# Catch undefined symbols and set them to the legacy database.
+when not declared(DefaultDbMemory):
+  const DefaultDbMemory* = LegacyDbMemory
+when not declared(DefaultDbPersistent):
+  const DefaultDbPersistent* = LegacyDbPersistent
 
 # End
