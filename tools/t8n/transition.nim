@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2023 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -163,7 +163,7 @@ proc traceToFileStream(path: string, txIndex: int): Stream =
     fName = "$1/$2-$3.jsonl" % [file.dir, file.name, $txIndex]
   newFileStream(fName, fmWrite)
 
-proc setupTrace(conf: T8NConf, txIndex: int, txHash: Hash256, vmState: BaseVMstate) =
+proc setupTrace(conf: T8NConf, txIndex: int, txHash: Hash256, vmState: BaseVMState) =
   var tracerFlags = {
     TracerFlags.DisableMemory,
     TracerFlags.DisableStorage,
@@ -187,7 +187,7 @@ proc setupTrace(conf: T8NConf, txIndex: int, txHash: Hash256, vmState: BaseVMsta
                  defaultTraceStream(conf, txIndex, txHash)
   vmState.tracer = newJsonTracer(stream, tracerFlags, false)
 
-proc closeTrace(vmState: BaseVMstate) =
+proc closeTrace(vmState: BaseVMState) =
   let tracer = JsonTracer(vmState.tracer)
   if tracer.isNil.not:
     tracer.close()

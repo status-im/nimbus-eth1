@@ -141,16 +141,11 @@ proc evmcExecComputation*(host: TransactionHost): EvmcResult
   # TODO: But wait: Why does the Nim EVMC test program compile fine without
   # any `gcsafe`, even with `--threads:on`?
   {.gcsafe.}:
-    try:
-      result = vm.execute(vm, hostInterface.unsafeAddr, hostContext,
+    result = vm.execute(vm, hostInterface.unsafeAddr, hostContext,
                           evmc_revision(host.vmState.fork.ord), host.msg,
                           if host.code.len > 0: host.code[0].unsafeAddr
                           else: nil,
                           host.code.len.csize_t)
-    except Exception as e:
-      {.warning: "Kludge(BareExcept): `evmc_execute_fn` in vendor package needs to be updated".}
-      raiseAssert "Ooops evmcExecComputation(): name=" &
-        $e.name & " msg=" & e.msg
 
   host.showCallReturn(result)
 
