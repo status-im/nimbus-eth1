@@ -10,8 +10,7 @@
 import
   std/[sequtils, strutils, os, macros],
   stew/results,
-  chronos/timer#,
-  # eth/common/eth_types
+  chronos/timer
 
 proc loadBootstrapNodes(
     path: string): seq[string] {.raises: [IOError].} =
