@@ -187,6 +187,11 @@ proc recursiveGossipAccountTrieNode(
         nibbles = decodedKey.accountTrieNodeKey.path.unpackNibbles()
         proof = decodedValue.proof
 
+      # When nibbles is empty this means the root node was received. Recursive
+      # gossiping is finished.
+      if nibbles.len() == 0:
+        return
+
       discard nibbles.pop()
       discard (distinctBase proof).pop()
       let
