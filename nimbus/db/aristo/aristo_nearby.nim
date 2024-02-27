@@ -411,7 +411,7 @@ proc right*(
     root: lty.root,
     path: ? lty.nearbyNextLeafTie(db, 64, moveRight=true))
 
-iterator right*(
+iterator rightPairs*(
     db: AristoDbRef;                    # Database layer
     start = low(LeafTie);               # Before or at first value
       ): (LeafTie,PayloadRef) =
@@ -472,7 +472,7 @@ proc left*(
     root: lty.root,
     path: ? lty.nearbyNextLeafTie(db, 64, moveRight=false))
 
-iterator left*(
+iterator leftPairs*(
     db: AristoDbRef;                    # Database layer
     start = high(LeafTie);              # Before or at first value
       ): (LeafTie,PayloadRef) =

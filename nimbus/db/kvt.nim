@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -13,10 +13,17 @@
 ##
 {.push raises: [].}
 
-import kvt/[
-  kvt_constants, kvt_init, kvt_tx, kvt_utils, kvt_walk]
+import
+  kvt/[kvt_api, kvt_constants]
 export
-  kvt_constants, kvt_init, kvt_tx, kvt_utils, kvt_walk
+  kvt_api, kvt_constants
+
+import
+  kvt/kvt_init
+export
+  MemBackendRef,
+  VoidBackendRef,
+  init
 
 import
   kvt/kvt_desc

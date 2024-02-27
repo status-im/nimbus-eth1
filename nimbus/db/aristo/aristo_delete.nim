@@ -385,16 +385,17 @@ proc deleteImpl(
       of Leaf:
         ? db.collapseLeaf(hike, nibble.byte, nxt.vtx)
 
+  let emptySubTreeOk = not db.getVtx(hike.root).isValid
+
   # Squeze list of recycled vertex IDs
   db.top.final.vGen = db.vGen.vidReorg()
-
-  ok(not db.getVtx(hike.root).isValid)
+  ok(emptySubTreeOk)
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc delete*(
+proc delTree*(
     db: AristoDbRef;                   # Database, top layer
     root: VertexID;                    # Root vertex
     accPath: PathID;                   # Needed for real storage tries

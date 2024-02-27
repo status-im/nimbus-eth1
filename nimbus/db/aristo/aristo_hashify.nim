@@ -309,8 +309,7 @@ proc hashify*(
     db: AristoDbRef;                   # Database, top layer
       ): Result[void,(VertexID,AristoError)] =
   ## Add keys to the  `Patricia Trie` so that it becomes a `Merkle Patricia
-  ## Tree`. If successful, the function returns the keys (aka Merkle hash) of
-  ## the root vertices.
+  ## Tree`.
   ##
   if 0 < db.dirty.len:
     # Set up widh-first traversal schedule

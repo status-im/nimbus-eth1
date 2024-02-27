@@ -17,9 +17,17 @@ import
   unittest2,
   stew/endians2,
   ../../nimbus/db/aristo/[
-    aristo_check, aristo_debug, aristo_delete, aristo_desc, aristo_get,
-    aristo_hike, aristo_layers, aristo_merge],
-  ../../nimbus/db/[aristo, aristo/aristo_init/persistent],
+    aristo_check,
+    aristo_debug,
+    aristo_delete,
+    aristo_desc,
+    aristo_get,
+    aristo_hike,
+    aristo_init/persistent,
+    aristo_layers,
+    aristo_merge,
+    aristo_nearby,
+    aristo_tx],
   ../replay/xcheck,
   ./test_helpers
 
@@ -245,7 +253,7 @@ proc fwdWalkVerify(
     leftOver = leftOver
     last = LeafTie()
     n = 0
-  for (key,_) in db.right low(LeafTie,root):
+  for (key,_) in db.rightPairs low(LeafTie,root):
     xCheck key in leftOver:
       noisy.say "*** fwdWalkVerify", "id=", n + (nLeafs + 1) * debugID
     leftOver.excl key
@@ -277,7 +285,7 @@ proc revWalkVerify(
     leftOver = leftOver
     last = LeafTie()
     n = 0
-  for (key,_) in db.left high(LeafTie,root):
+  for (key,_) in db.leftPairs high(LeafTie,root):
     xCheck key in leftOver:
       noisy.say "*** revWalkVerify", " id=", n + (nLeafs + 1) * debugID
     leftOver.excl key
@@ -302,7 +310,7 @@ proc mergeRlpData*(
     rlpData: openArray[byte];          # RLP encoded payload data
       ): Result[void,AristoError] =
   block body:
-    discard db.merge(
+    discard db.mergeLeaf(
       LeafTiePayload(
         leafTie: LeafTie(
           root:    VertexID(1),
@@ -357,7 +365,7 @@ proc testTxMergeAndDeleteOneByOne*(
       # e.g. lst.setLen(min(5,lst.len))
       lst
     for i,leaf in kvpLeafs:
-      let rc = db.merge leaf
+      let rc = db.mergeLeaf leaf
       xCheckRc rc.error == 0
 
     # List of all leaf entries that should be on the database
@@ -462,7 +470,7 @@ proc testTxMergeAndDeleteSubTree*(
       # e.g. lst.setLen(min(5,lst.len))
       lst
     for i,leaf in kvpLeafs:
-      let rc = db.merge leaf
+      let rc = db.mergeLeaf leaf
       xCheckRc rc.error == 0
 
     # List of all leaf entries that should be on the database
@@ -485,7 +493,7 @@ proc testTxMergeAndDeleteSubTree*(
           ""
     # Delete sub-tree
     block:
-      let rc = db.delete(VertexID(1), VOID_PATH_ID)
+      let rc = db.delTree(VertexID(1), VOID_PATH_ID)
       xCheckRc rc.error == (0,0):
         noisy.say "***", "del(2)",
           " n=", n, "/", list.len,

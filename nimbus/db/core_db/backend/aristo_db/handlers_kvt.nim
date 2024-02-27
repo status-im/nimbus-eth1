@@ -15,7 +15,7 @@ import
   eth/common,
   results,
   ../../../kvt,
-  ../../../kvt/kvt_desc,
+  ../../../kvt/[kvt_desc, kvt_init, kvt_utils, kvt_tx],
   ../../base,
   ../../base/base_desc,
   ./common_desc

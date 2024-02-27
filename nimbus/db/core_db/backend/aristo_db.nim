@@ -13,8 +13,12 @@
 import
   eth/common,
   results,
-  "../.."/[aristo, aristo/aristo_desc, aristo/aristo_walk],
-  "../.."/[kvt, kvt/kvt_desc, kvt/kvt_init/memory_only],
+  ../../aristo,
+  ../../aristo/[
+    aristo_desc, aristo_nearby, aristo_path, aristo_tx, aristo_serialise,
+    aristo_walk],
+  ../../kvt,
+  ../../kvt/[kvt_desc, kvt_init, kvt_tx, kvt_walk],
   ".."/[base, base/base_desc],
   ./aristo_db/[common_desc, handlers_aristo, handlers_kvt]
 
@@ -268,7 +272,7 @@ iterator aristoKvtPairs*(dsc: CoreDxKvtRef): (Blob,Blob) {.rlpRaise.} =
 
 iterator aristoMptPairs*(dsc: CoreDxMptRef): (Blob,Blob) {.noRaise.} =
   let mpt = dsc.to(AristoDbRef)
-  for (k,v) in mpt.right LeafTie(root: dsc.rootID):
+  for (k,v) in mpt.rightPairs LeafTie(root: dsc.rootID):
     yield (k.path.pathAsBlob, mpt.serialise(v).valueOr(EmptyBlob))
 
 iterator aristoReplicateMem*(dsc: CoreDxMptRef): (Blob,Blob) {.rlpRaise.} =

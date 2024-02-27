@@ -17,11 +17,19 @@ import
   results,
   unittest2,
   ../../nimbus/db/aristo/[
-    aristo_check, aristo_debug, aristo_desc, aristo_filter, aristo_get,
-    aristo_layers, aristo_merge, aristo_persistent, aristo_blobify],
-  ../../nimbus/db/aristo,
-  ../../nimbus/db/aristo/aristo_desc/desc_backend,
-  ../../nimbus/db/aristo/aristo_filter/[filter_fifos, filter_scheduler],
+    aristo_blobify,
+    aristo_check,
+    aristo_debug,
+    aristo_desc,
+    aristo_desc/desc_backend,
+    aristo_filter,
+    aristo_filter/filter_fifos,
+    aristo_filter/filter_scheduler,
+    aristo_get,
+    aristo_layers,
+    aristo_merge,
+    aristo_persistent,
+    aristo_tx],
   ../replay/xcheck,
   ./test_helpers
 
@@ -765,7 +773,7 @@ proc testFilterBacklog*(
     if sampleSize < n:
       break
     block:
-      let rc = db.merge w
+      let rc = db.mergeLeaf w
       xCheckRc rc.error == 0
     block:
       let rc = db.stow(persistent=true)

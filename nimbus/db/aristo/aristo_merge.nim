@@ -549,7 +549,7 @@ proc mergeNodeImpl(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc merge*(
+proc mergePayload*(
     db: AristoDbRef;                   # Database, top layer
     leafTie: LeafTie;                  # Leaf item to add to the database
     payload: PayloadRef;               # Payload value
@@ -612,27 +612,17 @@ proc merge*(
   ok okHike
 
 
-proc merge*(
+proc mergePayload*(
     db: AristoDbRef;                   # Database, top layer
     root: VertexID;                    # MPT state root
     path: openArray[byte];             # Even nibbled byte path
     payload: PayloadRef;               # Payload value
-    accPath: PathID;                   # Needed for accounts payload
+    accPath = VOID_PATH_ID;            # Needed for accounts payload
       ): Result[bool,AristoError] =
   ## Variant of `merge()` for `(root,path)` arguments instead of a `LeafTie`
   ## object.
   let lty = LeafTie(root: root, path: ? path.pathToTag)
-  db.merge(lty, payload, accPath).to(typeof result)
-
-proc merge*(
-    db: AristoDbRef;                   # Database, top layer
-    path: openArray[byte];             # Even nibbled byte path
-    payload: PayloadRef;               # Payload value
-      ): Result[bool,AristoError] =
-  ## Variant of `merge()` for `(VertexID(1),path)` arguments instead of a
-  ## `LeafTie` object.
-  let lty = LeafTie(root: VertexID(1), path: ? path.pathToTag)
-  db.merge(lty, payload, VOID_PATH_ID).to(typeof result)
+  db.mergePayload(lty, payload, accPath).to(typeof result)
 
 
 proc merge*(
@@ -645,9 +635,9 @@ proc merge*(
   ## Variant of `merge()` for `(root,path)` arguments instead of a `LeafTie`.
   ## The argument `data` is stored as-is as a `RawData` payload value.
   let pyl = PayloadRef(pType: RawData, rawBlob: @data)
-  db.merge(root, path, pyl, accPath)
+  db.mergePayload(root, path, pyl, accPath)
 
-proc merge*(
+proc mergeAccount*(
     db: AristoDbRef;                   # Database, top layer
     path: openArray[byte];             # Leaf item to add to the database
     data: openArray[byte];             # Raw data payload value
@@ -656,26 +646,17 @@ proc merge*(
   ## `LeafTie`. The argument `data` is stored as-is as a `RawData` payload
   ## value.
   let pyl = PayloadRef(pType: RawData, rawBlob: @data)
-  db.merge(VertexID(1), path, pyl, VOID_PATH_ID)
+  db.mergePayload(VertexID(1), path, pyl, VOID_PATH_ID)
 
 
-proc merge*(
+proc mergeLeaf*(
     db: AristoDbRef;                   # Database, top layer
     leaf: LeafTiePayload;              # Leaf item to add to the database
-    accPath: PathID;                   # Needed for accounts payload
+    accPath = VOID_PATH_ID;            # Needed for accounts payload
       ): Result[bool,AristoError] =
   ## Variant of `merge()`. This function will not indicate if the leaf
   ## was cached, already.
-  db.merge(leaf.leafTie, leaf.payload, accPath).to(typeof result)
-
-
-proc merge*(
-    db: AristoDbRef;                   # Database, top layer
-    leaf: LeafTiePayload;              # Leaf item to add to the database
-      ): Result[bool,AristoError] =
-  ## Variant of `merge()`, shortcut for `db.merge(leaf, VOID_PATH_ID)`. Note
-  ## that this function fails unless `leaf.root == VertexID(1)`.
-  db.merge(leaf.leafTie, leaf.payload, VOID_PATH_ID).to(typeof result)
+  db.mergePayload(leaf.leafTie, leaf.payload, accPath).to(typeof result)
 
 # ---------------------
 

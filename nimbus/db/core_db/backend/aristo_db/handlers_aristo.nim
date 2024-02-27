@@ -17,7 +17,10 @@ import
   stew/byteutils,
   results,
   ../../../aristo,
-  ../../../aristo/[aristo_desc, aristo_hike, aristo_vid],
+  ../../../aristo/[
+    aristo_desc, aristo_delete, aristo_fetch, aristo_get, aristo_hashify,
+    aristo_hike, aristo_init, aristo_merge, aristo_serialise, aristo_tx,
+    aristo_vid],
   ../../base,
   ../../base/base_desc,
   ./common_desc
@@ -572,7 +575,7 @@ proc accMethods(cAcc: AristoChildDbRef): CoreDbAccFns =
       mpt = cAcc.mpt
       key = acc.address.keccakHash.data
       val = acc.toPayloadRef()
-      rc = mpt.merge(cAcc.root, key, val, VOID_PATH_ID)
+      rc = mpt.mergePayload(cAcc.root, key, val)
     if rc.isErr:
       return err(rc.error.toError(db, info))
     ok()
@@ -609,7 +612,7 @@ proc accMethods(cAcc: AristoChildDbRef): CoreDbAccFns =
     if pyl.pType == AccountData:
       let stoID = pyl.account.storageID
       if stoID.isValid:
-        let rc = mpt.delete(stoID, address.to(PathID))
+        let rc = mpt.delTree(stoID, address.to(PathID))
         if rc.isErr:
           return err(rc.error.toError(db, info))
     ok()
@@ -915,7 +918,7 @@ proc newMptHandler*(
     # beween `VertexID(2) ..< LEAST_FREE_VID`. At the moment, this applies to
     # `GenericTrie` type sub-tries somehow emulating the behaviour of a new
     # empty MPT on the legacy database (handle with care, though.)
-    let rc = trie.ctx.mpt.delete(trie.root, VOID_PATH_ID)
+    let rc = trie.ctx.mpt.delTree(trie.root, VOID_PATH_ID)
     if rc.isErr:
       return err(rc.error.toError(db, info, AutoFlushFailed))
     trie.reset = false

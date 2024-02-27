@@ -47,7 +47,7 @@ proc fetchPayload*(
     key: LeafTie;
       ): Result[PayloadRef,(VertexID,AristoError)] =
   ## Cascaded attempt to traverse the `Aristo Trie` and fetch the value of a
-  ## leaf vertex. This function is complementary to `merge()`.
+  ## leaf vertex. This function is complementary to `mergePayload()`.
   ##
   key.hikeUp(db).fetchPayloadImpl
 
