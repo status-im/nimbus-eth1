@@ -243,6 +243,7 @@ proc asPortalBlockData*(
     txRoot = calculateTransactionData(payload.transactions)
     withdrawalsRoot = some(calculateWithdrawalsRoot(payload.withdrawals))
 
+    # TODO: adjust blobGasUsed & excessBlobGas according to deneb fork!
     header = etypes.BlockHeader(
       parentHash: payload.parentHash.asEthHash,
       ommersHash: EMPTY_UNCLE_HASH,
@@ -262,7 +263,7 @@ proc asPortalBlockData*(
       fee: some(payload.baseFeePerGas),
       withdrawalsRoot: withdrawalsRoot,
       blobGasUsed: options.none(uint64),
-      excessBlobGas: options.none(uint64) # TODO: adjust later according to deneb fork
+      excessBlobGas: options.none(uint64)
     )
 
     headerWithProof = BlockHeaderWithProof(
