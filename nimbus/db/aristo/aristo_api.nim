@@ -13,15 +13,18 @@
 
 
 import
+  std/times,
   eth/[common, trie/nibbles],
   results,
-  "."/[aristo_delete, aristo_desc, aristo_fetch, aristo_get, aristo_hashify,
-       aristo_hike, aristo_init, aristo_merge, aristo_path, aristo_serialise,
-       aristo_tx, aristo_vid]
+  "."/[aristo_delete, aristo_desc, aristo_desc/desc_backend, aristo_fetch,
+       aristo_get, aristo_hashify, aristo_hike, aristo_init, aristo_merge,
+       aristo_path, aristo_profile, aristo_serialise, aristo_tx, aristo_vid]
+
+export
+  AristoDbProfListRef
 
 # Annotation helper(s)
 {.pragma: noRaise, gcsafe, raises: [].}
-{.pragma: asFunc, gcsafe, raises: [], noSideEffect.}
 
 type
   AristoApiCommitFn* =
@@ -192,21 +195,21 @@ type
   AristoApiIsTopFn* =
     proc(tx: AristoTxRef;
         ): bool
-        {.asFunc.}
+        {.noRaise.}
       ## Getter, returns `true` if the argument `tx` referes to the current
       ## top level transaction.
 
   AristoApiLevelFn* =
     proc(db: AristoDbRef;
         ): int
-        {.asFunc.}
+        {.noRaise.}
       ## Getter, non-negative nesting level (i.e. number of pending
       ## transactions)
 
   AristoApiNForkedFn* =
     proc(db: AristoDbRef;
         ): int
-        {.asFunc.}
+        {.noRaise.}
       ## Returns the number of non centre descriptors (see comments on
       ## `reCentre()` for details.) This function is a fast version of
       ## `db.forked.toSeq.len`.
@@ -243,7 +246,7 @@ type
   AristoApiPathAsBlobFn* =
     proc(tag: PathID;
         ): Blob
-        {.asFunc.}
+        {.noRaise.}
     ## Converts the `tag` argument to a sequence of an even number of
     ## nibbles represented by a `Blob`. If the argument `tag` represents
     ## an odd number of nibbles, a zero nibble is appendend.
@@ -307,7 +310,7 @@ type
   AristoApiTxTopFn* =
     proc(db: AristoDbRef;
         ): Result[AristoTxRef,AristoError]
-        {.asFunc.}
+        {.noRaise.}
       ## Getter, returns top level transaction if there is any.
 
   AristoApiVidFetchFn* =
@@ -331,7 +334,6 @@ type
       ## Recycle the argument `vtxID` which is useful after deleting entries
       ## from the vertex table to prevent the `VertexID` type key values
       ## small.
-
 
   AristoApiRef* = ref AristoApiObj
   AristoApiObj* = object of RootObj
@@ -362,39 +364,260 @@ type
     vidFetch*: AristoApiVidFetchFn
     vidDispose*: AristoApiVidDisposeFn
 
-proc init*(api: var AristoApiObj) =
-    api.commit = commit
-    api.delete = delete
-    api.delTree = delTree
-    api.fetchPayload = fetchPayload
-    api.finish = finish
-    api.forget = forget
-    api.fork = fork
-    api.forkTop = forkTop
-    api.getKeyRc = getKeyRc
-    api.hashify = hashify
-    api.hasPath = hasPath
-    api.hikeUp = hikeUp
-    api.isTop = isTop
-    api.level = level
-    api.nForked = nForked
-    api.merge = merge
-    api.mergePayload = mergePayload
-    api.pathAsBlob = pathAsBlob
-    api.rollback = rollback
-    api.serialise = serialise
-    api.stow = stow
-    api.txBegin = txBegin
-    api.txTop = txTop
-    api.vidFetch = vidFetch
-    api.vidDispose = vidDispose
 
-proc init*(T: type AristoApiRef): T =
-  result = new T
+  AristoApiProfNames* = enum
+    ## Index/name mapping for profile slots
+    AristoApiProfTotal          = "total"
+
+    AristoApiProfCommitFn       = "commit"
+    AristoApiProfDeleteFn       = "delete"
+    AristoApiProfDelTreeFn      = "delTree"
+    AristoApiProfFetchPayloadFn = "fetchPayload"
+    AristoApiProfFinishFn       = "finish"
+    AristoApiProfForgetFn       = "forget"
+    AristoApiProfForkFn         = "fork"
+    AristoApiProfForkTopFn      = "forkTop"
+    AristoApiProfGetKeyRcFn     = "getKeyRc"
+    AristoApiProfHashifyFn      = "hashify"
+    AristoApiProfHasPathFn      = "hasPath"
+    AristoApiProfHikeUpFn       = "hikeUp"
+    AristoApiProfIsTopFn        = "isTop"
+    AristoApiProfLevelFn        = "level"
+    AristoApiProfNForkedFn      = "nForked"
+    AristoApiProfMergeFn        = "merge"
+    AristoApiProfMergePayloadFn = "mergePayload"
+    AristoApiProfPathAsBlobFn   = "pathAsBlob"
+    AristoApiProfRollbackFn     = "rollback"
+    AristoApiProfSerialiseFn    = "serialise"
+    AristoApiProfStowFn         = "stow"
+    AristoApiProfTxBeginFn      = "txBegin"
+    AristoApiProfTxTopFn        = "txTop"
+    AristoApiProfVidFetchFn     = "vidFetch"
+    AristoApiProfVidDisposeFn   = "vidDispose"
+
+    AristoApiProfBeGetVtxFn     = "be/getVtx"
+    AristoApiProfBeGetKeyFn     = "be/getKey"
+    AristoApiProfBePutEndFn     = "be/putEnd"
+
+  AristoApiProfRef* = ref object of AristoApiRef
+    ## Profiling API extension of `AristoApiObj`
+    data*: AristoDbProfListRef
+    be*: BackendRef
+
+# ------------------------------------------------------------------------------
+# Public API constuctors
+# ------------------------------------------------------------------------------
+
+func init*(api: var AristoApiObj) =
+  ## Initialise an `api` argument descriptor
+  ##
+  api.commit = commit
+  api.delete = delete
+  api.delTree = delTree
+  api.fetchPayload = fetchPayload
+  api.finish = finish
+  api.forget = forget
+  api.fork = fork
+  api.forkTop = forkTop
+  api.getKeyRc = getKeyRc
+  api.hashify = hashify
+  api.hasPath = hasPath
+  api.hikeUp = hikeUp
+  api.isTop = isTop
+  api.level = level
+  api.nForked = nForked
+  api.merge = merge
+  api.mergePayload = mergePayload
+  api.pathAsBlob = pathAsBlob
+  api.rollback = rollback
+  api.serialise = serialise
+  api.stow = stow
+  api.txBegin = txBegin
+  api.txTop = txTop
+  api.vidFetch = vidFetch
+  api.vidDispose = vidDispose
+
+func init*(T: type AristoApiRef): T =
+  new result
   result[].init()
 
-proc dup*(api: AristoApiRef): AristoApiRef =
+func dup*(api: AristoApiRef): AristoApiRef =
   new result
   result[] = api[]
 
+# ------------------------------------------------------------------------------
+# Public profile API constuctor
+# ------------------------------------------------------------------------------
+
+func init*(
+    T: type AristoApiProfRef;
+    api: AristoApiRef;
+    be = BackendRef(nil);
+      ): T =
+  ## This constructor creates a profiling API descriptor to be derived from
+  ## an initialised `api` argument descriptor. For profiling the DB backend,
+  ## the field `.be` of the result descriptor must be assigned to the
+  ## `.backend` field of the `AristoDbRef` descriptor.
+  ##
+  ## The argument desctiptors `api` and `be` will not be modified and can be
+  ## used to restore the previous set up.
+  ##
+  let
+    data = AristoDbProfListRef(
+      list: newSeq[AristoDbProfData](1 + high(AristoApiProfNames).ord))
+    profApi = T(data: data)
+
+  template profileRunner(n: AristoApiProfNames, code: untyped): untyped =
+    let start = getTime()
+    code
+    data.update(n.ord, getTime() - start)
+
+  profApi.commit =
+    proc(a: AristoTxRef): auto =
+      AristoApiProfCommitFn.profileRunner:
+        result = api.commit(a)
+
+  profApi.delete =
+    proc(a: AristoDbRef; b: VertexID; c: openArray[byte]; d: PathID): auto =
+      AristoApiProfDeleteFn.profileRunner:
+        result = api.delete(a, b, c, d)
+
+  profApi.delTree =
+    proc(a: AristoDbRef; b: VertexID; c: PathID): auto =
+      AristoApiProfDelTreeFn.profileRunner:
+        result = api.delTree(a, b, c)
+
+  profApi.fetchPayload =
+    proc(a: AristoDbRef; b: VertexID; c: openArray[byte]): auto =
+      AristoApiProfFetchPayloadFn.profileRunner:
+        result = api.fetchPayload(a, b, c)
+
+  profApi.finish =
+    proc(a: AristoDbRef; b = false) =
+      AristoApiProfFinishFn.profileRunner:
+        api.finish(a, b)
+
+  profApi.forget =
+    proc(a: AristoDbRef): auto =
+      AristoApiProfForgetFn.profileRunner:
+        result = api.forget(a)
+
+  profApi.fork =
+    proc(a: AristoDbRef; b = false): auto =
+      AristoApiProfForkFn.profileRunner:
+        result = api.fork(a, b)
+
+  profApi.forkTop =
+    proc(a: AristoDbRef; b = false): auto =
+      AristoApiProfForkTopFn.profileRunner:
+        result = api.forkTop(a, b)
+
+  profApi.getKeyRc =
+    proc(a: AristoDbRef; b: VertexID): auto =
+      AristoApiProfGetKeyRcFn.profileRunner:
+        result = api.getKeyRc(a, b)
+
+  profApi.hashify =
+    proc(a: AristoDbRef): auto =
+      AristoApiProfHashifyFn.profileRunner:
+        result = api.hashify(a)
+
+  profApi.hasPath =
+    proc(a: AristoDbRef; b: VertexID; c: openArray[byte]): auto =
+      AristoApiProfHasPathFn.profileRunner:
+        result = api.hasPath(a, b, c)
+
+  profApi.hikeUp =
+    proc(a: NibblesSeq; b: VertexID; c: AristoDbRef): auto =
+      AristoApiProfHikeUpFn.profileRunner:
+        result = api.hikeUp(a, b, c)
+
+  profApi.isTop =
+    proc(a: AristoTxRef): auto =
+      AristoApiProfIsTopFn.profileRunner:
+        result = api.isTop(a)
+
+  profApi.level =
+    proc(a: AristoDbRef): auto =
+       AristoApiProfLevelFn.profileRunner:
+         result = api.level(a)
+
+  profApi.nForked =
+    proc(a: AristoDbRef): auto =
+      AristoApiProfNForkedFn.profileRunner:
+         result = api.nForked(a)
+
+  profApi.merge =
+    proc(a: AristoDbRef; b: VertexID; c,d: openArray[byte]; e: PathID): auto =
+      AristoApiProfMergeFn.profileRunner:
+         result = api.merge(a, b, c, d ,e)
+
+  profApi.mergePayload =
+    proc(a: AristoDbRef; b: VertexID; c: openArray[byte]; d: PayloadRef;
+         e = VOID_PATH_ID): auto =
+      AristoApiProfMergePayloadFn.profileRunner:
+        result = api.mergePayload(a, b, c, d ,e)
+
+  profApi.pathAsBlob =
+    proc(a: PathID): auto =
+      AristoApiProfPathAsBlobFn.profileRunner:
+        result = api.pathAsBlob(a)
+
+  profApi.rollback =
+    proc(a: AristoTxRef): auto =
+      AristoApiProfRollbackFn.profileRunner:
+        result = api.rollback(a)
+
+  profApi.serialise =
+    proc(a: AristoDbRef; b: PayloadRef): auto =
+      AristoApiProfSerialiseFn.profileRunner:
+        result = api.serialise(a, b)
+
+  profApi.stow =
+    proc(a: AristoDbRef; b = false; c = false): auto =
+       AristoApiProfStowFn.profileRunner:
+        result = api.stow(a, b, c)
+
+  profApi.txBegin =
+    proc(a: AristoDbRef): auto =
+       AristoApiProfTxBeginFn.profileRunner:
+        result = api.txBegin(a)
+
+  profApi.txTop =
+    proc(a: AristoDbRef): auto =
+      AristoApiProfTxTopFn.profileRunner:
+        result = api.txTop(a)
+
+  profApi.vidFetch =
+    proc(a: AristoDbRef; b = false): auto =
+      AristoApiProfVidFetchFn.profileRunner:
+        result = api.vidFetch(a, b)
+
+  profApi.vidDispose =
+    proc(a: AristoDbRef;b: VertexID) =
+      AristoApiProfVidDisposeFn.profileRunner:
+        api.vidDispose(a, b)
+
+  if not be.isNil:
+    profApi.be = be.dup
+
+    profApi.be.getVtxFn =
+      proc(a: VertexID): auto =
+        AristoApiProfBeGetVtxFn.profileRunner:
+          result = be.getVtxFn(a)
+
+    profApi.be.getKeyFn =
+      proc(a: VertexID): auto =
+        AristoApiProfBeGetKeyFn.profileRunner:
+          result = be.getKeyFn(a)
+
+    profApi.be.putEndFn =
+      proc(a: PutHdlRef): auto =
+        AristoApiProfBePutEndFn.profileRunner:
+          result = be.putEndFn(a)
+
+  profApi
+
+# ------------------------------------------------------------------------------
 # End
+# ------------------------------------------------------------------------------

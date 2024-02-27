@@ -19,10 +19,19 @@ import
   ../replay/[pp, undump_blocks, xcheck],
   ./test_helpers
 
-type StopMoaningAboutLedger {.used.} = LedgerType
+type
+  StopMoaningAboutLedger {.used.} = LedgerType
 
-when CoreDbEnableApiProfiling or LedgerEnableApiProfiling:
-  import std/[algorithm, sequtils, strutils]
+when CoreDbEnableApiProfiling:
+  import
+    std/[algorithm, sequtils, strutils],
+    ../../nimbus/db/aristo/[aristo_api, aristo_profile]
+  var
+    aristoProfData: AristoDbProfListRef
+
+elif LedgerEnableApiProfiling:
+  import
+    std/[algorithm, sequtils, strutils]
 
 const
   EnableExtraLoggingControl = true
@@ -129,6 +138,25 @@ proc ledgerProfResults(info: string; indent = 4): string =
       result &= pfx2 & $count & ": " &
         w.mapIt($it & ledgerProfTab.stats(it).pp).sorted.join(", ")
 
+proc aristoProfResults(info: string; indent = 4): string =
+  when CoreDbEnableApiProfiling:
+    if not aristoProfData.isNil: # e.g. if on a legacy DB run
+      let
+        data = aristoProfData
+        pfx = indent.toPfx
+        pfx2 = pfx & "  "
+      result = "Aristo backend profiling results" & info & ":"
+      result &= "\n" & pfx & "by accumulated duration per procedure"
+      for (ela,fns) in data.byElapsed:
+        result &= pfx2 & ela.pp & ": " & fns.mapIt(
+          $AristoApiProfNames(it) &
+          data.stats(it).pp(true)).sorted.join(", ")
+      result &=  "\n" & pfx & "by number of visits"
+      for (count,fns) in data.byVisits:
+        result &= pfx2 & $count & ": " & fns.mapIt(
+          $AristoApiProfNames(it) &
+          data.stats(it).pp).sorted.join(", ")
+
 # ------------------------------------------------------------------------------
 # Public test function
 # ------------------------------------------------------------------------------
@@ -146,6 +174,9 @@ proc test_chainSyncProfilingPrint*(
       if 0 < s.len: true.say "***", s, "\n"
     block:
       let s = info.ledgerProfResults()
+      if 0 < s.len: true.say "***", s, "\n"
+    block:
+      let s = info.aristoProfResults()
       if 0 < s.len: true.say "***", s, "\n"
 
 
@@ -165,6 +196,12 @@ proc test_chainSync*(
 
   noisy.initLogging com
   defer: com.finishLogging()
+
+  when CoreDbEnableApiProfiling:
+    # Variables will be non-nil if profiling is available. The profiling apis
+    # needs to be captured so it will be available after the services have
+    # terminated.
+    aristoProfData = com.db.toAristoProfData()
 
   for w in filePaths.undumpBlocks:
     let (fromBlock, toBlock) = (w[0][0].blockNumber, w[0][^1].blockNumber)

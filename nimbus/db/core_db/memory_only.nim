@@ -32,6 +32,7 @@ export
 
   # see `aristo_db`
   toAristo,
+  toAristoProfData,
 
   # see `legacy_db`
   isLegacy,

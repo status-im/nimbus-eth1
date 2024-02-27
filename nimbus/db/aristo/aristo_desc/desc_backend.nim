@@ -120,6 +120,24 @@ type
 
     closeFn*: CloseFn                ## Generic destructor
 
+func dup*(be: BackendRef): BackendRef =
+  if not be.isNil:
+    result = BackendRef(
+      filters:  be.filters,
+      getVtxFn: be.getVtxFn,
+      getKeyFn: be.getKeyFn,
+      getFilFn: be.getFilFn,
+      getIdgFn: be.getIdgFn,
+      getFqsFn: be.getFqsFn,
+      putBegFn: be.putBegFn,
+      putVtxFn: be.putVtxFn,
+      putKeyFn: be.putKeyFn,
+      putFilFn: be.putFilFn,
+      putIdgFn: be.putIdgFn,
+      putFqsFn: be.putFqsFn,
+      putEndFn: be.putEndFn,
+      closeFn:  be.closeFn)
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
