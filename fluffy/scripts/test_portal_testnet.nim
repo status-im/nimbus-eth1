@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2021-2023 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -8,59 +8,59 @@
 import
   os,
   std/sequtils,
-  unittest2, testutils, confutils, chronos,
+  unittest2,
+  testutils,
+  confutils,
+  chronos,
   stew/byteutils,
-  eth/p2p/discoveryv5/random2, eth/keys,
+  eth/p2p/discoveryv5/random2,
+  eth/keys,
   ../../nimbus/rpc/[rpc_types],
   ../rpc/portal_rpc_client,
   ../rpc/eth_rpc_client,
-  ../eth_data/[
-    history_data_seeding,
-    history_data_json_store,
-    history_data_ssz_e2s],
+  ../eth_data/[history_data_seeding, history_data_json_store, history_data_ssz_e2s],
   ../network/history/[history_content, accumulator],
   ../database/seed_db,
   ../tests/test_history_util
 
 type
-  FutureCallback[A] = proc (): Future[A] {.gcsafe, raises: [].}
+  FutureCallback[A] = proc(): Future[A] {.gcsafe, raises: [].}
 
-  CheckCallback[A] = proc (a: A): bool {.gcsafe, raises: [].}
+  CheckCallback[A] = proc(a: A): bool {.gcsafe, raises: [].}
 
   PortalTestnetConf* = object
-    nodeCount* {.
-      defaultValue: 17
-      desc: "Number of nodes to test"
-      name: "node-count" .}: int
+    nodeCount* {.defaultValue: 17, desc: "Number of nodes to test", name: "node-count".}:
+      int
 
     rpcAddress* {.
-      desc: "Listening address of the JSON-RPC service for all nodes"
-      defaultValue: "127.0.0.1"
-      name: "rpc-address" }: string
+      desc: "Listening address of the JSON-RPC service for all nodes",
+      defaultValue: "127.0.0.1",
+      name: "rpc-address"
+    .}: string
 
     baseRpcPort* {.
-      defaultValue: 10000
-      desc: "Port of the JSON-RPC service of the bootstrap (first) node"
-      name: "base-rpc-port" .}: uint16
+      defaultValue: 10000,
+      desc: "Port of the JSON-RPC service of the bootstrap (first) node",
+      name: "base-rpc-port"
+    .}: uint16
 
-proc connectToRpcServers(config: PortalTestnetConf):
-    Future[seq[RpcClient]] {.async.} =
+proc connectToRpcServers(config: PortalTestnetConf): Future[seq[RpcClient]] {.async.} =
   var clients: seq[RpcClient]
-  for i in 0..<config.nodeCount:
+  for i in 0 ..< config.nodeCount:
     let client = newRpcHttpClient()
-    await client.connect(
-      config.rpcAddress, Port(config.baseRpcPort + uint16(i)), false)
+    await client.connect(config.rpcAddress, Port(config.baseRpcPort + uint16(i)), false)
     clients.add(client)
 
   return clients
 
 proc withRetries[A](
-  f: FutureCallback[A],
-  check: CheckCallback[A],
-  numRetries: int,
-  initialWait: Duration,
-  checkFailMessage: string,
-  nodeIdx: int): Future[A] {.async.} =
+    f: FutureCallback[A],
+    check: CheckCallback[A],
+    numRetries: int,
+    initialWait: Duration,
+    checkFailMessage: string,
+    nodeIdx: int,
+): Future[A] {.async.} =
   ## Retries given future callback until either:
   ## it returns successfuly and given check is true
   ## or
@@ -79,7 +79,8 @@ proc withRetries[A](
     except CatchableError as exc:
       if tries > numRetries:
         # if we reached max number of retries fail
-        let msg = "Call failed with msg: " & exc.msg & ", for node with idx: " & $nodeIdx
+        let msg =
+          "Call failed with msg: " & exc.msg & ", for node with idx: " & $nodeIdx
         raise newException(ValueError, msg)
 
     inc tries
@@ -91,10 +92,8 @@ proc withRetries[A](
 # To avoid long sleeps, this combinator can be used to retry some calls until
 # success or until some condition hold (or both)
 proc retryUntil[A](
-  f: FutureCallback[A],
-  c: CheckCallback[A],
-  checkFailMessage: string,
-  nodeIdx: int): Future[A] =
+    f: FutureCallback[A], c: CheckCallback[A], checkFailMessage: string, nodeIdx: int
+): Future[A] =
   # some reasonable limits, which will cause waits as: 1, 2, 4, 8, 16, 32 seconds
   return withRetries(f, c, 1, seconds(1), checkFailMessage, nodeIdx)
 
@@ -116,7 +115,6 @@ proc retryUntil[A](
 # Yes, this client json rpc API couldn't be more confusing.
 # Could also just retry each call on failure, which would set up a new
 # connection.
-
 
 # We are kind of abusing the unittest2 here to run json rpc tests against other
 # processes. Needs to be compiled with `-d:unittest2DisableParamFiltering` or
@@ -142,8 +140,12 @@ procSuite "Portal testnet tests":
     # Note 2: One could also ping all nodes but that is much slower and more
     # error prone
     for client in clients:
-      discard await client.discv5_addEnrs(nodeInfos.map(
-        proc(x: NodeInfo): Record = x.enr))
+      discard await client.discv5_addEnrs(
+        nodeInfos.map(
+          proc(x: NodeInfo): Record =
+            x.enr
+        )
+      )
       await client.close()
 
     for client in clients:
@@ -173,8 +175,12 @@ procSuite "Portal testnet tests":
       nodeInfos.add(nodeInfo)
 
     for client in clients:
-      discard await client.portal_state_addEnrs(nodeInfos.map(
-        proc(x: NodeInfo): Record = x.enr))
+      discard await client.portal_state_addEnrs(
+        nodeInfos.map(
+          proc(x: NodeInfo): Record =
+            x.enr
+        )
+      )
       await client.close()
 
     for client in clients:
@@ -210,8 +216,12 @@ procSuite "Portal testnet tests":
       nodeInfos.add(nodeInfo)
 
     for client in clients:
-      discard await client.portal_history_addEnrs(nodeInfos.map(
-        proc(x: NodeInfo): Record = x.enr))
+      discard await client.portal_history_addEnrs(
+        nodeInfos.map(
+          proc(x: NodeInfo): Record =
+            x.enr
+        )
+      )
       await client.close()
 
     for client in clients:
@@ -231,8 +241,10 @@ procSuite "Portal testnet tests":
 
   asyncTest "Portal History - Propagate blocks and do content lookups":
     const
-      headerFile = "./vendor/portal-spec-tests/tests/mainnet/history/headers/1000001-1000010.e2s"
-      accumulatorFile = "./vendor/portal-spec-tests/tests/mainnet/history/accumulator/epoch-accumulator-00122.ssz"
+      headerFile =
+        "./vendor/portal-spec-tests/tests/mainnet/history/headers/1000001-1000010.e2s"
+      accumulatorFile =
+        "./vendor/portal-spec-tests/tests/mainnet/history/accumulator/epoch-accumulator-00122.ssz"
       blockDataFile = "./fluffy/tests/blocks/mainnet_blocks_1000001_1000010.json"
 
     let
@@ -240,20 +252,18 @@ procSuite "Portal testnet tests":
         raiseAssert "Invalid header file: " & headerFile
       epochAccumulator = readEpochAccumulatorCached(accumulatorFile).valueOr:
         raiseAssert "Invalid epoch accumulator file: " & accumulatorFile
-      blockHeadersWithProof =
-        buildHeadersWithProof(blockHeaders, epochAccumulator).valueOr:
-          raiseAssert "Could not build headers with proof"
-      blockData =
-        readJsonType(blockDataFile, BlockDataTable).valueOr:
-          raiseAssert "Invalid block data file" & blockDataFile
+      blockHeadersWithProof = buildHeadersWithProof(blockHeaders, epochAccumulator).valueOr:
+        raiseAssert "Could not build headers with proof"
+      blockData = readJsonType(blockDataFile, BlockDataTable).valueOr:
+        raiseAssert "Invalid block data file" & blockDataFile
 
       clients = await connectToRpcServers(config)
 
     # Gossiping all block headers with proof first, as bodies and receipts
     # require them for validation.
     for (content, contentKey) in blockHeadersWithProof:
-      discard (await clients[0].portal_history_gossip(
-        content.toHex(), contentKey.toHex()))
+      discard
+        (await clients[0].portal_history_gossip(content.toHex(), contentKey.toHex()))
 
     # This will fill the first node its db with blocks from the data file. Next,
     # this node wil offer all these blocks their headers one by one.
@@ -268,7 +278,7 @@ procSuite "Portal testnet tests":
         # add a json-rpc debug proc that returns whether the offer queue is empty or
         # not. And then poll every node until all nodes have an empty queue.
         let content = await retryUntil(
-          proc (): Future[Option[BlockObject]] {.async.} =
+          proc(): Future[Option[BlockObject]] {.async.} =
             try:
               let res = await client.eth_getBlockByHash(w3Hash hash, true)
               await client.close()
@@ -277,9 +287,11 @@ procSuite "Portal testnet tests":
               await client.close()
               raise exc
           ,
-          proc (mc: Option[BlockObject]): bool = return mc.isSome(),
+          proc(mc: Option[BlockObject]): bool =
+            return mc.isSome()
+          ,
           "Did not receive expected Block with hash " & hash.data.toHex(),
-          i
+          i,
         )
         check content.isSome()
         let blockObj = content.get()
@@ -289,12 +301,10 @@ procSuite "Portal testnet tests":
           doAssert(tx.kind == tohTx)
           check tx.tx.blockHash.get == w3Hash hash
 
-        let filterOptions = FilterOptions(
-          blockHash: some(w3Hash hash)
-        )
+        let filterOptions = FilterOptions(blockHash: some(w3Hash hash))
 
         let logs = await retryUntil(
-          proc (): Future[seq[FilterLog]] {.async.} =
+          proc(): Future[seq[FilterLog]] {.async.} =
             try:
               let res = await client.eth_getLogs(filterOptions)
               await client.close()
@@ -303,9 +313,11 @@ procSuite "Portal testnet tests":
               await client.close()
               raise exc
           ,
-          proc (mc: seq[FilterLog]): bool = return true,
+          proc(mc: seq[FilterLog]): bool =
+            return true
+          ,
           "",
-          i
+          i,
         )
 
         for l in logs:

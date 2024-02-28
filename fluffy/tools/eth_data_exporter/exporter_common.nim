@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -12,13 +12,15 @@ import
   chronicles,
   stew/io2,
   faststreams,
-  json_serialization, json_serialization/std/tables,
+  json_serialization,
+  json_serialization/std/tables,
   ../../eth_data/history_data_json_store
 
 export history_data_json_store
 
 proc writePortalContentToJson*(
-    fh: OutputStreamHandle, content: JsonPortalContentTable) =
+    fh: OutputStreamHandle, content: JsonPortalContentTable
+) =
   try:
     var writer = JsonWriter[DefaultFlavor].init(fh.s, pretty = true)
     writer.writeValue(content)
@@ -44,8 +46,7 @@ proc createAndOpenFile*(dataDir: string, fileName: string): OutputStreamHandle =
 
   let res = createPath(dataDir)
   if res.isErr():
-    fatal "Error occurred while creating directory",
-      error = ioErrorMsg(res.error)
+    fatal "Error occurred while creating directory", error = ioErrorMsg(res.error)
     quit 1
 
   try:

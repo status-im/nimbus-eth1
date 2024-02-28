@@ -41,8 +41,10 @@
 import
   std/os,
   chronos,
-  confutils, confutils/std/net,
-  chronicles, chronicles/topics_registry,
+  confutils,
+  confutils/std/net,
+  chronicles,
+  chronicles/topics_registry,
   json_rpc/clients/httpclient,
   beacon_chain/spec/eth2_apis/rest_beacon_client,
   ../../network/beacon/beacon_content,
@@ -53,8 +55,7 @@ import
   ./portal_bridge_beacon
 
 proc runBeacon(config: PortalBridgeConf) {.raises: [CatchableError].} =
-  notice "Launching Fluffy beacon chain bridge",
-    cmdParams = commandLineParams()
+  notice "Launching Fluffy beacon chain bridge", cmdParams = commandLineParams()
 
   let
     (cfg, forkDigests, beaconClock) = getBeaconData()
@@ -65,18 +66,20 @@ proc runBeacon(config: PortalBridgeConf) {.raises: [CatchableError].} =
       quit QuitFailure
 
   proc backfill(
-      beaconRestClient: RestClientRef, rpcAddress: string, rpcPort: Port,
-      backfillAmount: uint64, trustedBlockRoot: Option[TrustedDigest])
-      {.async.} =
+      beaconRestClient: RestClientRef,
+      rpcAddress: string,
+      rpcPort: Port,
+      backfillAmount: uint64,
+      trustedBlockRoot: Option[TrustedDigest],
+  ) {.async.} =
     # Bootstrap backfill, currently just one bootstrap selected by
     # trusted-block-root, could become a selected list, or some other way.
     if trustedBlockRoot.isSome():
       await portalRpcClient.connect(rpcAddress, rpcPort, false)
 
       let res = await gossipLCBootstrapUpdate(
-        beaconRestClient, portalRpcClient,
-        trustedBlockRoot.get(),
-        cfg, forkDigests)
+        beaconRestClient, portalRpcClient, trustedBlockRoot.get(), cfg, forkDigests
+      )
 
       if res.isErr():
         warn "Error gossiping LC bootstrap", error = res.error
@@ -92,18 +95,21 @@ proc runBeacon(config: PortalBridgeConf) {.raises: [CatchableError].} =
 
     let
       wallSlot = getBeaconTime().slotOrZero()
-      currentPeriod =
-        wallSlot div (SLOTS_PER_EPOCH * EPOCHS_PER_SYNC_COMMITTEE_PERIOD)
+      currentPeriod = wallSlot div (SLOTS_PER_EPOCH * EPOCHS_PER_SYNC_COMMITTEE_PERIOD)
       requestAmount = backfillAmount div updatesPerRequest
       leftOver = backfillAmount mod updatesPerRequest
 
-    for i in 0..<requestAmount:
+    for i in 0 ..< requestAmount:
       await portalRpcClient.connect(rpcAddress, rpcPort, false)
 
       let res = await gossipLCUpdates(
-        beaconRestClient, portalRpcClient,
-        currentPeriod - updatesPerRequest * (i + 1) + 1, updatesPerRequest,
-        cfg, forkDigests)
+        beaconRestClient,
+        portalRpcClient,
+        currentPeriod - updatesPerRequest * (i + 1) + 1,
+        updatesPerRequest,
+        cfg,
+        forkDigests,
+      )
 
       if res.isErr():
         warn "Error gossiping LC updates", error = res.error
@@ -114,9 +120,13 @@ proc runBeacon(config: PortalBridgeConf) {.raises: [CatchableError].} =
       await portalRpcClient.connect(rpcAddress, rpcPort, false)
 
       let res = await gossipLCUpdates(
-        beaconRestClient, portalRpcClient,
-        currentPeriod - updatesPerRequest * requestAmount - leftOver + 1, leftOver,
-        cfg, forkDigests)
+        beaconRestClient,
+        portalRpcClient,
+        currentPeriod - updatesPerRequest * requestAmount - leftOver + 1,
+        leftOver,
+        cfg,
+        forkDigests,
+      )
 
       if res.isErr():
         warn "Error gossiping LC updates", error = res.error
@@ -141,11 +151,9 @@ proc runBeacon(config: PortalBridgeConf) {.raises: [CatchableError].} =
       lastOptimisticUpdateSlot,
       lastFinalityUpdateEpoch,
       lastUpdatePeriod,
-      slotsTillNextEpoch =
-        SLOTS_PER_EPOCH - (wallSlot mod SLOTS_PER_EPOCH),
+      slotsTillNextEpoch = SLOTS_PER_EPOCH - (wallSlot mod SLOTS_PER_EPOCH),
       slotsTillNextPeriod =
-        SLOTS_PER_SYNC_COMMITTEE_PERIOD -
-          (wallSlot mod SLOTS_PER_SYNC_COMMITTEE_PERIOD)
+        SLOTS_PER_SYNC_COMMITTEE_PERIOD - (wallSlot mod SLOTS_PER_SYNC_COMMITTEE_PERIOD)
 
     if wallSlot > lastOptimisticUpdateSlot + 1:
       # TODO: If this turns out to be too tricky to not gossip old updates,
@@ -158,34 +166,33 @@ proc runBeacon(config: PortalBridgeConf) {.raises: [CatchableError].} =
       # Or basically `lightClientOptimisticUpdateSlotOffset`
       await sleepAsync((SECONDS_PER_SLOT div INTERVALS_PER_SLOT).int.seconds)
 
-      await portalRpcClient.connect(
-        config.rpcAddress, Port(config.rpcPort), false)
+      await portalRpcClient.connect(config.rpcAddress, Port(config.rpcPort), false)
 
-      let res = await gossipLCOptimisticUpdate(
-        restClient, portalRpcClient,
-        cfg, forkDigests)
+      let res =
+        await gossipLCOptimisticUpdate(restClient, portalRpcClient, cfg, forkDigests)
 
       if res.isErr():
         warn "Error gossiping LC optimistic update", error = res.error
       else:
-        if wallEpoch > lastFinalityUpdateEpoch + 2 and
-            wallSlot > start_slot(wallEpoch):
-          let res = await gossipLCFinalityUpdate(
-            restClient, portalRpcClient,
-            cfg, forkDigests)
+        if wallEpoch > lastFinalityUpdateEpoch + 2 and wallSlot > start_slot(wallEpoch):
+          let res =
+            await gossipLCFinalityUpdate(restClient, portalRpcClient, cfg, forkDigests)
 
           if res.isErr():
             warn "Error gossiping LC finality update", error = res.error
           else:
             lastFinalityUpdateEpoch = epoch(res.get())
 
-        if wallPeriod > lastUpdatePeriod and
-            wallSlot > start_slot(wallEpoch):
+        if wallPeriod > lastUpdatePeriod and wallSlot > start_slot(wallEpoch):
           # TODO: Need to delay timing here also with one slot?
           let res = await gossipLCUpdates(
-            restClient, portalRpcClient,
-            sync_committee_period(wallSlot).uint64, 1,
-            cfg, forkDigests)
+            restClient,
+            portalRpcClient,
+            sync_committee_period(wallSlot).uint64,
+            1,
+            cfg,
+            forkDigests,
+          )
 
           if res.isErr():
             warn "Error gossiping LC update", error = res.error
@@ -213,8 +220,9 @@ proc runBeacon(config: PortalBridgeConf) {.raises: [CatchableError].} =
       timeToNextSlot = nextSlot.start_beacon_time() - getBeaconTime()
 
   waitFor backfill(
-    restClient, config.rpcAddress, config.rpcPort,
-    config.backfillAmount, config.trustedBlockRoot)
+    restClient, config.rpcAddress, config.rpcPort, config.backfillAmount,
+    config.trustedBlockRoot,
+  )
 
   asyncSpawn runOnSlotLoop()
 

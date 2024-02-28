@@ -15,21 +15,25 @@ import
   beacon_chain/beacon_clock,
   beacon_chain/conf
 
-type
-  NetworkInitData* = object
-    clock*: BeaconClock
-    metadata*: Eth2NetworkMetadata
-    forks*: ForkDigests
-    genesis_validators_root*: Eth2Digest
+type NetworkInitData* = object
+  clock*: BeaconClock
+  metadata*: Eth2NetworkMetadata
+  forks*: ForkDigests
+  genesis_validators_root*: Eth2Digest
 
 proc loadNetworkData*(networkName: string): NetworkInitData =
   let
     metadata = loadEth2Network(some("mainnet"))
     genesisState =
       try:
-        template genesisData(): auto = metadata.genesis.bakedBytes
-        newClone(readSszForkedHashedBeaconState(
-          metadata.cfg, genesisData.toOpenArray(genesisData.low, genesisData.high)))
+        template genesisData(): auto =
+          metadata.genesis.bakedBytes
+
+        newClone(
+          readSszForkedHashedBeaconState(
+            metadata.cfg, genesisData.toOpenArray(genesisData.low, genesisData.high)
+          )
+        )
       except SerializationError as err:
         raiseAssert "Invalid baked-in state: " & err.msg
 
@@ -38,8 +42,7 @@ proc loadNetworkData*(networkName: string): NetworkInitData =
       error "Invalid genesis time in state", genesisTime
       quit QuitFailure
 
-    genesis_validators_root =
-      getStateField(genesisState[], genesis_validators_root)
+    genesis_validators_root = getStateField(genesisState[], genesis_validators_root)
 
     forks = newClone ForkDigests.init(metadata.cfg, genesis_validators_root)
 
@@ -47,5 +50,5 @@ proc loadNetworkData*(networkName: string): NetworkInitData =
     clock: beaconClock,
     metadata: metadata,
     forks: forks[],
-    genesis_validators_root: genesis_validators_root
+    genesis_validators_root: genesis_validators_root,
   )

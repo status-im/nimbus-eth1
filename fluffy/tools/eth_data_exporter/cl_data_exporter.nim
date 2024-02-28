@@ -8,36 +8,37 @@
 {.push raises: [].}
 
 import
-  chronicles, chronos,
+  chronicles,
+  chronos,
   stew/byteutils,
   eth/async_utils,
   beacon_chain/networking/network_metadata,
-  beacon_chain/spec//eth2_apis/rest_beacon_client,
+  beacon_chain/spec // eth2_apis/rest_beacon_client,
   beacon_chain/beacon_clock,
   ../../network/beacon/beacon_content,
   ./exporter_common
 
 export beacon_clock
 
-const
-  restRequestsTimeout = 30.seconds
+const restRequestsTimeout = 30.seconds
 
-proc getBeaconData*(): (
-    RuntimeConfig, ref ForkDigests, BeaconClock) =
+proc getBeaconData*(): (RuntimeConfig, ref ForkDigests, BeaconClock) =
   let
     metadata = getMetadataForNetwork("mainnet")
     genesisState =
       try:
-        template genesisData(): auto = metadata.genesis.bakedBytes
-        newClone(readSszForkedHashedBeaconState(
-          metadata.cfg,
-          genesisData.toOpenArray(genesisData.low, genesisData.high)))
+        template genesisData(): auto =
+          metadata.genesis.bakedBytes
+
+        newClone(
+          readSszForkedHashedBeaconState(
+            metadata.cfg, genesisData.toOpenArray(genesisData.low, genesisData.high)
+          )
+        )
       except SerializationError as err:
         raiseAssert "Invalid baked-in state: " & err.msg
-    genesis_validators_root =
-      getStateField(genesisState[], genesis_validators_root)
-    forkDigests = newClone ForkDigests.init(
-      metadata.cfg, genesis_validators_root)
+    genesis_validators_root = getStateField(genesisState[], genesis_validators_root)
+    forkDigests = newClone ForkDigests.init(metadata.cfg, genesis_validators_root)
 
     genesisTime = getStateField(genesisState[], genesis_time)
     beaconClock = BeaconClock.init(genesisTime).valueOr:
@@ -47,9 +48,12 @@ proc getBeaconData*(): (
   return (metadata.cfg, forkDigests, beaconClock)
 
 proc exportLCBootstrapUpdate*(
-    restUrl: string, dataDir: string,
+    restUrl: string,
+    dataDir: string,
     trustedBlockRoot: Eth2Digest,
-    cfg: RuntimeConfig, forkDigests: ref ForkDigests) {.async.} =
+    cfg: RuntimeConfig,
+    forkDigests: ref ForkDigests,
+) {.async.} =
   let file = "light-client-bootstrap.json"
   let fh = createAndOpenFile(dataDir, file)
 
@@ -60,19 +64,16 @@ proc exportLCBootstrapUpdate*(
       fatal "Error occured while closing file", error = e.msg
       quit 1
 
-  let
-    client = RestClientRef.new(restUrl).valueOr:
-      error "Cannot connect to server", error = error
-      quit 1
+  let client = RestClientRef.new(restUrl).valueOr:
+    error "Cannot connect to server", error = error
+    quit 1
 
   let update =
     try:
       notice "Downloading LC bootstrap"
       awaitWithTimeout(
-        client.getLightClientBootstrap(
-          trustedBlockRoot,
-          cfg, forkDigests),
-        restRequestsTimeout
+        client.getLightClientBootstrap(trustedBlockRoot, cfg, forkDigests),
+        restRequestsTimeout,
       ):
         error "Attempt to download LC bootstrap timed out"
         quit 1
@@ -85,16 +86,11 @@ proc exportLCBootstrapUpdate*(
       let
         slot = forkyObject.header.beacon.slot
         contentKey = encode(bootstrapContentKey(trustedBlockRoot))
-        forkDigest = forkDigestAtEpoch(
-          forkDigests[], epoch(slot), cfg)
-        content = encodeBootstrapForked(
-          forkDigest,
-          update
-        )
+        forkDigest = forkDigestAtEpoch(forkDigests[], epoch(slot), cfg)
+        content = encodeBootstrapForked(forkDigest, update)
 
       let portalContent = JsonPortalContent(
-        content_key: contentKey.asSeq().to0xHex(),
-        content_value: content.to0xHex()
+        content_key: contentKey.asSeq().to0xHex(), content_value: content.to0xHex()
       )
 
       var contentTable: JsonPortalContentTable
@@ -103,9 +99,13 @@ proc exportLCBootstrapUpdate*(
       writePortalContentToJson(fh, contentTable)
 
 proc exportLCUpdates*(
-    restUrl: string, dataDir: string,
-    startPeriod: uint64, count: uint64,
-    cfg: RuntimeConfig, forkDigests: ref ForkDigests) {.async.} =
+    restUrl: string,
+    dataDir: string,
+    startPeriod: uint64,
+    count: uint64,
+    cfg: RuntimeConfig,
+    forkDigests: ref ForkDigests,
+) {.async.} =
   let file = "light-client-updates.json"
   let fh = createAndOpenFile(dataDir, file)
 
@@ -116,18 +116,18 @@ proc exportLCUpdates*(
       fatal "Error occured while closing file", error = e.msg
       quit 1
 
-  let
-    client = RestClientRef.new(restUrl).valueOr:
-      error "Cannot connect to server", error = error
-      quit 1
+  let client = RestClientRef.new(restUrl).valueOr:
+    error "Cannot connect to server", error = error
+    quit 1
 
   let updates =
     try:
       notice "Downloading LC updates"
       awaitWithTimeout(
         client.getLightClientUpdatesByRange(
-          SyncCommitteePeriod(startPeriod), count, cfg, forkDigests),
-        restRequestsTimeout
+          SyncCommitteePeriod(startPeriod), count, cfg, forkDigests
+        ),
+        restRequestsTimeout,
       ):
         error "Attempt to download LC updates timed out"
         quit 1
@@ -143,17 +143,13 @@ proc exportLCUpdates*(
           period = forkyObject.attested_header.beacon.slot.sync_committee_period
           contentKey = encode(updateContentKey(period.uint64, count))
           forkDigest = forkDigestAtEpoch(
-            forkDigests[], epoch(forkyObject.attested_header.beacon.slot), cfg)
-
-          content = encodeLightClientUpdatesForked(
-            forkDigest,
-            updates
+            forkDigests[], epoch(forkyObject.attested_header.beacon.slot), cfg
           )
 
+          content = encodeLightClientUpdatesForked(forkDigest, updates)
 
         let portalContent = JsonPortalContent(
-          content_key: contentKey.asSeq().to0xHex(),
-          content_value: content.to0xHex()
+          content_key: contentKey.asSeq().to0xHex(), content_value: content.to0xHex()
         )
 
         var contentTable: JsonPortalContentTable
@@ -165,8 +161,8 @@ proc exportLCUpdates*(
     quit 1
 
 proc exportLCFinalityUpdate*(
-    restUrl: string, dataDir: string,
-    cfg: RuntimeConfig, forkDigests: ref ForkDigests) {.async.} =
+    restUrl: string, dataDir: string, cfg: RuntimeConfig, forkDigests: ref ForkDigests
+) {.async.} =
   let file = "light-client-finality-update.json"
   let fh = createAndOpenFile(dataDir, file)
 
@@ -177,18 +173,15 @@ proc exportLCFinalityUpdate*(
       fatal "Error occured while closing file", error = e.msg
       quit 1
 
-  let
-    client = RestClientRef.new(restUrl).valueOr:
-      error "Cannot connect to server", error = error
-      quit 1
+  let client = RestClientRef.new(restUrl).valueOr:
+    error "Cannot connect to server", error = error
+    quit 1
 
   let update =
     try:
       notice "Downloading LC finality update"
       awaitWithTimeout(
-        client.getLightClientFinalityUpdate(
-          cfg, forkDigests),
-        restRequestsTimeout
+        client.getLightClientFinalityUpdate(cfg, forkDigests), restRequestsTimeout
       ):
         error "Attempt to download LC finality update timed out"
         quit 1
@@ -202,15 +195,12 @@ proc exportLCFinalityUpdate*(
         finalizedSlot = forkyObject.finalized_header.beacon.slot
         contentKey = encode(finalityUpdateContentKey(finalizedSlot.uint64))
         forkDigest = forkDigestAtEpoch(
-          forkDigests[], epoch(forkyObject.attested_header.beacon.slot), cfg)
-        content = encodeFinalityUpdateForked(
-          forkDigest,
-          update
+          forkDigests[], epoch(forkyObject.attested_header.beacon.slot), cfg
         )
+        content = encodeFinalityUpdateForked(forkDigest, update)
 
       let portalContent = JsonPortalContent(
-        content_key: contentKey.asSeq().to0xHex(),
-        content_value: content.to0xHex()
+        content_key: contentKey.asSeq().to0xHex(), content_value: content.to0xHex()
       )
 
       var contentTable: JsonPortalContentTable
@@ -219,8 +209,8 @@ proc exportLCFinalityUpdate*(
       writePortalContentToJson(fh, contentTable)
 
 proc exportLCOptimisticUpdate*(
-    restUrl: string, dataDir: string,
-    cfg: RuntimeConfig, forkDigests: ref ForkDigests) {.async.} =
+    restUrl: string, dataDir: string, cfg: RuntimeConfig, forkDigests: ref ForkDigests
+) {.async.} =
   let file = "light-client-optimistic-update.json"
   let fh = createAndOpenFile(dataDir, file)
 
@@ -231,18 +221,15 @@ proc exportLCOptimisticUpdate*(
       fatal "Error occured while closing file", error = e.msg
       quit 1
 
-  let
-    client = RestClientRef.new(restUrl).valueOr:
-      error "Cannot connect to server", error = error
-      quit 1
+  let client = RestClientRef.new(restUrl).valueOr:
+    error "Cannot connect to server", error = error
+    quit 1
 
   let update =
     try:
       notice "Downloading LC optimistic update"
       awaitWithTimeout(
-        client.getLightClientOptimisticUpdate(
-          cfg, forkDigests),
-        restRequestsTimeout
+        client.getLightClientOptimisticUpdate(cfg, forkDigests), restRequestsTimeout
       ):
         error "Attempt to download LC optimistic update timed out"
         quit 1
@@ -256,15 +243,12 @@ proc exportLCOptimisticUpdate*(
         slot = forkyObject.signature_slot
         contentKey = encode(optimisticUpdateContentKey(slot.uint64))
         forkDigest = forkDigestAtEpoch(
-          forkDigests[], epoch(forkyObject.attested_header.beacon.slot), cfg)
-        content = encodeOptimisticUpdateForked(
-          forkDigest,
-          update
+          forkDigests[], epoch(forkyObject.attested_header.beacon.slot), cfg
         )
+        content = encodeOptimisticUpdateForked(forkDigest, update)
 
       let portalContent = JsonPortalContent(
-        content_key: contentKey.asSeq().to0xHex(),
-        content_value: content.to0xHex()
+        content_key: contentKey.asSeq().to0xHex(), content_value: content.to0xHex()
       )
 
       var contentTable: JsonPortalContentTable

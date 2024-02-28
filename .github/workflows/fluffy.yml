@@ -315,6 +315,18 @@ jobs:
         with:
           fetch-depth: 2  # In PR, has extra merge commit: ^1 = PR, ^2 = base
 
+      - name: Check nph formatting
+        # Pin nph to a specific version to avoid sudden style differences.
+        # Updating nph version should be accompanied with running the new
+        # version on the fluffy directory.
+        run: |
+          VERSION="v0.5.1"
+          ARCHIVE="nph-linux_x64.tar.gz"
+          curl -L "https://github.com/arnetheduck/nph/releases/download/${VERSION}/${ARCHIVE}" -o ${ARCHIVE}
+          tar -xzf ${ARCHIVE}
+          ./nph fluffy/
+          git diff --exit-code
+
       - name: Check copyright year
         if: ${{ !cancelled() }} && github.event_name == 'pull_request'
         run: |

@@ -8,7 +8,8 @@
 {.push raises: [].}
 
 import
-  stew/[byteutils, io2, results], chronicles,
+  stew/[byteutils, io2, results],
+  chronicles,
   eth/[rlp, common/eth_types],
   ncli/e2store,
   ../network/history/[history_content, accumulator]
@@ -18,7 +19,7 @@ export results
 # Reading SSZ data from files
 
 proc readAccumulator*(file: string): Result[FinishedAccumulator, string] =
-  let encodedAccumulator = ? readAllFile(file).mapErr(toString)
+  let encodedAccumulator = ?readAllFile(file).mapErr(toString)
 
   try:
     ok(SSZ.decode(encodedAccumulator, FinishedAccumulator))
@@ -26,7 +27,7 @@ proc readAccumulator*(file: string): Result[FinishedAccumulator, string] =
     err("Failed decoding accumulator: " & e.msg)
 
 proc readEpochAccumulator*(file: string): Result[EpochAccumulator, string] =
-  let encodedAccumulator = ? readAllFile(file).mapErr(toString)
+  let encodedAccumulator = ?readAllFile(file).mapErr(toString)
 
   try:
     ok(SSZ.decode(encodedAccumulator, EpochAccumulator))
@@ -34,7 +35,7 @@ proc readEpochAccumulator*(file: string): Result[EpochAccumulator, string] =
     err("Decoding epoch accumulator failed: " & e.msg)
 
 proc readEpochAccumulatorCached*(file: string): Result[EpochAccumulatorCached, string] =
-  let encodedAccumulator = ? readAllFile(file).mapErr(toString)
+  let encodedAccumulator = ?readAllFile(file).mapErr(toString)
 
   try:
     ok(SSZ.decode(encodedAccumulator, EpochAccumulatorCached))
@@ -54,8 +55,9 @@ const
   ExecutionBlockHeaderRecord* = [byte 0xFF, 0x00]
 
 proc readBlockHeaders*(file: string): Result[seq[BlockHeader], string] =
-  let fh = ? openFile(file, {OpenFlags.Read}).mapErr(toString)
-  defer: discard closeFile(fh)
+  let fh = ?openFile(file, {OpenFlags.Read}).mapErr(toString)
+  defer:
+    discard closeFile(fh)
 
   var data: seq[byte]
   var blockHeaders: seq[BlockHeader]

@@ -89,15 +89,15 @@ type
     List[ForkedLightClientUpdate, MAX_REQUEST_LIGHT_CLIENT_UPDATES]
 
 func forkDigestAtEpoch*(
-    forkDigests: ForkDigests, epoch: Epoch, cfg: RuntimeConfig): ForkDigest =
+    forkDigests: ForkDigests, epoch: Epoch, cfg: RuntimeConfig
+): ForkDigest =
   forkDigests.atEpoch(epoch, cfg)
 
 func encode*(contentKey: ContentKey): ByteList =
   doAssert(contentKey.contentType != unused)
   ByteList.init(SSZ.encode(contentKey))
 
-proc readSszBytes*(
-    data: openArray[byte], val: var ContentKey) {.raises: [SszError].} =
+proc readSszBytes*(data: openArray[byte], val: var ContentKey) {.raises: [SszError].} =
   mixin readSszValue
   if data.len() > 0 and data[0] == ord(unused):
     raise newException(MalformedSszError, "SSZ selector unused value")
@@ -128,8 +128,8 @@ func toContentId*(contentKey: ContentKey): ContentId =
 # Not something we would like to include as a parameter here, so we stick with
 # just passing the forkDigest and doing the work outside of this encode call.
 func encodeForkedLightClientObject*(
-    obj: SomeForkedLightClientObject,
-    forkDigest: ForkDigest): seq[byte] =
+    obj: SomeForkedLightClientObject, forkDigest: ForkDigest
+): seq[byte] =
   withForkyObject(obj):
     when lcDataFork > LightClientDataFork.None:
       var res: seq[byte]
@@ -141,35 +141,36 @@ func encodeForkedLightClientObject*(
       raiseAssert("No light client objects before Altair")
 
 func encodeBootstrapForked*(
-    forkDigest: ForkDigest,
-    bootstrap: ForkedLightClientBootstrap): seq[byte] =
+    forkDigest: ForkDigest, bootstrap: ForkedLightClientBootstrap
+): seq[byte] =
   encodeForkedLightClientObject(bootstrap, forkDigest)
 
 func encodeFinalityUpdateForked*(
-    forkDigest: ForkDigest,
-    finalityUpdate: ForkedLightClientFinalityUpdate): seq[byte] =
+    forkDigest: ForkDigest, finalityUpdate: ForkedLightClientFinalityUpdate
+): seq[byte] =
   encodeForkedLightClientObject(finalityUpdate, forkDigest)
 
 func encodeOptimisticUpdateForked*(
-    forkDigest: ForkDigest,
-    optimisticUpdate: ForkedLightClientOptimisticUpdate): seq[byte] =
+    forkDigest: ForkDigest, optimisticUpdate: ForkedLightClientOptimisticUpdate
+): seq[byte] =
   encodeForkedLightClientObject(optimisticUpdate, forkDigest)
 
 func encodeLightClientUpdatesForked*(
-    forkDigest: ForkDigest,
-    updates: openArray[ForkedLightClientUpdate]): seq[byte] =
+    forkDigest: ForkDigest, updates: openArray[ForkedLightClientUpdate]
+): seq[byte] =
   var list: ForkedLightClientUpdateBytesList
   for update in updates:
     discard list.add(
-      ForkedLightClientUpdateBytes(
-        encodeForkedLightClientObject(update, forkDigest)))
+      ForkedLightClientUpdateBytes(encodeForkedLightClientObject(update, forkDigest))
+    )
 
   SSZ.encode(list)
 
 func decodeForkedLightClientObject(
     ObjType: type SomeForkedLightClientObject,
     forkDigests: ForkDigests,
-    data: openArray[byte]): Result[ObjType, string] =
+    data: openArray[byte],
+): Result[ObjType, string] =
   if len(data) < 4:
     return Result[ObjType, string].err("Not enough data for forkDigest")
 
@@ -180,8 +181,7 @@ func decodeForkedLightClientObject(
 
   withLcDataFork(lcDataForkAtConsensusFork(contextFork)):
     when lcDataFork > LightClientDataFork.None:
-      let res = decodeSsz(
-        data.toOpenArray(4, len(data) - 1), ObjType.Forky(lcDataFork))
+      let res = decodeSsz(data.toOpenArray(4, len(data) - 1), ObjType.Forky(lcDataFork))
       if res.isOk:
         # TODO:
         # How can we verify the Epoch vs fork, e.g. with `consensusForkAtEpoch`?
@@ -195,51 +195,33 @@ func decodeForkedLightClientObject(
       Result[ObjType, string].err("Invalid Fork")
 
 func decodeLightClientBootstrapForked*(
-    forkDigests: ForkDigests,
-    data: openArray[byte]): Result[ForkedLightClientBootstrap, string] =
-  decodeForkedLightClientObject(
-    ForkedLightClientBootstrap,
-    forkDigests,
-    data
-  )
+    forkDigests: ForkDigests, data: openArray[byte]
+): Result[ForkedLightClientBootstrap, string] =
+  decodeForkedLightClientObject(ForkedLightClientBootstrap, forkDigests, data)
 
 func decodeLightClientUpdateForked*(
-    forkDigests: ForkDigests,
-    data: openArray[byte]): Result[ForkedLightClientUpdate, string] =
-  decodeForkedLightClientObject(
-    ForkedLightClientUpdate,
-    forkDigests,
-    data
-  )
+    forkDigests: ForkDigests, data: openArray[byte]
+): Result[ForkedLightClientUpdate, string] =
+  decodeForkedLightClientObject(ForkedLightClientUpdate, forkDigests, data)
 
 func decodeLightClientFinalityUpdateForked*(
-    forkDigests: ForkDigests,
-    data: openArray[byte]): Result[ForkedLightClientFinalityUpdate, string] =
-  decodeForkedLightClientObject(
-    ForkedLightClientFinalityUpdate,
-    forkDigests,
-    data
-  )
+    forkDigests: ForkDigests, data: openArray[byte]
+): Result[ForkedLightClientFinalityUpdate, string] =
+  decodeForkedLightClientObject(ForkedLightClientFinalityUpdate, forkDigests, data)
 
 func decodeLightClientOptimisticUpdateForked*(
-    forkDigests: ForkDigests,
-    data: openArray[byte]): Result[ForkedLightClientOptimisticUpdate, string] =
-  decodeForkedLightClientObject(
-    ForkedLightClientOptimisticUpdate,
-    forkDigests,
-    data
-  )
+    forkDigests: ForkDigests, data: openArray[byte]
+): Result[ForkedLightClientOptimisticUpdate, string] =
+  decodeForkedLightClientObject(ForkedLightClientOptimisticUpdate, forkDigests, data)
 
 func decodeLightClientUpdatesByRange*(
-    forkDigests: ForkDigests,
-    data: openArray[byte]):
-    Result[ForkedLightClientUpdateList, string] =
-  let list = ? decodeSsz(data, ForkedLightClientUpdateBytesList)
+    forkDigests: ForkDigests, data: openArray[byte]
+): Result[ForkedLightClientUpdateList, string] =
+  let list = ?decodeSsz(data, ForkedLightClientUpdateBytesList)
 
   var res: ForkedLightClientUpdateList
   for encodedUpdate in list:
-    let update = ? decodeLightClientUpdateForked(
-      forkDigests, encodedUpdate.asSeq())
+    let update = ?decodeLightClientUpdateForked(forkDigests, encodedUpdate.asSeq())
     discard res.add(update)
 
   ok(res)
@@ -247,34 +229,28 @@ func decodeLightClientUpdatesByRange*(
 func bootstrapContentKey*(blockHash: Digest): ContentKey =
   ContentKey(
     contentType: lightClientBootstrap,
-    lightClientBootstrapKey: LightClientBootstrapKey(blockHash: blockHash)
+    lightClientBootstrapKey: LightClientBootstrapKey(blockHash: blockHash),
   )
 
 func updateContentKey*(startPeriod: uint64, count: uint64): ContentKey =
   ContentKey(
     contentType: lightClientUpdate,
-    lightClientUpdateKey: LightClientUpdateKey(
-      startPeriod: startPeriod, count: count)
+    lightClientUpdateKey: LightClientUpdateKey(startPeriod: startPeriod, count: count),
   )
 
 func finalityUpdateContentKey*(finalizedSlot: uint64): ContentKey =
   ContentKey(
     contentType: lightClientFinalityUpdate,
-    lightClientFinalityUpdateKey: LightClientFinalityUpdateKey(
-      finalizedSlot: finalizedSlot
-    )
+    lightClientFinalityUpdateKey:
+      LightClientFinalityUpdateKey(finalizedSlot: finalizedSlot),
   )
 
 func optimisticUpdateContentKey*(optimisticSlot: uint64): ContentKey =
   ContentKey(
     contentType: lightClientOptimisticUpdate,
-    lightClientOptimisticUpdateKey: LightClientOptimisticUpdateKey(
-      optimisticSlot: optimisticSlot
-    )
+    lightClientOptimisticUpdateKey:
+      LightClientOptimisticUpdateKey(optimisticSlot: optimisticSlot),
   )
 
 func historicalSummariesContentKey*(): ContentKey =
-  ContentKey(
-    contentType: historicalSummaries,
-    historicalSummariesKey: 0
-  )
+  ContentKey(contentType: historicalSummaries, historicalSummariesKey: 0)

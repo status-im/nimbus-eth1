@@ -8,8 +8,10 @@
 {.push raises: [].}
 
 import
-  eth/rlp, eth/common/eth_types_rlp,
-  ssz_serialization, ssz_serialization/[proofs, merkleization],
+  eth/rlp,
+  eth/common/eth_types_rlp,
+  ssz_serialization,
+  ssz_serialization/[proofs, merkleization],
   ../../common/common_types,
   ./history_content
 
@@ -70,20 +72,19 @@ type
 func init*(T: type Accumulator): T =
   Accumulator(
     historicalEpochs: List[Bytes32, int(preMergeEpochs)].init(@[]),
-    currentEpoch: EpochAccumulator.init(@[])
+    currentEpoch: EpochAccumulator.init(@[]),
   )
 
-func getEpochAccumulatorRoot*(
-    headerRecords: openArray[HeaderRecord]
-  ): Digest =
+func getEpochAccumulatorRoot*(headerRecords: openArray[HeaderRecord]): Digest =
   let epochAccumulator = EpochAccumulator.init(@headerRecords)
 
   hash_tree_root(epochAccumulator)
 
-func updateAccumulator*(
-    a: var Accumulator, header: BlockHeader) =
-  doAssert(header.blockNumber.truncate(uint64) < mergeBlockNumber,
-    "No post merge blocks for header accumulator")
+func updateAccumulator*(a: var Accumulator, header: BlockHeader) =
+  doAssert(
+    header.blockNumber.truncate(uint64) < mergeBlockNumber,
+    "No post merge blocks for header accumulator",
+  )
 
   let lastTotalDifficulty =
     if a.currentEpoch.len() == 0:
@@ -101,10 +102,10 @@ func updateAccumulator*(
     doAssert(a.historicalEpochs.add(epochHash.data))
     a.currentEpoch = EpochAccumulator.init(@[])
 
-  let headerRecord =
-    HeaderRecord(
-      blockHash: header.blockHash(),
-      totalDifficulty: lastTotalDifficulty + header.difficulty)
+  let headerRecord = HeaderRecord(
+    blockHash: header.blockHash(),
+    totalDifficulty: lastTotalDifficulty + header.difficulty,
+  )
 
   let res = a.currentEpoch.add(headerRecord)
   doAssert(res, "Can't fail because of currentEpoch length check")
@@ -144,7 +145,8 @@ func isPreMerge*(header: BlockHeader): bool =
   isPreMerge(header.blockNumber.truncate(uint64))
 
 func verifyProof(
-    a: FinishedAccumulator, header: BlockHeader, proof: openArray[Digest]): bool =
+    a: FinishedAccumulator, header: BlockHeader, proof: openArray[Digest]
+): bool =
   let
     epochIndex = getEpochIndex(header)
     epochAccumulatorHash = Digest(data: a.historicalEpochs[epochIndex])
@@ -153,13 +155,13 @@ func verifyProof(
     headerRecordIndex = getHeaderRecordIndex(header, epochIndex)
 
     # TODO: Implement more generalized `get_generalized_index`
-    gIndex = GeneralizedIndex(epochSize*2*2 + (headerRecordIndex*2))
+    gIndex = GeneralizedIndex(epochSize * 2 * 2 + (headerRecordIndex * 2))
 
   verify_merkle_multiproof(@[leave], proof, @[gIndex], epochAccumulatorHash)
 
 func verifyAccumulatorProof*(
-    a: FinishedAccumulator, header: BlockHeader, proof: AccumulatorProof):
-    Result[void, string] =
+    a: FinishedAccumulator, header: BlockHeader, proof: AccumulatorProof
+): Result[void, string] =
   if header.isPreMerge():
     # Note: The proof is typed with correct depth, so no check on this is
     # required here.
@@ -171,9 +173,9 @@ func verifyAccumulatorProof*(
     err("Cannot verify post merge header with accumulator proof")
 
 func verifyHeader*(
-    a: FinishedAccumulator, header: BlockHeader, proof: BlockHeaderProof):
-    Result[void, string] =
-  case proof.proofType:
+    a: FinishedAccumulator, header: BlockHeader, proof: BlockHeaderProof
+): Result[void, string] =
+  case proof.proofType
   of BlockHeaderProofType.accumulatorProof:
     a.verifyAccumulatorProof(header, proof.accumulatorProof)
   of BlockHeaderProofType.none:
@@ -189,9 +191,8 @@ func verifyHeader*(
       ok()
 
 func buildProof*(
-    header: BlockHeader,
-    epochAccumulator: EpochAccumulator | EpochAccumulatorCached):
-    Result[AccumulatorProof, string] =
+    header: BlockHeader, epochAccumulator: EpochAccumulator | EpochAccumulatorCached
+): Result[AccumulatorProof, string] =
   doAssert(header.isPreMerge(), "Must be pre merge header")
 
   let
@@ -199,33 +200,37 @@ func buildProof*(
     headerRecordIndex = getHeaderRecordIndex(header, epochIndex)
 
     # TODO: Implement more generalized `get_generalized_index`
-    gIndex = GeneralizedIndex(epochSize*2*2 + (headerRecordIndex*2))
+    gIndex = GeneralizedIndex(epochSize * 2 * 2 + (headerRecordIndex * 2))
 
   var proof: AccumulatorProof
-  ? epochAccumulator.build_proof(gIndex, proof)
+  ?epochAccumulator.build_proof(gIndex, proof)
 
   ok(proof)
 
 func buildHeaderWithProof*(
-    header: BlockHeader,
-    epochAccumulator: EpochAccumulator | EpochAccumulatorCached):
-    Result[BlockHeaderWithProof, string] =
-  let proof = ? buildProof(header, epochAccumulator)
+    header: BlockHeader, epochAccumulator: EpochAccumulator | EpochAccumulatorCached
+): Result[BlockHeaderWithProof, string] =
+  let proof = ?buildProof(header, epochAccumulator)
 
-  ok(BlockHeaderWithProof(
-    header: ByteList.init(rlp.encode(header)),
-    proof: BlockHeaderProof.init(proof)))
+  ok(
+    BlockHeaderWithProof(
+      header: ByteList.init(rlp.encode(header)), proof: BlockHeaderProof.init(proof)
+    )
+  )
 
 func getBlockEpochDataForBlockNumber*(
-    a: FinishedAccumulator, bn: UInt256): Result[BlockEpochData, string] =
+    a: FinishedAccumulator, bn: UInt256
+): Result[BlockEpochData, string] =
   let blockNumber = bn.truncate(uint64)
 
   if blockNumber.isPreMerge:
     let epochIndex = getEpochIndex(blockNumber)
 
-    ok(BlockEpochData(
-      epochHash: a.historicalEpochs[epochIndex],
-      blockRelativeIndex: getHeaderRecordIndex(blockNumber, epochIndex))
+    ok(
+      BlockEpochData(
+        epochHash: a.historicalEpochs[epochIndex],
+        blockRelativeIndex: getHeaderRecordIndex(blockNumber, epochIndex),
       )
+    )
   else:
     err("Block number is post merge: " & $blockNumber)

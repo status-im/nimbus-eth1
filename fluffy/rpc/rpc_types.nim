@@ -28,7 +28,7 @@ type
 
 NodeInfo.useDefaultSerializationIn JrpcConv
 RoutingTableInfo.useDefaultSerializationIn JrpcConv
-(string,string).useDefaultSerializationIn JrpcConv
+(string, string).useDefaultSerializationIn JrpcConv
 
 func getNodeInfo*(r: RoutingTable): NodeInfo =
   NodeInfo(enr: r.localNode.record, nodeId: r.localNode.id)
@@ -57,61 +57,69 @@ func toNodeWithAddress*(enr: Record): Node {.raises: [ValueError].} =
   else:
     node
 
-proc writeValue*(w: var JsonWriter[JrpcConv], v: Record)
-      {.gcsafe, raises: [IOError].} =
+proc writeValue*(w: var JsonWriter[JrpcConv], v: Record) {.gcsafe, raises: [IOError].} =
   w.writeValue(v.toURI())
 
-proc readValue*(r: var JsonReader[JrpcConv], val: var Record)
-       {.gcsafe, raises: [IOError, JsonReaderError].} =
+proc readValue*(
+    r: var JsonReader[JrpcConv], val: var Record
+) {.gcsafe, raises: [IOError, JsonReaderError].} =
   if not fromURI(val, r.parseString()):
     r.raiseUnexpectedValue("Invalid ENR")
 
-proc writeValue*(w: var JsonWriter[JrpcConv], v: NodeId)
-      {.gcsafe, raises: [IOError].} =
+proc writeValue*(w: var JsonWriter[JrpcConv], v: NodeId) {.gcsafe, raises: [IOError].} =
   w.writeValue("0x" & v.toHex())
 
-proc writeValue*(w: var JsonWriter[JrpcConv], v: Opt[NodeId])
-      {.gcsafe, raises: [IOError].} =
+proc writeValue*(
+    w: var JsonWriter[JrpcConv], v: Opt[NodeId]
+) {.gcsafe, raises: [IOError].} =
   if v.isSome():
     w.writeValue("0x" & v.get().toHex())
   else:
     w.writeValue("0x")
 
-proc readValue*(r: var JsonReader[JrpcConv], val: var NodeId)
-       {.gcsafe, raises: [IOError, JsonReaderError].} =
+proc readValue*(
+    r: var JsonReader[JrpcConv], val: var NodeId
+) {.gcsafe, raises: [IOError, JsonReaderError].} =
   try:
     val = NodeId.fromHex(r.parseString())
   except ValueError as exc:
     r.raiseUnexpectedValue("NodeId parser error: " & exc.msg)
 
-proc writeValue*(w: var JsonWriter[JrpcConv], v: Opt[seq[byte]])
-      {.gcsafe, raises: [IOError].} =
+proc writeValue*(
+    w: var JsonWriter[JrpcConv], v: Opt[seq[byte]]
+) {.gcsafe, raises: [IOError].} =
   if v.isSome():
     w.writeValue(v.get().to0xHex())
   else:
     w.writeValue("0x")
 
-proc readValue*(r: var JsonReader[JrpcConv], val: var seq[byte])
-       {.gcsafe, raises: [IOError, JsonReaderError].} =
+proc readValue*(
+    r: var JsonReader[JrpcConv], val: var seq[byte]
+) {.gcsafe, raises: [IOError, JsonReaderError].} =
   try:
     val = hexToSeqByte(r.parseString())
   except ValueError as exc:
     r.raiseUnexpectedValue("seq[byte] parser error: " & exc.msg)
 
-proc writeValue*(w: var JsonWriter[JrpcConv], v: PingResult)
-      {.gcsafe, raises: [IOError].} =
+proc writeValue*(
+    w: var JsonWriter[JrpcConv], v: PingResult
+) {.gcsafe, raises: [IOError].} =
   w.beginRecord()
   w.writeField("enrSeq", v.enrSeq)
   w.writeField("dataRadius", "0x" & v.dataRadius.toHex)
   w.endRecord()
 
-proc readValue*(r: var JsonReader[JrpcConv], val: var PingResult)
-       {.gcsafe, raises: [IOError, SerializationError].} =
+proc readValue*(
+    r: var JsonReader[JrpcConv], val: var PingResult
+) {.gcsafe, raises: [IOError, SerializationError].} =
   try:
     for field in r.readObjectFields():
-      case field:
-      of "enrSeq": val.enrSeq = r.parseInt(uint64)
-      of "dataRadius": val.dataRadius = UInt256.fromHex(r.parseString())
-      else: discard
+      case field
+      of "enrSeq":
+        val.enrSeq = r.parseInt(uint64)
+      of "dataRadius":
+        val.dataRadius = UInt256.fromHex(r.parseString())
+      else:
+        discard
   except ValueError as exc:
     r.raiseUnexpectedValue("PingResult parser error: " & exc.msg)

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -14,10 +14,9 @@ import
   beacon_chain/spec/forks,
   beacon_chain/spec/datatypes/bellatrix,
   # Test helpers
-  beacon_chain/../tests/testblockutil,
-  beacon_chain/../tests/mocking/mock_genesis,
-  beacon_chain/../tests/consensus_spec/fixtures_utils,
-
+  beacon_chain /../ tests/testblockutil,
+  beacon_chain /../ tests/mocking/mock_genesis,
+  beacon_chain /../ tests/consensus_spec/fixtures_utils,
   ../network/history/experimental/beacon_chain_historical_roots
 
 suite "Beacon Chain Historical Roots":
@@ -34,7 +33,7 @@ suite "Beacon Chain Historical Roots":
   # index i = 0 is second block.
   # index i = 8190 is 8192th block and last one that is part of the first
   # historical root
-  for i in 0..<SLOTS_PER_HISTORICAL_ROOT:
+  for i in 0 ..< SLOTS_PER_HISTORICAL_ROOT:
     blocks.add(addTestBlock(state[], cache, cfg = cfg).bellatrixData)
 
   test "Historical Roots Proof":

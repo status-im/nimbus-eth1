@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2023 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -13,10 +13,9 @@ import
   unittest2,
   beacon_chain/spec/forks,
   beacon_chain/spec/datatypes/capella,
-  beacon_chain/../tests/testblockutil,
+  beacon_chain /../ tests/testblockutil,
   # Mock helpers
-  beacon_chain/../tests/mocking/mock_genesis,
-
+  beacon_chain /../ tests/mocking/mock_genesis,
   ../network/history/experimental/beacon_chain_block_proof_capella
 
 # Test suite for the proofs:
@@ -63,11 +62,11 @@ suite "Beacon Chain Block Proofs":
   # historical root
 
   # genesis + 8191 slots, next one will be capella fork
-  for i in 0..<SLOTS_PER_HISTORICAL_ROOT-1:
+  for i in 0 ..< SLOTS_PER_HISTORICAL_ROOT - 1:
     discard addTestBlock(state[], cache, cfg = cfg)
 
   # slot 8192 -> 16383
-  for i in 0..<SLOTS_PER_HISTORICAL_ROOT:
+  for i in 0 ..< SLOTS_PER_HISTORICAL_ROOT:
     blocks.add(addTestBlock(state[], cache, cfg = cfg).capellaData)
 
   # One more slot to hit second SLOTS_PER_HISTORICAL_ROOT, hitting first
@@ -76,15 +75,17 @@ suite "Beacon Chain Block Proofs":
 
   # Starts from the block after genesis.
   const blocksToTest = [
-      0'u64, 1, 2, 3,
-      SLOTS_PER_HISTORICAL_ROOT div 2,
-      SLOTS_PER_HISTORICAL_ROOT - 3,
-      SLOTS_PER_HISTORICAL_ROOT - 2
-    ]
+    0'u64,
+    1,
+    2,
+    3,
+    SLOTS_PER_HISTORICAL_ROOT div 2,
+    SLOTS_PER_HISTORICAL_ROOT - 3,
+    SLOTS_PER_HISTORICAL_ROOT - 2,
+  ]
 
   test "HistoricalRootsProof for BeaconBlockHeader":
-    let
-      blockRoots = getStateField(state[], block_roots).data
+    let blockRoots = getStateField(state[], block_roots).data
 
     withState(state[]):
       when consensusFork >= ConsensusFork.Capella:
@@ -102,8 +103,11 @@ suite "Beacon Chain Block Proofs":
           let proof = res.get()
 
           check verifyProof(
-            blocks[i].root, proof,
-            historical_summaries[historicalRootsIndex].block_summary_root, blockRootIndex)
+            blocks[i].root,
+            proof,
+            historical_summaries[historicalRootsIndex].block_summary_root,
+            blockRootIndex,
+          )
 
   test "BeaconBlockHeaderProof for BeaconBlockBody":
     # for i in 0..<(SLOTS_PER_HISTORICAL_ROOT - 1): # Test all blocks
@@ -115,7 +119,7 @@ suite "Beacon Chain Block Proofs":
           proposer_index: beaconBlock.proposer_index,
           parent_root: beaconBlock.parent_root,
           state_root: beaconBlock.state_root,
-          body_root: hash_tree_root(beaconBlock.body)
+          body_root: hash_tree_root(beaconBlock.body),
         )
         beaconBlockBody = beaconBlock.body
 
@@ -140,8 +144,7 @@ suite "Beacon Chain Block Proofs":
       check verifyProof(leave, proof, root)
 
   test "BeaconChainBlockProof for Execution BlockHeader":
-    let
-      blockRoots = getStateField(state[], block_roots).data
+    let blockRoots = getStateField(state[], block_roots).data
 
     withState(state[]):
       when consensusFork >= ConsensusFork.Capella:
@@ -156,7 +159,7 @@ suite "Beacon Chain Block Proofs":
               proposer_index: beaconBlock.proposer_index,
               parent_root: beaconBlock.parent_root,
               state_root: beaconBlock.state_root,
-              body_root: hash_tree_root(beaconBlock.body)
+              body_root: hash_tree_root(beaconBlock.body),
             )
             beaconBlockBody = beaconBlock.body
 

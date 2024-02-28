@@ -12,10 +12,17 @@
 
 import
   std/[sequtils, sets, algorithm, tables],
-  stew/[results, byteutils, leb128, endians2], chronicles, chronos,
-  nimcrypto/hash, bearssl, ssz_serialization, metrics, faststreams,
-  eth/rlp, eth/p2p/discoveryv5/[protocol, node, enr, routing_table, random2,
-    nodes_verification, lru],
+  stew/[results, byteutils, leb128, endians2],
+  chronicles,
+  chronos,
+  nimcrypto/hash,
+  bearssl,
+  ssz_serialization,
+  metrics,
+  faststreams,
+  eth/rlp,
+  eth/p2p/discoveryv5/
+    [protocol, node, enr, routing_table, random2, nodes_verification, lru],
   "."/[portal_stream, portal_protocol_config],
   ./messages
 
@@ -25,8 +32,7 @@ declareCounter portal_message_requests_incoming,
   "Portal wire protocol incoming message requests",
   labels = ["protocol_id", "message_type"]
 declareCounter portal_message_decoding_failures,
-  "Portal wire protocol message decoding failures",
-  labels = ["protocol_id"]
+  "Portal wire protocol message decoding failures", labels = ["protocol_id"]
 declareCounter portal_message_requests_outgoing,
   "Portal wire protocol outgoing message requests",
   labels = ["protocol_id", "message_type"]
@@ -37,21 +43,24 @@ declareCounter portal_message_response_incoming,
 const requestBuckets = [1.0, 3.0, 5.0, 7.0, 9.0, Inf]
 declareHistogram portal_lookup_node_requests,
   "Portal wire protocol amount of requests per node lookup",
-  labels = ["protocol_id"], buckets = requestBuckets
+  labels = ["protocol_id"],
+  buckets = requestBuckets
 declareHistogram portal_lookup_content_requests,
   "Portal wire protocol amount of requests per node lookup",
-  labels = ["protocol_id"], buckets = requestBuckets
+  labels = ["protocol_id"],
+  buckets = requestBuckets
 declareCounter portal_lookup_content_failures,
-  "Portal wire protocol content lookup failures",
-  labels = ["protocol_id"]
+  "Portal wire protocol content lookup failures", labels = ["protocol_id"]
 
 const contentKeysBuckets = [0.0, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0, Inf]
 declareHistogram portal_content_keys_offered,
   "Portal wire protocol amount of content keys per offer message send",
-  labels = ["protocol_id"], buckets = contentKeysBuckets
+  labels = ["protocol_id"],
+  buckets = contentKeysBuckets
 declareHistogram portal_content_keys_accepted,
   "Portal wire protocol amount of content keys per accept message received",
-  labels = ["protocol_id"], buckets = contentKeysBuckets
+  labels = ["protocol_id"],
+  buckets = contentKeysBuckets
 declareCounter portal_gossip_offers_successful,
   "Portal wire protocol successful content offers from neighborhood gossip",
   labels = ["protocol_id"]
@@ -70,23 +79,28 @@ declareCounter portal_gossip_without_lookup,
 const enrsBuckets = [0.0, 1.0, 3.0, 5.0, 8.0, 9.0, Inf]
 declareHistogram portal_nodes_enrs_packed,
   "Portal wire protocol amount of enrs packed in a nodes message",
-  labels = ["protocol_id"], buckets = enrsBuckets
+  labels = ["protocol_id"],
+  buckets = enrsBuckets
 # This one will currently hit the max numbers because all neighbours are send,
 # not only the ones closer to the content.
 declareHistogram portal_content_enrs_packed,
   "Portal wire protocol amount of enrs packed in a content message",
-  labels = ["protocol_id"], buckets = enrsBuckets
+  labels = ["protocol_id"],
+  buckets = enrsBuckets
 
-const distanceBuckets =
-  [float64 239, 240, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250, 251, 252,
-  253, 254, 255, 256]
+const distanceBuckets = [
+  float64 239, 240, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250, 251, 252, 253,
+  254, 255, 256,
+]
 declareHistogram portal_find_content_log_distance,
   "Portal wire protocol logarithmic distance of requested content",
-  labels = ["protocol_id"], buckets = distanceBuckets
+  labels = ["protocol_id"],
+  buckets = distanceBuckets
 
 declareHistogram portal_offer_log_distance,
   "Portal wire protocol logarithmic distance of offered content",
-  labels = ["protocol_id"], buckets = distanceBuckets
+  labels = ["protocol_id"],
+  buckets = distanceBuckets
 
 logScope:
   topics = "portal_wire"
@@ -132,16 +146,13 @@ type
   ToContentIdHandler* =
     proc(contentKey: ByteList): results.Opt[ContentId] {.raises: [], gcsafe.}
 
-  DbGetHandler* =
-    proc(
-      contentKey: ByteList,
-      contentId: ContentId): results.Opt[seq[byte]] {.raises: [], gcsafe.}
+  DbGetHandler* = proc(
+    contentKey: ByteList, contentId: ContentId
+  ): results.Opt[seq[byte]] {.raises: [], gcsafe.}
 
-  DbStoreHandler* =
-    proc(
-      contentKey: ByteList,
-      contentId: ContentId,
-      content: seq[byte]) {.raises: [], gcsafe.}
+  DbStoreHandler* = proc(contentKey: ByteList, contentId: ContentId, content: seq[byte]) {.
+    raises: [], gcsafe
+  .}
 
   PortalProtocolId* = array[2, byte]
 
@@ -152,7 +163,8 @@ type
     content*: seq[byte]
 
   OfferRequestType = enum
-    Direct, Database
+    Direct
+    Database
 
   OfferRequest = object
     dst: Node
@@ -185,7 +197,7 @@ type
   PortalResult*[T] = Result[T, string]
 
   FoundContentKind* = enum
-    Nodes,
+    Nodes
     Content
 
   FoundContent* = object
@@ -226,24 +238,19 @@ type
     utpTransfer*: bool
     trace*: TraceObject
 
-func init*(
-  T: type ContentKV,
-  contentKey: ByteList,
-  content: seq[byte]): T =
-  ContentKV(
-    contentKey: contentKey,
-    content: content
-  )
+func init*(T: type ContentKV, contentKey: ByteList, content: seq[byte]): T =
+  ContentKV(contentKey: contentKey, content: content)
 
 func init*(
-  T: type ContentLookupResult,
-  content: seq[byte],
-  utpTransfer: bool,
-  nodesInterestedInContent: seq[Node]): T =
+    T: type ContentLookupResult,
+    content: seq[byte],
+    utpTransfer: bool,
+    nodesInterestedInContent: seq[Node],
+): T =
   ContentLookupResult(
     content: content,
     utpTransfer: utpTransfer,
-    nodesInterestedInContent: nodesInterestedInContent
+    nodesInterestedInContent: nodesInterestedInContent,
   )
 
 func `$`(id: PortalProtocolId): string =
@@ -262,7 +269,8 @@ proc addNode*(p: PortalProtocol, r: Record): bool =
 func getNode*(p: PortalProtocol, id: NodeId): Opt[Node] =
   p.routingTable.getNode(id)
 
-func localNode*(p: PortalProtocol): Node = p.baseProtocol.localNode
+func localNode*(p: PortalProtocol): Node =
+  p.baseProtocol.localNode
 
 func neighbours*(p: PortalProtocol, id: NodeId, seenOnly = false): seq[Node] =
   p.routingTable.neighbours(id = id, seenOnly = seenOnly)
@@ -274,10 +282,8 @@ func logDistance(p: PortalProtocol, a, b: NodeId): uint16 =
   p.routingTable.logDistance(a, b)
 
 func inRange(
-    p: PortalProtocol,
-    nodeId: NodeId,
-    nodeRadius: UInt256,
-    contentId: ContentId): bool =
+    p: PortalProtocol, nodeId: NodeId, nodeRadius: UInt256, contentId: ContentId
+): bool =
   let distance = p.distance(nodeId, contentId)
   distance <= nodeRadius
 
@@ -285,7 +291,8 @@ func inRange*(p: PortalProtocol, contentId: ContentId): bool =
   p.inRange(p.localNode.id, p.dataRadius, contentId)
 
 func truncateEnrs(
-    nodes: seq[Node], maxSize: int, enrOverhead: int): List[ByteList, 32] =
+    nodes: seq[Node], maxSize: int, enrOverhead: int
+): List[ByteList, 32] =
   var enrs: List[ByteList, 32]
   var totalSize = 0
   for n in nodes:
@@ -300,21 +307,23 @@ func truncateEnrs(
 
   enrs
 
-func handlePing(
-    p: PortalProtocol, ping: PingMessage, srcId: NodeId): seq[byte] =
+func handlePing(p: PortalProtocol, ping: PingMessage, srcId: NodeId): seq[byte] =
   # TODO: This should become custom per Portal Network
   # TODO: Need to think about the effect of malicious actor sending lots of
   # pings from different nodes to clear the LRU.
   let customPayloadDecoded =
-    try: SSZ.decode(ping.customPayload.asSeq(), CustomPayload)
+    try:
+      SSZ.decode(ping.customPayload.asSeq(), CustomPayload)
     except SerializationError:
       # invalid custom payload, send empty back
       return @[]
   p.radiusCache.put(srcId, customPayloadDecoded.dataRadius)
 
   let customPayload = CustomPayload(dataRadius: p.dataRadius)
-  let p = PongMessage(enrSeq: p.localNode.record.seqNum,
-    customPayload: ByteList(SSZ.encode(customPayload)))
+  let p = PongMessage(
+    enrSeq: p.localNode.record.seqNum,
+    customPayload: ByteList(SSZ.encode(customPayload)),
+  )
 
   encodeMessage(p)
 
@@ -328,9 +337,11 @@ proc handleFindNodes(p: PortalProtocol, fn: FindNodesMessage): seq[byte] =
     encodeMessage(NodesMessage(total: 1, enrs: List[ByteList, 32](@[enr])))
   else:
     let distances = fn.distances.asSeq()
-    if distances.all(proc (x: uint16): bool = return x <= 256):
-      let
-        nodes = p.routingTable.neighboursAtDistances(distances, seenOnly = true)
+    if distances.all(
+      proc(x: uint16): bool =
+        return x <= 256
+    ):
+      let nodes = p.routingTable.neighboursAtDistances(distances, seenOnly = true)
 
       # TODO: Total amount of messages is set fixed to 1 for now, else we would
       # need to either move the send of the talkresp messages here, or allow for
@@ -345,8 +356,7 @@ proc handleFindNodes(p: PortalProtocol, fn: FindNodesMessage): seq[byte] =
         enrOverhead = 4 # per added ENR, 4 bytes offset overhead
 
       let enrs = truncateEnrs(nodes, maxPayloadSize, enrOverhead)
-      portal_nodes_enrs_packed.observe(
-        enrs.len().int64, labelValues = [$p.protocolId])
+      portal_nodes_enrs_packed.observe(enrs.len().int64, labelValues = [$p.protocolId])
 
       encodeMessage(NodesMessage(total: 1, enrs: enrs))
     else:
@@ -355,7 +365,8 @@ proc handleFindNodes(p: PortalProtocol, fn: FindNodesMessage): seq[byte] =
       encodeMessage(NodesMessage(total: 1, enrs: enrs))
 
 proc handleFindContent(
-    p: PortalProtocol, fc: FindContentMessage, srcId: NodeId): seq[byte] =
+    p: PortalProtocol, fc: FindContentMessage, srcId: NodeId
+): seq[byte] =
   const
     contentOverhead = 1 + 1 # msg id + SSZ Union selector
     maxPayloadSize = maxDiscv5PacketSize - talkRespOverhead - contentOverhead
@@ -369,7 +380,8 @@ proc handleFindContent(
 
   let logDistance = p.logDistance(contentId, p.localNode.id)
   portal_find_content_log_distance.observe(
-    int64(logDistance), labelValues = [$p.protocolId])
+    int64(logDistance), labelValues = [$p.protocolId]
+  )
 
   # Check first if content is in range, as this is a cheaper operation
   if p.inRange(contentId):
@@ -377,22 +389,24 @@ proc handleFindContent(
     if contentResult.isOk():
       let content = contentResult.get()
       if content.len <= maxPayloadSize:
-        return encodeMessage(ContentMessage(
-          contentMessageType: contentType, content: ByteList(content)))
+        return encodeMessage(
+          ContentMessage(contentMessageType: contentType, content: ByteList(content))
+        )
       else:
         let connectionId = p.stream.addContentRequest(srcId, content)
 
-        return encodeMessage(ContentMessage(
-          contentMessageType: connectionIdType, connectionId: connectionId))
+        return encodeMessage(
+          ContentMessage(
+            contentMessageType: connectionIdType, connectionId: connectionId
+          )
+        )
 
   # Node does not have the content, or content is not even in radius,
   # send closest neighbours to the requested content id.
   let
-    closestNodes = p.routingTable.neighbours(
-      NodeId(contentId), seenOnly = true)
+    closestNodes = p.routingTable.neighbours(NodeId(contentId), seenOnly = true)
     enrs = truncateEnrs(closestNodes, maxPayloadSize, enrOverhead)
-  portal_content_enrs_packed.observe(
-    enrs.len().int64, labelValues = [$p.protocolId])
+  portal_content_enrs_packed.observe(enrs.len().int64, labelValues = [$p.protocolId])
 
   encodeMessage(ContentMessage(contentMessageType: enrsType, enrs: enrs))
 
@@ -401,9 +415,12 @@ proc handleOffer(p: PortalProtocol, o: OfferMessage, srcId: NodeId): seq[byte] =
   # of content to process and potentially gossip around. Don't accept more
   # data in this case.
   if p.stream.contentQueue.full():
-    return encodeMessage(AcceptMessage(
-      connectionId: Bytes2([byte 0x00, 0x00]),
-      contentKeys: ContentKeysBitList.init(o.contentKeys.len)))
+    return encodeMessage(
+      AcceptMessage(
+        connectionId: Bytes2([byte 0x00, 0x00]),
+        contentKeys: ContentKeysBitList.init(o.contentKeys.len),
+      )
+    )
 
   var contentKeysBitList = ContentKeysBitList.init(o.contentKeys.len)
   var contentKeys = ContentKeysList.init(@[])
@@ -419,7 +436,8 @@ proc handleOffer(p: PortalProtocol, o: OfferMessage, srcId: NodeId): seq[byte] =
 
       let logDistance = p.logDistance(contentId, p.localNode.id)
       portal_offer_log_distance.observe(
-        int64(logDistance), labelValues = [$p.protocolId])
+        int64(logDistance), labelValues = [$p.protocolId]
+      )
 
       if p.inRange(contentId):
         if p.dbGet(contentKey, contentId).isErr:
@@ -439,10 +457,16 @@ proc handleOffer(p: PortalProtocol, o: OfferMessage, srcId: NodeId): seq[byte] =
       Bytes2([byte 0x00, 0x00])
 
   encodeMessage(
-    AcceptMessage(connectionId: connectionId, contentKeys: contentKeysBitList))
+    AcceptMessage(connectionId: connectionId, contentKeys: contentKeysBitList)
+  )
 
-proc messageHandler(protocol: TalkProtocol, request: seq[byte],
-    srcId: NodeId, srcUdpAddress: Address, nodeOpt: Opt[Node]): seq[byte] =
+proc messageHandler(
+    protocol: TalkProtocol,
+    request: seq[byte],
+    srcId: NodeId,
+    srcUdpAddress: Address,
+    nodeOpt: Opt[Node],
+): seq[byte] =
   doAssert(protocol of PortalProtocol)
 
   logScope:
@@ -467,18 +491,15 @@ proc messageHandler(protocol: TalkProtocol, request: seq[byte],
     if nodeOpt.isSome():
       let node = nodeOpt.value()
       let status = p.addNode(node)
-      trace "Adding new node to routing table after incoming request",
-        status, node
+      trace "Adding new node to routing table after incoming request", status, node
     else:
       let nodeOpt = p.baseProtocol.getNode(srcId)
       if nodeOpt.isSome():
         let node = nodeOpt.value()
         let status = p.addNode(node)
-        trace "Adding new node to routing table after incoming request",
-          status, node
+        trace "Adding new node to routing table after incoming request", status, node
 
-    portal_message_requests_incoming.inc(
-      labelValues = [$p.protocolId, $message.kind])
+    portal_message_requests_incoming.inc(labelValues = [$p.protocolId, $message.kind])
 
     case message.kind
     of MessageKind.ping:
@@ -499,7 +520,8 @@ proc messageHandler(protocol: TalkProtocol, request: seq[byte],
     debug "Packet decoding error", error = decoded.error, srcId, srcUdpAddress
     @[]
 
-proc new*(T: type PortalProtocol,
+proc new*(
+    T: type PortalProtocol,
     baseProtocol: protocol.Protocol,
     protocolId: PortalProtocolId,
     toContentId: ToContentIdHandler,
@@ -507,17 +529,17 @@ proc new*(T: type PortalProtocol,
     stream: PortalStream,
     bootstrapRecords: openArray[Record] = [],
     distanceCalculator: DistanceCalculator = XorDistanceCalculator,
-    config: PortalProtocolConfig = defaultPortalProtocolConfig
-    ): T =
-
+    config: PortalProtocolConfig = defaultPortalProtocolConfig,
+): T =
   let initialRadius: UInt256 = config.radiusConfig.getInitialRadius()
 
   let proto = PortalProtocol(
     protocolHandler: messageHandler,
     protocolId: protocolId,
     routingTable: RoutingTable.init(
-      baseProtocol.localNode, config.bitsPerHop, config.tableIpLimits,
-      baseProtocol.rng, distanceCalculator),
+      baseProtocol.localNode, config.bitsPerHop, config.tableIpLimits, baseProtocol.rng,
+      distanceCalculator,
+    ),
     baseProtocol: baseProtocol,
     toContentId: toContentId,
     dbGet: dbGet,
@@ -528,27 +550,27 @@ proc new*(T: type PortalProtocol,
     radiusCache: RadiusCache.init(256),
     offerQueue: newAsyncQueue[OfferRequest](concurrentOffers),
     disablePoke: config.disablePoke,
-    pingTimings: initTable[NodeId, chronos.Moment]()
-    )
+    pingTimings: initTable[NodeId, chronos.Moment](),
+  )
 
   proto.baseProtocol.registerTalkProtocol(@(proto.protocolId), proto).expect(
-    "Only one protocol should have this id")
+    "Only one protocol should have this id"
+  )
 
   proto
 
 # Sends the discv5 talkreq message with provided Portal message, awaits and
 # validates the proper response, and updates the Portal Network routing table.
 proc reqResponse[Request: SomeMessage, Response: SomeMessage](
-    p: PortalProtocol,
-    dst: Node,
-    request: Request
-    ): Future[PortalResult[Response]] {.async.} =
+    p: PortalProtocol, dst: Node, request: Request
+): Future[PortalResult[Response]] {.async.} =
   logScope:
     protocolId = p.protocolId
 
   trace "Send message request", dstId = dst.id, kind = messageKind(Request)
   portal_message_requests_outgoing.inc(
-    labelValues = [$p.protocolId, $messageKind(Request)])
+    labelValues = [$p.protocolId, $messageKind(Request)]
+  )
 
   let talkresp =
     await talkReq(p.baseProtocol, dst, @(p.protocolId), encodeMessage(request))
@@ -558,49 +580,65 @@ proc reqResponse[Request: SomeMessage, Response: SomeMessage](
   # an empty response needs to be send in that case.
   # See: https://github.com/ethereum/devp2p/blob/master/discv5/discv5-wire.md#talkreq-request-0x05
 
-  let messageResponse = talkresp.mapErr(proc (x: cstring): string = $x)
-    .flatMap(proc (x: seq[byte]): Result[Message, string] = decodeMessage(x))
-    .flatMap(proc (m: Message): Result[Response, string] =
-      getInnerMessage[Response](m))
+  let messageResponse = talkresp
+    .mapErr(
+      proc(x: cstring): string =
+        $x
+    )
+    .flatMap(
+      proc(x: seq[byte]): Result[Message, string] =
+        decodeMessage(x)
+    )
+    .flatMap(
+      proc(m: Message): Result[Response, string] =
+        getInnerMessage[Response](m)
+    )
 
   if messageResponse.isOk():
-    trace "Received message response", srcId = dst.id,
-      srcAddress = dst.address, kind = messageKind(Response)
+    trace "Received message response",
+      srcId = dst.id, srcAddress = dst.address, kind = messageKind(Response)
     portal_message_response_incoming.inc(
-      labelValues = [$p.protocolId, $messageKind(Response)])
+      labelValues = [$p.protocolId, $messageKind(Response)]
+    )
 
     p.routingTable.setJustSeen(dst)
   else:
-    debug "Error receiving message response", error = messageResponse.error,
-      srcId = dst.id, srcAddress = dst.address
+    debug "Error receiving message response",
+      error = messageResponse.error, srcId = dst.id, srcAddress = dst.address
     p.pingTimings.del(dst.id)
     p.routingTable.replaceNode(dst)
 
   return messageResponse
 
-proc pingImpl*(p: PortalProtocol, dst: Node):
-    Future[PortalResult[PongMessage]] {.async.} =
+proc pingImpl*(
+    p: PortalProtocol, dst: Node
+): Future[PortalResult[PongMessage]] {.async.} =
   let customPayload = CustomPayload(dataRadius: p.dataRadius)
-  let ping = PingMessage(enrSeq: p.localNode.record.seqNum,
-    customPayload: ByteList(SSZ.encode(customPayload)))
+  let ping = PingMessage(
+    enrSeq: p.localNode.record.seqNum,
+    customPayload: ByteList(SSZ.encode(customPayload)),
+  )
 
   return await reqResponse[PingMessage, PongMessage](p, dst, ping)
 
-proc findNodesImpl*(p: PortalProtocol, dst: Node, distances: List[uint16, 256]):
-    Future[PortalResult[NodesMessage]] {.async.} =
+proc findNodesImpl*(
+    p: PortalProtocol, dst: Node, distances: List[uint16, 256]
+): Future[PortalResult[NodesMessage]] {.async.} =
   let fn = FindNodesMessage(distances: distances)
 
   # TODO Add nodes validation
   return await reqResponse[FindNodesMessage, NodesMessage](p, dst, fn)
 
-proc findContentImpl*(p: PortalProtocol, dst: Node, contentKey: ByteList):
-    Future[PortalResult[ContentMessage]] {.async.} =
+proc findContentImpl*(
+    p: PortalProtocol, dst: Node, contentKey: ByteList
+): Future[PortalResult[ContentMessage]] {.async.} =
   let fc = FindContentMessage(contentKey: contentKey)
 
   return await reqResponse[FindContentMessage, ContentMessage](p, dst, fc)
 
-proc offerImpl*(p: PortalProtocol, dst: Node, contentKeys: ContentKeysList):
-    Future[PortalResult[AcceptMessage]] {.async.} =
+proc offerImpl*(
+    p: PortalProtocol, dst: Node, contentKeys: ContentKeysList
+): Future[PortalResult[AcceptMessage]] {.async.} =
   let offer = OfferMessage(contentKeys: contentKeys)
 
   return await reqResponse[OfferMessage, AcceptMessage](p, dst, offer)
@@ -618,8 +656,7 @@ proc recordsFromBytes*(rawRecords: List[ByteList, 32]): PortalResult[seq[Record]
 
   ok(records)
 
-proc ping*(p: PortalProtocol, dst: Node):
-    Future[PortalResult[PongMessage]] {.async.} =
+proc ping*(p: PortalProtocol, dst: Node): Future[PortalResult[PongMessage]] {.async.} =
   let pongResponse = await p.pingImpl(dst)
 
   if pongResponse.isOk():
@@ -629,7 +666,8 @@ proc ping*(p: PortalProtocol, dst: Node):
     let pong = pongResponse.get()
     # TODO: This should become custom per Portal Network
     let customPayloadDecoded =
-      try: SSZ.decode(pong.customPayload.asSeq(), CustomPayload)
+      try:
+        SSZ.decode(pong.customPayload.asSeq(), CustomPayload)
       except MalformedSszError, SszSizeMismatchError:
         # invalid custom payload
         return err("Pong message contains invalid custom payload")
@@ -639,22 +677,22 @@ proc ping*(p: PortalProtocol, dst: Node):
   return pongResponse
 
 proc findNodes*(
-    p: PortalProtocol, dst: Node, distances: seq[uint16]):
-    Future[PortalResult[seq[Node]]] {.async.} =
+    p: PortalProtocol, dst: Node, distances: seq[uint16]
+): Future[PortalResult[seq[Node]]] {.async.} =
   let nodesMessage = await p.findNodesImpl(dst, List[uint16, 256](distances))
   if nodesMessage.isOk():
     let records = recordsFromBytes(nodesMessage.get().enrs)
     if records.isOk():
       # TODO: distance function is wrong here for state, fix + tests
-      return ok(verifyNodesRecords(
-        records.get(), dst, enrsResultLimit, distances))
+      return ok(verifyNodesRecords(records.get(), dst, enrsResultLimit, distances))
     else:
       return err(records.error)
   else:
     return err(nodesMessage.error)
 
-proc findContent*(p: PortalProtocol, dst: Node, contentKey: ByteList):
-    Future[PortalResult[FoundContent]] {.async.} =
+proc findContent*(
+    p: PortalProtocol, dst: Node, contentKey: ByteList
+): Future[PortalResult[FoundContent]] {.async.} =
   logScope:
     node = dst
     contentKey
@@ -663,22 +701,21 @@ proc findContent*(p: PortalProtocol, dst: Node, contentKey: ByteList):
 
   if contentMessageResponse.isOk():
     let m = contentMessageResponse.get()
-    case m.contentMessageType:
+    case m.contentMessageType
     of connectionIdType:
       let nodeAddress = NodeAddress.init(dst)
       if nodeAddress.isNone():
         # It should not happen as we are already after the succesfull
         # talkreq/talkresp cycle
-        error "Trying to connect to node with unknown address",
-          id = dst.id
+        error "Trying to connect to node with unknown address", id = dst.id
         return err("Trying to connect to node with unknown address")
 
       # uTP protocol uses BE for all values in the header, incl. connection id
-      let socket =
-          (await p.stream.connectTo(
-            nodeAddress.unsafeGet(),
-            uint16.fromBytesBE(m.connectionId)
-          )).valueOr:
+      let socket = (
+        await p.stream.connectTo(
+          nodeAddress.unsafeGet(), uint16.fromBytesBE(m.connectionId)
+        )
+      ).valueOr:
         debug "uTP connection error for find content", error
         return err("Error connecting uTP socket")
 
@@ -691,8 +728,7 @@ proc findContent*(p: PortalProtocol, dst: Node, contentKey: ByteList):
         let readFut = socket.read()
 
         readFut.cancelCallback = proc(udate: pointer) {.gcsafe.} =
-          debug "Socket read cancelled",
-            socketKey = socket.socketKey
+          debug "Socket read cancelled", socketKey = socket.socketKey
           # In case this `findContent` gets cancelled while reading the data,
           # send a FIN and clean up the socket.
           socket.close()
@@ -701,14 +737,13 @@ proc findContent*(p: PortalProtocol, dst: Node, contentKey: ByteList):
           let content = readFut.read
           # socket received remote FIN and drained whole buffer, it can be
           # safely destroyed without notifing remote
-          debug "Socket read fully",
-            socketKey = socket.socketKey
+          debug "Socket read fully", socketKey = socket.socketKey
           socket.destroy()
-          return ok(FoundContent(
-            src: dst, kind: Content, content: content, utpTransfer: true))
-        else :
-          debug "Socket read time-out",
-            socketKey = socket.socketKey
+          return ok(
+            FoundContent(src: dst, kind: Content, content: content, utpTransfer: true)
+          )
+        else:
+          debug "Socket read time-out", socketKey = socket.socketKey
           # Note: This might look a bit strange, but not doing a socket.close()
           # here as this is already done internally. utp_socket `checkTimeouts`
           # already does a socket.destroy() on timeout. Might want to change the
@@ -718,20 +753,20 @@ proc findContent*(p: PortalProtocol, dst: Node, contentKey: ByteList):
         # even though we already installed cancelCallback on readFut, it is worth
         # catching CancelledError in case that withTimeout throws CancelledError
         # but readFut have already finished.
-        debug "Socket read cancelled",
-          socketKey = socket.socketKey
+        debug "Socket read cancelled", socketKey = socket.socketKey
 
         socket.close()
         raise exc
     of contentType:
-      return ok(FoundContent(
-        src: dst,
-        kind: Content, content: m.content.asSeq(), utpTransfer: false))
+      return ok(
+        FoundContent(
+          src: dst, kind: Content, content: m.content.asSeq(), utpTransfer: false
+        )
+      )
     of enrsType:
       let records = recordsFromBytes(m.enrs)
       if records.isOk():
-        let verifiedNodes =
-          verifyNodesRecords(records.get(), dst, enrsResultLimit)
+        let verifiedNodes = verifyNodesRecords(records.get(), dst, enrsResultLimit)
 
         return ok(FoundContent(src: dst, kind: Nodes, nodes: verifiedNodes))
       else:
@@ -745,7 +780,7 @@ proc findContent*(p: PortalProtocol, dst: Node, contentKey: ByteList):
 proc getContentKeys(o: OfferRequest): ContentKeysList =
   case o.kind
   of Direct:
-    var contentKeys:ContentKeysList
+    var contentKeys: ContentKeysList
     for info in o.contentList:
       discard contentKeys.add(info.contentKey)
     return contentKeys
@@ -765,12 +800,11 @@ func getMaxOfferedContentKeys*(protocolIdLen: uint32, maxKeySize: uint32): int =
   # to calculate maximal number of keys which will will given space this can be
   # transformed to:
   # n = trunc((bytes - offerMessageOverhead) / (maxKeySize + perContentKeyOverhead))
-  return (
-    (maxTalkReqPayload - 5) div (int(maxKeySize) + 4)
-  )
+  return ((maxTalkReqPayload - 5) div (int(maxKeySize) + 4))
 
-proc offer(p: PortalProtocol, o: OfferRequest):
-  Future[PortalResult[ContentKeysBitList]] {.async.} =
+proc offer(
+    p: PortalProtocol, o: OfferRequest
+): Future[PortalResult[ContentKeysBitList]] {.async.} =
   ## Offer triggers offer-accept interaction with one peer
   ## Whole flow has two phases:
   ## 1. Come to an agreement on what content to transfer, by using offer and
@@ -797,7 +831,8 @@ proc offer(p: PortalProtocol, o: OfferRequest):
   debug "Offering content"
 
   portal_content_keys_offered.observe(
-    contentKeys.len().int64, labelValues = [$p.protocolId])
+    contentKeys.len().int64, labelValues = [$p.protocolId]
+  )
 
   let acceptMessageResponse = await p.offerImpl(o.dst, contentKeys)
 
@@ -819,7 +854,8 @@ proc offer(p: PortalProtocol, o: OfferRequest):
 
     let acceptedKeysAmount = m.contentKeys.countOnes()
     portal_content_keys_accepted.observe(
-      acceptedKeysAmount.int64, labelValues = [$p.protocolId])
+      acceptedKeysAmount.int64, labelValues = [$p.protocolId]
+    )
     if acceptedKeysAmount == 0:
       debug "No content accepted"
       # Don't open an uTP stream if no content was requested
@@ -829,15 +865,14 @@ proc offer(p: PortalProtocol, o: OfferRequest):
     if nodeAddress.isNone():
       # It should not happen as we are already after succesfull talkreq/talkresp
       # cycle
-      error "Trying to connect to node with unknown address",
-        id = o.dst.id
+      error "Trying to connect to node with unknown address", id = o.dst.id
       return err("Trying to connect to node with unknown address")
 
-    let socket =
-        (await p.stream.connectTo(
-          nodeAddress.unsafeGet(),
-          uint16.fromBytesBE(m.connectionId)
-        )).valueOr:
+    let socket = (
+      await p.stream.connectTo(
+        nodeAddress.unsafeGet(), uint16.fromBytesBE(m.connectionId)
+      )
+    ).valueOr:
       debug "uTP connection error for offer content", error
       return err("Error connecting uTP socket")
 
@@ -898,13 +933,15 @@ proc offer(p: PortalProtocol, o: OfferRequest):
       error = acceptMessageResponse.error
     return err("No accept response")
 
-proc offer*(p: PortalProtocol, dst: Node, contentKeys: ContentKeysList):
-    Future[PortalResult[ContentKeysBitList]] {.async.} =
+proc offer*(
+    p: PortalProtocol, dst: Node, contentKeys: ContentKeysList
+): Future[PortalResult[ContentKeysBitList]] {.async.} =
   let req = OfferRequest(dst: dst, kind: Database, contentKeys: contentKeys)
   return await p.offer(req)
 
-proc offer*(p: PortalProtocol, dst: Node, content: seq[ContentKV]):
-    Future[PortalResult[ContentKeysBitList]] {.async.} =
+proc offer*(
+    p: PortalProtocol, dst: Node, content: seq[ContentKV]
+): Future[PortalResult[ContentKeysBitList]] {.async.} =
   if len(content) > contentKeysLimit:
     return err("Cannot offer more than 64 content items")
 
@@ -926,7 +963,8 @@ proc offerQueueEmpty*(p: PortalProtocol): bool =
   p.offerQueue.empty()
 
 proc lookupWorker(
-    p: PortalProtocol, dst: Node, target: NodeId): Future[seq[Node]] {.async.} =
+    p: PortalProtocol, dst: Node, target: NodeId
+): Future[seq[Node]] {.async.} =
   let distances = lookupDistances(target, dst.id)
   let nodesMessage = await p.findNodes(dst, distances)
   if nodesMessage.isOk():
@@ -943,8 +981,7 @@ proc lookup*(p: PortalProtocol, target: NodeId): Future[seq[Node]] {.async.} =
   ## target. Maximum value for n is `BUCKET_SIZE`.
   # `closestNodes` holds the k closest nodes to target found, sorted by distance
   # Unvalidated nodes are used for requests as a form of validation.
-  var closestNodes = p.routingTable.neighbours(target, BUCKET_SIZE,
-    seenOnly = false)
+  var closestNodes = p.routingTable.neighbours(target, BUCKET_SIZE, seenOnly = false)
 
   var asked, seen = initHashSet[NodeId]()
   asked.incl(p.localNode.id) # No need to ask our own node
@@ -985,25 +1022,26 @@ proc lookup*(p: PortalProtocol, target: NodeId): Future[seq[Node]] {.async.} =
     for n in nodes:
       if not seen.containsOrIncl(n.id):
         # If it wasn't seen before, insert node while remaining sorted
-        closestNodes.insert(n, closestNodes.lowerBound(n,
-          proc(x: Node, n: Node): int =
-            cmp(p.distance(x.id, target),
-              p.distance(n.id, target))
-        ))
+        closestNodes.insert(
+          n,
+          closestNodes.lowerBound(
+            n,
+            proc(x: Node, n: Node): int =
+              cmp(p.distance(x.id, target), p.distance(n.id, target))
+            ,
+          ),
+        )
 
         if closestNodes.len > BUCKET_SIZE:
           closestNodes.del(closestNodes.high())
 
-  portal_lookup_node_requests.observe(
-    requestAmount, labelValues = [$p.protocolId])
+  portal_lookup_node_requests.observe(requestAmount, labelValues = [$p.protocolId])
   p.lastLookup = now(chronos.Moment)
   return closestNodes
 
 proc triggerPoke*(
-    p: PortalProtocol,
-    nodes: seq[Node],
-    contentKey: ByteList,
-    content: seq[byte]) =
+    p: PortalProtocol, nodes: seq[Node], contentKey: ByteList, content: seq[byte]
+) =
   ## In order to properly test gossip mechanisms (e.g. in Portal Hive),
   ## we need the option to turn off the POKE functionality as it influences
   ## how data moves around the network.
@@ -1029,14 +1067,14 @@ proc triggerPoke*(
 # TODO ContentLookup and Lookup look almost exactly the same, also lookups in other
 # networks will probably be very similar. Extract lookup function to separate module
 # and make it more generaic
-proc contentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256):
-    Future[Opt[ContentLookupResult]] {.async.} =
+proc contentLookup*(
+    p: PortalProtocol, target: ByteList, targetId: UInt256
+): Future[Opt[ContentLookupResult]] {.async.} =
   ## Perform a lookup for the given target, return the closest n nodes to the
   ## target. Maximum value for n is `BUCKET_SIZE`.
   # `closestNodes` holds the k closest nodes to target found, sorted by distance
   # Unvalidated nodes are used for requests as a form of validation.
-  var closestNodes = p.routingTable.neighbours(
-    targetId, BUCKET_SIZE, seenOnly = false)
+  var closestNodes = p.routingTable.neighbours(targetId, BUCKET_SIZE, seenOnly = false)
   # Shuffling the order of the nodes in order to not always hit the same node
   # first for the same request.
   p.baseProtocol.rng[].shuffle(closestNodes)
@@ -1096,23 +1134,30 @@ proc contentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256):
           if not seen.containsOrIncl(n.id):
             discard p.addNode(n)
             # If it wasn't seen before, insert node while remaining sorted
-            closestNodes.insert(n, closestNodes.lowerBound(n,
-              proc(x: Node, n: Node): int =
-                cmp(p.distance(x.id, targetId),
-                  p.distance(n.id, targetId))
-            ))
+            closestNodes.insert(
+              n,
+              closestNodes.lowerBound(
+                n,
+                proc(x: Node, n: Node): int =
+                  cmp(p.distance(x.id, targetId), p.distance(n.id, targetId))
+                ,
+              ),
+            )
 
             if closestNodes.len > BUCKET_SIZE:
               closestNodes.del(closestNodes.high())
-
       of Content:
         # cancel any pending queries as the content has been found
         for f in pendingQueries:
           f.cancelSoon()
         portal_lookup_content_requests.observe(
-          requestAmount, labelValues = [$p.protocolId])
-        return Opt.some(ContentLookupResult.init(
-          content.content, content.utpTransfer, nodesWithoutContent))
+          requestAmount, labelValues = [$p.protocolId]
+        )
+        return Opt.some(
+          ContentLookupResult.init(
+            content.content, content.utpTransfer, nodesWithoutContent
+          )
+        )
     else:
       # TODO: Should we do something with the node that failed responding our
       # query?
@@ -1121,14 +1166,14 @@ proc contentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256):
   portal_lookup_content_failures.inc(labelValues = [$p.protocolId])
   return Opt.none(ContentLookupResult)
 
-proc traceContentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256):
-    Future[TraceContentLookupResult] {.async.} =
+proc traceContentLookup*(
+    p: PortalProtocol, target: ByteList, targetId: UInt256
+): Future[TraceContentLookupResult] {.async.} =
   ## Perform a lookup for the given target, return the closest n nodes to the
   ## target. Maximum value for n is `BUCKET_SIZE`.
   # `closestNodes` holds the k closest nodes to target found, sorted by distance
   # Unvalidated nodes are used for requests as a form of validation.
-  var closestNodes = p.routingTable.neighbours(
-    targetId, BUCKET_SIZE, seenOnly = false)
+  var closestNodes = p.routingTable.neighbours(targetId, BUCKET_SIZE, seenOnly = false)
   # Shuffling the order of the nodes in order to not always hit the same node
   # first for the same request.
   p.baseProtocol.rng[].shuffle(closestNodes)
@@ -1144,23 +1189,18 @@ proc traceContentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256)
     seen.incl(node.id)
 
   # Local node should be part of the responses
-  responses["0x" & $p.localNode.id] = TraceResponse(
-    durationMs: 0,
-    respondedWith: seen.toSeq()
-  )
+  responses["0x" & $p.localNode.id] =
+    TraceResponse(durationMs: 0, respondedWith: seen.toSeq())
 
   metadata["0x" & $p.localNode.id] = NodeMetadata(
-    enr: p.localNode.record,
-    distance: p.distance(p.localNode.id, targetId)
+    enr: p.localNode.record, distance: p.distance(p.localNode.id, targetId)
   )
 
   # We should also have metadata for all the closes nodes
   # in order to be able to show cancelled requests
   for cn in closestNodes:
-    metadata["0x" & $cn.id] = NodeMetadata(
-      enr: cn.record,
-      distance: p.distance(cn.id, targetId)
-    )
+    metadata["0x" & $cn.id] =
+      NodeMetadata(enr: cn.record, distance: p.distance(cn.id, targetId))
 
   var pendingQueries = newSeqOfCap[Future[PortalResult[FoundContent]]](alpha)
   var pendingNodes = newSeq[Node]()
@@ -1217,35 +1257,32 @@ proc traceContentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256)
         for n in content.nodes:
           let dist = p.distance(n.id, targetId)
 
-          metadata["0x" & $n.id] = NodeMetadata(
-            enr: n.record,
-            distance: dist,
-          )
+          metadata["0x" & $n.id] = NodeMetadata(enr: n.record, distance: dist)
           respondedWith.add(n.id)
 
           if not seen.containsOrIncl(n.id):
             discard p.addNode(n)
             # If it wasn't seen before, insert node while remaining sorted
-            closestNodes.insert(n, closestNodes.lowerBound(n,
-              proc(x: Node, n: Node): int =
-                cmp(p.distance(x.id, targetId), dist)
-            ))
+            closestNodes.insert(
+              n,
+              closestNodes.lowerBound(
+                n,
+                proc(x: Node, n: Node): int =
+                  cmp(p.distance(x.id, targetId), dist)
+                ,
+              ),
+            )
 
             if closestNodes.len > BUCKET_SIZE:
               closestNodes.del(closestNodes.high())
 
         let distance = p.distance(content.src.id, targetId)
 
-        responses["0x" & $content.src.id] = TraceResponse(
-          durationMs: duration,
-          respondedWith: respondedWith,
-        )
+        responses["0x" & $content.src.id] =
+          TraceResponse(durationMs: duration, respondedWith: respondedWith)
 
-        metadata["0x" & $content.src.id] = NodeMetadata(
-          enr: content.src.record,
-          distance: distance,
-        )
-
+        metadata["0x" & $content.src.id] =
+          NodeMetadata(enr: content.src.record, distance: distance)
       of Content:
         let duration = chronos.milliseconds(now(chronos.Moment) - ts)
 
@@ -1253,28 +1290,23 @@ proc traceContentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256)
         for f in pendingQueries:
           f.cancelSoon()
         portal_lookup_content_requests.observe(
-          requestAmount, labelValues = [$p.protocolId])
+          requestAmount, labelValues = [$p.protocolId]
+        )
 
         let distance = p.distance(content.src.id, targetId)
 
-        responses["0x" & $content.src.id] = TraceResponse(
-          durationMs: duration,
-          respondedWith: newSeq[NodeId](),
-        )
+        responses["0x" & $content.src.id] =
+          TraceResponse(durationMs: duration, respondedWith: newSeq[NodeId]())
 
-        metadata["0x" & $content.src.id] = NodeMetadata(
-          enr: content.src.record,
-          distance: distance,
-        )
+        metadata["0x" & $content.src.id] =
+          NodeMetadata(enr: content.src.record, distance: distance)
 
         var pendingNodeIds = newSeq[NodeId]()
 
         for pn in pendingNodes:
           pendingNodeIds.add(pn.id)
-          metadata["0x" & $pn.id] = NodeMetadata(
-            enr: pn.record,
-            distance: p.distance(pn.id, targetId)
-          )
+          metadata["0x" & $pn.id] =
+            NodeMetadata(enr: pn.record, distance: p.distance(pn.id, targetId))
 
         return TraceContentLookupResult(
           content: Opt.some(content.content),
@@ -1286,8 +1318,9 @@ proc traceContentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256)
             responses: responses,
             metadata: metadata,
             cancelled: pendingNodeIds,
-            startedAtMs: chronos.epochNanoSeconds(ts) div 1_000_000 # nanoseconds to milliseconds
-          )
+            startedAtMs: chronos.epochNanoSeconds(ts) div 1_000_000,
+              # nanoseconds to milliseconds
+          ),
         )
     else:
       # TODO: Should we do something with the node that failed responding our
@@ -1305,12 +1338,14 @@ proc traceContentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256)
       responses: responses,
       metadata: metadata,
       cancelled: newSeq[NodeId](),
-      startedAtMs: chronos.epochNanoSeconds(ts) div 1_000_000 # nanoseconds to milliseconds
-      )
+      startedAtMs: chronos.epochNanoSeconds(ts) div 1_000_000,
+        # nanoseconds to milliseconds
+    ),
   )
 
-proc query*(p: PortalProtocol, target: NodeId, k = BUCKET_SIZE): Future[seq[Node]]
-    {.async.} =
+proc query*(
+    p: PortalProtocol, target: NodeId, k = BUCKET_SIZE
+): Future[seq[Node]] {.async.} =
   ## Query k nodes for the given target, returns all nodes found, including the
   ## nodes queried.
   ##
@@ -1363,12 +1398,10 @@ proc queryRandom*(p: PortalProtocol): Future[seq[Node]] =
   p.query(NodeId.random(p.baseProtocol.rng[]))
 
 proc getNClosestNodesWithRadius*(
-  p: PortalProtocol,
-  targetId: NodeId,
-  n: int,
-  seenOnly: bool = false): seq[(Node, UInt256)] =
-  let closestLocalNodes = p.routingTable.neighbours(
-    targetId, k = n, seenOnly = seenOnly)
+    p: PortalProtocol, targetId: NodeId, n: int, seenOnly: bool = false
+): seq[(Node, UInt256)] =
+  let closestLocalNodes =
+    p.routingTable.neighbours(targetId, k = n, seenOnly = seenOnly)
 
   var nodesWithRadiuses: seq[(Node, UInt256)]
   for node in closestLocalNodes:
@@ -1381,7 +1414,8 @@ proc neighborhoodGossip*(
     p: PortalProtocol,
     srcNodeId: Opt[NodeId],
     contentKeys: ContentKeysList,
-    content: seq[seq[byte]]): Future[int] {.async.} =
+    content: seq[seq[byte]],
+): Future[int] {.async.} =
   ## Run neighborhood gossip for provided content.
   ## Returns the number of peers to which content was attempted to be gossiped.
   if content.len() == 0:
@@ -1389,8 +1423,7 @@ proc neighborhoodGossip*(
 
   var contentList = List[ContentKV, contentKeysLimit].init(@[])
   for i, contentItem in content:
-    let contentKV =
-      ContentKV(contentKey: contentKeys[i], content: contentItem)
+    let contentKV = ContentKV(contentKey: contentKeys[i], content: contentItem)
     discard contentList.add(contentKV)
 
   # Just taking the first content item as target id.
@@ -1414,8 +1447,8 @@ proc neighborhoodGossip*(
   # It might still cause issues in data getting propagated in a wider id range.
   const maxGossipNodes = 8
 
-  let closestLocalNodes = p.routingTable.neighbours(
-    NodeId(contentId), k = 16, seenOnly = true)
+  let closestLocalNodes =
+    p.routingTable.neighbours(NodeId(contentId), k = 16, seenOnly = true)
 
   var gossipNodes: seq[Node]
   for node in closestLocalNodes:
@@ -1430,7 +1463,7 @@ proc neighborhoodGossip*(
   if gossipNodes.len >= 8: # use local nodes for gossip
     portal_gossip_without_lookup.inc(labelValues = [$p.protocolId])
     let numberOfGossipedNodes = min(gossipNodes.len, maxGossipNodes)
-    for node in gossipNodes[0..<numberOfGossipedNodes]:
+    for node in gossipNodes[0 ..< numberOfGossipedNodes]:
       let req = OfferRequest(dst: node, kind: Direct, contentList: contentList)
       await p.offerQueue.addLast(req)
     return numberOfGossipedNodes
@@ -1438,7 +1471,7 @@ proc neighborhoodGossip*(
     portal_gossip_with_lookup.inc(labelValues = [$p.protocolId])
     let closestNodes = await p.lookup(NodeId(contentId))
     let numberOfGossipedNodes = min(closestNodes.len, maxGossipNodes)
-    for node in closestNodes[0..<numberOfGossipedNodes]:
+    for node in closestNodes[0 ..< numberOfGossipedNodes]:
       # Note: opportunistically not checking if the radius of the node is known
       # and thus if the node is in radius with the content. Reason is, these
       # should really be the closest nodes in the DHT, and thus are most likely
@@ -1451,14 +1484,16 @@ proc neighborhoodGossipDiscardPeers*(
     p: PortalProtocol,
     srcNodeId: Opt[NodeId],
     contentKeys: ContentKeysList,
-    content: seq[seq[byte]]): Future[void] {.async.} =
+    content: seq[seq[byte]],
+): Future[void] {.async.} =
   discard await p.neighborhoodGossip(srcNodeId, contentKeys, content)
 
 proc randomGossip*(
     p: PortalProtocol,
     srcNodeId: Opt[NodeId],
     contentKeys: ContentKeysList,
-    content: seq[seq[byte]]): Future[int] {.async.} =
+    content: seq[seq[byte]],
+): Future[int] {.async.} =
   ## Run random gossip for provided content.
   ## Returns the number of peers to which content was attempted to be gossiped.
   if content.len() == 0:
@@ -1466,14 +1501,13 @@ proc randomGossip*(
 
   var contentList = List[ContentKV, contentKeysLimit].init(@[])
   for i, contentItem in content:
-    let contentKV =
-      ContentKV(contentKey: contentKeys[i], content: contentItem)
+    let contentKV = ContentKV(contentKey: contentKeys[i], content: contentItem)
     discard contentList.add(contentKV)
 
   const maxGossipNodes = 4
   let nodes = p.routingTable.randomNodes(maxGossipNodes)
 
-  for node in nodes[0..<nodes.len()]:
+  for node in nodes[0 ..< nodes.len()]:
     let req = OfferRequest(dst: node, kind: Direct, contentList: contentList)
     await p.offerQueue.addLast(req)
   return nodes.len()
@@ -1482,14 +1516,13 @@ proc randomGossipDiscardPeers*(
     p: PortalProtocol,
     srcNodeId: Opt[NodeId],
     contentKeys: ContentKeysList,
-    content: seq[seq[byte]]): Future[void] {.async.} =
+    content: seq[seq[byte]],
+): Future[void] {.async.} =
   discard await p.randomGossip(srcNodeId, contentKeys, content)
 
 proc storeContent*(
-    p: PortalProtocol,
-    contentKey: ByteList,
-    contentId: ContentId,
-    content: seq[byte]) =
+    p: PortalProtocol, contentKey: ByteList, contentId: ContentId, content: seq[byte]
+) =
   doAssert(p.dbPut != nil)
   p.dbPut(contentKey, contentId, content)
 
@@ -1507,11 +1540,10 @@ proc seedTable*(p: PortalProtocol) =
 
   for record in p.bootstrapRecords:
     if p.addNode(record):
-      debug "Added bootstrap node", uri = toURI(record),
-        protocolId = p.protocolId
+      debug "Added bootstrap node", uri = toURI(record), protocolId = p.protocolId
     else:
-      error "Bootstrap node could not be added", uri = toURI(record),
-        protocolId = p.protocolId
+      error "Bootstrap node could not be added",
+        uri = toURI(record), protocolId = p.protocolId
 
 proc populateTable(p: PortalProtocol) {.async.} =
   ## Do a set of initial lookups to quickly populate the table.
@@ -1522,12 +1554,11 @@ proc populateTable(p: PortalProtocol) {.async.} =
   let selfQuery = await p.query(p.localNode.id)
   trace "Discovered nodes in self target query", nodes = selfQuery.len
 
-  for i in 0..<initialLookups:
+  for i in 0 ..< initialLookups:
     let randomQuery = await p.queryRandom()
     trace "Discovered nodes in random target query", nodes = randomQuery.len
 
-  debug "Total nodes in routing table after populate",
-    total = p.routingTable.len()
+  debug "Total nodes in routing table after populate", total = p.routingTable.len()
 
 proc revalidateNode*(p: PortalProtocol, n: Node) {.async.} =
   let pong = await p.ping(n)
@@ -1638,7 +1669,8 @@ proc resolve*(p: PortalProtocol, id: NodeId): Future[Opt[Node]] {.async.} =
   return node
 
 proc resolveWithRadius*(
-    p: PortalProtocol, id: NodeId): Future[Opt[(Node, UInt256)]] {.async.} =
+    p: PortalProtocol, id: NodeId
+): Future[Opt[(Node, UInt256)]] {.async.} =
   ## Resolve a `Node` based on provided `NodeId`, also try to establish what
   ## is known radius of found node.
   ##

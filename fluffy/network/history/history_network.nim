@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2021-2023 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -8,7 +8,9 @@
 {.push raises: [].}
 
 import
-  stew/results, chronos, chronicles,
+  stew/results,
+  chronos,
+  chronicles,
   eth/[common/eth_types_rlp, rlp],
   eth/p2p/discoveryv5/[protocol, enr],
   ../../common/common_types,
@@ -46,8 +48,7 @@ export accumulator
 proc `$`(x: BlockHeader): string =
   $x
 
-const
-  historyProtocolId* = [byte 0x50, 0x0B]
+const historyProtocolId* = [byte 0x50, 0x0B]
 
 type
   HistoryNetwork* = ref object
@@ -66,8 +67,8 @@ func toContentIdHandler(contentKey: ByteList): results.Opt[ContentId] =
 ## Calls to go from SSZ decoded Portal types to RLP fully decoded EL types
 
 func fromPortalBlockBody*(
-    T: type BlockBody, body: PortalBlockBodyLegacy):
-    Result[T, string] =
+    T: type BlockBody, body: PortalBlockBodyLegacy
+): Result[T, string] =
   ## Get the EL BlockBody from the SSZ-decoded `PortalBlockBodyLegacy`.
   try:
     var transactions: seq[Transaction]
@@ -81,7 +82,8 @@ func fromPortalBlockBody*(
     err("RLP decoding failed: " & e.msg)
 
 func fromPortalBlockBody*(
-    T: type BlockBody, body: PortalBlockBodyShanghai): Result[T, string] =
+    T: type BlockBody, body: PortalBlockBodyShanghai
+): Result[T, string] =
   ## Get the EL BlockBody from the SSZ-decoded `PortalBlockBodyShanghai`.
   try:
     var transactions: seq[Transaction]
@@ -92,17 +94,19 @@ func fromPortalBlockBody*(
     for w in body.withdrawals:
       withdrawals.add(rlp.decode(w.asSeq(), Withdrawal))
 
-    ok(BlockBody(
-      transactions: transactions,
-      uncles: @[], # Uncles must be empty: TODO where validation?
-      withdrawals: some(withdrawals)))
+    ok(
+      BlockBody(
+        transactions: transactions,
+        uncles: @[], # Uncles must be empty: TODO where validation?
+        withdrawals: some(withdrawals),
+      )
+    )
   except RlpError as e:
     err("RLP decoding failed: " & e.msg)
 
 func fromPortalBlockBodyOrRaise*(
-    T: type BlockBody,
-    body: PortalBlockBodyLegacy | PortalBlockBodyShanghai):
-    T =
+    T: type BlockBody, body: PortalBlockBodyLegacy | PortalBlockBodyShanghai
+): T =
   ## Get the EL BlockBody from one of the SSZ-decoded Portal BlockBody types.
   ## Will raise Assertion in case of invalid RLP encodings. Only use of data
   ## has been validated before!
@@ -114,7 +118,8 @@ func fromPortalBlockBodyOrRaise*(
     raiseAssert(res.error)
 
 func fromPortalReceipts*(
-    T: type seq[Receipt], receipts: PortalReceipts): Result[T, string] =
+    T: type seq[Receipt], receipts: PortalReceipts
+): Result[T, string] =
   ## Get the full decoded EL seq[Receipt] from the SSZ-decoded `PortalReceipts`.
   try:
     var res: seq[Receipt]
@@ -152,7 +157,9 @@ func fromBlockBody(T: type PortalBlockBodyShanghai, body: BlockBody): T =
   var withdrawals: Withdrawals
   for w in body.withdrawals.get():
     discard withdrawals.add(WithdrawalByteList(rlp.encode(w)))
-  PortalBlockBodyShanghai(transactions: transactions, uncles: uncles, withdrawals: withdrawals)
+  PortalBlockBodyShanghai(
+    transactions: transactions, uncles: uncles, withdrawals: withdrawals
+  )
 
 func fromReceipts*(T: type PortalReceipts, receipts: seq[Receipt]): T =
   var portalReceipts: PortalReceipts
@@ -203,9 +210,9 @@ template calcWithdrawalsRoot*(receipts: Withdrawals): Hash256 =
   calcRootHash(receipts)
 
 func validateBlockHeaderBytes*(
-    bytes: openArray[byte], hash: BlockHash): Result[BlockHeader, string] =
-
-  let header = ? decodeRlp(bytes, BlockHeader)
+    bytes: openArray[byte], hash: BlockHash
+): Result[BlockHeader, string] =
+  let header = ?decodeRlp(bytes, BlockHeader)
 
   # Note:
   # One could do additional quick-checks here such as timestamp vs the optional
@@ -222,8 +229,8 @@ func validateBlockHeaderBytes*(
     ok(header)
 
 proc validateBlockBody(
-    body: PortalBlockBodyLegacy, header: BlockHeader):
-    Result[void, string] =
+    body: PortalBlockBodyLegacy, header: BlockHeader
+): Result[void, string] =
   ## Validate the block body against the txRoot and ommersHash from the header.
   let calculatedOmmersHash = keccakHash(body.uncles.asSeq())
   if calculatedOmmersHash != header.ommersHash:
@@ -231,14 +238,16 @@ proc validateBlockBody(
 
   let calculatedTxsRoot = calcTxsRoot(body.transactions)
   if calculatedTxsRoot != header.txRoot:
-    return err("Invalid transactions root: expected " &
-      $header.txRoot & " - got " & $calculatedTxsRoot)
+    return err(
+      "Invalid transactions root: expected " & $header.txRoot & " - got " &
+        $calculatedTxsRoot
+    )
 
   ok()
 
 proc validateBlockBody(
-    body: PortalBlockBodyShanghai, header: BlockHeader):
-    Result[void, string] =
+    body: PortalBlockBodyShanghai, header: BlockHeader
+): Result[void, string] =
   ## Validate the block body against the txRoot, ommersHash and withdrawalsRoot
   ## from the header.
   # Shortcut the ommersHash calculation as uncles must be an RLP encoded
@@ -248,8 +257,10 @@ proc validateBlockBody(
 
   let calculatedTxsRoot = calcTxsRoot(body.transactions)
   if calculatedTxsRoot != header.txRoot:
-    return err("Invalid transactions root: expected " &
-      $header.txRoot & " - got " & $calculatedTxsRoot)
+    return err(
+      "Invalid transactions root: expected " & $header.txRoot & " - got " &
+        $calculatedTxsRoot
+    )
 
   # TODO: This check is done higher up but perhaps this can become cleaner with
   # some refactor.
@@ -259,8 +270,10 @@ proc validateBlockBody(
     calculatedWithdrawalsRoot = calcWithdrawalsRoot(body.withdrawals)
     headerWithdrawalsRoot = header.withdrawalsRoot.get()
   if calculatedWithdrawalsRoot != headerWithdrawalsRoot:
-    return err("Invalid withdrawals root: expected " &
-      $headerWithdrawalsRoot & " - got " & $calculatedWithdrawalsRoot)
+    return err(
+      "Invalid withdrawals root: expected " & $headerWithdrawalsRoot & " - got " &
+        $calculatedWithdrawalsRoot
+    )
 
   ok()
 
@@ -273,8 +286,8 @@ proc decodeBlockBodyBytes*(bytes: openArray[byte]): Result[BlockBody, string] =
     err("All Portal block body decodings failed")
 
 proc validateBlockBodyBytes*(
-    bytes: openArray[byte], header: BlockHeader):
-    Result[BlockBody, string] =
+    bytes: openArray[byte], header: BlockHeader
+): Result[BlockBody, string] =
   ## Fully decode the SSZ encoded Portal Block Body and validate it against the
   ## header.
   ## TODO: improve this decoding in combination with the block body validation
@@ -289,8 +302,8 @@ proc validateBlockBodyBytes*(
     elif header.ommersHash != EMPTY_UNCLE_HASH:
       return err("Expected empty uncles for a Shanghai block")
     else:
-      let body = ? decodeSsz(bytes, PortalBlockBodyShanghai)
-      ? validateBlockBody(body, header)
+      let body = ?decodeSsz(bytes, PortalBlockBodyShanghai)
+      ?validateBlockBody(body, header)
       BlockBody.fromPortalBlockBody(body)
   elif isPoSBlock(chainConfig, header.blockNumber.truncate(uint64)):
     if header.withdrawalsRoot.isSome():
@@ -298,19 +311,20 @@ proc validateBlockBodyBytes*(
     elif header.ommersHash != EMPTY_UNCLE_HASH:
       return err("Expected empty uncles for a PoS block")
     else:
-      let body = ? decodeSsz(bytes, PortalBlockBodyLegacy)
-      ? validateBlockBody(body, header)
+      let body = ?decodeSsz(bytes, PortalBlockBodyLegacy)
+      ?validateBlockBody(body, header)
       BlockBody.fromPortalBlockBody(body)
   else:
     if header.withdrawalsRoot.isSome():
       return err("Expected no withdrawalsRoot for pre Shanghai block")
     else:
-      let body = ? decodeSsz(bytes, PortalBlockBodyLegacy)
-      ? validateBlockBody(body, header)
+      let body = ?decodeSsz(bytes, PortalBlockBodyLegacy)
+      ?validateBlockBody(body, header)
       BlockBody.fromPortalBlockBody(body)
 
 proc validateReceipts*(
-    receipts: PortalReceipts, receiptsRoot: KeccakHash): Result[void, string] =
+    receipts: PortalReceipts, receiptsRoot: KeccakHash
+): Result[void, string] =
   let calculatedReceiptsRoot = calcReceiptsRoot(receipts)
 
   if calculatedReceiptsRoot != receiptsRoot:
@@ -319,12 +333,12 @@ proc validateReceipts*(
     return ok()
 
 proc validateReceiptsBytes*(
-    bytes: openArray[byte],
-    receiptsRoot: KeccakHash): Result[seq[Receipt], string] =
+    bytes: openArray[byte], receiptsRoot: KeccakHash
+): Result[seq[Receipt], string] =
   ## Fully decode the SSZ Block Body and validate it against the header.
-  let receipts = ? decodeSsz(bytes, PortalReceipts)
+  let receipts = ?decodeSsz(bytes, PortalReceipts)
 
-  ? validateReceipts(receipts, receiptsRoot)
+  ?validateReceipts(receipts, receiptsRoot)
 
   seq[Receipt].fromPortalReceipts(receipts)
 
@@ -347,8 +361,9 @@ proc get(db: ContentDB, T: type BlockHeader, contentId: ContentId): Opt[T] =
   else:
     Opt.none(T)
 
-proc get(db: ContentDB, T: type BlockBody, contentId: ContentId,
-    header: BlockHeader): Opt[T] =
+proc get(
+    db: ContentDB, T: type BlockBody, contentId: ContentId, header: BlockHeader
+): Opt[T] =
   let encoded = db.get(contentId).valueOr:
     return Opt.none(T)
 
@@ -357,13 +372,16 @@ proc get(db: ContentDB, T: type BlockBody, contentId: ContentId,
     body =
       if isShanghai(chainConfig, timestamp):
         BlockBody.fromPortalBlockBodyOrRaise(
-          decodeSszOrRaise(encoded, PortalBlockBodyShanghai))
+          decodeSszOrRaise(encoded, PortalBlockBodyShanghai)
+        )
       elif isPoSBlock(chainConfig, header.blockNumber.truncate(uint64)):
         BlockBody.fromPortalBlockBodyOrRaise(
-          decodeSszOrRaise(encoded, PortalBlockBodyLegacy))
+          decodeSszOrRaise(encoded, PortalBlockBodyLegacy)
+        )
       else:
         BlockBody.fromPortalBlockBodyOrRaise(
-          decodeSszOrRaise(encoded, PortalBlockBodyLegacy))
+          decodeSszOrRaise(encoded, PortalBlockBodyLegacy)
+        )
 
   Opt.some(body)
 
@@ -378,17 +396,14 @@ proc get(db: ContentDB, T: type seq[Receipt], contentId: ContentId): Opt[T] =
   else:
     Opt.none(T)
 
-proc get(
-    db: ContentDB, T: type EpochAccumulator, contentId: ContentId): Opt[T] =
+proc get(db: ContentDB, T: type EpochAccumulator, contentId: ContentId): Opt[T] =
   db.getSszDecoded(contentId, T)
 
-proc getContentFromDb(
-    n: HistoryNetwork, T: type, contentId: ContentId): Opt[T] =
+proc getContentFromDb(n: HistoryNetwork, T: type, contentId: ContentId): Opt[T] =
   if n.portalProtocol.inRange(contentId):
     n.contentDB.get(T, contentId)
   else:
     Opt.none(T)
-
 
 ## Public API to get the history network specific types, either from database
 ## or through a lookup on the Portal Network
@@ -403,13 +418,13 @@ const requestRetries = 4
 # however that response is not yet validated at that moment.
 
 func verifyHeader(
-    n: HistoryNetwork, header: BlockHeader, proof: BlockHeaderProof):
-    Result[void, string] =
+    n: HistoryNetwork, header: BlockHeader, proof: BlockHeaderProof
+): Result[void, string] =
   verifyHeader(n.accumulator, header, proof)
 
 proc getVerifiedBlockHeader*(
-    n: HistoryNetwork, hash: BlockHash):
-    Future[Opt[BlockHeader]] {.async.} =
+    n: HistoryNetwork, hash: BlockHash
+): Future[Opt[BlockHeader]] {.async.} =
   let
     contentKey = ContentKey.init(blockHeader, hash).encode()
     contentId = contentKey.toContentId()
@@ -426,20 +441,17 @@ proc getVerifiedBlockHeader*(
     info "Fetched block header from database"
     return headerFromDb
 
-  for i in 0..<requestRetries:
+  for i in 0 ..< requestRetries:
     let
-      headerContent = (await n.portalProtocol.contentLookup(
-          contentKey, contentId)).valueOr:
+      headerContent = (await n.portalProtocol.contentLookup(contentKey, contentId)).valueOr:
         warn "Failed fetching block header with proof from the network"
         return Opt.none(BlockHeader)
 
-      headerWithProof = decodeSsz(
-          headerContent.content, BlockHeaderWithProof).valueOr:
+      headerWithProof = decodeSsz(headerContent.content, BlockHeaderWithProof).valueOr:
         warn "Failed decoding header with proof", error
         continue
 
-      header = validateBlockHeaderBytes(
-          headerWithProof.header.asSeq(), hash).valueOr:
+      header = validateBlockHeaderBytes(headerWithProof.header.asSeq(), hash).valueOr:
         warn "Validation of block header failed", error
         continue
 
@@ -451,9 +463,7 @@ proc getVerifiedBlockHeader*(
     # Content is valid, it can be stored and propagated to interested peers
     n.portalProtocol.storeContent(contentKey, contentId, headerContent.content)
     n.portalProtocol.triggerPoke(
-      headerContent.nodesInterestedInContent,
-      contentKey,
-      headerContent.content
+      headerContent.nodesInterestedInContent, contentKey, headerContent.content
     )
 
     return Opt.some(header)
@@ -462,8 +472,8 @@ proc getVerifiedBlockHeader*(
   return Opt.none(BlockHeader)
 
 proc getBlockBody*(
-    n: HistoryNetwork, hash: BlockHash, header: BlockHeader):
-    Future[Opt[BlockBody]] {.async.} =
+    n: HistoryNetwork, hash: BlockHash, header: BlockHeader
+): Future[Opt[BlockBody]] {.async.} =
   if header.txRoot == EMPTY_ROOT_HASH and header.ommersHash == EMPTY_UNCLE_HASH:
     # Short path for empty body indicated by txRoot and ommersHash
     return Opt.some(BlockBody(transactions: @[], uncles: @[]))
@@ -481,15 +491,13 @@ proc getBlockBody*(
     info "Fetched block body from database"
     return bodyFromDb
 
-  for i in 0..<requestRetries:
+  for i in 0 ..< requestRetries:
     let
-      bodyContent = (await n.portalProtocol.contentLookup(
-          contentKey, contentId)).valueOr:
+      bodyContent = (await n.portalProtocol.contentLookup(contentKey, contentId)).valueOr:
         warn "Failed fetching block body from the network"
         return Opt.none(BlockBody)
 
-      body = validateBlockBodyBytes(
-          bodyContent.content, header).valueOr:
+      body = validateBlockBodyBytes(bodyContent.content, header).valueOr:
         warn "Validation of block body failed", error
         continue
 
@@ -497,9 +505,7 @@ proc getBlockBody*(
     # Content is valid, it can be stored and propagated to interested peers
     n.portalProtocol.storeContent(contentKey, contentId, bodyContent.content)
     n.portalProtocol.triggerPoke(
-      bodyContent.nodesInterestedInContent,
-      contentKey,
-      bodyContent.content
+      bodyContent.nodesInterestedInContent, contentKey, bodyContent.content
     )
 
     return Opt.some(body)
@@ -507,9 +513,7 @@ proc getBlockBody*(
   # Bodies were requested `requestRetries` times and all failed on validation
   return Opt.none(BlockBody)
 
-proc getBlock*(
-    n: HistoryNetwork, hash: BlockHash):
-    Future[Opt[Block]] {.async.} =
+proc getBlock*(n: HistoryNetwork, hash: BlockHash): Future[Opt[Block]] {.async.} =
   debug "Trying to retrieve block with hash", hash
 
   # Note: Using `getVerifiedBlockHeader` instead of getBlockHeader even though
@@ -526,9 +530,8 @@ proc getBlock*(
   return Opt.some((header, body))
 
 proc getReceipts*(
-    n: HistoryNetwork,
-    hash: BlockHash,
-    header: BlockHeader): Future[Opt[seq[Receipt]]] {.async.} =
+    n: HistoryNetwork, hash: BlockHash, header: BlockHeader
+): Future[Opt[seq[Receipt]]] {.async.} =
   if header.receiptRoot == EMPTY_ROOT_HASH:
     # Short path for empty receipts indicated by receipts root
     return Opt.some(newSeq[Receipt]())
@@ -546,14 +549,12 @@ proc getReceipts*(
     info "Fetched receipts from database"
     return receiptsFromDb
 
-  for i in 0..<requestRetries:
+  for i in 0 ..< requestRetries:
     let
-      receiptsContent = (await n.portalProtocol.contentLookup(
-          contentKey, contentId)).valueOr:
+      receiptsContent = (await n.portalProtocol.contentLookup(contentKey, contentId)).valueOr:
         warn "Failed fetching receipts from the network"
         return Opt.none(seq[Receipt])
-      receipts = validateReceiptsBytes(
-          receiptsContent.content, header.receiptRoot).valueOr:
+      receipts = validateReceiptsBytes(receiptsContent.content, header.receiptRoot).valueOr:
         warn "Validation of receipts failed", error
         continue
 
@@ -561,16 +562,14 @@ proc getReceipts*(
     # Content is valid, it can be stored and propagated to interested peers
     n.portalProtocol.storeContent(contentKey, contentId, receiptsContent.content)
     n.portalProtocol.triggerPoke(
-      receiptsContent.nodesInterestedInContent,
-      contentKey,
-      receiptsContent.content
+      receiptsContent.nodesInterestedInContent, contentKey, receiptsContent.content
     )
 
     return Opt.some(receipts)
 
 proc getEpochAccumulator(
-    n: HistoryNetwork, epochHash: Digest):
-    Future[Opt[EpochAccumulator]] {.async.} =
+    n: HistoryNetwork, epochHash: Digest
+): Future[Opt[EpochAccumulator]] {.async.} =
   let
     contentKey = ContentKey.init(epochAccumulator, epochHash).encode()
     contentId = contentKey.toContentId()
@@ -584,10 +583,9 @@ proc getEpochAccumulator(
     info "Fetched epoch accumulator from database"
     return accumulatorFromDb
 
-  for i in 0..<requestRetries:
+  for i in 0 ..< requestRetries:
     let
-      accumulatorContent = (await n.portalProtocol.contentLookup(
-          contentKey, contentId)).valueOr:
+      accumulatorContent = (await n.portalProtocol.contentLookup(contentKey, contentId)).valueOr:
         warn "Failed fetching epoch accumulator from the network"
         return Opt.none(EpochAccumulator)
 
@@ -602,9 +600,8 @@ proc getEpochAccumulator(
       info "Fetched epoch accumulator from the network"
       n.portalProtocol.storeContent(contentKey, contentId, accumulatorContent.content)
       n.portalProtocol.triggerPoke(
-        accumulatorContent.nodesInterestedInContent,
-        contentKey,
-        accumulatorContent.content
+        accumulatorContent.nodesInterestedInContent, contentKey,
+        accumulatorContent.content,
       )
 
       return Opt.some(epochAccumulator)
@@ -614,8 +611,8 @@ proc getEpochAccumulator(
   return Opt.none(EpochAccumulator)
 
 proc getBlock*(
-    n: HistoryNetwork, bn: UInt256):
-    Future[Result[Opt[Block], string]] {.async.} =
+    n: HistoryNetwork, bn: UInt256
+): Future[Result[Opt[Block], string]] {.async.} =
   let
     epochData = n.accumulator.getBlockEpochDataForBlockNumber(bn).valueOr:
       return err(error)
@@ -629,34 +626,31 @@ proc getBlock*(
   return ok(maybeBlock)
 
 proc validateContent(
-    n: HistoryNetwork, content: seq[byte], contentKey: ByteList):
-    Future[bool] {.async.} =
+    n: HistoryNetwork, content: seq[byte], contentKey: ByteList
+): Future[bool] {.async.} =
   let key = contentKey.decode().valueOr:
     return false
 
-  case key.contentType:
+  case key.contentType
   of blockHeader:
     let
       headerWithProof = decodeSsz(content, BlockHeaderWithProof).valueOr:
         warn "Failed decoding header with proof", error
         return false
       header = validateBlockHeaderBytes(
-          headerWithProof.header.asSeq(),
-          key.blockHeaderKey.blockHash).valueOr:
+        headerWithProof.header.asSeq(), key.blockHeaderKey.blockHash
+      ).valueOr:
         warn "Invalid block header offered", error
         return false
 
     let res = n.verifyHeader(header, headerWithProof.proof)
     if res.isErr():
-      warn "Failed on check if header is part of canonical chain",
-        error = res.error
+      warn "Failed on check if header is part of canonical chain", error = res.error
       return false
     else:
       return true
-
   of blockBody:
-    let header = (await n.getVerifiedBlockHeader(
-        key.blockBodyKey.blockHash)).valueOr:
+    let header = (await n.getVerifiedBlockHeader(key.blockBodyKey.blockHash)).valueOr:
       warn "Failed getting canonical header for block"
       return false
 
@@ -666,10 +660,8 @@ proc validateContent(
       return false
     else:
       return true
-
   of receipts:
-    let header = (await n.getVerifiedBlockHeader(
-        key.receiptsKey.blockHash)).valueOr:
+    let header = (await n.getVerifiedBlockHeader(key.receiptsKey.blockHash)).valueOr:
       warn "Failed getting canonical header for receipts"
       return false
 
@@ -679,13 +671,11 @@ proc validateContent(
       return false
     else:
       return true
-
   of epochAccumulator:
     # Check first if epochHash is part of master accumulator
     let epochHash = key.epochAccumulatorKey.epochHash
     if not n.accumulator.historicalEpochs.contains(epochHash.data):
-      warn "Offered epoch accumulator is not part of master accumulator",
-        epochHash
+      warn "Offered epoch accumulator is not part of master accumulator", epochHash
       return false
 
     let epochAccumulator =
@@ -710,30 +700,36 @@ proc new*(
     streamManager: StreamManager,
     accumulator: FinishedAccumulator,
     bootstrapRecords: openArray[Record] = [],
-    portalConfig: PortalProtocolConfig = defaultPortalProtocolConfig): T =
+    portalConfig: PortalProtocolConfig = defaultPortalProtocolConfig,
+): T =
   let
     contentQueue = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
 
     stream = streamManager.registerNewStream(contentQueue)
 
     portalProtocol = PortalProtocol.new(
-      baseProtocol, historyProtocolId,
-      toContentIdHandler, createGetHandler(contentDB), stream, bootstrapRecords,
-      config = portalConfig)
+      baseProtocol,
+      historyProtocolId,
+      toContentIdHandler,
+      createGetHandler(contentDB),
+      stream,
+      bootstrapRecords,
+      config = portalConfig,
+    )
 
-  portalProtocol.dbPut = createStoreHandler(contentDB, portalConfig.radiusConfig, portalProtocol)
+  portalProtocol.dbPut =
+    createStoreHandler(contentDB, portalConfig.radiusConfig, portalProtocol)
 
   HistoryNetwork(
     portalProtocol: portalProtocol,
     contentDB: contentDB,
     contentQueue: contentQueue,
-    accumulator: accumulator
+    accumulator: accumulator,
   )
 
 proc validateContent(
-    n: HistoryNetwork,
-    contentKeys: ContentKeysList,
-    contentItems: seq[seq[byte]]): Future[bool] {.async.} =
+    n: HistoryNetwork, contentKeys: ContentKeysList, contentItems: seq[seq[byte]]
+): Future[bool] {.async.} =
   # content passed here can have less items then contentKeys, but not more.
   for i, contentItem in contentItems:
     let contentKey = contentKeys[i]
@@ -754,8 +750,7 @@ proc validateContent(
 proc processContentLoop(n: HistoryNetwork) {.async.} =
   try:
     while true:
-      let (srcNodeId, contentKeys, contentItems) =
-        await n.contentQueue.popFirst()
+      let (srcNodeId, contentKeys, contentItems) = await n.contentQueue.popFirst()
 
       # When there is one invalid content item, all other content items are
       # dropped and not gossiped around.
@@ -765,7 +760,6 @@ proc processContentLoop(n: HistoryNetwork) {.async.} =
         asyncSpawn n.portalProtocol.neighborhoodGossipDiscardPeers(
           srcNodeId, contentKeys, contentItems
         )
-
   except CancelledError:
     trace "processContentLoop canceled"
 

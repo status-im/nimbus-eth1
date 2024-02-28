@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2023 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -10,7 +10,8 @@
 {.push raises: [].}
 
 import
-  unittest2, stint,
+  unittest2,
+  stint,
   eth/common/eth_types_rlp,
   ../eth_data/history_data_json_store,
   ../network/history/[history_content, accumulator],
@@ -27,20 +28,20 @@ suite "Header Accumulator":
         0,
         epochSize - 1,
         epochSize,
-        epochSize*2 - 1,
-        epochSize*2,
-        epochSize*3 - 1,
-        epochSize*3,
-        epochSize*3 + 1,
-        int(amount) - 1]
+        epochSize * 2 - 1,
+        epochSize * 2,
+        epochSize * 3 - 1,
+        epochSize * 3,
+        epochSize * 3 + 1,
+        int(amount) - 1,
+      ]
 
     var headers: seq[BlockHeader]
-    for i in 0..<amount:
+    for i in 0 ..< amount:
       # Note: These test headers will not be a blockchain, as the parent hashes
       # are not properly filled in. That's fine however for this test, as that
       # is not the way the headers are verified with the accumulator.
-      headers.add(BlockHeader(
-        blockNumber: i.stuint(256), difficulty: 1.stuint(256)))
+      headers.add(BlockHeader(blockNumber: i.stuint(256), difficulty: 1.stuint(256)))
 
     let accumulatorRes = buildAccumulatorData(headers)
     check accumulatorRes.isOk()
@@ -66,8 +67,7 @@ suite "Header Accumulator":
         check:
           proof.isOk()
         # Alter the block header so the proof no longer matches
-        let header = BlockHeader(
-          blockNumber: i.stuint(256), difficulty: 2.stuint(256))
+        let header = BlockHeader(blockNumber: i.stuint(256), difficulty: 2.stuint(256))
 
         check verifyAccumulatorProof(accumulator, header, proof.get()).isErr()
 
@@ -82,9 +82,8 @@ suite "Header Accumulator":
     const amount = mergeBlockNumber - 1
 
     var headers: seq[BlockHeader]
-    for i in 0..<amount:
-      headers.add(BlockHeader(
-        blockNumber: i.stuint(256), difficulty: 1.stuint(256)))
+    for i in 0 ..< amount:
+      headers.add(BlockHeader(blockNumber: i.stuint(256), difficulty: 1.stuint(256)))
 
     let accumulatorRes = buildAccumulator(headers)
 
@@ -98,7 +97,7 @@ suite "Header Accumulator":
       headerHashes: seq[Hash256] = @[]
       headers: seq[BlockHeader]
 
-    for i in 0..<amount:
+    for i in 0 ..< amount:
       let header = BlockHeader(blockNumber: u256(i), difficulty: u256(1))
       headers.add(header)
       headerHashes.add(header.blockHash())
@@ -109,7 +108,7 @@ suite "Header Accumulator":
 
     # Valid response for block numbers in epoch 0
     block:
-      for i in 0..<epochSize:
+      for i in 0 ..< epochSize:
         let res = accumulator.getBlockEpochDataForBlockNumber(u256(i))
         check:
           res.isOk()
@@ -117,7 +116,7 @@ suite "Header Accumulator":
 
     # Valid response for block numbers in epoch 1
     block:
-      for i in epochSize..<(2 * epochSize):
+      for i in epochSize ..< (2 * epochSize):
         let res = accumulator.getBlockEpochDataForBlockNumber(u256(i))
         check:
           res.isOk()
@@ -126,17 +125,15 @@ suite "Header Accumulator":
     # Valid response for block numbers in the incomplete (= last) epoch
     block:
       const startIndex = mergeBlockNumber - (mergeBlockNumber mod epochSize)
-      for i in startIndex..<mergeBlockNumber:
+      for i in startIndex ..< mergeBlockNumber:
         let res = accumulator.getBlockEpochDataForBlockNumber(u256(i))
         check:
           res.isOk()
-          res.get().epochHash ==
-            accumulator.historicalEpochs[preMergeEpochs - 1]
+          res.get().epochHash == accumulator.historicalEpochs[preMergeEpochs - 1]
 
     # Error for block number at and past merge
     block:
       check:
-        accumulator.getBlockEpochDataForBlockNumber(
-          u256(mergeBlockNumber)).isErr()
-        accumulator.getBlockEpochDataForBlockNumber(
-          u256(mergeBlockNumber + 1)).isErr()
+        accumulator.getBlockEpochDataForBlockNumber(u256(mergeBlockNumber)).isErr()
+
+        accumulator.getBlockEpochDataForBlockNumber(u256(mergeBlockNumber + 1)).isErr()

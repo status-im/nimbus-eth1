@@ -8,7 +8,9 @@
 {.push raises: [].}
 
 import
-  stew/results, chronos, chronicles,
+  stew/results,
+  chronos,
+  chronicles,
   eth/p2p/discoveryv5/[protocol, enr],
   beacon_chain/spec/forks,
   beacon_chain/spec/datatypes/[phase0, altair, bellatrix],
@@ -22,38 +24,34 @@ export beacon_content, beacon_db
 logScope:
   topics = "beacon_network"
 
-const
-  lightClientProtocolId* = [byte 0x50, 0x1A]
+const lightClientProtocolId* = [byte 0x50, 0x1A]
 
-type
-  BeaconNetwork* = ref object
-    portalProtocol*: PortalProtocol
-    beaconDb*: BeaconDb
-    processor*: ref LightClientProcessor
-    contentQueue*: AsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])]
-    forkDigests*: ForkDigests
-    processContentLoop: Future[void]
+type BeaconNetwork* = ref object
+  portalProtocol*: PortalProtocol
+  beaconDb*: BeaconDb
+  processor*: ref LightClientProcessor
+  contentQueue*: AsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])]
+  forkDigests*: ForkDigests
+  processContentLoop: Future[void]
 
 func toContentIdHandler(contentKey: ByteList): results.Opt[ContentId] =
   ok(toContentId(contentKey))
 
 proc validateHistoricalSummaries(
-    n: BeaconNetwork,
-    summariesWithProof: HistoricalSummariesWithProof
-    ): Result[void, string] =
+    n: BeaconNetwork, summariesWithProof: HistoricalSummariesWithProof
+): Result[void, string] =
   let
     finalityUpdate = getLastFinalityUpdate(n.beaconDb).valueOr:
       return err("Require finality update for verification")
 
     # TODO: compare slots first
-    stateRoot =
-      withForkyFinalityUpdate(finalityUpdate):
-        when lcDataFork > LightClientDataFork.None:
-          forkyFinalityUpdate.finalized_header.beacon.state_root
-        else:
-          # Note: this should always be the case as historical_summaries was
-          # introduced in Capella.
-          return err("Require Altair or > for verification")
+    stateRoot = withForkyFinalityUpdate(finalityUpdate):
+      when lcDataFork > LightClientDataFork.None:
+        forkyFinalityUpdate.finalized_header.beacon.state_root
+      else:
+        # Note: this should always be the case as historical_summaries was
+        # introduced in Capella.
+        return err("Require Altair or > for verification")
 
   if summariesWithProof.verifyProof(stateRoot):
     ok()
@@ -61,8 +59,8 @@ proc validateHistoricalSummaries(
     err("Failed verifying historical_summaries proof")
 
 proc getContent(
-    n: BeaconNetwork, contentKey: ContentKey):
-    Future[results.Opt[seq[byte]]] {.async.} =
+    n: BeaconNetwork, contentKey: ContentKey
+): Future[results.Opt[seq[byte]]] {.async.} =
   let
     contentKeyEncoded = encode(contentKey)
     contentId = toContentId(contentKeyEncoded)
@@ -71,8 +69,7 @@ proc getContent(
   if localContent.isSome():
     return localContent
 
-  let contentRes = await n.portalProtocol.contentLookup(
-      contentKeyEncoded, contentId)
+  let contentRes = await n.portalProtocol.contentLookup(contentKeyEncoded, contentId)
 
   if contentRes.isNone():
     warn "Failed fetching content from the beacon chain network",
@@ -82,9 +79,8 @@ proc getContent(
     return Opt.some(contentRes.value().content)
 
 proc getLightClientBootstrap*(
-    n: BeaconNetwork,
-    trustedRoot: Digest):
-    Future[results.Opt[ForkedLightClientBootstrap]] {.async.} =
+    n: BeaconNetwork, trustedRoot: Digest
+): Future[results.Opt[ForkedLightClientBootstrap]] {.async.} =
   let
     contentKey = bootstrapContentKey(trustedRoot)
     contentResult = await n.getContent(contentKey)
@@ -94,8 +90,7 @@ proc getLightClientBootstrap*(
 
   let
     bootstrap = contentResult.value()
-    decodingResult = decodeLightClientBootstrapForked(
-      n.forkDigests, bootstrap)
+    decodingResult = decodeLightClientBootstrapForked(n.forkDigests, bootstrap)
 
   if decodingResult.isErr():
     return Opt.none(ForkedLightClientBootstrap)
@@ -105,10 +100,8 @@ proc getLightClientBootstrap*(
     return Opt.some(decodingResult.value())
 
 proc getLightClientUpdatesByRange*(
-    n: BeaconNetwork,
-    startPeriod: SyncCommitteePeriod,
-    count: uint64):
-    Future[results.Opt[ForkedLightClientUpdateList]] {.async.} =
+    n: BeaconNetwork, startPeriod: SyncCommitteePeriod, count: uint64
+): Future[results.Opt[ForkedLightClientUpdateList]] {.async.} =
   let
     contentKey = updateContentKey(distinctBase(startPeriod), count)
     contentResult = await n.getContent(contentKey)
@@ -118,8 +111,7 @@ proc getLightClientUpdatesByRange*(
 
   let
     updates = contentResult.value()
-    decodingResult = decodeLightClientUpdatesByRange(
-      n.forkDigests, updates)
+    decodingResult = decodeLightClientUpdatesByRange(n.forkDigests, updates)
 
   if decodingResult.isErr():
     return Opt.none(ForkedLightClientUpdateList)
@@ -129,9 +121,8 @@ proc getLightClientUpdatesByRange*(
     return Opt.some(decodingResult.value())
 
 proc getLightClientFinalityUpdate*(
-    n: BeaconNetwork,
-    finalizedSlot: uint64
-  ): Future[results.Opt[ForkedLightClientFinalityUpdate]] {.async.} =
+    n: BeaconNetwork, finalizedSlot: uint64
+): Future[results.Opt[ForkedLightClientFinalityUpdate]] {.async.} =
   let
     contentKey = finalityUpdateContentKey(finalizedSlot)
     contentResult = await n.getContent(contentKey)
@@ -141,8 +132,8 @@ proc getLightClientFinalityUpdate*(
 
   let
     finalityUpdate = contentResult.value()
-    decodingResult = decodeLightClientFinalityUpdateForked(
-      n.forkDigests, finalityUpdate)
+    decodingResult =
+      decodeLightClientFinalityUpdateForked(n.forkDigests, finalityUpdate)
 
   if decodingResult.isErr():
     return Opt.none(ForkedLightClientFinalityUpdate)
@@ -150,10 +141,8 @@ proc getLightClientFinalityUpdate*(
     return Opt.some(decodingResult.value())
 
 proc getLightClientOptimisticUpdate*(
-    n: BeaconNetwork,
-    optimisticSlot: uint64
-  ): Future[results.Opt[ForkedLightClientOptimisticUpdate]] {.async.} =
-
+    n: BeaconNetwork, optimisticSlot: uint64
+): Future[results.Opt[ForkedLightClientOptimisticUpdate]] {.async.} =
   let
     contentKey = optimisticUpdateContentKey(optimisticSlot)
     contentResult = await n.getContent(contentKey)
@@ -163,8 +152,8 @@ proc getLightClientOptimisticUpdate*(
 
   let
     optimisticUpdate = contentResult.value()
-    decodingResult = decodeLightClientOptimisticUpdateForked(
-      n.forkDigests, optimisticUpdate)
+    decodingResult =
+      decodeLightClientOptimisticUpdateForked(n.forkDigests, optimisticUpdate)
 
   if decodingResult.isErr():
     return Opt.none(ForkedLightClientOptimisticUpdate)
@@ -173,11 +162,11 @@ proc getLightClientOptimisticUpdate*(
 
 proc getHistoricalSummaries*(
     n: BeaconNetwork
-  ): Future[results.Opt[HistoricalSummaries]] {.async.} =
+): Future[results.Opt[HistoricalSummaries]] {.async.} =
   # Note: when taken from the db, it does not need to verify the proof.
   let
     contentKey = historicalSummariesContentKey()
-    content = ? await n.getContent(contentKey)
+    content = ?await n.getContent(contentKey)
 
     summariesWithProof = decodeSsz(content, HistoricalSummariesWithProof).valueOr:
       return Opt.none(HistoricalSummaries)
@@ -187,7 +176,6 @@ proc getHistoricalSummaries*(
   else:
     return Opt.none(HistoricalSummaries)
 
-
 proc new*(
     T: type BeaconNetwork,
     baseProtocol: protocol.Protocol,
@@ -195,10 +183,10 @@ proc new*(
     streamManager: StreamManager,
     forkDigests: ForkDigests,
     bootstrapRecords: openArray[Record] = [],
-    portalConfig: PortalProtocolConfig = defaultPortalProtocolConfig): T =
+    portalConfig: PortalProtocolConfig = defaultPortalProtocolConfig,
+): T =
   let
-    contentQueue = newAsyncQueue[(
-      Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
+    contentQueue = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
 
     stream = streamManager.registerNewStream(contentQueue)
 
@@ -208,13 +196,18 @@ proc new*(
       tableIpLimits: portalConfig.tableIpLimits,
       bitsPerHop: portalConfig.bitsPerHop,
       radiusConfig: RadiusConfig(kind: Static, logRadius: 256),
-      disablePoke: portalConfig.disablePoke)
+      disablePoke: portalConfig.disablePoke,
+    )
 
     portalProtocol = PortalProtocol.new(
-      baseProtocol, lightClientProtocolId,
+      baseProtocol,
+      lightClientProtocolId,
       toContentIdHandler,
-      createGetHandler(beaconDb), stream, bootstrapRecords,
-      config = portalConfigAdjusted)
+      createGetHandler(beaconDb),
+      stream,
+      bootstrapRecords,
+      config = portalConfigAdjusted,
+    )
 
   portalProtocol.dbPut = createStoreHandler(beaconDb)
 
@@ -222,21 +215,20 @@ proc new*(
     portalProtocol: portalProtocol,
     beaconDb: beaconDb,
     contentQueue: contentQueue,
-    forkDigests: forkDigests
+    forkDigests: forkDigests,
   )
 
 proc validateContent(
-    n: BeaconNetwork, content: seq[byte], contentKey: ByteList):
-    Result[void, string] =
+    n: BeaconNetwork, content: seq[byte], contentKey: ByteList
+): Result[void, string] =
   let key = contentKey.decode().valueOr:
     return err("Error decoding content key")
 
-  case key.contentType:
+  case key.contentType
   of unused:
     raiseAssert "Should not be used and fail at decoding"
   of lightClientBootstrap:
-    let decodingResult = decodeLightClientBootstrapForked(
-      n.forkDigests, content)
+    let decodingResult = decodeLightClientBootstrapForked(n.forkDigests, content)
     if decodingResult.isOk:
       # TODO:
       # Currently only verifying if the content can be decoded.
@@ -252,10 +244,8 @@ proc validateContent(
       ok()
     else:
       err("Error decoding content: " & decodingResult.error)
-
   of lightClientUpdate:
-    let decodingResult = decodeLightClientUpdatesByRange(
-      n.forkDigests, content)
+    let decodingResult = decodeLightClientUpdatesByRange(n.forkDigests, content)
     if decodingResult.isOk:
       # TODO:
       # Currently only verifying if the content can be decoded.
@@ -264,39 +254,32 @@ proc validateContent(
       ok()
     else:
       err("Error decoding content: " & decodingResult.error)
-
   of lightClientFinalityUpdate:
-    let update = decodeLightClientFinalityUpdateForked(
-      n.forkDigests, content).valueOr:
-        return err("Error decoding content: " & error)
+    let update = decodeLightClientFinalityUpdateForked(n.forkDigests, content).valueOr:
+      return err("Error decoding content: " & error)
 
-    let res = n.processor[].processLightClientFinalityUpdate(
-      MsgSource.gossip, update)
+    let res = n.processor[].processLightClientFinalityUpdate(MsgSource.gossip, update)
     if res.isErr():
       err("Error processing update: " & $res.error[1])
     else:
       ok()
-
   of lightClientOptimisticUpdate:
-    let update = decodeLightClientOptimisticUpdateForked(
-      n.forkDigests, content).valueOr:
-        return err("Error decoding content: " & error)
+    let update = decodeLightClientOptimisticUpdateForked(n.forkDigests, content).valueOr:
+      return err("Error decoding content: " & error)
 
-    let res = n.processor[].processLightClientOptimisticUpdate(
-      MsgSource.gossip, update)
+    let res = n.processor[].processLightClientOptimisticUpdate(MsgSource.gossip, update)
     if res.isErr():
       err("Error processing update: " & $res.error[1])
     else:
       ok()
   of beacon_content.ContentType.historicalSummaries:
-    let summariesWithProof = ? decodeSsz(content, HistoricalSummariesWithProof)
+    let summariesWithProof = ?decodeSsz(content, HistoricalSummariesWithProof)
 
     n.validateHistoricalSummaries(summariesWithProof)
 
 proc validateContent(
-    n: BeaconNetwork,
-    contentKeys: ContentKeysList,
-    contentItems: seq[seq[byte]]): Future[bool] {.async.} =
+    n: BeaconNetwork, contentKeys: ContentKeysList, contentItems: seq[seq[byte]]
+): Future[bool] {.async.} =
   # content passed here can have less items then contentKeys, but not more.
   for i, contentItem in contentItems:
     let
@@ -312,7 +295,6 @@ proc validateContent(
       n.portalProtocol.storeContent(contentKey, contentId, contentItem)
 
       info "Received offered content validated successfully", contentKey
-
     else:
       error "Received offered content failed validation",
         contentKey, error = validation.error
@@ -323,8 +305,7 @@ proc validateContent(
 proc processContentLoop(n: BeaconNetwork) {.async.} =
   try:
     while true:
-      let (srcNodeId, contentKeys, contentItems) =
-        await n.contentQueue.popFirst()
+      let (srcNodeId, contentKeys, contentItems) = await n.contentQueue.popFirst()
 
       # When there is one invalid content item, all other content items are
       # dropped and not gossiped around.
@@ -334,7 +315,6 @@ proc processContentLoop(n: BeaconNetwork) {.async.} =
         asyncSpawn n.portalProtocol.randomGossipDiscardPeers(
           srcNodeId, contentKeys, contentItems
         )
-
   except CancelledError:
     trace "processContentLoop canceled"
 

@@ -8,7 +8,9 @@
 
 import
   std/[hashes, tables, net],
-  chronos, chronicles, confutils,
+  chronos,
+  chronicles,
+  confutils,
   confutils/std/net as confNet,
   stew/[byteutils, endians2],
   json_rpc/servers/httpserver,
@@ -19,48 +21,42 @@ import
   ../../rpc/rpc_discovery_api,
   ./utp_rpc_types
 
-const
-  defaultListenAddress* = (static parseIpAddress("127.0.0.1"))
+const defaultListenAddress* = (static parseIpAddress("127.0.0.1"))
 
 type AppConf* = object
-  rpcPort* {.
-    defaultValue: 7041
-    desc: "Json rpc port"
-    name: "rpc-port" .}: Port
+  rpcPort* {.defaultValue: 7041, desc: "Json rpc port", name: "rpc-port".}: Port
 
-  udpPort* {.
-    defaultValue: 7042
-    desc: "UDP listening port"
-    name: "udp-port" .}: Port
+  udpPort* {.defaultValue: 7042, desc: "UDP listening port", name: "udp-port".}: Port
 
   udpListenAddress* {.
-    defaultValue: defaultListenAddress
-    desc: "UDP listening address"
-    name: "udp-listen-address" .}: IpAddress
+    defaultValue: defaultListenAddress,
+    desc: "UDP listening address",
+    name: "udp-listen-address"
+  .}: IpAddress
 
   rpcListenAddress* {.
-    defaultValue: defaultListenAddress
-    desc: "RPC listening address"
-    name: "rpc-listen-address" .}: IpAddress
+    defaultValue: defaultListenAddress,
+    desc: "RPC listening address",
+    name: "rpc-listen-address"
+  .}: IpAddress
 
-proc writeValue*(w: var JsonWriter[JrpcConv], v: Record)
-      {.gcsafe, raises: [IOError].} =
+proc writeValue*(w: var JsonWriter[JrpcConv], v: Record) {.gcsafe, raises: [IOError].} =
   w.writeValue(v.toURI())
 
-proc readValue*(r: var JsonReader[JrpcConv], val: var Record)
-       {.gcsafe, raises: [IOError, JsonReaderError].} =
+proc readValue*(
+    r: var JsonReader[JrpcConv], val: var Record
+) {.gcsafe, raises: [IOError, JsonReaderError].} =
   if not fromURI(val, r.parseString()):
     r.raiseUnexpectedValue("Invalid ENR")
 
 proc installUtpHandlers(
-  srv: RpcHttpServer,
-  d: protocol.Protocol,
-  s: UtpDiscv5Protocol,
-  t: ref Table[SKey, UtpSocket[NodeAddress]]) {.raises: [CatchableError].} =
-
+    srv: RpcHttpServer,
+    d: protocol.Protocol,
+    s: UtpDiscv5Protocol,
+    t: ref Table[SKey, UtpSocket[NodeAddress]],
+) {.raises: [CatchableError].} =
   srv.rpc("utp_connect") do(r: enr.Record) -> SKey:
-    let
-      nodeRes = newNode(r)
+    let nodeRes = newNode(r)
 
     if nodeRes.isOk():
       let node = nodeRes.get()
@@ -116,9 +112,11 @@ proc installUtpHandlers(
     else:
       raise newException(ValueError, "Socket with provided key is missing")
 
-proc buildAcceptConnection(t: ref Table[SKey, UtpSocket[NodeAddress]]): AcceptConnectionCallback[NodeAddress] =
+proc buildAcceptConnection(
+    t: ref Table[SKey, UtpSocket[NodeAddress]]
+): AcceptConnectionCallback[NodeAddress] =
   return (
-    proc (server: UtpRouter[NodeAddress], client: UtpSocket[NodeAddress]): Future[void] =
+    proc(server: UtpRouter[NodeAddress], client: UtpSocket[NodeAddress]): Future[void] =
       let fut = newFuture[void]()
       let key = client.socketKey.toSKey()
       t[key] = client
@@ -146,17 +144,23 @@ when isMainModule:
 
   let d = newProtocol(
     key,
-    some(discAddress), none(Port), some(conf.udpPort),
+    some(discAddress),
+    none(Port),
+    some(conf.udpPort),
     bootstrapRecords = @[],
-    bindIp = discAddress, bindPort = conf.udpPort,
+    bindIp = discAddress,
+    bindPort = conf.udpPort,
     enrAutoUpdate = true,
-    rng = rng)
+    rng = rng,
+  )
 
   d.open()
 
   let
     cfg = SocketConfig.init(incomingSocketReceiveTimeout = none[Duration]())
-    utp = UtpDiscv5Protocol.new(d, protName, buildAcceptConnection(table), socketConfig = cfg)
+    utp = UtpDiscv5Protocol.new(
+      d, protName, buildAcceptConnection(table), socketConfig = cfg
+    )
 
   # needed for some of the discovery api: nodeInfo, setEnr, ping
   srv.installDiscoveryApiHandlers(d)

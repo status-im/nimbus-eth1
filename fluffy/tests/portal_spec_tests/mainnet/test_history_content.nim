@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -10,7 +10,8 @@
 {.push raises: [].}
 
 import
-  unittest2, stew/byteutils,
+  unittest2,
+  stew/byteutils,
   eth/common/eth_types_rlp,
   ../../../network_metadata,
   ../../../eth_data/[history_data_json_store, history_data_ssz_e2s],
@@ -20,24 +21,25 @@ import
 suite "History Content Encodings":
   test "HeaderWithProof Building and Encoding":
     const
-      headerFile = "./vendor/portal-spec-tests/tests/mainnet/history/headers/1000001-1000010.e2s"
-      accumulatorFile = "./vendor/portal-spec-tests/tests/mainnet/history/accumulator/epoch-accumulator-00122.ssz"
-      headersWithProofFile = "./vendor/portal-spec-tests/tests/mainnet/history/headers_with_proof/1000001-1000010.json"
+      headerFile =
+        "./vendor/portal-spec-tests/tests/mainnet/history/headers/1000001-1000010.e2s"
+      accumulatorFile =
+        "./vendor/portal-spec-tests/tests/mainnet/history/accumulator/epoch-accumulator-00122.ssz"
+      headersWithProofFile =
+        "./vendor/portal-spec-tests/tests/mainnet/history/headers_with_proof/1000001-1000010.json"
 
     let
       blockHeaders = readBlockHeaders(headerFile).valueOr:
         raiseAssert "Invalid header file: " & headerFile
       epochAccumulator = readEpochAccumulatorCached(accumulatorFile).valueOr:
         raiseAssert "Invalid epoch accumulator file: " & accumulatorFile
-      blockHeadersWithProof =
-        buildHeadersWithProof(blockHeaders, epochAccumulator).valueOr:
-          raiseAssert "Could not build headers with proof"
+      blockHeadersWithProof = buildHeadersWithProof(blockHeaders, epochAccumulator).valueOr:
+        raiseAssert "Could not build headers with proof"
       accumulator =
         try:
           SSZ.decode(finishedAccumulator, FinishedAccumulator)
         except SszError as err:
           raiseAssert "Invalid baked-in accumulator: " & err.msg
-
 
     let res = readJsonType(headersWithProofFile, JsonPortalContentTable)
     check res.isOk()
@@ -48,8 +50,7 @@ suite "History Content Encodings":
       # them with the ones from the test vectors.
       let
         blockNumber = blockHeaders[i].blockNumber
-        contentKeyEncoded =
-          content[blockNumber.toString()].content_key.hexToSeqByte()
+        contentKeyEncoded = content[blockNumber.toString()].content_key.hexToSeqByte()
         contentValueEncoded =
           content[blockNumber.toString()].content_value.hexToSeqByte()
 
@@ -60,10 +61,8 @@ suite "History Content Encodings":
       # Also run the encode/decode loopback and verification of the header
       # proofs.
       let
-        contentKey = decodeSsz(
-          contentKeyEncoded, ContentKey)
-        contentValue = decodeSsz(
-          contentValueEncoded, BlockHeaderWithProof)
+        contentKey = decodeSsz(contentKeyEncoded, ContentKey)
+        contentValue = decodeSsz(contentValueEncoded, BlockHeaderWithProof)
 
       check:
         contentKey.isOk()
@@ -105,10 +104,8 @@ suite "History Content Encodings":
 
       # Decode content
       let
-        contentKey = decodeSsz(
-          contentKeyEncoded, ContentKey)
-        contentValue = decodeSsz(
-          contentValueEncoded, BlockHeaderWithProof)
+        contentKey = decodeSsz(contentKeyEncoded, ContentKey)
+        contentValue = decodeSsz(contentValueEncoded, BlockHeaderWithProof)
 
       check:
         contentKey.isOk()
@@ -129,8 +126,7 @@ suite "History Content Encodings":
 
   test "PortalBlockBody (Legacy) Encoding/Decoding and Verification":
     const
-      dataFile =
-        "./vendor/portal-spec-tests/tests/mainnet/history/bodies/14764013.json"
+      dataFile = "./vendor/portal-spec-tests/tests/mainnet/history/bodies/14764013.json"
       headersWithProofFile =
         "./vendor/portal-spec-tests/tests/mainnet/history/headers_with_proof/14764013.json"
 
@@ -150,11 +146,9 @@ suite "History Content Encodings":
       # Get the header for validation of body
       let
         headerEncoded = headers[k].content_value.hexToSeqByte()
-        headerWithProofRes = decodeSsz(
-          headerEncoded, BlockHeaderWithProof)
+        headerWithProofRes = decodeSsz(headerEncoded, BlockHeaderWithProof)
       check headerWithProofRes.isOk()
-      let headerRes = decodeRlp(
-        headerWithProofRes.get().header.asSeq(), BlockHeader)
+      let headerRes = decodeRlp(headerWithProofRes.get().header.asSeq(), BlockHeader)
       check headerRes.isOk()
       let header = headerRes.get()
 
@@ -163,8 +157,7 @@ suite "History Content Encodings":
       check contentKey.isOk()
 
       # Decode (SSZ + RLP decode step) and validate block body
-      let contentValue = validateBlockBodyBytes(
-        contentValueEncoded, header)
+      let contentValue = validateBlockBodyBytes(contentValueEncoded, header)
       check contentValue.isOk()
 
       # Encode content and content key
@@ -175,9 +168,8 @@ suite "History Content Encodings":
   test "PortalBlockBody (Shanghai) Encoding/Decoding":
     # TODO: We don't have the header (without proof) ready here so cannot do
     # full validation for now. Add this header and then we can do like above.
-    const
-      dataFile =
-        "./vendor/portal-spec-tests/tests/mainnet/history/bodies/17139055.json"
+    const dataFile =
+      "./vendor/portal-spec-tests/tests/mainnet/history/bodies/17139055.json"
 
     let res = readJsonType(dataFile, JsonPortalContentTable)
     check res.isOk()
@@ -193,8 +185,7 @@ suite "History Content Encodings":
       check contentKey.isOk()
 
       # Decode (SSZ + RLP decode step) and validate block body
-      let contentValue = decodeBlockBodyBytes(
-        contentValueEncoded)
+      let contentValue = decodeBlockBodyBytes(contentValueEncoded)
       check contentValue.isOk()
 
       # Encode content and content key
@@ -225,11 +216,9 @@ suite "History Content Encodings":
       # Get the header for validation of receipts
       let
         headerEncoded = headers[k].content_value.hexToSeqByte()
-        headerWithProofRes = decodeSsz(
-          headerEncoded, BlockHeaderWithProof)
+        headerWithProofRes = decodeSsz(headerEncoded, BlockHeaderWithProof)
       check headerWithProofRes.isOk()
-      let headerRes = decodeRlp(
-        headerWithProofRes.get().header.asSeq(), BlockHeader)
+      let headerRes = decodeRlp(headerWithProofRes.get().header.asSeq(), BlockHeader)
       check headerRes.isOk()
       let header = headerRes.get()
 
@@ -238,8 +227,7 @@ suite "History Content Encodings":
       check contentKey.isOk()
 
       # Decode (SSZ + RLP decode step) and validate receipts
-      let contentValue = validateReceiptsBytes(
-        contentValueEncoded, header.receiptRoot)
+      let contentValue = validateReceiptsBytes(contentValueEncoded, header.receiptRoot)
       check contentValue.isOk()
 
       # Encode content

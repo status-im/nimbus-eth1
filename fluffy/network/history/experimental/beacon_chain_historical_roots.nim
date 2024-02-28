@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -20,10 +20,7 @@
 
 {.push raises: [].}
 
-import
-  stew/results,
-  beacon_chain/spec/forks,
-  beacon_chain/spec/datatypes/bellatrix
+import stew/results, beacon_chain/spec/forks, beacon_chain/spec/datatypes/bellatrix
 
 export results
 
@@ -34,20 +31,18 @@ type
     historical_roots: HistoricalRoots
     proof: HistoricalRootsProof
 
-func buildProof*(
-    state: ForkedHashedBeaconState): Result[HistoricalRootsProof, string] =
+func buildProof*(state: ForkedHashedBeaconState): Result[HistoricalRootsProof, string] =
   let gIndex = GeneralizedIndex(39) # 31 + 8 = 39
 
   var proof: HistoricalRootsProof
   withState(state):
-    ? forkyState.data.build_proof(gIndex, proof)
+    ?forkyState.data.build_proof(gIndex, proof)
 
   ok(proof)
 
 func verifyProof*(
-    historical_roots: HistoricalRoots,
-    proof: HistoricalRootsProof,
-    stateRoot: Digest): bool =
+    historical_roots: HistoricalRoots, proof: HistoricalRootsProof, stateRoot: Digest
+): bool =
   let
     gIndex = GeneralizedIndex(39)
     leave = hash_tree_root(historical_roots)

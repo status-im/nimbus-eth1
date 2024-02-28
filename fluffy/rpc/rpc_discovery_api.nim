@@ -9,36 +9,36 @@
 
 import
   std/sequtils,
-  json_rpc/[rpcproxy, rpcserver], stew/byteutils,
+  json_rpc/[rpcproxy, rpcserver],
+  stew/byteutils,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ./rpc_types
 
 export rpc_types # tasty sandwich
 
-type
-  PongResponse* = object
-    enrSeq: uint64
-    recipientIP: string
-    recipientPort: uint16
+type PongResponse* = object
+  enrSeq: uint64
+  recipientIP: string
+  recipientPort: uint16
 
 PongResponse.useDefaultSerializationIn JrpcConv
 
-proc installDiscoveryApiHandlers*(rpcServer: RpcServer|RpcProxy,
-    d: discv5_protocol.Protocol) =
+proc installDiscoveryApiHandlers*(
+    rpcServer: RpcServer | RpcProxy, d: discv5_protocol.Protocol
+) =
   ## Discovery v5 JSON-RPC API such as defined here:
   ## https://github.com/ethereum/portal-network-specs/tree/master/jsonrpc
 
   rpcServer.rpc("discv5_nodeInfo") do() -> NodeInfo:
     return d.routingTable.getNodeInfo()
 
-  rpcServer.rpc("discv5_updateNodeInfo") do(
-      kvPairs: seq[(string, string)]) -> NodeInfo:
+  rpcServer.rpc("discv5_updateNodeInfo") do(kvPairs: seq[(string, string)]) -> NodeInfo:
     # TODO: Not according to spec, as spec only allows socket address.
     # portal-specs PR has been created with suggested change as is here.
     let enrFields = kvPairs.map(
       proc(n: (string, string)): (string, seq[byte]) {.raises: [ValueError].} =
         (n[0], hexToSeqByte(n[1]))
-      )
+    )
     let updated = d.updateRecord(enrFields)
     if updated.isErr():
       raise newException(ValueError, $updated.error)
@@ -104,28 +104,26 @@ proc installDiscoveryApiHandlers*(rpcServer: RpcServer|RpcProxy,
       raise newException(ValueError, $pong.error)
     else:
       let p = pong.get()
-      return PongResponse(
-        enrSeq: p.enrSeq,
-        recipientIP: $p.ip,
-        recipientPort: p.port
-      )
+      return PongResponse(enrSeq: p.enrSeq, recipientIP: $p.ip, recipientPort: p.port)
 
   rpcServer.rpc("discv5_findNode") do(
-      enr: Record, distances: seq[uint16]) -> seq[Record]:
+    enr: Record, distances: seq[uint16]
+  ) -> seq[Record]:
     let
       node = toNodeWithAddress(enr)
       nodes = await d.findNode(node, distances)
     if nodes.isErr():
       raise newException(ValueError, $nodes.error)
     else:
-      return nodes.get().map(proc(n: Node): Record = n.record)
+      return nodes.get().map(
+          proc(n: Node): Record =
+            n.record
+        )
 
-  rpcServer.rpc("discv5_talkReq") do(
-      enr: Record, protocol, payload: string) -> string:
+  rpcServer.rpc("discv5_talkReq") do(enr: Record, protocol, payload: string) -> string:
     let
       node = toNodeWithAddress(enr)
-      talkresp = await d.talkReq(
-        node, hexToSeqByte(protocol), hexToSeqByte(payload))
+      talkresp = await d.talkReq(node, hexToSeqByte(protocol), hexToSeqByte(payload))
     if talkresp.isErr():
       raise newException(ValueError, $talkresp.error)
     else:
@@ -133,4 +131,7 @@ proc installDiscoveryApiHandlers*(rpcServer: RpcServer|RpcProxy,
 
   rpcServer.rpc("discv5_recursiveFindNodes") do(nodeId: NodeId) -> seq[Record]:
     let discovered = await d.lookup(nodeId)
-    return discovered.map(proc(n: Node): Record = n.record)
+    return discovered.map(
+      proc(n: Node): Record =
+        n.record
+    )

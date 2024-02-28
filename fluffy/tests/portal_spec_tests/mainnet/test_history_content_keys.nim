@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2022 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -8,8 +8,11 @@
 {.used.}
 
 import
-  unittest2, stew/byteutils, stint,
-  ssz_serialization, ssz_serialization/[proofs, merkleization],
+  unittest2,
+  stew/byteutils,
+  stint,
+  ssz_serialization,
+  ssz_serialization/[proofs, merkleization],
   ../../../network/history/[history_content, accumulator]
 
 # According to test vectors:
@@ -19,7 +22,8 @@ suite "History ContentKey Encodings":
   test "BlockHeader":
     # Input
     const blockHash = BlockHash.fromHex(
-      "0xd1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d")
+      "0xd1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d"
+    )
 
     # Output
     const
@@ -32,8 +36,8 @@ suite "History ContentKey Encodings":
         "3e86b3767b57402ea72e369ae0496ce47cc15be685bec3b4726b9f316e3895fe"
 
     let contentKey = ContentKey(
-      contentType: blockHeader,
-      blockHeaderKey: BlockKey(blockHash: blockHash))
+      contentType: blockHeader, blockHeaderKey: BlockKey(blockHash: blockHash)
+    )
 
     let encoded = encode(contentKey)
     check encoded.asSeq.toHex == contentKeyHex
@@ -52,7 +56,8 @@ suite "History ContentKey Encodings":
   test "BlockBody":
     # Input
     const blockHash = BlockHash.fromHex(
-      "0xd1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d")
+      "0xd1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d"
+    )
 
     # Output
     const
@@ -64,9 +69,8 @@ suite "History ContentKey Encodings":
       contentIdHexBE =
         "ebe414854629d60c58ddd5bf60fd72e41760a5f7a463fdcb169f13ee4a26786b"
 
-    let contentKey = ContentKey(
-      contentType: blockBody,
-      blockBodyKey: BlockKey(blockHash: blockHash))
+    let contentKey =
+      ContentKey(contentType: blockBody, blockBodyKey: BlockKey(blockHash: blockHash))
 
     let encoded = encode(contentKey)
     check encoded.asSeq.toHex == contentKeyHex
@@ -85,7 +89,8 @@ suite "History ContentKey Encodings":
   test "Receipts":
     # Input
     const blockHash = BlockHash.fromHex(
-      "0xd1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d")
+      "0xd1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d"
+    )
 
     # Output
     const
@@ -97,9 +102,8 @@ suite "History ContentKey Encodings":
       contentIdHexBE =
         "a888f4aafe9109d495ac4d4774a6277c1ada42035e3da5e10a04cc93247c04a4"
 
-    let contentKey = ContentKey(
-      contentType: receipts,
-      receiptsKey: BlockKey(blockHash: blockHash))
+    let contentKey =
+      ContentKey(contentType: receipts, receiptsKey: BlockKey(blockHash: blockHash))
 
     let encoded = encode(contentKey)
     check encoded.asSeq.toHex == contentKeyHex
@@ -118,7 +122,8 @@ suite "History ContentKey Encodings":
   test "Epoch Accumulator":
     # Input
     const epochHash = Digest.fromHex(
-      "0xe242814b90ed3950e13aac7e56ce116540c71b41d1516605aada26c6c07cc491")
+      "0xe242814b90ed3950e13aac7e56ce116540c71b41d1516605aada26c6c07cc491"
+    )
 
     # Output
     const
@@ -132,7 +137,8 @@ suite "History ContentKey Encodings":
 
     let contentKey = ContentKey(
       contentType: epochAccumulator,
-      epochAccumulatorKey: EpochAccumulatorKey(epochHash: epochHash))
+      epochAccumulatorKey: EpochAccumulatorKey(epochHash: epochHash),
+    )
 
     let encoded = encode(contentKey)
     check encoded.asSeq.toHex == contentKeyHex

@@ -9,10 +9,17 @@ import
   std/[os, json],
   json_rpc/rpcclient,
   json_rpc/errors, # TODO: should be exported in json_rpc/clients/httpclient
-  ./rpc_types, rpc_discovery_api # for the PongResponse
+  ./rpc_types,
+  rpc_discovery_api # for the PongResponse
 
 export rpcclient, rpc_types, errors
 
-createRpcSigs(RpcClient, currentSourcePath.parentDir / "rpc_calls" / "rpc_discovery_calls.nim")
-createRpcSigs(RpcClient, currentSourcePath.parentDir / "rpc_calls" / "rpc_portal_calls.nim")
-createRpcSigs(RpcClient, currentSourcePath.parentDir / "rpc_calls" / "rpc_portal_debug_calls.nim")
+createRpcSigs(
+  RpcClient, currentSourcePath.parentDir / "rpc_calls" / "rpc_discovery_calls.nim"
+)
+createRpcSigs(
+  RpcClient, currentSourcePath.parentDir / "rpc_calls" / "rpc_portal_calls.nim"
+)
+createRpcSigs(
+  RpcClient, currentSourcePath.parentDir / "rpc_calls" / "rpc_portal_debug_calls.nim"
+)

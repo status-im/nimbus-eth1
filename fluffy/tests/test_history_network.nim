@@ -1,12 +1,13 @@
 # Fluffy
-# Copyright (c) 2022-2023 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  testutils/unittests, chronos,
+  testutils/unittests,
+  chronos,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   eth/p2p/discoveryv5/routing_table,
   eth/common/eth_types_rlp,
@@ -21,8 +22,9 @@ type HistoryNode = ref object
   discoveryProtocol*: discv5_protocol.Protocol
   historyNetwork*: HistoryNetwork
 
-proc newHistoryNode(rng: ref HmacDrbgContext, port: int,
-    accumulator: FinishedAccumulator): HistoryNode =
+proc newHistoryNode(
+    rng: ref HmacDrbgContext, port: int, accumulator: FinishedAccumulator
+): HistoryNode =
   let
     node = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(port))
     db = ContentDB.new("", uint32.high, inMemory = true)
@@ -49,7 +51,7 @@ proc containsId(hn: HistoryNode, contentId: ContentId): bool =
 
 proc createEmptyHeaders(fromNum: int, toNum: int): seq[BlockHeader] =
   var headers: seq[BlockHeader]
-  for i in fromNum..toNum:
+  for i in fromNum .. toNum:
     var bh = BlockHeader()
     bh.blockNumber = u256(i)
     bh.difficulty = u256(i)
@@ -59,8 +61,7 @@ proc createEmptyHeaders(fromNum: int, toNum: int): seq[BlockHeader] =
     headers.add(bh)
   return headers
 
-proc headersToContentKV(
-    headersWithProof: seq[BlockHeaderWithProof]): seq[ContentKV] =
+proc headersToContentKV(headersWithProof: seq[BlockHeaderWithProof]): seq[ContentKV] =
   var contentKVs: seq[ContentKV]
   for headerWithProof in headersWithProof:
     let
@@ -68,10 +69,10 @@ proc headersToContentKV(
       header = rlp.decode(headerWithProof.header.asSeq(), BlockHeader)
       headerHash = header.blockHash()
       blockKey = BlockKey(blockHash: headerHash)
-      contentKey = encode(ContentKey(
-        contentType: blockHeader, blockHeaderKey: blockKey))
-      contentKV = ContentKV(
-        contentKey: contentKey, content: SSZ.encode(headerWithProof))
+      contentKey =
+        encode(ContentKey(contentType: blockHeader, blockHeaderKey: blockKey))
+      contentKV =
+        ContentKV(contentKey: contentKey, content: SSZ.encode(headerWithProof))
     contentKVs.add(contentKV)
   return contentKVs
 
@@ -86,12 +87,13 @@ procSuite "History Content Network":
         0,
         epochSize - 1,
         epochSize,
-        epochSize*2 - 1,
-        epochSize*2,
-        epochSize*3 - 1,
-        epochSize*3,
-        epochSize*3 + 1,
-        int(lastBlockNumber)]
+        epochSize * 2 - 1,
+        epochSize * 2,
+        epochSize * 3 - 1,
+        epochSize * 3,
+        epochSize * 3 + 1,
+        int(lastBlockNumber),
+      ]
 
     let headers = createEmptyHeaders(0, int(lastBlockNumber))
     let accumulatorRes = buildAccumulatorData(headers)
@@ -106,8 +108,7 @@ procSuite "History Content Network":
     for i in headersToTest:
       selectedHeaders.add(headers[i])
 
-    let headersWithProof =
-      buildHeadersWithProof(selectedHeaders, epochAccumulators)
+    let headersWithProof = buildHeadersWithProof(selectedHeaders, epochAccumulators)
 
     check headersWithProof.isOk()
 
@@ -117,14 +118,11 @@ procSuite "History Content Network":
         header = rlp.decode(headerWithProof.header.asSeq(), BlockHeader)
         headerHash = header.blockHash()
         blockKey = BlockKey(blockHash: headerHash)
-        contentKey = ContentKey(
-          contentType: blockHeader, blockHeaderKey: blockKey)
+        contentKey = ContentKey(contentType: blockHeader, blockHeaderKey: blockKey)
         encKey = encode(contentKey)
         contentId = toContentId(contentKey)
       historyNode2.portalProtocol().storeContent(
-        encKey,
-        contentId,
-        SSZ.encode(headerWithProof)
+        encKey, contentId, SSZ.encode(headerWithProof)
       )
 
     # Need to store the epoch accumulators to be able to do the block to hash
@@ -134,13 +132,12 @@ procSuite "History Content Network":
         rootHash = epochAccumulator.hash_tree_root()
         contentKey = ContentKey(
           contentType: ContentType.epochAccumulator,
-          epochAccumulatorKey: EpochAccumulatorKey(epochHash: rootHash))
+          epochAccumulatorKey: EpochAccumulatorKey(epochHash: rootHash),
+        )
         encKey = encode(contentKey)
         contentId = toContentId(contentKey)
       historyNode2.portalProtocol().storeContent(
-        encKey,
-        contentId,
-        SSZ.encode(epochAccumulator)
+        encKey, contentId, SSZ.encode(epochAccumulator)
       )
 
     check:
@@ -190,11 +187,11 @@ procSuite "History Content Network":
     historyNode1.start()
     historyNode2.start()
 
-    let maxOfferedHistoryContent = getMaxOfferedContentKeys(
-        uint32(len(historyProtocolId)), maxContentKeySize)
+    let maxOfferedHistoryContent =
+      getMaxOfferedContentKeys(uint32(len(historyProtocolId)), maxContentKeySize)
 
-    let headersWithProof = buildHeadersWithProof(
-      headers[0..maxOfferedHistoryContent], epochAccumulators)
+    let headersWithProof =
+      buildHeadersWithProof(headers[0 .. maxOfferedHistoryContent], epochAccumulators)
     check headersWithProof.isOk()
 
     # This is one header more than maxOfferedHistoryContent
@@ -204,18 +201,14 @@ procSuite "History Content Network":
     for contentKV in contentKVs:
       let id = toContentId(contentKV.contentKey)
       historyNode1.portalProtocol.storeContent(
-        contentKV.contentKey,
-        id,
-        contentKV.content
+        contentKV.contentKey, id, contentKV.content
       )
 
     # Offering 1 content item too much which should result in a discv5 packet
     # that is too large and thus not get any response.
     block:
-      let offerResult = await historyNode1.portalProtocol.offer(
-        historyNode2.localNode(),
-        contentKVs
-      )
+      let offerResult =
+        await historyNode1.portalProtocol.offer(historyNode2.localNode(), contentKVs)
 
       # Fail due timeout, as remote side must drop the too large discv5 packet
       check offerResult.isErr()
@@ -228,8 +221,7 @@ procSuite "History Content Network":
     # in the content being transferred and stored on the other node.
     block:
       let offerResult = await historyNode1.portalProtocol.offer(
-        historyNode2.localNode(),
-        contentKVs[0..<maxOfferedHistoryContent]
+        historyNode2.localNode(), contentKVs[0 ..< maxOfferedHistoryContent]
       )
 
       check offerResult.isOk()
@@ -258,13 +250,8 @@ procSuite "History Content Network":
   asyncTest "Offer - Headers with No Historical Epochs - Stopped at Merge Block":
     const
       lastBlockNumber = int(mergeBlockNumber - 1)
-      headersToTest = [
-        0,
-        1,
-        epochSize div 2,
-        epochSize - 1,
-        lastBlockNumber - 1,
-        lastBlockNumber]
+      headersToTest =
+        [0, 1, epochSize div 2, epochSize - 1, lastBlockNumber - 1, lastBlockNumber]
 
     let headers = createEmptyHeaders(0, lastBlockNumber)
     let accumulatorRes = buildAccumulatorData(headers)
@@ -290,8 +277,7 @@ procSuite "History Content Network":
     for i in headersToTest:
       selectedHeaders.add(headers[i])
 
-    let headersWithProof = buildHeadersWithProof(
-      selectedHeaders, epochAccumulators)
+    let headersWithProof = buildHeadersWithProof(selectedHeaders, epochAccumulators)
     check headersWithProof.isOk()
 
     let contentKVs = headersToContentKV(headersWithProof.get())
@@ -299,13 +285,11 @@ procSuite "History Content Network":
     for contentKV in contentKVs:
       let id = toContentId(contentKV.contentKey)
       historyNode1.portalProtocol.storeContent(
-        contentKV.contentKey,
-        id,
-        contentKV.content
+        contentKV.contentKey, id, contentKV.content
       )
 
-      let offerResult = await historyNode1.portalProtocol.offer(
-        historyNode2.localNode(), @[contentKV])
+      let offerResult =
+        await historyNode1.portalProtocol.offer(historyNode2.localNode(), @[contentKV])
 
       check offerResult.isOk()
 
