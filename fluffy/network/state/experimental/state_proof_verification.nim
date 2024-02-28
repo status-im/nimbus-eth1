@@ -20,7 +20,8 @@ proc verifyAccount*(
     trustedStateRoot: KeccakHash,
     address: EthAddress,
     account: Account,
-    proof: AccountProof): Result[void, string] =
+    proof: AccountProof,
+): Result[void, string] =
   if proof.len() == 0:
     return err("proof is empty")
 
@@ -41,7 +42,8 @@ proc verifyContractStorageSlot*(
     trustedStorageRoot: KeccakHash,
     slotKey: UInt256,
     slotValue: UInt256,
-    proof: StorageProof): Result[void, string] =
+    proof: StorageProof,
+): Result[void, string] =
   if proof.len() == 0:
     return err("proof is empty")
 
@@ -59,8 +61,8 @@ proc verifyContractStorageSlot*(
     err(proofResult.errorMsg)
 
 func verifyContractBytecode*(
-    trustedCodeHash: KeccakHash,
-    bytecode: openArray[byte]): Result[void, string] =
+    trustedCodeHash: KeccakHash, bytecode: openArray[byte]
+): Result[void, string] =
   if trustedCodeHash == keccakHash(bytecode):
     ok()
   else:

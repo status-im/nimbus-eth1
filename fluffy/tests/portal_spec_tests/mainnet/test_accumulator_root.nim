@@ -10,7 +10,9 @@
 {.push raises: [].}
 
 import
-  unittest2, stint, stew/byteutils,
+  unittest2,
+  stint,
+  stew/byteutils,
   eth/common/eth_types_rlp,
   ../../../eth_data/history_data_json_store,
   ../../../network/history/[history_content, accumulator]
@@ -21,7 +23,8 @@ suite "Header Accumulator Root":
       hashTreeRoots = [
         "53521984da4bbdbb011fe8a1473bf71bdf1040b14214a05cd1ce6932775bc7fa",
         "ae48c6d4e1b0a68324f346755645ba7e5d99da3dd1c38a9acd10e2fe4f43cfb4",
-        "52f7bd6204be2d98cb9d09aa375b4355140e0d65744ce7b2f3ea34d8e6453572"]
+        "52f7bd6204be2d98cb9d09aa375b4355140e0d65744ce7b2f3ea34d8e6453572",
+      ]
 
       dataFile = "./fluffy/tests/blocks/mainnet_blocks_1-2.json"
 

@@ -34,7 +34,7 @@ const
   #caluculated per netowork basis
   maxItemsPerOfferBySize = getMaxOfferedContentKeys(
     uint32(len(history_network.historyProtocolId)),
-    uint32(history_content.maxContentKeySize)
+    uint32(history_content.maxContentKeySize),
   )
 
   # Offering is restricted to max 64 items
@@ -43,9 +43,8 @@ const
   maxItemsPerOffer = min(maxItemsPerOfferBySize, maxItemPerOfferByLen)
 
 proc depthContentPropagate*(
-    p: PortalProtocol, seedDbPath: string, maxClosestNodes: uint32):
-    Future[Result[void, string]] {.async.} =
-
+    p: PortalProtocol, seedDbPath: string, maxClosestNodes: uint32
+): Future[Result[void, string]] {.async.} =
   ## Choses `maxClosestNodes` closest known nodes with known radius and tries to
   ## offer as much content as possible in their range from seed db. Offers are made conccurently
   ## with at most one offer per peer at the time.
@@ -57,15 +56,12 @@ proc depthContentPropagate*(
   # TODO improve peer selection strategy, to be sure more network is covered, although
   # it still does not need to be perfect as nodes which receive content will still
   # propagate it further by neighbour gossip
-  let closestWithRadius = p.getNClosestNodesWithRadius(
-    p.localNode.id,
-    int(maxClosestNodes),
-    seenOnly = true
-  )
+  let closestWithRadius =
+    p.getNClosestNodesWithRadius(p.localNode.id, int(maxClosestNodes), seenOnly = true)
 
   proc worker(
-      p: PortalProtocol, db: SeedDb, node: Node, radius: UInt256):
-      Future[void] {.async.} =
+      p: PortalProtocol, db: SeedDb, node: Node, radius: UInt256
+  ): Future[void] {.async.} =
     var offset = 0
     while true:
       let content = db.getContentInRange(node.id, radius, batchSize, offset)
@@ -75,8 +71,8 @@ proc depthContentPropagate*(
 
       var contentKV: seq[ContentKV]
       for e in content:
-        let info = ContentKV(
-          contentKey: ByteList.init(e.contentKey), content: e.content)
+        let info =
+          ContentKV(contentKey: ByteList.init(e.contentKey), content: e.content)
         contentKV.add(info)
 
       let offerResult = await p.offer(node, contentKV)
@@ -92,17 +88,15 @@ proc depthContentPropagate*(
 
     var offset = 0
     while true:
-      let content = db.getContentInRange(
-        p.localNode.id, p.dataRadius, localBatchSize, offset)
+      let content =
+        db.getContentInRange(p.localNode.id, p.dataRadius, localBatchSize, offset)
 
       if len(content) == 0:
         break
 
       for e in content:
         p.storeContent(
-          ByteList.init(e.contentKey),
-          UInt256.fromBytesBE(e.contentId),
-          e.content
+          ByteList.init(e.contentKey), UInt256.fromBytesBE(e.contentId), e.content
         )
 
       if len(content) < localBatchSize:
@@ -132,8 +126,8 @@ proc depthContentPropagate*(
   return ok()
 
 func contentDataToKeys(
-    contentData: seq[ContentDataDist]):
-    (Opt[NodeId], ContentKeysList, seq[seq[byte]]) =
+    contentData: seq[ContentDataDist]
+): (Opt[NodeId], ContentKeysList, seq[seq[byte]]) =
   var contentKeys: seq[ByteList]
   var content: seq[seq[byte]]
   for cd in contentData:
@@ -142,9 +136,8 @@ func contentDataToKeys(
   return (Opt.none(NodeId), ContentKeysList(contentKeys), content)
 
 proc breadthContentPropagate*(
-    p: PortalProtocol, seedDbPath: string):
-    Future[Result[void, string]] {.async.} =
-
+    p: PortalProtocol, seedDbPath: string
+): Future[Result[void, string]] {.async.} =
   ## Iterates over whole seed database, and offer batches of content to different
   ## set of nodes
 
@@ -182,17 +175,14 @@ proc breadthContentPropagate*(
   while true:
     # Setting radius to `UInt256.high` and using batchSize and offset, means
     # we will iterate over whole database in batches of `maxItemsPerOffer` items
-    var contentData = db.getContentInRange(
-      target, UInt256.high, batchSize, offset)
+    var contentData = db.getContentInRange(target, UInt256.high, batchSize, offset)
 
     if len(contentData) == 0:
       break
 
     for cd in contentData:
       p.storeContent(
-        ByteList.init(cd.contentKey),
-        UInt256.fromBytesBE(cd.contentId),
-        cd.content
+        ByteList.init(cd.contentKey), UInt256.fromBytesBE(cd.contentId), cd.content
       )
 
     # TODO this a bit hacky way to make sure we will engage more valid peers for each
@@ -213,11 +203,8 @@ proc breadthContentPropagate*(
   return ok()
 
 proc offerContentInNodeRange*(
-    p: PortalProtocol,
-    seedDbPath: string,
-    nodeId: NodeId,
-    max: uint32,
-    starting: uint32):  Future[PortalResult[int]] {.async.} =
+    p: PortalProtocol, seedDbPath: string, nodeId: NodeId, max: uint32, starting: uint32
+): Future[PortalResult[int]] {.async.} =
   ## Offers `max` closest elements starting from `starting` index to peer
   ## with given `nodeId`.
   ## Maximum value of `max` is 64 , as this is limit for single offer. Although
@@ -244,8 +231,8 @@ proc offerContentInNodeRange*(
   let
     db = SeedDb.new(path = dbPath, name = dbName)
     (node, radius) = maybeNodeAndRadius.unsafeGet()
-    content = db.getContentInRange(
-      node.id, radius, int64(numberToToOffer), int64(starting))
+    content =
+      db.getContentInRange(node.id, radius, int64(numberToToOffer), int64(starting))
 
   # We got all we wanted from seed_db, it can be closed now.
   db.close()
@@ -267,10 +254,8 @@ proc offerContentInNodeRange*(
     return err(offerResult.error)
 
 proc storeContentInNodeRange*(
-    p: PortalProtocol,
-    seedDbPath: string,
-    max: uint32,
-    starting: uint32): PortalResult[void] =
+    p: PortalProtocol, seedDbPath: string, max: uint32, starting: uint32
+): PortalResult[void] =
   let maybePathAndDbName = getDbBasePathAndName(seedDbPath)
 
   if maybePathAndDbName.isNone():
@@ -282,17 +267,13 @@ proc storeContentInNodeRange*(
     localRadius = p.dataRadius
     db = SeedDb.new(path = dbPath, name = dbName)
     localId = p.localNode.id
-    contentInRange = db.getContentInRange(
-      localId, localRadius, int64(max), int64(starting))
+    contentInRange =
+      db.getContentInRange(localId, localRadius, int64(max), int64(starting))
 
   db.close()
 
   for contentData in contentInRange:
     let cid = UInt256.fromBytesBE(contentData.contentId)
-    p.storeContent(
-      ByteList.init(contentData.contentKey),
-      cid,
-      contentData.content
-    )
+    p.storeContent(ByteList.init(contentData.contentKey), cid, contentData.content)
 
   return ok()

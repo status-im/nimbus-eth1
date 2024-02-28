@@ -11,28 +11,31 @@
 {.push raises: [].}
 
 import
-  confutils, chronicles, chronicles/topics_registry, stew/byteutils,
+  confutils,
+  chronicles,
+  chronicles/topics_registry,
+  stew/byteutils,
   ../network_metadata,
   ../network/history/[accumulator, history_content, history_network],
   ../rpc/portal_rpc_client
 
-type
-  ContentVerifierConf* = object
-    logLevel* {.
-      defaultValue: LogLevel.INFO
-      defaultValueDesc: $LogLevel.INFO
-      desc: "Sets the log level"
-      name: "log-level" .}: LogLevel
+type ContentVerifierConf* = object
+  logLevel* {.
+    defaultValue: LogLevel.INFO,
+    defaultValueDesc: $LogLevel.INFO,
+    desc: "Sets the log level",
+    name: "log-level"
+  .}: LogLevel
 
-    rpcAddress* {.
-      desc: "Address of the JSON-RPC service"
-      defaultValue: "127.0.0.1"
-      name: "rpc-address" .}: string
+  rpcAddress* {.
+    desc: "Address of the JSON-RPC service",
+    defaultValue: "127.0.0.1",
+    name: "rpc-address"
+  .}: string
 
-    rpcPort* {.
-      defaultValue: 8545
-      desc: "Port of the JSON-RPC service"
-      name: "rpc-port" .}: uint16
+  rpcPort* {.
+    defaultValue: 8545, desc: "Port of the JSON-RPC service", name: "rpc-port"
+  .}: uint16
 
 proc checkAccumulators(client: RpcClient) {.async.} =
   let accumulator =
@@ -48,18 +51,21 @@ proc checkAccumulators(client: RpcClient) {.async.} =
 
     try:
       let content = await client.portal_historyRecursiveFindContent(
-        contentKey.encode.asSeq().toHex())
+        contentKey.encode.asSeq().toHex()
+      )
 
       let res = decodeSsz(hexToSeqByte(content), EpochAccumulator)
       if res.isErr():
-        echo "[Invalid] EpochAccumulator number " & $i & ": " & $root & " error: " & res.error
+        echo "[Invalid] EpochAccumulator number " & $i & ": " & $root & " error: " &
+          res.error
       else:
         let epochAccumulator = res.get()
         let resultingRoot = hash_tree_root(epochAccumulator)
         if resultingRoot == root:
           echo "[Available] EpochAccumulator number " & $i & ": " & $root
         else:
-          echo "[Invalid] EpochAccumulator number " & $i & ": " & $root & " error: Invalid root"
+          echo "[Invalid] EpochAccumulator number " & $i & ": " & $root &
+            " error: Invalid root"
     except RpcPostError as e:
       # RpcPostError when for example timing out on the request. Could retry
       # in this case.
@@ -68,7 +74,8 @@ proc checkAccumulators(client: RpcClient) {.async.} =
     except ValueError as e:
       # Either an error with the provided content key or the content was
       # simply not available in the network
-      echo "[Not Available] EpochAccumulator number " & $i & ": " & $root & " error: " & e.msg
+      echo "[Not Available] EpochAccumulator number " & $i & ": " & $root & " error: " &
+        e.msg
 
     # Using the http connection re-use seems to slow down these sequentual
     # requests considerably. Force a new connection setup by doing a close after

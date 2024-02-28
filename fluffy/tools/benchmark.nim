@@ -20,16 +20,18 @@ template withTimer*(stats: var RunningStat, body: untyped) =
   let stop = cpuTime()
   stats.push stop - start
 
-proc printTimers*[Timers: enum](
-  timers: array[Timers, RunningStat]
-) =
-  func fmtTime(t: float): string = &"{t * 1000 :>12.3f}, "
+proc printTimers*[Timers: enum](timers: array[Timers, RunningStat]) =
+  func fmtTime(t: float): string =
+    &"{t * 1000 :>12.3f}, "
 
   echo "All timings are in ms and are cpu time."
   echo &"{\"Average\" :>12}, {\"StdDev\" :>12}, {\"Min\" :>12}, " &
     &"{\"Max\" :>12}, {\"Samples\" :>12}, {\"Test\" :>12} "
 
   for t in Timers:
-    echo fmtTime(timers[t].mean), fmtTime(timers[t].standardDeviationS),
-      fmtTime(timers[t].min), fmtTime(timers[t].max), &"{timers[t].n :>12}, ",
+    echo fmtTime(timers[t].mean),
+      fmtTime(timers[t].standardDeviationS),
+      fmtTime(timers[t].min),
+      fmtTime(timers[t].max),
+      &"{timers[t].n :>12}, ",
       $t

@@ -6,7 +6,6 @@
 
 {.push raises: [].}
 
-
 import
   std/[hashes, json],
   json_rpc/jsonmarshal,
@@ -20,15 +19,15 @@ type SKey* = object
   id*: uint16
   nodeId*: NodeId
 
-proc writeValue*(w: var JsonWriter[JrpcConv], v: SKey)
-      {.gcsafe, raises: [IOError].} =
+proc writeValue*(w: var JsonWriter[JrpcConv], v: SKey) {.gcsafe, raises: [IOError].} =
   let hex = v.nodeId.toBytesBE().toHex()
   let numId = v.id.toBytesBE().toHex()
   let finalStr = hex & numId
   w.writeValue(finalStr)
 
-proc readValue*(r: var JsonReader[JrpcConv], val: var SKey)
-       {.gcsafe, raises: [IOError, JsonReaderError].} =
+proc readValue*(
+    r: var JsonReader[JrpcConv], val: var SKey
+) {.gcsafe, raises: [IOError, JsonReaderError].} =
   let str = r.parseString()
   if str.len < 64:
     r.raiseUnexpectedValue("SKey: too short string")

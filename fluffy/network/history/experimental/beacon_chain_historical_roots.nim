@@ -20,10 +20,7 @@
 
 {.push raises: [].}
 
-import
-  stew/results,
-  beacon_chain/spec/forks,
-  beacon_chain/spec/datatypes/bellatrix
+import stew/results, beacon_chain/spec/forks, beacon_chain/spec/datatypes/bellatrix
 
 export results
 
@@ -34,20 +31,18 @@ type
     historical_roots: HistoricalRoots
     proof: HistoricalRootsProof
 
-func buildProof*(
-    state: ForkedHashedBeaconState): Result[HistoricalRootsProof, string] =
+func buildProof*(state: ForkedHashedBeaconState): Result[HistoricalRootsProof, string] =
   let gIndex = GeneralizedIndex(39) # 31 + 8 = 39
 
   var proof: HistoricalRootsProof
   withState(state):
-    ? forkyState.data.build_proof(gIndex, proof)
+    ?forkyState.data.build_proof(gIndex, proof)
 
   ok(proof)
 
 func verifyProof*(
-    historical_roots: HistoricalRoots,
-    proof: HistoricalRootsProof,
-    stateRoot: Digest): bool =
+    historical_roots: HistoricalRoots, proof: HistoricalRootsProof, stateRoot: Digest
+): bool =
   let
     gIndex = GeneralizedIndex(39)
     leave = hash_tree_root(historical_roots)

@@ -9,8 +9,10 @@
 
 import
   std/[strformat, typetraits],
-  results, stew/[endians2, io2, byteutils, arrayops],
-  stint, snappy,
+  results,
+  stew/[endians2, io2, byteutils, arrayops],
+  stint,
+  snappy,
   eth/common/eth_types_rlp,
   beacon_chain/spec/beacon_time,
   ssz_serialization,
@@ -47,12 +49,12 @@ export e2store.readRecord
 const
   # Note: When specification is more official, these could go with the other
   # E2S types.
-  CompressedHeader*   = [byte 0x03, 0x00]
-  CompressedBody*     = [byte 0x04, 0x00]
+  CompressedHeader* = [byte 0x03, 0x00]
+  CompressedBody* = [byte 0x04, 0x00]
   CompressedReceipts* = [byte 0x05, 0x00]
-  TotalDifficulty*    = [byte 0x06, 0x00]
-  AccumulatorRoot*    = [byte 0x07, 0x00]
-  E2BlockIndex*       = [byte 0x66, 0x32]
+  TotalDifficulty* = [byte 0x06, 0x00]
+  AccumulatorRoot* = [byte 0x07, 0x00]
+  E2BlockIndex* = [byte 0x66, 0x32]
 
   MaxEra1Size* = 8192
 
@@ -78,18 +80,18 @@ template lenu64(x: untyped): untyped =
 # (first slot) and the last era (era1 ends at merge block).
 
 proc appendIndex*(
-    f: IoHandle, startNumber: uint64, offsets: openArray[int64]):
-    Result[int64, string] =
+    f: IoHandle, startNumber: uint64, offsets: openArray[int64]
+): Result[int64, string] =
   let
     len = offsets.len() * sizeof(int64) + 16
-    pos = ? f.appendHeader(E2BlockIndex, len)
+    pos = ?f.appendHeader(E2BlockIndex, len)
 
-  ? f.append(startNumber.uint64.toBytesLE())
+  ?f.append(startNumber.uint64.toBytesLE())
 
   for v in offsets:
-    ? f.append(cast[uint64](v - pos).toBytesLE())
+    ?f.append(cast[uint64](v - pos).toBytesLE())
 
-  ? f.append(offsets.lenu64().toBytesLE())
+  ?f.append(offsets.lenu64().toBytesLE())
 
   ok(pos)
 
@@ -98,47 +100,54 @@ proc appendRecord(f: IoHandle, index: BlockIndex): Result[int64, string] =
 
 proc readBlockIndex*(f: IoHandle): Result[BlockIndex, string] =
   let
-    startPos = ? f.getFilePos().mapErr(toString)
-    fileSize = ? f.getFileSize().mapErr(toString)
-    header = ? f.readHeader()
+    startPos = ?f.getFilePos().mapErr(toString)
+    fileSize = ?f.getFileSize().mapErr(toString)
+    header = ?f.readHeader()
 
-  if header.typ != E2BlockIndex: return err("not an index")
-  if header.len < 16: return err("index entry too small")
-  if header.len mod 8 != 0: return err("index length invalid")
+  if header.typ != E2BlockIndex:
+    return err("not an index")
+  if header.len < 16:
+    return err("index entry too small")
+  if header.len mod 8 != 0:
+    return err("index length invalid")
 
   var buf: array[8, byte]
-  ? f.readFileExact(buf)
+  ?f.readFileExact(buf)
   let
     blockNumber = uint64.fromBytesLE(buf)
     count = header.len div 8 - 2
 
   var offsets = newSeqUninitialized[int64](count)
-  for i in 0..<count:
-    ? f.readFileExact(buf)
+  for i in 0 ..< count:
+    ?f.readFileExact(buf)
 
     let
       offset = uint64.fromBytesLE(buf)
       absolute =
-        if offset == 0: 0'i64
+        if offset == 0:
+          0'i64
         else:
           # Wrapping math is actually convenient here
           cast[int64](cast[uint64](startPos) + offset)
 
-    if absolute < 0 or absolute > fileSize: return err("Invalid offset")
+    if absolute < 0 or absolute > fileSize:
+      return err("Invalid offset")
     offsets[i] = absolute
 
-  ? f.readFileExact(buf)
-  if uint64(count) != uint64.fromBytesLE(buf): return err("invalid count")
+  ?f.readFileExact(buf)
+  if uint64(count) != uint64.fromBytesLE(buf):
+    return err("invalid count")
 
   # technically not an error, but we'll throw this sanity check in here..
-  if blockNumber > int32.high().uint64: return err("fishy block number")
+  if blockNumber > int32.high().uint64:
+    return err("fishy block number")
 
   ok(BlockIndex(startNumber: blockNumber, offsets: offsets))
 
 proc skipRecord*(f: IoHandle): Result[void, string] =
-  let header = ? readHeader(f)
+  let header = ?readHeader(f)
   if header.len > 0:
-    ? f.setFilePos(header.len, SeekPosition.SeekCurrent).mapErr(ioErrorMsg)
+    ?f.setFilePos(header.len, SeekPosition.SeekCurrent).mapErr(ioErrorMsg)
 
   ok()
 
@@ -175,51 +184,58 @@ proc fromCompressedRlpBytes(bytes: openArray[byte], T: type): Result[T, string] 
   except RlpError as e:
     err("Invalid Compressed RLP data" & e.msg)
 
-proc init*(
-    T: type Era1Group, f: IoHandle, startNumber: uint64
-  ): Result[T, string] =
-  discard ? f.appendHeader(E2Version, 0)
+proc init*(T: type Era1Group, f: IoHandle, startNumber: uint64): Result[T, string] =
+  discard ?f.appendHeader(E2Version, 0)
 
-  ok(Era1Group(
-    blockIndex: BlockIndex(
-      startNumber: startNumber,
-      offsets: newSeq[int64](startNumber.offsetsLen())
-  )))
+  ok(
+    Era1Group(
+      blockIndex: BlockIndex(
+        startNumber: startNumber, offsets: newSeq[int64](startNumber.offsetsLen())
+      )
+    )
+  )
 
 proc update*(
-    g: var Era1Group, f: IoHandle, blockNumber: uint64,
-    header, body, receipts, totalDifficulty: openArray[byte]
-  ): Result[void, string] =
+    g: var Era1Group,
+    f: IoHandle,
+    blockNumber: uint64,
+    header, body, receipts, totalDifficulty: openArray[byte],
+): Result[void, string] =
   doAssert blockNumber >= g.blockIndex.startNumber
 
   g.blockIndex.offsets[int(blockNumber - g.blockIndex.startNumber)] =
-    ? f.appendRecord(CompressedHeader, header)
-  discard ? f.appendRecord(CompressedBody, body)
-  discard ? f.appendRecord(CompressedReceipts, receipts)
-  discard ? f.appendRecord(TotalDifficulty, totalDifficulty)
+    ?f.appendRecord(CompressedHeader, header)
+  discard ?f.appendRecord(CompressedBody, body)
+  discard ?f.appendRecord(CompressedReceipts, receipts)
+  discard ?f.appendRecord(TotalDifficulty, totalDifficulty)
 
   ok()
 
 proc update*(
-    g: var Era1Group, f: IoHandle, blockNumber: uint64,
-    header: BlockHeader, body: BlockBody, receipts: seq[Receipt],
-    totalDifficulty: UInt256
-  ): Result[void, string] =
+    g: var Era1Group,
+    f: IoHandle,
+    blockNumber: uint64,
+    header: BlockHeader,
+    body: BlockBody,
+    receipts: seq[Receipt],
+    totalDifficulty: UInt256,
+): Result[void, string] =
   g.update(
-    f, blockNumber,
+    f,
+    blockNumber,
     toCompressedRlpBytes(header),
     toCompressedRlpBytes(body),
     toCompressedRlpBytes(receipts),
-    totalDifficulty.toBytesLE()
+    totalDifficulty.toBytesLE(),
   )
 
 proc finish*(
     g: var Era1Group, f: IoHandle, accumulatorRoot: Digest, lastBlockNumber: uint64
-  ):Result[void, string] =
-  let accumulatorRootPos = ? f.appendRecord(AccumulatorRoot, accumulatorRoot.data)
+): Result[void, string] =
+  let accumulatorRootPos = ?f.appendRecord(AccumulatorRoot, accumulatorRoot.data)
 
   if lastBlockNumber > 0:
-    discard ? f.appendRecord(g.blockIndex)
+    discard ?f.appendRecord(g.blockIndex)
 
   # TODO:
   # This is not something added in current specification of era1.
@@ -250,22 +266,21 @@ type
     tuple[header: BlockHeader, body: BlockBody, receipts: seq[Receipt], td: UInt256]
 
 proc open*(_: type Era1File, name: string): Result[Era1File, string] =
-  var
-    f = Opt[IoHandle].ok(? openFile(name, {OpenFlags.Read}).mapErr(ioErrorMsg))
+  var f = Opt[IoHandle].ok(?openFile(name, {OpenFlags.Read}).mapErr(ioErrorMsg))
 
   defer:
-    if f.isSome(): discard closeFile(f[])
+    if f.isSome():
+      discard closeFile(f[])
 
   # Indices can be found at the end of each era file - we only support
   # single-era files for now
-  ? f[].setFilePos(0, SeekPosition.SeekEnd).mapErr(ioErrorMsg)
+  ?f[].setFilePos(0, SeekPosition.SeekEnd).mapErr(ioErrorMsg)
 
   # Last in the file is the block index
-  let
-    blockIdxPos = ? f[].findIndexStartOffset()
-  ? f[].setFilePos(blockIdxPos, SeekPosition.SeekCurrent).mapErr(ioErrorMsg)
+  let blockIdxPos = ?f[].findIndexStartOffset()
+  ?f[].setFilePos(blockIdxPos, SeekPosition.SeekCurrent).mapErr(ioErrorMsg)
 
-  let blockIdx = ? f[].readBlockIndex()
+  let blockIdx = ?f[].readBlockIndex()
   if blockIdx.offsets.len() != blockIdx.startNumber.offsetsLen():
     return err("Block index length invalid")
 
@@ -286,7 +301,7 @@ proc skipRecord*(f: Era1File): Result[void, string] =
 proc getBlockHeader(f: Era1File): Result[BlockHeader, string] =
   var bytes: seq[byte]
 
-  let header = ? f[].handle.get().readRecord(bytes)
+  let header = ?f[].handle.get().readRecord(bytes)
   if header.typ != CompressedHeader:
     return err("Invalid era file: didn't find block header at index position")
 
@@ -295,7 +310,7 @@ proc getBlockHeader(f: Era1File): Result[BlockHeader, string] =
 proc getBlockBody(f: Era1File): Result[BlockBody, string] =
   var bytes: seq[byte]
 
-  let header = ? f[].handle.get().readRecord(bytes)
+  let header = ?f[].handle.get().readRecord(bytes)
   if header.typ != CompressedBody:
     return err("Invalid era file: didn't find block body at index position")
 
@@ -304,7 +319,7 @@ proc getBlockBody(f: Era1File): Result[BlockBody, string] =
 proc getReceipts(f: Era1File): Result[seq[Receipt], string] =
   var bytes: seq[byte]
 
-  let header = ? f[].handle.get().readRecord(bytes)
+  let header = ?f[].handle.get().readRecord(bytes)
   if header.typ != CompressedReceipts:
     return err("Invalid era file: didn't find receipts at index position")
 
@@ -313,7 +328,7 @@ proc getReceipts(f: Era1File): Result[seq[Receipt], string] =
 proc getTotalDifficulty(f: Era1File): Result[UInt256, string] =
   var bytes: seq[byte]
 
-  let header = ? f[].handle.get().readRecord(bytes)
+  let header = ?f[].handle.get().readRecord(bytes)
   if header.typ != TotalDifficulty:
     return err("Invalid era file: didn't find total difficulty at index position")
 
@@ -322,61 +337,53 @@ proc getTotalDifficulty(f: Era1File): Result[UInt256, string] =
 
   ok(UInt256.fromBytesLE(bytes))
 
-proc getNextBlockTuple*(
-    f: Era1File
-  ): Result[BlockTuple, string] =
+proc getNextBlockTuple*(f: Era1File): Result[BlockTuple, string] =
   doAssert not isNil(f) and f[].handle.isSome
 
   let
-    blockHeader = ? getBlockHeader(f)
-    blockBody = ? getBlockBody(f)
-    receipts = ? getReceipts(f)
-    totalDifficulty = ? getTotalDifficulty(f)
+    blockHeader = ?getBlockHeader(f)
+    blockBody = ?getBlockBody(f)
+    receipts = ?getReceipts(f)
+    totalDifficulty = ?getTotalDifficulty(f)
 
   ok((blockHeader, blockBody, receipts, totalDifficulty))
 
-proc getBlockTuple*(
-    f: Era1File, blockNumber: uint64
-  ): Result[BlockTuple, string] =
+proc getBlockTuple*(f: Era1File, blockNumber: uint64): Result[BlockTuple, string] =
   doAssert not isNil(f) and f[].handle.isSome
   doAssert(
-    blockNumber >= f[].blockIdx.startNumber and
-    blockNumber <= f[].blockIdx.endNumber,
-    "Wrong era1 file for selected block number")
+    blockNumber >= f[].blockIdx.startNumber and blockNumber <= f[].blockIdx.endNumber,
+    "Wrong era1 file for selected block number",
+  )
 
   let pos = f[].blockIdx.offsets[blockNumber - f[].blockIdx.startNumber]
 
-  ? f[].handle.get().setFilePos(pos, SeekPosition.SeekBegin).mapErr(ioErrorMsg)
+  ?f[].handle.get().setFilePos(pos, SeekPosition.SeekBegin).mapErr(ioErrorMsg)
 
   getNextBlockTuple(f)
 
-proc getBlockHeader*(
-    f: Era1File, blockNumber: uint64
-  ): Result[BlockHeader, string] =
+proc getBlockHeader*(f: Era1File, blockNumber: uint64): Result[BlockHeader, string] =
   doAssert not isNil(f) and f[].handle.isSome
   doAssert(
-    blockNumber >= f[].blockIdx.startNumber and
-    blockNumber <= f[].blockIdx.endNumber,
-    "Wrong era1 file for selected block number")
+    blockNumber >= f[].blockIdx.startNumber and blockNumber <= f[].blockIdx.endNumber,
+    "Wrong era1 file for selected block number",
+  )
 
   let pos = f[].blockIdx.offsets[blockNumber - f[].blockIdx.startNumber]
 
-  ? f[].handle.get().setFilePos(pos, SeekPosition.SeekBegin).mapErr(ioErrorMsg)
+  ?f[].handle.get().setFilePos(pos, SeekPosition.SeekBegin).mapErr(ioErrorMsg)
 
   getBlockHeader(f)
 
-proc getTotalDifficulty*(
-    f: Era1File, blockNumber: uint64
-  ): Result[UInt256, string] =
+proc getTotalDifficulty*(f: Era1File, blockNumber: uint64): Result[UInt256, string] =
   doAssert not isNil(f) and f[].handle.isSome
   doAssert(
-    blockNumber >= f[].blockIdx.startNumber and
-    blockNumber <= f[].blockIdx.endNumber,
-    "Wrong era1 file for selected block number")
+    blockNumber >= f[].blockIdx.startNumber and blockNumber <= f[].blockIdx.endNumber,
+    "Wrong era1 file for selected block number",
+  )
 
   let pos = f[].blockIdx.offsets[blockNumber - f[].blockIdx.startNumber]
 
-  ? f[].handle.get().setFilePos(pos, SeekPosition.SeekBegin).mapErr(ioErrorMsg)
+  ?f[].handle.get().setFilePos(pos, SeekPosition.SeekBegin).mapErr(ioErrorMsg)
 
   ?skipRecord(f) # BlockHeader
   ?skipRecord(f) # BlockBody
@@ -386,15 +393,17 @@ proc getTotalDifficulty*(
 # TODO: Should we add this perhaps in the Era1File object and grab it in open()?
 proc getAccumulatorRoot*(f: Era1File): Result[Digest, string] =
   # Get position of BlockIndex
-  ? f[].handle.get().setFilePos(0, SeekPosition.SeekEnd).mapErr(ioErrorMsg)
-  let blockIdxPos = ? f[].handle.get().findIndexStartOffset()
+  ?f[].handle.get().setFilePos(0, SeekPosition.SeekEnd).mapErr(ioErrorMsg)
+  let blockIdxPos = ?f[].handle.get().findIndexStartOffset()
 
   # Accumulator root is 40 bytes before the BlockIndex
   let accumulatorRootPos = blockIdxPos - 40 # 8 + 32
-  ? f[].handle.get().setFilePos(accumulatorRootPos, SeekPosition.SeekCurrent).mapErr(ioErrorMsg)
+  ?f[].handle.get().setFilePos(accumulatorRootPos, SeekPosition.SeekCurrent).mapErr(
+    ioErrorMsg
+  )
 
   var bytes: seq[byte]
-  let header = ? f[].handle.get().readRecord(bytes)
+  let header = ?f[].handle.get().readRecord(bytes)
 
   if header.typ != AccumulatorRoot:
     return err("Invalid era file: didn't find accumulator root at index position")
@@ -410,14 +419,14 @@ proc buildAccumulator*(f: Era1File): Result[EpochAccumulatorCached, string] =
     endNumber = f.blockIdx.endNumber()
 
   var headerRecords: seq[HeaderRecord]
-  for blockNumber in startNumber..endNumber:
+  for blockNumber in startNumber .. endNumber:
     let
-      blockHeader = ? f.getBlockHeader(blockNumber)
-      totalDifficulty = ? f.getTotalDifficulty(blockNumber)
+      blockHeader = ?f.getBlockHeader(blockNumber)
+      totalDifficulty = ?f.getTotalDifficulty(blockNumber)
 
-    headerRecords.add(HeaderRecord(
-      blockHash: blockHeader.blockHash(),
-      totalDifficulty: totalDifficulty))
+    headerRecords.add(
+      HeaderRecord(blockHash: blockHeader.blockHash(), totalDifficulty: totalDifficulty)
+    )
 
   ok(EpochAccumulatorCached.init(@headerRecords))
 
@@ -427,10 +436,10 @@ proc verify*(f: Era1File): Result[Digest, string] =
     endNumber = f.blockIdx.endNumber()
 
   var headerRecords: seq[HeaderRecord]
-  for blockNumber in startNumber..endNumber:
+  for blockNumber in startNumber .. endNumber:
     let
       (blockHeader, blockBody, receipts, totalDifficulty) =
-        ? f.getBlockTuple(blockNumber)
+        ?f.getBlockTuple(blockNumber)
 
       txRoot = calcTxRoot(blockBody.transactions)
       ommershHash = keccakHash(rlp.encode(blockBody.uncles))
@@ -444,11 +453,11 @@ proc verify*(f: Era1File): Result[Digest, string] =
     if blockHeader.receiptRoot != calcReceiptRoot(receipts):
       return err("Invalid receipts root")
 
-    headerRecords.add(HeaderRecord(
-      blockHash: blockHeader.blockHash(),
-      totalDifficulty: totalDifficulty))
+    headerRecords.add(
+      HeaderRecord(blockHash: blockHeader.blockHash(), totalDifficulty: totalDifficulty)
+    )
 
-  let expectedRoot = ? f.getAccumulatorRoot()
+  let expectedRoot = ?f.getAccumulatorRoot()
   let accumulatorRoot = getEpochAccumulatorRoot(headerRecords)
 
   if accumulatorRoot != expectedRoot:
@@ -461,7 +470,7 @@ iterator era1BlockHeaders*(f: Era1File): BlockHeader =
     startNumber = f.blockIdx.startNumber
     endNumber = f.blockIdx.endNumber()
 
-  for blockNumber in startNumber..endNumber:
+  for blockNumber in startNumber .. endNumber:
     let header = f.getBlockHeader(blockNumber).valueOr:
       raiseAssert("Failed to read block header")
     yield header
@@ -471,7 +480,7 @@ iterator era1BlockTuples*(f: Era1File): BlockTuple =
     startNumber = f.blockIdx.startNumber
     endNumber = f.blockIdx.endNumber()
 
-  for blockNumber in startNumber..endNumber:
+  for blockNumber in startNumber .. endNumber:
     let blockTuple = f.getBlockTuple(blockNumber).valueOr:
       raiseAssert("Failed to read block header")
     yield blockTuple

@@ -11,9 +11,7 @@
 {.push raises: [].}
 
 import
-  stint, stew/[results, objects, endians2],
-  ssz_serialization,
-  ../../common/common_types
+  stint, stew/[results, objects, endians2], ssz_serialization, ../../common/common_types
 
 export ssz_serialization, stint, common_types
 
@@ -105,26 +103,33 @@ type
       accept*: AcceptMessage
 
   SomeMessage* =
-    PingMessage or PongMessage or
-    FindNodesMessage or NodesMessage or
-    FindContentMessage or ContentMessage or
-    OfferMessage or AcceptMessage
+    PingMessage or PongMessage or FindNodesMessage or NodesMessage or FindContentMessage or
+    ContentMessage or OfferMessage or AcceptMessage
 
 template messageKind*(T: typedesc[SomeMessage]): MessageKind =
-  when T is PingMessage: ping
-  elif T is PongMessage: pong
-  elif T is FindNodesMessage: findNodes
-  elif T is NodesMessage: nodes
-  elif T is FindContentMessage: findContent
-  elif T is ContentMessage: content
-  elif T is OfferMessage: offer
-  elif T is AcceptMessage: accept
+  when T is PingMessage:
+    ping
+  elif T is PongMessage:
+    pong
+  elif T is FindNodesMessage:
+    findNodes
+  elif T is NodesMessage:
+    nodes
+  elif T is FindContentMessage:
+    findContent
+  elif T is ContentMessage:
+    content
+  elif T is OfferMessage:
+    offer
+  elif T is AcceptMessage:
+    accept
 
 template toSszType*(x: UInt256): array[32, byte] =
   toBytesLE(x)
 
-func fromSszBytes*(T: type UInt256, data: openArray[byte]):
-    T {.raises: [MalformedSszError].} =
+func fromSszBytes*(
+    T: type UInt256, data: openArray[byte]
+): T {.raises: [MalformedSszError].} =
   if data.len != sizeof(result):
     raiseIncorrectSize T
 
@@ -133,14 +138,22 @@ func fromSszBytes*(T: type UInt256, data: openArray[byte]):
 func encodeMessage*[T: SomeMessage](m: T): seq[byte] =
   # TODO: Could/should be macro'd away,
   # or we just use SSZ.encode(Message) directly
-  when T is PingMessage: SSZ.encode(Message(kind: ping, ping: m))
-  elif T is PongMessage: SSZ.encode(Message(kind: pong, pong: m))
-  elif T is FindNodesMessage: SSZ.encode(Message(kind: findNodes, findNodes: m))
-  elif T is NodesMessage: SSZ.encode(Message(kind: nodes, nodes: m))
-  elif T is FindContentMessage: SSZ.encode(Message(kind: findContent, findContent: m))
-  elif T is ContentMessage: SSZ.encode(Message(kind: content, content: m))
-  elif T is OfferMessage: SSZ.encode(Message(kind: offer, offer: m))
-  elif T is AcceptMessage: SSZ.encode(Message(kind: accept, accept: m))
+  when T is PingMessage:
+    SSZ.encode(Message(kind: ping, ping: m))
+  elif T is PongMessage:
+    SSZ.encode(Message(kind: pong, pong: m))
+  elif T is FindNodesMessage:
+    SSZ.encode(Message(kind: findNodes, findNodes: m))
+  elif T is NodesMessage:
+    SSZ.encode(Message(kind: nodes, nodes: m))
+  elif T is FindContentMessage:
+    SSZ.encode(Message(kind: findContent, findContent: m))
+  elif T is ContentMessage:
+    SSZ.encode(Message(kind: content, content: m))
+  elif T is OfferMessage:
+    SSZ.encode(Message(kind: offer, offer: m))
+  elif T is AcceptMessage:
+    SSZ.encode(Message(kind: accept, accept: m))
 
 func decodeMessage*(body: openArray[byte]): Result[Message, string] =
   try:
@@ -151,7 +164,8 @@ func decodeMessage*(body: openArray[byte]): Result[Message, string] =
     err("Invalid message encoding: " & e.msg)
 
 template innerMessage[T: SomeMessage](
-    message: Message, expected: MessageKind): Result[T, string] =
+    message: Message, expected: MessageKind
+): Result[T, string] =
   if (message.kind == expected):
     ok(message.expected)
   else:

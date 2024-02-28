@@ -9,7 +9,6 @@
 
 import eth/[common, trie]
 
-
 type
   AccountState* = distinct HexaryTrie
   StorageState* = distinct HexaryTrie
@@ -18,15 +17,11 @@ type
   AccountProof* = distinct MptProof
   StorageProof* = distinct MptProof
 
-proc getBranch*(
-    self: AccountState;
-    key: openArray[byte]): seq[seq[byte]] {.borrow.}
+proc getBranch*(self: AccountState, key: openArray[byte]): seq[seq[byte]] {.borrow.}
 
 proc rootHash*(self: AccountState): KeccakHash {.borrow.}
 
-proc getBranch*(
-    self: StorageState;
-    key: openArray[byte]): seq[seq[byte]] {.borrow.}
+proc getBranch*(self: StorageState, key: openArray[byte]): seq[seq[byte]] {.borrow.}
 
 proc rootHash*(self: StorageState): KeccakHash {.borrow.}
 

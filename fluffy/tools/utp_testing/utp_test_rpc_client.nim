@@ -6,12 +6,13 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/os,
-  json_rpc/rpcclient,
-  ./utp_rpc_types,
-  ../../rpc/[rpc_types, rpc_discovery_api]
+  std/os, json_rpc/rpcclient, ./utp_rpc_types, ../../rpc/[rpc_types, rpc_discovery_api]
 
 export utp_rpc_types, rpc_types
 
 createRpcSigs(RpcClient, currentSourcePath.parentDir / "utp_test_rpc_calls.nim")
-createRpcSigs(RpcClient, currentSourcePath.parentDir /../ "" /../ "rpc" / "rpc_calls" / "rpc_discovery_calls.nim")
+createRpcSigs(
+  RpcClient,
+  currentSourcePath.parentDir /../ "" /../ "rpc" / "rpc_calls" /
+    "rpc_discovery_calls.nim",
+)

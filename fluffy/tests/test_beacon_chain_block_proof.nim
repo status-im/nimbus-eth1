@@ -13,10 +13,9 @@ import
   unittest2,
   beacon_chain/spec/forks,
   beacon_chain/spec/datatypes/bellatrix,
-  beacon_chain/../tests/testblockutil,
+  beacon_chain /../ tests/testblockutil,
   # Mock helpers
-  beacon_chain/../tests/mocking/mock_genesis,
-
+  beacon_chain /../ tests/mocking/mock_genesis,
   ../network/history/experimental/beacon_chain_block_proof
 
 # Test suite for the proofs:
@@ -56,23 +55,27 @@ suite "Beacon Chain Block Proofs":
   # index i = 0 is second block.
   # index i = 8190 is 8192th block and last one that is part of the first
   # historical root
-  for i in 0..<SLOTS_PER_HISTORICAL_ROOT:
+  for i in 0 ..< SLOTS_PER_HISTORICAL_ROOT:
     blocks.add(addTestBlock(state[], cache, cfg = cfg).bellatrixData)
 
   # Starts from the block after genesis.
   const blocksToTest = [
-      0'u64, 1, 2, 3,
-      SLOTS_PER_HISTORICAL_ROOT div 2,
-      SLOTS_PER_HISTORICAL_ROOT - 3,
-      SLOTS_PER_HISTORICAL_ROOT - 2
-    ]
+    0'u64,
+    1,
+    2,
+    3,
+    SLOTS_PER_HISTORICAL_ROOT div 2,
+    SLOTS_PER_HISTORICAL_ROOT - 3,
+    SLOTS_PER_HISTORICAL_ROOT - 2,
+  ]
 
   test "HistoricalRootsProof for BeaconBlockHeader":
     let
       # Historical batch of first historical root
       batch = HistoricalBatch(
         block_roots: getStateField(state[], block_roots).data,
-        state_roots: getStateField(state[], state_roots).data)
+        state_roots: getStateField(state[], state_roots).data,
+      )
       historical_roots = getStateField(state[], historical_roots)
 
     # for i in 0..<(SLOTS_PER_HISTORICAL_ROOT - 1): # Test all blocks
@@ -87,8 +90,8 @@ suite "Beacon Chain Block Proofs":
       let proof = res.get()
 
       check verifyProof(
-        blocks[i].root, proof,
-        historical_roots[historicalRootsIndex], blockRootIndex)
+        blocks[i].root, proof, historical_roots[historicalRootsIndex], blockRootIndex
+      )
 
   test "BeaconBlockHeaderProof for BeaconBlockBody":
     # for i in 0..<(SLOTS_PER_HISTORICAL_ROOT - 1): # Test all blocks
@@ -100,7 +103,7 @@ suite "Beacon Chain Block Proofs":
           proposer_index: beaconBlock.proposer_index,
           parent_root: beaconBlock.parent_root,
           state_root: beaconBlock.state_root,
-          body_root: hash_tree_root(beaconBlock.body)
+          body_root: hash_tree_root(beaconBlock.body),
         )
         beaconBlockBody = beaconBlock.body
 
@@ -129,7 +132,8 @@ suite "Beacon Chain Block Proofs":
       # Historical batch of first historical root
       batch = HistoricalBatch(
         block_roots: getStateField(state[], block_roots).data,
-        state_roots: getStateField(state[], state_roots).data)
+        state_roots: getStateField(state[], state_roots).data,
+      )
       historical_roots = getStateField(state[], historical_roots)
 
     # for i in 0..<(SLOTS_PER_HISTORICAL_ROOT - 1): # Test all blocks
@@ -141,7 +145,7 @@ suite "Beacon Chain Block Proofs":
           proposer_index: beaconBlock.proposer_index,
           parent_root: beaconBlock.parent_root,
           state_root: beaconBlock.state_root,
-          body_root: hash_tree_root(beaconBlock.body)
+          body_root: hash_tree_root(beaconBlock.body),
         )
         beaconBlockBody = beaconBlock.body
 

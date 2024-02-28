@@ -11,7 +11,8 @@
 
 import
   std/options,
-  nimcrypto/[sha2, hash], stint,
+  nimcrypto/[sha2, hash],
+  stint,
   ssz_serialization,
   ../../common/common_types
 
@@ -22,14 +23,13 @@ type
   # https://github.com/ethereum/portal-network-specs/blob/master/header-gossip-network.md#content-keys
   # But with Accumulator removed as per
   # https://github.com/ethereum/portal-network-specs/issues/153
-
   ContentType* = enum
     newBlockHeader = 0x00
     # TODO: remove or fix this temporary
     # dummySelector per latest spec.
     # This is temporary workaround
     # to fool SSZ.isUnion
-    dummySelector  = 0x01
+    dummySelector = 0x01
 
   NewBlockHeaderKey* = object
     blockHash*: BlockHash

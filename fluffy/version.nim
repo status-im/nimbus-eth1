@@ -7,20 +7,16 @@
 
 {.push raises: [].}
 
-import
-  std/strutils,
-  stew/byteutils,
-  metrics
+import std/strutils, stew/byteutils, metrics
 
 const
   versionMajor* = 0
   versionMinor* = 1
   versionBuild* = 0
 
-  gitRevision* = strip(staticExec("git rev-parse --short HEAD"))[0..5]
+  gitRevision* = strip(staticExec("git rev-parse --short HEAD"))[0 .. 5]
 
-  versionAsStr* =
-    $versionMajor & "." & $versionMinor & "." & $versionBuild
+  versionAsStr* = $versionMajor & "." & $versionMinor & "." & $versionBuild
 
   fullVersionStr* = "v" & versionAsStr & "-" & gitRevision
 
@@ -30,12 +26,11 @@ const
   nimBanner* = staticExec("nim --version | grep Version")
 
   # The web3_clientVersion
-  clientVersion* = clientName & "/" &
-      fullVersionStr & "/" &
-      hostOS & "-" & hostCPU & "/" &
-      "Nim" & NimVersion
+  clientVersion* =
+    clientName & "/" & fullVersionStr & "/" & hostOS & "-" & hostCPU & "/" & "Nim" &
+    NimVersion
 
-  compileYear = CompileDate[0 ..< 4]  # YYYY-MM-DD (UTC)
+  compileYear = CompileDate[0 ..< 4] # YYYY-MM-DD (UTC)
   copyrightBanner* =
     "Copyright (c) 2021-" & compileYear & " Status Research & Development GmbH"
 
@@ -49,17 +44,19 @@ func getNimGitHash*(): string =
     return
   for line in tmp:
     if line.startsWith(gitPrefix) and line.len > 8 + gitPrefix.len:
-      result = line[gitPrefix.len..<gitPrefix.len + 8]
+      result = line[gitPrefix.len ..< gitPrefix.len + 8]
 
 # TODO: Currently prefixing these metric names as the non prefixed names give
 # a collector already registered conflict at runtime. This is due to the same
 # names in nimbus-eth2 nimbus_binary_common.nim even though there are no direct
 # imports of that file.
 
-declareGauge versionGauge,"Fluffy version info (as metric labels)",
-  ["version", "commit"], name = "fluffy_version"
+declareGauge versionGauge,
+  "Fluffy version info (as metric labels)",
+  ["version", "commit"],
+  name = "fluffy_version"
 versionGauge.set(1, labelValues = [fullVersionStr, gitRevision])
 
-declareGauge nimVersionGauge, "Nim version info",
-  ["version", "nim_commit"], name = "fluffy_nim_version"
+declareGauge nimVersionGauge,
+  "Nim version info", ["version", "nim_commit"], name = "fluffy_nim_version"
 nimVersionGauge.set(1, labelValues = [NimVersion, getNimGitHash()])

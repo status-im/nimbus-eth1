@@ -14,18 +14,19 @@
 
 import
   std/[strutils, tables, terminal, typetraits],
-  pkg/chronicles, pkg/chronicles/helpers, chronicles/topics_registry,
+  pkg/chronicles,
+  pkg/chronicles/helpers,
+  chronicles/topics_registry,
   pkg/stew/results
 
 export results
 
-type
-  StdoutLogKind* {.pure.} = enum
-    Auto = "auto"
-    Colors = "colors"
-    NoColors = "nocolors"
-    Json = "json"
-    None = "none"
+type StdoutLogKind* {.pure.} = enum
+  Auto = "auto"
+  Colors = "colors"
+  NoColors = "nocolors"
+  Json = "json"
+  None = "none"
 
 # silly chronicles, colors is a compile-time property
 proc stripAnsi(v: string): string =
@@ -46,7 +47,7 @@ proc stripAnsi(v: string): string =
           if c2 != '[':
             break
         else:
-          if c2 in {'0'..'9'} + {';'}:
+          if c2 in {'0' .. '9'} + {';'}:
             discard # keep looking
           elif c2 == 'm':
             i = x + 1
@@ -69,10 +70,12 @@ proc updateLogLevel(logLevel: string) {.raises: [ValueError].} =
   try:
     setLogLevel(parseEnum[LogLevel](directives[0].capitalizeAscii()))
   except ValueError:
-    raise (ref ValueError)(msg: "Please specify one of TRACE, DEBUG, INFO, NOTICE, WARN, ERROR or FATAL")
+    raise (ref ValueError)(
+      msg: "Please specify one of TRACE, DEBUG, INFO, NOTICE, WARN, ERROR or FATAL"
+    )
 
   if directives.len > 1:
-    for topicName, settings in parseTopicDirectives(directives[1..^1]):
+    for topicName, settings in parseTopicDirectives(directives[1 ..^ 1]):
       if not setTopicState(topicName, settings.state, settings.logLevel):
         warn "Unrecognized logging topic", topic = topicName
 
@@ -89,8 +92,7 @@ proc detectTTY(stdoutKind: StdoutLogKind): StdoutLogKind =
   else:
     stdoutKind
 
-proc setupLogging*(
-    logLevel: string, stdoutKind: StdoutLogKind) =
+proc setupLogging*(logLevel: string, stdoutKind: StdoutLogKind) =
   # In the cfg file for fluffy, we create two formats: textlines and json.
   # Here, we either write those logs to an output, or not, depending on the
   # given configuration.
@@ -101,7 +103,9 @@ proc setupLogging*(
   else:
     # Naive approach where chronicles will form a string and we will discard
     # it, even if it could have skipped the formatting phase
-    proc noOutput(logLevel: LogLevel, msg: LogOutputStr) = discard
+    proc noOutput(logLevel: LogLevel, msg: LogOutputStr) =
+      discard
+
     proc writeAndFlush(f: File, msg: LogOutputStr) =
       try:
         f.write(msg)
@@ -120,7 +124,8 @@ proc setupLogging*(
     let tmp = detectTTY(stdoutKind)
 
     case tmp
-    of StdoutLogKind.Auto: raiseAssert "checked in detectTTY"
+    of StdoutLogKind.Auto:
+      raiseAssert "checked in detectTTY"
     of StdoutLogKind.Colors:
       defaultChroniclesStream.outputs[0].writer = stdoutFlush
     of StdoutLogKind.NoColors:
@@ -129,12 +134,13 @@ proc setupLogging*(
       defaultChroniclesStream.outputs[0].writer = noOutput
 
       let prevWriter = defaultChroniclesStream.outputs[1].writer
-      defaultChroniclesStream.outputs[1].writer =
-        proc(logLevel: LogLevel, msg: LogOutputStr) =
-          stdoutFlush(logLevel, msg)
-          prevWriter(logLevel, msg)
+      defaultChroniclesStream.outputs[1].writer = proc(
+          logLevel: LogLevel, msg: LogOutputStr
+      ) =
+        stdoutFlush(logLevel, msg)
+        prevWriter(logLevel, msg)
     of StdoutLogKind.None:
-     defaultChroniclesStream.outputs[0].writer = noOutput
+      defaultChroniclesStream.outputs[0].writer = noOutput
 
   try:
     updateLogLevel(logLevel)

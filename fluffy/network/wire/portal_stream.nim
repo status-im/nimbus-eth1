@@ -9,7 +9,9 @@
 
 import
   std/sequtils,
-  chronos, stew/[byteutils, leb128, endians2], chronicles,
+  chronos,
+  stew/[byteutils, leb128, endians2],
+  chronicles,
   eth/utp/utp_discv5_protocol,
   # even though utp_discv5_protocol exports this, import is still needed,
   # perhaps protocol.Protocol type of usage?
@@ -78,13 +80,18 @@ proc pruneAllowedConnections(stream: PortalStream) =
   # Prune requests and offers that didn't receive a connection request
   # before `connectionTimeout`.
   let now = Moment.now()
-  stream.contentRequests.keepIf(proc(x: ContentRequest): bool =
-    x.timeout > now)
-  stream.contentOffers.keepIf(proc(x: ContentOffer): bool =
-    x.timeout > now)
+  stream.contentRequests.keepIf(
+    proc(x: ContentRequest): bool =
+      x.timeout > now
+  )
+  stream.contentOffers.keepIf(
+    proc(x: ContentOffer): bool =
+      x.timeout > now
+  )
 
 proc addContentOffer*(
-    stream: PortalStream, nodeId: NodeId, contentKeys: ContentKeysList): Bytes2 =
+    stream: PortalStream, nodeId: NodeId, contentKeys: ContentKeysList
+): Bytes2 =
   stream.pruneAllowedConnections()
 
   # TODO: Should we check if `NodeId` & `connectionId` combo already exists?
@@ -101,13 +108,15 @@ proc addContentOffer*(
     connectionId: id,
     nodeId: nodeId,
     contentKeys: contentKeys,
-    timeout: Moment.now() + stream.connectionTimeout)
+    timeout: Moment.now() + stream.connectionTimeout,
+  )
   stream.contentOffers.add(contentOffer)
 
   return connectionId
 
 proc addContentRequest*(
-    stream: PortalStream, nodeId: NodeId, content: seq[byte]): Bytes2 =
+    stream: PortalStream, nodeId: NodeId, content: seq[byte]
+): Bytes2 =
   stream.pruneAllowedConnections()
 
   # TODO: Should we check if `NodeId` & `connectionId` combo already exists?
@@ -121,16 +130,15 @@ proc addContentRequest*(
     connectionId: id,
     nodeId: nodeId,
     content: content,
-    timeout: Moment.now() + stream.connectionTimeout)
+    timeout: Moment.now() + stream.connectionTimeout,
+  )
   stream.contentRequests.add(contentRequest)
 
   return connectionId
 
 proc connectTo*(
-    stream: PortalStream,
-    nodeAddress: NodeAddress,
-    connectionId: uint16):
-    Future[Result[UtpSocket[NodeAddress], string]] {.async.} =
+    stream: PortalStream, nodeAddress: NodeAddress, connectionId: uint16
+): Future[Result[UtpSocket[NodeAddress], string]] {.async.} =
   let connectRes = await stream.transport.connectTo(nodeAddress, connectionId)
   if connectRes.isErr():
     case connectRes.error.kind
@@ -138,8 +146,9 @@ proc connectTo*(
       # This means that there is already a socket to this nodeAddress with given
       # connection id. This means that a peer sent us a connection id which is
       # already in use. The connection is failed and an error returned.
-      let msg = "Socket to " & $nodeAddress & "with connection id: " &
-        $connectionId & " already exists"
+      let msg =
+        "Socket to " & $nodeAddress & "with connection id: " & $connectionId &
+        " already exists"
       return err(msg)
     of ConnectionTimedOut:
       # A time-out here means that a uTP SYN packet was re-sent 3 times and
@@ -151,20 +160,18 @@ proc connectTo*(
     return ok(connectRes.get())
 
 proc writeContentRequest(
-    socket: UtpSocket[NodeAddress], stream: PortalStream,
-    request: ContentRequest) {.async.} =
-  let dataWritten =  await socket.write(request.content)
+    socket: UtpSocket[NodeAddress], stream: PortalStream, request: ContentRequest
+) {.async.} =
+  let dataWritten = await socket.write(request.content)
   if dataWritten.isErr():
     debug "Error writing requested data", error = dataWritten.error
 
   await socket.closeWait()
 
-proc readVarint(socket: UtpSocket[NodeAddress]):
-    Future[Opt[uint32]] {.async.} =
-  var
-    buffer: array[5, byte]
+proc readVarint(socket: UtpSocket[NodeAddress]): Future[Opt[uint32]] {.async.} =
+  var buffer: array[5, byte]
 
-  for i in 0..<len(buffer):
+  for i in 0 ..< len(buffer):
     let dataRead = await socket.read(1)
     if dataRead.len() == 0:
       return err()
@@ -179,8 +186,7 @@ proc readVarint(socket: UtpSocket[NodeAddress]):
     else:
       return err()
 
-proc readContentItem(socket: UtpSocket[NodeAddress]):
-    Future[Opt[seq[byte]]] {.async.} =
+proc readContentItem(socket: UtpSocket[NodeAddress]): Future[Opt[seq[byte]]] {.async.} =
   let len = await socket.readVarint()
 
   if len.isOk():
@@ -193,8 +199,8 @@ proc readContentItem(socket: UtpSocket[NodeAddress]):
     return err()
 
 proc readContentOffer(
-    socket: UtpSocket[NodeAddress], stream: PortalStream,
-    offer: ContentOffer) {.async.} =
+    socket: UtpSocket[NodeAddress], stream: PortalStream, offer: ContentOffer
+) {.async.} =
   # Read number of content items according to amount of ContentKeys accepted.
   # This will either end with a FIN, or because the read action times out or
   # because the number of expected items was read (if this happens and no FIN
@@ -211,7 +217,7 @@ proc readContentOffer(
   let amount = offer.contentKeys.len()
 
   var contentItems: seq[seq[byte]]
-  for i in 0..<amount:
+  for i in 0 ..< amount:
     let contentItemFut = socket.readContentItem()
     if await contentItemFut.withTimeout(stream.contentReadTimeout):
       let contentItem = contentItemFut.read
@@ -248,7 +254,9 @@ proc readContentOffer(
   # as `AcceptConnectionCallback` is `asyncSpawn`'ed and there are no limits
   # on the `contentOffers`. Might move the queue to before the reading of the
   # socket, and let the specific networks handle that.
-  await stream.contentQueue.put((Opt.some(offer.nodeId), offer.contentKeys, contentItems))
+  await stream.contentQueue.put(
+    (Opt.some(offer.nodeId), offer.contentKeys, contentItems)
+  )
 
 proc new(
     T: type PortalStream,
@@ -256,30 +264,34 @@ proc new(
     contentQueue: AsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])],
     connectionTimeout: Duration,
     contentReadTimeout: Duration,
-    rng: ref HmacDrbgContext): T =
+    rng: ref HmacDrbgContext,
+): T =
   let stream = PortalStream(
     transport: transport,
     connectionTimeout: connectionTimeout,
     contentReadTimeout: contentReadTimeout,
     contentQueue: contentQueue,
-    rng: rng
+    rng: rng,
   )
 
   stream
 
 proc allowedConnection(
-    stream: PortalStream, address: NodeAddress, connectionId: uint16): bool =
+    stream: PortalStream, address: NodeAddress, connectionId: uint16
+): bool =
   return
     stream.contentRequests.any(
-      proc (x: ContentRequest): bool =
-        x.connectionId == connectionId and x.nodeId == address.nodeId) or
+      proc(x: ContentRequest): bool =
+        x.connectionId == connectionId and x.nodeId == address.nodeId
+    ) or
     stream.contentOffers.any(
-      proc (x: ContentOffer): bool =
-        x.connectionId == connectionId and x.nodeId == address.nodeId)
+      proc(x: ContentOffer): bool =
+        x.connectionId == connectionId and x.nodeId == address.nodeId
+    )
 
 proc handleIncomingConnection(
-    server: UtpRouter[NodeAddress],
-    socket: UtpSocket[NodeAddress]): Future[void] =
+    server: UtpRouter[NodeAddress], socket: UtpSocket[NodeAddress]
+): Future[void] =
   let manager = getUserData[NodeAddress, StreamManager](server)
 
   for stream in manager.streams:
@@ -307,9 +319,8 @@ proc handleIncomingConnection(
   return fut
 
 proc allowIncomingConnection(
-    r: UtpRouter[NodeAddress],
-    remoteAddress: NodeAddress,
-    connectionId: uint16): bool =
+    r: UtpRouter[NodeAddress], remoteAddress: NodeAddress, connectionId: uint16
+): bool =
   let manager = getUserData[NodeAddress, StreamManager](r)
   for stream in manager.streams:
     # stream.pruneAllowedConnections()
@@ -322,16 +333,12 @@ proc new*(T: type StreamManager, d: protocol.Protocol): T =
       # Setting to none means that incoming sockets are in Connected state, which
       # means they can send and receive data.
       incomingSocketReceiveTimeout = none(Duration),
-      payloadSize = uint32(maxUtpPayloadSize)
+      payloadSize = uint32(maxUtpPayloadSize),
     )
     manager = StreamManager(streams: @[], rng: d.rng)
     utpOverDiscV5Protocol = UtpDiscv5Protocol.new(
-      d,
-      utpProtocolId,
-      handleIncomingConnection ,
-      manager,
-      allowIncomingConnection,
-      socketConfig
+      d, utpProtocolId, handleIncomingConnection, manager, allowIncomingConnection,
+      socketConfig,
     )
 
   manager.transport = utpOverDiscV5Protocol
@@ -339,20 +346,15 @@ proc new*(T: type StreamManager, d: protocol.Protocol): T =
   return manager
 
 proc registerNewStream*(
-    m : StreamManager,
+    m: StreamManager,
     contentQueue: AsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])],
     connectionTimeout = defaultConnectionTimeout,
-    contentReadTimeout = defaultContentReadTimeout): PortalStream =
-
+    contentReadTimeout = defaultContentReadTimeout,
+): PortalStream =
   let s = PortalStream.new(
-    m.transport,
-    contentQueue,
-    connectionTimeout,
-    contentReadTimeout,
-    m.rng
+    m.transport, contentQueue, connectionTimeout, contentReadTimeout, m.rng
   )
 
   m.streams.add(s)
 
   return s
-

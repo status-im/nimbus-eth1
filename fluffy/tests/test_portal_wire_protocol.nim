@@ -9,9 +9,12 @@
 
 import
   std/[algorithm, sequtils],
-  chronos, testutils/unittests,
+  chronos,
+  testutils/unittests,
   stew/results,
-  eth/keys, eth/p2p/discoveryv5/routing_table, nimcrypto/[hash, sha2],
+  eth/keys,
+  eth/p2p/discoveryv5/routing_table,
+  nimcrypto/[hash, sha2],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ../network/wire/[portal_protocol, portal_stream, portal_protocol_config],
   ../database/content_db,
@@ -30,7 +33,8 @@ proc initPortalProtocol(
     rng: ref HmacDrbgContext,
     privKey: PrivateKey,
     address: Address,
-    bootstrapRecords: openArray[Record] = []): PortalProtocol =
+    bootstrapRecords: openArray[Record] = [],
+): PortalProtocol =
   let
     d = initDiscoveryNode(rng, privKey, address, bootstrapRecords)
     db = ContentDB.new("", uint32.high, inMemory = true)
@@ -39,8 +43,13 @@ proc initPortalProtocol(
     stream = manager.registerNewStream(q)
 
     proto = PortalProtocol.new(
-      d, protocolId, toContentId, createGetHandler(db), stream,
-      bootstrapRecords = bootstrapRecords)
+      d,
+      protocolId,
+      toContentId,
+      createGetHandler(db),
+      stream,
+      bootstrapRecords = bootstrapRecords,
+    )
 
   proto.dbPut = createStoreHandler(db, defaultRadiusConfig, proto)
 
@@ -50,13 +59,10 @@ proc stopPortalProtocol(proto: PortalProtocol) {.async.} =
   proto.stop()
   await proto.baseProtocol.closeWait()
 
-proc defaultTestSetup(rng: ref HmacDrbgContext):
-    (PortalProtocol, PortalProtocol) =
+proc defaultTestSetup(rng: ref HmacDrbgContext): (PortalProtocol, PortalProtocol) =
   let
-    proto1 =
-      initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20302))
-    proto2 =
-      initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20303))
+    proto1 = initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20302))
+    proto2 = initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20303))
 
   (proto1, proto2)
 
@@ -68,8 +74,7 @@ procSuite "Portal Wire Protocol Tests":
 
     let pong = await proto1.ping(proto2.localNode)
 
-    let customPayload =
-      ByteList(SSZ.encode(CustomPayload(dataRadius: UInt256.high())))
+    let customPayload = ByteList(SSZ.encode(CustomPayload(dataRadius: UInt256.high())))
 
     check:
       pong.isOk()
@@ -83,8 +88,8 @@ procSuite "Portal Wire Protocol Tests":
     let (proto1, proto2) = defaultTestSetup(rng)
 
     block: # Find itself
-      let nodes = await proto1.findNodesImpl(proto2.localNode,
-        List[uint16, 256](@[0'u16]))
+      let nodes =
+        await proto1.findNodesImpl(proto2.localNode, List[uint16, 256](@[0'u16]))
 
       check:
         nodes.isOk()
@@ -93,8 +98,7 @@ procSuite "Portal Wire Protocol Tests":
 
     block: # Find nothing: this should result in nothing as we haven't started
       # the seeding of the portal protocol routing table yet.
-      let nodes = await proto1.findNodesImpl(proto2.localNode,
-        List[uint16, 256](@[]))
+      let nodes = await proto1.findNodesImpl(proto2.localNode, List[uint16, 256](@[]))
 
       check:
         nodes.isOk()
@@ -113,8 +117,8 @@ procSuite "Portal Wire Protocol Tests":
       proto2.start()
 
       let distance = logDistance(proto1.localNode.id, proto2.localNode.id)
-      let nodes = await proto1.findNodesImpl(proto2.localNode,
-        List[uint16, 256](@[distance]))
+      let nodes =
+        await proto1.findNodesImpl(proto2.localNode, List[uint16, 256](@[distance]))
 
       check:
         nodes.isOk()
@@ -148,8 +152,7 @@ procSuite "Portal Wire Protocol Tests":
     let (proto1, proto2) = defaultTestSetup(rng)
     let contentKeys = ContentKeysList(@[ByteList(@[byte 0x01, 0x02, 0x03])])
 
-    let accept = await proto1.offerImpl(
-      proto2.baseProtocol.localNode, contentKeys)
+    let accept = await proto1.offerImpl(proto2.baseProtocol.localNode, contentKeys)
 
     check:
       accept.isOk()
@@ -162,9 +165,9 @@ procSuite "Portal Wire Protocol Tests":
   asyncTest "Offer/Accept/Stream":
     let (proto1, proto2) = defaultTestSetup(rng)
     var content: seq[ContentKV]
-    for i in 0..<contentKeysLimit:
-      let contentKV = ContentKV(
-        contentKey: ByteList(@[byte i]), content: repeat(byte i, 5000))
+    for i in 0 ..< contentKeysLimit:
+      let contentKV =
+        ContentKV(contentKey: ByteList(@[byte i]), content: repeat(byte i, 5000))
       content.add(contentKV)
 
     let res = await proto1.offer(proto2.baseProtocol.localNode, content)
@@ -172,7 +175,7 @@ procSuite "Portal Wire Protocol Tests":
     check res.isOk()
 
     let (srcNodeId, contentKeys, contentItems) =
-        await proto2.stream.contentQueue.popFirst()
+      await proto2.stream.contentQueue.popFirst()
 
     check contentItems.len() == content.len()
 
@@ -188,18 +191,15 @@ procSuite "Portal Wire Protocol Tests":
   asyncTest "Correctly mark node as seen after request":
     let (proto1, proto2) = defaultTestSetup(rng)
 
-    let initialNeighbours = proto1.neighbours(proto1.localNode.id,
-      seenOnly = false)
+    let initialNeighbours = proto1.neighbours(proto1.localNode.id, seenOnly = false)
 
     check:
       len(initialNeighbours) == 0
 
     discard proto1.addNode(proto2.localNode)
 
-    let allNeighboursAfterAdd = proto1.neighbours(
-      proto1.localNode.id, seenOnly = false)
-    let seenNeighboursAfterAdd = proto1.neighbours(
-      proto1.localNode.id, seenOnly = true)
+    let allNeighboursAfterAdd = proto1.neighbours(proto1.localNode.id, seenOnly = false)
+    let seenNeighboursAfterAdd = proto1.neighbours(proto1.localNode.id, seenOnly = true)
 
     check:
       len(allNeighboursAfterAdd) == 1
@@ -207,10 +207,10 @@ procSuite "Portal Wire Protocol Tests":
 
     let pong = await proto1.ping(proto2.localNode)
 
-    let allNeighboursAfterPing = proto1.neighbours(
-      proto1.localNode.id, seenOnly = false)
-    let seenNeighboursAfterPing = proto1.neighbours(
-      proto1.localNode.id, seenOnly = true)
+    let allNeighboursAfterPing =
+      proto1.neighbours(proto1.localNode.id, seenOnly = false)
+    let seenNeighboursAfterPing =
+      proto1.neighbours(proto1.localNode.id, seenOnly = true)
 
     check:
       pong.isOk()
@@ -222,12 +222,9 @@ procSuite "Portal Wire Protocol Tests":
 
   asyncTest "Lookup nodes":
     let
-      node1 =
-        initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20302))
-      node2 =
-        initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20303))
-      node3 =
-        initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20304))
+      node1 = initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20302))
+      node2 = initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20303))
+      node3 = initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20304))
 
     # Make node1 know about node2, and node2 about node3
     # node1 will then do a lookup for node3
@@ -248,12 +245,9 @@ procSuite "Portal Wire Protocol Tests":
 
   asyncTest "Lookup content - nodes interested":
     let
-      node1 =
-        initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20302))
-      node2 =
-        initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20303))
-      node3 =
-        initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20304))
+      node1 = initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20302))
+      node2 = initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20303))
+      node3 = initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20304))
 
       content = @[byte 1, 2]
       contentList = List[byte, 2048].init(content)
@@ -261,7 +255,6 @@ procSuite "Portal Wire Protocol Tests":
 
     # Store the content on node3
     node3.storeContent(contentList, contentId, content)
-
 
     # Make node1 know about node2, and node2 about node3
     check node1.addNode(node2.localNode) == Added
@@ -289,12 +282,13 @@ procSuite "Portal Wire Protocol Tests":
 
   asyncTest "Valid Bootstrap Node":
     let
-      node1 =
-        initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20302))
-      node2 =
-        initPortalProtocol(
-          rng, PrivateKey.random(rng[]), localAddress(20303),
-          bootstrapRecords = [node1.localNode.record])
+      node1 = initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20302))
+      node2 = initPortalProtocol(
+        rng,
+        PrivateKey.random(rng[]),
+        localAddress(20303),
+        bootstrapRecords = [node1.localNode.record],
+      )
 
     node1.start()
     node2.start()
@@ -306,11 +300,13 @@ procSuite "Portal Wire Protocol Tests":
 
   asyncTest "Invalid Bootstrap Node":
     let
-      node1 = initDiscoveryNode(
-        rng, PrivateKey.random(rng[]), localAddress(20302))
-      node2 =
-        initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20303),
-        bootstrapRecords = [node1.localNode.record])
+      node1 = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20302))
+      node2 = initPortalProtocol(
+        rng,
+        PrivateKey.random(rng[]),
+        localAddress(20303),
+        bootstrapRecords = [node1.localNode.record],
+      )
 
     # seedTable to add node1 to the routing table
     node2.seedTable()
@@ -330,8 +326,7 @@ procSuite "Portal Wire Protocol Tests":
     # Need to rework either this test, or the pruning mechanism, or probably
     # both.
     let
-      node1 = initDiscoveryNode(
-        rng, PrivateKey.random(rng[]), localAddress(20303))
+      node1 = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20303))
 
       dbLimit = 400_000'u32
       db = ContentDB.new("", dbLimit, inMemory = true)
@@ -339,15 +334,15 @@ procSuite "Portal Wire Protocol Tests":
       q = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
       stream = m.registerNewStream(q)
 
-      proto1 = PortalProtocol.new(
-        node1, protocolId, toContentId, createGetHandler(db), stream)
+      proto1 =
+        PortalProtocol.new(node1, protocolId, toContentId, createGetHandler(db), stream)
 
     proto1.dbPut = createStoreHandler(db, defaultRadiusConfig, proto1)
 
     let item = genByteSeq(10_000)
     var distances: seq[UInt256] = @[]
 
-    for i in 0..<40:
+    for i in 0 ..< 40:
       proto1.storeContent(ByteList.init(@[uint8(i)]), u256(i), item)
       distances.add(u256(i) xor proto1.localNode.id)
 

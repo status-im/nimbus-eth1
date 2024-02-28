@@ -21,10 +21,14 @@ suite "State Content Values":
     let
       blockContent = readJsonType(testVectorDir & "block.json", JsonBlock).valueOr:
         raiseAssert "Cannot read test vector: " & error
-      accountTrieNode = readJsonType(testVectorDir & "account_trie_node.json", JsonAccountTrieNode).valueOr:
+      accountTrieNode = readJsonType(
+        testVectorDir & "account_trie_node.json", JsonAccountTrieNode
+      ).valueOr:
         raiseAssert "Cannot read test vector: " & error
       blockHash = BlockHash.fromHex(blockContent.`block`.block_hash)
-      proof = TrieProof.init(blockContent.account_proof.map((hex) => TrieNode.init(hex.hexToSeqByte())))
+      proof = TrieProof.init(
+        blockContent.account_proof.map((hex) => TrieNode.init(hex.hexToSeqByte()))
+      )
       accountTrieNodeOffer = AccountTrieNodeOffer(blockHash: blockHash, proof: proof)
 
       encoded = SSZ.encode(accountTrieNodeOffer)
@@ -38,7 +42,9 @@ suite "State Content Values":
     let
       blockContent = readJsonType(testVectorDir & "block.json", JsonBlock).valueOr:
         raiseAssert "Cannot read test vector: " & error
-      accountTrieNode = readJsonType(testVectorDir & "account_trie_node.json", JsonAccountTrieNode).valueOr:
+      accountTrieNode = readJsonType(
+        testVectorDir & "account_trie_node.json", JsonAccountTrieNode
+      ).valueOr:
         raiseAssert "Cannot read test vector: " & error
 
       node = TrieNode.init(blockContent.account_proof[^1].hexToSeqByte())
@@ -55,16 +61,21 @@ suite "State Content Values":
     let
       blockContent = readJsonType(testVectorDir & "block.json", JsonBlock).valueOr:
         raiseAssert "Cannot read test vector: " & error
-      contractStorageTrieNode = readJsonType(testVectorDir & "contract_storage_trie_node.json", JsonContractStorageTtrieNode).valueOr:
+      contractStorageTrieNode = readJsonType(
+        testVectorDir & "contract_storage_trie_node.json", JsonContractStorageTtrieNode
+      ).valueOr:
         raiseAssert "Cannot read test vector: " & error
 
       blockHash = BlockHash.fromHex(blockContent.`block`.block_hash)
-      storageProof = TrieProof.init(blockContent.storage_proof.map((hex) => TrieNode.init(hex.hexToSeqByte())))
-      accountProof = TrieProof.init(blockContent.account_proof.map((hex) => TrieNode.init(hex.hexToSeqByte())))
+      storageProof = TrieProof.init(
+        blockContent.storage_proof.map((hex) => TrieNode.init(hex.hexToSeqByte()))
+      )
+      accountProof = TrieProof.init(
+        blockContent.account_proof.map((hex) => TrieNode.init(hex.hexToSeqByte()))
+      )
       contractTrieNodeOffer = ContractTrieNodeOffer(
-        blockHash: blockHash,
-        storage_proof: storageProof,
-        account_proof: accountProof)
+        blockHash: blockHash, storage_proof: storageProof, account_proof: accountProof
+      )
 
       encoded = SSZ.encode(contractTrieNodeOffer)
       expected = contractStorageTrieNode.content_value_offer.hexToSeqByte()
@@ -77,7 +88,9 @@ suite "State Content Values":
     let
       blockContent = readJsonType(testVectorDir & "block.json", JsonBlock).valueOr:
         raiseAssert "Cannot read test vector: " & error
-      contractStorageTrieNode = readJsonType(testVectorDir & "contract_storage_trie_node.json", JsonContractStorageTtrieNode).valueOr:
+      contractStorageTrieNode = readJsonType(
+        testVectorDir & "contract_storage_trie_node.json", JsonContractStorageTtrieNode
+      ).valueOr:
         raiseAssert "Cannot read test vector: " & error
 
       node = TrieNode.init(blockContent.storage_proof[^1].hexToSeqByte())
@@ -94,16 +107,18 @@ suite "State Content Values":
     let
       blockContent = readJsonType(testVectorDir & "block.json", JsonBlock).valueOr:
         raiseAssert "Cannot read test vector: " & error
-      contractBytecode = readJsonType(testVectorDir & "contract_bytecode.json", JsonContractBytecode).valueOr:
+      contractBytecode = readJsonType(
+        testVectorDir & "contract_bytecode.json", JsonContractBytecode
+      ).valueOr:
         raiseAssert "Cannot read test vector: " & error
 
       code = Bytecode.init(blockContent.bytecode.hexToSeqByte())
       blockHash = BlockHash.fromHex(blockContent.`block`.block_hash)
-      accountProof = TrieProof.init(blockContent.account_proof.map((hex) => TrieNode.init(hex.hexToSeqByte())))
-      contractCodeOffer = ContractCodeOffer(
-        code: code,
-        blockHash: blockHash,
-        accountProof: accountProof)
+      accountProof = TrieProof.init(
+        blockContent.account_proof.map((hex) => TrieNode.init(hex.hexToSeqByte()))
+      )
+      contractCodeOffer =
+        ContractCodeOffer(code: code, blockHash: blockHash, accountProof: accountProof)
 
       encoded = SSZ.encode(contractCodeOffer)
       expected = contractBytecode.content_value_offer.hexToSeqByte()
@@ -116,7 +131,9 @@ suite "State Content Values":
     let
       blockContent = readJsonType(testVectorDir & "block.json", JsonBlock).valueOr:
         raiseAssert "Cannot read test vector: " & error
-      contractBytecode = readJsonType(testVectorDir & "contract_bytecode.json", JsonContractBytecode).valueOr:
+      contractBytecode = readJsonType(
+        testVectorDir & "contract_bytecode.json", JsonContractBytecode
+      ).valueOr:
         raiseAssert "Cannot read test vector: " & error
 
       code = Bytecode.init(blockContent.bytecode.hexToSeqByte())

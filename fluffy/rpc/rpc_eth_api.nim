@@ -40,8 +40,10 @@ func toHash*(value: rpc_types.Hash256): eth_types.Hash256 =
 
 func init*(
     T: type TransactionObject,
-    tx: eth_types.Transaction, header: eth_types.BlockHeader, txIndex: int):
-    T {.raises: [ValidationError].} =
+    tx: eth_types.Transaction,
+    header: eth_types.BlockHeader,
+    txIndex: int,
+): T {.raises: [ValidationError].} =
   TransactionObject(
     blockHash: some(w3Hash header.blockHash),
     blockNumber: some(Quantity(header.blockNumber.truncate(uint64))),
@@ -66,9 +68,11 @@ func init*(
 # total difficulty
 func init*(
     T: type BlockObject,
-    header: eth_types.BlockHeader, body: BlockBody,
-    fullTx = true, isUncle = false):
-    T {.raises: [ValidationError].} =
+    header: eth_types.BlockHeader,
+    body: BlockBody,
+    fullTx = true,
+    isUncle = false,
+): T {.raises: [ValidationError].} =
   let blockHash = header.blockHash
 
   var blockObject = BlockObject(
@@ -90,15 +94,17 @@ func init*(
     totalDifficulty: UInt256.low(),
     gasLimit: Quantity(header.gasLimit.uint64),
     gasUsed: Quantity(header.gasUsed.uint64),
-    timestamp: Quantity(header.timestamp.uint64)
+    timestamp: Quantity(header.timestamp.uint64),
   )
 
   let size = sizeof(BlockHeader) - sizeof(Blob) + header.extraData.len
   blockObject.size = Quantity(size.uint)
 
   if not isUncle:
-    blockObject.uncles =
-      body.uncles.map(proc(h: BlockHeader): rpc_types.Hash256 = w3Hash h.blockHash)
+    blockObject.uncles = body.uncles.map(
+      proc(h: BlockHeader): rpc_types.Hash256 =
+        w3Hash h.blockHash
+    )
 
     if fullTx:
       var i = 0
@@ -115,9 +121,10 @@ func init*(
 proc installEthApiHandlers*(
     # Currently only HistoryNetwork needed, later we might want a master object
     # holding all the networks.
-    rpcServerWithProxy: var RpcProxy, historyNetwork: HistoryNetwork,
-    beaconLightClient: Opt[LightClient]) =
-
+    rpcServerWithProxy: var RpcProxy,
+    historyNetwork: HistoryNetwork,
+    beaconLightClient: Opt[LightClient],
+) =
   # Supported API
   rpcServerWithProxy.registerProxyMethod("eth_blockNumber")
 
@@ -201,7 +208,8 @@ proc installEthApiHandlers*(
     return Quantity(uint64(1))
 
   rpcServerWithProxy.rpc("eth_getBlockByHash") do(
-      data: rpc_types.Hash256, fullTransactions: bool) -> Option[BlockObject]:
+    data: rpc_types.Hash256, fullTransactions: bool
+  ) -> Option[BlockObject]:
     ## Returns information about a block by hash.
     ##
     ## data: Hash of a block.
@@ -217,8 +225,8 @@ proc installEthApiHandlers*(
     return some(BlockObject.init(header, body, fullTransactions))
 
   rpcServerWithProxy.rpc("eth_getBlockByNumber") do(
-      quantityTag: BlockTag, fullTransactions: bool) -> Option[BlockObject]:
-
+    quantityTag: BlockTag, fullTransactions: bool
+  ) -> Option[BlockObject]:
     if quantityTag.kind == bidAlias:
       let tag = quantityTag.alias.toLowerAscii
       case tag
@@ -243,8 +251,7 @@ proc installEthApiHandlers*(
 
             return some(BlockObject.init(header, body, fullTransactions))
           else:
-            raise newException(
-              ValueError, "Not available before Capella - not synced?")
+            raise newException(ValueError, "Not available before Capella - not synced?")
       of "finalized":
         if beaconLightClient.isNone():
           raise newException(ValueError, "Finalized tag not yet implemented")
@@ -258,8 +265,7 @@ proc installEthApiHandlers*(
 
             return some(BlockObject.init(header, body, fullTransactions))
           else:
-            raise newException(
-              ValueError, "Not available before Capella - not synced?")
+            raise newException(ValueError, "Not available before Capella - not synced?")
       of "pending":
         raise newException(ValueError, "Pending tag not yet implemented")
       else:
@@ -277,7 +283,8 @@ proc installEthApiHandlers*(
         return some(BlockObject.init(header, body, fullTransactions))
 
   rpcServerWithProxy.rpc("eth_getBlockTransactionCountByHash") do(
-      data: rpc_types.Hash256) -> Quantity:
+    data: rpc_types.Hash256
+  ) -> Quantity:
     ## Returns the number of transactions in a block from a block matching the
     ## given block hash.
     ##
@@ -302,18 +309,20 @@ proc installEthApiHandlers*(
   #     data: EthHashStr) -> Option[ReceiptObject]:
 
   rpcServerWithProxy.rpc("eth_getLogs") do(
-      filterOptions: FilterOptions) -> seq[FilterLog]:
+    filterOptions: FilterOptions
+  ) -> seq[FilterLog]:
     if filterOptions.blockHash.isNone():
       # Currently only queries by blockhash are supported.
       # To support range queries the Indicies network is required.
-      raise newException(ValueError,
-        "Unsupported query: Only `blockHash` queries are currently supported")
+      raise newException(
+        ValueError,
+        "Unsupported query: Only `blockHash` queries are currently supported",
+      )
 
     let hash = ethHash filterOptions.blockHash.unsafeGet()
 
     let header = (await historyNetwork.getVerifiedBlockHeader(hash)).valueOr:
-      raise newException(ValueError,
-        "Could not find header with requested hash")
+      raise newException(ValueError, "Could not find header with requested hash")
 
     if headerBloomFilter(header, filterOptions.address, filterOptions.topics):
       # TODO: These queries could be done concurrently, investigate if there
@@ -321,15 +330,12 @@ proc installEthApiHandlers*(
       # wire protocol level
       let
         body = (await historyNetwork.getBlockBody(hash, header)).valueOr:
-          raise newException(ValueError,
-            "Could not find block body for requested hash")
+          raise newException(ValueError, "Could not find block body for requested hash")
         receipts = (await historyNetwork.getReceipts(hash, header)).valueOr:
-          raise newException(ValueError,
-            "Could not find receipts for requested hash")
+          raise newException(ValueError, "Could not find receipts for requested hash")
 
         logs = deriveLogs(header, body.transactions, receipts)
-        filteredLogs = filterLogs(
-          logs, filterOptions.address, filterOptions.topics)
+        filteredLogs = filterLogs(logs, filterOptions.address, filterOptions.topics)
 
       return filteredLogs
     else:

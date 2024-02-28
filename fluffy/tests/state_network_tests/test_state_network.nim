@@ -9,11 +9,13 @@ import
   std/[os, json, sequtils, strutils, sugar],
   stew/[byteutils, io2],
   nimcrypto/hash,
-  testutils/unittests, chronos,
+  testutils/unittests,
+  chronos,
   eth/trie/hexary_proof_verification,
   eth/keys,
   eth/common/[eth_types, eth_hash],
-  eth/p2p/discoveryv5/protocol as discv5_protocol, eth/p2p/discoveryv5/routing_table,
+  eth/p2p/discoveryv5/protocol as discv5_protocol,
+  eth/p2p/discoveryv5/routing_table,
   ../../../nimbus/[config, db/core_db, db/state_db],
   ../../../nimbus/common/[chain_config, genesis],
   ../../network/wire/[portal_protocol, portal_stream],
@@ -21,8 +23,7 @@ import
   ../../database/content_db,
   .././test_helpers
 
-const testVectorDir =
-  "./vendor/portal-spec-tests/tests/mainnet/state/"
+const testVectorDir = "./vendor/portal-spec-tests/tests/mainnet/state/"
 
 proc genesisToTrie(filePath: string): CoreDbMptRef =
   # TODO: Doing our best here with API that exists, to be improved.
@@ -30,9 +31,10 @@ proc genesisToTrie(filePath: string): CoreDbMptRef =
   if not loadNetworkParams(filePath, cn):
     quit(1)
 
-  let sdb  = newStateDB(newCoreDbRef LegacyDbMemory, false)
-  let map  = toForkTransitionTable(cn.config)
-  let fork = map.toHardFork(forkDeterminationInfo(0.toBlockNumber, cn.genesis.timestamp))
+  let sdb = newStateDB(newCoreDbRef LegacyDbMemory, false)
+  let map = toForkTransitionTable(cn.config)
+  let fork =
+    map.toHardFork(forkDeterminationInfo(0.toBlockNumber, cn.genesis.timestamp))
   discard toGenesisHeader(cn.genesis, sdb, fork)
 
   sdb.getTrie
@@ -44,15 +46,15 @@ procSuite "State Network":
     let
       trie = genesisToTrie("fluffy" / "tests" / "custom_genesis" / "chainid7.json")
 
-      node1 = initDiscoveryNode(
-        rng, PrivateKey.random(rng[]), localAddress(20302))
+      node1 = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20302))
       sm1 = StreamManager.new(node1)
-      node2 = initDiscoveryNode(
-        rng, PrivateKey.random(rng[]), localAddress(20303))
+      node2 = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20303))
       sm2 = StreamManager.new(node2)
 
-      proto1 = StateNetwork.new(node1, ContentDB.new("", uint32.high, inMemory = true), sm1)
-      proto2 = StateNetwork.new(node2, ContentDB.new("", uint32.high, inMemory = true), sm2)
+      proto1 =
+        StateNetwork.new(node1, ContentDB.new("", uint32.high, inMemory = true), sm1)
+      proto2 =
+        StateNetwork.new(node2, ContentDB.new("", uint32.high, inMemory = true), sm2)
 
     check proto2.portalProtocol.addNode(node1.localNode) == Added
 
@@ -67,7 +69,8 @@ procSuite "State Network":
         # TODO: add stateRoot, and path eventually
         accountTrieNodeKey = AccountTrieNodeKey(nodeHash: nodeHash)
         contentKey = ContentKey(
-          contentType: accountTrieNode, accountTrieNodeKey: accountTrieNodeKey)
+          contentType: accountTrieNode, accountTrieNodeKey: accountTrieNodeKey
+        )
         contentId = toContentId(contentKey)
 
       discard proto1.contentDB.put(contentId, v, proto1.portalProtocol.localNode.id)
@@ -79,7 +82,8 @@ procSuite "State Network":
       let
         accountTrieNodeKey = AccountTrieNodeKey(nodeHash: nodeHash)
         contentKey = ContentKey(
-          contentType: accountTrieNode, accountTrieNodeKey: accountTrieNodeKey)
+          contentType: accountTrieNode, accountTrieNodeKey: accountTrieNodeKey
+        )
         contentId = toContentId(contentKey)
 
       # Note: GetContent and thus the lookup here is not really needed, as we
@@ -100,19 +104,19 @@ procSuite "State Network":
     # findNodes request, to properly test the lookup call.
     let
       trie = genesisToTrie("fluffy" / "tests" / "custom_genesis" / "chainid7.json")
-      node1 = initDiscoveryNode(
-        rng, PrivateKey.random(rng[]), localAddress(20302))
+      node1 = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20302))
       sm1 = StreamManager.new(node1)
-      node2 = initDiscoveryNode(
-        rng, PrivateKey.random(rng[]), localAddress(20303))
+      node2 = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20303))
       sm2 = StreamManager.new(node2)
-      node3 = initDiscoveryNode(
-        rng, PrivateKey.random(rng[]), localAddress(20304))
+      node3 = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20304))
       sm3 = StreamManager.new(node3)
 
-      proto1 = StateNetwork.new(node1, ContentDB.new("", uint32.high, inMemory = true), sm1)
-      proto2 = StateNetwork.new(node2, ContentDB.new("", uint32.high, inMemory = true), sm2)
-      proto3 = StateNetwork.new(node3, ContentDB.new("", uint32.high, inMemory = true), sm3)
+      proto1 =
+        StateNetwork.new(node1, ContentDB.new("", uint32.high, inMemory = true), sm1)
+      proto2 =
+        StateNetwork.new(node2, ContentDB.new("", uint32.high, inMemory = true), sm2)
+      proto3 =
+        StateNetwork.new(node3, ContentDB.new("", uint32.high, inMemory = true), sm3)
 
     # Node1 knows about Node2, and Node2 knows about Node3 which hold all content
     check proto1.portalProtocol.addNode(node2.localNode) == Added
@@ -130,7 +134,8 @@ procSuite "State Network":
       let
         accountTrieNodeKey = AccountTrieNodeKey(nodeHash: nodeHash)
         contentKey = ContentKey(
-          contentType: accountTrieNode, accountTrieNodeKey: accountTrieNodeKey)
+          contentType: accountTrieNode, accountTrieNodeKey: accountTrieNodeKey
+        )
         contentId = toContentId(contentKey)
 
       discard proto2.contentDB.put(contentId, v, proto2.portalProtocol.localNode.id)
@@ -145,8 +150,8 @@ procSuite "State Network":
 
     let
       accountTrieNodeKey = AccountTrieNodeKey(nodeHash: nodeHash)
-      contentKey = ContentKey(
-        contentType: accountTrieNode, accountTrieNodeKey: accountTrieNodeKey)
+      contentKey =
+        ContentKey(contentType: accountTrieNode, accountTrieNodeKey: accountTrieNodeKey)
 
     let foundContent = await proto1.getContent(contentKey)
 

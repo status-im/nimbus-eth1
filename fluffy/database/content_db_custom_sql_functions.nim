@@ -7,25 +7,21 @@
 
 {.push raises: [].}
 
-import
-  stew/ptrops,
-  stint,
-  sqlite3_abi,
-  eth/db/kvstore_sqlite3
+import stew/ptrops, stint, sqlite3_abi, eth/db/kvstore_sqlite3
 
 func xorDistance(a: openArray[byte], b: openArray[byte]): seq[byte] =
   doAssert(a.len == b.len)
 
   let length = a.len
   var distance: seq[byte] = newSeq[byte](length)
-  for i in 0..<length:
+  for i in 0 ..< length:
     distance[i] = a[i] xor b[i]
 
   return distance
 
 proc xorDistance*(
-    ctx: SqliteContext, n: cint, v: SqliteValue)
-    {.cdecl, gcsafe, raises: [].} =
+    ctx: SqliteContext, n: cint, v: SqliteValue
+) {.cdecl, gcsafe, raises: [].} =
   doAssert(n == 2)
 
   let
@@ -35,7 +31,7 @@ proc xorDistance*(
 
     bytes = xorDistance(
       makeOpenArray(sqlite3_value_blob(ptrs[][0]), byte, blob1Len),
-      makeOpenArray(sqlite3_value_blob(ptrs[][1]), byte, blob2Len)
+      makeOpenArray(sqlite3_value_blob(ptrs[][1]), byte, blob2Len),
     )
 
   sqlite3_result_blob(ctx, baseAddr bytes, cint bytes.len, SQLITE_TRANSIENT)
@@ -46,8 +42,8 @@ func isInRadius(contentId: UInt256, localId: UInt256, radius: UInt256): bool =
   radius > distance
 
 func isInRadius*(
-    ctx: SqliteContext, n: cint, v: SqliteValue)
-    {.cdecl, gcsafe, raises: [].} =
+    ctx: SqliteContext, n: cint, v: SqliteValue
+) {.cdecl, gcsafe, raises: [].} =
   doAssert(n == 3)
 
   let
@@ -59,12 +55,12 @@ func isInRadius*(
   doAssert(blob1Len == 32 and blob2Len == 32 and blob3Len == 32)
 
   let
-    localId = UInt256.fromBytesBE(
-      makeOpenArray(sqlite3_value_blob(ptrs[][0]), byte, blob1Len))
-    contentId = UInt256.fromBytesBE(
-      makeOpenArray(sqlite3_value_blob(ptrs[][1]), byte, blob2Len))
-    radius = UInt256.fromBytesBE(
-      makeOpenArray(sqlite3_value_blob(ptrs[][2]), byte, blob3Len))
+    localId =
+      UInt256.fromBytesBE(makeOpenArray(sqlite3_value_blob(ptrs[][0]), byte, blob1Len))
+    contentId =
+      UInt256.fromBytesBE(makeOpenArray(sqlite3_value_blob(ptrs[][1]), byte, blob2Len))
+    radius =
+      UInt256.fromBytesBE(makeOpenArray(sqlite3_value_blob(ptrs[][2]), byte, blob3Len))
 
   if isInRadius(contentId, localId, radius):
     ctx.sqlite3_result_int(cint 1)

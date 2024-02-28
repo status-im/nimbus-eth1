@@ -10,7 +10,8 @@
 {.push raises: [].}
 
 import
-  unittest2, stint,
+  unittest2,
+  stint,
   stew/[byteutils, results],
   eth/[common/eth_types, rlp],
   ../../../common/common_types,
@@ -20,12 +21,11 @@ import
 const
   dataFile = "./fluffy/tests/blocks/mainnet_blocks_selected.json"
   # Block that will be validated
-  blockHashStr =
-    "0xce8f770a56203e10afe19c7dd7e2deafc356e6cce0a560a30a85add03da56137"
+  blockHashStr = "0xce8f770a56203e10afe19c7dd7e2deafc356e6cce0a560a30a85add03da56137"
 
 suite "History Network Content Validation":
-  let blockDataTable = readJsonType(dataFile, BlockDataTable).expect(
-    "Valid data file should parse")
+  let blockDataTable =
+    readJsonType(dataFile, BlockDataTable).expect("Valid data file should parse")
 
   let blockData =
     try:
@@ -40,20 +40,20 @@ suite "History Network Content Validation":
 
     blockHash = BlockHash.fromHex(blockHashStr)
 
-    blockHeader = decodeRlp(blockHeaderBytes, BlockHeader).expect(
-      "Valid header should decode")
-    blockBody = validateBlockBodyBytes(
-      blockBodyBytes, blockHeader).expect(
-        "Should be Valid decoded block body")
-    receipts = validateReceiptsBytes(
-      receiptsBytes, blockHeader.receiptRoot).expect(
-        "Should be Valid decoded receipts")
+    blockHeader =
+      decodeRlp(blockHeaderBytes, BlockHeader).expect("Valid header should decode")
+    blockBody = validateBlockBodyBytes(blockBodyBytes, blockHeader).expect(
+        "Should be Valid decoded block body"
+      )
+    receipts = validateReceiptsBytes(receiptsBytes, blockHeader.receiptRoot).expect(
+        "Should be Valid decoded receipts"
+      )
 
   test "Valid Header":
     check validateBlockHeaderBytes(blockHeaderBytes, blockHash).isOk()
 
   test "Malformed Header":
-    let malformedBytes = blockHeaderBytes[10..blockHeaderBytes.high]
+    let malformedBytes = blockHeaderBytes[10 .. blockHeaderBytes.high]
 
     check validateBlockHeaderBytes(malformedBytes, blockHash).isErr()
 
@@ -67,28 +67,25 @@ suite "History Network Content Validation":
     check validateBlockHeaderBytes(modifiedHeaderBytes, blockHash).isErr()
 
   test "Valid Block Body":
-    check validateBlockBodyBytes(
-      blockBodyBytes, blockHeader).isOk()
+    check validateBlockBodyBytes(blockBodyBytes, blockHeader).isOk()
 
   test "Malformed Block Body":
-    let malformedBytes = blockBodyBytes[10..blockBodyBytes.high]
+    let malformedBytes = blockBodyBytes[10 .. blockBodyBytes.high]
 
-    check validateBlockBodyBytes(
-      malformedBytes, blockHeader).isErr()
+    check validateBlockBodyBytes(malformedBytes, blockHeader).isErr()
 
   test "Invalid Block Body - Modified Transaction List":
     var modifiedBody = blockBody
 
     # drop first transaction
     let modifiedTransactionList =
-      blockBody.transactions[1..blockBody.transactions.high]
+      blockBody.transactions[1 .. blockBody.transactions.high]
 
     modifiedBody.transactions = modifiedTransactionList
 
     let modifiedBodyBytes = encode(modifiedBody)
 
-    check validateBlockBodyBytes(
-      modifiedBodyBytes, blockHeader).isErr()
+    check validateBlockBodyBytes(modifiedBodyBytes, blockHeader).isErr()
 
   test "Invalid Block Body - Modified Uncles List":
     var modifiedBody = blockBody
@@ -97,21 +94,19 @@ suite "History Network Content Validation":
 
     let modifiedBodyBytes = encode(modifiedBody)
 
-    check validateBlockBodyBytes(
-      modifiedBodyBytes, blockHeader).isErr()
+    check validateBlockBodyBytes(modifiedBodyBytes, blockHeader).isErr()
 
   test "Valid Receipts":
     check validateReceiptsBytes(receiptsBytes, blockHeader.receiptRoot).isOk()
 
   test "Malformed Receipts":
-    let malformedBytes = receiptsBytes[10..receiptsBytes.high]
+    let malformedBytes = receiptsBytes[10 .. receiptsBytes.high]
 
     check validateReceiptsBytes(malformedBytes, blockHeader.receiptRoot).isErr()
 
   test "Invalid Receipts - Modified Receipts List":
-    var modifiedReceipts = receipts[1..receipts.high]
+    var modifiedReceipts = receipts[1 .. receipts.high]
 
     let modifiedReceiptsBytes = encode(modifiedReceipts)
 
-    check validateReceiptsBytes(
-      modifiedReceiptsBytes, blockHeader.receiptRoot).isErr()
+    check validateReceiptsBytes(modifiedReceiptsBytes, blockHeader.receiptRoot).isErr()

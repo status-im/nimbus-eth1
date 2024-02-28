@@ -75,7 +75,8 @@
 
 import
   stew/results,
-  ssz_serialization, ssz_serialization/[proofs, merkleization],
+  ssz_serialization,
+  ssz_serialization/[proofs, merkleization],
   beacon_chain/spec/eth2_ssz_serialization,
   beacon_chain/spec/datatypes/bellatrix
 
@@ -108,7 +109,8 @@ func getBlockRootsIndex*(blockHeader: BeaconBlockHeader): uint64 =
 # Builds proof to be able to verify that the EL block hash is part of
 # BeaconBlockBody for given root.
 func buildProof*(
-    blockBody: bellatrix.BeaconBlockBody): Result[BeaconBlockBodyProof, string] =
+    blockBody: bellatrix.BeaconBlockBody
+): Result[BeaconBlockBodyProof, string] =
   # 16 as there are 10 fields
   # 9 as index (pos) of field = 9
   let gIndexTopLevel = (1 * 1 * 16 + 9)
@@ -117,60 +119,62 @@ func buildProof*(
   let gIndex = GeneralizedIndex(gIndexTopLevel * 1 * 16 + 12)
 
   var proof: BeaconBlockBodyProof
-  ? blockBody.build_proof(gIndex, proof)
+  ?blockBody.build_proof(gIndex, proof)
 
   ok(proof)
 
 # Builds proof to be able to verify that the CL BlockBody root is part of
 # BeaconBlockHeader for given root.
 func buildProof*(
-    blockHeader: BeaconBlockHeader): Result[BeaconBlockHeaderProof, string] =
+    blockHeader: BeaconBlockHeader
+): Result[BeaconBlockHeaderProof, string] =
   # 5th field of container with 5 fields -> 7 + 5
   let gIndex = GeneralizedIndex(12)
 
   var proof: BeaconBlockHeaderProof
-  ? blockHeader.build_proof(gIndex, proof)
+  ?blockHeader.build_proof(gIndex, proof)
 
   ok(proof)
 
 # Builds proof to be able to verify that a BeaconBlock root is part of the
 # HistoricalBatch for given root.
 func buildProof*(
-    batch: HistoricalBatch, blockRootIndex: uint64):
-    Result[HistoricalRootsProof, string] =
+    batch: HistoricalBatch, blockRootIndex: uint64
+): Result[HistoricalRootsProof, string] =
   # max list size * 2 is start point of leaves
   let gIndex = GeneralizedIndex(2 * SLOTS_PER_HISTORICAL_ROOT + blockRootIndex)
 
   var proof: HistoricalRootsProof
-  ? batch.build_proof(gIndex, proof)
+  ?batch.build_proof(gIndex, proof)
 
   ok(proof)
 
 func buildProof*(
     batch: HistoricalBatch,
     blockHeader: BeaconBlockHeader,
-    blockBody: bellatrix.BeaconBlockBody):
-    Result[BeaconChainBlockProof, string] =
+    blockBody: bellatrix.BeaconBlockBody,
+): Result[BeaconChainBlockProof, string] =
   let
     blockRootIndex = getBlockRootsIndex(blockHeader)
 
-    beaconBlockBodyProof = ? blockBody.buildProof()
-    beaconBlockHeaderProof = ? blockHeader.buildProof()
-    historicalRootsProof = ? batch.buildProof(blockRootIndex)
+    beaconBlockBodyProof = ?blockBody.buildProof()
+    beaconBlockHeaderProof = ?blockHeader.buildProof()
+    historicalRootsProof = ?batch.buildProof(blockRootIndex)
 
-  ok(BeaconChainBlockProof(
-    beaconBlockBodyProof: beaconBlockBodyProof,
-    beaconBlockBodyRoot: hash_tree_root(blockBody),
-    beaconBlockHeaderProof: beaconBlockHeaderProof,
-    beaconBlockHeaderRoot: hash_tree_root(blockHeader),
-    historicalRootsProof: historicalRootsProof,
-    slot: blockHeader.slot
-  ))
+  ok(
+    BeaconChainBlockProof(
+      beaconBlockBodyProof: beaconBlockBodyProof,
+      beaconBlockBodyRoot: hash_tree_root(blockBody),
+      beaconBlockHeaderProof: beaconBlockHeaderProof,
+      beaconBlockHeaderRoot: hash_tree_root(blockHeader),
+      historicalRootsProof: historicalRootsProof,
+      slot: blockHeader.slot,
+    )
+  )
 
 func verifyProof*(
-    blockHash: Digest,
-    proof: BeaconBlockBodyProof,
-    blockBodyRoot: Digest): bool =
+    blockHash: Digest, proof: BeaconBlockBodyProof, blockBodyRoot: Digest
+): bool =
   let
     gIndexTopLevel = (1 * 1 * 16 + 9)
     gIndex = GeneralizedIndex(gIndexTopLevel * 1 * 16 + 12)
@@ -178,9 +182,8 @@ func verifyProof*(
   verify_merkle_multiproof(@[blockHash], proof, @[gIndex], blockBodyRoot)
 
 func verifyProof*(
-    blockBodyRoot: Digest,
-    proof: BeaconBlockHeaderProof,
-    blockHeaderRoot: Digest): bool =
+    blockBodyRoot: Digest, proof: BeaconBlockHeaderProof, blockHeaderRoot: Digest
+): bool =
   let gIndex = GeneralizedIndex(12)
 
   verify_merkle_multiproof(@[blockBodyRoot], proof, @[gIndex], blockHeaderRoot)
@@ -189,7 +192,8 @@ func verifyProof*(
     blockHeaderRoot: Digest,
     proof: HistoricalRootsProof,
     historicalRoot: Digest,
-    blockRootIndex: uint64): bool =
+    blockRootIndex: uint64,
+): bool =
   let gIndex = GeneralizedIndex(2 * SLOTS_PER_HISTORICAL_ROOT + blockRootIndex)
 
   verify_merkle_multiproof(@[blockHeaderRoot], proof, @[gIndex], historicalRoot)
@@ -197,15 +201,16 @@ func verifyProof*(
 func verifyProof*(
     historical_roots: HashList[Eth2Digest, Limit HISTORICAL_ROOTS_LIMIT],
     proof: BeaconChainBlockProof,
-    blockHash: Digest): bool =
+    blockHash: Digest,
+): bool =
   let
     historicalRootsIndex = getHistoricalRootsIndex(proof.slot)
     blockRootIndex = getBlockRootsIndex(proof.slot)
 
-  blockHash.verifyProof(
-      proof.beaconBlockBodyProof, proof.beaconBlockBodyRoot) and
+  blockHash.verifyProof(proof.beaconBlockBodyProof, proof.beaconBlockBodyRoot) and
     proof.beaconBlockBodyRoot.verifyProof(
-      proof.beaconBlockHeaderProof, proof.beaconBlockHeaderRoot) and
+      proof.beaconBlockHeaderProof, proof.beaconBlockHeaderRoot
+    ) and
     proof.beaconBlockHeaderRoot.verifyProof(
-      proof.historicalRootsProof, historical_roots[historicalRootsIndex],
-      blockRootIndex)
+      proof.historicalRootsProof, historical_roots[historicalRootsIndex], blockRootIndex
+    )

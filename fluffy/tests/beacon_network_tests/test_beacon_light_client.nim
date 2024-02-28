@@ -8,7 +8,8 @@
 {.push raises: [].}
 
 import
-  testutils/unittests, chronos,
+  testutils/unittests,
+  chronos,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   beacon_chain/spec/forks,
   beacon_chain/spec/datatypes/altair,
@@ -21,10 +22,12 @@ procSuite "Portal Beacon Light Client":
   let rng = newRng()
 
   proc headerCallback(
-      q: AsyncQueue[ForkedLightClientHeader]): LightClientHeaderCallback =
+      q: AsyncQueue[ForkedLightClientHeader]
+  ): LightClientHeaderCallback =
     return (
-      proc (lightClient: LightClient, finalizedHeader: ForkedLightClientHeader)
-        {.gcsafe, raises: [].} =
+      proc(
+          lightClient: LightClient, finalizedHeader: ForkedLightClientHeader
+      ) {.gcsafe, raises: [].} =
         try:
           q.putNoWait(finalizedHeader)
         except AsyncQueueFullError as exc:
@@ -41,7 +44,8 @@ procSuite "Portal Beacon Light Client":
       lcNode2 = newLCNode(rng, 20303, networkData)
       altairData = SSZ.decode(bootstrapBytes, altair.LightClientBootstrap)
       bootstrap = ForkedLightClientBootstrap(
-        kind: LightClientDataFork.Altair, altairData: altairData)
+        kind: LightClientDataFork.Altair, altairData: altairData
+      )
       bootstrapHeaderHash = hash_tree_root(altairData.header)
 
     check:
@@ -52,12 +56,9 @@ procSuite "Portal Beacon Light Client":
       (await lcNode2.portalProtocol().ping(lcNode1.localNode())).isOk()
 
     let
-      bootstrapKey = LightClientBootstrapKey(
-        blockHash: bootstrapHeaderHash
-      )
+      bootstrapKey = LightClientBootstrapKey(blockHash: bootstrapHeaderHash)
       bootstrapContentKey = ContentKey(
-        contentType: lightClientBootstrap,
-        lightClientBootstrapKey: bootstrapKey
+        contentType: lightClientBootstrap, lightClientBootstrapKey: bootstrapKey
       )
 
       bootstrapContentKeyEncoded = encode(bootstrapContentKey)
@@ -66,12 +67,12 @@ procSuite "Portal Beacon Light Client":
     lcNode2.portalProtocol().storeContent(
       bootstrapContentKeyEncoded,
       bootstrapContentId,
-      encodeForkedLightClientObject(bootstrap, networkData.forks.altair)
+      encodeForkedLightClientObject(bootstrap, networkData.forks.altair),
     )
 
     let lc = LightClient.new(
-      lcNode1.beaconNetwork, rng, networkData,
-      LightClientFinalizationMode.Optimistic)
+      lcNode1.beaconNetwork, rng, networkData, LightClientFinalizationMode.Optimistic
+    )
 
     lc.onFinalizedHeader = headerCallback(finalizedHeaders)
     lc.onOptimisticHeader = headerCallback(optimisticHeaders)
@@ -91,4 +92,3 @@ procSuite "Portal Beacon Light Client":
     check:
       hash_tree_root(receivedFinalHeader.altairData) == bootstrapHeaderHash
       hash_tree_root(receivedOptimisticHeader.altairData) == bootstrapHeaderHash
-

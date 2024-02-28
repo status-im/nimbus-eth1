@@ -7,8 +7,11 @@
 
 import
   std/[options, sequtils, sugar, strutils],
-  unittest2, testutils, chronos,
-  json_rpc/rpcclient, stew/byteutils,
+  unittest2,
+  testutils,
+  chronos,
+  json_rpc/rpcclient,
+  stew/byteutils,
   eth/keys,
   ./utp_test_rpc_client
 
@@ -34,13 +37,13 @@ procSuite "uTP network simulator tests":
 
   let rng = newRng()
 
-  type
-    FutureCallback[A] = proc (): Future[A] {.gcsafe, raises: [].}
+  type FutureCallback[A] = proc(): Future[A] {.gcsafe, raises: [].}
   # combinator which repeatedly calls passed closure until returned future is
   # successfull
   # TODO: currently works only for non void types
   proc repeatTillSuccess[A](
-      f: FutureCallback[A], maxTries: int = 20): Future[A] {.async.} =
+      f: FutureCallback[A], maxTries: int = 20
+  ): Future[A] {.async.} =
     var i = 0
     while true:
       try:
@@ -58,19 +61,17 @@ procSuite "uTP network simulator tests":
         raise canc
 
   proc findServerConnection(
-      connections: openArray[SKey],
-      clientId: NodeId,
-      clientConnectionId: uint16): Option[Skey] =
-    let conns: seq[SKey] =
-      connections.filter((key:Skey) => key.id == (clientConnectionId + 1) and
-        key.nodeId == clientId)
+      connections: openArray[SKey], clientId: NodeId, clientConnectionId: uint16
+  ): Option[Skey] =
+    let conns: seq[SKey] = connections.filter(
+      (key: Skey) => key.id == (clientConnectionId + 1) and key.nodeId == clientId
+    )
     if len(conns) == 0:
       none[Skey]()
     else:
       some[Skey](conns[0])
 
-  proc setupTest():
-      Future[(RpcHttpClient, NodeInfo, RpcHttpClient, NodeInfo)] {.async.} =
+  proc setupTest(): Future[(RpcHttpClient, NodeInfo, RpcHttpClient, NodeInfo)] {.async.} =
     let client = newRpcHttpClient()
     let server = newRpcHttpClient()
 
@@ -91,12 +92,12 @@ procSuite "uTP network simulator tests":
 
     let
       (client, clientInfo, server, serverInfo) = await setupTest()
-      clientConnectionKey = await repeatTillSuccess(() =>
-        client.utp_connect(serverInfo.enr))
-      serverConnections = await repeatTillSuccess(() =>
-        server.utp_get_connections())
+      clientConnectionKey =
+        await repeatTillSuccess(() => client.utp_connect(serverInfo.enr))
+      serverConnections = await repeatTillSuccess(() => server.utp_get_connections())
       maybeServerConnectionKey = serverConnections.findServerConnection(
-        clientInfo.nodeId, clientConnectionKey.id)
+        clientInfo.nodeId, clientConnectionKey.id
+      )
 
     check:
       maybeServerConnectionKey.isSome()
@@ -119,12 +120,12 @@ procSuite "uTP network simulator tests":
 
     let
       (client, clientInfo, server, serverInfo) = await setupTest()
-      clientConnectionKey = await repeatTillSuccess(() =>
-        client.utp_connect(serverInfo.enr))
-      serverConnections = await repeatTillSuccess(() =>
-        server.utp_get_connections())
+      clientConnectionKey =
+        await repeatTillSuccess(() => client.utp_connect(serverInfo.enr))
+      serverConnections = await repeatTillSuccess(() => server.utp_get_connections())
       maybeServerConnectionKey = serverConnections.findServerConnection(
-        clientInfo.nodeId, clientConnectionKey.id)
+        clientInfo.nodeId, clientConnectionKey.id
+      )
 
     check:
       maybeServerConnectionKey.isSome()
@@ -146,12 +147,12 @@ procSuite "uTP network simulator tests":
 
     let
       (client, clientInfo, server, serverInfo) = await setupTest()
-      clientConnectionKey = await repeatTillSuccess(() =>
-        client.utp_connect(serverInfo.enr))
-      serverConnections = await repeatTillSuccess(() =>
-        server.utp_get_connections())
+      clientConnectionKey =
+        await repeatTillSuccess(() => client.utp_connect(serverInfo.enr))
+      serverConnections = await repeatTillSuccess(() => server.utp_get_connections())
       maybeServerConnectionKey = serverConnections.findServerConnection(
-        clientInfo.nodeId, clientConnectionKey.id)
+        clientInfo.nodeId, clientConnectionKey.id
+      )
 
     check:
       maybeServerConnectionKey.isSome()
@@ -159,7 +160,7 @@ procSuite "uTP network simulator tests":
     let serverConnectionKey = maybeServerConnectionKey.unsafeGet()
 
     var totalBytesToWrite: string
-    for i in 0..<amountOfTransfers:
+    for i in 0 ..< amountOfTransfers:
       let
         bytesToWrite = generateBytesHex(rng[], amountOfBytes)
         writeRes = await client.utp_write(clientConnectionKey, bytesToWrite)
@@ -167,8 +168,8 @@ procSuite "uTP network simulator tests":
       check writeRes == true
       totalBytesToWrite.add(bytesToWrite)
 
-    let dataRead = await server.utp_read(
-      serverConnectionKey, amountOfBytes * amountOfTransfers)
+    let dataRead =
+      await server.utp_read(serverConnectionKey, amountOfBytes * amountOfTransfers)
 
     check dataRead == totalBytesToWrite
 
@@ -180,14 +181,14 @@ procSuite "uTP network simulator tests":
     let (client, clientInfo, server, serverInfo) = await setupTest()
 
     var connectionKeys: seq[(SKey, SKey)]
-    for i in 0..<amountOfSockets:
+    for i in 0 ..< amountOfSockets:
       let
-        clientConnectionKey = await repeatTillSuccess(() =>
-          client.utp_connect(serverInfo.enr))
-        serverConnections = await repeatTillSuccess(() =>
-          server.utp_get_connections())
+        clientConnectionKey =
+          await repeatTillSuccess(() => client.utp_connect(serverInfo.enr))
+        serverConnections = await repeatTillSuccess(() => server.utp_get_connections())
         serverConnectionKeyRes = serverConnections.findServerConnection(
-          clientInfo.nodeId, clientConnectionKey.id)
+          clientInfo.nodeId, clientConnectionKey.id
+        )
 
       check serverConnectionKeyRes.isSome()
 

@@ -16,8 +16,7 @@ proc portal_stateLookupEnr(nodeId: NodeId): Record
 proc portal_statePing(enr: Record): PingResult
 proc portal_stateFindNodes(enr: Record): seq[Record]
 proc portal_stateFindContent(enr: Record, contentKey: string): JsonNode
-proc portal_stateOffer(
-  enr: Record, contentKey: string, contentValue: string): string
+proc portal_stateOffer(enr: Record, contentKey: string, contentValue: string): string
 proc portal_stateRecursiveFindNodes(nodeId: NodeId): seq[Record]
 proc portal_stateRecursiveFindContent(contentKey: string): string
 proc portal_stateStore(contentKey: string, contentValue: string): bool
@@ -35,8 +34,7 @@ proc portal_historyLookupEnr(nodeId: NodeId): Record
 proc portal_historyPing(enr: Record): PingResult
 proc portal_historyFindNodes(enr: Record): seq[Record]
 proc portal_historyFindContent(enr: Record, contentKey: string): JsonNode
-proc portal_historyOffer(
-  enr: Record, contentKey: string, contentValue: string): string
+proc portal_historyOffer(enr: Record, contentKey: string, contentValue: string): string
 proc portal_historyRecursiveFindNodes(nodeId: NodeId): seq[Record]
 proc portal_historyRecursiveFindContent(contentKey: string): string
 proc portal_historyStore(contentKey: string, contentValue: string): bool
@@ -54,8 +52,7 @@ proc portal_beaconLookupEnr(nodeId: NodeId): Record
 proc portal_beaconPing(enr: Record): PingResult
 proc portal_beaconFindNodes(enr: Record): seq[Record]
 proc portal_beaconFindContent(enr: Record, contentKey: string): JsonNode
-proc portal_beaconOffer(
-  enr: Record, contentKey: string, contentValue: string): string
+proc portal_beaconOffer(enr: Record, contentKey: string, contentValue: string): string
 proc portal_beaconRecursiveFindNodes(nodeId: NodeId): seq[Record]
 proc portal_beaconRecursiveFindContent(contentKey: string): string
 proc portal_beaconStore(contentKey: string, contentValue: string): bool

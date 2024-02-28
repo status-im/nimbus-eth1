@@ -13,14 +13,15 @@ import
   stew/results,
   eth/[common, rlp, trie, trie/trie_defs],
   ../../nimbus/common/chain_config,
-  ../network/state/experimental/[state_proof_types, state_proof_generation, state_proof_verification],
+  ../network/state/experimental/
+    [state_proof_types, state_proof_generation, state_proof_verification],
   ./test_helpers
 
 proc checkValidProofsForExistingLeafs(
     genAccounts: GenesisAlloc,
     accountState: AccountState,
-    storageStates: Table[EthAddress, StorageState]) {.raises: [KeyError, RlpError].} =
-
+    storageStates: Table[EthAddress, StorageState],
+) {.raises: [KeyError, RlpError].} =
   for address, account in genAccounts:
     var acc = newAccount(account.nonce, account.balance)
     acc.codeHash = keccakHash(account.code)
@@ -31,9 +32,10 @@ proc checkValidProofsForExistingLeafs(
       let storageState = storageStates[address]
       acc.storageRoot = storageState.rootHash()
 
-      for slotKey, slotValue in account.storage :
+      for slotKey, slotValue in account.storage:
         let storageProof = storageState.generateStorageProof(slotKey)
-        let proofResult = verifyContractStorageSlot(acc.storageRoot, slotKey, slotValue, storageProof)
+        let proofResult =
+          verifyContractStorageSlot(acc.storageRoot, slotKey, slotValue, storageProof)
         check proofResult.isOk()
 
     let accountProof = accountState.generateAccountProof(address)
@@ -43,7 +45,8 @@ proc checkValidProofsForExistingLeafs(
 proc checkValidProofsForMissingLeafs(
     genAccounts: GenesisAlloc,
     accountState: var AccountState,
-    storageStates: Table[EthAddress, StorageState]) {.raises: [KeyError, RlpError].} =
+    storageStates: Table[EthAddress, StorageState],
+) {.raises: [KeyError, RlpError].} =
   var remainingAccounts = genAccounts.len()
 
   for address, account in genAccounts:
@@ -62,14 +65,17 @@ proc checkValidProofsForMissingLeafs(
         if (remainingSlots == 1):
           break # can't generate proofs from an empty state
 
-        storageState.HexaryTrie.del(keccakHash(toBytesBE(slotKey)).data) # delete the slot from the state
+        storageState.HexaryTrie.del(keccakHash(toBytesBE(slotKey)).data)
+          # delete the slot from the state
         dec remainingSlots
 
         let storageProof = storageState.generateStorageProof(slotKey)
-        let proofResult = verifyContractStorageSlot(acc.storageRoot, slotKey, slotValue, storageProof)
+        let proofResult =
+          verifyContractStorageSlot(acc.storageRoot, slotKey, slotValue, storageProof)
         check proofResult.isErr()
 
-    accountState.HexaryTrie.del(keccakHash(address).data) # delete the account from the state
+    accountState.HexaryTrie.del(keccakHash(address).data)
+      # delete the account from the state
     dec remainingAccounts
 
     let accountProof = accountState.generateAccountProof(address)
@@ -79,8 +85,10 @@ proc checkValidProofsForMissingLeafs(
 proc checkInvalidProofsWithBadStateRoot(
     genAccounts: GenesisAlloc,
     accountState: AccountState,
-    storageStates: Table[EthAddress, StorageState]) {.raises: [KeyError, RlpError].} =
-  let badHash = toDigest("2cb1b80b285d09e0570fdbbb808e1d14e4ac53e36dcd95dbc268deec2915b3e7")
+    storageStates: Table[EthAddress, StorageState],
+) {.raises: [KeyError, RlpError].} =
+  let badHash =
+    toDigest("2cb1b80b285d09e0570fdbbb808e1d14e4ac53e36dcd95dbc268deec2915b3e7")
 
   for address, account in genAccounts:
     var acc = newAccount(account.nonce, account.balance)
@@ -94,9 +102,9 @@ proc checkInvalidProofsWithBadStateRoot(
 
       var remainingSlots = account.storage.len()
       for slotKey, slotValue in account.storage:
-
         let storageProof = storageState.generateStorageProof(slotKey)
-        let proofResult = verifyContractStorageSlot(badHash, slotKey, slotValue, storageProof)
+        let proofResult =
+          verifyContractStorageSlot(badHash, slotKey, slotValue, storageProof)
         check:
           proofResult.isErr()
           proofResult.error() == "missing expected node"
@@ -110,8 +118,8 @@ proc checkInvalidProofsWithBadStateRoot(
 proc checkInvalidProofsWithBadValue(
     genAccounts: GenesisAlloc,
     accountState: AccountState,
-    storageStates: Table[EthAddress, StorageState]) {.raises: [KeyError, RlpError].} =
-
+    storageStates: Table[EthAddress, StorageState],
+) {.raises: [KeyError, RlpError].} =
   for address, account in genAccounts:
     var acc = newAccount(account.nonce, account.balance)
     acc.codeHash = keccakHash(account.code)
@@ -128,7 +136,9 @@ proc checkInvalidProofsWithBadValue(
         let storageProof = storageState.generateStorageProof(slotKey)
         let badSlotValue = slotValue + 1 # bad slot value
 
-        let proofResult = verifyContractStorageSlot(acc.storageRoot, slotKey, badSlotValue, storageProof)
+        let proofResult = verifyContractStorageSlot(
+          acc.storageRoot, slotKey, badSlotValue, storageProof
+        )
         check:
           proofResult.isErr()
           proofResult.error() == "proof does not contain expected value"
@@ -141,7 +151,6 @@ proc checkInvalidProofsWithBadValue(
       proofResult.error() == "proof does not contain expected value"
 
 suite "State Proof Verification Tests":
-
   let genesisFiles = ["berlin2000.json", "chainid1.json", "chainid7.json", "merge.json"]
 
   test "Valid proofs for existing leafs":

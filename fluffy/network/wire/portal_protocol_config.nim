@@ -7,16 +7,12 @@
 
 {.push raises: [].}
 
-import
-  std/strutils,
-  confutils,
-  chronos,
-  stint,
-  eth/p2p/discoveryv5/routing_table
+import std/strutils, confutils, chronos, stint, eth/p2p/discoveryv5/routing_table
 
 type
   RadiusConfigKind* = enum
-    Static, Dynamic
+    Static
+    Dynamic
 
   RadiusConfig* = object
     case kind*: RadiusConfigKind
@@ -45,7 +41,7 @@ const
     # security, this must not remain.
     tableIpLimits: TableIpLimits(tableIpLimit: 32, bucketIpLimit: 16),
     bitsPerHop: DefaultBitsPerHop,
-    radiusConfig: defaultRadiusConfig
+    radiusConfig: defaultRadiusConfig,
   )
 
 proc init*(
@@ -54,15 +50,14 @@ proc init*(
     bucketIpLimit: uint,
     bitsPerHop: int,
     radiusConfig: RadiusConfig,
-    disablePoke: bool): T =
-
+    disablePoke: bool,
+): T =
   PortalProtocolConfig(
-    tableIpLimits: TableIpLimits(
-      tableIpLimit: tableIpLimit,
-      bucketIpLimit: bucketIpLimit),
+    tableIpLimits:
+      TableIpLimits(tableIpLimit: tableIpLimit, bucketIpLimit: bucketIpLimit),
     bitsPerHop: bitsPerHop,
     radiusConfig: radiusConfig,
-    disablePoke: disablePoke
+    disablePoke: disablePoke,
   )
 
 func fromLogRadius*(T: type UInt256, logRadius: uint16): T =
@@ -83,12 +78,11 @@ func getInitialRadius*(rc: RadiusConfig): UInt256 =
 
 ## Confutils parsers
 
-proc parseCmdArg*(T: type RadiusConfig, p: string): T
-    {.raises: [ValueError].} =
+proc parseCmdArg*(T: type RadiusConfig, p: string): T {.raises: [ValueError].} =
   if p.startsWith("dynamic") and len(p) == 7:
     RadiusConfig(kind: Dynamic)
   elif p.startsWith("static:"):
-    let num = p[7..^1]
+    let num = p[7 ..^ 1]
     let parsed =
       try:
         uint16.parseCmdArg(num)
@@ -97,9 +91,7 @@ proc parseCmdArg*(T: type RadiusConfig, p: string): T
         raise newException(ValueError, msg)
 
     if parsed > 256:
-      raise newException(
-        ValueError, "Provided logRadius should be <= 256"
-      )
+      raise newException(ValueError, "Provided logRadius should be <= 256")
 
     RadiusConfig(kind: Static, logRadius: parsed)
   else:
@@ -113,8 +105,7 @@ proc parseCmdArg*(T: type RadiusConfig, p: string): T
         raise newException(ValueError, msg)
 
     if parsed > 256:
-      raise newException(
-        ValueError, "Provided logRadius should be <= 256")
+      raise newException(ValueError, "Provided logRadius should be <= 256")
 
     RadiusConfig(kind: Static, logRadius: parsed)
 

@@ -5,13 +5,7 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import
-  chronicles,
-  confutils,
-  stint,
-  eth/keys,
-  ../database/content_db,
-  ./benchmark
+import chronicles, confutils, stint, eth/keys, ../database/content_db, ./benchmark
 
 when defined(posix):
   import system/ansi_c
@@ -29,41 +23,36 @@ type Timers = enum
 
 type
   DbCmd* {.pure.} = enum
-    benchmark = "Run a benchmark on different ContentDb calls. This is invasive to the database as it will add but then also remove new random content"
+    benchmark =
+      "Run a benchmark on different ContentDb calls. This is invasive to the database as it will add but then also remove new random content"
     generate = "Generate random content into the database, for testing purposes."
     prune = "Prune the ContentDb in case of resizing or selecting a different local id"
     validate = "Validate all the content in the ContentDb"
 
   DbConf = object
     databaseDir* {.
-      desc: "Directory where `contentdb_xxx.sqlite` is stored"
-      name: "db-dir".}: InputDir
+      desc: "Directory where `contentdb_xxx.sqlite` is stored", name: "db-dir"
+    .}: InputDir
 
     contentSize* {.
-      desc: "Amount of bytes in generated content value"
-      defaultValue: 25_000 # 25kb
-      name: "content-size".}: uint64
+      desc: "Amount of bytes in generated content value",
+      defaultValue: 25_000, # 25kb
+      name: "content-size"
+    .}: uint64
 
-    case cmd* {.
-      command
-      desc: ""
-      .}: DbCmd
-
+    case cmd* {.command, desc: "".}: DbCmd
     of DbCmd.benchmark:
       samples* {.
-        desc: "Amount of benchmark samples"
-        defaultValue: 100
-        name: "samples".}: uint64
-
+        desc: "Amount of benchmark samples", defaultValue: 100, name: "samples"
+      .}: uint64
     of DbCmd.generate:
       contentAmount* {.
-        desc: "Amount of content key-value pairs to generate in db"
-        defaultValue: 1000
-        name: "content-amount".}: uint64
-
+        desc: "Amount of content key-value pairs to generate in db",
+        defaultValue: 1000,
+        name: "content-amount"
+      .}: uint64
     of DbCmd.prune:
       discard
-
     of DbCmd.validate:
       discard
 
@@ -76,23 +65,17 @@ func generateRandomU256(rng: var HmacDrbgContext): UInt256 =
 proc cmdGenerate(conf: DbConf) =
   let
     rng = newRng()
-    db = ContentDB.new(
-      conf.databaseDir.string,
-      maxDbSize,
-      inMemory = false)
+    db = ContentDB.new(conf.databaseDir.string, maxDbSize, inMemory = false)
     bytes = newSeq[byte](conf.contentSize)
 
-  for i in 0..<conf.contentAmount:
+  for i in 0 ..< conf.contentAmount:
     let key = rng[].generateRandomU256()
     db.put(key, bytes)
 
 proc cmdBench(conf: DbConf) =
   let
     rng = newRng()
-    db = ContentDB.new(
-      conf.databaseDir.string,
-      4_000_000_000'u64,
-      inMemory = false)
+    db = ContentDB.new(conf.databaseDir.string, 4_000_000_000'u64, inMemory = false)
     bytes = newSeq[byte](conf.contentSize)
 
   var timers: array[Timers, RunningStat]
@@ -100,7 +83,7 @@ proc cmdBench(conf: DbConf) =
 
   # TODO: We could/should avoid putting and deleting content by iterating over
   # some content and selecting random content keys for which to get the content.
-  for i in 0..<conf.samples:
+  for i in 0 ..< conf.samples:
     let key = rng[].generateRandomU256()
     keys.add(key)
     withTimer(timers[tDbPut]):
@@ -118,7 +101,7 @@ proc cmdBench(conf: DbConf) =
     withTimer(timers[tDbDel]):
       db.del(key)
 
-  for i in 0..<conf.samples:
+  for i in 0 ..< conf.samples:
     withTimer(timers[tDbSize]):
       let _ = db.size()
     withTimer(timers[tDbUsedSize]):
@@ -134,7 +117,7 @@ proc cmdBench(conf: DbConf) =
 
   printTimers(timers)
 
-proc controlCHook {.noconv.} =
+proc controlCHook() {.noconv.} =
   notice "Shutting down after having received SIGINT."
   quit QuitSuccess
 

@@ -9,7 +9,8 @@
 
 import
   chronos,
-  chronicles, chronicles/topics_registry,
+  chronicles,
+  chronicles/topics_registry,
   stew/byteutils,
   eth/async_utils,
   json_rpc/clients/httpclient,
@@ -18,27 +19,25 @@ import
   ../../rpc/portal_rpc_client,
   ../eth_data_exporter/cl_data_exporter
 
-const
-  restRequestsTimeout = 30.seconds
+const restRequestsTimeout = 30.seconds
 
 # TODO: From nimbus_binary_common, but we don't want to import that.
 proc sleepAsync*(t: TimeDiff): Future[void] =
-  sleepAsync(nanoseconds(
-    if t.nanoseconds < 0: 0'i64 else: t.nanoseconds))
+  sleepAsync(nanoseconds(if t.nanoseconds < 0: 0'i64 else: t.nanoseconds))
 
 proc gossipLCBootstrapUpdate*(
-    restClient: RestClientRef, portalRpcClient: RpcHttpClient,
+    restClient: RestClientRef,
+    portalRpcClient: RpcHttpClient,
     trustedBlockRoot: Eth2Digest,
-    cfg: RuntimeConfig, forkDigests: ref ForkDigests):
-    Future[Result[void, string]] {.async.} =
+    cfg: RuntimeConfig,
+    forkDigests: ref ForkDigests,
+): Future[Result[void, string]] {.async.} =
   var bootstrap =
     try:
       info "Downloading LC bootstrap"
       awaitWithTimeout(
-        restClient.getLightClientBootstrap(
-          trustedBlockRoot,
-          cfg, forkDigests),
-        restRequestsTimeout
+        restClient.getLightClientBootstrap(trustedBlockRoot, cfg, forkDigests),
+        restRequestsTimeout,
       ):
         return err("Attempt to download LC bootstrap timed out")
     except CatchableError as exc:
@@ -49,22 +48,17 @@ proc gossipLCBootstrapUpdate*(
       let
         slot = forkyObject.header.beacon.slot
         contentKey = encode(bootstrapContentKey(trustedBlockRoot))
-        forkDigest = forkDigestAtEpoch(
-          forkDigests[], epoch(slot), cfg)
-        content = encodeBootstrapForked(
-          forkDigest,
-          bootstrap
-        )
+        forkDigest = forkDigestAtEpoch(forkDigests[], epoch(slot), cfg)
+        content = encodeBootstrapForked(forkDigest, bootstrap)
 
       proc GossipRpcAndClose(): Future[Result[void, string]] {.async.} =
         try:
           let
             contentKeyHex = contentKey.asSeq().toHex()
             peers = await portalRpcClient.portal_beaconRandomGossip(
-                contentKeyHex,
-                content.toHex())
-          info "Beacon LC bootstrap gossiped", peers,
-            contentKey = contentKeyHex
+              contentKeyHex, content.toHex()
+            )
+          info "Beacon LC bootstrap gossiped", peers, contentKey = contentKeyHex
           return ok()
         except CatchableError as e:
           return err("JSON-RPC error: " & $e.msg)
@@ -74,22 +68,25 @@ proc gossipLCBootstrapUpdate*(
         return ok()
       else:
         return err(res.error)
-
     else:
       return err("No LC bootstraps pre Altair")
 
 proc gossipLCUpdates*(
-    restClient: RestClientRef, portalRpcClient: RpcHttpClient,
-    startPeriod: uint64, count: uint64,
-    cfg: RuntimeConfig, forkDigests: ref ForkDigests):
-    Future[Result[void, string]] {.async.} =
+    restClient: RestClientRef,
+    portalRpcClient: RpcHttpClient,
+    startPeriod: uint64,
+    count: uint64,
+    cfg: RuntimeConfig,
+    forkDigests: ref ForkDigests,
+): Future[Result[void, string]] {.async.} =
   var updates =
     try:
       info "Downloading LC updates", count
       awaitWithTimeout(
         restClient.getLightClientUpdatesByRange(
-          SyncCommitteePeriod(startPeriod), count, cfg, forkDigests),
-        restRequestsTimeout
+          SyncCommitteePeriod(startPeriod), count, cfg, forkDigests
+        ),
+        restRequestsTimeout,
       ):
         return err("Attempt to download LC updates timed out")
     except CatchableError as exc:
@@ -104,20 +101,17 @@ proc gossipLCUpdates*(
           contentKey = encode(updateContentKey(period.uint64, count))
           forkDigest = forkDigestAtEpoch(forkDigests[], epoch(slot), cfg)
 
-          content = encodeLightClientUpdatesForked(
-            forkDigest,
-            updates
-          )
+          content = encodeLightClientUpdatesForked(forkDigest, updates)
 
         proc GossipRpcAndClose(): Future[Result[void, string]] {.async.} =
           try:
             let
               contentKeyHex = contentKey.asSeq().toHex()
               peers = await portalRpcClient.portal_beaconRandomGossip(
-                contentKeyHex,
-                content.toHex())
-            info "Beacon LC update gossiped", peers,
-              contentKey = contentKeyHex, period, count
+                contentKeyHex, content.toHex()
+              )
+            info "Beacon LC update gossiped",
+              peers, contentKey = contentKeyHex, period, count
             return ok()
           except CatchableError as e:
             return err("JSON-RPC error: " & $e.msg)
@@ -138,16 +132,16 @@ proc gossipLCUpdates*(
     return err("No updates downloaded")
 
 proc gossipLCFinalityUpdate*(
-    restClient: RestClientRef, portalRpcClient: RpcHttpClient,
-    cfg: RuntimeConfig, forkDigests: ref ForkDigests):
-    Future[Result[Slot, string]] {.async.} =
+    restClient: RestClientRef,
+    portalRpcClient: RpcHttpClient,
+    cfg: RuntimeConfig,
+    forkDigests: ref ForkDigests,
+): Future[Result[Slot, string]] {.async.} =
   var update =
     try:
       info "Downloading LC finality update"
       awaitWithTimeout(
-        restClient.getLightClientFinalityUpdate(
-          cfg, forkDigests),
-        restRequestsTimeout
+        restClient.getLightClientFinalityUpdate(cfg, forkDigests), restRequestsTimeout
       ):
         return err("Attempt to download LC finality update timed out")
     except CatchableError as exc:
@@ -159,21 +153,19 @@ proc gossipLCFinalityUpdate*(
         finalizedSlot = forkyObject.finalized_header.beacon.slot
         contentKey = encode(finalityUpdateContentKey(finalizedSlot.uint64))
         forkDigest = forkDigestAtEpoch(
-          forkDigests[], epoch(forkyObject.attested_header.beacon.slot), cfg)
-        content = encodeFinalityUpdateForked(
-          forkDigest,
-          update
+          forkDigests[], epoch(forkyObject.attested_header.beacon.slot), cfg
         )
+        content = encodeFinalityUpdateForked(forkDigest, update)
 
       proc GossipRpcAndClose(): Future[Result[void, string]] {.async.} =
         try:
           let
             contentKeyHex = contentKey.asSeq().toHex()
             peers = await portalRpcClient.portal_beaconRandomGossip(
-                contentKeyHex,
-                content.toHex())
-          info "Beacon LC finality update gossiped", peers,
-            contentKey = contentKeyHex, finalizedSlot
+              contentKeyHex, content.toHex()
+            )
+          info "Beacon LC finality update gossiped",
+            peers, contentKey = contentKeyHex, finalizedSlot
           return ok()
         except CatchableError as e:
           return err("JSON-RPC error: " & $e.msg)
@@ -183,21 +175,20 @@ proc gossipLCFinalityUpdate*(
         return ok(finalizedSlot)
       else:
         return err(res.error)
-
     else:
       return err("No LC updates pre Altair")
 
 proc gossipLCOptimisticUpdate*(
-    restClient: RestClientRef, portalRpcClient: RpcHttpClient,
-    cfg: RuntimeConfig, forkDigests: ref ForkDigests):
-    Future[Result[Slot, string]] {.async.} =
+    restClient: RestClientRef,
+    portalRpcClient: RpcHttpClient,
+    cfg: RuntimeConfig,
+    forkDigests: ref ForkDigests,
+): Future[Result[Slot, string]] {.async.} =
   var update =
     try:
       info "Downloading LC optimistic update"
       awaitWithTimeout(
-        restClient.getLightClientOptimisticUpdate(
-          cfg, forkDigests),
-        restRequestsTimeout
+        restClient.getLightClientOptimisticUpdate(cfg, forkDigests), restRequestsTimeout
       ):
         return err("Attempt to download LC optimistic update timed out")
     except CatchableError as exc:
@@ -209,21 +200,19 @@ proc gossipLCOptimisticUpdate*(
         slot = forkyObject.signature_slot
         contentKey = encode(optimisticUpdateContentKey(slot.uint64))
         forkDigest = forkDigestAtEpoch(
-          forkDigests[], epoch(forkyObject.attested_header.beacon.slot), cfg)
-        content = encodeOptimisticUpdateForked(
-          forkDigest,
-          update
+          forkDigests[], epoch(forkyObject.attested_header.beacon.slot), cfg
         )
+        content = encodeOptimisticUpdateForked(forkDigest, update)
 
       proc GossipRpcAndClose(): Future[Result[void, string]] {.async.} =
         try:
           let
             contentKeyHex = contentKey.asSeq().toHex()
             peers = await portalRpcClient.portal_beaconRandomGossip(
-                contentKeyHex,
-                content.toHex())
-          info "Beacon LC optimistic update gossiped", peers,
-            contentKey = contentKeyHex, slot
+              contentKeyHex, content.toHex()
+            )
+          info "Beacon LC optimistic update gossiped",
+            peers, contentKey = contentKeyHex, slot
 
           return ok()
         except CatchableError as e:
@@ -234,6 +223,5 @@ proc gossipLCOptimisticUpdate*(
         return ok(slot)
       else:
         return err(res.error)
-
     else:
       return err("No LC updates pre Altair")

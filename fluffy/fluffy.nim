@@ -9,58 +9,66 @@
 
 import
   std/os,
-  confutils, confutils/std/net, chronicles, chronicles/topics_registry,
-  chronos, metrics, metrics/chronos_httpserver, json_rpc/clients/httpclient,
-  json_rpc/rpcproxy, stew/[byteutils, io2, results],
-  eth/keys, eth/net/nat,
+  confutils,
+  confutils/std/net,
+  chronicles,
+  chronicles/topics_registry,
+  chronos,
+  metrics,
+  metrics/chronos_httpserver,
+  json_rpc/clients/httpclient,
+  json_rpc/rpcproxy,
+  stew/[byteutils, io2, results],
+  eth/keys,
+  eth/net/nat,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   beacon_chain/beacon_clock,
   beacon_chain/spec/forks,
   beacon_chain/spec/datatypes/altair,
   beacon_chain/gossip_processing/light_client_processor,
-  ./conf, ./network_metadata, ./common/common_utils,
-  ./rpc/[rpc_web3_api, rpc_eth_api, rpc_discovery_api, rpc_portal_api,
-    rpc_portal_debug_api],
+  ./conf,
+  ./network_metadata,
+  ./common/common_utils,
+  ./rpc/
+    [rpc_web3_api, rpc_eth_api, rpc_discovery_api, rpc_portal_api, rpc_portal_debug_api],
   ./network/state/[state_network, state_content],
   ./network/history/[history_network, history_content],
-  ./network/beacon/[
-    beacon_init_loader,
-    beacon_light_client,
-  ],
+  ./network/beacon/[beacon_init_loader, beacon_light_client],
   ./network/wire/[portal_stream, portal_protocol_config],
   ./eth_data/history_data_ssz_e2s,
   ./database/content_db,
-  ./version, ./logging
+  ./version,
+  ./logging
 
-chronicles.formatIt(IoErrorCode): $it
+chronicles.formatIt(IoErrorCode):
+  $it
 
 # Application callbacks used when new finalized header or optimistic header is
 # available.
 proc onFinalizedHeader(
-    lightClient: LightClient, finalizedHeader: ForkedLightClientHeader) =
+    lightClient: LightClient, finalizedHeader: ForkedLightClientHeader
+) =
   withForkyHeader(finalizedHeader):
     when lcDataFork > LightClientDataFork.None:
-      info "New LC finalized header",
-        finalized_header = shortLog(forkyHeader)
+      info "New LC finalized header", finalized_header = shortLog(forkyHeader)
 
 proc onOptimisticHeader(
-    lightClient: LightClient, optimisticHeader: ForkedLightClientHeader) =
+    lightClient: LightClient, optimisticHeader: ForkedLightClientHeader
+) =
   withForkyHeader(optimisticHeader):
     when lcDataFork > LightClientDataFork.None:
-      info "New LC optimistic header",
-        optimistic_header = shortLog(forkyHeader)
+      info "New LC optimistic header", optimistic_header = shortLog(forkyHeader)
 
 proc run(config: PortalConf) {.raises: [CatchableError].} =
   setupLogging(config.logLevel, config.logStdout)
 
-  notice "Launching Fluffy",
-    version = fullVersionStr, cmdParams = commandLineParams()
+  notice "Launching Fluffy", version = fullVersionStr, cmdParams = commandLineParams()
 
   # Make sure dataDir exists
   let pathExists = createPath(config.dataDir.string)
   if pathExists.isErr():
-    fatal "Failed to create data directory", dataDir = config.dataDir,
-      error = pathExists.error
+    fatal "Failed to create data directory",
+      dataDir = config.dataDir, error = pathExists.error
     quit 1
 
   let
@@ -69,11 +77,12 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
     udpPort = Port(config.udpPort)
     # TODO: allow for no TCP port mapping!
     (extIp, _, extUdpPort) =
-      try: setupAddress(config.nat,
-        config.listenAddress, udpPort, udpPort, "fluffy")
-      except CatchableError as exc: raise exc
-      # TODO: Ideally we don't have the Exception here
-      except Exception as exc: raiseAssert exc.msg
+      try:
+        setupAddress(config.nat, config.listenAddress, udpPort, udpPort, "fluffy")
+      except CatchableError as exc:
+        raise exc # TODO: Ideally we don't have the Exception here
+      except Exception as exc:
+        raiseAssert exc.msg
     (netkey, newNetKey) =
       if config.networkKey.isSome():
         (config.networkKey.get(), true)
@@ -101,34 +110,42 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
     discard
 
   let
-    discoveryConfig = DiscoveryConfig.init(
-      config.tableIpLimit, config.bucketIpLimit, config.bitsPerHop)
+    discoveryConfig =
+      DiscoveryConfig.init(config.tableIpLimit, config.bucketIpLimit, config.bitsPerHop)
     d = newProtocol(
       netkey,
-      extIp, none(Port), extUdpPort,
+      extIp,
+      none(Port),
+      extUdpPort,
       # Note: The addition of default clientInfo to the ENR is a temporary
       # measure to easily identify & debug the clients used in the testnet.
       # Might make this into a, default off, cli option.
       localEnrFields = {"c": enrClientInfoShort},
       bootstrapRecords = bootstrapRecords,
-      previousRecord = # TODO: discv5/enr code still uses Option, to be changed.
+      previousRecord =
+        # TODO: discv5/enr code still uses Option, to be changed.
         if previousEnr.isSome():
           some(previousEnr.get())
         else:
-          none(enr.Record),
-      bindIp = bindIp, bindPort = udpPort,
+          none(enr.Record)
+      ,
+      bindIp = bindIp,
+      bindPort = udpPort,
       enrAutoUpdate = config.enrAutoUpdate,
       config = discoveryConfig,
-      rng = rng)
+      rng = rng,
+    )
 
   d.open()
 
   # Force pruning
   if config.forcePrune:
-    let db = ContentDB.new(config.dataDir / "db" / "contentdb_" &
-      d.localNode.id.toBytesBE().toOpenArray(0, 8).toHex(),
+    let db = ContentDB.new(
+      config.dataDir / "db" / "contentdb_" &
+        d.localNode.id.toBytesBE().toOpenArray(0, 8).toHex(),
       storageCapacity = config.storageCapacityMB * 1_000_000,
-      manualCheckpoint = true)
+      manualCheckpoint = true,
+    )
 
     let radius =
       if config.radiusConfig.kind == Static:
@@ -153,25 +170,29 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
   # This is done because the content in the db is dependant on the `NodeId` and
   # the selected `Radius`.
   let
-    db = ContentDB.new(config.dataDir / "db" / "contentdb_" &
-      d.localNode.id.toBytesBE().toOpenArray(0, 8).toHex(),
-      storageCapacity = config.storageCapacityMB * 1_000_000)
+    db = ContentDB.new(
+      config.dataDir / "db" / "contentdb_" &
+        d.localNode.id.toBytesBE().toOpenArray(0, 8).toHex(),
+      storageCapacity = config.storageCapacityMB * 1_000_000,
+    )
 
     portalConfig = PortalProtocolConfig.init(
-      config.tableIpLimit,
-      config.bucketIpLimit,
-      config.bitsPerHop,
-      config.radiusConfig,
-      config.disablePoke
+      config.tableIpLimit, config.bucketIpLimit, config.bitsPerHop, config.radiusConfig,
+      config.disablePoke,
     )
     streamManager = StreamManager.new(d)
 
     stateNetwork =
       if config.stateNetworkEnabled:
-        Opt.some(StateNetwork.new(
-            d, db, streamManager,
+        Opt.some(
+          StateNetwork.new(
+            d,
+            db,
+            streamManager,
             bootstrapRecords = bootstrapRecords,
-            portalConfig = portalConfig))
+            portalConfig = portalConfig,
+          )
+        )
       else:
         Opt.none(StateNetwork)
 
@@ -183,7 +204,8 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
       # - Start with file containing SSZ encoded accumulator
       if config.accumulatorFile.isSome():
         readAccumulator(string config.accumulatorFile.get()).expect(
-          "Need a file with a valid SSZ encoded accumulator")
+          "Need a file with a valid SSZ encoded accumulator"
+        )
       else:
         # Get it from binary file containing SSZ encoded accumulator
         try:
@@ -191,10 +213,16 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
         except SszError as err:
           raiseAssert "Invalid baked-in accumulator: " & err.msg
 
-    historyNetwork = Opt.some(HistoryNetwork.new(
-      d, db, streamManager, accumulator,
-      bootstrapRecords = bootstrapRecords,
-      portalConfig = portalConfig))
+    historyNetwork = Opt.some(
+      HistoryNetwork.new(
+        d,
+        db,
+        streamManager,
+        accumulator,
+        bootstrapRecords = bootstrapRecords,
+        portalConfig = portalConfig,
+      )
+    )
 
     beaconLightClient =
       # TODO: Currently disabled by default as it is not sufficiently polished.
@@ -203,19 +231,19 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
         let
           # Portal works only over mainnet data currently
           networkData = loadNetworkData("mainnet")
-          beaconDb = BeaconDb.new(
-            networkData, config.dataDir / "db" / "beacon_db")
+          beaconDb = BeaconDb.new(networkData, config.dataDir / "db" / "beacon_db")
           beaconNetwork = BeaconNetwork.new(
             d,
             beaconDb,
             streamManager,
             networkData.forks,
             bootstrapRecords = bootstrapRecords,
-            portalConfig = portalConfig)
+            portalConfig = portalConfig,
+          )
 
         let beaconLightClient = LightClient.new(
-          beaconNetwork, rng, networkData,
-          LightClientFinalizationMode.Optimistic)
+          beaconNetwork, rng, networkData, LightClientFinalizationMode.Optimistic
+        )
 
         beaconLightClient.onFinalizedHeader = onFinalizedHeader
         beaconLightClient.onOptimisticHeader = onOptimisticHeader
@@ -238,7 +266,6 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
     fatal "Failed to write the enr file", file = enrFile
     quit 1
 
-
   ## Start metrics HTTP server
   if config.metricsEnabled:
     let
@@ -248,9 +275,11 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
       url = "http://" & $address & ":" & $port & "/metrics"
     try:
       chronos_httpserver.startMetricsHttpServer($address, port)
-    except CatchableError as exc: raise exc
+    except CatchableError as exc:
+      raise exc
     # TODO: Ideally we don't have the Exception here
-    except Exception as exc: raiseAssert exc.msg
+    except Exception as exc:
+      raiseAssert exc.msg
 
   ## Starting the different networks.
   d.start()
@@ -294,17 +323,22 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
     rpcHttpServerWithProxy.installWeb3ApiHandlers()
     if stateNetwork.isSome():
       rpcHttpServerWithProxy.installPortalApiHandlers(
-        stateNetwork.get().portalProtocol, "state")
+        stateNetwork.get().portalProtocol, "state"
+      )
     if historyNetwork.isSome():
       rpcHttpServerWithProxy.installEthApiHandlers(
-        historyNetwork.get(), beaconLightClient)
+        historyNetwork.get(), beaconLightClient
+      )
       rpcHttpServerWithProxy.installPortalApiHandlers(
-        historyNetwork.get().portalProtocol, "history")
+        historyNetwork.get().portalProtocol, "history"
+      )
       rpcHttpServerWithProxy.installPortalDebugApiHandlers(
-        historyNetwork.get().portalProtocol, "history")
+        historyNetwork.get().portalProtocol, "history"
+      )
     if beaconLightClient.isSome():
       rpcHttpServerWithProxy.installPortalApiHandlers(
-        beaconLightClient.get().network.portalProtocol, "beacon")
+        beaconLightClient.get().network.portalProtocol, "beacon"
+      )
     # TODO: Test proxy with remote node over HTTPS
     waitFor rpcHttpServerWithProxy.start()
 
@@ -314,7 +348,7 @@ when isMainModule:
   {.pop.}
   let config = PortalConf.load(
     version = clientName & " " & fullVersionStr & "\p\p" & nimBanner,
-    copyrightBanner = copyrightBanner
+    copyrightBanner = copyrightBanner,
   )
   {.push raises: [].}
 

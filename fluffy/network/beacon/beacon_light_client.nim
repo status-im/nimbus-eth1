@@ -15,16 +15,15 @@ import
   beacon_chain/beacon_clock,
   "."/[beacon_init_loader, beacon_network, beacon_light_client_manager]
 
-export
-  LightClientFinalizationMode,
-  beacon_network, beacon_light_client_manager
+export LightClientFinalizationMode, beacon_network, beacon_light_client_manager
 
-logScope: topics = "beacon_lc"
+logScope:
+  topics = "beacon_lc"
 
 type
-  LightClientHeaderCallback* =
-    proc(lightClient: LightClient, header: ForkedLightClientHeader) {.
-      gcsafe, raises: [].}
+  LightClientHeaderCallback* = proc(
+    lightClient: LightClient, header: ForkedLightClientHeader
+  ) {.gcsafe, raises: [].}
 
   LightClient* = ref object
     network*: BeaconNetwork
@@ -37,8 +36,7 @@ type
     onFinalizedHeader*, onOptimisticHeader*: LightClientHeaderCallback
     trustedBlockRoot*: Option[Eth2Digest]
 
-func finalizedHeader*(
-    lightClient: LightClient): ForkedLightClientHeader =
+func finalizedHeader*(lightClient: LightClient): ForkedLightClientHeader =
   withForkyStore(lightClient.store[]):
     when lcDataFork > LightClientDataFork.None:
       var header = ForkedLightClientHeader(kind: lcDataFork)
@@ -47,8 +45,7 @@ func finalizedHeader*(
     else:
       default(ForkedLightClientHeader)
 
-func optimisticHeader*(
-    lightClient: LightClient): ForkedLightClientHeader =
+func optimisticHeader*(lightClient: LightClient): ForkedLightClientHeader =
   withForkyStore(lightClient.store[]):
     when lcDataFork > LightClientDataFork.None:
       var header = ForkedLightClientHeader(kind: lcDataFork)
@@ -67,13 +64,15 @@ proc new*(
     forkDigests: ref ForkDigests,
     getBeaconTime: GetBeaconTimeFn,
     genesis_validators_root: Eth2Digest,
-    finalizationMode: LightClientFinalizationMode): T =
+    finalizationMode: LightClientFinalizationMode,
+): T =
   let lightClient = LightClient(
     network: network,
     cfg: cfg,
     forkDigests: forkDigests,
     getBeaconTime: getBeaconTime,
-    store: (ref ForkedLightClientStore)())
+    store: (ref ForkedLightClientStore)(),
+  )
 
   func getTrustedBlockRoot(): Option[Eth2Digest] =
     lightClient.trustedBlockRoot
@@ -83,32 +82,36 @@ proc new*(
 
   proc onFinalizedHeader() =
     if lightClient.onFinalizedHeader != nil:
-      lightClient.onFinalizedHeader(
-        lightClient, lightClient.finalizedHeader)
+      lightClient.onFinalizedHeader(lightClient, lightClient.finalizedHeader)
 
   proc onOptimisticHeader() =
     if lightClient.onOptimisticHeader != nil:
-      lightClient.onOptimisticHeader(
-        lightClient, lightClient.optimisticHeader)
+      lightClient.onOptimisticHeader(lightClient, lightClient.optimisticHeader)
 
   lightClient.processor = LightClientProcessor.new(
-    dumpEnabled, dumpDirInvalid, dumpDirIncoming,
-    cfg, genesis_validators_root, finalizationMode,
-    lightClient.store, getBeaconTime, getTrustedBlockRoot,
-    onStoreInitialized, onFinalizedHeader, onOptimisticHeader)
+    dumpEnabled, dumpDirInvalid, dumpDirIncoming, cfg, genesis_validators_root,
+    finalizationMode, lightClient.store, getBeaconTime, getTrustedBlockRoot,
+    onStoreInitialized, onFinalizedHeader, onOptimisticHeader,
+  )
 
-  proc lightClientVerifier(obj: SomeForkedLightClientObject):
-      Future[Result[void, VerifierError]] =
-    let resfut = Future[Result[void, VerifierError]].Raising([CancelledError]).init("lightClientVerifier")
+  proc lightClientVerifier(
+      obj: SomeForkedLightClientObject
+  ): Future[Result[void, VerifierError]] =
+    let resfut = Future[Result[void, VerifierError]].Raising([CancelledError]).init(
+        "lightClientVerifier"
+      )
     lightClient.processor[].addObject(MsgSource.gossip, obj, resfut)
     resfut
 
   proc bootstrapVerifier(obj: ForkedLightClientBootstrap): auto =
     lightClientVerifier(obj)
+
   proc updateVerifier(obj: ForkedLightClientUpdate): auto =
     lightClientVerifier(obj)
+
   proc finalityVerifier(obj: ForkedLightClientFinalityUpdate): auto =
     lightClientVerifier(obj)
+
   proc optimisticVerifier(obj: ForkedLightClientOptimisticUpdate): auto =
     lightClientVerifier(obj)
 
@@ -137,10 +140,10 @@ proc new*(
         GENESIS_SLOT
 
   lightClient.manager = LightClientManager.init(
-    lightClient.network, rng, getTrustedBlockRoot,
-    bootstrapVerifier, updateVerifier, finalityVerifier, optimisticVerifier,
-    isLightClientStoreInitialized, isNextSyncCommitteeKnown,
-    getFinalizedSlot, getOptimisticSlot, getBeaconTime)
+    lightClient.network, rng, getTrustedBlockRoot, bootstrapVerifier, updateVerifier,
+    finalityVerifier, optimisticVerifier, isLightClientStoreInitialized,
+    isNextSyncCommitteeKnown, getFinalizedSlot, getOptimisticSlot, getBeaconTime,
+  )
 
   lightClient
 
@@ -149,16 +152,24 @@ proc new*(
     network: BeaconNetwork,
     rng: ref HmacDrbgContext,
     networkData: NetworkInitData,
-    finalizationMode: LightClientFinalizationMode): T =
+    finalizationMode: LightClientFinalizationMode,
+): T =
   let
     getBeaconTime = networkData.clock.getBeaconTimeFn()
     forkDigests = newClone networkData.forks
 
   LightClient.new(
-    network, rng,
-    dumpEnabled = false, dumpDirInvalid = ".", dumpDirIncoming = ".",
-    networkData.metadata.cfg, forkDigests, getBeaconTime,
-    networkData.genesis_validators_root, finalizationMode)
+    network,
+    rng,
+    dumpEnabled = false,
+    dumpDirInvalid = ".",
+    dumpDirIncoming = ".",
+    networkData.metadata.cfg,
+    forkDigests,
+    getBeaconTime,
+    networkData.genesis_validators_root,
+    finalizationMode,
+  )
 
 proc start*(lightClient: LightClient) =
   notice "Starting beacon light client",
@@ -168,6 +179,6 @@ proc start*(lightClient: LightClient) =
 proc resetToFinalizedHeader*(
     lightClient: LightClient,
     header: ForkedLightClientHeader,
-    current_sync_committee: altair.SyncCommittee) =
+    current_sync_committee: altair.SyncCommittee,
+) =
   lightClient.processor[].resetToFinalizedHeader(header, current_sync_committee)
-

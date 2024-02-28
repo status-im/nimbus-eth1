@@ -38,18 +38,15 @@ declareCounter portal_pruning_counter,
   labels = ["protocol_id"]
 
 declareGauge portal_pruning_deleted_elements,
-  "Number of elements deleted in the last pruning",
-  labels = ["protocol_id"]
+  "Number of elements deleted in the last pruning", labels = ["protocol_id"]
 
 const
   contentDeletionFraction = 0.05 ## 5% of the content will be deleted when the
   ## storage capacity is hit and radius gets adjusted.
 
 type
-  RowInfo = tuple
-    contentId: array[32, byte]
-    payloadLength: int64
-    distance: array[32, byte]
+  RowInfo =
+    tuple[contentId: array[32, byte], payloadLength: int64, distance: array[32, byte]]
 
   ContentDB* = ref object
     backend: SqStoreRef
@@ -66,7 +63,8 @@ type
     largestDistanceStmt: SqliteStmt[array[32, byte], array[32, byte]]
 
   PutResultType* = enum
-    ContentStored, DbPruned
+    ContentStored
+    DbPruned
 
   PutResult* = object
     case kind*: PutResultType
@@ -83,56 +81,65 @@ template expectDb(x: auto): untyped =
   x.expect("working database (disk broken/full?)")
 
 proc new*(
-    T: type ContentDB, path: string, storageCapacity: uint64,
-    inMemory = false, manualCheckpoint = false): ContentDB =
+    T: type ContentDB,
+    path: string,
+    storageCapacity: uint64,
+    inMemory = false,
+    manualCheckpoint = false,
+): ContentDB =
   doAssert(storageCapacity <= uint64(int64.high))
 
   let db =
     if inMemory:
       SqStoreRef.init("", "fluffy-test", inMemory = true).expect(
-        "working database (out of memory?)")
+        "working database (out of memory?)"
+      )
     else:
       SqStoreRef.init(path, "fluffy", manualCheckpoint = false).expectDb()
 
   db.createCustomFunction("xorDistance", 2, xorDistance).expect(
-    "Custom function xorDistance creation OK")
+    "Custom function xorDistance creation OK"
+  )
 
   db.createCustomFunction("isInRadius", 3, isInRadius).expect(
-    "Custom function isInRadius creation OK")
+    "Custom function isInRadius creation OK"
+  )
 
   let sizeStmt = db.prepareStmt(
     "SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size();",
-    NoParams, int64)[]
+    NoParams, int64,
+  )[]
 
   let unusedSizeStmt = db.prepareStmt(
     "SELECT freelist_count * page_size as size FROM pragma_freelist_count(), pragma_page_size();",
-    NoParams, int64)[]
+    NoParams, int64,
+  )[]
 
-  let vacuumStmt = db.prepareStmt(
-    "VACUUM;",
-    NoParams, void)[]
+  let vacuumStmt = db.prepareStmt("VACUUM;", NoParams, void)[]
 
   let kvStore = kvStore db.openKvStore().expectDb()
 
-  let contentSizeStmt = db.prepareStmt(
-    "SELECT SUM(length(value)) FROM kvstore",
-    NoParams, int64)[]
+  let contentSizeStmt =
+    db.prepareStmt("SELECT SUM(length(value)) FROM kvstore", NoParams, int64)[]
 
-  let contentCountStmt = db.prepareStmt(
-    "SELECT COUNT(key) FROM kvstore;",
-    NoParams, int64)[]
+  let contentCountStmt =
+    db.prepareStmt("SELECT COUNT(key) FROM kvstore;", NoParams, int64)[]
 
   let getAllOrderedByDistanceStmt = db.prepareStmt(
     "SELECT key, length(value), xorDistance(?, key) as distance FROM kvstore ORDER BY distance DESC",
-    array[32, byte], RowInfo)[]
+    array[32, byte],
+    RowInfo,
+  )[]
 
   let deleteOutOfRadiusStmt = db.prepareStmt(
     "DELETE FROM kvstore WHERE isInRadius(?, key, ?) == 0",
-    (array[32, byte], array[32, byte]), void)[]
+    (array[32, byte], array[32, byte]),
+    void,
+  )[]
 
   let largestDistanceStmt = db.prepareStmt(
-    "SELECT max(xorDistance(?, key)) FROM kvstore",
-    array[32, byte], array[32, byte])[]
+    "SELECT max(xorDistance(?, key)) FROM kvstore", array[32, byte], array[32, byte]
+  )[]
 
   ContentDB(
     kv: kvStore,
@@ -146,7 +153,7 @@ proc new*(
     contentCountStmt: contentCountStmt,
     getAllOrderedByDistanceStmt: getAllOrderedByDistanceStmt,
     deleteOutOfRadiusStmt: deleteOutOfRadiusStmt,
-    largestDistanceStmt: largestDistanceStmt
+    largestDistanceStmt: largestDistanceStmt,
   )
 
 template disposeSafe(s: untyped): untyped =
@@ -169,7 +176,8 @@ proc close*(db: ContentDB) =
 
 proc get(kv: KvStoreRef, key: openArray[byte]): Opt[seq[byte]] =
   var res: Opt[seq[byte]]
-  proc onData(data: openArray[byte]) = res = Opt.some(@data)
+  proc onData(data: openArray[byte]) =
+    res = Opt.some(@data)
 
   discard kv.get(key, onData).expectDb()
 
@@ -200,8 +208,7 @@ proc del(db: ContentDB, key: openArray[byte]) =
   # TODO: Do we want to return the bool here too?
   discard db.kv.del(key).expectDb()
 
-proc getSszDecoded(
-    db: ContentDB, key: openArray[byte], T: type auto): Opt[T] =
+proc getSszDecoded(db: ContentDB, key: openArray[byte], T: type auto): Opt[T] =
   db.kv.getSszDecoded(key, T)
 
 ## Public ContentId based ContentDB calls
@@ -242,16 +249,20 @@ proc size*(db: ContentDB): int64 =
   ## to the way how deleting works in sqlite.
   ## Good description can be found in: https://www.sqlite.org/lang_vacuum.html
   var size: int64 = 0
-  discard (db.sizeStmt.exec do(res: int64):
-    size = res).expectDb()
+  discard (
+    db.sizeStmt.exec do(res: int64):
+      size = res
+  ).expectDb()
   return size
 
 proc unusedSize(db: ContentDB): int64 =
   ## Returns the total size of the pages which are unused by the database,
   ## i.e they can be re-used for new content.
   var size: int64 = 0
-  discard (db.unusedSizeStmt.exec do(res: int64):
-    size = res).expectDb()
+  discard (
+    db.unusedSizeStmt.exec do(res: int64):
+      size = res
+  ).expectDb()
   return size
 
 proc usedSize*(db: ContentDB): int64 =
@@ -262,30 +273,38 @@ proc usedSize*(db: ContentDB): int64 =
 proc contentSize*(db: ContentDB): int64 =
   ## Returns total size of the content stored in DB.
   var size: int64 = 0
-  discard (db.contentSizeStmt.exec do(res: int64):
-    size = res).expectDb()
+  discard (
+    db.contentSizeStmt.exec do(res: int64):
+      size = res
+  ).expectDb()
   return size
 
 proc contentCount*(db: ContentDB): int64 =
   var count: int64 = 0
-  discard (db.contentCountStmt.exec do(res: int64):
-    count = res).expectDb()
+  discard (
+    db.contentCountStmt.exec do(res: int64):
+      count = res
+  ).expectDb()
   return count
 
 ## Pruning related calls
 
 proc getLargestDistance*(db: ContentDB, localId: UInt256): UInt256 =
   var distanceBytes: array[32, byte]
-  discard (db.largestDistanceStmt.exec(localId.toBytesBE(),
+  discard (
+    db.largestDistanceStmt.exec(
+      localId.toBytesBE(),
       proc(res: array[32, byte]) =
         distanceBytes = res
-      )).expectDb()
+      ,
+    )
+  ).expectDb()
 
   return UInt256.fromBytesBE(distanceBytes)
 
 func estimateNewRadius(
-    currentSize: uint64, storageCapacity: uint64,
-    currentRadius: UInt256): UInt256 =
+    currentSize: uint64, storageCapacity: uint64, currentRadius: UInt256
+): UInt256 =
   let sizeRatio = currentSize div storageCapacity
   if sizeRatio > 0:
     currentRadius div sizeRatio.stuint(256)
@@ -296,18 +315,14 @@ func estimateNewRadius*(db: ContentDB, currentRadius: UInt256): UInt256 =
   estimateNewRadius(uint64(db.usedSize()), db.storageCapacity, currentRadius)
 
 proc deleteContentFraction*(
-  db: ContentDB,
-  target: UInt256,
-  fraction: float64): (UInt256, int64, int64, int64) =
+    db: ContentDB, target: UInt256, fraction: float64
+): (UInt256, int64, int64, int64) =
   ## Deletes at most `fraction` percent of content from the database.
   ## The content furthest from the provided `target` is deleted first.
   # TODO: The usage of `db.contentSize()` for the deletion calculation versus
   # `db.usedSize()` for the pruning threshold leads sometimes to some unexpected
   # results of how much content gets up deleted.
-  doAssert(
-    fraction > 0 and fraction < 1,
-    "Deleted fraction should be > 0 and < 1"
-  )
+  doAssert(fraction > 0 and fraction < 1, "Deleted fraction should be > 0 and < 1")
 
   let totalContentSize = db.contentSize()
   let bytesToDelete = int64(fraction * float64(totalContentSize))
@@ -326,7 +341,7 @@ proc deleteContentFraction*(
         UInt256.fromBytesBE(ri.distance),
         deletedBytes,
         totalContentSize,
-        deletedElements
+        deletedElements,
       )
 
 proc reclaimSpace*(db: ContentDB): void =
@@ -337,11 +352,12 @@ proc reclaimSpace*(db: ContentDB): void =
   ## the start of db to leave it up to sqlite to clean up.
   db.vacuumStmt.exec().expectDb()
 
-proc deleteContentOutOfRadius*(
-    db: ContentDB, localId: UInt256, radius: UInt256) =
+proc deleteContentOutOfRadius*(db: ContentDB, localId: UInt256, radius: UInt256) =
   ## Deletes all content that falls outside of the given radius range.
-  db.deleteOutOfRadiusStmt.exec(
-    (localId.toBytesBE(), radius.toBytesBE())).expect("SQL query OK")
+
+  db.deleteOutOfRadiusStmt.exec((localId.toBytesBE(), radius.toBytesBE())).expect(
+    "SQL query OK"
+  )
 
 proc forcePrune*(db: ContentDB, localId: UInt256, radius: UInt256) =
   ## Force prune the database to a statically set radius. This will also run
@@ -361,10 +377,8 @@ proc forcePrune*(db: ContentDB, localId: UInt256, radius: UInt256) =
   notice "Finished database pruning"
 
 proc put*(
-    db: ContentDB,
-    key: ContentId,
-    value: openArray[byte],
-    target: UInt256): PutResult =
+    db: ContentDB, key: ContentId, value: openArray[byte], target: UInt256
+): PutResult =
   db.put(key, value)
 
   # The used size is used as pruning threshold. This means that the database
@@ -393,12 +407,7 @@ proc put*(
     # in the trend of:
     # "SELECT key FROM kvstore ORDER BY xorDistance(?, key) DESC LIMIT 1"
     # Potential adjusting the LIMIT for how many items require deletion.
-    let (
-      distanceOfFurthestElement,
-      deletedBytes,
-      totalContentSize,
-      deletedElements
-    ) =
+    let (distanceOfFurthestElement, deletedBytes, totalContentSize, deletedElements) =
       db.deleteContentFraction(target, contentDeletionFraction)
 
     let deletedFraction = float64(deletedBytes) / float64(totalContentSize)
@@ -408,12 +417,12 @@ proc put*(
       kind: DbPruned,
       distanceOfFurthestElement: distanceOfFurthestElement,
       deletedFraction: deletedFraction,
-      deletedElements: deletedElements)
+      deletedElements: deletedElements,
+    )
 
 proc adjustRadius(
-    p: PortalProtocol,
-    deletedFraction: float64,
-    distanceOfFurthestElement: UInt256) =
+    p: PortalProtocol, deletedFraction: float64, distanceOfFurthestElement: UInt256
+) =
   # Invert fraction as the UInt256 implementation does not support
   # multiplication by float
   let invertedFractionAsInt = int64(1.0 / deletedFraction)
@@ -426,9 +435,7 @@ proc adjustRadius(
   let newRadius = max(scaledRadius, distanceOfFurthestElement)
 
   info "Database radius adjusted",
-    oldRadius = p.dataRadius,
-    newRadius = newRadius,
-    distanceOfFurthestElement
+    oldRadius = p.dataRadius, newRadius = newRadius, distanceOfFurthestElement
 
   # Both scaledRadius and distanceOfFurthestElement are smaller than current
   # dataRadius, so the radius will constantly decrease through the node its
@@ -445,42 +452,41 @@ proc createGetHandler*(db: ContentDB): DbGetHandler =
   )
 
 proc createStoreHandler*(
-    db: ContentDB, cfg: RadiusConfig, p: PortalProtocol): DbStoreHandler =
-  return (proc(
-      contentKey: ByteList,
-      contentId: ContentId,
-      content: seq[byte]) {.raises: [], gcsafe.} =
-    # always re-check that the key is in the node range to make sure only
-    # content in range is stored.
-    # TODO: current silent assumption is that both ContentDB and PortalProtocol
-    # are using the same xor distance function
-    if p.inRange(contentId):
-      case cfg.kind:
-      of Dynamic:
-        # In case of dynamic radius setting we obey storage limits and adjust
-        # radius to store network fraction corresponding to those storage limits.
-        let res = db.put(contentId, content, p.localNode.id)
-        if res.kind == DbPruned:
-          portal_pruning_counter.inc(labelValues = [$p.protocolId])
-          portal_pruning_deleted_elements.set(
-            res.deletedElements.int64,
-            labelValues = [$p.protocolId]
-          )
+    db: ContentDB, cfg: RadiusConfig, p: PortalProtocol
+): DbStoreHandler =
+  return (
+    proc(
+        contentKey: ByteList, contentId: ContentId, content: seq[byte]
+    ) {.raises: [], gcsafe.} =
+      # always re-check that the key is in the node range to make sure only
+      # content in range is stored.
+      # TODO: current silent assumption is that both ContentDB and PortalProtocol
+      # are using the same xor distance function
+      if p.inRange(contentId):
+        case cfg.kind
+        of Dynamic:
+          # In case of dynamic radius setting we obey storage limits and adjust
+          # radius to store network fraction corresponding to those storage limits.
+          let res = db.put(contentId, content, p.localNode.id)
+          if res.kind == DbPruned:
+            portal_pruning_counter.inc(labelValues = [$p.protocolId])
+            portal_pruning_deleted_elements.set(
+              res.deletedElements.int64, labelValues = [$p.protocolId]
+            )
 
-          if res.deletedFraction > 0.0:
-            p.adjustRadius(res.deletedFraction, res.distanceOfFurthestElement)
-          else:
-            # Note:
-            # This can occur when the furthest content is bigger than the fraction
-            # size. This is unlikely to happen as it would require either very
-            # small storage capacity or a very small `contentDeletionFraction`
-            # combined with some big content.
-            info "Database pruning attempt resulted in no content deleted"
-            return
-
-      of Static:
-        # If the config is set statically, radius is not adjusted, and is kept
-        # constant thorugh node life time, also database max size is disabled
-        # so we will effectivly store fraction of the network
-        db.put(contentId, content)
+            if res.deletedFraction > 0.0:
+              p.adjustRadius(res.deletedFraction, res.distanceOfFurthestElement)
+            else:
+              # Note:
+              # This can occur when the furthest content is bigger than the fraction
+              # size. This is unlikely to happen as it would require either very
+              # small storage capacity or a very small `contentDeletionFraction`
+              # combined with some big content.
+              info "Database pruning attempt resulted in no content deleted"
+              return
+        of Static:
+          # If the config is set statically, radius is not adjusted, and is kept
+          # constant thorugh node life time, also database max size is disabled
+          # so we will effectivly store fraction of the network
+          db.put(contentId, content)
   )

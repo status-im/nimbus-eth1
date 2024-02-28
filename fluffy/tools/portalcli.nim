@@ -7,8 +7,14 @@
 
 import
   std/[options, strutils, tables],
-  confutils, confutils/std/net, chronicles, chronicles/topics_registry,
-  chronos, metrics, metrics/chronos_httpserver, stew/[byteutils, results],
+  confutils,
+  confutils/std/net,
+  chronicles,
+  chronicles/topics_registry,
+  chronos,
+  metrics,
+  metrics/chronos_httpserver,
+  stew/[byteutils, results],
   nimcrypto/[hash, sha2],
   eth/[keys, net/nat],
   eth/p2p/discoveryv5/[enr, node],
@@ -37,109 +43,120 @@ type
 
   PortalCliConf* = object
     logLevel* {.
-      defaultValue: LogLevel.DEBUG
-      defaultValueDesc: $LogLevel.DEBUG
-      desc: "Sets the log level"
-      name: "log-level" .}: LogLevel
+      defaultValue: LogLevel.DEBUG,
+      defaultValueDesc: $LogLevel.DEBUG,
+      desc: "Sets the log level",
+      name: "log-level"
+    .}: LogLevel
 
-    udpPort* {.
-      defaultValue: 9009
-      desc: "UDP listening port"
-      name: "udp-port" .}: uint16
+    udpPort* {.defaultValue: 9009, desc: "UDP listening port", name: "udp-port".}:
+      uint16
 
     listenAddress* {.
-      defaultValue: defaultListenAddress
-      defaultValueDesc: $defaultListenAddressDesc
-      desc: "Listening address for the Discovery v5 traffic"
-      name: "listen-address" }: IpAddress
+      defaultValue: defaultListenAddress,
+      defaultValueDesc: $defaultListenAddressDesc,
+      desc: "Listening address for the Discovery v5 traffic",
+      name: "listen-address"
+    .}: IpAddress
 
     # Note: This will add bootstrap nodes for both Discovery v5 network and each
     # enabled Portal network. No distinction is made on bootstrap nodes per
     # specific network.
     bootstrapNodes* {.
-      desc: "ENR URI of node to bootstrap Discovery v5 and the Portal networks from. Argument may be repeated"
-      name: "bootstrap-node" .}: seq[Record]
+      desc:
+        "ENR URI of node to bootstrap Discovery v5 and the Portal networks from. Argument may be repeated",
+      name: "bootstrap-node"
+    .}: seq[Record]
 
     bootstrapNodesFile* {.
-      desc: "Specifies a line-delimited file of ENR URIs to bootstrap Discovery v5 and Portal networks from"
-      defaultValue: ""
-      name: "bootstrap-file" }: InputFile
+      desc:
+        "Specifies a line-delimited file of ENR URIs to bootstrap Discovery v5 and Portal networks from",
+      defaultValue: "",
+      name: "bootstrap-file"
+    .}: InputFile
 
     nat* {.
-      desc: "Specify method to use for determining public address. " &
-            "Must be one of: any, none, upnp, pmp, extip:<IP>"
-      defaultValue: NatConfig(hasExtIp: false, nat: NatAny)
-      defaultValueDesc: "any"
-      name: "nat" .}: NatConfig
+      desc:
+        "Specify method to use for determining public address. " &
+        "Must be one of: any, none, upnp, pmp, extip:<IP>",
+      defaultValue: NatConfig(hasExtIp: false, nat: NatAny),
+      defaultValueDesc: "any",
+      name: "nat"
+    .}: NatConfig
 
     enrAutoUpdate* {.
-      defaultValue: false
-      desc: "Discovery can automatically update its ENR with the IP address " &
-            "and UDP port as seen by other nodes it communicates with. " &
-            "This option allows to enable/disable this functionality"
-      name: "enr-auto-update" .}: bool
+      defaultValue: false,
+      desc:
+        "Discovery can automatically update its ENR with the IP address " &
+        "and UDP port as seen by other nodes it communicates with. " &
+        "This option allows to enable/disable this functionality",
+      name: "enr-auto-update"
+    .}: bool
 
     networkKey* {.
       desc: "Private key (secp256k1) for the p2p network, hex encoded.",
-      defaultValue: PrivateKey.random(keys.newRng()[])
-      defaultValueDesc: "random"
-      name: "network-key" .}: PrivateKey
+      defaultValue: PrivateKey.random(keys.newRng()[]),
+      defaultValueDesc: "random",
+      name: "network-key"
+    .}: PrivateKey
 
     metricsEnabled* {.
-      defaultValue: false
-      desc: "Enable the metrics server"
-      name: "metrics" .}: bool
+      defaultValue: false, desc: "Enable the metrics server", name: "metrics"
+    .}: bool
 
     metricsAddress* {.
-      defaultValue: defaultAdminListenAddress
-      defaultValueDesc: $defaultAdminListenAddressDesc
-      desc: "Listening address of the metrics server"
-      name: "metrics-address" .}: IpAddress
+      defaultValue: defaultAdminListenAddress,
+      defaultValueDesc: $defaultAdminListenAddressDesc,
+      desc: "Listening address of the metrics server",
+      name: "metrics-address"
+    .}: IpAddress
 
     metricsPort* {.
-      defaultValue: 8008
-      desc: "Listening HTTP port of the metrics server"
-      name: "metrics-port" .}: Port
+      defaultValue: 8008,
+      desc: "Listening HTTP port of the metrics server",
+      name: "metrics-port"
+    .}: Port
 
     protocolId* {.
-      defaultValue: historyProtocolId
-      desc: "Portal wire protocol id for the network to connect to"
-      name: "protocol-id" .}: PortalProtocolId
+      defaultValue: historyProtocolId,
+      desc: "Portal wire protocol id for the network to connect to",
+      name: "protocol-id"
+    .}: PortalProtocolId
 
     # TODO maybe it is worth defining minimal storage size and throw error if
     # value provided is smaller than minimum
     storageSize* {.
-      desc: "Maximum amount (in bytes) of content which will be stored " &
-            "in local database."
-      defaultValue: defaultStorageSize
-      name: "storage-size" .}: uint32
+      desc:
+        "Maximum amount (in bytes) of content which will be stored " &
+        "in local database.",
+      defaultValue: defaultStorageSize,
+      name: "storage-size"
+    .}: uint32
 
-    case cmd* {.
-      command
-      defaultValue: noCommand }: PortalCmd
+    case cmd* {.command, defaultValue: noCommand.}: PortalCmd
     of noCommand:
       discard
     of ping:
       pingTarget* {.
-        argument
-        desc: "ENR URI of the node to a send ping message"
-        name: "node" .}: Node
+        argument, desc: "ENR URI of the node to a send ping message", name: "node"
+      .}: Node
     of findNodes:
       distance* {.
-        defaultValue: 255
-        desc: "Distance parameter for the findNodes message"
-        name: "distance" .}: uint16
+        defaultValue: 255,
+        desc: "Distance parameter for the findNodes message",
+        name: "distance"
+      .}: uint16
       # TODO: Order here matters as else the help message does not show all the
       # information, see: https://github.com/status-im/nim-confutils/issues/15
       findNodesTarget* {.
-        argument
-        desc: "ENR URI of the node to send a findNodes message"
-        name: "node" .}: Node
+        argument, desc: "ENR URI of the node to send a findNodes message", name: "node"
+      .}: Node
     of findContent:
       findContentTarget* {.
-        argument
-        desc: "ENR URI of the node to send a findContent message"
-        name: "node" .}: Node
+        argument,
+        desc: "ENR URI of the node to send a findContent message",
+        name: "node"
+      .}: Node
 
 proc parseCmdArg*(T: type enr.Record, p: string): T =
   if not fromURI(result, p):
@@ -178,8 +195,7 @@ proc parseCmdArg*(T: type PortalProtocolId, p: string): T =
   try:
     result = byteutils.hexToByteArray(p, 2)
   except ValueError:
-    raise newException(ValueError,
-      "Invalid protocol id, not a valid hex value")
+    raise newException(ValueError, "Invalid protocol id, not a valid hex value")
 
 proc completeCmdArg*(T: type PortalProtocolId, val: string): seq[string] =
   return @[]
@@ -204,8 +220,8 @@ proc run(config: PortalCliConf) =
     bindIp = config.listenAddress
     udpPort = Port(config.udpPort)
     # TODO: allow for no TCP port mapping!
-    (extIp, _, extUdpPort) = setupAddress(config.nat,
-      config.listenAddress, udpPort, udpPort, "portalcli")
+    (extIp, _, extUdpPort) =
+      setupAddress(config.nat, config.listenAddress, udpPort, udpPort, "portalcli")
 
   var bootstrapRecords: seq[Record]
   loadBootstrapFile(string config.bootstrapNodesFile, bootstrapRecords)
@@ -213,11 +229,15 @@ proc run(config: PortalCliConf) =
 
   let d = newProtocol(
     config.networkKey,
-    extIp, none(Port), extUdpPort,
+    extIp,
+    none(Port),
+    extUdpPort,
     bootstrapRecords = bootstrapRecords,
-    bindIp = bindIp, bindPort = udpPort,
+    bindIp = bindIp,
+    bindPort = udpPort,
     enrAutoUpdate = config.enrAutoUpdate,
-    rng = rng)
+    rng = rng,
+  )
 
   d.open()
 
@@ -226,9 +246,14 @@ proc run(config: PortalCliConf) =
     sm = StreamManager.new(d)
     cq = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
     stream = sm.registerNewStream(cq)
-    portal = PortalProtocol.new(d, config.protocolId,
-      testContentIdHandler, createGetHandler(db), stream,
-      bootstrapRecords = bootstrapRecords)
+    portal = PortalProtocol.new(
+      d,
+      config.protocolId,
+      testContentIdHandler,
+      createGetHandler(db),
+      stream,
+      bootstrapRecords = bootstrapRecords,
+    )
 
   portal.dbPut = createStoreHandler(db, defaultRadiusConfig, portal)
 
@@ -240,8 +265,11 @@ proc run(config: PortalCliConf) =
       url = "http://" & $address & ":" & $port & "/metrics"
     try:
       chronos_httpserver.startMetricsHttpServer($address, port)
-    except CatchableError as exc: raise exc
-    except Exception as exc: raiseAssert exc.msg # TODO fix metrics
+    except CatchableError as exc:
+      raise exc
+    except Exception as exc:
+      raiseAssert exc.msg
+      # TODO fix metrics
 
   case config.cmd
   of ping:
@@ -264,14 +292,12 @@ proc run(config: PortalCliConf) =
     # For now just some bogus bytes
     let contentKey = ByteList.init(@[1'u8])
 
-    let foundContent = waitFor portal.findContent(config.findContentTarget,
-      contentKey)
+    let foundContent = waitFor portal.findContent(config.findContentTarget, contentKey)
 
     if foundContent.isOk():
       echo foundContent.get()
     else:
       echo foundContent.error
-
   of noCommand:
     d.start()
     portal.start()

@@ -12,9 +12,13 @@
 
 import
   std/strutils,
-  confutils, chronicles, chronicles/topics_registry, stew/byteutils,
+  confutils,
+  chronicles,
+  chronicles/topics_registry,
+  stew/byteutils,
   eth/common/eth_types,
-  ../../nimbus/rpc/[rpc_types], ../../nimbus/errors,
+  ../../nimbus/rpc/[rpc_types],
+  ../../nimbus/errors,
   ../rpc/eth_rpc_client
 
 type
@@ -22,27 +26,28 @@ type
 
   BlockWalkConf* = object
     logLevel* {.
-      defaultValue: LogLevel.INFO
-      defaultValueDesc: $LogLevel.INFO
-      desc: "Sets the log level"
-      name: "log-level" .}: LogLevel
+      defaultValue: LogLevel.INFO,
+      defaultValueDesc: $LogLevel.INFO,
+      desc: "Sets the log level",
+      name: "log-level"
+    .}: LogLevel
 
     rpcAddress* {.
-      desc: "Address of the JSON-RPC service"
-      defaultValue: "127.0.0.1"
-      name: "rpc-address" .}: string
+      desc: "Address of the JSON-RPC service",
+      defaultValue: "127.0.0.1",
+      name: "rpc-address"
+    .}: string
 
     rpcPort* {.
-      defaultValue: 8545
-      desc: "Port of the JSON-RPC service"
-      name: "rpc-port" .}: uint16
+      defaultValue: 8545, desc: "Port of the JSON-RPC service", name: "rpc-port"
+    .}: uint16
 
     blockHash* {.
-      desc: "The block hash from where to start walking the blocks backwards"
-      name: "block-hash" .}: Hash256
+      desc: "The block hash from where to start walking the blocks backwards",
+      name: "block-hash"
+    .}: Hash256
 
-proc parseCmdArg*(T: type Hash256, p: string): T
-    {.raises: [ValueError].} =
+proc parseCmdArg*(T: type Hash256, p: string): T {.raises: [ValueError].} =
   var hash: Hash256
   try:
     hexToByteArray(p, hash.data)

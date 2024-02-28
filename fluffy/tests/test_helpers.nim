@@ -27,19 +27,23 @@ proc initDiscoveryNode*(
     address: Address,
     bootstrapRecords: openArray[Record] = [],
     localEnrFields: openArray[(string, seq[byte])] = [],
-    previousRecord = none[enr.Record]()): discv5_protocol.Protocol {.raises: [CatchableError].} =
+    previousRecord = none[enr.Record](),
+): discv5_protocol.Protocol {.raises: [CatchableError].} =
   # set bucketIpLimit to allow bucket split
   let config = DiscoveryConfig.init(1000, 24, 5)
 
-  result = newProtocol(privKey,
+  result = newProtocol(
+    privKey,
     some(address.ip),
-    some(address.port), some(address.port),
+    some(address.port),
+    some(address.port),
     bindPort = address.port,
     bootstrapRecords = bootstrapRecords,
     localEnrFields = localEnrFields,
     previousRecord = previousRecord,
     config = config,
-    rng = rng)
+    rng = rng,
+  )
 
   result.open()
 
@@ -51,8 +55,7 @@ proc genByteSeq*(length: int): seq[byte] =
     inc i
   return resultSeq
 
-func buildAccumulator*(
-    headers: seq[BlockHeader]): Result[FinishedAccumulator, string] =
+func buildAccumulator*(headers: seq[BlockHeader]): Result[FinishedAccumulator, string] =
   var accumulator: Accumulator
   for header in headers:
     updateAccumulator(accumulator, header)
@@ -62,8 +65,9 @@ func buildAccumulator*(
 
   err("Not enough headers provided to finish the accumulator")
 
-func buildAccumulatorData*(headers: seq[BlockHeader]):
-    Result[(FinishedAccumulator, seq[EpochAccumulator]), string] =
+func buildAccumulatorData*(
+    headers: seq[BlockHeader]
+): Result[(FinishedAccumulator, seq[EpochAccumulator]), string] =
   var accumulator: Accumulator
   var epochAccumulators: seq[EpochAccumulator]
   for header in headers:
@@ -80,8 +84,8 @@ func buildAccumulatorData*(headers: seq[BlockHeader]):
   err("Not enough headers provided to finish the accumulator")
 
 func buildProof*(
-    header: BlockHeader, epochAccumulators: seq[EpochAccumulator]):
-    Result[AccumulatorProof, string] =
+    header: BlockHeader, epochAccumulators: seq[EpochAccumulator]
+): Result[AccumulatorProof, string] =
   let epochIndex = getEpochIndex(header)
   doAssert(epochIndex < uint64(epochAccumulators.len()))
   let epochAccumulator = epochAccumulators[epochIndex]
@@ -89,9 +93,8 @@ func buildProof*(
   buildProof(header, epochAccumulator)
 
 func buildHeaderWithProof*(
-    header: BlockHeader,
-    epochAccumulators: seq[EpochAccumulator]):
-    Result[BlockHeaderWithProof, string] =
+    header: BlockHeader, epochAccumulators: seq[EpochAccumulator]
+): Result[BlockHeaderWithProof, string] =
   ## Construct the accumulator proof for a specific header.
   ## Returns the block header with the proof
   if header.isPreMerge():
@@ -100,18 +103,15 @@ func buildHeaderWithProof*(
     let epochAccumulator = epochAccumulators[epochIndex]
 
     buildHeaderWithProof(header, epochAccumulator)
-
   else:
     err("Cannot build accumulator proof for post merge header")
 
 func buildHeadersWithProof*(
-    headers: seq[BlockHeader],
-    epochAccumulators: seq[EpochAccumulator]):
-    Result[seq[BlockHeaderWithProof], string] =
+    headers: seq[BlockHeader], epochAccumulators: seq[EpochAccumulator]
+): Result[seq[BlockHeaderWithProof], string] =
   var headersWithProof: seq[BlockHeaderWithProof]
   for header in headers:
-    headersWithProof.add(
-      ? buildHeaderWithProof(header, epochAccumulators))
+    headersWithProof.add(?buildHeaderWithProof(header, epochAccumulators))
 
   ok(headersWithProof)
 
@@ -122,8 +122,9 @@ proc getGenesisAlloc*(filePath: string): GenesisAlloc =
 
   cn.genesis.alloc
 
-proc toState*(alloc: GenesisAlloc):
-    (AccountState, Table[EthAddress, StorageState]) {.raises: [RlpError].} =
+proc toState*(
+    alloc: GenesisAlloc
+): (AccountState, Table[EthAddress, StorageState]) {.raises: [RlpError].} =
   var accountTrie = initHexaryTrie(newMemoryDB())
   var storageStates = initTable[EthAddress, StorageState]()
 
@@ -142,10 +143,11 @@ proc toState*(alloc: GenesisAlloc):
       codeHash = keccakHash(genAccount.code)
 
     let account = Account(
-        nonce: genAccount.nonce,
-        balance: genAccount.balance,
-        storageRoot: storageRoot,
-        codeHash: codeHash)
+      nonce: genAccount.nonce,
+      balance: genAccount.balance,
+      storageRoot: storageRoot,
+      codeHash: codeHash,
+    )
     let key = keccakHash(address).data
     let value = rlp.encode(account)
     accountTrie.put(key, value)

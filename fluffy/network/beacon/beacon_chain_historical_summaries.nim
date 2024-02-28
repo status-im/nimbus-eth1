@@ -14,10 +14,7 @@
 
 {.push raises: [].}
 
-import
-  stew/results,
-  beacon_chain/spec/forks,
-  beacon_chain/spec/datatypes/capella
+import stew/results, beacon_chain/spec/forks, beacon_chain/spec/datatypes/capella
 
 export results
 
@@ -30,19 +27,21 @@ type
     proof*: HistoricalSummariesProof
 
 func buildProof*(
-    state: ForkedHashedBeaconState): Result[HistoricalSummariesProof, string] =
+    state: ForkedHashedBeaconState
+): Result[HistoricalSummariesProof, string] =
   let gIndex = GeneralizedIndex(59) # 31 + 28 = 59
 
   var proof: HistoricalSummariesProof
   withState(state):
-    ? forkyState.data.build_proof(gIndex, proof)
+    ?forkyState.data.build_proof(gIndex, proof)
 
   ok(proof)
 
 func verifyProof*(
     historical_summaries: HistoricalSummaries,
     proof: HistoricalSummariesProof,
-    stateRoot: Digest): bool =
+    stateRoot: Digest,
+): bool =
   let
     gIndex = GeneralizedIndex(59)
     leave = hash_tree_root(historical_summaries)
@@ -50,7 +49,8 @@ func verifyProof*(
   verify_merkle_multiproof(@[leave], proof, @[gIndex], stateRoot)
 
 func verifyProof*(
-    summariesWithProof: HistoricalSummariesWithProof,
-    stateRoot: Digest): bool =
+    summariesWithProof: HistoricalSummariesWithProof, stateRoot: Digest
+): bool =
   verifyProof(
-    summariesWithProof.historical_summaries, summariesWithProof.proof, stateRoot)
+    summariesWithProof.historical_summaries, summariesWithProof.proof, stateRoot
+  )

@@ -8,7 +8,8 @@
 {.used.}
 
 import
-  unittest2, stint,
+  unittest2,
+  stint,
   eth/keys,
   ../network/state/state_content,
   ../database/content_db,
@@ -49,8 +50,7 @@ suite "Content Database":
         db.contains(key) == false
 
   test "ContentDB size":
-    let
-      db = ContentDB.new("", uint32.high, inMemory = true)
+    let db = ContentDB.new("", uint32.high, inMemory = true)
 
     let numBytes = 10000
     let size1 = db.size()
@@ -149,7 +149,8 @@ suite "Content Database":
       rng = newRng()
       db = ContentDB.new("", startCapacity, inMemory = true)
       localId = UInt256.fromHex(
-        "30994892f3e4889d99deb5340050510d1842778acc7a7948adffa475fed51d6e")
+        "30994892f3e4889d99deb5340050510d1842778acc7a7948adffa475fed51d6e"
+      )
       content = genByteSeq(1000)
 
     # Note: We could randomly generate the above localId and the content keys
@@ -174,4 +175,4 @@ suite "Content Database":
 
     let diff = abs(db.size() - int64(db.storageCapacity))
     # Quite a big marging (20%) is added as it is all an approximation.
-    check diff <  int64(float(db.storageCapacity) * 0.20)
+    check diff < int64(float(db.storageCapacity) * 0.20)

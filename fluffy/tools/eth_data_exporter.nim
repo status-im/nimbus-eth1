@@ -41,8 +41,10 @@ import
   confutils,
   stew/[byteutils, io2],
   json_serialization,
-  faststreams, chronicles,
-  eth/[common, rlp], chronos,
+  faststreams,
+  chronicles,
+  eth/[common, rlp],
+  chronos,
   eth/common/eth_types_json_serialization,
   json_rpc/rpcclient,
   snappy,
@@ -57,7 +59,8 @@ import
 from ../network/history/history_network import encode
 from ../../nimbus/utils/utils import calcTxRoot, calcReceiptRoot
 
-chronicles.formatIt(IoErrorCode): $it
+chronicles.formatIt(IoErrorCode):
+  $it
 
 proc downloadHeader(client: RpcClient, i: uint64): BlockHeader =
   let blockNumber = u256(i)
@@ -82,7 +85,7 @@ proc writeHeadersToJson(config: ExporterConf, client: RpcClient) =
   try:
     var writer = JsonWriter[DefaultFlavor].init(fh.s, pretty = true)
     writer.beginRecord()
-    for i in config.startBlock..config.endBlock:
+    for i in config.startBlock .. config.endBlock:
       let blck = client.downloadHeader(i)
       writer.writeHeaderRecord(blck)
       if ((i - config.startBlock) mod 8192) == 0 and i != config.startBlock:
@@ -105,7 +108,7 @@ proc writeBlocksToJson(config: ExporterConf, client: RpcClient) =
   try:
     var writer = JsonWriter[DefaultFlavor].init(fh.s, pretty = true)
     writer.beginRecord()
-    for i in config.startBlock..config.endBlock:
+    for i in config.startBlock .. config.endBlock:
       let blck = downloadBlock(i, client)
       writer.writeBlockRecord(blck.header, blck.body, blck.receipts)
       if ((i - config.startBlock) mod 8192) == 0 and i != config.startBlock:
@@ -128,17 +131,16 @@ proc writeBlocksToDb(config: ExporterConf, client: RpcClient) =
   defer:
     db.close()
 
-  for i in config.startBlock..config.endBlock:
+  for i in config.startBlock .. config.endBlock:
     let
       blck = downloadBlock(i, client)
       blockHash = blck.header.blockHash()
       contentKeyType = BlockKey(blockHash: blockHash)
-      headerKey = encode(ContentKey(
-        contentType: blockHeader, blockHeaderKey: contentKeyType))
-      bodyKey = encode(ContentKey(
-        contentType: blockBody, blockBodyKey: contentKeyType))
-      receiptsKey = encode(
-        ContentKey(contentType: receipts, receiptsKey: contentKeyType))
+      headerKey =
+        encode(ContentKey(contentType: blockHeader, blockHeaderKey: contentKeyType))
+      bodyKey = encode(ContentKey(contentType: blockBody, blockBodyKey: contentKeyType))
+      receiptsKey =
+        encode(ContentKey(contentType: receipts, receiptsKey: contentKeyType))
 
     db.put(headerKey.toContentId(), headerKey.asSeq(), rlp.encode(blck.header))
 
@@ -181,8 +183,8 @@ proc newRpcClient(web3Url: Web3Url): RpcClient =
   client
 
 proc connectRpcClient(
-    client: RpcClient, web3Url: Web3Url):
-    Future[Result[void, string]] {.async.} =
+    client: RpcClient, web3Url: Web3Url
+): Future[Result[void, string]] {.async.} =
   case web3Url.kind
   of HttpUrl:
     try:
@@ -211,7 +213,8 @@ proc cmdExportEra1(config: ExporterConf) =
 
   var era = Era1(config.era)
   while config.eraCount == 0 or era < Era1(config.era) + config.eraCount:
-    defer: era += 1
+    defer:
+      era += 1
 
     let
       startNumber = era.startNumber()
@@ -228,8 +231,10 @@ proc cmdExportEra1(config: ExporterConf) =
 
     var completed = false
     block writeFileBlock:
-      let e2 = openFile(tmpName, {OpenFlags.Write, OpenFlags.Create, OpenFlags.Truncate}).get()
-      defer: discard closeFile(e2)
+      let e2 =
+        openFile(tmpName, {OpenFlags.Write, OpenFlags.Create, OpenFlags.Truncate}).get()
+      defer:
+        discard closeFile(e2)
 
       # TODO: Not checking the result of init, update or finish here, as all
       # error cases are fatal. But maybe we could throw proper errors still.
@@ -237,15 +242,18 @@ proc cmdExportEra1(config: ExporterConf) =
 
       # Header records to build the accumulator root
       var headerRecords: seq[accumulator.HeaderRecord]
-      for blockNumber in startNumber..endNumber:
+      for blockNumber in startNumber .. endNumber:
         let blck =
           try:
             # TODO: Not sure about the errors that can occur here. But the whole
             # block requests over json-rpc should be reworked here (and can be
             # used in the bridge also then)
-            requestBlock(blockNumber.u256, flags = {DownloadReceipts}, client = some(client))
+            requestBlock(
+              blockNumber.u256, flags = {DownloadReceipts}, client = some(client)
+            )
           except CatchableError as e:
-            error "Failed retrieving block, skip creation of era1 file", blockNumber, era, error = e.msg
+            error "Failed retrieving block, skip creation of era1 file",
+              blockNumber, era, error = e.msg
             break writeFileBlock
 
         var ttd: UInt256
@@ -254,12 +262,13 @@ proc cmdExportEra1(config: ExporterConf) =
         except ValueError:
           break writeFileBlock
 
-        headerRecords.add(accumulator.HeaderRecord(
-          blockHash: blck.header.blockHash(),
-          totalDifficulty: ttd))
+        headerRecords.add(
+          accumulator.HeaderRecord(
+            blockHash: blck.header.blockHash(), totalDifficulty: ttd
+          )
+        )
 
-        group.update(
-          e2, blockNumber, blck.header, blck.body, blck.receipts, ttd).get()
+        group.update(e2, blockNumber, blck.header, blck.body, blck.receipts, ttd).get()
 
       accumulatorRoot = getEpochAccumulatorRoot(headerRecords)
 
@@ -292,15 +301,15 @@ proc cmdVerifyEra1(config: ExporterConf) =
   let f = Era1File.open(config.era1FileName).valueOr:
     warn "Failed to open era file", error = error
     quit 1
-  defer: close(f)
+  defer:
+    close(f)
 
   let root = f.verify.valueOr:
     warn "Verification of era file failed", error = error
     quit 1
 
   notice "Era1 file succesfully verified",
-    accumulatorRoot = root.data.to0xHex(),
-    file = config.era1FileName
+    accumulatorRoot = root.data.to0xHex(), file = config.era1FileName
 
 when isMainModule:
   {.pop.}
@@ -329,15 +338,13 @@ when isMainModule:
 
       if (config.endBlock < config.startBlock):
         fatal "Initial block number should be smaller than end block number",
-          startBlock = config.startBlock,
-          endBlock = config.endBlock
+          startBlock = config.startBlock, endBlock = config.endBlock
         quit 1
 
       try:
         exportBlocks(config, client)
       finally:
         waitFor client.close()
-
     of HistoryCmd.exportEpochHeaders:
       let client = newRpcClient(config.web3Url)
       let connectRes = waitFor client.connectRpcClient(config.web3Url)
@@ -349,24 +356,25 @@ when isMainModule:
         # Downloading headers from JSON RPC endpoint
         info "Requesting epoch headers", epoch
         var headers: seq[BlockHeader]
-        for j in 0..<epochSize.uint64:
+        for j in 0 ..< epochSize.uint64:
           debug "Requesting block", number = j
-          let header = client.downloadHeader(epoch*epochSize + j)
+          let header = client.downloadHeader(epoch * epochSize + j)
           headers.add(header)
 
-        let fh = ? openFile(file, {OpenFlags.Write, OpenFlags.Create}).mapErr(toString)
-        defer: discard closeFile(fh)
+        let fh = ?openFile(file, {OpenFlags.Write, OpenFlags.Create}).mapErr(toString)
+        defer:
+          discard closeFile(fh)
 
         info "Writing headers to file", file
         for header in headers:
-          discard ? fh.appendRecord(ExecutionBlockHeaderRecord, rlp.encode(header))
+          discard ?fh.appendRecord(ExecutionBlockHeaderRecord, rlp.encode(header))
 
         ok()
 
       # TODO: Could make the JSON-RPC requests concurrent per epoch.
       # Batching would also be nice but our json-rpc does not support that:
       # https://geth.ethereum.org/docs/rpc/batch
-      for i in config.startEpoch..config.endEpoch:
+      for i in config.startEpoch .. config.endEpoch:
         let file = dataDir / &"mainnet-headers-epoch-{i.uint64:05}.e2s"
 
         if isFile(file):
@@ -377,11 +385,11 @@ when isMainModule:
             error "Failed exporting epoch headers", file, error = res.error
 
       waitFor client.close()
-
     of HistoryCmd.verifyEpochHeaders:
       proc verifyEpochHeaders(file: string, epoch: uint64): Result[void, string] =
-        let fh = ? openFile(file, {OpenFlags.Read}).mapErr(toString)
-        defer: discard closeFile(fh)
+        let fh = ?openFile(file, {OpenFlags.Read}).mapErr(toString)
+        defer:
+          discard closeFile(fh)
 
         var data: seq[byte]
         while true:
@@ -404,41 +412,43 @@ when isMainModule:
 
         ok()
 
-      for i in config.startEpochVerify..config.endEpochVerify:
+      for i in config.startEpochVerify .. config.endEpochVerify:
         let file = dataDir / &"mainnet-headers-epoch-{i.uint64:05}.e2s"
         let res = verifyEpochHeaders(file, i)
         if res.isErr():
           error "Failed verifying epoch headers", file, error = res.error
         else:
           info "Successfully decoded epoch headers", file
-
     of HistoryCmd.exportAccumulatorData:
       # Lets first check if the accumulator file already exists before starting
       # to build it.
       let accumulatorFile = dataDir / config.accumulatorFileName
       if isFile(accumulatorFile):
-        notice "Not building accumulator, file already exists",
-          file = accumulatorFile
+        notice "Not building accumulator, file already exists", file = accumulatorFile
         quit 1
 
       # Lets verify if the necessary files exists before starting to build the
       # accumulator.
-      for i in 0..<preMergeEpochs:
+      for i in 0 ..< preMergeEpochs:
         let file = dataDir / &"mainnet-headers-epoch-{i.uint64:05}.e2s"
         if not isFile(file):
           fatal "Required epoch headers file does not exist", file
           quit 1
 
-      proc buildAccumulator(dataDir: string, writeEpochAccumulators = false):
-          Result[FinishedAccumulator, string] =
+      proc buildAccumulator(
+          dataDir: string, writeEpochAccumulators = false
+      ): Result[FinishedAccumulator, string] =
         var accumulator: Accumulator
-        for i in 0..<preMergeEpochs:
+        for i in 0 ..< preMergeEpochs:
           let file =
-            try: dataDir / &"mainnet-headers-epoch-{i.uint64:05}.e2s"
-            except ValueError as e: raiseAssert e.msg
+            try:
+              dataDir / &"mainnet-headers-epoch-{i.uint64:05}.e2s"
+            except ValueError as e:
+              raiseAssert e.msg
 
-          let fh = ? openFile(file, {OpenFlags.Read}).mapErr(toString)
-          defer: discard closeFile(fh)
+          let fh = ?openFile(file, {OpenFlags.Read}).mapErr(toString)
+          defer:
+            discard closeFile(fh)
 
           var data: seq[byte]
           var count = 0'u64
@@ -454,10 +464,11 @@ when isMainModule:
                   return err("Invalid block header in " & file & ": " & e.msg)
 
               # Quick sanity check
-              if blockHeader.blockNumber.truncate(uint64) != i*epochSize + count:
-                fatal "Incorrect block headers in file", file = file,
+              if blockHeader.blockNumber.truncate(uint64) != i * epochSize + count:
+                fatal "Incorrect block headers in file",
+                  file = file,
                   blockNumber = blockHeader.blockNumber,
-                  expectedBlockNumber = i*epochSize + count
+                  expectedBlockNumber = i * epochSize + count
                 quit 1
 
               updateAccumulator(accumulator, blockHeader)
@@ -467,16 +478,18 @@ when isMainModule:
               # a header for the next epoch (or on finishing the epoch).
               if writeEpochAccumulators:
                 if accumulator.currentEpoch.len() == epochSize or
-                  blockHeader.blockNumber.truncate(uint64) == mergeBlockNumber - 1:
-                    let file =
-                      try: dataDir / &"mainnet-epoch-accumulator-{i.uint64:05}.ssz"
-                      except ValueError as e: raiseAssert e.msg
-                    let res = io2.writeFile(file, SSZ.encode(accumulator.currentEpoch))
-                    if res.isErr():
-                      error "Failed writing epoch accumulator to file",
-                        file, error = res.error
-                    else:
-                      notice "Succesfully wrote epoch accumulator to file", file
+                    blockHeader.blockNumber.truncate(uint64) == mergeBlockNumber - 1:
+                  let file =
+                    try:
+                      dataDir / &"mainnet-epoch-accumulator-{i.uint64:05}.ssz"
+                    except ValueError as e:
+                      raiseAssert e.msg
+                  let res = io2.writeFile(file, SSZ.encode(accumulator.currentEpoch))
+                  if res.isErr():
+                    error "Failed writing epoch accumulator to file",
+                      file, error = res.error
+                  else:
+                    notice "Succesfully wrote epoch accumulator to file", file
 
               if count == epochSize - 1:
                 info "Updated an epoch", epoch = i
@@ -504,9 +517,7 @@ when isMainModule:
           file = accumulatorFile, error = res.error
         quit 1
       else:
-        notice "Succesfully wrote master accumulator to file",
-          file = accumulatorFile
-
+        notice "Succesfully wrote master accumulator to file", file = accumulatorFile
     of HistoryCmd.printAccumulatorData:
       let file = dataDir / config.accumulatorFileNamePrint
 
@@ -519,8 +530,7 @@ when isMainModule:
         accumulator = res.get()
         accumulatorRoot = hash_tree_root(accumulator)
 
-      info "Accumulator decoded successfully",
-        root = accumulatorRoot
+      info "Accumulator decoded successfully", root = accumulatorRoot
 
       echo "Master Accumulator:"
       echo "-------------------"
@@ -531,7 +541,6 @@ when isMainModule:
       echo "Epoch Root"
       for i, root in accumulator.historicalEpochs:
         echo &"{i.uint64:05} 0x{root.toHex()}"
-
     of HistoryCmd.exportHeaderRange:
       let client = newRpcClient(config.web3Url)
       let connectRes = waitFor client.connectRpcClient(config.web3Url)
@@ -549,35 +558,36 @@ when isMainModule:
         quit 1
 
       proc exportHeaders(
-          file: string, startBlockNumber, endBlockNumber: uint64):
-          Result[void, string] =
+          file: string, startBlockNumber, endBlockNumber: uint64
+      ): Result[void, string] =
         # Downloading headers from JSON RPC endpoint
         info "Requesting headers", startBlockNumber, endBlockNumber
         var headers: seq[BlockHeader]
-        for j in startBlockNumber..endBlockNumber:
+        for j in startBlockNumber .. endBlockNumber:
           debug "Requesting block", number = j
           let header = client.downloadHeader(j)
           headers.add(header)
 
-        let fh = ? openFile(
-          file, {OpenFlags.Write, OpenFlags.Create}).mapErr(toString)
-        defer: discard closeFile(fh)
+        let fh = ?openFile(file, {OpenFlags.Write, OpenFlags.Create}).mapErr(toString)
+        defer:
+          discard closeFile(fh)
 
         info "Writing headers to file", file
         for header in headers:
-          discard ? fh.appendRecord(ExecutionBlockHeaderRecord, rlp.encode(header))
+          discard ?fh.appendRecord(ExecutionBlockHeaderRecord, rlp.encode(header))
 
         ok()
 
       let file =
-        try: dataDir / &"mainnet-headers-{startBlockNumber:05}-{endBlockNumber:05}.e2s"
-        except ValueError as e: raiseAssert e.msg
+        try:
+          dataDir / &"mainnet-headers-{startBlockNumber:05}-{endBlockNumber:05}.e2s"
+        except ValueError as e:
+          raiseAssert e.msg
 
       let res = exportHeaders(file, startBlockNumber, endBlockNumber)
       if res.isErr():
         fatal "Failed exporting headers", error = res.error
         quit 1
-
     of HistoryCmd.exportHeadersWithProof:
       let
         startBlockNumber = config.startBlockNumber2
@@ -588,15 +598,15 @@ when isMainModule:
           startBlockNumber, endBlockNumber
         quit 1
 
-      let file = &"mainnet-headersWithProof-{startBlockNumber:05}-{endBlockNumber:05}.json"
+      let file =
+        &"mainnet-headersWithProof-{startBlockNumber:05}-{endBlockNumber:05}.json"
       let fh = createAndOpenFile(string config.dataDir, file)
 
       var contentTable: JsonPortalContentTable
-      for blockNumber in startBlockNumber..endBlockNumber:
+      for blockNumber in startBlockNumber .. endBlockNumber:
         let
           epochIndex = getEpochIndex(blockNumber)
-          epochHeadersFile =
-            dataDir / &"mainnet-headers-epoch-{epochIndex:05}.e2s"
+          epochHeadersFile = dataDir / &"mainnet-headers-epoch-{epochIndex:05}.e2s"
           epochAccumulatorFile =
             dataDir / &"mainnet-epoch-accumulator-{epochIndex:05}.ssz"
 
@@ -626,13 +636,15 @@ when isMainModule:
             content = headerWithProof.get()
             contentKey = ContentKey(
               contentType: blockHeader,
-              blockHeaderKey: BlockKey(blockHash: header.blockHash()))
+              blockHeaderKey: BlockKey(blockHash: header.blockHash()),
+            )
             encodedContentKey = history_content.encode(contentKey)
             encodedContent = SSZ.encode(content)
 
           let portalContent = JsonPortalContent(
             content_key: encodedContentKey.asSeq().to0xHex(),
-            content_value: encodedContent.to0xHex())
+            content_value: encodedContent.to0xHex(),
+          )
 
           contentTable[$blockNumber] = portalContent
         else:
@@ -647,29 +659,32 @@ when isMainModule:
       except IOError as e:
         fatal "Error occured while closing file", error = e.msg
         quit 1
-
     of HistoryCmd.exportEra1:
       cmdExportEra1(config)
     of HistoryCmd.verifyEra1:
       cmdVerifyEra1(config)
-
   of ExporterCmd.beacon:
     let (cfg, forkDigests, _) = getBeaconData()
 
     case config.beaconCmd
     of BeaconCmd.exportLCBootstrap:
       waitFor exportLCBootstrapUpdate(
-        config.restUrl, string config.dataDir,
-        config.trustedBlockRoot,
-        cfg, forkDigests)
+        config.restUrl, string config.dataDir, config.trustedBlockRoot, cfg, forkDigests
+      )
     of BeaconCmd.exportLCUpdates:
       waitFor exportLCUpdates(
-        config.restUrl, string config.dataDir,
-        config.startPeriod, config.count,
-        cfg, forkDigests)
+        config.restUrl,
+        string config.dataDir,
+        config.startPeriod,
+        config.count,
+        cfg,
+        forkDigests,
+      )
     of BeaconCmd.exportLCFinalityUpdate:
       waitFor exportLCFinalityUpdate(
-        config.restUrl, string config.dataDir, cfg, forkDigests)
+        config.restUrl, string config.dataDir, cfg, forkDigests
+      )
     of BeaconCmd.exportLCOptimisticUpdate:
       waitFor exportLCOptimisticUpdate(
-        config.restUrl, string config.dataDir, cfg, forkDigests)
+        config.restUrl, string config.dataDir, cfg, forkDigests
+      )

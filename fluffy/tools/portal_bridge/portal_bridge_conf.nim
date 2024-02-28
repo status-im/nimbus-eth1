@@ -7,10 +7,7 @@
 
 {.push raises: [].}
 
-import
-  confutils, confutils/std/net,
-  nimcrypto/hash,
-  ../../logging
+import confutils, confutils/std/net, nimcrypto/hash, ../../logging
 
 export net
 
@@ -22,62 +19,60 @@ type
     history = "Run a Portal bridge for the history network"
     state = "Run a Portal bridge for the state network"
 
-  PortalBridgeConf* = object
-    # Logging
-    logLevel* {.
-      desc: "Sets the log level"
-      defaultValue: "INFO"
-      name: "log-level" .}: string
+  PortalBridgeConf* = object # Logging
+    logLevel* {.desc: "Sets the log level", defaultValue: "INFO", name: "log-level".}:
+      string
 
     logStdout* {.
-      hidden
-      desc: "Specifies what kind of logs should be written to stdout (auto, colors, nocolors, json)"
-      defaultValueDesc: "auto"
-      defaultValue: StdoutLogKind.Auto
-      name: "log-format" .}: StdoutLogKind
+      hidden,
+      desc:
+        "Specifies what kind of logs should be written to stdout (auto, colors, nocolors, json)",
+      defaultValueDesc: "auto",
+      defaultValue: StdoutLogKind.Auto,
+      name: "log-format"
+    .}: StdoutLogKind
 
     # Portal JSON-RPC API server to connect to
     rpcAddress* {.
-      desc: "Listening address of the Portal JSON-RPC server"
-      defaultValue: "127.0.0.1"
-      name: "rpc-address" .}: string
+      desc: "Listening address of the Portal JSON-RPC server",
+      defaultValue: "127.0.0.1",
+      name: "rpc-address"
+    .}: string
 
     rpcPort* {.
-      desc: "Listening port of the Portal JSON-RPC server"
-      defaultValue: 8545
-      name: "rpc-port" .}: Port
+      desc: "Listening port of the Portal JSON-RPC server",
+      defaultValue: 8545,
+      name: "rpc-port"
+    .}: Port
 
-    case cmd* {.
-      command
-      desc: ""
-      .}: PortalBridgeCmd
-
+    case cmd* {.command, desc: "".}: PortalBridgeCmd
     of PortalBridgeCmd.beacon:
       # Beacon node REST API URL
       restUrl* {.
-        desc: "URL of the beacon node REST service"
-        defaultValue: "http://127.0.0.1:5052"
-        name: "rest-url" .}: string
+        desc: "URL of the beacon node REST service",
+        defaultValue: "http://127.0.0.1:5052",
+        name: "rest-url"
+      .}: string
 
       # Backfill options
       backfillAmount* {.
-        desc: "Amount of beacon LC updates to backfill gossip into the network"
-        defaultValue: 64
-        name: "backfill-amount" .}: uint64
+        desc: "Amount of beacon LC updates to backfill gossip into the network",
+        defaultValue: 64,
+        name: "backfill-amount"
+      .}: uint64
 
       trustedBlockRoot* {.
-        desc: "Trusted finalized block root for which to gossip a LC bootstrap into the network"
-        defaultValue: none(TrustedDigest)
-        name: "trusted-block-root" .}: Option[TrustedDigest]
-
+        desc:
+          "Trusted finalized block root for which to gossip a LC bootstrap into the network",
+        defaultValue: none(TrustedDigest),
+        name: "trusted-block-root"
+      .}: Option[TrustedDigest]
     of PortalBridgeCmd.history:
       discard
-
     of PortalBridgeCmd.state:
       discard
 
-func parseCmdArg*(T: type TrustedDigest, input: string): T
-                 {.raises: [ValueError].} =
+func parseCmdArg*(T: type TrustedDigest, input: string): T {.raises: [ValueError].} =
   TrustedDigest.fromHex(input)
 
 func completeCmdArg*(T: type TrustedDigest, input: string): seq[string] =

@@ -7,7 +7,10 @@
 
 proc eth_chaindId(): Quantity
 proc eth_getBlockByHash(data: Hash256, fullTransactions: bool): Option[BlockObject]
-proc eth_getBlockByNumber(quantityTag: string, fullTransactions: bool): Option[BlockObject]
+proc eth_getBlockByNumber(
+  quantityTag: string, fullTransactions: bool
+): Option[BlockObject]
+
 proc eth_getBlockTransactionCountByHash(data: Hash256): Quantity
 proc eth_getTransactionReceipt(data: Hash256): Option[ReceiptObject]
 proc eth_getLogs(filterOptions: FilterOptions): seq[FilterLog]

@@ -11,7 +11,9 @@
 
 import
   std/math,
-  nimcrypto/[sha2, hash], stew/[byteutils, results], stint,
+  nimcrypto/[sha2, hash],
+  stew/[byteutils, results],
+  stint,
   ssz_serialization,
   ../../common/common_types
 
@@ -40,7 +42,8 @@ type
     blockHash*: BlockHash
 
   EpochAccumulatorKey* = object
-    epochHash*: Digest # TODO: Perhaps this should be called epochRoot in the spec instead
+    epochHash*: Digest
+      # TODO: Perhaps this should be called epochRoot in the spec instead
 
   ContentKey* = object
     case contentType*: ContentType
@@ -53,23 +56,19 @@ type
     of epochAccumulator:
       epochAccumulatorKey*: EpochAccumulatorKey
 
-func init*(
-    T: type ContentKey, contentType: ContentType,
-    hash: BlockHash | Digest): T =
+func init*(T: type ContentKey, contentType: ContentType, hash: BlockHash | Digest): T =
   case contentType
   of blockHeader:
-    ContentKey(
-      contentType: contentType, blockHeaderKey: BlockKey(blockHash: hash))
+    ContentKey(contentType: contentType, blockHeaderKey: BlockKey(blockHash: hash))
   of blockBody:
-    ContentKey(
-      contentType: contentType, blockBodyKey: BlockKey(blockHash: hash))
+    ContentKey(contentType: contentType, blockBodyKey: BlockKey(blockHash: hash))
   of receipts:
-    ContentKey(
-      contentType: contentType, receiptsKey: BlockKey(blockHash: hash))
+    ContentKey(contentType: contentType, receiptsKey: BlockKey(blockHash: hash))
   of epochAccumulator:
     ContentKey(
       contentType: contentType,
-      epochAccumulatorKey: EpochAccumulatorKey(epochHash: hash))
+      epochAccumulatorKey: EpochAccumulatorKey(epochHash: hash),
+    )
 
 func encode*(contentKey: ContentKey): ByteList =
   ByteList.init(SSZ.encode(contentKey))
@@ -97,7 +96,7 @@ func `$`*(x: BlockKey): string =
 func `$`*(x: ContentKey): string =
   var res = "(type: " & $x.contentType & ", "
 
-  case x.contentType:
+  case x.contentType
   of blockHeader:
     res.add($x.blockHeaderKey)
   of blockBody:
@@ -115,11 +114,11 @@ func `$`*(x: ContentKey): string =
 ## Types for history network content
 
 const
-  MAX_TRANSACTION_LENGTH* = 2^24  # ~= 16 million
-  MAX_TRANSACTION_COUNT* = 2^14  # ~= 16k
-  MAX_RECEIPT_LENGTH* = 2^27  # ~= 134 million
-  MAX_HEADER_LENGTH = 2^13  # = 8192
-  MAX_ENCODED_UNCLES_LENGTH* = MAX_HEADER_LENGTH * 2^4  # = 2**17 ~= 131k
+  MAX_TRANSACTION_LENGTH* = 2 ^ 24 # ~= 16 million
+  MAX_TRANSACTION_COUNT* = 2 ^ 14 # ~= 16k
+  MAX_RECEIPT_LENGTH* = 2 ^ 27 # ~= 134 million
+  MAX_HEADER_LENGTH = 2 ^ 13 # = 8192
+  MAX_ENCODED_UNCLES_LENGTH* = MAX_HEADER_LENGTH * 2 ^ 4 # = 2**17 ~= 131k
   MAX_WITHDRAWAL_LENGTH = 64
   MAX_WITHDRAWALS_COUNT = MAX_WITHDRAWALS_PER_PAYLOAD
 

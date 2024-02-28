@@ -67,7 +67,9 @@
 
 import
   std/[os, strutils, options],
-  chronicles, chronos, confutils,
+  chronicles,
+  chronos,
+  confutils,
   eth/[keys, rlp],
   # Need to rename this because of web3 ethtypes and ambigious indentifier mess
   # for `BlockHeader`.
@@ -114,8 +116,7 @@ func asTxType(quantity: Option[Quantity]): Result[TxType, string] =
   else:
     ok(txType)
 
-func asReceipt(
-    receiptObject: rpc_types.ReceiptObject): Result[Receipt, string] =
+func asReceipt(receiptObject: rpc_types.ReceiptObject): Result[Receipt, string] =
   let receiptType = asTxType(receiptObject.`type`).valueOr:
     return err("Failed conversion to TxType" & error)
 
@@ -126,39 +127,38 @@ func asReceipt(
       for topic in log.topics:
         topics.add(eth_types.Topic(topic))
 
-      logs.add(Log(
-        address: ethAddr log.address,
-        data: log.data,
-        topics: topics
-      ))
+      logs.add(Log(address: ethAddr log.address, data: log.data, topics: topics))
 
   let cumulativeGasUsed = receiptObject.cumulativeGasUsed.GasInt
   if receiptObject.status.isSome():
     let status = receiptObject.status.get().int
-    ok(Receipt(
-      receiptType: receiptType,
-      isHash: false,
-      status: status == 1,
-      cumulativeGasUsed: cumulativeGasUsed,
-      bloom: BloomFilter(receiptObject.logsBloom),
-      logs: logs
-    ))
+    ok(
+      Receipt(
+        receiptType: receiptType,
+        isHash: false,
+        status: status == 1,
+        cumulativeGasUsed: cumulativeGasUsed,
+        bloom: BloomFilter(receiptObject.logsBloom),
+        logs: logs,
+      )
+    )
   elif receiptObject.root.isSome():
-    ok(Receipt(
-      receiptType: receiptType,
-      isHash: true,
-      hash: ethHash receiptObject.root.get(),
-      cumulativeGasUsed: cumulativeGasUsed,
-      bloom: BloomFilter(receiptObject.logsBloom),
-      logs: logs
-    ))
+    ok(
+      Receipt(
+        receiptType: receiptType,
+        isHash: true,
+        hash: ethHash receiptObject.root.get(),
+        cumulativeGasUsed: cumulativeGasUsed,
+        bloom: BloomFilter(receiptObject.logsBloom),
+        logs: logs,
+      )
+    )
   else:
     err("No root nor status field in the JSON receipt object")
 
 proc calculateTransactionData(
-    items: openArray[TypedTransaction]):
-    Hash256 {.raises: [].} =
-
+    items: openArray[TypedTransaction]
+): Hash256 {.raises: [].} =
   var tr = newCoreDbRef(LegacyDbMemory).mptPrune
   for i, t in items:
     try:
@@ -172,10 +172,7 @@ proc calculateTransactionData(
 
 # TODO: Since Capella we can also access ExecutionPayloadHeader and thus
 # could get the Roots through there instead.
-proc calculateWithdrawalsRoot(
-  items: openArray[WithdrawalV1]):
-    Hash256 {.raises: [].} =
-
+proc calculateWithdrawalsRoot(items: openArray[WithdrawalV1]): Hash256 {.raises: [].} =
   var tr = newCoreDbRef(LegacyDbMemory).mptPrune
   for i, w in items:
     try:
@@ -183,7 +180,7 @@ proc calculateWithdrawalsRoot(
         index: distinctBase(w.index),
         validatorIndex: distinctBase(w.validatorIndex),
         address: distinctBase(w.address),
-        amount: distinctBase(w.amount)
+        amount: distinctBase(w.amount),
       )
       tr.put(rlp.encode(i), rlp.encode(withdrawal))
     except CatchableError as e:
@@ -192,8 +189,8 @@ proc calculateWithdrawalsRoot(
   return tr.rootHash()
 
 proc asPortalBlockData*(
-    payload: ExecutionPayloadV1):
-    (common_types.BlockHash, BlockHeaderWithProof, PortalBlockBodyLegacy) =
+    payload: ExecutionPayloadV1
+): (common_types.BlockHash, BlockHeaderWithProof, PortalBlockBodyLegacy) =
   let
     txRoot = calculateTransactionData(payload.transactions)
     withdrawalsRoot = options.none(Hash256)
@@ -217,28 +214,27 @@ proc asPortalBlockData*(
       fee: some(payload.baseFeePerGas),
       withdrawalsRoot: withdrawalsRoot,
       blobGasUsed: options.none(uint64),
-      excessBlobGas: options.none(uint64)
+      excessBlobGas: options.none(uint64),
     )
 
     headerWithProof = BlockHeaderWithProof(
-      header: ByteList(rlp.encode(header)),
-      proof: BlockHeaderProof.init())
+      header: ByteList(rlp.encode(header)), proof: BlockHeaderProof.init()
+    )
 
   var transactions: Transactions
   for tx in payload.transactions:
     discard transactions.add(TransactionByteList(distinctBase(tx)))
 
-  let body = PortalBlockBodyLegacy(
-    transactions: transactions,
-    uncles: Uncles(@[byte 0xc0]))
+  let body =
+    PortalBlockBodyLegacy(transactions: transactions, uncles: Uncles(@[byte 0xc0]))
 
   let hash = common_types.BlockHash(data: distinctBase(payload.blockHash))
 
   (hash, headerWithProof, body)
 
 proc asPortalBlockData*(
-    payload: ExecutionPayloadV2 | ExecutionPayloadV3):
-    (common_types.BlockHash, BlockHeaderWithProof, PortalBlockBodyShanghai) =
+    payload: ExecutionPayloadV2 | ExecutionPayloadV3
+): (common_types.BlockHash, BlockHeaderWithProof, PortalBlockBodyShanghai) =
   let
     txRoot = calculateTransactionData(payload.transactions)
     withdrawalsRoot = some(calculateWithdrawalsRoot(payload.withdrawals))
@@ -263,12 +259,12 @@ proc asPortalBlockData*(
       fee: some(payload.baseFeePerGas),
       withdrawalsRoot: withdrawalsRoot,
       blobGasUsed: options.none(uint64),
-      excessBlobGas: options.none(uint64)
+      excessBlobGas: options.none(uint64),
     )
 
     headerWithProof = BlockHeaderWithProof(
-      header: ByteList(rlp.encode(header)),
-      proof: BlockHeaderProof.init())
+      header: ByteList(rlp.encode(header)), proof: BlockHeaderProof.init()
+    )
 
   var transactions: Transactions
   for tx in payload.transactions:
@@ -279,7 +275,7 @@ proc asPortalBlockData*(
       index: x.index.uint64,
       validatorIndex: x.validatorIndex.uint64,
       address: x.address.EthAddress,
-      amount: x.amount.uint64
+      amount: x.amount.uint64,
     )
 
   var withdrawals: Withdrawals
@@ -287,18 +283,16 @@ proc asPortalBlockData*(
     discard withdrawals.add(WithdrawalByteList(rlp.encode(toWithdrawal(w))))
 
   let body = PortalBlockBodyShanghai(
-    transactions: transactions,
-    uncles: Uncles(@[byte 0xc0]),
-    withdrawals: withdrawals
-    )
+    transactions: transactions, uncles: Uncles(@[byte 0xc0]), withdrawals: withdrawals
+  )
 
   let hash = common_types.BlockHash(data: distinctBase(payload.blockHash))
 
   (hash, headerWithProof, body)
 
 proc getBlockReceipts(
-    client: RpcClient, transactions: seq[TypedTransaction], blockHash: Hash256):
-    Future[Result[seq[Receipt], string]] {.async: (raises: [CancelledError]).} =
+    client: RpcClient, transactions: seq[TypedTransaction], blockHash: Hash256
+): Future[Result[seq[Receipt], string]] {.async: (raises: [CancelledError]).} =
   ## Note: This makes use of `eth_getBlockReceipts` JSON-RPC endpoint which is
   ## only supported by Alchemy.
   var receipts: seq[Receipt]
@@ -321,8 +315,8 @@ proc getBlockReceipts(
 # takes too long and causes too much overhead. To make this usable the JSON-RPC
 # code needs to get support for batch requests.
 proc getBlockReceipts(
-    client: RpcClient, transactions: seq[TypedTransaction]):
-    Future[Result[seq[Receipt], string]] {.async.} =
+    client: RpcClient, transactions: seq[TypedTransaction]
+): Future[Result[seq[Receipt], string]] {.async.} =
   var receipts: seq[Receipt]
   for tx in transactions:
     let txHash = keccakHash(tx.distinctBase)
@@ -359,14 +353,20 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
   for node in metadata.bootstrapNodes:
     lcConfig.bootstrapNodes.add node
 
-  template cfg(): auto = metadata.cfg
+  template cfg(): auto =
+    metadata.cfg
 
   let
     genesisState =
       try:
-        template genesisData(): auto = metadata.genesis.bakedBytes
-        newClone(readSszForkedHashedBeaconState(
-          cfg, genesisData.toOpenArray(genesisData.low, genesisData.high)))
+        template genesisData(): auto =
+          metadata.genesis.bakedBytes
+
+        newClone(
+          readSszForkedHashedBeaconState(
+            cfg, genesisData.toOpenArray(genesisData.low, genesisData.high)
+          )
+        )
       except CatchableError as err:
         raiseAssert "Invalid baked-in state: " & err.msg
 
@@ -377,8 +377,7 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
 
     getBeaconTime = beaconClock.getBeaconTimeFn()
 
-    genesis_validators_root =
-      getStateField(genesisState[], genesis_validators_root)
+    genesis_validators_root = getStateField(genesisState[], genesis_validators_root)
     forkDigests = newClone ForkDigests.init(cfg, genesis_validators_root)
 
     genesisBlockRoot = get_initial_beacon_block(genesisState[]).root
@@ -388,8 +387,7 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
     netKeys = getRandomNetKeys(rng[])
 
     network = createEth2Node(
-      rng, lcConfig, netKeys, cfg,
-      forkDigests, getBeaconTime, genesis_validators_root
+      rng, lcConfig, netKeys, cfg, forkDigests, getBeaconTime, genesis_validators_root
     )
 
     portalRpcClient = newRpcHttpClient()
@@ -406,27 +404,27 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
             newRpcWebSocketClient()
         Opt.some(client)
 
-    optimisticHandler = proc(signedBlock: ForkedMsgTrustedSignedBeaconBlock):
-        Future[void] {.async: (raises: [CancelledError]).} =
+    optimisticHandler = proc(
+        signedBlock: ForkedMsgTrustedSignedBeaconBlock
+    ): Future[void] {.async: (raises: [CancelledError]).} =
       # TODO: Should not be gossiping optimistic blocks, but instead store them
       # in a cache and only gossip them after they are confirmed due to an LC
       # finalized header.
       notice "New LC optimistic block",
-        opt = signedBlock.toBlockId(),
-        wallSlot = getBeaconTime().slotOrZero
+        opt = signedBlock.toBlockId(), wallSlot = getBeaconTime().slotOrZero
 
       withBlck(signedBlock):
         when consensusFork >= ConsensusFork.Bellatrix:
           if forkyBlck.message.is_execution_block:
-            template payload(): auto = forkyBlck.message.body.execution_payload
+            template payload(): auto =
+              forkyBlck.message.body.execution_payload
 
             # TODO: Get rid of the asEngineExecutionPayload step?
             let executionPayload = payload.asEngineExecutionPayload()
-            let (hash, headerWithProof, body) =
-              asPortalBlockData(executionPayload)
+            let (hash, headerWithProof, body) = asPortalBlockData(executionPayload)
 
             logScope:
-              blockhash = history_content.`$`hash
+              blockhash = history_content.`$` hash
 
             block: # gossip header
               let contentKey = history_content.ContentKey.init(blockHeader, hash)
@@ -434,10 +432,10 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
 
               try:
                 let peers = await portalRpcClient.portal_historyGossip(
-                  toHex(encodedContentKey),
-                  SSZ.encode(headerWithProof).toHex())
-                info "Block header gossiped", peers,
-                    contentKey = encodedContentKey.toHex()
+                  toHex(encodedContentKey), SSZ.encode(headerWithProof).toHex()
+                )
+                info "Block header gossiped",
+                  peers, contentKey = encodedContentKey.toHex()
               except CatchableError as e:
                 error "JSON-RPC error", error = $e.msg
               # TODO: clean-up when json-rpc gets async raises annotations
@@ -457,10 +455,10 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
 
               try:
                 let peers = await portalRpcClient.portal_historyGossip(
-                  encodedContentKey.toHex(),
-                  SSZ.encode(body).toHex())
-                info "Block body gossiped", peers,
-                    contentKey = encodedContentKey.toHex()
+                  encodedContentKey.toHex(), SSZ.encode(body).toHex()
+                )
+                info "Block body gossiped",
+                  peers, contentKey = encodedContentKey.toHex()
               except CatchableError as e:
                 error "JSON-RPC error", error = $e.msg
 
@@ -473,18 +471,18 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
             if web3Client.isSome():
               let client = web3Client.get()
               # get receipts
-              let receipts =
-                (await client.getBlockReceipts(
-                    executionPayload.transactions, hash)).valueOr:
+              let receipts = (
+                await client.getBlockReceipts(executionPayload.transactions, hash)
+              ).valueOr:
                 # (await web3Client.get().getBlockReceipts(
                 #     executionPayload.transactions)).valueOr:
-                  error "Error getting block receipts", error
-                  # TODO: clean-up when json-rpc gets async raises annotations
-                  try:
-                    await client.close()
-                  except CatchableError:
-                    discard
-                  return
+                error "Error getting block receipts", error
+                # TODO: clean-up when json-rpc gets async raises annotations
+                try:
+                  await client.close()
+                except CatchableError:
+                  discard
+                return
               # TODO: clean-up when json-rpc gets async raises annotations
               try:
                 await client.close()
@@ -498,15 +496,15 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
 
               # gossip receipts
               let contentKey = history_content.ContentKey.init(
-                history_content.ContentType.receipts, hash)
+                history_content.ContentType.receipts, hash
+              )
               let encodedContentKeyHex = contentKey.encode.asSeq().toHex()
 
               try:
                 let peers = await portalRpcClient.portal_historyGossip(
-                  encodedContentKeyHex,
-                  SSZ.encode(portalReceipts).toHex())
-                info "Block receipts gossiped", peers,
-                    contentKey = encodedContentKeyHex
+                  encodedContentKeyHex, SSZ.encode(portalReceipts).toHex()
+                )
+                info "Block receipts gossiped", peers, contentKey = encodedContentKeyHex
               except CatchableError as e:
                 error "JSON-RPC error for portal_historyGossip", error = $e.msg
 
@@ -518,17 +516,15 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
 
       return
 
-    optimisticProcessor = initOptimisticProcessor(
-      getBeaconTime, optimisticHandler)
+    optimisticProcessor = initOptimisticProcessor(getBeaconTime, optimisticHandler)
 
     lightClient = createLightClient(
-      network, rng, lcConfig, cfg, forkDigests, getBeaconTime,
-      genesis_validators_root, LightClientFinalizationMode.Optimistic)
+      network, rng, lcConfig, cfg, forkDigests, getBeaconTime, genesis_validators_root,
+      LightClientFinalizationMode.Optimistic,
+    )
 
   ### Beacon Light Client content bridging specific callbacks
-  proc onBootstrap(
-      lightClient: LightClient,
-      bootstrap: ForkedLightClientBootstrap) =
+  proc onBootstrap(lightClient: LightClient, bootstrap: ForkedLightClientBootstrap) =
     withForkyObject(bootstrap):
       when lcDataFork > LightClientDataFork.None:
         info "New Beacon LC bootstrap",
@@ -537,22 +533,18 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
         let
           root = hash_tree_root(forkyObject.header)
           contentKey = encode(bootstrapContentKey(root))
-          forkDigest = forkDigestAtEpoch(
-            forkDigests[], epoch(forkyObject.header.beacon.slot), cfg)
-          content = encodeBootstrapForked(
-            forkDigest,
-            bootstrap
-          )
+          forkDigest =
+            forkDigestAtEpoch(forkDigests[], epoch(forkyObject.header.beacon.slot), cfg)
+          content = encodeBootstrapForked(forkDigest, bootstrap)
 
         proc GossipRpcAndClose() {.async.} =
           try:
             let
               contentKeyHex = contentKey.asSeq().toHex()
               peers = await portalRpcClient.portal_beaconGossip(
-                contentKeyHex,
-                content.toHex())
-            info "Beacon LC bootstrap gossiped", peers,
-                contentKey = contentKeyHex
+                contentKeyHex, content.toHex()
+              )
+            info "Beacon LC bootstrap gossiped", peers, contentKey = contentKeyHex
           except CatchableError as e:
             error "JSON-RPC error", error = $e.msg
 
@@ -570,21 +562,18 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
           period = forkyObject.attested_header.beacon.slot.sync_committee_period
           contentKey = encode(updateContentKey(period.uint64, uint64(1)))
           forkDigest = forkDigestAtEpoch(
-            forkDigests[], epoch(forkyObject.attested_header.beacon.slot), cfg)
-          content = encodeLightClientUpdatesForked(
-            forkDigest,
-            @[update]
+            forkDigests[], epoch(forkyObject.attested_header.beacon.slot), cfg
           )
+          content = encodeLightClientUpdatesForked(forkDigest, @[update])
 
         proc GossipRpcAndClose() {.async.} =
           try:
             let
               contentKeyHex = contentKey.asSeq().toHex()
               peers = await portalRpcClient.portal_beaconGossip(
-                contentKeyHex,
-                content.toHex())
-            info "Beacon LC bootstrap gossiped", peers,
-                contentKey = contentKeyHex
+                contentKeyHex, content.toHex()
+              )
+            info "Beacon LC bootstrap gossiped", peers, contentKey = contentKeyHex
           except CatchableError as e:
             error "JSON-RPC error", error = $e.msg
 
@@ -593,8 +582,8 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
         asyncSpawn(GossipRpcAndClose())
 
   proc onOptimisticUpdate(
-      lightClient: LightClient,
-      update: ForkedLightClientOptimisticUpdate) =
+      lightClient: LightClient, update: ForkedLightClientOptimisticUpdate
+  ) =
     withForkyObject(update):
       when lcDataFork > LightClientDataFork.None:
         info "New Beacon LC optimistic update",
@@ -604,21 +593,18 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
           slot = forkyObject.signature_slot
           contentKey = encode(optimisticUpdateContentKey(slot.uint64))
           forkDigest = forkDigestAtEpoch(
-            forkDigests[], epoch(forkyObject.attested_header.beacon.slot), cfg)
-          content = encodeOptimisticUpdateForked(
-            forkDigest,
-            update
+            forkDigests[], epoch(forkyObject.attested_header.beacon.slot), cfg
           )
+          content = encodeOptimisticUpdateForked(forkDigest, update)
 
         proc GossipRpcAndClose() {.async.} =
           try:
             let
               contentKeyHex = contentKey.asSeq().toHex()
               peers = await portalRpcClient.portal_beaconGossip(
-                contentKeyHex,
-                content.toHex())
-            info "Beacon LC bootstrap gossiped", peers,
-                contentKey = contentKeyHex
+                contentKeyHex, content.toHex()
+              )
+            info "Beacon LC bootstrap gossiped", peers, contentKey = contentKeyHex
           except CatchableError as e:
             error "JSON-RPC error", error = $e.msg
 
@@ -627,8 +613,8 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
         asyncSpawn(GossipRpcAndClose())
 
   proc onFinalityUpdate(
-      lightClient: LightClient,
-      update: ForkedLightClientFinalityUpdate) =
+      lightClient: LightClient, update: ForkedLightClientFinalityUpdate
+  ) =
     withForkyObject(update):
       when lcDataFork > LightClientDataFork.None:
         info "New Beacon LC finality update",
@@ -637,21 +623,18 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
           finalizedSlot = forkyObject.finalized_header.beacon.slot
           contentKey = encode(finalityUpdateContentKey(finalizedSlot.uint64))
           forkDigest = forkDigestAtEpoch(
-            forkDigests[], epoch(forkyObject.attested_header.beacon.slot), cfg)
-          content = encodeFinalityUpdateForked(
-            forkDigest,
-            update
+            forkDigests[], epoch(forkyObject.attested_header.beacon.slot), cfg
           )
+          content = encodeFinalityUpdateForked(forkDigest, update)
 
         proc GossipRpcAndClose() {.async.} =
           try:
             let
               contentKeyHex = contentKey.asSeq().toHex()
               peers = await portalRpcClient.portal_beaconGossip(
-                contentKeyHex,
-                content.toHex())
-            info "Beacon LC bootstrap gossiped", peers,
-                contentKey = contentKeyHex
+                contentKeyHex, content.toHex()
+              )
+            info "Beacon LC bootstrap gossiped", peers, contentKey = contentKeyHex
           except CatchableError as e:
             error "JSON-RPC error", error = $e.msg
 
@@ -669,51 +652,57 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
 
   info "Listening to incoming network requests"
   network.registerProtocol(
-    PeerSync, PeerSync.NetworkState.init(
-      cfg, forkDigests, genesisBlockRoot, getBeaconTime))
+    PeerSync,
+    PeerSync.NetworkState.init(cfg, forkDigests, genesisBlockRoot, getBeaconTime),
+  )
   network.addValidator(
     getBeaconBlocksTopic(forkDigests.phase0),
-    proc (signedBlock: phase0.SignedBeaconBlock): errors.ValidationResult =
-      toValidationResult(
-        optimisticProcessor.processSignedBeaconBlock(signedBlock)))
+    proc(signedBlock: phase0.SignedBeaconBlock): errors.ValidationResult =
+      toValidationResult(optimisticProcessor.processSignedBeaconBlock(signedBlock))
+    ,
+  )
   network.addValidator(
     getBeaconBlocksTopic(forkDigests.altair),
-    proc (signedBlock: altair.SignedBeaconBlock): errors.ValidationResult =
-      toValidationResult(
-        optimisticProcessor.processSignedBeaconBlock(signedBlock)))
+    proc(signedBlock: altair.SignedBeaconBlock): errors.ValidationResult =
+      toValidationResult(optimisticProcessor.processSignedBeaconBlock(signedBlock))
+    ,
+  )
   network.addValidator(
     getBeaconBlocksTopic(forkDigests.bellatrix),
-    proc (signedBlock: bellatrix.SignedBeaconBlock): errors.ValidationResult =
-      toValidationResult(
-        optimisticProcessor.processSignedBeaconBlock(signedBlock)))
+    proc(signedBlock: bellatrix.SignedBeaconBlock): errors.ValidationResult =
+      toValidationResult(optimisticProcessor.processSignedBeaconBlock(signedBlock))
+    ,
+  )
   network.addValidator(
     getBeaconBlocksTopic(forkDigests.capella),
-    proc (signedBlock: capella.SignedBeaconBlock): errors.ValidationResult =
-      toValidationResult(
-        optimisticProcessor.processSignedBeaconBlock(signedBlock)))
+    proc(signedBlock: capella.SignedBeaconBlock): errors.ValidationResult =
+      toValidationResult(optimisticProcessor.processSignedBeaconBlock(signedBlock))
+    ,
+  )
   network.addValidator(
     getBeaconBlocksTopic(forkDigests.deneb),
-    proc (signedBlock: deneb.SignedBeaconBlock): errors.ValidationResult =
-      toValidationResult(
-        optimisticProcessor.processSignedBeaconBlock(signedBlock)))
+    proc(signedBlock: deneb.SignedBeaconBlock): errors.ValidationResult =
+      toValidationResult(optimisticProcessor.processSignedBeaconBlock(signedBlock))
+    ,
+  )
   lightClient.installMessageValidators()
 
   waitFor network.startListening()
   waitFor network.start()
 
   proc onFinalizedHeader(
-      lightClient: LightClient, finalizedHeader: ForkedLightClientHeader) =
+      lightClient: LightClient, finalizedHeader: ForkedLightClientHeader
+  ) =
     withForkyHeader(finalizedHeader):
       when lcDataFork > LightClientDataFork.None:
-        info "New LC finalized header",
-          finalized_header = shortLog(forkyHeader)
+        info "New LC finalized header", finalized_header = shortLog(forkyHeader)
 
   proc onOptimisticHeader(
-      lightClient: LightClient, optimisticHeader: ForkedLightClientHeader) =
+      lightClient: LightClient, optimisticHeader: ForkedLightClientHeader
+  ) =
     withForkyHeader(optimisticHeader):
       when lcDataFork > LightClientDataFork.None:
-        info "New LC optimistic header",
-          optimistic_header = shortLog(forkyHeader)
+        info "New LC optimistic header", optimistic_header = shortLog(forkyHeader)
         optimisticProcessor.setOptimisticHeader(forkyHeader.beacon)
 
   lightClient.onFinalizedHeader = onFinalizedHeader
@@ -743,18 +732,19 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
 
       targetGossipState = getTargetGossipState(
         slot.epoch, cfg.ALTAIR_FORK_EPOCH, cfg.BELLATRIX_FORK_EPOCH,
-        cfg.CAPELLA_FORK_EPOCH, cfg.DENEB_FORK_EPOCH, isBehind)
+        cfg.CAPELLA_FORK_EPOCH, cfg.DENEB_FORK_EPOCH, isBehind,
+      )
 
-    template currentGossipState(): auto = blocksGossipState
+    template currentGossipState(): auto =
+      blocksGossipState
+
     if currentGossipState == targetGossipState:
       return
 
     if currentGossipState.card == 0 and targetGossipState.card > 0:
-      debug "Enabling blocks topic subscriptions",
-        wallSlot = slot, targetGossipState
+      debug "Enabling blocks topic subscriptions", wallSlot = slot, targetGossipState
     elif currentGossipState.card > 0 and targetGossipState.card == 0:
-      debug "Disabling blocks topic subscriptions",
-        wallSlot = slot
+      debug "Disabling blocks topic subscriptions", wallSlot = slot
     else:
       # Individual forks added / removed
       discard
@@ -770,8 +760,8 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
     for gossipFork in newGossipForks:
       let forkDigest = forkDigests[].atConsensusFork(gossipFork)
       network.subscribe(
-        getBeaconBlocksTopic(forkDigest), blocksTopicParams,
-        enableTopicMetrics = true)
+        getBeaconBlocksTopic(forkDigest), blocksTopicParams, enableTopicMetrics = true
+      )
 
     blocksGossipState = targetGossipState
 
@@ -801,8 +791,7 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
 
 when isMainModule:
   {.pop.}
-  var config = makeBannerAndConfig(
-    "Nimbus beacon chain bridge", BeaconBridgeConf)
+  var config = makeBannerAndConfig("Nimbus beacon chain bridge", BeaconBridgeConf)
   {.push raises: [].}
 
   run(config)

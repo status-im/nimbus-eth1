@@ -9,8 +9,11 @@
 
 import
   std/[strformat, os],
-  results, chronos, chronicles,
-  eth/common/eth_types, eth/rlp,
+  results,
+  chronos,
+  chronicles,
+  eth/common/eth_types,
+  eth/rlp,
   ../network/wire/portal_protocol,
   ../network/history/[history_content, history_network, accumulator],
   "."/[era1, history_data_json_store, history_data_ssz_e2s]
@@ -20,9 +23,9 @@ export results
 ### Helper calls to seed the local database and/or the network
 
 proc historyStore*(
-    p: PortalProtocol, dataFile: string, verify = false):
-    Result[void, string] =
-  let blockData = ? readJsonType(dataFile, BlockDataTable)
+    p: PortalProtocol, dataFile: string, verify = false
+): Result[void, string] =
+  let blockData = ?readJsonType(dataFile, BlockDataTable)
 
   for b in blocks(blockData, verify):
     for value in b:
@@ -33,8 +36,8 @@ proc historyStore*(
   ok()
 
 proc propagateEpochAccumulator*(
-    p: PortalProtocol, file: string):
-    Future[Result[void, string]] {.async.} =
+    p: PortalProtocol, file: string
+): Future[Result[void, string]] {.async.} =
   ## Propagate a specific epoch accumulator into the network.
   ## file holds the SSZ serialized epoch accumulator.
   let epochAccumulatorRes = readEpochAccumulator(file)
@@ -46,34 +49,33 @@ proc propagateEpochAccumulator*(
       rootHash = accumulator.hash_tree_root()
       key = ContentKey(
         contentType: epochAccumulator,
-        epochAccumulatorKey: EpochAccumulatorKey(
-          epochHash: rootHash))
+        epochAccumulatorKey: EpochAccumulatorKey(epochHash: rootHash),
+      )
       encKey = history_content.encode(key)
       # Note: The file actually holds the SSZ encoded accumulator, but we need
       # to decode as we need the root for the content key.
       encodedAccumulator = SSZ.encode(accumulator)
     info "Gossiping epoch accumulator", rootHash, contentKey = encKey
 
-    p.storeContent(
-      encKey,
-      history_content.toContentId(encKey),
-      encodedAccumulator
-    )
+    p.storeContent(encKey, history_content.toContentId(encKey), encodedAccumulator)
     discard await p.neighborhoodGossip(
-      Opt.none(NodeId), ContentKeysList(@[encKey]), @[encodedAccumulator])
+      Opt.none(NodeId), ContentKeysList(@[encKey]), @[encodedAccumulator]
+    )
 
     return ok()
 
 proc propagateEpochAccumulators*(
-    p: PortalProtocol, path: string):
-    Future[Result[void, string]] {.async.} =
+    p: PortalProtocol, path: string
+): Future[Result[void, string]] {.async.} =
   ## Propagate all epoch accumulators created when building the accumulator
   ## from the block headers.
   ## path is a directory that holds all SSZ encoded epoch accumulator files.
-  for i in 0..<preMergeEpochs:
+  for i in 0 ..< preMergeEpochs:
     let file =
-      try: path / &"mainnet-epoch-accumulator-{i.uint64:05}.ssz"
-      except ValueError as e: raiseAssert e.msg
+      try:
+        path / &"mainnet-epoch-accumulator-{i.uint64:05}.ssz"
+      except ValueError as e:
+        raiseAssert e.msg
 
     let res = await p.propagateEpochAccumulator(file)
     if res.isErr():
@@ -82,8 +84,8 @@ proc propagateEpochAccumulators*(
   return ok()
 
 proc historyPropagate*(
-    p: PortalProtocol, dataFile: string, verify = false):
-    Future[Result[void, string]] {.async.} =
+    p: PortalProtocol, dataFile: string, verify = false
+): Future[Result[void, string]] {.async.} =
   const concurrentGossips = 20
 
   var gossipQueue =
@@ -121,15 +123,16 @@ proc historyPropagate*(
           p.storeContent(encKey, contentId, value[1])
 
           await gossipQueue.addLast(
-            (Opt.none(NodeId), ContentKeysList(@[encode(value[0])]), value[1]))
+            (Opt.none(NodeId), ContentKeysList(@[encode(value[0])]), value[1])
+          )
 
     return ok()
   else:
     return err(blockData.error)
 
 proc historyPropagateBlock*(
-    p: PortalProtocol, dataFile: string, blockHash: string, verify = false):
-    Future[Result[void, string]] {.async.} =
+    p: PortalProtocol, dataFile: string, blockHash: string, verify = false
+): Future[Result[void, string]] {.async.} =
   let blockDataTable = readJsonType(dataFile, BlockDataTable)
 
   if blockDataTable.isOk():
@@ -152,15 +155,17 @@ proc historyPropagateBlock*(
         contentId = history_content.toContentId(encKey)
       p.storeContent(encKey, contentId, value[1])
 
-      discard await p.neighborhoodGossip(Opt.none(NodeId), ContentKeysList(@[encode(value[0])]), @[value[1]])
+      discard await p.neighborhoodGossip(
+        Opt.none(NodeId), ContentKeysList(@[encode(value[0])]), @[value[1]]
+      )
 
     return ok()
   else:
     return err(blockDataTable.error)
 
 proc historyPropagateHeadersWithProof*(
-    p: PortalProtocol, epochHeadersFile: string, epochAccumulatorFile: string):
-    Future[Result[void, string]] {.async.} =
+    p: PortalProtocol, epochHeadersFile: string, epochAccumulatorFile: string
+): Future[Result[void, string]] {.async.} =
   let res = readBlockHeaders(epochHeadersFile)
   if res.isErr():
     return err(res.error)
@@ -182,7 +187,8 @@ proc historyPropagateHeadersWithProof*(
         content = headerWithProof.get()
         contentKey = ContentKey(
           contentType: blockHeader,
-          blockHeaderKey: BlockKey(blockHash: header.blockHash()))
+          blockHeaderKey: BlockKey(blockHash: header.blockHash()),
+        )
         encKey = history_content.encode(contentKey)
         contentId = history_content.toContentId(encKey)
         encodedContent = SSZ.encode(content)
@@ -195,19 +201,23 @@ proc historyPropagateHeadersWithProof*(
   return ok()
 
 proc historyPropagateHeadersWithProof*(
-    p: PortalProtocol, dataDir: string):
-    Future[Result[void, string]] {.async.} =
-  for i in 0..<preMergeEpochs:
+    p: PortalProtocol, dataDir: string
+): Future[Result[void, string]] {.async.} =
+  for i in 0 ..< preMergeEpochs:
     let
       epochHeadersfile =
-        try: dataDir / &"mainnet-headers-epoch-{i.uint64:05}.e2s"
-        except ValueError as e: raiseAssert e.msg
+        try:
+          dataDir / &"mainnet-headers-epoch-{i.uint64:05}.e2s"
+        except ValueError as e:
+          raiseAssert e.msg
       epochAccumulatorFile =
-        try: dataDir / &"mainnet-epoch-accumulator-{i.uint64:05}.ssz"
-        except ValueError as e: raiseAssert e.msg
+        try:
+          dataDir / &"mainnet-epoch-accumulator-{i.uint64:05}.ssz"
+        except ValueError as e:
+          raiseAssert e.msg
 
-    let res = await p.historyPropagateHeadersWithProof(
-      epochHeadersfile, epochAccumulatorFile)
+    let res =
+      await p.historyPropagateHeadersWithProof(epochHeadersfile, epochAccumulatorFile)
     if res.isOk():
       info "Finished gossiping 1 epoch of headers with proof", i
     else:
@@ -216,13 +226,12 @@ proc historyPropagateHeadersWithProof*(
   return ok()
 
 proc historyPropagateHeaders*(
-    p: PortalProtocol, dataFile: string, verify = false):
-    Future[Result[void, string]] {.async.} =
+    p: PortalProtocol, dataFile: string, verify = false
+): Future[Result[void, string]] {.async.} =
   # TODO: Should perhaps be integrated with `historyPropagate` call.
   const concurrentGossips = 20
 
-  var gossipQueue =
-    newAsyncQueue[(ContentKeysList, seq[byte])](concurrentGossips)
+  var gossipQueue = newAsyncQueue[(ContentKeysList, seq[byte])](concurrentGossips)
   var gossipWorkers: seq[Future[void]]
 
   proc gossipWorker(p: PortalProtocol) {.async.} =
@@ -243,8 +252,7 @@ proc historyPropagateHeaders*(
         contentId = history_content.toContentId(encKey)
       p.storeContent(encKey, contentId, header[1])
 
-      await gossipQueue.addLast(
-        (ContentKeysList(@[encode(header[0])]), header[1]))
+      await gossipQueue.addLast((ContentKeysList(@[encode(header[0])]), header[1]))
 
     return ok()
   else:
@@ -261,14 +269,14 @@ proc historyPropagateHeaders*(
 
 iterator headersWithProof*(
     f: Era1File, epochAccumulator: EpochAccumulatorCached
-  ): (ByteList, seq[byte]) =
+): (ByteList, seq[byte]) =
   for blockHeader in f.era1BlockHeaders:
     doAssert blockHeader.isPreMerge()
 
     let
       contentKey = ContentKey(
         contentType: blockHeader,
-        blockHeaderKey: BlockKey(blockHash: blockHeader.blockHash())
+        blockHeaderKey: BlockKey(blockHash: blockHeader.blockHash()),
       ).encode()
 
       headerWithProof = buildHeaderWithProof(blockHeader, epochAccumulator).valueOr:
@@ -285,8 +293,7 @@ iterator blockContent*(f: Era1File): (ByteList, seq[byte]) =
     block: # block body
       let
         contentKey = ContentKey(
-          contentType: blockBody,
-          blockBodyKey: BlockKey(blockHash: blockHash)
+          contentType: blockBody, blockBodyKey: BlockKey(blockHash: blockHash)
         ).encode()
 
         contentValue = encode(body)
@@ -296,8 +303,7 @@ iterator blockContent*(f: Era1File): (ByteList, seq[byte]) =
     block: # receipts
       let
         contentKey = ContentKey(
-          contentType: receipts,
-          receiptsKey: BlockKey(blockHash: blockHash)
+          contentType: receipts, receiptsKey: BlockKey(blockHash: blockHash)
         ).encode()
 
         contentValue = encode(receipts)
@@ -309,9 +315,11 @@ iterator blockContent*(f: Era1File): (ByteList, seq[byte]) =
 ##
 
 proc historyGossipHeadersWithProof*(
-      p: PortalProtocol, era1File: string, epochAccumulatorFile: Opt[string],
-      verifyEra = false
-  ): Future[Result[void, string]] {.async.} =
+    p: PortalProtocol,
+    era1File: string,
+    epochAccumulatorFile: Opt[string],
+    verifyEra = false,
+): Future[Result[void, string]] {.async.} =
   let f = ?Era1File.open(era1File)
 
   if verifyEra:
@@ -328,14 +336,15 @@ proc historyGossipHeadersWithProof*(
 
   for (contentKey, contentValue) in f.headersWithProof(epochAccumulator):
     let peers = await p.neighborhoodGossip(
-      Opt.none(NodeId), ContentKeysList(@[contentKey]), @[contentValue])
+      Opt.none(NodeId), ContentKeysList(@[contentKey]), @[contentValue]
+    )
     info "Gossiped block header", contentKey, peers
 
   ok()
 
 proc historyGossipBlockContent*(
-      p: PortalProtocol, era1File: string, verifyEra = false
-  ): Future[Result[void, string]] {.async.} =
+    p: PortalProtocol, era1File: string, verifyEra = false
+): Future[Result[void, string]] {.async.} =
   let f = ?Era1File.open(era1File)
 
   if verifyEra:
@@ -343,7 +352,8 @@ proc historyGossipBlockContent*(
 
   for (contentKey, contentValue) in f.blockContent():
     let peers = await p.neighborhoodGossip(
-      Opt.none(NodeId), ContentKeysList(@[contentKey]), @[contentValue])
+      Opt.none(NodeId), ContentKeysList(@[contentKey]), @[contentValue]
+    )
     info "Gossiped block content", contentKey, peers
 
   ok()
