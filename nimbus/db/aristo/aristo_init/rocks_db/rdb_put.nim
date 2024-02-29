@@ -135,8 +135,9 @@ proc commit(
     if not csError.isNil:
       return err((RdbBeFinishSstWriter, $csError))
 
+    var sstPath = session.sstPath.cstring
     rdb.store.cPtr.rocksdb_ingest_external_file(
-      [session.sstPath].allocCStringArray, 1, rdb.impOpt, cast[cstringArray](csError.addr))
+      cast[cstringArray](sstPath.addr), 1, rdb.impOpt, cast[cstringArray](csError.addr))
     if not csError.isNil:
       return err((RdbBeIngestSstWriter, $csError))
 

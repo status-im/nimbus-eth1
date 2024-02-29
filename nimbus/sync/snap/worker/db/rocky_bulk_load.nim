@@ -148,9 +148,10 @@ proc finish*(
   var csError: cstring
   rbl.writer.rocksdb_sstfilewriter_finish(cast[cstringArray](csError.addr))
 
+  var filePath = rbl.filePath.cstring
   if csError.isNil:
     rbl.db.store.cPtr.rocksdb_ingest_external_file(
-      [rbl.filePath].allocCStringArray, 1,
+      cast[cstringArray](filePath.addr), 1,
       rbl.importOption,
       cast[cstringArray](csError.addr))
 
