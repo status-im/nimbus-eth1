@@ -274,6 +274,7 @@ type
     trackLedgerApi*: bool       ## Debugging, suggestion for subsequent ledger
     localDbOnly*: bool          ## Debugging, suggestion to ignore async fetch
     profTab*: CoreDbProfListRef ## Profiling data (if any)
+    ledgerHook*: RootRef        ## Debugging/profiling, to be used by ledger
     methods*: CoreDbBaseFns
 
   CoreDbErrorRef* = ref object of RootRef

@@ -13,12 +13,19 @@
 import
   eth/common,
   ../../core_db,
-  ../../../../stateless/multi_keys
+  ../../../../stateless/multi_keys,
+  ../../aristo/aristo_profile
 
 # Annotation helpers
 {.pragma:  noRaise, gcsafe, raises: [].}
 
 type
+  LedgerProfListRef* = AristoDbProfListRef
+    ## Borrowed from `aristo_profile`, only used in profiling mode
+
+  LedgerProfData* = AristoDbProfData
+    ## Borrowed from `aristo_profile`, only used in profiling mode
+
   LedgerType* = enum
     Ooops = 0
     LegacyAccountsCache,
@@ -29,9 +36,10 @@ type
 
   LedgerRef* = ref object of RootRef
     ## Root object with closures
-    ldgType*: LedgerType    ## For debugging
-    trackApi*: bool         ## For debugging
-    extras*: LedgerExtras   ## Support might go away
+    ldgType*: LedgerType        ## For debugging
+    trackApi*: bool             ## For debugging
+    profTab*: LedgerProfListRef ## Profiling data (if any)
+    extras*: LedgerExtras       ## Support might go away
     methods*: LedgerFns
 
   RawRootHashFn* = proc(): Hash256 {.noRaise.}

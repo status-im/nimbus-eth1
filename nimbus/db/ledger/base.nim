@@ -36,27 +36,21 @@ type
   ReadOnlyStateDB* = distinct LedgerRef
 
 export
+  LedgerFnInx,
+  LedgerProfListRef,
   LedgerType,
   LedgerRef,
-  LedgerSpRef,
-
-  # Profiling support
-  byElapsed,
-  byMean,
-  byVisits,
-  stats
+  LedgerSpRef
 
 const
   LedgerEnableApiTracking* = EnableApiTracking
   LedgerEnableApiProfiling* = EnableApiTracking and EnableApiProfiling
   LedgerApiTxt* = apiTxt
 
-when EnableApiTracking and EnableApiProfiling:
-  var ledgerProfTab*: LedgerProfFnInx
-
-
 when AutoValidateDescriptors:
   import ./base/validate
+
+proc ldgProfData*(db: CoreDbRef): LedgerProfListRef {.gcsafe.}
 
 # ------------------------------------------------------------------------------
 # Logging/tracking helpers (some public)
@@ -81,14 +75,11 @@ when EnableApiTracking:
 # Publicly available for API logging
 template beginTrackApi*(ldg: LedgerRef; s: LedgerFnInx) =
   when EnableApiTracking:
-    ldg.beginApi
-    let ctx {.inject.} = s
+    ldg.beginApi(s)
 
 template ifTrackApi*(ldg: LedgerRef; code: untyped) =
   when EnableApiTracking:
     ldg.endApiIf:
-      when EnableApiProfiling:
-        ledgerProfTab.update(ctx, elapsed)
       code
 
 # ------------------------------------------------------------------------------
@@ -101,12 +92,27 @@ proc bless*(ldg: LedgerRef; db: CoreDbRef): LedgerRef =
     ldg.validate()
   when EnableApiTracking:
     ldg.trackApi = db.trackLedgerApi
+  when LedgerEnableApiProfiling:
+    ldg.profTab = db.ldgProfData()
   ldg.ifTrackApi: debug apiTxt, ctx, elapsed, ldgType=ldg.ldgType
   ldg
 
 # ------------------------------------------------------------------------------
 # Public methods
 # ------------------------------------------------------------------------------
+
+proc ldgProfData*(db: CoreDbRef): LedgerProfListRef =
+  ## Return profiling data table (only available in profiling mode). If
+  ## available (i.e. non-nil), result data can be organised by the functions
+  ## available with `aristo_profile`.
+  ##
+  ## Note that profiling these data have accumulated over several ledger
+  ## sessions running on the same `CoreDb` instance.
+  ##
+  when LedgerEnableApiProfiling:
+    if db.ledgerHook.isNil:
+      db.ledgerHook = LedgerProfListRef.init()
+    cast[LedgerProfListRef](db.ledgerHook)
 
 proc accessList*(ldg: LedgerRef, eAddr: EthAddress) =
   ldg.beginTrackApi LdgAccessListFn
