@@ -13,7 +13,8 @@ import
   eth/common,
   rocksdb,
   ../../nimbus/db/aristo/[
-    aristo_debug, aristo_desc, aristo_filter/filter_scheduler, aristo_merge],
+    aristo_debug, aristo_desc, aristo_delete, aristo_filter/filter_scheduler,
+    aristo_hashify, aristo_hike, aristo_merge],
   ../../nimbus/db/kvstore_rocksdb,
   ../../nimbus/sync/protocol/snap/snap_types,
   ../test_sync_snap/test_types,
@@ -45,26 +46,6 @@ func to(a: NodeKey; T: type UInt256): T =
 
 func to(a: NodeKey; T: type PathID): T =
   a.to(UInt256).to(T)
-
-when not declared(aristo_merge.noisy):
-  import  ../../nimbus/db/aristo/aristo_hike
-  proc merge(
-      db: AristoDbRef;
-      root: VertexID;
-      path: openArray[byte];
-      data: openArray[byte];
-      accPath: PathID;
-      noisy: bool;
-        ): Result[bool, AristoError] =
-    aristo_merge.merge(db, root, path, data, accPath)
-  proc merge(
-      db: AristoDbRef;
-      lty: LeafTie;
-      pyl: PayloadRef;
-      accPath: PathID;
-      noisy: bool;
-        ): Result[Hike, AristoError] =
-    aristo_merge.merge(db, lty, pyl, accPath)
 
 # ------------------------------------------------------------------------------
 # Public pretty printing
@@ -231,6 +212,77 @@ func mapRootVid*(
 # Public functions
 # ------------------------------------------------------------------------------
 
+proc hashify*(
+    db: AristoDbRef;
+    noisy: bool;
+      ): Result[void,(VertexID,AristoError)] =
+  when declared(aristo_hashify.noisy):
+    aristo_hashify.exec(aristo_hashify.hashify(db), noisy)
+  else:
+    aristo_hashify.hashify(db)
+
+
+proc delete*(
+    db: AristoDbRef;
+    root: VertexID;
+    path: openArray[byte];
+    accPath: PathID;
+    noisy: bool;
+      ): Result[bool,(VertexID,AristoError)] =
+  when declared(aristo_delete.noisy):
+    aristo_delete.exec(aristo_delete.delete(db, root, path, accPath), noisy)
+  else:
+    aristo_delete.delete(db, root, path, accPath)
+
+proc delete*(
+    db: AristoDbRef;
+    lty: LeafTie;
+    accPath: PathID;
+    noisy: bool;
+      ): Result[bool,(VertexID,AristoError)] =
+  when declared(aristo_delete.noisy):
+    aristo_delete.exec(aristo_delete.delete(db, lty, accPath), noisy)
+  else:
+    aristo_delete.delete(db, lty, accPath)
+
+proc delTree*(
+    db: AristoDbRef;
+    root: VertexID;
+    accPath: PathID;
+    noisy: bool;
+      ): Result[void,(VertexID,AristoError)] =
+  when declared(aristo_delete.noisy):
+    aristo_delete.exec(aristo_delete.delTree(db, root, accPath), noisy)
+  else:
+    aristo_delete.delTree(db, root, accPath)
+
+
+proc merge(
+    db: AristoDbRef;
+    root: VertexID;
+    path: openArray[byte];
+    data: openArray[byte];
+    accPath: PathID;
+    noisy: bool;
+      ): Result[bool, AristoError] =
+  when declared(aristo_merge.noisy):
+    aristo_merge.exec(aristo_merge.merge(db, root, path, data, accPath), noisy)
+  else:
+    aristo_merge.merge(db, root, path, data, accPath)
+
+proc mergePayload*(
+    db: AristoDbRef;
+    lty: LeafTie;
+    pyl: PayloadRef;
+    accPath: PathID;
+    noisy: bool;
+      ): Result[Hike,AristoError] =
+  when declared(aristo_merge.noisy):
+    aristo_merge.exec(aristo_merge.mergePayload(db, lty, pyl, accPath), noisy)
+  else:
+    aristo_merge.mergePayload(db, lty, pyl, accPath)
+
+
 proc mergeList*(
     db: AristoDbRef;                   # Database, top layer
     leafs: openArray[LeafTiePayload];  # Leaf items to add to the database
@@ -241,7 +293,7 @@ proc mergeList*(
   for n,w in leafs:
     noisy.say "*** mergeList",
       " n=", n, "/", leafs.len
-    let rc = db.merge(w.leafTie, w.payload, VOID_PATH_ID, noisy=noisy)
+    let rc = db.mergePayload(w.leafTie, w.payload, VOID_PATH_ID, noisy=noisy)
     noisy.say "*** mergeList",
       " n=", n, "/", leafs.len,
       " rc=", (if rc.isOk: "ok" else: $rc.error),

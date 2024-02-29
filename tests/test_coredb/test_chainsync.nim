@@ -19,10 +19,25 @@ import
   ../replay/[pp, undump_blocks, xcheck],
   ./test_helpers
 
-type StopMoaningAboutLedger {.used.} = LedgerType
+type
+  StopMoaningAboutLedger {.used.} = LedgerType
 
-when CoreDbEnableApiProfiling or LedgerEnableApiProfiling:
-  import std/[algorithm, sequtils, strutils]
+when CoreDbEnableApiProfiling:
+  import
+    std/[algorithm, sequtils, strutils],
+    ../../nimbus/db/aristo/[aristo_api, aristo_profile],
+    ../../nimbus/db/kvt/kvt_api
+  var
+    aristoProfData: AristoDbProfListRef
+    kvtProfData: KvtDbProfListRef
+    cdbProfData: CoreDbProfListRef
+
+when LedgerEnableApiProfiling:
+  when not CoreDbEnableApiProfiling:
+    import
+      std/[algorithm, sequtils, strutils]
+  var
+    ldgProfData: LedgerProfListRef
 
 const
   EnableExtraLoggingControl = true
@@ -99,35 +114,29 @@ template stopLoggingAfter(noisy: bool; code: untyped) =
 
 # --------------
 
-proc coreDbProfResults(info: string; indent = 4): string =
-  when CoreDbEnableApiProfiling:
-    let
-      pfx = indent.toPfx
-      pfx2 = pfx & "  "
-    result = "CoreDb profiling results" & info & ":"
-    result &= "\n" & pfx & "by accumulated duration per procedure"
-    for (ela,w) in coreDbProfTab.byElapsed:
-      result &= pfx2 & ela.pp & ": " &
-        w.mapIt($it & coreDbProfTab.stats(it).pp(true)).sorted.join(", ")
-    result &=  "\n" & pfx & "by number of visits"
-    for (count,w) in coreDbProfTab.byVisits:
-      result &= pfx2 & $count & ": " &
-        w.mapIt($it & coreDbProfTab.stats(it).pp).sorted.join(", ")
+when CoreDbEnableApiProfiling or
+     LedgerEnableApiProfiling:
+  proc profilingPrinter(
+      data: AristoDbProfListRef;
+      names: openArray[string];
+      header: string;
+      indent = 4;
+        ): string =
+    if not data.isNil:
+      let
+        pfx = indent.toPfx
+        pfx2 = pfx & "  "
+      result = header & ":"
 
-proc ledgerProfResults(info: string; indent = 4): string =
-  when LedgerEnableApiProfiling:
-    let
-      pfx = indent.toPfx
-      pfx2 = pfx & "  "
-    result = "Ledger profiling results" & info & ":"
-    result &= "\n" & pfx & "by accumulated duration per procedure"
-    for (ela,w) in ledgerProfTab.byElapsed:
-      result &= pfx2 & ela.pp & ": " &
-        w.mapIt($it & ledgerProfTab.stats(it).pp(true)).sorted.join(", ")
-    result &=  "\n" & pfx & "by number of visits"
-    for (count,w) in ledgerProfTab.byVisits:
-      result &= pfx2 & $count & ": " &
-        w.mapIt($it & ledgerProfTab.stats(it).pp).sorted.join(", ")
+      result &= "\n" & pfx & "by accumulated duration per procedure"
+      for (ela,fns) in data.byElapsed:
+        result &= pfx2 & ela.pp & ": " & fns.mapIt(
+          names[it] & data.stats(it).pp(true)).sorted.join(", ")
+
+      result &=  "\n" & pfx & "by number of visits"
+      for (count,fns) in data.byVisits:
+        result &= pfx2 & $count & ": " & fns.mapIt(
+          names[it] & data.stats(it).pp).sorted.join(", ")
 
 # ------------------------------------------------------------------------------
 # Public test function
@@ -136,18 +145,33 @@ proc ledgerProfResults(info: string; indent = 4): string =
 proc test_chainSyncProfilingPrint*(
     noisy = false;
     nBlocks: int;
+    indent = 2;
       ) =
   if noisy:
     let info =
       if 0 < nBlocks and nBlocks < high(int): " (" & $nBlocks & " blocks)"
       else: ""
-    block:
-      let s = info.coreDbProfResults()
+    var blurb: seq[string]
+    when LedgerEnableApiProfiling:
+      blurb.add ldgProfData.profilingPrinter(
+        names = LedgerFnInx.toSeq.mapIt($it),
+        header = "Ledger profiling results" & info,
+        indent)
+    when CoreDbEnableApiProfiling:
+      blurb.add cdbProfData.profilingPrinter(
+        names = CoreDbFnInx.toSeq.mapIt($it),
+        header = "CoreDb profiling results" & info,
+        indent)
+      blurb.add aristoProfData.profilingPrinter(
+        names = AristoApiProfNames.toSeq.mapIt($it),
+        header = "Aristo backend profiling results" & info,
+        indent)
+      blurb.add kvtProfData.profilingPrinter(
+        names = KvtApiProfNames.toSeq.mapIt($it),
+        header = "Kvt backend profiling results" & info,
+        indent)
+    for s in blurb:
       if 0 < s.len: true.say "***", s, "\n"
-    block:
-      let s = info.ledgerProfResults()
-      if 0 < s.len: true.say "***", s, "\n"
-
 
 proc test_chainSync*(
     noisy: bool;
@@ -165,6 +189,16 @@ proc test_chainSync*(
 
   noisy.initLogging com
   defer: com.finishLogging()
+
+  # Profile variables will be non-nil if profiling is available. The profiling
+  # API data need to be captured so it will be available after the services
+  # have terminated.
+  when CoreDbEnableApiProfiling:
+    # terminated.
+    (aristoProfData, kvtProfData) = com.db.toAristoProfData()
+    cdbProfData = com.db.dbProfData()
+  when LedgerEnableApiProfiling:
+    ldgProfData = com.db.ldgProfData()
 
   for w in filePaths.undumpBlocks:
     let (fromBlock, toBlock) = (w[0][0].blockNumber, w[0][^1].blockNumber)

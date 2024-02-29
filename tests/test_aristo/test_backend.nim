@@ -17,18 +17,18 @@ import
   unittest2,
   stew/endians2,
   ../../nimbus/sync/protocol,
-  ../../nimbus/db/aristo,
   ../../nimbus/db/aristo/[
+    aristo_blobify,
     aristo_debug,
     aristo_desc,
     aristo_desc/desc_backend,
     aristo_get,
-    aristo_hashify,
     aristo_init/memory_db,
     aristo_init/rocks_db,
     aristo_layers,
+    aristo_merge,
     aristo_persistent,
-    aristo_blobify,
+    aristo_tx,
     aristo_vid],
   ../replay/xcheck,
   ./test_helpers
@@ -39,13 +39,6 @@ const
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
-
-when not declared(aristo_hashify.noisy):
-  proc hashify(
-      db: AristoDbRef;
-      noisy: bool;
-        ): Result[void,(VertexID,AristoError)] =
-    aristo_hashify.hashify(db)
 
 func hash(filter: FilterRef): Hash =
   ## Unique hash/filter -- cannot use de/blobify as the expressions

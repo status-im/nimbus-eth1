@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -13,31 +13,26 @@
 ##
 {.push raises: [].}
 
-import aristo/[
-  aristo_constants, aristo_delete, aristo_fetch, aristo_init, aristo_merge,
-  aristo_nearby, aristo_serialise, aristo_sign, aristo_tx, aristo_utils,
-  aristo_walk]
+import
+  aristo/[aristo_api, aristo_constants, aristo_sign]
 export
-  aristo_constants, aristo_delete, aristo_fetch, aristo_init, aristo_merge,
-  aristo_nearby, aristo_serialise, aristo_sign, aristo_tx, aristo_utils,
-  aristo_walk
+  aristo_api, aristo_constants, aristo_sign
 
 import
-  aristo/aristo_get
+  aristo/aristo_init
 export
-  getKeyRc
+  MemBackendRef,
+  VoidBackendRef,
+  init
 
 import
-  aristo/aristo_hashify
+  aristo/aristo_nearby
 export
-  hashify
+  leftPairs, # iterators
+  rightPairs
 
 import
-  aristo/aristo_path
-export
-  pathAsBlob
-
-import aristo/aristo_desc/[desc_identifiers, desc_structural]
+  aristo/aristo_desc/[desc_identifiers, desc_structural]
 export
   AristoAccount,
   PayloadRef,
@@ -53,7 +48,7 @@ export
   AristoError,
   AristoTxRef,
   MerkleSignRef,
-  forget,
+  QidLayoutRef,
   isValid
 
 # End

@@ -22,14 +22,15 @@ import
 # ------------------------------------------------------------------------------
 
 proc vidFetch*(db: AristoDbRef; pristine = false): VertexID =
-  ## Create a new `VertexID`. Reusable vertex *ID*s are kept in a list where
-  ## the top entry *ID* has the property that any other *ID* larger is also not
-  ## not used on the database.
+  ## Recycle or create a new `VertexID`. Reusable vertex *ID*s are kept in a
+  ## list where the top entry *ID* has the property that any other *ID* larger
+  ## is also not used on the database.
   ##
   ## The function prefers to return recycled vertex *ID*s if there are any.
   ## When the argument `pristine` is set `true`, the function guarantees to
   ## return a non-recycled, brand new vertex *ID* which is the preferred mode
   ## when creating leaf vertices.
+  ##
   if db.vGen.len == 0:
     # Note that `VertexID(1)` is the root of the main trie
     db.top.final.vGen = @[VertexID(LEAST_FREE_VID+1)]
@@ -47,6 +48,7 @@ proc vidFetch*(db: AristoDbRef; pristine = false): VertexID =
 proc vidPeek*(db: AristoDbRef): VertexID =
   ## Like `new()` without consuming this *ID*. It will return the *ID* that
   ## would be returned by the `new()` function.
+  ##
   case db.vGen.len:
   of 0:
     VertexID(LEAST_FREE_VID)
@@ -59,6 +61,7 @@ proc vidPeek*(db: AristoDbRef): VertexID =
 proc vidDispose*(db: AristoDbRef; vid: VertexID) =
   ## Recycle the argument `vtxID` which is useful after deleting entries from
   ## the vertex table to prevent the `VertexID` type key values small.
+  ##
   if LEAST_FREE_VID <= vid.distinctBase:
     if db.vGen.len == 0:
       db.top.final.vGen = @[vid]

@@ -14,7 +14,8 @@ import
   eth/common,
   results,
   ../../aristo,
-  ../../aristo/[aristo_persistent, aristo_walk/persistent],
+  ../../aristo/[
+    aristo_desc, aristo_persistent, aristo_walk/persistent, aristo_tx],
   ../../kvt,
   ../../kvt/kvt_persistent,
   ../base,

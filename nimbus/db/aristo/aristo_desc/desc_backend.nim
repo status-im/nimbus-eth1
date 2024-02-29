@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -119,6 +119,24 @@ type
     putEndFn*: PutEndFn              ## Commit bulk store session
 
     closeFn*: CloseFn                ## Generic destructor
+
+func dup*(be: BackendRef): BackendRef =
+  if not be.isNil:
+    result = BackendRef(
+      filters:  be.filters,
+      getVtxFn: be.getVtxFn,
+      getKeyFn: be.getKeyFn,
+      getFilFn: be.getFilFn,
+      getIdgFn: be.getIdgFn,
+      getFqsFn: be.getFqsFn,
+      putBegFn: be.putBegFn,
+      putVtxFn: be.putVtxFn,
+      putKeyFn: be.putKeyFn,
+      putFilFn: be.putFilFn,
+      putIdgFn: be.putIdgFn,
+      putFqsFn: be.putFqsFn,
+      putEndFn: be.putEndFn,
+      closeFn:  be.closeFn)
 
 # ------------------------------------------------------------------------------
 # End
