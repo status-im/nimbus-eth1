@@ -25,9 +25,11 @@ type
 when CoreDbEnableApiProfiling:
   import
     std/[algorithm, sequtils, strutils],
-    ../../nimbus/db/aristo/[aristo_api, aristo_profile]
+    ../../nimbus/db/aristo/[aristo_api, aristo_profile],
+    ../../nimbus/db/kvt/kvt_api
   var
     aristoProfData: AristoDbProfListRef
+    kvtProfData: KvtDbProfListRef
 
 elif LedgerEnableApiProfiling:
   import
@@ -157,6 +159,25 @@ proc aristoProfResults(info: string; indent = 4): string =
           $AristoApiProfNames(it) &
           data.stats(it).pp).sorted.join(", ")
 
+proc kvtProfResults(info: string; indent = 4): string =
+  when CoreDbEnableApiProfiling:
+    if not kvtProfData.isNil: # e.g. if on a legacy DB run
+      let
+        data = kvtProfData
+        pfx = indent.toPfx
+        pfx2 = pfx & "  "
+      result = "Kvt backend profiling results" & info & ":"
+      result &= "\n" & pfx & "by accumulated duration per procedure"
+      for (ela,fns) in data.byElapsed:
+        result &= pfx2 & ela.pp & ": " & fns.mapIt(
+          $KvtApiProfNames(it) &
+          data.stats(it).pp(true)).sorted.join(", ")
+      result &=  "\n" & pfx & "by number of visits"
+      for (count,fns) in data.byVisits:
+        result &= pfx2 & $count & ": " & fns.mapIt(
+          $KvtApiProfNames(it) &
+          data.stats(it).pp).sorted.join(", ")
+
 # ------------------------------------------------------------------------------
 # Public test function
 # ------------------------------------------------------------------------------
@@ -177,6 +198,9 @@ proc test_chainSyncProfilingPrint*(
       if 0 < s.len: true.say "***", s, "\n"
     block:
       let s = info.aristoProfResults()
+      if 0 < s.len: true.say "***", s, "\n"
+    block:
+      let s = info.kvtProfResults()
       if 0 < s.len: true.say "***", s, "\n"
 
 
@@ -201,7 +225,7 @@ proc test_chainSync*(
     # Variables will be non-nil if profiling is available. The profiling apis
     # needs to be captured so it will be available after the services have
     # terminated.
-    aristoProfData = com.db.toAristoProfData()
+    (aristoProfData, kvtProfData) = com.db.toAristoProfData()
 
   for w in filePaths.undumpBlocks:
     let (fromBlock, toBlock) = (w[0][0].blockNumber, w[0][^1].blockNumber)

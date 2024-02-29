@@ -248,10 +248,13 @@ proc newAristoVoidCoreDbRef*(): CoreDbRef =
 # Public helpers for direct backend access
 # ------------------------------------------------------------------------------
 
-func toAristoProfData*(db: CoreDbRef): AristoDbProfListRef =
+func toAristoProfData*(
+    db: CoreDbRef;
+      ): tuple[aristo: AristoDbProfListRef, kvt: KvtDbProfListRef]  =
   when CoreDbEnableApiProfiling:
     if db.isAristo:
-      return db.AristoCoreDbRef.adbBase.api.AristoApiProfRef.data
+      result.aristo = db.AristoCoreDbRef.adbBase.api.AristoApiProfRef.data
+      result.kvt = db.AristoCoreDbRef.kdbBase.api.KvtApiProfRef.data
 
 func toAristo*(be: CoreDbKvtBackendRef): KvtDbRef =
   if be.parent.isAristo:
