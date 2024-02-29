@@ -27,11 +27,8 @@ type
     tmpDir*: string
     backupEngine: BackupEngineRef
 
-template canWrite(db: RocksStoreRef): bool =
-  (db.store of RocksDbReadWriteRef)
-
 template validateCanWrite(db: RocksStoreRef) =
-  if not db.canWrite():
+  if not (db.store of RocksDbReadWriteRef):
     raiseAssert "Unimplemented"
 
 proc get*(db: RocksStoreRef, key: openArray[byte], onData: kvstore.DataProc): KvResult[bool] =
@@ -51,13 +48,13 @@ proc del*(db: RocksStoreRef, key: openArray[byte]): KvResult[bool] =
   db.validateCanWrite()
   let db = db.store.RocksDbReadWriteRef
 
-  let existsRes = db.keyExists(key)
-  if existsRes.isErr() or existsRes.get() == false:
-    return existsRes
+  let exists = ? db.keyExists(key)
+  if not exists:
+    return ok(false)
 
-  let delRes = db.delete(key)
-  if delRes.isErr():
-    return err(delRes.error())
+  let res = db.delete(key)
+  if res.isErr():
+    return err(res.error())
 
   ok(true)
 
@@ -66,6 +63,8 @@ proc clear*(db: RocksStoreRef): KvResult[bool] =
 
 proc close*(db: RocksStoreRef) =
   db.store.close()
+  db.dbOpts.close()
+  db.backupEngine.close()
 
 proc init*(
     T: type RocksStoreRef,
@@ -83,20 +82,14 @@ proc init*(
   except OSError, IOError:
     return err("rocksdb: cannot create database directory")
 
-  let backupRes = openBackupEngine(backupsDir)
-  if backupRes.isErr():
-    return err(backupRes.error())
+  let backupEngine = ? openBackupEngine(backupsDir)
 
   let dbOpts = defaultDbOptions()
   dbOpts.setMaxOpenFiles(maxOpenFiles)
 
   if readOnly:
-    let res = openRocksDbReadOnly(dataDir, dbOpts)
-    if res.isErr():
-      return err(res.error())
-    ok(T(dbOpts: dbOpts, store: res.get(), backupEngine: backupRes.get()))
+    let readOnlyStore = ? openRocksDbReadOnly(dataDir, dbOpts)
+    ok(T(dbOpts: dbOpts, store: readOnlyStore, backupEngine: backupEngine))
   else:
-    let res = openRocksDb(dataDir, dbOpts)
-    if res.isErr():
-      return err(res.error())
-    ok(T(dbOpts: dbOpts, store: res.get(), backupEngine: backupRes.get()))
+    let readWriteStore = ? openRocksDb(dataDir, dbOpts)
+    ok(T(dbOpts: dbOpts, store: readWriteStore, backupEngine: backupEngine))
