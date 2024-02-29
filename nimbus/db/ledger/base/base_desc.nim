@@ -89,6 +89,7 @@ type
   SetTransientStorageFn* =
     proc(eAddr: EthAddress, slot, val: UInt256) {.noRaise.}
   SubBalanceFn* = proc(eAddr: EthAddress, delta: UInt256) {.noRaise.}
+  GetAccessListFn* = proc(): AccessList {.noRaise.}
 
   LedgerFns* = object
     accessListFn*: AccessListFn
@@ -136,5 +137,6 @@ type
     setStorageFn*: SetStorageFn
     setTransientStorageFn*: SetTransientStorageFn
     subBalanceFn*: SubBalanceFn
+    getAccessListFn*: GetAccessListFn
 
 # End
