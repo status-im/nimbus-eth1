@@ -16,6 +16,7 @@
 import
   std/sequtils,
   eth/common,
+  rocksdb/lib/librocksdb,
   rocksdb,
   ./rdb_desc
 
@@ -26,8 +27,12 @@ import
 iterator walk*(rdb: RdbInst): tuple[key: Blob, data: Blob] =
   ## Walk over all key-value pairs of the database.
   ##
-  let rit = rdb.store.db.rocksdb_create_iterator(rdb.store.readOptions)
-  defer: rit.rocksdb_iter_destroy()
+  let
+    readOptions = rocksdb_readoptions_create()
+    rit = rdb.store.cPtr.rocksdb_create_iterator(readOptions)
+  defer:
+    rit.rocksdb_iter_destroy()
+    readOptions.rocksdb_readoptions_destroy()
 
   rit.rocksdb_iter_seek_to_first()
   while rit.rocksdb_iter_valid() != 0:

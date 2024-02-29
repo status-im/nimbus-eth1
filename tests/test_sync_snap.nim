@@ -151,7 +151,7 @@ proc flushDbs(db: TestDbs) =
     for n in 0 ..< nTestDbInstances:
       if db.cdb[n].isNil or db.cdb[n].dbType != LegacyDbPersistent:
         break
-      db.cdb[n].backend.toRocksStoreRef.store.db.rocksdb_close
+      db.cdb[n].backend.toRocksStoreRef.store.close()
     db.baseDir.flushDbDir(db.subDir)
 
 proc testDbs(

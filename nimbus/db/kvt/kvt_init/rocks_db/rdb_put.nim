@@ -17,6 +17,7 @@ import
   std/[algorithm, os, sequtils, strutils, sets, tables],
   chronicles,
   eth/common,
+  rocksdb/lib/librocksdb,
   rocksdb,
   results,
   ../../kvt_desc,
@@ -27,7 +28,7 @@ logScope:
 
 type
   RdbPutSession = object
-    writer: rocksdb_sstfilewriter_t
+    writer: ptr rocksdb_sstfilewriter_t
     sstPath: string
     nRecords: int
 
@@ -74,7 +75,7 @@ proc begin(
   var csError: cstring
 
   var session = RdbPutSession(
-    writer: rocksdb_sstfilewriter_create(rdb.envOpt, rdb.store.options),
+    writer: rocksdb_sstfilewriter_create(rdb.envOpt, rdb.dbOpts.cPtr),
     sstPath: rdb.sstFilePath)
 
   if session.writer.isNil:
@@ -82,7 +83,7 @@ proc begin(
   session.sstPath.rmFileIgnExpt
 
   session.writer.rocksdb_sstfilewriter_open(
-    session.sstPath.cstring, addr csError)
+    session.sstPath.cstring, cast[cstringArray](csError.addr))
   if not csError.isNil:
     session.destroy()
     let info = $csError
@@ -109,7 +110,8 @@ proc add(
 
   session.writer.rocksdb_sstfilewriter_add(
     cast[cstring](unsafeAddr key[0]), csize_t(key.len),
-    cast[cstring](unsafeAddr val[0]), csize_t(val.len), addr csError)
+    cast[cstring](unsafeAddr val[0]), csize_t(val.len),
+    cast[cstringArray](csError.addr))
   if not csError.isNil:
     return err((RdbBeAddSstWriter, $csError))
 
@@ -127,12 +129,12 @@ proc commit(
   var csError: cstring
 
   if 0 < session.nRecords:
-    session.writer.rocksdb_sstfilewriter_finish(addr csError)
+    session.writer.rocksdb_sstfilewriter_finish(cast[cstringArray](csError.addr))
     if not csError.isNil:
       return err((RdbBeFinishSstWriter, $csError))
 
-    rdb.store.db.rocksdb_ingest_external_file(
-      [session.sstPath].allocCStringArray, 1, rdb.impOpt, addr csError)
+    rdb.store.cPtr.rocksdb_ingest_external_file(
+      [session.sstPath].allocCStringArray, 1, rdb.impOpt, cast[cstringArray](csError.addr))
     if not csError.isNil:
       return err((RdbBeIngestSstWriter, $csError))
 
@@ -170,7 +172,7 @@ proc put*(
       return -1
     if b.len < a.len:
       return 1
-  
+
   for key in tab.keys.toSeq.sorted cmpBlobs:
     let val = tab.getOrVoid key
     if val.isValid:
@@ -189,7 +191,7 @@ proc put*(
 
   # Delete vertices after successfully updating vertices with non-zero values.
   for key in delKey:
-    let rc = rdb.store.del key
+    let rc = rdb.store.delete key
     if rc.isErr:
       return err((RdbBeDriverDelError,rc.error))
 

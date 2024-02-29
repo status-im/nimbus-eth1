@@ -17,6 +17,7 @@ import
   std/sequtils,
   eth/common,
   stew/endians2,
+  rocksdb/lib/librocksdb,
   rocksdb,
   ../init_common,
   ./rdb_desc
@@ -49,8 +50,13 @@ iterator walk*(
   ## Walk over all key-value pairs of the database.
   ##
   ## Non-decodable entries are stepped over and ignored.
-  let rit = rdb.store.db.rocksdb_create_iterator(rdb.store.readOptions)
-  defer: rit.rocksdb_iter_destroy()
+
+  let
+    readOptions = rocksdb_readoptions_create()
+    rit = rdb.store.cPtr.rocksdb_create_iterator(readOptions)
+  defer:
+    rit.rocksdb_iter_destroy()
+    readOptions.rocksdb_readoptions_destroy()
 
   rit.rocksdb_iter_seek_to_first()
 
@@ -91,8 +97,12 @@ iterator walk*(
       # Unsupported
       break walkBody
 
-    let rit = rdb.store.db.rocksdb_create_iterator(rdb.store.readOptions)
-    defer: rit.rocksdb_iter_destroy()
+    let
+      readOptions = rocksdb_readoptions_create()
+      rit = rdb.store.cPtr.rocksdb_create_iterator(readOptions)
+    defer:
+      rit.rocksdb_iter_destroy()
+      readOptions.rocksdb_readoptions_destroy()
 
     var
       kLen: csize_t

@@ -15,16 +15,18 @@
 
 import
   std/os,
+  rocksdb/lib/librocksdb,
   rocksdb
 
 type
   RdbInst* = object
-    store*: RocksDBInstance          ## Rocks DB database handler
+    dbOpts*: DbOptionsRef
+    store*: RocksDbReadWriteRef      ## Rocks DB database handler
     basePath*: string                ## Database directory
 
     # Low level Rocks DB access for bulk store
-    envOpt*: rocksdb_envoptions_t
-    impOpt*: rocksdb_ingestexternalfileoptions_t
+    envOpt*: ptr rocksdb_envoptions_t
+    impOpt*: ptr rocksdb_ingestexternalfileoptions_t
 
 const
   BaseFolder* = "nimbus"         # Same as for Legacy DB

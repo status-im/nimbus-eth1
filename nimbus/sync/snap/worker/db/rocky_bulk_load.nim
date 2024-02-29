@@ -13,6 +13,7 @@
 import
   std/os, # std/[sequtils, strutils],
   eth/common/eth_types,
+  rocksdb/lib/librocksdb,
   rocksdb,
   ../../../../db/kvstore_rocksdb
 
@@ -21,9 +22,9 @@ import
 type
   RockyBulkLoadRef* = ref object of RootObj
     db: RocksStoreRef
-    envOption: rocksdb_envoptions_t
-    importOption: rocksdb_ingestexternalfileoptions_t
-    writer: rocksdb_sstfilewriter_t
+    envOption: ptr rocksdb_envoptions_t
+    importOption: ptr rocksdb_ingestexternalfileoptions_t
+    writer: ptr rocksdb_sstfilewriter_t
     filePath: string
     csError: string
 
@@ -34,7 +35,7 @@ type
 proc init*(
     T: type RockyBulkLoadRef;
     db: RocksStoreRef;
-    envOption: rocksdb_envoptions_t
+    envOption: ptr rocksdb_envoptions_t
       ): T =
   ## Create a new bulk load descriptor.
   result = T(
@@ -85,9 +86,9 @@ proc lastError*(rbl: RockyBulkLoadRef): string =
   ## Get last error explainer
   rbl.csError
 
-proc store*(rbl: RockyBulkLoadRef): RocksDBInstance =
+proc store*(rbl: RockyBulkLoadRef): RocksDbReadWriteRef =
   ## Provide the diecriptor for backend functions as defined in `rocksdb`.
-  rbl.db.store
+  rbl.db.store.RocksDbReadWriteRef
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -98,7 +99,7 @@ proc begin*(rbl: RockyBulkLoadRef; fileName: string): bool =
   ## `fileName`. When finished, this file will bi direcly imported into the
   ## database.
   rbl.writer = rocksdb_sstfilewriter_create(
-    rbl.envOption, rbl.db.store.options)
+    rbl.envOption, rbl.db.dbOpts.cPtr)
   if rbl.writer.isNil:
     rbl.csError = "Cannot create sst writer session"
     return false
@@ -106,7 +107,7 @@ proc begin*(rbl: RockyBulkLoadRef; fileName: string): bool =
   rbl.csError = ""
   let filePath = rbl.db.tmpDir / fileName
   var csError: cstring
-  rbl.writer.rocksdb_sstfilewriter_open(fileName, addr csError)
+  rbl.writer.rocksdb_sstfilewriter_open(fileName, cast[cstringArray](csError.addr))
   if not csError.isNil:
     rbl.csError = $csError
     return false
@@ -129,7 +130,7 @@ proc add*(
   rbl.writer.rocksdb_sstfilewriter_add(
     cast[cstring](unsafeAddr key[0]), csize_t(key.len),
     cast[cstring](unsafeAddr val[0]), csize_t(val.len),
-    addr csError)
+    cast[cstringArray](csError.addr))
   if csError.isNil:
     return true
   rbl.csError = $csError
@@ -145,13 +146,13 @@ proc finish*(
   ## If successful, the return value is the size of the SST file used if
   ## that value is available. Otherwise, `0` is returned.
   var csError: cstring
-  rbl.writer.rocksdb_sstfilewriter_finish(addr csError)
+  rbl.writer.rocksdb_sstfilewriter_finish(cast[cstringArray](csError.addr))
 
   if csError.isNil:
-    rbl.db.store.db.rocksdb_ingest_external_file(
+    rbl.db.store.cPtr.rocksdb_ingest_external_file(
       [rbl.filePath].allocCStringArray, 1,
       rbl.importOption,
-      addr csError)
+      cast[cstringArray](csError.addr))
 
     if csError.isNil:
       var

@@ -16,6 +16,7 @@
 import
   std/[tables, os],
   eth/common,
+  rocksdb/lib/librocksdb,
   rocksdb,
   stew/endians2,
   ../../aristo_desc,
@@ -23,17 +24,18 @@ import
 
 type
   RdbInst* = object
-    store*: RocksDBInstance          ## Rocks DB database handler
+    dbOpts*: DbOptionsRef
+    store*: RocksDbReadWriteRef      ## Rocks DB database handler
     basePath*: string                ## Database directory
 
     # Low level Rocks DB access for bulk store
-    envOpt*: rocksdb_envoptions_t
-    impOpt*: rocksdb_ingestexternalfileoptions_t
+    envOpt*: ptr rocksdb_envoptions_t
+    impOpt*: ptr rocksdb_ingestexternalfileoptions_t
 
   RdbKey* = array[1 + sizeof VertexID, byte]
     ## Sub-table key, <pfx> + VertexID
 
-  RdbTabs* = array[StorageType,Table[uint64,Blob]]
+  RdbTabs* = array[StorageType, Table[uint64,Blob]]
     ## Combined table for caching data to be stored/updated
 
 const

@@ -13,6 +13,7 @@
 import
   std/[algorithm, math, sequtils, strformat, times],
   stew/byteutils,
+  rocksdb/lib/librocksdb,
   rocksdb,
   unittest2,
   ../../nimbus/core/chain,
@@ -57,7 +58,7 @@ proc to*(t: NodeTag; T: type Blob): T =
 
 # ----------------
 
-proc thisRecord(r: rocksdb_iterator_t): (Blob,Blob) =
+proc thisRecord(r: ptr rocksdb_iterator_t): (Blob,Blob) =
   var kLen, vLen:  csize_t
   let
     kData = r.rocksdb_iter_key(addr kLen)
@@ -134,8 +135,8 @@ proc test_dbTimingRockySetup*(
   ## Extract key-value records into memory tables via rocksdb iterator
   let
     rdb = cdb.backend.toRocksStoreRef
-    rop = rdb.store.readOptions
-    rit = rdb.store.db.rocksdb_create_iterator(rop)
+    rop = rocksdb_readoptions_create()
+    rit = rdb.store.cPtr.rocksdb_create_iterator(rop)
   check not rit.isNil
 
   var
@@ -163,6 +164,7 @@ proc test_dbTimingRockySetup*(
       noisy.say "***", "ignoring key=", key.toHex
 
   rit.rocksdb_iter_destroy()
+  rop.rocksdb_readoptions_destroy()
 
   var
     (mean32, stdv32) = meanStdDev(v32Sum, v32SqSum, t32.len)
