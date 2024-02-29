@@ -97,10 +97,9 @@ proc run*(
         raiseAssert "Invalid baked-in state: " & err.msg
 
     genesisTime = getStateField(genesisState[], genesis_time)
-    beaconClock =
-      BeaconClock.init(genesisTime).valueOr:
-        error "Invalid genesis time in state", genesisTime
-        quit QuitFailure
+    beaconClock = BeaconClock.init(genesisTime).valueOr:
+      error "Invalid genesis time in state", genesisTime
+      quit QuitFailure
 
     getBeaconTime = beaconClock.getBeaconTimeFn()
 
@@ -150,7 +149,7 @@ proc run*(
 
     lightClient = createLightClient(
       network, rng, lcConfig, cfg, forkDigests, getBeaconTime, genesis_validators_root,
-      LightClientFinalizationMode.Optimistic
+      LightClientFinalizationMode.Optimistic,
     )
 
   verifiedProxy.installEthApiHandlers()
@@ -243,7 +242,7 @@ proc run*(
 
       targetGossipState = getTargetGossipState(
         slot.epoch, cfg.ALTAIR_FORK_EPOCH, cfg.BELLATRIX_FORK_EPOCH,
-        cfg.CAPELLA_FORK_EPOCH, cfg.DENEB_FORK_EPOCH, isBehind
+        cfg.CAPELLA_FORK_EPOCH, cfg.DENEB_FORK_EPOCH, isBehind,
       )
 
     template currentGossipState(): auto =

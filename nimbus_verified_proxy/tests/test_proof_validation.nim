@@ -65,7 +65,7 @@ suite "Merkle proof of inclusion validation":
             hexToSeqByte(
               "0xf8749e2070b0cf62febcfb17abd5e2189b6e0029e0f9b9a1aabf0e670469d6ab74b853f8518301175e8a3d25780abb5f0a89b7daa056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
             )
-          )
+          ),
         ]
 
     check:
@@ -117,7 +117,7 @@ suite "Merkle proof of inclusion validation":
             hexToSeqByte(
               "0xf8679e20da5951bceaed385c03546f45f276b83d86bc0755e045f92f1d9071f431b846f8440180a07bb85da974b0ee4efcb379f528bcf7e947a55901d5a2c0d38bc9cc16c851e785a03b45ab254ec24f2bcb75a922f15031796bc433ea5a4514783705d185321e5f82"
             )
-          )
+          ),
         ],
       balance: UInt256.fromHex("0x0"),
       codeHash: FixedBytes[32].fromHex(
@@ -143,7 +143,7 @@ suite "Merkle proof of inclusion validation":
                   hexToSeqByte(
                     "0xf7a0390decd9548b62a8d60345a988386fc84ba6bc95484008f6362f93160ef3e563959425a92a5853702f199bb2d805bba05d67025214a8"
                   )
-                )
+                ),
               ],
           )
         ],
