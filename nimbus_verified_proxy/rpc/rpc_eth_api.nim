@@ -124,7 +124,7 @@ proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
 
     let accountResult = getAccountFromProof(
       executionPayload.stateRoot, proof.address, proof.balance, proof.nonce,
-      proof.codeHash, proof.storageHash, proof.accountProof
+      proof.codeHash, proof.storageHash, proof.accountProof,
     )
 
     if accountResult.isOk():
@@ -165,7 +165,7 @@ proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
 
     let accountResult = getAccountFromProof(
       executionPayload.stateRoot, proof.address, proof.balance, proof.nonce,
-      proof.codeHash, proof.storageHash, proof.accountProof
+      proof.codeHash, proof.storageHash, proof.accountProof,
     )
 
     if accountResult.isOk():
@@ -184,7 +184,7 @@ proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
       proof = await lcProxy.rpcClient.eth_getProof(address, @[], blockId(blockNumber))
       accountResult = getAccountFromProof(
         executionPayload.stateRoot, proof.address, proof.balance, proof.nonce,
-        proof.codeHash, proof.storageHash, proof.accountProof
+        proof.codeHash, proof.storageHash, proof.accountProof,
       )
 
     if accountResult.isErr():

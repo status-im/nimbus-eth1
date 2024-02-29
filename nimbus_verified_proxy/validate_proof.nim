@@ -97,7 +97,7 @@ proc getStorageData*(
   let account =
     ?getAccountFromProof(
       stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
-      proof.storageHash, proof.accountProof
+      proof.storageHash, proof.accountProof,
     )
 
   if account.storageRoot == etypes.EMPTY_ROOT_HASH:
