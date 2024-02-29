@@ -769,6 +769,11 @@ proc clearTransientStorage*(ac: AccountsLedgerRef) =
   doAssert(ac.savePoint.parentSavepoint.isNil)
   ac.savePoint.transientStorage.clear()
 
+func getAccessList*(ac: AccountsLedgerRef): common.AccessList =
+  # make sure all savepoint already committed
+  doAssert(ac.savePoint.parentSavepoint.isNil)
+  ac.savePoint.accessList.getAccessList()
+
 proc rootHash*(db: ReadOnlyStateDB): KeccakHash {.borrow.}
 proc getCodeHash*(db: ReadOnlyStateDB, address: EthAddress): Hash256 {.borrow.}
 proc getStorageRoot*(db: ReadOnlyStateDB, address: EthAddress): Hash256 {.borrow.}

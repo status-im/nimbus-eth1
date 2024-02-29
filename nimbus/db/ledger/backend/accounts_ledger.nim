@@ -163,7 +163,10 @@ proc ledgerMethods(lc: impl.AccountsLedgerRef): LedgerFns =
       lc.setTransientStorage(eAddr, slot, val),
 
     subBalanceFn: proc(eAddr: EthAddress, delta: UInt256) =
-      lc.subBalance(eAddr, delta))
+      lc.subBalance(eAddr, delta),
+
+    getAccessListFn: proc(): common.AccessList =
+      lc.getAccessList())
 
 proc ledgerExtras(lc: impl.AccountsLedgerRef): LedgerExtras =
   LedgerExtras(

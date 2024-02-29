@@ -68,6 +68,7 @@ type
     LdgSubBalanceFn            = "subBalance"
     LdgGetMptFn                = "getMpt"
     LdgRawRootHashFn           = "rawRootHash"
+    LdgGetAccessListFn         = "getAcessList"
 
     LdgAccountsIt              = "accounts"
     LdgAdressesIt              = "addresses"

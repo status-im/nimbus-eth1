@@ -32,7 +32,7 @@ func savePoint(sp: LedgerSpRef): impl.SavePoint =
   wrp.SavePoint(sp).sp
 
 # ----------------
-  
+
 proc ledgerMethods(lc: impl.AccountsCache): LedgerFns =
   LedgerFns(
     accessListFn: proc(eAddr: EthAddress) =
@@ -52,7 +52,7 @@ proc ledgerMethods(lc: impl.AccountsCache): LedgerFns =
 
     beginSavepointFn: proc(): LedgerSpRef =
       wrp.SavePoint(sp: lc.beginSavepoint()),
-  
+
     clearStorageFn: proc(eAddr: EthAddress) =
       lc.clearStorage(eAddr),
 
@@ -176,7 +176,10 @@ proc ledgerMethods(lc: impl.AccountsCache): LedgerFns =
       lc.setTransientStorage(eAddr, slot, val),
 
     subBalanceFn: proc(eAddr: EthAddress, delta: UInt256) =
-      lc.subBalance(eAddr, delta))
+      lc.subBalance(eAddr, delta),
+
+    getAccessListFn: proc(): common.AccessList =
+      lc.getAccessList())
 
 proc ledgerExtras(lc: impl.AccountsCache): LedgerExtras =
   LedgerExtras(

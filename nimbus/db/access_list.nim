@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  tables, sets,
+  std/[tables, sets],
   stint,
   eth/common
 
@@ -19,11 +19,27 @@ type
   AccessList* = object
     slots: Table[EthAddress, SlotSet]
 
+# ------------------------------------------------------------------------------
+# Private helpers
+# ------------------------------------------------------------------------------
+
+func toStorageKeys(slots: SlotSet): seq[StorageKey] =
+  for slot in slots:
+    result.add slot.toBytesBE
+
+# ------------------------------------------------------------------------------
+# Public constructors
+# ------------------------------------------------------------------------------
+
 proc init*(ac: var AccessList) =
   ac.slots = initTable[EthAddress, SlotSet]()
 
 proc init*(_: type AccessList): AccessList {.inline.} =
   result.init()
+
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
 
 func contains*(ac: AccessList, address: EthAddress): bool {.inline.} =
   address in ac.slots
@@ -52,3 +68,10 @@ proc add*(ac: var AccessList, address: EthAddress, slot: UInt256) =
 
 proc clear*(ac: var AccessList) {.inline.} =
   ac.slots.clear()
+
+func getAccessList*(ac: AccessList): common.AccessList =
+  for address, slots in ac.slots:
+    result.add common.AccessPair(
+      address    : address,
+      storageKeys: slots.toStorageKeys,
+    )

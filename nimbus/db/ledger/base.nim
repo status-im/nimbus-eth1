@@ -346,6 +346,11 @@ proc subBalance*(ldg: LedgerRef, eAddr: EthAddress, delta: UInt256) =
   ldg.methods.subBalanceFn(eAddr, delta)
   ldg.ifTrackApi: debug apiTxt, ctx, elapsed, eAddr, delta
 
+proc getAccessList*(ldg: LedgerRef): AccessList =
+  ldg.beginTrackApi LdgGetAccessListFn
+  result = ldg.methods.getAccessListFn()
+  ldg.ifTrackApi: debug apiTxt, ctx, elapsed
+
 # ------------------------------------------------------------------------------
 # Public methods, extensions to go away
 # ------------------------------------------------------------------------------
