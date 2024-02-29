@@ -49,6 +49,7 @@ export
   CoreDbKvtBackendRef,
   CoreDbMptBackendRef,
   CoreDbPersistentTypes,
+  CoreDbProfListRef,
   CoreDbRef,
   CoreDbSaveFlags,
   CoreDbSubTrie,
@@ -59,13 +60,7 @@ export
   CoreDxKvtRef,
   CoreDxMptRef,
   CoreDxPhkRef,
-  CoreDxTxRef,
-
-  # Profiling support
-  byElapsed,
-  byMean,
-  byVisits,
-  stats
+  CoreDxTxRef
 
 const
   CoreDbProvideLegacyAPI* = ProvideLegacyAPI
@@ -80,10 +75,6 @@ when ProvideLegacyAPI:
 
 when AutoValidateDescriptors:
   import ./base/validate
-
-when EnableApiTracking and EnableApiProfiling:
-  var coreDbProfTab*: CoreDbProfFnInx
-
 
 # More settings
 const
@@ -128,7 +119,7 @@ when ProvideLegacyAPI:
     ## Template with code section that will be discarded if logging is
     ## disabled at compile time when `EnableApiTracking` is `false`.
     when EnableApiTracking:
-      w.beginLegaApi()
+      w.beginLegaApi(s)
       code
     const ctx {.inject,used.} = s
 
@@ -142,8 +133,6 @@ when ProvideLegacyAPI:
   template ifTrackLegaApi*(w: CoreDbApiTrackRef; code: untyped) =
     when EnableApiTracking:
       w.endLegaApiIf:
-        when EnableApiProfiling:
-          coreDbProfTab.update(ctx, elapsed)
         code
 
 
@@ -155,7 +144,7 @@ template setTrackNewApi(
   ## Template with code section that will be discarded if logging is
   ## disabled at compile time when `EnableApiTracking` is `false`.
   when EnableApiTracking:
-    w.beginNewApi()
+    w.beginNewApi(s)
     code
   const ctx {.inject,used.} = s
 
@@ -169,8 +158,6 @@ template setTrackNewApi*(
 template ifTrackNewApi*(w: CoreDxApiTrackRef; code: untyped) =
   when EnableApiTracking:
     w.endNewApiIf:
-      when EnableApiProfiling:
-        coreDbProfTab.update(ctx, elapsed)
       code
 
 # ---------
@@ -212,6 +199,8 @@ proc bless*(db: CoreDbRef): CoreDbRef =
   ## Verify descriptor
   when AutoValidateDescriptors:
     db.validate
+  when CoreDbEnableApiProfiling:
+    db.profTab = CoreDbProfListRef.init()
   db
 
 proc bless*(db: CoreDbRef; trie: CoreDbTrieRef): CoreDbTrieRef =
@@ -267,6 +256,13 @@ proc verify*(trie: CoreDbTrieRef): bool =
 # ------------------------------------------------------------------------------
 # Public main descriptor methods
 # ------------------------------------------------------------------------------
+
+proc dbProfData*(db: CoreDbRef): CoreDbProfListRef =
+  ## Return profiling data table (only available in profiling mode). If
+  ## available (i.e. non-nil), result data can be organised by the functions
+  ## available with `aristo_profile`.
+  when CoreDbEnableApiProfiling:
+    db.profTab
 
 proc dbType*(db: CoreDbRef): CoreDbType =
   ## Getter, print DB type identifier

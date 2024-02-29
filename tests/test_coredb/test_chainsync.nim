@@ -30,6 +30,7 @@ when CoreDbEnableApiProfiling:
   var
     aristoProfData: AristoDbProfListRef
     kvtProfData: KvtDbProfListRef
+    cdbProfdata: CoreDbProfListRef
 
 elif LedgerEnableApiProfiling:
   import
@@ -112,18 +113,20 @@ template stopLoggingAfter(noisy: bool; code: untyped) =
 
 proc coreDbProfResults(info: string; indent = 4): string =
   when CoreDbEnableApiProfiling:
-    let
-      pfx = indent.toPfx
-      pfx2 = pfx & "  "
-    result = "CoreDb profiling results" & info & ":"
-    result &= "\n" & pfx & "by accumulated duration per procedure"
-    for (ela,w) in coreDbProfTab.byElapsed:
-      result &= pfx2 & ela.pp & ": " &
-        w.mapIt($it & coreDbProfTab.stats(it).pp(true)).sorted.join(", ")
-    result &=  "\n" & pfx & "by number of visits"
-    for (count,w) in coreDbProfTab.byVisits:
-      result &= pfx2 & $count & ": " &
-        w.mapIt($it & coreDbProfTab.stats(it).pp).sorted.join(", ")
+    if not cdbProfdata.isNil:
+      let
+        data = cdbProfdata
+        pfx = indent.toPfx
+        pfx2 = pfx & "  "
+      result = "CoreDb profiling results" & info & ":"
+      result &= "\n" & pfx & "by accumulated duration per procedure"
+      for (ela,fns) in data.byElapsed:
+        result &= pfx2 & ela.pp & ": " & fns.mapIt(
+          $CoreDbFnInx(it) & data.stats(it).pp(true)).sorted.join(", ")
+      result &=  "\n" & pfx & "by number of visits"
+      for (count,fns) in data.byVisits:
+        result &= pfx2 & $count & ": " & fns.mapIt(
+          $CoreDbFnInx(it) & data.stats(it).pp).sorted.join(", ")
 
 proc ledgerProfResults(info: string; indent = 4): string =
   when LedgerEnableApiProfiling:
@@ -151,13 +154,11 @@ proc aristoProfResults(info: string; indent = 4): string =
       result &= "\n" & pfx & "by accumulated duration per procedure"
       for (ela,fns) in data.byElapsed:
         result &= pfx2 & ela.pp & ": " & fns.mapIt(
-          $AristoApiProfNames(it) &
-          data.stats(it).pp(true)).sorted.join(", ")
+          $AristoApiProfNames(it) & data.stats(it).pp(true)).sorted.join(", ")
       result &=  "\n" & pfx & "by number of visits"
       for (count,fns) in data.byVisits:
         result &= pfx2 & $count & ": " & fns.mapIt(
-          $AristoApiProfNames(it) &
-          data.stats(it).pp).sorted.join(", ")
+          $AristoApiProfNames(it) & data.stats(it).pp).sorted.join(", ")
 
 proc kvtProfResults(info: string; indent = 4): string =
   when CoreDbEnableApiProfiling:
@@ -170,13 +171,11 @@ proc kvtProfResults(info: string; indent = 4): string =
       result &= "\n" & pfx & "by accumulated duration per procedure"
       for (ela,fns) in data.byElapsed:
         result &= pfx2 & ela.pp & ": " & fns.mapIt(
-          $KvtApiProfNames(it) &
-          data.stats(it).pp(true)).sorted.join(", ")
+          $KvtApiProfNames(it) & data.stats(it).pp(true)).sorted.join(", ")
       result &=  "\n" & pfx & "by number of visits"
       for (count,fns) in data.byVisits:
         result &= pfx2 & $count & ": " & fns.mapIt(
-          $KvtApiProfNames(it) &
-          data.stats(it).pp).sorted.join(", ")
+          $KvtApiProfNames(it) & data.stats(it).pp).sorted.join(", ")
 
 # ------------------------------------------------------------------------------
 # Public test function
@@ -191,10 +190,10 @@ proc test_chainSyncProfilingPrint*(
       if 0 < nBlocks and nBlocks < high(int): " (" & $nBlocks & " blocks)"
       else: ""
     block:
-      let s = info.coreDbProfResults()
+      let s = info.ledgerProfResults()
       if 0 < s.len: true.say "***", s, "\n"
     block:
-      let s = info.ledgerProfResults()
+      let s = info.coreDbProfResults()
       if 0 < s.len: true.say "***", s, "\n"
     block:
       let s = info.aristoProfResults()
@@ -226,6 +225,7 @@ proc test_chainSync*(
     # needs to be captured so it will be available after the services have
     # terminated.
     (aristoProfData, kvtProfData) = com.db.toAristoProfData()
+    cdbProfdata = com.db.dbProfData()
 
   for w in filePaths.undumpBlocks:
     let (fromBlock, toBlock) = (w[0][0].blockNumber, w[0][^1].blockNumber)

@@ -12,7 +12,8 @@
 
 import
   eth/common,
-  results
+  results,
+  ../../aristo/aristo_profile
 
 # Annotation helpers
 {.pragma:  noRaise, gcsafe, raises: [].}
@@ -31,6 +32,12 @@ const
   CoreDbPersistentTypes* = {LegacyDbPersistent, AristoDbRocks}
 
 type
+  CoreDbProfListRef* = AristoDbProfListRef
+    ## Borrowed from `aristo_profile`, only used in profiling mode
+
+  CoreDbProfData* = AristoDbProfData
+    ## Borrowed from `aristo_profile`, only used in profiling mode
+
   CoreDbRc*[T] = Result[T,CoreDbErrorRef]
 
   CoreDbAccount* = object
@@ -261,11 +268,12 @@ type
   # --------------------------------------------------
   CoreDbRef* = ref object of RootRef
     ## Database descriptor
-    dbType*: CoreDbType    ## Type of database backend
-    trackLegaApi*: bool    ## Debugging, support
-    trackNewApi*: bool     ## Debugging, support
-    trackLedgerApi*: bool  ## Debugging, suggestion for subsequent ledger
-    localDbOnly*: bool     ## Debugging, suggestion to ignore async fetch
+    dbType*: CoreDbType         ## Type of database backend
+    trackLegaApi*: bool         ## Debugging, support
+    trackNewApi*: bool          ## Debugging, support
+    trackLedgerApi*: bool       ## Debugging, suggestion for subsequent ledger
+    localDbOnly*: bool          ## Debugging, suggestion to ignore async fetch
+    profTab*: CoreDbProfListRef ## Profiling data (if any)
     methods*: CoreDbBaseFns
 
   CoreDbErrorRef* = ref object of RootRef
