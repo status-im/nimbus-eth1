@@ -9,7 +9,6 @@
 # distributed except according to those terms.
 
 import
-  std/strutils,
   eth/common,
   ../../nimbus/db/core_db,
   ../../nimbus/common/chain_config
@@ -26,111 +25,136 @@ type
     numBlocks*: int          ## Number of blocks to load
     dbType*: CoreDbType      ## Use `CoreDbType(0)` for default
 
+func cloneWith(
+    dsc: CaptureSpecs;
+    name = "";
+    network = NetworkId(0);
+    genesis = "";
+    files = seq[string].default;
+    numBlocks = 0;
+    dbType = CoreDbType(0);
+      ): CaptureSpecs =
+  result = dsc
+  if network != NetworkId(0):
+    result.builtIn = true
+    result.network = network
+  elif 0 < genesis.len:
+    result.builtIn = false
+    result.genesis = genesis
+  if 0 < name.len:
+    if name[0] == '-':
+      result.name &= name
+    elif name[0] == '+' and 1 < name.len:
+      result.name &= name[1 .. ^1]
+    else:
+      result.name = name
+  if 0 < files.len:
+    result.files = files
+  if 0 < numBlocks:
+    result.numBlocks = numBlocks
+  if dbType != CoreDbType(0):
+    result.dbType = dbType
+
+
 # Must not use `const` here, see `//github.com/nim-lang/Nim/issues/23295`
 # Waiting for fix `//github.com/nim-lang/Nim/pull/23297` (or similar) to
 # appear on local `Nim` compiler version.
 let
-  bulkTest0* = CaptureSpecs(
-    builtIn:   true,
-    name:      "goerli-some",
-    network:   GoerliNet,
-    files:     @["goerli68161.txt.gz"],
-    numBlocks: 1_000)
+  goerliSample =  CaptureSpecs(
+    builtIn: true,
+    name:    "goerli",
+    network: GoerliNet,
+    files:   @["goerli68161.txt.gz"])     # lon local replay folder
 
-  bulkTest1* = CaptureSpecs(
-    builtIn:   true,
-    name:      "goerli-more",
-    network:   GoerliNet,
-    files:     @["goerli68161.txt.gz"],
-    numBlocks: high(int))
+  goerliSampleEx = CaptureSpecs(
+    builtIn: true,
+    name:    "goerli",
+    network: GoerliNet,
+    files:   @[
+        "goerli482304.txt.gz",            # on nimbus-eth1-blobs/replay
+        "goerli482305-504192.txt.gz"])
 
-  bulkTest2* = CaptureSpecs(
-    builtIn:   true,
-    name:      "goerli",
-    network:   GoerliNet,
-    files:     @[
-      "goerli482304.txt.gz",              # on nimbus-eth1-blobs/replay
-      "goerli482305-504192.txt.gz"],
-    numBlocks: high(int))
-
-  bulkTest3* = CaptureSpecs(
-    builtIn:   true,
-    name:      "main",
-    network:   MainNet,
-    files:     @[
+  mainSampleEx = CaptureSpecs(
+    builtIn: true,
+    name:    "main",
+    network: MainNet,
+    files:   @[
       "mainnet332160.txt.gz",             # on nimbus-eth1-blobs/replay
       "mainnet332161-550848.txt.gz",
       "mainnet550849-719232.txt.gz",
-      "mainnet719233-843841.txt.gz"],
-    numBlocks: high(int))
+      "mainnet719233-843841.txt.gz"])
 
+  # ------------------
+
+  bulkTest0* = goerliSample
+    .cloneWith(
+      name      = "-some",
+      numBlocks = 1_000)
+
+  bulkTest1* = goerliSample
+    .cloneWith(
+      name      = "-more",
+      numBlocks = high(int))
+
+  bulkTest2* = goerliSampleEx
+    .cloneWith(
+      numBlocks = high(int))
+
+  bulkTest3* = mainSampleEx
+    .cloneWith(
+      numBlocks = high(int))
 
   # Test samples with all the problems one can expect
-  ariTest0* = CaptureSpecs(
-    builtIn:   true,
-    name:      bulkTest2.name & "-am",
-    network:   bulkTest2.network,
-    files:     bulkTest2.files,
-    numBlocks: high(int),
-    dbType:    AristoDbMemory)
+  ariTest0* = goerliSampleEx
+    .cloneWith(
+      name      = "-am",
+      numBlocks = high(int),
+      dbType    = AristoDbMemory)
 
-  ariTest1* = CaptureSpecs(
-    builtIn:   true,
-    name:      bulkTest2.name & "-ar",
-    network:   bulkTest2.network,
-    files:     bulkTest2.files,
-    numBlocks: high(int),
-    dbType:    AristoDbRocks)
+  ariTest1* = goerliSampleEx
+    .cloneWith(
+      name      = "-ar",
+      numBlocks = high(int),
+      dbType    = AristoDbRocks)
 
-  ariTest2* = CaptureSpecs(
-    builtIn:   true,
-    name:      bulkTest3.name & "-am",
-    network:   bulkTest3.network,
-    files:     bulkTest3.files,
-    numBlocks: 500_000,
-    dbType:    AristoDbMemory)
+  ariTest2* = mainSampleEx
+    .cloneWith(
+      name      = "-am",
+      numBlocks = 500_000,
+      dbType    = AristoDbMemory)
 
-  ariTest3* = CaptureSpecs(
-    builtIn:   true,
-    name:      bulkTest3.name & "-ar",
-    network:   bulkTest3.network,
-    files:     bulkTest3.files,
-    numBlocks: high(int),
-    dbType:    AristoDbRocks)
+  ariTest3* = mainSampleEx
+    .cloneWith(
+      name      = "-ar",
+      numBlocks = high(int),
+      dbType    = AristoDbRocks)
 
+  # To be compared against the proof-of-concept implementation as
+  # reference
 
-  # To be compared against the proof-of-concept implementation as reference
-  legaTest0* = CaptureSpecs(
-    builtIn:   true,
-    name:      ariTest0.name.replace("-am", "-lm"),
-    network:   ariTest0.network,
-    files:     ariTest0.files,
-    numBlocks: ariTest0.numBlocks,
-    dbType:    LegacyDbMemory)
+  legaTest0* = goerliSampleEx
+    .cloneWith(
+      name      = "-lm",
+      numBlocks = 500, # high(int),
+      dbType    = LegacyDbMemory)
 
-  legaTest1* = CaptureSpecs(
-    builtIn:   true,
-    name:      ariTest1.name.replace("-ar", "-lp"),
-    network:   ariTest1.network,
-    files:     ariTest1.files,
-    numBlocks: ariTest1.numBlocks,
-    dbType:    LegacyDbPersistent)
+  legaTest1* = goerliSampleEx
+    .cloneWith(
+      name      = "-lp",
+      numBlocks = high(int),
+      dbType    = LegacyDbPersistent)
 
-  legaTest2* = CaptureSpecs(
-    builtIn:   true,
-    name:      ariTest2.name.replace("-ar", "-lm"),
-    network:   ariTest2.network,
-    files:     ariTest2.files,
-    numBlocks: ariTest2.numBlocks,
-    dbType:    LegacyDbMemory)
+  legaTest2* = mainSampleEx
+    .cloneWith(
+      name      = "-lm",
+      numBlocks = 500_000,
+      dbType    = LegacyDbMemory)
 
-  legaTest3* = CaptureSpecs(
-    builtIn:   true,
-    name:      ariTest3.name.replace("-ar", "-lp"),
-    network:   ariTest3.network,
-    files:     ariTest3.files,
-    numBlocks: ariTest3.numBlocks,
-    dbType:    LegacyDbPersistent)
+  legaTest3* = mainSampleEx
+    .cloneWith(
+      name      = "-lp",
+      numBlocks = high(int),
+      dbType    = LegacyDbPersistent)
 
   # ------------------
 
