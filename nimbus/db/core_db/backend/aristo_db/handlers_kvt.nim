@@ -87,13 +87,14 @@ proc `=destroy`(cKvt: var KvtChildDbObj) =
   ## Auto destructor
   let
     base = cKvt.base
+    api = base.api
     kvt = cKvt.kvt
   if not kvt.isNil:
     block body:
       # Do some heuristics to avoid duplicates:
       block addToBatchQueue:
         if kvt != base.kdb:              # not base descriptor?
-          if base.api.level(kvt) == 0:   # no transaction pending?
+          if api.level(kvt) == 0:        # no transaction pending?
             break addToBatchQueue        # add to destructor queue
           else:
             break body                   # ignore `kvt`
@@ -132,7 +133,6 @@ proc persistent(
     api = base.api
     db = base.parent
     rc = api.stow(kvt)
-
   # Note that `gc()` may call `persistent()` so there is no `base.gc()` here
   if rc.isOk:
     ok()
@@ -155,7 +155,8 @@ proc forget(
   if kvt != base.kdb:
     let
       db = base.parent
-      rc = base.api.forget(kvt)
+      api = base.api
+      rc = api.forget(kvt)
     if rc.isErr:
       result = err(rc.error.toError(db, info))
 
@@ -206,7 +207,7 @@ proc kvtMethods(cKvt: KvtChildDbRef): CoreDbKvtFns =
         ): CoreDbRc[void] =
     let
       base = cKvt.base
-      rc = base.api.put(cKvt.kvt, k,v)
+      rc = base.api.put(cKvt.kvt, k, v)
     if rc.isErr:
       return err(rc.error.toError(base.parent, info))
     ok()
@@ -348,12 +349,13 @@ proc newKvtHandler*(
 
   let
     db = base.parent
+    api = base.api
 
     (mode, kvt) = case saveMode:
       of TopShot:
-        (saveMode, ? base.kdb.forkTop.toRc(db, info))
+        (saveMode, ? api.forkTop(base.kdb).toRc(db, info))
       of Companion:
-        (saveMode, ? base.kdb.fork.toRc(db, info))
+        (saveMode, ? api.fork(base.kdb).toRc(db, info))
       of Shared, AutoSave:
         if base.kdb.backend.isNil:
           (Shared, base.kdb)
