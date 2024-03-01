@@ -18,6 +18,10 @@ import
   ../aristo/aristo_profile,
   "."/[kvt_desc, kvt_desc/desc_backend, kvt_init, kvt_tx, kvt_utils]
 
+const
+  AutoValidateApiHooks = defined(release).not
+    ## No validatinon needed for production suite.
+
 # Annotation helper(s)
 {.pragma: noRaise, gcsafe, raises: [].}
 
@@ -102,34 +106,84 @@ type
     be*: BackendRef
 
 # ------------------------------------------------------------------------------
+# Private helpers
+# ------------------------------------------------------------------------------
+
+when AutoValidateApiHooks:
+  proc validate(api: KvtApiObj|KvtApiRef) =
+    doAssert not api.commit.isNil
+    doAssert not api.del.isNil
+    doAssert not api.finish.isNil
+    doAssert not api.forget.isNil
+    doAssert not api.fork.isNil
+    doAssert not api.forkTop.isNil
+    doAssert not api.get.isNil
+    doAssert not api.hasKey.isNil
+    doAssert not api.isTop.isNil
+    doAssert not api.level.isNil
+    doAssert not api.nForked.isNil
+    doAssert not api.put.isNil
+    doAssert not api.rollback.isNil
+    doAssert not api.stow.isNil
+    doAssert not api.txBegin.isNil
+    doAssert not api.txTop.isNil
+
+  proc validate(prf: KvtApiProfRef; be: BackendRef) =
+    prf.KvtApiRef.validate
+    doAssert not prf.data.isNil
+    if not be.isNil:
+      doAssert not prf.be.isNil
+
+# ------------------------------------------------------------------------------
 # Public API constuctors
 # ------------------------------------------------------------------------------
 
 func init*(api: var KvtApiObj) =
-    api.commit = commit
-    api.del = del
-    api.finish = finish
-    api.forget = forget
-    api.fork = fork
-    api.forkTop = forkTop
-    api.get = get
-    api.hasKey = hasKey
-    api.isTop = isTop
-    api.level = level
-    api.nForked = nForked
-    api.put = put
-    api.rollback = rollback
-    api.stow = stow
-    api.txBegin = txBegin
-    api.txTop = txTop
+  when AutoValidateApiHooks:
+    api.reset
+  api.commit = commit
+  api.del = del
+  api.finish = finish
+  api.forget = forget
+  api.fork = fork
+  api.forkTop = forkTop
+  api.get = get
+  api.hasKey = hasKey
+  api.isTop = isTop
+  api.level = level
+  api.nForked = nForked
+  api.put = put
+  api.rollback = rollback
+  api.stow = stow
+  api.txBegin = txBegin
+  api.txTop = txTop
+  when AutoValidateApiHooks:
+    api.validate
 
 func init*(T: type KvtApiRef): T =
   result = new T
   result[].init()
 
 func dup*(api: KvtApiRef): KvtApiRef =
-  new result
-  result[] = api[]
+  result = KvtApiRef(
+    commit:   api.commit,
+    del:      api.del,
+    finish:   api.finish,
+    forget:   api.forget,
+    fork:     api.fork,
+    forkTop:  api.forkTop,
+    get:      api.get,
+    hasKey:   api.hasKey,
+    isTop:    api.isTop,
+    level:    api.level,
+    nForked:  api.nForked,
+    put:      api.put,
+    rollback: api.rollback,
+    stow:     api.stow,
+    txBegin:  api.txBegin,
+    txTop:    api.txTop)
+  when AutoValidateApiHooks:
+    api.validate
 
 # ------------------------------------------------------------------------------
 # Public profile API constuctor
@@ -250,6 +304,9 @@ func init*(
       proc(a: PutHdlRef): auto =
         KvtApiProfBePutEndFn.profileRunner:
           result = be.putEndFn(a)
+
+  when AutoValidateApiHooks:
+    profApi.validate be
 
   profApi
 
