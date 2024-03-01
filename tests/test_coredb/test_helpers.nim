@@ -9,15 +9,36 @@
 # distributed except according to those terms.
 
 import
-  std/[os, sequtils, times],
+  std/[algorithm, os, sequtils],
   eth/common,
   results,
   ../../nimbus/utils/prettify,
+  ../../nimbus/db/aristo/aristo_profile,
   ../replay/pp
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
+
+func pp(
+    w: AristoDbProfStats,
+    spaced = false;
+    count = true;
+      ): string =
+  result = "("
+  if w.count < 2:
+    result &= w.mean.pp
+  else:
+    let space = if spaced: " " else: ""
+    if count:
+      result &= $w.count
+    else:
+      result &= w.total.pp
+    result &= "," & space & w.mean.pp
+    if w.devRatio != 0.0: # when all items are the same
+      let dr = if 0.2 < w.devRatio: w.devRatio.toPC(0) else: w.devRatio.toPC(1)
+      result &= space & "±" & space & dr
+  result &= ")"
 
 # ------------------------------------------------------------------------------
 # Public pretty printing
@@ -34,21 +55,6 @@ proc say*(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
 
 proc toPfx*(indent: int): string =
   "\n" & " ".repeat(indent)
-
-func pp*(
-    w: tuple[n: int, mean: Duration, stdDev: Duration, devRatio: float];
-    spaced = false;
-      ): string =
-  result = "("
-  if w.n < 2:
-    result &= w.mean.pp
-  else:
-    let space = if spaced: " " else: ""
-    result &= $w.n & "," & space & w.mean.pp
-    if w.devRatio != 0.0: # when all items are the same
-      let dr = if 0.2 < w.devRatio: w.devRatio.toPC(0) else: w.devRatio.toPC(1)
-      result &= space & "±" & space & dr
-  result &= ")"
 
 # ------------------------------------------------------------------------------
 # Public helpers
@@ -71,6 +77,29 @@ proc findFilePathHelper*(
                 return ok(path)
   echo "*** File not found \"", file, "\"."
   err()
+
+
+proc profilingPrinter*(
+    data: AristoDbProfListRef;
+    names: openArray[string];
+    header: string;
+    indent = 4;
+      ): string =
+  if not data.isNil:
+    let
+      pfx = indent.toPfx
+      pfx2 = pfx & "  "
+    result = header & ":"
+
+    result &= "\n" & pfx & "by accumulated duration per procedure"
+    for (ela,fns) in data.byElapsed:
+      result &= pfx2 & ela.pp & ": " & fns.mapIt(
+        names[it] & data.stats(it).pp(spaced=true)).sorted.join(", ")
+
+    result &=  "\n" & pfx & "by number of visits"
+    for (count,fns) in data.byVisits:
+      result &= pfx2 & $count & ": " & fns.mapIt(
+        names[it] & data.stats(it).pp(count=false)).sorted.join(", ")
 
 # ------------------------------------------------------------------------------
 # End

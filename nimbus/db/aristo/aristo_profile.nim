@@ -26,6 +26,12 @@ type
   AristoDbProfEla* = seq[(Duration,seq[uint])]
   AristoDbProfMean* = seq[(Duration,seq[uint])]
   AristoDbProfCount* = seq[(int,seq[uint])]
+  AristoDbProfStats* = tuple
+    count:    int
+    total:    Duration
+    mean:     Duration
+    stdDev:   Duration
+    devRatio: float
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -176,14 +182,14 @@ proc byVisits*(t: AristoDbProfListRef): AristoDbProfCount =
 func stats*(
     t: AristoDbProfListRef;
     inx: uint;
-      ): tuple[n: int, mean: Duration, stdDev: Duration, devRatio: float] =
+      ): AristoDbProfStats =
   ## Print mean and strandard deviation of timing
   let data = t.list[inx]
-  result.n = data.count
-  if 0 < result.n:
+  result.count = data.count
+  if 0 < result.count:
     let
-      mean = data.sum / result.n.float
-      sqMean = data.sqSum / result.n.float
+      mean = data.sum / result.count.float
+      sqMean = data.sqSum / result.count.float
       meanSq = mean * mean
 
       # Mathematically, `meanSq <= sqMean` but there might be rounding errors
@@ -191,6 +197,7 @@ func stats*(
       sigma = sqMean - min(meanSq,sqMean)
       stdDev = sigma.sqrt
 
+    result.total = data.sum.toDuration
     result.mean = mean.toDuration
     result.stdDev = stdDev.sqrt.toDuration
 
