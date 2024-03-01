@@ -16,37 +16,46 @@ import
   rocksdb,
   eth/db/kvstore
 
-export results, kvstore
+export kvstore
 
 const maxOpenFiles = 512
 
 type
   RocksStoreRef* = ref object of RootObj
-    dbOpts*: DbOptionsRef
-    store*: RocksDbRef
-    tmpDir*: string
+    db: RocksDbRef
     backupEngine: BackupEngineRef
+    readOnly: bool
 
-template validateCanWrite(db: RocksStoreRef) =
-  if not (db.store of RocksDbReadWriteRef):
+proc readOnly*(store: RocksStoreRef): bool =
+  store.readOnly
+
+proc readOnlyDb*(store: RocksStoreRef): RocksDbReadOnlyRef =
+  doAssert store.readOnly
+  store.db.RocksDbReadOnlyRef
+
+proc readWriteDb*(store: RocksStoreRef): RocksDbReadWriteRef =
+  doAssert not store.readOnly
+  store.db.RocksDbReadWriteRef
+
+template validateCanWriteAndGet(store: RocksStoreRef): RocksDbReadWriteRef =
+  if store.readOnly:
     raiseAssert "Unimplemented"
+  store.db.RocksDbReadWriteRef
 
-proc get*(db: RocksStoreRef, key: openArray[byte], onData: kvstore.DataProc): KvResult[bool] =
-  db.store.get(key, onData)
+proc get*(store: RocksStoreRef, key: openArray[byte], onData: kvstore.DataProc): KvResult[bool] =
+  store.db.get(key, onData)
 
-proc find*(db: RocksStoreRef, prefix: openArray[byte], onFind: kvstore.KeyValueProc): KvResult[int] =
+proc find*(store: RocksStoreRef, prefix: openArray[byte], onFind: kvstore.KeyValueProc): KvResult[int] =
   raiseAssert "Unimplemented"
 
-proc put*(db: RocksStoreRef, key, value: openArray[byte]): KvResult[void] =
-  db.validateCanWrite()
-  db.store.RocksDbReadWriteRef.put(key, value)
+proc put*(store: RocksStoreRef, key, value: openArray[byte]): KvResult[void] =
+  store.validateCanWriteAndGet().put(key, value)
 
-proc contains*(db: RocksStoreRef, key: openArray[byte]): KvResult[bool] =
-  db.store.keyExists(key)
+proc contains*(store: RocksStoreRef, key: openArray[byte]): KvResult[bool] =
+  store.db.keyExists(key)
 
-proc del*(db: RocksStoreRef, key: openArray[byte]): KvResult[bool] =
-  db.validateCanWrite()
-  let db = db.store.RocksDbReadWriteRef
+proc del*(store: RocksStoreRef, key: openArray[byte]): KvResult[bool] =
+  let db = store.validateCanWriteAndGet()
 
   let exists = ? db.keyExists(key)
   if not exists:
@@ -58,13 +67,12 @@ proc del*(db: RocksStoreRef, key: openArray[byte]): KvResult[bool] =
 
   ok(true)
 
-proc clear*(db: RocksStoreRef): KvResult[bool] =
+proc clear*(store: RocksStoreRef): KvResult[bool] =
   raiseAssert "Unimplemented"
 
-proc close*(db: RocksStoreRef) =
-  db.store.close()
-  db.dbOpts.close()
-  db.backupEngine.close()
+proc close*(store: RocksStoreRef) =
+  store.db.close()
+  store.backupEngine.close()
 
 proc init*(
     T: type RocksStoreRef,
@@ -88,8 +96,8 @@ proc init*(
   dbOpts.setMaxOpenFiles(maxOpenFiles)
 
   if readOnly:
-    let readOnlyStore = ? openRocksDbReadOnly(dataDir, dbOpts)
-    ok(T(dbOpts: dbOpts, store: readOnlyStore, backupEngine: backupEngine))
+    let readOnlyDb = ? openRocksDbReadOnly(dataDir, dbOpts)
+    ok(T(db: readOnlyDb, backupEngine: backupEngine, readOnly: true))
   else:
-    let readWriteStore = ? openRocksDb(dataDir, dbOpts)
-    ok(T(dbOpts: dbOpts, store: readWriteStore, backupEngine: backupEngine))
+    let readWriteDb = ? openRocksDb(dataDir, dbOpts)
+    ok(T(db: readWriteDb, backupEngine: backupEngine, readOnly: false))

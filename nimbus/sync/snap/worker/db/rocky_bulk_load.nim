@@ -22,6 +22,7 @@ import
 type
   RockyBulkLoadRef* = ref object of RootObj
     db: RocksStoreRef
+    dbOption: ptr rocksdb_options_t
     envOption: ptr rocksdb_envoptions_t
     importOption: ptr rocksdb_ingestexternalfileoptions_t
     writer: ptr rocksdb_sstfilewriter_t
@@ -54,7 +55,7 @@ proc clearCacheFile*(db: RocksStoreRef; fileName: string): bool
     {.gcsafe, raises: [OSError].} =
   ## Remove left-over cache file from an imcomplete previous session. The
   ## return value `true` indicated that a cache file was detected.
-  let filePath = db.tmpDir / fileName
+  let filePath = fileName
   if filePath.fileExists:
     filePath.removeFile
     return true
@@ -70,6 +71,8 @@ proc destroy*(rbl: RockyBulkLoadRef) {.gcsafe, raises: [OSError].} =
   ##
   if not rbl.writer.isNil:
     rbl.writer.rocksdb_sstfilewriter_destroy()
+  if not rbl.dbOption.isNil:
+    rbl.dbOption.rocksdb_options_destroy()
   if not rbl.envOption.isNil:
     rbl.envOption.rocksdb_envoptions_destroy()
   if not rbl.importOption.isNil:
@@ -88,7 +91,7 @@ proc lastError*(rbl: RockyBulkLoadRef): string =
 
 proc store*(rbl: RockyBulkLoadRef): RocksDbReadWriteRef =
   ## Provide the diecriptor for backend functions as defined in `rocksdb`.
-  rbl.db.store.RocksDbReadWriteRef
+  rbl.db.readWriteDb()
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -98,14 +101,15 @@ proc begin*(rbl: RockyBulkLoadRef; fileName: string): bool =
   ## Begin a new bulk load session storing data into a temporary cache file
   ## `fileName`. When finished, this file will bi direcly imported into the
   ## database.
-  rbl.writer = rocksdb_sstfilewriter_create(
-    rbl.envOption, rbl.db.dbOpts.cPtr)
+
+  rbl.dbOption = rocksdb_options_create()
+  rbl.writer = rocksdb_sstfilewriter_create(rbl.envOption, rbl.dbOption)
   if rbl.writer.isNil:
     rbl.csError = "Cannot create sst writer session"
     return false
 
   rbl.csError = ""
-  let filePath = rbl.db.tmpDir / fileName
+  let filePath = fileName
   var csError: cstring
   rbl.writer.rocksdb_sstfilewriter_open(fileName, cast[cstringArray](csError.addr))
   if not csError.isNil:
@@ -113,7 +117,7 @@ proc begin*(rbl: RockyBulkLoadRef; fileName: string): bool =
     return false
 
   rbl.filePath = filePath
-  return  true
+  return true
 
 proc add*(
     rbl: RockyBulkLoadRef;
@@ -150,7 +154,7 @@ proc finish*(
 
   var filePath = rbl.filePath.cstring
   if csError.isNil:
-    rbl.db.store.cPtr.rocksdb_ingest_external_file(
+    rbl.db.readWriteDb().cPtr.rocksdb_ingest_external_file(
       cast[cstringArray](filePath.addr), 1,
       rbl.importOption,
       cast[cstringArray](csError.addr))

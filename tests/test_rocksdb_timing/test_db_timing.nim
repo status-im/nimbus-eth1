@@ -17,6 +17,7 @@ import
   rocksdb,
   unittest2,
   ../../nimbus/core/chain,
+  ../../nimbus/db/kvstore_rocksdb,
   ../../nimbus/db/core_db,
   ../../nimbus/db/core_db/persistent,
   ../../nimbus/sync/snap/range_desc,
@@ -136,7 +137,7 @@ proc test_dbTimingRockySetup*(
   let
     rdb = cdb.backend.toRocksStoreRef
     rop = rocksdb_readoptions_create()
-    rit = rdb.store.cPtr.rocksdb_create_iterator(rop)
+    rit = rdb.readWriteDb().cPtr.rocksdb_create_iterator(rop)
   check not rit.isNil
 
   var
