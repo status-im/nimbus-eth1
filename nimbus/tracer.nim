@@ -86,6 +86,12 @@ proc dumpMemoryDB*(node: JsonNode, db: CoreDbRef) =
     n[k.toHex(false)] = %v
   node["state"] = n
 
+proc dumpMemoryDB*(node: JsonNode, kvt: TableRef[Blob,Blob]) =
+  var n = newJObject()
+  for k, v in kvt:
+    n[k.toHex(false)] = %v
+  node["state"] = n
+
 proc dumpMemoryDB*(node: JsonNode, capture: CoreDbCaptRef) =
   node.dumpMemoryDB capture.logDb
 
@@ -149,7 +155,7 @@ proc traceTransaction*(com: CommonRef, header: BlockHeader,
       break
 
   # internal transactions:
-  var stateBefore = AccountsCache.init(capture.recorder, beforeRoot, com.pruneTrie)
+  var stateBefore = AccountsLedgerRef.init(capture.recorder, beforeRoot, com.pruneTrie)
   for idx, acc in tracedAccountsPairs(tracerInst):
     before.captureAccount(stateBefore, acc, internalTxName & $idx)
 
@@ -180,7 +186,7 @@ proc dumpBlockState*(com: CommonRef, header: BlockHeader, body: BlockBody, dumpS
   var
     before = newJArray()
     after = newJArray()
-    stateBefore = AccountsCache.init(capture.recorder, parent.stateRoot, com.pruneTrie)
+    stateBefore = AccountsLedgerRef.init(capture.recorder, parent.stateRoot, com.pruneTrie)
 
   for idx, tx in body.transactions:
     let sender = tx.getSender

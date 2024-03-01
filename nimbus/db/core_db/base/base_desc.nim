@@ -255,7 +255,7 @@ type
   # Sub-descriptor: capture recorder methods
   # --------------------------------------------------
   CoreDbCaptRecorderFn* = proc(): CoreDbRc[CoreDbRef] {.noRaise.}
-  CoreDbCaptLogDbFn* = proc(): CoreDbRc[CoreDbRef] {.noRaise.}
+  CoreDbCaptLogDbFn* = proc(): CoreDbRc[TableRef[Blob,Blob]] {.noRaise.}
   CoreDbCaptFlagsFn* = proc(): set[CoreDbCaptFlags] {.noRaise.}
 
   CoreDbCaptFns* = object

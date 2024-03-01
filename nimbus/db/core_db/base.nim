@@ -1001,7 +1001,7 @@ proc recorder*(cp: CoreDxCaptRef): CoreDbRc[CoreDbRef] =
   result = cp.methods.recorderFn()
   cp.ifTrackNewApi: debug newApiTxt, ctx, elapsed, result
 
-proc logDb*(cp: CoreDxCaptRef): CoreDbRc[CoreDbRef] =
+proc logDb*(cp: CoreDxCaptRef): CoreDbRc[TableRef[Blob,Blob]] =
   cp.setTrackNewApi CptLogDbFn
   result = cp.methods.logDbFn()
   cp.ifTrackNewApi: debug newApiTxt, ctx, elapsed, result
@@ -1244,7 +1244,7 @@ when ProvideLegacyAPI:
     result = cp.distinctBase.recorder().expect $ctx
     cp.ifTrackLegaApi: debug legaApiTxt, ctx, elapsed
 
-  proc logDb*(cp: CoreDbCaptRef): CoreDbRef =
+  proc logDb*(cp: CoreDbCaptRef): TableRef[Blob,Blob] =
     cp.setTrackLegaApi LegaCptLogDbFn
     result = cp.distinctBase.logDb().expect $ctx
     cp.ifTrackLegaApi: debug legaApiTxt, ctx, elapsed

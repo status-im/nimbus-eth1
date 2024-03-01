@@ -46,7 +46,7 @@ type
   RecorderRef = ref object of RootRef
     flags: set[CoreDbCaptFlags]
     parent: TrieDatabaseRef
-    logger: LegacyDbRef
+    logger: TableRef[Blob,Blob]
     appDb: LegacyDbRef
 
   LegacyCoreDbTrie* = ref object of CoreDbTrieRef
@@ -184,40 +184,39 @@ proc toAccount(
 
 proc get(db: RecorderRef, key: openArray[byte]): Blob =
   ## Mixin for `trieDB()`
-  result = db.logger.tdb.get(key)
+  result = db.logger.getOrDefault @key
   if result.len == 0:
     result = db.parent.get(key)
     if result.len != 0:
-      db.logger.tdb.put(key, result)
+      db.logger[@key] = result
 
 proc put(db: RecorderRef, key, value: openArray[byte]) =
   ## Mixin for `trieDB()`
-  db.logger.tdb.put(key, value)
+  db.logger[@key] = @value
   if PersistPut in db.flags:
     db.parent.put(key, value)
 
 proc contains(db: RecorderRef, key: openArray[byte]): bool =
   ## Mixin for `trieDB()`
   result = db.parent.contains(key)
-  doAssert(db.logger.tdb.contains(key) == result)
+  doAssert(db.logger.contains(@key) == result)
 
 proc del(db: RecorderRef, key: openArray[byte]) =
   ## Mixin for `trieDB()`
-  db.logger.tdb.del(key)
+  db.logger.del @key
   if PersistDel in db.flags:
-    db.parent.del(key)
+    db.parent.del key
 
 proc newRecorderRef(
-    tdb: TrieDatabaseRef;
-    dbType: CoreDbType,
+    db: LegacyDbRef;
     flags: set[CoreDbCaptFlags];
       ): RecorderRef =
   ## Capture constuctor, uses `mixin` values from above
   result = RecorderRef(
     flags:    flags,
-    parent:   tdb,
-    logger: LegacyDbRef().init(LegacyDbMemory, newMemoryDB()).LegacyDbRef)
-  result.appDb = LegacyDbRef().init(dbType, trieDB result).LegacyDbRef
+    parent: db.tdb,
+    logger: newTable[Blob,Blob]())
+  result.appDb = LegacyDbRef().init(db.dbType, trieDB result).LegacyDbRef
 
 # ------------------------------------------------------------------------------
 # Private database method function tables
@@ -399,12 +398,12 @@ proc tidMethods(tid: TransactionID; tdb: TrieDatabaseRef): CoreDbTxIdFns =
       tdb.shortTimeReadOnly(tid, action())
       ok())
 
-proc cptMethods(cpt: RecorderRef): CoreDbCaptFns =
+proc cptMethods(cpt: RecorderRef; db: LegacyDbRef): CoreDbCaptFns =
   CoreDbCaptFns(
     recorderFn: proc(): CoreDbRc[CoreDbRef] =
       ok(cpt.appDb),
 
-    logDbFn: proc(): CoreDbRc[CoreDbRef] =
+    logDbFn: proc(): CoreDbRc[TableRef[Blob,Blob]] =
       ok(cpt.logger),
 
     getFlagsFn: proc(): set[CoreDbCaptFlags] =
@@ -514,7 +513,7 @@ proc baseMethods(
       ok(db.bless db.top),
 
     captureFn: proc(flgs: set[CoreDbCaptFlags]): CoreDbRc[CoreDxCaptRef] =
-      let fns = newRecorderRef(tdb, dbType, flgs).cptMethods
+      let fns = db.newRecorderRef(flgs).cptMethods(db)
       ok(db.bless CoreDxCaptRef(methods: fns)))
 
 # ------------------------------------------------------------------------------
