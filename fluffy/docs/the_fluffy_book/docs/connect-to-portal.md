@@ -13,7 +13,7 @@ which contains nodes of the different clients.
     Default the Fluffy node will connect to the
     [bootstrap nodes](https://github.com/ethereum/portal-network-specs/blob/master/testnet.md#bootnodes) of the public testnet.
 
-    When testing locally the `--network:none` option can be provided to avoid
+    When testing locally the `--portal-network:none` option can be provided to avoid
     connecting to any of the testnet bootstrap nodes.
 
 The `--rpc` option will also enable the different JSON-RPC interfaces through
