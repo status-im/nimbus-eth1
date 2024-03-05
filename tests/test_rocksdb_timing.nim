@@ -16,6 +16,7 @@ import
   eth/[common, p2p],
   rocksdb,
   unittest2,
+  ../nimbus/db/kvstore_rocksdb,
   ../nimbus/db/core_db/persistent,
   ../nimbus/core/chain,
   ../nimbus/sync/snap/range_desc,
@@ -119,7 +120,7 @@ proc flushDbs(db: TestDbs) =
     for n in 0 ..< nTestDbInstances:
       if db.cdb[n].isNil or db.cdb[n].dbType != LegacyDbPersistent:
          break
-      db.cdb[n].backend.toRocksStoreRef.store.db.rocksdb_close
+      db.cdb[n].backend.toRocksStoreRef.close()
     db.baseDir.flushDbDir(db.subDir)
 
 proc testDbs(

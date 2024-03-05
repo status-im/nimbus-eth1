@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2023 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -12,6 +12,7 @@ import
   std/[os, sequtils, strformat, strutils],
   chronicles,
   eth/common,
+  rocksdb/lib/librocksdb,
   rocksdb,
   stew/byteutils,
   ../../nimbus/db/kvstore_rocksdb,
@@ -55,8 +56,8 @@ proc walkAllDb(
       ) =
   ## Walk over all key-value pairs of the database (`RocksDB` only.)
   let
-    rop = rocky.store.readOptions
-    rit = rocky.store.db.rocksdb_create_iterator(rop)
+    rop = rocksdb_readoptions_create()
+    rit = rocky.readWriteDb.cPtr.rocksdb_create_iterator(rop)
 
   rit.rocksdb_iter_seek_to_first()
   while rit.rocksdb_iter_valid() != 0:
@@ -83,6 +84,7 @@ proc walkAllDb(
     # End while
 
   rit.rocksdb_iter_destroy()
+  rop.rocksdb_readoptions_destroy()
 
 proc dumpAllDbImpl(
     rocky: RocksStoreRef;           # Persistent database handle

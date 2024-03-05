@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -16,6 +16,7 @@
 import
   std/os,
   chronicles,
+  rocksdb/lib/librocksdb,
   rocksdb,
   results,
   ../../aristo_desc,
@@ -61,14 +62,18 @@ proc init*(
   except OSError, IOError:
     return err((RdbBeCantCreateTmpDir, ""))
 
-  let rc = rdb.store.init(
-    dbPath=dataDir, dbBackuppath=backupsDir, readOnly=false,
-    maxOpenFiles=openMax)
+  let dbOpts = defaultDbOptions()
+  dbOpts.setMaxOpenFiles(openMax)
+
+  let rc = openRocksDb(dataDir, dbOpts)
   if rc.isErr:
     let error = RdbBeDriverInitError
     debug logTxt "driver failed", dataDir, backupsDir, openMax,
       error, info=rc.error
     return err((RdbBeDriverInitError, rc.error))
+
+  rdb.dbOpts = dbOpts
+  rdb.store = rc.get()
 
   # The following is a default setup (subject to change)
   rdb.impOpt = rocksdb_ingestexternalfileoptions_create()

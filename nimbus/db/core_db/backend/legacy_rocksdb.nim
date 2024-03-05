@@ -60,7 +60,7 @@ proc newLegacyPersistentCoreDbRef*(path: string): CoreDbRef =
     raise (ref ResultDefect)(msg: msg)
 
   proc done() =
-    backend.rdb.store.close()
+    backend.rdb.close()
 
   LegaPersDbRef(rdb: backend.rdb).init(LegacyDbPersistent, backend.trieDB, done)
 

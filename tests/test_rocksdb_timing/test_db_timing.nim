@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2023 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -13,9 +13,11 @@
 import
   std/[algorithm, math, sequtils, strformat, times],
   stew/byteutils,
+  rocksdb/lib/librocksdb,
   rocksdb,
   unittest2,
   ../../nimbus/core/chain,
+  ../../nimbus/db/kvstore_rocksdb,
   ../../nimbus/db/core_db,
   ../../nimbus/db/core_db/persistent,
   ../../nimbus/sync/snap/range_desc,
@@ -57,7 +59,7 @@ proc to*(t: NodeTag; T: type Blob): T =
 
 # ----------------
 
-proc thisRecord(r: rocksdb_iterator_t): (Blob,Blob) =
+proc thisRecord(r: ptr rocksdb_iterator_t): (Blob,Blob) =
   var kLen, vLen:  csize_t
   let
     kData = r.rocksdb_iter_key(addr kLen)
@@ -134,8 +136,8 @@ proc test_dbTimingRockySetup*(
   ## Extract key-value records into memory tables via rocksdb iterator
   let
     rdb = cdb.backend.toRocksStoreRef
-    rop = rdb.store.readOptions
-    rit = rdb.store.db.rocksdb_create_iterator(rop)
+    rop = rocksdb_readoptions_create()
+    rit = rdb.readWriteDb().cPtr.rocksdb_create_iterator(rop)
   check not rit.isNil
 
   var
@@ -163,6 +165,7 @@ proc test_dbTimingRockySetup*(
       noisy.say "***", "ignoring key=", key.toHex
 
   rit.rocksdb_iter_destroy()
+  rop.rocksdb_readoptions_destroy()
 
   var
     (mean32, stdv32) = meanStdDev(v32Sum, v32SqSum, t32.len)
