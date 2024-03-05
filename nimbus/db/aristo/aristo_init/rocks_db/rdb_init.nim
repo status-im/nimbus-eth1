@@ -47,16 +47,11 @@ proc init*(
 
   let
     dataDir = rdb.dataDir
-    backupsDir = rdb.backupsDir
 
   try:
     dataDir.createDir
   except OSError, IOError:
     return err((RdbBeCantCreateDataDir, ""))
-  try:
-    backupsDir.createDir
-  except OSError, IOError:
-    return err((RdbBeCantCreateBackupDir, ""))
   try:
     rdb.cacheDir.createDir
   except OSError, IOError:
@@ -68,7 +63,7 @@ proc init*(
   let rc = openRocksDb(dataDir, dbOpts)
   if rc.isErr:
     let error = RdbBeDriverInitError
-    debug logTxt "driver failed", dataDir, backupsDir, openMax,
+    debug logTxt "driver failed", dataDir, openMax,
       error, info=rc.error
     return err((RdbBeDriverInitError, rc.error))
 
