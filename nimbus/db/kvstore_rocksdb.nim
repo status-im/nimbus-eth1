@@ -22,36 +22,17 @@ const maxOpenFiles = 512
 
 type
   RocksStoreRef* = ref object of RootObj
-    db: RocksDbRef
-    backupEngine: BackupEngineRef
-    readOnly: bool
+    db: RocksDbReadWriteRef
 
   RocksNamespaceRef* = ref object of RootObj
-    case readOnly: bool
-    of true:
-      cfReadOnly: ColFamilyReadOnly
-    of false:
-      cfReadWrite: ColFamilyReadWrite
+    colFamily: ColFamilyReadWrite
 
 # ------------------------------------------------------------------------------
-# RocksStoreRef functions
+# RocksStoreRef procs
 # ------------------------------------------------------------------------------
 
-proc readOnly*(store: RocksStoreRef): bool =
-  store.readOnly
-
-proc readOnlyDb*(store: RocksStoreRef): RocksDbReadOnlyRef =
-  doAssert store.readOnly
-  store.db.RocksDbReadOnlyRef
-
-proc readWriteDb*(store: RocksStoreRef): RocksDbReadWriteRef =
-  doAssert not store.readOnly
-  store.db.RocksDbReadWriteRef
-
-template validateCanWriteAndGet(store: RocksStoreRef): RocksDbReadWriteRef =
-  if store.readOnly:
-    raiseAssert "Unimplemented"
-  store.db.RocksDbReadWriteRef
+proc db*(store: RocksStoreRef): RocksDbReadWriteRef =
+  store.db
 
 proc get*(
     store: RocksStoreRef,
@@ -66,19 +47,18 @@ proc find*(
   raiseAssert "Unimplemented"
 
 proc put*(store: RocksStoreRef, key, value: openArray[byte]): KvResult[void] =
-  store.validateCanWriteAndGet().put(key, value)
+  store.db.put(key, value)
 
 proc contains*(store: RocksStoreRef, key: openArray[byte]): KvResult[bool] =
   store.db.keyExists(key)
 
 proc del*(store: RocksStoreRef, key: openArray[byte]): KvResult[bool] =
-  let db = store.validateCanWriteAndGet()
 
-  let exists = ? db.keyExists(key)
+  let exists = ? store.db.keyExists(key)
   if not exists:
     return ok(false)
 
-  let res = db.delete(key)
+  let res = store.db.delete(key)
   if res.isErr():
     return err(res.error())
 
@@ -89,54 +69,39 @@ proc clear*(store: RocksStoreRef): KvResult[bool] =
 
 proc close*(store: RocksStoreRef) =
   store.db.close()
-  store.backupEngine.close()
 
 proc init*(
     T: type RocksStoreRef,
     basePath: string,
     name: string,
-    readOnly = false,
     namespaces = @["default"]): KvResult[T] =
 
-  let
-    dataDir = basePath / name / "data"
-    backupsDir = basePath / name / "backups"
+  let dataDir = basePath / name / "data"
 
   try:
     createDir(dataDir)
-    createDir(backupsDir)
   except OSError, IOError:
     return err("RocksStoreRef: cannot create database directory")
-
-  let backupEngine = ? openBackupEngine(backupsDir)
 
   let dbOpts = defaultDbOptions()
   dbOpts.setMaxOpenFiles(maxOpenFiles)
 
-  if readOnly:
-    let readOnlyDb = ? openRocksDbReadOnly(dataDir, dbOpts,
-        columnFamilies = namespaces.mapIt(initColFamilyDescriptor(it)))
-    ok(T(db: readOnlyDb, backupEngine: backupEngine, readOnly: true))
-  else:
-    let readWriteDb = ? openRocksDb(dataDir, dbOpts,
-        columnFamilies = namespaces.mapIt(initColFamilyDescriptor(it)))
-    ok(T(db: readWriteDb, backupEngine: backupEngine, readOnly: false))
+  let db = ? openRocksDb(dataDir, dbOpts,
+      columnFamilies = namespaces.mapIt(initColFamilyDescriptor(it)))
+  ok(T(db: db))
 
 # ------------------------------------------------------------------------------
-# RocksNamespaceRef functions
+# RocksNamespaceRef procs
 # ------------------------------------------------------------------------------
 
-proc readOnly*(ns: RocksNamespaceRef): bool =
-  ns.readOnly
+proc name*(store: RocksNamespaceRef): string =
+  store.colFamily.name
 
 proc get*(
     ns: RocksNamespaceRef,
     key: openArray[byte],
     onData: kvstore.DataProc): KvResult[bool] =
-  if ns.readOnly:
-    ns.cfReadOnly.get(key, onData)
-  else:
-    ns.cfReadWrite.get(key, onData)
+  ns.colFamily.get(key, onData)
 
 proc find*(
     ns: RocksNamespaceRef,
@@ -145,26 +110,17 @@ proc find*(
   raiseAssert "Unimplemented"
 
 proc put*(ns: RocksNamespaceRef, key, value: openArray[byte]): KvResult[void] =
-  if ns.readOnly:
-    raiseAssert "Unimplemented"
-
-  ns.cfReadWrite.put(key, value)
+  ns.colFamily.put(key, value)
 
 proc contains*(ns: RocksNamespaceRef, key: openArray[byte]): KvResult[bool] =
-  if ns.readOnly:
-    ns.cfReadOnly.keyExists(key)
-  else:
-    ns.cfReadWrite.keyExists(key)
+  ns.colFamily.keyExists(key)
 
 proc del*(ns: RocksNamespaceRef, key: openArray[byte]): KvResult[bool] =
-  if ns.readOnly:
-    raiseAssert "Unimplemented"
-
-  let exists = ? ns.cfReadWrite.keyExists(key)
+  let exists = ? ns.colFamily.keyExists(key)
   if not exists:
     return ok(false)
 
-  let res = ns.cfReadWrite.delete(key)
+  let res = ns.colFamily.delete(key)
   if res.isErr():
     return err(res.error())
 
@@ -182,11 +138,5 @@ proc openNamespace*(
     name: string): KvResult[RocksNamespaceRef] =
   doAssert not store.db.isClosed()
 
-  if store.readOnly:
-    doAssert store.db of RocksDbReadOnlyRef
-    let cf = ? store.db.RocksDbReadOnlyRef.withColFamily(name)
-    ok(RocksNamespaceRef(readOnly: true, cfReadOnly: cf))
-  else:
-    doAssert store.db of RocksDbReadWriteRef
-    let cf = ? store.db.RocksDbReadWriteRef.withColFamily(name)
-    ok(RocksNamespaceRef(readOnly: false, cfReadWrite: cf))
+  let cf = ? store.db.withColFamily(name)
+  ok(RocksNamespaceRef(colFamily: cf))

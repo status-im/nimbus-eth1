@@ -19,7 +19,6 @@ type
 
     # RocksDB backend
     RdbBeCantCreateDataDir
-    RdbBeCantCreateBackupDir
     RdbBeCantCreateTmpDir
     RdbBeDriverInitError
     RdbBeDriverGetError

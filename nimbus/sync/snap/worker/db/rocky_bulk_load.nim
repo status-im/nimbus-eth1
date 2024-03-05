@@ -91,7 +91,7 @@ proc lastError*(rbl: RockyBulkLoadRef): string =
 
 proc store*(rbl: RockyBulkLoadRef): RocksDbReadWriteRef =
   ## Provide the diecriptor for backend functions as defined in `rocksdb`.
-  rbl.db.readWriteDb()
+  rbl.db.db()
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -154,7 +154,7 @@ proc finish*(
 
   var filePath = rbl.filePath.cstring
   if csError.isNil:
-    rbl.db.readWriteDb().cPtr.rocksdb_ingest_external_file(
+    rbl.db.db().cPtr.rocksdb_ingest_external_file(
       cast[cstringArray](filePath.addr), 1,
       rbl.importOption,
       cast[cstringArray](csError.addr))

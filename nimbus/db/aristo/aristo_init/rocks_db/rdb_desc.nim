@@ -41,7 +41,6 @@ type
 const
   BaseFolder* = "nimbus"           # Same as for Legacy DB
   DataFolder* = "aristo"           # Legacy DB has "data"
-  BackupFolder* = "aristo-history" # Legacy DB has "backups"
   SstCache* = "bulkput"            # Rocks DB bulk load file name in temp folder
   TempFolder* = "tmp"              # No `tmp` directory used with legacy DB
 
@@ -54,9 +53,6 @@ func baseDir*(rdb: RdbInst): string =
 
 func dataDir*(rdb: RdbInst): string =
   rdb.baseDir / DataFolder
-
-func backupsDir*(rdb: RdbInst): string =
-  rdb.basePath / BaseFolder / BackupFolder
 
 func cacheDir*(rdb: RdbInst): string =
   rdb.dataDir / TempFolder
