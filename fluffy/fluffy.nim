@@ -100,7 +100,14 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
   loadBootstrapFile(string config.bootstrapNodesFile, bootstrapRecords)
   bootstrapRecords.add(config.bootstrapNodes)
 
-  case config.portalNetwork
+  var portalNetwork: PortalNetwork
+  if config.portalNetworkDeprecated.isSome():
+    warn "DEPRECATED: The --network flag will be removed in the future, please use the drop in replacement --portal-network flag instead"
+    portalNetwork = config.portalNetworkDeprecated.get()
+  else:
+    portalNetwork = config.portalNetwork
+
+  case portalNetwork
   of testnet0:
     for enrURI in testnet0BootstrapNodes:
       var record: Record
@@ -183,7 +190,7 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
     streamManager = StreamManager.new(d)
 
     stateNetwork =
-      if config.stateNetworkEnabled:
+      if Network.state in config.networks:
         Opt.some(
           StateNetwork.new(
             d,
@@ -213,21 +220,25 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
         except SszError as err:
           raiseAssert "Invalid baked-in accumulator: " & err.msg
 
-    historyNetwork = Opt.some(
-      HistoryNetwork.new(
-        d,
-        db,
-        streamManager,
-        accumulator,
-        bootstrapRecords = bootstrapRecords,
-        portalConfig = portalConfig,
-      )
-    )
+    historyNetwork =
+      if Network.history in config.networks:
+        Opt.some(
+          HistoryNetwork.new(
+            d,
+            db,
+            streamManager,
+            accumulator,
+            bootstrapRecords = bootstrapRecords,
+            portalConfig = portalConfig,
+          )
+        )
+      else:
+        Opt.none(HistoryNetwork)
 
     beaconLightClient =
       # TODO: Currently disabled by default as it is not sufficiently polished.
       # Eventually this should be always-on functionality.
-      if config.trustedBlockRoot.isSome():
+      if Network.beacon in config.networks and config.trustedBlockRoot.isSome():
         let
           # Portal works only over mainnet data currently
           networkData = loadNetworkData("mainnet")
