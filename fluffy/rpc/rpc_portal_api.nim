@@ -15,6 +15,9 @@ import
   ../network/wire/portal_protocol,
   ./rpc_types
 
+{.warning[UnusedImport]: off.}
+import json_rpc/errors
+
 export rpcserver, tables
 
 # Portal Network JSON-RPC impelentation as per specification:
@@ -179,10 +182,10 @@ proc installPortalApiHandlers*(
     let
       key = ByteList.init(hexToSeqByte(contentKey))
       contentId = p.toContentId(key).valueOr:
-        raise newException(ValueError, "Invalid content key")
+        raise (ref errors.InvalidRequest)(code: -32602, msg: "Invalid content key")
 
       contentResult = (await p.contentLookup(key, contentId)).valueOr:
-        return ContentInfo(content: "0x", utpTransfer: false)
+        raise (ref ApplicationError)(code: -39001, msg: "Content not found")
 
     return ContentInfo(
       content: contentResult.content.to0xHex(), utpTransfer: contentResult.utpTransfer
@@ -194,9 +197,17 @@ proc installPortalApiHandlers*(
     let
       key = ByteList.init(hexToSeqByte(contentKey))
       contentId = p.toContentId(key).valueOr:
-        raise newException(ValueError, "Invalid content key")
+        raise (ref errors.InvalidRequest)(code: -32602, msg: "Invalid content key")
 
-    await p.traceContentLookup(key, contentId)
+      res = await p.traceContentLookup(key, contentId)
+
+    # TODO: Might want to restructure the lookup result here. Potentially doing
+    # the json conversion in this module.
+    if res.content.isSome():
+      return res
+    else:
+      let data = Opt.some(JrpcConv.encode(res.trace).JsonString)
+      raise (ref ApplicationError)(code: -39001, msg: "Content not found", data: data)
 
   rpcServer.rpc("portal_" & network & "Store") do(
     contentKey: string, contentValue: string
@@ -208,16 +219,16 @@ proc installPortalApiHandlers*(
       p.storeContent(key, contentId.get(), hexToSeqByte(contentValue))
       return true
     else:
-      raise newException(ValueError, "Invalid content key")
+      raise (ref errors.InvalidRequest)(code: -32602, msg: "Invalid content key")
 
   rpcServer.rpc("portal_" & network & "LocalContent") do(contentKey: string) -> string:
     let
       key = ByteList.init(hexToSeqByte(contentKey))
       contentId = p.toContentId(key).valueOr:
-        raise newException(ValueError, "Invalid content key")
+        raise (ref errors.InvalidRequest)(code: -32602, msg: "Invalid content key")
 
       contentResult = p.dbGet(key, contentId).valueOr:
-        return "0x"
+        raise (ref ApplicationError)(code: -39001, msg: "Content not found")
 
     return contentResult.to0xHex()
 
