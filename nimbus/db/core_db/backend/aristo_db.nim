@@ -169,7 +169,7 @@ proc baseMethods(
     getIdFn: proc(): CoreDbRc[CoreDxTxID] =
       CoreDxTxID.notImplemented(db, "getIdFn()"),
 
-    captureFn: proc(flags: set[CoreDbCaptFlags]): CoreDbRc[CoreDxCaptRef] =
+    newCaptureFn: proc(flags: set[CoreDbCaptFlags]): CoreDbRc[CoreDxCaptRef] =
       CoreDxCaptRef.notImplemented(db, "capture()"))
 
 # ------------------------------------------------------------------------------

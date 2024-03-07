@@ -412,14 +412,17 @@ proc tidMethods(tid: TransactionID; tdb: TrieDatabaseRef): CoreDbTxIdFns =
 
 proc cptMethods(cpt: RecorderRef; db: LegacyDbRef): CoreDbCaptFns =
   CoreDbCaptFns(
-    recorderFn: proc(): CoreDbRc[CoreDbRef] =
-      ok(cpt.appDb),
+    recorderFn: proc(): CoreDbRef =
+      cpt.appDb,
 
-    logDbFn: proc(): CoreDbRc[TableRef[Blob,Blob]] =
-      ok(cpt.logger),
+    logDbFn: proc(): TableRef[Blob,Blob] =
+      cpt.logger,
 
     getFlagsFn: proc(): set[CoreDbCaptFlags] =
-      cpt.flags)
+      cpt.flags,
+
+    forgetFn: proc(): CoreDbRc[void] =
+      err(db.bless(NotImplemented, LegacyCoreDbError(ctx: "disposeFn()"))))
 
 # ------------------------------------------------------------------------------
 # Private base methods (including constructors)
@@ -524,7 +527,7 @@ proc baseMethods(
       db.top.methods = db.top.txMethods()
       ok(db.bless db.top),
 
-    captureFn: proc(flgs: set[CoreDbCaptFlags]): CoreDbRc[CoreDxCaptRef] =
+    newCaptureFn: proc(flgs: set[CoreDbCaptFlags]): CoreDbRc[CoreDxCaptRef] =
       let fns = db.newRecorderRef(flgs).cptMethods(db)
       ok(db.bless CoreDxCaptRef(methods: fns)))
 
