@@ -35,7 +35,7 @@ type
 # ------------------------------------------------------------------------------
 
 func isAristo*(be: CoreDbRef): bool =
-  be.dbType in {AristoDbMemory, AristoDbRocks}
+  be.dbType in {AristoDbMemory, AristoDbRocks, AristoDbVoid}
 
 func toStr*(n: VertexID): string =
   result = "$"

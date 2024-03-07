@@ -24,7 +24,7 @@ type
 
 when CoreDbEnableApiProfiling:
   import
-    std/[algorithm, sequtils, strutils],
+    std/sequtils,
     ../../nimbus/db/aristo/[aristo_api, aristo_profile],
     ../../nimbus/db/kvt/kvt_api
   var
@@ -35,7 +35,7 @@ when CoreDbEnableApiProfiling:
 when LedgerEnableApiProfiling:
   when not CoreDbEnableApiProfiling:
     import
-      std/[algorithm, sequtils, strutils]
+      std/sequtils
   var
     ldgProfData: LedgerProfListRef
 
@@ -111,32 +111,6 @@ template stopLoggingAfter(noisy: bool; code: untyped) =
   block:
     defer: noisy.stopLogging()
     code
-
-# --------------
-
-when CoreDbEnableApiProfiling or
-     LedgerEnableApiProfiling:
-  proc profilingPrinter(
-      data: AristoDbProfListRef;
-      names: openArray[string];
-      header: string;
-      indent = 4;
-        ): string =
-    if not data.isNil:
-      let
-        pfx = indent.toPfx
-        pfx2 = pfx & "  "
-      result = header & ":"
-
-      result &= "\n" & pfx & "by accumulated duration per procedure"
-      for (ela,fns) in data.byElapsed:
-        result &= pfx2 & ela.pp & ": " & fns.mapIt(
-          names[it] & data.stats(it).pp(true)).sorted.join(", ")
-
-      result &=  "\n" & pfx & "by number of visits"
-      for (count,fns) in data.byVisits:
-        result &= pfx2 & $count & ": " & fns.mapIt(
-          names[it] & data.stats(it).pp).sorted.join(", ")
 
 # ------------------------------------------------------------------------------
 # Public test function

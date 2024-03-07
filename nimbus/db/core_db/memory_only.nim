@@ -17,7 +17,7 @@ import
   ./backend/[aristo_db, legacy_db]
 
 import
-  #./core_apps_legacy as core_apps
+  #./core_apps_legacy as core_apps -- avoid
   ./core_apps_newapi as core_apps
 import
   ./base except bless

@@ -23,6 +23,10 @@ import
 export
   AristoDbProfListRef
 
+const
+  AutoValidateApiHooks = defined(release).not
+    ## No validatinon needed for production suite.
+
 # Annotation helper(s)
 {.pragma: noRaise, gcsafe, raises: [].}
 
@@ -157,6 +161,14 @@ type
       ## descriptor will *NOT* be hashified right after construction.
       ##
       ## Use `aristo_desc.forget()` to clean up this descriptor.
+
+  AristoApiGetKeyFn* =
+    proc(db: AristoDbRef;
+         vid: VertexID;
+        ): HashKey
+        {.noRaise.}
+      ## Simplified version of `getKey(0` (see below) returns `VOID_HASH_KEY`
+      ## also on fetch errors.
 
   AristoApiGetKeyRcFn* =
     proc(db: AristoDbRef;
@@ -346,6 +358,7 @@ type
     forget*: AristoApiForgetFn
     fork*: AristoApiForkFn
     forkTop*: AristoApiForkTopFn
+    getKey*: AristoApiGetKeyFn
     getKeyRc*: AristoApiGetKeyRcFn
     hashify*: AristoApiHashifyFn
     hasPath*: AristoApiHasPathFn
@@ -377,6 +390,7 @@ type
     AristoApiProfForgetFn       = "forget"
     AristoApiProfForkFn         = "fork"
     AristoApiProfForkTopFn      = "forkTop"
+    AristoApiProfGetKeyFn       = "getKey"
     AristoApiProfGetKeyRcFn     = "getKeyRc"
     AristoApiProfHashifyFn      = "hashify"
     AristoApiProfHasPathFn      = "hasPath"
@@ -405,12 +419,53 @@ type
     be*: BackendRef
 
 # ------------------------------------------------------------------------------
+# Private helpers
+# ------------------------------------------------------------------------------
+
+when AutoValidateApiHooks:
+  proc validate(api: AristoApiObj|AristoApiRef) =
+    doAssert not api.commit.isNil
+    doAssert not api.delete.isNil
+    doAssert not api.delTree.isNil
+    doAssert not api.fetchPayload.isNil
+    doAssert not api.finish.isNil
+    doAssert not api.forget.isNil
+    doAssert not api.fork.isNil
+    doAssert not api.forkTop.isNil
+    doAssert not api.getKey.isNil
+    doAssert not api.getKeyRc.isNil
+    doAssert not api.hashify.isNil
+    doAssert not api.hasPath.isNil
+    doAssert not api.hikeUp.isNil
+    doAssert not api.isTop.isNil
+    doAssert not api.level.isNil
+    doAssert not api.nForked.isNil
+    doAssert not api.merge.isNil
+    doAssert not api.mergePayload.isNil
+    doAssert not api.pathAsBlob.isNil
+    doAssert not api.rollback.isNil
+    doAssert not api.serialise.isNil
+    doAssert not api.stow.isNil
+    doAssert not api.txBegin.isNil
+    doAssert not api.txTop.isNil
+    doAssert not api.vidFetch.isNil
+    doAssert not api.vidDispose.isNil
+
+  proc validate(prf: AristoApiProfRef; be: BackendRef) =
+    prf.AristoApiRef.validate
+    doAssert not prf.data.isNil
+    if not be.isNil:
+      doAssert not prf.be.isNil
+
+# ------------------------------------------------------------------------------
 # Public API constuctors
 # ------------------------------------------------------------------------------
 
 func init*(api: var AristoApiObj) =
   ## Initialise an `api` argument descriptor
   ##
+  when AutoValidateApiHooks:
+    api.reset
   api.commit = commit
   api.delete = delete
   api.delTree = delTree
@@ -419,6 +474,7 @@ func init*(api: var AristoApiObj) =
   api.forget = forget
   api.fork = fork
   api.forkTop = forkTop
+  api.getKey = getKey
   api.getKeyRc = getKeyRc
   api.hashify = hashify
   api.hasPath = hasPath
@@ -436,14 +492,43 @@ func init*(api: var AristoApiObj) =
   api.txTop = txTop
   api.vidFetch = vidFetch
   api.vidDispose = vidDispose
+  when AutoValidateApiHooks:
+    api.validate
 
 func init*(T: type AristoApiRef): T =
   new result
   result[].init()
 
 func dup*(api: AristoApiRef): AristoApiRef =
-  new result
-  result[] = api[]
+  result = AristoApiRef(
+    commit:       api.commit,
+    delete:       api.delete,
+    delTree:      api.delTree,
+    fetchPayload: api.fetchPayload,
+    finish:       api.finish,
+    forget:       api.forget,
+    fork:         api.fork,
+    forkTop:      api.forkTop,
+    getKey:       api.getKey,
+    getKeyRc:     api.getKeyRc,
+    hashify:      api.hashify,
+    hasPath:      api.hasPath,
+    hikeUp:       api.hikeUp,
+    isTop:        api.isTop,
+    level:        api.level,
+    nForked:      api.nForked,
+    merge:        api.merge,
+    mergePayload: api.mergePayload,
+    pathAsBlob:   api.pathAsBlob,
+    rollback:     api.rollback,
+    serialise:    api.serialise,
+    stow:         api.stow,
+    txBegin:      api.txBegin,
+    txTop:        api.txTop,
+    vidFetch:     api.vidFetch,
+    vidDispose:   api.vidDispose)
+  when AutoValidateApiHooks:
+    api.validate
 
 # ------------------------------------------------------------------------------
 # Public profile API constuctor
@@ -511,6 +596,11 @@ func init*(
     proc(a: AristoDbRef; b = false): auto =
       AristoApiProfForkTopFn.profileRunner:
         result = api.forkTop(a, b)
+
+  profApi.getKey =
+    proc(a: AristoDbRef; b: VertexID): auto =
+      AristoApiProfGetKeyFn.profileRunner:
+        result = api.getKey(a, b)
 
   profApi.getKeyRc =
     proc(a: AristoDbRef; b: VertexID): auto =
@@ -615,6 +705,9 @@ func init*(
       proc(a: PutHdlRef): auto =
         AristoApiProfBePutEndFn.profileRunner:
           result = be.putEndFn(a)
+
+  when AutoValidateApiHooks:
+    profApi.validate be
 
   profApi
 

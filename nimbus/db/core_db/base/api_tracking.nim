@@ -40,13 +40,13 @@ type
     AnyBackendFn        = "any/backend"
     AnyIsPruningFn      = "any/isPruning"
 
-    BaseCaptureFn       = "newCapture"
     BaseDbTypeFn        = "dbType"
     BaseFinishFn        = "finish"
     BaseGetTrieFn       = "getTrie"
     BaseLegacySetupFn   = "compensateLegacySetup"
     BaseLevelFn         = "level"
     BaseNewAccFn        = "newAccMpt"
+    BaseNewCaptureFn    = "newCapture"
     BaseNewKvtFn        = "newKvt"
     BaseNewMptFn        = "newMpt"
     BaseNewTxFn         = "newTransaction"
@@ -54,6 +54,7 @@ type
     CptFlagsFn          = "cpt/flags"
     CptLogDbFn          = "cpt/logDb"
     CptRecorderFn       = "cpt/recorder"
+    CptForgetFn         = "cpt/forget"
 
     ErrorPrintFn        = "$$"
     EthAccRecastFn      = "recast"
@@ -197,6 +198,9 @@ proc toStr*(rc: CoreDbRc[Hash256]): string =
 proc toStr*(rc: CoreDbRc[CoreDbTrieRef]): string =
   if rc.isOk: "ok(" & rc.value.toStr & ")" else: "err(" & rc.error.toStr & ")"
 
+proc toStr*(rc: CoreDbRc[set[CoreDbCaptFlags]]): string =
+  if rc.isOk: "ok(" & rc.value.toStr & ")" else: "err(" & rc.error.toStr & ")"
+
 proc toStr*(rc: CoreDbRc[Account]): string =
   if rc.isOk: "ok(Account)" else: "err(" & rc.error.toStr & ")"
 
@@ -205,6 +209,7 @@ proc toStr[T](rc: CoreDbRc[T]; ifOk: static[string]): string =
 
 proc toStr*(rc: CoreDbRc[CoreDbRef]): string = rc.toStr "db"
 proc toStr*(rc: CoreDbRc[CoreDbAccount]): string = rc.toStr "acc"
+proc toStr*(rc: CoreDbRc[CoreDxKvtRef]): string = rc.toStr "kvt"
 proc toStr*(rc: CoreDbRc[CoreDxTxID]): string = rc.toStr "txId"
 proc toStr*(rc: CoreDbRc[CoreDxTxRef]): string = rc.toStr "tx"
 proc toStr*(rc: CoreDbRc[CoreDxCaptRef]): string = rc.toStr "capt"

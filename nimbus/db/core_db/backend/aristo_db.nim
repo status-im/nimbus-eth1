@@ -13,20 +13,17 @@
 import
   eth/common,
   results,
-  ../../aristo,
-  ../../aristo/[
-    aristo_desc, aristo_nearby, aristo_path, aristo_tx, aristo_serialise,
-    aristo_walk],
-  ../../kvt,
-  ../../kvt/[kvt_desc, kvt_init, kvt_tx, kvt_walk],
+  "../.."/[aristo, aristo/aristo_walk],
+  "../.."/[kvt, kvt/kvt_init/memory_only, kvt/kvt_walk],
   ".."/[base, base/base_desc],
   ./aristo_db/[common_desc, handlers_aristo, handlers_kvt]
 
 import
   ../../aristo/aristo_init/memory_only as aristo_memory_only
 
-include
-  ./aristo_db/aristo_replicate
+# Caveat:
+#  additional direct include(s) -- not import(s) -- is placed near
+#  the end of this source file
 
 # Annotation helper(s)
 {.pragma:  noRaise, gcsafe, raises: [].}
@@ -43,6 +40,8 @@ type
     adbBase: AristoBaseRef                   ## Aristo subsystem
 
   AristoCoreDbBE = ref object of CoreDbBackendRef
+
+proc newAristoVoidCoreDbRef*(): CoreDbRef {.noRaise.}
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -72,27 +71,32 @@ proc txMethods(
 
     commitFn: proc(ignore: bool): CoreDbRc[void] =
       const info = "commitFn()"
-      ? aTx.commit.toVoidRc(db, info)
-      ? kTx.commit.toVoidRc(db, info)
+      ? db.adbBase.api.commit(aTx).toVoidRc(db, info)
+      ? db.kdbBase.api.commit(kTx).toVoidRc(db, info)
       ok(),
 
     rollbackFn: proc(): CoreDbRc[void] =
       const info = "rollbackFn()"
-      ? aTx.rollback.toVoidRc(db, info)
-      ? kTx.rollback.toVoidRc(db, info)
+      ? db.adbBase.api.rollback(aTx).toVoidRc(db, info)
+      ? db.kdbBase.api.rollback(kTx).toVoidRc(db, info)
       ok(),
 
     disposeFn: proc(): CoreDbRc[void] =
       const info =  "disposeFn()"
-      if aTx.isTop: ? aTx.rollback.toVoidRc(db, info)
-      if kTx.isTop: ? kTx.rollback.toVoidRc(db, info)
+      if db.adbBase.api.isTop(aTx):
+        ? db.adbBase.api.rollback(aTx).toVoidRc(db, info)
+      if db.kdbBase.api.isTop(kTx):
+        ? db.kdbBase.api.rollback(kTx).toVoidRc(db, info)
       ok(),
 
     safeDisposeFn: proc(): CoreDbRc[void] =
       const info =  "safeDisposeFn()"
-      if aTx.isTop: ? aTx.rollback.toVoidRc(db, info)
-      if kTx.isTop: ? kTx.rollback.toVoidRc(db, info)
+      if db.adbBase.api.isTop(aTx):
+        ? db.adbBase.api.rollback(aTx).toVoidRc(db, info)
+      if db.kdbBase.api.isTop(kTx):
+        ? db.kdbBase.api.rollback(kTx).toVoidRc(db, info)
       ok())
+
 
 proc baseMethods(
     db: AristoCoreDbRef;
@@ -165,7 +169,7 @@ proc baseMethods(
     getIdFn: proc(): CoreDbRc[CoreDxTxID] =
       CoreDxTxID.notImplemented(db, "getIdFn()"),
 
-    captureFn: proc(flags: set[CoreDbCaptFlags]): CoreDbRc[CoreDxCaptRef] =
+    newCaptureFn: proc(flags: set[CoreDbCaptFlags]): CoreDbRc[CoreDxCaptRef] =
       CoreDxCaptRef.notImplemented(db, "capture()"))
 
 # ------------------------------------------------------------------------------
@@ -245,7 +249,7 @@ proc newAristoVoidCoreDbRef*(): CoreDbRef =
   AristoDbVoid.init(kvt.VoidBackendRef, aristo.VoidBackendRef)
 
 # ------------------------------------------------------------------------------
-# Public helpers for direct backend access
+# Public helpers, e.g. for direct backend access
 # ------------------------------------------------------------------------------
 
 func toAristoProfData*(
@@ -255,6 +259,18 @@ func toAristoProfData*(
     if db.isAristo:
       result.aristo = db.AristoCoreDbRef.adbBase.api.AristoApiProfRef.data
       result.kvt = db.AristoCoreDbRef.kdbBase.api.KvtApiProfRef.data
+
+func toAristoApi*(dsc: CoreDxKvtRef): KvtApiRef =
+  doAssert not dsc.parent.isNil
+  doAssert dsc.parent.isAristo
+  if dsc.parent.isAristo:
+    return AristoCoreDbRef(dsc.parent).kdbBase.api
+
+func toAristoApi*(dsc: CoreDxMptRef): AristoApiRef =
+  doAssert not dsc.parent.isNil
+  doAssert dsc.parent.isAristo
+  if dsc.parent.isAristo:
+    return AristoCoreDbRef(dsc.parent).adbBase.api
 
 func toAristo*(be: CoreDbKvtBackendRef): KvtDbRef =
   if be.parent.isAristo:
@@ -272,16 +288,33 @@ func toAristo*(be: CoreDbAccBackendRef): AristoDbRef =
 # Public aristo iterators
 # ------------------------------------------------------------------------------
 
-iterator aristoKvtPairs*(dsc: CoreDxKvtRef): (Blob,Blob) {.rlpRaise.} =
-  let p = dsc.to(KvtDbRef).forkTop.valueOrApiError "aristoKvtPairs()"
-  defer: discard p.forget()
+include
+  ./aristo_db/aristo_replicate
+
+# ------------------------
+
+iterator aristoKvtPairsVoid*(dsc: CoreDxKvtRef): (Blob,Blob) {.rlpRaise.} =
+  let
+    api = dsc.toAristoApi()
+    p = api.forkTop(dsc.to(KvtDbRef)).valueOrApiError "aristoKvtPairs()"
+  defer: discard api.forget(p)
+  for (k,v) in kvt.VoidBackendRef.walkPairs p:
+    yield (k,v)
+
+iterator aristoKvtPairsMem*(dsc: CoreDxKvtRef): (Blob,Blob) {.rlpRaise.} =
+  let
+    api = dsc.toAristoApi()
+    p = api.forkTop(dsc.to(KvtDbRef)).valueOrApiError "aristoKvtPairs()"
+  defer: discard api.forget(p)
   for (k,v) in kvt.MemBackendRef.walkPairs p:
     yield (k,v)
 
 iterator aristoMptPairs*(dsc: CoreDxMptRef): (Blob,Blob) {.noRaise.} =
-  let mpt = dsc.to(AristoDbRef)
+  let
+    api = dsc.toAristoApi()
+    mpt = dsc.to(AristoDbRef)
   for (k,v) in mpt.rightPairs LeafTie(root: dsc.rootID):
-    yield (k.path.pathAsBlob, mpt.serialise(v).valueOr(EmptyBlob))
+    yield (api.pathAsBlob(k.path), api.serialise(mpt, v).valueOr(EmptyBlob))
 
 iterator aristoReplicateMem*(dsc: CoreDxMptRef): (Blob,Blob) {.rlpRaise.} =
   ## Instantiation for `MemBackendRef`

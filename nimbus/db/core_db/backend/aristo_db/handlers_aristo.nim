@@ -471,7 +471,6 @@ proc mptMethods(cMpt: AristoChildDbRef): CoreDbMptFns =
     if rc.value:
       # Trie has become empty
       cMpt.root = VoidTrieID
-
     ok()
 
   proc mptHasPath(

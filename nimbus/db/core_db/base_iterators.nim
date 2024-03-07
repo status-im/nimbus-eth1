@@ -45,7 +45,10 @@ iterator pairs*(kvt: CoreDxKvtRef): (Blob, Blob) {.apiRaise.} =
     for k,v in kvt.legaKvtPairs():
       yield (k,v)
   of AristoDbMemory:
-    for k,v in kvt.aristoKvtPairs():
+    for k,v in kvt.aristoKvtPairsMem():
+      yield (k,v)
+  of AristoDbVoid:
+    for k,v in kvt.aristoKvtPairsVoid():
       yield (k,v)
   else:
     raiseAssert: "Unsupported database type: " & $kvt.parent.dbType
