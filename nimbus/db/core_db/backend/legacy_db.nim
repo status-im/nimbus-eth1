@@ -27,6 +27,7 @@ type
     kvt: CoreDxKvtRef       ## Cache, no need to rebuild methods descriptor
     tdb: TrieDatabaseRef    ## Descriptor reference copy captured with closures
     top: LegacyCoreDxTxRef  ## Top transaction (if any)
+    level: int              ## Debugging
 
   LegacyDbClose* = proc() {.gcsafe, raises: [].}
     ## Custom destructor
@@ -198,8 +199,10 @@ proc put(db: RecorderRef, key, value: openArray[byte]) =
 
 proc contains(db: RecorderRef, key: openArray[byte]): bool =
   ## Mixin for `trieDB()`
-  result = db.parent.contains(key)
-  doAssert(db.logger.contains(@key) == result)
+  if db.logger.hasKey @key:
+    return true
+  if db.parent.contains key:
+    return true
 
 proc del(db: RecorderRef, key: openArray[byte]) =
   ## Mixin for `trieDB()`
@@ -213,10 +216,19 @@ proc newRecorderRef(
       ): RecorderRef =
   ## Capture constuctor, uses `mixin` values from above
   result = RecorderRef(
-    flags:    flags,
+    flags:  flags,
     parent: db.tdb,
     logger: newTable[Blob,Blob]())
-  result.appDb = LegacyDbRef().init(db.dbType, trieDB result).LegacyDbRef
+  let newDb = LegacyDbRef(
+    level:          db.level+1,
+    trackLegaApi:   db.trackLegaApi,
+    trackNewApi:    db.trackNewApi,
+    trackLedgerApi: db.trackLedgerApi,
+    localDbOnly:    db.localDbOnly,
+    profTab:        db.profTab,
+    ledgerHook:     db.ledgerHook)
+  # Note: the **mixin** magic happens in `trieDB()`
+  result.appDb = newDb.init(db.dbType, trieDB result).LegacyDbRef
 
 # ------------------------------------------------------------------------------
 # Private database method function tables
