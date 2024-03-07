@@ -14,6 +14,7 @@ import
   eth/[common, rlp, trie/db, trie/hexary],
   stew/byteutils,
   results,
+  ../../storage_types,
   ../../../errors,
   ".."/[base, base/base_desc]
 
@@ -27,7 +28,7 @@ type
     kvt: CoreDxKvtRef       ## Cache, no need to rebuild methods descriptor
     tdb: TrieDatabaseRef    ## Descriptor reference copy captured with closures
     top: LegacyCoreDxTxRef  ## Top transaction (if any)
-    nsDbs: Table[string, TrieDatabaseRef]
+    nsDbs: Table[DbNamespace, TrieDatabaseRef]
 
   LegacyDbClose* = proc() {.gcsafe, raises: [].}
     ## Custom destructor
@@ -80,7 +81,7 @@ proc init*(
     db: LegacyDbRef;
     dbType: CoreDbType;
     tdb: TrieDatabaseRef;
-    nsDbs: Table[string, TrieDatabaseRef] = initTable[string, TrieDatabaseRef]();
+    nsDbs: Table[DbNamespace, TrieDatabaseRef] = initTable[DbNamespace, TrieDatabaseRef]();
     closeDb = LegacyDbClose(nil);
       ): CoreDbRef
       {.gcsafe.}
@@ -225,10 +226,10 @@ proc newRecorderRef(
 # Private database method function tables
 # ------------------------------------------------------------------------------
 
-proc kvtMethods(db: LegacyDbRef, namespace = ""): CoreDbKvtFns {.gcsafe.} =
+proc kvtMethods(db: LegacyDbRef, namespace: DbNamespace): CoreDbKvtFns {.gcsafe.} =
   ## Key-value database table handlers
 
-  let tdb = if db.dbType == LegacyDbPersistent and namespace.len() > 0:
+  let tdb = if db.dbType == LegacyDbPersistent and namespace != DbNamespace.default:
     doAssert db.nsDbs.hasKey(namespace)
     db.nsDbs.getOrDefault(namespace)
   else:
@@ -265,7 +266,7 @@ proc kvtMethods(db: LegacyDbRef, namespace = ""): CoreDbKvtFns {.gcsafe.} =
     forgetFn: proc(): CoreDbRc[void] =
       ok(),
 
-    namespaceFn: proc(namespace: string): CoreDxKvtRef {.gcsafe.} =
+    namespaceFn: proc(namespace: DbNamespace): CoreDxKvtRef {.gcsafe.} =
       CoreDxKvtRef(methods: db.kvtMethods(namespace)))
 
 proc mptMethods(mpt: HexaryChildDbRef; db: LegacyDbRef): CoreDbMptFns =
@@ -480,8 +481,8 @@ proc baseMethods(
           trie.accPath = @(address.unsafeGet.keccakHash.data)
       ok(db.bless trie),
 
-    newKvtFn: proc(saveMode: CoreDbSaveFlags): CoreDbRc[CoreDxKvtRef] =
-      ok(db.kvt),
+    newKvtFn: proc(namespace: DbNamespace, saveMode: CoreDbSaveFlags): CoreDbRc[CoreDxKvtRef] =
+      ok(db.kvt.namespace(namespace)),
 
     newMptFn: proc(
         trie: CoreDbTrieRef,
@@ -536,7 +537,7 @@ proc init*(
     db: LegacyDbRef;
     dbType: CoreDbType;
     tdb: TrieDatabaseRef;
-    nsDbs: Table[string, TrieDatabaseRef] = initTable[string, TrieDatabaseRef]();
+    nsDbs: Table[DbNamespace, TrieDatabaseRef] = initTable[DbNamespace, TrieDatabaseRef]();
     closeDb = LegacyDbClose(nil);
      ): CoreDbRef =
   ## Constructor helper
@@ -544,7 +545,7 @@ proc init*(
   # Local extensions
   db.tdb = tdb
   db.nsDbs = nsDbs
-  db.kvt = db.bless CoreDxKvtRef(methods: db.kvtMethods())
+  db.kvt = db.bless CoreDxKvtRef(methods: db.kvtMethods(DbNamespace.default))
 
   # Base descriptor
   db.dbType = dbType

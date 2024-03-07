@@ -15,6 +15,7 @@ import
   chronicles,
   eth/common,
   results,
+  ../storage_types,
   "../.."/[constants, errors],
   ./base/[api_new_desc, api_tracking, base_desc]
 
@@ -437,7 +438,7 @@ proc getTrie*(
 # Public key-value table methods
 # ------------------------------------------------------------------------------
 
-proc newKvt*(db: CoreDbRef; saveMode = AutoSave): CoreDxKvtRef =
+proc newKvt*(db: CoreDbRef; namespace: DbNamespace, saveMode = AutoSave): CoreDxKvtRef =
   ## Constructor, will defect on failure.
   ##
   ## Depending on the argument `saveMode`, the contructed object will have
@@ -476,9 +477,12 @@ proc newKvt*(db: CoreDbRef; saveMode = AutoSave): CoreDxKvtRef =
   ## function argument.
   ##
   db.setTrackNewApi BaseNewKvtFn
-  result = db.methods.newKvtFn(saveMode).valueOr:
+  result = db.methods.newKvtFn(namespace, saveMode).valueOr:
     raiseAssert error.prettyText()
   db.ifTrackNewApi: debug newApiTxt, ctx, elapsed, saveMode
+
+proc newDefaultKvt*(db: CoreDbRef; saveMode = AutoSave): CoreDxKvtRef =
+  newKvt(db, DbNamespace.default, saveMode)
 
 proc get*(kvt: CoreDxKvtRef; key: openArray[byte]): CoreDbRc[Blob] =
   ## This function always returns a non-empty `Blob` or an error code.
@@ -555,7 +559,7 @@ proc forget*(dsc: CoreDxKvtRef): CoreDbRc[void] {.discardable.} =
   result = dsc.methods.forgetFn()
   dsc.ifTrackNewApi: debug newApiTxt, ctx, elapsed, result
 
-proc namespace*(dsc: CoreDxKvtRef, namespace: string): CoreDxKvtRef =
+proc namespace*(dsc: CoreDxKvtRef, namespace: DbNamespace): CoreDxKvtRef =
   ## TODO:
   dsc.methods.namespaceFn(namespace)
 
@@ -1033,17 +1037,17 @@ when ProvideLegacyAPI:
 
   # ----------------
 
-  proc kvt*(db: CoreDbRef, namespace = ""): CoreDbKvtRef =
+  proc kvt*(db: CoreDbRef, namespace: DbNamespace): CoreDbKvtRef =
     ## Legacy pseudo constructor, see `toKvt()` for production constructor
     db.setTrackLegaApi LegaNewKvtFn
     db.ifTrackLegaApi: debug legaApiTxt, ctx, elapsed, result
 
-    if namespace.len() > 0:
-      result = db.newKvt().namespace(namespace).CoreDbKvtRef
-    else:
-      result = db.newKvt().CoreDbKvtRef
+    result = db.newKvt(namespace = namespace).CoreDbKvtRef
 
     db.ifTrackLegaApi: debug legaApiTxt, ctx, elapsed, result
+
+  proc defaultKvt*(db: CoreDbRef): CoreDbKvtRef =
+    kvt(db, DbNamespace.default)
 
   proc get*(kvt: CoreDbKvtRef; key: openArray[byte]): Blob =
     kvt.setTrackLegaApi LegaKvtGetFn
@@ -1057,7 +1061,7 @@ when ProvideLegacyAPI:
 
   proc put*(kvt: CoreDbKvtRef; key: openArray[byte]; val: openArray[byte]) =
     kvt.setTrackLegaApi LegaKvtPutFn
-    kvt.distinctBase.parent.newKvt().put(key, val).expect $ctx
+    kvt.distinctBase.put(key, val).expect $ctx
     kvt.ifTrackLegaApi:
       debug legaApiTxt, ctx, elapsed, key=key.toStr, val=val.toLenStr
 

@@ -37,10 +37,12 @@ type
 # ------------------------------------------------------------------------------
 
 proc writeStatus(db: CoreDbRef, status: TransitionStatus) =
-  db.kvt.put(transitionStatusKey().toOpenArray(), rlp.encode(status))
+  let key = transitionStatusKey()
+  db.kvt(key.namespace).put(key.toOpenArray(), rlp.encode(status))
 
 proc readStatus(db: CoreDbRef): TransitionStatus =
-  var bytes = db.kvt.get(transitionStatusKey().toOpenArray())
+  let key = transitionStatusKey()
+  var bytes = db.kvt(key.namespace).get(key.toOpenArray())
   if bytes.len > 0:
     try:
       result = rlp.decode(bytes, typeof result)

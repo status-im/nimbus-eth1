@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/tables,
+  std/[tables, sequtils],
   eth/trie/db,
   eth/db/kvstore,
   rocksdb,
@@ -28,11 +28,18 @@ type
     kv: KvStoreRef
     rdb: RocksStoreRef
 
-proc getDbNamespaces(): seq[string] =
-  var namespaces = newSeq[string]()
+proc `$`*(ns: DbNamespace): string =
+  if ns == DbNamespace.default:
+    return "default"
+  $ord(ns)
 
-  for k in DBKeyKind.items():
-    namespaces.add(k.toNamespace())
+proc getNamespaces(): seq[DbNamespace] =
+  var namespaces = newSeq[DbNamespace]()
+  for ns in DbNamespace.items():
+    # Don't include the default namespace in the list because the main
+    # RocksStoreRef uses the default namespace already
+    if ns != DbNamespace.default:
+      namespaces.add(ns)
   namespaces
 
 # TODO KvStore is a virtual interface and TrieDB is a virtual interface - one
@@ -57,7 +64,7 @@ proc newChainDB(path: string): KvResult[ChainDB] =
   let rdb = RocksStoreRef.init(
       path,
       "nimbus",
-      namespaces = getDbNamespaces()).valueOr:
+      namespaces = getNamespaces().mapIt($it)).valueOr:
     return err(error)
   ok(ChainDB(kv: kvStore rdb, rdb: rdb))
 
@@ -75,10 +82,10 @@ proc newLegacyPersistentCoreDbRef*(path: string): CoreDbRef =
     let msg = "DB initialisation : " & error
     raise (ref ResultDefect)(msg: msg)
 
-  var nsMap = initTable[string, TrieDatabaseRef]()
+  var nsMap = initTable[DbNamespace, TrieDatabaseRef]()
 
-  for ns in getDbNamespaces():
-    let namespace = backend.withNamespace(ns).valueOr:
+  for ns in getNamespaces():
+    let namespace = backend.withNamespace($ns).valueOr:
       let msg = "DB initialisation : " & error
       raise (ref ResultDefect)(msg: msg)
     nsMap[ns] = trieDB(namespace)

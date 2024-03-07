@@ -34,7 +34,7 @@ proc buildAccountsTableFromKeys(
   for key in keys:
     let account = db.getAccount(key.address)
     let code = if key.codeLen > 0:
-        db.getTrie().parent().kvt().get(account.codeHash.data)
+        db.getTrie().parent().defaultKvt().get(account.codeHash.data)
       else: @[]
     var storage = initTable[UInt256, UInt256]()
 

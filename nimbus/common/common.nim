@@ -408,7 +408,7 @@ proc initializeEmptyDb*(com: CommonRef)
     {.gcsafe, raises: [CatchableError].} =
   let
     key = canonicalHeadHashKey()
-    kvt = com.db.kvt(key.toNamespace())
+    kvt = com.db.kvt(key.namespace)
   if key.toOpenArray notin kvt:
     trace "Writing genesis to DB"
     doAssert(com.genesisHeader.blockNumber.isZero,

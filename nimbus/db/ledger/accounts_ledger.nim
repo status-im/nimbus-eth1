@@ -144,7 +144,7 @@ proc init*(x: typedesc[AccountsLedgerRef], db: CoreDbRef,
            root: KeccakHash, pruneTrie = true): AccountsLedgerRef =
   new result
   result.ledger = AccountLedger.init(db, root, pruneTrie)
-  result.kvt = db.newKvt(Shared) # save manually in `persist()`
+  result.kvt = db.newDefaultKvt(Shared) # save manually in `persist()`
   result.witnessCache = initTable[EthAddress, WitnessData]()
   discard result.beginSavepoint
 
@@ -358,7 +358,7 @@ proc persistStorage(acc: AccountRef, ac: AccountsLedgerRef, clearCache: bool) =
       storageLedger.delete(slot)
     let
       key = slot.toBytesBE.keccakHash.data.slotHashToSlotKey
-      rc = ac.kvt.put(key.toOpenArray, rlp.encode(slot))
+      rc = ac.kvt.namespace(key.namespace).put(key.toOpenArray, rlp.encode(slot))
     if rc.isErr:
       warn logTxt "persistStorage()", slot, error=($$rc.error)
 
@@ -668,7 +668,8 @@ iterator storage*(ac: AccountsLedgerRef, address: EthAddress): (UInt256, UInt256
     noRlpException "storage()":
       for slotHash, value in ac.ledger.storage acc.statement:
         if slotHash.len == 0: continue
-        let rc = ac.kvt.get(slotHashToSlotKey(slotHash).toOpenArray)
+        let key = slotHashToSlotKey(slotHash)
+        let rc = ac.kvt.namespace(key.namespace).get(key.toOpenArray)
         if rc.isErr:
           warn logTxt "storage()", slotHash, error=($$rc.error)
         else:

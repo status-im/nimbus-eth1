@@ -20,7 +20,9 @@ import
   ../../kvt,
   ../../kvt/[kvt_desc, kvt_init, kvt_tx, kvt_walk],
   ".."/[base, base/base_desc],
-  ./aristo_db/[common_desc, handlers_aristo, handlers_kvt]
+  ./aristo_db/[common_desc, handlers_aristo, handlers_kvt],
+  ../../storage_types
+
 
 import
   ../../aristo/aristo_init/memory_only as aristo_memory_only
@@ -135,7 +137,8 @@ proc baseMethods(
           ): CoreDbRc[CoreDbTrieRef] =
       db.adbBase.getTrie(kind, root, address, "getTrieFn()"),
 
-    newKvtFn: proc(saveMode: CoreDbSaveFlags): CoreDbRc[CoreDxKvtRef] =
+    newKvtFn: proc(namespace: DbNamespace, saveMode: CoreDbSaveFlags): CoreDbRc[CoreDxKvtRef] =
+      # TODO: use namespace
       db.kdbBase.gc()
       db.kdbBase.newKvtHandler(saveMode, "newKvtFn()"),
 

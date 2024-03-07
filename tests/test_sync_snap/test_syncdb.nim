@@ -23,7 +23,7 @@ import
   ./test_helpers
 
 type
-  UndumpDBKeySubType* = array[DBKeyKind.high.ord+2,int]
+  UndumpDBKeySubType* = array[DbNamespace.high.ord+2, int]
 
 proc pp*(a: UndumpDBKeySubType): string
 
@@ -31,7 +31,7 @@ proc pp*(a: UndumpDBKeySubType): string
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc pp(a: ((int,int),UndumpDBKeySubType,UndumpDBKeySubType)): string =
+proc pp(a: ((int,int),UndumpDBKeySubType, UndumpDBKeySubType)): string =
   "([" & $a[0][0] & "," & $a[0][1] & "]," & a[1].pp & "," & a[2].pp & ")"
 
 
@@ -138,14 +138,14 @@ proc test_syncdbImportSnapshot*(
     case w.kind:
     of UndumpKey32:
       key = w.key32.toSeq
-      if select.isNil or 0 < select.com.db.kvt.backend.toLegacy.get(key).len:
+      if select.isNil or 0 < select.com.db.defaultKvt.backend.toLegacy.get(key).len:
         result[0][0].inc
       else:
         storeOk = false
         result[0][1].inc
     of UndumpKey33:
       key = w.key33.toSeq
-      let inx = min(w.key33[0], DBKeyKind.high.ord+1)
+      let inx = min(w.key33[0], DbNamespace.high.ord + 1)
 
       #if inx == contractHash.ord:
       #  let digest = w.data.keccakHash.data.toSeq
@@ -161,7 +161,7 @@ proc test_syncdbImportSnapshot*(
         result[1][inx].inc
     of UndumpOther:
       key = w.other
-      let inx = min(w.other[0], DBKeyKind.high.ord+1)
+      let inx = min(w.other[0], DbNamespace.high.ord+1)
       result[2][inx].inc
 
     count.inc
@@ -169,7 +169,7 @@ proc test_syncdbImportSnapshot*(
       noisy.say "*** import", result.pp, ".. "
 
     if storeOk:
-      chn.com.db.kvt.backend.toLegacy.put(key, w.data)
+      chn.com.db.defaultKvt.backend.toLegacy.put(key, w.data)
 
   if (count mod 23456) != 0:
     noisy.say "*** import", result.pp, " ok"
@@ -187,7 +187,8 @@ proc test_syncdbAppendBlocks*(
   let
     blkLen = 33
     lastBlock = pivotBlock + max(1,nItemsMax).uint64
-    kvt = chn.com.db.kvt.backend.toLegacy
+    db = chn.com.db
+    #kvt = chn.com.db.defaultKvt.backend.toLegacy
 
     # Join (headers,blocks) pair in the range pivotBlock..lastBlock
     q = toSeq(filePath.undumpBlocks(pivotBlock,lastBlock)).pairJoin
@@ -196,8 +197,10 @@ proc test_syncdbAppendBlocks*(
     pivNum = q[0][0].blockNumber
 
   # Verify pivot
-  check 0 < kvt.get(pivHash.toBlockHeaderKey.toOpenArray).len
-  check pivHash == kvt.get(pivNum.toBlockNumberKey.toOpenArray).decode(Hash256)
+  let pivHashKey = pivHash.toBlockHeaderKey
+  check 0 < db.kvt(pivHashKey.namespace).get(pivHashKey.toOpenArray).len
+  let pivNumKey = pivNum.toBlockNumberKey
+  check pivHash == db.kvt(pivNumKey.namespace).get(pivNumKey.toOpenArray).decode(Hash256)
 
   # Set up genesis deputy.
   chn.com.startOfHistory = pivHash

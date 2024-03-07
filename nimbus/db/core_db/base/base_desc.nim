@@ -13,6 +13,7 @@
 import
   eth/common,
   results,
+  ../../storage_types,
   ../../aristo/aristo_profile
 
 # Annotation helpers
@@ -101,7 +102,7 @@ type
     ): CoreDbRc[CoreDbTrieRef] {.noRaise.}
   CoreDbBaseLevelFn* = proc(): int {.noRaise.}
   CoreDbBaseKvtFn* = proc(
-    saveMode: CoreDbSaveFlags): CoreDbRc[CoreDxKvtRef] {.noRaise.}
+    namespace: DbNamespace, saveMode: CoreDbSaveFlags): CoreDbRc[CoreDxKvtRef] {.noRaise.}
   CoreDbBaseMptFn* = proc(
     root: CoreDbTrieRef; prune: bool; saveMode: CoreDbSaveFlags;
     ): CoreDbRc[CoreDxMptRef] {.noRaise.}
@@ -151,7 +152,7 @@ type
   CoreDbKvtPersistentFn* = proc(): CoreDbRc[void] {.noRaise.}
   CoreDbKvtForgetFn* = proc(): CoreDbRc[void] {.noRaise.}
   CoreDbKvtHasKeyFn* = proc(k: openArray[byte]): CoreDbRc[bool] {.noRaise.}
-  CoreDbKvtNamespaceFn* = proc(ns: string): CoreDxKvtRef {.noRaise.}
+  CoreDbKvtNamespaceFn* = proc(ns: DbNamespace): CoreDxKvtRef {.noRaise.}
 
   CoreDbKvtFns* = object
     ## Methods for key-value table

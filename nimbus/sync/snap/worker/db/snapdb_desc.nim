@@ -130,7 +130,7 @@ proc init*(
 proc copyWithoutRoot*(a, b: SnapDbBaseRef) =
   a.xDb = b.xDb
   a.base = b.base
-    
+
 # ------------------------------------------------------------------------------
 # Public getters
 # ------------------------------------------------------------------------------
@@ -159,23 +159,23 @@ proc kvDb*(pv: SnapDbRef): CoreDbRef =
 # Public functions, select sub-tables for persistent storage
 # ------------------------------------------------------------------------------
 
-proc toBlockHeaderKey*(a: Hash256): ByteArray33 =
-  a.genericHashKey.data
+proc toBlockHeaderKey*(a: Hash256): DbKey =
+  a.genericHashKey
 
-proc toBlockNumberKey*(a: BlockNumber): ByteArray33 =
+proc toBlockNumberKey*(a: BlockNumber): DbKey =
   static:
     doAssert 32 == sizeof BlockNumber # needed in `blockNumberToHashKey()`
-  a.blockNumberToHashKey.data
+  a.blockNumberToHashKey
 
-proc toContractHashKey*(a: NodeKey): ByteArray33 =
-  a.to(Hash256).contractHashKey.data
+proc toContractHashKey*(a: NodeKey): DbKey =
+  a.to(Hash256).contractHashKey
 
 when false:
-  proc toAccountsKey*(a: NodeKey): ByteArray33 =
-    a.ByteArray32.snapSyncAccountKey.data
+  proc toAccountsKey*(a: NodeKey): DbKey =
+    a.ByteArray32.snapSyncAccountKey
 
-  proc toStorageSlotsKey*(a: NodeKey): ByteArray33 =
-    a.ByteArray32.snapSyncStorageSlotKey.data
+  proc toStorageSlotsKey*(a: NodeKey): DbKey =
+    a.ByteArray32.snapSyncStorageSlotKey
 else:
   proc toAccountsKey*(a: NodeKey): ByteArray32 =
     a.ByteArray32
@@ -183,8 +183,8 @@ else:
   proc toStorageSlotsKey*(a: NodeKey): ByteArray32 =
     a.ByteArray32
 
-proc toStateRootKey*(a: NodeKey): ByteArray33 =
-  a.ByteArray32.snapSyncStateRootKey.data
+proc toStateRootKey*(a: NodeKey): DbKey =
+  a.ByteArray32.snapSyncStateRootKey
 
 template toOpenArray*(k: ByteArray32): openArray[byte] =
   k.toOpenArray(0, 31)

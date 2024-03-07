@@ -52,14 +52,15 @@ proc toSvp*(sl: StorageTrie): seq[(UInt256,UInt256)] =
     save = db.trackLegaApi
   db.trackLegaApi = false
   defer: db.trackLegaApi = save
-  let kvt = db.kvt
+
   var kvp: Table[UInt256,UInt256]
   try:
     for (slotHash,val) in sl.toBase.toMpt.pairs:
       if slotHash.len == 0:
         kvp[high UInt256] = high UInt256
       else:
-        let slotRlp = kvt.get(slotHashToSlotKey(slotHash).toOpenArray)
+        let key = slotHashToSlotKey(slotHash)
+        let slotRlp = db.kvt(key.namespace).get(key.toOpenArray)
         if slotRlp.len == 0:
           kvp[high UInt256] = high UInt256
         else:

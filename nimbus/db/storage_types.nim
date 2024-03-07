@@ -12,7 +12,8 @@ import
   eth/common
 
 type
-  DBKeyKind* = enum
+  DbNamespace* = enum
+    default
     genericHash
     blockNumberToHash
     blockHashToScore
@@ -34,129 +35,126 @@ type
     blockHashToBlockWitness
 
   DbKey* = object
-    kind*: DBKeyKind
+    namespace: DbNamespace
     # The first byte stores the key type. The rest are key-specific values
     data*: array[33, byte]
     dataEndPos*: uint8 # the last populated position in the data
 
-proc toNamespace*(kind: DBKeyKind): string =
-  $ord(kind)
-
-proc toNamespace*(key: DbKey): string =
-  $ord(key.kind)
+proc namespace*(key: DbKey): DbNamespace =
+  key.namespace
 
 proc genericHashKey*(h: Hash256): DbKey {.inline.} =
-  result.kind = genericHash
+  result.namespace = genericHash
   result.data[0] = byte ord(genericHash)
   result.data[1 .. 32] = h.data
   result.dataEndPos = uint8 32
 
 proc blockHashToScoreKey*(h: Hash256): DbKey {.inline.} =
-  result.kind = blockHashToScore
+  result.namespace = blockHashToScore
   result.data[0] = byte ord(blockHashToScore)
   result.data[1 .. 32] = h.data
   result.dataEndPos = uint8 32
 
 proc transactionHashToBlockKey*(h: Hash256): DbKey {.inline.} =
-  result.kind = transactionHashToBlock
+  result.namespace = transactionHashToBlock
   result.data[0] = byte ord(transactionHashToBlock)
   result.data[1 .. 32] = h.data
   result.dataEndPos = uint8 32
 
 proc blockNumberToHashKey*(u: BlockNumber): DbKey {.inline.} =
-  result.kind = blockNumberToHash
+  result.namespace = blockNumberToHash
   result.data[0] = byte ord(blockNumberToHash)
   doAssert sizeof(u) <= 32
   copyMem(addr result.data[1], unsafeAddr u, sizeof(u))
   result.dataEndPos = uint8 sizeof(u)
 
 proc canonicalHeadHashKey*(): DbKey {.inline.} =
-  result.kind = canonicalHeadHash
+  result.namespace = canonicalHeadHash
   result.data[0] = byte ord(canonicalHeadHash)
   result.dataEndPos = 1
 
 proc slotHashToSlotKey*(h: openArray[byte]): DbKey {.inline.} =
   doAssert(h.len == 32)
-  result.kind = slotHashToSlot
+  result.namespace = slotHashToSlot
   result.data[0] = byte ord(slotHashToSlot)
   result.data[1 .. 32] = h
   result.dataEndPos = uint8 32
 
 proc contractHashKey*(h: Hash256): DbKey {.inline.} =
-  result.kind = contractHash
+  result.namespace = contractHash
   result.data[0] = byte ord(contractHash)
   result.data[1 .. 32] = h.data
   result.dataEndPos = uint8 32
 
 proc cliqueSnapshotKey*(h: Hash256): DbKey {.inline.} =
-  result.kind = cliqueSnapshot
+  result.namespace = cliqueSnapshot
   result.data[0] = byte ord(cliqueSnapshot)
   result.data[1 .. 32] = h.data
   result.dataEndPos = uint8 32
 
 proc transitionStatusKey*(): DbKey =
-  result.kind = transitionStatus
+  result.namespace = transitionStatus
   # ETH-2 Transition Status
   result.data[0] = byte ord(transitionStatus)
   result.dataEndPos = uint8 1
 
 proc safeHashKey*(): DbKey {.inline.} =
-  result.kind = safeHash
+  result.namespace = safeHash
   result.data[0] = byte ord(safeHash)
   result.dataEndPos = uint8 1
 
 proc finalizedHashKey*(): DbKey {.inline.} =
-  result.kind = finalizedHash
+  result.namespace = finalizedHash
   result.data[0] = byte ord(finalizedHash)
   result.dataEndPos = uint8 1
 
 proc skeletonProgressKey*(): DbKey {.inline.} =
-  result.kind = skeletonProgress
+  result.namespace = skeletonProgress
   result.data[0] = byte ord(skeletonProgress)
   result.dataEndPos = 1
 
 proc skeletonBlockHashToNumberKey*(h: Hash256): DbKey {.inline.} =
-  result.kind = skeletonBlockHashToNumber
+  result.namespace = skeletonBlockHashToNumber
   result.data[0] = byte ord(skeletonBlockHashToNumber)
   result.data[1 .. 32] = h.data
   result.dataEndPos = uint8 32
 
 proc skeletonHeaderKey*(u: BlockNumber): DbKey {.inline.} =
   doAssert sizeof(u) <= 32
-  result.kind = skeletonHeader
+  result.namespace = skeletonHeader
   result.data[0] = byte ord(skeletonHeader)
   copyMem(addr result.data[1], unsafeAddr u, sizeof(u))
   result.dataEndPos = uint8 sizeof(u)
 
 proc skeletonBodyKey*(h: Hash256): DbKey {.inline.} =
-  result.kind = skeletonBody
+  result.namespace = skeletonBody
   result.data[0] = byte ord(skeletonBody)
   result.data[1 .. 32] = h.data
   result.dataEndPos = uint8 32
 
 proc snapSyncAccountKey*(h: openArray[byte]): DbKey {.inline.} =
   doAssert(h.len == 32)
-  result.kind = snapSyncAccount
+  result.namespace = snapSyncAccount
   result.data[0] = byte ord(snapSyncAccount)
   result.data[1 .. 32] = h
   result.dataEndPos = uint8 sizeof(h)
 
 proc snapSyncStorageSlotKey*(h: openArray[byte]): DbKey {.inline.} =
   doAssert(h.len == 32)
-  result.kind = snapSyncStorageSlot
+  result.namespace = snapSyncStorageSlot
   result.data[0] = byte ord(snapSyncStorageSlot)
   result.data[1 .. 32] = h
   result.dataEndPos = uint8 sizeof(h)
 
 proc snapSyncStateRootKey*(h: openArray[byte]): DbKey {.inline.} =
   doAssert(h.len == 32)
-  result.kind = snapSyncStateRoot
+  result.namespace = snapSyncStateRoot
   result.data[0] = byte ord(snapSyncStateRoot)
   result.data[1 .. 32] = h
   result.dataEndPos = uint8 sizeof(h)
 
 proc blockHashToBlockWitnessKey*(h: Hash256): DbKey {.inline.} =
-  result.kind = blockHashToBlockWitness
+  result.namespace = blockHashToBlockWitness
   result.data[0] = byte ord(blockHashToBlockWitness)
   result.data[1 .. 32] = h.data
   result.dataEndPos = uint8 32

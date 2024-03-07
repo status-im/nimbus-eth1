@@ -47,11 +47,12 @@ proc toSvp*(sl: StorageLedger): seq[(UInt256,UInt256)] =
     save = db.trackNewApi
   db.trackNewApi = false
   defer: db.trackNewApi = save
-  let kvt = db.newKvt
+
   var kvp: Table[UInt256,UInt256]
   try:
     for (slotHash,val) in sl.distinctBase.toMpt.pairs:
-      let rc = kvt.get(slotHashToSlotKey(slotHash).toOpenArray)
+      let key = slotHashToSlotKey(slotHash)
+      let rc = db.newKvt(key.namespace).get(key.toOpenArray)
       if rc.isErr:
         warn "StorageLedger.dump()", slotHash, error=($$rc.error)
       else:

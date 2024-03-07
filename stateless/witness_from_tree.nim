@@ -50,7 +50,7 @@ proc expectHash(r: Rlp): seq[byte] {.gcsafe, raises: [RlpError].} =
 
 template getNode(elem: untyped): untyped =
   if elem.isList: @(elem.rawData)
-  else: @(wb.db.kvt.get elem.expectHash)
+  else: @(wb.db.defaultKvt.get elem.expectHash)
 
 proc rlpListToBitmask(r: var Rlp): uint {.gcsafe, raises: [RlpError].} =
   # only bit 1st to 16th are valid
@@ -176,12 +176,13 @@ proc getBranchRecurse(wb: var WitnessBuilder, z: var StackElem) {.gcsafe, raises
 
 proc writeByteCode(wb: var WitnessBuilder, kd: KeyData, acc: Account, depth: int)
     {.gcsafe, raises: [IOError,ContractCodeError].} =
-  let kvt = wb.db.kvt()
+
   if not kd.codeTouched:
     # the account have code but not touched by the EVM
     # in current block execution
     wb.writeByte(CodeUntouched)
-    let code = kvt.get contractHashKey(acc.codeHash).toOpenArray
+    let key = contractHashKey(acc.codeHash)
+    let code = wb.db.kvt(key.namespace).get(key.toOpenArray)
     if wfEIP170 in wb.flags and code.len > EIP170_MAX_CODE_SIZE:
       raise newException(ContractCodeError, "code len exceed EIP170 code size limit")
     wb.writeUVarint32(code.len)
@@ -196,7 +197,8 @@ proc writeByteCode(wb: var WitnessBuilder, kd: KeyData, acc: Account, depth: int
     return
 
   # the account have code and the EVM use it
-  let code = kvt.get contractHashKey(acc.codeHash).toOpenArray
+  let key = contractHashKey(acc.codeHash)
+  let code = wb.db.kvt(key.namespace).get(key.toOpenArray)
   if wfEIP170 in wb.flags and code.len > EIP170_MAX_CODE_SIZE:
     raise newException(ContractCodeError, "code len exceed EIP170 code size limit")
   wb.writeUVarint32(code.len)
@@ -210,7 +212,7 @@ proc writeStorage(wb: var WitnessBuilder, kd: KeyData, acc: Account, depth: int)
   elif acc.storageRoot != emptyRlpHash:
     # the account have storage and the EVM use it
     var zz = StackElem(
-      node: wb.db.kvt.get(acc.storageRoot.data),
+      node: wb.db.defaultKvt.get(acc.storageRoot.data),
       parentGroup: kd.storageKeys.initGroup(),
       keys: kd.storageKeys,
       depth: 0,          # set depth to zero
@@ -359,7 +361,7 @@ proc buildWitness*(wb: var WitnessBuilder, keys: MultiKeysRef): seq[byte]
   wb.writeByte(MetadataNothing)
 
   var z = StackElem(
-    node: @(wb.db.kvt.get(wb.root.data)),
+    node: @(wb.db.defaultKvt.get(wb.root.data)),
     parentGroup: keys.initGroup(),
     keys: keys,
     depth: 0,          # always start with a zero depth

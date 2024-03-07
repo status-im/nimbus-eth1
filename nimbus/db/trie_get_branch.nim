@@ -41,7 +41,7 @@ proc getLocalBytes(x: TrieNodeKey): seq[byte] =
 
 proc dbGet(db: CoreDbRef, data: openArray[byte]): seq[byte]
   {.gcsafe, raises: [].} =
-  db.kvt.get(data)
+  db.defaultKvt.get(data)
 
 template keyToLocalBytes(db: CoreDbRef, k: TrieNodeKey): seq[byte] =
   if k.len < 32: k.getLocalBytes
