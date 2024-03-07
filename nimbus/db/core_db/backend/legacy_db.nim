@@ -11,6 +11,7 @@
 {.push raises: [].}
 
 import
+  std/tables,
   eth/[common, rlp, trie/db, trie/hexary],
   stew/byteutils,
   results,
