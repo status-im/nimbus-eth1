@@ -555,6 +555,10 @@ proc forget*(dsc: CoreDxKvtRef): CoreDbRc[void] {.discardable.} =
   result = dsc.methods.forgetFn()
   dsc.ifTrackNewApi: debug newApiTxt, ctx, elapsed, result
 
+proc namespace*(dsc: CoreDxKvtRef, namespace: string): CoreDxKvtRef =
+  ## TODO:
+  dsc.methods.namespaceFn(namespace)
+
 # ------------------------------------------------------------------------------
 # Public Merkle Patricia Tree, hexary trie constructors
 # ------------------------------------------------------------------------------
@@ -1029,10 +1033,16 @@ when ProvideLegacyAPI:
 
   # ----------------
 
-  proc kvt*(db: CoreDbRef): CoreDbKvtRef =
+  proc kvt*(db: CoreDbRef, namespace = ""): CoreDbKvtRef =
     ## Legacy pseudo constructor, see `toKvt()` for production constructor
     db.setTrackLegaApi LegaNewKvtFn
-    result = db.newKvt().CoreDbKvtRef
+    db.ifTrackLegaApi: debug legaApiTxt, ctx, elapsed, result
+
+    if namespace.len() > 0:
+      result = db.newKvt().namespace(namespace).CoreDbKvtRef
+    else:
+      result = db.newKvt().CoreDbKvtRef
+
     db.ifTrackLegaApi: debug legaApiTxt, ctx, elapsed, result
 
   proc get*(kvt: CoreDbKvtRef; key: openArray[byte]): Blob =

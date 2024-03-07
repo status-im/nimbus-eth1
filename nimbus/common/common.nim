@@ -406,14 +406,16 @@ proc consensus*(com: CommonRef, header: BlockHeader): ConsensusType
 
 proc initializeEmptyDb*(com: CommonRef)
     {.gcsafe, raises: [CatchableError].} =
-  let kvt = com.db.kvt()
-  if canonicalHeadHashKey().toOpenArray notin kvt:
+  let
+    key = canonicalHeadHashKey()
+    kvt = com.db.kvt(key.toNamespace())
+  if key.toOpenArray notin kvt:
     trace "Writing genesis to DB"
     doAssert(com.genesisHeader.blockNumber.isZero,
       "can't commit genesis block with number > 0")
     discard com.db.persistHeaderToDb(com.genesisHeader,
       com.consensusType == ConsensusType.POS)
-    doAssert(canonicalHeadHashKey().toOpenArray in kvt)
+    doAssert(key.toOpenArray in kvt)
 
 proc syncReqNewHead*(com: CommonRef; header: BlockHeader)
     {.gcsafe, raises: [].} =

@@ -25,7 +25,8 @@ proc generatePrestate*(nimbus, geth: JsonNode, blockNumber: UInt256, parent, hea
   discard chainDB.persistTransactions(blockNumber, body.transactions)
   discard chainDB.persistUncles(body.uncles)
 
-  chainDB.kvt.put(genericHashKey(headerHash).toOpenArray, rlp.encode(header))
+  let key = genericHashKey(headerHash)
+  chainDB.kvt(key.toNamespace()).put(key.toOpenArray, rlp.encode(header))
   chainDB.addBlockNumberToHashLookup(header)
 
   for k, v in state:

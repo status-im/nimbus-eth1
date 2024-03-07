@@ -144,13 +144,14 @@ type
   # Sub-descriptor: KVT methods
   # --------------------------------------------------
   CoreDbKvtBackendFn* = proc(): CoreDbKvtBackendRef {.noRaise.}
-  CoreDbKvtGetFn* = proc(k: openArray[byte]): CoreDbRc[Blob] {.noRaise.} 
+  CoreDbKvtGetFn* = proc(k: openArray[byte]): CoreDbRc[Blob] {.noRaise.}
   CoreDbKvtDelFn* = proc(k: openArray[byte]): CoreDbRc[void] {.noRaise.}
   CoreDbKvtPutFn* =
     proc(k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] {.noRaise.}
   CoreDbKvtPersistentFn* = proc(): CoreDbRc[void] {.noRaise.}
   CoreDbKvtForgetFn* = proc(): CoreDbRc[void] {.noRaise.}
   CoreDbKvtHasKeyFn* = proc(k: openArray[byte]): CoreDbRc[bool] {.noRaise.}
+  CoreDbKvtNamespaceFn* = proc(ns: string): CoreDxKvtRef {.noRaise.}
 
   CoreDbKvtFns* = object
     ## Methods for key-value table
@@ -161,6 +162,7 @@ type
     hasKeyFn*:     CoreDbKvtHasKeyFn
     persistentFn*: CoreDbKvtPersistentFn
     forgetFn*:     CoreDbKvtForgetFn
+    namespaceFn*:  CoreDbKvtNamespaceFn
 
 
   # --------------------------------------------------

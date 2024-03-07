@@ -222,9 +222,9 @@ proc removeTransactionFromCanonicalChain(
     db: CoreDbRef;
     transactionHash: Hash256;
       ) =
-  ## Removes the transaction specified by the given hash from the canonical
-  ## chain.
-  db.newKvt.del(transactionHashToBlockKey(transactionHash).toOpenArray).isOkOr:
+  ## Removes the transaction specified by the given hash from the canonical chain.
+  let key = transactionHashToBlockKey(transactionHash)
+  db.newKvt.namespace(key.toNamespace()).del(key.toOpenArray).isOkOr:
     warn logTxt "removeTransactionFromCanonicalChain()",
       transactionHash, action="del()", error=($$error)
 
@@ -251,8 +251,8 @@ proc setAsCanonicalChainHead(
   for h in newCanonicalHeaders:
     db.addBlockNumberToHashLookup(h)
 
-  let canonicalHeadHash = canonicalHeadHashKey()
-  db.newKvt.put(canonicalHeadHash.toOpenArray, rlp.encode(headerHash)).isOkOr:
+  let key = canonicalHeadHashKey()
+  db.newKvt.namespace(key.toNamespace()).put(key.toOpenArray, rlp.encode(headerHash)).isOkOr:
     warn logTxt "setAsCanonicalChainHead()",
       canonicalHeadHash, action="put()", error=($$error)
 
@@ -272,8 +272,9 @@ proc markCanonicalChain(
 
   # mark current header as canonical
   let
-    kvt = db.newKvt()
     key = blockNumberToHashKey(currHeader.blockNumber)
+    kvt = db.newKvt().namespace(key.toNamespace())
+
   kvt.put(key.toOpenArray, rlp.encode(currHash)).isOkOr:
     warn logTxt "markCanonicalChain()", key, action="put()", error=($$error)
     return false
@@ -329,8 +330,9 @@ proc getBlockHeader*(
     output: var BlockHeader;
       ): bool =
   const info = "getBlockHeader()"
-  let data = db.newKvt(Shared)
-               .get(genericHashKey(blockHash).toOpenArray).valueOr:
+  let key = genericHashKey(blockHash)
+  let data = db.newKvt(Shared).namespace(key.toNamespace())
+               .get(key.toOpenArray).valueOr:
     if error.error != KvtNotFound:
       warn logTxt info, blockHash, action="get()", error=($$error)
     return false
@@ -356,7 +358,8 @@ proc getHash(
     output: var Hash256;
       ): bool
       {.gcsafe, raises: [RlpError].} =
-  let data = db.newKvt(Shared).get(key.toOpenArray).valueOr:
+
+  let data = db.newKvt(Shared).namespace(key.toNamespace()).get(key.toOpenArray).valueOr:
     if error.error != KvtNotFound:
       warn logTxt "getHash()", key, action="get()", error=($$error)
     return false
@@ -455,8 +458,9 @@ proc getScore*(
     blockHash: Hash256;
       ): UInt256
       {.gcsafe, raises: [RlpError].} =
-  let data = db.newKvt(Shared)
-               .get(blockHashToScoreKey(blockHash).toOpenArray).valueOr:
+  let key = blockHashToScoreKey(blockHash)
+  let data = db.newKvt(Shared).namespace(key.toNamespace())
+               .get(key.toOpenArray).valueOr:
     if error.error != KvtNotFound:
       warn logTxt "getScore()", blockHash, action="get()", error=($$error)
     return
@@ -464,15 +468,16 @@ proc getScore*(
 
 proc setScore*(db: CoreDbRef; blockHash: Hash256, score: UInt256) =
   ## for testing purpose
-  let scoreKey = blockHashToScoreKey blockHash
-  db.newKvt.put(scoreKey.toOpenArray, rlp.encode(score)).isOkOr:
-    warn logTxt "setScore()", scoreKey, action="put()", error=($$error)
+  let key = blockHashToScoreKey(blockHash)
+  db.newKvt.namespace(key.toNamespace()).put(key.toOpenArray, rlp.encode(score)).isOkOr:
+    warn logTxt "setScore()", key, action="put()", error=($$error)
     return
 
 proc getTd*(db: CoreDbRef; blockHash: Hash256, td: var UInt256): bool =
   const info = "getId()"
-  let bytes = db.newKvt(Shared)
-                .get(blockHashToScoreKey(blockHash).toOpenArray).valueOr:
+  let key = blockHashToScoreKey(blockHash)
+  let bytes = db.newKvt(Shared).namespace(key.toNamespace())
+                .get(key.toOpenArray).valueOr:
     if error.error != KvtNotFound:
       warn logTxt info, blockHash, action="get()", error=($$error)
     return false
@@ -490,12 +495,13 @@ proc headTotalDifficulty*(
     key = canonicalHeadHashKey()
   let
     kvt = db.newKvt(Shared)
-    data = kvt.get(key.toOpenArray).valueOr:
+    data = kvt.namespace(key.toNamespace()).get(key.toOpenArray).valueOr:
       if error.error != KvtNotFound:
         warn logTxt info, key, action="get()", error=($$error)
       return 0.u256
     blockHash = rlp.decode(data, Hash256)
-    numData = kvt.get(blockHashToScoreKey(blockHash).toOpenArray).valueOr:
+    scoreKey = blockHashToScoreKey(blockHash)
+    numData = kvt.namespace(key.toNamespace()).get(scoreKey.toOpenArray).valueOr:
       warn logTxt info, blockHash, action="get()", error=($$error)
       return 0.u256
 
@@ -517,10 +523,10 @@ proc getAncestorsHashes*(
     dec ancestorCount
 
 proc addBlockNumberToHashLookup*(db: CoreDbRef; header: BlockHeader) =
-  let blockNumberKey = blockNumberToHashKey(header.blockNumber)
-  db.newKvt.put(blockNumberKey.toOpenArray, rlp.encode(header.hash)).isOkOr:
+  let key = blockNumberToHashKey(header.blockNumber)
+  db.newKvt.namespace(key.toNamespace()).put(key.toOpenArray, rlp.encode(header.hash)).isOkOr:
     warn logTxt "addBlockNumberToHashLookup()",
-      blockNumberKey, action="put()", error=($$error)
+      key, action="put()", error=($$error)
 
 proc persistTransactions*(
     db: CoreDbRef;
@@ -544,7 +550,7 @@ proc persistTransactions*(
     mpt.merge(encodedKey, encodedTx).isOkOr:
       warn logTxt info, idx, action="merge()", error=($$error)
       return EMPTY_ROOT_HASH
-    kvt.put(blockKey.toOpenArray, rlp.encode(txKey)).isOkOr:
+    kvt.namespace(blockKey.toNamespace()).put(blockKey.toOpenArray, rlp.encode(txKey)).isOkOr:
       warn logTxt info, blockKey, action="put()", error=($$error)
       return EMPTY_ROOT_HASH
   mpt.getTrie.rootHash.valueOr:
@@ -610,7 +616,7 @@ proc getUnclesCount*(
   if ommersHash != EMPTY_UNCLE_HASH:
     let encodedUncles = block:
       let key = genericHashKey(ommersHash)
-      db.newKvt(Shared).get(key.toOpenArray).valueOr:
+      db.newKvt(Shared).namespace(key.toNamespace()).get(key.toOpenArray).valueOr:
         if error.error == KvtNotFound:
           warn logTxt info, ommersHash, action="get()", `error`=($$error)
         return 0
@@ -625,7 +631,7 @@ proc getUncles*(
   if ommersHash != EMPTY_UNCLE_HASH:
     let  encodedUncles = block:
       let key = genericHashKey(ommersHash)
-      db.newKvt(Shared).get(key.toOpenArray).valueOr:
+      db.newKvt(Shared).namespace(key.toNamespace()).get(key.toOpenArray).valueOr:
         if error.error == KvtNotFound:
           warn logTxt info, ommersHash, action="get()", `error`=($$error)
         return @[]
@@ -670,7 +676,7 @@ proc getBlockBody*(
   if header.ommersHash != EMPTY_UNCLE_HASH:
     let
       key = genericHashKey(header.ommersHash)
-      encodedUncles = db.newKvt(Shared).get(key.toOpenArray).valueOr:
+      encodedUncles = db.newKvt(Shared).namespace(key.toNamespace()).get(key.toOpenArray).valueOr:
         if error.error == KvtNotFound:
           warn logTxt "getBlockBody()",
             ommersHash=header.ommersHash, action="get()", `error`=($$error)
@@ -712,7 +718,7 @@ proc getUncleHashes*(
   if header.ommersHash != EMPTY_UNCLE_HASH:
     let
       key = genericHashKey(header.ommersHash)
-      encodedUncles = db.newKvt(Shared).get(key.toOpenArray).valueOr:
+      encodedUncles = db.newKvt(Shared).namespace(key.toNamespace()).get(key.toOpenArray).valueOr:
         if error.error == KvtNotFound:
           warn logTxt "getUncleHashes()",
             ommersHash=header.ommersHash, action="get()", `error`=($$error)
@@ -726,7 +732,7 @@ proc getTransactionKey*(
       {.gcsafe, raises: [RlpError].} =
   let
     txKey = transactionHashToBlockKey(transactionHash)
-    tx = db.newKvt(Shared).get(txKey.toOpenArray).valueOr:
+    tx = db.newKvt(Shared).namespace(txKey.toNamespace()).get(txKey.toOpenArray).valueOr:
       if error.error == KvtNotFound:
         warn logTxt "getTransactionKey()",
           transactionHash, action="get()", `error`=($$error)
@@ -736,7 +742,8 @@ proc getTransactionKey*(
 
 proc headerExists*(db: CoreDbRef; blockHash: Hash256): bool =
   ## Returns True if the header with the given block hash is in our DB.
-  db.newKvt(Shared).hasKey(genericHashKey(blockHash).toOpenArray).valueOr:
+  let key = genericHashKey(blockHash)
+  db.newKvt(Shared).namespace(key.toNamespace()).hasKey(key.toOpenArray).valueOr:
     warn logTxt "headerExists()", blockHash, action="get()", `error`=($$error)
     return false
 
@@ -752,9 +759,9 @@ proc setHead*(
   if not db.markCanonicalChain(header, blockHash):
     return false
 
-  let canonicalHeadHash = canonicalHeadHashKey()
-  db.newKvt.put(canonicalHeadHash.toOpenArray, rlp.encode(blockHash)).isOkOr:
-    warn logTxt "setHead()", canonicalHeadHash, action="put()", error=($$error)
+  let key = canonicalHeadHashKey()
+  db.newKvt.namespace(key.toNamespace()).put(key.toOpenArray, rlp.encode(blockHash)).isOkOr:
+    warn logTxt "setHead()", key, action="put()", error=($$error)
   return true
 
 proc setHead*(
@@ -766,14 +773,15 @@ proc setHead*(
   var headerHash = rlpHash(header)
   let kvt = db.newKvt()
   if writeHeader:
-    kvt.put(genericHashKey(headerHash).toOpenArray, rlp.encode(header)).isOkOr:
+    let key = genericHashKey(headerHash)
+    kvt.namespace(key.toNamespace()).put(key.toOpenArray, rlp.encode(header)).isOkOr:
       warn logTxt "setHead()", headerHash, action="put()", error=($$error)
       return false
   if not db.markCanonicalChain(header, headerHash):
     return false
-  let canonicalHeadHash = canonicalHeadHashKey()
-  kvt.put(canonicalHeadHash.toOpenArray, rlp.encode(headerHash)).isOkOr:
-    warn logTxt "setHead()", canonicalHeadHash, action="put()", error=($$error)
+  let key = canonicalHeadHashKey()
+  kvt.namespace(key.toNamespace()).put(key.toOpenArray, rlp.encode(headerHash)).isOkOr:
+    warn logTxt "setHead()", key, action="put()", error=($$error)
     return false
   true
 
@@ -813,7 +821,8 @@ proc persistHeaderToDb*(
     raise newException(ParentNotFound, "Cannot persist block header " &
         $headerHash & " with unknown parent " & $header.parentHash)
   let kvt = db.newKvt()
-  kvt.put(genericHashKey(headerHash).toOpenArray, rlp.encode(header)).isOkOr:
+  let key = genericHashKey(headerHash)
+  kvt.namespace(key.toNamespace()).put(key.toOpenArray, rlp.encode(header)).isOkOr:
     warn logTxt "persistHeaderToDb()",
       headerHash, action="put()", `error`=($$error)
     return @[]
@@ -821,7 +830,7 @@ proc persistHeaderToDb*(
   let score = if isStartOfHistory: header.difficulty
               else: db.getScore(header.parentHash) + header.difficulty
   let scoreKey = blockHashToScoreKey(headerHash)
-  kvt.put(scoreKey.toOpenArray, rlp.encode(score)).isOkOr:
+  kvt.namespace(key.toNamespace()).put(scoreKey.toOpenArray, rlp.encode(score)).isOkOr:
     warn logTxt "persistHeaderToDb()",
       scoreKey, action="put()", `error`=($$error)
     return @[]
@@ -848,11 +857,12 @@ proc persistHeaderToDbWithoutSetHead*(
   let
     kvt = db.newKvt()
     scoreKey = blockHashToScoreKey(headerHash)
-  kvt.put(scoreKey.toOpenArray, rlp.encode(score)).isOkOr:
+  kvt.namespace(scoreKey.toNamespace()).put(scoreKey.toOpenArray, rlp.encode(score)).isOkOr:
     warn logTxt "persistHeaderToDbWithoutSetHead()",
       scoreKey, action="put()", `error`=($$error)
     return
-  kvt.put(genericHashKey(headerHash).toOpenArray, rlp.encode(header)).isOkOr:
+  let key = genericHashKey(headerHash)
+  kvt.namespace(key.toNamespace()).put(key.toOpenArray, rlp.encode(header)).isOkOr:
     warn logTxt "persistHeaderToDbWithoutSetHead()",
       headerHash, action="put()", `error`=($$error)
     return
@@ -865,7 +875,8 @@ proc persistHeaderToDbWithoutSetHeadOrScore*(db: CoreDbRef; header: BlockHeader)
   let
     kvt = db.newKvt()
     blockHash = header.blockHash
-  kvt.put(genericHashKey(blockHash).toOpenArray, rlp.encode(header)).isOkOr:
+    key = genericHashKey(blockHash)
+  kvt.namespace(key.toNamespace()).put(key.toOpenArray, rlp.encode(header)).isOkOr:
     warn logTxt "persistHeaderToDbWithoutSetHeadOrScore()",
       blockHash, action="put()", `error`=($$error)
     return
@@ -875,7 +886,8 @@ proc persistUncles*(db: CoreDbRef, uncles: openArray[BlockHeader]): Hash256 =
   ## Returns the uncles hash.
   let enc = rlp.encode(uncles)
   result = keccakHash(enc)
-  db.newKvt.put(genericHashKey(result).toOpenArray, enc).isOkOr:
+  let key = genericHashKey(result)
+  db.newKvt.namespace(key.toNamespace()).put(key.toOpenArray, enc).isOkOr:
     warn logTxt "persistUncles()",
       unclesHash=result, action="put()", `error`=($$error)
     return EMPTY_ROOT_HASH
@@ -888,10 +900,10 @@ proc safeHeaderHash*(
   discard db.getHash(safeHashKey(), result)
 
 proc safeHeaderHash*(db: CoreDbRef, headerHash: Hash256) =
-  let safeHashKey = safeHashKey()
-  db.newKvt.put(safeHashKey.toOpenArray, rlp.encode(headerHash)).isOkOr:
+  let key = safeHashKey()
+  db.newKvt.namespace(key.toNamespace()).put(key.toOpenArray, rlp.encode(headerHash)).isOkOr:
     warn logTxt "safeHeaderHash()",
-      safeHashKey, action="put()", `error`=($$error)
+      key, action="put()", `error`=($$error)
     return
 
 proc finalizedHeaderHash*(
@@ -901,10 +913,10 @@ proc finalizedHeaderHash*(
   discard db.getHash(finalizedHashKey(), result)
 
 proc finalizedHeaderHash*(db: CoreDbRef, headerHash: Hash256) =
-  let finalizedHashKey = finalizedHashKey()
-  db.newKvt.put(finalizedHashKey.toOpenArray, rlp.encode(headerHash)).isOkOr:
+  let key = finalizedHashKey()
+  db.newKvt.namespace(key.toNamespace()).put(key.toOpenArray, rlp.encode(headerHash)).isOkOr:
     warn logTxt "finalizedHeaderHash()",
-      finalizedHashKey, action="put()", `error`=($$error)
+      key, action="put()", `error`=($$error)
     return
 
 proc safeHeader*(
@@ -928,17 +940,17 @@ proc haveBlockAndState*(db: CoreDbRef, headerHash: Hash256): bool =
 
 proc getBlockWitness*(
     db: CoreDbRef, blockHash: Hash256): Result[seq[byte], string] {.gcsafe.} =
-  let res = db.newKvt(Shared)
-      .get(blockHashToBlockWitnessKey(blockHash).toOpenArray)
+  let key = blockHashToBlockWitnessKey(blockHash)
+  let res = db.newKvt(Shared).namespace(key.toNamespace()).get(key.toOpenArray)
   if res.isErr():
     err("Failed to get block witness from database: " & $res.error.error)
   else:
     ok(res.value())
 
 proc setBlockWitness*(db: CoreDbRef, blockHash: Hash256, witness: seq[byte]) =
-  let witnessKey = blockHashToBlockWitnessKey(blockHash)
-  db.newKvt.put(witnessKey.toOpenArray, witness).isOkOr:
-    warn logTxt "setBlockWitness()", witnessKey, action="put()", error=($$error)
+  let key = blockHashToBlockWitnessKey(blockHash)
+  db.newKvt().namespace(key.toNamespace()).put(key.toOpenArray, witness).isOkOr:
+    warn logTxt "setBlockWitness()", key, action="put()", error=($$error)
     return
 
 # ------------------------------------------------------------------------------

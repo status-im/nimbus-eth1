@@ -11,11 +11,13 @@
 {.push raises: [].}
 
 import
+  std/tables,
   eth/trie/db,
   eth/db/kvstore,
   rocksdb,
   ../base,
   ./legacy_db,
+  ../../storage_types,
   ../../kvstore_rocksdb
 
 type
@@ -25,6 +27,13 @@ type
   ChainDB = ref object of RootObj
     kv: KvStoreRef
     rdb: RocksStoreRef
+
+proc getDbNamespaces(): seq[string] =
+  var namespaces = newSeq[string]()
+
+  for k in DBKeyKind.items():
+    namespaces.add(k.toNamespace())
+  namespaces
 
 # TODO KvStore is a virtual interface and TrieDB is a virtual interface - one
 #      will be enough eventually - unless the TrieDB interface gains operations
@@ -45,9 +54,16 @@ proc del(db: ChainDB, key: openArray[byte]): bool =
   db.kv.del(key).expect("working database")
 
 proc newChainDB(path: string): KvResult[ChainDB] =
-  let rdb = RocksStoreRef.init(path, "nimbus").valueOr:
+  let rdb = RocksStoreRef.init(
+      path,
+      "nimbus",
+      namespaces = getDbNamespaces()).valueOr:
     return err(error)
   ok(ChainDB(kv: kvStore rdb, rdb: rdb))
+
+proc withNamespace(db: ChainDB, ns: string): KvResult[ChainDB] =
+  let nsDb = ? db.rdb.openNamespace(ns)
+  ok(ChainDB(kv: kvStore nsDb, rdb: db.rdb))
 
 # ------------------------------------------------------------------------------
 # Public constructor and low level data retrieval, storage & transation frame
@@ -59,10 +75,18 @@ proc newLegacyPersistentCoreDbRef*(path: string): CoreDbRef =
     let msg = "DB initialisation : " & error
     raise (ref ResultDefect)(msg: msg)
 
+  var nsMap = initTable[string, TrieDatabaseRef]()
+
+  for ns in getDbNamespaces():
+    let namespace = backend.withNamespace(ns).valueOr:
+      let msg = "DB initialisation : " & error
+      raise (ref ResultDefect)(msg: msg)
+    nsMap[ns] = trieDB(namespace)
+
   proc done() =
     backend.rdb.close()
 
-  LegaPersDbRef(rdb: backend.rdb).init(LegacyDbPersistent, backend.trieDB, done)
+  LegaPersDbRef(rdb: backend.rdb).init(LegacyDbPersistent, trieDB(backend), nsMap, done)
 
 # ------------------------------------------------------------------------------
 # Public helper for direct backend access

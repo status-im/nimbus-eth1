@@ -27,6 +27,7 @@ type
     kvt: CoreDxKvtRef       ## Cache, no need to rebuild methods descriptor
     tdb: TrieDatabaseRef    ## Descriptor reference copy captured with closures
     top: LegacyCoreDxTxRef  ## Top transaction (if any)
+    nsDbs: Table[string, TrieDatabaseRef]
 
   LegacyDbClose* = proc() {.gcsafe, raises: [].}
     ## Custom destructor
@@ -79,6 +80,7 @@ proc init*(
     db: LegacyDbRef;
     dbType: CoreDbType;
     tdb: TrieDatabaseRef;
+    nsDbs: Table[string, TrieDatabaseRef] = initTable[string, TrieDatabaseRef]();
     closeDb = LegacyDbClose(nil);
       ): CoreDbRef
       {.gcsafe.}
@@ -223,9 +225,15 @@ proc newRecorderRef(
 # Private database method function tables
 # ------------------------------------------------------------------------------
 
-proc kvtMethods(db: LegacyDbRef): CoreDbKvtFns =
+proc kvtMethods(db: LegacyDbRef, namespace = ""): CoreDbKvtFns {.gcsafe.} =
   ## Key-value database table handlers
-  let tdb = db.tdb
+
+  let tdb = if db.dbType == LegacyDbPersistent and namespace.len() > 0:
+    doAssert db.nsDbs.hasKey(namespace)
+    db.nsDbs.getOrDefault(namespace)
+  else:
+    db.tdb
+
   CoreDbKvtFns(
     backendFn: proc(): CoreDbKvtBackendRef =
       db.bless(LegacyCoreDbKvtBE(tdb: tdb)),
@@ -255,7 +263,10 @@ proc kvtMethods(db: LegacyDbRef): CoreDbKvtFns =
       ok(),
 
     forgetFn: proc(): CoreDbRc[void] =
-      ok())
+      ok(),
+
+    namespaceFn: proc(namespace: string): CoreDxKvtRef {.gcsafe.} =
+      CoreDxKvtRef(methods: db.kvtMethods(namespace)))
 
 proc mptMethods(mpt: HexaryChildDbRef; db: LegacyDbRef): CoreDbMptFns =
   ## Hexary trie database handlers
@@ -525,12 +536,14 @@ proc init*(
     db: LegacyDbRef;
     dbType: CoreDbType;
     tdb: TrieDatabaseRef;
+    nsDbs: Table[string, TrieDatabaseRef] = initTable[string, TrieDatabaseRef]();
     closeDb = LegacyDbClose(nil);
      ): CoreDbRef =
   ## Constructor helper
 
   # Local extensions
   db.tdb = tdb
+  db.nsDbs = nsDbs
   db.kvt = db.bless CoreDxKvtRef(methods: db.kvtMethods())
 
   # Base descriptor
