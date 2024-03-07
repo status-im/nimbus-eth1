@@ -13,7 +13,10 @@ import
 
 type
   DbNamespace* = enum
-    default
+    # Start at -1 because the existing code and tests require this.
+    # Don't change the order or ord values of the below enums or the
+    # tests will break.
+    default = -1
     genericHash
     blockNumberToHash
     blockHashToScore
