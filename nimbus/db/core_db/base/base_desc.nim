@@ -11,6 +11,7 @@
 {.push raises: [].}
 
 import
+  std/tables,
   eth/common,
   results,
   ../../aristo/aristo_profile
