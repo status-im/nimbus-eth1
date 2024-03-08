@@ -27,7 +27,7 @@ proc store(memoryDB: CoreDbRef, branch: JsonNode) =
   for p in branch:
     let rlp = hexToSeqByte(p.getStr)
     let hash = keccakHash(rlp)
-    memoryDB.kvt.put(hash.data, rlp)
+    memoryDB.defaultKvt.put(hash.data, rlp)
 
 proc parseAddress(address: string): EthAddress =
   hexToByteArray(address, result)

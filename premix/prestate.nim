@@ -26,13 +26,13 @@ proc generatePrestate*(nimbus, geth: JsonNode, blockNumber: UInt256, parent, hea
   discard chainDB.persistUncles(body.uncles)
 
   let key = genericHashKey(headerHash)
-  chainDB.kvt(key.toNamespace()).put(key.toOpenArray, rlp.encode(header))
+  chainDB.kvt(key.namespace).put(key.toOpenArray, rlp.encode(header))
   chainDB.addBlockNumberToHashLookup(header)
 
   for k, v in state:
     let key = hexToSeqByte(k)
     let value = hexToSeqByte(v.getStr())
-    chainDB.kvt.put(key, value)
+    chainDB.defaultKvt.put(key, value)
 
   var metaData = %{
     "blockNumber": %blockNumber.toHex,

@@ -63,7 +63,7 @@ proc main() {.used.} =
     discard com.db.setHead(parentBlock.header)
 
   let key = canonicalHeadHashKey()
-  let kvt = com.db.kvt(key.toNamespace())
+  let kvt = com.db.kvt(key.namespace)
   if key.toOpenArray notin kvt:
     persistToDb(com.db):
       com.initializeEmptyDb()
