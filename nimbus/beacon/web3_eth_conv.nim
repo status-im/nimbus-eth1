@@ -161,6 +161,21 @@ func ethTxs*(list: openArray[Web3Tx], removeBlobs = false):
     for x in list:
       result.add ethTx(x)
 
+func storageKeys(list: seq[FixedBytes[32]]): seq[StorageKey] =
+  for x in list:
+    result.add StorageKey(x)
+
+func ethAccessList*(list: openArray[AccessTuple]): common.AccessList =
+  for x in list:
+    result.add common.AccessPair(
+      address    : ethAddr x.address,
+      storageKeys: storageKeys x.storageKeys,
+    )
+
+func ethAccessList*(x: Option[seq[AccessTuple]]): common.AccessList =
+  if x.isSome:
+    return ethAccessList(x.get)
+
 # ------------------------------------------------------------------------------
 # Eth types to Web3 types
 # ------------------------------------------------------------------------------
@@ -187,6 +202,11 @@ func w3Hash*(x: Option[common.Hash256]): Option[BlockHash] =
 
 func w3Hash*(x: common.BlockHeader): BlockHash =
   BlockHash rlpHash(x).data
+
+func w3Hash*(list: openArray[StorageKey]): seq[Web3Hash] =
+  result = newSeqOfCap[Web3Hash](list.len)
+  for x in list:
+    result.add Web3Hash x
 
 func w3Addr*(x: common.EthAddress): Web3Address =
   Web3Address x
@@ -266,3 +286,14 @@ func w3Txs*(list: openArray[common.Transaction]): seq[Web3Tx] =
   result = newSeqOfCap[Web3Tx](list.len)
   for tx in list:
     result.add w3Tx(tx)
+
+proc w3AccessTuple*(ac: AccessPair): AccessTuple =
+  AccessTuple(
+    address: w3Addr ac.address,
+    storageKeys: w3Hash(ac.storageKeys)
+  )
+
+proc w3AccessList*(list: openArray[AccessPair]): seq[AccessTuple] =
+  result = newSeqOfCap[AccessTuple](list.len)
+  for x in list:
+    result.add w3AccessTuple(x)

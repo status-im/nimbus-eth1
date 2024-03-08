@@ -208,9 +208,6 @@ proc exchangeCapabilities*(client: RpcClient,
   wrapTrySimpleRes:
     client.engine_exchangeCapabilities(methods)
 
-proc toBlockNumber(n: Quantity): common.BlockNumber =
-  n.uint64.toBlockNumber
-
 proc toBlockNonce(n: Option[FixedBytes[8]]): common.BlockNonce =
   if n.isNone:
     return default(BlockNonce)
@@ -265,21 +262,6 @@ proc toBlockHeader*(bc: BlockObject): common.BlockHeader =
     parentBeaconBlockRoot: ethHash bc.parentBeaconBlockRoot,
   )
 
-func storageKeys(list: seq[FixedBytes[32]]): seq[StorageKey] =
-  for x in list:
-    result.add StorageKey(x)
-
-func accessList(list: openArray[AccessTuple]): AccessList =
-  for x in list:
-    result.add AccessPair(
-      address    : ethAddr x.address,
-      storageKeys: storageKeys x.storageKeys,
-    )
-
-func accessList(x: Option[seq[AccessTuple]]): AccessList =
-  if x.isNone: return
-  else: accessList(x.get)
-
 func vHashes(x: Option[seq[Web3Hash]]): seq[common.Hash256] =
   if x.isNone: return
   else: ethHashes(x.get)
@@ -296,7 +278,7 @@ proc toTransaction(tx: TransactionObject): Transaction =
     to              : ethAddr tx.to,
     value           : tx.value,
     payload         : tx.input,
-    accessList      : accessList(tx.accessList),
+    accessList      : ethAccessList(tx.accessList),
     maxFeePerBlobGas: tx.maxFeePerBlobGas.get(0.u256),
     versionedHashes : vHashes(tx.blobVersionedHashes),
     V               : tx.v.int64,

@@ -75,3 +75,20 @@ func getAccessList*(ac: AccessList): common.AccessList =
       address    : address,
       storageKeys: slots.toStorageKeys,
     )
+
+func equal*(ac: AccessList, other: var AccessList): bool =
+  if ac.slots.len != other.slots.len:
+    return false
+
+  for address, slots in ac.slots:
+    other.slots.withValue(address, otherSlots):
+      if slots.len != otherSlots[].len:
+        return false
+
+      for slot in slots:
+        if slot notin otherSlots[]:
+          return false
+    do:
+      return false
+
+  true
