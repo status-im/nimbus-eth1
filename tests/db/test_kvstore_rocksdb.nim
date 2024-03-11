@@ -22,10 +22,6 @@ suite "KvStore RocksDb Tests":
   const
     NS_DEFAULT = "default"
     NS_OTHER = "other"
-    key = [0'u8, 1, 2, 3]
-    value = [3'u8, 2, 1, 0]
-    value2 = [5'u8, 2, 1, 0]
-    key2 = [255'u8, 255]
 
   test "RocksStoreRef KvStore interface":
     let tmp = getTempDir() / "nimbus-test-db"
