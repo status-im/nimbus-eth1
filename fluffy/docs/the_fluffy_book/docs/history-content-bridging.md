@@ -2,7 +2,43 @@
 
 ## From content bridges
 
-### Seeding post-merge block data through the `beacon_lc_bridge`
+### Seeding history data with the `portal_bridge`
+
+#### Step 1: Run a Portal client
+
+Run a Portal client with the Portal JSON-RPC API enabled, e.g. fluffy:
+
+```bash
+./build/fluffy --rpc
+```
+
+#### Step 2: Run an EL client
+
+The portal_bridge needs access to the EL JSON-RPC API, either through a local
+Ethereum client or via a web3 provider.
+
+#### Step 3: Run the Portal bridge in history mode
+
+Build & run the `portal_bridge`:
+```bash
+make portal_bridge
+
+WEB3_URL="http://127.0.0.1:8546" # Replace with your provider.
+./build/portal_bridge history --web3-url:${WEB3_URL}
+```
+
+### Seeding post-merge history data with the `beacon_lc_bridge`
+
+The `beacon_lc_bridge` is more of a standalone bridge that does not require access to a full node with its EL JSON-RPC API. However it is also more limited in the functions it provides.
+It will start with the consensus light client sync and follow beacon block gossip. Once it is synced, the execution payload of new beacon blocks will be extracted and injected in the Portal network as execution headers
+and blocks.
+
+> Note: The execution headers will come without a proof.
+
+The injection into the Portal network is done via the
+`portal_historyGossip` JSON-RPC endpoint of the running Fluffy node.
+
+> Note: Backfilling of block bodies and headers is not yet supported.
 
 Run a Fluffy node with the JSON-RPC API enabled.
 
@@ -17,18 +53,6 @@ make beacon_lc_bridge
 TRUSTED_BLOCK_ROOT=0x1234567890123456789012345678901234567890123456789012345678901234 # Replace with trusted block root.
 ./build/beacon_lc_bridge --trusted-block-root=${TRUSTED_BLOCK_ROOT}
 ```
-
-The `beacon_lc_bridge` will start with the consensus light client sync follow
-beacon block gossip. Once it is synced, the execution payload of new beacon
-blocks will be extracted and injected in the Portal network as execution headers
-and blocks.
-
-> Note: The execution headers will come without a proof for now.
-
-The injection into the Portal network is done via the
-`portal_historyGossip` JSON-RPC endpoint of the running Fluffy node.
-
-> Note: Backfilling of block bodies and headers is not yet supported.
 
 ## From locally stored block data
 

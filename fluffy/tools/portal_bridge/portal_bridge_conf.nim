@@ -7,12 +7,20 @@
 
 {.push raises: [].}
 
-import confutils, confutils/std/net, nimcrypto/hash, ../../logging
+import std/uri, confutils, confutils/std/net, nimcrypto/hash, ../../logging
 
 export net
 
 type
   TrustedDigest* = MDigest[32 * 8]
+
+  Web3UrlKind* = enum
+    HttpUrl
+    WsUrl
+
+  Web3Url* = object
+    kind*: Web3UrlKind
+    url*: string
 
   PortalBridgeCmd* = enum
     beacon = "Run a Portal bridge for the beacon network"
@@ -68,7 +76,13 @@ type
         name: "trusted-block-root"
       .}: Option[TrustedDigest]
     of PortalBridgeCmd.history:
-      discard
+      web3Url* {.desc: "Execution layer JSON-RPC API URL", name: "web3-url".}: Web3Url
+
+      blockVerify* {.
+        desc: "Verify the block header, body and receipts",
+        defaultValue: false,
+        name: "block-verify"
+      .}: bool
     of PortalBridgeCmd.state:
       discard
 
@@ -76,4 +90,22 @@ func parseCmdArg*(T: type TrustedDigest, input: string): T {.raises: [ValueError
   TrustedDigest.fromHex(input)
 
 func completeCmdArg*(T: type TrustedDigest, input: string): seq[string] =
+  return @[]
+
+proc parseCmdArg*(T: type Web3Url, p: string): T {.raises: [ValueError].} =
+  let
+    url = parseUri(p)
+    normalizedScheme = url.scheme.toLowerAscii()
+
+  if (normalizedScheme == "http" or normalizedScheme == "https"):
+    Web3Url(kind: HttpUrl, url: p)
+  elif (normalizedScheme == "ws" or normalizedScheme == "wss"):
+    Web3Url(kind: WsUrl, url: p)
+  else:
+    raise newException(
+      ValueError,
+      "The Web3 URL must specify one of following protocols: http/https/ws/wss",
+    )
+
+proc completeCmdArg*(T: type Web3Url, val: string): seq[string] =
   return @[]

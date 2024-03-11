@@ -13,7 +13,7 @@
 #
 # Beacon Network:
 #
-# For the beacon network a consensus full node is require on one side,
+# For the beacon network a consensus full node is required on one side,
 # making use of the Beacon Node REST-API, and a Portal node on the other side,
 # making use of the Portal JSON-RPC API.
 #
@@ -26,10 +26,17 @@
 #
 # Updates, optimistic updates and finality updates are injected as they become
 # available.
+# Updating these as better updates come available is not yet implemented.
 #
 # History network:
 #
-# To be implemented
+# For the history network a execution client is required on one side, making use
+# of the EL JSON-RPC API, and a Portal node on the other side, making use of the
+# Portal JSON-RPC API.
+#
+# Portal Network <-> Portal Client (e.g. fluffy) <--Portal JSON-RPC--> bridge <--EL JSON-RPC--> execution client / web3 provider
+#
+# Backfilling is not yet implemented. Backfilling will make use of Era1 files.
 #
 # State network:
 #
@@ -51,8 +58,7 @@ import
   ../../rpc/portal_rpc_client,
   ../../logging,
   ../eth_data_exporter/cl_data_exporter,
-  ./portal_bridge_conf,
-  ./portal_bridge_beacon
+  ./[portal_bridge_conf, portal_bridge_beacon, portal_bridge_history]
 
 proc runBeacon(config: PortalBridgeConf) {.raises: [CatchableError].} =
   notice "Launching Fluffy beacon chain bridge", cmdParams = commandLineParams()
@@ -240,6 +246,6 @@ when isMainModule:
   of PortalBridgeCmd.beacon:
     runBeacon(config)
   of PortalBridgeCmd.history:
-    notice "Functionality not yet implemented"
+    runHistory(config)
   of PortalBridgeCmd.state:
     notice "Functionality not yet implemented"

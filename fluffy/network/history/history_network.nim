@@ -228,7 +228,7 @@ func validateBlockHeaderBytes*(
   else:
     ok(header)
 
-proc validateBlockBody(
+proc validateBlockBody*(
     body: PortalBlockBodyLegacy, header: BlockHeader
 ): Result[void, string] =
   ## Validate the block body against the txRoot and ommersHash from the header.
@@ -245,7 +245,7 @@ proc validateBlockBody(
 
   ok()
 
-proc validateBlockBody(
+proc validateBlockBody*(
     body: PortalBlockBodyShanghai, header: BlockHeader
 ): Result[void, string] =
   ## Validate the block body against the txRoot, ommersHash and withdrawalsRoot
