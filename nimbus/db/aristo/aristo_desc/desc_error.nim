@@ -271,10 +271,10 @@ type
 
     # Miscelaneous handy helpers
     AccRootUnacceptable
-    MptContextMissing
     MptRootUnacceptable
     MptRootMissing
     NotImplemented
+    TrieInvalid
     VidContextLocked
 
 # End

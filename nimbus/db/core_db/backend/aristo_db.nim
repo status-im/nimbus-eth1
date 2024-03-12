@@ -53,7 +53,7 @@ func notImplemented[T](
     info: string;
       ): CoreDbRc[T] {.gcsafe.} =
   ## Applies only to `Aristo` methods
-  err((VertexID(0),aristo.NotImplemented).toError(db, info))
+  err((VertexID(0),aristo.NotImplemented).toError(db.adbBase, info))
 
 # ------------------------------------------------------------------------------
 # Private tx and base methods
@@ -71,20 +71,20 @@ proc txMethods(
 
     commitFn: proc(ignore: bool): CoreDbRc[void] =
       const info = "commitFn()"
-      ? db.adbBase.api.commit(aTx).toVoidRc(db, info)
+      ? db.adbBase.api.commit(aTx).toVoidRc(db.adbBase, info)
       ? db.kdbBase.api.commit(kTx).toVoidRc(db.kdbBase, info)
       ok(),
 
     rollbackFn: proc(): CoreDbRc[void] =
       const info = "rollbackFn()"
-      ? db.adbBase.api.rollback(aTx).toVoidRc(db, info)
+      ? db.adbBase.api.rollback(aTx).toVoidRc(db.adbBase, info)
       ? db.kdbBase.api.rollback(kTx).toVoidRc(db.kdbBase, info)
       ok(),
 
     disposeFn: proc(): CoreDbRc[void] =
       const info =  "disposeFn()"
       if db.adbBase.api.isTop(aTx):
-        ? db.adbBase.api.rollback(aTx).toVoidRc(db, info)
+        ? db.adbBase.api.rollback(aTx).toVoidRc(db.adbBase, info)
       if db.kdbBase.api.isTop(kTx):
         ? db.kdbBase.api.rollback(kTx).toVoidRc(db.kdbBase, info)
       ok(),
@@ -92,7 +92,7 @@ proc txMethods(
     safeDisposeFn: proc(): CoreDbRc[void] =
       const info =  "safeDisposeFn()"
       if db.adbBase.api.isTop(aTx):
-        ? db.adbBase.api.rollback(aTx).toVoidRc(db, info)
+        ? db.adbBase.api.rollback(aTx).toVoidRc(db.adbBase, info)
       if db.kdbBase.api.isTop(kTx):
         ? db.kdbBase.api.rollback(kTx).toVoidRc(db.kdbBase, info)
       ok())
@@ -137,7 +137,7 @@ proc baseMethods(
         root: Hash256;
         address: Option[EthAddress];
           ): CoreDbRc[CoreDbTrieRef] =
-      db.adbBase.getTrie(kind, root, address, "getTrieFn()"),
+      db.adbBase.newTrie(kind, root, address, "getTrieFn()"),
 
     newKvtFn: proc(sharedTable: bool): CoreDbRc[CoreDxKvtRef] =
       db.kdbBase.newKvtHandler(sharedTable, "newKvtFn()"),
@@ -145,18 +145,14 @@ proc baseMethods(
     newMptFn: proc(
         trie: CoreDbTrieRef;
         prune: bool; # ignored
-        saveMode: CoreDbSaveFlags;
           ): CoreDbRc[CoreDxMptRef] =
-      db.adbBase.gc()
-      db.adbBase.newMptHandler(trie, saveMode, "newMptFn()"),
+      db.adbBase.newMptHandler(trie, "newMptFn()"),
 
     newAccFn: proc(
         trie: CoreDbTrieRef;
         prune: bool; # ignored
-        saveMode: CoreDbSaveFlags;
           ): CoreDbRc[CoreDxAccRef] =
-      db.adbBase.gc()
-      ok(? db.adbBase.newAccHandler(trie, saveMode, "newAccFn()")),
+      ok(? db.adbBase.newAccHandler(trie, "newAccFn()")),
 
     beginFn: proc(): CoreDbRc[CoreDxTxRef] =
       const info = "beginFn()"

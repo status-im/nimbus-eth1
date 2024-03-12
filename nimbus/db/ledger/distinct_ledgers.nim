@@ -90,14 +90,14 @@ proc init*(
     root: Hash256;
     pruneOk = true;
       ): T =
-  db.newAccMpt(root, pruneOk, Shared).T
+  db.newAccMpt(root, pruneOk).T
 
 proc init*(
     T: type AccountLedger;
     db: CoreDbRef;
     pruneOk = true;
       ): T =
-  db.newAccMpt(EMPTY_ROOT_HASH, pruneOk, Shared).AccountLedger
+  db.newAccMpt(EMPTY_ROOT_HASH, pruneOk).AccountLedger
 
 proc fetch*(al: AccountLedger; eAddr: EthAddress): Result[CoreDbAccount,void] =
   ## Using `fetch()` for trie data retrieval
@@ -161,7 +161,7 @@ proc init*(
   let
     trie = if stt.isNil: db.getTrie(account.address) else: stt
     mpt = block:
-      let rc = db.newMpt(trie, pruneOk, Shared)
+      let rc = db.newMpt(trie, pruneOk)
       if rc.isErr:
         raiseAssert info & $$rc.error
       rc.value
@@ -195,7 +195,7 @@ iterator storage*(
     info = "storage(): "
   let trie = account.stoTrie
   if not trie.isNil:
-    let mpt = al.distinctBase.parent.newMpt(trie, saveMode=Shared).valueOr:
+    let mpt = al.distinctBase.parent.newMpt(trie).valueOr:
       raiseAssert info & $$error
     for (key,val) in mpt.pairs:
       yield (key,val)

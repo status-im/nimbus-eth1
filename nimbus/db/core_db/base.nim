@@ -25,7 +25,7 @@ const
   ProvideLegacyAPI = true
     ## Enable legacy API. For now everybody would want this enabled.
 
-  EnableApiTracking = false
+  EnableApiTracking = false or true
     ## When enabled, functions using this tracking facility need to import
     ## `chronicles`, as well. Tracking is enabled by setting `true` the flags
     ## `trackLegaApi` and/or `trackNewApi` in the `CoreDxTxRef` descriptor.
@@ -51,7 +51,6 @@ export
   CoreDbPersistentTypes,
   CoreDbProfListRef,
   CoreDbRef,
-  CoreDbSaveFlags,
   CoreDbSubTrie,
   CoreDbTrieRef,
   CoreDbType,
@@ -541,7 +540,6 @@ proc newMpt*(
     db: CoreDbRef;
     trie: CoreDbTrieRef;
     prune = true;
-    saveMode = AutoSave;
       ): CoreDbRc[CoreDxMptRef] =
   ## MPT sub-trie object incarnation. The argument `prune` is currently
   ## ignored on other than the legacy backend. The legacy backend always
@@ -553,25 +551,24 @@ proc newMpt*(
   ## the function `getTrie()` on this MPT.
   ##
   db.setTrackNewApi BaseNewMptFn
-  result = db.methods.newMptFn(trie, prune, saveMode)
-  db.ifTrackNewApi: debug newApiTxt, ctx, elapsed, trie, prune, saveMode, result
+  result = db.methods.newMptFn(trie, prune)
+  db.ifTrackNewApi: debug newApiTxt, ctx, elapsed, trie, prune, result
 
 proc newMpt*(
     db: CoreDbRef;
     kind: CoreDbSubTrie;
     address = none(EthAddress);
     prune = true;
-    saveMode = AutoSave;
       ): CoreDxMptRef =
-  ## Shortcut for `newMpt(trie,prune,saveMode)` where the `trie` argument is
+  ## Shortcut for `newMpt(trie,prune)` where the `trie` argument is
   ## `db.getTrie(kind,EMPTY_ROOT_HASH).value`. This function will always
   ## return a non-nil descriptor or throw an exception.
   ##
   db.setTrackNewApi BaseNewMptFn
   let trie = db.methods.getTrieFn(kind, EMPTY_ROOT_HASH, address).value
-  result = db.methods.newMptFn(trie, prune, saveMode).valueOr:
+  result = db.methods.newMptFn(trie, prune).valueOr:
     raiseAssert error.prettyText()
-  db.ifTrackNewApi: debug newApiTxt, ctx, elapsed, prune, saveMode
+  db.ifTrackNewApi: debug newApiTxt, ctx, elapsed, prune
 
 
 proc newMpt*(acc: CoreDxAccRef): CoreDxMptRef =
@@ -592,7 +589,6 @@ proc newAccMpt*(
     db: CoreDbRef;
     trie: CoreDbTrieRef;
     prune = true;
-    saveMode = AutoSave;
       ): CoreDbRc[CoreDxAccRef] =
   ## Accounts trie constructor, will defect on failure. The argument `prune`
   ## is currently ignored on other than the legacy backend.
@@ -603,7 +599,7 @@ proc newAccMpt*(
   ##     ... # No node with <some-hash>
   ##     return
   ##
-  ##   let acc = db.newAccMpt(trie, saveMode=Shared)
+  ##   let acc = db.newAccMpt(trie)
   ##     ... # Was not the state root for the accounts sub-trie
   ##     return
   ##
@@ -613,21 +609,20 @@ proc newAccMpt*(
   ## provides its own subset of methods to handle accounts.
   ##
   db.setTrackNewApi BaseNewAccFn
-  result = db.methods.newAccFn(trie, prune, saveMode)
-  db.ifTrackNewApi: debug newApiTxt, ctx, elapsed, trie, prune, saveMode, result
+  result = db.methods.newAccFn(trie, prune)
+  db.ifTrackNewApi: debug newApiTxt, ctx, elapsed, trie, prune, result
 
 proc newAccMpt*(
     db: CoreDbRef;
     root = EMPTY_ROOT_HASH;
     prune = true;
-    saveMode = AutoSave;
       ): CoreDxAccRef =
   ## Simplified version of `newAccMpt()` where the `CoreDbTrieRef` argument is
   ## replaced by a `root` hash argument. This function is sort of a shortcut
   ## for:
   ## ::
   ##   let trie = db.getTrie(AccountsTrie, root).value
-  ##   result = db.newAccMpt(trie, prune, saveMode).value
+  ##   result = db.newAccMpt(trie, prune).value
   ##
   ## and will throw an exception if something goes wrong. The result reference
   ## will alwye be non `nil`.
@@ -635,9 +630,9 @@ proc newAccMpt*(
   db.setTrackNewApi BaseNewAccFn
   let trie = db.methods.getTrieFn(AccountsTrie, root, none(EthAddress)).valueOr:
     raiseAssert error.prettyText()
-  result = db.methods.newAccFn(trie, prune, saveMode).valueOr:
+  result = db.methods.newAccFn(trie, prune).valueOr:
     raiseAssert error.prettyText()
-  db.ifTrackNewApi: debug newApiTxt, ctx, elapsed, prune, saveMode
+  db.ifTrackNewApi: debug newApiTxt, ctx, elapsed, prune
 
 
 proc toMpt*(phk: CoreDxPhkRef): CoreDxMptRef =
