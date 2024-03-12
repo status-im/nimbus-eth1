@@ -288,6 +288,7 @@ proc markCanonicalChain(
     return false
 
   while currHash != Hash256():
+    let blockNum = currHeader.blockNumber
     let data = kvt.getOrEmpty(blockNum.toOpenArray).valueOr:
       warn logTxt "markCanonicalChain()", blockNum, action="get()", error=($$error)
       return false
