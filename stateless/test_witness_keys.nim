@@ -43,8 +43,7 @@ proc randCode(db: DB): Hash256 =
     let codeLen = rand(1..150)
     let code = randList(byte, rng(0, 255), codeLen, unique = false)
     result = keccakHash(code)
-    let key = contractHashKey(result)
-    db.kvt(key.namespace).put(contractHashKey(result).toOpenArray, code)
+    db.kvt.put(contractHashKey(result).toOpenArray, code)
 
 proc randStorage(db: DB): StorageKeys =
   if rand(0..1) == 0:

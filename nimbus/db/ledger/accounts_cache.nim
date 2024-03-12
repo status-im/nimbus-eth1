@@ -101,6 +101,7 @@ proc beginSavepoint*(ac: AccountsCache): SavePoint {.gcsafe.}
 proc rawTrie*(ac: AccountsCache): AccountsTrie = ac.trie
 
 func db(ac: AccountsCache): CoreDbRef = ac.trie.db
+proc kvt(ac: AccountsCache): CoreDbKvtRef = ac.db.kvt
 
 # The AccountsCache is modeled after TrieDatabase for it's transaction style
 proc init*(x: typedesc[AccountsCache], db: CoreDbRef,
@@ -303,10 +304,9 @@ proc persistMode(acc: RefAccount): PersistMode =
 proc persistCode(acc: RefAccount, db: CoreDbRef) =
   if acc.code.len != 0:
     when defined(geth):
-      db.defaultKvt.put(acc.account.codeHash.data, acc.code)
+      db.kvt.put(acc.account.codeHash.data, acc.code)
     else:
-      let key = contractHashKey(acc.account.codeHash)
-      db.kvt(key.namespace).put(key.toOpenArray, acc.code)
+      db.kvt.put(contractHashKey(acc.account.codeHash).toOpenArray, acc.code)
 
 proc persistStorage(acc: RefAccount, db: CoreDbRef, clearCache: bool) =
   if acc.overlayStorage.len == 0:
@@ -335,8 +335,7 @@ proc persistStorage(acc: RefAccount, db: CoreDbRef, clearCache: bool) =
     # see iterator storage below
     # slotHash can be obtained from storageTrie.putSlotBytes?
     let slotHash = keccakHash(slotAsKey)
-    let key = slotHashToSlotKey(slotHash.data)
-    db.kvt(key.namespace).put(key.toOpenArray, rlp.encode(slot))
+    db.kvt.put(slotHashToSlotKey(slotHash.data).toOpenArray, rlp.encode(slot))
 
   if not clearCache:
     # if we preserve cache, move the overlayStorage
@@ -387,10 +386,9 @@ proc getCode*(ac: AccountsCache, address: EthAddress): seq[byte] =
     result = acc.code
   else:
     when defined(geth):
-      let data = ac.db.defaultKvt.get(acc.account.codeHash.data)
+      let data = ac.kvt.get(acc.account.codeHash.data)
     else:
-      let key = contractHashKey(acc.account.codeHash)
-      let data = ac.db.kvt(key.namespace).get(key.toOpenArray)
+      let data = ac.kvt.get(contractHashKey(acc.account.codeHash).toOpenArray)
 
     acc.code = data
     acc.flags.incl CodeLoaded
@@ -637,8 +635,7 @@ iterator storage*(ac: AccountsCache, address: EthAddress): (UInt256, UInt256) =
 
     for slotHash, value in trie:
       if slotHash.len == 0: continue
-      let key = slotHashToSlotKey(slotHash)
-      let keyData = ac.db.kvt(key.namespace).get(key.toOpenArray)
+      let keyData = ac.kvt.get(slotHashToSlotKey(slotHash).toOpenArray)
       if keyData.len == 0: continue
       yield (rlp.decode(keyData, UInt256), rlp.decode(value, UInt256))
 

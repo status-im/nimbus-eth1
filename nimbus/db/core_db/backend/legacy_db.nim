@@ -28,7 +28,6 @@ type
     kvt: CoreDxKvtRef       ## Cache, no need to rebuild methods descriptor
     tdb: TrieDatabaseRef    ## Descriptor reference copy captured with closures
     top: LegacyCoreDxTxRef  ## Top transaction (if any)
-    nsDbs: Table[DbNamespace, TrieDatabaseRef]
 
   LegacyDbClose* = proc() {.gcsafe, raises: [].}
     ## Custom destructor
@@ -81,7 +80,6 @@ proc init*(
     db: LegacyDbRef;
     dbType: CoreDbType;
     tdb: TrieDatabaseRef;
-    nsDbs: Table[DbNamespace, TrieDatabaseRef] = initTable[DbNamespace, TrieDatabaseRef]();
     closeDb = LegacyDbClose(nil);
       ): CoreDbRef
       {.gcsafe.}
@@ -226,35 +224,37 @@ proc newRecorderRef(
 # Private database method function tables
 # ------------------------------------------------------------------------------
 
+template mapKey(k: openArray[byte], namespace: DbNamespace): openArray[byte] =
+  if namespace == DbNamespace.default:
+    k
+  else:
+    k.toDbKey(namespace).toOpenArray()
+
 proc kvtMethods(db: LegacyDbRef, namespace: DbNamespace): CoreDbKvtFns {.gcsafe.} =
   ## Key-value database table handlers
 
-  let tdb = if db.dbType == LegacyDbPersistent and namespace != DbNamespace.default:
-    doAssert db.nsDbs.hasKey(namespace)
-    db.nsDbs.getOrDefault(namespace)
-  else:
-    db.tdb
+  let tdb = db.tdb
 
   CoreDbKvtFns(
     backendFn: proc(): CoreDbKvtBackendRef =
       db.bless(LegacyCoreDbKvtBE(tdb: tdb)),
 
     getFn: proc(k: openArray[byte]): CoreDbRc[Blob] =
-      let data = tdb.get(k)
+      let data = tdb.get(k.mapKey(namespace))
       if 0 < data.len:
         return ok(data)
       err(db.bless(KvtNotFound, LegacyCoreDbError(ctx: "getFn()"))),
 
     delFn: proc(k: openArray[byte]): CoreDbRc[void] =
-      tdb.del(k)
+      tdb.del(k.mapKey(namespace))
       ok(),
 
     putFn: proc(k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] =
-      tdb.put(k,v)
+      tdb.put(k.mapKey(namespace), v)
       ok(),
 
     hasKeyFn: proc(k: openArray[byte]): CoreDbRc[bool] =
-      ok(tdb.contains(k)),
+      ok(tdb.contains(k.mapKey(namespace))),
 
     persistentFn: proc(): CoreDbRc[void] =
       # Emulate `Kvt` behaviour
@@ -537,14 +537,12 @@ proc init*(
     db: LegacyDbRef;
     dbType: CoreDbType;
     tdb: TrieDatabaseRef;
-    nsDbs: Table[DbNamespace, TrieDatabaseRef] = initTable[DbNamespace, TrieDatabaseRef]();
     closeDb = LegacyDbClose(nil);
      ): CoreDbRef =
   ## Constructor helper
 
   # Local extensions
   db.tdb = tdb
-  db.nsDbs = nsDbs
   db.kvt = db.bless CoreDxKvtRef(methods: db.kvtMethods(DbNamespace.default))
 
   # Base descriptor

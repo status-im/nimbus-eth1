@@ -15,7 +15,7 @@ import
   chronicles,
   eth/[common, trie/db],
   results,
-  ../../../../db/[core_db, kvstore_rocksdb, storage_types],
+  ../../../../db/[core_db, kvstore_rocksdb],
   ../../range_desc,
   "."/[hexary_desc, hexary_error, rocky_bulk_load, snapdb_desc]
 
@@ -88,8 +88,7 @@ proc toStorageSlotsKey(a: RepairKey): auto =
 
 proc stateRootGet*(db: CoreDbRef; nodeKey: NodeKey): Blob =
   if db.isLegacy:
-    let key = nodeKey.toStateRootKey
-    return db.kvt(key.namespace).backend.toLegacy.get(key.toOpenArray)
+    return db.kvt.backend.toLegacy.get(nodeKey.toStateRootKey.toOpenArray)
 
 # ------------------------------------------------------------------------------
 # Public functions: get
@@ -101,8 +100,8 @@ proc persistentAccountsGetFn*(db: CoreDbRef): AccountsGetFn =
     var nodeKey: NodeKey
     if nodeKey.init(key):
       if db.isLegacy:
-        let key = nodeKey.toAccountsKey
-        return db.defaultKvt.backend.toLegacy.get(key.toOpenArray)
+        return db.kvt.backend.toLegacy.get(
+          nodeKey.toAccountsKey.toOpenArray)
 
 proc persistentContractsGetFn*(db: CoreDbRef): ContractsGetFn =
   ## Returns a `get()` function for retrieving contracts data
@@ -110,8 +109,8 @@ proc persistentContractsGetFn*(db: CoreDbRef): ContractsGetFn =
     var nodeKey: NodeKey
     if nodeKey.init(key):
       if db.isLegacy:
-        let key = nodeKey.toContractHashKey
-        return db.kvt(key.namespace).backend.toLegacy.get(key.toOpenArray)
+        return db.kvt.backend.toLegacy.get(
+          nodeKey.toContractHashKey.toOpenArray)
 
 proc persistentStorageSlotsGetFn*(db: CoreDbRef): StorageSlotsGetFn =
   ## Returns a `get()` function for retrieving storage slots data
@@ -119,8 +118,8 @@ proc persistentStorageSlotsGetFn*(db: CoreDbRef): StorageSlotsGetFn =
     var nodeKey: NodeKey
     if nodeKey.init(key):
       if db.isLegacy:
-        let key = nodeKey.toStorageSlotsKey
-        return db.defaultKvt.backend.toLegacy.get(key.toOpenArray)
+        return db.kvt.backend.toLegacy.get(
+          nodeKey.toStorageSlotsKey.toOpenArray)
 
 proc persistentStateRootGet*(
     db: CoreDbRef;
@@ -146,10 +145,8 @@ proc persistentBlockHeaderPut*(
   ## Store a single header. This function is intended to finalise snap sync
   ## with storing a universal pivot header not unlike genesis.
   let hashKey = hdr.blockHash
-  let key = hashKey.toBlockHeaderKey
-  db.kvt(key.namespace).put(key.toOpenArray, rlp.encode(hdr))
-  let bnKey = hdr.blockNumber.toBlockNumberKey
-  db.kvt(key.namespace).put(bnKey.toOpenArray, rlp.encode(hashKey))
+  db.kvt.put(hashKey.toBlockHeaderKey.toOpenArray, rlp.encode(hdr))
+  db.kvt.put(hdr.blockNumber.toBlockNumberKey.toOpenArray, rlp.encode(hashKey))
   when extraTraceMessages:
     trace logTxt "stored block header", hashKey,
       blockNumber=hdr.blockNumber.toStr,
@@ -169,8 +166,7 @@ proc persistentAccountsPut*(
       when extraTraceMessages:
         trace logTxt "unresolved node in repair table", error
       return err(error)
-    let accKey = key.toAccountsKey
-    base.defaultKvt.put(accKey.toOpenArray, value.convertTo(Blob))
+    base.kvt.put(key.toAccountsKey.toOpenArray, value.convertTo(Blob))
   ok()
 
 proc persistentStorageSlotsPut*(
@@ -187,9 +183,7 @@ proc persistentStorageSlotsPut*(
       when extraTraceMessages:
         trace logTxt "unresolved node in repair table", error
       return err(error)
-
-    let slotsKey = key.toStorageSlotsKey
-    base.defaultKvt.put(slotsKey.toOpenArray, value.convertTo(Blob))
+    base.kvt.put(key.toStorageSlotsKey.toOpenArray, value.convertTo(Blob))
   ok()
 
 proc persistentContractPut*(
@@ -201,10 +195,8 @@ proc persistentContractPut*(
   let dbTx = base.beginTransaction
   defer: dbTx.commit
 
-  for (k, v) in data:
-    let key = k.toContractHashKey()
-    base.kvt(key.namespace).put(key.toOpenArray, v)
-
+  for (key,val) in data:
+    base.kvt.put(key.toContractHashKey.toOpenArray,val)
   ok()
 
 
@@ -233,12 +225,10 @@ proc persistentStateRootPut*(
       zeroEntryData = rlp.encode StateRootRegistry(key: root)
 
     # Store a new top entry
-    let stateRootKey = root.toStateRootKey
-    db.kvt(stateRootKey.namespace).put(stateRootKey.toOpenArray, rootEntryData)
+    db.kvt.put(root.toStateRootKey.toOpenArray, rootEntryData)
 
     # Store updated base record pointing to top entry
-    let zeroStateRootKey = zeroKey.toStateRootKey
-    db.kvt(zeroStateRootKey.namespace).put(zeroStateRootKey.toOpenArray, zeroEntryData)
+    db.kvt.put(zeroKey.toStateRootKey.toOpenArray, zeroEntryData)
 
   else:
     let record = rlp.decode(rlpData, StateRootRegistry)
@@ -247,8 +237,7 @@ proc persistentStateRootPut*(
       let rootEntryData =
         rlp.encode StateRootRegistry(key: record.key, data: data)
 
-      let stateRootKey = root.toStateRootKey
-      db.kvt(stateRootKey.namespace).put(stateRootKey.toOpenArray, rootEntryData)
+      db.kvt.put(root.toStateRootKey.toOpenArray, rootEntryData)
 
 
 proc persistentAccountsPut*(
@@ -406,3 +395,4 @@ proc persistentContractPut*(
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
+

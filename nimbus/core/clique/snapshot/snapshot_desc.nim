@@ -147,8 +147,7 @@ proc loadSnapshot*(cfg: CliqueCfg; hash: Hash256):
   ## Load an existing snapshot from the database.
   var s = Snapshot(cfg: cfg)
   try:
-    let key = cliqueSnapshotKey(hash)
-    let rc = s.cfg.db.newKvt(key.namespace, Shared).get(key.toOpenArray)
+    let rc = s.cfg.db.newKvt(cliqueSnapshot, Shared).get(hash.data)
     if rc.isOk:
       s.data = rc.value.decode(SnapshotData)
     else:
@@ -164,10 +163,9 @@ proc storeSnapshot*(cfg: CliqueCfg; s: Snapshot): CliqueOkResult =
   ## Insert the snapshot into the database.
   try:
     let
-      key = cliqueSnapshotKey(s.data.blockHash)
       val = rlp.encode(s.data)
-      kvt = s.cfg.db.newKvt(key.namespace, Companion)
-    kvt.put(key.toOpenArray, val).isOkOr:
+      kvt = s.cfg.db.newKvt(cliqueSnapshot, Companion)
+    kvt.put(s.data.blockHash.data, val).isOkOr:
       error logTxt "put() failed", `error`=($$error)
     kvt.persistent()
 

@@ -619,7 +619,7 @@ when defined(legacy_eth66_enabled):
   method getStorageNodes*(ctx: EthWireRef,
                           hashes: openArray[Hash256]):
                             Result[seq[Blob], string] {.gcsafe.} =
-    let db = ctx.db.defaultKvt()
+    let db = ctx.db.kvt
     var list: seq[Blob]
     for hash in hashes:
       list.add db.get(hash.data)

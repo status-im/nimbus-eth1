@@ -85,8 +85,7 @@ proc verifySlotProof(trustedStorageRoot: Web3Hash, slot: StorageProof): MptProof
 proc persistFixtureBlock(chainDB: CoreDbRef) =
   let header = getBlockHeader4514995()
   # Manually inserting header to avoid any parent checks
-  let key = genericHashKey(header.blockHash)
-  chainDB.kvt(key.namespace).put(key.toOpenArray, rlp.encode(header))
+  chainDB.kvt.put(genericHashKey(header.blockHash).toOpenArray, rlp.encode(header))
   chainDB.addBlockNumberToHashLookup(header)
   discard chainDB.persistTransactions(header.blockNumber, getBlockBody4514995().transactions)
   discard chainDB.persistReceipts(getReceipts4514995())

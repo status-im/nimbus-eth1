@@ -138,7 +138,7 @@ proc test_syncdbImportSnapshot*(
     case w.kind:
     of UndumpKey32:
       key = w.key32.toSeq
-      if select.isNil or 0 < select.com.db.defaultKvt.backend.toLegacy.get(key).len:
+      if select.isNil or 0 < select.com.db.kvt.backend.toLegacy.get(key).len:
         result[0][0].inc
       else:
         storeOk = false
@@ -169,7 +169,7 @@ proc test_syncdbImportSnapshot*(
       noisy.say "*** import", result.pp, ".. "
 
     if storeOk:
-      chn.com.db.defaultKvt.backend.toLegacy.put(key, w.data)
+      chn.com.db.kvt.backend.toLegacy.put(key, w.data)
 
   if (count mod 23456) != 0:
     noisy.say "*** import", result.pp, " ok"
@@ -197,10 +197,8 @@ proc test_syncdbAppendBlocks*(
     pivNum = q[0][0].blockNumber
 
   # Verify pivot
-  let pivHashKey = pivHash.toBlockHeaderKey
-  check 0 < db.kvt(pivHashKey.namespace).get(pivHashKey.toOpenArray).len
-  let pivNumKey = pivNum.toBlockNumberKey
-  check pivHash == db.kvt(pivNumKey.namespace).get(pivNumKey.toOpenArray).decode(Hash256)
+  check 0 < db.kvt.get(pivHash.toBlockHeaderKey.toOpenArray).len
+  check pivHash == db.kvt.get(pivNum.toBlockNumberKey.toOpenArray).decode(Hash256)
 
   # Set up genesis deputy.
   chn.com.startOfHistory = pivHash

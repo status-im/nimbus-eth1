@@ -266,10 +266,9 @@ proc fetchAndVerifyCode(client: RpcClient, p: CodeFetchingInfo, desiredCodeHash:
 
 proc putCode*(db: CoreDbRef, codeHash: common.Hash256, code: seq[byte]) =
   when defined(geth):
-    db.defaultKvt.put(codeHash.data, code)
+    db.kvt.put(codeHash.data, code)
   else:
-    let key = contractHashKey(codeHash)
-    db.kvt(key.namespace).put(key.toOpenArray, code)
+    db.kvt.put(contractHashKey(codeHash).toOpenArray, code)
 
 proc putCode*(trie: AccountsTrie, codeHash: common.Hash256, code: seq[byte]) =
   putCode(trie.db, codeHash, code)
@@ -397,8 +396,7 @@ proc ifNecessaryGetAccountAndSlots*(client: RpcClient, db: CoreDbRef, blockNumbe
         let slotAsKey = createTrieKeyFromSlot(slot)
         let slotHash = keccakHash(slotAsKey)
         let slotEncoded = rlp.encode(slot)
-        let key = slotHashToSlotKey(slotHash.data)
-        db.kvt(key.namespace).put(key.toOpenArray, slotEncoded)
+        db.kvt.put(slotHashToSlotKey(slotHash.data).toOpenArray, slotEncoded)
 
         if shouldDoUnnecessarySanityChecks:
           assertThatWeHaveStoredSlot(trie, address, acc, slot, fetchedVal, false)

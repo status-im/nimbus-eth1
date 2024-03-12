@@ -41,13 +41,13 @@ proc populateDbWithNodes*(db: CoreDbRef, nodes: seq[seq[byte]]) =
   for nodeBytes in nodes:
     let nodeHash = keccakHash(nodeBytes)
     info("AARDVARK: populateDbWithNodes about to add node", nodeHash, nodeBytes)
-    db.defaultKvt.put(nodeHash.data, nodeBytes)
+    db.kvt.put(nodeHash.data, nodeBytes)
 
 # AARDVARK: just make the callers call populateDbWithNodes directly?
 proc populateDbWithBranch*(db: CoreDbRef, branch: seq[seq[byte]]) =
   for nodeBytes in branch:
     let nodeHash = keccakHash(nodeBytes)
-    db.defaultKvt.put(nodeHash.data, nodeBytes)
+    db.kvt.put(nodeHash.data, nodeBytes)
 
 # Returns a none if there are missing nodes; if the account itself simply
 # doesn't exist yet, that's fine and it returns some(newAccount()).
@@ -57,15 +57,14 @@ proc ifNodesExistGetAccount*(trie: AccountsTrie, address: EthAddress): Option[Ac
 proc maybeGetCode*(db: CoreDbRef, codeHash: Hash256): Option[seq[byte]] =
   when defined(geth):
     if db.isLegacy:
-      db.defaultKvt.backend.toLegacy.maybeGet(codeHash.data)
+      db.kvt.backend.toLegacy.maybeGet(codeHash.data)
     else:
-      db.defaultKvt.get(codeHash.data)
+      db.kvt.get(codeHash.data)
   else:
-    let key = contractHashKey(codeHash)
     if db.isLegacy:
-      db.kvt(key.namespace).backend.toLegacy.maybeGet(key.toOpenArray)
+      db.kvt.backend.toLegacy.maybeGet(contractHashKey(codeHash).toOpenArray)
     else:
-      some(db.kvt(key.namespace).get(key.toOpenArray))
+      some(db.kvt.get(contractHashKey(codeHash).toOpenArray))
 
 proc maybeGetCode*(trie: AccountsTrie, address: EthAddress): Option[seq[byte]] =
   let maybeAcc = trie.ifNodesExistGetAccount(address)

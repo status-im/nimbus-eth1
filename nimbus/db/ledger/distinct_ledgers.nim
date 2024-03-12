@@ -51,8 +51,7 @@ proc toSvp*(sl: StorageLedger): seq[(UInt256,UInt256)] =
   var kvp: Table[UInt256,UInt256]
   try:
     for (slotHash,val) in sl.distinctBase.toMpt.pairs:
-      let key = slotHashToSlotKey(slotHash)
-      let rc = db.newKvt(key.namespace).get(key.toOpenArray)
+      let rc = db.newKvt(slotHashToSlot).get(slotHash)
       if rc.isErr:
         warn "StorageLedger.dump()", slotHash, error=($$rc.error)
       else:

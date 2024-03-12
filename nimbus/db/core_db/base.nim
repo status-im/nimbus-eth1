@@ -1037,17 +1037,14 @@ when ProvideLegacyAPI:
 
   # ----------------
 
-  proc kvt*(db: CoreDbRef, namespace: DbNamespace): CoreDbKvtRef =
+  proc kvt*(db: CoreDbRef): CoreDbKvtRef =
     ## Legacy pseudo constructor, see `toKvt()` for production constructor
     db.setTrackLegaApi LegaNewKvtFn
     db.ifTrackLegaApi: debug legaApiTxt, ctx, elapsed, result
 
-    result = db.newKvt(namespace = namespace).CoreDbKvtRef
+    result = db.newKvt(namespace = DbNamespace.default).CoreDbKvtRef
 
     db.ifTrackLegaApi: debug legaApiTxt, ctx, elapsed, result
-
-  proc defaultKvt*(db: CoreDbRef): CoreDbKvtRef =
-    kvt(db, DbNamespace.default)
 
   proc get*(kvt: CoreDbKvtRef; key: openArray[byte]): Blob =
     kvt.setTrackLegaApi LegaKvtGetFn

@@ -178,7 +178,7 @@ proc toNodeKey(t: var TreeBuilder, z: openArray[byte]): NodeKey =
   else:
     result.data = keccakHash(z).data
     result.usedBytes = 32
-    t.db.defaultKvt.put(result.data, z)
+    t.db.kvt.put(result.data, z)
 
 proc toNodeKey(z: openArray[byte]): NodeKey =
   if z.len >= 32:
@@ -188,13 +188,13 @@ proc toNodeKey(z: openArray[byte]): NodeKey =
 
 proc forceSmallNodeKeyToHash(t: var TreeBuilder, r: NodeKey): NodeKey =
   let hash = keccakHash(r.data.toOpenArray(0, r.usedBytes-1))
-  t.db.defaultKvt.put(hash.data, r.data.toOpenArray(0, r.usedBytes-1))
+  t.db.kvt.put(hash.data, r.data.toOpenArray(0, r.usedBytes-1))
   result.data = hash.data
   result.usedBytes = 32
 
 proc writeCode(t: var TreeBuilder, code: openArray[byte]): Hash256 =
   result = keccakHash(code)
-  put(t.db.defaultKvt, result.data, code)
+  put(t.db.kvt, result.data, code)
 
 proc branchNode(t: var TreeBuilder, depth: int, storageMode: bool): NodeKey {.gcsafe.}
 proc extensionNode(t: var TreeBuilder, depth: int, storageMode: bool): NodeKey {.gcsafe.}

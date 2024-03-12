@@ -357,8 +357,8 @@ proc persistStorage(acc: AccountRef, ac: AccountsLedgerRef, clearCache: bool) =
     else:
       storageLedger.delete(slot)
     let
-      key = slot.toBytesBE.keccakHash.data.slotHashToSlotKey
-      rc = ac.kvt.namespace(key.namespace).put(key.toOpenArray, rlp.encode(slot))
+      key = slot.toBytesBE.keccakHash
+      rc = ac.kvt.namespace(slotHashToSlot).put(key.data, rlp.encode(slot))
     if rc.isErr:
       warn logTxt "persistStorage()", slot, error=($$rc.error)
 
@@ -668,8 +668,7 @@ iterator storage*(ac: AccountsLedgerRef, address: EthAddress): (UInt256, UInt256
     noRlpException "storage()":
       for slotHash, value in ac.ledger.storage acc.statement:
         if slotHash.len == 0: continue
-        let key = slotHashToSlotKey(slotHash)
-        let rc = ac.kvt.namespace(key.namespace).get(key.toOpenArray)
+        let rc = ac.kvt.namespace(slotHashToSlot).get(slotHash)
         if rc.isErr:
           warn logTxt "storage()", slotHash, error=($$rc.error)
         else:

@@ -62,13 +62,11 @@ proc main() {.used.} =
     var parentBlock = requestBlock(conf.head, { DownloadAndValidate })
     discard com.db.setHead(parentBlock.header)
 
-  let key = canonicalHeadHashKey()
-  let kvt = com.db.kvt(key.namespace)
-  if key.toOpenArray notin kvt:
+  if canonicalHeadHashKey().toOpenArray notin com.db.kvt:
     persistToDb(com.db):
       com.initializeEmptyDb()
       com.db.compensateLegacySetup()
-    doAssert(key.toOpenArray in kvt)
+    doAssert(canonicalHeadHashKey().toOpenArray in com.db.kvt)
 
   var head = com.db.getCanonicalHead()
   var blockNumber = head.blockNumber + 1

@@ -29,14 +29,14 @@ logScope:
 # Private helpers
 # ------------------------------------------------------------------------------
 
-template get(sk: SkeletonRef, key: DbKey): untyped =
-  get(sk.db.kvt(key.namespace), key.toOpenArray)
+template get(sk: SkeletonRef, key: untyped): untyped =
+  get(sk.db.kvt, key.toOpenArray)
 
-template put(sk: SkeletonRef, key: DbKey, val: untyped): untyped =
-  put(sk.db.kvt(key.namespace), key.toOpenArray, val)
+template put(sk: SkeletonRef, key, val: untyped): untyped =
+  put(sk.db.kvt, key.toOpenArray, val)
 
-template del(sk: SkeletonRef, key: DbKey): untyped =
-  del(sk.db.kvt(key.namespace), key.toOpenArray)
+template del(sk: SkeletonRef, key: untyped): untyped =
+  del(sk.db.kvt, key.toOpenArray)
 
 proc append(w: var RlpWriter, s: Segment) =
   w.startList(3)

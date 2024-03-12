@@ -65,6 +65,9 @@ proc pruneTrie*(db: AccountStateDB): bool =
 proc db*(db: AccountStateDB): CoreDbRef =
   db.trie.db
 
+proc kvt*(db: AccountStateDB): CoreDbKvtRef =
+  db.trie.db.kvt
+
 proc rootHash*(db: AccountStateDB): KeccakHash =
   db.trie.rootHash
 
@@ -140,11 +143,11 @@ proc getStorageRoot*(db: AccountStateDB, address: EthAddress): Hash256 =
   var account = db.getAccount(address)
   account.storageRoot
 
-proc setStorage*(stateDb: AccountStateDB,
+proc setStorage*(db: AccountStateDB,
                  address: EthAddress,
                  slot: UInt256, value: UInt256) =
-  var account = stateDb.getAccount(address)
-  var accountTrie = getStorageTrie(stateDb, account)
+  var account = db.getAccount(address)
+  var accountTrie = getStorageTrie(db, account)
   let slotAsKey = createTrieKeyFromSlot slot
 
   if value > 0:
@@ -156,24 +159,24 @@ proc setStorage*(stateDb: AccountStateDB,
   # map slothash back to slot value
   # see iterator storage below
   var
+    triedb = db.kvt
     # slotHash can be obtained from accountTrie.put?
     slotHash = keccakHash(slot.toBytesBE)
-    key = slotHashToSlotKey(slotHash.data)
-  stateDb.db.kvt(key.namespace).put(key.toOpenArray, rlp.encode(slot))
+  triedb.put(slotHashToSlotKey(slotHash.data).toOpenArray, rlp.encode(slot))
 
   account.storageRoot = accountTrie.rootHash
-  stateDb.setAccount(address, account)
+  db.setAccount(address, account)
 
-iterator storage*(stateDb: AccountStateDB, address: EthAddress): (UInt256, UInt256) =
+iterator storage*(db: AccountStateDB, address: EthAddress): (UInt256, UInt256) =
   let
-    storageRoot = stateDb.getStorageRoot(address)
-    trie = stateDb.db.mptPrune storageRoot
+    storageRoot = db.getStorageRoot(address)
+    triedb = db.kvt
+    trie = db.db.mptPrune storageRoot
 
-  for k, v in trie:
-    if k.len != 0:
-      let key = slotHashToSlotKey(k)
-      var keyData = stateDb.db.kvt(key.namespace).get(key.toOpenArray)
-      yield (rlp.decode(keyData, UInt256), rlp.decode(v, UInt256))
+  for key, value in trie:
+    if key.len != 0:
+      var keyData = triedb.get(slotHashToSlotKey(key).toOpenArray)
+      yield (rlp.decode(keyData, UInt256), rlp.decode(value, UInt256))
 
 proc getStorage*(db: AccountStateDB, address: EthAddress, slot: UInt256): (UInt256, bool) =
   let
@@ -202,23 +205,24 @@ proc getNonce*(db: AccountStateDB, address: EthAddress): AccountNonce =
 proc incNonce*(db: AccountStateDB, address: EthAddress) {.inline.} =
   db.setNonce(address, db.getNonce(address) + 1)
 
-proc setCode*(stateDb: AccountStateDB, address: EthAddress, code: openArray[byte]) =
-  var account = stateDb.getAccount(address)
+proc setCode*(db: AccountStateDB, address: EthAddress, code: openArray[byte]) =
+  var account = db.getAccount(address)
   # TODO: implement JournalDB to store code and storage
   # also use JournalDB to revert state trie
 
-  let newCodeHash = keccakHash(code)
+  let
+    newCodeHash = keccakHash(code)
+    triedb = db.kvt
 
   if code.len != 0:
-    let key = contractHashKey(newCodeHash)
-    stateDb.db.kvt(key.namespace).put(key.toOpenArray, code)
+    triedb.put(contractHashKey(newCodeHash).toOpenArray, code)
 
   account.codeHash = newCodeHash
-  stateDb.setAccount(address, account)
+  db.setAccount(address, account)
 
-proc getCode*(stateDb: AccountStateDB, address: EthAddress): seq[byte] =
-  let key = contractHashKey(stateDb.getCodeHash(address))
-  stateDb.db.kvt(key.namespace).get(key.toOpenArray)
+proc getCode*(db: AccountStateDB, address: EthAddress): seq[byte] =
+  let triedb = db.kvt
+  triedb.get(contractHashKey(db.getCodeHash(address)).toOpenArray)
 
 proc hasCodeOrNonce*(db: AccountStateDB, address: EthAddress): bool {.inline.} =
   db.getNonce(address) != 0 or db.getCodeHash(address) != EMPTY_SHA3

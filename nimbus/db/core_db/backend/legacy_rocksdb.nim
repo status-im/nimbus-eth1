@@ -11,13 +11,11 @@
 {.push raises: [].}
 
 import
-  std/[tables, sequtils],
   eth/trie/db,
   eth/db/kvstore,
   rocksdb,
   ../base,
   ./legacy_db,
-  ../../storage_types,
   ../../kvstore_rocksdb
 
 type
@@ -27,20 +25,6 @@ type
   ChainDB = ref object of RootObj
     kv: KvStoreRef
     rdb: RocksStoreRef
-
-proc `$`*(ns: DbNamespace): string =
-  if ns == DbNamespace.default:
-    return "default"
-  $ord(ns)
-
-proc getNamespaces(): seq[DbNamespace] =
-  var namespaces = newSeq[DbNamespace]()
-  for ns in DbNamespace.items():
-    # Don't include the default namespace in the list because the main
-    # RocksStoreRef uses the default namespace already
-    if ns != DbNamespace.default:
-      namespaces.add(ns)
-  namespaces
 
 # TODO KvStore is a virtual interface and TrieDB is a virtual interface - one
 #      will be enough eventually - unless the TrieDB interface gains operations
@@ -61,16 +45,9 @@ proc del(db: ChainDB, key: openArray[byte]): bool =
   db.kv.del(key).expect("working database")
 
 proc newChainDB(path: string): KvResult[ChainDB] =
-  let rdb = RocksStoreRef.init(
-      path,
-      "nimbus",
-      namespaces = getNamespaces().mapIt($it)).valueOr:
+  let rdb = RocksStoreRef.init(path, "nimbus").valueOr:
     return err(error)
   ok(ChainDB(kv: kvStore rdb, rdb: rdb))
-
-proc withNamespace(db: ChainDB, ns: string): KvResult[ChainDB] =
-  let nsDb = ? db.rdb.openNamespace(ns)
-  ok(ChainDB(kv: kvStore nsDb, rdb: db.rdb))
 
 # ------------------------------------------------------------------------------
 # Public constructor and low level data retrieval, storage & transation frame
@@ -82,18 +59,10 @@ proc newLegacyPersistentCoreDbRef*(path: string): CoreDbRef =
     let msg = "DB initialisation : " & error
     raise (ref ResultDefect)(msg: msg)
 
-  var nsMap = initTable[DbNamespace, TrieDatabaseRef]()
-
-  for ns in getNamespaces():
-    let namespace = backend.withNamespace($ns).valueOr:
-      let msg = "DB initialisation : " & error
-      raise (ref ResultDefect)(msg: msg)
-    nsMap[ns] = trieDB(namespace)
-
   proc done() =
     backend.rdb.close()
 
-  LegaPersDbRef(rdb: backend.rdb).init(LegacyDbPersistent, trieDB(backend), nsMap, done)
+  LegaPersDbRef(rdb: backend.rdb).init(LegacyDbPersistent, backend.trieDB, done)
 
 # ------------------------------------------------------------------------------
 # Public helper for direct backend access

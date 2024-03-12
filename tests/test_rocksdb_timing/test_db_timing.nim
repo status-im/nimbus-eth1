@@ -187,7 +187,7 @@ proc test_dbTimingStoreDirect32*(
      ) =
   ## Direct db, key length 32, no transaction
   var ela: Duration
-  let tdb = cdb.defaultKvt
+  let tdb = cdb.kvt
 
   if noisy: echo ""
   noisy.showElapsed("Standard db loader(keyLen 32)", ela):
@@ -209,7 +209,7 @@ proc test_dbTimingStoreDirectly32as33*(
      ) =
   ## Direct db, key length 32 as 33, no transaction
   var ela = initDuration()
-  let tdb = cdb.defaultKvt
+  let tdb = cdb.kvt
 
   if noisy: echo ""
   noisy.showElapsed("Standard db loader(keyLen 32 as 33)", ela):
@@ -231,7 +231,7 @@ proc test_dbTimingStoreTx32*(
      ) =
   ## Direct db, key length 32, transaction based
   var ela: Duration
-  let tdb = cdb.defaultKvt
+  let tdb = cdb.kvt
 
   if noisy: echo ""
   noisy.showElapsed("Standard db loader(tx,keyLen 32)", ela):
@@ -256,7 +256,7 @@ proc test_dbTimingStoreTx32as33*(
      ) =
   ## Direct db, key length 32 as 33, transaction based
   var ela: Duration
-  let tdb = cdb.defaultKvt
+  let tdb = cdb.kvt
 
   if noisy: echo ""
   noisy.showElapsed("Standard db loader(tx,keyLen 32 as 33)", ela):
@@ -281,7 +281,7 @@ proc test_dbTimingDirect33*(
      ) =
   ## Direct db, key length 33, no transaction
   var ela: Duration
-  let tdb = cdb.defaultKvt
+  let tdb = cdb.kvt
 
   if noisy: echo ""
   noisy.showElapsed("Standard db loader(keyLen 33)", ela):
@@ -303,7 +303,7 @@ proc test_dbTimingTx33*(
      ) =
   ## Direct db, key length 33, transaction based
   var ela: Duration
-  let tdb = cdb.defaultKvt
+  let tdb = cdb.kvt
 
   if noisy: echo ""
   noisy.showElapsed("Standard db loader(tx,keyLen 33)", ela):

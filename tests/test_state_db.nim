@@ -151,7 +151,7 @@ proc stateDBMain*() =
       ac.persist()
       check ac.getCode(addr2) == code
       let key = contractHashKey(keccakHash(code))
-      check acDB.kvt(key.namespace).get(key.toOpenArray) == code
+      check acDB.kvt.get(key.toOpenArray) == code
 
     test "accessList operations":
       proc verifyAddrs(ac: AccountsCache, addrs: varargs[int]): bool =

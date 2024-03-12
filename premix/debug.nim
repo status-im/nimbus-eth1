@@ -24,7 +24,7 @@ proc prepareBlockEnv(node: JsonNode, memoryDB: CoreDbRef) =
   for k, v in state:
     let key = hexToSeqByte(k)
     let value = hexToSeqByte(v.getStr())
-    memoryDB.defaultKvt.put(key, value)
+    memoryDB.kvt.put(key, value)
 
 proc executeBlock(blockEnv: JsonNode, memoryDB: CoreDbRef, blockNumber: UInt256) =
   let

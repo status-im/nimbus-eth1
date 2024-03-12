@@ -37,7 +37,7 @@ proc importBlockData(node: JsonNode): (CommonRef, Hash256, Hash256, UInt256) {. 
   for k, v in state:
     let key = hexToSeqByte(k)
     let value = hexToSeqByte(v.getStr())
-    memoryDB.defaultKvt.put(key, value)
+    memoryDB.kvt.put(key, value)
 
   let
     parentNumber = blockNumber - 1
