@@ -72,13 +72,13 @@ proc txMethods(
     commitFn: proc(ignore: bool): CoreDbRc[void] =
       const info = "commitFn()"
       ? db.adbBase.api.commit(aTx).toVoidRc(db, info)
-      ? db.kdbBase.api.commit(kTx).toVoidRc(db, info)
+      ? db.kdbBase.api.commit(kTx).toVoidRc(db.kdbBase, info)
       ok(),
 
     rollbackFn: proc(): CoreDbRc[void] =
       const info = "rollbackFn()"
       ? db.adbBase.api.rollback(aTx).toVoidRc(db, info)
-      ? db.kdbBase.api.rollback(kTx).toVoidRc(db, info)
+      ? db.kdbBase.api.rollback(kTx).toVoidRc(db.kdbBase, info)
       ok(),
 
     disposeFn: proc(): CoreDbRc[void] =
@@ -86,7 +86,7 @@ proc txMethods(
       if db.adbBase.api.isTop(aTx):
         ? db.adbBase.api.rollback(aTx).toVoidRc(db, info)
       if db.kdbBase.api.isTop(kTx):
-        ? db.kdbBase.api.rollback(kTx).toVoidRc(db, info)
+        ? db.kdbBase.api.rollback(kTx).toVoidRc(db.kdbBase, info)
       ok(),
 
     safeDisposeFn: proc(): CoreDbRc[void] =
@@ -94,7 +94,7 @@ proc txMethods(
       if db.adbBase.api.isTop(aTx):
         ? db.adbBase.api.rollback(aTx).toVoidRc(db, info)
       if db.kdbBase.api.isTop(kTx):
-        ? db.kdbBase.api.rollback(kTx).toVoidRc(db, info)
+        ? db.kdbBase.api.rollback(kTx).toVoidRc(db.kdbBase, info)
       ok())
 
 
@@ -139,9 +139,8 @@ proc baseMethods(
           ): CoreDbRc[CoreDbTrieRef] =
       db.adbBase.getTrie(kind, root, address, "getTrieFn()"),
 
-    newKvtFn: proc(saveMode: CoreDbSaveFlags): CoreDbRc[CoreDxKvtRef] =
-      db.kdbBase.gc()
-      db.kdbBase.newKvtHandler(saveMode, "newKvtFn()"),
+    newKvtFn: proc(sharedTable: bool): CoreDbRc[CoreDxKvtRef] =
+      db.kdbBase.newKvtHandler(sharedTable, "newKvtFn()"),
 
     newMptFn: proc(
         trie: CoreDbTrieRef;

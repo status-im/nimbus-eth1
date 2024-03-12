@@ -102,8 +102,7 @@ type
     trie: CoreDbSubTrie; root: Hash256; address: Option[EthAddress];
     ): CoreDbRc[CoreDbTrieRef] {.noRaise.}
   CoreDbBaseLevelFn* = proc(): int {.noRaise.}
-  CoreDbBaseKvtFn* = proc(
-    saveMode: CoreDbSaveFlags): CoreDbRc[CoreDxKvtRef] {.noRaise.}
+  CoreDbBaseKvtFn* = proc(sharedTable: bool): CoreDbRc[CoreDxKvtRef] {.noRaise.}
   CoreDbBaseMptFn* = proc(
     root: CoreDbTrieRef; prune: bool; saveMode: CoreDbSaveFlags;
     ): CoreDbRc[CoreDxMptRef] {.noRaise.}
@@ -303,7 +302,8 @@ type
     ## Backend wrapper for direct backend access
     parent*: CoreDbRef
 
-  CoreDxKvtRef* = ref object of RootRef
+  CoreDxKvtRef* = ref CoreDxKvtObj
+  CoreDxKvtObj* = object of RootObj
     ## Statically initialised Key-Value pair table living in `CoreDbRef`
     parent*: CoreDbRef
     methods*: CoreDbKvtFns

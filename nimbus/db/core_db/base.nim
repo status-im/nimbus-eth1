@@ -437,48 +437,28 @@ proc getTrie*(
 # Public key-value table methods
 # ------------------------------------------------------------------------------
 
-proc newKvt*(db: CoreDbRef; saveMode = AutoSave): CoreDxKvtRef =
+proc newKvt*(db: CoreDbRef; sharedTable = true): CoreDxKvtRef =
   ## Constructor, will defect on failure.
   ##
-  ## Depending on the argument `saveMode`, the contructed object will have
+  ## Depending on the argument `sharedTable`, the contructed object will have
   ## the following properties.
   ##
-  ## * `Shared`
-  ##   Subscribe to the common base object shared with other subscribed
-  ##   `AutoSave` or `Shared` descriptors. So any changes are immediately
-  ##   visible among subscribers. On automatic destruction (when the
-  ##   constructed object gets out of scope), changes are not saved to the
-  ##   backend database but are still available to subscribers.
+  ## * `true`
+  ##   Subscribe to the common base object shared with other shared
+  ##   descriptors. Any changes are immediately visible among subscribers.
+  ##   On destruction (when the constructed object gets out of scope), changes
+  ##   are not saved to the backend database but are still available to
+  ##   other subscribers.
   ##
-  ##   This mode would used for short time read-only database descriptors.
-  ##
-  ## * `AutoSave`
-  ##   This mode works similar to `Shared` with the difference that changes
-  ##   are saved to the backend database some time after automatic destruction
-  ##   when this becomes permissible, i.e. there is a backend available and
-  ##   there is no pending transaction on the common base object.
-  ##
-  ## * `TopShot`
-  ##   The contructed object will be a new descriptor with a separate snapshot
-  ##   of the common shared base object. If there are pending transactions
-  ##   on the shared  base object, the snapsot will squash them to a single
-  ##   pending transaction. On automatic destruction, changes will be discarded.
-  ##
-  ## * `Companion`
-  ##   The contructed object will be a new  separate descriptor with a clean
-  ##   cache (similar to `TopShot` with empty cache and no pending
-  ##   transactions.) On automatic destruction, changes will be discarded.
-  ##
-  ## The constructed object can be manually descructed (see `forget()`) without
-  ## saving and can be forced to save (see `persistent()`.)
-  ##
-  ## The legacy backend always assumes `AutoSave` mode regardless of the
-  ## function argument.
+  ## * `false`
+  ##   The contructed object will be a new separate descriptor with a clean
+  ##   cache and no pending transactions. On automatic destruction, changes
+  ##   will be discarded.
   ##
   db.setTrackNewApi BaseNewKvtFn
-  result = db.methods.newKvtFn(saveMode).valueOr:
+  result = db.methods.newKvtFn(sharedTable).valueOr:
     raiseAssert error.prettyText()
-  db.ifTrackNewApi: debug newApiTxt, ctx, elapsed, saveMode
+  db.ifTrackNewApi: debug newApiTxt, ctx, elapsed, sharedTable
 
 proc get*(kvt: CoreDxKvtRef; key: openArray[byte]): CoreDbRc[Blob] =
   ## This function always returns a non-empty `Blob` or an error code.
@@ -540,16 +520,14 @@ proc persistent*(dsc: CoreDxKvtRef): CoreDbRc[void] {.discardable.} =
 proc forget*(dsc: CoreDxKvtRef): CoreDbRc[void] {.discardable.} =
   ## For the legacy database, this function has no effect and succeeds always.
   ##
-  ## This function destroys the current descriptor without any further action
-  ## regardless of the save/share mode assigned to the constructor.
+  ## This function destroys the current non-shared descriptor (see argument
+  ## `sharedTable` for `newKvt()`) regardless of the save/share mode
+  ## assigned to the constructor. For other descriptor types, the function
+  ## does nothing.
   ##
-  ## For desciptors constructed with modes `saveMode` or`Shared`, nothing will
-  ## change on the current database if there are other descriptors referring
-  ## to the same shared database view. Creating a new `saveMode` or`Shared`
-  ## descriptor will retrieve this state.
-  ##
-  ## For other desciptors constructed as `Companion` ot `TopShot`, the latest
-  ## changes (after the last `persistent()` call) will be discarded.
+  ## Note:
+  ##   Auto destruction seems to be unreliable (causing spurious crashes.)
+  ##   So manual destruction using this function is advised.
   ##
   dsc.setTrackNewApi KvtForgetFn
   result = dsc.methods.forgetFn()
@@ -573,9 +551,6 @@ proc newMpt*(
   ## sub-trie database will be flushed. There is no need to keep the `trie`
   ## argument. It can always be rerieved for this particular incarnation unsing
   ## the function `getTrie()` on this MPT.
-  ##
-  ## See the discussion at `newKvt()` for an explanation of the `saveMode`
-  ## argument.
   ##
   db.setTrackNewApi BaseNewMptFn
   result = db.methods.newMptFn(trie, prune, saveMode)
@@ -620,8 +595,7 @@ proc newAccMpt*(
     saveMode = AutoSave;
       ): CoreDbRc[CoreDxAccRef] =
   ## Accounts trie constructor, will defect on failure. The argument `prune`
-  ## is currently ignored on other than the legacy backend. The legacy backend
-  ## always assumes `AutoSave` mode regardless of the function argument.
+  ## is currently ignored on other than the legacy backend.
   ##
   ## Example:
   ## ::
@@ -637,9 +611,6 @@ proc newAccMpt*(
   ## this sub-trie can be emulated by means of `newMpt(..).toPhk()`, it is
   ## recommended using this particular constructor for accounts because it
   ## provides its own subset of methods to handle accounts.
-  ##
-  ## See the discussion at `newKvt()` for an explanation of the `saveMode`
-  ## argument.
   ##
   db.setTrackNewApi BaseNewAccFn
   result = db.methods.newAccFn(trie, prune, saveMode)

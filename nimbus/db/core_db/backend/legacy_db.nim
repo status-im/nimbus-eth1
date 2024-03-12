@@ -484,7 +484,7 @@ proc baseMethods(
           trie.accPath = @(address.unsafeGet.keccakHash.data)
       ok(db.bless trie),
 
-    newKvtFn: proc(saveMode: CoreDbSaveFlags): CoreDbRc[CoreDxKvtRef] =
+    newKvtFn: proc(sharedTable = true): CoreDbRc[CoreDxKvtRef] =
       ok(db.kvt),
 
     newMptFn: proc(

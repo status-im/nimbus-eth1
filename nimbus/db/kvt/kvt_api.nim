@@ -52,11 +52,13 @@ type
     key: openArray[byte]): Result[Blob,KvtError] {.noRaise.}
   KvtApiHasKeyFn* = proc(db: KvtDbRef,
     key: openArray[byte]): Result[bool,KvtError] {.noRaise.}
+  KvtApiIsCentreFn* = proc(db: KvtDbRef): bool {.noRaise.}
   KvtApiIsTopFn* = proc(tx: KvtTxRef): bool {.noRaise.}
   KvtApiLevelFn* = proc(db: KvtDbRef): int {.noRaise.}
   KvtApiNForkedFn* = proc(db: KvtDbRef): int {.noRaise.}
   KvtApiPutFn* = proc(db: KvtDbRef,
     key, data: openArray[byte]): Result[void,KvtError] {.noRaise.}
+  KvtApiReCentreFn* = proc(db: KvtDbRef) {.noRaise.}
   KvtApiRollbackFn* = proc(tx: KvtTxRef): Result[void,KvtError] {.noRaise.}
   KvtApiStowFn* = proc(db: KvtDbRef): Result[void,KvtError] {.noRaise.}
   KvtApiTxBeginFn* = proc(db: KvtDbRef): Result[KvtTxRef,KvtError] {.noRaise.}
@@ -75,10 +77,12 @@ type
     forkTop*: KvtApiForkTopFn
     get*: KvtApiGetFn
     hasKey*: KvtApiHasKeyFn
+    isCentre*: KvtApiIsCentreFn
     isTop*: KvtApiIsTopFn
     level*: KvtApiLevelFn
     nForked*: KvtApiNForkedFn
     put*: KvtApiPutFn
+    reCentre*: KvtApiReCentreFn
     rollback*: KvtApiRollbackFn
     stow*: KvtApiStowFn
     txBegin*: KvtApiTxBeginFn
@@ -97,10 +101,12 @@ type
     KvtApiProfForkTopFn      = "forkTop"
     KvtApiProfGetFn          = "get"
     KvtApiProfHasKeyFn       = "hasKey"
+    KvtApiProfIsCentreFn     = "isCentre"
     KvtApiProfIsTopFn        = "isTop"
     KvtApiProfLevelFn        = "level"
     KvtApiProfNForkedFn      = "nForked"
     KvtApiProfPutFn          = "put"
+    KvtApiProfReCentreFn     = "reCentre"
     KvtApiProfRollbackFn     = "rollback"
     KvtApiProfStowFn         = "stow"
     KvtApiProfTxBeginFn      = "txBegin"
@@ -128,10 +134,12 @@ when AutoValidateApiHooks:
     doAssert not api.forkTop.isNil
     doAssert not api.get.isNil
     doAssert not api.hasKey.isNil
+    doAssert not api.isCentre.isNil
     doAssert not api.isTop.isNil
     doAssert not api.level.isNil
     doAssert not api.nForked.isNil
     doAssert not api.put.isNil
+    doAssert not api.reCentre.isNil
     doAssert not api.rollback.isNil
     doAssert not api.stow.isNil
     doAssert not api.txBegin.isNil
@@ -168,10 +176,12 @@ func init*(api: var KvtApiObj) =
   api.forkTop = forkTop
   api.get = get
   api.hasKey = hasKey
+  api.isCentre = isCentre
   api.isTop = isTop
   api.level = level
   api.nForked = nForked
   api.put = put
+  api.reCentre = reCentre
   api.rollback = rollback
   api.stow = stow
   api.txBegin = txBegin
@@ -193,10 +203,12 @@ func dup*(api: KvtApiRef): KvtApiRef =
     forkTop:  api.forkTop,
     get:      api.get,
     hasKey:   api.hasKey,
+    isCentre: api.isCentre,
     isTop:    api.isTop,
     level:    api.level,
     nForked:  api.nForked,
     put:      api.put,
+    reCentre: api.reCentre,
     rollback: api.rollback,
     stow:     api.stow,
     txBegin:  api.txBegin,
@@ -271,6 +283,11 @@ func init*(
       KvtApiProfHasKeyFn.profileRunner:
         result = api.hasKey(a, b)
 
+  profApi.isCentre =
+    proc(a: KvtDbRef): auto =
+      KvtApiProfIsCentreFn.profileRunner:
+        result = api.isCentre(a)
+
   profApi.isTop =
     proc(a: KvtTxRef): auto =
       KvtApiProfIsTopFn.profileRunner:
@@ -290,6 +307,11 @@ func init*(
     proc(a: KvtDbRef; b, c: openArray[byte]): auto =
       KvtApiProfPutFn.profileRunner:
         result = api.put(a, b, c)
+
+  profApi.reCentre =
+    proc(a: KvtDbRef) =
+      KvtApiProfReCentreFn.profileRunner:
+        api.reCentre(a)
 
   profApi.rollback =
     proc(a: KvtTxRef): auto =
