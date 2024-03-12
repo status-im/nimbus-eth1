@@ -11,6 +11,7 @@
 {.push raises: [].}
 
 import
+  std/tables,
   eth/common,
   results,
   ../../storage_types,
@@ -66,6 +67,7 @@ type
     HashNotAvailable
     TrieLocked
     StorageFailed
+    NotImplemented
 
   CoreDbSubTrie* = enum
     StorageTrie = 0
@@ -111,8 +113,9 @@ type
     ): CoreDbRc[CoreDxAccRef] {.noRaise.}
   CoreDbBaseTxGetIdFn* = proc(): CoreDbRc[CoreDxTxID] {.noRaise.}
   CoreDbBaseTxBeginFn* = proc(): CoreDbRc[CoreDxTxRef] {.noRaise.}
-  CoreDbBaseCaptFn* =
+  CoreDbBaseNewCaptFn* =
     proc(flgs: set[CoreDbCaptFlags]): CoreDbRc[CoreDxCaptRef] {.noRaise.}
+  CoreDbBaseGetCaptFn* = proc(): CoreDbRc[CoreDxCaptRef] {.noRaise.}
 
   CoreDbBaseFns* = object
     verifyFn*:      CoreDbBaseVerifyFn
@@ -138,7 +141,7 @@ type
     beginFn*:       CoreDbBaseTxBeginFn
 
     # capture/tracer constructors
-    captureFn*:     CoreDbBaseCaptFn
+    newCaptureFn*:  CoreDbBaseNewCaptFn
 
 
   # --------------------------------------------------
@@ -257,14 +260,16 @@ type
   # --------------------------------------------------
   # Sub-descriptor: capture recorder methods
   # --------------------------------------------------
-  CoreDbCaptRecorderFn* = proc(): CoreDbRc[CoreDbRef] {.noRaise.}
-  CoreDbCaptLogDbFn* = proc(): CoreDbRc[CoreDbRef] {.noRaise.}
+  CoreDbCaptRecorderFn* = proc(): CoreDbRef {.noRaise.}
+  CoreDbCaptLogDbFn* = proc(): TableRef[Blob,Blob] {.noRaise.}
   CoreDbCaptFlagsFn* = proc(): set[CoreDbCaptFlags] {.noRaise.}
+  CoreDbCaptForgetFn* = proc(): CoreDbRc[void] {.noRaise.}
 
   CoreDbCaptFns* = object
     recorderFn*: CoreDbCaptRecorderFn
     logDbFn*: CoreDbCaptLogDbFn
     getFlagsFn*: CoreDbCaptFlagsFn
+    forgetFn*: CoreDbCaptForgetFn
 
   # --------------------------------------------------
   # Production descriptors

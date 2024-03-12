@@ -216,14 +216,6 @@ proc collapseLeaf(
       par.vtx.bVid[hike.legs[^3].nibble] = lf.vid
       db.layersPutVtx(hike.root, par.vid, par.vtx)
       db.layersPutVtx(hike.root, lf.vid, lf.vtx)
-      # Make sure that there is a cache enty in case the leaf was pulled from
-      # the backend.
-      let
-        lfPath = hike.legsTo(hike.legs.len - 2, NibblesSeq) & lf.vtx.lPfx
-
-      lfPath.pathToTag.isOkOr:
-        return err((lf.vid,error))
-
       return ok()
 
     of Extension:                                        # (2) or (3)
@@ -240,14 +232,6 @@ proc collapseLeaf(
         gpr.vtx.bVid[hike.legs[^4].nibble] = lf.vid
         db.layersPutVtx(hike.root, gpr.vid, gpr.vtx)
         db.layersPutVtx(hike.root, lf.vid, lf.vtx)
-        # Make sure that there is a cache enty in case the leaf was pulled from
-        # the backend.
-        let
-          lfPath = hike.legsTo(hike.legs.len - 3, NibblesSeq) & lf.vtx.lPfx
-
-        lfPath.pathToTag.isOKOr:
-            return err((lf.vid,error))
-
         return ok()
 
       # No grandparent, so ^3 is root vertex             # (3)

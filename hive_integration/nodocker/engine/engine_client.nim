@@ -236,7 +236,7 @@ proc maybeInt(n: Option[Quantity]): Option[int] =
     return none(int)
   some(n.get.int)
 
-proc toBlockHeader(bc: BlockObject): common.BlockHeader =
+proc toBlockHeader*(bc: BlockObject): common.BlockHeader =
   common.BlockHeader(
     blockNumber    : toBlockNumber(bc.number),
     parentHash     : ethHash bc.parentHash,
@@ -299,7 +299,7 @@ proc toTransaction(tx: TransactionObject): Transaction =
     S               : tx.s,
   )
 
-proc toTransactions(txs: openArray[TxOrHash]): seq[Transaction] =
+proc toTransactions*(txs: openArray[TxOrHash]): seq[Transaction] =
   for x in txs:
     doAssert x.kind == tohTx
     result.add toTransaction(x.tx)
@@ -317,7 +317,7 @@ proc toWithdrawals(list: seq[WithdrawalObject]): seq[Withdrawal] =
   for wd in list:
     result.add toWithdrawal(wd)
 
-proc toWithdrawals(list: Option[seq[WithdrawalObject]]): Option[seq[Withdrawal]] =
+proc toWithdrawals*(list: Option[seq[WithdrawalObject]]): Option[seq[Withdrawal]] =
   if list.isNone:
     return none(seq[Withdrawal])
   some(toWithdrawals(list.get))

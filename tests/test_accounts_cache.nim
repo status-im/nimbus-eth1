@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -9,8 +9,9 @@
 # according to those terms.
 
 import
-  std/[os, sequtils, strformat, strutils, tables],
+  std/[os, strformat, strutils, tables],
   chronicles,
+  stew/byteutils,
   ../nimbus/db/ledger,
   ../nimbus/common/common,
   ../nimbus/core/chain,
@@ -62,14 +63,14 @@ proc findFilePath(file: string): string =
         return path
 
 proc pp*(a: EthAddress): string =
-  a.mapIt(it.toHex(2)).join[32 .. 39].toLowerAscii
+  a.toHex[32 .. 39].toLowerAscii
 
 proc pp*(tx: Transaction): string =
   # "(" & tx.ecRecover.value.pp & "," & $tx.nonce & ")"
   "(" & tx.getSender.pp & "," & $tx.nonce & ")"
 
 proc pp*(h: KeccakHash): string =
-  h.data.mapIt(it.toHex(2)).join[52 .. 63].toLowerAscii
+  h.data.toHex[52 .. 63].toLowerAscii
 
 proc pp*(tx: Transaction; vmState: BaseVMState): string =
   let address = tx.getSender

@@ -31,7 +31,7 @@ type
 # RocksStoreRef procs
 # ------------------------------------------------------------------------------
 
-proc db*(store: RocksStoreRef): RocksDbReadWriteRef =
+proc rocksDb*(store: RocksStoreRef): RocksDbReadWriteRef =
   store.db
 
 proc get*(

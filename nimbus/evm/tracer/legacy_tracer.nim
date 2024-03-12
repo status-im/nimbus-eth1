@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -7,6 +7,13 @@
 #    http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
+
+## Populates the tracer API methods
+## ================================
+##
+## The module name `legacy_tracer` is probably a misonmer as it also works
+## with the new APIs for `CoreDb` and `Ledger`.
+##
 
 import
   std/[json, sets, strutils, hashes],

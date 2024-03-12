@@ -8,7 +8,7 @@
 {.push raises: [].}
 
 import
-  std/os,
+  std/[os, strutils],
   uri,
   confutils,
   confutils/std/net,
@@ -60,6 +60,12 @@ type
     none
     testnet0
 
+  # The networks alias Portal sub-protocols
+  Network* = enum
+    beacon
+    history
+    state
+
   PortalConf* = object
     logLevel* {.
       desc:
@@ -90,10 +96,24 @@ type
     portalNetwork* {.
       desc:
         "Select which Portal network to join. This will set the " &
-        "network specific bootstrap nodes automatically",
+        "Portal network specific bootstrap nodes automatically",
       defaultValue: PortalNetwork.testnet0,
-      name: "network"
+      name: "portal-network"
     .}: PortalNetwork
+
+    portalNetworkDeprecated* {.
+      hidden,
+      desc:
+        "DEPRECATED: The --network flag will be removed in the future, please use the drop in replacement --portal-network flag instead",
+      defaultValue: none(PortalNetwork),
+      name: "network"
+    .}: Option[PortalNetwork.testnet0]
+
+    networks* {.
+      desc: "Select which networks (Portal sub-protocols) to enable",
+      defaultValue: {Network.history},
+      name: "networks"
+    .}: set[Network]
 
     # Note: This will add bootstrap nodes for both Discovery v5 network and each
     # enabled Portal network. No distinction is made on bootstrap nodes per
@@ -278,10 +298,6 @@ type
       name: "disable-poke"
     .}: bool
 
-    stateNetworkEnabled* {.
-      hidden, desc: "Enable State Network", defaultValue: false, name: "state"
-    .}: bool
-
     case cmd* {.command, defaultValue: noCommand.}: PortalCmd
     of noCommand:
       discard
@@ -337,6 +353,23 @@ proc parseCmdArg*(T: type ClientConfig, p: string): T {.raises: [ValueError].} =
     )
 
 proc completeCmdArg*(T: type ClientConfig, val: string): seq[string] =
+  return @[]
+
+proc parseCmdArg*(T: type set[Network], p: string): T {.raises: [ValueError].} =
+  var res: set[Network] = {}
+  let values = p.split({' ', ','})
+  for value in values:
+    let stripped = value.strip()
+    let network =
+      try:
+        parseEnum[Network](stripped)
+      except ValueError:
+        raise newException(ValueError, "Invalid network: " & stripped)
+
+    res.incl(network)
+  res
+
+proc completeCmdArg*(T: type set[Network], val: string): seq[string] =
   return @[]
 
 chronicles.formatIt(InputDir):
