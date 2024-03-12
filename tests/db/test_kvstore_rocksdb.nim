@@ -18,8 +18,12 @@ import
   ../../nimbus/db/kvstore_rocksdb,
   eth/../tests/db/test_kvstore
 
-suite "RocksStoreRef":
-  test "KvStore interface":
+suite "KvStore RocksDb Tests":
+  const
+    NS_DEFAULT = "default"
+    NS_OTHER = "other"
+
+  test "RocksStoreRef KvStore interface":
     let tmp = getTempDir() / "nimbus-test-db"
     removeDir(tmp)
 
@@ -28,3 +32,29 @@ suite "RocksStoreRef":
       db.close()
 
     testKvStore(kvStore db, false, false)
+
+  test "RocksNamespaceRef KvStore interface - default namespace":
+    let tmp = getTempDir() / "nimbus-test-db"
+    removeDir(tmp)
+
+    let db = RocksStoreRef.init(tmp, "test")[]
+    defer:
+      db.close()
+
+    let defaultNs = db.openNamespace(NS_DEFAULT)[]
+    testKvStore(kvStore defaultNs, false, false)
+
+  test "RocksNamespaceRef KvStore interface - multiple namespace":
+    let tmp = getTempDir() / "nimbus-test-db"
+    removeDir(tmp)
+
+    let db = RocksStoreRef.init(tmp, "test",
+        namespaces = @[NS_DEFAULT, NS_OTHER])[]
+    defer:
+      db.close()
+
+    let defaultNs = db.openNamespace(NS_DEFAULT)[]
+    testKvStore(kvStore defaultNs, false, false)
+
+    let otherNs = db.openNamespace(NS_OTHER)[]
+    testKvStore(kvStore otherNs, false, false)

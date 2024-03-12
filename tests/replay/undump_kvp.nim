@@ -57,7 +57,7 @@ proc walkAllDb(
   ## Walk over all key-value pairs of the database (`RocksDB` only.)
   let
     rop = rocksdb_readoptions_create()
-    rit = rocky.readWriteDb.cPtr.rocksdb_create_iterator(rop)
+    rit = rocky.rocksdb.cPtr.rocksdb_create_iterator(rop)
 
   rit.rocksdb_iter_seek_to_first()
   while rit.rocksdb_iter_valid() != 0:

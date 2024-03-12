@@ -236,7 +236,6 @@ type
 
     # RocksDB backend
     RdbBeCantCreateDataDir
-    RdbBeCantCreateBackupDir
     RdbBeCantCreateTmpDir
     RdbBeDriverInitError
     RdbBeDriverGetError
@@ -268,7 +267,7 @@ type
     AccVtxUnsupported
     AccNodeUnsupported
     PayloadTypeUnsupported
-    
+
     # Miscelaneous handy helpers
     AccRootUnacceptable
     MptContextMissing

@@ -137,7 +137,7 @@ proc test_dbTimingRockySetup*(
   let
     rdb = cdb.backend.toRocksStoreRef
     rop = rocksdb_readoptions_create()
-    rit = rdb.readWriteDb().cPtr.rocksdb_create_iterator(rop)
+    rit = rdb.rocksDb.cPtr.rocksdb_create_iterator(rop)
   check not rit.isNil
 
   var
