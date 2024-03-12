@@ -24,15 +24,6 @@ proc defaultDataDir*(): string =
 
 const defaultDataDirDesc* = defaultDataDir()
 
-type
-  Web3UrlKind* = enum
-    HttpUrl
-    WsUrl
-
-  Web3Url* = object
-    kind*: Web3UrlKind
-    web3Url*: string
-
 type BeaconBridgeConf* = object # Config
   configFile* {.desc: "Loads the configuration from a TOML file", name: "config-file".}:
     Option[InputFile]
@@ -78,9 +69,6 @@ type BeaconBridgeConf* = object # Config
     defaultValue: false,
     name: "beacon-light-client"
   .}: bool
-
-  web3Url* {.desc: "Execution layer JSON-RPC API URL", name: "web3-url".}:
-    Option[Web3Url]
 
   ## Beacon chain light client specific options
 
@@ -178,24 +166,6 @@ type BeaconBridgeConf* = object # Config
       "Peering agreements are established out of band and must be reciprocal",
     name: "direct-peer"
   .}: seq[string]
-
-proc parseCmdArg*(T: type Web3Url, p: string): T {.raises: [ValueError].} =
-  let
-    url = parseUri(p)
-    normalizedScheme = url.scheme.toLowerAscii()
-
-  if (normalizedScheme == "http" or normalizedScheme == "https"):
-    Web3Url(kind: HttpUrl, web3Url: p)
-  elif (normalizedScheme == "ws" or normalizedScheme == "wss"):
-    Web3Url(kind: WsUrl, web3Url: p)
-  else:
-    raise newException(
-      ValueError,
-      "The Web3 URL must specify one of following protocols: http/https/ws/wss",
-    )
-
-proc completeCmdArg*(T: type Web3Url, val: string): seq[string] =
-  return @[]
 
 func asLightClientConf*(pc: BeaconBridgeConf): LightClientConf =
   return LightClientConf(
