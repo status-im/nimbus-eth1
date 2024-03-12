@@ -25,6 +25,7 @@
 ##       ...
 ##
 {.push raises: [].}
+{.warning: "*** importing rocks DB which needs a linker library".}
 
 import
   chronicles,
@@ -162,6 +163,11 @@ proc rocksDbBackend*(
   db.closeFn = closeFn db
 
   ok db
+
+proc dup*(db: RdbBackendRef): RdbBackendRef =
+  new result
+  init_common.init(result[], db[])
+  result.rdb = db.rdb
 
 # ------------------------------------------------------------------------------
 # Public iterators (needs direct backend access)

@@ -16,9 +16,11 @@ import
   std/times,
   eth/[common, trie/nibbles],
   results,
-  "."/[aristo_delete, aristo_desc, aristo_desc/desc_backend, aristo_fetch,
-       aristo_get, aristo_hashify, aristo_hike, aristo_init, aristo_merge,
-       aristo_path, aristo_profile, aristo_serialise, aristo_tx, aristo_vid]
+  ./aristo_desc/desc_backend,
+  ./aristo_init/memory_db,
+  "."/[aristo_delete, aristo_desc, aristo_fetch, aristo_get, aristo_hashify,
+       aristo_hike, aristo_init, aristo_merge, aristo_path, aristo_profile,
+       aristo_serialise, aristo_tx, aristo_vid]
 
 export
   AristoDbProfListRef
@@ -26,6 +28,13 @@ export
 const
   AutoValidateApiHooks = defined(release).not
     ## No validatinon needed for production suite.
+
+  AristoPersistentBackendOk = false
+    ## Set true for persistent backend profiling (which needs an extra
+    ## link library.)
+
+when AristoPersistentBackendOk:
+  import ./aristo_init/rocks_db
 
 # Annotation helper(s)
 {.pragma: noRaise, gcsafe, raises: [].}
@@ -451,11 +460,21 @@ when AutoValidateApiHooks:
     doAssert not api.vidFetch.isNil
     doAssert not api.vidDispose.isNil
 
-  proc validate(prf: AristoApiProfRef; be: BackendRef) =
+  proc validate(prf: AristoApiProfRef) =
     prf.AristoApiRef.validate
     doAssert not prf.data.isNil
-    if not be.isNil:
-      doAssert not prf.be.isNil
+
+proc dup(be: BackendRef): BackendRef =
+  case be.kind:
+  of BackendMemory:
+    return MemBackendRef(be).dup
+
+  of BackendRocksDB:
+    when AristoPersistentBackendOk:
+      return RdbBackendRef(be).dup
+
+  of BackendVoid:
+    discard
 
 # ------------------------------------------------------------------------------
 # Public API constuctors
@@ -688,8 +707,8 @@ func init*(
       AristoApiProfVidDisposeFn.profileRunner:
         api.vidDispose(a, b)
 
-  if not be.isNil:
-    profApi.be = be.dup
+  profApi.be = be.dup()
+  if not profApi.be.isNil:
 
     profApi.be.getVtxFn =
       proc(a: VertexID): auto =
@@ -707,7 +726,7 @@ func init*(
           result = be.putEndFn(a)
 
   when AutoValidateApiHooks:
-    profApi.validate be
+    profApi.validate
 
   profApi
 

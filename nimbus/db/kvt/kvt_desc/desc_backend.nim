@@ -55,7 +55,8 @@ type
 
   # -------------
 
-  BackendRef* = ref object of RootRef
+  BackendRef* = ref BackendObj
+  BackendObj* = object of RootObj
     ## Backend interface.
 
     getKvpFn*: GetKvpFn              ## Read key-value pair
@@ -66,14 +67,12 @@ type
 
     closeFn*: CloseFn                ## Generic destructor
 
-func dup*(be: BackendRef): BackendRef =
-  if not be.isNil:
-    result = BackendRef(
-      getKvpFn: be.getKvpFn,
-      putBegFn: be.putBegFn,
-      putKvpFn: be.putKvpFn,
-      putEndFn: be.putEndFn,
-      closeFn:  be.closeFn)
+proc init*(trg: var BackendObj; src: BackendObj) =
+  trg.getKvpFn = src.getKvpFn
+  trg.putBegFn = src.putBegFn
+  trg.putKvpFn = src.putKvpFn
+  trg.putEndFn = src.putEndFn
+  trg.closeFn = src.closeFn
 
 # ------------------------------------------------------------------------------
 # End

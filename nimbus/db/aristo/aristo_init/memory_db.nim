@@ -38,14 +38,18 @@ import
   ./init_common
 
 type
-  MemBackendRef* = ref object of TypedBackendRef
-    ## Inheriting table so access can be extended for debugging purposes
+  MemDbRef = ref object
+    ## Database
     sTab: Table[VertexID,Blob]       ## Structural vertex table making up a trie
     kMap: Table[VertexID,HashKey]    ## Merkle hash key mapping
     rFil: Table[QueueID,Blob]        ## Backend filters
     vGen: Option[seq[VertexID]]
     vFqs: Option[seq[(QueueID,QueueID)]]
     noFq: bool                       ## No filter queues available
+
+  MemBackendRef* = ref object of TypedBackendRef
+    ## Inheriting table so access can be extended for debugging purposes
+    mdb: MemDbRef                    ## Database
 
   MemPutHdlRef = ref object of TypedPutHdlRef
     sTab: Table[VertexID,Blob]
@@ -82,7 +86,7 @@ proc getVtxFn(db: MemBackendRef): GetVtxFn =
   result =
     proc(vid: VertexID): Result[VertexRef,AristoError] =
       # Fetch serialised data record
-      let data = db.sTab.getOrDefault(vid, EmptyBlob)
+      let data = db.mdb.sTab.getOrDefault(vid, EmptyBlob)
       if 0 < data.len:
         let rc = data.deblobify VertexRef
         if rc.isErr:
@@ -93,20 +97,20 @@ proc getVtxFn(db: MemBackendRef): GetVtxFn =
 proc getKeyFn(db: MemBackendRef): GetKeyFn =
   result =
     proc(vid: VertexID): Result[HashKey,AristoError] =
-      let key = db.kMap.getOrVoid vid
+      let key = db.mdb.kMap.getOrVoid vid
       if key.isValid:
         return ok key
       err(GetKeyNotFound)
 
 proc getFilFn(db: MemBackendRef): GetFilFn =
-  if db.noFq:
+  if db.mdb.noFq:
     result =
       proc(qid: QueueID): Result[FilterRef,AristoError] =
         err(FilQuSchedDisabled)
   else:
     result =
       proc(qid: QueueID): Result[FilterRef,AristoError] =
-        let data = db.rFil.getOrDefault(qid, EmptyBlob)
+        let data = db.mdb.rFil.getOrDefault(qid, EmptyBlob)
         if 0 < data.len:
           return data.deblobify FilterRef
         err(GetFilNotFound)
@@ -114,20 +118,20 @@ proc getFilFn(db: MemBackendRef): GetFilFn =
 proc getIdgFn(db: MemBackendRef): GetIdgFn =
   result =
     proc(): Result[seq[VertexID],AristoError]=
-      if db.vGen.isSome:
-        return ok db.vGen.unsafeGet
+      if db.mdb.vGen.isSome:
+        return ok db.mdb.vGen.unsafeGet
       err(GetIdgNotFound)
 
 proc getFqsFn(db: MemBackendRef): GetFqsFn =
-  if db.noFq:
+  if db.mdb.noFq:
     result =
       proc(): Result[seq[(QueueID,QueueID)],AristoError] =
         err(FilQuSchedDisabled)
   else:
     result =
       proc(): Result[seq[(QueueID,QueueID)],AristoError] =
-        if db.vFqs.isSome:
-          return ok db.vFqs.unsafeGet
+        if db.mdb.vFqs.isSome:
+          return ok db.mdb.vFqs.unsafeGet
         err(GetFqsNotFound)
 
 # -------------
@@ -165,7 +169,7 @@ proc putKeyFn(db: MemBackendRef): PutKeyFn =
           hdl.kMap[vid] = key
 
 proc putFilFn(db: MemBackendRef): PutFilFn =
-  if db.noFq:
+  if db.mdb.noFq:
     result =
       proc(hdl: PutHdlRef; vf: openArray[(QueueID,FilterRef)]) =
         let hdl = hdl.getSession db
@@ -200,7 +204,7 @@ proc putIdgFn(db: MemBackendRef): PutIdgFn =
         hdl.vGen = some(vs.toSeq)
 
 proc putFqsFn(db: MemBackendRef): PutFqsFn =
-  if db.noFq:
+  if db.mdb.noFq:
     result =
       proc(hdl: PutHdlRef; fs: openArray[(QueueID,QueueID)])  =
         let hdl = hdl.getSession db
@@ -235,35 +239,35 @@ proc putEndFn(db: MemBackendRef): PutEndFn =
 
       for (vid,data) in hdl.sTab.pairs:
         if 0 < data.len:
-          db.sTab[vid] = data
+          db.mdb.sTab[vid] = data
         else:
-          db.sTab.del vid
+          db.mdb.sTab.del vid
 
       for (vid,key) in hdl.kMap.pairs:
         if key.isValid:
-          db.kMap[vid] = key
+          db.mdb.kMap[vid] = key
         else:
-          db.kMap.del vid
+          db.mdb.kMap.del vid
 
       for (qid,data) in hdl.rFil.pairs:
         if 0 < data.len:
-          db.rFil[qid] = data
+          db.mdb.rFil[qid] = data
         else:
-          db.rFil.del qid
+          db.mdb.rFil.del qid
 
       if hdl.vGen.isSome:
         let vGen = hdl.vGen.unsafeGet
         if vGen.len == 0:
-          db.vGen = none(seq[VertexID])
+          db.mdb.vGen = none(seq[VertexID])
         else:
-          db.vGen = some(vGen)
+          db.mdb.vGen = some(vGen)
 
       if hdl.vFqs.isSome:
         let vFqs = hdl.vFqs.unsafeGet
         if vFqs.len == 0:
-          db.vFqs = none(seq[(QueueID,QueueID)])
+          db.mdb.vFqs = none(seq[(QueueID,QueueID)])
         else:
-          db.vFqs = some(vFqs)
+          db.mdb.vFqs = some(vFqs)
 
       ok()
 
@@ -281,7 +285,9 @@ proc closeFn(db: MemBackendRef): CloseFn =
 proc memoryBackend*(qidLayout: QidLayoutRef): BackendRef =
   let db = MemBackendRef(
     beKind: BackendMemory,
-    noFq:   qidLayout.isNil)
+    mdb:    MemDbRef())
+
+  db.mdb.noFq = qidLayout.isNil
 
   db.getVtxFn = getVtxFn db
   db.getKeyFn = getKeyFn db
@@ -300,10 +306,16 @@ proc memoryBackend*(qidLayout: QidLayoutRef): BackendRef =
   db.closeFn = closeFn db
 
   # Set up filter management table
-  if not db.noFq:
+  if not db.mdb.noFq:
     db.filters = QidSchedRef(ctx: qidLayout)
 
   db
+
+proc dup*(db: MemBackendRef): MemBackendRef =
+  ## Duplicate descriptor shell as needed for API debugging
+  new result
+  init_common.init(result[], db[])
+  result.mdb = db.mdb
 
 # ------------------------------------------------------------------------------
 # Public iterators (needs direct backend access)
@@ -313,8 +325,8 @@ iterator walkVtx*(
     be: MemBackendRef;
       ): tuple[vid: VertexID, vtx: VertexRef] =
   ##  Iteration over the vertex sub-table.
-  for n,vid in be.sTab.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID):
-    let data = be.sTab.getOrDefault(vid, EmptyBlob)
+  for n,vid in be.mdb.sTab.keys.toSeq.mapIt(it).sorted:
+    let data = be.mdb.sTab.getOrDefault(vid, EmptyBlob)
     if 0 < data.len:
       let rc = data.deblobify VertexRef
       if rc.isErr:
@@ -326,8 +338,8 @@ iterator walkKey*(
     be: MemBackendRef;
       ): tuple[vid: VertexID, key: HashKey] =
   ## Iteration over the Markle hash sub-table.
-  for vid in be.kMap.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID):
-    let key = be.kMap.getOrVoid vid
+  for vid in be.mdb.kMap.keys.toSeq.mapIt(it).sorted:
+    let key = be.mdb.kMap.getOrVoid vid
     if key.isValid:
       yield (vid, key)
 
@@ -335,9 +347,9 @@ iterator walkFil*(
     be: MemBackendRef;
       ): tuple[qid: QueueID, filter: FilterRef] =
   ##  Iteration over the vertex sub-table.
-  if not be.noFq:
-    for n,qid in be.rFil.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.QueueID):
-      let data = be.rFil.getOrDefault(qid, EmptyBlob)
+  if not be.mdb.noFq:
+    for n,qid in be.mdb.rFil.keys.toSeq.mapIt(it).sorted:
+      let data = be.mdb.rFil.getOrDefault(qid, EmptyBlob)
       if 0 < data.len:
         let rc = data.deblobify FilterRef
         if rc.isErr:
@@ -353,24 +365,24 @@ iterator walk*(
   ##
   ## Non-decodable entries are stepped over while the counter `n` of the
   ## yield record is still incremented.
-  if be.vGen.isSome:
-    yield(AdmPfx, AdmTabIdIdg.uint64, be.vGen.unsafeGet.blobify)
+  if be.mdb.vGen.isSome:
+    yield(AdmPfx, AdmTabIdIdg.uint64, be.mdb.vGen.unsafeGet.blobify)
 
-  if not be.noFq:
-    if be.vFqs.isSome:
-      yield(AdmPfx, AdmTabIdFqs.uint64, be.vFqs.unsafeGet.blobify)
+  if not be.mdb.noFq:
+    if be.mdb.vFqs.isSome:
+      yield(AdmPfx, AdmTabIdFqs.uint64, be.mdb.vFqs.unsafeGet.blobify)
 
-  for vid in be.sTab.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID):
-    let data = be.sTab.getOrDefault(vid, EmptyBlob)
+  for vid in be.mdb.sTab.keys.toSeq.mapIt(it).sorted:
+    let data = be.mdb.sTab.getOrDefault(vid, EmptyBlob)
     if 0 < data.len:
       yield (VtxPfx, vid.uint64, data)
 
   for (vid,key) in be.walkKey:
     yield (KeyPfx, vid.uint64, @key)
 
-  if not be.noFq:
-    for lid in be.rFil.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.QueueID):
-      let data = be.rFil.getOrDefault(lid, EmptyBlob)
+  if not be.mdb.noFq:
+    for lid in be.mdb.rFil.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.QueueID):
+      let data = be.mdb.rFil.getOrDefault(lid, EmptyBlob)
       if 0 < data.len:
         yield (FilPfx, lid.uint64, data)
 

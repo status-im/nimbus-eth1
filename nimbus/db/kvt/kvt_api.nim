@@ -16,11 +16,20 @@ import
   eth/common,
   results,
   ../aristo/aristo_profile,
-  "."/[kvt_desc, kvt_desc/desc_backend, kvt_init, kvt_tx, kvt_utils]
+  ./kvt_desc/desc_backend,
+  ./kvt_init/memory_db,
+  "."/[kvt_desc, kvt_init, kvt_tx, kvt_utils]
 
 const
   AutoValidateApiHooks = defined(release).not
     ## No validatinon needed for production suite.
+
+  KvtPersistentBackendOk = false
+    ## Set true for persistent backend profiling (which needs an extra
+    ## link library.)
+
+when KvtPersistentBackendOk:
+  import ./kvt_init/rocks_db
 
 # Annotation helper(s)
 {.pragma: noRaise, gcsafe, raises: [].}
@@ -128,11 +137,21 @@ when AutoValidateApiHooks:
     doAssert not api.txBegin.isNil
     doAssert not api.txTop.isNil
 
-  proc validate(prf: KvtApiProfRef; be: BackendRef) =
+  proc validate(prf: KvtApiProfRef) =
     prf.KvtApiRef.validate
     doAssert not prf.data.isNil
-    if not be.isNil:
-      doAssert not prf.be.isNil
+
+proc dup(be: BackendRef): BackendRef =
+  case be.kind:
+  of BackendMemory:
+    return MemBackendRef(be).dup
+
+  of BackendRocksDB:
+    when KvtPersistentBackendOk:
+      return RdbBackendRef(be).dup
+
+  of BackendVoid:
+    discard
 
 # ------------------------------------------------------------------------------
 # Public API constuctors
@@ -292,8 +311,8 @@ func init*(
       KvtApiProfTxTopFn.profileRunner:
         result = api.txTop(a)
 
-  if not be.isNil:
-    profApi.be = be.dup
+  profApi.be = be.dup()
+  if not profApi.be.isNil:
 
     profApi.be.getKvpFn =
       proc(a: openArray[byte]): auto =
@@ -306,7 +325,7 @@ func init*(
           result = be.putEndFn(a)
 
   when AutoValidateApiHooks:
-    profApi.validate be
+    profApi.validate
 
   profApi
 

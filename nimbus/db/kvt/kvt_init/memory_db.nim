@@ -37,9 +37,13 @@ import
   ./init_common
 
 type
+  MemDbRef = ref object
+    ## Database
+    tab: Table[Blob,Blob]            ## Structural key-value table
+
   MemBackendRef* = ref object of TypedBackendRef
     ## Inheriting table so access can be extended for debugging purposes
-    tab: Table[Blob,Blob]           ## Structural key-value table
+    mdb: MemDbRef                    ## Database
 
   MemPutHdlRef = ref object of TypedPutHdlRef
     tab: Table[Blob,Blob]
@@ -73,7 +77,7 @@ proc getKvpFn(db: MemBackendRef): GetKvpFn =
     proc(key: openArray[byte]): Result[Blob,KvtError] =
       if key.len == 0:
         return err(KeyInvalid)
-      let data = db.tab.getOrVoid @key
+      let data = db.mdb.tab.getOrVoid @key
       if data.isValid:
         return ok(data)
       err(GetNotFound)
@@ -105,7 +109,7 @@ proc putEndFn(db: MemBackendRef): PutEndFn =
         return err(hdl.error)
 
       for (k,v) in hdl.tab.pairs:
-        db.tab[k] = v
+        db.mdb.tab[k] = v
 
       ok()
 
@@ -122,7 +126,8 @@ proc closeFn(db: MemBackendRef): CloseFn =
 
 proc memoryBackend*: BackendRef =
   let db = MemBackendRef(
-    beKind: BackendMemory)
+    beKind: BackendMemory,
+    mdb:    MemDbRef())
 
   db.getKvpFn = getKvpFn db
 
@@ -134,6 +139,12 @@ proc memoryBackend*: BackendRef =
 
   db
 
+proc dup*(db: MemBackendRef): MemBackendRef =
+  ## Duplicate descriptor shell as needed for API debugging
+  new result
+  init_common.init(result[], db[])
+  result.mdb = db.mdb
+
 # ------------------------------------------------------------------------------
 # Public iterators (needs direct backend access)
 # ------------------------------------------------------------------------------
@@ -142,7 +153,7 @@ iterator walk*(
     be: MemBackendRef;
       ): tuple[key: Blob, data: Blob] =
   ## Walk over all key-value pairs of the database.
-  for (key,data) in be.tab.pairs:
+  for (key,data) in be.mdb.tab.pairs:
     if data.isValid:
       yield (key, data)
     else:

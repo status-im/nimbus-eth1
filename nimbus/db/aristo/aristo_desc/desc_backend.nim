@@ -100,7 +100,8 @@ type
 
   # -------------
 
-  BackendRef* = ref object of RootRef
+  BackendRef* = ref BackendObj
+  BackendObj* = object of RootObj
     ## Backend interface.
     filters*: QidSchedRef            ## Filter slot queue state
 
@@ -120,23 +121,21 @@ type
 
     closeFn*: CloseFn                ## Generic destructor
 
-func dup*(be: BackendRef): BackendRef =
-  if not be.isNil:
-    result = BackendRef(
-      filters:  be.filters,
-      getVtxFn: be.getVtxFn,
-      getKeyFn: be.getKeyFn,
-      getFilFn: be.getFilFn,
-      getIdgFn: be.getIdgFn,
-      getFqsFn: be.getFqsFn,
-      putBegFn: be.putBegFn,
-      putVtxFn: be.putVtxFn,
-      putKeyFn: be.putKeyFn,
-      putFilFn: be.putFilFn,
-      putIdgFn: be.putIdgFn,
-      putFqsFn: be.putFqsFn,
-      putEndFn: be.putEndFn,
-      closeFn:  be.closeFn)
+proc init*(trg: var BackendObj; src: BackendObj) =
+  trg.filters = src.filters
+  trg.getVtxFn = src.getVtxFn
+  trg.getKeyFn = src.getKeyFn
+  trg.getFilFn = src.getFilFn
+  trg.getIdgFn = src.getIdgFn
+  trg.getFqsFn = src.getFqsFn
+  trg.putBegFn = src.putBegFn
+  trg.putVtxFn = src.putVtxFn
+  trg.putKeyFn = src.putKeyFn
+  trg.putFilFn = src.putFilFn
+  trg.putIdgFn = src.putIdgFn
+  trg.putFqsFn = src.putFqsFn
+  trg.putEndFn = src.putEndFn
+  trg.closeFn = src.closeFn
 
 # ------------------------------------------------------------------------------
 # End
