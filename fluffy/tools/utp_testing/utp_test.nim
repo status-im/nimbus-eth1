@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/[options, sequtils, sugar, strutils],
+  std/[options, sequtils, sugar],
   unittest2,
   testutils,
   chronos,

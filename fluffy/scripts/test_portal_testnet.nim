@@ -15,7 +15,7 @@ import
   stew/byteutils,
   eth/p2p/discoveryv5/random2,
   eth/keys,
-  ../../nimbus/rpc/[rpc_types],
+  ../common/common_types,
   ../rpc/portal_rpc_client,
   ../rpc/eth_rpc_client,
   ../eth_data/[history_data_seeding, history_data_json_store, history_data_ssz_e2s],
@@ -43,6 +43,9 @@ type
       desc: "Port of the JSON-RPC service of the bootstrap (first) node",
       name: "base-rpc-port"
     .}: uint16
+
+func w3Hash*(x: common_types.BlockHash): eth_api_types.BlockHash =
+  eth_api_types.BlockHash(x.data)
 
 proc connectToRpcServers(config: PortalTestnetConf): Future[seq[RpcClient]] {.async.} =
   var clients: seq[RpcClient]
@@ -278,7 +281,7 @@ procSuite "Portal testnet tests":
         # add a json-rpc debug proc that returns whether the offer queue is empty or
         # not. And then poll every node until all nodes have an empty queue.
         let content = await retryUntil(
-          proc(): Future[Option[BlockObject]] {.async.} =
+          proc(): Future[Opt[BlockObject]] {.async.} =
             try:
               let res = await client.eth_getBlockByHash(w3Hash hash, true)
               await client.close()
@@ -287,7 +290,7 @@ procSuite "Portal testnet tests":
               await client.close()
               raise exc
           ,
-          proc(mc: Option[BlockObject]): bool =
+          proc(mc: Opt[BlockObject]): bool =
             return mc.isSome()
           ,
           "Did not receive expected Block with hash " & hash.data.toHex(),
@@ -304,7 +307,7 @@ procSuite "Portal testnet tests":
         let filterOptions = FilterOptions(blockHash: some(w3Hash hash))
 
         let logs = await retryUntil(
-          proc(): Future[seq[FilterLog]] {.async.} =
+          proc(): Future[seq[LogObject]] {.async.} =
             try:
               let res = await client.eth_getLogs(filterOptions)
               await client.close()
@@ -313,7 +316,7 @@ procSuite "Portal testnet tests":
               await client.close()
               raise exc
           ,
-          proc(mc: seq[FilterLog]): bool =
+          proc(mc: seq[LogObject]): bool =
             return true
           ,
           "",
