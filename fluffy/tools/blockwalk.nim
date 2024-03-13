@@ -16,51 +16,46 @@ import
   chronicles,
   chronicles/topics_registry,
   stew/byteutils,
-  eth/common/eth_types,
-  ../../nimbus/rpc/[rpc_types],
-  ../../nimbus/errors,
+  web3/primitives,
   ../rpc/eth_rpc_client
 
-type
-  Hash256 = eth_types.Hash256
+type BlockWalkConf* = object
+  logLevel* {.
+    defaultValue: LogLevel.INFO,
+    defaultValueDesc: $LogLevel.INFO,
+    desc: "Sets the log level",
+    name: "log-level"
+  .}: LogLevel
 
-  BlockWalkConf* = object
-    logLevel* {.
-      defaultValue: LogLevel.INFO,
-      defaultValueDesc: $LogLevel.INFO,
-      desc: "Sets the log level",
-      name: "log-level"
-    .}: LogLevel
+  rpcAddress* {.
+    desc: "Address of the JSON-RPC service",
+    defaultValue: "127.0.0.1",
+    name: "rpc-address"
+  .}: string
 
-    rpcAddress* {.
-      desc: "Address of the JSON-RPC service",
-      defaultValue: "127.0.0.1",
-      name: "rpc-address"
-    .}: string
+  rpcPort* {.
+    defaultValue: 8545, desc: "Port of the JSON-RPC service", name: "rpc-port"
+  .}: uint16
 
-    rpcPort* {.
-      defaultValue: 8545, desc: "Port of the JSON-RPC service", name: "rpc-port"
-    .}: uint16
+  blockHash* {.
+    desc: "The block hash from where to start walking the blocks backwards",
+    name: "block-hash"
+  .}: BlockHash
 
-    blockHash* {.
-      desc: "The block hash from where to start walking the blocks backwards",
-      name: "block-hash"
-    .}: Hash256
-
-proc parseCmdArg*(T: type Hash256, p: string): T {.raises: [ValueError].} =
-  var hash: Hash256
+proc parseCmdArg*(T: type BlockHash, p: string): T {.raises: [ValueError].} =
+  var hash: array[32, byte]
   try:
-    hexToByteArray(p, hash.data)
+    hexToByteArray(p, hash)
   except ValueError:
     raise newException(ValueError, "Invalid Hash256")
 
-  return hash
+  return BlockHash(hash)
 
-proc completeCmdArg*(T: type Hash256, val: string): seq[string] =
+proc completeCmdArg*(T: type BlockHash, val: string): seq[string] =
   return @[]
 
-proc walkBlocks(client: RpcClient, startHash: Hash256) {.async.} =
-  var parentHash = w3Hash startHash
+proc walkBlocks(client: RpcClient, startHash: BlockHash) {.async: (raises: []).} =
+  var parentHash = startHash
   var blockNumber: Quantity
 
   # Should be 0x0, but block 0 does not exist in the json data file
@@ -73,16 +68,18 @@ proc walkBlocks(client: RpcClient, startHash: Hash256) {.async.} =
         # in this case.
         fatal "Error occured on JSON-RPC request", error = e.msg
         quit 1
-      except ValidationError as e:
-        # ValidationError from buildBlockObject, should not occur with proper
-        # blocks
+      except CatchableError as e:
         fatal "Error occured on JSON-RPC request", error = e.msg
         quit 1
 
     # Using the http connection re-use seems to slow down these sequentual
     # requests considerably. Force a new connection setup by doing a close after
     # each request.
-    await client.close()
+    try:
+      await client.close()
+    except CatchableError as e:
+      fatal "Error closing RPC client connection", error = e.msg
+      quit 1
 
     if parentBlockOpt.isNone():
       fatal "Failed getting parent block", hash = parentHash
@@ -92,11 +89,15 @@ proc walkBlocks(client: RpcClient, startHash: Hash256) {.async.} =
     blockNumber = parentBlock.number
     parentHash = parentBlock.parentHash
 
-    echo "Block " & $blockNumber & ": " & $parentBlock.hash
+    echo "Block " & $distinctBase(blockNumber) & ": " & $parentBlock.hash
 
-proc run(config: BlockWalkConf) {.async.} =
+proc run(config: BlockWalkConf) {.async: (raises: []).} =
   let client = newRpcHttpClient()
-  await client.connect(config.rpcAddress, Port(config.rpcPort), false)
+  try:
+    await client.connect(config.rpcAddress, Port(config.rpcPort), false)
+  except CatchableError as e:
+    fatal "Error connecting to JSON-RPC service", error = e.msg
+    quit 1
 
   await walkBlocks(client, config.blockHash)
 
