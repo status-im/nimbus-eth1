@@ -13,6 +13,9 @@ import
 
 type
   DBKeyKind* = enum
+    # Starts at -1 because the existing code and tests require this.
+    # Don't change the order of the below enums or the tests will break.
+    default = -1
     genericHash
     blockNumberToHash
     blockHashToScore
@@ -140,4 +143,3 @@ template toOpenArray*(k: DbKey): openArray[byte] =
 
 proc `==`*(a, b: DbKey): bool {.inline.} =
   a.toOpenArray == b.toOpenArray
-
