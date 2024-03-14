@@ -127,7 +127,7 @@ proc forkTx*(
       return err(rc.error)
 
   # Set up clone associated to `db`
-  let txClone = ? db.fork(rawToplayer = true)
+  let txClone = ? db.fork(noToplayer = true)
   txClone.top = db.layersCc tx.level      # Provide tx level 1 stack
   txClone.stack = @[stackLayer]           # Zero level stack
   txClone.roFilter = db.roFilter          # No need to copy (done when updated)
@@ -159,7 +159,7 @@ proc forkTop*(
   ## Use `aristo_desc.forget()` to clean up this descriptor.
   ##
   if db.txRef.isNil:
-    let dbClone = ? db.fork(rawToplayer = true)
+    let dbClone = ? db.fork(noToplayer = true)
 
     dbClone.top = db.layersCc      # Is a deep copy
     dbClone.roFilter = db.roFilter # No need to copy contents when updated

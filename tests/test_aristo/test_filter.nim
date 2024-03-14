@@ -188,6 +188,7 @@ proc dbTriplet(w: LeafQuartet; rdbPath: string): Result[DbTriplet,AristoError] =
       return
 
   let dx = [db, db.forkTop.value, db.forkTop.value]
+  xCheck dx[0].nForked == 2
 
   # Clause (9) from `aristo/README.md` example
   for n in 0 ..< dx.len:
@@ -585,9 +586,7 @@ proc testDistributedAccess*(
       xCheck db2.roFilter != db3.roFilter
 
       # Clause (11) from `aristo/README.md` example
-      block:
-        let rc = db2.reCentre()
-        xCheckRc rc.error == 0
+      db2.reCentre()
       block:
         let rc = db2.stow(persistent=true)
         xCheckRc rc.error == 0
@@ -623,9 +622,7 @@ proc testDistributedAccess*(
         dy.cleanUp()
 
       # Build clause (12) from `aristo/README.md` example
-      block:
-        let rc = db2.reCentre()
-        xCheckRc rc.error == 0
+      db2.reCentre()
       block:
         let rc = db2.stow(persistent=true)
         xCheckRc rc.error == 0
@@ -633,6 +630,7 @@ proc testDistributedAccess*(
       xCheck db1.roFilter == db3.roFilter
 
       # Clause (13) from `aristo/README.md` example
+      xCheck not db1.isCentre()
       block:
         let rc = db1.stow(persistent=false)
         xCheckRc rc.error == 0
@@ -641,15 +639,17 @@ proc testDistributedAccess*(
       let c11Fil1_eq_db1RoFilter = c11Filter1.isDbEq(db1.roFilter, db1, noisy)
       xCheck c11Fil1_eq_db1RoFilter:
         noisy.say "*** testDistributedAccess (7)", "n=", n,
-          "\n   c11Filter1=", c11Filter3.pp(db1),
-          "db1".dump(db1)
+          "\n   c11Filter1\n   ", c11Filter1.pp(db1),
+          "db1".dump(db1),
+          ""
 
       # Clause (15) from `aristo/README.md` check
       let c11Fil3_eq_db3RoFilter = c11Filter3.isDbEq(db3.roFilter, db3, noisy)
       xCheck c11Fil3_eq_db3RoFilter:
         noisy.say "*** testDistributedAccess (8)", "n=", n,
-          "\n   c11Filter3=", c11Filter3.pp(db3),
-          "db3".dump(db3)
+          "\n   c11Filter3\n   ", c11Filter3.pp(db3),
+          "db3".dump(db3),
+          ""
 
       # Check/verify backends
       block:

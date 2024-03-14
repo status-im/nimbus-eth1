@@ -260,6 +260,7 @@ type
     # Functions from `aristo_desc.nim`
     MustBeOnCentre
     NotAllowedOnCentre
+    StaleDescriptor
 
     # Functions from `aristo_utils.nim`
     AccRlpDecodingError
