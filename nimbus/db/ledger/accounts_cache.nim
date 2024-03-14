@@ -596,7 +596,6 @@ proc persist*(ac: AccountsCache,
 
   if clearCache:
     ac.savePoint.cache.clear()
-    ac.witnessCache.clear()
   else:
     for x in cleanAccounts:
       ac.savePoint.cache.del x
@@ -694,6 +693,10 @@ proc makeMultiKeys*(ac: AccountsCache): MultiKeysRef =
   for k, v in ac.witnessCache:
     result.add(k, v.codeTouched, multiKeys(v.storageKeys))
   result.sort()
+
+  # reset the witness cache after collecting the witness data
+  # so it is clean before executing the next block
+  ac.witnessCache.clear()
 
 proc accessList*(ac: AccountsCache, address: EthAddress) {.inline.} =
   ac.savePoint.accessList.add(address)

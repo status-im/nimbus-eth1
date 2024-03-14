@@ -627,7 +627,6 @@ proc persist*(ac: AccountsLedgerRef,
 
   if clearCache:
     ac.savePoint.cache.clear()
-    ac.witnessCache.clear()
   else:
     for x in cleanAccounts:
       ac.savePoint.cache.del x

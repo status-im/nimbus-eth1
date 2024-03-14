@@ -117,7 +117,7 @@ proc procBlkEpilogue(vmState: BaseVMState;
     if vmState.generateWitness:
       db.collectWitnessData()
     let clearEmptyAccount = vmState.determineFork >= FkSpurious
-    db.persist(clearEmptyAccount, ClearCache in vmState.flags)
+    db.persist(clearEmptyAccount, clearCache = true)
 
   let stateDb = vmState.stateDB
   if header.stateRoot != stateDb.rootHash:
