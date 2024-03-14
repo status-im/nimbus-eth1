@@ -135,7 +135,7 @@ proc getBlockReceipts(
 ): Future[Result[seq[ReceiptObject], string]] {.async: (raises: []).} =
   let res =
     try:
-      await client.eth_getBlockReceipts(blockNumber)
+      await client.eth_getBlockReceipts(blockId(blockNumber))
     except CatchableError as e:
       return err("JSON-RPC eth_getBlockReceipts failed: " & e.msg)
   if res.isNone():
