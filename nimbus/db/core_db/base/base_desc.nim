@@ -76,12 +76,6 @@ type
     TxTrie
     WithdrawalsTrie
 
-  CoreDbSaveFlags* = enum
-    Shared                    ## Shared, leaves changes in memory cache
-    AutoSave                  ## Shared, save changes on destruction
-    TopShot                   ## Separate copy of shared cache
-    Companion                 ## Separate clean cache
-
   CoreDbCaptFlags* {.pure.} = enum
     PersistPut
     PersistDel
@@ -102,14 +96,11 @@ type
     trie: CoreDbSubTrie; root: Hash256; address: Option[EthAddress];
     ): CoreDbRc[CoreDbTrieRef] {.noRaise.}
   CoreDbBaseLevelFn* = proc(): int {.noRaise.}
-  CoreDbBaseKvtFn* = proc(
-    saveMode: CoreDbSaveFlags): CoreDbRc[CoreDxKvtRef] {.noRaise.}
+  CoreDbBaseKvtFn* = proc(sharedTable: bool): CoreDbRc[CoreDxKvtRef] {.noRaise.}
   CoreDbBaseMptFn* = proc(
-    root: CoreDbTrieRef; prune: bool; saveMode: CoreDbSaveFlags;
-    ): CoreDbRc[CoreDxMptRef] {.noRaise.}
+    root: CoreDbTrieRef; prune: bool): CoreDbRc[CoreDxMptRef] {.noRaise.}
   CoreDbBaseAccFn* = proc(
-    root: CoreDbTrieRef; prune: bool; saveMode: CoreDbSaveFlags;
-    ): CoreDbRc[CoreDxAccRef] {.noRaise.}
+    root: CoreDbTrieRef; prune: bool): CoreDbRc[CoreDxAccRef] {.noRaise.}
   CoreDbBaseTxGetIdFn* = proc(): CoreDbRc[CoreDxTxID] {.noRaise.}
   CoreDbBaseTxBeginFn* = proc(): CoreDbRc[CoreDxTxRef] {.noRaise.}
   CoreDbBaseNewCaptFn* =
@@ -303,7 +294,8 @@ type
     ## Backend wrapper for direct backend access
     parent*: CoreDbRef
 
-  CoreDxKvtRef* = ref object of RootRef
+  CoreDxKvtRef* = ref CoreDxKvtObj
+  CoreDxKvtObj* = object of RootObj
     ## Statically initialised Key-Value pair table living in `CoreDbRef`
     parent*: CoreDbRef
     methods*: CoreDbKvtFns

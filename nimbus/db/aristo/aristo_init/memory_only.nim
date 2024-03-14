@@ -101,10 +101,7 @@ proc finish*(db: AristoDbRef; flush = false) =
   if not db.isNil:
     if not db.backend.isNil:
       db.backend.closeFn flush
-
-    let lebo = db.getCentre
-    discard lebo.forgetOthers()
-    lebo[] = AristoDbObj(top: LayerRef.init())
+    discard db.getCentre.forgetOthers()
 
 # ------------------------------------------------------------------------------
 # End

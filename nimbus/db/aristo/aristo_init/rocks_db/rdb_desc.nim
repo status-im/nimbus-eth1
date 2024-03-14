@@ -27,6 +27,7 @@ type
     dbOpts*: DbOptionsRef
     store*: RocksDbReadWriteRef      ## Rocks DB database handler
     basePath*: string                ## Database directory
+    noFq*: bool                      ## No filter queues available
 
     # Low level Rocks DB access for bulk store
     envOpt*: ptr rocksdb_envoptions_t

@@ -183,14 +183,18 @@ proc storagesRunner(
 
 proc aristoMain*(noisy = defined(debug)) =
   noisy.miscRunner()
-  noisy.accountsRunner()
-  noisy.storagesRunner()
+  noisy.accountsRunner(persistent=false)
+  noisy.storagesRunner(persistent=false)
 
 when isMainModule:
   const
     noisy = defined(debug) or true
 
   setErrorLevel()
+
+  when true: # and false:
+    # Verify Problem with the persisten database
+    noisy.accountsRunner()
 
   when true: # and false:
     noisy.miscRunner(qidSampleSize = 1_000)

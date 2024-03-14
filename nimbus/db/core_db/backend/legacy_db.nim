@@ -484,14 +484,10 @@ proc baseMethods(
           trie.accPath = @(address.unsafeGet.keccakHash.data)
       ok(db.bless trie),
 
-    newKvtFn: proc(saveMode: CoreDbSaveFlags): CoreDbRc[CoreDxKvtRef] =
+    newKvtFn: proc(sharedTable = true): CoreDbRc[CoreDxKvtRef] =
       ok(db.kvt),
 
-    newMptFn: proc(
-        trie: CoreDbTrieRef,
-        prune: bool;
-        saveMode: CoreDbSaveFlags;
-          ): CoreDbRc[CoreDxMptRef] =
+    newMptFn: proc(trie: CoreDbTrieRef, prune: bool): CoreDbRc[CoreDxMptRef] =
       var mpt = HexaryChildDbRef(trie: initHexaryTrie(tdb, trie.lroot, prune))
       when CoreDbEnableApiTracking:
         if not trie.isNil and trie.ready:
@@ -501,11 +497,7 @@ proc baseMethods(
           mpt.accPath = trie.accPath
       ok(db.bless CoreDxMptRef(methods: mpt.mptMethods db)),
 
-    newAccFn: proc(
-        trie: CoreDbTrieRef,
-        prune: bool;
-        saveMode: CoreDbSaveFlags;
-          ): CoreDbRc[CoreDxAccRef] =
+    newAccFn: proc(trie: CoreDbTrieRef, prune: bool): CoreDbRc[CoreDxAccRef] =
       var mpt = HexaryChildDbRef(trie: initHexaryTrie(tdb, trie.lroot, prune))
       when CoreDbEnableApiTracking:
         if not trie.isNil and trie.ready:

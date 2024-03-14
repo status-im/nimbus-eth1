@@ -144,7 +144,7 @@ proc init*(x: typedesc[AccountsLedgerRef], db: CoreDbRef,
            root: KeccakHash, pruneTrie = true): AccountsLedgerRef =
   new result
   result.ledger = AccountLedger.init(db, root, pruneTrie)
-  result.kvt = db.newKvt(Shared) # save manually in `persist()`
+  result.kvt = db.newKvt() # save manually in `persist()`
   result.witnessCache = initTable[EthAddress, WitnessData]()
   discard result.beginSavepoint
 

@@ -126,8 +126,8 @@ proc resolveBackendFilter*(
   if db != parent:
     if not reCentreOk:
       return err(FilBackendRoMode)
-    ? db.reCentre
-  defer: discard parent.reCentre
+    db.reCentre
+  defer: parent.reCentre
 
   # Blind or missing filter
   if db.roFilter.isNil:
@@ -201,7 +201,8 @@ proc forkBackLog*(
     return err(FilNegativeEpisode)
   let
     instr = ? be.fifosFetch(backSteps = episode+1)
-    clone = ? db.fork(rawToplayer = true)
+    clone = ? db.fork(noToplayer = true)
+  clone.top = LayerRef.init()
   clone.top.final.vGen = instr.fil.vGen
   clone.roFilter = instr.fil
   ok clone

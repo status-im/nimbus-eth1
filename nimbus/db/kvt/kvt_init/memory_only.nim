@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -76,10 +76,7 @@ proc finish*(db: KvtDbRef; flush = false) =
   if not db.isNil:
     if not db.backend.isNil:
       db.backend.closeFn flush
-
-    let lebo = db.getCentre
-    discard lebo.forgetOthers()
-    lebo[] = KvtDbObj()
+    discard db.getCentre.forgetOthers()
 
 # ------------------------------------------------------------------------------
 # End

@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -25,6 +25,7 @@
 ##       ...
 ##
 {.push raises: [].}
+{.warning: "*** importing rocks DB which needs a linker library".}
 
 import
   chronicles,
@@ -44,7 +45,6 @@ logScope:
 type
   RdbBackendRef* = ref object of TypedBackendRef
     rdb: RdbInst              ## Allows low level access to database
-    noFq: bool                ## No filter queues available
 
   RdbPutHdlRef = ref object of TypedPutHdlRef
     cache: RdbTabs            ## Transaction cache
@@ -131,7 +131,7 @@ proc getKeyFn(db: RdbBackendRef): GetKeyFn =
       err(GetKeyNotFound)
 
 proc getFilFn(db: RdbBackendRef): GetFilFn =
-  if db.noFq:
+  if db.rdb.noFq:
     result =
       proc(qid: QueueID): Result[FilterRef,AristoError] =
         err(FilQuSchedDisabled)
@@ -170,7 +170,7 @@ proc getIdgFn(db: RdbBackendRef): GetIdgFn =
       rc.value.deblobify seq[VertexID]
 
 proc getFqsFn(db: RdbBackendRef): GetFqsFn =
-  if db.noFq:
+  if db.rdb.noFq:
     result =
       proc(): Result[seq[(QueueID,QueueID)],AristoError] =
         err(FilQuSchedDisabled)
@@ -229,7 +229,7 @@ proc putKeyFn(db: RdbBackendRef): PutKeyFn =
             hdl.keyCache = (vid, EmptyBlob)
 
 proc putFilFn(db: RdbBackendRef): PutFilFn =
-  if db.noFq:
+  if db.rdb.noFq:
     result =
       proc(hdl: PutHdlRef; vf: openArray[(QueueID,FilterRef)]) =
         let hdl = hdl.getSession db
@@ -267,7 +267,7 @@ proc putIdgFn(db: RdbBackendRef): PutIdgFn =
           hdl.admCache = (AdmTabIdIdg, EmptyBlob)
 
 proc putFqsFn(db: RdbBackendRef): PutFqsFn =
-  if db.noFq:
+  if db.rdb.noFq:
     result =
       proc(hdl: PutHdlRef; fs: openArray[(QueueID,QueueID)])  =
         let hdl = hdl.getSession db
@@ -322,8 +322,7 @@ proc rocksDbBackend*(
     qidLayout: QidLayoutRef;
       ): Result[BackendRef,AristoError] =
   let db = RdbBackendRef(
-    beKind: BackendRocksDB,
-    noFq:   qidLayout.isNil)
+    beKind: BackendRocksDB)
 
   # Initialise RocksDB
   block:
@@ -333,6 +332,8 @@ proc rocksDbBackend*(
         trace logTxt "constructor failed",
            error=rc.error[0], info=rc.error[1]
         return err(rc.error[0])
+
+  db.rdb.noFq = qidLayout.isNil
 
   db.getVtxFn = getVtxFn db
   db.getKeyFn = getKeyFn db
@@ -351,7 +352,7 @@ proc rocksDbBackend*(
   db.closeFn = closeFn db
 
   # Set up filter management table
-  if not db.noFq:
+  if not db.rdb.noFq:
     db.filters = QidSchedRef(ctx: qidLayout)
     db.filters.state = block:
       let rc = db.getFqsFn()
@@ -361,6 +362,12 @@ proc rocksDbBackend*(
       rc.value
 
   ok db
+
+proc dup*(db: RdbBackendRef): RdbBackendRef =
+  ## Duplicate descriptor shell as needed for API debugging
+  new result
+  init_common.init(result[], db[])
+  result.rdb = db.rdb
 
 # ------------------------------------------------------------------------------
 # Public iterators (needs direct backend access)
@@ -373,7 +380,7 @@ iterator walk*(
   ##
   ## Non-decodable entries are stepped over while the counter `n` of the
   ## yield record is still incremented.
-  if be.noFq:
+  if be.rdb.noFq:
     for w in be.rdb.walk:
       case w.pfx:
       of AdmPfx:
@@ -410,7 +417,7 @@ iterator walkFil*(
     be: RdbBackendRef;
       ): tuple[qid: QueueID, filter: FilterRef] =
   ## Variant of `walk()` iteration over the filter sub-table.
-  if not be.noFq:
+  if not be.rdb.noFq:
     for (xid, data) in be.rdb.walk FilPfx:
       let rc = data.deblobify FilterRef
       if rc.isOk:
