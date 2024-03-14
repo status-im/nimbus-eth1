@@ -76,10 +76,7 @@ proc finish*(db: KvtDbRef; flush = false) =
   if not db.isNil:
     if not db.backend.isNil:
       db.backend.closeFn flush
-
-    let lebo = db.getCentre
-    discard lebo.forgetOthers()
-    lebo[] = KvtDbObj()
+    discard db.getCentre.forgetOthers()
 
 # ------------------------------------------------------------------------------
 # End

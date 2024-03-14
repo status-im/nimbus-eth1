@@ -41,5 +41,6 @@ type
     # Functions from `kvt_desc`
     MustBeOnCentre
     NotAllowedOnCentre
+    StaleDescriptor
 
 # End
