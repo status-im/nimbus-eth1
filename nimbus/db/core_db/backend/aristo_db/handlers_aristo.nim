@@ -202,7 +202,10 @@ proc mptMethods(cMpt: AristoCoreDxMptRef): CoreDbMptFns =
           stoRoot: cMpt.root,
           stoAddr: cMpt.address)
       else:
-        AristoCoreDbTrie(kind: CoreDbSubTrie(cMpt.root))
+        AristoCoreDbTrie(
+          base: cMpt.base,
+          kind: CoreDbSubTrie(cMpt.root))
+
     cMpt.base.parent.bless trie
 
   proc mptPersistent(
