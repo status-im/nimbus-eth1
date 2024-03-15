@@ -183,8 +183,8 @@ proc storagesRunner(
 
 proc aristoMain*(noisy = defined(debug)) =
   noisy.miscRunner()
-  noisy.accountsRunner(persistent=false)
-  noisy.storagesRunner(persistent=false)
+  noisy.accountsRunner()
+  noisy.storagesRunner()
 
 when isMainModule:
   const
