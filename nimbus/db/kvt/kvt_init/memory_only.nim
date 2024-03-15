@@ -73,10 +73,9 @@ proc finish*(db: KvtDbRef; flush = false) =
   ##
   ## This distructor may be used on already *destructed* descriptors.
   ##
-  if not db.isNil:
-    if not db.backend.isNil:
-      db.backend.closeFn flush
-    discard db.getCentre.forgetOthers()
+  if not db.backend.isNil:
+    db.backend.closeFn flush
+  discard db.getCentre.forgetOthers()
 
 # ------------------------------------------------------------------------------
 # End

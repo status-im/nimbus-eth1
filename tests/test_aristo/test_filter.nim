@@ -202,8 +202,10 @@ proc dbTriplet(w: LeafQuartet; rdbPath: string): Result[DbTriplet,AristoError] =
 
 # ----------------------
 
-proc cleanUp(dx: DbTriplet) =
-  dx[0].finish(flush=true)
+proc cleanUp(dx: var DbTriplet) =
+  if not dx[0].isNil:
+    dx[0].finish(flush=true)
+    dx.reset
 
 proc isDbEq(a, b: FilterRef; db: AristoDbRef; noisy = true): bool =
   ## Verify that argument filter `a` has the same effect on the
@@ -559,7 +561,7 @@ proc testDistributedAccess*(
     block:
 
       # Clause (8) from `aristo/README.md` example
-      let
+      var
         dx = block:
           let rc = dbTriplet(w, rdbPath)
           xCheckRc rc.error == 0
@@ -612,7 +614,7 @@ proc testDistributedAccess*(
 
     # Work through clauses (12)..(15) from `aristo/README.md` example
     block:
-      let
+      var
         dy = block:
           let rc = dbTriplet(w, rdbPath)
           xCheckRc rc.error == 0
