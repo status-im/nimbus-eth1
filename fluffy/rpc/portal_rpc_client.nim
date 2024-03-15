@@ -7,7 +7,6 @@
 
 import
   json_rpc/rpcclient,
-  json_rpc/errors, # TODO: should be exported in json_rpc/clients/httpclient
   ./rpc_calls/[rpc_discovery_calls, rpc_portal_calls, rpc_portal_debug_calls]
 
-export rpcclient, errors, rpc_discovery_calls, rpc_portal_calls, rpc_portal_debug_calls
+export rpcclient, rpc_discovery_calls, rpc_portal_calls, rpc_portal_debug_calls
