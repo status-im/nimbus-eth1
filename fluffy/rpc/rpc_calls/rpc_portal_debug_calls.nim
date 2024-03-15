@@ -19,6 +19,7 @@ createRpcSigsFromNim(RpcClient):
     era1File: string, epochAccumulatorFile: Opt[string]
   ): bool
 
+  proc portal_historyGossipHeaders(era1File: string): bool
   proc portal_historyGossipBlockContent(era1File: string): bool
   proc portal_history_storeContent(dataFile: string): bool
   proc portal_history_propagate(dataFile: string): bool
