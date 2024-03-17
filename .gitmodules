@@ -232,3 +232,8 @@
 	url = https://github.com/arnetheduck/nim-results
 	ignore = untracked
 	branch = master
+[submodule "vendor/nim-eth-verkle"]
+  path = vendor/nim-eth-verkle
+  url = https://github.com/status-im/nim-eth-verkle
+  ignore = untracked
+  branch = stable/stateless-1
