@@ -17,7 +17,7 @@ type
   CoreDxTrieRefs* = CoreDxMptRef | CoreDxPhkRef | CoreDxAccRef
     ## Shortcut, *MPT* descriptors
 
-  CoreDxTrieRelated* = CoreDxTrieRefs | CoreDxTxRef | CoreDxTxID | CoreDxCaptRef
+  CoreDxTrieRelated* = CoreDxTrieRefs | CoreDxTxRef | CoreDxCaptRef
     ## Shortcut, descriptors for sub-modules running on an *MPT*
 
   CoreDbBackends* = CoreDbBackendRef | CoreDbKvtBackendRef |

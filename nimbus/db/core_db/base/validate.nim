@@ -20,7 +20,7 @@ type
   MethodsDesc =
     CoreDxKvtRef |
     CoreDxMptRef | CoreDxPhkRef | CoreDxAccRef  |
-    CoreDxTxRef  | CoreDxTxID   |
+    CoreDxTxRef  |
     CoreDxCaptRef
 
   ValidateDesc* = MethodsDesc | EphemMethodsDesc | CoreDbErrorRef
@@ -41,7 +41,6 @@ proc validateMethodsDesc(base: CoreDbBaseFns) =
   doAssert not base.newKvtFn.isNil
   doAssert not base.newMptFn.isNil
   doAssert not base.newAccFn.isNil
-  doAssert not base.getIdFn.isNil
   doAssert not base.beginFn.isNil
   doAssert not base.newCaptureFn.isNil
 
@@ -129,11 +128,6 @@ proc validateMethodsDesc(tx: CoreDxTxRef) =
   doAssert not tx.methods.rollbackFn.isNil
   doAssert not tx.methods.disposeFn.isNil
   doAssert not tx.methods.safeDisposeFn.isNil
-
-proc validateMethodsDesc(id: CoreDxTxID) =
-  doAssert not id.isNil
-  doAssert not id.parent.isNil
-  doAssert not id.methods.roWrapperFn.isNil
 
 proc validateMethodsDesc(db: CoreDbRef) =
   doAssert not db.isNil

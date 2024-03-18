@@ -1168,35 +1168,6 @@ when ProvideLegacyAPI:
 
   # ----------------
 
-  proc getTransactionID*(db: CoreDbRef): CoreDbTxID =
-    db.setTrackLegaApi LegaGetTxIdFn
-    result = db.methods.getIdFn().expect($api).CoreDbTxID
-    db.ifTrackLegaApi: debug legaApiTxt, api, elapsed
-
-  proc shortTimeReadOnly*(
-      id: CoreDbTxID;
-      action: proc() {.catchRaise.};
-        ) {.catchRaise.} =
-    id.setTrackLegaApi LegaShortTimeRoFn
-    var oops = none(ref CatchableError)
-    proc safeFn() =
-      try:
-        action()
-      except CatchableError as e:
-        oops = some(e)
-      # Action has finished now
-
-    id.distinctBase.methods.roWrapperFn(safeFn).expect $api
-
-    # Delayed exception
-    if oops.isSome:
-      let
-        e = oops.unsafeGet
-        msg = "delayed and reraised" &
-          ", name=" & $e.name & ", msg=\"" & e.msg & "\""
-      raise (ref TxWrapperApiError)(msg: msg)
-    id.ifTrackLegaApi: debug legaApiTxt, api, elapsed
-
   proc beginTransaction*(db: CoreDbRef): CoreDbTxRef =
     db.setTrackLegaApi LegaBeginTxFn
     result = (db.distinctBase.methods.beginFn().expect $api).CoreDbTxRef

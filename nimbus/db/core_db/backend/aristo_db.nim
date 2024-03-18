@@ -155,9 +155,6 @@ proc baseMethods(
         kTx = ? db.kdbBase.txBegin(info)
       ok(db.bless CoreDxTxRef(methods: db.txMethods(aTx, kTx))),
 
-    getIdFn: proc(): CoreDbRc[CoreDxTxID] =
-      CoreDxTxID.notImplemented(db, "getIdFn()"),
-
     newCaptureFn: proc(flags: set[CoreDbCaptFlags]): CoreDbRc[CoreDxCaptRef] =
       CoreDxCaptRef.notImplemented(db, "capture()"))
 

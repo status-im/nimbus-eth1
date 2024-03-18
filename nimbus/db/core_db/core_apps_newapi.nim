@@ -469,7 +469,7 @@ proc setScore*(db: CoreDbRef; blockHash: Hash256, score: UInt256) =
     return
 
 proc getTd*(db: CoreDbRef; blockHash: Hash256, td: var UInt256): bool =
-  const info = "getId()"
+  const info = "getTd()"
   let bytes = db.newKvt()
                 .get(blockHashToScoreKey(blockHash).toOpenArray).valueOr:
     if error.error != KvtNotFound:

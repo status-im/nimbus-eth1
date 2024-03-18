@@ -99,7 +99,6 @@ type
     root: CoreDbTrieRef; prune: bool): CoreDbRc[CoreDxMptRef] {.noRaise.}
   CoreDbBaseAccFn* = proc(
     root: CoreDbTrieRef; prune: bool): CoreDbRc[CoreDxAccRef] {.noRaise.}
-  CoreDbBaseTxGetIdFn* = proc(): CoreDbRc[CoreDxTxID] {.noRaise.}
   CoreDbBaseTxBeginFn* = proc(): CoreDbRc[CoreDxTxRef] {.noRaise.}
   CoreDbBaseNewCaptFn* =
     proc(flgs: set[CoreDbCaptFlags]): CoreDbRc[CoreDxCaptRef] {.noRaise.}
@@ -123,7 +122,6 @@ type
     newAccFn*:      CoreDbBaseAccFn
 
     # Transactions constructors
-    getIdFn*:       CoreDbBaseTxGetIdFn
     beginFn*:       CoreDbBaseTxBeginFn
 
     # capture/tracer constructors
@@ -185,6 +183,7 @@ type
     persistentFn*: CoreDbMptPersistentFn
     forgetFn*:     CoreDbMptForgetFn
 
+
   # ----------------------------------------------------
   # Sub-descriptor: Mpt/hexary trie methods for accounts
   # ------------------------------------------------------
@@ -214,6 +213,7 @@ type
     persistentFn*: CoreDbAccPersistentFn
     forgetFn*:     CoreDbAccForgetFn
 
+
   # --------------------------------------------------
   # Sub-descriptor: Transaction frame management
   # --------------------------------------------------
@@ -230,16 +230,6 @@ type
     disposeFn*:     CoreDbTxDisposeFn
     safeDisposeFn*: CoreDbTxSafeDisposeFn
 
-  # --------------------------------------------------
-  # Sub-descriptor: Transaction ID management
-  # --------------------------------------------------
-  CoreDbTxIdSetIdFn* = proc(): CoreDbRc[void] {.noRaise.}
-  CoreDbTxIdActionFn* = proc() {.noRaise.}
-  CoreDbTxIdRoWrapperFn* =
-    proc(action: CoreDbTxIdActionFn): CoreDbRc[void] {.noRaise.}
-  CoreDbTxIdFns* = object
-    roWrapperFn*: CoreDbTxIdRoWrapperFn
-
 
   # --------------------------------------------------
   # Sub-descriptor: capture recorder methods
@@ -254,6 +244,7 @@ type
     logDbFn*: CoreDbCaptLogDbFn
     getFlagsFn*: CoreDbCaptFlagsFn
     forgetFn*: CoreDbCaptForgetFn
+
 
   # --------------------------------------------------
   # Production descriptors
@@ -325,11 +316,6 @@ type
     ## Transaction descriptor derived from `CoreDbRef`
     parent*: CoreDbRef
     methods*: CoreDbTxFns
-
-  CoreDxTxID* = ref object
-    ## Transaction ID descriptor derived from `CoreDbRef`
-    parent*: CoreDbRef
-    methods*: CoreDbTxIdFns
 
   CoreDxCaptRef* = ref object
     ## Db transaction tracer derived from `CoreDbRef`

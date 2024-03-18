@@ -405,12 +405,6 @@ proc txMethods(tx: CoreDxTxRef): CoreDbTxFns =
       tx.pop()
       ok())
 
-proc tidMethods(tid: TransactionID; tdb: TrieDatabaseRef): CoreDbTxIdFns =
-  CoreDbTxIdFns(
-    roWrapperFn: proc(action: CoreDbTxIdActionFn): CoreDbRc[void] =
-      tdb.shortTimeReadOnly(tid, action())
-      ok())
-
 proc cptMethods(cpt: RecorderRef; db: LegacyDbRef): CoreDbCaptFns =
   CoreDbCaptFns(
     recorderFn: proc(): CoreDbRef =
@@ -495,9 +489,6 @@ proc baseMethods(
             return err(db.bless(RootUnacceptable, ctx))
           mpt.kind = AccountsTrie
       ok(db.bless CoreDxAccRef(methods: mpt.accMethods db)),
-
-    getIdFn: proc(): CoreDbRc[CoreDxTxID] =
-      ok(db.bless CoreDxTxID(methods: tdb.getTransactionID.tidMethods(tdb))),
 
     beginFn: proc(): CoreDbRc[CoreDxTxRef] =
       db.top = LegacyCoreDxTxRef(

@@ -22,14 +22,12 @@ type
   CoreDbMptRef*  = distinct CoreDxMptRef
   CoreDbPhkRef*  = distinct CoreDxPhkRef
   CoreDbTxRef*   = distinct CoreDxTxRef
-  CoreDbTxID*    = distinct CoreDxTxID
   CoreDbCaptRef* = distinct CoreDxCaptRef
 
   CoreDbTrieRefs* = CoreDbMptRef | CoreDbPhkRef
     ## Shortcut, *MPT* modules for (legacy API)
 
-  CoreDbChldRefs* = CoreDbKvtRef | CoreDbTrieRefs | CoreDbTxRef | CoreDbTxID |
-                    CoreDbCaptRef
+  CoreDbChldRefs* = CoreDbKvtRef | CoreDbTrieRefs | CoreDbTxRef | CoreDbCaptRef
     ## Shortcut, all modules with a `parent` entry (for legacy API)
 
 # End
