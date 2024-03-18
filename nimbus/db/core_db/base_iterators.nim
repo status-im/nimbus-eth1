@@ -52,7 +52,7 @@ iterator pairs*(kvt: CoreDxKvtRef): (Blob, Blob) {.apiRaise.} =
       yield (k,v)
   else:
     raiseAssert: "Unsupported database type: " & $kvt.parent.dbType
-  kvt.ifTrackNewApi: debug newApiTxt, ctx, elapsed
+  kvt.ifTrackNewApi: debug newApiTxt, api, elapsed
 
 iterator pairs*(mpt: CoreDxMptRef): (Blob, Blob) {.apiRaise.} =
   ## Trie traversal, only supported for `CoreDxMptRef` (not `Phk`)
@@ -69,7 +69,7 @@ iterator pairs*(mpt: CoreDxMptRef): (Blob, Blob) {.apiRaise.} =
     raiseAssert: "Unsupported database type: " & $mpt.parent.dbType
   mpt.ifTrackNewApi:
     let trie = mpt.methods.getTrieFn()
-    debug newApiTxt, ctx, elapsed, trie
+    debug newApiTxt, api, elapsed, trie
 
 iterator replicate*(mpt: CoreDxMptRef): (Blob, Blob) {.apiRaise.} =
   ## Low level trie dump, only supported for `CoreDxMptRef` (not `Phk`)
@@ -89,26 +89,26 @@ iterator replicate*(mpt: CoreDxMptRef): (Blob, Blob) {.apiRaise.} =
     raiseAssert: "Unsupported database type: " & $mpt.parent.dbType
   mpt.ifTrackNewApi:
     let trie = mpt.methods.getTrieFn()
-    debug newApiTxt, ctx, elapsed, trie
+    debug newApiTxt, api, elapsed, trie
 
 when ProvideLegacyAPI:
 
   iterator pairs*(kvt: CoreDbKvtRef): (Blob, Blob) {.apiRaise.} =
     kvt.setTrackLegaApi LegaKvtPairsIt
     for k,v in kvt.distinctBase.pairs(): yield (k,v)
-    kvt.ifTrackLegaApi: debug legaApiTxt, ctx, elapsed
+    kvt.ifTrackLegaApi: debug legaApiTxt, api, elapsed
 
   iterator pairs*(mpt: CoreDbMptRef): (Blob, Blob) {.apiRaise.} =
     ## Trie traversal, not supported for `CoreDbPhkRef`
     mpt.setTrackLegaApi LegaMptPairsIt
     for k,v in mpt.distinctBase.pairs(): yield (k,v)
-    mpt.ifTrackLegaApi: debug legaApiTxt, ctx
+    mpt.ifTrackLegaApi: debug legaApiTxt, api, elapsed
 
   iterator replicate*(mpt: CoreDbMptRef): (Blob, Blob) {.apiRaise.} =
     ## Low level trie dump, not supported for `CoreDbPhkRef`
     mpt.setTrackLegaApi LegaMptReplicateIt
     for k,v in mpt.distinctBase.replicate(): yield (k,v)
-    mpt.ifTrackLegaApi: debug legaApiTxt, ctx, elapsed
+    mpt.ifTrackLegaApi: debug legaApiTxt, api, elapsed
 
 # ------------------------------------------------------------------------------
 # End
