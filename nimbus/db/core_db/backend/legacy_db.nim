@@ -436,16 +436,6 @@ proc baseMethods(
       ): CoreDbBaseFns =
   let tdb = db.tdb
   CoreDbBaseFns(
-    verifyFn: proc(trie: CoreDbTrieRef): bool =
-      when CoreDbEnableApiTracking:
-        let trie = trie.LegacyCoreDbTrie
-        if trie.kind == StorageTrie:
-          if trie.root != EMPTY_ROOT_HASH and trie.address.isNone:
-            return false
-        else:
-          discard # at the moment
-      true,
-
     backendFn: proc(): CoreDbBackendRef =
       db.bless(LegacyCoreDbBE(base: db)),
 
@@ -455,9 +445,6 @@ proc baseMethods(
     destroyFn: proc(ignore: bool) =
       if not closeDb.isNil:
         closeDb(),
-
-    tryHashFn: proc(trie: CoreDbTrieRef): CoreDbRc[Hash256] =
-      ok(trie.lroot),
 
     rootHashFn: proc(trie: CoreDbTrieRef): CoreDbRc[Hash256] =
       ok(trie.lroot),

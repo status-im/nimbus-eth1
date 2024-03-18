@@ -104,9 +104,6 @@ proc baseMethods(
     K:  typedesc;
       ): CoreDbBaseFns =
   CoreDbBaseFns(
-    verifyFn: proc(trie: CoreDbTrieRef): bool =
-      db.adbBase.verify(trie),
-
     backendFn: proc(): CoreDbBackendRef =
       db.bless(AristoCoreDbBE()),
 
@@ -116,9 +113,6 @@ proc baseMethods(
 
     levelFn: proc(): int =
       db.adbBase.getLevel,
-
-    tryHashFn: proc(trie: CoreDbTrieRef): CoreDbRc[Hash256] =
-      db.adbBase.tryHash(trie, "tryHashFn()"),
 
     rootHashFn: proc(trie: CoreDbTrieRef): CoreDbRc[Hash256] =
       db.adbBase.rootHash(trie, "rootHashFn()"),
@@ -256,14 +250,10 @@ func toAristoProfData*(
       result.kvt = db.AristoCoreDbRef.kdbBase.api.KvtApiProfRef.data
 
 func toAristoApi*(dsc: CoreDxKvtRef): KvtApiRef =
-  doAssert not dsc.parent.isNil
-  doAssert dsc.parent.isAristo
   if dsc.parent.isAristo:
     return AristoCoreDbRef(dsc.parent).kdbBase.api
 
 func toAristoApi*(dsc: CoreDxMptRef): AristoApiRef =
-  doAssert not dsc.parent.isNil
-  doAssert dsc.parent.isAristo
   if dsc.parent.isAristo:
     return AristoCoreDbRef(dsc.parent).adbBase.api
 

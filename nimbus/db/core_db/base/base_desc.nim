@@ -83,10 +83,8 @@ type
   # --------------------------------------------------
   # Sub-descriptor: Misc methods for main descriptor
   # --------------------------------------------------
-  CoreDbBaseVerifyFn* = proc(trie: CoreDbTrieRef): bool {.noRaise.}
   CoreDbBaseBackendFn* = proc(): CoreDbBackendRef {.noRaise.}
   CoreDbBaseDestroyFn* = proc(flush = true) {.noRaise.}
-  CoreDbBaseTryHashFn* = proc(vid: CoreDbTrieRef): CoreDbRc[Hash256] {.noRaise.}
   CoreDbBaseRootHashFn* = proc(
     trie: CoreDbTrieRef): CoreDbRc[Hash256] {.noRaise.}
   CoreDbBaseTriePrintFn* = proc(vid: CoreDbTrieRef): string {.noRaise.}
@@ -108,10 +106,8 @@ type
   CoreDbBaseGetCaptFn* = proc(): CoreDbRc[CoreDxCaptRef] {.noRaise.}
 
   CoreDbBaseFns* = object
-    verifyFn*:      CoreDbBaseVerifyFn
     backendFn*:     CoreDbBaseBackendFn
     destroyFn*:     CoreDbBaseDestroyFn
-    tryHashFn*:     CoreDbBaseTryHashFn
     rootHashFn*:    CoreDbBaseRootHashFn
     triePrintFn*:   CoreDbBaseTriePrintFn
     errorPrintFn*:  CoreDbBaseErrorPrintFn

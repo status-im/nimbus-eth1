@@ -247,11 +247,6 @@ proc prettyText*(trie: CoreDbTrieRef): string =
   ## Pretty print argument object (for tracking use `$$()`)
   if trie.isNil or not trie.ready: "$ø" else: trie.toStr()
 
-proc verify*(trie: CoreDbTrieRef): bool =
-  ## Verify that the `trie` argument is `nil` or properly initialised. This
-  ## function is for debugging and subject to change.
-  trie.isNil or (trie.ready and trie.parent.methods.verifyFn trie)
-
 # ------------------------------------------------------------------------------
 # Public main descriptor methods
 # ------------------------------------------------------------------------------

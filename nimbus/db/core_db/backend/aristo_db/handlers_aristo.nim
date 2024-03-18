@@ -71,11 +71,6 @@ static:
 # Private helpers
 # ------------------------------------------------------------------------------
 
-template logTxt(info: static[string]): static[string] =
-  "CoreDb/adb " & info
-
-# -------------------------------
-
 func isValid(trie: CoreDbTrieRef): bool =
   not trie.isNil and trie.ready
 
@@ -176,6 +171,27 @@ func toVoidRc[T](
   if rc.isOk:
     return ok()
   err rc.error.toError(base, info, error)
+
+# -------------------------------
+
+proc tryHash(
+    base: AristoBaseRef;
+    trie: CoreDbTrieRef;
+    info: static[string];
+      ): CoreDbRc[Hash256] =
+  let trie = trie.AristoCoreDbTrie
+  if not trie.isValid:
+    return err(TrieInvalid.toError(base, info, HashNotAvailable))
+
+  let root = trie.to(VertexID)
+  if not root.isValid:
+    return ok(EMPTY_ROOT_HASH)
+
+  let rc = base.api.getKeyRc(trie.base.adb, root)
+  if rc.isErr:
+    return err(rc.error.toError(base, info, HashNotAvailable))
+
+  ok rc.value.to(Hash256)
 
 # ------------------------------------------------------------------------------
 # Private `MPT` call back functions
@@ -568,25 +584,6 @@ proc txBegin*(
 proc getLevel*(base: AristoBaseRef): int =
   base.api.level(base.adb)
 
-proc tryHash*(
-    base: AristoBaseRef;
-    trie: CoreDbTrieRef;
-    info: static[string];
-      ): CoreDbRc[Hash256] =
-  let trie = trie.AristoCoreDbTrie
-  if not trie.isValid:
-    return err(TrieInvalid.toError(base, info, HashNotAvailable))
-
-  let root = trie.to(VertexID)
-  if not root.isValid:
-    return ok(EMPTY_ROOT_HASH)
-
-  let rc = base.api.getKeyRc(trie.base.adb, root)
-  if rc.isErr:
-    return err(rc.error.toError(base, info, HashNotAvailable))
-
-  ok rc.value.to(Hash256)
-
 proc triePrint*(
     base: AristoBaseRef;
     trie: CoreDbTrieRef;
@@ -683,17 +680,6 @@ proc newTrie*(
 # ------------------------------------------------------------------------------
 # Public constructors and related
 # ------------------------------------------------------------------------------
-
-proc verify*(base: AristoBaseRef; trie: CoreDbTrieRef): bool =
-  let trie = trie.AristoCoreDbTrie
-  if not trie.base.isNil:
-    if trie.kind != StorageTrie:
-      return true
-    if LEAST_FREE_VID < trie.stoRoot.distinctBase:
-      let path = trie.stoAddr.to(PathID).to(NibblesSeq)
-      if base.api.hikeUp(path, AccountsTrieID, base.adb).isOk:
-        return true
-  false
 
 proc newMptHandler*(
     base: AristoBaseRef;
