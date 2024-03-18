@@ -90,7 +90,7 @@ proc init*(
     root: Hash256;
     pruneOk = true;
       ): T =
-  db.newAccMpt(root, pruneOk).T
+  db.ctx.getAccMpt(root, pruneOk).T
 
 proc init*(
     T: type AccountLedger;
@@ -159,9 +159,10 @@ proc init*(
     if rc.isErr:
       raiseAssert "re-hash oops, error=" & $$rc.error
   let
-    trie = if stt.isNil: db.getTrie(account.address) else: stt
+    ctx = db.ctx
+    trie = if stt.isNil: ctx.newTrie(account.address) else: stt
     mpt = block:
-      let rc = db.newMpt(trie, pruneOk)
+      let rc = ctx.getMpt(trie, pruneOk)
       if rc.isErr:
         raiseAssert info & $$rc.error
       rc.value
@@ -195,7 +196,7 @@ iterator storage*(
     info = "storage(): "
   let trie = account.stoTrie
   if not trie.isNil:
-    let mpt = al.distinctBase.parent.newMpt(trie).valueOr:
+    let mpt = al.distinctBase.parent.ctx.getMpt(trie).valueOr:
       raiseAssert info & $$error
     for (key,val) in mpt.pairs:
       yield (key,val)

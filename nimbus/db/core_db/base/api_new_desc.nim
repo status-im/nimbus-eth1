@@ -14,7 +14,7 @@ import
   ./base_desc
 
 type
-  CoreDxTrieRefs* = CoreDxMptRef | CoreDxPhkRef | CoreDxAccRef
+  CoreDxTrieRefs* = CoreDbCtxRef | CoreDxMptRef | CoreDxPhkRef | CoreDxAccRef
     ## Shortcut, *MPT* descriptors
 
   CoreDxTrieRelated* = CoreDxTrieRefs | CoreDxTxRef | CoreDxCaptRef

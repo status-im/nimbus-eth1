@@ -129,27 +129,11 @@ proc baseMethods(
     legacySetupFn: proc() =
       discard,
 
-    getTrieFn: proc(
-        kind: CoreDbSubTrie;
-        root: Hash256;
-        address: Option[EthAddress];
-          ): CoreDbRc[CoreDbTrieRef] =
-      db.adbBase.newTrie(kind, root, address, "getTrieFn()"),
-
     newKvtFn: proc(sharedTable: bool): CoreDbRc[CoreDxKvtRef] =
       db.kdbBase.newKvtHandler(sharedTable, "newKvtFn()"),
 
-    newMptFn: proc(
-        trie: CoreDbTrieRef;
-        prune: bool; # ignored
-          ): CoreDbRc[CoreDxMptRef] =
-      db.adbBase.newMptHandler(trie, "newMptFn()"),
-
-    newAccFn: proc(
-        trie: CoreDbTrieRef;
-        prune: bool; # ignored
-          ): CoreDbRc[CoreDxAccRef] =
-      ok(? db.adbBase.newAccHandler(trie, "newAccFn()")),
+    getCtxFn: proc(): CoreDbCtxRef =
+      db.adbBase.ctx,
 
     beginFn: proc(): CoreDbRc[CoreDxTxRef] =
       const info = "beginFn()"

@@ -118,11 +118,12 @@ iterator getBlockTransactionData*(
       ): Blob =
   block body:
     let
-      trie = db.getTrie(TxTrie, transactionRoot).valueOr:
+      ctx = db.ctx
+      trie = ctx.newTrie(TxTrie, transactionRoot).valueOr:
         warn logTxt "getBlockTransactionData()",
           transactionRoot, action="getTrie()", `error`=($$error)
         break body
-      transactionDb = db.newMpt(trie).valueOr:
+      transactionDb = ctx.getMpt(trie).valueOr:
         warn logTxt "getBlockTransactionData()", transactionRoot,
           action="newMpt()", trie=($$trie), error=($$error)
         break body
@@ -165,11 +166,12 @@ iterator getWithdrawalsData*(
       ): Blob =
   block body:
     let
-      trie = db.getTrie(WithdrawalsTrie, withdrawalsRoot).valueOr:
+      ctx = db.ctx
+      trie = ctx.newTrie(WithdrawalsTrie, withdrawalsRoot).valueOr:
         warn logTxt "getWithdrawalsData()",
           withdrawalsRoot, action="getTrie()", error=($$error)
         break body
-      wddb = db.newMpt(trie).valueOr:
+      wddb = ctx.getMpt(trie).valueOr:
         warn logTxt "getWithdrawalsData()",
           withdrawalsRoot, action="newMpt()", trie=($$trie), error=($$error)
         break body
@@ -192,11 +194,12 @@ iterator getReceipts*(
       {.gcsafe, raises: [RlpError].} =
   block body:
     let
-      trie = db.getTrie(ReceiptsTrie, receiptRoot).valueOr:
+      ctx = db.ctx
+      trie = ctx.newTrie(ReceiptsTrie, receiptRoot).valueOr:
         warn logTxt "getWithdrawalsData()",
           receiptRoot, action="getTrie()", error=($$error)
         break body
-      receiptDb = db.newMpt(trie).valueOr:
+      receiptDb = ctx.getMpt(trie).valueOr:
         warn logTxt "getWithdrawalsData()",
           receiptRoot, action="newMpt()", trie=($$trie), error=($$error)
         break body
@@ -529,7 +532,7 @@ proc persistTransactions*(
   const
     info = "persistTransactions()"
   let
-    mpt = db.newMpt(TxTrie)
+    mpt = db.ctx.getMpt(TxTrie)
     kvt = db.newKvt()
   # Prevent DB from coughing.
   db.compensateLegacySetup()
@@ -560,10 +563,11 @@ proc getTransaction*(
   const
     info = "getTransaction()"
   let
-    trie = db.getTrie(TxTrie, txRoot).valueOr:
+    ctx = db.ctx
+    trie = ctx.newTrie(TxTrie, txRoot).valueOr:
       warn logTxt info, txRoot, action="getTrie()", error=($$error)
       return false
-    mpt = db.newMpt(trie).valueOr:
+    mpt = ctx.getMpt(trie).valueOr:
       warn logTxt info,
         txRoot, action="newMpt()", trie=($$trie), error=($$error)
       return false
@@ -581,10 +585,11 @@ proc getTransactionCount*(
   const
     info = "getTransactionCount()"
   let
-    trie = db.getTrie(TxTrie, txRoot).valueOr:
+    ctx = db.ctx
+    trie = ctx.newTrie(TxTrie, txRoot).valueOr:
       warn logTxt info, txRoot, action="getTrie()", error=($$error)
       return 0
-    mpt = db.newMpt(trie).valueOr:
+    mpt = ctx.getMpt(trie).valueOr:
       warn logTxt info, txRoot,
         action="newMpt()", trie=($$trie), error=($$error)
       return 0
@@ -635,7 +640,7 @@ proc persistWithdrawals*(
     withdrawals: openArray[Withdrawal];
       ): Hash256 =
   const info = "persistWithdrawals()"
-  let mpt = db.newMpt(WithdrawalsTrie)
+  let mpt = db.ctx.getMpt(WithdrawalsTrie)
   for idx, wd in withdrawals:
     mpt.merge(rlp.encode(idx), rlp.encode(wd)).isOkOr:
       warn logTxt info, idx, action="merge()", error=($$error)
@@ -781,7 +786,7 @@ proc persistReceipts*(
     receipts: openArray[Receipt];
       ): Hash256 =
   const info = "persistReceipts()"
-  let mpt = db.newMpt(ReceiptsTrie)
+  let mpt = db.ctx.getMpt(ReceiptsTrie)
   for idx, rec in receipts:
     mpt.merge(rlp.encode(idx), rlp.encode(rec)).isOkOr:
       warn logTxt info, idx, action="merge()", error=($$error)
