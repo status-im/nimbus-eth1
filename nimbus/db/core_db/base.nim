@@ -314,119 +314,6 @@ proc `$$`*(e: CoreDbErrorRef): string =
   result = e.prettyText()
   e.ifTrackNewApi: debug newApiTxt, api, elapsed, result
 
-proc `$$`*(trie: CoreDbTrieRef): string =
-  ## Pretty print vertex ID symbol, note that this directive may have side
-  ## effects as it calls a backend function.
-  ##
-  #trie.setTrackNewApi TriePrintFn
-  result = trie.prettyText()
-  #trie.ifTrackNewApi: debug newApiTxt, api, elapsed, result
-
-proc rootHash*(trie: CoreDbTrieRef): CoreDbRc[Hash256] =
-  ## Getter (well, sort of), retrieves the root hash for the argument `trie`
-  ## descriptor. The function might fail if there is currently no hash
-  ## available (e.g. on `Aristo`.) Note that a failure to retrieve the hash
-  ## (which returns an error) is different from succeeding with an
-  ## `EMPTY_ROOT_HASH` value for an empty trie.
-  ##
-  ## The value `EMPTY_ROOT_HASH` is also returned on a void `trie` descriptor
-  ## argument `CoreDbTrieRef(nil)`.
-  ##
-  trie.setTrackNewApi RootHashFn
-  result = block:
-    if not trie.isNil and trie.ready:
-      trie.parent.methods.rootHashFn trie
-    else:
-      ok EMPTY_ROOT_HASH
-  # Note: tracker will be silent if `vid` is NIL
-  trie.ifTrackNewApi: debug newApiTxt, api, elapsed, trie, result
-
-proc rootHashOrEmpty*(trie: CoreDbTrieRef): Hash256 =
-  ## Convenience wrapper, returns `EMPTY_ROOT_HASH` where `hash()` would fail.
-  trie.rootHash.valueOr: EMPTY_ROOT_HASH
-
-proc recast*(account: CoreDbAccount): CoreDbRc[Account] =
-  ## Convert the argument `account` to the portable Ethereum representation
-  ## of an account. This conversion may fail if the storage root hash (see
-  ## `hash()` above) is currently unavailable.
-  ##
-  ## Note that for the legacy backend, this function always succeeds.
-  ##
-  let stoTrie = account.stoTrie
-  stoTrie.setTrackNewApi EthAccRecastFn
-  let rc =
-    if stoTrie.isNil or not stoTrie.ready: CoreDbRc[Hash256].ok(EMPTY_ROOT_HASH)
-    else: stoTrie.parent.methods.rootHashFn stoTrie
-  result =
-    if rc.isOk:
-      ok Account(
-        nonce:       account.nonce,
-        balance:     account.balance,
-        codeHash:    account.codeHash,
-        storageRoot: rc.value)
-    else:
-      err(rc.error)
-  stoTrie.ifTrackNewApi: debug newApiTxt, api, elapsed, stoTrie, result
-
-
-proc getTrie*(
-    db: CoreDbRef;
-    kind: CoreDbSubTrie;
-    root: Hash256;
-    address = none(EthAddress);
-      ): CoreDbRc[CoreDbTrieRef] =
-  ## Retrieve virtual sub-trie descriptor.
-  ##
-  ## For a sub-trie of type `kind` find the root node with Merkle hash `root`.
-  ## If the `root` argument is set `EMPTY_ROOT_HASH`, this function always
-  ## succeeds. Otherwise, the function will fail unless a root node with the
-  ## corresponding argument Merkle hash `root` exists.
-  ##
-  ## For an `EMPTY_ROOT_HASH` root hash argument and a sub-trie of type `kind`
-  ## different form `StorageTrie` and `AccuntsTrie`, the returned sub-trie
-  ## descriptor will be flagged to flush the sub-trie when this descriptor is
-  ## incarnated as MPT (see `newMpt()`.).
-  ##
-  ## If the argument `kind` is `StorageTrie`, then the `address` argument is
-  ## needed which links an account to the result descriptor.
-  ##
-  ## This function is intended to open a virtual trie database as in:
-  ## ::
-  ##   proc openAccountLedger(db: CoreDbRef, root: Hash256): CoreDxMptRef =
-  ##     let trie = db.getTrie(AccountsTrie, root).valueOr:
-  ##       # some error handling
-  ##       return
-  ##     db.newAccMpt trie
-  ##
-  db.setTrackNewApi BaseGetTrieFn
-  result = db.methods.getTrieFn(kind, root, address)
-  db.ifTrackNewApi: debug newApiTxt, api, elapsed, kind, root, address, result
-
-proc getTrie*(
-    db: CoreDbRef;
-    root: Hash256;
-    address: EthAddress;
-      ): CoreDbRc[CoreDbTrieRef] =
-  ## Shortcut for `db.getTrie(StorageTrie,root,some(address))`.
-  ##
-  db.setTrackNewApi BaseGetTrieFn
-  result = db.methods.getTrieFn(StorageTrie, root, some(address))
-  db.ifTrackNewApi: debug newApiTxt, api, elapsed, root, address, result
-
-proc getTrie*(
-    db: CoreDbRef;
-    address: EthAddress;
-      ): CoreDbTrieRef =
-  ## Shortcut for `db.getTrie(StorageTrie,EMPTY_ROOT_HASH,address).value`. The
-  ## function will throw an exception on error. So the result will always be a
-  ## valid descriptor.
-  ##
-  db.setTrackNewApi BaseGetTrieFn
-  result = db.methods.getTrieFn(
-             StorageTrie, EMPTY_ROOT_HASH, some(address)).valueOr:
-    raiseAssert error.prettyText()
-  db.ifTrackNewApi: debug newApiTxt, api, elapsed, address, result
-
 # ------------------------------------------------------------------------------
 # Public key-value table methods
 # ------------------------------------------------------------------------------
@@ -493,7 +380,7 @@ proc hasKey*(kvt: CoreDxKvtRef; key: openArray[byte]): CoreDbRc[bool] =
   result = kvt.methods.hasKeyFn key
   kvt.ifTrackNewApi: debug newApiTxt, api, elapsed, key=key.toStr, result
 
-proc persistent*(dsc: CoreDxKvtRef): CoreDbRc[void] {.discardable.} =
+proc persistent*(kvt: CoreDxKvtRef): CoreDbRc[void] {.discardable.} =
   ## For the legacy database, this function has no effect and succeeds always.
   ## It will nevertheless return a discardable error if there is a pending
   ## transaction.
@@ -501,17 +388,11 @@ proc persistent*(dsc: CoreDxKvtRef): CoreDbRc[void] {.discardable.} =
   ## This function saves the current cache to the database if possible,
   ## regardless of the save/share mode assigned to the constructor.
   ##
-  ## Caveat:
-  ##   If `dsc` is a detached descriptor of `Companion` or `TopShot` mode which
-  ##   could be persistently saved, the changes are immediately visible on all
-  ##   other descriptors unless they are hidden by newer versions of key-value
-  ##   items in the cache.
-  ##
-  dsc.setTrackNewApi KvtPersistentFn
-  result = dsc.methods.persistentFn()
-  dsc.ifTrackNewApi: debug newApiTxt, api, elapsed, result
+  kvt.setTrackNewApi KvtPersistentFn
+  result = kvt.methods.persistentFn()
+  kvt.ifTrackNewApi: debug newApiTxt, api, elapsed, result
 
-proc forget*(dsc: CoreDxKvtRef): CoreDbRc[void] {.discardable.} =
+proc forget*(kvt: CoreDxKvtRef): CoreDbRc[void] {.discardable.} =
   ## For the legacy database, this function has no effect and succeeds always.
   ##
   ## This function destroys the current non-shared descriptor (see argument
@@ -523,9 +404,103 @@ proc forget*(dsc: CoreDxKvtRef): CoreDbRc[void] {.discardable.} =
   ##   Auto destruction seems to be unreliable (causing spurious crashes.)
   ##   So manual destruction using this function is advised.
   ##
-  dsc.setTrackNewApi KvtForgetFn
-  result = dsc.methods.forgetFn()
-  dsc.ifTrackNewApi: debug newApiTxt, api, elapsed, result
+  kvt.setTrackNewApi KvtForgetFn
+  result = kvt.methods.forgetFn()
+  kvt.ifTrackNewApi: debug newApiTxt, api, elapsed, result
+
+# ------------------------------------------------------------------------------
+# Public Merkle Patricia Tree sub-trie abstaction management
+# ------------------------------------------------------------------------------
+
+proc getTrie*(
+    db: CoreDbRef;
+    kind: CoreDbSubTrie;
+    root: Hash256;
+    address = none(EthAddress);
+      ): CoreDbRc[CoreDbTrieRef] =
+  ## Retrieve a new virtual sub-trie descriptor.
+  ##
+  ## For a sub-trie of type `kind` find the root node with Merkle hash `root`.
+  ## If the `root` argument is set `EMPTY_ROOT_HASH`, this function always
+  ## succeeds. Otherwise, the function will fail unless a root node with the
+  ## corresponding argument Merkle hash `root` exists.
+  ##
+  ## For an `EMPTY_ROOT_HASH` root hash argument and a sub-trie of type `kind`
+  ## different form `StorageTrie` and `AccuntsTrie`, the returned sub-trie
+  ## descriptor will be flagged to flush the sub-trie when this descriptor is
+  ## incarnated as MPT (see `newMpt()`.).
+  ##
+  ## If the argument `kind` is `StorageTrie`, then the `address` argument is
+  ## needed which links an account to the result descriptor.
+  ##
+  ## This function is intended to open a virtual trie database as in:
+  ## ::
+  ##   proc openAccountLedger(db: CoreDbRef, root: Hash256): CoreDxMptRef =
+  ##     let trie = db.getTrie(AccountsTrie, root).valueOr:
+  ##       # some error handling
+  ##       return
+  ##     db.newAccMpt trie
+  ##
+  db.setTrackNewApi BaseGetTrieFn
+  result = db.methods.getTrieFn(kind, root, address)
+  db.ifTrackNewApi: debug newApiTxt, api, elapsed, kind, root, address, result
+
+proc getTrie*(
+    db: CoreDbRef;
+    root: Hash256;
+    address: EthAddress;
+      ): CoreDbRc[CoreDbTrieRef] =
+  ## Shortcut for `db.getTrie(StorageTrie,root,some(address))`.
+  ##
+  db.setTrackNewApi BaseGetTrieFn
+  result = db.methods.getTrieFn(StorageTrie, root, some(address))
+  db.ifTrackNewApi: debug newApiTxt, api, elapsed, root, address, result
+
+proc getTrie*(
+    db: CoreDbRef;
+    address: EthAddress;
+      ): CoreDbTrieRef =
+  ## Shortcut for `db.getTrie(StorageTrie,EMPTY_ROOT_HASH,address).value`. The
+  ## function will throw an exception on error. So the result will always be a
+  ## valid descriptor.
+  ##
+  db.setTrackNewApi BaseGetTrieFn
+  result = db.methods.getTrieFn(
+             StorageTrie, EMPTY_ROOT_HASH, some(address)).valueOr:
+    raiseAssert error.prettyText()
+  db.ifTrackNewApi: debug newApiTxt, api, elapsed, address, result
+
+
+proc `$$`*(trie: CoreDbTrieRef): string =
+  ## Pretty print vertex ID symbol, note that this directive may have side
+  ## effects as it calls a backend function.
+  ##
+  #trie.setTrackNewApi TriePrintFn
+  result = trie.prettyText()
+  #trie.ifTrackNewApi: debug newApiTxt, api, elapsed, result
+
+proc rootHash*(trie: CoreDbTrieRef): CoreDbRc[Hash256] =
+  ## Getter (well, sort of), retrieves the root hash for the argument `trie`
+  ## descriptor. The function might fail if there is currently no hash
+  ## available (e.g. on `Aristo`.) Note that a failure to retrieve the hash
+  ## (which returns an error) is different from succeeding with an
+  ## `EMPTY_ROOT_HASH` value for an empty trie.
+  ##
+  ## The value `EMPTY_ROOT_HASH` is also returned on a void `trie` descriptor
+  ## argument `CoreDbTrieRef(nil)`.
+  ##
+  trie.setTrackNewApi RootHashFn
+  result = block:
+    if not trie.isNil and trie.ready:
+      trie.parent.methods.rootHashFn trie
+    else:
+      ok EMPTY_ROOT_HASH
+  # Note: tracker will be silent if `vid` is NIL
+  trie.ifTrackNewApi: debug newApiTxt, api, elapsed, trie, result
+
+proc rootHashOrEmpty*(trie: CoreDbTrieRef): Hash256 =
+  ## Convenience wrapper, returns `EMPTY_ROOT_HASH` where `hash()` would fail.
+  trie.rootHash.valueOr: EMPTY_ROOT_HASH
 
 # ------------------------------------------------------------------------------
 # Public Merkle Patricia Tree, hexary trie constructors
@@ -873,11 +848,11 @@ proc stoFlush*(acc: CoreDxAccRef; address: EthAddress): CoreDbRc[void] =
   ## the account identified by the argument `address`. After successful run,
   ## the storage trie will be empty.
   ##
-  ## caveat:
-  ##   This function has currently no effect on the legacy backend so it must
-  ##   not be relied upon in general. On the legacy backend, storage tries
-  ##   might be shared by several accounts whereas they are unique on the
-  ##   `Aristo` backend.
+  ## Caveat:
+  ##   This function has no effect on the legacy backend so it must not be
+  ##   relied upon in general. On the legacy backend, storage tries might be
+  ##   shared by several accounts whereas they are unique on the `Aristo`
+  ##   backend.
   ##
   acc.setTrackNewApi AccStoFlushFn
   result = acc.methods.stoFlushFn address
@@ -899,6 +874,30 @@ proc hasPath*(acc: CoreDxAccRef; address: EthAddress): CoreDbRc[bool] =
   acc.setTrackNewApi AccHasPathFn
   result = acc.methods.hasPathFn address
   acc.ifTrackNewApi: debug newApiTxt, api, elapsed, address, result
+
+
+proc recast*(statement: CoreDbAccount): CoreDbRc[Account] =
+  ## Convert the argument `statement` to the portable Ethereum representation
+  ## of an statement. This conversion may fail if the storage root hash (see
+  ## `hash()` above) is currently unavailable.
+  ##
+  ## Note that for the legacy backend, this function always succeeds.
+  ##
+  let stoTrie = statement.stoTrie
+  stoTrie.setTrackNewApi EthAccRecastFn
+  let rc =
+    if stoTrie.isNil or not stoTrie.ready: CoreDbRc[Hash256].ok(EMPTY_ROOT_HASH)
+    else: stoTrie.parent.methods.rootHashFn stoTrie
+  result =
+    if rc.isOk:
+      ok Account(
+        nonce:       statement.nonce,
+        balance:     statement.balance,
+        codeHash:    statement.codeHash,
+        storageRoot: rc.value)
+    else:
+      err(rc.error)
+  stoTrie.ifTrackNewApi: debug newApiTxt, api, elapsed, stoTrie, result
 
 # ------------------------------------------------------------------------------
 # Public transaction related methods
