@@ -14,10 +14,10 @@ import
   ./base_desc
 
 type
-  CoreDxTrieRefs* = CoreDxMptRef | CoreDxPhkRef | CoreDxAccRef
+  CoreDxTrieRefs* = CoreDbCtxRef | CoreDxMptRef | CoreDxPhkRef | CoreDxAccRef
     ## Shortcut, *MPT* descriptors
 
-  CoreDxTrieRelated* = CoreDxTrieRefs | CoreDxTxRef | CoreDxTxID | CoreDxCaptRef
+  CoreDxTrieRelated* = CoreDxTrieRefs | CoreDxTxRef | CoreDxCaptRef
     ## Shortcut, descriptors for sub-modules running on an *MPT*
 
   CoreDbBackends* = CoreDbBackendRef | CoreDbKvtBackendRef |

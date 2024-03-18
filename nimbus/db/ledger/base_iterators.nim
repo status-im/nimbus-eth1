@@ -47,7 +47,7 @@ iterator accounts*(ldg: LedgerRef): Account =
       yield w
   else:
     raiseAssert: "Unsupported ledger type: " & $ldg.ldgType
-  ldg.ifTrackApi: debug apiTxt, ctx, elapsed
+  ldg.ifTrackApi: debug apiTxt, api, elapsed
 
 
 iterator addresses*(ldg: LedgerRef): EthAddress =
@@ -61,7 +61,7 @@ iterator addresses*(ldg: LedgerRef): EthAddress =
       yield w
   else:
     raiseAssert: "Unsupported ledger type: " & $ldg.ldgType
-  ldg.ifTrackApi: debug apiTxt, ctx, elapsed
+  ldg.ifTrackApi: debug apiTxt, api, elapsed
 
 
 iterator cachedStorage*(ldg: LedgerRef, eAddr: EthAddress): (UInt256,UInt256) =
@@ -75,7 +75,7 @@ iterator cachedStorage*(ldg: LedgerRef, eAddr: EthAddress): (UInt256,UInt256) =
       yield w
   else:
     raiseAssert: "Unsupported ledger type: " & $ldg.ldgType
-  ldg.ifTrackApi: debug apiTxt, ctx, elapsed, eAddr
+  ldg.ifTrackApi: debug apiTxt, api, elapsed, eAddr
 
 
 iterator pairs*(ldg: LedgerRef): (EthAddress,Account) =
@@ -89,7 +89,7 @@ iterator pairs*(ldg: LedgerRef): (EthAddress,Account) =
       yield w
   else:
     raiseAssert: "Unsupported ledger type: " & $ldg.ldgType
-  ldg.ifTrackApi: debug apiTxt, ctx, elapsed
+  ldg.ifTrackApi: debug apiTxt, api, elapsed
 
 
 iterator storage*(
@@ -107,7 +107,7 @@ iterator storage*(
       yield w
   else:
     raiseAssert: "Unsupported ledger type: " & $ldg.ldgType
-  ldg.ifTrackApi: debug apiTxt, ctx, elapsed, eAddr
+  ldg.ifTrackApi: debug apiTxt, api, elapsed, eAddr
 
 # ------------------------------------------------------------------------------
 # End

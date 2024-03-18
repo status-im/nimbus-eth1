@@ -65,36 +65,39 @@ proc txMethods(
     kTx: KvtTxRef;
      ): CoreDbTxFns =
   ## To be constructed by some `CoreDbBaseFns` function
+  let
+    adbBase = db.adbBase
+    kdbBase = db.kdbBase
+
+    adbApi = adbBase.api
+    kdbApi = kdbBase.api
+
   CoreDbTxFns(
     levelFn: proc(): int =
       aTx.level,
 
     commitFn: proc(ignore: bool): CoreDbRc[void] =
       const info = "commitFn()"
-      ? db.adbBase.api.commit(aTx).toVoidRc(db.adbBase, info)
-      ? db.kdbBase.api.commit(kTx).toVoidRc(db.kdbBase, info)
+      ? adbApi.commit(aTx).toVoidRc(adbBase, info)
+      ? kdbApi.commit(kTx).toVoidRc(kdbBase, info)
       ok(),
 
     rollbackFn: proc(): CoreDbRc[void] =
       const info = "rollbackFn()"
-      ? db.adbBase.api.rollback(aTx).toVoidRc(db.adbBase, info)
-      ? db.kdbBase.api.rollback(kTx).toVoidRc(db.kdbBase, info)
+      ? adbApi.rollback(aTx).toVoidRc(adbBase, info)
+      ? kdbApi.rollback(kTx).toVoidRc(kdbBase, info)
       ok(),
 
     disposeFn: proc(): CoreDbRc[void] =
       const info =  "disposeFn()"
-      if db.adbBase.api.isTop(aTx):
-        ? db.adbBase.api.rollback(aTx).toVoidRc(db.adbBase, info)
-      if db.kdbBase.api.isTop(kTx):
-        ? db.kdbBase.api.rollback(kTx).toVoidRc(db.kdbBase, info)
+      if adbApi.isTop(aTx): ? adbApi.rollback(aTx).toVoidRc(adbBase, info)
+      if kdbApi.isTop(kTx): ? kdbApi.rollback(kTx).toVoidRc(kdbBase, info)
       ok(),
 
     safeDisposeFn: proc(): CoreDbRc[void] =
       const info =  "safeDisposeFn()"
-      if db.adbBase.api.isTop(aTx):
-        ? db.adbBase.api.rollback(aTx).toVoidRc(db.adbBase, info)
-      if db.kdbBase.api.isTop(kTx):
-        ? db.kdbBase.api.rollback(kTx).toVoidRc(db.kdbBase, info)
+      if adbApi.isTop(aTx): ? adbApi.rollback(aTx).toVoidRc(adbBase, info)
+      if kdbApi.isTop(kTx): ? kdbApi.rollback(kTx).toVoidRc(kdbBase, info)
       ok())
 
 
@@ -104,9 +107,6 @@ proc baseMethods(
     K:  typedesc;
       ): CoreDbBaseFns =
   CoreDbBaseFns(
-    verifyFn: proc(trie: CoreDbTrieRef): bool =
-      db.adbBase.verify(trie),
-
     backendFn: proc(): CoreDbBackendRef =
       db.bless(AristoCoreDbBE()),
 
@@ -116,9 +116,6 @@ proc baseMethods(
 
     levelFn: proc(): int =
       db.adbBase.getLevel,
-
-    tryHashFn: proc(trie: CoreDbTrieRef): CoreDbRc[Hash256] =
-      db.adbBase.tryHash(trie, "tryHashFn()"),
 
     rootHashFn: proc(trie: CoreDbTrieRef): CoreDbRc[Hash256] =
       db.adbBase.rootHash(trie, "rootHashFn()"),
@@ -132,27 +129,11 @@ proc baseMethods(
     legacySetupFn: proc() =
       discard,
 
-    getTrieFn: proc(
-        kind: CoreDbSubTrie;
-        root: Hash256;
-        address: Option[EthAddress];
-          ): CoreDbRc[CoreDbTrieRef] =
-      db.adbBase.newTrie(kind, root, address, "getTrieFn()"),
-
     newKvtFn: proc(sharedTable: bool): CoreDbRc[CoreDxKvtRef] =
       db.kdbBase.newKvtHandler(sharedTable, "newKvtFn()"),
 
-    newMptFn: proc(
-        trie: CoreDbTrieRef;
-        prune: bool; # ignored
-          ): CoreDbRc[CoreDxMptRef] =
-      db.adbBase.newMptHandler(trie, "newMptFn()"),
-
-    newAccFn: proc(
-        trie: CoreDbTrieRef;
-        prune: bool; # ignored
-          ): CoreDbRc[CoreDxAccRef] =
-      ok(? db.adbBase.newAccHandler(trie, "newAccFn()")),
+    getCtxFn: proc(): CoreDbCtxRef =
+      db.adbBase.ctx,
 
     beginFn: proc(): CoreDbRc[CoreDxTxRef] =
       const info = "beginFn()"
@@ -160,9 +141,6 @@ proc baseMethods(
         aTx = ? db.adbBase.txBegin(info)
         kTx = ? db.kdbBase.txBegin(info)
       ok(db.bless CoreDxTxRef(methods: db.txMethods(aTx, kTx))),
-
-    getIdFn: proc(): CoreDbRc[CoreDxTxID] =
-      CoreDxTxID.notImplemented(db, "getIdFn()"),
 
     newCaptureFn: proc(flags: set[CoreDbCaptFlags]): CoreDbRc[CoreDxCaptRef] =
       CoreDxCaptRef.notImplemented(db, "capture()"))
@@ -256,14 +234,10 @@ func toAristoProfData*(
       result.kvt = db.AristoCoreDbRef.kdbBase.api.KvtApiProfRef.data
 
 func toAristoApi*(dsc: CoreDxKvtRef): KvtApiRef =
-  doAssert not dsc.parent.isNil
-  doAssert dsc.parent.isAristo
   if dsc.parent.isAristo:
     return AristoCoreDbRef(dsc.parent).kdbBase.api
 
 func toAristoApi*(dsc: CoreDxMptRef): AristoApiRef =
-  doAssert not dsc.parent.isNil
-  doAssert dsc.parent.isAristo
   if dsc.parent.isAristo:
     return AristoCoreDbRef(dsc.parent).adbBase.api
 

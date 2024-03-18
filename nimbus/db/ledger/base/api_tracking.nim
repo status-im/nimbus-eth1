@@ -112,13 +112,13 @@ func toStr*(ela: Duration): string =
 # ------------------------------------------------------------------------------
 
 template beginApi*(ldg: LedgerRef; s: static[LedgerFnInx]) =
-  const ctx {.inject,used.} = s      # Generally available
+  const api {.inject,used.} = s      # Generally available
   let baStart {.inject.} = getTime() # Local use only
 
 template endApiIf*(ldg: LedgerRef; code: untyped) =
   when CoreDbEnableApiProfiling:
     let elapsed {.inject,used.} = getTime() - baStart
-    aristo_profile.update(ldg.profTab, ctx.ord, elapsed)
+    aristo_profile.update(ldg.profTab, api.ord, elapsed)
   if ldg.trackApi:
     when not CoreDbEnableApiProfiling: # otherwise use variable above
       let elapsed {.inject,used.} = getTime() - baStart
