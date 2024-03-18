@@ -9,8 +9,23 @@ import
   std/algorithm,
   eth/common,
   stew/[byteutils, endians2], stint,
-  "../../../vendor/nim-eth-verkle/eth_verkle"/[math, utils, encoding],
-  "../../../vendor/nim-eth-verkle/constantine/constantine"/[serialization/codecs, serialization/codecs_banderwagon]
+  "../../../vendor/nim-eth-verkle/eth_verkle"/[
+    math, 
+    utils, 
+    tree/tree, 
+    tree/operations, 
+    tree/commitment
+  ],
+  "../../../vendor/nim-eth-verkle/constantine/constantine"/[
+    serialization/codecs, 
+    serialization/codecs_banderwagon
+  ]
+
+type
+  VerkleTrie = ref object
+    root: BranchesNode
+  # db: <something>
+  # persistcheck: <some-flag>
 
 const
   VersionLeafKey = 0
@@ -106,4 +121,28 @@ proc getTreeKeyCodeSize*(address: EthAddress): Bytes32 =
   return getTreeKey(address, UInt256.zero(), CodeSizeLeafKey)
 
 
-  
+proc updateAccount*(trie: var VerkleTrie, address: EthAddress, acc: Account) =
+  var verKey = getTreeKeyVersion(address)
+  var nonceKey = getTreeKeyNonce(address)
+  var balanceKey = getTreeKeyBalance(address)
+  var codeKeccakKey = getTreeKeyCodeKeccak(address)
+
+  var varVal = fromHex(Bytes32, "0x0")
+  var nonceVal = acc.nonce.toBytesLE()
+  var nonceValfull: Bytes32
+  for i in 0 ..< 32:
+    if i < nonceVal.len:
+      nonceValfull[i] = nonceVal[i]
+    else:
+      nonceValfull[i] = 0
+
+  var balanceVal = acc.balance.toBytesLE()
+  trie.root.setValue(verKey, varVal)
+  trie.root.setValue(nonceKey, nonceValfull)
+  trie.root.setValue(balanceKey, balanceVal)
+  trie.root.setValue(codeKeccakKey, acc.codeHash.data)
+
+    
+proc hashVerkleTrie*(trie: var VerkleTrie): Bytes32 =
+  trie.root.updateAllCommitments()
+  return trie.root.commitment.serializePoint()
