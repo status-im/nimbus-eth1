@@ -249,13 +249,15 @@ type
 
     # Transaction wrappers
     TxArgStaleTx
+    TxArgsUseless
     TxBackendNotWritable
+    TxGarbledSpan
     TxNoPendingTx
-    TxPendingTx
+    TxNotFound
     TxNotTopTx
+    TxPendingTx
     TxStackGarbled
     TxStackUnderflow
-    TxGarbledSpan
 
     # Functions from `aristo_desc.nim`
     MustBeOnCentre
