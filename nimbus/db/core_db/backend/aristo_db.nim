@@ -65,36 +65,39 @@ proc txMethods(
     kTx: KvtTxRef;
      ): CoreDbTxFns =
   ## To be constructed by some `CoreDbBaseFns` function
+  let
+    adbBase = db.adbBase
+    kdbBase = db.kdbBase
+
+    adbApi = adbBase.api
+    kdbApi = kdbBase.api
+
   CoreDbTxFns(
     levelFn: proc(): int =
       aTx.level,
 
     commitFn: proc(ignore: bool): CoreDbRc[void] =
       const info = "commitFn()"
-      ? db.adbBase.api.commit(aTx).toVoidRc(db.adbBase, info)
-      ? db.kdbBase.api.commit(kTx).toVoidRc(db.kdbBase, info)
+      ? adbApi.commit(aTx).toVoidRc(adbBase, info)
+      ? kdbApi.commit(kTx).toVoidRc(kdbBase, info)
       ok(),
 
     rollbackFn: proc(): CoreDbRc[void] =
       const info = "rollbackFn()"
-      ? db.adbBase.api.rollback(aTx).toVoidRc(db.adbBase, info)
-      ? db.kdbBase.api.rollback(kTx).toVoidRc(db.kdbBase, info)
+      ? adbApi.rollback(aTx).toVoidRc(adbBase, info)
+      ? kdbApi.rollback(kTx).toVoidRc(kdbBase, info)
       ok(),
 
     disposeFn: proc(): CoreDbRc[void] =
       const info =  "disposeFn()"
-      if db.adbBase.api.isTop(aTx):
-        ? db.adbBase.api.rollback(aTx).toVoidRc(db.adbBase, info)
-      if db.kdbBase.api.isTop(kTx):
-        ? db.kdbBase.api.rollback(kTx).toVoidRc(db.kdbBase, info)
+      if adbApi.isTop(aTx): ? adbApi.rollback(aTx).toVoidRc(adbBase, info)
+      if kdbApi.isTop(kTx): ? kdbApi.rollback(kTx).toVoidRc(kdbBase, info)
       ok(),
 
     safeDisposeFn: proc(): CoreDbRc[void] =
       const info =  "safeDisposeFn()"
-      if db.adbBase.api.isTop(aTx):
-        ? db.adbBase.api.rollback(aTx).toVoidRc(db.adbBase, info)
-      if db.kdbBase.api.isTop(kTx):
-        ? db.kdbBase.api.rollback(kTx).toVoidRc(db.kdbBase, info)
+      if adbApi.isTop(aTx): ? adbApi.rollback(aTx).toVoidRc(adbBase, info)
+      if kdbApi.isTop(kTx): ? kdbApi.rollback(kTx).toVoidRc(kdbBase, info)
       ok())
 
 

@@ -199,40 +199,36 @@ proc tryHash(
 
 proc mptMethods(cMpt: AristoCoreDxMptRef): CoreDbMptFns =
   ## Hexary trie database handlers
+  let
+    cMpt = cMpt      # So it can be captured
+    base = cMpt.base # Will not change and can be captured
+    db = base.parent # Ditto
+    api = base.api   # Ditto
+    mpt = base.adb   # Ditto
 
-  proc mptBackend(
-      cMpt: AristoCoreDxMptRef;
-        ): CoreDbMptBackendRef =
-    let base = cMpt.base
-    base.parent.bless AristoCoreDbMptBE(adb: base.adb)
+  proc mptBackend(): CoreDbMptBackendRef =
+    db.bless AristoCoreDbMptBE(adb: mpt)
 
-  proc mptTrieFn(
-      cMpt: AristoCoreDxMptRef;
-        ): CoreDbTrieRef =
+  proc mptTrieFn(): CoreDbTrieRef =
     let trie =
       if LEAST_FREE_VID <= cMpt.root.distinctBase:
         assert cMpt.accPath.isValid # debug mode only
         AristoCoreDbTrie(
-          base:    cMpt.base,
+          base:    base,
           kind:    StorageTrie,
           stoRoot: cMpt.root,
           stoAddr: cMpt.address)
       else:
         AristoCoreDbTrie(
-          base: cMpt.base,
+          base: base,
           kind: CoreDbSubTrie(cMpt.root))
 
-    cMpt.base.parent.bless trie
+    db.bless trie
 
-  proc mptPersistent(
-    cMpt: AristoCoreDxMptRef;
-    info: static[string];
-      ): CoreDbRc[void] =
-    let
-      base = cMpt.base
-      mpt = base.adb
-      api = base.api
-      rc = api.stow(mpt, persistent = true)
+  proc mptPersistent(): CoreDbRc[void] =
+    const info = "persistentFn()"
+
+    let rc = api.stow(mpt, persistent = true)
     if rc.isOk:
       ok()
     elif api.level(mpt) == 0:
@@ -240,25 +236,17 @@ proc mptMethods(cMpt: AristoCoreDxMptRef): CoreDbMptFns =
     else:
       err(rc.error.toError(base, info, MptTxPending))
 
-  proc mptFetch(
-      cMpt: AristoCoreDxMptRef;
-      k: openArray[byte];
-      info: static[string];
-        ): CoreDbRc[Blob] =
-    let
-      base = cMpt.base
-      root = cMpt.root
+  proc mptFetch(key: openArray[byte]): CoreDbRc[Blob] =
+    const info = "fetchFn()"
 
     # Some pathological behaviour observed with storage tries due to lazy
     # update. The `fetchPayload()` does not now about this and would complain
     # an error different from `FetchPathNotFound`.
+    let root = cMpt.root
     if not root.isValid:
       return err((VoidTrieID,MptRootMissing).toError(base, info, MptNotFound))
 
-    let
-      mpt = base.adb
-      api = base.api
-      rc = api.fetchPayload(mpt, root, k)
+    let rc = api.fetchPayload(mpt, root, key)
     if rc.isOk:
       api.serialise(mpt, rc.value).toRc(base, info)
     elif rc.error[1] != FetchPathNotFound:
@@ -266,19 +254,11 @@ proc mptMethods(cMpt: AristoCoreDxMptRef): CoreDbMptFns =
     else:
       err rc.error.toError(base, info, MptNotFound)
 
-  proc mptMerge(
-      cMpt: AristoCoreDxMptRef;
-      k: openArray[byte];
-      v: openArray[byte];
-      info: static[string];
-        ): CoreDbRc[void] =
-    let
-      base = cMpt.base
-      api = base.api
-      mpt = base.adb
-      rootOk = cMpt.root.isValid
+  proc mptMerge(k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] =
+    const info = "mergeFn()"
 
     # Provide root ID on-the-fly
+    let rootOk = cMpt.root.isValid
     if not rootOk:
       cMpt.root = api.vidFetch(mpt, pristine=true)
 
@@ -291,22 +271,15 @@ proc mptMethods(cMpt: AristoCoreDxMptRef): CoreDbMptFns =
       return err(rc.error.toError(base, info))
     ok()
 
-  proc mptDelete(
-      cMpt: AristoCoreDxMptRef;
-      k: openArray[byte];
-      info: static[string];
-        ): CoreDbRc[void] =
-    let
-      base = cMpt.base
-      api = base.api
-      mpt = base.adb
+  proc mptDelete(key: openArray[byte]): CoreDbRc[void] =
+    const info = "deleteFn()"
 
     if not cMpt.root.isValid and cMpt.accPath.isValid:
       # This is insane but legit. A storage trie was announced for an account
       # but no data have been added, yet.
       return ok()
 
-    let rc = api.delete(mpt, cMpt.root, k, cMpt.accPath)
+    let rc = api.delete(mpt, cMpt.root, key, cMpt.accPath)
     if rc.isErr:
       if rc.error[1] == DelPathNotFound:
         return err(rc.error.toError(base, info, MptNotFound))
@@ -317,44 +290,39 @@ proc mptMethods(cMpt: AristoCoreDxMptRef): CoreDbMptFns =
       cMpt.root = VoidTrieID
     ok()
 
-  proc mptHasPath(
-      cMpt: AristoCoreDxMptRef;
-      key: openArray[byte];
-      info: static[string];
-        ): CoreDbRc[bool] =
-    let
-      base = cMpt.base
-      mpt = base.adb
-      api = base.api
-      rc = api.hasPath(mpt, cMpt.root, key)
+  proc mptHasPath(key: openArray[byte]): CoreDbRc[bool] =
+    const info = "hasPathFn()"
+
+    let rc = api.hasPath(mpt, cMpt.root, key)
     if rc.isErr:
       return err(rc.error.toError(base, info))
     ok(rc.value)
 
+
   CoreDbMptFns(
     backendFn: proc(): CoreDbMptBackendRef =
-      cMpt.mptBackend(),
+      mptBackend(),
 
     fetchFn: proc(k: openArray[byte]): CoreDbRc[Blob] =
-      cMpt.mptFetch(k, "fetchFn()"),
+      mptFetch(k),
 
     deleteFn: proc(k: openArray[byte]): CoreDbRc[void] =
-      cMpt.mptDelete(k, "deleteFn()"),
+      mptDelete(k),
 
     mergeFn: proc(k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] =
-      cMpt.mptMerge(k, v, "mergeFn()"),
+      mptMerge(k, v),
 
     hasPathFn: proc(k: openArray[byte]): CoreDbRc[bool] =
-      cMpt.mptHasPath(k, "hasPathFn()"),
+      mptHasPath(k),
 
     getTrieFn: proc(): CoreDbTrieRef =
-      cMpt.mptTrieFn(),
+      mptTrieFn(),
 
     isPruningFn: proc(): bool =
       true,
 
     persistentFn: proc(): CoreDbRc[void] =
-      cMpt.mptPersistent("persistentFn()"),
+      mptPersistent(),
 
     forgetFn: proc(): CoreDbRc[void] =
       discard)
@@ -365,30 +333,25 @@ proc mptMethods(cMpt: AristoCoreDxMptRef): CoreDbMptFns =
 
 proc accMethods(cAcc: AristoCoreDxAccRef): CoreDbAccFns =
   ## Hexary trie database handlers
+  let
+    cAcc = cAcc      # So it can be captured
+    base = cAcc.base # Will not change and can be captured
+    db = base.parent # Ditto
+    api = base.api   # Ditto
+    mpt = base.adb   # Ditto
 
-  proc accBackend(
-      cAcc: AristoCoreDxAccRef;
-        ): CoreDbAccBackendRef =
-    let base = cAcc.base
-    base.parent.bless AristoCoreDbAccBE(adb: base.adb)
+  proc accBackend(): CoreDbAccBackendRef =
+    db.bless AristoCoreDbAccBE(adb: mpt)
 
-  proc getTrieFn(
-      cMpt: AristoCoreDxAccRef;
-        ): CoreDbTrieRef =
-    let base = cAcc.base
-    base.parent.bless AristoCoreDbTrie(
+  proc getTrieFn(): CoreDbTrieRef =
+    db.bless AristoCoreDbTrie(
       base: base,
       kind: AccountsTrie)
 
-  proc accPersistent(
-    cAcc: AristoCoreDxAccRef;
-    info: static[string];
-      ): CoreDbRc[void] =
-    let
-      base = cAcc.base
-      mpt = base.adb
-      api = base.api
-      rc = api.stow(mpt, persistent = true)
+  proc accPersistent(): CoreDbRc[void] =
+    const info = "persistentFn()"
+
+    let rc = api.stow(mpt, persistent = true)
     if rc.isOk:
       ok()
     elif api.level(mpt) == 0:
@@ -396,64 +359,45 @@ proc accMethods(cAcc: AristoCoreDxAccRef): CoreDbAccFns =
     else:
       err(rc.error.toError(base, info, AccTxPending))
 
-  proc accCloneMpt(
-      cAcc: AristoCoreDxAccRef;
-      info: static[string];
-        ): CoreDbRc[CoreDxMptRef] =
+  proc accCloneMpt(): CoreDbRc[CoreDxMptRef] =
     ok(AristoCoreDxMptRef(
-      base: cAcc.base,
+      base: base,
       root: AccountsTrieID))
 
-  proc accFetch(
-      cAcc: AristoCoreDxAccRef;
-      address: EthAddress;
-      info: static[string];
-        ): CoreDbRc[CoreDbAccount] =
-    let
-      base = cAcc.base
-      api = base.api
-      mpt = base.adb
-      pyl = block:
-        let
-          key = address.keccakHash.data
-          rc = api.fetchPayload(mpt, AccountsTrieID, key)
-        if rc.isOk:
-          rc.value
-        elif rc.error[1] != FetchPathNotFound:
-          return err(rc.error.toError(base, info))
-        else:
-          return err(rc.error.toError(base, info, AccNotFound))
+  proc accFetch(address: EthAddress): CoreDbRc[CoreDbAccount] =
+    const info = "fetchFn()"
+
+    let pyl = block:
+      let
+        key = address.keccakHash.data
+        rc = api.fetchPayload(mpt, AccountsTrieID, key)
+      if rc.isOk:
+        rc.value
+      elif rc.error[1] != FetchPathNotFound:
+        return err(rc.error.toError(base, info))
+      else:
+        return err(rc.error.toError(base, info, AccNotFound))
 
     if pyl.pType != AccountData:
-      let vePair = (pyl.account.storageID, PayloadTypeUnsupported)
-      return err(vePair.toError(base, info & "/" & $pyl.pType))
+      let vidErrPair = (pyl.account.storageID, PayloadTypeUnsupported)
+      return err(vidErrPair.toError(base, info & "/" & $pyl.pType))
     ok cAcc.toCoreDbAccount(pyl.account, address)
 
-  proc accMerge(
-      cAcc: AristoCoreDxAccRef;
-      acc: CoreDbAccount;
-      info: static[string];
-        ): CoreDbRc[void] =
+  proc accMerge(account: CoreDbAccount): CoreDbRc[void] =
+    const info = "mergeFn()"
+
     let
-      base = cAcc.base
-      api = base.api
-      mpt = base.adb
-      key = acc.address.keccakHash.data
-      val = acc.toPayloadRef()
+      key = account.address.keccakHash.data
+      val = account.toPayloadRef()
       rc = api.mergePayload(mpt, AccountsTrieID, key, val)
     if rc.isErr:
       return err(rc.error.toError(base, info))
     ok()
 
-  proc accDelete(
-      cAcc: AristoCoreDxAccRef;
-      address: EthAddress;
-      info: static[string];
-        ): CoreDbRc[void] =
+  proc accDelete(address: EthAddress): CoreDbRc[void] =
+    const info = "deleteFn()"
+
     let
-      base = cAcc.base
-      api = base.api
-      mpt = base.adb
       key = address.keccakHash.data
       rc = api.delete(mpt, AccountsTrieID, key, VOID_PATH_ID)
     if rc.isErr:
@@ -462,15 +406,10 @@ proc accMethods(cAcc: AristoCoreDxAccRef): CoreDbAccFns =
       return err(rc.error.toError(base, info))
     ok()
 
-  proc accStoFlush(
-      cAcc: AristoCoreDxAccRef;
-      address: EthAddress;
-      info: static[string];
-        ): CoreDbRc[void] =
+  proc accStoFlush(address: EthAddress): CoreDbRc[void] =
+    const info = "stoFlushFn()"
+
     let
-      base = cAcc.base
-      api = base.api
-      mpt = base.adb
       key = address.keccakHash.data
       pyl = api.fetchPayload(mpt, AccountsTrieID, key).valueOr:
         return ok()
@@ -484,51 +423,47 @@ proc accMethods(cAcc: AristoCoreDxAccRef): CoreDbAccFns =
           return err(rc.error.toError(base, info))
     ok()
 
-  proc accHasPath(
-      cAcc: AristoCoreDxAccRef;
-      address: EthAddress;
-      info: static[string];
-        ): CoreDbRc[bool] =
+  proc accHasPath(address: EthAddress): CoreDbRc[bool] =
+    const info = "hasPathFn()"
+
     let
-      base = cAcc.base
-      api = cAcc.base.api
-      mpt = cAcc.base.adb
       key = address.keccakHash.data
       rc = api.hasPath(mpt, AccountsTrieID, key)
     if rc.isErr:
       return err(rc.error.toError(base, info))
     ok(rc.value)
 
+
   CoreDbAccFns(
     backendFn: proc(): CoreDbAccBackendRef =
-      cAcc.accBackend(),
+      accBackend(),
 
     newMptFn: proc(): CoreDbRc[CoreDxMptRef] =
-      cAcc.accCloneMpt("newMptFn()"),
+      accCloneMpt(),
 
     fetchFn: proc(address: EthAddress): CoreDbRc[CoreDbAccount] =
-      cAcc.accFetch(address, "fetchFn()"),
+      accFetch(address),
 
     deleteFn: proc(address: EthAddress): CoreDbRc[void] =
-      cAcc.accDelete(address, "deleteFn()"),
+      accDelete(address),
 
     stoFlushFn: proc(address: EthAddress): CoreDbRc[void] =
-      cAcc.accStoFlush(address, "stoFlushFn()"),
+      accStoFlush(address),
 
     mergeFn: proc(acc: CoreDbAccount): CoreDbRc[void] =
-      cAcc.accMerge(acc, "mergeFn()"),
+      accMerge(acc),
 
     hasPathFn: proc(address: EthAddress): CoreDbRc[bool] =
-      cAcc.accHasPath(address, "hasPathFn()"),
+      accHasPath(address),
 
     getTrieFn: proc(): CoreDbTrieRef =
-      cAcc.getTrieFn(),
+      getTrieFn(),
 
     isPruningFn: proc(): bool =
       true,
 
     persistentFn: proc(): CoreDbRc[void] =
-      cAcc.accPersistent("persistentFn()"),
+      accPersistent(),
 
     forgetFn: proc(): CoreDbRc[void] =
       discard)
