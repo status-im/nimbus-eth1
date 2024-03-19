@@ -35,11 +35,7 @@ suite "History Content Encodings":
         raiseAssert "Invalid epoch accumulator file: " & accumulatorFile
       blockHeadersWithProof = buildHeadersWithProof(blockHeaders, epochAccumulator).valueOr:
         raiseAssert "Could not build headers with proof"
-      accumulator =
-        try:
-          SSZ.decode(finishedAccumulator, FinishedAccumulator)
-        except SszError as err:
-          raiseAssert "Invalid baked-in accumulator: " & err.msg
+      accumulator = loadAccumulator()
 
     let res = readJsonType(headersWithProofFile, JsonPortalContentTable)
     check res.isOk()
@@ -85,11 +81,7 @@ suite "History Content Encodings":
     const dataFile =
       "./vendor/portal-spec-tests/tests/mainnet/history/headers_with_proof/14764013.json"
 
-    let accumulator =
-      try:
-        SSZ.decode(finishedAccumulator, FinishedAccumulator)
-      except SszError as err:
-        raiseAssert "Invalid baked-in accumulator: " & err.msg
+    let accumulator = loadAccumulator()
 
     let res = readJsonType(dataFile, JsonPortalContentTable)
     check res.isOk()

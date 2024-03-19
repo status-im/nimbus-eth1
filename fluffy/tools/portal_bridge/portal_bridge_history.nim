@@ -346,12 +346,7 @@ proc runBackfillLoop(
 ) {.async: (raises: [CancelledError]).} =
   let
     rng = newRng()
-    accumulator =
-      try:
-        SSZ.decode(finishedAccumulator, FinishedAccumulator)
-      except SerializationError as err:
-        raiseAssert "Invalid baked-in accumulator: " & err.msg
-
+    accumulator = loadAccumulator()
   while true:
     let
       # Grab a random era1 to backfill

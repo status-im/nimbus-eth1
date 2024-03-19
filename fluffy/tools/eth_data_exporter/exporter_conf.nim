@@ -69,6 +69,7 @@ type
     exportLCUpdates = "Export Light Client Updates"
     exportLCFinalityUpdate = "Export Light Client Finality Update"
     exportLCOptimisticUpdate = "Export Light Client Optimistic Update"
+    exportHistoricalRoots = "Export historical roots from the beacon state (SSZ format)"
 
   ExporterConf* = object
     logLevel* {.
@@ -206,6 +207,8 @@ type
       of exportLCFinalityUpdate:
         discard
       of exportLCOptimisticUpdate:
+        discard
+      of exportHistoricalRoots:
         discard
 
 proc parseCmdArg*(T: type Web3Url, p: string): T {.raises: [ValueError].} =

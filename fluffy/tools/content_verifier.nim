@@ -38,12 +38,7 @@ type ContentVerifierConf* = object
   .}: uint16
 
 proc checkAccumulators(client: RpcClient) {.async.} =
-  let accumulator =
-    # Get it from binary file containing SSZ encoded accumulator
-    try:
-      SSZ.decode(finishedAccumulator, FinishedAccumulator)
-    except SszError as err:
-      raiseAssert "Invalid baked-in accumulator: " & err.msg
+  let accumulator = loadAccumulator()
 
   for i, hash in accumulator.historicalEpochs:
     let root = Digest(data: hash)
