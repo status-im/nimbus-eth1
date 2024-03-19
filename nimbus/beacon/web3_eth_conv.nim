@@ -22,16 +22,17 @@ export
   primitives
 
 type
-  Web3Hash*       = web3types.Hash256
-  Web3Address*    = web3types.Address
-  Web3Bloom*      = web3types.FixedBytes[256]
-  Web3Quantity*   = web3types.Quantity
-  Web3PrevRandao* = web3types.FixedBytes[32]
-  Web3ExtraData*  = web3types.DynamicBytes[0, 32]
-  Web3Topic*      = eth_api_types.Topic
-  Web3Tx*         = engine_api_types.TypedTransaction
-  Web3Blob*       = engine_api_types.Blob
-  Web3KZGProof*   = engine_api_types.KZGProof
+  Web3Hash*          = web3types.Hash256
+  Web3Address*       = web3types.Address
+  Web3Bloom*         = web3types.FixedBytes[256]
+  Web3Quantity*      = web3types.Quantity
+  Web3PrevRandao*    = web3types.FixedBytes[32]
+  Web3ExtraData*     = web3types.DynamicBytes[0, 32]
+  Web3BlockNumber*   = web3types.BlockNumber
+  Web3Topic*         = eth_api_types.Topic
+  Web3Tx*            = engine_api_types.TypedTransaction
+  Web3Blob*          = engine_api_types.Blob
+  Web3KZGProof*      = engine_api_types.KZGProof
   Web3KZGCommitment* = engine_api_types.KZGCommitment
 
 {.push gcsafe, raises:[].}
@@ -84,6 +85,9 @@ func u64*(x: Option[Web3Quantity]): Option[uint64] =
   else: some(uint64 x.get)
 
 func u256*(x: Web3Quantity): UInt256 =
+  u256(x.uint64)
+
+func u256*(x: Web3BlockNumber): UInt256 =
   u256(x.uint64)
 
 func u256*(x: FixedBytes[32]): UInt256 =
@@ -220,6 +224,16 @@ func w3Qty*(x: Option[uint64]): Option[Web3Quantity] =
 
 func w3Qty*(x: uint64): Web3Quantity =
   Web3Quantity(x)
+
+func w3BlockNumber*(x: Option[uint64]): Option[Web3BlockNumber] =
+  if x.isNone: none(Web3BlockNumber)
+  else: some(Web3BlockNumber x.get)
+
+func w3BlockNumber*(x: uint64): Web3BlockNumber =
+  Web3BlockNumber(x)
+
+func w3BlockNumber*(x: UInt256): Web3BlockNumber =
+  Web3BlockNumber x.truncate(uint64)
 
 func w3FixedBytes*(x: UInt256): FixedBytes[32] =
   FixedBytes[32](x.toBytesBE)

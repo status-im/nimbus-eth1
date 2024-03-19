@@ -86,7 +86,7 @@ proc dumpMemoryDB*(node: JsonNode, db: CoreDbRef) =
     n[k.toHex(false)] = %v
   node["state"] = n
 
-proc dumpMemoryDB*(node: JsonNode, kvt: TableRef[Blob,Blob]) =
+proc dumpMemoryDB*(node: JsonNode, kvt: TableRef[common.Blob, common.Blob]) =
   var n = newJObject()
   for k, v in kvt:
     n[k.toHex(false)] = %v
