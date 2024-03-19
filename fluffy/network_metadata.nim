@@ -7,12 +7,17 @@
 
 {.push raises: [].}
 
-import std/[sequtils, strutils, os, macros], stew/results, chronos/timer
+import
+  std/[sequtils, strutils, os, macros],
+  results,
+  stew/io2,
+  chronos/timer,
+  beacon_chain/spec/forks,
+  ./network/history/accumulator
 
 proc loadBootstrapNodes(path: string): seq[string] {.raises: [IOError].} =
   # Read a list of ENR URIs from a file containing a flat list of entries.
   # If the file can't be read, this will raise. This is intentionally.
-
   splitLines(readFile(path)).filterIt(it.startsWith("enr:")).mapIt(it.strip())
 
 proc loadCompileTimeBootstrapNodes(path: string): seq[string] =
@@ -22,14 +27,6 @@ proc loadCompileTimeBootstrapNodes(path: string): seq[string] =
   # unhandled exception (IOError)
   except IOError as err:
     macros.error "Failed to load bootstrap nodes metadata at '" & path & "': " & err.msg
-
-# Need to use std/io readFile because:
-# https://github.com/status-im/nim-stew/issues/145
-proc loadEncodedAccumulator(path: string): string =
-  try:
-    return readFile(path).string
-  except IOError as err:
-    macros.error "Failed to read finished accumulator at '" & path & "': " & err.msg
 
 const
   # TODO: Change this from our local repo to an eth-client repo if/when this
@@ -55,9 +52,24 @@ const
     portalNetworksDir / "testnet0" / "bootstrap_nodes.txt"
   )
 
-  finishedAccumulator* = loadEncodedAccumulator(
+  finishedAccumulatorSSZ* = slurp(
     portalTestDir / "mainnet" / "history" / "accumulator" / "finished_accumulator.ssz"
   )
+
+  historicalRootsSSZ* =
+    slurp(portalTestDir / "mainnet" / "beacon_chain" / "historical_roots.ssz")
+
+func loadAccumulator*(): FinishedAccumulator =
+  try:
+    SSZ.decode(finishedAccumulatorSSZ, FinishedAccumulator)
+  except SerializationError as err:
+    raiseAssert "Invalid baked-in accumulator: " & err.msg
+
+func loadHistoricalRoots*(): HashList[Eth2Digest, Limit HISTORICAL_ROOTS_LIMIT] =
+  try:
+    SSZ.decode(historicalRootsSSZ, HashList[Eth2Digest, Limit HISTORICAL_ROOTS_LIMIT])
+  except SerializationError as err:
+    raiseAssert "Invalid baked-in historical_roots: " & err.msg
 
 type
   # TODO: I guess we could use the nimbus ChainConfig but:

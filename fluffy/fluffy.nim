@@ -215,10 +215,7 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
         )
       else:
         # Get it from binary file containing SSZ encoded accumulator
-        try:
-          SSZ.decode(finishedAccumulator, FinishedAccumulator)
-        except SszError as err:
-          raiseAssert "Invalid baked-in accumulator: " & err.msg
+        loadAccumulator()
 
     historyNetwork =
       if Network.history in config.networks:

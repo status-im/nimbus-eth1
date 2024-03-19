@@ -8,19 +8,22 @@
 {.push raises: [].}
 
 import
+  std/os,
   chronicles,
   chronos,
-  stew/byteutils,
+  stew/[byteutils, io2],
   eth/async_utils,
   beacon_chain/networking/network_metadata,
-  beacon_chain/spec // eth2_apis/rest_beacon_client,
+  beacon_chain/spec/eth2_apis/rest_beacon_client,
   beacon_chain/beacon_clock,
   ../../network/beacon/beacon_content,
   ./exporter_common
 
 export beacon_clock
 
-const restRequestsTimeout = 30.seconds
+const
+  largeRequestsTimeout = 60.seconds # Downloading large items such as states.
+  restRequestsTimeout = 30.seconds
 
 proc getBeaconData*(): (RuntimeConfig, ref ForkDigests, BeaconClock) =
   let
@@ -255,3 +258,41 @@ proc exportLCOptimisticUpdate*(
       contentTable[$slot] = portalContent
 
       writePortalContentToJson(fh, contentTable)
+
+proc exportHistoricalRoots*(
+    restUrl: string, dataDir: string, cfg: RuntimeConfig, forkDigests: ref ForkDigests
+) {.async.} =
+  let file = dataDir / "historical_roots.ssz"
+  if isFile(file):
+    notice "Not downloading historical_roots, file already exists", file
+    quit 1
+
+  let client = RestClientRef.new(restUrl).valueOr:
+    error "Cannot connect to server", error
+    quit 1
+
+  let state =
+    try:
+      notice "Downloading beacon state"
+      awaitWithTimeout(
+        client.getStateV2(StateIdent.init(StateIdentType.Finalized), cfg),
+        largeRequestsTimeout,
+      ):
+        error "Attempt to download beacon state timed out"
+        quit 1
+    except CatchableError as exc:
+      error "Unable to download beacon state", error = exc.msg
+      quit 1
+
+  if state == nil:
+    error "No beacon state found"
+    quit 1
+
+  let historical_roots = getStateField(state[], historical_roots)
+
+  let res = io2.writeFile(file, SSZ.encode(historical_roots))
+  if res.isErr():
+    error "Failed writing historical_roots to file", file, error = ioErrorMsg(res.error)
+    quit 1
+  else:
+    notice "Succesfully wrote historical_roots to file", file

@@ -688,3 +688,7 @@ when isMainModule:
       waitFor exportLCOptimisticUpdate(
         config.restUrl, string config.dataDir, cfg, forkDigests
       )
+    of BeaconCmd.exportHistoricalRoots:
+      waitFor exportHistoricalRoots(
+        config.restUrl, string config.dataDir, cfg, forkDigests
+      )
