@@ -115,6 +115,7 @@ VERIF_PROXY_OUT_PATH ?= build/libverifproxy/
 	libnimbus.so \
 	libnimbus.a \
 	libbacktrace \
+	rocksdb \
 	dist-amd64 \
 	dist-arm64 \
 	dist-arm \
@@ -180,6 +181,8 @@ ifneq ($(USE_LIBBACKTRACE), 0)
 deps: | libbacktrace
 endif
 
+deps: | rocksdb
+
 ifneq ($(USE_MIRACL), 0)
   NIM_PARAMS += -d:BLS_FORCE_BACKEND=miracl
 endif
@@ -232,6 +235,10 @@ nimbus.nims:
 # nim-libbacktrace
 libbacktrace:
 	+ $(MAKE) -C vendor/nim-libbacktrace --no-print-directory BUILD_CXX_LIB=0
+
+# nim-rocksdb
+rocksdb:
+	+ vendor/nim-rocksdb/scripts/build_static_deps.sh
 
 # builds and runs the nimbus test suite
 test: | build deps

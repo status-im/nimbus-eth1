@@ -159,3 +159,15 @@ if defined(windows) and defined(i386):
 # nim-kzg shipping their own blst, nimbus-eth1 too.
 # disable nim-kzg's blst
 switch("define", "kzgExternalBlst")
+
+# nim-rocksdb static linking
+import std/os
+
+const libsDir = currentSourcePath.parentDir() & "/vendor/nim-rocksdb/build/lib"
+switch("define", "rocksdb_static_linking")
+switch("gcc.linkerexe", "g++") # use the C++ linker profile because it's a C++ library
+switch("dynlibOverride", "libz.a")
+switch("dynlibOverride", "librocksdb.a")
+switch("l", libsDir & "/librocksdb.a")
+switch("l", libsDir & "/libz.a")
+#switch("passL", "-s") # to reduce the binary size if needed
