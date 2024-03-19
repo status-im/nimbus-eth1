@@ -166,8 +166,15 @@ import std/os
 const libsDir = currentSourcePath.parentDir() & "/vendor/nim-rocksdb/build/lib"
 switch("define", "rocksdb_static_linking")
 switch("gcc.linkerexe", "g++") # use the C++ linker profile because it's a C++ library
-switch("dynlibOverride", "libz.a")
 switch("dynlibOverride", "librocksdb.a")
+switch("dynlibOverride", "libz.a")
+switch("dynlibOverride", "libbz2.a")
+switch("dynlibOverride", "liblz4.a")
+switch("dynlibOverride", "libzstd.a")
+
 switch("l", libsDir & "/librocksdb.a")
 switch("l", libsDir & "/libz.a")
+switch("l", libsDir & "/libbz2.a")
+switch("l", libsDir & "/liblz4.a")
+switch("l", libsDir & "/libzstd.a")
 #switch("passL", "-s") # to reduce the binary size if needed
