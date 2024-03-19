@@ -694,6 +694,10 @@ proc makeMultiKeys*(ac: AccountsCache): MultiKeysRef =
     result.add(k, v.codeTouched, multiKeys(v.storageKeys))
   result.sort()
 
+  # reset the witness cache after collecting the witness data
+  # so it is clean before executing the next block
+  ac.witnessCache.clear()
+
 proc accessList*(ac: AccountsCache, address: EthAddress) {.inline.} =
   ac.savePoint.accessList.add(address)
 
