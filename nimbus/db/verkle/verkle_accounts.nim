@@ -10,14 +10,12 @@ import
   eth/common,
   stew/[byteutils, endians2], stint,
   "../../../vendor/nim-eth-verkle/eth_verkle"/[
-    math, 
-    utils, 
+    math,
     tree/tree, 
     tree/operations, 
     tree/commitment
   ],
   "../../../vendor/nim-eth-verkle/constantine/constantine"/[
-    serialization/codecs, 
     serialization/codecs_banderwagon
   ]
 
@@ -77,26 +75,30 @@ proc evaluateAddressPoint*(address: EthAddress): Point =
   return ret
 
 proc getTreeKey*(address: EthAddress, treeIndex: UInt256, subIndex: byte): Bytes32 =
-  var newAddr: array[32, byte]
+  var newAddr {.noinit.} : array[32, byte]
   for i in 0 ..< (32 - address.len):
     newAddr[i] = 0
   newAddr[(32 - address.len)..^1] = address
 
-  var poly: array[5, Field]
-  var b: array[4, byte]
-  b[0] = 0
-  b[1] = 0
-  b[2] = 2
-  b[3] = 40
-  poly[0].fromLEBytes(b) # 2+256*64
+  var poly: array[256, Field]
   poly[1].fromLEBytes(newAddr[0..15])
   poly[2].fromLEBytes(newAddr[16..^1])
 
-  var treeIndexBytes = treeIndex.toBytesBE()
-  poly[3].fromLEBytes(treeIndexBytes[0..15])
-  poly[4].fromLEBytes(treeIndexBytes[16..^1])
+  var getTreePolyIndex0Point {.noinit.} : Point
+  var a = fromHex(Bytes32, "0x22196df2c10590e04c34bd5cc57e09911b98c782a503d21bc1838e1c6e1a10bf")
+  discard getTreePolyIndex0Point.deserialize(a)
 
-  var ret = poly.ipaCommitToPoly()
+  var treeIndexBytes = treeIndex.toBytesBE()
+  poly[3].fromBEBytes(treeIndexBytes[16..^1])
+  poly[4].fromBEBytes(treeIndexBytes[0..15])
+
+  poly[0] = zeroField()
+  for i in 5 .. 255:
+    poly[i] = zeroField()
+  
+  var ret = ipaCommitToPoly(poly)
+
+  ret.banderwagonAddPoint(getTreePolyIndex0Point)
   return pointToHash(ret, subIndex)
 
 proc getTreeKeyAccountLeaf*(address: EthAddress, leaf: byte): Bytes32 =
