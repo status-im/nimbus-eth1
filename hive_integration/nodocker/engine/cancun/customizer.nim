@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  std/[options, strutils, typetraits, random],
+  std/[options, strutils, typetraits],
   stew/byteutils,
   ./blobs,
   ../types,
@@ -82,17 +82,17 @@ method getExpectedError(cust: BaseGetPayloadCustomizer): int =
   cust.expectedError
 
 type
-  UpgradegetPayloadVersion* = ref object of BaseGetPayloadCustomizer
+  UpgradeGetPayloadVersion* = ref object of BaseGetPayloadCustomizer
 
-method getPayloadVersion(cust: UpgradegetPayloadVersion, timestamp: uint64): Version =
+method getPayloadVersion(cust: UpgradeGetPayloadVersion, timestamp: uint64): Version =
   let version = procCall getPayloadVersion(cust.GetPayloadCustomizer, timestamp)
   doAssert(version != Version.high, "cannot upgrade version " & $Version.high)
   version.succ
 
 type
-  DowngradegetPayloadVersion* = ref object of BaseGetPayloadCustomizer
+  DowngradeGetPayloadVersion* = ref object of BaseGetPayloadCustomizer
 
-method getPayloadVersion(cust: DowngradegetPayloadVersion, timestamp: uint64): Version =
+method getPayloadVersion(cust: DowngradeGetPayloadVersion, timestamp: uint64): Version =
   let version = procCall getPayloadVersion(cust.GetPayloadCustomizer, timestamp)
   doAssert(version != Version.V1, "cannot downgrade version 1")
   version.pred
@@ -171,9 +171,9 @@ method getExpectInvalidStatus(cust: BaseForkchoiceUpdatedCustomizer): bool =
 
 # Customizer that upgrades the version of the forkchoice directive call to the next version.
 type
-  UpgradeforkchoiceUpdatedVersion* = ref object of BaseForkchoiceUpdatedCustomizer
+  UpgradeForkchoiceUpdatedVersion* = ref object of BaseForkchoiceUpdatedCustomizer
 
-method forkchoiceUpdatedVersion(cust: UpgradeforkchoiceUpdatedVersion, headTimestamp:
+method forkchoiceUpdatedVersion(cust: UpgradeForkchoiceUpdatedVersion, headTimestamp:
                                 uint64, payloadAttributesTimestamp: Option[uint64] = none(uint64)): Version =
   let version = procCall forkchoiceUpdatedVersion(EngineAPIVersionResolver(cust), headTimestamp, payloadAttributesTimestamp)
   doAssert(version != Version.high, "cannot upgrade version " & $Version.high)
@@ -181,9 +181,9 @@ method forkchoiceUpdatedVersion(cust: UpgradeforkchoiceUpdatedVersion, headTimes
 
 # Customizer that downgrades the version of the forkchoice directive call to the previous version.
 type
-  DowngradeforkchoiceUpdatedVersion* = ref object of BaseForkchoiceUpdatedCustomizer
+  DowngradeForkchoiceUpdatedVersion* = ref object of BaseForkchoiceUpdatedCustomizer
 
-method forkchoiceUpdatedVersion(cust: DowngradeforkchoiceUpdatedVersion, headTimestamp: uint64,
+method forkchoiceUpdatedVersion(cust: DowngradeForkchoiceUpdatedVersion, headTimestamp: uint64,
                                 payloadAttributesTimestamp: Option[uint64] = none(uint64)): Version =
   let version = procCall forkchoiceUpdatedVersion(EngineAPIVersionResolver(cust), headTimestamp, payloadAttributesTimestamp)
   doAssert(version != Version.V1, "cannot downgrade version 1")
@@ -686,6 +686,7 @@ proc generateInvalidPayload*(sender: TxSender, data: ExecutableData, payloadFiel
 # amounts and accounts, but the order in the list is different, so
 # stateRoot of the resulting payload should be the same.
 
-proc randomizeWithdrawalsOrder(src: openArray[Withdrawal]): seq[Withdrawal] =
-  result = @src
-  result.shuffle
+when false:
+  proc randomizeWithdrawalsOrder(src: openArray[Withdrawal]): seq[Withdrawal] =
+    result = @src
+    result.shuffle

@@ -37,7 +37,6 @@ import
   chronicles,
   eth/common,
   results,
-  stew/byteutils,
   "."/[aristo_desc, aristo_get, aristo_layers, aristo_serialise, aristo_utils]
 
 type
@@ -56,14 +55,16 @@ logScope:
 # Private helpers
 # ------------------------------------------------------------------------------
 
-template logTxt(info: static[string]): static[string] =
-  "Hashify " & info
+when false:
+  template logTxt(info: static[string]): static[string] =
+    "Hashify " & info
 
 func getOrVoid(tab: Table[VertexID,VertexID]; vid: VertexID): VertexID =
   tab.getOrDefault(vid, VertexID(0))
 
-func contains(wff: WidthFirstForest; vid: VertexID): bool =
-  vid in wff.base or vid in wff.pool or vid in wff.root
+when false:
+  func contains(wff: WidthFirstForest; vid: VertexID): bool =
+    vid in wff.base or vid in wff.pool or vid in wff.root
 
 # ------------------------------------------------------------------------------
 # Private functions

@@ -42,9 +42,6 @@ const
   extraTraceMessages = false # or true
     ## Enabled additional logging noise
 
-  estimatedNodeSize = hexaryRangeRlpNodesListSizeMax(1)
-    ## Some expected upper limit for a single node
-
   estimatedProofSize = hexaryRangeRlpNodesListSizeMax(10)
     ## Some expected upper limit, typically not mote than 10 proof nodes
 
@@ -57,6 +54,11 @@ const
 
   defaultDataSizeMax = fetchRequestBytesLimit
     ## Truncate maximum data size
+
+when false:
+  const
+    estimatedNodeSize = hexaryRangeRlpNodesListSizeMax(1)
+      ## Some expected upper limit for a single node
 
 # ------------------------------------------------------------------------------
 # Private functions: helpers

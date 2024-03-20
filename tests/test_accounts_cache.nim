@@ -39,6 +39,7 @@ const
     numBlocks: 5500,  # unconditionally load blocks
     numTxs:      10)  # txs following (not in block chain)
 
+when false:
   goerliCapture1: CaptureSpecs = (
     GoerliNet, goerliCapture.file, 5500, 10000)
 
@@ -80,15 +81,16 @@ proc pp*(tx: Transaction; vmState: BaseVMState): string =
     "," & $vmState.readOnlyStateDB.getBalance(address) &
     ")"
 
-proc setTraceLevel =
-  discard
-  when defined(chronicles_runtime_filtering) and loggingEnabled:
-    setLogLevel(LogLevel.TRACE)
-
-proc setErrorLevel =
-  discard
-  when defined(chronicles_runtime_filtering) and loggingEnabled:
-    setLogLevel(LogLevel.ERROR)
+when false:
+  proc setTraceLevel =
+    discard
+    when defined(chronicles_runtime_filtering) and loggingEnabled:
+      setLogLevel(LogLevel.TRACE)
+  
+  proc setErrorLevel =
+    discard
+    when defined(chronicles_runtime_filtering) and loggingEnabled:
+      setLogLevel(LogLevel.ERROR)
 
 # ------------------------------------------------------------------------------
 # Private functions

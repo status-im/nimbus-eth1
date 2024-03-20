@@ -16,9 +16,9 @@ import
 type
   BlockStatusRPCcheckType* = enum
     LatestOnNewPayload            = "Latest Block on NewPayload"
-    LatestOnHeadblockHash         = "Latest Block on HeadblockHash Update"
-    SafeOnSafeblockHash           = "Safe Block on SafeblockHash Update"
-    FinalizedOnFinalizedblockHash = "Finalized Block on FinalizedblockHash Update"
+    LatestOnHeadBlockHash         = "Latest Block on HeadblockHash Update"
+    SafeOnSafeBlockHash           = "Safe Block on SafeblockHash Update"
+    FinalizedOnFinalizedBlockHash = "Finalized Block on FinalizedblockHash Update"
 
 type
   BlockStatus* = ref object of EngineSpec
@@ -42,9 +42,9 @@ method execute(cs: BlockStatus, env: TestEnv): bool =
   let ok = waitFor env.clMock.waitForTTD()
   testCond ok
 
-  if cs.checkType in [SafeOnSafeblockHash, FinalizedOnFinalizedblockHash]:
+  if cs.checkType in [SafeOnSafeBlockHash, FinalizedOnFinalizedBlockHash]:
     var number = Finalized
-    if cs.checkType == SafeOnSafeblockHash:
+    if cs.checkType == SafeOnSafeBlockHash:
       number = Safe
 
     let p = env.engine.client.namedHeader(number)
@@ -87,19 +87,19 @@ method execute(cs: BlockStatus, env: TestEnv): bool =
       let q = env.engine.client.txReceipt(shadow.txHash)
       q.expectError()
       return true
-  of LatestOnHeadblockHash:
+  of LatestOnHeadBlockHash:
     callbacks.onForkchoiceBroadcast = proc(): bool =
       let r = env.engine.client.namedHeader(Head)
       r.expectHash(ethHash env.clMock.latestForkchoice.headblockHash)
       let s = env.engine.client.txReceipt(shadow.txHash)
       s.expectTransactionHash(shadow.txHash)
       return true
-  of SafeOnSafeblockHash:
+  of SafeOnSafeBlockHash:
     callbacks.onSafeBlockChange = proc(): bool =
       let r = env.engine.client.namedHeader(Safe)
       r.expectHash(ethHash env.clMock.latestForkchoice.safeblockHash)
       return true
-  of FinalizedOnFinalizedblockHash:
+  of FinalizedOnFinalizedBlockHash:
     callbacks.onFinalizedBlockChange = proc(): bool =
       let r = env.engine.client.namedHeader(Finalized)
       r.expectHash(ethHash env.clMock.latestForkchoice.finalizedblockHash)

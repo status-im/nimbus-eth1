@@ -91,11 +91,11 @@ func client*(env: TestEnv): RpcHttpClient =
 func engine*(env: TestEnv): EngineEnv =
   env.clients.first
 
-func sender*(env: TesTenv): TxSender =
+func sender*(env: TestEnv): TxSender =
   env.sender
 
 proc setupCLMock*(env: TestEnv) =
-  env.clmock = newCLMocker(env.engine, env.engine.com)
+  env.clMock = newClMocker(env.engine, env.engine.com)
 
 proc addEngine*(env: TestEnv, addToCL: bool = true, connectBootNode: bool = true): EngineEnv =
   doAssert(env.clMock.isNil.not)

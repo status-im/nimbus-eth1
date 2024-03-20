@@ -17,244 +17,244 @@ macro_assembler.coreDbType = LegacyDbMemory
 
 proc opMemoryMain*() =
   suite "Memory Opcodes":
-    assembler: # PUSH1 OP
-      title: "PUSH1"
+    assembler: # Push1 OP
+      title: "Push1"
       code:
-        PUSH1 "0xa0"
+        Push1 "0xa0"
       stack: "0x00000000000000000000000000000000000000000000000000000000000000A0"
 
-    assembler: # PUSH2 OP
-      title: "PUSH2"
+    assembler: # Push2 OP
+      title: "Push2"
       code:
-        PUSH2 "0xa0b0"
+        Push2 "0xa0b0"
       stack: "0x000000000000000000000000000000000000000000000000000000000000A0B0"
 
-    assembler: # PUSH3 OP
-      title: "PUSH3"
+    assembler: # Push3 OP
+      title: "Push3"
       code:
-        PUSH3 "0xA0B0C0"
+        Push3 "0xA0B0C0"
       stack: "0x0000000000000000000000000000000000000000000000000000000000A0B0C0"
 
-    assembler: # PUSH4 OP
-      title: "PUSH4"
+    assembler: # Push4 OP
+      title: "Push4"
       code:
-        PUSH4 "0xA0B0C0D0"
+        Push4 "0xA0B0C0D0"
       stack: "0x00000000000000000000000000000000000000000000000000000000A0B0C0D0"
 
-    assembler: # PUSH5 OP
-      title: "PUSH5"
+    assembler: # Push5 OP
+      title: "Push5"
       code:
-        PUSH5 "0xA0B0C0D0E0"
+        Push5 "0xA0B0C0D0E0"
       stack: "0x000000000000000000000000000000000000000000000000000000A0B0C0D0E0"
 
-    assembler: # PUSH6 OP
-      title: "PUSH6"
+    assembler: # Push6 OP
+      title: "Push6"
       code:
-        PUSH6 "0xA0B0C0D0E0F0"
+        Push6 "0xA0B0C0D0E0F0"
       stack: "0x0000000000000000000000000000000000000000000000000000A0B0C0D0E0F0"
 
-    assembler: # PUSH7 OP
-      title: "PUSH7"
+    assembler: # Push7 OP
+      title: "Push7"
       code:
-        PUSH7 "0xA0B0C0D0E0F0A1"
+        Push7 "0xA0B0C0D0E0F0A1"
       stack: "0x00000000000000000000000000000000000000000000000000A0B0C0D0E0F0A1"
 
-    assembler: # PUSH8 OP
-      title: "PUSH8"
+    assembler: # Push8 OP
+      title: "Push8"
       code:
-        PUSH8 "0xA0B0C0D0E0F0A1B1"
+        Push8 "0xA0B0C0D0E0F0A1B1"
       stack: "0x000000000000000000000000000000000000000000000000A0B0C0D0E0F0A1B1"
 
-    assembler: # PUSH9 OP
-      title: "PUSH9"
+    assembler: # Push9 OP
+      title: "Push9"
       code:
-        PUSH9 "0xA0B0C0D0E0F0A1B1C1"
+        Push9 "0xA0B0C0D0E0F0A1B1C1"
       stack: "0x0000000000000000000000000000000000000000000000A0B0C0D0E0F0A1B1C1"
 
-    assembler: # PUSH10 OP
-      title: "PUSH10"
+    assembler: # Push10 OP
+      title: "Push10"
       code:
-        PUSH10 "0xA0B0C0D0E0F0A1B1C1D1"
+        Push10 "0xA0B0C0D0E0F0A1B1C1D1"
       stack: "0x00000000000000000000000000000000000000000000A0B0C0D0E0F0A1B1C1D1"
 
-    assembler: # PUSH11 OP
-      title: "PUSH11"
+    assembler: # Push11 OP
+      title: "Push11"
       code:
-        PUSH11 "0xA0B0C0D0E0F0A1B1C1D1E1"
+        Push11 "0xA0B0C0D0E0F0A1B1C1D1E1"
       stack: "0x000000000000000000000000000000000000000000A0B0C0D0E0F0A1B1C1D1E1"
 
-    assembler: # PUSH12 OP
-      title: "PUSH12"
+    assembler: # Push12 OP
+      title: "Push12"
       code:
-        PUSH12 "0xA0B0C0D0E0F0A1B1C1D1E1F1"
+        Push12 "0xA0B0C0D0E0F0A1B1C1D1E1F1"
       stack: "0x0000000000000000000000000000000000000000A0B0C0D0E0F0A1B1C1D1E1F1"
 
-    assembler: # PUSH13 OP
-      title: "PUSH13"
+    assembler: # Push13 OP
+      title: "Push13"
       code:
-        PUSH13 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2"
+        Push13 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2"
       stack: "0x00000000000000000000000000000000000000A0B0C0D0E0F0A1B1C1D1E1F1A2"
 
-    assembler: # PUSH14 OP
-      title: "PUSH14"
+    assembler: # Push14 OP
+      title: "Push14"
       code:
-        PUSH14 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2"
+        Push14 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2"
       stack: "0x000000000000000000000000000000000000A0B0C0D0E0F0A1B1C1D1E1F1A2B2"
 
-    assembler: # PUSH15 OP
-      title: "PUSH15"
+    assembler: # Push15 OP
+      title: "Push15"
       code:
-        PUSH15 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2"
+        Push15 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2"
       stack: "0x0000000000000000000000000000000000A0B0C0D0E0F0A1B1C1D1E1F1A2B2C2"
 
-    assembler: # PUSH16 OP
-      title: "PUSH16"
+    assembler: # Push16 OP
+      title: "Push16"
       code:
-        PUSH16 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2"
+        Push16 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2"
       stack: "0x00000000000000000000000000000000A0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2"
 
-    assembler: # PUSH17 OP
-      title: "PUSH17"
+    assembler: # Push17 OP
+      title: "Push17"
       code:
-        PUSH17 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2"
+        Push17 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2"
       stack: "0x000000000000000000000000000000A0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2"
 
-    assembler: # PUSH18 OP
-      title: "PUSH18"
+    assembler: # Push18 OP
+      title: "Push18"
       code:
-        PUSH18 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2"
+        Push18 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2"
       stack: "0x0000000000000000000000000000A0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2"
 
-    assembler: # PUSH19 OP
-      title: "PUSH19"
+    assembler: # Push19 OP
+      title: "Push19"
       code:
-        PUSH19 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3"
+        Push19 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3"
       stack: "0x00000000000000000000000000A0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3"
 
-    assembler: # PUSH20 OP
-      title: "PUSH20"
+    assembler: # Push20 OP
+      title: "Push20"
       code:
-        PUSH20 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3"
+        Push20 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3"
       stack: "0x000000000000000000000000A0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3"
 
-    assembler: # PUSH21 OP
-      title: "PUSH21"
+    assembler: # Push21 OP
+      title: "Push21"
       code:
-        PUSH21 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3"
+        Push21 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3"
       stack: "0x0000000000000000000000A0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3"
 
-    assembler: # PUSH22 OP
-      title: "PUSH22"
+    assembler: # Push22 OP
+      title: "Push22"
       code:
-        PUSH22 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3"
+        Push22 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3"
       stack: "0x00000000000000000000A0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3"
 
-    assembler: # PUSH23 OP
-      title: "PUSH23"
+    assembler: # Push23 OP
+      title: "Push23"
       code:
-        PUSH23 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3E3"
+        Push23 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3E3"
       stack: "0x000000000000000000A0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3E3"
 
-    assembler: # PUSH24 OP
-      title: "PUSH24"
+    assembler: # Push24 OP
+      title: "Push24"
       code:
-        PUSH24 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3E3F3"
+        Push24 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3E3F3"
       stack: "0x0000000000000000A0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3E3F3"
 
-    assembler: # PUSH25 OP
-      title: "PUSH25"
+    assembler: # Push25 OP
+      title: "Push25"
       code:
-        PUSH25 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3E3F3A4"
+        Push25 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3E3F3A4"
       stack: "0x00000000000000A0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3E3F3A4"
 
-    assembler: # PUSH26 OP
-      title: "PUSH26"
+    assembler: # Push26 OP
+      title: "Push26"
       code:
-        PUSH26 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3E3F3A4B4"
+        Push26 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3E3F3A4B4"
       stack: "0x000000000000A0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3E3F3A4B4"
 
-    assembler: # PUSH27 OP
-      title: "PUSH27"
+    assembler: # Push27 OP
+      title: "Push27"
       code:
-        PUSH27 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3E3F3A4B4C4"
+        Push27 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3E3F3A4B4C4"
       stack: "0x0000000000A0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3E3F3A4B4C4"
 
-    assembler: # PUSH28 OP
-      title: "PUSH28"
+    assembler: # Push28 OP
+      title: "Push28"
       code:
-        PUSH28 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3E3F3A4B4C4D4"
+        Push28 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3E3F3A4B4C4D4"
       stack: "0x00000000A0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3E3F3A4B4C4D4"
 
-    assembler: # PUSH29 OP
-      title: "PUSH29"
+    assembler: # Push29 OP
+      title: "Push29"
       code:
-        PUSH29 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3E3F3A4B4C4D4E4"
+        Push29 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3E3F3A4B4C4D4E4"
       stack: "0x000000A0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3E3F3A4B4C4D4E4"
 
-    assembler: # PUSH30 OP
-      title: "PUSH30"
+    assembler: # Push30 OP
+      title: "Push30"
       code:
-        PUSH30 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3E3F3A4B4C4D4E4F4"
+        Push30 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3E3F3A4B4C4D4E4F4"
       stack: "0x0000A0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3E3F3A4B4C4D4E4F4"
 
-    assembler: # PUSH31 OP
-      title: "PUSH31"
+    assembler: # Push31 OP
+      title: "Push31"
       code:
-        PUSH31 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3E3F3A4B4C4D4E4F4A1"
+        Push31 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3E3F3A4B4C4D4E4F4A1"
       stack: "0x00A0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3E3F3A4B4C4D4E4F4A1"
 
-    assembler: # PUSH32 OP
-      title: "PUSH32"
+    assembler: # Push32 OP
+      title: "Push32"
       code:
-        PUSH32 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3E3F3A4B4C4D4E4F4A1B1"
+        Push32 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3E3F3A4B4C4D4E4F4A1B1"
       stack: "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3E3F3A4B4C4D4E4F4A1B1"
 
     # macro assembler prevented this
-    #assembler: # PUSHN OP not enough data
-    #  title: "PUSHN_1"
+    #assembler: # PushN OP not enough data
+    #  title: "PushN_1"
     #  code:
-    #    PUSH2 "0xAA"
+    #    Push2 "0xAA"
     #  stack: "0x000000000000000000000000000000000000000000000000000000000000AA00"
     #  success: false
     #
-    #assembler: # PUSHN OP not enough data
-    #  title: "PUSHN_2"
+    #assembler: # PushN OP not enough data
+    #  title: "PushN_2"
     #  code:
-    #    PUSH32 "0xAABB"
+    #    Push32 "0xAABB"
     #  stack: "0xAABB000000000000000000000000000000000000000000000000000000000000"
     #  success: false
 
-    assembler: # POP OP
-      title: "POP_1"
+    assembler: # Pop OP
+      title: "Pop_1"
       code:
-        PUSH2 "0x0000"
-        PUSH1 "0x01"
-        PUSH3 "0x000002"
-        POP
+        Push2 "0x0000"
+        Push1 "0x01"
+        Push3 "0x000002"
+        Pop
       stack:
         "0x0000000000000000000000000000000000000000000000000000000000000000"
         "0x0000000000000000000000000000000000000000000000000000000000000001"
 
-    assembler: # POP OP
-      title: "POP_2"
+    assembler: # Pop OP
+      title: "Pop_2"
       code:
-        PUSH2 "0x0000"
-        PUSH1 "0x01"
-        PUSH3 "0x000002"
-        POP
-        POP
+        Push2 "0x0000"
+        Push1 "0x01"
+        Push3 "0x000002"
+        Pop
+        Pop
       stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
 
-    assembler:# POP OP mal data
-      title: "POP_3"
+    assembler:# Pop OP mal data
+      title: "Pop_3"
       code:
-        PUSH2 "0x0000"
-        PUSH1 "0x01"
-        PUSH3 "0x000002"
-        POP
-        POP
-        POP
-        POP
+        Push2 "0x0000"
+        Push1 "0x01"
+        Push3 "0x000002"
+        Pop
+        Pop
+        Pop
+        Pop
       success: false
 
     macro generateDUPS(): untyped =
@@ -262,7 +262,7 @@ proc opMemoryMain*() =
 
       for i in 1 .. 16:
         let title = newStmtList(newLit("DUP_" & $i))
-        let pushIdent = ident("PUSH1")
+        let pushIdent = ident("Push1")
         var body = newStmtList()
         var stack = newStmtList()
 
@@ -296,7 +296,7 @@ proc opMemoryMain*() =
     assembler: # DUPN OP mal data
       title: "DUPN_2"
       code:
-        DUP1
+        Dup1
       success: false
 
     macro generateSWAPS(): untyped =
@@ -304,7 +304,7 @@ proc opMemoryMain*() =
 
       for i in 1 .. 16:
         let title = newStmtList(newLit("SWAP_" & $i))
-        let pushIdent = ident("PUSH1")
+        let pushIdent = ident("Push1")
         var body = newStmtList()
         var stack = newStmtList()
 
@@ -343,52 +343,52 @@ proc opMemoryMain*() =
     assembler:# SWAPN OP mal data
       title: "SWAPN_2"
       code:
-        SWAP1
+        Swap1
       success: false
 
-    assembler: # MSTORE OP
-      title: "MSTORE_1"
+    assembler: # Mstore OP
+      title: "Mstore_1"
       code:
-        PUSH2 "0x1234"
-        PUSH1 "0x00"
-        MSTORE
+        Push2 "0x1234"
+        Push1 "0x00"
+        Mstore
       memory: "0x0000000000000000000000000000000000000000000000000000000000001234"
 
-    assembler: # MSTORE OP
-      title: "MSTORE_2"
+    assembler: # Mstore OP
+      title: "Mstore_2"
       code:
-        PUSH2 "0x1234"
-        PUSH1 "0x00"
-        MSTORE
-        PUSH2 "0x5566"
-        PUSH1 "0x20"
-        MSTORE
+        Push2 "0x1234"
+        Push1 "0x00"
+        Mstore
+        Push2 "0x5566"
+        Push1 "0x20"
+        Mstore
       memory:
         "0x0000000000000000000000000000000000000000000000000000000000001234"
         "0x0000000000000000000000000000000000000000000000000000000000005566"
 
-    assembler: # MSTORE OP
-      title: "MSTORE_3"
+    assembler: # Mstore OP
+      title: "Mstore_3"
       code:
-        PUSH2 "0x1234"
-        PUSH1 "0x00"
-        MSTORE
-        PUSH2 "0x5566"
-        PUSH1 "0x20"
-        MSTORE
-        PUSH2 "0x8888"
-        PUSH1 "0x00"
-        MSTORE
+        Push2 "0x1234"
+        Push1 "0x00"
+        Mstore
+        Push2 "0x5566"
+        Push1 "0x20"
+        Mstore
+        Push2 "0x8888"
+        Push1 "0x00"
+        Mstore
       memory:
         "0x0000000000000000000000000000000000000000000000000000000000008888"
         "0x0000000000000000000000000000000000000000000000000000000000005566"
 
-    assembler: # MSTORE OP
-      title: "MSTORE_4"
+    assembler: # Mstore OP
+      title: "Mstore_4"
       code:
-        PUSH2 "0x1234"
-        PUSH1 "0xA0"
-        MSTORE
+        Push2 "0x1234"
+        Push1 "0xA0"
+        Mstore
       memory:
         "0x0000000000000000000000000000000000000000000000000000000000000000"
         "0x0000000000000000000000000000000000000000000000000000000000000000"
@@ -397,169 +397,169 @@ proc opMemoryMain*() =
         "0x0000000000000000000000000000000000000000000000000000000000000000"
         "0x0000000000000000000000000000000000000000000000000000000000001234"
 
-    assembler: # MSTORE OP
-      title: "MSTORE_5"
+    assembler: # Mstore OP
+      title: "Mstore_5"
       code:
-        PUSH2 "0x1234"
-        MSTORE
+        Push2 "0x1234"
+        Mstore
       success: false
       stack: "0x1234"
 
-    assembler: # MLOAD OP
-      title: "MLOAD_1"
+    assembler: # Mload OP
+      title: "Mload_1"
       code:
-        PUSH1 "0x00"
-        MLOAD
+        Push1 "0x00"
+        Mload
       memory: "0x0000000000000000000000000000000000000000000000000000000000000000"
       stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
 
-    assembler: # MLOAD OP
-      title: "MLOAD_2"
+    assembler: # Mload OP
+      title: "Mload_2"
       code:
-        PUSH1 "0x22"
-        MLOAD
+        Push1 "0x22"
+        Mload
       memory:
         "0x0000000000000000000000000000000000000000000000000000000000000000"
         "0x0000000000000000000000000000000000000000000000000000000000000000"
         "0x0000000000000000000000000000000000000000000000000000000000000000"
       stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
 
-    assembler: # MLOAD OP
-      title: "MLOAD_3"
+    assembler: # Mload OP
+      title: "Mload_3"
       code:
-        PUSH1 "0x20"
-        MLOAD
+        Push1 "0x20"
+        Mload
       memory:
         "0x0000000000000000000000000000000000000000000000000000000000000000"
         "0x0000000000000000000000000000000000000000000000000000000000000000"
       stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
 
-    assembler: # MLOAD OP
-      title: "MLOAD_4"
+    assembler: # Mload OP
+      title: "Mload_4"
       code:
-        PUSH2 "0x1234"
-        PUSH1 "0x20"
-        MSTORE
-        PUSH1 "0x20"
-        MLOAD
+        Push2 "0x1234"
+        Push1 "0x20"
+        Mstore
+        Push1 "0x20"
+        Mload
       memory:
         "0x0000000000000000000000000000000000000000000000000000000000000000"
         "0x0000000000000000000000000000000000000000000000000000000000001234"
       stack: "0x0000000000000000000000000000000000000000000000000000000000001234"
 
-    assembler: # MLOAD OP
-      title: "MLOAD_5"
+    assembler: # Mload OP
+      title: "Mload_5"
       code:
-        PUSH2 "0x1234"
-        PUSH1 "0x20"
-        MSTORE
-        PUSH1 "0x1F"
-        MLOAD
+        Push2 "0x1234"
+        Push1 "0x20"
+        Mstore
+        Push1 "0x1F"
+        Mload
       memory:
         "0x0000000000000000000000000000000000000000000000000000000000000000"
         "0x0000000000000000000000000000000000000000000000000000000000001234"
       stack: "0x0000000000000000000000000000000000000000000000000000000000000012"
 
-    assembler: # MLOAD OP mal data
-      title: "MLOAD_6"
+    assembler: # Mload OP mal data
+      title: "Mload_6"
       code:
-        MLOAD
+        Mload
       success: false
 
-    assembler: # MSTORE8 OP
-      title: "MSTORE8_1"
+    assembler: # Mstore8 OP
+      title: "Mstore8_1"
       code:
-        PUSH1 "0x11"
-        PUSH1 "0x00"
-        MSTORE8
+        Push1 "0x11"
+        Push1 "0x00"
+        Mstore8
       memory: "0x1100000000000000000000000000000000000000000000000000000000000000"
 
-    assembler: # MSTORE8 OP
-      title: "MSTORE8_2"
+    assembler: # Mstore8 OP
+      title: "Mstore8_2"
       code:
-        PUSH1 "0x22"
-        PUSH1 "0x01"
-        MSTORE8
+        Push1 "0x22"
+        Push1 "0x01"
+        Mstore8
       memory: "0x0022000000000000000000000000000000000000000000000000000000000000"
 
-    assembler: # MSTORE8 OP
-      title: "MSTORE8_3"
+    assembler: # Mstore8 OP
+      title: "Mstore8_3"
       code:
-        PUSH1 "0x22"
-        PUSH1 "0x21"
-        MSTORE8
+        Push1 "0x22"
+        Push1 "0x21"
+        Mstore8
       memory:
         "0x0000000000000000000000000000000000000000000000000000000000000000"
         "0x0022000000000000000000000000000000000000000000000000000000000000"
 
-    assembler: # MSTORE8 OP mal
-      title: "MSTORE8_4"
+    assembler: # Mstore8 OP mal
+      title: "Mstore8_4"
       code:
-        PUSH1 "0x22"
-        MSTORE8
+        Push1 "0x22"
+        Mstore8
       success: false
       stack: "0x22"
 
-    assembler: # SSTORE OP
-      title: "SSTORE_1"
+    assembler: # Sstore OP
+      title: "Sstore_1"
       code:
-        PUSH1 "0x22"
-        PUSH1 "0xAA"
-        SSTORE
+        Push1 "0x22"
+        Push1 "0xAA"
+        Sstore
       storage:
         "0xAA": "0x22"
 
-    assembler: # SSTORE OP
-      title: "SSTORE_2"
+    assembler: # Sstore OP
+      title: "Sstore_2"
       code:
-        PUSH1 "0x22"
-        PUSH1 "0xAA"
-        SSTORE
-        PUSH1 "0x22"
-        PUSH1 "0xBB"
-        SSTORE
+        Push1 "0x22"
+        Push1 "0xAA"
+        Sstore
+        Push1 "0x22"
+        Push1 "0xBB"
+        Sstore
       storage:
         "0xAA": "0x22"
         "0xBB": "0x22"
 
-    assembler: # SSTORE OP
-      title: "SSTORE_3"
+    assembler: # Sstore OP
+      title: "Sstore_3"
       code:
-        PUSH1 "0x22"
-        SSTORE
+        Push1 "0x22"
+        Sstore
       success: false
       stack: "0x22"
 
-    assembler: # SSTORE EIP1283
-      title: "SSTORE_NET_1"
+    assembler: # Sstore EIP1283
+      title: "Sstore_NET_1"
       code: "60006000556000600055"
       fork: Constantinople
       gasUsed: 412
 
-    assembler: # SSTORE EIP1283
-      title: "SSTORE_NET_2"
+    assembler: # Sstore EIP1283
+      title: "Sstore_NET_2"
       code: "60006000556001600055"
       fork: Constantinople
       gasUsed: 20212
 
-    assembler: # SSTORE EIP1283
-      title: "SSTORE_NET_3"
+    assembler: # Sstore EIP1283
+      title: "Sstore_NET_3"
       code: "60016000556000600055"
       fork: Constantinople
       gasUsed: 20212
 
-    assembler: # SSTORE EIP1283
-      title: "SSTORE_NET_4"
+    assembler: # Sstore EIP1283
+      title: "Sstore_NET_4"
       code: "60016000556002600055"
       fork: Constantinople
       gasUsed: 20212
 
-    assembler: # SSTORE EIP1283
-      title: "SSTORE_NET_5"
+    assembler: # Sstore EIP1283
+      title: "Sstore_NET_5"
       code: "60016000556001600055"
       fork: Constantinople
       gasUsed: 20212
-#[
+
     # Sets Storage row on "cow" address:
     # 0: 1
     # private void setStorageToOne(VM vm) {
@@ -569,128 +569,128 @@ proc opMemoryMain*() =
     #       invoke.getRepository().commit()
     #       invoke.setOrigRepository(invoke.getRepository())
 
-    assembler: # SSTORE EIP1283
-      title: "SSTORE_NET_6"
+    assembler: # Sstore EIP1283
+      title: "Sstore_NET_6"
       code: "60006000556000600055"
-      fork: Constantinople
-      gasUsed: 5212
-
-    assembler: # SSTORE EIP1283
-      title: "SSTORE_NET_7"
-      code: "60006000556001600055"
-      fork: Constantinople
-      gasUsed: 5212
-
-    assembler: # SSTORE EIP1283
-      title: "SSTORE_NET_8"
-      code: "60006000556002600055"
-      fork: Constantinople
-      gasUsed: 5212
-
-    assembler: # SSTORE EIP1283
-      title: "SSTORE_NET_9"
-      code: "60026000556000600055"
-      fork: Constantinople
-      gasUsed: 5212
-
-    assembler: # SSTORE EIP1283
-      title: "SSTORE_NET_10"
-      code: "60026000556003600055"
-      fork: Constantinople
-      gasUsed: 5212
-
-    assembler: # SSTORE EIP1283
-      title: "SSTORE_NET_11"
-      code: "60026000556001600055"
-      fork: Constantinople
-      gasUsed: 5212
-
-    assembler: # SSTORE EIP1283
-      title: "SSTORE_NET_12"
-      code: "60026000556002600055"
-      fork: Constantinople
-      gasUsed: 5212
-
-    assembler: # SSTORE EIP1283
-      title: "SSTORE_NET_13"
-      code: "60016000556000600055"
-      fork: Constantinople
-      gasUsed: 5212
-
-    assembler: # SSTORE EIP1283
-      title: "SSTORE_NET_14"
-      code: "60016000556002600055"
-      fork: Constantinople
-      gasUsed: 5212
-
-    assembler: # SSTORE EIP1283
-      title: "SSTORE_NET_15"
-      code: "60016000556001600055"
       fork: Constantinople
       gasUsed: 412
 
-    assembler: # SSTORE EIP1283
-      title: "SSTORE_NET_16"
+    assembler: # Sstore EIP1283
+      title: "Sstore_NET_7"
+      code: "60006000556001600055"
+      fork: Constantinople
+      gasUsed: 20212
+
+    assembler: # Sstore EIP1283
+      title: "Sstore_NET_8"
+      code: "60006000556002600055"
+      fork: Constantinople
+      gasUsed: 20212
+
+    assembler: # Sstore EIP1283
+      title: "Sstore_NET_9"
+      code: "60026000556000600055"
+      fork: Constantinople
+      gasUsed: 20212
+
+    assembler: # Sstore EIP1283
+      title: "Sstore_NET_10"
+      code: "60026000556003600055"
+      fork: Constantinople
+      gasUsed: 20212
+
+    assembler: # Sstore EIP1283
+      title: "Sstore_NET_11"
+      code: "60026000556001600055"
+      fork: Constantinople
+      gasUsed: 20212
+
+    assembler: # Sstore EIP1283
+      title: "Sstore_NET_12"
+      code: "60026000556002600055"
+      fork: Constantinople
+      gasUsed: 20212
+
+    assembler: # Sstore EIP1283
+      title: "Sstore_NET_13"
+      code: "60016000556000600055"
+      fork: Constantinople
+      gasUsed: 20212
+
+    assembler: # Sstore EIP1283
+      title: "Sstore_NET_14"
+      code: "60016000556002600055"
+      fork: Constantinople
+      gasUsed: 20212
+
+    assembler: # Sstore EIP1283
+      title: "Sstore_NET_15"
+      code: "60016000556001600055"
+      fork: Constantinople
+      gasUsed: 20212
+
+    assembler: # Sstore EIP1283
+      title: "Sstore_NET_16"
       code: "600160005560006000556001600055"
       fork: Constantinople
       gasUsed: 40218
 
-    assembler: # SSTORE EIP1283
-      title: "SSTORE_NET_17"
+    assembler: # Sstore EIP1283
+      title: "Sstore_NET_17"
       code: "600060005560016000556000600055"
       fork: Constantinople
-      gasUsed: 10218
-]#
-    assembler: # SLOAD OP
-      title: "SLOAD_1"
+      gasUsed: 20418
+
+    assembler: # Sload OP
+      title: "Sload_1"
       code:
-        PUSH1 "0xAA"
-        SLOAD
+        Push1 "0xAA"
+        Sload
       stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
 
-    assembler: # SLOAD OP
-      title: "SLOAD_2"
+    assembler: # Sload OP
+      title: "Sload_2"
       code:
-        PUSH1 "0x22"
-        PUSH1 "0xAA"
-        SSTORE
-        PUSH1 "0xAA"
-        SLOAD
+        Push1 "0x22"
+        Push1 "0xAA"
+        Sstore
+        Push1 "0xAA"
+        Sload
       stack: "0x0000000000000000000000000000000000000000000000000000000000000022"
 
-    assembler: # SLOAD OP
-      title: "SLOAD_3"
+    assembler: # Sload OP
+      title: "Sload_3"
       code:
-        PUSH1 "0x22"
-        PUSH1 "0xAA"
-        SSTORE
-        PUSH1 "0x33"
-        PUSH1 "0xCC"
-        SSTORE
-        PUSH1 "0xCC"
-        SLOAD
+        Push1 "0x22"
+        Push1 "0xAA"
+        Sstore
+        Push1 "0x33"
+        Push1 "0xCC"
+        Sstore
+        Push1 "0xCC"
+        Sload
       stack: "0x0000000000000000000000000000000000000000000000000000000000000033"
 
-    assembler: # SLOAD OP
-      title: "SLOAD_4"
-      code: SLOAD
+    assembler: # Sload OP
+      title: "Sload_4"
+      code: Sload
       success: false
 
-    assembler: # PC OP
-      title: "PC_1"
-      code: PC
+    assembler: # Pc OP
+      title: "Pc_1"
+      code: Pc
       stack:
         "0x0000000000000000000000000000000000000000000000000000000000000000"
 
-    assembler: # PC OP
-      title: "PC_2"
+    assembler: # Pc OP
+      title: "Pc_2"
       code:
-        PUSH1 "0x22"
-        PUSH1 "0xAA"
-        MSTORE
-        PUSH1 "0xAA"
-        SLOAD
-        PC
+        Push1 "0x22"
+        Push1 "0xAA"
+        Mstore
+        Push1 "0xAA"
+        Sload
+        Pc
       stack:
         "0x0000000000000000000000000000000000000000000000000000000000000000"
         "0x0000000000000000000000000000000000000000000000000000000000000008"
@@ -703,121 +703,121 @@ proc opMemoryMain*() =
         "0x00"
         "0x0000000000000000002200000000000000000000000000000000000000000000"
 
-    assembler: # JUMP OP mal data
-      title: "JUMP_1"
+    assembler: # Jump OP mal data
+      title: "Jump_1"
       code:
-        PUSH1 "0xAA"
-        PUSH1 "0xBB"
-        PUSH1 "0x0E"
-        JUMP
-        PUSH1 "0xCC"
-        PUSH1 "0xDD"
-        PUSH1 "0xEE"
-        JUMPDEST
-        PUSH1 "0xFF"
+        Push1 "0xAA"
+        Push1 "0xBB"
+        Push1 "0x0E"
+        Jump
+        Push1 "0xCC"
+        Push1 "0xDD"
+        Push1 "0xEE"
+        JumpDest
+        Push1 "0xFF"
       stack:
         "0xaa"
         "0x00000000000000000000000000000000000000000000000000000000000000bb"
       success: false
 
-    assembler: # JUMP OP mal data
-      title: "JUMP_2"
+    assembler: # Jump OP mal data
+      title: "Jump_2"
       code:
-        PUSH1 "0x0C"
-        PUSH1 "0x0C"
-        SWAP1
-        JUMP
-        PUSH1 "0xCC"
-        PUSH1 "0xDD"
-        PUSH1 "0xEE"
-        PUSH1 "0xFF"
+        Push1 "0x0C"
+        Push1 "0x0C"
+        Swap1
+        Jump
+        Push1 "0xCC"
+        Push1 "0xDD"
+        Push1 "0xEE"
+        Push1 "0xFF"
       success: false
       stack : "0x0C"
 
-    assembler: # JUMPI OP
-      title: "JUMPI_1"
+    assembler: # JumpI OP
+      title: "JumpI_1"
       code:
-        PUSH1 "0x01"
-        PUSH1 "0x05"
-        JUMPI
-        JUMPDEST
-        PUSH1 "0xCC"
+        Push1 "0x01"
+        Push1 "0x05"
+        JumpI
+        JumpDest
+        Push1 "0xCC"
       stack: "0x00000000000000000000000000000000000000000000000000000000000000CC"
 
-    assembler: # JUMPI OP
-      title: "JUMPI_2"
+    assembler: # JumpI OP
+      title: "JumpI_2"
       code:
-        PUSH4 "0x00000000"
-        PUSH1 "0x44"
-        JUMPI
-        PUSH1 "0xCC"
-        PUSH1 "0xDD"
+        Push4 "0x00000000"
+        Push1 "0x44"
+        JumpI
+        Push1 "0xCC"
+        Push1 "0xDD"
       stack:
         "0x00000000000000000000000000000000000000000000000000000000000000CC"
         "0x00000000000000000000000000000000000000000000000000000000000000DD"
 
-    assembler: # JUMPI OP mal
-      title: "JUMPI_3"
+    assembler: # JumpI OP mal
+      title: "JumpI_3"
       code:
-        PUSH1 "0x01"
-        JUMPI
+        Push1 "0x01"
+        JumpI
       success: false
       stack: "0x01"
 
-    assembler: # JUMPI OP mal
-      title: "JUMPI_4"
+    assembler: # JumpI OP mal
+      title: "JumpI_4"
       code:
-        PUSH1 "0x01"
-        PUSH1 "0x22"
-        SWAP1
-        SWAP1
-        JUMPI
+        Push1 "0x01"
+        Push1 "0x22"
+        Swap1
+        Swap1
+        JumpI
       success: false
 
-    assembler: # JUMP OP mal data
-      title: "JUMPDEST_1"
+    assembler: # Jump OP mal data
+      title: "JumpDest_1"
       code:
-        PUSH1 "0x23"
-        PUSH1 "0x08"
-        JUMP
-        PUSH1 "0x01"
-        JUMPDEST
-        PUSH1 "0x02"
-        SSTORE
+        Push1 "0x23"
+        Push1 "0x08"
+        Jump
+        Push1 "0x01"
+        JumpDest
+        Push1 "0x02"
+        Sstore
       storage:
         "0x02": "0x00"
       stack: "0x23"
       success: false
 
     # success or not?
-    assembler: # JUMPDEST OP for JUMPI
-      title: "JUMPDEST_2"
+    assembler: # JumpDest OP for JumpI
+      title: "JumpDest_2"
       code:
-        PUSH1 "0x23"
-        PUSH1 "0x01"
-        PUSH1 "0x09"
-        JUMPI
-        PUSH1 "0x01"
-        JUMPDEST
-        PUSH1 "0x02"
-        SSTORE
+        Push1 "0x23"
+        Push1 "0x01"
+        Push1 "0x09"
+        JumpI
+        Push1 "0x01"
+        JumpDest
+        Push1 "0x02"
+        Sstore
       #success: false
       storage:
         "0x02": "0x23"
 
-    assembler: # MSIZE OP
-      title: "MSIZE_1"
+    assembler: # Msize OP
+      title: "Msize_1"
       code:
-        MSIZE
+        Msize
       stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
 
-    assembler: # MSIZE OP
-      title: "MSIZE_2"
+    assembler: # Msize OP
+      title: "Msize_2"
       code:
-        PUSH1 "0x20"
-        PUSH1 "0x30"
-        MSTORE
-        MSIZE
+        Push1 "0x20"
+        Push1 "0x30"
+        Mstore
+        Msize
       stack:
         "0x60"
       memory:
@@ -826,132 +826,132 @@ proc opMemoryMain*() =
         "0x0000000000000000000000000000002000000000000000000000000000000000"
 
     assembler:
-      title: "MCOPY 1"
+      title: "Mcopy 1"
       code:
-        PUSH32 "0x0000000000000000000000000000000000000000000000000000000000000000"
-        PUSH1  "0x00"
-        MSTORE
-        PUSH32 "0x000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
-        PUSH1  "0x20"
-        MSTORE
-        PUSH1  "0x20" # len
-        PUSH1  "0x20" # src
-        PUSH1  "0x00" # dst
-        MCOPY
+        Push32 "0x0000000000000000000000000000000000000000000000000000000000000000"
+        Push1  "0x00"
+        Mstore
+        Push32 "0x000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+        Push1  "0x20"
+        Mstore
+        Push1  "0x20" # len
+        Push1  "0x20" # src
+        Push1  "0x00" # dst
+        Mcopy
       memory:
         "0x000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
         "0x000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
       fork: Cancun
 
     assembler:
-      title: "MCOPY 2: Overlap"
+      title: "Mcopy 2: Overlap"
       code:
-        PUSH32 "0x0101010101010101010101010101010101010101010101010101010101010101"
-        PUSH1  "0x00"
-        MSTORE
-        PUSH1  "0x20" # len
-        PUSH1  "0x00" # src
-        PUSH1  "0x00" # dst
-        MCOPY
+        Push32 "0x0101010101010101010101010101010101010101010101010101010101010101"
+        Push1  "0x00"
+        Mstore
+        Push1  "0x20" # len
+        Push1  "0x00" # src
+        Push1  "0x00" # dst
+        Mcopy
       memory:
         "0x0101010101010101010101010101010101010101010101010101010101010101"
       fork: Cancun
 
     assembler:
-      title: "MCOPY 3"
+      title: "Mcopy 3"
       code:
-        PUSH1 "0x00"
-        PUSH1 "0x00"
-        MSTORE8
-        PUSH1 "0x01"
-        PUSH1 "0x01"
-        MSTORE8
-        PUSH1 "0x02"
-        PUSH1 "0x02"
-        MSTORE8
-        PUSH1 "0x03"
-        PUSH1 "0x03"
-        MSTORE8
-        PUSH1 "0x04"
-        PUSH1 "0x04"
-        MSTORE8
-        PUSH1 "0x05"
-        PUSH1 "0x05"
-        MSTORE8
-        PUSH1 "0x06"
-        PUSH1 "0x06"
-        MSTORE8
-        PUSH1 "0x07"
-        PUSH1 "0x07"
-        MSTORE8
-        PUSH1 "0x08"
-        PUSH1 "0x08"
-        MSTORE8
-        PUSH1  "0x08" # len
-        PUSH1  "0x01" # src
-        PUSH1  "0x00" # dst
-        MCOPY
+        Push1 "0x00"
+        Push1 "0x00"
+        Mstore8
+        Push1 "0x01"
+        Push1 "0x01"
+        Mstore8
+        Push1 "0x02"
+        Push1 "0x02"
+        Mstore8
+        Push1 "0x03"
+        Push1 "0x03"
+        Mstore8
+        Push1 "0x04"
+        Push1 "0x04"
+        Mstore8
+        Push1 "0x05"
+        Push1 "0x05"
+        Mstore8
+        Push1 "0x06"
+        Push1 "0x06"
+        Mstore8
+        Push1 "0x07"
+        Push1 "0x07"
+        Mstore8
+        Push1 "0x08"
+        Push1 "0x08"
+        Mstore8
+        Push1  "0x08" # len
+        Push1  "0x01" # src
+        Push1  "0x00" # dst
+        Mcopy
       memory:
         "0x0102030405060708080000000000000000000000000000000000000000000000"
       fork: Cancun
 
     assembler:
-      title: "MCOPY 4"
+      title: "Mcopy 4"
       code:
-        PUSH1 "0x00"
-        PUSH1 "0x00"
-        MSTORE8
-        PUSH1 "0x01"
-        PUSH1 "0x01"
-        MSTORE8
-        PUSH1 "0x02"
-        PUSH1 "0x02"
-        MSTORE8
-        PUSH1 "0x03"
-        PUSH1 "0x03"
-        MSTORE8
-        PUSH1 "0x04"
-        PUSH1 "0x04"
-        MSTORE8
-        PUSH1 "0x05"
-        PUSH1 "0x05"
-        MSTORE8
-        PUSH1 "0x06"
-        PUSH1 "0x06"
-        MSTORE8
-        PUSH1 "0x07"
-        PUSH1 "0x07"
-        MSTORE8
-        PUSH1 "0x08"
-        PUSH1 "0x08"
-        MSTORE8
-        PUSH1  "0x08" # len
-        PUSH1  "0x00" # src
-        PUSH1  "0x01" # dst
-        MCOPY
+        Push1 "0x00"
+        Push1 "0x00"
+        Mstore8
+        Push1 "0x01"
+        Push1 "0x01"
+        Mstore8
+        Push1 "0x02"
+        Push1 "0x02"
+        Mstore8
+        Push1 "0x03"
+        Push1 "0x03"
+        Mstore8
+        Push1 "0x04"
+        Push1 "0x04"
+        Mstore8
+        Push1 "0x05"
+        Push1 "0x05"
+        Mstore8
+        Push1 "0x06"
+        Push1 "0x06"
+        Mstore8
+        Push1 "0x07"
+        Push1 "0x07"
+        Mstore8
+        Push1 "0x08"
+        Push1 "0x08"
+        Mstore8
+        Push1  "0x08" # len
+        Push1  "0x00" # src
+        Push1  "0x01" # dst
+        Mcopy
       memory:
         "0x0000010203040506070000000000000000000000000000000000000000000000"
       fork: Cancun
 
     assembler:
-      title: "TSTORE/TLOAD"
+      title: "Tstore/Tload"
       code:
-        PUSH1 "0xAA"
-        PUSH1 "0xBB"
-        TSTORE
-        PUSH1 "0xBB"
-        TLOAD
+        Push1 "0xAA"
+        Push1 "0xBB"
+        Tstore
+        Push1 "0xBB"
+        Tload
       stack:
         "0x00000000000000000000000000000000000000000000000000000000000000AA"
       fork: Cancun
 
     assembler:
-      title: "TLOAD stack underflow not crash"
+      title: "Tload stack underflow not crash"
       code:
-        PUSH1 "0xAA"
-        PUSH1 "0xBB"
-        TSTORE
-        TLOAD
+        Push1 "0xAA"
+        Push1 "0xBB"
+        Tstore
+        Tload
       success: false
       fork: Cancun
 

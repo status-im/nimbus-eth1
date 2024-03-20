@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -39,7 +39,7 @@ template skipTest(folder, name: untyped): bool =
   skipNewGSTTests(folder, name)
 
 proc collectFileNames(inputPath: string, map: var StatusMap, fileNames: var seq[TestFile]) =
-  for filename in walkDirRec(inputPath):
+  for fileName in walkDirRec(inputPath):
     if not fileName.endsWith(".json"):
       continue
 
@@ -52,8 +52,8 @@ proc collectFileNames(inputPath: string, map: var StatusMap, fileNames: var seq[
       continue
 
     fileNames.add TestFile(
-      fullPath: filename,
-      dispName: substr(filename, inputPath.len+1)
+      fullPath: fileName,
+      dispName: substr(fileName, inputPath.len+1)
     )
 
 proc main() =

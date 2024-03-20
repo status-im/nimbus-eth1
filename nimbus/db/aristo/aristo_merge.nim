@@ -160,7 +160,7 @@ proc insertBranch(
 
       let
         local = db.vidFetch(pristine = true)
-        lty = LeafTie(root: hike.root, path: rc.value)
+        # lty = LeafTie(root: hike.root, path: rc.value)
 
       db.setVtxAndKey(hike.root, local, linkVtx)
       linkVtx.lPfx = linkVtx.lPfx.slice(1+n)

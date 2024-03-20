@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2019-2023 Status Research & Development GmbH
+# Copyright (c) 2019-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -99,7 +99,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
         ommersHash : t.parentUncles
       )
 
-      let timestamp = EthTime(t.currentTimeStamp)
+      let timestamp = EthTime(t.currentTimestamp)
 
       let diff = calculator(revision, timestamp, p)
       check diff == t.currentDifficulty

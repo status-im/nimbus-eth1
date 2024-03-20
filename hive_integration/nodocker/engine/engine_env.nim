@@ -211,7 +211,7 @@ proc numTxsInPool*(env: EngineEnv): int =
 func version*(env: EngineEnv, time: EthTime): Version =
   if env.com.isCancunOrLater(time):
     Version.V3
-  elif env.com.isShanghaiOrlater(time):
+  elif env.com.isShanghaiOrLater(time):
     Version.V2
   else:
     Version.V1

@@ -93,7 +93,7 @@ type
 
 proc collectBlobHashes(list: openArray[Web3Tx]): seq[common.Hash256] =
   for w3tx in list:
-    let tx = ethTx(w3Tx)
+    let tx = ethTx(w3tx)
     for h in tx.versionedHashes:
       result.add h
 

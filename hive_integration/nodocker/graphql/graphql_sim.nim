@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -103,7 +103,7 @@ proc main() =
     if not fileName.endsWith(".json"):
       continue
 
-    let (folder, name) = fileName.splitPath()
+    let (_, name) = fileName.splitPath()
     let node = parseFile(fileName)
     let status = ctx.processNode(node, fileName)
     stat.inc(name, status)

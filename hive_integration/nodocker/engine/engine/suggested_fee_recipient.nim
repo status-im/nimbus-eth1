@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -56,7 +56,7 @@ method execute(cs: SuggestedFeeRecipientTest, env: TestEnv): bool =
   testCond env.clMock.produceSingleBlock(BlockProcessCallbacks())
 
   # Calculate the fees and check that they match the balance of the fee recipient
-  let r = env.engine.client.latestblock()
+  let r = env.engine.client.latestBlock()
   testCond r.isOk:
     error "cannot get latest header", msg=r.error
 

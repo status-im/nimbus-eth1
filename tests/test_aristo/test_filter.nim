@@ -64,11 +64,11 @@ proc fifos(be: BackendRef): seq[seq[(QueueID,FilterRef)]] =
     discard
   check be.kind == BackendMemory or be.kind == BackendRocksDB
 
-func flatten(a: seq[seq[(QueueID,FilterRef)]]): seq[(QueueID,FilterRef)] =
+func flatten(a: seq[seq[(QueueID,FilterRef)]]): seq[(QueueID,FilterRef)] {.used.} =
   for w in a:
     result &= w
 
-proc fList(be: BackendRef): seq[(QueueID,FilterRef)] =
+proc fList(be: BackendRef): seq[(QueueID,FilterRef)] {.used.} =
   case be.kind:
   of BackendMemory:
     return be.MemBackendRef.walkFilBe.toSeq.mapIt((it.qid, it.filter))
@@ -128,11 +128,12 @@ proc dump(pfx: string; dx: varargs[AristoDbRef]): string =
     if n1 < dx.len:
       result &= "   ==========\n   "
 
-proc dump(dx: varargs[AristoDbRef]): string =
-  "".dump dx
+when false:
+  proc dump(dx: varargs[AristoDbRef]): string =
+    "".dump dx
 
-proc dump(w: DbTriplet): string =
-  "db".dump(w[0], w[1], w[2])
+  proc dump(w: DbTriplet): string =
+    "db".dump(w[0], w[1], w[2])
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -684,7 +685,7 @@ proc testFilterFifo*(
     be = db.backend
   defer: db.finish(flush=true)
 
-  proc show(serial = 0; exec: seq[QidAction] = @[]) =
+  proc show(serial = 0; exec: seq[QidAction] = @[]) {.used.} =
     var s = ""
     if 0 < serial:
       s &= " n=" & $serial
@@ -755,7 +756,7 @@ proc testFilterBacklog*(
     be = db.backend
   defer: db.finish(flush=true)
 
-  proc show(serial = -42, blurb = "") =
+  proc show(serial = -42, blurb = "") {.used.} =
     var s = blurb
     if 0 <= serial:
       s &= " n=" & $serial
@@ -799,7 +800,7 @@ proc testFilterBacklog*(
   var
     fifoLen = be.filters.len
     pivot = (fifoLen * reorgPercent) div 100
-    qid = be.filters[pivot]
+    qid {.used.} = be.filters[pivot]
     xb = AristoDbRef(nil)
 
   for episode in 0 .. pivot:

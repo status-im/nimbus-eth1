@@ -45,9 +45,9 @@ proc execute*(ws: BlockValueSpec, env: TestEnv): bool =
 
     totalValue += txTip.uint64.u256 * rec.gasUsed.u256
 
-  doAssert(env.cLMock.latestBlockValue.isSome)
-  testCond totalValue == env.cLMock.latestBlockValue.get:
+  doAssert(env.clMock.latestBlockValue.isSome)
+  testCond totalValue == env.clMock.latestBlockValue.get:
     error "Unexpected block value returned on GetPayloadV2",
       expect=totalValue,
-      get=env.cLMock.latestBlockValue.get
+      get=env.clMock.latestBlockValue.get
   return true

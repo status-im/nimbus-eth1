@@ -17,9 +17,10 @@ import
   ../../../nimbus/transaction,
   ./client
 
-const
-  # This is the account that sends vault funding transactions.
-  vaultAccountAddr = hextoByteArray[20]("0xcf49fda3be353c69b41ed96333cd24302da4556f")
+when false:
+  const
+    # This is the account that sends vault funding transactions.
+    vaultAccountAddr = hextoByteArray[20]("0xcf49fda3be353c69b41ed96333cd24302da4556f")
 
 const
   # Address of the vault in genesis.
