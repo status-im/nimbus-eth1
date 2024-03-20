@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -20,7 +20,8 @@ import
   ./kvt_desc/desc_backend,
   "."/[kvt_desc, kvt_layers]
 
-func isTop*(tx: KvtTxRef): bool
+func isTop*(tx: KvtTxRef): bool {.gcsafe.}
+proc txBegin*(db: KvtDbRef): Result[KvtTxRef,KvtError] {.gcsafe.}
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -113,30 +114,19 @@ proc forkTx*(tx: KvtTxRef): Result[KvtDbRef,KvtError] =
 
 proc forkTop*(db: KvtDbRef): Result[KvtDbRef,KvtError] =
   ## Variant of `forkTx()` for the top transaction if there is any. Otherwise
-  ## the top layer is cloned, only.
+  ## the top layer is cloned, and an empty transaction is set up. After
+  ## successful fork the returned descriptor has transaction level 1.
   ##
   ## Use `kvt_desc.forget()` to clean up this descriptor.
   ##
   if db.txRef.isNil:
     let dbClone = ? db.fork()
     dbClone.top = db.layersCc
+
+    discard dbClone.txBegin
     return ok(dbClone)
 
   db.txRef.forkTx()
-
-
-proc exec*(
-    tx: KvtTxRef;
-    action: KvtDbAction;
-      ): Result[void,KvtError] =
-  ## Execute function argument `action()` on a temporary `tx.forkTx()`
-  ## transaction database. After return, the temporary database gets
-  ## destroyed.
-  ##
-  let db = ? tx.forkTx()
-  db.action()
-  ? db.forget()
-  ok()
 
 # ------------------------------------------------------------------------------
 # Public functions: Transaction frame

@@ -18,8 +18,9 @@ import
   results,
   "."/[aristo_desc, aristo_filter, aristo_get, aristo_layers, aristo_hashify]
 
-func isTop*(tx: AristoTxRef): bool
-func level*(db: AristoDbRef): int
+func isTop*(tx: AristoTxRef): bool {.gcsafe.}
+func level*(db: AristoDbRef): int {.gcsafe.}
+proc txBegin*(db: AristoDbRef): Result[AristoTxRef,AristoError] {.gcsafe.}
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -71,6 +72,7 @@ func level*(db: AristoDbRef): int =
 func to*(tx: AristoTxRef; T: type[AristoDbRef]): T =
   ## Getter, retrieves the parent database descriptor from argument `tx`
   tx.db
+
 
 proc forkTx*(
     tx: AristoTxRef;                  # Transaction descriptor
@@ -127,11 +129,9 @@ proc forkTx*(
       return err(rc.error)
 
   # Set up clone associated to `db`
-  let txClone = ? db.fork(noToplayer = true)
-  txClone.top = db.layersCc tx.level      # Provide tx level 1 stack
-  txClone.stack = @[stackLayer]           # Zero level stack
-  txClone.roFilter = db.roFilter          # No need to copy (done when updated)
-  txClone.backend = db.backend
+  let txClone = ? db.fork(noToplayer = true, noFilter = false)
+  txClone.top = db.layersCc tx.level  # Provide tx level 1 stack
+  txClone.stack = @[stackLayer]       # Zero level stack
   txClone.top.txUid = 1
   txClone.txUidGen = 1
 
@@ -154,42 +154,25 @@ proc forkTop*(
     dontHashify = false;              # Process/fix MPT hashes
       ): Result[AristoDbRef,AristoError] =
   ## Variant of `forkTx()` for the top transaction if there is any. Otherwise
-  ## the top layer is cloned, only.
+  ## the top layer is cloned, and an empty transaction is set up. After
+  ## successful fork the returned descriptor has transaction level 1.
   ##
   ## Use `aristo_desc.forget()` to clean up this descriptor.
   ##
   if db.txRef.isNil:
-    let dbClone = ? db.fork(noToplayer = true)
-
-    dbClone.top = db.layersCc      # Is a deep copy
-    dbClone.roFilter = db.roFilter # No need to copy contents when updated
-    dbClone.backend = db.backend
+    let dbClone = ? db.fork(noToplayer = true, noFilter = false)
+    dbClone.top = db.layersCc         # Is a deep copy
 
     if not dontHashify:
       dbClone.hashify().isOkOr:
         discard dbClone.forget()
         return err(error[1])
+
+    discard dbClone.txBegin
     return ok(dbClone)
+    # End if()
 
   db.txRef.forkTx dontHashify
-
-
-proc exec*(
-    tx: AristoTxRef;
-    action: AristoDbAction;
-    dontHashify = false;              # Process/fix MPT hashes
-      ): Result[void,AristoError] =
-  ## Execute function argument `action()` on a temporary `tx.forkTx()`
-  ## transaction clone database. After return, the temporary database gets
-  ## destroyed.
-  ##
-  ## If the arguent flag `dontHashify` is passed `true`, the clone database
-  ## will *NOT* be hashified right after construction.
-  ##
-  let db = ? tx.forkTx dontHashify
-  db.action()
-  ? db.forget()
-  ok()
 
 # ------------------------------------------------------------------------------
 # Public functions: Transaction frame
@@ -272,7 +255,6 @@ proc commit*(
   if 0 < db.stack.len:
     db.txRef.txUid = db.getTxUid
     db.top.txUid = db.txRef.txUid
-
   ok()
 
 
@@ -364,7 +346,6 @@ proc stow*(
     delta: LayerDeltaRef(),
     final: LayerFinalRef(vGen: db.vGen),
     txUid: db.top.txUid)
-
   ok()
 
 # ------------------------------------------------------------------------------

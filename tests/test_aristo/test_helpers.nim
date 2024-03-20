@@ -217,7 +217,7 @@ proc hashify*(
     noisy: bool;
       ): Result[void,(VertexID,AristoError)] =
   when declared(aristo_hashify.noisy):
-    aristo_hashify.exec(aristo_hashify.hashify(db), noisy)
+    aristo_hashify.exec(noisy, aristo_hashify.hashify(db))
   else:
     aristo_hashify.hashify(db)
 
@@ -230,7 +230,7 @@ proc delete*(
     noisy: bool;
       ): Result[bool,(VertexID,AristoError)] =
   when declared(aristo_delete.noisy):
-    aristo_delete.exec(aristo_delete.delete(db, root, path, accPath), noisy)
+    aristo_delete.exec(noisy, aristo_delete.delete(db, root, path, accPath))
   else:
     aristo_delete.delete(db, root, path, accPath)
 
@@ -241,7 +241,7 @@ proc delete*(
     noisy: bool;
       ): Result[bool,(VertexID,AristoError)] =
   when declared(aristo_delete.noisy):
-    aristo_delete.exec(aristo_delete.delete(db, lty, accPath), noisy)
+    aristo_delete.exec(noisy, aristo_delete.delete(db, lty, accPath))
   else:
     aristo_delete.delete(db, lty, accPath)
 
@@ -252,7 +252,7 @@ proc delTree*(
     noisy: bool;
       ): Result[void,(VertexID,AristoError)] =
   when declared(aristo_delete.noisy):
-    aristo_delete.exec(aristo_delete.delTree(db, root, accPath), noisy)
+    aristo_delete.exec(noisy, aristo_delete.delTree(db, root, accPath))
   else:
     aristo_delete.delTree(db, root, accPath)
 
@@ -266,7 +266,7 @@ proc merge*(
     noisy: bool;
       ): Result[bool, AristoError] =
   when declared(aristo_merge.noisy):
-    aristo_merge.exec(aristo_merge.merge(db, root, path, data, accPath), noisy)
+    aristo_merge.exec(noisy, aristo_merge.merge(db, root, path, data, accPath))
   else:
     aristo_merge.merge(db, root, path, data, accPath)
 
@@ -278,7 +278,7 @@ proc mergePayload*(
     noisy: bool;
       ): Result[Hike,AristoError] =
   when declared(aristo_merge.noisy):
-    aristo_merge.exec(aristo_merge.mergePayload(db, lty, pyl, accPath), noisy)
+    aristo_merge.exec(noisy, aristo_merge.mergePayload(db, lty, pyl, accPath))
   else:
     aristo_merge.mergePayload(db, lty, pyl, accPath)
 

@@ -118,53 +118,13 @@ type
       ## A non centre descriptor should always be destructed after use (see
       ## also# comments on `fork()`.)
 
-  AristoApiForkFn* =
-    proc(db: AristoDbRef;
-         rawTopLayer = false;
-        ): Result[AristoDbRef,AristoError]
-        {.noRaise.}
-      ## This function creates a new empty descriptor accessing the same
-      ## backend (if any) database as the argument `db`. This new descriptor
-      ## joins the list of descriptors accessing the same backend database.
-      ##
-      ## After use, any unused non centre descriptor should be destructed
-      ## via `forget()`. Not doing so will not only hold memory ressources
-      ## but might also cost computing ressources for maintaining and
-      ## updating backend filters when writing to the backend database .
-      ##
-      ## If the argument `rawTopLayer` is set `true` the function will
-      ## provide an uninitalised and inconsistent (!) top layer. This
-      ## setting avoids some database lookup for cases where the top layer
-      ## is redefined anyway.
-
   AristoApiForkTopFn* =
     proc(db: AristoDbRef;
          dontHashify = false;
         ): Result[AristoDbRef,AristoError]
         {.noRaise.}
-      ## Clone a top transaction into a new DB descriptor accessing the same
-      ## backend database (if any) as the argument `db`. The new descriptor
-      ## is linked to the transaction parent and is fully functional as a
-      ## forked instance (see comments on `aristo_desc.reCentre()` for
-      ## details.) If there is no active transaction, the top layer state
-      ## is cloned.
-      ##
-      ## Input situation:
-      ## ::
-      ##   tx -> db0   with tx is top transaction, tx.level > 0
-      ##
-      ## Output situation:
-      ## ::
-      ##   tx  -> db0 \
-      ##               >  share the same backend
-      ##   tx1 -> db1 /
-      ##
-      ## where `tx.level > 0`, `db1.level == 1` and `db1` is returned. The
-      ## transaction `tx1` can be retrieved via `db1.txTop()`.
-      ##
-      ## The new DB descriptor will contain a copy of the argument transaction
-      ## `tx` as top layer of level 1 (i.e. this is he only transaction.)
-      ## Rolling back will end up at the backend layer (incl. backend filter.)
+      ## Clone a descriptor in a way so that there is exactly one active
+      ## transaction.
       ##
       ## If the arguent flag `dontHashify` is passed `true`, the clone
       ## descriptor will *NOT* be hashified right after construction.
@@ -365,7 +325,6 @@ type
     fetchPayload*: AristoApiFetchPayloadFn
     finish*: AristoApiFinishFn
     forget*: AristoApiForgetFn
-    fork*: AristoApiForkFn
     forkTop*: AristoApiForkTopFn
     getKey*: AristoApiGetKeyFn
     getKeyRc*: AristoApiGetKeyRcFn
@@ -397,7 +356,6 @@ type
     AristoApiProfFetchPayloadFn = "fetchPayload"
     AristoApiProfFinishFn       = "finish"
     AristoApiProfForgetFn       = "forget"
-    AristoApiProfForkFn         = "fork"
     AristoApiProfForkTopFn      = "forkTop"
     AristoApiProfGetKeyFn       = "getKey"
     AristoApiProfGetKeyRcFn     = "getKeyRc"
@@ -439,7 +397,6 @@ when AutoValidateApiHooks:
     doAssert not api.fetchPayload.isNil
     doAssert not api.finish.isNil
     doAssert not api.forget.isNil
-    doAssert not api.fork.isNil
     doAssert not api.forkTop.isNil
     doAssert not api.getKey.isNil
     doAssert not api.getKeyRc.isNil
@@ -491,7 +448,6 @@ func init*(api: var AristoApiObj) =
   api.fetchPayload = fetchPayload
   api.finish = finish
   api.forget = forget
-  api.fork = fork
   api.forkTop = forkTop
   api.getKey = getKey
   api.getKeyRc = getKeyRc
@@ -526,7 +482,6 @@ func dup*(api: AristoApiRef): AristoApiRef =
     fetchPayload: api.fetchPayload,
     finish:       api.finish,
     forget:       api.forget,
-    fork:         api.fork,
     forkTop:      api.forkTop,
     getKey:       api.getKey,
     getKeyRc:     api.getKeyRc,
@@ -605,11 +560,6 @@ func init*(
     proc(a: AristoDbRef): auto =
       AristoApiProfForgetFn.profileRunner:
         result = api.forget(a)
-
-  profApi.fork =
-    proc(a: AristoDbRef; b = false): auto =
-      AristoApiProfForkFn.profileRunner:
-        result = api.fork(a, b)
 
   profApi.forkTop =
     proc(a: AristoDbRef; b = false): auto =

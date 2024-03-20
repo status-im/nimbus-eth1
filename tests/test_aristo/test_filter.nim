@@ -191,6 +191,11 @@ proc dbTriplet(w: LeafQuartet; rdbPath: string): Result[DbTriplet,AristoError] =
   let dx = [db, db.forkTop.value, db.forkTop.value]
   xCheck dx[0].nForked == 2
 
+  # Reduce unwanted tx layers
+  for n in 1 ..< dx.len:
+    check dx[n].level == 1
+    check dx[n].txTop.value.commit.isOk
+
   # Clause (9) from `aristo/README.md` example
   for n in 0 ..< dx.len:
     let report = dx[n].mergeList w[n+1]
