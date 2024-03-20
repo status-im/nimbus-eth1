@@ -173,24 +173,6 @@ proc forkTop*(
 
   db.txRef.forkTx dontHashify
 
-
-proc exec*(
-    tx: AristoTxRef;
-    action: AristoDbAction;
-    dontHashify = false;              # Process/fix MPT hashes
-      ): Result[void,AristoError] =
-  ## Execute function argument `action()` on a temporary `tx.forkTx()`
-  ## transaction clone database. After return, the temporary database gets
-  ## destroyed.
-  ##
-  ## If the arguent flag `dontHashify` is passed `true`, the clone database
-  ## will *NOT* be hashified right after construction.
-  ##
-  let db = ? tx.forkTx dontHashify
-  db.action()
-  ? db.forget()
-  ok()
-
 # ------------------------------------------------------------------------------
 # Public functions: Transaction frame
 # ------------------------------------------------------------------------------

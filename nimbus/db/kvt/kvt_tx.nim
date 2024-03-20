@@ -124,20 +124,6 @@ proc forkTop*(db: KvtDbRef): Result[KvtDbRef,KvtError] =
 
   db.txRef.forkTx()
 
-
-proc exec*(
-    tx: KvtTxRef;
-    action: KvtDbAction;
-      ): Result[void,KvtError] =
-  ## Execute function argument `action()` on a temporary `tx.forkTx()`
-  ## transaction database. After return, the temporary database gets
-  ## destroyed.
-  ##
-  let db = ? tx.forkTx()
-  db.action()
-  ? db.forget()
-  ok()
-
 # ------------------------------------------------------------------------------
 # Public functions: Transaction frame
 # ------------------------------------------------------------------------------
