@@ -476,7 +476,7 @@ proc ctxMethods(cCtx: AristoCoreDbCtxRef): CoreDbCtxFns =
     base = cCtx.base   # Will not change and can be captured
     db = base.parent   # Ditto
     api = base.api     # Ditto
-    mpt = base.ctx.mpt # Ditto
+    mpt = cCtx.mpt     # Ditto
 
   proc ctxNewTrie(
       kind: CoreDbSubTrie;
@@ -721,10 +721,11 @@ func init*(T: type AristoBaseRef; db: CoreDbRef; adb: AristoDbRef): T =
     api:    AristoApiRef.init())
 
   # Create initial context
-  result.ctx = db.bless AristoCoreDbCtxRef(
+  let ctx = AristoCoreDbCtxRef(
     base: result,
     mpt:  adb)
-  result.ctx.methods = result.ctx.ctxMethods
+  ctx.methods = ctx.ctxMethods
+  result.ctx = db.bless ctx
 
   when CoreDbEnableApiProfiling:
     let profApi = AristoApiProfRef.init(result.api, adb.backend)
