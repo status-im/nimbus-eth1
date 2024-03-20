@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2020-2023 Status Research & Development GmbH
+# Copyright (c) 2020-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -117,7 +117,7 @@ proc huntProblematicBlock(blockNumber: UInt256): ValidationResult =
   if validationResult != ValidationResult.OK:
     transaction.rollback()
     putAncestorsIntoDB(vmState, com.db)
-    dumpDebuggingMetaData(com, thisBlock.header, thisBlock.body, vmState, false)
+    vmState.dumpDebuggingMetaData(thisBlock.header, thisBlock.body, false)
 
   result = validationResult
 
