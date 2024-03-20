@@ -20,7 +20,8 @@ import
   ./kvt_desc/desc_backend,
   "."/[kvt_desc, kvt_layers]
 
-func isTop*(tx: KvtTxRef): bool
+func isTop*(tx: KvtTxRef): bool {.gcsafe.}
+proc txBegin*(db: KvtDbRef): Result[KvtTxRef,KvtError] {.gcsafe.}
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -113,13 +114,16 @@ proc forkTx*(tx: KvtTxRef): Result[KvtDbRef,KvtError] =
 
 proc forkTop*(db: KvtDbRef): Result[KvtDbRef,KvtError] =
   ## Variant of `forkTx()` for the top transaction if there is any. Otherwise
-  ## the top layer is cloned, only.
+  ## the top layer is cloned, and an empty transaction is set up. After
+  ## successful fork the returned descriptor has transaction level 1.
   ##
   ## Use `kvt_desc.forget()` to clean up this descriptor.
   ##
   if db.txRef.isNil:
     let dbClone = ? db.fork()
     dbClone.top = db.layersCc
+
+    discard dbClone.txBegin
     return ok(dbClone)
 
   db.txRef.forkTx()

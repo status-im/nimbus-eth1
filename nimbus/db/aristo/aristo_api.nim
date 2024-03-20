@@ -123,29 +123,8 @@ type
          dontHashify = false;
         ): Result[AristoDbRef,AristoError]
         {.noRaise.}
-      ## Clone a top transaction into a new DB descriptor accessing the same
-      ## backend database (if any) as the argument `db`. The new descriptor
-      ## is linked to the transaction parent and is fully functional as a
-      ## forked instance (see comments on `aristo_desc.reCentre()` for
-      ## details.) If there is no active transaction, the top layer state
-      ## is cloned.
-      ##
-      ## Input situation:
-      ## ::
-      ##   tx -> db0   with tx is top transaction, tx.level > 0
-      ##
-      ## Output situation:
-      ## ::
-      ##   tx  -> db0 \
-      ##               >  share the same backend
-      ##   tx1 -> db1 /
-      ##
-      ## where `tx.level > 0`, `db1.level == 1` and `db1` is returned. The
-      ## transaction `tx1` can be retrieved via `db1.txTop()`.
-      ##
-      ## The new DB descriptor will contain a copy of the argument transaction
-      ## `tx` as top layer of level 1 (i.e. this is he only transaction.)
-      ## Rolling back will end up at the backend layer (incl. backend filter.)
+      ## Clone a descriptor in a way so that there is exactly one active
+      ## transaction.
       ##
       ## If the arguent flag `dontHashify` is passed `true`, the clone
       ## descriptor will *NOT* be hashified right after construction.

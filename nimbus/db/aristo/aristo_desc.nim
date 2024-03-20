@@ -176,6 +176,7 @@ proc reCentre*(db: AristoDbRef) =
 proc fork*(
     db: AristoDbRef;
     noTopLayer = false;
+    noFilter = false;
       ): Result[AristoDbRef,AristoError] =
   ## This function creates a new empty descriptor accessing the same backend
   ## (if any) database as the argument `db`. This new descriptor joins the
@@ -185,6 +186,9 @@ proc fork*(
   ## `forget()`. Not doing so will not only hold memory ressources but might
   ## also cost computing ressources for maintaining and updating backend
   ## filters when writing to the backend database .
+  ##
+  ## If the argument `noFilter` is set `true` the function will fork directly
+  ## off the backend database and ignore any filter.
   ##
   ## If the argument `noTopLayer` is set `true` the function will provide an
   ## uninitalised and inconsistent (!) descriptor object without top layer.
@@ -199,13 +203,19 @@ proc fork*(
     dudes:   db.dudes,
     backend: db.backend)
 
+  if not noFilter:
+    clone.roFilter = db.roFilter # Ref is ok here (filters are immutable)
+
   if not noTopLayer:
     clone.top = LayerRef.init()
-    let rc = clone.backend.getIdgFn()
-    if rc.isOk:
-      clone.top.final.vGen = rc.value
-    elif rc.error != GetIdgNotFound:
-      return err(rc.error)
+    if not db.roFilter.isNil:
+      clone.top.final.vGen = db.roFilter.vGen
+    else:
+      let rc = clone.backend.getIdgFn()
+      if rc.isOk:
+        clone.top.final.vGen = rc.value
+      elif rc.error != GetIdgNotFound:
+        return err(rc.error)
 
   # Add to peer list of clones
   db.dudes.peers.incl clone
