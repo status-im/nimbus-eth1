@@ -12,15 +12,18 @@
 
 import
   std/[strutils, tables],
-  chronicles,
   eth/common,
   stew/byteutils,
   results,
   ../../../aristo as use_aristo,
   ../../../aristo/aristo_path,
   ../../../kvt as use_kvt,
+  ../../base,
   ../../base/base_desc,
   "."/[handlers_kvt, handlers_aristo]
+
+const
+  EnableDebugLog = CoreDbEnableApiTracking
 
 type
   TraceKdbRecorder = object
@@ -42,6 +45,9 @@ type
     inst: seq[TracerLogInstRef]   ## Production stack for log database
     kdb: TraceKdbRecorder         ## Contains restore information
     adb: TraceAdbRecorder         ## Contains restore information
+
+when EnableDebugLog:
+  import chronicles
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -139,72 +145,86 @@ proc traceRecorder(
   # Update production api
   tracerApi.get =
     proc(kvt: KvtDbRef; key: openArray[byte]): Result[Blob,KvtError] =
-      const logTxt = "trace get"
+      when EnableDebugLog:
+        const logTxt = "trace get"
 
       # Try to fetch data from the stacked logger instances
       var (data, pos) = (EmptyBlob, -1)
       for level in (tr.inst.len-1).countDown(0):
         data = tr.inst[level].kLog.getOrVoid key
         if 0 < data.len:
-          debug logTxt, level, log="get()", key=key.toStr, result=data.toStr
+          when EnableDebugLog:
+            debug logTxt, level, log="get()", key=key.toStr, result=data.toStr
           pos = level
           break
 
       # Alternatively fetch data from the production DB instance
       if pos < 0:
         data = api.get(kvt, key).valueOr:
-          debug logTxt, key=key.toStr, error
+          when EnableDebugLog:
+            debug logTxt, key=key.toStr, error
           return err(error) # No way
 
       # Data available, store in all top level instances
       for level in pos+1 ..< tr.inst.len:
         tr.inst[level].kLog[@key] = data
-        debug logTxt, level, log="put()", key=key.toStr, result=data.toStr
+        when EnableDebugLog:
+          debug logTxt, level, log="put()", key=key.toStr, result=data.toStr
 
       ok(data)
 
   tracerApi.del =
     proc(kvt: KvtDbRef; key: openArray[byte]): Result[void,KvtError] =
-      const logTxt = "trace del"
+      when EnableDebugLog:
+        const logTxt = "trace del"
 
       # Delete data on the stacked logger instances
       for level in (tr.inst.len-1).countDown(0):
         let flags = tr.inst[level].flags
         tr.inst[level].kLog.del @key
-        debug logTxt, level, log="del()", flags, key=key.toStr
+        when EnableDebugLog:
+          debug logTxt, level, log="del()", flags, key=key.toStr
         if PersistDel notin flags:
           return ok()
 
-      debug logTxt, key=key.toStr
+      when EnableDebugLog:
+        debug logTxt, key=key.toStr
       api.del(kvt, key)
 
   tracerApi.put =
     proc(kvt: KvtDbRef; key, data: openArray[byte]): Result[void,KvtError] =
-      const logTxt = "trace put"
+      when EnableDebugLog:
+        const logTxt = "trace put"
 
       # Store data on the stacked logger instances
       for level in (tr.inst.len-1).countDown(0):
         let flags = tr.inst[level].flags
         tr.inst[level].kLog[@key] = @data
-        debug logTxt, level, log="put()", flags, key=key.toStr, data=data.toStr
+        when EnableDebugLog:
+          debug logTxt, level, log="put()",
+            flags, key=key.toStr, data=data.toStr
         if PersistPut notin flags:
           return ok()
 
-      debug logTxt, key=key.toStr, data=data.toStr
+      when EnableDebugLog:
+        debug logTxt, key=key.toStr, data=data.toStr
       api.put(kvt, key, data)
 
   tracerApi.hasKey =
     proc(kvt: KvtDbRef; key: openArray[byte]): Result[bool,KvtError] =
-      const logTxt = "trace hasKey"
+      when EnableDebugLog:
+        const logTxt = "trace hasKey"
 
       # Try to fetch data from the stacked logger instances
       for level in (tr.inst.len-1).countDown(0):
         if tr.inst[level].kLog.hasKey @key:
-          debug logTxt, level, log="get()", key=key.toStr, result=true
+          when EnableDebugLog:
+            debug logTxt, level, log="get()", key=key.toStr, result=true
           return ok(true)
 
       # Alternatively fetch data from the production DB instance
-      debug logTxt, key=key.toStr
+      when EnableDebugLog:
+        debug logTxt, key=key.toStr
       api.hasKey(kvt, key)
 
   result = TraceKdbRecorder(
@@ -227,9 +247,12 @@ proc traceRecorder(
          root: VertexID;
          path: openArray[byte];
            ): Result[PayloadRef,(VertexID,AristoError)] =
-      const logTxt = "trace fetchPayload"
+      when EnableDebugLog:
+        const logTxt = "trace fetchPayload"
+
       let key = leafTie(root, path).valueOr:
-        info logTxt, root, path=path.toStr, error=error[1]
+        when EnableDebugLog:
+          debug logTxt, root, path=path.toStr, error=error[1]
         return err(error)
 
       # Try to fetch data from the stacked logger instances
@@ -238,7 +261,8 @@ proc traceRecorder(
         pyl = tr.inst[level].mLog.getOrVoid key
         if not pyl.isNil:
           pos = level
-          debug logTxt, level, key, result=($pyl)
+          when EnableDebugLog:
+            debug logTxt, level, key, result=($pyl)
           break
 
       # Alternatively fetch data from the production DB instance
@@ -246,19 +270,22 @@ proc traceRecorder(
         pyl = block:
           let rc = api.fetchPayload(mpt, root, path)
           if rc.isErr:
-            debug logTxt, level=0, key, error=rc.error[1]
+            when EnableDebugLog:
+              debug logTxt, level=0, key, error=rc.error[1]
             return err(rc.error)
           rc.value.to(CoreDbPayloadRef)
 
         # For accounts payload serialise the data
         pyl = pyl.update(api, mpt).valueOr:
-          debug logTxt, key, pyl, error=(error[1])
+          when EnableDebugLog:
+            debug logTxt, key, pyl, error=(error[1])
           return err(error)
 
       # Data and payload available, store in all top level instances
       for level in pos+1 ..< tr.inst.len:
         tr.inst[level].mLog[key] = pyl
-        debug logTxt, level, log="put()", key, result=($pyl)
+        when EnableDebugLog:
+          debug logTxt, level, log="put()", key, result=($pyl)
 
       ok(pyl)
 
@@ -268,20 +295,25 @@ proc traceRecorder(
          path: openArray[byte];
          accPath: PathID;
            ): Result[bool,(VertexID,AristoError)] =
-      const logTxt = "trace delete"
+      when EnableDebugLog:
+        const logTxt = "trace delete"
+
       let key = leafTie(root, path).valueOr:
-        info logTxt, root, path=path.toStr, error=error[1]
+        when EnableDebugLog:
+          debug logTxt, root, path=path.toStr, error=error[1]
         return err(error)
 
       # Delete data on the stacked logger instances
       for level in (tr.inst.len-1).countDown(0):
         let flags = tr.inst[level].flags
         tr.inst[level].mLog.del key
-        debug logTxt, level, log="del()", flags, key
+        when EnableDebugLog:
+          debug logTxt, level, log="del()", flags, key
         if PersistDel notin flags:
           return ok(false)
 
-      debug logTxt, key, accPath
+      when EnableDebugLog:
+        debug logTxt, key, accPath
       api.delete(mpt, root, path, accPath)
 
   tracerApi.merge =
@@ -290,9 +322,12 @@ proc traceRecorder(
          path, data: openArray[byte];
          accPath: PathID;
            ): Result[bool,AristoError] =
-      const logTxt = "trace merge"
+      when EnableDebugLog:
+        const logTxt = "trace merge"
+
       let key = leafTie(root, path).valueOr:
-        info logTxt, root, path=path.toStr, error=error[1]
+        when EnableDebugLog:
+          debug logTxt, root, path=path.toStr, error=error[1]
         return err(error[1])
 
       # Store data on the stacked logger instances
@@ -300,11 +335,13 @@ proc traceRecorder(
       for level in (tr.inst.len-1).countDown(0):
         let flags = tr.inst[level].flags
         tr.inst[level].mLog[key] = pyl
-        debug logTxt, level, log="put()", flags, key, data=($pyl)
+        when EnableDebugLog:
+          debug logTxt, level, log="put()", flags, key, data=($pyl)
         if PersistPut notin flags:
           return ok(false)
 
-      debug logTxt, key, data=($pyl), accPath
+      when EnableDebugLog:
+        debug logTxt, key, data=($pyl), accPath
       api.merge(mpt, root, path, data, accPath)
 
   tracerApi.mergePayload =
@@ -314,25 +351,31 @@ proc traceRecorder(
          pyl: PayloadRef;
          accPath = VOID_PATH_ID;
            ): Result[bool,AristoError] =
-      const logTxt = "trace mergePayload"
+      when EnableDebugLog:
+        const logTxt = "trace mergePayload"
+
       let key = leafTie(root, path).valueOr:
-        info logTxt, root, path=path.toStr, error=error[1]
+        when EnableDebugLog:
+          debug logTxt, root, path=path.toStr, error=error[1]
         return err(error[1])
 
       # For accounts payload add serialised version of the data to `pyl`
       var pyl = pyl.to(CoreDbPayloadRef).update(api, mpt).valueOr:
-        debug logTxt, key, pyl, error=(error[1])
+        when EnableDebugLog:
+          debug logTxt, key, pyl, error=(error[1])
         return err(error[1])
 
       # Store data on the stacked logger instances
       for level in (tr.inst.len-1).countDown(0):
         let flags = tr.inst[level].flags
         tr.inst[level].mLog[key] = pyl
-        debug logTxt, level, log="put()", flags, key, pyl
+        when EnableDebugLog:
+          debug logTxt, level, log="put()", flags, key, pyl
         if PersistPut notin flags:
           return ok(false)
 
-      debug logTxt, key, pyl
+      when EnableDebugLog:
+        debug logTxt, key, pyl
       api.mergePayload(mpt, root, path, pyl, accPath)
 
   tracerApi.hasPath =
@@ -340,19 +383,24 @@ proc traceRecorder(
          root: VertexID;
          path: openArray[byte];
            ): Result[bool,(VertexID,AristoError)] =
-      const logTxt = "trace hasPath"
+      when EnableDebugLog:
+        const logTxt = "trace hasPath"
+
       let key = leafTie(root, path).valueOr:
-        info logTxt, root, path=path.toStr, error=error[1]
+        when EnableDebugLog:
+          debug logTxt, root, path=path.toStr, error=error[1]
         return err(error)
 
       # Try to fetch data from the stacked logger instances
       for level in (tr.inst.len-1).countDown(0):
         if tr.inst[level].mLog.hasKey key:
-          debug logTxt, level, log="get()", key, result=true
+          when EnableDebugLog:
+            debug logTxt, level, log="get()", key, result=true
           return ok(true)
 
       # Alternatively fetch data from the production DB instance
-      debug logTxt, key
+      when EnableDebugLog:
+        debug logTxt, key
       api.hasPath(mpt, root, path)
 
   result = TraceAdbRecorder(
