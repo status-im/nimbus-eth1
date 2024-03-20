@@ -122,6 +122,8 @@ proc getTreeKeyCodeKeccak*(address: EthAddress): Bytes32 =
 proc getTreeKeyCodeSize*(address: EthAddress): Bytes32 =
   return getTreeKey(address, UInt256.zero(), CodeSizeLeafKey)
 
+proc newVerkleTrie*(): VerkleTrie =
+  result = VerkleTrie(root: newTree())
 
 proc updateAccount*(trie: var VerkleTrie, address: EthAddress, acc: Account) =
   var verKey = getTreeKeyVersion(address)
@@ -129,7 +131,10 @@ proc updateAccount*(trie: var VerkleTrie, address: EthAddress, acc: Account) =
   var balanceKey = getTreeKeyBalance(address)
   var codeKeccakKey = getTreeKeyCodeKeccak(address)
 
-  var varVal = fromHex(Bytes32, "0x0")
+  var varVal: Bytes32
+  for i in 0 ..< 32:
+    if i < varVal.len:
+      varVal[i] = 0
   var nonceVal = acc.nonce.toBytesLE()
   var nonceValfull: Bytes32
   for i in 0 ..< 32:
