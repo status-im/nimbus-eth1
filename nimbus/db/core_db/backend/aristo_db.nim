@@ -132,8 +132,14 @@ proc baseMethods(
     newKvtFn: proc(sharedTable: bool): CoreDbRc[CoreDxKvtRef] =
       db.kdbBase.newKvtHandler(sharedTable, "newKvtFn()"),
 
-    getCtxFn: proc(): CoreDbCtxRef =
+    newCtxFn: proc(): CoreDbCtxRef =
       db.adbBase.ctx,
+
+    newCtxFromTxFn: proc(r: Hash256; k: CoreDbSubTrie): CoreDbRc[CoreDbCtxRef] =
+      CoreDbCtxRef.init(db.adbBase, r, k),
+
+    swapCtxFn: proc(ctx: CoreDbCtxRef): CoreDbCtxRef =
+      db.adbBase.swapCtx(ctx),
 
     beginFn: proc(): CoreDbRc[CoreDxTxRef] =
       const info = "beginFn()"

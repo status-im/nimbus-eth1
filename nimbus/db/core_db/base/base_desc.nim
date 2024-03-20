@@ -68,6 +68,7 @@ type
     RootNotFound
     RootUnacceptable
     StorageFailed
+    SubTrieUnacceptable
     TrieLocked
 
   CoreDbSubTrie* = enum
@@ -95,32 +96,37 @@ type
   CoreDbBaseLevelFn* = proc(): int {.noRaise.}
   CoreDbBaseNewKvtFn* =
     proc(sharedTable: bool): CoreDbRc[CoreDxKvtRef] {.noRaise.}
-  CoreDbBaseGetCtxFn* = proc(): CoreDbCtxRef {.noRaise.}
+  CoreDbBaseNewCtxFn* = proc(): CoreDbCtxRef {.noRaise.}
+  CoreDbBaseNewCtxFromTxFn* = proc(
+    root: Hash256; kind: CoreDbSubTrie;): CoreDbRc[CoreDbCtxRef] {.noRaise.}
+  CoreDbBaseSwapCtxFn* = proc(ctx: CoreDbCtxRef): CoreDbCtxRef {.noRaise.}
   CoreDbBaseTxBeginFn* = proc(): CoreDbRc[CoreDxTxRef] {.noRaise.}
   CoreDbBaseNewCaptFn* =
     proc(flgs: set[CoreDbCaptFlags]): CoreDbRc[CoreDxCaptRef] {.noRaise.}
   CoreDbBaseGetCaptFn* = proc(): CoreDbRc[CoreDxCaptRef] {.noRaise.}
 
   CoreDbBaseFns* = object
-    backendFn*:     CoreDbBaseBackendFn
-    destroyFn*:     CoreDbBaseDestroyFn
-    rootHashFn*:    CoreDbBaseRootHashFn
-    triePrintFn*:   CoreDbBaseTriePrintFn
-    errorPrintFn*:  CoreDbBaseErrorPrintFn
-    legacySetupFn*: CoreDbBaseInitLegaSetupFn
-    levelFn*:       CoreDbBaseLevelFn
+    backendFn*:      CoreDbBaseBackendFn
+    destroyFn*:      CoreDbBaseDestroyFn
+    rootHashFn*:     CoreDbBaseRootHashFn
+    triePrintFn*:    CoreDbBaseTriePrintFn
+    errorPrintFn*:   CoreDbBaseErrorPrintFn
+    legacySetupFn*:  CoreDbBaseInitLegaSetupFn
+    levelFn*:        CoreDbBaseLevelFn
 
     # Kvt constructor
-    newKvtFn*:      CoreDbBaseNewKvtFn
+    newKvtFn*:       CoreDbBaseNewKvtFn
 
     # MPT context constructor
-    getCtxFn*:      CoreDbBaseGetCtxFn
+    newCtxFn*:       CoreDbBaseNewCtxFn
+    newCtxFromTxFn*: CoreDbBaseNewCtxFromTxFn
+    swapCtxFn*:      CoreDbBaseSwapCtxFn
 
     # Transactions constructors
-    beginFn*:       CoreDbBaseTxBeginFn
+    beginFn*:        CoreDbBaseTxBeginFn
 
     # capture/tracer constructors
-    newCaptureFn*:  CoreDbBaseNewCaptFn
+    newCaptureFn*:   CoreDbBaseNewCaptFn
 
 
   # --------------------------------------------------
@@ -150,7 +156,6 @@ type
   # --------------------------------------------------
   CoreDbCtxFromTxFn* =
     proc(root: Hash256; kind: CoreDbSubTrie): CoreDbRc[CoreDbCtxRef] {.noRaise.}
-  CoreDbCtxSwapFn* = proc(ctx: CoreDbCtxRef): CoreDbCtxRef {.noRaise.}
   CoreDbCtxNewTrieFn* = proc(
     trie: CoreDbSubTrie; root: Hash256; address: Option[EthAddress];
     ): CoreDbRc[CoreDbTrieRef] {.noRaise.}
@@ -162,8 +167,6 @@ type
 
   CoreDbCtxFns* = object
     ## Methods for context maniulation
-    fromTxFn*:  CoreDbCtxFromTxFn
-    swapFn*:    CoreDbCtxSwapFn
     newTrieFn*: CoreDbCtxNewTrieFn
     getMptFn*:  CoreDbCtxGetMptFn
     getAccFn*:  CoreDbCtxGetAccFn
@@ -257,7 +260,7 @@ type
   CoreDbCaptRecorderFn* = proc(): CoreDbRef {.noRaise.}
   CoreDbCaptLogDbFn* = proc(): TableRef[Blob,Blob] {.noRaise.}
   CoreDbCaptFlagsFn* = proc(): set[CoreDbCaptFlags] {.noRaise.}
-  CoreDbCaptForgetFn* = proc(): CoreDbRc[void] {.noRaise.}
+  CoreDbCaptForgetFn* = proc() {.noRaise.}
 
   CoreDbCaptFns* = object
     recorderFn*: CoreDbCaptRecorderFn

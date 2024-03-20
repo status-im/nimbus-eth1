@@ -42,10 +42,12 @@ type
 
     BaseDbTypeFn        = "dbType"
     BaseFinishFn        = "finish"
-    BaseGetCtxFn        = "ctx"
     BaseLegacySetupFn   = "compensateLegacySetup"
     BaseLevelFn         = "level"
     BaseNewCaptureFn    = "newCapture"
+    BaseNewCtxFn        = "ctx"
+    BaseNewCtxFromTxFn  = "ctxFromTx"
+    BaseSwapCtxFn       = "swapCtx"
     BaseNewKvtFn        = "newKvt"
     BaseNewTxFn         = "newTransaction"
 
@@ -55,12 +57,10 @@ type
     CptForgetFn         = "cpt/forget"
 
     CtxForgetFn         = "ctx/forget"
-    CtxFromTxFn         = "ctx/fromTx"
     CtxGetAccFn         = "ctx/getAcc"
     CtxGetAccMptFn      = "ctx/getAccMpt"
     CtxGetMptFn         = "ctx/getMpt"
     CtxNewTrieFn        = "ctx/newTrie"
-    CtxSwapFn           = "ctx/swap"
 
     ErrorPrintFn        = "$$"
     EthAccRecastFn      = "recast"

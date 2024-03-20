@@ -410,35 +410,42 @@ proc forget*(kvt: CoreDxKvtRef): CoreDbRc[void] {.discardable.} =
   kvt.ifTrackNewApi: debug newApiTxt, api, elapsed, result
 
 # ------------------------------------------------------------------------------
-# Public Merkle Patricia Tree context administration
+# Public Merkle Patricia Tree context constructors and administration
 # ------------------------------------------------------------------------------
 
 proc ctx*(db: CoreDbRef): CoreDbCtxRef =
   ## Get currently active context.
   ##
-  db.setTrackNewApi BaseGetCtxFn
-  result = db.methods.getCtxFn()
+  db.setTrackNewApi BaseNewCtxFn
+  result = db.methods.newCtxFn()
   db.ifTrackNewApi: debug newApiTxt, api, elapsed
 
-proc fromTx*(
-    ctx: CoreDbCtxRef;
+proc ctxFromTx*(
+    db: CoreDbRef;
     root: Hash256;
     kind = AccountsTrie;
       ): CoreDbRc[CoreDbCtxRef] =
   ## Create new context derived from matching transaction of the currently
-  ## active context.
+  ## active context. Fir the legacy backend, this function always returns
+  ## the currently active context (i.e. the same as `db.ctx()`.)
   ##
-  ctx.setTrackNewApi CtxFromTxFn
-  result = ctx.methods.fromTxFn(root, kind)
-  ctx.ifTrackNewApi: debug newApiTxt, api, elapsed, result
+  db.setTrackNewApi BaseNewCtxFromTxFn
+  result = db.methods.newCtxFromTxFn(root, kind)
+  db.ifTrackNewApi: debug newApiTxt, api, elapsed, result
 
-proc swap*(ctx: CoreDbCtxRef; other: CoreDbCtxRef): CoreDbCtxRef =
-  ## Activate argument context `other` and return the previously active
-  ## context.
+proc swapCtx*(db: CoreDbRef; ctx: CoreDbCtxRef): CoreDbCtxRef =
+  ## Activate argument context `ctx` and return the previously active context.
+  ## This function goes typically together with `forget()`. A valid scenario
+  ## might look like
+  ## ::
+  ##   proc doSomething(db: CoreDbRef; ctx: CoreDbCtxRef) =
+  ##     let saved = db.swapCtx ctx
+  ##     defer: db.swapCtx(saved).forget()
+  ##     ...
   ##
-  ctx.setTrackNewApi CtxSwapFn
-  result = ctx.methods.swapFn(other)
-  ctx.ifTrackNewApi: debug newApiTxt, api, elapsed
+  db.setTrackNewApi BaseSwapCtxFn
+  result = db.methods.swapCtxFn ctx
+  db.ifTrackNewApi: debug newApiTxt, api, elapsed
 
 proc forget*(ctx: CoreDbCtxRef) =
   ## Dispose contextand all MPT views related.
@@ -1007,20 +1014,18 @@ proc logDb*(cp: CoreDxCaptRef): TableRef[Blob,Blob] =
 
 proc flags*(cp: CoreDxCaptRef):set[CoreDbCaptFlags] =
   ## Getter
+  ##
   cp.setTrackNewApi CptFlagsFn
   result = cp.methods.getFlagsFn()
   cp.ifTrackNewApi: debug newApiTxt, api, elapsed, result
 
-proc forget*(cp: CoreDxCaptRef): CoreDbRc[void] =
-  ## Explicitely stop recording the current tracer instance. If this call was
-  ## successful, the the database argument `db` used when starting the trace
-  ## with `newCapture()` will be fully operational, again. This will also
-  ## implicitely take place when the`NIM` garbage collector recycles an
-  ## abondoned capture descriptor.
+proc forget*(cp: CoreDxCaptRef) =
+  ## Explicitely stop recording the current tracer instance and reset to
+  ## previous level.
   ##
   cp.setTrackNewApi CptForgetFn
-  result = cp.methods.forgetFn()
-  cp.ifTrackNewApi: debug newApiTxt, api, elapsed, result
+  cp.methods.forgetFn()
+  cp.ifTrackNewApi: debug newApiTxt, api, elapsed
 
 # ------------------------------------------------------------------------------
 # Public methods, legacy API
