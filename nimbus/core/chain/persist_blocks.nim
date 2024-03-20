@@ -76,8 +76,12 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
     toBlock = headers[^1].blockNumber
 
   for i in 0 ..< headers.len:
-    let
-      (header, body) = (headers[i], bodies[i])
+    let (header, body) = (headers[i], bodies[i])
+
+    # This transaction keeps the current state open for inspection
+    # if an error occurs (as needed for `Aristo`.).
+    let lapTx = c.db.beginTransaction()
+    defer: lapTx.dispose()
 
     c.com.hardForkTransition(header)
 
@@ -111,11 +115,8 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
     when not defined(release):
       if validationResult == ValidationResult.Error and
          body.transactions.calcTxRoot == header.txRoot:
-        if c.com.ledgerType == LegacyAccountsCache:
-          dumpDebuggingMetaData(c.com, header, body, vmState)
-          warn "Validation error. Debugging metadata dumped."
-        else:
-          warn "Validation error", blockNumber=header.blockNumber
+        vmState.dumpDebuggingMetaData(header, body)
+        warn "Validation error. Debugging metadata dumped."
 
     if validationResult != ValidationResult.OK:
       return validationResult
@@ -167,6 +168,9 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
     # so the rpc return consistent result
     # between eth_blockNumber and eth_syncing
     c.com.syncCurrent = header.blockNumber
+
+    # Done with this bllock
+    lapTx.commit()
 
   dbTx.commit()
 
