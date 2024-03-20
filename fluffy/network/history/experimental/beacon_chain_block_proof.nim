@@ -87,12 +87,12 @@ type
 
   BeaconChainBlockProof* = object
     # Total size (8 + 1 + 3 + 1 + 14) * 32 bytes + 4 bytes = 868 bytes
-    beaconBlockBodyProof: BeaconBlockBodyProof
-    beaconBlockBodyRoot: Digest
-    beaconBlockHeaderProof: BeaconBlockHeaderProof
-    beaconBlockHeaderRoot: Digest
-    historicalRootsProof: HistoricalRootsProof
-    slot: Slot
+    beaconBlockBodyProof*: BeaconBlockBodyProof
+    beaconBlockBodyRoot*: Digest
+    beaconBlockHeaderProof*: BeaconBlockHeaderProof
+    beaconBlockHeaderRoot*: Digest
+    historicalRootsProof*: HistoricalRootsProof
+    slot*: Slot
 
 func getHistoricalRootsIndex*(slot: Slot): uint64 =
   slot div SLOTS_PER_HISTORICAL_ROOT
@@ -109,7 +109,7 @@ func getBlockRootsIndex*(blockHeader: BeaconBlockHeader): uint64 =
 # Builds proof to be able to verify that the EL block hash is part of
 # BeaconBlockBody for given root.
 func buildProof*(
-    blockBody: bellatrix.BeaconBlockBody
+    blockBody: bellatrix.TrustedBeaconBlockBody | bellatrix.BeaconBlockBody
 ): Result[BeaconBlockBodyProof, string] =
   # 16 as there are 10 fields
   # 9 as index (pos) of field = 9
@@ -152,7 +152,7 @@ func buildProof*(
 func buildProof*(
     batch: HistoricalBatch,
     blockHeader: BeaconBlockHeader,
-    blockBody: bellatrix.BeaconBlockBody,
+    blockBody: bellatrix.TrustedBeaconBlockBody | bellatrix.BeaconBlockBody,
 ): Result[BeaconChainBlockProof, string] =
   let
     blockRootIndex = getBlockRootsIndex(blockHeader)
