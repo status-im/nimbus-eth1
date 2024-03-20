@@ -260,6 +260,8 @@ proc coreDbMain*(noisy = defined(debug)) =
   noisy.chainSyncRunner(ldgType=LedgerCache)
 
 when isMainModule:
+  import
+    std/times
   const
     noisy = defined(debug) or true
   var

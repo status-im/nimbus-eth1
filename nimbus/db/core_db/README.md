@@ -43,24 +43,26 @@ Usage of the replacement wrapper
 
 ### Objects pedigree:
 
-        CoreDbRef                   -- base descriptor
-         | | | |
-         | | | +-- CoreDbMptRef     -- hexary trie instance
-         | | | |    :                    :
-         | | | +-- CoreDbMptRef     -- hexary trie instance
+        CoreDbRef                        -- base descriptor
          | | |
-         | | |
-         | | +---- CoreDbPhkRef     -- pre-hashed key hexary trie instance
-         | | |      :                    :
-         | | +---- CoreDbPhkRef     -- pre-hashed key hexary trie instance
+         | | +--- CoreDbCtxRef           -- MPT context descriptor
+         | |        | |
+         | |        | +-- CoreDbMptRef   -- hexary trie instance
+         | |        | |    :                    :
+         | |        | +-- CoreDbMptRef   -- hexary trie instance
+         | |        |
+         | |        |
+         | |        +---- CoreDbPhkRef   -- pre-hashed key hexary trie instance
+         | |        |      :                    :
+         | |        +---- CoreDbPhkRef   -- pre-hashed key hexary trie instance
          | |
          | |
-         | +------ CoreDbKvtRef     -- single static key-value table
+         | +------ CoreDbKvtRef          -- single static key-value table
          |
          |
-         +-------- CoreDbCaptRef    -- tracer support descriptor
+         +-------- CoreDbCaptRef         -- tracer support descriptor
 
-### Instantiating standard database object descriptors works as follows:
+### Instantiating legacy standard database object descriptors works as follows:
 
         let
           db = newCoreDbRef(..)           # new base descriptor

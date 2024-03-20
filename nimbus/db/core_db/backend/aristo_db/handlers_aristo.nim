@@ -58,12 +58,9 @@ type
 
 const
   VoidTrieID = VertexID(0)
+  # StorageTrieID = VertexID(StorageTrie) -- currently unused
   AccountsTrieID = VertexID(AccountsTrie)
   GenericTrieID = VertexID(GenericTrie)
-
-when false:
-  const
-    StorageTrieID = VertexID(StorageTrie)
 
 logScope:
   topics = "aristo-hdl"
