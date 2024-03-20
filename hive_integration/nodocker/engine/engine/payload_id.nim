@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -15,7 +15,7 @@ import
 
 type
   PayloadAttributesFieldChange* = enum
-    PayloadAttributesIncreasetimestamp         = "Increase timestamp"
+    PayloadAttributesIncreaseTimestamp         = "Increase timestamp"
     PayloadAttributesRandom                    = "Modify Random"
     PayloadAttributesSuggestedFeeRecipient     = "Modify SuggestedFeeRecipient"
     PayloadAttributesAddWithdrawal             = "Add Withdrawal"
@@ -58,11 +58,11 @@ method execute(cs: UniquePayloadIDTest, env: TestEnv): bool =
     onPayloadAttributesGenerated: proc(): bool =
       var attr = env.clMock.latestPayloadAttributes
       case cs.fieldModification
-      of PayloadAttributesIncreasetimestamp:
+      of PayloadAttributesIncreaseTimestamp:
         attr.timestamp = w3Qty(attr.timestamp, 1)
       of PayloadAttributesRandom:
         attr.prevRandao = attr.prevRandao.plusOne
-      of PayloadAttributesSuggestedFeerecipient:
+      of PayloadAttributesSuggestedFeeRecipient:
         attr.suggestedFeeRecipient = attr.suggestedFeeRecipient.plusOne
       of PayloadAttributesAddWithdrawal:
         let newWithdrawal = WithdrawalV1()

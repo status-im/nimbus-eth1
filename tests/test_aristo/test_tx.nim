@@ -484,6 +484,7 @@ proc testTxMergeAndDeleteSubTree*(
       let rc = db.randomisedLeafs(leafsLeft, prng)
       xCheckRc rc.error == (0,0)
       rc.value
+    discard leafVidPairs
 
     # === delete sub-tree ===
     block:

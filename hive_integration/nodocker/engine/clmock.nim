@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -93,7 +93,7 @@ type
 
 proc collectBlobHashes(list: openArray[Web3Tx]): seq[common.Hash256] =
   for w3tx in list:
-    let tx = ethTx(w3Tx)
+    let tx = ethTx(w3tx)
     for h in tx.versionedHashes:
       result.add h
 

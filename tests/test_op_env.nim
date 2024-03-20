@@ -19,108 +19,108 @@ proc opEnvMain*() =
     assembler: # EVM bug reported in discord
       title: "stack's operator [] bug"
       code:
-        PUSH1 "0x0A"
-        DUP1
-        RETURNDATASIZE
-        MSIZE
-        ADDRESS
-        GAS
-        STATICCALL
-        CALL
+        Push1 "0x0A"
+        Dup1
+        ReturnDataSize
+        Msize
+        Address
+        Gas
+        StaticCall
+        Call
       fork: London
       success: false
       memory: "0x0000000000000000000000000000000000000000000000000000000000000000"
 
-    assembler: # CODECOPY OP
+    assembler: # CodeCopy OP
       title: "CODECOPY_1"
       code:
-        PUSH1 "0x03" # size
-        PUSH1 "0x08" # copy start pos
-        PUSH1 "0x00" # mem start pos
-        CODECOPY
-        STOP
-        SLT
-        CALLVALUE
-        JUMP
+        Push1 "0x03" # size
+        Push1 "0x08" # copy start pos
+        Push1 "0x00" # mem start pos
+        CodeCopy
+        Stop
+        Slt
+        CallValue
+        Jump
       memory: "0x1234560000000000000000000000000000000000000000000000000000000000"
-      # assertEquals(6, gas); ??
+      gasused: 18
 
-    assembler: # CODECOPY OP
+    assembler: # CodeCopy OP
       title: "CODECOPY_2"
       code:
-        PUSH1 "0x5E" # size
-        PUSH1 "0x08" # copy start pos
-        PUSH1 "0x00" # mem start pos
-        CODECOPY
-        STOP
-        PUSH1 "0x00"
-        PUSH1 "0x5f"
-        SSTORE
-        PUSH1 "0x14"
-        PUSH1 "0x00"
-        SLOAD
-        PUSH1 "0x1e"
-        PUSH1 "0x20"
-        SLOAD
-        PUSH4 "0xabcddcba"
-        PUSH1 "0x40"
-        SLOAD
-        JUMPDEST
-        MLOAD
-        PUSH1 "0x20"
-        ADD
-        PUSH1 "0x0a"
-        MSTORE
-        SLOAD
-        MLOAD
-        PUSH1 "0x40"
-        ADD
-        PUSH1 "0x14"
-        MSTORE
-        SLOAD
-        MLOAD
-        PUSH1 "0x60"
-        ADD
-        PUSH1 "0x1e"
-        MSTORE
-        SLOAD
-        MLOAD
-        PUSH1 "0x80"
-        ADD
-        PUSH1 "0x28"
-        MSTORE
-        SLOAD
-        PUSH1 "0xa0"
-        MSTORE
-        SLOAD
-        PUSH1 "0x16"
-        PUSH1 "0x48"
-        PUSH1 "0x00"
-        CODECOPY
-        PUSH1 "0x16"
-        PUSH1 "0x00"
-        CALLCODE
-        PUSH1 "0x00"
-        PUSH1 "0x3f"
-        SSTORE
-        PUSH2 "0x03e7"
-        JUMP
-        PUSH1 "0x00"
-        SLOAD
-        PUSH1 "0x00"
-        MSTORE8
-        PUSH1 "0x20"
-        MUL
-        CALLDATALOAD
-        PUSH1 "0x20"
-        SLOAD
+        Push1 "0x5E" # size
+        Push1 "0x08" # copy start pos
+        Push1 "0x00" # mem start pos
+        CodeCopy
+        Stop
+        Push1 "0x00"
+        Push1 "0x5f"
+        Sstore
+        Push1 "0x14"
+        Push1 "0x00"
+        Sload
+        Push1 "0x1e"
+        Push1 "0x20"
+        Sload
+        Push4 "0xabcddcba"
+        Push1 "0x40"
+        Sload
+        JumpDest
+        Mload
+        Push1 "0x20"
+        Add
+        Push1 "0x0a"
+        Mstore
+        Sload
+        Mload
+        Push1 "0x40"
+        Add
+        Push1 "0x14"
+        Mstore
+        Sload
+        Mload
+        Push1 "0x60"
+        Add
+        Push1 "0x1e"
+        Mstore
+        Sload
+        Mload
+        Push1 "0x80"
+        Add
+        Push1 "0x28"
+        Mstore
+        Sload
+        Push1 "0xa0"
+        Mstore
+        Sload
+        Push1 "0x16"
+        Push1 "0x48"
+        Push1 "0x00"
+        CodeCopy
+        Push1 "0x16"
+        Push1 "0x00"
+        CallCode
+        Push1 "0x00"
+        Push1 "0x3f"
+        Sstore
+        Push2 "0x03e7"
+        Jump
+        Push1 "0x00"
+        Sload
+        Push1 "0x00"
+        Mstore8
+        Push1 "0x20"
+        Mul
+        CallDataLoad
+        Push1 "0x20"
+        Sload
       memory:
         "0x6000605F556014600054601E60205463ABCDDCBA6040545B51602001600A5254"
         "0x516040016014525451606001601E5254516080016028525460A0525460166048"
         "0x60003960166000F26000603F556103E756600054600053602002356020540000"
-      #assertEquals(10, gas); ??
+      gasUsed: 30
 
-    assembler: # CODECOPY OP
+    assembler: # CodeCopy OP
       title: "CODECOPY_3"
         # cost for that:
         # 94 - data copied
@@ -130,7 +130,7 @@ proc opEnvMain*() =
         Push1 "0x08"
         Push1 "0x00"
         CodeCopy
-        STOP
+        Stop
         "0x6000605f556014600054601e60205463abcddcba6040545b"
         "0x51602001600a5254516040016014525451606001601e52545160800160285254"
         "0x60a052546016604860003960166000f26000603f556103e75660005460005360"
@@ -141,14 +141,14 @@ proc opEnvMain*() =
         "0x60003960166000F26000603F556103E756600054600053602002350000000000"
       #assertEquals(10, program.getResult().getGasUsed());
 
-    assembler: # CODECOPY OP
+    assembler: # CodeCopy OP
       title: "CODECOPY_4"
       code:
         Push1 "0x5E"
         Push1 "0x07"
         Push1 "0x00"
         CodeCopy
-        STOP
+        Stop
         "0x6000605f556014600054601e60205463abcddcba6040545b51"
         "0x602001600a5254516040016014525451606001601e5254516080016028525460"
         "0xa052546016604860003960166000f26000603f556103e756600054600053602002351234"
@@ -158,7 +158,7 @@ proc opEnvMain*() =
         "0x4860003960166000F26000603F556103E7566000546000536020023512340000"
       #assertEquals(10, program.getResult().getGasUsed());
 
-    assembler: # CODECOPY OP
+    assembler: # CodeCopy OP
       title: "CODECOPY_5"
       code:
         Push2 "0x1234"
@@ -171,7 +171,7 @@ proc opEnvMain*() =
         Push1 "0x00"
         Push1 "0x20"
         CodeCopy
-        STOP
+        Stop
         "0x6000605f55601460"
         "0x0054601e60205463abcddcba6040545b51602001600a525451604001"
         "0x6014525451606001601e5254516080016028525460a0525460166048"
@@ -188,7 +188,7 @@ proc opEnvMain*() =
         "0x601e5254516080016028525460a052546016604860003960166000f26000603f"
         "0x556103e756600054600053602002351200000000000000000000000000000000"
 
-    assembler: # CODECOPY OP mal
+    assembler: # CodeCopy OP mal
       title: "CODECOPY_6"
       code:
         "0x605E6007396000605f556014600054601e60205463abcddcba604054"
@@ -220,7 +220,7 @@ proc opEnvMain*() =
         Push1 "0x00" # mem pos
         Push20 "0xfbe0afcd7658ba86be41922059dd879c192d4c73"
         ExtCodeCopy
-        STOP
+        Stop
         Slt
         CallValue
         Jump
@@ -238,7 +238,7 @@ proc opEnvMain*() =
         Push1 "0x00"
         Push20 "0xfbe0afcd7658ba86be41922059dd879c192d4c73"
         ExtCodeCopy
-        STOP
+        Stop
         "0x6000605f"
         "0x556014600054601e60205463abcddcba6040545b51602001600a525451604001"
         "0x6014525451606001601e5254516080016028525460a052546016604860003960"
@@ -258,7 +258,7 @@ proc opEnvMain*() =
         Push1 "0x00"
         Push20 "0xfbe0afcd7658ba86be41922059dd879c192d4c73"
         ExtCodeCopy
-        STOP
+        Stop
         "0x6000605f"
         "0x556014600054601e60205463abcddcba6040545b51602001600a525451604001"
         "0x6014525451606001601e5254516080016028525460a052546016604860003960"
@@ -285,7 +285,7 @@ proc opEnvMain*() =
         Push1 "0x20"
         Push20 "0xfbe0afcd7658ba86be41922059dd879c192d4c73"
         ExtCodeCopy
-        STOP
+        Stop
         "0x6000605f556014600054601e60205463abcddcba6040545b"
         "0x51602001600a5254516040016014525451606001601e52545160800160285254"
         "0x60a052546016604860003960166000f26000603f556103e756600054600053602002351234"
@@ -330,7 +330,7 @@ proc opEnvMain*() =
       code:
         Push20 "0xfbe0afcd7658ba86be41922059dd879c192d4c73"
         ExtCodeSize
-        STOP
+        Stop
         "0x5E60076000396000605f"
         "0x556014600054601e60205463abcddcba6040545b51602001600a525451604001"
         "0x6014525451606001601e5254516080016028525460a052546016604860003960"
@@ -345,7 +345,7 @@ proc opEnvMain*() =
       code:
         Push20 "0xfbe0afcd7658ba86be41922059dd879c192d4c73"
         ExtCodeSize
-        STOP
+        Stop
       stack: "0x94"
       fork: Berlin
       gasused: 2603
@@ -358,7 +358,7 @@ proc opEnvMain*() =
       code:
         Push20 "0xfbe0afcd7658ba86be41922059dd879c192d4c73"
         ExtCodeHash
-        STOP
+        Stop
       stack:
         "0xc862129bffb73168481c6a51fd36afb8342887fbc5314c763ac731c732d7310c"
       fork: Berlin
@@ -368,7 +368,7 @@ proc opEnvMain*() =
       title: "EIP-4399 PrevRandao 0"
       code:
         PrevRandao
-        STOP
+        Stop
       stack:
         "0x0000000000000000000000000000000000000000000000000000000000000000"
       fork: Paris
@@ -379,7 +379,7 @@ proc opEnvMain*() =
         vmState.blockCtx.prevRandao = EMPTY_UNCLE_HASH
       code:
         PrevRandao
-        STOP
+        Stop
       stack:
         "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
       fork: Paris
@@ -387,9 +387,9 @@ proc opEnvMain*() =
     assembler:
       title: "EIP-4844: BlobHash 1"
       code:
-        PUSH1 "0x01"
+        Push1 "0x01"
         BlobHash
-        STOP
+        Stop
       stack:
         "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
       fork: Cancun
@@ -397,9 +397,9 @@ proc opEnvMain*() =
     assembler:
       title: "EIP-4844: BlobHash 0"
       code:
-        PUSH1 "0x00"
+        Push1 "0x00"
         BlobHash
-        STOP
+        Stop
       stack:
         "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
       fork: Cancun
@@ -407,9 +407,9 @@ proc opEnvMain*() =
     assembler:
       title: "EIP-4844: BlobHash 2"
       code:
-        PUSH1 "0x02"
+        Push1 "0x02"
         BlobHash
-        STOP
+        Stop
       stack:
         "0x0000000000000000000000000000000000000000000000000000000000000000"
       fork: Cancun
@@ -417,9 +417,9 @@ proc opEnvMain*() =
     assembler:
       title: "EIP-4844: BlobHash 32 Bit high"
       code:
-        PUSH4 "0xffffffff"
+        Push4 "0xffffffff"
         BlobHash
-        STOP
+        Stop
       stack:
         "0x0000000000000000000000000000000000000000000000000000000000000000"
       fork: Cancun
@@ -427,9 +427,9 @@ proc opEnvMain*() =
     assembler:
       title: "EIP-4844: BlobHash 64 Bit high"
       code:
-        PUSH8 "0xffffffffffffffff"
+        Push8 "0xffffffffffffffff"
         BlobHash
-        STOP
+        Stop
       stack:
         "0x0000000000000000000000000000000000000000000000000000000000000000"
       fork: Cancun
@@ -437,9 +437,9 @@ proc opEnvMain*() =
     assembler:
       title: "EIP-4844: BlobHash 128 Bit high"
       code:
-        PUSH16 "0xffffffffffffffffffffffffffffffff"
+        Push16 "0xffffffffffffffffffffffffffffffff"
         BlobHash
-        STOP
+        Stop
       stack:
         "0x0000000000000000000000000000000000000000000000000000000000000000"
       fork: Cancun
@@ -447,9 +447,9 @@ proc opEnvMain*() =
     assembler:
       title: "EIP-4844: BlobHash 256 Bit high"
       code:
-        PUSH32 "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+        Push32 "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         BlobHash
-        STOP
+        Stop
       stack:
         "0x0000000000000000000000000000000000000000000000000000000000000000"
       fork: Cancun
@@ -458,7 +458,7 @@ proc opEnvMain*() =
       title: "EIP-7516: BlobBaseFee"
       code:
         BlobBaseFee
-        STOP
+        Stop
       stack:
         "0x0000000000000000000000000000000000000000000000000000000000000001"
       gasused: 2

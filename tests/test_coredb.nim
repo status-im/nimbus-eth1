@@ -11,7 +11,7 @@
 ## Testing `CoreDB` wrapper implementation
 
 import
-  std/[os, strformat, strutils, times],
+  std/[os, strformat, strutils],
   chronicles,
   eth/common,
   results,
@@ -46,7 +46,7 @@ let
 
 when unittest2DisableParamFiltering:
   import algorithm
-  
+
   # Filter out local options and pass on the rest to `unittest2`
   proc cmdLineConfig(): tuple[samples: seq[CaptureSpecs]] {.used.} =
     ## This helper allows to pass additional command line options to the

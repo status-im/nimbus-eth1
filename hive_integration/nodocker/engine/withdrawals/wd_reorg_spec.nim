@@ -292,7 +292,7 @@ proc execute*(ws: ReorgSpec, env: TestEnv): bool =
       let b = env.client.latestHeader()
       testCond b.isOk
       let header = b.get
-      if header.blockHash == ethHash(sidehash):
+      if header.blockHash == ethHash(sideHash):
         # sync successful
         break
 

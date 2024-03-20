@@ -125,6 +125,7 @@ proc test_chainSyncProfilingPrint*(
     let info =
       if 0 < nBlocks and nBlocks < high(int): " (" & $nBlocks & " blocks)"
       else: ""
+    discard info
     var blurb: seq[string]
     when LedgerEnableApiProfiling:
       blurb.add ldgProfData.profilingPrinter(

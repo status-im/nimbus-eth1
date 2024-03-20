@@ -257,7 +257,7 @@ proc delTree*(
     aristo_delete.delTree(db, root, accPath)
 
 
-proc merge(
+proc merge*(
     db: AristoDbRef;
     root: VertexID;
     path: openArray[byte];

@@ -428,7 +428,7 @@ method execute(cs: ReOrgBackToCanonicalTest, env: TestEnv): bool =
         var version = env.engine.version(env.clMock.latestHeader.timestamp)
         let r = env.engine.client.forkchoiceUpdated(version, env.clMock.latestForkchoice, some(attr))
         r.expectNoError()
-        testcond r.get.payloadID.isSome:
+        testCond r.get.payloadID.isSome:
           fatal "No payload ID returned by forkchoiceUpdated"
 
         version = env.engine.version(attr.timestamp)
