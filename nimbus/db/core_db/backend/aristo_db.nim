@@ -16,7 +16,7 @@ import
   "../.."/[aristo, aristo/aristo_walk],
   "../.."/[kvt, kvt/kvt_init/memory_only, kvt/kvt_walk],
   ".."/[base, base/base_desc],
-  ./aristo_db/[common_desc, handlers_aristo, handlers_kvt]
+  ./aristo_db/[common_desc, handlers_aristo, handlers_kvt, handlers_trace]
 
 import
   ../../aristo/aristo_init/memory_only as aristo_memory_only
@@ -38,22 +38,15 @@ type
     ## Main descriptor
     kdbBase: KvtBaseRef                      ## Kvt subsystem
     adbBase: AristoBaseRef                   ## Aristo subsystem
+    tracer: AristoTracerRef                  ## Currently active recorder
+
+  AristoTracerRef = ref object of TraceRecorderRef
+    ## Sub-handle for tracer
+    parent: AristoCoreDbRef
 
   AristoCoreDbBE = ref object of CoreDbBackendRef
 
 proc newAristoVoidCoreDbRef*(): CoreDbRef {.noRaise.}
-
-# ------------------------------------------------------------------------------
-# Private helpers
-# ------------------------------------------------------------------------------
-
-func notImplemented[T](
-    _: typedesc[T];
-    db: AristoCoreDbRef;
-    info: string;
-      ): CoreDbRc[T] {.gcsafe.} =
-  ## Applies only to `Aristo` methods
-  err((VertexID(0),aristo.NotImplemented).toError(db.adbBase, info))
 
 # ------------------------------------------------------------------------------
 # Private tx and base methods
@@ -100,12 +93,48 @@ proc txMethods(
       if kdbApi.isTop(kTx): ? kdbApi.rollback(kTx).toVoidRc(kdbBase, info)
       ok())
 
+proc cptMethods(
+    tracer: AristoTracerRef;
+      ): CoreDbCaptFns =
+  let
+    tracer = tracer         # So it can savely be captured
+    db = tracer.parent      # Will not change and can be captured
+    log = tracer.topInst()  # Ditto
+
+  CoreDbCaptFns(
+    recorderFn: proc(): CoreDbRef =
+      db,
+
+    logDbFn: proc(): TableRef[Blob,Blob] =
+      log.kLog,
+
+    getFlagsFn: proc(): set[CoreDbCaptFlags] =
+      log.flags,
+
+    forgetFn: proc() =
+      if tracer.pop():
+        tracer.restore())
+
 
 proc baseMethods(
     db: AristoCoreDbRef;
     A:  typedesc;
     K:  typedesc;
       ): CoreDbBaseFns =
+
+  proc tracerSetup(
+      db: AristoCoreDbRef;
+      flags: set[CoreDbCaptFlags];
+        ): CoreDxCaptRef =
+    let dx = db.adbBase.ctx.mpt
+    if db.tracer.isNil:
+      db.tracer = AristoTracerRef(parent: db)
+      db.tracer.init(db.kdbBase, db.adbBase, flags)
+    else:
+      db.tracer.push(flags)
+    CoreDxCaptRef(methods: db.tracer.cptMethods)
+
+
   CoreDbBaseFns(
     backendFn: proc(): CoreDbBackendRef =
       db.bless(AristoCoreDbBE()),
@@ -149,7 +178,7 @@ proc baseMethods(
       ok(db.bless CoreDxTxRef(methods: db.txMethods(aTx, kTx))),
 
     newCaptureFn: proc(flags: set[CoreDbCaptFlags]): CoreDbRc[CoreDxCaptRef] =
-      CoreDxCaptRef.notImplemented(db, "capture()"))
+      ok(db.bless db.tracerSetup(flags)))
 
 # ------------------------------------------------------------------------------
 # Private  constructor helpers

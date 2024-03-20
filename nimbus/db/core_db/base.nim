@@ -19,7 +19,7 @@ import
   ./base/[api_new_desc, api_tracking, base_desc]
 
 from ../aristo
-  import EmptyBlob, isValid
+  import EmptyBlob, PayloadRef, isValid
 
 const
   ProvideLegacyAPI = true
@@ -49,6 +49,7 @@ export
   CoreDbFnInx,
   CoreDbKvtBackendRef,
   CoreDbMptBackendRef,
+  CoreDbPayloadRef,
   CoreDbPersistentTypes,
   CoreDbProfListRef,
   CoreDbRef,
@@ -60,7 +61,8 @@ export
   CoreDxKvtRef,
   CoreDxMptRef,
   CoreDxPhkRef,
-  CoreDxTxRef
+  CoreDxTxRef,
+  PayloadRef
 
 const
   CoreDbProvideLegacyAPI* = ProvideLegacyAPI
