@@ -56,10 +56,10 @@ proc completeCmdArg*(T: type BlockHash, val: string): seq[string] =
 
 proc walkBlocks(client: RpcClient, startHash: BlockHash) {.async: (raises: []).} =
   var parentHash = startHash
-  var blockNumber: Quantity
+  var blockNumber: BlockNumber
 
   # Should be 0x0, but block 0 does not exist in the json data file
-  while blockNumber != Quantity(0x1):
+  while blockNumber != BlockNumber(0x1):
     let parentBlockOpt =
       try:
         await client.eth_getBlockByHash(parentHash, false)

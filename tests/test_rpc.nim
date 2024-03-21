@@ -383,13 +383,12 @@ proc rpcMain*() =
       check recoveredAddr == signer # verified
 
     test "eth_signTransaction, eth_sendTransaction, eth_sendRawTransaction":
-      var unsignedTx = EthSend(
-        `from`: w3Addr(signer),
+      var unsignedTx = TransactionArgs(
+        `from`: w3Addr(signer).some,
         to: w3Addr(ks2).some,
         gas: w3Qty(100000'u).some,
         gasPrice: none(Quantity),
         value: some 100.u256,
-        data: @[],
         nonce: none(Quantity)
         )
 
@@ -402,7 +401,7 @@ proc rpcMain*() =
       check hashAhex == hashBhex
 
     test "eth_call":
-      var ec = EthCall(
+      var ec = TransactionArgs(
         `from`: w3Addr(signer).some,
         to: w3Addr(ks2).some,
         gas: w3Qty(100000'u).some,
@@ -414,7 +413,7 @@ proc rpcMain*() =
       check res == hexToSeqByte("deadbeef")
 
     test "eth_estimateGas":
-      var ec = EthCall(
+      var ec = TransactionArgs(
         `from`: w3Addr(signer).some,
         to: w3Addr(ks3).some,
         gas: w3Qty(42000'u).some,
@@ -442,14 +441,14 @@ proc rpcMain*() =
     test "eth_getTransactionByHash":
       let res = await client.eth_getTransactionByHash(w3Hash env.txHash)
       check res.isNil.not
-      check res.blockNumber.get() == w3Qty(1'u64)
+      check res.blockNumber.get() == w3BlockNumber(1'u64)
       let res2 = await client.eth_getTransactionByHash(w3Hash env.blockHash)
       check res2.isNil
 
     test "eth_getTransactionByBlockHashAndIndex":
       let res = await client.eth_getTransactionByBlockHashAndIndex(w3Hash env.blockHash, w3Qty(0'u64))
       check res.isNil.not
-      check res.blockNumber.get() == w3Qty(1'u64)
+      check res.blockNumber.get() == w3BlockNumber(1'u64)
 
       let res2 = await client.eth_getTransactionByBlockHashAndIndex(w3Hash env.blockHash, w3Qty(3'u64))
       check res2.isNil
@@ -460,7 +459,7 @@ proc rpcMain*() =
     test "eth_getTransactionByBlockNumberAndIndex":
       let res = await client.eth_getTransactionByBlockNumberAndIndex("latest", w3Qty(1'u64))
       check res.isNil.not
-      check res.blockNumber.get() == w3Qty(1'u64)
+      check res.blockNumber.get() == w3BlockNumber(1'u64)
 
       let res2 = await client.eth_getTransactionByBlockNumberAndIndex("latest", w3Qty(3'u64))
       check res2.isNil
@@ -468,7 +467,7 @@ proc rpcMain*() =
     test "eth_getTransactionReceipt":
       let res = await client.eth_getTransactionReceipt(w3Hash env.txHash)
       check res.isNil.not
-      check res.blockNumber == w3Qty(1'u64)
+      check res.blockNumber == w3BlockNumber(1'u64)
 
       let res2 = await client.eth_getTransactionReceipt(w3Hash env.blockHash)
       check res2.isNil
@@ -476,7 +475,7 @@ proc rpcMain*() =
     test "eth_getUncleByBlockHashAndIndex":
       let res = await client.eth_getUncleByBlockHashAndIndex(w3Hash env.blockHash, w3Qty(0'u64))
       check res.isNil.not
-      check res.number == w3Qty(1'u64)
+      check res.number == w3BlockNumber(1'u64)
 
       let res2 = await client.eth_getUncleByBlockHashAndIndex(w3Hash env.blockHash, w3Qty(1'u64))
       check res2.isNil
@@ -487,7 +486,7 @@ proc rpcMain*() =
     test "eth_getUncleByBlockNumberAndIndex":
       let res = await client.eth_getUncleByBlockNumberAndIndex("latest", w3Qty(0'u64))
       check res.isNil.not
-      check res.number == w3Qty(1'u64)
+      check res.number == w3BlockNumber(1'u64)
 
       let res2 = await client.eth_getUncleByBlockNumberAndIndex("latest", w3Qty(1'u64))
       check res2.isNil

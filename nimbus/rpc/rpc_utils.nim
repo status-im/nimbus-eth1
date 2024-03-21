@@ -43,7 +43,7 @@ proc headerFromTag*(chain: CoreDbRef, blockId: BlockTag): BlockHeader
     else:
       raise newException(ValueError, "Unsupported block tag " & tag)
   else:
-    let blockNum = blockId.number.toBlockNumber
+    let blockNum = blockId.number.uint64.toBlockNumber
     result = chain.getBlockHeader(blockNum)
 
 proc headerFromTag*(chain: CoreDbRef, blockTag: Option[BlockTag]): BlockHeader
@@ -69,7 +69,7 @@ proc calculateMedianGasPrice*(chain: CoreDbRef): GasInt
     else:
       result = prices[middle]
 
-proc unsignedTx*(tx: EthSend, chain: CoreDbRef, defaultNonce: AccountNonce): Transaction
+proc unsignedTx*(tx: TransactionArgs, chain: CoreDbRef, defaultNonce: AccountNonce): Transaction
     {.gcsafe, raises: [CatchableError].} =
   if tx.to.isSome:
     result.to = some(ethAddr(tx.to.get))
@@ -94,7 +94,7 @@ proc unsignedTx*(tx: EthSend, chain: CoreDbRef, defaultNonce: AccountNonce): Tra
   else:
     result.nonce = defaultNonce
 
-  result.payload = tx.data
+  result.payload = tx.payload
 
 template optionalAddress(src, dst: untyped) =
   if src.isSome:
@@ -112,7 +112,7 @@ template optionalBytes(src, dst: untyped) =
   if src.isSome:
     dst = src.get
 
-proc callData*(call: EthCall): RpcCallData {.gcsafe, raises: [].} =
+proc callData*(call: TransactionArgs): RpcCallData {.gcsafe, raises: [].} =
   optionalAddress(call.source, result.source)
   optionalAddress(call.to, result.to)
   optionalGas(call.gas, result.gasLimit)
@@ -160,7 +160,7 @@ proc populateTransactionObject*(tx: Transaction,
   if optionalHeader.isSome:
     let header = optionalHeader.get
     result.blockHash = some(w3Hash header.hash)
-    result.blockNumber = some(w3Qty(header.blockNumber.truncate(uint64)))
+    result.blockNumber = some(w3BlockNumber(header.blockNumber))
 
   result.`from` = w3Addr tx.getSender()
   result.gas = w3Qty(tx.gasLimit)
@@ -191,7 +191,7 @@ proc populateBlockObject*(header: BlockHeader, chain: CoreDbRef, fullTx: bool, i
   let blockHash = header.blockHash
   result = BlockObject()
 
-  result.number = w3Qty(header.blockNumber)
+  result.number = w3BlockNumber(header.blockNumber)
   result.hash = w3Hash blockHash
   result.parentHash = w3Hash header.parentHash
   result.nonce = some(FixedBytes[8] header.nonce)
@@ -206,7 +206,7 @@ proc populateBlockObject*(header: BlockHeader, chain: CoreDbRef, fullTx: bool, i
   result.mixHash = w3Hash header.mixDigest
 
   # discard sizeof(seq[byte]) of extraData and use actual length
-  let size = sizeof(BlockHeader) - sizeof(Blob) + header.extraData.len
+  let size = sizeof(BlockHeader) - sizeof(common.Blob) + header.extraData.len
   result.size = w3Qty(size)
 
   result.gasLimit  = w3Qty(header.gasLimit)
@@ -249,7 +249,7 @@ proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction,
   result.transactionHash = w3Hash tx.rlpHash
   result.transactionIndex = w3Qty(txIndex)
   result.blockHash = w3Hash header.hash
-  result.blockNumber = w3Qty(header.blockNumber)
+  result.blockNumber = w3BlockNumber(header.blockNumber)
   result.`from` = w3Addr tx.getSender()
   result.to = some(w3Addr tx.destination)
   result.cumulativeGasUsed = w3Qty(receipt.cumulativeGasUsed)

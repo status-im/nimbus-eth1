@@ -130,7 +130,7 @@ proc asBlockObject*(p: ExecutionData): BlockObject {.raises: [ValueError].} =
   let headerSize = blockHeaderSize(p, txRoot)
   let blockSize = txSize + headerSize
   BlockObject(
-    number: p.blockNumber,
+    number: web3.BlockNumber p.blockNumber,
     hash: p.blockHash,
     parentHash: p.parentHash,
     sha3Uncles: FixedBytes(etypes.EMPTY_UNCLE_HASH.data),

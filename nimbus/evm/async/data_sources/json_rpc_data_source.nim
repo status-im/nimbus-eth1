@@ -79,7 +79,7 @@ proc fetchBlockHeaderWithHash*(rpcClient: RpcClient, h: common.Hash256): Future[
 
 proc fetchBlockHeaderWithNumber*(rpcClient: RpcClient, n: common.BlockNumber): Future[common.BlockHeader] {.async.} =
   let t0 = now()
-  let bid = blockId(n.truncate(uint64))
+  let bid = blockId(w3BlockNumber n)
   let blockObject: BlockObject = await rpcClient.eth_getBlockByNumber(bid, false)
   durationSpentDoingFetches += now() - t0
   fetchCounter += 1
@@ -141,7 +141,7 @@ proc fetchAccountAndSlots*(rpcClient: RpcClient, address: EthAddress, slots: seq
   debug "Got to fetchAccountAndSlots", address=address, slots=slots, blockNumber=blockNumber
   #let blockNumberUint64 = blockNumber.truncate(uint64)
   let a = web3.Address(address)
-  let bid = blockId(blockNumber.truncate(uint64))
+  let bid = blockId(w3BlockNumber blockNumber)
   debug "About to call eth_getProof", address=address, slots=slots, blockNumber=blockNumber
   let proofResponse: ProofResponse = await rpcClient.eth_getProof(a, slots, bid)
   debug "Received response to eth_getProof", proofResponse=proofResponse
@@ -161,7 +161,7 @@ proc fetchAccountAndSlots*(rpcClient: RpcClient, address: EthAddress, slots: seq
 proc fetchCode*(client: RpcClient, blockNumber: common.BlockNumber, address: EthAddress): Future[seq[byte]] {.async.} =
   let t0 = now()
   let a = web3.Address(address)
-  let bid = blockId(blockNumber.truncate(uint64))
+  let bid = blockId(w3BlockNumber blockNumber)
   let fetchedCode: seq[byte] = await client.eth_getCode(a, bid)
   durationSpentDoingFetches += now() - t0
   fetchCounter += 1

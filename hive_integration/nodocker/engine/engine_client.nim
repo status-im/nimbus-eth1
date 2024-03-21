@@ -221,6 +221,11 @@ proc maybeU64(n: Option[Quantity]): Option[uint64] =
     return none(uint64)
   some(n.get.uint64)
 
+proc maybeU64(n: Option[Web3BlockNumber]): Option[uint64] =
+  if n.isNone:
+    return none(uint64)
+  some(n.get.uint64)
+
 proc maybeBool(n: Option[Quantity]): Option[bool] =
   if n.isNone:
     return none(bool)
@@ -238,7 +243,7 @@ proc maybeInt(n: Option[Quantity]): Option[int] =
 
 proc toBlockHeader*(bc: BlockObject): common.BlockHeader =
   common.BlockHeader(
-    blockNumber    : toBlockNumber(bc.number),
+    blockNumber    : bc.number.u256,
     parentHash     : ethHash bc.parentHash,
     nonce          : toBlockNonce(bc.nonce),
     ommersHash     : ethHash bc.sha3Uncles,
@@ -538,7 +543,7 @@ proc verifyPoWProgress*(client: RpcClient, lastBlockHash: Hash256): Future[Resul
     return err("cannot get block by hash " & lastBlockHash.data.toHex)
 
   let header = res
-  let number = toBlockNumber(header.number)
+  let number = header.number.u256
 
   let period = chronos.seconds(3)
   var loop = 0
@@ -554,7 +559,7 @@ proc verifyPoWProgress*(client: RpcClient, lastBlockHash: Hash256): Future[Resul
     if diff.isZero:
       return err("Expected PoW chain to progress in PoW mode, but following block difficulty: " & $diff)
 
-    if toBlockNumber(bc.number) > number:
+    if bc.number.u256 > number:
       return ok()
 
     await sleepAsync(period)
