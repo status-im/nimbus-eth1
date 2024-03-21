@@ -205,7 +205,6 @@ proc mptMethods(cMpt: AristoCoreDxMptRef): CoreDbMptFns =
         AristoCoreDbTrie(
           base: base,
           kind: CoreDbSubTrie(cMpt.root))
-
     db.bless trie
 
   proc mptPersistent(): CoreDbRc[void] =
@@ -261,7 +260,6 @@ proc mptMethods(cMpt: AristoCoreDxMptRef): CoreDbMptFns =
       # This is insane but legit. A storage trie was announced for an account
       # but no data have been added, yet.
       return ok()
-
     let rc = api.delete(mpt, cMpt.root, key, cMpt.accPath)
     if rc.isErr:
       if rc.error[1] == DelPathNotFound:
@@ -329,7 +327,7 @@ proc accMethods(cAcc: AristoCoreDxAccRef): CoreDbAccFns =
       kind: AccountsTrie)
 
   proc accPersistent(): CoreDbRc[void] =
-    const info = "persistentFn()"
+    const info = "acc/persistentFn()"
 
     let rc = api.stow(mpt, persistent = true)
     if rc.isOk:
@@ -345,7 +343,7 @@ proc accMethods(cAcc: AristoCoreDxAccRef): CoreDbAccFns =
       root: AccountsTrieID))
 
   proc accFetch(address: EthAddress): CoreDbRc[CoreDbAccount] =
-    const info = "fetchFn()"
+    const info = "acc/fetchFn()"
 
     let pyl = block:
       let
@@ -364,7 +362,7 @@ proc accMethods(cAcc: AristoCoreDxAccRef): CoreDbAccFns =
     ok cAcc.toCoreDbAccount(pyl.account, address)
 
   proc accMerge(account: CoreDbAccount): CoreDbRc[void] =
-    const info = "mergeFn()"
+    const info = "acc/mergeFn()"
 
     let
       key = account.address.keccakHash.data
@@ -375,7 +373,7 @@ proc accMethods(cAcc: AristoCoreDxAccRef): CoreDbAccFns =
     ok()
 
   proc accDelete(address: EthAddress): CoreDbRc[void] =
-    const info = "deleteFn()"
+    const info = "acc/deleteFn()"
 
     let
       key = address.keccakHash.data
@@ -462,7 +460,7 @@ proc ctxMethods(cCtx: AristoCoreDbCtxRef): CoreDbCtxFns =
       root: Hash256;
       address: Option[EthAddress];
         ): CoreDbRc[CoreDbTrieRef] =
-    const info = "newTrieFn()"
+    const info = "ctx/newTrieFn()"
 
     let trie = AristoCoreDbTrie(
       base: base,
@@ -492,13 +490,12 @@ proc ctxMethods(cCtx: AristoCoreDbCtxRef): CoreDbCtxFns =
       doAssert rc.error == GetKeyNotFound
     elif rc.value == root.to(HashKey):
       return ok(db.bless trie)
-
     err(aristo.GenericError.toError(base, info, RootNotFound))
 
 
   proc ctxGetMpt(trie: CoreDbTrieRef): CoreDbRc[CoreDxMptRef] =
     const
-      info = "getMptFn()"
+      info = "ctx/getMptFn()"
     let
       trie = AristoCoreDbTrie(trie)
     var
@@ -635,14 +632,15 @@ proc triePrint*(
     let
       trie = trie.AristoCoreDbTrie
       root = trie.to(VertexID)
+    result = "(" & $trie.kind & ","
 
-    result = "(" & $trie.kind
+    # Do vertex ID and address/hash
     if trie.kind == StorageTrie:
       result &= trie.stoRoot.toStr
       if trie.stoAddr != EthAddress.default:
         result &= ",%" & $trie.stoAddr.toHex
     else:
-      result &= "," & VertexID(trie.kind).toStr
+      result &= VertexID(trie.kind).toStr
 
     # Do the Merkle hash key
     if not root.isValid:
@@ -685,7 +683,6 @@ proc rootHash*(
       doAssert rc.error in {GetKeyNotFound,GetKeyUpdateNeeded}
       return err(rc.error.toError(base, info, HashNotAvailable))
     rc.value
-
   ok key.to(Hash256)
 
 
@@ -729,28 +726,28 @@ proc init*(
     root: Hash256;
     kind: CoreDbSubTrie;
       ): CoreDbRc[CoreDbCtxRef] =
-    const info = "fromTxFn()"
+  const info = "fromTxFn()"
 
-    if kind.ord == 0:
-      return err(aristo.GenericError.toError(base, info, SubTrieUnacceptable))
+  if kind.ord == 0:
+    return err(aristo.GenericError.toError(base, info, SubTrieUnacceptable))
+  let
+    api = base.api
+    vid = VertexID(kind)
+    key = root.to(HashKey)
 
-    let
-      api = base.api
-      vid = VertexID(kind)
-      key = root.to(HashKey)
+    # Fork MPT descriptor that provides `(vid,key)`
+    newMpt = block:
+      let rc = api.forkWith(base.ctx.mpt, vid, key)
+      if rc.isErr:
+        return err(rc.error.toError(base, info))
+      rc.value
 
-      newMpt = block:
-        let rc = api.forkWith(base.ctx.mpt, vid, key)
-        if rc.isErr:
-          return err(rc.error.toError(base, info))
-        rc.value
-
-    # Create new context
-    let ctx = AristoCoreDbCtxRef(
-      base: base,
-      mpt:  newMpt)
-    ctx.methods = ctx.ctxMethods
-    ok( base.parent.bless ctx)
+  # Create new context
+  let ctx = AristoCoreDbCtxRef(
+    base: base,
+    mpt:  newMpt)
+  ctx.methods = ctx.ctxMethods
+  ok( base.parent.bless ctx)
 
 # ------------------------------------------------------------------------------
 # End

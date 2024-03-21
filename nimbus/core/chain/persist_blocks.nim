@@ -126,7 +126,7 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
 
       if c.com.consensus == ConsensusType.POA:
         var parent = if 0 < i: @[headers[i-1]] else: @[]
-        let rc = c.clique.cliqueVerify(c.com, header,parent)
+        let rc = c.clique.cliqueVerify(c.com, header, parent)
         if rc.isOk:
           # mark it off so it would not auto-restore previous state
           c.clique.cliqueDispose(cliqueState)
@@ -169,7 +169,7 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
     # between eth_blockNumber and eth_syncing
     c.com.syncCurrent = header.blockNumber
 
-    # Done with this bllock
+    # Done with this block
     lapTx.commit()
 
   dbTx.commit()
