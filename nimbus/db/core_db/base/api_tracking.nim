@@ -58,7 +58,6 @@ type
 
     CtxForgetFn         = "ctx/forget"
     CtxGetAccFn         = "ctx/getAcc"
-    CtxGetAccMptFn      = "ctx/getAccMpt"
     CtxGetMptFn         = "ctx/getMpt"
     CtxNewTrieFn        = "ctx/newTrie"
 

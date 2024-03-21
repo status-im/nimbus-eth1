@@ -148,14 +148,6 @@ type
       ## pair was found on the filter or the backend, this transaction is
       ## empty.
 
-  AristoApiGetKeyFn* =
-    proc(db: AristoDbRef;
-         vid: VertexID;
-        ): HashKey
-        {.noRaise.}
-      ## Simplified version of `getKey(0` (see below) returns `VOID_HASH_KEY`
-      ## also on fetch errors.
-
   AristoApiGetKeyRcFn* =
     proc(db: AristoDbRef;
          vid: VertexID;
@@ -360,7 +352,6 @@ type
     forget*: AristoApiForgetFn
     forkTop*: AristoApiForkTopFn
     forkWith*: AristoApiForkWithFn
-    getKey*: AristoApiGetKeyFn
     getKeyRc*: AristoApiGetKeyRcFn
     hashify*: AristoApiHashifyFn
     hasPath*: AristoApiHasPathFn
@@ -393,7 +384,6 @@ type
     AristoApiProfForgetFn       = "forget"
     AristoApiProfForkTopFn      = "forkTop"
     AristoApiProfForkWithFn     = "forkWith"
-    AristoApiProfGetKeyFn       = "getKey"
     AristoApiProfGetKeyRcFn     = "getKeyRc"
     AristoApiProfHashifyFn      = "hashify"
     AristoApiProfHasPathFn      = "hasPath"
@@ -436,7 +426,6 @@ when AutoValidateApiHooks:
     doAssert not api.forget.isNil
     doAssert not api.forkTop.isNil
     doAssert not api.forkWith.isNil
-    doAssert not api.getKey.isNil
     doAssert not api.getKeyRc.isNil
     doAssert not api.hashify.isNil
     doAssert not api.hasPath.isNil
@@ -489,7 +478,6 @@ func init*(api: var AristoApiObj) =
   api.forget = forget
   api.forkTop = forkTop
   api.forkWith = forkWith
-  api.getKey = getKey
   api.getKeyRc = getKeyRc
   api.hashify = hashify
   api.hasPath = hasPath
@@ -525,7 +513,6 @@ func dup*(api: AristoApiRef): AristoApiRef =
     forget:       api.forget,
     forkTop:      api.forkTop,
     forkWith:     api.forkWith,
-    getKey:       api.getKey,
     getKeyRc:     api.getKeyRc,
     hashify:      api.hashify,
     hasPath:      api.hasPath,
@@ -613,11 +600,6 @@ func init*(
     proc(a: AristoDbRef; b: VertexID; c: HashKey; d = false): auto =
       AristoApiProfForkWithFn.profileRunner:
         result = api.forkWith(a, b, c, d)
-
-  profApi.getKey =
-    proc(a: AristoDbRef; b: VertexID): auto =
-      AristoApiProfGetKeyFn.profileRunner:
-        result = api.getKey(a, b)
 
   profApi.getKeyRc =
     proc(a: AristoDbRef; b: VertexID): auto =

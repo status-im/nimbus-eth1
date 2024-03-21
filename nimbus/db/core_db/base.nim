@@ -487,7 +487,7 @@ proc newTrie*(
   ##     let trie = db.ctx.newTrie(AccountsTrie, root).valueOr:
   ##       # some error handling
   ##       return
-  ##     db.getAccMpt trie
+  ##     db.getAcc trie
   ##
   ctx.setTrackNewApi CtxNewTrieFn
   result = ctx.methods.newTrieFn(kind, root, address)
@@ -602,7 +602,7 @@ proc getMpt*(acc: CoreDxAccRef): CoreDxMptRef =
     debug newApiTxt, api, elapsed, root
 
 
-proc getAccMpt*(
+proc getAcc*(
     ctx: CoreDbCtxRef;
     trie: CoreDbTrieRef;
     prune = true;
@@ -613,7 +613,7 @@ proc getAccMpt*(
   ## Example:
   ## ::
   ##   let trie = db.getTrie(AccountsTrie,<some-hash>).valueOr:
-  ##     ... # No node with <some-hash>
+  ##     ... # No node available with <some-hash>
   ##     return
   ##
   ##   let acc = db.getAccMpt(trie)
@@ -625,38 +625,14 @@ proc getAccMpt*(
   ## recommended using this particular constructor for accounts because it
   ## provides its own subset of methods to handle accounts.
   ##
-  ctx.setTrackNewApi CtxGetAccMptFn
+  ctx.setTrackNewApi CtxGetAccFn
   result = ctx.methods.getAccFn(trie, prune)
   ctx.ifTrackNewApi: debug newApiTxt, api, elapsed, trie, prune, result
-
-proc getAccMpt*(
-    ctx: CoreDbCtxRef;
-    root = EMPTY_ROOT_HASH;
-    prune = true;
-      ): CoreDxAccRef =
-  ## Simplified version of `getAccMpt()` where the `CoreDbTrieRef` argument is
-  ## replaced by a `root` hash argument. This function is sort of a shortcut
-  ## for:
-  ## ::
-  ##   let trie = db.getTrie(AccountsTrie, root).value
-  ##   result = db.getAccMpt(trie, prune).value
-  ##
-  ## and will throw an exception if something goes wrong. The result reference
-  ## will alwye be non `nil`.
-  ##
-  ctx.setTrackNewApi CtxGetAccMptFn
-  let trie = ctx.methods.newTrieFn(
-      AccountsTrie, root, none(EthAddress)).valueOr:
-    raiseAssert error.prettyText()
-  result = ctx.methods.getAccFn(trie, prune).valueOr:
-    raiseAssert error.prettyText()
-  ctx.ifTrackNewApi: debug newApiTxt, api, elapsed, prune
-
 
 proc toMpt*(phk: CoreDxPhkRef): CoreDxMptRef =
   ## Replaces the pre-hashed argument trie `phk` by the non pre-hashed *MPT*.
   ## Note that this does not apply to an accounts trie that was created by
-  ## `getAccMpt()`.
+  ## `getAcc()`.
   ##
   phk.setTrackNewApi PhkToMptFn
   result = phk.fromMpt
