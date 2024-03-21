@@ -97,6 +97,19 @@ proc rpcCallEvm*(call: RpcCallData, header: BlockHeader, com: CommonRef): CallRe
 
   runComputation(params)
 
+proc rpcCallEvm*(call: RpcCallData,
+                 header: BlockHeader,
+                 com: CommonRef,
+                 vmState: BaseVMState): CallResult
+    {.gcsafe, raises: [CatchableError].} =
+  const globalGasCap = 0 # TODO: globalGasCap should configurable by user
+  let params  = toCallParams(vmState, call, globalGasCap, header.fee)
+
+  var dbTx = com.db.beginTransaction()
+  defer: dbTx.dispose() # always dispose state changes
+
+  runComputation(params)
+  
 proc rpcEstimateGas*(cd: RpcCallData, header: BlockHeader, com: CommonRef, gasCap: GasInt): GasInt
     {.gcsafe, raises: [CatchableError].} =
   # Binary search the gas requirement, as it may be higher than the amount used

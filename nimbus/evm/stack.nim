@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -129,6 +129,10 @@ proc `[]`*(stack: Stack, i: BackwardsIndex, T: typedesc): T =
   fromStackElement(stack.values[i], result)
 
 proc peekInt*(stack: Stack): UInt256 =
+  ensurePop(stack, 1)
+  fromStackElement(stack.values[^1], result)
+
+proc peekAddress*(stack: Stack): EthAddress =
   ensurePop(stack, 1)
   fromStackElement(stack.values[^1], result)
 

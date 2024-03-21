@@ -575,6 +575,19 @@ proc setupEthRpc*(
       return Opt.some(recs)
     except CatchableError:
       return Opt.none(seq[ReceiptObject])
+
+  server.rpc("eth_createAccessList") do(args: TransactionArgs, quantityTag: BlockTag) -> AccessListResult:
+    try:
+      let
+        header = chainDB.headerFromTag(quantityTag)
+        args = callData(args)
+
+      return createAccessList(header, com, args)
+    except CatchableError as exc:
+      return AccessListResult(
+        error: some("createAccessList error: " & exc.msg),
+      )
+
 #[
   server.rpc("eth_newFilter") do(filterOptions: FilterOptions) -> int:
     ## Creates a filter object, based on filter options, to notify when the state changes (logs).
