@@ -158,10 +158,7 @@ proc insertBranch(
         debug "Branch link leaf path garbled", linkID, path
         return err(MergeBranchLinkLeafGarbled)
 
-      let
-        local = db.vidFetch(pristine = true)
-        # lty = LeafTie(root: hike.root, path: rc.value)
-
+      let local = db.vidFetch(pristine = true)
       db.setVtxAndKey(hike.root, local, linkVtx)
       linkVtx.lPfx = linkVtx.lPfx.slice(1+n)
       forkVtx.bVid[linkInx] = local

@@ -378,20 +378,6 @@ proc ctxMethods(ctx: LegacyCoreDbCtxRef): CoreDbCtxFns =
     tdb = db.tdb
 
   CoreDbCtxFns(
-    fromTxFn: proc(
-      root: Hash256;
-      kind: CoreDbSubTrie;
-        ): CoreDbRc[CoreDbCtxRef] =
-      # This is not 100% on the tx layer but should work anyway with
-      # the application as it emulates sort of `Aristo` behaviour.
-      if db.tdb.contains root.data:
-        return ok(ctx)
-      err(db.bless(CtxNotFound, LegacyCoreDbError(ctx: "fromTxFn()"))),
-
-    swapFn: proc(cty: CoreDbCtxRef): CoreDbCtxRef =
-      doAssert cty == ctx
-      ctx,
-
     newTrieFn: proc(
         kind: CoreDbSubTrie;
         root: Hash256;
@@ -475,8 +461,8 @@ proc cptMethods(cpt: RecorderRef; db: LegacyDbRef): CoreDbCaptFns =
     getFlagsFn: proc(): set[CoreDbCaptFlags] =
       cpt.flags,
 
-    forgetFn: proc(): CoreDbRc[void] =
-      err(db.bless(NotImplemented, LegacyCoreDbError(ctx: "disposeFn()"))))
+    forgetFn: proc() =
+      discard)
 
 # ------------------------------------------------------------------------------
 # Private base methods (including constructors)
@@ -487,7 +473,7 @@ proc baseMethods(
     dbType: CoreDbType;
     closeDb: LegacyDbClose;
       ): CoreDbBaseFns =
-  let tdb = db.tdb
+  let db = db
   CoreDbBaseFns(
     backendFn: proc(): CoreDbBackendRef =
       db.bless(LegacyCoreDbBE(base: db)),
@@ -514,12 +500,26 @@ proc baseMethods(
     newKvtFn: proc(sharedTable = true): CoreDbRc[CoreDxKvtRef] =
       ok(db.kvt),
 
-    getCtxFn: proc(): CoreDbCtxRef =
+    newCtxFn: proc(): CoreDbCtxRef =
       db.ctx,
+
+    swapCtxFn: proc(ctx: CoreDbCtxRef): CoreDbCtxRef =
+      doAssert CoreDbCtxRef(db.ctx) == ctx
+      ctx,
+
+    newCtxFromTxFn: proc(
+        root: Hash256;
+        kind: CoreDbSubTrie;
+          ): CoreDbRc[CoreDbCtxRef] =
+      # This is not 100% on the tx layer but should work anyway with
+      # the application as it emulates sort of `Aristo` behaviour.
+      if db.tdb.contains root.data:
+        return ok(db.ctx)
+      err(db.bless(CtxNotFound, LegacyCoreDbError(ctx: "fromTxFn()"))),
 
     beginFn: proc(): CoreDbRc[CoreDxTxRef] =
       db.top = LegacyCoreDxTxRef(
-        ltx:   tdb.beginTransaction,
+        ltx:   db.tdb.beginTransaction,
         level: (if db.top.isNil: 1 else: db.top.level + 1),
         back:  db.top)
       db.top.methods = db.top.txMethods()

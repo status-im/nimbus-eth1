@@ -38,7 +38,7 @@ type
     RlpData                          ## Marked RLP encoded
     AccountData                      ## `Aristo account` with vertex IDs links
 
-  PayloadRef* = ref object
+  PayloadRef* = ref object of RootRef
     case pType*: PayloadType
     of RawData:
       rawBlob*: Blob                 ## Opaque data, default value

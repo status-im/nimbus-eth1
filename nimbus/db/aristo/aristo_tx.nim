@@ -14,7 +14,7 @@
 {.push raises: [].}
 
 import
-  std/tables,
+  std/[sets, tables],
   results,
   "."/[aristo_desc, aristo_filter, aristo_get, aristo_layers, aristo_hashify]
 
@@ -39,6 +39,57 @@ proc getTxUid(db: AristoDbRef): uint =
     db.txUidGen = 0
   db.txUidGen.inc
   db.txUidGen
+
+proc txGet(
+    db: AristoDbRef;
+    vid: VertexID;
+    key: HashKey;
+      ): Result[AristoTxRef,AristoError] =
+  ## Getter, returns the transaction where the vertex with ID `vid` exists and
+  ## has the Merkle hash key `key`.
+  ##
+  var tx = db.txRef
+  if tx.isNil:
+    return err(TxNoPendingTx)
+  if tx.level != db.stack.len or
+     tx.txUid != db.top.txUid:
+    return err(TxStackGarbled)
+
+  # Check the top level
+  if db.top.final.dirty.len == 0 and
+     db.top.delta.kMap.getOrVoid(vid) == key:
+    let rc = db.getVtxRc vid
+    if rc.isOk:
+      return ok(tx)
+    if rc.error != GetVtxNotFound:
+      return err(rc.error) # oops
+
+  # Walk down the transaction stack
+  for level in  (tx.level-1).countDown(1):
+    tx = tx.parent
+    if tx.isNil or tx.level != level:
+      return err(TxStackGarbled)
+
+    let layer = db.stack[level]
+    if tx.txUid != layer.txUid:
+      return err(TxStackGarbled)
+
+    if layer.final.dirty.len == 0 and
+       layer.delta.kMap.getOrVoid(vid) == key:
+
+      # Need to check validity on lower layers
+      for n in level.countDown(0):
+        if db.stack[n].delta.sTab.getOrVoid(vid).isValid:
+          return ok(tx)
+
+      # Not found, check whether the key exists on the backend
+      let rc = db.getVtxBE vid
+      if rc.isOk:
+        return ok(tx)
+      if rc.error != GetVtxNotFound:
+        return err(rc.error) # oops
+
+  err(TxNotFound)
 
 # ------------------------------------------------------------------------------
 # Public functions, getters
@@ -147,6 +198,54 @@ proc forkTx*(
       return err(error[1])
 
   ok(txClone)
+
+
+proc forkWith*(
+    db: AristoDbRef;
+    vid: VertexID;                    # Pivot vertex (typically `VertexID(1)`)
+    key: HashKey;                     # Hash key of pivot verte
+    dontHashify = false;              # Process/fix MPT hashes
+      ): Result[AristoDbRef,AristoError] =
+  ## Find the transaction where the vertex with ID `vid` exists and has the
+  ## Merkle hash key `key`. If there is no transaction available, search in
+  ## the filter and then in the backend.
+  ##
+  ## If the above procedure succeeds, a new descriptor is forked with exactly
+  ## one transaction which contains the all the bottom layers up until the
+  ## layer where the `(vid,key)` pair is found. In case the pair was found on
+  ## the filter or the backend, this transaction is empty.
+  ##
+  if not vid.isValid or
+     not key.isValid:
+    return err(TxArgsUseless)
+
+  # Find `(vid,key)` on transaction layers
+  block:
+    let rc = db.txGet(vid, key)
+    if rc.isOk:
+      return rc.value.forkTx(dontHashify)
+    if rc.error notin {TxNotFound,GetVtxNotFound}:
+      return err(rc.error)
+
+  # Try filter
+  if not db.roFilter.isNil:
+    let roKey = db.roFilter.kMap.getOrVoid vid
+    if roKey == key:
+      let rc = db.fork(noFilter = false)
+      if rc.isOk:
+        discard rc.value.txBegin
+      return rc
+
+  # Try backend alone
+  block:
+    let beKey = db.getKeyUBE(vid).valueOr: VOID_HASH_KEY
+    if beKey == key:
+      let rc = db.fork(noFilter = true)
+      if rc.isOk:
+        discard rc.value.txBegin
+      return rc
+
+  err(TxNotFound)
 
 
 proc forkTop*(

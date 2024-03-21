@@ -27,9 +27,9 @@ type
     api*: AristoApiRef           ## Api functions can be re-directed
     ctx*: AristoCoreDbCtxRef     ## Currently active context
 
-  AristoCoreDbCtxRef = ref object of CoreDbCtxRef
+  AristoCoreDbCtxRef* = ref object of CoreDbCtxRef
     base: AristoBaseRef          ## Local base descriptor
-    mpt: AristoDbRef             ## Aristo MPT database
+    mpt*: AristoDbRef            ## Aristo MPT database
 
   AristoCoreDxAccRef = ref object of CoreDxAccRef
     base: AristoBaseRef          ## Local base descriptor
@@ -58,12 +58,9 @@ type
 
 const
   VoidTrieID = VertexID(0)
+  # StorageTrieID = VertexID(StorageTrie) -- currently unused
   AccountsTrieID = VertexID(AccountsTrie)
   GenericTrieID = VertexID(GenericTrie)
-
-when false:
-  const
-    StorageTrieID = VertexID(StorageTrie)
 
 logScope:
   topics = "aristo-hdl"
@@ -178,27 +175,6 @@ func toVoidRc[T](
   if rc.isOk:
     return ok()
   err rc.error.toError(base, info, error)
-
-# -------------------------------
-
-proc tryHash(
-    base: AristoBaseRef;
-    trie: CoreDbTrieRef;
-    info: static[string];
-      ): CoreDbRc[Hash256] =
-  let trie = trie.AristoCoreDbTrie
-  if not trie.isValid:
-    return err(TrieInvalid.toError(base, info, HashNotAvailable))
-
-  let root = trie.to(VertexID)
-  if not root.isValid:
-    return ok(EMPTY_ROOT_HASH)
-
-  let rc = base.api.getKeyRc(trie.base.ctx.mpt, root)
-  if rc.isErr:
-    return err(rc.error.toError(base, info, HashNotAvailable))
-
-  ok rc.value.to(Hash256)
 
 # ------------------------------------------------------------------------------
 # Private `MPT` call back functions
@@ -475,18 +451,19 @@ proc accMethods(cAcc: AristoCoreDxAccRef): CoreDbAccFns =
 
 proc ctxMethods(cCtx: AristoCoreDbCtxRef): CoreDbCtxFns =
   let
-    cCtx = cCtx        # So it can savely be captured
-    base = cCtx.base   # Will not change and can be captured
-    db = base.parent   # Ditto
-    api = base.api     # Ditto
-    mpt = cCtx.mpt     # Ditto
+    cCtx = cCtx      # So it can savely be captured
+    base = cCtx.base # Will not change and can be captured
+    db = base.parent # Ditto
+    api = base.api   # Ditto
+    mpt = cCtx.mpt   # Ditto
 
   proc ctxNewTrie(
       kind: CoreDbSubTrie;
       root: Hash256;
       address: Option[EthAddress];
-      info: static[string];
         ): CoreDbRc[CoreDbTrieRef] =
+    const info = "newTrieFn()"
+
     let trie = AristoCoreDbTrie(
       base: base,
       kind: kind)
@@ -519,10 +496,9 @@ proc ctxMethods(cCtx: AristoCoreDbCtxRef): CoreDbCtxFns =
     err(aristo.GenericError.toError(base, info, RootNotFound))
 
 
-  proc ctxGetMpt(
-      trie: CoreDbTrieRef;
-      info: static[string];
-        ): CoreDbRc[CoreDxMptRef] =
+  proc ctxGetMpt(trie: CoreDbTrieRef): CoreDbRc[CoreDxMptRef] =
+    const
+      info = "getMptFn()"
     let
       trie = AristoCoreDbTrie(trie)
     var
@@ -563,14 +539,11 @@ proc ctxMethods(cCtx: AristoCoreDbCtxRef): CoreDbCtxFns =
 
     newMpt.base = base
     newMpt.methods = newMpt.mptMethods()
-
     ok(db.bless newMpt)
 
+  proc ctxGetAcc(trie: CoreDbTrieRef): CoreDbRc[CoreDxAccRef] =
+    const info = "getAccFn()"
 
-  proc ctxGetAcc(
-      trie: CoreDbTrieRef;
-      info: static[string];
-        ): CoreDbRc[CoreDxAccRef] =
     let trie = AristoCoreDbTrie(trie)
     if trie.kind != AccountsTrie:
       let error = (AccountsTrieID, AccRootUnacceptable)
@@ -581,32 +554,27 @@ proc ctxMethods(cCtx: AristoCoreDbCtxRef): CoreDbCtxFns =
 
     ok(db.bless acc)
 
+  proc ctxForget() =
+    api.forget(mpt).isOkOr:
+      raiseAssert "forgetFn(): " & $error
+
+
   CoreDbCtxFns(
-    fromTxFn: proc(root: Hash256; kind: CoreDbSubTrie): CoreDbRc[CoreDbCtxRef] =
-      const info = "fromTxFn()"
-      err(aristo.NotImplemented.toError(base, info, base_desc.NotImplemented)),
-
-    swapFn: proc(cty: CoreDbCtxRef): CoreDbCtxRef =
-      doAssert not cty.isNil
-      base.ctx.swap(AristoCoreDbCtxRef(cty)),
-
     newTrieFn: proc(
         trie: CoreDbSubTrie;
         root: Hash256;
         address: Option[EthAddress];
           ): CoreDbRc[CoreDbTrieRef] =
-      ctxNewTrie(trie, root, address, "newTrieFn()"),
+      ctxNewTrie(trie, root, address),
 
     getMptFn: proc(trie: CoreDbTrieRef; prune: bool): CoreDbRc[CoreDxMptRef] =
-      ctxGetMpt(trie, "newMptFn()"),
+      ctxGetMpt(trie),
 
     getAccFn: proc(trie: CoreDbTrieRef; prune: bool): CoreDbRc[CoreDxAccRef] =
-      ctxGetAcc(trie, "newAccFn()"),
+      ctxGetAcc(trie),
 
     forgetFn: proc() =
-      api.forget(mpt).isOkOr:
-        raiseAssert "forgetFn(): " & $error
-      discard)
+      ctxForget())
 
 # ------------------------------------------------------------------------------
 # Public handlers and helpers
@@ -654,10 +622,10 @@ proc txBegin*(
       ): CoreDbRc[AristoTxRef] =
   base.api.txBegin(base.ctx.mpt).toRc(base, info)
 
-# ---------------------
-
 proc getLevel*(base: AristoBaseRef): int =
   base.api.level(base.ctx.mpt)
+
+# ---------------------
 
 proc triePrint*(
     base: AristoBaseRef;
@@ -666,18 +634,28 @@ proc triePrint*(
   if trie.isValid:
     let
       trie = trie.AristoCoreDbTrie
-      rc = base.tryHash(trie, "triePrint()")
+      root = trie.to(VertexID)
+
     result = "(" & $trie.kind
     if trie.kind == StorageTrie:
       result &= trie.stoRoot.toStr
       if trie.stoAddr != EthAddress.default:
         result &= ",%" & $trie.stoAddr.toHex
     else:
-      result &= VertexID(trie.kind).toStr
-    if rc.isErr:
-      result &= "," & $rc.error.AristoCoreDbError.aErr
+      result &= "," & VertexID(trie.kind).toStr
+
+    # Do the Merkle hash key
+    if not root.isValid:
+      result &= ",£ø"
     else:
-      result &= ",£" & (if rc.value.isValid: rc.value.data.toHex else: "ø")
+      let rc = base.api.getKeyRc(trie.base.ctx.mpt, root)
+      if rc.isErr:
+        result &= "," & $rc.error
+      elif rc.value.isValid:
+        result &= ",£" & rc.value.to(Hash256).data.toHex
+      else:
+        result &= ",£ø"
+
     result &= ")"
   elif not trie.isNil:
     result &= "$?"
@@ -710,6 +688,15 @@ proc rootHash*(
 
   ok key.to(Hash256)
 
+
+proc swapCtx*(base: AristoBaseRef; ctx: CoreDbCtxRef): CoreDbCtxRef =
+  doAssert not ctx.isNil
+  result = base.ctx
+
+  # Set read-write access and install
+  base.ctx = AristoCoreDbCtxRef(ctx)
+  base.api.reCentre(base.ctx.mpt)
+
 # ------------------------------------------------------------------------------
 # Public constructors and related
 # ------------------------------------------------------------------------------
@@ -734,6 +721,36 @@ func init*(T: type AristoBaseRef; db: CoreDbRef; adb: AristoDbRef): T =
     let profApi = AristoApiProfRef.init(result.api, adb.backend)
     result.api = profApi
     result.ctx.mpt.backend = profApi.be
+
+
+proc init*(
+    T: type CoreDbCtxRef;
+    base: AristoBaseRef;
+    root: Hash256;
+    kind: CoreDbSubTrie;
+      ): CoreDbRc[CoreDbCtxRef] =
+    const info = "fromTxFn()"
+
+    if kind.ord == 0:
+      return err(aristo.GenericError.toError(base, info, SubTrieUnacceptable))
+
+    let
+      api = base.api
+      vid = VertexID(kind)
+      key = root.to(HashKey)
+
+      newMpt = block:
+        let rc = api.forkWith(base.ctx.mpt, vid, key)
+        if rc.isErr:
+          return err(rc.error.toError(base, info))
+        rc.value
+
+    # Create new context
+    let ctx = AristoCoreDbCtxRef(
+      base: base,
+      mpt:  newMpt)
+    ctx.methods = ctx.ctxMethods
+    ok( base.parent.bless ctx)
 
 # ------------------------------------------------------------------------------
 # End

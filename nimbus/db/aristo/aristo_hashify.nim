@@ -55,16 +55,8 @@ logScope:
 # Private helpers
 # ------------------------------------------------------------------------------
 
-when false:
-  template logTxt(info: static[string]): static[string] =
-    "Hashify " & info
-
 func getOrVoid(tab: Table[VertexID,VertexID]; vid: VertexID): VertexID =
   tab.getOrDefault(vid, VertexID(0))
-
-when false:
-  func contains(wff: WidthFirstForest; vid: VertexID): bool =
-    vid in wff.base or vid in wff.pool or vid in wff.root
 
 # ------------------------------------------------------------------------------
 # Private functions

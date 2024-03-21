@@ -30,6 +30,19 @@ else:
   proc getParentHeader(self: CoreDbRef, header: BlockHeader): BlockHeader =
     self.getBlockHeader(header.parentHash)
 
+proc setParentCtx(com: CommonRef, header: BlockHeader): CoreDbCtxRef =
+  ## Adjust state root (mainly for `Aristo`)
+  let
+    parent = com.db.getParentHeader(header)
+    ctx = com.db.ctxFromTx(parent.stateRoot).valueOr:
+      raiseAssert "setParentCtx: " & $$error
+  com.db.swapCtx ctx
+
+proc reset(com: CommonRef, saveCtx: CoreDbCtxRef) =
+  ## Reset context
+  com.db.swapCtx(saveCtx).forget()
+
+
 proc `%`(x: openArray[byte]): JsonNode =
   result = %toHex(x, false)
 
@@ -92,7 +105,7 @@ proc dumpMemoryDB*(node: JsonNode, kvt: TableRef[common.Blob, common.Blob]) =
     n[k.toHex(false)] = %v
   node["state"] = n
 
-proc dumpMemoryDB*(node: JsonNode, capture: CoreDbCaptRef) =
+proc dumpMemoryDB*(node: JsonNode, capture: CoreDbCaptRef|CoreDxCaptRef) =
   node.dumpMemoryDB capture.logDb
 
 const
@@ -105,13 +118,16 @@ const
 proc traceTransaction*(com: CommonRef, header: BlockHeader,
                        body: BlockBody, txIndex: int, tracerFlags: set[TracerFlags] = {}): JsonNode =
   let
-    # parent = com.db.getParentHeader(header) -- notused
     # we add a memory layer between backend/lower layer db
     # and capture state db snapshot during transaction execution
-    capture = com.db.capture()
+    saveCtx = com.setParentCtx(header)
+    capture = com.db.newCapture.value
     tracerInst = newLegacyTracer(tracerFlags)
     captureCom = com.clone(capture.recorder)
     vmState = BaseVMState.new(header, captureCom)
+  defer:
+    capture.forget
+    com.reset saveCtx
 
   var stateDb = vmState.stateDB
 
@@ -175,13 +191,17 @@ proc traceTransaction*(com: CommonRef, header: BlockHeader,
 proc dumpBlockState*(com: CommonRef, header: BlockHeader, body: BlockBody, dumpState = false): JsonNode =
   let
     parent = com.db.getParentHeader(header)
-    capture = com.db.capture()
+    saveCtx = com.setParentCtx(header)
+    capture = com.db.newCapture.value
     captureCom = com.clone(capture.recorder)
-    # we only need stack dump if we want to scan for internal transaction address
+    # we only need a stack dump when scanning for internal transaction address
     captureFlags = {DisableMemory, DisableStorage, EnableAccount}
     tracerInst = newLegacyTracer(captureFlags)
     vmState = BaseVMState.new(header, captureCom, tracerInst)
     miner = vmState.coinbase()
+  defer:
+    capture.forget
+    com.reset saveCtx
 
   var
     before = newJArray()
@@ -231,11 +251,14 @@ proc dumpBlockState*(com: CommonRef, header: BlockHeader, body: BlockBody, dumpS
 
 proc traceBlock*(com: CommonRef, header: BlockHeader, body: BlockBody, tracerFlags: set[TracerFlags] = {}): JsonNode =
   let
-    # parent = com.db.getParentHeader(header) -- notused
-    capture = com.db.capture()
+    saveCtx = com.setParentCtx(header)
+    capture = com.db.newCapture.value
     captureCom = com.clone(capture.recorder)
     tracerInst = newLegacyTracer(tracerFlags)
     vmState = BaseVMState.new(header, captureCom, tracerInst)
+  defer:
+    capture.forget
+    com.reset saveCtx
 
   if header.txRoot == EMPTY_ROOT_HASH: return newJNull()
   doAssert(body.transactions.calcTxRoot == header.txRoot)
@@ -261,15 +284,17 @@ proc traceTransactions*(com: CommonRef, header: BlockHeader, blockBody: BlockBod
   for i in 0 ..< blockBody.transactions.len:
     result.add traceTransaction(com, header, blockBody, i, {DisableState})
 
-proc dumpDebuggingMetaData*(com: CommonRef, header: BlockHeader,
-                            blockBody: BlockBody, vmState: BaseVMState, launchDebugger = true) =
-  let
-    blockNumber = header.blockNumber
 
-  var
-    capture = com.db.capture()
+proc dumpDebuggingMetaData*(vmState: BaseVMState, header: BlockHeader,
+                            blockBody: BlockBody, launchDebugger = true) =
+  let
+    com = vmState.com
+    blockNumber = header.blockNumber
+    capture = com.db.newCapture.value
     captureCom = com.clone(capture.recorder)
     bloom = createBloom(vmState.receipts)
+  defer:
+    capture.forget()
 
   let blockSummary = %{
     "receiptsRoot": %("0x" & toHex(calcReceiptRoot(vmState.receipts).data)),
