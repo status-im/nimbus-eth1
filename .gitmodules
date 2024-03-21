@@ -212,11 +212,6 @@
 	url = https://github.com/status-im/nimbus-security-resources.git
 	ignore = untracked
 	branch = master
-[submodule "vendor/portal-spec-tests"]
-	path = vendor/portal-spec-tests
-	url = https://github.com/status-im/portal-spec-tests.git
-	ignore = untracked
-	branch = master
 [submodule "vendor/libtommath"]
 	path = vendor/libtommath
 	url = https://github.com/libtom/libtommath
@@ -230,5 +225,20 @@
 [submodule "vendor/nim-results"]
 	path = vendor/nim-results
 	url = https://github.com/arnetheduck/nim-results
+	ignore = untracked
+	branch = master
+[submodule "vendor/NimYAML"]
+	path = vendor/NimYAML
+	url = https://github.com/status-im/NimYAML.git
+	ignore = untracked
+	branch = master
+[submodule "vendor/portal-spec-tests"]
+	path = vendor/portal-spec-tests
+	url = https://github.com/ethereum/portal-spec-tests.git
+	ignore = untracked
+	branch = master
+[submodule "vendor/portal-mainnet"]
+	path = vendor/portal-mainnet
+	url = https://github.com/status-im/portal-mainnet.git
 	ignore = untracked
 	branch = master
