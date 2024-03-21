@@ -585,7 +585,7 @@ proc setupEthRpc*(
       return createAccessList(header, com, args)
     except CatchableError as exc:
       return AccessListResult(
-        error: some(exc.msg),
+        error: some("createAccessList error: " & exc.msg),
       )
 
 #[
