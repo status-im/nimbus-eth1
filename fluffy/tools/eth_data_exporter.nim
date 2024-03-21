@@ -692,3 +692,7 @@ when isMainModule:
       waitFor exportHistoricalRoots(
         config.restUrl, string config.dataDir, cfg, forkDigests
       )
+    of BeaconCmd.exportBlockProofBellatrix:
+      cmdExportBlockProofBellatrix(
+        string config.dataDir, string config.eraDir, config.slotNumber
+      )
