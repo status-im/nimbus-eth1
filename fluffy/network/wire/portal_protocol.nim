@@ -797,7 +797,7 @@ func getMaxOfferedContentKeys*(protocolIdLen: uint32, maxKeySize: uint32): int =
   # To calculate how much bytes, `n` content keys of size `maxKeySize` will take
   # we can use following equation:
   # bytes = (n * (maxKeySize + perContentKeyOverhead)) + offerMessageOverhead
-  # to calculate maximal number of keys which will will given space this can be
+  # to calculate maximal number of keys which will given space this can be
   # transformed to:
   # n = trunc((bytes - offerMessageOverhead) / (maxKeySize + perContentKeyOverhead))
   return ((maxTalkReqPayload - 5) div (int(maxKeySize) + 4))

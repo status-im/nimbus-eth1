@@ -163,7 +163,7 @@ proc cliqueGenvote*(
     checkPoint: seq[EthAddress] = @[]): BlockHeader
     {.gcsafe, raises: [CatchableError].} =
   ## Variant of `clique_genvote()` where the `parent` is the canonical head
-  ## on the the block chain database.
+  ## on the block chain database.
   ##
   ## Trivial example (aka smoke test):
   ##

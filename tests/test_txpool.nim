@@ -54,7 +54,7 @@ const
   deletedItemsRatioBandPC = 95
 
   # With a large enough block size, decreasing it should not decrease the
-  # profitability (very much) as the the number of blocks availabe increases
+  # profitability (very much) as the number of blocks availabe increases
   # (and a better choice might be available?) A good value for the next
   # parameter should be above 100%.
   decreasingBlockProfitRatioPC = 92

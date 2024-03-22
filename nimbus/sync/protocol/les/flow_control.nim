@@ -411,7 +411,7 @@ when defined(testing):
               # check newError < error
               error = newError
 
-            # After enough samples we should be very close the the final result
+            # After enough samples we should be very close the final result
             check error < (expectedFinalCost * 0.02)
 
           performTest(1, 10, 5.0, 100.0)

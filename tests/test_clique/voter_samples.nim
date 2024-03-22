@@ -39,7 +39,7 @@ type
       ## addresses in turn (no pun intended) depend on the private keys of
       ## these accounts. Now, the private keys are generated on-the-fly by a
       ## PRNG which re-seeded the same for each test. So the sort order is
-      ## predictable and the correct value of the the `noTurn` flag can be set
+      ## predictable and the correct value of the `noTurn` flag can be set
       ## by sort of experimenting with the tests (and/or refering to earlier
       ## woking test specs.)
 

@@ -35,7 +35,7 @@ export
 type
   CliqueState* = ##\
     ## Descriptor state snapshot which can be used for implementing
-    ## transaction trasnaction handling. Nore the the `Snapshot` type
+    ## transaction trasnaction handling. Nore the `Snapshot` type
     ## inside the `Result[]` is most probably opaque.
     Result[Snapshot,void]
 
