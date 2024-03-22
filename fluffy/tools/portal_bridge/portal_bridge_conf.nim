@@ -7,7 +7,8 @@
 
 {.push raises: [].}
 
-import std/[os, uri], confutils, confutils/std/net, nimcrypto/hash, ../../logging
+import
+  std/[strutils, os, uri], confutils, confutils/std/net, nimcrypto/hash, ../../logging
 
 export net
 
@@ -119,7 +120,8 @@ type
         name: "era1-dir"
       .}: InputDir
     of PortalBridgeCmd.state:
-      discard
+      web3UrlState* {.desc: "Execution layer JSON-RPC API URL", name: "web3-url".}:
+        Web3Url
 
 func parseCmdArg*(T: type TrustedDigest, input: string): T {.raises: [ValueError].} =
   TrustedDigest.fromHex(input)
