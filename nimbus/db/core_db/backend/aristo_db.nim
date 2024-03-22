@@ -127,7 +127,6 @@ proc baseMethods(
       db: AristoCoreDbRef;
       flags: set[CoreDbCaptFlags];
         ): CoreDxCaptRef =
-    let dx = db.adbBase.ctx.mpt
     if db.tracer.isNil:
       db.tracer = AristoTracerRef(parent: db)
       db.tracer.init(db.kdbBase, db.adbBase, flags)

@@ -71,7 +71,10 @@ proc db*(led: SomeLedger): CoreDbRef =
   led.distinctBase.parent
 
 proc rootHash*(led: SomeLedger): Hash256 =
-  const info = "SomeLedger/rootHash(): "
+  when SomeLedger is AccountLedger:
+    const info = "AccountLedger/rootHash(): "
+  else:
+    const info = "StorageLedger/rootHash(): "
   let rc = led.distinctBase.getTrie().rootHash()
   if rc.isErr:
     raiseAssert info & $$rc.error
@@ -90,14 +93,21 @@ proc init*(
     root: Hash256;
     pruneOk = true;
       ): T =
-  db.ctx.getAccMpt(root, pruneOk).T
-
-proc init*(
-    T: type AccountLedger;
-    db: CoreDbRef;
-    pruneOk = true;
-      ): T =
-  db.newAccMpt(EMPTY_ROOT_HASH, pruneOk).AccountLedger
+  const
+    info = "AccountLedger.init(): "
+  let
+    ctx = db.ctx
+    trie = block:
+      let rc = ctx.newTrie(AccountsTrie, root)
+      if rc.isErr:
+        raiseAssert info & $$rc.error
+      rc.value
+    mpt =  block:
+      let rc = ctx.getAcc(trie)
+      if rc.isErr:
+        raiseAssert info & $$rc.error
+      rc.value
+  mpt.T
 
 proc fetch*(al: AccountLedger; eAddr: EthAddress): Result[CoreDbAccount,void] =
   ## Using `fetch()` for trie data retrieval
@@ -150,10 +160,10 @@ proc init*(
   ## https://github.com/status-im/nimbus-eth1/issues/932.)
   const
     info = "StorageLedger/init(): "
+    noisy = true
   let
     db = al.distinctBase.parent
     stt = account.stoTrie
-
   if not stt.isNil and reHashOk:
     let rc = al.distinctBase.getTrie.rootHash
     if rc.isErr:
