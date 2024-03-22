@@ -30,17 +30,18 @@ else:
   proc getParentHeader(self: CoreDbRef, header: BlockHeader): BlockHeader =
     self.getBlockHeader(header.parentHash)
 
-proc setParentCtx(com: CommonRef, header: BlockHeader): CoreDbCtxRef =
-  ## Adjust state root (mainly for `Aristo`)
-  let
-    parent = com.db.getParentHeader(header)
-    ctx = com.db.ctxFromTx(parent.stateRoot).valueOr:
-      raiseAssert "setParentCtx: " & $$error
-  com.db.swapCtx ctx
+type
+  SaveCtxEnv = object
+    db: CoreDbRef
+    ctx: CoreDbCtxRef
 
-proc reset(com: CommonRef, saveCtx: CoreDbCtxRef) =
-  ## Reset context
-  com.db.swapCtx(saveCtx).forget()
+proc newCtx(com: CommonRef; root: eth_types.Hash256): SaveCtxEnv =
+  let ctx = com.db.ctxFromTx(root).valueOr:
+    raiseAssert "setParentCtx: " & $$error
+  SaveCtxEnv(db: com.db, ctx: ctx)
+
+proc setCtx(saveCtx: SaveCtxEnv): SaveCtxEnv =
+  SaveCtxEnv(db: saveCtx.db, ctx: saveCtx.db.swapCtx saveCtx.ctx)
 
 
 proc `%`(x: openArray[byte]): JsonNode =
@@ -120,16 +121,16 @@ proc traceTransaction*(com: CommonRef, header: BlockHeader,
   let
     # we add a memory layer between backend/lower layer db
     # and capture state db snapshot during transaction execution
-    saveCtx = com.setParentCtx(header)
     capture = com.db.newCapture.value
     tracerInst = newLegacyTracer(tracerFlags)
     captureCom = com.clone(capture.recorder)
-    vmState = BaseVMState.new(header, captureCom)
-  defer:
-    capture.forget
-    com.reset saveCtx
 
-  var stateDb = vmState.stateDB
+    saveCtx = setCtx com.newCtx(com.db.getParentHeader(header).stateRoot)
+    vmState = BaseVMState.new(header, captureCom)
+    stateDb = vmState.stateDB
+  defer:
+    saveCtx.setCtx().ctx.forget()
+    capture.forget()
 
   if header.txRoot == EMPTY_ROOT_HASH: return newJNull()
   doAssert(body.transactions.calcTxRoot == header.txRoot)
@@ -141,6 +142,7 @@ proc traceTransaction*(com: CommonRef, header: BlockHeader,
     after = newJArray()
     stateDiff = %{"before": before, "after": after}
     beforeRoot: common.Hash256
+    beforeCtx: SaveCtxEnv
 
   let
     miner = vmState.coinbase()
@@ -157,6 +159,7 @@ proc traceTransaction*(com: CommonRef, header: BlockHeader,
       stateDb.persist()
       stateDiff["beforeRoot"] = %($stateDb.rootHash)
       beforeRoot = stateDb.rootHash
+      beforeCtx = com.newCtx beforeRoot
 
     let rc = vmState.processTransaction(tx, sender, header)
     gasUsed = if rc.isOk: rc.value else: 0
@@ -171,7 +174,12 @@ proc traceTransaction*(com: CommonRef, header: BlockHeader,
       break
 
   # internal transactions:
-  var stateBefore = AccountsLedgerRef.init(capture.recorder, beforeRoot, com.pruneTrie)
+  let
+    saveCtxBefore = setCtx beforeCtx
+    stateBefore = AccountsLedgerRef.init(capture.recorder, beforeRoot, com.pruneTrie)
+  defer:
+    saveCtxBefore.setCtx().ctx.forget()
+
   for idx, acc in tracedAccountsPairs(tracerInst):
     before.captureAccount(stateBefore, acc, internalTxName & $idx)
 
@@ -191,17 +199,18 @@ proc traceTransaction*(com: CommonRef, header: BlockHeader,
 proc dumpBlockState*(com: CommonRef, header: BlockHeader, body: BlockBody, dumpState = false): JsonNode =
   let
     parent = com.db.getParentHeader(header)
-    saveCtx = com.setParentCtx(header)
     capture = com.db.newCapture.value
     captureCom = com.clone(capture.recorder)
     # we only need a stack dump when scanning for internal transaction address
     captureFlags = {DisableMemory, DisableStorage, EnableAccount}
     tracerInst = newLegacyTracer(captureFlags)
+
+    saveCtx = setCtx com.newCtx(parent.stateRoot)
     vmState = BaseVMState.new(header, captureCom, tracerInst)
     miner = vmState.coinbase()
   defer:
-    capture.forget
-    com.reset saveCtx
+    saveCtx.setCtx().ctx.forget()
+    capture.forget()
 
   var
     before = newJArray()
@@ -251,14 +260,15 @@ proc dumpBlockState*(com: CommonRef, header: BlockHeader, body: BlockBody, dumpS
 
 proc traceBlock*(com: CommonRef, header: BlockHeader, body: BlockBody, tracerFlags: set[TracerFlags] = {}): JsonNode =
   let
-    saveCtx = com.setParentCtx(header)
     capture = com.db.newCapture.value
     captureCom = com.clone(capture.recorder)
     tracerInst = newLegacyTracer(tracerFlags)
+
+    saveCtx = setCtx com.newCtx(com.db.getParentHeader(header).stateRoot)
     vmState = BaseVMState.new(header, captureCom, tracerInst)
   defer:
-    capture.forget
-    com.reset saveCtx
+    saveCtx.setCtx().ctx.forget()
+    capture.forget()
 
   if header.txRoot == EMPTY_ROOT_HASH: return newJNull()
   doAssert(body.transactions.calcTxRoot == header.txRoot)
