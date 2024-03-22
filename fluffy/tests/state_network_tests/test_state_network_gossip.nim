@@ -6,29 +6,37 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  stew/[byteutils, results],
-  testutils/unittests,
+  std/os,
   chronos,
+  testutils/unittests,
+  stew/[byteutils, results],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
-  eth/p2p/discoveryv5/routing_table,
-  ./helpers,
   ../../network/wire/[portal_protocol, portal_stream],
   ../../network/state/[state_content, state_network],
   ../../database/content_db,
   .././test_helpers,
-  ../../eth_data/history_data_json_store
+  ../test_yaml_utils
 
-const testVectorDir = "./vendor/portal-spec-tests/tests/mainnet/state/"
+const testVectorDir = "./vendor/portal-spec-tests/tests/mainnet/state/validation/"
 
 procSuite "State Network Gossip":
   let rng = newRng()
 
   asyncTest "Test Gossip of Account Trie Node Offer":
+    const file = testVectorDir / "recursive_gossip.yaml"
+
+    type
+      YamlOffer = object
+        content_key: string
+        content_value: string
+
+      YamlRecursiveGossip = seq[seq[YamlOffer]]
+
     let
-      recursiveGossipSteps = readJsonType(
-        testVectorDir & "recursive_gossip.json", JsonRecursiveGossip
-      ).valueOr:
+      testCase = YamlRecursiveGossip.loadFromYaml(file).valueOr:
         raiseAssert "Cannot read test vector: " & error
+
+      recursiveGossipSteps = testCase[0]
       numOfClients = recursiveGossipSteps.len() - 1
 
     var clients: seq[StateNetwork]

@@ -29,15 +29,9 @@ proc loadCompileTimeBootstrapNodes(path: string): seq[string] =
     macros.error "Failed to load bootstrap nodes metadata at '" & path & "': " & err.msg
 
 const
-  # TODO: Change this from our local repo to an eth-client repo if/when this
-  # gets created for the Portal networks.
-  portalNetworksDir = currentSourcePath.parentDir.replace('\\', '/') / "network_data"
-
-  # TODO: Using a repo for test vectors for now, as it is something to test
-  # against, but at the same time could also go in a network metadata repo.
-  portalTestDir =
+  portalConfigDir =
     currentSourcePath.parentDir.parentDir.replace('\\', '/') / "vendor" /
-    "portal-spec-tests" / "tests"
+    "portal-mainnet" / "config"
   # Note:
   # For now it gets called testnet0 but this Portal network serves Eth1 mainnet
   # data. Giving the actual Portal (test)networks different names might not be
@@ -48,16 +42,12 @@ const
   # TODO: It would be nice to be able to use `loadBootstrapFile` here, but that
   # doesn't work at compile time. The main issue seems to be the usage of
   # rlp.rawData() in the enr code.
-  testnet0BootstrapNodes* = loadCompileTimeBootstrapNodes(
-    portalNetworksDir / "testnet0" / "bootstrap_nodes.txt"
-  )
+  testnet0BootstrapNodes* =
+    loadCompileTimeBootstrapNodes(portalConfigDir / "bootstrap_nodes.txt")
 
-  finishedAccumulatorSSZ* = slurp(
-    portalTestDir / "mainnet" / "history" / "accumulator" / "finished_accumulator.ssz"
-  )
+  finishedAccumulatorSSZ* = slurp(portalConfigDir / "finished_accumulator.ssz")
 
-  historicalRootsSSZ* =
-    slurp(portalTestDir / "mainnet" / "beacon_chain" / "historical_roots.ssz")
+  historicalRootsSSZ* = slurp(portalConfigDir / "historical_roots.ssz")
 
 func loadAccumulator*(): FinishedAccumulator =
   try:

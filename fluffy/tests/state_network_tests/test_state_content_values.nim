@@ -6,142 +6,166 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/[sugar, sequtils],
-  testutils/unittests,
-  stew/[byteutils, io2],
-  eth/keys,
-  ./helpers,
+  std/[os, sugar, sequtils],
+  unittest2,
+  stew/byteutils,
   ../../network/state/state_content,
-  ../../eth_data/history_data_json_store
+  ../test_yaml_utils
 
-const testVectorDir = "./vendor/portal-spec-tests/tests/mainnet/state/"
+const testVectorDir = "./vendor/portal-spec-tests/tests/mainnet/state/serialization/"
 
 suite "State Content Values":
   test "Encode/decode AccountTrieNodeOffer":
+    const file = testVectorDir / "account_trie_node_with_proof.yaml"
+
+    type YamlAccountTrieNodeWithProof = object
+      proof: seq[string]
+      block_hash: string
+      content_value: string
+
     let
-      blockContent = readJsonType(testVectorDir & "block.json", JsonBlock).valueOr:
+      testCase = YamlAccountTrieNodeWithProof.loadFromYaml(file).valueOr:
         raiseAssert "Cannot read test vector: " & error
-      accountTrieNode = readJsonType(
-        testVectorDir & "account_trie_node.json", JsonAccountTrieNode
-      ).valueOr:
-        raiseAssert "Cannot read test vector: " & error
-      blockHash = BlockHash.fromHex(blockContent.`block`.block_hash)
-      proof = TrieProof.init(
-        blockContent.account_proof.map((hex) => TrieNode.init(hex.hexToSeqByte()))
-      )
+
+      blockHash = BlockHash.fromHex(testCase.block_hash)
+      proof =
+        TrieProof.init(testCase.proof.map((hex) => TrieNode.init(hex.hexToSeqByte())))
       accountTrieNodeOffer = AccountTrieNodeOffer(blockHash: blockHash, proof: proof)
 
       encoded = SSZ.encode(accountTrieNodeOffer)
-      expected = accountTrieNode.content_value_offer.hexToSeqByte()
+      expected = testCase.content_value.hexToSeqByte()
       decoded = SSZ.decode(encoded, AccountTrieNodeOffer)
 
-    check encoded == expected
-    check decoded == accountTrieNodeOffer
+    check:
+      encoded == expected
+      decoded == accountTrieNodeOffer
 
   test "Encode/decode AccountTrieNodeRetrieval":
+    const file = testVectorDir / "trie_node.yaml"
+
+    type YamlTrieNode = object
+      trie_node: string
+      content_value: string
+
     let
-      blockContent = readJsonType(testVectorDir & "block.json", JsonBlock).valueOr:
-        raiseAssert "Cannot read test vector: " & error
-      accountTrieNode = readJsonType(
-        testVectorDir & "account_trie_node.json", JsonAccountTrieNode
-      ).valueOr:
+      testCase = YamlTrieNode.loadFromYaml(file).valueOr:
         raiseAssert "Cannot read test vector: " & error
 
-      node = TrieNode.init(blockContent.account_proof[^1].hexToSeqByte())
+      node = TrieNode.init(testCase.trie_node.hexToSeqByte())
       accountTrieNodeRetrieval = AccountTrieNodeRetrieval(node: node)
 
       encoded = SSZ.encode(accountTrieNodeRetrieval)
-      expected = accountTrieNode.content_value_retrieval.hexToSeqByte()
+      expected = testCase.content_value.hexToSeqByte()
       decoded = SSZ.decode(encoded, AccountTrieNodeRetrieval)
 
-    check encoded == expected
-    check decoded == accountTrieNodeRetrieval
+    check:
+      encoded == expected
+      decoded == accountTrieNodeRetrieval
 
   test "Encode/decode ContractTrieNodeOffer":
+    const file = testVectorDir / "contract_storage_trie_node_with_proof.yaml"
+
+    type YamlContractStorageTrieNodeWithProof = object
+      storage_proof: seq[string]
+      account_proof: seq[string]
+      block_hash: string
+      content_value: string
+
     let
-      blockContent = readJsonType(testVectorDir & "block.json", JsonBlock).valueOr:
-        raiseAssert "Cannot read test vector: " & error
-      contractStorageTrieNode = readJsonType(
-        testVectorDir & "contract_storage_trie_node.json", JsonContractStorageTtrieNode
-      ).valueOr:
+      testCase = YamlContractStorageTrieNodeWithProof.loadFromYaml(file).valueOr:
         raiseAssert "Cannot read test vector: " & error
 
-      blockHash = BlockHash.fromHex(blockContent.`block`.block_hash)
+      blockHash = BlockHash.fromHex(testCase.block_hash)
       storageProof = TrieProof.init(
-        blockContent.storage_proof.map((hex) => TrieNode.init(hex.hexToSeqByte()))
+        testCase.storage_proof.map((hex) => TrieNode.init(hex.hexToSeqByte()))
       )
       accountProof = TrieProof.init(
-        blockContent.account_proof.map((hex) => TrieNode.init(hex.hexToSeqByte()))
+        testCase.account_proof.map((hex) => TrieNode.init(hex.hexToSeqByte()))
       )
       contractTrieNodeOffer = ContractTrieNodeOffer(
         blockHash: blockHash, storage_proof: storageProof, account_proof: accountProof
       )
 
       encoded = SSZ.encode(contractTrieNodeOffer)
-      expected = contractStorageTrieNode.content_value_offer.hexToSeqByte()
+      expected = testCase.content_value.hexToSeqByte()
       decoded = SSZ.decode(encoded, ContractTrieNodeOffer)
 
-    check encoded == expected
-    check decoded == contractTrieNodeOffer
+    check:
+      encoded == expected
+      decoded == contractTrieNodeOffer
 
   test "Encode/decode ContractTrieNodeRetrieval":
+    # TODO: This is practically the same as AccountTrieNodeRetrieval test,
+    # but we use different objects for it. Might want to adjust this to just
+    # 1 basic TrieNode type.
+    const file = testVectorDir / "trie_node.yaml"
+
+    type YamlTrieNode = object
+      trie_node: string
+      content_value: string
+
     let
-      blockContent = readJsonType(testVectorDir & "block.json", JsonBlock).valueOr:
-        raiseAssert "Cannot read test vector: " & error
-      contractStorageTrieNode = readJsonType(
-        testVectorDir & "contract_storage_trie_node.json", JsonContractStorageTtrieNode
-      ).valueOr:
+      testCase = YamlTrieNode.loadFromYaml(file).valueOr:
         raiseAssert "Cannot read test vector: " & error
 
-      node = TrieNode.init(blockContent.storage_proof[^1].hexToSeqByte())
+      node = TrieNode.init(testCase.trie_node.hexToSeqByte())
       contractTrieNodeRetrieval = ContractTrieNodeRetrieval(node: node)
 
       encoded = SSZ.encode(contractTrieNodeRetrieval)
-      expected = contractStorageTrieNode.content_value_retrieval.hexToSeqByte()
+      expected = testCase.content_value.hexToSeqByte()
       decoded = SSZ.decode(encoded, ContractTrieNodeRetrieval)
 
-    check encoded == expected
-    check decoded == contractTrieNodeRetrieval
+    check:
+      encoded == expected
+      decoded == contractTrieNodeRetrieval
 
   test "Encode/decode ContractCodeOffer":
+    const file = testVectorDir / "contract_bytecode_with_proof.yaml"
+
+    type YamlContractBytecodeWithProof = object
+      bytecode: string
+      account_proof: seq[string]
+      block_hash: string
+      content_value: string
+
     let
-      blockContent = readJsonType(testVectorDir & "block.json", JsonBlock).valueOr:
-        raiseAssert "Cannot read test vector: " & error
-      contractBytecode = readJsonType(
-        testVectorDir & "contract_bytecode.json", JsonContractBytecode
-      ).valueOr:
+      testCase = YamlContractBytecodeWithProof.loadFromYaml(file).valueOr:
         raiseAssert "Cannot read test vector: " & error
 
-      code = Bytecode.init(blockContent.bytecode.hexToSeqByte())
-      blockHash = BlockHash.fromHex(blockContent.`block`.block_hash)
+      code = Bytecode.init(testCase.bytecode.hexToSeqByte())
+      blockHash = BlockHash.fromHex(testCase.block_hash)
       accountProof = TrieProof.init(
-        blockContent.account_proof.map((hex) => TrieNode.init(hex.hexToSeqByte()))
+        testCase.account_proof.map((hex) => TrieNode.init(hex.hexToSeqByte()))
       )
       contractCodeOffer =
         ContractCodeOffer(code: code, blockHash: blockHash, accountProof: accountProof)
 
       encoded = SSZ.encode(contractCodeOffer)
-      expected = contractBytecode.content_value_offer.hexToSeqByte()
+      expected = testCase.content_value.hexToSeqByte()
       decoded = SSZ.decode(encoded, ContractCodeOffer)
 
-    check encoded == expected
-    check decoded == contractCodeOffer
+    check:
+      encoded == expected
+      decoded == contractCodeOffer
 
   test "Encode/decode ContractCodeRetrieval":
+    const file = testVectorDir / "contract_bytecode.yaml"
+
+    type YamlContractBytecode = object
+      bytecode: string
+      content_value: string
+
     let
-      blockContent = readJsonType(testVectorDir & "block.json", JsonBlock).valueOr:
-        raiseAssert "Cannot read test vector: " & error
-      contractBytecode = readJsonType(
-        testVectorDir & "contract_bytecode.json", JsonContractBytecode
-      ).valueOr:
+      testCase = YamlContractBytecode.loadFromYaml(file).valueOr:
         raiseAssert "Cannot read test vector: " & error
 
-      code = Bytecode.init(blockContent.bytecode.hexToSeqByte())
+      code = Bytecode.init(testCase.bytecode.hexToSeqByte())
       contractCodeRetrieval = ContractCodeRetrieval(code: code)
 
       encoded = SSZ.encode(contractCodeRetrieval)
-      expected = contractBytecode.content_value_retrieval.hexToSeqByte()
+      expected = testCase.content_value.hexToSeqByte()
       decoded = SSZ.decode(encoded, ContractCodeRetrieval)
 
-    check encoded == expected
-    check decoded == contractCodeRetrieval
+    check:
+      encoded == expected
+      decoded == contractCodeRetrieval
