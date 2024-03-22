@@ -12,5 +12,6 @@ import
   ./test_history_content_keys,
   ./test_history_content,
   ./test_history_content_validation,
+  ./test_history_block_proof_bellatrix,
   ./test_header_content,
   ./test_accumulator_root
