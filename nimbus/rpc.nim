@@ -57,7 +57,7 @@ proc installRPC(server: RpcServer,
     setupEthRpc(nimbus.ethNode, nimbus.ctx, com, nimbus.txPool, server)
 
   if RpcFlag.Debug in flags:
-    setupDebugRpc(com, server)
+    setupDebugRpc(com, nimbus.txPool, server)
 
   if RpcFlag.Exp in flags:
     setupExpRpc(com, server)

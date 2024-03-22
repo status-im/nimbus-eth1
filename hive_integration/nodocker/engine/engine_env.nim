@@ -126,7 +126,7 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
 
   setupEthRpc(node, ctx, com, txPool, server)
   setupEngineAPI(beaconEngine, server)
-  setupDebugRpc(com, server)
+  setupDebugRpc(com, txPool, server)
 
   # Do not start clique sealing engine if we are using a Proof of Work chain file
   if chainFile.len > 0:
