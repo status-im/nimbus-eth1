@@ -428,7 +428,7 @@ proc ctxFromTx*(
     kind = AccountsTrie;
       ): CoreDbRc[CoreDbCtxRef] =
   ## Create new context derived from matching transaction of the currently
-  ## active context. Fir the legacy backend, this function always returns
+  ## active context. For the legacy backend, this function always returns
   ## the currently active context (i.e. the same as `db.ctx()`.)
   ##
   db.setTrackNewApi BaseNewCtxFromTxFn

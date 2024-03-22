@@ -511,11 +511,7 @@ proc baseMethods(
         root: Hash256;
         kind: CoreDbSubTrie;
           ): CoreDbRc[CoreDbCtxRef] =
-      # This is not 100% on the tx layer but should work anyway with
-      # the application as it emulates sort of `Aristo` behaviour.
-      if db.tdb.contains root.data:
-        return ok(db.ctx)
-      err(db.bless(CtxNotFound, LegacyCoreDbError(ctx: "fromTxFn()"))),
+      ok(db.ctx),
 
     beginFn: proc(): CoreDbRc[CoreDxTxRef] =
       db.top = LegacyCoreDxTxRef(
