@@ -159,6 +159,10 @@ proc getTreeKeyCodeChunk*(address: EthAddress, chunk: UInt256): Bytes32 =
   let (treeIndex, subIndex) = getTreeKeyCodeChunkIndices(chunk)
   return getTreeKey(address, treeIndex, subIndex)
 
+proc getTreeKeyCodeChunkWithEvaluatedAddress*(addressPoint: Point, chunk: UInt256): Bytes32 =
+  let (treeIndex, subIndex) = getTreeKeyCodeChunkIndices(chunk)
+  return getTreeKeyWithEvaluatedAddress(addressPoint, treeIndex, subIndex)
+
 
 proc newVerkleTrie*(): VerkleTrie =
   result = VerkleTrie(root: newTree())
