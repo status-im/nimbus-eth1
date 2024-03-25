@@ -160,15 +160,17 @@ if defined(windows) and defined(i386):
 # disable nim-kzg's blst
 switch("define", "kzgExternalBlst")
 
-# nim-rocksdb static linking
-switch("define", "rocksdb_static_linking")
+# RocksDB static linking is enabled by default
+# but can be disabled by setting this flag
+when not defined(disable_rocksdb_static_linking):
+  switch("define", "rocksdb_static_linking")
 
-# use the C++ linker profile because it's a C++ library
-when defined(macosx):
-  switch("clang.linkerexe", "clang++")
-else:
-  switch("gcc.linkerexe", "g++")
+  # use the C++ linker profile because it's a C++ library
+  when defined(macosx):
+    switch("clang.linkerexe", "clang++")
+  else:
+    switch("gcc.linkerexe", "g++")
 
-switch("dynlibOverride", "librocksdb.a")
-switch("dynlibOverride", "liblz4.a")
-switch("dynlibOverride", "libzstd.a")
+  switch("dynlibOverride", "rocksdb")
+  switch("dynlibOverride", "lz4")
+  switch("dynlibOverride", "zstd")
