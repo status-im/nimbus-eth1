@@ -105,7 +105,7 @@ in a markdown file with the same name with the simulator.
   ```nim
   nim c -r -d:release hive_integration/nodocker/consensus/consensus_sim
   ```
-  Note that this progam expects the _./tests_ directory accessible. So if
+  Note that this program expects the _./tests_ directory accessible. So if
   you compile from the _hive_integration/nodocker_ directory on a Posix
   system, the _./tests_ directory would be a symlink to _../../tests_.
 
@@ -167,7 +167,7 @@ in a markdown file with the same name with the simulator.
 
 * Useful commands after entering the nimbus container<br>
 
-           apt udate
+           apt update
            apt install iproute2 procps vim openssh-client strace
 
 * Resume hive installation & processing:<br>
