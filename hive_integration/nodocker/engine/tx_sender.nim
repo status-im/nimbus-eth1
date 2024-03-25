@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -116,7 +116,7 @@ proc fillBalance(sender: TxSender, params: NetworkParams) =
     )
 
 proc new*(_: type TxSender, params: NetworkParams): TxSender =
-  result = TxSender(chainId: params.config.chainID)
+  result = TxSender(chainId: params.config.chainId)
   result.createAccounts()
   result.fillBalance(params)
 
@@ -157,10 +157,10 @@ proc makeTx(params: MakeTxParams, tc: BaseTx): Transaction =
                to      : tc.recipient,
                value   : tc.amount,
                payload : tc.payload,
-               chainId : params.chainID
+               chainId : params.chainId
              )
 
-  signTransaction(tx, params.key, params.chainID, eip155 = true)
+  signTransaction(tx, params.key, params.chainId, eip155 = true)
 
 proc makeTx(params: MakeTxParams, tc: BigInitcodeTx): Transaction =
   var tx = tc
@@ -179,7 +179,7 @@ proc makeTx(params: MakeTxParams, tc: BigInitcodeTx): Transaction =
 proc makeTx*(sender: TxSender, tc: BaseTx, nonce: AccountNonce): Transaction =
   let acc = sender.getNextAccount()
   let params = MakeTxParams(
-    chainId: sender.chainID,
+    chainId: sender.chainId,
     key: acc.key,
     nonce: nonce
   )
@@ -188,7 +188,7 @@ proc makeTx*(sender: TxSender, tc: BaseTx, nonce: AccountNonce): Transaction =
 proc makeTx*(sender: TxSender, tc: BigInitcodeTx, nonce: AccountNonce): Transaction =
   let acc = sender.getNextAccount()
   let params = MakeTxParams(
-    chainId: sender.chainID,
+    chainId: sender.chainId,
     key: acc.key,
     nonce: nonce
   )
@@ -199,7 +199,7 @@ proc makeNextTx*(sender: TxSender, tc: BaseTx): Transaction =
     acc = sender.getNextAccount()
     nonce = sender.getNextNonce(acc.address)
     params = MakeTxParams(
-      chainId: sender.chainID,
+      chainId: sender.chainId,
       key: acc.key,
       nonce: nonce
     )
@@ -219,7 +219,7 @@ proc sendTx*(sender: TxSender, client: RpcClient, tc: BaseTx, nonce: AccountNonc
   let
     acc = sender.getNextAccount()
     params = MakeTxParams(
-      chainId: sender.chainID,
+      chainId: sender.chainId,
       key: acc.key,
       nonce: nonce
     )
@@ -237,7 +237,7 @@ proc sendTx*(sender: TxSender, client: RpcClient, tc: BigInitcodeTx, nonce: Acco
   let
     acc = sender.getNextAccount()
     params = MakeTxParams(
-      chainId: sender.chainID,
+      chainId: sender.chainId,
       key: acc.key,
       nonce: nonce
     )
@@ -272,7 +272,7 @@ proc makeTx*(params: MakeTxParams, tc: BlobTx): Transaction =
 
   let unsignedTx = Transaction(
     txType    : TxEip4844,
-    chainId   : params.chainID,
+    chainId   : params.chainId,
     nonce     : params.nonce,
     maxPriorityFee: gasTipCap,
     maxFee    : gasFeeCap,
@@ -284,7 +284,7 @@ proc makeTx*(params: MakeTxParams, tc: BlobTx): Transaction =
     versionedHashes: data.hashes,
   )
 
-  var tx = signTransaction(unsignedTx, params.key, params.chainID, eip155 = true)
+  var tx = signTransaction(unsignedTx, params.key, params.chainId, eip155 = true)
   tx.networkPayload = NetworkPayload(
     blobs      : data.blobs,
     commitments: data.commitments,
@@ -299,7 +299,7 @@ proc getAccount*(sender: TxSender, idx: int): TestAccount =
 proc sendTx*(sender: TxSender, acc: TestAccount, client: RpcClient, tc: BlobTx): Result[Transaction, void] =
   let
     params = MakeTxParams(
-      chainId: sender.chainID,
+      chainId: sender.chainId,
       key: acc.key,
       nonce: sender.getNextNonce(acc.address),
     )
@@ -316,7 +316,7 @@ proc sendTx*(sender: TxSender, acc: TestAccount, client: RpcClient, tc: BlobTx):
 proc replaceTx*(sender: TxSender, acc: TestAccount, client: RpcClient, tc: BlobTx): Result[Transaction, void] =
   let
     params = MakeTxParams(
-      chainId: sender.chainID,
+      chainId: sender.chainId,
       key: acc.key,
       nonce: sender.getLastNonce(acc.address),
     )
@@ -333,7 +333,7 @@ proc replaceTx*(sender: TxSender, acc: TestAccount, client: RpcClient, tc: BlobT
 proc makeTx*(sender: TxSender, tc: BaseTx, acc: TestAccount, nonce: AccountNonce): Transaction =
   let
     params = MakeTxParams(
-      chainId: sender.chainID,
+      chainId: sender.chainId,
       key: acc.key,
       nonce: nonce,
     )
@@ -370,8 +370,8 @@ proc customizeTransaction*(sender: TxSender,
     modTx.S = signature.S
 
   if baseTx.txType in {TxEip1559, TxEip4844}:
-    if custTx.chainID.isSome:
-      modTx.chainID = custTx.chainID.get
+    if custTx.chainId.isSome:
+      modTx.chainId = custTx.chainId.get
 
     if custTx.gasPriceOrGasFeeCap.isSome:
       modTx.maxFee = custTx.gasPriceOrGasFeeCap.get.GasInt
@@ -385,6 +385,6 @@ proc customizeTransaction*(sender: TxSender,
       modTx.to = some(address)
 
   if custTx.signature.isNone:
-    return signTransaction(modTx, acc.key, modTx.chainID, eip155 = true)
+    return signTransaction(modTx, acc.key, modTx.chainId, eip155 = true)
 
   return modTx

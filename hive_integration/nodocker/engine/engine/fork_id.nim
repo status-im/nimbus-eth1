@@ -23,7 +23,7 @@ method withMainFork(cs: ForkIDSpec, fork: EngineFork): BaseSpec =
   return res
 
 method getName(cs: ForkIDSpec): string =
-  var name = "Fork ID: Genesis at $1, $2 at $3" % [$cs.getGenesistimestamp(), $cs.mainFork, $cs.forkTime]
+  var name = "Fork ID: Genesis at $1, $2 at $3" % [$cs.getGenesisTimestamp(), $cs.mainFork, $cs.forkTime]
   if cs.previousForkTime != 0:
     name.add ", $1 at $2" % [$cs.mainFork.pred, $cs.previousForkTime]
 
@@ -53,4 +53,5 @@ method execute(cs: ForkIDSpec, env: TestEnv): bool =
 
   # Get client index's enode
   let engine = env.addEngine()
+  discard engine
   return true

@@ -98,13 +98,9 @@ proc finish*(db: AristoDbRef; flush = false) =
   ##
   ## This distructor may be used on already *destructed* descriptors.
   ##
-  if not db.isNil:
-    if not db.backend.isNil:
-      db.backend.closeFn flush
-
-    let lebo = db.getCentre
-    discard lebo.forgetOthers()
-    lebo[] = AristoDbObj(top: LayerRef.init())
+  if not db.backend.isNil:
+    db.backend.closeFn flush
+  discard db.getCentre.forgetOthers()
 
 # ------------------------------------------------------------------------------
 # End

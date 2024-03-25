@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -16,9 +16,9 @@ import
 
 type
   ForkchoiceStateField* = enum
-    HeadblockHash      = "Head"
-    SafeblockHash      = "Safe"
-    FinalizedblockHash = "Finalized"
+    HeadBlockHash      = "Head"
+    SafeBlockHash      = "Safe"
+    FinalizedBlockHash = "Finalized"
 
 type
   InconsistentForkchoiceTest* = ref object of EngineSpec
@@ -76,11 +76,11 @@ method execute(cs: InconsistentForkchoiceTest, env: TestEnv): bool =
   )
 
   case cs.field
-  of HeadblockHash:
+  of HeadBlockHash:
     inconsistentFcU.headblockHash = shadow.alt[len(shadow.alt)-1].blockHash
-  of SafeblockHash:
+  of SafeBlockHash:
     inconsistentFcU.safeblockHash = shadow.alt[len(shadow.canon)-2].blockHash
-  of FinalizedblockHash:
+  of FinalizedBlockHash:
     inconsistentFcU.finalizedblockHash = shadow.alt[len(shadow.canon)-3].blockHash
 
   let version = env.engine.version(env.clMock.latestPayloadBuilt.timestamp)
@@ -93,19 +93,19 @@ method execute(cs: InconsistentForkchoiceTest, env: TestEnv): bool =
   return true
 
 type
-  ForkchoiceUpdatedUnknownblockHashTest* = ref object of EngineSpec
+  ForkchoiceUpdatedUnknownBlockHashTest* = ref object of EngineSpec
     field*: ForkchoiceStateField
 
-method withMainFork(cs: ForkchoiceUpdatedUnknownblockHashTest, fork: EngineFork): BaseSpec =
+method withMainFork(cs: ForkchoiceUpdatedUnknownBlockHashTest, fork: EngineFork): BaseSpec =
   var res = cs.clone()
   res.mainFork = fork
   return res
 
-method getName(cs: ForkchoiceUpdatedUnknownblockHashTest): string =
+method getName(cs: ForkchoiceUpdatedUnknownBlockHashTest): string =
   return "Unknown $1blockHash" % [$cs.field]
 
 # Send an inconsistent ForkchoiceState with a known payload that belongs to a side chain as head, safe or finalized.
-method execute(cs: ForkchoiceUpdatedUnknownblockHashTest, env: TestEnv): bool =
+method execute(cs: ForkchoiceUpdatedUnknownBlockHashTest, env: TestEnv): bool =
   # Wait until TTD is reached by this client
   let ok = waitFor env.clMock.waitForTTD()
   testCond ok
@@ -116,7 +116,7 @@ method execute(cs: ForkchoiceUpdatedUnknownblockHashTest, env: TestEnv): bool =
   # Generate a random block hash
   let randomblockHash = Web3Hash.randomBytes()
 
-  if cs.field == HeadblockHash:
+  if cs.field == HeadBlockHash:
     let fcu = ForkchoiceStateV1(
       headblockHash:      randomblockHash,
       safeblockHash:      env.clMock.latestForkchoice.safeblockHash,
@@ -153,9 +153,9 @@ method execute(cs: ForkchoiceUpdatedUnknownblockHashTest, env: TestEnv): bool =
           finalizedblockHash: env.clMock.latestForkchoice.finalizedblockHash,
         )
 
-        if cs.field == SafeblockHash:
+        if cs.field == SafeBlockHash:
           fcu.safeblockHash = randomblockHash
-        elif cs.field == FinalizedblockHash:
+        elif cs.field == FinalizedBlockHash:
           fcu.finalizedblockHash = randomblockHash
 
         let version = env.engine.version(env.clMock.latestExecutedPayload.timestamp)

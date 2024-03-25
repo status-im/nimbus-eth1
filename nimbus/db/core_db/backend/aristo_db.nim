@@ -11,14 +11,13 @@
 {.push raises: [].}
 
 import
+  std/tables,
   eth/common,
   results,
   "../.."/[aristo, aristo/aristo_walk],
   "../.."/[kvt, kvt/kvt_init/memory_only, kvt/kvt_walk],
   ".."/[base, base/base_desc],
-  ./aristo_db/[common_desc, handlers_aristo, handlers_kvt],
-  ../../storage_types
-
+  ./aristo_db/[common_desc, handlers_aristo, handlers_kvt, handlers_trace]
 
 import
   ../../aristo/aristo_init/memory_only as aristo_memory_only
@@ -40,22 +39,15 @@ type
     ## Main descriptor
     kdbBase: KvtBaseRef                      ## Kvt subsystem
     adbBase: AristoBaseRef                   ## Aristo subsystem
+    tracer: AristoTracerRef                  ## Currently active recorder
+
+  AristoTracerRef = ref object of TraceRecorderRef
+    ## Sub-handle for tracer
+    parent: AristoCoreDbRef
 
   AristoCoreDbBE = ref object of CoreDbBackendRef
 
 proc newAristoVoidCoreDbRef*(): CoreDbRef {.noRaise.}
-
-# ------------------------------------------------------------------------------
-# Private helpers
-# ------------------------------------------------------------------------------
-
-func notImplemented[T](
-    _: typedesc[T];
-    db: AristoCoreDbRef;
-    info: string;
-      ): CoreDbRc[T] {.gcsafe.} =
-  ## Applies only to `Aristo` methods
-  err((VertexID(0),aristo.NotImplemented).toError(db, info))
 
 # ------------------------------------------------------------------------------
 # Private tx and base methods
@@ -67,37 +59,62 @@ proc txMethods(
     kTx: KvtTxRef;
      ): CoreDbTxFns =
   ## To be constructed by some `CoreDbBaseFns` function
+  let
+    adbBase = db.adbBase
+    kdbBase = db.kdbBase
+
+    adbApi = adbBase.api
+    kdbApi = kdbBase.api
+
   CoreDbTxFns(
     levelFn: proc(): int =
       aTx.level,
 
     commitFn: proc(ignore: bool): CoreDbRc[void] =
       const info = "commitFn()"
-      ? db.adbBase.api.commit(aTx).toVoidRc(db, info)
-      ? db.kdbBase.api.commit(kTx).toVoidRc(db, info)
+      ? adbApi.commit(aTx).toVoidRc(adbBase, info)
+      ? kdbApi.commit(kTx).toVoidRc(kdbBase, info)
       ok(),
 
     rollbackFn: proc(): CoreDbRc[void] =
       const info = "rollbackFn()"
-      ? db.adbBase.api.rollback(aTx).toVoidRc(db, info)
-      ? db.kdbBase.api.rollback(kTx).toVoidRc(db, info)
+      ? adbApi.rollback(aTx).toVoidRc(adbBase, info)
+      ? kdbApi.rollback(kTx).toVoidRc(kdbBase, info)
       ok(),
 
     disposeFn: proc(): CoreDbRc[void] =
       const info =  "disposeFn()"
-      if db.adbBase.api.isTop(aTx):
-        ? db.adbBase.api.rollback(aTx).toVoidRc(db, info)
-      if db.kdbBase.api.isTop(kTx):
-        ? db.kdbBase.api.rollback(kTx).toVoidRc(db, info)
+      if adbApi.isTop(aTx): ? adbApi.rollback(aTx).toVoidRc(adbBase, info)
+      if kdbApi.isTop(kTx): ? kdbApi.rollback(kTx).toVoidRc(kdbBase, info)
       ok(),
 
     safeDisposeFn: proc(): CoreDbRc[void] =
       const info =  "safeDisposeFn()"
-      if db.adbBase.api.isTop(aTx):
-        ? db.adbBase.api.rollback(aTx).toVoidRc(db, info)
-      if db.kdbBase.api.isTop(kTx):
-        ? db.kdbBase.api.rollback(kTx).toVoidRc(db, info)
+      if adbApi.isTop(aTx): ? adbApi.rollback(aTx).toVoidRc(adbBase, info)
+      if kdbApi.isTop(kTx): ? kdbApi.rollback(kTx).toVoidRc(kdbBase, info)
       ok())
+
+proc cptMethods(
+    tracer: AristoTracerRef;
+      ): CoreDbCaptFns =
+  let
+    tracer = tracer         # So it can savely be captured
+    db = tracer.parent      # Will not change and can be captured
+    log = tracer.topInst()  # Ditto
+
+  CoreDbCaptFns(
+    recorderFn: proc(): CoreDbRef =
+      db,
+
+    logDbFn: proc(): TableRef[Blob,Blob] =
+      log.kLog,
+
+    getFlagsFn: proc(): set[CoreDbCaptFlags] =
+      log.flags,
+
+    forgetFn: proc() =
+      if tracer.pop():
+        tracer.restore())
 
 
 proc baseMethods(
@@ -105,10 +122,20 @@ proc baseMethods(
     A:  typedesc;
     K:  typedesc;
       ): CoreDbBaseFns =
-  CoreDbBaseFns(
-    verifyFn: proc(trie: CoreDbTrieRef): bool =
-      db.adbBase.verify(trie),
 
+  proc tracerSetup(
+      db: AristoCoreDbRef;
+      flags: set[CoreDbCaptFlags];
+        ): CoreDxCaptRef =
+    if db.tracer.isNil:
+      db.tracer = AristoTracerRef(parent: db)
+      db.tracer.init(db.kdbBase, db.adbBase, flags)
+    else:
+      db.tracer.push(flags)
+    CoreDxCaptRef(methods: db.tracer.cptMethods)
+
+
+  CoreDbBaseFns(
     backendFn: proc(): CoreDbBackendRef =
       db.bless(AristoCoreDbBE()),
 
@@ -118,9 +145,6 @@ proc baseMethods(
 
     levelFn: proc(): int =
       db.adbBase.getLevel,
-
-    tryHashFn: proc(trie: CoreDbTrieRef): CoreDbRc[Hash256] =
-      db.adbBase.tryHash(trie, "tryHashFn()"),
 
     rootHashFn: proc(trie: CoreDbTrieRef): CoreDbRc[Hash256] =
       db.adbBase.rootHash(trie, "rootHashFn()"),
@@ -134,33 +158,17 @@ proc baseMethods(
     legacySetupFn: proc() =
       discard,
 
-    getTrieFn: proc(
-        kind: CoreDbSubTrie;
-        root: Hash256;
-        address: Option[EthAddress];
-          ): CoreDbRc[CoreDbTrieRef] =
-      db.adbBase.getTrie(kind, root, address, "getTrieFn()"),
+    newKvtFn: proc(sharedTable: bool): CoreDbRc[CoreDxKvtRef] =
+      db.kdbBase.newKvtHandler(sharedTable, "newKvtFn()"),
 
-    newKvtFn: proc(namespace: DbNamespace, saveMode: CoreDbSaveFlags): CoreDbRc[CoreDxKvtRef] =
-      # TODO: use namespace
-      db.kdbBase.gc()
-      db.kdbBase.newKvtHandler(saveMode, "newKvtFn()"),
+    newCtxFn: proc(): CoreDbCtxRef =
+      db.adbBase.ctx,
 
-    newMptFn: proc(
-        trie: CoreDbTrieRef;
-        prune: bool; # ignored
-        saveMode: CoreDbSaveFlags;
-          ): CoreDbRc[CoreDxMptRef] =
-      db.adbBase.gc()
-      db.adbBase.newMptHandler(trie, saveMode, "newMptFn()"),
+    newCtxFromTxFn: proc(r: Hash256; k: CoreDbSubTrie): CoreDbRc[CoreDbCtxRef] =
+      CoreDbCtxRef.init(db.adbBase, r, k),
 
-    newAccFn: proc(
-        trie: CoreDbTrieRef;
-        prune: bool; # ignored
-        saveMode: CoreDbSaveFlags;
-          ): CoreDbRc[CoreDxAccRef] =
-      db.adbBase.gc()
-      ok(? db.adbBase.newAccHandler(trie, saveMode, "newAccFn()")),
+    swapCtxFn: proc(ctx: CoreDbCtxRef): CoreDbCtxRef =
+      db.adbBase.swapCtx(ctx),
 
     beginFn: proc(): CoreDbRc[CoreDxTxRef] =
       const info = "beginFn()"
@@ -169,11 +177,8 @@ proc baseMethods(
         kTx = ? db.kdbBase.txBegin(info)
       ok(db.bless CoreDxTxRef(methods: db.txMethods(aTx, kTx))),
 
-    getIdFn: proc(): CoreDbRc[CoreDxTxID] =
-      CoreDxTxID.notImplemented(db, "getIdFn()"),
-
     newCaptureFn: proc(flags: set[CoreDbCaptFlags]): CoreDbRc[CoreDxCaptRef] =
-      CoreDxCaptRef.notImplemented(db, "capture()"))
+      ok(db.bless db.tracerSetup(flags)))
 
 # ------------------------------------------------------------------------------
 # Private  constructor helpers
@@ -264,14 +269,10 @@ func toAristoProfData*(
       result.kvt = db.AristoCoreDbRef.kdbBase.api.KvtApiProfRef.data
 
 func toAristoApi*(dsc: CoreDxKvtRef): KvtApiRef =
-  doAssert not dsc.parent.isNil
-  doAssert dsc.parent.isAristo
   if dsc.parent.isAristo:
     return AristoCoreDbRef(dsc.parent).kdbBase.api
 
 func toAristoApi*(dsc: CoreDxMptRef): AristoApiRef =
-  doAssert not dsc.parent.isNil
-  doAssert dsc.parent.isAristo
   if dsc.parent.isAristo:
     return AristoCoreDbRef(dsc.parent).adbBase.api
 

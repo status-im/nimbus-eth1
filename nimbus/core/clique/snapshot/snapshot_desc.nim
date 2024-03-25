@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -69,8 +69,7 @@ proc append[K,V](rw: var RlpWriter; tab: Table[K,V]) =
   for key,value in tab.pairs:
     rw.append((key,value))
 
-proc read[K,V](rlp: var Rlp;
-        Q: type Table[K,V]): Q {.gcsafe, raises: [CatchableError].} =
+proc read[K,V](rlp: var Rlp; Q: type Table[K,V]): Q {.gcsafe, raises: [RlpError].} =
   for w in rlp.items:
     let (key,value) = w.read((K,V))
     result[key] = value
@@ -145,35 +144,35 @@ proc `blockHash=`*(s: Snapshot; hash: Hash256) =
 proc loadSnapshot*(cfg: CliqueCfg; hash: Hash256):
                  Result[Snapshot,CliqueError] =
   ## Load an existing snapshot from the database.
-  var s = Snapshot(cfg: cfg)
+  var
+    s = Snapshot(cfg: cfg)
   try:
-    let rc = s.cfg.db.newKvt(cliqueSnapshot, Shared).get(hash.data)
+    let rc = s.cfg.db.newKvt().get(hash.cliqueSnapshotKey.toOpenArray)
     if rc.isOk:
       s.data = rc.value.decode(SnapshotData)
     else:
       if rc.error.error != KvtNotFound:
         error logTxt "get() failed", error=($$rc.error)
       return err((errSnapshotLoad,""))
-  except CatchableError as e:
+  except RlpError as e:
     return err((errSnapshotLoad, $e.name & ": " & e.msg))
   ok(s)
 
 # clique/snapshot.go(104): func (s *Snapshot) store(db [..]
 proc storeSnapshot*(cfg: CliqueCfg; s: Snapshot): CliqueOkResult =
   ## Insert the snapshot into the database.
-  try:
-    let
-      val = rlp.encode(s.data)
-      kvt = s.cfg.db.newKvt(cliqueSnapshot, Companion)
-    kvt.put(s.data.blockHash.data, val).isOkOr:
-      error logTxt "put() failed", `error`=($$error)
-    kvt.persistent()
+  let
+    key = s.data.blockHash.cliqueSnapshotKey
+    val = rlp.encode(s.data)
+    db  = s.cfg.db.newKvt(sharedTable = false) # bypass block chain txs
+  defer: db.forget()
+  let rc = db.put(key.toOpenArray, val)
+  if rc.isErr:
+    error logTxt "put() failed", `error`=($$rc.error)
+  db.persistent()
 
-    cfg.nSnaps.inc
-    cfg.snapsData += val.len.uint
-  except CatchableError as e:
-    return err((errSnapshotStore, $e.name & ": " & e.msg))
-
+  cfg.nSnaps.inc
+  cfg.snapsData += val.len.uint
   ok()
 
 # ------------------------------------------------------------------------------

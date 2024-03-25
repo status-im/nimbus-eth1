@@ -246,11 +246,11 @@ proc setupEthRpc*(
       raise newException(ValueError, "Account locked, please unlock it first")
     result = sign(acc.privateKey, cast[string](message))
 
-  server.rpc("eth_signTransaction") do(data: EthSend) -> seq[byte]:
+  server.rpc("eth_signTransaction") do(data: TransactionArgs) -> seq[byte]:
     ## Signs a transaction that can be submitted to the network at a later time using with
     ## eth_sendRawTransaction
     let
-      address = data.`from`.ethAddr
+      address = data.`from`.get(w3Address()).ethAddr
       acc     = ctx.am.getAccount(address).tryGet()
 
     if not acc.unlocked:
@@ -263,14 +263,14 @@ proc setupEthRpc*(
       signedTx = signTransaction(tx, acc.privateKey, com.chainId, eip155)
     result    = rlp.encode(signedTx)
 
-  server.rpc("eth_sendTransaction") do(data: EthSend) -> Web3Hash:
+  server.rpc("eth_sendTransaction") do(data: TransactionArgs) -> Web3Hash:
     ## Creates new message call transaction or a contract creation, if the data field contains code.
     ##
     ## obj: the transaction object.
     ## Returns the transaction hash, or the zero hash if the transaction is not yet available.
     ## Note: Use eth_getTransactionReceipt to get the contract address, after the transaction was mined, when you created a contract.
     let
-      address = data.`from`.ethAddr
+      address = data.`from`.get(w3Address()).ethAddr
       acc     = ctx.am.getAccount(address).tryGet()
 
     if not acc.unlocked:
@@ -301,7 +301,7 @@ proc setupEthRpc*(
       raise newException(ValueError, res.error)
     result = txHash.w3Hash
 
-  server.rpc("eth_call") do(call: EthCall, quantityTag: BlockTag) -> seq[byte]:
+  server.rpc("eth_call") do(call: TransactionArgs, quantityTag: BlockTag) -> seq[byte]:
     ## Executes a new message call immediately without creating a transaction on the block chain.
     ##
     ## call: the transaction call object.
@@ -313,7 +313,7 @@ proc setupEthRpc*(
       res      = rpcCallEvm(callData, header, com)
     result = res.output
 
-  server.rpc("eth_estimateGas") do(call: EthCall) -> Web3Quantity:
+  server.rpc("eth_estimateGas") do(call: TransactionArgs) -> Web3Quantity:
     ## Generates and returns an estimate of how much gas is necessary to allow the transaction to complete.
     ## The transaction will not be added to the blockchain. Note that the estimate may be significantly more than
     ## the amount of gas actually used by the transaction, for a variety of reasons including EVM mechanics and node performance.
@@ -322,7 +322,6 @@ proc setupEthRpc*(
     ## quantityTag:  integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns the amount of gas used.
     let
-      # TODO: use latest spec EthCall
       header   = chainDB.headerFromTag(blockId("latest"))
       callData = callData(call)
       # TODO: DEFAULT_RPC_GAS_CAP should configurable
@@ -576,6 +575,19 @@ proc setupEthRpc*(
       return Opt.some(recs)
     except CatchableError:
       return Opt.none(seq[ReceiptObject])
+
+  server.rpc("eth_createAccessList") do(args: TransactionArgs, quantityTag: BlockTag) -> AccessListResult:
+    try:
+      let
+        header = chainDB.headerFromTag(quantityTag)
+        args = callData(args)
+
+      return createAccessList(header, com, args)
+    except CatchableError as exc:
+      return AccessListResult(
+        error: some("createAccessList error: " & exc.msg),
+      )
+
 #[
   server.rpc("eth_newFilter") do(filterOptions: FilterOptions) -> int:
     ## Creates a filter object, based on filter options, to notify when the state changes (logs).

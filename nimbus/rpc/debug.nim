@@ -15,6 +15,7 @@ import
   ../tracer, ../vm_types,
   ../common/common,
   ../beacon/web3_eth_conv,
+  ../core/tx_pool,
   web3/conversions
 
 {.push raises: [].}
@@ -41,7 +42,7 @@ proc traceOptionsToFlags(options: Option[TraceOptions]): set[TracerFlags] =
     if opts.disableState.isTrue  : result.incl TracerFlags.DisableState
     if opts.disableStateDiff.isTrue: result.incl TracerFlags.DisableStateDiff
 
-proc setupDebugRpc*(com: CommonRef, rpcsrv: RpcServer) =
+proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, rpcsrv: RpcServer) =
   let chainDB = com.db
 
   rpcsrv.rpc("debug_traceTransaction") do(data: Web3Hash, options: Option[TraceOptions]) -> JsonNode:
@@ -130,3 +131,49 @@ proc setupDebugRpc*(com: CommonRef, rpcsrv: RpcServer) =
     let
       header = chainDB.headerFromTag(quantityTag)
     result = chainDB.setHead(header)
+
+  rpcsrv.rpc("debug_getRawBlock") do(quantityTag: BlockTag) -> seq[byte]:
+    ## Returns an RLP-encoded block.
+    let
+      header = chainDB.headerFromTag(quantityTag)
+      blockHash = chainDB.getBlockHash(header.blockNumber)
+
+    var
+      body = chainDB.getBlockBody(blockHash)
+      ethBlock = EthBlock(
+        header: header,
+        txs: system.move(body.transactions),
+        uncles: system.move(body.uncles),
+        withdrawals: system.move(body.withdrawals),
+      )
+
+    result = rlp.encode(ethBlock)
+
+  rpcsrv.rpc("debug_getRawHeader") do(quantityTag: BlockTag) -> seq[byte]:
+    ## Returns an RLP-encoded header.
+    let header = chainDB.headerFromTag(quantityTag)
+    result = rlp.encode(header)
+
+  rpcsrv.rpc("debug_getRawReceipts") do(quantityTag: BlockTag) -> seq[seq[byte]]:
+    ## Returns an array of EIP-2718 binary-encoded receipts.
+    let header = chainDB.headerFromTag(quantityTag)
+    for receipt in chainDB.getReceipts(header.receiptRoot):
+      result.add rlp.encode(receipt)
+
+  rpcsrv.rpc("debug_getRawTransaction") do(data: Web3Hash) -> seq[byte]:
+    ## Returns an EIP-2718 binary-encoded transaction.
+    let txHash = ethHash data
+    let res = txPool.getItem(txHash)
+    if res.isOk:
+      return rlp.encode(res.get().tx)
+
+    let txDetails = chainDB.getTransactionKey(txHash)
+    if txDetails.index < 0:
+      raise newException(ValueError, "Transaction not found " & data.toHex)
+
+    let header = chainDB.getBlockHeader(txDetails.blockNumber)
+    var tx: Transaction
+    if chainDB.getTransaction(header.txRoot, txDetails.index, tx):
+      return rlp.encode(tx)
+
+    raise newException(ValueError, "Transaction not found " & data.toHex)

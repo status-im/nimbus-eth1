@@ -221,6 +221,7 @@ proc mergeData(
       let rc = db.merge(proof, root) # , noisy=noisy)
       xCheckRc rc.error == 0
       rc.value
+    discard nMerged
 
   let merged = db.mergeList(leafs, noisy=noisy)
   xCheck merged.error in {AristoError(0), MergeLeafPathCachedAlready}
@@ -328,7 +329,7 @@ proc testBackendConsistency*(
 
     var
       mdbPreSave = ""
-      rdbPreSave = ""
+      rdbPreSave {.used.} = ""
     when true and false:
       mdbPreSave = mdb.pp() # backendOk = true)
       rdbPreSave = rdb.pp() # backendOk = true)

@@ -688,3 +688,11 @@ when isMainModule:
       waitFor exportLCOptimisticUpdate(
         config.restUrl, string config.dataDir, cfg, forkDigests
       )
+    of BeaconCmd.exportHistoricalRoots:
+      waitFor exportHistoricalRoots(
+        config.restUrl, string config.dataDir, cfg, forkDigests
+      )
+    of BeaconCmd.exportBlockProofBellatrix:
+      cmdExportBlockProofBellatrix(
+        string config.dataDir, string config.eraDir, config.slotNumber
+      )

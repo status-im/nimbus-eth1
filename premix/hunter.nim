@@ -117,7 +117,7 @@ proc huntProblematicBlock(blockNumber: UInt256): ValidationResult =
   if validationResult != ValidationResult.OK:
     transaction.rollback()
     putAncestorsIntoDB(vmState, com.db)
-    dumpDebuggingMetaData(com, thisBlock.header, thisBlock.body, vmState, false)
+    vmState.dumpDebuggingMetaData(thisBlock.header, thisBlock.body, false)
 
   result = validationResult
 

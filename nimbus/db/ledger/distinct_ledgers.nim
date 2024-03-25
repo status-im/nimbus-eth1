@@ -71,7 +71,10 @@ proc db*(led: SomeLedger): CoreDbRef =
   led.distinctBase.parent
 
 proc rootHash*(led: SomeLedger): Hash256 =
-  const info = "SomeLedger/rootHash(): "
+  when SomeLedger is AccountLedger:
+    const info = "AccountLedger/rootHash(): "
+  else:
+    const info = "StorageLedger/rootHash(): "
   let rc = led.distinctBase.getTrie().rootHash()
   if rc.isErr:
     raiseAssert info & $$rc.error
@@ -90,14 +93,21 @@ proc init*(
     root: Hash256;
     pruneOk = true;
       ): T =
-  db.newAccMpt(root, pruneOk, Shared).T
-
-proc init*(
-    T: type AccountLedger;
-    db: CoreDbRef;
-    pruneOk = true;
-      ): T =
-  db.newAccMpt(EMPTY_ROOT_HASH, pruneOk, Shared).AccountLedger
+  const
+    info = "AccountLedger.init(): "
+  let
+    ctx = db.ctx
+    trie = block:
+      let rc = ctx.newTrie(AccountsTrie, root)
+      if rc.isErr:
+        raiseAssert info & $$rc.error
+      rc.value
+    mpt =  block:
+      let rc = ctx.getAcc(trie)
+      if rc.isErr:
+        raiseAssert info & $$rc.error
+      rc.value
+  mpt.T
 
 proc fetch*(al: AccountLedger; eAddr: EthAddress): Result[CoreDbAccount,void] =
   ## Using `fetch()` for trie data retrieval
@@ -150,18 +160,19 @@ proc init*(
   ## https://github.com/status-im/nimbus-eth1/issues/932.)
   const
     info = "StorageLedger/init(): "
+    noisy = true
   let
     db = al.distinctBase.parent
     stt = account.stoTrie
-
   if not stt.isNil and reHashOk:
     let rc = al.distinctBase.getTrie.rootHash
     if rc.isErr:
       raiseAssert "re-hash oops, error=" & $$rc.error
   let
-    trie = if stt.isNil: db.getTrie(account.address) else: stt
+    ctx = db.ctx
+    trie = if stt.isNil: ctx.newTrie(account.address) else: stt
     mpt = block:
-      let rc = db.newMpt(trie, pruneOk, Shared)
+      let rc = ctx.getMpt(trie, pruneOk)
       if rc.isErr:
         raiseAssert info & $$rc.error
       rc.value
@@ -195,7 +206,7 @@ iterator storage*(
     info = "storage(): "
   let trie = account.stoTrie
   if not trie.isNil:
-    let mpt = al.distinctBase.parent.newMpt(trie, saveMode=Shared).valueOr:
+    let mpt = al.distinctBase.parent.ctx.getMpt(trie).valueOr:
       raiseAssert info & $$error
     for (key,val) in mpt.pairs:
       yield (key,val)

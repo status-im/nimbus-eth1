@@ -46,7 +46,7 @@ func init*(
 ): T {.raises: [ValidationError].} =
   TransactionObject(
     blockHash: some(w3Hash header.blockHash),
-    blockNumber: some(Quantity(header.blockNumber.truncate(uint64))),
+    blockNumber: some(rpc_types.BlockNumber(header.blockNumber.truncate(uint64))),
     `from`: w3Addr tx.getSender(),
     gas: Quantity(tx.gasLimit),
     gasPrice: Quantity(tx.gasPrice),
@@ -76,7 +76,7 @@ func init*(
   let blockHash = header.blockHash
 
   var blockObject = BlockObject(
-    number: Quantity(header.blockNumber.truncate(uint64)),
+    number: rpc_types.BlockNumber(header.blockNumber.truncate(uint64)),
     hash: w3Hash blockHash,
     parentHash: w3Hash header.parentHash,
     nonce: some(FixedBytes[8](header.nonce)),
@@ -272,7 +272,7 @@ proc installEthApiHandlers*(
         raise newException(ValueError, "Unsupported block tag " & tag)
     else:
       let
-        blockNumber = quantityTag.number.toBlockNumber
+        blockNumber = quantityTag.number.uint64.toBlockNumber
         maybeBlock = (await historyNetwork.getBlock(blockNumber)).valueOr:
           raise newException(ValueError, error)
 

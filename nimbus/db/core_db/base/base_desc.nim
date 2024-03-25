@@ -14,8 +14,10 @@ import
   std/tables,
   eth/common,
   results,
-  ../../storage_types,
   ../../aristo/aristo_profile
+
+from ../../aristo
+  import PayloadRef
 
 # Annotation helpers
 {.pragma:  noRaise, gcsafe, raises: [].}
@@ -50,24 +52,31 @@ type
     stoTrie*:  CoreDbTrieRef ## Implies storage root sub-MPT
     codeHash*: Hash256
 
+  CoreDbPayloadRef* = ref object of PayloadRef
+    ## Extension of `Aristo` payload used in the tracer
+    blob*: Blob              ## Serialised version for accounts data
+
   CoreDbErrorCode* = enum
     Unset = 0
     Unspecified
-    RlpException
+
+    AccAddrMissing
+    AccNotFound
+    AccTxPending
+    AutoFlushFailed
+    CtxNotFound
+    HashNotAvailable
     KvtNotFound
     KvtTxPending
     MptNotFound
     MptTxPending
-    AccNotFound
-    AccAddrMissing
-    AccTxPending
-    RootNotFound
-    AutoFlushFailed
-    RootUnacceptable
-    HashNotAvailable
-    TrieLocked
-    StorageFailed
     NotImplemented
+    RlpException
+    RootNotFound
+    RootUnacceptable
+    StorageFailed
+    SubTrieUnacceptable
+    TrieLocked
 
   CoreDbSubTrie* = enum
     StorageTrie = 0
@@ -77,12 +86,6 @@ type
     TxTrie
     WithdrawalsTrie
 
-  CoreDbSaveFlags* = enum
-    Shared                    ## Shared, leaves changes in memory cache
-    AutoSave                  ## Shared, save changes on destruction
-    TopShot                   ## Separate copy of shared cache
-    Companion                 ## Separate clean cache
-
   CoreDbCaptFlags* {.pure.} = enum
     PersistPut
     PersistDel
@@ -90,72 +93,60 @@ type
   # --------------------------------------------------
   # Sub-descriptor: Misc methods for main descriptor
   # --------------------------------------------------
-  CoreDbBaseVerifyFn* = proc(trie: CoreDbTrieRef): bool {.noRaise.}
   CoreDbBaseBackendFn* = proc(): CoreDbBackendRef {.noRaise.}
   CoreDbBaseDestroyFn* = proc(flush = true) {.noRaise.}
-  CoreDbBaseTryHashFn* = proc(vid: CoreDbTrieRef): CoreDbRc[Hash256] {.noRaise.}
   CoreDbBaseRootHashFn* = proc(
     trie: CoreDbTrieRef): CoreDbRc[Hash256] {.noRaise.}
   CoreDbBaseTriePrintFn* = proc(vid: CoreDbTrieRef): string {.noRaise.}
   CoreDbBaseErrorPrintFn* = proc(e: CoreDbErrorRef): string {.noRaise.}
   CoreDbBaseInitLegaSetupFn* = proc() {.noRaise.}
-  CoreDbBaseGetTrieFn* = proc(
-    trie: CoreDbSubTrie; root: Hash256; address: Option[EthAddress];
-    ): CoreDbRc[CoreDbTrieRef] {.noRaise.}
   CoreDbBaseLevelFn* = proc(): int {.noRaise.}
-  CoreDbBaseKvtFn* = proc(
-    namespace: DbNamespace, saveMode: CoreDbSaveFlags): CoreDbRc[CoreDxKvtRef] {.noRaise.}
-  CoreDbBaseMptFn* = proc(
-    root: CoreDbTrieRef; prune: bool; saveMode: CoreDbSaveFlags;
-    ): CoreDbRc[CoreDxMptRef] {.noRaise.}
-  CoreDbBaseAccFn* = proc(
-    root: CoreDbTrieRef; prune: bool; saveMode: CoreDbSaveFlags;
-    ): CoreDbRc[CoreDxAccRef] {.noRaise.}
-  CoreDbBaseTxGetIdFn* = proc(): CoreDbRc[CoreDxTxID] {.noRaise.}
+  CoreDbBaseNewKvtFn* =
+    proc(sharedTable: bool): CoreDbRc[CoreDxKvtRef] {.noRaise.}
+  CoreDbBaseNewCtxFn* = proc(): CoreDbCtxRef {.noRaise.}
+  CoreDbBaseNewCtxFromTxFn* = proc(
+    root: Hash256; kind: CoreDbSubTrie;): CoreDbRc[CoreDbCtxRef] {.noRaise.}
+  CoreDbBaseSwapCtxFn* = proc(ctx: CoreDbCtxRef): CoreDbCtxRef {.noRaise.}
   CoreDbBaseTxBeginFn* = proc(): CoreDbRc[CoreDxTxRef] {.noRaise.}
   CoreDbBaseNewCaptFn* =
     proc(flgs: set[CoreDbCaptFlags]): CoreDbRc[CoreDxCaptRef] {.noRaise.}
   CoreDbBaseGetCaptFn* = proc(): CoreDbRc[CoreDxCaptRef] {.noRaise.}
 
   CoreDbBaseFns* = object
-    verifyFn*:      CoreDbBaseVerifyFn
-    backendFn*:     CoreDbBaseBackendFn
-    destroyFn*:     CoreDbBaseDestroyFn
-    tryHashFn*:     CoreDbBaseTryHashFn
-    rootHashFn*:    CoreDbBaseRootHashFn
-    triePrintFn*:   CoreDbBaseTriePrintFn
-    errorPrintFn*:  CoreDbBaseErrorPrintFn
-    legacySetupFn*: CoreDbBaseInitLegaSetupFn
-    getTrieFn*:     CoreDbBaseGetTrieFn
-    levelFn*:       CoreDbBaseLevelFn
+    backendFn*:      CoreDbBaseBackendFn
+    destroyFn*:      CoreDbBaseDestroyFn
+    rootHashFn*:     CoreDbBaseRootHashFn
+    triePrintFn*:    CoreDbBaseTriePrintFn
+    errorPrintFn*:   CoreDbBaseErrorPrintFn
+    legacySetupFn*:  CoreDbBaseInitLegaSetupFn
+    levelFn*:        CoreDbBaseLevelFn
 
     # Kvt constructor
-    newKvtFn*:      CoreDbBaseKvtFn
+    newKvtFn*:       CoreDbBaseNewKvtFn
 
-    # Hexary trie constructors
-    newMptFn*:      CoreDbBaseMptFn
-    newAccFn*:      CoreDbBaseAccFn
+    # MPT context constructor
+    newCtxFn*:       CoreDbBaseNewCtxFn
+    newCtxFromTxFn*: CoreDbBaseNewCtxFromTxFn
+    swapCtxFn*:      CoreDbBaseSwapCtxFn
 
     # Transactions constructors
-    getIdFn*:       CoreDbBaseTxGetIdFn
-    beginFn*:       CoreDbBaseTxBeginFn
+    beginFn*:        CoreDbBaseTxBeginFn
 
     # capture/tracer constructors
-    newCaptureFn*:  CoreDbBaseNewCaptFn
+    newCaptureFn*:   CoreDbBaseNewCaptFn
 
 
   # --------------------------------------------------
   # Sub-descriptor: KVT methods
   # --------------------------------------------------
   CoreDbKvtBackendFn* = proc(): CoreDbKvtBackendRef {.noRaise.}
-  CoreDbKvtGetFn* = proc(k: openArray[byte]): CoreDbRc[Blob] {.noRaise.}
+  CoreDbKvtGetFn* = proc(k: openArray[byte]): CoreDbRc[Blob] {.noRaise.} 
   CoreDbKvtDelFn* = proc(k: openArray[byte]): CoreDbRc[void] {.noRaise.}
   CoreDbKvtPutFn* =
     proc(k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] {.noRaise.}
   CoreDbKvtPersistentFn* = proc(): CoreDbRc[void] {.noRaise.}
   CoreDbKvtForgetFn* = proc(): CoreDbRc[void] {.noRaise.}
   CoreDbKvtHasKeyFn* = proc(k: openArray[byte]): CoreDbRc[bool] {.noRaise.}
-  CoreDbKvtNamespaceFn* = proc(ns: DbNamespace): CoreDxKvtRef {.noRaise.}
 
   CoreDbKvtFns* = object
     ## Methods for key-value table
@@ -166,8 +157,31 @@ type
     hasKeyFn*:     CoreDbKvtHasKeyFn
     persistentFn*: CoreDbKvtPersistentFn
     forgetFn*:     CoreDbKvtForgetFn
-    namespaceFn*:  CoreDbKvtNamespaceFn
 
+  # --------------------------------------------------
+  # Sub-descriptor: MPT context methods
+  # --------------------------------------------------
+  CoreDbCtxFromTxFn* =
+    proc(root: Hash256; kind: CoreDbSubTrie): CoreDbRc[CoreDbCtxRef] {.noRaise.}
+  CoreDbCtxNewTrieFn* = proc(
+    trie: CoreDbSubTrie; root: Hash256; address: Option[EthAddress];
+    ): CoreDbRc[CoreDbTrieRef] {.noRaise.}
+  CoreDbCtxGetMptFn* = proc(
+    root: CoreDbTrieRef; prune: bool): CoreDbRc[CoreDxMptRef] {.noRaise.}
+  CoreDbCtxGetAccFn* = proc(
+    root: CoreDbTrieRef; prune: bool): CoreDbRc[CoreDxAccRef] {.noRaise.}
+  CoreDbCtxForgetFn* = proc() {.noRaise.}
+
+  CoreDbCtxFns* = object
+    ## Methods for context maniulation
+    newTrieFn*: CoreDbCtxNewTrieFn
+    getMptFn*:  CoreDbCtxGetMptFn
+    getAccFn*:  CoreDbCtxGetAccFn
+    forgetFn*:  CoreDbCtxForgetFn
+
+  # --------------------------------------------------
+  # Sub-descriptor: MPT context methods
+  # --------------------------------------------------
 
   # --------------------------------------------------
   # Sub-descriptor: generic  Mpt/hexary trie methods
@@ -199,13 +213,13 @@ type
     getTrieFn*:    CoreDbMptGetTrieFn
     isPruningFn*:  CoreDbMptIsPruningFn
     persistentFn*: CoreDbMptPersistentFn
-    forgetFn*:     CoreDbMptForgetFn
+
 
   # ----------------------------------------------------
   # Sub-descriptor: Mpt/hexary trie methods for accounts
   # ------------------------------------------------------
   CoreDbAccBackendFn* = proc(): CoreDbAccBackendRef {.noRaise.}
-  CoreDbAccNewMptFn* = proc(): CoreDbRc[CoreDxMptRef] {.noRaise.}
+  CoreDbAccGetMptFn* = proc(): CoreDbRc[CoreDxMptRef] {.noRaise.}
   CoreDbAccFetchFn* = proc(k: EthAddress): CoreDbRc[CoreDbAccount] {.noRaise.}
   CoreDbAccDeleteFn* = proc(k: EthAddress): CoreDbRc[void] {.noRaise.}
   CoreDbAccStoFlushFn* = proc(k: EthAddress): CoreDbRc[void] {.noRaise.}
@@ -219,7 +233,7 @@ type
   CoreDbAccFns* = object
     ## Methods for trie objects
     backendFn*:    CoreDbAccBackendFn
-    newMptFn*:     CoreDbAccNewMptFn
+    getMptFn*:     CoreDbAccGetMptFn
     fetchFn*:      CoreDbAccFetchFn
     deleteFn*:     CoreDbAccDeleteFn
     stoFlushFn*:   CoreDbAccStoFlushFn
@@ -228,7 +242,7 @@ type
     getTrieFn*:    CoreDbAccGetTrieFn
     isPruningFn*:  CoreDbAccIsPruningFn
     persistentFn*: CoreDbAccPersistentFn
-    forgetFn*:     CoreDbAccForgetFn
+
 
   # --------------------------------------------------
   # Sub-descriptor: Transaction frame management
@@ -246,16 +260,6 @@ type
     disposeFn*:     CoreDbTxDisposeFn
     safeDisposeFn*: CoreDbTxSafeDisposeFn
 
-  # --------------------------------------------------
-  # Sub-descriptor: Transaction ID management
-  # --------------------------------------------------
-  CoreDbTxIdSetIdFn* = proc(): CoreDbRc[void] {.noRaise.}
-  CoreDbTxIdActionFn* = proc() {.noRaise.}
-  CoreDbTxIdRoWrapperFn* =
-    proc(action: CoreDbTxIdActionFn): CoreDbRc[void] {.noRaise.}
-  CoreDbTxIdFns* = object
-    roWrapperFn*: CoreDbTxIdRoWrapperFn
-
 
   # --------------------------------------------------
   # Sub-descriptor: capture recorder methods
@@ -263,13 +267,14 @@ type
   CoreDbCaptRecorderFn* = proc(): CoreDbRef {.noRaise.}
   CoreDbCaptLogDbFn* = proc(): TableRef[Blob,Blob] {.noRaise.}
   CoreDbCaptFlagsFn* = proc(): set[CoreDbCaptFlags] {.noRaise.}
-  CoreDbCaptForgetFn* = proc(): CoreDbRc[void] {.noRaise.}
+  CoreDbCaptForgetFn* = proc() {.noRaise.}
 
   CoreDbCaptFns* = object
     recorderFn*: CoreDbCaptRecorderFn
     logDbFn*: CoreDbCaptLogDbFn
     getFlagsFn*: CoreDbCaptFlagsFn
     forgetFn*: CoreDbCaptForgetFn
+
 
   # --------------------------------------------------
   # Production descriptors
@@ -306,10 +311,16 @@ type
     ## Backend wrapper for direct backend access
     parent*: CoreDbRef
 
-  CoreDxKvtRef* = ref object of RootRef
+  CoreDxKvtRef* = ref CoreDxKvtObj
+  CoreDxKvtObj* = object of RootObj
     ## Statically initialised Key-Value pair table living in `CoreDbRef`
     parent*: CoreDbRef
     methods*: CoreDbKvtFns
+
+  CoreDbCtxRef* = ref object of RootRef
+    ## Context for `CoreDxMptRef` and `CoreDxAccRef`
+    parent*: CoreDbRef
+    methods*: CoreDbCtxFns
 
   CoreDxMptRef* = ref object of RootRef
     ## Hexary/Merkle-Patricia tree derived from `CoreDbRef`, will be
@@ -340,11 +351,6 @@ type
     ## Transaction descriptor derived from `CoreDbRef`
     parent*: CoreDbRef
     methods*: CoreDbTxFns
-
-  CoreDxTxID* = ref object
-    ## Transaction ID descriptor derived from `CoreDbRef`
-    parent*: CoreDbRef
-    methods*: CoreDbTxIdFns
 
   CoreDxCaptRef* = ref object
     ## Db transaction tracer derived from `CoreDbRef`

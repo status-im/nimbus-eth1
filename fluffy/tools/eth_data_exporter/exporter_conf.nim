@@ -69,6 +69,8 @@ type
     exportLCUpdates = "Export Light Client Updates"
     exportLCFinalityUpdate = "Export Light Client Finality Update"
     exportLCOptimisticUpdate = "Export Light Client Optimistic Update"
+    exportHistoricalRoots = "Export historical roots from the beacon state (SSZ format)"
+    exportBlockProofBellatrix = "Export Bellatrix EL block proof from era files"
 
   ExporterConf* = object
     logLevel* {.
@@ -207,6 +209,13 @@ type
         discard
       of exportLCOptimisticUpdate:
         discard
+      of exportHistoricalRoots:
+        discard
+      of exportBlockProofBellatrix:
+        slotNumber* {.
+          desc: "The slot for which to export the block proof", name: "slot"
+        .}: uint64
+        eraDir* {.desc: "Directory containing era files", name: "era-dir".}: InputDir
 
 proc parseCmdArg*(T: type Web3Url, p: string): T {.raises: [ValueError].} =
   let

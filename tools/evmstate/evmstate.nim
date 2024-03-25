@@ -98,25 +98,27 @@ proc writeResultToStdout(stateRes: seq[StateResult]) =
   stdout.write(n.pretty)
   stdout.write("\n")
 
-proc dumpAccounts(db: LedgerRef): Table[EthAddress, DumpAccount] =
-  for accAddr in db.addresses():
-    let acc = DumpAccount(
-      balance : db.getBalance(accAddr),
-      nonce   : db.getNonce(accAddr),
-      root    : db.getStorageRoot(accAddr),
-      codeHash: db.getCodeHash(accAddr),
-      code    : db.getCode(accAddr),
-      key     : keccakHash(accAddr)
-    )
-    for k, v in db.storage(accAddr):
-      acc.storage[k] = v
-    result[accAddr] = acc
+when false:
+  proc dumpAccounts(db: LedgerRef): Table[EthAddress, DumpAccount] =
+    for accAddr in db.addresses():
+      let acc = DumpAccount(
+        balance : db.getBalance(accAddr),
+        nonce   : db.getNonce(accAddr),
+        root    : db.getStorageRoot(accAddr),
+        codeHash: db.getCodeHash(accAddr),
+        code    : db.getCode(accAddr),
+        key     : keccakHash(accAddr)
+      )
+      for k, v in db.storage(accAddr):
+        acc.storage[k] = v
+      result[accAddr] = acc
 
-proc dumpState(vmState: BaseVMState): StateDump =
-  StateDump(
-    root: vmState.readOnlyStateDB.rootHash,
-    accounts: dumpAccounts(vmState.stateDB)
-  )
+
+  proc dumpState(vmState: BaseVMState): StateDump =
+    StateDump(
+      root: vmState.readOnlyStateDB.rootHash,
+      accounts: dumpAccounts(vmState.stateDB)
+    )
 
 proc writeRootHashToStderr(vmState: BaseVMState) =
   let stateRoot = %{

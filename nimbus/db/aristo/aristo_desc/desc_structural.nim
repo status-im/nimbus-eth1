@@ -38,7 +38,7 @@ type
     RlpData                          ## Marked RLP encoded
     AccountData                      ## `Aristo account` with vertex IDs links
 
-  PayloadRef* = ref object
+  PayloadRef* = ref object of RootRef
     case pType*: PayloadType
     of RawData:
       rawBlob*: Blob                 ## Opaque data, default value
@@ -66,6 +66,11 @@ type
     key*: array[16,HashKey]          ## Merkle hash/es for vertices
 
   # ----------------------
+
+  VidVtxPair* = object
+    ## Handy helper structure
+    vid*: VertexID                    ## Table lookup vertex ID (if any)
+    vtx*: VertexRef                   ## Reference to vertex
 
   FilterRef* = ref object
     ## Delta layer with expanded sequences for quick access.
@@ -305,6 +310,12 @@ func dup*(final: LayerFinalRef): LayerFinalRef =
     fRpp:  final.fRpp,
     vGen:  final.vGen,
     dirty: final.dirty)
+
+func dup*(wp: VidVtxPair): VidVtxPair =
+  ## Safe copy of `wp` argument
+  VidVtxPair(
+    vid: wp.vid,
+    vtx: wp.vtx.dup)
 
 # ---------------
 

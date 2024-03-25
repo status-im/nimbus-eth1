@@ -32,7 +32,7 @@ type
   MultiKeysRef* = ref MultiKeys
 
   Group* = object
-    first*, last*: int16
+    first*, last*: int
 
   BranchGroup* = object
     mask*: uint

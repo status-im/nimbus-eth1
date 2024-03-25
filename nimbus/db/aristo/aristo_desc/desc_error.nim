@@ -249,17 +249,20 @@ type
 
     # Transaction wrappers
     TxArgStaleTx
+    TxArgsUseless
     TxBackendNotWritable
+    TxGarbledSpan
     TxNoPendingTx
-    TxPendingTx
+    TxNotFound
     TxNotTopTx
+    TxPendingTx
     TxStackGarbled
     TxStackUnderflow
-    TxGarbledSpan
 
     # Functions from `aristo_desc.nim`
     MustBeOnCentre
     NotAllowedOnCentre
+    StaleDescriptor
 
     # Functions from `aristo_utils.nim`
     AccRlpDecodingError
@@ -270,10 +273,10 @@ type
 
     # Miscelaneous handy helpers
     AccRootUnacceptable
-    MptContextMissing
     MptRootUnacceptable
     MptRootMissing
     NotImplemented
+    TrieInvalid
     VidContextLocked
 
 # End

@@ -190,7 +190,7 @@ proc ppKey(key: HashKey; db: AristoDbRef; pfx = true): string =
         return (vids, "+")
   if pfx:
     result = "£"
-  if key.len == 0 or key.to(Hash256) == Hash256():
+  if key.to(Hash256) == Hash256():
     result &= "©"
   elif not key.isValid:
     result &= "ø"
@@ -751,27 +751,30 @@ proc pp*(
     indent = 4;
     backendOk = false;
     filterOk = true;
+    topOk = true;
+    stackOk = true;
       ): string =
-  result = db.layersCc.pp(db, indent=indent) & indent.toPfx
-  if 0 < db.stack.len:
-    result &= " level=" & $db.stack.len
-    when false: # or true:
-      let layers = @[db.top] & db.stack.reversed
-      var lStr = ""
-      for n,w in layers:
-        let
-          m = layers.len - n - 1
-          l = db.layersCc m
-          a = w.delta.kMap.values.toSeq.filterIt(not it.isValid).len
-          c = l.delta.kMap.values.toSeq.filterIt(not it.isValid).len
-        result &= " (" & $(w.delta.kMap.len - a) & "," & $a
-        lStr &= " " & $m & "=(" & $(l.delta.kMap.len - c) & "," & $c
-      result &= " --" & lStr
-    result &= indent.toPfx
+  if topOk:
+    result = db.layersCc.pp(db, indent=indent)
+  let stackOnlyOk = stackOk and not (topOk or filterOk or backendOk)
+  if not stackOnlyOk:
+    result &= indent.toPfx & " level=" & $db.stack.len
+  if (stackOk and 0 < db.stack.len) or stackOnlyOk:
+    let layers = @[db.top] & db.stack.reversed
+    var lStr = ""
+    for n,w in layers:
+      let
+        m = layers.len - n - 1
+        l = db.layersCc m
+        a = w.delta.kMap.values.toSeq.filterIt(not it.isValid).len
+        c = l.delta.kMap.values.toSeq.filterIt(not it.isValid).len
+      result &= "(" & $(w.delta.kMap.len - a) & "," & $a & ")"
+      lStr &= " " & $m & "=(" & $(l.delta.kMap.len - c) & "," & $c & ")"
+    result &= " =>" & lStr
   if backendOk:
-    result &= db.backend.pp(db)
+    result &= indent.toPfx & db.backend.pp(db)
   elif filterOk:
-    result &= db.roFilter.ppFilter(db, indent+1)
+    result &= indent.toPfx & db.roFilter.ppFilter(db, indent+1)
 
 proc pp*(sdb: MerkleSignRef; indent = 4): string =
   "count=" & $sdb.count &

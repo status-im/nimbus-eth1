@@ -215,10 +215,7 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
         )
       else:
         # Get it from binary file containing SSZ encoded accumulator
-        try:
-          SSZ.decode(finishedAccumulator, FinishedAccumulator)
-        except SszError as err:
-          raiseAssert "Invalid baked-in accumulator: " & err.msg
+        loadAccumulator()
 
     historyNetwork =
       if Network.history in config.networks:
@@ -329,7 +326,13 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
   ## Starting the JSON-RPC APIs
   if config.rpcEnabled:
     let ta = initTAddress(config.rpcAddress, config.rpcPort)
-    var rpcHttpServerWithProxy = RpcProxy.new([ta], config.proxyUri)
+
+    let rpcHttpServer = RpcHttpServer.new()
+    # Note: Set maxRequestBodySize to 4MB instead of 1MB as there are blocks
+    # that reach that limit (in hex, for gossip method).
+    rpcHttpServer.addHttpServer(ta, maxRequestBodySize = 4 * 1_048_576)
+    var rpcHttpServerWithProxy = RpcProxy.new(rpcHttpServer, config.proxyUri)
+
     rpcHttpServerWithProxy.installDiscoveryApiHandlers(d)
     rpcHttpServerWithProxy.installWeb3ApiHandlers()
     if stateNetwork.isSome():

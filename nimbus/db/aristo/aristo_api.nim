@@ -16,9 +16,11 @@ import
   std/times,
   eth/[common, trie/nibbles],
   results,
-  "."/[aristo_delete, aristo_desc, aristo_desc/desc_backend, aristo_fetch,
-       aristo_get, aristo_hashify, aristo_hike, aristo_init, aristo_merge,
-       aristo_path, aristo_profile, aristo_serialise, aristo_tx, aristo_vid]
+  ./aristo_desc/desc_backend,
+  ./aristo_init/memory_db,
+  "."/[aristo_delete, aristo_desc, aristo_fetch, aristo_get, aristo_hashify,
+       aristo_hike, aristo_init, aristo_merge, aristo_path, aristo_profile,
+       aristo_serialise, aristo_tx, aristo_vid]
 
 export
   AristoDbProfListRef
@@ -26,6 +28,13 @@ export
 const
   AutoValidateApiHooks = defined(release).not
     ## No validatinon needed for production suite.
+
+  AristoPersistentBackendOk = false
+    ## Set true for persistent backend profiling (which needs an extra
+    ## link library.)
+
+when AristoPersistentBackendOk:
+  import ./aristo_init/rocks_db
 
 # Annotation helper(s)
 {.pragma: noRaise, gcsafe, raises: [].}
@@ -109,66 +118,35 @@ type
       ## A non centre descriptor should always be destructed after use (see
       ## also# comments on `fork()`.)
 
-  AristoApiForkFn* =
-    proc(db: AristoDbRef;
-         rawTopLayer = false;
-        ): Result[AristoDbRef,AristoError]
-        {.noRaise.}
-      ## This function creates a new empty descriptor accessing the same
-      ## backend (if any) database as the argument `db`. This new descriptor
-      ## joins the list of descriptors accessing the same backend database.
-      ##
-      ## After use, any unused non centre descriptor should be destructed
-      ## via `forget()`. Not doing so will not only hold memory ressources
-      ## but might also cost computing ressources for maintaining and
-      ## updating backend filters when writing to the backend database .
-      ##
-      ## If the argument `rawTopLayer` is set `true` the function will
-      ## provide an uninitalised and inconsistent (!) top layer. This
-      ## setting avoids some database lookup for cases where the top layer
-      ## is redefined anyway.
-
   AristoApiForkTopFn* =
     proc(db: AristoDbRef;
          dontHashify = false;
         ): Result[AristoDbRef,AristoError]
         {.noRaise.}
-      ## Clone a top transaction into a new DB descriptor accessing the same
-      ## backend database (if any) as the argument `db`. The new descriptor
-      ## is linked to the transaction parent and is fully functional as a
-      ## forked instance (see comments on `aristo_desc.reCentre()` for
-      ## details.) If there is no active transaction, the top layer state
-      ## is cloned.
-      ##
-      ## Input situation:
-      ## ::
-      ##   tx -> db0   with tx is top transaction, tx.level > 0
-      ##
-      ## Output situation:
-      ## ::
-      ##   tx  -> db0 \
-      ##               >  share the same backend
-      ##   tx1 -> db1 /
-      ##
-      ## where `tx.level > 0`, `db1.level == 1` and `db1` is returned. The
-      ## transaction `tx1` can be retrieved via `db1.txTop()`.
-      ##
-      ## The new DB descriptor will contain a copy of the argument transaction
-      ## `tx` as top layer of level 1 (i.e. this is he only transaction.)
-      ## Rolling back will end up at the backend layer (incl. backend filter.)
+      ## Clone a descriptor in a way so that there is exactly one active
+      ## transaction.
       ##
       ## If the arguent flag `dontHashify` is passed `true`, the clone
       ## descriptor will *NOT* be hashified right after construction.
       ##
       ## Use `aristo_desc.forget()` to clean up this descriptor.
 
-  AristoApiGetKeyFn* =
+  AristoApiForkWithFn* =
     proc(db: AristoDbRef;
          vid: VertexID;
-        ): HashKey
-        {.noRaise.}
-      ## Simplified version of `getKey(0` (see below) returns `VOID_HASH_KEY`
-      ## also on fetch errors.
+         key: HashKey;
+         dontHashify = false;
+           ): Result[AristoDbRef,AristoError]
+           {.noRaise.}
+      ## Find the transaction where the vertex with ID `vid` exists and has
+      ## the Merkle hash key `key`. If there is no transaction available,
+      ## search in the filter and then in the backend.
+      ##
+      ## If the above procedure succeeds, a new descriptor is forked with
+      ## exactly one transaction which contains the all the bottom layers up
+      ## until the layer where the `(vid,key)` pair is found. In case the
+      ## pair was found on the filter or the backend, this transaction is
+      ## empty.
 
   AristoApiGetKeyRcFn* =
     proc(db: AristoDbRef;
@@ -234,8 +212,8 @@ type
          accPath: PathID;
         ): Result[bool,AristoError]
         {.noRaise.}
-    ## Veriant of `mergePayload()` where the `data` argument will be
-    ## converted to a `RawBlob` type `PayloadRef` value.
+      ## Veriant of `mergePayload()` where the `data` argument will be
+      ## converted to a `RawBlob` type `PayloadRef` value.
 
   AristoApiMergePayloadFn* =
     proc(db: AristoDbRef;
@@ -245,27 +223,43 @@ type
          accPath = VOID_PATH_ID;
         ): Result[bool,AristoError]
         {.noRaise.}
-    ## Merge the argument key-value-pair `(path,payload)` into the top level
-    ## vertex table of the database `db`.
-    ##
-    ## For a `root` argument with `VertexID` greater than `LEAST_FREE_VID`,
-    ## the sub-tree generated by `payload.root` is considered a storage trie
-    ## linked to an account leaf referred to by a valid `accPath` (i.e.
-    ## different from `VOID_PATH_ID`.) In that case, an account must exists.
-    ## If there is payload of type `AccountData`, its `storageID` field must
-    ## be unset or equal to the `payload.root` vertex ID.
+      ## Merge the argument key-value-pair `(path,payload)` into the top level
+      ## vertex table of the database `db`.
+      ##
+      ## For a `root` argument with `VertexID` greater than `LEAST_FREE_VID`,
+      ## the sub-tree generated by `payload.root` is considered a storage trie
+      ## linked to an account leaf referred to by a valid `accPath` (i.e.
+      ## different from `VOID_PATH_ID`.) In that case, an account must exists.
+      ## If there is payload of type `AccountData`, its `storageID` field must
+      ## be unset or equal to the `payload.root` vertex ID.
 
   AristoApiPathAsBlobFn* =
     proc(tag: PathID;
         ): Blob
         {.noRaise.}
-    ## Converts the `tag` argument to a sequence of an even number of
-    ## nibbles represented by a `Blob`. If the argument `tag` represents
-    ## an odd number of nibbles, a zero nibble is appendend.
-    ##
-    ## This function is useful only if there is a tacit agreement that all
-    ## paths used to index database leaf values can be represented as
-    ## `Blob`, i.e. `PathID` type paths with an even number of nibbles.
+      ## Converts the `tag` argument to a sequence of an even number of
+      ## nibbles represented by a `Blob`. If the argument `tag` represents
+      ## an odd number of nibbles, a zero nibble is appendend.
+      ##
+      ## This function is useful only if there is a tacit agreement that all
+      ## paths used to index database leaf values can be represented as
+      ## `Blob`, i.e. `PathID` type paths with an even number of nibbles.
+
+  AristoApiReCentreFn* =
+    proc(db: AristoDbRef;
+        ) {.noRaise.}
+      ## Re-focus the `db` argument descriptor so that it becomes the centre.
+      ## Nothing is done if the `db` descriptor is the centre, already.
+      ##
+      ## With several descriptors accessing the same backend database there is
+      ## a single one that has write permission for the backend (regardless
+      ## whether there is a backend, at all.) The descriptor entity with write
+      ## permission is called *the centre*.
+      ##
+      ## After invoking `reCentre()`, the argument database `db` can only be
+      ## destructed by `finish()` which also destructs all other descriptors
+      ## accessing the same backend database. Descriptors where `isCentre()`
+      ## returns `false` must be single destructed with `forget()`.
 
   AristoApiRollbackFn* =
     proc(tx: AristoTxRef;
@@ -356,9 +350,8 @@ type
     fetchPayload*: AristoApiFetchPayloadFn
     finish*: AristoApiFinishFn
     forget*: AristoApiForgetFn
-    fork*: AristoApiForkFn
     forkTop*: AristoApiForkTopFn
-    getKey*: AristoApiGetKeyFn
+    forkWith*: AristoApiForkWithFn
     getKeyRc*: AristoApiGetKeyRcFn
     hashify*: AristoApiHashifyFn
     hasPath*: AristoApiHasPathFn
@@ -369,6 +362,7 @@ type
     merge*: AristoApiMergeFn
     mergePayload*: AristoApiMergePayloadFn
     pathAsBlob*: AristoApiPathAsBlobFn
+    reCentre*: AristoApiReCentreFn
     rollback*: AristoApiRollbackFn
     serialise*: AristoApiSerialiseFn
     stow*: AristoApiStowFn
@@ -388,9 +382,8 @@ type
     AristoApiProfFetchPayloadFn = "fetchPayload"
     AristoApiProfFinishFn       = "finish"
     AristoApiProfForgetFn       = "forget"
-    AristoApiProfForkFn         = "fork"
     AristoApiProfForkTopFn      = "forkTop"
-    AristoApiProfGetKeyFn       = "getKey"
+    AristoApiProfForkWithFn     = "forkWith"
     AristoApiProfGetKeyRcFn     = "getKeyRc"
     AristoApiProfHashifyFn      = "hashify"
     AristoApiProfHasPathFn      = "hasPath"
@@ -401,6 +394,7 @@ type
     AristoApiProfMergeFn        = "merge"
     AristoApiProfMergePayloadFn = "mergePayload"
     AristoApiProfPathAsBlobFn   = "pathAsBlob"
+    AristoApiProfReCentreFn     = "reCentre"
     AristoApiProfRollbackFn     = "rollback"
     AristoApiProfSerialiseFn    = "serialise"
     AristoApiProfStowFn         = "stow"
@@ -430,9 +424,8 @@ when AutoValidateApiHooks:
     doAssert not api.fetchPayload.isNil
     doAssert not api.finish.isNil
     doAssert not api.forget.isNil
-    doAssert not api.fork.isNil
     doAssert not api.forkTop.isNil
-    doAssert not api.getKey.isNil
+    doAssert not api.forkWith.isNil
     doAssert not api.getKeyRc.isNil
     doAssert not api.hashify.isNil
     doAssert not api.hasPath.isNil
@@ -443,6 +436,7 @@ when AutoValidateApiHooks:
     doAssert not api.merge.isNil
     doAssert not api.mergePayload.isNil
     doAssert not api.pathAsBlob.isNil
+    doAssert not api.reCentre.isNil
     doAssert not api.rollback.isNil
     doAssert not api.serialise.isNil
     doAssert not api.stow.isNil
@@ -451,11 +445,21 @@ when AutoValidateApiHooks:
     doAssert not api.vidFetch.isNil
     doAssert not api.vidDispose.isNil
 
-  proc validate(prf: AristoApiProfRef; be: BackendRef) =
+  proc validate(prf: AristoApiProfRef) =
     prf.AristoApiRef.validate
     doAssert not prf.data.isNil
-    if not be.isNil:
-      doAssert not prf.be.isNil
+
+proc dup(be: BackendRef): BackendRef =
+  case be.kind:
+  of BackendMemory:
+    return MemBackendRef(be).dup
+
+  of BackendRocksDB:
+    when AristoPersistentBackendOk:
+      return RdbBackendRef(be).dup
+
+  of BackendVoid:
+    discard
 
 # ------------------------------------------------------------------------------
 # Public API constuctors
@@ -472,9 +476,8 @@ func init*(api: var AristoApiObj) =
   api.fetchPayload = fetchPayload
   api.finish = finish
   api.forget = forget
-  api.fork = fork
   api.forkTop = forkTop
-  api.getKey = getKey
+  api.forkWith = forkWith
   api.getKeyRc = getKeyRc
   api.hashify = hashify
   api.hasPath = hasPath
@@ -485,6 +488,7 @@ func init*(api: var AristoApiObj) =
   api.merge = merge
   api.mergePayload = mergePayload
   api.pathAsBlob = pathAsBlob
+  api.reCentre = reCentre
   api.rollback = rollback
   api.serialise = serialise
   api.stow = stow
@@ -507,9 +511,8 @@ func dup*(api: AristoApiRef): AristoApiRef =
     fetchPayload: api.fetchPayload,
     finish:       api.finish,
     forget:       api.forget,
-    fork:         api.fork,
     forkTop:      api.forkTop,
-    getKey:       api.getKey,
+    forkWith:     api.forkWith,
     getKeyRc:     api.getKeyRc,
     hashify:      api.hashify,
     hasPath:      api.hasPath,
@@ -520,6 +523,7 @@ func dup*(api: AristoApiRef): AristoApiRef =
     merge:        api.merge,
     mergePayload: api.mergePayload,
     pathAsBlob:   api.pathAsBlob,
+    reCentre:     api.reCentre,
     rollback:     api.rollback,
     serialise:    api.serialise,
     stow:         api.stow,
@@ -587,20 +591,15 @@ func init*(
       AristoApiProfForgetFn.profileRunner:
         result = api.forget(a)
 
-  profApi.fork =
-    proc(a: AristoDbRef; b = false): auto =
-      AristoApiProfForkFn.profileRunner:
-        result = api.fork(a, b)
-
   profApi.forkTop =
     proc(a: AristoDbRef; b = false): auto =
       AristoApiProfForkTopFn.profileRunner:
         result = api.forkTop(a, b)
 
-  profApi.getKey =
-    proc(a: AristoDbRef; b: VertexID): auto =
-      AristoApiProfGetKeyFn.profileRunner:
-        result = api.getKey(a, b)
+  profApi.forkWith =
+    proc(a: AristoDbRef; b: VertexID; c: HashKey; d = false): auto =
+      AristoApiProfForkWithFn.profileRunner:
+        result = api.forkWith(a, b, c, d)
 
   profApi.getKeyRc =
     proc(a: AristoDbRef; b: VertexID): auto =
@@ -653,6 +652,11 @@ func init*(
       AristoApiProfPathAsBlobFn.profileRunner:
         result = api.pathAsBlob(a)
 
+  profApi.reCentre =
+    proc(a: AristoDbRef) =
+      AristoApiProfReCentreFn.profileRunner:
+        api.reCentre(a)
+
   profApi.rollback =
     proc(a: AristoTxRef): auto =
       AristoApiProfRollbackFn.profileRunner:
@@ -688,8 +692,8 @@ func init*(
       AristoApiProfVidDisposeFn.profileRunner:
         api.vidDispose(a, b)
 
-  if not be.isNil:
-    profApi.be = be.dup
+  profApi.be = be.dup()
+  if not profApi.be.isNil:
 
     profApi.be.getVtxFn =
       proc(a: VertexID): auto =
@@ -707,7 +711,7 @@ func init*(
           result = be.putEndFn(a)
 
   when AutoValidateApiHooks:
-    profApi.validate be
+    profApi.validate
 
   profApi
 

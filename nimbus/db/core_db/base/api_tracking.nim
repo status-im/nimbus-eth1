@@ -32,7 +32,7 @@ type
     AccGetTrieFn        = "acc/getTrie"
     AccHasPathFn        = "acc/hasPath"
     AccMergeFn          = "acc/merge"
-    AccNewMptFn         = "acc/newMpt"
+    AccGetMptFn         = "acc/getMpt"
     AccPersistentFn     = "acc/persistent"
     AccStoFlushFn       = "acc/stoFlush"
     AccToMptFn          = "acc/toMpt"
@@ -42,19 +42,24 @@ type
 
     BaseDbTypeFn        = "dbType"
     BaseFinishFn        = "finish"
-    BaseGetTrieFn       = "getTrie"
     BaseLegacySetupFn   = "compensateLegacySetup"
     BaseLevelFn         = "level"
-    BaseNewAccFn        = "newAccMpt"
     BaseNewCaptureFn    = "newCapture"
+    BaseNewCtxFn        = "ctx"
+    BaseNewCtxFromTxFn  = "ctxFromTx"
+    BaseSwapCtxFn       = "swapCtx"
     BaseNewKvtFn        = "newKvt"
-    BaseNewMptFn        = "newMpt"
     BaseNewTxFn         = "newTransaction"
 
     CptFlagsFn          = "cpt/flags"
     CptLogDbFn          = "cpt/logDb"
     CptRecorderFn       = "cpt/recorder"
     CptForgetFn         = "cpt/forget"
+
+    CtxForgetFn         = "ctx/forget"
+    CtxGetAccFn         = "ctx/getAcc"
+    CtxGetMptFn         = "ctx/getMpt"
+    CtxNewTrieFn        = "ctx/newTrie"
 
     ErrorPrintFn        = "$$"
     EthAccRecastFn      = "recast"
@@ -74,7 +79,6 @@ type
     LegaCptFlagsFn      = "cpt/flags"
     LegaCptLogDbFn      = "cpt/logDb"
     LegaCptRecorderFn   = "cpt/recorder"
-    LegaGetTxIdFn       = "getTransactionID"
     LegaIsPruningFn     = "trie/isPruning"
 
     LegaKvtContainsFn   = "kvt/contains"
@@ -101,7 +105,6 @@ type
     LegaPhkPutFn        = "phk/put"
     LegaPhkRootHashFn   = "phk/rootHash"
 
-    LegaShortTimeRoFn   = "shortTimeReadOnly"
     LegaToMptFn         = "phk/toMpt"
     LegaToPhkFn         = "mpt/toPhk"
 
@@ -210,9 +213,9 @@ proc toStr[T](rc: CoreDbRc[T]; ifOk: static[string]): string =
 proc toStr*(rc: CoreDbRc[CoreDbRef]): string = rc.toStr "db"
 proc toStr*(rc: CoreDbRc[CoreDbAccount]): string = rc.toStr "acc"
 proc toStr*(rc: CoreDbRc[CoreDxKvtRef]): string = rc.toStr "kvt"
-proc toStr*(rc: CoreDbRc[CoreDxTxID]): string = rc.toStr "txId"
 proc toStr*(rc: CoreDbRc[CoreDxTxRef]): string = rc.toStr "tx"
 proc toStr*(rc: CoreDbRc[CoreDxCaptRef]): string = rc.toStr "capt"
+proc toStr*(rc: CoreDbRc[CoreDbCtxRef]): string = rc.toStr "ctx"
 proc toStr*(rc: CoreDbRc[CoreDxMptRef]): string = rc.toStr "mpt"
 proc toStr*(rc: CoreDbRc[CoreDxAccRef]): string = rc.toStr "acc"
 

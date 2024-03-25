@@ -108,13 +108,15 @@ proc randomisedLeafs(
       lvp2[n].swap lvp2[r]
   ok lvp2
 
-proc innerCleanUp(db: AristoDbRef): bool {.discardable.}  =
+proc innerCleanUp(db: var AristoDbRef): bool {.discardable.}  =
   ## Defer action
-  let rx = db.txTop()
-  if rx.isOk:
-    let rc = rx.value.collapse(commit=false)
-    xCheckRc rc.error == 0
-  db.finish(flush=true)
+  if not db.isNil:
+    let rx = db.txTop()
+    if rx.isOk:
+      let rc = rx.value.collapse(commit=false)
+      xCheckRc rc.error == 0
+    db.finish(flush=true)
+    db = AristoDbRef(nil)
 
 proc schedStow(
     db: AristoDbRef;                  # Database
@@ -334,10 +336,11 @@ proc testTxMergeAndDeleteOneByOne*(
        ): bool =
   var
     prng = PrngDesc.init 42
-    db = AristoDbRef()
+    db = AristoDbRef(nil)
     fwdRevVfyToggle = true
   defer:
-    db.finish(flush=true)
+    if not db.isNil:
+      db.finish(flush=true)
 
   for n,w in list:
     # Start with brand new persistent database.
@@ -439,10 +442,10 @@ proc testTxMergeAndDeleteSubTree*(
        ): bool =
   var
     prng = PrngDesc.init 42
-    db = AristoDbRef()
-
+    db = AristoDbRef(nil)
   defer:
-    db.finish(flush=true)
+    if not db.isNil:
+      db.finish(flush=true)
 
   for n,w in list:
     # Start with brand new persistent database.
@@ -481,6 +484,7 @@ proc testTxMergeAndDeleteSubTree*(
       let rc = db.randomisedLeafs(leafsLeft, prng)
       xCheckRc rc.error == (0,0)
       rc.value
+    discard leafVidPairs
 
     # === delete sub-tree ===
     block:
@@ -524,7 +528,7 @@ proc testTxMergeProofAndKvpList*(
   let
     oopsTab = oops.toTable
   var
-    db = AristoDbRef()
+    db = AristoDbRef(nil)
     tx = AristoTxRef(nil)
     rootKey: Hash256
     count = 0

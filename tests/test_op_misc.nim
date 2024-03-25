@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2019-2023 Status Research & Development GmbH
+# Copyright (c) 2019-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -15,15 +15,15 @@ import
 
 proc opMiscMain*() =
   suite "Misc Opcodes":
-    assembler: # LOG0 OP
+    assembler: # Log0 OP
       title: "Log0"
       code:
-        PUSH2 "0x1234"
-        PUSH1 "0x00"
-        MSTORE
-        PUSH1 "0x20"
-        PUSH1 "0x00"
-        LOG0
+        Push2 "0x1234"
+        Push1 "0x00"
+        Mstore
+        Push1 "0x20"
+        Push1 "0x00"
+        Log0
       memory:
         "0x1234"
       logs:
@@ -32,16 +32,16 @@ proc opMiscMain*() =
           data: "0x0000000000000000000000000000000000000000000000000000000000001234"
         )
 
-    assembler: # LOG1 OP
+    assembler: # Log1 OP
       title: "Log1"
       code:
-        PUSH2 "0x1234"
-        PUSH1 "0x00"
-        MSTORE
-        PUSH2 "0x9999"
-        PUSH1 "0x20"
-        PUSH1 "0x00"
-        LOG1
+        Push2 "0x1234"
+        Push1 "0x00"
+        Mstore
+        Push2 "0x9999"
+        Push1 "0x20"
+        Push1 "0x00"
+        Log1
       memory:
         "0x1234"
       logs:
@@ -51,17 +51,17 @@ proc opMiscMain*() =
           data: "0x0000000000000000000000000000000000000000000000000000000000001234"
         )
 
-    assembler: # LOG2 OP
+    assembler: # Log2 OP
       title: "Log2"
       code:
-        PUSH2 "0x1234"
-        PUSH1 "0x00"
-        MSTORE
-        PUSH2 "0x9999"
-        PUSH2 "0x6666"
-        PUSH1 "0x20"
-        PUSH1 "0x00"
-        LOG2
+        Push2 "0x1234"
+        Push1 "0x00"
+        Mstore
+        Push2 "0x9999"
+        Push2 "0x6666"
+        Push1 "0x20"
+        Push1 "0x00"
+        Log2
       memory:
         "0x1234"
       logs:
@@ -71,18 +71,18 @@ proc opMiscMain*() =
           data: "0x0000000000000000000000000000000000000000000000000000000000001234"
         )
 
-    assembler: # LOG3 OP
+    assembler: # Log3 OP
       title: "Log3"
       code:
-        PUSH2 "0x1234"
-        PUSH1 "0x00"
-        MSTORE
-        PUSH2 "0x9999"
-        PUSH2 "0x6666"
-        PUSH2 "0x3333"
-        PUSH1 "0x20"
-        PUSH1 "0x00"
-        LOG3
+        Push2 "0x1234"
+        Push1 "0x00"
+        Mstore
+        Push2 "0x9999"
+        Push2 "0x6666"
+        Push2 "0x3333"
+        Push1 "0x20"
+        Push1 "0x00"
+        Log3
       memory:
         "0x1234"
       logs:
@@ -92,19 +92,19 @@ proc opMiscMain*() =
           data: "0x0000000000000000000000000000000000000000000000000000000000001234"
         )
 
-    assembler: # LOG4 OP
+    assembler: # Log4 OP
       title: "Log4"
       code:
-        PUSH2 "0x1234"
-        PUSH1 "0x00"
-        MSTORE
-        PUSH2 "0x9999"
-        PUSH2 "0x6666"
-        PUSH2 "0x3333"
-        PUSH2 "0x5555"
-        PUSH1 "0x20"
-        PUSH1 "0x00"
-        LOG4
+        Push2 "0x1234"
+        Push1 "0x00"
+        Mstore
+        Push2 "0x9999"
+        Push2 "0x6666"
+        Push2 "0x3333"
+        Push2 "0x5555"
+        Push1 "0x20"
+        Push1 "0x00"
+        Log4
       memory:
         "0x1234"
       logs:
@@ -114,16 +114,16 @@ proc opMiscMain*() =
           data: "0x0000000000000000000000000000000000000000000000000000000000001234"
         )
 
-    assembler: # STOP OP
-      title: "STOP_1"
+    assembler: # Stop OP
+      title: "Stop_1"
       code:
-        PUSH1 "0x20"
-        PUSH1 "0x30"
-        PUSH1 "0x10"
-        PUSH1 "0x30"
-        PUSH1 "0x11"
-        PUSH1 "0x23"
-        STOP
+        Push1 "0x20"
+        Push1 "0x30"
+        Push1 "0x10"
+        Push1 "0x30"
+        Push1 "0x11"
+        Push1 "0x23"
+        Stop
       stack:
         "0x20"
         "0x30"
@@ -132,53 +132,53 @@ proc opMiscMain*() =
         "0x11"
         "0x23"
 
-    assembler: # RETURN OP
-      title: "RETURN_1"
+    assembler: # Return OP
+      title: "Return_1"
       code:
-        PUSH2 "0x1234"
-        PUSH1 "0x00"
-        MSTORE
-        PUSH1 "0x20"
-        PUSH1 "0x00"
-        RETURN
+        Push2 "0x1234"
+        Push1 "0x00"
+        Mstore
+        Push1 "0x20"
+        Push1 "0x00"
+        Return
       memory: "0x1234"
       output: "0x0000000000000000000000000000000000000000000000000000000000001234"
 
-    assembler: # RETURN OP
-      title: "RETURN_2"
+    assembler: # Return OP
+      title: "Return_2"
       code:
-        PUSH2 "0x1234"
-        PUSH1 "0x00"
-        MSTORE
-        PUSH1 "0x20"
-        PUSH1 "0x1F"
-        RETURN
+        Push2 "0x1234"
+        Push1 "0x00"
+        Mstore
+        Push1 "0x20"
+        Push1 "0x1F"
+        Return
       memory:
         "0x1234"
         "0x00"
       output: "0x3400000000000000000000000000000000000000000000000000000000000000"
 
-    assembler: # RETURN OP
-      title: "RETURN_3"
+    assembler: # Return OP
+      title: "Return_3"
       code:
-        PUSH32 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3E3F3A4B4C4D4E4F4A1B1"
-        PUSH1 "0x00"
-        MSTORE
-        PUSH1 "0x20"
-        PUSH1 "0x00"
-        RETURN
+        Push32 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3E3F3A4B4C4D4E4F4A1B1"
+        Push1 "0x00"
+        Mstore
+        Push1 "0x20"
+        Push1 "0x00"
+        Return
       memory: "0xa0b0c0d0e0f0a1b1c1d1e1f1a2b2c2d2e2f2a3b3c3d3e3f3a4b4c4d4e4f4a1b1"
       output: "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3E3F3A4B4C4D4E4F4A1B1"
 
-    assembler: # RETURN OP
-      title: "RETURN_4"
+    assembler: # Return OP
+      title: "Return_4"
       code:
-        PUSH32 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3E3F3A4B4C4D4E4F4A1B1"
-        PUSH1 "0x00"
-        MSTORE
-        PUSH1 "0x20"
-        PUSH1 "0x10"
-        RETURN
+        Push32 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3E3F3A4B4C4D4E4F4A1B1"
+        Push1 "0x00"
+        Mstore
+        Push1 "0x20"
+        Push1 "0x10"
+        Return
       output: "0xE2F2A3B3C3D3E3F3A4B4C4D4E4F4A1B100000000000000000000000000000000"
       memory:
         "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3E3F3A4B4C4D4E4F4A1B1"
@@ -189,48 +189,48 @@ proc opMiscMain*() =
     assembler:
       title: "Simple routine"
       code:
-        PUSH1 "0x04"
+        Push1 "0x04"
         JUMPSUB
-        STOP
+        Stop
         BEGINSUB
-        RETURNSUB
+        ReturnSUB
       gasUsed: 18
       fork: berlin
 
     assembler:
       title: "Two levels of subroutines"
       code:
-        PUSH9 "0x00000000000000000C"
+        Push9 "0x00000000000000000C"
         JUMPSUB
-        STOP
+        Stop
         BEGINSUB
-        PUSH1 "0x11"
+        Push1 "0x11"
         JUMPSUB
-        RETURNSUB
+        ReturnSUB
         BEGINSUB
-        RETURNSUB
+        ReturnSUB
       gasUsed: 36
       fork: berlin
 
     assembler:
       title: "Failure 1: invalid jump"
       code:
-        PUSH9 "0x01000000000000000C"
+        Push9 "0x01000000000000000C"
         JUMPSUB
-        STOP
+        Stop
         BEGINSUB
-        PUSH1 "0x11"
+        Push1 "0x11"
         JUMPSUB
-        RETURNSUB
+        ReturnSUB
         BEGINSUB
-        RETURNSUB
+        ReturnSUB
       success: false
       fork: berlin
 
     assembler:
       title: "Failure 2: shallow return stack"
       code:
-        RETURNSUB
+        ReturnSUB
         PC
         PC
       success: false
@@ -239,12 +239,12 @@ proc opMiscMain*() =
     assembler:
       title: "Subroutine at end of code"
       code:
-        PUSH1 "0x05"
+        Push1 "0x05"
         JUMP
         BEGINSUB
-        RETURNSUB
+        ReturnSUB
         JUMPDEST
-        PUSH1 "0x03"
+        Push1 "0x03"
         JUMPSUB
       gasUsed: 30
       fork: berlin
@@ -253,30 +253,30 @@ proc opMiscMain*() =
       title: "Error on 'walk-into-subroutine'"
       code:
         BEGINSUB
-        RETURNSUB
-        STOP
+        ReturnSUB
+        Stop
       success: false
       fork: berlin
 
     assembler:
       title: "sol test"
       code:
-        PUSH1 "0x02"
-        PUSH1 "0x03"
-        PUSH1 "0x08" # jumpdest
+        Push1 "0x02"
+        Push1 "0x03"
+        Push1 "0x08" # jumpdest
         JUMPSUB
-        STOP
+        Stop
 
         # 0x08
         BEGINSUB
-        PUSH1 "0x0D" # jumpdest
+        Push1 "0x0D" # jumpdest
         JUMPSUB
-        RETURNSUB
+        ReturnSUB
 
         # 0x0D
         BEGINSUB
         MUL
-        RETURNSUB
+        ReturnSUB
       gasUsed: 47
       fork: berlin
       stack:

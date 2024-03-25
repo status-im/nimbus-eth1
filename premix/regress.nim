@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2020-2023 Status Research & Development GmbH
+# Copyright (c) 2020-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -25,7 +25,6 @@ proc validateBlock(com: CommonRef, blockNumber: BlockNumber): BlockNumber =
     parent = com.db.getBlockHeader(parentNumber)
     headers = newSeq[BlockHeader](numBlocks)
     bodies  = newSeq[BlockBody](numBlocks)
-    lastBlockHash: Hash256
 
   for i in 0 ..< numBlocks:
     headers[i] = com.db.getBlockHeader(blockNumber + i.u256)

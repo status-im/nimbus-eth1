@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -35,7 +35,8 @@ type
     ## Access keys for admin table records. When exposed (e.g. when itereating
     ## over the tables), this data type is to be used.
 
-  TypedBackendRef* = ref object of BackendRef
+  TypedBackendRef* = ref TypedBackendObj
+  TypedBackendObj* = object of BackendObj
     beKind*: BackendType             ## Backend type identifier
     when verifyIxId:
       txGen: uint                    ## Transaction ID generator (for debugging)
@@ -81,6 +82,13 @@ proc finishSession*(hdl: TypedPutHdlRef; db: TypedBackendRef) =
   when verifyIxId:
     doAssert db.txId == hdl.txId
     db.txId = 0
+
+proc init*(trg: var TypedBackendObj; src: TypedBackendObj) =
+  desc_backend.init(trg, src)
+  trg.beKind = src.beKind
+  when verifyIxId:
+    trg.txGen = src.txGen
+    trg.txId = src.txId
 
 # ------------------------------------------------------------------------------
 # End

@@ -47,7 +47,7 @@ proc deriveLogs*(header: BlockHeader, transactions: seq[Transaction], receipts: 
         transactionIndex: some(w3Qty(i)),
         transactionHash: some(w3Hash transactions[i].rlpHash),
         blockHash: some(w3Hash header.blockHash),
-        blockNumber: some(w3Qty(header.blockNumber.truncate(uint64))),
+        blockNumber: some(w3BlockNumber(header.blockNumber)),
         address: w3Addr log.address,
         data: log.data,
         #  TODO topics should probably be kept as Hash256 in receipts

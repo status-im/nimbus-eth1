@@ -12,14 +12,21 @@
 import
   std/[strutils, algorithm, options],
   ./rpc_types,
-  eth/[common, keys],
+  eth/keys,
+  ../common/common,
   ../db/core_db,
+  ../db/ledger,
   ../constants, stint,
   ../utils/utils,
   ../transaction,
   ../transaction/call_evm,
   ../core/eip4844,
-  ../beacon/web3_eth_conv
+  ../beacon/web3_eth_conv,
+  ../vm_types,
+  ../vm_state,
+  ../evm/precompiles,
+  ../evm/tracer/access_list_tracer
+
 
 const
   defaultTag = blockId("latest")
@@ -43,7 +50,7 @@ proc headerFromTag*(chain: CoreDbRef, blockId: BlockTag): BlockHeader
     else:
       raise newException(ValueError, "Unsupported block tag " & tag)
   else:
-    let blockNum = blockId.number.toBlockNumber
+    let blockNum = blockId.number.uint64.toBlockNumber
     result = chain.getBlockHeader(blockNum)
 
 proc headerFromTag*(chain: CoreDbRef, blockTag: Option[BlockTag]): BlockHeader
@@ -69,7 +76,7 @@ proc calculateMedianGasPrice*(chain: CoreDbRef): GasInt
     else:
       result = prices[middle]
 
-proc unsignedTx*(tx: EthSend, chain: CoreDbRef, defaultNonce: AccountNonce): Transaction
+proc unsignedTx*(tx: TransactionArgs, chain: CoreDbRef, defaultNonce: AccountNonce): Transaction
     {.gcsafe, raises: [CatchableError].} =
   if tx.to.isSome:
     result.to = some(ethAddr(tx.to.get))
@@ -94,7 +101,7 @@ proc unsignedTx*(tx: EthSend, chain: CoreDbRef, defaultNonce: AccountNonce): Tra
   else:
     result.nonce = defaultNonce
 
-  result.payload = tx.data
+  result.payload = tx.payload
 
 template optionalAddress(src, dst: untyped) =
   if src.isSome:
@@ -108,19 +115,18 @@ template optionalU256(src, dst: untyped) =
   if src.isSome:
     dst = some(src.get)
 
-template optionalBytes(src, dst: untyped) =
-  if src.isSome:
-    dst = src.get
-
-proc callData*(call: EthCall): RpcCallData {.gcsafe, raises: [].} =
-  optionalAddress(call.source, result.source)
-  optionalAddress(call.to, result.to)
-  optionalGas(call.gas, result.gasLimit)
-  optionalGas(call.gasPrice, result.gasPrice)
-  optionalGas(call.maxFeePerGas, result.maxFee)
-  optionalGas(call.maxPriorityFeePerGas, result.maxPriorityFee)
-  optionalU256(call.value, result.value)
-  optionalBytes(call.data, result.data)
+proc callData*(args: TransactionArgs): RpcCallData {.gcsafe, raises: [].} =
+  optionalAddress(args.source, result.source)
+  optionalAddress(args.to, result.to)
+  optionalGas(args.gas, result.gasLimit)
+  optionalGas(args.gasPrice, result.gasPrice)
+  optionalGas(args.maxFeePerGas, result.maxFee)
+  optionalGas(args.maxPriorityFeePerGas, result.maxPriorityFee)
+  optionalU256(args.value, result.value)
+  result.data = args.payload()
+  if args.blobVersionedHashes.isSome:
+    result.versionedHashes = ethHashes args.blobVersionedHashes.get
+  result.accessList = ethAccessList args.accessList
 
 proc toWd(wd: Withdrawal): WithdrawalObject =
   WithdrawalObject(
@@ -135,22 +141,6 @@ proc toWdList(list: openArray[Withdrawal]): seq[WithdrawalObject] =
   for x in list:
     result.add toWd(x)
 
-proc toHashList(list: openArray[StorageKey]): seq[Web3Hash] =
-  result = newSeqOfCap[Web3Hash](list.len)
-  for x in list:
-    result.add Web3Hash x
-
-proc toAccessTuple(ac: AccessPair): AccessTuple =
-  AccessTuple(
-    address: w3Addr ac.address,
-    storageKeys: toHashList(ac.storageKeys)
-  )
-
-proc toAccessTupleList(list: openArray[AccessPair]): seq[AccessTuple] =
-  result = newSeqOfCap[AccessTuple](list.len)
-  for x in list:
-    result.add toAccessTuple(x)
-
 proc populateTransactionObject*(tx: Transaction,
                                 optionalHeader: Option[BlockHeader] = none(BlockHeader),
                                 txIndex: Option[int] = none(int)): TransactionObject
@@ -160,7 +150,7 @@ proc populateTransactionObject*(tx: Transaction,
   if optionalHeader.isSome:
     let header = optionalHeader.get
     result.blockHash = some(w3Hash header.hash)
-    result.blockNumber = some(w3Qty(header.blockNumber.truncate(uint64)))
+    result.blockNumber = some(w3BlockNumber(header.blockNumber))
 
   result.`from` = w3Addr tx.getSender()
   result.gas = w3Qty(tx.gasLimit)
@@ -180,7 +170,7 @@ proc populateTransactionObject*(tx: Transaction,
 
   if tx.txType >= TxEip2930:
     result.chainId = some(Web3Quantity(tx.chainId))
-    result.accessList = some(toAccessTupleList(tx.accessList))
+    result.accessList = some(w3AccessList(tx.accessList))
 
   if tx.txType >= TxEIP4844:
     result.maxFeePerBlobGas = some(tx.maxFeePerBlobGas)
@@ -191,7 +181,7 @@ proc populateBlockObject*(header: BlockHeader, chain: CoreDbRef, fullTx: bool, i
   let blockHash = header.blockHash
   result = BlockObject()
 
-  result.number = w3Qty(header.blockNumber)
+  result.number = w3BlockNumber(header.blockNumber)
   result.hash = w3Hash blockHash
   result.parentHash = w3Hash header.parentHash
   result.nonce = some(FixedBytes[8] header.nonce)
@@ -206,7 +196,7 @@ proc populateBlockObject*(header: BlockHeader, chain: CoreDbRef, fullTx: bool, i
   result.mixHash = w3Hash header.mixDigest
 
   # discard sizeof(seq[byte]) of extraData and use actual length
-  let size = sizeof(BlockHeader) - sizeof(Blob) + header.extraData.len
+  let size = sizeof(BlockHeader) - sizeof(common.Blob) + header.extraData.len
   result.size = w3Qty(size)
 
   result.gasLimit  = w3Qty(header.gasLimit)
@@ -249,7 +239,7 @@ proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction,
   result.transactionHash = w3Hash tx.rlpHash
   result.transactionIndex = w3Qty(txIndex)
   result.blockHash = w3Hash header.hash
-  result.blockNumber = w3Qty(header.blockNumber)
+  result.blockNumber = w3BlockNumber(header.blockNumber)
   result.`from` = w3Addr tx.getSender()
   result.to = some(w3Addr tx.destination)
   result.cumulativeGasUsed = w3Qty(receipt.cumulativeGasUsed)
@@ -301,3 +291,55 @@ proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction,
   if tx.txType == TxEip4844:
     result.blobGasUsed = some(w3Qty(tx.versionedHashes.len.uint64 * GAS_PER_BLOB.uint64))
     result.blobGasPrice = some(getBlobBaseFee(header.excessBlobGas.get(0'u64)))
+
+proc createAccessList*(header: BlockHeader,
+                       com: CommonRef,
+                       args: RpcCallData): AccessListResult {.gcsafe, raises:[CatchableError].} =
+  var args = args
+
+  # If the gas amount is not set, default to RPC gas cap.
+  if args.gasLimit.isNone:
+    args.gasLimit = some(DEFAULT_RPC_GAS_CAP)
+
+  let
+    vmState = BaseVMState.new(header, com)
+    fork    = com.toEVMFork(forkDeterminationInfo(header.blockNumber, header.timestamp))
+    sender  = args.source.get(ZERO_ADDRESS)
+    # TODO: nonce should be retrieved from txPool
+    nonce   = vmState.stateDB.getNonce(sender)
+    to      = if args.to.isSome: args.to.get
+              else: generateAddress(sender, nonce)
+    precompiles = activePrecompilesList(fork)
+
+  var prevTracer = AccessListTracer.new(
+    args.accessList,
+    sender,
+    to,
+    precompiles)
+
+  while true:
+    # Retrieve the current access list to expand
+    let accessList = prevTracer.accessList()
+
+    # Set the accesslist to the last accessList
+    # generated by prevTracer
+    args.accessList = accessList
+
+    # Apply the transaction with the access list tracer
+    let
+      tracer  = AccessListTracer.new(accessList, sender, to, precompiles)
+      vmState = BaseVMState.new(header, com, tracer)
+      res     = rpcCallEvm(args, header, com, vmState)
+
+    if res.isError:
+      return AccessListResult(
+        error: some("failed to apply transaction: " & res.error),
+      )
+
+    if tracer.equal(prevTracer):
+      return AccessListResult(
+        accessList: w3AccessList accessList,
+        gasUsed: w3Qty res.gasUsed,
+      )
+
+    prevTracer = tracer

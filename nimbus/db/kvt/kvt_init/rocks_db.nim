@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -25,6 +25,7 @@
 ##       ...
 ##
 {.push raises: [].}
+{.warning: "*** importing rocks DB which needs a linker library".}
 
 import
   chronicles,
@@ -162,6 +163,11 @@ proc rocksDbBackend*(
   db.closeFn = closeFn db
 
   ok db
+
+proc dup*(db: RdbBackendRef): RdbBackendRef =
+  new result
+  init_common.init(result[], db[])
+  result.rdb = db.rdb
 
 # ------------------------------------------------------------------------------
 # Public iterators (needs direct backend access)

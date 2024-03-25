@@ -380,7 +380,7 @@ proc snapRunner(noisy = true; specs: SnapSyncSpecs) {.used.} =
   let
     tailInfo = specs.tailBlocks.splitPath.tail.replace(".txt.gz","")
     tailPath = specs.tailBlocks.findFilePath.value
-    allFile = "mainnet332160.txt.gz".findFilePath.value
+    # allFile = "mainnet332160.txt.gz".findFilePath.value
 
     pivot = specs.pivotBlock
     updateSize = specs.nItems

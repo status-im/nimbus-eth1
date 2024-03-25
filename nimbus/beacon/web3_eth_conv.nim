@@ -22,16 +22,17 @@ export
   primitives
 
 type
-  Web3Hash*       = web3types.Hash256
-  Web3Address*    = web3types.Address
-  Web3Bloom*      = web3types.FixedBytes[256]
-  Web3Quantity*   = web3types.Quantity
-  Web3PrevRandao* = web3types.FixedBytes[32]
-  Web3ExtraData*  = web3types.DynamicBytes[0, 32]
-  Web3Topic*      = eth_api_types.Topic
-  Web3Tx*         = engine_api_types.TypedTransaction
-  Web3Blob*       = engine_api_types.Blob
-  Web3KZGProof*   = engine_api_types.KZGProof
+  Web3Hash*          = web3types.Hash256
+  Web3Address*       = web3types.Address
+  Web3Bloom*         = web3types.FixedBytes[256]
+  Web3Quantity*      = web3types.Quantity
+  Web3PrevRandao*    = web3types.FixedBytes[32]
+  Web3ExtraData*     = web3types.DynamicBytes[0, 32]
+  Web3BlockNumber*   = web3types.BlockNumber
+  Web3Topic*         = eth_api_types.Topic
+  Web3Tx*            = engine_api_types.TypedTransaction
+  Web3Blob*          = engine_api_types.Blob
+  Web3KZGProof*      = engine_api_types.KZGProof
   Web3KZGCommitment* = engine_api_types.KZGCommitment
 
 {.push gcsafe, raises:[].}
@@ -84,6 +85,9 @@ func u64*(x: Option[Web3Quantity]): Option[uint64] =
   else: some(uint64 x.get)
 
 func u256*(x: Web3Quantity): UInt256 =
+  u256(x.uint64)
+
+func u256*(x: Web3BlockNumber): UInt256 =
   u256(x.uint64)
 
 func u256*(x: FixedBytes[32]): UInt256 =
@@ -157,6 +161,21 @@ func ethTxs*(list: openArray[Web3Tx], removeBlobs = false):
     for x in list:
       result.add ethTx(x)
 
+func storageKeys(list: seq[FixedBytes[32]]): seq[StorageKey] =
+  for x in list:
+    result.add StorageKey(x)
+
+func ethAccessList*(list: openArray[AccessTuple]): common.AccessList =
+  for x in list:
+    result.add common.AccessPair(
+      address    : ethAddr x.address,
+      storageKeys: storageKeys x.storageKeys,
+    )
+
+func ethAccessList*(x: Option[seq[AccessTuple]]): common.AccessList =
+  if x.isSome:
+    return ethAccessList(x.get)
+
 # ------------------------------------------------------------------------------
 # Eth types to Web3 types
 # ------------------------------------------------------------------------------
@@ -183,6 +202,11 @@ func w3Hash*(x: Option[common.Hash256]): Option[BlockHash] =
 
 func w3Hash*(x: common.BlockHeader): BlockHash =
   BlockHash rlpHash(x).data
+
+func w3Hash*(list: openArray[StorageKey]): seq[Web3Hash] =
+  result = newSeqOfCap[Web3Hash](list.len)
+  for x in list:
+    result.add Web3Hash x
 
 func w3Addr*(x: common.EthAddress): Web3Address =
   Web3Address x
@@ -221,6 +245,16 @@ func w3Qty*(x: Option[uint64]): Option[Web3Quantity] =
 func w3Qty*(x: uint64): Web3Quantity =
   Web3Quantity(x)
 
+func w3BlockNumber*(x: Option[uint64]): Option[Web3BlockNumber] =
+  if x.isNone: none(Web3BlockNumber)
+  else: some(Web3BlockNumber x.get)
+
+func w3BlockNumber*(x: uint64): Web3BlockNumber =
+  Web3BlockNumber(x)
+
+func w3BlockNumber*(x: UInt256): Web3BlockNumber =
+  Web3BlockNumber x.truncate(uint64)
+
 func w3FixedBytes*(x: UInt256): FixedBytes[32] =
   FixedBytes[32](x.toBytesBE)
 
@@ -252,3 +286,14 @@ func w3Txs*(list: openArray[common.Transaction]): seq[Web3Tx] =
   result = newSeqOfCap[Web3Tx](list.len)
   for tx in list:
     result.add w3Tx(tx)
+
+proc w3AccessTuple*(ac: AccessPair): AccessTuple =
+  AccessTuple(
+    address: w3Addr ac.address,
+    storageKeys: w3Hash(ac.storageKeys)
+  )
+
+proc w3AccessList*(list: openArray[AccessPair]): seq[AccessTuple] =
+  result = newSeqOfCap[AccessTuple](list.len)
+  for x in list:
+    result.add w3AccessTuple(x)

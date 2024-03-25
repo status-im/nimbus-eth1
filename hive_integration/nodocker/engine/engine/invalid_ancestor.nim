@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -230,7 +230,7 @@ method execute(cs: InvalidMissingAncestorReOrgSyncTest, env: TestEnv): bool =
 
   if not cs.reOrgFromCanonical:
     # Add back the original client before side chain production
-    env.cLMock.addEngine(env.engine)
+    env.clMock.addEngine(env.engine)
 
   # Produce blocks but at the same time create an side chain which contains an invalid payload at some point (INV_P)
   # CommonAncestor◄─▲── P1 ◄─ P2 ◄─ P3 ◄─ ... ◄─ Pn

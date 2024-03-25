@@ -5,63 +5,34 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-#
-# This beacon_lc_bridge allows for following the head of the beacon chain and
-# seeding the latest execution block headers and bodies into the Portal network.
-#
-# The bridge does consensus light client sync and follows beacon block gossip.
-# Once it is synced, the execution payload of new beacon blocks will be
-# extracted and injected in the Portal network as execution headers and blocks.
-#
-# The injection into the Portal network is done via the `portal_historyGossip`
-# JSON-RPC endpoint of a running Fluffy node.
-#
-# If a web3 provider is configured, then block receipts will also be injected
-# into the network whenever there is a new block. The web3 provider is needed
-# to request the receipts. The receipts root is verified against the root
-# provided bij the exection payload of the beacon block.
-# To get the block receipts, the web3 provider currently needs to support the
-# `eth_getBlockReceipts` JSON-RPC endpoint (not in standard specification).
-#
-# Other, currently not implemented, options to seed data:
-# - Backfill post-merge block headers & bodies block into the network. Could
-#   walk down the parent blocks and seed them. Could also verify if the data is
-#   already available on the network before seeding it, potentially jumping in
-#   steps > 1.
-# - For backfill of pre-merge headers and blocks, access to epoch accumulators
-#   is needed to be able to build the proofs. These could be retrieved from the
-#   network, but would require usage of the `portal_historyRecursiveFindContent`
-#   JSON-RPC endpoint. Additionally, the actualy block headers and bodies need
-#   to be requested from an execution JSON-RPC endpoint.
-#   Data would flow from:
-#     (block data)          execution client -> bridge
-#     (epoch accumulator)   fluffy -> bridge
-#     (portal content)      bridge -> fluffy
-#   This seems awfully cumbersome. Other options sound better, see comment down.
-#
-# Data seeding of Epoch accumulators is unlikely to be supported by this bridge.
-# It is currently done by first downloading and storing all headers into files
-# per epoch. Then the accumulator and epoch accumulators can be build from this
-# data.
-# The reason for this approach is because downloading all the headers from an
-# execution endpoint takes long (you actually request the full blocks). An
-# intermediate local storage step is preferred because of this. The accumulator
-# build itself can be done in minutes when the data is locally available. These
-# locally stored accumulators can then be seeded directly from a Fluffy node via
-# a (currently) non standardized JSON-RPC endpoint.
-#
-# Data seeding of the block headers, bodies and receipts can be done the same
-# way. Downloading and storing them first locally in files. Then seeding them
-# into the network.
-# For the headers, the proof needs to be build and added from the right
-# epoch accumulator, so access to the epoch accumulator is a requirement
-# (offline or from the network).
-# This functionality is currently directly part of Fluffy and triggered via
-# non standardized JSON-RPC calls
-# Alternatively, this could also be moved to a seperate tool which gossips the
-# data with a portal_historyGossip JSON-RPC call, but the building of the header
-# proofs would be slighty more cumbersome.
-#
+## The beacon_lc_bridge is a "standalone" bridge, which means that it requires
+## only a Portal client to inject content into the Portal network, but retrieves
+## the content via p2p protocols only (no private / centralized full node access
+## required).
+## The bridge allows to follow the head of the beacon chain and inject the latest
+## execution block headers and bodies into the Portal history network.
+## It can, optionally, inject the beacon LC content into the Portal beacon network.
+##
+## The bridge does consensus light client sync and follows beacon block gossip.
+## Once it is synced, the execution payload of new beacon blocks will be
+## extracted and injected in the Portal network as execution headers and blocks.
+##
+## The injection into the Portal network is done via the `portal_historyGossip`
+## JSON-RPC endpoint of a running Fluffy node.
+##
+## Actions that this type of bridge (currently?) cannot perform:
+## 1. Inject block receipts into the portal network
+## 2. Inject epoch accumulators into the portal network
+## 3. Backfill headers and blocks
+## 4. Provide proofs for the headers
+##
+## - To provide 1., it would require devp2p/eth access for the bridge to remain
+## standalone.
+## - To provide 2., it could use Era1 files.
+## - To provide 3. and 4, it could use Era1 files pre-merge, and Era files
+## post-merge. To backfill without Era or Era1 files, it could use libp2p and
+## devp2p for access to the blocks, however it would not be possible to (easily)
+## build the proofs for the headers.
 
 {.push raises: [].}
 
@@ -84,8 +55,7 @@ import
   # Weirdness. Need to import this to be able to do errors.ValidationResult as
   # else we get an ambiguous identifier, ValidationResult from eth & libp2p.
   libp2p/protocols/pubsub/errors,
-  ../../../nimbus/rpc/rpc_types,
-  ../../rpc/[portal_rpc_client, eth_rpc_client],
+  ../../rpc/portal_rpc_client,
   ../../network/history/[history_content, history_network],
   ../../network/beacon/beacon_content,
   ../../common/common_types,
@@ -107,54 +77,6 @@ template asEthHash(hash: web3types.BlockHash): Hash256 =
 # TODO: Ugh why isn't gasLimit and gasUsed a uint64 in nim-eth / nimbus-eth1 :(
 template unsafeQuantityToInt64(q: Quantity): int64 =
   int64 q
-
-func asTxType(quantity: Option[Quantity]): Result[TxType, string] =
-  let value = quantity.get(0.Quantity).uint8
-  var txType: TxType
-  if not checkedEnumAssign(txType, value):
-    err("Invalid data for TxType: " & $value)
-  else:
-    ok(txType)
-
-func asReceipt(receiptObject: rpc_types.ReceiptObject): Result[Receipt, string] =
-  let receiptType = asTxType(receiptObject.`type`).valueOr:
-    return err("Failed conversion to TxType" & error)
-
-  var logs: seq[Log]
-  if receiptObject.logs.len > 0:
-    for log in receiptObject.logs:
-      var topics: seq[eth_types.Topic]
-      for topic in log.topics:
-        topics.add(eth_types.Topic(topic))
-
-      logs.add(Log(address: ethAddr log.address, data: log.data, topics: topics))
-
-  let cumulativeGasUsed = receiptObject.cumulativeGasUsed.GasInt
-  if receiptObject.status.isSome():
-    let status = receiptObject.status.get().int
-    ok(
-      Receipt(
-        receiptType: receiptType,
-        isHash: false,
-        status: status == 1,
-        cumulativeGasUsed: cumulativeGasUsed,
-        bloom: BloomFilter(receiptObject.logsBloom),
-        logs: logs,
-      )
-    )
-  elif receiptObject.root.isSome():
-    ok(
-      Receipt(
-        receiptType: receiptType,
-        isHash: true,
-        hash: ethHash receiptObject.root.get(),
-        cumulativeGasUsed: cumulativeGasUsed,
-        bloom: BloomFilter(receiptObject.logsBloom),
-        logs: logs,
-      )
-    )
-  else:
-    err("No root nor status field in the JSON receipt object")
 
 proc calculateTransactionData(
     items: openArray[TypedTransaction]
@@ -290,55 +212,6 @@ proc asPortalBlockData*(
 
   (hash, headerWithProof, body)
 
-proc getBlockReceipts(
-    client: RpcClient, transactions: seq[TypedTransaction], blockHash: Hash256
-): Future[Result[seq[Receipt], string]] {.async: (raises: [CancelledError]).} =
-  ## Note: This makes use of `eth_getBlockReceipts` JSON-RPC endpoint which is
-  ## only supported by Alchemy.
-  var receipts: seq[Receipt]
-  if transactions.len() > 0:
-    let receiptObjects =
-      # TODO: Add some retries depending on the failure
-      try:
-        await client.eth_getBlockReceipts(w3Hash blockHash)
-      except CatchableError as e:
-        return err("JSON-RPC eth_getBlockReceipts failed: " & e.msg)
-
-    for receiptObject in receiptObjects:
-      let receipt = asReceipt(receiptObject).valueOr:
-        return err(error)
-      receipts.add(receipt)
-
-  return ok(receipts)
-
-# TODO: This requires a seperate call for each transactions, which in reality
-# takes too long and causes too much overhead. To make this usable the JSON-RPC
-# code needs to get support for batch requests.
-proc getBlockReceipts(
-    client: RpcClient, transactions: seq[TypedTransaction]
-): Future[Result[seq[Receipt], string]] {.async.} =
-  var receipts: seq[Receipt]
-  for tx in transactions:
-    let txHash = keccakHash(tx.distinctBase)
-    let receiptObjectOpt =
-      # TODO: Add some retries depending on the failure
-      try:
-        await client.eth_getTransactionReceipt(w3Hash txHash)
-      except CatchableError as e:
-        await client.close()
-        return err("JSON-RPC eth_getTransactionReceipt failed: " & e.msg)
-
-    await client.close()
-
-    if receiptObjectOpt.isNone():
-      return err("eth_getTransactionReceipt returned no receipt")
-
-    let receipt = asReceipt(receiptObjectOpt.get()).valueOr:
-      return err(error)
-    receipts.add(receipt)
-
-  return ok(receipts)
-
 proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
   # Required as both Eth2Node and LightClient requires correct config type
   var lcConfig = config.asLightClientConf()
@@ -391,18 +264,6 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
     )
 
     portalRpcClient = newRpcHttpClient()
-
-    web3Client: Opt[RpcClient] =
-      if config.web3Url.isNone():
-        Opt.none(RpcClient)
-      else:
-        let client: RpcClient =
-          case config.web3Url.get().kind
-          of HttpUrl:
-            newRpcHttpClient()
-          of WsUrl:
-            newRpcWebSocketClient()
-        Opt.some(client)
 
     optimisticHandler = proc(
         signedBlock: ForkedMsgTrustedSignedBeaconBlock
@@ -461,52 +322,6 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
                   peers, contentKey = encodedContentKey.toHex()
               except CatchableError as e:
                 error "JSON-RPC error", error = $e.msg
-
-              # TODO: clean-up when json-rpc gets async raises annotations
-              try:
-                await portalRpcClient.close()
-              except CatchableError:
-                discard
-
-            if web3Client.isSome():
-              let client = web3Client.get()
-              # get receipts
-              let receipts = (
-                await client.getBlockReceipts(executionPayload.transactions, hash)
-              ).valueOr:
-                # (await web3Client.get().getBlockReceipts(
-                #     executionPayload.transactions)).valueOr:
-                error "Error getting block receipts", error
-                # TODO: clean-up when json-rpc gets async raises annotations
-                try:
-                  await client.close()
-                except CatchableError:
-                  discard
-                return
-              # TODO: clean-up when json-rpc gets async raises annotations
-              try:
-                await client.close()
-              except CatchableError:
-                discard
-
-              let portalReceipts = PortalReceipts.fromReceipts(receipts)
-              if validateReceipts(portalReceipts, payload.receiptsRoot).isErr():
-                error "Receipts root is invalid"
-                return
-
-              # gossip receipts
-              let contentKey = history_content.ContentKey.init(
-                history_content.ContentType.receipts, hash
-              )
-              let encodedContentKeyHex = contentKey.encode.asSeq().toHex()
-
-              try:
-                let peers = await portalRpcClient.portal_historyGossip(
-                  encodedContentKeyHex, SSZ.encode(portalReceipts).toHex()
-                )
-                info "Block receipts gossiped", peers, contentKey = encodedContentKeyHex
-              except CatchableError as e:
-                error "JSON-RPC error for portal_historyGossip", error = $e.msg
 
               # TODO: clean-up when json-rpc gets async raises annotations
               try:
@@ -645,10 +460,6 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
   ###
 
   waitFor portalRpcClient.connect(config.rpcAddress, Port(config.rpcPort), false)
-
-  if web3Client.isSome():
-    if config.web3Url.get().kind == HttpUrl:
-      waitFor (RpcHttpClient(web3Client.get())).connect(config.web3Url.get().web3Url)
 
   info "Listening to incoming network requests"
   network.registerProtocol(

@@ -132,14 +132,14 @@ proc fillBlob(blobId: BlobID): KzgBlob =
     currentHashed = sha256.digest(currentHashed.data)
 
 proc generateBlob(blobid: BlobID): BlobCommitment =
-  result.blob = blobId.fillBlob()
+  result.blob = blobid.fillBlob()
   let res = blobToKzgCommitment(result.blob)
   if res.isErr:
     doAssert(false, res.error)
   result.commitment = res.get
 
 proc getVersionedHash*(blobid: BlobID, commitmentVersion: byte): Hash256 =
-  let res = blobId.generateBlob()
+  let res = blobid.generateBlob()
   result = sha256.digest(res.commitment)
   result.data[0] = commitmentVersion
 

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -22,14 +22,12 @@ type
   CoreDbMptRef*  = distinct CoreDxMptRef
   CoreDbPhkRef*  = distinct CoreDxPhkRef
   CoreDbTxRef*   = distinct CoreDxTxRef
-  CoreDbTxID*    = distinct CoreDxTxID
   CoreDbCaptRef* = distinct CoreDxCaptRef
 
   CoreDbTrieRefs* = CoreDbMptRef | CoreDbPhkRef
     ## Shortcut, *MPT* modules for (legacy API)
 
-  CoreDbChldRefs* = CoreDbKvtRef | CoreDbTrieRefs | CoreDbTxRef | CoreDbTxID |
-                    CoreDbCaptRef
+  CoreDbChldRefs* = CoreDbKvtRef | CoreDbTrieRefs | CoreDbTxRef | CoreDbCaptRef
     ## Shortcut, all modules with a `parent` entry (for legacy API)
 
 # End

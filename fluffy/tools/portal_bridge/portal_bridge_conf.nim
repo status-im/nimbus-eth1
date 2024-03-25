@@ -7,9 +7,24 @@
 
 {.push raises: [].}
 
-import std/uri, confutils, confutils/std/net, nimcrypto/hash, ../../logging
+import
+  std/[strutils, os, uri], confutils, confutils/std/net, nimcrypto/hash, ../../logging
 
 export net
+
+proc defaultEthDataDir*(): string =
+  let dataDir =
+    when defined(windows):
+      "AppData" / "Roaming" / "EthData"
+    elif defined(macosx):
+      "Library" / "Application Support" / "EthData"
+    else:
+      ".cache" / "eth-data"
+
+  getHomeDir() / dataDir
+
+proc defaultEra1DataDir*(): string =
+  defaultEthDataDir() / "era1"
 
 type
   TrustedDigest* = MDigest[32 * 8]
@@ -83,8 +98,30 @@ type
         defaultValue: false,
         name: "block-verify"
       .}: bool
+
+      latest* {.
+        desc:
+          "Follow the head of the chain and gossip latest block header, body and receipts into the network",
+        defaultValue: true,
+        name: "latest"
+      .}: bool
+
+      backfill* {.
+        desc:
+          "Randomly backfill block headers, bodies and receipts into the network from the era1 files",
+        defaultValue: false,
+        name: "backfill"
+      .}: bool
+
+      era1Dir* {.
+        desc: "The directory where all era1 files are stored",
+        defaultValue: defaultEra1DataDir(),
+        defaultValueDesc: defaultEra1DataDir(),
+        name: "era1-dir"
+      .}: InputDir
     of PortalBridgeCmd.state:
-      discard
+      web3UrlState* {.desc: "Execution layer JSON-RPC API URL", name: "web3-url".}:
+        Web3Url
 
 func parseCmdArg*(T: type TrustedDigest, input: string): T {.raises: [ValueError].} =
   TrustedDigest.fromHex(input)

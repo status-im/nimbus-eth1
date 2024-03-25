@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -74,6 +74,10 @@ iterator activePrecompiles*(fork: EVMFork): EthAddress =
     if validPrecompileAddr(c.byte, maxPrecompileAddr.byte):
       res[^1] = c.byte
       yield res
+
+func activePrecompilesList*(fork: EVMFork): seq[EthAddress] =
+  for address in activePrecompiles(fork):
+    result.add address
 
 proc getSignature(c: Computation): (array[32, byte], Signature) =
   # input is Hash, V, R, S

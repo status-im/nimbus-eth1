@@ -131,7 +131,8 @@ proc getVtx*(db: AristoDbRef; vid: VertexID): VertexRef =
 
 proc getKeyRc*(db: AristoDbRef; vid: VertexID): Result[HashKey,AristoError] =
   ## Cascaded attempt to fetch a Merkle hash from the cache layers or the
-  ## backend.
+  ## backend. This function will never return a `VOID_HASH_KEY` but rather
+  ## some `GetKeyNotFound` or `GetKeyUpdateNeeded` error.
   ##
   block body:
     let key = db.layersGetKey(vid).valueOr:

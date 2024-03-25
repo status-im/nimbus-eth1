@@ -10,9 +10,11 @@
 import
   std/[os, json, strutils, times],
   stew/byteutils,
+  results,
   chronicles,
   ../../../nimbus/core/block_import,
   ../../../nimbus/common,
+  ../../../nimbus/core/eip4844,
   ../sim_utils,
   ./extract_consensus_data
 
@@ -48,6 +50,11 @@ proc main() =
   const basePath = "tests" / "fixtures" / "eth_tests" / "BlockchainTests"
   var stat: SimStat
   let start = getTime()
+
+  let res = loadKzgTrustedSetup()
+  if res.isErr:
+    echo "FATAL: ", res.error
+    quit(QuitFailure)
 
   for fileName in walkDirRec(basePath):
     if not fileName.endsWith(".json"):

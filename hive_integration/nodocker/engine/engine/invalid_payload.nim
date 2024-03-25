@@ -60,6 +60,8 @@ method execute(cs: InvalidPayloadTestCase, env: TestEnv): bool =
   let sec = if cs.syncing: env.addEngine()
             else: EngineEnv(nil)
 
+  discard sec
+  
   # Wait until TTD is reached by all clients
   let ok = waitFor env.clMock.waitForTTD()
   testCond ok
@@ -132,7 +134,7 @@ method execute(cs: InvalidPayloadTestCase, env: TestEnv): bool =
       # Depending on the field we modified, we expect a different status
       var version = env.engine.version(shadow.alteredPayload.timestamp)
       let r = env.engine.client.newPayload(version, shadow.alteredPayload)
-      if cs.syncing or cs.invalidField == InvalidparentHash:
+      if cs.syncing or cs.invalidField == InvalidParentHash:
         # Execution specification::
         # (status: ACCEPTED, latestValidHash: null, validationError: null) if the following conditions are met:
         #  - the blockHash of the payload is valid
@@ -199,7 +201,7 @@ method execute(cs: InvalidPayloadTestCase, env: TestEnv): bool =
 
 
         let q = env.engine.client.newPayload(version, shadow.alteredPayload)
-        if cs.invalidField == InvalidparentHash:
+        if cs.invalidField == InvalidParentHash:
           # There is no invalid parentHash, if this value is incorrect,
           # it is assumed that the block is missing and we need to sync.
           # ACCEPTED also valid since the CLs normally use these interchangeably
@@ -221,7 +223,7 @@ method execute(cs: InvalidPayloadTestCase, env: TestEnv): bool =
 
         # Try sending the fcU again, this time we should get the proper invalid response.
         # At this moment the response should be INVALID
-        if cs.invalidField != InvalidparentHash:
+        if cs.invalidField != InvalidParentHash:
           let version = env.engine.version(shadow.alteredPayload.timestamp)
           let s = env.engine.client.forkchoiceUpdated(version, fcState)
           # Note: syncing is acceptable here as long as the block produced after this test is produced successfully
@@ -305,6 +307,7 @@ method execute(cs: PayloadBuildAfterInvalidPayloadTest, env: TestEnv): bool =
 
   # Wait until TTD is reached by this client
   let ok = waitFor env.clMock.waitForTTD()
+  testCond ok
 
   # Produce blocks before starting the test
   testCond env.clMock.produceBlocks(5, BlockProcessCallbacks())

@@ -57,7 +57,7 @@ iterator replicatePersistent*(mpt: CoreDxMptRef): (Blob, Blob) {.rlpRaise.} =
     raiseAssert: "Unsupported database type: " & $mpt.parent.dbType
   mpt.ifTrackNewApi:
     let trie = mpt.methods.getTrieFn()
-    debug newApiTxt, ctx, elapsed, trie
+    debug newApiTxt, api, elapsed, trie
 
 when ProvideLegacyAPI:
 
@@ -65,7 +65,7 @@ when ProvideLegacyAPI:
     ## Low level trie dump, not supported for `CoreDbPhkRef`
     mpt.setTrackLegaApi LegaMptReplicateIt
     for k,v in mpt.distinctBase.replicatePersistent(): yield (k,v)
-    mpt.ifTrackLegaApi: debug legaApiTxt, ctx, elapsed
+    mpt.ifTrackLegaApi: debug legaApiTxt, api, elapsed
 
 # ------------------------------------------------------------------------------
 # End

@@ -126,7 +126,7 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
 
   setupEthRpc(node, ctx, com, txPool, server)
   setupEngineAPI(beaconEngine, server)
-  setupDebugRpc(com, server)
+  setupDebugRpc(com, txPool, server)
 
   # Do not start clique sealing engine if we are using a Proof of Work chain file
   if chainFile.len > 0:
@@ -211,7 +211,7 @@ proc numTxsInPool*(env: EngineEnv): int =
 func version*(env: EngineEnv, time: EthTime): Version =
   if env.com.isCancunOrLater(time):
     Version.V3
-  elif env.com.isShanghaiOrlater(time):
+  elif env.com.isShanghaiOrLater(time):
     Version.V2
   else:
     Version.V1

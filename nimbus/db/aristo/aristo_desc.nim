@@ -36,9 +36,6 @@ export
   aristo_constants, desc_error, desc_identifiers, desc_structural
 
 type
-  AristoDudes* = HashSet[AristoDbRef]
-    ## Descriptor peers sharing the same backend
-
   AristoTxRef* = ref object
     ## Transaction descriptor
     db*: AristoDbRef                  ## Database descriptor
@@ -55,15 +52,11 @@ type
     errKey*: Blob
 
   DudesRef = ref object
-    case rwOk: bool
-    of true:
-      roDudes: AristoDudes            ## Read-only peers
-    else:
-      rwDb: AristoDbRef               ## Link to writable descriptor
-
-  VidVtxPair* = object
-    vid*: VertexID                    ## Table lookup vertex ID (if any)
-    vtx*: VertexRef                   ## Reference to vertex
+    ## List of peers accessing the same database. This list is layzily
+    ## allocated and might be kept with a single entry, i.e. so that
+    ## `{centre} == peers`.
+    centre: AristoDbRef               ## Link to peer with write permission
+    peers: HashSet[AristoDbRef]       ## List of all peers
 
   AristoDbRef* = ref AristoDbObj
   AristoDbObj* = object
@@ -147,12 +140,6 @@ func hash*(db: AristoDbRef): Hash =
   ## Table/KeyedQueue/HashSet mixin
   cast[pointer](db).hash
 
-func dup*(wp: VidVtxPair): VidVtxPair =
-  ## Safe copy of `wp` argument
-  VidVtxPair(
-    vid: wp.vid,
-    vtx: wp.vtx.dup)
-
 # ------------------------------------------------------------------------------
 # Public functions, `dude` related
 # ------------------------------------------------------------------------------
@@ -161,18 +148,15 @@ func isCentre*(db: AristoDbRef): bool =
   ## This function returns `true` is the argument `db` is the centre (see
   ## comments on `reCentre()` for details.)
   ##
-  db.dudes.isNil or db.dudes.rwOk
+  db.dudes.isNil or db.dudes.centre == db
 
 func getCentre*(db: AristoDbRef): AristoDbRef =
   ## Get the centre descriptor among all other descriptors accessing the same
   ## backend database (see comments on `reCentre()` for details.)
   ##
-  if db.dudes.isNil or db.dudes.rwOk:
-    db
-  else:
-    db.dudes.rwDb
+  if db.dudes.isNil: db else: db.dudes.centre
 
-proc reCentre*(db: AristoDbRef): Result[void,AristoError] =
+proc reCentre*(db: AristoDbRef) =
   ## Re-focus the `db` argument descriptor so that it becomes the centre.
   ## Nothing is done if the `db` descriptor is the centre, already.
   ##
@@ -186,30 +170,13 @@ proc reCentre*(db: AristoDbRef): Result[void,AristoError] =
   ## accessing the same backend database. Descriptors where `isCentre()`
   ## returns `false` must be single destructed with `forget()`.
   ##
-  if not db.isCentre:
-    let parent = db.dudes.rwDb
-
-    # Steal dudes list from parent, make the rw-parent a read-only dude
-    db.dudes = parent.dudes
-    parent.dudes = DudesRef(rwOk: false, rwDb: db)
-
-    # Exclude self
-    db.dudes.roDudes.excl db
-
-    # Update dudes
-    for w in db.dudes.roDudes:
-      # Let all other dudes refer to this one
-      w.dudes.rwDb = db
-
-    # Update dudes list (parent was alredy updated)
-    db.dudes.roDudes.incl parent
-
-  ok()
-
+  if not db.dudes.isNil:
+    db.dudes.centre = db
 
 proc fork*(
     db: AristoDbRef;
-    rawTopLayer = false;
+    noTopLayer = false;
+    noFilter = false;
       ): Result[AristoDbRef,AristoError] =
   ## This function creates a new empty descriptor accessing the same backend
   ## (if any) database as the argument `db`. This new descriptor joins the
@@ -220,29 +187,38 @@ proc fork*(
   ## also cost computing ressources for maintaining and updating backend
   ## filters when writing to the backend database .
   ##
-  ## If the argument `rawTopLayer` is set `true` the function will provide an
-  ## uninitalised and inconsistent (!) top layer. This setting avoids some
-  ## database lookup for cases where the top layer is redefined anyway.
+  ## If the argument `noFilter` is set `true` the function will fork directly
+  ## off the backend database and ignore any filter.
   ##
+  ## If the argument `noTopLayer` is set `true` the function will provide an
+  ## uninitalised and inconsistent (!) descriptor object without top layer.
+  ## This setting avoids some database lookup for cases where the top layer
+  ## is redefined anyway.
+  ##
+  # Make sure that there is a dudes list
+  if db.dudes.isNil:
+    db.dudes = DudesRef(centre: db, peers: @[db].toHashSet)
+
   let clone = AristoDbRef(
-    top:     LayerRef.init(),
+    dudes:   db.dudes,
     backend: db.backend)
 
-  if not rawTopLayer:
-    let rc = clone.backend.getIdgFn()
-    if rc.isOk:
-      clone.top.final.vGen = rc.value
-    elif rc.error != GetIdgNotFound:
-      return err(rc.error)
+  if not noFilter:
+    clone.roFilter = db.roFilter # Ref is ok here (filters are immutable)
 
-  # Update dudes list
-  if db.dudes.isNil:
-    clone.dudes = DudesRef(rwOk: false, rwDb: db)
-    db.dudes = DudesRef(rwOk: true, roDudes: [clone].toHashSet)
-  else:
-    let parent = if db.dudes.rwOk: db else: db.dudes.rwDb
-    clone.dudes = DudesRef(rwOk: false, rwDb: parent)
-    parent.dudes.roDudes.incl clone
+  if not noTopLayer:
+    clone.top = LayerRef.init()
+    if not db.roFilter.isNil:
+      clone.top.final.vGen = db.roFilter.vGen
+    else:
+      let rc = clone.backend.getIdgFn()
+      if rc.isOk:
+        clone.top.final.vGen = rc.value
+      elif rc.error != GetIdgNotFound:
+        return err(rc.error)
+
+  # Add to peer list of clones
+  db.dudes.peers.incl clone
 
   ok clone
 
@@ -250,14 +226,15 @@ iterator forked*(db: AristoDbRef): AristoDbRef =
   ## Interate over all non centre descriptors (see comments on `reCentre()`
   ## for details.)
   if not db.dudes.isNil:
-    for dude in db.getCentre.dudes.roDudes.items:
-      yield dude
+    for dude in db.getCentre.dudes.peers.items:
+      if dude != db.dudes.centre:
+        yield dude
 
 func nForked*(db: AristoDbRef): int =
   ## Returns the number of non centre descriptors (see comments on `reCentre()`
   ## for details.) This function is a fast version of `db.forked.toSeq.len`.
   if not db.dudes.isNil:
-    return db.getCentre.dudes.roDudes.len
+    return db.dudes.peers.len - 1
 
 
 proc forget*(db: AristoDbRef): Result[void,AristoError] =
@@ -267,31 +244,21 @@ proc forget*(db: AristoDbRef): Result[void,AristoError] =
   ## A non centre descriptor should always be destructed after use (see also
   ## comments on `fork()`.)
   ##
-  if not db.isNil:
-    if db.isCentre:
-      return err(NotAllowedOnCentre)
-
-    # Unlink argument `db`
-    let parent = db.dudes.rwDb
-    if parent.dudes.roDudes.len < 2:
-      parent.dudes = DudesRef(nil)
-    else:
-      parent.dudes.roDudes.excl db
-
-    # Clear descriptor so it would not do harm if used wrongly
-    db[] = AristoDbObj(top: LayerRef.init())
-  ok()
+  if db.isCentre:
+    err(NotAllowedOnCentre)
+  elif db notin db.dudes.peers:
+    err(StaleDescriptor)
+  else:
+    db.dudes.peers.excl db         # Unlink argument `db` from peers list
+    ok()
 
 proc forgetOthers*(db: AristoDbRef): Result[void,AristoError] =
   ## For the centre argument `db` descriptor (see comments on `reCentre()`
   ## for details), destruct all other descriptors accessing the same backend.
   ##
-  if not db.isCentre:
-    return err(MustBeOnCentre)
-
   if not db.dudes.isNil:
-    for dude in db.dudes.roDudes.items:
-      dude[] = AristoDbObj(top: LayerRef.init())
+    if db.dudes.centre != db:
+      return err(MustBeOnCentre)
 
     db.dudes = DudesRef(nil)
   ok()

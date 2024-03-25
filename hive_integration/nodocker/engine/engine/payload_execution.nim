@@ -289,7 +289,7 @@ method execute(cs: NewPayloadOnSyncingClientTest, env: TestEnv): bool =
     recipient: EthAddress.randomBytes(),
   )
 
-  var sec = env.addEngine()
+  discard env.addEngine()
 
   # Wait until TTD is reached by all clients
   let ok = waitFor env.clMock.waitForTTD()
@@ -327,7 +327,7 @@ method execute(cs: NewPayloadOnSyncingClientTest, env: TestEnv): bool =
   let r = env.engine.client.forkchoiceUpdated(version, env.clMock.latestForkchoice)
   r.expectPayloadStatus(PayloadExecutionStatus.syncing)
 
-  pbREs = env.clMock.produceSingleBlock(BlockProcessCallbacks(
+  pbRes = env.clMock.produceSingleBlock(BlockProcessCallbacks(
     onPayloadProducerSelected: proc(): bool =
       # Send at least one transaction per payload
       let tc = BaseTx(
