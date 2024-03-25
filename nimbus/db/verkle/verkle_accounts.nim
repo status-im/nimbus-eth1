@@ -9,6 +9,7 @@ import
   std/algorithm,
   eth/common,
   stew/[byteutils, endians2], stint,
+  ../../evm/interpreter/op_codes,
   "../../../vendor/nim-eth-verkle/eth_verkle"/[
     math,
     tree/tree, 
@@ -20,6 +21,7 @@ import
   ]
 
 type
+  ChunkedCode = seq[byte]
   VerkleTrie = ref object
     root: BranchesNode
   # db: <something>
@@ -74,13 +76,34 @@ proc evaluateAddressPoint*(address: EthAddress): Point =
 
   return ret
 
+proc getTreeKeyCodeChunkIndices*(chunk: UInt256): (UInt256, byte) =
+  var chunkOffSet: UInt256
+  chunkOffSet = u256(128) + chunk
+  var treeIndex: UInt256
+  treeIndex = chunkOffSet div u256(256)
+  var subIndexMod: UInt256
+  subIndexMod = chunkOffSet mod u256(256)
+  var subIndex: byte
+  if not subIndexMod == UInt256.zero():
+    subIndex = byte(subIndexMod.limbs[0])
+  return (treeIndex, subIndex)
+
+# GetTreeKey performs both the work of the spec's get_tree_key function, and that
+# of pedersen_hash: it builds the polynomial in pedersen_hash without having to
+# create a mostly zero-filled buffer and "type cast" it to a 128-long 16-byte
+# array. Since at most the first 5 coefficients of the polynomial will be non-zero,
+# these 5 coefficients are created directly.
 proc getTreeKey*(address: EthAddress, treeIndex: UInt256, subIndex: byte): Bytes32 =
   var newAddr {.noinit.} : array[32, byte]
   for i in 0 ..< (32 - address.len):
     newAddr[i] = 0
   newAddr[(32 - address.len)..^1] = address
 
+  # poly = [2+256*64, address_le_low, address_le_high, tree_index_le_low, tree_index_le_high]
   var poly: array[256, Field]
+
+  # 32-byte address, interpreted as two little endian
+  # 16-byte numbers.
   poly[1].fromLEBytes(newAddr[0..15])
   poly[2].fromLEBytes(newAddr[16..^1])
 
@@ -88,6 +111,15 @@ proc getTreeKey*(address: EthAddress, treeIndex: UInt256, subIndex: byte): Bytes
   var a = fromHex(Bytes32, "0x22196df2c10590e04c34bd5cc57e09911b98c782a503d21bc1838e1c6e1a10bf")
   discard getTreePolyIndex0Point.deserialize(a)
 
+  # treeIndex must be interpreted as a 32-byte aligned little-endian integer.
+  # e.g: if treeIndex is 0xAABBCC, we need the byte representation to be 0xCCBBAA00...00.
+  # poly[3] = LE({CC,BB,AA,00...0}) (16 bytes), poly[4]=LE({00,00,...}) (16 bytes).
+  #
+  # To avoid unnecessary endianness conversions for nim-eth-verkle, we do some trick:
+  # - poly[3]'s byte representation is the same as the *top* 16 bytes (trieIndexBytes[16:]) of
+  #   32-byte aligned big-endian representation (BE({00,...,AA,BB,CC})).
+  # - poly[4]'s byte representation is the same as the *low* 16 bytes (trieIndexBytes[:16]) of
+  #   the 32-byte aligned big-endian representation (BE({00,00,...}).
   var treeIndexBytes = treeIndex.toBytesBE()
   poly[3].fromBEBytes(treeIndexBytes[16..^1])
   poly[4].fromBEBytes(treeIndexBytes[0..15])
@@ -98,6 +130,7 @@ proc getTreeKey*(address: EthAddress, treeIndex: UInt256, subIndex: byte): Bytes
   
   var ret = ipaCommitToPoly(poly)
 
+  # add a constant point corresponding to poly[0]=[2+256*64]
   ret.banderwagonAddPoint(getTreePolyIndex0Point)
   return pointToHash(ret, subIndex)
 
@@ -121,6 +154,11 @@ proc getTreeKeyCodeKeccak*(address: EthAddress): Bytes32 =
 
 proc getTreeKeyCodeSize*(address: EthAddress): Bytes32 =
   return getTreeKey(address, UInt256.zero(), CodeSizeLeafKey)
+
+proc getTreeKeyCodeChunk*(address: EthAddress, chunk: UInt256): Bytes32 =
+  let (treeIndex, subIndex) = getTreeKeyCodeChunkIndices(chunk)
+  return getTreeKey(address, treeIndex, subIndex)
+
 
 proc newVerkleTrie*(): VerkleTrie =
   result = VerkleTrie(root: newTree())
@@ -153,3 +191,51 @@ proc updateAccount*(trie: var VerkleTrie, address: EthAddress, acc: Account) =
 proc hashVerkleTrie*(trie: var VerkleTrie): Bytes32 =
   trie.root.updateAllCommitments()
   return trie.root.commitment.serializePoint()
+
+# ChunkifyCode generates the chunked version of an array representing EVM bytecode
+proc chunkifyCode*(code: openArray[byte]) : ChunkedCode =
+  var
+    chunkOffset = 0 # offset in the chunk
+    chunkCount  = len(code) div 31
+    codeOffset  = 0 # offset in the code
+
+  if len(code) mod 31 != 0:
+    chunkCount += 1
+
+  var chunks = newSeq[byte](chunkCount*32)
+
+  for i in 0 ..< chunkCount:
+    # number of bytes to copy, 31 unless
+    # the end of the code has been reached.
+    var endAt = 31 * (i + 1)
+    if len(code) < endAt:
+      endAt = len(code)
+
+    # Copy the code itself
+    for j in 31*i ..< endAt:
+      chunks[32*i + 1 + j - 31*i] = code[j]
+
+    # chunk offset = taken from the
+    # last chunk.
+    if chunkOffset > 31:
+      # skip offset calculation if push
+      # data covers the whole chunk
+      chunks[i*32] = 31
+      chunkOffset = 1
+      continue
+
+    chunks[32*i] = byte(chunkOffset)
+    chunkOffset = 0
+
+    # Check each instruction and update the offset
+    # it should be 0 unless a PUSHn overflows.
+    while codeOffset < endAt:
+      if code[codeOffset] >= byte(Op.Push1) and code[codeOffset] <= byte(Op.Push32):
+        codeOffset += int(code[codeOffset] - byte(Op.Push1) + 1)
+        if codeOffset+1 >= 31*(i+1):
+          codeOffset += 1
+          chunkOffset = codeOffset - 31*(i+1)
+          break
+      codeOffset += 1
+
+  return chunks
