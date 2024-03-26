@@ -60,7 +60,8 @@ EXCLUDED_NIM_PACKAGES := 	\
 # debugging tools + testing tools
 TOOLS := \
 	test_tools_build \
-	persist
+	persist \
+	hunter
 TOOLS_DIRS := \
 	tests \
 	premix
