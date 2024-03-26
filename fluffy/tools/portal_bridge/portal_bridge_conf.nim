@@ -108,9 +108,16 @@ type
 
       backfill* {.
         desc:
-          "Randomly backfill block headers, bodies and receipts into the network from the era1 files",
+          "Randomly backfill pre-merge block headers, bodies and receipts into the network from the era1 files",
         defaultValue: false,
         name: "backfill"
+      .}: bool
+
+      audit* {.
+        desc:
+          "Run pre-merge backfill in audit mode, which will only gossip content that if failed to fetch from the network",
+        defaultValue: false,
+        name: "audit"
       .}: bool
 
       era1Dir* {.

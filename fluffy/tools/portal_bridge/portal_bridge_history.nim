@@ -22,6 +22,7 @@ import
   ../../network/history/[history_content, history_network],
   ../../network_metadata,
   ../../eth_data/[era1, history_data_ssz_e2s, history_data_seeding],
+  ../../database/era1_db,
   ./portal_bridge_conf
 
 from stew/objects import checkedEnumAssign
@@ -170,7 +171,9 @@ proc gossipBlockHeader(
   return ok()
 
 proc gossipBlockBody(
-    client: RpcClient, hash: common_types.BlockHash, body: PortalBlockBodyShanghai
+    client: RpcClient,
+    hash: common_types.BlockHash,
+    body: PortalBlockBodyLegacy | PortalBlockBodyShanghai,
 ): Future[Result[void, string]] {.async: (raises: []).} =
   let
     contentKey = history_content.ContentKey.init(blockBody, hash)
@@ -402,6 +405,142 @@ proc runBackfillLoop(
 
       info "Succesfully gossiped era1 file", eraFile
 
+proc runBackfillLoopAuditMode(
+    portalClient: RpcClient, web3Client: RpcClient, era1Dir: string
+) {.async: (raises: [CancelledError]).} =
+  let
+    rng = newRng()
+    db = Era1DB.new(era1Dir, "mainnet", loadAccumulator())
+
+  while true:
+    let
+      # Grab a random blockNumber to audit and potentially gossip
+      blockNumber = rng[].rand(network_metadata.mergeBlockNumber - 1).uint64
+      (header, body, receipts, _) = db.getBlockTuple(blockNumber).valueOr:
+        error "Failed to get block tuple", error, blockNumber
+        continue
+      blockHash = header.blockHash()
+
+    var headerSuccess, bodySuccess, receiptsSuccess = false
+
+    logScope:
+      blockNumber = blockNumber
+
+    # header
+    block headerBlock:
+      let
+        contentKey = ContentKey.init(blockHeader, blockHash)
+        contentHex =
+          try:
+            (
+              await portalClient.portal_historyRecursiveFindContent(
+                contentKey.encode.asSeq().toHex()
+              )
+            ).content
+          except CatchableError as e:
+            error "Failed to find block header content", error = e.msg
+            break headerBlock
+        content =
+          try:
+            hexToSeqByte(contentHex)
+          except ValueError as e:
+            error "Invalid hex for block header content", error = e.msg
+            break headerBlock
+
+        headerWithProof = decodeSsz(content, BlockHeaderWithProof).valueOr:
+          error "Failed to decode block header content", error
+          break headerBlock
+
+      if keccakHash(headerWithProof.header.asSeq()) != blockHash:
+        error "Block hash mismatch", blockNumber
+        break headerBlock
+
+      info "Retrieved block header from Portal network"
+      headerSuccess = true
+
+    # body
+    block bodyBlock:
+      let
+        contentKey = ContentKey.init(blockBody, blockHash)
+        contentHex =
+          try:
+            (
+              await portalClient.portal_historyRecursiveFindContent(
+                contentKey.encode.asSeq().toHex()
+              )
+            ).content
+          except CatchableError as e:
+            error "Failed to find block body content", error = e.msg
+            break bodyBlock
+        content =
+          try:
+            hexToSeqByte(contentHex)
+          except ValueError as e:
+            error "Invalid hex for block body content", error = e.msg
+            break bodyBlock
+
+      validateBlockBodyBytes(content, header).isOkOr:
+        error "Block body is invalid", error
+        break bodyBlock
+
+      info "Retrieved block body from Portal network"
+      bodySuccess = true
+
+    # receipts
+    block receiptsBlock:
+      let
+        contentKey = ContentKey.init(ContentType.receipts, blockHash)
+        contentHex =
+          try:
+            (
+              await portalClient.portal_historyRecursiveFindContent(
+                contentKey.encode.asSeq().toHex()
+              )
+            ).content
+          except CatchableError as e:
+            error "Failed to find block receipts content", error = e.msg
+            break receiptsBlock
+        content =
+          try:
+            hexToSeqByte(contentHex)
+          except ValueError as e:
+            error "Invalid hex for block receipts content", error = e.msg
+            break receiptsBlock
+
+      validateReceiptsBytes(content, header.receiptRoot).isOkOr:
+        error "Block receipts are invalid", error
+        break receiptsBlock
+
+      info "Retrieved block receipts from Portal network"
+      receiptsSuccess = true
+
+    # Gossip missing content
+    if not headerSuccess:
+      let
+        epochAccumulator = db.getAccumulator(blockNumber).valueOr:
+          raiseAssert "Failed to get accumulator from EraDB: " & error
+        headerWithProof = buildHeaderWithProof(header, epochAccumulator).valueOr:
+          raiseAssert "Failed to build header with proof: " & error
+
+      (await portalClient.gossipBlockHeader(blockHash, headerWithProof)).isOkOr:
+        error "Failed to gossip block header", error
+    if not bodySuccess:
+      (
+        await portalClient.gossipBlockBody(
+          blockHash, PortalBlockBodyLegacy.fromBlockBody(body)
+        )
+      ).isOkOr:
+        error "Failed to gossip block body", error
+    if not receiptsSuccess:
+      (
+        await portalClient.gossipReceipts(
+          blockHash, PortalReceipts.fromReceipts(receipts)
+        )
+      ).isOkOr:
+        error "Failed to gossip receipts", error
+
+    await sleepAsync(2.seconds)
+
 proc runHistory*(config: PortalBridgeConf) =
   let
     portalClient = newRpcHttpClient()
@@ -427,7 +566,12 @@ proc runHistory*(config: PortalBridgeConf) =
     asyncSpawn runLatestLoop(portalClient, web3Client, config.blockVerify)
 
   if config.backfill:
-    asyncSpawn runBackfillLoop(portalClient, web3Client, config.era1Dir.string)
+    if config.audit:
+      asyncSpawn runBackfillLoopAuditMode(
+        portalClient, web3Client, config.era1Dir.string
+      )
+    else:
+      asyncSpawn runBackfillLoop(portalClient, web3Client, config.era1Dir.string)
 
   while true:
     poll()

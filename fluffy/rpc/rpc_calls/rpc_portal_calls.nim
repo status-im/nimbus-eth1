@@ -25,7 +25,7 @@ createRpcSigsFromNim(RpcClient):
   proc portal_stateFindContent(enr: Record, contentKey: string): JsonNode
   proc portal_stateOffer(enr: Record, contentKey: string, contentValue: string): string
   proc portal_stateRecursiveFindNodes(nodeId: NodeId): seq[Record]
-  proc portal_stateRecursiveFindContent(contentKey: string): string
+  proc portal_stateRecursiveFindContent(contentKey: string): ContentInfo
   proc portal_stateStore(contentKey: string, contentValue: string): bool
   proc portal_stateLocalContent(contentKey: string): string
   proc portal_stateGossip(contentKey: string, contentValue: string): int
@@ -46,7 +46,7 @@ createRpcSigsFromNim(RpcClient):
   ): string
 
   proc portal_historyRecursiveFindNodes(nodeId: NodeId): seq[Record]
-  proc portal_historyRecursiveFindContent(contentKey: string): string
+  proc portal_historyRecursiveFindContent(contentKey: string): ContentInfo
   proc portal_historyStore(contentKey: string, contentValue: string): bool
   proc portal_historyLocalContent(contentKey: string): string
   proc portal_historyGossip(contentKey: string, contentValue: string): int
@@ -64,7 +64,7 @@ createRpcSigsFromNim(RpcClient):
   proc portal_beaconFindContent(enr: Record, contentKey: string): JsonNode
   proc portal_beaconOffer(enr: Record, contentKey: string, contentValue: string): string
   proc portal_beaconRecursiveFindNodes(nodeId: NodeId): seq[Record]
-  proc portal_beaconRecursiveFindContent(contentKey: string): string
+  proc portal_beaconRecursiveFindContent(contentKey: string): ContentInfo
   proc portal_beaconStore(contentKey: string, contentValue: string): bool
   proc portal_beaconLocalContent(contentKey: string): string
   proc portal_beaconGossip(contentKey: string, contentValue: string): int

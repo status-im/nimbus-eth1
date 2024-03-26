@@ -45,11 +45,11 @@ proc checkAccumulators(client: RpcClient) {.async.} =
     let contentKey = ContentKey.init(epochAccumulator, root)
 
     try:
-      let content = await client.portal_historyRecursiveFindContent(
+      let contentInfo = await client.portal_historyRecursiveFindContent(
         contentKey.encode.asSeq().toHex()
       )
 
-      let res = decodeSsz(hexToSeqByte(content), EpochAccumulator)
+      let res = decodeSsz(hexToSeqByte(contentInfo.content), EpochAccumulator)
       if res.isErr():
         echo "[Invalid] EpochAccumulator number " & $i & ": " & $root & " error: " &
           res.error

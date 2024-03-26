@@ -26,9 +26,14 @@ type
 
   PingResult* = tuple[enrSeq: uint64, dataRadius: UInt256]
 
+  ContentInfo* = object
+    content*: string
+    utpTransfer*: bool
+
 NodeInfo.useDefaultSerializationIn JrpcConv
 RoutingTableInfo.useDefaultSerializationIn JrpcConv
 (string, string).useDefaultSerializationIn JrpcConv
+ContentInfo.useDefaultSerializationIn JrpcConv
 
 func getNodeInfo*(r: RoutingTable): NodeInfo =
   NodeInfo(enr: r.localNode.record, nodeId: r.localNode.id)
