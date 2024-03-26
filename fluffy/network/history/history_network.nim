@@ -136,7 +136,7 @@ func fromPortalReceipts*(
 # forks but not for the EL BlockBody (usage of Option) does not play so well
 # together.
 
-func fromBlockBody(T: type PortalBlockBodyLegacy, body: BlockBody): T =
+func fromBlockBody*(T: type PortalBlockBodyLegacy, body: BlockBody): T =
   var transactions: Transactions
   for tx in body.transactions:
     discard transactions.add(TransactionByteList(rlp.encode(tx)))
@@ -145,7 +145,7 @@ func fromBlockBody(T: type PortalBlockBodyLegacy, body: BlockBody): T =
 
   PortalBlockBodyLegacy(transactions: transactions, uncles: uncles)
 
-func fromBlockBody(T: type PortalBlockBodyShanghai, body: BlockBody): T =
+func fromBlockBody*(T: type PortalBlockBodyShanghai, body: BlockBody): T =
   var transactions: Transactions
   for tx in body.transactions:
     discard transactions.add(TransactionByteList(rlp.encode(tx)))

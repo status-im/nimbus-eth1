@@ -260,7 +260,7 @@ func era1FileName*(network: string, era: Era1, eraRoot: Digest): string =
 type
   Era1File* = ref object
     handle: Opt[IoHandle]
-    blockIdx: BlockIndex
+    blockIdx*: BlockIndex
 
   BlockTuple* =
     tuple[header: BlockHeader, body: BlockBody, receipts: seq[Receipt], td: UInt256]
