@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -147,19 +147,19 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     if not db.getBlockHeader(finalizedBlockHash, finalBlock):
       warn "Final block not available in database",
         hash=finalizedBlockHash.short
-      raise invalidParams("finalized block header not available")
+      raise invalidForkChoiceState("finalized block header not available")
     var finalHash: common.Hash256
     if not db.getBlockHash(finalBlock.blockNumber, finalHash):
       warn "Final block not in canonical chain",
         number=finalBlock.blockNumber,
         hash=finalizedBlockHash.short
-      raise invalidParams("finalized block hash not available")
+      raise invalidForkChoiceState("finalized block hash not available")
     if finalHash != finalizedBlockHash:
       warn "Final block not in canonical chain",
         number=finalBlock.blockNumber,
         expect=finalizedBlockHash.short,
         get=finalHash.short
-      raise invalidParams("finalized block not canonical")
+      raise invalidForkChoiceState("finalized block not canonical")
     db.finalizedHeaderHash(finalizedBlockHash)
 
   let safeBlockHash = ethHash update.safeBlockHash
@@ -168,18 +168,18 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     if not db.getBlockHeader(safeBlockHash, safeBlock):
       warn "Safe block not available in database",
         hash = safeBlockHash.short
-      raise invalidParams("safe head not available")
+      raise invalidForkChoiceState("safe head not available")
     var safeHash: common.Hash256
     if not db.getBlockHash(safeBlock.blockNumber, safeHash):
       warn "Safe block hash not available in database",
         hash = safeHash.short
-      raise invalidParams("safe block hash not available")
+      raise invalidForkChoiceState("safe block hash not available")
     if safeHash != safeBlockHash:
       warn "Safe block not in canonical chain",
         blockNumber=safeBlock.blockNumber,
         expect=safeBlockHash.short,
         get=safeHash.short
-      raise invalidParams("safe head not canonical")
+      raise invalidForkChoiceState("safe head not canonical")
     db.safeHeaderHash(safeBlockHash)
 
   # If payload generation was requested, create a new block to be potentially

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2023 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -135,6 +135,12 @@ proc invalidParams*(msg: string): ref InvalidRequest =
     msg: msg
   )
 
+proc invalidForkChoiceState*(msg: string): ref InvalidRequest =
+  (ref InvalidRequest)(
+    code: engineApiInvalidForkchoiceState,
+    msg: msg
+  )
+  
 proc unknownPayload*(msg: string): ref InvalidRequest =
   (ref InvalidRequest)(
     code: engineApiUnknownPayload,

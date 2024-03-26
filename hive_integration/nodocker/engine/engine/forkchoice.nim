@@ -85,7 +85,7 @@ method execute(cs: InconsistentForkchoiceTest, env: TestEnv): bool =
 
   let version = env.engine.version(env.clMock.latestPayloadBuilt.timestamp)
   var r = env.engine.client.forkchoiceUpdated(version, inconsistentFcU)
-  r.expectError()
+  r.expectErrorCode(engineApiInvalidForkchoiceState)
 
   # Return to the canonical chain
   r = env.engine.client.forkchoiceUpdated(version, env.clMock.latestForkchoice)
