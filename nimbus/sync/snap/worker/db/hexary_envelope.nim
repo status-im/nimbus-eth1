@@ -534,7 +534,7 @@ proc hexaryEnvelopeDecompose*(
   if touched.chunks == 0:
     return err(DecomposeDisjunct)
 
-  # Decompose the the complement of the `node` envelope off `iv` into
+  # Decompose the complement of the `node` envelope off `iv` into
   # envelopes/sub-tries.
   let
     startNode = NodeSpecs(partialPath: partialPath)

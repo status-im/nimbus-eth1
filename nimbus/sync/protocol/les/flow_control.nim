@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -411,7 +411,7 @@ when defined(testing):
               # check newError < error
               error = newError
 
-            # After enough samples we should be very close the the final result
+            # After enough samples we should be very close the final result
             check error < (expectedFinalCost * 0.02)
 
           performTest(1, 10, 5.0, 100.0)
