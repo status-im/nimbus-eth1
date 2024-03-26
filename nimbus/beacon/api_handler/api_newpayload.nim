@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -48,6 +48,14 @@ template validateVersion(com, timestamp, version, apiVersion) =
       " expect ExecutionPayload" & $apiVersion &
       " but got ExecutionPayload" & $version)
 
+template validatePayload(apiVersion, version, payload) =
+  if version == Version.V3:
+    if payload.blobGasUsed.isNone:
+      raise invalidParams("newPayload" & $apiVersion &
+        "blobGasUsed is expected from execution payload")
+    if payload.excessBlobGas.isNone:
+      raise invalidParams("newPayload" & $apiVersion &
+        "excessBlobGas is expected from execution payload")
 
 proc newPayload*(ben: BeaconEngineRef,
                  apiVersion: Version,
@@ -70,6 +78,7 @@ proc newPayload*(ben: BeaconEngineRef,
     version = payload.version
 
   validateVersion(com, timestamp, version, apiVersion)
+  validatePayload(apiVersion, version, payload)
 
   var header = blockHeader(payload, ethHash beaconRoot)
   let blockHash = ethHash payload.blockHash
