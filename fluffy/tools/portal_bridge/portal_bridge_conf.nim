@@ -116,7 +116,7 @@ type
       audit* {.
         desc:
           "Run pre-merge backfill in audit mode, which will only gossip content that if failed to fetch from the network",
-        defaultValue: false,
+        defaultValue: true,
         name: "audit"
       .}: bool
 
