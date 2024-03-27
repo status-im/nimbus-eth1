@@ -289,8 +289,8 @@ proc runLatestLoop(
     let elapsed = t1 - t0
     if elapsed < newHeadPollInterval:
       await sleepAsync(newHeadPollInterval - elapsed)
-    else:
-      warn "Block gossip took longer than the poll interval"
+    elif elapsed > newHeadPollInterval * 2:
+      warn "Block gossip took longer than slot interval"
 
 proc gossipHeadersWithProof(
     portalClient: RpcClient,
