@@ -160,9 +160,12 @@ if defined(windows) and defined(i386):
 # disable nim-kzg's blst
 switch("define", "kzgExternalBlst")
 
-# RocksDB static linking is enabled by default
-# but can be disabled by setting this flag
-when not defined(disable_rocksdb_static_linking):
+# RocksDB static linking is disabled by default
+when defined(enable_rocksdb_static_linking):
+
+  when defined(windows):
+    {.fatal: "RocksDB static linking is not supported on Windows".}
+
   switch("define", "rocksdb_static_linking")
 
   # use the C++ linker profile because it's a C++ library
