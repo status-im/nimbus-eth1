@@ -34,6 +34,17 @@ const
   CodeKeccakLeafKey = 3
   CodeSizeLeafKey = 4
 
+const
+  CodeOffset* = UInt256.fromHex("0x100")
+  HeaderStorageOffset* = UInt256.fromHex("0x40")
+  CodeStorageDelta* = UInt256.fromHex("0x40")
+  VerkleNodeWidthLog2* = 8
+
+let one = 1.u256
+let twofourty = 240
+
+var MainStorageOffsetLshVerkleNodeWidth*: UInt256 = one shl twofourty
+
 
 proc pointToHash*(point: Point, suffix: byte): Bytes32 =
   result = point.serializePoint()
@@ -243,3 +254,33 @@ proc chunkifyCode*(code: openArray[byte]) : ChunkedCode =
       codeOffset += 1
 
   return chunks
+
+proc getTreeKeyStorageSlotIndices* (storageKey: openArray[byte]): (UInt256, byte) =
+  var position = UInt256.fromBytesBE(storageKey)
+
+  ## If the storage slot exists in the header, then we need to add the header offset
+  if position < CodeStorageDelta:
+    position = position + HeaderStorageOffset
+
+    ## In this branch, the tree-index is 0 since it points to the account header
+    ## and the sub-index is the LSB of the updated storage Key
+    let ret = byte(position.limbs[0] and byte(0xff))
+    return (UInt256.zero(), ret)
+
+
+  ## The first MAIN_STORAGE_OFFSET group will find the 
+  ## first 64 slots unreachable. 
+
+  let suffix = storageKey[storageKey.len - 1]
+
+  ## Divide the position with VerkleNodeWidthLog2 to avoid an overflow
+  position = position shr VerkleNodeWidthLog2
+
+  ## Add the MAIN_STORAGE_OFFSET lsh VerkleNodeWidth to the position
+  position = position + MainStorageOffsetLshVerkleNodeWidth
+
+  return (position, suffix)
+
+
+
+  
