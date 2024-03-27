@@ -77,10 +77,23 @@ proc getPayloadV3*(client: RpcClient, payloadId: PayloadID): Result[GetPayloadV3
   wrapTrySimpleRes:
     client.engine_getPayloadV3(payloadId)
 
+proc getPayloadV4*(client: RpcClient, payloadId: PayloadID): Result[GetPayloadV4Response, string] =
+  wrapTrySimpleRes:
+    client.engine_getPayloadV4(payloadId)
+
 proc getPayload*(client: RpcClient,
                  payloadId: PayloadID,
                  version: Version): Result[GetPayloadResponse, string] =
-  if version == Version.V3:
+  if version == Version.V4:
+    let x = client.getPayloadV4(payloadId).valueOr:
+      return err(error)
+    ok(GetPayloadResponse(
+      executionPayload: executionPayload(x.executionPayload),
+      blockValue: some(x.blockValue),
+      blobsBundle: some(x.blobsBundle),
+      shouldOverrideBuilder: some(x.shouldOverrideBuilder),
+    ))
+  elif version == Version.V3:
     let x = client.getPayloadV3(payloadId).valueOr:
       return err(error)
     ok(GetPayloadResponse(
@@ -108,9 +121,10 @@ proc forkchoiceUpdated*(client: RpcClient,
                         attr: PayloadAttributes):
                           Result[ForkchoiceUpdatedResponse, string] =
   case attr.version
-  of Version.V1: client.forkchoiceUpdatedV1(update, some attr.V1)
-  of Version.V2: client.forkchoiceUpdatedV2(update, some attr)
-  of Version.V3: client.forkchoiceUpdatedV3(update, some attr)
+  of Version.V1: return client.forkchoiceUpdatedV1(update, some attr.V1)
+  of Version.V2: return client.forkchoiceUpdatedV2(update, some attr)
+  of Version.V3: return client.forkchoiceUpdatedV3(update, some attr)
+  of Version.V4: discard
 
 proc forkchoiceUpdated*(client: RpcClient,
                         version: Version,
@@ -118,9 +132,10 @@ proc forkchoiceUpdated*(client: RpcClient,
                         attr = none(PayloadAttributes)):
                           Result[ForkchoiceUpdatedResponse, string] =
   case version
-  of Version.V1: client.forkchoiceUpdatedV1(update, attr.V1)
-  of Version.V2: client.forkchoiceUpdatedV2(update, attr)
-  of Version.V3: client.forkchoiceUpdatedV3(update, attr)
+  of Version.V1: return client.forkchoiceUpdatedV1(update, attr.V1)
+  of Version.V2: return client.forkchoiceUpdatedV2(update, attr)
+  of Version.V3: return client.forkchoiceUpdatedV3(update, attr)
+  of Version.V4: discard
 
 proc newPayloadV1*(client: RpcClient,
       payload: ExecutionPayloadV1):
@@ -149,6 +164,15 @@ proc newPayloadV3*(client: RpcClient,
   wrapTrySimpleRes:
     client.engine_newPayloadV3(payload, versionedHashes, parentBeaconBlockRoot)
 
+proc newPayloadV4*(client: RpcClient,
+      payload: ExecutionPayloadV4,
+      versionedHashes: seq[VersionedHash],
+      parentBeaconBlockRoot: FixedBytes[32]
+      ):
+        Result[PayloadStatusV1, string] =
+  wrapTrySimpleRes:
+    client.engine_newPayloadV4(payload, versionedHashes, parentBeaconBlockRoot)
+
 proc newPayloadV1*(client: RpcClient,
       payload: ExecutionPayload):
         Result[PayloadStatusV1, string] =
@@ -170,6 +194,15 @@ proc newPayloadV3*(client: RpcClient,
   wrapTrySimpleRes:
     client.engine_newPayloadV3(payload, versionedHashes, parentBeaconBlockRoot)
 
+proc newPayloadV4*(client: RpcClient,
+      payload: ExecutionPayload,
+      versionedHashes: Option[seq[VersionedHash]],
+      parentBeaconBlockRoot: Option[FixedBytes[32]]
+      ):
+        Result[PayloadStatusV1, string] =
+  wrapTrySimpleRes:
+    client.engine_newPayloadV4(payload, versionedHashes, parentBeaconBlockRoot)
+
 proc collectBlobHashes(list: openArray[Web3Tx]): seq[Web3Hash] =
   for w3tx in list:
     let tx = ethTx(w3tx)
@@ -190,6 +223,11 @@ proc newPayload*(client: RpcClient,
     return client.newPayloadV3(payload.V3,
       versionedHashes,
       w3Hash beaconRoot.get)
+  of Version.V4:
+    let versionedHashes = collectBlobHashes(payload.transactions)
+    return client.newPayloadV4(payload.V4,
+      versionedHashes,
+      w3Hash beaconRoot.get)
 
 proc newPayload*(client: RpcClient,
                  version: Version,
@@ -199,6 +237,10 @@ proc newPayload*(client: RpcClient,
   of Version.V2: return client.newPayloadV2(payload.basePayload)
   of Version.V3:
     return client.newPayloadV3(payload.basePayload,
+      w3Hashes payload.versionedHashes,
+      w3Hash payload.beaconRoot)
+  of Version.V4:
+    return client.newPayloadV4(payload.basePayload,
       w3Hashes payload.versionedHashes,
       w3Hash payload.beaconRoot)
 
