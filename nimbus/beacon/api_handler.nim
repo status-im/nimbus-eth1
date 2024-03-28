@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -47,6 +47,7 @@ export
   invalidStatus,
   getPayload,
   getPayloadV3,
+  getPayloadV4,
   getPayloadBodiesByHash,
   getPayloadBodiesByRange,
   exchangeConf,

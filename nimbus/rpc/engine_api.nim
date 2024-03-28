@@ -23,9 +23,11 @@ const supportedMethods: HashSet[string] =
     "engine_newPayloadV1",
     "engine_newPayloadV2",
     "engine_newPayloadV3",
+    "engine_newPayloadV4",
     "engine_getPayloadV1",
     "engine_getPayloadV2",
     "engine_getPayloadV3",
+    "engine_getPayloadV4",
     "engine_exchangeTransitionConfigurationV1",
     "engine_forkchoiceUpdatedV1",
     "engine_forkchoiceUpdatedV2",
@@ -57,6 +59,15 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
       return invalidStatus()
     return engine.newPayload(Version.V3, payload, parentBeaconBlockRoot)
 
+  server.rpc("engine_newPayloadV4") do(payload: ExecutionPayload,
+                                       expectedBlobVersionedHashes: Option[seq[Web3Hash]],
+                                       parentBeaconBlockRoot: Option[Web3Hash]) -> PayloadStatusV1:
+    if expectedBlobVersionedHashes.isNone:
+      raise invalidParams("newPayloadV4 expect blobVersionedHashes but got none")
+    if not validateVersionedHashed(payload, expectedBlobVersionedHashes.get):
+      return invalidStatus()
+    return engine.newPayload(Version.V4, payload, parentBeaconBlockRoot)
+
   server.rpc("engine_getPayloadV1") do(payloadId: PayloadID) -> ExecutionPayloadV1:
     return engine.getPayload(Version.V1, payloadId).executionPayload.V1
 
@@ -65,6 +76,9 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
 
   server.rpc("engine_getPayloadV3") do(payloadId: PayloadID) -> GetPayloadV3Response:
     return engine.getPayloadV3(payloadId)
+
+  server.rpc("engine_getPayloadV4") do(payloadId: PayloadID) -> GetPayloadV4Response:
+    return engine.getPayloadV4(payloadId)
 
   server.rpc("engine_exchangeTransitionConfigurationV1") do(
                        conf: TransitionConfigurationV1) -> TransitionConfigurationV1:
