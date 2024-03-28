@@ -74,7 +74,7 @@ echo "ROCKSDBVER=${ROCKSDBVER}"
 #- we need to build everything against libraries available inside this container, including the Nim compiler
 #- "librocksdb.a" is a C++ library so we need to link it with the C++ profile
 make clean
-NIMFLAGS_COMMON="-d:disableMarchNative --gcc.options.debug:'-g1' --clang.options.debug:'-gline-tables-only' --dynlibOverride:rocksdb --passL:'-L/home/user/nimbus-eth1/build/rocksdb-${ROCKSDBVER}'"
+NIMFLAGS_COMMON="-d:disableMarchNative --gcc.options.debug:'-g1' --clang.options.debug:'-gline-tables-only' --dynlibOverride:rocksdb --passL:'-lrocksdb -L/home/user/nimbus-eth1/build/rocksdb-${ROCKSDBVER}'"
 
 if [[ "${PLATFORM}" == "Windows_amd64" ]]; then
   # Cross-compilation using the MXE distribution of Mingw-w64
