@@ -397,6 +397,9 @@ func isShanghaiOrLater*(com: CommonRef, t: EthTime): bool =
 func isCancunOrLater*(com: CommonRef, t: EthTime): bool =
   com.config.cancunTime.isSome and t >= com.config.cancunTime.get
 
+func isPragueOrLater*(com: CommonRef, t: EthTime): bool =
+  com.config.pragueTime.isSome and t >= com.config.pragueTime.get
+
 proc consensus*(com: CommonRef, header: BlockHeader): ConsensusType
                 {.gcsafe, raises: [CatchableError].} =
   if com.isBlockAfterTtd(header):

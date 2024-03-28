@@ -149,8 +149,8 @@ proc evmcExecComputation*(host: TransactionHost): EvmcResult
 
   host.showCallReturn(result)
 
-# This code assumes fields, methods and types of ABI version 11, and must be
+# This code assumes fields, methods and types of ABI version 12, and must be
 # checked for compatibility if the `import evmc/evmc` major version is updated.
-when EVMC_ABI_VERSION != 11:
-  {.error: ("This code assumes EVMC_ABI_VERSION 11;" &
+when EVMC_ABI_VERSION != 12:
+  {.error: ("This code assumes EVMC_ABI_VERSION 12;" &
             " update the code to use EVMC_ABI_VERSION " & $EVMC_ABI_VERSION).}

@@ -31,6 +31,8 @@ type
     blob_hashes*      : ptr evmc_bytes32 # The array of blob hashes (EIP-4844).
     blob_hashes_count*: csize_t          # The number of blob hashes (EIP-4844).
     blob_base_fee*    : evmc_uint256be   # The blob base fee (EIP-7516).
+    initcodes*        : ptr evmc_tx_initcode # The array of transaction initcodes (TXCREATE).
+    initcodes_count*  : csize_t              # The number of transaction initcodes (TXCREATE).
 
   nimbus_message* = object
     kind*        : evmc_call_kind
@@ -44,6 +46,8 @@ type
     value*       : evmc_uint256be
     create2_salt*: evmc_bytes32
     code_address*: EthAddress
+    code*        : ptr byte
+    code_size*   : csize_t
 
   nimbus_result* = object
     status_code*   : evmc_status_code
