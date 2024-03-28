@@ -159,3 +159,21 @@ if defined(windows) and defined(i386):
 # nim-kzg shipping their own blst, nimbus-eth1 too.
 # disable nim-kzg's blst
 switch("define", "kzgExternalBlst")
+
+# RocksDB static linking is disabled by default
+when defined(enable_rocksdb_static_linking):
+
+  when defined(windows):
+    {.fatal: "RocksDB static linking is not supported on Windows".}
+
+  switch("define", "rocksdb_static_linking")
+
+  # use the C++ linker profile because it's a C++ library
+  when defined(macosx):
+    switch("clang.linkerexe", "clang++")
+  else:
+    switch("gcc.linkerexe", "g++")
+
+  switch("dynlibOverride", "rocksdb")
+  switch("dynlibOverride", "lz4")
+  switch("dynlibOverride", "zstd")

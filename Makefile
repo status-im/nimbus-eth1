@@ -115,6 +115,7 @@ VERIF_PROXY_OUT_PATH ?= build/libverifproxy/
 	libnimbus.so \
 	libnimbus.a \
 	libbacktrace \
+	rocksdb \
 	dist-amd64 \
 	dist-arm64 \
 	dist-arm \
@@ -225,6 +226,11 @@ nimbus: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/$@ "nimbus/$@.nim"
 
+nimbus_rocksdb_static: | build deps rocksdb_static_deps
+	echo -e $(BUILD_MSG) "build/$@" && \
+		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:enable_rocksdb_static_linking -d:chronicles_log_level=TRACE \
+		-o:build/$@ "nimbus/nimbus.nim"
+
 # symlink
 nimbus.nims:
 	ln -s nimbus.nimble $@
@@ -232,6 +238,10 @@ nimbus.nims:
 # nim-libbacktrace
 libbacktrace:
 	+ $(MAKE) -C vendor/nim-libbacktrace --no-print-directory BUILD_CXX_LIB=0
+
+# nim-rocksdb static dependencies
+rocksdb_static_deps:
+	+ vendor/nim-rocksdb/scripts/build_static_deps.sh
 
 # builds and runs the nimbus test suite
 test: | build deps
