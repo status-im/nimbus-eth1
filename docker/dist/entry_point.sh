@@ -124,7 +124,7 @@ if [[ "${PLATFORM}" == "Windows_amd64" ]]; then
     CXXFLAGS="${CXXFLAGS} -D__STDC_FORMAT_MACROS -D_WIN32_WINNT=0x0600" \
     USE_VENDORED_LIBUNWIND=1 \
     LOG_LEVEL="TRACE" \
-    NIMFLAGS="${NIMFLAGS_COMMON} --os:windows --gcc.exe=${CC} --gcc.linkerexe=${CXX} --passL:'-static' -d:BLSTuseSSSE3=1" \
+    NIMFLAGS="${NIMFLAGS_COMMON} --os:windows --gcc.exe=${CC} --gcc.linkerexe=${CXX} --passL:'-static -lshlwapi -lrpcrt4' -d:BLSTuseSSSE3=1" \
     ${BINARIES}
 elif [[ "${PLATFORM}" == "Linux_arm32v7" ]]; then
   CC="arm-linux-gnueabihf-gcc"
