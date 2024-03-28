@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Copyright (c) 2020-2022 Status Research & Development GmbH. Licensed under
+# Copyright (c) 2020-2024 Status Research & Development GmbH. Licensed under
 # either of:
 # - Apache License, version 2.0
 # - MIT license
@@ -74,7 +74,7 @@ echo "ROCKSDBVER=${ROCKSDBVER}"
 #- we need to build everything against libraries available inside this container, including the Nim compiler
 #- "librocksdb.a" is a C++ library so we need to link it with the C++ profile
 make clean
-NIMFLAGS_COMMON="-d:disableMarchNative --gcc.options.debug:'-g1' --clang.options.debug:'-gline-tables-only' --passL:'/home/user/nimbus-eth1/build/rocksdb-${ROCKSDBVER}/librocksdb.a'"
+NIMFLAGS_COMMON="-d:disableMarchNative --gcc.options.debug:'-g1' --clang.options.debug:'-gline-tables-only' --dynlibOverride:rocksdb --passL:'-L/home/user/nimbus-eth1/build/rocksdb-${ROCKSDBVER}'"
 
 if [[ "${PLATFORM}" == "Windows_amd64" ]]; then
   # Cross-compilation using the MXE distribution of Mingw-w64
