@@ -186,7 +186,8 @@ const
     DelegateCall,
     CallCode,
     Create,
-    Create2
+    Create2,
+    EofCreate
   ]
 
 func msgToOp(msg: Message): Op =

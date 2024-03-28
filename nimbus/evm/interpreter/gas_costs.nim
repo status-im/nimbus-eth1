@@ -859,6 +859,7 @@ const
     FkParis: LondonGasFees,
     FkShanghai: ShanghaiGasFees,
     FkCancun: ShanghaiGasFees,
+    FkPrague: ShanghaiGasFees,
   ]
 
 gasCosts(FkFrontier, base, BaseGasCosts)
@@ -894,6 +895,7 @@ const forkToGck*: array[EVMFork, OpGck] = [
   opGck LondonGasCosts        , # FkParis
   opGck ShanghaiGasCosts      , # FkShanghai
   opGck ShanghaiGasCosts      , # FkCancun
+  opGck ShanghaiGasCosts      , # FkPrague
   ]
 
 proc forkToSchedule*(fork: EVMFork): GasCosts =

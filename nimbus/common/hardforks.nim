@@ -49,6 +49,7 @@ type
     MergeFork       # a.k.a. Paris
     Shanghai
     Cancun
+    Prague
 
 const lastPurelyBlockNumberBasedFork* = GrayGlacier
 # MergeFork is special because of TTD.
@@ -68,7 +69,7 @@ type
   ForkTransitionTable* = object
     blockNumberThresholds*: array[Frontier..GrayGlacier, Option[BlockNumber]]
     mergeForkTransitionThreshold*: MergeForkTransitionThreshold
-    timeThresholds*: array[Shanghai..Cancun, Option[EthTime]]
+    timeThresholds*: array[Shanghai..Prague, Option[EthTime]]
 
   # Starting with Shanghai, forking is based on timestamp
   # rather than block number.
@@ -182,6 +183,7 @@ type
     mergeForkBlock*     : Option[BlockNumber]
     shanghaiTime*       : Option[EthTime]
     cancunTime*         : Option[EthTime]
+    pragueTime*         : Option[EthTime]
 
     clique*             : CliqueOptions
     terminalTotalDifficulty*: Option[UInt256]
@@ -275,6 +277,7 @@ proc toForkTransitionTable*(conf: ChainConfig): ForkTransitionTable =
   result.mergeForkTransitionThreshold          = conf.mergeForkTransitionThreshold
   result.timeThresholds[Shanghai] = conf.shanghaiTime
   result.timeThresholds[Cancun] = conf.cancunTime
+  result.timeThresholds[Prague] = conf.pragueTime
 
 proc populateFromForkTransitionTable*(conf: ChainConfig, t: ForkTransitionTable) =
   conf.homesteadBlock      = t.blockNumberThresholds[HardFork.Homestead]
@@ -298,6 +301,7 @@ proc populateFromForkTransitionTable*(conf: ChainConfig, t: ForkTransitionTable)
 
   conf.shanghaiTime        = t.timeThresholds[HardFork.Shanghai]
   conf.cancunTime          = t.timeThresholds[HardFork.Cancun]
+  conf.pragueTime          = t.timeThresholds[HardFork.Prague]
 
 # ------------------------------------------------------------------------------
 # Map HardFork to EVM/EVMC Fork
@@ -322,6 +326,7 @@ const
     FkParis,          # MergeFork
     FkShanghai,       # Shanghai
     FkCancun,         # Cancun
+    FkPrague,         # Prague
   ]
 
 # ------------------------------------------------------------------------------
@@ -355,6 +360,7 @@ const
     eth0, # MergeFork
     eth0, # Shanghai
     eth0, # Cancun
+    eth0, # Prague
   ]
 
 # ------------------------------------------------------------------------------
