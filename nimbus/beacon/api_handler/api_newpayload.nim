@@ -20,6 +20,15 @@ import
 {.push gcsafe, raises:[CatchableError].}
 
 template validateVersion(com, timestamp, version, apiVersion) =
+  if apiVersion == Version.V4:
+    if not com.isPragueOrLater(timestamp):
+      raise unsupportedFork("newPayloadV4 expect payload timestamp fall within Prague")
+
+  if com.isPragueOrLater(timestamp):
+    if version != Version.V4:
+      raise invalidParams("if timestamp is Prague or later, " &
+        "payload must be ExecutionPayloadV4")
+
   if apiVersion == Version.V3:
     if not com.isCancunOrLater(timestamp):
       raise unsupportedFork("newPayloadV3 expect payload timestamp fall within Cancun")
@@ -42,20 +51,34 @@ template validateVersion(com, timestamp, version, apiVersion) =
       raise invalidParams("if timestamp is earlier than Shanghai, " &
         "payload must be ExecutionPayloadV1")
 
-  if apiVersion == Version.V3:
+  if apiVersion >= Version.V3:
     if version != apiVersion:
       raise invalidParams("newPayload" & $apiVersion &
       " expect ExecutionPayload" & $apiVersion &
       " but got ExecutionPayload" & $version)
 
 template validatePayload(apiVersion, version, payload) =
-  if version == Version.V3:
+  if version >= Version.V2:
+    if payload.withdrawals.isNone:
+      raise invalidParams("newPayload" & $apiVersion &
+        "withdrawals is expected from execution payload")
+
+  if version >= Version.V3:
     if payload.blobGasUsed.isNone:
       raise invalidParams("newPayload" & $apiVersion &
         "blobGasUsed is expected from execution payload")
     if payload.excessBlobGas.isNone:
       raise invalidParams("newPayload" & $apiVersion &
         "excessBlobGas is expected from execution payload")
+
+  if version >= Version.V4:
+    if payload.depositReceipts.isNone:
+      raise invalidParams("newPayload" & $apiVersion &
+        "depositReceipts is expected from execution payload")
+    if payload.exits.isNone:
+      raise invalidParams("newPayload" & $apiVersion &
+        "exits is expected from execution payload")
+
 
 proc newPayload*(ben: BeaconEngineRef,
                  apiVersion: Version,
