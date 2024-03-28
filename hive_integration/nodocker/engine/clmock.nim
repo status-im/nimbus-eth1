@@ -389,6 +389,9 @@ proc broadcastNewPayload(cl: CLMocker,
   of Version.V3: return eng.client.newPayloadV3(payload.V3,
     versionedHashes(payload),
     cl.latestPayloadAttributes.parentBeaconBlockRoot.get)
+  of Version.V4: return eng.client.newPayloadV4(payload.V4,
+    versionedHashes(payload),
+    cl.latestPayloadAttributes.parentBeaconBlockRoot.get)
 
 proc broadcastNextNewPayload(cl: CLMocker): bool =
   for eng in cl.clients:
