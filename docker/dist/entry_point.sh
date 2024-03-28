@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Copyright (c) 2020-2022 Status Research & Development GmbH. Licensed under
+# Copyright (c) 2020-2024 Status Research & Development GmbH. Licensed under
 # either of:
 # - Apache License, version 2.0
 # - MIT license
@@ -74,7 +74,7 @@ echo "ROCKSDBVER=${ROCKSDBVER}"
 #- we need to build everything against libraries available inside this container, including the Nim compiler
 #- "librocksdb.a" is a C++ library so we need to link it with the C++ profile
 make clean
-NIMFLAGS_COMMON="-d:disableMarchNative --gcc.options.debug:'-g1' --clang.options.debug:'-gline-tables-only' -d:LibrocksbStaticArgs='/home/user/nimbus-eth1/build/rocksdb-${ROCKSDBVER}/librocksdb.a'"
+NIMFLAGS_COMMON="-d:disableMarchNative --gcc.options.debug:'-g1' --clang.options.debug:'-gline-tables-only' --dynlibOverride:rocksdb --passL:'-lrocksdb -L/home/user/nimbus-eth1/build/rocksdb-${ROCKSDBVER}'"
 
 if [[ "${PLATFORM}" == "Windows_amd64" ]]; then
   # Cross-compilation using the MXE distribution of Mingw-w64
@@ -124,7 +124,7 @@ if [[ "${PLATFORM}" == "Windows_amd64" ]]; then
     CXXFLAGS="${CXXFLAGS} -D__STDC_FORMAT_MACROS -D_WIN32_WINNT=0x0600" \
     USE_VENDORED_LIBUNWIND=1 \
     LOG_LEVEL="TRACE" \
-    NIMFLAGS="${NIMFLAGS_COMMON} --os:windows --gcc.exe=${CC} --gcc.linkerexe=${CXX} --passL:'-static' -d:BLSTuseSSSE3=1" \
+    NIMFLAGS="${NIMFLAGS_COMMON} --os:windows --gcc.exe=${CC} --gcc.linkerexe=${CXX} --passL:'-static -lshlwapi -lrpcrt4' -d:BLSTuseSSSE3=1" \
     ${BINARIES}
 elif [[ "${PLATFORM}" == "Linux_arm32v7" ]]; then
   CC="arm-linux-gnueabihf-gcc"
@@ -332,4 +332,3 @@ tar -czf "${DIR}.tar.gz" "${DIR}"
 # don't leave the directory hanging around
 rm -rf "${DIR}"
 cd - >/dev/null
-
