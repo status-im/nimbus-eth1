@@ -5,110 +5,125 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import
-  testutils/unittests,
-  stew/[byteutils, io2],
-  eth/keys,
-  ../../network/state/state_content
+import unittest2, stew/byteutils, ../../network/state/state_content, ../test_yaml_utils
+
+const testVectorDir = "./vendor/portal-spec-tests/tests/mainnet/state/serialization/"
 
 suite "State Content Keys":
-  const evenNibles = "008679e8ed"
   test "Encode/decode even nibbles":
     const
+      expected = "008679e8ed"
       nibbles: seq[byte] = @[8, 6, 7, 9, 14, 8, 14, 13]
       packedNibbles = packNibbles(nibbles)
       unpackedNibbles = unpackNibbles(packedNibbles)
 
     let encoded = SSZ.encode(packedNibbles)
 
-    check encoded.toHex() == evenNibles
-    check unpackedNibbles == nibbles
+    check:
+      encoded.toHex() == expected
+      unpackedNibbles == nibbles
 
-  const oddNibbles = "138679e8ed"
   test "Encode/decode odd nibbles":
     const
+      expected = "138679e8ed"
       nibbles: seq[byte] = @[3, 8, 6, 7, 9, 14, 8, 14, 13]
       packedNibbles = packNibbles(nibbles)
       unpackedNibbles = unpackNibbles(packedNibbles)
 
     let encoded = SSZ.encode(packedNibbles)
 
-    check encoded.toHex() == oddNibbles
-    check unpackedNibbles == nibbles
+    check:
+      encoded.toHex() == expected
+      unpackedNibbles == nibbles
 
-  const accountTrieNodeKeyEncoded =
-    "20240000006225fcc63b22b80301d9f2582014e450e91f9b329b7cc87ad16894722fff5296008679e8ed"
   test "Encode/decode AccountTrieNodeKey":
-    const
-      nibbles: seq[byte] = @[8, 6, 7, 9, 14, 8, 14, 13]
-      packedNibbles = packNibbles(nibbles)
-      nodeHash = NodeHash.fromHex(
-        "6225fcc63b22b80301d9f2582014e450e91f9b329b7cc87ad16894722fff5296"
-      )
+    const file = testVectorDir & "account_trie_node_key.yaml"
+
+    type YamlAccountTrieNodeKey = object
+      path: seq[byte]
+      node_hash: string
+      content_key: string
+      content_id: string
 
     let
-      accountTrieNodeKey = AccountTrieNodeKey(path: packedNibbles, nodeHash: nodeHash)
-      contentKey =
-        ContentKey(contentType: accountTrieNode, accountTrieNodeKey: accountTrieNodeKey)
-      encoded = contentKey.encode()
-    check $encoded == accountTrieNodeKeyEncoded
+      testCase = YamlAccountTrieNodeKey.loadFromYaml(file).valueOr:
+        raiseAssert "Cannot read test vector: " & error
 
-    let decoded = encoded.decode().valueOr:
-      raiseAssert "Cannot decode AccountTrieNodeKey"
+      packedNibbles = packNibbles(testCase.path)
+      nodeHash = NodeHash.fromHex(testCase.node_hash)
+      contentKey = initAccountTrieNodeKey(packedNibbles, nodeHash)
+      encoded = contentKey.encode()
+
     check:
-      decoded.contentType == accountTrieNode
-      decoded.accountTrieNodeKey ==
+      encoded.asSeq() == testCase.content_key.hexToSeqByte()
+      encoded.toContentId().toBytesBE() == testCase.content_id.hexToSeqByte()
+
+    let decoded = encoded.decode()
+    check:
+      decoded.isOk()
+      decoded.value().contentType == accountTrieNode
+      decoded.value().accountTrieNodeKey ==
         AccountTrieNodeKey(path: packedNibbles, nodeHash: nodeHash)
 
-  const contractTrieNodeKeyEncoded =
-    "21c02aaa39b223fe8d0a0e5c4f27ead9083c756cc238000000eb43d68008d216e753fef198cf51077f5a89f406d9c244119d1643f0f2b1901100405787"
   test "Encode/decode ContractTrieNodeKey":
-    const
-      nibbles: seq[byte] = @[4, 0, 5, 7, 8, 7]
-      packedNibbles = packNibbles(nibbles)
-      address = Address.fromHex("c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2")
-      nodeHash = NodeHash.fromHex(
-        "eb43d68008d216e753fef198cf51077f5a89f406d9c244119d1643f0f2b19011"
-      )
+    const file = testVectorDir & "contract_storage_trie_node_key.yaml"
+
+    type YamlContractStorageTrieNodeKey = object
+      address: string
+      path: seq[byte]
+      node_hash: string
+      content_key: string
+      content_id: string
 
     let
-      contractTrieNodeKey =
-        ContractTrieNodeKey(address: address, path: packedNibbles, nodeHash: nodeHash)
-      contentKey = ContentKey(
-        contentType: contractTrieNode, contractTrieNodeKey: contractTrieNodeKey
-      )
+      testCase = YamlContractStorageTrieNodeKey.loadFromYaml(file).valueOr:
+        raiseAssert "Cannot read test vector: " & error
+
+      packedNibbles = packNibbles(testCase.path)
+      address = Address.fromHex(testCase.address)
+      nodeHash = NodeHash.fromHex(testCase.node_hash)
+      contentKey = initContractTrieNodeKey(address, packedNibbles, nodeHash)
       encoded = contentKey.encode()
-    check $encoded == contractTrieNodeKeyEncoded
 
-    let decoded = encoded.decode().valueOr:
-      raiseAssert "Cannot decode ContractTrieNodeKey"
     check:
-      decoded.contentType == contractTrieNode
-      decoded.contractTrieNodeKey ==
+      encoded.asSeq() == testCase.content_key.hexToSeqByte()
+      encoded.toContentId().toBytesBE() == testCase.content_id.hexToSeqByte()
+
+    let decoded = encoded.decode()
+    check:
+      decoded.isOk()
+      decoded.value().contentType == contractTrieNode
+      decoded.value().contractTrieNodeKey ==
         ContractTrieNodeKey(address: address, path: packedNibbles, nodeHash: nodeHash)
 
-  const contractCodeKeyEncoded =
-    "22c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2d0a06b12ac47863b5c7be4185c2deaad1c61557033f56c7d4ea74429cbb25e23"
   test "Encode/decode ContractCodeKey":
-    const
-      address = Address.fromHex("c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2")
-      codeHash = CodeHash.fromHex(
-        "d0a06b12ac47863b5c7be4185c2deaad1c61557033f56c7d4ea74429cbb25e23"
-      )
+    const file = testVectorDir & "contract_bytecode_key.yaml"
+
+    type YamlContractBytecodeKey = object
+      address: string
+      code_hash: string
+      content_key: string
+      content_id: string
 
     let
-      contractCodeKey = ContractCodeKey(address: address, codeHash: codeHash)
-      contentKey =
-        ContentKey(contentType: contractCode, contractCodeKey: contractCodeKey)
-      encoded = contentKey.encode()
-    check $encoded == contractCodeKeyEncoded
+      testCase = YamlContractBytecodeKey.loadFromYaml(file).valueOr:
+        raiseAssert "Cannot read test vector: " & error
 
-    let decoded = encoded.decode().valueOr:
-      raiseAssert "Cannot decode ContractCodeKey"
+      address = Address.fromHex(testCase.address)
+      codeHash = CodeHash.fromHex(testCase.code_hash)
+      contentKey = initContractCodeKey(address, codeHash)
+      encoded = contentKey.encode()
+
     check:
-      decoded.contentType == contractCode
-      decoded.contractCodeKey.address == address
-      decoded.contractCodeKey.codeHash == codeHash
+      encoded.asSeq() == testCase.content_key.hexToSeqByte()
+      encoded.toContentId().toBytesBE() == testCase.content_id.hexToSeqByte()
+
+    let decoded = encoded.decode()
+    check:
+      decoded.isOk()
+      decoded.value().contentType == contractCode
+      decoded.value().contractCodeKey.address == address
+      decoded.value().contractCodeKey.codeHash == codeHash
 
   test "Invalid prefix - 0 value":
     let encoded = ByteList.init(@[byte 0x00])

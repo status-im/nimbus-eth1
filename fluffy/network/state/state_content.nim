@@ -152,6 +152,27 @@ func toContentId*(contentKey: ByteList): ContentId =
 func toContentId*(contentKey: ContentKey): ContentId =
   toContentId(encode(contentKey))
 
+func initAccountTrieNodeKey*(path: Nibbles, nodeHash: NodeHash): ContentKey =
+  ContentKey(
+    contentType: accountTrieNode,
+    accountTrieNodeKey: AccountTrieNodeKey(path: path, nodeHash: nodeHash),
+  )
+
+func initContractTrieNodeKey*(
+    address: Address, path: Nibbles, nodeHash: NodeHash
+): ContentKey =
+  ContentKey(
+    contentType: contractTrieNode,
+    contractTrieNodeKey:
+      ContractTrieNodeKey(address: address, path: path, nodeHash: nodeHash),
+  )
+
+func initContractCodeKey*(address: Address, codeHash: CodeHash): ContentKey =
+  ContentKey(
+    contentType: contractCode,
+    contractCodeKey: ContractCodeKey(address: address, codeHash: codeHash),
+  )
+
 func offerContentToRetrievalContent*(
     offerContent: OfferContentValue
 ): RetrievalContentValue =
@@ -193,9 +214,7 @@ func packNibbles*(nibbles: seq[byte]): Nibbles =
   if nibbles.len() == 0:
     return Nibbles(@[byte(0x00)])
 
-  let
-    isOddLength = (nibbles.len() %% 2 == 1)
-    outputLength = (nibbles.len() + 1) div 2
+  let isOddLength = (nibbles.len() %% 2 == 1)
 
   var
     output = newSeq[byte]()
