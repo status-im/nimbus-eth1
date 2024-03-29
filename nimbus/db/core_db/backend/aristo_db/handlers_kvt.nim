@@ -19,6 +19,12 @@ import
   ../../base/base_desc,
   ./common_desc
 
+import
+  std/strutils #, ../../../kvt/kvt_debug
+
+var
+  noisy* = false
+
 type
   KvtBaseRef* = ref object
     parent: CoreDbRef            ## Opaque top level descriptor
@@ -26,6 +32,7 @@ type
     api*: KvtApiRef              ## Api functions can be re-directed
     cache: KvtCoreDxKvtRef       ## Shared transaction table wrapper
     gq: seq[KvtDbRef]            ## Garbage queue, deferred disposal
+    serial: int                  ## Debugging -- will go away
 
   KvtCoreDxKvtRef = ref KvtCoreDxKvtObj
   KvtCoreDxKvtObj = object of CoreDxKvtRef
@@ -98,6 +105,17 @@ proc kvtMethods(cKvt: KvtCoreDxKvtRef): CoreDbKvtFns =
       base = cKvt.base
       kvt = cKvt.kvt
     if kvt != base.kdb:
+      base.serial.inc
+      let skip = false # bool(base.serial mod 2)
+      if noisy: debugEcho "*** kvtForget (1)",
+        " ptr=", cast[uint64](kvt).toHex,
+        " skip=", skip,
+        " isCentre=", base.api.isCentre(kvt),
+        " nForked=", base.api.nForked(kvt),
+        " #gq=", base.gq.len,
+        ""
+      if skip: return ok()
+
       let rc = base.api.forget(kvt)
 
       # There is not much that can be done in case of a `forget()` error.
@@ -105,7 +123,18 @@ proc kvtMethods(cKvt: KvtCoreDxKvtRef): CoreDbKvtFns =
       cKvt.kvt = KvtDbRef(nil)
 
       if rc.isErr:
+        if noisy: debugEcho "*** kvtForget (8) err",
+          " ptr=", cast[uint64](kvt).toHex,
+          " #gq=", base.gq.len,
+          " oops=", rc.error,
+          ""
         return err(rc.error.toError(base, info))
+
+      if noisy: debugEcho "*** kvtForget (9) ok",
+        " ptr=", cast[uint64](kvt).toHex,
+        " #gq=", base.gq.len,
+        ""
+      # End if
     ok()
 
   proc kvtPersistent(
@@ -116,10 +145,22 @@ proc kvtMethods(cKvt: KvtCoreDxKvtRef): CoreDbKvtFns =
       base = cKvt.base
       kvt = cKvt.kvt
       api = base.api
+    const noisy = false
+    if noisy: debugEcho "*** kvtPersistent (1)",
+      " isCentre=", api.isCentre(kvt),
+      " isBase=", kvt == base.kdb,
+      " nForked=", api.nForked(kvt),
+      " level=", api.level(kvt),
+      " #gq=", base.gq.len,
+      # "\n    db\n    ", base.kdb.pp(backendOk=true),
+      ""
     # Re-centre to make sure we can save the data to disk/backend
     api.reCentre(kvt)
-    defer: api.reCentre(base.kdb)
-
+    defer:
+      api.reCentre(base.kdb)
+      if noisy: debugEcho "*** kvtPersistent (9)",
+        " isCentre=", api.isCentre(kvt),
+        ""
     let rc = api.stow(kvt)
     if rc.isOk:
       ok()
@@ -240,10 +281,15 @@ proc newKvtHandler*(
   if sharedTable:
     ok(base.cache)
   else:
+    if noisy: debugEcho "*** newKvtHandler (2)"
     let
       kvt = ? base.api.forkTop(base.kdb).toRc(base, info)
       dsc = KvtCoreDxKvtRef(base: base, kvt: kvt)
     dsc.methods = dsc.kvtMethods()
+
+    if noisy: debugEcho "*** newKvtHandler (9)",
+      " ptr=", cast[uint64](kvt).toHex,
+      ""
     ok(base.parent.bless dsc)
 
 

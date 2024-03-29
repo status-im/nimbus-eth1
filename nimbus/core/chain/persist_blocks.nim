@@ -36,6 +36,9 @@ type
 
   PersistBlockFlags = set[PersistBlockFlag]
 
+var
+  noisy* = false
+
 # ------------------------------------------------------------------------------
 # Private
 # ------------------------------------------------------------------------------
@@ -135,6 +138,18 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
             blockNumber = header.blockNumber,
             msg = $rc.error
           return ValidationResult.Error
+
+    when defined(release).not and true: # and false:
+      let num = header.blockNumber.truncate(uint64)
+      #if 81984 < num and (num mod 7000) == 500:
+      if (num mod 500) == 0:
+        const noisy = true
+        if noisy: debugEcho ">>> persistBlocksImpl (1)",
+          " #", header.blockNumber,
+          " i=", i
+        vmState.dumpDebuggingMetaData(header, body)
+        info "Validation OK. Debugging metadata dumped."
+        if noisy: debugEcho "<<< persistBlocksImpl (9) #", header.blockNumber
 
     if c.generateWitness:
       let dbTx = c.db.beginTransaction()

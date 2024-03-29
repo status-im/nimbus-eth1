@@ -32,6 +32,9 @@ const
   daoForkBlockExtraData* =
     byteutils.hexToByteArray[13](DAOForkBlockExtra).toSeq
 
+var
+  noisy* = false
+
 # ------------------------------------------------------------------------------
 # Pivate validator functions
 # ------------------------------------------------------------------------------
@@ -299,13 +302,23 @@ proc validateTransaction*(
     excessBlobGas: uint64;    ## excessBlobGas from parent block header
     fork:     EVMFork): Result[void, string] =
 
+  if noisy: echo ">>> validateTransaction (1)",
+    " fork=", fork,
+    " address=", sender.toHex
+
   let res = validateTxBasic(tx, fork)
   if res.isErr:
     return res
 
+  if noisy: echo ">>> validateTransaction (2)",
+    " address=", sender.toHex
   let
     balance = roDB.getBalance(sender)
     nonce = roDB.getNonce(sender)
+
+  if noisy: echo ">>> validateTransaction (2.1)",
+    " address=", sender.toHex,
+    " nonce=", nonce
 
   # Note that the following check bears some plausibility but is _not_
   # covered by the eip-1559 reference (sort of) pseudo code, for details
@@ -327,6 +340,7 @@ proc validateTransaction*(
       return err("invalid tx: block header gasLimit exceeded. maxLimit=$1, gasLimit=$2" % [
         $maxLimit, $tx.gasLimit])
 
+    if noisy: echo ">>> validateTransaction (3)", " nonce=", nonce, " tx.nonce=", tx.nonce
     # ensure that the user was willing to at least pay the base fee
     if tx.maxFee < baseFee.truncate(int64):
       return err("invalid tx: maxFee is smaller than baseFee. maxFee=$1, baseFee=$2" % [
@@ -335,18 +349,22 @@ proc validateTransaction*(
     # the signer must be able to fully afford the transaction
     let gasCost = tx.gasCost()
 
+    if noisy: echo ">>> validateTransaction (4)", " nonce=", nonce, " tx.nonce=", tx.nonce
     if balance < gasCost:
       return err("invalid tx: not enough cash for gas. avail=$1, require=$2" % [
         $balance, $gasCost])
 
+    if noisy: echo ">>> validateTransaction (5)", " nonce=", nonce, " tx.nonce=", tx.nonce
     if balance - gasCost < tx.value:
       return err("invalid tx: not enough cash to send. avail=$1, availMinusGas=$2, require=$3" % [
         $balance, $(balance-gasCost), $tx.value])
 
+    if noisy: echo ">>> validateTransaction (6)", " nonce=", nonce, " tx.nonce=", tx.nonce
     if tx.nonce != nonce:
       return err("invalid tx: account nonce mismatch. txNonce=$1, accNonce=$2" % [
         $tx.nonce, $nonce])
 
+    if noisy: echo ">>> validateTransaction (7)"
     if tx.nonce == high(uint64):
       return err("invalid tx: nonce at maximum")
 
@@ -360,6 +378,7 @@ proc validateTransaction*(
       return err("invalid tx: sender is not an EOA. sender=$1, codeHash=$2" % [
         sender.toHex, codeHash.data.toHex])
 
+    if noisy: echo ">>> validateTransaction (8)"
     if tx.txType >= TxEip4844:
       # ensure that the user was willing to at least pay the current data gasprice
       let blobGasPrice = getBlobBaseFee(excessBlobGas)

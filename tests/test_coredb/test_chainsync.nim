@@ -45,6 +45,13 @@ var
   logStartTime {.used.} = Time()
   logSavedEnv {.used.}: (bool,bool,bool,bool)
 
+import
+  ../../nimbus/tracer,
+  ../../nimbus/core/chain/persist_blocks,
+  ../../nimbus/db/aristo/aristo_tx,
+  ../../nimbus/db/ledger/distinct_ledgers,
+  ../../nimbus/db/core_db/backend/aristo_db/handlers_aristo
+
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
@@ -221,6 +228,11 @@ proc test_chainSync*(
       let runPersistBlocks1Rc = chain.persistBlocks(headers1, bodies1)
       xCheck runPersistBlocks1Rc == ValidationResult.OK
       dotsOrSpace = "   "
+
+    persist_blocks.noisy = true
+    distinct_ledgers.noisy = true
+    handlers_aristo.noisy = true
+    aristo_tx.noisy = true
 
     noisy.startLogging(headers9[0].blockNumber)
     if lastOneExtra:

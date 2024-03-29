@@ -25,7 +25,7 @@ const
   ProvideLegacyAPI = true
     ## Enable legacy API. For now everybody would want this enabled.
 
-  EnableApiTracking = false
+  EnableApiTracking = false or true
     ## When enabled, functions using this tracking facility need to import
     ## `chronicles`, as well. Tracking is enabled by setting `true` the flags
     ## `trackLegaApi` and/or `trackNewApi` in the `CoreDxTxRef` descriptor.

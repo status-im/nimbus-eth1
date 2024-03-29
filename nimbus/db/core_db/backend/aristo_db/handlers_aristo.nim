@@ -71,6 +71,93 @@ static:
   doAssert low(CoreDbSubTrie).ord == 0
   doAssert high(CoreDbSubTrie).ord < LEAST_FREE_VID
 
+# -------------- begin debugging stuff -------------------
+
+import
+  std/[sequtils, sets],
+  ../../../aristo/aristo_desc/desc_structural,
+  ../../../aristo/[aristo_check, aristo_debug, aristo_layers]
+export
+  sequtils,  aristo_debug
+var
+  noisy* = false
+  serial* = 0u
+
+import ../../../aristo/aristo_hashify
+proc hashify(
+    api: AristoApiRef;
+    db: AristoDbRef;
+    noisy: bool;
+      ): Result[void,(VertexID,AristoError)] =
+  when declared(aristo_hashify.noisy):
+    aristo_hashify.exec(noisy, (api.hashify)(db))
+  else:
+    (api.hashify)(db)
+
+import ../../../aristo/aristo_delete
+proc delete(
+    api: AristoApiRef;
+    db: AristoDbRef;
+    root: VertexID;
+    path: openArray[byte];
+    accPath: PathID;
+    noisy: bool;
+      ): Result[bool,(VertexID,AristoError)] =
+  when declared(aristo_delete.noisy):
+    aristo_delete.exec(noisy, (api.delete)(db, root, path, accPath))
+  else:
+    (api.delete)(db, root, path, accPath)
+
+proc delTree(
+    api: AristoApiRef;
+    db: AristoDbRef;
+    root: VertexID;
+    accPath: PathID;
+    noisy: bool;
+      ): Result[void,(VertexID,AristoError)] =
+  when declared(aristo_delete.noisy):
+    aristo_delete.exec(noisy, (api.delTree)(db, root, accPath))
+  else:
+    (api.delTree)(db, root, accPath)
+
+import ../../../aristo/aristo_merge
+proc merge(
+    api: AristoApiRef;
+    db: AristoDbRef;
+    root: VertexID;
+    path: openArray[byte];
+    data: openArray[byte];
+    accPath: PathID;
+    noisy: bool;
+      ): Result[bool, AristoError] =
+  when declared(aristo_merge.noisy):
+    aristo_merge.exec(noisy, (api.merge)(db, root, path, data, accPath))
+  else:
+    (api.merge)(db, root, path, data, accPath)
+
+import ../../../aristo/aristo_tx
+proc forkWith(
+    api: AristoApiRef;
+    db: AristoDbRef;
+    vid: VertexID;
+    key: HashKey;
+    noisy: bool;
+      ): Result[AristoDbRef, AristoError] =
+  when declared(aristo_tx.noisy):
+    aristo_tx.exec(noisy, (api.forkWith)(db, vid, key))
+  else:
+    (api.forkWith)(db, vid, key)
+
+proc say(noisy: bool, info: static[string], args: varargs[string, `$`]) =
+  if noisy:
+    let pfx = "*** " & info & " serial=" & $serial
+    if args.len == 0:
+      debugEcho pfx
+    else:
+      debugEcho pfx, " ", @args.join
+
+# -------------- end debugging stuff -------------------
+
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
@@ -211,17 +298,33 @@ proc mptMethods(cMpt: AristoCoreDxMptRef): CoreDbMptFns =
         AristoCoreDbTrie(
           base: base,
           kind: CoreDbSubTrie(cMpt.root))
+
+    noisy.say "mptTrieFn", "(2)",
+      " kind=", trie.kind,
+      " root=", cMpt.root.pp,
+      " path=", cMpt.accPath,
+      " addr=", cMpt.address.toHex,
+      ""
     db.bless trie
 
   proc mptPersistent(): CoreDbRc[void] =
     const info = "persistentFn()"
 
+    const noisy = true
+
     let rc = api.stow(mpt, persistent = true)
     if rc.isOk:
+      noisy.say info, "(1)"
       ok()
     elif api.level(mpt) == 0:
+      noisy.say info, "(2)",
+        " error=", rc.error,
+        ""
       err(rc.error.toError(base, info))
     else:
+      noisy.say info, "(3) tx-pending",
+        " error=", rc.error,
+        ""
       err(rc.error.toError(base, info, MptTxPending))
 
   proc mptFetch(key: openArray[byte]): CoreDbRc[Blob] =
@@ -250,8 +353,20 @@ proc mptMethods(cMpt: AristoCoreDxMptRef): CoreDbMptFns =
     if not rootOk:
       cMpt.root = api.vidFetch(mpt, pristine=true)
 
-    let rc = api.merge(mpt, cMpt.root, k, v, cMpt.accPath)
+    noisy.say info, "(1)",
+      " rootOk=", rootOk,
+      " cMpt.root=", cMpt.root.pp,
+      ""
+    let rc = merge(api, mpt, cMpt.root, k, v, cMpt.accPath, noisy=false)
     if rc.isErr:
+      if noisy:
+        noisy.say info, "(2)",
+          " sTab-has-zero=", mpt.top.delta.sTab.hasKey VoidTrieID,
+          " kMap-has-zero=", mpt.top.delta.kMap.hasKey VoidTrieID,
+          " error=", rc.error,
+          "\n    top\n    ", mpt.pp(),
+          ""
+        discard merge(api, mpt, cMpt.root, k, v, cMpt.accPath, noisy=true)
       # Re-cycle unused ID (prevents from leaking IDs)
       if not rootOk:
         api.vidDispose(mpt, cMpt.root)
@@ -262,11 +377,24 @@ proc mptMethods(cMpt: AristoCoreDxMptRef): CoreDbMptFns =
   proc mptDelete(key: openArray[byte]): CoreDbRc[void] =
     const info = "deleteFn()"
 
+    #const noisy = true
+    serial.inc
+    noisy.say info, "(1)",
+      " k=", key.toHex,
+      ""
     if not cMpt.root.isValid and cMpt.accPath.isValid:
       # This is insane but legit. A storage trie was announced for an account
       # but no data have been added, yet.
       return ok()
-    let rc = api.delete(mpt, cMpt.root, key, cMpt.accPath)
+
+    # Debugging (not noisy)
+    doAssert cMpt.root.isValid
+    if mpt.dirty.len == 0:
+      doAssert api.getKeyRc(mpt, cMpt.root).isOk
+
+    let
+      blurby = noisy # and serial==436092
+      rc = delete(api, mpt, cMpt.root, key, cMpt.accPath, noisy=blurby)
     if rc.isErr:
       if rc.error[1] == DelPathNotFound:
         return err(rc.error.toError(base, info, MptNotFound))
@@ -275,6 +403,10 @@ proc mptMethods(cMpt: AristoCoreDxMptRef): CoreDbMptFns =
     if rc.value:
       # Trie has become empty
       cMpt.root = VoidTrieID
+
+    # Debugging (not noisy)
+    if mpt.dirty.len == 0:
+      doAssert api.getKeyRc(mpt, AccountsTrieID).isOk
     ok()
 
   proc mptHasPath(key: openArray[byte]): CoreDbRc[bool] =
@@ -335,12 +467,25 @@ proc accMethods(cAcc: AristoCoreDxAccRef): CoreDbAccFns =
   proc accPersistent(): CoreDbRc[void] =
     const info = "acc/persistentFn()"
 
+    #const noisy = true
+
     let rc = api.stow(mpt, persistent = true)
     if rc.isOk:
+      noisy.say info, "(1)",
+        " stack=", mpt.pp(topOk=false,filterOk=false),
+        ""
       ok()
     elif api.level(mpt) == 0:
+      noisy.say info, "(2)",
+        " error=", rc.error,
+        ""
       err(rc.error.toError(base, info))
     else:
+      #const noisy = false
+      noisy.say info, "(3) tx-pending",
+        " error=", rc.error,
+        " stack=", mpt.pp(topOk=false,filterOk=false),
+        ""
       err(rc.error.toError(base, info, AccTxPending))
 
   proc accCloneMpt(): CoreDbRc[CoreDxMptRef] =
@@ -373,6 +518,12 @@ proc accMethods(cAcc: AristoCoreDxAccRef): CoreDbAccFns =
     let
       key = account.address.keccakHash.data
       val = account.toPayloadRef()
+
+    noisy.say info, "(1)",
+      " account=", account.address.toHex,
+      " payload=", val.pp(mpt),
+      ""
+    let
       rc = api.mergePayload(mpt, AccountsTrieID, key, val)
     if rc.isErr:
       return err(rc.error.toError(base, info))
@@ -381,13 +532,26 @@ proc accMethods(cAcc: AristoCoreDxAccRef): CoreDbAccFns =
   proc accDelete(address: EthAddress): CoreDbRc[void] =
     const info = "acc/deleteFn()"
 
+    #const noisy = true
+    serial.inc
+    noisy.say info, "(1)",
+      " serial=", serial,
+      " address=", address.toHex,
+      ""
+    if mpt.dirty.len == 0:
+      doAssert api.getKeyRc(mpt, AccountsTrieID).isOk
+
     let
       key = address.keccakHash.data
-      rc = api.delete(mpt, AccountsTrieID, key, VOID_PATH_ID)
+      blurby = noisy # and serial==92355
+      rc = delete(api, mpt, AccountsTrieID, key, VOID_PATH_ID, noisy=blurby)
     if rc.isErr:
       if rc.error[1] == DelPathNotFound:
         return err(rc.error.toError(base, info, AccNotFound))
       return err(rc.error.toError(base, info))
+
+    if mpt.dirty.len == 0:
+      doAssert api.getKeyRc(mpt, AccountsTrieID).isOk
     ok()
 
   proc accStoFlush(address: EthAddress): CoreDbRc[void] =
@@ -468,6 +632,13 @@ proc ctxMethods(cCtx: AristoCoreDbCtxRef): CoreDbCtxFns =
         ): CoreDbRc[CoreDbTrieRef] =
     const info = "ctx/newTrieFn()"
 
+    serial.inc
+    #let noisy = true # 301077 <= serial
+    noisy.say info, "(1)",
+      " kind=", kind,
+      " root=", root.pp,
+      " address=", (if address.isNone: "n/a" else: address.unsafeGet.toHex),
+      ""
     let trie = AristoCoreDbTrie(
       base: base,
       kind: kind)
@@ -475,10 +646,16 @@ proc ctxMethods(cCtx: AristoCoreDbCtxRef): CoreDbCtxFns =
     if kind == StorageTrie:
       if address.isNone:
         let error = aristo.UtilsAccPathMissing
+        noisy.say info, "(2)",
+          " error=", error,
+          ""
         return err(error.toError(base, info, AccAddrMissing))
       trie.stoAddr = address.unsafeGet
 
     if not root.isValid:
+      noisy.say info, "(3)",
+        " kind=", kind,
+        ""
       return ok(db.bless trie)
 
     # Reset some non-dynamic trie when instantiating. It emulates the behaviour
@@ -486,14 +663,42 @@ proc ctxMethods(cCtx: AristoCoreDbCtxRef): CoreDbCtxFns =
     trie.reset = kind.resetTrie()
 
     # Update hashes in order to verify the trie state root.
-    ? api.hashify(mpt).toVoidRc(base, info, HashNotAvailable)
+    block:
+      let rc = api.hashify(mpt)
+      if rc.isErr:
+        noisy.say info, "(4)",
+          " kind=", kind,
+          " reset=", trie.reset,
+          " error=", rc.error,
+          ""
+        return err(rc.error.toError(base, info, HashNotAvailable))
+    # ? api.hashify(mpt).toVoidRc(base, info, HashNotAvailable)
 
     # Make sure that the hash is available as state root on the main trie
     let rc = api.getKeyRc(mpt, VertexID kind)
     if rc.isErr:
+      noisy.say info, "(5)",
+        " kind=", kind,
+        " reset=", trie.reset,
+        " error=", rc.error,
+        " nForked=", api.nForked(mpt),
+        " level=", api.level(mpt),
+        #"\n    db\n    " & mpt.pp(backendOk=true),
+        ""
       doAssert rc.error == GetKeyNotFound
     elif rc.value == root.to(HashKey):
+      noisy.say info, "(6)",
+        " kind=", kind,
+        " reset=", trie.reset,
+        ""
       return ok(db.bless trie)
+
+    noisy.say info, "(9)",
+      " kind=", kind,
+      " root=", root.pp,
+      " value=", rc.value.pp,
+      " error=", RootNotFound,
+      ""
     err(aristo.GenericError.toError(base, info, RootNotFound))
 
 
@@ -505,7 +710,10 @@ proc ctxMethods(cCtx: AristoCoreDbCtxRef): CoreDbCtxFns =
     var
       reset = false
       newMpt: AristoCoreDxMptRef
+
+    #const noisy = true
     if not trie.isValid:
+      noisy.say info, "(2)"
       reset = true
       newMpt = AristoCoreDxMptRef(
         root:    GenericTrieID,
@@ -519,12 +727,21 @@ proc ctxMethods(cCtx: AristoCoreDbCtxRef): CoreDbCtxFns =
       if trie.stoRoot.isValid:
         if trie.stoRoot.distinctBase < LEAST_FREE_VID:
           let error = (trie.stoRoot,MptRootUnacceptable)
+          noisy.say info, "(3)",
+            " error=", error
           return err(error.toError(base, info, RootUnacceptable))
         # Verify path if there is a particular storge root VID
         let rc = api.hikeUp(newMpt.accPath.to(NibblesSeq), AccountsTrieID, mpt)
         if rc.isErr:
+          noisy.say info, "(4)",
+            " error=", rc.error[1],
+            "\n    address=", newMpt.address.toHex,
+            "\n    path=", newMpt.accPath,
+            "\n    hike\n    ", rc.error[2].pp(mpt),
+            ""
           return err(rc.error[1].toError(base, info, AccNotFound))
     else:
+      noisy.say info, "(5)"
       reset = trie.kind.resetTrie()
       newMpt = AristoCoreDxMptRef(
         root:    VertexID(trie.kind),
@@ -533,6 +750,7 @@ proc ctxMethods(cCtx: AristoCoreDbCtxRef): CoreDbCtxFns =
     # Reset trie. This a emulates the behaviour of a new empty MPT on the
     # legacy database.
     if reset:
+      noisy.say info, "(6) reset"
       let rc = api.delTree(mpt, newMpt.root, VOID_PATH_ID)
       if rc.isErr:
         return err(rc.error.toError(base, info, AutoFlushFailed))
@@ -540,6 +758,8 @@ proc ctxMethods(cCtx: AristoCoreDbCtxRef): CoreDbCtxFns =
 
     newMpt.base = base
     newMpt.methods = newMpt.mptMethods()
+
+    noisy.say info, "(9)"
     ok(db.bless newMpt)
 
   proc ctxGetAcc(trie: CoreDbTrieRef): CoreDbRc[CoreDxAccRef] =
@@ -668,22 +888,67 @@ proc rootHash*(
     trie: CoreDbTrieRef;
     info: static[string];
       ): CoreDbRc[Hash256] =
+  #const noisy = true
+  serial.inc
+
   let trie = trie.AristoCoreDbTrie
   if not trie.isValid:
     return err(TrieInvalid.toError(base, info, HashNotAvailable))
 
   let root = trie.to(VertexID)
+
+  noisy.say info, "(1)",
+    " root=", root.pp(),
+    " level=", base.api.level(base.ctx.mpt),
+    #" checkBE=", base.ctx.mpt.checkBE().pp,
+    " nDirty=", base.ctx.mpt.dirty.len,
+    ""
   if not root.isValid:
     return ok(EMPTY_ROOT_HASH)
 
   let
     api = base.api
     mpt = base.ctx.mpt
-  ? api.hashify(mpt).toVoidRc(base, info, HashNotAvailable)
+    blurby = false # serial==1_593_298 # 1_724_456 and noisy
+    preState = if blurby: mpt.pp(backendOk=false) else: ""
+    rc = hashify(api, mpt, noisy=blurby)
+  if rc.isErr:
+    let noisy = blurby
+    noisy.say info, "(3)",
+      " rc=", rc,
+      " nForked=", api.nForked(mpt),
+      " level=", api.level(mpt),
+      #" check=",  mpt.checkBE().pp,
+      #"\n    -------------",
+      #"\n    preDb\n    ", preState,
+      #"\n    -------------",
+      #"\n    db\n    " & mpt.pp(backendOk=false),
+      #"\n    -------------",
+      ""
+    noisy.not.say info, "(4)",
+      " rc=", rc,
+      ""
+    return err(rc.error.toError(base, info, HashNotAvailable))
+  # ? api.hashify(mpt).toVoidRc(base, info, HashNotAvailable)
 
+  if api.getKeyRc(mpt, AccountsTrieID).isErr:
+    noisy.say info, "(5)",
+      " rc=", rc,
+      " nForked=", api.nForked(mpt),
+      " level=", api.level(mpt),
+      #" check=",  mpt.checkBE(),
+      "\n    preDb\n    ", preState,
+      "\n    db\n    " & mpt.pp(backendOk=false),
+      ""
   let key = block:
     let rc = api.getKeyRc(mpt, root)
     if rc.isErr:
+      noisy.say info, "(8)",
+        " root=", root.pp(),
+        " error=", rc.error,
+        #"\n    preDb\n    ", preState,
+        #"\n    db\n    ", mpt.pp(backendOk=false or true),
+        ""
       doAssert rc.error in {GetKeyNotFound,GetKeyUpdateNeeded}
       return err(rc.error.toError(base, info, HashNotAvailable))
     rc.value
@@ -734,6 +999,12 @@ proc init*(
 
   if kind.ord == 0:
     return err(aristo.GenericError.toError(base, info, SubTrieUnacceptable))
+
+  serial.inc
+  let
+    trigger = false # 73138 <= serial
+    #noisy = true
+
   let
     api = base.api
     vid = VertexID(kind)
@@ -741,11 +1012,30 @@ proc init*(
 
     # Fork MPT descriptor that provides `(vid,key)`
     newMpt = block:
+      noisy.say info, "(1)",
+        " rootHash=", root.data.toHex,
+        " rootKey=", key.pp(base.ctx.mpt),
+        ""
       let rc = api.forkWith(base.ctx.mpt, vid, key)
       if rc.isErr:
+        if noisy and not trigger:
+          let rx = forkWith(api, base.ctx.mpt, vid, key, noisy)
+          doAssert rx.isErr and rx.error == rc.error
+        noisy.say info, "(7) forkWith",
+          " trie=", kind,
+          " error=", rc.error,
+          "\n    hash=", root.data.toHex,
+          "\n    db\n    ", base.ctx.mpt.pp(backendOK=true),
+          ""
         return err(rc.error.toError(base, info))
       rc.value
 
+  #const noisy = true
+  noisy.say info, "(8) forkWith",
+    " nForked=", api.nForked(base.ctx.mpt),
+    "\n    oldStack=", base.ctx.mpt.pp(topOk=false,filterOk=false),
+    "\n    newStack=", newMpt.pp(topOk=false,filterOk=false),
+    ""
   # Create new context
   let ctx = AristoCoreDbCtxRef(
     base: base,

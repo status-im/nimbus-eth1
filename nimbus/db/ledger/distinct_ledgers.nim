@@ -41,6 +41,8 @@ const
     ## Provide database dumper. Note that the dump function needs to link
     ## against the `rocksdb` library. The# dependency lies in import of
     ## `aristo_debug`.
+var
+  noisy* = false
 
 # ------------------------------------------------------------------------------
 # Public debugging helpers
@@ -180,12 +182,29 @@ proc delete*(al: AccountLedger, eAddr: EthAddress) =
     raiseAssert info & $$error
 
 proc persistent*(al: AccountLedger) =
+  if noisy: echo ">>> persistent (1)",
+    "\n    trie=", $$al.distinctBase.getTrie,
+    "\n    db\n    ", al.dump,
+    ""
   let rc = al.distinctBase.persistent()
   if rc.isErr:
     if rc.error.error != AccTxPending:
       raiseAssert "persistent oops, error=" & $$rc.error
+    #if noisy: echo ">>> persistent (7) try",
+    #  "\n    trie=", $$al.distinctBase.getTrie,
+    #  "\n    db\n    ", al.dump,
+    #  ""
     discard al.distinctBase.getTrie.rootHash.valueOr:
       raiseAssert "re-hash oops, error=" & $$error
+    if noisy: echo ">>> persistent (8) re-hash ok",
+      "\n    trie=", $$al.distinctBase.getTrie,
+      "\n    db\n    ", al.dump,
+      ""
+  else:
+    if noisy: echo ">>> persistent (9) ok",
+      "\n    trie=", $$al.distinctBase.getTrie,
+      "\n    db\n    ", al.dump,
+      ""
 
 # ------------------------------------------------------------------------------
 # Public functions: storage ledger

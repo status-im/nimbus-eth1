@@ -108,7 +108,8 @@ let
   ariTest0* = goerliSampleEx
     .cloneWith(
       name      = "-am",
-      numBlocks = high(int),
+      #numBlocks = high(int),
+      numBlocks = 6_000,
       dbType    = AristoDbMemory)
 
   ariTest1* = goerliSampleEx
@@ -135,7 +136,7 @@ let
   legaTest0* = goerliSampleEx
     .cloneWith(
       name      = "-lm",
-      numBlocks = 500, # high(int),
+      numBlocks = high(int),
       dbType    = LegacyDbMemory)
 
   legaTest1* = goerliSampleEx
@@ -147,7 +148,7 @@ let
   legaTest2* = mainSampleEx
     .cloneWith(
       name      = "-lm",
-      numBlocks = 500_000,
+      numBlocks = 600, # 500_000,
       dbType    = LegacyDbMemory)
 
   legaTest3* = mainSampleEx
