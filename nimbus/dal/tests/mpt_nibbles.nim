@@ -42,8 +42,11 @@ suite "Nibbles":
   test "Nibbles":
     var nibs64: Nibbles64
     nibs64.bytes = hexToBytesArray[32]("0123456789abcdeffedcba9876543210ffeeddccbbaa99887766554433221100")
+
+    # even-length
     var nibs = nibs64.slice(0, 62)
     check: $nibs == "0123456789abcdeffedcba9876543210ffeeddccbbaa998877665544332211"
+    check: nibs.len == 62
 
     check: nibs[0] == 0x0
     check: nibs[1] == 0x1
@@ -59,8 +62,29 @@ suite "Nibbles":
     check: nibs[61] == 0xf
     check: $nibs == "a223456789abcdeffedcba9876543210ffeeddccbbaa99887766554433221f"
 
+    # odd-length
+    nibs = nibs64.slice(0, 61)
+    check: $nibs == "0123456789abcdeffedcba9876543210ffeeddccbbaa99887766554433221"
+    check: nibs.len == 61
+
+    check: nibs[0] == 0x0
+    check: nibs[1] == 0x1
+    check: nibs[20] == 0xb
+    check: nibs[59] == 0x2
+    check: nibs[60] == 0x1
+
+    nibs[0] = 0xa
+    check: nibs[0] == 0xa
+    nibs[1] = 2
+    check: nibs[1] == 2
+    nibs[60] = 0xf
+    check: nibs[60] == 0xf
+    check: $nibs == "a223456789abcdeffedcba9876543210ffeeddccbbaa9988776655443322f"
+
+    # slices from Nibbles64
     nibs = nibs64.slice(0, 1)
     check: $nibs == "0"
+    check: nibs.len == 1
     nibs = nibs64.slice(0, 2)
     check: $nibs == "01"
     nibs = nibs64.slice(0, 5)
@@ -83,7 +107,9 @@ suite "Nibbles":
     check: $nibs == "32211"
     nibs = nibs64.slice(30, 4)
     check: $nibs == "10ff"
+    check: nibs.len == 4
 
+    # slices from Nibbles
     nibs = nibs64.slice(0, 62)
     var subnibs = nibs.slice(0, 62)
     check: $subnibs == "0123456789abcdeffedcba9876543210ffeeddccbbaa998877665544332211"

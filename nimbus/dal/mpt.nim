@@ -21,7 +21,7 @@ import
 ]#
 
 # how to make certain fields visible just to mpt_* modules?
-
+# perf: check possibility of using enum types; save cost of virtual methods
 
 type
   MptNode* = ref object of RootObj
@@ -29,7 +29,6 @@ type
     logicalDepth*: uint8
     # encodedTreeSize: uint64
     # depthInBlob
-    rlpEncoding*: seq[byte]
 
   MptLeaf* = ref object of MptNode
     path*: Nibbles64
@@ -45,12 +44,12 @@ type
   MptExtension* = ref object of MptNode
     remainderPath*: Nibbles
     child*: MptBranch
-    childHash*: ref array[32, byte]
+    childHashOrRlp*: seq[byte]
 
   MptBranch* = ref object of MptNode
     childExistFlags*: uint16 # most significant bit = child #0
     children*: array[16, MptNode]
-    childHashes*: array[16, ref array[32, byte]]
+    childHashesOrRlps*: array[16, seq[byte]]
 
   DiffLayer* = object
     diffHeight*: uint64
@@ -69,37 +68,36 @@ func childExists*(branch: MptBranch, offset: uint8): bool =
 
 
 iterator enumerateTree*(node: MptNode):
-    tuple[node: MptNode, depth: uint8, index: uint8] =
+    tuple[node: MptNode, index: uint8, maybeHash: seq[byte]] =
   ## Iterates over all the nodes in the tree, depth-first. If a branch child
   ## exists but is not loaded, nil is returned. Same for the child of an
   ## extension node.
 
   # In order to keep this iterator an efficient second-class citizen, we can't
-  # use recursion, hence we store our position in a stack. The depth denotes
-  # the logical depth of the branch (not tree depth), and the index denotes the
+  # use recursion, hence we store our position in a stack. The index denotes the
   # next child offset in the branch that should be processed.
-  var stack: seq[tuple[branch: MptBranch, index: uint8, depth: uint8]]
+  var stack: seq[tuple[branch: MptBranch, index: uint8]]
 
+  var hash: seq[byte]
   var current = node
   var index = 0.uint8 # the index of current in its parent (0 if root)
-  var depth = 0.uint8 # the logical depth of current (not the tree depth)
 
   while true:
 
     # At the start of each iteration, we have an item that we can work with
-    yield (current, index, depth)
+    yield (current, index, hash)
 
     # Extension node: yield its child branch and push the child onto the stack
     if current of MptExtension:
       index = current.MptExtension.remainderPath[0]
-      depth += current.MptExtension.remainderPath.len.uint8
+      hash = current.MptExtension.childHashOrRlp
       current = current.MptExtension.child
-      yield (current, index, depth)
-      stack.add((current.MptBranch, 0.uint8, depth))
+      yield (current, index, hash)
+      stack.add((current.MptBranch, 0.uint8))
 
     # MptBranch: push it onto the stack
     elif current of MptBranch:
-      stack.add((current.MptBranch, 0.uint8, depth))
+      stack.add((current.MptBranch, 0.uint8))
 
     while stack.len > 0:
       # peek at the current branch we're working on
@@ -114,7 +112,7 @@ iterator enumerateTree*(node: MptNode):
       elif last.branch.childExists(last.index):
         current = last.branch.children[last.index]
         index = last.index
-        depth = last.depth
+        hash = last.branch.childHashesOrRlps[last.index]
         inc last.index
         break
 
@@ -127,55 +125,61 @@ iterator enumerateTree*(node: MptNode):
       break
 
 
-proc printTree*(node: MptNode, stream: Stream) =
+
+proc printHash(stream: Stream, depth: uint8, hash: seq[byte], rootHash: ref array[32, byte] = nil) =
+  if depth == 0 and rootHash != nil:
+    stream.write " Hash: "
+    stream.writeAsHex rootHash[]
+  elif hash.len > 0:
+    stream.write " Hash: "
+    stream.writeAsHex hash
+
+
+
+proc printTree*(node: MptNode, stream: Stream, rootHash: ref array[32, byte] = nil) =
   ## Prints the tree into the given `stream`.
   ## Outputs one line for each leaf, account, extension or branch in the tree,
   ## indented by depth, along with their properties.
 
-  #stream.write("<Tree root>                                                           Branch. Commitment: ")
-  #stream.writeAsHex(node.commitment.serializePoint)
-  #stream.writeLine()
-  for n, parentIndex, depth in node.enumerateTree():
-    for _ in 0 ..< depth.int:
-      stream.write(" ")
-    #if depth > 0: # if non-root
-    #  stream.writeAsHex(parentIndex.byte)
+  for n, parentIndex, hash in node.enumerateTree:
+    for _ in 0 ..< n.logicalDepth.int:
+      stream.write " "
+    if n.logicalDepth != 0:
+      stream.write parentIndex.bitsToHex
     if n of MptBranch:
-      stream.write('|')
-      for _ in depth.int ..< 65:
-        stream.write(" ")
-      stream.write("Branch.")
-      #stream.writeAsHex(n.commitment.serializePoint)
-      stream.writeLine()
+      stream.write '|'
+      for _ in n.logicalDepth.int ..< 65:
+        stream.write " "
+      stream.write "Branch       "
+      stream.printHash n.logicalDepth, hash, rootHash
     elif n of MptExtension:
       for i in 0 ..< n.MptExtension.remainderPath.len:
-        stream.write(n.MptExtension.remainderPath[i].bitsToHex)
-      for _ in depth.int + n.MptExtension.remainderPath.len ..< 66:
-        stream.write(" ")
-      stream.write("Extension.")
-      #stream.writeAsHex(n.commitment.serializePoint)
-      stream.writeLine()
+        stream.write n.MptExtension.remainderPath[i].bitsToHex
+      for _ in n.logicalDepth.int + n.MptExtension.remainderPath.len ..< 66:
+        stream.write " "
+      stream.write "Extension    "
+      stream.printHash n.logicalDepth, hash, rootHash
     elif n of MptLeaf:
-      #stream.write(parentIndex.bitsToHex)
-      for i in depth ..< 64:
-        stream.write(n.MptLeaf.path[i].bitsToHex)
-      stream.write("  Leaf.      Value: ")
-      stream.writeAsHex(n.MptLeaf.value)
-      stream.writeLine()
+      for i in n.logicalDepth ..< 64:
+        stream.write n.MptLeaf.path[i].bitsToHex
+      stream.write "  Leaf         "
+      stream.printHash n.logicalDepth, hash, rootHash
+      stream.write "  Value: "
+      stream.writeAsHex n.MptLeaf.value
     elif n of MptAccount:
-      #stream.write(parentIndex.bitsToHex)
-      for i in depth ..< 64:
-        stream.write(n.MptLeaf.path[i].bitsToHex)
-      stream.write("  Account.   Balance: ")
-      stream.write(n.MptAccount.balance)
-      stream.write(", Nonce: ")
-      stream.write(n.MptAccount.nonce)
-      stream.writeLine()
+      for i in n.logicalDepth ..< 64:
+        stream.write n.MptLeaf.path[i].bitsToHex
+      stream.write "  Account.     "
+      stream.printHash n.logicalDepth, hash, rootHash
+      stream.write "  Balance: "
+      stream.write n.MptAccount.balance
+      stream.write "  Nonce: "
+      stream.write n.MptAccount.nonce
     elif n == nil:
-      for _ in depth.int .. 66:
-        stream.write(" ")
-      stream.write("(node not loaded). Hash: ")
-      #stream.writeAsHex(n.commitment.serializePoint)
-      stream.writeLine()
+      for _ in n.logicalDepth.int .. 66:
+        stream.write " "
+      stream.write "(not loaded) "
+      stream.printHash n.logicalDepth, hash, rootHash
     else: doAssert false
+    stream.writeLine
 

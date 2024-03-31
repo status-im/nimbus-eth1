@@ -21,17 +21,20 @@ type
 
   Nibbles* = object
     ## Holds up to 62 nibbles (the maximum that an extension node in a MPT tree
-    ## can have), in a fixed 32 bytes array. The number of nibbles held is
-    ## stored in the last byte of the array. Nibbles are accessed and assigned
+    ## can have), in a fixed 32 bytes array. Nibbles are accessed and assigned
     ## using the indexing operator (`[]`). Use the `slice` method to initialize
     ## a `Nibbles` from a range of nibbles in another `Nibbles` or `Nibbles64`.
+    ## The number of nibbles held is stored in the last byte of the underlying
+    ## array. In case the number of nibbles is odd, they're shifted by half a
+    ## byte such that the first byte starts with 0x0. The rest of the bytes can
+    ## be copied in bulk.
     #
     # Note: There's some memory waste when storing just a few nibbles, but using
     #       a `seq` wouldn't have helped; a seq uses two ints, a pointer to heap
     #       memory and some minimum heap allocation, ending up taking 32 bytes
     #       or more (at least on x64), with extra overhead due to non-locality,
     #       fragmentation and GC.
-    bytes: array[32, byte]
+    bytes*: array[32, byte]
 
 
 func `[]`*(nibbles: Nibbles64, pos: range[0..63]): uint8 =
@@ -49,28 +52,38 @@ func `[]=`*(nibbles: var Nibbles64, pos: range[0..63], nibble: range[0..15]) =
 
 
 iterator enumerate*(nibbles: Nibbles64): uint8 =
+  ## Iterates over the nibbles
   for b in nibbles.bytes:
     yield b shr 4
     yield b and 0xf
 
 
-func `$`*(nibbles: Nibbles64): string = nibbles.bytes.toHex
+func `$`*(nibbles: Nibbles64): string =
+  ## Hex encoded nibbles, excluding `0x` prefix
+  nibbles.bytes.toHex
 
 
-func len*(nibbles: Nibbles): int = nibbles.bytes[31].int
+func len*(nibbles: Nibbles): int =
   ## Returns the number of nibbles stored
+  nibbles.bytes[31].int
 
 
 iterator enumerate(nibbles: Nibbles): uint8 =
+  ## Iterates over the nibbles
   let len = nibbles.bytes[31].int
-  for i in 0 ..< len div 2:
-    yield nibbles.bytes[i] shr 4
-    yield nibbles.bytes[i] and 0xf
+  if len mod 2 == 0:
+    for i in 0 ..< len div 2:
+      yield nibbles.bytes[i] shr 4
+      yield nibbles.bytes[i] and 0xf
   if len mod 2 == 1:
-    yield nibbles.bytes[len div 2] shr 4
+    yield nibbles.bytes[0]
+    for i in 1 .. len div 2:
+      yield nibbles.bytes[i] shr 4
+      yield nibbles.bytes[i] and 0xf
 
 
 func `$`*(nibbles: Nibbles): string =
+  ## Hex encoded nibbles, excluding `0x` prefix
   for nibble in nibbles.enumerate():
     result.add nibble.bitsToHex
 
@@ -80,8 +93,12 @@ func `[]`*(nibbles: Nibbles, pos: range[0..61]): uint8 =
   ## the range of held nibbles, a `RangeDefect` exception is raised.
   if pos.uint8 >= nibbles.bytes[31]:
     raise newException(RangeDefect, "Out of range nibble at position " & $pos & "; length is " & $nibbles.bytes[31].uint8)
-  if pos mod 2 == 0: nibbles.bytes[pos div 2] shr 4
-  else: nibbles.bytes[pos div 2] and 0xf
+  if nibbles.bytes[31] mod 2 == 0:
+    if pos mod 2 == 0: nibbles.bytes[pos div 2] shr 4
+    else: nibbles.bytes[pos div 2] and 0xf
+  else:
+    if pos mod 2 == 0: nibbles.bytes[pos div 2] and 0xf
+    else: nibbles.bytes[(pos+1) div 2] shr 4
 
 
 func `[]=`*(nibbles: var Nibbles, pos: range[0..61], nibble: range[0..15]) =
@@ -89,9 +106,14 @@ func `[]=`*(nibbles: var Nibbles, pos: range[0..61], nibble: range[0..15]) =
   ## the range of held nibbles, a `RangeDefect` exception is raised.
   if pos.uint8 >= nibbles.bytes[31]:
     raise newException(RangeDefect, "Out of range nibble at position " & $pos & "; length is " & $nibbles.bytes[31].uint8)
-  if pos mod 2 == 0:
-    nibbles.bytes[pos div 2] = (nibbles.bytes[pos div 2] and 0xf) or (nibble.byte shl 4)
-  else: nibbles.bytes[pos div 2] = (nibbles.bytes[pos div 2] and 0xf0) or nibble.byte
+  if nibbles.bytes[31] mod 2 == 0:
+    if pos mod 2 == 0:
+      nibbles.bytes[pos div 2] = (nibbles.bytes[pos div 2] and 0xf) or (nibble.byte shl 4)
+    else: nibbles.bytes[pos div 2] = (nibbles.bytes[pos div 2] and 0xf0) or nibble.byte
+  else:
+    if pos mod 2 == 0:
+      nibbles.bytes[pos div 2] = (nibbles.bytes[pos div 2] and 0xf0) or nibble.byte
+    else: nibbles.bytes[(pos+1) div 2] = (nibbles.bytes[(pos+1) div 2] and 0xf) or (nibble.byte shl 4)
 
 
 func slice*(nibbles: Nibbles64, start: range[0..61], length: range[1..62]): Nibbles =

@@ -75,6 +75,7 @@ proc put*(diff: var DiffLayer, key: Nibbles64, value: seq[byte]) =
       let keyNibble = key[divergeDepth]
       let bits = (0x8000.uint16 shr rootNibble) or (0x8000.uint16 shr keyNibble)
       let branch = MptBranch(diffHeight: diff.diffHeight, logicalDepth: divergeDepth, childExistFlags: bits)
+      diff.root.logicalDepth = divergeDepth + 1
       branch.children[rootNibble] = diff.root
       branch.children[keyNibble] = MptLeaf(diffHeight: diff.diffHeight,
         logicalDepth: divergeDepth + 1, path: key, value: value)
@@ -101,7 +102,7 @@ proc put*(diff: var DiffLayer, key: Nibbles64, value: seq[byte]) =
       let bits = (0x8000.uint16 shr extPath[0]) or (0x8000.uint16 shr key[0])
       let branch = MptBranch(diffHeight: diff.diffHeight, logicalDepth: 0, childExistFlags: bits)
       branch.children[extPath[0]] = MptExtension(diffHeight: diff.diffHeight, logicalDepth: 1,
-        child: diff.root.MptExtension.child, childHash: diff.root.MptExtension.childHash,
+        child: diff.root.MptExtension.child, childHashOrRlp: diff.root.MptExtension.childHashOrRlp,
         remainderPath: extPath.slice(1, extPath.len-1))
       branch.children[key[0]] = MptLeaf(diffHeight: diff.diffHeight,
         logicalDepth: extPath.len.uint8 - 2, path: key, value: value)
@@ -147,8 +148,10 @@ for kvp in db2.pairsInMemoryDB():
   if kvp[0][0..^1] != emptyRlpHash[0..^1]:
     echo &"{kvp[0].toHex} => {kvp[1].toHex}"
 
+echo ""
+var rootHash = container.getOrComputeHash
 echo "\nDumping tree:\n"
-container.root.printTree(newFileStream(stdout))
+container.root.printTree(newFileStream(stdout), rootHash)
 
 echo ""
 echo &"Legacy root hash: {trie.rootHash.data.toHex}" #"0xe9e2935138352776cad724d31c9fa5266a5c593bb97726dd2a908fe6d53284df"
