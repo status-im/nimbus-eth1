@@ -6,11 +6,12 @@
 #   at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 
-## This module provides two memory-efficient data structures for working with
-## 'nibbles'. A nibble is a 4-bit value. To save on RAM, we store two nibbles
-## per byte. We provide methods for working with logical nibbles instead of
-## bytes.
+##  This module provides two memory-efficient data structures for working with
+##  'nibbles'. A nibble is a 4-bit value. To save on RAM, we store two nibbles
+##  per byte. We provide methods for working with logical nibbles instead of
+##  bytes.
 
+import utils
 
 type
   Nibbles64* = object
@@ -25,7 +26,7 @@ type
     ## using the indexing operator (`[]`). Use the `slice` method to initialize
     ## a `Nibbles` from a range of nibbles in another `Nibbles` or `Nibbles64`.
     #
-    # Note: there's some memory waste when storing just a few nibbles, but using
+    # Note: There's some memory waste when storing just a few nibbles, but using
     #       a `seq` wouldn't have helped; a seq uses two ints, a pointer to heap
     #       memory and some minimum heap allocation, ending up taking 32 bytes
     #       or more (at least on x64), with extra overhead due to non-locality,
@@ -43,12 +44,35 @@ func `[]=`*(nibbles: var Nibbles64, pos: range[0..63], nibble: range[0..15]) =
   ## Stores `nibble` at the logical `pos`ition
   let current = nibbles.bytes[pos div 2]
   if pos mod 2 == 0:
-    nibbles.bytes[pos div 2] = (current and 0xf0) or nibble.byte
-  else: nibbles.bytes[pos div 2] = (current and 0xf) or (nibble.byte shl 4)
+    nibbles.bytes[pos div 2] = (current and 0xf) or (nibble.byte shl 4)
+  else: nibbles.bytes[pos div 2] = (current and 0xf0) or nibble.byte
+
+
+iterator enumerate*(nibbles: Nibbles64): uint8 =
+  for b in nibbles.bytes:
+    yield b shr 4
+    yield b and 0xf
+
+
+func `$`*(nibbles: Nibbles64): string = nibbles.bytes.toHex
 
 
 func len*(nibbles: Nibbles): int = nibbles.bytes[31].int
   ## Returns the number of nibbles stored
+
+
+iterator enumerate(nibbles: Nibbles): uint8 =
+  let len = nibbles.bytes[31].int
+  for i in 0 ..< len div 2:
+    yield nibbles.bytes[i] shr 4
+    yield nibbles.bytes[i] and 0xf
+  if len mod 2 == 1:
+    yield nibbles.bytes[len div 2] shr 4
+
+
+func `$`*(nibbles: Nibbles): string =
+  for nibble in nibbles.enumerate():
+    result.add nibble.bitsToHex
 
 
 func `[]`*(nibbles: Nibbles, pos: range[0..61]): uint8 =
@@ -70,11 +94,12 @@ func `[]=`*(nibbles: var Nibbles, pos: range[0..61], nibble: range[0..15]) =
   else: nibbles.bytes[pos div 2] = (nibbles.bytes[pos div 2] and 0xf0) or nibble.byte
 
 
-func slice*(nibbles: Nibbles64, start: range[0..61], length: range[0..62]): Nibbles =
+func slice*(nibbles: Nibbles64, start: range[0..61], length: range[1..62]): Nibbles =
   ## Initializes a `Nibbles` instance from a range within a `Nibbles64`
   ## instance, denoted by `start` and `length`. The nibbles are copied over, not
   ## referenced. In case `start` + `length` exceed 64, a `RangeDefect` exception
   ## is raised.
+  # PERF: This can probably be optimized
   if start + length > 64:
     raise newException(RangeDefect, "Can't initialize nibbles slice with start=" & $start & " and length=" & $length & "; exceeds 64")
   result.bytes[31] = length.uint8
@@ -84,11 +109,12 @@ func slice*(nibbles: Nibbles64, start: range[0..61], length: range[0..62]): Nibb
     inc pos
 
 
-func slice*(nibbles: Nibbles, start: range[0..61], length: range[0..62]): Nibbles =
+func slice*(nibbles: Nibbles, start: range[0..61], length: range[1..62]): Nibbles =
   ## Initializes a `Nibbles` instance from a range within another instance,
   ## denoted by `start` and `length`. The nibbles are copied over, not
   ## referenced. In case `start` + `length` exceed the number of nibbles in the
   ## source, a `RangeDefect` exception is raised.
+  # PERF: This can probably be optimized
   if start + length > nibbles.len:
     raise newException(RangeDefect, "Can't initialize nibbles slice with start=" & $start & " and length=" & $length & "; exceeds " & $nibbles.len)
   result.bytes[31] = length.uint8

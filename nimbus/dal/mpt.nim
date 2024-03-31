@@ -1,25 +1,35 @@
-# Nimbus
-# Copyright (c) 2021-2024 Status Research & Development GmbH
-# Licensed under either of
-#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
-#  * MIT license ([LICENSE-MIT](LICENSE-MIT))
-# at your option.
-# This file may not be copied, modified, or distributed except according to
-# those terms.
+#   Nimbus
+#   Copyright (c) 2021-2024 Status Research & Development GmbH
+#   Licensed and distributed under either of
+#     * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
+#     * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
+#   at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
   std/streams,
   stint,
-  ../../vendor/nim-eth/eth/common/eth_hash,
   utils,
   mpt_nibbles
+
+
+#[
+ features:
+    diff layers
+    accounts node
+    lazy hashing
+    ...
+]#
+
+# how to make certain fields visible just to mpt_* modules?
+
 
 type
   MptNode* = ref object of RootObj
     diffHeight*: uint64
-    hash*: ref KeccakHash
+    logicalDepth*: uint8
     # encodedTreeSize: uint64
     # depthInBlob
+    rlpEncoding*: seq[byte]
 
   MptLeaf* = ref object of MptNode
     path*: Nibbles64
@@ -45,10 +55,17 @@ type
   DiffLayer* = object
     diffHeight*: uint64
     root*: MptNode
+    hash*: ref array[32, byte]
+
+# todo: list of procs/funcs/methods that can be called, incl. from other files
+
 
 
 func childExists*(branch: MptBranch, offset: uint8): bool =
   (branch.childExistFlags and (0x8000.uint16 shr offset.uint16)) > 0
+
+
+# TODO: remove depth
 
 
 iterator enumerateTree*(node: MptNode):
@@ -114,6 +131,7 @@ proc printTree*(node: MptNode, stream: Stream) =
   ## Prints the tree into the given `stream`.
   ## Outputs one line for each leaf, account, extension or branch in the tree,
   ## indented by depth, along with their properties.
+
   #stream.write("<Tree root>                                                           Branch. Commitment: ")
   #stream.writeAsHex(node.commitment.serializePoint)
   #stream.writeLine()

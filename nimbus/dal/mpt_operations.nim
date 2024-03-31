@@ -1,38 +1,29 @@
-# Nimbus
-# Copyright (c) 2021-2024 Status Research & Development GmbH
-# Licensed under either of
-#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
-#  * MIT license ([LICENSE-MIT](LICENSE-MIT))
-# at your option.
-# This file may not be copied, modified, or distributed except according to
-# those terms.
+#   Nimbus
+#   Copyright (c) 2021-2024 Status Research & Development GmbH
+#   Licensed and distributed under either of
+#     * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
+#     * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
+#   at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
   std/streams,
-  std/times,
-  std/sequtils,
   std/strformat,
-  #unittest2,
   stint,
   nimcrypto/hash,
-  #stew/byteutils,
-  ../../vendor/nim-stint/stint,
   ../../vendor/nim-eth/eth/trie/hexary,
   ../../vendor/nim-eth/eth/trie/db,
-  ../../vendor/nim-eth/eth/trie/trie_defs,
-  ../../vendor/nim-eth/eth/trie/hexary_proof_verification,
-  ../../vendor/nim-eth/eth/common/eth_hash,
-  mpt,
   mpt_rlp_hash,
   mpt_nibbles,
   utils
+
+import mpt {.all.}
 
 from ../../vendor/nimcrypto/nimcrypto/utils import fromHex
 
 # import std/atomics
 # proc atomicInc[T: SomeInteger](location: var Atomic[T]; value: T = 1)
 
-
+# Todo: needed?
 func shallowCloneMptNode(node: MptNode): MptNode =
   if node of MptLeaf:
     result = MptLeaf()
@@ -64,7 +55,7 @@ proc put*(diff: var DiffLayer, key: Nibbles64, value: seq[byte]) =
   
   # No root? Store a leaf
   if diff.root == nil:
-    diff.root = MptLeaf(diffHeight: diff.diffHeight, path: key, value: value)
+    diff.root = MptLeaf(diffHeight: diff.diffHeight, logicalDepth: 0, path: key, value: value)
 
   # Root is a leaf? (cloned)
   elif diff.root of MptLeaf:
@@ -75,7 +66,7 @@ proc put*(diff: var DiffLayer, key: Nibbles64, value: seq[byte]) =
 
     # Different? Find the point at which they diverge
     else:
-      var divergeDepth = 0
+      var divergeDepth = 0.uint8
       while diff.root.MptLeaf.path[divergeDepth] == key[divergeDepth]:
         inc divergeDepth
 
@@ -83,9 +74,10 @@ proc put*(diff: var DiffLayer, key: Nibbles64, value: seq[byte]) =
       let rootNibble = diff.root.MptLeaf.path[divergeDepth]
       let keyNibble = key[divergeDepth]
       let bits = (0x8000.uint16 shr rootNibble) or (0x8000.uint16 shr keyNibble)
-      let branch = MptBranch(diffHeight: diff.diffHeight, childExistFlags: bits)
+      let branch = MptBranch(diffHeight: diff.diffHeight, logicalDepth: divergeDepth, childExistFlags: bits)
       branch.children[rootNibble] = diff.root
-      branch.children[keyNibble] = MptLeaf(diffHeight: diff.diffHeight, path: key, value: value)
+      branch.children[keyNibble] = MptLeaf(diffHeight: diff.diffHeight,
+        logicalDepth: divergeDepth + 1, path: key, value: value)
 
       # Diverging right from the start? Replace the root node with the branch
       if divergeDepth == 0:
@@ -95,8 +87,8 @@ proc put*(diff: var DiffLayer, key: Nibbles64, value: seq[byte]) =
       # branch. The extension node's remainder path extends till the point of
       # divergence.
       else:
-        diff.root = MptExtension(diffHeight: diff.diffHeight, child: branch,
-          remainderPath: key.slice(0, divergeDepth))
+        diff.root = MptExtension(diffHeight: diff.diffHeight, logicalDepth: 0,
+          child: branch, remainderPath: key.slice(0, divergeDepth))
 
   # Root is an extension?
   elif diff.root of MptExtension:
@@ -107,10 +99,12 @@ proc put*(diff: var DiffLayer, key: Nibbles64, value: seq[byte]) =
     # leaf
     if extPath[0] != key[0]:
       let bits = (0x8000.uint16 shr extPath[0]) or (0x8000.uint16 shr key[0])
-      let branch = MptBranch(diffHeight: diff.diffHeight, childExistFlags: bits)
-      branch.children[extPath[0]] = MptExtension(diffHeight: diff.diffHeight,
-        child: diff.root.MptExtension.child, remainderPath: extPath.slice(1, extPath.len-1))
-      branch.children[key[0]] = MptLeaf(diffHeight: diff.diffHeight, path: key, value: value)
+      let branch = MptBranch(diffHeight: diff.diffHeight, logicalDepth: 0, childExistFlags: bits)
+      branch.children[extPath[0]] = MptExtension(diffHeight: diff.diffHeight, logicalDepth: 1,
+        child: diff.root.MptExtension.child, childHash: diff.root.MptExtension.childHash,
+        remainderPath: extPath.slice(1, extPath.len-1))
+      branch.children[key[0]] = MptLeaf(diffHeight: diff.diffHeight,
+        logicalDepth: extPath.len.uint8 - 2, path: key, value: value)
       diff.root = branch
 
   else: doAssert false
@@ -158,4 +152,4 @@ container.root.printTree(newFileStream(stdout))
 
 echo ""
 echo &"Legacy root hash: {trie.rootHash.data.toHex}" #"0xe9e2935138352776cad724d31c9fa5266a5c593bb97726dd2a908fe6d53284df"
-echo &"BART   root hash: {container.root.getOrComputeHash.data.toHex}"
+echo &"BART   root hash: {container.getOrComputeHash[].toHex}"
