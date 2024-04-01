@@ -8,6 +8,7 @@
 import
   std/algorithm,
   eth/common,
+  std/[times, os],
   stew/[byteutils, endians2], stint,
   ../../evm/interpreter/op_codes,
   "../../../vendor/nim-eth-verkle/eth_verkle"/[
@@ -84,7 +85,7 @@ proc getTreeKeyCodeChunkIndices*(chunk: UInt256): (UInt256, byte) =
   var subIndexMod: UInt256
   subIndexMod = chunkOffSet mod u256(256)
   var subIndex: byte
-  if not subIndexMod == UInt256.zero():
+  if not (subIndexMod == UInt256.zero()):
     subIndex = byte(subIndexMod.limbs[0])
   return (treeIndex, subIndex)
 
@@ -243,3 +244,53 @@ proc chunkifyCode*(code: openArray[byte]) : ChunkedCode =
       codeOffset += 1
 
   return chunks
+
+proc updateContractCode*(trie: var VerkleTrie, address: EthAddress, codeHash: Hash256, code: openArray[byte]) =
+
+  let chunks = chunkifyCode(code)
+  var key, value: Bytes32
+
+  var i = 0
+  var chunknr = 0
+  var groupOffSet = 0
+
+  var values: array[256, ref Bytes32] 
+  
+  while i < chunks.len:
+
+    groupOffSet = (chunknr + 128) mod 256
+    if ((groupOffSet == 0) or (chunknr == 0)):
+      key = getTreeKeyCodeChunk(address, u256(chunknr))
+      for i in 0 ..< 256:
+        values[i] = nil
+
+    # set the chunk value to value
+    for j in i ..< i+32:
+      value[j-i] = chunks[j]
+    
+    var heapValue = new Bytes32
+    heapValue[] = value
+    values[groupOffSet] = heapValue
+
+    if i == 0 :
+      var sizeVal = new Bytes32
+      let codelength = code.len
+      let valueLE = uint64(codelength).toBytesLE()
+      var sizeLE: Bytes32
+      for i in 0 ..< 32:
+        if i < valueLE.len:
+          sizeLE[i] = valueLE[i]
+        else:
+          sizeLE[i] = 0 
+      sizeVal[] = sizeLE
+      values[CodeSizeLeafKey] = sizeVal
+
+    if ((groupOffSet == 255) or ((chunks.len - i) <= 32)):
+      var stem: array[31, byte]
+      for j in 0 ..< 31:
+        stem[j] = key[j]
+      trie.root.setMultipleValues(stem, values)
+      trie.root.updateAllCommitments()
+
+    i = i + 32
+    chunknr = chunknr + 1
