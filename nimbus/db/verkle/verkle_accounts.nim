@@ -70,7 +70,7 @@ proc evaluateAddressPoint*(address: EthAddress): Point =
   var ret = poly.ipaCommitToPoly()
 
   var getTreePolyIndex0Point: Point
-  var a = fromHex(Bytes32, "0x22196df2c10590e04c34bd5cc57e09911b98c782a503d21bc1838e1c6e1a10bf")
+  const a = fromHex(Bytes32, "0x22196df2c10590e04c34bd5cc57e09911b98c782a503d21bc1838e1c6e1a10bf")
   discard getTreePolyIndex0Point.deserialize(a)
 
   ret.banderwagonAddPoint(getTreePolyIndex0Point)
@@ -109,7 +109,7 @@ proc getTreeKey*(address: EthAddress, treeIndex: UInt256, subIndex: byte): Bytes
   poly[2].fromLEBytes(newAddr[16..^1])
 
   var getTreePolyIndex0Point {.noinit.} : Point
-  var a = fromHex(Bytes32, "0x22196df2c10590e04c34bd5cc57e09911b98c782a503d21bc1838e1c6e1a10bf")
+  const a = fromHex(Bytes32, "0x22196df2c10590e04c34bd5cc57e09911b98c782a503d21bc1838e1c6e1a10bf")
   discard getTreePolyIndex0Point.deserialize(a)
 
   # treeIndex must be interpreted as a 32-byte aligned little-endian integer.
