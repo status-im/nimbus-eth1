@@ -27,7 +27,7 @@ suite "Tree Embeddings Tests":
     n = n + 3
 
     var tk = getTreeKey(address, n, 1)
-    doAssert tk.toHex() == "20f55e0457f368b464533b95c836deb6d6fe1c5a03758bb7732ba6622fddbb01", "Generated trie key is incorrect"
+    doAssert tk.toHex() == "f546a4318c58e0f6fc5c28d4dfc302c7c32d209d360b27991d2d2525289a9601", "Generated trie key is incorrect"
 
 suite "Verkle Account Tests":
   test "Test Verkle Account Updation":
@@ -45,7 +45,7 @@ suite "Verkle Account Tests":
     trie.updateAccount(address, acc)
     var comm = trie.hashVerkleTrie()
 
-    doAssert comm.toHex() == "4f552174cdd1e9a50b03edd879a8f650c7d28e8ab2dd9bd03be45749e4808b34", "Root Commitment not matching with expected data"
+    doAssert comm.toHex() == "43ca08d7ec0f76747e5615e00792c84de5d0ac2753fdef2315a6106d5917b332", "Root Commitment not matching with expected data"
 
   test "Chunkify Code Simple":
     let
@@ -124,6 +124,6 @@ suite "Verkle Account Tests":
     trie.updateContractCode(address, acc.codeHash, hexcode)
     var comm = trie.hashVerkleTrie()
 
-    doAssert comm.toHex() == "28912fb3eeaf684f4069dbd391b200eb910891aa76a78541d791ab0115d4486b", "Root Commitment not matching with expected data"
+    doAssert comm.toHex() == "70d33ec88ca3efcca85510f1511b5bd063c6812ca1f9ec70e15a4d8b6637d9a8", "Root Commitment not matching with expected data"
 
 

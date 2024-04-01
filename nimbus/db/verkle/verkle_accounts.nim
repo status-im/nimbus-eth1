@@ -37,8 +37,7 @@ const
 
 
 proc pointToHash*(point: Point, suffix: byte): Bytes32 =
-  result = point.serializePoint()
-  result.reverse()
+  result = point.hashPointToBytes()
   result[31] = suffix
 
 proc getTreeKeyWithEvaluatedAddress*(evaluated: Point, treeIndex: UInt256, subIndex: byte): Bytes32 =
