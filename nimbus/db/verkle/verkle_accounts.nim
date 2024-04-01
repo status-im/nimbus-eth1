@@ -23,7 +23,7 @@ import
 
 type
   ChunkedCode = seq[byte]
-  VerkleTrie = ref object
+  VerkleTrieRef = ref object
     root: BranchesNode
   # db: <something>
   # persistcheck: <some-flag>
@@ -165,10 +165,10 @@ proc getTreeKeyCodeChunkWithEvaluatedAddress*(addressPoint: Point, chunk: UInt25
   return getTreeKeyWithEvaluatedAddress(addressPoint, treeIndex, subIndex)
 
 
-proc newVerkleTrie*(): VerkleTrie =
-  result = VerkleTrie(root: newTree())
+proc newVerkleTrie*(): VerkleTrieRef =
+  result = VerkleTrieRef(root: newTree())
 
-proc updateAccount*(trie: var VerkleTrie, address: EthAddress, acc: Account) =
+proc updateAccount*(trie: VerkleTrieRef, address: EthAddress, acc: Account) =
   var verKey = getTreeKeyVersion(address)
   var nonceKey = getTreeKeyNonce(address)
   var balanceKey = getTreeKeyBalance(address)
@@ -193,7 +193,7 @@ proc updateAccount*(trie: var VerkleTrie, address: EthAddress, acc: Account) =
   trie.root.setValue(codeKeccakKey, acc.codeHash.data)
 
     
-proc hashVerkleTrie*(trie: var VerkleTrie): Bytes32 =
+proc hashVerkleTrie*(trie: VerkleTrieRef): Bytes32 =
   trie.root.updateAllCommitments()
   return trie.root.commitment.serializePoint()
 
@@ -245,7 +245,7 @@ proc chunkifyCode*(code: openArray[byte]) : ChunkedCode =
 
   return chunks
 
-proc updateContractCode*(trie: var VerkleTrie, address: EthAddress, codeHash: Hash256, code: openArray[byte]) =
+proc updateContractCode*(trie: VerkleTrieRef, address: EthAddress, codeHash: Hash256, code: openArray[byte]) =
 
   let chunks = chunkifyCode(code)
   var key, value: Bytes32
