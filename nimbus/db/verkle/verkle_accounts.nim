@@ -204,7 +204,7 @@ proc chunkifyCode*(code: openArray[byte]) : ChunkedCode =
     chunkCount  = len(code) div 31
     codeOffset  = 0 # offset in the code
 
-  if len(code) mod 31 != 0:
+  if code.len mod 31 != 0:
     chunkCount += 1
 
   var chunks = newSeq[byte](chunkCount*32)
