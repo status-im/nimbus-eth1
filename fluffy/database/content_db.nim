@@ -359,6 +359,13 @@ proc deleteContentOutOfRadius*(db: ContentDB, localId: UInt256, radius: UInt256)
     "SQL query OK"
   )
 
+proc reclaimAndTruncate*(db: ContentDB) =
+  notice "Reclaiming unused pages"
+  db.reclaimSpace()
+  if db.manualCheckpoint:
+    notice "Truncating WAL file"
+    db.backend.checkpoint(SqStoreCheckpointKind.truncate)
+
 proc forcePrune*(db: ContentDB, localId: UInt256, radius: UInt256) =
   ## Force prune the database to a statically set radius. This will also run
   ## the reclaimSpace (vacuum) to free unused pages. As side effect this will
@@ -369,11 +376,7 @@ proc forcePrune*(db: ContentDB, localId: UInt256, radius: UInt256) =
   ## skipped.
   notice "Starting the pruning of content"
   db.deleteContentOutOfRadius(localId, radius)
-  notice "Reclaiming unused pages"
-  db.reclaimSpace()
-  if db.manualCheckpoint:
-    notice "Truncating WAL file"
-    db.backend.checkpoint(SqStoreCheckpointKind.truncate)
+  db.reclaimAndTruncate()
   notice "Finished database pruning"
 
 proc put*(

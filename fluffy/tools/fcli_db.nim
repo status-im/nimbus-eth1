@@ -52,7 +52,11 @@ type
         name: "content-amount"
       .}: uint64
     of DbCmd.prune:
-      discard
+      reclaimOnly* {.
+        desc: "Only reclaim space from the database, don't actually prune it",
+        defaultValue: true,
+        name: "reclaim-only"
+      .}: bool
     of DbCmd.validate:
       discard
 
@@ -117,6 +121,19 @@ proc cmdBench(conf: DbConf) =
 
   printTimers(timers)
 
+proc cmdPrune(conf: DbConf) =
+  if conf.reclaimOnly:
+    let db = ContentDB.new(
+      conf.databaseDir.string,
+      storageCapacity = 1_000_000, # Doesn't matter if only space reclaiming is done
+      manualCheckpoint = true,
+    )
+
+    db.reclaimAndTruncate()
+  else:
+    notice "Functionality not yet implemented"
+    quit QuitSuccess
+
 proc controlCHook() {.noconv.} =
   notice "Shutting down after having received SIGINT."
   quit QuitSuccess
@@ -138,6 +155,6 @@ when isMainModule:
   of DbCmd.generate:
     cmdGenerate(conf)
   of DbCmd.prune:
-    notice "Functionality not yet implemented"
+    cmdPrune(conf)
   of DbCmd.validate:
     notice "Functionality not yet implemented"
