@@ -88,6 +88,12 @@ func to(trie: CoreDbTrieRef; T: type VertexID): T =
 func to(address: EthAddress; T: type PathID): T =
   HashKey.fromBytes(address.keccakHash.data).value.to(T)
 
+func resetTrie(kind: CoreDbSubTrie): bool =
+  ## Check whether to reset some non-dynamic trie when instantiating. It
+  ## emulates the behaviour of a new empty MPT on the legacy database.
+  kind == GenericTrie or
+    (high(CoreDbSubTrie) < kind and kind.ord < LEAST_FREE_VID)
+
 # -------------------------------
 
 func toCoreDbAccount(
@@ -475,11 +481,9 @@ proc ctxMethods(cCtx: AristoCoreDbCtxRef): CoreDbCtxFns =
     if not root.isValid:
       return ok(db.bless trie)
 
-    # Reset non-dynamic trie when instantiating. This applies to root IDs beween
-    # `VertexID(2) .. LEAST_FREE_VID`. It emulates the behaviour of a new empty
-    # MPT on the legacy database.
-    if AccountsTrie < kind and kind.ord < LEAST_FREE_VID:
-      trie.reset = true
+    # Reset some non-dynamic trie when instantiating. It emulates the behaviour
+    # of a new empty MPT on the legacy database.
+    trie.reset = kind.resetTrie()
 
     # Update hashes in order to verify the trie state root.
     ? api.hashify(mpt).toVoidRc(base, info, HashNotAvailable)
@@ -521,7 +525,7 @@ proc ctxMethods(cCtx: AristoCoreDbCtxRef): CoreDbCtxFns =
         if rc.isErr:
           return err(rc.error[1].toError(base, info, AccNotFound))
     else:
-      reset = AccountsTrie < trie.kind
+      reset = trie.kind.resetTrie()
       newMpt = AristoCoreDxMptRef(
         root:    VertexID(trie.kind),
         accPath: VOID_PATH_ID)
@@ -747,7 +751,7 @@ proc init*(
     base: base,
     mpt:  newMpt)
   ctx.methods = ctx.ctxMethods
-  ok( base.parent.bless ctx)
+  ok(base.parent.bless ctx)
 
 # ------------------------------------------------------------------------------
 # End

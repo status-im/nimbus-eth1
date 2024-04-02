@@ -1,29 +1,94 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
-#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
-#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
-# at your option. This file may not be copied, modified, or distributed except according to those terms.
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+#    http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or
+#    http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified,
+# or distributed except according to those terms.
 
 import
-  std/[json, os, tables, strutils],
+  std/[json, os, sets, tables, strutils],
+  chronicles,
   unittest2,
   stew/byteutils,
+  results,
   ./test_helpers,
+  ../nimbus/sync/protocol/snap/snap_types,
+  ../nimbus/db/aristo/aristo_merge,
+  ../nimbus/db/kvt/kvt_utils,
+  ../nimbus/db/aristo,
   ../nimbus/[tracer, vm_types],
   ../nimbus/common/common
 
-proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus)
+proc setErrorLevel {.used.} =
+  when defined(chronicles_runtime_filtering) and loggingEnabled:
+    setLogLevel(LogLevel.ERROR)
 
-proc tracerJsonMain*() =
-  suite "tracer json tests":
-    jsonTest("TracerTests", testFixture)
+
+proc preLoadLegaDb(cdb: CoreDbRef; jKvp: JsonNode) =
+    # Just a hack: MPT and KVT share the same base table
+    for k, v in jKvp:
+      let key = hexToSeqByte(k)
+      let value = hexToSeqByte(v.getStr())
+      cdb.kvt.put(key, value)
+
+proc preLoadAristoDb(cdb: CoreDbRef; jKvp: JsonNode; num: BlockNumber) =
+  ## Hack for `Aristo` pre-lading using the `snap` protocol proof-loader
+  var
+    proof: seq[SnapProof] # for pre-loading MPT
+    predRoot: Hash256     # from predecessor header
+    txRoot: Hash256       # header with block number `num`
+    rcptRoot: Hash256     # ditto
+  let
+    adb = cdb.ctx.getMpt(GenericTrie).backend.toAristo
+    kdb = cdb.newKvt.backend.toAristo
+
+  # Fill KVT and collect `proof` data
+  for (k,v) in jKvp.pairs:
+    let
+      key = hexToSeqByte(k)
+      val = hexToSeqByte(v.getStr())
+    if key.len == 32:
+      doAssert key == val.keccakHash.data
+      if val != @[0x80u8]: # Exclude empty item
+        proof.add SnapProof(val)
+    else:
+      if key[0] == 0:
+        try:
+          # Pull our particular header fields (if possible)
+          let header = rlp.decode(val, BlockHeader)
+          if header.blockNumber == num:
+            txRoot = header.txRoot
+            rcptRoot = header.receiptRoot
+          elif header.blockNumber == num-1:
+            predRoot = header.stateRoot
+        except RlpError:
+          discard
+      check kdb.put(key, val).isOk
+
+  # Install sub-trie roots onto production db
+  if txRoot.isValid:
+    doAssert adb.merge(txRoot, VertexID(TxTrie)).isOk
+  if rcptRoot.isValid:
+    doAssert adb.merge(rcptRoot, VertexID(ReceiptsTrie)).isOk
+  doAssert adb.merge(predRoot, VertexID(AccountsTrie)).isOk
+
+  # Set up production MPT
+  doAssert adb.merge(proof).isOk
+
+  # Remove locks so that hashify can re-assign changed nodes
+  adb.top.final.pPrf.clear
+  adb.top.final.fRpp.clear
+
 
 # use tracerTestGen.nim to generate additional test data
-proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus) =
+proc testFixtureImpl(node: JsonNode, testStatusIMPL: var TestStatus, memoryDB: CoreDbRef) =
+  setErrorLevel()
+
   var
     blockNumber = UInt256.fromHex(node["blockNumber"].getStr())
-    memoryDB = newCoreDbRef LegacyDbMemory
     com = CommonRef.new(memoryDB, chainConfigForNetwork(MainNet))
     state = node["state"]
     receipts = node["receipts"]
@@ -31,10 +96,13 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus) =
   # disable POS/post Merge feature
   com.setTTD none(DifficultyInt)
 
-  for k, v in state:
-    let key = hexToSeqByte(k)
-    let value = hexToSeqByte(v.getStr())
-    memoryDB.kvt.put(key, value)
+  # Import raw data into database
+  if memoryDB.dbType in {LegacyDbMemory,LegacyDbPersistent}:
+    # Just a hack: MPT and KVT share the same base table
+    memoryDB.preLoadLegaDb state
+  else:
+    # Another hack for `Aristo` using the `snap` protocol proof-loader
+    memoryDB.preLoadAristoDb(state, blockNumber)
 
   var header = com.db.getBlockHeader(blockNumber)
   var headerHash = header.blockHash
@@ -51,6 +119,19 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus) =
     let receipt = receipts[i]
     let stateDiff = txTraces[i]["stateDiff"]
     check receipt["root"].getStr().toLowerAscii() == stateDiff["afterRoot"].getStr().toLowerAscii()
+
+
+proc testFixtureLega(node: JsonNode, testStatusIMPL: var TestStatus) =
+  node.testFixtureImpl(testStatusIMPL, newCoreDbRef LegacyDbMemory)
+
+proc testFixtureAristo(node: JsonNode, testStatusIMPL: var TestStatus) =
+  node.testFixtureImpl(testStatusIMPL, newCoreDbRef AristoDbMemory)
+
+proc tracerJsonMain*() =
+  suite "tracer json tests for legacy DB":
+    jsonTest("TracerTests", testFixtureLega)
+  suite "tracer json tests for Aristo DB":
+    jsonTest("TracerTests", testFixtureAristo)
 
 when isMainModule:
   tracerJsonMain()
