@@ -47,6 +47,37 @@ suite "Verkle Account Tests":
 
     doAssert comm.toHex() == "43ca08d7ec0f76747e5615e00792c84de5d0ac2753fdef2315a6106d5917b332", "Root Commitment not matching with expected data"
 
+  test "Test Verkle Storage Updation":
+    var trie = newVerkleTrie()
+
+    var address: EthAddress = parseAddress("0x3b7c4c2b2b25239e58f8e67509b32edb5bbf293c")
+
+    var storageSlots: array[9, UInt256]
+    storageSlots[0] = UInt256.zero()
+    storageSlots[1] = UInt256.one()
+    storageSlots[2] = UInt256.one() + 30
+    storageSlots[3] = UInt256.one() + 31
+    storageSlots[4] = UInt256.one() + 62
+    storageSlots[5] = UInt256.one() + 63
+    storageSlots[6] = UInt256.zero() + 100
+    storageSlots[7] = UInt256.zero() + 1000
+    storageSlots[8] = UInt256.zero() + 10001
+
+    let elephantString = "elephant"
+    var elephant = elephantString.toBytes()
+
+    for i in 0 ..< storageSlots.len:
+      # var ssBi = uint64(storageSlots[i])
+      var key = storageSlots[i].toBytesBE()
+      echo "Key"
+      echo key.toHex()
+      trie.updateStorage(address, key, elephant)
+
+    var comm = trie.hashVerkleTrie()
+    echo comm.toHex()
+    doAssert comm.toHex() == "5f9b9b718f3658151bdc58e594a951787d0307467b13ea4d1cda411428216a1e", "Root Commitment not matching with expected data"
+
+
   test "Chunkify Code Simple":
     let
       PUSH4 = byte(0x63)

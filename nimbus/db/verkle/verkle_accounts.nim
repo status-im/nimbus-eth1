@@ -176,6 +176,10 @@ proc getTreeKey*(address: EthAddress, treeIndex: UInt256, subIndex: byte): Bytes
   ret.banderwagonAddPoint(getTreePolyIndex0Point)
   return pointToHash(ret, subIndex)
 
+proc getTreeKeyHeader*(addressPoint: var Point, address: EthAddress): Point =
+  addressPoint = evaluateAddressPoint(address)
+  return addressPoint
+
 proc getTreeKeyAccountLeaf*(address: EthAddress, leaf: byte): Bytes32 =
   return getTreeKey(address, UInt256.zero(), leaf)
 
@@ -211,6 +215,21 @@ proc getTreeKeyStorageSlotWithEvaluatedAddress*(addressPoint: Point, storageKey:
 
 proc newVerkleTrie*(): VerkleTrieRef =
   result = VerkleTrieRef(root: newTree())
+
+proc updateStorage*(trie: VerkleTrieRef, address: EthAddress, key, value: var openArray[byte]) =
+  var addressPoint {.noinit.}: Point
+  var inter = getTreeKeyHeader(addressPoint, address)
+  var k = getTreeKeyStorageSlotWithEvaluatedAddress(inter, key)
+  var v {.noinit.}: array[32, byte]
+  if value.len >= 32:
+    for i in 0..<32:
+      v[i] = value[i]
+  else:
+    let start = 32 - value.len
+    for i in 0..<value.len:
+      v[start + i] = value[i]
+  
+  trie.root.setValue(k, v)
 
 proc updateAccount*(trie: VerkleTrieRef, address: EthAddress, acc: Account) =
   var verKey = getTreeKeyVersion(address)
