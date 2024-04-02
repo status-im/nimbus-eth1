@@ -217,10 +217,10 @@ proc newVerkleTrie*(): VerkleTrieRef =
   result = VerkleTrieRef(root: newTree())
 
 proc updateStorage*(trie: VerkleTrieRef, address: EthAddress, key, value: var openArray[byte]) =
-  var addressPoint {.noinit.}: Point
+  var addressPoint: Point
   var inter = getTreeKeyHeader(addressPoint, address)
   var k = getTreeKeyStorageSlotWithEvaluatedAddress(inter, key)
-  var v {.noinit.}: array[32, byte]
+  var v: Bytes32
   if value.len >= 32:
     for i in 0..<32:
       v[i] = value[i]
