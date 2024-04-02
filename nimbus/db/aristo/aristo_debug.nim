@@ -444,24 +444,43 @@ proc ppBe[T](be: T; db: AristoDbRef; indent: int): string =
     pfx1 = indent.toPfx(1)
     pfx2 = indent.toPfx(2)
   result = "<" & $be.kind & ">"
-  result &= pfx & "vGen" & pfx1 & "[" &
-    be.getIdgFn().get(otherwise = EmptyVidSeq).mapIt(it.ppVid).join(",") & "]"
+  var (dump,dataOk) = ("",false)
+  dump &= pfx & "vGen"
   block:
-    result &= pfx & "sTab" & pfx1 & "{"
-    var n = 0
+    let q = be.getIdgFn().get(otherwise = EmptyVidSeq).mapIt(it.ppVid)
+    dump &= "(" & $q.len & ")"
+    if 0 < q.len:
+      dataOk = true
+      dump &= pfx1
+    dump &= "[" & q.join(",") & "]"
+  block:
+    dump &= pfx & "sTab"
+    var (n, data) = (0, "")
     for (vid,vtx) in be.walkVtx:
-      if 0 < n: result &= pfx2
+      if 0 < n: data &= pfx2
       n.inc
-      result &= $n & "(" & vid.ppVid & "," & vtx.ppVtx(db,vid) & ")"
-    result &= "}"
+      data &= $n & "(" & vid.ppVid & "," & vtx.ppVtx(db,vid) & ")"
+    dump &= "(" & $n & ")"
+    if 0 < n:
+      dataOk = true
+      dump &= pfx1
+    dump &= "{" & data & "}"
   block:
-    result &= pfx & "kMap" & pfx1 & "{"
-    var n = 0
+    dump &= pfx & "kMap"
+    var (n, data) = (0, "")
     for (vid,key) in be.walkKey:
-      if 0 < n: result &= pfx2
+      if 0 < n: data &= pfx2
       n.inc
-      result &= $n & "(" & vid.ppVid & "," & key.ppKey(db) & ")"
-    result &= "}"
+      data &= $n & "(" & vid.ppVid & "," & key.ppKey(db) & ")"
+    dump &= "(" & $n & ")"
+    if 0 < n:
+      dataOk = true
+      dump &= pfx1
+    dump &= "{" & data & "}"
+  if dataOk:
+    result &= dump
+  else:
+    result &= "[]"
 
 proc ppLayer(
     layer: LayerRef;
@@ -532,8 +551,10 @@ proc ppLayer(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc pp*(w: Hash256): string =
-  if w == EMPTY_ROOT_HASH:
+proc pp*(w: Hash256; codeHashOk = false): string =
+  if codeHashOk:
+    w.ppCodeHash
+  elif w == EMPTY_ROOT_HASH:
     "EMPTY_ROOT_HASH"
   elif w == Hash256():
     "Hash256()"
@@ -545,6 +566,9 @@ proc pp*(w: HashKey; sig: MerkleSignRef): string =
 
 proc pp*(w: HashKey; db = AristoDbRef(nil)): string =
   w.ppKey(db.orDefault)
+
+proc pp*(w: openArray[HashKey]; db = AristoDbRef(nil)): string =
+  "[" & @w.mapIt(it.ppKey(db.orDefault)).join(",") & "]"
 
 proc pp*(lty: LeafTie, db = AristoDbRef(nil)): string =
   lty.ppLeafTie(db.orDefault)
@@ -753,9 +777,11 @@ proc pp*(
     filterOk = true;
     topOk = true;
     stackOk = true;
+    kMapOk = true;
       ): string =
   if topOk:
-    result = db.layersCc.pp(db, indent=indent)
+    result = db.layersCc.pp(
+      db, xTabOk=true, kMapOk=kMapOk, other=true, indent=indent)
   let stackOnlyOk = stackOk and not (topOk or filterOk or backendOk)
   if not stackOnlyOk:
     result &= indent.toPfx & " level=" & $db.stack.len

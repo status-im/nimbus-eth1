@@ -313,6 +313,13 @@ func to*(pid: PathID; T: type NibblesSeq): T =
   else:
     nibbles
 
+func `@`*(pid: PathID): Blob =
+  ## Representation of a `PathID` as a `Blob`. The result is left padded
+  ## by a zero LSB if the path length was odd.
+  result = pid.pfx.toBytesBE.toSeq
+  if pid.length < 63:
+    result.setLen((pid.length + 1) shl 1)
+
 func to*(lid: HashKey; T: type Hash256): T =
   ## Returns the `Hash236` key if available, otherwise the Keccak hash of
   ## the `Blob` version.
