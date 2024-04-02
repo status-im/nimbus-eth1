@@ -74,6 +74,10 @@ func to*(tx: KvtTxRef; T: type[KvtDbRef]): T =
   ## Getter, retrieves the parent database descriptor from argument `tx`
   tx.db
 
+func toKvtDbRef*(tx: KvtTxRef): KvtDbRef =
+  ## Same as `.to(KvtDbRef)`
+  tx.db
+
 proc forkTx*(tx: KvtTxRef): Result[KvtDbRef,KvtError] =
   ## Clone a transaction into a new DB descriptor  accessing the same backend
   ## (if any) database as the argument `db`. The new descriptor is linked to
