@@ -41,7 +41,7 @@ proc pointToHash*(point: Point, suffix: byte): Bytes32 =
   result[31] = suffix
 
 proc getTreeKeyWithEvaluatedAddress*(evaluated: Point, treeIndex: UInt256, subIndex: byte): Bytes32 =
-  var poly: array[5, Field]
+  var poly: array[256, Field]
   poly[0] = zeroField()
   poly[1] = zeroField()
   poly[2] = zeroField()
@@ -49,6 +49,9 @@ proc getTreeKeyWithEvaluatedAddress*(evaluated: Point, treeIndex: UInt256, subIn
   var indexBytes = treeIndex.toBytesLE()
   poly[3].fromLEBytes(indexBytes[0..15])
   poly[4].fromLEBytes(indexBytes[16..^1])
+
+  for i in 5 .. 255:
+    poly[i] = zeroField()
 
   var ret = poly.ipaCommitToPoly()
   ret.banderwagonAddPoint(evaluated)
@@ -60,11 +63,14 @@ proc evaluateAddressPoint*(address: EthAddress): Point =
     newAddr[i] = 0
   newAddr[(32 - address.len)..^1] = address
 
-  var poly: array[3, Field]
+  var poly: array[256, Field]
   
   poly[0] = zeroField()
   poly[1].fromLEBytes(newAddr[0..15])
   poly[2].fromLEBytes(newAddr[16..^1])
+
+  for i in 3 .. 255:
+    poly[i] = zeroField()
 
   var ret = poly.ipaCommitToPoly()
 
