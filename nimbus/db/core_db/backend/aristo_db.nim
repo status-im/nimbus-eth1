@@ -32,7 +32,8 @@ import
 
 export
   AristoApiRlpError,
-  AristoCoreDbKvtBE
+  AristoCoreDbKvtBE,
+  isAristo
 
 type
   AristoCoreDbRef* = ref object of CoreDbRef
@@ -98,9 +99,9 @@ proc cptMethods(
     tracer: AristoTracerRef;
       ): CoreDbCaptFns =
   let
-    tracer = tracer         # So it can savely be captured
-    db = tracer.parent      # Will not change and can be captured
-    log = tracer.topInst()  # Ditto
+    tr = tracer         # So it can savely be captured
+    db = tr.parent      # Will not change and can be captured
+    log = tr.topInst()  # Ditto
 
   CoreDbCaptFns(
     recorderFn: proc(): CoreDbRef =
@@ -113,8 +114,9 @@ proc cptMethods(
       log.flags,
 
     forgetFn: proc() =
-      if tracer.pop():
-        tracer.restore())
+      if not tracer.pop():
+        tr.parent.tracer = AristoTracerRef(nil)
+        tr.restore())
 
 
 proc baseMethods(
