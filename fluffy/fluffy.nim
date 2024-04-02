@@ -167,7 +167,9 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
     # TODO I: Perhaps we want to add an offset to counter the latter.
     # TODO II: Perhaps for dynamical radius, we want to also apply the vacuum
     # without the forcePrune flag and purely by checking the amount of free
-    # space versus the pruning fraction.
+    # space versus the pruning fraction. The problem with this is that the
+    # vacuum will temporarily double the space usage (WAL + DB) and thus to do
+    # this automatically without user requesting it could be dangerous.
     # TODO III: Adding Radius metadata to the db could be yet another way to
     # decide whether or not to force prune, instead of this flag.
     db.forcePrune(d.localNode.id, radius)
