@@ -134,7 +134,7 @@ func pp*(a: MDigest[256]; collapse = true): string =
   elif a == ZERO_HASH256:
     "ZERO_HASH256"
   else:
-    a.data.toHex.join[56 .. 63]
+    "£" & a.data.toHex.join[0..6] & ".." & a.data.toHex.join[56..63]
 
 func pp*(a: openArray[MDigest[256]]; collapse = true): string =
   "@[" & a.toSeq.mapIt(it.pp).join(" ") & "]"

@@ -12,7 +12,7 @@
 ## ----------------------------------------------------
 
 import
-  std/tables,
+  std/[tables, typetraits],
   eth/common,
   stew/byteutils,
   ../../nimbus/common/chain_config,
@@ -25,19 +25,30 @@ export
 # Public functions,  pretty printer
 # ------------------------------------------------------------------------------
 
-proc pp*(b: Blob): string =
+func pp*(b: Blob): string =
   b.toHex.pp(hex = true)
 
-proc pp*(a: EthAddress): string =
+func pp*(a: EthAddress): string =
   a.toHex[32 .. 39]
 
-proc pp*(a: openArray[EthAddress]): string =
+func pp*(a: Option[EthAddress]): string =
+  if a.isSome: a.unsafeGet.pp else: "n/a"
+
+func pp*(a: openArray[EthAddress]): string =
   "[" & a.mapIt(it.pp).join(" ") & "]"
 
-proc pp*(a: BlockNonce): string =
+func pp*(a: BlockNonce): string =
   a.toHex
 
-proc pp*(h: BlockHeader; sep = " "): string =
+func pp*(a: NetworkPayload): string =
+  if a.isNil:
+    "n/a"
+  else:
+    "([#" & $a.blobs.len & "],[#" &
+      $a.commitments.len & "],[#" &
+      $a.proofs.len & "])"
+
+func pp*(h: BlockHeader; sep = " "): string =
   "" &
     &"hash={h.blockHash.pp}{sep}" &
     &"blockNumber={h.blockNumber}{sep}" &
@@ -56,10 +67,10 @@ proc pp*(h: BlockHeader; sep = " "): string =
     &"stateRoot={h.stateRoot.pp}{sep}" &
     &"baseFee={h.baseFee}{sep}" &
     &"withdrawalsRoot={h.withdrawalsRoot.get(EMPTY_ROOT_HASH)}{sep}" &
-    &"blobGasUsed={h.blobGasUsed.get(0'u64)}" &
+    &"blobGasUsed={h.blobGasUsed.get(0'u64)}{sep}" &
     &"excessBlobGas={h.excessBlobGas.get(0'u64)}"
 
-proc pp*(g: Genesis; sep = " "): string =
+func pp*(g: Genesis; sep = " "): string =
   "" &
     &"nonce={g.nonce.pp}{sep}" &
     &"timestamp={g.timestamp}{sep}" &
@@ -74,6 +85,25 @@ proc pp*(g: Genesis; sep = " "): string =
     &"parentHash={g.parentHash.pp}{sep}" &
     &"baseFeePerGas={g.baseFeePerGas}"
 
+func pp*(t: Transaction; sep = " "): string =
+  "" &
+    &"txType={t.txType}{sep}" &
+    &"chainId={t.chainId.distinctBase}{sep}" &
+    &"nonce={t.nonce}{sep}" &
+    &"gasPrice={t.gasPrice}{sep}" &
+    &"maxPriorityFee={t.maxPriorityFee}{sep}" &
+    &"maxFee={t.maxFee}{sep}" &
+    &"gasLimit={t.gasLimit}{sep}" &
+    &"to={t.to.pp}{sep}" &
+    &"value={t.value}{sep}" &
+    &"payload={t.payload.pp}{sep}" &
+    &"accessList=[#{t.accessList.len}]{sep}" &
+    &"maxFeePerBlobGas={t.maxFeePerBlobGas}{sep}" &
+    &"versionedHashes=[#{t.versionedHashes.len}]{sep}" &
+    &"networkPayload={t.networkPayload.pp}{sep}" &
+    &"V={t.V}{sep}" &
+    &"R={t.R}{sep}" &
+    &"S={t.S}{sep}"
 
 proc pp*(h: BlockHeader; indent: int): string =
   h.pp("\n" & " ".repeat(max(1,indent)))
