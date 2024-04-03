@@ -6,24 +6,11 @@
 #   at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/streams,
-  std/strformat,
-  stint,
-  nimcrypto/hash,
-  ../../vendor/nim-eth/eth/trie/hexary,
-  ../../vendor/nim-eth/eth/trie/db,
-  mpt_rlp_hash,
-  mpt_nibbles,
-  utils
+  ./[mpt, mpt_nibbles]
 
-import mpt {.all.}
+export mpt, mpt_nibbles
 
-from ../../vendor/nimcrypto/nimcrypto/utils import fromHex
 
-# import std/atomics
-# proc atomicInc[T: SomeInteger](location: var Atomic[T]; value: T = 1)
-
-# Todo: needed?
 func shallowCloneMptNode(node: MptNode): MptNode =
   if node of MptLeaf:
     result = MptLeaf()
@@ -109,50 +96,3 @@ proc put*(diff: var DiffLayer, key: Nibbles64, value: seq[byte]) =
       diff.root = branch
 
   else: doAssert false
-
-const sampleKvps = @[
-   ("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", "1234"),
-   ("0123456789abcdef0123456789abcdef88888888888888888888888888888888", "1234"),
-  #("0000000000000000000000000000000000000000000000000000000000000000", "000000000000000000000000000000000123456789abcdef0123456789abcdef"),
-  #("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", "0000000000000000000000000000000000000000000000000000000000000002"),
-  # ("1100000000000000000000000000000000000000000000000000000000000000", "0000000000000000000000000000000000000000000000000000000000000003"),
-  # ("2200000000000000000000000000000000000000000000000000000000000000", "0000000000000000000000000000000000000000000000000000000000000004"),
-  # ("2211000000000000000000000000000000000000000000000000000000000000", "0000000000000000000000000000000000000000000000000000000000000005"),
-  # ("3300000000000000000000000000000000000000000000000000000000000000", "0000000000000000000000000000000000000000000000000000000000000006"),
-  # ("3300000000000000000000000000000000000000000000000000000000000001", "0000000000000000000000000000000000000000000000000000000000000007"),
-  # ("33000000000000000000000000000000000000000000000000000000000000ff", "0000000000000000000000000000000000000000000000000000000000000008"),
-  # ("4400000000000000000000000000000000000000000000000000000000000000", "0000000000000000000000000000000000000000000000000000000000000009"),
-  # ("4400000011000000000000000000000000000000000000000000000000000000", "000000000000000000000000000000000000000000000000000000000000000a"),
-  # ("5500000000000000000000000000000000000000000000000000000000000000", "000000000000000000000000000000000000000000000000000000000000000b"),
-  # ("5500000000000000000000000000000000000000000000000000000000001100", "000000000000000000000000000000000000000000000000000000000000000c"),
-]
-
-iterator hexKvpsToBytes32(kvps: openArray[tuple[key: string, value: string]]):
-    tuple[key: array[32, byte], value: seq[byte]] =
-  for (hexKey, hexValue) in kvps:
-    yield (hexToBytesArray[32](hexKey), hexValue.fromHex)
-
-let emptyRlpHash = "56E81F171BCC55A6FF8345E692C0F86E5B48E01B996CADC001622FB5E363B421".fromHex
-var db2 = newMemoryDB()
-var trie = initHexaryTrie(db2)
-var container: DiffLayer
-
-for (key, value) in sampleKvps.hexKvpsToBytes32():
-  echo &"Adding {key.toHex} --> {value.toHex}"
-  #let key = "A".keccakHash.data
-  trie.put(key, value)
-  container.put(Nibbles64(bytes: key), value)
-
-echo "\nDumping kvps in DB"
-for kvp in db2.pairsInMemoryDB():
-  if kvp[0][0..^1] != emptyRlpHash[0..^1]:
-    echo &"{kvp[0].toHex} => {kvp[1].toHex}"
-
-echo ""
-var rootHash = container.getOrComputeHash
-echo "\nDumping tree:\n"
-container.root.printTree(newFileStream(stdout), rootHash)
-
-echo ""
-echo &"Legacy root hash: {trie.rootHash.data.toHex}" #"0xe9e2935138352776cad724d31c9fa5266a5c593bb97726dd2a908fe6d53284df"
-echo &"BART   root hash: {container.getOrComputeHash[].toHex}"

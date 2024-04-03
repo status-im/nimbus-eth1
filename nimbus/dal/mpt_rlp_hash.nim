@@ -5,6 +5,15 @@
 #     * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 #   at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+##  This module handles computing the Merkle hash of MPT nodes. The Merkle hash
+##  of a node is computed by serializing it into RLP (Recursive Length Prefix)
+##  form, 
+
+# TODO: Test
+# TODO: Optimize
+
+# consider using an array to serialize data instead of seq. problem is accounts could be large.
+
 import
   ../../vendor/nim-eth/eth/common/eth_hash,
   mpt,
@@ -14,8 +23,6 @@ import
 from ../../vendor/nimcrypto/nimcrypto/utils import fromHex
 when TraceLogs: import utils
 
-# TODO: Test
-# TODO: Optimize
 
 func rlpLegthOfLength(length: int): int =
   if length <= 55: 1

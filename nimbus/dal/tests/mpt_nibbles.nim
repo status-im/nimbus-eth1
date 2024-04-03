@@ -6,7 +6,7 @@
 #   at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  unittest2,
+  ../../../vendor/nim-unittest2/unittest2,
   ../utils,
   ../mpt_nibbles
 

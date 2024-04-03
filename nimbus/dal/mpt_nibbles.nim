@@ -1,39 +1,40 @@
-#   Nimbus
-#   Copyright (c) 2021-2024 Status Research & Development GmbH
-#   Licensed and distributed under either of
-#     * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
-#     * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
-#   at your option. This file may not be copied, modified, or distributed except according to those terms.
+#[  Nimbus
+    Copyright (c) 2021-2024 Status Research & Development GmbH
+    Licensed and distributed under either of
+      * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
+      * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
+    at your option. This file may not be copied, modified, or distributed except according to those terms. ]#
 
+##[ This module provides two data structures for working with 'nibbles'. A
+    nibble is a 4-bit value. To save on RAM, we store two nibbles per byte. We
+    provide methods for working with logical nibbles instead of bytes. We use
+    a non-ref backing array for better performance. ]##
 
-##  This module provides two memory-efficient data structures for working with
-##  'nibbles'. A nibble is a 4-bit value. To save on RAM, we store two nibbles
-##  per byte. We provide methods for working with logical nibbles instead of
-##  bytes.
-
-import utils
+import ./utils
 
 type
+
   Nibbles64* = object
     ## Holds 64 nibbles in a 32-bytes array. Nibbles are accessed and assigned
-    ## using the indexing operator (`[]`).
+    ##    using the indexing operator (`[]`).
     bytes*: array[32, byte]
 
+
   Nibbles* = object
-    ## Holds up to 62 nibbles (the maximum that an extension node in a MPT tree
-    ## can have), in a fixed 32 bytes array. Nibbles are accessed and assigned
-    ## using the indexing operator (`[]`). Use the `slice` method to initialize
-    ## a `Nibbles` from a range of nibbles in another `Nibbles` or `Nibbles64`.
-    ## The number of nibbles held is stored in the last byte of the underlying
-    ## array. In case the number of nibbles is odd, they're shifted by half a
-    ## byte such that the first byte starts with 0x0. The rest of the bytes can
-    ## be copied in bulk.
-    #
-    # Note: There's some memory waste when storing just a few nibbles, but using
-    #       a `seq` wouldn't have helped; a seq uses two ints, a pointer to heap
-    #       memory and some minimum heap allocation, ending up taking 32 bytes
-    #       or more (at least on x64), with extra overhead due to non-locality,
-    #       fragmentation and GC.
+    ##[ Holds up to 62 nibbles (the maximum that an extension node in a MPT tree
+        can have), in a fixed 32 bytes array. Nibbles are accessed and assigned
+        using the indexing operator (`[]`). Use the `slice` method to initialize
+        a `Nibbles` from a range of nibbles in another `Nibbles` or `Nibbles64`.
+        The number of nibbles held is stored in the last byte of the underlying
+        array. In case the number of nibbles is odd, they're shifted by half a
+        byte such that the first byte starts with 0x0. This is useful for
+        copying the rest of the bytes in bulk during RLP encoding. ]##
+    
+    #[  Note: There's some memory waste when storing just a few nibbles, but
+        using a `seq` wouldn't have helped; a seq uses two ints, a pointer to
+        heap memory and some minimum heap allocation, ending up taking 32 bytes
+        or more (at least on x64), with performance overheads due to non-
+        locality, fragmentation and GC. ]#
     bytes*: array[32, byte]
 
 
