@@ -74,6 +74,42 @@ proc to(
   else:
     err(rc.error)
 
+
+proc differ(
+    db: AristoDbRef;                   # Database, top layer
+    p1, p2: PayloadRef;                # Payload values
+      ): bool =
+  ## Check whether payloads differ on the database.
+  ## If `p1` is `RLP` serialised and `p2` is a raw blob compare serialsations.
+  ## If `p1` is of account type and `p2` is serialised, translate `p2`
+  ## to an account type and compare.
+  ##
+  if p1 == p2:
+    return false
+
+  # Adjust abd check for divergent types.
+  if p1.pType != p2.pType:
+    if p1.pType == AccountData:
+      try:
+        let
+          blob = (if p2.pType == RlpData: p2.rlpBlob else: p2.rawBlob)
+          acc = rlp.decode(blob, Account)
+        if acc.nonce == p1.account.nonce and
+           acc.balance == p1.account.balance and
+           acc.codeHash == p1.account.codeHash and
+           acc.storageRoot.isValid == p1.account.storageID.isValid:
+          if not p1.account.storageID.isValid or
+             acc.storageRoot.to(HashKey) == db.getKey p1.account.storageID:
+            return false
+      except RlpError:
+        discard
+
+    elif p1.pType == RlpData:
+      if p2.pType == RawData and p1.rlpBlob == p2.rawBlob:
+        return false
+
+  true
+
 # -----------
 
 proc clearMerkleKeys(
@@ -437,15 +473,16 @@ proc updatePayload(
   let leafLeg = hike.legs[^1]
 
   # Update payloads if they differ
-  if leafLeg.wp.vtx.lData != payload:
+  if db.differ(leafLeg.wp.vtx.lData, payload):
+    let vid = leafLeg.wp.vid
+    if vid in db.pPrf:
+      return err(MergeLeafProofModeLock)
 
     # Update vertex and hike
-    let
-      vid = leafLeg.wp.vid
-      vtx = VertexRef(
-        vType: Leaf,
-        lPfx:  leafLeg.wp.vtx.lPfx,
-        lData: payload)
+    let vtx = VertexRef(
+      vType: Leaf,
+      lPfx:  leafLeg.wp.vtx.lPfx,
+      lData: payload)
     var hike = hike
     hike.legs[^1].wp.vtx = vtx
 
@@ -515,27 +552,57 @@ proc mergeNodeImpl(
   # The `vertexID <-> hashKey` mappings need to be set up now (if any)
   case node.vType:
   of Leaf:
-    discard
+    # Check whether there is need to convert the payload to `Account` payload
+    if rootVid == VertexID(1) and newVtxFromNode:
+      try:
+        let
+          # `aristo_serialise.read()` always decodes raw data payloaf
+          acc = rlp.decode(node.lData.rawBlob, Account)
+          pyl = PayloadRef(
+            pType: AccountData,
+            account: AristoAccount(
+              nonce:    acc.nonce,
+              balance:  acc.balance,
+              codeHash: acc.codeHash))
+        if acc.storageRoot.isValid:
+          var sid = db.layerGetProofVidOrVoid acc.storageRoot.to(HashKey)
+          if not sid.isValid:
+            sid = db.vidFetch
+            db.layersPutProof(sid, acc.storageRoot.to(HashKey))
+          pyl.account.storageID = sid
+        vtx.lData = pyl
+      except RlpError:
+        return err(MergeNodeAccountPayloadError)
   of Extension:
     if node.key[0].isValid:
       let eKey = node.key[0]
       if newVtxFromNode:
-        # Brand new reverse lookup link for this vertex
-        vtx.eVid = db.vidFetch
-        db.layersPutProof(vtx.eVid, eKey)
+        vtx.eVid = db.layerGetProofVidOrVoid eKey
+        if not vtx.eVid.isValid:
+          # Brand new reverse lookup link for this vertex
+          vtx.eVid = db.vidFetch
       elif not vtx.eVid.isValid:
-        return err(MergeNodeVtxDiffersFromExisting)
+        return err(MergeNodeVidMissing)
+      else:
+        let yEke = db.getKey vtx.eVid
+        if yEke.isValid and eKey != yEke:
+          return err(MergeNodeVtxDiffersFromExisting)
       db.layersPutProof(vtx.eVid, eKey)
   of Branch:
     for n in 0..15:
       if node.key[n].isValid:
         let bKey = node.key[n]
         if newVtxFromNode:
-          # Brand new reverse lookup link for this vertex
-          vtx.bVid[n] = db.vidFetch
-          db.layersPutProof(vtx.bVid[n], bKey)
+          vtx.bVid[n] = db.layerGetProofVidOrVoid bKey
+          if not vtx.bVid[n].isValid:
+            # Brand new reverse lookup link for this vertex
+            vtx.bVid[n] = db.vidFetch
         elif not vtx.bVid[n].isValid:
-          return err(MergeNodeVtxDiffersFromExisting)
+          return err(MergeNodeVidMissing)
+        else:
+          let yEkb = db.getKey vtx.bVid[n]
+          if yEkb.isValid and yEkb != bKey:
+            return err(MergeNodeVtxDiffersFromExisting)
         db.layersPutProof(vtx.bVid[n], bKey)
 
   # Store and lock vertex
@@ -660,12 +727,16 @@ proc mergeLeaf*(
 proc merge*(
     db: AristoDbRef;                   # Database, top layer
     proof: openArray[SnapProof];       # RLP encoded node records
-    rootVid: VertexID;                 # Current sub-trie
+    rootVid = VertexID(0);             # Current sub-trie
       ): Result[int, AristoError]
       {.gcsafe, raises: [RlpError].} =
   ## The function merges the argument `proof` list of RLP encoded node records
   ## into the `Aristo Trie` database. This function is intended to be used with
   ## the proof nodes as returened by `snap/1` messages.
+  ##
+  ## If there is no root vertex ID passed, the function tries to find out what
+  ## the root hashes are and allocates new vertices with static IDs `$2`, `$3`,
+  ## etc.
   ##
   ## Caveat:
   ##   Proof of concept, not in production yet.
@@ -675,7 +746,8 @@ proc merge*(
       todo: var KeyedQueueNV[NodeRef];
       key: HashKey;
         ) {.gcsafe, raises: [RlpError].} =
-    ## Check for embedded nodes, i.e. fully encoded node instead of a hash
+    ## Check for embedded nodes, i.e. fully encoded node instead of a hash.
+    ## They need to be treated as full nodes, here.
     if key.isValid and key.len < 32:
       let lid = @key.digestTo(HashKey)
       if not seen.hasKey lid:
@@ -683,17 +755,22 @@ proc merge*(
         discard todo.append node
         seen[lid] = node
 
-  if not rootVid.isValid:
-    return err(MergeRootVidInvalid)
-  let rootKey = db.getKey rootVid
-  if not rootKey.isValid:
-    return err(MergeRootKeyInvalid)
-  # Make sure that the reverse lookup for the root vertex key is available.
-  if not db.layerGetProofVidOrVoid(rootKey).isValid:
-    return err(MergeProofInitMissing)
+  let rootKey = block:
+    if rootVid.isValid:
+      let vidKey = db.getKey rootVid
+      if not vidKey.isValid:
+        return err(MergeRootKeyInvalid)
+      # Make sure that the reverse lookup for the root vertex key is available.
+      if not db.layerGetProofVidOrVoid(vidKey).isValid:
+        return err(MergeProofInitMissing)
+      vidKey
+    else:
+      VOID_HASH_KEY
 
-  # Expand and collect hash keys and nodes
-  var nodeTab: Table[HashKey,NodeRef]
+  # Expand and collect hash keys and nodes and parent indicator
+  var
+    nodeTab: Table[HashKey,NodeRef]
+    rootKeys: HashSet[HashKey] # Potential root node hashes
   for w in proof:
     let
       key = w.Blob.digestTo(HashKey)
@@ -701,8 +778,10 @@ proc merge*(
     if node.error != AristoError(0):
       return err(node.error)
     nodeTab[key] = node
+    rootKeys.incl key
 
-    # Check for embedded nodes, i.e. fully encoded node instead of a hash
+    # Check for embedded nodes, i.e. fully encoded node instead of a hash.
+    # They will be added as full nodes to the `nodeTab[]`.
     var embNodes: KeyedQueueNV[NodeRef]
     discard embNodes.append node
     while true:
@@ -727,6 +806,7 @@ proc merge*(
     of Extension:
       if nodeTab.hasKey node.key[0]:
         backLink[node.key[0]] = key
+        rootKeys.excl node.key[0] # predecessor => not root
       else:
         blindNodes.incl key
     of Branch:
@@ -735,13 +815,45 @@ proc merge*(
         if nodeTab.hasKey node.key[n]:
           isBlind = false
           backLink[node.key[n]] = key
+          rootKeys.excl node.key[n] # predecessor => not root
       if isBlind:
         blindNodes.incl key
+
+  # If it exists, the root key must be in the set `mayBeRoot` in order
+  # to work.
+  var roots: Table[HashKey,VertexID]
+  if rootVid.isValid:
+    if rootKey notin rootKeys:
+      return err(MergeRootKeyNotInProof)
+    roots[rootKey] = rootVid
+  elif rootKeys.len == 0:
+    return err(MergeRootKeysMissing)
+  else:
+    # Add static root keys different from VertexID(1)
+    var count = 2
+    for key in rootKeys.items:
+      while true:
+        # Check for already allocated nodes
+        let vid1 = db.layerGetProofVidOrVoid key
+        if vid1.isValid:
+          roots[key] = vid1
+          break
+        # Use the next free static free vertex ID
+        let vid2 = VertexID(count)
+        count.inc
+        if not db.getKey(vid2).isValid:
+          db.layersPutProof(vid2, key)
+          roots[key] = vid2
+          break
+        if LEAST_FREE_VID <= count:
+          return err(MergeRootKeysOverflow)
 
   # Run over blind nodes and build chains from a blind/bottom level node up
   # to the root node. Select only chains that end up at the pre-defined root
   # node.
-  var chains: seq[seq[HashKey]]
+  var
+    accounts: seq[seq[HashKey]] # This one separated, to be processed last
+    chains: seq[seq[HashKey]]
   for w in blindNodes:
     # Build a chain of nodes up to the root node
     var
@@ -750,8 +862,11 @@ proc merge*(
     while nodeKey.isValid and nodeTab.hasKey nodeKey:
       chain.add nodeKey
       nodeKey = backLink.getOrVoid nodeKey
-    if 0 < chain.len and chain[^1] == rootKey:
-      chains.add chain
+    if 0 < chain.len and chain[^1] in roots:
+      if roots.getOrVoid(chain[0]) == VertexID(1):
+        accounts.add chain
+      else:
+        chains.add chain
 
   # Process over chains in reverse mode starting with the root node. This
   # allows the algorithm to find existing nodes on the backend.
@@ -759,11 +874,13 @@ proc merge*(
     seen: HashSet[HashKey]
     merged = 0
   # Process the root ID which is common to all chains
-  for chain in chains:
+  for chain in chains & accounts:
+    let chainRootVid = roots.getOrVoid chain[^1]
     for key in chain.reversed:
       if key notin seen:
         seen.incl key
-        db.mergeNodeImpl(key, nodeTab.getOrVoid key, rootVid).isOkOr:
+        let node = nodeTab.getOrVoid key
+        db.mergeNodeImpl(key, node, chainRootVid).isOkOr:
           return err(error)
         merged.inc
 

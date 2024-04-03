@@ -218,10 +218,10 @@ proc mergeData(
       rc.value
 
     let nMerged = block:
-      let rc = db.merge(proof, root) # , noisy=noisy)
+      let rc = db.merge(proof, root)
       xCheckRc rc.error == 0
       rc.value
-    discard nMerged
+    discard nMerged # Result is currently unused
 
   let merged = db.mergeList(leafs, noisy=noisy)
   xCheck merged.error in {AristoError(0), MergeLeafPathCachedAlready}
@@ -292,6 +292,8 @@ proc testBackendConsistency*(
 
     xCheck ndb.backend.isNil
     xCheck not mdb.backend.isNil
+    xCheck ndb.vGen == mdb.vGen
+    xCheck ndb.top.final.fRpp.len == mdb.top.final.fRpp.len
 
     when true and false:
       noisy.say "***", "beCon(1) <", n, "/", list.len-1, ">",
@@ -349,6 +351,9 @@ proc testBackendConsistency*(
     block:
       let rc = rdb.stow(persistent=true, chunkedMpt=true)
       xCheckRc rc.error == 0
+
+    xCheck ndb.vGen == mdb.vGen
+    xCheck ndb.top.final.fRpp.len == mdb.top.final.fRpp.len
 
     block:
       ndb.top.final.pPrf.clear # let it look like mdb/rdb

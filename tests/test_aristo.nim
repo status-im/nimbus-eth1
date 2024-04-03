@@ -192,9 +192,9 @@ when isMainModule:
 
   setErrorLevel()
 
-  when true: # and false:
-    # Verify Problem with the persisten database
-    noisy.accountsRunner()
+  when true and false:
+    # Verify Problem with the database for production test
+    noisy.accountsRunner(persistent=false)
 
   when true: # and false:
     noisy.miscRunner(qidSampleSize = 1_000)

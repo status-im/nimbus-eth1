@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2023 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -134,7 +134,7 @@ func pp*(a: MDigest[256]; collapse = true): string =
   elif a == ZERO_HASH256:
     "ZERO_HASH256"
   else:
-    a.data.toHex.join[56 .. 63]
+    "£" & a.data.toHex.join[0..6] & ".." & a.data.toHex.join[56..63]
 
 func pp*(a: openArray[MDigest[256]]; collapse = true): string =
   "@[" & a.toSeq.mapIt(it.pp).join(" ") & "]"

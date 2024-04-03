@@ -61,6 +61,7 @@ type
   KvtApiReCentreFn* = proc(db: KvtDbRef) {.noRaise.}
   KvtApiRollbackFn* = proc(tx: KvtTxRef): Result[void,KvtError] {.noRaise.}
   KvtApiStowFn* = proc(db: KvtDbRef): Result[void,KvtError] {.noRaise.}
+  KvtApiToKvtDbRefFn* = proc(tx: KvtTxRef): KvtDbRef {.noRaise.}
   KvtApiTxBeginFn* = proc(db: KvtDbRef): Result[KvtTxRef,KvtError] {.noRaise.}
   KvtApiTxTopFn* =
     proc(db: KvtDbRef): Result[KvtTxRef,KvtError] {.noRaise.}
@@ -85,6 +86,7 @@ type
     reCentre*: KvtApiReCentreFn
     rollback*: KvtApiRollbackFn
     stow*: KvtApiStowFn
+    toKvtDbRef*: KvtApiToKvtDbRefFn
     txBegin*: KvtApiTxBeginFn
     txTop*: KvtApiTxTopFn
 
@@ -109,6 +111,7 @@ type
     KvtApiProfReCentreFn     = "reCentre"
     KvtApiProfRollbackFn     = "rollback"
     KvtApiProfStowFn         = "stow"
+    KvtApiProfToKvtDbRefFn   = "toKvtDbRef"
     KvtApiProfTxBeginFn      = "txBegin"
     KvtApiProfTxTopFn        = "txTop"
 
@@ -142,6 +145,7 @@ when AutoValidateApiHooks:
     doAssert not api.reCentre.isNil
     doAssert not api.rollback.isNil
     doAssert not api.stow.isNil
+    doAssert not api.toKvtDbRef.isNil
     doAssert not api.txBegin.isNil
     doAssert not api.txTop.isNil
 
@@ -184,6 +188,7 @@ func init*(api: var KvtApiObj) =
   api.reCentre = reCentre
   api.rollback = rollback
   api.stow = stow
+  api.toKvtDbRef = toKvtDbRef
   api.txBegin = txBegin
   api.txTop = txTop
   when AutoValidateApiHooks:
@@ -195,24 +200,25 @@ func init*(T: type KvtApiRef): T =
 
 func dup*(api: KvtApiRef): KvtApiRef =
   result = KvtApiRef(
-    commit:   api.commit,
-    del:      api.del,
-    finish:   api.finish,
-    forget:   api.forget,
-    fork:     api.fork,
-    forkTop:  api.forkTop,
-    get:      api.get,
-    hasKey:   api.hasKey,
-    isCentre: api.isCentre,
-    isTop:    api.isTop,
-    level:    api.level,
-    nForked:  api.nForked,
-    put:      api.put,
-    reCentre: api.reCentre,
-    rollback: api.rollback,
-    stow:     api.stow,
-    txBegin:  api.txBegin,
-    txTop:    api.txTop)
+    commit:     api.commit,
+    del:        api.del,
+    finish:     api.finish,
+    forget:     api.forget,
+    fork:       api.fork,
+    forkTop:    api.forkTop,
+    get:        api.get,
+    hasKey:     api.hasKey,
+    isCentre:   api.isCentre,
+    isTop:      api.isTop,
+    level:      api.level,
+    nForked:    api.nForked,
+    put:        api.put,
+    reCentre:   api.reCentre,
+    rollback:   api.rollback,
+    stow:       api.stow,
+    toKvtDbRef: api.toKvtDbRef,
+    txBegin:    api.txBegin,
+    txTop:      api.txTop)
   when AutoValidateApiHooks:
     api.validate
 
@@ -322,6 +328,11 @@ func init*(
     proc(a: KvtDbRef): auto =
       KvtApiProfStowFn.profileRunner:
         result = api.stow(a)
+
+  profApi.toKvtDbRef =
+     proc(a: KvtTxRef): auto =
+       KvtApiProfToKvtDbRefFn.profileRunner:
+         result = api.toKvtDbRef(a)
 
   profApi.txBegin =
     proc(a: KvtDbRef): auto =

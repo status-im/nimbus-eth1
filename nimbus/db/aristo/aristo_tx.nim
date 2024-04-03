@@ -437,9 +437,12 @@ proc stow*(
     # Merge `top` layer into `roFilter`
     db.merge(fwd).isOkOr:
       return err(error[1])
+    let final =
+      if chunkedMpt: LayerFinalRef(fRpp: db.top.final.fRpp)
+      else: LayerFinalRef()
     db.top = LayerRef(
       delta: LayerDeltaRef(),
-      final: LayerFinalRef())
+      final: final)
     if db.roFilter.isValid:
       db.top.final.vGen = db.roFilter.vGen
     else:
@@ -456,9 +459,12 @@ proc stow*(
     db.roFilter = FilterRef(nil)
 
   # Delete/clear top
+  let final =
+    if chunkedMpt: LayerFinalRef(vGen: db.vGen, fRpp: db.top.final.fRpp)
+    else: LayerFinalRef(vGen: db.vGen)
   db.top = LayerRef(
     delta: LayerDeltaRef(),
-    final: LayerFinalRef(vGen: db.vGen),
+    final: final,
     txUid: db.top.txUid)
   ok()
 

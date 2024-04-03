@@ -92,6 +92,7 @@ type
     MergeLeafGarbledHike
     MergeLeafPathCachedAlready
     MergeLeafPathOnBackendAlready
+    MergeLeafProofModeLock
     MergeNonBranchProofModeLock
     MergeRootBranchLinkBusy
     MergeRootMissing
@@ -100,11 +101,15 @@ type
     MergeHashKeyInvalid
     MergeHashKeyDiffersFromCached
     MergeHashKeyRevLookUpGarbled
-    MergeRootVidInvalid
     MergeRootKeyInvalid
+    MergeRootKeyNotInProof
+    MergeRootKeysMissing
+    MergeRootKeysOverflow
     MergeProofInitMissing
     MergeRevVidMustHaveBeenCached
     MergeNodeVtxDiffersFromExisting
+    MergeNodeVidMissing
+    MergeNodeAccountPayloadError
     MergeRootKeyDiffersForVid
     MergeNodeVtxDuplicates
     MergeRootKeyMissing

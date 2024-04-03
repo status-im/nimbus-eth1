@@ -589,8 +589,10 @@ proc testTxMergeProofAndKvpList*(
         return
 
     when true and false:
-      noisy.say "***", "proofs(9) <", n, "/", list.len-1, ">",
-        " groups=", count, " proved=", proved, " merged=", merged
+      noisy.say "***", "testTxMergeProofAndKvpList (1)",
+        " <", n, "/", list.len-1, ">",
+        " runID=", runID,
+        " groups=", count, " merged=", merged
 
   true
 
