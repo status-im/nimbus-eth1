@@ -36,11 +36,11 @@ type
   StorageLedger* = distinct CoreDxPhkRef
   SomeLedger* = AccountLedger | StorageLedger
 
-import
-  eth/trie,
-  stew/byteutils,
-  ../aristo,
-  ../aristo/aristo_debug
+const
+  EnableMptDump = false # or true
+    ## Provide database dumper. Note that the dump function needs to link
+    ## against the `rocksdb` library. The# dependency lies in import of
+    ## `aristo_debug`.
 
 # ------------------------------------------------------------------------------
 # Public debugging helpers
@@ -69,38 +69,45 @@ proc toSvp*(sl: StorageLedger): seq[(UInt256,UInt256)] =
 proc toStr*(w: seq[(UInt256,UInt256)]): string =
   "[" & w.mapIt("(" & it[0].toHex & "," & it[1].toHex & ")").join(", ") & "]"
 
-proc dump*(led: SomeLedger): string =
-  ## Dump database (beware of large backend)
-  let db = led.distinctBase.parent
-  if db.dbType notin CoreDbPersistentTypes:
-    # Memory based storage only
-    let be = led.distinctBase.backend
+when EnableMptDump:
+  import
+    eth/trie,
+    stew/byteutils,
+    ../aristo,
+    ../aristo/aristo_debug
 
-    if db.isAristo:
-      let adb = be.toAristo()
-      if not adb.isNil:
-        return adb.pp(kMapOk=false,backendOK=true)
+  proc dump*(led: SomeLedger): string =
+    ## Dump database (beware of large backend)
+    let db = led.distinctBase.parent
+    if db.dbType notin CoreDbPersistentTypes:
+      # Memory based storage only
+      let be = led.distinctBase.backend
 
-    if db.isLegacy:
-      let ldb = be.toLegacy()
-      var blurb: seq[string]
-      blurb.add "level=" & $db.level
-      try:
-        for (k,v) in ldb.pairs:
-          let key = HashKey.fromBytes(k).value
-          if key.isValid:
-            let acc = rlp.decode(v, Account)
-            blurb.add "(" & key.pp & ",(" &
-              $acc.nonce & "," &
-              $acc.balance & "," &
-              acc.storageRoot.pp & "," &
-              acc.codeHash.pp(codeHashOk=true) & "))"
-      except RlpError as e:
-        raiseAssert "dump: " & $e.name & " - " & e.msg
-      return blurb.join("\n    ")
+      if db.isAristo:
+        let adb = be.toAristo()
+        if not adb.isNil:
+          return adb.pp(kMapOk=false,backendOK=true)
 
-  # Oops
-  "<" & $db.dbType & ">"
+      if db.isLegacy:
+        let ldb = be.toLegacy()
+        var blurb: seq[string]
+        blurb.add "level=" & $db.level
+        try:
+          for (k,v) in ldb.pairs:
+            let key = HashKey.fromBytes(k).value
+            if key.isValid:
+              let acc = rlp.decode(v, Account)
+              blurb.add "(" & key.pp & ",(" &
+                $acc.nonce & "," &
+                $acc.balance & "," &
+                acc.storageRoot.pp & "," &
+                acc.codeHash.pp(codeHashOk=true) & "))"
+        except RlpError as e:
+          raiseAssert "dump: " & $e.name & " - " & e.msg
+        return blurb.join("\n    ")
+
+    # Oops
+    "<" & $db.dbType & ">"
 
 # ------------------------------------------------------------------------------
 # Public helpers
