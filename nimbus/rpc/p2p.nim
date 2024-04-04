@@ -20,6 +20,7 @@ import
   rpc_types, rpc_utils,
   ../transaction/call_evm,
   ../core/tx_pool,
+  ../core/eip4844,
   ../common/[common, context],
   ../utils/utils,
   ../beacon/web3_eth_conv,
@@ -555,6 +556,7 @@ proc setupEthRpc*(
     getProof(accDB, address, slots)
 
   server.rpc("eth_getBlockReceipts") do(quantityTag: BlockTag) -> Opt[seq[ReceiptObject]]:
+    ## Returns the receipts of a block.
     try:
       let header = chainDB.headerFromTag(quantityTag)
       var
@@ -577,6 +579,7 @@ proc setupEthRpc*(
       return Opt.none(seq[ReceiptObject])
 
   server.rpc("eth_createAccessList") do(args: TransactionArgs, quantityTag: BlockTag) -> AccessListResult:
+    ## Generates an access list for a transaction.
     try:
       let
         header = chainDB.headerFromTag(quantityTag)
@@ -587,6 +590,18 @@ proc setupEthRpc*(
       return AccessListResult(
         error: some("createAccessList error: " & exc.msg),
       )
+
+  server.rpc("eth_blobBaseFee") do() -> Web3Quantity:
+    ## Returns the base fee per blob gas in wei.
+    let header = chainDB.headerFromTag(blockId("latest"))
+    if header.blobGasUsed.isNone:
+      raise newException(ValueError, "blobGasUsed missing from latest header")
+    if header.excessBlobGas.isNone:
+      raise newException(ValueError, "excessBlobGas missing from latest header")
+    let blobBaseFee = getBlobBaseFee(header.excessBlobGas.get) * header.blobGasUsed.get.u256
+    if blobBaseFee > high(uint64).u256:
+      raise newException(ValueError, "blobBaseFee is bigger than uint64.max")
+    return w3Qty blobBaseFee.truncate(uint64)
 
 #[
   server.rpc("eth_newFilter") do(filterOptions: FilterOptions) -> int:
