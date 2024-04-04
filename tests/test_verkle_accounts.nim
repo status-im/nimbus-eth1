@@ -69,13 +69,9 @@ suite "Verkle Account Tests":
     for i in 0 ..< storageSlots.len:
       # var ssBi = uint64(storageSlots[i])
       var key = storageSlots[i].toBytesBE()
-      echo "Key"
-      echo key.toHex()
       trie.updateStorage(address, key, elephant)
 
     var comm = trie.hashVerkleTrie()
-    echo "Expected Root Hash! EIP-6800 Storage Test"
-    echo comm.toHex()
     doAssert comm.toHex() == "5f9b9b718f3658151bdc58e594a951787d0307467b13ea4d1cda411428216a1e", "Root Commitment not matching with expected data"
 
 
