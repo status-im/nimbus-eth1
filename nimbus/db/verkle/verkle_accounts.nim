@@ -35,6 +35,16 @@ const
   CodeKeccakLeafKey = 3
   CodeSizeLeafKey = 4
 
+const
+  CodeOffset* = UInt256.fromHex("0x100")
+  HeaderStorageOffset* = UInt256.fromHex("0x40")
+  CodeStorageDelta* = UInt256.fromHex("0x40")
+  VerkleNodeWidthLog2* = 8
+
+let one = 1.u256
+let twofourty = 240
+
+var MainStorageOffsetLshVerkleNodeWidth*: UInt256 = one shl twofourty
 
 proc pointToHash*(point: Point, suffix: byte): Bytes32 =
   result = point.hashPointToBytes()
@@ -94,6 +104,32 @@ proc getTreeKeyCodeChunkIndices*(chunk: UInt256): (UInt256, byte) =
     subIndex = byte(subIndexMod.limbs[0])
   return (treeIndex, subIndex)
 
+proc getTreeKeyStorageSlotIndices*(storageKey: openArray[byte]): (UInt256, byte) =
+  var treeIndex = UInt256.fromBytesBE(storageKey)
+
+  ## If the storage slot exists in the header, then we need to add the header offset
+  if treeIndex < CodeStorageDelta:
+    treeIndex = treeIndex + HeaderStorageOffset
+
+    ## In this branch, the tree-index is 0 since it points to the account header
+    ## and the sub-index is the LSB of the updated storage Key
+    let ret = byte(treeIndex.limbs[0] and byte(0xff))
+    return (UInt256.zero(), ret)
+
+
+  ## The first MAIN_STORAGE_OFFSET group will find the 
+  ## first 64 slots unreachable. 
+
+  let subIndex = storageKey[storageKey.len - 1]
+
+  ## Divide the position with VerkleNodeWidthLog2 to avoid an overflow
+  treeIndex = treeIndex shr VerkleNodeWidthLog2
+
+  ## Add the MAIN_STORAGE_OFFSET lsh VerkleNodeWidth to the position
+  treeIndex = treeIndex + MainStorageOffsetLshVerkleNodeWidth
+
+  return (treeIndex, subIndex)
+
 # GetTreeKey performs both the work of the spec's get_tree_key function, and that
 # of pedersen_hash: it builds the polynomial in pedersen_hash without having to
 # create a mostly zero-filled buffer and "type cast" it to a 128-long 16-byte
@@ -140,6 +176,10 @@ proc getTreeKey*(address: EthAddress, treeIndex: UInt256, subIndex: byte): Bytes
   ret.banderwagonAddPoint(getTreePolyIndex0Point)
   return pointToHash(ret, subIndex)
 
+proc getTreeKeyHeader*(addressPoint: var Point, address: EthAddress): Point =
+  addressPoint = evaluateAddressPoint(address)
+  return addressPoint
+
 proc getTreeKeyAccountLeaf*(address: EthAddress, leaf: byte): Bytes32 =
   return getTreeKey(address, UInt256.zero(), leaf)
 
@@ -169,9 +209,27 @@ proc getTreeKeyCodeChunkWithEvaluatedAddress*(addressPoint: Point, chunk: UInt25
   let (treeIndex, subIndex) = getTreeKeyCodeChunkIndices(chunk)
   return getTreeKeyWithEvaluatedAddress(addressPoint, treeIndex, subIndex)
 
+proc getTreeKeyStorageSlotWithEvaluatedAddress*(addressPoint: Point, storageKey: openArray[byte]): Bytes32 =
+  let (treeIndex, subIndex) = getTreeKeyStorageSlotIndices(storageKey)
+  return getTreeKeyWithEvaluatedAddress(addressPoint, treeIndex, subIndex)
 
 proc newVerkleTrie*(): VerkleTrieRef =
   result = VerkleTrieRef(root: newTree())
+
+proc updateStorage*(trie: VerkleTrieRef, address: EthAddress, key, value: var openArray[byte]) =
+  var addressPoint: Point
+  var inter = getTreeKeyHeader(addressPoint, address)
+  var k = getTreeKeyStorageSlotWithEvaluatedAddress(inter, key)
+  var v: Bytes32
+  if value.len >= 32:
+    for i in 0..<32:
+      v[i] = value[i]
+  else:
+    let start = 32 - value.len
+    for i in 0..<value.len:
+      v[start + i] = value[i]
+  
+  trie.root.setValue(k, v)
 
 proc updateAccount*(trie: VerkleTrieRef, address: EthAddress, acc: Account) =
   var verKey = getTreeKeyVersion(address)
