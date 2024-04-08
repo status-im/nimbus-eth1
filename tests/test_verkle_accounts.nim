@@ -17,6 +17,10 @@ import
   ../nimbus/db/verkle/verkle_accounts
 
 suite "Tree Embeddings Tests":
+
+  # Tests for the generalized tree key generation function
+  # test vectors are taken from gballet/go-ethereum implementation
+  # but modified as there they use 32byte addr, and we use 20byte
   test "Test getTreeKey":
     var address: EthAddress
     for i in 0 ..< 10:
@@ -30,6 +34,9 @@ suite "Tree Embeddings Tests":
     doAssert tk.toHex() == "f546a4318c58e0f6fc5c28d4dfc302c7c32d209d360b27991d2d2525289a9601", "Generated trie key is incorrect"
 
 suite "Verkle Account Tests":
+
+  # Test for the Accout details upation in the Verkle Trie
+  # Test vectors taken from Ignacio's `verkle-test-vectors`
   test "Test Verkle Account Updation":
     var trie = newVerkleTrie()
 
@@ -47,6 +54,7 @@ suite "Verkle Account Tests":
 
     doAssert comm.toHex() == "43ca08d7ec0f76747e5615e00792c84de5d0ac2753fdef2315a6106d5917b332", "Root Commitment not matching with expected data"
 
+  # Tests if the account details updated are getting fetched properly
   test "Test Fetching Account from Verkle Trie":
     var trie = newVerkleTrie()
 
@@ -65,7 +73,7 @@ suite "Verkle Account Tests":
     doAssert acc2.balance == u256(8832), "Balance not matching"
     doAssert acc2.codeHash == EMPTY_CODE_HASH, "Code Hash not matching"
 
-
+  # Tests the storage layer inside the verkle trie
   test "Test Verkle Storage Updation":
     var trie = newVerkleTrie()
 
@@ -93,7 +101,8 @@ suite "Verkle Account Tests":
     var comm = trie.hashVerkleTrie()
     doAssert comm.toHex() == "5f9b9b718f3658151bdc58e594a951787d0307467b13ea4d1cda411428216a1e", "Root Commitment not matching with expected data"
 
-
+  # Tests for code chunkification as per EIP-6800
+  # Test vectors taken from gballet/go-ethereum
   test "Chunkify Code Simple":
     let
       PUSH4 = byte(0x63)
@@ -121,6 +130,8 @@ suite "Verkle Account Tests":
     doAssert chunks[32] == byte(1), "invalid offset in second chunk"
     doAssert chunks[64] == byte(0), "Invalid offset in third chunk"
 
+  # Tests for code chunkification
+  # Test vectors taken from gballet/go-ethereum
   test "Chunkify Code Testnet":
     let code = hexToSeqByte("0x6080604052348015600f57600080fd5b506004361060285760003560e01c806381ca91d314602d575b600080fd5b60336047565b604051603e9190605a565b60405180910390f35b60005481565b6054816073565b82525050565b6000602082019050606d6000830184604d565b92915050565b600081905091905056fea264697066735822122000382db0489577c1646ea2147a05f92f13f32336a32f1f82c6fb10b63e19f04064736f6c63430008070033")
     let chunks = chunkifyCode(code)
@@ -153,6 +164,8 @@ suite "Verkle Account Tests":
       let chunk = chunk3[i..32+i-1]
       doAssert chunk[0] == expected3[i div 32 - 1], "Invalid chunk"
 
+  # Tests for code updation in the Verkle Trie
+  # Test vectors taken from Ignacio's `verkle-test-vectors`
   test "Smart Contract Code Updation":
     var trie = newVerkleTrie()
 

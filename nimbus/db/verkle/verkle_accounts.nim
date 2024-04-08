@@ -344,7 +344,7 @@ proc chunkifyCode*(code: openArray[byte]) : ChunkedCode =
 # It uses the code chunkification first, and then 
 # updates each chunk into the trie, as per EIP-6800
 proc updateContractCode*(trie: VerkleTrieRef, address: EthAddress, codeHash: Hash256, code: openArray[byte]) =
-
+  # generate the chunks for the code
   let chunks = chunkifyCode(code)
   var key, value: Bytes32
 
@@ -355,7 +355,7 @@ proc updateContractCode*(trie: VerkleTrieRef, address: EthAddress, codeHash: Has
   var values: array[256, ref Bytes32] 
   
   while i < chunks.len:
-
+    # create a internal track when to update at stem level using groupoffset
     groupOffSet = (chunknr + 128) mod 256
     if ((groupOffSet == 0) or (chunknr == 0)):
       key = getTreeKeyCodeChunk(address, u256(chunknr))
@@ -396,10 +396,13 @@ proc updateContractCode*(trie: VerkleTrieRef, address: EthAddress, codeHash: Has
 # Helps fetching a account from the verkle trie
 # using the account address
 proc getAccount*(trie: VerkleTrieRef, address: EthAddress): Account =
+
+  # generate the keys for the account paramas
   var nonceKey = getTreeKeyNonce(address)
   var balanceKey = getTreeKeyBalance(address)
   var codeKeccakKey = getTreeKeyCodeKeccak(address)
 
+  # Fetch the account values from the trie, using the generated keys
   var nonceVal = trie.root.getValue(nonceKey)
   var balanceVal = trie.root.getValue(balanceKey)
   var codeKeccakVal = trie.root.getValue(codeKeccakKey)
