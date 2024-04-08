@@ -199,8 +199,8 @@ proc getTreeKey*(address: EthAddress, treeIndex: UInt256, subIndex: byte): Bytes
 #
 # ################################################################
 
-proc getTreeKeyHeader*(addressPoint: var Point, address: EthAddress): Point =
-  addressPoint = evaluateAddressPoint(address)
+proc getTreeKeyHeader*(address: EthAddress): Point =
+  var addressPoint : Point = evaluateAddressPoint(address)
   return addressPoint
 
 proc getTreeKeyAccountLeaf*(address: EthAddress, leaf: byte): Bytes32 =
@@ -248,8 +248,8 @@ proc newVerkleTrie*(): VerkleTrieRef =
 # Updates the storage slots in the Verkle Trie
 proc updateStorage*(trie: VerkleTrieRef, address: EthAddress, key, value: var openArray[byte]) =
   var addressPoint: Point
-  var inter = getTreeKeyHeader(addressPoint, address)
-  var k = getTreeKeyStorageSlotWithEvaluatedAddress(inter, key)
+  addressPoint = getTreeKeyHeader(address)
+  var k = getTreeKeyStorageSlotWithEvaluatedAddress(addressPoint, key)
   var v: Bytes32
   if value.len >= 32:
     for i in 0..<32:
@@ -408,3 +408,11 @@ proc getAccount*(trie: VerkleTrieRef, address: EthAddress): Account =
   result.nonce = uint64.fromBytesLE(nonceVal[])
   result.balance = UInt256.fromBytesLE(balanceVal[])
   result.codeHash.data = codeKeccakVal[]
+
+# Get returns the value for key stored in the trie. The value bytes must
+# not be modified by the caller.
+proc getStorage*(trie: VerkleTrieRef, address: EthAddress, key: openArray[byte]): Bytes32 =
+  var addressPoint: Point
+  addressPoint = getTreeKeyHeader(address)
+  var k = getTreeKeyStorageSlotWithEvaluatedAddress(addressPoint, key)
+  return trie.root.getValue(k)[]
