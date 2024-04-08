@@ -16,6 +16,8 @@ import
   ../nimbus/evm/interpreter/op_codes,
   ../nimbus/db/verkle/verkle_accounts
 
+# TODO : Migrate test vectors to a different file
+
 suite "Tree Embeddings Tests":
 
   # Tests for the generalized tree key generation function
