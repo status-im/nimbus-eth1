@@ -36,7 +36,7 @@ suite "Verkle Account Tests":
     # Setting the account as per the test vectors by EF
     var acc: Account
     acc.nonce = 32
-    acc.balance = UInt256.zero() + 8832
+    acc.balance = u256(8832)
     acc.codeHash = EMPTY_CODE_HASH
 
     var address: EthAddress = parseAddress("0x3B7C4C2b2b25239E58f8e67509B32edB5bBF293c")
@@ -46,6 +46,25 @@ suite "Verkle Account Tests":
     var comm = trie.hashVerkleTrie()
 
     doAssert comm.toHex() == "43ca08d7ec0f76747e5615e00792c84de5d0ac2753fdef2315a6106d5917b332", "Root Commitment not matching with expected data"
+
+  test "Test Fetching Account from Verkle Trie":
+    var trie = newVerkleTrie()
+
+    # Setting the account as per the test vectors by EF
+    var acc: Account
+    acc.nonce = 32
+    acc.balance = u256(8832)
+    acc.codeHash = EMPTY_CODE_HASH
+    var address: EthAddress = parseAddress("0x3B7C4C2b2b25239E58f8e67509B32edB5bBF293c")
+
+    trie.updateAccount(address, acc)
+
+    # Fetch the same account from the trie and match data
+    var acc2 = trie.getAccount(address)
+    doAssert acc2.nonce == 32, "Nonce not matching"
+    doAssert acc2.balance == u256(8832), "Balance not matching"
+    doAssert acc2.codeHash == EMPTY_CODE_HASH, "Code Hash not matching"
+
 
   test "Test Verkle Storage Updation":
     var trie = newVerkleTrie()
@@ -142,7 +161,7 @@ suite "Verkle Account Tests":
     # Setting the account as per the test vectors by EF
     var acc: Account
     acc.nonce = 21
-    acc.balance = UInt256.zero() + 100
+    acc.balance = u256(100)
     acc.codeHash = keccakHash(hexcode)
 
     var address: EthAddress = parseAddress("0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984")

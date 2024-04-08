@@ -46,10 +46,22 @@ let twofourty = 240
 
 var MainStorageOffsetLshVerkleNodeWidth*: UInt256 = one shl twofourty
 
+# ################################################################
+#
+#        Utility Functions for the Verkle Accounts
+#
+# ################################################################
+
+# Spec implementation from the EIP-6800
+# Converts a EC Banderwagon point to an
+# array of 32 bytes
 proc pointToHash*(point: Point, suffix: byte): Bytes32 =
   result = point.hashPointToBytes()
   result[31] = suffix
 
+# To calculate the tree key
+# here evaluated address means, when the address
+# is evaluated into a EC Banderwagon Point
 proc getTreeKeyWithEvaluatedAddress*(evaluated: Point, treeIndex: UInt256, subIndex: byte): Bytes32 =
   var poly: array[256, Field]
   poly[0] = zeroField()
@@ -67,6 +79,8 @@ proc getTreeKeyWithEvaluatedAddress*(evaluated: Point, treeIndex: UInt256, subIn
   ret.banderwagonAddPoint(evaluated)
   return pointToHash(ret, subIndex)
 
+# Convert a ethereum address to a 
+# Elliptic Curve (EC) Banderwagon Point
 proc evaluateAddressPoint*(address: EthAddress): Point =
   var newAddr: array[32, byte]
   for i in 0 ..< (32 - address.len):
@@ -92,6 +106,8 @@ proc evaluateAddressPoint*(address: EthAddress): Point =
 
   return ret
 
+# Get the tree key for a
+# particular chunks[i] of the code
 proc getTreeKeyCodeChunkIndices*(chunk: UInt256): (UInt256, byte) =
   var chunkOffSet: UInt256
   chunkOffSet = u256(128) + chunk
@@ -104,28 +120,29 @@ proc getTreeKeyCodeChunkIndices*(chunk: UInt256): (UInt256, byte) =
     subIndex = byte(subIndexMod.limbs[0])
   return (treeIndex, subIndex)
 
+# Get the tree key for a particular storage slot
 proc getTreeKeyStorageSlotIndices*(storageKey: openArray[byte]): (UInt256, byte) =
   var treeIndex = UInt256.fromBytesBE(storageKey)
 
-  ## If the storage slot exists in the header, then we need to add the header offset
+  # If the storage slot exists in the header, then we need to add the header offset
   if treeIndex < CodeStorageDelta:
     treeIndex = treeIndex + HeaderStorageOffset
 
-    ## In this branch, the tree-index is 0 since it points to the account header
-    ## and the sub-index is the LSB of the updated storage Key
+    # In this branch, the tree-index is 0 since it points to the account header
+    # and the sub-index is the LSB of the updated storage Key
     let ret = byte(treeIndex.limbs[0] and byte(0xff))
     return (UInt256.zero(), ret)
 
 
-  ## The first MAIN_STORAGE_OFFSET group will find the 
-  ## first 64 slots unreachable. 
+  # The first MAIN_STORAGE_OFFSET group will find the 
+  # first 64 slots unreachable. 
 
   let subIndex = storageKey[storageKey.len - 1]
 
-  ## Divide the position with VerkleNodeWidthLog2 to avoid an overflow
+  # Divide the position with VerkleNodeWidthLog2 to avoid an overflow
   treeIndex = treeIndex shr VerkleNodeWidthLog2
 
-  ## Add the MAIN_STORAGE_OFFSET lsh VerkleNodeWidth to the position
+  # Add the MAIN_STORAGE_OFFSET lsh VerkleNodeWidth to the position
   treeIndex = treeIndex + MainStorageOffsetLshVerkleNodeWidth
 
   return (treeIndex, subIndex)
@@ -176,6 +193,12 @@ proc getTreeKey*(address: EthAddress, treeIndex: UInt256, subIndex: byte): Bytes
   ret.banderwagonAddPoint(getTreePolyIndex0Point)
   return pointToHash(ret, subIndex)
 
+# ################################################################
+#
+#        Key Generation Operations for the Verkle Trie
+#
+# ################################################################
+
 proc getTreeKeyHeader*(addressPoint: var Point, address: EthAddress): Point =
   addressPoint = evaluateAddressPoint(address)
   return addressPoint
@@ -216,6 +239,13 @@ proc getTreeKeyStorageSlotWithEvaluatedAddress*(addressPoint: Point, storageKey:
 proc newVerkleTrie*(): VerkleTrieRef =
   result = VerkleTrieRef(root: newTree())
 
+# ################################################################
+#
+#       Verkle Trie Updation Operations from Account
+#
+# ################################################################
+
+# Updates the storage slots in the Verkle Trie
 proc updateStorage*(trie: VerkleTrieRef, address: EthAddress, key, value: var openArray[byte]) =
   var addressPoint: Point
   var inter = getTreeKeyHeader(addressPoint, address)
@@ -231,6 +261,7 @@ proc updateStorage*(trie: VerkleTrieRef, address: EthAddress, key, value: var op
   
   trie.root.setValue(k, v)
 
+# Update the account details in the Verkle Trie
 proc updateAccount*(trie: VerkleTrieRef, address: EthAddress, acc: Account) =
   var verKey = getTreeKeyVersion(address)
   var nonceKey = getTreeKeyNonce(address)
@@ -255,7 +286,8 @@ proc updateAccount*(trie: VerkleTrieRef, address: EthAddress, acc: Account) =
   trie.root.setValue(balanceKey, balanceVal)
   trie.root.setValue(codeKeccakKey, acc.codeHash.data)
 
-    
+# Performs hashing ( commitment generation )
+# for all the nodes in the Verkle Trie   
 proc hashVerkleTrie*(trie: VerkleTrieRef): Bytes32 =
   trie.root.updateAllCommitments()
   return trie.root.commitment.serializePoint()
@@ -308,6 +340,9 @@ proc chunkifyCode*(code: openArray[byte]) : ChunkedCode =
 
   return chunks
 
+# Updates the contract code in the Verkle Trie
+# It uses the code chunkification first, and then 
+# updates each chunk into the trie, as per EIP-6800
 proc updateContractCode*(trie: VerkleTrieRef, address: EthAddress, codeHash: Hash256, code: openArray[byte]) =
 
   let chunks = chunkifyCode(code)
@@ -357,3 +392,19 @@ proc updateContractCode*(trie: VerkleTrieRef, address: EthAddress, codeHash: Has
 
     i = i + 32
     chunknr = chunknr + 1
+
+# Helps fetching a account from the verkle trie
+# using the account address
+proc getAccount*(trie: VerkleTrieRef, address: EthAddress): Account =
+  var nonceKey = getTreeKeyNonce(address)
+  var balanceKey = getTreeKeyBalance(address)
+  var codeKeccakKey = getTreeKeyCodeKeccak(address)
+
+  var nonceVal = trie.root.getValue(nonceKey)
+  var balanceVal = trie.root.getValue(balanceKey)
+  var codeKeccakVal = trie.root.getValue(codeKeccakKey)
+
+  # TODO: Implement case for deleted accounts
+  result.nonce = uint64.fromBytesLE(nonceVal[])
+  result.balance = UInt256.fromBytesLE(balanceVal[])
+  result.codeHash.data = codeKeccakVal[]
