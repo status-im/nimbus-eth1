@@ -24,13 +24,16 @@ import
   std/[algorithm, sequtils, strutils, tables],
   eth/[common, trie/hexary],
   chronicles,
-  "."/[core_db, storage_types]
+  "."/[core_db, storage_types],
+  ./verkle/verkle_accounts
 
 type
   DB = CoreDbRef
   AccountsTrie* = distinct CoreDbPhkRef
   StorageTrie* = distinct CoreDbPhkRef
-  DistinctTrie* = AccountsTrie | StorageTrie
+  VerkleTrie* = distinct VerkleTrieRef
+  DistinctTrie* = AccountsTrie | StorageTrie | VerkleTrie
+
 
 # ------------------------------------------------------------------------------
 # Private helper

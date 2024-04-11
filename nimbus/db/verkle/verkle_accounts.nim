@@ -22,18 +22,18 @@ import
   ]
 
 type
-  ChunkedCode = seq[byte]
-  VerkleTrieRef = ref object
+  ChunkedCode* = seq[byte]
+  VerkleTrieRef* = ref object
     root: BranchesNode
   # db: <something>
   # persistcheck: <some-flag>
 
 const
-  VersionLeafKey = 0
-  BalanceLeafKey = 1
-  NonceLeafKey = 2
-  CodeKeccakLeafKey = 3
-  CodeSizeLeafKey = 4
+  VersionLeafKey* = 0
+  BalanceLeafKey* = 1
+  NonceLeafKey* = 2
+  CodeKeccakLeafKey* = 3
+  CodeSizeLeafKey* = 4
 
 const
   CodeOffset* = UInt256.fromHex("0x100")
