@@ -18,8 +18,8 @@ const
   VmName* = vmName()
   warningMsg = block:
     var rc = "*** Compiling with " & VmName
-    when defined(legacy_eth66_enabled):
-      rc &= ", legacy-eth/66"
+    when defined(eth66_enabled):
+      rc &= ", eth/66"
     when defined(eth67_enabled):
       rc &= ", eth/67"
     when defined(eth68_enabled):

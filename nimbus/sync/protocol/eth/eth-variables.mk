@@ -22,7 +22,7 @@ endif
 
 # parse list for supported items
 ifneq ($(findstring :66:,:$(ENABLE_ETH_VERSION):),)
-NIM_ETH_PARAMS := $(NIM_ETH_PARAMS) -d:legacy_eth66_enabled
+NIM_ETH_PARAMS := $(NIM_ETH_PARAMS) -d:eth66_enabled
 endif
 
 ifneq ($(findstring :67:,:$(ENABLE_ETH_VERSION):),)
