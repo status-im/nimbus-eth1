@@ -24,16 +24,13 @@ import
   std/[algorithm, sequtils, strutils, tables],
   eth/[common, trie/hexary],
   chronicles,
-  "."/[core_db, storage_types],
-  ./verkle/verkle_accounts
+  "."/[core_db, storage_types]
 
 type
   DB = CoreDbRef
   AccountsTrie* = distinct CoreDbPhkRef
   StorageTrie* = distinct CoreDbPhkRef
-  VerkleTrie* = distinct VerkleTrieRef
-  DistinctTrie* = AccountsTrie | StorageTrie | VerkleTrie
-
+  DistinctTrie* = AccountsTrie | StorageTrie
 
 # ------------------------------------------------------------------------------
 # Private helper
@@ -109,9 +106,8 @@ proc maybeGetAccountBytes*(trie: AccountsTrie, address: EthAddress): Option[Blob
 proc putAccountBytes*(trie: var AccountsTrie, address: EthAddress, value: openArray[byte]) =
   CoreDbPhkRef(trie).put(address, value)
 
-# INVALID FOR VERKLE ( as of April 2024 )
-# proc delAccountBytes*(trie: var AccountsTrie, address: EthAddress) =
-#   CoreDbPhkRef(trie).del(address)
+proc delAccountBytes*(trie: var AccountsTrie, address: EthAddress) =
+  CoreDbPhkRef(trie).del(address)
 
 # ------------------------------------------------------------------------------
 # Public functions: storage trie
@@ -145,9 +141,8 @@ proc maybeGetSlotBytes*(trie: StorageTrie, slotAsKey: openArray[byte]): Option[B
 proc putSlotBytes*(trie: var StorageTrie, slotAsKey: openArray[byte], value: openArray[byte]) =
   CoreDbPhkRef(trie).put(slotAsKey, value)
 
-# INVALID FOR VERKLE ( as of April 2024 )
-# proc delSlotBytes*(trie: var StorageTrie, slotAsKey: openArray[byte]) =
-#   CoreDbPhkRef(trie).del(slotAsKey)
+proc delSlotBytes*(trie: var StorageTrie, slotAsKey: openArray[byte]) =
+  CoreDbPhkRef(trie).del(slotAsKey)
 
 proc storageTrieForAccount*(trie: AccountsTrie, account: Account, isPruning = true): StorageTrie =
   # TODO: implement `prefix-db` to solve issue #228 permanently.
