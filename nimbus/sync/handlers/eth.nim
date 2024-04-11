@@ -21,6 +21,12 @@ import
   ../protocol/trace_config, # gossip noise control
   ../../core/[chain, tx_pool, tx_pool/tx_item]
 
+# There is only one eth protocol version possible at compile time. This
+# might change in future.
+when ethVersion == 68:
+  import
+    std/sequtils
+
 logScope:
   topics = "eth-wire"
 
@@ -221,7 +227,6 @@ proc sendNewTxHashes(ctx: EthWireRef,
                      txHashes: seq[Hash256],
                      peers: seq[Peer]): Future[void] {.async.} =
   try:
-
     for peer in peers:
       # Add to known tx hashes and get hashes still to send to peer
       var hashesToSend: seq[Hash256]
@@ -229,7 +234,15 @@ proc sendNewTxHashes(ctx: EthWireRef,
 
       # Broadcast to peer if at least 1 new tx hash to announce
       if hashesToSend.len > 0:
-        await peer.newPooledTransactionHashes(hashesToSend)
+        # Currently only one protocol version is available as compiled
+        when ethVersion == 68:
+          await newPooledTransactionHashes(
+            peer,
+            1u8.repeat hashesToSend.len, # type
+            0.repeat hashesToSend.len,   # sizes
+            hashesToSend)
+        else:
+          await newPooledTransactionHashes(peer, hashesToSend)
 
   except TransportError:
     debug "Transport got closed during sendNewTxHashes"
@@ -241,7 +254,6 @@ proc sendTransactions(ctx: EthWireRef,
                       txs: seq[Transaction],
                       peers: seq[Peer]): Future[void] {.async.} =
   try:
-
     for peer in peers:
       # This is used to avoid re-sending along pooledTxHashes
       # announcements/re-broadcasts
@@ -536,39 +548,52 @@ method handleAnnouncedTxs*(ctx: EthWireRef,
   except CatchableError as exc:
     return err(exc.msg)
 
-method handleAnnouncedTxsHashes*(ctx: EthWireRef,
-                                 peer: Peer,
-                                 txHashes: openArray[Hash256]):
-                                   Result[void, string] =
-  if ctx.enableTxPool != Enabled:
-    when trMissingOrDisabledGossipOk:
-      notEnabled("handleAnnouncedTxsHashes")
+when ethVersion == 68:
+  method handleAnnouncedTxsHashes68*(
+        ctx: EthWireRef;
+        peer: Peer;
+        txTypes: Blob;
+        txSizes: openArray[int];
+        txHashes: openArray[Hash256];
+          ): Result[void, string] =
+    ## `Eth68` method
+    notImplemented "handleAnnouncedTxsHashes()/eth68"
+
+else:
+  method handleAnnouncedTxsHashes*(ctx: EthWireRef,
+                                   peer: Peer,
+                                   txHashes: openArray[Hash256]):
+                                     Result[void, string] =
+    ## Pre-eth68 method
+    if ctx.enableTxPool != Enabled:
+      when trMissingOrDisabledGossipOk:
+        notEnabled("handleAnnouncedTxsHashes")
+      return ok()
+
+    if txHashes.len == 0:
+      return ok()
+
+    if ctx.lastCleanup - getTime() > POOLED_STORAGE_TIME_LIMIT:
+      ctx.cleanupKnownByPeer()
+
+    ctx.addToKnownByPeer(txHashes, peer)
+    var reqHashes = newSeqOfCap[Hash256](txHashes.len)
+    for txHash in txHashes:
+      if txHash in ctx.pending or ctx.inPool(txHash):
+        continue
+      reqHashes.add txHash
+
+    if reqHashes.len == 0:
+      return ok()
+
+    debug "handleAnnouncedTxsHashes: received new tx hashes",
+      number = reqHashes.len
+
+    for txHash in reqHashes:
+      ctx.pending.incl txHash
+
+    asyncSpawn ctx.fetchTransactions(reqHashes, peer)
     return ok()
-
-  if txHashes.len == 0:
-    return ok()
-
-  if ctx.lastCleanup - getTime() > POOLED_STORAGE_TIME_LIMIT:
-    ctx.cleanupKnownByPeer()
-
-  ctx.addToKnownByPeer(txHashes, peer)
-  var reqHashes = newSeqOfCap[Hash256](txHashes.len)
-  for txHash in txHashes:
-    if txHash in ctx.pending or ctx.inPool(txHash):
-      continue
-    reqHashes.add txHash
-
-  if reqHashes.len == 0:
-    return ok()
-
-  debug "handleAnnouncedTxsHashes: received new tx hashes",
-    number = reqHashes.len
-
-  for txHash in reqHashes:
-    ctx.pending.incl txHash
-
-  asyncSpawn ctx.fetchTransactions(reqHashes, peer)
-  return ok()
 
 method handleNewBlock*(ctx: EthWireRef,
                        peer: Peer,

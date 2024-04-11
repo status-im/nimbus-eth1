@@ -31,7 +31,7 @@ when 1 < buildEthVersions.len:
   {.warning: "No multi eth-protocol yet (using latest version only)".}
 
 when 68 in ethVersions:
-  {.error: "Protocol eth68 is not functional yet".}
+  {.warning: "Protocol eth68 is not fully functional yet".}
   import ./protocol/eth68 as proto_eth
   type eth* = eth68
 
