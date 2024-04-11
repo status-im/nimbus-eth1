@@ -16,6 +16,9 @@ import
   eth/[common, p2p, p2p/private/p2p_types],
   ../../types
 
+include
+  ./eth_versions # early compile time list of proto versions
+
 logScope:
   topics = "eth-wire"
 
@@ -107,7 +110,8 @@ method handleNewBlockHashes*(ctx: EthWireBase,
     {.base, gcsafe.} =
   notImplemented("handleNewBlockHashes")
 
-when defined(legacy_eth66_enabled):
+# Legacy setting, currently the latest version is active only
+when 66 in ethVersions and ethVersions.len == 1:
   method getStorageNodes*(ctx: EthWireBase,
                           hashes: openArray[Hash256]):
                             Result[seq[Blob], string]

@@ -20,6 +20,10 @@ const
     var rc = "*** Compiling with " & VmName
     when defined(legacy_eth66_enabled):
       rc &= ", legacy-eth/66"
+    when defined(eth67_enabled):
+      rc &= ", eth/67"
+    when defined(eth68_enabled):
+      rc &= ", eth/68"
     when defined(chunked_rlpx_enabled):
       rc &= ", chunked-rlpx"
     when defined(boehmgc):

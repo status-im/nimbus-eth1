@@ -615,7 +615,9 @@ method handleNewBlockHashes*(ctx: EthWireRef,
   except CatchableError as exc:
     return err(exc.msg)
 
-when defined(legacy_eth66_enabled):
+# There is only one eth protocol version possible at compile time. This
+# might change in future.
+when ethVersion == 66:
   method getStorageNodes*(ctx: EthWireRef,
                           hashes: openArray[Hash256]):
                             Result[seq[Blob], string] {.gcsafe.} =
