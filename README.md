@@ -230,6 +230,9 @@ available.)
    Disable legacy chunked RLPx messages which are enabled by default for
    synchronising against `Nethermind` nodes
 
+ * ENABLE_ETH_VERSION=66<br>
+   Enable legacy protocol `eth66` (or whatever other protocol version.)
+
  * ENABLE_EVMC=1<br>
    Enable mostly EVMC compliant wrapper around the native Nim VM
 

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -18,8 +18,12 @@ const
   VmName* = vmName()
   warningMsg = block:
     var rc = "*** Compiling with " & VmName
-    when defined(legacy_eth66_enabled):
-      rc &= ", legacy-eth/66"
+    when defined(eth66_enabled):
+      rc &= ", eth/66"
+    when defined(eth67_enabled):
+      rc &= ", eth/67"
+    when defined(eth68_enabled):
+      rc &= ", eth/68"
     when defined(chunked_rlpx_enabled):
       rc &= ", chunked-rlpx"
     when defined(boehmgc):

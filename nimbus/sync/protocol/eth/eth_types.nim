@@ -16,6 +16,9 @@ import
   eth/[common, p2p, p2p/private/p2p_types],
   ../../types
 
+include
+  ./eth_versions # early compile time list of proto versions
+
 logScope:
   topics = "eth-wire"
 
@@ -93,12 +96,24 @@ method handleAnnouncedTxs*(ctx: EthWireBase,
     {.base, gcsafe.} =
   notImplemented("handleAnnouncedTxs")
 
-method handleAnnouncedTxsHashes*(ctx: EthWireBase,
-                                 peer: Peer,
-                                 txHashes: openArray[Hash256]):
-                                   Result[void, string]
-    {.base, gcsafe.} =
-  notImplemented("handleAnnouncedTxsHashes")
+# Most recent setting, only the latest version is active
+when 68 in ethVersions:
+  method handleAnnouncedTxsHashes*(
+    ctx: EthWireBase;
+    peer: Peer;
+    txTypes: Blob;
+    txSizes: openArray[int];
+    txHashes: openArray[Hash256];
+      ): Result[void, string]
+      {.base, gcsafe.} =
+    notImplemented("handleAnnouncedTxsHashes/eth68")
+else:
+  method handleAnnouncedTxsHashes*(ctx: EthWireBase,
+                                   peer: Peer,
+                                   txHashes: openArray[Hash256]):
+                                     Result[void, string]
+      {.base, gcsafe.} =
+    notImplemented("handleAnnouncedTxsHashes")
 
 method handleNewBlockHashes*(ctx: EthWireBase,
                              peer: Peer,
@@ -107,7 +122,8 @@ method handleNewBlockHashes*(ctx: EthWireBase,
     {.base, gcsafe.} =
   notImplemented("handleNewBlockHashes")
 
-when defined(legacy_eth66_enabled):
+# Legacy setting, currently the latest version is active only
+when 66 in ethVersions and ethVersions.len == 1:
   method getStorageNodes*(ctx: EthWireBase,
                           hashes: openArray[Hash256]):
                             Result[seq[Blob], string]

@@ -56,6 +56,7 @@ EXCLUDED_NIM_PACKAGES := 	\
 
 # we don't want an error here, so we can handle things later, in the ".DEFAULT" target
 -include $(BUILD_SYSTEM_DIR)/makefiles/variables.mk
+-include ./nimbus/sync/protocol/eth/eth-variables.mk
 
 # debugging tools + testing tools
 TOOLS := \
@@ -195,15 +196,8 @@ ifneq ($(if $(ENABLE_VMLOWMEM),$(ENABLE_VMLOWMEM),0),0)
   NIM_PARAMS += -d:lowmem:1
 endif
 
-# chunked messages enabled by default, use ENABLE_CHUNKED_RLPX=0 to disable
-ifneq ($(if $(ENABLE_CHUNKED_RLPX),$(ENABLE_CHUNKED_RLPX),1),0)
-NIM_PARAMS := $(NIM_PARAMS) -d:chunked_rlpx_enabled
-endif
-
-# legacy wire protocol enabled by default, use ENABLE_LEGACY_ETH66=0 to disable
-ifneq ($(if $(ENABLE_LEGACY_ETH66),$(ENABLE_LEGACY_ETH66),1),0)
-NIM_PARAMS := $(NIM_PARAMS) -d:legacy_eth66_enabled
-endif
+# eth protocol settings, rules from "nimbus/sync/protocol/eth/variables.mk"
+NIM_PARAMS := $(NIM_PARAMS) $(NIM_ETH_PARAMS)
 
 #- deletes and recreates "nimbus.nims" which on Windows is a copy instead of a proper symlink
 update: | update-common

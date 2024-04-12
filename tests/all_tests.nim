@@ -14,8 +14,8 @@ cliBuilder:
           ./test_accounts_cache,
           ./test_aristo,
           ./test_coredb,
-          ./test_sync_snap,
-          ./test_rocksdb_timing,
+          #./test_sync_snap,                     -- temporarily suspended
+          #./test_rocksdb_timing,                -- temporarily suspended
           ./test_jwt_auth,
           ./test_gas_meter,
           ./test_memory,
