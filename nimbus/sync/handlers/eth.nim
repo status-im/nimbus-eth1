@@ -549,7 +549,7 @@ method handleAnnouncedTxs*(ctx: EthWireRef,
     return err(exc.msg)
 
 when ethVersion == 68:
-  method handleAnnouncedTxsHashes68*(
+  method handleAnnouncedTxsHashes*(
         ctx: EthWireRef;
         peer: Peer;
         txTypes: Blob;
