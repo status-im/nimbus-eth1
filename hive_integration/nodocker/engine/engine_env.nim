@@ -59,7 +59,7 @@ const
 proc makeCom*(conf: NimbusConf): CommonRef =
   CommonRef.new(
     newCoreDbRef LegacyDbMemory,
-    conf.pruneMode == PruneMode.Full,
+    conf.chainDbMode == ChainDbMode.Prune,
     conf.networkId,
     conf.networkParams
   )

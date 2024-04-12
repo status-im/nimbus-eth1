@@ -39,18 +39,21 @@ proc configurationMain*() =
       check dd.dataDir.string == "apple\\bin"
       check dd.keyStore.string == "banana/bin"
 
-    test "prune-mode":
+    test "chaindb-mode":
       let aa = makeTestConfig()
-      check aa.pruneMode == PruneMode.Full
+      check aa.chainDbMode == ChainDbMode.Prune
 
-      let bb = makeConfig(@["--prune-mode:full"])
-      check bb.pruneMode == PruneMode.Full
+      let bb = makeConfig(@["--chaindb:prune"])
+      check bb.chainDbMode == ChainDbMode.Prune
 
-      let cc = makeConfig(@["--prune-mode:archive"])
-      check cc.pruneMode == PruneMode.Archive
+      let cc = makeConfig(@["--chaindb:archive"])
+      check cc.chainDbMode == ChainDbMode.Archive
 
       let dd = makeConfig(@["-p:archive"])
-      check dd.pruneMode == PruneMode.Archive
+      check dd.chainDbMode == ChainDbMode.Archive
+
+      let ee = makeConfig(@["--chaindb:aristo"])
+      check ee.chainDbMode == ChainDbMode.Aristo
 
     test "import":
       let aa = makeTestConfig()

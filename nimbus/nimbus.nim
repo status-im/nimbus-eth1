@@ -280,12 +280,16 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
     evmcSetLibraryPath(conf.evm)
 
   createDir(string conf.dataDir)
+  let coreDB =
+    # Resolve statically for database type
+    case conf.chainDbMode:
+    of Prune,Archive: LegacyDbPersistent.newCoreDbRef(string conf.dataDir)
+    of Aristo: AristoDbRocks.newCoreDbRef(string conf.dataDir)
   let com = CommonRef.new(
-    newCoreDbRef(LegacyDbPersistent, string conf.dataDir),
-    conf.pruneMode == PruneMode.Full,
-    conf.networkId,
-    conf.networkParams
-    )
+    db = coreDB,
+    pruneTrie = (conf.chainDbMode == ChainDbMode.Prune),
+    networkId = conf.networkId,
+    params = conf.networkParams)
 
   com.initializeEmptyDb()
   com.db.compensateLegacySetup()

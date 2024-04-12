@@ -105,9 +105,10 @@ const sharedLibText = if defined(linux): " (*.so, *.so.N)"
                       else: ""
 
 type
-  PruneMode* {.pure.} = enum
-    Full
+  ChainDbMode* {.pure.} = enum
+    Prune
     Archive
+    Aristo
 
   NimbusCmd* {.pure.} = enum
     noCommand
@@ -154,12 +155,17 @@ type
       abbr: "k"
       name: "key-store" }: OutDir
 
-    pruneMode* {.
-      desc: "Blockchain prune mode (Full or Archive)"
-      defaultValue: PruneMode.Full
-      defaultValueDesc: $PruneMode.Full
+    chainDbMode* {.
+      desc: "Blockchain database"
+      longDesc:
+        "- Prune   -- Legacy/reference database, full pruning\n" &
+        "- Archive -- Legacy/reference database without pruning\n" &
+        "- Aristo  -- Experimental single state DB\n" &
+        ""
+      defaultValue: ChainDbMode.Prune
+      defaultValueDesc: $ChainDbMode.Prune
       abbr : "p"
-      name: "prune-mode" }: PruneMode
+      name: "chaindb" }: ChainDbMode
 
     syncMode* {.
       desc: "Specify particular blockchain sync mode."
