@@ -116,11 +116,12 @@ proc putAccountBytes*(trie: var AccountsTrie, address: EthAddress, value: openAr
 # Public functions: storage trie
 # ------------------------------------------------------------------------------
 
-proc initStorageTrie*(db: DB, rootHash: KeccakHash, isPruning = true): StorageTrie =
-  StorageTrie(db.phkPrune(rootHash, isPruning))
+# INVALID FOR VERKLE ( as of April 2024 )
+# proc initStorageTrie*(db: DB, rootHash: KeccakHash, isPruning = true): StorageTrie =
+#   StorageTrie(db.phkPrune(rootHash, isPruning))
 
-template initStorageTrie*(db: DB, isPruning = true): StorageTrie =
-  StorageTrie(db.phkPrune(isPruning))
+# template initStorageTrie*(db: DB, isPruning = true): StorageTrie =
+#   StorageTrie(db.phkPrune(isPruning))
 
 template createTrieKeyFromSlot*(slot: UInt256): auto =
   # XXX: This is too expensive. Similar to `createRangeFromAddress`
