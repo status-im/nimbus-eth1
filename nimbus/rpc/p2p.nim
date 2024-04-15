@@ -17,7 +17,7 @@ import
   eth/[keys, rlp, p2p],
   ".."/[transaction, vm_state, constants],
   ../db/state_db,
-  rpc_types, rpc_utils,
+  ./rpc_types, ./rpc_utils, ./oracle,
   ../transaction/call_evm,
   ../core/tx_pool,
   ../core/eip4844,
@@ -66,7 +66,7 @@ proc getProof*(
 
 proc setupEthRpc*(
     node: EthereumNode, ctx: EthContext, com: CommonRef,
-    txPool: TxPoolRef, server: RpcServer) =
+    txPool: TxPoolRef, oracle: Oracle, server: RpcServer) =
 
   let chainDB = com.db
   proc getStateDB(header: BlockHeader): ReadOnlyStateDB =
@@ -602,6 +602,17 @@ proc setupEthRpc*(
     if blobBaseFee > high(uint64).u256:
       raise newException(ValueError, "blobBaseFee is bigger than uint64.max")
     return w3Qty blobBaseFee.truncate(uint64)
+
+  server.rpc("eth_feeHistory") do(blockCount: Quantity,
+                                  newestBlock: BlockTag,
+                                  rewardPercentiles: Option[seq[float64]]) -> FeeHistoryResult:
+    let
+      blocks = blockCount.uint64
+      percentiles = rewardPercentiles.get(newSeq[float64]())
+      res = feeHistory(oracle, blocks, newestBlock, percentiles)
+    if res.isErr:
+      raise newException(ValueError, res.error)
+    return res.get
 
 #[
   server.rpc("eth_newFilter") do(filterOptions: FilterOptions) -> int:

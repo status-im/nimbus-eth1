@@ -241,9 +241,10 @@ proc rpcMain*() =
       rpcServer = newRpcSocketServer(["127.0.0.1:" & $RPC_PORT])
       client = newRpcSocketClient()
       txPool = TxPoolRef.new(com, conf.engineSigner)
+      oracle = Oracle.new(com)
 
     setupCommonRpc(ethNode, conf, rpcServer)
-    setupEthRpc(ethNode, ctx, com, txPool, rpcServer)
+    setupEthRpc(ethNode, ctx, com, txPool, oracle, rpcServer)
 
     # Begin tests
     rpcServer.start()

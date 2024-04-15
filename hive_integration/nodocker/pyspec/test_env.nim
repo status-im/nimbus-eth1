@@ -73,7 +73,8 @@ proc setupELClient*(t: TestEnv, conf: ChainConfig, node: JsonNode) =
   t.rpcServer = newRpcHttpServer(["127.0.0.1:8545"])
 
   let beaconEngine = BeaconEngineRef.new(txPool, t.chainRef)
-  setupEthRpc(t.ethNode, t.ctx, t.com, txPool, t.rpcServer)
+  let oracle = Oracle.new(t.com)
+  setupEthRpc(t.ethNode, t.ctx, t.com, txPool, oracle, t.rpcServer)
   setupEngineAPI(beaconEngine, t.rpcServer)
 
   t.rpcServer.start()

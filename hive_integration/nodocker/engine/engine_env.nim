@@ -123,8 +123,9 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
              else:
                BeaconSyncRef(nil)
     beaconEngine = BeaconEngineRef.new(txPool, chain)
+    oracle = Oracle.new(com)
 
-  setupEthRpc(node, ctx, com, txPool, server)
+  setupEthRpc(node, ctx, com, txPool, oracle, server)
   setupEngineAPI(beaconEngine, server)
   setupDebugRpc(com, txPool, server)
 

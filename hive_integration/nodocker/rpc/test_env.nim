@@ -47,8 +47,9 @@ proc setupRpcServer(ctx: EthContext, com: CommonRef,
                     ethNode: EthereumNode, txPool: TxPoolRef,
                     conf: NimbusConf): RpcServer  =
   let rpcServer = newRpcHttpServer([initTAddress(conf.httpAddress, conf.httpPort)])
+  let oracle = Oracle.new(com)
   setupCommonRpc(ethNode, conf, rpcServer)
-  setupEthRpc(ethNode, ctx, com, txPool, rpcServer)
+  setupEthRpc(ethNode, ctx, com, txPool, oracle, rpcServer)
 
   rpcServer.start()
   rpcServer
