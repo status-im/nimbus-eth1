@@ -95,9 +95,23 @@ template initAccountsTrie*(db: DB, rootHash: KeccakHash, isPruning = true): Acco
 template initAccountsTrie*(db: DB, isPruning = true): AccountsTrie =
   AccountsTrie(db.phkPrune(isPruning))
 
-proc getAccountBytes*(trie: AccountsTrie, address: EthAddress): seq[byte] =
-  CoreDbPhkRef(trie).get(address)
+# For Verkle
+template initVerkleTrie*(): VerkleTrie =
+  VerkleTrie(newVerkleTrie())
 
+# proc getAccountBytes*(trie: AccountsTrie, address: EthAddress): seq[byte] =
+#   CoreDbPhkRef(trie).get(address)
+#                              |
+#                              ▼
+proc getAccount*(trie: VerkleTrie, address: EthAddress): Account =
+  VerkleTrieRef(trie).getAccount(address)
+#                              |
+#                              |  for (API compatibitilty initially) removed later
+#                              ▼
+proc getAccountBytes*(trie: VerkleTrie, address: EthAddress): Account =
+  VerkleTrieRef(trie).getAccount(address)
+
+# TODO : find out the use of (maybe functions) ?
 proc maybeGetAccountBytes*(trie: AccountsTrie, address: EthAddress): Option[Blob]  {.gcsafe, raises: [RlpError].} =
   let phk = CoreDbPhkRef(trie)
   if phk.parent.isLegacy:
@@ -105,10 +119,19 @@ proc maybeGetAccountBytes*(trie: AccountsTrie, address: EthAddress): Option[Blob
   else:
     some(phk.get(address))
 
-proc putAccountBytes*(trie: var AccountsTrie, address: EthAddress, value: openArray[byte]) =
-  CoreDbPhkRef(trie).put(address, value)
+# proc putAccountBytes*(trie: var AccountsTrie, address: EthAddress, value: openArray[byte]) =
+#   CoreDbPhkRef(trie).put(address, value)
+#                              |
+#                              ▼
+proc putAccount*(trie: VerkleTrie, address: EthAddress, account: Account) =
+  VerkleTrieRef(trie).updateAccount(address, account)
+#                              |
+#                              |  for (API compatibitilty initially) removed later
+#                              ▼
+proc putAccountBytes*(trie: VerkleTrie, address: EthAddress, account: Account) =
+  VerkleTrieRef(trie).updateAccount(address, account)
 
-# INVALID FOR VERKLE ( as of April 2024 )
+# INVALID FOR VERKLE ( as of April 2024 by spec )
 # proc delAccountBytes*(trie: var AccountsTrie, address: EthAddress) =
 #   CoreDbPhkRef(trie).del(address)
 
@@ -145,17 +168,25 @@ proc maybeGetSlotBytes*(trie: StorageTrie, slotAsKey: openArray[byte]): Option[B
 proc putSlotBytes*(trie: var StorageTrie, slotAsKey: openArray[byte], value: openArray[byte]) =
   CoreDbPhkRef(trie).put(slotAsKey, value)
 
-# INVALID FOR VERKLE ( as of April 2024 )
+# INVALID FOR VERKLE ( as of April 2024 by spec )
 # proc delSlotBytes*(trie: var StorageTrie, slotAsKey: openArray[byte]) =
 #   CoreDbPhkRef(trie).del(slotAsKey)
 
-proc storageTrieForAccount*(trie: AccountsTrie, account: Account, isPruning = true): StorageTrie =
+# TODO : Please check the todo mentioned inside the function
+# proc storageTrieForAccount*(trie: AccountsTrie, account: Account, isPruning = true): StorageTrie =
   # TODO: implement `prefix-db` to solve issue #228 permanently.
   # the `prefix-db` will automatically insert account address to the
   # underlying-db key without disturb how the trie works.
   # it will create virtual container for each account.
   # see nim-eth#9
-  initStorageTrie(trie.db, account.storageRoot, isPruning)
+
+  # TODO
+  # Instead of returning a new storage trie, we
+  # have to modify this in a such a way that it doesn't break nimbus api yet, 
+  # follow the Verkle Trie spec, since in verkle we don't have a 
+  # seperate storage trie, it is store within the same tree.
+
+  # initStorageTrie(trie.db, account.storageRoot, isPruning)
 
 # ------------------------------------------------------------------------------
 # End
