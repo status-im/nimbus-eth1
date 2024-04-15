@@ -28,7 +28,6 @@
 
 import
   std/[algorithm, options, sequtils, tables],
-  chronicles,
   eth/common,
   results,
   ../aristo_constants,
@@ -36,6 +35,10 @@ import
   ../aristo_desc/desc_backend,
   ../aristo_blobify,
   ./init_common
+
+const
+   extraTraceMessages = false or true
+     ## Enabled additional logging noise
 
 type
   MemDbRef = ref object
@@ -58,13 +61,18 @@ type
     vGen: Option[seq[VertexID]]
     vFqs: Option[seq[(QueueID,QueueID)]]
 
+when extraTraceMessages:
+  import chronicles
+
+  logScope:
+    topics = "aristo-backend"
+
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
 template logTxt(info: static[string]): static[string] =
-  "MemoryDB " & info
-
+  "MemoryDB/" & info
 
 proc newSession(db: MemBackendRef): MemPutHdlRef =
   new result
@@ -88,9 +96,10 @@ proc getVtxFn(db: MemBackendRef): GetVtxFn =
       # Fetch serialised data record
       let data = db.mdb.sTab.getOrDefault(vid, EmptyBlob)
       if 0 < data.len:
-        let rc = data.deblobify VertexRef
-        if rc.isErr:
-          debug logTxt "getVtxFn() failed", vid, error=rc.error, info=rc.error
+        let rc = data.deblobify(VertexRef)
+        when extraTraceMessages:
+          if rc.isErr:
+            trace logTxt "getVtxFn() failed", vid, error=rc.error
         return rc
       err(GetVtxNotFound)
 
@@ -211,6 +220,7 @@ proc putFqsFn(db: MemBackendRef): PutFqsFn =
         if hdl.error.isNil:
           hdl.error = TypedPutHdlErrRef(
             pfx:  AdmPfx,
+            aid:  AdmTabIdFqs,
             code: FilQuSchedDisabled)
   else:
     result =
@@ -225,16 +235,16 @@ proc putEndFn(db: MemBackendRef): PutEndFn =
     proc(hdl: PutHdlRef): Result[void,AristoError] =
       let hdl = hdl.endSession db
       if not hdl.error.isNil:
-        case hdl.error.pfx:
-        of VtxPfx, KeyPfx:
-          debug logTxt "putEndFn: vtx/key failed",
+        when extraTraceMessages:
+          case hdl.error.pfx:
+          of VtxPfx, KeyPfx: trace logTxt "putEndFn: vtx/key failed",
             pfx=hdl.error.pfx, vid=hdl.error.vid, error=hdl.error.code
-        of FilPfx:
-          debug logTxt "putEndFn: filter failed",
+          of FilPfx: trace logTxt "putEndFn: filter failed",
             pfx=hdl.error.pfx, qid=hdl.error.qid, error=hdl.error.code
-        else:
-          debug logTxt "putEndFn: failed",
-            pfx=hdl.error.pfx, error=hdl.error.code
+          of AdmPfx: trace logTxt "putEndFn: admin failed",
+            pfx=AdmPfx, aid=hdl.error.aid.uint64, error=hdl.error.code
+          of Oops: trace logTxt "putEndFn: failed",
+             pfx=hdl.error.pfx, error=hdl.error.code
         return err(hdl.error.code)
 
       for (vid,data) in hdl.sTab.pairs:
@@ -330,7 +340,8 @@ iterator walkVtx*(
     if 0 < data.len:
       let rc = data.deblobify VertexRef
       if rc.isErr:
-        debug logTxt "walkVtxFn() skip", n, vid, error=rc.error
+        when extraTraceMessages:
+          debug logTxt "walkVtxFn() skip", n, vid, error=rc.error
       else:
         yield (vid, rc.value)
 
@@ -353,7 +364,8 @@ iterator walkFil*(
       if 0 < data.len:
         let rc = data.deblobify FilterRef
         if rc.isErr:
-          debug logTxt "walkFilFn() skip", n, qid, error=rc.error
+          when extraTraceMessages:
+            debug logTxt "walkFilFn() skip", n, qid, error=rc.error
         else:
           yield (qid, rc.value)
 
