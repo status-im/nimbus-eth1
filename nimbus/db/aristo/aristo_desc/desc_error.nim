@@ -242,14 +242,11 @@ type
     # RocksDB backend
     RdbBeCantCreateDataDir
     RdbBeCantCreateTmpDir
-    RdbBeDriverInitError
-    RdbBeDriverGetError
     RdbBeDriverDelError
-    RdbBeCreateSstWriter
-    RdbBeOpenSstWriter
-    RdbBeAddSstWriter
-    RdbBeFinishSstWriter
-    RdbBeIngestSstWriter
+    RdbBeDriverGetError
+    RdbBeDriverInitError
+    RdbBeDriverPutError
+    RdbBeDriverWriteError
     RdbHashKeyExpected
 
     # Transaction wrappers

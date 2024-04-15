@@ -16,7 +16,6 @@
 import
   std/[tables, os],
   eth/common,
-  rocksdb/lib/librocksdb,
   rocksdb,
   stew/endians2,
   ../../aristo_desc,
@@ -24,14 +23,10 @@ import
 
 type
   RdbInst* = object
-    dbOpts*: DbOptionsRef
     store*: RocksDbReadWriteRef      ## Rocks DB database handler
+    session*: WriteBatchRef          ## For batched `put()`
     basePath*: string                ## Database directory
     noFq*: bool                      ## No filter queues available
-
-    # Low level Rocks DB access for bulk store
-    envOpt*: ptr rocksdb_envoptions_t
-    impOpt*: ptr rocksdb_ingestexternalfileoptions_t
 
   RdbKey* = array[1 + sizeof VertexID, byte]
     ## Sub-table key, <pfx> + VertexID
@@ -42,12 +37,14 @@ type
 const
   BaseFolder* = "nimbus"           # Same as for Legacy DB
   DataFolder* = "aristo"           # Legacy DB has "data"
-  SstCache* = "bulkput"            # Rocks DB bulk load file name in temp folder
-  TempFolder* = "tmp"              # No `tmp` directory used with legacy DB
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
+
+template logTxt*(info: static[string]): static[string] =
+  "RocksDB/" & info
+
 
 func baseDir*(rdb: RdbInst): string =
   rdb.basePath / BaseFolder
@@ -55,17 +52,11 @@ func baseDir*(rdb: RdbInst): string =
 func dataDir*(rdb: RdbInst): string =
   rdb.baseDir / DataFolder
 
-func cacheDir*(rdb: RdbInst): string =
-  rdb.dataDir / TempFolder
-
-func sstFilePath*(rdb: RdbInst): string =
-  rdb.cacheDir / SstCache
-
-
 func toRdbKey*(id: uint64; pfx: StorageType): RdbKey =
   let idKey = id.toBytesBE
   result[0] = pfx.ord.byte
   copyMem(addr result[1], unsafeAddr idKey, sizeof idKey)
+
 
 template toOpenArray*(vid: VertexID; pfx: StorageType): openArray[byte] =
   vid.uint64.toRdbKey(pfx).toOpenArray(0, sizeof uint64)

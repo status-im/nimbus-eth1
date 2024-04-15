@@ -14,31 +14,22 @@
 {.push raises: [].}
 
 import
-  std/sequtils,
   eth/common,
   stew/endians2,
-  rocksdb/lib/librocksdb,
   rocksdb,
   ../init_common,
   ./rdb_desc
 
-# ------------------------------------------------------------------------------
-# Private helpers
-# ------------------------------------------------------------------------------
+const
+  extraTraceMessages = false
+    ## Enable additional logging noise
 
-func keyPfx(kData: cstring, kLen: csize_t): int =
-  if not kData.isNil and kLen == 1 + sizeof(uint64):
-    kData.toOpenArrayByte(0,0)[0].int
-  else:
-    -1
+when extraTraceMessages:
+  import
+    chronicles
 
-func keyXid(kData: cstring, kLen: csize_t): uint64 =
-  if not kData.isNil and kLen == 1 + sizeof(uint64):
-    return uint64.fromBytesBE kData.toOpenArrayByte(1,int(kLen)-1).toSeq
-
-func valBlob(vData: cstring, vLen: csize_t): Blob =
-  if not vData.isNil and 0 < vLen:
-    return vData.toOpenArrayByte(0,int(vLen)-1).toSeq
+  logScope:
+    topics = "aristo-rocksdb"
 
 # ------------------------------------------------------------------------------
 # Public iterators
@@ -50,37 +41,21 @@ iterator walk*(
   ## Walk over all key-value pairs of the database.
   ##
   ## Non-decodable entries are stepped over and ignored.
+  block walkBody:
+    let rit = rdb.store.openIterator().valueOr:
+      when extraTraceMessages:
+        trace logTxt "walk", pfx="all", error
+      break walkBody
+    defer: rit.close()
 
-  let
-    readOptions = rocksdb_readoptions_create()
-    rit = rdb.store.cPtr.rocksdb_create_iterator(readOptions)
-  defer:
-    rit.rocksdb_iter_destroy()
-    readOptions.rocksdb_readoptions_destroy()
-
-  rit.rocksdb_iter_seek_to_first()
-
-  while rit.rocksdb_iter_valid() != 0:
-    var kLen: csize_t
-    let kData = rit.rocksdb_iter_key(addr kLen)
-
-    let pfx = kData.keyPfx(kLen)
-    if 0 <= pfx:
-      if high(StorageType).ord < pfx:
-        break
-
-      let xid = kData.keyXid(kLen)
-      if 0 < xid:
-        var vLen: csize_t
-        let vData = rit.rocksdb_iter_value(addr vLen)
-
-        let val = vData.valBlob(vLen)
-        if 0 < val.len:
-          yield (pfx.StorageType, xid, val)
-
-    # Update Iterator (might overwrite kData/vdata)
-    rit.rocksdb_iter_next()
-    # End while
+    for (key,val) in rit.pairs:
+      if key.len == 9:
+        if StorageType.high.ord < key[0]:
+          break walkBody
+        let
+          pfx = StorageType(key[0])
+          id = uint64.fromBytesBE key[1..^1]
+        yield (pfx, id, val)
 
 
 iterator walk*(
@@ -93,65 +68,30 @@ iterator walk*(
   ## Non-decodable entries are stepped over and ignored.
   ##
   block walkBody:
-    if pfx in {Oops, AdmPfx}:
-      # Unsupported
+    let rit = rdb.store.openIterator().valueOr:
+      when extraTraceMessages:
+        echo ">>> walk (2) oops",
+          " pfx=", pfx
+        trace logTxt "walk", pfx, error
       break walkBody
+    defer: rit.close()
 
-    let
-      readOptions = rocksdb_readoptions_create()
-      rit = rdb.store.cPtr.rocksdb_create_iterator(readOptions)
-    defer:
-      rit.rocksdb_iter_destroy()
-      readOptions.rocksdb_readoptions_destroy()
+    # Start at first entry not less than `<pfx> & 1`
+    rit.seekToKey 1u64.toRdbKey pfx
 
-    var
-      kLen: csize_t
-      kData: cstring
+    # Fetch sub-table data as long as the current key is acceptable
+    while rit.isValid():
+      let key = rit.key()
+      if key.len == 9:
+        if key[0] != pfx.ord.uint:
+          break walkBody # done
 
-    # Seek for `VertexID(1)` and subsequent entries if that fails. There should
-    # always be a `VertexID(1)` entry unless the sub-table is empty. There is
-    # no such control for the filter table in which case there is a blind guess
-    # (in case `rocksdb_iter_seek()` does not search `ge` for some reason.)
-    let keyOne = 1u64.toRdbKey pfx
-
-    # It is not clear what happens when the `key` does not exist. The guess
-    # is that the interation will proceed at the next key position.
-    #
-    # Comment from GO port at
-    #    //github.com/DanielMorsing/rocksdb/blob/master/iterator.go:
-    #
-    # Seek moves the iterator the position of the key given or, if the key
-    # doesn't exist, the next key that does exist in the database. If the key
-    # doesn't exist, and there is no next key, the Iterator becomes invalid.
-    #
-    kData = cast[cstring](unsafeAddr keyOne[0])
-    kLen = sizeof(keyOne).csize_t
-    rit.rocksdb_iter_seek(kData, kLen)
-    if rit.rocksdb_iter_valid() == 0:
-      break walkBody
-
-    # Fetch sub-table data
-    while true:
-      kData = rit.rocksdb_iter_key(addr kLen)
-      if pfx.ord != kData.keyPfx kLen:
-        break walkBody # done
-
-      let xid = kData.keyXid(kLen)
-      if 0 < xid:
-        # Fetch value data
-        var vLen: csize_t
-        let vData = rit.rocksdb_iter_value(addr vLen)
-
-        let val = vData.valBlob(vLen)
-        if 0 < val.len:
-          yield (xid, val)
+        let val = rit.value()
+        if val.len != 0:
+          yield (uint64.fromBytesBE key[1..^1], val)
 
       # Update Iterator
-      rit.rocksdb_iter_next()
-      if rit.rocksdb_iter_valid() == 0:
-        break walkBody
-
-      # End while
+      rit.next()
 
 # ------------------------------------------------------------------------------
 # End
