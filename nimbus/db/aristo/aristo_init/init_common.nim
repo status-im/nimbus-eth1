@@ -48,9 +48,12 @@ type
       vid*: VertexID                 ## Vertex ID where the error occured
     of FilPfx:
       qid*: QueueID                  ## Ditto
-    of AdmPfx, Oops:
+    of AdmPfx:
+      aid*: AdminTabID
+    of Oops:
       discard
     code*: AristoError               ## Error code (if any)
+    info*: string                    ## Error description (if any)
 
   TypedPutHdlRef* = ref object of PutHdlRef
     error*: TypedPutHdlErrRef        ## Track error while collecting transaction

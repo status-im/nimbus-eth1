@@ -14,7 +14,6 @@
 {.push raises: [].}
 
 import
-  std/sequtils,
   eth/common,
   rocksdb/lib/librocksdb,
   rocksdb,
@@ -90,20 +89,6 @@ proc put*(
         when extraTraceMessages:
           trace logTxt "put", pfx, xid, error=errSym, info=error
         return err((xid,errSym,error))
-  ok()
-
-proc put*(
-    rdb: var RdbInst;
-    tabs: RdbTabs;
-      ): Result[void,(AristoError,string)] =
-  rdb.begin()
-
-  for (pfx,tab) in tabs.pairs:
-    rdb.put(pfx, tab.pairs.toSeq).isOkOr:
-      rdb.rollback()
-      return err((error[1],error[2]))
-
-  ? rdb.commit()
   ok()
 
 # ------------------------------------------------------------------------------

@@ -14,8 +14,7 @@
 {.push raises: [].}
 
 import
-  std/[tables, os],
-  eth/common,
+  std/os,
   rocksdb,
   stew/endians2,
   ../../aristo_desc,
@@ -30,9 +29,6 @@ type
 
   RdbKey* = array[1 + sizeof VertexID, byte]
     ## Sub-table key, <pfx> + VertexID
-
-  RdbTabs* = array[StorageType, Table[uint64,Blob]]
-    ## Combined table for caching data to be stored/updated
 
 const
   BaseFolder* = "nimbus"           # Same as for Legacy DB
@@ -56,16 +52,6 @@ func toRdbKey*(id: uint64; pfx: StorageType): RdbKey =
   let idKey = id.toBytesBE
   result[0] = pfx.ord.byte
   copyMem(addr result[1], unsafeAddr idKey, sizeof idKey)
-
-
-template toOpenArray*(vid: VertexID; pfx: StorageType): openArray[byte] =
-  vid.uint64.toRdbKey(pfx).toOpenArray(0, sizeof uint64)
-
-template toOpenArray*(qid: QueueID): openArray[byte] =
-  qid.uint64.toRdbKey(FilPfx).toOpenArray(0, sizeof uint64)
-
-template toOpenArray*(aid: AdminTabID): openArray[byte] =
-  aid.uint64.toRdbKey(AdmPfx).toOpenArray(0, sizeof uint64)
 
 # ------------------------------------------------------------------------------
 # End
