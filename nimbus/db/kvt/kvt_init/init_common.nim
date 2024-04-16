@@ -32,6 +32,7 @@ type
 
   TypedPutHdlRef* = ref object of PutHdlRef
     error*: KvtError                 ## Track error while collecting transaction
+    info*: string                    ##  Error description (if any)
     when verifyIxId:
       txId: uint                     ## Transaction ID (for debugging)
 

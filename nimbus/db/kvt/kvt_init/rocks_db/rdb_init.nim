@@ -15,22 +15,20 @@
 
 import
   std/os,
-  chronicles,
-  rocksdb/lib/librocksdb,
   rocksdb,
   results,
   ../../kvt_desc,
   ./rdb_desc
 
-logScope:
-  topics = "kvt-backend"
+const
+  extraTraceMessages = false
+    ## Enabled additional logging noise
 
-# ------------------------------------------------------------------------------
-# Private helpers
-# ------------------------------------------------------------------------------
+when extraTraceMessages:
+  import chronicles
 
-template logTxt(info: static[string]): static[string] =
-  "RocksDB/init " & info
+  logScope:
+    topics = "kvt-backend"
 
 # ------------------------------------------------------------------------------
 # Public constructor
@@ -52,52 +50,39 @@ proc init*(
     dataDir.createDir
   except OSError, IOError:
     return err((RdbBeCantCreateDataDir, ""))
-  try:
-    rdb.cacheDir.createDir
-  except OSError, IOError:
-    return err((RdbBeCantCreateTmpDir, ""))
 
-  let dbOpts = defaultDbOptions()
-  dbOpts.setMaxOpenFiles(openMax)
+  let opts = defaultDbOptions()
+  opts.setMaxOpenFiles(openMax)
 
-  let rc = openRocksDb(dataDir, dbOpts)
-  if rc.isErr:
-    let error = RdbBeDriverInitError
-    debug logTxt "driver failed", dataDir, openMax,
-      error, info=rc.error
-    return err((RdbBeDriverInitError, rc.error))
+  # Reserve a family corner for `Kvt` on the database
+  let baseDb = openRocksDb(dataDir, opts).valueOr:
+    let errSym = RdbBeDriverInitError
+    when extraTraceMessages:
+      debug logTxt "init failed", dataDir, openMax, error=errSym, info=($error)
+    return err((errSym, error))
 
-  rdb.dbOpts = dbOpts
-  rdb.store = rc.get()
-
-  # The following is a default setup (subject to change)
-  rdb.impOpt = rocksdb_ingestexternalfileoptions_create()
-  rdb.envOpt = rocksdb_envoptions_create()
+  rdb.store = baseDb
   ok()
 
 
 proc destroy*(rdb: var RdbInst; flush: bool) =
-  ## Destructor
-  rdb.envOpt.rocksdb_envoptions_destroy()
-  rdb.impOpt.rocksdb_ingestexternalfileoptions_destroy()
+  ## Destructor (no need to do anything if piggybacked)
   rdb.store.close()
 
-  try:
-    rdb.cacheDir.removeDir
+  if flush:
+    try:
+        rdb.dataDir.removeDir
 
-    if flush:
-      rdb.dataDir.removeDir
+        # Remove the base folder if it is empty
+        block done:
+          for w in rdb.baseDir.walkDirRec:
+            # Ignore backup files
+            if 0 < w.len and w[^1] != '~':
+              break done
+          rdb.baseDir.removeDir
 
-      # Remove the base folder if it is empty
-      block done:
-        for w in rdb.baseDir.walkDirRec:
-          # Ignore backup files
-          if 0 < w.len and w[^1] != '~':
-            break done
-        rdb.baseDir.removeDir
-
-  except CatchableError:
-    discard
+    except CatchableError:
+      discard
 
 # ------------------------------------------------------------------------------
 # End

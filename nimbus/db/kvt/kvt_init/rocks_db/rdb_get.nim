@@ -20,6 +20,17 @@ import
   "../.."/[kvt_constants, kvt_desc],
   ./rdb_desc
 
+const
+  extraTraceMessages = false
+    ## Enable additional logging noise
+
+when extraTraceMessages:
+  import
+    chronicles
+
+  logScope:
+    topics = "kvt-rocksdb"
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -31,10 +42,14 @@ proc get*(
   var res: Blob
   let onData: DataProc = proc(data: openArray[byte]) =
     res = @data
-  let rc = rdb.store.get(key, onData)
-  if rc.isErr:
-    return err((RdbBeDriverGetError,rc.error))
-  if not rc.value:
+
+  let gotData = rdb.store.get(key, onData).valueOr:
+    const errSym = RdbBeDriverGetError
+    when extraTraceMessages:
+      trace logTxt "get", error=errSym, info=error
+    return err((errSym,error))
+
+  if not gotData:
     res = EmptyBlob
   ok res
 
