@@ -302,7 +302,7 @@ proc setupEthRpc*(
       raise newException(ValueError, res.error)
     result = txHash.w3Hash
 
-  server.rpc("eth_call") do(call: TransactionArgs, quantityTag: BlockTag) -> seq[byte]:
+  server.rpc("eth_call") do(args: TransactionArgs, quantityTag: BlockTag) -> seq[byte]:
     ## Executes a new message call immediately without creating a transaction on the block chain.
     ##
     ## call: the transaction call object.
@@ -310,23 +310,21 @@ proc setupEthRpc*(
     ## Returns the return value of executed contract.
     let
       header   = headerFromTag(chainDB, quantityTag)
-      callData = callData(call)
-      res      = rpcCallEvm(callData, header, com)
+      res      = rpcCallEvm(args, header, com)
     result = res.output
 
-  server.rpc("eth_estimateGas") do(call: TransactionArgs) -> Web3Quantity:
+  server.rpc("eth_estimateGas") do(args: TransactionArgs) -> Web3Quantity:
     ## Generates and returns an estimate of how much gas is necessary to allow the transaction to complete.
     ## The transaction will not be added to the blockchain. Note that the estimate may be significantly more than
     ## the amount of gas actually used by the transaction, for a variety of reasons including EVM mechanics and node performance.
     ##
-    ## call: the transaction call object.
+    ## args: the transaction call object.
     ## quantityTag:  integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns the amount of gas used.
     let
       header   = chainDB.headerFromTag(blockId("latest"))
-      callData = callData(call)
       # TODO: DEFAULT_RPC_GAS_CAP should configurable
-      gasUsed  = rpcEstimateGas(callData, header, com, DEFAULT_RPC_GAS_CAP)
+      gasUsed  = rpcEstimateGas(args, header, com, DEFAULT_RPC_GAS_CAP)
     result = w3Qty(gasUsed)
 
   server.rpc("eth_getBlockByHash") do(data: Web3Hash, fullTransactions: bool) -> BlockObject:
@@ -583,8 +581,6 @@ proc setupEthRpc*(
     try:
       let
         header = chainDB.headerFromTag(quantityTag)
-        args = callData(args)
-
       return createAccessList(header, com, args)
     except CatchableError as exc:
       return AccessListResult(
