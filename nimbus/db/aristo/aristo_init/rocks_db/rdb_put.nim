@@ -73,18 +73,17 @@ proc put*(
     pfx: StorageType;
     data: openArray[(uint64,Blob)];
       ): Result[void,(uint64,AristoError,string)] =
-  let dsc = rdb.session # rdb.store
-  assert not dsc.isNil
+  let dsc = rdb.session
   for (xid,val) in data:
     let key = xid.toRdbKey pfx
     if val.len == 0:
-      dsc.delete(key).isOkOr:
+      dsc.delete(key, rdb.store.name).isOkOr:
         const errSym = RdbBeDriverDelError
         when extraTraceMessages:
           trace logTxt "del", pfx, xid, error=errSym, info=error
         return err((xid,errSym,error))
     else:
-      dsc.put(key, val).isOkOr:
+      dsc.put(key, val, rdb.store.name).isOkOr:
         const errSym = RdbBeDriverPutError
         when extraTraceMessages:
           trace logTxt "put", pfx, xid, error=errSym, info=error

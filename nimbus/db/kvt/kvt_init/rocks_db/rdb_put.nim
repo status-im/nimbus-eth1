@@ -71,13 +71,13 @@ proc put*(
   let dsc = rdb.session
   for (key,val) in data:
     if val.len == 0:
-      dsc.delete(key).isOkOr:
+      dsc.delete(key, rdb.store.name).isOkOr:
         const errSym = RdbBeDriverDelError
         when extraTraceMessages:
           trace logTxt "del", key, error=errSym, info=error
         return err((key,errSym,error))
     else:
-      dsc.put(key, val).isOkOr:
+      dsc.put(key, val, rdb.store.name).isOkOr:
         const errSym = RdbBeDriverPutError
         when extraTraceMessages:
           trace logTxt "put", key, error=errSym, info=error

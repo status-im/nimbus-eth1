@@ -52,23 +52,31 @@ proc init*(
   except OSError, IOError:
     return err((RdbBeCantCreateDataDir, ""))
 
-  let opts = defaultDbOptions()
+  let
+    cfs = @[initColFamilyDescriptor AristoFamily]
+    opts = defaultDbOptions()
   opts.setMaxOpenFiles(openMax)
 
   # Reserve a family corner for Aristo on the database
-  let baseDb = openRocksDb(dataDir, opts).valueOr:
+  let baseDb = openRocksDb(dataDir, opts, columnFamilies=cfs).valueOr:
     let errSym = RdbBeDriverInitError
     when extraTraceMessages:
-      debug logTxt "init failed", dataDir, openMax, error=errSym, info=($error)
+      debug logTxt "init failed", dataDir, openMax, error=errSym, info=error
     return err((errSym, error))
 
-  rdb.store = baseDb
+  # Initialise Aristo family corner
+  rdb.store = baseDb.withColFamily(AristoFamily).valueOr:
+    let errSym = RdbBeDriverInitError
+    when extraTraceMessages:
+      debug logTxt "init failed", dataDir, openMax, error=errSym, info=error
+    return err((errSym, error))
+
   ok()
 
 
 proc destroy*(rdb: var RdbInst; flush: bool) =
   ## Destructor
-  rdb.store.close()
+  rdb.store.db.close()
 
   if flush:
     try:

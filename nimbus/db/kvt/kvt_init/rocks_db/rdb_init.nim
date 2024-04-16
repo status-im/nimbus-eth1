@@ -51,35 +51,42 @@ proc init*(
   except OSError, IOError:
     return err((RdbBeCantCreateDataDir, ""))
 
-  let opts = defaultDbOptions()
+  let
+    cfs = @[initColFamilyDescriptor KvtFamily]
+    opts = defaultDbOptions()
   opts.setMaxOpenFiles(openMax)
 
   # Reserve a family corner for `Kvt` on the database
-  let baseDb = openRocksDb(dataDir, opts).valueOr:
+  let baseDb = openRocksDb(dataDir, opts, columnFamilies=cfs).valueOr:
     let errSym = RdbBeDriverInitError
     when extraTraceMessages:
-      debug logTxt "init failed", dataDir, openMax, error=errSym, info=($error)
+      debug logTxt "init failed", dataDir, openMax, error=errSym, info=error
     return err((errSym, error))
 
-  rdb.store = baseDb
+  # Initialise Aristo family corner
+  rdb.store = baseDb.withColFamily(KvtFamily).valueOr:
+    let errSym = RdbBeDriverInitError
+    when extraTraceMessages:
+      debug logTxt "init failed", dataDir, openMax, error=errSym, info=error
+    return err((errSym, error))
   ok()
 
 
 proc destroy*(rdb: var RdbInst; flush: bool) =
   ## Destructor (no need to do anything if piggybacked)
-  rdb.store.close()
+  rdb.store.db.close()
 
   if flush:
     try:
-        rdb.dataDir.removeDir
+      rdb.dataDir.removeDir
 
-        # Remove the base folder if it is empty
-        block done:
-          for w in rdb.baseDir.walkDirRec:
-            # Ignore backup files
-            if 0 < w.len and w[^1] != '~':
-              break done
-          rdb.baseDir.removeDir
+      # Remove the base folder if it is empty
+      block done:
+        for w in rdb.baseDir.walkDirRec:
+          # Ignore backup files
+          if 0 < w.len and w[^1] != '~':
+            break done
+        rdb.baseDir.removeDir
 
     except CatchableError:
       discard

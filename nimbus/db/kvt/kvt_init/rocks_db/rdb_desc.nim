@@ -19,13 +19,14 @@ import
 
 type
   RdbInst* = object
-    store*: RocksDbReadWriteRef      ## Rocks DB database handler
+    store*: ColFamilyReadWrite       ## Rocks DB database handler
     session*: WriteBatchRef          ## For batched `put()`
     basePath*: string                ## Database directory
 
 const
-  BaseFolder* = "nimbus"         # Same as for Legacy DB
-  DataFolder* = "kvt"            # Legacy DB has "data"
+  KvtFamily* = "Kvt"                 ## RocksDB column family
+  BaseFolder* = "nimbus"             ## Same as for Legacy DB
+  DataFolder* = "kvt"                ## Legacy DB has "data"
 
 # ------------------------------------------------------------------------------
 # Public functions
