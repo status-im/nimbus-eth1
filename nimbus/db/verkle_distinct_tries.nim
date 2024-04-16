@@ -169,6 +169,7 @@ proc createTrieKeyFromSlot*(storageKey: openArray[byte]): (UInt256, byte) =
 proc getSlotBytes*(trie: VerkleTrie, address: EthAddress, slotAsKey: openArray[byte]): Bytes32 =
   return VerkleTrieRef(trie).getStorage(address, slotAsKey)
 
+# TODO : find out the use of (maybe functions) ?
 proc maybeGetSlotBytes*(trie: StorageTrie, slotAsKey: openArray[byte]): Option[Blob] {.gcsafe, raises: [RlpError].} =
   let phk = CoreDbPhkRef(trie)
   if phk.parent.isLegacy:
