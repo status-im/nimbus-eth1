@@ -20,8 +20,11 @@
 
 import
   results,
+  rocksdb,
   ../aristo_desc,
+  ./rocks_db/rdb_desc,
   "."/[rocks_db, memory_only]
+
 export
   RdbBackendRef,
   memory_only
@@ -78,6 +81,12 @@ proc init*[W: RdbBackendRef](
   ##
   when B is RdbBackendRef:
     basePath.newAristoRdbDbRef DEFAULT_QID_QUEUES.to(QidLayoutRef)
+
+proc getRocksDbFamily*(gdb: GuestDbRef): Result[ColFamilyReadWrite,void] =
+  ## Database pigiback feature
+  if not gdb.isNil and gdb.beKind == BackendRocksDB:
+    return ok RdbGuestDbRef(gdb).guestDb
+  err()
 
 # ------------------------------------------------------------------------------
 # End

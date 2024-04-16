@@ -244,6 +244,7 @@ type
     RdbBeCantCreateTmpDir
     RdbBeDriverDelError
     RdbBeDriverGetError
+    RdbBeDriverGuestError
     RdbBeDriverInitError
     RdbBeDriverPutError
     RdbBeDriverWriteError

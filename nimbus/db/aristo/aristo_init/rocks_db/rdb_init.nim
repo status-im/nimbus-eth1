@@ -53,26 +53,38 @@ proc init*(
     return err((RdbBeCantCreateDataDir, ""))
 
   let
-    cfs = @[initColFamilyDescriptor AristoFamily]
+    cfs = @[initColFamilyDescriptor AristoFamily,
+            initColFamilyDescriptor GuestFamily]
     opts = defaultDbOptions()
   opts.setMaxOpenFiles(openMax)
 
-  # Reserve a family corner for Aristo on the database
+  # Reserve a family corner for `Aristo` on the database
   let baseDb = openRocksDb(dataDir, opts, columnFamilies=cfs).valueOr:
     let errSym = RdbBeDriverInitError
     when extraTraceMessages:
-      debug logTxt "init failed", dataDir, openMax, error=errSym, info=error
+      trace logTxt "init failed", dataDir, openMax, error=errSym, info=error
     return err((errSym, error))
 
-  # Initialise Aristo family corner
+  # Initialise `Aristo` family
   rdb.store = baseDb.withColFamily(AristoFamily).valueOr:
     let errSym = RdbBeDriverInitError
     when extraTraceMessages:
-      debug logTxt "init failed", dataDir, openMax, error=errSym, info=error
+      trace logTxt "init failed", dataDir, openMax, error=errSym, info=error
     return err((errSym, error))
 
   ok()
 
+proc guestDb*(rdb: RdbInst): Result[RootRef,(AristoError,string)] =
+  # Initialise `Guest` family
+  let guestDb = rdb.store.db.withColFamily(GuestFamily).valueOr:
+    let errSym = RdbBeDriverGuestError
+    when extraTraceMessages:
+      trace logTxt "guestDb failed", error=errSym, info=error
+    return err((errSym, error))
+
+  ok RdbGuestDbRef(
+    beKind: BackendRocksDB,
+    guestDb: guestDb)
 
 proc destroy*(rdb: var RdbInst; flush: bool) =
   ## Destructor

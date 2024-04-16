@@ -14,6 +14,7 @@
 {.push raises: [].}
 
 import
+  results,
   ../aristo_desc,
   ../aristo_desc/desc_backend,
   "."/[init_common, memory_db]
@@ -26,6 +27,7 @@ type
 
 export
   BackendType,
+  GuestDbRef,
   MemBackendRef,
   QidLayoutRef
 
@@ -86,6 +88,14 @@ proc init*(
   ## Shortcut for `AristoDbRef.init(VoidBackendRef)`
   AristoDbRef.init VoidBackendRef
 
+proc guestDb*(db: AristoDbRef): Result[GuestDbRef,AristoError] =
+  ## Database pigiback feature
+  if db.backend.isNil:
+    ok(GuestDbRef(nil))
+  else:
+    let gdb = db.backend.guestDbFn().valueOr:
+      return err(error)
+    ok(gdb.GuestDbRef)
 
 proc finish*(db: AristoDbRef; flush = false) =
   ## Backend destructor. The argument `flush` indicates that a full database

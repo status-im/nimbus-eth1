@@ -35,6 +35,10 @@ type
     ## Access keys for admin table records. When exposed (e.g. when itereating
     ## over the tables), this data type is to be used.
 
+  GuestDbRef* = ref object of RootRef
+    ## Object returned from `GuestDbFn` (if any)
+    beKind*: BackendType             ## Backend type identifier
+
   TypedBackendRef* = ref TypedBackendObj
   TypedBackendObj* = object of BackendObj
     beKind*: BackendType             ## Backend type identifier

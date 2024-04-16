@@ -336,6 +336,14 @@ proc putEndFn(db: RdbBackendRef): PutEndFn =
         return err(error[0])
       ok()
 
+proc guestDbFn(db: RdbBackendRef): GuestDbFn =
+  result =
+    proc(): Result[RootRef,AristoError] =
+      let gdb = db.rdb.guestDb().valueOr:
+        when extraTraceMessages:
+          trace logTxt "guestDbFn", error=error[0], info=error[1]
+        return err(error[0])
+      ok gdb
 
 proc closeFn(db: RdbBackendRef): CloseFn =
   result =
@@ -377,6 +385,8 @@ proc rocksDbBackend*(
   db.putIdgFn = putIdgFn db
   db.putFqsFn = putFqsFn db
   db.putEndFn = putEndFn db
+
+  db.guestDbFn = guestDbFn db
 
   db.closeFn = closeFn db
 

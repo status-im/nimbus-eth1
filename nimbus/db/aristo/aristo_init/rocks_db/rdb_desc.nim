@@ -27,10 +27,14 @@ type
     basePath*: string                ## Database directory
     noFq*: bool                      ## No filter queues available
 
+  RdbGuestDbRef* = ref object of GuestDbRef
+    guestDb*: ColFamilyReadWrite     ## Pigiback feature reference
+
   RdbKey* = array[1 + sizeof VertexID, byte]
     ## Sub-table key, <pfx> + VertexID
 
 const
+  GuestFamily* = "Guest"             ## Guest family (e.g. for Kvt)
   AristoFamily* = "Aristo"           ## RocksDB column family
   BaseFolder* = "nimbus"             ## Same as for Legacy DB
   DataFolder* = "aristo"             ## Legacy DB has "data"

@@ -283,6 +283,11 @@ proc putEndFn(db: MemBackendRef): PutEndFn =
 
 # -------------
 
+proc guestDbFn(db: MemBackendRef): GuestDbFn =
+  result =
+    proc(): Result[RootRef,AristoError] =
+      ok(RootRef nil)
+
 proc closeFn(db: MemBackendRef): CloseFn =
   result =
     proc(ignore: bool) =
@@ -312,6 +317,8 @@ proc memoryBackend*(qidLayout: QidLayoutRef): BackendRef =
   db.putIdgFn = putIdgFn db
   db.putFqsFn = putFqsFn db
   db.putEndFn = putEndFn db
+
+  db.guestDbFn = guestDbFn db
 
   db.closeFn = closeFn db
 
