@@ -83,8 +83,9 @@ proc runTest(steps: Steps) =
       txPool, EnginePostMerge
     )
     beaconEngine = BeaconEngineRef.new(txPool, chainRef)
+    oracle = Oracle.new(com)
 
-  setupEthRpc(ethNode, ctx, com, txPool, rpcServer)
+  setupEthRpc(ethNode, ctx, com, txPool, oracle, rpcServer)
   setupEngineAPI(beaconEngine, rpcServer)
 
   sealingEngine.start()

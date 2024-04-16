@@ -20,6 +20,7 @@ import
   ./rpc/cors,
   ./rpc/rpc_server,
   ./rpc/experimental,
+  ./rpc/oracle,
   ./nimbus_desc,
   ./graphql/ethapi
 
@@ -31,7 +32,8 @@ export
   jwt_auth,
   cors,
   rpc_server,
-  experimental
+  experimental,
+  oracle
 
 {.push gcsafe, raises: [].}
 
@@ -49,12 +51,13 @@ proc installRPC(server: RpcServer,
                 nimbus: NimbusNode,
                 conf: NimbusConf,
                 com: CommonRef,
+                oracle: Oracle,
                 flags: set[RpcFlag]) =
 
   setupCommonRpc(nimbus.ethNode, conf, server)
 
   if RpcFlag.Eth in flags:
-    setupEthRpc(nimbus.ethNode, nimbus.ctx, com, nimbus.txPool, server)
+    setupEthRpc(nimbus.ethNode, nimbus.ctx, com, nimbus.txPool, oracle, server)
 
   if RpcFlag.Debug in flags:
     setupDebugRpc(com, nimbus.txPool, server)
@@ -142,7 +145,8 @@ proc addHandler(handlers: var seq[RpcHandlerProc],
 
 proc addHttpServices(handlers: var seq[RpcHandlerProc],
                      nimbus: NimbusNode, conf: NimbusConf,
-                     com: CommonRef, protocols: set[ProtocolFlag]) =
+                     com: CommonRef, oracle: Oracle,
+                     protocols: set[ProtocolFlag]) =
 
   # The order is important: graphql, ws, rpc
   # graphql depends on /graphl path
@@ -158,37 +162,37 @@ proc addHttpServices(handlers: var seq[RpcHandlerProc],
     let server = newRpcWebsocketHandler()
     var rpcFlags = conf.getWsFlags()
     if ProtocolFlag.Eth in protocols: rpcFlags.incl RpcFlag.Eth
-    installRPC(server, nimbus, conf, com, rpcFlags)
+    installRPC(server, nimbus, conf, com, oracle, rpcFlags)
     handlers.addHandler(server)
 
   if conf.rpcEnabled:
     let server = newRpcHttpHandler()
     var rpcFlags = conf.getRpcFlags()
     if ProtocolFlag.Eth in protocols: rpcFlags.incl RpcFlag.Eth
-    installRPC(server, nimbus, conf, com, rpcFlags)
+    installRPC(server, nimbus, conf, com, oracle, rpcFlags)
     handlers.addHandler(server)
 
 proc addEngineApiServices(handlers: var seq[RpcHandlerProc],
                           nimbus: NimbusNode, conf: NimbusConf,
-                          com: CommonRef) =
+                          com: CommonRef, oracle: Oracle,) =
 
   # The order is important: ws, rpc
 
   if conf.engineApiWsEnabled:
     let server = newRpcWebsocketHandler()
     setupEngineAPI(nimbus.beaconEngine, server)
-    installRPC(server, nimbus, conf, com, {RpcFlag.Eth})
+    installRPC(server, nimbus, conf, com, oracle, {RpcFlag.Eth})
     handlers.addHandler(server)
 
   if conf.engineApiEnabled:
     let server = newRpcHttpHandler()
     setupEngineAPI(nimbus.beaconEngine, server)
-    installRPC(server, nimbus, conf, com, {RpcFlag.Eth})
+    installRPC(server, nimbus, conf, com, oracle, {RpcFlag.Eth})
     handlers.addHandler(server)
 
 proc addServices(handlers: var seq[RpcHandlerProc],
                  nimbus: NimbusNode, conf: NimbusConf,
-                 com: CommonRef, protocols: set[ProtocolFlag]) =
+                 com: CommonRef, oracle: Oracle, protocols: set[ProtocolFlag]) =
 
   # The order is important: graphql, ws, rpc
 
@@ -202,12 +206,12 @@ proc addServices(handlers: var seq[RpcHandlerProc],
     if conf.engineApiWsEnabled:
       setupEngineAPI(nimbus.beaconEngine, server)
       if not conf.wsEnabled:
-        installRPC(server, nimbus, conf, com, {RpcFlag.Eth})
+        installRPC(server, nimbus, conf, com, oracle, {RpcFlag.Eth})
 
     if conf.wsEnabled:
       var rpcFlags = conf.getWsFlags()
       if ProtocolFlag.Eth in protocols: rpcFlags.incl RpcFlag.Eth
-      installRPC(server, nimbus, conf, com, rpcFlags)
+      installRPC(server, nimbus, conf, com, oracle, rpcFlags)
     handlers.addHandler(server)
 
   if conf.rpcEnabled or conf.engineApiEnabled:
@@ -215,12 +219,12 @@ proc addServices(handlers: var seq[RpcHandlerProc],
     if conf.engineApiEnabled:
       setupEngineAPI(nimbus.beaconEngine, server)
       if not conf.rpcEnabled:
-        installRPC(server, nimbus, conf, com, {RpcFlag.Eth})
+        installRPC(server, nimbus, conf, com, oracle, {RpcFlag.Eth})
 
     if conf.rpcEnabled:
       var rpcFlags = conf.getRpcFlags()
       if ProtocolFlag.Eth in protocols: rpcFlags.incl RpcFlag.Eth
-      installRPC(server, nimbus, conf, com, rpcFlags)
+      installRPC(server, nimbus, conf, com, oracle, rpcFlags)
     handlers.addHandler(server)
 
 proc setupRpc*(nimbus: NimbusNode, conf: NimbusConf,
@@ -242,11 +246,12 @@ proc setupRpc*(nimbus: NimbusNode, conf: NimbusConf,
     allowedOrigins = conf.getAllowedOrigins()
     jwtAuthHook = httpJwtAuth(jwtKey)
     corsHook = httpCors(allowedOrigins)
+    oracle = Oracle.new(com)
 
   if conf.combinedServer:
     let hooks = @[jwtAuthHook, corsHook]
     var handlers: seq[RpcHandlerProc]
-    handlers.addServices(nimbus, conf, com, protocols)
+    handlers.addServices(nimbus, conf, com, oracle, protocols)
     let address = initTAddress(conf.httpAddress, conf.httpPort)
     let res = newHttpServerWithParams(address, hooks, handlers)
     if res.isErr:
@@ -259,7 +264,7 @@ proc setupRpc*(nimbus: NimbusNode, conf: NimbusConf,
   if conf.httpServerEnabled:
     let hooks = @[corsHook]
     var handlers: seq[RpcHandlerProc]
-    handlers.addHttpServices(nimbus, conf, com, protocols)
+    handlers.addHttpServices(nimbus, conf, com, oracle, protocols)
     let address = initTAddress(conf.httpAddress, conf.httpPort)
     let res = newHttpServerWithParams(address, hooks, handlers)
     if res.isErr:
@@ -271,7 +276,7 @@ proc setupRpc*(nimbus: NimbusNode, conf: NimbusConf,
   if conf.engineApiServerEnabled:
     let hooks = @[jwtAuthHook, corsHook]
     var handlers: seq[RpcHandlerProc]
-    handlers.addEngineApiServices(nimbus, conf, com)
+    handlers.addEngineApiServices(nimbus, conf, com, oracle)
     let address = initTAddress(conf.engineApiAddress, conf.engineApiPort)
     let res = newHttpServerWithParams(address, hooks, handlers)
     if res.isErr:

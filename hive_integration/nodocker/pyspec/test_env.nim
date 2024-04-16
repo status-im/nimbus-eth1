@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -73,7 +73,8 @@ proc setupELClient*(t: TestEnv, conf: ChainConfig, node: JsonNode) =
   t.rpcServer = newRpcHttpServer(["127.0.0.1:8545"])
 
   let beaconEngine = BeaconEngineRef.new(txPool, t.chainRef)
-  setupEthRpc(t.ethNode, t.ctx, t.com, txPool, t.rpcServer)
+  let oracle = Oracle.new(t.com)
+  setupEthRpc(t.ethNode, t.ctx, t.com, txPool, oracle, t.rpcServer)
   setupEngineAPI(beaconEngine, t.rpcServer)
 
   t.rpcServer.start()
