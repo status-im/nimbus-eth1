@@ -81,7 +81,7 @@ proc toStr*(w: seq[(UInt256,UInt256)]): string =
 # ------------------------------------------------------------------------------
 
 # I don't understand why "borrow" doesn't work here. --Adam
-proc rootHash*   (t: DistinctTrie): KeccakHash   = t.toBase.rootHash()
+proc rootHash*   (t: DistinctTrie): KeccakHash   = t.toBase.rootHash()      # TODO: Verkle Uses `updateAllCommiments()` before roothash calculation 
 proc rootHashHex*(t: DistinctTrie): string       = $t.toBase.rootHash()
 proc db*         (t: DistinctTrie): DB           = t.toBase.parent()
 proc isPruning*  (t: DistinctTrie): bool         = t.toBase.isPruning()
