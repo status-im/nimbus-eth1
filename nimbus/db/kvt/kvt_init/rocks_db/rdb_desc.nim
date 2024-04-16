@@ -15,24 +15,18 @@
 
 import
   std/os,
-  rocksdb/lib/librocksdb,
   rocksdb
 
 type
   RdbInst* = object
-    dbOpts*: DbOptionsRef
-    store*: RocksDbReadWriteRef      ## Rocks DB database handler
+    store*: ColFamilyReadWrite       ## Rocks DB database handler
+    session*: WriteBatchRef          ## For batched `put()`
     basePath*: string                ## Database directory
 
-    # Low level Rocks DB access for bulk store
-    envOpt*: ptr rocksdb_envoptions_t
-    impOpt*: ptr rocksdb_ingestexternalfileoptions_t
-
 const
-  BaseFolder* = "nimbus"         # Same as for Legacy DB
-  DataFolder* = "kvt"            # Legacy DB has "data"
-  SstCache* = "bulkput"          # Rocks DB bulk load file name in temp folder
-  TempFolder* = "tmp"            # No `tmp` directory used with legacy DB
+  KvtFamily* = "Kvt"                 ## RocksDB column family
+  BaseFolder* = "nimbus"             ## Same as for Legacy DB
+  DataFolder* = "kvt"                ## Legacy DB has "data"
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -44,11 +38,9 @@ func baseDir*(rdb: RdbInst): string =
 func dataDir*(rdb: RdbInst): string =
   rdb.baseDir / DataFolder
 
-func cacheDir*(rdb: RdbInst): string =
-  rdb.dataDir / TempFolder
 
-func sstFilePath*(rdb: RdbInst): string =
-  rdb.cacheDir / SstCache
+template logTxt(info: static[string]): static[string] =
+   "RocksDB/" & info
 
 # ------------------------------------------------------------------------------
 # End

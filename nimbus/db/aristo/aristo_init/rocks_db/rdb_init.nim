@@ -15,22 +15,21 @@
 
 import
   std/os,
-  chronicles,
-  rocksdb/lib/librocksdb,
   rocksdb,
   results,
   ../../aristo_desc,
   ./rdb_desc
 
-logScope:
-  topics = "aristo-backend"
+const
+  extraTraceMessages = false
+    ## Enable additional logging noise
 
-# ------------------------------------------------------------------------------
-# Private helpers
-# ------------------------------------------------------------------------------
+when extraTraceMessages:
+  import
+    chronicles
 
-template logTxt(info: static[string]): static[string] =
-  "RocksDB/init " & info
+  logScope:
+    topics = "aristo-rocksdb"
 
 # ------------------------------------------------------------------------------
 # Public constructor
@@ -52,40 +51,47 @@ proc init*(
     dataDir.createDir
   except OSError, IOError:
     return err((RdbBeCantCreateDataDir, ""))
-  try:
-    rdb.cacheDir.createDir
-  except OSError, IOError:
-    return err((RdbBeCantCreateTmpDir, ""))
 
-  let dbOpts = defaultDbOptions()
-  dbOpts.setMaxOpenFiles(openMax)
+  let
+    cfs = @[initColFamilyDescriptor AristoFamily,
+            initColFamilyDescriptor GuestFamily]
+    opts = defaultDbOptions()
+  opts.setMaxOpenFiles(openMax)
 
-  let rc = openRocksDb(dataDir, dbOpts)
-  if rc.isErr:
-    let error = RdbBeDriverInitError
-    debug logTxt "driver failed", dataDir, openMax,
-      error, info=rc.error
-    return err((RdbBeDriverInitError, rc.error))
+  # Reserve a family corner for `Aristo` on the database
+  let baseDb = openRocksDb(dataDir, opts, columnFamilies=cfs).valueOr:
+    let errSym = RdbBeDriverInitError
+    when extraTraceMessages:
+      trace logTxt "init failed", dataDir, openMax, error=errSym, info=error
+    return err((errSym, error))
 
-  rdb.dbOpts = dbOpts
-  rdb.store = rc.get()
+  # Initialise `Aristo` family
+  rdb.store = baseDb.withColFamily(AristoFamily).valueOr:
+    let errSym = RdbBeDriverInitError
+    when extraTraceMessages:
+      trace logTxt "init failed", dataDir, openMax, error=errSym, info=error
+    return err((errSym, error))
 
-  # The following is a default setup (subject to change)
-  rdb.impOpt = rocksdb_ingestexternalfileoptions_create()
-  rdb.envOpt = rocksdb_envoptions_create()
   ok()
 
+proc guestDb*(rdb: RdbInst): Result[RootRef,(AristoError,string)] =
+  # Initialise `Guest` family
+  let guestDb = rdb.store.db.withColFamily(GuestFamily).valueOr:
+    let errSym = RdbBeDriverGuestError
+    when extraTraceMessages:
+      trace logTxt "guestDb failed", error=errSym, info=error
+    return err((errSym, error))
+
+  ok RdbGuestDbRef(
+    beKind: BackendRocksDB,
+    guestDb: guestDb)
 
 proc destroy*(rdb: var RdbInst; flush: bool) =
   ## Destructor
-  rdb.envOpt.rocksdb_envoptions_destroy()
-  rdb.impOpt.rocksdb_ingestexternalfileoptions_destroy()
-  rdb.store.close()
+  rdb.store.db.close()
 
-  try:
-    rdb.cacheDir.removeDir
-
-    if flush:
+  if flush:
+    try:
       rdb.dataDir.removeDir
 
       # Remove the base folder if it is empty
@@ -96,8 +102,8 @@ proc destroy*(rdb: var RdbInst; flush: bool) =
             break done
         rdb.baseDir.removeDir
 
-  except CatchableError:
-    discard
+    except CatchableError:
+      discard
 
 # ------------------------------------------------------------------------------
 # End

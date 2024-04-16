@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -17,8 +17,20 @@ import
   eth/common,
   rocksdb,
   results,
-  "../.."/[aristo_constants, aristo_desc],
+  ../../aristo_desc,
+  ../init_common,
   ./rdb_desc
+
+const
+  extraTraceMessages = false
+    ## Enable additional logging noise
+
+when extraTraceMessages:
+  import
+    chronicles
+
+  logScope:
+    topics = "aristo-rocksdb"
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -26,15 +38,20 @@ import
 
 proc get*(
     rdb: RdbInst;
-    key: openArray[byte],
+    pfx: StorageType;
+    xid: uint64,
       ): Result[Blob,(AristoError,string)] =
   var res: Blob
-  let onData: DataProc = proc(data: openArray[byte]) =
-    res = @data
-  let rc = rdb.store.get(key, onData)
-  if rc.isErr:
-    return err((RdbBeDriverGetError,rc.error))
-  if not rc.value:
+  let onData = proc(data: openArray[byte]) =
+      res = @data
+
+  let gotData = rdb.store.get(xid.toRdbKey pfx, onData).valueOr:
+    const errSym = RdbBeDriverGetError
+    when extraTraceMessages:
+      trace logTxt "get", error=errSym, info=error
+    return err((errSym,error))
+
+  if not gotData:
     res = EmptyBlob
   ok res
 

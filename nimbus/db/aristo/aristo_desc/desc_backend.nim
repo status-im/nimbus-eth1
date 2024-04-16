@@ -91,6 +91,20 @@ type
 
   # -------------
 
+  GuestDbFn* =
+    proc(): Result[RootRef,AristoError] {.gcsafe, raises: [].}
+      ## Generic function that returns a compartmentalised database handle that
+      ## can be used by another application. If non-nil, this handle allows to
+      ## use a previously allocated database. It is separated from the `Aristo`
+      ## columns.
+      ##
+      ## A successful return value might be `nil` if this feature is
+      ## unsupported.
+      ##
+      ## Caveat:
+      ##  The guest database is closed automatically when closing the `Aristo`
+      ##  database.
+
   CloseFn* =
     proc(flush: bool) {.gcsafe, raises: [].}
       ## Generic destructor for the `Aristo DB` backend. The argument `flush`
@@ -119,6 +133,8 @@ type
     putFqsFn*: PutFqsFn              ## Store filter ID state
     putEndFn*: PutEndFn              ## Commit bulk store session
 
+    guestDbFn*: GuestDbFn            ## Piggyback DB for another application
+
     closeFn*: CloseFn                ## Generic destructor
 
 proc init*(trg: var BackendObj; src: BackendObj) =
@@ -135,6 +151,7 @@ proc init*(trg: var BackendObj; src: BackendObj) =
   trg.putIdgFn = src.putIdgFn
   trg.putFqsFn = src.putFqsFn
   trg.putEndFn = src.putEndFn
+  trg.guestDbFn = src.guestDbFn
   trg.closeFn = src.closeFn
 
 # ------------------------------------------------------------------------------

@@ -14,16 +14,21 @@ import
   eth/common,
   results,
   ../../aristo,
-  ../../aristo/[
-    aristo_desc, aristo_persistent, aristo_walk/persistent, aristo_tx],
+  ../../aristo/aristo_persistent as use_ari,
+  ../../aristo/[aristo_desc, aristo_walk/persistent, aristo_tx],
   ../../kvt,
-  ../../kvt/kvt_persistent,
+  ../../kvt/kvt_persistent as use_kvt,
   ../base,
   ./aristo_db,
-  ./aristo_db/handlers_aristo
+  ./aristo_db/[common_desc, handlers_aristo]
 
 include
   ./aristo_db/aristo_replicate
+
+const
+  # Expectation messages
+  aristoFail = "Aristo/RocksDB init() failed"
+  kvtFail = "Kvt/RocksDB init() failed"
 
 # Annotation helper(s)
 {.pragma: rlpRaise, gcsafe, raises: [AristoApiRlpError].}
@@ -33,16 +38,18 @@ include
 # ------------------------------------------------------------------------------
 
 proc newAristoRocksDbCoreDbRef*(path: string; qlr: QidLayoutRef): CoreDbRef =
-  AristoDbRocks.init(
-    kvt_persistent.RdbBackendRef,
-    aristo_persistent.RdbBackendRef,
-    path, qlr)
+  let
+    adb = AristoDbRef.init(use_ari.RdbBackendRef, path, qlr).expect aristoFail
+    gdb = adb.guestDb().valueOr: GuestDbRef(nil)
+    kdb = KvtDbRef.init(use_kvt.RdbBackendRef, path, gdb).expect kvtFail
+  AristoDbRocks.create(kdb, use_kvt.RdbBackendRef, adb, use_ari.RdbBackendRef)
 
 proc newAristoRocksDbCoreDbRef*(path: string): CoreDbRef =
-  AristoDbRocks.init(
-    kvt_persistent.RdbBackendRef,
-    aristo_persistent.RdbBackendRef,
-    path)
+  let
+    adb = AristoDbRef.init(use_ari.RdbBackendRef, path).expect aristoFail
+    gdb = adb.guestDb().valueOr: GuestDbRef(nil)
+    kdb = KvtDbRef.init(use_kvt.RdbBackendRef, path, gdb).expect kvtFail
+  AristoDbRocks.create(kdb, use_kvt.RdbBackendRef, adb, use_ari.RdbBackendRef)
 
 # ------------------------------------------------------------------------------
 # Public aristo iterators
@@ -50,7 +57,7 @@ proc newAristoRocksDbCoreDbRef*(path: string): CoreDbRef =
 
 iterator aristoReplicateRdb*(dsc: CoreDxMptRef): (Blob,Blob) {.rlpRaise.} =
   ## Instantiation for `VoidBackendRef`
-  for k,v in aristoReplicate[aristo_persistent.RdbBackendRef](dsc):
+  for k,v in aristoReplicate[use_ari.RdbBackendRef](dsc):
     yield (k,v)
 
 # ------------------------------------------------------------------------------

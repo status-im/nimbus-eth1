@@ -35,6 +35,10 @@ type
     ## Access keys for admin table records. When exposed (e.g. when itereating
     ## over the tables), this data type is to be used.
 
+  GuestDbRef* = ref object of RootRef
+    ## Object returned from `GuestDbFn` (if any)
+    beKind*: BackendType             ## Backend type identifier
+
   TypedBackendRef* = ref TypedBackendObj
   TypedBackendObj* = object of BackendObj
     beKind*: BackendType             ## Backend type identifier
@@ -48,9 +52,12 @@ type
       vid*: VertexID                 ## Vertex ID where the error occured
     of FilPfx:
       qid*: QueueID                  ## Ditto
-    of AdmPfx, Oops:
+    of AdmPfx:
+      aid*: AdminTabID
+    of Oops:
       discard
     code*: AristoError               ## Error code (if any)
+    info*: string                    ## Error description (if any)
 
   TypedPutHdlRef* = ref object of PutHdlRef
     error*: TypedPutHdlErrRef        ## Track error while collecting transaction

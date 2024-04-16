@@ -28,7 +28,6 @@
 {.warning: "*** importing rocks DB which needs a linker library".}
 
 import
-  chronicles,
   eth/common,
   rocksdb,
   results,
@@ -39,23 +38,23 @@ import
   ./init_common,
   ./rocks_db/[rdb_desc, rdb_get, rdb_init, rdb_put, rdb_walk]
 
-logScope:
-  topics = "aristo-backend"
+const
+  maxOpenFiles = 512          ## Rocks DB setup, open files limit
+
+  extraTraceMessages = false
+    ## Enabled additional logging noise
 
 type
   RdbBackendRef* = ref object of TypedBackendRef
     rdb: RdbInst              ## Allows low level access to database
 
   RdbPutHdlRef = ref object of TypedPutHdlRef
-    cache: RdbTabs            ## Transaction cache
 
-const
-  extraTraceMessages = false or true
-    ## Enabled additional logging noise
+when extraTraceMessages:
+  import chronicles
 
-  # ----------
-
-  maxOpenFiles = 512          ## Rocks DB setup, open files limit
+  logScope:
+    topics = "aristo-backend"
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -77,19 +76,6 @@ proc endSession(hdl: PutHdlRef; db: RdbBackendRef): RdbPutHdlRef =
   hdl.TypedPutHdlRef.finishSession db
   hdl.RdbPutHdlRef
 
-
-proc `vtxCache=`(hdl: RdbPutHdlRef; val: tuple[vid: VertexID; data: Blob]) =
-  hdl.cache[VtxPfx][val.vid.uint64] = val.data
-
-proc `keyCache=`(hdl: RdbPutHdlRef; val: tuple[vid: VertexID; data: Blob]) =
-  hdl.cache[KeyPfx][val.vid.uint64] = val.data
-
-proc `filCache=`(hdl: RdbPutHdlRef; val: tuple[qid: QueueID; data: Blob]) =
-  hdl.cache[FilPfx][val.qid.uint64] = val.data
-
-proc `admCache=`(hdl: RdbPutHdlRef; val: tuple[id: AdminTabID; data: Blob]) =
-  hdl.cache[AdmPfx][val.id.uint64] = val.data
-
 # ------------------------------------------------------------------------------
 # Private functions: interface
 # ------------------------------------------------------------------------------
@@ -99,15 +85,14 @@ proc getVtxFn(db: RdbBackendRef): GetVtxFn =
     proc(vid: VertexID): Result[VertexRef,AristoError] =
 
       # Fetch serialised data record
-      let rc = db.rdb.get vid.toOpenArray(VtxPfx)
-      if rc.isErr:
-        debug logTxt "getVtxFn() failed", vid,
-          error=rc.error[0], info=rc.error[1]
-        return err(rc.error[0])
+      let data = db.rdb.get(VtxPfx, vid.uint64).valueOr:
+        when extraTraceMessages:
+          trace logTxt "getVtxFn() failed", vid, error=error[0], info=error[1]
+        return err(error[0])
 
       # Decode data record
-      if 0 < rc.value.len:
-        return rc.value.deblobify VertexRef
+      if 0 < data.len:
+        return data.deblobify VertexRef
 
       err(GetVtxNotFound)
 
@@ -116,15 +101,14 @@ proc getKeyFn(db: RdbBackendRef): GetKeyFn =
     proc(vid: VertexID): Result[HashKey,AristoError] =
 
       # Fetch serialised data record
-      let rc = db.rdb.get vid.toOpenArray(KeyPfx)
-      if rc.isErr:
-        debug logTxt "getKeyFn: failed", vid,
-          error=rc.error[0], info=rc.error[1]
-        return err(rc.error[0])
+      let data = db.rdb.get(KeyPfx, vid.uint64).valueOr:
+        when extraTraceMessages:
+          trace logTxt "getKeyFn: failed", vid, error=error[0], info=error[1]
+        return err(error[0])
 
       # Decode data record
-      if 0 < rc.value.len:
-        let lid = HashKey.fromBytes(rc.value).valueOr:
+      if 0 < data.len:
+        let lid = HashKey.fromBytes(data).valueOr:
           return err(RdbHashKeyExpected)
         return ok lid
 
@@ -140,15 +124,14 @@ proc getFilFn(db: RdbBackendRef): GetFilFn =
       proc(qid: QueueID): Result[FilterRef,AristoError] =
 
         # Fetch serialised data record
-        let rc = db.rdb.get qid.toOpenArray()
-        if rc.isErr:
-          debug logTxt "getFilFn: failed", qid,
-            error=rc.error[0], info=rc.error[1]
-          return err(rc.error[0])
+        let data = db.rdb.get(FilPfx, qid.uint64).valueOr:
+          when extraTraceMessages:
+            trace logTxt "getFilFn: failed", qid, error=error[0], info=error[1]
+          return err(error[0])
 
         # Decode data record
-        if 0 < rc.value.len:
-          return rc.value.deblobify FilterRef
+        if 0 < data.len:
+          return data.deblobify FilterRef
 
         err(GetFilNotFound)
 
@@ -157,17 +140,18 @@ proc getIdgFn(db: RdbBackendRef): GetIdgFn =
     proc(): Result[seq[VertexID],AristoError]=
 
       # Fetch serialised data record
-      let rc = db.rdb.get AdmTabIdIdg.toOpenArray()
-      if rc.isErr:
-        debug logTxt "getIdgFn: failed", error=rc.error[1]
-        return err(rc.error[0])
-
-      if rc.value.len == 0:
-        let w = EmptyVidSeq
-        return ok w
+      let data = db.rdb.get(AdmPfx, AdmTabIdIdg.uint64).valueOr:
+        when extraTraceMessages:
+          trace logTxt "getIdgFn: failed", error=error[0], info=error[1]
+        return err(error[0])
 
       # Decode data record
-      rc.value.deblobify seq[VertexID]
+      if data.len == 0:
+        let w = EmptyVidSeq   # Must be `let`
+        return ok w           # Compiler error with `ok(EmptyVidSeq)`
+
+      # Decode data record
+      data.deblobify seq[VertexID]
 
 proc getFqsFn(db: RdbBackendRef): GetFqsFn =
   if db.rdb.noFq:
@@ -179,23 +163,24 @@ proc getFqsFn(db: RdbBackendRef): GetFqsFn =
       proc(): Result[seq[(QueueID,QueueID)],AristoError]=
 
         # Fetch serialised data record
-        let rc = db.rdb.get AdmTabIdFqs.toOpenArray()
-        if rc.isErr:
-          debug logTxt "getFqsFn: failed", error=rc.error[1]
-          return err(rc.error[0])
+        let data = db.rdb.get(AdmPfx, AdmTabIdFqs.uint64).valueOr:
+          when extraTraceMessages:
+            trace logTxt "getFqsFn: failed", error=error[0], info=error[1]
+          return err(error[0])
 
-        if rc.value.len == 0:
-          let w = EmptyQidPairSeq
-          return ok w
+        if data.len == 0:
+          let w = EmptyQidPairSeq   # Must be `let`
+          return ok w               # Compiler error with `ok(EmptyQidPairSeq)`
 
         # Decode data record
-        rc.value.deblobify seq[(QueueID,QueueID)]
+        data.deblobify seq[(QueueID,QueueID)]
 
 # -------------
 
 proc putBegFn(db: RdbBackendRef): PutBegFn =
   result =
     proc(): PutHdlRef =
+      db.rdb.begin()
       db.newSession()
 
 
@@ -204,6 +189,9 @@ proc putVtxFn(db: RdbBackendRef): PutVtxFn =
     proc(hdl: PutHdlRef; vrps: openArray[(VertexID,VertexRef)]) =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
+
+        # Collect batch session arguments
+        var batch: seq[(uint64,Blob)]
         for (vid,vtx) in vrps:
           if vtx.isValid:
             let rc = vtx.blobify()
@@ -213,20 +201,39 @@ proc putVtxFn(db: RdbBackendRef): PutVtxFn =
                 vid:  vid,
                 code: rc.error)
               return
-            hdl.vtxCache = (vid, rc.value)
+            batch.add (vid.uint64, rc.value)
           else:
-            hdl.vtxCache = (vid, EmptyBlob)
+            batch.add (vid.uint64, EmptyBlob)
+
+        # Stash batch session data
+        db.rdb.put(VtxPfx, batch).isOkOr:
+          hdl.error = TypedPutHdlErrRef(
+            pfx:  VtxPfx,
+            vid:  VertexID(error[0]),
+            code: error[1],
+            info: error[2])
 
 proc putKeyFn(db: RdbBackendRef): PutKeyFn =
   result =
     proc(hdl: PutHdlRef; vkps: openArray[(VertexID,HashKey)]) =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
+
+        # Collect batch session arguments
+        var batch: seq[(uint64,Blob)]
         for (vid,key) in vkps:
           if key.isValid:
-            hdl.keyCache = (vid, @key)
+            batch.add (vid.uint64, @key)
           else:
-            hdl.keyCache = (vid, EmptyBlob)
+            batch.add (vid.uint64, EmptyBlob)
+
+        # Stash batch session data
+        db.rdb.put(KeyPfx, batch).isOkOr:
+          hdl.error = TypedPutHdlErrRef(
+            pfx:  KeyPfx,
+            vid:  VertexID(error[0]),
+            code: error[1],
+            info: error[2])
 
 proc putFilFn(db: RdbBackendRef): PutFilFn =
   if db.rdb.noFq:
@@ -243,6 +250,9 @@ proc putFilFn(db: RdbBackendRef): PutFilFn =
       proc(hdl: PutHdlRef; vrps: openArray[(QueueID,FilterRef)]) =
         let hdl = hdl.getSession db
         if hdl.error.isNil:
+
+          # Collect batch session arguments
+          var batch: seq[(uint64,Blob)]
           for (qid,filter) in vrps:
             if filter.isValid:
               let rc = filter.blobify()
@@ -252,19 +262,30 @@ proc putFilFn(db: RdbBackendRef): PutFilFn =
                   qid:  qid,
                   code: rc.error)
                 return
-              hdl.filCache = (qid, rc.value)
+              batch.add (qid.uint64, rc.value)
             else:
-              hdl.filCache = (qid, EmptyBlob)
+              batch.add (qid.uint64, EmptyBlob)
+
+          # Stash batch session data
+          db.rdb.put(FilPfx, batch).isOkOr:
+            hdl.error = TypedPutHdlErrRef(
+              pfx:  FilPfx,
+              qid:  QueueID(error[0]),
+              code: error[1],
+              info: error[2])
 
 proc putIdgFn(db: RdbBackendRef): PutIdgFn =
   result =
     proc(hdl: PutHdlRef; vs: openArray[VertexID])  =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
-        if 0 < vs.len:
-          hdl.admCache = (AdmTabIdIdg, vs.blobify)
-        else:
-          hdl.admCache = (AdmTabIdIdg, EmptyBlob)
+        let idg = if 0 < vs.len: vs.blobify else: EmptyBlob
+        db.rdb.put(AdmPfx, @[(AdmTabIdIdg.uint64, idg)]).isOkOr:
+          hdl.error = TypedPutHdlErrRef(
+            pfx:  AdmPfx,
+            aid:  AdmTabIdIdg,
+            code: error[1],
+            info: error[2])
 
 proc putFqsFn(db: RdbBackendRef): PutFqsFn =
   if db.rdb.noFq:
@@ -280,10 +301,15 @@ proc putFqsFn(db: RdbBackendRef): PutFqsFn =
       proc(hdl: PutHdlRef; vs: openArray[(QueueID,QueueID)])  =
         let hdl = hdl.getSession db
         if hdl.error.isNil:
-          if 0 < vs.len:
-            hdl.admCache = (AdmTabIdFqs, vs.blobify)
-          else:
-            hdl.admCache = (AdmTabIdFqs, EmptyBlob)
+
+          # Stash batch session data
+          let fqs = if 0 < vs.len: vs.blobify else: EmptyBlob
+          db.rdb.put(AdmPfx, @[(AdmTabIdFqs.uint64, fqs)]).isOkOr:
+            hdl.error = TypedPutHdlErrRef(
+              pfx:  AdmPfx,
+              aid:  AdmTabIdFqs,
+              code: error[1],
+              info: error[2])
 
 
 proc putEndFn(db: RdbBackendRef): PutEndFn =
@@ -291,22 +317,33 @@ proc putEndFn(db: RdbBackendRef): PutEndFn =
     proc(hdl: PutHdlRef): Result[void,AristoError] =
       let hdl = hdl.endSession db
       if not hdl.error.isNil:
-        case hdl.error.pfx:
-        of VtxPfx, KeyPfx:
-          debug logTxt "putEndFn: vtx/key failed",
-            pfx=hdl.error.pfx, vid=hdl.error.vid, error=hdl.error.code
-        else:
-          debug logTxt "putEndFn: failed",
-            pfx=hdl.error.pfx, error=hdl.error.code
-        return err(hdl.error.code)
-      let rc = db.rdb.put hdl.cache
-      if rc.isErr:
         when extraTraceMessages:
-          debug logTxt "putEndFn: failed",
-            error=rc.error[0], info=rc.error[1]
-        return err(rc.error[0])
+          case hdl.error.pfx:
+          of VtxPfx, KeyPfx: trace logTxt "putEndFn: vtx/key failed",
+            pfx=hdl.error.pfx, vid=hdl.error.vid, error=hdl.error.code
+          of FilPfx: trace logTxt "putEndFn: filter failed",
+            pfx=FilPfx, qid=hdl.error.qid, error=hdl.error.code
+          of AdmPfx: trace logTxt "putEndFn: admin failed",
+            pfx=AdmPfx, aid=hdl.error.aid.uint64, error=hdl.error.code
+          of Oops: trace logTxt "putEndFn: oops",
+            error=hdl.error.code
+        return err(hdl.error.code)
+
+      # Commit session
+      db.rdb.commit().isOkOr:
+        when extraTraceMessages:
+          trace logTxt "putEndFn: failed", error=($error[0]), info=error[1]
+        return err(error[0])
       ok()
 
+proc guestDbFn(db: RdbBackendRef): GuestDbFn =
+  result =
+    proc(): Result[RootRef,AristoError] =
+      let gdb = db.rdb.guestDb().valueOr:
+        when extraTraceMessages:
+          trace logTxt "guestDbFn", error=error[0], info=error[1]
+        return err(error[0])
+      ok gdb
 
 proc closeFn(db: RdbBackendRef): CloseFn =
   result =
@@ -348,6 +385,8 @@ proc rocksDbBackend*(
   db.putIdgFn = putIdgFn db
   db.putFqsFn = putFqsFn db
   db.putEndFn = putEndFn db
+
+  db.guestDbFn = guestDbFn db
 
   db.closeFn = closeFn db
 

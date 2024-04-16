@@ -28,7 +28,6 @@
 {.warning: "*** importing rocks DB which needs a linker library".}
 
 import
-  chronicles,
   eth/common,
   rocksdb,
   results,
@@ -37,8 +36,12 @@ import
   ./init_common,
   ./rocks_db/[rdb_desc, rdb_get, rdb_init, rdb_put, rdb_walk]
 
-logScope:
-  topics = "kvt-backend"
+
+const
+  maxOpenFiles = 512          ## Rocks DB setup, open files limit
+
+  extraTraceMessages = false or true
+    ## Enabled additional logging noise
 
 type
   RdbBackendRef* = ref object of TypedBackendRef
@@ -47,13 +50,11 @@ type
   RdbPutHdlRef = ref object of TypedPutHdlRef
     tab: Table[Blob,Blob]     ## Transaction cache
 
-const
-  extraTraceMessages = false or true
-    ## Enabled additional logging noise
+when extraTraceMessages:
+  import chronicles
 
-  # ----------
-
-  maxOpenFiles = 512          ## Rocks DB setup, open files limit
+  logScope:
+    topics = "aristo-backend"
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -82,17 +83,16 @@ proc endSession(hdl: PutHdlRef; db: RdbBackendRef): RdbPutHdlRef =
 proc getKvpFn(db: RdbBackendRef): GetKvpFn =
   result =
     proc(key: openArray[byte]): Result[Blob,KvtError] =
-      if key.len == 0:
-        return err(KeyInvalid)
-      let rc = db.rdb.get key
-      if rc.isErr:
-        debug logTxt "getKvpFn() failed", key,
-          error=rc.error[0], info=rc.error[1]
-        return err(rc.error[0])
 
-      # Decode data record
-      if 0 < rc.value.len:
-        return ok(rc.value)
+      # Get data record
+      let data = db.rdb.get(key).valueOr:
+        when extraTraceMessages:
+          debug logTxt "getKvpFn() failed", key, error=error[0], info=error[1]
+        return err(error[0])
+
+      # Return if non-empty
+      if 0 < data.len:
+        return ok(data)
 
       err(GetNotFound)
 
@@ -101,6 +101,7 @@ proc getKvpFn(db: RdbBackendRef): GetKvpFn =
 proc putBegFn(db: RdbBackendRef): PutBegFn =
   result =
     proc(): PutHdlRef =
+      db.rdb.begin()
       db.newSession()
 
 proc putKvpFn(db: RdbBackendRef): PutKvpFn =
@@ -108,25 +109,27 @@ proc putKvpFn(db: RdbBackendRef): PutKvpFn =
     proc(hdl: PutHdlRef; kvps: openArray[(Blob,Blob)]) =
       let hdl = hdl.getSession db
       if hdl.error == KvtError(0):
-        for (k,v) in kvps:
-          if k.isValid:
-            hdl.tab[k] = v
-          else:
-            hdl.error = KeyInvalid
+
+        # Collect batch session arguments
+        db.rdb.put(kvps).isOkOr:
+          hdl.error = error[1]
+          hdl.info = error[2]
+          return
 
 proc putEndFn(db: RdbBackendRef): PutEndFn =
   result =
     proc(hdl: PutHdlRef): Result[void,KvtError] =
       let hdl = hdl.endSession db
       if hdl.error != KvtError(0):
-        debug logTxt "putEndFn: key/value failed", error=hdl.error
-        return err(hdl.error)
-      let rc = db.rdb.put hdl.tab
-      if rc.isErr:
         when extraTraceMessages:
-          debug logTxt "putEndFn: failed",
-            error=rc.error[0], info=rc.error[1]
-        return err(rc.error[0])
+          debug logTxt "putEndFn: failed", error=hdl.error, info=hdl.info
+        return err(hdl.error)
+
+      # Commit session
+      db.rdb.commit().isOkOr:
+        when extraTraceMessages:
+          trace logTxt "putEndFn: failed", error=($error[0]), info=error[1]
+        return err(error[0])
       ok()
 
 
@@ -135,25 +138,9 @@ proc closeFn(db: RdbBackendRef): CloseFn =
     proc(flush: bool) =
       db.rdb.destroy(flush)
 
-# ------------------------------------------------------------------------------
-# Public functions
-# ------------------------------------------------------------------------------
+# --------------
 
-proc rocksDbBackend*(
-    path: string;
-      ): Result[BackendRef,KvtError] =
-  let db = RdbBackendRef(
-    beKind: BackendRocksDB)
-
-  # Initialise RocksDB
-  block:
-    let rc = db.rdb.init(path, maxOpenFiles)
-    if rc.isErr:
-      when extraTraceMessages:
-        trace logTxt "constructor failed",
-           error=rc.error[0], info=rc.error[1]
-        return err(rc.error[0])
-
+proc setup(db: RdbBackendRef) =
   db.getKvpFn = getKvpFn db
 
   db.putBegFn = putBegFn db
@@ -162,6 +149,28 @@ proc rocksDbBackend*(
 
   db.closeFn = closeFn db
 
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
+
+proc rocksDbBackend*(path: string): Result[BackendRef,KvtError] =
+  let db = RdbBackendRef(
+    beKind: BackendRocksDB)
+
+  # Initialise RocksDB
+  db.rdb.init(path, maxOpenFiles).isOkOr:
+    when extraTraceMessages:
+      trace logTxt "constructor failed", error=error[0], info=error[1]
+    return err(error[0])
+
+  db.setup()
+  ok db
+
+proc rocksDbBackend*(store: ColFamilyReadWrite): Result[BackendRef,KvtError] =
+  let db = RdbBackendRef(
+    beKind: BackendRocksDB)
+  db.rdb.init(store)
+  db.setup()
   ok db
 
 proc dup*(db: RdbBackendRef): RdbBackendRef =

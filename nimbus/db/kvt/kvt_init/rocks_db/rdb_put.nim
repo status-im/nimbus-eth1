@@ -14,189 +14,74 @@
 {.push raises: [].}
 
 import
-  std/[algorithm, os, sequtils, strutils, sets, tables],
-  chronicles,
   eth/common,
-  rocksdb/lib/librocksdb,
+  stew/byteutils,
   rocksdb,
   results,
   ../../kvt_desc,
   ./rdb_desc
 
-logScope:
-  topics = "kvt-backend"
-
-type
-  RdbPutSession = object
-    writer: ptr rocksdb_sstfilewriter_t
-    sstPath: string
-    nRecords: int
-
 const
-  extraTraceMessages = false or true
+  extraTraceMessages = false
     ## Enable additional logging noise
+
+when extraTraceMessages:
+  import chronicles
+
+  logScope:
+    topics = "kvt-rocksdb"
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
-template logTxt(info: static[string]): static[string] =
-  "RocksDB/put " & info
+proc disposeSession(rdb: var RdbInst) =
+  rdb.session.close()
+  rdb.session = WriteBatchRef(nil)
 
-proc getFileSize(fileName: string): int64 {.used.} =
-  var f: File
-  if f.open fileName:
-    defer: f.close
-    try:
-      result = f.getFileSize
-    except CatchableError:
-      discard
-
-proc rmFileIgnExpt(fileName: string) =
-  try:
-    fileName.removeFile
-  except CatchableError:
-    discard
-
-# ------------------------------------------------------------------------------
-# Private functions
-# ------------------------------------------------------------------------------
-
-proc destroy(rps: RdbPutSession) =
-  rps.writer.rocksdb_sstfilewriter_destroy()
-  rps.sstPath.rmFileIgnExpt
-
-proc begin(
-    rdb: var RdbInst;
-      ): Result[RdbPutSession,(KvtError,string)] =
-  ## Begin a new bulk load session storing data into a temporary cache file
-  ## `fileName`. When finished, this file will bi direcly imported into the
-  ## database.
-  var csError: cstring
-
-  var session = RdbPutSession(
-    writer: rocksdb_sstfilewriter_create(rdb.envOpt, rdb.dbOpts.cPtr),
-    sstPath: rdb.sstFilePath)
-
-  if session.writer.isNil:
-    return err((RdbBeCreateSstWriter, "Cannot create sst writer session"))
-  session.sstPath.rmFileIgnExpt
-
-  session.writer.rocksdb_sstfilewriter_open(
-    session.sstPath.cstring, cast[cstringArray](csError.addr))
-  if not csError.isNil:
-    session.destroy()
-    let info = $csError
-    if "no such file or directory" in info.toLowerAscii:
-      # Somebody might have killed the "tmp" directory?
-      raiseAssert info
-    return err((RdbBeOpenSstWriter, info))
-
-  ok session
-
-
-proc add(
-    session: var RdbPutSession;
-    key: openArray[byte];
-    val: openArray[byte];
-      ): Result[void,(KvtError,string)] =
-  ## Append a record to the SST file. Note that consecutive records must be
-  ## strictly increasing.
-  ##
-  ## This function is a wrapper around `rocksdb_sstfilewriter_add()` or
-  ## `rocksdb_sstfilewriter_put()` (stragely enough, there are two functions
-  ## with exactly the same impementation code.)
-  var csError: cstring
-
-  session.writer.rocksdb_sstfilewriter_add(
-    cast[cstring](unsafeAddr key[0]), csize_t(key.len),
-    cast[cstring](unsafeAddr val[0]), csize_t(val.len),
-    cast[cstringArray](csError.addr))
-  if not csError.isNil:
-    return err((RdbBeAddSstWriter, $csError))
-
-  session.nRecords.inc
-  ok()
-
-
-proc commit(
-    rdb: var RdbInst;
-    session: RdbPutSession;
-      ): Result[void,(KvtError,string)] =
-  ## Commit collected and cached data to the database. This function implies
-  ## `destroy()` if successful. Otherwise `destroy()` must be called
-  ## explicitely, e.g. after error analysis.
-  var csError: cstring
-
-  if 0 < session.nRecords:
-    session.writer.rocksdb_sstfilewriter_finish(cast[cstringArray](csError.addr))
-    if not csError.isNil:
-      return err((RdbBeFinishSstWriter, $csError))
-
-    var sstPath = session.sstPath.cstring
-    rdb.store.cPtr.rocksdb_ingest_external_file(
-      cast[cstringArray](sstPath.addr),
-      1, rdb.impOpt, cast[cstringArray](csError.addr))
-    if not csError.isNil:
-      return err((RdbBeIngestSstWriter, $csError))
-
-    when extraTraceMessages:
-      trace logTxt "finished sst", fileSize=session.sstPath.getFileSize
-
-  session.destroy()
-  ok()
-
+proc `$`(a: Blob): string =
+  a.toHex
+  
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
+proc begin*(rdb: var RdbInst) =
+  if rdb.session.isNil:
+    rdb.session = rdb.store.openWriteBatch()
+
+proc rollback*(rdb: var RdbInst) =
+  if not rdb.session.isClosed():
+    rdb.disposeSession()
+
+proc commit*(rdb: var RdbInst): Result[void,(KvtError,string)] =
+  if not rdb.session.isClosed():
+    defer: rdb.disposeSession()
+    rdb.store.write(rdb.session).isOkOr:
+      const errSym = RdbBeDriverWriteError
+      when extraTraceMessages:
+        trace logTxt "commit", error=errSym, info=error
+      return err((errSym,error))
+  ok()
+
 proc put*(
-    rdb: var RdbInst;
-    tab: Table[Blob,Blob];
-      ): Result[void,(KvtError,string)] =
-
-  var session = block:
-    let rc = rdb.begin()
-    if rc.isErr:
-      return err(rc.error)
-    rc.value
-
-  # Vertices with empty table values will be deleted
-  var delKey: HashSet[Blob]
-
-  # Compare `Blob`s as left aligned big endian numbers, right padded with zeros
-  proc cmpBlobs(a, b: Blob): int =
-    let minLen = min(a.len, b.len)
-    for n in 0 ..< minLen:
-      if a[n] != b[n]:
-        return a[n].cmp b[n]
-    if a.len < b.len:
-      return -1
-    if b.len < a.len:
-      return 1
-
-  for key in tab.keys.toSeq.sorted cmpBlobs:
-    let val = tab.getOrVoid key
-    if val.isValid:
-      let rc = session.add(key, val)
-      if rc.isErr:
-        session.destroy()
-        return err(rc.error)
+    rdb: RdbInst;
+    data: openArray[(Blob,Blob)];
+      ): Result[void,(Blob,KvtError,string)] =
+  let dsc = rdb.session
+  for (key,val) in data:
+    if val.len == 0:
+      dsc.delete(key, rdb.store.name).isOkOr:
+        const errSym = RdbBeDriverDelError
+        when extraTraceMessages:
+          trace logTxt "del", key, error=errSym, info=error
+        return err((key,errSym,error))
     else:
-      delKey.incl key
-
-  block:
-    let rc = rdb.commit session
-    if rc.isErr:
-      trace logTxt "commit error", error=rc.error[0], info=rc.error[1]
-      return err(rc.error)
-
-  # Delete vertices after successfully updating vertices with non-zero values.
-  for key in delKey:
-    let rc = rdb.store.delete key
-    if rc.isErr:
-      return err((RdbBeDriverDelError,rc.error))
-
+      dsc.put(key, val, rdb.store.name).isOkOr:
+        const errSym = RdbBeDriverPutError
+        when extraTraceMessages:
+          trace logTxt "put", key, error=errSym, info=error
+        return err((key,errSym,error))
   ok()
 
 # ------------------------------------------------------------------------------
