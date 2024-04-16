@@ -14,8 +14,10 @@ import
   std/tables,
   eth/common,
   results,
-  "../.."/[aristo, aristo/aristo_walk],
-  "../.."/[kvt, kvt/kvt_init/memory_only, kvt/kvt_walk],
+  ../../aristo as use_ari,
+  ../../aristo/aristo_walk,
+  ../../kvt as use_kvt,
+  ../../kvt/[kvt_init/memory_only, kvt_walk],
   ".."/[base, base/base_desc],
   ./aristo_db/[common_desc, handlers_aristo, handlers_kvt, handlers_trace]
 
@@ -183,10 +185,10 @@ proc baseMethods(
       ok(db.bless db.tracerSetup(flags)))
 
 # ------------------------------------------------------------------------------
-# Private  constructor helpers
+# Public constructor and helper
 # ------------------------------------------------------------------------------
 
-proc create(
+proc create*(
     dbType: CoreDbType;
     kdb: KvtDbRef;
     K: typedesc;
@@ -205,58 +207,20 @@ proc create(
   db.methods = db.baseMethods(A,K)
   db.bless
 
-proc init(
-    dbType: CoreDbType;
-    K: typedesc;
-    A: typedesc;
-    qlr: QidLayoutRef;
-      ): CoreDbRef =
-  dbType.create(KvtDbRef.init(K), K, AristoDbRef.init(A, qlr), A)
-
-proc init(
-    dbType: CoreDbType;
-    K: typedesc;
-    A: typedesc;
-      ): CoreDbRef =
-  dbType.create(KvtDbRef.init(K), K, AristoDbRef.init(A), A)
-
-# ------------------------------------------------------------------------------
-# Public constructor helpers
-# ------------------------------------------------------------------------------
-
-proc init*(
-    dbType: CoreDbType;
-    K: typedesc;
-    A: typedesc;
-    path: string;
-    qlr: QidLayoutRef;
-      ): CoreDbRef =
-  dbType.create(
-    KvtDbRef.init(K, path).expect "Kvt/RocksDB init() failed", K,
-    AristoDbRef.init(A, path, qlr).expect "Aristo/RocksDB init() failed", A)
-
-proc init*(
-    dbType: CoreDbType;
-    K: typedesc;
-    A: typedesc;
-    path: string;
-      ): CoreDbRef =
-  dbType.create(
-    KvtDbRef.init(K, path).expect "Kvt/RocksDB init() failed", K,
-    AristoDbRef.init(A, path).expect "Aristo/RocksDB init() failed", A)
-
-# ------------------------------------------------------------------------------
-# Public constructor
-# ------------------------------------------------------------------------------
-
 proc newAristoMemoryCoreDbRef*(qlr: QidLayoutRef): CoreDbRef =
-  AristoDbMemory.init(kvt.MemBackendRef, aristo.MemBackendRef, qlr)
+  AristoDbMemory.create(
+    KvtDbRef.init(use_kvt.MemBackendRef), use_ari.MemBackendRef,
+    AristoDbRef.init(use_ari.MemBackendRef, qlr), use_kvt.MemBackendRef)
 
 proc newAristoMemoryCoreDbRef*(): CoreDbRef =
-  AristoDbMemory.init(kvt.MemBackendRef, aristo.MemBackendRef)
+  AristoDbMemory.create(
+    KvtDbRef.init(use_kvt.MemBackendRef), use_ari.MemBackendRef,
+    AristoDbRef.init(use_ari.MemBackendRef), use_kvt.MemBackendRef)
 
 proc newAristoVoidCoreDbRef*(): CoreDbRef =
-  AristoDbVoid.init(kvt.VoidBackendRef, aristo.VoidBackendRef)
+  AristoDbVoid.create(
+    KvtDbRef.init(use_kvt.VoidBackendRef), use_ari.VoidBackendRef,
+    AristoDbRef.init(use_ari.VoidBackendRef), use_kvt.VoidBackendRef)
 
 # ------------------------------------------------------------------------------
 # Public helpers, e.g. for direct backend access
@@ -304,7 +268,7 @@ iterator aristoKvtPairsVoid*(dsc: CoreDxKvtRef): (Blob,Blob) {.rlpRaise.} =
     api = dsc.toAristoApi()
     p = api.forkTop(dsc.to(KvtDbRef)).valueOrApiError "aristoKvtPairs()"
   defer: discard api.forget(p)
-  for (k,v) in kvt.VoidBackendRef.walkPairs p:
+  for (k,v) in use_kvt.VoidBackendRef.walkPairs p:
     yield (k,v)
 
 iterator aristoKvtPairsMem*(dsc: CoreDxKvtRef): (Blob,Blob) {.rlpRaise.} =
@@ -312,7 +276,7 @@ iterator aristoKvtPairsMem*(dsc: CoreDxKvtRef): (Blob,Blob) {.rlpRaise.} =
     api = dsc.toAristoApi()
     p = api.forkTop(dsc.to(KvtDbRef)).valueOrApiError "aristoKvtPairs()"
   defer: discard api.forget(p)
-  for (k,v) in kvt.MemBackendRef.walkPairs p:
+  for (k,v) in use_kvt.MemBackendRef.walkPairs p:
     yield (k,v)
 
 iterator aristoMptPairs*(dsc: CoreDxMptRef): (Blob,Blob) {.noRaise.} =
@@ -324,12 +288,12 @@ iterator aristoMptPairs*(dsc: CoreDxMptRef): (Blob,Blob) {.noRaise.} =
 
 iterator aristoReplicateMem*(dsc: CoreDxMptRef): (Blob,Blob) {.rlpRaise.} =
   ## Instantiation for `MemBackendRef`
-  for k,v in aristoReplicate[aristo.MemBackendRef](dsc):
+  for k,v in aristoReplicate[use_ari.MemBackendRef](dsc):
     yield (k,v)
 
 iterator aristoReplicateVoid*(dsc: CoreDxMptRef): (Blob,Blob) {.rlpRaise.} =
   ## Instantiation for `VoidBackendRef`
-  for k,v in aristoReplicate[aristo.VoidBackendRef](dsc):
+  for k,v in aristoReplicate[use_ari.VoidBackendRef](dsc):
     yield (k,v)
 
 # ------------------------------------------------------------------------------
