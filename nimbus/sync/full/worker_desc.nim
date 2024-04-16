@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2021 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -13,6 +13,7 @@
 import
   eth/p2p,
   chronos,
+  ../../db/aristo/aristo_desc,
   ../sync_desc,
   ../misc/[best_pivot, block_queue, ticker]
 
@@ -40,6 +41,7 @@ type
 
     enableTicker*: bool             ## Advisary, extra level of gossip
     ticker*: TickerRef              ## Logger ticker
+    journal*: QidSchedRef           ## Journal access for logging (if any)
 
   FullBuddyRef* = BuddyRef[FullCtxData,FullBuddyData]
     ## Extended worker peer descriptor
