@@ -63,7 +63,7 @@ proc init*(
       debug logTxt "init failed", dataDir, openMax, error=errSym, info=error
     return err((errSym, error))
 
-  # Initialise Aristo family corner
+  # Initialise `Kvt` family
   rdb.store = baseDb.withColFamily(KvtFamily).valueOr:
     let errSym = RdbBeDriverInitError
     when extraTraceMessages:
@@ -71,25 +71,32 @@ proc init*(
     return err((errSym, error))
   ok()
 
+proc init*(
+    rdb: var RdbInst;
+    store: ColFamilyReadWrite;
+      ) =
+  ## Piggyback on other database
+  rdb.store = store # that's it
 
 proc destroy*(rdb: var RdbInst; flush: bool) =
   ## Destructor (no need to do anything if piggybacked)
-  rdb.store.db.close()
+  if 0 < rdb.basePath.len:
+    rdb.store.db.close()
 
-  if flush:
-    try:
-      rdb.dataDir.removeDir
+    if flush:
+      try:
+        rdb.dataDir.removeDir
 
-      # Remove the base folder if it is empty
-      block done:
-        for w in rdb.baseDir.walkDirRec:
-          # Ignore backup files
-          if 0 < w.len and w[^1] != '~':
-            break done
-        rdb.baseDir.removeDir
+        # Remove the base folder if it is empty
+        block done:
+          for w in rdb.baseDir.walkDirRec:
+            # Ignore backup files
+            if 0 < w.len and w[^1] != '~':
+              break done
+          rdb.baseDir.removeDir
 
-    except CatchableError:
-      discard
+      except CatchableError:
+        discard
 
 # ------------------------------------------------------------------------------
 # End

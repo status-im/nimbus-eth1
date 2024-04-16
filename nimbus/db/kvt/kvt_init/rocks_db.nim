@@ -138,6 +138,17 @@ proc closeFn(db: RdbBackendRef): CloseFn =
     proc(flush: bool) =
       db.rdb.destroy(flush)
 
+# --------------
+
+proc setup(db: RdbBackendRef) =
+  db.getKvpFn = getKvpFn db
+
+  db.putBegFn = putBegFn db
+  db.putKvpFn = putKvpFn db
+  db.putEndFn = putEndFn db
+
+  db.closeFn = closeFn db
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -152,13 +163,14 @@ proc rocksDbBackend*(path: string): Result[BackendRef,KvtError] =
       trace logTxt "constructor failed", error=error[0], info=error[1]
     return err(error[0])
 
-  db.getKvpFn = getKvpFn db
+  db.setup()
+  ok db
 
-  db.putBegFn = putBegFn db
-  db.putKvpFn = putKvpFn db
-  db.putEndFn = putEndFn db
-
-  db.closeFn = closeFn db
+proc rocksDbBackend*(store: ColFamilyReadWrite): Result[BackendRef,KvtError] =
+  let db = RdbBackendRef(
+    beKind: BackendRocksDB)
+  db.rdb.init(store)
+  db.setup()
   ok db
 
 proc dup*(db: RdbBackendRef): RdbBackendRef =
