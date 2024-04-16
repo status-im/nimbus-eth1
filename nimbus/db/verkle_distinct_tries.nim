@@ -23,6 +23,9 @@
 import
   std/[algorithm, sequtils, strutils, tables],
   eth/[common, trie/hexary],
+  "../../vendor/nim-eth-verkle/eth_verkle"/[
+    math
+  ],
   chronicles,
   "."/[core_db, storage_types],
   ./verkle/verkle_accounts
@@ -146,17 +149,25 @@ proc putAccountBytes*(trie: VerkleTrie, address: EthAddress, account: Account) =
 # template initStorageTrie*(db: DB, isPruning = true): StorageTrie =
 #   StorageTrie(db.phkPrune(isPruning))
 
-template createTrieKeyFromSlot*(slot: UInt256): auto =
-  # XXX: This is too expensive. Similar to `createRangeFromAddress`
-  # Converts a number to hex big-endian representation including
-  # prefix and leading zeros:
-  slot.toBytesBE
-  # Original py-evm code:
-  # pad32(int_to_big_endian(slot))
-  # morally equivalent to toByteRange_Unnecessary but with different types
+# template createTrieKeyFromSlot*(slot: UInt256): auto =
+#   # XXX: This is too expensive. Similar to `createRangeFromAddress`
+#   # Converts a number to hex big-endian representation including
+#   # prefix and leading zeros:
+#   slot.toBytesBE
+#   # Original py-evm code:
+#   # pad32(int_to_big_endian(slot))
+#   # morally equivalent to toByteRange_Unnecessary but with different types
+#                              |
+#                              ▼
+proc createTrieKeyFromSlot*(storageKey: openArray[byte]): (UInt256, byte) =
+  return getTreeKeyStorageSlotIndices(storageKey)
 
-proc getSlotBytes*(trie: StorageTrie, slotAsKey: openArray[byte]): seq[byte] =
-  CoreDbPhkRef(trie).get(slotAsKey)
+# proc getSlotBytes*(trie: StorageTrie, slotAsKey: openArray[byte]): seq[byte] =
+#   CoreDbPhkRef(trie).get(slotAsKey)
+#                              |
+#                              ▼
+proc getSlotBytes*(trie: VerkleTrie, address: EthAddress, slotAsKey: openArray[byte]): Bytes32 =
+  return VerkleTrieRef(trie).getStorage(address, slotAsKey)
 
 proc maybeGetSlotBytes*(trie: StorageTrie, slotAsKey: openArray[byte]): Option[Blob] {.gcsafe, raises: [RlpError].} =
   let phk = CoreDbPhkRef(trie)
@@ -165,8 +176,15 @@ proc maybeGetSlotBytes*(trie: StorageTrie, slotAsKey: openArray[byte]): Option[B
   else:
     some(phk.get(slotAsKey))
 
-proc putSlotBytes*(trie: var StorageTrie, slotAsKey: openArray[byte], value: openArray[byte]) =
-  CoreDbPhkRef(trie).put(slotAsKey, value)
+proc putSlot*(trie: VerkleTrie, address: EthAddress, key, value: var openArray[byte]) =
+  VerkleTrieRef(trie).updateStorage(address, key, value)
+
+# proc putSlotBytes*(trie: var StorageTrie, slotAsKey: openArray[byte], value: openArray[byte]) =
+#   CoreDbPhkRef(trie).put(slotAsKey, value)
+#                              |
+#                              ▼
+proc putSlotBytes*(trie: VerkleTrie, address: EthAddress, key, value: var openArray[byte]) =
+  VerkleTrieRef(trie).updateStorage(address, key, value)
 
 # INVALID FOR VERKLE ( as of April 2024 by spec )
 # proc delSlotBytes*(trie: var StorageTrie, slotAsKey: openArray[byte]) =
