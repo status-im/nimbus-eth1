@@ -225,7 +225,9 @@ proc getCode*(db: AccountStateDB, address: EthAddress): seq[byte] =
   triedb.get(contractHashKey(db.getCodeHash(address)).toOpenArray)
 
 proc contractCollision*(db: AccountStateDB, address: EthAddress): bool {.inline.} =
-  db.getNonce(address) != 0 or db.getCodeHash(address) != EMPTY_SHA3
+  db.getNonce(address) != 0 or
+    db.getCodeHash(address) != EMPTY_SHA3 or
+      db.getStorageRoot(address) != EMPTY_ROOT_HASH
 
 proc dumpAccount*(db: AccountStateDB, addressS: string): string =
   let address = addressS.parseAddress

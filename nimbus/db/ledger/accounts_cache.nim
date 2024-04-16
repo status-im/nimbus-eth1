@@ -413,7 +413,9 @@ proc contractCollision*(ac: AccountsCache, address: EthAddress): bool {.inline.}
   let acc = ac.getAccount(address, false)
   if acc.isNil:
     return
-  acc.account.nonce != 0 or acc.account.codeHash != EMPTY_SHA3
+  acc.account.nonce != 0 or
+    acc.account.codeHash != EMPTY_SHA3 or
+      acc.account.storageRoot != EMPTY_ROOT_HASH
 
 proc accountExists*(ac: AccountsCache, address: EthAddress): bool {.inline.} =
   let acc = ac.getAccount(address, false)

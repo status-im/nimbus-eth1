@@ -53,17 +53,6 @@ OK: 7/7 Fail: 0/7 Skip: 0/7
 + gas_usage.json                                                  OK
 ```
 OK: 3/3 Fail: 0/3 Skip: 0/3
-## eip4788_beacon_root
-```diff
-+ beacon_root_contract_calls.json                                 OK
-+ beacon_root_contract_timestamps.json                            OK
-+ beacon_root_equal_to_timestamp.json                             OK
-+ beacon_root_selfdestruct.json                                   OK
-+ calldata_lengths.json                                           OK
-+ invalid_beacon_root_calldata_value.json                         OK
-+ tx_to_beacon_root_contract.json                                 OK
-```
-OK: 7/7 Fail: 0/7 Skip: 0/7
 ## eip4844_blobs
 ```diff
 + blob_gas_subtraction_tx.json                                    OK
@@ -1375,7 +1364,6 @@ OK: 0/17 Fail: 0/17 Skip: 17/17
   randomStatetest1.json                                           Skip
 + randomStatetest10.json                                          OK
 + randomStatetest100.json                                         OK
-+ randomStatetest101.json                                         OK
 + randomStatetest102.json                                         OK
 + randomStatetest103.json                                         OK
 + randomStatetest104.json                                         OK
@@ -1575,7 +1563,6 @@ OK: 0/17 Fail: 0/17 Skip: 17/17
 + randomStatetest315.json                                         OK
 + randomStatetest316.json                                         OK
 + randomStatetest318.json                                         OK
-  randomStatetest32.json                                          Skip
 + randomStatetest320.json                                         OK
 + randomStatetest321.json                                         OK
 + randomStatetest322.json                                         OK
@@ -1645,7 +1632,6 @@ OK: 0/17 Fail: 0/17 Skip: 17/17
 + randomStatetest48.json                                          OK
 + randomStatetest49.json                                          OK
 + randomStatetest5.json                                           OK
-+ randomStatetest50.json                                          OK
 + randomStatetest51.json                                          OK
 + randomStatetest52.json                                          OK
 + randomStatetest53.json                                          OK
@@ -1662,7 +1648,6 @@ OK: 0/17 Fail: 0/17 Skip: 17/17
 + randomStatetest66.json                                          OK
 + randomStatetest67.json                                          OK
 + randomStatetest69.json                                          OK
-+ randomStatetest7.json                                           OK
 + randomStatetest72.json                                          OK
 + randomStatetest73.json                                          OK
 + randomStatetest74.json                                          OK
@@ -1686,10 +1671,9 @@ OK: 0/17 Fail: 0/17 Skip: 17/17
 + randomStatetest97.json                                          OK
 + randomStatetest98.json                                          OK
 ```
-OK: 310/314 Fail: 0/314 Skip: 4/314
+OK: 307/310 Fail: 0/310 Skip: 3/310
 ## stRandom2
 ```diff
-+ 201503110226PYTHON_DUP6.json                                    OK
 + randomStatetest.json                                            OK
 + randomStatetest384.json                                         OK
 + randomStatetest385.json                                         OK
@@ -1724,7 +1708,6 @@ OK: 310/314 Fail: 0/314 Skip: 4/314
 + randomStatetest420.json                                         OK
 + randomStatetest421.json                                         OK
 + randomStatetest422.json                                         OK
-+ randomStatetest423.json                                         OK
 + randomStatetest424.json                                         OK
 + randomStatetest425.json                                         OK
 + randomStatetest426.json                                         OK
@@ -1761,7 +1744,6 @@ OK: 310/314 Fail: 0/314 Skip: 4/314
 + randomStatetest465.json                                         OK
 + randomStatetest466.json                                         OK
 + randomStatetest467.json                                         OK
-+ randomStatetest468.json                                         OK
 + randomStatetest469.json                                         OK
 + randomStatetest470.json                                         OK
 + randomStatetest471.json                                         OK
@@ -1823,7 +1805,6 @@ OK: 310/314 Fail: 0/314 Skip: 4/314
 + randomStatetest535.json                                         OK
 + randomStatetest536.json                                         OK
 + randomStatetest537.json                                         OK
-+ randomStatetest538.json                                         OK
 + randomStatetest539.json                                         OK
 + randomStatetest541.json                                         OK
 + randomStatetest542.json                                         OK
@@ -1851,7 +1832,6 @@ OK: 310/314 Fail: 0/314 Skip: 4/314
 + randomStatetest569.json                                         OK
 + randomStatetest571.json                                         OK
 + randomStatetest572.json                                         OK
-+ randomStatetest573.json                                         OK
 + randomStatetest574.json                                         OK
 + randomStatetest575.json                                         OK
 + randomStatetest576.json                                         OK
@@ -1915,7 +1895,7 @@ OK: 310/314 Fail: 0/314 Skip: 4/314
 + randomStatetest649.json                                         OK
 + randomStatetest650.json                                         OK
 ```
-OK: 223/225 Fail: 0/225 Skip: 2/225
+OK: 218/220 Fail: 0/220 Skip: 2/220
 ## stRecursiveCreate
 ```diff
 + recursiveCreate.json                                            OK
@@ -2889,6 +2869,7 @@ OK: 36/36 Fail: 0/36 Skip: 0/36
 + ecpairing_bad_length_193.json                                   OK
 + ecpairing_empty_data.json                                       OK
 + ecpairing_empty_data_insufficient_gas.json                      OK
++ ecpairing_inputs.json                                           OK
 + ecpairing_one_point_fail.json                                   OK
 + ecpairing_one_point_insufficient_gas.json                       OK
 + ecpairing_one_point_not_in_subgroup.json                        OK
@@ -2919,7 +2900,7 @@ OK: 36/36 Fail: 0/36 Skip: 0/36
 + pointMulAdd.json                                                OK
 + pointMulAdd2.json                                               OK
 ```
-OK: 134/134 Fail: 0/134 Skip: 0/134
+OK: 135/135 Fail: 0/135 Skip: 0/135
 ## stZeroKnowledge2
 ```diff
 + ecadd_0-0_0-0_21000_0.json                                      OK
@@ -3152,4 +3133,4 @@ OK: 11/11 Fail: 0/11 Skip: 0/11
 OK: 1/1 Fail: 0/1 Skip: 0/1
 
 ---TOTAL---
-OK: 2719/2822 Fail: 0/2822 Skip: 103/2822
+OK: 2705/2807 Fail: 0/2807 Skip: 102/2807

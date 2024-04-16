@@ -19,7 +19,7 @@ newBlockchainTests
 + withdrawalsValidatorIndexBounds.json                            OK
 ```
 OK: 15/15 Fail: 0/15 Skip: 0/15
-## bcArrowGlacierToMerge
+## bcArrowGlacierToParis
 ```diff
 + difficultyFormula.json                                          OK
 + powToPosBlockRejection.json                                     OK
@@ -195,6 +195,8 @@ OK: 1/1 Fail: 0/1 Skip: 0/1
 OK: 9/9 Fail: 0/9 Skip: 0/9
 ## bcRandomBlockhashTest
 ```diff
++ 201503110226PYTHON_DUP6BC.json                                  OK
++ randomStatetest101BC.json                                       OK
 + randomStatetest109BC.json                                       OK
 + randomStatetest113BC.json                                       OK
 + randomStatetest127BC.json                                       OK
@@ -230,6 +232,7 @@ OK: 9/9 Fail: 0/9 Skip: 0/9
 + randomStatetest314BC.json                                       OK
 + randomStatetest317BC.json                                       OK
 + randomStatetest319BC.json                                       OK
++ randomStatetest32BC.json                                        OK
 + randomStatetest330BC.json                                       OK
 + randomStatetest331BC.json                                       OK
 + randomStatetest344BC.json                                       OK
@@ -243,6 +246,7 @@ OK: 9/9 Fail: 0/9 Skip: 0/9
 + randomStatetest400BC.json                                       OK
 + randomStatetest403BC.json                                       OK
 + randomStatetest40BC.json                                        OK
++ randomStatetest423BC.json                                       OK
 + randomStatetest427BC.json                                       OK
 + randomStatetest431BC.json                                       OK
 + randomStatetest432BC.json                                       OK
@@ -251,14 +255,17 @@ OK: 9/9 Fail: 0/9 Skip: 0/9
 + randomStatetest453BC.json                                       OK
 + randomStatetest459BC.json                                       OK
 + randomStatetest463BC.json                                       OK
++ randomStatetest468BC.json                                       OK
 + randomStatetest479BC.json                                       OK
 + randomStatetest486BC.json                                       OK
 + randomStatetest490BC.json                                       OK
 + randomStatetest492BC.json                                       OK
++ randomStatetest50BC.json                                        OK
 + randomStatetest515BC.json                                       OK
 + randomStatetest522BC.json                                       OK
 + randomStatetest529BC.json                                       OK
 + randomStatetest530BC.json                                       OK
++ randomStatetest538BC.json                                       OK
 + randomStatetest540BC.json                                       OK
 + randomStatetest551BC.json                                       OK
 + randomStatetest557BC.json                                       OK
@@ -266,6 +273,7 @@ OK: 9/9 Fail: 0/9 Skip: 0/9
 + randomStatetest568BC.json                                       OK
 + randomStatetest56BC.json                                        OK
 + randomStatetest570BC.json                                       OK
++ randomStatetest573BC.json                                       OK
 + randomStatetest590BC.json                                       OK
 + randomStatetest591BC.json                                       OK
 + randomStatetest593BC.json                                       OK
@@ -286,13 +294,14 @@ OK: 9/9 Fail: 0/9 Skip: 0/9
 + randomStatetest71BC.json                                        OK
 + randomStatetest76BC.json                                        OK
 + randomStatetest79BC.json                                        OK
++ randomStatetest7BC.json                                         OK
 + randomStatetest86BC.json                                        OK
 + randomStatetest8BC.json                                         OK
 + randomStatetest91BC.json                                        OK
 + randomStatetest93BC.json                                        OK
 + randomStatetest99BC.json                                        OK
 ```
-OK: 96/96 Fail: 0/96 Skip: 0/96
+OK: 105/105 Fail: 0/105 Skip: 0/105
 ## bcStateTests
 ```diff
 + BLOCKHASH_Bounds.json                                           OK
@@ -510,6 +519,11 @@ OK: 17/17 Fail: 0/17 Skip: 0/17
 + walletReorganizeOwners.json                                     OK
 ```
 OK: 5/5 Fail: 0/5 Skip: 0/5
+## create2
+```diff
++ recreate.json                                                   OK
+```
+OK: 1/1 Fail: 0/1 Skip: 0/1
 ## eip1153_tstore
 ```diff
 + contract_creation.json                                          OK
@@ -660,6 +674,7 @@ OK: 5/5 Fail: 0/5 Skip: 0/5
 + delegatecall_from_pre_existing_contract_to_new_contract.json    OK
 + dynamic_create2_selfdestruct_collision.json                     OK
 + dynamic_create2_selfdestruct_collision_multi_tx.json            OK
++ dynamic_create2_selfdestruct_collision_two_different_transactio OK
 + recreate_self_destructed_contract_different_txs.json            OK
 + reentrancy_selfdestruct_revert.json                             OK
 + self_destructing_initcode.json                                  OK
@@ -669,7 +684,7 @@ OK: 5/5 Fail: 0/5 Skip: 0/5
 + selfdestruct_not_created_in_same_tx_with_revert.json            OK
 + selfdestruct_pre_existing.json                                  OK
 ```
-OK: 13/13 Fail: 0/13 Skip: 0/13
+OK: 14/14 Fail: 0/14 Skip: 0/14
 ## eip7516_blobgasfee
 ```diff
 + blobbasefee_before_fork.json                                    OK
@@ -680,10 +695,11 @@ OK: 13/13 Fail: 0/13 Skip: 0/13
 OK: 4/4 Fail: 0/4 Skip: 0/4
 ## opcodes
 ```diff
++ double_kill.json                                                OK
 + dup.json                                                        OK
 + value_transfer_gas_calculation.json                             OK
 ```
-OK: 2/2 Fail: 0/2 Skip: 0/2
+OK: 3/3 Fail: 0/3 Skip: 0/3
 ## security
 ```diff
 + tx_selfdestruct_balance_bug.json                                OK
@@ -1941,7 +1957,6 @@ OK: 0/17 Fail: 0/17 Skip: 17/17
   randomStatetest1.json                                           Skip
 + randomStatetest10.json                                          OK
 + randomStatetest100.json                                         OK
-+ randomStatetest101.json                                         OK
 + randomStatetest102.json                                         OK
 + randomStatetest103.json                                         OK
 + randomStatetest104.json                                         OK
@@ -2141,7 +2156,6 @@ OK: 0/17 Fail: 0/17 Skip: 17/17
 + randomStatetest315.json                                         OK
 + randomStatetest316.json                                         OK
 + randomStatetest318.json                                         OK
-  randomStatetest32.json                                          Skip
 + randomStatetest320.json                                         OK
 + randomStatetest321.json                                         OK
 + randomStatetest322.json                                         OK
@@ -2211,7 +2225,6 @@ OK: 0/17 Fail: 0/17 Skip: 17/17
 + randomStatetest48.json                                          OK
 + randomStatetest49.json                                          OK
 + randomStatetest5.json                                           OK
-+ randomStatetest50.json                                          OK
 + randomStatetest51.json                                          OK
 + randomStatetest52.json                                          OK
 + randomStatetest53.json                                          OK
@@ -2228,7 +2241,6 @@ OK: 0/17 Fail: 0/17 Skip: 17/17
 + randomStatetest66.json                                          OK
 + randomStatetest67.json                                          OK
 + randomStatetest69.json                                          OK
-+ randomStatetest7.json                                           OK
 + randomStatetest72.json                                          OK
 + randomStatetest73.json                                          OK
 + randomStatetest74.json                                          OK
@@ -2252,10 +2264,9 @@ OK: 0/17 Fail: 0/17 Skip: 17/17
 + randomStatetest97.json                                          OK
 + randomStatetest98.json                                          OK
 ```
-OK: 310/314 Fail: 0/314 Skip: 4/314
+OK: 307/310 Fail: 0/310 Skip: 3/310
 ## stRandom2
 ```diff
-+ 201503110226PYTHON_DUP6.json                                    OK
 + randomStatetest.json                                            OK
 + randomStatetest384.json                                         OK
 + randomStatetest385.json                                         OK
@@ -2290,7 +2301,6 @@ OK: 310/314 Fail: 0/314 Skip: 4/314
 + randomStatetest420.json                                         OK
 + randomStatetest421.json                                         OK
 + randomStatetest422.json                                         OK
-+ randomStatetest423.json                                         OK
 + randomStatetest424.json                                         OK
 + randomStatetest425.json                                         OK
 + randomStatetest426.json                                         OK
@@ -2327,7 +2337,6 @@ OK: 310/314 Fail: 0/314 Skip: 4/314
 + randomStatetest465.json                                         OK
 + randomStatetest466.json                                         OK
 + randomStatetest467.json                                         OK
-+ randomStatetest468.json                                         OK
 + randomStatetest469.json                                         OK
 + randomStatetest470.json                                         OK
 + randomStatetest471.json                                         OK
@@ -2389,7 +2398,6 @@ OK: 310/314 Fail: 0/314 Skip: 4/314
 + randomStatetest535.json                                         OK
 + randomStatetest536.json                                         OK
 + randomStatetest537.json                                         OK
-+ randomStatetest538.json                                         OK
 + randomStatetest539.json                                         OK
 + randomStatetest541.json                                         OK
 + randomStatetest542.json                                         OK
@@ -2417,7 +2425,6 @@ OK: 310/314 Fail: 0/314 Skip: 4/314
 + randomStatetest569.json                                         OK
 + randomStatetest571.json                                         OK
 + randomStatetest572.json                                         OK
-+ randomStatetest573.json                                         OK
 + randomStatetest574.json                                         OK
 + randomStatetest575.json                                         OK
 + randomStatetest576.json                                         OK
@@ -2481,7 +2488,7 @@ OK: 310/314 Fail: 0/314 Skip: 4/314
 + randomStatetest649.json                                         OK
 + randomStatetest650.json                                         OK
 ```
-OK: 223/225 Fail: 0/225 Skip: 2/225
+OK: 218/220 Fail: 0/220 Skip: 2/220
 ## stRecursiveCreate
 ```diff
 + recursiveCreate.json                                            OK
@@ -3455,6 +3462,7 @@ OK: 36/36 Fail: 0/36 Skip: 0/36
 + ecpairing_bad_length_193.json                                   OK
 + ecpairing_empty_data.json                                       OK
 + ecpairing_empty_data_insufficient_gas.json                      OK
++ ecpairing_inputs.json                                           OK
 + ecpairing_one_point_fail.json                                   OK
 + ecpairing_one_point_insufficient_gas.json                       OK
 + ecpairing_one_point_not_in_subgroup.json                        OK
@@ -3485,7 +3493,7 @@ OK: 36/36 Fail: 0/36 Skip: 0/36
 + pointMulAdd.json                                                OK
 + pointMulAdd2.json                                               OK
 ```
-OK: 134/134 Fail: 0/134 Skip: 0/134
+OK: 135/135 Fail: 0/135 Skip: 0/135
 ## stZeroKnowledge2
 ```diff
 + ecadd_0-0_0-0_21000_0.json                                      OK
@@ -3718,4 +3726,4 @@ OK: 11/11 Fail: 0/11 Skip: 0/11
 OK: 1/1 Fail: 0/1 Skip: 0/1
 
 ---TOTAL---
-OK: 3162/3268 Fail: 0/3268 Skip: 106/3268
+OK: 3167/3272 Fail: 0/3272 Skip: 105/3272

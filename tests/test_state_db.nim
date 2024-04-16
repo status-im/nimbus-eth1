@@ -283,5 +283,27 @@ proc stateDBMain*() =
       check ac.vts(0xcc, 7, 88) == false
       check ac.vts(0xdd, 2, 66) == false
 
+    test "accounts cache contractCollision":
+      # use previous hash
+      var ac = init(AccountsCache, acDB, emptyRlpHash, true)
+      let addr2 = initAddr(2)
+      check ac.contractCollision(addr2) == false
+
+      ac.setStorage(addr2, 1.u256, 1.u256)
+      check ac.contractCollision(addr2) == false
+
+      ac.persist()
+      check ac.contractCollision(addr2) == true
+
+      let addr3 = initAddr(3)
+      check ac.contractCollision(addr3) == false
+      ac.setCode(addr3, @[0xaa.byte, 0xbb])
+      check ac.contractCollision(addr3) == true
+
+      let addr4 = initAddr(4)
+      check ac.contractCollision(addr4) == false
+      ac.setNonce(addr4, 1)
+      check ac.contractCollision(addr4) == true
+      
 when isMainModule:
   stateDBMain()
