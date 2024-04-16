@@ -224,7 +224,7 @@ proc getCode*(db: AccountStateDB, address: EthAddress): seq[byte] =
   let triedb = db.kvt
   triedb.get(contractHashKey(db.getCodeHash(address)).toOpenArray)
 
-proc hasCodeOrNonce*(db: AccountStateDB, address: EthAddress): bool {.inline.} =
+proc contractCollision*(db: AccountStateDB, address: EthAddress): bool {.inline.} =
   db.getNonce(address) != 0 or db.getCodeHash(address) != EMPTY_SHA3
 
 proc dumpAccount*(db: AccountStateDB, addressS: string): string =

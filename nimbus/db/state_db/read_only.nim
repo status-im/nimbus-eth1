@@ -24,7 +24,7 @@ proc getStorageRoot*(db: ReadOnlyStateDB, address: EthAddress): Hash256 {.borrow
 proc getStorage*(db: ReadOnlyStateDB, address: EthAddress, slot: UInt256): (UInt256, bool) {.borrow.}
 proc getNonce*(db: ReadOnlyStateDB, address: EthAddress): AccountNonce {.borrow.}
 proc getCode*(db: ReadOnlyStateDB, address: EthAddress): seq[byte] {.borrow.}
-proc hasCodeOrNonce*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
+proc contractCollision*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
 proc accountExists*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
 proc isDeadAccount*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
 proc isEmptyAccount*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}

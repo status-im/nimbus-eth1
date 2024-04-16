@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -89,7 +89,7 @@ proc stateDBMain*() =
 
       check ac.isDeadAccount(addr1) == true
       check ac.accountExists(addr1) == false
-      check ac.hasCodeOrNonce(addr1) == false
+      check ac.contractCollision(addr1) == false
 
       ac.setBalance(addr1, 1000.u256)
       check ac.getBalance(addr1) == 1000.u256
@@ -110,7 +110,7 @@ proc stateDBMain*() =
       check ac.getStorage(addr1, 1.u256) == 10.u256
       check ac.getCommittedStorage(addr1, 1.u256) == 0.u256
 
-      check ac.hasCodeOrNonce(addr1) == true
+      check ac.contractCollision(addr1) == true
       check ac.getCodeSize(addr1) == code.len
 
       ac.persist()
@@ -135,7 +135,7 @@ proc stateDBMain*() =
       check ac.getCodeSize(addr2) == 0
       check ac.getCommittedStorage(addr2, 1.u256) == 0.u256
       check ac.getStorage(addr2, 1.u256) == 0.u256
-      check ac.hasCodeOrNonce(addr2) == false
+      check ac.contractCollision(addr2) == false
       check ac.accountExists(addr2) == false
       check ac.isDeadAccount(addr2) == true
 

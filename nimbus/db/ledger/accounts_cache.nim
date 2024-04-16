@@ -409,7 +409,7 @@ proc getStorage*(ac: AccountsCache, address: EthAddress, slot: UInt256): UInt256
     return
   acc.storageValue(slot, ac.db)
 
-proc hasCodeOrNonce*(ac: AccountsCache, address: EthAddress): bool {.inline.} =
+proc contractCollision*(ac: AccountsCache, address: EthAddress): bool {.inline.} =
   let acc = ac.getAccount(address, false)
   if acc.isNil:
     return
@@ -751,7 +751,7 @@ proc getStorage*(db: ReadOnlyStateDB, address: EthAddress, slot: UInt256): UInt2
 proc getNonce*(db: ReadOnlyStateDB, address: EthAddress): AccountNonce {.borrow.}
 proc getCode*(db: ReadOnlyStateDB, address: EthAddress): seq[byte] {.borrow.}
 proc getCodeSize*(db: ReadOnlyStateDB, address: EthAddress): int {.borrow.}
-proc hasCodeOrNonce*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
+proc contractCollision*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
 proc accountExists*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
 proc isDeadAccount*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
 proc isEmptyAccount*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}

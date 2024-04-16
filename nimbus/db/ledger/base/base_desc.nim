@@ -73,7 +73,7 @@ type
   GetStorageRootFn* = proc(eAddr: EthAddress): Hash256 {.noRaise.}
   GetTransientStorageFn* =
     proc(eAddr: EthAddress, slot: UInt256): UInt256 {.noRaise.}
-  HasCodeOrNonceFn* = proc(eAddr: EthAddress): bool {.noRaise.}
+  ContractCollisionFn* = proc(eAddr: EthAddress): bool {.noRaise.}
   InAccessListFn* = proc(eAddr: EthAddress): bool {.noRaise.}
   InAccessList2Fn* = proc(eAddr: EthAddress, slot: UInt256): bool {.noRaise.}
   IncNonceFn* = proc(eAddr: EthAddress) {.noRaise.}
@@ -122,7 +122,7 @@ type
     getStorageFn*: GetStorageFn
     getStorageRootFn*: GetStorageRootFn
     getTransientStorageFn*: GetTransientStorageFn
-    hasCodeOrNonceFn*: HasCodeOrNonceFn
+    contractCollisionFn*: ContractCollisionFn
     inAccessListFn*: InAccessListFn
     inAccessList2Fn*: InAccessList2Fn
     incNonceFn*: IncNonceFn

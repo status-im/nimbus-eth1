@@ -45,7 +45,7 @@ type
     LdgGetStorageFn            = "getStorage"
     LdgGetStorageRootFn        = "getStorageRoot"
     LdgGetTransientStorageFn   = "getTransientStorage"
-    LdgHasCodeOrNonceFn        = "hasCodeOrNonce"
+    LdgContractCollisionFn     = "contractCollision"
     LdgInAccessListFn          = "inAccessList"
     LdgIncNonceFn              = "incNonce"
     LdgIsDeadAccountFn         = "isDeadAccount"

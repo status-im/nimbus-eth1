@@ -147,9 +147,9 @@ proc beforeExecCreate(c: Computation): bool
 
   c.snapshot()
 
-  if c.vmState.readOnlyStateDB().hasCodeOrNonce(c.msg.contractAddress):
-    # let blurb = c.msg.contractAddress.toHex -- notused
-    c.setError("Address collision when creating contract address={blurb}", true)
+  if c.vmState.readOnlyStateDB().contractCollision(c.msg.contractAddress):
+    let blurb = c.msg.contractAddress.toHex
+    c.setError("Address collision when creating contract address=" & blurb, true)
     c.rollback()
     return true
 

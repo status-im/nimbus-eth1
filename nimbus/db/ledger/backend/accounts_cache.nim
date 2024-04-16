@@ -105,8 +105,8 @@ proc ledgerMethods(lc: impl.AccountsCache): LedgerFns =
     getTransientStorageFn: proc(eAddr: EthAddress, slot: UInt256): UInt256 =
       lc.getTransientStorage(eAddr, slot),
 
-    hasCodeOrNonceFn: proc(eAddr: EthAddress): bool =
-      lc.hasCodeOrNonce(eAddr),
+    contractCollisionFn: proc(eAddr: EthAddress): bool =
+      lc.contractCollision(eAddr),
 
     inAccessListFn: proc(eAddr: EthAddress): bool =
       lc.inAccessList(eAddr),

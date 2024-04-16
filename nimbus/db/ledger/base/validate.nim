@@ -41,7 +41,7 @@ proc validate*(ldg: LedgerRef) =
   doAssert not ldg.methods.getStorageFn.isNil
   doAssert not ldg.methods.getStorageRootFn.isNil
   doAssert not ldg.methods.getTransientStorageFn.isNil
-  doAssert not ldg.methods.hasCodeOrNonceFn.isNil
+  doAssert not ldg.methods.contractCollisionFn.isNil
   doAssert not ldg.methods.inAccessListFn.isNil
   doAssert not ldg.methods.inAccessList2Fn.isNil
   doAssert not ldg.methods.incNonceFn.isNil

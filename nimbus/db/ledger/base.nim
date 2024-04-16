@@ -232,9 +232,9 @@ proc getTransientStorage*(
   result = ldg.methods.getTransientStorageFn(eAddr, slot)
   ldg.ifTrackApi: debug apiTxt, api, elapsed, eAddr, slot, result
 
-proc hasCodeOrNonce*(ldg: LedgerRef, eAddr: EthAddress): bool =
-  ldg.beginTrackApi LdgHasCodeOrNonceFn
-  result = ldg.methods.hasCodeOrNonceFn eAddr
+proc contractCollision*(ldg: LedgerRef, eAddr: EthAddress): bool =
+  ldg.beginTrackApi LdgContractCollisionFn
+  result = ldg.methods.contractCollisionFn eAddr
   ldg.ifTrackApi: debug apiTxt, api, elapsed, eAddr, result
 
 proc inAccessList*(ldg: LedgerRef, eAddr: EthAddress): bool =
@@ -383,7 +383,7 @@ proc getStorage*(db: ReadOnlyStateDB, eAddr: EthAddress, slot: UInt256): UInt256
 proc getNonce*(db: ReadOnlyStateDB, eAddr: EthAddress): AccountNonce {.borrow.}
 proc getCode*(db: ReadOnlyStateDB, eAddr: EthAddress): seq[byte] {.borrow.}
 proc getCodeSize*(db: ReadOnlyStateDB, eAddr: EthAddress): int {.borrow.}
-proc hasCodeOrNonce*(db: ReadOnlyStateDB, eAddr: EthAddress): bool {.borrow.}
+proc contractCollision*(db: ReadOnlyStateDB, eAddr: EthAddress): bool {.borrow.}
 proc accountExists*(db: ReadOnlyStateDB, eAddr: EthAddress): bool {.borrow.}
 proc isDeadAccount*(db: ReadOnlyStateDB, eAddr: EthAddress): bool {.borrow.}
 proc isEmptyAccount*(db: ReadOnlyStateDB, eAddr: EthAddress): bool {.borrow.}

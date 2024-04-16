@@ -25,7 +25,7 @@ export
   getStorage,
   getStorageRoot,
   getTrie,
-  hasCodeOrNonce,
+  contractCollision,
   isDeadAccount,
   isEmptyAccount,
   newAccountStateDB,
