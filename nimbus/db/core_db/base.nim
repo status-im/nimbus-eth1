@@ -16,7 +16,7 @@ import
   eth/common,
   results,
   "../.."/[constants, errors],
-  ./base/[api_new_desc, api_tracking, base_desc]
+  ./base/[api_tracking, base_desc]
 
 from ../aristo
   import EmptyBlob, PayloadRef, isValid
@@ -68,10 +68,11 @@ const
   CoreDbEnableApiProfiling* = EnableApiTracking and EnableApiProfiling
 
 when ProvideLegacyAPI:
-  import
-    ./base/api_legacy_desc
+  type
+    TxWrapperApiError* = object of CoreDbApiError
+      ## For re-routing exception on tx/action template
   export
-    api_legacy_desc
+    CoreDbKvtRef, CoreDbMptRef, CoreDbPhkRef, CoreDbTxRef, CoreDbCaptRef
 
 when AutoValidateDescriptors:
   import ./base/validate
@@ -218,7 +219,10 @@ proc bless*(db: CoreDbRef; kvt: CoreDxKvtRef): CoreDxKvtRef =
     kvt.validate
   kvt
 
-proc bless*[T: CoreDxTrieRelated | CoreDbKvtBackendRef | CoreDbMptBackendRef](
+proc bless*[T: CoreDxKvtRef |
+               CoreDbCtxRef | CoreDxMptRef | CoreDxPhkRef | CoreDxAccRef |
+               CoreDxTxRef  | CoreDxCaptRef |
+               CoreDbKvtBackendRef | CoreDbMptBackendRef](
     db: CoreDbRef;
     dsc: T;
       ): auto =
@@ -283,7 +287,13 @@ proc level*(db: CoreDbRef): int =
   result = db.methods.levelFn()
   db.ifTrackNewApi: debug newApiTxt, api, elapsed, result
 
-proc parent*(cld: CoreDxChldRefs): CoreDbRef =
+proc parent*[T: CoreDxKvtRef |
+                CoreDbTrieRef |
+                CoreDbCtxRef | CoreDxMptRef | CoreDxPhkRef | CoreDxAccRef |
+                CoreDxTxRef |
+                CoreDxCaptRef |
+                CoreDbErrorRef](
+    cld: T): CoreDbRef =
   ## Getter, common method for all sub-modules
   ##
   result = cld.parent
@@ -653,7 +663,8 @@ proc toPhk*(mpt: CoreDxMptRef): CoreDxPhkRef =
 # Public common methods for all hexary trie databases (`mpt`, `phk`, or `acc`)
 # ------------------------------------------------------------------------------
 
-proc isPruning*(dsc: CoreDxTrieRefs): bool =
+proc isPruning*[T: CoreDbCtxRef | CoreDxMptRef | CoreDxPhkRef | CoreDxAccRef](
+    dsc: T): bool =
   ## Getter
   ##
   dsc.setTrackNewApi AnyIsPruningFn
@@ -908,7 +919,7 @@ proc newTransaction*(db: CoreDbRef): CoreDbRc[CoreDxTxRef] =
     debug newApiTxt, api, elapsed, newLevel=db.methods.levelFn(), result
 
 proc level*(tx: CoreDxTxRef): int =
-  ## Print positive argument `tx` transaction level
+  ## Print positive transaction level for argument `tx`
   ##
   tx.setTrackNewApi TxLevelFn
   result = tx.methods.levelFn()

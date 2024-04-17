@@ -36,6 +36,12 @@ const
   CoreDbPersistentTypes* = {LegacyDbPersistent, AristoDbRocks}
 
 type
+  CoreDbKvtRef*  = distinct CoreDxKvtRef  # Legacy descriptor
+  CoreDbMptRef*  = distinct CoreDxMptRef  # Legacy descriptor
+  CoreDbPhkRef*  = distinct CoreDxPhkRef  # Legacy descriptor
+  CoreDbTxRef*   = distinct CoreDxTxRef   # Legacy descriptor
+  CoreDbCaptRef* = distinct CoreDxCaptRef # Legacy descriptor
+
   CoreDbProfListRef* = AristoDbProfListRef
     ## Borrowed from `aristo_profile`, only used in profiling mode
 

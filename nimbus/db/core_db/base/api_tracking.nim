@@ -16,11 +16,17 @@ import
   results,
   stew/byteutils,
   ../../aristo/aristo_profile,
-  "."/[api_new_desc, api_legacy_desc, base_desc]
+  ./base_desc
 
 type
-  CoreDbApiTrackRef* = CoreDbChldRefs | CoreDbRef
-  CoreDxApiTrackRef* = CoreDxChldRefs | CoreDbRef
+  CoreDbApiTrackRef* =
+    CoreDbRef | CoreDbKvtRef | CoreDbMptRef | CoreDbPhkRef |
+    CoreDbTxRef | CoreDbCaptRef
+
+  CoreDxApiTrackRef* =
+    CoreDbRef | CoreDxKvtRef | CoreDbTrieRef |
+    CoreDbCtxRef | CoreDxMptRef | CoreDxPhkRef | CoreDxAccRef |
+    CoreDxTxRef | CoreDxCaptRef | CoreDbErrorRef
 
   CoreDbFnInx* = enum
     ## Profiling table index
