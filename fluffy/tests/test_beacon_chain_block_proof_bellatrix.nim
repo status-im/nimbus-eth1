@@ -16,7 +16,7 @@ import
   beacon_chain /../ tests/testblockutil,
   # Mock helpers
   beacon_chain /../ tests/mocking/mock_genesis,
-  ../network/history/experimental/beacon_chain_block_proof
+  ../network/history/beacon_chain_block_proof_bellatrix
 
 # Test suite for the proofs:
 # - HistoricalRootsProof
@@ -37,7 +37,7 @@ import
 # TODO: Add more blocks to reach 1+ historical roots, to make sure that indexing
 # is properly tested.
 
-suite "Beacon Chain Block Proofs":
+suite "Beacon Chain Block Proofs - Bellatrix":
   let
     cfg = block:
       var res = defaultRuntimeConfig

@@ -16,7 +16,7 @@
 # The usage of this PoC can be seen in
 # ./fluffy/tests/test_beacon_chain_block_proof_capella.nim
 #
-# TODO: Fit both beacon_chain_block_proof.nim and
+# TODO: Fit both beacon_chain_block_proof_bellatrix.nim and
 # beacon_chain_block_proof_capella.nim better together and add fork selection
 # on top of it.
 #

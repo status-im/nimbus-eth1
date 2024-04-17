@@ -18,7 +18,7 @@ import
   ../../network_metadata,
   ../../../nimbus/[constants, db/core_db],
   ../wire/[portal_protocol, portal_stream, portal_protocol_config],
-  "."/[history_content, accumulator]
+  "."/[history_content, accumulator, beacon_chain_historical_roots]
 
 logScope:
   topics = "portal_hist"
@@ -56,6 +56,7 @@ type
     contentDB*: ContentDB
     contentQueue*: AsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])]
     accumulator*: FinishedAccumulator
+    historicalRoots*: HistoricalRoots
     processContentLoop: Future[void]
     statusLogLoop: Future[void]
 
@@ -699,6 +700,7 @@ proc new*(
     contentDB: ContentDB,
     streamManager: StreamManager,
     accumulator: FinishedAccumulator,
+    historicalRoots: HistoricalRoots = loadHistoricalRoots(),
     bootstrapRecords: openArray[Record] = [],
     portalConfig: PortalProtocolConfig = defaultPortalProtocolConfig,
 ): T =
@@ -725,6 +727,7 @@ proc new*(
     contentDB: contentDB,
     contentQueue: contentQueue,
     accumulator: accumulator,
+    historicalRoots: historicalRoots,
   )
 
 proc validateContent(
