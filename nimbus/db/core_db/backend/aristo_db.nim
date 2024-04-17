@@ -48,8 +48,6 @@ type
     ## Sub-handle for tracer
     parent: AristoCoreDbRef
 
-  AristoCoreDbBE = ref object of CoreDbBackendRef
-
 proc newAristoVoidCoreDbRef*(): CoreDbRef {.noRaise.}
 
 # ------------------------------------------------------------------------------
@@ -140,9 +138,6 @@ proc baseMethods(
 
 
   CoreDbBaseFns(
-    backendFn: proc(): CoreDbBackendRef =
-      db.bless(AristoCoreDbBE()),
-
     destroyFn: proc(flush: bool) =
       db.adbBase.destroy(flush)
       db.kdbBase.destroy(flush),
@@ -240,7 +235,7 @@ func toAristoApi*(kvt: CoreDxKvtRef): KvtApiRef =
 
 func toAristoApi*(mpt: CoreDxMptRef): AristoApiRef =
   if mpt.parent.isAristo:
-    return AristoCoreDbRef(mpt.parent).adbBase.api
+    return mpt.to(AristoApiRef)
 
 func toAristo*(kBe: CoreDbKvtBackendRef): KvtDbRef =
   if not kBe.isNil and kBe.parent.isAristo:
@@ -249,10 +244,6 @@ func toAristo*(kBe: CoreDbKvtBackendRef): KvtDbRef =
 func toAristo*(mBe: CoreDbMptBackendRef): AristoDbRef =
   if not mBe.isNil and mBe.parent.isAristo:
     return mBe.AristoCoreDbMptBE.adb
-
-func toAristo*(be: CoreDbAccBackendRef): AristoDbRef =
-  if be.parent.isAristo:
-    return be.AristoCoreDbAccBE.adb
 
 # ------------------------------------------------------------------------------
 # Public aristo iterators
@@ -281,7 +272,7 @@ iterator aristoKvtPairsMem*(dsc: CoreDxKvtRef): (Blob,Blob) {.rlpRaise.} =
 
 iterator aristoMptPairs*(dsc: CoreDxMptRef): (Blob,Blob) {.noRaise.} =
   let
-    api = dsc.toAristoApi()
+    api = dsc.to(AristoApiRef)
     mpt = dsc.to(AristoDbRef)
   for (k,v) in mpt.rightPairs LeafTie(root: dsc.rootID):
     yield (api.pathAsBlob(k.path), api.serialise(mpt, v).valueOr(EmptyBlob))

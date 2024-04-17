@@ -151,7 +151,7 @@ proc flushDbs(db: TestDbs) =
     for n in 0 ..< nTestDbInstances:
       if db.cdb[n].isNil or db.cdb[n].dbType != LegacyDbPersistent:
         break
-      db.cdb[n].backend.toRocksStoreRef.close()
+      db.cdb[n].newKvt.backend.toRocksStoreRef.close()
     db.baseDir.flushDbDir(db.subDir)
 
 proc testDbs(
@@ -323,7 +323,7 @@ proc inspectionRunner(
       memBase = SnapDbRef.init(newCoreDbRef LegacyDbMemory)
       dbSlot = proc(n: int): SnapDbRef =
         if 2+n < nTestDbInstances and
-           not db.cdb[2+n].backend.toRocksStoreRef.isNil:
+           not db.cdb[2+n].newKvt.backend.toRocksStoreRef.isNil:
           return SnapDbRef.init(db.cdb[2+n])
 
     test &"{singleAcc} for in-memory-db":
@@ -414,7 +414,7 @@ proc snapRunner(noisy = true; specs: SnapSyncSpecs) {.used.} =
     #      dsc[1].chn.db.toLegacyBackend.rocksStoreRef.dumpAllDb()
 
     test "Import snapshot dump":
-      if dsc.chn.db.backend.toRocksStoreRef.isNil:
+      if dsc.chn.db.newKvt.backend.toRocksStoreRef.isNil:
         skip()
       else:
         noisy.showElapsed(&"undump \"{dsc.info}\""):
@@ -433,7 +433,7 @@ proc snapRunner(noisy = true; specs: SnapSyncSpecs) {.used.} =
             dsc.chn.db.toLegacyBackend.rocksStoreRef.dumpAllDb()
 
       test &"Append block chain from \"{tailInfo}\"":
-        if dsc.chn.db.backend.toRocksStoreRef.isNil:
+        if dsc.chn.db.newKvt.backend.toRocksStoreRef.isNil:
           skip()
         else:
           dsc.chn.db.compensateLegacySetup

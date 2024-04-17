@@ -13,9 +13,7 @@ import
   ./base_desc
 
 type
-  EphemMethodsDesc =
-    CoreDbBackendRef | CoreDbKvtBackendRef | CoreDbMptBackendRef |
-    CoreDbAccBackendRef | CoreDbTrieRef
+  EphemMethodsDesc = CoreDbKvtBackendRef | CoreDbMptBackendRef | CoreDbTrieRef
 
   MethodsDesc =
     CoreDxKvtRef |
@@ -30,7 +28,6 @@ type
 # ------------------------------------------------------------------------------
 
 proc validateMethodsDesc(base: CoreDbBaseFns) =
-  doAssert not base.backendFn.isNil
   doAssert not base.destroyFn.isNil
   doAssert not base.rootHashFn.isNil
   doAssert not base.triePrintFn.isNil
@@ -70,7 +67,6 @@ proc validateMethodsDesc(fns: CoreDbMptFns) =
   doAssert not fns.persistentFn.isNil
 
 proc validateMethodsDesc(fns: CoreDbAccFns) =
-  doAssert not fns.backendFn.isNil
   doAssert not fns.getMptFn.isNil
   doAssert not fns.fetchFn.isNil
   doAssert not fns.deleteFn.isNil
@@ -119,7 +115,7 @@ proc validateMethodsDesc(acc: CoreDxAccRef) =
 
 proc validateMethodsDesc(phk: CoreDxPhkRef) =
   doAssert not phk.isNil
-  doAssert not phk.fromMpt.isNil
+  doAssert not phk.toMpt.isNil
   phk.methods.validateMethodsDesc
 
 proc validateMethodsDesc(cpt: CoreDxCaptRef) =

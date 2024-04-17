@@ -93,7 +93,6 @@ type
   # --------------------------------------------------
   # Sub-descriptor: Misc methods for main descriptor
   # --------------------------------------------------
-  CoreDbBaseBackendFn* = proc(): CoreDbBackendRef {.noRaise.}
   CoreDbBaseDestroyFn* = proc(flush = true) {.noRaise.}
   CoreDbBaseRootHashFn* = proc(
     trie: CoreDbTrieRef): CoreDbRc[Hash256] {.noRaise.}
@@ -113,7 +112,6 @@ type
   CoreDbBaseGetCaptFn* = proc(): CoreDbRc[CoreDxCaptRef] {.noRaise.}
 
   CoreDbBaseFns* = object
-    backendFn*:      CoreDbBaseBackendFn
     destroyFn*:      CoreDbBaseDestroyFn
     rootHashFn*:     CoreDbBaseRootHashFn
     triePrintFn*:    CoreDbBaseTriePrintFn
@@ -180,10 +178,6 @@ type
     forgetFn*:  CoreDbCtxForgetFn
 
   # --------------------------------------------------
-  # Sub-descriptor: MPT context methods
-  # --------------------------------------------------
-
-  # --------------------------------------------------
   # Sub-descriptor: generic  Mpt/hexary trie methods
   # --------------------------------------------------
   CoreDbMptBackendFn* = proc(): CoreDbMptBackendRef {.noRaise.}
@@ -218,7 +212,6 @@ type
   # ----------------------------------------------------
   # Sub-descriptor: Mpt/hexary trie methods for accounts
   # ------------------------------------------------------
-  CoreDbAccBackendFn* = proc(): CoreDbAccBackendRef {.noRaise.}
   CoreDbAccGetMptFn* = proc(): CoreDbRc[CoreDxMptRef] {.noRaise.}
   CoreDbAccFetchFn* = proc(k: EthAddress): CoreDbRc[CoreDbAccount] {.noRaise.}
   CoreDbAccDeleteFn* = proc(k: EthAddress): CoreDbRc[void] {.noRaise.}
@@ -232,7 +225,6 @@ type
 
   CoreDbAccFns* = object
     ## Methods for trie objects
-    backendFn*:    CoreDbAccBackendFn
     getMptFn*:     CoreDbAccGetMptFn
     fetchFn*:      CoreDbAccFetchFn
     deleteFn*:     CoreDbAccDeleteFn
@@ -295,19 +287,11 @@ type
     error*: CoreDbErrorCode
     parent*: CoreDbRef
 
-  CoreDbBackendRef* = ref object of RootRef
-    ## Backend wrapper for direct backend access
-    parent*: CoreDbRef
-
   CoreDbKvtBackendRef* = ref object of RootRef
     ## Backend wrapper for direct backend access
     parent*: CoreDbRef
 
   CoreDbMptBackendRef* = ref object of RootRef
-    ## Backend wrapper for direct backend access
-    parent*: CoreDbRef
-
-  CoreDbAccBackendRef* = ref object of RootRef
     ## Backend wrapper for direct backend access
     parent*: CoreDbRef
 
@@ -344,7 +328,7 @@ type
     ## Similar to `CoreDbMptRef` but with pre-hashed keys. That is, any
     ## argument key for `merge()`, `fetch()` etc. will be hashed first
     ## before being applied.
-    fromMpt*: CoreDxMptRef
+    toMpt*: CoreDxMptRef
     methods*: CoreDbMptFns
 
   CoreDxTxRef* = ref object of RootRef

@@ -68,9 +68,11 @@ proc newLegacyPersistentCoreDbRef*(path: string): CoreDbRef =
 # Public helper for direct backend access
 # ------------------------------------------------------------------------------
 
-proc toRocksStoreRef*(db: CoreDbBackendRef): RocksStoreRef =
+proc toRocksStoreRef*(
+    db: CoreDbKvtBackendRef | CoreDbMptBackendRef
+      ): RocksStoreRef =
   if db.parent.dbType == LegacyDbPersistent:
-    return db.parent.LegaPersDbRef.rdb
+    return LegaPersDbRef(db.parent).rdb
 
 # ------------------------------------------------------------------------------
 # End

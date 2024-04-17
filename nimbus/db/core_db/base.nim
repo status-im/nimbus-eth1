@@ -38,10 +38,8 @@ const
 
 
 export
-  CoreDbAccBackendRef,
   CoreDbAccount,
   CoreDbApiError,
-  CoreDbBackendRef,
   CoreDbCaptFlags,
   CoreDbCtxRef,
   CoreDbErrorCode,
@@ -167,7 +165,7 @@ template ifTrackNewApi*(w: CoreDxApiTrackRef; code: untyped) =
 func toCoreDxPhkRef(mpt: CoreDxMptRef): CoreDxPhkRef =
   ## MPT => pre-hashed MPT (aka PHK)
   result = CoreDxPhkRef(
-    fromMpt: mpt,
+    toMpt: mpt,
     methods: mpt.methods)
 
   result.methods.fetchFn =
@@ -191,7 +189,7 @@ func toCoreDxPhkRef(mpt: CoreDxMptRef): CoreDxPhkRef =
 
 
 func parent(phk: CoreDxPhkRef): CoreDbRef =
-  phk.fromMpt.parent
+  phk.toMpt.parent
 
 # ------------------------------------------------------------------------------
 # Public constructor helper
@@ -220,7 +218,7 @@ proc bless*(db: CoreDbRef; kvt: CoreDxKvtRef): CoreDxKvtRef =
     kvt.validate
   kvt
 
-proc bless*[T: CoreDxTrieRelated | CoreDbBackends](
+proc bless*[T: CoreDxTrieRelated | CoreDbKvtBackendRef | CoreDbMptBackendRef](
     db: CoreDbRef;
     dsc: T;
       ): auto =
@@ -290,7 +288,7 @@ proc parent*(cld: CoreDxChldRefs): CoreDbRef =
   ##
   result = cld.parent
 
-proc backend*(dsc: CoreDxKvtRef | CoreDxTrieRelated | CoreDbRef): auto =
+proc backend*(dsc: CoreDxKvtRef | CoreDxMptRef): auto =
   ## Getter, retrieves the *raw* backend object for special/localised support.
   ##
   dsc.setTrackNewApi AnyBackendFn
@@ -635,7 +633,7 @@ proc toMpt*(phk: CoreDxPhkRef): CoreDxMptRef =
   ## `getAcc()`.
   ##
   phk.setTrackNewApi PhkToMptFn
-  result = phk.fromMpt
+  result = phk.toMpt
   phk.ifTrackNewApi:
     let trie = result.methods.getTrieFn()
     debug newApiTxt, api, elapsed, trie
@@ -1011,14 +1009,11 @@ proc forget*(cp: CoreDxCaptRef) =
 
 when ProvideLegacyAPI:
 
-  proc parent*(cld: CoreDbChldRefs): CoreDbRef =
+  proc parent*[T: CoreDbKvtRef | CoreDbMptRef | CoreDbPhkRef |
+                  CoreDbTxRef | CoreDbCaptRef](
+      cld: T): CoreDbRef =
     ## Getter, common method for all sub-modules
     result = cld.distinctBase.parent
-
-  proc backend*(dsc: CoreDbChldRefs): auto =
-    dsc.setTrackLegaApi LegaBackendFn
-    result = dsc.distinctBase.backend
-    dsc.ifTrackLegaApi: debug legaApiTxt, api, elapsed
 
   # ----------------
 
@@ -1098,7 +1093,7 @@ when ProvideLegacyAPI:
 
   # ----------------
 
-  proc isPruning*(trie: CoreDbTrieRefs): bool =
+  proc isPruning*(trie: CoreDbMptRef | CoreDbPhkRef): bool =
     trie.setTrackLegaApi LegaIsPruningFn
     result = trie.distinctBase.isPruning()
     trie.ifTrackLegaApi: debug legaApiTxt, api, elapsed, result

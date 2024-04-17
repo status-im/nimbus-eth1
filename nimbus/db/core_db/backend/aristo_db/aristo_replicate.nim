@@ -28,7 +28,7 @@ iterator aristoReplicate[T](
   let
     root = dsc.rootID
     mpt = dsc.to(AristoDbRef)
-    api = dsc.toAristoApi()
+    api = dsc.to(AristoApiRef)
     p = api.forkTop(mpt).valueOrApiError "aristoReplicate()"
   defer: discard api.forget(p)
   for (vid,key,vtx,node) in T.replicate(p):

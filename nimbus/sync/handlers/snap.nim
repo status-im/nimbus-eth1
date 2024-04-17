@@ -82,7 +82,7 @@ proc getAccountFn(
   let db = ctx.chain.com.db
   return proc(key: openArray[byte]): Blob =
     if db.isLegacy:
-      return db.kvt.backend.toLegacy.get(key)
+      return db.newKvt.backend.toLegacy.get(key)
 
 proc getStoSlotFn(
     ctx: SnapWireRef;
@@ -95,7 +95,7 @@ proc getStoSlotFn(
   let db = ctx.chain.com.db
   return proc(key: openArray[byte]): Blob =
     if db.isLegacy:
-      return db.kvt.backend.toLegacy.get(key)
+      return db.newKvt.backend.toLegacy.get(key)
 
 proc getCodeFn(
     ctx: SnapWireRef;

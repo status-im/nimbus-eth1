@@ -53,9 +53,6 @@ type
   AristoCoreDbMptBE* = ref object of CoreDbMptBackendRef
     adb*: AristoDbRef
 
-  AristoCoreDbAccBE* = ref object of CoreDbAccBackendRef
-    adb*: AristoDbRef
-
 const
   VoidTrieID = VertexID(0)
   # StorageTrieID = VertexID(StorageTrie) -- currently unused
@@ -324,9 +321,6 @@ proc accMethods(cAcc: AristoCoreDxAccRef): CoreDbAccFns =
     api = base.api     # Ditto
     mpt = base.ctx.mpt # Ditto
 
-  proc accBackend(): CoreDbAccBackendRef =
-    db.bless AristoCoreDbAccBE(adb: mpt)
-
   proc getTrieFn(): CoreDbTrieRef =
     db.bless AristoCoreDbTrie(
       base: base,
@@ -419,9 +413,6 @@ proc accMethods(cAcc: AristoCoreDxAccRef): CoreDbAccFns =
 
 
   CoreDbAccFns(
-    backendFn: proc(): CoreDbAccBackendRef =
-      accBackend(),
-
     getMptFn: proc(): CoreDbRc[CoreDxMptRef] =
       accCloneMpt(),
 
@@ -607,6 +598,9 @@ func toVoidRc*[T](
 
 func to*(dsc: CoreDxMptRef, T: type AristoDbRef): T =
   AristoCoreDxMptRef(dsc).base.ctx.mpt
+
+func to*(dsc: CoreDxMptRef, T: type AristoApiRef): T =
+  AristoCoreDxMptRef(dsc).base.api
 
 func rootID*(dsc: CoreDxMptRef): VertexID  =
   dsc.AristoCoreDxMptRef.root

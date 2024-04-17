@@ -70,16 +70,10 @@ type
 
   # ------------
 
-  LegacyCoreDbBE = ref object of CoreDbBackendRef
-    base: LegacyDbRef
-
   LegacyCoreDbKvtBE = ref object of CoreDbKvtBackendRef
     tdb: TrieDatabaseRef
 
   LegacyCoreDbMptBE = ref object of CoreDbMptBackendRef
-    mpt: HexaryTrie
-
-  LegacyCoreDbAccBE = ref object of CoreDbAccBackendRef
     mpt: HexaryTrie
 
 proc init*(
@@ -322,9 +316,6 @@ proc mptMethods(mpt: HexaryChildDbRef; db: LegacyDbRef): CoreDbMptFns =
 proc accMethods(mpt: HexaryChildDbRef; db: LegacyDbRef): CoreDbAccFns =
   ## Hexary trie database handlers
   CoreDbAccFns(
-    backendFn: proc(): CoreDbAccBackendRef =
-      db.bless(LegacyCoreDbAccBE(mpt: mpt.trie)),
-
     getMptFn: proc(): CoreDbRc[CoreDxMptRef] =
       let xMpt = HexaryChildDbRef(trie: mpt.trie)
       ok(db.bless CoreDxMptRef(methods: xMpt.mptMethods db)),
@@ -475,9 +466,6 @@ proc baseMethods(
       ): CoreDbBaseFns =
   let db = db
   CoreDbBaseFns(
-    backendFn: proc(): CoreDbBackendRef =
-      db.bless(LegacyCoreDbBE(base: db)),
-
     levelFn: proc(): int =
       db.txLevel(),
 
@@ -569,10 +557,6 @@ proc newLegacyMemoryCoreDbRef*(): CoreDbRef =
 func isLegacy*(be: CoreDbRef): bool =
   be.dbType in {LegacyDbMemory, LegacyDbPersistent}
 
-#func toLegacy*(be: CoreDbBackendRef): LegacyDbRef =
-#  if be.parent.isLegacy:
-#    return be.LegacyCoreDbBE.base
-
 func toLegacy*(be: CoreDbKvtBackendRef): TrieDatabaseRef =
   if be.parent.isLegacy:
     return be.LegacyCoreDbKvtBE.tdb
@@ -580,10 +564,6 @@ func toLegacy*(be: CoreDbKvtBackendRef): TrieDatabaseRef =
 func toLegacy*(be: CoreDbMptBackendRef): HexaryTrie =
   if be.parent.isLegacy:
     return be.LegacyCoreDbMptBE.mpt
-
-func toLegacy*(be: CoreDbAccBackendRef): HexaryTrie =
-  if be.parent.isLegacy:
-    return be.LegacyCoreDbAccBE.mpt
 
 # ------------------------------------------------------------------------------
 # Public legacy iterators

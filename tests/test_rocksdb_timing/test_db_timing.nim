@@ -135,7 +135,7 @@ proc test_dbTimingRockySetup*(
      ) =
   ## Extract key-value records into memory tables via rocksdb iterator
   let
-    rdb = cdb.backend.toRocksStoreRef
+    rdb = cdb.newKvt.backend.toRocksStoreRef
     rop = rocksdb_readoptions_create()
     rit = rdb.rocksDb.cPtr.rocksdb_create_iterator(rop)
   check not rit.isNil
@@ -332,7 +332,7 @@ proc test_dbTimingRocky32*(
     ela: array[4,Duration]
     size: int64
   let
-    rdb = cdb.backend.toRocksStoreRef
+    rdb = cdb.newKvt.backend.toRocksStoreRef
 
   # Note that 32 and 33 size keys cannot be usefully merged into the same SST
   # file. The keys must be added in a sorted mode. So playing safe, key sizes
@@ -390,7 +390,7 @@ proc test_dbTimingRocky32as33*(
     ela: array[4,Duration]
     size: int64
   let
-    rdb = cdb.backend.toRocksStoreRef
+    rdb = cdb.newKvt.backend.toRocksStoreRef
 
   # Note that 32 and 33 size keys cannot be usefiully merged into the same SST
   # file. The keys must be added in a sorted mode. So playing safe, key sizes
@@ -447,7 +447,7 @@ proc test_dbTimingRocky33*(
   var
     ela: array[4,Duration]
     size: int64
-  let rdb = cdb.backend.toRocksStoreRef
+  let rdb = cdb.newKvt.backend.toRocksStoreRef
 
   # Note that 32 and 33 size keys cannot be usefiully merged into the same SST
   # file. The keys must be added in a sorted mode. So playing safe, key sizes

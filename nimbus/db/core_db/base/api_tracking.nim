@@ -73,7 +73,6 @@ type
     KvtPersistentFn     = "kvt/persistent"
     KvtPutFn            = "kvt/put"
 
-    LegaBackendFn       = "trie/backend"
     LegaBeginTxFn       = "beginTransaction"
     LegaCaptureFn       = "capture"
     LegaCptFlagsFn      = "cpt/flags"

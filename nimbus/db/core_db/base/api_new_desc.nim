@@ -20,12 +20,8 @@ type
   CoreDxTrieRelated* = CoreDxTrieRefs | CoreDxTxRef | CoreDxCaptRef
     ## Shortcut, descriptors for sub-modules running on an *MPT*
 
-  CoreDbBackends* = CoreDbBackendRef | CoreDbKvtBackendRef |
-                    CoreDbMptBackendRef | CoreDbAccBackendRef
-    ## Shortcut, all backend descriptors.
-
   CoreDxChldRefs* = CoreDxKvtRef | CoreDxTrieRelated | CoreDbTrieRef |
-                    CoreDbBackends | CoreDbErrorRef
+                    CoreDbKvtBackendRef | CoreDbMptBackendRef | CoreDbErrorRef
     ## Shortcut, all descriptors with a `parent` entry.
 
 # End
