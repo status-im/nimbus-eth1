@@ -485,7 +485,7 @@ let cancunTestList* = [
       - Payload Attributes uses Shanghai timestamp
       - Payload Attributes' Beacon Root is nil
 
-      Verify that client returns INVALID_PARAMS_ERROR.
+      Verify that client returns INVALID_PAYLOAD_ATTRIBUTES.
       """,
     run: specExecute,
     spec: CancunSpec(
@@ -494,11 +494,11 @@ let cancunTestList* = [
       testSequence: @[
         NewPayloads(
           fcUOnPayloadRequest: UpgradeForkchoiceUpdatedVersion(
-            expectedError: engineApiInvalidParams,
+            expectedError: engineApiInvalidPayloadAttributes,
           ),
           expectationDescription: """
-          ForkchoiceUpdatedV3 before Cancun with any nil field must return INVALID_PARAMS_ERROR (code $1)
-          """ % [$engineApiInvalidParams],
+          ForkchoiceUpdatedV3 before Cancun with any nil field must return INVALID_PAYLOAD_ATTRIBUTES (code $1)
+          """ % [$engineApiInvalidPayloadAttributes],
         ).TestStep,
       ]
     ),
@@ -539,7 +539,7 @@ let cancunTestList* = [
       - Payload Attributes uses Shanghai timestamp
       - Payload Attributes' Beacon Root zero
 
-      Verify that client returns INVALID_PARAMS_ERROR.
+      Verify that client returns INVALID_PAYLOAD_ATTRIBUTES.
       """,
     run: specExecute,
     spec: CancunSpec(
@@ -549,11 +549,11 @@ let cancunTestList* = [
         NewPayloads(
           fcUOnPayloadRequest: DowngradeForkchoiceUpdatedVersion(
             beaconRoot: some(common.Hash256()),
-            expectedError: engineApiInvalidParams,
+            expectedError: engineApiInvalidPayloadAttributes,
           ),
           expectationDescription: """
-          ForkchoiceUpdatedV2 before Cancun with beacon root field must return INVALID_PARAMS_ERROR (code $1)
-          """ % [$engineApiInvalidParams],
+          ForkchoiceUpdatedV2 before Cancun with beacon root field must return INVALID_PAYLOAD_ATTRIBUTES (code $1)
+          """ % [$engineApiInvalidPayloadAttributes],
         ).TestStep,
       ]
     ),
@@ -567,7 +567,7 @@ let cancunTestList* = [
       - Payload Attributes uses Cancun timestamp
       - Payload Attributes' Beacon Root zero
 
-      Verify that client returns INVALID_PARAMS_ERROR.
+      Verify that client returns INVALID_PAYLOAD_ATTRIBUTES.
       """,
     run: specExecute,
     spec: CancunSpec(
@@ -577,11 +577,11 @@ let cancunTestList* = [
         NewPayloads(
           fcUOnPayloadRequest: DowngradeForkchoiceUpdatedVersion(
             beaconRoot: some(common.Hash256()),
-            expectedError: engineApiInvalidParams,
+            expectedError: engineApiInvalidPayloadAttributes,
           ),
           expectationDescription: """
-          ForkchoiceUpdatedV2 after Cancun with beacon root field must return INVALID_PARAMS_ERROR (code $1)
-          """ % [$engineApiInvalidParams],
+          ForkchoiceUpdatedV2 after Cancun with beacon root field must return INVALID_PAYLOAD_ATTRIBUTES (code $1)
+          """ % [$engineApiInvalidPayloadAttributes],
         ).TestStep,
       ]
     ),
