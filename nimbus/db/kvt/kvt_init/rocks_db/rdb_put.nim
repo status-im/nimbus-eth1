@@ -15,7 +15,6 @@
 
 import
   eth/common,
-  stew/byteutils,
   rocksdb,
   results,
   ../../kvt_desc,
@@ -26,7 +25,9 @@ const
     ## Enable additional logging noise
 
 when extraTraceMessages:
-  import chronicles
+  import
+    chronicles,
+    stew/byteutils
 
   logScope:
     topics = "kvt-rocksdb"
@@ -39,9 +40,10 @@ proc disposeSession(rdb: var RdbInst) =
   rdb.session.close()
   rdb.session = WriteBatchRef(nil)
 
-proc `$`(a: Blob): string =
-  a.toHex
-  
+when extraTraceMessages:
+  proc `$`(a: Blob): string =
+    a.toHex
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------

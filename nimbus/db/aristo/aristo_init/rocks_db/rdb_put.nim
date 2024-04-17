@@ -15,18 +15,11 @@
 
 import
   eth/common,
-  rocksdb/lib/librocksdb,
   rocksdb,
   results,
   ../../aristo_desc,
   ../init_common,
   ./rdb_desc
-
-type
-  RdbPutSession = object
-    writer: ptr rocksdb_sstfilewriter_t
-    sstPath: string
-    nRecords: int
 
 const
   extraTraceMessages = false

@@ -141,15 +141,12 @@ when EnableDebugLog:
 
 # -------------------------
 
-func getOrVoid(tab: TableRef[Blob,Blob]; w: openArray[byte]): Blob =
-  tab.getOrDefault(@w, EmptyBlob)
-
 func leafTie(
     root: VertexID;
     path: openArray[byte];
       ): Result[LeafTie,(VertexID,AristoError)] =
   let tag = path.pathToTag.valueOr:
-    return err((VertexID(root), error))
+    return err((root, error))
   ok LeafTie(root: root, path: tag)
 
 proc blobify(

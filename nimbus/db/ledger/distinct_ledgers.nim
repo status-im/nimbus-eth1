@@ -206,7 +206,6 @@ proc init*(
   ## https://github.com/status-im/nimbus-eth1/issues/932.)
   const
     info = "StorageLedger/init(): "
-    noisy = true
   let
     db = al.distinctBase.parent
     stt = account.stoTrie
