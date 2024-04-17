@@ -60,10 +60,6 @@ when extraTraceMessages:
 # Private helpers
 # ------------------------------------------------------------------------------
 
-template logTxt(info: static[string]): static[string] =
-  "RocksDB " & info
-
-
 proc newSession(db: RdbBackendRef): RdbPutHdlRef =
   new result
   result.TypedPutHdlRef.beginSession db

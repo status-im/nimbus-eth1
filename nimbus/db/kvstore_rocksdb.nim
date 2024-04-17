@@ -54,8 +54,10 @@ proc contains*(store: RocksStoreRef, key: openArray[byte]): KvResult[bool] =
 
 proc del*(store: RocksStoreRef, key: openArray[byte]): KvResult[bool] =
 
-  let exists = ? store.db.keyExists(key)
-  if not exists:
+  let rc = store.db.keyExists(key)
+  if rc.isErr:
+    return rc
+  if not rc.value:
     return ok(false)
 
   let res = store.db.delete(key)

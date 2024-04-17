@@ -39,7 +39,7 @@ func dataDir*(rdb: RdbInst): string =
   rdb.baseDir / DataFolder
 
 
-template logTxt(info: static[string]): static[string] =
+template logTxt*(info: static[string]): static[string] =
    "RocksDB/" & info
 
 # ------------------------------------------------------------------------------

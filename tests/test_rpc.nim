@@ -209,7 +209,7 @@ proc rpcMain*() =
       ethNode = setupEthNode(conf, ctx, eth)
       com = CommonRef.new(
         newCoreDbRef LegacyDbMemory,
-        conf.pruneMode == PruneMode.Full,
+        conf.chainDbMode == ChainDbMode.Prune,
         conf.networkId,
         conf.networkParams
       )

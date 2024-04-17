@@ -106,7 +106,7 @@ proc initEnv(envFork: HardFork): TestEnv =
   let
     com = CommonRef.new(
       newCoreDbRef LegacyDbMemory,
-      conf.pruneMode == PruneMode.Full,
+      conf.chainDbMode == ChainDbMode.Prune,
       conf.networkId,
       conf.networkParams
     )

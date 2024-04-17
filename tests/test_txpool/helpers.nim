@@ -15,7 +15,7 @@ import
   ../replay/[pp, undump_blocks],
   chronicles,
   eth/[common, keys],
-  stew/[keyed_queue, sorted_set],
+  stew/[byteutils,keyed_queue, sorted_set],
   stint
 
 # Make sure that the runner can stay on public view without the need
@@ -76,6 +76,10 @@ const
 # Helpers
 # ------------------------------------------------------------------------------
 
+proc toHex2(a: byte): string =
+  # Avoids compiler warning with `toHex(2)`
+  [a].toHex
+
 proc joinXX(s: string): string =
   if s.len <= 30:
     return s
@@ -92,13 +96,13 @@ proc toXX[T](s: T): string =
   s.toHex.strip(leading=true,chars={'0'}).toLowerAscii
 
 proc toXX(q: Blob): string =
-  q.mapIt(it.toHex(2)).join(":")
+  q.mapIt(it.toHex2).join(":")
 
 proc toXX(a: EthAddress): string =
-  a.mapIt(it.toHex(2)).joinXX
+  a.mapIt(it.toHex2).joinXX
 
 proc toXX(h: Hash256): string =
-  h.data.mapIt(it.toHex(2)).joinXX
+  h.data.mapIt(it.toHex2).joinXX
 
 proc toXX(v: int64; r,s: UInt256): string =
   v.toXX & ":" & ($r).joinXX & ":" & ($s).joinXX
@@ -184,7 +188,7 @@ proc isOk*(rc: ValidationResult): bool =
   rc == ValidationResult.OK
 
 proc toHex*(acc: EthAddress): string =
-  acc.toSeq.mapIt(it.toHex(2)).join
+  acc.toHex
 
 proc say*(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
   if noisy:

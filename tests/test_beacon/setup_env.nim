@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -64,7 +64,7 @@ proc setupEnv*(extraValidation: bool = false, ccm: CCModify = nil): TestEnv =
   let
     com = CommonRef.new(
       newCoreDbRef LegacyDbMemory,
-      conf.pruneMode == PruneMode.Full,
+      conf.chainDbMode == ChainDbMode.Prune,
       conf.networkId,
       conf.networkParams
     )

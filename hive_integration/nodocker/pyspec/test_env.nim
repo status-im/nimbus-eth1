@@ -53,11 +53,11 @@ proc setupELClient*(t: TestEnv, conf: ChainConfig, node: JsonNode) =
   t.com = CommonRef.new(
       memDB,
       conf,
-      t.conf.pruneMode == PruneMode.Full
+      t.conf.chainDbMode == ChainDbMode.Prune
     )
   t.chainRef = newChain(t.com, extraValidation = true)
   let
-    stateDB = AccountsCache.init(memDB, emptyRlpHash, t.conf.pruneMode == PruneMode.Full)
+    stateDB = AccountsCache.init(memDB, emptyRlpHash, t.conf.chainDbMode == ChainDbMode.Prune)
     genesisHeader = node.genesisHeader
 
   setupStateDB(node["pre"], stateDB)

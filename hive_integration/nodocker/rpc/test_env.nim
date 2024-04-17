@@ -61,7 +61,7 @@ proc stopRpcHttpServer(srv: RpcServer) =
 
 proc setupEnv*(): TestEnv =
   let conf = makeConfig(@[
-    "--prune-mode:archive",
+    "--chaindb:archive",
     # "--nat:extip:0.0.0.0",
     "--network:7",
     "--import-key:" & initPath / "private-key",
@@ -77,7 +77,7 @@ proc setupEnv*(): TestEnv =
     ethCtx  = newEthContext()
     ethNode = setupEthNode(conf, ethCtx, eth)
     com     = CommonRef.new(newCoreDbRef LegacyDbMemory,
-      conf.pruneMode == PruneMode.Full,
+      conf.chainDbMode == ChainDbMode.Prune,
       conf.networkId,
       conf.networkParams
     )
