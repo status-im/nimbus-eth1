@@ -28,7 +28,7 @@ template validateVersion(attrsOpt, com, apiVersion) =
 
     if apiVersion == Version.V3:
       if version != apiVersion:
-        raise invalidParams("forkChoiceUpdatedV3 expect PayloadAttributesV3" &
+        raise invalidAttr("forkChoiceUpdatedV3 expect PayloadAttributesV3" &
         " but got PayloadAttributes" & $version)
       if not com.isCancunOrLater(timestamp):
         raise unsupportedFork(
@@ -39,11 +39,11 @@ template validateVersion(attrsOpt, com, apiVersion) =
           raise unsupportedFork("forkChoiceUpdated" & $apiVersion &
             " doesn't support payloadAttributes with Cancun timestamp")
         if version >= Version.V3:
-          raise invalidParams("forkChoiceUpdated" & $apiVersion &
+          raise invalidAttr("forkChoiceUpdated" & $apiVersion &
             " doesn't support PayloadAttributes" & $version)
       elif com.isShanghaiOrLater(timestamp):
         if version != Version.V2:
-          raise invalidParams("if timestamp is Shanghai or later," &
+          raise invalidAttr("if timestamp is Shanghai or later," &
             " payloadAttributes must be PayloadAttributesV2")
       else:
         if version != Version.V1:
