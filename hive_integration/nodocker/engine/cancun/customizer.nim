@@ -425,7 +425,7 @@ proc customizePayload*(cust: CustomPayloadData, data: ExecutableData): Executabl
   if cust.versionedHashesCustomizer.isNil.not:
     doAssert(data.versionedHashes.isSome)
     result.versionedHashes = cust.versionedHashesCustomizer.getVersionedHashes(data.versionedHashes.get)
-
+  
 # Base new payload directive call cust.
 # Used as base to other customizers.
 type

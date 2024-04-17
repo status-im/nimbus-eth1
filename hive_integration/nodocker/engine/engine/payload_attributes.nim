@@ -19,7 +19,6 @@ type
     description*: string
     customizer* : PayloadAttributesCustomizer
     syncing*    : bool
-    errorOnSync*: bool
 
 method withMainFork(cs: InvalidPayloadAttributesTest, fork: EngineFork): BaseSpec =
   var res = cs.clone()
@@ -68,14 +67,11 @@ method execute(cs: InvalidPayloadAttributesTest, env: TestEnv): bool =
       if cs.syncing:
         # If we are SYNCING, the outcome should be SYNCING regardless of the validity of the payload atttributes
         let r = env.engine.client.forkchoiceUpdated(version, fcu, some(attr))
-        if cs.errorOnSync:
-          r.expectError()
-        else:
-          r.expectPayloadStatus(PayloadExecutionStatus.syncing)
-          r.expectPayloadID(none(PayloadID))
+        r.expectPayloadStatus(PayloadExecutionStatus.syncing)
+        r.expectPayloadID(none(PayloadID))
       else:
         let r = env.engine.client.forkchoiceUpdated(version, fcu, some(attr))
-        r.expectError()
+        r.expectErrorCode(engineApiInvalidPayloadAttributes)
 
         # Check that the forkchoice was applied, regardless of the error
         let s = env.engine.client.latestHeader()

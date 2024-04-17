@@ -61,7 +61,7 @@ method execute(cs: InvalidPayloadTestCase, env: TestEnv): bool =
             else: EngineEnv(nil)
 
   discard sec
-  
+
   # Wait until TTD is reached by all clients
   let ok = waitFor env.clMock.waitForTTD()
   testCond ok
@@ -301,6 +301,12 @@ method withMainFork(cs: PayloadBuildAfterInvalidPayloadTest, fork: EngineFork): 
 method getName(cs: PayloadBuildAfterInvalidPayloadTest): string =
   "Payload Build after New Invalid payload: Invalid " & $cs.invalidField
 
+proc collectBlobHashes(list: openArray[Web3Tx]): seq[common.Hash256] =
+  for w3tx in list:
+    let tx = ethTx(w3tx)
+    for h in tx.versionedHashes:
+      result.add h
+
 method execute(cs: PayloadBuildAfterInvalidPayloadTest, env: TestEnv): bool =
   # Add a second client to build the invalid payload
   let sec = env.addEngine()
@@ -343,7 +349,12 @@ method execute(cs: PayloadBuildAfterInvalidPayloadTest, env: TestEnv): bool =
           s = invalidPayloadProducer.client.getPayload(r.get.payloadID.get, versione)
         s.expectNoError()
 
-        var src = ExecutableData(basePayload: s.get.executionPayload)
+        let basePayload = s.get.executionPayload
+        var src = ExecutableData(basePayload: basePayload)
+        if versione == Version.V3:
+          src.beaconRoot = some(common.Hash256())
+          src.versionedHashes = some(collectBlobHashes(basePayload.transactions))
+
         inv_p = env.generateInvalidPayload(src, InvalidStateRoot)
 
       # Broadcast the invalid payload

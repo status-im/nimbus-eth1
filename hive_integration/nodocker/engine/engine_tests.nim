@@ -44,7 +44,7 @@ proc getGenesis(cs: EngineSpec, param: NetworkParams) =
   if cs.genesisTimestamp != 0:
     param.genesis.timestamp = cs.genesisTimestamp.EthTime
 
-proc specExecute(ws: BaseSpec): bool =
+proc executeEngineSpec*(ws: BaseSpec): bool =
   let
     cs = EngineSpec(ws)
     forkConfig = ws.getForkConfig()
@@ -409,12 +409,12 @@ proc makeEngineTest*(): seq[EngineSpec] =
         enableConfigureCLMock: true,
       )
 
-proc fillEngineTests*(): seq[TestDesc] =
+proc fillEngineTests(): seq[TestDesc] =
   let list = makeEngineTest()
   for x in list:
     result.add TestDesc(
       name: x.getName(),
-      run: specExecute,
+      run: executeEngineSpec,
       spec: x,
     )
 

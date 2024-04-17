@@ -119,7 +119,8 @@ proc `==`*(a: Option[BlockHash], b: Option[common.Hash256]): bool =
 template expectErrorCode*(res: untyped, errCode: int) =
   testCond res.isErr:
     error "unexpected result, want error, get ok"
-  testCond res.error.find($errCode) != -1
+  testCond res.error.find($errCode) != -1:
+    error "unexpected error code", expect=errCode, got=res.error
 
 template expectNoError*(res: untyped) =
   testCond res.isOk
@@ -185,7 +186,7 @@ template expectErrorCode*(res: untyped, errCode: int, expectedDesc: string) =
   testCond res.isErr:
     error "unexpected result, want error, get ok"
   testCond res.error.find($errCode) != -1:
-    fatal "DEBUG", msg=expectedDesc, got=res.error
+    fatal "DEBUG", msg=expectedDesc, expected=errCode, got=res.error
 
 template expectNoError*(res: untyped, expectedDesc: string) =
   testCond res.isOk:

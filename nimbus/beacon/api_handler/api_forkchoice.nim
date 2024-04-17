@@ -19,36 +19,37 @@ import
 
 {.push gcsafe, raises:[CatchableError].}
 
-template validateVersion(attrsOpt, com, apiVersion) =
-  if attrsOpt.isSome:
-    let
-      attr      = attrsOpt.get
-      version   = attr.version
-      timestamp = ethTime attr.timestamp
+template validateVersion(attr, com, apiVersion) =
+  let
+    version   = attr.version
+    timestamp = ethTime attr.timestamp
 
-    if apiVersion == Version.V3:
-      if version != apiVersion:
-        raise invalidAttr("forkChoiceUpdatedV3 expect PayloadAttributesV3" &
-        " but got PayloadAttributes" & $version)
-      if not com.isCancunOrLater(timestamp):
-        raise unsupportedFork(
-          "forkchoiceUpdatedV3 get invalid payloadAttributes timestamp")
+  if apiVersion == Version.V3:
+    if version != apiVersion:
+      raise invalidAttr("forkChoiceUpdatedV3 expect PayloadAttributesV3" &
+      " but got PayloadAttributes" & $version)
+    if not com.isCancunOrLater(timestamp):
+      raise unsupportedFork(
+        "forkchoiceUpdatedV3 get invalid payloadAttributes timestamp")
+  else:
+    if com.isCancunOrLater(timestamp):
+      if version < Version.V3:
+        raise unsupportedFork("forkChoiceUpdated" & $apiVersion &
+          " doesn't support payloadAttributes" & $version)
+      if version >= Version.V3:
+        raise invalidAttr("forkChoiceUpdated" & $apiVersion &
+          " doesn't support PayloadAttributes" & $version)
+    elif com.isShanghaiOrLater(timestamp):
+      if version < Version.V2:
+        raise invalidParams("forkChoiceUpdated" & $apiVersion &
+          " doesn't support payloadAttributesV1")
+      if version > Version.V2:
+        raise invalidAttr("if timestamp is Shanghai or later," &
+          " payloadAttributes must be PayloadAttributesV2")
     else:
-      if com.isCancunOrLater(timestamp):
-        if version < Version.V3:
-          raise unsupportedFork("forkChoiceUpdated" & $apiVersion &
-            " doesn't support payloadAttributes with Cancun timestamp")
-        if version >= Version.V3:
-          raise invalidAttr("forkChoiceUpdated" & $apiVersion &
-            " doesn't support PayloadAttributes" & $version)
-      elif com.isShanghaiOrLater(timestamp):
-        if version != Version.V2:
-          raise invalidAttr("if timestamp is Shanghai or later," &
-            " payloadAttributes must be PayloadAttributesV2")
-      else:
-        if version != Version.V1:
-          raise invalidParams("if timestamp is earlier than Shanghai," &
-            " payloadAttributes must be PayloadAttributesV1")
+      if version != Version.V1:
+        raise invalidParams("if timestamp is earlier than Shanghai," &
+          " payloadAttributes must be PayloadAttributesV1")
 
 proc forkchoiceUpdated*(ben: BeaconEngineRef,
                         apiVersion: Version,
@@ -60,8 +61,6 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     db    = com.db
     chain = ben.chain
     blockHash = ethHash update.headBlockHash
-
-  validateVersion(attrsOpt, com, apiVersion)
 
   if blockHash == common.Hash256():
     warn "Forkchoice requested update to zero hash"
@@ -187,6 +186,8 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
   # might replace it arbitrarilly many times in between.
   if attrsOpt.isSome:
     let attrs = attrsOpt.get()
+    validateVersion(attrs, com, apiVersion)
+
     let payload = ben.generatePayload(attrs).valueOr:
       error "Failed to create sealing payload", err = error
       raise invalidAttr(error)

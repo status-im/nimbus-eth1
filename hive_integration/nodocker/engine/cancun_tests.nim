@@ -22,6 +22,8 @@ import
   ./cancun/helpers,
   ./cancun/blobs,
   ./cancun/customizer,
+  ./engine_tests,
+  ./engine/engine_spec,
   ../../../nimbus/constants,
   ../../../nimbus/common/chain_config
 
@@ -30,7 +32,12 @@ import
   ./cancun/step_sendblobtx,
   ./cancun/step_launch_client,
   ./cancun/step_sendmodpayload,
-  ./cancun/step_devp2p_pooledtx
+  ./cancun/step_devp2p_pooledtx,
+  ./engine/suggested_fee_recipient,
+  ./engine/payload_attributes,
+  ./engine/invalid_payload,
+  ./engine/prev_randao,
+  ./engine/payload_id
 
 # Precalculate the first data gas cost increase
 const
@@ -79,7 +86,7 @@ proc specExecute(ws: BaseSpec): bool =
   env.close()
 
 # List of all blob tests
-let cancunTestList* = [
+let cancunTestListA* = [
   TestDesc(
     name: "Blob Transactions On Block 1, Shanghai Genesis",
     about: """
@@ -547,7 +554,7 @@ let cancunTestList* = [
       forkHeight: 2,
       testSequence: @[
         NewPayloads(
-          fcUOnPayloadRequest: DowngradeForkchoiceUpdatedVersion(
+          fcUOnPayloadRequest: BaseForkchoiceUpdatedCustomizer(
             beaconRoot: some(common.Hash256()),
             expectedError: engineApiInvalidPayloadAttributes,
           ),
@@ -1823,118 +1830,123 @@ let cancunTestList* = [
   ),]#
 ]
 
-#[
-var EngineAPITests []test.Spec
-
-func init() {
+proc makeCancunTest(): seq[EngineSpec] =
   # Append all engine api tests with Cancun as main fork
-  for _, test := range suite_engine.Tests {
-    Tests = append(Tests, test.WithMainFork(Cancun))
-  }
-
-  # Cancun specific variants for pre-existing tests
-  baseSpec := test.BaseSpec{
-    mainFork: ForkCancun,
-  }
-  onlyBlobTxsSpec := test.BaseSpec{
-    mainFork:            Cancun,
-    TestTransactionType: BlobTxOnly,
-  }
+  #[for x in engineTestList:
+    let t = EngineSpec(x.spec)
+    result.add t.withMainFork(ForkCancun).EngineSpec]#
 
   # Payload Attributes
-  for _, t := range []suite_engine.InvalidPayloadAttributesTest{
-    {
-      BaseSpec:    baseSpec,
-      Description: "Missing BeaconRoot",
-      Customizer: BasePayloadAttributesCustomizer{
+  for syncing in [false, true]:
+    result.add InvalidPayloadAttributesTest(
+      description: "Missing BeaconRoot",
+      mainFork   : ForkCancun,
+      syncing    : syncing,
+      customizer : BasePayloadAttributesCustomizer(
         removeBeaconRoot: true,
-      ),
-      # Error is expected on syncing because V3 checks all fields to be present
-      ErrorOnSync: true,
-    ),
-  } {
-    Tests = append(Tests, t)
-    t.Syncing = true
-    Tests = append(Tests, t)
-  }
+      )
+    )
+
+  const
+    payloadIdTests = [
+      PayloadAttributesParentBeaconRoot,
+      # TODO: Remove when withdrawals suite is refactored
+      PayloadAttributesAddWithdrawal,
+      PayloadAttributesModifyWithdrawalAmount,
+      PayloadAttributesModifyWithdrawalIndex,
+      PayloadAttributesModifyWithdrawalValidator,
+      PayloadAttributesModifyWithdrawalAddress,
+      PayloadAttributesRemoveWithdrawal,
+    ]
 
   # Unique Payload ID Tests
-  for _, t := range []suite_engine.PayloadAttributesFieldChange{
-    suite_engine.PayloadAttributesParentBeaconRoot,
-    # TODO: Remove when withdrawals suite is refactored
-    suite_engine.PayloadAttributesAddWithdrawal,
-    suite_engine.PayloadAttributesModifyWithdrawalAmount,
-    suite_engine.PayloadAttributesModifyWithdrawalIndex,
-    suite_engine.PayloadAttributesModifyWithdrawalValidator,
-    suite_engine.PayloadAttributesModifyWithdrawalAddress,
-    suite_engine.PayloadAttributesRemoveWithdrawal,
-  } {
-    Tests = append(Tests, suite_engine.UniquePayloadIDTest{
-      BaseSpec:          baseSpec,
-      FieldModification: t,
-    })
-  }
-
+  for t in payloadIdTests:
+    result.add UniquePayloadIDTest(
+      mainFork: ForkCancun,
+      fieldModification: t,
+    )
+#[
   # Invalid Payload Tests
-  for _, invalidField := range []InvalidPayloadBlockField{
-    InvalidParentBeaconBlockRoot,
-    InvalidBlobGasUsed,
-    InvalidBlobCountGasUsed,
-    InvalidExcessBlobGas,
-    InvalidVersionedHashes,
-    InvalidVersionedHashesVersion,
-    IncompleteVersionedHashes,
-    ExtraVersionedHashes,
-  } {
-    for _, syncing := range []bool{false, true} {
+  const
+    invalidFields = [
+      InvalidParentBeaconBlockRoot,
+      InvalidBlobGasUsed,
+      InvalidBlobCountGasUsed,
+      InvalidExcessBlobGas,
+      InvalidVersionedHashes,
+      InvalidVersionedHashesVersion,
+      IncompleteVersionedHashes,
+      ExtraVersionedHashes,
+    ]
+
+    invalidDetectedOnSyncs = [
+      InvalidBlobGasUsed,
+      InvalidBlobCountGasUsed,
+      InvalidVersionedHashes,
+      InvalidVersionedHashesVersion,
+      IncompleteVersionedHashes,
+      ExtraVersionedHashes
+    ]
+
+    nilLatestValidHashes = [
+      InvalidVersionedHashes,
+      InvalidVersionedHashesVersion,
+      IncompleteVersionedHashes,
+      ExtraVersionedHashes
+    ]
+
+  for invalidField in invalidFields:
+    for syncing in [false, true]:
       # Invalidity of payload can be detected even when syncing because the
       # blob gas only depends on the transactions contained.
-      invalidDetectedOnSync := (invalidField == InvalidBlobGasUsed ||
-        invalidField == InvalidBlobCountGasUsed ||
-        invalidField == InvalidVersionedHashes ||
-        invalidField == InvalidVersionedHashesVersion ||
-        invalidField == IncompleteVersionedHashes ||
-        invalidField == ExtraVersionedHashes)
+      let
+        invalidDetectedOnSync = invalidField in invalidDetectedOnSyncs
+        nilLatestValidHash = invalidField in nilLatestValidHashes
 
-      nilLatestValidHash := (invalidField == InvalidVersionedHashes ||
-        invalidField == InvalidVersionedHashesVersion ||
-        invalidField == IncompleteVersionedHashes ||
-        invalidField == ExtraVersionedHashes)
-
-      Tests = append(Tests, suite_engine.InvalidPayloadTestCase{
-        BaseSpec:              onlyBlobTxsSpec,
-        InvalidField:          invalidField,
-        Syncing:               syncing,
-        InvalidDetectedOnSync: invalidDetectedOnSync,
-        NilLatestValidHash:    nilLatestValidHash,
-      })
-    }
-  }
+      result.add InvalidPayloadTestCase(
+        mainFork             : ForkCancun,
+        txType               : some(TxEIP4844),
+        invalidField         : invalidField,
+        syncing              : syncing,
+        invalidDetectedOnSync: invalidDetectedOnSync,
+        nilLatestValidHash   : nilLatestValidHash,
+      )
+  ]#
 
   # Invalid Transaction ChainID Tests
-  Tests = append(Tests,
-    suite_engine.InvalidTxChainIDTest{
-      BaseSpec: onlyBlobTxsSpec,
-    ),
+  result.add InvalidTxChainIDTest(
+    mainFork: ForkCancun,
+    txType  : some(TxEIP4844),
   )
 
-  Tests = append(Tests, suite_engine.PayloadBuildAfterInvalidPayloadTest{
-    BaseSpec:     onlyBlobTxsSpec,
-    InvalidField: InvalidParentBeaconBlockRoot,
-  })
+  result.add PayloadBuildAfterInvalidPayloadTest(
+    mainFork: ForkCancun,
+    txType  : some(TxEIP4844),
+    invalidField: InvalidParentBeaconBlockRoot,
+  )
 
   # Suggested Fee Recipient Tests (New Transaction Type)
-  Tests = append(Tests,
-    suite_engine.SuggestedFeeRecipientTest{
-      BaseSpec:         onlyBlobTxsSpec,
-      transactionCount: 1, # Only one blob tx gets through due to blob gas limit
-    ),
+  result.add SuggestedFeeRecipientTest(
+    mainFork: ForkCancun,
+    txType  : some(TxEIP4844),
+    transactionCount: 1, # Only one blob tx gets through due to blob gas limit
   )
+
   # Prev Randao Tests (New Transaction Type)
-  Tests = append(Tests,
-    suite_engine.PrevRandaoTransactionTest{
-      BaseSpec: onlyBlobTxsSpec,
-    ),
+  result.add PrevRandaoTransactionTest(
+    mainFork: ForkCancun,
+    txType  : some(TxEIP4844),
   )
-}
-]#
+
+proc filCancunTests(): seq[TestDesc] =
+  result.add cancunTestListA
+
+  let list = makeCancunTest()
+  for x in list:
+    result.add TestDesc(
+      name: x.getName(),
+      run: executeEngineSpec,
+      spec: x,
+    )
+
+let cancunTestList* = filCancunTests()
