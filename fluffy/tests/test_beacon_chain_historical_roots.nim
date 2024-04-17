@@ -17,7 +17,7 @@ import
   beacon_chain /../ tests/testblockutil,
   beacon_chain /../ tests/mocking/mock_genesis,
   beacon_chain /../ tests/consensus_spec/fixtures_utils,
-  ../network/history/experimental/beacon_chain_historical_roots
+  ../network/history/beacon_chain_historical_roots
 
 suite "Beacon Chain Historical Roots":
   let

@@ -16,7 +16,7 @@ import
   beacon_chain/spec/datatypes/bellatrix,
   ../../../common/common_types,
   ../../../network_metadata,
-  ../../../network/history/experimental/beacon_chain_block_proof,
+  ../../../network/history/beacon_chain_block_proof_bellatrix,
   ../../test_yaml_utils
 
 type YamlTestProof = object

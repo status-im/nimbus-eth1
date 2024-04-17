@@ -20,7 +20,7 @@ import
   beacon_chain/beacon_clock,
   ../../network/beacon/beacon_content,
   ../../network/beacon/beacon_init_loader,
-  ../../network/history/experimental/beacon_chain_block_proof,
+  ../../network/history/beacon_chain_block_proof_bellatrix,
   ../../network_metadata,
   ./exporter_common
 
