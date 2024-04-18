@@ -164,12 +164,12 @@ proc storeSnapshot*(cfg: CliqueCfg; s: Snapshot): CliqueOkResult =
   let
     key = s.data.blockHash.cliqueSnapshotKey
     val = rlp.encode(s.data)
-    db  = s.cfg.db.newKvt(sharedTable = false) # bypass block chain txs
+    db  = s.cfg.db.newKvt(offSite = true) # bypass block chain txs
   defer: db.forget()
   let rc = db.put(key.toOpenArray, val)
   if rc.isErr:
     error logTxt "put() failed", `error`=($$rc.error)
-  db.persistent()
+  db.saveOffSite()
 
   cfg.nSnaps.inc
   cfg.snapsData += val.len.uint

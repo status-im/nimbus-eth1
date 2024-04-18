@@ -39,7 +39,6 @@ type
     AccHasPathFn        = "acc/hasPath"
     AccMergeFn          = "acc/merge"
     AccGetMptFn         = "acc/getMpt"
-    AccPersistentFn     = "acc/persistent"
     AccStoFlushFn       = "acc/stoFlush"
     AccToMptFn          = "acc/toMpt"
 
@@ -56,6 +55,7 @@ type
     BaseSwapCtxFn       = "swapCtx"
     BaseNewKvtFn        = "newKvt"
     BaseNewTxFn         = "newTransaction"
+    BasePersistentFn    = "persistent"
 
     CptFlagsFn          = "cpt/flags"
     CptLogDbFn          = "cpt/logDb"
@@ -76,7 +76,7 @@ type
     KvtGetOrEmptyFn     = "kvt/getOrEmpty"
     KvtHasKeyFn         = "kvt/hasKey"
     KvtPairsIt          = "kvt/pairs"
-    KvtPersistentFn     = "kvt/persistent"
+    KvtSaveOffSiteFn    = "kvt/saveOffSite"
     KvtPutFn            = "kvt/put"
 
     LegaBeginTxFn       = "beginTransaction"
@@ -126,7 +126,6 @@ type
     MptHasPathFn        = "mpt/hasPath"
     MptMergeFn          = "mpt/merge"
     MptPairsIt          = "mpt/pairs"
-    MptPersistentFn     = "mpt/persistent"
     MptReplicateIt      = "mpt/replicate"
     MptToPhkFn          = "mpt/toPhk"
 
@@ -137,7 +136,6 @@ type
     PhkGetTrieFn        = "phk/getTrie"
     PhkHasPathFn        = "phk/hasPath"
     PhkMergeFn          = "phk/merge"
-    PhkPersistentFn     = "pkk/persistent"
     PhkToMptFn          = "phk/toMpt"
 
     RootHashFn          = "rootHash"

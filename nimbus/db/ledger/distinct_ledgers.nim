@@ -179,14 +179,6 @@ proc delete*(al: AccountLedger, eAddr: EthAddress) =
       return
     raiseAssert info & $$error
 
-proc persistent*(al: AccountLedger) =
-  let rc = al.distinctBase.persistent()
-  if rc.isErr:
-    if rc.error.error != AccTxPending:
-      raiseAssert "persistent oops, error=" & $$rc.error
-    discard al.distinctBase.getTrie.rootHash.valueOr:
-      raiseAssert "re-hash oops, error=" & $$error
-
 # ------------------------------------------------------------------------------
 # Public functions: storage ledger
 # ------------------------------------------------------------------------------

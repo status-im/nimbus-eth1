@@ -279,14 +279,6 @@ proc compensateLegacySetup*(db: CoreDbRef) =
   db.methods.legacySetupFn()
   db.ifTrackNewApi: debug newApiTxt, api, elapsed
 
-proc level*(db: CoreDbRef): int =
-  ## Getter, retrieve transaction level (zero if there is no pending
-  ## transaction)
-  ##
-  db.setTrackNewApi BaseLevelFn
-  result = db.methods.levelFn()
-  db.ifTrackNewApi: debug newApiTxt, api, elapsed, result
-
 proc parent*[T: CoreDxKvtRef |
                 CoreDbTrieRef |
                 CoreDbCtxRef | CoreDxMptRef | CoreDxPhkRef | CoreDxAccRef |
@@ -329,28 +321,29 @@ proc `$$`*(e: CoreDbErrorRef): string =
 # Public key-value table methods
 # ------------------------------------------------------------------------------
 
-proc newKvt*(db: CoreDbRef; sharedTable = true): CoreDxKvtRef =
+proc newKvt*(db: CoreDbRef; offSite = false): CoreDxKvtRef =
   ## Constructor, will defect on failure.
   ##
-  ## Depending on the argument `sharedTable`, the contructed object will have
+  ## Depending on the argument `offSite`, the constructed object will have
   ## the following properties.
   ##
-  ## * `true`
+  ## * `false`
   ##   Subscribe to the common base object shared with other shared
   ##   descriptors. Any changes are immediately visible among subscribers.
   ##   On destruction (when the constructed object gets out of scope), changes
-  ##   are not saved to the backend database but are still available to
-  ##   other subscribers.
+  ##   are not saved to the backend database but are still cached and available
+  ##   to other subscribers.
   ##
-  ## * `false`
-  ##   The contructed object will be a new separate descriptor with a clean
-  ##   cache and no pending transactions. On automatic destruction, changes
-  ##   will be discarded.
+  ## * `true`
+  ##   The contructed object will be a new separate table descriptor with a
+  ##   clean cache and no pending transactions. On automatic destruction,
+  ##   changes will be discarded. The contents of this descriptor cache can be
+  ##   saved persistently with the `saveOffSite()` function.
   ##
   db.setTrackNewApi BaseNewKvtFn
-  result = db.methods.newKvtFn(sharedTable).valueOr:
+  result = db.methods.newKvtFn(offSite).valueOr:
     raiseAssert error.prettyText()
-  db.ifTrackNewApi: debug newApiTxt, api, elapsed, sharedTable
+  db.ifTrackNewApi: debug newApiTxt, api, elapsed, offSite
 
 proc get*(kvt: CoreDxKvtRef; key: openArray[byte]): CoreDbRc[Blob] =
   ## This function always returns a non-empty `Blob` or an error code.
@@ -391,16 +384,19 @@ proc hasKey*(kvt: CoreDxKvtRef; key: openArray[byte]): CoreDbRc[bool] =
   result = kvt.methods.hasKeyFn key
   kvt.ifTrackNewApi: debug newApiTxt, api, elapsed, key=key.toStr, result
 
-proc persistent*(kvt: CoreDxKvtRef): CoreDbRc[void] {.discardable.} =
-  ## For the legacy database, this function has no effect and succeeds always.
-  ## It will nevertheless return a discardable error if there is a pending
-  ## transaction.
+proc saveOffSite*(kvt: CoreDxKvtRef): CoreDbRc[void] {.discardable.} =
+  ## For the legacy database, this function has no effect and will always
+  ## succeeds. It will nevertheless return a discardable error if there is
+  ## a pending transaction.
   ##
-  ## This function saves the current cache to the database if possible,
-  ## regardless of the save/share mode assigned to the constructor.
+  ## Otherwise, if assigned *off-site* (see `newKvt()`), this function will
+  ## save the current cache to the database.
   ##
-  kvt.setTrackNewApi KvtPersistentFn
-  result = kvt.methods.persistentFn()
+  ## Otherwise, this function will have no effect and return a discardable
+  ## error.
+  ##
+  kvt.setTrackNewApi KvtSaveOffSiteFn
+  result = kvt.methods.saveOffSiteFn()
   kvt.ifTrackNewApi: debug newApiTxt, api, elapsed, result
 
 proc forget*(kvt: CoreDxKvtRef): CoreDbRc[void] {.discardable.} =
@@ -691,41 +687,6 @@ proc getTrie*(phk: CoreDxPhkRef): CoreDbTrieRef =
   result = phk.methods.getTrieFn()
   phk.ifTrackNewApi: debug newApiTxt, api, elapsed, result
 
-
-proc persistent*(acc: CoreDxAccRef): CoreDbRc[void] =
-  ## For the legacy database, this function has no effect and succeeds always.
-  ## It will nevertheless return a discardable error if there is a pending
-  ## transaction.
-  ##
-  ## This function saves the current cache to the database if possible,
-  ## regardless of the save/share mode assigned to the constructor.
-  ##
-  ## Caveat:
-  ##  If `dsc` is a detached descriptor of `Companion` or `TopShot` mode which
-  ##  could be persistently saved, no changes are visible on other descriptors.
-  ##  This is different from the behaviour of a `Kvt` descriptor. Saving any
-  ##  other descriptor will undo the changes.
-  ##
-  acc.setTrackNewApi AccPersistentFn
-  result = acc.methods.persistentFn()
-  acc.ifTrackNewApi: debug newApiTxt, api, elapsed, result
-
-proc persistent*(mpt: CoreDxMptRef): CoreDbRc[void] {.discardable.} =
-  ## Variant of `persistent()`
-  mpt.setTrackNewApi MptPersistentFn
-  result = mpt.methods.persistentFn()
-  mpt.ifTrackNewApi:
-    let trie = mpt.methods.getTrieFn()
-    debug newApiTxt, api, elapsed, trie, result
-
-proc persistent*(phk: CoreDxPhkRef): CoreDbRc[void] {.discardable.} =
-  ## Variant of `persistent()`
-  phk.setTrackNewApi PhkPersistentFn
-  result = phk.methods.persistentFn()
-  phk.ifTrackNewApi:
-    let trie = phk.methods.getTrieFn()
-    debug newApiTxt, api, elapsed, trie, result
-
 # ------------------------------------------------------------------------------
 # Public generic hexary trie database methods (`mpt` or `phk`)
 # ------------------------------------------------------------------------------
@@ -910,6 +871,30 @@ proc recast*(statement: CoreDbAccount): CoreDbRc[Account] =
 # Public transaction related methods
 # ------------------------------------------------------------------------------
 
+proc level*(db: CoreDbRef): int =
+  ## Retrieve transaction level (zero if there is no pending transaction).
+  ##
+  db.setTrackNewApi BaseLevelFn
+  result = db.methods.levelFn()
+  db.ifTrackNewApi: debug newApiTxt, api, elapsed, result
+
+proc persistent*(db: CoreDbRef): CoreDbRc[void] {.discardable.} =
+  ## For the legacy database, this function has no effect and succeeds always.
+  ## It will nevertheless return a discardable error if there is a pending
+  ## transaction (i.e. `db.level() == 0`.)
+  ##
+  ## Otherwise, cached data from the `Kvt`, `Mpt`, and `Acc` descriptors are
+  ## stored on the persistent database (if any). This requires that that there
+  ## is no transaction pending.
+  ##
+  ## Caveat:
+  ##   For the `Kvt` table(s), cached *off-site* data are not stored and
+  ##   treated separately (see `saveOffSite()`.)
+  ##
+  db.setTrackNewApi BasePersistentFn
+  result = db.methods.persistentFn()
+  db.ifTrackNewApi: debug newApiTxt, api, elapsed, result
+
 proc newTransaction*(db: CoreDbRef): CoreDbRc[CoreDxTxRef] =
   ## Constructor
   ##
@@ -917,6 +902,7 @@ proc newTransaction*(db: CoreDbRef): CoreDbRc[CoreDxTxRef] =
   result = db.methods.beginFn()
   db.ifTrackNewApi:
     debug newApiTxt, api, elapsed, newLevel=db.methods.levelFn(), result
+
 
 proc level*(tx: CoreDxTxRef): int =
   ## Print positive transaction level for argument `tx`

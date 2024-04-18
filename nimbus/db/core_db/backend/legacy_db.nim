@@ -258,11 +258,11 @@ proc kvtMethods(db: LegacyDbRef): CoreDbKvtFns =
     hasKeyFn: proc(k: openArray[byte]): CoreDbRc[bool] =
       ok(tdb.contains(k)),
 
-    persistentFn: proc(): CoreDbRc[void] =
+    saveOffSiteFn: proc(): CoreDbRc[void] =
       # Emulate `Kvt` behaviour
       if 0 < db.txLevel():
-        const info = "persistentFn()"
-        return err(db.bless(KvtTxPending, LegacyCoreDbError(ctx: info)))
+        const info = "saveOffSiteFn()"
+        return err(db.bless(TxPending, LegacyCoreDbError(ctx: info)))
       ok(),
 
     forgetFn: proc(): CoreDbRc[void] =
@@ -304,14 +304,7 @@ proc mptMethods(mpt: HexaryChildDbRef; db: LegacyDbRef): CoreDbMptFns =
       db.bless(trie),
 
     isPruningFn: proc(): bool =
-      mpt.trie.isPruning,
-
-    persistentFn: proc(): CoreDbRc[void] =
-      # Emulate `Aristo` behaviour
-      if 0 < db.txLevel():
-        const info = "persistentFn()"
-        return err(db.bless(MptTxPending, LegacyCoreDbError(ctx: info)))
-      ok())
+      mpt.trie.isPruning)
 
 proc accMethods(mpt: HexaryChildDbRef; db: LegacyDbRef): CoreDbAccFns =
   ## Hexary trie database handlers
@@ -353,14 +346,7 @@ proc accMethods(mpt: HexaryChildDbRef; db: LegacyDbRef): CoreDbAccFns =
       db.bless(trie),
 
     isPruningFn: proc(): bool =
-      mpt.trie.isPruning,
-
-    persistentFn: proc(): CoreDbRc[void] =
-      # Emulate `Aristo` behaviour
-      if 0 < db.txLevel():
-        const info = "persistentFn()"
-        return err(db.bless(AccTxPending, LegacyCoreDbError(ctx: info)))
-      ok())
+      mpt.trie.isPruning)
 
 
 proc ctxMethods(ctx: LegacyCoreDbCtxRef): CoreDbCtxFns =
@@ -511,7 +497,14 @@ proc baseMethods(
 
     newCaptureFn: proc(flgs: set[CoreDbCaptFlags]): CoreDbRc[CoreDxCaptRef] =
       let fns = db.newRecorderRef(flgs).cptMethods(db)
-      ok(db.bless CoreDxCaptRef(methods: fns)))
+      ok(db.bless CoreDxCaptRef(methods: fns)),
+
+    persistentFn: proc(): CoreDbRc[void] =
+      # Emulate `Aristo` behaviour
+      if 0 < db.txLevel():
+        const info = "persistentFn()"
+        return err(db.bless(TxPending, LegacyCoreDbError(ctx: info)))
+      ok())
 
 # ------------------------------------------------------------------------------
 # Public constructor helpers

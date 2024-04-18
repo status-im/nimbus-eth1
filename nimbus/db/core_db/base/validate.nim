@@ -40,13 +40,14 @@ proc validateMethodsDesc(base: CoreDbBaseFns) =
   doAssert not base.swapCtxFn.isNil
   doAssert not base.beginFn.isNil
   doAssert not base.newCaptureFn.isNil
+  doAssert not base.persistentFn.isNil
 
 proc validateMethodsDesc(kvt: CoreDbKvtFns) =
   doAssert not kvt.backendFn.isNil
   doAssert not kvt.getFn.isNil
   doAssert not kvt.delFn.isNil
   doAssert not kvt.putFn.isNil
-  doAssert not kvt.persistentFn.isNil
+  doAssert not kvt.saveOffSiteFn.isNil
   doAssert not kvt.hasKeyFn.isNil
   doAssert not kvt.forgetFn.isNil
 
@@ -64,7 +65,6 @@ proc validateMethodsDesc(fns: CoreDbMptFns) =
   doAssert not fns.hasPathFn.isNil
   doAssert not fns.getTrieFn.isNil
   doAssert not fns.isPruningFn.isNil
-  doAssert not fns.persistentFn.isNil
 
 proc validateMethodsDesc(fns: CoreDbAccFns) =
   doAssert not fns.getMptFn.isNil
@@ -75,7 +75,6 @@ proc validateMethodsDesc(fns: CoreDbAccFns) =
   doAssert not fns.hasPathFn.isNil
   doAssert not fns.getTrieFn.isNil
   doAssert not fns.isPruningFn.isNil
-  doAssert not fns.persistentFn.isNil
 
 # ------------
 

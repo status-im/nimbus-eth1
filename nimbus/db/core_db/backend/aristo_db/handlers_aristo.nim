@@ -210,17 +210,6 @@ proc mptMethods(cMpt: AristoCoreDxMptRef): CoreDbMptFns =
           kind: CoreDbSubTrie(cMpt.root))
     db.bless trie
 
-  proc mptPersistent(): CoreDbRc[void] =
-    const info = "persistentFn()"
-
-    let rc = api.stow(mpt, persistent = true)
-    if rc.isOk:
-      ok()
-    elif api.level(mpt) == 0:
-      err(rc.error.toError(base, info))
-    else:
-      err(rc.error.toError(base, info, MptTxPending))
-
   proc mptFetch(key: openArray[byte]): CoreDbRc[Blob] =
     const info = "fetchFn()"
 
@@ -303,10 +292,7 @@ proc mptMethods(cMpt: AristoCoreDxMptRef): CoreDbMptFns =
       mptTrieFn(),
 
     isPruningFn: proc(): bool =
-      true,
-
-    persistentFn: proc(): CoreDbRc[void] =
-      mptPersistent())
+      true)
 
 # ------------------------------------------------------------------------------
 # Private account call back functions
@@ -325,17 +311,6 @@ proc accMethods(cAcc: AristoCoreDxAccRef): CoreDbAccFns =
     db.bless AristoCoreDbTrie(
       base: base,
       kind: AccountsTrie)
-
-  proc accPersistent(): CoreDbRc[void] =
-    const info = "acc/persistentFn()"
-
-    let rc = api.stow(mpt, persistent = true)
-    if rc.isOk:
-      ok()
-    elif api.level(mpt) == 0:
-      err(rc.error.toError(base, info))
-    else:
-      err(rc.error.toError(base, info, AccTxPending))
 
   proc accCloneMpt(): CoreDbRc[CoreDxMptRef] =
     ok(AristoCoreDxMptRef(
@@ -435,10 +410,7 @@ proc accMethods(cAcc: AristoCoreDxAccRef): CoreDbAccFns =
       getTrieFn(),
 
     isPruningFn: proc(): bool =
-      true,
-
-    persistentFn: proc(): CoreDbRc[void] =
-      accPersistent())
+      true)
 
 # ------------------------------------------------------------------------------
 # Private context call back functions
@@ -691,6 +663,22 @@ proc swapCtx*(base: AristoBaseRef; ctx: CoreDbCtxRef): CoreDbCtxRef =
   # Set read-write access and install
   base.ctx = AristoCoreDbCtxRef(ctx)
   base.api.reCentre(base.ctx.mpt)
+
+
+proc persistent*(
+    base: AristoBaseRef;
+    info: static[string];
+      ): CoreDbRc[void] =
+  let
+    api = base.api
+    mpt = base.ctx.mpt
+    rc = api.stow(mpt, persistent = true)
+  if rc.isOk:
+    ok()
+  elif api.level(mpt) == 0:
+    err(rc.error.toError(base, info))
+  else:
+    err(rc.error.toError(base, info, TxPending))
 
 # ------------------------------------------------------------------------------
 # Public constructors and related

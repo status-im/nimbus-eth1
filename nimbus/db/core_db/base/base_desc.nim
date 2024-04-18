@@ -73,9 +73,8 @@ type
     CtxNotFound
     HashNotAvailable
     KvtNotFound
-    KvtTxPending
+    KvtNotOffSite
     MptNotFound
-    MptTxPending
     NotImplemented
     RlpException
     RootNotFound
@@ -83,6 +82,7 @@ type
     StorageFailed
     SubTrieUnacceptable
     TrieLocked
+    TxPending
 
   CoreDbSubTrie* = enum
     StorageTrie = 0
@@ -106,8 +106,7 @@ type
   CoreDbBaseErrorPrintFn* = proc(e: CoreDbErrorRef): string {.noRaise.}
   CoreDbBaseInitLegaSetupFn* = proc() {.noRaise.}
   CoreDbBaseLevelFn* = proc(): int {.noRaise.}
-  CoreDbBaseNewKvtFn* =
-    proc(sharedTable: bool): CoreDbRc[CoreDxKvtRef] {.noRaise.}
+  CoreDbBaseNewKvtFn* = proc(offSite: bool): CoreDbRc[CoreDxKvtRef] {.noRaise.}
   CoreDbBaseNewCtxFn* = proc(): CoreDbCtxRef {.noRaise.}
   CoreDbBaseNewCtxFromTxFn* = proc(
     root: Hash256; kind: CoreDbSubTrie;): CoreDbRc[CoreDbCtxRef] {.noRaise.}
@@ -116,6 +115,7 @@ type
   CoreDbBaseNewCaptFn* =
     proc(flgs: set[CoreDbCaptFlags]): CoreDbRc[CoreDxCaptRef] {.noRaise.}
   CoreDbBaseGetCaptFn* = proc(): CoreDbRc[CoreDxCaptRef] {.noRaise.}
+  CoreDbBasePersistentFn* = proc(): CoreDbRc[void] {.noRaise.}
 
   CoreDbBaseFns* = object
     destroyFn*:      CoreDbBaseDestroyFn
@@ -136,8 +136,11 @@ type
     # Transactions constructors
     beginFn*:        CoreDbBaseTxBeginFn
 
-    # capture/tracer constructors
+    # Capture/tracer constructors
     newCaptureFn*:   CoreDbBaseNewCaptFn
+
+    # Save to disk
+    persistentFn*: CoreDbBasePersistentFn
 
 
   # --------------------------------------------------
@@ -148,19 +151,19 @@ type
   CoreDbKvtDelFn* = proc(k: openArray[byte]): CoreDbRc[void] {.noRaise.}
   CoreDbKvtPutFn* =
     proc(k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] {.noRaise.}
-  CoreDbKvtPersistentFn* = proc(): CoreDbRc[void] {.noRaise.}
+  CoreDbKvtSaveOffSiteFn* = proc(): CoreDbRc[void] {.noRaise.}
   CoreDbKvtForgetFn* = proc(): CoreDbRc[void] {.noRaise.}
   CoreDbKvtHasKeyFn* = proc(k: openArray[byte]): CoreDbRc[bool] {.noRaise.}
 
   CoreDbKvtFns* = object
     ## Methods for key-value table
-    backendFn*:    CoreDbKvtBackendFn
-    getFn*:        CoreDbKvtGetFn
-    delFn*:        CoreDbKvtDelFn
-    putFn*:        CoreDbKvtPutFn
-    hasKeyFn*:     CoreDbKvtHasKeyFn
-    persistentFn*: CoreDbKvtPersistentFn
-    forgetFn*:     CoreDbKvtForgetFn
+    backendFn*:     CoreDbKvtBackendFn
+    getFn*:         CoreDbKvtGetFn
+    delFn*:         CoreDbKvtDelFn
+    putFn*:         CoreDbKvtPutFn
+    hasKeyFn*:      CoreDbKvtHasKeyFn
+    saveOffSiteFn*: CoreDbKvtSaveOffSiteFn
+    forgetFn*:      CoreDbKvtForgetFn
 
   # --------------------------------------------------
   # Sub-descriptor: MPT context methods
@@ -200,7 +203,6 @@ type
   CoreDbMptHasPathFn* = proc(k: openArray[byte]): CoreDbRc[bool] {.noRaise.}
   CoreDbMptGetTrieFn* = proc(): CoreDbTrieRef {.noRaise.}
   CoreDbMptIsPruningFn* = proc(): bool {.noRaise.}
-  CoreDbMptPersistentFn* = proc(): CoreDbRc[void] {.noRaise.}
   CoreDbMptForgetFn* = proc(): CoreDbRc[void] {.noRaise.}
 
   CoreDbMptFns* = object
@@ -212,7 +214,6 @@ type
     hasPathFn*:    CoreDbMptHasPathFn
     getTrieFn*:    CoreDbMptGetTrieFn
     isPruningFn*:  CoreDbMptIsPruningFn
-    persistentFn*: CoreDbMptPersistentFn
 
 
   # ----------------------------------------------------

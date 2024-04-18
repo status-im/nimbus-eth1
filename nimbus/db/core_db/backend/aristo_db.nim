@@ -119,37 +119,38 @@ proc cptMethods(
         tr.restore())
 
 
-proc baseMethods(
-    db: AristoCoreDbRef;
-    A:  typedesc;
-    K:  typedesc;
-      ): CoreDbBaseFns =
+proc baseMethods(db: AristoCoreDbRef): CoreDbBaseFns =
+  let
+    aBase = db.adbBase
+    kBase = db.kdbBase
 
-  proc tracerSetup(
-      db: AristoCoreDbRef;
-      flags: set[CoreDbCaptFlags];
-        ): CoreDxCaptRef =
+  proc tracerSetup(flags: set[CoreDbCaptFlags]): CoreDxCaptRef =
     if db.tracer.isNil:
       db.tracer = AristoTracerRef(parent: db)
-      db.tracer.init(db.kdbBase, db.adbBase, flags)
+      db.tracer.init(kBase, aBase, flags)
     else:
       db.tracer.push(flags)
     CoreDxCaptRef(methods: db.tracer.cptMethods)
 
+  proc persistent(): CoreDbRc[void] =
+    const info = "persistentFn()"
+    ? aBase.persistent info
+    ? kBase.persistent info
+    ok()
 
   CoreDbBaseFns(
     destroyFn: proc(flush: bool) =
-      db.adbBase.destroy(flush)
-      db.kdbBase.destroy(flush),
+      aBase.destroy(flush)
+      kBase.destroy(flush),
 
     levelFn: proc(): int =
-      db.adbBase.getLevel,
+      aBase.getLevel,
 
     rootHashFn: proc(trie: CoreDbTrieRef): CoreDbRc[Hash256] =
-      db.adbBase.rootHash(trie, "rootHashFn()"),
+      aBase.rootHash(trie, "rootHashFn()"),
 
     triePrintFn: proc(vid: CoreDbTrieRef): string =
-      db.adbBase.triePrint(vid),
+      aBase.triePrint(vid),
 
     errorPrintFn: proc(e: CoreDbErrorRef): string =
       e.errorPrint(),
@@ -157,39 +158,35 @@ proc baseMethods(
     legacySetupFn: proc() =
       discard,
 
-    newKvtFn: proc(sharedTable: bool): CoreDbRc[CoreDxKvtRef] =
-      db.kdbBase.newKvtHandler(sharedTable, "newKvtFn()"),
+    newKvtFn: proc(offSite: bool): CoreDbRc[CoreDxKvtRef] =
+      kBase.newKvtHandler(offSite, "newKvtFn()"),
 
     newCtxFn: proc(): CoreDbCtxRef =
-      db.adbBase.ctx,
+      aBase.ctx,
 
     newCtxFromTxFn: proc(r: Hash256; k: CoreDbSubTrie): CoreDbRc[CoreDbCtxRef] =
       CoreDbCtxRef.init(db.adbBase, r, k),
 
     swapCtxFn: proc(ctx: CoreDbCtxRef): CoreDbCtxRef =
-      db.adbBase.swapCtx(ctx),
+      aBase.swapCtx(ctx),
 
     beginFn: proc(): CoreDbRc[CoreDxTxRef] =
       const info = "beginFn()"
-      let
-        aTx = ? db.adbBase.txBegin(info)
-        kTx = ? db.kdbBase.txBegin(info)
-      ok(db.bless CoreDxTxRef(methods: db.txMethods(aTx, kTx))),
+      let dsc = CoreDxTxRef(
+        methods: db.txMethods(? aBase.txBegin info, ? kBase.txBegin info))
+      ok(db.bless dsc),
 
     newCaptureFn: proc(flags: set[CoreDbCaptFlags]): CoreDbRc[CoreDxCaptRef] =
-      ok(db.bless db.tracerSetup(flags)))
+      ok(db.bless flags.tracerSetup()),
+
+    persistentFn: proc(): CoreDbRc[void] =
+      persistent())
 
 # ------------------------------------------------------------------------------
 # Public constructor and helper
 # ------------------------------------------------------------------------------
 
-proc create*(
-    dbType: CoreDbType;
-    kdb: KvtDbRef;
-    K: typedesc;
-    adb: AristoDbRef;
-    A: typedesc;
-      ): CoreDbRef =
+proc create*(dbType: CoreDbType; kdb: KvtDbRef; adb: AristoDbRef): CoreDbRef =
   ## Constructor helper
 
   # Local extensions
@@ -199,23 +196,23 @@ proc create*(
 
   # Base descriptor
   db.dbType = dbType
-  db.methods = db.baseMethods(A,K)
-  db.bless
+  db.methods = db.baseMethods()
+  db.bless()
 
 proc newAristoMemoryCoreDbRef*(qlr: QidLayoutRef): CoreDbRef =
   AristoDbMemory.create(
-    KvtDbRef.init(use_kvt.MemBackendRef), use_ari.MemBackendRef,
-    AristoDbRef.init(use_ari.MemBackendRef, qlr), use_kvt.MemBackendRef)
+    KvtDbRef.init(use_kvt.MemBackendRef),
+    AristoDbRef.init(use_ari.MemBackendRef, qlr))
 
 proc newAristoMemoryCoreDbRef*(): CoreDbRef =
   AristoDbMemory.create(
-    KvtDbRef.init(use_kvt.MemBackendRef), use_ari.MemBackendRef,
-    AristoDbRef.init(use_ari.MemBackendRef), use_kvt.MemBackendRef)
+    KvtDbRef.init(use_kvt.MemBackendRef),
+    AristoDbRef.init(use_ari.MemBackendRef))
 
 proc newAristoVoidCoreDbRef*(): CoreDbRef =
   AristoDbVoid.create(
-    KvtDbRef.init(use_kvt.VoidBackendRef), use_ari.VoidBackendRef,
-    AristoDbRef.init(use_ari.VoidBackendRef), use_kvt.VoidBackendRef)
+    KvtDbRef.init(use_kvt.VoidBackendRef),
+    AristoDbRef.init(use_ari.VoidBackendRef))
 
 # ------------------------------------------------------------------------------
 # Public helpers, e.g. for direct backend access

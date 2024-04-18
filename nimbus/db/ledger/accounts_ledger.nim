@@ -633,10 +633,6 @@ proc persist*(ac: AccountsLedgerRef,
 
   ac.savePoint.selfDestruct.clear()
 
-  # Save kvt and ledger
-  ac.kvt.persistent()
-  ac.ledger.persistent()
-
   # EIP2929
   ac.savePoint.accessList.clear()
 

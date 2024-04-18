@@ -174,6 +174,11 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
 
   dbTx.commit()
 
+  # The `c.db.persistent()` call is ignored by the legacy DB which
+  # automatically saves persistently when reaching the zero level transaction
+  c.db.persistent()
+  ValidationResult.OK
+
 # ------------------------------------------------------------------------------
 # Public `ChainDB` methods
 # ------------------------------------------------------------------------------
