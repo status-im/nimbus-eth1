@@ -474,7 +474,7 @@ proc newTrie*(
   ## corresponding argument Merkle hash `root` exists.
   ##
   ## For an `EMPTY_ROOT_HASH` root hash argument and a sub-trie of type `kind`
-  ## different form `StorageTrie` and `AccuntsTrie`, the returned sub-trie
+  ## different form `StorageTrie` and `AccountsTrie`, the returned sub-trie
   ## descriptor will be flagged to flush the sub-trie when this descriptor is
   ## incarnated as MPT (see `newMpt()`.).
   ##

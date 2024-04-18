@@ -119,65 +119,57 @@ proc resolveBackendFilter*(
   ##         chain from the cascaded fifos as implied by the function
   ##         `forkBackLog()`, for example.
   ##
-  if db.backend.isNil:
+  let be = db.backend
+  if be.isNil:
     return err(FilBackendMissing)
 
+  # Make sure that the argument `db` is at the centre so the backend is in
+  # read-write mode for this peer.
   let parent = db.getCentre
   if db != parent:
     if not reCentreOk:
       return err(FilBackendRoMode)
     db.reCentre
+  # Always re-centre to `parent` (in case `reCentreOk` was set)
   defer: parent.reCentre
 
   # Blind or missing filter
   if db.roFilter.isNil:
     return ok()
 
-  #let ubeRootKey = block:
-  #  let rc = db.getKeyUBE VertexID(1)
-  #  if rc.isOk:
-  #    rc.value
-  #  elif rc.error == GetKeyNotFound:
-  #    VOID_HASH_KEY
-  #  else:
-  #    return err(rc.error)
-
+  # Initialise peer filter balancer.
   let updateSiblings = ? UpdateSiblingsRef.init db
   defer: updateSiblings.rollback()
 
   # Figure out how to save the reverse filter on a cascades slots queue
-  let
-    be = db.backend
-    backLogOk = not be.filters.isNil           # otherwise disabled
-    # revFilter = updateSiblings.rev
+  var instr: FifoInstr
+  if not be.filters.isNil:                       # Otherwise ignore
+    block getInstr:
+      # Compile instruction for updating filters on the cascaded fifos
+      if db.roFilter.isValid:
+        let ovLap = be.getFilterOverlap db.roFilter
+        if 0 < ovLap:
+          instr = ? be.fifosDelete ovLap         # Revert redundant entries
+          break getInstr
+      instr = ? be.fifosStore updateSiblings.rev # Store reverse filter
 
-  # Compile instruction for updating filters on the cascaded fifos
-  var instr = FifoInstr()
-  block getInstr:
-    if not backLogOk:                          # Ignore reverse filter
-      break getInstr
-    if db.roFilter.isValid:
-      let ovLap = be.getFilterOverlap db.roFilter
-      if 0 < ovLap:
-        instr = ? be.fifosDelete ovLap         # Revert redundant entries
-        break getInstr
-    instr = ? be.fifosStore updateSiblings.rev # Store reverse filter
+  # Store structural single trie entries
+  let writeBatch = be.putBegFn()
+  be.putVtxFn(writeBatch, db.roFilter.sTab.pairs.toSeq)
+  be.putKeyFn(writeBatch, db.roFilter.kMap.pairs.toSeq)
+  be.putIdgFn(writeBatch, db.roFilter.vGen)
 
-  # Save structural and other table entries
-  let txFrame = be.putBegFn()
-  be.putVtxFn(txFrame, db.roFilter.sTab.pairs.toSeq)
-  be.putKeyFn(txFrame, db.roFilter.kMap.pairs.toSeq)
-  be.putIdgFn(txFrame, db.roFilter.vGen)
-  if backLogOk:
-    be.putFilFn(txFrame, instr.put)
-    be.putFqsFn(txFrame, instr.scd.state)
-  ? be.putEndFn txFrame
+  # Store `instr` as history journal entry
+  if not be.filters.isNil:
+    be.putFilFn(writeBatch, instr.put)
+    be.putFqsFn(writeBatch, instr.scd.state)
+  ? be.putEndFn writeBatch                       # Finalise write batch
 
   # Update dudes and this descriptor
   ? updateSiblings.update().commit()
 
   # Finally update slot queue scheduler state (as saved)
-  if backLogOk:
+  if not be.filters.isNil:
     be.filters.state = instr.scd.state
 
   ok()

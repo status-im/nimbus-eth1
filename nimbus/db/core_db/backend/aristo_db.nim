@@ -234,21 +234,21 @@ func toAristoProfData*(
       result.aristo = db.AristoCoreDbRef.adbBase.api.AristoApiProfRef.data
       result.kvt = db.AristoCoreDbRef.kdbBase.api.KvtApiProfRef.data
 
-func toAristoApi*(dsc: CoreDxKvtRef): KvtApiRef =
-  if dsc.parent.isAristo:
-    return AristoCoreDbRef(dsc.parent).kdbBase.api
+func toAristoApi*(kvt: CoreDxKvtRef): KvtApiRef =
+  if kvt.parent.isAristo:
+    return AristoCoreDbRef(kvt.parent).kdbBase.api
 
-func toAristoApi*(dsc: CoreDxMptRef): AristoApiRef =
-  if dsc.parent.isAristo:
-    return AristoCoreDbRef(dsc.parent).adbBase.api
+func toAristoApi*(mpt: CoreDxMptRef): AristoApiRef =
+  if mpt.parent.isAristo:
+    return AristoCoreDbRef(mpt.parent).adbBase.api
 
-func toAristo*(be: CoreDbKvtBackendRef): KvtDbRef =
-  if be.parent.isAristo:
-    return be.AristoCoreDbKvtBE.kdb
+func toAristo*(kBe: CoreDbKvtBackendRef): KvtDbRef =
+  if not kBe.isNil and kBe.parent.isAristo:
+    return kBe.AristoCoreDbKvtBE.kdb
 
-func toAristo*(be: CoreDbMptBackendRef): AristoDbRef =
-  if be.parent.isAristo:
-    return be.AristoCoreDbMptBE.adb
+func toAristo*(mBe: CoreDbMptBackendRef): AristoDbRef =
+  if not mBe.isNil and mBe.parent.isAristo:
+    return mBe.AristoCoreDbMptBE.adb
 
 func toAristo*(be: CoreDbAccBackendRef): AristoDbRef =
   if be.parent.isAristo:

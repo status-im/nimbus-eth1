@@ -108,11 +108,10 @@ type
     LegaToMptFn         = "phk/toMpt"
     LegaToPhkFn         = "mpt/toPhk"
 
-    LegaTxCommitFn      = "tx/commit"
-    LegaTxDisposeFn     = "tx/dispose"
-    LegaTxLevelFn       = "tx/level"
-    LegaTxRollbackFn    = "tx/rollback"
-    LegaTxSaveDisposeFn = "tx/safeDispose"
+    LegaTxCommitFn      = "lega/commit"
+    LegaTxDisposeFn     = "lega/dispose"
+    LegaTxRollbackFn    = "lega/rollback"
+    LegaTxSaveDisposeFn = "lega/safeDispose"
 
     MptDeleteFn         = "mpt/delete"
     MptFetchFn          = "mpt/fetch"
@@ -139,11 +138,11 @@ type
     RootHashFn          = "rootHash"
     TriePrintFn         = "$$"
 
-    TxCommitFn          = "tx/commit"
-    TxDisposeFn         = "tx/dispose"
-    TxLevelFn           = "tx/level"
-    TxRollbackFn        = "tx/rollback"
-    TxSaveDisposeFn     = "tx/safeDispose"
+    TxCommitFn          = "commit"
+    TxDisposeFn         = "dispose"
+    TxLevelFn           = "level"
+    TxRollbackFn        = "rollback"
+    TxSaveDisposeFn     = "safeDispose"
 
 # ------------------------------------------------------------------------------
 # Private helpers

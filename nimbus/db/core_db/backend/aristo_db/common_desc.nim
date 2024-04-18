@@ -34,8 +34,8 @@ type
 # Public helpers
 # ------------------------------------------------------------------------------
 
-func isAristo*(be: CoreDbRef): bool =
-  be.dbType in {AristoDbMemory, AristoDbRocks, AristoDbVoid}
+func isAristo*(db: CoreDbRef): bool =
+  db.dbType in {AristoDbMemory, AristoDbRocks, AristoDbVoid}
 
 func toStr*(n: VertexID): string =
   result = "$"
