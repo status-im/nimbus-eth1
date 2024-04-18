@@ -692,23 +692,27 @@ func init*(
       AristoApiProfVidDisposeFn.profileRunner:
         api.vidDispose(a, b)
 
-  profApi.be = be.dup()
-  if not profApi.be.isNil:
+  let beDup = be.dup()
+  if beDup.isNil:
+    profApi.be = be
 
-    profApi.be.getVtxFn =
+  else:
+    beDup.getVtxFn =
       proc(a: VertexID): auto =
         AristoApiProfBeGetVtxFn.profileRunner:
           result = be.getVtxFn(a)
 
-    profApi.be.getKeyFn =
+    beDup.getKeyFn =
       proc(a: VertexID): auto =
         AristoApiProfBeGetKeyFn.profileRunner:
           result = be.getKeyFn(a)
 
-    profApi.be.putEndFn =
+    beDup.putEndFn =
       proc(a: PutHdlRef): auto =
         AristoApiProfBePutEndFn.profileRunner:
           result = be.putEndFn(a)
+
+    profApi.be = beDup
 
   when AutoValidateApiHooks:
     profApi.validate
