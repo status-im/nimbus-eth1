@@ -388,8 +388,8 @@ proc rocksDbBackend*(
 
   # Set up filter management table
   if not db.rdb.noFq:
-    db.filters = QidSchedRef(ctx: qidLayout)
-    db.filters.state = block:
+    db.journal = QidSchedRef(ctx: qidLayout)
+    db.journal.state = block:
       let rc = db.getFqsFn()
       if rc.isErr:
         db.closeFn(flush = false)

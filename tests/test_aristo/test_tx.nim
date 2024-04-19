@@ -533,7 +533,8 @@ proc testTxMergeProofAndKvpList*(
     rootKey: Hash256
     count = 0
   defer:
-    db.finish(flush=true)
+    if not db.isNil:
+      db.finish(flush=true)
 
   for n,w in list:
 

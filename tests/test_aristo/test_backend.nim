@@ -287,7 +287,7 @@ proc testBackendConsistency*(
 
       # Disable automated filter management, still allow filter table access
       # for low level read/write testing.
-      rdb.backend.filters = QidSchedRef(nil)
+      rdb.backend.journal = QidSchedRef(nil)
     count.inc
 
     xCheck ndb.backend.isNil

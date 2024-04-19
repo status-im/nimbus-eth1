@@ -184,7 +184,7 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
     # Check cascaded fifos
     if fifos and
        not db.backend.isNil and
-       not db.backend.filters.isNil:
+       not db.backend.journal.isNil:
       var lastTrg = db.getKeyUBE(VertexID(1)).get(otherwise = VOID_HASH_KEY)
                       .to(Hash256)
       for (qid,filter) in db.backend.T.walkFifoBe: # walk in fifo order

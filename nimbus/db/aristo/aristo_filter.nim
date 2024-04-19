@@ -143,7 +143,7 @@ proc resolveBackendFilter*(
 
   # Figure out how to save the reverse filter on a cascades slots queue
   var instr: FifoInstr
-  if not be.filters.isNil:                       # Otherwise ignore
+  if not be.journal.isNil:                        # Otherwise ignore
     block getInstr:
       # Compile instruction for updating filters on the cascaded fifos
       if db.roFilter.isValid:
@@ -160,7 +160,7 @@ proc resolveBackendFilter*(
   be.putIdgFn(writeBatch, db.roFilter.vGen)
 
   # Store `instr` as history journal entry
-  if not be.filters.isNil:
+  if not be.journal.isNil:
     be.putFilFn(writeBatch, instr.put)
     be.putFqsFn(writeBatch, instr.scd.state)
   ? be.putEndFn writeBatch                       # Finalise write batch
@@ -169,8 +169,8 @@ proc resolveBackendFilter*(
   ? updateSiblings.update().commit()
 
   # Finally update slot queue scheduler state (as saved)
-  if not be.filters.isNil:
-    be.filters.state = instr.scd.state
+  if not be.journal.isNil:
+    be.journal.state = instr.scd.state
 
   ok()
 
