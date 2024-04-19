@@ -98,7 +98,7 @@ iterator walkFifoBeImpl*[T](
       (cid, be.getFilFn(cid).get(otherwise = FilterRef(nil)))
 
     if not be.isNil:
-      let scd = be.filters
+      let scd = be.journal
       if not scd.isNil:
         for i in 0 ..< scd.state.len:
           let (left, right) = scd.state[i]

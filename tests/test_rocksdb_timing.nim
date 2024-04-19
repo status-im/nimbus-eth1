@@ -120,7 +120,7 @@ proc flushDbs(db: TestDbs) =
     for n in 0 ..< nTestDbInstances:
       if db.cdb[n].isNil or db.cdb[n].dbType != LegacyDbPersistent:
          break
-      db.cdb[n].backend.toRocksStoreRef.close()
+      db.cdb[n].newKvt.backend.toRocksStoreRef.close()
     db.baseDir.flushDbDir(db.subDir)
 
 proc testDbs(
@@ -177,7 +177,7 @@ proc importRunner(noisy = true;  persistent = true; capture = bChainCapture) =
       noisy.test_dbTimingUndumpBlocks(filePath, ddb, numBlocks, loadNoise)
 
     test "Extract key-value records into memory tables via rocksdb iterator":
-      if db.cdb[0].backend.toRocksStoreRef.isNil:
+      if db.cdb[0].newKvt.backend.toRocksStoreRef.isNil:
         skip() # not persistent => db.cdb[0] is nil
       else:
         noisy.test_dbTimingRockySetup(xTab32, xTab33, db.cdb[0])
@@ -256,7 +256,7 @@ proc dbTimingRunner(noisy = true;  persistent = true; cleanUp = true) =
       test &"{storeTx33} (key length 33) {intoTrieDb}":
         noisy.test_dbTimingTx33(xTab33, xDbs.cdb[5])
 
-      if xDbs.cdb[0].backend.toRocksStoreRef.isNil:
+      if xDbs.cdb[0].newKvt.backend.toRocksStoreRef.isNil:
         test "The rocksdb interface must be available": skip()
       else:
         test &"{storeRks32} (key length 32) {intoRksDb}":

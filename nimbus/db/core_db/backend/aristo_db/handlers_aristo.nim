@@ -36,63 +36,60 @@ type
 
   AristoCoreDxMptRef = ref object of CoreDxMptRef
     base: AristoBaseRef          ## Local base descriptor
-    root: VertexID               ## State root, may be zero unless account
-    accPath: PathID              ## Needed for storage tries
+    mptRoot: VertexID            ## State root, may be zero unless account
+    accPath: PathID              ## Needed for storage columns
     address: EthAddress          ## For storage tree debugging
 
-  AristoCoreDbTrie* = ref object of CoreDbTrieRef
+  AristoColRef* = ref object of CoreDbColRef
     ## Vertex ID wrapper, optionally with *MPT* context
     base: AristoBaseRef
-    case kind: CoreDbSubTrie     ## Current sub-trie
-    of StorageTrie:
+    case colType: CoreDbColType  ## Current column type
+    of CtStorage:
       stoRoot: VertexID          ## State root, may be zero if unknown
-      stoAddr: EthAddress        ## Account where the storage trie belongs to
+      stoAddr: EthAddress        ## Associated storage account address
     else:
       reset: bool                ## Internal delete request
 
   AristoCoreDbMptBE* = ref object of CoreDbMptBackendRef
     adb*: AristoDbRef
 
-  AristoCoreDbAccBE* = ref object of CoreDbAccBackendRef
-    adb*: AristoDbRef
-
 const
-  VoidTrieID = VertexID(0)
-  # StorageTrieID = VertexID(StorageTrie) -- currently unused
-  AccountsTrieID = VertexID(AccountsTrie)
-  GenericTrieID = VertexID(GenericTrie)
+  VoidVID = VertexID(0)
+  # StorageVID = VertexID(CtStorage) -- currently unused
+  AccountsVID = VertexID(CtAccounts)
+  GenericVID = VertexID(CtGeneric)
 
 logScope:
   topics = "aristo-hdl"
 
 static:
-  doAssert StorageTrie.ord == 0
-  doAssert AccountsTrie.ord == 1
-  doAssert low(CoreDbSubTrie).ord == 0
-  doAssert high(CoreDbSubTrie).ord < LEAST_FREE_VID
+  doAssert CtStorage.ord == 0
+  doAssert CtAccounts.ord == 1
+  doAssert low(CoreDbColType).ord == 0
+  doAssert high(CoreDbColType).ord < LEAST_FREE_VID
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
-func isValid(trie: CoreDbTrieRef): bool =
-  not trie.isNil and trie.ready
+func isValid(col: CoreDbColRef): bool =
+  not col.isNil and col.ready
 
-func to(trie: CoreDbTrieRef; T: type VertexID): T =
-  if trie.isValid:
-    let trie = AristoCoreDbTrie(trie)
-    if trie.kind == StorageTrie:
-      return trie.stoRoot
-    return VertexID(trie.kind)
+func to(col: CoreDbColRef; T: type VertexID): T =
+  if col.isValid:
+    let col = AristoColRef(col)
+    if col.colType == CtStorage:
+      return col.stoRoot
+    return VertexID(col.colType)
 
 func to(address: EthAddress; T: type PathID): T =
   HashKey.fromBytes(address.keccakHash.data).value.to(T)
 
-func resetTrie(kind: CoreDbSubTrie): bool =
-  ## Check whether to reset some non-dynamic trie when instantiating. It
+func resetCol(colType: CoreDbColType): bool =
+  ## Check whether to reset some non-dynamic column when instantiating. It
   ## emulates the behaviour of a new empty MPT on the legacy database.
-  kind == GenericTrie or
-    (high(CoreDbSubTrie) < kind and kind.ord < LEAST_FREE_VID)
+  colType == CtGeneric or
+    (high(CoreDbColType) < colType and colType.ord < LEAST_FREE_VID)
 
 # -------------------------------
 
@@ -108,9 +105,9 @@ func toCoreDbAccount(
     balance:  acc.balance,
     codeHash: acc.codeHash)
   if acc.storageID.isValid:
-    result.stoTrie = db.bless AristoCoreDbTrie(
+    result.storage = db.bless AristoColRef(
       base:    cAcc.base,
-      kind:    StorageTrie,
+      colType: CtStorage,
       stoRoot: acc.storageID,
       stoAddr: address)
 
@@ -120,7 +117,7 @@ func toPayloadRef(acc: CoreDbAccount): PayloadRef =
     account: AristoAccount(
       nonce:     acc.nonce,
       balance:   acc.balance,
-      storageID: acc.stoTrie.to(VertexID),
+      storageID: acc.storage.to(VertexID),
       codeHash:  acc.codeHash))
 
 # -------------------------------
@@ -169,7 +166,7 @@ func toRc[T](
       return ok()
     else:
       return ok(rc.value)
-  err((VoidTrieID,rc.error).toError(base, info, error))
+  err((VoidVID,rc.error).toError(base, info, error))
 
 
 func toVoidRc[T](
@@ -187,7 +184,7 @@ func toVoidRc[T](
 # ------------------------------------------------------------------------------
 
 proc mptMethods(cMpt: AristoCoreDxMptRef): CoreDbMptFns =
-  ## Hexary trie database handlers
+  ## Generic columns database handlers
   let
     cMpt = cMpt        # So it can savely be captured
     base = cMpt.base   # Will not change and can be captured
@@ -198,43 +195,32 @@ proc mptMethods(cMpt: AristoCoreDxMptRef): CoreDbMptFns =
   proc mptBackend(): CoreDbMptBackendRef =
     db.bless AristoCoreDbMptBE(adb: mpt)
 
-  proc mptTrieFn(): CoreDbTrieRef =
-    let trie =
-      if LEAST_FREE_VID <= cMpt.root.distinctBase:
+  proc mptColFn(): CoreDbColRef =
+    let col =
+      if LEAST_FREE_VID <= cMpt.mptRoot.distinctBase:
         assert cMpt.accPath.isValid # debug mode only
-        AristoCoreDbTrie(
+        AristoColRef(
           base:    base,
-          kind:    StorageTrie,
-          stoRoot: cMpt.root,
+          colType: CtStorage,
+          stoRoot: cMpt.mptRoot,
           stoAddr: cMpt.address)
       else:
-        AristoCoreDbTrie(
-          base: base,
-          kind: CoreDbSubTrie(cMpt.root))
-    db.bless trie
-
-  proc mptPersistent(): CoreDbRc[void] =
-    const info = "persistentFn()"
-
-    let rc = api.stow(mpt, persistent = true)
-    if rc.isOk:
-      ok()
-    elif api.level(mpt) == 0:
-      err(rc.error.toError(base, info))
-    else:
-      err(rc.error.toError(base, info, MptTxPending))
+        AristoColRef(
+          base:    base,
+          colType: CoreDbColType(cMpt.mptRoot))
+    db.bless col
 
   proc mptFetch(key: openArray[byte]): CoreDbRc[Blob] =
     const info = "fetchFn()"
 
-    # Some pathological behaviour observed with storage tries due to lazy
+    # Some pathological behaviour observed with storage column due to lazy
     # update. The `fetchPayload()` does not now about this and would complain
     # an error different from `FetchPathNotFound`.
-    let root = cMpt.root
-    if not root.isValid:
-      return err((VoidTrieID,MptRootMissing).toError(base, info, MptNotFound))
+    let rootVID = cMpt.mptRoot
+    if not rootVID.isValid:
+      return err((VoidVID,MptRootMissing).toError(base, info, MptNotFound))
 
-    let rc = api.fetchPayload(mpt, root, key)
+    let rc = api.fetchPayload(mpt, rootVID, key)
     if rc.isOk:
       api.serialise(mpt, rc.value).toRc(base, info)
     elif rc.error[1] != FetchPathNotFound:
@@ -246,41 +232,41 @@ proc mptMethods(cMpt: AristoCoreDxMptRef): CoreDbMptFns =
     const info = "mergeFn()"
 
     # Provide root ID on-the-fly
-    let rootOk = cMpt.root.isValid
+    let rootOk = cMpt.mptRoot.isValid
     if not rootOk:
-      cMpt.root = api.vidFetch(mpt, pristine=true)
+      cMpt.mptRoot = api.vidFetch(mpt, pristine=true)
 
-    let rc = api.merge(mpt, cMpt.root, k, v, cMpt.accPath)
+    let rc = api.merge(mpt, cMpt.mptRoot, k, v, cMpt.accPath)
     if rc.isErr:
       # Re-cycle unused ID (prevents from leaking IDs)
       if not rootOk:
-        api.vidDispose(mpt, cMpt.root)
-        cMpt.root = VoidTrieID
+        api.vidDispose(mpt, cMpt.mptRoot)
+        cMpt.mptRoot = VoidVID
       return err(rc.error.toError(base, info))
     ok()
 
   proc mptDelete(key: openArray[byte]): CoreDbRc[void] =
     const info = "deleteFn()"
 
-    if not cMpt.root.isValid and cMpt.accPath.isValid:
-      # This is insane but legit. A storage trie was announced for an account
+    if not cMpt.mptRoot.isValid and cMpt.accPath.isValid:
+      # This is insane but legit. A storage column was announced for an account
       # but no data have been added, yet.
       return ok()
-    let rc = api.delete(mpt, cMpt.root, key, cMpt.accPath)
+    let rc = api.delete(mpt, cMpt.mptRoot, key, cMpt.accPath)
     if rc.isErr:
       if rc.error[1] == DelPathNotFound:
         return err(rc.error.toError(base, info, MptNotFound))
       return err(rc.error.toError(base, info))
 
     if rc.value:
-      # Trie has become empty
-      cMpt.root = VoidTrieID
+      # Column has become empty
+      cMpt.mptRoot = VoidVID
     ok()
 
   proc mptHasPath(key: openArray[byte]): CoreDbRc[bool] =
     const info = "hasPathFn()"
 
-    let rc = api.hasPath(mpt, cMpt.root, key)
+    let rc = api.hasPath(mpt, cMpt.mptRoot, key)
     if rc.isErr:
       return err(rc.error.toError(base, info))
     ok(rc.value)
@@ -302,21 +288,18 @@ proc mptMethods(cMpt: AristoCoreDxMptRef): CoreDbMptFns =
     hasPathFn: proc(k: openArray[byte]): CoreDbRc[bool] =
       mptHasPath(k),
 
-    getTrieFn: proc(): CoreDbTrieRef =
-      mptTrieFn(),
+    getColFn: proc(): CoreDbColRef =
+      mptColFn(),
 
     isPruningFn: proc(): bool =
-      true,
-
-    persistentFn: proc(): CoreDbRc[void] =
-      mptPersistent())
+      true)
 
 # ------------------------------------------------------------------------------
 # Private account call back functions
 # ------------------------------------------------------------------------------
 
 proc accMethods(cAcc: AristoCoreDxAccRef): CoreDbAccFns =
-  ## Hexary trie database handlers
+  ## Account columns database handlers
   let
     cAcc = cAcc        # So it can savely be captured
     base = cAcc.base   # Will not change and can be captured
@@ -324,29 +307,15 @@ proc accMethods(cAcc: AristoCoreDxAccRef): CoreDbAccFns =
     api = base.api     # Ditto
     mpt = base.ctx.mpt # Ditto
 
-  proc accBackend(): CoreDbAccBackendRef =
-    db.bless AristoCoreDbAccBE(adb: mpt)
-
-  proc getTrieFn(): CoreDbTrieRef =
-    db.bless AristoCoreDbTrie(
+  proc getColFn(): CoreDbColRef =
+    db.bless AristoColRef(
       base: base,
-      kind: AccountsTrie)
-
-  proc accPersistent(): CoreDbRc[void] =
-    const info = "acc/persistentFn()"
-
-    let rc = api.stow(mpt, persistent = true)
-    if rc.isOk:
-      ok()
-    elif api.level(mpt) == 0:
-      err(rc.error.toError(base, info))
-    else:
-      err(rc.error.toError(base, info, AccTxPending))
+      colType: CtAccounts)
 
   proc accCloneMpt(): CoreDbRc[CoreDxMptRef] =
     ok(AristoCoreDxMptRef(
-      base: base,
-      root: AccountsTrieID))
+      base:    base,
+      mptRoot: AccountsVID))
 
   proc accFetch(address: EthAddress): CoreDbRc[CoreDbAccount] =
     const info = "acc/fetchFn()"
@@ -354,7 +323,7 @@ proc accMethods(cAcc: AristoCoreDxAccRef): CoreDbAccFns =
     let pyl = block:
       let
         key = address.keccakHash.data
-        rc = api.fetchPayload(mpt, AccountsTrieID, key)
+        rc = api.fetchPayload(mpt, AccountsVID, key)
       if rc.isOk:
         rc.value
       elif rc.error[1] != FetchPathNotFound:
@@ -373,7 +342,7 @@ proc accMethods(cAcc: AristoCoreDxAccRef): CoreDbAccFns =
     let
       key = account.address.keccakHash.data
       val = account.toPayloadRef()
-      rc = api.mergePayload(mpt, AccountsTrieID, key, val)
+      rc = api.mergePayload(mpt, AccountsVID, key, val)
     if rc.isErr:
       return err(rc.error.toError(base, info))
     ok()
@@ -383,7 +352,7 @@ proc accMethods(cAcc: AristoCoreDxAccRef): CoreDbAccFns =
 
     let
       key = address.keccakHash.data
-      rc = api.delete(mpt, AccountsTrieID, key, VOID_PATH_ID)
+      rc = api.delete(mpt, AccountsVID, key, VOID_PATH_ID)
     if rc.isErr:
       if rc.error[1] == DelPathNotFound:
         return err(rc.error.toError(base, info, AccNotFound))
@@ -395,10 +364,10 @@ proc accMethods(cAcc: AristoCoreDxAccRef): CoreDbAccFns =
 
     let
       key = address.keccakHash.data
-      pyl = api.fetchPayload(mpt, AccountsTrieID, key).valueOr:
+      pyl = api.fetchPayload(mpt, AccountsVID, key).valueOr:
         return ok()
 
-    # Use storage ID from account and delete that sub-trie
+    # Use storage ID from account and delete that column
     if pyl.pType == AccountData:
       let stoID = pyl.account.storageID
       if stoID.isValid:
@@ -412,16 +381,13 @@ proc accMethods(cAcc: AristoCoreDxAccRef): CoreDbAccFns =
 
     let
       key = address.keccakHash.data
-      rc = api.hasPath(mpt, AccountsTrieID, key)
+      rc = api.hasPath(mpt, AccountsVID, key)
     if rc.isErr:
       return err(rc.error.toError(base, info))
     ok(rc.value)
 
 
   CoreDbAccFns(
-    backendFn: proc(): CoreDbAccBackendRef =
-      accBackend(),
-
     getMptFn: proc(): CoreDbRc[CoreDxMptRef] =
       accCloneMpt(),
 
@@ -440,14 +406,11 @@ proc accMethods(cAcc: AristoCoreDxAccRef): CoreDbAccFns =
     hasPathFn: proc(address: EthAddress): CoreDbRc[bool] =
       accHasPath(address),
 
-    getTrieFn: proc(): CoreDbTrieRef =
-      getTrieFn(),
+    getColFn: proc(): CoreDbColRef =
+      getColFn(),
 
     isPruningFn: proc(): bool =
-      true,
-
-    persistentFn: proc(): CoreDbRc[void] =
-      accPersistent())
+      true)
 
 # ------------------------------------------------------------------------------
 # Private context call back functions
@@ -461,93 +424,93 @@ proc ctxMethods(cCtx: AristoCoreDbCtxRef): CoreDbCtxFns =
     api = base.api   # Ditto
     mpt = cCtx.mpt   # Ditto
 
-  proc ctxNewTrie(
-      kind: CoreDbSubTrie;
-      root: Hash256;
+  proc ctxNewCol(
+      colType: CoreDbColType;
+      colState: Hash256;
       address: Option[EthAddress];
-        ): CoreDbRc[CoreDbTrieRef] =
-    const info = "ctx/newTrieFn()"
+        ): CoreDbRc[CoreDbColRef] =
+    const info = "ctx/newColFn()"
 
-    let trie = AristoCoreDbTrie(
-      base: base,
-      kind: kind)
+    let col = AristoColRef(
+      base:    base,
+      colType: colType)
 
-    if kind == StorageTrie:
+    if colType == CtStorage:
       if address.isNone:
         let error = aristo.UtilsAccPathMissing
         return err(error.toError(base, info, AccAddrMissing))
-      trie.stoAddr = address.unsafeGet
+      col.stoAddr = address.unsafeGet
 
-    if not root.isValid:
-      return ok(db.bless trie)
+    if not colState.isValid:
+      return ok(db.bless col)
 
-    # Reset some non-dynamic trie when instantiating. It emulates the behaviour
+    # Reset some non-dynamic col when instantiating. It emulates the behaviour
     # of a new empty MPT on the legacy database.
-    trie.reset = kind.resetTrie()
+    col.reset = colType.resetCol()
 
-    # Update hashes in order to verify the trie state root.
+    # Update hashes in order to verify the column state.
     ? api.hashify(mpt).toVoidRc(base, info, HashNotAvailable)
 
-    # Make sure that the hash is available as state root on the main trie
-    let rc = api.getKeyRc(mpt, VertexID kind)
+    # Assure that hash is available as state for the main/accounts column
+    let rc = api.getKeyRc(mpt, VertexID colType)
     if rc.isErr:
       doAssert rc.error == GetKeyNotFound
-    elif rc.value == root.to(HashKey):
-      return ok(db.bless trie)
+    elif rc.value == colState.to(HashKey):
+      return ok(db.bless col)
     err(aristo.GenericError.toError(base, info, RootNotFound))
 
 
-  proc ctxGetMpt(trie: CoreDbTrieRef): CoreDbRc[CoreDxMptRef] =
+  proc ctxGetMpt(col: CoreDbColRef): CoreDbRc[CoreDxMptRef] =
     const
       info = "ctx/getMptFn()"
     let
-      trie = AristoCoreDbTrie(trie)
+      col = AristoColRef(col)
     var
       reset = false
       newMpt: AristoCoreDxMptRef
-    if not trie.isValid:
+    if not col.isValid:
       reset = true
       newMpt = AristoCoreDxMptRef(
-        root:    GenericTrieID,
+        mptRoot: GenericVID,
         accPath: VOID_PATH_ID)
 
-    elif trie.kind == StorageTrie:
+    elif col.colType == CtStorage:
       newMpt = AristoCoreDxMptRef(
-        root:    trie.stoRoot,
-        accPath: trie.stoAddr.to(PathID),
-        address: trie.stoAddr)
-      if trie.stoRoot.isValid:
-        if trie.stoRoot.distinctBase < LEAST_FREE_VID:
-          let error = (trie.stoRoot,MptRootUnacceptable)
+        mptRoot: col.stoRoot,
+        accPath: col.stoAddr.to(PathID),
+        address: col.stoAddr)
+      if col.stoRoot.isValid:
+        if col.stoRoot.distinctBase < LEAST_FREE_VID:
+          let error = (col.stoRoot,MptRootUnacceptable)
           return err(error.toError(base, info, RootUnacceptable))
         # Verify path if there is a particular storge root VID
-        let rc = api.hikeUp(newMpt.accPath.to(NibblesSeq), AccountsTrieID, mpt)
+        let rc = api.hikeUp(newMpt.accPath.to(NibblesSeq), AccountsVID, mpt)
         if rc.isErr:
           return err(rc.error[1].toError(base, info, AccNotFound))
     else:
-      reset = trie.kind.resetTrie()
+      reset = col.colType.resetCol()
       newMpt = AristoCoreDxMptRef(
-        root:    VertexID(trie.kind),
+        mptRoot: VertexID(col.colType),
         accPath: VOID_PATH_ID)
 
-    # Reset trie. This a emulates the behaviour of a new empty MPT on the
+    # Reset column. This a emulates the behaviour of a new empty MPT on the
     # legacy database.
     if reset:
-      let rc = api.delTree(mpt, newMpt.root, VOID_PATH_ID)
+      let rc = api.delTree(mpt, newMpt.mptRoot, VOID_PATH_ID)
       if rc.isErr:
         return err(rc.error.toError(base, info, AutoFlushFailed))
-      trie.reset = false
+      col.reset = false
 
     newMpt.base = base
     newMpt.methods = newMpt.mptMethods()
     ok(db.bless newMpt)
 
-  proc ctxGetAcc(trie: CoreDbTrieRef): CoreDbRc[CoreDxAccRef] =
+  proc ctxGetAcc(col: CoreDbColRef): CoreDbRc[CoreDxAccRef] =
     const info = "getAccFn()"
 
-    let trie = AristoCoreDbTrie(trie)
-    if trie.kind != AccountsTrie:
-      let error = (AccountsTrieID, AccRootUnacceptable)
+    let col = AristoColRef(col)
+    if col.colType != CtAccounts:
+      let error = (AccountsVID, AccRootUnacceptable)
       return err(error.toError(base, info, RootUnacceptable))
 
     let acc = AristoCoreDxAccRef(base: base)
@@ -561,18 +524,18 @@ proc ctxMethods(cCtx: AristoCoreDbCtxRef): CoreDbCtxFns =
 
 
   CoreDbCtxFns(
-    newTrieFn: proc(
-        trie: CoreDbSubTrie;
-        root: Hash256;
+    newColFn: proc(
+        col: CoreDbColType;
+        colState: Hash256;
         address: Option[EthAddress];
-          ): CoreDbRc[CoreDbTrieRef] =
-      ctxNewTrie(trie, root, address),
+          ): CoreDbRc[CoreDbColRef] =
+      ctxNewCol(col, colState, address),
 
-    getMptFn: proc(trie: CoreDbTrieRef; prune: bool): CoreDbRc[CoreDxMptRef] =
-      ctxGetMpt(trie),
+    getMptFn: proc(col: CoreDbColRef; prune: bool): CoreDbRc[CoreDxMptRef] =
+      ctxGetMpt(col),
 
-    getAccFn: proc(trie: CoreDbTrieRef; prune: bool): CoreDbRc[CoreDxAccRef] =
-      ctxGetAcc(trie),
+    getAccFn: proc(col: CoreDbColRef; prune: bool): CoreDbRc[CoreDxAccRef] =
+      ctxGetAcc(col),
 
     forgetFn: proc() =
       ctxForget())
@@ -601,15 +564,18 @@ func toVoidRc*[T](
       ): CoreDbRc[void] =
   if rc.isOk:
     return ok()
-  err((VoidTrieID,rc.error).toError(base, info, error))
+  err((VoidVID,rc.error).toError(base, info, error))
 
 # ---------------------
 
 func to*(dsc: CoreDxMptRef, T: type AristoDbRef): T =
   AristoCoreDxMptRef(dsc).base.ctx.mpt
 
+func to*(dsc: CoreDxMptRef, T: type AristoApiRef): T =
+  AristoCoreDxMptRef(dsc).base.api
+
 func rootID*(dsc: CoreDxMptRef): VertexID  =
-  dsc.AristoCoreDxMptRef.root
+  AristoCoreDxMptRef(dsc).mptRoot
 
 func txTop*(
     base: AristoBaseRef;
@@ -628,29 +594,29 @@ proc getLevel*(base: AristoBaseRef): int =
 
 # ---------------------
 
-proc triePrint*(
+proc colPrint*(
     base: AristoBaseRef;
-    trie: CoreDbTrieRef;
+    col: CoreDbColRef;
       ): string =
-  if trie.isValid:
+  if col.isValid:
     let
-      trie = trie.AristoCoreDbTrie
-      root = trie.to(VertexID)
-    result = "(" & $trie.kind & ","
+      col = AristoColRef(col)
+      root = col.to(VertexID)
+    result = "(" & $col.colType & ","
 
     # Do vertex ID and address/hash
-    if trie.kind == StorageTrie:
-      result &= trie.stoRoot.toStr
-      if trie.stoAddr != EthAddress.default:
-        result &= ",%" & $trie.stoAddr.toHex
+    if col.colType == CtStorage:
+      result &= col.stoRoot.toStr
+      if col.stoAddr != EthAddress.default:
+        result &= ",%" & $col.stoAddr.toHex
     else:
-      result &= VertexID(trie.kind).toStr
+      result &= VertexID(col.colType).toStr
 
     # Do the Merkle hash key
     if not root.isValid:
       result &= ",£ø"
     else:
-      let rc = base.api.getKeyRc(trie.base.ctx.mpt, root)
+      let rc = base.api.getKeyRc(col.base.ctx.mpt, root)
       if rc.isErr:
         result &= "," & $rc.error
       elif rc.value.isValid:
@@ -659,20 +625,20 @@ proc triePrint*(
         result &= ",£ø"
 
     result &= ")"
-  elif not trie.isNil:
+  elif not col.isNil:
     result &= "$?"
 
 
 proc rootHash*(
     base: AristoBaseRef;
-    trie: CoreDbTrieRef;
+    col: CoreDbColRef;
     info: static[string];
       ): CoreDbRc[Hash256] =
-  let trie = trie.AristoCoreDbTrie
-  if not trie.isValid:
+  let col = AristoColRef(col)
+  if not col.isValid:
     return err(TrieInvalid.toError(base, info, HashNotAvailable))
 
-  let root = trie.to(VertexID)
+  let root = col.to(VertexID)
   if not root.isValid:
     return ok(EMPTY_ROOT_HASH)
 
@@ -684,7 +650,7 @@ proc rootHash*(
   let key = block:
     let rc = api.getKeyRc(mpt, root)
     if rc.isErr:
-      doAssert rc.error in {GetKeyNotFound,GetKeyUpdateNeeded}
+      doAssert rc.error in {GetKeyNotFound, GetKeyUpdateNeeded}
       return err(rc.error.toError(base, info, HashNotAvailable))
     rc.value
   ok key.to(Hash256)
@@ -697,6 +663,22 @@ proc swapCtx*(base: AristoBaseRef; ctx: CoreDbCtxRef): CoreDbCtxRef =
   # Set read-write access and install
   base.ctx = AristoCoreDbCtxRef(ctx)
   base.api.reCentre(base.ctx.mpt)
+
+
+proc persistent*(
+    base: AristoBaseRef;
+    info: static[string];
+      ): CoreDbRc[void] =
+  let
+    api = base.api
+    mpt = base.ctx.mpt
+    rc = api.stow(mpt, persistent = true)
+  if rc.isOk:
+    ok()
+  elif api.level(mpt) == 0:
+    err(rc.error.toError(base, info))
+  else:
+    err(rc.error.toError(base, info, TxPending))
 
 # ------------------------------------------------------------------------------
 # Public constructors and related
@@ -727,17 +709,17 @@ func init*(T: type AristoBaseRef; db: CoreDbRef; adb: AristoDbRef): T =
 proc init*(
     T: type CoreDbCtxRef;
     base: AristoBaseRef;
-    root: Hash256;
-    kind: CoreDbSubTrie;
+    colState: Hash256;
+    colType: CoreDbColType;
       ): CoreDbRc[CoreDbCtxRef] =
   const info = "fromTxFn()"
 
-  if kind.ord == 0:
-    return err(aristo.GenericError.toError(base, info, SubTrieUnacceptable))
+  if colType.ord == 0:
+    return err(aristo.GenericError.toError(base, info, ColUnacceptable))
   let
     api = base.api
-    vid = VertexID(kind)
-    key = root.to(HashKey)
+    vid = VertexID(colType)
+    key = colState.to(HashKey)
 
     # Fork MPT descriptor that provides `(vid,key)`
     newMpt = block:

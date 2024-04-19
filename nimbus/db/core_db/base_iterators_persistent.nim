@@ -56,7 +56,7 @@ iterator replicatePersistent*(mpt: CoreDxMptRef): (Blob, Blob) {.rlpRaise.} =
   else:
     raiseAssert: "Unsupported database type: " & $mpt.parent.dbType
   mpt.ifTrackNewApi:
-    let trie = mpt.methods.getTrieFn()
+    let trie = mpt.methods.getColFn()
     debug newApiTxt, api, elapsed, trie
 
 when ProvideLegacyAPI:

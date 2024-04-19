@@ -117,7 +117,7 @@ type
   BackendRef* = ref BackendObj
   BackendObj* = object of RootObj
     ## Backend interface.
-    filters*: QidSchedRef            ## Filter slot queue state
+    journal*: QidSchedRef            ## Delta filters slot queue state
 
     getVtxFn*: GetVtxFn              ## Read vertex record
     getKeyFn*: GetKeyFn              ## Read Merkle hash/key
@@ -138,7 +138,7 @@ type
     closeFn*: CloseFn                ## Generic destructor
 
 proc init*(trg: var BackendObj; src: BackendObj) =
-  trg.filters = src.filters
+  trg.journal = src.journal
   trg.getVtxFn = src.getVtxFn
   trg.getKeyFn = src.getKeyFn
   trg.getFilFn = src.getFilFn

@@ -13,9 +13,7 @@ import
   ./base_desc
 
 type
-  EphemMethodsDesc =
-    CoreDbBackendRef | CoreDbKvtBackendRef | CoreDbMptBackendRef |
-    CoreDbAccBackendRef | CoreDbTrieRef
+  EphemMethodsDesc = CoreDbKvtBackendRef | CoreDbMptBackendRef | CoreDbColRef
 
   MethodsDesc =
     CoreDxKvtRef |
@@ -30,10 +28,9 @@ type
 # ------------------------------------------------------------------------------
 
 proc validateMethodsDesc(base: CoreDbBaseFns) =
-  doAssert not base.backendFn.isNil
   doAssert not base.destroyFn.isNil
-  doAssert not base.rootHashFn.isNil
-  doAssert not base.triePrintFn.isNil
+  doAssert not base.colStateFn.isNil
+  doAssert not base.colPrintFn.isNil
   doAssert not base.errorPrintFn.isNil
   doAssert not base.legacySetupFn.isNil
   doAssert not base.levelFn.isNil
@@ -43,18 +40,19 @@ proc validateMethodsDesc(base: CoreDbBaseFns) =
   doAssert not base.swapCtxFn.isNil
   doAssert not base.beginFn.isNil
   doAssert not base.newCaptureFn.isNil
+  doAssert not base.persistentFn.isNil
 
 proc validateMethodsDesc(kvt: CoreDbKvtFns) =
   doAssert not kvt.backendFn.isNil
   doAssert not kvt.getFn.isNil
   doAssert not kvt.delFn.isNil
   doAssert not kvt.putFn.isNil
-  doAssert not kvt.persistentFn.isNil
+  doAssert not kvt.saveOffSiteFn.isNil
   doAssert not kvt.hasKeyFn.isNil
   doAssert not kvt.forgetFn.isNil
 
 proc validateMethodsDesc(ctx: CoreDbCtxFns) =
-  doAssert not ctx.newTrieFn.isNil
+  doAssert not ctx.newColFn.isNil
   doAssert not ctx.getMptFn.isNil
   doAssert not ctx.getAccFn.isNil
   doAssert not ctx.forgetFn.isNil
@@ -65,28 +63,25 @@ proc validateMethodsDesc(fns: CoreDbMptFns) =
   doAssert not fns.deleteFn.isNil
   doAssert not fns.mergeFn.isNil
   doAssert not fns.hasPathFn.isNil
-  doAssert not fns.getTrieFn.isNil
+  doAssert not fns.getColFn.isNil
   doAssert not fns.isPruningFn.isNil
-  doAssert not fns.persistentFn.isNil
 
 proc validateMethodsDesc(fns: CoreDbAccFns) =
-  doAssert not fns.backendFn.isNil
   doAssert not fns.getMptFn.isNil
   doAssert not fns.fetchFn.isNil
   doAssert not fns.deleteFn.isNil
   doAssert not fns.stoFlushFn.isNil
   doAssert not fns.mergeFn.isNil
   doAssert not fns.hasPathFn.isNil
-  doAssert not fns.getTrieFn.isNil
+  doAssert not fns.getColFn.isNil
   doAssert not fns.isPruningFn.isNil
-  doAssert not fns.persistentFn.isNil
 
 # ------------
 
-proc validateMethodsDesc(trie: CoreDbTrieRef) =
-  doAssert not trie.isNil
-  doAssert not trie.parent.isNil
-  doAssert trie.ready == true
+proc validateMethodsDesc(col: CoreDbColRef) =
+  doAssert not col.isNil
+  doAssert not col.parent.isNil
+  doAssert col.ready == true
 
 proc validateMethodsDesc(e: CoreDbErrorRef) =
   doAssert e.error != CoreDbErrorCode(0)
@@ -119,7 +114,7 @@ proc validateMethodsDesc(acc: CoreDxAccRef) =
 
 proc validateMethodsDesc(phk: CoreDxPhkRef) =
   doAssert not phk.isNil
-  doAssert not phk.fromMpt.isNil
+  doAssert not phk.toMpt.isNil
   phk.methods.validateMethodsDesc
 
 proc validateMethodsDesc(cpt: CoreDxCaptRef) =

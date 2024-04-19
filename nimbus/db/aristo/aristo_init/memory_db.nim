@@ -45,7 +45,7 @@ type
     ## Database
     sTab: Table[VertexID,Blob]       ## Structural vertex table making up a trie
     kMap: Table[VertexID,HashKey]    ## Merkle hash key mapping
-    rFil: Table[QueueID,Blob]        ## Backend filters
+    rFil: Table[QueueID,Blob]        ## Backend journal filters
     vGen: Option[seq[VertexID]]
     vFqs: Option[seq[(QueueID,QueueID)]]
     noFq: bool                       ## No filter queues available
@@ -324,7 +324,7 @@ proc memoryBackend*(qidLayout: QidLayoutRef): BackendRef =
 
   # Set up filter management table
   if not db.mdb.noFq:
-    db.filters = QidSchedRef(ctx: qidLayout)
+    db.journal = QidSchedRef(ctx: qidLayout)
 
   db
 

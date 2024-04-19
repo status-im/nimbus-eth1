@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -57,12 +57,12 @@ proc ifNodesExistGetAccount*(trie: AccountsTrie, address: EthAddress): Option[Ac
 proc maybeGetCode*(db: CoreDbRef, codeHash: Hash256): Option[seq[byte]] =
   when defined(geth):
     if db.isLegacy:
-      db.kvt.backend.toLegacy.maybeGet(codeHash.data)
+      db.newKvt.backend.toLegacy.maybeGet(codeHash.data)
     else:
       db.kvt.get(codeHash.data)
   else:
     if db.isLegacy:
-      db.kvt.backend.toLegacy.maybeGet(contractHashKey(codeHash).toOpenArray)
+      db.newKvt.backend.toLegacy.maybeGet(contractHashKey(codeHash).toOpenArray)
     else:
       some(db.kvt.get(contractHashKey(codeHash).toOpenArray))
 

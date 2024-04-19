@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2021 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -14,7 +14,10 @@ import
   chronicles,
   chronos,
   eth/p2p,
+  ../../db/aristo/aristo_desc,
+  ../../db/aristo/aristo_filter/filter_scheduler,
   ".."/[protocol, sync_desc],
+  ../handlers/eth,
   ../misc/[best_pivot, block_queue, sync_ctrl, ticker],
   ./worker_desc
 
@@ -41,6 +44,16 @@ const
 proc pp(n: BlockNumber): string =
   ## Dedicated pretty printer (`$` is defined elsewhere using `UInt256`)
   if n == high(BlockNumber): "high" else:"#" & $n
+
+# --------------
+
+proc disableWireServices(ctx: FullCtxRef) =
+  ## Helper for `setup()`: Temporarily stop useless wire protocol services.
+  ctx.ethWireCtx.txPoolEnabled = false
+
+proc enableWireServices(ctx: FullCtxRef) =
+  ## Enable services again
+  ctx.ethWireCtx.txPoolEnabled = true
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -74,13 +87,18 @@ proc tickerUpdater(ctx: FullCtxRef): TickerFullStatsUpdater =
     let suspended =
       0 < ctx.pool.suspendAt and ctx.pool.suspendAt < stats.topAccepted
 
+    var journal: seq[int]
+    if not ctx.pool.journal.isNil:
+      journal = ctx.pool.journal.lengths()
+
     TickerFullStats(
       topPersistent:   stats.topAccepted,
       nextStaged:      stats.nextStaged,
       nextUnprocessed: stats.nextUnprocessed,
       nStagedQueue:    stats.nStagedQueue,
       suspended:       suspended,
-      reOrg:           stats.reOrg)
+      reOrg:           stats.reOrg,
+      journal:         journal)
 
 
 proc processStaged(buddy: FullBuddyRef): bool =
@@ -169,12 +187,20 @@ proc setup*(ctx: FullCtxRef): bool =
   ctx.pool.bCtx = BlockQueueCtxRef.init(rc.value + 1)
   if ctx.pool.enableTicker:
     ctx.pool.ticker = TickerRef.init(ctx.tickerUpdater)
+
+    # Monitor journal state
+    let adb = ctx.chain.com.db.ctx.getMpt(CtGeneric).backend.toAristo
+    if not adb.isNil:
+      doAssert not adb.backend.isNil
+      ctx.pool.journal = adb.backend.journal
   else:
     debug "Ticker is disabled"
 
   if ctx.exCtrlFile.isSome:
     warn "Full sync accepts suspension request block number",
       syncCtrlFile=ctx.exCtrlFile.get
+
+  ctx.disableWireServices()
   true
 
 proc release*(ctx: FullCtxRef) =
@@ -182,6 +208,7 @@ proc release*(ctx: FullCtxRef) =
   ctx.pool.pivot = nil
   if not ctx.pool.ticker.isNil:
     ctx.pool.ticker.stop()
+  ctx.enableWireServices() # restore to default
 
 proc start*(buddy: FullBuddyRef): bool =
   ## Initialise worker peer
@@ -200,10 +227,11 @@ proc start*(buddy: FullBuddyRef): bool =
 
 proc stop*(buddy: FullBuddyRef) =
   ## Clean up this peer
+  let ctx = buddy.ctx
   buddy.ctrl.stopped = true
   buddy.only.pivot.clear()
-  if not buddy.ctx.pool.ticker.isNil:
-     buddy.ctx.pool.ticker.stopBuddy()
+  if not ctx.pool.ticker.isNil:
+     ctx.pool.ticker.stopBuddy()
 
 # ------------------------------------------------------------------------------
 # Public functions

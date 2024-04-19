@@ -420,7 +420,7 @@ proc storeFilter(
   let rc = be.putEndFn txFrame
   xCheckRc rc.error == 0
 
-  be.filters.state = instr.scd.state
+  be.journal.state = instr.scd.state
   true
 
 proc storeFilter(
@@ -449,8 +449,8 @@ proc fetchDelete(
       let rc = be.fifosFetch(backSteps = backSteps)
       xCheckRc rc.error == 0
       rc.value
-    qid = be.filters.le(instr.fil.fid, be.qid2fidFn)
-    inx = be.filters[qid]
+    qid = be.journal.le(instr.fil.fid, be.qid2fidFn)
+    inx = be.journal[qid]
   xCheck backSteps == inx + 1
   xCheck instr.del.put == vfyInst.put
   xCheck instr.del.scd.state == vfyInst.scd.state
@@ -464,13 +464,13 @@ proc fetchDelete(
     let rc = be.putEndFn txFrame
     xCheckRc rc.error == 0
 
-  be.filters.state = instr.del.scd.state
+  be.journal.state = instr.del.scd.state
   filter = instr.fil
 
   # Verify that state was properly installed
   let rc = be.getFqsFn()
   xCheckRc rc.error == 0
-  xCheck rc.value == be.filters.state
+  xCheck rc.value == be.journal.state
 
   true
 
@@ -525,12 +525,12 @@ proc validateFifo(
       lastTrg = filter.trg.to(UInt256)
 
       # Check random access
-      xCheck qid == be.filters[inx]
-      xCheck inx == be.filters[qid]
+      xCheck qid == be.journal[inx]
+      xCheck inx == be.journal[qid]
 
       # Check access by queue ID (all end up at `qid`)
       for fid in filter.fid ..< lastFid:
-        xCheck qid == be.filters.le(fid, be.qid2fidFn)
+        xCheck qid == be.journal.le(fid, be.qid2fidFn)
 
       inx.inc
       lastFid = filter.fid
@@ -694,11 +694,11 @@ proc testFilterFifo*(
     var s = ""
     if 0 < serial:
       s &= " n=" & $serial
-    s &= " len=" & $be.filters.len
+    s &= " len=" & $be.journal.len
     if 0 < exec.len:
       s &= " exec=" & exec.pp
     s &= "" &
-      "\n   state=" & be.filters.state.pp &
+      "\n   state=" & be.journal.state.pp &
       #"\n    list=" & be.fList.pp &
       "\n    fifo=" & be.fifos.pp &
       "\n"
@@ -706,7 +706,7 @@ proc testFilterFifo*(
 
   when false: # or true
     noisy.say "***", "sampleSize=", sampleSize,
-     " ctx=", be.filters.ctx.q, " stats=", be.filters.ctx.stats
+     " ctx=", be.journal.ctx.q, " stats=", be.journal.ctx.stats
 
   # -------------------
 
@@ -719,14 +719,14 @@ proc testFilterFifo*(
   # Squash some entries on the fifo
   block:
     var
-      filtersLen = be.filters.len
+      filtersLen = be.journal.len
       nDel = (filtersLen * reorgPercent) div 100
       filter: FilterRef
 
     # Extract and delete leading filters, use squashed filters extract
     let fetchDeleteOk = be.fetchDelete(nDel, filter)
     xCheck fetchDeleteOk
-    xCheck be.filters.len + nDel == filtersLen
+    xCheck be.journal.len + nDel == filtersLen
 
     # Push squashed filter
     let storeFilterOK = be.storeFilter filter
@@ -765,10 +765,10 @@ proc testFilterBacklog*(
     var s = blurb
     if 0 <= serial:
       s &= " n=" & $serial
-    s &= " nFilters=" & $be.filters.len
+    s &= " nFilters=" & $be.journal.len
     s &= "" &
       " root=" & be.getKeyFn(VertexID(1)).get(otherwise=VOID_HASH_KEY).pp &
-      "\n   state=" & be.filters.state.pp &
+      "\n   state=" & be.journal.state.pp &
       "\n    fifo=" & be.fifos.pp(db) &
       "\n"
     noisy.say "***", s
@@ -803,9 +803,9 @@ proc testFilterBacklog*(
 
   # Retrieve some earlier state
   var
-    fifoLen = be.filters.len
+    fifoLen = be.journal.len
     pivot = (fifoLen * reorgPercent) div 100
-    qid {.used.} = be.filters[pivot]
+    qid {.used.} = be.journal[pivot]
     xb = AristoDbRef(nil)
 
   for episode in 0 .. pivot:
@@ -851,7 +851,7 @@ proc testFilterBacklog*(
     # Note that the above process squashes the first `episode` entries into
     # a single one (summing up number gives an arithmetic series.)
     let expSize = max(1, fifoLen - episode * (episode+1) div 2)
-    xCheck be.filters.len == expSize
+    xCheck be.journal.len == expSize
 
   true
 

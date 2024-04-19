@@ -14,7 +14,7 @@ import
   chronicles,
   eth/common,
   results,
-  ../../../kvt,
+  ../../../kvt as use_kvt,
   ../../base,
   ../../base/base_desc,
   ./common_desc
@@ -108,23 +108,25 @@ proc kvtMethods(cKvt: KvtCoreDxKvtRef): CoreDbKvtFns =
         return err(rc.error.toError(base, info))
     ok()
 
-  proc kvtPersistent(
+  proc kvtSaveOffSite(
     cKvt: KvtCoreDxKvtRef;
     info: static[string];
       ): CoreDbRc[void] =
+    let base = cKvt.base
+    if cKvt == base.cache:
+      return err(use_kvt.GenericError.toError(base, info, KvtNotOffSite))
+
+    # Re-centre to get a writable instance
     let
-      base = cKvt.base
       kvt = cKvt.kvt
       api = base.api
-    # Re-centre to make sure we can save the data to disk/backend
     api.reCentre(kvt)
     defer: api.reCentre(base.kdb)
 
+    # Store/write to persistent DB
     let rc = api.stow(kvt)
     if rc.isOk:
       ok()
-    elif api.level(kvt) != 0:
-      err(rc.error.toError(base, info, KvtTxPending))
     else:
       err(rc.error.toError(base, info))
 
@@ -191,8 +193,8 @@ proc kvtMethods(cKvt: KvtCoreDxKvtRef): CoreDbKvtFns =
     hasKeyFn: proc(k: openArray[byte]): CoreDbRc[bool] =
       cKvt.kvtHasKey(k, "hasKeyFn()"),
 
-    persistentFn: proc(): CoreDbRc[void] =
-      cKvt.kvtPersistent("persistentFn()"),
+    saveOffSiteFn: proc(): CoreDbRc[void] =
+      cKvt.kvtSaveOffSite("persistentFn()"),
 
     forgetFn: proc(): CoreDbRc[void] =
       cKvt.kvtForget("forgetFn()"))
@@ -228,23 +230,38 @@ proc txBegin*(
       ): CoreDbRc[KvtTxRef] =
   base.api.txBegin(base.kdb).toRc(base, info)
 
+proc persistent*(
+    base: KvtBaseRef;
+    info: static[string];
+      ): CoreDbRc[void] =
+  let
+    api = base.api
+    kvt = base.kdb
+    rc = api.stow(kvt)
+  if rc.isOk:
+    ok()
+  elif api.level(kvt) == 0:
+    err(rc.error.toError(base, info))
+  else:
+    err(rc.error.toError(base, info, TxPending))
+
 # ------------------------------------------------------------------------------
 # Public constructors and related
 # ------------------------------------------------------------------------------
 
 proc newKvtHandler*(
     base: KvtBaseRef;
-    sharedTable: bool;
+    offSite: bool;
     info: static[string];
       ): CoreDbRc[CoreDxKvtRef] =
-  if sharedTable:
-    ok(base.cache)
-  else:
+  if offSite:
     let
       kvt = ? base.api.forkTop(base.kdb).toRc(base, info)
       dsc = KvtCoreDxKvtRef(base: base, kvt: kvt)
     dsc.methods = dsc.kvtMethods()
     ok(base.parent.bless dsc)
+  else:
+    ok(base.cache)
 
 
 proc destroy*(base: KvtBaseRef; flush: bool) =

@@ -53,7 +53,6 @@ proc validate*(ldg: LedgerRef) =
   doAssert not ldg.methods.persistFn.isNil
   doAssert not ldg.methods.ripemdSpecialFn.isNil
   doAssert not ldg.methods.rollbackFn.isNil
-  doAssert not ldg.methods.rootHashFn.isNil
   doAssert not ldg.methods.safeDisposeFn.isNil
   doAssert not ldg.methods.selfDestruct6780Fn.isNil
   doAssert not ldg.methods.selfDestructFn.isNil
@@ -63,6 +62,7 @@ proc validate*(ldg: LedgerRef) =
   doAssert not ldg.methods.setNonceFn.isNil
   doAssert not ldg.methods.setStorageFn.isNil
   doAssert not ldg.methods.setTransientStorageFn.isNil
+  doAssert not ldg.methods.stateFn.isNil
   doAssert not ldg.methods.subBalanceFn.isNil
 
 # End

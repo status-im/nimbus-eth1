@@ -131,7 +131,7 @@ func newCoreDbAccount(address: EthAddress): CoreDbAccount =
     nonce:    emptyEthAccount.nonce,
     balance:  emptyEthAccount.balance,
     codeHash: emptyEthAccount.codeHash,
-    stoTrie:  CoreDbTrieRef(nil))
+    storage:  CoreDbColRef(nil))
 
 template noRlpException(info: static[string]; code: untyped) =
   try:
@@ -151,12 +151,13 @@ proc init*(x: typedesc[AccountsLedgerRef], db: CoreDbRef,
 proc init*(x: typedesc[AccountsLedgerRef], db: CoreDbRef, pruneTrie = true): AccountsLedgerRef =
   init(x, db, EMPTY_ROOT_HASH, pruneTrie)
 
-proc rootHash*(ac: AccountsLedgerRef): KeccakHash =
+# Renamed `rootHash()` => `state()`
+proc state*(ac: AccountsLedgerRef): KeccakHash =
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
   # make sure all cache already committed
   doAssert(ac.isDirty == false)
-  ac.ledger.rootHash
+  ac.ledger.state
 
 proc isTopLevelClean*(ac: AccountsLedgerRef): bool =
   ## Getter, returns `true` if all pending data have been commited.
@@ -342,10 +343,9 @@ proc persistStorage(acc: AccountRef, ac: AccountsLedgerRef, clearCache: bool) =
 
   ac.ledger.db.compensateLegacySetup()
 
-  # Make sure that there is an account on the database. This is needed for
-  # saving the storage trie on the Aristo database. The account will be marked
-  # as root for the storage trie so that lazy hashing works (at a later stage.)
-  if acc.statement.stoTrie.isNil:
+  # Make sure that there is an account column on the database. This is needed
+  # for saving the account-linked storage column on the Aristo database.
+  if acc.statement.storage.isNil:
     ac.ledger.merge(acc.statement)
   var storageLedger = StorageLedger.init(ac.ledger, acc.statement)
 
@@ -372,7 +372,7 @@ proc persistStorage(acc: AccountRef, ac: AccountsLedgerRef, clearCache: bool) =
         acc.originalStorage.del(slot)
     acc.overlayStorage.clear()
 
-  acc.statement.stoTrie = storageLedger.getTrie()
+  acc.statement.storage = storageLedger.getColumn()
 
 proc makeDirty(ac: AccountsLedgerRef, address: EthAddress, cloneStorage = true): AccountRef =
   ac.isDirty = true
@@ -523,11 +523,11 @@ proc clearStorage*(ac: AccountsLedgerRef, address: EthAddress) =
   let acc = ac.getAccount(address)
   acc.flags.incl {Alive, NewlyCreated}
 
-  let accHash = acc.statement.stoTrie.rootHash.valueOr: return
+  let accHash = acc.statement.storage.state.valueOr: return
   if accHash != EMPTY_ROOT_HASH:
     # there is no point to clone the storage since we want to remove it
     let acc = ac.makeDirty(address, cloneStorage = false)
-    acc.statement.stoTrie = CoreDbTrieRef(nil)
+    acc.statement.storage = CoreDbColRef(nil)
     if acc.originalStorage.isNil.not:
       # also clear originalStorage cache, otherwise
       # both getStorage and getCommittedStorage will
@@ -633,10 +633,6 @@ proc persist*(ac: AccountsLedgerRef,
 
   ac.savePoint.selfDestruct.clear()
 
-  # Save kvt and ledger
-  ac.kvt.persistent()
-  ac.ledger.persistent()
-
   # EIP2929
   ac.savePoint.accessList.clear()
 
@@ -686,7 +682,7 @@ proc getStorageRoot*(ac: AccountsLedgerRef, address: EthAddress): Hash256 =
   # the storage root will not be updated
   let acc = ac.getAccount(address, false)
   if acc.isNil: EMPTY_ROOT_HASH
-  else: acc.statement.stoTrie.rootHash.valueOr: EMPTY_ROOT_HASH
+  else: acc.statement.storage.state.valueOr: EMPTY_ROOT_HASH
 
 proc update(wd: var WitnessData, acc: AccountRef) =
   # once the code is touched make sure it doesn't get reset back to false in another update
@@ -774,7 +770,7 @@ func getAccessList*(ac: AccountsLedgerRef): common.AccessList =
   doAssert(ac.savePoint.parentSavepoint.isNil)
   ac.savePoint.accessList.getAccessList()
 
-proc rootHash*(db: ReadOnlyStateDB): KeccakHash {.borrow.}
+proc state*(db: ReadOnlyStateDB): KeccakHash {.borrow.}
 proc getCodeHash*(db: ReadOnlyStateDB, address: EthAddress): Hash256 {.borrow.}
 proc getStorageRoot*(db: ReadOnlyStateDB, address: EthAddress): Hash256 {.borrow.}
 proc getBalance*(db: ReadOnlyStateDB, address: EthAddress): UInt256 {.borrow.}

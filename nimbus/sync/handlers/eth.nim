@@ -557,6 +557,11 @@ when ethVersion == 68:
         txHashes: openArray[Hash256];
           ): Result[void, string] =
     ## `Eth68` method
+    if ctx.enableTxPool != Enabled:
+      when trMissingOrDisabledGossipOk:
+        notEnabled("handleAnnouncedTxsHashes")
+      return ok()
+
     notImplemented "handleAnnouncedTxsHashes()/eth68"
 
 else:

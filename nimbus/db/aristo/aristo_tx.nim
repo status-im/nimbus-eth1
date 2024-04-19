@@ -427,6 +427,7 @@ proc stow*(
   if persistent and not db.canResolveBackendFilter():
     return err(TxBackendNotWritable)
 
+  # Updatre Merkle hashes (unless disabled)
   db.hashify().isOkOr:
     return err(error[1])
 
@@ -437,9 +438,13 @@ proc stow*(
     # Merge `top` layer into `roFilter`
     db.merge(fwd).isOkOr:
       return err(error[1])
+
+    # Special treatment for `snap` proofs (aka `chunkedMpt`)
     let final =
       if chunkedMpt: LayerFinalRef(fRpp: db.top.final.fRpp)
       else: LayerFinalRef()
+
+    # New empty top layer (probably with `snap` proofs and `vGen` carry over)
     db.top = LayerRef(
       delta: LayerDeltaRef(),
       final: final)
@@ -455,13 +460,16 @@ proc stow*(
         doAssert rc.error == GetIdgNotFound
 
   if persistent:
+    # Merge `roFiler` into persistent tables
     ? db.resolveBackendFilter()
     db.roFilter = FilterRef(nil)
 
-  # Delete/clear top
+  # Special treatment for `snap` proofs (aka `chunkedMpt`)
   let final =
     if chunkedMpt: LayerFinalRef(vGen: db.vGen, fRpp: db.top.final.fRpp)
     else: LayerFinalRef(vGen: db.vGen)
+
+  # New empty top layer (probably with `snap` proofs carry over)
   db.top = LayerRef(
     delta: LayerDeltaRef(),
     final: final,

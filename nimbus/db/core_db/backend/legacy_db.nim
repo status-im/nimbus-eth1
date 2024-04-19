@@ -37,7 +37,7 @@ type
   HexaryChildDbRef = ref object
     trie: HexaryTrie              ## For closure descriptor for capturing
     when CoreDbEnableApiTracking:
-      kind: CoreDbSubTrie         ## Current sub-trie
+      colType: CoreDbColType      ## Current sub-trie
       address: Option[EthAddress] ## For storage tree debugging
       accPath: Blob               ## For storage tree debugging
 
@@ -56,10 +56,10 @@ type
     logger: TableRef[Blob,Blob]
     appDb: LegacyDbRef
 
-  LegacyCoreDbTrie* = ref object of CoreDbTrieRef
+  LegacyColRef* = ref object of CoreDbColRef
     root: Hash256                 ## Hash key
     when CoreDbEnableApiTracking:
-      kind: CoreDbSubTrie         ## Current sub-trie
+      colType: CoreDbColType      ## Current sub-trie
       address: Option[EthAddress] ## For storage tree debugging
       accPath: Blob               ## For storage tree debugging
 
@@ -70,16 +70,10 @@ type
 
   # ------------
 
-  LegacyCoreDbBE = ref object of CoreDbBackendRef
-    base: LegacyDbRef
-
   LegacyCoreDbKvtBE = ref object of CoreDbKvtBackendRef
     tdb: TrieDatabaseRef
 
   LegacyCoreDbMptBE = ref object of CoreDbMptBackendRef
-    mpt: HexaryTrie
-
-  LegacyCoreDbAccBE = ref object of CoreDbAccBackendRef
     mpt: HexaryTrie
 
 proc init*(
@@ -123,23 +117,23 @@ func errorPrint(e: CoreDbErrorRef): string =
      if e.msg != "":
        result &= ", msg=\"" & $e.msg & "\""
 
-func triePrint(trie: CoreDbTrieRef): string =
-  if not trie.isNil:
-    if not trie.ready:
+func colPrint(col: CoreDbColRef): string =
+  if not col.isNil:
+    if not col.ready:
       result = "$?"
     else:
-      var trie = LegacyCoreDbTrie(trie)
+      var col = LegacyColRef(col)
       when CoreDbEnableApiTracking:
-        result = "(" & $trie.kind & ","
-        if trie.address.isSome:
+        result = "(" & $col.colType & ","
+        if col.address.isSome:
           result &= "@"
-          if trie.accPath.len == 0:
+          if col.accPath.len == 0:
             result &= "ø"
           else:
-            result &= trie.accPath.toHex & ","
-          result &= "%" & trie.address.unsafeGet.toHex & ","
-      if trie.root != EMPTY_ROOT_HASH:
-        result &= "£" & trie.root.data.toHex
+            result &= col.accPath.toHex & ","
+          result &= "%" & col.address.unsafeGet.toHex & ","
+      if col.root != EMPTY_ROOT_HASH:
+        result &= "£" & col.root.data.toHex
       else:
         result &= "£ø"
       when CoreDbEnableApiTracking:
@@ -149,9 +143,9 @@ func txLevel(db: LegacyDbRef): int =
   if not db.top.isNil:
     return db.top.level
 
-func lroot(trie: CoreDbTrieRef): Hash256 =
-  if not trie.isNil and trie.ready:
-    return trie.LegacyCoreDbTrie.root
+func lroot(col: CoreDbColRef): Hash256 =
+  if not col.isNil and col.ready:
+    return col.LegacyColRef.root
   EMPTY_ROOT_HASH
 
 
@@ -168,11 +162,11 @@ proc toCoreDbAccount(
     balance:  acc.balance,
     codeHash: acc.codeHash)
   if acc.storageRoot != EMPTY_ROOT_HASH:
-    result.stoTrie = db.bless LegacyCoreDbTrie(root: acc.storageRoot)
+    result.storage = db.bless LegacyColRef(root: acc.storageRoot)
     when CoreDbEnableApiTracking:
-      result.stoTrie.LegacyCoreDbTrie.kind = StorageTrie # redundant, ord() = 0
-      result.stoTrie.LegacyCoreDbTrie.address = some(address)
-      result.stoTrie.LegacyCoreDbTrie.accPath = @(address.keccakHash.data)
+      result.storage.LegacyColRef.colType = CtStorage # redundant, ord() = 0
+      result.storage.LegacyColRef.address = some(address)
+      result.storage.LegacyColRef.accPath = @(address.keccakHash.data)
 
 
 proc toAccount(
@@ -183,7 +177,7 @@ proc toAccount(
     nonce:       acc.nonce,
     balance:     acc.balance,
     codeHash:    acc.codeHash,
-    storageRoot: acc.stoTrie.lroot)
+    storageRoot: acc.storage.lroot)
 
 # ------------------------------------------------------------------------------
 # Private mixin methods for `trieDB` (backport from capturedb/tracer sources)
@@ -264,11 +258,11 @@ proc kvtMethods(db: LegacyDbRef): CoreDbKvtFns =
     hasKeyFn: proc(k: openArray[byte]): CoreDbRc[bool] =
       ok(tdb.contains(k)),
 
-    persistentFn: proc(): CoreDbRc[void] =
+    saveOffSiteFn: proc(): CoreDbRc[void] =
       # Emulate `Kvt` behaviour
       if 0 < db.txLevel():
-        const info = "persistentFn()"
-        return err(db.bless(KvtTxPending, LegacyCoreDbError(ctx: info)))
+        const info = "saveOffSiteFn()"
+        return err(db.bless(TxPending, LegacyCoreDbError(ctx: info)))
       ok(),
 
     forgetFn: proc(): CoreDbRc[void] =
@@ -301,30 +295,20 @@ proc mptMethods(mpt: HexaryChildDbRef; db: LegacyDbRef): CoreDbMptFns =
       db.mapRlpException("hasPathFn()"):
         return ok(mpt.trie.contains(k)),
 
-    getTrieFn: proc(): CoreDbTrieRef =
-      var trie = LegacyCoreDbTrie(root: mpt.trie.rootHash)
+    getColFn: proc(): CoreDbColRef =
+      var col = LegacyColRef(root: mpt.trie.rootHash)
       when CoreDbEnableApiTracking:
-        trie.kind = mpt.kind
-        trie.address = mpt.address
-        trie.accPath = mpt.accPath
-      db.bless(trie),
+        col.colType = mpt.colType
+        col.address = mpt.address
+        col.accPath = mpt.accPath
+      db.bless(col),
 
     isPruningFn: proc(): bool =
-      mpt.trie.isPruning,
-
-    persistentFn: proc(): CoreDbRc[void] =
-      # Emulate `Aristo` behaviour
-      if 0 < db.txLevel():
-        const info = "persistentFn()"
-        return err(db.bless(MptTxPending, LegacyCoreDbError(ctx: info)))
-      ok())
+      mpt.trie.isPruning)
 
 proc accMethods(mpt: HexaryChildDbRef; db: LegacyDbRef): CoreDbAccFns =
   ## Hexary trie database handlers
   CoreDbAccFns(
-    backendFn: proc(): CoreDbAccBackendRef =
-      db.bless(LegacyCoreDbAccBE(mpt: mpt.trie)),
-
     getMptFn: proc(): CoreDbRc[CoreDxMptRef] =
       let xMpt = HexaryChildDbRef(trie: mpt.trie)
       ok(db.bless CoreDxMptRef(methods: xMpt.mptMethods db)),
@@ -353,23 +337,16 @@ proc accMethods(mpt: HexaryChildDbRef; db: LegacyDbRef): CoreDbAccFns =
       db.mapRlpException("hasPath()"):
         return ok(mpt.trie.contains k.keccakHash.data),
 
-    getTrieFn: proc(): CoreDbTrieRef =
-      var trie = LegacyCoreDbTrie(root: mpt.trie.rootHash)
+    getColFn: proc(): CoreDbColRef =
+      var col = LegacyColRef(root: mpt.trie.rootHash)
       when CoreDbEnableApiTracking:
-        trie.kind = mpt.kind
-        trie.address = mpt.address
-        trie.accPath = mpt.accPath
-      db.bless(trie),
+        col.colType = mpt.colType
+        col.address = mpt.address
+        col.accPath = mpt.accPath
+      db.bless(col),
 
     isPruningFn: proc(): bool =
-      mpt.trie.isPruning,
-
-    persistentFn: proc(): CoreDbRc[void] =
-      # Emulate `Aristo` behaviour
-      if 0 < db.txLevel():
-        const info = "persistentFn()"
-        return err(db.bless(AccTxPending, LegacyCoreDbError(ctx: info)))
-      ok())
+      mpt.trie.isPruning)
 
 
 proc ctxMethods(ctx: LegacyCoreDbCtxRef): CoreDbCtxFns =
@@ -378,39 +355,39 @@ proc ctxMethods(ctx: LegacyCoreDbCtxRef): CoreDbCtxFns =
     tdb = db.tdb
 
   CoreDbCtxFns(
-    newTrieFn: proc(
-        kind: CoreDbSubTrie;
+    newColFn: proc(
+        colType: CoreDbColType;
         root: Hash256;
         address: Option[EthAddress];
-          ): CoreDbRc[CoreDbTrieRef] =
-      var trie = LegacyCoreDbTrie(root: root)
+          ): CoreDbRc[CoreDbColRef] =
+      var col = LegacyColRef(root: root)
       when CoreDbEnableApiTracking:
-        trie.kind = kind
-        trie.address = address
+        col.colType = colType
+        col.address = address
         if address.isSome:
-          trie.accPath = @(address.unsafeGet.keccakHash.data)
-      ok(db.bless trie),
+          col.accPath = @(address.unsafeGet.keccakHash.data)
+      ok(db.bless col),
 
-    getMptFn: proc(trie: CoreDbTrieRef, prune: bool): CoreDbRc[CoreDxMptRef] =
-      var mpt = HexaryChildDbRef(trie: initHexaryTrie(tdb, trie.lroot, prune))
+    getMptFn: proc(col: CoreDbColRef, prune: bool): CoreDbRc[CoreDxMptRef] =
+      var mpt = HexaryChildDbRef(trie: initHexaryTrie(tdb, col.lroot, prune))
       when CoreDbEnableApiTracking:
-        if not trie.isNil and trie.ready:
-          let trie = trie.LegacyCoreDbTrie
-          mpt.kind = trie.kind
-          mpt.address = trie.address
-          mpt.accPath = trie.accPath
+        if not col.isNil and col.ready:
+          let col = col.LegacyColRef
+          mpt.colType = col.colType
+          mpt.address = col.address
+          mpt.accPath = col.accPath
       ok(db.bless CoreDxMptRef(methods: mpt.mptMethods db)),
 
-    getAccFn: proc(trie: CoreDbTrieRef, prune: bool): CoreDbRc[CoreDxAccRef] =
-      var mpt = HexaryChildDbRef(trie: initHexaryTrie(tdb, trie.lroot, prune))
+    getAccFn: proc(col: CoreDbColRef, prune: bool): CoreDbRc[CoreDxAccRef] =
+      var mpt = HexaryChildDbRef(trie: initHexaryTrie(tdb, col.lroot, prune))
       when CoreDbEnableApiTracking:
-        if not trie.isNil and trie.ready:
-          if trie.LegacyCoreDbTrie.kind != AccountsTrie:
+        if not col.isNil and col.ready:
+          if col.LegacyColRef.colType != CtAccounts:
             let ctx = LegacyCoreDbError(
               ctx: "newAccFn()",
-              msg: "got " & $trie.LegacyCoreDbTrie.kind)
+              msg: "got " & $col.LegacyColRef.colType)
             return err(db.bless(RootUnacceptable, ctx))
-          mpt.kind = AccountsTrie
+          mpt.colType = CtAccounts
       ok(db.bless CoreDxAccRef(methods: mpt.accMethods db)),
 
     forgetFn: proc() =
@@ -475,9 +452,6 @@ proc baseMethods(
       ): CoreDbBaseFns =
   let db = db
   CoreDbBaseFns(
-    backendFn: proc(): CoreDbBackendRef =
-      db.bless(LegacyCoreDbBE(base: db)),
-
     levelFn: proc(): int =
       db.txLevel(),
 
@@ -485,11 +459,11 @@ proc baseMethods(
       if not closeDb.isNil:
         closeDb(),
 
-    rootHashFn: proc(trie: CoreDbTrieRef): CoreDbRc[Hash256] =
-      ok(trie.lroot),
+    colStateFn: proc(col: CoreDbColRef): CoreDbRc[Hash256] =
+      ok(col.lroot),
 
-    triePrintFn: proc(trie: CoreDbTrieRef): string =
-      trie.triePrint(),
+    colPrintFn: proc(col: CoreDbColRef): string =
+      col.colPrint(),
 
     errorPrintFn: proc(e: CoreDbErrorRef): string =
       e.errorPrint(),
@@ -509,7 +483,7 @@ proc baseMethods(
 
     newCtxFromTxFn: proc(
         root: Hash256;
-        kind: CoreDbSubTrie;
+        colType: CoreDbColType;
           ): CoreDbRc[CoreDbCtxRef] =
       ok(db.ctx),
 
@@ -523,7 +497,14 @@ proc baseMethods(
 
     newCaptureFn: proc(flgs: set[CoreDbCaptFlags]): CoreDbRc[CoreDxCaptRef] =
       let fns = db.newRecorderRef(flgs).cptMethods(db)
-      ok(db.bless CoreDxCaptRef(methods: fns)))
+      ok(db.bless CoreDxCaptRef(methods: fns)),
+
+    persistentFn: proc(): CoreDbRc[void] =
+      # Emulate `Aristo` behaviour
+      if 0 < db.txLevel():
+        const info = "persistentFn()"
+        return err(db.bless(TxPending, LegacyCoreDbError(ctx: info)))
+      ok())
 
 # ------------------------------------------------------------------------------
 # Public constructor helpers
@@ -569,10 +550,6 @@ proc newLegacyMemoryCoreDbRef*(): CoreDbRef =
 func isLegacy*(be: CoreDbRef): bool =
   be.dbType in {LegacyDbMemory, LegacyDbPersistent}
 
-#func toLegacy*(be: CoreDbBackendRef): LegacyDbRef =
-#  if be.parent.isLegacy:
-#    return be.LegacyCoreDbBE.base
-
 func toLegacy*(be: CoreDbKvtBackendRef): TrieDatabaseRef =
   if be.parent.isLegacy:
     return be.LegacyCoreDbKvtBE.tdb
@@ -580,10 +557,6 @@ func toLegacy*(be: CoreDbKvtBackendRef): TrieDatabaseRef =
 func toLegacy*(be: CoreDbMptBackendRef): HexaryTrie =
   if be.parent.isLegacy:
     return be.LegacyCoreDbMptBE.mpt
-
-func toLegacy*(be: CoreDbAccBackendRef): HexaryTrie =
-  if be.parent.isLegacy:
-    return be.LegacyCoreDbAccBE.mpt
 
 # ------------------------------------------------------------------------------
 # Public legacy iterators

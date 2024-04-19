@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -44,7 +44,7 @@ template nextFidOrReturn(be: BackendRef): FilterID =
   ## Get next free filter ID, or exit function using this wrapper
   var fid = FilterID(1)
   block:
-    let qid = be.filters[0]
+    let qid = be.journal[0]
     if qid.isValid:
       let rc = be.getFilFn qid
       if rc.isOK:
@@ -64,15 +64,15 @@ proc fifosStore*(
   ## Calculate backend instructions for storing the arguent `filter` on the
   ## argument backend `be`.
   ##
-  if be.filters.isNil:
+  if be.journal.isNil:
     return err(FilQuSchedDisabled)
 
   # Calculate filter table queue update by slot addresses
   let
-    qTop = be.filters[0]
-    upd = be.filters.addItem
+    qTop = be.journal[0]
+    upd = be.journal.addItem
 
-  # Update filters and calculate database update
+  # Update journal filters and calculate database update
   var
     instr = FifoInstr(scd: upd.fifo)
     hold: seq[FilterRef]
@@ -102,7 +102,7 @@ proc fifosStore*(
       # Push filter
       hold.add be.getFilterOrReturn act.qid
 
-      # Merge additional filters into top filter
+      # Merge additional journal filters into top filter
       for w in act.qid+1 .. act.xid:
         let lower = be.getFilterOrReturn w
         hold[^1] = hold[^1].joinFiltersOrReturn lower
@@ -130,20 +130,21 @@ proc fifosFetch*(
     backSteps: int;                              # Backstep this many filters
       ): Result[FetchInstr,AristoError] =
   ## This function returns the single filter obtained by squash merging the
-  ## topmost `backSteps` filters on the backend fifo. Also, backend instructions
-  ## are calculated and returned for deleting the merged filters on the fifo.
+  ## topmost `backSteps` filters on the backend journal fifo. Also, backend
+  ## instructions are calculated and returned for deleting the merged journal
+  ## filters on the fifo.
   ##
-  if be.filters.isNil:
+  if be.journal.isNil:
     return err(FilQuSchedDisabled)
   if backSteps <= 0:
     return err(FilBackStepsExpected)
 
   # Get instructions
-  let fetch = be.filters.fetchItems backSteps
+  let fetch = be.journal.fetchItems backSteps
   var instr = FetchInstr(del: FifoInstr(scd: fetch.fifo))
 
-  # Follow `HoldQid` instructions and combine filters for sub-queues and
-  # push intermediate results on the `hold` stack
+  # Follow `HoldQid` instructions and combine journal filters for sub-queues
+  # and push intermediate results on the `hold` stack
   var hold: seq[FilterRef]
   for act in fetch.exec:
     if act.op != HoldQid:
@@ -177,13 +178,13 @@ proc fifosDelete*(
     backSteps: int;                              # Backstep this many filters
       ): Result[FifoInstr,AristoError] =
   ## Variant of `fetch()` for calculating the deletion part only.
-  if be.filters.isNil:
+  if be.journal.isNil:
     return err(FilQuSchedDisabled)
   if backSteps <= 0:
     return err(FilBackStepsExpected)
 
   # Get instructions
-  let fetch = be.filters.fetchItems backSteps
+  let fetch = be.journal.fetchItems backSteps
   var instr = FifoInstr(scd: fetch.fifo)
 
   # Follow `HoldQid` instructions for producing the list of entries that

@@ -88,7 +88,7 @@ proc toStorageSlotsKey(a: RepairKey): auto =
 
 proc stateRootGet*(db: CoreDbRef; nodeKey: NodeKey): Blob =
   if db.isLegacy:
-    return db.kvt.backend.toLegacy.get(nodeKey.toStateRootKey.toOpenArray)
+    return db.newKvt.backend.toLegacy.get(nodeKey.toStateRootKey.toOpenArray)
 
 # ------------------------------------------------------------------------------
 # Public functions: get
@@ -100,7 +100,7 @@ proc persistentAccountsGetFn*(db: CoreDbRef): AccountsGetFn =
     var nodeKey: NodeKey
     if nodeKey.init(key):
       if db.isLegacy:
-        return db.kvt.backend.toLegacy.get(
+        return db.newKvt.backend.toLegacy.get(
           nodeKey.toAccountsKey.toOpenArray)
 
 proc persistentContractsGetFn*(db: CoreDbRef): ContractsGetFn =
@@ -109,7 +109,7 @@ proc persistentContractsGetFn*(db: CoreDbRef): ContractsGetFn =
     var nodeKey: NodeKey
     if nodeKey.init(key):
       if db.isLegacy:
-        return db.kvt.backend.toLegacy.get(
+        return db.newKvt.backend.toLegacy.get(
           nodeKey.toContractHashKey.toOpenArray)
 
 proc persistentStorageSlotsGetFn*(db: CoreDbRef): StorageSlotsGetFn =
@@ -118,7 +118,7 @@ proc persistentStorageSlotsGetFn*(db: CoreDbRef): StorageSlotsGetFn =
     var nodeKey: NodeKey
     if nodeKey.init(key):
       if db.isLegacy:
-        return db.kvt.backend.toLegacy.get(
+        return db.newKvt.backend.toLegacy.get(
           nodeKey.toStorageSlotsKey.toOpenArray)
 
 proc persistentStateRootGet*(

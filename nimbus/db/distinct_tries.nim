@@ -21,7 +21,7 @@
 {.push raises: [].}
 
 import
-  std/[algorithm, sequtils, strutils, tables],
+  std/[algorithm, sequtils, strutils, tables, typetraits],
   eth/[common, trie/hexary],
   chronicles,
   "."/[core_db, storage_types]
@@ -99,7 +99,7 @@ proc getAccountBytes*(trie: AccountsTrie, address: EthAddress): seq[byte] =
 proc maybeGetAccountBytes*(trie: AccountsTrie, address: EthAddress): Option[Blob]  {.gcsafe, raises: [RlpError].} =
   let phk = CoreDbPhkRef(trie)
   if phk.parent.isLegacy:
-    phk.backend.toLegacy.SecureHexaryTrie.maybeGet(address)
+    phk.toMpt.distinctBase.backend.toLegacy.SecureHexaryTrie.maybeGet(address)
   else:
     some(phk.get(address))
 
@@ -134,7 +134,7 @@ proc getSlotBytes*(trie: StorageTrie, slotAsKey: openArray[byte]): seq[byte] =
 proc maybeGetSlotBytes*(trie: StorageTrie, slotAsKey: openArray[byte]): Option[Blob] {.gcsafe, raises: [RlpError].} =
   let phk = CoreDbPhkRef(trie)
   if phk.parent.isLegacy:
-    phk.backend.toLegacy.SecureHexaryTrie.maybeGet(slotAsKey)
+    phk.toMpt.distinctBase.backend.toLegacy.SecureHexaryTrie.maybeGet(slotAsKey)
   else:
     some(phk.get(slotAsKey))
 

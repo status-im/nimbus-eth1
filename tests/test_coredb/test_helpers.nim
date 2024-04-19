@@ -90,16 +90,19 @@ proc profilingPrinter*(
       pfx = indent.toPfx
       pfx2 = pfx & "  "
     result = header & ":"
+    let names = @names
+
+    proc pp(w: uint, spaced: bool): string =
+      let (a,z) = (if data.list[w].masked: ("[","]") else: ("",""))
+      a & names[w] & data.stats(w).pp(spaced=spaced) & z
 
     result &= "\n" & pfx & "by accumulated duration per procedure"
     for (ela,fns) in data.byElapsed:
-      result &= pfx2 & ela.pp & ": " & fns.mapIt(
-        names[it] & data.stats(it).pp(spaced=true)).sorted.join(", ")
+      result &= pfx2 & ela.pp & ": " & fns.mapIt(it.pp true).sorted.join(", ")
 
     result &=  "\n" & pfx & "by number of visits"
     for (count,fns) in data.byVisits:
-      result &= pfx2 & $count & ": " & fns.mapIt(
-        names[it] & data.stats(it).pp(count=false)).sorted.join(", ")
+      result &= pfx2 & $count & ": " & fns.mapIt(it.pp false).sorted.join(", ")
 
 # ------------------------------------------------------------------------------
 # End

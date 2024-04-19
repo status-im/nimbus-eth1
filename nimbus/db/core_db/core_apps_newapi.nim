@@ -31,6 +31,10 @@ type
     blockNumber: BlockNumber
     index: int
 
+const
+  extraTraceMessages = false
+    ## Enabled additional logging noise
+
 # ------------------------------------------------------------------------------
 # Forward declarations
 # ------------------------------------------------------------------------------
@@ -119,13 +123,13 @@ iterator getBlockTransactionData*(
   block body:
     let
       ctx = db.ctx
-      trie = ctx.newTrie(TxTrie, transactionRoot).valueOr:
+      col = ctx.newColumn(CtTxs, transactionRoot).valueOr:
         warn logTxt "getBlockTransactionData()",
-          transactionRoot, action="getTrie()", `error`=($$error)
+          transactionRoot, action="newColumn()", `error`=($$error)
         break body
-      transactionDb = ctx.getMpt(trie).valueOr:
+      transactionDb = ctx.getMpt(col).valueOr:
         warn logTxt "getBlockTransactionData()", transactionRoot,
-          action="newMpt()", trie=($$trie), error=($$error)
+          action="newMpt()", col=($$col), error=($$error)
         break body
     var transactionIdx = 0
     while true:
@@ -167,13 +171,13 @@ iterator getWithdrawalsData*(
   block body:
     let
       ctx = db.ctx
-      trie = ctx.newTrie(WithdrawalsTrie, withdrawalsRoot).valueOr:
+      col = ctx.newColumn(CtWithdrawals, withdrawalsRoot).valueOr:
         warn logTxt "getWithdrawalsData()",
-          withdrawalsRoot, action="getTrie()", error=($$error)
+          withdrawalsRoot, action="newColumn()", error=($$error)
         break body
-      wddb = ctx.getMpt(trie).valueOr:
+      wddb = ctx.getMpt(col).valueOr:
         warn logTxt "getWithdrawalsData()",
-          withdrawalsRoot, action="newMpt()", trie=($$trie), error=($$error)
+          withdrawalsRoot, action="newMpt()", col=($$col), error=($$error)
         break body
     var idx = 0
     while true:
@@ -195,13 +199,13 @@ iterator getReceipts*(
   block body:
     let
       ctx = db.ctx
-      trie = ctx.newTrie(ReceiptsTrie, receiptRoot).valueOr:
+      col = ctx.newColumn(CtReceipts, receiptRoot).valueOr:
         warn logTxt "getWithdrawalsData()",
-          receiptRoot, action="getTrie()", error=($$error)
+          receiptRoot, action="newColumn()", error=($$error)
         break body
-      receiptDb = ctx.getMpt(trie).valueOr:
+      receiptDb = ctx.getMpt(col).valueOr:
         warn logTxt "getWithdrawalsData()",
-          receiptRoot, action="newMpt()", trie=($$trie), error=($$error)
+          receiptRoot, action="getMpt()", col=($$col), error=($$error)
         break body
     var receiptIdx = 0
     while true:
@@ -532,7 +536,7 @@ proc persistTransactions*(
   const
     info = "persistTransactions()"
   let
-    mpt = db.ctx.getMpt(TxTrie)
+    mpt = db.ctx.getMpt(CtTxs)
     kvt = db.newKvt()
   # Prevent DB from coughing.
   db.compensateLegacySetup()
@@ -549,8 +553,9 @@ proc persistTransactions*(
     kvt.put(blockKey.toOpenArray, rlp.encode(txKey)).isOkOr:
       warn logTxt info, blockKey, action="put()", error=($$error)
       return EMPTY_ROOT_HASH
-  mpt.getTrie.rootHash.valueOr:
-    warn logTxt info, action="hash()"
+  mpt.getColumn.state.valueOr:
+    when extraTraceMessages:
+      warn logTxt info, action="state()"
     return EMPTY_ROOT_HASH
 
 proc getTransaction*(
@@ -564,12 +569,12 @@ proc getTransaction*(
     info = "getTransaction()"
   let
     ctx = db.ctx
-    trie = ctx.newTrie(TxTrie, txRoot).valueOr:
-      warn logTxt info, txRoot, action="getTrie()", error=($$error)
+    col = ctx.newColumn(CtTxs, txRoot).valueOr:
+      warn logTxt info, txRoot, action="newColumn()", error=($$error)
       return false
-    mpt = ctx.getMpt(trie).valueOr:
+    mpt = ctx.getMpt(col).valueOr:
       warn logTxt info,
-        txRoot, action="newMpt()", trie=($$trie), error=($$error)
+        txRoot, action="newMpt()", col=($$col), error=($$error)
       return false
     txData = mpt.fetch(rlp.encode(txIndex)).valueOr:
       if error.error != MptNotFound:
@@ -586,12 +591,12 @@ proc getTransactionCount*(
     info = "getTransactionCount()"
   let
     ctx = db.ctx
-    trie = ctx.newTrie(TxTrie, txRoot).valueOr:
-      warn logTxt info, txRoot, action="getTrie()", error=($$error)
+    col = ctx.newColumn(CtTxs, txRoot).valueOr:
+      warn logTxt info, txRoot, action="newColumn()", error=($$error)
       return 0
-    mpt = ctx.getMpt(trie).valueOr:
+    mpt = ctx.getMpt(col).valueOr:
       warn logTxt info, txRoot,
-        action="newMpt()", trie=($$trie), error=($$error)
+        action="newMpt()", col=($$col), error=($$error)
       return 0
   var txCount = 0
   while true:
@@ -640,13 +645,13 @@ proc persistWithdrawals*(
     withdrawals: openArray[Withdrawal];
       ): Hash256 =
   const info = "persistWithdrawals()"
-  let mpt = db.ctx.getMpt(WithdrawalsTrie)
+  let mpt = db.ctx.getMpt(CtWithdrawals)
   for idx, wd in withdrawals:
     mpt.merge(rlp.encode(idx), rlp.encode(wd)).isOkOr:
       warn logTxt info, idx, action="merge()", error=($$error)
       return EMPTY_ROOT_HASH
-  mpt.getTrie.rootHash.valueOr:
-    warn logTxt info, action="hash()"
+  mpt.getColumn.state.valueOr:
+    warn logTxt info, action="state()"
     return EMPTY_ROOT_HASH
 
 proc getWithdrawals*(
@@ -786,12 +791,13 @@ proc persistReceipts*(
     receipts: openArray[Receipt];
       ): Hash256 =
   const info = "persistReceipts()"
-  let mpt = db.ctx.getMpt(ReceiptsTrie)
+  let mpt = db.ctx.getMpt(CtReceipts)
   for idx, rec in receipts:
     mpt.merge(rlp.encode(idx), rlp.encode(rec)).isOkOr:
       warn logTxt info, idx, action="merge()", error=($$error)
-  mpt.getTrie.rootHash.valueOr:
-    warn logTxt info, action="hash()"
+  mpt.getColumn.state.valueOr:
+    when extraTraceMessages:
+      trace logTxt info, action="state()"
     return EMPTY_ROOT_HASH
 
 proc getReceipts*(

@@ -42,14 +42,14 @@ proc newAristoRocksDbCoreDbRef*(path: string; qlr: QidLayoutRef): CoreDbRef =
     adb = AristoDbRef.init(use_ari.RdbBackendRef, path, qlr).expect aristoFail
     gdb = adb.guestDb().valueOr: GuestDbRef(nil)
     kdb = KvtDbRef.init(use_kvt.RdbBackendRef, path, gdb).expect kvtFail
-  AristoDbRocks.create(kdb, use_kvt.RdbBackendRef, adb, use_ari.RdbBackendRef)
+  AristoDbRocks.create(kdb, adb)
 
 proc newAristoRocksDbCoreDbRef*(path: string): CoreDbRef =
   let
     adb = AristoDbRef.init(use_ari.RdbBackendRef, path).expect aristoFail
     gdb = adb.guestDb().valueOr: GuestDbRef(nil)
     kdb = KvtDbRef.init(use_kvt.RdbBackendRef, path, gdb).expect kvtFail
-  AristoDbRocks.create(kdb, use_kvt.RdbBackendRef, adb, use_ari.RdbBackendRef)
+  AristoDbRocks.create(kdb, adb)
 
 # ------------------------------------------------------------------------------
 # Public aristo iterators

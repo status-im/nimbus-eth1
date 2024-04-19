@@ -12,7 +12,7 @@
 {.push raises: [].}
 
 import
-  std/[strformat, strutils],
+  std/[strformat, strutils, sequtils],
   chronos,
   chronicles,
   eth/[common, p2p],
@@ -65,6 +65,7 @@ type
     nStagedQueue*: int
     suspended*: bool
     reOrg*: bool
+    journal*: seq[int]
 
   TickerRef* = ref object
     ## Ticker descriptor object
@@ -186,16 +187,18 @@ proc fullTicker(t: TickerRef) {.gcsafe.} =
       # With `int64`, there are more than 29*10^10 years range for seconds
       up = (now - t.started).seconds.uint64.toSI
       mem = getTotalMem().uint.toSI
+      jSeq =  data.journal
+      jrn = if 0 < jSeq.len: jSeq.mapIt($it).join("/") else: "n/a"
 
     t.full.lastStats = data
     t.visited = now
 
     if data.suspended:
       info "Full sync ticker (suspended)", up, nInst, pv,
-        persistent, unprocessed, staged, queued, reOrg, mem
+        persistent, staged, unprocessed, queued, reOrg, mem, jrn
     else:
       info "Full sync ticker", up, nInst, pv,
-        persistent, unprocessed, staged, queued, reOrg, mem
+        persistent, staged, unprocessed, queued, reOrg, mem, jrn
 
 # ------------------------------------------------------------------------------
 # Private functions: ticking log messages

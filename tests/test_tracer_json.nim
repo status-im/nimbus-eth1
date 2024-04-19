@@ -42,7 +42,7 @@ proc preLoadAristoDb(cdb: CoreDbRef; jKvp: JsonNode; num: BlockNumber) =
     txRoot: Hash256       # header with block number `num`
     rcptRoot: Hash256     # ditto
   let
-    adb = cdb.ctx.getMpt(GenericTrie).backend.toAristo
+    adb = cdb.ctx.getMpt(CtGeneric).backend.toAristo
     kdb = cdb.newKvt.backend.toAristo
 
   # Fill KVT and collect `proof` data
@@ -70,10 +70,10 @@ proc preLoadAristoDb(cdb: CoreDbRef; jKvp: JsonNode; num: BlockNumber) =
 
   # Install sub-trie roots onto production db
   if txRoot.isValid:
-    doAssert adb.merge(txRoot, VertexID(TxTrie)).isOk
+    doAssert adb.merge(txRoot, VertexID(CtTxs)).isOk
   if rcptRoot.isValid:
-    doAssert adb.merge(rcptRoot, VertexID(ReceiptsTrie)).isOk
-  doAssert adb.merge(predRoot, VertexID(AccountsTrie)).isOk
+    doAssert adb.merge(rcptRoot, VertexID(CtReceipts)).isOk
+  doAssert adb.merge(predRoot, VertexID(CtAccounts)).isOk
 
   # Set up production MPT
   doAssert adb.merge(proof).isOk

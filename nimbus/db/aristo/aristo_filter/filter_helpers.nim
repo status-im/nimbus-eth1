@@ -22,7 +22,7 @@ type
     fg*: Hash256                   ## Layer or filter implied state root
 
   FilterIndexPair* = object
-    ## Helper structure for fetching filters from cascaded fifo
+    ## Helper structure for fetching journal filters from cascaded fifo
     inx*: int                      ## Non negative fifo index
     fil*: FilterRef                ## Valid filter
 
@@ -96,10 +96,10 @@ proc getFilterFromFifo*(
     cache = (qid,rc.value)
     rc.value.fid
 
-  if be.filters.isNil:
+  if be.journal.isNil:
     return err(FilQuSchedDisabled)
 
-  let qid = be.filters.le(fid, qid2fid, forceEQ = not earlierOK)
+  let qid = be.journal.le(fid, qid2fid, forceEQ = not earlierOK)
   if not qid.isValid:
     return err(FilFilterNotFound)
 
@@ -113,7 +113,7 @@ proc getFilterFromFifo*(
         return err(rc.error)
       rc.value
 
-  fip.inx = be.filters[qid]
+  fip.inx = be.journal[qid]
   if fip.inx < 0:
     return err(FilInxByQidFailed)
 
@@ -124,13 +124,14 @@ proc getFilterOverlap*(
     be: BackendRef;
     filter: FilterRef;
       ): int =
-  ## Return the number of filters in the leading chain that is reverted by the
-  ## argument `filter`. A heuristc approach is used here for an argument
-  ## `filter` with a valid filter ID when the chain is longer than one items.
-  ## So only single chain overlaps a guaranteed to be found.
+  ## Return the number of journal filters in the leading chain that is
+  ## reverted by the argument `filter`. A heuristc approach is used here
+  ## for an argument `filter` with a valid filter ID when the chain is
+  ## longer than one items. So only single chain overlaps a guaranteed to
+  ## be found.
   ##
   # Check against the top-fifo entry
-  let qid = be.filters[0]
+  let qid = be.journal[0]
   if not qid.isValid:
     return 0
   let top = block:

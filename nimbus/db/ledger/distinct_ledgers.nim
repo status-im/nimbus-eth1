@@ -116,18 +116,18 @@ when EnableMptDump:
 proc db*(led: SomeLedger): CoreDbRef =
   led.distinctBase.parent
 
-proc rootHash*(led: SomeLedger): Hash256 =
+proc state*(led: SomeLedger): Hash256 =
   when SomeLedger is AccountLedger:
-    const info = "AccountLedger/rootHash(): "
+    const info = "AccountLedger/state(): "
   else:
-    const info = "StorageLedger/rootHash(): "
-  let rc = led.distinctBase.getTrie().rootHash()
+    const info = "StorageLedger/state(): "
+  let rc = led.distinctBase.getColumn().state()
   if rc.isErr:
     raiseAssert info & $$rc.error
   rc.value
 
-proc getTrie*(led: SomeLedger): CoreDbTrieRef =
-  led.distinctBase.getTrie()
+proc getColumn*(led: SomeLedger): CoreDbColRef =
+  led.distinctBase.getColumn()
 
 # ------------------------------------------------------------------------------
 # Public functions: accounts ledger
@@ -144,7 +144,7 @@ proc init*(
   let
     ctx = db.ctx
     trie = block:
-      let rc = ctx.newTrie(AccountsTrie, root)
+      let rc = ctx.newColumn(CtAccounts, root)
       if rc.isErr:
         raiseAssert info & $$rc.error
       rc.value
@@ -179,14 +179,6 @@ proc delete*(al: AccountLedger, eAddr: EthAddress) =
       return
     raiseAssert info & $$error
 
-proc persistent*(al: AccountLedger) =
-  let rc = al.distinctBase.persistent()
-  if rc.isErr:
-    if rc.error.error != AccTxPending:
-      raiseAssert "persistent oops, error=" & $$rc.error
-    discard al.distinctBase.getTrie.rootHash.valueOr:
-      raiseAssert "re-hash oops, error=" & $$error
-
 # ------------------------------------------------------------------------------
 # Public functions: storage ledger
 # ------------------------------------------------------------------------------
@@ -208,14 +200,14 @@ proc init*(
     info = "StorageLedger/init(): "
   let
     db = al.distinctBase.parent
-    stt = account.stoTrie
+    stt = account.storage
   if not stt.isNil and reHashOk:
-    let rc = al.distinctBase.getTrie.rootHash
+    let rc = al.distinctBase.getColumn.state()
     if rc.isErr:
       raiseAssert "re-hash oops, error=" & $$rc.error
   let
     ctx = db.ctx
-    trie = if stt.isNil: ctx.newTrie(account.address) else: stt
+    trie = if stt.isNil: ctx.newColumn(account.address) else: stt
     mpt = block:
       let rc = ctx.getMpt(trie, pruneOk)
       if rc.isErr:
@@ -249,9 +241,9 @@ iterator storage*(
   ## For given account, iterate over storage slots
   const
     info = "storage(): "
-  let trie = account.stoTrie
-  if not trie.isNil:
-    let mpt = al.distinctBase.parent.ctx.getMpt(trie).valueOr:
+  let col = account.storage
+  if not col.isNil:
+    let mpt = al.distinctBase.parent.ctx.getMpt(col).valueOr:
       raiseAssert info & $$error
     for (key,val) in mpt.pairs:
       yield (key,val)
