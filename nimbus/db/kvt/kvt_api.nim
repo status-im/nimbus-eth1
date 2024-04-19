@@ -24,7 +24,7 @@ const
   AutoValidateApiHooks = defined(release).not
     ## No validatinon needed for production suite.
 
-  KvtPersistentBackendOk = true
+  KvtPersistentBackendOk = AutoValidateApiHooks # and false
     ## Set true for persistent backend profiling (which needs an extra
     ## link library.)
 

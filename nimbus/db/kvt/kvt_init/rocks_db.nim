@@ -48,7 +48,6 @@ type
     rdb: RdbInst              ## Allows low level access to database
 
   RdbPutHdlRef = ref object of TypedPutHdlRef
-    tab: Table[Blob,Blob]     ## Transaction cache
 
 when extraTraceMessages:
   import chronicles
