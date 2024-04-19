@@ -15,7 +15,7 @@ import
   eth/common
 
 type
-  AristoDbProfData* = tuple[sum: float, sqSum: float, count: int]
+  AristoDbProfData* = tuple[sum: float, sqSum: float, count: int, masked: bool]
 
   AristoDbProfListRef* = ref object of RootRef
     ## Statistic table synced with name indexes from `AristoDbProfNames`. Here
@@ -32,6 +32,7 @@ type
     mean:     Duration
     stdDev:   Duration
     devRatio: float
+    masked:   bool
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -52,11 +53,13 @@ func toFloat(ela: Duration): float =
 proc updateTotal(t: AristoDbProfListRef; fnInx: uint) =
   ## Summary update helper
   if fnInx == 0:
-    t.list[0] = (0.0, 0.0, 0)
-  else:
-    t.list[0][0] += t.list[fnInx][0]
-    t.list[0][1] += t.list[fnInx][1]
-    t.list[0][2] += t.list[fnInx][2]
+    t.list[0].sum = 0.0
+    t.list[0].sqSum = 0.0
+    t.list[0].count = 0
+  elif t.list[0].masked == false:
+    t.list[0].sum += t.list[fnInx].sum
+    t.list[0].sqSum += t.list[fnInx].sqSum
+    t.list[0].count += t.list[fnInx].count
 
 # ---------------------
 
@@ -129,7 +132,7 @@ proc byElapsed*(t: AristoDbProfListRef): AristoDbProfEla =
   var u: Table[Duration,seq[uint]]
   for inx in 0u ..< t.list.len.uint:
     t.updateTotal inx
-    let (secs,_,count) = t.list[inx]
+    let (secs,_,count,_) = t.list[inx]
     if 0 < count:
       let ela = secs.toDuration
       u.withValue(ela,val):
@@ -148,7 +151,7 @@ proc byMean*(t: AristoDbProfListRef): AristoDbProfMean =
   var u: Table[Duration,seq[uint]]
   for inx in 0u ..< t.list.len.uint:
     t.updateTotal inx
-    let (secs,_,count) = t.list[inx]
+    let (secs,_,count,_) = t.list[inx]
     if 0 < count:
       let ela = (secs / count.float).toDuration
       u.withValue(ela,val):
@@ -167,7 +170,7 @@ proc byVisits*(t: AristoDbProfListRef): AristoDbProfCount =
   var u: Table[int,seq[uint]]
   for fnInx in 0 ..< t.list.len:
     t.updateTotal fnInx.uint
-    let (_,_,count) = t.list[fnInx]
+    let (_,_,count,_) = t.list[fnInx]
     if 0 < count:
       u.withValue(count,val):
         val[].add fnInx.uint
@@ -186,6 +189,7 @@ func stats*(
   ## Print mean and strandard deviation of timing
   let data = t.list[inx]
   result.count = data.count
+  result.masked = data.masked
   if 0 < result.count:
     let
       mean = data.sum / result.count.float

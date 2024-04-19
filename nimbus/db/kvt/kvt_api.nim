@@ -24,7 +24,7 @@ const
   AutoValidateApiHooks = defined(release).not
     ## No validatinon needed for production suite.
 
-  KvtPersistentBackendOk = false
+  KvtPersistentBackendOk = true
     ## Set true for persistent backend profiling (which needs an extra
     ## link library.)
 
@@ -353,11 +353,13 @@ func init*(
       proc(a: openArray[byte]): auto =
         KvtApiProfBeGetKvpFn.profileRunner:
           result = be.getKvpFn(a)
+    data.list[KvtApiProfBeGetKvpFn.ord].masked = true
 
     beDup.putEndFn =
       proc(a: PutHdlRef): auto =
         KvtApiProfBePutEndFn.profileRunner:
           result = be.putEndFn(a)
+    data.list[KvtApiProfBePutEndFn.ord].masked = true
 
     profApi.be = beDup
 

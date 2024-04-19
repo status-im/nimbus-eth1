@@ -29,7 +29,7 @@ const
   AutoValidateApiHooks = defined(release).not
     ## No validatinon needed for production suite.
 
-  AristoPersistentBackendOk = false
+  AristoPersistentBackendOk = true
     ## Set true for persistent backend profiling (which needs an extra
     ## link library.)
 
@@ -701,16 +701,19 @@ func init*(
       proc(a: VertexID): auto =
         AristoApiProfBeGetVtxFn.profileRunner:
           result = be.getVtxFn(a)
+    data.list[AristoApiProfBeGetVtxFn.ord].masked = true
 
     beDup.getKeyFn =
       proc(a: VertexID): auto =
         AristoApiProfBeGetKeyFn.profileRunner:
           result = be.getKeyFn(a)
+    data.list[AristoApiProfBeGetKeyFn.ord].masked = true
 
     beDup.putEndFn =
       proc(a: PutHdlRef): auto =
         AristoApiProfBePutEndFn.profileRunner:
           result = be.putEndFn(a)
+    data.list[AristoApiProfBePutEndFn.ord].masked = true
 
     profApi.be = beDup
 
