@@ -146,11 +146,11 @@ proc baseMethods(db: AristoCoreDbRef): CoreDbBaseFns =
     levelFn: proc(): int =
       aBase.getLevel,
 
-    rootHashFn: proc(trie: CoreDbTrieRef): CoreDbRc[Hash256] =
-      aBase.rootHash(trie, "rootHashFn()"),
+    colStateFn: proc(col: CoreDbColRef): CoreDbRc[Hash256] =
+      aBase.rootHash(col, "rootHashFn()"),
 
-    triePrintFn: proc(vid: CoreDbTrieRef): string =
-      aBase.triePrint(vid),
+    colPrintFn: proc(vid: CoreDbColRef): string =
+      aBase.colPrint(vid),
 
     errorPrintFn: proc(e: CoreDbErrorRef): string =
       e.errorPrint(),
@@ -164,7 +164,7 @@ proc baseMethods(db: AristoCoreDbRef): CoreDbBaseFns =
     newCtxFn: proc(): CoreDbCtxRef =
       aBase.ctx,
 
-    newCtxFromTxFn: proc(r: Hash256; k: CoreDbSubTrie): CoreDbRc[CoreDbCtxRef] =
+    newCtxFromTxFn: proc(r: Hash256; k: CoreDbColType): CoreDbRc[CoreDbCtxRef] =
       CoreDbCtxRef.init(db.adbBase, r, k),
 
     swapCtxFn: proc(ctx: CoreDbCtxRef): CoreDbCtxRef =

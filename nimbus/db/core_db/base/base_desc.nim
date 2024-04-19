@@ -55,7 +55,7 @@ type
     address*:  EthAddress    ## Reverse reference for storage trie path
     nonce*:    AccountNonce  ## Some `uint64` type
     balance*:  UInt256
-    stoTrie*:  CoreDbTrieRef ## Implies storage root sub-MPT
+    storage*:  CoreDbColRef  ## Implies storage root MPT (aka column)
     codeHash*: Hash256
 
   CoreDbPayloadRef* = ref object of PayloadRef
@@ -70,6 +70,8 @@ type
     AccNotFound
     AccTxPending
     AutoFlushFailed
+    ColUnacceptable
+    ColLocked
     CtxNotFound
     HashNotAvailable
     KvtNotFound
@@ -80,17 +82,15 @@ type
     RootNotFound
     RootUnacceptable
     StorageFailed
-    SubTrieUnacceptable
-    TrieLocked
     TxPending
 
-  CoreDbSubTrie* = enum
-    StorageTrie = 0
-    AccountsTrie
-    GenericTrie
-    ReceiptsTrie
-    TxTrie
-    WithdrawalsTrie
+  CoreDbColType* = enum
+    CtStorage = 0
+    CtAccounts
+    CtGeneric
+    CtReceipts
+    CtTxs
+    CtWithdrawals
 
   CoreDbCaptFlags* {.pure.} = enum
     PersistPut
@@ -100,16 +100,16 @@ type
   # Sub-descriptor: Misc methods for main descriptor
   # --------------------------------------------------
   CoreDbBaseDestroyFn* = proc(flush = true) {.noRaise.}
-  CoreDbBaseRootHashFn* = proc(
-    trie: CoreDbTrieRef): CoreDbRc[Hash256] {.noRaise.}
-  CoreDbBaseTriePrintFn* = proc(vid: CoreDbTrieRef): string {.noRaise.}
+  CoreDbBaseColStateFn* = proc(
+    col: CoreDbColRef): CoreDbRc[Hash256] {.noRaise.}
+  CoreDbBaseColPrintFn* = proc(vid: CoreDbColRef): string {.noRaise.}
   CoreDbBaseErrorPrintFn* = proc(e: CoreDbErrorRef): string {.noRaise.}
   CoreDbBaseInitLegaSetupFn* = proc() {.noRaise.}
   CoreDbBaseLevelFn* = proc(): int {.noRaise.}
   CoreDbBaseNewKvtFn* = proc(offSite: bool): CoreDbRc[CoreDxKvtRef] {.noRaise.}
   CoreDbBaseNewCtxFn* = proc(): CoreDbCtxRef {.noRaise.}
   CoreDbBaseNewCtxFromTxFn* = proc(
-    root: Hash256; kind: CoreDbSubTrie;): CoreDbRc[CoreDbCtxRef] {.noRaise.}
+    colState: Hash256; kind: CoreDbColType): CoreDbRc[CoreDbCtxRef] {.noRaise.}
   CoreDbBaseSwapCtxFn* = proc(ctx: CoreDbCtxRef): CoreDbCtxRef {.noRaise.}
   CoreDbBaseTxBeginFn* = proc(): CoreDbRc[CoreDxTxRef] {.noRaise.}
   CoreDbBaseNewCaptFn* =
@@ -119,8 +119,8 @@ type
 
   CoreDbBaseFns* = object
     destroyFn*:      CoreDbBaseDestroyFn
-    rootHashFn*:     CoreDbBaseRootHashFn
-    triePrintFn*:    CoreDbBaseTriePrintFn
+    colStateFn*:     CoreDbBaseColStateFn
+    colPrintFn*:     CoreDbBaseColPrintFn
     errorPrintFn*:   CoreDbBaseErrorPrintFn
     legacySetupFn*:  CoreDbBaseInitLegaSetupFn
     levelFn*:        CoreDbBaseLevelFn
@@ -169,22 +169,22 @@ type
   # Sub-descriptor: MPT context methods
   # --------------------------------------------------
   CoreDbCtxFromTxFn* =
-    proc(root: Hash256; kind: CoreDbSubTrie): CoreDbRc[CoreDbCtxRef] {.noRaise.}
-  CoreDbCtxNewTrieFn* = proc(
-    trie: CoreDbSubTrie; root: Hash256; address: Option[EthAddress];
-    ): CoreDbRc[CoreDbTrieRef] {.noRaise.}
+    proc(root: Hash256; kind: CoreDbColType): CoreDbRc[CoreDbCtxRef] {.noRaise.}
+  CoreDbCtxNewColFn* = proc(
+    colType: CoreDbColType; colState: Hash256; address: Option[EthAddress];
+    ): CoreDbRc[CoreDbColRef] {.noRaise.}
   CoreDbCtxGetMptFn* = proc(
-    root: CoreDbTrieRef; prune: bool): CoreDbRc[CoreDxMptRef] {.noRaise.}
+    root: CoreDbColRef; prune: bool): CoreDbRc[CoreDxMptRef] {.noRaise.}
   CoreDbCtxGetAccFn* = proc(
-    root: CoreDbTrieRef; prune: bool): CoreDbRc[CoreDxAccRef] {.noRaise.}
+    root: CoreDbColRef; prune: bool): CoreDbRc[CoreDxAccRef] {.noRaise.}
   CoreDbCtxForgetFn* = proc() {.noRaise.}
 
   CoreDbCtxFns* = object
     ## Methods for context maniulation
-    newTrieFn*: CoreDbCtxNewTrieFn
-    getMptFn*:  CoreDbCtxGetMptFn
-    getAccFn*:  CoreDbCtxGetAccFn
-    forgetFn*:  CoreDbCtxForgetFn
+    newColFn*: CoreDbCtxNewColFn
+    getMptFn*: CoreDbCtxGetMptFn
+    getAccFn*: CoreDbCtxGetAccFn
+    forgetFn*: CoreDbCtxForgetFn
 
   # --------------------------------------------------
   # Sub-descriptor: generic  Mpt/hexary trie methods
@@ -201,19 +201,19 @@ type
   CoreDbMptMergeAccountFn* =
     proc(k: openArray[byte]; v: CoreDbAccount): CoreDbRc[void] {.noRaise.}
   CoreDbMptHasPathFn* = proc(k: openArray[byte]): CoreDbRc[bool] {.noRaise.}
-  CoreDbMptGetTrieFn* = proc(): CoreDbTrieRef {.noRaise.}
+  CoreDbMptGetColFn* = proc(): CoreDbColRef {.noRaise.}
   CoreDbMptIsPruningFn* = proc(): bool {.noRaise.}
   CoreDbMptForgetFn* = proc(): CoreDbRc[void] {.noRaise.}
 
   CoreDbMptFns* = object
     ## Methods for trie objects
-    backendFn*:    CoreDbMptBackendFn
-    fetchFn*:      CoreDbMptFetchFn
-    deleteFn*:     CoreDbMptDeleteFn
-    mergeFn*:      CoreDbMptMergeFn
-    hasPathFn*:    CoreDbMptHasPathFn
-    getTrieFn*:    CoreDbMptGetTrieFn
-    isPruningFn*:  CoreDbMptIsPruningFn
+    backendFn*:   CoreDbMptBackendFn
+    fetchFn*:     CoreDbMptFetchFn
+    deleteFn*:    CoreDbMptDeleteFn
+    mergeFn*:     CoreDbMptMergeFn
+    hasPathFn*:   CoreDbMptHasPathFn
+    getColFn*:    CoreDbMptGetColFn
+    isPruningFn*: CoreDbMptIsPruningFn
 
 
   # ----------------------------------------------------
@@ -225,7 +225,7 @@ type
   CoreDbAccStoFlushFn* = proc(k: EthAddress): CoreDbRc[void] {.noRaise.}
   CoreDbAccMergeFn* = proc(v: CoreDbAccount): CoreDbRc[void] {.noRaise.}
   CoreDbAccHasPathFn* = proc(k: EthAddress): CoreDbRc[bool] {.noRaise.}
-  CoreDbAccGetTrieFn* = proc(): CoreDbTrieRef {.noRaise.}
+  CoreDbAccGetColFn* = proc(): CoreDbColRef {.noRaise.}
   CoreDbAccIsPruningFn* = proc(): bool {.noRaise.}
   CoreDbAccPersistentFn* = proc(): CoreDbRc[void] {.noRaise.}
   CoreDbAccForgetFn* = proc(): CoreDbRc[void] {.noRaise.}
@@ -238,7 +238,7 @@ type
     stoFlushFn*:   CoreDbAccStoFlushFn
     mergeFn*:      CoreDbAccMergeFn
     hasPathFn*:    CoreDbAccHasPathFn
-    getTrieFn*:    CoreDbAccGetTrieFn
+    getColFn*:     CoreDbAccGetColFn
     isPruningFn*:  CoreDbAccIsPruningFn
     persistentFn*: CoreDbAccPersistentFn
 
@@ -325,9 +325,9 @@ type
     parent*: CoreDbRef
     methods*: CoreDbAccFns
 
-  CoreDbTrieRef* = ref object of RootRef
+  CoreDbColRef* = ref object of RootRef
     ## Generic state root: `Hash256` for legacy, `VertexID` for Aristo. This
-    ## object makes only sense in the context od an *MPT*.
+    ## object makes only sense in the context of an *MPT*.
     parent*: CoreDbRef
     ready*: bool              ## Must be set `true` to enable
 

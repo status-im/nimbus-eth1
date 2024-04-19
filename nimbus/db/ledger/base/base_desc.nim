@@ -85,7 +85,6 @@ type
   PersistFn* = proc(clearEmptyAccount: bool, clearCache: bool) {.noRaise.}
   RipemdSpecialFn* = proc() {.noRaise.}
   RollbackFn* = proc(sp: LedgerSpRef) {.noRaise.}
-  RootHashFn* = proc(): Hash256 {.noRaise.}
   SafeDisposeFn* = proc(sp: LedgerSpRef) {.noRaise.}
   SelfDestructFn* = proc(eAddr: EthAddress) {.noRaise.}
   SelfDestruct6780Fn* = proc(eAddr: EthAddress) {.noRaise.}
@@ -96,6 +95,7 @@ type
   SetStorageFn* = proc(eAddr: EthAddress, slot, value: UInt256) {.noRaise.}
   SetTransientStorageFn* =
     proc(eAddr: EthAddress, slot, val: UInt256) {.noRaise.}
+  StateFn* = proc(): Hash256 {.noRaise.}
   SubBalanceFn* = proc(eAddr: EthAddress, delta: UInt256) {.noRaise.}
   GetAccessListFn* = proc(): AccessList {.noRaise.}
 
@@ -134,7 +134,6 @@ type
     persistFn*: PersistFn
     ripemdSpecialFn*: RipemdSpecialFn
     rollbackFn*: RollbackFn
-    rootHashFn*: RootHashFn
     safeDisposeFn*: SafeDisposeFn
     selfDestruct6780Fn*: SelfDestruct6780Fn
     selfDestructFn*: SelfDestructFn
@@ -144,6 +143,7 @@ type
     setNonceFn*: SetNonceFn
     setStorageFn*: SetStorageFn
     setTransientStorageFn*: SetTransientStorageFn
+    stateFn*: StateFn
     subBalanceFn*: SubBalanceFn
     getAccessListFn*: GetAccessListFn
 

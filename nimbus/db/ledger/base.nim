@@ -292,11 +292,6 @@ proc rollback*(ldg: LedgerRef, sp: LedgerSpRef) =
   ldg.methods.rollbackFn sp
   ldg.ifTrackApi: debug apiTxt, api, elapsed
 
-proc rootHash*(ldg: LedgerRef): Hash256 =
-  ldg.beginTrackApi LdgRootHashFn
-  result = ldg.methods.rootHashFn()
-  ldg.ifTrackApi: debug apiTxt, api, elapsed, result
-
 proc safeDispose*(ldg: LedgerRef, sp: LedgerSpRef) =
   ldg.beginTrackApi LdgSafeDisposeFn
   ldg.methods.safeDisposeFn sp
@@ -347,6 +342,11 @@ proc setTransientStorage*(
   ldg.methods.setTransientStorageFn(eAddr, slot, val)
   ldg.ifTrackApi: debug apiTxt, api, elapsed, eAddr, slot, val
 
+proc state*(ldg: LedgerRef): Hash256 =
+  ldg.beginTrackApi LdgStateFn
+  result = ldg.methods.stateFn()
+  ldg.ifTrackApi: debug apiTxt, api, elapsed, result
+
 proc subBalance*(ldg: LedgerRef, eAddr: EthAddress, delta: UInt256) =
   ldg.beginTrackApi LdgSubBalanceFn
   ldg.methods.subBalanceFn(eAddr, delta)
@@ -360,6 +360,12 @@ proc getAccessList*(ldg: LedgerRef): AccessList =
 # ------------------------------------------------------------------------------
 # Public methods, extensions to go away
 # ------------------------------------------------------------------------------
+
+proc rootHash*(ldg: LedgerRef): Hash256 =
+  ## Replaced by `state()`
+  ldg.beginTrackApi LdgRootHashFn
+  result = ldg.methods.stateFn()
+  ldg.ifTrackApi: debug apiTxt, api, elapsed, result
 
 proc getMpt*(ldg: LedgerRef): CoreDbMptRef =
   ldg.beginTrackApi LdgGetMptFn

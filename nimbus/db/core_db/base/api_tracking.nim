@@ -24,7 +24,7 @@ type
     CoreDbTxRef | CoreDbCaptRef
 
   CoreDxApiTrackRef* =
-    CoreDbRef | CoreDxKvtRef | CoreDbTrieRef |
+    CoreDbRef | CoreDxKvtRef | CoreDbColRef |
     CoreDbCtxRef | CoreDxMptRef | CoreDxPhkRef | CoreDxAccRef |
     CoreDxTxRef | CoreDxCaptRef | CoreDbErrorRef
 
@@ -35,7 +35,7 @@ type
     AccDeleteFn         = "acc/delete"
     AccFetchFn          = "acc/fetch"
     AccForgetFn         = "acc/forget"
-    AccGetTrieFn        = "acc/getTrie"
+    AccGetColFn         = "acc/getColumn"
     AccHasPathFn        = "acc/hasPath"
     AccMergeFn          = "acc/merge"
     AccGetMptFn         = "acc/getMpt"
@@ -45,6 +45,8 @@ type
     AnyBackendFn        = "any/backend"
     AnyIsPruningFn      = "any/isPruning"
 
+    BaseColPrintFn      = "$$"
+    BaseColStateFn      = "state"
     BaseDbTypeFn        = "dbType"
     BaseFinishFn        = "finish"
     BaseLegacySetupFn   = "compensateLegacySetup"
@@ -52,10 +54,10 @@ type
     BaseNewCaptureFn    = "newCapture"
     BaseNewCtxFn        = "ctx"
     BaseNewCtxFromTxFn  = "ctxFromTx"
-    BaseSwapCtxFn       = "swapCtx"
     BaseNewKvtFn        = "newKvt"
     BaseNewTxFn         = "newTransaction"
     BasePersistentFn    = "persistent"
+    BaseSwapCtxFn       = "swapCtx"
 
     CptFlagsFn          = "cpt/flags"
     CptLogDbFn          = "cpt/logDb"
@@ -65,7 +67,7 @@ type
     CtxForgetFn         = "ctx/forget"
     CtxGetAccFn         = "ctx/getAcc"
     CtxGetMptFn         = "ctx/getMpt"
-    CtxNewTrieFn        = "ctx/newTrie"
+    CtxNewColFn         = "ctx/newColumn"
 
     ErrorPrintFn        = "$$"
     EthAccRecastFn      = "recast"
@@ -79,39 +81,39 @@ type
     KvtSaveOffSiteFn    = "kvt/saveOffSite"
     KvtPutFn            = "kvt/put"
 
-    LegaBeginTxFn       = "beginTransaction"
-    LegaCaptureFn       = "capture"
-    LegaCptFlagsFn      = "cpt/flags"
-    LegaCptLogDbFn      = "cpt/logDb"
-    LegaCptRecorderFn   = "cpt/recorder"
-    LegaIsPruningFn     = "trie/isPruning"
+    LegaBeginTxFn       = "lega/beginTransaction"
+    LegaCaptureFn       = "lega/cpt/capture"
+    LegaCptFlagsFn      = "lega/cpt/flags"
+    LegaCptLogDbFn      = "lega/cpt/logDb"
+    LegaCptRecorderFn   = "lega/cpt/recorder"
+    LegaIsPruningFn     = "lega/isPruning"
 
-    LegaKvtContainsFn   = "kvt/contains"
-    LegaKvtDelFn        = "kvt/del"
-    LegaKvtGetFn        = "kvt/get"
-    LegaKvtPairsIt      = "kvt/pairs"
-    LegaKvtPutFn        = "kvt/put"
+    LegaKvtContainsFn   = "lega/kvt/contains"
+    LegaKvtDelFn        = "lega/kvt/del"
+    LegaKvtGetFn        = "lega/kvt/get"
+    LegaKvtPairsIt      = "lega/kvt/pairs"
+    LegaKvtPutFn        = "lega/kvt/put"
 
-    LegaMptContainsFn   = "mpt/contains"
-    LegaMptDelFn        = "mpt/del"
-    LegaMptGetFn        = "mpt/get"
-    LegaMptPutFn        = "mpt/put"
-    LegaMptRootHashFn   = "mpt/rootHash"
-    LegaMptPairsIt      = "mpt/pairs"
-    LegaMptReplicateIt  = "mpt/replicate"
+    LegaMptContainsFn   = "lega/mpt/contains"
+    LegaMptDelFn        = "lega/mpt/del"
+    LegaMptGetFn        = "lega/mpt/get"
+    LegaMptPutFn        = "lega/mpt/put"
+    LegaMptRootHashFn   = "lega/mpt/rootHash"
+    LegaMptPairsIt      = "lega/mpt/pairs"
+    LegaMptReplicateIt  = "lega/mpt/replicate"
 
-    LegaNewKvtFn        = "kvt"
-    LegaNewMptFn        = "mptPrune"
-    LegaNewPhkFn        = "phkPrune"
+    LegaNewKvtFn        = "lega/kvt"
+    LegaNewMptFn        = "lega/mptPrune"
+    LegaNewPhkFn        = "lega/phkPrune"
 
-    LegaPhkContainsFn   = "phk/contains"
-    LegaPhkDelFn        = "phk/del"
-    LegaPhkGetFn        = "phk/get"
-    LegaPhkPutFn        = "phk/put"
-    LegaPhkRootHashFn   = "phk/rootHash"
+    LegaPhkContainsFn   = "lega/phk/contains"
+    LegaPhkDelFn        = "lega/phk/del"
+    LegaPhkGetFn        = "lega/phk/get"
+    LegaPhkPutFn        = "lega/phk/put"
+    LegaPhkRootHashFn   = "lega/phk/rootHash"
 
-    LegaToMptFn         = "phk/toMpt"
-    LegaToPhkFn         = "mpt/toPhk"
+    LegaToMptFn         = "lega/phk/toMpt"
+    LegaToPhkFn         = "lega/mpt/toPhk"
 
     LegaTxCommitFn      = "lega/commit"
     LegaTxDisposeFn     = "lega/dispose"
@@ -122,7 +124,7 @@ type
     MptFetchFn          = "mpt/fetch"
     MptFetchOrEmptyFn   = "mpt/fetchOrEmpty"
     MptForgetFn         = "mpt/forget"
-    MptGetTrieFn        = "mpt/getTrie"
+    MptGetColFn         = "mpt/getColumn"
     MptHasPathFn        = "mpt/hasPath"
     MptMergeFn          = "mpt/merge"
     MptPairsIt          = "mpt/pairs"
@@ -133,13 +135,10 @@ type
     PhkFetchFn          = "phk/fetch"
     PhkFetchOrEmptyFn   = "phk/fetchOrEmpty"
     PhkForgetFn         = "phk/forget"
-    PhkGetTrieFn        = "phk/getTrie"
+    PhkGetColFn         = "phk/getColumn"
     PhkHasPathFn        = "phk/hasPath"
     PhkMergeFn          = "phk/merge"
     PhkToMptFn          = "phk/toMpt"
-
-    RootHashFn          = "rootHash"
-    TriePrintFn         = "$$"
 
     TxCommitFn          = "commit"
     TxDisposeFn         = "dispose"
@@ -164,11 +163,11 @@ func toStr*(w: Hash256): string =
 proc toStr*(e: CoreDbErrorRef): string =
   $e.error & "(" & e.parent.methods.errorPrintFn(e) & ")"
 
-proc toStr*(p: CoreDbTrieRef): string =
+proc toStr*(p: CoreDbColRef): string =
   let
-    w = if p.isNil or not p.ready: "nil" else: p.parent.methods.triePrintFn(p)
+    w = if p.isNil or not p.ready: "nil" else: p.parent.methods.colPrintFn(p)
     (a,b) = if 0 < w.len and w[0] == '(': ("","") else: ("(",")")
-  "Trie" & a & w & b
+  "Col" & a & w & b
 
 func toStr*(w: CoreDbKvtRef): string =
   if w.distinctBase.isNil: "kvt(nil)" else: "kvt"
@@ -200,7 +199,7 @@ proc toStr*(rc: CoreDbRc[Blob]): string =
 proc toStr*(rc: CoreDbRc[Hash256]): string =
   if rc.isOk: "ok(" & rc.value.toStr & ")" else: "err(" & rc.error.toStr & ")"
 
-proc toStr*(rc: CoreDbRc[CoreDbTrieRef]): string =
+proc toStr*(rc: CoreDbRc[CoreDbColRef]): string =
   if rc.isOk: "ok(" & rc.value.toStr & ")" else: "err(" & rc.error.toStr & ")"
 
 proc toStr*(rc: CoreDbRc[set[CoreDbCaptFlags]]): string =

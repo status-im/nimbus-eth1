@@ -132,9 +132,6 @@ proc ledgerMethods(lc: impl.AccountsLedgerRef): LedgerFns =
     rollbackFn: proc(sp: LedgerSpRef) =
       lc.rollback(sp.savePoint),
 
-    rootHashFn: proc(): Hash256 =
-      lc.rootHash(),
-
     safeDisposeFn: proc(sp: LedgerSpRef) =
       lc.safeDispose(sp.savePoint),
 
@@ -162,6 +159,9 @@ proc ledgerMethods(lc: impl.AccountsLedgerRef): LedgerFns =
     setTransientStorageFn: proc(eAddr: EthAddress, slot, val: UInt256) =
       lc.setTransientStorage(eAddr, slot, val),
 
+    stateFn: proc(): Hash256 =
+      lc.state(),
+
     subBalanceFn: proc(eAddr: EthAddress, delta: UInt256) =
       lc.subBalance(eAddr, delta),
 
@@ -174,7 +174,7 @@ proc ledgerExtras(lc: impl.AccountsLedgerRef): LedgerExtras =
       lc.rawTrie.CoreDxAccRef.getMpt.CoreDbMptRef,
 
     rawRootHashFn: proc(): Hash256 =
-      lc.rawTrie.rootHash())
+      lc.rawTrie.state())
 
 
 proc newAccountsLedgerRef(
