@@ -53,10 +53,8 @@ func toFloat(ela: Duration): float =
 proc updateTotal(t: AristoDbProfListRef; fnInx: uint) =
   ## Summary update helper
   if fnInx == 0:
-    t.list[0].sum = 0.0
-    t.list[0].sqSum = 0.0
-    t.list[0].count = 0
-  elif t.list[0].masked == false:
+    t.list[0].reset
+  elif not t.list[fnInx].masked:
     t.list[0].sum += t.list[fnInx].sum
     t.list[0].sqSum += t.list[fnInx].sqSum
     t.list[0].count += t.list[fnInx].count
