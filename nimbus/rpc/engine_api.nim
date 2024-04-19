@@ -13,8 +13,7 @@ import
   web3/[conversions, execution_types],
   ../beacon/api_handler,
   ../beacon/beacon_engine,
-  ../beacon/web3_eth_conv,
-  ../beacon/api_handler/api_utils
+  ../beacon/web3_eth_conv
 
 {.push raises: [].}
 
@@ -53,20 +52,12 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
   server.rpc("engine_newPayloadV3") do(payload: ExecutionPayload,
                                        expectedBlobVersionedHashes: Option[seq[Web3Hash]],
                                        parentBeaconBlockRoot: Option[Web3Hash]) -> PayloadStatusV1:
-    if expectedBlobVersionedHashes.isNone:
-      raise invalidParams("newPayloadV3 expect blobVersionedHashes but got none")
-    if not validateVersionedHashed(payload, expectedBlobVersionedHashes.get):
-      return invalidStatus()
-    return engine.newPayload(Version.V3, payload, parentBeaconBlockRoot)
+    return engine.newPayload(Version.V3, payload, expectedBlobVersionedHashes, parentBeaconBlockRoot)
 
   server.rpc("engine_newPayloadV4") do(payload: ExecutionPayload,
                                        expectedBlobVersionedHashes: Option[seq[Web3Hash]],
                                        parentBeaconBlockRoot: Option[Web3Hash]) -> PayloadStatusV1:
-    if expectedBlobVersionedHashes.isNone:
-      raise invalidParams("newPayloadV4 expect blobVersionedHashes but got none")
-    if not validateVersionedHashed(payload, expectedBlobVersionedHashes.get):
-      return invalidStatus()
-    return engine.newPayload(Version.V4, payload, parentBeaconBlockRoot)
+    return engine.newPayload(Version.V4, payload, expectedBlobVersionedHashes, parentBeaconBlockRoot)
 
   server.rpc("engine_getPayloadV1") do(payloadId: PayloadID) -> ExecutionPayloadV1:
     return engine.getPayload(Version.V1, payloadId).executionPayload.V1

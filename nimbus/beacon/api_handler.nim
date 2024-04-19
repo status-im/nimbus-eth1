@@ -8,11 +8,6 @@
 # those terms.
 
 import
-  std/[options, typetraits],
-  eth/common,
-  ./web3_eth_conv,
-  ./beacon_engine,
-  web3/execution_types,
   ./api_handler/api_utils,
   ./api_handler/api_getpayload,
   ./api_handler/api_getbodies,
@@ -23,25 +18,6 @@ import
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
-
-{.push gcsafe, raises:[CatchableError].}
-
-func validateVersionedHashed*(payload: ExecutionPayload,
-                              expected: openArray[Web3Hash]): bool  =
-  var versionedHashes: seq[common.Hash256]
-  for x in payload.transactions:
-    let tx = rlp.decode(distinctBase(x), Transaction)
-    versionedHashes.add tx.versionedHashes
-
-  if versionedHashes.len != expected.len:
-    return false
-
-  for i, x in expected:
-    if distinctBase(x) != versionedHashes[i].data:
-      return false
-  true
-
-{.pop.}
 
 export
   invalidStatus,

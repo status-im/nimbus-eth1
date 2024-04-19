@@ -22,11 +22,16 @@ import
 
 type
   BaseTx* = object of RootObj
-    recipient*: Option[EthAddress]
-    gasLimit* : GasInt
-    amount*   : UInt256
-    payload*  : seq[byte]
-    txType*   : Option[TxType]
+    recipient* : Option[EthAddress]
+    gasLimit*  : GasInt
+    amount*    : UInt256
+    payload*   : seq[byte]
+    txType*    : Option[TxType]
+    gasTip*    : GasInt
+    gasFee*    : GasInt
+    blobGasFee*: UInt256
+    blobCount* : int
+    blobID*    : BlobID
 
   BigInitcodeTx* = object of BaseTx
     initcodeLength*: int
@@ -35,11 +40,6 @@ type
 
   # Blob transaction creator
   BlobTx* = object of BaseTx
-    gasFee*    : GasInt
-    gasTip*    : GasInt
-    blobGasFee*: UInt256
-    blobID*    : BlobID
-    blobCount* : int
 
   TestAccount* = object
     key*    : PrivateKey
@@ -77,6 +77,7 @@ const
   TestAccountCount = 1000
   gasPrice* = 30.gwei
   gasTipPrice* = 1.gwei
+  blobGasPrice* = 1.gwei
 
 func toAddress(key: PrivateKey): EthAddress =
   toKeyPair(key).pubkey.toCanonicalAddress()
@@ -129,37 +130,75 @@ proc getTxType(tc: BaseTx, nonce: uint64): TxType =
   else:
     tc.txType.get
 
-proc makeTx(params: MakeTxParams, tc: BaseTx): Transaction =
-  const
-    gasFeeCap = gasPrice
-    gasTipCap = gasTipPrice
+proc makeTxOfType(params: MakeTxParams, tc: BaseTx): Transaction =
+  let
+    gasFeeCap = if tc.gasFee != 0.GasInt: tc.gasFee
+                else: gasPrice
+    gasTipCap = if tc.gasTip != 0.GasInt: tc.gasTip
+                else: gasTipPrice
 
   let txType = tc.getTxType(params.nonce)
+  case txType
+  of TxLegacy:
+    Transaction(
+      txType  : TxLegacy,
+      nonce   : params.nonce,
+      to      : tc.recipient,
+      value   : tc.amount,
+      gasLimit: tc.gasLimit,
+      gasPrice: gasPrice,
+      payload : tc.payload
+    )
+  of TxEip1559:
+    Transaction(
+      txType  : TxEIP1559,
+      nonce   : params.nonce,
+      gasLimit: tc.gasLimit,
+      maxFee  : gasFeeCap,
+      maxPriorityFee: gasTipCap,
+      to      : tc.recipient,
+      value   : tc.amount,
+      payload : tc.payload,
+      chainId : params.chainId
+    )
+  of TxEip4844:
+    doAssert(tc.recipient.isSome, "recipient must be some")
+    let
+      blobCount  = if tc.blobCount != 0: tc.blobCount
+                   else: MAX_BLOBS_PER_BLOCK
+      blobFeeCap = if tc.blobGasFee != 0.u256: tc.blobGasFee
+                   else: blobGasPrice.u256
 
+    # Need tx wrap data that will pass blob verification
+    var blobData = blobDataGenerator(tc.blobID, blobCount)
+    #tc.blobID += BlobID(blobCount)
+
+    Transaction(
+      txType  : TxEIP4844,
+      nonce   : params.nonce,
+      chainId : params.chainId,
+      maxFee  : gasFeeCap,
+      maxPriorityFee: gasTipCap,
+      gasLimit: tc.gasLimit,
+      to      : tc.recipient,
+      value   : tc.amount,
+      payload : tc.payload,
+      #AccessList: tc.AccessList,
+      maxFeePerBlobGas: blobFeeCap,
+      versionedHashes: system.move(blobData.hashes),
+      networkPayload: NetworkPayload(
+        blobs: system.move(blobData.blobs),
+        commitments: system.move(blobData.commitments),
+        proofs: system.move(blobData.proofs),
+      )
+    )
+  else:
+    doAssert(false, "unsupported tx type")
+    Transaction()
+
+proc makeTx(params: MakeTxParams, tc: BaseTx): Transaction =
   # Build the transaction depending on the specified type
-  let tx = if txType == TxLegacy:
-             Transaction(
-               txType  : TxLegacy,
-               nonce   : params.nonce,
-               to      : tc.recipient,
-               value   : tc.amount,
-               gasLimit: tc.gasLimit,
-               gasPrice: gasPrice,
-               payload : tc.payload
-             )
-           else:
-             Transaction(
-               txType  : TxEIP1559,
-               nonce   : params.nonce,
-               gasLimit: tc.gasLimit,
-               maxFee  : gasFeeCap,
-               maxPriorityFee: gasTipCap,
-               to      : tc.recipient,
-               value   : tc.amount,
-               payload : tc.payload,
-               chainId : params.chainId
-             )
-
+  let tx = makeTxOfType(params, tc)
   signTransaction(tx, params.key, params.chainId, eip155 = true)
 
 proc makeTx(params: MakeTxParams, tc: BigInitcodeTx): Transaction =
@@ -263,13 +302,13 @@ proc makeTx*(params: MakeTxParams, tc: BlobTx): Transaction =
   let data = blobDataGenerator(tc.blobID, tc.blobCount)
   doAssert(tc.recipient.isSome, "nil recipient address")
 
-  # Collect fields for transaction
   let
     gasFeeCap = if tc.gasFee != 0.GasInt: tc.gasFee
                 else: gasPrice
     gasTipCap = if tc.gasTip != 0.GasInt: tc.gasTip
                 else: gasTipPrice
 
+  # Collect fields for transaction
   let unsignedTx = Transaction(
     txType    : TxEip4844,
     chainId   : params.chainId,

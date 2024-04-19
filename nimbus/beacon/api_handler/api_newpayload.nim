@@ -19,6 +19,21 @@ import
 
 {.push gcsafe, raises:[CatchableError].}
 
+func validateVersionedHashed(payload: ExecutionPayload,
+                              expected: openArray[Web3Hash]): bool  =
+  var versionedHashes: seq[common.Hash256]
+  for x in payload.transactions:
+    let tx = rlp.decode(distinctBase(x), Transaction)
+    versionedHashes.add tx.versionedHashes
+
+  if versionedHashes.len != expected.len:
+    return false
+
+  for i, x in expected:
+    if distinctBase(x) != versionedHashes[i].data:
+      return false
+  true
+
 template validateVersion(com, timestamp, version, apiVersion) =
   if apiVersion == Version.V4:
     if not com.isPragueOrLater(timestamp):
@@ -83,6 +98,7 @@ template validatePayload(apiVersion, version, payload) =
 proc newPayload*(ben: BeaconEngineRef,
                  apiVersion: Version,
                  payload: ExecutionPayload,
+                 versionedHashes = none(seq[Web3Hash]),
                  beaconRoot = none(Web3Hash)): PayloadStatusV1 =
 
   trace "Engine API request received",
@@ -90,7 +106,7 @@ proc newPayload*(ben: BeaconEngineRef,
     number = payload.blockNumber,
     hash = payload.blockHash
 
-  if apiVersion == Version.V3:
+  if apiVersion >= Version.V3:
     if beaconRoot.isNone:
       raise invalidParams("newPayloadV3 expect beaconRoot but got none")
 
@@ -108,6 +124,12 @@ proc newPayload*(ben: BeaconEngineRef,
   header.validateBlockHash(blockHash, version).isOkOr:
     return error
 
+  if apiVersion >= Version.V3:
+    if versionedHashes.isNone:
+      raise invalidParams("newPayload" & $apiVersion &
+        " expect blobVersionedHashes but got none")
+    if not validateVersionedHashed(payload, versionedHashes.get):
+      return invalidStatus(header.parentHash, "invalid blob versionedHashes")
 
   # If we already have the block locally, ignore the entire execution and just
   # return a fake success.

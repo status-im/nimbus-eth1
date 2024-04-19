@@ -1865,7 +1865,7 @@ proc makeCancunTest(): seq[EngineSpec] =
       mainFork: ForkCancun,
       fieldModification: t,
     )
-#[
+
   # Invalid Payload Tests
   const
     invalidFields = [
@@ -1911,7 +1911,6 @@ proc makeCancunTest(): seq[EngineSpec] =
         invalidDetectedOnSync: invalidDetectedOnSync,
         nilLatestValidHash   : nilLatestValidHash,
       )
-  ]#
 
   # Invalid Transaction ChainID Tests
   result.add InvalidTxChainIDTest(
