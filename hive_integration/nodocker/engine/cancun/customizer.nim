@@ -425,7 +425,7 @@ proc customizePayload*(cust: CustomPayloadData, data: ExecutableData): Executabl
   if cust.versionedHashesCustomizer.isNil.not:
     doAssert(data.versionedHashes.isSome)
     result.versionedHashes = cust.versionedHashesCustomizer.getVersionedHashes(data.versionedHashes.get)
-  
+
 # Base new payload directive call cust.
 # Used as base to other customizers.
 type
@@ -615,22 +615,22 @@ proc generateInvalidPayload*(sender: TxSender, data: ExecutableData, payloadFiel
       excessBlobGas: some(modExcessBlobGas),
     )
   of InvalidVersionedHashesVersion:
-    doAssert(data.versionedHashes.isNone, "no versioned hashes available for modification")
+    doAssert(data.versionedHashes.isSome, "no versioned hashes available for modification")
     customPayloadMod = CustomPayloadData(
       versionedHashesCustomizer: IncreaseVersionVersionedHashes(),
     )
   of InvalidVersionedHashes:
-    doAssert(data.versionedHashes.isNone, "no versioned hashes available for modification")
+    doAssert(data.versionedHashes.isSome, "no versioned hashes available for modification")
     customPayloadMod = CustomPayloadData(
       versionedHashesCustomizer: CorruptVersionedHashes(),
     )
   of IncompleteVersionedHashes:
-    doAssert(data.versionedHashes.isNone, "no versioned hashes available for modification")
+    doAssert(data.versionedHashes.isSome, "no versioned hashes available for modification")
     customPayloadMod = CustomPayloadData(
       versionedHashesCustomizer: RemoveVersionedHash(),
     )
   of ExtraVersionedHashes:
-    doAssert(data.versionedHashes.isNone, "no versioned hashes available for modification")
+    doAssert(data.versionedHashes.isSome, "no versioned hashes available for modification")
     customPayloadMod = CustomPayloadData(
       versionedHashesCustomizer: ExtraVersionedHash(),
     )
