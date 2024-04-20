@@ -204,6 +204,15 @@ proc getAccount(ac: AccountsCache, address: EthAddress, shouldCreate = true): Re
       account: account,
       flags: {Alive}
     )
+
+  else:
+    if not shouldCreate:
+      return
+    # it's a request for new account
+    result = RefAccount(
+      account: newAccount(),
+      flags: {Alive, IsNew}
+      )
   
   # cache the account
   ac.savePoint.cache[address] = result
