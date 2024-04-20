@@ -21,7 +21,7 @@ import
     tree/tree
   ],
   ../verkle/verkle_accounts,
-  ".."/[core_db, verkle_distinct_tries, distinct_tries, storage_types, transient_storage]
+  ".."/[core_db, verkle_distinct_tries, storage_types, transient_storage]
 
 
 const debugAccountsCache = false
@@ -257,3 +257,206 @@ proc persistMode(acc: RefAccount): PersistMode =
   else:
     if IsNew notin acc.flags:
       result = Remove
+
+proc getBalance*(ac: AccountsCache, address: EthAddress): UInt256 {.inline.} =
+  let acc = ac.getAccount(address, false)
+  if acc.isNil: emptyAcc.balance
+  else: acc.account.balance
+
+proc getNonce*(ac: AccountsCache, address: EthAddress): AccountNonce {.inline.} =
+  let acc = ac.getAccount(address, false)
+  if acc.isNil: emptyAcc.nonce
+  else: acc.account.nonce
+
+proc makeDirty(ac: AccountsCache, address: EthAddress, cloneStorage = true): RefAccount =
+  ac.isDirty = true
+  result = ac.getAccount(address)
+  if address in ac.savePoint.cache:
+    # it's already in latest savepoint
+    result.flags.incl Dirty
+    return
+
+  # put a copy into latest savepoint
+  result = result.clone(cloneStorage)
+  result.flags.incl Dirty
+  ac.savePoint.cache[address] = result
+
+proc hasCodeOrNonce*(ac: AccountsCache, address: EthAddress): bool {.inline.} =
+  let acc = ac.getAccount(address, false)
+  if acc.isNil:
+    return
+  acc.account.nonce != 0 or acc.account.codeHash != EMPTY_SHA3
+
+proc accountExists*(ac: AccountsCache, address: EthAddress): bool {.inline.} =
+  let acc = ac.getAccount(address, false)
+  if acc.isNil:
+    return
+  acc.exists()
+
+proc isEmptyAccount*(ac: AccountsCache, address: EthAddress): bool {.inline.} =
+  let acc = ac.getAccount(address, false)
+  doAssert not acc.isNil
+  doAssert acc.exists()
+  acc.isEmpty()
+
+proc isDeadAccount*(ac: AccountsCache, address: EthAddress): bool =
+  let acc = ac.getAccount(address, false)
+  if acc.isNil:
+    return true
+  if not acc.exists():
+    return true
+  acc.isEmpty()
+
+proc setBalance*(ac: AccountsCache, address: EthAddress, balance: UInt256) =
+  let acc = ac.getAccount(address)
+  acc.flags.incl {Alive}
+  if acc.account.balance != balance:
+    ac.makeDirty(address).account.balance = balance
+
+proc addBalance*(ac: AccountsCache, address: EthAddress, delta: UInt256) {.inline.} =
+  # EIP161: We must check emptiness for the objects such that the account
+  # clearing (0,0,0 objects) can take effect.
+  if delta.isZero:
+    let acc = ac.getAccount(address)
+    if acc.isEmpty:
+      ac.makeDirty(address).flags.incl Touched
+    return
+  ac.setBalance(address, ac.getBalance(address) + delta)
+
+proc subBalance*(ac: AccountsCache, address: EthAddress, delta: UInt256) {.inline.} =
+  if delta.isZero:
+    # This zero delta early exit is important as shown in EIP-4788.
+    # If the account is created, it will change the state.
+    # But early exit will prevent the account creation.
+    # In this case, the SYSTEM_ADDRESS
+    return
+  ac.setBalance(address, ac.getBalance(address) - delta)
+
+proc setNonce*(ac: AccountsCache, address: EthAddress, nonce: AccountNonce) =
+  let acc = ac.getAccount(address)
+  acc.flags.incl {Alive}
+  if acc.account.nonce != nonce:
+    ac.makeDirty(address).account.nonce = nonce
+
+proc incNonce*(ac: AccountsCache, address: EthAddress) {.inline.} =
+  ac.setNonce(address, ac.getNonce(address) + 1)
+
+
+proc deleteAccount*(ac: AccountsCache, address: EthAddress) =
+  # make sure all savepoints already committed
+  doAssert(ac.savePoint.parentSavepoint.isNil)
+  let acc = ac.getAccount(address)
+  acc.kill()
+
+proc selfDestruct*(ac: AccountsCache, address: EthAddress) =
+  ac.setBalance(address, 0.u256)
+  ac.savePoint.selfDestruct.incl address
+
+proc selfDestruct6780*(ac: AccountsCache, address: EthAddress) =
+  let acc = ac.getAccount(address, false)
+  if acc.isNil:
+    return
+
+  if NewlyCreated in acc.flags:
+    ac.selfDestruct(address)
+
+proc selfDestructLen*(ac: AccountsCache): int =
+  ac.savePoint.selfDestruct.len
+
+proc addLogEntry*(ac: AccountsCache, log: Log) =
+  ac.savePoint.logEntries.add log
+
+proc logEntries*(ac: AccountsCache): seq[Log] =
+  ac.savePoint.logEntries
+
+proc getAndClearLogEntries*(ac: AccountsCache): seq[Log] =
+  result = ac.savePoint.logEntries
+  ac.savePoint.logEntries.setLen(0)
+
+proc ripemdSpecial*(ac: AccountsCache) =
+  ac.ripemdSpecial = true
+
+proc deleteEmptyAccount(ac: AccountsCache, address: EthAddress) =
+  let acc = ac.getAccount(address, false)
+  if acc.isNil:
+    return
+  if not acc.isEmpty:
+    return
+  if not acc.exists:
+    return
+  acc.kill()
+
+proc clearEmptyAccounts(ac: AccountsCache) =
+  for address, acc in ac.savePoint.cache:
+    if Touched in acc.flags and
+        acc.isEmpty and acc.exists:
+      acc.kill()
+
+  # https://github.com/ethereum/EIPs/issues/716
+  if ac.ripemdSpecial:
+    ac.deleteEmptyAccount(RIPEMD_ADDR)
+    ac.ripemdSpecial = false
+
+
+iterator addresses*(ac: AccountsCache): EthAddress =
+  # make sure all savepoint already committed
+  doAssert(ac.savePoint.parentSavepoint.isNil)
+  for address, _ in ac.savePoint.cache:
+    yield address
+
+iterator accounts*(ac: AccountsCache): Account =
+  # make sure all savepoint already committed
+  doAssert(ac.savePoint.parentSavepoint.isNil)
+  for _, account in ac.savePoint.cache:
+    yield account.account
+
+iterator pairs*(ac: AccountsCache): (EthAddress, Account) =
+  # make sure all savepoint already committed
+  doAssert(ac.savePoint.parentSavepoint.isNil)
+  for address, account in ac.savePoint.cache:
+    yield (address, account.account)
+
+proc accessList*(ac: AccountsCache, address: EthAddress) {.inline.} =
+  ac.savePoint.accessList.add(address)
+
+proc accessList*(ac: AccountsCache, address: EthAddress, slot: UInt256) {.inline.} =
+  ac.savePoint.accessList.add(address, slot)
+
+func inAccessList*(ac: AccountsCache, address: EthAddress): bool =
+  var sp = ac.savePoint
+  while sp != nil:
+    result = sp.accessList.contains(address)
+    if result:
+      return
+    sp = sp.parentSavepoint
+
+func inAccessList*(ac: AccountsCache, address: EthAddress, slot: UInt256): bool =
+  var sp = ac.savePoint
+  while sp != nil:
+    result = sp.accessList.contains(address, slot)
+    if result:
+      return
+    sp = sp.parentSavepoint
+
+func getTransientStorage*(ac: AccountsCache,
+                          address: EthAddress, slot: UInt256): UInt256 =
+  var sp = ac.savePoint
+  while sp != nil:
+    let (ok, res) = sp.transientStorage.getStorage(address, slot)
+    if ok:
+      return res
+    sp = sp.parentSavepoint
+
+proc setTransientStorage*(ac: AccountsCache,
+                          address: EthAddress, slot, val: UInt256) =
+  ac.savePoint.transientStorage.setStorage(address, slot, val)
+
+proc clearTransientStorage*(ac: AccountsCache) {.inline.} =
+  # make sure all savepoint already committed
+  doAssert(ac.savePoint.parentSavepoint.isNil)
+  ac.savePoint.transientStorage.clear()
+
+func getAccessList*(ac: AccountsCache): common.AccessList =
+  # make sure all savepoint already committed
+  doAssert(ac.savePoint.parentSavepoint.isNil)
+  ac.savePoint.accessList.getAccessList()
