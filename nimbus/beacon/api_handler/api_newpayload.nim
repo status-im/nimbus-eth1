@@ -120,17 +120,18 @@ proc newPayload*(ben: BeaconEngineRef,
   validatePayload(apiVersion, version, payload)
 
   var header = blockHeader(payload, removeBlobs = true, beaconRoot = ethHash beaconRoot)
-  let blockHash = ethHash payload.blockHash
-  header.validateBlockHash(blockHash, version).isOkOr:
-    return error
-
+  
   if apiVersion >= Version.V3:
     if versionedHashes.isNone:
       raise invalidParams("newPayload" & $apiVersion &
         " expect blobVersionedHashes but got none")
     if not validateVersionedHashed(payload, versionedHashes.get):
       return invalidStatus(header.parentHash, "invalid blob versionedHashes")
-
+    
+  let blockHash = ethHash payload.blockHash
+  header.validateBlockHash(blockHash, version).isOkOr:
+    return error
+        
   # If we already have the block locally, ignore the entire execution and just
   # return a fake success.
   if db.getBlockHeader(blockHash, header):
