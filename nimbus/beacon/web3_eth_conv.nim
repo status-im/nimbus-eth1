@@ -191,7 +191,7 @@ func w3Hashes*(z: Option[seq[common.Hash256]]): Option[seq[Web3Hash]] =
   if z.isNone: none(seq[Web3Hash])
   else:
     let list = z.get
-    var v = newSeq[Web3Hash](list.len)
+    var v = newSeqOfCap[Web3Hash](list.len)
     for x in list:
       v.add Web3Hash x.data
     some(v)
