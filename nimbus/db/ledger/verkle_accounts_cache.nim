@@ -200,7 +200,7 @@ proc getAccount(ac: AccountsCache, address: EthAddress, shouldCreate = true): Re
   let account = ac.trie.getAccountBytes(address)
 
   # Check if the account fetched from the Verkle Trie is Empty or not
-  if account.isEmptyVerkleAccount():
+  if (not account.isEmptyVerkleAccount()):
     result = RefAccount(
       account: account,
       flags: {Alive}
