@@ -288,11 +288,12 @@ proc makeDirty(ac: AccountsCache, address: EthAddress, cloneStorage = true): Ref
   result.flags.incl Dirty
   ac.savePoint.cache[address] = result
 
+# TODO : Verify the logic of empty hash for verkle
 proc hasCodeOrNonce*(ac: AccountsCache, address: EthAddress): bool {.inline.} =
   let acc = ac.getAccount(address, false)
   if acc.isNil:
     return
-  acc.account.nonce != 0 or acc.account.codeHash != EMPTY_SHA3
+  acc.account.nonce != 0 or acc.account.codeHash != EMPTY_SHA3  # for verkle this might not be the EMPTY_CODE_HASH
 
 proc accountExists*(ac: AccountsCache, address: EthAddress): bool {.inline.} =
   let acc = ac.getAccount(address, false)
