@@ -52,6 +52,11 @@ var MainStorageOffsetLshVerkleNodeWidth*: UInt256 = one shl twofourty
 #
 # ################################################################
 
+# Check if the account loaded is empty or not
+proc isEmptyVerkleAccount*(acc: Account): bool =
+  var zero: array[32, byte]
+  return acc.nonce == 0 and acc.balance.isZero() and acc.codeHash.data == zero
+
 # Spec implementation from the EIP-6800
 # Converts a EC Banderwagon point to an
 # array of 32 bytes
@@ -407,7 +412,6 @@ proc getAccount*(trie: VerkleTrieRef, address: EthAddress): Account =
   var balanceVal = trie.root.getValue(balanceKey)
   var codeKeccakVal = trie.root.getValue(codeKeccakKey)
 
-  # TODO: Implement case for deleted accounts
   result.nonce = uint64.fromBytesLE(nonceVal[])
   result.balance = UInt256.fromBytesLE(balanceVal[])
   result.codeHash.data = codeKeccakVal[]

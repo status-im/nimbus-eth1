@@ -24,7 +24,8 @@ import
   ".."/[core_db, verkle_distinct_tries, storage_types, transient_storage]
 
 
-const debugAccountsCache = false
+const
+  debugAccountsCache = false
 
 ## Rewrite of AccountsCache as per the Verkle Specs, Notable changes:
 ## 1) No storage trie, as storage is now a part of the unified Verkle Trie (EIP 6800)
@@ -122,12 +123,12 @@ proc init*(x: typedesc[AccountsCache]): AccountsCache =
   result.witnessCache = initTable[EthAddress, WitnessData]
   discard result.beginSavePoint
 
-proc rootHash*(ac: AccountsCache): Bytes32 =
+proc rootHash*(ac: AccountsCache): KeccakHash =
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
   # make sure all cache already committed
   doAssert(ac.isDirty == false)
-  VerkleTrieRef(ac.trie).hashVerkleTrie()
+  result.data = VerkleTrieRef(ac.trie).hashVerkleTrie()
 
 proc isTopLevelClean*(ac: AccountsCache): bool =
   ## Getter, returns `true` if all pending data have been commited.
@@ -198,8 +199,8 @@ proc getAccount(ac: AccountsCache, address: EthAddress, shouldCreate = true): Re
 
   let account = ac.trie.getAccountBytes(address)
 
-  ## The logic is incorrect here, as we are not checking if the account is empty or not
-  if account.codeHash != EMPTY_CODE_HASH:
+  # Check if the account fetched from the Verkle Trie is Empty or not
+  if account.isEmptyVerkleAccount():
     result = RefAccount(
       account: account,
       flags: {Alive}
