@@ -333,7 +333,7 @@ proc getNextPayload(cl: CLMocker): bool =
   cl.latestShouldOverrideBuilder = x.shouldOverrideBuilder
 
   let beaconRoot = ethHash cl.latestPayloadAttributes.parentBeaconblockRoot
-  let header = blockHeader(cl.latestPayloadBuilt, beaconRoot)
+  let header = blockHeader(cl.latestPayloadBuilt, removeBlobs = true, beaconRoot = beaconRoot)
   let blockHash = w3Hash header.blockHash
   if blockHash != cl.latestPayloadBuilt.blockHash:
     error "CLMocker: getNextPayload blockHash mismatch",
@@ -412,7 +412,7 @@ proc broadcastNextNewPayload(cl: CLMocker): bool =
         return false
 
       let latestValidHash = s.latestValidHash.get()
-      if latestValidHash != BlockHash(blockHash):
+      if latestValidHash != blockHash:
         error "CLMocker: NewPayload returned VALID status with incorrect LatestValidHash",
           get=latestValidHash.toHex, expected=blockHash.toHex
         return false
@@ -424,7 +424,7 @@ proc broadcastNextNewPayload(cl: CLMocker): bool =
       # the blockHash of the payload is valid
       # the payload doesn't extend the canonical chain
       # the payload hasn't been fully validated.
-      let nullHash = BlockHash common.Hash256().data
+      let nullHash = w3Hash common.Hash256()
       let latestValidHash = s.latestValidHash.get(nullHash)
       if s.latestValidHash.isSome and latestValidHash != nullHash:
         error "CLMocker: NewPayload returned ACCEPTED status with incorrect LatestValidHash",
@@ -433,7 +433,8 @@ proc broadcastNextNewPayload(cl: CLMocker): bool =
 
     else:
       error "CLMocker: broadcastNewPayload Response",
-        status=s.status
+        status=s.status,
+        msg=s.validationError.get("NO MSG")
       return false
 
   cl.latestExecutedPayload = cl.latestPayloadBuilt
@@ -460,7 +461,8 @@ proc broadcastForkchoiceUpdated*(cl: CLMocker,
     let s = res.get()
     if s.payloadStatus.status != PayloadExecutionStatus.valid:
       error "CLMocker: broadcastForkchoiceUpdated Response",
-        status=s.payloadStatus.status
+        status=s.payloadStatus.status,
+        msg=s.payloadStatus.validationError.get("NO MSG")
       return false
 
     if s.payloadStatus.latestValidHash.get != cl.latestForkchoice.headBlockHash:

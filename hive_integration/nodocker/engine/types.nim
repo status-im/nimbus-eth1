@@ -158,7 +158,8 @@ template expectLatestValidHash*(res: untyped, expectedHash: Web3Hash) =
   let s = res.get
   when s is PayloadStatusV1:
     testCond s.latestValidHash.isSome:
-      error "Expect latest valid hash isSome"
+      error "Expect latest valid hash isSome",
+        msg=s.validationError.get("NO MSG")
     testCond s.latestValidHash.get == expectedHash:
       error "latest valid hash mismatch",
         expect=expectedHash.short,
@@ -198,10 +199,13 @@ template expectStatusEither*(res: untyped, cond: openArray[PayloadExecutionStatu
   let s = res.get()
   when s is PayloadStatusV1:
     testCond s.status in cond:
-      error "Unexpected expectStatusEither status", expect=cond, get=s.status
+      error "Unexpected expectStatusEither status",
+        expect=cond, get=s.status, msg=s.validationError.get("NO MSG")
   else:
     testCond s.payloadStatus.status in cond:
-      error "Unexpected expectStatusEither status", expect=cond, get=s.payloadStatus.status
+      error "Unexpected expectStatusEither status",
+        expect=cond, get=s.payloadStatus.status,
+        msg=s.payloadStatus.validationError.get("NO MSG")
 
 template expectNoValidationError*(res: untyped) =
   testCond res.isOk:

@@ -78,7 +78,7 @@ template validatePayload(apiVersion, version, payload) =
       raise invalidParams("newPayload" & $apiVersion &
         "withdrawals is expected from execution payload")
 
-  if version >= Version.V3:
+  if apiVersion >= Version.V3 or version >= Version.V3:
     if payload.blobGasUsed.isNone:
       raise invalidParams("newPayload" & $apiVersion &
         "blobGasUsed is expected from execution payload")
@@ -86,7 +86,7 @@ template validatePayload(apiVersion, version, payload) =
       raise invalidParams("newPayload" & $apiVersion &
         "excessBlobGas is expected from execution payload")
 
-  if version >= Version.V4:
+  if apiVersion >= Version.V4 or version >= Version.V4:
     if payload.depositReceipts.isNone:
       raise invalidParams("newPayload" & $apiVersion &
         "depositReceipts is expected from execution payload")
@@ -119,18 +119,19 @@ proc newPayload*(ben: BeaconEngineRef,
   validateVersion(com, timestamp, version, apiVersion)
   validatePayload(apiVersion, version, payload)
 
-  var header = blockHeader(payload, ethHash beaconRoot)
-  let blockHash = ethHash payload.blockHash
-  header.validateBlockHash(blockHash, version).isOkOr:
-    return error
-
+  var header = blockHeader(payload, removeBlobs = true, beaconRoot = ethHash beaconRoot)
+  
   if apiVersion >= Version.V3:
     if versionedHashes.isNone:
       raise invalidParams("newPayload" & $apiVersion &
         " expect blobVersionedHashes but got none")
     if not validateVersionedHashed(payload, versionedHashes.get):
       return invalidStatus(header.parentHash, "invalid blob versionedHashes")
-
+    
+  let blockHash = ethHash payload.blockHash
+  header.validateBlockHash(blockHash, version).isOkOr:
+    return error
+        
   # If we already have the block locally, ignore the entire execution and just
   # return a fake success.
   if db.getBlockHeader(blockHash, header):
