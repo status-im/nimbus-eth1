@@ -336,8 +336,7 @@ func getTimestamp*(cust: CustomPayloadData, basePayload: ExecutionPayload): uint
 # Construct a customized payload by taking an existing payload as base and mixing it CustomPayloadData
 # blockHash is calculated automatically.
 proc customizePayload*(cust: CustomPayloadData, data: ExecutableData): ExecutableData {.gcsafe.} =
-  var customHeader = blockHeader(data.basePayload, data.beaconRoot)
-
+  var customHeader = blockHeader(data.basePayload, removeBlobs = false, beaconRoot = data.beaconRoot)
   if cust.transactions.isSome:
     customHeader.txRoot = calcTxRoot(cust.transactions.get)
 

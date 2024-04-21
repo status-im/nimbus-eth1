@@ -158,7 +158,8 @@ template expectLatestValidHash*(res: untyped, expectedHash: Web3Hash) =
   let s = res.get
   when s is PayloadStatusV1:
     testCond s.latestValidHash.isSome:
-      error "Expect latest valid hash isSome"
+      error "Expect latest valid hash isSome",
+        msg=s.validationError.get("NO MSG")
     testCond s.latestValidHash.get == expectedHash:
       error "latest valid hash mismatch",
         expect=expectedHash.short,
