@@ -229,8 +229,9 @@ proc clone(acc: RefAccount, cloneStorage: bool): RefAccount =
     # it's ok to clone a table this way
     result.overlayStorage = acc.overlayStorage
 
+# TODO: Verify logic
 proc isEmpty(acc: RefAccount): bool =
-  result = acc.account.codeHash == EMPTY_SHA3 and
+  result = acc.account.codeHash == EMPTY_SHA3 and  # in verkle codeHash might not be be == EMPTY_CODE_HASH
     acc.account.balance.isZero and
     acc.account.nonce == 0
 
@@ -268,6 +269,11 @@ proc getNonce*(ac: AccountsCache, address: EthAddress): AccountNonce {.inline.} 
   let acc = ac.getAccount(address, false)
   if acc.isNil: emptyAcc.nonce
   else: acc.account.nonce
+
+proc getCodeHash*(ac: AccountsCache, address: EthAddress): Hash256 {.inline.} =
+  let acc = ac.getAccount(address, false)
+  if acc.isNil: emptyAcc.codeHash
+  else: acc.account.codeHash
 
 proc makeDirty(ac: AccountsCache, address: EthAddress, cloneStorage = true): RefAccount =
   ac.isDirty = true
