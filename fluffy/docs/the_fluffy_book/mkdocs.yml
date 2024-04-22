@@ -14,9 +14,22 @@ theme:
     - navigation.top
     - content.tabs.link
   palette:
-    scheme: default
-    primary: orange
-    accent: amber
+    - scheme: slate
+      primary: black
+      accent: light blue
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+    - scheme: default
+      primary: white
+      accent: light blue
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+
+
+extra_css:
+  - stylesheets/extra.css
 
 # Support urls previously used by mdbook
 use_directory_urls: false
@@ -26,7 +39,6 @@ docs_dir: docs
 
 markdown_extensions:
   - admonition
-  - meta
   - pymdownx.details
   - pymdownx.highlight:
       anchor_linenums: true
