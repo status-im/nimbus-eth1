@@ -205,9 +205,9 @@ type
     DelVidStaleVtx
 
     # Functions from  `aristo_filter.nim`
+    FilBackStepsExpected
     FilBackendMissing
     FilBackendRoMode
-    FilBackStepsExpected
     FilDudeFilterUpdateError
     FilExecDublicateSave
     FilExecHoldExpected
@@ -222,13 +222,14 @@ type
     FilNoMatchOnFifo
     FilPrettyPointlessLayer
     FilQidByLeFidFailed
+    FilQuBespokeFidTooSmall
     FilQuSchedDisabled
+    FilSiblingsCommitUnfinshed
+    FilSrcTrgInconsistent
     FilStateRootMismatch
     FilStateRootMissing
     FilTrgSrcMismatch
     FilTrgTopSrcMismatch
-    FilSiblingsCommitUnfinshed
-    FilSrcTrgInconsistent
 
     # Get functions from `aristo_get.nim`
     GetLeafMissing

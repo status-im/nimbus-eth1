@@ -406,11 +406,10 @@ proc checkFilterTrancoderOk(
 # -------------------------
 
 proc qid2fidFn(be: BackendRef): QuFilMap =
-  result = proc(qid: QueueID): FilterID =
-    let rc = be.getFilFn qid
-    if rc.isErr:
-      return FilterID(0)
-    rc.value.fid
+  result = proc(qid: QueueID): Result[FilterID,void] =
+    let fil = be.getFilFn(qid).valueOr:
+      return err()
+    ok fil.fid
 
 proc storeFilter(
     be: BackendRef;
@@ -418,7 +417,7 @@ proc storeFilter(
       ): bool =
   ## ..
   let instr = block:
-    let rc = be.fifosStore filter
+    let rc = be.fifosStore(filter, none(FilterID))
     xCheckRc rc.error == 0
     rc.value
 

@@ -151,7 +151,8 @@ proc resolveBackendFilter*(
         if 0 < ovLap:
           instr = ? be.fifosDelete ovLap         # Revert redundant entries
           break getInstr
-      instr = ? be.fifosStore updateSiblings.rev # Store reverse filter
+      instr = ? be.fifosStore(                   # Store reverse filter
+        updateSiblings.rev, none(FilterID))
 
   # Store structural single trie entries
   let writeBatch = be.putBegFn()
@@ -209,7 +210,7 @@ proc forkBackLog*(
   if be.isNil:
     return err(FilBackendMissing)
 
-  let fip = ? be.getFilterFromFifo(fid, earlierOK)
+  let fip = ? be.getFilterFromFifo(some(fid), earlierOK)
   db.forkBackLog fip.inx
 
 # ------------------------------------------------------------------------------

@@ -147,8 +147,6 @@ func ppCodeHash(h: Hash256): string =
     result &= h.data.toHex.squeeze(hex=true,ignLen=true)
 
 proc ppFid(fid: FilterID): string =
-  if not fid.isValid:
-    return "ø"
   "@" & $fid
 
 proc ppQid(qid: QueueID): string =
