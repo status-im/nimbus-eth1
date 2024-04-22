@@ -32,7 +32,7 @@ type
 
 const
   QidSlotLyo* = [(4,0,10),(3,3,10),(3,4,10),(3,5,10)]
-  QidSample* = (3 * QidSlotLyo.stats.minCovered) div 2
+  QidSample* = (3 * QidSlotLyo.capacity.minCovered) div 2
 
 # ------------------------------------------------------------------------------
 # Private helpers

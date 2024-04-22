@@ -9,7 +9,7 @@
 # except according to those terms.
 
 import
-  std/[algorithm, sequtils],
+  std/[algorithm, sequtils, typetraits],
   ".."/[aristo_constants, aristo_desc]
 
 type
@@ -238,11 +238,7 @@ func fifoDel(
         # Delete all available
         return (@[(QueueID(1), fifo[1]), (fifo[0], wrap)], ZeroQidPair)
 
-# ------------------------------------------------------------------------------
-# Public functions
-# ------------------------------------------------------------------------------
-
-func stats*(
+func capacity(
     ctx: openArray[tuple[size, width: int]];       # Schedule layout
       ): tuple[maxQueue: int, minCovered: int, maxCovered: int] =
   ## Number of maximally stored and covered queued entries for the argument
@@ -258,17 +254,24 @@ func stats*(
     result.minCovered += (ctx[n].size * step).int
     result.maxCovered += (size * step).int
 
-func stats*(
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
+
+func capacity*(
     ctx: openArray[tuple[size, width, wrap: int]]; # Schedule layout
       ): tuple[maxQueue: int, minCovered: int, maxCovered: int] =
-  ## Variant of `stats()`
-  ctx.toSeq.mapIt((it[0],it[1])).stats
+  ## Variant of `capacity()` below.
+  ctx.toSeq.mapIt((it[0],it[1])).capacity
 
-func stats*(
-    ctx: QidLayoutRef;                             # Cascaded fifos descriptor
+func capacity*(
+    journal: QidSchedRef;                          # Cascaded fifos descriptor
       ): tuple[maxQueue: int, minCovered: int, maxCovered: int] =
-  ## Variant of `stats()`
-  ctx.q.toSeq.mapIt((it[0].int,it[1].int)).stats
+  ## Number of maximally stored and covered queued entries for the layout of
+  ## argument `journal`. The resulting value of `maxQueue` entry is the maximal
+  ## number of database slots needed, the `minCovered` and `maxCovered` entry
+  ## indicate the rancge of the backlog foa a fully populated database.
+  journal.ctx.q.toSeq.mapIt((it[0].int,it[1].int)).capacity()
 
 
 func addItem*(
@@ -548,6 +551,13 @@ func `[]`*(
         if inx <= qInxMax0:
           return n.globalQid(wrap - inx)
         inx -= qInxMax0 + 1 # Otherwise continue
+
+func `[]`*(
+    fifo: QidSchedRef;                             # Cascaded fifos descriptor
+    bix: BackwardsIndex;                           # Index into latest items
+      ): QueueID =
+  ## Variant of `[]` for provifing `[^bix]`.
+  fifo[fifo.state.len - bix.distinctBase]
 
 
 func `[]`*(

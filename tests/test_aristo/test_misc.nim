@@ -389,7 +389,7 @@ proc testQidScheduler*(
 
   if debug:
     noisy.say "***", "sampleSize=", sampleSize,
-      " ctx=", ctx, " stats=", scd.ctx.stats
+      " ctx=", ctx, " stats=", scd.capacity()
 
   for n in 1 .. sampleSize:
     let w = scd.addItem()
