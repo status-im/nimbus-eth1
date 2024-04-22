@@ -81,7 +81,7 @@ proc getVtxFn(db: RdbBackendRef): GetVtxFn =
     proc(vid: VertexID): Result[VertexRef,AristoError] =
 
       # Fetch serialised data record
-      let data = db.rdb.get(VtxPfx, vid.uint64).valueOr:
+      let data = db.rdb.getVtx(vid.uint64).valueOr:
         when extraTraceMessages:
           trace logTxt "getVtxFn() failed", vid, error=error[0], info=error[1]
         return err(error[0])
@@ -97,7 +97,7 @@ proc getKeyFn(db: RdbBackendRef): GetKeyFn =
     proc(vid: VertexID): Result[HashKey,AristoError] =
 
       # Fetch serialised data record
-      let data = db.rdb.get(KeyPfx, vid.uint64).valueOr:
+      let data = db.rdb.getKey(vid.uint64).valueOr:
         when extraTraceMessages:
           trace logTxt "getKeyFn: failed", vid, error=error[0], info=error[1]
         return err(error[0])
@@ -119,8 +119,8 @@ proc getFilFn(db: RdbBackendRef): GetFilFn =
     result =
       proc(qid: QueueID): Result[FilterRef,AristoError] =
 
-        # Fetch serialised data record
-        let data = db.rdb.get(FilPfx, qid.uint64).valueOr:
+        # Fetch serialised data record.
+        let data = db.rdb.getByPfx(FilPfx, qid.uint64).valueOr:
           when extraTraceMessages:
             trace logTxt "getFilFn: failed", qid, error=error[0], info=error[1]
           return err(error[0])
@@ -135,8 +135,8 @@ proc getIdgFn(db: RdbBackendRef): GetIdgFn =
   result =
     proc(): Result[seq[VertexID],AristoError]=
 
-      # Fetch serialised data record
-      let data = db.rdb.get(AdmPfx, AdmTabIdIdg.uint64).valueOr:
+      # Fetch serialised data record.
+      let data = db.rdb.getByPfx(AdmPfx, AdmTabIdIdg.uint64).valueOr:
         when extraTraceMessages:
           trace logTxt "getIdgFn: failed", error=error[0], info=error[1]
         return err(error[0])
@@ -158,8 +158,8 @@ proc getFqsFn(db: RdbBackendRef): GetFqsFn =
     result =
       proc(): Result[seq[(QueueID,QueueID)],AristoError]=
 
-        # Fetch serialised data record
-        let data = db.rdb.get(AdmPfx, AdmTabIdFqs.uint64).valueOr:
+        # Fetch serialised data record.
+        let data = db.rdb.getByPfx(AdmPfx, AdmTabIdFqs.uint64).valueOr:
           when extraTraceMessages:
             trace logTxt "getFqsFn: failed", error=error[0], info=error[1]
           return err(error[0])
@@ -178,7 +178,6 @@ proc putBegFn(db: RdbBackendRef): PutBegFn =
     proc(): PutHdlRef =
       db.rdb.begin()
       db.newSession()
-
 
 proc putVtxFn(db: RdbBackendRef): PutVtxFn =
   result =
@@ -201,8 +200,8 @@ proc putVtxFn(db: RdbBackendRef): PutVtxFn =
           else:
             batch.add (vid.uint64, EmptyBlob)
 
-        # Stash batch session data
-        db.rdb.put(VtxPfx, batch).isOkOr:
+        # Stash batch session data via LRU cache
+        db.rdb.putVtx(batch).isOkOr:
           hdl.error = TypedPutHdlErrRef(
             pfx:  VtxPfx,
             vid:  VertexID(error[0]),
@@ -223,8 +222,8 @@ proc putKeyFn(db: RdbBackendRef): PutKeyFn =
           else:
             batch.add (vid.uint64, EmptyBlob)
 
-        # Stash batch session data
-        db.rdb.put(KeyPfx, batch).isOkOr:
+        # Stash batch session data via LRU cache
+        db.rdb.putKey(batch).isOkOr:
           hdl.error = TypedPutHdlErrRef(
             pfx:  KeyPfx,
             vid:  VertexID(error[0]),
@@ -263,7 +262,7 @@ proc putFilFn(db: RdbBackendRef): PutFilFn =
               batch.add (qid.uint64, EmptyBlob)
 
           # Stash batch session data
-          db.rdb.put(FilPfx, batch).isOkOr:
+          db.rdb.putByPfx(FilPfx, batch).isOkOr:
             hdl.error = TypedPutHdlErrRef(
               pfx:  FilPfx,
               qid:  QueueID(error[0]),
@@ -276,7 +275,7 @@ proc putIdgFn(db: RdbBackendRef): PutIdgFn =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
         let idg = if 0 < vs.len: vs.blobify else: EmptyBlob
-        db.rdb.put(AdmPfx, @[(AdmTabIdIdg.uint64, idg)]).isOkOr:
+        db.rdb.putByPfx(AdmPfx, @[(AdmTabIdIdg.uint64, idg)]).isOkOr:
           hdl.error = TypedPutHdlErrRef(
             pfx:  AdmPfx,
             aid:  AdmTabIdIdg,
@@ -300,7 +299,7 @@ proc putFqsFn(db: RdbBackendRef): PutFqsFn =
 
           # Stash batch session data
           let fqs = if 0 < vs.len: vs.blobify else: EmptyBlob
-          db.rdb.put(AdmPfx, @[(AdmTabIdFqs.uint64, fqs)]).isOkOr:
+          db.rdb.putByPfx(AdmPfx, @[(AdmTabIdFqs.uint64, fqs)]).isOkOr:
             hdl.error = TypedPutHdlErrRef(
               pfx:  AdmPfx,
               aid:  AdmTabIdFqs,

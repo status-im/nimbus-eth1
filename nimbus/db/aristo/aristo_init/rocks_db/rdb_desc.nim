@@ -15,29 +15,34 @@
 
 import
   std/os,
+  eth/common,
   rocksdb,
-  stew/endians2,
+  stew/[endians2, keyed_queue],
   ../../aristo_desc,
   ../init_common
 
 type
   RdbInst* = object
-    store*: ColFamilyReadWrite       ## Rocks DB database handler
-    session*: WriteBatchRef          ## For batched `put()`
-    basePath*: string                ## Database directory
-    noFq*: bool                      ## No filter queues available
+    store*: ColFamilyReadWrite         ## Rocks DB database handler
+    session*: WriteBatchRef            ## For batched `put()`
+    rdKeyLru*: KeyedQueue[RdbKey,Blob] ## Read cache
+    rdVtxLru*: KeyedQueue[RdbKey,Blob] ## Read cache
+    basePath*: string                  ## Database directory
+    noFq*: bool                        ## No filter queues available
 
   RdbGuestDbRef* = ref object of GuestDbRef
-    guestDb*: ColFamilyReadWrite     ## Pigiback feature reference
+    guestDb*: ColFamilyReadWrite       ## Pigiback feature reference
 
   RdbKey* = array[1 + sizeof VertexID, byte]
     ## Sub-table key, <pfx> + VertexID
 
 const
-  GuestFamily* = "Guest"             ## Guest family (e.g. for Kvt)
-  AristoFamily* = "Aristo"           ## RocksDB column family
-  BaseFolder* = "nimbus"             ## Same as for Legacy DB
-  DataFolder* = "aristo"             ## Legacy DB has "data"
+  GuestFamily* = "Guest"               ## Guest family (e.g. for Kvt)
+  AristoFamily* = "Aristo"             ## RocksDB column family
+  BaseFolder* = "nimbus"               ## Same as for Legacy DB
+  DataFolder* = "aristo"               ## Legacy DB has "data"
+  RdKeyLruMaxSize* = 4096              ## Max size of read cache for keys
+  RdVtxLruMaxSize* = 2048              ## Max size of read cache for vertex IDs
 
 # ------------------------------------------------------------------------------
 # Public functions

@@ -116,6 +116,7 @@ type
     KvtApiProfTxTopFn        = "txTop"
 
     KvtApiProfBeGetKvpFn     = "be/getKvp"
+    KvtApiProfBePutKvpFn     = "be/putKvp"
     KvtApiProfBePutEndFn     = "be/putEnd"
 
   KvtApiProfRef* = ref object of KvtApiRef
@@ -354,6 +355,11 @@ func init*(
         KvtApiProfBeGetKvpFn.profileRunner:
           result = be.getKvpFn(a)
     data.list[KvtApiProfBeGetKvpFn.ord].masked = true
+
+    beDup.putKvpFn =
+      proc(a: PutHdlRef; b: openArray[(Blob,Blob)]) =
+        be.putKvpFn(a,b)
+    data.list[KvtApiProfBePutKvpFn.ord].masked = true
 
     beDup.putEndFn =
       proc(a: PutHdlRef): auto =

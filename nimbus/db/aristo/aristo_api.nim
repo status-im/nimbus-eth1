@@ -405,6 +405,14 @@ type
 
     AristoApiProfBeGetVtxFn     = "be/getVtx"
     AristoApiProfBeGetKeyFn     = "be/getKey"
+    AristoApiProfBeGetFilFn     = "be/getFil"
+    AristoApiProfBeGetIdgFn     = "be/getIfg"
+    AristoApiProfBeGetFqsFn     = "be/getFqs"
+    AristoApiProfBePutVtxFn     = "be/putVtx"
+    AristoApiProfBePutKeyFn     = "be/putKey"
+    AristoApiProfBePutFilFn     = "be/putFil"
+    AristoApiProfBePutIdgFn     = "be/putIdg"
+    AristoApiProfBePutFqsFn     = "be/putFqs"
     AristoApiProfBePutEndFn     = "be/putEnd"
 
   AristoApiProfRef* = ref object of AristoApiRef
@@ -708,6 +716,54 @@ func init*(
         AristoApiProfBeGetKeyFn.profileRunner:
           result = be.getKeyFn(a)
     data.list[AristoApiProfBeGetKeyFn.ord].masked = true
+
+    beDup.getFilFn =
+      proc(a: QueueID): auto =
+        AristoApiProfBeGetFilFn.profileRunner:
+          result = be.getFilFn(a)
+    data.list[AristoApiProfBeGetFilFn.ord].masked = true
+
+    beDup.getIdgFn =
+      proc(): auto =
+        AristoApiProfBeGetIdgFn.profileRunner:
+          result = be.getIdgFn()
+    data.list[AristoApiProfBeGetIdgFn.ord].masked = true
+
+    beDup.getFqsFn =
+      proc(): auto =
+        AristoApiProfBeGetFqsFn.profileRunner:
+          result = be.getFqsFn()
+    data.list[AristoApiProfBeGetFqsFn.ord].masked = true
+
+    beDup.putVtxFn =
+      proc(a: PutHdlRef; b: openArray[(VertexID,VertexRef)]) =
+        AristoApiProfBePutVtxFn.profileRunner:
+          be.putVtxFn(a,b)
+    data.list[AristoApiProfBePutVtxFn.ord].masked = true
+
+    beDup.putKeyFn =
+      proc(a: PutHdlRef; b: openArray[(VertexID,HashKey)]) =
+        AristoApiProfBePutKeyFn.profileRunner:
+          be.putKeyFn(a,b)
+    data.list[AristoApiProfBePutKeyFn.ord].masked = true
+
+    beDup.putFilFn =
+      proc(a: PutHdlRef; b: openArray[(QueueID,FilterRef)]) =
+        AristoApiProfBePutFilFn.profileRunner:
+          be.putFilFn(a,b)
+    data.list[AristoApiProfBePutFilFn.ord].masked = true
+
+    beDup.putIdgFn =
+      proc(a: PutHdlRef; b: openArray[VertexID]) =
+        AristoApiProfBePutIdgFn.profileRunner:
+          be.putIdgFn(a,b)
+    data.list[AristoApiProfBePutIdgFn.ord].masked = true
+
+    beDup.putFqsFn =
+      proc(a: PutHdlRef; b: openArray[(QueueID,QueueID)]) =
+        AristoApiProfBePutFqsFn.profileRunner:
+          be.putFqsFn(a,b)
+    data.list[AristoApiProfBePutFqsFn.ord].masked = true
 
     beDup.putEndFn =
       proc(a: PutHdlRef): auto =
