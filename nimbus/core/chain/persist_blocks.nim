@@ -36,6 +36,10 @@ type
 
   PersistBlockFlags = set[PersistBlockFlag]
 
+const
+  CleanUpEpoch = 30_000.u256
+    ## Regular checks for history clean up (applies to single state DB)
+
 # ------------------------------------------------------------------------------
 # Private
 # ------------------------------------------------------------------------------
@@ -53,12 +57,22 @@ proc getVmState(c: ChainRef, header: BlockHeader):
     return err()
   return ok(vmState)
 
+proc purgeExpiredBlocks(db: CoreDbRef) {.inline, raises: [RlpError].} =
+  ## Remove non-reachable blocks from KVT database
+  var blkNum = db.getOldestJournalBlockNumber()
+  if 0 < blkNum:
+    blkNum = blkNum - 1
+    while 0 < blkNum:
+      if not db.forgetHistory blkNum:
+        break
+      blkNum = blkNum - 1
+
+
 proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
                        bodies: openArray[BlockBody],
                        flags: PersistBlockFlags = {}): ValidationResult
                           # wildcard exception, wrapped below in public section
                           {.inline, raises: [CatchableError].} =
-
   let dbTx = c.db.beginTransaction()
   defer: dbTx.dispose()
 
@@ -71,10 +85,13 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
   let vmState = c.getVmState(headers[0]).valueOr:
     return ValidationResult.Error
 
-  trace "Persisting blocks",
-    fromBlock = headers[0].blockNumber,
-    toBlock = headers[^1].blockNumber
+  # Check point
+  let stateRootChpt = vmState.parent.stateRoot
 
+  # Needed for figuring out whether KVT cleanup is due (see at the end)
+  let (fromBlock, toBlock) = (headers[0].blockNumber, headers[^1].blockNumber)
+
+  trace "Persisting blocks", fromBlock, toBlock
   for i in 0 ..< headers.len:
     let (header, body) = (headers[i], bodies[i])
 
@@ -177,6 +194,13 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
   # The `c.db.persistent()` call is ignored by the legacy DB which
   # automatically saves persistently when reaching the zero level transaction
   c.db.persistent()
+
+  # For a single state ledger, there is only a limited backlog. So clean up
+  # regularly (the `CleanUpEpoch` should not be too small as each lookup pulls
+  # a journal entry from disk.)
+  if (fromBlock mod CleanUpEpoch) <= (toBlock - fromBlock):
+    c.db.purgeExpiredBlocks()
+
   ValidationResult.OK
 
 # ------------------------------------------------------------------------------
