@@ -148,6 +148,13 @@ type
       ## pair was found on the filter or the backend, this transaction is
       ## empty.
 
+  AristoApiGetFilUbeFn* =
+    proc(db: AristoDbRef;
+         qid: QueueID;
+        ): Result[FilterRef,AristoError]
+        {.noRaise.}
+      ## Get the filter from the unfiltered backened if available.
+
   AristoApiGetKeyRcFn* =
     proc(db: AristoDbRef;
          vid: VertexID;
@@ -352,6 +359,7 @@ type
     forget*: AristoApiForgetFn
     forkTop*: AristoApiForkTopFn
     forkWith*: AristoApiForkWithFn
+    getFilUbe*: AristoApiGetFilUbeFn
     getKeyRc*: AristoApiGetKeyRcFn
     hashify*: AristoApiHashifyFn
     hasPath*: AristoApiHasPathFn
@@ -384,6 +392,7 @@ type
     AristoApiProfForgetFn       = "forget"
     AristoApiProfForkTopFn      = "forkTop"
     AristoApiProfForkWithFn     = "forkWith"
+    AristoApiProfGetFilUbeFn    = "getFilUBE"
     AristoApiProfGetKeyRcFn     = "getKeyRc"
     AristoApiProfHashifyFn      = "hashify"
     AristoApiProfHasPathFn      = "hasPath"
@@ -434,6 +443,7 @@ when AutoValidateApiHooks:
     doAssert not api.forget.isNil
     doAssert not api.forkTop.isNil
     doAssert not api.forkWith.isNil
+    doAssert not api.getFilUbe.isNil
     doAssert not api.getKeyRc.isNil
     doAssert not api.hashify.isNil
     doAssert not api.hasPath.isNil
@@ -486,6 +496,7 @@ func init*(api: var AristoApiObj) =
   api.forget = forget
   api.forkTop = forkTop
   api.forkWith = forkWith
+  api.getFilUbe = getFilUbe
   api.getKeyRc = getKeyRc
   api.hashify = hashify
   api.hasPath = hasPath
@@ -521,6 +532,7 @@ func dup*(api: AristoApiRef): AristoApiRef =
     forget:       api.forget,
     forkTop:      api.forkTop,
     forkWith:     api.forkWith,
+    getFilUbe:    api.getFilUbe,
     getKeyRc:     api.getKeyRc,
     hashify:      api.hashify,
     hasPath:      api.hasPath,
@@ -608,6 +620,11 @@ func init*(
     proc(a: AristoDbRef; b: VertexID; c: HashKey; d = false): auto =
       AristoApiProfForkWithFn.profileRunner:
         result = api.forkWith(a, b, c, d)
+
+  profApi.getFilUbe =
+    proc(a: AristoDbRef; b: QueueID): auto =
+      AristoApiProfGetFilUbeFn.profileRunner:
+        result = api.getFilUbe(a, b)
 
   profApi.getKeyRc =
     proc(a: AristoDbRef; b: VertexID): auto =

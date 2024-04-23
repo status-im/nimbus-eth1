@@ -34,6 +34,7 @@ export
   isAristo,
   toAristo,
   toAristoProfData,
+  toAristoOldestStateRoot,
 
   # see `legacy_db`
   isLegacy,
