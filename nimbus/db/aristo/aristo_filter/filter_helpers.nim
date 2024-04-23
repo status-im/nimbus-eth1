@@ -127,8 +127,8 @@ proc getFilterOverlap*(
   ## Return the number of journal filters in the leading chain that is
   ## reverted by the argument `filter`. A heuristc approach is used here
   ## for an argument `filter` with a valid filter ID when the chain is
-  ## longer than one items. So only single chain overlaps a guaranteed to
-  ## be found.
+  ## longer than one items. Only single step filter overlaps are guaranteed
+  ## to be found.
   ##
   # Check against the top-fifo entry
   let qid = be.journal[0]
@@ -148,7 +148,7 @@ proc getFilterOverlap*(
   if filter.trg == top.trg:
     return 1
 
-  # Check against sme stored filter IDs
+  # Check against some stored filter IDs
   if filter.isValid:
     let rc = be.getFilterFromFifo(filter.fid, earlierOK=true)
     if rc.isOk:

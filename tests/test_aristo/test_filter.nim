@@ -238,7 +238,7 @@ proc isDbEq(a, b: FilterRef; db: AristoDbRef; noisy = true): bool =
         if aVtx.isValid and bVtx.isValid:
           return false
         # The valid one must match the backend data
-        let rc = db.getVtxUBE vid
+        let rc = db.getVtxUbe vid
         if rc.isErr:
           return false
         let vtx = if aVtx.isValid: aVtx else: bVtx
@@ -246,7 +246,7 @@ proc isDbEq(a, b: FilterRef; db: AristoDbRef; noisy = true): bool =
           return false
 
       elif not vid.isValid and not bTab.hasKey vid:
-        let rc = db.getVtxUBE vid
+        let rc = db.getVtxUbe vid
         if rc.isOk:
           return false # Exists on backend but missing on `bTab[]`
         elif rc.error != GetKeyNotFound:
@@ -268,7 +268,7 @@ proc isDbEq(a, b: FilterRef; db: AristoDbRef; noisy = true): bool =
         if aKey.isValid and bKey.isValid:
           return false
         # The valid one must match the backend data
-        let rc = db.getKeyUBE vid
+        let rc = db.getKeyUbe vid
         if rc.isErr:
           return false
         let key = if aKey.isValid: aKey else: bKey
@@ -276,7 +276,7 @@ proc isDbEq(a, b: FilterRef; db: AristoDbRef; noisy = true): bool =
           return false
 
       elif not vid.isValid and not bMap.hasKey vid:
-        let rc = db.getKeyUBE vid
+        let rc = db.getKeyUbe vid
         if rc.isOk:
           return false # Exists on backend but missing on `bMap[]`
         elif rc.error != GetKeyNotFound:

@@ -279,7 +279,7 @@ proc forkWith*(
 
   # Try `(vid,key)` on unfiltered backend
   block:
-    let beKey = db.getKeyUBE(vid).valueOr: VOID_HASH_KEY
+    let beKey = db.getKeyUbe(vid).valueOr: VOID_HASH_KEY
     if beKey == key:
       let rc = db.fork(noFilter = true)
       if rc.isOk:
@@ -451,7 +451,7 @@ proc stow*(
     if db.roFilter.isValid:
       db.top.final.vGen = db.roFilter.vGen
     else:
-      let rc = db.getIdgUBE()
+      let rc = db.getIdgUbe()
       if rc.isOk:
         db.top.final.vGen = rc.value
       else:

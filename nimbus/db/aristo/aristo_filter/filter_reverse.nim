@@ -34,7 +34,7 @@ proc revFilter*(
 
   # Get vid generator state on backend
   block:
-    let rc = db.getIdgUBE()
+    let rc = db.getIdgUbe()
     if rc.isOk:
       rev.vGen = rc.value
     elif rc.error != GetIdgNotFound:
@@ -42,7 +42,7 @@ proc revFilter*(
 
   # Calculate reverse changes for the `sTab[]` structural table
   for vid in filter.sTab.keys:
-    let rc = db.getVtxUBE vid
+    let rc = db.getVtxUbe vid
     if rc.isOk:
       rev.sTab[vid] = rc.value
     elif rc.error == GetVtxNotFound:
@@ -52,7 +52,7 @@ proc revFilter*(
 
   # Calculate reverse changes for the `kMap` sequence.
   for vid in filter.kMap.keys:
-    let rc = db.getKeyUBE vid
+    let rc = db.getKeyUbe vid
     if rc.isOk:
       rev.kMap[vid] = rc.value
     elif rc.error == GetKeyNotFound:

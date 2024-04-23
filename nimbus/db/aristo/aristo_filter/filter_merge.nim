@@ -75,7 +75,7 @@ proc merge*(
     if vtx.isValid or not newFilter.sTab.hasKey vid:
       newFilter.sTab[vid] = vtx
     elif newFilter.sTab.getOrVoid(vid).isValid:
-      let rc = db.getVtxUBE vid
+      let rc = db.getVtxUbe vid
       if rc.isOk:
         newFilter.sTab[vid] = vtx # VertexRef(nil)
       elif rc.error == GetVtxNotFound:
@@ -87,7 +87,7 @@ proc merge*(
     if key.isValid or not newFilter.kMap.hasKey vid:
       newFilter.kMap[vid] = key
     elif newFilter.kMap.getOrVoid(vid).isValid:
-      let rc = db.getKeyUBE vid
+      let rc = db.getKeyUbe vid
       if rc.isOk:
         newFilter.kMap[vid] = key
       elif rc.error == GetKeyNotFound:
