@@ -275,8 +275,7 @@ proc vmExecCommit(pst: TxPackerStateRef)
 
   if vmState.com.forkGTE(Cancun):
     # EIP-4844
-    let excessBlobGas = calcExcessBlobGas(vmState.parent)
-    xp.chain.excessBlobGas = some(excessBlobGas)
+    xp.chain.excessBlobGas = some(vmState.blockCtx.excessBlobGas)
     xp.chain.blobGasUsed = some(pst.blobGasUsed)
 
   proc balanceDelta: UInt256 =

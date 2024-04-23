@@ -116,9 +116,9 @@ proc newPayload*(ben: BeaconEngineRef,
     timestamp = ethTime payload.timestamp
     version = payload.version
 
-  validateVersion(com, timestamp, version, apiVersion)
   validatePayload(apiVersion, version, payload)
-
+  validateVersion(com, timestamp, version, apiVersion)
+  
   var header = blockHeader(payload, removeBlobs = true, beaconRoot = ethHash beaconRoot)
   
   if apiVersion >= Version.V3:
