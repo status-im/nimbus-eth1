@@ -81,7 +81,7 @@ template unsafeQuantityToInt64(q: Quantity): int64 =
 proc calculateTransactionData(
     items: openArray[TypedTransaction]
 ): Hash256 {.raises: [].} =
-  var tr = newCoreDbRef(LegacyDbMemory).mptPrune
+  var tr = initHexaryTrie(newMemoryDB(), isPruning = false)
   for i, t in items:
     try:
       let tx = distinctBase(t)
@@ -95,7 +95,7 @@ proc calculateTransactionData(
 # TODO: Since Capella we can also access ExecutionPayloadHeader and thus
 # could get the Roots through there instead.
 proc calculateWithdrawalsRoot(items: openArray[WithdrawalV1]): Hash256 {.raises: [].} =
-  var tr = newCoreDbRef(LegacyDbMemory).mptPrune
+  var tr = initHexaryTrie(newMemoryDB(), isPruning = false)
   for i, w in items:
     try:
       let withdrawal = etypes.Withdrawal(
