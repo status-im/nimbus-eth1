@@ -19,6 +19,7 @@ import
   ../../utils/utils,
   ../../vm_state,
   ../../vm_types,
+  ../eip4844,
   ../clique/[clique_sealer, clique_desc, clique_cfg],
   ../pow/difficulty,
   ../executor,
@@ -131,12 +132,13 @@ proc resetTxEnv(dh: TxChainRef; parent: BlockHeader; fee: Option[UInt256])
   # we don't consider PoS difficulty here
   # because that is handled in vmState
   let blockCtx = BlockContext(
-    timestamp : dh.prepHeader.timestamp,
-    gasLimit  : (if dh.maxMode: dh.limits.maxLimit else: dh.limits.trgLimit),
-    fee       : fee,
-    prevRandao: dh.prepHeader.prevRandao,
-    difficulty: dh.prepHeader.difficulty,
-    coinbase  : dh.feeRecipient,
+    timestamp    : dh.prepHeader.timestamp,
+    gasLimit     : (if dh.maxMode: dh.limits.maxLimit else: dh.limits.trgLimit),
+    fee          : fee,
+    prevRandao   : dh.prepHeader.prevRandao,
+    difficulty   : dh.prepHeader.difficulty,
+    coinbase     : dh.feeRecipient,
+    excessBlobGas: calcExcessBlobGas(parent),
   )
 
   dh.txEnv.vmState = BaseVMState.new(
