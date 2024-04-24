@@ -1,8 +1,8 @@
 # Nimbus: ultra-light Ethereum execution layer client
 [![License: Apache](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-![GH action-nimbus-eth1](https://github.com/status-im/nimbus-eth1/workflows/CI/badge.svg)
-![GH action-fluffy](https://github.com/status-im/nimbus-eth1/workflows/fluffy%20CI/badge.svg)
+[![GH action-nimbus-eth1](https://github.com/status-im/nimbus-eth1/actions/workflows/ci.yml/badge.svg)](https://github.com/status-im/nimbus-eth1/actions/workflows/ci.yml)
+[![GH action-fluffy](https://github.com/status-im/nimbus-eth1/actions/workflows/fluffy.yml/badge.svg)](https://github.com/status-im/nimbus-eth1/actions/workflows/fluffy.yml)
 
 [![Discord: Nimbus](https://img.shields.io/badge/discord-nimbus-orange.svg)](https://discord.gg/XRxWahP)
 [![Status: #nimbus-general](https://img.shields.io/badge/status-nimbus--general-orange.svg)](https://get.status.im/chat/public/nimbus-general)
