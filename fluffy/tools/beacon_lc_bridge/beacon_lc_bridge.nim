@@ -41,7 +41,7 @@ import
   chronicles,
   chronos,
   confutils,
-  eth/[keys, rlp],
+  eth/[keys, rlp, trie, trie/db],
   # Need to rename this because of web3 ethtypes and ambigious indentifier mess
   # for `BlockHeader`.
   eth/common/eth_types as etypes,
