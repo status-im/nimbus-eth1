@@ -557,7 +557,7 @@ func `[]`*(
     bix: BackwardsIndex;                           # Index into latest items
       ): QueueID =
   ## Variant of `[]` for provifing `[^bix]`.
-  fifo[fifo.state.len - bix.distinctBase]
+  fifo[fifo.len - bix.distinctBase]
 
 
 func `[]`*(
