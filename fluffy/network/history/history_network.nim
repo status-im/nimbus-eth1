@@ -16,7 +16,6 @@ import
   ../../common/common_types,
   ../../database/content_db,
   ../../network_metadata,
-  ../../../nimbus/constants,
   ../wire/[portal_protocol, portal_stream, portal_protocol_config],
   "."/[history_content, accumulator, beacon_chain_historical_roots]
 

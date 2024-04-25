@@ -10,32 +10,37 @@
 import
   std/[times, sequtils, strutils, typetraits],
   json_rpc/[rpcproxy, rpcserver],
-  web3/[conversions], # sigh, for FixedBytes marshalling
+  web3/conversions, # sigh, for FixedBytes marshalling
+  web3/eth_api_types,
   eth/[common/eth_types, rlp],
   beacon_chain/spec/forks,
-  ../../nimbus/rpc/[rpc_types, filters],
-  ../../nimbus/transaction,
-  # TODO: this is a bit weird but having this import makes beacon_light_client
-  # to fail compilation due throwing undeclared `CatchableError` in
-  # `vendor/nimbus-eth2/beacon_chain/spec/keystore.nim`. This is most probably
-  # caused by `readValue` clashing ?
-  # ../../nimbus/common/chain_config
   ../network/history/[history_network, history_content],
   ../network/beacon/beacon_light_client
 
-# Subset of Eth JSON-RPC API: https://eth.wiki/json-rpc/API
-# Supported subset will eventually be found here:
-# https://github.com/ethereum/stateless-ethereum-specs/blob/master/portal-network.md#json-rpc-api
+from ../../nimbus/transaction import getSender, ValidationError
+from ../../nimbus/rpc/filters import headerBloomFilter, deriveLogs, filterLogs
+from ../../nimbus/beacon/web3_eth_conv import w3Addr, w3Hash, ethHash
+
+# Subset of Ethereum execution JSON-RPC API:
+# https://ethereum.github.io/execution-apis/api-documentation/
 #
-# In order to already support these calls before every part of the Portal
-# Network is up, one plan is to get the data directly from an external client
-# through RPC calls. Practically just playing a proxy to that client.
-# Can be done by just forwarding the rpc call, or by adding a call here, but
-# that would introduce a unnecessary serializing/deserializing step.
+# Currently supported subset:
+# - eth_chainId
+# - eth_getBlockByHash
+# - eth_getBlockByNumber - Partially: only by tags and block numbers before TheMerge
+# - eth_getBlockTransactionCountByHash
+# - eth_getLogs - Partially: only requests by block hash
+#
+# In order to be able to use Fluffy as drop-in replacement for apps/tools that
+# use the JSON RPC API, unsupported methods can be forwarded to a configured
+# web3 provider.
+# Supported methods will be handled by Fluffy by making use of the Portal network,
+# unsupported methods will be proxied to the given web3 provider.
+#
 
 # Some similar code as from nimbus `rpc_utils`, but avoiding that import as it
 # brings in  a lot more. Should restructure `rpc_utils` a bit before using that.
-func toHash*(value: rpc_types.Hash256): eth_types.Hash256 =
+func toHash*(value: eth_api_types.Hash256): eth_types.Hash256 =
   result.data = value.bytes
 
 func init*(
@@ -46,7 +51,7 @@ func init*(
 ): T {.raises: [ValidationError].} =
   TransactionObject(
     blockHash: some(w3Hash header.blockHash),
-    blockNumber: some(rpc_types.BlockNumber(header.blockNumber.truncate(uint64))),
+    blockNumber: some(eth_api_types.BlockNumber(header.blockNumber.truncate(uint64))),
     `from`: w3Addr tx.getSender(),
     gas: Quantity(tx.gasLimit),
     gasPrice: Quantity(tx.gasPrice),
@@ -76,7 +81,7 @@ func init*(
   let blockHash = header.blockHash
 
   var blockObject = BlockObject(
-    number: rpc_types.BlockNumber(header.blockNumber.truncate(uint64)),
+    number: eth_api_types.BlockNumber(header.blockNumber.truncate(uint64)),
     hash: w3Hash blockHash,
     parentHash: w3Hash header.parentHash,
     nonce: some(FixedBytes[8](header.nonce)),
@@ -102,7 +107,7 @@ func init*(
 
   if not isUncle:
     blockObject.uncles = body.uncles.map(
-      proc(h: BlockHeader): rpc_types.Hash256 =
+      proc(h: eth_types.BlockHeader): eth_api_types.Hash256 =
         w3Hash h.blockHash
     )
 
@@ -119,8 +124,6 @@ func init*(
   blockObject
 
 proc installEthApiHandlers*(
-    # Currently only HistoryNetwork needed, later we might want a master object
-    # holding all the networks.
     rpcServerWithProxy: var RpcProxy,
     historyNetwork: HistoryNetwork,
     beaconLightClient: Opt[LightClient],
@@ -208,7 +211,7 @@ proc installEthApiHandlers*(
     return Quantity(uint64(1))
 
   rpcServerWithProxy.rpc("eth_getBlockByHash") do(
-    data: rpc_types.Hash256, fullTransactions: bool
+    data: eth_api_types.Hash256, fullTransactions: bool
   ) -> Option[BlockObject]:
     ## Returns information about a block by hash.
     ##
@@ -225,7 +228,7 @@ proc installEthApiHandlers*(
     return some(BlockObject.init(header, body, fullTransactions))
 
   rpcServerWithProxy.rpc("eth_getBlockByNumber") do(
-    quantityTag: BlockTag, fullTransactions: bool
+    quantityTag: RtBlockIdentifier, fullTransactions: bool
   ) -> Option[BlockObject]:
     if quantityTag.kind == bidAlias:
       let tag = quantityTag.alias.toLowerAscii
@@ -283,7 +286,7 @@ proc installEthApiHandlers*(
         return some(BlockObject.init(header, body, fullTransactions))
 
   rpcServerWithProxy.rpc("eth_getBlockTransactionCountByHash") do(
-    data: rpc_types.Hash256
+    data: eth_api_types.Hash256
   ) -> Quantity:
     ## Returns the number of transactions in a block from a block matching the
     ## given block hash.
@@ -310,7 +313,7 @@ proc installEthApiHandlers*(
 
   rpcServerWithProxy.rpc("eth_getLogs") do(
     filterOptions: FilterOptions
-  ) -> seq[FilterLog]:
+  ) -> seq[LogObject]:
     if filterOptions.blockHash.isNone():
       # Currently only queries by blockhash are supported.
       # To support range queries the Indicies network is required.
