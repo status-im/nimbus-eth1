@@ -27,7 +27,7 @@ type TestCase = ref object
 proc setupTest(rng: ref HmacDrbgContext): Future[TestCase] {.async.} =
   let
     localSrvAddress = "127.0.0.1"
-    localSrvPort = 8545
+    localSrvPort = 0 # let the OS choose a port
     ta = initTAddress(localSrvAddress, localSrvPort)
     localDiscoveryNode =
       initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20302))
@@ -39,7 +39,9 @@ proc setupTest(rng: ref HmacDrbgContext): Future[TestCase] {.async.} =
   rpcHttpServerWithProxy.installDiscoveryApiHandlers(localDiscoveryNode)
 
   await rpcHttpServerWithProxy.start()
-  await client.connect(localSrvAddress, Port(localSrvPort), false)
+  await client.connect(
+    localSrvAddress, rpcHttpServerWithProxy.localAddress[0].port, false
+  )
   return TestCase(
     localDiscovery: localDiscoveryNode, server: rpcHttpServerWithProxy, client: client
   )

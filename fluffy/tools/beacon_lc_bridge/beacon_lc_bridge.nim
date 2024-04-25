@@ -41,7 +41,7 @@ import
   chronicles,
   chronos,
   confutils,
-  eth/[keys, rlp],
+  eth/[keys, rlp, trie, trie/db],
   # Need to rename this because of web3 ethtypes and ambigious indentifier mess
   # for `BlockHeader`.
   eth/common/eth_types as etypes,
@@ -59,7 +59,6 @@ import
   ../../network/history/[history_content, history_network],
   ../../network/beacon/beacon_content,
   ../../common/common_types,
-  ../../nimbus/db/core_db,
   ./beacon_lc_bridge_conf
 
 from stew/objects import checkedEnumAssign
@@ -81,7 +80,7 @@ template unsafeQuantityToInt64(q: Quantity): int64 =
 proc calculateTransactionData(
     items: openArray[TypedTransaction]
 ): Hash256 {.raises: [].} =
-  var tr = newCoreDbRef(LegacyDbMemory).mptPrune
+  var tr = initHexaryTrie(newMemoryDB(), isPruning = false)
   for i, t in items:
     try:
       let tx = distinctBase(t)
@@ -95,7 +94,7 @@ proc calculateTransactionData(
 # TODO: Since Capella we can also access ExecutionPayloadHeader and thus
 # could get the Roots through there instead.
 proc calculateWithdrawalsRoot(items: openArray[WithdrawalV1]): Hash256 {.raises: [].} =
-  var tr = newCoreDbRef(LegacyDbMemory).mptPrune
+  var tr = initHexaryTrie(newMemoryDB(), isPruning = false)
   for i, w in items:
     try:
       let withdrawal = etypes.Withdrawal(

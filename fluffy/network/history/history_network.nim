@@ -11,12 +11,12 @@ import
   stew/results,
   chronos,
   chronicles,
-  eth/[common/eth_types_rlp, rlp],
+  eth/[common/eth_types_rlp, rlp, trie, trie/db],
   eth/p2p/discoveryv5/[protocol, enr],
   ../../common/common_types,
   ../../database/content_db,
   ../../network_metadata,
-  ../../../nimbus/[constants, db/core_db],
+  ../../../nimbus/constants,
   ../wire/[portal_protocol, portal_stream, portal_protocol_config],
   "."/[history_content, accumulator, beacon_chain_historical_roots]
 
@@ -190,7 +190,7 @@ func encode*(receipts: seq[Receipt]): seq[byte] =
 # for if/when peer scoring/banning is added.
 
 proc calcRootHash(items: Transactions | PortalReceipts | Withdrawals): Hash256 =
-  var tr = newCoreDbRef(LegacyDbMemory).mptPrune
+  var tr = initHexaryTrie(newMemoryDB(), isPruning = false)
   for i, item in items:
     try:
       tr.put(rlp.encode(i), item.asSeq())
