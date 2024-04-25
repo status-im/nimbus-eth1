@@ -74,8 +74,9 @@ proc setErrorLevel {.used.} =
 
 proc miscRunner(
     noisy = true;
-    qidSampleSize = QidSample;
-     ) =
+    layout = LyoSamples[0];
+      ) =
+  let (lyo,qidSampleSize) = layout
 
   suite "Aristo: Miscellaneous tests":
 
@@ -83,10 +84,10 @@ proc miscRunner(
       check noisy.testVidRecycleLists()
 
     test &"Low level cascaded fifos API (sample size: {qidSampleSize})":
-      check noisy.testQidScheduler(sampleSize = qidSampleSize)
+      check noisy.testQidScheduler(layout = lyo, sampleSize = qidSampleSize)
 
     test &"High level cascaded fifos API (sample size: {qidSampleSize})":
-      check noisy.testFilterFifo(sampleSize = qidSampleSize)
+      check noisy.testFilterFifo(layout = lyo, sampleSize = qidSampleSize)
 
     test "Short keys and other patholgical cases":
       check noisy.testShortKeys()
@@ -197,7 +198,8 @@ when isMainModule:
     noisy.accountsRunner(persistent=false)
 
   when true: # and false:
-    noisy.miscRunner(qidSampleSize = 1_000)
+    for n,w in LyoSamples:
+      noisy.miscRunner() # layouts = (w[0], 1_000))
 
   # This one uses dumps from the external `nimbus-eth1-blob` repo
   when true and false:

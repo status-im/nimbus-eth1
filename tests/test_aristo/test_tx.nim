@@ -43,7 +43,7 @@ const
     ## Policy settig for `pack()`
 
 let
-  TxQidLyo = QidSlotLyo.to(QidLayoutRef)
+  TxQidLyo = LyoSamples[0][0].to(QidLayoutRef)
     ## Cascaded filter slots layout for testing
 
 # ------------------------------------------------------------------------------

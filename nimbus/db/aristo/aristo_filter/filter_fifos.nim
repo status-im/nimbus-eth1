@@ -75,6 +75,7 @@ proc fifosStore*(
   # Update journal filters and calculate database update
   var
     instr = FifoInstr(scd: upd.fifo)
+    dbClear: seq[QueueID]
     hold: seq[FilterRef]
     saved = false
 
@@ -100,10 +101,12 @@ proc fifosStore*(
 
     of HoldQid:
       # Push filter
+      dbClear.add act.qid
       hold.add be.getFilterOrReturn act.qid
 
       # Merge additional journal filters into top filter
       for w in act.qid+1 .. act.xid:
+        dbClear.add w
         let lower = be.getFilterOrReturn w
         hold[^1] = hold[^1].joinFiltersOrReturn lower
 
@@ -115,6 +118,9 @@ proc fifosStore*(
         let upper = hold.pop
         lower = upper.joinFiltersOrReturn lower
       instr.put.add (act.qid, lower)
+      for qid in dbClear:
+        instr.put.add (qid, FilterRef(nil))
+      dbClear.setLen(0)
 
   if not saved:
     return err(FilExecSaveMissing)

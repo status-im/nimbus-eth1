@@ -261,7 +261,7 @@ func capacity(
 func capacity*(
     ctx: openArray[tuple[size, width, wrap: int]]; # Schedule layout
       ): tuple[maxQueue: int, minCovered: int, maxCovered: int] =
-  ## Variant of `capacity()` below.
+  ## Variant of `capacity()`.
   ctx.toSeq.mapIt((it[0],it[1])).capacity
 
 func capacity*(
@@ -289,16 +289,17 @@ func addItem*(
   ##    SaveQid <queue-id>         -- Store a new item under the address
   ##                               -- <queue-id> on the database.
   ##
-  ##    HoldQid <from-id>..<to-id> -- Move the records accessed by the argument
-  ##                               -- addresses from the database to the right
-  ##                               -- end of the local hold queue. The age of
-  ##                               -- the items on the hold queue increases
-  ##                               -- left to right.
+  ##    HoldQid <from-id>..<to-id> -- Move the records referred to by the
+  ##                               -- argument addresses from the database to
+  ##                               -- the right end of the local hold queue.
+  ##                               -- The age of the items on the hold queue
+  ##                               -- increases left to right.
   ##
   ##    DequQid <queue-id>         -- Merge items from the hold queue into a
   ##                               -- new item and store it under the address
   ##                               -- <queue-id> on the database. Clear the
-  ##                               -- the hold queue.
+  ##                               -- the hold queue and the corresponding
+  ##                               -- items on the database.
   ##
   ##    DelQid <queue-id>          -- Delete item. This happens if the last
   ##                               -- oberflow queue needs to make space for

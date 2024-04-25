@@ -20,7 +20,7 @@ import
   results,
   ./aristo_walk/persistent,
   "."/[aristo_desc, aristo_get, aristo_init, aristo_utils],
-  ./aristo_check/[check_be, check_top]
+  ./aristo_check/[check_be, check_journal, check_top]
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -55,7 +55,7 @@ proc checkBE*(
     cache = true;                      # Also verify against top layer cache
     fifos = false;                     # Also verify cascaded filter fifos
       ): Result[void,(VertexID,AristoError)] =
-  ## Veryfy database backend structure. If the argument `relax` is set `false`,
+  ## Verify database backend structure. If the argument `relax` is set `false`,
   ## all necessary Merkle hashes are compiled and verified. If the argument
   ## `cache` is set `true`, the cache is also checked so that a safe operation
   ## (like `resolveBackendFilter()`) will leave the backend consistent.
@@ -79,6 +79,18 @@ proc checkBE*(
   of BackendVoid:
     return VoidBackendRef.checkBE(db, cache=cache, relax=relax)
 
+proc checkJournal*(
+    db: AristoDbRef;                   # Database, top layer
+      ): Result[void,(QueueID,AristoError)] =
+  ## Verify database backend journal.
+  case db.backend.kind:
+  of BackendMemory:
+    return MemBackendRef.checkJournal(db)
+  of BackendRocksDB:
+    return RdbBackendRef.checkJournal(db)
+  of BackendVoid:
+    return ok() # no journal
+
 
 proc check*(
     db: AristoDbRef;                   # Database, top layer
@@ -89,7 +101,11 @@ proc check*(
       ): Result[void,(VertexID,AristoError)] =
   ## Shortcut for running `checkTop()` followed by `checkBE()`
   ? db.checkTop(proofMode = proofMode)
-  ? db.checkBE(relax = relax, cache = cache)
+  ? db.checkBE(relax = relax, cache = cache, fifos = fifos)
+  if fifos:
+    let rc = db.checkJournal()
+    if rc.isErr:
+      return err((VertexID(0),rc.error[1]))
   ok()
 
 # ------------------------------------------------------------------------------

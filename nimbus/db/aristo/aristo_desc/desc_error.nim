@@ -169,6 +169,12 @@ type
     CheckBeFifoSrcTrgMismatch
     CheckBeFifoTrgNotStateRoot
 
+    # Jornal check `checkJournal()`
+    CheckJrnCachedQidOverlap
+    CheckJrnSavedQidMissing
+    CheckJrnSavedQidStale
+    CheckJrnLinkingGap
+
     # Neighbour vertex, tree traversal `nearbyRight()` and `nearbyLeft()`
     NearbyBeyondRange
     NearbyBranchError

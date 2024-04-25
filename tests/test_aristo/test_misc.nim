@@ -335,8 +335,8 @@ proc testVidRecycleLists*(noisy = true; seed = 42): bool =
 
 proc testQidScheduler*(
     noisy = true;
-    layout = QidSlotLyo;
-    sampleSize = QidSample;
+    layout = LyoSamples[0][0];
+    sampleSize = LyoSamples[0][1];
     reorgPercent = 40
       ): bool =
   ##
