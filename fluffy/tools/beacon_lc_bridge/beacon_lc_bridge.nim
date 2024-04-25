@@ -59,7 +59,6 @@ import
   ../../network/history/[history_content, history_network],
   ../../network/beacon/beacon_content,
   ../../common/common_types,
-  ../../nimbus/db/core_db,
   ./beacon_lc_bridge_conf
 
 from stew/objects import checkedEnumAssign
