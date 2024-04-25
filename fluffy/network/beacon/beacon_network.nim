@@ -15,7 +15,6 @@ import
   beacon_chain/spec/forks,
   beacon_chain/spec/datatypes/[phase0, altair, bellatrix],
   beacon_chain/gossip_processing/light_client_processor,
-  ../../../nimbus/constants,
   ../wire/[portal_protocol, portal_stream, portal_protocol_config],
   "."/[beacon_content, beacon_db, beacon_chain_historical_summaries]
 
