@@ -268,6 +268,7 @@ proc persistCode(acc: RefAccount, address: EthAddress, db: VerkleTrie) =
       VerkleTrieRef(db).updateContractCode(address, acc.account.codeHash, acc.code)
 
 proc persistStorage(acc: RefAccount, db: VerkleTrie, clearCache: bool) =
+  ## Placeholder for @agnxsh to implement using the verkle trie storage layer
   return
 
 proc getBalance*(ac: AccountsCache, address: EthAddress): UInt256 {.inline.} =
