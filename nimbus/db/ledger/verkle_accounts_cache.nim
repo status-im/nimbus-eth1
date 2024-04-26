@@ -260,6 +260,13 @@ proc persistMode(acc: RefAccount): PersistMode =
     if IsNew notin acc.flags:
       result = Remove
 
+proc persistCode(acc: RefAccount, address: EthAddress, db: VerkleTrie) =
+  if acc.code.len != 0:
+    when defined(geth):
+      VerkleTrieRef(db).updateContractCode(address, acc.account.codeHash, acc.code)
+    else:
+      VerkleTrieRef(db).updateContractCode(address, acc.account.codeHash, acc.code)
+
 proc getBalance*(ac: AccountsCache, address: EthAddress): UInt256 {.inline.} =
   let acc = ac.getAccount(address, false)
   if acc.isNil: emptyAcc.balance
