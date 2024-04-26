@@ -267,6 +267,9 @@ proc persistCode(acc: RefAccount, address: EthAddress, db: VerkleTrie) =
     else:
       VerkleTrieRef(db).updateContractCode(address, acc.account.codeHash, acc.code)
 
+proc persistStorage(acc: RefAccount, db: VerkleTrie, clearCache: bool) =
+  return
+
 proc getBalance*(ac: AccountsCache, address: EthAddress): UInt256 {.inline.} =
   let acc = ac.getAccount(address, false)
   if acc.isNil: emptyAcc.balance
@@ -475,3 +478,52 @@ func getAccessList*(ac: AccountsCache): common.AccessList =
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
   ac.savePoint.accessList.getAccessList()
+
+
+proc persist*(ac: AccountsCache,
+              clearEmptyAccount: bool = false,
+              clearCache: bool = true) =
+  # make sure all savepoint already committed
+  doAssert(ac.savePoint.parentSavepoint.isNil)
+  var cleanAccounts = initHashSet[EthAddress]()
+
+  if clearEmptyAccount:
+    ac.clearEmptyAccounts()
+
+  for address in ac.savePoint.selfDestruct:
+    ac.deleteAccount(address)
+
+  for address, acc in ac.savePoint.cache:
+    case acc.persistMode()
+    of Update:
+      if CodeChanged in acc.flags:
+        acc.persistCode(address, ac.trie)
+      if StorageChanged in acc.flags:
+        # storageRoot must be updated first
+        # before persisting account into merkle trie
+        acc.persistStorage(ac.trie, clearCache)           # --------------->>>> TODO: write the storage function @agnxsh <<<<
+      ac.trie.putAccountBytes address, acc.account
+    of Remove:
+      VerkleTrieRef(ac.trie).delAccountBytes address
+      if not clearCache:
+        cleanAccounts.incl address
+    of DoNothing:
+      # dead man tell no tales
+      # remove touched dead account from cache
+      if not clearCache and Alive notin acc.flags:
+        cleanAccounts.incl address
+
+    acc.flags = acc.flags - resetFlags
+
+  if clearCache:
+    ac.savePoint.cache.clear()
+  else:
+    for x in cleanAccounts:
+      ac.savePoint.cache.del x
+
+  ac.savePoint.selfDestruct.clear()
+
+  # EIP2929
+  ac.savePoint.accessList.clear()
+
+  ac.isDirty = false
