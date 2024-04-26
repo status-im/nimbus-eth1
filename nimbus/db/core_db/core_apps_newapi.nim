@@ -18,9 +18,10 @@ import
   chronicles,
   eth/[common, rlp],
   results,
-  stew/byteutils,
+  stew/[byteutils, endians2],
   "../.."/[errors, constants],
   ".."/[aristo, storage_types],
+  ./backend/aristo_db,
   "."/base
 
 logScope:
@@ -87,6 +88,23 @@ template discardRlpException(info: static[string]; code: untyped) =
     code
   except RlpError as e:
     warn logTxt info, error=($e.name), msg=e.msg
+
+# ---------
+
+func to(bn: BlockNumber; T: type Blob): T =
+  if bn <= high(uint64).toBlockNumber:
+    bn.truncate(uint64).toBytesBE.toSeq
+  else:
+    bn.toBytesBE.toSeq
+
+func to(data: openArray[byte]; T: type BlockNumber): T =
+  case data.len:
+  of 8:
+    return uint64.fromBytesBE(data).toBlockNumber
+  of 32:
+    return UInt256.fromBytesBE(data).toBlockNumber
+  else:
+    discard
 
 # ------------------------------------------------------------------------------
 # Private iterators
@@ -320,7 +338,6 @@ proc markCanonicalChain(
 
   return true
 
-
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -329,6 +346,27 @@ proc exists*(db: CoreDbRef, hash: Hash256): bool =
   db.newKvt().hasKey(hash.data).valueOr:
     warn logTxt "exisis()", hash, action="hasKey()", error=($$error)
     return false
+
+proc getBlockNumber*(db: CoreDbRef; stateRoot: Hash256): BlockNumber =
+  const info = "getBlockNumber()"
+  if stateRoot != EMPTY_ROOT_HASH:
+    let
+      kvt = db.newKvt()
+      data = kvt.get(stRootToBlockNumKey(stateRoot).toOpenArray).valueOr:
+        if error.error != KvtNotFound:
+          warn logTxt info, stateRoot, action="get()", error=($$error)
+        return
+    return data.to(BlockNumber)
+
+proc getOldestJournalBlockNumber*(db: CoreDbRef): BlockNumber =
+  ## Returns the block number implied by the database journal if there is any,
+  ## or `BlockNumber(0)`. At the moment, only the `Aristo` database has a
+  ## journal.
+  ##
+  let be = db.ctx.getMpt(CtGeneric).backend
+  if be.parent.isAristo:
+    return db.getBlockNumber be.toAristoOldestStateRoot()
+
 
 proc getBlockHeader*(
     db: CoreDbRef;
@@ -523,8 +561,18 @@ proc getAncestorsHashes*(
     dec ancestorCount
 
 proc addBlockNumberToHashLookup*(db: CoreDbRef; header: BlockHeader) =
-  let blockNumberKey = blockNumberToHashKey(header.blockNumber)
-  db.newKvt.put(blockNumberKey.toOpenArray, rlp.encode(header.hash)).isOkOr:
+  ## The function stores lookup for
+  ## ::
+  ##   header.stateRoot -> header.blockNumber -> header.hash()
+  ##
+  let
+    blockNumberKey = blockNumberToHashKey(header.blockNumber)
+    stRootKey = stRootToBlockNumKey(header.stateRoot)
+    kvt = db.newKvt()
+  kvt.put(stRootKey.toOpenArray, header.blockNumber.to(Blob)).isOkOr:
+    warn logTxt "addBlockNumberToHashLookup()",
+      stRootKey, action="put()", `error`=($$error)
+  kvt.put(blockNumberKey.toOpenArray, rlp.encode(header.hash)).isOkOr:
     warn logTxt "addBlockNumberToHashLookup()",
       blockNumberKey, action="put()", error=($$error)
 
@@ -557,6 +605,26 @@ proc persistTransactions*(
     when extraTraceMessages:
       warn logTxt info, action="state()"
     return EMPTY_ROOT_HASH
+
+proc forgetHistory*(
+    db: CoreDbRef;
+    blockNum: BlockNumber;
+      ): bool
+      {.gcsafe, raises: [RlpError].} =
+  ## Remove all data related to the block number argument `num`. This function
+  ## returns `true`, if some history was available and deleted.
+  var blockHash: Hash256
+  if db.getBlockHash(blockNum, blockHash):
+    let kvt = db.newKvt()
+    # delete blockNum->blockHash
+    discard kvt.del(blockNumberToHashKey(blockNum).toOpenArray)
+    result = true
+
+    var header: BlockHeader
+    if db.getBlockHeader(blockHash, header):
+      # delete blockHash->header, stateRoot->blockNum
+      discard kvt.del(genericHashKey(blockHash).toOpenArray)
+      discard kvt.del(stRootToBlockNumKey(header.stateRoot).toOpenArray)
 
 proc getTransaction*(
     db: CoreDbRef;
@@ -858,6 +926,12 @@ proc persistHeaderToDbWithoutSetHead*(
   let
     kvt = db.newKvt()
     scoreKey = blockHashToScoreKey(headerHash)
+
+  # This extra call `addBlockNumberToHashLookup()` has been added in order
+  # to access the burrent block by the state root. So it can be deleted
+  # if not needed, anymore.
+  db.addBlockNumberToHashLookup(header)
+
   kvt.put(scoreKey.toOpenArray, rlp.encode(score)).isOkOr:
     warn logTxt "persistHeaderToDbWithoutSetHead()",
       scoreKey, action="put()", `error`=($$error)

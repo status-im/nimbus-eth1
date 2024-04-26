@@ -64,7 +64,10 @@ proc fifos(be: BackendRef): seq[seq[(QueueID,FilterRef)]] =
     discard
   check be.kind == BackendMemory or be.kind == BackendRocksDB
 
-func flatten(a: seq[seq[(QueueID,FilterRef)]]): seq[(QueueID,FilterRef)] {.used.} =
+func flatten(
+    a: seq[seq[(QueueID,FilterRef)]];
+      ): seq[(QueueID,FilterRef)]
+      {.used.} =
   for w in a:
     result &= w
 
@@ -238,7 +241,7 @@ proc isDbEq(a, b: FilterRef; db: AristoDbRef; noisy = true): bool =
         if aVtx.isValid and bVtx.isValid:
           return false
         # The valid one must match the backend data
-        let rc = db.getVtxUBE vid
+        let rc = db.getVtxUbe vid
         if rc.isErr:
           return false
         let vtx = if aVtx.isValid: aVtx else: bVtx
@@ -246,7 +249,7 @@ proc isDbEq(a, b: FilterRef; db: AristoDbRef; noisy = true): bool =
           return false
 
       elif not vid.isValid and not bTab.hasKey vid:
-        let rc = db.getVtxUBE vid
+        let rc = db.getVtxUbe vid
         if rc.isOk:
           return false # Exists on backend but missing on `bTab[]`
         elif rc.error != GetKeyNotFound:
@@ -268,7 +271,7 @@ proc isDbEq(a, b: FilterRef; db: AristoDbRef; noisy = true): bool =
         if aKey.isValid and bKey.isValid:
           return false
         # The valid one must match the backend data
-        let rc = db.getKeyUBE vid
+        let rc = db.getKeyUbe vid
         if rc.isErr:
           return false
         let key = if aKey.isValid: aKey else: bKey
@@ -276,7 +279,7 @@ proc isDbEq(a, b: FilterRef; db: AristoDbRef; noisy = true): bool =
           return false
 
       elif not vid.isValid and not bMap.hasKey vid:
-        let rc = db.getKeyUBE vid
+        let rc = db.getKeyUbe vid
         if rc.isOk:
           return false # Exists on backend but missing on `bMap[]`
         elif rc.error != GetKeyNotFound:
@@ -348,18 +351,24 @@ proc checkBeOk(
     dx: DbTriplet;
     relax = false;
     forceCache = false;
+    fifos = true;
     noisy = true;
       ): bool =
   ## ..
   for n in 0 ..< dx.len:
-    let
-      cache = if forceCache: true else: dx[n].dirty.len == 0
-      rc = dx[n].checkBE(relax=relax, cache=cache)
-    xCheckRc rc.error == (0,0):
-      noisy.say "***", "db check failed",
-        " n=", n, "/", dx.len-1,
-        " cache=", cache
-
+    let cache = if forceCache: true else: dx[n].dirty.len == 0
+    block:
+      let rc = dx[n].checkBE(relax=relax, cache=cache, fifos=fifos)
+      xCheckRc rc.error == (0,0):
+        noisy.say "***", "db checkBE failed",
+          " n=", n, "/", dx.len-1,
+          " cache=", cache
+    if fifos:
+      let rc = dx[n].checkJournal()
+      xCheckRc rc.error == (0,0):
+        noisy.say "***", "db checkJournal failed",
+          " n=", n, "/", dx.len-1,
+          " cache=", cache
   true
 
 proc checkFilterTrancoderOk(
@@ -602,7 +611,7 @@ proc testDistributedAccess*(
 
       # Check/verify backends
       block:
-        let ok = dx.checkBeOk(noisy=noisy)
+        let ok = dx.checkBeOk(noisy=noisy,fifos=true)
         xCheck ok:
           noisy.say "*** testDistributedAccess (4)", "n=", n, "db3".dump db3
       block:
@@ -661,7 +670,7 @@ proc testDistributedAccess*(
 
       # Check/verify backends
       block:
-        let ok = dy.checkBeOk(noisy=noisy)
+        let ok = dy.checkBeOk(noisy=noisy,fifos=true)
         xCheck ok
       block:
         let ok = dy.checkFilterTrancoderOk(noisy=noisy)
@@ -675,8 +684,8 @@ proc testDistributedAccess*(
 
 proc testFilterFifo*(
     noisy = true;
-    layout = QidSlotLyo;                   # Backend fifos layout
-    sampleSize = QidSample;                # Synthetic filters generation
+    layout = LyoSamples[0][0];             # Backend fifos layout
+    sampleSize = LyoSamples[0][1];         # Synthetic filters generation
     reorgPercent = 40;                     # To be deleted and re-filled
     rdbPath = "";                          # Optional Rocks DB storage directory
       ): bool =
@@ -710,11 +719,23 @@ proc testFilterFifo*(
 
   # -------------------
 
+  block:
+    let rc = db.checkJournal()
+    xCheckRc rc.error == (0,0)
+
   for n in 1 .. sampleSize:
-    let storeFilterOK = be.storeFilter(serial=n)
-    xCheck storeFilterOK
-    let validateFifoOk = be.validateFifo(serial=n)
-    xCheck validateFifoOk
+    #let trigger = n in {7,8}
+    #if trigger: show(n, be.journal.addItem.exec)
+    block:
+      let storeFilterOK = be.storeFilter(serial=n)
+      xCheck storeFilterOK
+    block:
+      #if trigger: show(n)
+      let rc = db.checkJournal()
+      xCheckRc rc.error == (0,0)
+    block:
+      let validateFifoOk = be.validateFifo(serial=n)
+      xCheck validateFifoOk
 
   # Squash some entries on the fifo
   block:
@@ -739,6 +760,9 @@ proc testFilterFifo*(
     #show(n)
     let validateFifoOk = be.validateFifo(serial=n)
     xCheck validateFifoOk
+    block:
+      let rc = db.checkJournal()
+      xCheckRc rc.error == (0,0)
 
   true
 
@@ -746,7 +770,7 @@ proc testFilterFifo*(
 proc testFilterBacklog*(
     noisy: bool;
     list: openArray[ProofTrieData];        # Sample data for generating filters
-    layout = QidSlotLyo;                   # Backend fifos layout
+    layout = LyoSamples[0][0];             # Backend fifos layout
     reorgPercent = 40;                     # To be deleted and re-filled
     rdbPath = "";                          # Optional Rocks DB storage directory
     sampleSize = 777;                      # Truncate `list`
@@ -786,6 +810,9 @@ proc testFilterBacklog*(
     block:
       let rc = db.stow(persistent=true)
       xCheckRc rc.error == 0
+    block:
+      let rc = db.checkJournal()
+      xCheckRc rc.error == (0,0)
     let validateFifoOk = be.validateFifo(serial=n, hashesOk=true)
     xCheck validateFifoOk
     when false: # or true:
@@ -844,6 +871,9 @@ proc testFilterBacklog*(
       xCheckRc rc.error == (0,0)
     block:
       let rc = xb.check(relax=false)
+      xCheckRc rc.error == (0,0)
+    block:
+      let rc = db.checkJournal()
       xCheckRc rc.error == (0,0)
 
     #show(episode, "testFilterBacklog (3)")

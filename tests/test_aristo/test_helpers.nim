@@ -31,8 +31,12 @@ type
     kvpLst*: seq[LeafTiePayload]
 
 const
-  QidSlotLyo* = [(4,0,10),(3,3,10),(3,4,10),(3,5,10)]
-  QidSample* = (3 * QidSlotLyo.capacity.minCovered) div 2
+  samples = [
+    [      (4,0,10),      (3,3,10),      (3,4,10),      (3,5,10)],
+    [(2,0,high int),(1,1,high int),(1,1,high int),(1,1,high int)],
+  ]
+
+  LyoSamples* = samples.mapIt((it, (3 * it.capacity.minCovered) div 2))
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -106,7 +110,7 @@ proc say*(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
 func `==`*[T: AristoError|VertexID](a: T, b: int): bool =
   a == T(b)
 
-func `==`*(a: (VertexID,AristoError), b: (int,int)): bool =
+func `==`*(a: (VertexID|QueueID,AristoError), b: (int,int)): bool =
   (a[0].int,a[1].int) == b
 
 func `==`*(a: (VertexID,AristoError), b: (int,AristoError)): bool =

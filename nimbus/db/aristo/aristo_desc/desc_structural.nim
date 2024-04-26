@@ -324,7 +324,7 @@ func to*(node: NodeRef; T: type VertexRef): T =
   node.VertexRef.dup
 
 func to*(a: array[4,tuple[size, width: int]]; T: type QidLayoutRef): T =
-  ## Convert a size-width array to a `QidLayoutRef` layout. Over large
+  ## Convert a size-width array to a `QidLayoutRef` layout. Overly large
   ## array field values are adjusted to its maximal size.
   var q: array[4,QidSpec]
   for n in 0..3:
@@ -335,18 +335,20 @@ func to*(a: array[4,tuple[size, width: int]]; T: type QidLayoutRef): T =
   T(q: q)
 
 func to*(a: array[4,tuple[size, width, wrap: int]]; T: type QidLayoutRef): T =
-  ## Convert a size-width-wrap array to a `QidLayoutRef` layout. Over large
+  ## Convert a size-width-wrap array to a `QidLayoutRef` layout. Overly large
   ## array field values are adjusted to its maximal size. Too small `wrap`
-  ## values are adjusted to its minimal size.
+  ## field values are adjusted to its minimal size.
   var q: array[4,QidSpec]
   for n in 0..2:
     q[n] = (min(a[n].size.uint, QidSpecSizeMax),
             min(a[n].width.uint, QidSpecWidthMax),
-            QueueID(max(a[n].size + a[n+1].width, a[n].width+1, a[n].wrap)))
+            QueueID(max(a[n].size + a[n+1].width, a[n].width+1,
+                        min(a[n].wrap, DefaultQidWrap.int))))
   q[0].width = 0
   q[3] = (min(a[3].size.uint, QidSpecSizeMax),
           min(a[3].width.uint, QidSpecWidthMax),
-          QueueID(max(a[3].size, a[3].width, a[3].wrap)))
+          QueueID(max(a[3].size, a[3].width,
+                      min(a[3].wrap, DefaultQidWrap.int))))
   T(q: q)
 
 # ------------------------------------------------------------------------------

@@ -242,6 +242,11 @@ func toAristo*(mBe: CoreDbMptBackendRef): AristoDbRef =
   if not mBe.isNil and mBe.parent.isAristo:
     return mBe.AristoCoreDbMptBE.adb
 
+proc toAristoOldestStateRoot*(mBe: CoreDbMptBackendRef): Hash256 =
+  if not mBe.isNil and mBe.parent.isAristo:
+    return mBe.parent.AristoCoreDbRef.adbBase.toJournalOldestStateRoot()
+  EMPTY_ROOT_HASH
+
 # ------------------------------------------------------------------------------
 # Public aristo iterators
 # ------------------------------------------------------------------------------

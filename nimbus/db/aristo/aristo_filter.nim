@@ -73,7 +73,7 @@ proc merge*(
   ## argument `filter`, all the `top` and `stack` layers should be cleared.
   ##
   let ubeRoot = block:
-    let rc = db.getKeyUBE VertexID(1)
+    let rc = db.getKeyUbe VertexID(1)
     if rc.isOk:
       rc.value.to(Hash256)
     elif rc.error == GetKeyNotFound:

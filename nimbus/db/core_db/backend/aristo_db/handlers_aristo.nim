@@ -17,6 +17,7 @@ import
   stew/byteutils,
   results,
   ../../../aristo,
+  ../../../aristo/aristo_filter/filter_scheduler,
   ../../base,
   ../../base/base_desc,
   ./common_desc
@@ -565,6 +566,20 @@ func toVoidRc*[T](
   if rc.isOk:
     return ok()
   err((VoidVID,rc.error).toError(base, info, error))
+
+proc toJournalOldestStateRoot*(base: AristoBaseRef): Hash256 =
+  let
+    adb = base.ctx.mpt
+    be = adb.backend
+  if not be.isNil:
+    let jrn = be.journal
+    if not jrn.isNil:
+      let qid = jrn[^1]
+      if qid.isValid:
+        let rc = base.api.getFilUbe(adb, qid)
+        if rc.isOk:
+          return rc.value.trg
+  EMPTY_ROOT_HASH
 
 # ---------------------
 

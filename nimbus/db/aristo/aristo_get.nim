@@ -22,7 +22,7 @@ import
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc getIdgUBE*(
+proc getIdgUbe*(
     db: AristoDbRef;
       ): Result[seq[VertexID],AristoError] =
   ## Get the ID generator state from the unfiltered backened if available.
@@ -31,7 +31,7 @@ proc getIdgUBE*(
     return be.getIdgFn()
   err(GetIdgNotFound)
 
-proc getFqsUBE*(
+proc getFqsUbe*(
     db: AristoDbRef;
       ): Result[seq[(QueueID,QueueID)],AristoError] =
   ## Get the list of filter IDs unfiltered backened if available.
@@ -40,7 +40,7 @@ proc getFqsUBE*(
     return be.getFqsFn()
   err(GetFqsNotFound)
 
-proc getVtxUBE*(
+proc getVtxUbe*(
     db: AristoDbRef;
     vid: VertexID;
       ): Result[VertexRef,AristoError] =
@@ -50,17 +50,17 @@ proc getVtxUBE*(
     return be.getVtxFn vid
   err GetVtxNotFound
 
-proc getKeyUBE*(
+proc getKeyUbe*(
     db: AristoDbRef;
     vid: VertexID;
       ): Result[HashKey,AristoError] =
-  ## Get the merkle hash/key from the unfiltered backend if available.
+  ## Get the Merkle hash/key from the unfiltered backend if available.
   let be = db.backend
   if not be.isNil:
     return be.getKeyFn vid
   err GetKeyNotFound
 
-proc getFilUBE*(
+proc getFilUbe*(
     db: AristoDbRef;
     qid: QueueID;
       ): Result[FilterRef,AristoError] =
@@ -78,7 +78,7 @@ proc getIdgBE*(
   ## Get the ID generator state the `backened` layer if available.
   if not db.roFilter.isNil:
     return ok(db.roFilter.vGen)
-  db.getIdgUBE()
+  db.getIdgUbe()
 
 proc getVtxBE*(
     db: AristoDbRef;
@@ -90,7 +90,7 @@ proc getVtxBE*(
     if vtx.isValid:
       return ok(vtx)
     return err(GetVtxNotFound)
-  db.getVtxUBE vid
+  db.getVtxUbe vid
 
 proc getKeyBE*(
     db: AristoDbRef;
@@ -102,7 +102,7 @@ proc getKeyBE*(
     if key.isValid:
       return ok(key)
     return err(GetKeyNotFound)
-  db.getKeyUBE vid
+  db.getKeyUbe vid
 
 # ------------------
 

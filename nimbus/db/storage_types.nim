@@ -32,6 +32,7 @@ type
     snapSyncStorageSlot
     snapSyncStateRoot
     blockHashToBlockWitness
+    stRootToBlockNum
 
   DbKey* = object
     # The first byte stores the key type. The rest are key-specific values
@@ -132,6 +133,11 @@ proc snapSyncStateRootKey*(h: openArray[byte]): DbKey {.inline.} =
 
 proc blockHashToBlockWitnessKey*(h: Hash256): DbKey {.inline.} =
   result.data[0] = byte ord(blockHashToBlockWitness)
+  result.data[1 .. 32] = h.data
+  result.dataEndPos = uint8 32
+
+proc stRootToBlockNumKey*(h: Hash256): DbKey =
+  result.data[0] = byte ord(stRootToBlockNum)
   result.data[1 .. 32] = h.data
   result.dataEndPos = uint8 32
 
