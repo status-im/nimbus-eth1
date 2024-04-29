@@ -254,6 +254,7 @@ type
 
   AristoApiPersistFn* =
     proc(db: AristoDbRef;
+         nxtFid = none(FilterID);
          chunkedMpt = false;
         ): Result[void,AristoError]
         {.noRaise.}
@@ -267,6 +268,11 @@ type
       ## Finally, the staged data are merged into the physical backend
       ## database and the staged data area is cleared. Wile performing this
       ## last step, the recovery journal is updated (if available.)
+      ##
+      ## If the argument `nxtFid` is passed non-zero, it will be the ID for
+      ## the next recovery journal record. If non-zero, this ID must be greater
+      ## than all previous IDs (e.g. block number when storing after block
+      ## execution.)
       ##
       ## Staging the top layer cache might fail with a partial MPT when it is
       ## set up from partial MPT chunks as it happens with `snap` sync
@@ -677,9 +683,9 @@ func init*(
         result = api.pathAsBlob(a)
 
   profApi.persist =
-    proc(a: AristoDbRef; b = false): auto =
+    proc(a: AristoDbRef; b = none(FilterID); c = false): auto =
        AristoApiProfPersistFn.profileRunner:
-        result = api.persist(a, b)
+        result = api.persist(a, b, c)
 
   profApi.reCentre =
     proc(a: AristoDbRef) =

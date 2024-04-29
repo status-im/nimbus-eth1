@@ -14,7 +14,7 @@
 {.push raises: [].}
 
 import
-  std/tables,
+  std/[options, tables],
   results,
   "."/[aristo_desc, aristo_filter, aristo_get, aristo_layers, aristo_hashify]
 
@@ -73,6 +73,7 @@ iterator txWalk(tx: AristoTxRef): (AristoTxRef,LayerRef,AristoError) =
 
 proc stowImpl(
     db: AristoDbRef;                  # Database
+    nxtFid: Option[FilterID];         # Next filter ID (zero is OK)
     persistent: bool;                 # Stage only unless `true`
     chunkedMpt: bool;                 # Partial data (e.g. from `snap`)
       ): Result[void,AristoError] =
@@ -119,7 +120,7 @@ proc stowImpl(
 
   if persistent:
     # Merge `roFiler` into persistent tables
-    ? db.resolveBackendFilter()
+    ? db.resolveBackendFilter nxtFid
     db.roFilter = FilterRef(nil)
 
   # Special treatment for `snap` proofs (aka `chunkedMpt`)
@@ -467,6 +468,7 @@ proc collapse*(
 
 proc persist*(
     db: AristoDbRef;                  # Database
+    nxtFid = none(FilterID);          # Next filter ID (zero is OK)
     chunkedMpt = false;               # Partial data (e.g. from `snap`)
       ): Result[void,AristoError] =
   ## Persistently store data onto backend database. If the system is running
@@ -480,12 +482,16 @@ proc persist*(
   ## and the staged data area is cleared. Wile performing this last step,
   ## the recovery journal is updated (if available.)
   ##
+  ## If the argument `nxtFid` is passed non-zero, it will be the ID for the
+  ## next recovery journal record. If non-zero, this ID must be greater than
+  ## all previous IDs (e.g. block number when stowing after block execution.)
+  ##
   ## Staging the top layer cache might fail with a partial MPT when it is
   ## set up from partial MPT chunks as it happens with `snap` sync processing.
   ## In this case, the `chunkedMpt` argument must be set `true` (see alse
   ## `fwdFilter()`.)
   ##
-  db.stowImpl(persistent=true, chunkedMpt=chunkedMpt)
+  db.stowImpl(nxtFid, persistent=true, chunkedMpt=chunkedMpt)
 
 proc stow*(
     db: AristoDbRef;                  # Database
@@ -504,7 +510,7 @@ proc stow*(
   ## In this case, the `chunkedMpt` argument must be set `true` (see alse
   ## `fwdFilter()`.)
   ##
-  db.stowImpl(persistent=false, chunkedMpt=chunkedMpt)
+  db.stowImpl(nxtFid=none(FilterID), persistent=false, chunkedMpt=chunkedMpt)
 
 # ------------------------------------------------------------------------------
 # End

@@ -132,10 +132,13 @@ proc baseMethods(db: AristoCoreDbRef): CoreDbBaseFns =
       db.tracer.push(flags)
     CoreDxCaptRef(methods: db.tracer.cptMethods)
 
-  proc persistent(): CoreDbRc[void] =
+  proc persistent(bn: Option[BlockNumber]): CoreDbRc[void] =
     const info = "persistentFn()"
-    ? aBase.persistent info
+    let fid =
+      if bn.isNone: none(FilterID)
+      else: some(bn.unsafeGet.truncate(uint64).FilterID)
     ? kBase.persistent info
+    ? aBase.persistent(fid, info)
     ok()
 
   CoreDbBaseFns(
@@ -179,8 +182,8 @@ proc baseMethods(db: AristoCoreDbRef): CoreDbBaseFns =
     newCaptureFn: proc(flags: set[CoreDbCaptFlags]): CoreDbRc[CoreDxCaptRef] =
       ok(db.bless flags.tracerSetup()),
 
-    persistentFn: proc(): CoreDbRc[void] =
-      persistent())
+    persistentFn: proc(bn: Option[BlockNumber]): CoreDbRc[void] =
+      persistent(bn))
 
 # ------------------------------------------------------------------------------
 # Public constructor and helper

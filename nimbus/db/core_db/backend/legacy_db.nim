@@ -499,7 +499,7 @@ proc baseMethods(
       let fns = db.newRecorderRef(flgs).cptMethods(db)
       ok(db.bless CoreDxCaptRef(methods: fns)),
 
-    persistentFn: proc(): CoreDbRc[void] =
+    persistentFn: proc(bn: Option[BlockNumber]): CoreDbRc[void] =
       # Emulate `Aristo` behaviour
       if 0 < db.txLevel():
         const info = "persistentFn()"

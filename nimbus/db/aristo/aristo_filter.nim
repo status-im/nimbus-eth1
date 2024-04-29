@@ -13,7 +13,7 @@
 ##
 
 import
-  std/[sequtils, sets, tables],
+  std/[options, sequtils, sets, tables],
   eth/common,
   results,
   "."/[aristo_desc, aristo_get, aristo_vid],
@@ -99,7 +99,8 @@ proc canResolveBackendFilter*(db: AristoDbRef): bool =
 
 
 proc resolveBackendFilter*(
-    db: AristoDbRef;
+    db: AristoDbRef;                   # Database
+    nxtFid = none(FilterID);           # Next filter ID (if any)
     reCentreOk = false;
       ): Result[void,AristoError] =
   ## Resolve the backend filter into the physical backend database.
@@ -143,7 +144,7 @@ proc resolveBackendFilter*(
 
   # Figure out how to save the reverse filter on a cascades slots queue
   var instr: FifoInstr
-  if not be.journal.isNil:                        # Otherwise ignore
+  if not be.journal.isNil:                       # Otherwise ignore
     block getInstr:
       # Compile instruction for updating filters on the cascaded fifos
       if db.roFilter.isValid:
@@ -151,8 +152,9 @@ proc resolveBackendFilter*(
         if 0 < ovLap:
           instr = ? be.fifosDelete ovLap         # Revert redundant entries
           break getInstr
-      instr = ? be.fifosStore(                   # Store reverse filter
-        updateSiblings.rev, none(FilterID))
+      instr = ? be.fifosStore(
+        updateSiblings.rev,                      # Store reverse filter
+        nxtFid)                                  # Set filter ID (if any)
 
   # Store structural single trie entries
   let writeBatch = be.putBegFn()
@@ -202,15 +204,21 @@ proc forkBackLog*(
 
 proc forkBackLog*(
     db: AristoDbRef;
-    fid: FilterID;
+    fid: Option[FilterID];
     earlierOK = false;
       ): Result[AristoDbRef,AristoError] =
-  ## ..
+  ## Variant of `forkByJounal()` for forking to a particular filter ID (or the
+  ## nearest predecessot if `earlierOK` is passed `true`.) if there is some
+  ## filter ID `fid`.
+  ##
+  ## Otherwise, the oldest filter is forked to (regardless of the value of
+  ## `earlierOK`.)
+  ##
   let be = db.backend
   if be.isNil:
     return err(FilBackendMissing)
 
-  let fip = ? be.getFilterFromFifo(some(fid), earlierOK)
+  let fip = ? be.getFilterFromFifo(fid, earlierOK)
   db.forkBackLog fip.inx
 
 # ------------------------------------------------------------------------------

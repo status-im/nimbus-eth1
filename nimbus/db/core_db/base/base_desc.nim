@@ -115,7 +115,8 @@ type
   CoreDbBaseNewCaptFn* =
     proc(flgs: set[CoreDbCaptFlags]): CoreDbRc[CoreDxCaptRef] {.noRaise.}
   CoreDbBaseGetCaptFn* = proc(): CoreDbRc[CoreDxCaptRef] {.noRaise.}
-  CoreDbBasePersistentFn* = proc(): CoreDbRc[void] {.noRaise.}
+  CoreDbBasePersistentFn* =
+    proc(bn: Option[BlockNumber]): CoreDbRc[void] {.noRaise.}
 
   CoreDbBaseFns* = object
     destroyFn*:      CoreDbBaseDestroyFn
@@ -227,7 +228,6 @@ type
   CoreDbAccHasPathFn* = proc(k: EthAddress): CoreDbRc[bool] {.noRaise.}
   CoreDbAccGetColFn* = proc(): CoreDbColRef {.noRaise.}
   CoreDbAccIsPruningFn* = proc(): bool {.noRaise.}
-  CoreDbAccPersistentFn* = proc(): CoreDbRc[void] {.noRaise.}
   CoreDbAccForgetFn* = proc(): CoreDbRc[void] {.noRaise.}
 
   CoreDbAccFns* = object
@@ -240,7 +240,6 @@ type
     hasPathFn*:    CoreDbAccHasPathFn
     getColFn*:     CoreDbAccGetColFn
     isPruningFn*:  CoreDbAccIsPruningFn
-    persistentFn*: CoreDbAccPersistentFn
 
 
   # --------------------------------------------------

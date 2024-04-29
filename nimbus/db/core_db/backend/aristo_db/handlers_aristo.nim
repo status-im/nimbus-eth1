@@ -682,12 +682,13 @@ proc swapCtx*(base: AristoBaseRef; ctx: CoreDbCtxRef): CoreDbCtxRef =
 
 proc persistent*(
     base: AristoBaseRef;
+    fid: Option[FilterID];
     info: static[string];
       ): CoreDbRc[void] =
   let
     api = base.api
     mpt = base.ctx.mpt
-    rc = api.persist(mpt)
+    rc = api.persist(mpt, fid)
   if rc.isOk:
     ok()
   elif api.level(mpt) == 0:
