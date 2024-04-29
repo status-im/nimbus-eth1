@@ -13,10 +13,11 @@
 
 
 import
-  std/times,
+  std/[options, times],
   eth/[common, trie/nibbles],
   results,
   ./aristo_desc/desc_backend,
+  ./aristo_filter/filter_helpers,
   ./aristo_init/memory_db,
   "."/[aristo_delete, aristo_desc, aristo_fetch, aristo_get, aristo_hashify,
        aristo_hike, aristo_init, aristo_merge, aristo_path, aristo_profile,
@@ -154,6 +155,23 @@ type
         ): Result[FilterRef,AristoError]
         {.noRaise.}
       ## Get the filter from the unfiltered backened if available.
+
+  AristoApiGetFromJournalFn* =
+    proc(be: BackendRef;
+         fid: Option[FilterID];
+         earlierOK = false;
+        ): Result[FilterIndexPair,AristoError]
+        {.noRaise.}
+      ## For a positive argument `fid`, find the filter on the journal with ID
+      ## not larger than `fid` (i e. the resulting filter might be older.)
+      ##
+      ## If the argument `earlierOK` is passed `false`, the function succeeds
+      ## only if the filter ID of the returned filter is equal to the argument
+      ## `fid`.
+      ##
+      ## In case that the argument `fid` is zera (i.e. `FilterID(0)`), the
+      ## filter with the smallest filter ID (i.e. the oldest filter) is
+      ## returned. In that case, the argument `earlierOK` is ignored.
 
   AristoApiGetKeyRcFn* =
     proc(db: AristoDbRef;
@@ -365,6 +383,7 @@ type
     forkTop*: AristoApiForkTopFn
     forkWith*: AristoApiForkWithFn
     getFilUbe*: AristoApiGetFilUbeFn
+    getFromJournal*: AristoApiGetFromJournalFn
     getKeyRc*: AristoApiGetKeyRcFn
     hashify*: AristoApiHashifyFn
     hasPath*: AristoApiHasPathFn
@@ -389,45 +408,46 @@ type
     ## Index/name mapping for profile slots
     AristoApiProfTotal          = "total"
 
-    AristoApiProfCommitFn       = "commit"
-    AristoApiProfDeleteFn       = "delete"
-    AristoApiProfDelTreeFn      = "delTree"
-    AristoApiProfFetchPayloadFn = "fetchPayload"
-    AristoApiProfFinishFn       = "finish"
-    AristoApiProfForgetFn       = "forget"
-    AristoApiProfForkTopFn      = "forkTop"
-    AristoApiProfForkWithFn     = "forkWith"
-    AristoApiProfGetFilUbeFn    = "getFilUBE"
-    AristoApiProfGetKeyRcFn     = "getKeyRc"
-    AristoApiProfHashifyFn      = "hashify"
-    AristoApiProfHasPathFn      = "hasPath"
-    AristoApiProfHikeUpFn       = "hikeUp"
-    AristoApiProfIsTopFn        = "isTop"
-    AristoApiProfLevelFn        = "level"
-    AristoApiProfNForkedFn      = "nForked"
-    AristoApiProfMergeFn        = "merge"
-    AristoApiProfMergePayloadFn = "mergePayload"
-    AristoApiProfPathAsBlobFn   = "pathAsBlob"
-    AristoApiProfPersistFn      = "persist"
-    AristoApiProfReCentreFn     = "reCentre"
-    AristoApiProfRollbackFn     = "rollback"
-    AristoApiProfSerialiseFn    = "serialise"
-    AristoApiProfTxBeginFn      = "txBegin"
-    AristoApiProfTxTopFn        = "txTop"
-    AristoApiProfVidFetchFn     = "vidFetch"
-    AristoApiProfVidDisposeFn   = "vidDispose"
+    AristoApiProfCommitFn         = "commit"
+    AristoApiProfDeleteFn         = "delete"
+    AristoApiProfDelTreeFn        = "delTree"
+    AristoApiProfFetchPayloadFn   = "fetchPayload"
+    AristoApiProfFinishFn         = "finish"
+    AristoApiProfForgetFn         = "forget"
+    AristoApiProfForkTopFn        = "forkTop"
+    AristoApiProfForkWithFn       = "forkWith"
+    AristoApiProfGetFilUbeFn      = "getFilUBE"
+    AristoApiProfGetFromJournalFn = "getFromJournal"
+    AristoApiProfGetKeyRcFn       = "getKeyRc"
+    AristoApiProfHashifyFn        = "hashify"
+    AristoApiProfHasPathFn        = "hasPath"
+    AristoApiProfHikeUpFn         = "hikeUp"
+    AristoApiProfIsTopFn          = "isTop"
+    AristoApiProfLevelFn          = "level"
+    AristoApiProfNForkedFn        = "nForked"
+    AristoApiProfMergeFn          = "merge"
+    AristoApiProfMergePayloadFn   = "mergePayload"
+    AristoApiProfPathAsBlobFn     = "pathAsBlob"
+    AristoApiProfPersistFn        = "persist"
+    AristoApiProfReCentreFn       = "reCentre"
+    AristoApiProfRollbackFn       = "rollback"
+    AristoApiProfSerialiseFn      = "serialise"
+    AristoApiProfTxBeginFn        = "txBegin"
+    AristoApiProfTxTopFn          = "txTop"
+    AristoApiProfVidFetchFn       = "vidFetch"
+    AristoApiProfVidDisposeFn     = "vidDispose"
 
-    AristoApiProfBeGetVtxFn     = "be/getVtx"
-    AristoApiProfBeGetKeyFn     = "be/getKey"
-    AristoApiProfBeGetFilFn     = "be/getFil"
-    AristoApiProfBeGetIdgFn     = "be/getIfg"
-    AristoApiProfBeGetFqsFn     = "be/getFqs"
-    AristoApiProfBePutVtxFn     = "be/putVtx"
-    AristoApiProfBePutKeyFn     = "be/putKey"
-    AristoApiProfBePutFilFn     = "be/putFil"
-    AristoApiProfBePutIdgFn     = "be/putIdg"
-    AristoApiProfBePutFqsFn     = "be/putFqs"
-    AristoApiProfBePutEndFn     = "be/putEnd"
+    AristoApiProfBeGetVtxFn       = "be/getVtx"
+    AristoApiProfBeGetKeyFn       = "be/getKey"
+    AristoApiProfBeGetFilFn       = "be/getFil"
+    AristoApiProfBeGetIdgFn       = "be/getIfg"
+    AristoApiProfBeGetFqsFn       = "be/getFqs"
+    AristoApiProfBePutVtxFn       = "be/putVtx"
+    AristoApiProfBePutKeyFn       = "be/putKey"
+    AristoApiProfBePutFilFn       = "be/putFil"
+    AristoApiProfBePutIdgFn       = "be/putIdg"
+    AristoApiProfBePutFqsFn       = "be/putFqs"
+    AristoApiProfBePutEndFn       = "be/putEnd"
 
   AristoApiProfRef* = ref object of AristoApiRef
     ## Profiling API extension of `AristoApiObj`
@@ -449,6 +469,7 @@ when AutoValidateApiHooks:
     doAssert not api.forkTop.isNil
     doAssert not api.forkWith.isNil
     doAssert not api.getFilUbe.isNil
+    doAssert not api.getFromJournal.isNil
     doAssert not api.getKeyRc.isNil
     doAssert not api.hashify.isNil
     doAssert not api.hasPath.isNil
@@ -502,6 +523,7 @@ func init*(api: var AristoApiObj) =
   api.forkTop = forkTop
   api.forkWith = forkWith
   api.getFilUbe = getFilUbe
+  api.getFromJournal = getFromJournal
   api.getKeyRc = getKeyRc
   api.hashify = hashify
   api.hasPath = hasPath
@@ -529,33 +551,34 @@ func init*(T: type AristoApiRef): T =
 
 func dup*(api: AristoApiRef): AristoApiRef =
   result = AristoApiRef(
-    commit:       api.commit,
-    delete:       api.delete,
-    delTree:      api.delTree,
-    fetchPayload: api.fetchPayload,
-    finish:       api.finish,
-    forget:       api.forget,
-    forkTop:      api.forkTop,
-    forkWith:     api.forkWith,
-    getFilUbe:    api.getFilUbe,
-    getKeyRc:     api.getKeyRc,
-    hashify:      api.hashify,
-    hasPath:      api.hasPath,
-    hikeUp:       api.hikeUp,
-    isTop:        api.isTop,
-    level:        api.level,
-    nForked:      api.nForked,
-    merge:        api.merge,
-    mergePayload: api.mergePayload,
-    pathAsBlob:   api.pathAsBlob,
-    persist:      api.persist,
-    reCentre:     api.reCentre,
-    rollback:     api.rollback,
-    serialise:    api.serialise,
-    txBegin:      api.txBegin,
-    txTop:        api.txTop,
-    vidFetch:     api.vidFetch,
-    vidDispose:   api.vidDispose)
+    commit:         api.commit,
+    delete:         api.delete,
+    delTree:        api.delTree,
+    fetchPayload:   api.fetchPayload,
+    finish:         api.finish,
+    forget:         api.forget,
+    forkTop:        api.forkTop,
+    forkWith:       api.forkWith,
+    getFilUbe:      api.getFilUbe,
+    getFromJournal: api.getFromJournal,
+    getKeyRc:       api.getKeyRc,
+    hashify:        api.hashify,
+    hasPath:        api.hasPath,
+    hikeUp:         api.hikeUp,
+    isTop:          api.isTop,
+    level:          api.level,
+    nForked:        api.nForked,
+    merge:          api.merge,
+    mergePayload:   api.mergePayload,
+    pathAsBlob:     api.pathAsBlob,
+    persist:        api.persist,
+    reCentre:       api.reCentre,
+    rollback:       api.rollback,
+    serialise:      api.serialise,
+    txBegin:        api.txBegin,
+    txTop:          api.txTop,
+    vidFetch:       api.vidFetch,
+    vidDispose:     api.vidDispose)
   when AutoValidateApiHooks:
     api.validate
 
@@ -630,6 +653,11 @@ func init*(
     proc(a: AristoDbRef; b: QueueID): auto =
       AristoApiProfGetFilUbeFn.profileRunner:
         result = api.getFilUbe(a, b)
+
+  profApi.getFromJournal =
+    proc(a: BackendRef; b: Option[FilterID]; c = false): auto =
+      AristoApiProfGetFromJournalFn.profileRunner:
+        result = api.getFromJournal(a, b, c)
 
   profApi.getKeyRc =
     proc(a: AristoDbRef; b: VertexID): auto =

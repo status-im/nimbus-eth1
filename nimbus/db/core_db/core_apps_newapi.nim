@@ -365,7 +365,7 @@ proc getOldestJournalBlockNumber*(db: CoreDbRef): BlockNumber =
   ##
   let be = db.ctx.getMpt(CtGeneric).backend
   if be.parent.isAristo:
-    return db.getBlockNumber be.toAristoOldestStateRoot()
+    return db.getBlockNumber be.toAristoOldestState().stateRoot
 
 
 proc getBlockHeader*(

@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/tables,
+  std/[tables, typetraits],
   eth/common,
   results,
   ../../aristo as use_ari,
@@ -245,10 +245,14 @@ func toAristo*(mBe: CoreDbMptBackendRef): AristoDbRef =
   if not mBe.isNil and mBe.parent.isAristo:
     return mBe.AristoCoreDbMptBE.adb
 
-proc toAristoOldestStateRoot*(mBe: CoreDbMptBackendRef): Hash256 =
+proc toAristoOldestState*(
+    mBe: CoreDbMptBackendRef;
+      ): tuple[stateRoot: Hash256, blockNumber: BlockNumber] =
   if not mBe.isNil and mBe.parent.isAristo:
-    return mBe.parent.AristoCoreDbRef.adbBase.toJournalOldestStateRoot()
-  EMPTY_ROOT_HASH
+    let fil = mBe.parent.AristoCoreDbRef.adbBase.getFromJournal none(FilterID)
+    if not fil.isNil:
+      return (fil.trg, fil.fid.distinctBase.toBlockNumber)
+  (EMPTY_ROOT_HASH, 0.toBlockNumber)
 
 # ------------------------------------------------------------------------------
 # Public aristo iterators
