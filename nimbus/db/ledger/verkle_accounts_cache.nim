@@ -11,8 +11,7 @@
 import
   std/[tables, hashes, sets],
   chronicles,
-  eth/[common, rlp],
-  ../../../stateless/multi_keys,
+  eth/common,
   ../../constants,
   ../../utils/utils,
   ../access_list as ac_access_list,
@@ -21,7 +20,7 @@ import
     tree/tree
   ],
   ../verkle/verkle_accounts,
-  ".."/[core_db, verkle_distinct_tries, storage_types, transient_storage]
+  ".."/[core_db, verkle_distinct_tries, transient_storage]
 
 
 const
@@ -267,9 +266,35 @@ proc persistCode(acc: RefAccount, address: EthAddress, db: VerkleTrie) =
     else:
       VerkleTrieRef(db).updateContractCode(address, acc.account.codeHash, acc.code)
 
-proc persistStorage(acc: RefAccount, db: VerkleTrie, clearCache: bool) =
-  ## Placeholder for @agnxsh to implement using the verkle trie storage layer
-  return
+proc persistStorage(acc: RefAccount, address: EthAddress, db: VerkleTrie, clearCache: bool) =
+  if acc.overlayStorage.len == 0:
+    return
+
+  if not clearCache and acc.originalStorage.isNil:
+    acc.originalStorage = newTable[UInt256, UInt256]()
+
+  for slot, value in acc.overlayStorage:
+    var (slotAsKey, subIndex) = createTrieKeyFromSlot(slot.toBytesBE())
+    discard subIndex
+
+    if value > 0:
+      var slotBytes = slotAsKey.toBytesBE()
+      var valueToBytes = value.toBytesBE()
+      db.putSlotBytes(address, slotBytes, valueToBytes)
+
+    else:
+      ## No delete operation for now in Kaustinen
+      discard
+
+  if not clearCache:
+    # if we preserve cache, move the overlayStorage
+    # to originalStorage, related to EIP2200, EIP1283
+    for slot, value in acc.overlayStorage:
+      if value > 0:
+        acc.originalStorage[slot] = value
+      else:
+        acc.originalStorage.del(slot)
+    acc.overlayStorage.clear()
 
 proc getBalance*(ac: AccountsCache, address: EthAddress): UInt256 {.inline.} =
   let acc = ac.getAccount(address, false)
@@ -494,7 +519,7 @@ proc persist*(ac: AccountsCache,
   for address in ac.savePoint.selfDestruct:
     ac.deleteAccount(address)
 
-  for address, acc in ac.savePoint.cache:
+  for address, acc in ac.savePoint.cache:               
     case acc.persistMode()
     of Update:
       if CodeChanged in acc.flags:
@@ -502,7 +527,7 @@ proc persist*(ac: AccountsCache,
       if StorageChanged in acc.flags:
         # storageRoot must be updated first
         # before persisting account into merkle trie
-        acc.persistStorage(ac.trie, clearCache)           # --------------->>>> TODO: write the storage function @agnxsh <<<<
+        acc.persistStorage(address, ac.trie, clearCache)           # --------------->>>> TODO: write the storage function @agnxsh <<<<
       ac.trie.putAccountBytes address, acc.account
     of Remove:
       VerkleTrieRef(ac.trie).delAccountBytes address
