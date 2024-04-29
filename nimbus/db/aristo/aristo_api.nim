@@ -149,13 +149,6 @@ type
       ## pair was found on the filter or the backend, this transaction is
       ## empty.
 
-  AristoApiGetFilUbeFn* =
-    proc(db: AristoDbRef;
-         qid: QueueID;
-        ): Result[FilterRef,AristoError]
-        {.noRaise.}
-      ## Get the filter from the unfiltered backened if available.
-
   AristoApiGetFromJournalFn* =
     proc(be: BackendRef;
          fid: Option[FilterID];
@@ -382,7 +375,6 @@ type
     forget*: AristoApiForgetFn
     forkTop*: AristoApiForkTopFn
     forkWith*: AristoApiForkWithFn
-    getFilUbe*: AristoApiGetFilUbeFn
     getFromJournal*: AristoApiGetFromJournalFn
     getKeyRc*: AristoApiGetKeyRcFn
     hashify*: AristoApiHashifyFn
@@ -416,7 +408,6 @@ type
     AristoApiProfForgetFn         = "forget"
     AristoApiProfForkTopFn        = "forkTop"
     AristoApiProfForkWithFn       = "forkWith"
-    AristoApiProfGetFilUbeFn      = "getFilUBE"
     AristoApiProfGetFromJournalFn = "getFromJournal"
     AristoApiProfGetKeyRcFn       = "getKeyRc"
     AristoApiProfHashifyFn        = "hashify"
@@ -468,7 +459,6 @@ when AutoValidateApiHooks:
     doAssert not api.forget.isNil
     doAssert not api.forkTop.isNil
     doAssert not api.forkWith.isNil
-    doAssert not api.getFilUbe.isNil
     doAssert not api.getFromJournal.isNil
     doAssert not api.getKeyRc.isNil
     doAssert not api.hashify.isNil
@@ -522,7 +512,6 @@ func init*(api: var AristoApiObj) =
   api.forget = forget
   api.forkTop = forkTop
   api.forkWith = forkWith
-  api.getFilUbe = getFilUbe
   api.getFromJournal = getFromJournal
   api.getKeyRc = getKeyRc
   api.hashify = hashify
@@ -559,7 +548,6 @@ func dup*(api: AristoApiRef): AristoApiRef =
     forget:         api.forget,
     forkTop:        api.forkTop,
     forkWith:       api.forkWith,
-    getFilUbe:      api.getFilUbe,
     getFromJournal: api.getFromJournal,
     getKeyRc:       api.getKeyRc,
     hashify:        api.hashify,
@@ -648,11 +636,6 @@ func init*(
     proc(a: AristoDbRef; b: VertexID; c: HashKey; d = false): auto =
       AristoApiProfForkWithFn.profileRunner:
         result = api.forkWith(a, b, c, d)
-
-  profApi.getFilUbe =
-    proc(a: AristoDbRef; b: QueueID): auto =
-      AristoApiProfGetFilUbeFn.profileRunner:
-        result = api.getFilUbe(a, b)
 
   profApi.getFromJournal =
     proc(a: BackendRef; b: Option[FilterID]; c = false): auto =
