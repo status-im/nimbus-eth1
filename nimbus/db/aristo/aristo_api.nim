@@ -252,6 +252,27 @@ type
       ## paths used to index database leaf values can be represented as
       ## `Blob`, i.e. `PathID` type paths with an even number of nibbles.
 
+  AristoApiPersistFn* =
+    proc(db: AristoDbRef;
+         chunkedMpt = false;
+        ): Result[void,AristoError]
+        {.noRaise.}
+      ## Persistently store data onto backend database. If the system is
+      ## running without a database backend, the function returns immediately
+      ## with an error. The same happens if there is a pending transaction.
+      ##
+      ## The function merges all staged data from the top layer cache onto the
+      ## backend stage area. After that, the top layer cache is cleared.
+      ##
+      ## Finally, the staged data are merged into the physical backend
+      ## database and the staged data area is cleared. Wile performing this
+      ## last step, the recovery journal is updated (if available.)
+      ##
+      ## Staging the top layer cache might fail with a partial MPT when it is
+      ## set up from partial MPT chunks as it happens with `snap` sync
+      ## processing. In this case, the `chunkedMpt` argument must be set
+      ## `true` (see alse `fwdFilter()`.)
+
   AristoApiReCentreFn* =
     proc(db: AristoDbRef;
         ) {.noRaise.}
@@ -283,28 +304,6 @@ type
         {.noRaise.}
       ## Encode the data payload of the argument `pyl` as RLP `Blob` if
       ## it is of account type, otherwise pass the data as is.
-
-  AristoApiStowFn* =
-    proc(db: AristoDbRef;
-         persistent = false;
-         chunkedMpt = false;
-        ): Result[void,AristoError]
-        {.noRaise.}
-      ## If there is no backend while the `persistent` argument is set `true`,
-      ## the function returns immediately with an error. The same happens if
-      ## there is a pending transaction.
-      ##
-      ## The function then merges the data from the top layer cache into the
-      ## backend stage area. After that, the top layer cache is cleared.
-      ##
-      ## Staging the top layer cache might fail withh a partial MPT when it
-      ## is set up from partial MPT chunks as it happens with `snap` sync
-      ## processing. In this case, the `chunkedMpt` argument must be set
-      ## `true` (see alse `fwdFilter`.)
-      ##
-      ## If the argument `persistent` is set `true`, all the staged data are
-      ## merged into the physical backend database and the staged data area
-      ## is cleared.
 
   AristoApiTxBeginFn* =
     proc(db: AristoDbRef
@@ -370,10 +369,10 @@ type
     merge*: AristoApiMergeFn
     mergePayload*: AristoApiMergePayloadFn
     pathAsBlob*: AristoApiPathAsBlobFn
+    persist*: AristoApiPersistFn
     reCentre*: AristoApiReCentreFn
     rollback*: AristoApiRollbackFn
     serialise*: AristoApiSerialiseFn
-    stow*: AristoApiStowFn
     txBegin*: AristoApiTxBeginFn
     txTop*: AristoApiTxTopFn
     vidFetch*: AristoApiVidFetchFn
@@ -403,10 +402,10 @@ type
     AristoApiProfMergeFn        = "merge"
     AristoApiProfMergePayloadFn = "mergePayload"
     AristoApiProfPathAsBlobFn   = "pathAsBlob"
+    AristoApiProfPersistFn      = "persist"
     AristoApiProfReCentreFn     = "reCentre"
     AristoApiProfRollbackFn     = "rollback"
     AristoApiProfSerialiseFn    = "serialise"
-    AristoApiProfStowFn         = "stow"
     AristoApiProfTxBeginFn      = "txBegin"
     AristoApiProfTxTopFn        = "txTop"
     AristoApiProfVidFetchFn     = "vidFetch"
@@ -454,10 +453,10 @@ when AutoValidateApiHooks:
     doAssert not api.merge.isNil
     doAssert not api.mergePayload.isNil
     doAssert not api.pathAsBlob.isNil
+    doAssert not api.persist.isNil
     doAssert not api.reCentre.isNil
     doAssert not api.rollback.isNil
     doAssert not api.serialise.isNil
-    doAssert not api.stow.isNil
     doAssert not api.txBegin.isNil
     doAssert not api.txTop.isNil
     doAssert not api.vidFetch.isNil
@@ -507,10 +506,10 @@ func init*(api: var AristoApiObj) =
   api.merge = merge
   api.mergePayload = mergePayload
   api.pathAsBlob = pathAsBlob
+  api.persist = persist
   api.reCentre = reCentre
   api.rollback = rollback
   api.serialise = serialise
-  api.stow = stow
   api.txBegin = txBegin
   api.txTop = txTop
   api.vidFetch = vidFetch
@@ -543,10 +542,10 @@ func dup*(api: AristoApiRef): AristoApiRef =
     merge:        api.merge,
     mergePayload: api.mergePayload,
     pathAsBlob:   api.pathAsBlob,
+    persist:      api.persist,
     reCentre:     api.reCentre,
     rollback:     api.rollback,
     serialise:    api.serialise,
-    stow:         api.stow,
     txBegin:      api.txBegin,
     txTop:        api.txTop,
     vidFetch:     api.vidFetch,
@@ -677,6 +676,11 @@ func init*(
       AristoApiProfPathAsBlobFn.profileRunner:
         result = api.pathAsBlob(a)
 
+  profApi.persist =
+    proc(a: AristoDbRef; b = false): auto =
+       AristoApiProfPersistFn.profileRunner:
+        result = api.persist(a, b)
+
   profApi.reCentre =
     proc(a: AristoDbRef) =
       AristoApiProfReCentreFn.profileRunner:
@@ -691,11 +695,6 @@ func init*(
     proc(a: AristoDbRef; b: PayloadRef): auto =
       AristoApiProfSerialiseFn.profileRunner:
         result = api.serialise(a, b)
-
-  profApi.stow =
-    proc(a: AristoDbRef; b = false; c = false): auto =
-       AristoApiProfStowFn.profileRunner:
-        result = api.stow(a, b, c)
 
   profApi.txBegin =
     proc(a: AristoDbRef): auto =

@@ -69,6 +69,71 @@ iterator txWalk(tx: AristoTxRef): (AristoTxRef,LayerRef,AristoError) =
 
       yield (tx,layer,AristoError(0))
 
+# ---------
+
+proc stowImpl(
+    db: AristoDbRef;                  # Database
+    persistent: bool;                 # Stage only unless `true`
+    chunkedMpt: bool;                 # Partial data (e.g. from `snap`)
+      ): Result[void,AristoError] =
+  ## Worker for `stow()` variants.
+  ##
+  if not db.txRef.isNil:
+    return err(TxPendingTx)
+  if 0 < db.stack.len:
+    return err(TxStackGarbled)
+  if persistent and not db.canResolveBackendFilter():
+    return err(TxBackendNotWritable)
+
+  # Update Merkle hashes (unless disabled)
+  db.hashify().isOkOr:
+    return err(error[1])
+
+  let fwd = db.fwdFilter(db.top, chunkedMpt).valueOr:
+    return err(error[1])
+
+  if fwd.isValid:
+    # Merge `top` layer into `roFilter`
+    db.merge(fwd).isOkOr:
+      return err(error[1])
+
+    # Special treatment for `snap` proofs (aka `chunkedMpt`)
+    let final =
+      if chunkedMpt: LayerFinalRef(fRpp: db.top.final.fRpp)
+      else: LayerFinalRef()
+
+    # New empty top layer (probably with `snap` proofs and `vGen` carry over)
+    db.top = LayerRef(
+      delta: LayerDeltaRef(),
+      final: final)
+    if db.roFilter.isValid:
+      db.top.final.vGen = db.roFilter.vGen
+    else:
+      let rc = db.getIdgUbe()
+      if rc.isOk:
+        db.top.final.vGen = rc.value
+      else:
+        # It is OK if there was no `Idg`. Otherwise something serious happened
+        # and there is no way to recover easily.
+        doAssert rc.error == GetIdgNotFound
+
+  if persistent:
+    # Merge `roFiler` into persistent tables
+    ? db.resolveBackendFilter()
+    db.roFilter = FilterRef(nil)
+
+  # Special treatment for `snap` proofs (aka `chunkedMpt`)
+  let final =
+    if chunkedMpt: LayerFinalRef(vGen: db.vGen, fRpp: db.top.final.fRpp)
+    else: LayerFinalRef(vGen: db.vGen)
+
+  # New empty top layer (probably with `snap` proofs carry over)
+  db.top = LayerRef(
+    delta: LayerDeltaRef(),
+    final: final,
+    txUid: db.top.txUid)
+  ok()
+
 # ------------------------------------------------------------------------------
 # Public functions, getters
 # ------------------------------------------------------------------------------
@@ -397,84 +462,49 @@ proc collapse*(
   ok()
 
 # ------------------------------------------------------------------------------
-# Public functions: save database
+# Public functions: save to database
 # ------------------------------------------------------------------------------
+
+proc persist*(
+    db: AristoDbRef;                  # Database
+    chunkedMpt = false;               # Partial data (e.g. from `snap`)
+      ): Result[void,AristoError] =
+  ## Persistently store data onto backend database. If the system is running
+  ## without a database backend, the function returns immediately with an
+  ## error. The same happens if there is a pending transaction.
+  ##
+  ## The function merges all staged data from the top layer cache onto the
+  ## backend stage area. After that, the top layer cache is cleared.
+  ##
+  ## Finally, the staged data are merged into the physical backend database
+  ## and the staged data area is cleared. Wile performing this last step,
+  ## the recovery journal is updated (if available.)
+  ##
+  ## Staging the top layer cache might fail with a partial MPT when it is
+  ## set up from partial MPT chunks as it happens with `snap` sync processing.
+  ## In this case, the `chunkedMpt` argument must be set `true` (see alse
+  ## `fwdFilter()`.)
+  ##
+  db.stowImpl(persistent=true, chunkedMpt=chunkedMpt)
 
 proc stow*(
     db: AristoDbRef;                  # Database
-    persistent = false;               # Stage only unless `true`
     chunkedMpt = false;               # Partial data (e.g. from `snap`)
       ): Result[void,AristoError] =
-  ## If there is no backend while the `persistent` argument is set `true`,
-  ## the function returns immediately with an error. The same happens if there
-  ## is a pending transaction.
+  ## This function is similar to `persist()` stopping short of performing the
+  ## final step stoting on the persistent database. It fails if there is a
+  ## pending transaction.
   ##
-  ## The function then merges the data from the top layer cache into the
-  ## backend stage area. After that, the top layer cache is cleared.
+  ## The function merges all staged data from the top layer cache onto the
+  ## backend stage area and leaves it there. This function can be seen as
+  ## a sort of a bottom level transaction `commit()`.
   ##
-  ## Staging the top layer cache might fail withh a partial MPT when it is
+  ## Staging the top layer cache might fail with a partial MPT when it is
   ## set up from partial MPT chunks as it happens with `snap` sync processing.
   ## In this case, the `chunkedMpt` argument must be set `true` (see alse
-  ## `fwdFilter`.)
+  ## `fwdFilter()`.)
   ##
-  ## If the argument `persistent` is set `true`, all the staged data are merged
-  ## into the physical backend database and the staged data area is cleared.
-  ##
-  if not db.txRef.isNil:
-    return err(TxPendingTx)
-  if 0 < db.stack.len:
-    return err(TxStackGarbled)
-  if persistent and not db.canResolveBackendFilter():
-    return err(TxBackendNotWritable)
-
-  # Updatre Merkle hashes (unless disabled)
-  db.hashify().isOkOr:
-    return err(error[1])
-
-  let fwd = db.fwdFilter(db.top, chunkedMpt).valueOr:
-    return err(error[1])
-
-  if fwd.isValid:
-    # Merge `top` layer into `roFilter`
-    db.merge(fwd).isOkOr:
-      return err(error[1])
-
-    # Special treatment for `snap` proofs (aka `chunkedMpt`)
-    let final =
-      if chunkedMpt: LayerFinalRef(fRpp: db.top.final.fRpp)
-      else: LayerFinalRef()
-
-    # New empty top layer (probably with `snap` proofs and `vGen` carry over)
-    db.top = LayerRef(
-      delta: LayerDeltaRef(),
-      final: final)
-    if db.roFilter.isValid:
-      db.top.final.vGen = db.roFilter.vGen
-    else:
-      let rc = db.getIdgUbe()
-      if rc.isOk:
-        db.top.final.vGen = rc.value
-      else:
-        # It is OK if there was no `Idg`. Otherwise something serious happened
-        # and there is no way to recover easily.
-        doAssert rc.error == GetIdgNotFound
-
-  if persistent:
-    # Merge `roFiler` into persistent tables
-    ? db.resolveBackendFilter()
-    db.roFilter = FilterRef(nil)
-
-  # Special treatment for `snap` proofs (aka `chunkedMpt`)
-  let final =
-    if chunkedMpt: LayerFinalRef(vGen: db.vGen, fRpp: db.top.final.fRpp)
-    else: LayerFinalRef(vGen: db.vGen)
-
-  # New empty top layer (probably with `snap` proofs carry over)
-  db.top = LayerRef(
-    delta: LayerDeltaRef(),
-    final: final,
-    txUid: db.top.txUid)
-  ok()
+  db.stowImpl(persistent=false, chunkedMpt=chunkedMpt)
 
 # ------------------------------------------------------------------------------
 # End

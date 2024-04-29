@@ -687,7 +687,7 @@ proc persistent*(
   let
     api = base.api
     mpt = base.ctx.mpt
-    rc = api.stow(mpt, persistent = true)
+    rc = api.persist(mpt)
   if rc.isOk:
     ok()
   elif api.level(mpt) == 0:
