@@ -74,7 +74,7 @@ proc getLayerStateRoots*(
   err(FilStateRootMismatch)
 
 
-proc getFilterFromFifo*(
+proc getFromJournal*(
     be: BackendRef;
     fid = none(FilterID);
     earlierOK = false;
@@ -127,7 +127,7 @@ proc getFilterFromFifo*(
   ok fip
 
 
-proc getFilterOverlap*(
+proc getJournalOverlap*(
     be: BackendRef;
     filter: FilterRef;
       ): int =
@@ -155,7 +155,7 @@ proc getFilterOverlap*(
 
   # Check against some stored filter IDs
   if filter.isValid:
-    let fp = be.getFilterFromFifo(some(filter.fid), earlierOK=true).valueOr:
+    let fp = be.getFromJournal(some(filter.fid), earlierOK=true).valueOr:
       return 0
     if filter.trg == fp.fil.trg:
       return 1 + fp.inx

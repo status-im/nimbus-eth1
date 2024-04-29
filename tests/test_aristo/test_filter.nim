@@ -842,7 +842,7 @@ proc testFilterBacklog*(
 
     # Realign to earlier state
     xb = block:
-      let rc = db.forkBackLog(episode = episode)
+      let rc = db.forkByJournal(episode = episode)
       xCheckRc rc.error == 0
       rc.value
     block:

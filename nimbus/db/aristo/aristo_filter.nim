@@ -148,7 +148,7 @@ proc resolveBackendFilter*(
     block getInstr:
       # Compile instruction for updating filters on the cascaded fifos
       if db.roFilter.isValid:
-        let ovLap = be.getFilterOverlap db.roFilter
+        let ovLap = be.getJournalOverlap db.roFilter
         if 0 < ovLap:
           instr = ? be.fifosDelete ovLap         # Revert redundant entries
           break getInstr
@@ -178,7 +178,7 @@ proc resolveBackendFilter*(
   ok()
 
 
-proc forkBackLog*(
+proc forkByJournal*(
     db: AristoDbRef;
     episode: int;
       ): Result[AristoDbRef,AristoError] =
@@ -202,7 +202,7 @@ proc forkBackLog*(
   clone.roFilter = instr.fil
   ok clone
 
-proc forkBackLog*(
+proc forkByJournal*(
     db: AristoDbRef;
     fid: Option[FilterID];
     earlierOK = false;
@@ -218,8 +218,8 @@ proc forkBackLog*(
   if be.isNil:
     return err(FilBackendMissing)
 
-  let fip = ? be.getFilterFromFifo(fid, earlierOK)
-  db.forkBackLog fip.inx
+  let fip = ? be.getFromJournal(fid, earlierOK)
+  db.forkByJournal fip.inx
 
 # ------------------------------------------------------------------------------
 # End
