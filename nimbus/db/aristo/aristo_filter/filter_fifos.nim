@@ -9,7 +9,7 @@
 # except according to those terms.
 
 import
-  std/tables,
+  std/[options, tables],
   results,
   ".."/[aristo_desc, aristo_desc/desc_backend],
   "."/[filter_merge, filter_scheduler]
@@ -40,18 +40,24 @@ template joinFiltersOrReturn(upper, lower: FilterRef): FilterRef =
     return err(rc.error[1])
   rc.value
 
-template nextFidOrReturn(be: BackendRef): FilterID =
+template getNextFidOrReturn(be: BackendRef; fid: Option[FilterID]): FilterID =
   ## Get next free filter ID, or exit function using this wrapper
-  var fid = FilterID(1)
-  block:
-    let qid = be.journal[0]
-    if qid.isValid:
-      let rc = be.getFilFn qid
-      if rc.isOK:
-        fid = rc.value.fid + 1
-      elif rc.error != GetFilNotFound:
-        return err(rc.error)
-  fid
+  var nxtFid = fid.get(otherwise = FilterID(1))
+
+  let qid = be.journal[0]
+  if qid.isValid:
+    let rc = be.getFilFn qid
+    if rc.isErr:
+      # Must exist when `qid` exists
+      return err(rc.error)
+    elif fid.isNone:
+      # Stepwise increase is the default
+      nxtFid = rc.value.fid + 1
+    elif nxtFid <= rc.value.fid:
+      # The bespoke filter IDs must be greater than the existing ones
+      return err(FilQuBespokeFidTooSmall)
+
+  nxtFid
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -60,6 +66,7 @@ template nextFidOrReturn(be: BackendRef): FilterID =
 proc fifosStore*(
     be: BackendRef;                              # Database backend
     filter: FilterRef;                           # Filter to save
+    fid: Option[FilterID];                       # Next filter ID (if any)
       ): Result[FifoInstr,AristoError] =
   ## Calculate backend instructions for storing the arguent `filter` on the
   ## argument backend `be`.
@@ -126,7 +133,7 @@ proc fifosStore*(
     return err(FilExecSaveMissing)
 
   # Set next filter ID
-  filter.fid = be.nextFidOrReturn
+  filter.fid = be.getNextFidOrReturn fid
 
   ok instr
 

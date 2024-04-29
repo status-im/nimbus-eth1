@@ -128,7 +128,10 @@ proc schedStow(
     filterMeter = if db.roFilter.isNil: 0
                   else: db.roFilter.sTab.len + db.roFilter.kMap.len
     persistent = MaxFilterBulk < max(layersMeter, filterMeter)
-  db.stow(persistent = persistent, chunkedMpt = chunkedMpt)
+  if persistent:
+    db.persist(chunkedMpt=chunkedMpt)
+  else:
+    db.stow(chunkedMpt=chunkedMpt)
 
 proc saveToBackend(
     tx: var AristoTxRef;

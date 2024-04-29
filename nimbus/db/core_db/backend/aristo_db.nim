@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/tables,
+  std/[tables, typetraits],
   eth/common,
   results,
   ../../aristo as use_ari,
@@ -132,10 +132,13 @@ proc baseMethods(db: AristoCoreDbRef): CoreDbBaseFns =
       db.tracer.push(flags)
     CoreDxCaptRef(methods: db.tracer.cptMethods)
 
-  proc persistent(): CoreDbRc[void] =
+  proc persistent(bn: Option[BlockNumber]): CoreDbRc[void] =
     const info = "persistentFn()"
-    ? aBase.persistent info
+    let fid =
+      if bn.isNone: none(FilterID)
+      else: some(bn.unsafeGet.truncate(uint64).FilterID)
     ? kBase.persistent info
+    ? aBase.persistent(fid, info)
     ok()
 
   CoreDbBaseFns(
@@ -179,8 +182,8 @@ proc baseMethods(db: AristoCoreDbRef): CoreDbBaseFns =
     newCaptureFn: proc(flags: set[CoreDbCaptFlags]): CoreDbRc[CoreDxCaptRef] =
       ok(db.bless flags.tracerSetup()),
 
-    persistentFn: proc(): CoreDbRc[void] =
-      persistent())
+    persistentFn: proc(bn: Option[BlockNumber]): CoreDbRc[void] =
+      persistent(bn))
 
 # ------------------------------------------------------------------------------
 # Public constructor and helper
@@ -242,10 +245,14 @@ func toAristo*(mBe: CoreDbMptBackendRef): AristoDbRef =
   if not mBe.isNil and mBe.parent.isAristo:
     return mBe.AristoCoreDbMptBE.adb
 
-proc toAristoOldestStateRoot*(mBe: CoreDbMptBackendRef): Hash256 =
+proc toAristoOldestState*(
+    mBe: CoreDbMptBackendRef;
+      ): tuple[stateRoot: Hash256, blockNumber: BlockNumber] =
   if not mBe.isNil and mBe.parent.isAristo:
-    return mBe.parent.AristoCoreDbRef.adbBase.toJournalOldestStateRoot()
-  EMPTY_ROOT_HASH
+    let fil = mBe.parent.AristoCoreDbRef.adbBase.getFromJournal none(FilterID)
+    if not fil.isNil:
+      return (fil.trg, fil.fid.distinctBase.toBlockNumber)
+  (EMPTY_ROOT_HASH, 0.toBlockNumber)
 
 # ------------------------------------------------------------------------------
 # Public aristo iterators

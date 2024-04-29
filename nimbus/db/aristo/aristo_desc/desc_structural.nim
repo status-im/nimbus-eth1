@@ -128,6 +128,11 @@ type
     final*: LayerFinalRef            ## Stored as latest version
     txUid*: uint                     ## Transaction identifier if positive
 
+  FilterIndexPair* = object
+    ## Helper structure for fetching fiters from journal.
+    inx*: int                        ## Non negative journal index. latest=`0`
+    fil*: FilterRef                  ## Valid filter
+
   # ----------------------
 
   QidLayoutRef* = ref object
@@ -137,14 +142,14 @@ type
 
   QidSpec* = tuple
     ## Layout of a filter ID slot queue
-    size: uint                     ## Capacity of queue, length within `1..wrap`
-    width: uint                    ## Instance gaps (relative to prev. item)
-    wrap: QueueID                  ## Range `1..wrap` for round-robin queue
+    size: uint                       ## Queue capacity, length within `1..wrap`
+    width: uint                      ## Instance gaps (relative to prev. item)
+    wrap: QueueID                    ## Range `1..wrap` for round-robin queue
 
   QidSchedRef* = ref object of RootRef
     ## Current state of the filter queues
-    ctx*: QidLayoutRef             ## Organisation of the FIFO
-    state*: seq[(QueueID,QueueID)] ## Current fill state
+    ctx*: QidLayoutRef               ## Organisation of the FIFO
+    state*: seq[(QueueID,QueueID)]   ## Current fill state
 
 const
   DefaultQidWrap = QueueID(0x3fff_ffff_ffff_ffffu64)

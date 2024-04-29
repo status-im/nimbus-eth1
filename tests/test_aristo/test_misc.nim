@@ -224,10 +224,11 @@ proc validate(db: QTabRef; scd: QidSchedRef; serial: int; relax: bool): bool =
   else:
     xCheck db.len == scd.len
 
-  proc qFn(qid: QueueID): FilterID =
+  proc qFn(qid: QueueID): Result[FilterID,void] =
     let val = db.getOrDefault(qid, QValRef(nil))
-    if not val.isNil:
-      return val.fid
+    if val.isNil:
+      return err()
+    ok val.fid
 
   # Test filter ID selection
   var lastFid = FilterID(serial + 1)

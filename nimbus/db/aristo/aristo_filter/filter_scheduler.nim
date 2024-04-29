@@ -10,6 +10,7 @@
 
 import
   std/[algorithm, sequtils, typetraits],
+  results,
   ".."/[aristo_constants, aristo_desc]
 
 type
@@ -28,20 +29,23 @@ type
     DequQid                        ## Store merged local queue items
     DelQid                         ## Delete entry from last overflow queue
 
-  QuFilMap* = proc(qid: QueueID): FilterID {.gcsafe, raises: [].}
-    ## The map `fn: QueueID -> FilterID` can be augmented to a strictly
-    ## *decreasing* map `g: {0 .. N} -> FilterID`, with `g = fn([])`
+  QuFilMap* = proc(qid: QueueID): Result[FilterID,void] {.gcsafe, raises: [].}
+    ## A map `fn: QueueID -> FilterID` of type `QuFilMap` must preserve the
+    ## order relation on the image of `fn()` defined as
     ##
-    ## * `i < j` => `fn(fifo[j]) < fn(fifo[i])`
+    ## * `fn(fifo[j]) < fn(fifo[i])` <=> `i < j`
     ##
-    ## for a `fifo` of type `QidSchedRef`, `N = fifo.len` and the function
-    ## `[]: {0 .. N} -> QueueID` as defined below.
+    ## where `[]` is defined as the index function `[]: {0 .. N-1} -> QueueID`,
+    ## `N = fifo.len`.
     ##
-    ## This *decreasing* requirement can be seen as a generalisation of a
-    ## block chain scenario with `i`, `j`  backward steps into the past and
-    ## the `FilterID` as the block number.
+    ## Any injective function `fn()` (aka monomorphism) will do.
     ##
-    ## In order to flag an error, `FilterID(0)` must be returned.
+    ## This definition decouples access to ordered journal records from the
+    ## storage of these records on the database. The records are accessed via
+    ## `QueueID` type keys while the order is defined by a `FilterID` type
+    ## scalar.
+    ##
+    ## In order to flag an error, `err()` must be returned.
 
 const
   ZeroQidPair = (QueueID(0),QueueID(0))
@@ -610,31 +614,29 @@ func `[]`*(
 
 proc le*(
     fifo: QidSchedRef;                             # Cascaded fifos descriptor
-    fid: FilterID;                                 # Upper bound
+    fid: FilterID;                                 # Upper (or right) bound
     fn: QuFilMap;                                  # QueueID/FilterID mapping
     forceEQ = false;                               # Check for strict equality
       ): QueueID =
-  ## Find the `qid` address of type `QueueID` with `fn(qid) <= fid` and
-  ## `fid < fn(qid+1)`.
+  ## Find the `qid` address of type `QueueID` with `fn(qid) <= fid` with
+  ## maximal `fn(qid)`. The requirements on argument map `fn()` of type
+  ## `QuFilMap` has been commented on at the type definition.
   ##
-  ## If `fn()` returns `FilterID(0)`, then this function returns `QueueID(0)`
-  ##
-  ## The argument type `QuFilMap` of map `fn()` has been commented on earlier.
+  ## This function returns `QueueID(0)` if `fn()` returns `err()` at some
+  ## stage of the algorithm applied here.
   ##
   var
     left = 0
     right = fifo.len - 1
 
   template toFid(qid: QueueID): FilterID =
-    let w = fn(qid)
-    if not w.isValid:
+    fn(qid).valueOr:
       return QueueID(0) # exit hosting function environment
-    w
 
-  # The algorithm below tryes to avoid `toFid()` as much as possible because
-  # it might invoke an extra database lookup.
+  # The algorithm below trys to avoid `toFid()` as much as possible because
+  # it might invoke some extra database lookup.
 
-  if fid.isValid and 0 <= right:
+  if 0 <= right:
     # Check left fringe
     let
       maxQid = fifo[left]
@@ -656,7 +658,7 @@ proc le*(
     # So `fifo[right] < fid`
 
     # Bisection
-    var rightQid = minQid        # Might be used as end result
+    var rightQid = minQid                          # Might be used as end result
     while 1 < right - left:
       let
         pivot = (left + right) div 2
@@ -671,10 +673,10 @@ proc le*(
       #
       # with `fifo[left].toFid > fid > fifo[right].toFid`
       #
-      if pivFid < fid:           # fid >= fifo[half].toFid:
+      if pivFid < fid:                             # fid >= fifo[half].toFid:
         right = pivot
         rightQid = pivQid
-      elif fid < pivFid:         # fifo[half].toFid > fid
+      elif fid < pivFid:                           # fifo[half].toFid > fid
         left = pivot
       else:
         return pivQid
@@ -682,10 +684,11 @@ proc le*(
     # Now: `fifo[right].toFid < fid < fifo[left].toFid` (and `right == left+1`).
     if not forceEQ:
       # Make sure that `fifo[right].toFid` exists
-      if rightQid.fn.isValid:
+      if fn(rightQid).isOk:
         return rightQid
 
   # Otherwise QueueID(0)
+
 
 proc eq*(
     fifo: QidSchedRef;                             # Cascaded fifos descriptor

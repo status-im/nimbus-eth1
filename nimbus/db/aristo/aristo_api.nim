@@ -13,10 +13,11 @@
 
 
 import
-  std/times,
+  std/[options, times],
   eth/[common, trie/nibbles],
   results,
   ./aristo_desc/desc_backend,
+  ./aristo_filter/filter_helpers,
   ./aristo_init/memory_db,
   "."/[aristo_delete, aristo_desc, aristo_fetch, aristo_get, aristo_hashify,
        aristo_hike, aristo_init, aristo_merge, aristo_path, aristo_profile,
@@ -148,12 +149,22 @@ type
       ## pair was found on the filter or the backend, this transaction is
       ## empty.
 
-  AristoApiGetFilUbeFn* =
-    proc(db: AristoDbRef;
-         qid: QueueID;
-        ): Result[FilterRef,AristoError]
+  AristoApiGetFromJournalFn* =
+    proc(be: BackendRef;
+         fid: Option[FilterID];
+         earlierOK = false;
+        ): Result[FilterIndexPair,AristoError]
         {.noRaise.}
-      ## Get the filter from the unfiltered backened if available.
+      ## For a positive argument `fid`, find the filter on the journal with ID
+      ## not larger than `fid` (i e. the resulting filter might be older.)
+      ##
+      ## If the argument `earlierOK` is passed `false`, the function succeeds
+      ## only if the filter ID of the returned filter is equal to the argument
+      ## `fid`.
+      ##
+      ## In case that the argument `fid` is zera (i.e. `FilterID(0)`), the
+      ## filter with the smallest filter ID (i.e. the oldest filter) is
+      ## returned. In that case, the argument `earlierOK` is ignored.
 
   AristoApiGetKeyRcFn* =
     proc(db: AristoDbRef;
@@ -252,6 +263,33 @@ type
       ## paths used to index database leaf values can be represented as
       ## `Blob`, i.e. `PathID` type paths with an even number of nibbles.
 
+  AristoApiPersistFn* =
+    proc(db: AristoDbRef;
+         nxtFid = none(FilterID);
+         chunkedMpt = false;
+        ): Result[void,AristoError]
+        {.noRaise.}
+      ## Persistently store data onto backend database. If the system is
+      ## running without a database backend, the function returns immediately
+      ## with an error. The same happens if there is a pending transaction.
+      ##
+      ## The function merges all staged data from the top layer cache onto the
+      ## backend stage area. After that, the top layer cache is cleared.
+      ##
+      ## Finally, the staged data are merged into the physical backend
+      ## database and the staged data area is cleared. Wile performing this
+      ## last step, the recovery journal is updated (if available.)
+      ##
+      ## If the argument `nxtFid` is passed non-zero, it will be the ID for
+      ## the next recovery journal record. If non-zero, this ID must be greater
+      ## than all previous IDs (e.g. block number when storing after block
+      ## execution.)
+      ##
+      ## Staging the top layer cache might fail with a partial MPT when it is
+      ## set up from partial MPT chunks as it happens with `snap` sync
+      ## processing. In this case, the `chunkedMpt` argument must be set
+      ## `true` (see alse `fwdFilter()`.)
+
   AristoApiReCentreFn* =
     proc(db: AristoDbRef;
         ) {.noRaise.}
@@ -283,28 +321,6 @@ type
         {.noRaise.}
       ## Encode the data payload of the argument `pyl` as RLP `Blob` if
       ## it is of account type, otherwise pass the data as is.
-
-  AristoApiStowFn* =
-    proc(db: AristoDbRef;
-         persistent = false;
-         chunkedMpt = false;
-        ): Result[void,AristoError]
-        {.noRaise.}
-      ## If there is no backend while the `persistent` argument is set `true`,
-      ## the function returns immediately with an error. The same happens if
-      ## there is a pending transaction.
-      ##
-      ## The function then merges the data from the top layer cache into the
-      ## backend stage area. After that, the top layer cache is cleared.
-      ##
-      ## Staging the top layer cache might fail withh a partial MPT when it
-      ## is set up from partial MPT chunks as it happens with `snap` sync
-      ## processing. In this case, the `chunkedMpt` argument must be set
-      ## `true` (see alse `fwdFilter`.)
-      ##
-      ## If the argument `persistent` is set `true`, all the staged data are
-      ## merged into the physical backend database and the staged data area
-      ## is cleared.
 
   AristoApiTxBeginFn* =
     proc(db: AristoDbRef
@@ -359,7 +375,7 @@ type
     forget*: AristoApiForgetFn
     forkTop*: AristoApiForkTopFn
     forkWith*: AristoApiForkWithFn
-    getFilUbe*: AristoApiGetFilUbeFn
+    getFromJournal*: AristoApiGetFromJournalFn
     getKeyRc*: AristoApiGetKeyRcFn
     hashify*: AristoApiHashifyFn
     hasPath*: AristoApiHasPathFn
@@ -370,10 +386,10 @@ type
     merge*: AristoApiMergeFn
     mergePayload*: AristoApiMergePayloadFn
     pathAsBlob*: AristoApiPathAsBlobFn
+    persist*: AristoApiPersistFn
     reCentre*: AristoApiReCentreFn
     rollback*: AristoApiRollbackFn
     serialise*: AristoApiSerialiseFn
-    stow*: AristoApiStowFn
     txBegin*: AristoApiTxBeginFn
     txTop*: AristoApiTxTopFn
     vidFetch*: AristoApiVidFetchFn
@@ -384,45 +400,45 @@ type
     ## Index/name mapping for profile slots
     AristoApiProfTotal          = "total"
 
-    AristoApiProfCommitFn       = "commit"
-    AristoApiProfDeleteFn       = "delete"
-    AristoApiProfDelTreeFn      = "delTree"
-    AristoApiProfFetchPayloadFn = "fetchPayload"
-    AristoApiProfFinishFn       = "finish"
-    AristoApiProfForgetFn       = "forget"
-    AristoApiProfForkTopFn      = "forkTop"
-    AristoApiProfForkWithFn     = "forkWith"
-    AristoApiProfGetFilUbeFn    = "getFilUBE"
-    AristoApiProfGetKeyRcFn     = "getKeyRc"
-    AristoApiProfHashifyFn      = "hashify"
-    AristoApiProfHasPathFn      = "hasPath"
-    AristoApiProfHikeUpFn       = "hikeUp"
-    AristoApiProfIsTopFn        = "isTop"
-    AristoApiProfLevelFn        = "level"
-    AristoApiProfNForkedFn      = "nForked"
-    AristoApiProfMergeFn        = "merge"
-    AristoApiProfMergePayloadFn = "mergePayload"
-    AristoApiProfPathAsBlobFn   = "pathAsBlob"
-    AristoApiProfReCentreFn     = "reCentre"
-    AristoApiProfRollbackFn     = "rollback"
-    AristoApiProfSerialiseFn    = "serialise"
-    AristoApiProfStowFn         = "stow"
-    AristoApiProfTxBeginFn      = "txBegin"
-    AristoApiProfTxTopFn        = "txTop"
-    AristoApiProfVidFetchFn     = "vidFetch"
-    AristoApiProfVidDisposeFn   = "vidDispose"
+    AristoApiProfCommitFn         = "commit"
+    AristoApiProfDeleteFn         = "delete"
+    AristoApiProfDelTreeFn        = "delTree"
+    AristoApiProfFetchPayloadFn   = "fetchPayload"
+    AristoApiProfFinishFn         = "finish"
+    AristoApiProfForgetFn         = "forget"
+    AristoApiProfForkTopFn        = "forkTop"
+    AristoApiProfForkWithFn       = "forkWith"
+    AristoApiProfGetFromJournalFn = "getFromJournal"
+    AristoApiProfGetKeyRcFn       = "getKeyRc"
+    AristoApiProfHashifyFn        = "hashify"
+    AristoApiProfHasPathFn        = "hasPath"
+    AristoApiProfHikeUpFn         = "hikeUp"
+    AristoApiProfIsTopFn          = "isTop"
+    AristoApiProfLevelFn          = "level"
+    AristoApiProfNForkedFn        = "nForked"
+    AristoApiProfMergeFn          = "merge"
+    AristoApiProfMergePayloadFn   = "mergePayload"
+    AristoApiProfPathAsBlobFn     = "pathAsBlob"
+    AristoApiProfPersistFn        = "persist"
+    AristoApiProfReCentreFn       = "reCentre"
+    AristoApiProfRollbackFn       = "rollback"
+    AristoApiProfSerialiseFn      = "serialise"
+    AristoApiProfTxBeginFn        = "txBegin"
+    AristoApiProfTxTopFn          = "txTop"
+    AristoApiProfVidFetchFn       = "vidFetch"
+    AristoApiProfVidDisposeFn     = "vidDispose"
 
-    AristoApiProfBeGetVtxFn     = "be/getVtx"
-    AristoApiProfBeGetKeyFn     = "be/getKey"
-    AristoApiProfBeGetFilFn     = "be/getFil"
-    AristoApiProfBeGetIdgFn     = "be/getIfg"
-    AristoApiProfBeGetFqsFn     = "be/getFqs"
-    AristoApiProfBePutVtxFn     = "be/putVtx"
-    AristoApiProfBePutKeyFn     = "be/putKey"
-    AristoApiProfBePutFilFn     = "be/putFil"
-    AristoApiProfBePutIdgFn     = "be/putIdg"
-    AristoApiProfBePutFqsFn     = "be/putFqs"
-    AristoApiProfBePutEndFn     = "be/putEnd"
+    AristoApiProfBeGetVtxFn       = "be/getVtx"
+    AristoApiProfBeGetKeyFn       = "be/getKey"
+    AristoApiProfBeGetFilFn       = "be/getFil"
+    AristoApiProfBeGetIdgFn       = "be/getIfg"
+    AristoApiProfBeGetFqsFn       = "be/getFqs"
+    AristoApiProfBePutVtxFn       = "be/putVtx"
+    AristoApiProfBePutKeyFn       = "be/putKey"
+    AristoApiProfBePutFilFn       = "be/putFil"
+    AristoApiProfBePutIdgFn       = "be/putIdg"
+    AristoApiProfBePutFqsFn       = "be/putFqs"
+    AristoApiProfBePutEndFn       = "be/putEnd"
 
   AristoApiProfRef* = ref object of AristoApiRef
     ## Profiling API extension of `AristoApiObj`
@@ -443,7 +459,7 @@ when AutoValidateApiHooks:
     doAssert not api.forget.isNil
     doAssert not api.forkTop.isNil
     doAssert not api.forkWith.isNil
-    doAssert not api.getFilUbe.isNil
+    doAssert not api.getFromJournal.isNil
     doAssert not api.getKeyRc.isNil
     doAssert not api.hashify.isNil
     doAssert not api.hasPath.isNil
@@ -454,10 +470,10 @@ when AutoValidateApiHooks:
     doAssert not api.merge.isNil
     doAssert not api.mergePayload.isNil
     doAssert not api.pathAsBlob.isNil
+    doAssert not api.persist.isNil
     doAssert not api.reCentre.isNil
     doAssert not api.rollback.isNil
     doAssert not api.serialise.isNil
-    doAssert not api.stow.isNil
     doAssert not api.txBegin.isNil
     doAssert not api.txTop.isNil
     doAssert not api.vidFetch.isNil
@@ -496,7 +512,7 @@ func init*(api: var AristoApiObj) =
   api.forget = forget
   api.forkTop = forkTop
   api.forkWith = forkWith
-  api.getFilUbe = getFilUbe
+  api.getFromJournal = getFromJournal
   api.getKeyRc = getKeyRc
   api.hashify = hashify
   api.hasPath = hasPath
@@ -507,10 +523,10 @@ func init*(api: var AristoApiObj) =
   api.merge = merge
   api.mergePayload = mergePayload
   api.pathAsBlob = pathAsBlob
+  api.persist = persist
   api.reCentre = reCentre
   api.rollback = rollback
   api.serialise = serialise
-  api.stow = stow
   api.txBegin = txBegin
   api.txTop = txTop
   api.vidFetch = vidFetch
@@ -524,33 +540,33 @@ func init*(T: type AristoApiRef): T =
 
 func dup*(api: AristoApiRef): AristoApiRef =
   result = AristoApiRef(
-    commit:       api.commit,
-    delete:       api.delete,
-    delTree:      api.delTree,
-    fetchPayload: api.fetchPayload,
-    finish:       api.finish,
-    forget:       api.forget,
-    forkTop:      api.forkTop,
-    forkWith:     api.forkWith,
-    getFilUbe:    api.getFilUbe,
-    getKeyRc:     api.getKeyRc,
-    hashify:      api.hashify,
-    hasPath:      api.hasPath,
-    hikeUp:       api.hikeUp,
-    isTop:        api.isTop,
-    level:        api.level,
-    nForked:      api.nForked,
-    merge:        api.merge,
-    mergePayload: api.mergePayload,
-    pathAsBlob:   api.pathAsBlob,
-    reCentre:     api.reCentre,
-    rollback:     api.rollback,
-    serialise:    api.serialise,
-    stow:         api.stow,
-    txBegin:      api.txBegin,
-    txTop:        api.txTop,
-    vidFetch:     api.vidFetch,
-    vidDispose:   api.vidDispose)
+    commit:         api.commit,
+    delete:         api.delete,
+    delTree:        api.delTree,
+    fetchPayload:   api.fetchPayload,
+    finish:         api.finish,
+    forget:         api.forget,
+    forkTop:        api.forkTop,
+    forkWith:       api.forkWith,
+    getFromJournal: api.getFromJournal,
+    getKeyRc:       api.getKeyRc,
+    hashify:        api.hashify,
+    hasPath:        api.hasPath,
+    hikeUp:         api.hikeUp,
+    isTop:          api.isTop,
+    level:          api.level,
+    nForked:        api.nForked,
+    merge:          api.merge,
+    mergePayload:   api.mergePayload,
+    pathAsBlob:     api.pathAsBlob,
+    persist:        api.persist,
+    reCentre:       api.reCentre,
+    rollback:       api.rollback,
+    serialise:      api.serialise,
+    txBegin:        api.txBegin,
+    txTop:          api.txTop,
+    vidFetch:       api.vidFetch,
+    vidDispose:     api.vidDispose)
   when AutoValidateApiHooks:
     api.validate
 
@@ -621,10 +637,10 @@ func init*(
       AristoApiProfForkWithFn.profileRunner:
         result = api.forkWith(a, b, c, d)
 
-  profApi.getFilUbe =
-    proc(a: AristoDbRef; b: QueueID): auto =
-      AristoApiProfGetFilUbeFn.profileRunner:
-        result = api.getFilUbe(a, b)
+  profApi.getFromJournal =
+    proc(a: BackendRef; b: Option[FilterID]; c = false): auto =
+      AristoApiProfGetFromJournalFn.profileRunner:
+        result = api.getFromJournal(a, b, c)
 
   profApi.getKeyRc =
     proc(a: AristoDbRef; b: VertexID): auto =
@@ -677,6 +693,11 @@ func init*(
       AristoApiProfPathAsBlobFn.profileRunner:
         result = api.pathAsBlob(a)
 
+  profApi.persist =
+    proc(a: AristoDbRef; b = none(FilterID); c = false): auto =
+       AristoApiProfPersistFn.profileRunner:
+        result = api.persist(a, b, c)
+
   profApi.reCentre =
     proc(a: AristoDbRef) =
       AristoApiProfReCentreFn.profileRunner:
@@ -691,11 +712,6 @@ func init*(
     proc(a: AristoDbRef; b: PayloadRef): auto =
       AristoApiProfSerialiseFn.profileRunner:
         result = api.serialise(a, b)
-
-  profApi.stow =
-    proc(a: AristoDbRef; b = false; c = false): auto =
-       AristoApiProfStowFn.profileRunner:
-        result = api.stow(a, b, c)
 
   profApi.txBegin =
     proc(a: AristoDbRef): auto =

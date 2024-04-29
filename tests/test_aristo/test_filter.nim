@@ -186,7 +186,7 @@ proc dbTriplet(w: LeafQuartet; rdbPath: string): Result[DbTriplet,AristoError] =
       db.finish(flush=true)
       check report.error == 0
       return err(report.error)
-    let rc = db.stow(persistent=true)
+    let rc = db.persist()
     if rc.isErr:
       check rc.error == 0
       return
@@ -406,11 +406,10 @@ proc checkFilterTrancoderOk(
 # -------------------------
 
 proc qid2fidFn(be: BackendRef): QuFilMap =
-  result = proc(qid: QueueID): FilterID =
-    let rc = be.getFilFn qid
-    if rc.isErr:
-      return FilterID(0)
-    rc.value.fid
+  result = proc(qid: QueueID): Result[FilterID,void] =
+    let fil = be.getFilFn(qid).valueOr:
+      return err()
+    ok fil.fid
 
 proc storeFilter(
     be: BackendRef;
@@ -418,7 +417,7 @@ proc storeFilter(
       ): bool =
   ## ..
   let instr = block:
-    let rc = be.fifosStore filter
+    let rc = be.fifosStore(filter, none(FilterID))
     xCheckRc rc.error == 0
     rc.value
 
@@ -590,13 +589,13 @@ proc testDistributedAccess*(
 
       # Clause (9) from `aristo/README.md` example
       block:
-        let rc = db1.stow(persistent=true)
+        let rc = db1.persist()
         xCheckRc rc.error == 0
       xCheck db1.roFilter == FilterRef(nil)
       xCheck db2.roFilter == db3.roFilter
 
       block:
-        let rc = db2.stow(persistent=false)
+        let rc = db2.stow() # non-persistent
         xCheckRc rc.error == 0:
           noisy.say "*** testDistributedAccess (3)", "n=", n, "db2".dump db2
       xCheck db1.roFilter == FilterRef(nil)
@@ -605,7 +604,7 @@ proc testDistributedAccess*(
       # Clause (11) from `aristo/README.md` example
       db2.reCentre()
       block:
-        let rc = db2.stow(persistent=true)
+        let rc = db2.persist()
         xCheckRc rc.error == 0
       xCheck db2.roFilter == FilterRef(nil)
 
@@ -641,7 +640,7 @@ proc testDistributedAccess*(
       # Build clause (12) from `aristo/README.md` example
       db2.reCentre()
       block:
-        let rc = db2.stow(persistent=true)
+        let rc = db2.persist()
         xCheckRc rc.error == 0
       xCheck db2.roFilter == FilterRef(nil)
       xCheck db1.roFilter == db3.roFilter
@@ -649,7 +648,7 @@ proc testDistributedAccess*(
       # Clause (13) from `aristo/README.md` example
       xCheck not db1.isCentre()
       block:
-        let rc = db1.stow(persistent=false)
+        let rc = db1.stow() # non-persistent
         xCheckRc rc.error == 0
 
       # Clause (14) from `aristo/README.md` check
@@ -808,7 +807,7 @@ proc testFilterBacklog*(
       let rc = db.mergeLeaf w
       xCheckRc rc.error == 0
     block:
-      let rc = db.stow(persistent=true)
+      let rc = db.persist()
       xCheckRc rc.error == 0
     block:
       let rc = db.checkJournal()
@@ -843,7 +842,7 @@ proc testFilterBacklog*(
 
     # Realign to earlier state
     xb = block:
-      let rc = db.forkBackLog(episode = episode)
+      let rc = db.forkByJournal(episode = episode)
       xCheckRc rc.error == 0
       rc.value
     block:

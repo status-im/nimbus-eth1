@@ -9,7 +9,7 @@
 # except according to those terms.
 
 import
-  std/tables,
+  std/[options, tables],
   eth/common,
   results,
   ".."/[aristo_desc, aristo_desc/desc_backend, aristo_get],
@@ -20,11 +20,6 @@ type
     ## Helper structure for analysing state roots.
     be*: Hash256                   ## Backend state root
     fg*: Hash256                   ## Layer or filter implied state root
-
-  FilterIndexPair* = object
-    ## Helper structure for fetching journal filters from cascaded fifo
-    inx*: int                      ## Non negative fifo index
-    fil*: FilterRef                ## Valid filter
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -79,27 +74,41 @@ proc getLayerStateRoots*(
   err(FilStateRootMismatch)
 
 
-proc getFilterFromFifo*(
+proc getFromJournal*(
     be: BackendRef;
-    fid: FilterID;
+    fid = none(FilterID);
     earlierOK = false;
       ): Result[FilterIndexPair,AristoError] =
-  ## Find filter on cascaded fifos and return its index and filter ID.
+  ## If there is some argument `fid`, find the filter on the journal with ID
+  ## not larger than `fid` (i e. the resulting filter must not be more recent.)
   ##
-  var cache = (QueueID(0),FilterRef(nil))  # Avoids double lookup for last entry
-  proc qid2fid(qid: QueueID): FilterID =
-    if qid == cache[0]:                    # Avoids double lookup for last entry
-      return cache[1].fid
-    let rc = be.getFilFn qid
-    if rc.isErr:
-      return FilterID(0)
-    cache = (qid,rc.value)
-    rc.value.fid
-
+  ## If the argument `earlierOK` is passed `false`, the function succeeds only
+  ## if the filter ID of the returned filter is equal to the argument `fid`.
+  ##
+  ## In case that there is no argument `fid`, the filter with the smallest
+  ## filter ID (i.e. the oldest filter) is returned. here, the argument
+  ## `earlierOK` is ignored.
+  ##
   if be.journal.isNil:
     return err(FilQuSchedDisabled)
 
-  let qid = be.journal.le(fid, qid2fid, forceEQ = not earlierOK)
+  var cache = (QueueID(0),FilterRef(nil))  # Avoids double lookup for last entry
+  proc qid2fid(qid: QueueID): Result[FilterID,void] =
+    if qid == cache[0]:                    # Avoids double lookup for last entry
+      return ok cache[1].fid
+    let fil = be.getFilFn(qid).valueOr:
+      return err()
+    cache = (qid,fil)
+    ok fil.fid
+
+  let qid = block:
+    if fid.isNone:
+      # Get oldest filter
+      be.journal[^1]
+    else:
+      # Find filter with ID not smaller than `fid`
+      be.journal.le(fid.unsafeGet, qid2fid, forceEQ = not earlierOK)
+
   if not qid.isValid:
     return err(FilFilterNotFound)
 
@@ -108,10 +117,8 @@ proc getFilterFromFifo*(
     if cache[0] == qid:
       cache[1]
     else:
-      let rc = be.getFilFn qid
-      if rc.isErr:
-        return err(rc.error)
-      rc.value
+      be.getFilFn(qid).valueOr:
+        return err(error)
 
   fip.inx = be.journal[qid]
   if fip.inx < 0:
@@ -120,7 +127,7 @@ proc getFilterFromFifo*(
   ok fip
 
 
-proc getFilterOverlap*(
+proc getJournalOverlap*(
     be: BackendRef;
     filter: FilterRef;
       ): int =
@@ -130,15 +137,13 @@ proc getFilterOverlap*(
   ## longer than one items. Only single step filter overlaps are guaranteed
   ## to be found.
   ##
-  # Check against the top-fifo entry
+  # Check against the top-fifo entry.
   let qid = be.journal[0]
   if not qid.isValid:
     return 0
-  let top = block:
-    let rc = be.getFilFn qid
-    if rc.isErr:
-      return 0
-    rc.value
+
+  let top = be.getFilFn(qid).valueOr:
+    return 0
 
   # The `filter` must match the `top`
   if filter.src != top.src:
@@ -150,10 +155,10 @@ proc getFilterOverlap*(
 
   # Check against some stored filter IDs
   if filter.isValid:
-    let rc = be.getFilterFromFifo(filter.fid, earlierOK=true)
-    if rc.isOk:
-      if filter.trg == rc.value.fil.trg:
-        return 1 + rc.value.inx
+    let fp = be.getFromJournal(some(filter.fid), earlierOK=true).valueOr:
+      return 0
+    if filter.trg == fp.fil.trg:
+      return 1 + fp.inx
 
 # ------------------------------------------------------------------------------
 # End

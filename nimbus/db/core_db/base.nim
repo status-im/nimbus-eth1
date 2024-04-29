@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/typetraits,
+  std/[options, typetraits],
   chronicles,
   eth/common,
   results,
@@ -882,7 +882,9 @@ proc level*(db: CoreDbRef): int =
   result = db.methods.levelFn()
   db.ifTrackNewApi: debug newApiTxt, api, elapsed, result
 
-proc persistent*(db: CoreDbRef): CoreDbRc[void] {.discardable.} =
+proc persistent*(
+    db: CoreDbRef;
+      ): CoreDbRc[void] {.discardable.} =
   ## For the legacy database, this function has no effect and succeeds always.
   ## It will nevertheless return a discardable error if there is a pending
   ## transaction (i.e. `db.level() == 0`.)
@@ -896,8 +898,37 @@ proc persistent*(db: CoreDbRef): CoreDbRc[void] {.discardable.} =
   ##   treated separately (see `saveOffSite()`.)
   ##
   db.setTrackNewApi BasePersistentFn
-  result = db.methods.persistentFn()
+  result = db.methods.persistentFn none(BlockNumber)
   db.ifTrackNewApi: debug newApiTxt, api, elapsed, result
+
+proc persistent*(
+    db: CoreDbRef;
+    blockNumber: BlockNumber;
+      ): CoreDbRc[void] {.discardable.} =
+  ## Variant of `persistent()` which stores a block number within the recovery
+  ## journal record. This recoed will be addressable by the `blockNumber` (e.g.
+  ##  for recovery.) The argument block number `blockNumber` must be greater
+  ## than all previously stored block numbers.
+  ##
+  ## The function is intended to be used in a way so hat the argument block
+  ## number `blockNumber` is associated with the state root to be recovered
+  ## from a particular journal entry. This means that the correct block number
+  ## will be the one of the state *before* a state change takes place. Using
+  ## it that way, `pesistent()` must only be run after some blocks were fully
+  ## executed.
+  ##
+  ## Example:
+  ## ::
+  ##   # Save block number for the current state
+  ##   let stateBlockNumber = db.getCanonicalHead().blockNumber
+  ##   ..
+  ##   # Process blocks
+  ##   ..
+  ##   db.persistent(stateBlockNumber)
+  ##
+  db.setTrackNewApi BasePersistentFn
+  result = db.methods.persistentFn some(blockNumber)
+  db.ifTrackNewApi: debug newApiTxt, api, elapsed, blockNumber, result
 
 proc newTransaction*(db: CoreDbRef): CoreDbRc[CoreDxTxRef] =
   ## Constructor

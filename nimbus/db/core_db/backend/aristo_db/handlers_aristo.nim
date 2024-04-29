@@ -11,13 +11,13 @@
 {.push raises: [].}
 
 import
-  std/[strutils, typetraits],
+  std/[options, strutils, typetraits],
   chronicles,
   eth/[common, trie/nibbles],
   stew/byteutils,
   results,
   ../../../aristo,
-  ../../../aristo/aristo_filter/filter_scheduler,
+  ../../../aristo/aristo_desc,
   ../../base,
   ../../base/base_desc,
   ./common_desc
@@ -567,19 +567,12 @@ func toVoidRc*[T](
     return ok()
   err((VoidVID,rc.error).toError(base, info, error))
 
-proc toJournalOldestStateRoot*(base: AristoBaseRef): Hash256 =
-  let
-    adb = base.ctx.mpt
-    be = adb.backend
+proc getFromJournal*(base: AristoBaseRef; fid: Option[FilterID]): FilterRef =
+  let be = base.ctx.mpt.backend
   if not be.isNil:
-    let jrn = be.journal
-    if not jrn.isNil:
-      let qid = jrn[^1]
-      if qid.isValid:
-        let rc = base.api.getFilUbe(adb, qid)
-        if rc.isOk:
-          return rc.value.trg
-  EMPTY_ROOT_HASH
+    let fp = base.api.getFromJournal(be, fid, earlierOK=true).valueOr:
+      return FilterRef(nil)
+    return fp.fil
 
 # ---------------------
 
@@ -682,12 +675,13 @@ proc swapCtx*(base: AristoBaseRef; ctx: CoreDbCtxRef): CoreDbCtxRef =
 
 proc persistent*(
     base: AristoBaseRef;
+    fid: Option[FilterID];
     info: static[string];
       ): CoreDbRc[void] =
   let
     api = base.api
     mpt = base.ctx.mpt
-    rc = api.stow(mpt, persistent = true)
+    rc = api.persist(mpt, fid)
   if rc.isOk:
     ok()
   elif api.level(mpt) == 0:
