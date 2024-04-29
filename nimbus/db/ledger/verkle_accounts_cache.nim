@@ -519,7 +519,7 @@ proc persist*(ac: AccountsCache,
   for address in ac.savePoint.selfDestruct:
     ac.deleteAccount(address)
 
-  for address, acc in ac.savePoint.cache:               
+  for address, acc in ac.savePoint.cache:             
     case acc.persistMode()
     of Update:
       if CodeChanged in acc.flags:
@@ -527,7 +527,7 @@ proc persist*(ac: AccountsCache,
       if StorageChanged in acc.flags:
         # storageRoot must be updated first
         # before persisting account into merkle trie
-        acc.persistStorage(address, ac.trie, clearCache)           # --------------->>>> TODO: write the storage function @agnxsh <<<<
+        acc.persistStorage(address, ac.trie, clearCache)
       ac.trie.putAccountBytes address, acc.account
     of Remove:
       VerkleTrieRef(ac.trie).delAccountBytes address
