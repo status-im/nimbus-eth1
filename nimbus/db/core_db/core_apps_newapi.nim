@@ -358,14 +358,19 @@ proc getBlockNumber*(db: CoreDbRef; stateRoot: Hash256): BlockNumber =
         return
     return data.to(BlockNumber)
 
-proc getOldestJournalBlockNumber*(db: CoreDbRef): BlockNumber =
+proc getOldestJournalBlockNumber*(
+    db: CoreDbRef;
+      ): BlockNumber
+      {.gcsafe, raises: [RlpError].} =
   ## Returns the block number implied by the database journal if there is any,
   ## or `BlockNumber(0)`. At the moment, only the `Aristo` database has a
   ## journal.
   ##
-  let be = db.ctx.getMpt(CtGeneric).backend
-  if be.parent.isAristo:
-    return db.getBlockNumber be.toAristoOldestState().stateRoot
+  let st = db.ctx.getMpt(CtGeneric).backend.toAristoOldestState
+  var header: BlockHeader
+  if db.getBlockHeader(st.blockNumber, header):
+    doAssert header.stateRoot == st.stateRoot or st.blockNumber == 0
+    return st.blockNumber
 
 
 proc getBlockHeader*(
