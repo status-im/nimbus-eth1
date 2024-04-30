@@ -13,7 +13,7 @@ import
   eth/common,
   rocksdb,
   ../../nimbus/db/aristo/[
-    aristo_debug, aristo_desc, aristo_delete, aristo_filter/filter_scheduler,
+    aristo_debug, aristo_desc, aristo_delete, aristo_journal/journal_scheduler,
     aristo_hashify, aristo_hike, aristo_merge],
   ../../nimbus/db/kvstore_rocksdb,
   ../../nimbus/sync/protocol/snap/snap_types,

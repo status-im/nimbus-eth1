@@ -570,7 +570,7 @@ func toVoidRc*[T](
 proc getFromJournal*(base: AristoBaseRef; fid: Option[FilterID]): FilterRef =
   let be = base.ctx.mpt.backend
   if not be.isNil:
-    let fp = base.api.getFromJournal(be, fid, earlierOK=true).valueOr:
+    let fp = base.api.journalGetInx(be, fid, earlierOK=true).valueOr:
       return FilterRef(nil)
     return fp.fil
 

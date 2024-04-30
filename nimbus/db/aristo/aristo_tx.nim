@@ -16,7 +16,7 @@
 import
   std/[options, tables],
   results,
-  "."/[aristo_desc, aristo_filter, aristo_get, aristo_layers, aristo_hashify]
+  "."/[aristo_desc, aristo_get, aristo_journal, aristo_layers, aristo_hashify]
 
 func isTop*(tx: AristoTxRef): bool {.gcsafe.}
 func level*(db: AristoDbRef): int {.gcsafe.}
@@ -83,19 +83,19 @@ proc stowImpl(
     return err(TxPendingTx)
   if 0 < db.stack.len:
     return err(TxStackGarbled)
-  if persistent and not db.canResolveBackendFilter():
+  if persistent and not db.journalUpdateOk():
     return err(TxBackendNotWritable)
 
   # Update Merkle hashes (unless disabled)
   db.hashify().isOkOr:
     return err(error[1])
 
-  let fwd = db.fwdFilter(db.top, chunkedMpt).valueOr:
+  let fwd = db.journalFwdFilter(db.top, chunkedMpt).valueOr:
     return err(error[1])
 
   if fwd.isValid:
     # Merge `top` layer into `roFilter`
-    db.merge(fwd).isOkOr:
+    db.journalMerge(fwd).isOkOr:
       return err(error[1])
 
     # Special treatment for `snap` proofs (aka `chunkedMpt`)
@@ -120,7 +120,7 @@ proc stowImpl(
 
   if persistent:
     # Merge `roFiler` into persistent tables
-    ? db.resolveBackendFilter nxtFid
+    ? db.journalUpdate nxtFid
     db.roFilter = FilterRef(nil)
 
   # Special treatment for `snap` proofs (aka `chunkedMpt`)

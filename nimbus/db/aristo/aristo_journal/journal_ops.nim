@@ -12,17 +12,18 @@ import
   std/[options, tables],
   results,
   ".."/[aristo_desc, aristo_desc/desc_backend],
-  "."/[filter_merge, filter_scheduler]
+  "."/[filter_merge, journal_scheduler]
 
 type
-  FifoInstr* = object
-    ## Database backend instructions for storing or deleting filters.
+  JournalOpsMod* = object
+    ## Database journal instructions for storing or deleting filters.
     put*: seq[(QueueID,FilterRef)]
     scd*: QidSchedRef
 
-  FetchInstr* = object
+  JournalOpsFetch* = object
+    ## Database journal instructions for merge-fetching slots.
     fil*: FilterRef
-    del*: FifoInstr
+    del*: JournalOpsMod
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -63,13 +64,15 @@ template getNextFidOrReturn(be: BackendRef; fid: Option[FilterID]): FilterID =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc fifosStore*(
+proc journalOpsPushSlot*(
     be: BackendRef;                              # Database backend
-    filter: FilterRef;                           # Filter to save
+    filter: FilterRef;                           # Filter to store
     fid: Option[FilterID];                       # Next filter ID (if any)
-      ): Result[FifoInstr,AristoError] =
+      ): Result[JournalOpsMod,AristoError] =
   ## Calculate backend instructions for storing the arguent `filter` on the
   ## argument backend `be`.
+  ##
+  ## The journal is not modified by this function.
   ##
   if be.journal.isNil:
     return err(FilQuSchedDisabled)
@@ -81,7 +84,7 @@ proc fifosStore*(
 
   # Update journal filters and calculate database update
   var
-    instr = FifoInstr(scd: upd.fifo)
+    instr = JournalOpsMod(scd: upd.journal)
     dbClear: seq[QueueID]
     hold: seq[FilterRef]
     saved = false
@@ -138,14 +141,16 @@ proc fifosStore*(
   ok instr
 
 
-proc fifosFetch*(
+proc journalOpsFetchSlots*(
     be: BackendRef;                              # Database backend
     backSteps: int;                              # Backstep this many filters
-      ): Result[FetchInstr,AristoError] =
+      ): Result[JournalOpsFetch,AristoError] =
   ## This function returns the single filter obtained by squash merging the
   ## topmost `backSteps` filters on the backend journal fifo. Also, backend
-  ## instructions are calculated and returned for deleting the merged journal
-  ## filters on the fifo.
+  ## instructions are calculated and returned for deleting the extracted
+  ## journal slots.
+  ##
+  ## The journal is not modified by this function.
   ##
   if be.journal.isNil:
     return err(FilQuSchedDisabled)
@@ -154,7 +159,7 @@ proc fifosFetch*(
 
   # Get instructions
   let fetch = be.journal.fetchItems backSteps
-  var instr = FetchInstr(del: FifoInstr(scd: fetch.fifo))
+  var instr = JournalOpsFetch(del: JournalOpsMod(scd: fetch.journal))
 
   # Follow `HoldQid` instructions and combine journal filters for sub-queues
   # and push intermediate results on the `hold` stack
@@ -186,11 +191,16 @@ proc fifosFetch*(
   ok instr
 
 
-proc fifosDelete*(
+proc journalOpsDeleteSlots*(
     be: BackendRef;                              # Database backend
     backSteps: int;                              # Backstep this many filters
-      ): Result[FifoInstr,AristoError] =
-  ## Variant of `fetch()` for calculating the deletion part only.
+      ): Result[JournalOpsMod,AristoError] =
+  ## Calculate backend instructions for deleting the most recent `backSteps`
+  ## slots on the journal. This is basically the deletion calculator part
+  ## from `journalOpsFetchSlots()`.
+  ##
+  ## The journal is not modified by this function.
+  ##
   if be.journal.isNil:
     return err(FilQuSchedDisabled)
   if backSteps <= 0:
@@ -198,7 +208,7 @@ proc fifosDelete*(
 
   # Get instructions
   let fetch = be.journal.fetchItems backSteps
-  var instr = FifoInstr(scd: fetch.fifo)
+  var instr = JournalOpsMod(scd: fetch.journal)
 
   # Follow `HoldQid` instructions for producing the list of entries that
   # need to be deleted

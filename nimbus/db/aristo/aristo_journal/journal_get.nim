@@ -9,76 +9,21 @@
 # except according to those terms.
 
 import
-  std/[options, tables],
+  std/options,
   eth/common,
   results,
-  ".."/[aristo_desc, aristo_desc/desc_backend, aristo_get],
-  ./filter_scheduler
-
-type
-  StateRootPair* = object
-    ## Helper structure for analysing state roots.
-    be*: Hash256                   ## Backend state root
-    fg*: Hash256                   ## Layer or filter implied state root
+  ".."/[aristo_desc, aristo_desc/desc_backend],
+  ./journal_scheduler
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc getLayerStateRoots*(
-    db: AristoDbRef;
-    delta: LayerDeltaRef;
-    chunkedMpt: bool;
-      ): Result[StateRootPair,AristoError] =
-  ## Get the Merkle hash key for target state root to arrive at after this
-  ## reverse filter was applied.
-  ##
-  var spr: StateRootPair
-
-  let sprBeKey = block:
-    let rc = db.getKeyBE VertexID(1)
-    if rc.isOk:
-      rc.value
-    elif rc.error == GetKeyNotFound:
-      VOID_HASH_KEY
-    else:
-      return err(rc.error)
-  spr.be = sprBeKey.to(Hash256)
-
-  spr.fg = block:
-    let key = delta.kMap.getOrVoid VertexID(1)
-    if key.isValid:
-      key.to(Hash256)
-    else:
-      EMPTY_ROOT_HASH
-  if spr.fg.isValid:
-    return ok(spr)
-
-  if not delta.kMap.hasKey(VertexID(1)) and
-     not delta.sTab.hasKey(VertexID(1)):
-    # This layer is unusable, need both: vertex and key
-    return err(FilPrettyPointlessLayer)
-  elif not delta.sTab.getOrVoid(VertexID(1)).isValid:
-    # Root key and vertex has been deleted
-    return ok(spr)
-
-  if chunkedMpt:
-    if sprBeKey == delta.kMap.getOrVoid VertexID(1):
-      spr.fg = spr.be
-      return ok(spr)
-
-  if delta.sTab.len == 0 and
-     delta.kMap.len == 0:
-    return err(FilPrettyPointlessLayer)
-
-  err(FilStateRootMismatch)
-
-
-proc getFromJournal*(
+proc journalGetInx*(
     be: BackendRef;
     fid = none(FilterID);
     earlierOK = false;
-      ): Result[FilterIndexPair,AristoError] =
+      ): Result[JournalInx,AristoError] =
   ## If there is some argument `fid`, find the filter on the journal with ID
   ## not larger than `fid` (i e. the resulting filter must not be more recent.)
   ##
@@ -112,7 +57,7 @@ proc getFromJournal*(
   if not qid.isValid:
     return err(FilFilterNotFound)
 
-  var fip = FilterIndexPair()
+  var fip: JournalInx
   fip.fil = block:
     if cache[0] == qid:
       cache[1]
@@ -127,15 +72,17 @@ proc getFromJournal*(
   ok fip
 
 
-proc getJournalOverlap*(
+proc journalGetOverlap*(
     be: BackendRef;
     filter: FilterRef;
       ): int =
-  ## Return the number of journal filters in the leading chain that is
-  ## reverted by the argument `filter`. A heuristc approach is used here
-  ## for an argument `filter` with a valid filter ID when the chain is
-  ## longer than one items. Only single step filter overlaps are guaranteed
-  ## to be found.
+  ## This function will find the overlap of an argument `filter` which is
+  ## composed by some recent filter slots from the journal.
+  ##
+  ## The function returns the number of most recent journal filters that are
+  ## reverted by the argument `filter`. This requires that `src`, `trg`, and
+  ## `fid` of the argument `filter` is properly calculated (e.g. using
+  ## `journalOpsFetchSlots()`.)
   ##
   # Check against the top-fifo entry.
   let qid = be.journal[0]
@@ -155,7 +102,7 @@ proc getJournalOverlap*(
 
   # Check against some stored filter IDs
   if filter.isValid:
-    let fp = be.getFromJournal(some(filter.fid), earlierOK=true).valueOr:
+    let fp = be.journalGetInx(some(filter.fid), earlierOK=true).valueOr:
       return 0
     if filter.trg == fp.fil.trg:
       return 1 + fp.inx

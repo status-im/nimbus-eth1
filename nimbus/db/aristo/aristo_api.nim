@@ -17,8 +17,8 @@ import
   eth/[common, trie/nibbles],
   results,
   ./aristo_desc/desc_backend,
-  ./aristo_filter/filter_helpers,
   ./aristo_init/memory_db,
+  ./aristo_journal/journal_get,
   "."/[aristo_delete, aristo_desc, aristo_fetch, aristo_get, aristo_hashify,
        aristo_hike, aristo_init, aristo_merge, aristo_path, aristo_profile,
        aristo_serialise, aristo_tx, aristo_vid]
@@ -149,23 +149,6 @@ type
       ## pair was found on the filter or the backend, this transaction is
       ## empty.
 
-  AristoApiGetFromJournalFn* =
-    proc(be: BackendRef;
-         fid: Option[FilterID];
-         earlierOK = false;
-        ): Result[FilterIndexPair,AristoError]
-        {.noRaise.}
-      ## For a positive argument `fid`, find the filter on the journal with ID
-      ## not larger than `fid` (i e. the resulting filter might be older.)
-      ##
-      ## If the argument `earlierOK` is passed `false`, the function succeeds
-      ## only if the filter ID of the returned filter is equal to the argument
-      ## `fid`.
-      ##
-      ## In case that the argument `fid` is zera (i.e. `FilterID(0)`), the
-      ## filter with the smallest filter ID (i.e. the oldest filter) is
-      ## returned. In that case, the argument `earlierOK` is ignored.
-
   AristoApiGetKeyRcFn* =
     proc(db: AristoDbRef;
          vid: VertexID;
@@ -206,6 +189,23 @@ type
         {.noRaise.}
       ## Getter, returns `true` if the argument `tx` referes to the current
       ## top level transaction.
+
+  AristoApiJournalGetInxFn* =
+    proc(be: BackendRef;
+         fid: Option[FilterID];
+         earlierOK = false;
+        ): Result[JournalInx,AristoError]
+        {.noRaise.}
+      ## For a positive argument `fid`, find the filter on the journal with ID
+      ## not larger than `fid` (i e. the resulting filter might be older.)
+      ##
+      ## If the argument `earlierOK` is passed `false`, the function succeeds
+      ## only if the filter ID of the returned filter is equal to the argument
+      ## `fid`.
+      ##
+      ## In case that the argument `fid` is zera (i.e. `FilterID(0)`), the
+      ## filter with the smallest filter ID (i.e. the oldest filter) is
+      ## returned. In that case, the argument `earlierOK` is ignored.
 
   AristoApiLevelFn* =
     proc(db: AristoDbRef;
@@ -375,12 +375,12 @@ type
     forget*: AristoApiForgetFn
     forkTop*: AristoApiForkTopFn
     forkWith*: AristoApiForkWithFn
-    getFromJournal*: AristoApiGetFromJournalFn
     getKeyRc*: AristoApiGetKeyRcFn
     hashify*: AristoApiHashifyFn
     hasPath*: AristoApiHasPathFn
     hikeUp*: AristoApiHikeUpFn
     isTop*: AristoApiIsTopFn
+    journalGetInx*: AristoApiJournalGetInxFn
     level*: AristoApiLevelFn
     nForked*: AristoApiNForkedFn
     merge*: AristoApiMergeFn
@@ -408,12 +408,12 @@ type
     AristoApiProfForgetFn         = "forget"
     AristoApiProfForkTopFn        = "forkTop"
     AristoApiProfForkWithFn       = "forkWith"
-    AristoApiProfGetFromJournalFn = "getFromJournal"
     AristoApiProfGetKeyRcFn       = "getKeyRc"
     AristoApiProfHashifyFn        = "hashify"
     AristoApiProfHasPathFn        = "hasPath"
     AristoApiProfHikeUpFn         = "hikeUp"
     AristoApiProfIsTopFn          = "isTop"
+    AristoApiProfJournalGetInxFn  = "journalGetInx"
     AristoApiProfLevelFn          = "level"
     AristoApiProfNForkedFn        = "nForked"
     AristoApiProfMergeFn          = "merge"
@@ -459,12 +459,12 @@ when AutoValidateApiHooks:
     doAssert not api.forget.isNil
     doAssert not api.forkTop.isNil
     doAssert not api.forkWith.isNil
-    doAssert not api.getFromJournal.isNil
     doAssert not api.getKeyRc.isNil
     doAssert not api.hashify.isNil
     doAssert not api.hasPath.isNil
     doAssert not api.hikeUp.isNil
     doAssert not api.isTop.isNil
+    doAssert not api.journalGetInx.isNil
     doAssert not api.level.isNil
     doAssert not api.nForked.isNil
     doAssert not api.merge.isNil
@@ -512,12 +512,12 @@ func init*(api: var AristoApiObj) =
   api.forget = forget
   api.forkTop = forkTop
   api.forkWith = forkWith
-  api.getFromJournal = getFromJournal
   api.getKeyRc = getKeyRc
   api.hashify = hashify
   api.hasPath = hasPath
   api.hikeUp = hikeUp
-  api.isTop = isTop
+  api.isTop = isTop 
+  api.journalGetInx = journalGetInx
   api.level = level
   api.nForked = nForked
   api.merge = merge
@@ -548,12 +548,12 @@ func dup*(api: AristoApiRef): AristoApiRef =
     forget:         api.forget,
     forkTop:        api.forkTop,
     forkWith:       api.forkWith,
-    getFromJournal: api.getFromJournal,
     getKeyRc:       api.getKeyRc,
     hashify:        api.hashify,
     hasPath:        api.hasPath,
     hikeUp:         api.hikeUp,
     isTop:          api.isTop,
+    journalGetInx:  api.journalGetInx,
     level:          api.level,
     nForked:        api.nForked,
     merge:          api.merge,
@@ -637,11 +637,6 @@ func init*(
       AristoApiProfForkWithFn.profileRunner:
         result = api.forkWith(a, b, c, d)
 
-  profApi.getFromJournal =
-    proc(a: BackendRef; b: Option[FilterID]; c = false): auto =
-      AristoApiProfGetFromJournalFn.profileRunner:
-        result = api.getFromJournal(a, b, c)
-
   profApi.getKeyRc =
     proc(a: AristoDbRef; b: VertexID): auto =
       AristoApiProfGetKeyRcFn.profileRunner:
@@ -666,6 +661,11 @@ func init*(
     proc(a: AristoTxRef): auto =
       AristoApiProfIsTopFn.profileRunner:
         result = api.isTop(a)
+
+  profApi.journalGetInx =
+    proc(a: BackendRef; b: Option[FilterID]; c = false): auto =
+      AristoApiProfJournalGetInxFn.profileRunner:
+        result = api.journalGetInx(a, b, c)
 
   profApi.level =
     proc(a: AristoDbRef): auto =
