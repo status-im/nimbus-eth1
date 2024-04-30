@@ -561,3 +561,10 @@ proc persist*(ac: AccountsCache,
   ac.savePoint.accessList.clear()
 
   ac.isDirty = false
+
+proc getStorageRoot*(ac: AccountsCache, address: EthAddress): Hash256 =
+  # beware that if the account not persisted,
+  # the storage root will not be updated
+  let acc = ac.getAccount(address, false)
+  if acc.isNil: emptyAcc.storageRoot
+  else: acc.account.storageRoot
