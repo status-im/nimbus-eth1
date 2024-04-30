@@ -730,9 +730,16 @@ proc init*(
     vid = VertexID(colType)
     key = colState.to(HashKey)
 
+    # Find `(vid,key)` on transaction stack
+    inx = block:
+      let rc = api.findTx(base.ctx.mpt, vid, key)
+      if rc.isErr:
+        return err(rc.error.toError(base, info))
+      rc.value
+
     # Fork MPT descriptor that provides `(vid,key)`
     newMpt = block:
-      let rc = api.forkWith(base.ctx.mpt, vid, key)
+      let rc = api.forkTx(base.ctx.mpt, inx)
       if rc.isErr:
         return err(rc.error.toError(base, info))
       rc.value

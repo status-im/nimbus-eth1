@@ -14,126 +14,10 @@
 {.push raises: [].}
 
 import
-  std/[options, tables],
+  std/options,
   results,
-  "."/[aristo_desc, aristo_get, aristo_journal, aristo_layers, aristo_hashify]
-
-func isTop*(tx: AristoTxRef): bool {.gcsafe.}
-func level*(db: AristoDbRef): int {.gcsafe.}
-proc txBegin*(db: AristoDbRef): Result[AristoTxRef,AristoError] {.gcsafe.}
-
-# ------------------------------------------------------------------------------
-# Private helpers
-# ------------------------------------------------------------------------------
-
-func getDbDescFromTopTx(tx: AristoTxRef): Result[AristoDbRef,AristoError] =
-  if not tx.isTop():
-    return err(TxNotTopTx)
-  let db = tx.db
-  if tx.level != db.stack.len:
-    return err(TxStackGarbled)
-  ok db
-
-proc getTxUid(db: AristoDbRef): uint =
-  if db.txUidGen == high(uint):
-    db.txUidGen = 0
-  db.txUidGen.inc
-  db.txUidGen
-
-iterator txWalk(tx: AristoTxRef): (AristoTxRef,LayerRef,AristoError) =
-  ## Walk down the transaction chain.
-  let db = tx.db
-  var tx = tx
-
-  block body:
-    # Start at top layer if tx refers to that
-    if tx.level == db.stack.len:
-      if tx.txUid != db.top.txUid:
-        yield (tx,db.top,TxStackGarbled)
-        break body
-
-      # Yield the top level
-      yield (tx,db.top,AristoError(0))
-
-    # Walk down the transaction stack
-    for level in  (tx.level-1).countDown(1):
-      tx = tx.parent
-      if tx.isNil or tx.level != level:
-        yield (tx,LayerRef(nil),TxStackGarbled)
-        break body
-
-      var layer = db.stack[level]
-      if tx.txUid != layer.txUid:
-        yield (tx,layer,TxStackGarbled)
-        break body
-
-      yield (tx,layer,AristoError(0))
-
-# ---------
-
-proc stowImpl(
-    db: AristoDbRef;                  # Database
-    nxtFid: Option[FilterID];         # Next filter ID (zero is OK)
-    persistent: bool;                 # Stage only unless `true`
-    chunkedMpt: bool;                 # Partial data (e.g. from `snap`)
-      ): Result[void,AristoError] =
-  ## Worker for `stow()` variants.
-  ##
-  if not db.txRef.isNil:
-    return err(TxPendingTx)
-  if 0 < db.stack.len:
-    return err(TxStackGarbled)
-  if persistent and not db.journalUpdateOk():
-    return err(TxBackendNotWritable)
-
-  # Update Merkle hashes (unless disabled)
-  db.hashify().isOkOr:
-    return err(error[1])
-
-  let fwd = db.journalFwdFilter(db.top, chunkedMpt).valueOr:
-    return err(error[1])
-
-  if fwd.isValid:
-    # Merge `top` layer into `roFilter`
-    db.journalMerge(fwd).isOkOr:
-      return err(error[1])
-
-    # Special treatment for `snap` proofs (aka `chunkedMpt`)
-    let final =
-      if chunkedMpt: LayerFinalRef(fRpp: db.top.final.fRpp)
-      else: LayerFinalRef()
-
-    # New empty top layer (probably with `snap` proofs and `vGen` carry over)
-    db.top = LayerRef(
-      delta: LayerDeltaRef(),
-      final: final)
-    if db.roFilter.isValid:
-      db.top.final.vGen = db.roFilter.vGen
-    else:
-      let rc = db.getIdgUbe()
-      if rc.isOk:
-        db.top.final.vGen = rc.value
-      else:
-        # It is OK if there was no `Idg`. Otherwise something serious happened
-        # and there is no way to recover easily.
-        doAssert rc.error == GetIdgNotFound
-
-  if persistent:
-    # Merge `roFiler` into persistent tables
-    ? db.journalUpdate nxtFid
-    db.roFilter = FilterRef(nil)
-
-  # Special treatment for `snap` proofs (aka `chunkedMpt`)
-  let final =
-    if chunkedMpt: LayerFinalRef(vGen: db.vGen, fRpp: db.top.final.fRpp)
-    else: LayerFinalRef(vGen: db.vGen)
-
-  # New empty top layer (probably with `snap` proofs carry over)
-  db.top = LayerRef(
-    delta: LayerDeltaRef(),
-    final: final,
-    txUid: db.top.txUid)
-  ok()
+  ./aristo_tx/[tx_fork, tx_frame, tx_stow],
+  "."/[aristo_desc, aristo_get]
 
 # ------------------------------------------------------------------------------
 # Public functions, getters
@@ -141,24 +25,20 @@ proc stowImpl(
 
 func txTop*(db: AristoDbRef): Result[AristoTxRef,AristoError] =
   ## Getter, returns top level transaction if there is any.
-  if db.txRef.isNil:
-    err(TxNoPendingTx)
-  else:
-    ok(db.txRef)
+  db.txFrameTop()
 
 func isTop*(tx: AristoTxRef): bool =
   ## Getter, returns `true` if the argument `tx` referes to the current top
   ## level transaction.
-  tx.db.txRef == tx and tx.db.top.txUid == tx.txUid
+  tx.txFrameIsTop()
 
 func level*(tx: AristoTxRef): int =
   ## Getter, positive nesting level of transaction argument `tx`
-  tx.level
+  tx.txFrameLevel()
 
 func level*(db: AristoDbRef): int =
   ## Getter, non-negative nesting level (i.e. number of pending transactions)
-  if not db.txRef.isNil:
-    result = db.txRef.level
+  db.txFrameLevel()
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -170,146 +50,88 @@ func to*(tx: AristoTxRef; T: type[AristoDbRef]): T =
 
 
 proc forkTx*(
-    tx: AristoTxRef;                  # Transaction descriptor
+    db: AristoDbRef;
+    backLevel: int;                   # Backward location of transaction
     dontHashify = false;              # Process/fix MPT hashes
       ): Result[AristoDbRef,AristoError] =
-  ## Clone a transaction into a new DB descriptor accessing the same backend
-  ## database (if any) as the argument `db`. The new descriptor is linked to
-  ## the transaction parent and is fully functional as a forked instance (see
-  ## comments on `aristo_desc.reCentre()` for details.)
+  ## Fork a new descriptor obtained from parts of the argument database
+  ## as described by arguments `db` and `backLevel`.
   ##
-  ## Input situation:
-  ## ::
-  ##   tx -> db0   with tx is top transaction, tx.level > 0
+  ## If the argument `backLevel` is non-negative, the forked descriptor will
+  ## provide the database view where the first `backLevel` transaction layers
+  ## are stripped and the remaing layers are squashed into a single transaction.
   ##
-  ## Output situation:
-  ## ::
-  ##   tx  -> db0 \
-  ##               >  share the same backend
-  ##   tx1 -> db1 /
+  ## If `backLevel` is `-1`, a database descriptor with empty transaction
+  ## layers will be provided where the `roFilter` between database and
+  ## transaction layers are kept in place.
   ##
-  ## where `tx.level > 0`, `db1.level == 1` and `db1` is returned. The
-  ## transaction `tx1` can be retrieved via `db1.txTop()`.
+  ## If `backLevel` is `-2`, a database descriptor with empty transaction
+  ## layers will be provided without an `roFilter`.
   ##
-  ## The new DB descriptor will contain a copy of the argument transaction
-  ## `tx` as top layer of level 1 (i.e. this is he only transaction.) Rolling
-  ## back will end up at the backend layer (incl. backend filter.)
+  ## The returned database descriptor will always have transaction level one.
+  ## If there were no transactions that could be squashed, an empty
+  ## transaction is added.
   ##
-  ## If the arguent flag `dontHashify` is passed `true`, the clone descriptor
+  ## If the arguent flag `dontHashify` is passed `true`, the forked descriptor
   ## will *NOT* be hashified right after construction.
   ##
   ## Use `aristo_desc.forget()` to clean up this descriptor.
   ##
-  let db = tx.db
+  # Fork top layer (with or without pending transaction)?
+  if backLevel == 0:
+    return db.txForkTop dontHashify
 
-  # Verify `tx` argument
-  if db.txRef == tx:
-    if db.top.txUid != tx.txUid:
-      return err(TxArgStaleTx)
-  elif db.stack.len <= tx.level:
-    return err(TxArgStaleTx)
-  elif db.stack[tx.level].txUid != tx.txUid:
-    return err(TxArgStaleTx)
+  # Fork bottom layer (=> 0 < db.stack.len)
+  if backLevel == db.stack.len:
+    return db.txForkBase dontHashify
 
-  # Provide new empty stack layer
-  let stackLayer = block:
-    let rc = db.getIdgBE()
-    if rc.isOk:
-      LayerRef(
-        delta: LayerDeltaRef(),
-        final: LayerFinalRef(vGen: rc.value))
-    elif rc.error == GetIdgNotFound:
-      LayerRef.init()
-    else:
-      return err(rc.error)
+  # Inspect transaction stack
+  if 0 < backLevel:
+    var tx = db.txRef
+    if tx.isNil or db.stack.len < backLevel:
+      return err(TxLevelTooDeep)
 
-  # Set up clone associated to `db`
-  let txClone = ? db.fork(noToplayer = true, noFilter = false)
-  txClone.top = db.layersCc tx.level  # Provide tx level 1 stack
-  txClone.stack = @[stackLayer]       # Zero level stack
-  txClone.top.txUid = 1
-  txClone.txUidGen = 1
+    # Fetch tx of level `backLevel` (seed to skip some items)
+    for _ in 0 ..< backLevel:
+      tx = tx.parent
+      if tx.isNil:
+        return err(TxStackGarbled)
+    return tx.txFork dontHashify
 
-  # Install transaction similar to `tx` on clone
-  txClone.txRef = AristoTxRef(
-    db:    txClone,
-    txUid: 1,
-    level: 1)
+  # Plain fork, include `roFilter`
+  if backLevel == -1:
+    let xb = ? db.fork(noFilter=false)
+    discard xb.txFrameBegin()
+    return ok(xb)
 
-  if not dontHashify:
-    txClone.hashify().isOkOr:
-      discard txClone.forget()
-      return err(error[1])
+  # Plain fork, unfiltered backend
+  if backLevel == -2:
+    let xb = ? db.fork(noFilter=true)
+    discard xb.txFrameBegin()
+    return ok(xb)
 
-  ok(txClone)
+  err(TxLevelUseless)
 
 
-proc forkTop*(
-    db: AristoDbRef;
-    dontHashify = false;              # Process/fix MPT hashes
-      ): Result[AristoDbRef,AristoError] =
-  ## Variant of `forkTx()` for the top transaction if there is any. Otherwise
-  ## the top layer is cloned, and an empty transaction is set up. After
-  ## successful fork the returned descriptor has transaction level 1.
-  ##
-  ## Use `aristo_desc.forget()` to clean up this descriptor.
-  ##
-  if db.txRef.isNil:
-    let dbClone = ? db.fork(noToplayer=true, noFilter=false)
-    dbClone.top = db.layersCc         # Is a deep copy
-
-    if not dontHashify:
-      dbClone.hashify().isOkOr:
-        discard dbClone.forget()
-        return err(error[1])
-
-    discard dbClone.txBegin
-    return ok(dbClone)
-    # End if()
-
-  db.txRef.forkTx dontHashify
-
-
-proc forkBase*(
-    db: AristoDbRef;
-    dontHashify = false;              # Process/fix MPT hashes
-      ): Result[AristoDbRef,AristoError] =
-  ## Variant of `forkTx()`, sort of the opposite of `forkTop()`. This is the
-  ## equivalent of top layer forking after all tranactions have been rolled
-  ## back.
-  ##
-  ## Use `aristo_desc.forget()` to clean up this descriptor.
-  ##
-  if not db.txRef.isNil:
-    let dbClone = ? db.fork(noToplayer=true, noFilter=false)
-    dbClone.top = db.layersCc 0
-
-    if not dontHashify:
-      dbClone.hashify().isOkOr:
-        discard dbClone.forget()
-        return err(error[1])
-
-    discard dbClone.txBegin
-    return ok(dbClone)
-    # End if()
-
-  db.forkTop dontHashify
-
-
-proc forkWith*(
+proc findTx*(
     db: AristoDbRef;
     vid: VertexID;                    # Pivot vertex (typically `VertexID(1)`)
-    key: HashKey;                     # Hash key of pivot verte
-    dontHashify = true;               # Process/fix MPT hashes
-      ): Result[AristoDbRef,AristoError] =
+    key: HashKey;                     # Hash key of pivot vertex
+      ): Result[int,AristoError] =
   ## Find the transaction where the vertex with ID `vid` exists and has the
   ## Merkle hash key `key`. If there is no transaction available, search in
   ## the filter and then in the backend.
   ##
-  ## If the above procedure succeeds, a new descriptor is forked with exactly
-  ## one transaction which contains the all the bottom layers up until the
-  ## layer where the `(vid,key)` pair is found. In case the pair was found on
-  ## the filter or the backend, this transaction is empty.
+  ## If the above procedure succeeds, an integer indicating the transaction
+  ## level integer is returned:
+  ##
+  ## * `0` -- top level, current layer
+  ## * `1`, `2`, ... -- some transaction level further down the stack
+  ## * `-1` -- the filter between transaction stack and database backend
+  ## * `-2` -- the databse backend
+  ##
+  ## A successful return code might be used for the `forkTx()` call for
+  ## creating a forked descriptor that provides the pair `(vid,key)`.
   ##
   if not vid.isValid or
      not key.isValid:
@@ -319,38 +141,33 @@ proc forkWith*(
     # Try `(vid,key)` on top layer
     let topKey = db.top.delta.kMap.getOrVoid vid
     if topKey == key:
-      return db.forkTop dontHashify
+      return ok(0)
 
   else:
     # Find `(vid,key)` on transaction layers
-    for (tx,layer,error) in db.txRef.txWalk:
+    var n = 0
+    for (n,tx,layer,error) in db.txRef.txFrameWalk:
       if error != AristoError(0):
         return err(error)
       if layer.delta.kMap.getOrVoid(vid) == key:
-        return tx.forkTx dontHashify
+        return ok(n)
 
     # Try bottom layer
     let botKey = db.stack[0].delta.kMap.getOrVoid vid
     if botKey == key:
-      return db.forkBase dontHashify
+      return ok(db.stack.len)
 
-  # Try `(vid,key)` on filter
+  # Try `(vid,key)` on roFilter
   if not db.roFilter.isNil:
     let roKey = db.roFilter.kMap.getOrVoid vid
     if roKey == key:
-      let rc = db.fork(noFilter = false)
-      if rc.isOk:
-        discard rc.value.txBegin
-      return rc
+      return ok(-1)
 
   # Try `(vid,key)` on unfiltered backend
   block:
     let beKey = db.getKeyUbe(vid).valueOr: VOID_HASH_KEY
     if beKey == key:
-      let rc = db.fork(noFilter = true)
-      if rc.isOk:
-        discard rc.value.txBegin
-      return rc
+      return ok(-2)
 
   err(TxNotFound)
 
@@ -369,23 +186,7 @@ proc txBegin*(db: AristoDbRef): Result[AristoTxRef,AristoError] =
   ##     ... continue using db ...
   ##     tx.commit()
   ##
-  if db.level != db.stack.len:
-    return err(TxStackGarbled)
-
-  db.stack.add db.top
-  db.top = LayerRef(
-    delta: LayerDeltaRef(),
-    final: db.top.final.dup,
-    txUid: db.getTxUid)
-
-  db.txRef = AristoTxRef(
-    db:     db,
-    txUid:  db.top.txUid,
-    parent: db.txRef,
-    level:  db.stack.len)
-
-  ok db.txRef
-
+  db.txFrameBegin()
 
 proc rollback*(
     tx: AristoTxRef;                  # Top transaction on database
@@ -394,15 +195,7 @@ proc rollback*(
   ## performed for this transactio. The previous transaction is returned if
   ## there was any.
   ##
-  let db = ? tx.getDbDescFromTopTx()
-
-  # Roll back to previous layer.
-  db.top = db.stack[^1]
-  db.stack.setLen(db.stack.len-1)
-
-  db.txRef = db.txRef.parent
-  ok()
-
+  tx.txFrameRollback()
 
 proc commit*(
     tx: AristoTxRef;                  # Top transaction on database
@@ -411,32 +204,7 @@ proc commit*(
   ## performed through this handle and merges it to the previous layer. The
   ## previous transaction is returned if there was any.
   ##
-  let db = ? tx.getDbDescFromTopTx()
-  db.hashify().isOkOr:
-    return err(error[1])
-
-  # Pop layer from stack and merge database top layer onto it
-  let merged = block:
-    if db.top.delta.sTab.len == 0 and
-       db.top.delta.kMap.len == 0:
-      # Avoid `layersMergeOnto()`
-      db.top.delta = db.stack[^1].delta
-      db.stack.setLen(db.stack.len-1)
-      db.top
-    else:
-      let layer = db.stack[^1]
-      db.stack.setLen(db.stack.len-1)
-      db.top.layersMergeOnto layer[]
-      layer
-
-  # Install `merged` stack top layer and update stack
-  db.top = merged
-  db.txRef = tx.parent
-  if 0 < db.stack.len:
-    db.txRef.txUid = db.getTxUid
-    db.top.txUid = db.txRef.txUid
-  ok()
-
+  tx.txFrameCommit()
 
 proc collapse*(
     tx: AristoTxRef;                  # Top transaction on database
@@ -447,20 +215,10 @@ proc collapse*(
   ## ::
   ##   while true:
   ##     discard tx.commit() # ditto for rollback()
-  ##     if db.topTx.isErr: break
-  ##     tx = db.topTx.value
+  ##     if db.txTop.isErr: break
+  ##     tx = db.txTop.value
   ##
-  let db = ? tx.getDbDescFromTopTx()
-
-  if commit:
-    # For commit, hashify the current layer if requested and install it
-    db.hashify().isOkOr:
-      return err(error[1])
-
-  db.top.txUid = 0
-  db.stack.setLen(0)
-  db.txRef = AristoTxRef(nil)
-  ok()
+  tx.txFrameCollapse commit
 
 # ------------------------------------------------------------------------------
 # Public functions: save to database
@@ -491,7 +249,7 @@ proc persist*(
   ## In this case, the `chunkedMpt` argument must be set `true` (see alse
   ## `fwdFilter()`.)
   ##
-  db.stowImpl(nxtFid, persistent=true, chunkedMpt=chunkedMpt)
+  db.txStow(nxtFid, persistent=true, chunkedMpt=chunkedMpt)
 
 proc stow*(
     db: AristoDbRef;                  # Database
@@ -510,7 +268,7 @@ proc stow*(
   ## In this case, the `chunkedMpt` argument must be set `true` (see alse
   ## `fwdFilter()`.)
   ##
-  db.stowImpl(nxtFid=none(FilterID), persistent=false, chunkedMpt=chunkedMpt)
+  db.txStow(nxtFid=none(FilterID), persistent=false, chunkedMpt=chunkedMpt)
 
 # ------------------------------------------------------------------------------
 # End

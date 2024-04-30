@@ -191,7 +191,7 @@ proc dbTriplet(w: LeafQuartet; rdbPath: string): Result[DbTriplet,AristoError] =
       check rc.error == 0
       return
 
-  let dx = [db, db.forkTop.value, db.forkTop.value]
+  let dx = [db, db.forkTx(0).value, db.forkTx(0).value]
   xCheck dx[0].nForked == 2
 
   # Reduce unwanted tx layers

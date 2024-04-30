@@ -263,7 +263,8 @@ type
     TxArgStaleTx
     TxArgsUseless
     TxBackendNotWritable
-    TxGarbledSpan
+    TxLevelTooDeep
+    TxLevelUseless
     TxNoPendingTx
     TxNotFound
     TxNotTopTx
