@@ -30,7 +30,6 @@ const
 ## 1) No storage trie, as storage is now a part of the unified Verkle Trie (EIP 6800)
 ## 2) Changing the format of Witness Data and Witness Cache
 ## 3) Changing the trie in AccountsCache to a VerkleTrie
-## 4) Changing the format of rootHash to a 32-byte array
 
 type
   AccountFlag = enum
@@ -384,6 +383,25 @@ proc setNonce*(ac: AccountsCache, address: EthAddress, nonce: AccountNonce) =
 
 proc incNonce*(ac: AccountsCache, address: EthAddress) {.inline.} =
   ac.setNonce(address, ac.getNonce(address) + 1)
+
+proc setCode*(ac: AccountsCache, address: EthAddress, code: seq[byte]) =
+  let acc = ac.getAccount(address)
+  acc.flags.incl {Alive}
+  let codeHash = keccakHash(code)
+  if acc.account.codeHash != codeHash:
+    var acc = ac.makeDirty(address)
+    acc.account.codeHash = codeHash
+    acc.code = code
+    acc.flags.incl CodeChanged
+
+proc setStorage*(ac: AccountsCache, address: EthAddress, slot, value: UInt256) =
+  let acc = ac.getAccount(address)
+  acc.flags.incl {Alive}
+  let oldValue = acc.storageValue(slot, ac.db)
+  if oldValue != value:
+    var acc = ac.makeDirty(address)
+    acc.overlayStorage[slot] = value
+    acc.flags.incl StorageChanged
 
 
 proc deleteAccount*(ac: AccountsCache, address: EthAddress) =
