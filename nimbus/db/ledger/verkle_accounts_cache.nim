@@ -394,16 +394,6 @@ proc setCode*(ac: AccountsCache, address: EthAddress, code: seq[byte]) =
     acc.code = code
     acc.flags.incl CodeChanged
 
-proc setStorage*(ac: AccountsCache, address: EthAddress, slot, value: UInt256) =
-  let acc = ac.getAccount(address)
-  acc.flags.incl {Alive}
-  let oldValue = acc.storageValue(slot, ac.db)
-  if oldValue != value:
-    var acc = ac.makeDirty(address)
-    acc.overlayStorage[slot] = value
-    acc.flags.incl StorageChanged
-
-
 proc deleteAccount*(ac: AccountsCache, address: EthAddress) =
   # make sure all savepoints already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
