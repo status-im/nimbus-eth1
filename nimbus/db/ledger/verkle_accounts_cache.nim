@@ -12,6 +12,7 @@ import
   std/[tables, hashes, sets],
   chronicles,
   eth/common,
+  ../../../stateless/multi_keys,
   ../../constants,
   ../../utils/utils,
   ../access_list as ac_access_list,
@@ -568,3 +569,17 @@ proc getStorageRoot*(ac: AccountsCache, address: EthAddress): Hash256 =
   let acc = ac.getAccount(address, false)
   if acc.isNil: emptyAcc.storageRoot
   else: acc.account.storageRoot
+
+func multiKeys(slots: HashSet[UInt256]): MultiKeysRef =
+  if slots.len == 0: return
+  new result
+  for x in slots:
+    result.add x.toBytesBE
+  result.sort()
+
+proc makeMultiKeys*(ac: AccountsCache): MultiKeysRef =
+  # this proc is called after we done executing a block
+  new result
+  for k, v in ac.witnessCache:
+    result.add(k, v.codeTouched, multiKeys(v.storageKeys))
+  result.sort()
