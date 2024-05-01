@@ -26,16 +26,12 @@
 
 import
   std/[algorithm, sequtils, strutils, sets, tables, typetraits],
-  chronicles,
   eth/[common, trie/nibbles],
   results,
   stew/keyed_queue,
   ../../sync/protocol/snap/snap_types,
   "."/[aristo_desc, aristo_get, aristo_hike, aristo_layers,
        aristo_path, aristo_serialise, aristo_utils, aristo_vid]
-
-logScope:
-  topics = "aristo-merge"
 
 type
   LeafTiePayload* = object
@@ -186,12 +182,8 @@ proc insertBranch(
       return err(MergeNonBranchProofModeLock)
 
     if linkVtx.vType == Leaf:
-      # Update vertex path lookup
-      let
-        path = hike.legsTo(NibblesSeq) & linkVtx.lPfx
-        rc = path.pathToTag()
-      if rc.isErr:
-        debug "Branch link leaf path garbled", linkID, path
+      # Double check path prefix
+      if 64 < hike.legsTo(NibblesSeq).len + linkVtx.lPfx.len:
         return err(MergeBranchLinkLeafGarbled)
 
       let local = db.vidFetch(pristine = true)
@@ -330,8 +322,12 @@ proc topIsBranchAddLeaf(
     #
     if db.pPrf.len == 0:
       # Not much else that can be done here
-      debug "Dangling leaf link, reused", branch=hike.legs[^1].wp.vid,
-        nibble, linkID, leafPfx=hike.tail
+      raiseAssert "Dangling edge:" &
+        " pfx=" & $hike.legsTo(hike.legs.len-1,NibblesSeq) &
+        " branch=" & $parent &
+        " nibble=" & $nibble &
+        " edge=" & $linkID &
+        " tail=" & $hike.tail
 
     # Reuse placeholder entry in table
     let vtx = VertexRef(
