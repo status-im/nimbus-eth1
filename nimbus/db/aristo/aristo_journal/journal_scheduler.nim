@@ -279,12 +279,12 @@ func capacity*(
 
 
 func addItem*(
-    fifo: QidSchedRef;                             # Cascaded fifos descriptor
-      ): tuple[exec: seq[QidAction], fifo: QidSchedRef] =
+    journal: QidSchedRef;                          # Cascaded fifos descriptor
+      ): tuple[exec: seq[QidAction], journal: QidSchedRef] =
   ## Get the instructions for adding a new slot to the cascades queues. The
-  ## argument `fifo` is a complete state of the addresses of a cascaded *FIFO*
-  ## when applied to a database. Only the *FIFO* queue addresses are needed
-  ## in order to describe how to add another item.
+  ## argument `journal` is a complete state of the addresses of a cascaded
+  ## *FIFO* when applied to a database. Only the *FIFO* queue addresses are
+  ## needed in order to describe how to add another item.
   ##
   ## The function returns a list of instructions what to do when adding a new
   ## item and the new state of the cascaded *FIFO*. The following instructions
@@ -310,9 +310,9 @@ func addItem*(
   ##                               -- another item.
   ##
   let
-    ctx = fifo.ctx.q
+    ctx = journal.ctx.q
   var
-    state = fifo.state
+    state = journal.state
     deferred: seq[QidAction]   # carry over to next sub-queue
     revActions: seq[QidAction] # instructions in reverse order
 
@@ -370,15 +370,15 @@ func addItem*(
       op:  DelQid,
       qid: deferred[0].qid)
 
-  (revActions.reversed, QidSchedRef(ctx: fifo.ctx, state: state))
+  (revActions.reversed, QidSchedRef(ctx: journal.ctx, state: state))
 
 
 func fetchItems*(
-    fifo: QidSchedRef;                             # Cascaded fifos descriptor
+    journal: QidSchedRef;                          # Cascaded fifos descriptor
     size: int;                                     # Leading items to merge
-      ): tuple[exec: seq[QidAction], fifo: QidSchedRef] =
+      ): tuple[exec: seq[QidAction], journal: QidSchedRef] =
   ## Get the instructions for extracting the latest `size` items from the
-  ## cascaded queues. argument `fifo` is a complete state of the addresses of
+  ## cascaded queues. argument `journal` is a complete state of the addresses of
   ## a cascaded *FIFO* when applied to a database. Only the *FIFO* queue
   ## addresses are used in order to describe how to add another item.
   ##
@@ -395,13 +395,13 @@ func fetchItems*(
   ## The extracted items will then be available from the hold queue.
   var
     actions: seq[QidAction]
-    state = fifo.state
+    state = journal.state
 
   if 0 < size:
     var size = size.uint64
 
-    for n in 0 ..< fifo.state.len:
-      let q = fifo.state[n]
+    for n in 0 ..< journal.state.len:
+      let q = journal.state[n]
       if q[0] == 0:
         discard
 
@@ -447,7 +447,7 @@ func fetchItems*(
         #  |          :
         #  |         wrap
         let
-          wrap = fifo.ctx.q[n].wrap
+          wrap = journal.ctx.q[n].wrap
           qSize1 = q[1] - QueueID(0)
 
         if size <= qSize1:
@@ -490,35 +490,35 @@ func fetchItems*(
 
         state[n] = (QueueID(0), QueueID(0))
 
-  (actions, QidSchedRef(ctx: fifo.ctx, state: state))
+  (actions, QidSchedRef(ctx: journal.ctx, state: state))
 
 
 func lengths*(
-    fifo: QidSchedRef;                             # Cascaded fifos descriptor
+    journal: QidSchedRef;                          # Cascaded fifos descriptor
       ): seq[int] =
   ## Return the list of lengths for all cascaded sub-fifos.
-  for n in 0 ..< fifo.state.len:
-    result.add fifo.state[n].fifoLen(fifo.ctx.q[n].wrap).int
+  for n in 0 ..< journal.state.len:
+    result.add journal.state[n].fifoLen(journal.ctx.q[n].wrap).int
 
 func len*(
-    fifo: QidSchedRef;                             # Cascaded fifos descriptor
+    journal: QidSchedRef;                          # Cascaded fifos descriptor
       ): int =
-  ## Size of the fifo
-  fifo.lengths.foldl(a + b, 0)
+  ## Size of the journal
+  journal.lengths.foldl(a + b, 0)
 
 
 func `[]`*(
-    fifo: QidSchedRef;                             # Cascaded fifos descriptor
+    journal: QidSchedRef;                          # Cascaded fifos descriptor
     inx: int;                                      # Index into latest items
       ): QueueID =
-  ## Get the queue ID of the `inx`-th `fifo` entry where index `0` refers to
+  ## Get the queue ID of the `inx`-th `journal` entry where index `0` refers to
   ## the entry most recently added, `1` the one before, etc. If there is no
   ## such entry `QueueID(0)` is returned.
   if 0 <= inx:
     var inx = inx.uint64
 
-    for n in 0 ..< fifo.state.len:
-      let q = fifo.state[n]
+    for n in 0 ..< journal.state.len:
+      let q = journal.state[n]
       if q[0] == 0:
         discard
 
@@ -551,22 +551,22 @@ func `[]`*(
         inx -= qInxMax1 + 1 # Otherwise continue
 
         let
-          wrap = fifo.ctx.q[n].wrap
+          wrap = journal.ctx.q[n].wrap
           qInxMax0 = wrap - q[0]
         if inx <= qInxMax0:
           return n.globalQid(wrap - inx)
         inx -= qInxMax0 + 1 # Otherwise continue
 
 func `[]`*(
-    fifo: QidSchedRef;                             # Cascaded fifos descriptor
+    journal: QidSchedRef;                          # Cascaded fifos descriptor
     bix: BackwardsIndex;                           # Index into latest items
       ): QueueID =
   ## Variant of `[]` for provifing `[^bix]`.
-  fifo[fifo.len - bix.distinctBase]
+  journal[journal.len - bix.distinctBase]
 
 
 func `[]`*(
-    fifo: QidSchedRef;                             # Cascaded fifos descriptor
+    journal: QidSchedRef;                          # Cascaded fifos descriptor
     qid: QueueID;                                  # Index into latest items
       ): int =
   ## ..
@@ -575,12 +575,12 @@ func `[]`*(
       chn = (qid.uint64 shr 62).int
       qid = (qid.uint64 and 0x3fff_ffff_ffff_ffffu64).QueueID
 
-    if chn < fifo.state.len:
+    if chn < journal.state.len:
       var offs = 0
       for n in 0 ..< chn:
-        offs += fifo.state[n].fifoLen(fifo.ctx.q[n].wrap).int
+        offs += journal.state[n].fifoLen(journal.ctx.q[n].wrap).int
 
-      let q = fifo.state[chn]
+      let q = journal.state[chn]
       if q[0] <= q[1]:
         # Single file
         # ::
@@ -606,14 +606,14 @@ func `[]`*(
           return offs + (q[1] - qid).int
 
         if q[0] <= qid:
-          let wrap = fifo.ctx.q[chn].wrap
+          let wrap = journal.ctx.q[chn].wrap
           if qid <= wrap:
             return offs + (q[1] - QueueID(0)).int + (wrap - qid).int
   -1
 
 
 proc le*(
-    fifo: QidSchedRef;                             # Cascaded fifos descriptor
+    journal: QidSchedRef;                          # Cascaded fifos descriptor
     fid: FilterID;                                 # Upper (or right) bound
     fn: QuFilMap;                                  # QueueID/FilterID mapping
     forceEQ = false;                               # Check for strict equality
@@ -627,7 +627,7 @@ proc le*(
   ##
   var
     left = 0
-    right = fifo.len - 1
+    right = journal.len - 1
 
   template toFid(qid: QueueID): FilterID =
     fn(qid).valueOr:
@@ -639,30 +639,30 @@ proc le*(
   if 0 <= right:
     # Check left fringe
     let
-      maxQid = fifo[left]
+      maxQid = journal[left]
       maxFid = maxQid.toFid
     if maxFid <= fid:
       if forceEQ and maxFid != fid:
         return QueueID(0)
       return maxQid
-    # So `fid < fifo[left]`
+    # So `fid < journal[left]`
 
     # Check right fringe
     let
-      minQid = fifo[right]
+      minQid = journal[right]
       minFid = minQid.toFid
     if fid <= minFid:
       if minFid == fid:
         return minQid
       return QueueID(0)
-    # So `fifo[right] < fid`
+    # So `journal[right] < fid`
 
     # Bisection
     var rightQid = minQid                          # Might be used as end result
     while 1 < right - left:
       let
         pivot = (left + right) div 2
-        pivQid = fifo[pivot]
+        pivQid = journal[pivot]
         pivFid = pivQid.toFid
       #
       # Example:
@@ -671,19 +671,20 @@ proc le*(
       #   inx:        left ... pivot ... right
       #   fid:             77
       #
-      # with `fifo[left].toFid > fid > fifo[right].toFid`
+      # with `journal[left].toFid > fid > journal[right].toFid`
       #
-      if pivFid < fid:                             # fid >= fifo[half].toFid:
+      if pivFid < fid:                             # fid >= journal[half].toFid:
         right = pivot
         rightQid = pivQid
-      elif fid < pivFid:                           # fifo[half].toFid > fid
+      elif fid < pivFid:                           # journal[half].toFid > fid
         left = pivot
       else:
         return pivQid
 
-    # Now: `fifo[right].toFid < fid < fifo[left].toFid` (and `right == left+1`).
+    # Now: `journal[right].toFid < fid < journal[left].toFid`
+    #      (and `right == left+1`).
     if not forceEQ:
-      # Make sure that `fifo[right].toFid` exists
+      # Make sure that `journal[right].toFid` exists
       if fn(rightQid).isOk:
         return rightQid
 
@@ -691,12 +692,12 @@ proc le*(
 
 
 proc eq*(
-    fifo: QidSchedRef;                             # Cascaded fifos descriptor
+    journal: QidSchedRef;                          # Cascaded fifos descriptor
     fid: FilterID;                                 # Filter ID to search for
     fn: QuFilMap;                                  # QueueID/FilterID mapping
       ): QueueID =
   ## Variant of `le()` for strict equality.
-  fifo.le(fid, fn, forceEQ = true)
+  journal.le(fid, fn, forceEQ = true)
 
 # ------------------------------------------------------------------------------
 # End

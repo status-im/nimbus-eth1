@@ -21,7 +21,7 @@ import
   ../../nimbus/db/aristo/[
     aristo_check, aristo_debug, aristo_desc, aristo_blobify, aristo_layers,
     aristo_vid],
-  ../../nimbus/db/aristo/aristo_filter/filter_scheduler,
+  ../../nimbus/db/aristo/aristo_journal/journal_scheduler,
   ../replay/xcheck,
   ./test_helpers
 
@@ -396,7 +396,7 @@ proc testQidScheduler*(
     let w = scd.addItem()
     let execOk = list.exec(serial=n, instr=w.exec, relax=false)
     xCheck execOk
-    scd[] = w.fifo[]
+    scd[] = w.journal[]
     let validateOk = list.validate(scd, serial=n, relax=false)
     xCheck validateOk:
       show(serial=n, exec=w.exec)
@@ -436,7 +436,7 @@ proc testQidScheduler*(
       list.del qid
 
   xCheck delIDs.len == 0
-  scd[] = fetch.fifo[]
+  scd[] = fetch.journal[]
 
   # -------------------
 
@@ -445,7 +445,7 @@ proc testQidScheduler*(
     let w = scd.addItem()
     let execOk = list.exec(serial=n, instr=w.exec, relax=true)
     xCheck execOk
-    scd[] = w.fifo[]
+    scd[] = w.journal[]
     let validateOk = list.validate(scd, serial=n, relax=true)
     xCheck validateOk:
       show(serial=n, exec=w.exec)
@@ -455,7 +455,7 @@ proc testQidScheduler*(
     let w = scd.addItem()
     let execOk = list.exec(serial=n, instr=w.exec, relax=false)
     xCheck execOk
-    scd[] = w.fifo[]
+    scd[] = w.journal[]
     let validateOk = list.validate(scd, serial=n, relax=false)
     xCheck validateOk
 

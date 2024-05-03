@@ -49,7 +49,7 @@ func pathAsBlob*(tag: PathID): Blob =
     if 64 <= tag.length:
       return key
     else:
-      return key[0 .. (tag.length + 1) div 2]
+      return key[0 .. (tag.length - 1) div 2]
 
 func pathAsHEP*(tag: PathID; isLeaf = false): Blob =
   ## Convert the `tag` argument to a hex encoded partial path as used in `eth`

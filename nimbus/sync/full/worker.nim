@@ -15,7 +15,7 @@ import
   chronos,
   eth/p2p,
   ../../db/aristo/aristo_desc,
-  ../../db/aristo/aristo_filter/filter_scheduler,
+  ../../db/aristo/aristo_journal/journal_scheduler,
   ".."/[protocol, sync_desc],
   ../handlers/eth,
   ../misc/[best_pivot, block_queue, sync_ctrl, ticker],

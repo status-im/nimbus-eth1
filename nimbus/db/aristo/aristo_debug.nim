@@ -17,7 +17,7 @@ import
   stew/[byteutils, interval_set],
   ./aristo_desc/desc_backend,
   ./aristo_init/[memory_db, memory_only, rocks_db],
-  ./aristo_filter/filter_scheduler,
+  ./aristo_journal/journal_scheduler,
   "."/[aristo_constants, aristo_desc, aristo_hike, aristo_layers]
 
 # ------------------------------------------------------------------------------

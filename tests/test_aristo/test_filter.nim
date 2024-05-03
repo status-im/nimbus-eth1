@@ -22,10 +22,10 @@ import
     aristo_debug,
     aristo_desc,
     aristo_desc/desc_backend,
-    aristo_filter,
-    aristo_filter/filter_fifos,
-    aristo_filter/filter_scheduler,
     aristo_get,
+    aristo_journal,
+    aristo_journal/journal_ops,
+    aristo_journal/journal_scheduler,
     aristo_layers,
     aristo_merge,
     aristo_persistent,
@@ -191,7 +191,7 @@ proc dbTriplet(w: LeafQuartet; rdbPath: string): Result[DbTriplet,AristoError] =
       check rc.error == 0
       return
 
-  let dx = [db, db.forkTop.value, db.forkTop.value]
+  let dx = [db, db.forkTx(0).value, db.forkTx(0).value]
   xCheck dx[0].nForked == 2
 
   # Reduce unwanted tx layers
@@ -417,7 +417,7 @@ proc storeFilter(
       ): bool =
   ## ..
   let instr = block:
-    let rc = be.fifosStore(filter, none(FilterID))
+    let rc = be.journalOpsPushSlot(filter, none(FilterID))
     xCheckRc rc.error == 0
     rc.value
 
@@ -450,11 +450,11 @@ proc fetchDelete(
   ## ...
   let
     vfyInst = block:
-      let rc = be.fifosDelete(backSteps = backSteps)
+      let rc = be.journalOpsDeleteSlots(backSteps = backSteps)
       xCheckRc rc.error == 0
       rc.value
     instr = block:
-      let rc = be.fifosFetch(backSteps = backSteps)
+      let rc = be.journalOpsFetchSlots(backSteps = backSteps)
       xCheckRc rc.error == 0
       rc.value
     qid = be.journal.le(instr.fil.fid, be.qid2fidFn)
@@ -842,7 +842,7 @@ proc testFilterBacklog*(
 
     # Realign to earlier state
     xb = block:
-      let rc = db.forkByJournal(episode = episode)
+      let rc = db.journalFork(episode = episode)
       xCheckRc rc.error == 0
       rc.value
     block:
@@ -851,7 +851,7 @@ proc testFilterBacklog*(
 
     # Store this state backend database (temporarily re-centre)
     block:
-      let rc = xb.resolveBackendFilter(reCentreOk = true)
+      let rc = xb.journalUpdate(reCentreOk = true)
       xCheckRc rc.error == 0
     xCheck db.isCentre
     block:
@@ -863,7 +863,7 @@ proc testFilterBacklog*(
 
     # Restore previous database state
     block:
-      let rc = db.resolveBackendFilter()
+      let rc = db.journalUpdate()
       xCheckRc rc.error == 0
     block:
       let rc = db.check(relax=false)

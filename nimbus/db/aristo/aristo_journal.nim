@@ -8,8 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-## Aristo DB -- Patricia Trie filter management
-## =============================================
+## Aristo DB -- Filter and journal management
+## ==========================================
 ##
 
 import
@@ -18,14 +18,15 @@ import
   results,
   "."/[aristo_desc, aristo_get, aristo_vid],
   ./aristo_desc/desc_backend,
-  ./aristo_filter/[
-    filter_fifos, filter_helpers, filter_merge, filter_reverse, filter_siblings]
+  ./aristo_journal/[
+    filter_state_root, filter_merge, filter_reverse, filter_siblings,
+    journal_get, journal_ops]
 
 # ------------------------------------------------------------------------------
 # Public functions, construct filters
 # ------------------------------------------------------------------------------
 
-proc fwdFilter*(
+proc journalFwdFilter*(
     db: AristoDbRef;                   # Database
     layer: LayerRef;                   # Layer to derive filter from
     chunkedMpt = false;                # Relax for snap/proof scenario
@@ -64,7 +65,7 @@ proc fwdFilter*(
 # Public functions, apply/install filters
 # ------------------------------------------------------------------------------
 
-proc merge*(
+proc journalMerge*(
     db: AristoDbRef;                   # Database
     filter: FilterRef;                 # Filter to apply to database
       ): Result[void,(VertexID,AristoError)] =
@@ -93,12 +94,12 @@ proc merge*(
   ok()
 
 
-proc canResolveBackendFilter*(db: AristoDbRef): bool =
+proc journalUpdateOk*(db: AristoDbRef): bool =
   ## Check whether the read-only filter can be merged into the backend
   not db.backend.isNil and db.isCentre
 
 
-proc resolveBackendFilter*(
+proc journalUpdate*(
     db: AristoDbRef;                   # Database
     nxtFid = none(FilterID);           # Next filter ID (if any)
     reCentreOk = false;
@@ -143,16 +144,16 @@ proc resolveBackendFilter*(
   defer: updateSiblings.rollback()
 
   # Figure out how to save the reverse filter on a cascades slots queue
-  var instr: FifoInstr
+  var instr: JournalOpsMod
   if not be.journal.isNil:                       # Otherwise ignore
     block getInstr:
       # Compile instruction for updating filters on the cascaded fifos
       if db.roFilter.isValid:
-        let ovLap = be.getJournalOverlap db.roFilter
+        let ovLap = be.journalGetOverlap db.roFilter
         if 0 < ovLap:
-          instr = ? be.fifosDelete ovLap         # Revert redundant entries
+          instr = ? be.journalOpsDeleteSlots ovLap # Revert redundant entries
           break getInstr
-      instr = ? be.fifosStore(
+      instr = ? be.journalOpsPushSlot(
         updateSiblings.rev,                      # Store reverse filter
         nxtFid)                                  # Set filter ID (if any)
 
@@ -178,7 +179,7 @@ proc resolveBackendFilter*(
   ok()
 
 
-proc forkByJournal*(
+proc journalFork*(
     db: AristoDbRef;
     episode: int;
       ): Result[AristoDbRef,AristoError] =
@@ -195,19 +196,19 @@ proc forkByJournal*(
   if episode < 0:
     return err(FilNegativeEpisode)
   let
-    instr = ? be.fifosFetch(backSteps = episode+1)
+    instr = ? be.journalOpsFetchSlots(backSteps = episode+1)
     clone = ? db.fork(noToplayer = true)
   clone.top = LayerRef.init()
   clone.top.final.vGen = instr.fil.vGen
   clone.roFilter = instr.fil
   ok clone
 
-proc forkByJournal*(
+proc journalFork*(
     db: AristoDbRef;
     fid: Option[FilterID];
     earlierOK = false;
       ): Result[AristoDbRef,AristoError] =
-  ## Variant of `forkByJounal()` for forking to a particular filter ID (or the
+  ## Variant of `journalFork()` for forking to a particular filter ID (or the
   ## nearest predecessot if `earlierOK` is passed `true`.) if there is some
   ## filter ID `fid`.
   ##
@@ -218,8 +219,8 @@ proc forkByJournal*(
   if be.isNil:
     return err(FilBackendMissing)
 
-  let fip = ? be.getFromJournal(fid, earlierOK)
-  db.forkByJournal fip.inx
+  let fip = ? be.journalGetInx(fid, earlierOK)
+  db.journalFork fip.inx
 
 # ------------------------------------------------------------------------------
 # End

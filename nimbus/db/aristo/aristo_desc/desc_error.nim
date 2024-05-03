@@ -68,7 +68,9 @@ type
     # Path function `hikeUp()`
     HikeBranchMissingEdge
     HikeBranchTailEmpty
+    HikeDanglingEdge
     HikeEmptyPath
+    HikeExtMissingEdge
     HikeExtTailEmpty
     HikeExtTailMismatch
     HikeLeafUnexpected
@@ -261,7 +263,8 @@ type
     TxArgStaleTx
     TxArgsUseless
     TxBackendNotWritable
-    TxGarbledSpan
+    TxLevelTooDeep
+    TxLevelUseless
     TxNoPendingTx
     TxNotFound
     TxNotTopTx

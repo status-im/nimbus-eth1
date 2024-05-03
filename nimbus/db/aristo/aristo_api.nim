@@ -17,8 +17,8 @@ import
   eth/[common, trie/nibbles],
   results,
   ./aristo_desc/desc_backend,
-  ./aristo_filter/filter_helpers,
   ./aristo_init/memory_db,
+  ./aristo_journal/journal_get,
   "."/[aristo_delete, aristo_desc, aristo_fetch, aristo_get, aristo_hashify,
        aristo_hike, aristo_init, aristo_merge, aristo_path, aristo_profile,
        aristo_serialise, aristo_tx, aristo_vid]
@@ -95,6 +95,28 @@ type
       ## Cascaded attempt to traverse the `Aristo Trie` and fetch the value
       ## of a leaf vertex. This function is complementary to `mergePayload()`.
 
+  AristoApiFindTxFn* =
+    proc(db: AristoDbRef;
+         vid: VertexID;
+         key: HashKey;
+        ): Result[int,AristoError]
+        {.noRaise.}
+      ## Find the transaction where the vertex with ID `vid` exists and has
+      ## the Merkle hash key `key`. If there is no transaction available,
+      ## search in the filter and then in the backend.
+      ##
+      ## If the above procedure succeeds, an integer indicating the transaction
+      ## level is returned:
+      ##
+      ## * `0` -- top level, current layer
+      ## * `1`,`2`,`..` -- some transaction level further down the stack
+      ## * `-1` -- the filter between transaction stack and database backend
+      ## * `-2` -- the databse backend
+      ##
+      ## A successful return code might be used for the `forkTx()` call for
+      ## creating a forked descriptor that provides the pair `(vid,key)`.
+      ##
+
   AristoApiFinishFn* =
     proc(db: AristoDbRef;
          flush = false;
@@ -119,52 +141,35 @@ type
       ## A non centre descriptor should always be destructed after use (see
       ## also# comments on `fork()`.)
 
-  AristoApiForkTopFn* =
+  AristoApiForkTxFn* =
     proc(db: AristoDbRef;
+         backLevel: int;
          dontHashify = false;
         ): Result[AristoDbRef,AristoError]
         {.noRaise.}
-      ## Clone a descriptor in a way so that there is exactly one active
-      ## transaction.
-      ##
-      ## If the arguent flag `dontHashify` is passed `true`, the clone
-      ## descriptor will *NOT* be hashified right after construction.
-      ##
-      ## Use `aristo_desc.forget()` to clean up this descriptor.
-
-  AristoApiForkWithFn* =
-    proc(db: AristoDbRef;
-         vid: VertexID;
-         key: HashKey;
-         dontHashify = false;
-           ): Result[AristoDbRef,AristoError]
-           {.noRaise.}
-      ## Find the transaction where the vertex with ID `vid` exists and has
-      ## the Merkle hash key `key`. If there is no transaction available,
-      ## search in the filter and then in the backend.
-      ##
-      ## If the above procedure succeeds, a new descriptor is forked with
-      ## exactly one transaction which contains the all the bottom layers up
-      ## until the layer where the `(vid,key)` pair is found. In case the
-      ## pair was found on the filter or the backend, this transaction is
-      ## empty.
-
-  AristoApiGetFromJournalFn* =
-    proc(be: BackendRef;
-         fid: Option[FilterID];
-         earlierOK = false;
-        ): Result[FilterIndexPair,AristoError]
-        {.noRaise.}
-      ## For a positive argument `fid`, find the filter on the journal with ID
-      ## not larger than `fid` (i e. the resulting filter might be older.)
-      ##
-      ## If the argument `earlierOK` is passed `false`, the function succeeds
-      ## only if the filter ID of the returned filter is equal to the argument
-      ## `fid`.
-      ##
-      ## In case that the argument `fid` is zera (i.e. `FilterID(0)`), the
-      ## filter with the smallest filter ID (i.e. the oldest filter) is
-      ## returned. In that case, the argument `earlierOK` is ignored.
+    ## Fork a new descriptor obtained from parts of the argument database
+    ## as described by arguments `db` and `backLevel`.
+    ##
+    ## If the argument `backLevel` is non-negative, the forked descriptor
+    ## will provide the database view where the first `backLevel` transaction
+    ## layers are stripped and the remaing layers are squashed into a single
+    ## transaction.
+    ##
+    ## If `backLevel` is `-1`, a database descriptor with empty transaction
+    ## layers will be provided where the `roFilter` between database and
+    ## transaction layers are kept in place.
+    ##
+    ## If `backLevel` is `-2`, a database descriptor with empty transaction
+    ## layers will be provided without an `roFilter`.
+    ##
+    ## The returned database descriptor will always have transaction level one.
+    ## If there were no transactions that could be squashed, an empty
+    ## transaction is added.
+    ##
+    ## If the arguent flag `dontHashify` is passed `true`, the forked descriptor
+    ## will *NOT* be hashified right after construction.
+    ##
+    ## Use `aristo_desc.forget()` to clean up this descriptor.
 
   AristoApiGetKeyRcFn* =
     proc(db: AristoDbRef;
@@ -206,6 +211,23 @@ type
         {.noRaise.}
       ## Getter, returns `true` if the argument `tx` referes to the current
       ## top level transaction.
+
+  AristoApiJournalGetInxFn* =
+    proc(be: BackendRef;
+         fid: Option[FilterID];
+         earlierOK = false;
+        ): Result[JournalInx,AristoError]
+        {.noRaise.}
+      ## For a positive argument `fid`, find the filter on the journal with ID
+      ## not larger than `fid` (i e. the resulting filter might be older.)
+      ##
+      ## If the argument `earlierOK` is passed `false`, the function succeeds
+      ## only if the filter ID of the returned filter is equal to the argument
+      ## `fid`.
+      ##
+      ## In case that the argument `fid` is zera (i.e. `FilterID(0)`), the
+      ## filter with the smallest filter ID (i.e. the oldest filter) is
+      ## returned. In that case, the argument `earlierOK` is ignored.
 
   AristoApiLevelFn* =
     proc(db: AristoDbRef;
@@ -371,16 +393,16 @@ type
     delete*: AristoApiDeleteFn
     delTree*: AristoApiDelTreeFn
     fetchPayload*: AristoApiFetchPayloadFn
+    findTx*: AristoApiFindTxFn
     finish*: AristoApiFinishFn
     forget*: AristoApiForgetFn
-    forkTop*: AristoApiForkTopFn
-    forkWith*: AristoApiForkWithFn
-    getFromJournal*: AristoApiGetFromJournalFn
+    forkTx*: AristoApiForkTxFn
     getKeyRc*: AristoApiGetKeyRcFn
     hashify*: AristoApiHashifyFn
     hasPath*: AristoApiHasPathFn
     hikeUp*: AristoApiHikeUpFn
     isTop*: AristoApiIsTopFn
+    journalGetInx*: AristoApiJournalGetInxFn
     level*: AristoApiLevelFn
     nForked*: AristoApiNForkedFn
     merge*: AristoApiMergeFn
@@ -404,16 +426,16 @@ type
     AristoApiProfDeleteFn         = "delete"
     AristoApiProfDelTreeFn        = "delTree"
     AristoApiProfFetchPayloadFn   = "fetchPayload"
+    AristoApiProfFindTxFn         = "findTx"
     AristoApiProfFinishFn         = "finish"
     AristoApiProfForgetFn         = "forget"
-    AristoApiProfForkTopFn        = "forkTop"
-    AristoApiProfForkWithFn       = "forkWith"
-    AristoApiProfGetFromJournalFn = "getFromJournal"
+    AristoApiProfForkTxFn         = "forkTx"
     AristoApiProfGetKeyRcFn       = "getKeyRc"
     AristoApiProfHashifyFn        = "hashify"
     AristoApiProfHasPathFn        = "hasPath"
     AristoApiProfHikeUpFn         = "hikeUp"
     AristoApiProfIsTopFn          = "isTop"
+    AristoApiProfJournalGetInxFn  = "journalGetInx"
     AristoApiProfLevelFn          = "level"
     AristoApiProfNForkedFn        = "nForked"
     AristoApiProfMergeFn          = "merge"
@@ -455,16 +477,16 @@ when AutoValidateApiHooks:
     doAssert not api.delete.isNil
     doAssert not api.delTree.isNil
     doAssert not api.fetchPayload.isNil
+    doAssert not api.findTx.isNil
     doAssert not api.finish.isNil
     doAssert not api.forget.isNil
-    doAssert not api.forkTop.isNil
-    doAssert not api.forkWith.isNil
-    doAssert not api.getFromJournal.isNil
+    doAssert not api.forkTx.isNil
     doAssert not api.getKeyRc.isNil
     doAssert not api.hashify.isNil
     doAssert not api.hasPath.isNil
     doAssert not api.hikeUp.isNil
     doAssert not api.isTop.isNil
+    doAssert not api.journalGetInx.isNil
     doAssert not api.level.isNil
     doAssert not api.nForked.isNil
     doAssert not api.merge.isNil
@@ -508,16 +530,16 @@ func init*(api: var AristoApiObj) =
   api.delete = delete
   api.delTree = delTree
   api.fetchPayload = fetchPayload
+  api.findTx = findTx
   api.finish = finish
   api.forget = forget
-  api.forkTop = forkTop
-  api.forkWith = forkWith
-  api.getFromJournal = getFromJournal
+  api.forkTx = forkTx
   api.getKeyRc = getKeyRc
   api.hashify = hashify
   api.hasPath = hasPath
   api.hikeUp = hikeUp
-  api.isTop = isTop
+  api.isTop = isTop 
+  api.journalGetInx = journalGetInx
   api.level = level
   api.nForked = nForked
   api.merge = merge
@@ -544,16 +566,16 @@ func dup*(api: AristoApiRef): AristoApiRef =
     delete:         api.delete,
     delTree:        api.delTree,
     fetchPayload:   api.fetchPayload,
+    findTx:         api.findTx,
     finish:         api.finish,
     forget:         api.forget,
-    forkTop:        api.forkTop,
-    forkWith:       api.forkWith,
-    getFromJournal: api.getFromJournal,
+    forkTx:         api.forkTx,
     getKeyRc:       api.getKeyRc,
     hashify:        api.hashify,
     hasPath:        api.hasPath,
     hikeUp:         api.hikeUp,
     isTop:          api.isTop,
+    journalGetInx:  api.journalGetInx,
     level:          api.level,
     nForked:        api.nForked,
     merge:          api.merge,
@@ -617,6 +639,11 @@ func init*(
       AristoApiProfFetchPayloadFn.profileRunner:
         result = api.fetchPayload(a, b, c)
 
+  profApi.findTx =
+    proc(a: AristoDbRef; b: VertexID; c: HashKey): auto =
+      AristoApiProfFindTxFn.profileRunner:
+        result = api.findTx(a, b, c)
+
   profApi.finish =
     proc(a: AristoDbRef; b = false) =
       AristoApiProfFinishFn.profileRunner:
@@ -627,20 +654,10 @@ func init*(
       AristoApiProfForgetFn.profileRunner:
         result = api.forget(a)
 
-  profApi.forkTop =
-    proc(a: AristoDbRef; b = false): auto =
-      AristoApiProfForkTopFn.profileRunner:
-        result = api.forkTop(a, b)
-
-  profApi.forkWith =
-    proc(a: AristoDbRef; b: VertexID; c: HashKey; d = false): auto =
-      AristoApiProfForkWithFn.profileRunner:
-        result = api.forkWith(a, b, c, d)
-
-  profApi.getFromJournal =
-    proc(a: BackendRef; b: Option[FilterID]; c = false): auto =
-      AristoApiProfGetFromJournalFn.profileRunner:
-        result = api.getFromJournal(a, b, c)
+  profApi.forkTx =
+    proc(a: AristoDbRef; b: int; c = false): auto =
+      AristoApiProfForkTxFn.profileRunner:
+        result = api.forkTx(a, b, c)
 
   profApi.getKeyRc =
     proc(a: AristoDbRef; b: VertexID): auto =
@@ -666,6 +683,11 @@ func init*(
     proc(a: AristoTxRef): auto =
       AristoApiProfIsTopFn.profileRunner:
         result = api.isTop(a)
+
+  profApi.journalGetInx =
+    proc(a: BackendRef; b: Option[FilterID]; c = false): auto =
+      AristoApiProfJournalGetInxFn.profileRunner:
+        result = api.journalGetInx(a, b, c)
 
   profApi.level =
     proc(a: AristoDbRef): auto =

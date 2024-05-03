@@ -17,14 +17,10 @@
 
 import
   std/[sets, typetraits],
-  chronicles,
   eth/[common, trie/nibbles],
   results,
   "."/[aristo_desc, aristo_get, aristo_hike, aristo_layers, aristo_path,
        aristo_utils, aristo_vid]
-
-logScope:
-  topics = "aristo-delete"
 
 type
   SaveToVaeVidFn =

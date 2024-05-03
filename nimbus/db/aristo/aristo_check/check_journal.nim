@@ -14,7 +14,7 @@ import
   std/[algorithm, sequtils, sets, tables],
   eth/common,
   results,
-  ../aristo_filter/filter_scheduler,
+  ../aristo_journal/journal_scheduler,
   ../aristo_walk/persistent,
   ".."/[aristo_desc, aristo_blobify]
 

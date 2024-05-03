@@ -94,7 +94,7 @@ proc hikeUp*(
     return err((VertexID(0),HikeEmptyPath,hike))
 
   var vid = root
-  while vid.isValid:
+  while true:
     var leg = Leg(wp: VidVtxPair(vid: vid), nibble: -1)
 
     # Fetch next vertex
@@ -103,19 +103,25 @@ proc hikeUp*(
         return err((vid,error,hike))
       if hike.legs.len == 0:
         return err((vid,HikeNoLegs,hike))
-      break
+      # The vertex ID `vid` was a follow up from a parent vertex, but there is
+      # no child vertex on the database. So `vid` is a dangling link which is
+      # allowed only if there is a partial trie (e.g. with `snap` sync.)
+      return err((vid,HikeDanglingEdge,hike))
 
     case leg.wp.vtx.vType:
     of Leaf:
+      # This must be the last vertex, so there cannot be any `tail` left.
       if hike.tail.len == hike.tail.sharedPrefixLen(leg.wp.vtx.lPfx):
         # Bingo, got full path
         hike.legs.add leg
         hike.tail = EmptyNibbleSeq
+        # This is the only loop exit
         break
 
       return err((vid,HikeLeafUnexpected,hike))
 
     of Branch:
+      # There must be some more data (aka `tail`) after a `Branch` vertex.
       if hike.tail.len == 0:
         hike.legs.add leg
         return err((vid,HikeBranchTailEmpty,hike))
@@ -133,6 +139,7 @@ proc hikeUp*(
       vid = nextVid
 
     of Extension:
+      # There must be some more data (aka `tail`) after an `Extension` vertex.
       if hike.tail.len == 0:
         hike.legs.add leg
         hike.tail = EmptyNibbleSeq
@@ -141,9 +148,13 @@ proc hikeUp*(
       if leg.wp.vtx.ePfx.len != hike.tail.sharedPrefixLen(leg.wp.vtx.ePfx):
         return err((vid,HikeExtTailMismatch,hike)) # Need to branch from here
 
+      let nextVid = leg.wp.vtx.eVid
+      if not nextVid.isValid:
+        return err((vid,HikeExtMissingEdge,hike))
+
       hike.legs.add leg
       hike.tail = hike.tail.slice(leg.wp.vtx.ePfx.len)
-      vid = leg.wp.vtx.eVid
+      vid = nextVid
 
   ok hike
 

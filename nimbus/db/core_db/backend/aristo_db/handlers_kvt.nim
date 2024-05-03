@@ -279,7 +279,7 @@ func init*(T: type KvtBaseRef; db: CoreDbRef; kdb: KvtDbRef): T =
     base: result,
     kvt:  kdb)
   dsc.methods = dsc.kvtMethods()
-  result.cache = KvtCoreDxKvtRef(db.bless dsc)
+  result.cache = db.bless dsc
 
   when CoreDbEnableApiProfiling:
     let profApi = KvtApiProfRef.init(result.api, kdb.backend)

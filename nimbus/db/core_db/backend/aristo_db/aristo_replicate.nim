@@ -29,7 +29,7 @@ iterator aristoReplicate[T](
     root = dsc.rootID
     mpt = dsc.to(AristoDbRef)
     api = dsc.to(AristoApiRef)
-    p = api.forkTop(mpt).valueOrApiError "aristoReplicate()"
+    p = api.forkTx(mpt,0).valueOrApiError "aristoReplicate()"
   defer: discard api.forget(p)
   for (vid,key,vtx,node) in T.replicate(p):
     if key.len == 32:

@@ -314,9 +314,11 @@ proc accMethods(cAcc: AristoCoreDxAccRef): CoreDbAccFns =
       colType: CtAccounts)
 
   proc accCloneMpt(): CoreDbRc[CoreDxMptRef] =
-    ok(AristoCoreDxMptRef(
+    var xpt = AristoCoreDxMptRef(
       base:    base,
-      mptRoot: AccountsVID))
+      mptRoot: AccountsVID)
+    xpt.methods = xpt.mptMethods
+    ok(db.bless xpt)
 
   proc accFetch(address: EthAddress): CoreDbRc[CoreDbAccount] =
     const info = "acc/fetchFn()"
@@ -570,7 +572,7 @@ func toVoidRc*[T](
 proc getFromJournal*(base: AristoBaseRef; fid: Option[FilterID]): FilterRef =
   let be = base.ctx.mpt.backend
   if not be.isNil:
-    let fp = base.api.getFromJournal(be, fid, earlierOK=true).valueOr:
+    let fp = base.api.journalGetInx(be, fid, earlierOK=true).valueOr:
       return FilterRef(nil)
     return fp.fil
 
@@ -730,9 +732,16 @@ proc init*(
     vid = VertexID(colType)
     key = colState.to(HashKey)
 
+    # Find `(vid,key)` on transaction stack
+    inx = block:
+      let rc = api.findTx(base.ctx.mpt, vid, key)
+      if rc.isErr:
+        return err(rc.error.toError(base, info))
+      rc.value
+
     # Fork MPT descriptor that provides `(vid,key)`
     newMpt = block:
-      let rc = api.forkWith(base.ctx.mpt, vid, key)
+      let rc = api.forkTx(base.ctx.mpt, inx)
       if rc.isErr:
         return err(rc.error.toError(base, info))
       rc.value

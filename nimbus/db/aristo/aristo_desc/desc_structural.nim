@@ -128,11 +128,6 @@ type
     final*: LayerFinalRef            ## Stored as latest version
     txUid*: uint                     ## Transaction identifier if positive
 
-  FilterIndexPair* = object
-    ## Helper structure for fetching fiters from journal.
-    inx*: int                        ## Non negative journal index. latest=`0`
-    fil*: FilterRef                  ## Valid filter
-
   # ----------------------
 
   QidLayoutRef* = ref object
@@ -150,6 +145,11 @@ type
     ## Current state of the filter queues
     ctx*: QidLayoutRef               ## Organisation of the FIFO
     state*: seq[(QueueID,QueueID)]   ## Current fill state
+
+  JournalInx* = tuple
+    ## Helper structure for fetching fiters from the journal.
+    inx: int                         ## Non negative journal index. latest=`0`
+    fil: FilterRef                   ## Valid filter
 
 const
   DefaultQidWrap = QueueID(0x3fff_ffff_ffff_ffffu64)
