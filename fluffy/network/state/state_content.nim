@@ -214,18 +214,17 @@ func packNibbles*(nibbles: seq[byte]): Nibbles =
   if nibbles.len() == 0:
     return Nibbles(@[byte(0x00)])
 
-  let isOddLength = (nibbles.len() %% 2 == 1)
+  let isEvenLength = nibbles.len() mod 2 == 0
 
   var
-    output = newSeq[byte]()
-    highNibble = not isOddLength
+    output = newSeqOfCap[byte](nibbles.len() div 2 + 1)
+    highNibble = isEvenLength
     currentByte: byte = 0
 
-  if isOddLength:
-    currentByte = 0x10
-
-  if not isOddLength:
+  if isEvenLength:
     output.add(0x00)
+  else:
+    currentByte = 0x10
 
   for i, nibble in nibbles:
     if highNibble:
@@ -240,7 +239,7 @@ func packNibbles*(nibbles: seq[byte]): Nibbles =
 func unpackNibbles*(nibbles: Nibbles): seq[byte] =
   doAssert(nibbles.len() <= MAX_PACKED_NIBBLES_LEN, "Packed nibbles length is too long")
 
-  var output = newSeq[byte]()
+  var output = newSeqOfCap[byte](nibbles.len * 2)
 
   for i, pair in nibbles:
     if i == 0 and pair == 0x00:
