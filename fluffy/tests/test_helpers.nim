@@ -14,8 +14,7 @@ import
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ../network/history/[accumulator, history_content],
   ../network/state/experimental/state_proof_types,
-  ../../nimbus/db/core_db,
-  ../../nimbus/common/[chain_config],
+  ../../nimbus/common/chain_config,
   ../database/content_db
 
 proc localAddress*(port: int): Address {.raises: [ValueError].} =
