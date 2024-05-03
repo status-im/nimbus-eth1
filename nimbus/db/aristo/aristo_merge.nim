@@ -186,9 +186,11 @@ proc insertBranch(
       if 64 < hike.legsTo(NibblesSeq).len + linkVtx.lPfx.len:
         return err(MergeBranchLinkLeafGarbled)
 
-      let local = db.vidFetch(pristine = true)
-      db.setVtxAndKey(hike.root, local, linkVtx)
-      linkVtx.lPfx = linkVtx.lPfx.slice(1+n)
+      let
+        local = db.vidFetch(pristine = true)
+        linkDup = linkVtx.dup
+      db.setVtxAndKey(hike.root, local, linkDup)
+      linkDup.lPfx = linkDup.lPfx.slice(1+n)
       forkVtx.bVid[linkInx] = local
 
     elif linkVtx.ePfx.len == n + 1:
@@ -196,9 +198,11 @@ proc insertBranch(
       forkVtx.bVid[linkInx] = linkVtx.eVid
 
     else:
-      let local = db.vidFetch
-      db.setVtxAndKey(hike.root, local, linkVtx)
-      linkVtx.ePfx = linkVtx.ePfx.slice(1+n)
+      let
+        local = db.vidFetch
+        linkDup = linkVtx.dup
+      db.setVtxAndKey(hike.root, local, linkDup)
+      linkDup.ePfx = linkDup.ePfx.slice(1+n)
       forkVtx.bVid[linkInx] = local
 
   block:
@@ -277,13 +281,14 @@ proc concatBranchAndLeaf(
 
   # Append leaf vertex
   let
+    brDup = brVtx.dup
     vid = db.vidFetch(pristine = true)
     vtx = VertexRef(
       vType: Leaf,
       lPfx:  hike.tail.slice(1),
       lData: payload)
-  brVtx.bVid[nibble] = vid
-  db.setVtxAndKey(hike.root, brVid, brVtx)
+  brDup.bVid[nibble] = vid
+  db.setVtxAndKey(hike.root, brVid, brDup)
   db.setVtxAndKey(hike.root, vid, vtx)
   okHike.legs.add Leg(wp: VidVtxPair(vtx: vtx, vid: vid), nibble: -1)
 
@@ -409,15 +414,16 @@ proc topIsExtAddLeaf(
       return err(MergeBranchProofModeLock)
 
     let
+      brDup = brVtx.dup
       vid = db.vidFetch(pristine = true)
       vtx = VertexRef(
         vType: Leaf,
         lPfx:  hike.tail.slice(1),
         lData: payload)
-    brVtx.bVid[nibble] = vid
-    db.setVtxAndKey(hike.root, brVid, brVtx)
+    brDup.bVid[nibble] = vid
+    db.setVtxAndKey(hike.root, brVid, brDup)
     db.setVtxAndKey(hike.root, vid, vtx)
-    okHike.legs.add Leg(wp: VidVtxPair(vtx: brVtx, vid: brVid), nibble: nibble)
+    okHike.legs.add Leg(wp: VidVtxPair(vtx: brDup, vid: brVid), nibble: nibble)
     okHike.legs.add Leg(wp: VidVtxPair(vtx: vtx, vid: vid), nibble: -1)
 
   ok okHike
@@ -443,17 +449,18 @@ proc topIsEmptyAddLeaf(
       return err(MergeBranchProofModeLock)
 
     let
+      rootDup = rootVtx.dup
       leafVid = db.vidFetch(pristine = true)
       leafVtx = VertexRef(
         vType: Leaf,
         lPfx:  hike.tail.slice(1),
         lData: payload)
-    rootVtx.bVid[nibble] = leafVid
-    db.setVtxAndKey(hike.root, hike.root, rootVtx)
+    rootDup.bVid[nibble] = leafVid
+    db.setVtxAndKey(hike.root, hike.root, rootDup)
     db.setVtxAndKey(hike.root, leafVid, leafVtx)
     return ok Hike(
       root: hike.root,
-      legs: @[Leg(wp: VidVtxPair(vtx: rootVtx, vid: hike.root), nibble: nibble),
+      legs: @[Leg(wp: VidVtxPair(vtx: rootDup, vid: hike.root), nibble: nibble),
               Leg(wp: VidVtxPair(vtx: leafVtx, vid: leafVid), nibble: -1)])
 
   db.insertBranch(hike, hike.root, rootVtx, payload)
