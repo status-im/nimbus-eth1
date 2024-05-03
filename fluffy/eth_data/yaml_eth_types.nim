@@ -7,7 +7,7 @@
 
 {.push raises: [].}
 
-import ssz_serialization/types
+import ssz_serialization/types, stew/byteutils
 
 type
   YamlTestProofBellatrix* = object
@@ -38,6 +38,6 @@ proc fromHex*[n](T: type array[n, Digest], a: array[n, string]): T =
 proc toHex*[n](a: array[n, Digest], T: type array[n, string]): T =
   var res: T
   for i in 0 ..< a.len:
-    res[i] = toHex(a[i].data)
+    res[i] = to0xHex(a[i].data)
 
   res

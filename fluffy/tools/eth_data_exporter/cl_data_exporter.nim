@@ -347,11 +347,11 @@ proc exportBeaconBlockProofBellatrix(
 
   let yamlTestProof = YamlTestProofBellatrix(
     execution_block_header:
-      beaconBlock.message.body.execution_payload.block_hash.data.toHex,
+      beaconBlock.message.body.execution_payload.block_hash.data.to0xHex(),
     beacon_block_body_proof: blockProof.beaconBlockBodyProof.toHex(array[8, string]),
-    beacon_block_body_root: blockProof.beaconBlockBodyRoot.data.toHex(),
+    beacon_block_body_root: blockProof.beaconBlockBodyRoot.data.to0xHex(),
     beacon_block_header_proof: blockProof.beaconBlockHeaderProof.toHex(array[3, string]),
-    beacon_block_header_root: blockProof.beaconBlockHeaderRoot.data.toHex(),
+    beacon_block_header_root: blockProof.beaconBlockHeaderRoot.data.to0xHex(),
     historical_roots_proof: blockProof.historicalRootsProof.toHex(array[14, string]),
     slot: blockProof.slot.uint64,
   )
@@ -469,11 +469,11 @@ proc exportBeaconBlockProofCapella(
 
   let yamlTestProof = YamlTestProof(
     execution_block_header:
-      beaconBlock.message.body.execution_payload.block_hash.data.toHex,
+      beaconBlock.message.body.execution_payload.block_hash.data.to0xHex(),
     beacon_block_body_proof: blockProof.beaconBlockBodyProof.toHex(array[8, string]),
-    beacon_block_body_root: blockProof.beaconBlockBodyRoot.data.toHex(),
+    beacon_block_body_root: blockProof.beaconBlockBodyRoot.data.to0xHex(),
     beacon_block_header_proof: blockProof.beaconBlockHeaderProof.toHex(array[3, string]),
-    beacon_block_header_root: blockProof.beaconBlockHeaderRoot.data.toHex(),
+    beacon_block_header_root: blockProof.beaconBlockHeaderRoot.data.to0xHex(),
     historical_summaries_proof:
       blockProof.historicalSummariesProof.toHex(array[13, string]),
     slot: blockProof.slot.uint64,
