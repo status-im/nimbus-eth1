@@ -160,20 +160,31 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
 
   # Check top layer cache against backend
   if cache:
-    if 0 < db.dirty.len:
-      return err((VertexID(0),CheckBeCacheIsDirty))
+    let checkKeysOk = block:
+      if db.dirty.len == 0:
+        true
+      elif relax:
+        false
+      else:
+        return err((VertexID(0),CheckBeCacheIsDirty))
 
     # Check structural table
     for (vid,vtx) in db.layersWalkVtx:
-      let key = db.layersGetKey(vid).valueOr:
-        # A `kMap[]` entry must exist.
-        return err((vid,CheckBeCacheKeyMissing))
+      let key = block:
+        let rc = db.layersGetKey(vid)
+        if rc.isOk:
+          rc.value
+        elif checkKeysOk:
+          # A `kMap[]` entry must exist.
+          return err((vid,CheckBeCacheKeyMissing))
+        else:
+          VOID_HASH_KEY
       if vtx.isValid:
         # Register existing vid against backend generator state
         discard vids.reduce Interval[VertexID,uint64].new(vid,vid)
       else:
         # Some vertex is to be deleted, the key must be empty
-        if key.isValid:
+        if checkKeysOk and key.isValid:
           return err((vid,CheckBeCacheKeyNonEmpty))
         # There must be a representation on the backend DB unless in a TX
         if db.getVtxBE(vid).isErr and db.stack.len == 0:
