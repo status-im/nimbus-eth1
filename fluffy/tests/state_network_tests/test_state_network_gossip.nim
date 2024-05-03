@@ -15,7 +15,7 @@ import
   ../../network/state/[state_content, state_network],
   ../../database/content_db,
   .././test_helpers,
-  ../test_yaml_utils
+  ../../eth_data/yaml_utils
 
 const testVectorDir = "./vendor/portal-spec-tests/tests/mainnet/state/validation/"
 

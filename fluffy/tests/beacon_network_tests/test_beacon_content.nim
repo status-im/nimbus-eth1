@@ -1,4 +1,4 @@
-# Nimbus - Portal Network
+# Fluffy
 # Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
@@ -16,7 +16,7 @@ import
   beacon_chain/spec/forks,
   beacon_chain/spec/datatypes/altair,
   ../../network/beacon/beacon_content,
-  ../test_yaml_utils,
+  ../../eth_data/yaml_utils,
   "."/light_client_test_data
 
 suite "Beacon Content Encodings - Mainnet":

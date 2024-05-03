@@ -1,4 +1,4 @@
-# Nimbus
+# Fluffy
 # Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
@@ -21,7 +21,9 @@ import
   ../../network/beacon/beacon_content,
   ../../network/beacon/beacon_init_loader,
   ../../network/history/beacon_chain_block_proof_bellatrix,
+  ../../network/history/experimental/beacon_chain_block_proof_capella,
   ../../network_metadata,
+  ../../eth_data/[yaml_utils, yaml_eth_types],
   ./exporter_common
 
 from beacon_chain/el/el_manager import toBeaconBlockHeader
@@ -304,7 +306,7 @@ proc exportHistoricalRoots*(
   else:
     notice "Succesfully wrote historical_roots to file", file
 
-proc cmdExportBlockProofBellatrix*(
+proc exportBeaconBlockProofBellatrix(
     dataDir: string, eraDir: string, slotNumber: uint64
 ) =
   let
@@ -316,35 +318,198 @@ proc cmdExportBlockProofBellatrix*(
     era = era(slot)
 
   # Note: Provide just empty historical_summaries here as this is only
-  # supposed to generate proofs for Bellatrix for now.
-  # For later proofs, it will be more difficult to use this call as we need
-  # to provide the (changing) historical summaries. Probably want to directly
-  # grab the right era file through different calls then.
+  # supposed to generate proofs for Bellatrix.
   var state: ForkedHashedBeaconState
   db.getState(historical_roots, [], start_slot(era + 1), state).isOkOr:
     error "Failed to load state", error = error
     quit QuitFailure
 
-  let batch = HistoricalBatch(
-    block_roots: getStateField(state, block_roots).data,
-    state_roots: getStateField(state, state_roots).data,
+  let
+    batch = HistoricalBatch(
+      block_roots: getStateField(state, block_roots).data,
+      state_roots: getStateField(state, state_roots).data,
+    )
+
+    beaconBlock = db.getBlock(
+      historical_roots,
+      [],
+      slot,
+      Opt.none(Eth2Digest),
+      bellatrix.TrustedSignedBeaconBlock,
+    ).valueOr:
+      error "Failed to load Bellatrix block", slot
+      quit QuitFailure
+
+    beaconBlockHeader = beaconBlock.toBeaconBlockHeader()
+    blockProof = buildProof(batch, beaconBlockHeader, beaconBlock.message.body).valueOr:
+      error "Failed to build proof for Bellatrix block", slot, error
+      quit QuitFailure
+
+  let yamlTestProof = YamlTestProofBellatrix(
+    execution_block_header:
+      beaconBlock.message.body.execution_payload.block_hash.data.toHex,
+    beacon_block_body_proof: blockProof.beaconBlockBodyProof.toHex(array[8, string]),
+    beacon_block_body_root: blockProof.beaconBlockBodyRoot.data.toHex(),
+    beacon_block_header_proof: blockProof.beaconBlockHeaderProof.toHex(array[3, string]),
+    beacon_block_header_root: blockProof.beaconBlockHeaderRoot.data.toHex(),
+    historical_roots_proof: blockProof.historicalRootsProof.toHex(array[14, string]),
+    slot: blockProof.slot.uint64,
   )
 
-  let beaconBlock = db.getBlock(
-    historical_roots, [], slot, Opt.none(Eth2Digest), bellatrix.TrustedSignedBeaconBlock
-  ).valueOr:
-    error "Failed to load Bellatrix block", slot
-    quit QuitFailure
-
-  let beaconBlockHeader = beaconBlock.toBeaconBlockHeader()
-  let blockProof = buildProof(batch, beaconBlockHeader, beaconBlock.message.body).valueOr:
-    error "Failed to build proof for Bellatrix block", slot, error
-    quit QuitFailure
-
-  let file = dataDir / "block_proof_" & $slot & ".ssz"
-  let res = io2.writeFile(file, SSZ.encode(blockProof))
+  let
+    blockNumber = beaconBlock.message.body.execution_payload.block_number
+    file = dataDir / "beacon_block_proof-" & $blockNumber & ".yaml"
+    res = yamlTestProof.dumpToYaml(file)
   if res.isErr():
-    error "Failed writing block proof to file", file, error = ioErrorMsg(res.error)
+    error "Failed writing beacon block proof to file", file, error = res.error
     quit 1
   else:
-    notice "Succesfully wrote block proof to file", file
+    notice "Successfully wrote beacon block proof to file", file
+
+proc latestEraFile(eraDir: string): Result[(string, Era), string] =
+  ## Find the latest era file in the era directory.
+  var
+    latestEra = 0
+    latestEraFile = ""
+
+  try:
+    for kind, obj in walkDir eraDir:
+      let (_, name, _) = splitFile(obj)
+      let parts = name.split('-')
+      if parts.len() == 3 and parts[0] == "mainnet":
+        let era =
+          try:
+            parseInt(parts[1])
+          except ValueError:
+            return err("Invalid era number")
+        if era > latestEra:
+          latestEra = era
+          latestEraFile = obj
+  except OSError as e:
+    return err(e.msg)
+
+  if latestEraFile == "":
+    err("No valid era files found")
+  else:
+    ok((latestEraFile, Era(latestEra)))
+
+proc loadHistoricalSummariesFromEra(
+    eraDir: string, cfg: RuntimeConfig
+): Result[(HashList[HistoricalSummary, Limit HISTORICAL_ROOTS_LIMIT], Slot), string] =
+  ## Load the historical_summaries from the latest era file.
+  let
+    (latestEraFile, latestEra) = ?latestEraFile(eraDir)
+    f = ?EraFile.open(latestEraFile)
+    slot = start_slot(latestEra)
+  var bytes: seq[byte]
+
+  ?f.getStateSSZ(slot, bytes)
+
+  if bytes.len() == 0:
+    return err("State not found")
+
+  let state =
+    try:
+      newClone(readSszForkedHashedBeaconState(cfg, slot, bytes))
+    except SerializationError as exc:
+      return err("Unable to read state: " & exc.msg)
+
+  return ok((state[].historical_summaries(), getStateField(state[], slot)))
+
+proc exportBeaconBlockProofCapella(
+    dataDir: string, eraDir: string, slotNumber: uint64
+) =
+  ## Export a beacon block proof for a block from Capella and onwards. Also
+  ## exports the historical summaries in SSZ encoding as this is required to
+  ## verify the proof.
+  let
+    networkData = loadNetworkData("mainnet")
+    db =
+      EraDB.new(networkData.metadata.cfg, eraDir, networkData.genesis_validators_root)
+    slot = Slot(slotNumber)
+    era = era(slot)
+    historical_roots = loadHistoricalRoots().asSeq()
+    # Note: This could be considered somewhat of a hack. The EraDB API requires
+    # access to the historical_summaries, which we do not have. It could be taken
+    # from a full node through the rest API, but that is a bit slow as it needs
+    # to request the full state. Instead we take the historical summaries from
+    # the state in latest era file.
+    (historical_summaries, historicalSummariesSlot) = loadHistoricalSummariesFromEra(
+      eraDir, networkData.metadata.cfg
+    ).valueOr:
+      error "Failed to load historical summaries", error
+      quit QuitFailure
+
+  var state: ForkedHashedBeaconState
+
+  db.getState(
+    historical_roots, historical_summaries.asSeq(), start_slot(era + 1), state
+  ).isOkOr:
+    error "Failed to load state", error = error
+    quit QuitFailure
+
+  let
+    beaconBlock = db.getBlock(
+      historical_roots,
+      historical_summaries.asSeq(),
+      slot,
+      Opt.none(Eth2Digest),
+      capella.TrustedSignedBeaconBlock,
+    ).valueOr:
+      error "Failed to load Capella block", slot
+      quit QuitFailure
+
+    beaconBlockHeader = beaconBlock.toBeaconBlockHeader()
+    blockRoots = getStateField(state, block_roots).data
+    blockProof = beacon_chain_block_proof_capella.buildProof(
+      blockRoots, beaconBlockHeader, beaconBlock.message.body
+    ).valueOr:
+      error "Failed to build proof for Bellatrix block", slot, error
+      quit QuitFailure
+
+  let yamlTestProof = YamlTestProof(
+    execution_block_header:
+      beaconBlock.message.body.execution_payload.block_hash.data.toHex,
+    beacon_block_body_proof: blockProof.beaconBlockBodyProof.toHex(array[8, string]),
+    beacon_block_body_root: blockProof.beaconBlockBodyRoot.data.toHex(),
+    beacon_block_header_proof: blockProof.beaconBlockHeaderProof.toHex(array[3, string]),
+    beacon_block_header_root: blockProof.beaconBlockHeaderRoot.data.toHex(),
+    historical_summaries_proof:
+      blockProof.historicalSummariesProof.toHex(array[13, string]),
+    slot: blockProof.slot.uint64,
+  )
+
+  # Also writing the historical_summaries of last state (according to era files)
+  # to a file as it is needed for verifying the proof.
+  let
+    f = dataDir / "historical_summaries_at_slot_" & $historicalSummariesSlot & ".ssz"
+    r = io2.writeFile(f, SSZ.encode(historical_summaries))
+  if r.isErr():
+    error "Failed writing historical_summaries to file", f, error = ioErrorMsg(r.error)
+    quit 1
+  else:
+    notice "Successfully wrote historical_summaries to file", f
+
+  let
+    blockNumber = beaconBlock.message.body.execution_payload.block_number
+    file = dataDir / "beacon_block_proof-" & $blockNumber & ".yaml"
+    res = yamlTestProof.dumpToYaml(file)
+  if res.isErr():
+    error "Failed writing beacon block proof to file", file, error = res.error
+    quit 1
+  else:
+    notice "Successfully wrote beacon block proof to file", file
+
+proc exportBeaconBlockProof*(dataDir: string, eraDir: string, slotNumber: uint64) =
+  let
+    networkData = loadNetworkData("mainnet")
+    cfg = networkData.metadata.cfg
+    slot = Slot(slotNumber)
+
+  if slot.epoch() >= cfg.CAPELLA_FORK_EPOCH:
+    exportBeaconBlockProofCapella(dataDir, eraDir, slotNumber)
+  elif slot.epoch() >= cfg.BELLATRIX_FORK_EPOCH:
+    exportBeaconBlockProofBellatrix(dataDir, eraDir, slotNumber)
+  else:
+    error "Slot number is before Bellatrix fork", slotNumber
+    quit 1

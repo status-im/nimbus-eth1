@@ -39,3 +39,20 @@ proc loadFromYaml*(T: type, file: string): Result[T, string] =
   except IOError as e:
     return err(e.msg)
   ok(res)
+
+proc dumpToYaml*[T](value: T, file: string): Result[void, string] =
+  let s = newFileStream(file, fmWrite)
+  defer:
+    try:
+      close(s)
+    except Exception as e:
+      raiseAssert(e.msg)
+  try:
+    dump(value, s)
+  except YamlPresenterJsonError as e:
+    return err(e.msg)
+  except YamlSerializationError as e:
+    return err(e.msg)
+  except YamlPresenterOutputError as e:
+    return err(e.msg)
+  ok()

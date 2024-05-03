@@ -10,7 +10,7 @@ import
   unittest2,
   stew/byteutils,
   ../../network/state/state_content,
-  ../test_yaml_utils
+  ../../eth_data/yaml_utils
 
 const testVectorDir = "./vendor/portal-spec-tests/tests/mainnet/state/serialization/"
 
