@@ -168,7 +168,7 @@ suite "Beacon Chain Block Proofs - Capella":
             # the blockHash from the execution payload.
             blockHash = beaconBlockBody.execution_payload.block_hash
 
-          let proofRes = buildProof(blockRoots, beaconBlockHeader, beaconBlockBody, cfg)
+          let proofRes = buildProof(blockRoots, beaconBlockHeader, beaconBlockBody)
           check proofRes.isOk()
           let proof = proofRes.get()
 

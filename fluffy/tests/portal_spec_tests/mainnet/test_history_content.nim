@@ -17,7 +17,7 @@ import
   ../../../eth_data/[history_data_json_store, history_data_ssz_e2s],
   ../../../network/history/[history_content, history_network, accumulator],
   ../../test_history_util,
-  ../../test_yaml_utils
+  ../../../eth_data/yaml_utils
 
 suite "History Content Encodings":
   test "HeaderWithProof Building and Encoding":

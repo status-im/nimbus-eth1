@@ -70,7 +70,8 @@ type
     exportLCFinalityUpdate = "Export Light Client Finality Update"
     exportLCOptimisticUpdate = "Export Light Client Optimistic Update"
     exportHistoricalRoots = "Export historical roots from the beacon state (SSZ format)"
-    exportBlockProofBellatrix = "Export Bellatrix EL block proof from era files"
+    exportBeaconBlockProof =
+      "Export EL beacon block proof from era files (Bellatrix and later)"
 
   ExporterConf* = object
     logLevel* {.
@@ -211,9 +212,9 @@ type
         discard
       of exportHistoricalRoots:
         discard
-      of exportBlockProofBellatrix:
+      of exportBeaconBlockProof:
         slotNumber* {.
-          desc: "The slot for which to export the block proof", name: "slot"
+          desc: "The slot for which to export the beacon block proof", name: "slot"
         .}: uint64
         eraDir* {.desc: "Directory containing era files", name: "era-dir".}: InputDir
 

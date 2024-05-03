@@ -17,23 +17,7 @@ import
   ../../../common/common_types,
   ../../../network_metadata,
   ../../../network/history/beacon_chain_block_proof_bellatrix,
-  ../../test_yaml_utils
-
-type YamlTestProof = object
-  execution_block_header: string # Not part of the actual proof
-  beacon_block_body_proof: array[8, string]
-  beacon_block_body_root: string
-  beacon_block_header_proof: array[3, string]
-  beacon_block_header_root: string
-  historical_roots_proof: array[14, string]
-  slot: uint64
-
-proc fromHex[n](T: type array[n, Digest], a: array[n, string]): T =
-  var res: T
-  for i in 0 ..< a.len:
-    res[i] = Digest.fromHex(a[i])
-
-  res
+  ../../../eth_data/[yaml_utils, yaml_eth_types]
 
 suite "History Block Proofs - Bellatrix":
   test "BeaconChainBlockProof for Execution BlockHeader":
@@ -45,7 +29,7 @@ suite "History Block Proofs - Bellatrix":
     for kind, path in walkDir(testsPath):
       if kind == pcFile and path.splitFile.ext == ".yaml":
         let
-          testProof = YamlTestProof.loadFromYaml(path).valueOr:
+          testProof = YamlTestProofBellatrix.loadFromYaml(path).valueOr:
             raiseAssert "Cannot read test vector: " & error
 
           blockHash = BlockHash.fromHex(testProof.execution_block_header)

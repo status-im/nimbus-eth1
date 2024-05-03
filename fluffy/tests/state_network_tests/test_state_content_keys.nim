@@ -5,7 +5,11 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import unittest2, stew/byteutils, ../../network/state/state_content, ../test_yaml_utils
+import
+  unittest2,
+  stew/byteutils,
+  ../../network/state/state_content,
+  ../../eth_data/yaml_utils
 
 const testVectorDir = "./vendor/portal-spec-tests/tests/mainnet/state/serialization/"
 
