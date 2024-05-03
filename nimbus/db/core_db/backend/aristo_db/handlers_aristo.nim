@@ -314,9 +314,11 @@ proc accMethods(cAcc: AristoCoreDxAccRef): CoreDbAccFns =
       colType: CtAccounts)
 
   proc accCloneMpt(): CoreDbRc[CoreDxMptRef] =
-    ok(AristoCoreDxMptRef(
+    var xpt = AristoCoreDxMptRef(
       base:    base,
-      mptRoot: AccountsVID))
+      mptRoot: AccountsVID)
+    xpt.methods = xpt.mptMethods
+    ok(db.bless xpt)
 
   proc accFetch(address: EthAddress): CoreDbRc[CoreDbAccount] =
     const info = "acc/fetchFn()"
