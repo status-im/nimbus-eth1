@@ -424,6 +424,11 @@ proc getStorage*(trie: VerkleTrieRef, address: EthAddress, key: openArray[byte])
   var k = getTreeKeyStorageSlotWithEvaluatedAddress(addressPoint, key)
   return trie.root.getValue(k)[]
 
+proc getCodeSize*(trie: VerkleTrieRef, address: EthAddress): uint64 =
+  var k = getTreeKeyCodeSize(address)
+  var v = trie.root.getValue(k)
+  return uint64.fromBytesLE(v[])
+
 # DeleteAccount Placeholder
 proc delAccountBytes*(trie: VerkleTrieRef, address: EthAddress) = 
   return

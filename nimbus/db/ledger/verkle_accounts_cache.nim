@@ -237,6 +237,30 @@ proc isEmpty(acc: RefAccount): bool =
 template exists(acc: RefAccount): bool =
   Alive in acc.flags
 
+proc originalStorageValue(acc: RefAccount, address: EthAddress, slot: UInt256, db: VerkleTrie): UInt256 =
+  # share the same original storage between multiple
+  # versions of account
+  if acc.originalStorage.isNil:
+    acc.originalStorage = newTable[UInt256, UInt256]()
+  else:
+    acc.originalStorage[].withValue(slot, val) do:
+      return val[]
+
+  # Not in the original values cache - go to the DB.
+  var (slotAsKey, subIndex) = createTrieKeyFromSlot(slot.toBytesBE())
+  discard subIndex
+
+  let foundRecord = db.getSlotBytes(address, slotAsKey.toBytesBE())
+  result = UInt256.fromBytesBE(foundRecord)
+
+  acc.originalStorage[slot] = result
+
+proc storageValue(acc: RefAccount, address: EthAddress, slot: UInt256, db: VerkleTrie): UInt256 =
+  acc.overlayStorage.withValue(slot, val) do:
+    return val[]
+  do:
+    result = acc.originalStorageValue(address, slot, db)
+
 proc kill(acc: RefAccount) =
   acc.flags.excl Alive
   acc.overlayStorage.clear()
@@ -305,6 +329,11 @@ proc getNonce*(ac: AccountsCache, address: EthAddress): AccountNonce {.inline.} 
   let acc = ac.getAccount(address, false)
   if acc.isNil: emptyAcc.nonce
   else: acc.account.nonce
+
+proc getCodeSize*(ac: AccountsCache, address: EthAddress): int {.inline.} =
+  let acc = ac.getAccount(address, false)
+  if acc.isNil: 0
+  else: acc.code.len
 
 proc getCodeHash*(ac: AccountsCache, address: EthAddress): Hash256 {.inline.} =
   let acc = ac.getAccount(address, false)
@@ -384,6 +413,31 @@ proc setNonce*(ac: AccountsCache, address: EthAddress, nonce: AccountNonce) =
 
 proc incNonce*(ac: AccountsCache, address: EthAddress) {.inline.} =
   ac.setNonce(address, ac.getNonce(address) + 1)
+
+proc setStorage*(ac: AccountsCache, address: EthAddress, slot, value: UInt256) =
+  let acc = ac.getAccount(address)
+  acc.flags.incl {Alive}
+  let oldValue = acc.storageValue(address, slot, ac.trie)
+  if oldValue != value:
+    var acc = ac.makeDirty(address)
+    acc.overlayStorage[slot] = value
+    acc.flags.incl StorageChanged
+
+proc clearStorage*(ac: AccountsCache, address: EthAddress) =
+  # a.k.a createStateObject. If there is an existing account with
+  # the given address, it is overwritten.
+
+  let acc = ac.getAccount(address)
+  acc.flags.incl {Alive, NewlyCreated}
+  if acc.account.storageRoot != EMPTY_ROOT_HASH:
+    # there is no point to clone the storage since we want to remove it
+    let acc = ac.makeDirty(address, cloneStorage = false)
+    acc.account.storageRoot = EMPTY_ROOT_HASH
+    if acc.originalStorage.isNil.not:
+      # also clear originalStorage cache, otherwise
+      # both getStorage and getCommittedStorage will
+      # return wrong value
+      acc.originalStorage.clear()
 
 proc setCode*(ac: AccountsCache, address: EthAddress, code: seq[byte]) =
   let acc = ac.getAccount(address)
@@ -468,6 +522,15 @@ iterator pairs*(ac: AccountsCache): (EthAddress, Account) =
   doAssert(ac.savePoint.parentSavepoint.isNil)
   for address, account in ac.savePoint.cache:
     yield (address, account.account)
+
+# Storage iterator missing @agnxsh
+
+iterator cachedStorage*(ac: AccountsCache, address: EthAddress): (UInt256, UInt256) =
+  let acc = ac.getAccount(address, false)
+  if not acc.isNil:
+    if not acc.originalStorage.isNil:
+      for k, v in acc.originalStorage:
+        yield (k, v)
 
 proc accessList*(ac: AccountsCache, address: EthAddress) {.inline.} =
   ac.savePoint.accessList.add(address)
@@ -569,6 +632,33 @@ proc getStorageRoot*(ac: AccountsCache, address: EthAddress): Hash256 =
   let acc = ac.getAccount(address, false)
   if acc.isNil: emptyAcc.storageRoot
   else: acc.account.storageRoot
+
+func update(wd: var WitnessData, acc: RefAccount) =
+  # once the code is touched make sure it doesn't get reset back to false in another update
+  if not wd.codeTouched:
+    wd.codeTouched = CodeChanged in acc.flags or CodeLoaded in acc.flags
+
+  if not acc.originalStorage.isNil:
+    for k, v in acc.originalStorage:
+      if v.isZero: continue
+      wd.storageKeys.incl k
+
+  for k, v in acc.overlayStorage:
+    wd.storageKeys.incl k
+
+func witnessData(acc: RefAccount): WitnessData =
+  result.storageKeys = initHashSet[UInt256]()
+  update(result, acc)
+
+proc collectWitnessData*(ac: AccountsCache) =
+  # make sure all savepoint already committed
+  doAssert(ac.savePoint.parentSavepoint.isNil)
+  # usually witness data is collected before we call persist()
+  for address, acc in ac.savePoint.cache:
+    ac.witnessCache.withValue(address, val) do:
+      update(val[], acc)
+    do:
+      ac.witnessCache[address] = witnessData(acc)
 
 func multiKeys(slots: HashSet[UInt256]): MultiKeysRef =
   if slots.len == 0: return
