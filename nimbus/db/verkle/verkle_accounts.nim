@@ -19,13 +19,14 @@ import
   ],
   "../../../vendor/nim-eth-verkle/constantine/constantine"/[
     serialization/codecs_banderwagon
-  ]
+  ],
+  ".."/core_db
 
 type
   ChunkedCode* = seq[byte]
   VerkleTrieRef* = ref object
     root: BranchesNode
-  # db: <something>
+    db:   CoreDxKvtRef
   # persistcheck: <some-flag>
 
 const
