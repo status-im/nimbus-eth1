@@ -26,7 +26,7 @@ type
   ChunkedCode* = seq[byte]
   VerkleTrieRef* = ref object
     root: BranchesNode
-    db:   CoreDxKvtRef
+    db:   CoreDbKvtRef
   # persistcheck: <some-flag>
 
 const
