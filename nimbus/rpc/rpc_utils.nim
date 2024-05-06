@@ -46,7 +46,7 @@ proc headerFromTag*(chain: CoreDbRef, blockId: BlockTag): BlockHeader
     of "finalized": result = chain.finalizedHeader()
     of "pending":
       #TODO: Implement get pending block
-      raise newException(ValueError, "Pending tag not yet implemented")
+      result = chain.getCanonicalHead()
     else:
       raise newException(ValueError, "Unsupported block tag " & tag)
   else:
