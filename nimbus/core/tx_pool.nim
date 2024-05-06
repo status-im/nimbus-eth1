@@ -635,16 +635,17 @@ proc assembleBlock*(
   )
   var blobsBundle: BlobsBundle
 
-  for (_,nonceList) in xp.txDB.packingOrderAccounts(txItemPacked):
+  for _, nonceList in xp.txDB.packingOrderAccounts(txItemPacked):
     for item in nonceList.incNonce:
       let tx = item.pooledTx
       blk.txs.add tx.tx
-      for k in tx.networkPayload.commitments:
-        blobsBundle.commitments.add k
-      for p in tx.networkPayload.proofs:
-        blobsBundle.proofs.add p
-      for blob in tx.networkPayload.blobs:
-        blobsBundle.blobs.add blob
+      if tx.networkPayload != nil:
+        for k in tx.networkPayload.commitments:
+          blobsBundle.commitments.add k
+        for p in tx.networkPayload.proofs:
+          blobsBundle.proofs.add p
+        for blob in tx.networkPayload.blobs:
+          blobsBundle.blobs.add blob
 
   let com = xp.chain.com
   if com.forkGTE(Shanghai):
