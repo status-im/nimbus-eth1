@@ -76,6 +76,9 @@ proc calculateMedianGasPrice*(chain: CoreDbRef): GasInt
     else:
       result = prices[middle]
 
+  const minGasPrice = 30_000_000_000.GasInt
+  result = max(result, minGasPrice)
+
 proc unsignedTx*(tx: TransactionArgs, chain: CoreDbRef, defaultNonce: AccountNonce): Transaction
     {.gcsafe, raises: [CatchableError].} =
   if tx.to.isSome:
