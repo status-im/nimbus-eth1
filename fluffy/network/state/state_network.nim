@@ -14,7 +14,8 @@ import
   eth/p2p/discoveryv5/[protocol, enr],
   ../../database/content_db,
   ../wire/[portal_protocol, portal_stream, portal_protocol_config],
-  ./state_content
+  ./state_content,
+  ./state_validation
 
 logScope:
   topics = "portal_state"
@@ -79,34 +80,25 @@ func decodeValue*(
 
   Opt.some(value)
 
-proc validateAccountTrieNode(
-    n: StateNetwork, key: ContentKey, contentValue: RetrievalContentValue
-): bool =
-  true
-
-proc validateContractTrieNode(
-    n: StateNetwork, key: ContentKey, contentValue: RetrievalContentValue
-): bool =
-  true
-
-proc validateContractCode(
-    n: StateNetwork, key: ContentKey, contentValue: RetrievalContentValue
-): bool =
-  true
-
 proc validateContent*(
     n: StateNetwork, contentKey: ContentKey, contentValue: RetrievalContentValue
 ): bool =
+  doAssert(contentKey.contentType == contentValue.contentType)
+
   case contentKey.contentType
   of unused:
     warn "Received content with unused content type"
     false
   of accountTrieNode:
-    validateAccountTrieNode(n, contentKey, contentValue)
+    validateAccountTrieNodeHash(
+      contentKey.accountTrieNodeKey, contentValue.accountTrieNode
+    )
   of contractTrieNode:
-    validateContractTrieNode(n, contentKey, contentValue)
+    validateContractTrieNodeHash(
+      contentKey.contractTrieNodeKey, contentValue.contractTrieNode
+    )
   of contractCode:
-    validateContractCode(n, contentKey, contentValue)
+    validateContractCodeHash(contentKey.contractCodeKey, contentValue.contractCode)
 
 proc getContent*(n: StateNetwork, key: ContentKey): Future[Opt[seq[byte]]] {.async.} =
   let

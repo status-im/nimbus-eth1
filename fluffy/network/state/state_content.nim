@@ -239,7 +239,7 @@ func packNibbles*(nibbles: seq[byte]): Nibbles =
 func unpackNibbles*(nibbles: Nibbles): seq[byte] =
   doAssert(nibbles.len() <= MAX_PACKED_NIBBLES_LEN, "Packed nibbles length is too long")
 
-  var output = newSeqOfCap[byte](nibbles.len * 2)
+  var output = newSeqOfCap[byte](nibbles.len() * 2)
 
   for i, pair in nibbles:
     if i == 0 and pair == 0x00:
