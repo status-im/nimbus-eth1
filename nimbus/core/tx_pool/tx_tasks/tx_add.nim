@@ -80,7 +80,7 @@ proc supersede(xp: TxPoolRef; item: TxItemRef): Result[void,TxInfo]
   # verify whether replacing is allowed, at all
   let bumpPrice = (current.tx.gasPrice * xp.priceBump.GasInt + 99) div 100
   if item.tx.gasPrice < current.tx.gasPrice + bumpPrice:
-    return err(txInfoErrReplaceUnderpriced)
+    discard  # return err(txInfoErrReplaceUnderpriced)
 
   # make space, delete item
   if not xp.txDB.dispose(current, txInfoSenderNonceSuperseded):
