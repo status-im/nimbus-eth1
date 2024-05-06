@@ -14,7 +14,7 @@ import
   eth/common,
   ../../../../stateless/multi_keys,
   "../.."/[core_db, distinct_tries],
-  ../accounts_cache as impl,
+  ../verkle_accounts_cache as impl,
   ".."/[base, base/base_desc],
   ./accounts_cache_desc as wrp
 
@@ -51,7 +51,7 @@ proc ledgerMethods(lc: impl.AccountsCache): LedgerFns =
       lc.addLogEntry(log),
 
     beginSavepointFn: proc(): LedgerSpRef =
-      wrp.SavePoint(sp: lc.beginSavepoint()),
+      wrp.SavePoint(sp: lc.beginSavePoint()),
 
     clearStorageFn: proc(eAddr: EthAddress) =
       lc.clearStorage(eAddr),
@@ -184,7 +184,7 @@ proc ledgerMethods(lc: impl.AccountsCache): LedgerFns =
 proc ledgerExtras(lc: impl.AccountsCache): LedgerExtras =
   LedgerExtras(
     getMptFn: proc(): CoreDbMptRef =
-      lc.rawTrie.mpt,
+      lc.rawTrie.mpt,                                                 # -----------> needs to be fixed, MPT doesn't exist anymore
 
     rawRootHashFn: proc(): Hash256 =
       lc.rawTrie.rootHash())
@@ -195,7 +195,7 @@ proc newLegacyAccountsCache(
     root: Hash256;
     pruneTrie: bool): LedgerRef =
   ## Constructor
-  let lc = impl.AccountsCache.init(db, root, pruneTrie)
+  let lc = impl.AccountsCache.init()
   wrp.AccountsCache(
     ldgType:   LegacyAccountsCache,
     ac:        lc,
@@ -231,7 +231,7 @@ iterator storageIt*(
       ): (UInt256,UInt256)
       {.gcsafe, raises: [CoreDbApiError].} =
   noRlpException "storage()":
-    for w in lc.ac.storage(eAddr):
+    for w in lc.ac.storage(eAddr):                                         # -----------> needs to be fixed, storage() doesn't exist yet 
       yield w
 
 # ------------------------------------------------------------------------------

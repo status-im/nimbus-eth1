@@ -19,13 +19,14 @@ import
   ],
   "../../../vendor/nim-eth-verkle/constantine/constantine"/[
     serialization/codecs_banderwagon
-  ]
+  ],
+  ".."/core_db
 
 type
   ChunkedCode* = seq[byte]
   VerkleTrieRef* = ref object
     root: BranchesNode
-  # db: <something>
+    db:   CoreDbKvtRef
   # persistcheck: <some-flag>
 
 const
@@ -51,6 +52,10 @@ var MainStorageOffsetLshVerkleNodeWidth*: UInt256 = one shl twofourty
 #        Utility Functions for the Verkle Accounts
 #
 # ################################################################
+
+# Returns the kv-store ref
+proc db*(trie: VerkleTrieRef): CoreDbKvtRef =
+  return trie.db
 
 # Check if the account loaded is empty or not
 proc isEmptyVerkleAccount*(acc: Account): bool =
@@ -242,7 +247,10 @@ proc getTreeKeyStorageSlotWithEvaluatedAddress*(addressPoint: Point, storageKey:
   return getTreeKeyWithEvaluatedAddress(addressPoint, treeIndex, subIndex)
 
 proc newVerkleTrie*(): VerkleTrieRef =
-  result = VerkleTrieRef(root: newTree())
+  result = VerkleTrieRef(
+    root: newTree(),
+    db: LegacyDbMemory.newCoreDbRef().newKvt().CoreDbKvtRef
+  )
 
 # ################################################################
 #
