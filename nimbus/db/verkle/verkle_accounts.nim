@@ -53,6 +53,10 @@ var MainStorageOffsetLshVerkleNodeWidth*: UInt256 = one shl twofourty
 #
 # ################################################################
 
+# Returns the kv-store ref
+proc db*(trie: VerkleTrieRef): CoreDbKvtRef =
+  return trie.db
+
 # Check if the account loaded is empty or not
 proc isEmptyVerkleAccount*(acc: Account): bool =
   var zero: array[32, byte]
@@ -243,7 +247,10 @@ proc getTreeKeyStorageSlotWithEvaluatedAddress*(addressPoint: Point, storageKey:
   return getTreeKeyWithEvaluatedAddress(addressPoint, treeIndex, subIndex)
 
 proc newVerkleTrie*(): VerkleTrieRef =
-  result = VerkleTrieRef(root: newTree())
+  result = VerkleTrieRef(
+    root: newTree(),
+    db: LegacyDbMemory.newCoreDbRef().newKvt().CoreDbKvtRef
+  )
 
 # ################################################################
 #

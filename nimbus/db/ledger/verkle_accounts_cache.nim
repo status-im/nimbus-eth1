@@ -283,12 +283,10 @@ proc persistMode(acc: RefAccount): PersistMode =
     if IsNew notin acc.flags:
       result = Remove
 
-proc persistCode(acc: RefAccount, address: EthAddress, db: VerkleTrie) =
+proc persistCode(acc: RefAccount, address: EthAddress, trie: VerkleTrie) =
   if acc.code.len != 0:
-    when defined(geth):
-      VerkleTrieRef(db).updateContractCode(address, acc.account.codeHash, acc.code)
-    else:
-      VerkleTrieRef(db).updateContractCode(address, acc.account.codeHash, acc.code)
+      VerkleTrieRef(trie).updateContractCode(address, acc.account.codeHash, acc.code)
+      VerkleTrieRef(trie).db.put(acc.account.codeHash.data, acc.code)
 
 proc persistStorage(acc: RefAccount, address: EthAddress, db: VerkleTrie, clearCache: bool) =
   if acc.overlayStorage.len == 0:
@@ -330,10 +328,24 @@ proc getNonce*(ac: AccountsCache, address: EthAddress): AccountNonce {.inline.} 
   if acc.isNil: emptyAcc.nonce
   else: acc.account.nonce
 
+proc getCode*(ac: AccountsCache, address: EthAddress): seq[byte] =
+  let acc = ac.getAccount(address, false)
+  if acc.isNil:
+    return
+
+  if CodeLoaded in acc.flags or CodeChanged in acc.flags:
+    result = acc.code
+  else:
+    let data = VerkleTrieRef(ac.trie).db.get(acc.account.codeHash.data)
+
+    acc.code = data
+    acc.flags.incl CodeLoaded
+    result = acc.code
+
 proc getCodeSize*(ac: AccountsCache, address: EthAddress): int {.inline.} =
   let acc = ac.getAccount(address, false)
   if acc.isNil: 0
-  else: acc.code.len
+  else: int(VerkleTrieRef(ac.trie).getCodeSize(address))
 
 proc getCodeHash*(ac: AccountsCache, address: EthAddress): Hash256 {.inline.} =
   let acc = ac.getAccount(address, false)
