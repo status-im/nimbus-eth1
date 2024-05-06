@@ -1,9 +1,10 @@
-#   Nimbus
-#   Copyright (c) 2021-2024 Status Research & Development GmbH
-#   Licensed and distributed under either of
-#     * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
-#     * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
-#   at your option. This file may not be copied, modified, or distributed except according to those terms.
+#[  Nimbus
+    Copyright (c) 2021-2024 Status Research & Development GmbH
+    Licensed and distributed under either of
+      * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
+      * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
+    at your option. This file may not be copied, modified, or distributed except according to those terms. ]#
+
 
 import
   ../../../vendor/nim-unittest2/unittest2,
@@ -39,7 +40,7 @@ suite "Nibbles":
     check: path == $nibs
 
 
-  test "Nibbles":
+  test "Nibbles62":
     var nibs64: Nibbles64
     nibs64.bytes = hexToBytesArray[32]("0123456789abcdeffedcba9876543210ffeeddccbbaa99887766554433221100")
 
@@ -109,7 +110,7 @@ suite "Nibbles":
     check: $nibs == "10ff"
     check: nibs.len == 4
 
-    # slices from Nibbles
+    # slices from Nibbles62
     nibs = nibs64.slice(0, 62)
     var subnibs = nibs.slice(0, 62)
     check: $subnibs == "0123456789abcdeffedcba9876543210ffeeddccbbaa998877665544332211"
@@ -151,3 +152,62 @@ suite "Nibbles":
     nibs = subnibs.slice(0, 3)
     expect RangeDefect:
       nibs = subnibs.slice(0, 4)
+
+
+  test "Nibbles":
+
+    var nibs: Nibbles
+    nibs.bytes = hexToBytesArray[32]("0123456789abcdeffedcba9876543210ffeeddccbbaa99887766554433221100")
+    nibs.len = 64
+    check: $nibs == "0123456789abcdeffedcba9876543210ffeeddccbbaa99887766554433221100"
+
+    check: nibs[0] == 0x0
+    check: nibs[1] == 0x1
+    check: nibs[20] == 0xb
+    check: nibs[62] == 0x0
+    check: nibs[63] == 0x0
+
+    nibs[0] = 0xa
+    check: nibs[0] == 0xa
+    nibs[1] = 2
+    check: nibs[1] == 2
+    nibs[63] = 0xf
+    check: nibs[63] == 0xf
+    check: $nibs == "a223456789abcdeffedcba9876543210ffeeddccbbaa9988776655443322110f"
+    
+    var path: string
+    for n in nibs.enumerate():
+      path.add n.bitsToHex
+    check: path == $nibs
+
+    # append nibbles
+    nibs = Nibbles()
+    nibs.bytes = hexToBytesArray[32]("0123456789000000000000000000000000000000000000000000000000000000")
+    nibs.len = 64
+    expect RangeDefect:
+      discard nibs.append 0xa
+    nibs.len = 10
+    nibs = nibs.append 0xa
+    nibs = nibs.append 0xb
+    check $nibs == "0123456789ab"
+    check nibs.len == 12
+
+    nibs = Nibbles()
+    check $nibs == ""
+    nibs = nibs.append(3)
+    check $nibs == "3"
+    nibs = nibs.append(4)
+    check $nibs == "34"
+
+    var nibs64: Nibbles64
+    nibs64.bytes = hexToBytesArray[32]("0123456789abcdeffedcba9876543210ffeeddccbbaa99887766554433221100")
+    var nibs62 = nibs64.slice(5, 10)
+
+    nibs = nibs.append nibs62
+    check $nibs == "3456789abcde"
+
+    expect RangeDefect:
+      discard nibs.append nibs64.slice(0, 62)
+    expect RangeDefect:
+      discard nibs.append nibs64.slice(0, 53)
+    discard nibs.append nibs64.slice(0, 52)

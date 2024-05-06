@@ -10,7 +10,7 @@
 import std/[streams, strformat]
 
 
-func bitsToHex*(b: byte): char =
+func bitsToHex*(b: range[0..15]): char =
   ## Converts a uint4 to a lowercase hex char
   case b
     of 0:  result = '0'
@@ -29,7 +29,6 @@ func bitsToHex*(b: byte): char =
     of 13: result = 'd'
     of 14: result = 'e'
     of 15: result = 'f'
-    else: raise newException(ValueError, "Given byte must be uint4 (0-15)")
 
 
 func hexToBits*(c: char): byte =

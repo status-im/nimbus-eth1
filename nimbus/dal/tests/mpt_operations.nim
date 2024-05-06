@@ -1,120 +1,274 @@
-#   Nimbus
-#   Copyright (c) 2021-2024 Status Research & Development GmbH
-#   Licensed and distributed under either of
-#     * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
-#     * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
-#   at your option. This file may not be copied, modified, or distributed except according to those terms.
+#[  Nimbus
+    Copyright (c) 2021-2024 Status Research & Development GmbH
+    Licensed and distributed under either of
+      * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
+      * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
+    at your option. This file may not be copied, modified, or distributed except according to those terms. ]#
+
 
 import
-  std/streams,
-  std/strformat,
+  std/[streams, strformat, os, random, times, tables],
   stint,
+  unittest2,
   nimcrypto/hash,
   ../../../vendor/nim-eth/eth/trie/hexary,
   ../../../vendor/nim-eth/eth/trie/db,
-  ../mpt_rlp_hash,
-  ../mpt_nibbles,
-  ../mpt_operations,
-  ../utils
+  ../../../vendor/nim-eth/eth/common/eth_hash,
+  ../[mpt, mpt_rlp_hash, mpt_nibbles, mpt_operations, utils, config]
 
 import ../mpt {.all.}
 
 from ../../../vendor/nimcrypto/nimcrypto/utils import fromHex
 
-# import std/atomics
-# proc atomicInc[T: SomeInteger](location: var Atomic[T]; value: T = 1)
+randomize()
+let randomSeed = rand(1_000_000_000) # In case a test fails, manually override the seed here to reproduce it
+echo "Random seed: " & $randomSeed
+var randomGenerator = initRand(randomSeed)
 
-const sampleKvps = @[
-   ("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", "1234"),
-   ("0123456789abcdef0123456789abcdef88888888888888888888888888888888", "1234"),
-  #("0000000000000000000000000000000000000000000000000000000000000000", "000000000000000000000000000000000123456789abcdef0123456789abcdef"),
-  #("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", "0000000000000000000000000000000000000000000000000000000000000002"),
-  # ("1100000000000000000000000000000000000000000000000000000000000000", "0000000000000000000000000000000000000000000000000000000000000003"),
-  # ("2200000000000000000000000000000000000000000000000000000000000000", "0000000000000000000000000000000000000000000000000000000000000004"),
-  # ("2211000000000000000000000000000000000000000000000000000000000000", "0000000000000000000000000000000000000000000000000000000000000005"),
-  # ("3300000000000000000000000000000000000000000000000000000000000000", "0000000000000000000000000000000000000000000000000000000000000006"),
-  # ("3300000000000000000000000000000000000000000000000000000000000001", "0000000000000000000000000000000000000000000000000000000000000007"),
-  # ("33000000000000000000000000000000000000000000000000000000000000ff", "0000000000000000000000000000000000000000000000000000000000000008"),
-  # ("4400000000000000000000000000000000000000000000000000000000000000", "0000000000000000000000000000000000000000000000000000000000000009"),
-  # ("4400000011000000000000000000000000000000000000000000000000000000", "000000000000000000000000000000000000000000000000000000000000000a"),
-  # ("5500000000000000000000000000000000000000000000000000000000000000", "000000000000000000000000000000000000000000000000000000000000000b"),
-  # ("5500000000000000000000000000000000000000000000000000000000001100", "000000000000000000000000000000000000000000000000000000000000000c"),
-]
+proc makeRandomBytes32(): array[32, byte] =
+  result[ 0 ..<  8] = cast[array[8, byte]](randomGenerator.next())
+  result[ 8 ..< 16] = cast[array[8, byte]](randomGenerator.next())
+  result[16 ..< 24] = cast[array[8, byte]](randomGenerator.next())
+  result[24 ..< 32] = cast[array[8, byte]](randomGenerator.next())
 
 iterator hexKvpsToBytes32(kvps: openArray[tuple[key: string, value: string]]):
     tuple[key: array[32, byte], value: seq[byte]] =
   for (hexKey, hexValue) in kvps:
     yield (hexToBytesArray[32](hexKey), hexValue.fromHex)
 
-let emptyRlpHash = "56E81F171BCC55A6FF8345E692C0F86E5B48E01B996CADC001622FB5E363B421".fromHex
-var db2 = newMemoryDB()
-var trie = initHexaryTrie(db2)
-var container: DiffLayer
 
-for (key, value) in sampleKvps.hexKvpsToBytes32():
-  echo &"Adding {key.toHex} --> {value.toHex}"
-  #let key = "A".keccakHash.data
-  trie.put(key, value)
-  container.put(Nibbles64(bytes: key), value)
+suite "Legacy compatibility":
 
-echo "\nDumping kvps in DB"
-for kvp in db2.pairsInMemoryDB():
-  if kvp[0][0..^1] != emptyRlpHash[0..^1]:
-    echo &"{kvp[0].toHex} => {kvp[1].toHex}"
+  let emptyValue = hexToBytesArray[32]("0000000000000000000000000000000000000000000000000000000000000000").toBuffer32
 
-echo ""
-var rootHash = container.getOrComputeHash
-echo "\nDumping tree:\n"
-container.root.printTree(newFileStream(stdout), rootHash)
+  func makeKey(hex: string): Nibbles64 =
+    Nibbles64(bytes: hexToBytesArray[32](hex))
 
-echo ""
-echo &"Legacy root hash: {trie.rootHash.data.toHex}" #"0xe9e2935138352776cad724d31c9fa5266a5c593bb97726dd2a908fe6d53284df"
-echo &"BART   root hash: {container.getOrComputeHash[].toHex}"
+  echo ""
+
+  test "Extension node":
+
+    # case #1
+    var tree = DiffLayer(root: nil)
+    discard tree.put(makeKey("9100000000000000000000000000000000000000000000000000000000000000"), emptyValue)
+    discard tree.put(makeKey("9200000000000000000000000000000000000000000000000000000000000000"), emptyValue)
+    #tree.root.printTree(newFileStream(stdout), justTopTree=false)
+    discard tree.put(makeKey("b000000000000000000000000000000000000000000000000000000000000000"), emptyValue)
+    #tree.root.printTree(newFileStream(stdout), justTopTree=false)
+
+    # case #2
+    tree = DiffLayer(root: nil)
+    discard tree.put(makeKey("56789a1000000000000000000000000000000000000000000000000000000000"), emptyValue)
+    discard tree.put(makeKey("56789a2000000000000000000000000000000000000000000000000000000000"), emptyValue)
+    #tree.root.printTree(newFileStream(stdout), justTopTree=false)
+    discard tree.put(makeKey("01bc000000000000000000000000000000000000000000000000000000000000"), emptyValue)
+    #tree.root.printTree(newFileStream(stdout), justTopTree=false)
+
+    # case #3
+    tree = DiffLayer(root: nil)
+    discard tree.put(makeKey("56789a1000000000000000000000000000000000000000000000000000000000"), emptyValue)
+    discard tree.put(makeKey("56789a2000000000000000000000000000000000000000000000000000000000"), emptyValue)
+    #tree.root.printTree(newFileStream(stdout), justTopTree=false)
+    discard tree.put(makeKey("56789b0000000000000000000000000000000000000000000000000000000000"), emptyValue)
+    #tree.root.printTree(newFileStream(stdout), justTopTree=false)
+
+    # case #4
+    tree = DiffLayer(root: nil)
+    discard tree.put(makeKey("56789a1000000000000000000000000000000000000000000000000000000000"), emptyValue)
+    discard tree.put(makeKey("56789a2000000000000000000000000000000000000000000000000000000000"), emptyValue)
+    #tree.root.printTree(newFileStream(stdout), justTopTree=false)
+    discard tree.put(makeKey("56bc000000000000000000000000000000000000000000000000000000000000"), emptyValue)
+    #tree.root.printTree(newFileStream(stdout), justTopTree=false)
 
 
-#[
+  test "Populate trees and compare":
+
+    const sampleKvps = @[
+      ("20001ab975821a408aa3fabe8132f5915cd05054652f879f0aedf0c573dfb33", "2d9e782d37eec375ab9950fbdd1e9a9b983bbfe71ceb4b073411a3c821927f07"),
+      ("ed812738fb4aec6f6b8db0b372e5f8039aa85d47fe2845edb219301acec34ad", "74e931d10d7e1b1ca9f0811cdf80999254971c029981ceaebde2924a6f97a17c"),
+    ]
+
+    var db = newMemoryDB()
+    var trie = initHexaryTrie(db)
+    var tree = DiffLayer(root: nil)
+
+    for (key, value) in sampleKvps.hexKvpsToBytes32():
+      when TraceLogs: echo &"Adding {key.toHex} --> {value.toHex}"
+      trie.put(key, value)
+      discard tree.put(Nibbles64(bytes: key), value.toBuffer32)
+    discard tree.rootHash
+
+    when TraceLogs:
+
+      echo "\nDumping kvps in Legacy DB"
+      for kvp in db.pairsInMemoryDB():
+        if kvp[0][0..^1] != emptyRlpHash[0..^1]:
+          echo &"{kvp[0].toHex} => {kvp[1].toHex}"
+
+      echo ""
+      echo "\nDumping tree:\n"
+      tree.root.printTree(newFileStream(stdout), justTopTree=false)
+
+      echo ""
+      echo &"Legacy root hash: {trie.rootHash.data.toHex}"
+      echo &"BART   root hash: {$tree.rootHash}"
+
+    check trie.rootHash.data == tree.rootHash
 
 
-Adding 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef --> 1234
-Adding 0123456789abcdef0123456789abcdef88888888888888888888888888888888 --> 1234
-
-Dumping kvps in DB
-22cfdc621a743d628b8492366840f1ba5dfe7be3f5da2e039b0e3a72ddd9ed6c =>  f839d4903123456789abcdef0123456789abcdef82123480808080808080d490388888888888888888888888888888888212348080808080808080
-73209468d8d1058c7f3140c030f10ef2a7b09b25e891f42dcf33a248b0fbd8f0 =>  f391000123456789abcdef0123456789abcdefa022cfdc621a743d628b8492366840f1ba5dfe7be3f5da2e039b0e3a72ddd9ed6c
-
-       [                                                                                                                                                  ]
-           [                                                ]                        [                                            ]
-f8  39  d4  90    3123456789abcdef0123456789abcdef  82  1234  80 80 80 80 80 80 80 d4  90 38888888888888888888888888888888 82 1234 80 80 80 80 80 80 80 80
-list ahead; size in 1 byte                          2-bytes string ahead           20 bytes list ahead
-    size of list: 57                                    leaf 1? value                  16 bytes string ahead 
-        20 bytes list ahead                                   empty strings...            string: 3 = odd leaf marker; the rest: second leaf's lower path
-            16 bytes string ahead                                                                                          2-bytes string ahead
-                  3 = odd leaf marker; the rest: first leaf's lower path                                                      leaf 2? value
+  test "Fuzzing":
+    const numRuns = 10
+    const maxBlocksPerRun = 200
+    const maxNewKeysPerBlock = 200
+    const maxModifiedOldKeysPerBlock = 50
+    const oldChainsRatio  = 0.1 # 0.1  The probability to base a block on top of another block that's earlier than the last one (0.0 - 1.0)
 
 
-[[3123456789abcdef0123456789abcdef, 1234], nil, nil, nil, nil, nil, nil, nil, [], nil, nil, nil, nil, nil, nil, nil, nil]
+    type BlockState = ref object
+      legacyTrie: ref HexaryTrie
+      legacyTrieHash: KeccakHash
+      tree: DiffLayer
+      treeHash: Buffer32
+      newKeys: seq[array[32, byte]]
+      newKvps: Table[array[32, byte], seq[byte]]
+      modifiedKvps: Table[array[32, byte], seq[byte]]
 
-[ offset 0: [leaf 1 lower path + marker, leaf 1 value], ...(nils)... , offset 8: [leaf 2 lower path + marker, leaf 2 value], ...(nils)... ]  (17 children)
+    # number of times to run whole test
+    for runIteration in 0 ..< numRuns:
 
-f3  91  00  0123456789abcdef0123456789abcdef a0  22cfdc621a743d628b8492366840f1ba5dfe7be3f5da2e039b0e3a72ddd9ed6c
-f3   list of 51 items                        32 bytes tring
-    string 17 bytes                              hash of above
-        extention node marker
-            extension node path
-                                             
+      let db = newMemoryDB()
+      var lastTrie: ref HexaryTrie
+      new lastTrie
+      lastTrie[] = initHexaryTrie(db, isPruning = false)
+      var lastTree = DiffLayer(root: nil)
+      var blocks: seq[BlockState]
 
-Leaf: d4903123456789abcdef0123456789abcdef821234
-Leaf: d49038888888888888888888888888888888821234
-Branch: f839d4903123456789abcdef0123456789abcdef82123480808080808080d490388888888888888888888888888888888212348080808080808080
-Extension: f291000123456789abcdef0123456789abcdefa022cfdc621a743d628b8492366840f1ba5dfe7be3f5da2e039b0e3a72ddd9ed6c
+      # Number of "blocks" in that run
+      for blockNumber in 0 ..< randomGenerator.rand(maxBlocksPerRun):
+        var state = BlockState()
 
-Dumping tree:
+        # Base the "block" on top of the previous one 90% of the time; 10% of the time on top of some other random block
+        if randomGenerator.rand(1f) > oldChainsRatio or blocks.len < 2:
+          new state.legacyTrie
+          state.legacyTrie[] = initHexaryTrie(db, lastTrie[].rootHash, isPruning = false)
+          state.tree = stackDiffLayer(lastTree)
+        else:
+          let randomBlock = blocks[randomGenerator.rand(blocks.len-2)]
+          new state.legacyTrie
+          state.legacyTrie[] = initHexaryTrie(db, randomBlock.legacyTrieHash, isPruning = false)
+          state.tree = stackDiffLayer(randomBlock.tree)
+        lastTrie = state.legacyTrie
+        lastTree = state.tree
 
-0123456789abcdef0123456789abcdef                                  Extension     Hash: f58249e0398995cea68f155e0ad9855bc2273983c2cbb470ad24a43ea7ac687d
-                                0|                                 Branch        Hash: 22cfdc621a743d628b8492366840f1ba5dfe7be3f5da2e039b0e3a72ddd9ed6c
-                                 0123456789abcdef0123456789abcdef  Leaf          Hash: d4903123456789abcdef0123456789abcdef821234  Value: 1234
-                                 88888888888888888888888888888888  Leaf          Hash: d49038888888888888888888888888888888821234  Value: 1234
+        # Add some random number of random key-values to that "block"
+        for _ in 0 ..< 1 + randomGenerator.rand(maxNewKeysPerBlock-1):
+          let key = makeRandomBytes32()
+          let randomLength = 32 #1 + randomGenerator.rand(31)
+          let value = makeRandomBytes32()[0..<randomLength]
+          state.newKvps[key] = value
+          state.newKeys.add key
+          state.legacyTrie[].put(key, value)
+          discard state.tree.put(Nibbles64(bytes: key), value.toBuffer32)
 
-Legacy root hash: 73209468d8d1058c7f3140c030f10ef2a7b09b25e891f42dcf33a248b0fbd8f0
-BART   root hash: f58249e0398995cea68f155e0ad9855bc2273983c2cbb470ad24a43ea7ac687d  
-]#
+        # Modify some random number of keys from previous blocks (override in current block)
+        if blocks.len > 0:
+          for _ in 0 ..< randomGenerator.rand(maxModifiedOldKeysPerBlock):
+            let randomBlock = blocks[randomGenerator.rand(blocks.len-1)]
+            let oldKey = randomBlock.newKeys[randomGenerator.rand(randomBlock.newKeys.len-1)]
+            let randomLength = 32 #1 + randomGenerator.rand(31)
+            let value = makeRandomBytes32()[0..<randomLength]
+            state.modifiedKvps[oldKey] = value
+            state.legacyTrie[].put(oldKey, value)
+            discard state.tree.put(Nibbles64(bytes: oldKey), value.toBuffer32)
+
+        # Compare the hashes of legacy and DiffLayer
+        if state.legacyTrie[].rootHash.data != state.tree.rootHash:
+          echo &"Error at run iteration #{runIteration}, block #{blockNumber}"
+          echo &"Legacy root hash: {state.legacyTrie[].rootHash.data.toHex}"
+          echo "\nDumping kvps in Legacy DB"
+          for kvp in db.pairsInMemoryDB():
+            if kvp[0][0..^1] != emptyRlpHash[0..^1]:
+              echo &"{kvp[0].toHex} => {kvp[1].toHex}"
+          echo "\nDumping tree:\n"
+          state.tree.root.printTree(newFileStream(stdout), false)
+          doAssert false
+
+        state.legacyTrieHash = state.legacyTrie[].rootHash
+        blocks.add state
+
+        # Print state
+        when false:
+          echo &"\n\nRun iteration #{runIteration}, block #{blockNumber}. Tree:\n"
+          state.tree.root.printTree(newFileStream(stdout), justTopTree=false)
+
+          echo &"\n\nRun iteration #{runIteration}, block #{blockNumber}. Top tree:\n"
+          state.tree.root.printTree(newFileStream(stdout), justTopTree=true)
+
+          echo &"\n\nRun iteration #{runIteration}, block #{blockNumber}. Expected new key-values:\n"
+          for key, value in state.newKvps:
+            echo &"{key.toHex}  -->  {value.toHex}"
+
+          echo &"\n\nRun iteration #{runIteration}, block #{blockNumber}. Found key-values in top tree:\n"
+          for node, path, _ in state.tree.root.enumerateTree(justTopTree = true):
+            if node of MptLeaf:
+              echo &"{node.MptLeaf.path.bytes.toHex}  -->  {$node.MptLeaf.value}"
+
+      # Verify the new key-values in all blocks in that run
+      for blockNumber, state in blocks.pairs:
+        for key, value in state.newKvps:
+          let (leaf, _) = state.tree.tryGet Nibbles64(bytes: key)
+          if leaf == nil:
+            echo &"\nRun iteration #{runIteration}, block #{blockNumber}. Key not found: {key.toHex}"
+          elif leaf.value.toSeq != value:
+            echo &"\nRun iteration #{runIteration}, block #{blockNumber}. Unexpeced key-value: {key.toHex}  -->  {value.toHex}"
+          elif leaf.diffHeight != state.tree.diffHeight:
+            echo &"\nRun iteration #{runIteration}, block #{blockNumber}. Key has wrong diff height: {key.toHex}"
+          check leaf != nil and leaf.value.toSeq == value
+
+      # Verify the modified key-values in all blocks in that run
+      for blockNumber, state in blocks.pairs:
+        for key, value in state.modifiedKvps:
+          let (leaf, _) = state.tree.tryGet Nibbles64(bytes: key)
+          if leaf == nil:
+            echo &"\nRun iteration #{runIteration}, block #{blockNumber}. Key not found: {key.toHex}"
+          elif leaf.value.toSeq != value:
+            echo &"\nRun iteration #{runIteration}, block #{blockNumber}. Unexpeced key-value: {key.toHex}  -->  {value.toHex}"
+          elif leaf.diffHeight != state.tree.diffHeight:
+            echo &"\nRun iteration #{runIteration}, block #{blockNumber}. Key has wrong diff height: {key.toHex}"
+          check leaf != nil and leaf.value.toSeq == value
+
+      # Nullify the hashes of all nodes, recompute them in random blocks order and compare them again with legacy hashes
+      for state in blocks:
+        for node, _, _ in state.tree.root.enumerateTree(justTopTree=true):
+          node.hashOrRlp.len = 0
+      randomGenerator.shuffle(blocks)
+      for state in blocks:
+        check state.tree.rootHash == state.legacyTrie[].rootHash.data
+
+
+
+  test "randomValues_1000":
+
+    ## Writes a larger-ish tree with random nodes to a file
+    createDir "testResults"
+    var startTime = cpuTime()
+
+    var tree = DiffLayer(root: nil)
+    for i in 0..<1000:
+      discard tree.put(key = Nibbles64(bytes: makeRandomBytes32()), value = makeRandomBytes32().toBuffer32)
+
+    var hashTime = cpuTime()
+    tree.root.computeHashOrRlpIfNeeded 0
+    var endTime = cpuTime()
+
+    var file = open("testResults/randomValues_1000", fmWrite)
+    defer: close(file)
+    tree.root.printTree(newFileStream(file), justTopTree=false)
+    echo "Tree dumped to 'testResults/mpt_randomValues_1000'"
+    echo &"Time to populate tree: {hashTime - startTime:.3f} secs"
+    echo &"Time to compute root hash: {endTime - hashTime:.3f} secs"
+
+
+# getOccupiedMem
+
+# todo: comparative performance test of small tree and big tree
