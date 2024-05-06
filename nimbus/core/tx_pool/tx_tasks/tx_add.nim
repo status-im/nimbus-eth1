@@ -160,7 +160,7 @@ proc addTx*(xp: TxPoolRef; item: TxItemRef): bool
 # core/tx_pool.go(883): func (pool *TxPool) AddRemotes(txs []..
 # core/tx_pool.go(889): func (pool *TxPool) addTxs(txs []*types.Transaction, ..
 proc addTxs*(xp: TxPoolRef;
-             txs: openArray[Transaction]; info = ""): TxAddStats
+             txs: openArray[PooledTransaction]; info = ""): TxAddStats
     {.discardable,gcsafe,raises: [CatchableError].} =
   ## Add a list of transactions. The list is sorted after nonces and txs are
   ## tested and stored into either of the `pending` or `staged` buckets, or
@@ -181,7 +181,7 @@ proc addTxs*(xp: TxPoolRef;
   for tx in txs.items:
     var reason: TxInfo
 
-    if tx.txType == TxEip4844:
+    if tx.tx.txType == TxEip4844:
       let res = tx.validateBlobTransactionWrapper()
       if res.isErr:
         # move item to waste basket

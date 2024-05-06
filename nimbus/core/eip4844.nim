@@ -167,17 +167,17 @@ func validateEip4844Header*(
 
   return ok()
 
-proc validateBlobTransactionWrapper*(tx: Transaction):
+proc validateBlobTransactionWrapper*(tx: PooledTransaction):
                                      Result[void, string] {.raises: [].} =
   if tx.networkPayload.isNil:
     return err("tx wrapper is none")
 
   # note: assert blobs are not malformatted
-  let goodFormatted = tx.versionedHashes.len ==
+  let goodFormatted = tx.tx.versionedHashes.len ==
                       tx.networkPayload.commitments.len and
-                      tx.versionedHashes.len  ==
+                      tx.tx.versionedHashes.len ==
                       tx.networkPayload.blobs.len and
-                      tx.versionedHashes.len ==
+                      tx.tx.versionedHashes.len ==
                       tx.networkPayload.proofs.len
 
   if not goodFormatted:
@@ -194,12 +194,13 @@ proc validateBlobTransactionWrapper*(tx: Transaction):
     return err("Failed to verify network payload of a transaction")
 
   # Now that all commitments have been verified, check that versionedHashes matches the commitments
-  for i in 0 ..< tx.versionedHashes.len:
+  for i in 0 ..< tx.tx.versionedHashes.len:
     # this additional check also done in tx validation
-    if tx.versionedHashes[i].data[0] != VERSIONED_HASH_VERSION_KZG:
+    if tx.tx.versionedHashes[i].data[0] != VERSIONED_HASH_VERSION_KZG:
       return err("wrong kzg version in versioned hash at index " & $i)
 
-    if tx.versionedHashes[i] != kzgToVersionedHash(tx.networkPayload.commitments[i]):
+    if tx.tx.versionedHashes[i] !=
+        kzgToVersionedHash(tx.networkPayload.commitments[i]):
       return err("tx versioned hash not match commitments at index " & $i)
 
   ok()

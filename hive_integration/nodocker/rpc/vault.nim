@@ -79,7 +79,8 @@ proc sendSome(address: EthAddress, amount: UInt256): seq[byte] =
   result.add amount.toBytesBE
   doAssert(result.len == 68) # 4 + 32 + 32
 
-proc makeFundingTx*(v: Vault, recipient: EthAddress, amount: UInt256): Transaction =
+proc makeFundingTx*(
+    v: Vault, recipient: EthAddress, amount: UInt256): PooledTransaction =
   let
     unsignedTx = Transaction(
       txType  : TxLegacy,
@@ -92,7 +93,8 @@ proc makeFundingTx*(v: Vault, recipient: EthAddress, amount: UInt256): Transacti
       payload : sendSome(recipient, amount)
     )
 
-  signTransaction(unsignedTx, v.vaultKey, v.chainId, eip155 = true)
+  PooledTransaction(
+    tx: signTransaction(unsignedTx, v.vaultKey, v.chainId, eip155 = true))
 
 proc signTx*(v: Vault,
              sender: EthAddress,
@@ -100,7 +102,7 @@ proc signTx*(v: Vault,
              recipient: EthAddress,
              amount: UInt256,
              gasLimit, gasPrice: GasInt,
-             payload: seq[byte] = @[]): Transaction =
+             payload: seq[byte] = @[]): PooledTransaction =
 
   let
     unsignedTx = Transaction(
@@ -115,7 +117,8 @@ proc signTx*(v: Vault,
     )
 
   let key = v.accounts[sender]
-  signTransaction(unsignedTx, key, v.chainId, eip155 = true)
+  PooledTransaction(
+    tx: signTransaction(unsignedTx, key, v.chainId, eip155 = true))
 
 # createAccount creates a new account that is funded from the vault contract.
 # It will panic when the account could not be created and funded.

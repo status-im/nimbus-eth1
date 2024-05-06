@@ -31,7 +31,7 @@ type
     ## Diff data, txs changes that apply after changing the head\
     ## insertion point of the block chain
 
-    addTxs*: KeyedQueue[Hash256,Transaction] ##\
+    addTxs*: KeyedQueue[Hash256, PooledTransaction] ##\
       ## txs to add; using a queue makes it more intuive to delete
       ## items while travesing the queue in a loop.
 
@@ -50,7 +50,13 @@ proc insert(xp: TxPoolRef; kq: TxHeadDiffRef; blockHash: Hash256)
     {.gcsafe,raises: [CatchableError].} =
   let db = xp.chain.com.db
   for tx in db.getBlockBody(blockHash).transactions:
-    kq.addTxs[tx.itemID] = tx
+    if tx.versionedHashes.len > 0:
+      # EIP-4844 blobs are not persisted and cannot be re-broadcasted.
+      # Note that it is also not possible to crete a cache in all cases,
+      # as we may have never seen the actual blob sidecar while syncing.
+      # Only the consensus layer persists the blob sidecar.
+      continue
+    kq.addTxs[tx.itemID] = PooledTransaction(tx: tx)
 
 proc remove(xp: TxPoolRef; kq: TxHeadDiffRef; blockHash: Hash256)
     {.gcsafe,raises: [CatchableError].} =

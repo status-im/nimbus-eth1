@@ -23,7 +23,7 @@ type
     startBlockNumber: uint64
     blockCount: int
     currentTxIndex: int
-    txs: seq[Transaction]
+    txs: seq[PooledTransaction]
 
 method withMainFork(cs: PrevRandaoTransactionTest, fork: EngineFork): BaseSpec =
   var res = cs.clone()

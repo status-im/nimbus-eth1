@@ -28,10 +28,10 @@ func wdRoot(x: Option[seq[WithdrawalV1]]): Option[common.Hash256]
     if x.isNone: none(common.Hash256)
     else: some(wdRoot x.get)
 
-func txRoot(list: openArray[Web3Tx], removeBlobs: bool): common.Hash256
+func txRoot(list: openArray[Web3Tx]): common.Hash256
              {.gcsafe, raises:[RlpError].} =
   {.noSideEffect.}:
-    calcTxRoot(ethTxs(list, removeBlobs))
+    calcTxRoot(ethTxs(list))
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -80,15 +80,14 @@ func executionPayloadV1V2*(blk: EthBlock): ExecutionPayloadV1OrV2 =
   )
 
 func blockHeader*(p: ExecutionPayload,
-                  removeBlobs: bool,
                   beaconRoot: Option[common.Hash256]):
-                       common.BlockHeader {.gcsafe, raises:[CatchableError].} =
+                    common.BlockHeader {.gcsafe, raises:[CatchableError].} =
   common.BlockHeader(
     parentHash     : ethHash p.parentHash,
     ommersHash     : EMPTY_UNCLE_HASH,
     coinbase       : ethAddr p.feeRecipient,
     stateRoot      : ethHash p.stateRoot,
-    txRoot         : txRoot(p.transactions, removeBlobs),
+    txRoot         : txRoot p.transactions,
     receiptRoot    : ethHash p.receiptsRoot,
     bloom          : ethBloom p.logsBloom,
     difficulty     : 0.u256,
@@ -106,21 +105,20 @@ func blockHeader*(p: ExecutionPayload,
     parentBeaconBlockRoot: beaconRoot
   )
 
-func blockBody*(p: ExecutionPayload, removeBlobs: bool):
-                 common.BlockBody {.gcsafe, raises:[RlpError].} =
+func blockBody*(p: ExecutionPayload):
+                  common.BlockBody {.gcsafe, raises:[RlpError].} =
   common.BlockBody(
     uncles      : @[],
-    transactions: ethTxs(p.transactions, removeBlobs),
+    transactions: ethTxs p.transactions,
     withdrawals : ethWithdrawals p.withdrawals,
   )
 
 func ethBlock*(p: ExecutionPayload,
-               removeBlobs: bool,
                beaconRoot: Option[common.Hash256]):
                  common.EthBlock {.gcsafe, raises:[CatchableError].} =
-  common.Ethblock(
-    header     : blockHeader(p, removeBlobs, beaconRoot),
+  common.EthBlock(
+    header     : blockHeader(p, beaconRoot),
     uncles     : @[],
-    txs        : ethTxs(p.transactions, removeBlobs),
+    txs        : ethTxs p.transactions,
     withdrawals: ethWithdrawals p.withdrawals,
   )

@@ -118,20 +118,20 @@ proc newPayload*(ben: BeaconEngineRef,
 
   validatePayload(apiVersion, version, payload)
   validateVersion(com, timestamp, version, apiVersion)
-  
-  var header = blockHeader(payload, removeBlobs = true, beaconRoot = ethHash beaconRoot)
-  
+
+  var header = blockHeader(payload, beaconRoot = ethHash beaconRoot)
+
   if apiVersion >= Version.V3:
     if versionedHashes.isNone:
       raise invalidParams("newPayload" & $apiVersion &
         " expect blobVersionedHashes but got none")
     if not validateVersionedHashed(payload, versionedHashes.get):
       return invalidStatus(header.parentHash, "invalid blob versionedHashes")
-    
+
   let blockHash = ethHash payload.blockHash
   header.validateBlockHash(blockHash, version).isOkOr:
     return error
-        
+
   # If we already have the block locally, ignore the entire execution and just
   # return a fake success.
   if db.getBlockHeader(blockHash, header):
@@ -195,7 +195,7 @@ proc newPayload*(ben: BeaconEngineRef,
 
   trace "Inserting block without sethead",
     hash = blockHash, number = header.blockNumber
-  let body = blockBody(payload, removeBlobs = true)
+  let body = blockBody(payload)
   let vres = ben.chain.insertBlockWithoutSetHead(header, body)
   if vres != ValidationResult.OK:
     let blockHash = latestValidHash(db, parent, ttd)

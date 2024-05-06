@@ -151,15 +151,11 @@ func ethWithdrawals*(x: Option[seq[WithdrawalV1]]):
 func ethTx*(x: Web3Tx): common.Transaction {.gcsafe, raises:[RlpError].} =
   result = rlp.decode(distinctBase x, common.Transaction)
 
-func ethTxs*(list: openArray[Web3Tx], removeBlobs = false):
+func ethTxs*(list: openArray[Web3Tx]):
                seq[common.Transaction] {.gcsafe, raises:[RlpError].} =
   result = newSeqOfCap[common.Transaction](list.len)
-  if removeBlobs:
-    for x in list:
-      result.add ethTx(x).removeNetworkPayload
-  else:
-    for x in list:
-      result.add ethTx(x)
+  for x in list:
+    result.add ethTx(x)
 
 func storageKeys(list: seq[FixedBytes[32]]): seq[StorageKey] =
   for x in list:

@@ -35,7 +35,7 @@ let
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc recoverItem*(xp: TxPoolRef; tx: Transaction; status = txItemPending;
+proc recoverItem*(xp: TxPoolRef; tx: PooledTransaction; status = txItemPending;
                   info = ""; acceptExisting = false): Result[TxItemRef,TxInfo] =
   ## Recover item from waste basket or create new. It is an error if the item
   ## is in the buckets database, already.

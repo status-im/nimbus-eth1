@@ -423,7 +423,7 @@
 ##
 
 import
-  std/[sequtils, tables],
+  std/[options, sequtils, tables],
   ./tx_pool/[tx_chain, tx_desc, tx_info, tx_item],
   ./tx_pool/tx_tabs,
   ./tx_pool/tx_tasks/[
@@ -517,7 +517,7 @@ proc new*(T: type TxPoolRef; com: CommonRef; miner: EthAddress): T
 
 # core/tx_pool.go(848): func (pool *TxPool) AddLocals(txs []..
 # core/tx_pool.go(864): func (pool *TxPool) AddRemotes(txs []..
-proc add*(xp: TxPoolRef; txs: openArray[Transaction]; info = "")
+proc add*(xp: TxPoolRef; txs: openArray[PooledTransaction]; info = "")
     {.gcsafe,raises: [CatchableError].} =
   ## Add a list of transactions to be processed and added to the buckets
   ## database. It is OK pass an empty list in which case some maintenance
@@ -533,7 +533,7 @@ proc add*(xp: TxPoolRef; txs: openArray[Transaction]; info = "")
 
 # core/tx_pool.go(854): func (pool *TxPool) AddLocals(txs []..
 # core/tx_pool.go(883): func (pool *TxPool) AddRemotes(txs []..
-proc add*(xp: TxPoolRef; tx: Transaction; info = "")
+proc add*(xp: TxPoolRef; tx: PooledTransaction; info = "")
     {.gcsafe,raises: [CatchableError].} =
   ## Variant of `add()` for a single transaction.
   xp.add(@[tx], info)
@@ -607,8 +607,14 @@ proc dirtyBuckets*(xp: TxPoolRef): bool =
   ## flag is also set.
   xp.pDirtyBuckets
 
-proc assembleBlock*(xp: TxPoolRef, someBaseFee: bool = false): Result[EthBlock, string]
-    {.gcsafe,raises: [CatchableError].} =
+type EthBlockAndBlobsBundle* = object
+  blk*: EthBlock
+  blobsBundle*: Option[BlobsBundle]
+
+proc assembleBlock*(
+    xp: TxPoolRef,
+    someBaseFee: bool = false
+): Result[EthBlockAndBlobsBundle, string] {.gcsafe,raises: [CatchableError].} =
   ## Getter, retrieves a packed block ready for mining and signing depending
   ## on the internally cached block chain head, the txs in the pool and some
   ## tuning parameters. The following block header fields are left
@@ -627,19 +633,40 @@ proc assembleBlock*(xp: TxPoolRef, someBaseFee: bool = false): Result[EthBlock, 
   var blk = EthBlock(
     header: xp.chain.getHeader               # uses updated vmState
   )
+  var blobsBundle: BlobsBundle
 
   for (_,nonceList) in xp.txDB.packingOrderAccounts(txItemPacked):
-    blk.txs.add toSeq(nonceList.incNonce).mapIt(it.tx)
+    for item in nonceList.incNonce:
+      let tx = item.pooledTx
+      blk.txs.add tx.tx
+      for k in tx.networkPayload.commitments:
+        blobsBundle.commitments.add k
+      for p in tx.networkPayload.proofs:
+        blobsBundle.proofs.add p
+      for blob in tx.networkPayload.blobs:
+        blobsBundle.blobs.add blob
 
   let com = xp.chain.com
   if com.forkGTE(Shanghai):
     blk.withdrawals = some(com.pos.withdrawals)
 
+  if not com.forkGTE(Cancun) and blobsBundle.commitments.len > 0:
+    return err("PooledTransaction contains blobs prior to Cancun")
+  let blobsBundleOpt =
+    if com.forkGTE(Cancun):
+      doAssert blobsBundle.commitments.len == blobsBundle.blobs.len
+      doAssert blobsBundle.proofs.len == blobsBundle.blobs.len
+      options.some blobsBundle
+    else:
+      options.none BlobsBundle
+
   if someBaseFee:
     # make sure baseFee always has something
     blk.header.fee = some(blk.header.fee.get(0.u256))
 
-  ok(blk)
+  ok EthBlockAndBlobsBundle(
+    blk: blk,
+    blobsBundle: blobsBundleOpt)
 
 proc gasCumulative*(xp: TxPoolRef): GasInt =
   ## Getter, retrieves the gas that will be burned in the block after
@@ -856,7 +883,7 @@ proc accountRanks*(xp: TxPoolRef): TxTabsLocality =
   xp.txDB.locality
 
 proc addRemote*(xp: TxPoolRef;
-                tx: Transaction; force = false): Result[void,TxInfo]
+                tx: PooledTransaction; force = false): Result[void,TxInfo]
     {.gcsafe,raises: [CatchableError].} =
   ## Adds the argument transaction `tx` to the buckets database.
   ##
@@ -890,7 +917,7 @@ proc addRemote*(xp: TxPoolRef;
   ok()
 
 proc addLocal*(xp: TxPoolRef;
-               tx: Transaction; force = false): Result[void,TxInfo]
+               tx: PooledTransaction; force = false): Result[void,TxInfo]
     {.gcsafe,raises: [CatchableError].} =
   ## Adds the argument transaction `tx` to the buckets database.
   ##

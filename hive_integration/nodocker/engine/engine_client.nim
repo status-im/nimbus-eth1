@@ -512,7 +512,8 @@ proc namedHeader*(client: RpcClient, name: string): Result[common.BlockHeader, s
       return err("failed to get named blockHeader")
     return ok(res.toBlockHeader)
 
-proc sendTransaction*(client: RpcClient, tx: common.Transaction): Result[void, string] =
+proc sendTransaction*(
+    client: RpcClient, tx: common.PooledTransaction): Result[void, string] =
   wrapTry:
     let encodedTx = rlp.encode(tx)
     let res = waitFor client.eth_sendRawTransaction(encodedTx)
@@ -603,7 +604,10 @@ TraceOpts.useDefaultSerializationIn JrpcConv
 createRpcSigsFromNim(RpcClient):
   proc debug_traceTransaction(hash: TxHash, opts: TraceOpts): JsonNode
 
-proc debugPrevRandaoTransaction*(client: RpcClient, tx: Transaction, expectedPrevRandao: Hash256): Result[void, string] =
+proc debugPrevRandaoTransaction*(
+    client: RpcClient,
+    tx: PooledTransaction,
+    expectedPrevRandao: Hash256): Result[void, string] =
   wrapTry:
     let hash = w3Hash tx.rlpHash
     # we only interested in stack, disable all other elems

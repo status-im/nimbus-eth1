@@ -116,18 +116,20 @@ func numEngines*(env: TestEnv): int =
 func accounts*(env: TestEnv, idx: int): TestAccount =
   env.sender.getAccount(idx)
 
-proc makeTx*(env: TestEnv, tc: BaseTx, nonce: AccountNonce): Transaction =
+proc makeTx*(
+    env: TestEnv, tc: BaseTx, nonce: AccountNonce): PooledTransaction =
   env.sender.makeTx(tc, nonce)
 
-proc makeTx*(env: TestEnv, tc: BigInitcodeTx, nonce: AccountNonce): Transaction =
+proc makeTx*(
+    env: TestEnv, tc: BigInitcodeTx, nonce: AccountNonce): PooledTransaction =
   env.sender.makeTx(tc, nonce)
 
-proc makeTxs*(env: TestEnv, tc: BaseTx, num: int): seq[Transaction] =
-  result = newSeqOfCap[Transaction](num)
+proc makeTxs*(env: TestEnv, tc: BaseTx, num: int): seq[PooledTransaction] =
+  result = newSeqOfCap[PooledTransaction](num)
   for _ in 0..<num:
     result.add env.sender.makeNextTx(tc)
 
-proc makeNextTx*(env: TestEnv, tc: BaseTx): Transaction =
+proc makeNextTx*(env: TestEnv, tc: BaseTx): PooledTransaction =
   env.sender.makeNextTx(tc)
 
 proc sendNextTx*(env: TestEnv, eng: EngineEnv, tc: BaseTx): bool =
@@ -145,7 +147,8 @@ proc sendTx*(env: TestEnv, eng: EngineEnv, tc: BaseTx, nonce: AccountNonce): boo
 proc sendTx*(env: TestEnv, eng: EngineEnv, tc: BigInitcodeTx, nonce: AccountNonce): bool =
   env.sender.sendTx(eng.client, tc, nonce)
 
-proc sendTxs*(env: TestEnv, eng: EngineEnv, txs: openArray[Transaction]): bool =
+proc sendTxs*(
+    env: TestEnv, eng: EngineEnv, txs: openArray[PooledTransaction]): bool =
   for tx in txs:
     if not sendTx(eng.client, tx):
       return false
@@ -163,17 +166,29 @@ proc sendTx*(env: TestEnv, tc: BigInitcodeTx, nonce: AccountNonce): bool =
   let client = env.engine.client
   env.sender.sendTx(client, tc, nonce)
 
-proc sendTx*(env: TestEnv, tx: Transaction): bool =
+proc sendTx*(env: TestEnv, tx: PooledTransaction): bool =
   let client = env.engine.client
   sendTx(client, tx)
 
-proc sendTx*(env: TestEnv, sender: TestAccount, eng: EngineEnv, tc: BlobTx): Result[Transaction, void] =
+proc sendTx*(
+    env: TestEnv,
+    sender: TestAccount,
+    eng: EngineEnv,
+    tc: BlobTx): Result[PooledTransaction, void] =
   env.sender.sendTx(sender, eng.client, tc)
 
-proc replaceTx*(env: TestEnv, sender: TestAccount, eng: EngineEnv, tc: BlobTx): Result[Transaction, void] =
+proc replaceTx*(
+    env: TestEnv,
+    sender: TestAccount,
+    eng: EngineEnv,
+    tc: BlobTx): Result[PooledTransaction, void] =
   env.sender.replaceTx(sender, eng.client, tc)
 
-proc makeTx*(env: TestEnv, tc: BaseTx, sender: TestAccount, nonce: AccountNonce): Transaction =
+proc makeTx*(
+    env: TestEnv,
+    tc: BaseTx,
+    sender: TestAccount,
+    nonce: AccountNonce): PooledTransaction =
   env.sender.makeTx(tc, sender, nonce)
 
 proc customizeTransaction*(env: TestEnv,

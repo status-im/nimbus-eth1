@@ -35,6 +35,7 @@ type
     id: PayloadID
     payload: ExecutionPayload
     blockValue: UInt256
+    blobsBundle: Option[BlobsBundleV1]
 
   HeaderItem = object
     hash: common.Hash256
@@ -71,13 +72,22 @@ proc put*(api: var PayloadQueue,
   api.headerQueue.put(HeaderItem(hash: hash, header: header))
 
 proc put*(api: var PayloadQueue, id: PayloadID,
-          blockValue: UInt256, payload: ExecutionPayload) =
+          blockValue: UInt256, payload: ExecutionPayload,
+          blobsBundle: Option[BlobsBundleV1]) =
   api.payloadQueue.put(PayloadItem(id: id,
-    payload: payload, blockValue: blockValue))
+    payload: payload, blockValue: blockValue, blobsBundle: blobsBundle))
 
 proc put*(api: var PayloadQueue, id: PayloadID,
-          blockValue: UInt256, payload: SomeExecutionPayload) =
-  api.put(id, blockValue, payload.executionPayload)
+          blockValue: UInt256, payload: SomeExecutionPayload,
+          blobsBundle: Option[BlobsBundleV1]) =
+  doAssert blobsBundle.isNone == (payload is
+    ExecutionPayloadV1 | ExecutionPayloadV2)
+  api.put(id, blockValue, payload.executionPayload, blobsBundle: blobsBundle)
+
+proc put*(api: var PayloadQueue, id: PayloadID,
+          blockValue: UInt256,
+          payload: ExecutionPayloadV1 | ExecutionPayloadV2) =
+  api.put(id, blockValue, payload, blobsBundle = options.none(BlobsBundleV1))
 
 # ------------------------------------------------------------------------------
 # Public functions, getters
@@ -93,46 +103,66 @@ proc get*(api: PayloadQueue, hash: common.Hash256,
 
 proc get*(api: PayloadQueue, id: PayloadID,
           blockValue: var UInt256,
-          payload: var ExecutionPayload): bool =
+          payload: var ExecutionPayload,
+          blobsBundle: var Option[BlobsBundleV1]): bool =
   for x in api.payloadQueue:
     if x.id == id:
       payload = x.payload
       blockValue = x.blockValue
+      blobsBundle = x.blobsBundle
       return true
   false
 
 proc get*(api: PayloadQueue, id: PayloadID,
           blockValue: var UInt256,
           payload: var ExecutionPayloadV1): bool =
-  var p: ExecutionPayload
-  let found = api.get(id, blockValue, p)
-  doAssert(p.version == Version.V1)
-  payload = p.V1
+  var
+    p: ExecutionPayload
+    blobsBundleOpt: Option[BlobsBundleV1]
+  let found = api.get(id, blockValue, p, blobsBundleOpt)
+  if found:
+    doAssert(p.version == Version.V1)
+    payload = p.V1
+    doAssert(blobsBundleOpt.isNone)
   return found
 
 proc get*(api: PayloadQueue, id: PayloadID,
           blockValue: var UInt256,
           payload: var ExecutionPayloadV2): bool =
-  var p: ExecutionPayload
-  let found = api.get(id, blockValue, p)
-  doAssert(p.version == Version.V2)
-  payload = p.V2
+  var
+    p: ExecutionPayload
+    blobsBundleOpt: Option[BlobsBundleV1]
+  let found = api.get(id, blockValue, p, blobsBundleOpt)
+  if found:
+    doAssert(p.version == Version.V2)
+    payload = p.V2
+    doAssert(blobsBundleOpt.isNone)
   return found
 
 proc get*(api: PayloadQueue, id: PayloadID,
           blockValue: var UInt256,
-          payload: var ExecutionPayloadV3): bool =
-  var p: ExecutionPayload
-  let found = api.get(id, blockValue, p)
-  doAssert(p.version == Version.V3)
-  payload = p.V3
+          payload: var ExecutionPayloadV3,
+          blobsBundle: var BlobsBundleV1): bool =
+  var
+    p: ExecutionPayload
+    blobsBundleOpt: Option[BlobsBundleV1]
+  let found = api.get(id, blockValue, p, blobsBundleOpt)
+  if found:
+    doAssert(p.version == Version.V3)
+    payload = p.V3
+    doAssert(blobsBundleOpt.isSome)
+    blobsBundle = blobsBundleOpt.unsafeGet
   return found
 
 proc get*(api: PayloadQueue, id: PayloadID,
           blockValue: var UInt256,
           payload: var ExecutionPayloadV1OrV2): bool =
-  var p: ExecutionPayload
-  let found = api.get(id, blockValue, p)
-  doAssert(p.version in {Version.V1, Version.V2})
-  payload = p.V1V2
+  var
+    p: ExecutionPayload
+    blobsBundleOpt: Option[BlobsBundleV1]
+  let found = api.get(id, blockValue, p, blobsBundleOpt)
+  if found:
+    doAssert(p.version in {Version.V1, Version.V2})
+    payload = p.V1V2
+    doAssert(blobsBundleOpt.isNone)
   return found

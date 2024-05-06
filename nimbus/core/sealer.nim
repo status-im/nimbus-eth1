@@ -61,8 +61,9 @@ proc validateSealer*(conf: NimbusConf, ctx: EthContext, chain: ChainRef): Result
 proc generateBlock(engine: SealingEngineRef,
                    outBlock: var EthBlock): Result[void, string] =
 
-  outBlock = engine.txPool.assembleBlock().valueOr:
+  let bundle = engine.txPool.assembleBlock().valueOr:
     return err(error)
+  outBlock = bundle.blk
 
   if engine.chain.com.consensus == ConsensusType.POS:
     # Stop the block generator if we reach TTD

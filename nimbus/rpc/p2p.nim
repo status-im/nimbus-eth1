@@ -10,7 +10,7 @@
 {.push raises: [].}
 
 import
-  std/[times, tables, typetraits],
+  std/[sequtils, times, tables, typetraits],
   json_rpc/rpcserver, stint, stew/byteutils,
   json_serialization, web3/conversions, json_serialization/std/options,
   eth/common/eth_types_json_serialization,
@@ -282,8 +282,27 @@ proc setupEthRpc*(
       tx       = unsignedTx(data, chainDB, accDB.getNonce(address) + 1)
       eip155   = com.isEIP155(com.syncCurrent)
       signedTx = signTransaction(tx, acc.privateKey, com.chainId, eip155)
+      networkPayload =
+        if signedTx.txType == TxEip4844:
+          if data.blobs.isNone or data.commitments.isNone or data.proofs.isNone:
+            raise newException(ValueError, "EIP-4844 transaction needs blobs")
+          if data.blobs.get.len != signedTx.versionedHashes.len:
+            raise newException(ValueError, "Incorrect number of blobs")
+          if data.commitments.get.len != signedTx.versionedHashes.len:
+            raise newException(ValueError, "Incorrect number of commitments")
+          if data.proofs.get.len != signedTx.versionedHashes.len:
+            raise newException(ValueError, "Incorrect number of proofs")
+          NetworkPayload(
+            blobs: data.blobs.get.mapIt it.NetworkBlob,
+            commitments: data.commitments.get.mapIt eth_types.KzgCommitment(it),
+            proofs: data.proofs.get.mapIt eth_types.KzgProof(it))
+        else:
+          if data.blobs.isSome or data.commitments.isSome or data.proofs.isSome:
+            raise newException(ValueError, "Blobs require EIP-4844 transaction")
+          nil
+      pooledTx = PooledTransaction(tx: signedTx, networkPayload: networkPayload)
 
-    txPool.add(signedTx)
+    txPool.add(pooledTx)
     result = rlpHash(signedTx).w3Hash
 
   server.rpc("eth_sendRawTransaction") do(txBytes: seq[byte]) -> Web3Hash:
@@ -293,10 +312,10 @@ proc setupEthRpc*(
     ## Returns the transaction hash, or the zero hash if the transaction is not yet available.
     ## Note: Use eth_getTransactionReceipt to get the contract address, after the transaction was mined, when you created a contract.
     let
-      signedTx = decodeTx(txBytes)
-      txHash   = rlpHash(signedTx)
+      pooledTx = decodePooledTx(txBytes)
+      txHash   = rlpHash(pooledTx)
 
-    txPool.add(signedTx)
+    txPool.add(pooledTx)
     let res = txPool.inPoolAndReason(txHash)
     if res.isErr:
       raise newException(ValueError, res.error)
