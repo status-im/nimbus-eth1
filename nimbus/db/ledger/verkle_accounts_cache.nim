@@ -119,7 +119,7 @@ proc rawTrie*(ac: AccountsCache): VerkleTrie {.inline.} = ac.trie
 proc init*(x: typedesc[AccountsCache]): AccountsCache =
   new result
   result.trie = initVerkleTrie()
-  result.witnessCache = initTable[EthAddress, WitnessData]
+  result.witnessCache = initTable[EthAddress, WitnessData]()
   discard result.beginSavePoint
 
 proc rootHash*(ac: AccountsCache): KeccakHash =
@@ -260,6 +260,18 @@ proc storageValue(acc: RefAccount, address: EthAddress, slot: UInt256, db: Verkl
     return val[]
   do:
     result = acc.originalStorageValue(address, slot, db)
+
+proc getCommittedStorage*(ac: AccountsCache, address: EthAddress, slot: UInt256): UInt256 {.inline.} =
+  let acc = ac.getAccount(address, false)
+  if acc.isNil:
+    return
+  acc.originalStorageValue(address, slot, ac.trie)
+
+proc getStorage*(ac: AccountsCache, address: EthAddress, slot: UInt256): UInt256 {.inline.} =
+  let acc = ac.getAccount(address, false)
+  if acc.isNil:
+    return
+  acc.storageValue(address, slot, ac.trie)
 
 proc kill(acc: RefAccount) =
   acc.flags.excl Alive

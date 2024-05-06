@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  ../accounts_cache as impl,
+  ../verkle_accounts_cache as impl,
   ../base/base_desc
 
 type
