@@ -49,7 +49,7 @@ suite "State Validation":
       )
 
       check:
-        validateAccountTrieNodeHash(
+        validateFetchedAccountTrieNode(
           contentKey.accountTrieNodeKey, contentValueRetrieval
         )
 
@@ -68,7 +68,7 @@ suite "State Validation":
       contentValueRetrieval.node[^1] += 1 # Modify node hash
 
       check:
-        not validateAccountTrieNodeHash(
+        not validateFetchedAccountTrieNode(
           contentKey.accountTrieNodeKey, contentValueRetrieval
         )
 
@@ -85,7 +85,7 @@ suite "State Validation":
       )
 
       check:
-        validateContractTrieNodeHash(
+        validateFetchedContractTrieNode(
           contentKey.contractTrieNodeKey, contentValueRetrieval
         )
 
@@ -104,7 +104,7 @@ suite "State Validation":
       contentValueRetrieval.node[^1] += 1 # Modify node hash
 
       check:
-        not validateContractTrieNodeHash(
+        not validateFetchedContractTrieNode(
           contentKey.contractTrieNodeKey, contentValueRetrieval
         )
 
@@ -121,7 +121,7 @@ suite "State Validation":
       )
 
       check:
-        validateContractCodeHash(contentKey.contractCodeKey, contentValueRetrieval)
+        validateFetchedContractCode(contentKey.contractCodeKey, contentValueRetrieval)
 
   test "Validate invalid ContractCodeRetrieval nodes":
     const file = testVectorDir / "contract_bytecode.yaml"
@@ -138,4 +138,6 @@ suite "State Validation":
       contentValueRetrieval.code[^1] += 1 # Modify node hash
 
       check:
-        not validateContractCodeHash(contentKey.contractCodeKey, contentValueRetrieval)
+        not validateFetchedContractCode(
+          contentKey.contractCodeKey, contentValueRetrieval
+        )

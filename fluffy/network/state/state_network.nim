@@ -90,15 +90,15 @@ proc validateContent*(
     warn "Received content with unused content type"
     false
   of accountTrieNode:
-    validateAccountTrieNodeHash(
+    validateFetchedAccountTrieNode(
       contentKey.accountTrieNodeKey, contentValue.accountTrieNode
     )
   of contractTrieNode:
-    validateContractTrieNodeHash(
+    validateFetchedContractTrieNode(
       contentKey.contractTrieNodeKey, contentValue.contractTrieNode
     )
   of contractCode:
-    validateContractCodeHash(contentKey.contractCodeKey, contentValue.contractCode)
+    validateFetchedContractCode(contentKey.contractCodeKey, contentValue.contractCode)
 
 proc getContent*(n: StateNetwork, key: ContentKey): Future[Opt[seq[byte]]] {.async.} =
   let

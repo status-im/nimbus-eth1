@@ -7,27 +7,28 @@
 
 import eth/common, ./state_content
 
-proc validateAccountTrieNodeHash*(
-    accountTrieNodeKey: AccountTrieNodeKey, accountTrieNode: AccountTrieNodeRetrieval
+proc validateFetchedAccountTrieNode*(
+    trustedAccountTrieNodeKey: AccountTrieNodeKey,
+    accountTrieNode: AccountTrieNodeRetrieval,
 ): bool =
-  let expectedHash = accountTrieNodeKey.nodeHash
+  let expectedHash = trustedAccountTrieNodeKey.nodeHash
   let actualHash = keccakHash(accountTrieNode.node.asSeq())
 
   expectedHash == actualHash
 
-proc validateContractTrieNodeHash*(
-    contractTrieNodeKey: ContractTrieNodeKey,
+proc validateFetchedContractTrieNode*(
+    trustedContractTrieNodeKey: ContractTrieNodeKey,
     contractTrieNode: ContractTrieNodeRetrieval,
 ): bool =
-  let expectedHash = contractTrieNodeKey.nodeHash
+  let expectedHash = trustedContractTrieNodeKey.nodeHash
   let actualHash = keccakHash(contractTrieNode.node.asSeq())
 
   expectedHash == actualHash
 
-proc validateContractCodeHash*(
-    contractCodeKey: ContractCodeKey, contractCode: ContractCodeRetrieval
+proc validateFetchedContractCode*(
+    trustedContractCodeKey: ContractCodeKey, contractCode: ContractCodeRetrieval
 ): bool =
-  let expectedHash = contractCodeKey.codeHash
+  let expectedHash = trustedContractCodeKey.codeHash
   let actualHash = keccakHash(contractCode.code.asSeq())
 
   expectedHash == actualHash
