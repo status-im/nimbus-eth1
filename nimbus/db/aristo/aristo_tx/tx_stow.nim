@@ -45,7 +45,7 @@ proc txStow*(
     return err(error[1])
 
   if fwd.isValid:
-    # Merge `top` layer into `roFilter`
+    # Move/merge `top` layer onto `roFilter`
     db.journalMerge(fwd).isOkOr:
       return err(error[1])
 
@@ -70,9 +70,8 @@ proc txStow*(
         doAssert rc.error == GetIdgNotFound
 
   if persistent:
-    # Merge `roFiler` into persistent tables
+    # Merge/move `roFilter` into persistent tables
     ? db.journalUpdate nxtFid
-    db.roFilter = FilterRef(nil)
 
   # Special treatment for `snap` proofs (aka `chunkedMpt`)
   let final =

@@ -256,7 +256,7 @@ proc stow*(
     chunkedMpt = false;               # Partial data (e.g. from `snap`)
       ): Result[void,AristoError] =
   ## This function is similar to `persist()` stopping short of performing the
-  ## final step stoting on the persistent database. It fails if there is a
+  ## final step storing on the persistent database. It fails if there is a
   ## pending transaction.
   ##
   ## The function merges all staged data from the top layer cache onto the
