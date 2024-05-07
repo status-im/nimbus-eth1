@@ -333,8 +333,8 @@ proc putEndFn(db: RdbBackendRef): PutEndFn =
 
 proc guestDbFn(db: RdbBackendRef): GuestDbFn =
   result =
-    proc(): Result[RootRef,AristoError] =
-      let gdb = db.rdb.guestDb().valueOr:
+    proc(instance: int): Result[RootRef,AristoError] =
+      let gdb = db.rdb.initGuestDb(instance).valueOr:
         when extraTraceMessages:
           trace logTxt "guestDbFn", error=error[0], info=error[1]
         return err(error[0])

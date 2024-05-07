@@ -73,7 +73,7 @@ type
     vtx*: VertexRef                   ## Reference to vertex
 
   FilterRef* = ref object
-    ## Delta layer with expanded sequences for quick access.
+    ## Delta layer
     fid*: FilterID                   ## Filter identifier
     src*: Hash256                    ## Applicable to this state root
     trg*: Hash256                    ## Resulting state root (i.e. `kMap[1]`)
@@ -168,7 +168,7 @@ func max(a, b, c: int): int =
   max(max(a,b),c)
 
 # ------------------------------------------------------------------------------
-# Public helpers: `NodeRef` and `PayloadRef`
+# Public helpers (misc)
 # ------------------------------------------------------------------------------
 
 func init*(T: type LayerRef): T =
@@ -180,7 +180,9 @@ func hash*(node: NodeRef): Hash =
   ## Table/KeyedQueue/HashSet mixin
   cast[pointer](node).hash
 
-# ---------------
+# ------------------------------------------------------------------------------
+# Public helpers: `NodeRef` and `PayloadRef`
+# ------------------------------------------------------------------------------
 
 proc `==`*(a, b: PayloadRef): bool =
   ## Beware, potential deep comparison

@@ -82,7 +82,10 @@ proc init*[W: RdbBackendRef](
   when B is RdbBackendRef:
     basePath.newAristoRdbDbRef DEFAULT_QID_QUEUES.to(QidLayoutRef)
 
-proc getRocksDbFamily*(gdb: GuestDbRef): Result[ColFamilyReadWrite,void] =
+proc getRocksDbFamily*(
+    gdb: GuestDbRef;
+    instance = 0;
+      ): Result[ColFamilyReadWrite,void] =
   ## Database pigiback feature
   if not gdb.isNil and gdb.beKind == BackendRocksDB:
     return ok RdbGuestDbRef(gdb).guestDb

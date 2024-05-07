@@ -104,7 +104,7 @@ proc journalUpdate*(
     nxtFid = none(FilterID);           # Next filter ID (if any)
     reCentreOk = false;
       ): Result[void,AristoError] =
-  ## Resolve the backend filter into the physical backend database.
+  ## Resolve (i.e. move) the backend filter into the physical backend database.
   ##
   ## This needs write permission on the backend DB for the argument `db`
   ## descriptor (see the function `aristo_desc.isCentre()`.) With the argument
@@ -125,6 +125,10 @@ proc journalUpdate*(
   if be.isNil:
     return err(FilBackendMissing)
 
+  # Blind or missing filter
+  if db.roFilter.isNil:
+    return ok()
+
   # Make sure that the argument `db` is at the centre so the backend is in
   # read-write mode for this peer.
   let parent = db.getCentre
@@ -134,10 +138,6 @@ proc journalUpdate*(
     db.reCentre
   # Always re-centre to `parent` (in case `reCentreOk` was set)
   defer: parent.reCentre
-
-  # Blind or missing filter
-  if db.roFilter.isNil:
-    return ok()
 
   # Initialise peer filter balancer.
   let updateSiblings = ? UpdateSiblingsRef.init db
@@ -176,6 +176,7 @@ proc journalUpdate*(
   if not be.journal.isNil:
     be.journal.state = instr.scd.state
 
+  db.roFilter = FilterRef(nil)
   ok()
 
 

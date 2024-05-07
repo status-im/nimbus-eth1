@@ -28,11 +28,18 @@ type
     # Transaction wrappers
     TxArgStaleTx
     TxBackendNotWritable
+    TxLevelTooDeep
+    TxLevelUseless
     TxNoPendingTx
-    TxPendingTx
     TxNotTopTx
+    TxPendingTx
     TxStackGarbled
     TxStackUnderflow
+
+    # Filter management
+    FilBackendMissing
+    FilBackendRoMode
+    FilSiblingsCommitUnfinshed
 
     # Functions from `kvt_desc`
     MustBeOnCentre

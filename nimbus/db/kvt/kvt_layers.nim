@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -75,7 +75,7 @@ proc layersCc*(db: KvtDbRef; level = high(int)): LayerRef =
                else:                     db.stack[0 .. level]
 
   # Set up initial layer (bottom layer)
-  result = LayerRef(delta: LayerDelta(sTab: layers[0].delta.sTab))
+  result = LayerRef(delta: LayerDeltaRef(sTab: layers[0].delta.sTab))
 
   # Consecutively merge other layers on top
   for n in 1 ..< layers.len:

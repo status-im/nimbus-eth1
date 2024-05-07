@@ -47,6 +47,7 @@ type
     ## Three tier database object supporting distributed instances.
     top*: LayerRef                    ## Database working layer, mutable
     stack*: seq[LayerRef]             ## Stashed immutable parent layers
+    roFilter*: LayerDeltaRef          ## Apply read filter (locks writing)
     backend*: BackendRef              ## Backend database (may well be `nil`)
 
     txRef*: KvtTxRef                  ## Latest active transaction
@@ -115,6 +116,8 @@ proc reCentre*(db: KvtDbRef) =
 
 proc fork*(
     db: KvtDbRef;
+    noTopLayer = false;
+    noFilter = false;
       ): Result[KvtDbRef,KvtError] =
   ## This function creates a new empty descriptor accessing the same backend
   ## (if any) database as the argument `db`. This new descriptor joins the
@@ -125,14 +128,22 @@ proc fork*(
   ## also cost computing ressources for maintaining and updating backend
   ## filters when writing to the backend database .
   ##
+  ## If the argument `noFilter` is set `true` the function will fork directly
+  ## off the backend database and ignore any filter.
+  ##
   # Make sure that there is a dudes list
   if db.dudes.isNil:
     db.dudes = DudesRef(centre: db, peers: @[db].toHashSet)
 
   let clone = KvtDbRef(
-    top:     LayerRef(),
     backend: db.backend,
     dudes:   db.dudes)
+
+  if not noFilter:
+    clone.roFilter = db.roFilter # Ref is ok here (filters are immutable)
+
+  if not noTopLayer:
+    clone.top = LayerRef.init()
 
   # Add to peer list of clones
   db.dudes.peers.incl clone

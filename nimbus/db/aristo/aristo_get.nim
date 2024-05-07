@@ -85,11 +85,11 @@ proc getVtxBE*(
     vid: VertexID;
       ): Result[VertexRef,AristoError] =
   ## Get the vertex from the (filtered) backened if available.
-  if not db.roFilter.isNil and db.roFilter.sTab.hasKey vid:
-    let vtx = db.roFilter.sTab.getOrVoid vid
-    if vtx.isValid:
-      return ok(vtx)
-    return err(GetVtxNotFound)
+  if not db.roFilter.isNil:
+    db.roFilter.sTab.withValue(vid, w):
+      if w[].isValid:
+        return ok(w[])
+      return err(GetVtxNotFound)
   db.getVtxUbe vid
 
 proc getKeyBE*(
@@ -97,11 +97,11 @@ proc getKeyBE*(
     vid: VertexID;
       ): Result[HashKey,AristoError] =
   ## Get the merkle hash/key from the (filtered) backend if available.
-  if not db.roFilter.isNil and db.roFilter.kMap.hasKey vid:
-    let key = db.roFilter.kMap.getOrVoid vid
-    if key.isValid:
-      return ok(key)
-    return err(GetKeyNotFound)
+  if not db.roFilter.isNil:
+    db.roFilter.kMap.withValue(vid, w):
+      if w[].isValid:
+        return ok(w[])
+      return err(GetKeyNotFound)
   db.getKeyUbe vid
 
 # ------------------

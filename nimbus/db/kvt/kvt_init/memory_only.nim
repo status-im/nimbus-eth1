@@ -53,10 +53,10 @@ proc init*(
   ## Memory backend constructor.
   ##
   when B is VoidBackendRef:
-    KvtDbRef(top: LayerRef())
+    KvtDbRef(top: LayerRef.init())
 
   elif B is MemBackendRef:
-    KvtDbRef(top: LayerRef(), backend: memoryBackend())
+    KvtDbRef(top: LayerRef.init(), backend: memoryBackend())
 
 proc init*(
     T: type KvtDbRef;                         # Target type

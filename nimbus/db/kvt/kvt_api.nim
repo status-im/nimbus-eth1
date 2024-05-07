@@ -46,8 +46,8 @@ type
     key: openArray[byte]): Result[void,KvtError] {.noRaise.}
   KvtApiFinishFn* = proc(db: KvtDbRef, flush = false) {.noRaise.}
   KvtApiForgetFn* = proc(db: KvtDbRef): Result[void,KvtError] {.noRaise.}
-  KvtApiForkFn* = proc(db: KvtDbRef): Result[KvtDbRef,KvtError] {.noRaise.}
-  KvtApiForkTopFn* = proc(db: KvtDbRef): Result[KvtDbRef,KvtError] {.noRaise.}
+  KvtApiForkTxFn* = proc(db: KvtDbRef,
+    backLevel: int): Result[KvtDbRef,KvtError] {.noRaise.}
   KvtApiGetFn* = proc(db: KvtDbRef,
     key: openArray[byte]): Result[Blob,KvtError] {.noRaise.}
   KvtApiHasKeyFn* = proc(db: KvtDbRef,
@@ -60,7 +60,7 @@ type
     key, data: openArray[byte]): Result[void,KvtError] {.noRaise.}
   KvtApiReCentreFn* = proc(db: KvtDbRef) {.noRaise.}
   KvtApiRollbackFn* = proc(tx: KvtTxRef): Result[void,KvtError] {.noRaise.}
-  KvtApiStowFn* = proc(db: KvtDbRef): Result[void,KvtError] {.noRaise.}
+  KvtApiPersistFn* = proc(db: KvtDbRef): Result[void,KvtError] {.noRaise.}
   KvtApiToKvtDbRefFn* = proc(tx: KvtTxRef): KvtDbRef {.noRaise.}
   KvtApiTxBeginFn* = proc(db: KvtDbRef): Result[KvtTxRef,KvtError] {.noRaise.}
   KvtApiTxTopFn* =
@@ -74,8 +74,7 @@ type
     del*: KvtApiDelFn
     finish*: KvtApiFinishFn
     forget*: KvtApiForgetFn
-    fork*: KvtApiForkFn
-    forkTop*: KvtApiForkTopFn
+    forkTx*: KvtApiForkTxFn
     get*: KvtApiGetFn
     hasKey*: KvtApiHasKeyFn
     isCentre*: KvtApiIsCentreFn
@@ -85,7 +84,7 @@ type
     put*: KvtApiPutFn
     reCentre*: KvtApiReCentreFn
     rollback*: KvtApiRollbackFn
-    stow*: KvtApiStowFn
+    persist*: KvtApiPersistFn
     toKvtDbRef*: KvtApiToKvtDbRefFn
     txBegin*: KvtApiTxBeginFn
     txTop*: KvtApiTxTopFn
@@ -99,8 +98,7 @@ type
     KvtApiProfDelFn          = "del"
     KvtApiProfFinishFn       = "finish"
     KvtApiProfForgetFn       = "forget"
-    KvtApiProfForkFn         = "fork"
-    KvtApiProfForkTopFn      = "forkTop"
+    KvtApiProfForkTxFn       = "forkTx"
     KvtApiProfGetFn          = "get"
     KvtApiProfHasKeyFn       = "hasKey"
     KvtApiProfIsCentreFn     = "isCentre"
@@ -110,7 +108,7 @@ type
     KvtApiProfPutFn          = "put"
     KvtApiProfReCentreFn     = "reCentre"
     KvtApiProfRollbackFn     = "rollback"
-    KvtApiProfStowFn         = "stow"
+    KvtApiProfPersistFn      = "persist"
     KvtApiProfToKvtDbRefFn   = "toKvtDbRef"
     KvtApiProfTxBeginFn      = "txBegin"
     KvtApiProfTxTopFn        = "txTop"
@@ -134,8 +132,7 @@ when AutoValidateApiHooks:
     doAssert not api.del.isNil
     doAssert not api.finish.isNil
     doAssert not api.forget.isNil
-    doAssert not api.fork.isNil
-    doAssert not api.forkTop.isNil
+    doAssert not api.forkTx.isNil
     doAssert not api.get.isNil
     doAssert not api.hasKey.isNil
     doAssert not api.isCentre.isNil
@@ -145,7 +142,7 @@ when AutoValidateApiHooks:
     doAssert not api.put.isNil
     doAssert not api.reCentre.isNil
     doAssert not api.rollback.isNil
-    doAssert not api.stow.isNil
+    doAssert not api.persist.isNil
     doAssert not api.toKvtDbRef.isNil
     doAssert not api.txBegin.isNil
     doAssert not api.txTop.isNil
@@ -177,8 +174,7 @@ func init*(api: var KvtApiObj) =
   api.del = del
   api.finish = finish
   api.forget = forget
-  api.fork = fork
-  api.forkTop = forkTop
+  api.forkTx = forkTx
   api.get = get
   api.hasKey = hasKey
   api.isCentre = isCentre
@@ -188,7 +184,7 @@ func init*(api: var KvtApiObj) =
   api.put = put
   api.reCentre = reCentre
   api.rollback = rollback
-  api.stow = stow
+  api.persist = persist
   api.toKvtDbRef = toKvtDbRef
   api.txBegin = txBegin
   api.txTop = txTop
@@ -205,8 +201,7 @@ func dup*(api: KvtApiRef): KvtApiRef =
     del:        api.del,
     finish:     api.finish,
     forget:     api.forget,
-    fork:       api.fork,
-    forkTop:    api.forkTop,
+    forkTx:     api.forkTx,
     get:        api.get,
     hasKey:     api.hasKey,
     isCentre:   api.isCentre,
@@ -216,7 +211,7 @@ func dup*(api: KvtApiRef): KvtApiRef =
     put:        api.put,
     reCentre:   api.reCentre,
     rollback:   api.rollback,
-    stow:       api.stow,
+    persist:    api.persist,
     toKvtDbRef: api.toKvtDbRef,
     txBegin:    api.txBegin,
     txTop:      api.txTop)
@@ -270,15 +265,10 @@ func init*(
       KvtApiProfForgetFn.profileRunner:
         result = api.forget(a)
 
-  profApi.fork =
-    proc(a: KvtDbRef): auto =
-      KvtApiProfForkFn.profileRunner:
-        result = api.fork(a)
-
-  profApi.forkTop =
-    proc(a: KvtDbRef): auto =
-      KvtApiProfForkTopFn.profileRunner:
-        result = api.forkTop(a)
+  profApi.forkTx =
+    proc(a: KvtDbRef, b: int): auto =
+      KvtApiProfForkTxFn.profileRunner:
+        result = api.forkTx(a, b)
 
   profApi.get =
     proc(a: KvtDbRef, b: openArray[byte]): auto =
@@ -325,10 +315,10 @@ func init*(
       KvtApiProfRollbackFn.profileRunner:
         result = api.rollback(a)
 
-  profApi.stow =
+  profApi.persist =
     proc(a: KvtDbRef): auto =
-      KvtApiProfStowFn.profileRunner:
-        result = api.stow(a)
+      KvtApiProfPersistFn.profileRunner:
+        result = api.persist(a)
 
   profApi.toKvtDbRef =
      proc(a: KvtTxRef): auto =
