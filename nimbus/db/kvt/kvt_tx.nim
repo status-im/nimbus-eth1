@@ -98,13 +98,13 @@ proc forkTx*(
 
   # Plain fork, include `roFilter`
   if backLevel == -1:
-    let xb = ? db.fork()
+    let xb = ? db.fork(noFilter=false)
     discard xb.txFrameBegin()
     return ok(xb)
 
   # Plain fork, unfiltered backend
   if backLevel == -2:
-    let xb = ? db.fork()
+    let xb = ? db.fork(noFilter=true)
     discard xb.txFrameBegin()
     return ok(xb)
 

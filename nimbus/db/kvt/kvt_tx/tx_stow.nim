@@ -14,9 +14,9 @@
 {.push raises: [].}
 
 import
-  std/[sequtils, tables],
+  std/tables,
   results,
-  ../kvt_desc
+  ".."/[kvt_desc, kvt_filter]
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -37,17 +37,16 @@ proc txStow*(
   if 0 < db.stack.len:
     return err(TxStackGarbled)
 
-  let be = db.backend
-  if be.isNil:
+  if persistent and not db.filterUpdateOk():
     return err(TxBackendNotWritable)
 
-  # Save structural and other table entries
-  let txFrame = be.putBegFn()
-  be.putKvpFn(txFrame, db.top.delta.sTab.pairs.toSeq)
-  ? be.putEndFn txFrame
+  if 0 < db.top.delta.sTab.len:
+    db.filterMerge db.top.delta
+    db.top.delta = LayerDeltaRef()
 
-  # Clean up
-  db.top.delta.sTab.clear
+  if persistent:
+    # Move `roFilter` data into persistent tables
+    ? db.filterUpdate()
 
   ok()
 

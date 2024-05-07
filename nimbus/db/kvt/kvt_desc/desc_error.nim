@@ -36,6 +36,11 @@ type
     TxStackGarbled
     TxStackUnderflow
 
+    # Filter management
+    FilBackendMissing
+    FilBackendRoMode
+    FilSiblingsCommitUnfinshed
+
     # Functions from `kvt_desc`
     MustBeOnCentre
     NotAllowedOnCentre

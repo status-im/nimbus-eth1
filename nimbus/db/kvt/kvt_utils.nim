@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -14,16 +14,17 @@
 {.push raises: [].}
 
 import
+  std/tables,
   eth/common,
   results,
   ./kvt_desc/desc_backend,
   "."/[kvt_desc, kvt_layers]
 
 # ------------------------------------------------------------------------------
-# Private helpers
+# Public functions, converters
 # ------------------------------------------------------------------------------
 
-proc getBE(
+proc getUbe*(
     db: KvtDbRef;                     # Database
     key: openArray[byte];             # Key of database record
       ): Result[Blob,KvtError] =
@@ -35,9 +36,19 @@ proc getBE(
     return be.getKvpFn key
   err(GetNotFound)
 
-# ------------------------------------------------------------------------------
-# Public functions, converters
-# ------------------------------------------------------------------------------
+proc getBe*(
+    db: KvtDbRef;                     # Database
+    key: openArray[byte];             # Key of database record
+      ): Result[Blob,KvtError] =
+  ## Get the vertex from the (filtered) backened if available.
+  if not db.roFilter.isNil:
+    db.roFilter.sTab.withValue(@key, w):
+      if w[].len == 0:
+        return err(GetNotFound)
+      return ok(w[])
+  db.getUbe key
+
+# ------------
 
 proc put*(
     db: KvtDbRef;                     # Database
@@ -80,7 +91,7 @@ proc get*(
     return err(KeyInvalid)
 
   let data = db.layersGet(key).valueOr:
-    return db.getBE key
+    return db.getBe key
 
   return ok(data)
 
@@ -98,7 +109,7 @@ proc hasKey*(
   if db.layersHasKey @key:
     return ok(true)
 
-  let rc = db.getBE key
+  let rc = db.getBe key
   if rc.isOk:
     return ok(true)
   if rc.error == GetNotFound:

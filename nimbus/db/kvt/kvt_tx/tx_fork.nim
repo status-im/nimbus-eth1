@@ -84,7 +84,7 @@ proc txForkBase*(
   if db.txRef.isNil:
     return db.txForkTop()
 
-  let txClone = ? db.fork(noToplayer=true)
+  let txClone = ? db.fork(noToplayer=true, noFilter=false)
   txClone.top = db.layersCc 0
 
   discard txClone.txFrameBegin()
