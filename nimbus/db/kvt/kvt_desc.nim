@@ -115,6 +115,7 @@ proc reCentre*(db: KvtDbRef) =
 
 proc fork*(
     db: KvtDbRef;
+    noTopLayer = false;
       ): Result[KvtDbRef,KvtError] =
   ## This function creates a new empty descriptor accessing the same backend
   ## (if any) database as the argument `db`. This new descriptor joins the
@@ -130,9 +131,11 @@ proc fork*(
     db.dudes = DudesRef(centre: db, peers: @[db].toHashSet)
 
   let clone = KvtDbRef(
-    top:     LayerRef(),
     backend: db.backend,
     dudes:   db.dudes)
+
+  if not noTopLayer:
+    clone.top = LayerRef.init()
 
   # Add to peer list of clones
   db.dudes.peers.incl clone

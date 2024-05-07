@@ -75,7 +75,7 @@ proc layersCc*(db: KvtDbRef; level = high(int)): LayerRef =
                else:                     db.stack[0 .. level]
 
   # Set up initial layer (bottom layer)
-  result = LayerRef(delta: LayerDelta(sTab: layers[0].delta.sTab))
+  result = LayerRef(delta: LayerDeltaRef(sTab: layers[0].delta.sTab))
 
   # Consecutively merge other layers on top
   for n in 1 ..< layers.len:

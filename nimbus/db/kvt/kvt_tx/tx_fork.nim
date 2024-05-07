@@ -48,7 +48,7 @@ proc txFork*(tx: KvtTxRef): Result[KvtDbRef,KvtError] =
   # Set up clone associated to `db`
   let txClone = ? db.fork()
   txClone.top = db.layersCc tx.level
-  txClone.stack = @[LayerRef()]          # Provide tx level 1 stack
+  txClone.stack = @[LayerRef.init()]     # Provide tx level 1 stack
   txClone.top.txUid = 1
   txClone.txUidGen = 1                   # Used value of `txClone.top.txUid`
 
@@ -69,7 +69,7 @@ proc txForkTop*(db: KvtDbRef): Result[KvtDbRef,KvtError] =
   ## Use `kvt_desc.forget()` to clean up this descriptor.
   ##
   if db.txRef.isNil:
-    let dbClone = ? db.fork()
+    let dbClone = ? db.fork(noToplayer=true)
     dbClone.top = db.layersCc()
 
     discard dbClone.txFrameBegin()
@@ -84,7 +84,7 @@ proc txForkBase*(
   if db.txRef.isNil:
     return db.txForkTop()
 
-  let txClone = ? db.fork()
+  let txClone = ? db.fork(noToplayer=true)
   txClone.top = db.layersCc 0
 
   discard txClone.txFrameBegin()

@@ -83,6 +83,7 @@ proc txFrameBegin*(db: KvtDbRef): Result[KvtTxRef,KvtError] =
 
   db.stack.add db.top
   db.top = LayerRef(
+    delta: LayerDeltaRef(),
     txUid: db.getTxUid)
   db.txRef = KvtTxRef(
     db:     db,
