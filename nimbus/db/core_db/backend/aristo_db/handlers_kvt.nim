@@ -124,7 +124,7 @@ proc kvtMethods(cKvt: KvtCoreDxKvtRef): CoreDbKvtFns =
     defer: api.reCentre(base.kdb)
 
     # Store/write to persistent DB
-    let rc = api.stow(kvt)
+    let rc = api.persist(kvt)
     if rc.isOk:
       ok()
     else:
@@ -237,7 +237,7 @@ proc persistent*(
   let
     api = base.api
     kvt = base.kdb
-    rc = api.stow(kvt)
+    rc = api.persist(kvt)
   if rc.isOk:
     ok()
   elif api.level(kvt) == 0:

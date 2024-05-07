@@ -60,7 +60,7 @@ type
     key, data: openArray[byte]): Result[void,KvtError] {.noRaise.}
   KvtApiReCentreFn* = proc(db: KvtDbRef) {.noRaise.}
   KvtApiRollbackFn* = proc(tx: KvtTxRef): Result[void,KvtError] {.noRaise.}
-  KvtApiStowFn* = proc(db: KvtDbRef): Result[void,KvtError] {.noRaise.}
+  KvtApiPersistFn* = proc(db: KvtDbRef): Result[void,KvtError] {.noRaise.}
   KvtApiToKvtDbRefFn* = proc(tx: KvtTxRef): KvtDbRef {.noRaise.}
   KvtApiTxBeginFn* = proc(db: KvtDbRef): Result[KvtTxRef,KvtError] {.noRaise.}
   KvtApiTxTopFn* =
@@ -84,7 +84,7 @@ type
     put*: KvtApiPutFn
     reCentre*: KvtApiReCentreFn
     rollback*: KvtApiRollbackFn
-    stow*: KvtApiStowFn
+    persist*: KvtApiPersistFn
     toKvtDbRef*: KvtApiToKvtDbRefFn
     txBegin*: KvtApiTxBeginFn
     txTop*: KvtApiTxTopFn
@@ -108,7 +108,7 @@ type
     KvtApiProfPutFn          = "put"
     KvtApiProfReCentreFn     = "reCentre"
     KvtApiProfRollbackFn     = "rollback"
-    KvtApiProfStowFn         = "stow"
+    KvtApiProfPersistFn      = "persist"
     KvtApiProfToKvtDbRefFn   = "toKvtDbRef"
     KvtApiProfTxBeginFn      = "txBegin"
     KvtApiProfTxTopFn        = "txTop"
@@ -142,7 +142,7 @@ when AutoValidateApiHooks:
     doAssert not api.put.isNil
     doAssert not api.reCentre.isNil
     doAssert not api.rollback.isNil
-    doAssert not api.stow.isNil
+    doAssert not api.persist.isNil
     doAssert not api.toKvtDbRef.isNil
     doAssert not api.txBegin.isNil
     doAssert not api.txTop.isNil
@@ -184,7 +184,7 @@ func init*(api: var KvtApiObj) =
   api.put = put
   api.reCentre = reCentre
   api.rollback = rollback
-  api.stow = stow
+  api.persist = persist
   api.toKvtDbRef = toKvtDbRef
   api.txBegin = txBegin
   api.txTop = txTop
@@ -211,7 +211,7 @@ func dup*(api: KvtApiRef): KvtApiRef =
     put:        api.put,
     reCentre:   api.reCentre,
     rollback:   api.rollback,
-    stow:       api.stow,
+    persist:    api.persist,
     toKvtDbRef: api.toKvtDbRef,
     txBegin:    api.txBegin,
     txTop:      api.txTop)
@@ -315,10 +315,10 @@ func init*(
       KvtApiProfRollbackFn.profileRunner:
         result = api.rollback(a)
 
-  profApi.stow =
+  profApi.persist =
     proc(a: KvtDbRef): auto =
-      KvtApiProfStowFn.profileRunner:
-        result = api.stow(a)
+      KvtApiProfPersistFn.profileRunner:
+        result = api.persist(a)
 
   profApi.toKvtDbRef =
      proc(a: KvtTxRef): auto =
