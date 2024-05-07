@@ -88,12 +88,12 @@ proc init*(
   ## Shortcut for `AristoDbRef.init(VoidBackendRef)`
   AristoDbRef.init VoidBackendRef
 
-proc guestDb*(db: AristoDbRef): Result[GuestDbRef,AristoError] =
+proc guestDb*(db: AristoDbRef; instance = 0): Result[GuestDbRef,AristoError] =
   ## Database pigiback feature
   if db.backend.isNil:
     ok(GuestDbRef(nil))
   else:
-    let gdb = db.backend.guestDbFn().valueOr:
+    let gdb = db.backend.guestDbFn(instance).valueOr:
       return err(error)
     ok(gdb.GuestDbRef)
 

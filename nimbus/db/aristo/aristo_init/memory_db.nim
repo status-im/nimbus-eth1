@@ -285,7 +285,7 @@ proc putEndFn(db: MemBackendRef): PutEndFn =
 
 proc guestDbFn(db: MemBackendRef): GuestDbFn =
   result =
-    proc(): Result[RootRef,AristoError] =
+    proc(instance: int): Result[RootRef,AristoError] =
       ok(RootRef nil)
 
 proc closeFn(db: MemBackendRef): CloseFn =

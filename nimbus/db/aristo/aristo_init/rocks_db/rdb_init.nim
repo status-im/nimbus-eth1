@@ -14,7 +14,7 @@
 {.push raises: [].}
 
 import
-  std/os,
+  std/[sequtils, os],
   rocksdb,
   results,
   ../../aristo_desc,
@@ -53,8 +53,8 @@ proc init*(
     return err((RdbBeCantCreateDataDir, ""))
 
   let
-    cfs = @[initColFamilyDescriptor AristoFamily,
-            initColFamilyDescriptor GuestFamily]
+    cfs = @[initColFamilyDescriptor AristoFamily] &
+          RdbGuest.mapIt(initColFamilyDescriptor $it)
     opts = defaultDbOptions()
   opts.setMaxOpenFiles(openMax)
 
@@ -74,17 +74,25 @@ proc init*(
 
   ok()
 
-proc guestDb*(rdb: RdbInst): Result[RootRef,(AristoError,string)] =
+proc initGuestDb*(
+    rdb: RdbInst;
+    instance: int;
+      ): Result[RootRef,(AristoError,string)] =
   # Initialise `Guest` family
-  let guestDb = rdb.store.db.withColFamily(GuestFamily).valueOr:
-    let errSym = RdbBeDriverGuestError
-    when extraTraceMessages:
-      trace logTxt "guestDb failed", error=errSym, info=error
-    return err((errSym, error))
+  if high(RdbGuest).ord < instance:
+    return err((RdbGuestInstanceUnsupported,""))
+  let
+    guestSym = $RdbGuest(instance)
+    guestDb = rdb.store.db.withColFamily(guestSym).valueOr:
+      let errSym = RdbBeDriverGuestError
+      when extraTraceMessages:
+        trace logTxt "guestDb failed", error=errSym, info=error
+      return err((errSym, error))
 
   ok RdbGuestDbRef(
     beKind: BackendRocksDB,
     guestDb: guestDb)
+
 
 proc destroy*(rdb: var RdbInst; flush: bool) =
   ## Destructor

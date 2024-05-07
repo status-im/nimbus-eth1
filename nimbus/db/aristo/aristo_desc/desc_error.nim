@@ -257,6 +257,7 @@ type
     RdbBeDriverInitError
     RdbBeDriverPutError
     RdbBeDriverWriteError
+    RdbGuestInstanceUnsupported
     RdbHashKeyExpected
 
     # Transaction wrappers

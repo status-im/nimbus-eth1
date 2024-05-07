@@ -92,7 +92,7 @@ type
   # -------------
 
   GuestDbFn* =
-    proc(): Result[RootRef,AristoError] {.gcsafe, raises: [].}
+    proc(instance: int): Result[RootRef,AristoError] {.gcsafe, raises: [].}
       ## Generic function that returns a compartmentalised database handle that
       ## can be used by another application. If non-nil, this handle allows to
       ## use a previously allocated database. It is separated from the `Aristo`
