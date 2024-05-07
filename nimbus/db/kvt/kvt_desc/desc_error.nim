@@ -28,9 +28,11 @@ type
     # Transaction wrappers
     TxArgStaleTx
     TxBackendNotWritable
+    TxLevelTooDeep
+    TxLevelUseless
     TxNoPendingTx
-    TxPendingTx
     TxNotTopTx
+    TxPendingTx
     TxStackGarbled
     TxStackUnderflow
 

@@ -266,7 +266,7 @@ include
 iterator aristoKvtPairsVoid*(dsc: CoreDxKvtRef): (Blob,Blob) {.rlpRaise.} =
   let
     api = dsc.toAristoApi()
-    p = api.forkTop(dsc.to(KvtDbRef)).valueOrApiError "aristoKvtPairs()"
+    p = api.forkTx(dsc.to(KvtDbRef),0).valueOrApiError "aristoKvtPairs()"
   defer: discard api.forget(p)
   for (k,v) in use_kvt.VoidBackendRef.walkPairs p:
     yield (k,v)
@@ -274,7 +274,7 @@ iterator aristoKvtPairsVoid*(dsc: CoreDxKvtRef): (Blob,Blob) {.rlpRaise.} =
 iterator aristoKvtPairsMem*(dsc: CoreDxKvtRef): (Blob,Blob) {.rlpRaise.} =
   let
     api = dsc.toAristoApi()
-    p = api.forkTop(dsc.to(KvtDbRef)).valueOrApiError "aristoKvtPairs()"
+    p = api.forkTx(dsc.to(KvtDbRef),0).valueOrApiError "aristoKvtPairs()"
   defer: discard api.forget(p)
   for (k,v) in use_kvt.MemBackendRef.walkPairs p:
     yield (k,v)

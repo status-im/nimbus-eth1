@@ -46,8 +46,8 @@ type
     key: openArray[byte]): Result[void,KvtError] {.noRaise.}
   KvtApiFinishFn* = proc(db: KvtDbRef, flush = false) {.noRaise.}
   KvtApiForgetFn* = proc(db: KvtDbRef): Result[void,KvtError] {.noRaise.}
-  KvtApiForkFn* = proc(db: KvtDbRef): Result[KvtDbRef,KvtError] {.noRaise.}
-  KvtApiForkTopFn* = proc(db: KvtDbRef): Result[KvtDbRef,KvtError] {.noRaise.}
+  KvtApiForkTxFn* = proc(db: KvtDbRef,
+    backLevel: int): Result[KvtDbRef,KvtError] {.noRaise.}
   KvtApiGetFn* = proc(db: KvtDbRef,
     key: openArray[byte]): Result[Blob,KvtError] {.noRaise.}
   KvtApiHasKeyFn* = proc(db: KvtDbRef,
@@ -74,8 +74,7 @@ type
     del*: KvtApiDelFn
     finish*: KvtApiFinishFn
     forget*: KvtApiForgetFn
-    fork*: KvtApiForkFn
-    forkTop*: KvtApiForkTopFn
+    forkTx*: KvtApiForkTxFn
     get*: KvtApiGetFn
     hasKey*: KvtApiHasKeyFn
     isCentre*: KvtApiIsCentreFn
@@ -99,8 +98,7 @@ type
     KvtApiProfDelFn          = "del"
     KvtApiProfFinishFn       = "finish"
     KvtApiProfForgetFn       = "forget"
-    KvtApiProfForkFn         = "fork"
-    KvtApiProfForkTopFn      = "forkTop"
+    KvtApiProfForkTxFn       = "forkTx"
     KvtApiProfGetFn          = "get"
     KvtApiProfHasKeyFn       = "hasKey"
     KvtApiProfIsCentreFn     = "isCentre"
@@ -134,8 +132,7 @@ when AutoValidateApiHooks:
     doAssert not api.del.isNil
     doAssert not api.finish.isNil
     doAssert not api.forget.isNil
-    doAssert not api.fork.isNil
-    doAssert not api.forkTop.isNil
+    doAssert not api.forkTx.isNil
     doAssert not api.get.isNil
     doAssert not api.hasKey.isNil
     doAssert not api.isCentre.isNil
@@ -177,8 +174,7 @@ func init*(api: var KvtApiObj) =
   api.del = del
   api.finish = finish
   api.forget = forget
-  api.fork = fork
-  api.forkTop = forkTop
+  api.forkTx = forkTx
   api.get = get
   api.hasKey = hasKey
   api.isCentre = isCentre
@@ -205,8 +201,7 @@ func dup*(api: KvtApiRef): KvtApiRef =
     del:        api.del,
     finish:     api.finish,
     forget:     api.forget,
-    fork:       api.fork,
-    forkTop:    api.forkTop,
+    forkTx:     api.forkTx,
     get:        api.get,
     hasKey:     api.hasKey,
     isCentre:   api.isCentre,
@@ -270,15 +265,10 @@ func init*(
       KvtApiProfForgetFn.profileRunner:
         result = api.forget(a)
 
-  profApi.fork =
-    proc(a: KvtDbRef): auto =
-      KvtApiProfForkFn.profileRunner:
-        result = api.fork(a)
-
-  profApi.forkTop =
-    proc(a: KvtDbRef): auto =
-      KvtApiProfForkTopFn.profileRunner:
-        result = api.forkTop(a)
+  profApi.forkTx =
+    proc(a: KvtDbRef, b: int): auto =
+      KvtApiProfForkTxFn.profileRunner:
+        result = api.forkTx(a, b)
 
   profApi.get =
     proc(a: KvtDbRef, b: openArray[byte]): auto =

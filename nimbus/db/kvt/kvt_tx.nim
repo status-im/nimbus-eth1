@@ -14,32 +14,9 @@
 {.push raises: [].}
 
 import
-  std/[sequtils, tables],
-  eth/common,
   results,
-  ./kvt_desc/desc_backend,
-  "."/[kvt_desc, kvt_layers]
-
-func isTop*(tx: KvtTxRef): bool {.gcsafe.}
-proc txBegin*(db: KvtDbRef): Result[KvtTxRef,KvtError] {.gcsafe.}
-
-# ------------------------------------------------------------------------------
-# Private helpers
-# ------------------------------------------------------------------------------
-
-func getDbDescFromTopTx(tx: KvtTxRef): Result[KvtDbRef,KvtError] =
-  if not tx.isTop():
-    return err(TxNotTopTx)
-  let db = tx.db
-  if tx.level != db.stack.len:
-    return err(TxStackUnderflow)
-  ok db
-
-proc getTxUid(db: KvtDbRef): uint =
-  if db.txUidGen == high(uint):
-    db.txUidGen = 0
-  db.txUidGen.inc
-  db.txUidGen
+  ./kvt_tx/[tx_fork, tx_frame, tx_stow],
+  ./kvt_desc
 
 # ------------------------------------------------------------------------------
 # Public functions, getters
@@ -47,24 +24,20 @@ proc getTxUid(db: KvtDbRef): uint =
 
 func txTop*(db: KvtDbRef): Result[KvtTxRef,KvtError] =
   ## Getter, returns top level transaction if there is any.
-  if db.txRef.isNil:
-    err(TxNoPendingTx)
-  else:
-    ok(db.txRef)
+  db.txFrameTop()
 
 func isTop*(tx: KvtTxRef): bool =
   ## Getter, returns `true` if the argument `tx` referes to the current top
   ## level transaction.
-  tx.db.txRef == tx and tx.db.top.txUid == tx.txUid
+  tx.txFrameIsTop()
 
 func level*(tx: KvtTxRef): int =
   ## Getter, positive nesting level of transaction argument `tx`
-  tx.level
+  tx.txFrameLevel()
 
 func level*(db: KvtDbRef): int =
   ## Getter, non-negative nesting level (i.e. number of pending transactions)
-  if not db.txRef.isNil:
-    result = db.txRef.level
+  db.txFrameLevel()
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -78,59 +51,64 @@ func toKvtDbRef*(tx: KvtTxRef): KvtDbRef =
   ## Same as `.to(KvtDbRef)`
   tx.db
 
-proc forkTx*(tx: KvtTxRef): Result[KvtDbRef,KvtError] =
-  ## Clone a transaction into a new DB descriptor  accessing the same backend
-  ## (if any) database as the argument `db`. The new descriptor is linked to
-  ## the transaction parent and is fully functional as a forked instance (see
-  ## comments on `kvt_desc.reCentre()` for details.)
+proc forkTx*(
+    db: KvtDbRef;
+    backLevel: int;                   # Backward location of transaction
+      ): Result[KvtDbRef,KvtError] =
+  ## Fork a new descriptor obtained from parts of the argument database
+  ## as described by arguments `db` and `backLevel`.
   ##
-  ## The new DB descriptor will contain a copy of the argument transaction
-  ## `tx` as top layer of level 1 (i.e. this is he only transaction.) Rolling
-  ## back will end up at the backend layer (incl. backend filter.)
+  ## If the argument `backLevel` is non-negative, the forked descriptor will
+  ## provide the database view where the first `backLevel` transaction layers
+  ## are stripped and the remaing layers are squashed into a single transaction.
   ##
-  ## Use `kvt_desc.forget()` to clean up this descriptor.
+  ## If `backLevel` is `-1`, a database descriptor with empty transaction
+  ## layers will be provided where the `roFilter` between database and
+  ## transaction layers are kept in place.
   ##
-  let db = tx.db
-
-  # Verify `tx` argument
-  if db.txRef == tx:
-    if db.top.txUid != tx.txUid:
-      return err(TxArgStaleTx)
-  elif db.stack.len <= tx.level:
-    return err(TxArgStaleTx)
-  elif db.stack[tx.level].txUid != tx.txUid:
-    return err(TxArgStaleTx)
-
-  # Set up clone associated to `db`
-  let txClone = ? db.fork()
-  txClone.top = db.layersCc tx.level
-  txClone.stack = @[LayerRef()]          # Provide tx level 1 stack
-  txClone.top.txUid = 1
-  txClone.txUidGen = 1                   # Used value of `txClone.top.txUid`
-
-  # Install transaction similar to `tx` on clone
-  txClone.txRef = KvtTxRef(
-    db:    txClone,
-    txUid: 1,
-    level: 1)
-
-  ok(txClone)
-
-proc forkTop*(db: KvtDbRef): Result[KvtDbRef,KvtError] =
-  ## Variant of `forkTx()` for the top transaction if there is any. Otherwise
-  ## the top layer is cloned, and an empty transaction is set up. After
-  ## successful fork the returned descriptor has transaction level 1.
+  ## If `backLevel` is `-2`, a database descriptor with empty transaction
+  ## layers will be provided without an `roFilter`.
+  ##
+  ## The returned database descriptor will always have transaction level one.
+  ## If there were no transactions that could be squashed, an empty
+  ## transaction is added.
   ##
   ## Use `kvt_desc.forget()` to clean up this descriptor.
   ##
-  if db.txRef.isNil:
-    let dbClone = ? db.fork()
-    dbClone.top = db.layersCc
+  # Fork top layer (with or without pending transaction)?
+  if backLevel == 0:
+    return db.txForkTop()
 
-    discard dbClone.txBegin
-    return ok(dbClone)
+  # Fork bottom layer (=> 0 < db.stack.len)
+  if backLevel == db.stack.len:
+    return db.txForkBase()
 
-  db.txRef.forkTx()
+  # Inspect transaction stack
+  if 0 < backLevel:
+    var tx = db.txRef
+    if tx.isNil or db.stack.len < backLevel:
+      return err(TxLevelTooDeep)
+
+    # Fetch tx of level `backLevel` (seed to skip some items)
+    for _ in 0 ..< backLevel:
+      tx = tx.parent
+      if tx.isNil:
+        return err(TxStackGarbled)
+    return tx.txFork()
+
+  # Plain fork, include `roFilter`
+  if backLevel == -1:
+    let xb = ? db.fork()
+    discard xb.txFrameBegin()
+    return ok(xb)
+
+  # Plain fork, unfiltered backend
+  if backLevel == -2:
+    let xb = ? db.fork()
+    discard xb.txFrameBegin()
+    return ok(xb)
+
+  err(TxLevelUseless)
 
 # ------------------------------------------------------------------------------
 # Public functions: Transaction frame
@@ -142,23 +120,12 @@ proc txBegin*(db: KvtDbRef): Result[KvtTxRef,KvtError] =
   ## Example:
   ## ::
   ##   proc doSomething(db: KvtDbRef) =
-  ##     let tx = db.begin
+  ##     let tx = db.txBegin
   ##     defer: tx.rollback()
   ##     ... continue using db ...
   ##     tx.commit()
   ##
-  if db.level != db.stack.len:
-    return err(TxStackGarbled)
-
-  db.stack.add db.top
-  db.top = LayerRef(txUid: db.getTxUid)
-  db.txRef = KvtTxRef(
-    db:     db,
-    txUid:  db.top.txUid,
-    parent: db.txRef,
-    level:  db.stack.len)
-
-  ok db.txRef
+  db.txFrameBegin()
 
 proc rollback*(
     tx: KvtTxRef;                     # Top transaction on database
@@ -167,15 +134,7 @@ proc rollback*(
   ## performed for this transactio. The previous transaction is returned if
   ## there was any.
   ##
-  let db = ? tx.getDbDescFromTopTx()
-
-  # Roll back to previous layer.
-  db.top = db.stack[^1]
-  db.stack.setLen(db.stack.len-1)
-
-  db.txRef = tx.parent
-  ok()
-
+  tx.txFrameRollback()
 
 proc commit*(
     tx: KvtTxRef;                     # Top transaction on database
@@ -184,23 +143,7 @@ proc commit*(
   ## performed through this handle and merges it to the previous layer. The
   ## previous transaction is returned if there was any.
   ##
-  let db = ? tx.getDbDescFromTopTx()
-
-  # Replace the top two layers by its merged version
-  let merged = db.stack[^1]
-  for (key,val) in db.top.delta.sTab.pairs:
-    merged.delta.sTab[key] = val
-
-  # Install `merged` layer
-  db.top = merged
-  db.stack.setLen(db.stack.len-1)
-  db.txRef = tx.parent
-  if 0 < db.stack.len:
-    db.txRef.txUid = db.getTxUid
-    db.top.txUid = db.txRef.txUid
-
-  ok()
-
+  tx.txFrameCommit()
 
 proc collapse*(
     tx: KvtTxRef;                     # Top transaction on database
@@ -214,50 +157,40 @@ proc collapse*(
   ##     if db.topTx.isErr: break
   ##     tx = db.topTx.value
   ##
-  let db = ? tx.getDbDescFromTopTx()
-
-  if commit:
-    db.top = db.layersCc
-  else:
-    db.top = db.stack[0]
-    db.top.txUid = 0
-
-  # Clean up
-  db.stack.setLen(0)
-  db.txRef = KvtTxRef(nil)
-  ok()
+  tx.txFrameCollapse commit
 
 # ------------------------------------------------------------------------------
 # Public functions: save database
 # ------------------------------------------------------------------------------
 
+proc persist*(
+    db: KvtDbRef;                     # Database
+      ): Result[void,KvtError] =
+  ## Persistently store data onto backend database. If the system is running
+  ## without a database backend, the function returns immediately with an
+  ## error. The same happens if there is a pending transaction.
+  ##
+  ## The function merges all staged data from the top layer cache onto the
+  ## backend stage area. After that, the top layer cache is cleared.
+  ##
+  ## Finally, the staged data are merged into the physical backend database
+  ## and the staged data area is cleared. Wile performing this last step,
+  ## the recovery journal is updated (if available.)
+  ##
+  db.txStow(persistent=true)
+
 proc stow*(
     db: KvtDbRef;                     # Database
       ): Result[void,KvtError] =
-  ## The function saves the data from the top layer cache into the
-  ## backend database.
+  ## This function is similar to `persist()` stopping short of performing the
+  ## final step storing on the persistent database. It fails if there is a
+  ## pending transaction.
   ##
-  ## If there is no backend the function returns immediately with an error.
-  ## The same happens if there is a pending transaction.
+  ## The function merges all staged data from the top layer cache onto the
+  ## backend stage area and leaves it there. This function can be seen as
+  ## a sort of a bottom level transaction `commit()`.
   ##
-  if not db.txRef.isNil:
-    return err(TxPendingTx)
-  if 0 < db.stack.len:
-    return err(TxStackGarbled)
-
-  let be = db.backend
-  if be.isNil:
-    return err(TxBackendNotWritable)
-
-  # Save structural and other table entries
-  let txFrame = be.putBegFn()
-  be.putKvpFn(txFrame, db.top.delta.sTab.pairs.toSeq)
-  ? be.putEndFn txFrame
-
-  # Clean up
-  db.top.delta.sTab.clear
-
-  ok()
+  db.txStow(persistent=false)
 
 # ------------------------------------------------------------------------------
 # End

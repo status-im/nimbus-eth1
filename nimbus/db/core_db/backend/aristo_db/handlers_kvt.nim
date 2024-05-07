@@ -256,7 +256,7 @@ proc newKvtHandler*(
       ): CoreDbRc[CoreDxKvtRef] =
   if offSite:
     let
-      kvt = ? base.api.forkTop(base.kdb).toRc(base, info)
+      kvt = ? base.api.forkTx(base.kdb,0).toRc(base, info)
       dsc = KvtCoreDxKvtRef(base: base, kvt: kvt)
     dsc.methods = dsc.kvtMethods()
     ok(base.parent.bless dsc)
