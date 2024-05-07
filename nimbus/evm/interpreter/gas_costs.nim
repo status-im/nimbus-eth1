@@ -508,9 +508,10 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
         raise newException(TypeError, "GasInt Overflow (" & $gasParams.kind & ") " & $gasParams.c_contractGas)
       result.gasRefund = gasParams.c_contractGas.truncate(GasInt)
 
-    if result.gasCost.u256 + result.gasRefund.u256 > high(GasInt).u256:
-      raise newException(TypeError, "GasInt overflow, gasCost=" &
-        $result.gasCost & ", gasRefund=" & $result.gasRefund)
+    if result.gasRefund > 0: # skip check if gasRefund is negative
+      if result.gasCost.u256 + result.gasRefund.u256 > high(GasInt).u256:
+        raise newException(TypeError, "GasInt overflow, gasCost=" &
+          $result.gasCost & ", gasRefund=" & $result.gasRefund)
 
     result.gasCost += result.gasRefund
 
