@@ -280,12 +280,8 @@ when isMainModule:
     noisy.profileSection("@sample #" & $n, state):
       noisy.chainSyncRunner(
         capture = capture,
-        #dbType = ..,
-        ldgType=LedgerCache,
         #profilingOk = true,
         #finalDiskCleanUpOk = false,
-        #enaLoggingOk = ..,
-        #lastOneExtraOk = ..,
       )
 
   noisy.say "***", "total: ", state[0].pp, " sections: ", state[1]
