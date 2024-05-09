@@ -137,34 +137,36 @@ proc getContent*(n: StateNetwork, key: ContentKey): Future[Opt[seq[byte]]] {.asy
   # domain types.
   return Opt.some(contentResult.content)
 
-proc validateAccountTrieNode(
-    n: StateNetwork, key: ContentKey, contentValue: OfferContentValue
-): bool =
-  true
-
-proc validateContractTrieNode(
-    n: StateNetwork, key: ContentKey, contentValue: OfferContentValue
-): bool =
-  true
-
-proc validateContractCode(
-    n: StateNetwork, key: ContentKey, contentValue: OfferContentValue
-): bool =
-  true
-
 proc validateContent*(
     n: StateNetwork, contentKey: ContentKey, contentValue: OfferContentValue
 ): bool =
+  doAssert(contentKey.contentType == contentValue.contentType)
+
   case contentKey.contentType
   of unused:
     warn "Received content with unused content type"
     false
   of accountTrieNode:
-    validateAccountTrieNode(n, contentKey, contentValue)
+    validateOfferedAccountTrieNode(
+      keccakHash(""),
+        # TODO: Get the stateRoot from the block header using history network
+      contentKey.accountTrieNodeKey,
+      contentValue.accountTrieNode,
+    )
   of contractTrieNode:
-    validateContractTrieNode(n, contentKey, contentValue)
+    validateOfferedContractTrieNode(
+      keccakHash(""),
+        # TODO: Get the stateRoot from the block header using history network
+      contentKey.contractTrieNodeKey,
+      contentValue.contractTrieNode,
+    )
   of contractCode:
-    validateContractCode(n, contentKey, contentValue)
+    validateOfferedContractCode(
+      keccakHash(""),
+        # TODO: Get the stateRoot from the block header using history network
+      contentKey.contractCodeKey,
+      contentValue.contractCode,
+    )
 
 proc recursiveGossipAccountTrieNode(
     p: PortalProtocol,
