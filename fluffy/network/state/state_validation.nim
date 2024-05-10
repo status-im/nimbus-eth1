@@ -7,6 +7,8 @@
 
 import eth/[common, trie], ../../common/common_types, ./state_content
 
+# private functions
+
 proc isValidTrieNode(expectedHash: openArray[byte], node: TrieNode): bool {.inline.} =
   doAssert(expectedHash.len() == 32)
   expectedHash == keccakHash(node.asSeq()).data
@@ -16,6 +18,103 @@ proc isValidTrieNode(expectedHash: KeccakHash, node: TrieNode): bool {.inline.} 
 
 proc isValidBytecode(expectedHash: KeccakHash, code: Bytecode): bool {.inline.} =
   expectedHash == keccakHash(code.asSeq())
+
+proc isValidNextNode(nodeRlp: Rlp, rlpIdx: int, nextNode: TrieNode): bool =
+  let nextHashRlp = nodeRlp.listElem(rlpIdx)
+  if nextHashRlp.isEmpty:
+    return false
+
+  let nextHash = nextHashRlp.toBytes()
+  if nextHash.len() != 32:
+    return false
+
+  isValidTrieNode(nextHash, nextNode)
+
+proc decodePrefix(nodePrefixRlp: Rlp): (byte, bool, Nibbles) =
+  let
+    rlpBytes = nodePrefixRlp.toBytes()
+    firstNibble = (rlpBytes[0] and 0xF0) shr 4
+    isLeaf = firstNibble == 2 or firstNibble == 3
+    isEven = firstNibble == 0 or firstNibble == 2
+
+  var packedNibbles = Nibbles(@rlpBytes)
+  if isEven:
+    packedNibbles[0] = 0
+  else:
+    # set the first nibble to 1
+    packedNibbles[0] = (packedNibbles[0] and 0x0F) or 0x10
+
+  (firstNibble.byte, isLeaf, packedNibbles)
+
+proc isValidTrieProof(
+    expectedRootHash: KeccakHash, path: Nibbles, proof: TrieProof
+): bool =
+  if proof.len() == 0:
+    return false
+
+  if not isValidTrieNode(expectedRootHash, proof[0]):
+    return false
+
+  let nibbles = path.unpackNibbles()
+  if nibbles.len() == 0:
+    if proof.len() == 1:
+      return true # root node case, already validated above
+    else:
+      return false
+
+  var nibbleIdx = 0
+  for proofIdx, thisNode in proof[0 ..^ 2]:
+    let
+      nextNibble = nibbles[nibbleIdx]
+      nextNode = proof[proofIdx + 1]
+      nodeRlp = rlpFromBytes(thisNode.asSeq())
+
+    case nodeRlp.listLen()
+    of 2:
+      let nodePrefixRlp = nodeRlp.listElem(0)
+      if nodePrefixRlp.isEmpty:
+        return false
+
+      let (prefix, isLeaf, prefixNibbles) = decodePrefix(nodePrefixRlp)
+      if prefix >= 4:
+        return false # invalid prefix
+
+      let
+        unpackedPrefix = prefixNibbles.unpackNibbles()
+        remainingNibbles = nibbles.len() - nibbleIdx
+      if remainingNibbles < unpackedPrefix.len():
+        return false # not enough nibbles for prefix
+
+      let nibbleEndIdx = nibbleIdx + unpackedPrefix.len()
+      if nibbles[nibbleIdx ..< nibbleEndIdx] != unpackedPrefix:
+        return false
+      nibbleIdx += unpackedPrefix.len()
+
+      if isLeaf:
+        if proofIdx < proof.len() - 1:
+          return false # leaf should be the last node in the proof
+      else: # is extension node
+        if not isValidNextNode(nodeRlp, 1, nextNode):
+          return false
+    of 17:
+      if nextNibble >= 16 or not isValidNextNode(nodeRlp, nextNibble.int, nextNode):
+        return false
+      inc nibbleIdx
+    else:
+      return false
+
+  return true
+
+proc rlpDecodeAccountTrieNode(accountNode: TrieNode): auto =
+  let accNodeRlp = rlpFromBytes(accountNode.asSeq())
+  doAssert(accNodeRlp.hasData and not accNodeRlp.isEmpty and accNodeRlp.listLen() == 2)
+
+  let (_, isLeaf, _) = decodePrefix(accNodeRlp.listElem(0))
+  doAssert(isLeaf)
+
+  decodeRlp(accNodeRlp.listElem(1).toBytes(), Account)
+
+# public functions
 
 proc validateFetchedAccountTrieNode*(
     trustedAccountTrieNodeKey: AccountTrieNodeKey,
@@ -49,114 +148,6 @@ proc validateFetchedContractCode*(
 # template extensionNodeKey(r: Rlp): auto =
 #   hexPrefixDecode r.listElem(0).toBytes
 
-# Needs to handle partial path or full address path
-proc isValidTrieProof(
-    expectedRootHash: KeccakHash, path: Nibbles, proof: TrieProof
-): bool =
-  if proof.len() == 0:
-    echo "Empty proof"
-    return false
-
-  if not isValidTrieNode(expectedRootHash, proof[0]):
-    echo "Invalid root hash"
-    return false
-
-  let nibbles = path.unpackNibbles()
-  if nibbles.len() == 0:
-    if proof.len() == 1:
-      echo "Empty path"
-      return true
-    else:
-      echo "Invalid path"
-      return false # root node case, already validated above
-
-  var nibbleIdx = 0
-  var proofIdx = 0
-
-  while nibbleIdx < nibbles.len() and proofIdx < proof.len() - 1:
-    let nextNibble = nibbles[nibbleIdx]
-    let thisNode = proof[proofIdx]
-    let nextNode = proof[proofIdx + 1]
-
-    let nodeRlp = rlpFromBytes(thisNode.asSeq())
-    if not nodeRlp.hasData or nodeRlp.isEmpty:
-      echo "Invalid node"
-      return false
-
-    case nodeRlp.listLen()
-    of 2:
-      let nodePrefixRlp = nodeRlp.listElem(0)
-      if nodePrefixRlp.isEmpty:
-        echo "Invalid node prefix"
-        return false
-
-      let nodePrefix = nodePrefixRlp.toBytes()
-      let firstN = (nodePrefix[0] and 0xF0) shr 4
-      if firstN > 3:
-        echo "Invalid node prefix"
-        return false
-
-      let isLeaf = firstN == 2 or firstN == 3
-      let isEvenLen = firstN == 0 or firstN == 2
-
-      # TODO: assuming only single byte prefixes for now
-      let nextByte =
-        if isEvenLen:
-          nodePrefix[1]
-        else:
-          nodePrefix[0] and 0x0F
-      if nextByte != nextNibble:
-        echo "nextByte not matching"
-        return false
-
-      if isLeaf:
-        if proofIdx < proof.len() - 1:
-          echo "leaf not at end"
-          return false
-      else: # is extension node
-        let nextHashRlp = nodeRlp.listElem(1)
-        if nextHashRlp.isEmpty:
-          echo "empty next hash"
-          return false
-
-        let nextHash = nextHashRlp.toBytes()
-        if nextHash.len() != 32:
-          echo "next hash wrong len"
-          return false
-
-        # echo "nextHash: ", nextHash
-        # echo "nextNode: ", nextNode
-        if not isValidTrieNode(nextHash, nextNode):
-          return false
-    of 17:
-      if nextNibble >= 16:
-        echo "Invalid branch node nibble"
-        return false
-
-      let nextHashRlp = nodeRlp.listElem(nextNibble.int)
-      if nextHashRlp.isEmpty:
-        echo "empty next hash"
-        return false
-
-      let nextHash = nextHashRlp.toBytes()
-      if nextHash.len() != 32:
-        echo "next hash wrong len"
-        return false
-
-      # echo "nextHash: ", nextHash
-      # echo "nextNode: ", nextNode
-      if not isValidTrieNode(nextHash, nextNode):
-        echo "next hash invalid"
-        return false
-    else:
-      echo "corrupt rlp"
-      return false
-
-    inc nibbleIdx
-    inc proofIdx
-
-  return true
-
 # Precondition: AccountTrieNodeOffer.blockHash is already checked to be part of the canonical chain
 proc validateOfferedAccountTrieNode*(
     trustedStateRoot: KeccakHash,
@@ -165,19 +156,6 @@ proc validateOfferedAccountTrieNode*(
 ): bool =
   isValidTrieProof(trustedStateRoot, accountTrieNodeKey.path, accountTrieNode.proof) and
     isValidTrieNode(accountTrieNodeKey.nodeHash, accountTrieNode.proof[^1])
-
-proc rlpDecodeAccountTrieNode(accountNode: TrieNode): auto =
-  let accNodeRlp = rlpFromBytes(accountNode.asSeq())
-  doAssert(accNodeRlp.hasData and not accNodeRlp.isEmpty and accNodeRlp.listLen() == 2)
-
-  # TODO: refactor this
-  let nodePrefix = accNodeRlp.listElem(0).toBytes()
-  let firstN = (nodePrefix[0] and 0xF0) shr 4
-
-  let isLeaf = firstN == 2 or firstN == 3
-  doAssert(isLeaf)
-
-  decodeRlp(accNodeRlp.listElem(1).toBytes(), Account)
 
 # Precondition: ContractTrieNodeOffer.blockHash is already checked to be part of the canonical chain
 proc validateOfferedContractTrieNode*(
@@ -188,12 +166,12 @@ proc validateOfferedContractTrieNode*(
   let
     addressHash = keccakHash(contractTrieNodeKey.address).data
     accountPath = Nibbles(@addressHash)
-  if not isValidTrieProof(trustedStateRoot, accountPath, contractTrieNode.accountProof):
-    echo "trie proof validation failed"
+  if not isValidTrieProof(
+    trustedStateRoot, Nibbles(@addressHash), contractTrieNode.accountProof
+  ):
     return false
 
   let account = rlpDecodeAccountTrieNode(contractTrieNode.accountProof[^1]).valueOr:
-    echo "decodeRlp account failed"
     return false
 
   isValidTrieProof(
@@ -213,7 +191,6 @@ proc validateOfferedContractCode*(
     return false
 
   let account = rlpDecodeAccountTrieNode(contractCode.accountProof[^1]).valueOr:
-    echo "decodeRlp account failed"
     return false
 
   isValidBytecode(account.codeHash, contractCode.code)
