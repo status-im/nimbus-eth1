@@ -63,15 +63,18 @@ proc isValidTrieProof(
       return false
 
   var nibbleIdx = 0
-  for proofIdx, thisNode in proof[0 ..^ 2]:
+  for proofIdx, p in proof[0 ..^ 2]:
     let
-      nextNibble = nibbles[nibbleIdx]
+      thisNodeRlp = rlpFromBytes(p.asSeq())
       nextNode = proof[proofIdx + 1]
-      nodeRlp = rlpFromBytes(thisNode.asSeq())
+      remainingNibbles = nibbles.len() - nibbleIdx
 
-    case nodeRlp.listLen()
+    if remainingNibbles == 0:
+      return false
+
+    case thisNodeRlp.listLen()
     of 2:
-      let nodePrefixRlp = nodeRlp.listElem(0)
+      let nodePrefixRlp = thisNodeRlp.listElem(0)
       if nodePrefixRlp.isEmpty:
         return false
 
@@ -79,9 +82,7 @@ proc isValidTrieProof(
       if prefix >= 4:
         return false # invalid prefix
 
-      let
-        unpackedPrefix = prefixNibbles.unpackNibbles()
-        remainingNibbles = nibbles.len() - nibbleIdx
+      let unpackedPrefix = prefixNibbles.unpackNibbles()
       if remainingNibbles < unpackedPrefix.len():
         return false # not enough nibbles for prefix
 
@@ -94,10 +95,11 @@ proc isValidTrieProof(
         if proofIdx < proof.len() - 1:
           return false # leaf should be the last node in the proof
       else: # is extension node
-        if not isValidNextNode(nodeRlp, 1, nextNode):
+        if not isValidNextNode(thisNodeRlp, 1, nextNode):
           return false
     of 17:
-      if nextNibble >= 16 or not isValidNextNode(nodeRlp, nextNibble.int, nextNode):
+      let nextNibble = nibbles[nibbleIdx]
+      if nextNibble >= 16 or not isValidNextNode(thisNodeRlp, nextNibble.int, nextNode):
         return false
       inc nibbleIdx
     else:
@@ -136,18 +138,6 @@ proc validateFetchedContractCode*(
   let expectedHash = trustedContractCodeKey.codeHash
   isValidBytecode(expectedHash, contractCode.code)
 
-# proc hexPrefixDecode*(r: openArray[byte]): tuple[isLeaf: bool, nibbles: NibblesSeq] =
-#   result.nibbles = initNibbleRange(r)
-#   if r.len > 0:
-#     result.isLeaf = (r[0] and 0x20) != 0
-#     let hasOddLen = (r[0] and 0x10) != 0
-#     result.nibbles.ibegin = 2 - int(hasOddLen)
-#   else:
-#     result.isLeaf = false
-
-# template extensionNodeKey(r: Rlp): auto =
-#   hexPrefixDecode r.listElem(0).toBytes
-
 # Precondition: AccountTrieNodeOffer.blockHash is already checked to be part of the canonical chain
 proc validateOfferedAccountTrieNode*(
     trustedStateRoot: KeccakHash,
@@ -166,9 +156,7 @@ proc validateOfferedContractTrieNode*(
   let
     addressHash = keccakHash(contractTrieNodeKey.address).data
     accountPath = Nibbles(@addressHash)
-  if not isValidTrieProof(
-    trustedStateRoot, Nibbles(@addressHash), contractTrieNode.accountProof
-  ):
+  if not isValidTrieProof(trustedStateRoot, accountPath, contractTrieNode.accountProof):
     return false
 
   let account = rlpDecodeAccountTrieNode(contractTrieNode.accountProof[^1]).valueOr:

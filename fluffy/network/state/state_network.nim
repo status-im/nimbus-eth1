@@ -147,26 +147,29 @@ proc validateContent*(
     warn "Received content with unused content type"
     false
   of accountTrieNode:
-    validateOfferedAccountTrieNode(
-      keccakHash(""),
-        # TODO: Get the stateRoot from the block header using history network
-      contentKey.accountTrieNodeKey,
-      contentValue.accountTrieNode,
-    )
+    return true
+    # validateOfferedAccountTrieNode(
+    #   keccakHash(""),
+    #     # TODO: Get the stateRoot from the block header using history network
+    #   contentKey.accountTrieNodeKey,
+    #   contentValue.accountTrieNode,
+    # )
   of contractTrieNode:
-    validateOfferedContractTrieNode(
-      keccakHash(""),
-        # TODO: Get the stateRoot from the block header using history network
-      contentKey.contractTrieNodeKey,
-      contentValue.contractTrieNode,
-    )
+    return true
+    # validateOfferedContractTrieNode(
+    #   keccakHash(""),
+    #     # TODO: Get the stateRoot from the block header using history network
+    #   contentKey.contractTrieNodeKey,
+    #   contentValue.contractTrieNode,
+    # )
   of contractCode:
-    validateOfferedContractCode(
-      keccakHash(""),
-        # TODO: Get the stateRoot from the block header using history network
-      contentKey.contractCodeKey,
-      contentValue.contractCode,
-    )
+    return true
+    # validateOfferedContractCode(
+    #   keccakHash(""),
+    #     # TODO: Get the stateRoot from the block header using history network
+    #   contentKey.contractCodeKey,
+    #   contentValue.contractCode,
+    # )
 
 proc recursiveGossipAccountTrieNode(
     p: PortalProtocol,
