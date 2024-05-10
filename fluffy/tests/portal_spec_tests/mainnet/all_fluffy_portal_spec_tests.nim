@@ -1,4 +1,4 @@
-# Nimbus
+# Fluffy
 # Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
@@ -13,5 +13,6 @@ import
   ./test_history_content,
   ./test_history_content_validation,
   ./test_history_block_proof_bellatrix,
+  ./test_history_block_proof_capella,
   ./test_header_content,
   ./test_accumulator_root
