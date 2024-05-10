@@ -166,6 +166,19 @@ proc validateOfferedAccountTrieNode*(
   isValidTrieProof(trustedStateRoot, accountTrieNodeKey.path, accountTrieNode.proof) and
     isValidTrieNode(accountTrieNodeKey.nodeHash, accountTrieNode.proof[^1])
 
+proc rlpDecodeAccountTrieNode(accountNode: TrieNode): auto =
+  let accNodeRlp = rlpFromBytes(accountNode.asSeq())
+  doAssert(accNodeRlp.hasData and not accNodeRlp.isEmpty and accNodeRlp.listLen() == 2)
+
+  # TODO: refactor this
+  let nodePrefix = accNodeRlp.listElem(0).toBytes()
+  let firstN = (nodePrefix[0] and 0xF0) shr 4
+
+  let isLeaf = firstN == 2 or firstN == 3
+  doAssert(isLeaf)
+
+  decodeRlp(accNodeRlp.listElem(1).toBytes(), Account)
+
 # Precondition: ContractTrieNodeOffer.blockHash is already checked to be part of the canonical chain
 proc validateOfferedContractTrieNode*(
     trustedStateRoot: KeccakHash,
@@ -176,9 +189,11 @@ proc validateOfferedContractTrieNode*(
     addressHash = keccakHash(contractTrieNodeKey.address).data
     accountPath = Nibbles(@addressHash)
   if not isValidTrieProof(trustedStateRoot, accountPath, contractTrieNode.accountProof):
+    echo "trie proof validation failed"
     return false
 
-  let account = decodeRlp(contractTrieNode.accountProof[^1].asSeq(), Account).valueOr:
+  let account = rlpDecodeAccountTrieNode(contractTrieNode.accountProof[^1]).valueOr:
+    echo "decodeRlp account failed"
     return false
 
   isValidTrieProof(
@@ -197,7 +212,8 @@ proc validateOfferedContractCode*(
   if not isValidTrieProof(trustedStateRoot, accountPath, contractCode.accountProof):
     return false
 
-  let account = decodeRlp(contractCode.accountProof[^1].asSeq(), Account).valueOr:
+  let account = rlpDecodeAccountTrieNode(contractCode.accountProof[^1]).valueOr:
+    echo "decodeRlp account failed"
     return false
 
   isValidBytecode(account.codeHash, contractCode.code)
