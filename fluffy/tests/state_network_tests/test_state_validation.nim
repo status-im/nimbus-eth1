@@ -522,7 +522,7 @@ suite "State Validation":
 
   # Recursive gossip offer validation tests
 
-test "Validate valid AccountTrieNodeOffer nodes":
+test "Validate valid AccountTrieNodeOffer recursive gossip nodes":
   const file = testVectorDir / "recursive_gossip.yaml"
   const stateRoots = [
     "0x1ad7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61".hexToSeqByte(),
@@ -534,10 +534,13 @@ test "Validate valid AccountTrieNodeOffer nodes":
     raiseAssert "Cannot read test vector: " & error
 
   for i, testData in testCase:
+    if i == 1:
+      continue
+
     var stateRoot: KeccakHash
     copyMem(addr stateRoot, unsafeAddr stateRoots[i][0], 32)
 
-    for j, kv in testData:
+    for kv in testData:
       let contentKey = decode(kv.content_key.hexToSeqByte().ByteList).get()
       let contentValueOffer =
         SSZ.decode(kv.content_value.hexToSeqByte(), AccountTrieNodeOffer)
@@ -545,4 +548,32 @@ test "Validate valid AccountTrieNodeOffer nodes":
       check:
         validateOfferedAccountTrieNode(
           stateRoot, contentKey.accountTrieNodeKey, contentValueOffer
+        )
+
+test "Validate valid ContractTrieNodeOffer recursive gossip nodes":
+  const file = testVectorDir / "recursive_gossip.yaml"
+  const stateRoots = [
+    "0x1ad7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61".hexToSeqByte(),
+    "0x1ad7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61".hexToSeqByte(),
+    "0xd7f8974fb5ac78d9ac099b9ad5018bedc2ce0a72dad1827a1709da30580f0544".hexToSeqByte(),
+  ]
+
+  let testCase = YamlRecursiveGossipKVs.loadFromYaml(file).valueOr:
+    raiseAssert "Cannot read test vector: " & error
+
+  for i, testData in testCase:
+    if i != 1:
+      continue
+
+    var stateRoot: KeccakHash
+    copyMem(addr stateRoot, unsafeAddr stateRoots[i][0], 32)
+
+    for kv in testData:
+      let contentKey = decode(kv.content_key.hexToSeqByte().ByteList).get()
+      let contentValueOffer =
+        SSZ.decode(kv.content_value.hexToSeqByte(), ContractTrieNodeOffer)
+
+      check:
+        validateOfferedContractTrieNode(
+          stateRoot, contentKey.contractTrieNodeKey, contentValueOffer
         )
