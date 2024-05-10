@@ -9,6 +9,7 @@ import
   std/os,
   unittest2,
   stew/byteutils,
+  eth/common,
   ../../network/state/state_content,
   ../../network/state/state_validation,
   ../../eth_data/yaml_utils
@@ -36,6 +37,8 @@ type YamlContractBytecodeKV = object
 type YamlContractBytecodeKVs = seq[YamlContractBytecodeKV]
 
 suite "State Validation":
+  # Retrieval validation tests
+
   test "Validate valid AccountTrieNodeRetrieval nodes":
     const file = testVectorDir / "account_trie_node.yaml"
 
@@ -141,3 +144,172 @@ suite "State Validation":
         not validateFetchedContractCode(
           contentKey.contractCodeKey, contentValueRetrieval
         )
+
+  # Account offer validation tests
+
+  test "Validate valid AccountTrieNodeOffer nodes":
+    const file = testVectorDir / "account_trie_node.yaml"
+    const stateRoots = [
+      "0x1ad7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61".hexToSeqByte(),
+      "0x1ad7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61".hexToSeqByte(),
+      "0xd7f8974fb5ac78d9ac099b9ad5018bedc2ce0a72dad1827a1709da30580f0544".hexToSeqByte(),
+    ]
+
+    let testCase = YamlTrieNodeKVs.loadFromYaml(file).valueOr:
+      raiseAssert "Cannot read test vector: " & error
+
+    for i, testData in testCase:
+      var stateRoot: KeccakHash
+      copyMem(addr stateRoot, unsafeAddr stateRoots[i][0], 32)
+
+      block:
+        let contentKey = decode(testData.content_key.hexToSeqByte().ByteList).get()
+        let contentValueOffer =
+          SSZ.decode(testData.content_value_offer.hexToSeqByte(), AccountTrieNodeOffer)
+
+        check:
+          validateOfferedAccountTrieNode(
+            stateRoot, contentKey.accountTrieNodeKey, contentValueOffer
+          )
+
+      if i == 1:
+        continue # second test case only has root node and no recursive gossip
+
+      let contentKey =
+        decode(testData.recursive_gossip.content_key.hexToSeqByte().ByteList).get()
+      let contentValueOffer = SSZ.decode(
+        testData.recursive_gossip.content_value_offer.hexToSeqByte(),
+        AccountTrieNodeOffer,
+      )
+
+      check:
+        validateOfferedAccountTrieNode(
+          stateRoot, contentKey.accountTrieNodeKey, contentValueOffer
+        )
+
+  test "Validate invalid AccountTrieNodeOffer nodes - bad state roots":
+    const file = testVectorDir / "account_trie_node.yaml"
+    const stateRoots = [
+      "0xBAD7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61".hexToSeqByte(),
+      "0xBAD7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61".hexToSeqByte(),
+      "0xBAD8974fb5ac78d9ac099b9ad5018bedc2ce0a72dad1827a1709da30580f0544".hexToSeqByte(),
+    ]
+
+    let testCase = YamlTrieNodeKVs.loadFromYaml(file).valueOr:
+      raiseAssert "Cannot read test vector: " & error
+
+    for i, testData in testCase:
+      var stateRoot: KeccakHash
+      copyMem(addr stateRoot, unsafeAddr stateRoots[i][0], 32)
+
+      let contentKey = decode(testData.content_key.hexToSeqByte().ByteList).get()
+      let contentValueOffer =
+        SSZ.decode(testData.content_value_offer.hexToSeqByte(), AccountTrieNodeOffer)
+
+      check:
+        not validateOfferedAccountTrieNode(
+          stateRoot, contentKey.accountTrieNodeKey, contentValueOffer
+        )
+
+  test "Validate invalid AccountTrieNodeOffer nodes - bad nodes":
+    const file = testVectorDir / "account_trie_node.yaml"
+    const stateRoots = [
+      "0x1ad7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61".hexToSeqByte(),
+      "0x1ad7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61".hexToSeqByte(),
+      "0xd7f8974fb5ac78d9ac099b9ad5018bedc2ce0a72dad1827a1709da30580f0544".hexToSeqByte(),
+    ]
+
+    let testCase = YamlTrieNodeKVs.loadFromYaml(file).valueOr:
+      raiseAssert "Cannot read test vector: " & error
+
+    for i, testData in testCase:
+      var stateRoot: KeccakHash
+      copyMem(addr stateRoot, unsafeAddr stateRoots[i][0], 32)
+
+      let contentKey = decode(testData.content_key.hexToSeqByte().ByteList).get()
+      var contentValueOffer =
+        SSZ.decode(testData.content_value_offer.hexToSeqByte(), AccountTrieNodeOffer)
+
+      contentValueOffer.proof[0][0] += 1.byte
+
+      check:
+        not validateOfferedAccountTrieNode(
+          stateRoot, contentKey.accountTrieNodeKey, contentValueOffer
+        )
+
+    for i, testData in testCase:
+      if i == 1:
+        continue # second test case only has root node
+      var stateRoot: KeccakHash
+      copyMem(addr stateRoot, unsafeAddr stateRoots[i][0], 32)
+
+      let contentKey = decode(testData.content_key.hexToSeqByte().ByteList).get()
+      var contentValueOffer =
+        SSZ.decode(testData.content_value_offer.hexToSeqByte(), AccountTrieNodeOffer)
+
+      contentValueOffer.proof[^2][^2] += 1.byte
+
+      check:
+        not validateOfferedAccountTrieNode(
+          stateRoot, contentKey.accountTrieNodeKey, contentValueOffer
+        )
+
+    for i, testData in testCase:
+      var stateRoot: KeccakHash
+      copyMem(addr stateRoot, unsafeAddr stateRoots[i][0], 32)
+
+      let contentKey = decode(testData.content_key.hexToSeqByte().ByteList).get()
+      var contentValueOffer =
+        SSZ.decode(testData.content_value_offer.hexToSeqByte(), AccountTrieNodeOffer)
+
+      contentValueOffer.proof[^1][^1] += 1.byte
+
+      check:
+        not validateOfferedAccountTrieNode(
+          stateRoot, contentKey.accountTrieNodeKey, contentValueOffer
+        )
+
+  # Contract storage offer validation tests
+
+  test "Validate valid ContractTrieNodeOffer nodes":
+    const file = testVectorDir / "contract_storage_trie_node.yaml"
+    const stateRoots = [
+      "0x1ad7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61".hexToSeqByte(),
+      "0x1ad7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61".hexToSeqByte(),
+    ]
+
+    let testCase = YamlTrieNodeKVs.loadFromYaml(file).valueOr:
+      raiseAssert "Cannot read test vector: " & error
+
+    for i, testData in testCase:
+      var stateRoot: KeccakHash
+      copyMem(addr stateRoot, unsafeAddr stateRoots[i][0], 32)
+
+      block:
+        let contentKey = decode(testData.content_key.hexToSeqByte().ByteList).get()
+        let contentValueOffer =
+          SSZ.decode(testData.content_value_offer.hexToSeqByte(), ContractTrieNodeOffer)
+
+        check:
+          validateOfferedContractTrieNode(
+            stateRoot, contentKey.contractTrieNodeKey, contentValueOffer
+          )
+
+      if i == 1:
+        continue # second test case has no recursive gossip
+
+      let contentKey =
+        decode(testData.recursive_gossip.content_key.hexToSeqByte().ByteList).get()
+      let contentValueOffer = SSZ.decode(
+        testData.recursive_gossip.content_value_offer.hexToSeqByte(),
+        ContractTrieNodeOffer,
+      )
+
+      check:
+        validateOfferedContractTrieNode(
+          stateRoot, contentKey.contractTrieNodeKey, contentValueOffer
+        )
+
+  # Contract bytecode offer validation tests
+
+  # Recursive gossip offer validation tests
