@@ -225,6 +225,7 @@ proc toGenesisHeader*(
 proc toGenesisHeader*(
     genesis: Genesis;
     fork: HardFork;
+    chainId: ChainId;
     db = CoreDbRef(nil);
     ledgerType = GenesisLedgerTypeDefault;
       ): BlockHeader
@@ -232,7 +233,7 @@ proc toGenesisHeader*(
   ## Generate the genesis block header from the `genesis` and `config`
   ## argument value.
   let
-    db  = if db.isNil: newCoreDbRef LegacyDbMemory else: db
+    db  = if db.isNil: newCoreDbRef LegacyDbMemory, chainId else: db
     sdb = newStateDB(db, pruneTrie = true, ledgerType)
   toGenesisHeader(genesis, sdb, fork)
 
@@ -246,7 +247,7 @@ proc toGenesisHeader*(
   ## argument value.
   let map  = toForkTransitionTable(params.config)
   let fork = map.toHardFork(forkDeterminationInfo(0.toBlockNumber, params.genesis.timestamp))
-  toGenesisHeader(params.genesis, fork, db, ledgerType)
+  toGenesisHeader(params.genesis, fork, params.config.chainId, db, ledgerType)
 
 # ------------------------------------------------------------------------------
 # End

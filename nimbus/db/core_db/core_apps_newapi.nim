@@ -16,7 +16,7 @@
 import
   std/[algorithm, options, sequtils],
   chronicles,
-  eth/[common, rlp],
+  eth/[common, common/transaction, rlp],
   results,
   stew/byteutils,
   "../.."/[errors, constants],
@@ -150,7 +150,8 @@ iterator getBlockTransactions*(
       ): Transaction
       {.gcsafe, raises: [RlpError].} =
   for encodedTx in db.getBlockTransactionData(header.txRoot):
-    yield rlp.decode(encodedTx, Transaction)
+    yield Transaction.fromBytes(encodedTx, db.chainId).valueOr:
+      raise (ref MalformedRlpError)(msg: "Invalid transaction in block")
 
 
 iterator getBlockTransactionHashes*(
@@ -161,8 +162,9 @@ iterator getBlockTransactionHashes*(
   ## Returns an iterable of the transaction hashes from th block specified
   ## by the given block header.
   for encodedTx in db.getBlockTransactionData(blockHeader.txRoot):
-    let tx = rlp.decode(encodedTx, Transaction)
-    yield rlpHash(tx) # beware EIP-4844
+    let tx = Transaction.fromBytes(encodedTx, db.chainId).valueOr:
+      raise (ref MalformedRlpError)(msg: "Invalid transaction in block")
+    yield tx.compute_tx_hash(db.chainId)
 
 
 iterator getWithdrawalsData*(

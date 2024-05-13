@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  eth/common,
+  eth/[common, common/transaction],
   chronicles,
   stew/byteutils,
   ./engine_spec,
@@ -134,11 +134,11 @@ method getName(cs: TransactionReOrgTest): string =
     name.add ", " & $cs.scenario
   return name
 
-proc txHash(shadow: ShadowTx): common.Hash256 =
+proc txHash(shadow: ShadowTx, chainId: ChainId): common.Hash256 =
   if shadow.tx.isNone:
     error "SHADOW TX IS NONE"
     return
-  shadow.tx.get.rlpHash
+  shadow.tx.get.tx.compute_tx_hash(chainId)
 
 # Test transaction status after a forkchoiceUpdated re-orgs to an alternative hash where a transaction is not present
 method execute(cs: TransactionReOrgTest, env: TestEnv): bool =
@@ -204,7 +204,8 @@ method execute(cs: TransactionReOrgTest, env: TestEnv): bool =
           shadow.tx = some(shadow.sendTransaction(i))
 
           # Get the receipt
-          let receipt = env.engine.client.txReceipt(shadow.txHash)
+          let receipt = env.engine.client.txReceipt(
+            shadow.txHash(env.conf.networkParams.config.chainId))
           testCond receipt.isErr:
             fatal "Receipt obtained before tx included in block"
 
@@ -213,7 +214,9 @@ method execute(cs: TransactionReOrgTest, env: TestEnv): bool =
       onGetpayload: proc(): bool =
         # Check that indeed the payload contains the transaction
         if shadow.tx.isSome:
-          testCond txInPayload(env.clMock.latestPayloadBuilt, shadow.txHash):
+          testCond txInPayload(
+              env.clMock.latestPayloadBuilt,
+              shadow.txHash(env.conf.networkParams.config.chainId)):
             fatal "Payload built does not contain the transaction"
 
         if cs.scenario in [TransactionReOrgScenarioReOrgDifferentBlock, TransactionReOrgScenarioNewPayloadOnRevert]:
@@ -256,7 +259,8 @@ method execute(cs: TransactionReOrgTest, env: TestEnv): bool =
             g.expectNoError()
 
             let payload = g.get.executionPayload
-            testCond txInPayload(payload, shadow.nextTx.rlpHash):
+            testCond txInPayload(payload, shadow.nextTx.tx.compute_tx_hash(
+                env.conf.networkParams.config.chainId)):
               fatal "Payload built does not contain the transaction"
 
             # Send the new payload and forkchoiceUpdated to it
@@ -273,7 +277,9 @@ method execute(cs: TransactionReOrgTest, env: TestEnv): bool =
       onNewPayloadBroadcast: proc(): bool =
         if shadow.tx.isSome:
           # Get the receipt
-          let receipt = env.engine.client.txReceipt(shadow.txHash)
+          let receipt = env.engine.client.txReceipt(
+            shadow.tx.unsafeGet.tx.compute_tx_hash(
+              env.conf.networkParams.config.chainId))
           testCond receipt.isErr:
             fatal "Receipt obtained before tx included in block (NewPayload)"
         return true
@@ -282,7 +288,9 @@ method execute(cs: TransactionReOrgTest, env: TestEnv): bool =
         if cs.scenario != TransactionReOrgScenarioReOrgBackIn:
           # Transaction is now in the head of the canonical chain, re-org and verify it's removed
           # Get the receipt
-          var txt = env.engine.client.txReceipt(shadow.txHash)
+          var txt = env.engine.client.txReceipt(
+            shadow.tx.get.tx.compute_tx_hash(
+              env.conf.networkParams.config.chainId))
           txt.expectBlockHash(ethHash env.clMock.latestForkchoice.headBlockHash)
 
           testCond shadow.payload.parentHash == env.clMock.latestPayloadBuilt.parentHash:
@@ -311,7 +319,9 @@ method execute(cs: TransactionReOrgTest, env: TestEnv): bool =
           let p = env.engine.client.namedHeader(Head)
           p.expectHash(ethHash shadow.payload.blockHash)
 
-          txt = env.engine.client.txReceipt(shadow.txHash)
+          txt = env.engine.client.txReceipt(
+            shadow.tx.get.tx.compute_tx_hash(
+              env.conf.networkParams.config.chainId))
           if cs.scenario == TransactionReOrgScenarioReOrgOut:
             testCond txt.isErr:
               fatal "Receipt was obtained when the tx had been re-org'd out"
@@ -328,7 +338,9 @@ method execute(cs: TransactionReOrgTest, env: TestEnv): bool =
 
         if shadow.tx.isSome:
           # Now it should be back with main payload
-          let txt = env.engine.client.txReceipt(shadow.txHash)
+          let txt = env.engine.client.txReceipt(
+            shadow.tx.get.tx.compute_tx_hash(
+              env.conf.networkParams.config.chainId))
           txt.expectBlockHash(ethHash env.clMock.latestForkchoice.headBlockHash)
 
           if cs.scenario != TransactionReOrgScenarioReOrgBackIn:
@@ -347,11 +359,16 @@ method execute(cs: TransactionReOrgTest, env: TestEnv): bool =
     # Produce one last block and verify that the block contains the transaction
     let pbRes = env.clMock.produceSingleBlock(BlockProcessCallbacks(
       onForkchoiceBroadcast: proc(): bool =
-        testCond txInPayload(env.clMock.latestPayloadBuilt, shadow.txHash):
+        testCond txInPayload(
+            env.clMock.latestPayloadBuilt,
+            shadow.tx.get.tx.compute_tx_hash(
+              env.conf.networkParams.config.chainId)):
           fatal "Payload built does not contain the transaction"
 
         # Get the receipt
-        let receipt = env.engine.client.txReceipt(shadow.txHash)
+        let receipt = env.engine.client.txReceipt(
+          shadow.tx.get.tx.compute_tx_hash(
+            env.conf.networkParams.config.chainId))
         testCond receipt.isOk:
           fatal "Receipt not obtained after tx included in block"
 

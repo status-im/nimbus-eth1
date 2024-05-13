@@ -8,7 +8,7 @@
 # those terms.
 
 import
-  eth/[common, rlp],
+  eth/common,
   chronos, stint,
   json_rpc/[rpcclient],
   ../../../nimbus/transaction,
@@ -19,8 +19,10 @@ import
 export eth_api
 
 proc sendTransaction*(
-    client: RpcClient, tx: PooledTransaction): Future[bool] {.async.} =
-  let data   = rlp.encode(tx)
+    client: RpcClient,
+    tx: PooledTransaction,
+    chainId: ChainId): Future[bool] {.async.} =
+  let data   = tx.toBytes(chainId)
   let txHash = keccakHash(data)
   let hex    = await client.eth_sendRawTransaction(data)
   let decodedHash = ethHash(hex)

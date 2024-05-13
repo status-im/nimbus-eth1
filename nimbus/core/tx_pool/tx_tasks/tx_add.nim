@@ -72,14 +72,17 @@ proc supersede(xp: TxPoolRef; item: TxItemRef): Result[void,TxInfo]
   var current: TxItemRef
 
   block:
-    let rc = xp.txDB.bySender.eq(item.sender).sub.eq(item.tx.nonce)
+    let rc = xp.txDB.bySender.eq(item.sender).sub.eq(item.tx.payload.nonce)
     if rc.isErr:
       return err(txInfoErrUnspecified)
     current = rc.value.data
 
   # verify whether replacing is allowed, at all
-  let bumpPrice = (current.tx.gasPrice * xp.priceBump.GasInt + 99) div 100
-  if item.tx.gasPrice < current.tx.gasPrice + bumpPrice:
+  let bumpPrice = (
+    current.tx.payload.max_fee_per_gas.truncate(int64) *
+    xp.priceBump.GasInt + 99) div 100
+  if item.tx.payload.max_fee_per_gas.truncate(int64) <
+      current.tx.payload.max_fee_per_gas.truncate(int64) + bumpPrice:
     discard  # return err(txInfoErrReplaceUnderpriced)
 
   # make space, delete item
@@ -181,7 +184,7 @@ proc addTxs*(xp: TxPoolRef;
   for tx in txs.items:
     var reason: TxInfo
 
-    if tx.tx.txType == TxEip4844:
+    if tx.blob_data.isSome:
       let res = tx.validateBlobTransactionWrapper()
       if res.isErr:
         # move item to waste basket
@@ -197,7 +200,7 @@ proc addTxs*(xp: TxPoolRef;
     else:
       let
         item = rcTx.value
-        rcInsert = accTab.getItemList(item.sender).insert(item.tx.nonce)
+        rcInsert = accTab.getItemList(item.sender).insert(item.tx.payload.nonce)
       if rcInsert.isErr:
         reason = txInfoErrSenderNonceIndex
       else:

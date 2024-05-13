@@ -10,6 +10,7 @@
 
 import
   chronicles,
+  eth/common/transaction,
   ./engine_spec,
   ../helper,
   ../cancun/customizer,
@@ -304,8 +305,9 @@ method getName(cs: PayloadBuildAfterInvalidPayloadTest): string =
 proc collectBlobHashes(list: openArray[Web3Tx]): seq[common.Hash256] =
   for w3tx in list:
     let tx = ethTx(w3tx)
-    for h in tx.versionedHashes:
-      result.add h
+    if tx.payload.blob_versioned_hashes.isSome:
+      for h in tx.payload.blob_versioned_hashes.unsafeGet:
+        result.add h
 
 method execute(cs: PayloadBuildAfterInvalidPayloadTest, env: TestEnv): bool =
   # Add a second client to build the invalid payload
@@ -442,7 +444,8 @@ method execute(cs: InvalidTxChainIDTest, env: TestEnv): bool =
   testCond pbRes
 
   # Verify that the latest payload built does NOT contain the invalid chain Tx
-  let txHash = shadow.invalidTx.rlpHash
+  let txHash = shadow.invalidTx.tx.compute_tx_hash(
+    env.conf.networkParams.config.chainId)
   if txInPayload(env.clMock.latestPayloadBuilt, txHash):
     fatal "Invalid chain ID tx was included in payload"
     return false

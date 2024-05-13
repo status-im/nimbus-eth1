@@ -9,9 +9,9 @@
 # according to those terms.
 
 import
-  json, strutils, options, os,
+  std/[json, options, os, strutils, typetraits],
   eth/common, httputils, nimcrypto/utils,
-  stint, stew/byteutils
+  results, stint, stew/byteutils
 
 import ../nimbus/transaction, ../nimbus/utils/ec_recover
 
@@ -96,15 +96,36 @@ proc fromJson*(n: JsonNode, name: string, x: var SomeInteger) =
     x = T(node.getInt)
     doAssert($x == $node.getInt, name)
 
+func fromJson(n: JsonNode, name: string, x: var ChainId) =
+  n.fromJson(name, distinctBase(x))
+
 proc fromJson*(n: JsonNode, name: string, x: var EthTime) =
   x = EthTime(hexToInt(n[name].getStr(), uint64))
   doAssert(x.uint64.prefixHex == toLowerAscii(n[name].getStr()), name)
 
 proc fromJson*[T](n: JsonNode, name: string, x: var Option[T]) =
-  if name in n:
+  if name in n and n[name].kind != JNull:
     var val: T
     n.fromJson(name, val)
-    x = some(val)
+    x = options.some(val)
+  else:
+    x = options.none(T)
+
+func fromJson*[T](n: JsonNode, name: string, x: var Opt[T]) =
+  if name in n and n[name].kind != JNull:
+    var val: T
+    n.fromJson(name, val)
+    x.ok val
+  else:
+    x.err()
+
+func fromJson*[E, N](n: JsonNode, name: string, x: var List[E, N]) =
+  var v: seq[E]
+  n.fromJson(name, v)
+  if v.len > N:
+    raise (ref ValueError)(msg:
+      "List[" & $E & ", Limit " & $N & "] cannot fit " & $v.len & " items")
+  x = List[E, N].init(v)
 
 proc fromJson*(n: JsonNode, name: string, x: var TxType) =
   let node = n[name]
@@ -120,6 +141,20 @@ proc fromJson*(n: JsonNode, name: string, x: var seq[Hash256]) =
   for v in node:
     hexToByteArray(v.getStr(), h.data)
     x.add h
+
+func fromJson*(n: JsonNode, name: string, x: var common.AccessList) =
+  x.reset()
+  let node = n[name]
+  for innerNode in node:
+    var entry: common.AccessPair
+    innerNode.fromJson "address", entry.address
+    for storageKeyVal in innerNode["storageKeys"]:
+      var storageKey: common.StorageKey
+      hexToByteArray(storageKeyVal.getStr(), storageKey)
+      if not entry.storage_keys.add storageKey:
+        raise (ref ValueError)(msg: "StorageKeys capacity exceeded")
+    if not x.add entry:
+      raise (ref ValueError)(msg: "AccessList capacity exceeded")
 
 proc parseBlockHeader*(n: JsonNode): BlockHeader =
   n.fromJson "parentHash", result.parentHash
@@ -147,53 +182,72 @@ proc parseBlockHeader*(n: JsonNode): BlockHeader =
     # probably geth bug
     result.fee = none(UInt256)
 
-proc parseAccessPair(n: JsonNode): AccessPair =
-  n.fromJson "address", result.address
-  let keys = n["storageKeys"]
-  for kn in keys:
-    result.storageKeys.add hexToByteArray[32](kn.getStr())
-
-proc parseTransaction*(n: JsonNode): Transaction =
-  var tx = Transaction(txType: TxLegacy)
+proc parseTransaction*(n: JsonNode, chain_id: ChainId): Transaction =
+  var
+    tx: TransactionPayload
+    gasPrice: Opt[UInt256]
+    txChainId: Opt[ChainId]
+    v: UInt256
+    r: UInt256
+    s: UInt256
   n.fromJson "nonce", tx.nonce
-  n.fromJson "gasPrice", tx.gasPrice
-  n.fromJson "gas", tx.gasLimit
-
-  if n["to"].kind != JNull:
-    var to: EthAddress
-    n.fromJson "to", to
-    tx.to = some(to)
-
+  n.fromJson "gasPrice", gasPrice
+  n.fromJson "gas", tx.gas
+  n.fromJson "to", tx.to
   n.fromJson "value", tx.value
-  n.fromJson "input", tx.payload
-  n.fromJson "v", tx.V
-  n.fromJson "r", tx.R
-  n.fromJson "s", tx.S
-
-  if n.hasKey("type") and n["type"].kind != JNull:
-    n.fromJson "type", tx.txType
-
-  if tx.txType >= TxEip1559:
-    n.fromJson "maxPriorityFeePerGas", tx.maxPriorityFee
-    n.fromJson "maxFeePerGas", tx.maxFee
-
-  if tx.txType >= TxEip2930:
-    if n.hasKey("chainId"):
-      let id = hexToInt(n["chainId"].getStr(), int)
-      tx.chainId = ChainId(id)
-
-    let accessList = n["accessList"]
-    if accessList.len > 0:
-      for acn in accessList:
-        tx.accessList.add parseAccessPair(acn)
-
-  if tx.txType >= TxEip4844:
-    n.fromJson "maxFeePerBlobGas", tx.maxFeePerBlobGas
-
-  if n.hasKey("versionedHashes") and n["versionedHashes"].kind != JNull:
-    n.fromJson "versionedHashes", tx.versionedHashes
-
-  tx
+  n.fromJson "input", tx.input
+  n.fromJson "v", v
+  n.fromJson "r", r
+  n.fromJson "s", s
+  n.fromJson "chainId", txChainId
+  n.fromJson "type", tx.tx_type
+  n.fromJson "accessList", tx.access_list
+  n.fromJson "maxPriorityFeePerGas", tx.max_priority_fee_per_gas
+  n.fromJson "maxFeePerGas", tx.max_fee_per_gas
+  n.fromJson "maxFeePerBlobGas", tx.max_fee_per_blob_gas
+  n.fromJson "versionedHashes", tx.blob_versioned_hashes
+  if gasPrice.get(tx.max_fee_per_gas) != tx.max_fee_per_gas:
+    raise (ref ValueError)(msg: "`gasPrice` and `maxFeePerGas` don't match")
+  if tx.tx_type.get(TxLegacy) != TxLegacy and txChainId.isNone:
+    raise (ref ValueError)(msg: "`chainId` is required")
+  if tx.tx_type == Opt.some(TxLegacy) and txChainId.isNone:
+    tx.tx_type.reset()
+  if txChainId.get(chain_id) != chain_id:
+    raise (ref ValueError)(msg: "Unsupported `chainId`")
+  if r >= SECP256K1N:
+    raise (ref ValueError)(msg: "Invalid `r`")
+  if s < UInt256.one or s >= SECP256K1N:
+    raise (ref ValueError)(msg: "Invalid `s`")
+  let anyTx = AnyTransactionPayload.fromOneOfBase(tx).valueOr:
+    raise (ref ValueError)(msg: "Invalid combination of fields")
+  withTxPayloadVariant(anyTx):
+    let y_parity =
+      when txKind == TransactionKind.Replayable:
+        if v == 27.u256:
+          false
+        elif v == 28.u256:
+          true
+        else:
+          raise (ref ValueError)(msg: "Invalid `v`")
+      elif txKind == TransactionKind.Legacy:
+        let
+          res = v.isEven
+          expected_v =
+            distinctBase(chain_id).u256 * 2 + (if res: 36.u256 else: 35.u256)
+        if v != expected_v:
+          raise (ref ValueError)(msg: "Invalid `v`")
+        res
+      else:
+        if v > UInt256.one:
+          raise (ref ValueError)(msg: "Invalid `v`")
+        v.isOdd
+    var signature: TransactionSignature
+    signature.ecdsa_signature = ecdsa_pack_signature(y_parity, r, s)
+    signature.from_address = ecdsa_recover_from_address(
+        signature.ecdsa_signature,
+        txPayloadVariant.compute_sig_hash(chain_id)).valueOr:
+      raise (ref ValueError)(msg: "Cannot compute `from` address")
+    Transaction(payload: tx, signature: signature)
 
 proc parseWithdrawal*(n: JsonNode): Withdrawal =
   n.fromJson "index", result.index

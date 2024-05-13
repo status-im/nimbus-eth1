@@ -57,19 +57,19 @@ proc checkTxNonce(xp: TxPoolRef; item: TxItemRef): bool
   # get the next applicable nonce as registered on the account database
   let accountNonce = xp.chain.getNonce(item.sender)
 
-  if item.tx.nonce < accountNonce:
+  if item.tx.payload.nonce < accountNonce:
     debug "invalid tx: account nonce too small",
-      txNonce = item.tx.nonce,
+      txNonce = item.tx.payload.nonce,
       accountNonce
     return false
 
-  elif accountNonce < item.tx.nonce:
+  elif accountNonce < item.tx.payload.nonce:
     # for an existing account, nonces must come in increasing consecutive order
     let rc = xp.txDB.bySender.eq(item.sender)
     if rc.isOk:
-      if rc.value.data.sub.eq(item.tx.nonce - 1).isErr:
+      if rc.value.data.sub.eq(item.tx.payload.nonce - 1).isErr:
         debug "invalid tx: account nonces gap",
-           txNonce = item.tx.nonce,
+           txNonce = item.tx.payload.nonce,
            accountNonce
         return false
 
@@ -87,7 +87,7 @@ proc txNonceActive(xp: TxPoolRef; item: TxItemRef): bool
   if rc.isErr:
     return true
   # Must not be in the `pending` bucket.
-  if rc.value.data.eq(txItemPending).eq(item.tx.nonce - 1).isOk:
+  if rc.value.data.eq(txItemPending).eq(item.tx.payload.nonce - 1).isOk:
     return false
   true
 
@@ -96,30 +96,31 @@ proc txGasCovered(xp: TxPoolRef; item: TxItemRef): bool =
   ## Check whether the max gas consumption is within the gas limit (aka block
   ## size).
   let trgLimit = xp.chain.limits.trgLimit
-  if trgLimit < item.tx.gasLimit:
+  if trgLimit < item.tx.payload.gas.GasInt:
     debug "invalid tx: gasLimit exceeded",
       maxLimit = trgLimit,
-      gasLimit = item.tx.gasLimit
+      gasLimit = item.tx.payload.gas
     return false
   true
 
 proc txFeesCovered(xp: TxPoolRef; item: TxItemRef): bool =
   ## Ensure that the user was willing to at least pay the base fee
   ## And to at least pay the current data gasprice
-  if item.tx.txType >= TxEip1559:
-    if item.tx.maxFee.GasPriceEx < xp.chain.baseFee:
+  if item.tx.payload.tx_type.get(TxLegacy) >= TxEip1559:
+    if item.tx.payload.max_fee_per_gas.truncate(int64).GasPriceEx <
+        xp.chain.baseFee:
       debug "invalid tx: maxFee is smaller than baseFee",
-        maxFee = item.tx.maxFee,
+        maxFee = item.tx.payload.max_fee_per_gas,
         baseFee = xp.chain.baseFee
       return false
 
-  if item.tx.txType >= TxEip4844:
+  if item.tx.payload.max_fee_per_blob_gas.isSome:
     let
       excessBlobGas = xp.chain.excessBlobGas
       blobGasPrice = getBlobBaseFee(excessBlobGas)
-    if item.tx.maxFeePerBlobGas < blobGasPrice:
+    if item.tx.payload.max_fee_per_blob_gas.unsafeGet < blobGasPrice:
       debug "invalid tx: maxFeePerBlobGas smaller than blobGasPrice",
-        maxFeePerBlobGas=item.tx.maxFeePerBlobGas,
+        maxFeePerBlobGas=item.tx.payload.max_fee_per_blob_gas.unsafeGet,
         blobGasPrice=blobGasPrice
       return false
   true
@@ -135,11 +136,11 @@ proc txCostInBudget(xp: TxPoolRef; item: TxItemRef): bool =
       require = gasCost
     return false
   let balanceOffGasCost = balance - gasCost
-  if balanceOffGasCost < item.tx.value:
+  if balanceOffGasCost < item.tx.payload.value:
     debug "invalid tx: not enough cash to send",
       available = balance,
       availableMinusGas = balanceOffGasCost,
-      require = item.tx.value
+      require = item.tx.payload.value
     return false
   true
 
@@ -147,10 +148,11 @@ proc txCostInBudget(xp: TxPoolRef; item: TxItemRef): bool =
 proc txPreLondonAcceptableGasPrice(xp: TxPoolRef; item: TxItemRef): bool =
   ## For legacy transactions check whether minimum gas price and tip are
   ## high enough. These checks are optional.
-  if item.tx.txType < TxEip1559:
+  if item.tx.payload.tx_type.get(TxLegacy) < TxEip1559:
 
     if stageItemsPlMinPrice in xp.pFlags:
-      if item.tx.gasPrice.GasPriceEx < xp.pMinPlGasPrice:
+      if item.tx.payload.max_fee_per_gas.truncate(int64).GasPriceEx <
+          xp.pMinPlGasPrice:
         return false
 
     elif stageItems1559MinTip in xp.pFlags:
@@ -161,14 +163,15 @@ proc txPreLondonAcceptableGasPrice(xp: TxPoolRef; item: TxItemRef): bool =
 
 proc txPostLondonAcceptableTipAndFees(xp: TxPoolRef; item: TxItemRef): bool =
   ## Helper for `classifyTxPacked()`
-  if item.tx.txType >= TxEip1559:
+  if item.tx.payload.tx_type.get(TxLegacy) >= TxEip1559:
 
     if stageItems1559MinTip in xp.pFlags:
       if item.tx.effectiveGasTip(xp.chain.baseFee) < xp.pMinTipPrice:
         return false
 
     if stageItems1559MinFee in xp.pFlags:
-      if item.tx.maxFee.GasPriceEx < xp.pMinFeePrice:
+      if item.tx.payload.max_fee_per_gas.truncate(int64).GasPriceEx <
+          xp.pMinFeePrice:
         return false
   true
 
@@ -231,11 +234,10 @@ proc classifyValidatePacked*(xp: TxPoolRef;
                  xp.chain.limits.maxLimit
                else:
                  xp.chain.limits.trgLimit
-    tx = item.tx.eip1559TxNormalization(xp.chain.baseFee.GasInt)
     excessBlobGas = calcExcessBlobGas(vmState.parent)
 
   roDB.validateTransaction(
-    tx, item.sender, gasLimit, baseFee, excessBlobGas, fork).isOk
+    item.tx, item.sender, gasLimit, baseFee, excessBlobGas, fork).isOk
 
 proc classifyPacked*(xp: TxPoolRef; gasBurned, moreBurned: GasInt): bool =
   ## Classifier for *packing* (i.e. adding up `gasUsed` values after executing

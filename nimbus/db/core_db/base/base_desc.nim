@@ -148,7 +148,7 @@ type
   # Sub-descriptor: KVT methods
   # --------------------------------------------------
   CoreDbKvtBackendFn* = proc(): CoreDbKvtBackendRef {.noRaise.}
-  CoreDbKvtGetFn* = proc(k: openArray[byte]): CoreDbRc[Blob] {.noRaise.} 
+  CoreDbKvtGetFn* = proc(k: openArray[byte]): CoreDbRc[Blob] {.noRaise.}
   CoreDbKvtDelFn* = proc(k: openArray[byte]): CoreDbRc[void] {.noRaise.}
   CoreDbKvtPutFn* =
     proc(k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] {.noRaise.}
@@ -287,6 +287,7 @@ type
     profTab*: CoreDbProfListRef ## Profiling data (if any)
     ledgerHook*: RootRef        ## Debugging/profiling, to be used by ledger
     methods*: CoreDbBaseFns
+    chainId*: ChainId
 
   CoreDbErrorRef* = ref object of RootRef
     ## Generic error object

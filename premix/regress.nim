@@ -52,7 +52,10 @@ proc validateBlock(com: CommonRef, blockNumber: BlockNumber): BlockNumber =
 proc main() {.used.} =
   let
     conf = getConfiguration()
-    com = CommonRef.new(newCoreDbRef(LegacyDbPersistent, conf.dataDir), false)
+    params = networkParams(conf.netId)
+    com = CommonRef.new(
+      newCoreDbRef(LegacyDbPersistent, conf.dataDir, params.config.chainId),
+      false)
 
   # move head to block number ...
   if conf.head == 0.u256:

@@ -70,7 +70,9 @@ method execute(cs: PrevRandaoTransactionTest, env: TestEnv): bool =
     onForkchoiceBroadcast: proc(): bool =
       # Check the transaction tracing, which is client specific
       let expectedPrevRandao = env.clMock.prevRandaoHistory[env.clMock.latestHeader.blockNumber.truncate(uint64)+1]
-      let res = debugPrevRandaoTransaction(env.engine.client, shadow.txs[shadow.currentTxIndex-1], expectedPrevRandao)
+      let res = debugPrevRandaoTransaction(
+        env.engine.client, shadow.txs[shadow.currentTxIndex-1],
+        expectedPrevRandao, env.conf.networkParams.config.chainId)
       testCond res.isOk:
         fatal "Error during transaction tracing", msg=res.error
 

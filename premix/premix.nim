@@ -48,12 +48,14 @@ proc main() =
   try:
     let
       nimbus      = json.parseFile(paramStr(1))
+      chainId     = nimbus["chainId"].getInt().ChainId
       blockNumber = UInt256.fromHex(nimbus["blockNumber"].getStr())
-      thisBlock   = requestBlock(blockNumber, {DownloadReceipts, DownloadTxTrace})
-      accounts    = requestPostState(thisBlock)
+      thisBlock   = requestBlock(
+        blockNumber, chainId, {DownloadReceipts, DownloadTxTrace})
+      accounts    = requestPostState(thisBlock, chainId)
       geth        = generateGethData(thisBlock, blockNumber, accounts)
       parentNumber = blockNumber - 1.u256
-      parentBlock  = requestBlock(parentNumber)
+      parentBlock  = requestBlock(parentNumber, chainId)
 
     processNimbusData(nimbus)
 

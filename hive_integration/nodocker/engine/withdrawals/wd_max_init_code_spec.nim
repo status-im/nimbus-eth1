@@ -12,7 +12,7 @@ import
   std/typetraits,
   chronos,
   chronicles,
-  eth/common/eth_types_rlp,
+  eth/common/[eth_types_rlp, transaction],
   ./wd_base_spec,
   ../test_env,
   ../engine_client,
@@ -87,7 +87,8 @@ proc execute*(ws: MaxInitcodeSizeSpec, env: TestEnv): bool =
     testCond not env.sendTx(tx):
       error "Client accepted tx exceeding the MAX_INITCODE_SIZE"
 
-    let res = env.client.txByHash(rlpHash(tx))
+    let res = env.client.txByHash(
+      tx.tx.compute_tx_hash(env.conf.networkParams.config.chainId))
     testCond res.isErr:
       error "Invalid tx was not unknown to the client"
 
@@ -102,7 +103,7 @@ proc execute*(ws: MaxInitcodeSizeSpec, env: TestEnv): bool =
       return true
     ,
     onGetPayload: proc(): bool =
-      let validTxBytes = rlp.encode(validTx)
+      let validTxBytes = validTx.toBytes(env.conf.networkParams.config.chainId)
       testCond env.clMock.latestPayloadBuilt.transactions.len == 1:
         error "Client did not include valid tx with MAX_INITCODE_SIZE"
 

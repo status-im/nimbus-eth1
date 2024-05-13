@@ -9,6 +9,7 @@
 # according to those terms.
 
 import
+  std/typetraits,
   json,
   ../nimbus/common/common, # must be early (compilation annoyance)
   ../nimbus/db/core_db/persistent,
@@ -32,6 +33,7 @@ proc dumpTest(com: CommonRef, blockNumber: int) =
     receipts = dumpReceipts(captureCom.db, header)
 
   var metaData = %{
+    "chainId": %distinctBase(com.chainId),
     "blockNumber": %blockNumber.toHex,
     "txTraces": txTrace,
     "stateDump": stateDump,
@@ -56,9 +58,12 @@ proc main() {.used.} =
 
   # nimbus --rpc-api: eth, debug --prune: archive
 
-  var conf = makeConfig()
-  let db = newCoreDbRef(LegacyDbPersistent, string conf.dataDir)
-  let com = CommonRef.new(db, false)
+  let
+    conf = makeConfig()
+    params = networkParams(conf.networkId)
+    db = newCoreDbRef(
+      LegacyDbPersistent, string conf.dataDir, params.config.chainId)
+    com = CommonRef.new(db, false)
 
   com.dumpTest(97)
   com.dumpTest(46147)

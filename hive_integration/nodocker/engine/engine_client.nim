@@ -11,7 +11,7 @@
 import
   std/[times, json, strutils],
   stew/byteutils,
-  eth/[common, common/eth_types, rlp], chronos,
+  eth/[common, common/eth_types, common/transaction], chronos,
   json_rpc/[rpcclient, errors, jsonmarshal],
   ../../../nimbus/beacon/web3_eth_conv,
   ./types
@@ -206,8 +206,9 @@ proc newPayloadV4*(client: RpcClient,
 proc collectBlobHashes(list: openArray[Web3Tx]): seq[Web3Hash] =
   for w3tx in list:
     let tx = ethTx(w3tx)
-    for h in tx.versionedHashes:
-      result.add w3Hash(h)
+    if tx.payload.blob_versioned_hashes.isSome:
+      for h in tx.payload.blob_versioned_hashes.unsafeGet:
+        result.add w3Hash(h)
 
 proc newPayload*(client: RpcClient,
                  payload: ExecutionPayload,
@@ -308,30 +309,95 @@ func vHashes(x: Option[seq[Web3Hash]]): seq[common.Hash256] =
   if x.isNone: return
   else: ethHashes(x.get)
 
-proc toTransaction(tx: TransactionObject): Transaction =
-  common.Transaction(
-    txType          : tx.`type`.get(0.Web3Quantity).TxType,
-    chainId         : tx.chainId.get(0.Web3Quantity).ChainId,
-    nonce           : tx.nonce.AccountNonce,
-    gasPrice        : tx.gasPrice.GasInt,
-    maxPriorityFee  : tx.maxPriorityFeePerGas.get(0.Web3Quantity).GasInt,
-    maxFee          : tx.maxFeePerGas.get(0.Web3Quantity).GasInt,
-    gasLimit        : tx.gas.GasInt,
-    to              : ethAddr tx.to,
-    value           : tx.value,
-    payload         : tx.input,
-    accessList      : ethAccessList(tx.accessList),
-    maxFeePerBlobGas: tx.maxFeePerBlobGas.get(0.u256),
-    versionedHashes : vHashes(tx.blobVersionedHashes),
-    V               : tx.v.int64,
-    R               : tx.r,
-    S               : tx.s,
-  )
+proc toTransaction(tx: TransactionObject, chain_id: ChainId): Transaction =
+  var
+    payload: TransactionPayload
+    gasPrice: Opt[UInt256]
+    txChainId: Opt[ChainId]
+    v: UInt256
+    r: UInt256
+    s: UInt256
+  if tx.`type`.isSome:
+    payload.tx_type.ok tx.`type`.get.TxType
+  if tx.chainId.isSome:
+    txChainId.ok tx.chainId.get.ChainId
+  payload.nonce = tx.nonce.AccountNonce
+  payload.max_fee_per_gas = distinctBase(tx.gasPrice).u256
+  if tx.maxPriorityFeePerGas.isSome:
+    payload.max_priority_fee_per_gas.ok(
+      distinctBase(tx.maxPriorityFeePerGas.get).u256)
+  if tx.maxFeePerGas.isSome:
+    gasPrice.ok distinctBase(tx.maxFeePerGas.get).u256
+  payload.gas = distinctBase(tx.gas)
+  if tx.to.isSome:
+    payload.to.ok(ethAddr(tx.to).get)
+  payload.value = tx.value
+  if tx.input.len > payload.input.maxLen:
+    raise (ref ValueError)(msg:
+      "Input cannot fit " & $tx.input.len & " bytes")
+  payload.input = List[byte, Limit MAX_CALLDATA_SIZE].init tx.input
+  if tx.accessList.isSome:
+    payload.access_list.ok ethAccessList(tx.accessList)
+  if tx.maxFeePerBlobGas.isSome:
+    payload.max_fee_per_blob_gas.ok tx.maxFeePerBlobGas.get
+  if tx.blobVersionedHashes.isSome:
+    if tx.blobVersionedHashes.get.len > MAX_BLOB_COMMITMENTS_PER_BLOCK:
+      raise (ref ValueError)(msg:
+        "Access list cannot fit " & $tx.blobVersionedHashes.get.len & " bytes")
+    payload.blob_versioned_hashes.ok(
+      List[eth_types.VersionedHash, Limit MAX_BLOB_COMMITMENTS_PER_BLOCK]
+        .init vHashes(tx.blobVersionedHashes))
+  v = distinctBase(tx.v).u256
+  r = tx.r
+  s = tx.s
+  if gasPrice.get(payload.max_fee_per_gas) != payload.max_fee_per_gas:
+    raise (ref ValueError)(msg: "`gasPrice` and `maxFeePerGas` don't match")
+  if payload.tx_type.get(TxLegacy) != TxLegacy and txChainId.isNone:
+    raise (ref ValueError)(msg: "`chainId` is required")
+  if payload.tx_type == Opt.some(TxLegacy) and txChainId.isNone:
+    payload.tx_type.reset()
+  if txChainId.get(chain_id) != chain_id:
+    raise (ref ValueError)(msg: "Unsupported `chainId`")
+  if r >= SECP256K1N:
+    raise (ref ValueError)(msg: "Invalid `r`")
+  if s < UInt256.one or s >= SECP256K1N:
+    raise (ref ValueError)(msg: "Invalid `s`")
+  let anyTx = AnyTransactionPayload.fromOneOfBase(payload).valueOr:
+    raise (ref ValueError)(msg: "Invalid combination of fields")
+  withTxPayloadVariant(anyTx):
+    let y_parity =
+      when txKind == TransactionKind.Replayable:
+        if v == 27.u256:
+          false
+        elif v == 28.u256:
+          true
+        else:
+          raise (ref ValueError)(msg: "Invalid `v`")
+      elif txKind == TransactionKind.Legacy:
+        let
+          res = v.isEven
+          expected_v =
+            distinctBase(chain_id).u256 * 2 + (if res: 36.u256 else: 35.u256)
+        if v != expected_v:
+          raise (ref ValueError)(msg: "Invalid `v`")
+        res
+      else:
+        if v > UInt256.one:
+          raise (ref ValueError)(msg: "Invalid `v`")
+        v.isOdd
+    var signature: TransactionSignature
+    signature.ecdsa_signature = ecdsa_pack_signature(y_parity, r, s)
+    signature.from_address = ecdsa_recover_from_address(
+        signature.ecdsa_signature,
+        txPayloadVariant.compute_sig_hash(chain_id)).valueOr:
+      raise (ref ValueError)(msg: "Cannot compute `from` address")
+    Transaction(payload: payload, signature: signature)
 
-proc toTransactions*(txs: openArray[TxOrHash]): seq[Transaction] =
+proc toTransactions*(
+    txs: openArray[TxOrHash], chain_id: ChainId): seq[Transaction] =
   for x in txs:
     doAssert x.kind == tohTx
-    result.add toTransaction(x.tx)
+    result.add toTransaction(x.tx, chain_id)
 
 proc toWithdrawal(wd: WithdrawalObject): Withdrawal =
   Withdrawal(
@@ -493,14 +559,15 @@ proc latestHeader*(client: RpcClient): Result[common.BlockHeader, string] =
       return err("failed to get latest blockHeader")
     return ok(res.toBlockHeader)
 
-proc latestBlock*(client: RpcClient): Result[common.EthBlock, string] =
+proc latestBlock*(
+    client: RpcClient, chainId: ChainId): Result[common.EthBlock, string] =
   wrapTry:
     let res = waitFor client.eth_getBlockByNumber(blockId("latest"), true)
     if res.isNil:
       return err("failed to get latest blockHeader")
     let output = EthBlock(
       header: toBlockHeader(res),
-      txs: toTransactions(res.transactions),
+      txs: toTransactions(res.transactions, chainId),
       withdrawals: toWithdrawals(res.withdrawals),
     )
     return ok(output)
@@ -513,11 +580,13 @@ proc namedHeader*(client: RpcClient, name: string): Result[common.BlockHeader, s
     return ok(res.toBlockHeader)
 
 proc sendTransaction*(
-    client: RpcClient, tx: common.PooledTransaction): Result[void, string] =
+    client: RpcClient,
+    tx: common.PooledTransaction,
+    chainId: ChainId): Result[void, string] =
   wrapTry:
-    let encodedTx = rlp.encode(tx)
+    let encodedTx = tx.toBytes(chainId)
     let res = waitFor client.eth_sendRawTransaction(encodedTx)
-    let txHash = rlpHash(tx)
+    let txHash = tx.tx.compute_tx_hash(chainId)
     let getHash = ethHash res
     if txHash != getHash:
       return err("sendTransaction: tx hash mismatch")
@@ -607,9 +676,10 @@ createRpcSigsFromNim(RpcClient):
 proc debugPrevRandaoTransaction*(
     client: RpcClient,
     tx: PooledTransaction,
-    expectedPrevRandao: Hash256): Result[void, string] =
+    expectedPrevRandao: Hash256,
+    chain_id: ChainId): Result[void, string] =
   wrapTry:
-    let hash = w3Hash tx.rlpHash
+    let hash = tx.tx.compute_tx_hash(chain_id).data.TxHash
     # we only interested in stack, disable all other elems
     let opts = TraceOpts(
       disableStorage: true,

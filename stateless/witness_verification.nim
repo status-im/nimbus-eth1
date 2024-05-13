@@ -54,11 +54,12 @@ proc buildAccountsTableFromKeys(
 proc verifyWitness*(
     trustedStateRoot: KeccakHash,
     witness: BlockWitness,
-    flags: WitnessFlags): Result[TableRef[EthAddress, AccountData], string] =
+    flags: WitnessFlags,
+    chainId: ChainId): Result[TableRef[EthAddress, AccountData], string] =
   if witness.len() == 0:
     return err("witness is empty")
 
-  let db = newCoreDbRef(LegacyDbMemory)
+  let db = newCoreDbRef(LegacyDbMemory, chainId)
   var tb = initTreeBuilder(witness, db, flags)
 
   try:

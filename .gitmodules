@@ -102,7 +102,7 @@
 	path = vendor/nim-web3
 	url = https://github.com/status-im/nim-web3.git
   ignore = dirty
-  branch = master
+  branch = feat/eip-6493
 [submodule "vendor/nim-snappy"]
   path = vendor/nim-snappy
   url = https://github.com/status-im/nim-snappy.git
@@ -172,7 +172,7 @@
 	path = vendor/nim-ssz-serialization
 	url = https://github.com/status-im/nim-ssz-serialization.git
 	ignore = untracked
-	branch = master
+	branch = feat/eip-6493
 [submodule "vendor/nimbus-eth2"]
 	path = vendor/nimbus-eth2
 	url = https://github.com/status-im/nimbus-eth2.git

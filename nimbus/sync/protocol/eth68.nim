@@ -267,11 +267,11 @@ p2pProtocol eth68(version = ethVersion,
         trace trEthSendReplying & "EMPTY PooledTransactions (0x0a)", peer,
           sent=0, requested=txHashes.len
 
-      await response.send(txs.get)
+      await response.send(RawRlp(txs.get.toBytes(ctx.chainId)))
 
     # User message 0x0a: PooledTransactions.
     proc pooledTransactions(
-        peer: Peer, transactions: openArray[PooledTransaction])
+        peer: Peer, transactions: RawRlp)
 
   # User message 0x0d: GetNodeData -- removed, was so 66ish
   # User message 0x0e: NodeData -- removed, was so 66ish

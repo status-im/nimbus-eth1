@@ -12,7 +12,7 @@ import
   std/[tables],
   chronicles,
   stew/[byteutils],
-  eth/common, chronos,
+  eth/[common, common/transaction], chronos,
   json_rpc/rpcclient,
   web3/execution_types,
   ../../../nimbus/beacon/web3_eth_conv,
@@ -94,8 +94,9 @@ type
 proc collectBlobHashes(list: openArray[Web3Tx]): seq[common.Hash256] =
   for w3tx in list:
     let tx = ethTx(w3tx)
-    for h in tx.versionedHashes:
-      result.add h
+    if tx.payload.blob_versioned_hashes.isSome:
+      for h in tx.payload.blob_versioned_hashes.unsafeGet:
+        result.add h
 
 func latestExecutableData*(cl: CLMocker): ExecutableData =
   ExecutableData(
@@ -373,12 +374,14 @@ proc getNextPayload(cl: CLMocker): bool =
 
   return true
 
-func versionedHashes(payload: ExecutionPayload): seq[Web3Hash] =
+func versionedHashes(payload: ExecutionPayload, chainId: ChainId): seq[Web3Hash] =
   result = newSeqOfCap[BlockHash](payload.transactions.len)
   for x in payload.transactions:
-    let tx = rlp.decode(distinctBase(x), Transaction)
-    for vs in tx.versionedHashes:
-      result.add w3Hash vs
+    let tx = Transaction.fromBytes(distinctBase(x), chainId).valueOr:
+      raise (ref MalformedRlpError)(msg: "Invalid transaction in payload")
+    if tx.payload.blob_versioned_hashes.isSome:
+      for vs in tx.payload.blob_versioned_hashes.get:
+        result.add w3Hash vs
 
 proc broadcastNewPayload(cl: CLMocker,
                          eng: EngineEnv,
@@ -387,10 +390,10 @@ proc broadcastNewPayload(cl: CLMocker,
   of Version.V1: return eng.client.newPayloadV1(payload.V1)
   of Version.V2: return eng.client.newPayloadV2(payload.V2)
   of Version.V3: return eng.client.newPayloadV3(payload.V3,
-    versionedHashes(payload),
+    versionedHashes(payload, cl.com.chainId),
     cl.latestPayloadAttributes.parentBeaconBlockRoot.get)
   of Version.V4: return eng.client.newPayloadV4(payload.V4,
-    versionedHashes(payload),
+    versionedHashes(payload, cl.com.chainId),
     cl.latestPayloadAttributes.parentBeaconBlockRoot.get)
 
 proc broadcastNextNewPayload(cl: CLMocker): bool =

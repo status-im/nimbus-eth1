@@ -313,6 +313,7 @@ proc dumpDebuggingMetaData*(vmState: BaseVMState, header: BlockHeader,
   }
 
   var metaData = %{
+    "chainId": %distinctBase(com.chainId),
     "blockNumber": %blockNumber.toHex,
     "txTraces": traceTransactions(captureCom, header, blockBody),
     "stateDump": dumpBlockState(captureCom, header, blockBody),

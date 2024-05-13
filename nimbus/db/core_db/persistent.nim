@@ -35,23 +35,28 @@ export
 proc newCoreDbRef*(
     dbType: static[CoreDbType];      # Database type symbol
     path: string;                    # Storage path for database
+    chainId: ChainId;
       ): CoreDbRef =
   ## Constructor for persistent type DB
   ##
   ## Note: Using legacy notation `newCoreDbRef()` rather than
   ## `CoreDbRef.init()` because of compiler coughing.
   when dbType == LegacyDbPersistent:
-    newLegacyPersistentCoreDbRef path
+    let res = newLegacyPersistentCoreDbRef path
 
   elif dbType == AristoDbRocks:
-    newAristoRocksDbCoreDbRef path
+    let res = newAristoRocksDbCoreDbRef path
 
   else:
     {.error: "Unsupported dbType for persistent newCoreDbRef()".}
 
+  res.chainId = chainId
+  res
+
 proc newCoreDbRef*(
     dbType: static[CoreDbType];      # Database type symbol
     path: string;                    # Storage path for database
+    chainId: ChainId;
     qidLayout: QidLayoutRef;         # Optional for `Aristo`, ignored by others
       ): CoreDbRef =
   ## Constructor for persistent type DB
@@ -59,10 +64,13 @@ proc newCoreDbRef*(
   ## Note: Using legacy notation `newCoreDbRef()` rather than
   ## `CoreDbRef.init()` because of compiler coughing.
   when dbType == AristoDbRocks:
-    newAristoRocksDbCoreDbRef(path, qlr)
+    let res = newAristoRocksDbCoreDbRef(path, qlr)
 
   else:
     {.error: "Unsupported dbType for persistent newCoreDbRef()" &
             " with qidLayout argument".}
+
+  res.chainId = chainId
+  res
 
 # End

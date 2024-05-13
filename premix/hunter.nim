@@ -35,10 +35,11 @@ proc parseAddress(address: string): EthAddress =
 proc parseU256(val: string): UInt256 =
   UInt256.fromHex(val)
 
-proc prepareBlockEnv(parent: BlockHeader, thisBlock: Block): CoreDbRef =
+proc prepareBlockEnv(
+    parent: BlockHeader, thisBlock: Block, chainId: ChainId): CoreDbRef =
   var
-    accounts     = requestPostState(thisBlock)
-    memoryDB     = newCoreDbRef LegacyDbMemory
+    accounts     = requestPostState(thisBlock, chainId)
+    memoryDB     = newCoreDbRef(LegacyDbMemory, chainId)
     accountDB    = newAccountStateDB(memoryDB, parent.stateRoot, false)
     parentNumber = %(parent.blockNumber.prefixHex)
 
@@ -95,13 +96,14 @@ proc putAncestorsIntoDB(vmState: HunterVMState, db: CoreDbRef) =
   for header in vmState.headers.values:
     db.addBlockNumberToHashLookup(header)
 
-proc huntProblematicBlock(blockNumber: UInt256): ValidationResult =
+proc huntProblematicBlock(
+    blockNumber: UInt256, chainId: ChainId): ValidationResult =
   let
     # prepare needed state from previous block
     parentNumber = blockNumber - 1
-    thisBlock    = requestBlock(blockNumber)
-    parentBlock  = requestBlock(parentNumber)
-    memoryDB     = prepareBlockEnv(parentBlock.header, thisBlock)
+    thisBlock    = requestBlock(blockNumber, chainId)
+    parentBlock  = requestBlock(parentNumber, chainId)
+    memoryDB     = prepareBlockEnv(parentBlock.header, thisBlock, chainId)
 
     # try to execute current block
     com = CommonRef.new(memoryDB, false)
@@ -122,7 +124,10 @@ proc huntProblematicBlock(blockNumber: UInt256): ValidationResult =
   result = validationResult
 
 proc main() {.used.} =
-  let conf = getConfiguration()
+  let
+    conf = getConfiguration()
+    params = networkParams(conf.netId)
+    chainId = params.config.chainId
 
   if conf.head == 0.u256:
     echo "please specify the starting block with `--head:blockNumber`"
@@ -138,7 +143,7 @@ proc main() {.used.} =
 
   while true:
     echo blockNumber
-    if huntProblematicBlock(blockNumber) != ValidationResult.OK:
+    if huntProblematicBlock(blockNumber, chainId) != ValidationResult.OK:
       echo "shot down problematic block: ", blockNumber
       problematicBlocks.add blockNumber
     blockNumber = blockNumber + 1

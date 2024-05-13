@@ -56,7 +56,7 @@ method execute(cs: SuggestedFeeRecipientTest, env: TestEnv): bool =
   testCond env.clMock.produceSingleBlock(BlockProcessCallbacks())
 
   # Calculate the fees and check that they match the balance of the fee recipient
-  let r = env.engine.client.latestBlock()
+  let r = env.engine.client.latestBlock(env.conf.networkParams.config.chainId)
   testCond r.isOk:
     error "cannot get latest header", msg=r.error
 
@@ -72,14 +72,16 @@ method execute(cs: SuggestedFeeRecipientTest, env: TestEnv): bool =
 
   var feeRecipientFees = 0.u256
   for tx in blockIncluded.txs:
-    let effGasTip = tx.effectiveGasTip(blockIncluded.header.fee)
+    let effGasTip = tx.effectiveGasTip(
+      blockIncluded.header.fee.get(UInt256.zero))
 
     let r = env.engine.client.txReceipt(tx.rlpHash)
     testCond r.isOk:
       fatal "unable to obtain receipt", msg=r.error
 
     let receipt = r.get
-    feeRecipientFees = feeRecipientFees + effGasTip.u256 * receipt.gasUsed.u256
+    feeRecipientFees =
+      feeRecipientFees + effGasTip.uint64.u256 * receipt.gasUsed.u256
 
 
   var s = env.engine.client.balanceAt(feeRecipient)

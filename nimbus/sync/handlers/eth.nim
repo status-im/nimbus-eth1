@@ -11,9 +11,10 @@
 {.push raises: [].}
 
 import
-  std/[tables, times, hashes, sets],
+  std/[tables, times, hashes, sets, typetraits],
   chronicles, chronos,
   stew/endians2,
+  eth/common/transaction,
   eth/p2p,
   eth/p2p/peer_pool,
   ".."/[types, protocol],
@@ -258,7 +259,7 @@ proc sendTransactions(ctx: EthWireRef,
       # This is used to avoid re-sending along pooledTxHashes
       # announcements/re-broadcasts
       ctx.addToKnownByPeer(txHashes, peer)
-      await peer.transactions(txs)
+      await peer.transactions(RawRlp txs.toBytes(ctx.chainId))
 
   except TransportError:
     debug "Transport got closed during sendTransactions"
@@ -276,16 +277,19 @@ proc fetchTransactions(ctx: EthWireRef, reqHashes: seq[Hash256], peer: Peer): Fu
       error "not able to get pooled transactions"
       return
 
-    let txs = res.get()
+    let txs = seq[PooledTransaction].fromBytes(
+        distinctBase(res.get().transactions), ctx.chainId).valueOr:
+      error "invalid pooled transactions"
+      return
     debug "fetchTx: received requested txs",
-      number = txs.transactions.len
+      number = txs.len
 
     # Remove from pending list regardless if tx is in result
-    for tx in txs.transactions:
-      let txHash = rlpHash(tx)
+    for tx in txs:
+      let txHash = tx.tx.compute_tx_hash(ctx.chainId)
       ctx.pending.excl txHash
 
-    ctx.txPool.add(txs.transactions)
+    ctx.txPool.add(txs)
 
   except TransportError:
     debug "Transport got closed during fetchTransactions"
@@ -353,6 +357,7 @@ proc new*(_: type EthWireRef,
           txPool: TxPoolRef,
           peerPool: PeerPool): EthWireRef =
   let ctx = EthWireRef(
+    chainId: chain.com.chainId,
     db: chain.db,
     chain: chain,
     txPool: txPool,
@@ -523,7 +528,7 @@ method handleAnnouncedTxs*(ctx: EthWireRef,
 
     ctx.addToKnownByPeer(txHashes, peer)
     for tx in txs:
-      if tx.versionedHashes.len > 0:
+      if tx.payload.blob_versioned_hashes.isSome:
         # EIP-4844 blobs are not persisted and cannot be broadcasted
         continue
       ctx.txPool.add PooledTransaction(tx: tx)
@@ -533,7 +538,8 @@ method handleAnnouncedTxs*(ctx: EthWireRef,
     for i, txHash in txHashes:
       # Nodes must not automatically broadcast blob transactions to
       # their peers. per EIP-4844 spec
-      if ctx.txPool.inPoolAndOk(txHash) and txs[i].txType != TxEip4844:
+      if ctx.txPool.inPoolAndOk(txHash) and
+          txs[i].payload.blob_versioned_hashes.isNone:
         newTxHashes.add txHash
         validTxs.add txs[i]
 

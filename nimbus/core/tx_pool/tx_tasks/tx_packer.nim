@@ -27,7 +27,7 @@ import
   ../../../transaction,
   ../../../vm_state,
   ../../../vm_types,
-  ".."/[tx_chain, tx_desc, tx_item, tx_tabs, tx_tabs/tx_status, tx_info],
+  ".."/[tx_chain, tx_desc, tx_item, tx_tabs, tx_tabs/tx_status],
   "."/[tx_bucket, tx_classify]
 
 type
@@ -87,11 +87,10 @@ proc runTx(pst: TxPackerStateRef; item: TxItemRef): GasInt
   let
     fork = pst.xp.chain.nextFork
     baseFee = pst.xp.chain.baseFee
-    tx = item.tx.eip1559TxNormalization(baseFee.GasInt)
 
   #safeExecutor "tx_packer.runTx":
   #  # Execute transaction, may return a wildcard `Exception`
-  result = tx.txCallEvm(item.sender, pst.xp.chain.vmState, fork)
+  result = item.tx.txCallEvm(item.sender, pst.xp.chain.vmState, fork)
 
   pst.cleanState = false
   doAssert 0 <= result
@@ -130,14 +129,15 @@ proc runTxCommit(pst: TxPackerStateRef; item: TxItemRef; gasBurned: GasInt)
 
   # Return remaining gas to the block gas counter so it is
   # available for the next transaction.
-  vmState.gasPool += item.tx.gasLimit - gasBurned
+  vmState.gasPool += item.tx.payload.gas.GasInt - gasBurned
 
   # gasUsed accounting
   vmState.cumulativeGasUsed += gasBurned
-  vmState.receipts[inx] = vmState.makeReceipt(item.tx.txType)
+  vmState.receipts[inx] =
+    vmState.makeReceipt(item.tx.payload.tx_type.get(TxLegacy))
 
   # EIP-4844, count blobGasUsed
-  if item.tx.txType >= TxEip4844:
+  if item.tx.payload.max_fee_per_blob_gas.isSome:
     pst.blobGasUsed += item.tx.getTotalBlobGas
 
   # Update txRoot
@@ -175,7 +175,7 @@ proc vmExecInit(xp: TxPoolRef): Result[TxPackerStateRef, string]
 
   let packer = TxPackerStateRef( # return value
     xp: xp,
-    tr: newCoreDbRef(LegacyDbMemory).mptPrune,
+    tr: newCoreDbRef(LegacyDbMemory, xp.chain.com.chainId).mptPrune,
     balance: xp.chain.vmState.readOnlyStateDB.getBalance(xp.chain.feeRecipient),
     numBlobPerBlock: 0,
   )
@@ -189,22 +189,23 @@ proc vmExecGrabItem(pst: TxPackerStateRef; item: TxItemRef): Result[bool,void]
     xp = pst.xp
     vmState = xp.chain.vmState
 
-  if not item.tx.validateChainId(xp.chain.com.chainId):
-    discard xp.txDB.dispose(item, txInfoChainIdMismatch)
-    return ok(false) # continue with next account
-
   # EIP-4844
-  if pst.numBlobPerBlock + item.tx.versionedHashes.len > MAX_BLOBS_PER_BLOCK:
+    numBlobVersionedHashes =
+      if item.tx.payload.blob_versioned_hashes.isSome:
+        item.tx.payload.blob_versioned_hashes.unsafeGet.len
+      else:
+        0
+  if pst.numBlobPerBlock + numBlobVersionedHashes > MAX_BLOBS_PER_BLOCK:
     return err() # stop collecting
-  pst.numBlobPerBlock += item.tx.versionedHashes.len
+  pst.numBlobPerBlock += numBlobVersionedHashes
 
   # Verify we have enough gas in gasPool
-  if vmState.gasPool < item.tx.gasLimit:
+  if vmState.gasPool < item.tx.payload.gas.GasInt:
     # skip this transaction and
     # continue with next account
     # if we don't have enough gas
     return ok(false)
-  vmState.gasPool -= item.tx.gasLimit
+  vmState.gasPool -= item.tx.payload.gas.GasInt
 
   # Validate transaction relative to the current vmState
   if not xp.classifyValidatePacked(vmState, item):

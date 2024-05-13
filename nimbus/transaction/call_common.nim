@@ -9,6 +9,7 @@
 {.push raises: [].}
 
 import
+  std/typetraits,
   eth/common/eth_types, stint, options, stew/ptrops,
   chronos,
   ".."/[vm_types, vm_state, vm_computation, vm_state_transactions],
@@ -124,7 +125,7 @@ proc initialAccessListEIP2929(call: CallParams) =
     # EIP2930 optional access list.
     for account in call.accessList:
       db.accessList(account.address)
-      for key in account.storageKeys:
+      for key in distinctBase(account.storageKeys):
         db.accessList(account.address, UInt256.fromBytesBE(key))
 
 proc setupHost(call: CallParams): TransactionHost =

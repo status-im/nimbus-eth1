@@ -62,9 +62,8 @@ proc calculateMedianGasPrice*(chain: CoreDbRef): GasInt
     {.gcsafe, raises: [CatchableError].} =
   var prices  = newSeqOfCap[GasInt](64)
   let header = chain.getCanonicalHead()
-  for encodedTx in chain.getBlockTransactionData(header.txRoot):
-    let tx = decodeTx(encodedTx)
-    prices.add(tx.gasPrice)
+  for tx in chain.getBlockTransactions(header):
+    prices.add(tx.payload.max_fee_per_gas.truncate(int64))
 
   if prices.len > 0:
     sort(prices)
@@ -79,32 +78,48 @@ proc calculateMedianGasPrice*(chain: CoreDbRef): GasInt
   const minGasPrice = 30_000_000_000.GasInt
   result = max(result, minGasPrice)
 
-proc unsignedTx*(tx: TransactionArgs, chain: CoreDbRef, defaultNonce: AccountNonce): Transaction
-    {.gcsafe, raises: [CatchableError].} =
-  if tx.to.isSome:
-    result.to = some(ethAddr(tx.to.get))
-
-  if tx.gas.isSome:
-    result.gasLimit = tx.gas.get.GasInt
-  else:
-    result.gasLimit = 90000.GasInt
-
-  if tx.gasPrice.isSome:
-    result.gasPrice = tx.gasPrice.get.GasInt
-  else:
-    result.gasPrice = calculateMedianGasPrice(chain)
-
-  if tx.value.isSome:
-    result.value = tx.value.get
-  else:
-    result.value = 0.u256
-
-  if tx.nonce.isSome:
-    result.nonce = tx.nonce.get.AccountNonce
-  else:
-    result.nonce = defaultNonce
-
-  result.payload = tx.payload
+proc unsignedTx*(
+    tx: TransactionArgs,
+    chain: CoreDbRef,
+    defaultNonce: AccountNonce,
+    eip155 = true
+): TransactionPayload {.gcsafe, raises: [CatchableError].} =
+  TransactionPayload(
+    nonce:
+      if tx.nonce.isSome:
+        tx.nonce.get.AccountNonce
+      else:
+        defaultNonce,
+    max_fee_per_gas:
+      if tx.gasPrice.isSome:
+        distinctBase(tx.gasPrice.get).u256
+      else:
+        calculateMedianGasPrice(chain).uint64.u256,
+    gas:
+      if tx.gas.isSome:
+        distinctBase(tx.gas.get)
+      else:
+        90000,
+    to:
+      if tx.to.isSome:
+        Opt.some ethAddr(tx.to.get)
+      else:
+        Opt.none(EthAddress),
+    value:
+      if tx.value.isSome:
+        tx.value.get
+      else:
+        UInt256.zero,
+    input:
+      if tx.payload.len > MAX_CALL_DATA_SIZE:
+        raise (ref ValueError)(msg: "tx.payload exceeds MAX_CALL_DATA_SIZE")
+      else:
+        List[byte, Limit MAX_CALL_DATA_SIZE].init(tx.payload),
+    tx_type:
+      if eip155:
+        Opt.some TxLegacy
+      else:
+        Opt.none TxType)
 
 proc toWd(wd: Withdrawal): WithdrawalObject =
   WithdrawalObject(
@@ -120,39 +135,61 @@ proc toWdList(list: openArray[Withdrawal]): seq[WithdrawalObject] =
     result.add toWd(x)
 
 proc populateTransactionObject*(tx: Transaction,
+                                chainId: ChainId,
                                 optionalHeader: Option[BlockHeader] = none(BlockHeader),
                                 txIndex: Option[int] = none(int)): TransactionObject
     {.gcsafe, raises: [ValidationError].} =
-  result = TransactionObject()
-  result.`type` = some w3Qty(tx.txType.ord)
-  if optionalHeader.isSome:
-    let header = optionalHeader.get
-    result.blockHash = some(w3Hash header.hash)
-    result.blockNumber = some(w3BlockNumber(header.blockNumber))
+  let anyTx = AnyTransaction.fromOneOfBase(tx).valueOr:
+    raiseAssert "Cannot convert invalid `Transaction`: " & $tx
+  withTxVariant(anyTx):
+    result = TransactionObject()
+    when txKind >= TransactionKind.Legacy:
+      result.`type` = options.some w3Qty(txVariant.payload.tx_type.ord)
+    if optionalHeader.isSome:
+      let header = optionalHeader.get
+      result.blockHash = some(w3Hash header.hash)
+      result.blockNumber = some(w3BlockNumber(header.blockNumber))
 
-  result.`from` = w3Addr tx.getSender()
-  result.gas = w3Qty(tx.gasLimit)
-  result.gasPrice = w3Qty(tx.gasPrice)
-  result.hash = w3Hash tx.rlpHash
-  result.input = tx.payload
-  result.nonce = w3Qty(tx.nonce)
-  result.to = some(w3Addr tx.destination)
-  if txIndex.isSome:
-    result.transactionIndex = some(w3Qty(txIndex.get))
-  result.value = tx.value
-  result.v = w3Qty(tx.V)
-  result.r = u256(tx.R)
-  result.s = u256(tx.S)
-  result.maxFeePerGas = some w3Qty(tx.maxFee)
-  result.maxPriorityFeePerGas = some w3Qty(tx.maxPriorityFee)
+    result.`from` = w3Addr txVariant.signature.from_address
+    result.gas = w3Qty(txVariant.payload.gas)
+    result.gasPrice = w3Qty(txVariant.payload.max_fee_per_gas)
+    result.hash = w3Hash txVariant.payload.compute_sig_hash(chainId)
+    result.input = distinctBase(txVariant.payload.input)
+    result.nonce = w3Qty(txVariant.payload.nonce)
+    when txKind == TransactionKind.Eip4844:
+      result.to = some(w3Addr txVariant.payload.to)
+    else:
+      if txVariant.payload.to.isSome:
+        result.to = some(w3Addr txVariant.payload.to.unsafeGet)
+    if txIndex.isSome:
+      result.transactionIndex = some(w3Qty(txIndex.get))
+    result.value = txVariant.payload.value
+    let
+      (yParity, r, s) = ecdsa_unpack_signature(
+        txVariant.signature.ecdsa_signature)
+      v =
+        when txKind == TransactionKind.Replayable:
+          if yParity: 28.u256 else: 27.u256
+        elif txKind == TransactionKind.Legacy:
+          distinctBase(chainId).u256 * 2 + (if yParity: 36.u256 else: 35.u256)
+        else:
+          if yParity: UInt256.one else: UInt256.zero
+    result.v = w3Qty(v)
+    result.r = u256(r)
+    result.s = u256(s)
+    when txKind >= TransactionKind.Eip1559:
+      result.maxFeePerGas = some w3Qty(txVariant.payload.max_fee_per_gas)
+      result.maxPriorityFeePerGas = some w3Qty(
+        txVariant.payload.max_priority_fee_per_gas)
 
-  if tx.txType >= TxEip2930:
-    result.chainId = some(Web3Quantity(tx.chainId))
-    result.accessList = some(w3AccessList(tx.accessList))
+    when txKind >= TransactionKind.Eip2930:
+      result.chainId = some(Web3Quantity(chainId))
+      result.accessList = some(w3AccessList(txVariant.payload.access_list))
 
-  if tx.txType >= TxEIP4844:
-    result.maxFeePerBlobGas = some(tx.maxFeePerBlobGas)
-    result.blobVersionedHashes = some(w3Hashes tx.versionedHashes)
+    when txKind == TransactionKind.Eip4844:
+      result.maxFeePerBlobGas = some(txVariant.payload.max_fee_per_blob_gas)
+      result.blobVersionedHashes =
+        some(w3Hashes distinctBase(txVariant.payload.blob_versioned_hashes))
 
 proc populateBlockObject*(header: BlockHeader, chain: CoreDbRef, fullTx: bool, isUncle = false): BlockObject
     {.gcsafe, raises: [CatchableError].} =
@@ -191,7 +228,8 @@ proc populateBlockObject*(header: BlockHeader, chain: CoreDbRef, fullTx: bool, i
     if fullTx:
       var i = 0
       for tx in chain.getBlockTransactions(header):
-        result.transactions.add txOrHash(populateTransactionObject(tx, some(header), some(i)))
+        result.transactions.add txOrHash(
+          populateTransactionObject(tx, chain.chainId, some(header), some(i)))
         inc i
     else:
       for x in chain.getBlockTransactionHashes(header):
@@ -227,7 +265,7 @@ proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction,
   if tx.contractCreation:
     var sender: EthAddress
     if tx.getSender(sender):
-      let contractAddress = generateAddress(sender, tx.nonce)
+      let contractAddress = generateAddress(sender, tx.payload.nonce)
       result.contractAddress = some(w3Addr contractAddress)
 
   for log in receipt.logs:
@@ -263,11 +301,15 @@ proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction,
     # 1 = success, 0 = failure.
     result.status = some(w3Qty(receipt.status.uint64))
 
-  let normTx = eip1559TxNormalization(tx, header.baseFee.truncate(GasInt))
-  result.effectiveGasPrice = w3Qty(normTx.gasPrice)
+  result.effectiveGasPrice = w3Qty(
+    (header.baseFee + min(
+      tx.payload.max_priority_fee_per_gas.get(tx.payload.max_fee_per_gas),
+      tx.payload.max_fee_per_gas - header.baseFee)).truncate(int64))
 
-  if tx.txType == TxEip4844:
-    result.blobGasUsed = some(w3Qty(tx.versionedHashes.len.uint64 * GAS_PER_BLOB.uint64))
+  if tx.payload.blob_versioned_hashes.isSome:
+    result.blobGasUsed = some(w3Qty(
+      tx.payload.blob_versioned_hashes.unsafeGet.len.uint64 *
+      GAS_PER_BLOB.uint64))
     result.blobGasPrice = some(getBlobBaseFee(header.excessBlobGas.get(0'u64)))
 
 proc createAccessList*(header: BlockHeader,

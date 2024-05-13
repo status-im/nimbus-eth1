@@ -46,8 +46,12 @@ proc dumpDebug(com: CommonRef, blockNumber: UInt256) =
   vmState.dumpDebuggingMetaData(header, body, false)
 
 proc main() {.used.} =
-  let conf = getConfiguration()
-  let com = CommonRef.new(newCoreDbRef(LegacyDbPersistent, conf.dataDir), false)
+  let
+    conf = getConfiguration()
+    params = networkParams(conf.netId)
+    com = CommonRef.new(
+      newCoreDbRef(LegacyDbPersistent, conf.dataDir, params.config.chainId),
+      false)
 
   if conf.head != 0.u256:
     dumpDebug(com, conf.head)

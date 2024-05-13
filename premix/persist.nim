@@ -52,14 +52,17 @@ proc main() {.used.} =
   # 52029 first block with receipts logs
   # 66407 failed transaction
 
-  let conf = configuration.getConfiguration()
-  let com = CommonRef.new(
-    newCoreDbRef(LegacyDbPersistent, conf.dataDir),
-    false, conf.netId, networkParams(conf.netId))
+  let
+    conf = configuration.getConfiguration()
+    params = networkParams(conf.netId)
+    com = CommonRef.new(
+      newCoreDbRef(LegacyDbPersistent, conf.dataDir, params.config.chainId),
+      false, conf.netId, networkParams(conf.netId))
 
   # move head to block number ...
   if conf.head != 0.u256:
-    var parentBlock = requestBlock(conf.head, { DownloadAndValidate })
+    var parentBlock = requestBlock(
+      conf.head, com.chainId, { DownloadAndValidate })
     discard com.db.setHead(parentBlock.header)
 
   if canonicalHeadHashKey().toOpenArray notin com.db.kvt:
@@ -86,7 +89,8 @@ proc main() {.used.} =
 
     var thisBlock: Block
     try:
-      thisBlock = requestBlock(blockNumber, { DownloadAndValidate })
+      thisBlock = requestBlock(
+        blockNumber, com.chainId, { DownloadAndValidate })
     except CatchableError as e:
       if retryCount < 3:
         warn "Unable to get block data via JSON-RPC API", error = e.msg

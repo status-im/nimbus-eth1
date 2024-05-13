@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  eth/common,
+  eth/[common, common/transaction],
   chronicles,
   ./engine_spec
 
@@ -64,7 +64,8 @@ method execute(cs: BlockStatus, env: TestEnv): bool =
       )
 
       let tx = env.makeNextTx(tc)
-      shadow.txHash = tx.rlpHash
+      shadow.txHash = tx.tx.compute_tx_hash(
+        env.conf.networkParams.config.chainId)
       let ok = env.sendTx(tx)
       testCond ok:
         fatal "Error trying to send transaction"

@@ -16,7 +16,7 @@ import
   ../../../common/common,
   ../../../constants,
   ../tx_item,
-  eth/eip1559
+  eth/[common/transaction, eip1559]
 
 {.push raises: [].}
 

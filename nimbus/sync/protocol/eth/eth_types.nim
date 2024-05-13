@@ -32,6 +32,7 @@ type
     forkNext*: uint64         # The RLP encoding must be variable-length
 
   EthWireBase* = ref object of RootRef
+    chainId*: ChainId
 
   EthState* = object
     totalDifficulty*: DifficultyInt

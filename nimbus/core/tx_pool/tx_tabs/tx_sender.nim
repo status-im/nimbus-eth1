@@ -16,7 +16,7 @@ import
   std/[math],
   ../tx_info,
   ../tx_item,
-  eth/[common],
+  eth/[common, common/transaction],
   stew/[results, keyed_queue, keyed_queue/kq_debug, sorted_set]
 
 {.push raises: [].}
@@ -120,7 +120,7 @@ proc getRank(schedData: TxSenderSchedRef): int64 =
 
 proc maxProfit(item: TxItemRef; baseFee: GasPrice): float64 =
   ## Profit calculator
-  item.tx.gasLimit.float64 * item.tx.effectiveGasTip(baseFee).float64
+  item.tx.payload.gas.float64 * item.tx.effectiveGasTip(baseFee).float64
 
 proc recalcProfit(nonceData: TxSenderNonceRef; baseFee: GasPrice) =
   ## Re-calculate profit value depending on `baseFee`
@@ -129,7 +129,7 @@ proc recalcProfit(nonceData: TxSenderNonceRef; baseFee: GasPrice) =
   while rc.isOk:
     let item = rc.value.data
     nonceData.profit += item.maxProfit(baseFee)
-    rc = nonceData.nonceList.gt(item.tx.nonce)
+    rc = nonceData.nonceList.gt(item.tx.payload.nonce)
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -152,7 +152,7 @@ proc mkInxImpl(gt: var TxSenderTab; item: TxItemRef): Result[TxSenderInx,void]
     inxData.schedData.allList = inxData.allNonce
   else:
     inxData.allNonce = inxData.schedData.allList
-  let rc = inxData.allNonce.nonceList.insert(item.tx.nonce)
+  let rc = inxData.allNonce.nonceList.insert(item.tx.payload.nonce)
   if rc.isErr:
     return err()
   rc.value.data = item
@@ -165,7 +165,7 @@ proc mkInxImpl(gt: var TxSenderTab; item: TxItemRef): Result[TxSenderInx,void]
   else:
     inxData.statusNonce = inxData.schedData.statusList[item.status]
   # this is a new item, checked at `all items sub-list` above
-  inxData.statusNonce.nonceList.insert(item.tx.nonce).value.data = item
+  inxData.statusNonce.nonceList.insert(item.tx.payload.nonce).value.data = item
 
   return ok(inxData)
 
@@ -214,10 +214,10 @@ proc insert*(gt: var TxSenderTab; item: TxItemRef): bool
 
     inx.schedData.size.inc
 
-    inx.statusNonce.gasLimits += item.tx.gasLimit
+    inx.statusNonce.gasLimits += item.tx.payload.gas.GasInt
     inx.statusNonce.profit += tip
 
-    inx.allNonce.gasLimits += item.tx.gasLimit
+    inx.allNonce.gasLimits += item.tx.payload.gas.GasInt
     inx.allNonce.profit += tip
     return true
 
@@ -233,21 +233,21 @@ proc delete*(gt: var TxSenderTab; item: TxItemRef): bool
 
     inx.schedData.size.dec
 
-    discard inx.allNonce.nonceList.delete(item.tx.nonce)
+    discard inx.allNonce.nonceList.delete(item.tx.payload.nonce)
     if inx.allNonce.nonceList.len == 0:
       # this was the last nonce for that sender account
       discard gt.addrList.delete(item.sender)
       return true
 
-    inx.allNonce.gasLimits -= item.tx.gasLimit
+    inx.allNonce.gasLimits -= item.tx.payload.gas.GasInt
     inx.allNonce.profit -= tip
 
-    discard inx.statusNonce.nonceList.delete(item.tx.nonce)
+    discard inx.statusNonce.nonceList.delete(item.tx.payload.nonce)
     if inx.statusNonce.nonceList.len == 0:
       inx.schedData.statusList[item.status] = nil
       return true
 
-    inx.statusNonce.gasLimits -= item.tx.gasLimit
+    inx.statusNonce.gasLimits -= item.tx.payload.gas.GasInt
     inx.statusNonce.profit -= tip
     return true
 
@@ -293,7 +293,7 @@ proc verify*(gt: var TxSenderTab): Result[void,TxInfo]
           let (nonceKey, item) = (rcNonce.value.key, rcNonce.value.data)
           rcNonce = statusData.nonceList.gt(nonceKey)
 
-          statusGas += item.tx.gasLimit
+          statusGas += item.tx.payload.gas.GasInt
           statusCount.inc
 
           bucketProfit += item.maxProfit(gt.baseFee)
@@ -330,7 +330,7 @@ proc verify*(gt: var TxSenderTab): Result[void,TxInfo]
           rcNonce = allData.nonceList.gt(nonceKey)
 
           allProfit += item.maxProfit(gt.baseFee)
-          allGas += item.tx.gasLimit
+          allGas += item.tx.payload.gas.GasInt
           allCount.inc
 
         if differs(allData.profit, allProfit):

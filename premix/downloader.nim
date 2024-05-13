@@ -49,12 +49,13 @@ proc request*(
 proc requestBlockBody(
     n: JsonNode,
     blockNumber: BlockNumber,
+    chainId: ChainId,
     client: Option[RpcClient] = none[RpcClient]()): BlockBody =
   let txs = n["transactions"]
   if txs.len > 0:
     result.transactions = newSeqOfCap[Transaction](txs.len)
     for tx in txs:
-      let txn = parseTransaction(tx)
+      let txn = parseTransaction(tx, chainId)
       validateTxSenderAndHash(tx, txn)
       result.transactions.add txn
 
@@ -108,12 +109,13 @@ proc requestHeader*(
 
 proc requestBlock*(
     blockNumber: BlockNumber,
+    chainId: ChainId,
     flags: set[DownloadFlags] = {},
     client: Option[RpcClient] = none[RpcClient]()): Block =
   let header = requestHeader(blockNumber, client)
   result.jsonData   = header
   result.header     = parseBlockHeader(header)
-  result.body       = requestBlockBody(header, blockNumber, client)
+  result.body       = requestBlockBody(header, blockNumber, chainId, client)
 
   if DownloadTxTrace in flags:
     result.traces     = requestTxTraces(header, client)

@@ -242,10 +242,10 @@ proc verify*(xp: TxPoolRef): Result[void,TxInfo]
       if not initOk or lastSender != item.sender:
         initOk = true
         lastSender = item.sender
-        lastNonce = item.tx.nonce
+        lastNonce = item.tx.payload.nonce
         lastSublist = xp.txDB.bySender.eq(item.sender).value.data
-      elif lastNonce + 1 == item.tx.nonce:
-        lastNonce = item.tx.nonce
+      elif lastNonce + 1 == item.tx.payload.nonce:
+        lastNonce = item.tx.payload.nonce
       else:
         return err(txInfoVfyNonceChain)
 
@@ -254,12 +254,12 @@ proc verify*(xp: TxPoolRef): Result[void,TxInfo]
       of txItemPending:
         discard
       of txItemStaged:
-        if lastSublist.eq(txItemPending).eq(item.tx.nonce - 1).isOk:
+        if lastSublist.eq(txItemPending).eq(item.tx.payload.nonce - 1).isOk:
           return err(txInfoVfyNonceChain)
       of txItemPacked:
-        if lastSublist.eq(txItemPending).eq(item.tx.nonce - 1).isOk:
+        if lastSublist.eq(txItemPending).eq(item.tx.payload.nonce - 1).isOk:
           return err(txInfoVfyNonceChain)
-        if lastSublist.eq(txItemStaged).eq(item.tx.nonce - 1).isOk:
+        if lastSublist.eq(txItemStaged).eq(item.tx.payload.nonce - 1).isOk:
           return err(txInfoVfyNonceChain)
 
   ok()

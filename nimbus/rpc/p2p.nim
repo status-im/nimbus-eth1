@@ -259,9 +259,9 @@ proc setupEthRpc*(
 
     let
       accDB    = stateDBFromTag(blockId("latest"))
-      tx       = unsignedTx(data, chainDB, accDB.getNonce(address) + 1)
       eip155   = com.isEIP155(com.syncCurrent)
-      signedTx = signTransaction(tx, acc.privateKey, com.chainId, eip155)
+      tx       = unsignedTx(data, chainDB, accDB.getNonce(address) + 1, eip155)
+      signedTx = signTransaction(tx, acc.privateKey, com.chainId)
     result    = rlp.encode(signedTx)
 
   server.rpc("eth_sendTransaction") do(data: TransactionArgs) -> Web3Hash:
@@ -279,31 +279,40 @@ proc setupEthRpc*(
 
     let
       accDB    = stateDBFromTag(blockId("latest"))
-      tx       = unsignedTx(data, chainDB, accDB.getNonce(address) + 1)
       eip155   = com.isEIP155(com.syncCurrent)
-      signedTx = signTransaction(tx, acc.privateKey, com.chainId, eip155)
+      tx       = unsignedTx(data, chainDB, accDB.getNonce(address) + 1, eip155)
+      signedTx = signTransaction(tx, acc.privateKey, com.chainId)
       networkPayload =
-        if signedTx.txType == TxEip4844:
+        if signedTx.payload.blob_versioned_hashes.isSome:
+          template vhs: untyped =
+            signedTx.payload.blob_versioned_hashes.unsafeGet
           if data.blobs.isNone or data.commitments.isNone or data.proofs.isNone:
             raise newException(ValueError, "EIP-4844 transaction needs blobs")
-          if data.blobs.get.len != signedTx.versionedHashes.len:
+          if data.blobs.get.len != vhs.len:
             raise newException(ValueError, "Incorrect number of blobs")
-          if data.commitments.get.len != signedTx.versionedHashes.len:
+          if data.commitments.get.len != vhs.len:
             raise newException(ValueError, "Incorrect number of commitments")
-          if data.proofs.get.len != signedTx.versionedHashes.len:
+          if data.proofs.get.len != vhs.len:
             raise newException(ValueError, "Incorrect number of proofs")
-          NetworkPayload(
-            blobs: data.blobs.get.mapIt it.NetworkBlob,
-            commitments: data.commitments.get.mapIt eth_types.KzgCommitment(it),
-            proofs: data.proofs.get.mapIt eth_types.KzgProof(it))
+
+          Opt.some NetworkPayload(
+            blobs:
+              List[NetworkBlob, MAX_BLOB_COMMITMENTS_PER_BLOCK]
+                .init(data.blobs.get.mapIt it.NetworkBlob),
+            commitments:
+              List[eth_types.KzgCommitment, MAX_BLOB_COMMITMENTS_PER_BLOCK]
+                .init(data.commitments.get.mapIt eth_types.KzgCommitment(it)),
+            proofs:
+              List[eth_types.KzgProof, MAX_BLOB_COMMITMENTS_PER_BLOCK]
+                .init(data.proofs.get.mapIt eth_types.KzgProof(it)))
         else:
           if data.blobs.isSome or data.commitments.isSome or data.proofs.isSome:
             raise newException(ValueError, "Blobs require EIP-4844 transaction")
-          nil
-      pooledTx = PooledTransaction(tx: signedTx, networkPayload: networkPayload)
+          Opt.none NetworkPayload
+      pooledTx = PooledTransaction(tx: signedTx, blob_data: networkPayload)
 
     txPool.add(pooledTx)
-    result = rlpHash(signedTx).w3Hash
+    result = signedTx.compute_tx_hash(com.chainId).w3Hash
 
   server.rpc("eth_sendRawTransaction") do(txBytes: seq[byte]) -> Web3Hash:
     ## Creates new message call transaction or a contract creation for signed transactions.
@@ -312,8 +321,9 @@ proc setupEthRpc*(
     ## Returns the transaction hash, or the zero hash if the transaction is not yet available.
     ## Note: Use eth_getTransactionReceipt to get the contract address, after the transaction was mined, when you created a contract.
     let
-      pooledTx = decodePooledTx(txBytes)
-      txHash   = rlpHash(pooledTx)
+      pooledTx = PooledTransaction.fromBytes(txBytes, com.chainId).valueOr:
+        raise (ref MalformedRlpError)(msg: "Invalid `PooledTransaction`")
+      txHash   = pooledTx.tx.compute_tx_hash(com.chainId)
 
     txPool.add(pooledTx)
     let res = txPool.inPoolAndReason(txHash)
@@ -381,7 +391,7 @@ proc setupEthRpc*(
     let txHash = data.ethHash()
     let res = txPool.getItem(txHash)
     if res.isOk:
-      return populateTransactionObject(res.get().tx)
+      return populateTransactionObject(res.get().tx, com.chainId)
 
     let txDetails = chainDB.getTransactionKey(txHash)
     if txDetails.index < 0:
@@ -390,7 +400,8 @@ proc setupEthRpc*(
     let header = chainDB.getBlockHeader(txDetails.blockNumber)
     var tx: Transaction
     if chainDB.getTransaction(header.txRoot, txDetails.index, tx):
-      result = populateTransactionObject(tx, some(header), some(txDetails.index))
+      result = populateTransactionObject(
+        tx, com.chainId, some(header), some(txDetails.index))
 
   server.rpc("eth_getTransactionByBlockHashAndIndex") do(data: Web3Hash, quantity: Web3Quantity) -> TransactionObject:
     ## Returns information about a transaction by block hash and transaction index position.
@@ -405,7 +416,8 @@ proc setupEthRpc*(
 
     var tx: Transaction
     if chainDB.getTransaction(header.txRoot, index, tx):
-      result = populateTransactionObject(tx, some(header), some(index))
+      result = populateTransactionObject(
+        tx, com.chainId, some(header), some(index))
     else:
       result = nil
 
@@ -420,7 +432,8 @@ proc setupEthRpc*(
 
     var tx: Transaction
     if chainDB.getTransaction(header.txRoot, index, tx):
-      result = populateTransactionObject(tx, some(header), some(index))
+      result = populateTransactionObject(
+        tx, com.chainId, some(header), some(index))
     else:
       result = nil
 

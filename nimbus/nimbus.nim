@@ -283,8 +283,12 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
   let coreDB =
     # Resolve statically for database type
     case conf.chainDbMode:
-    of Prune,Archive: LegacyDbPersistent.newCoreDbRef(string conf.dataDir)
-    of Aristo: AristoDbRocks.newCoreDbRef(string conf.dataDir)
+    of Prune,Archive:
+      LegacyDbPersistent.newCoreDbRef(
+        string conf.dataDir, conf.networkParams.config.chainId)
+    of Aristo:
+      AristoDbRocks.newCoreDbRef(
+        string conf.dataDir, conf.networkParams.config.chainId)
   let com = CommonRef.new(
     db = coreDB,
     pruneTrie = (conf.chainDbMode == ChainDbMode.Prune),

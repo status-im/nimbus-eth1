@@ -157,16 +157,18 @@ func ethTxs*(list: openArray[Web3Tx]):
   for x in list:
     result.add ethTx(x)
 
-func storageKeys(list: seq[FixedBytes[32]]): seq[StorageKey] =
+func storageKeys(list: seq[FixedBytes[32]]): common.StorageKeys =
   for x in list:
-    result.add StorageKey(x)
+    let ok = result.add distinctBase(x)
+    doAssert ok, "StorageKeys capacity exceeded"
 
 func ethAccessList*(list: openArray[AccessTuple]): common.AccessList =
   for x in list:
-    result.add common.AccessPair(
+    let ok = result.add common.AccessPair(
       address    : ethAddr x.address,
       storageKeys: storageKeys x.storageKeys,
     )
+    doAssert ok, "AccessList capacity exceeded"
 
 func ethAccessList*(x: Option[seq[AccessTuple]]): common.AccessList =
   if x.isSome:
@@ -286,10 +288,10 @@ func w3Txs*(list: openArray[common.Transaction]): seq[Web3Tx] =
 proc w3AccessTuple*(ac: AccessPair): AccessTuple =
   AccessTuple(
     address: w3Addr ac.address,
-    storageKeys: w3Hash(ac.storageKeys)
+    storageKeys: w3Hash(distinctBase(ac.storage_keys))
   )
 
-proc w3AccessList*(list: openArray[AccessPair]): seq[AccessTuple] =
+proc w3AccessList*(list: common.AccessList): seq[AccessTuple] =
   result = newSeqOfCap[AccessTuple](list.len)
   for x in list:
     result.add w3AccessTuple(x)

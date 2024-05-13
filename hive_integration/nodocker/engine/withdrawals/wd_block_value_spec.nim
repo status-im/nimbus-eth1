@@ -26,7 +26,7 @@ proc execute*(ws: BlockValueSpec, env: TestEnv): bool =
   testCond WDBaseSpec(ws).execute(env)
 
   # Get the latest block and the transactions included
-  let b = env.client.latestBlock()
+  let b = env.client.latestBlock(env.conf.networkParams.config.chainId)
   b.expectNoError()
   let blk = b.get
 

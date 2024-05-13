@@ -23,9 +23,10 @@ type
 # Private helpers
 # ------------------------------------------------------------------------------
 
-func toStorageKeys(slots: SlotSet): seq[StorageKey] =
+func toStorageKeys(slots: SlotSet): StorageKeys =
   for slot in slots:
-    result.add slot.toBytesBE
+    let ok = result.add slot.toBytesBE()
+    doAssert ok, "StorageKeys capacity exceeded"
 
 # ------------------------------------------------------------------------------
 # Public constructors
@@ -71,10 +72,11 @@ proc clear*(ac: var AccessList) {.inline.} =
 
 func getAccessList*(ac: AccessList): common.AccessList =
   for address, slots in ac.slots:
-    result.add common.AccessPair(
+    let ok = result.add common.AccessPair(
       address    : address,
       storageKeys: slots.toStorageKeys,
     )
+    doAssert ok, "AccessList capacity exceeded"
 
 func equal*(ac: AccessList, other: var AccessList): bool =
   if ac.slots.len != other.slots.len:

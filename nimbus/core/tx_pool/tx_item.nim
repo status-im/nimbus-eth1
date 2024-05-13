@@ -17,22 +17,14 @@ import
   ../../utils/ec_recover,
   ../../utils/utils,
   ./tx_info,
-  eth/[common, keys],
+  eth/[common, common/transaction, keys],
   stew/results
+
+export transaction.GasPrice, transaction.GasPriceEx
 
 {.push raises: [].}
 
 type
-  GasPrice* = ##|
-    ## Handy definition distinct from `GasInt` which is a commodity unit while
-    ## the `GasPrice` is the commodity valuation per unit of gas, similar to a
-    ## kind of currency.
-    distinct uint64
-
-  GasPriceEx* = ##\
-    ## Similar to `GasPrice` but is allowed to be negative.
-    distinct int64
-
   TxItemStatus* = enum ##\
     ## Current status of a transaction as seen by the pool.
     txItemPending = 0
@@ -115,12 +107,9 @@ proc init*(item: TxItemRef; status: TxItemStatus; info: string) =
 proc new*(T: type TxItemRef; tx: PooledTransaction; itemID: Hash256;
           status: TxItemStatus; info: string): Result[T,void] {.gcsafe,raises: [].} =
   ## Create item descriptor.
-  let rc = tx.tx.ecRecover
-  if rc.isErr:
-    return err()
   ok(T(itemID:    itemID,
        tx:        tx,
-       sender:    rc.value,
+       sender:    tx.tx.signature.from_address,
        timeStamp: utcTime(),
        info:      info,
        status:    status))
@@ -157,22 +146,7 @@ proc itemID*(tx: PooledTransaction): Hash256 =
 # core/types/transaction.go(297): func (tx *Transaction) Cost() *big.Int {
 proc cost*(tx: Transaction): UInt256 =
   ## Getter (go/ref compat): gas * gasPrice + value.
-  (tx.gasPrice * tx.gasLimit).u256 + tx.value
-
-# core/types/transaction.go(332): .. *Transaction) EffectiveGasTip(baseFee ..
-# core/types/transaction.go(346): .. EffectiveGasTipValue(baseFee ..
-proc effectiveGasTip*(tx: Transaction; baseFee: GasPrice): GasPriceEx =
-  ## The effective miner gas tip for the globally argument `baseFee`. The
-  ## result (which is a price per gas) might well be negative.
-  if tx.txType < TxEip1559:
-    (tx.gasPrice - baseFee.int64).GasPriceEx
-  else:
-    # London, EIP1559
-    min(tx.maxPriorityFee, tx.maxFee - baseFee.int64).GasPriceEx
-
-proc effectiveGasTip*(tx: Transaction; baseFee: UInt256): GasPriceEx =
-  ## Variant of `effectiveGasTip()`
-  tx.effectiveGasTip(baseFee.truncate(uint64).GasPrice)
+  tx.payload.max_fee_per_gas * tx.payload.gas.u256 + tx.payload.value
 
 # ------------------------------------------------------------------------------
 # Public functions, item getters

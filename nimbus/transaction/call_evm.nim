@@ -153,40 +153,42 @@ proc callParamsForTx(tx: Transaction, sender: EthAddress, vmState: BaseVMState, 
   result = CallParams(
     vmState:      vmState,
     forkOverride: some(fork),
-    gasPrice:     tx.gasPrice,
-    gasLimit:     tx.gasLimit,
+    gasPrice:     tx.payload.max_fee_per_gas.truncate(int64).GasInt,
+    gasLimit:     tx.payload.gas.int64,
     sender:       sender,
-    to:           tx.destination,
+    to:           tx.payload.to.get(default(EthAddress)),
     isCreate:     tx.contractCreation,
-    value:        tx.value,
-    input:        tx.payload
+    value:        tx.payload.value,
+    input:        distinctBase(tx.payload.input)
   )
-  if tx.txType > TxLegacy:
-    result.accessList = tx.accessList
+  if tx.payload.access_list.isSome:
+    result.accessList = tx.payload.access_list.unsafeGet
 
-  if tx.txType >= TxEip4844:
-    result.versionedHashes = tx.versionedHashes
+  if tx.payload.blob_versioned_hashes.isSome:
+    result.versionedHashes =
+      distinctBase(tx.payload.blob_versioned_hashes.unsafeGet)
 
 proc callParamsForTest(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: EVMFork): CallParams =
   result = CallParams(
     vmState:      vmState,
     forkOverride: some(fork),
-    gasPrice:     tx.gasPrice,
-    gasLimit:     tx.gasLimit,
+    gasPrice:     tx.payload.max_fee_per_gas.truncate(int64).GasInt,
+    gasLimit:     tx.payload.gas.int64,
     sender:       sender,
-    to:           tx.destination,
+    to:           tx.payload.to.get(default(EthAddress)),
     isCreate:     tx.contractCreation,
-    value:        tx.value,
-    input:        tx.payload,
+    value:        tx.payload.value,
+    input:        distinctBase(tx.payload.input),
 
     noIntrinsic:  true, # Don't charge intrinsic gas.
     noRefund:     true, # Don't apply gas refund/burn rule.
   )
-  if tx.txType > TxLegacy:
-    result.accessList = tx.accessList
+  if tx.payload.access_list.isSome:
+    result.accessList = tx.payload.access_list.unsafeGet
 
-  if tx.txType >= TxEip4844:
-    result.versionedHashes = tx.versionedHashes
+  if tx.payload.blob_versioned_hashes.isSome:
+    result.versionedHashes =
+      distinctBase(tx.payload.blob_versioned_hashes.unsafeGet)
 
 proc txCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: EVMFork): GasInt
     {.gcsafe, raises: [CatchableError].} =

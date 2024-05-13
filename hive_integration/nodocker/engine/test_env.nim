@@ -32,7 +32,7 @@ export
 
 type
   TestEnv* = ref object
-    conf      : NimbusConf
+    conf*     : NimbusConf
     chainFile : string
     enableAuth: bool
     port      : int
@@ -150,7 +150,7 @@ proc sendTx*(env: TestEnv, eng: EngineEnv, tc: BigInitcodeTx, nonce: AccountNonc
 proc sendTxs*(
     env: TestEnv, eng: EngineEnv, txs: openArray[PooledTransaction]): bool =
   for tx in txs:
-    if not sendTx(eng.client, tx):
+    if not sendTx(eng.client, tx, env.conf.networkParams.config.chainId):
       return false
   true
 
@@ -168,7 +168,7 @@ proc sendTx*(env: TestEnv, tc: BigInitcodeTx, nonce: AccountNonce): bool =
 
 proc sendTx*(env: TestEnv, tx: PooledTransaction): bool =
   let client = env.engine.client
-  sendTx(client, tx)
+  sendTx(client, tx, env.conf.networkParams.config.chainId)
 
 proc sendTx*(
     env: TestEnv,
@@ -195,7 +195,8 @@ proc customizeTransaction*(env: TestEnv,
                            acc: TestAccount,
                            baseTx: Transaction,
                            custTx: CustomTransactionData): Transaction =
-  env.sender.customizeTransaction(acc, baseTx, custTx)
+  env.sender.customizeTransaction(
+    acc, baseTx, custTx, env.conf.networkParams.config.chainId)
 
 proc generateInvalidPayload*(env: TestEnv,
                              data: ExecutableData,

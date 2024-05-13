@@ -452,7 +452,6 @@ export
   tx_item.GasPrice,
   tx_item.`<=`,
   tx_item.`<`,
-  tx_item.effectiveGasTip,
   tx_item.info,
   tx_item.itemID,
   tx_item.sender,
@@ -630,6 +629,7 @@ proc assembleBlock*(
   xp.packerVmExec().isOkOr:                  # updates vmState
     return err(error)
 
+  let com = xp.chain.com
   var blk = EthBlock(
     header: xp.chain.getHeader               # uses updated vmState
   )
@@ -639,20 +639,19 @@ proc assembleBlock*(
     for item in nonceList.incNonce:
       let tx = item.pooledTx
       blk.txs.add tx.tx
-      if tx.networkPayload != nil:
-        for k in tx.networkPayload.commitments:
+      if tx.blob_data.isSome:
+        if not com.forkGTE(Cancun):
+          return err("PooledTransaction contains blobs prior to Cancun")
+        for k in tx.blob_data.unsafeGet.commitments:
           blobsBundle.commitments.add k
-        for p in tx.networkPayload.proofs:
+        for p in tx.blob_data.unsafeGet.proofs:
           blobsBundle.proofs.add p
-        for blob in tx.networkPayload.blobs:
+        for blob in tx.blob_data.unsafeGet.blobs:
           blobsBundle.blobs.add blob
 
-  let com = xp.chain.com
   if com.forkGTE(Shanghai):
     blk.withdrawals = some(com.pos.withdrawals)
 
-  if not com.forkGTE(Cancun) and blobsBundle.commitments.len > 0:
-    return err("PooledTransaction contains blobs prior to Cancun")
   let blobsBundleOpt =
     if com.forkGTE(Cancun):
       doAssert blobsBundle.commitments.len == blobsBundle.blobs.len

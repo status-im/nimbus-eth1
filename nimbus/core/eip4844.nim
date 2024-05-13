@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  std/[os, strutils],
+  std/[os, strutils, typetraits],
   nimcrypto/sha2,
   kzg4844/kzg_ex as kzg,
   stew/results,
@@ -108,7 +108,9 @@ func fakeExponential*(factor, numerator, denominator: UInt256): UInt256 =
   output div denominator
 
 proc getTotalBlobGas*(tx: Transaction): uint64 =
-  GAS_PER_BLOB * tx.versionedHashes.len.uint64
+  let vhs = tx.payload.blob_versioned_hashes.valueOr:
+    return 0
+  GAS_PER_BLOB * vhs.len.uint64
 
 proc getTotalBlobGas*(versionedHashesLen: int): uint64 =
   GAS_PER_BLOB * versionedHashesLen.uint64
@@ -169,38 +171,44 @@ func validateEip4844Header*(
 
 proc validateBlobTransactionWrapper*(tx: PooledTransaction):
                                      Result[void, string] {.raises: [].} =
-  if tx.networkPayload.isNil:
+  if tx.tx.payload.blob_versioned_hashes.isNone:
+    if tx.blob_data.isSome:
+      return err("tx wrapper contains unexpected blobs")
+    return ok()
+  if tx.blob_data.isNone:
     return err("tx wrapper is none")
 
+  template blob_versioned_hashes: untyped =
+    tx.tx.payload.blob_versioned_hashes.unsafeGet
+  template blob_data: untyped =
+    tx.blob_data.unsafeGet
+
   # note: assert blobs are not malformatted
-  let goodFormatted = tx.tx.versionedHashes.len ==
-                      tx.networkPayload.commitments.len and
-                      tx.tx.versionedHashes.len ==
-                      tx.networkPayload.blobs.len and
-                      tx.tx.versionedHashes.len ==
-                      tx.networkPayload.proofs.len
+  let goodFormatted = blob_versioned_hashes.len ==
+                      blob_data.commitments.len and
+                      blob_versioned_hashes.len ==
+                      blob_data.blobs.len and
+                      blob_versioned_hashes.len ==
+                      blob_data.proofs.len
 
   if not goodFormatted:
     return err("tx wrapper is ill formatted")
 
   # Verify that commitments match the blobs by checking the KZG proof
-  let res = kzg.verifyBlobKzgProofBatch(tx.networkPayload.blobs,
-              tx.networkPayload.commitments, tx.networkPayload.proofs)
-  if res.isErr:
-    return err(res.error)
-
-  # Actual verification result
-  if not res.get():
+  if not(? kzg.verifyBlobKzgProofBatch(
+      distinctBase(blob_data.blobs),
+      distinctBase(blob_data.commitments),
+      distinctBase(blob_data.proofs))):
     return err("Failed to verify network payload of a transaction")
 
-  # Now that all commitments have been verified, check that versionedHashes matches the commitments
-  for i in 0 ..< tx.tx.versionedHashes.len:
+  # Now that all commitments have been verified, check that versionedHashes
+  # matches the commitments
+  for i in 0 ..< blob_versioned_hashes.len:
     # this additional check also done in tx validation
-    if tx.tx.versionedHashes[i].data[0] != VERSIONED_HASH_VERSION_KZG:
+    if blob_versioned_hashes[i].data[0] != VERSIONED_HASH_VERSION_KZG:
       return err("wrong kzg version in versioned hash at index " & $i)
 
-    if tx.tx.versionedHashes[i] !=
-        kzgToVersionedHash(tx.networkPayload.commitments[i]):
+    if blob_versioned_hashes[i] != kzgToVersionedHash(blob_data.commitments[i]):
       return err("tx versioned hash not match commitments at index " & $i)
 
   ok()

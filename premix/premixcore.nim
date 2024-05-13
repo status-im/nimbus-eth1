@@ -86,7 +86,7 @@ proc hasInternalTx(tx: Transaction, blockNumber: UInt256, sender: EthAddress): b
     recipientHasCode = code.getStr.len > 2 # "0x"
 
   if tx.contractCreation:
-    return recipientHasCode or tx.payload.len > 0
+    return recipientHasCode or tx.payload.input.len > 0
 
   recipientHasCode
 
@@ -143,7 +143,8 @@ proc updateAccount*(address: string, account: JsonNode, blockNumber: UInt256) =
     x["value"] = padding(x["value"].getStr())
     account["storage"][x["key"].getStr] = x["value"]
 
-proc requestPostState*(premix, n: JsonNode, blockNumber: UInt256) =
+proc requestPostState*(
+    premix, n: JsonNode, blockNumber: UInt256, chainId: ChainId) =
   type
     TxKind {.pure.} = enum
       Regular
@@ -156,7 +157,7 @@ proc requestPostState*(premix, n: JsonNode, blockNumber: UInt256) =
   let tracer = jsonTracer(postStateTracer)
   for t in txs:
     var txKind = TxKind.Regular
-    let tx = parseTransaction(t)
+    let tx = parseTransaction(t, chainId)
     let sender = tx.getSender
     if tx.contractCreation: txKind = TxKind.ContractCreation
     if hasInternalTx(tx, blockNumber, sender):
@@ -171,11 +172,11 @@ proc requestPostState*(premix, n: JsonNode, blockNumber: UInt256) =
 
     t["txKind"] = %($txKind)
 
-proc requestPostState*(thisBlock: Block): JsonNode =
+proc requestPostState*(thisBlock: Block, chainId: ChainId): JsonNode =
   let blockNumber = thisBlock.header.blockNumber
   var premix = newJArray()
 
-  premix.requestPostState(thisBlock.jsonData, blockNumber)
+  premix.requestPostState(thisBlock.jsonData, blockNumber, chainId)
   premix.requestAccount(blockNumber, thisBlock.header.coinbase)
   for uncle in thisBlock.body.uncles:
     premix.requestAccount(blockNumber, uncle.coinbase)

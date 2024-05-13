@@ -190,7 +190,7 @@ proc init(com      : CommonRef,
       time: some(genesis.timestamp)
     ))
     com.genesisHeader = toGenesisHeader(genesis,
-      com.currentFork, com.db, com.ldgType)
+      com.currentFork, config.chainId, com.db, com.ldgType)
     com.setForkId(com.genesisHeader)
     com.pos.timestamp = genesis.timestamp
   else:

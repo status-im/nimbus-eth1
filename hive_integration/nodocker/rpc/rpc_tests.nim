@@ -9,7 +9,7 @@
 
 import
   std/strutils,
-  eth/[common],
+  eth/[common, common/transaction],
   stew/byteutils,
   stint,
   chronos,
@@ -88,11 +88,11 @@ proc balanceAndNonceAtTest(t: TestEnv): Future[TestStatus] {.async.} =
   let tx = vault.signTx(sourceAddr, sourceNonce, targetAddr, amount, gasLimit, gasPrice)
   inc sourceNonce
 
-  let txHash = rlpHash(tx)
+  let txHash = tx.tx.compute_tx_hash(vault.chainId)
   echo "BalanceAt: send $1 wei from 0x$2 to 0x$3 in 0x$4" % [
-    $tx.tx.value, sourceAddr.toHex, targetAddr.toHex, txHash.data.toHex]
+    $tx.tx.payload.value, sourceAddr.toHex, targetAddr.toHex, txHash.data.toHex]
 
-  let ok = await client.sendTransaction(tx)
+  let ok = await client.sendTransaction(tx, vault.chainId)
   if not ok:
     echo "failed to send transaction"
     return TestStatus.Failed
@@ -118,7 +118,8 @@ proc balanceAndNonceAtTest(t: TestEnv): Future[TestStatus] {.async.} =
 
   # expected balance is previous balance - tx amount - tx fee (gasUsed * gasPrice)
   let exp =
-    sourceAddressBalanceBefore - amount - (gasUsed * tx.tx.gasPrice).u256
+    sourceAddressBalanceBefore - amount -
+    gasUsed.u256 * tx.tx.payload.max_fee_per_gas
 
   if exp != accountBalanceAfter:
     echo "Expected sender account to have a balance of $1, got $2" % [$exp, $accountBalanceAfter]
@@ -126,7 +127,7 @@ proc balanceAndNonceAtTest(t: TestEnv): Future[TestStatus] {.async.} =
 
   if balanceTargetAccountAfter != amount:
     echo "Expected new account to have a balance of $1, got $2" % [
-      $tx.tx.value, $balanceTargetAccountAfter]
+      $tx.tx.payload.value, $balanceTargetAccountAfter]
     return TestStatus.Failed
 
   # ensure nonce is incremented by 1

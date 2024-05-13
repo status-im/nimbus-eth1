@@ -11,6 +11,7 @@
 import
   std/[options, strutils, typetraits],
   stew/byteutils,
+  eth/common/transaction,
   ./blobs,
   ../types,
   ../tx_sender,
@@ -656,10 +657,11 @@ proc generateInvalidPayload*(sender: TxSender, data: ExecutableData, payloadFiel
 
     case payloadField
     of InvalidTransactionSignature:
-      var sig = CustSig(R: baseTx.R - 1.u256)
+      var sig = CustSig(
+        R: ecdsa_unpack_signature(baseTx.signature.ecdsa_signature).r - 1.u256)
       custTx.signature = some(sig)
     of InvalidTransactionNonce:
-      custTx.nonce = some(baseTx.nonce - 1)
+      custTx.nonce = some(baseTx.payload.nonce - 1)
     of InvalidTransactionGas:
       custTx.gas = some(0.GasInt)
     of InvalidTransactionGasPrice:
@@ -670,11 +672,12 @@ proc generateInvalidPayload*(sender: TxSender, data: ExecutableData, payloadFiel
       # Vault account initially has 0x123450000000000000000, so this value should overflow
       custTx.value = some(UInt256.fromHex("0x123450000000000000001"))
     of InvalidTransactionChainID:
-      custTx.chainId = some(ChainId(baseTx.chainId.uint64 + 1))
+      custTx.chainId = some(ChainId(sender.chainId.uint64 + 1))
     else: discard
 
     let acc = sender.getNextAccount()
-    let modifiedTx = sender.customizeTransaction(acc, baseTx, custTx)
+    let modifiedTx = sender.customizeTransaction(
+      acc, baseTx, custTx, sender.chainId)
     customPayloadMod = CustomPayloadData(
       transactions: some(@[modifiedTx]),
     )

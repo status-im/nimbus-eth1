@@ -10,8 +10,9 @@
 
 import
   std/[tables],
-  eth/keys,
+  eth/[common/transaction, keys],
   stew/endians2,
+  stint,
   nimcrypto/sha2,
   chronicles,
   ./engine_client,
@@ -50,7 +51,7 @@ type
     accounts: seq[TestAccount]
     nonceMap: Table[EthAddress, uint64]
     txSent  : int
-    chainId : ChainID
+    chainId*: ChainID
 
   MakeTxParams* = object
     chainId*: ChainID
@@ -142,29 +143,34 @@ proc makeTxOfType(params: MakeTxParams, tc: BaseTx): PooledTransaction =
   of TxLegacy:
     PooledTransaction(
       tx: Transaction(
-        txType  : TxLegacy,
-        nonce   : params.nonce,
-        to      : tc.recipient,
-        value   : tc.amount,
-        gasLimit: tc.gasLimit,
-        gasPrice: gasPrice,
-        payload : tc.payload
-      )
-    )
+        payload: TransactionPayload(
+          nonce: params.nonce,
+          to:
+            if tc.recipient.isSome:
+              Opt.some(tc.recipient.get)
+            else:
+              Opt.none(EthAddress),
+          value: tc.amount,
+          gas: tc.gasLimit.uint64,
+          max_fee_per_gas: gasPrice.uint64.u256,
+          input: List[byte, Limit MAX_CALLDATA_SIZE].init tc.payload)))
+
   of TxEip1559:
     PooledTransaction(
       tx: Transaction(
-        txType  : TxEIP1559,
-        nonce   : params.nonce,
-        gasLimit: tc.gasLimit,
-        maxFee  : gasFeeCap,
-        maxPriorityFee: gasTipCap,
-        to      : tc.recipient,
-        value   : tc.amount,
-        payload : tc.payload,
-        chainId : params.chainId
-      )
-    )
+        payload: TransactionPayload(
+          tx_type: Opt.some TxEip1559,
+          nonce: params.nonce,
+          gas: tc.gasLimit.uint64,
+          max_fee_per_gas: gasPrice.uint64.u256,
+          max_priority_fee_per_gas: Opt.some(gasTipCap.uint64.u256),
+          to:
+            if tc.recipient.isSome:
+              Opt.some(tc.recipient.get)
+            else:
+              Opt.none(EthAddress),
+          value: tc.amount,
+          input: List[byte, Limit MAX_CALLDATA_SIZE].init tc.payload)))
   of TxEip4844:
     doAssert(tc.recipient.isSome, "recipient must be some")
     let
@@ -179,23 +185,33 @@ proc makeTxOfType(params: MakeTxParams, tc: BaseTx): PooledTransaction =
 
     PooledTransaction(
       tx: Transaction(
-        txType  : TxEIP4844,
-        nonce   : params.nonce,
-        chainId : params.chainId,
-        maxFee  : gasFeeCap,
-        maxPriorityFee: gasTipCap,
-        gasLimit: tc.gasLimit,
-        to      : tc.recipient,
-        value   : tc.amount,
-        payload : tc.payload,
-        #AccessList: tc.AccessList,
-        maxFeePerBlobGas: blobFeeCap,
-        versionedHashes: system.move(blobData.hashes),
-      ),
-      networkPayload: NetworkPayload(
-        blobs: system.move(blobData.blobs),
-        commitments: system.move(blobData.commitments),
-        proofs: system.move(blobData.proofs),
+        payload: TransactionPayload(
+          tx_type: Opt.some TxEip4844,
+          nonce: params.nonce,
+          max_fee_per_gas: gasPrice.uint64.u256,
+          max_priority_fee_per_gas: Opt.some(gasTipCap.uint64.u256),
+          gas: tc.gasLimit.uint64,
+          to:
+            if tc.recipient.isSome:
+              Opt.some(tc.recipient.get)
+            else:
+              Opt.none(EthAddress),
+          value: tc.amount,
+          input: List[byte, Limit MAX_CALLDATA_SIZE].init tc.payload,
+          max_fee_per_blob_gas: Opt.some(blobFeeCap),
+          blob_versioned_hashes: Opt.some(
+            List[eth_types.VersionedHash, Limit MAX_BLOB_COMMITMENTS_PER_BLOCK]
+              .init(system.move(blobData.hashes))))),
+      blob_data: Opt.some NetworkPayload(
+        blobs:
+          List[NetworkBlob, MAX_BLOB_COMMITMENTS_PER_BLOCK]
+            .init(system.move(blobData.blobs)),
+        commitments:
+          List[eth_types.KzgCommitment, MAX_BLOB_COMMITMENTS_PER_BLOCK]
+            .init(system.move(blobData.commitments)),
+        proofs:
+          List[eth_types.KzgProof, MAX_BLOB_COMMITMENTS_PER_BLOCK]
+            .init(system.move(blobData.proofs)),
       )
     )
   else:
@@ -205,8 +221,8 @@ proc makeTx(params: MakeTxParams, tc: BaseTx): PooledTransaction =
   # Build the transaction depending on the specified type
   let tx = makeTxOfType(params, tc)
   PooledTransaction(
-    tx: signTransaction(tx.tx, params.key, params.chainId, eip155 = true),
-    networkPayload: tx.networkPayload)
+    tx: signTransaction(tx.tx.payload, params.key, params.chainId),
+    blob_data: tx.blob_data)
 
 proc makeTx(params: MakeTxParams, tc: BigInitcodeTx): PooledTransaction =
   var tx = tc
@@ -257,7 +273,7 @@ proc makeNextTx*(sender: TxSender, tc: BaseTx): PooledTransaction =
 
 proc sendNextTx*(sender: TxSender, client: RpcClient, tc: BaseTx): bool =
   let tx = sender.makeNextTx(tc)
-  let rr = client.sendTransaction(tx)
+  let rr = client.sendTransaction(tx, sender.chainId)
   if rr.isErr:
     error "sendNextTx: Unable to send transaction", msg=rr.error
     return false
@@ -275,7 +291,7 @@ proc sendTx*(sender: TxSender, client: RpcClient, tc: BaseTx, nonce: AccountNonc
     )
     tx = params.makeTx(tc)
 
-  let rr = client.sendTransaction(tx)
+  let rr = client.sendTransaction(tx, sender.chainId)
   if rr.isErr:
     error "sendTx: Unable to send transaction", msg=rr.error
     return false
@@ -293,7 +309,7 @@ proc sendTx*(sender: TxSender, client: RpcClient, tc: BigInitcodeTx, nonce: Acco
     )
     tx = params.makeTx(tc)
 
-  let rr = client.sendTransaction(tx)
+  let rr = client.sendTransaction(tx, sender.chainId)
   if rr.isErr:
     error "Unable to send transaction", msg=rr.error
     return false
@@ -301,8 +317,8 @@ proc sendTx*(sender: TxSender, client: RpcClient, tc: BigInitcodeTx, nonce: Acco
   inc sender.txSent
   return true
 
-proc sendTx*(client: RpcClient, tx: PooledTransaction): bool =
-  let rr = client.sendTransaction(tx)
+proc sendTx*(client: RpcClient, tx: PooledTransaction, chainId: ChainId): bool =
+  let rr = client.sendTransaction(tx, chainId)
   if rr.isErr:
     error "Unable to send transaction", msg=rr.error
     return false
@@ -320,27 +336,36 @@ proc makeTx*(params: MakeTxParams, tc: BlobTx): PooledTransaction =
                 else: gasTipPrice
 
   # Collect fields for transaction
-  let unsignedTx = Transaction(
-    txType    : TxEip4844,
-    chainId   : params.chainId,
-    nonce     : params.nonce,
-    maxPriorityFee: gasTipCap,
-    maxFee    : gasFeeCap,
-    gasLimit  : tc.gasLimit,
-    to        : tc.recipient,
-    value     : tc.amount,
-    payload   : tc.payload,
-    maxFeePerBlobGas: tc.blobGasFee,
-    versionedHashes: data.hashes,
-  )
-
+  let unsignedTx = TransactionPayload(
+    tx_type: Opt.some TxEip4844,
+    nonce: params.nonce,
+    max_priority_fee_per_gas: Opt.some(gasTipCap.uint64.u256),
+    max_fee_per_gas: gasFeeCap.uint64.u256,
+    gas: tc.gasLimit.uint64,
+    to:
+      if tc.recipient.isSome:
+        Opt.some(tc.recipient.get)
+      else:
+        Opt.none(EthAddress),
+    value: tc.amount,
+    input: List[byte, Limit MAX_CALLDATA_SIZE].init tc.payload,
+    max_fee_per_blob_gas: Opt.some(tc.blobGasFee),
+    blob_versioned_hashes: Opt.some(
+      List[eth_types.VersionedHash, Limit MAX_BLOB_COMMITMENTS_PER_BLOCK]
+        .init(data.hashes)))
   PooledTransaction(
-    tx: signTransaction(unsignedTx, params.key, params.chainId, eip155 = true),
-    networkPayload: NetworkPayload(
-      blobs      : data.blobs,
-      commitments: data.commitments,
-      proofs     : data.proofs,
-    ),
+    tx: signTransaction(unsignedTx, params.key, params.chainId),
+    blob_data: Opt.some NetworkPayload(
+      blobs:
+        List[NetworkBlob, MAX_BLOB_COMMITMENTS_PER_BLOCK]
+          .init(data.blobs),
+      commitments:
+        List[eth_types.KzgCommitment, MAX_BLOB_COMMITMENTS_PER_BLOCK]
+          .init(data.commitments),
+      proofs:
+        List[eth_types.KzgProof, MAX_BLOB_COMMITMENTS_PER_BLOCK]
+          .init(data.proofs),
+    )
   )
 
 proc getAccount*(sender: TxSender, idx: int): TestAccount =
@@ -359,7 +384,7 @@ proc sendTx*(
     )
     tx = params.makeTx(tc)
 
-  let rr = client.sendTransaction(tx)
+  let rr = client.sendTransaction(tx, params.chainId)
   if rr.isErr:
     error "Unable to send transaction", msg=rr.error
     return err()
@@ -380,7 +405,7 @@ proc replaceTx*(
     )
     tx = params.makeTx(tc)
 
-  let rr = client.sendTransaction(tx)
+  let rr = client.sendTransaction(tx, params.chainId)
   if rr.isErr:
     error "Unable to send transaction", msg=rr.error
     return err()
@@ -404,49 +429,86 @@ proc makeTx*(
 proc customizeTransaction*(sender: TxSender,
                            acc: TestAccount,
                            baseTx: Transaction,
-                           custTx: CustomTransactionData): Transaction =
+                           custTx: CustomTransactionData,
+                           chainId: ChainId): Transaction =
   # Create a modified transaction base, from the base transaction and custTx mix
   var modTx = baseTx
   if custTx.nonce.isSome:
-    modTx.nonce = custTx.nonce.get.AccountNonce
+    modTx.payload.nonce = custTx.nonce.get.AccountNonce
 
   if custTx.gasPriceOrGasFeeCap.isSome:
-    modTx.gasPrice = custTx.gasPriceOrGasFeeCap.get.GasInt
+    modTx.payload.max_fee_per_gas = custTx.gasPriceOrGasFeeCap.get.u256
 
   if custTx.gas.isSome:
-    modTx.gasLimit = custTx.gas.get.GasInt
+    modTx.payload.gas = custTx.gas.get.uint64
 
   if custTx.to.isSome:
-    modTx.to = custTx.to
+    modTx.payload.to.ok custTx.to.get
 
   if custTx.value.isSome:
-    modTx.value = custTx.value.get
+    modTx.payload.value = custTx.value.get
 
   if custTx.data.isSome:
-    modTx.payload = custTx.data.get
+    modTx.payload.input =
+      List[byte, Limit MAX_CALLDATA_SIZE].init(custTx.data.get)
 
-  if custTx.signature.isSome:
-    let signature = custTx.signature.get
-    modTx.V = signature.V
-    modTx.R = signature.R
-    modTx.S = signature.S
-
-  if baseTx.txType in {TxEip1559, TxEip4844}:
+  let custChainId =
     if custTx.chainId.isSome:
-      modTx.chainId = custTx.chainId.get
+      custTx.chainId.get
+    else:
+      chainId
 
+  if baseTx.payload.tx_type.get(TxLegacy) in {TxEip1559, TxEip4844}:
     if custTx.gasPriceOrGasFeeCap.isSome:
-      modTx.maxFee = custTx.gasPriceOrGasFeeCap.get.GasInt
+      modTx.payload.max_fee_per_gas = custTx.gasPriceOrGasFeeCap.get.u256
 
     if custTx.gasTipCap.isSome:
-      modTx.maxPriorityFee = custTx.gasTipCap.get.GasInt
+      modTx.payload.max_priority_fee_per_gas.ok custTx.gasTipCap.get.u256
 
-  if baseTx.txType == TxEip4844:
-    if modTx.to.isNone:
+  if baseTx.payload.tx_type.get(TxLegacy) == TxEip4844:
+    if modTx.payload.to.isNone:
       var address: EthAddress
-      modTx.to = some(address)
+      modTx.payload.to.ok(address)
+
+  if custTx.signature.isSome:
+    let
+      signature = custTx.signature.get
+      v = signature.V.u256
+      r = signature.R
+      s = signature.S
+      anyTx = AnyTransactionPayload.fromOneOfBase(modTx.payload).valueOr:
+        raise (ref ValueError)(msg: "Invalid combination of fields")
+    return withTxPayloadVariant(anyTx):
+      let y_parity =
+        when txKind == TransactionKind.Replayable:
+          if v == 27.u256:
+            false
+          elif v == 28.u256:
+            true
+          else:
+            raise (ref ValueError)(msg: "Invalid `v`")
+        elif txKind == TransactionKind.Legacy:
+          let
+            res = v.isEven
+            expected_v =
+              distinctBase(custChainId).u256 * 2 +
+              (if res: 36.u256 else: 35.u256)
+          if v != expected_v:
+            raise (ref ValueError)(msg: "Invalid `v`")
+          res
+        else:
+          if v > UInt256.one:
+            raise (ref ValueError)(msg: "Invalid `v`")
+          v.isOdd
+      var signature: TransactionSignature
+      signature.ecdsa_signature = ecdsa_pack_signature(y_parity, r, s)
+      signature.from_address = ecdsa_recover_from_address(
+          signature.ecdsa_signature,
+          txPayloadVariant.compute_sig_hash(custChainId)).valueOr:
+        raise (ref ValueError)(msg: "Cannot compute `from` address")
+      Transaction(payload: modTx.payload, signature: signature)
 
   if custTx.signature.isNone:
-    return signTransaction(modTx, acc.key, modTx.chainId, eip155 = true)
+    return signTransaction(modTx.payload, acc.key, custChainId)
 
   return modTx

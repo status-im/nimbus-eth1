@@ -77,7 +77,7 @@ proc mkInxImpl(sq: var TxStatusTab; item: TxItemRef): Result[TxStatusInx,void]
     inx.addrData.addrList[item.sender] = inx.nonceData
 
   # nonce sublist
-  let rc = inx.nonceData.nonceList.insert(item.tx.nonce)
+  let rc = inx.nonceData.nonceList.insert(item.tx.payload.nonce)
   if rc.isErr:
     return err()
   rc.value.data = item
@@ -120,7 +120,7 @@ proc insert*(sq: var TxStatusTab; item: TxItemRef): bool
     let inx = rc.value
     sq.size.inc
     inx.addrData.size.inc
-    inx.addrData.gasLimits += item.tx.gasLimit
+    inx.addrData.gasLimits += item.tx.payload.gas.GasInt
     return true
 
 
@@ -132,9 +132,9 @@ proc delete*(sq: var TxStatusTab; item: TxItemRef): bool
 
     sq.size.dec
     inx.addrData.size.dec
-    inx.addrData.gasLimits -= item.tx.gasLimit
+    inx.addrData.gasLimits -= item.tx.payload.gas.GasInt
 
-    discard inx.nonceData.nonceList.delete(item.tx.nonce)
+    discard inx.nonceData.nonceList.delete(item.tx.payload.nonce)
     if inx.nonceData.nonceList.len == 0:
       discard inx.addrData.addrList.delete(item.sender)
 
@@ -174,7 +174,7 @@ proc verify*(sq: var TxStatusTab): Result[void,TxInfo]
           let (nonceKey, item) = (rcNonce.value.key, rcNonce.value.data)
           rcNonce = nonceData.nonceList.gt(nonceKey)
 
-          gasLimits += item.tx.gasLimit
+          gasLimits += item.tx.payload.gas.GasInt
           addrCount.inc
 
       if addrCount != addrData.size:

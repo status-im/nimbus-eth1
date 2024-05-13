@@ -8,7 +8,7 @@
 # those terms.
 
 import
-  eth/common,
+  eth/[common, common/transaction],
   stew/results,
   ../web3_eth_conv,
   ../beacon_engine,
@@ -20,11 +20,15 @@ import
 {.push gcsafe, raises:[CatchableError].}
 
 func validateVersionedHashed(payload: ExecutionPayload,
-                              expected: openArray[Web3Hash]): bool  =
+                              expected: openArray[Web3Hash],
+                              chainId: ChainId): bool  =
   var versionedHashes: seq[common.Hash256]
   for x in payload.transactions:
-    let tx = rlp.decode(distinctBase(x), Transaction)
-    versionedHashes.add tx.versionedHashes
+    let tx = Transaction.fromBytes(distinctBase(x), chainId).valueOr:
+      raise (ref MalformedRlpError)(msg: "Invalid transaction in payload")
+    if tx.payload.blob_versioned_hashes.isSome:
+      versionedHashes.add distinctBase(
+        tx.payload.blob_versioned_hashes.unsafeGet)
 
   if versionedHashes.len != expected.len:
     return false
@@ -125,7 +129,7 @@ proc newPayload*(ben: BeaconEngineRef,
     if versionedHashes.isNone:
       raise invalidParams("newPayload" & $apiVersion &
         " expect blobVersionedHashes but got none")
-    if not validateVersionedHashed(payload, versionedHashes.get):
+    if not validateVersionedHashed(payload, versionedHashes.get, com.chainId):
       return invalidStatus(header.parentHash, "invalid blob versionedHashes")
 
   let blockHash = ethHash payload.blockHash

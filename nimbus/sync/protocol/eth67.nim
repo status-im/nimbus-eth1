@@ -14,10 +14,11 @@
 ##   `eth/67 <https://github.com/ethereum/devp2p/blob/master/caps/eth.md>`_
 
 import
+  std/typetraits,
   stint,
   chronicles,
   chronos,
-  eth/[common, p2p, p2p/private/p2p_types],
+  eth/[common, common/transaction, p2p, p2p/private/p2p_types],
   stew/byteutils,
   ./trace_config,
   ./eth/eth_types,
@@ -161,12 +162,17 @@ p2pProtocol eth67(version = ethVersion,
     handleHandlerError(res)
 
   # User message 0x02: Transactions.
-  proc transactions(peer: Peer, transactions: openArray[Transaction]) =
+  proc transactions(peer: Peer, encodedTransactions: RawRlp) =
+    let
+      ctx = peer.networkState()
+      transactions = seq[Transaction].fromBytes(
+          distinctBase(encodedTransactions), ctx.chainId).valueOr:
+        raise (ref MalformedRlpError)(msg: "Invalid transaction in message")
+
     when trEthTraceGossipOk:
       trace trEthRecvReceived & "Transactions (0x02)", peer,
         transactions=transactions.len
 
-    let ctx = peer.networkState()
     let res = ctx.handleAnnouncedTxs(peer, transactions)
     handleHandlerError(res)
 
@@ -264,11 +270,11 @@ p2pProtocol eth67(version = ethVersion,
         trace trEthSendReplying & "EMPTY PooledTransactions (0x0a)", peer,
           sent=0, requested=txHashes.len
 
-      await response.send(txs.get)
+      await response.send(RawRlp(txs.get.toBytes(ctx.chainId)))
 
     # User message 0x0a: PooledTransactions.
     proc pooledTransactions(
-        peer: Peer, transactions: openArray[PooledTransaction])
+        peer: Peer, transactions: RawRlp)
 
   # User message 0x0d: GetNodeData -- removed, was so 66ish
   # User message 0x0e: NodeData -- removed, was so 66ish

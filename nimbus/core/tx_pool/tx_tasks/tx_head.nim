@@ -50,7 +50,7 @@ proc insert(xp: TxPoolRef; kq: TxHeadDiffRef; blockHash: Hash256)
     {.gcsafe,raises: [CatchableError].} =
   let db = xp.chain.com.db
   for tx in db.getBlockBody(blockHash).transactions:
-    if tx.versionedHashes.len > 0:
+    if tx.payload.blob_versioned_hashes.isSome:
       # EIP-4844 blobs are not persisted and cannot be re-broadcasted.
       # Note that it is also not possible to crete a cache in all cases,
       # as we may have never seen the actual blob sidecar while syncing.

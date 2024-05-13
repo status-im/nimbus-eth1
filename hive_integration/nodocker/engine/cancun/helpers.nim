@@ -12,7 +12,7 @@ import
   std/[tables, strutils, typetraits],
   stint,
   eth/[common, rlp],
-  eth/common/eth_types_rlp,
+  eth/common/[eth_types_rlp, transaction],
   chronicles,
   stew/[results, byteutils],
   kzg4844/kzg_ex as kzg,
@@ -53,8 +53,9 @@ func getMinExcessBlobGasForBlobGasPrice(data_gas_price: uint64): uint64 =
 func getMinExcessBlobsForBlobGasPrice*(data_gas_price: uint64): uint64 =
   return getMinExcessBlobGasForBlobGasPrice(data_gas_price) div GAS_PER_BLOB.uint64
 
-proc addBlobTransaction*(pool: TestBlobTxPool, tx: PooledTransaction) =
-  let txHash = rlpHash(tx)
+proc addBlobTransaction*(
+    pool: TestBlobTxPool, tx: PooledTransaction, chainId: ChainId) =
+  let txHash = tx.tx.compute_tx_hash(chainId)
   pool.transactions[txHash] = tx
 
 proc `==`(a: openArray[AccessTuple], b: openArray[AccessPair]): bool =
@@ -73,7 +74,10 @@ proc `==`(a: openArray[AccessTuple], b: openArray[AccessPair]): bool =
   return true
 
 # Test two different transactions with the same blob, and check the blob bundle.
-proc verifyTransactionFromNode*(client: RpcClient, tx: Transaction): Result[void, string] =
+proc verifyTransactionFromNode*(
+    client: RpcClient,
+    tx: Transaction,
+    chainId: ChainId): Result[void, string] =
   let txHash = tx.rlpHash
   let res = client.txByHash(txHash)
   if res.isErr:
@@ -81,29 +85,34 @@ proc verifyTransactionFromNode*(client: RpcClient, tx: Transaction): Result[void
   let returnedTx = res.get()
 
   # Verify that the tx fields are all the same
-  if returnedTx.nonce != tx.nonce:
-    return err("nonce mismatch: $1 != $2" % [$returnedTx.nonce, $tx.nonce])
+  if returnedTx.nonce != tx.payload.nonce:
+    return err("nonce mismatch: $1 != $2" %
+      [$returnedTx.nonce, $tx.payload.nonce])
 
-  if returnedTx.gasLimit != tx.gasLimit:
-    return err("gas mismatch: $1 != $2" % [$returnedTx.gasLimit, $tx.gasLimit])
+  if returnedTx.gasLimit != tx.payload.gas:
+    return err("gas mismatch: $1 != $2" %
+      [$returnedTx.gasLimit, $tx.payload.gas])
 
-  if returnedTx.gasPrice != tx.gasPrice:
-    return err("gas price mismatch: $1 != $2" % [$returnedTx.gasPrice, $tx.gasPrice])
+  if returnedTx.gasPrice != tx.payload.max_fee_per_gas:
+    return err("gas price mismatch: $1 != $2" %
+      [$returnedTx.gasPrice, $tx.payload.max_fee_per_gas])
 
-  if returnedTx.value != tx.value:
-    return err("value mismatch: $1 != $2" % [$returnedTx.value, $tx.value])
+  if returnedTx.value != tx.payload.value:
+    return err("value mismatch: $1 != $2" %
+      [$returnedTx.value, $tx.payload.value])
 
-  if returnedTx.to != tx.to:
-    return err("to mismatch: $1 != $2" % [$returnedTx.to, $tx.to])
+  if returnedTx.to != tx.payload.to:
+    return err("to mismatch: $1 != $2" % [$returnedTx.to, $tx.payload.to])
 
-  if returnedTx.payload != tx.payload:
-    return err("data mismatch: $1 != $2" % [returnedTx.payload.toHex, tx.payload.toHex])
+  if returnedTx.payload != tx.payload.input:
+    return err("data mismatch: $1 != $2" %
+      [returnedTx.payload.input.toHex, tx.payload.input.toHex])
 
-  if returnedTx.accessList.isNone:
+  if returnedTx.payload.access_list.isNone:
     return err("expect accessList is some")
 
-  let ac = returnedTx.accessList.get
-  if ac != tx.accessList:
+  let ac = returnedTx.payload.access_list.get
+  if ac != tx.payload.access_list:
     return err("access list mismatch")
 
   if returnedTx.chainId.isNone:

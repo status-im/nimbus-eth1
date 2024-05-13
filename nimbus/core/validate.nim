@@ -217,12 +217,8 @@ proc validateUncles(com: CommonRef; header: BlockHeader;
 # ------------------------------------------------------------------------------
 
 func gasCost*(tx: Transaction): UInt256 =
-  if tx.txType >= TxEip4844:
-    tx.gasLimit.u256 * tx.maxFee.u256 + tx.getTotalBlobGas.u256 * tx.maxFeePerBlobGas.u256
-  elif tx.txType >= TxEip1559:
-    tx.gasLimit.u256 * tx.maxFee.u256
-  else:
-    tx.gasLimit.u256 * tx.gasPrice.u256
+  tx.payload.gas.u256 * tx.payload.max_fee_per_gas +
+    tx.getTotalBlobGas.u256 * tx.payload.max_fee_per_blob_gas.get(UInt256.zero)
 
 proc validateTxBasic*(
     tx:       Transaction;     ## tx to validate
@@ -230,54 +226,63 @@ proc validateTxBasic*(
     validateFork: bool = true): Result[void, string] =
 
   if validateFork:
-    if tx.txType == TxEip2930 and fork < FkBerlin:
-      return err("invalid tx: Eip2930 Tx type detected before Berlin")
+    case tx.payload.tx_type.get(TxLegacy)
+    of TxEip4844:
+      if fork < FkCancun:
+        return err("invalid tx: Eip4844 Tx type detected before Cancun")
+    of TxEip1559:
+      if fork < FkLondon:
+        return err("invalid tx: Eip1559 Tx type detected before London")
+    of TxEip2930:
+      if fork < FkBerlin:
+        return err("invalid tx: Eip2930 Tx type detected before Berlin")
+    of TxLegacy:
+      if tx.payload.tx_type.isSome and fork < FkHomestead:
+        return err("invalid tx: Tx with chain ID detected before Homestead")
 
-    if tx.txType == TxEip1559 and fork < FkLondon:
-      return err("invalid tx: Eip1559 Tx type detected before London")
-
-    if tx.txType == TxEip4844 and fork < FkCancun:
-      return err("invalid tx: Eip4844 Tx type detected before Cancun")
-
-  if fork >= FkShanghai and tx.contractCreation and tx.payload.len > EIP3860_MAX_INITCODE_SIZE:
+  if fork >= FkShanghai and
+      tx.contractCreation and tx.payload.input.len > EIP3860_MAX_INITCODE_SIZE:
     return err("invalid tx: initcode size exceeds maximum")
 
   try:
     # The total must be the larger of the two
-    if tx.maxFee < tx.maxPriorityFee:
-      return err("invalid tx: maxFee is smaller than maPriorityFee. maxFee=$1, maxPriorityFee=$2" % [
-        $tx.maxFee, $tx.maxPriorityFee])
+    if tx.payload.max_fee_per_gas <
+        tx.payload.max_priority_fee_per_gas.get(tx.payload.max_fee_per_gas):
+      return err("invalid tx: maxFee is smaller than maxPriorityFee. maxFee=$1, maxPriorityFee=$2" % [
+        $tx.payload.max_fee_per_gas, $tx.payload.max_priority_fee_per_gas])
 
-    if tx.gasLimit < tx.intrinsicGas(fork):
+    if tx.payload.gas.int64 < tx.intrinsicGas(fork):
       return err("invalid tx: not enough gas to perform calculation. avail=$1, require=$2" % [
-        $tx.gasLimit, $tx.intrinsicGas(fork)])
+        $tx.payload.gas, $tx.intrinsicGas(fork)])
 
     if fork >= FkCancun:
-      if tx.payload.len > MAX_CALLDATA_SIZE:
+      if tx.payload.input.len > MAX_CALLDATA_SIZE:
         return err("invalid tx: payload len exceeds MAX_CALLDATA_SIZE. len=" &
-          $tx.payload.len)
+          $tx.payload.input.len)
 
-      if tx.accessList.len > MAX_ACCESS_LIST_SIZE:
-        return err("invalid tx: access list len exceeds MAX_ACCESS_LIST_SIZE. len=" &
-          $tx.accessList.len)
+      if tx.payload.access_list.isSome:
+        if tx.payload.access_list.unsafeGet.len > MAX_ACCESS_LIST_SIZE:
+          return err("invalid tx: access list len exceeds MAX_ACCESS_LIST_SIZE. len=" &
+            $tx.payload.access_list.unsafeGet.len)
 
-      for i, acl in tx.accessList:
-        if acl.storageKeys.len > MAX_ACCESS_LIST_STORAGE_KEYS:
-          return err("invalid tx: access list storage keys len exceeds MAX_ACCESS_LIST_STORAGE_KEYS. " &
-            "index=$1, len=$2" % [$i, $acl.storageKeys.len])
+        for i, acl in tx.payload.access_list.unsafeGet:
+          if acl.storage_keys.len > MAX_ACCESS_LIST_STORAGE_KEYS:
+            return err("invalid tx: access list storage keys len exceeds MAX_ACCESS_LIST_STORAGE_KEYS. " &
+              "index=$1, len=$2" % [$i, $acl.storage_keys.len])
 
-    if tx.txType >= TxEip4844:
-      if tx.to.isNone:
+    if tx.payload.tx_type == Opt.some TxEip4844:
+      if tx.payload.to.isNone:
         return err("invalid tx: destination must be not empty")
 
-      if tx.versionedHashes.len == 0:
+      if tx.payload.blob_versioned_hashes.isNone or
+          tx.payload.blob_versioned_hashes.unsafeGet.len == 0:
         return err("invalid tx: there must be at least one blob")
 
-      if tx.versionedHashes.len > MAX_BLOBS_PER_BLOCK:
+      if tx.payload.blob_versioned_hashes.unsafeGet.len > MAX_BLOBS_PER_BLOCK:
         return err("invalid tx: versioned hashes len exceeds MAX_BLOBS_PER_BLOCK=" & $MAX_BLOBS_PER_BLOCK &
-          ". get=" & $tx.versionedHashes.len)
+          ". get=" & $tx.payload.blob_versioned_hashes.unsafeGet.len)
 
-      for i, bv in tx.versionedHashes:
+      for i, bv in tx.payload.blob_versioned_hashes.unsafeGet:
         if bv.data[0] != VERSIONED_HASH_VERSION_KZG:
           return err("invalid tx: one of blobVersionedHash has invalid version. " &
             "get=$1, expect=$2" % [$bv.data[0].int, $VERSIONED_HASH_VERSION_KZG.int])
@@ -320,14 +325,14 @@ proc validateTransaction*(
   # The parallel lowGasLimit.json test never triggers the case checked below
   # as the paricular transaction is omitted (the txs list is just set empty.)
   try:
-    if maxLimit < tx.gasLimit:
+    if maxLimit < tx.payload.gas.int64:
       return err("invalid tx: block header gasLimit exceeded. maxLimit=$1, gasLimit=$2" % [
-        $maxLimit, $tx.gasLimit])
+        $maxLimit, $tx.payload.gas])
 
     # ensure that the user was willing to at least pay the base fee
-    if tx.maxFee < baseFee.truncate(int64):
+    if tx.payload.max_fee_per_gas < baseFee:
       return err("invalid tx: maxFee is smaller than baseFee. maxFee=$1, baseFee=$2" % [
-        $tx.maxFee, $baseFee])
+        $tx.payload.max_fee_per_gas, $baseFee])
 
     # the signer must be able to fully afford the transaction
     let gasCost = tx.gasCost()
@@ -336,15 +341,15 @@ proc validateTransaction*(
       return err("invalid tx: not enough cash for gas. avail=$1, require=$2" % [
         $balance, $gasCost])
 
-    if balance - gasCost < tx.value:
+    if balance - gasCost < tx.payload.value:
       return err("invalid tx: not enough cash to send. avail=$1, availMinusGas=$2, require=$3" % [
-        $balance, $(balance-gasCost), $tx.value])
+        $balance, $(balance-gasCost), $tx.payload.value])
 
-    if tx.nonce != nonce:
+    if tx.payload.nonce != nonce:
       return err("invalid tx: account nonce mismatch. txNonce=$1, accNonce=$2" % [
-        $tx.nonce, $nonce])
+        $tx.payload.nonce, $nonce])
 
-    if tx.nonce == high(uint64):
+    if tx.payload.nonce == high(uint64):
       return err("invalid tx: nonce at maximum")
 
     # EIP-3607 Reject transactions from senders with deployed code
@@ -357,12 +362,13 @@ proc validateTransaction*(
       return err("invalid tx: sender is not an EOA. sender=$1, codeHash=$2" % [
         sender.toHex, codeHash.data.toHex])
 
-    if tx.txType >= TxEip4844:
+    if tx.payload.max_fee_per_blob_gas.isSome:
       # ensure that the user was willing to at least pay the current data gasprice
       let blobGasPrice = getBlobBaseFee(excessBlobGas)
-      if tx.maxFeePerBlobGas < blobGasPrice:
+      if tx.payload.max_fee_per_blob_gas.unsafeGet < blobGasPrice:
         return err("invalid tx: maxFeePerBlobGas smaller than blobGasPrice. " &
-          "maxFeePerBlobGas=$1, blobGasPrice=$2" % [$tx.maxFeePerBlobGas, $blobGasPrice])
+          "maxFeePerBlobGas=$1, blobGasPrice=$2" %
+          [$tx.payload.max_fee_per_blob_gas, $blobGasPrice])
 
   except CatchableError as ex:
     return err(ex.msg)

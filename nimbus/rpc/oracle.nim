@@ -8,7 +8,7 @@
 # those terms.
 
 import
-  std/[hashes, algorithm, strutils],
+  std/[hashes, algorithm, strutils, typetraits],
   eth/eip1559,
   stew/keyed_queue,
   stew/endians2,
@@ -125,11 +125,11 @@ proc processBlock(oracle: Oracle, bc: BlockContent, percentiles: openArray[float
 
   for i, tx in bc.txs:
     let
-      reward = tx.effectiveGasTip(bc.header.fee)
+      reward = tx.effectiveGasTip(bc.header.fee.get(UInt256.zero))
       gasUsed = bc.receipts[i].cumulativeGasUsed - prevUsed
     sorter[i] = TxGasAndReward(
       gasUsed: gasUsed.uint64,
-      reward: reward.u256
+      reward: distinctBase(reward).u256
     )
     prevUsed = bc.receipts[i].cumulativeGasUsed
 

@@ -49,6 +49,7 @@ type
     db: ReadOnlyStateDB
 
   TxNode = ref object of Node
+    chainId: ChainId
     tx: Transaction
     index: int
     blockNumber: common.BlockNumber
@@ -113,6 +114,7 @@ proc txNode(ctx: GraphqlContextRef, tx: Transaction, index: int, blockNumber: co
     kind: nkMap,
     typeName: ctx.ids[ethTransaction],
     pos: Pos(),
+    chainId: ctx.com.chainId,
     tx: tx,
     index: index,
     blockNumber: blockNumber,
@@ -282,7 +284,8 @@ proc getTxs(ctx: GraphqlContextRef, header: common.BlockHeader): RespResult =
     var list = respList()
     var index = 0
     for n in getBlockTransactionData(ctx.chainDB, header.txRoot):
-      let tx = decodeTx(n)
+      let tx = Transaction.fromBytes(n, ctx.com.chainId).valueOr:
+        raise (ref MalformedRlpError)(msg: "Invalid transaction in block")
       list.add txNode(ctx, tx, index, header.blockNumber, header.fee)
       inc index
 
@@ -614,7 +617,7 @@ proc txHash(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
 
 proc txNonce(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let tx = TxNode(parent)
-  longNode(tx.tx.nonce)
+  longNode(tx.tx.payload.nonce)
 
 proc txIndex(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let tx = TxNode(parent)
@@ -653,61 +656,65 @@ proc txTo(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   if hres.isErr:
     return hres
   let h = HeaderNode(hres.get())
-  ctx.accountNode(h.header, tx.tx.to.get())
+  ctx.accountNode(h.header, tx.tx.payload.to.get())
 
 proc txValue(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let tx = TxNode(parent)
-  bigIntNode(tx.tx.value)
+  bigIntNode(tx.tx.payload.value)
 
 proc txGasPrice(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let tx = TxNode(parent)
-  if tx.tx.txType == TxEip1559:
+  if tx.tx.payload.max_priority_fee_per_gas.isSome:
     if tx.baseFee.isNone:
-      return bigIntNode(tx.tx.gasPrice)
+      return bigIntNode(tx.tx.payload.max_fee_per_gas)
 
     let baseFee = tx.baseFee.get().truncate(GasInt)
-    let priorityFee = min(tx.tx.maxPriorityFee, tx.tx.maxFee - baseFee)
+    let priorityFee = min(
+      tx.tx.payload.max_priority_fee_per_gas.unsafeGet.truncate(int64),
+      tx.tx.payload.max_fee_per_gas.truncate(int64) - baseFee)
     bigIntNode(priorityFee + baseFee)
   else:
-    bigIntNode(tx.tx.gasPrice)
+    bigIntNode(tx.tx.payload.max_fee_per_gas)
 
 proc txMaxFeePerGas(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let tx = TxNode(parent)
-  if tx.tx.txType == TxEip1559:
-    bigIntNode(tx.tx.maxFee)
+  if tx.tx.payload.max_priority_fee_per_gas.isSome:
+    bigIntNode(tx.tx.payload.max_fee_per_gas)
   else:
     ok(respNull())
 
 proc txMaxPriorityFeePerGas(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let tx = TxNode(parent)
-  if tx.tx.txType == TxEip1559:
-    bigIntNode(tx.tx.maxPriorityFee)
+  if tx.tx.payload.max_priority_fee_per_gas.isSome:
+    bigIntNode(tx.tx.payload.max_priority_fee_per_gas.unsafeGet)
   else:
     ok(respNull())
 
 proc txEffectiveGasPrice(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let tx = TxNode(parent)
   if tx.baseFee.isNone:
-    return bigIntNode(tx.tx.gasPrice)
+    return bigIntNode(tx.tx.payload.max_fee_per_gas.truncate(int64))
 
   let baseFee = tx.baseFee.get().truncate(GasInt)
-  let priorityFee = min(tx.tx.maxPriorityFee, tx.tx.maxFee - baseFee)
+  let priorityFee = min(
+    tx.tx.payload.max_priority_fee_per_gas.unsafeGet.truncate(int64),
+    tx.tx.payload.max_fee_per_gas.truncate(int64) - baseFee)
   bigIntNode(priorityFee + baseFee)
 
 proc txChainId(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let tx = TxNode(parent)
-  if tx.tx.txType == TxLegacy:
+  if tx.tx.payload.tx_type.isNone:
     ok(respNull())
   else:
-    longNode(tx.tx.chainId.uint64)
+    longNode(tx.chainId.uint64)
 
 proc txGas(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let tx = TxNode(parent)
-  longNode(tx.tx.gasLimit)
+  longNode(tx.tx.payload.gas)
 
 proc txInputData(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let tx = TxNode(parent)
-  resp(tx.tx.payload)
+  resp(distinctBase(tx.tx.payload.input))
 
 proc txBlock(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
@@ -743,7 +750,7 @@ proc txCreatedContract(ud: RootRef, params: Args, parent: Node): RespResult {.ap
   if hres.isErr:
     return hres
   let h = HeaderNode(hres.get())
-  let contractAddress = generateAddress(sender, tx.tx.nonce)
+  let contractAddress = generateAddress(sender, tx.tx.payload.nonce)
   ctx.accountNode(h.header, contractAddress)
 
 proc txLogs(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
@@ -756,46 +763,55 @@ proc txLogs(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
 
 proc txR(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let tx = TxNode(parent)
-  bigIntNode(tx.tx.R)
+  bigIntNode(ecdsa_unpack_signature(tx.tx.signature.ecdsa_signature).r)
 
 proc txS(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let tx = TxNode(parent)
-  bigIntNode(tx.tx.S)
+  bigIntNode(ecdsa_unpack_signature(tx.tx.signature.ecdsa_signature).s)
 
 proc txV(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
-  let tx = TxNode(parent)
-  bigIntNode(tx.tx.V)
+  let
+    tx = TxNode(parent)
+    yParity = ecdsa_unpack_signature(tx.tx.signature.ecdsa_signature).y_parity
+    v =
+      if tx.tx.payload.tx_type.isNone:
+        if yParity: 28.u256 else: 27.u256
+      elif tx.tx.payload.tx_type == Opt.some TxLegacy:
+        distinctBase(tx.chainId).u256 * 2 + (if yParity: 36.u256 else: 35.u256)
+      else:
+        if yParity: UInt256.one else: UInt256.zero
+  bigIntNode(v)
 
 proc txType(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let tx = TxNode(parent)
-  let typ = resp(ord(tx.tx.txType))
+  let typ = resp(ord(tx.tx.payload.tx_type.get(TxLegacy)))
   ok(typ)
 
 proc txAccessList(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
   let tx = TxNode(parent)
-  if tx.tx.txType == TxLegacy:
+  if tx.tx.payload.access_list.isNone:
     ok(respNull())
   else:
     var list = respList()
-    for x in tx.tx.accessList:
+    for x in tx.tx.payload.access_list.unsafeGet:
       list.add aclNode(ctx, x)
     ok(list)
 
 proc txMaxFeePerBlobGas(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let tx = TxNode(parent)
-  if tx.tx.txType < TxEIP4844:
+  if tx.tx.payload.max_fee_per_blob_gas.isNone:
     ok(respNull())
   else:
-    longNode(tx.tx.maxFeePerBlobGas)
+    longNode(tx.tx.payload.max_fee_per_blob_gas.unsafeGet)
 
 proc txVersionedHashes(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let tx = TxNode(parent)
-  if tx.tx.txType < TxEIP4844:
+  if tx.tx.payload.blob_versioned_hashes.isNone:
     ok(respNull())
   else:
     var list = respList()
-    for hs in tx.tx.versionedHashes:
+    for hs in tx.tx.payload.blob_versioned_hashes.unsafeGet:
       list.add resp("0x" & hs.data.toHex)
     ok(list)
 
@@ -1364,8 +1380,10 @@ proc sendRawTransaction(ud: RootRef, params: Args, parent: Node): RespResult {.a
   let ctx = GraphqlContextRef(ud)
   try:
     let data   = hexToSeqByte(params[0].val.stringVal)
-    let tx     = decodePooledTx(data) # we want to know if it is a valid tx blob
-    let txHash = rlpHash(tx)
+    # we want to know if it is a valid tx blob
+    let tx     = PooledTransaction.fromBytes(data, ctx.com.chainId).valueOr:
+      return err("Invalid `PooledTransaction`")
+    let txHash = tx.tx.compute_tx_hash(ctx.com.chainId)
 
     ctx.txPool.add(tx)
 

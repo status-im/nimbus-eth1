@@ -57,9 +57,12 @@ proc main() {.used.} =
 
   # nimbus --rpcapi: eth, debug --prune: archive
 
-  var conf = makeConfig()
-  let db = newCoreDbRef(DefaultDbPersistent, string conf.dataDir)
-  let com = CommonRef.new(db, false)
+  let
+    conf = makeConfig()
+    params = networkParams(conf.networkId)
+    db = newCoreDbRef(
+      DefaultDbPersistent, string conf.dataDir, params.config.chainId)
+    com = CommonRef.new(db, false)
 
   com.dumpTest(97)
   com.dumpTest(98) # no uncles and no tx

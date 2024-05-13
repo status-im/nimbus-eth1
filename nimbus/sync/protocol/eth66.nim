@@ -263,11 +263,11 @@ p2pProtocol eth66(version = ethVersion,
         trace trEthSendReplying & "EMPTY PooledTransactions (0x0a)", peer,
           sent=0, requested=txHashes.len
 
-      await response.send(txs.get)
+      await response.send(RawRlp(txs.get.toBytes(ctx.chainId)))
 
     # User message 0x0a: PooledTransactions.
     proc pooledTransactions(
-        peer: Peer, transactions: openArray[PooledTransaction])
+        peer: Peer, transactions: RawRlp)
 
   nextId 0x0d
 

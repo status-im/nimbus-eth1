@@ -42,7 +42,8 @@ proc processTransactions*(vmState: BaseVMState;
     let rc = vmState.processTransaction(tx, sender, header)
     if rc.isErr:
       return err("Error processing tx with index " & $(txIndex) & ":" & rc.error)
-    vmState.receipts[txIndex] = vmState.makeReceipt(tx.txType)
+    vmState.receipts[txIndex] =
+      vmState.makeReceipt(tx.payload.tx_type.get(TxLegacy))
   ok()
 
 proc procBlkPreamble(vmState: BaseVMState;

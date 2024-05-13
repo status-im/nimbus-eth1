@@ -53,7 +53,7 @@ proc bucketItemsReassignPending*(xp: TxPoolRef; labelFrom: TxItemStatus;
 proc bucketItemsReassignPending*(xp: TxPoolRef; item: TxItemRef)
     {.gcsafe,raises: [CatchableError].} =
   ## Variant of `bucketItemsReassignPending()`
-  xp.bucketItemsReassignPending(item.status, item.sender, item.tx.nonce)
+  xp.bucketItemsReassignPending(item.status, item.sender, item.tx.payload.nonce)
 
 
 proc bucketUpdateAll*(xp: TxPoolRef): bool
@@ -71,10 +71,10 @@ proc bucketUpdateAll*(xp: TxPoolRef): bool
     for item in xp.pDoubleCheck:
       if item.reject == txInfoOk:
         # Check whether there was a gap when the head was moved backwards.
-        let rc = xp.txDB.bySender.eq(item.sender).sub.gt(item.tx.nonce)
+        let rc = xp.txDB.bySender.eq(item.sender).sub.gt(item.tx.payload.nonce)
         if rc.isOk:
           let nextItem = rc.value.data
-          if item.tx.nonce + 1 < nextItem.tx.nonce:
+          if item.tx.payload.nonce + 1 < nextItem.tx.payload.nonce:
             discard xp.disposeItemAndHigherNonces(
               item, txInfoErrNonceGap, txInfoErrImpliedNonceGap)
       else:

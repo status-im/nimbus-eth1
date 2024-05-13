@@ -53,6 +53,7 @@ export
 
 proc newCoreDbRef*(
     db: TrieDatabaseRef;
+    chainId: ChainId;
       ): CoreDbRef
       {.gcsafe, deprecated: "use newCoreDbRef(LegacyDbPersistent,<path>)".} =
   ## Legacy constructor.
@@ -60,10 +61,13 @@ proc newCoreDbRef*(
   ## Note: Using legacy notation `newCoreDbRef()` rather than
   ## `CoreDbRef.init()` because of compiler coughing.
   ##
-  db.newLegacyPersistentCoreDbRef()
+  let res = db.newLegacyPersistentCoreDbRef()
+  res.chainId = chainId
+  res
 
 proc newCoreDbRef*(
     dbType: static[CoreDbType];      # Database type symbol
+    chainId: ChainId;
       ): CoreDbRef =
   ## Constructor for volatile/memory type DB
   ##
@@ -71,19 +75,23 @@ proc newCoreDbRef*(
   ## `CoreDbRef.init()` because of compiler coughing.
   ##
   when dbType == LegacyDbMemory:
-    newLegacyMemoryCoreDbRef()
+    let res = newLegacyMemoryCoreDbRef()
 
   elif dbType == AristoDbMemory:
-    newAristoMemoryCoreDbRef()
+    let res = newAristoMemoryCoreDbRef()
 
   elif dbType == AristoDbVoid:
-    newAristoVoidCoreDbRef()
+    let res = newAristoVoidCoreDbRef()
 
   else:
     {.error: "Unsupported constructor " & $dbType & ".newCoreDbRef()".}
 
+  res.chainId = chainId
+  res
+
 proc newCoreDbRef*(
     dbType: static[CoreDbType];      # Database type symbol
+    chainId: ChainId;
     qidLayout: QidLayoutRef;         # `Aristo` only
       ): CoreDbRef =
   ## Constructor for volatile/memory type DB
@@ -92,14 +100,17 @@ proc newCoreDbRef*(
   ## `CoreDbRef.init()` because of compiler coughing.
   ##
   when dbType == AristoDbMemory:
-    newAristoMemoryCoreDbRef(DefaultQidLayoutRef)
+    let res = newAristoMemoryCoreDbRef(DefaultQidLayoutRef)
 
   elif dbType == AristoDbVoid:
-    newAristoVoidCoreDbRef()
+    let res = newAristoVoidCoreDbRef()
 
   else:
     {.error: "Unsupported constructor " & $dbType & ".newCoreDbRef()" &
              " with qidLayout argument".}
+
+  res.chainId = chainId
+  res
 
 # ------------------------------------------------------------------------------
 # End

@@ -60,7 +60,7 @@ proc commitOrRollbackDependingOnGasUsed(
 
     # Return remaining gas to the block gas counter so it is
     # available for the next transaction.
-    vmState.gasPool += tx.gasLimit - gasBurned
+    vmState.gasPool += tx.payload.gas.GasInt - gasBurned
     return ok(gasBurned)
 
 proc asyncProcessTransactionImpl(
@@ -77,24 +77,25 @@ proc asyncProcessTransactionImpl(
   let
     roDB = vmState.readOnlyStateDB
     baseFee256 = header.eip1559BaseFee(fork)
-    baseFee = baseFee256.truncate(GasInt)
-    tx = eip1559TxNormalization(tx, baseFee)
-    priorityFee = min(tx.maxPriorityFee, tx.maxFee - baseFee)
+    baseFee = baseFee256
+    priorityFee = min(
+      tx.payload.max_priority_fee_per_gas.get(tx.payload.max_fee_per_gas),
+      tx.payload.max_fee_per_gas - baseFee).truncate(int64)
     excessBlobGas = header.excessBlobGas.get(0'u64)
 
   # Return failure unless explicitely set `ok()`
   var res: Result[GasInt, string] = err("")
 
   await ifNecessaryGetAccounts(vmState, @[sender, vmState.coinbase()])
-  if tx.to.isSome:
-    await ifNecessaryGetCode(vmState, tx.to.get)
+  if tx.payload.to.isSome:
+    await ifNecessaryGetCode(vmState, tx.payload.to.unsafeGet)
 
   # buy gas, then the gas goes into gasMeter
-  if vmState.gasPool < tx.gasLimit:
+  if vmState.gasPool < tx.payload.gas.GasInt:
     return err("gas limit reached. gasLimit=$1, gasNeeded=$2" % [
-      $vmState.gasPool, $tx.gasLimit])
+      $vmState.gasPool, $tx.payload.gas])
 
-  vmState.gasPool -= tx.gasLimit
+  vmState.gasPool -= tx.payload.gas.GasInt
 
   # Actually, the eip-1559 reference does not mention an early exit.
   #
@@ -109,11 +110,11 @@ proc asyncProcessTransactionImpl(
     vmState.stateDB.clearTransientStorage()
 
     # Execute the transaction.
-    vmState.captureTxStart(tx.gasLimit)
+    vmState.captureTxStart(tx.payload.gas.GasInt)
     let
       accTx = vmState.stateDB.beginSavepoint
       gasBurned = tx.txCallEvm(sender, vmState, fork)
-    vmState.captureTxEnd(tx.gasLimit - gasBurned)
+    vmState.captureTxEnd(tx.payload.gas.GasInt - gasBurned)
 
     res = commitOrRollbackDependingOnGasUsed(vmState, accTx, header, tx, gasBurned, priorityFee)
   else:

@@ -9,17 +9,19 @@
 # according to those terms.
 
 import
+  std/typetraits,
   json, stint, stew/byteutils,
   ../nimbus/db/[core_db, storage_types], eth/[rlp, common],
   ../nimbus/tracer
 
 proc generatePrestate*(nimbus, geth: JsonNode, blockNumber: UInt256, parent, header: BlockHeader, body: BlockBody) =
   let
+    chainId = nimbus["chainId"].getInt().ChainId
     state = nimbus["state"]
     headerHash = rlpHash(header)
 
   var
-    chainDB = newCoreDbRef(LegacyDbMemory)
+    chainDB = newCoreDbRef(LegacyDbMemory, chainId)
 
   discard chainDB.setHead(parent, true)
   discard chainDB.persistTransactions(blockNumber, body.transactions)
@@ -34,6 +36,7 @@ proc generatePrestate*(nimbus, geth: JsonNode, blockNumber: UInt256, parent, hea
     chainDB.kvt.put(key, value)
 
   var metaData = %{
+    "chainId": %distinctBase(chainId),
     "blockNumber": %blockNumber.toHex,
     "geth": geth
   }
