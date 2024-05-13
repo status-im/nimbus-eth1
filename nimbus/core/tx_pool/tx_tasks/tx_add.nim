@@ -77,10 +77,16 @@ proc supersede(xp: TxPoolRef; item: TxItemRef): Result[void,TxInfo]
       return err(txInfoErrUnspecified)
     current = rc.value.data
 
-  # verify whether replacing is allowed, at all
-  let bumpPrice = (current.tx.gasPrice * xp.priceBump.GasInt + 99) div 100
-  if item.tx.gasPrice < current.tx.gasPrice + bumpPrice:
-    return err(txInfoErrReplaceUnderpriced)
+  # TODO: To unblock `kurtosis-tech/ethereum-package` based testing,
+  # we have to accept superseding transactions temporarily until `rpc_utils.nim`
+  # supports the 'pending' tag by incorporating pending transactions from the
+  # mempool when returning the current account nonce. Until that is fixed,
+  # we keep telling the transaction spammer that their nonce has not changed,
+  # and it keeps spamming transactions with the same nonce repeatedly.
+  if false:
+    let bumpPrice = (current.tx.gasPrice * xp.priceBump.GasInt + 99) div 100
+    if item.tx.gasPrice < current.tx.gasPrice + bumpPrice:
+      return err(txInfoErrReplaceUnderpriced)
 
   # make space, delete item
   if not xp.txDB.dispose(current, txInfoSenderNonceSuperseded):
