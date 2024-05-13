@@ -85,20 +85,25 @@ proc validateContent*(
 ): bool =
   doAssert(contentKey.contentType == contentValue.contentType)
 
-  case contentKey.contentType
-  of unused:
-    warn "Received content with unused content type"
-    false
-  of accountTrieNode:
-    validateFetchedAccountTrieNode(
-      contentKey.accountTrieNodeKey, contentValue.accountTrieNode
-    )
-  of contractTrieNode:
-    validateFetchedContractTrieNode(
-      contentKey.contractTrieNodeKey, contentValue.contractTrieNode
-    )
-  of contractCode:
-    validateFetchedContractCode(contentKey.contractCodeKey, contentValue.contractCode)
+  let res =
+    case contentKey.contentType
+    of unused:
+      Result[void, string].err("Received content with unused content type")
+    of accountTrieNode:
+      validateFetchedAccountTrieNode(
+        contentKey.accountTrieNodeKey, contentValue.accountTrieNode
+      )
+    of contractTrieNode:
+      validateFetchedContractTrieNode(
+        contentKey.contractTrieNodeKey, contentValue.contractTrieNode
+      )
+    of contractCode:
+      validateFetchedContractCode(contentKey.contractCodeKey, contentValue.contractCode)
+
+  res.isOkOr:
+    warn "Validation of fetched content failed: ", error
+
+  res.isOk()
 
 proc getContent*(n: StateNetwork, key: ContentKey): Future[Opt[seq[byte]]] {.async.} =
   let
@@ -142,34 +147,39 @@ proc validateContent*(
 ): bool =
   doAssert(contentKey.contentType == contentValue.contentType)
 
-  case contentKey.contentType
-  of unused:
-    warn "Received content with unused content type"
-    false
-  of accountTrieNode:
-    return true
-    # validateOfferedAccountTrieNode(
-    #   keccakHash(""),
-    #     # TODO: Get the stateRoot from the block header using history network
-    #   contentKey.accountTrieNodeKey,
-    #   contentValue.accountTrieNode,
-    # )
-  of contractTrieNode:
-    return true
-    # validateOfferedContractTrieNode(
-    #   keccakHash(""),
-    #     # TODO: Get the stateRoot from the block header using history network
-    #   contentKey.contractTrieNodeKey,
-    #   contentValue.contractTrieNode,
-    # )
-  of contractCode:
-    return true
-    # validateOfferedContractCode(
-    #   keccakHash(""),
-    #     # TODO: Get the stateRoot from the block header using history network
-    #   contentKey.contractCodeKey,
-    #   contentValue.contractCode,
-    # )
+  let res =
+    case contentKey.contentType
+    of unused:
+      Result[void, string].err("Received content with unused content type")
+    of accountTrieNode:
+      Result[void, string].ok()
+      # validateOfferedAccountTrieNode(
+      #   keccakHash(""),
+      #     # TODO: Get the stateRoot from the block header using history network
+      #   contentKey.accountTrieNodeKey,
+      #   contentValue.accountTrieNode,
+      # )
+    of contractTrieNode:
+      Result[void, string].ok()
+      # validateOfferedContractTrieNode(
+      #   keccakHash(""),
+      #     # TODO: Get the stateRoot from the block header using history network
+      #   contentKey.contractTrieNodeKey,
+      #   contentValue.contractTrieNode,
+      # )
+    of contractCode:
+      Result[void, string].ok()
+      # validateOfferedContractCode(
+      #   keccakHash(""),
+      #     # TODO: Get the stateRoot from the block header using history network
+      #   contentKey.contractCodeKey,
+      #   contentValue.contractCode,
+      # )
+
+  res.isOkOr:
+    warn "Validation of offered content failed: ", error
+
+  res.isOk()
 
 proc recursiveGossipAccountTrieNode(
     p: PortalProtocol,

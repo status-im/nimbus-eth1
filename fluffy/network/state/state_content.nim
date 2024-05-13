@@ -208,7 +208,7 @@ func encode*(content: RetrievalContentValue): seq[byte] =
   of contractCode:
     SSZ.encode(content.contractCode)
 
-func packNibbles*(nibbles: seq[byte]): Nibbles =
+func packNibbles*(nibbles: openArray[byte]): Nibbles =
   doAssert(nibbles.len() <= MAX_UNPACKED_NIBBLES_LEN, "Can't pack more than 64 nibbles")
 
   if nibbles.len() == 0:
