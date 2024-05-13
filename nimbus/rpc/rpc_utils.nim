@@ -46,7 +46,11 @@ proc headerFromTag*(chain: CoreDbRef, blockId: BlockTag): BlockHeader
     of "finalized": result = chain.finalizedHeader()
     of "pending":
       #TODO: Implement get pending block
-      raise newException(ValueError, "Pending tag not yet implemented")
+      # We currently fall back to `latest` so that the `tx-spammer` in
+      # `kurtosis-tech/ethereum-package` can make progress. A real
+      # implementation is still required that takes into account any
+      # pending transactions that have not yet been bundled into a block.
+      result = chain.getCanonicalHead()
     else:
       raise newException(ValueError, "Unsupported block tag " & tag)
   else:
