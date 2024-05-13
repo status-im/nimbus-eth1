@@ -60,7 +60,8 @@ type
   LightClientOptimisticUpdateKey* = object
     optimisticSlot*: uint64 ## signature_slot of the update
 
-  HistoricalSummariesKey* = uint8
+  HistoricalSummariesKey* = object
+    epoch*: uint64
 
   ContentKey* = object
     case contentType*: ContentType
@@ -252,5 +253,8 @@ func optimisticUpdateContentKey*(optimisticSlot: uint64): ContentKey =
       LightClientOptimisticUpdateKey(optimisticSlot: optimisticSlot),
   )
 
-func historicalSummariesContentKey*(): ContentKey =
-  ContentKey(contentType: historicalSummaries, historicalSummariesKey: 0)
+func historicalSummariesContentKey*(epoch: uint64): ContentKey =
+  ContentKey(
+    contentType: historicalSummaries,
+    historicalSummariesKey: HistoricalSummariesKey(epoch: epoch),
+  )
