@@ -83,6 +83,8 @@ proc supersede(xp: TxPoolRef; item: TxItemRef): Result[void,TxInfo]
   # mempool when returning the current account nonce. Until that is fixed,
   # we keep telling the transaction spammer that their nonce has not changed,
   # and it keeps spamming transactions with the same nonce repeatedly.
+  # Note: When this is fixed, update `tests/test_txpool.nim` and
+  # re-enable the "Superseding txs with sender and nonce variants" test case.
   if false:
     let bumpPrice = (current.tx.gasPrice * xp.priceBump.GasInt + 99) div 100
     if item.tx.gasPrice < current.tx.gasPrice + bumpPrice:
