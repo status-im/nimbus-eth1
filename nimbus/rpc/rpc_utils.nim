@@ -81,6 +81,8 @@ proc calculateMedianGasPrice*(chain: CoreDbRef): GasInt
   # This also has to work on Genesis where no prior transaction data exists.
   # For compatibility with `kurtosis-tech/ethereum-package`, set this to a
   # sane minimum for compatibility to unblock testing.
+  # Note: When this is fixed, update `tests/graphql/queries.toml` and
+  # re-enable the "query.gasPrice" test case (remove `skip = true`).
   const minGasPrice = 30_000_000_000.GasInt
   result = max(result, minGasPrice)
 
