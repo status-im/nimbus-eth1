@@ -14,7 +14,8 @@ import
   faststreams,
   json_serialization,
   json_serialization/std/tables,
-  ../../eth_data/history_data_json_store
+  ../../eth_data/history_data_json_store,
+  ../../eth_data/yaml_utils
 
 export history_data_json_store
 
@@ -27,6 +28,17 @@ proc writePortalContentToJson*(
   except IOError as e:
     fatal "Error occured while writing to file", error = e.msg
     quit 1
+
+proc writePortalContentToYaml*(file: string, contentKey: string, contentValue: string) =
+  let
+    yamlPortalContent =
+      YamlPortalContent(content_key: contentKey, content_value: contentValue)
+    res = yamlPortalContent.dumpToYaml(file)
+  if res.isErr():
+    error "Failed writing content to file", file, error = res.error
+    quit 1
+  else:
+    notice "Successfully wrote content to file", file
 
 proc createAndOpenFile*(dataDir: string, fileName: string): OutputStreamHandle =
   # Creates directory and file, if file already exists
@@ -53,4 +65,12 @@ proc createAndOpenFile*(dataDir: string, fileName: string): OutputStreamHandle =
     return fileOutput(filePath)
   except IOError as e:
     fatal "Error occurred while opening the file", error = e.msg
+    quit 1
+
+proc existsFile*(dataDir: string, fileName: string) =
+  let filePath = dataDir / fileName
+
+  if isFile(filePath):
+    fatal "File under provided path already exists and would be overwritten",
+      path = filePath
     quit 1

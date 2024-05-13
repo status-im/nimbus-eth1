@@ -62,8 +62,9 @@ proc dumpToYaml*[T](value: T, file: string): Result[void, string] =
     except Exception as e:
       raiseAssert(e.msg)
   try:
-    # Dump to yaml, avoiding TAGS and YAML version directives.
-    dump(value, s, tagStyle = tsNone, options = options, handles = @[])
+    {.gcsafe.}:
+      # Dump to yaml, avoiding TAGS and YAML version directives.
+      dump(value, s, tagStyle = tsNone, options = options, handles = @[])
   except YamlPresenterJsonError as e:
     return err(e.msg)
   except YamlSerializationError as e:
