@@ -31,7 +31,7 @@ from beacon_chain/el/el_manager import toBeaconBlockHeader
 export beacon_clock
 
 const
-  largeRequestsTimeout = 60.seconds # Downloading large items such as states.
+  largeRequestsTimeout = 120.seconds # For downloading large items such as states.
   restRequestsTimeout = 30.seconds
 
 proc getBeaconData*(): (RuntimeConfig, ref ForkDigests, BeaconClock) =
@@ -66,15 +66,8 @@ proc exportLCBootstrapUpdate*(
     cfg: RuntimeConfig,
     forkDigests: ref ForkDigests,
 ) {.async.} =
-  let file = "light-client-bootstrap.json"
-  let fh = createAndOpenFile(dataDir, file)
-
-  defer:
-    try:
-      fh.close()
-    except IOError as e:
-      fatal "Error occured while closing file", error = e.msg
-      quit 1
+  let fileName = "light-client-bootstrap-" & $trustedBlockRoot.data.toHex() & ".yaml"
+  existsFile(dataDir, fileName)
 
   let client = RestClientRef.new(restUrl).valueOr:
     error "Cannot connect to server", error = error
@@ -101,14 +94,8 @@ proc exportLCBootstrapUpdate*(
         forkDigest = forkDigestAtEpoch(forkDigests[], epoch(slot), cfg)
         content = encodeBootstrapForked(forkDigest, update)
 
-      let portalContent = JsonPortalContent(
-        content_key: contentKey.asSeq().to0xHex(), content_value: content.to0xHex()
-      )
-
-      var contentTable: JsonPortalContentTable
-      contentTable[$slot] = portalContent
-
-      writePortalContentToJson(fh, contentTable)
+        file = dataDir / fileName
+      writePortalContentToYaml(file, contentKey.asSeq().to0xHex(), content.to0xHex())
 
 proc exportLCUpdates*(
     restUrl: string,
@@ -118,15 +105,8 @@ proc exportLCUpdates*(
     cfg: RuntimeConfig,
     forkDigests: ref ForkDigests,
 ) {.async.} =
-  let file = "light-client-updates.json"
-  let fh = createAndOpenFile(dataDir, file)
-
-  defer:
-    try:
-      fh.close()
-    except IOError as e:
-      fatal "Error occured while closing file", error = e.msg
-      quit 1
+  let fileName = "light-client-updates-" & $startPeriod & "-" & $count & ".yaml"
+  existsFile(dataDir, fileName)
 
   let client = RestClientRef.new(restUrl).valueOr:
     error "Cannot connect to server", error = error
@@ -160,14 +140,8 @@ proc exportLCUpdates*(
 
           content = encodeLightClientUpdatesForked(forkDigest, updates)
 
-        let portalContent = JsonPortalContent(
-          content_key: contentKey.asSeq().to0xHex(), content_value: content.to0xHex()
-        )
-
-        var contentTable: JsonPortalContentTable
-        contentTable[$slot] = portalContent
-
-        writePortalContentToJson(fh, contentTable)
+          file = dataDir / fileName
+        writePortalContentToYaml(file, contentKey.asSeq().to0xHex(), content.to0xHex())
   else:
     error "No updates downloaded"
     quit 1
@@ -175,15 +149,8 @@ proc exportLCUpdates*(
 proc exportLCFinalityUpdate*(
     restUrl: string, dataDir: string, cfg: RuntimeConfig, forkDigests: ref ForkDigests
 ) {.async.} =
-  let file = "light-client-finality-update.json"
-  let fh = createAndOpenFile(dataDir, file)
-
-  defer:
-    try:
-      fh.close()
-    except IOError as e:
-      fatal "Error occured while closing file", error = e.msg
-      quit 1
+  let fileName = "light-client-finality-update.yaml"
+  existsFile(dataDir, fileName)
 
   let client = RestClientRef.new(restUrl).valueOr:
     error "Cannot connect to server", error = error
@@ -211,27 +178,14 @@ proc exportLCFinalityUpdate*(
         )
         content = encodeFinalityUpdateForked(forkDigest, update)
 
-      let portalContent = JsonPortalContent(
-        content_key: contentKey.asSeq().to0xHex(), content_value: content.to0xHex()
-      )
-
-      var contentTable: JsonPortalContentTable
-      contentTable[$finalizedSlot] = portalContent
-
-      writePortalContentToJson(fh, contentTable)
+        file = dataDir / fileName
+      writePortalContentToYaml(file, contentKey.asSeq().to0xHex(), content.to0xHex())
 
 proc exportLCOptimisticUpdate*(
     restUrl: string, dataDir: string, cfg: RuntimeConfig, forkDigests: ref ForkDigests
 ) {.async.} =
-  let file = "light-client-optimistic-update.json"
-  let fh = createAndOpenFile(dataDir, file)
-
-  defer:
-    try:
-      fh.close()
-    except IOError as e:
-      fatal "Error occured while closing file", error = e.msg
-      quit 1
+  let fileName = "light-client-optimistic-update.yaml"
+  existsFile(dataDir, fileName)
 
   let client = RestClientRef.new(restUrl).valueOr:
     error "Cannot connect to server", error = error
@@ -259,14 +213,8 @@ proc exportLCOptimisticUpdate*(
         )
         content = encodeOptimisticUpdateForked(forkDigest, update)
 
-      let portalContent = JsonPortalContent(
-        content_key: contentKey.asSeq().to0xHex(), content_value: content.to0xHex()
-      )
-
-      var contentTable: JsonPortalContentTable
-      contentTable[$slot] = portalContent
-
-      writePortalContentToJson(fh, contentTable)
+        file = dataDir / fileName
+      writePortalContentToYaml(file, contentKey.asSeq().to0xHex(), content.to0xHex())
 
 proc exportHistoricalRoots*(
     restUrl: string, dataDir: string, cfg: RuntimeConfig, forkDigests: ref ForkDigests
