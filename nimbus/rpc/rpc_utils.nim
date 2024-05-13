@@ -76,6 +76,14 @@ proc calculateMedianGasPrice*(chain: CoreDbRef): GasInt
     else:
       result = prices[middle]
 
+  # TODO: This should properly incorporate the base fee in the block data,
+  # and recommend a gas fee that likely gets the block to confirm.
+  # This also has to work on Genesis where no prior transaction data exists.
+  # For compatibility with `kurtosis-tech/ethereum-package`, set this to a
+  # sane minimum for compatibility to unblock testing.
+  const minGasPrice = 30_000_000_000.GasInt
+  result = max(result, minGasPrice)
+
 proc unsignedTx*(tx: TransactionArgs, chain: CoreDbRef, defaultNonce: AccountNonce): Transaction
     {.gcsafe, raises: [CatchableError].} =
   if tx.to.isSome:
