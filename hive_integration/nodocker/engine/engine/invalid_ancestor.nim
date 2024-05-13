@@ -192,7 +192,7 @@ method getName(cs: InvalidMissingAncestorReOrgSyncTest): string =
     $cs.invalidField, $cs.emptyTransactions, $cs.reOrgFromCanonical, $cs.invalidIndex]
 
 proc executableDataToBlock(ex: ExecutableData): EthBlock =
-  ethBlock(ex.basePayload, removeBlobs = true, beaconRoot = ex.beaconRoot)
+  ethBlock(ex.basePayload, beaconRoot = ex.beaconRoot)
 
 method execute(cs: InvalidMissingAncestorReOrgSyncTest, env: TestEnv): bool =
   var sec = env.addEngine(true, cs.reOrgFromCanonical)

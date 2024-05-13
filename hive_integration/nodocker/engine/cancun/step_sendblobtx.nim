@@ -80,7 +80,7 @@ method execute*(step: SendBlobTransactions, ctx: CancunTestContext): bool =
 
     let blobTx = res.get
     if not step.skipVerificationFromNode:
-      let r = verifyTransactionFromNode(engine.client, blobTx)
+      let r = verifyTransactionFromNode(engine.client, blobTx.tx)
       if r.isErr:
         error "verify tx from node", msg=r.error
         return false

@@ -18,7 +18,8 @@ import
 
 export eth_api
 
-proc sendTransaction*(client: RpcClient, tx: Transaction): Future[bool] {.async.} =
+proc sendTransaction*(
+    client: RpcClient, tx: PooledTransaction): Future[bool] {.async.} =
   let data   = rlp.encode(tx)
   let txHash = keccakHash(data)
   let hex    = await client.eth_sendRawTransaction(data)

@@ -65,7 +65,7 @@ method getReceipts*(ctx: EthWireBase,
 
 method getPooledTxs*(ctx: EthWireBase,
                      hashes: openArray[Hash256]):
-                       Result[seq[Transaction], string]
+                       Result[seq[PooledTransaction], string]
     {.base, gcsafe.} =
   notImplemented("getPooledTxs")
 

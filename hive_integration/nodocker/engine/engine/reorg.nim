@@ -119,9 +119,9 @@ type
 
   ShadowTx = ref object
     payload: ExecutionPayload
-    nextTx: Transaction
-    tx: Option[Transaction]
-    sendTransaction: proc(i: int): Transaction {.gcsafe.}
+    nextTx: PooledTransaction
+    tx: Option[PooledTransaction]
+    sendTransaction: proc(i: int): PooledTransaction {.gcsafe.}
 
 method withMainFork(cs: TransactionReOrgTest, fork: EngineFork): BaseSpec =
   var res = cs.clone()
@@ -153,7 +153,7 @@ method execute(cs: TransactionReOrgTest, env: TestEnv): bool =
   var shadow = ShadowTx()
 
   # Send a transaction on each payload of the canonical chain
-  shadow.sendTransaction = proc(i: int): Transaction {.gcsafe.} =
+  shadow.sendTransaction = proc(i: int): PooledTransaction {.gcsafe.} =
     let sstoreContractAddr = hexToByteArray[20]("0000000000000000000000000000000000000317")
     var data: array[32, byte]
     data[^1] = i.byte
@@ -332,7 +332,7 @@ method execute(cs: TransactionReOrgTest, env: TestEnv): bool =
           txt.expectBlockHash(ethHash env.clMock.latestForkchoice.headBlockHash)
 
           if cs.scenario != TransactionReOrgScenarioReOrgBackIn:
-            shadow.tx = none(Transaction)
+            shadow.tx = none(PooledTransaction)
 
         if cs.scenario == TransactionReOrgScenarioReOrgBackIn and i > 0:
           # Reasoning: Most of the clients do not re-add blob transactions to the pool

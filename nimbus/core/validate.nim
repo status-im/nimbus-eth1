@@ -267,9 +267,6 @@ proc validateTxBasic*(
             "index=$1, len=$2" % [$i, $acl.storageKeys.len])
 
     if tx.txType >= TxEip4844:
-      if tx.networkPayload.isNil.not:
-        return err("invalid tx: network payload should not appear in block validation")
-
       if tx.to.isNone:
         return err("invalid tx: destination must be not empty")
 

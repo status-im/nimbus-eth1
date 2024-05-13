@@ -42,7 +42,7 @@ type
   TxItemRef* = ref object of RootObj ##\
     ## Data container with transaction and meta data. Entries are *read-only*\
     ## by default, for some there is a setter available.
-    tx:        Transaction           ## Transaction data
+    tx:        PooledTransaction     ## Transaction data
     itemID:    Hash256               ## Transaction hash
     timeStamp: Time                  ## Time when added
     sender:    EthAddress            ## Sender account address
@@ -112,10 +112,10 @@ proc init*(item: TxItemRef; status: TxItemStatus; info: string) =
   item.timeStamp = utcTime()
   item.reject = txInfoOk
 
-proc new*(T: type TxItemRef; tx: Transaction; itemID: Hash256;
+proc new*(T: type TxItemRef; tx: PooledTransaction; itemID: Hash256;
           status: TxItemStatus; info: string): Result[T,void] {.gcsafe,raises: [].} =
   ## Create item descriptor.
-  let rc = tx.ecRecover
+  let rc = tx.tx.ecRecover
   if rc.isErr:
     return err()
   ok(T(itemID:    itemID,
@@ -125,7 +125,7 @@ proc new*(T: type TxItemRef; tx: Transaction; itemID: Hash256;
        info:      info,
        status:    status))
 
-proc new*(T: type TxItemRef; tx: Transaction;
+proc new*(T: type TxItemRef; tx: PooledTransaction;
           reject: TxInfo; status: TxItemStatus; info: string): T {.gcsafe,raises: [].} =
   ## Create incomplete item descriptor, so meta-data can be stored (e.g.
   ## for holding in the waste basket to be investigated later.)
@@ -149,6 +149,10 @@ proc hash*(item: TxItemRef): Hash =
 proc itemID*(tx: Transaction): Hash256 =
   ## Getter, transaction ID
   tx.rlpHash
+
+proc itemID*(tx: PooledTransaction): Hash256 =
+  ## Getter, transaction ID
+  tx.tx.rlpHash
 
 # core/types/transaction.go(297): func (tx *Transaction) Cost() *big.Int {
 proc cost*(tx: Transaction): UInt256 =
@@ -210,9 +214,13 @@ proc timeStamp*(item: TxItemRef): Time =
   ## Getter
   item.timeStamp
 
-proc tx*(item: TxItemRef): Transaction =
+proc pooledTx*(item: TxItemRef): PooledTransaction =
   ## Getter
   item.tx
+
+proc tx*(item: TxItemRef): Transaction =
+  ## Getter
+  item.tx.tx
 
 func rejectInfo*(item: TxItemRef): string =
   ## Getter

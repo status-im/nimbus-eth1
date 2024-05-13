@@ -29,7 +29,7 @@ type
   TestBlobTxPool* = ref object
     currentBlobID* : BlobID
     currentTxIndex*: int
-    transactions*  : Table[common.Hash256, Transaction]
+    transactions*  : Table[common.Hash256, PooledTransaction]
     hashesByIndex* : Table[int, common.Hash256]
 
 const
@@ -53,7 +53,7 @@ func getMinExcessBlobGasForBlobGasPrice(data_gas_price: uint64): uint64 =
 func getMinExcessBlobsForBlobGasPrice*(data_gas_price: uint64): uint64 =
   return getMinExcessBlobGasForBlobGasPrice(data_gas_price) div GAS_PER_BLOB.uint64
 
-proc addBlobTransaction*(pool: TestBlobTxPool, tx: Transaction) =
+proc addBlobTransaction*(pool: TestBlobTxPool, tx: PooledTransaction) =
   let txHash = rlpHash(tx)
   pool.transactions[txHash] = tx
 
@@ -178,19 +178,19 @@ proc getBlobDataInPayload*(pool: TestBlobTxPool, payload: ExecutionPayload): Res
       return err("blob data is nil")
 
     let np = blobTx.networkPayload
-    if blobTx.versionedHashes.len != np.commitments.len or
+    if blobTx.tx.versionedHashes.len != np.commitments.len or
        np.commitments.len != np.blobs.len or
        np.blobs.len != np.proofs.len:
       return err("invalid blob wrap data")
 
-    for i in 0..<blobTx.versionedHashes.len:
+    for i in 0..<blobTx.tx.versionedHashes.len:
       blobData.data.add BlobWrapData(
-        versionedHash: blobTx.versionedHashes[i],
+        versionedHash: blobTx.tx.versionedHashes[i],
         commitment   : np.commitments[i],
         blob         : np.blobs[i],
         proof        : np.proofs[i],
       )
-    blobData.txs.add blobTx
+    blobData.txs.add blobTx.tx
 
   return ok(blobData)
 

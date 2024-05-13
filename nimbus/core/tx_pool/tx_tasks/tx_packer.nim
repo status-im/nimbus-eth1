@@ -141,7 +141,7 @@ proc runTxCommit(pst: TxPackerStateRef; item: TxItemRef; gasBurned: GasInt)
     pst.blobGasUsed += item.tx.getTotalBlobGas
 
   # Update txRoot
-  pst.tr.put(rlp.encode(inx), rlp.encode(item.tx.removeNetworkPayload))
+  pst.tr.put(rlp.encode(inx), rlp.encode(item.tx))
 
   # Add the item to the `packed` bucket. This implicitely increases the
   # receipts index `inx` at the next visit of this function.

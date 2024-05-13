@@ -38,7 +38,7 @@ logScope:
 
 proc checkTxBasic(xp: TxPoolRef; item: TxItemRef): bool =
   let res = validateTxBasic(
-    item.tx.removeNetworkPayload,
+    item.tx,
     xp.chain.nextFork,
     # A new transaction of the next fork may be
     # coming before the fork activated
@@ -234,7 +234,8 @@ proc classifyValidatePacked*(xp: TxPoolRef;
     tx = item.tx.eip1559TxNormalization(xp.chain.baseFee.GasInt)
     excessBlobGas = calcExcessBlobGas(vmState.parent)
 
-  roDB.validateTransaction(tx.removeNetworkPayload, item.sender, gasLimit, baseFee, excessBlobGas, fork).isOk
+  roDB.validateTransaction(
+    tx, item.sender, gasLimit, baseFee, excessBlobGas, fork).isOk
 
 proc classifyPacked*(xp: TxPoolRef; gasBurned, moreBurned: GasInt): bool =
   ## Classifier for *packing* (i.e. adding up `gasUsed` values after executing
