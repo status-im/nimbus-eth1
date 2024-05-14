@@ -208,28 +208,35 @@ func encode*(content: RetrievalContentValue): seq[byte] =
   of contractCode:
     SSZ.encode(content.contractCode)
 
-proc initNibbles*(packedNibbles: openArray[byte]): Nibbles =
-  doAssert(packedNibbles.len() <= MAX_PACKED_NIBBLES_LEN)
-  doAssert(packedNibbles.len() mod 2 == 0)
+func init*(T: type Nibbles, packed: openArray[byte]): T =
+  doAssert(packed.len() <= MAX_PACKED_NIBBLES_LEN)
 
-  var output = newSeqOfCap[byte](packedNibbles.len() + 1)
-  output.add(0x00)
+  let isEven = packed.len() mod 2 == 0
+  var output = newSeqOfCap[byte](packed.len() + 1)
+  if isEven:
+    output.add(0x00)
+  else:
+    # set the first nibble to 1 and copy the second nibble from the input
+    output.add((packed[0] and 0x0F) or 0x10)
 
-  for i in 0 ..< packedNibbles.len():
-    output.add(packedNibbles[i])
+  let startIdx = if isEven: 0 else: 1
+  for i in startIdx ..< packed.len():
+    output.add(packed[i])
 
   Nibbles(output)
 
-func packNibbles*(nibbles: openArray[byte]): Nibbles =
-  doAssert(nibbles.len() <= MAX_UNPACKED_NIBBLES_LEN, "Can't pack more than 64 nibbles")
+func packNibbles*(unpacked: openArray[byte]): Nibbles =
+  doAssert(
+    unpacked.len() <= MAX_UNPACKED_NIBBLES_LEN, "Can't pack more than 64 nibbles"
+  )
 
-  if nibbles.len() == 0:
+  if unpacked.len() == 0:
     return Nibbles(@[byte(0x00)])
 
-  let isEvenLength = nibbles.len() mod 2 == 0
+  let isEvenLength = unpacked.len() mod 2 == 0
 
   var
-    output = newSeqOfCap[byte](nibbles.len() div 2 + 1)
+    output = newSeqOfCap[byte](unpacked.len() div 2 + 1)
     highNibble = isEvenLength
     currentByte: byte = 0
 
@@ -238,7 +245,7 @@ func packNibbles*(nibbles: openArray[byte]): Nibbles =
   else:
     currentByte = 0x10
 
-  for i, nibble in nibbles:
+  for i, nibble in unpacked:
     if highNibble:
       currentByte = nibble shl 4
     else:
@@ -248,12 +255,12 @@ func packNibbles*(nibbles: openArray[byte]): Nibbles =
 
   Nibbles(output)
 
-func unpackNibbles*(nibbles: Nibbles): seq[byte] =
-  doAssert(nibbles.len() <= MAX_PACKED_NIBBLES_LEN, "Packed nibbles length is too long")
+func unpackNibbles*(packed: Nibbles): seq[byte] =
+  doAssert(packed.len() <= MAX_PACKED_NIBBLES_LEN, "Packed nibbles length is too long")
 
-  var output = newSeqOfCap[byte](nibbles.len() * 2)
+  var output = newSeqOfCap[byte](packed.len() * 2)
 
-  for i, pair in nibbles:
+  for i, pair in packed:
     if i == 0 and pair == 0x00:
       continue
 

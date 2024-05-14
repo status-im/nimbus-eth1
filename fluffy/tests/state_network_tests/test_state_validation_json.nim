@@ -29,7 +29,7 @@ proc checkValidProofsForExistingLeafs(
     let
       accountProof = accountState.generateAccountProof(address)
       accountTrieNodeKey = AccountTrieNodeKey(
-        path: initNibbles(keccakHash(address).data),
+        path: Nibbles.init(keccakHash(address).data),
         nodeHash: keccakHash(accountProof[^1].asSeq()),
       )
       accountTrieOffer = AccountTrieNodeOffer(proof: accountProof)
@@ -56,7 +56,7 @@ proc checkValidProofsForExistingLeafs(
           storageProof = storageState.generateStorageProof(slotKey)
           contractTrieNodeKey = ContractTrieNodeKey(
             address: address,
-            path: initNibbles(keccakHash(toBytesBE(slotKey)).data),
+            path: Nibbles.init(keccakHash(toBytesBE(slotKey)).data),
             nodeHash: keccakHash(storageProof[^1].asSeq()),
           )
           contractTrieOffer = ContractTrieNodeOffer(
@@ -79,7 +79,7 @@ proc checkInvalidProofsWithBadValue(
     var
       accountProof = accountState.generateAccountProof(address)
       accountTrieNodeKey = AccountTrieNodeKey(
-        path: initNibbles(keccakHash(address).data),
+        path: Nibbles.init(keccakHash(address).data),
         nodeHash: keccakHash(accountProof[^1].asSeq()),
       )
     accountProof[^1][^1] += 1 # bad account leaf value
@@ -110,7 +110,7 @@ proc checkInvalidProofsWithBadValue(
           storageProof = storageState.generateStorageProof(slotKey)
           contractTrieNodeKey = ContractTrieNodeKey(
             address: address,
-            path: initNibbles(keccakHash(toBytesBE(slotKey)).data),
+            path: Nibbles.init(keccakHash(toBytesBE(slotKey)).data),
             nodeHash: keccakHash(storageProof[^1].asSeq()),
           )
         storageProof[^1][^1] += 1 # bad storage leaf value

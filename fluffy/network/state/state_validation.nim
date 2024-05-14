@@ -37,14 +37,7 @@ proc decodePrefix(nodePrefixRlp: Rlp): (byte, bool, Nibbles) =
     isLeaf = firstNibble == 2 or firstNibble == 3
     isEven = firstNibble == 0 or firstNibble == 2
 
-  var packedNibbles = Nibbles(@rlpBytes)
-  if isEven:
-    packedNibbles[0] = 0
-  else:
-    # set the first nibble to 1
-    packedNibbles[0] = (packedNibbles[0] and 0x0F) or 0x10
-
-  (firstNibble.byte, isLeaf, packedNibbles)
+  (firstNibble.byte, isLeaf, Nibbles.init(rlpBytes[isEven.int .. ^1]))
 
 proc validateTrieProof(
     expectedRootHash: KeccakHash, path: Nibbles, proof: TrieProof
@@ -171,10 +164,10 @@ proc validateOfferedContractTrieNode*(
     contractTrieNodeKey: ContractTrieNodeKey,
     contractTrieNode: ContractTrieNodeOffer,
 ): Result[void, string] =
-  let
-    addressHash = keccakHash(contractTrieNodeKey.address).data
-    accountPath = Nibbles(@[byte(0x00)] & @addressHash)
-  ?validateTrieProof(trustedStateRoot, accountPath, contractTrieNode.accountProof)
+  let addressHash = keccakHash(contractTrieNodeKey.address).data
+  ?validateTrieProof(
+    trustedStateRoot, Nibbles.init(addressHash), contractTrieNode.accountProof
+  )
 
   let account = ?rlpDecodeAccountTrieNode(contractTrieNode.accountProof[^1])
 
@@ -196,10 +189,10 @@ proc validateOfferedContractCode*(
     contractCodeKey: ContractCodeKey,
     contractCode: ContractCodeOffer,
 ): Result[void, string] =
-  let
-    addressHash = keccakHash(contractCodeKey.address).data
-    accountPath = Nibbles(@[byte(0x00)] & @addressHash)
-  ?validateTrieProof(trustedStateRoot, accountPath, contractCode.accountProof)
+  let addressHash = keccakHash(contractCodeKey.address).data
+  ?validateTrieProof(
+    trustedStateRoot, Nibbles.init(addressHash), contractCode.accountProof
+  )
 
   let account = ?rlpDecodeAccountTrieNode(contractCode.accountProof[^1])
 
