@@ -103,7 +103,7 @@ proc toTxPool*(
           status = statusInfo[getStatus()]
           info = &"{txCount} #{num}({chainNo}) {n}/{txs.len} {status}"
         noisy.showElapsed(&"insert: {info}"):
-          result[0].add(txs[n], info)
+          result[0].add(PooledTransaction(tx: txs[n]), info)
 
       if loadTxs <= txCount:
         break
@@ -132,11 +132,11 @@ proc toTxPool*(
   noisy.showElapsed(&"Loading {itList.len} transactions"):
     for item in itList:
       if noLocals:
-        result.add(item.tx, item.info)
+        result.add(item.pooledTx, item.info)
       elif localAddr.hasKey(item.sender):
-        doAssert result.addLocal(item.tx, true).isOk
+        doAssert result.addLocal(item.pooledTx, true).isOk
       else:
-        doAssert result.addRemote(item.tx, true).isOk
+        doAssert result.addRemote(item.pooledTx, true).isOk
   doAssert result.nItems.total == itList.len
 
 
@@ -174,11 +174,11 @@ proc toTxPool*(
     for n in 0 ..< itList.len:
       let item = itList[n]
       if noLocals:
-        result.add(item.tx, item.info)
+        result.add(item.pooledTx, item.info)
       elif localAddr.hasKey(item.sender):
-        doAssert result.addLocal(item.tx, true).isOk
+        doAssert result.addLocal(item.pooledTx, true).isOk
       else:
-        doAssert result.addRemote(item.tx, true).isOk
+        doAssert result.addRemote(item.pooledTx, true).isOk
       if n < 3 or delayAt-3 <= n and n <= delayAt+3 or itList.len-4 < n:
         let t = result.getItem(item.itemID).value.timeStamp.format(tFmt, utc())
         noisy.say &"added item {n} time={t}"

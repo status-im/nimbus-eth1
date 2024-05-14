@@ -82,7 +82,7 @@ proc put*(api: var PayloadQueue, id: PayloadID,
           blobsBundle: Option[BlobsBundleV1]) =
   doAssert blobsBundle.isNone == (payload is
     ExecutionPayloadV1 | ExecutionPayloadV2)
-  api.put(id, blockValue, payload.executionPayload, blobsBundle: blobsBundle)
+  api.put(id, blockValue, payload.executionPayload, blobsBundle = blobsBundle)
 
 proc put*(api: var PayloadQueue, id: PayloadID,
           blockValue: UInt256,
