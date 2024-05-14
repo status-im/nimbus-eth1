@@ -191,20 +191,6 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
     )
     streamManager = StreamManager.new(d)
 
-    stateNetwork =
-      if Network.state in config.networks:
-        Opt.some(
-          StateNetwork.new(
-            d,
-            db,
-            streamManager,
-            bootstrapRecords = bootstrapRecords,
-            portalConfig = portalConfig,
-          )
-        )
-      else:
-        Opt.none(StateNetwork)
-
     accumulator =
       # Building an accumulator from header epoch files takes > 2m30s and is
       # thus not really a viable option at start-up.
@@ -233,6 +219,21 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
         )
       else:
         Opt.none(HistoryNetwork)
+
+    stateNetwork =
+      if Network.state in config.networks:
+        Opt.some(
+          StateNetwork.new(
+            d,
+            db,
+            streamManager,
+            bootstrapRecords = bootstrapRecords,
+            portalConfig = portalConfig,
+            historyNetwork = historyNetwork,
+          )
+        )
+      else:
+        Opt.none(StateNetwork)
 
     beaconLightClient =
       # TODO: Currently disabled by default as it is not sufficiently polished.

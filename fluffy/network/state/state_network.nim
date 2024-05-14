@@ -13,6 +13,7 @@ import
   eth/common,
   eth/p2p/discoveryv5/[protocol, enr],
   ../../database/content_db,
+  ../history/[history_network],
   ../wire/[portal_protocol, portal_stream, portal_protocol_config],
   ./state_content,
   ./state_validation
@@ -27,6 +28,7 @@ type StateNetwork* = ref object
   contentDB*: ContentDB
   contentQueue*: AsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])]
   processContentLoop: Future[void]
+  historyNetwork: Opt[HistoryNetwork]
 
 func toContentIdHandler(contentKey: ByteList): results.Opt[ContentId] =
   ok(toContentId(contentKey))
@@ -142,9 +144,22 @@ proc getContent*(n: StateNetwork, key: ContentKey): Future[Opt[seq[byte]]] {.asy
   # domain types.
   return Opt.some(contentResult.content)
 
+proc getStateRootByBlockHash(
+    n: StateNetwork, hash: BlockHash
+): Future[Opt[KeccakHash]] {.async.} =
+  if n.historyNetwork.isNone():
+    warn "History network is not available. Unable to get state root by block hash"
+    return Opt.none(KeccakHash)
+
+  let header = (await n.historyNetwork.get().getVerifiedBlockHeader(hash)).valueOr:
+    warn "Failed to get block header by hash", hash
+    return Opt.none(KeccakHash)
+
+  Opt.some(header.stateRoot)
+
 proc validateContent*(
     n: StateNetwork, contentKey: ContentKey, contentValue: OfferContentValue
-): bool =
+): Future[Result[void, string]] {.async.} =
   doAssert(contentKey.contentType == contentValue.contentType)
 
   let res =
@@ -152,34 +167,34 @@ proc validateContent*(
     of unused:
       Result[void, string].err("Received content with unused content type")
     of accountTrieNode:
-      Result[void, string].ok()
-      # validateOfferedAccountTrieNode(
-      #   keccakHash(""),
-      #     # TODO: Get the stateRoot from the block header using history network
-      #   contentKey.accountTrieNodeKey,
-      #   contentValue.accountTrieNode,
-      # )
+      let stateRoot = (
+        await n.getStateRootByBlockHash(contentValue.accountTrieNode.blockHash)
+      ).valueOr:
+        return Result[void, string].err("Failed to get state root by block hash")
+
+      validateOfferedAccountTrieNode(
+        stateRoot, contentKey.accountTrieNodeKey, contentValue.accountTrieNode
+      )
     of contractTrieNode:
-      Result[void, string].ok()
-      # validateOfferedContractTrieNode(
-      #   keccakHash(""),
-      #     # TODO: Get the stateRoot from the block header using history network
-      #   contentKey.contractTrieNodeKey,
-      #   contentValue.contractTrieNode,
-      # )
+      let stateRoot = (
+        await n.getStateRootByBlockHash(contentValue.contractTrieNode.blockHash)
+      ).valueOr:
+        return Result[void, string].err("Failed to get state root by block hash")
+
+      validateOfferedContractTrieNode(
+        stateRoot, contentKey.contractTrieNodeKey, contentValue.contractTrieNode
+      )
     of contractCode:
-      Result[void, string].ok()
-      # validateOfferedContractCode(
-      #   keccakHash(""),
-      #     # TODO: Get the stateRoot from the block header using history network
-      #   contentKey.contractCodeKey,
-      #   contentValue.contractCode,
-      # )
+      let stateRoot = (
+        await n.getStateRootByBlockHash(contentValue.contractCode.blockHash)
+      ).valueOr:
+        return Result[void, string].err("Failed to get state root by block hash")
 
-  res.isOkOr:
-    warn "Validation of offered content failed: ", error
+      validateOfferedContractCode(
+        stateRoot, contentKey.contractCodeKey, contentValue.contractCode
+      )
 
-  res.isOk()
+  res
 
 proc recursiveGossipAccountTrieNode(
     p: PortalProtocol,
@@ -250,6 +265,7 @@ proc new*(
     streamManager: StreamManager,
     bootstrapRecords: openArray[Record] = [],
     portalConfig: PortalProtocolConfig = defaultPortalProtocolConfig,
+    historyNetwork = Opt.none(HistoryNetwork),
 ): T =
   let cq = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
 
@@ -268,8 +284,12 @@ proc new*(
   portalProtocol.dbPut =
     createStoreHandler(contentDB, portalConfig.radiusConfig, portalProtocol)
 
-  return
-    StateNetwork(portalProtocol: portalProtocol, contentDB: contentDB, contentQueue: cq)
+  return StateNetwork(
+    portalProtocol: portalProtocol,
+    contentDB: contentDB,
+    contentQueue: cq,
+    historyNetwork: historyNetwork,
+  )
 
 proc processContentLoop(n: StateNetwork) {.async.} =
   try:
@@ -281,22 +301,25 @@ proc processContentLoop(n: StateNetwork) {.async.} =
           (decodedKey, decodedValue) = decodeKV(contentKey, contentValue).valueOr:
             error "Unable to decode offered Key/Value"
             continue
-        if validateContent(n, decodedKey, decodedValue):
-          let
-            valueForRetrieval = decodedValue.offerContentToRetrievalContent().encode()
-            contentId = n.portalProtocol.toContentId(contentKey).valueOr:
-              error "Received offered content with invalid content key", contentKey
-              continue
 
-          n.portalProtocol.storeContent(contentKey, contentId, valueForRetrieval)
-          info "Received offered content validated successfully", contentKey
+        let res = await n.validateContent(decodedKey, decodedValue)
+        res.isOkOr:
+          error "Received offered content failed validation", contentKey, error
+          continue
 
-          await gossipContent(
-            n.portalProtocol, maybeSrcNodeId, contentKey, decodedKey, contentValue,
-            decodedValue,
-          )
-        else:
-          error "Received offered content failed validation", contentKey
+        let
+          valueForRetrieval = decodedValue.offerContentToRetrievalContent().encode()
+          contentId = n.portalProtocol.toContentId(contentKey).valueOr:
+            error "Received offered content with invalid content key", contentKey
+            continue
+
+        n.portalProtocol.storeContent(contentKey, contentId, valueForRetrieval)
+        info "Received offered content validated successfully", contentKey
+
+        await gossipContent(
+          n.portalProtocol, maybeSrcNodeId, contentKey, decodedKey, contentValue,
+          decodedValue,
+        )
   except CancelledError:
     trace "processContentLoop canceled"
 
