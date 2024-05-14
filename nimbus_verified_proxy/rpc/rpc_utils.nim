@@ -35,7 +35,7 @@ type ExecutionData* = object
   withdrawals*: seq[WithdrawalV1]
 
 proc asExecutionData*(
-    payload: ExecutionPayloadV1 | ExecutionPayloadV2 | ExecutionPayloadV3
+    payload: SomeExecutionPayload
 ): ExecutionData =
   when payload is ExecutionPayloadV1:
     return ExecutionData(
