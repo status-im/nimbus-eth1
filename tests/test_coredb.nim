@@ -33,12 +33,12 @@ const
   # Reference file for finding some database directory base
   sampleDirRefFile = "coredb_test_xx.nim"
 
-  dbTypeDefault = LegacyDbMemory
-  ldgTypeDefault = LegacyAccountsCache
+  dbTypeDefault = AristoDbRocks
+  ldgTypeDefault = LedgerCache
 
 let
   # Standard test sample
-  bChainCapture = bulkTest0
+  bChainCapture = mainEra1
 
 # ------------------------------------------------------------------------------
 # Helpers
@@ -275,10 +275,7 @@ when isMainModule:
 
   sampleList = cmdLineConfig().samples
   if sampleList.len == 0:
-    sampleList = @[bulkTest0]
-    when true:
-      sampleList = @[bulkTest2, bulkTest3]
-    sampleList = @[ariTest1] # debugging
+    sampleList = @[mainEra1]
 
   var state: (Duration, int)
   for n,capture in sampleList:

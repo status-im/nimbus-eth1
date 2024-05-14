@@ -9,6 +9,7 @@
 # distributed except according to those terms.
 
 import
+  std/[os, sequtils],
   eth/common,
   ../../nimbus/db/core_db,
   ../../nimbus/common/chain_config
@@ -83,6 +84,14 @@ let
       "mainnet332161-550848.txt.gz",
       "mainnet550849-719232.txt.gz",
       "mainnet719233-843841.txt.gz"])
+
+  mainEra1* = CaptureSpecs(
+    builtIn: true,
+    name:    "main",
+    network: MainNet,
+    files: toSeq(walkPattern("*.era1")),
+    numBlocks: high(int),
+    dbType: AristoDbRocks)
 
   # ------------------
 

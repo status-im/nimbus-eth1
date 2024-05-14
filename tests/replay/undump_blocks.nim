@@ -10,9 +10,11 @@
 
 import
   std/[os, sequtils, strformat, strutils],
+  results,
   eth/[common, rlp],
   nimcrypto/utils,
   ../../nimbus/db/core_db,
+  ../../fluffy/eth_data/era1,
   ./gunzip
 
 # ------------------------------------------------------------------------------
@@ -172,11 +174,25 @@ iterator undumpBlocks*(gzFile: string): (seq[BlockHeader],seq[BlockBody]) =
     echo &"*** Ignoring line({lno}): {line}."
     waitFor = "transaction"
 
-iterator undumpBlocks*(gzs: seq[string]): (seq[BlockHeader],seq[BlockBody])=
+
+iterator undumpBlocks*(era1files: seq[string]): (seq[BlockHeader],seq[BlockBody])=
   ## Variant of `undumpBlocks()`
-  for f in gzs:
-    for w in f.undumpBlocks:
-      yield w
+  for fileName in era1files:
+    var headers: seq[BlockHeader]
+    var bodies: seq[BlockBody]
+    let era1File = Era1File.open(fileName).value
+    for blockTuple in era1File.era1BlockTuples:
+      headers.add blockTuple.header
+      bodies.add blockTuple.body
+      if headers.len == 100:
+        yield (headers, bodies)
+        headers.setLen 0
+        bodies.setLen 0
+    if headers.len > 0:
+      yield (headers, bodies)
+      headers.setLen 0
+      bodies.setLen 0
+
 
 iterator undumpBlocks*(
         gzFile: string;                          # Data dump file
