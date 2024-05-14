@@ -201,7 +201,7 @@ func asLightClientConf*(pc: VerifiedProxyConf): LightClientConf =
     eth2Network: pc.eth2Network,
     bootstrapNodes: pc.bootstrapNodes,
     bootstrapNodesFile: pc.bootstrapNodesFile,
-    listenAddress: pc.listenAddress,
+    listenAddress: pc.listenAddress.get(),
     tcpPort: pc.tcpPort,
     udpPort: pc.udpPort,
     maxPeers: pc.maxPeers,
