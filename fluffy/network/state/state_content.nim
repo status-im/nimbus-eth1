@@ -208,6 +208,18 @@ func encode*(content: RetrievalContentValue): seq[byte] =
   of contractCode:
     SSZ.encode(content.contractCode)
 
+proc initNibbles*(packedNibbles: openArray[byte]): Nibbles =
+  doAssert(packedNibbles.len() <= MAX_PACKED_NIBBLES_LEN)
+  doAssert(packedNibbles.len() mod 2 == 0)
+
+  var output = newSeqOfCap[byte](packedNibbles.len() + 1)
+  output.add(0x00)
+
+  for i in 0 ..< packedNibbles.len():
+    output.add(packedNibbles[i])
+
+  Nibbles(output)
+
 func packNibbles*(nibbles: openArray[byte]): Nibbles =
   doAssert(nibbles.len() <= MAX_UNPACKED_NIBBLES_LEN, "Can't pack more than 64 nibbles")
 

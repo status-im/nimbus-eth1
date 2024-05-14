@@ -13,7 +13,7 @@ import
   ./state_network_tests/test_state_content_values,
   ./state_network_tests/test_state_network_gossip,
   ./state_network_tests/test_state_validation,
-  ./test_state_proof_verification,
+  ./state_network_tests/test_state_validation_json,
   ./test_accumulator,
   ./test_history_network,
   ./test_content_db,
