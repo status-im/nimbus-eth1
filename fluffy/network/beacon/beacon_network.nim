@@ -160,11 +160,11 @@ proc getLightClientOptimisticUpdate*(
     return Opt.some(decodingResult.value())
 
 proc getHistoricalSummaries*(
-    n: BeaconNetwork
+    n: BeaconNetwork, epoch: uint64
 ): Future[results.Opt[HistoricalSummaries]] {.async.} =
   # Note: when taken from the db, it does not need to verify the proof.
   let
-    contentKey = historicalSummariesContentKey()
+    contentKey = historicalSummariesContentKey(epoch)
     content = ?await n.getContent(contentKey)
 
     summariesWithProof = decodeSsz(content, HistoricalSummariesWithProof).valueOr:
