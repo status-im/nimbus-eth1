@@ -99,10 +99,9 @@ type BeaconBridgeConf* = object # Config
 
   listenAddress* {.
     desc: "Listening address for the Ethereum LibP2P and Discovery v5 traffic",
-    defaultValue: defaultListenAddress,
-    defaultValueDesc: $defaultListenAddressDesc,
+    defaultValueDesc: "*",
     name: "listen-address"
-  .}: IpAddress
+  .}: Option[IpAddress]
 
   tcpPort* {.
     desc: "Listening TCP port for Ethereum LibP2P traffic",
