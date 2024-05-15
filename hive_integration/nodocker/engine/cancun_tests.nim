@@ -1937,15 +1937,20 @@ proc makeCancunTest(): seq[EngineSpec] =
     txType  : some(TxEIP4844),
   )
 
+proc getGenesisProc(cs: BaseSpec, param: NetworkParams) =
+  getGenesis(param)
+
 proc filCancunTests(): seq[TestDesc] =
   result.add cancunTestListA
 
   let list = makeCancunTest()
   for x in list:
+    var z = x
+    z.getGenesisFn = getGenesisProc
     result.add TestDesc(
       name: x.getName(),
       run: executeEngineSpec,
-      spec: x,
+      spec: z,
     )
 
 let cancunTestList* = filCancunTests()

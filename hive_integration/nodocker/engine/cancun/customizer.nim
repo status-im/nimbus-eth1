@@ -540,7 +540,7 @@ func scramble(data: Web3Hash): Option[common.Hash256] =
 
 func scramble(data: common.Hash256): Option[common.Hash256] =
   var h = data
-  h.data[^1] = byte(255 - h.data[^1])
+  h.data[0] = byte(255 - h.data[0])
   some(h)
 
 # This function generates an invalid payload by taking a base payload and modifying the specified field such that it ends up being invalid.
