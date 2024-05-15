@@ -610,6 +610,10 @@ method handleNewBlock*(ctx: EthWireRef,
                        totalDifficulty: DifficultyInt):
                          Result[void, string]
     {.gcsafe.} =
+  if ctx.enableTxPool != Enabled:
+    when trMissingOrDisabledGossipOk:
+      notEnabled("handleNewBlock")
+    return ok()
   try:
     if ctx.chain.com.forkGTE(MergeFork):
       debug "Dropping peer for sending NewBlock after merge (EIP-3675)",
@@ -632,6 +636,10 @@ method handleNewBlockHashes*(ctx: EthWireRef,
                              hashes: openArray[NewBlockHashesAnnounce]):
                                Result[void, string]
     {.gcsafe.} =
+  if ctx.enableTxPool != Enabled:
+    when trMissingOrDisabledGossipOk:
+      notEnabled("handleNewBlockHashes")
+    return ok()
   try:
     if ctx.chain.com.forkGTE(MergeFork):
       debug "Dropping peer for sending NewBlockHashes after merge (EIP-3675)",
