@@ -13,4 +13,4 @@ import
   ./test_state_network,
   #./test_state_network_gossip,
   ./test_state_validation,
-  ./test_state_validation_json
+  ./test_state_validation_genesis

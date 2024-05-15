@@ -26,7 +26,7 @@ proc isValidNextNode(nodeRlp: Rlp, rlpIdx: int, nextNode: TrieNode): bool =
   if nextHash.len() != 32:
     return false
 
-  # is there a better way to build a KeccakHash from bytes?
+  # is there a better way to build a KeccakHash from a seq[byte]?
   nextNode.hashEquals(KeccakHash.fromHex(nextHash.toHex()))
 
 proc decodePrefix(nodePrefixRlp: Rlp): (byte, bool, Nibbles) =

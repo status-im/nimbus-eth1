@@ -12,6 +12,7 @@ import
   stew/[byteutils, results],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ../../network/wire/[portal_protocol, portal_stream],
+  ../../network/history/[history_content, history_network],
   ../../network/state/[state_content, state_network],
   ../../database/content_db,
   .././test_helpers,
@@ -35,7 +36,6 @@ procSuite "State Network Gossip":
     let
       testCase = YamlRecursiveGossip.loadFromYaml(file).valueOr:
         raiseAssert "Cannot read test vector: " & error
-
       recursiveGossipSteps = testCase[0]
       numOfClients = recursiveGossipSteps.len() - 1
 
@@ -44,9 +44,10 @@ procSuite "State Network Gossip":
     for i in 0 .. numOfClients:
       let
         node = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20400 + i))
+        db = ContentDB.new("", uint32.high, inMemory = true)
         sm = StreamManager.new(node)
-        proto =
-          StateNetwork.new(node, ContentDB.new("", uint32.high, inMemory = true), sm)
+        hn = HistoryNetwork.new(node, db, sm, FinishedAccumulator())
+        proto = StateNetwork.new(node, db, sm, historyNetwork = Opt.some(hn))
       proto.start()
       clients.add(proto)
 
@@ -54,9 +55,29 @@ procSuite "State Network Gossip":
       let
         currentNode = clients[i]
         nextNode = clients[i + 1]
+
       check:
         currentNode.portalProtocol.addNode(nextNode.portalProtocol.localNode) == Added
         (await currentNode.portalProtocol.ping(nextNode.portalProtocol.localNode)).isOk()
+
+      let
+        blockHeader = BlockHeader(
+          stateRoot: Hash256.fromHex(
+            "0x1ad7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61"
+          )
+        )
+        headerRlp = rlp.encode(blockHeader)
+        blockHeaderWithProof = BlockHeaderWithProof(
+          header: ByteList.init(headerRlp), proof: BlockHeaderProof.init()
+        )
+        value = recursiveGossipSteps[0].content_value.hexToSeqByte()
+        decodedValue = SSZ.decode(value, AccountTrieNodeOffer)
+        contentKey = history_content.ContentKey
+          .init(history_content.ContentType.blockHeader, decodedValue.blockHash)
+          .encode()
+        contentId = history_content.toContentId(contentKey)
+
+      clients[i].contentDB.put(contentId, SSZ.encode(blockHeaderWithProof))
 
     for i in 0 .. numOfClients - 1:
       let
@@ -65,11 +86,11 @@ procSuite "State Network Gossip":
         nextNode = clients[i + 1]
 
         key = ByteList.init(pair.content_key.hexToSeqByte())
-        decodedKey = key.decode().valueOr:
+        decodedKey = state_content.decode(key).valueOr:
           raiseAssert "Cannot decode key"
 
         nextKey = ByteList.init(recursiveGossipSteps[1].content_key.hexToSeqByte())
-        decodedNextKey = nextKey.decode().valueOr:
+        decodedNextKey = state_content.decode(nextKey).valueOr:
           raiseAssert "Cannot decode key"
 
         value = pair.content_value.hexToSeqByte()

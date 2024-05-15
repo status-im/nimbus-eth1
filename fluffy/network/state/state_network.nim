@@ -13,7 +13,7 @@ import
   eth/common,
   eth/p2p/discoveryv5/[protocol, enr],
   ../../database/content_db,
-  ../history/[history_network],
+  ../history/history_network,
   ../wire/[portal_protocol, portal_stream, portal_protocol_config],
   ./state_content,
   ./state_validation
@@ -162,39 +162,36 @@ proc validateContent*(
 ): Future[Result[void, string]] {.async.} =
   doAssert(contentKey.contentType == contentValue.contentType)
 
-  let res =
-    case contentKey.contentType
-    of unused:
-      Result[void, string].err("Received content with unused content type")
-    of accountTrieNode:
-      let stateRoot = (
-        await n.getStateRootByBlockHash(contentValue.accountTrieNode.blockHash)
-      ).valueOr:
-        return Result[void, string].err("Failed to get state root by block hash")
+  case contentKey.contentType
+  of unused:
+    Result[void, string].err("Received content with unused content type")
+  of accountTrieNode:
+    let stateRoot = (
+      await n.getStateRootByBlockHash(contentValue.accountTrieNode.blockHash)
+    ).valueOr:
+      return Result[void, string].err("Failed to get state root by block hash")
 
-      validateOfferedAccountTrieNode(
-        stateRoot, contentKey.accountTrieNodeKey, contentValue.accountTrieNode
-      )
-    of contractTrieNode:
-      let stateRoot = (
-        await n.getStateRootByBlockHash(contentValue.contractTrieNode.blockHash)
-      ).valueOr:
-        return Result[void, string].err("Failed to get state root by block hash")
+    validateOfferedAccountTrieNode(
+      stateRoot, contentKey.accountTrieNodeKey, contentValue.accountTrieNode
+    )
+  of contractTrieNode:
+    let stateRoot = (
+      await n.getStateRootByBlockHash(contentValue.contractTrieNode.blockHash)
+    ).valueOr:
+      return Result[void, string].err("Failed to get state root by block hash")
 
-      validateOfferedContractTrieNode(
-        stateRoot, contentKey.contractTrieNodeKey, contentValue.contractTrieNode
-      )
-    of contractCode:
-      let stateRoot = (
-        await n.getStateRootByBlockHash(contentValue.contractCode.blockHash)
-      ).valueOr:
-        return Result[void, string].err("Failed to get state root by block hash")
+    validateOfferedContractTrieNode(
+      stateRoot, contentKey.contractTrieNodeKey, contentValue.contractTrieNode
+    )
+  of contractCode:
+    let stateRoot = (
+      await n.getStateRootByBlockHash(contentValue.contractCode.blockHash)
+    ).valueOr:
+      return Result[void, string].err("Failed to get state root by block hash")
 
-      validateOfferedContractCode(
-        stateRoot, contentKey.contractCodeKey, contentValue.contractCode
-      )
-
-  res
+    validateOfferedContractCode(
+      stateRoot, contentKey.contractCodeKey, contentValue.contractCode
+    )
 
 proc recursiveGossipAccountTrieNode(
     p: PortalProtocol,
@@ -302,8 +299,7 @@ proc processContentLoop(n: StateNetwork) {.async.} =
             error "Unable to decode offered Key/Value"
             continue
 
-        let res = await n.validateContent(decodedKey, decodedValue)
-        res.isOkOr:
+        (await n.validateContent(decodedKey, decodedValue)).isOkOr:
           error "Received offered content failed validation", contentKey, error
           continue
 
