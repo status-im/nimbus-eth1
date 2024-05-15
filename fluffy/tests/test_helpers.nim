@@ -9,11 +9,10 @@
 
 import
   std/net,
-  eth/[common, keys, rlp, trie, trie/db],
+  eth/[common, keys, rlp],
   eth/p2p/discoveryv5/[enr, node, routing_table],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ../network/history/[accumulator, history_content],
-  ../../nimbus/common/chain_config,
   ../database/content_db
 
 proc localAddress*(port: int): Address {.raises: [ValueError].} =

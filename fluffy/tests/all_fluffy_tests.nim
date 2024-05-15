@@ -9,11 +9,6 @@
 
 import
   ./test_portal_wire_protocol,
-  ./state_network_tests/test_state_content_keys,
-  ./state_network_tests/test_state_content_values,
-  ./state_network_tests/test_state_network_gossip,
-  ./state_network_tests/test_state_validation,
-  ./state_network_tests/test_state_validation_json,
   ./test_accumulator,
   ./test_history_network,
   ./test_content_db,
@@ -22,4 +17,5 @@ import
   ./test_beacon_chain_block_proof_capella,
   ./test_beacon_chain_historical_roots,
   ./test_beacon_chain_historical_summaries,
-  ./beacon_network_tests/all_beacon_network_tests
+  ./beacon_network_tests/all_beacon_network_tests,
+  ./state_network_tests/all_state_network_tests

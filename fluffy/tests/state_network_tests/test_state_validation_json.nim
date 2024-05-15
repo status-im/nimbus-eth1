@@ -15,7 +15,7 @@ import
   ../../../nimbus/common/chain_config,
   ../../network/state/state_content,
   ../../network/state/state_validation,
-  ./test_helpers
+  ./state_test_helpers
 
 proc checkValidProofsForExistingLeafs(
     genAccounts: GenesisAlloc,
