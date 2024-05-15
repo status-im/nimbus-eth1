@@ -41,7 +41,7 @@ method withMainFork(cs: InvalidPayloadTestCase, fork: EngineFork): BaseSpec =
   return res
 
 method getName(cs: InvalidPayloadTestCase): string =
-  var name = "Invalid " & $cs.invalidField & " NewPayload"
+  var name = "Invalid NewPayload, " & $cs.invalidField
   if cs.syncing:
     name.add " - syncing"
 
@@ -185,10 +185,11 @@ method execute(cs: InvalidPayloadTestCase, env: TestEnv): bool =
         s.expectPayloadStatus(PayloadExecutionStatus.syncing)
 
         # When we send the previous payload, the client must now be capable of determining that the invalid payload is actually invalid
-        let p = env.engine.client.newPayload(env.clMock.latestExecutedPayload)
+        let version = env.engine.version(env.clMock.latestExecutedPayload.timestamp)
+        let p = env.engine.client.newPayload(version, env.clMock.latestExecutedPayload)
+
         p.expectStatus(PayloadExecutionStatus.valid)
         p.expectLatestValidHash(env.clMock.latestExecutedPayload.blockHash)
-
 
         # Another option here could be to send an fcU to the previous payload,
         # but this does not seem like something the CL would do.
@@ -198,7 +199,6 @@ method execute(cs: InvalidPayloadTestCase, env: TestEnv): bool =
         #  finalizedblockHash: previousPayload.blockHash,
         #), nil)
         #s.expectPayloadStatus(Valid)
-
 
         let q = env.engine.client.newPayload(version, shadow.alteredPayload)
         if cs.invalidField == InvalidParentHash:
@@ -238,11 +238,11 @@ method execute(cs: InvalidPayloadTestCase, env: TestEnv): bool =
 
   if cs.syncing:
     # Send the valid payload and its corresponding forkchoiceUpdated
-    let r = env.engine.client.newPayload(env.clMock.latestExecutedPayload)
+    let version = env.engine.version(env.clMock.latestExecutedPayload.timestamp)
+    let r = env.engine.client.newPayload(version, env.clMock.latestExecutedPayload)
     r.expectStatus(PayloadExecutionStatus.valid)
     r.expectLatestValidHash(env.clMock.latestExecutedPayload.blockHash)
 
-    let version = env.engine.version(env.clMock.latestExecutedPayload.timestamp)
     let s = env.engine.client.forkchoiceUpdated(version, env.clMock.latestForkchoice)
     s.expectPayloadStatus(PayloadExecutionStatus.valid)
     s.expectLatestValidHash(env.clMock.latestExecutedPayload.blockHash)

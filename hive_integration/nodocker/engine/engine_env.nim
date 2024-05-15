@@ -190,7 +190,8 @@ proc connect*(env: EngineEnv, node: ENode) =
   waitFor env.node.connectToNode(node)
 
 func ID*(env: EngineEnv): string =
-  $env.node.listeningAddress
+  # $env.node.listeningAddress
+  $env.conf.httpPort
 
 proc peer*(env: EngineEnv): Peer =
   doAssert(env.node.numPeers > 0)

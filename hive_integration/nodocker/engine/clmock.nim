@@ -68,7 +68,7 @@ type
     latestBlobsBundle*      : Option[BlobsBundleV1]
     latestShouldOverrideBuilder*: Option[bool]
     latestPayloadAttributes*: PayloadAttributes
-    latestExecutedPayload*  : ExecutionPayload
+    latestExecutedPayload*  : ExecutableData
     latestForkchoice*       : ForkchoiceStateV1
 
     # Merge related
@@ -139,9 +139,11 @@ proc newClMocker*(eng: EngineEnv, com: CommonRef): CLMocker =
 
 proc addEngine*(cl: CLMocker, eng: EngineEnv) =
   cl.clients.add eng
+  echo "CLMocker: Adding engine client ", eng.ID()
 
 proc removeEngine*(cl: CLMocker, eng: EngineEnv) =
   cl.clients.remove eng
+  echo "CLMocker: Removing engine client ", eng.ID()
 
 proc waitForTTD*(cl: CLMocker): Future[bool] {.async.} =
   let ttd = cl.com.ttd()
@@ -150,6 +152,8 @@ proc waitForTTD*(cl: CLMocker): Future[bool] {.async.} =
   if not waitRes:
     error "CLMocker: timeout while waiting for TTD"
     return false
+
+  echo "CLMocker: TTD has been reached at block ", header.blockNumber
 
   cl.latestHeader = header
   cl.headerHistory[header.blockNumber.truncate(uint64)] = header
@@ -241,6 +245,8 @@ proc pickNextPayloadProducer(cl: CLMocker): bool =
     # Get a client to generate the payload
     let id = (cl.latestHeadNumber.int + i) mod cl.clients.len
     cl.nextBlockProducer = cl.clients[id]
+
+    echo "CLMocker: Selected payload producer: ", cl.nextBlockProducer.ID()
 
     # Get latest header. Number and hash must coincide with our view of the chain,
     # and only then we can build on top of this client's chain
@@ -401,6 +407,9 @@ proc broadcastNextNewPayload(cl: CLMocker): bool =
       return false
 
     let s = res.get()
+    echo "CLMocker: Executed payload on ", eng.ID(),
+      " ", s.status, " ", s.latestValidHash
+
     if s.status == PayloadExecutionStatus.valid:
       # The client is synced and the payload was immediately validated
       # https:#github.com/ethereum/execution-apis/blob/main/src/engine/specification.md:
@@ -437,7 +446,10 @@ proc broadcastNextNewPayload(cl: CLMocker): bool =
         msg=s.validationError.get("NO MSG")
       return false
 
-  cl.latestExecutedPayload = cl.latestPayloadBuilt
+  # warning: although latestExecutedPayload is taken from
+  # latestPayloadBuilt, but during the next round, it can be different
+
+  cl.latestExecutedPayload = cl.latestExecutableData()
   let number = uint64 cl.latestPayloadBuilt.blockNumber
   cl.executedPayloadHistory[number] = cl.latestPayloadBuilt
   return true
@@ -662,6 +674,9 @@ proc produceSingleBlock*(cl: CLMocker, cb: BlockProcessCallbacks): bool {.gcsafe
 
   cl.latestHeader = newHeader
   cl.headerHistory[cl.latestHeadNumber] = cl.latestHeader
+
+  echo "CLMocker: New block produced: number=", newHeader.blockNumber,
+    " hash=", newHeader.blockHash
 
   return true
 

@@ -11,13 +11,15 @@
 import
   std/[options, typetraits, strutils],
   eth/common,
-  nimcrypto/sysrand,
+  nimcrypto/[sysrand, sha2],
   stew/[byteutils, endians2],
   web3/eth_api_types,
   web3/engine_api_types,
   web3/execution_types,
   ../../../nimbus/beacon/web3_eth_conv,
   ../../../nimbus/utils/utils
+
+from ../../../nimbus/common/chain_config import NetworkParams
 
 export
   execution_types,
@@ -44,6 +46,7 @@ type
     forkHeight*: int
     forkTime*: uint64
     previousForkTime*: uint64
+    getGenesisFn*: proc(cs: BaseSpec, param: NetworkParams)
 
   TestDesc* = object
     name* : string
@@ -83,7 +86,7 @@ func toHash*(x: UInt256): common.Hash256 =
 
 func timestampToBeaconRoot*(timestamp: Quantity): FixedBytes[32] =
   # Generates a deterministic hash from the timestamp
-  let h = keccakHash(timestamp.uint64.toBytesBE)
+  let h = sha2.sha256.digest(timestamp.uint64.toBytesBE)
   FixedBytes[32](h.data)
 
 proc randomBytes*(_: type common.Hash256): common.Hash256 =
@@ -315,6 +318,12 @@ func blockNumber*(x: ExecutableData): auto =
 
 func stateRoot*(x: ExecutableData): auto =
   x.basePayload.stateRoot
+
+func version*(x: ExecutableData): auto =
+  x.basePayload.version
+
+func V1V2*(x: ExecutableData): auto =
+  x.basePayload.V1V2
 
 proc `parentHash=`*(x: var ExecutableData, val: auto) =
   x.basePayload.parentHash = val
