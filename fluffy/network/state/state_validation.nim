@@ -5,19 +5,17 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import results, eth/[common, trie], ../../common/common_types, ./state_content
+import
+  results,
+  stew/byteutils,
+  eth/[common, trie],
+  ../../common/common_types,
+  ./state_content
 
 # private functions
 
-proc isValidTrieNode(expectedHash: openArray[byte], node: TrieNode): bool {.inline.} =
-  doAssert(expectedHash.len() == 32)
-  expectedHash == keccakHash(node.asSeq()).data
-
-proc isValidTrieNode(expectedHash: KeccakHash, node: TrieNode): bool {.inline.} =
-  expectedHash == keccakHash(node.asSeq())
-
-proc isValidBytecode(expectedHash: KeccakHash, code: Bytecode): bool {.inline.} =
-  expectedHash == keccakHash(code.asSeq())
+proc hashEquals(value: TrieNode | Bytecode, expectedHash: KeccakHash): bool {.inline.} =
+  keccakHash(value.asSeq()) == expectedHash
 
 proc isValidNextNode(nodeRlp: Rlp, rlpIdx: int, nextNode: TrieNode): bool =
   let nextHashRlp = nodeRlp.listElem(rlpIdx)
@@ -28,16 +26,20 @@ proc isValidNextNode(nodeRlp: Rlp, rlpIdx: int, nextNode: TrieNode): bool =
   if nextHash.len() != 32:
     return false
 
-  isValidTrieNode(nextHash, nextNode)
+  # is there a better way to build a KeccakHash from bytes?
+  nextNode.hashEquals(KeccakHash.fromHex(nextHash.toHex()))
 
 proc decodePrefix(nodePrefixRlp: Rlp): (byte, bool, Nibbles) =
+  doAssert(not nodePrefixRlp.isEmpty())
+
   let
     rlpBytes = nodePrefixRlp.toBytes()
     firstNibble = (rlpBytes[0] and 0xF0) shr 4
     isLeaf = firstNibble == 2 or firstNibble == 3
     isEven = firstNibble == 0 or firstNibble == 2
+    startIdx = if isEven: 1 else: 0
 
-  (firstNibble.byte, isLeaf, Nibbles.init(rlpBytes[isEven.int .. ^1]))
+  (firstNibble.byte, isLeaf, Nibbles.init(rlpBytes[startIdx .. ^1]))
 
 proc validateTrieProof(
     expectedRootHash: KeccakHash, path: Nibbles, proof: TrieProof
@@ -45,7 +47,7 @@ proc validateTrieProof(
   if proof.len() == 0:
     return err("proof is empty")
 
-  if not isValidTrieNode(expectedRootHash, proof[0]):
+  if not proof[0].hashEquals(expectedRootHash):
     return err("hash of proof root node doesn't match the expected root hash")
 
   let nibbles = path.unpackNibbles()
@@ -68,7 +70,7 @@ proc validateTrieProof(
     case thisNodeRlp.listLen()
     of 2:
       let nodePrefixRlp = thisNodeRlp.listElem(0)
-      if nodePrefixRlp.isEmpty:
+      if nodePrefixRlp.isEmpty():
         return err("node prefix is empty")
 
       let (prefix, isLeaf, prefixNibbles) = decodePrefix(nodePrefixRlp)
@@ -104,12 +106,18 @@ proc validateTrieProof(
 
   ok()
 
-proc rlpDecodeAccountTrieNode(accountNode: TrieNode): auto =
+proc rlpDecodeAccountTrieNode(accountNode: TrieNode): Result[Account, string] =
   let accNodeRlp = rlpFromBytes(accountNode.asSeq())
-  doAssert(accNodeRlp.hasData and not accNodeRlp.isEmpty and accNodeRlp.listLen() == 2)
+  if accNodeRlp.isEmpty() or accNodeRlp.listLen() != 2:
+    return err("invalid account trie node - malformed")
 
-  let (_, isLeaf, _) = decodePrefix(accNodeRlp.listElem(0))
-  doAssert(isLeaf)
+  let accNodePrefixRlp = accNodeRlp.listElem(0)
+  if accNodePrefixRlp.isEmpty():
+    return err("invalid account trie node - empty prefix")
+
+  let (_, isLeaf, _) = decodePrefix(accNodePrefixRlp)
+  if not isLeaf:
+    return err("invalid account trie node - leaf prefix expected")
 
   decodeRlp(accNodeRlp.listElem(1).toBytes(), Account)
 
@@ -119,33 +127,28 @@ proc validateFetchedAccountTrieNode*(
     trustedAccountTrieNodeKey: AccountTrieNodeKey,
     accountTrieNode: AccountTrieNodeRetrieval,
 ): Result[void, string] =
-  let expectedHash = trustedAccountTrieNodeKey.nodeHash
-  if not isValidTrieNode(expectedHash, accountTrieNode.node):
-    return err("hash of fetched account trie node doesn't match the expected node hash")
-
-  ok()
+  if accountTrieNode.node.hashEquals(trustedAccountTrieNodeKey.nodeHash):
+    ok()
+  else:
+    err("hash of fetched account trie node doesn't match the expected node hash")
 
 proc validateFetchedContractTrieNode*(
     trustedContractTrieNodeKey: ContractTrieNodeKey,
     contractTrieNode: ContractTrieNodeRetrieval,
 ): Result[void, string] =
-  let expectedHash = trustedContractTrieNodeKey.nodeHash
-  if not isValidTrieNode(expectedHash, contractTrieNode.node):
-    return
-      err("hash of fetched contract trie node doesn't match the expected node hash")
-
-  ok()
+  if contractTrieNode.node.hashEquals(trustedContractTrieNodeKey.nodeHash):
+    ok()
+  else:
+    err("hash of fetched contract trie node doesn't match the expected node hash")
 
 proc validateFetchedContractCode*(
     trustedContractCodeKey: ContractCodeKey, contractCode: ContractCodeRetrieval
 ): Result[void, string] =
-  let expectedHash = trustedContractCodeKey.codeHash
-  if not isValidBytecode(expectedHash, contractCode.code):
-    return err("hash of fetched bytecode doesn't match the expected code hash")
+  if contractCode.code.hashEquals(trustedContractCodeKey.codeHash):
+    ok()
+  else:
+    err("hash of fetched bytecode doesn't match the expected code hash")
 
-  ok()
-
-# Precondition: AccountTrieNodeOffer.blockHash is already checked to be part of the canonical chain
 proc validateOfferedAccountTrieNode*(
     trustedStateRoot: KeccakHash,
     accountTrieNodeKey: AccountTrieNodeKey,
@@ -153,12 +156,11 @@ proc validateOfferedAccountTrieNode*(
 ): Result[void, string] =
   ?validateTrieProof(trustedStateRoot, accountTrieNodeKey.path, accountTrieNode.proof)
 
-  if not isValidTrieNode(accountTrieNodeKey.nodeHash, accountTrieNode.proof[^1]):
-    return err("hash of offered account trie node doesn't match the expected node hash")
+  if accountTrieNode.proof[^1].hashEquals(accountTrieNodeKey.nodeHash):
+    ok()
+  else:
+    err("hash of offered account trie node doesn't match the expected node hash")
 
-  ok()
-
-# Precondition: ContractTrieNodeOffer.blockHash is already checked to be part of the canonical chain
 proc validateOfferedContractTrieNode*(
     trustedStateRoot: KeccakHash,
     contractTrieNodeKey: ContractTrieNodeKey,
@@ -175,15 +177,11 @@ proc validateOfferedContractTrieNode*(
     account.storageRoot, contractTrieNodeKey.path, contractTrieNode.storageProof
   )
 
-  if not isValidTrieNode(
-    contractTrieNodeKey.nodeHash, contractTrieNode.storageProof[^1]
-  ):
-    return
-      err("hash of offered contract trie node doesn't match the expected node hash")
+  if contractTrieNode.storageProof[^1].hashEquals(contractTrieNodeKey.nodeHash):
+    ok()
+  else:
+    err("hash of offered contract trie node doesn't match the expected node hash")
 
-  ok()
-
-# Precondition: ContractCodeOffer.blockHash is already checked to be part of the canonical chain
 proc validateOfferedContractCode*(
     trustedStateRoot: KeccakHash,
     contractCodeKey: ContractCodeKey,
@@ -196,7 +194,7 @@ proc validateOfferedContractCode*(
 
   let account = ?rlpDecodeAccountTrieNode(contractCode.accountProof[^1])
 
-  if not isValidBytecode(account.codeHash, contractCode.code):
-    return err("hash of offered bytecode doesn't match the expected code hash")
-
-  ok()
+  if contractCode.code.hashEquals(account.codeHash):
+    ok()
+  else:
+    err("hash of offered bytecode doesn't match the expected code hash")
