@@ -90,7 +90,7 @@ proc setupExpRpc*(com: CommonRef, server: RpcServer) =
   proc getStateDB(header: BlockHeader): ReadOnlyStateDB =
     ## Retrieves the account db from canonical head
     # we don't use accounst_cache here because it's only read operations
-    let ac = newAccountStateDB(chainDB, header.stateRoot, com.pruneTrie)
+    let ac = newAccountStateDB(chainDB, header.stateRoot)
     result = ReadOnlyStateDB(ac)
 
   server.rpc("exp_getWitnessByBlockNumber") do(quantityTag: BlockTag, statePostExecution: bool) -> seq[byte]:

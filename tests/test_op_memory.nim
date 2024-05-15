@@ -10,10 +10,8 @@
 
 import
   std/[macros, strutils],
-  macro_assembler, unittest2
-
-# Currently fails on `AristoDb*`
-macro_assembler.coreDbType = LegacyDbMemory
+  unittest2,
+  ./macro_assembler
 
 proc opMemoryMain*() =
   suite "Memory Opcodes":

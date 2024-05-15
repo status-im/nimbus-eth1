@@ -135,10 +135,10 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
         nimbus.txPool)
     of ProtocolFlag.Les:
       nimbus.ethNode.addCapability les
-    of ProtocolFlag.Snap:
-      nimbus.ethNode.addSnapHandlerCapability(
-        nimbus.ethNode.peerPool,
-        nimbus.chainRef)
+    #of ProtocolFlag.Snap:
+    #  nimbus.ethNode.addSnapHandlerCapability(
+    #    nimbus.ethNode.peerPool,
+    #    nimbus.chainRef)
   # Cannot do without minimal `eth` capability
   if ProtocolFlag.Eth notin protocols:
     nimbus.ethNode.addEthHandlerCapability(
@@ -157,14 +157,14 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
       nimbus.fullSyncRef = FullSyncRef.init(
         nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers,
         tickerOK, exCtrlFile)
-    of SyncMode.Snap:
-      # Minimal capability needed for sync only
-      if ProtocolFlag.Snap notin protocols:
-        nimbus.ethNode.addSnapHandlerCapability(
-          nimbus.ethNode.peerPool)
-      nimbus.snapSyncRef = SnapSyncRef.init(
-        nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers,
-        tickerOK, exCtrlFile)
+    #of SyncMode.Snap:
+    #  # Minimal capability needed for sync only
+    #  if ProtocolFlag.Snap notin protocols:
+    #    nimbus.ethNode.addSnapHandlerCapability(
+    #      nimbus.ethNode.peerPool)
+    #  nimbus.snapSyncRef = SnapSyncRef.init(
+    #    nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers,
+    #    tickerOK, exCtrlFile)
     of SyncMode.Stateless:
       # FIXME-Adam: what needs to go here?
       nimbus.statelessSyncRef = StatelessSyncRef.init()
@@ -192,7 +192,9 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
   if conf.maxPeers > 0:
     var waitForPeers = true
     case conf.syncMode:
-    of SyncMode.Snap, SyncMode.Stateless:
+    #of SyncMode.Snap:
+    #  waitForPeers = false
+    of SyncMode.Stateless:
       waitForPeers = false
     of SyncMode.Full, SyncMode.Default:
       discard
@@ -283,11 +285,11 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
   let coreDB =
     # Resolve statically for database type
     case conf.chainDbMode:
-    of Prune,Archive: LegacyDbPersistent.newCoreDbRef(string conf.dataDir)
-    of Aristo: AristoDbRocks.newCoreDbRef(string conf.dataDir)
+    of Aristo,AriPrune:
+      AristoDbRocks.newCoreDbRef(string conf.dataDir)
   let com = CommonRef.new(
     db = coreDB,
-    pruneTrie = (conf.chainDbMode == ChainDbMode.Prune),
+    pruneHistory = (conf.chainDbMode == AriPrune),
     networkId = conf.networkId,
     params = conf.networkParams)
 
@@ -332,8 +334,8 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
         nimbus.fullSyncRef.start
       of SyncMode.Stateless:
         nimbus.statelessSyncRef.start
-      of SyncMode.Snap:
-        nimbus.snapSyncRef.start
+      #of SyncMode.Snap:
+      #  nimbus.snapSyncRef.start
 
     if nimbus.state == NimbusState.Starting:
       # it might have been set to "Stopping" with Ctrl+C

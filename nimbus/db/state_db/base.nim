@@ -59,9 +59,6 @@ type
   AccountProof* = seq[MptNodeRlpBytes]
   SlotProof* = seq[MptNodeRlpBytes]
 
-proc pruneTrie*(db: AccountStateDB): bool =
-  db.trie.isPruning
-
 proc db*(db: AccountStateDB): CoreDbRef =
   db.trie.db
 
@@ -75,9 +72,9 @@ proc `rootHash=`*(db: AccountStateDB, root: KeccakHash) =
   db.trie = initAccountsTrie(db.trie.db, root, db.trie.isPruning)
 
 proc newAccountStateDB*(backingStore: CoreDbRef,
-                        root: KeccakHash, pruneTrie: bool): AccountStateDB =
+                        root: KeccakHash): AccountStateDB =
   result.new()
-  result.trie = initAccountsTrie(backingStore, root, pruneTrie)
+  result.trie = initAccountsTrie(backingStore, root)
   result.originalRoot = root
   #result.transactionID = backingStore.getTransactionID()
   when aleth_compat:

@@ -78,7 +78,7 @@ proc randAddress(): EthAddress =
 proc runTest(numPairs: int, testStatusIMPL: var TestStatus,
              addIdenticalKeys: bool = false, addInvalidKeys: static[bool] = false) =
 
-  var memDB = newCoreDbRef(LegacyDbMemory)
+  var memDB = newCoreDbRef(DefaultDbMemory)
   var trie = initAccountsTrie(memDB)
   var addrs = newSeq[AccountKey](numPairs)
   var accs = newSeq[Account](numPairs)
@@ -103,7 +103,7 @@ proc runTest(numPairs: int, testStatusIMPL: var TestStatus,
 
   var wb = initWitnessBuilder(memDB, rootHash, {wfNoFlag})
   var witness = wb.buildWitness(mkeys)
-  var db = newCoreDbRef(LegacyDbMemory)
+  var db = newCoreDbRef(DefaultDbMemory)
   when defined(useInputStream):
     var input = memoryInput(witness)
     var tb = initTreeBuilder(input, db, {wfNoFlag})
@@ -148,7 +148,7 @@ proc initMultiKeys(keys: openArray[string], storageMode: bool = false): MultiKey
       )
 
 proc parseInvalidInput(payload: openArray[byte]): bool =
-  var db = newCoreDbRef(LegacyDbMemory)
+  var db = newCoreDbRef(DefaultDbMemory)
   try:
     var tb = initTreeBuilder(payload, db, {wfNoFlag})
     discard tb.buildTree()
@@ -270,7 +270,7 @@ proc witnessKeysMain*() =
         "01234567c140158288775c8912aed274fb9d6a3a260e9e95e03e70ba8df30f6b",
       ]
       let m  = initMultiKeys(keys, true)
-      var memDB = newCoreDbRef(LegacyDbMemory)
+      var memDB = newCoreDbRef(DefaultDbMemory)
       var trie = initAccountsTrie(memDB)
       var acc  = randAccount(memDB)
 
@@ -287,7 +287,7 @@ proc witnessKeysMain*() =
 
       var wb = initWitnessBuilder(memDB, rootHash, {wfNoFlag})
       var witness = wb.buildWitness(mkeys)
-      var db = newCoreDbRef(LegacyDbMemory)
+      var db = newCoreDbRef(DefaultDbMemory)
       var tb = initTreeBuilder(witness, db, {wfNoFlag})
       let root = tb.buildTree()
       check root.data == rootHash.data

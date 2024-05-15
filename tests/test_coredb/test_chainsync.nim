@@ -177,7 +177,7 @@ proc test_chainSync*(
 
   # Scan folder for `era1` files (ignoring the argument file name)
   let
-    (dir, name, ext) = filePaths[0].splitFile
+    (dir, _, ext) = filePaths[0].splitFile
     files =
       if filePaths.len == 1 and ext == ".era1":
         (dir / "*" & ext).walkPattern.toSeq

@@ -34,7 +34,7 @@ import
   eth/[common, rlp],
   results,
   ../../../stateless/multi_keys,
-  "../.."/[constants, errors, utils/utils],
+  "../.."/[constants, utils/utils],
   ../access_list as ac_access_list,
   ".."/[core_db, storage_types, transient_storage],
   ./distinct_ledgers
@@ -658,7 +658,7 @@ iterator pairs*(ac: AccountsLedgerRef): (EthAddress, Account) =
   for address, account in ac.savePoint.cache:
     yield (address, account.statement.recast().value)
 
-iterator storage*(ac: AccountsLedgerRef, address: EthAddress): (UInt256, UInt256) {.gcsafe, raises: [CoreDbApiError].} =
+iterator storage*(ac: AccountsLedgerRef, address: EthAddress): (UInt256, UInt256) =
   # beware that if the account not persisted,
   # the storage root will not be updated
   let acc = ac.getAccount(address, false)

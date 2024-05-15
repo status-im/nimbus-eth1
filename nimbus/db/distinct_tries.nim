@@ -96,12 +96,8 @@ template initAccountsTrie*(db: DB, isPruning = true): AccountsTrie =
 proc getAccountBytes*(trie: AccountsTrie, address: EthAddress): seq[byte] =
   CoreDbPhkRef(trie).get(address)
 
-proc maybeGetAccountBytes*(trie: AccountsTrie, address: EthAddress): Option[Blob]  {.gcsafe, raises: [RlpError].} =
-  let phk = CoreDbPhkRef(trie)
-  if phk.parent.isLegacy:
-    phk.toMpt.distinctBase.backend.toLegacy.SecureHexaryTrie.maybeGet(address)
-  else:
-    some(phk.get(address))
+proc maybeGetAccountBytes*(trie: AccountsTrie, address: EthAddress): Option[Blob] =
+  some(CoreDbPhkRef(trie).get(address))
 
 proc putAccountBytes*(trie: var AccountsTrie, address: EthAddress, value: openArray[byte]) =
   CoreDbPhkRef(trie).put(address, value)
@@ -131,12 +127,8 @@ template createTrieKeyFromSlot*(slot: UInt256): auto =
 proc getSlotBytes*(trie: StorageTrie, slotAsKey: openArray[byte]): seq[byte] =
   CoreDbPhkRef(trie).get(slotAsKey)
 
-proc maybeGetSlotBytes*(trie: StorageTrie, slotAsKey: openArray[byte]): Option[Blob] {.gcsafe, raises: [RlpError].} =
-  let phk = CoreDbPhkRef(trie)
-  if phk.parent.isLegacy:
-    phk.toMpt.distinctBase.backend.toLegacy.SecureHexaryTrie.maybeGet(slotAsKey)
-  else:
-    some(phk.get(slotAsKey))
+proc maybeGetSlotBytes*(trie: StorageTrie, slotAsKey: openArray[byte]): Option[Blob] =
+  some(CoreDbPhkRef(trie).get(slotAsKey))
 
 proc putSlotBytes*(trie: var StorageTrie, slotAsKey: openArray[byte], value: openArray[byte]) =
   CoreDbPhkRef(trie).put(slotAsKey, value)

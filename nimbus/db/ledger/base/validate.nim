@@ -31,6 +31,7 @@ proc validate*(ldg: LedgerRef) =
   doAssert not ldg.methods.commitFn.isNil
   doAssert not ldg.methods.deleteAccountFn.isNil
   doAssert not ldg.methods.disposeFn.isNil
+  doAssert not ldg.methods.getAccessListFn.isNil
   doAssert not ldg.methods.getAndClearLogEntriesFn.isNil
   doAssert not ldg.methods.getBalanceFn.isNil
   doAssert not ldg.methods.getCodeFn.isNil

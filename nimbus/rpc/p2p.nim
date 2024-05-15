@@ -72,7 +72,7 @@ proc setupEthRpc*(
   proc getStateDB(header: BlockHeader): ReadOnlyStateDB =
     ## Retrieves the account db from canonical head
     # we don't use accounst_cache here because it's only read operations
-    let ac = newAccountStateDB(chainDB, header.stateRoot, com.pruneTrie)
+    let ac = newAccountStateDB(chainDB, header.stateRoot)
     result = ReadOnlyStateDB(ac)
 
   proc stateDBFromTag(quantityTag: BlockTag, readOnly = true): ReadOnlyStateDB

@@ -31,7 +31,7 @@ proc genesisToTrie(filePath: string): CoreDbMptRef =
   if not loadNetworkParams(filePath, cn):
     quit(1)
 
-  let sdb = newStateDB(newCoreDbRef LegacyDbMemory, false)
+  let sdb = newStateDB(newCoreDbRef DefaultDbMemory)
   let map = toForkTransitionTable(cn.config)
   let fork =
     map.toHardFork(forkDeterminationInfo(0.toBlockNumber, cn.genesis.timestamp))

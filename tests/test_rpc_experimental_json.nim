@@ -29,9 +29,9 @@ template toHash256(hash: untyped): Hash256 =
 proc importBlockData(node: JsonNode): (CommonRef, Hash256, Hash256, UInt256) {. raises: [Exception].} =
   var
     blockNumber = UInt256.fromHex(node["blockNumber"].getStr())
-    memoryDB    = newCoreDbRef LegacyDbMemory
+    memoryDB    = newCoreDbRef DefaultDbMemory
     config      = chainConfigForNetwork(MainNet)
-    com         = CommonRef.new(memoryDB, config, pruneTrie = false)
+    com         = CommonRef.new(memoryDB, config)
     state       = node["state"]
 
   for k, v in state:
@@ -64,7 +64,7 @@ proc checkAndValidateWitnessAgainstProofs(
     proofs: seq[ProofResponse]) =
 
   let
-    stateDB = AccountsCache.init(db, parentStateRoot, false)
+    stateDB = LedgerCache.init(db, parentStateRoot)
     verifyWitnessResult = verifyWitness(expectedStateRoot, witness, {wfNoFlag})
 
   check verifyWitnessResult.isOk()

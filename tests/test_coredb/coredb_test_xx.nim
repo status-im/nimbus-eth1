@@ -137,39 +137,11 @@ let
       numBlocks = high(int),
       dbType    = AristoDbRocks)
 
-  # To be compared against the proof-of-concept implementation as
-  # reference
-
-  legaTest0* = goerliSampleEx
-    .cloneWith(
-      name      = "-lm",
-      numBlocks = 500, # high(int),
-      dbType    = LegacyDbMemory)
-
-  legaTest1* = goerliSampleEx
-    .cloneWith(
-      name      = "-lp",
-      numBlocks = high(int),
-      dbType    = LegacyDbPersistent)
-
-  legaTest2* = mainSampleEx
-    .cloneWith(
-      name      = "-lm",
-      numBlocks = 500_000,
-      dbType    = LegacyDbMemory)
-
-  legaTest3* = mainSampleEx
-    .cloneWith(
-      name      = "-lp",
-      numBlocks = high(int),
-      dbType    = LegacyDbPersistent)
-
   # ------------------
 
   allSamples* = [
     mainEra1,
     bulkTest0, bulkTest1, bulkTest2, bulkTest3,
-    ariTest0, ariTest1, ariTest2, ariTest3,
-    legaTest0, legaTest1, legaTest2, legaTest3]
+    ariTest0, ariTest1, ariTest2, ariTest3]
 
 # End

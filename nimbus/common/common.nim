@@ -43,9 +43,6 @@ type
     # all purpose storage
     db: CoreDbRef
 
-    # prune underlying state db?
-    pruneTrie: bool
-
     # block chain config
     config: ChainConfig
 
@@ -96,10 +93,8 @@ type
     ldgType: LedgerType
       ## Optional suggestion for the ledger cache to be used as state DB
 
-const
-  CommonLegacyDbLedgerTypeDefault = LegacyAccountsCache
-    ## Default ledger type to use, see `ldgType` above. This default will be
-    ## superseded by `LedgerCache` as default for `Aristo` type deb backend.
+    pruneHistory: bool
+      ## Must not not set for a full node, might go away some time
 
 # ------------------------------------------------------------------------------
 # Forward declarations
@@ -140,31 +135,24 @@ proc daoCheck(conf: ChainConfig) =
   if conf.daoForkSupport and conf.daoForkBlock.isNone:
     conf.daoForkBlock = conf.homesteadBlock
 
-proc init(com      : CommonRef,
-          db       : CoreDbRef,
-          pruneTrie: bool,
-          networkId: NetworkId,
-          config   : ChainConfig,
-          genesis  : Genesis,
-          ldgType  : LedgerType,
+proc init(com         : CommonRef,
+          db          : CoreDbRef,
+          networkId   : NetworkId,
+          config      : ChainConfig,
+          genesis     : Genesis,
+          ldgType     : LedgerType,
+          pruneHistory: bool,
             ) {.gcsafe, raises: [CatchableError].} =
 
   config.daoCheck()
 
   com.db          = db
-  com.pruneTrie   = pruneTrie
   com.config      = config
   com.forkTransitionTable = config.toForkTransitionTable()
   com.networkId   = networkId
   com.syncProgress= SyncProgress()
-  com.ldgType     = block:
-    if ldgType != LedgerType(0):
-      ldgType
-    elif db.dbType in {AristoDbMemory,AristoDbRocks,AristoDbVoid}:
-      # The `Aristo` backend does not work well with the `LegacyAccountsCache`
-      LedgerCache
-    else:
-      CommonLegacyDbLedgerTypeDefault
+  com.ldgType     = LedgerCache
+  com.pruneHistory= pruneHistory
 
   # Initalise the PoA state regardless of whether it is needed on the current
   # network. For non-PoA networks this descriptor is ignored.
@@ -228,10 +216,10 @@ proc getTdIfNecessary(com: CommonRef, blockHash: Hash256): Option[DifficultyInt]
 proc new*(
     _: type CommonRef;
     db: CoreDbRef;
-    pruneTrie: bool = true;
     networkId: NetworkId = MainNet;
     params = networkParams(MainNet);
     ldgType = LedgerType(0);
+    pruneHistory = false;
       ): CommonRef
       {.gcsafe, raises: [CatchableError].} =
 
@@ -240,19 +228,19 @@ proc new*(
   new(result)
   result.init(
     db,
-    pruneTrie,
     networkId,
     params.config,
     params.genesis,
-    ldgType)
+    ldgType,
+    pruneHistory)
 
 proc new*(
     _: type CommonRef;
     db: CoreDbRef;
     config: ChainConfig;
-    pruneTrie: bool = true;
     networkId: NetworkId = MainNet;
     ldgType = LedgerType(0);
+    pruneHistory = false;
       ): CommonRef
       {.gcsafe, raises: [CatchableError].} =
 
@@ -261,18 +249,17 @@ proc new*(
   new(result)
   result.init(
     db,
-    pruneTrie,
     networkId,
     config,
     nil,
-    ldgType)
+    ldgType,
+    pruneHistory)
 
 proc clone*(com: CommonRef, db: CoreDbRef): CommonRef =
   ## clone but replace the db
   ## used in EVM tracer whose db is CaptureDB
   CommonRef(
     db           : db,
-    pruneTrie    : com.pruneTrie,
     config       : com.config,
     forkTransitionTable: com.forkTransitionTable,
     forkIdCalculator: com.forkIdCalculator,
@@ -285,8 +272,8 @@ proc clone*(com: CommonRef, db: CoreDbRef): CommonRef =
     pow          : com.pow,
     poa          : com.poa,
     pos          : com.pos,
-    ldgType      : com.ldgType
-  )
+    ldgType      : com.ldgType,
+    pruneHistory : com.pruneHistory)
 
 proc clone*(com: CommonRef): CommonRef =
   com.clone(com.db)
@@ -479,8 +466,8 @@ func cliqueEpoch*(com: CommonRef): int =
   if com.config.clique.epoch.isSome:
     return com.config.clique.epoch.get()
 
-func pruneTrie*(com: CommonRef): bool =
-  com.pruneTrie
+func pruneHistory*(com: CommonRef): bool =
+  com.pruneHistory
 
 # always remember ChainId and NetworkId
 # are two distinct things that often got mixed

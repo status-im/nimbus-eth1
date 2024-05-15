@@ -264,7 +264,7 @@ proc resetChainDb(ap: TesterPool; extraData: Blob; debug = false) =
     ap.boot.genesis.extraData = extraData
 
   let com = CommonRef.new(
-    newCoreDbRef LegacyDbMemory,
+    newCoreDbRef DefaultDbMemory,
     networkId = ap.networkId,
     params = ap.boot)
   ap.chain = newChain(com)

@@ -18,7 +18,7 @@ import
   ./sync/peers,
   ./sync/beacon,
   ./sync/legacy,
-  ./sync/snap,
+  # ./sync/snap, # -- todo
   ./sync/stateless,
   ./sync/full,
   ./beacon/beacon_engine,
@@ -36,7 +36,7 @@ export
   peers,
   beacon,
   legacy,
-  snap,
+  #snap,
   stateless,
   full,
   beacon_engine,
@@ -59,7 +59,7 @@ type
     networkLoop*: Future[void]
     peerManager*: PeerManagerRef
     legaSyncRef*: LegacySyncRef
-    snapSyncRef*: SnapSyncRef
+    # snapSyncRef*: SnapSyncRef # -- todo
     fullSyncRef*: FullSyncRef
     beaconSyncRef*: BeaconSyncRef
     statelessSyncRef*: StatelessSyncRef
@@ -82,8 +82,8 @@ proc stop*(nimbus: NimbusNode, conf: NimbusConf) {.async, gcsafe.} =
     await nimbus.peerManager.stop()
   if nimbus.statelessSyncRef.isNil.not:
     nimbus.statelessSyncRef.stop()
-  if nimbus.snapSyncRef.isNil.not:
-    nimbus.snapSyncRef.stop()
+  #if nimbus.snapSyncRef.isNil.not:
+  #  nimbus.snapSyncRef.stop()
   if nimbus.fullSyncRef.isNil.not:
     nimbus.fullSyncRef.stop()
   if nimbus.beaconSyncRef.isNil.not:

@@ -58,7 +58,7 @@ proc verifyWitness*(
   if witness.len() == 0:
     return err("witness is empty")
 
-  let db = newCoreDbRef(LegacyDbMemory)
+  let db = newCoreDbRef(AristoDbMemory) # `AristoDbVoid` has smaller footprint
   var tb = initTreeBuilder(witness, db, flags)
 
   try:
@@ -66,7 +66,7 @@ proc verifyWitness*(
     if stateRoot != trustedStateRoot:
       return err("witness stateRoot doesn't match trustedStateRoot")
 
-    let ac = newAccountStateDB(db, trustedStateRoot, false)
+    let ac = newAccountStateDB(db, trustedStateRoot)
     let accounts = buildAccountsTableFromKeys(ReadOnlyStateDB(ac), tb.keys)
     ok(accounts)
   except Exception as e:

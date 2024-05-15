@@ -43,7 +43,7 @@ proc importBlocks(c: ChainRef; h: seq[BlockHeader]; b: seq[BlockBody]): int =
 proc blockChainForTesting*(network: NetworkID): CommonRef =
 
   result = CommonRef.new(
-    newCoreDbRef LegacyDbMemory,
+    newCoreDbRef DefaultDbMemory,
     networkId = network,
     params = network.networkParams)
 
