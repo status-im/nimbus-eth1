@@ -236,7 +236,7 @@ proc rpcMain*() =
     let env = setupEnv(com, signer, ks2, ctx)
 
     # Create Ethereum RPCs
-    let RPC_PORT = 8545
+    let RPC_PORT = 0 # let the OS choose a port
     var
       rpcServer = newRpcSocketServer(["127.0.0.1:" & $RPC_PORT])
       client = newRpcSocketClient()
@@ -248,7 +248,7 @@ proc rpcMain*() =
 
     # Begin tests
     rpcServer.start()
-    waitFor client.connect("127.0.0.1", Port(RPC_PORT))
+    waitFor client.connect("127.0.0.1", rpcServer.localAddress[0].port)
 
     # TODO: add more tests here
     test "web3_clientVersion":
