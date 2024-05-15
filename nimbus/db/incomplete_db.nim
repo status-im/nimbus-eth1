@@ -55,16 +55,10 @@ proc ifNodesExistGetAccount*(trie: AccountsTrie, address: EthAddress): Option[Ac
   ifNodesExistGetAccountBytes(trie, address).map(accountFromBytes)
 
 proc maybeGetCode*(db: CoreDbRef, codeHash: Hash256): Option[seq[byte]] =
-  when defined(geth):
-    if db.isLegacy:
-      db.newKvt.backend.toLegacy.maybeGet(codeHash.data)
-    else:
-      db.kvt.get(codeHash.data)
+  if db.isLegacy:
+    db.newKvt.backend.toLegacy.maybeGet(contractHashKey(codeHash).toOpenArray)
   else:
-    if db.isLegacy:
-      db.newKvt.backend.toLegacy.maybeGet(contractHashKey(codeHash).toOpenArray)
-    else:
-      some(db.kvt.get(contractHashKey(codeHash).toOpenArray))
+    some(db.kvt.get(contractHashKey(codeHash).toOpenArray))
 
 proc maybeGetCode*(trie: AccountsTrie, address: EthAddress): Option[seq[byte]] =
   let maybeAcc = trie.ifNodesExistGetAccount(address)

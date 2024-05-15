@@ -303,10 +303,7 @@ proc persistMode(acc: RefAccount): PersistMode =
 
 proc persistCode(acc: RefAccount, db: CoreDbRef) =
   if acc.code.len != 0:
-    when defined(geth):
-      db.kvt.put(acc.account.codeHash.data, acc.code)
-    else:
-      db.kvt.put(contractHashKey(acc.account.codeHash).toOpenArray, acc.code)
+    db.kvt.put(contractHashKey(acc.account.codeHash).toOpenArray, acc.code)
 
 proc persistStorage(acc: RefAccount, db: CoreDbRef, clearCache: bool) =
   if acc.overlayStorage.len == 0:
@@ -385,10 +382,7 @@ proc getCode*(ac: AccountsCache, address: EthAddress): seq[byte] =
   if CodeLoaded in acc.flags or CodeChanged in acc.flags:
     result = acc.code
   else:
-    when defined(geth):
-      let data = ac.kvt.get(acc.account.codeHash.data)
-    else:
-      let data = ac.kvt.get(contractHashKey(acc.account.codeHash).toOpenArray)
+    let data = ac.kvt.get(contractHashKey(acc.account.codeHash).toOpenArray)
 
     acc.code = data
     acc.flags.incl CodeLoaded

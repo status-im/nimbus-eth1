@@ -235,35 +235,29 @@ proc statelessInit*(
     asyncFactory = asyncFactory)
   return true
 
-method coinbase*(vmState: BaseVMState): EthAddress {.base, gcsafe.} =
+proc coinbase*(vmState: BaseVMState): EthAddress =
   vmState.blockCtx.coinbase
 
-method blockNumber*(vmState: BaseVMState): BlockNumber {.base, gcsafe.} =
+proc blockNumber*(vmState: BaseVMState): BlockNumber =
   # it should return current block number
   # and not head.blockNumber
   vmState.parent.blockNumber + 1
 
-method difficultyOrPrevRandao*(vmState: BaseVMState): UInt256 {.base, gcsafe.} =
+proc difficultyOrPrevRandao*(vmState: BaseVMState): UInt256 =
   if vmState.com.consensus == ConsensusType.POS:
     # EIP-4399/EIP-3675
     UInt256.fromBytesBE(vmState.blockCtx.prevRandao.data)
   else:
     vmState.blockCtx.difficulty
 
-method baseFee*(vmState: BaseVMState): UInt256 {.base, gcsafe.} =
+proc baseFee*(vmState: BaseVMState): UInt256 =
   vmState.blockCtx.fee.get(0.u256)
-
-when defined(geth):
-  import db/geth_db
 
 method getAncestorHash*(
     vmState: BaseVMState, blockNumber: BlockNumber):
     Hash256 {.base, gcsafe, raises: [CatchableError].} =
   let db = vmState.com.db
-  when defined(geth):
-    result = db.headerHash(blockNumber.truncate(uint64))
-  else:
-    result = db.getBlockHash(blockNumber)
+  db.getBlockHash(blockNumber)
 
 proc readOnlyStateDB*(vmState: BaseVMState): ReadOnlyStateDB {.inline.} =
   ReadOnlyStateDB(vmState.stateDB)

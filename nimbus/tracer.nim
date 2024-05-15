@@ -20,15 +20,8 @@ import
   results,
   ./beacon/web3_eth_conv
 
-when defined(geth):
-  import db/geth_db
-
-  proc getParentHeader(db: CoreDbRef, header: BlockHeader): BlockHeader =
-    db.blockHeader(header.blockNumber.truncate(uint64) - 1)
-
-else:
-  proc getParentHeader(self: CoreDbRef, header: BlockHeader): BlockHeader =
-    self.getBlockHeader(header.parentHash)
+proc getParentHeader(self: CoreDbRef, header: BlockHeader): BlockHeader =
+  self.getBlockHeader(header.parentHash)
 
 type
   SaveCtxEnv = object
