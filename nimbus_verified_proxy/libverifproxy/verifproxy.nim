@@ -28,6 +28,7 @@ proc initLib() =
     nimGC_setStackBottom(locals)
 
 proc runContext(ctx: ptr Context) {.thread.} =
+  const defaultListenAddress = (static parseIpAddress("0.0.0.0"))
   let str = $ctx.configJson
   try:
     let jsonNode = parseJson(str)
@@ -35,7 +36,7 @@ proc runContext(ctx: ptr Context) {.thread.} =
     let rpcAddr = jsonNode["RpcAddress"].getStr()
     let myConfig = VerifiedProxyConf(
       rpcAddress: parseIpAddress(rpcAddr),
-      listenAddress: defaultListenAddress,
+      listenAddress: some(defaultListenAddress),
       eth2Network: some(jsonNode["Eth2Network"].getStr()),
       trustedBlockRoot: Eth2Digest.fromHex(jsonNode["TrustedBlockRoot"].getStr()),
       web3Url: parseCmdArg(Web3Url, jsonNode["Web3Url"].getStr()),

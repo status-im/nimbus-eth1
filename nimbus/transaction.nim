@@ -233,3 +233,9 @@ proc decodeTx*(bytes: openArray[byte]): Transaction =
   result = rlp.read(Transaction)
   if rlp.hasData:
     raise newException(RlpError, "rlp: input contains more than one value")
+
+proc decodePooledTx*(bytes: openArray[byte]): PooledTransaction =
+  var rlp = rlpFromBytes(bytes)
+  result = rlp.read(PooledTransaction)
+  if rlp.hasData:
+    raise newException(RlpError, "rlp: input contains more than one value")

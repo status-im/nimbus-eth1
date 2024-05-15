@@ -380,7 +380,7 @@ method execute(cs: PayloadBuildAfterInvalidPayloadTest, env: TestEnv): bool =
 type
   InvalidTxChainIDTest* = ref object of EngineSpec
   InvalidTxChainIDShadow = ref object
-    invalidTx: Transaction
+    invalidTx: PooledTransaction
 
 method withMainFork(cs: InvalidTxChainIDTest, fork: EngineFork): BaseSpec =
   var res = cs.clone()
@@ -430,7 +430,9 @@ method execute(cs: InvalidTxChainIDTest, env: TestEnv): bool =
         chainID: some((chainId.uint64 + 1'u64).ChainId)
       )
 
-      shadow.invalidTx = env.customizeTransaction(sender, tx, txCustomizerData)
+      shadow.invalidTx = tx
+      shadow.invalidTx.tx = env.customizeTransaction(
+        sender, shadow.invalidTx.tx, txCustomizerData)
       testCond env.sendTx(shadow.invalidTx):
         info "Error on sending transaction with incorrect chain ID"
 

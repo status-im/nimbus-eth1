@@ -188,17 +188,17 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     let attrs = attrsOpt.get()
     validateVersion(attrs, com, apiVersion)
 
-    let payload = ben.generatePayload(attrs).valueOr:
+    let bundle = ben.generatePayload(attrs).valueOr:
       error "Failed to create sealing payload", err = error
       raise invalidAttr(error)
 
     let id = computePayloadId(blockHash, attrs)
-    ben.put(id, ben.blockValue, payload)
+    ben.put(id, ben.blockValue, bundle.executionPayload, bundle.blobsBundle)
 
     info "Created payload for sealing",
       id = id.toHex,
-      hash = payload.blockHash.short,
-      number = payload.blockNumber
+      hash = bundle.executionPayload.blockHash.short,
+      number = bundle.executionPayload.blockNumber
 
     return validFCU(some(id), blockHash)
 

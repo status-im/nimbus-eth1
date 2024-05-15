@@ -442,14 +442,14 @@ method getReceipts*(ctx: EthWireRef,
 
 method getPooledTxs*(ctx: EthWireRef,
                      hashes: openArray[Hash256]):
-                       Result[seq[Transaction], string]
+                       Result[seq[PooledTransaction], string]
     {.gcsafe.} =
   let txPool = ctx.txPool
-  var list: seq[Transaction]
+  var list: seq[PooledTransaction]
   for txHash in hashes:
     let res = txPool.getItem(txHash)
     if res.isOk:
-      list.add res.value.tx
+      list.add res.value.pooledTx
     else:
       trace "handlers.getPooledTxs: tx not found", txHash
   ok(list)
@@ -522,7 +522,11 @@ method handleAnnouncedTxs*(ctx: EthWireRef,
       txHashes.add rlpHash(tx)
 
     ctx.addToKnownByPeer(txHashes, peer)
-    ctx.txPool.add(txs)
+    for tx in txs:
+      if tx.versionedHashes.len > 0:
+        # EIP-4844 blobs are not persisted and cannot be broadcasted
+        continue
+      ctx.txPool.add PooledTransaction(tx: tx)
 
     var newTxHashes = newSeqOfCap[Hash256](txHashes.len)
     var validTxs = newSeqOfCap[Transaction](txHashes.len)

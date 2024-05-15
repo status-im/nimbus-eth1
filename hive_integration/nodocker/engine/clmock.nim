@@ -333,7 +333,7 @@ proc getNextPayload(cl: CLMocker): bool =
   cl.latestShouldOverrideBuilder = x.shouldOverrideBuilder
 
   let beaconRoot = ethHash cl.latestPayloadAttributes.parentBeaconblockRoot
-  let header = blockHeader(cl.latestPayloadBuilt, removeBlobs = true, beaconRoot = beaconRoot)
+  let header = blockHeader(cl.latestPayloadBuilt, beaconRoot = beaconRoot)
   let blockHash = w3Hash header.blockHash
   if blockHash != cl.latestPayloadBuilt.blockHash:
     error "CLMocker: getNextPayload blockHash mismatch",

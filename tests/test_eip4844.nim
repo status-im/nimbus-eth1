@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -16,11 +16,9 @@ import
 
 const
   recipient = hexToByteArray[20]("095e7baea6a6c7c4c2dfeb977efac326af552d87")
-  zeroG1    = hexToByteArray[48]("0xc00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000")
   source    = hexToByteArray[20]("0x0000000000000000000000000000000000000001")
   storageKey= default(StorageKey)
   accesses  = @[AccessPair(address: source, storageKeys: @[storageKey])]
-  blob      = default(NetworkBlob)
   abcdef    = hexToSeqByte("abcdef")
   hexKey    = "af1a9be9f1a54421cac82943820a0fe0f601bb5f4f6d0bccc81c613f0ce6ae22"
   senderTop = hexToByteArray[20]("73cf19657412508833f618a15e8251306b3e6ee5")
@@ -98,12 +96,7 @@ proc tx6(i: int): Transaction =
     maxPriorityFee:      42.GasInt,
     maxFee:              10.GasInt,
     accessList:          accesses,
-    versionedHashes:     @[digest],
-    networkPayload: NetworkPayload(
-        commitments: @[zeroG1],
-        blobs: @[blob],
-        proofs: @[zeroG1],
-    )
+    versionedHashes:     @[digest]
   )
 
 proc tx7(i: int): Transaction =

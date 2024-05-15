@@ -34,9 +34,7 @@ type ExecutionData* = object
   transactions*: seq[TypedTransaction]
   withdrawals*: seq[WithdrawalV1]
 
-proc asExecutionData*(
-    payload: ExecutionPayloadV1 | ExecutionPayloadV2 | ExecutionPayloadV3
-): ExecutionData =
+proc asExecutionData*(payload: SomeExecutionPayload): ExecutionData =
   when payload is ExecutionPayloadV1:
     return ExecutionData(
       parentHash: payload.parentHash,

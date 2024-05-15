@@ -154,7 +154,7 @@ proc asPortalBlockData*(
   (hash, headerWithProof, body)
 
 proc asPortalBlockData*(
-    payload: ExecutionPayloadV2 | ExecutionPayloadV3
+    payload: ExecutionPayloadV2 | ExecutionPayloadV3 | ExecutionPayloadV4
 ): (common_types.BlockHash, BlockHeaderWithProof, PortalBlockBodyShanghai) =
   let
     txRoot = calculateTransactionData(payload.transactions)

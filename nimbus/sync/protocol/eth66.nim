@@ -266,7 +266,8 @@ p2pProtocol eth66(version = ethVersion,
       await response.send(txs.get)
 
     # User message 0x0a: PooledTransactions.
-    proc pooledTransactions(peer: Peer, transactions: openArray[Transaction])
+    proc pooledTransactions(
+        peer: Peer, transactions: openArray[PooledTransaction])
 
   nextId 0x0d
 

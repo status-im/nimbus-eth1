@@ -100,7 +100,6 @@ func pp*(t: Transaction; sep = " "): string =
     &"accessList=[#{t.accessList.len}]{sep}" &
     &"maxFeePerBlobGas={t.maxFeePerBlobGas}{sep}" &
     &"versionedHashes=[#{t.versionedHashes.len}]{sep}" &
-    &"networkPayload={t.networkPayload.pp}{sep}" &
     &"V={t.V}{sep}" &
     &"R={t.R}{sep}" &
     &"S={t.S}{sep}"

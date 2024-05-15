@@ -1364,8 +1364,8 @@ proc sendRawTransaction(ud: RootRef, params: Args, parent: Node): RespResult {.a
   let ctx = GraphqlContextRef(ud)
   try:
     let data   = hexToSeqByte(params[0].val.stringVal)
-    let tx     = decodeTx(data) # we want to know if it is a valid tx blob
-    let txHash = rlpHash(tx) # beware EIP-4844
+    let tx     = decodePooledTx(data) # we want to know if it is a valid tx blob
+    let txHash = rlpHash(tx)
 
     ctx.txPool.add(tx)
 

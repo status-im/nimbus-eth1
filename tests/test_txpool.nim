@@ -287,7 +287,7 @@ proc runTxPoolTests(noisy = true) =
 
         # insert some txs
         for triple in testTxs:
-          xq.add(triple[1], triple[0].info)
+          xq.add(PooledTransaction(tx: triple[1]), triple[0].info)
 
         check xq.nItems.total == testTxs.len
         check xq.nItems.disposed == 0
@@ -296,7 +296,7 @@ proc runTxPoolTests(noisy = true) =
 
         # re-insert modified transactions
         for triple in testTxs:
-          xq.add(triple[2], "alt " & triple[0].info)
+          xq.add(PooledTransaction(tx: triple[2]), "alt " & triple[0].info)
 
         check xq.nItems.total == testTxs.len
         check xq.nItems.disposed == testTxs.len
@@ -505,7 +505,7 @@ proc runTxPoolTests(noisy = true) =
         check txList.len == xq.nItems.total + xq.nItems.disposed
 
         # re-add item
-        xq.add(thisItem.tx)
+        xq.add(thisItem.pooledTx)
 
         # verify that the pivot item was moved out from the waste basket
         check not xq.txDB.byRejects.hasKey(thisItem.itemID)
@@ -793,7 +793,7 @@ proc runTxPackerTests(noisy = true) =
           check false
           return
 
-        let blk = r.get
+        let blk = r.get.blk
         # Make sure that there are at least two txs on the packed block so
         # this test does not degenerate.
         check 1 < xq.chain.receipts.len

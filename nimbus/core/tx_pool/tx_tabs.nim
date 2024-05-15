@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -138,7 +138,7 @@ proc new*(T: type TxTabsRef): T {.gcsafe,raises: [].} =
 
 proc insert*(
     xp: TxTabsRef;
-    tx: var Transaction;
+    tx: var PooledTransaction;
     status = txItemPending;
     info = ""): Result[void,TxInfo]
     {.gcsafe,raises: [CatchableError].} =
@@ -221,7 +221,7 @@ proc dispose*(xp: TxTabsRef; item: TxItemRef; reason: TxInfo): bool
     xp.byRejects[item.itemID] = item
     return true
 
-proc reject*(xp: TxTabsRef; tx: var Transaction;
+proc reject*(xp: TxTabsRef; tx: var PooledTransaction;
              reason: TxInfo; status = txItemPending; info = "") =
   ## Similar to dispose but for a tx without the item wrapper, the function
   ## imports the tx into the waste basket (e.g. after it could not
@@ -239,7 +239,7 @@ proc reject*(xp: TxTabsRef; item: TxItemRef; reason: TxInfo) =
   item.reject = reason
   xp.byRejects[item.itemID] = item
 
-proc reject*(xp: TxTabsRef; tx: Transaction;
+proc reject*(xp: TxTabsRef; tx: PooledTransaction;
              reason: TxInfo; status = txItemPending; info = "") =
   ## Variant of `reject()`
   var ty = tx

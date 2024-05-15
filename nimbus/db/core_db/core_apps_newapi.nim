@@ -558,8 +558,8 @@ proc persistTransactions*(
   for idx, tx in transactions:
     let
       encodedKey = rlp.encode(idx)
-      encodedTx = rlp.encode(tx.removeNetworkPayload)
-      txHash = rlpHash(tx) # beware EIP-4844
+      encodedTx = rlp.encode(tx)
+      txHash = rlpHash(tx)
       blockKey = transactionHashToBlockKey(txHash)
       txKey: TransactionKey = (blockNumber, idx)
     mpt.merge(encodedKey, encodedTx).isOkOr:

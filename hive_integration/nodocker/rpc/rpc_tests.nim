@@ -90,7 +90,7 @@ proc balanceAndNonceAtTest(t: TestEnv): Future[TestStatus] {.async.} =
 
   let txHash = rlpHash(tx)
   echo "BalanceAt: send $1 wei from 0x$2 to 0x$3 in 0x$4" % [
-    $tx.value, sourceAddr.toHex, targetAddr.toHex, txHash.data.toHex]
+    $tx.tx.value, sourceAddr.toHex, targetAddr.toHex, txHash.data.toHex]
 
   let ok = await client.sendTransaction(tx)
   if not ok:
@@ -117,14 +117,16 @@ proc balanceAndNonceAtTest(t: TestEnv): Future[TestStatus] {.async.} =
   let balanceTargetAccountAfter = await client.balanceAt(targetAddr)
 
   # expected balance is previous balance - tx amount - tx fee (gasUsed * gasPrice)
-  let exp = sourceAddressBalanceBefore - amount - (gasUsed * tx.gasPrice).u256
+  let exp =
+    sourceAddressBalanceBefore - amount - (gasUsed * tx.tx.gasPrice).u256
 
   if exp != accountBalanceAfter:
     echo "Expected sender account to have a balance of $1, got $2" % [$exp, $accountBalanceAfter]
     return TestStatus.Failed
 
   if balanceTargetAccountAfter != amount:
-    echo "Expected new account to have a balance of $1, got $2" % [$tx.value, $balanceTargetAccountAfter]
+    echo "Expected new account to have a balance of $1, got $2" % [
+      $tx.tx.value, $balanceTargetAccountAfter]
     return TestStatus.Failed
 
   # ensure nonce is incremented by 1

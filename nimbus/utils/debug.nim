@@ -134,7 +134,12 @@ proc debug*(tx: Transaction): string =
   result.add "accessList    : " & $tx.accessList     & "\n"
   result.add "maxFeePerBlobGas: " & $tx.maxFeePerBlobGas & "\n"
   result.add "versionedHashes.len: " & $tx.versionedHashes.len & "\n"
+  result.add "V             : " & $tx.V              & "\n"
+  result.add "R             : " & $tx.R              & "\n"
+  result.add "S             : " & $tx.S              & "\n"
 
+proc debug*(tx: PooledTransaction): string =
+  result.add debug(tx.tx)
   if tx.networkPayload.isNil:
     result.add "networkPaylod : nil\n"
   else:
@@ -142,10 +147,6 @@ proc debug*(tx: Transaction): string =
     result.add " - blobs       : " & $tx.networkPayload.blobs.len & "\n"
     result.add " - commitments : " & $tx.networkPayload.commitments.len & "\n"
     result.add " - proofs      : " & $tx.networkPayload.proofs.len & "\n"
-
-  result.add "V             : " & $tx.V              & "\n"
-  result.add "R             : " & $tx.R              & "\n"
-  result.add "S             : " & $tx.S              & "\n"
 
 proc debugSum*(h: BlockHeader): string =
   result.add "txRoot         : " & $h.txRoot      & "\n"

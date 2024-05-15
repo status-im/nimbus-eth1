@@ -156,7 +156,7 @@ proc runTxPoolCliqueTest*() =
 
   suite "Test TxPool with Clique sealer":
     test "TxPool addLocal":
-      let res = xp.addLocal(tx, force = true)
+      let res = xp.addLocal(PooledTransaction(tx: tx), force = true)
       check res.isOk
       if res.isErr:
         debugEcho res.error
@@ -172,7 +172,7 @@ proc runTxPoolCliqueTest*() =
         check false
         return
 
-      blk = res.get
+      blk = res.get.blk
       body = BlockBody(
         transactions: blk.txs,
         uncles: blk.uncles
@@ -201,7 +201,7 @@ proc runTxPoolCliqueTest*() =
       check xp.smartHead(blk.header)
 
       let tx = env.makeTx(recipient, amount)
-      let res = xp.addLocal(tx, force = true)
+      let res = xp.addLocal(PooledTransaction(tx: tx), force = true)
       check res.isOk
       if res.isErr:
         debugEcho res.error
@@ -214,7 +214,7 @@ proc runTxPoolCliqueTest*() =
         check false
         return
 
-      blk = r.get
+      blk = r.get.blk
       body = BlockBody(
         transactions: blk.txs,
         uncles: blk.uncles
@@ -249,7 +249,7 @@ proc runTxPoolPosTest*() =
 
   suite "Test TxPool with PoS block":
     test "TxPool addLocal":
-      let res = xp.addLocal(tx, force = true)
+      let res = xp.addLocal(PooledTransaction(tx: tx), force = true)
       check res.isOk
       if res.isErr:
         debugEcho res.error
@@ -269,7 +269,7 @@ proc runTxPoolPosTest*() =
         check false
         return
 
-      blk = r.get
+      blk = r.get.blk
       check com.isBlockAfterTtd(blk.header)
 
       body = BlockBody(
@@ -310,12 +310,12 @@ proc runTxPoolBlobhashTest*() =
 
   suite "Test TxPool with blobhash block":
     test "TxPool addLocal":
-      let res = xp.addLocal(tx1, force = true)
+      let res = xp.addLocal(PooledTransaction(tx: tx1), force = true)
       check res.isOk
       if res.isErr:
         debugEcho res.error
         return
-      let res2 = xp.addLocal(tx2, force = true)
+      let res2 = xp.addLocal(PooledTransaction(tx: tx2), force = true)
       check res2.isOk
 
     test "TxPool jobCommit":
@@ -332,7 +332,7 @@ proc runTxPoolBlobhashTest*() =
         check false
         return
 
-      blk = r.get
+      blk = r.get.blk
       check com.isBlockAfterTtd(blk.header)
 
       body = BlockBody(
@@ -366,7 +366,7 @@ proc runTxPoolBlobhashTest*() =
         xp = env.xp
 
       check xp.smartHead(blk.header)
-      let res = xp.addLocal(tx4, force = true)
+      let res = xp.addLocal(PooledTransaction(tx: tx4), force = true)
       check res.isOk
       if res.isErr:
         debugEcho res.error
@@ -400,7 +400,7 @@ proc runTxHeadDelta*(noisy = true) =
             let tx = env.makeTx(recipient, amount)
             # Instead of `add()`, the functions `addRemote()` or `addLocal()`
             # also would do.
-            xp.add(tx)
+            xp.add(PooledTransaction(tx: tx))
 
           noisy.say "***", "txDB",
             &" n={n}",
@@ -418,7 +418,7 @@ proc runTxHeadDelta*(noisy = true) =
             check false
             return
 
-          let blk = r.get
+          let blk = r.get.blk
           check com.isBlockAfterTtd(blk.header)
 
           let body = BlockBody(
