@@ -42,7 +42,7 @@ template validateVersion(com, timestamp, version, apiVersion) =
   if com.isPragueOrLater(timestamp):
     if version != Version.V4:
       raise invalidParams("if timestamp is Prague or later, " &
-        "payload must be ExecutionPayloadV4")
+        "payload must be ExecutionPayloadV4, got ExecutionPayload" & $version)
 
   if apiVersion == Version.V3:
     if not com.isCancunOrLater(timestamp):
@@ -51,12 +51,12 @@ template validateVersion(com, timestamp, version, apiVersion) =
   if com.isCancunOrLater(timestamp):
     if version != Version.V3:
       raise invalidParams("if timestamp is Cancun or later, " &
-        "payload must be ExecutionPayloadV3")
+        "payload must be ExecutionPayloadV3, got ExecutionPayload" & $version)
 
   elif com.isShanghaiOrLater(timestamp):
     if version != Version.V2:
       raise invalidParams("if timestamp is Shanghai or later, " &
-        "payload must be ExecutionPayloadV2")
+        "payload must be ExecutionPayloadV2, got ExecutionPayload" & $version)
 
   elif version != Version.V1:
     if com.syncReqRelaxV2:
@@ -64,7 +64,7 @@ template validateVersion(com, timestamp, version, apiVersion) =
       discard
     else:
       raise invalidParams("if timestamp is earlier than Shanghai, " &
-        "payload must be ExecutionPayloadV1")
+        "payload must be ExecutionPayloadV1, got ExecutionPayload" & $version)
 
   if apiVersion >= Version.V3:
     if version != apiVersion:

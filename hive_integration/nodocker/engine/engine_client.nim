@@ -231,6 +231,24 @@ proc newPayload*(client: RpcClient,
 
 proc newPayload*(client: RpcClient,
                  version: Version,
+                 payload: ExecutionPayload,
+                 beaconRoot = none(common.Hash256)): Result[PayloadStatusV1, string] =
+  case version
+  of Version.V1: return client.newPayloadV1(payload)
+  of Version.V2: return client.newPayloadV2(payload)
+  of Version.V3:    
+    let versionedHashes = collectBlobHashes(payload.transactions)
+    return client.newPayloadV3(payload,
+      some(versionedHashes),
+      w3Hash beaconRoot)
+  of Version.V4:
+    let versionedHashes = collectBlobHashes(payload.transactions)
+    return client.newPayloadV4(payload,
+      some(versionedHashes),
+      w3Hash beaconRoot)
+      
+proc newPayload*(client: RpcClient,
+                 version: Version,
                  payload: ExecutableData): Result[PayloadStatusV1, string] =
   case version
   of Version.V1: return client.newPayloadV1(payload.basePayload)

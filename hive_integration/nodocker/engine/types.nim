@@ -316,6 +316,12 @@ func blockNumber*(x: ExecutableData): auto =
 func stateRoot*(x: ExecutableData): auto =
   x.basePayload.stateRoot
 
+func version*(x: ExecutableData): auto =
+  x.basePayload.version
+
+func V1V2*(x: ExecutableData): auto =
+  x.basePayload.V1V2
+
 proc `parentHash=`*(x: var ExecutableData, val: auto) =
   x.basePayload.parentHash = val
 
