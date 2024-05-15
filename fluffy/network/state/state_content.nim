@@ -208,14 +208,14 @@ func encode*(content: RetrievalContentValue): seq[byte] =
   of contractCode:
     SSZ.encode(content.contractCode)
 
-func init*(T: type Nibbles, packed: openArray[byte]): T =
+func init*(T: type Nibbles, packed: openArray[byte], isEven: bool): T =
   doAssert(packed.len() <= MAX_PACKED_NIBBLES_LEN)
 
-  let isEven = packed.len() mod 2 == 0
   var output = newSeqOfCap[byte](packed.len() + 1)
   if isEven:
     output.add(0x00)
   else:
+    doAssert(packed.len() > 0)
     # set the first nibble to 1 and copy the second nibble from the input
     output.add((packed[0] and 0x0F) or 0x10)
 

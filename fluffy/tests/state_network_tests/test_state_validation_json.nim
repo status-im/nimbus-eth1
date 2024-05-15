@@ -11,17 +11,17 @@ import
   std/os,
   unittest2,
   stew/results,
-  eth/[common, rlp, trie, trie/trie_defs],
+  eth/[common, trie, trie/trie_defs],
   ../../../nimbus/common/chain_config,
   ../../network/state/state_content,
   ../../network/state/state_validation,
   ./state_test_helpers
 
-proc checkValidProofsForExistingLeafs(
+template checkValidProofsForExistingLeafs(
     genAccounts: GenesisAlloc,
     accountState: HexaryTrie,
     storageStates: Table[EthAddress, HexaryTrie],
-) {.raises: [KeyError, RlpError].} =
+) =
   for address, account in genAccounts:
     var acc = newAccount(account.nonce, account.balance)
     acc.codeHash = keccakHash(account.code)
@@ -29,7 +29,7 @@ proc checkValidProofsForExistingLeafs(
     let
       accountProof = accountState.generateAccountProof(address)
       accountTrieNodeKey = AccountTrieNodeKey(
-        path: Nibbles.init(keccakHash(address).data),
+        path: Nibbles.init(keccakHash(address).data, true),
         nodeHash: keccakHash(accountProof[^1].asSeq()),
       )
       accountTrieOffer = AccountTrieNodeOffer(proof: accountProof)
@@ -56,7 +56,7 @@ proc checkValidProofsForExistingLeafs(
           storageProof = storageState.generateStorageProof(slotKey)
           contractTrieNodeKey = ContractTrieNodeKey(
             address: address,
-            path: Nibbles.init(keccakHash(toBytesBE(slotKey)).data),
+            path: Nibbles.init(keccakHash(toBytesBE(slotKey)).data, true),
             nodeHash: keccakHash(storageProof[^1].asSeq()),
           )
           contractTrieOffer = ContractTrieNodeOffer(
@@ -67,11 +67,11 @@ proc checkValidProofsForExistingLeafs(
           )
         check proofResult.isOk()
 
-proc checkInvalidProofsWithBadValue(
+template checkInvalidProofsWithBadValue(
     genAccounts: GenesisAlloc,
     accountState: HexaryTrie,
     storageStates: Table[EthAddress, HexaryTrie],
-) {.raises: [KeyError, RlpError].} =
+) =
   for address, account in genAccounts:
     var acc = newAccount(account.nonce, account.balance)
     acc.codeHash = keccakHash(account.code)
@@ -79,7 +79,7 @@ proc checkInvalidProofsWithBadValue(
     var
       accountProof = accountState.generateAccountProof(address)
       accountTrieNodeKey = AccountTrieNodeKey(
-        path: Nibbles.init(keccakHash(address).data),
+        path: Nibbles.init(keccakHash(address).data, true),
         nodeHash: keccakHash(accountProof[^1].asSeq()),
       )
     accountProof[^1][^1] += 1 # bad account leaf value
@@ -110,7 +110,7 @@ proc checkInvalidProofsWithBadValue(
           storageProof = storageState.generateStorageProof(slotKey)
           contractTrieNodeKey = ContractTrieNodeKey(
             address: address,
-            path: Nibbles.init(keccakHash(toBytesBE(slotKey)).data),
+            path: Nibbles.init(keccakHash(toBytesBE(slotKey)).data, true),
             nodeHash: keccakHash(storageProof[^1].asSeq()),
           )
         storageProof[^1][^1] += 1 # bad storage leaf value
@@ -124,7 +124,10 @@ proc checkInvalidProofsWithBadValue(
         check proofResult.isErr()
 
 suite "State Proof Verification Tests":
-  let genesisFiles = ["berlin2000.json", "chainid1.json", "chainid7.json", "merge.json"]
+  let genesisFiles = [
+    "berlin2000.json", "calaveras.json", "chainid1.json", "chainid7.json",
+    "devnet4.json", "devnet5.json", "holesky.json", "mainshadow1.json", "merge.json",
+  ]
 
   test "Valid proofs for existing leafs":
     for file in genesisFiles:
