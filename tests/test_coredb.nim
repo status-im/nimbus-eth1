@@ -28,7 +28,7 @@ const
 
   baseDir = [".", "..", ".."/"..", $DirSep]
   repoDir = [".", "tests", "nimbus-eth1-blobs"]
-  subDir = ["replay", "test_coredb", "custom-network", "customgenesis"]
+  subDir = ["replay", "test_coredb", "custom-network", "customgenesis", "era1"]
 
   # Reference file for finding some database directory base
   sampleDirRefFile = "coredb_test_xx.nim"

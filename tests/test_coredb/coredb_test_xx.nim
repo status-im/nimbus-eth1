@@ -84,6 +84,14 @@ let
       "mainnet550849-719232.txt.gz",
       "mainnet719233-843841.txt.gz"])
 
+  mainEra1* = CaptureSpecs(
+    builtIn: true,
+    name:    "main-era1",
+    network: MainNet,
+    files:  @["00000.era1"], # ext `.era1` will run over all avail files
+    numBlocks: high(int),
+    dbType: AristoDbRocks)
+
   # ------------------
 
   bulkTest0* = goerliSample
@@ -159,6 +167,7 @@ let
   # ------------------
 
   allSamples* = [
+    mainEra1,
     bulkTest0, bulkTest1, bulkTest2, bulkTest3,
     ariTest0, ariTest1, ariTest2, ariTest3,
     legaTest0, legaTest1, legaTest2, legaTest3]

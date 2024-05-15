@@ -9,7 +9,7 @@
 # distributed except according to those terms.
 
 import
-  std/[strformat, times],
+  std/[os, sequtils, strformat, times],
   chronicles,
   eth/common,
   results,
@@ -175,7 +175,16 @@ proc test_chainSync*(
   when LedgerEnableApiProfiling:
     ldgProfData = com.db.ldgProfData()
 
-  for w in filePaths.undumpBlocks:
+  # Scan folder for `era1` files (ignoring the argument file name)
+  let
+    (dir, name, ext) = filePaths[0].splitFile
+    files =
+      if filePaths.len == 1 and ext == ".era1":
+        (dir / "*" & ext).walkPattern.toSeq
+      else:
+        filePaths
+
+  for w in files.undumpBlocks:
     let (fromBlock, toBlock) = (w[0][0].blockNumber, w[0][^1].blockNumber)
     if fromBlock == 0.u256:
       xCheck w[0][0] == com.db.getBlockHeader(0.u256)

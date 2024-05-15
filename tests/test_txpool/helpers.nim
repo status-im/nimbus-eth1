@@ -12,7 +12,7 @@ import
   std/[os, strformat, sequtils, strutils, times],
   ../../nimbus/core/tx_pool/[tx_chain, tx_desc, tx_gauge, tx_item, tx_tabs],
   ../../nimbus/core/tx_pool/tx_tasks/[tx_packer, tx_recover],
-  ../replay/[pp, undump_blocks],
+  ../replay/[pp, undump_blocks_gz],
   chronicles,
   eth/[common, keys],
   stew/[byteutils,keyed_queue, sorted_set],
@@ -55,7 +55,7 @@ export
   tx_tabs.reassign,
   tx_tabs.reject,
   tx_tabs.verify,
-  undumpBlocks
+  undumpBlocksGz
 
 const
   # pretty printing

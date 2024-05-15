@@ -9,30 +9,35 @@
 # according to those terms.
 
 import
-  std/os,
+  results,
   eth/common,
-  "."/[undump_blocks_era1, undump_blocks_gz]
+  ../../nimbus/db/core_db,
+  ../../fluffy/eth_data/era1
 
 # ------------------------------------------------------------------------------
 # Public undump
 # ------------------------------------------------------------------------------
 
-iterator undumpBlocks*(file: string): (seq[BlockHeader],seq[BlockBody]) =
-  let ext = file.splitFile.ext
-  if ext == ".era1":
-    for w in file.undumpBlocksEra1:
-      yield w
-  elif ext == ".gz":
-    for w in file.undumpBlocksGz:
-      yield w
-  else:
-    raiseAssert "Unsupported extension for \"" &
-      file & "\" (got \"" & ext & "\")"
-
-iterator undumpBlocks*(files: seq[string]): (seq[BlockHeader],seq[BlockBody]) =
-  for f in files:
-    for w in f.undumpBlocks:
-      yield w
+iterator undumpBlocksEra1*(eFile: string): (seq[BlockHeader],seq[BlockBody]) =
+  ## Variant of `undumpBlocks()`
+  var headers: seq[BlockHeader]
+  var bodies: seq[BlockBody]
+  let era1File = Era1File.open(eFile).valueOr:
+    raiseAssert "Cannot open " & eFile & ": " & $error
+  for blockTuple in era1File.era1BlockTuples:
+    if blockTuple.header.blockNumber == 0:
+      yield (@[blockTuple.header], @[blockTuple.body])
+    else:
+      headers.add blockTuple.header
+      bodies.add blockTuple.body
+      if 192 <= headers.len:
+        yield (headers, bodies)
+        headers.setLen 0
+        bodies.setLen 0
+  if headers.len > 0:
+    yield (headers, bodies)
+    headers.setLen 0
+    bodies.setLen 0
 
 # ------------------------------------------------------------------------------
 # End
