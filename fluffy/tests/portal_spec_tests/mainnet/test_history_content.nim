@@ -19,6 +19,8 @@ import
   ../../test_history_util,
   ../../../eth_data/yaml_utils
 
+from std/os import walkDir, splitFile, PathComponent
+
 suite "History Content Encodings":
   test "HeaderWithProof Building and Encoding":
     const
@@ -79,37 +81,39 @@ suite "History Content Encodings":
         encode(contentKey.get()).asSeq() == contentKeyEncoded
 
   test "HeaderWithProof Encoding/Decoding and Verification":
-    const dataFile =
-      "./vendor/portal-spec-tests/tests/mainnet/history/headers_with_proof/14764013.yaml"
+    const testsPath =
+      "./vendor/portal-spec-tests/tests/mainnet/history/headers_with_proof/"
 
-    let
-      content = YamlPortalContent.loadFromYaml(dataFile).valueOr:
-        raiseAssert "Invalid data file: " & error
-      accumulator = loadAccumulator()
-      contentKeyEncoded = content.content_key.hexToSeqByte()
-      contentValueEncoded = content.content_value.hexToSeqByte()
+    for kind, path in walkDir(testsPath):
+      if kind == pcFile and path.splitFile.ext == ".yaml":
+        let
+          content = YamlPortalContent.loadFromYaml(path).valueOr:
+            raiseAssert "Invalid data file: " & error
+          accumulator = loadAccumulator()
+          contentKeyEncoded = content.content_key.hexToSeqByte()
+          contentValueEncoded = content.content_value.hexToSeqByte()
 
-    # Decode content
-    let
-      contentKey = decodeSsz(contentKeyEncoded, ContentKey)
-      contentValue = decodeSsz(contentValueEncoded, BlockHeaderWithProof)
+        # Decode content
+        let
+          contentKey = decodeSsz(contentKeyEncoded, ContentKey)
+          contentValue = decodeSsz(contentValueEncoded, BlockHeaderWithProof)
 
-    check:
-      contentKey.isOk()
-      contentValue.isOk()
+        check:
+          contentKey.isOk()
+          contentValue.isOk()
 
-    let blockHeaderWithProof = contentValue.get()
+        let blockHeaderWithProof = contentValue.get()
 
-    let res = decodeRlp(blockHeaderWithProof.header.asSeq(), BlockHeader)
-    check res.isOk()
-    let header = res.get()
+        let res = decodeRlp(blockHeaderWithProof.header.asSeq(), BlockHeader)
+        check res.isOk()
+        let header = res.get()
 
-    check accumulator.verifyHeader(header, blockHeaderWithProof.proof).isOk()
+        check accumulator.verifyHeader(header, blockHeaderWithProof.proof).isOk()
 
-    # Encode content
-    check:
-      SSZ.encode(blockHeaderWithProof) == contentValueEncoded
-      encode(contentKey.get()).asSeq() == contentKeyEncoded
+        # Encode content
+        check:
+          SSZ.encode(blockHeaderWithProof) == contentValueEncoded
+          encode(contentKey.get()).asSeq() == contentKeyEncoded
 
   test "PortalBlockBody (Legacy) Encoding/Decoding and Verification":
     const
