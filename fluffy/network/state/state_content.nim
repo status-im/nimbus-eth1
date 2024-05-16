@@ -12,7 +12,7 @@
 
 import
   nimcrypto/[hash, sha2, keccak],
-  stew/results,
+  results,
   stint,
   eth/common/eth_types,
   ssz_serialization,

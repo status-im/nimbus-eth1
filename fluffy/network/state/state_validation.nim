@@ -6,28 +6,31 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  results,
-  stew/byteutils,
-  eth/[common, trie],
-  ../../common/common_types,
-  ./state_content
+  results, stew/arrayops, eth/[common, trie], ../../common/common_types, ./state_content
+
+export results
 
 # private functions
 
 proc hashEquals(value: TrieNode | Bytecode, expectedHash: KeccakHash): bool {.inline.} =
   keccakHash(value.asSeq()) == expectedHash
 
-proc isValidNextNode(nodeRlp: Rlp, rlpIdx: int, nextNode: TrieNode): bool =
-  let nextHashRlp = nodeRlp.listElem(rlpIdx)
-  if nextHashRlp.isEmpty:
+proc isValidNextNode(thisNodeRlp: Rlp, rlpIdx: int, nextNode: TrieNode): bool =
+  let hashOrShortRlp = thisNodeRlp.listElem(rlpIdx)
+  if hashOrShortRlp.isEmpty():
     return false
 
-  let nextHash = nextHashRlp.toBytes()
-  if nextHash.len() != 32:
-    return false
+  let nextHash =
+    if hashOrShortRlp.isList():
+      # is a short node
+      keccakHash(rlp.encode(hashOrShortRlp))
+    else:
+      let hash = hashOrShortRlp.toBytes()
+      if hash.len() != 32:
+        return false
+      KeccakHash(data: array[32, byte].initCopyFrom(hash))
 
-  # is there a better way to build a KeccakHash from a seq[byte]?
-  nextNode.hashEquals(KeccakHash.fromHex(nextHash.toHex()))
+  nextNode.hashEquals(nextHash)
 
 proc decodePrefix(nodePrefixRlp: Rlp): (byte, bool, Nibbles) =
   doAssert(not nodePrefixRlp.isEmpty())
@@ -42,7 +45,7 @@ proc decodePrefix(nodePrefixRlp: Rlp): (byte, bool, Nibbles) =
 
   (firstNibble.byte, isLeaf, nibbles)
 
-proc validateTrieProof(
+proc validateTrieProof*(
     expectedRootHash: KeccakHash, path: Nibbles, proof: TrieProof
 ): Result[void, string] =
   if proof.len() == 0:
@@ -59,14 +62,17 @@ proc validateTrieProof(
       return err("empty path, only one node expected in proof")
 
   var nibbleIdx = 0
-  for proofIdx, p in proof[0 .. ^2]:
+  for proofIdx, p in proof:
     let
       thisNodeRlp = rlpFromBytes(p.asSeq())
-      nextNode = proof[proofIdx + 1]
       remainingNibbles = nibbles.len() - nibbleIdx
+      isLastNode = proofIdx == proof.high
 
     if remainingNibbles == 0:
-      return err("empty nibbles but proof has more nodes")
+      if isLastNode:
+        break
+      else:
+        return err("empty nibbles but proof has more nodes")
 
     case thisNodeRlp.listLen()
     of 2:
@@ -78,34 +84,40 @@ proc validateTrieProof(
       if prefix >= 4:
         return err("invalid prefix in node")
 
-      let unpackedPrefix = prefixNibbles.unpackNibbles()
-      if remainingNibbles < unpackedPrefix.len():
-        return err("not enough nibbles to validate node prefix")
+      if not isLastNode or isLeaf:
+        let unpackedPrefix = prefixNibbles.unpackNibbles()
+        if remainingNibbles < unpackedPrefix.len():
+          return err("not enough nibbles to validate node prefix")
 
-      let nibbleEndIdx = nibbleIdx + unpackedPrefix.len()
-      if nibbles[nibbleIdx ..< nibbleEndIdx] != unpackedPrefix:
-        return err("nibbles don't match node prefix")
-      nibbleIdx += unpackedPrefix.len()
+        let nibbleEndIdx = nibbleIdx + unpackedPrefix.len()
+        if nibbles[nibbleIdx ..< nibbleEndIdx] != unpackedPrefix:
+          return err("nibbles don't match node prefix")
+        nibbleIdx += unpackedPrefix.len()
 
-      if isLeaf:
-        if proofIdx < proof.len() - 1:
+      if not isLastNode:
+        if isLeaf:
           return err("leaf node must be last node in the proof")
-      else: # is extension node
-        if not isValidNextNode(thisNodeRlp, 1, nextNode):
-          return err("hash of next node doesn't match the expected extension node hash")
+        else: # is extension node
+          if not isValidNextNode(thisNodeRlp, 1, proof[proofIdx + 1]):
+            return
+              err("hash of next node doesn't match the expected extension node hash")
     of 17:
-      let nextNibble = nibbles[nibbleIdx]
-      if nextNibble >= 16:
-        return err("invalid next nibble for branch node")
+      if not isLastNode:
+        let nextNibble = nibbles[nibbleIdx]
+        if nextNibble >= 16:
+          return err("invalid next nibble for branch node")
 
-      if not isValidNextNode(thisNodeRlp, nextNibble.int, nextNode):
-        return err("hash of next node doesn't match the expected branch node hash")
+        if not isValidNextNode(thisNodeRlp, nextNibble.int, proof[proofIdx + 1]):
+          return err("hash of next node doesn't match the expected branch node hash")
 
-      inc nibbleIdx
+        inc nibbleIdx
     else:
       return err("invalid rlp node, expected 2 or 17 elements")
 
-  ok()
+  if nibbleIdx < nibbles.len():
+    err("path contains more nibbles than expected for proof")
+  else:
+    ok()
 
 proc rlpDecodeAccountTrieNode(accountNode: TrieNode): Result[Account, string] =
   let accNodeRlp = rlpFromBytes(accountNode.asSeq())

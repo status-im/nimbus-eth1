@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  stew/results,
+  results,
   chronos,
   chronicles,
   eth/common/eth_hash,
@@ -17,6 +17,8 @@ import
   ../wire/[portal_protocol, portal_stream, portal_protocol_config],
   ./state_content,
   ./state_validation
+
+export results
 
 logScope:
   topics = "portal_state"

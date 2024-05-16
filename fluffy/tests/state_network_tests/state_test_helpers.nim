@@ -1,4 +1,4 @@
-# Nimbus - Portal Network
+# Fluffy
 # Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
@@ -13,21 +13,29 @@ import
   ../../nimbus/common/chain_config,
   ../../network/state/state_content
 
+proc asNibbles*(key: openArray[byte], isEven = true): Nibbles =
+  Nibbles.init(key, isEven)
+
+proc asTrieProof*(branch: openArray[seq[byte]]): TrieProof =
+  TrieProof.init(branch.map(node => TrieNode.init(node)))
+
+proc getTrieProof*(
+    state: HexaryTrie, key: openArray[byte]
+): TrieProof {.raises: [RlpError].} =
+  let branch = state.getBranch(key)
+  branch.asTrieProof()
+
 proc generateAccountProof*(
     state: HexaryTrie, address: EthAddress
 ): TrieProof {.raises: [RlpError].} =
-  let
-    key = keccakHash(address).data
-    branch = state.getBranch(key)
-  TrieProof.init(branch.map(node => TrieNode.init(node)))
+  let key = keccakHash(address).data
+  state.getTrieProof(key)
 
 proc generateStorageProof*(
     state: HexaryTrie, slotKey: UInt256
 ): TrieProof {.raises: [RlpError].} =
-  let
-    key = keccakHash(toBytesBE(slotKey)).data
-    branch = state.getBranch(key)
-  TrieProof.init(branch.map(node => TrieNode.init(node)))
+  let key = keccakHash(toBytesBE(slotKey)).data
+  state.getTrieProof(key)
 
 proc getGenesisAlloc*(filePath: string): GenesisAlloc =
   var cn: NetworkParams
