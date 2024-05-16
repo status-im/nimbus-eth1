@@ -322,12 +322,8 @@ proc persistMode(acc: AccountRef): PersistMode =
 
 proc persistCode(acc: AccountRef, ac: AccountsLedgerRef) =
   if acc.code.len != 0:
-    when defined(geth):
-      let rc = ac.kvt.put(
-        acc.statement.codeHash.data, acc.code)
-    else:
-      let rc = ac.kvt.put(
-        contractHashKey(acc.statement.codeHash).toOpenArray, acc.code)
+    let rc = ac.kvt.put(
+      contractHashKey(acc.statement.codeHash).toOpenArray, acc.code)
     if rc.isErr:
       warn logTxt "persistCode()",
        codeHash=acc.statement.codeHash, error=($$rc.error)
@@ -410,11 +406,7 @@ proc getCode*(ac: AccountsLedgerRef, address: EthAddress): seq[byte] =
   if CodeLoaded in acc.flags or CodeChanged in acc.flags:
     result = acc.code
   else:
-    let rc = block:
-      when defined(geth):
-        ac.kvt.get(acc.statement.codeHash.data)
-      else:
-        ac.kvt.get(contractHashKey(acc.statement.codeHash).toOpenArray)
+    let rc = ac.kvt.get(contractHashKey(acc.statement.codeHash).toOpenArray)
     if rc.isErr:
       warn logTxt "getCode()", codeHash=acc.statement.codeHash, error=($$rc.error)
     else:
