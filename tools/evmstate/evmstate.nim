@@ -128,7 +128,7 @@ proc writeRootHashToStderr(vmState: BaseVMState) =
 
 proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateResult =
   let
-    com     = CommonRef.new(newCoreDbRef DefaultDbMemory, ctx.chainConfig, pruneTrie = false)
+    com     = CommonRef.new(newCoreDbRef DefaultDbMemory, ctx.chainConfig)
     fork    = com.toEVMFork(ctx.header.forkDeterminationInfo)
     stream  = newFileStream(stderr)
     tracer  = if conf.jsonEnabled:

@@ -22,7 +22,6 @@ proc processChainData(cd: ChainData): TestStatus =
   let
     networkId = NetworkId(cd.params.config.chainId)
     com = CommonRef.new(newCoreDbRef DefaultDbMemory,
-      pruneTrie = false,
       networkId,
       cd.params
     )

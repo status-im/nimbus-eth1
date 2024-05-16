@@ -47,7 +47,7 @@ proc dumpDebug(com: CommonRef, blockNumber: UInt256) =
 
 proc main() {.used.} =
   let conf = getConfiguration()
-  let com = CommonRef.new(newCoreDbRef(DefaultDbPersistent, conf.dataDir), false)
+  let com = CommonRef.new(newCoreDbRef(DefaultDbPersistent, conf.dataDir))
 
   if conf.head != 0.u256:
     dumpDebug(com, conf.head)

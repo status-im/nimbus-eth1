@@ -145,13 +145,13 @@ proc rpcGetProofsTrackStateChangesMain*() =
 
     test "Test tracking the changes introduced in every block":
 
-      let com = CommonRef.new(newCoreDbRef(LegacyDbPersistent, DATABASE_PATH), false)
+      let com = CommonRef.new(newCoreDbRef(DefaultDbPersistent, DATABASE_PATH))
       com.initializeEmptyDb()
       com.db.compensateLegacySetup()
 
       let
         blockHeader = waitFor client.eth_getBlockByNumber(blockId(START_BLOCK), false)
-        stateDB = newAccountStateDB(com.db, blockHeader.stateRoot.toHash256(), false)
+        stateDB = newAccountStateDB(com.db, blockHeader.stateRoot.toHash256())
 
       for i in START_BLOCK..END_BLOCK:
         let
