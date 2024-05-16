@@ -6,16 +6,19 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  stew/results,
+  results,
   chronos,
   chronicles,
   eth/common/eth_hash,
   eth/common,
   eth/p2p/discoveryv5/[protocol, enr],
   ../../database/content_db,
+  ../history/history_network,
   ../wire/[portal_protocol, portal_stream, portal_protocol_config],
   ./state_content,
   ./state_validation
+
+export results
 
 logScope:
   topics = "portal_state"
@@ -27,6 +30,7 @@ type StateNetwork* = ref object
   contentDB*: ContentDB
   contentQueue*: AsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])]
   processContentLoop: Future[void]
+  historyNetwork: Opt[HistoryNetwork]
 
 func toContentIdHandler(contentKey: ByteList): results.Opt[ContentId] =
   ok(toContentId(contentKey))
@@ -85,20 +89,25 @@ proc validateContent*(
 ): bool =
   doAssert(contentKey.contentType == contentValue.contentType)
 
-  case contentKey.contentType
-  of unused:
-    warn "Received content with unused content type"
-    false
-  of accountTrieNode:
-    validateFetchedAccountTrieNode(
-      contentKey.accountTrieNodeKey, contentValue.accountTrieNode
-    )
-  of contractTrieNode:
-    validateFetchedContractTrieNode(
-      contentKey.contractTrieNodeKey, contentValue.contractTrieNode
-    )
-  of contractCode:
-    validateFetchedContractCode(contentKey.contractCodeKey, contentValue.contractCode)
+  let res =
+    case contentKey.contentType
+    of unused:
+      Result[void, string].err("Received content with unused content type")
+    of accountTrieNode:
+      validateFetchedAccountTrieNode(
+        contentKey.accountTrieNodeKey, contentValue.accountTrieNode
+      )
+    of contractTrieNode:
+      validateFetchedContractTrieNode(
+        contentKey.contractTrieNodeKey, contentValue.contractTrieNode
+      )
+    of contractCode:
+      validateFetchedContractCode(contentKey.contractCodeKey, contentValue.contractCode)
+
+  res.isOkOr:
+    warn "Validation of fetched content failed: ", error
+
+  res.isOk()
 
 proc getContent*(n: StateNetwork, key: ContentKey): Future[Opt[seq[byte]]] {.async.} =
   let
@@ -137,34 +146,54 @@ proc getContent*(n: StateNetwork, key: ContentKey): Future[Opt[seq[byte]]] {.asy
   # domain types.
   return Opt.some(contentResult.content)
 
-proc validateAccountTrieNode(
-    n: StateNetwork, key: ContentKey, contentValue: OfferContentValue
-): bool =
-  true
+proc getStateRootByBlockHash(
+    n: StateNetwork, hash: BlockHash
+): Future[Opt[KeccakHash]] {.async.} =
+  if n.historyNetwork.isNone():
+    warn "History network is not available. Unable to get state root by block hash"
+    return Opt.none(KeccakHash)
 
-proc validateContractTrieNode(
-    n: StateNetwork, key: ContentKey, contentValue: OfferContentValue
-): bool =
-  true
+  let header = (await n.historyNetwork.get().getVerifiedBlockHeader(hash)).valueOr:
+    warn "Failed to get block header by hash", hash
+    return Opt.none(KeccakHash)
 
-proc validateContractCode(
-    n: StateNetwork, key: ContentKey, contentValue: OfferContentValue
-): bool =
-  true
+  Opt.some(header.stateRoot)
 
 proc validateContent*(
     n: StateNetwork, contentKey: ContentKey, contentValue: OfferContentValue
-): bool =
+): Future[Result[void, string]] {.async.} =
+  doAssert(contentKey.contentType == contentValue.contentType)
+
   case contentKey.contentType
   of unused:
-    warn "Received content with unused content type"
-    false
+    Result[void, string].err("Received content with unused content type")
   of accountTrieNode:
-    validateAccountTrieNode(n, contentKey, contentValue)
+    let stateRoot = (
+      await n.getStateRootByBlockHash(contentValue.accountTrieNode.blockHash)
+    ).valueOr:
+      return Result[void, string].err("Failed to get state root by block hash")
+
+    validateOfferedAccountTrieNode(
+      stateRoot, contentKey.accountTrieNodeKey, contentValue.accountTrieNode
+    )
   of contractTrieNode:
-    validateContractTrieNode(n, contentKey, contentValue)
+    let stateRoot = (
+      await n.getStateRootByBlockHash(contentValue.contractTrieNode.blockHash)
+    ).valueOr:
+      return Result[void, string].err("Failed to get state root by block hash")
+
+    validateOfferedContractTrieNode(
+      stateRoot, contentKey.contractTrieNodeKey, contentValue.contractTrieNode
+    )
   of contractCode:
-    validateContractCode(n, contentKey, contentValue)
+    let stateRoot = (
+      await n.getStateRootByBlockHash(contentValue.contractCode.blockHash)
+    ).valueOr:
+      return Result[void, string].err("Failed to get state root by block hash")
+
+    validateOfferedContractCode(
+      stateRoot, contentKey.contractCodeKey, contentValue.contractCode
+    )
 
 proc recursiveGossipAccountTrieNode(
     p: PortalProtocol,
@@ -235,6 +264,7 @@ proc new*(
     streamManager: StreamManager,
     bootstrapRecords: openArray[Record] = [],
     portalConfig: PortalProtocolConfig = defaultPortalProtocolConfig,
+    historyNetwork = Opt.none(HistoryNetwork),
 ): T =
   let cq = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
 
@@ -253,8 +283,12 @@ proc new*(
   portalProtocol.dbPut =
     createStoreHandler(contentDB, portalConfig.radiusConfig, portalProtocol)
 
-  return
-    StateNetwork(portalProtocol: portalProtocol, contentDB: contentDB, contentQueue: cq)
+  return StateNetwork(
+    portalProtocol: portalProtocol,
+    contentDB: contentDB,
+    contentQueue: cq,
+    historyNetwork: historyNetwork,
+  )
 
 proc processContentLoop(n: StateNetwork) {.async.} =
   try:
@@ -266,22 +300,24 @@ proc processContentLoop(n: StateNetwork) {.async.} =
           (decodedKey, decodedValue) = decodeKV(contentKey, contentValue).valueOr:
             error "Unable to decode offered Key/Value"
             continue
-        if validateContent(n, decodedKey, decodedValue):
-          let
-            valueForRetrieval = decodedValue.offerContentToRetrievalContent().encode()
-            contentId = n.portalProtocol.toContentId(contentKey).valueOr:
-              error "Received offered content with invalid content key", contentKey
-              continue
 
-          n.portalProtocol.storeContent(contentKey, contentId, valueForRetrieval)
-          info "Received offered content validated successfully", contentKey
+        (await n.validateContent(decodedKey, decodedValue)).isOkOr:
+          error "Received offered content failed validation", contentKey, error
+          continue
 
-          await gossipContent(
-            n.portalProtocol, maybeSrcNodeId, contentKey, decodedKey, contentValue,
-            decodedValue,
-          )
-        else:
-          error "Received offered content failed validation", contentKey
+        let
+          valueForRetrieval = decodedValue.offerContentToRetrievalContent().encode()
+          contentId = n.portalProtocol.toContentId(contentKey).valueOr:
+            error "Received offered content with invalid content key", contentKey
+            continue
+
+        n.portalProtocol.storeContent(contentKey, contentId, valueForRetrieval)
+        info "Received offered content validated successfully", contentKey
+
+        await gossipContent(
+          n.portalProtocol, maybeSrcNodeId, contentKey, decodedKey, contentValue,
+          decodedValue,
+        )
   except CancelledError:
     trace "processContentLoop canceled"
 

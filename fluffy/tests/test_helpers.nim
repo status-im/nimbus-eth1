@@ -9,12 +9,10 @@
 
 import
   std/net,
-  eth/[common, keys, rlp, trie, trie/db],
+  eth/[common, keys, rlp],
   eth/p2p/discoveryv5/[enr, node, routing_table],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ../network/history/[accumulator, history_content],
-  ../network/state/experimental/state_proof_types,
-  ../../nimbus/common/chain_config,
   ../database/content_db
 
 proc localAddress*(port: int): Address {.raises: [ValueError].} =
@@ -113,42 +111,3 @@ func buildHeadersWithProof*(
     headersWithProof.add(?buildHeaderWithProof(header, epochAccumulators))
 
   ok(headersWithProof)
-
-proc getGenesisAlloc*(filePath: string): GenesisAlloc =
-  var cn: NetworkParams
-  if not loadNetworkParams(filePath, cn):
-    quit(1)
-
-  cn.genesis.alloc
-
-proc toState*(
-    alloc: GenesisAlloc
-): (AccountState, Table[EthAddress, StorageState]) {.raises: [RlpError].} =
-  var accountTrie = initHexaryTrie(newMemoryDB())
-  var storageStates = initTable[EthAddress, StorageState]()
-
-  for address, genAccount in alloc:
-    var storageRoot = EMPTY_ROOT_HASH
-    var codeHash = EMPTY_CODE_HASH
-
-    if genAccount.code.len() > 0:
-      var storageTrie = initHexaryTrie(newMemoryDB())
-      for slotKey, slotValue in genAccount.storage:
-        let key = keccakHash(toBytesBE(slotKey)).data
-        let value = rlp.encode(slotValue)
-        storageTrie.put(key, value)
-      storageStates[address] = storageTrie.StorageState
-      storageRoot = storageTrie.rootHash()
-      codeHash = keccakHash(genAccount.code)
-
-    let account = Account(
-      nonce: genAccount.nonce,
-      balance: genAccount.balance,
-      storageRoot: storageRoot,
-      codeHash: codeHash,
-    )
-    let key = keccakHash(address).data
-    let value = rlp.encode(account)
-    accountTrie.put(key, value)
-
-  (accountTrie.AccountState, storageStates)

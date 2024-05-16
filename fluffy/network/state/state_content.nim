@@ -12,7 +12,7 @@
 
 import
   nimcrypto/[hash, sha2, keccak],
-  stew/results,
+  results,
   stint,
   eth/common/eth_types,
   ssz_serialization,
@@ -208,16 +208,35 @@ func encode*(content: RetrievalContentValue): seq[byte] =
   of contractCode:
     SSZ.encode(content.contractCode)
 
-func packNibbles*(nibbles: seq[byte]): Nibbles =
-  doAssert(nibbles.len() <= MAX_UNPACKED_NIBBLES_LEN, "Can't pack more than 64 nibbles")
+func init*(T: type Nibbles, packed: openArray[byte], isEven: bool): T =
+  doAssert(packed.len() <= MAX_PACKED_NIBBLES_LEN)
 
-  if nibbles.len() == 0:
+  var output = newSeqOfCap[byte](packed.len() + 1)
+  if isEven:
+    output.add(0x00)
+  else:
+    doAssert(packed.len() > 0)
+    # set the first nibble to 1 and copy the second nibble from the input
+    output.add((packed[0] and 0x0F) or 0x10)
+
+  let startIdx = if isEven: 0 else: 1
+  for i in startIdx ..< packed.len():
+    output.add(packed[i])
+
+  Nibbles(output)
+
+func packNibbles*(unpacked: openArray[byte]): Nibbles =
+  doAssert(
+    unpacked.len() <= MAX_UNPACKED_NIBBLES_LEN, "Can't pack more than 64 nibbles"
+  )
+
+  if unpacked.len() == 0:
     return Nibbles(@[byte(0x00)])
 
-  let isEvenLength = nibbles.len() mod 2 == 0
+  let isEvenLength = unpacked.len() mod 2 == 0
 
   var
-    output = newSeqOfCap[byte](nibbles.len() div 2 + 1)
+    output = newSeqOfCap[byte](unpacked.len() div 2 + 1)
     highNibble = isEvenLength
     currentByte: byte = 0
 
@@ -226,7 +245,7 @@ func packNibbles*(nibbles: seq[byte]): Nibbles =
   else:
     currentByte = 0x10
 
-  for i, nibble in nibbles:
+  for i, nibble in unpacked:
     if highNibble:
       currentByte = nibble shl 4
     else:
@@ -236,12 +255,12 @@ func packNibbles*(nibbles: seq[byte]): Nibbles =
 
   Nibbles(output)
 
-func unpackNibbles*(nibbles: Nibbles): seq[byte] =
-  doAssert(nibbles.len() <= MAX_PACKED_NIBBLES_LEN, "Packed nibbles length is too long")
+func unpackNibbles*(packed: Nibbles): seq[byte] =
+  doAssert(packed.len() <= MAX_PACKED_NIBBLES_LEN, "Packed nibbles length is too long")
 
-  var output = newSeqOfCap[byte](nibbles.len() * 2)
+  var output = newSeqOfCap[byte](packed.len() * 2)
 
-  for i, pair in nibbles:
+  for i, pair in packed:
     if i == 0 and pair == 0x00:
       continue
 
