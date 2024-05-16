@@ -38,7 +38,7 @@ proc parseU256(val: string): UInt256 =
 proc prepareBlockEnv(parent: BlockHeader, thisBlock: Block): CoreDbRef =
   var
     accounts     = requestPostState(thisBlock)
-    memoryDB     = newCoreDbRef LegacyDbMemory
+    memoryDB     = newCoreDbRef DefaultDbMemory
     accountDB    = newAccountStateDB(memoryDB, parent.stateRoot, false)
     parentNumber = %(parent.blockNumber.prefixHex)
 

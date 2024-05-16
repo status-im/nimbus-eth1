@@ -19,7 +19,7 @@ proc generatePrestate*(nimbus, geth: JsonNode, blockNumber: UInt256, parent, hea
     headerHash = rlpHash(header)
 
   var
-    chainDB = newCoreDbRef(LegacyDbMemory)
+    chainDB = newCoreDbRef(DefaultDbMemory)
 
   discard chainDB.setHead(parent, true)
   discard chainDB.persistTransactions(blockNumber, body.transactions)

@@ -378,7 +378,7 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
     let config = parseChainConfig(conf.stateFork)
     config.chainId = conf.stateChainId.ChainId
 
-    let com = CommonRef.new(newCoreDbRef LegacyDbMemory, config, pruneTrie = true)
+    let com = CommonRef.new(newCoreDbRef DefaultDbMemory, config, pruneTrie = true)
 
     # We need to load three things: alloc, env and transactions.
     # May be either in stdin input or in files.

@@ -54,7 +54,7 @@ proc main() {.used.} =
 
   let conf = configuration.getConfiguration()
   let com = CommonRef.new(
-    newCoreDbRef(LegacyDbPersistent, conf.dataDir),
+    newCoreDbRef(DefaultDbPersistent, conf.dataDir),
     false, conf.netId, networkParams(conf.netId))
 
   # move head to block number ...
