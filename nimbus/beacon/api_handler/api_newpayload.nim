@@ -139,6 +139,11 @@ proc newPayload*(ben: BeaconEngineRef,
       number = header.blockNumber, hash = blockHash.short
     return validStatus(blockHash)
 
+  # If this block was rejected previously, keep rejecting it
+  let res = ben.checkInvalidAncestor(blockHash, blockHash)
+  if res.isSome:
+    return res.get
+
   # If the parent is missing, we - in theory - could trigger a sync, but that
   # would also entail a reorg. That is problematic if multiple sibling blocks
   # are being fed to us, and even moreso, if some semi-distant uncle shortens
@@ -147,26 +152,7 @@ proc newPayload*(ben: BeaconEngineRef,
   # update after legit payload executions.
   var parent: common.BlockHeader
   if not db.getBlockHeader(header.parentHash, parent):
-    # Stash the block away for a potential forced forckchoice update to it
-    # at a later time.
-    ben.put(blockHash, header)
-
-    # Although we don't want to trigger a sync, if there is one already in
-    # progress, try to extend if with the current payload request to relieve
-    # some strain from the forkchoice update.
-    #if err := api.eth.Downloader().BeaconExtend(api.eth.SyncMode(), block.Header()); err == nil {
-    #  log.Debug("Payload accepted for sync extension", "number", params.Number, "hash", params.BlockHash)
-    #  return beacon.PayloadStatusV1{Status: beacon.SYNCING}, nil
-
-    # Either no beacon sync was started yet, or it rejected the delivered
-    # payload as non-integratable on top of the existing sync. We'll just
-    # have to rely on the beacon client to forcefully update the head with
-    # a forkchoice update request.
-    warn "Ignoring payload with missing parent",
-      number = header.blockNumber,
-      hash   = blockHash.short,
-      parent = header.parentHash.short
-    return acceptedStatus()
+    return ben.delayPayloadImport(header)
 
   # We have an existing parent, do some sanity checks to avoid the beacon client
   # triggering too early
@@ -185,6 +171,14 @@ proc newPayload*(ben: BeaconEngineRef,
       parent = parent.timestamp, header = header.timestamp
     return invalidStatus(parent.blockHash, "Invalid timestamp")
 
+  # Another corner case: if the node is in snap sync mode, but the CL client
+  # tries to make it import a block. That should be denied as pushing something
+  # into the database directly will conflict with the assumptions of snap sync
+  # that it has an empty db that it can fill itself.
+  when false:
+    if api.eth.SyncMode() != downloader.FullSync:
+      return api.delayPayloadImport(header)
+
   if not db.haveBlockAndState(header.parentHash):
     ben.put(blockHash, header)
     warn "State not available, ignoring new payload",
@@ -198,6 +192,7 @@ proc newPayload*(ben: BeaconEngineRef,
   let body = blockBody(payload)
   let vres = ben.chain.insertBlockWithoutSetHead(header, body)
   if vres != ValidationResult.OK:
+    ben.setInvalidAncestor(header, blockHash)
     let blockHash = latestValidHash(db, parent, ttd)
     return invalidStatus(blockHash, "Failed to insert block")
 
