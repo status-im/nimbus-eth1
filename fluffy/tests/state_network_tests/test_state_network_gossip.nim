@@ -26,17 +26,20 @@ procSuite "State Network Gossip":
   asyncTest "Test Gossip of Account Trie Node Offer":
     const file = testVectorDir / "recursive_gossip.yaml"
 
-    type
-      YamlOffer = object
-        content_key: string
-        content_value: string
+    type YamlRecursiveGossipKV = object
+      content_key: string
+      content_value: string
 
-      YamlRecursiveGossip = seq[seq[YamlOffer]]
+    type YamlRecursiveGossipData = object
+      state_root: string
+      recursive_gossip: seq[YamlRecursiveGossipKV]
+
+    type YamlRecursiveGossipKVs = seq[YamlRecursiveGossipData]
 
     let
-      testCase = YamlRecursiveGossip.loadFromYaml(file).valueOr:
+      testCase = YamlRecursiveGossipKVs.loadFromYaml(file).valueOr:
         raiseAssert "Cannot read test vector: " & error
-      recursiveGossipSteps = testCase[0]
+      recursiveGossipSteps = testCase[0].recursive_gossip
       numOfClients = recursiveGossipSteps.len() - 1
 
     var clients: seq[StateNetwork]

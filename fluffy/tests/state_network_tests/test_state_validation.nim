@@ -11,6 +11,7 @@ import
   unittest2,
   stew/byteutils,
   eth/common,
+  ../../common/common_utils,
   ../../network/state/state_content,
   ../../network/state/state_validation,
   ../../eth_data/yaml_utils
@@ -23,6 +24,7 @@ type YamlTrieNodeRecursiveGossipKV = ref object
   content_value_retrieval: string
 
 type YamlTrieNodeKV = object
+  state_root: string
   content_key: string
   content_value_offer: string
   content_value_retrieval: string
@@ -31,6 +33,7 @@ type YamlTrieNodeKV = object
 type YamlTrieNodeKVs = seq[YamlTrieNodeKV]
 
 type YamlContractBytecodeKV = object
+  state_root: string
   content_key: string
   content_value_offer: string
   content_value_retrieval: string
@@ -41,7 +44,11 @@ type YamlRecursiveGossipKV = object
   content_key: string
   content_value: string
 
-type YamlRecursiveGossipKVs = seq[seq[YamlRecursiveGossipKV]]
+type YamlRecursiveGossipData = object
+  state_root: string
+  recursive_gossip: seq[YamlRecursiveGossipKV]
+
+type YamlRecursiveGossipKVs = seq[YamlRecursiveGossipData]
 
 suite "State Validation":
   # Retrieval validation tests
@@ -166,18 +173,12 @@ suite "State Validation":
 
   test "Validate valid AccountTrieNodeOffer nodes":
     const file = testVectorDir / "account_trie_node.yaml"
-    const stateRoots = [
-      "0x1ad7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61".hexToSeqByte(),
-      "0x1ad7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61".hexToSeqByte(),
-      "0xd7f8974fb5ac78d9ac099b9ad5018bedc2ce0a72dad1827a1709da30580f0544".hexToSeqByte(),
-    ]
 
     let testCase = YamlTrieNodeKVs.loadFromYaml(file).valueOr:
       raiseAssert "Cannot read test vector: " & error
 
     for i, testData in testCase:
-      var stateRoot: KeccakHash
-      copyMem(addr stateRoot, unsafeAddr stateRoots[i][0], 32)
+      var stateRoot = KeccakHash.init(testData.state_root.hexToSeqByte())
 
       block:
         let contentKey = decode(testData.content_key.hexToSeqByte().ByteList).get()
@@ -209,17 +210,16 @@ suite "State Validation":
   test "Validate invalid AccountTrieNodeOffer nodes - bad state roots":
     const file = testVectorDir / "account_trie_node.yaml"
     const stateRoots = [
-      "0xBAD7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61".hexToSeqByte(),
-      "0xBAD7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61".hexToSeqByte(),
-      "0xBAD8974fb5ac78d9ac099b9ad5018bedc2ce0a72dad1827a1709da30580f0544".hexToSeqByte(),
+      "0xBAD7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61",
+      "0xBAD7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61",
+      "0xBAD8974fb5ac78d9ac099b9ad5018bedc2ce0a72dad1827a1709da30580f0544",
     ]
 
     let testCase = YamlTrieNodeKVs.loadFromYaml(file).valueOr:
       raiseAssert "Cannot read test vector: " & error
 
     for i, testData in testCase:
-      var stateRoot: KeccakHash
-      copyMem(addr stateRoot, unsafeAddr stateRoots[i][0], 32)
+      var stateRoot = KeccakHash.init(stateRoots[i].hexToSeqByte())
 
       let contentKey = decode(testData.content_key.hexToSeqByte().ByteList).get()
       let contentValueOffer =
@@ -234,18 +234,12 @@ suite "State Validation":
 
   test "Validate invalid AccountTrieNodeOffer nodes - bad nodes":
     const file = testVectorDir / "account_trie_node.yaml"
-    const stateRoots = [
-      "0x1ad7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61".hexToSeqByte(),
-      "0x1ad7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61".hexToSeqByte(),
-      "0xd7f8974fb5ac78d9ac099b9ad5018bedc2ce0a72dad1827a1709da30580f0544".hexToSeqByte(),
-    ]
 
     let testCase = YamlTrieNodeKVs.loadFromYaml(file).valueOr:
       raiseAssert "Cannot read test vector: " & error
 
     for i, testData in testCase:
-      var stateRoot: KeccakHash
-      copyMem(addr stateRoot, unsafeAddr stateRoots[i][0], 32)
+      var stateRoot = KeccakHash.init(testData.state_root.hexToSeqByte())
 
       let contentKey = decode(testData.content_key.hexToSeqByte().ByteList).get()
       var contentValueOffer =
@@ -263,8 +257,7 @@ suite "State Validation":
     for i, testData in testCase:
       if i == 1:
         continue # second test case only has root node
-      var stateRoot: KeccakHash
-      copyMem(addr stateRoot, unsafeAddr stateRoots[i][0], 32)
+      var stateRoot = KeccakHash.init(testData.state_root.hexToSeqByte())
 
       let contentKey = decode(testData.content_key.hexToSeqByte().ByteList).get()
       var contentValueOffer =
@@ -280,8 +273,7 @@ suite "State Validation":
         "hash of next node doesn't match the expected" in res.error()
 
     for i, testData in testCase:
-      var stateRoot: KeccakHash
-      copyMem(addr stateRoot, unsafeAddr stateRoots[i][0], 32)
+      var stateRoot = KeccakHash.init(testData.state_root.hexToSeqByte())
 
       let contentKey = decode(testData.content_key.hexToSeqByte().ByteList).get()
       var contentValueOffer =
@@ -299,17 +291,12 @@ suite "State Validation":
 
   test "Validate valid ContractTrieNodeOffer nodes":
     const file = testVectorDir / "contract_storage_trie_node.yaml"
-    const stateRoots = [
-      "0x1ad7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61".hexToSeqByte(),
-      "0x1ad7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61".hexToSeqByte(),
-    ]
 
     let testCase = YamlTrieNodeKVs.loadFromYaml(file).valueOr:
       raiseAssert "Cannot read test vector: " & error
 
     for i, testData in testCase:
-      var stateRoot: KeccakHash
-      copyMem(addr stateRoot, unsafeAddr stateRoots[i][0], 32)
+      var stateRoot = KeccakHash.init(testData.state_root.hexToSeqByte())
 
       block:
         let contentKey = decode(testData.content_key.hexToSeqByte().ByteList).get()
@@ -341,16 +328,15 @@ suite "State Validation":
   test "Validate invalid ContractTrieNodeOffer nodes - bad state roots":
     const file = testVectorDir / "contract_storage_trie_node.yaml"
     const stateRoots = [
-      "0xBAD7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61".hexToSeqByte(),
-      "0xBAD7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61".hexToSeqByte(),
+      "0xBAD7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61",
+      "0xBAD7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61",
     ]
 
     let testCase = YamlTrieNodeKVs.loadFromYaml(file).valueOr:
       raiseAssert "Cannot read test vector: " & error
 
     for i, testData in testCase:
-      var stateRoot: KeccakHash
-      copyMem(addr stateRoot, unsafeAddr stateRoots[i][0], 32)
+      var stateRoot = KeccakHash.init(stateRoots[i].hexToSeqByte())
 
       let contentKey = decode(testData.content_key.hexToSeqByte().ByteList).get()
       let contentValueOffer =
@@ -365,17 +351,12 @@ suite "State Validation":
 
   test "Validate invalid ContractTrieNodeOffer nodes - bad nodes":
     const file = testVectorDir / "contract_storage_trie_node.yaml"
-    const stateRoots = [
-      "0x1ad7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61".hexToSeqByte(),
-      "0x1ad7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61".hexToSeqByte(),
-    ]
 
     let testCase = YamlTrieNodeKVs.loadFromYaml(file).valueOr:
       raiseAssert "Cannot read test vector: " & error
 
     for i, testData in testCase:
-      var stateRoot: KeccakHash
-      copyMem(addr stateRoot, unsafeAddr stateRoots[i][0], 32)
+      var stateRoot = KeccakHash.init(testData.state_root.hexToSeqByte())
 
       block:
         let contentKey = decode(testData.content_key.hexToSeqByte().ByteList).get()
@@ -448,16 +429,12 @@ suite "State Validation":
 
   test "Validate valid ContractCodeOffer nodes":
     const file = testVectorDir / "contract_bytecode.yaml"
-    const stateRoots = [
-      "0x1ad7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61".hexToSeqByte()
-    ]
 
     let testCase = YamlContractBytecodeKVs.loadFromYaml(file).valueOr:
       raiseAssert "Cannot read test vector: " & error
 
     for i, testData in testCase:
-      var stateRoot: KeccakHash
-      copyMem(addr stateRoot, unsafeAddr stateRoots[i][0], 32)
+      var stateRoot = KeccakHash.init(testData.state_root.hexToSeqByte())
 
       let contentKey = decode(testData.content_key.hexToSeqByte().ByteList).get()
       let contentValueOffer =
@@ -471,16 +448,14 @@ suite "State Validation":
 
   test "Validate invalid ContractCodeOffer nodes - bad state root":
     const file = testVectorDir / "contract_bytecode.yaml"
-    const stateRoots = [
-      "0xBAD7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61".hexToSeqByte()
-    ]
+    const stateRoots =
+      ["0xBAD7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61"]
 
     let testCase = YamlContractBytecodeKVs.loadFromYaml(file).valueOr:
       raiseAssert "Cannot read test vector: " & error
 
     for i, testData in testCase:
-      var stateRoot: KeccakHash
-      copyMem(addr stateRoot, unsafeAddr stateRoots[i][0], 32)
+      var stateRoot = KeccakHash.init(stateRoots[i].hexToSeqByte())
 
       let contentKey = decode(testData.content_key.hexToSeqByte().ByteList).get()
       let contentValueOffer =
@@ -495,16 +470,12 @@ suite "State Validation":
 
   test "Validate invalid ContractCodeOffer nodes - bad nodes and bytecode":
     const file = testVectorDir / "contract_bytecode.yaml"
-    const stateRoots = [
-      "0x1ad7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61".hexToSeqByte()
-    ]
 
     let testCase = YamlContractBytecodeKVs.loadFromYaml(file).valueOr:
       raiseAssert "Cannot read test vector: " & error
 
     for i, testData in testCase:
-      var stateRoot: KeccakHash
-      copyMem(addr stateRoot, unsafeAddr stateRoots[i][0], 32)
+      var stateRoot = KeccakHash.init(testData.state_root.hexToSeqByte())
 
       block:
         let contentKey = decode(testData.content_key.hexToSeqByte().ByteList).get()
@@ -566,9 +537,9 @@ suite "State Validation":
   test "Validate valid AccountTrieNodeOffer recursive gossip nodes":
     const file = testVectorDir / "recursive_gossip.yaml"
     const stateRoots = [
-      "0x1ad7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61".hexToSeqByte(),
-      "0x1ad7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61".hexToSeqByte(),
-      "0xd7f8974fb5ac78d9ac099b9ad5018bedc2ce0a72dad1827a1709da30580f0544".hexToSeqByte(),
+      "0x1ad7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61",
+      "0x1ad7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61",
+      "0xd7f8974fb5ac78d9ac099b9ad5018bedc2ce0a72dad1827a1709da30580f0544",
     ]
 
     let testCase = YamlRecursiveGossipKVs.loadFromYaml(file).valueOr:
@@ -578,10 +549,9 @@ suite "State Validation":
       if i == 1:
         continue
 
-      var stateRoot: KeccakHash
-      copyMem(addr stateRoot, unsafeAddr stateRoots[i][0], 32)
+      var stateRoot = KeccakHash.init(stateRoots[i].hexToSeqByte())
 
-      for kv in testData:
+      for kv in testData.recursive_gossip:
         let contentKey = decode(kv.content_key.hexToSeqByte().ByteList).get()
         let contentValueOffer =
           SSZ.decode(kv.content_value.hexToSeqByte(), AccountTrieNodeOffer)
@@ -594,11 +564,6 @@ suite "State Validation":
 
   test "Validate valid ContractTrieNodeOffer recursive gossip nodes":
     const file = testVectorDir / "recursive_gossip.yaml"
-    const stateRoots = [
-      "0x1ad7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61".hexToSeqByte(),
-      "0x1ad7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61".hexToSeqByte(),
-      "0xd7f8974fb5ac78d9ac099b9ad5018bedc2ce0a72dad1827a1709da30580f0544".hexToSeqByte(),
-    ]
 
     let testCase = YamlRecursiveGossipKVs.loadFromYaml(file).valueOr:
       raiseAssert "Cannot read test vector: " & error
@@ -607,10 +572,9 @@ suite "State Validation":
       if i != 1:
         continue
 
-      var stateRoot: KeccakHash
-      copyMem(addr stateRoot, unsafeAddr stateRoots[i][0], 32)
+      var stateRoot = KeccakHash.init(testData.state_root.hexToSeqByte())
 
-      for kv in testData:
+      for kv in testData.recursive_gossip:
         let contentKey = decode(kv.content_key.hexToSeqByte().ByteList).get()
         let contentValueOffer =
           SSZ.decode(kv.content_value.hexToSeqByte(), ContractTrieNodeOffer)

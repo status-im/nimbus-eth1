@@ -6,7 +6,10 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  results, stew/arrayops, eth/[common, trie], ../../common/common_types, ./state_content
+  results,
+  eth/[common, trie],
+  ../../common/[common_types, common_utils],
+  ./state_content
 
 export results
 
@@ -28,7 +31,7 @@ proc isValidNextNode(thisNodeRlp: Rlp, rlpIdx: int, nextNode: TrieNode): bool =
       let hash = hashOrShortRlp.toBytes()
       if hash.len() != 32:
         return false
-      KeccakHash(data: array[32, byte].initCopyFrom(hash))
+      KeccakHash.init(hash)
 
   nextNode.hashEquals(nextHash)
 
