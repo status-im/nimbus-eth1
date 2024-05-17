@@ -39,6 +39,9 @@ type
   SyncReqNewHeadCB* = proc(header: BlockHeader) {.gcsafe, raises: [].}
     ## Update head for syncing
 
+  NotifyBadBlockCB* = proc(invalid, origin: BlockHeader) {.gcsafe, raises: [].}
+    ## Notify engine-API of encountered bad block
+
   CommonRef* = ref object
     # all purpose storage
     db: CoreDbRef
@@ -78,6 +81,10 @@ type
       ## Allow processing of certain RPC/V2 messages type while syncing (i.e.
       ## `syncReqNewHead` is set.) although `shanghaiTime` is unavailable
       ## or has not reached, yet.
+
+    notifyBadBlock: NotifyBadBlockCB
+      ## Allow synchronizer to inform engine-API of bad encountered during sync
+      ## progress
 
     startOfHistory: Hash256
       ## This setting is needed for resuming blockwise syncying after
@@ -424,6 +431,12 @@ proc syncReqNewHead*(com: CommonRef; header: BlockHeader)
   if not com.syncReqNewHead.isNil:
     com.syncReqNewHead(header)
 
+proc notifyBadBlock*(com: CommonRef; invalid, origin: BlockHeader)
+    {.gcsafe, raises: [].} =
+
+  if not com.notifyBadBlock.isNil:
+    com.notifyBadBlock(invalid, origin)
+
 # ------------------------------------------------------------------------------
 # Getters
 # ------------------------------------------------------------------------------
@@ -565,6 +578,10 @@ proc `syncReqRelaxV2=`*(com: CommonRef; val: bool) =
   ## This setter is effective only while `syncReqNewHead` is activated.
   if not com.syncReqNewHead.isNil:
     com.syncReqRelaxV2 = val
+
+proc `notifyBadBlock=`*(com: CommonRef; cb: NotifyBadBlockCB) =
+  ## Activate or reset a call back handler for bad block notification.
+  com.notifyBadBlock = cb
 
 # ------------------------------------------------------------------------------
 # End

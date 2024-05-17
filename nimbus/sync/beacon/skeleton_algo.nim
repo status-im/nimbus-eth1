@@ -324,6 +324,13 @@ proc fillCanonicalChain*(sk: SkeletonRef): Result[void, string] =
     let header = maybeHeader.get
     let res = sk.insertBlock(header, true)
     if res.isErr:
+      let maybeHead = sk.getHeader(subchain.head).valueOr:
+        return err(error)
+
+      # In post-merge, notify the engine API of encountered bad chains
+      if maybeHead.isSome:
+        sk.com.notifyBadBlock(header, maybeHead.get)
+
       debug "fillCanonicalChain putBlock", msg=res.error
       if maybeOldHead.isSome:
         let oldHead = maybeOldHead.get

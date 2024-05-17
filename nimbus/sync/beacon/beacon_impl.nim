@@ -237,8 +237,12 @@ proc shiftSyncTarget*(ctx: BeaconCtxRef): Future[BlockHeader] {.async.} =
 
 proc setSyncTarget*(ctx: BeaconCtxRef): Future[void] {.async.} =
   let header = await ctx.shiftSyncTarget()
-  let job = makeGetBodyJob(header, setHead = true)
-  ctx.pool.jobs.addLast(job)
+  let res = ctx.pool.skeleton.setHead(header, force = true)
+  if res.isOk:
+    let job = makeGetBodyJob(header, setHead = true)
+    ctx.pool.jobs.addLast(job)
+  else:
+    error "setSyncTarget.setHead", msg=res.error
 
 proc fillBlocksGaps*(ctx: BeaconCtxRef, least: uint64, last: uint64) =
   if last - least < MaxGetBlocks:
@@ -277,14 +281,18 @@ proc executeGetBodyJob*(buddy: BeaconBuddyRef, job: BeaconJob): Future[void] {.a
 
   let b = await peer.getBlockBodies([job.getBodyJob.headerHash])
   if b.isNone:
-    debug "executeGetBodyJob->getBodies none"
+    debug "executeGetBodyJob->getBodies none",
+      hash=job.getBodyJob.headerHash.short,
+      number=job.getBodyJob.header.blockNumber
     # retry with other peer
     buddy.requeue job
     return
 
   let bodies = b.get
   if bodies.blocks.len == 0:
-    debug "executeGetBodyJob->getBodies isZero"
+    debug "executeGetBodyJob->getBodies isZero",
+      hash=job.getBodyJob.headerHash.short,
+      number=job.getBodyJob.header.blockNumber
     # retry with other peer
     buddy.requeue job
     return

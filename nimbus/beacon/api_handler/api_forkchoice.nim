@@ -71,6 +71,11 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
   # reason.
   var header: common.BlockHeader
   if not db.getBlockHeader(blockHash, header):
+    # If this block was previously invalidated, keep rejecting it here too
+    let res = ben.checkInvalidAncestor(blockHash, blockHash)
+    if res.isSome:
+      return simpleFCU(res.get)
+
     # If the head hash is unknown (was not given to us in a newPayload request),
     # we cannot resolve the header, so not much to do. This could be extended in
     # the future to resolve from the `eth` network, but it's an unexpected case

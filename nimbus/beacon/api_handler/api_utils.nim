@@ -69,6 +69,9 @@ proc validateBlockHash*(header: common.BlockHeader,
 template toValidHash*(x: common.Hash256): Option[Web3Hash] =
   some(w3Hash x)
 
+proc simpleFCU*(status: PayloadStatusV1): ForkchoiceUpdatedResponse =
+  ForkchoiceUpdatedResponse(payloadStatus: status)
+
 proc simpleFCU*(status: PayloadExecutionStatus): ForkchoiceUpdatedResponse =
   ForkchoiceUpdatedResponse(payloadStatus: PayloadStatusV1(status: status))
 
@@ -140,7 +143,7 @@ proc invalidForkChoiceState*(msg: string): ref InvalidRequest =
     code: engineApiInvalidForkchoiceState,
     msg: msg
   )
-  
+
 proc unknownPayload*(msg: string): ref InvalidRequest =
   (ref InvalidRequest)(
     code: engineApiUnknownPayload,

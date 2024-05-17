@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -83,6 +83,9 @@ func blockHeight*(sk: SkeletonRef): uint64 =
 
 func genesisHash*(sk: SkeletonRef): Hash256 =
   sk.chain.com.genesisHash
+
+func com*(sk: SkeletonRef): CommonRef =
+  sk.chain.com
 
 func len*(sk: SkeletonRef): int =
   sk.progress.segments.len
