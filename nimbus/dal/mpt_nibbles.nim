@@ -139,20 +139,6 @@ func `[]=`*(nibbles: var Nibbles62, pos: range[0..61], nibble: range[0..15]) =
     else: nibbles.bytes[(pos+1) div 2] = (nibbles.bytes[(pos+1) div 2] and 0xf) or (nibble.byte shl 4)
 
 
-func slice*(nibbles: Nibbles64, start: range[0..61], length: range[1..62]): Nibbles62 =
-  ##[ Initializes a `Nibbles62` instance from a range within a `Nibbles64` instance, denoted by
-      `start` and `length`. The nibbles are copied over, not referenced. In case `start` + `length`
-      exceed 64, a `RangeDefect` exception is raised. ]##
-  # PERF TODO: This can probably be optimized
-  if start + length > 64:
-    raise newException(RangeDefect, "Can't initialize nibbles slice with start=" & $start & " and length=" & $length & "; exceeds 64")
-  result.bytes[31] = length.uint8
-  var pos = 0
-  for i in start.int ..< start + length:
-    result[pos] = nibbles[i]
-    inc pos
-
-
 func slice*(nibbles: Nibbles62, start: range[0..61], length: range[1..62]): Nibbles62 =
   ##[ Initializes a `Nibbles62` instance from a range within another instance, denoted by `start`
       and `length`. The nibbles are copied over, not referenced. In case `start` + `length` exceed
@@ -197,14 +183,18 @@ func append*(nibbles: Nibbles, nibble: range[0..15]): Nibbles {.noinit.} =
   result[nibbles.len] = nibble
 
 
-func append*(nibbles: Nibbles, nibbles62: Nibbles62): Nibbles {.noinit.} =
-  ## Returns a clone of `nibbles` with the content of `nibbles62` appended to it.
-  if nibbles.len + nibbles62.len.uint8 > 64:
-    raise newException(RangeDefect, "Can't append a nibbles62; exceeds 64")
-  result = nibbles
-  for n in nibbles62.enumerate():
-    inc result.len
-    result[result.len - 1] = n
+func slice*(nibbles: Nibbles64, start: range[0..63], length: range[0..64]): Nibbles =
+  ##[ Initializes a `Nibbles` instance from a range within a `Nibbles64` instance, denoted by
+      `start` and `length`. The nibbles are copied over, not referenced. In case `start` + `length`
+      exceed 64, a `RangeDefect` exception is raised. ]##
+  # PERF TODO: This can probably be optimized
+  if start + length > 64:
+    raise newException(RangeDefect, "Can't initialize nibbles slice with start=" & $start & " and length=" & $length & "; exceeds 64")
+  result.len = length.uint8
+  var pos = 0
+  for i in start.int ..< start + length:
+    result[pos] = nibbles[i]
+    inc pos
 
 
 iterator enumerate*(nibbles: Nibbles): uint8 =
@@ -220,3 +210,27 @@ func `$`*(nibbles: Nibbles): string =
   ## Hex encoded nibbles, excluding `0x` prefix
   for nibble in nibbles.enumerate():
     result.add nibble.bitsToHex
+
+
+func append*(nibbles: Nibbles, otherNibs: Nibbles): Nibbles {.noinit.} =
+  ## Returns a clone of `nibbles` with the content of `otherNibs` appended to it.
+  if nibbles.len + otherNibs.len.uint8 > 64:
+    raise newException(RangeDefect, "Can't append a nibbles62; exceeds 64")
+  result = nibbles
+  for n in otherNibs.enumerate():
+    inc result.len
+    result[result.len - 1] = n
+
+
+func slice*(nibbles: Nibbles, start: range[0..63], length: range[0..64]): Nibbles =
+  ##[ Initializes a `Nibbles` instance from a range within another `Nibbles` instance, denoted by
+      `start` and `length`. The nibbles are copied over, not referenced. In case `start` + `length`
+      exceed 64, a `RangeDefect` exception is raised. ]##
+  # PERF TODO: This can probably be optimized
+  if start + length > 64:
+    raise newException(RangeDefect, "Can't initialize nibbles slice with start=" & $start & " and length=" & $length & "; exceeds 64")
+  result.len = length.uint8
+  var pos = 0
+  for i in start.int ..< start + length:
+    result[pos] = nibbles[i]
+    inc pos

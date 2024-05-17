@@ -47,7 +47,7 @@ func newAccount(diffHeight: uint64, path: Nibbles64, balance: UInt256,
     codeHash:     codeHash)
 
 
-func newExtension(diffHeight: uint64, remainderPath: Nibbles62, child: MptBranch): MptExtension =
+func newExtension(diffHeight: uint64, remainderPath: Nibbles, child: MptBranch): MptExtension =
   MptExtension(
     diffHeight:    diffHeight,
     hashOrRlp:     emptyBuffer32,
@@ -244,7 +244,7 @@ method put(ext: MptExtension, diffHeight: uint64, logicalDepth: uint8, key: Nibb
 
   # Check if the key matches the (remainder of) the extension path
   var divergence = logicalDepth
-  var offset = 0
+  var offset = 0'u8
   while offset < ext.remainderPath.len and ext.remainderPath[offset] == key[divergence]:
     inc divergence
     inc offset
@@ -258,7 +258,7 @@ method put(ext: MptExtension, diffHeight: uint64, logicalDepth: uint8, key: Nibb
       else: newExtension(diffHeight, ext.remainderPath, ext.child)
 
     # Call put() on the child branch, and update it afterwards in case it was cloned
-    let res = clone.child.put(diffHeight, logicalDepth + ext.remainderPath.len.uint8, key, value)
+    let res = clone.child.put(diffHeight, logicalDepth + ext.remainderPath.len, key, value)
     clone.child = cast[MptBranch](res.updatedNode)
     return (clone, res.missing)
 

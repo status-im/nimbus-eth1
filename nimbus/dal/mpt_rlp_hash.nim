@@ -35,19 +35,8 @@ when TraceLogs:
     buffer.bytes[0..<buffer.len].toHex
 
 
-func rlpLegthOfLength(length: int): int {.inline.} =
-  if length <= 1: 0
-  elif length <= 55: 1
-  elif length < 256: 2
-  elif length < 65536: 3
-  elif length < 16777216: 4
-  else: 5
-
-
 func rlpAppendStringLength(buffer: var Buffer, length: int) {.inline.} =
-  if length <= 1:
-    discard
-  elif length <= 55:
+  if length <= 55:
     buffer.add 128+length.byte
   elif length < 256:
     buffer.add 184
@@ -111,18 +100,28 @@ method computeHashOrRlpIfNeeded(leaf: MptLeaf, logicalDepth: uint8) =
   
   #[ A leaf is encoded as a RLP list with two items: [path, value]. In case the path's length is
      even, it's prefixed with 0x20 to discern it from an extension node. In case its length is odd,
-     it's prefixed with 0x3, to complement to a full byte. Both the path and the value are prefixed
-     by their length if it's greater than 1, which is enocded as one additional byte. ]#
+     it's prefixed with 0x3, to complement to a full byte.
 
+     PERF TODO: if we know the leaf is going to encode into 31 bytes or less, we could serialize it
+     straight into node's buffer instead of into the temaporary buffer and then copying it. ]#
+
+  let pathPrefixLen =
+    if logicalDepth >= 63: 0
+    else: 1
   let pathLen = 1 + (64 - logicalDepth.int) div 2
-  let blobLen = rlpLegthOfLength(pathLen) + pathLen + rlpLegthOfLength(leaf.value.len.int) + leaf.value.len.int
+  let leafPrefixLen =
+    if leaf.value.len == 1 and leaf.value.bytes[0] < 128: 0
+    else: 1
+  let blobLen = pathPrefixLen + pathLen + leafPrefixLen + leaf.value.len.int
 
   var buffer {.noinit.}: Buffer
   buffer.len = 0
   buffer.rlpAppendListLength blobLen
-  buffer.rlpAppendStringLength pathLen
+  if pathPrefixLen > 0:
+    buffer.rlpAppendStringLength pathLen
 
   # TODO PERF: copy memory in bulk
+  # Serialize path
   if logicalDepth mod 2 == 0: # Even-length path
     buffer.add 0x20
     for i in logicalDepth div 2 ..< 32:
@@ -132,15 +131,22 @@ method computeHashOrRlpIfNeeded(leaf: MptLeaf, logicalDepth: uint8) =
     for i in logicalDepth div 2 + 1 ..< 32:
       buffer.add leaf.path.bytes[i]
 
-  buffer.rlpAppendStringLength leaf.value.len.int
-  for i in 0 ..< leaf.value.len.int:
-    buffer.add leaf.value.bytes[i]
+  # Serialize value. In case the value is a single ASCII byte, we don't need a length prefix
+  if leaf.value.len == 1 and leaf.value.bytes[0] < 128:
+    buffer.add leaf.value.bytes[0]
+  else:
+    buffer.rlpAppendStringLength leaf.value.len.int
+    for i in 0 ..< leaf.value.len.int:
+      buffer.add leaf.value.bytes[i]
 
-  when TraceLogs: echo &"Leaf {$leaf.path} RLP: {$buffer}"
+  when TraceLogs: echo &"Leaf {$leaf.path} at depth {logicalDepth:2} RLP: {$buffer}"
 
+  # Encoded RLP is less than 32 bytes long? Store it as-is
   if buffer.len < 32:
     leaf.hashOrRlp.bytes[0..<buffer.len] = buffer.bytes[0..<buffer.len]
     leaf.hashOrRlp.len = buffer.len.uint8
+
+  # Encoded RLP is 32 bytes long or more? Keccak-hash it and store the 32-bytes hash
   else:
     leaf.hashOrRlp.bytes[0..<32] = keccak256.digest(addr buffer.bytes[0], buffer.len.uint).data
     leaf.hashOrRlp.len = 32
@@ -161,32 +167,36 @@ method computeHashOrRlpIfNeeded(ext: MptExtension, logicalDepth: uint8) =
   # of them are less than that.
 
   ext.child.computeHashOrRlpIfNeeded logicalDepth + ext.remainderPath.len.uint8
+  let pathPrefixLen =
+    if ext.remainderPath.len == 1: 0'u8
+    else: 1
   let pathLen = 1 + ext.remainderPath.len div 2
-  var blobLen = rlpLegthOfLength(pathLen) + pathLen + ext.child.hashOrRlp.len.int
+  var blobLen = pathPrefixLen + pathLen + ext.child.hashOrRlp.len
   if ext.child.hashOrRlp.len == 32: # It's a hash; need a length prefix
     inc blobLen
 
   var buffer {.noinit.}: Buffer
   buffer.len = 0
-  buffer.rlpAppendListLength blobLen
-  buffer.rlpAppendStringLength pathLen
+  buffer.rlpAppendListLength blobLen.int
+  if pathPrefixLen > 0:
+    buffer.rlpAppendStringLength pathLen.int
 
   # TODO PERF: copy memory in bulk
   if ext.remainderPath.len mod 2 == 0: # Even-length path
     buffer.add 0x00
-    for i in 0 ..< ext.remainderPath.len div 2:
-      buffer.add ext.remainderPath.bytes[i]
+    for i in 0 ..< ext.remainderPath.len.int div 2:
+      buffer.add (ext.remainderPath[i*2] shl 4 or ext.remainderPath[i*2+1]).byte
   else: # odd-length path
-    buffer.add (0x1 shl 4).byte or ext.remainderPath.bytes[0]
-    for i in 1 .. ext.remainderPath.len div 2:
-      buffer.add ext.remainderPath.bytes[i]
+    buffer.add (0x1 shl 4).byte or ext.remainderPath[0].byte
+    for i in 0 ..< ext.remainderPath.len.int div 2:
+      buffer.add (ext.remainderPath[i*2+1] shl 4 or ext.remainderPath[(i+1)*2]).byte
 
   if ext.child.hashOrRlp.len == 32:
     buffer.add 0xa0 # RLP code for 32-bytes string
   for i in 0 ..< ext.child.hashOrRlp.len.int: # No need for length prefix; included in RLP blob
     buffer.add ext.child.hashOrRlp.bytes[i]
 
-  when TraceLogs: echo &"Extension {$ext.remainderPath} RLP: {$buffer}"
+  when TraceLogs: echo &"Extend {$ext.remainderPath:62} at depth {logicalDepth:2} RLP: {$buffer}"
 
   if buffer.len < 32:
     ext.hashOrRlp.bytes[0..<buffer.len] = buffer.bytes[0..<buffer.len]
@@ -230,7 +240,7 @@ method computeHashOrRlpIfNeeded(branch: MptBranch, logicalDepth: uint8) =
     else: buffer.add 0x80 # empty string
   buffer.add 0x80 # empty string
 
-  when TraceLogs: echo &"Branch RLP: {$buffer}"
+  when TraceLogs: echo &"Branch                                                                at depth {logicalDepth:2} RLP: {$buffer}"
 
   if buffer.len < 32:
     branch.hashOrRlp.bytes[0..<buffer.len] = buffer.bytes[0..<buffer.len]

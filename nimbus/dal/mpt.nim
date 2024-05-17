@@ -97,7 +97,7 @@ type
 
   MptExtension* = ref object of MptNode
     ## An MPT Extension node. Guaranteed to have a non-nil, loaded child branch.
-    remainderPath*: Nibbles62
+    remainderPath*: Nibbles
     child*: MptBranch
 
 
@@ -139,11 +139,13 @@ type
 
 
 func `$`*(buffer: Buffer32): string =
-  buffer.bytes[0..<buffer.len].toHex
+  if buffer.len > 0:
+    result = buffer.bytes[0..<buffer.len].toHex
 
 
 func toSeq*(buffer: Buffer32): seq[byte] =
-  buffer.bytes[0..<buffer.len]
+  if buffer.len > 0:
+    return buffer.bytes[0..<buffer.len]
 
 
 func remainderPath*(leaf: MptLeaf, logicalDepth: uint8): Nibbles =
@@ -246,7 +248,7 @@ proc printTree*(node: MptNode, stream: Stream, justTopTree: bool) =
     elif node of MptExtension:
       for nibble in node.MptExtension.remainderPath.enumerate:
         stream.write nibble.bitsToHex
-      for _ in path.len.int + node.MptExtension.remainderPath.len ..< 66:
+      for _ in path.len + node.MptExtension.remainderPath.len ..< 66:
         stream.write " "
       stream.write "Extension    "
     elif node of MptLeaf:
@@ -270,7 +272,8 @@ proc printTree*(node: MptNode, stream: Stream, justTopTree: bool) =
 
     if node of MptLeaf:
       stream.write "  Value: "
-      stream.writeAsHex node.MptLeaf.value.bytes[0..<node.MptLeaf.value.len]
+      if node.MptLeaf.value.len > 0:
+        stream.writeAsHex node.MptLeaf.value.bytes[0..<node.MptLeaf.value.len]
     elif node of MptAccount:
       stream.write "  Balance: "
       stream.write node.MptAccount.balance

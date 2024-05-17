@@ -84,8 +84,8 @@ suite "Legacy compatibility":
   test "Populate trees and compare":
 
     const sampleKvps = @[
-      ("20001ab975821a408aa3fabe8132f5915cd05054652f879f0aedf0c573dfb33", "2d9e782d37eec375ab9950fbdd1e9a9b983bbfe71ceb4b073411a3c821927f07"),
-      ("ed812738fb4aec6f6b8db0b372e5f8039aa85d47fe2845edb219301acec34ad", "74e931d10d7e1b1ca9f0811cdf80999254971c029981ceaebde2924a6f97a17c"),
+      ("20001ab975821a408aa3fabe8132f5915cd05054652f879f0aedf0c573dfb336", "2d9e782d37eec375ab9950fbdd1e9a9b983bbfe71ceb4b073411a3c821927f07"),
+      ("ed812738fb4aec6f6b8db0b372e5f8039aa85d47fe2845edb219301acec34ada", "74e931d10d7e1b1ca9f0811cdf80999254971c029981ceaebde2924a6f97a17c"),
     ]
 
     var db = newMemoryDB()
@@ -117,10 +117,10 @@ suite "Legacy compatibility":
 
 
   test "Fuzzing":
-    const numRuns = 10
+    const numRuns = 5
     const maxBlocksPerRun = 200
-    const maxNewKeysPerBlock = 200
-    const maxModifiedOldKeysPerBlock = 50
+    const maxNewKeysPerBlock = 2000
+    const maxModifiedOldKeysPerBlock = 500
     const oldChainsRatio  = 0.1 # 0.1  The probability to base a block on top of another block that's earlier than the last one (0.0 - 1.0)
 
 
@@ -163,7 +163,7 @@ suite "Legacy compatibility":
         # Add some random number of random key-values to that "block"
         for _ in 0 ..< 1 + randomGenerator.rand(maxNewKeysPerBlock-1):
           let key = makeRandomBytes32()
-          let randomLength = 32 #1 + randomGenerator.rand(31)
+          let randomLength = 1 + randomGenerator.rand(31)
           let value = makeRandomBytes32()[0..<randomLength]
           state.newKvps[key] = value
           state.newKeys.add key
@@ -175,7 +175,7 @@ suite "Legacy compatibility":
           for _ in 0 ..< randomGenerator.rand(maxModifiedOldKeysPerBlock):
             let randomBlock = blocks[randomGenerator.rand(blocks.len-1)]
             let oldKey = randomBlock.newKeys[randomGenerator.rand(randomBlock.newKeys.len-1)]
-            let randomLength = 32 #1 + randomGenerator.rand(31)
+            let randomLength = 1 + randomGenerator.rand(31)
             let value = makeRandomBytes32()[0..<randomLength]
             state.modifiedKvps[oldKey] = value
             state.legacyTrie[].put(oldKey, value)
@@ -183,14 +183,20 @@ suite "Legacy compatibility":
 
         # Compare the hashes of legacy and DiffLayer
         if state.legacyTrie[].rootHash.data != state.tree.rootHash:
+          var hashes: Table[string, bool]
           echo &"Error at run iteration #{runIteration}, block #{blockNumber}"
           echo &"Legacy root hash: {state.legacyTrie[].rootHash.data.toHex}"
           echo "\nDumping kvps in Legacy DB"
           for kvp in db.pairsInMemoryDB():
             if kvp[0][0..^1] != emptyRlpHash[0..^1]:
               echo &"{kvp[0].toHex} => {kvp[1].toHex}"
+              hashes[kvp[0].toHex] = true
           echo "\nDumping tree:\n"
           state.tree.root.printTree(newFileStream(stdout), false)
+          for node, _, _ in state.tree.root.enumerateTree(false):
+            let hash = node.hashOrRlp.bytes[0..<node.hashOrRlp.len].toHex
+            if not hashes.hasKey(hash):
+              echo "Hash in tree not found in Legacy: " & hash
           doAssert false
 
         state.legacyTrieHash = state.legacyTrie[].rootHash
@@ -198,17 +204,17 @@ suite "Legacy compatibility":
 
         # Print state
         when false:
-          echo &"\n\nRun iteration #{runIteration}, block #{blockNumber}. Tree:\n"
+          echo &"\n\nRun iteration #{runIteration}, block #{blockNumber}, height {state.tree.diffHeight}. Tree:\n"
           state.tree.root.printTree(newFileStream(stdout), justTopTree=false)
 
-          echo &"\n\nRun iteration #{runIteration}, block #{blockNumber}. Top tree:\n"
+          echo &"\n\nRun iteration #{runIteration}, block #{blockNumber}, height {state.tree.diffHeight}. Top tree:\n"
           state.tree.root.printTree(newFileStream(stdout), justTopTree=true)
 
-          echo &"\n\nRun iteration #{runIteration}, block #{blockNumber}. Expected new key-values:\n"
+          echo &"\n\nRun iteration #{runIteration}, block #{blockNumber}, height {state.tree.diffHeight}. Expected new key-values:\n"
           for key, value in state.newKvps:
             echo &"{key.toHex}  -->  {value.toHex}"
 
-          echo &"\n\nRun iteration #{runIteration}, block #{blockNumber}. Found key-values in top tree:\n"
+          echo &"\n\nRun iteration #{runIteration}, block #{blockNumber}, height {state.tree.diffHeight}. Found key-values in top tree:\n"
           for node, path, _ in state.tree.root.enumerateTree(justTopTree = true):
             if node of MptLeaf:
               echo &"{node.MptLeaf.path.bytes.toHex}  -->  {$node.MptLeaf.value}"
@@ -218,11 +224,14 @@ suite "Legacy compatibility":
         for key, value in state.newKvps:
           let (leaf, _) = state.tree.tryGet Nibbles64(bytes: key)
           if leaf == nil:
-            echo &"\nRun iteration #{runIteration}, block #{blockNumber}. Key not found: {key.toHex}"
+            echo &"\nRun iteration #{runIteration}, block #{blockNumber}, height {state.tree.diffHeight}. New key not found: {key.toHex}"
+            check leaf != nil
           elif leaf.value.toSeq != value:
-            echo &"\nRun iteration #{runIteration}, block #{blockNumber}. Unexpeced key-value: {key.toHex}  -->  {value.toHex}"
+            echo &"\nRun iteration #{runIteration}, block #{blockNumber}, height {state.tree.diffHeight}. Unexpeced new key-value: {key.toHex}  -->  {value.toHex}"
+            check leaf.value.toSeq == value
           elif leaf.diffHeight != state.tree.diffHeight:
-            echo &"\nRun iteration #{runIteration}, block #{blockNumber}. Key has wrong diff height: {key.toHex}"
+            echo &"\nRun iteration #{runIteration}, block #{blockNumber}, height {state.tree.diffHeight}. New key has wrong diff height: {key.toHex}. Got: {leaf.diffHeight}, expected: {state.tree.diffHeight}"
+            check leaf.diffHeight == state.tree.diffHeight
           check leaf != nil and leaf.value.toSeq == value
 
       # Verify the modified key-values in all blocks in that run
@@ -230,11 +239,14 @@ suite "Legacy compatibility":
         for key, value in state.modifiedKvps:
           let (leaf, _) = state.tree.tryGet Nibbles64(bytes: key)
           if leaf == nil:
-            echo &"\nRun iteration #{runIteration}, block #{blockNumber}. Key not found: {key.toHex}"
+            echo &"\nRun iteration #{runIteration}, block #{blockNumber}, height {state.tree.diffHeight}. Modified key not found: {key.toHex}"
+            check leaf != nil
           elif leaf.value.toSeq != value:
-            echo &"\nRun iteration #{runIteration}, block #{blockNumber}. Unexpeced key-value: {key.toHex}  -->  {value.toHex}"
+            echo &"\nRun iteration #{runIteration}, block #{blockNumber}, height {state.tree.diffHeight}. Unexpeced modified key-value: {key.toHex}  -->  {value.toHex}"
+            check leaf.value.toSeq == value
           elif leaf.diffHeight != state.tree.diffHeight:
-            echo &"\nRun iteration #{runIteration}, block #{blockNumber}. Key has wrong diff height: {key.toHex}"
+            echo &"\nRun iteration #{runIteration}, block #{blockNumber}, height {state.tree.diffHeight}. Modified key has wrong diff height: {key.toHex}. Got: {leaf.diffHeight}, expected: {state.tree.diffHeight}"
+            check leaf.diffHeight == state.tree.diffHeight
           check leaf != nil and leaf.value.toSeq == value
 
       # Nullify the hashes of all nodes, recompute them in random blocks order and compare them again with legacy hashes
