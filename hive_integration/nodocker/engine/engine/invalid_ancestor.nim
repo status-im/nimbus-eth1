@@ -11,6 +11,7 @@
 import
   std/strutils,
   chronicles,
+  eth/common,
   eth/common/eth_types_rlp,
   ./engine_spec,
   ../cancun/customizer,
@@ -191,8 +192,11 @@ method getName(cs: InvalidMissingAncestorReOrgSyncTest): string =
   "Invalid Missing Ancestor Syncing ReOrg, $1, EmptyTxs=$2, CanonicalReOrg=$3, Invalid P$4" % [
     $cs.invalidField, $cs.emptyTransactions, $cs.reOrgFromCanonical, $cs.invalidIndex]
 
-proc executableDataToBlock(ex: ExecutableData): EthBlock =
-  ethBlock(ex.basePayload, beaconRoot = ex.beaconRoot)
+func blockHeader(ex: ExecutableData): common.BlockHeader =
+  blockHeader(ex.basePayload, ex.beaconRoot)
+
+func blockBody(ex: ExecutableData): common.BlockBody =
+  blockBody(ex.basePayload)
 
 method execute(cs: InvalidMissingAncestorReOrgSyncTest, env: TestEnv): bool =
   var sec = env.addEngine(true, cs.reOrgFromCanonical)
@@ -227,10 +231,6 @@ method execute(cs: InvalidMissingAncestorReOrgSyncTest, env: TestEnv): bool =
   # Slice to save the side B chain
   # Append the common ancestor
   shadow.payloads.add env.clMock.latestExecutableData
-
-  if not cs.reOrgFromCanonical:
-    # Add back the original client before side chain production
-    env.clMock.addEngine(env.engine)
 
   # Produce blocks but at the same time create an side chain which contains an invalid payload at some point (INV_P)
   # CommonAncestor◄─▲── P1 ◄─ P2 ◄─ P3 ◄─ ... ◄─ Pn
@@ -285,6 +285,10 @@ method execute(cs: InvalidMissingAncestorReOrgSyncTest, env: TestEnv): bool =
   ))
   testCond pbRes
 
+  if not cs.reOrgFromCanonical:
+    # Add back the original client before side chain production
+    env.clMock.addEngine(env.engine)
+
   info "Starting side chain production"
   pbRes = env.clMock.produceSingleBlock(BlockProcessCallbacks(
     # Note: We perform the test in the middle of payload creation by the CL Mock, in order to be able to
@@ -315,13 +319,16 @@ method execute(cs: InvalidMissingAncestorReOrgSyncTest, env: TestEnv): bool =
           s.expectStatusEither([PayloadExecutionStatus.valid, PayloadExecutionStatus.syncing])
 
         else:
-          let invalidBlock = executableDataToBlock(shadow.payloads[i])
-          testCond sec.client.setBlock(invalidBlock, shadow.payloads[i-1].blockNumber, shadow.payloads[i-1].stateRoot):
+          let
+            invalidHeader = blockHeader(shadow.payloads[i])
+            invalidBody = blockBody(shadow.payloads[i])
+
+          testCond sec.setBlock(invalidHeader, invalidBody):
               fatal "TEST ISSUE - Failed to set invalid block"
           info "Invalid block successfully set",
             idx=i,
             msg=payloadValidStr,
-            hash=invalidBlock.header.blockHash.short
+            hash=invalidHeader.blockHash.short
 
       # Check that the second node has the correct head
       var res = sec.client.latestHeader()
@@ -352,6 +359,7 @@ method execute(cs: InvalidMissingAncestorReOrgSyncTest, env: TestEnv): bool =
           number=head.blockNumber
 
       # If we are syncing through p2p, we need to keep polling until the client syncs the missing payloads
+      let period = chronos.milliseconds(500)
       while true:
         let version = env.engine.version(shadow.payloads[shadow.n].timestamp)
         let r = env.engine.client.newPayload(version, shadow.payloads[shadow.n])
@@ -394,6 +402,8 @@ method execute(cs: InvalidMissingAncestorReOrgSyncTest, env: TestEnv): bool =
 
           fatal "Client returned VALID on an invalid chain", status=r.get.status
           return false
+
+        waitFor sleepAsync(period)
 
       if not cs.reOrgFromCanonical:
         # We need to send the canonical chain to the main client here

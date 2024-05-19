@@ -34,6 +34,8 @@ import
   ../../../tests/test_helpers,
   web3/execution_types
 
+from ./node import setBlock
+
 export
   results
 
@@ -48,6 +50,7 @@ type
     client : RpcHttpClient
     sync   : BeaconSyncRef
     txPool : TxPoolRef
+    chain  : ChainRef
 
 const
   baseFolder  = "hive_integration/nodocker/engine"
@@ -154,7 +157,8 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
     sealer : sealer,
     client : client,
     sync   : sync,
-    txPool : txPool
+    txPool : txPool,
+    chain  : chain
   )
 
 proc close*(env: EngineEnv) =
@@ -223,3 +227,6 @@ func version*(env: EngineEnv, time: Web3Quantity): Version =
 
 func version*(env: EngineEnv, time: uint64): Version =
   env.version(time.EthTime)
+
+proc setBlock*(env: EngineEnv, header: common.BlockHeader, body: common.BlockBody): bool =
+  env.chain.setBlock(header, body) == ValidationResult.OK

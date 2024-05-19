@@ -676,6 +676,3 @@ template expectStorageEqual*(res: Result[FixedBytes[32], string], account: EthAd
   if res.get != expectedValue:
     return err("invalid wd storage at $1 is $2, expect $3" % [
     account.toHex, $res.get, $expectedValue])
-
-proc setBlock*(client: RpcClient, blk: EthBlock, blockNumber: Web3Quantity, stateRoot: Web3Hash): bool =
-  return true
