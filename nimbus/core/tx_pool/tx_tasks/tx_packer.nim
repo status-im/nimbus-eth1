@@ -195,7 +195,7 @@ proc vmExecGrabItem(pst: TxPackerStateRef; item: TxItemRef): Result[bool,void]
 
   # EIP-4844
   if pst.numBlobPerBlock + item.tx.versionedHashes.len > MAX_BLOBS_PER_BLOCK:
-    return err() # stop collecting
+    return ok(false) # continue with next account
   pst.numBlobPerBlock += item.tx.versionedHashes.len
 
   # Verify we have enough gas in gasPool

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -17,7 +17,8 @@ import
   ../tx_info,
   ../tx_item,
   eth/[common],
-  stew/[results, keyed_queue, keyed_queue/kq_debug, sorted_set]
+  stew/[results, keyed_queue, keyed_queue/kq_debug, sorted_set],
+  ../../eip4844
 
 {.push raises: [].}
 
@@ -120,7 +121,7 @@ proc getRank(schedData: TxSenderSchedRef): int64 =
 
 proc maxProfit(item: TxItemRef; baseFee: GasPrice): float64 =
   ## Profit calculator
-  item.tx.gasLimit.float64 * item.tx.effectiveGasTip(baseFee).float64
+  item.tx.gasLimit.float64 * item.tx.effectiveGasTip(baseFee).float64 + item.tx.getTotalBlobGas.float64
 
 proc recalcProfit(nonceData: TxSenderNonceRef; baseFee: GasPrice) =
   ## Re-calculate profit value depending on `baseFee`
