@@ -27,6 +27,7 @@ import
   ../hive_integration/nodocker/pyspec/pyspec_sim,
   ../tools/t8n/t8n,
   ../tools/t8n/t8n_test,
+  ../tools/t8n/t8n_debug,
   ../tools/evmstate/evmstate,
   ../tools/evmstate/evmstate_test,
   ./test_rpc_getproofs_track_state_changes

@@ -34,9 +34,11 @@ proc blockhashOp (k: var VmCtx): EvmResultVoid =
   let
     cpt = k.cpt
     blockNumber = ? cpt.stack.popInt()
-    blockHash = cpt.getBlockHash(blockNumber.truncate(BlockNumber))
 
-  cpt.stack.push blockHash
+  if blockNumber > high(BlockNumber).u256:
+    cpt.stack.push Hash256()
+  else:
+    cpt.stack.push cpt.getBlockHash(blockNumber.truncate(BlockNumber))
 
 proc coinBaseOp (k: var VmCtx): EvmResultVoid =
   ## 0x41, Get the block's beneficiary address.

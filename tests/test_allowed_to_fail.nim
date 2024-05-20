@@ -136,9 +136,6 @@ const
     "ChainAtoChainBtoChainAtoChainB.json",
     "UncleFromSideChain.json",
     "lotsOfLeafs.json",
-    "randomStatetest224BC.json",
-    "randomStatetest631BC.json",
-    "blockhashTests.json",
     "lotsOfBranchesOverrideAtTheEnd.json",
     "lotsOfBranchesOverrideAtTheMiddle.json",
     "newChainFrom4Block.json",
@@ -158,7 +155,7 @@ func skipNewBCTests*(folder: string, name: string): bool =
   # TODO: fix this
   if name in problematicCases:
     return true
-    
+
   # the new BC tests also contains these slow tests
   # for Istanbul fork
   if slowGSTTests(folder, name):

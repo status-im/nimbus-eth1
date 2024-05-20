@@ -215,7 +215,7 @@ OK: 0/9 Fail: 0/9 Skip: 9/9
 + randomStatetest213BC.json                                       OK
 + randomStatetest218BC.json                                       OK
 + randomStatetest21BC.json                                        OK
-  randomStatetest224BC.json                                       Skip
++ randomStatetest224BC.json                                       OK
 + randomStatetest234BC.json                                       OK
 + randomStatetest235BC.json                                       OK
 + randomStatetest239BC.json                                       OK
@@ -286,7 +286,7 @@ OK: 0/9 Fail: 0/9 Skip: 9/9
 + randomStatetest61BC.json                                        OK
 + randomStatetest622BC.json                                       OK
 + randomStatetest623BC.json                                       OK
-  randomStatetest631BC.json                                       Skip
++ randomStatetest631BC.json                                       OK
 + randomStatetest634BC.json                                       OK
 + randomStatetest65BC.json                                        OK
 + randomStatetest68BC.json                                        OK
@@ -301,7 +301,7 @@ OK: 0/9 Fail: 0/9 Skip: 9/9
 + randomStatetest93BC.json                                        OK
 + randomStatetest99BC.json                                        OK
 ```
-OK: 103/105 Fail: 0/105 Skip: 2/105
+OK: 105/105 Fail: 0/105 Skip: 0/105
 ## bcStateTests
 ```diff
 + BLOCKHASH_Bounds.json                                           OK
@@ -342,7 +342,7 @@ OK: 103/105 Fail: 0/105 Skip: 2/105
 + ZeroValue_TransactionCALLwithData_ToOneStorageKey_OOGRevert_Ist OK
 + ZeroValue_TransactionCALLwithData_ToOneStorageKey_OOGRevert_Par OK
 + blockhashNonConstArg.json                                       OK
-  blockhashTests.json                                             Skip
++ blockhashTests.json                                             OK
 + callcodeOutput1.json                                            OK
 + callcodeOutput2.json                                            OK
 + callcodeOutput3partial.json                                     OK
@@ -405,7 +405,7 @@ OK: 103/105 Fail: 0/105 Skip: 2/105
 + transactionFromSelfDestructedContract.json                      OK
 + txCost-sec73.json                                               OK
 ```
-OK: 98/100 Fail: 0/100 Skip: 2/100
+OK: 99/100 Fail: 0/100 Skip: 1/100
 ## bcTotalDifficultyTest
 ```diff
   lotsOfBranchesOverrideAtTheEnd.json                             Skip
@@ -3726,4 +3726,4 @@ OK: 11/11 Fail: 0/11 Skip: 0/11
 OK: 1/1 Fail: 0/1 Skip: 0/1
 
 ---TOTAL---
-OK: 3137/3272 Fail: 0/3272 Skip: 135/3272
+OK: 3140/3272 Fail: 0/3272 Skip: 132/3272
