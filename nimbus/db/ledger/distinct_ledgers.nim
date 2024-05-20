@@ -236,8 +236,7 @@ proc delete*(sl: StorageLedger, slot: UInt256) =
 iterator storage*(
     al: AccountLedger;
     account: CoreDbAccount;
-      ): (Blob,Blob)
-      {.gcsafe, raises: [CoreDbApiError].} =
+      ): (Blob,Blob) =
   ## For given account, iterate over storage slots
   const
     info = "storage(): "

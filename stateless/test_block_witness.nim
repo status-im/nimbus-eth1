@@ -30,7 +30,7 @@ proc testGetBranch(tester: Tester, rootHash: KeccakHash, testStatusIMPL: var Tes
     var wb = initWitnessBuilder(tester.memDB, rootHash, flags)
     var witness = wb.buildWitness(tester.keys)
 
-    var db = newCoreDbRef(LegacyDbMemory)
+    var db = newCoreDbRef(DefaultDbMemory)
     when defined(useInputStream):
       var input = memoryInput(witness)
       var tb = initTreeBuilder(input, db, flags)
@@ -87,8 +87,8 @@ proc setupStateDB(tester: var Tester, wantedState: JsonNode, stateDB: LedgerRef)
 
 proc testBlockWitness(node: JsonNode, rootHash: Hash256, testStatusIMPL: var TestStatus) =
   var
-    tester = Tester(memDB: newCoreDbRef(LegacyDbMemory))
-    ac = AccountsCache.init(tester.memDB, emptyRlpHash, true)
+    tester = Tester(memDB: newCoreDbRef(DefaultDbMemory))
+    ac = LedgerCache.init(tester.memDB, emptyRlpHash)
 
   let root = tester.setupStateDB(node, ac)
   if rootHash != emptyRlpHash:

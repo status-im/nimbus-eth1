@@ -78,7 +78,7 @@ proc new*(
   ## with the `parent` block header.
   new result
   result.init(
-    ac       = com.ledgerType.init(com.db, parent.stateRoot, com.pruneTrie),
+    ac       = com.ledgerType.init(com.db, parent.stateRoot),
     parent   = parent,
     blockCtx = blockCtx,
     com      = com,
@@ -103,7 +103,7 @@ proc reinit*(self:     BaseVMState;     ## Object descriptor
       com    = self.com
       db     = com.db
       ac     = if self.stateDB.rootHash == parent.stateRoot: self.stateDB
-               else: com.ledgerType.init(db, parent.stateRoot, com.pruneTrie)
+               else: com.ledgerType.init(db, parent.stateRoot)
       flags  = self.flags
     self[].reset
     self.init(
@@ -160,7 +160,7 @@ proc init*(
   ## It requires the `header` argument properly initalised so that for PoA
   ## networks, the miner address is retrievable via `ecRecover()`.
   self.init(
-    ac       = com.ledgerType.init(com.db, parent.stateRoot, com.pruneTrie),
+    ac       = com.ledgerType.init(com.db, parent.stateRoot),
     parent   = parent,
     blockCtx = com.blockCtx(header),
     com      = com,
@@ -227,7 +227,7 @@ proc statelessInit*(
     tracer:       TracerRef = nil): bool
     {.gcsafe, raises: [CatchableError].} =
   vmState.init(
-    ac          = com.ledgerType.init(com.db, parent.stateRoot, com.pruneTrie),
+    ac          = com.ledgerType.init(com.db, parent.stateRoot),
     parent      = parent,
     blockCtx    = com.blockCtx(header),
     com         = com,

@@ -85,9 +85,6 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
   let vmState = c.getVmState(headers[0]).valueOr:
     return ValidationResult.Error
 
-  # Check point
-  let stateRootChpt = vmState.parent.stateRoot
-
   # Needed for figuring out whether KVT cleanup is due (see at the end)
   let (fromBlock, toBlock) = (headers[0].blockNumber, headers[^1].blockNumber)
 

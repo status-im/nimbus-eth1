@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -13,8 +13,7 @@
 import
   std/tables,
   eth/[common, eip1559],
-  eth/trie/trie_defs,
-  ../db/[ledger, core_db, state_db/read_write],
+  ../db/[ledger, core_db],
   ../constants,
   ./chain_config
 
@@ -28,8 +27,6 @@ type
     address: EthAddress; nonce: AccountNonce; balance: UInt256;
     code: openArray[byte]) {.catchRaise.}
 
-  GenesisCompensateLegacySetupFn = proc() {.noRaise.}
-
   GenesisSetStorageFn = proc(
     address: EthAddress; slot: UInt256; val: UInt256) {.rlpRaise.}
 
@@ -40,70 +37,23 @@ type
   GenesisGetTrieFn = proc: CoreDbMptRef {.noRaise.}
 
   GenesisLedgerRef* = ref object
-    ## Exportable ledger DB just for initialising Genesis. This is needed
-    ## when using the `Aristo` backend which is not fully supported by the
-    ## `AccountStateDB` object.
-    ##
-    ## Currently, using other than the `AccountStateDB` ledgers are
-    ## experimental and test only. Eventually, the `GenesisLedgerRef` wrapper
-    ## should disappear so that the `Ledger` object (which encapsulates
-    ## `AccountsCache` and `AccountsLedger`) will prevail.
+    ## Exportable ledger DB just for initialising Genesis.
     ##
     addAccount: GenesisAddAccountFn
-    compensateLegacySetup: GenesisCompensateLegacySetupFn
     setStorage: GenesisSetStorageFn
     commit: GenesisCommitFn
     rootHash: GenesisRootHashFn
     getTrie: GenesisGetTrieFn
 
-const
-  GenesisLedgerTypeDefault* = LedgerType(0)
-    ## Default ledger type to use, `LedgerType(0)` uses  `AccountStateDB`
-    ## rather than a `Ledger` variant.
-
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc initStateDbledgerRef(db: CoreDbRef; pruneTrie: bool): GenesisLedgerRef =
-  let sdb = newAccountStateDB(db, emptyRlpHash, pruneTrie)
-
-  GenesisLedgerRef(
-    addAccount: proc(
-        address: EthAddress;
-        nonce: AccountNonce;
-        balance: UInt256;
-        code: openArray[byte];
-          ) {.catchRaise.} =
-      sdb.setAccount(address, newAccount(nonce, balance))
-      sdb.setCode(address, code),
-
-    compensateLegacySetup: proc() =
-      if pruneTrie: db.compensateLegacySetup(),
-
-    setStorage: proc(
-        address: EthAddress;
-        slot: UInt256;
-        val: UInt256;
-          ) {.rlpRaise.} =
-      sdb.setStorage(address, slot, val),
-
-    commit: proc() =
-      discard,
-
-    rootHash: proc(): Hash256 =
-      sdb.rootHash(),
-
-    getTrie: proc(): CoreDbMptRef =
-      sdb.getTrie())
-
-
 proc initAccountsLedgerRef(
     db: CoreDbRef;
-    pruneTrie: bool;
-    ledgerType: LedgerType;
      ): GenesisLedgerRef =
-  let ac = ledgerType.init(db, emptyRlpHash, pruneTrie)
+  ## Methods jump table
+  let ac = LedgerCache.init(db, EMPTY_ROOT_HASH)
 
   GenesisLedgerRef(
     addAccount: proc(
@@ -115,9 +65,6 @@ proc initAccountsLedgerRef(
       ac.setNonce(address, nonce)
       ac.setBalance(address, balance)
       ac.setCode(address, @code),
-
-    compensateLegacySetup: proc() =
-      if pruneTrie: db.compensateLegacySetup(),
 
     setStorage: proc(
         address: EthAddress;
@@ -141,15 +88,11 @@ proc initAccountsLedgerRef(
 
 proc newStateDB*(
     db: CoreDbRef;
-    pruneTrie: bool;
-    ledgerType = LedgerType(0);
+    ledgerType: LedgerType;
       ): GenesisLedgerRef =
-  ## The flag `ledgerType` is set to zero for compatibility with legacy apps
-  ## (see `test_state_network`).
-  if ledgerType != LedgerType(0):
-    db.initAccountsLedgerRef(pruneTrie, ledgerType)
-  else:
-    db.initStateDbledgerRef pruneTrie
+  ## Currently only `LedgerCache` supported for `ledgerType`.
+  doAssert ledgerType == LedgerCache
+  db.initAccountsLedgerRef()
 
 proc getTrie*(sdb: GenesisLedgerRef): CoreDbMptRef =
   ## Getter, used in `test_state_network`
@@ -167,21 +110,8 @@ proc toGenesisHeader*(
   ## The function returns the `Genesis` block header.
   ##
 
-  # The following kludge is needed for the `LegacyDbPersistent` type database
-  # when `pruneTrie` is enabled. For other cases, this code is irrelevant.
-  sdb.compensateLegacySetup()
-
   for address, account in g.alloc:
     sdb.addAccount(address, account.nonce, account.balance, account.code)
-
-    # Kludge:
-    #
-    # See https://github.com/status-im/nim-eth/issues/9 where other,
-    # probably related debilities are discussed.
-    #
-    # This kludge also fixes the initial crash described in
-    # https://github.com/status-im/nimbus-eth1/issues/932.
-    sdb.compensateLegacySetup() # <-- kludge
 
     for k, v in account.storage:
       sdb.setStorage(address, k, v)
@@ -226,20 +156,20 @@ proc toGenesisHeader*(
     genesis: Genesis;
     fork: HardFork;
     db = CoreDbRef(nil);
-    ledgerType = GenesisLedgerTypeDefault;
+    ledgerType = LedgerCache;
       ): BlockHeader
       {.gcsafe, raises: [CatchableError].} =
   ## Generate the genesis block header from the `genesis` and `config`
   ## argument value.
   let
-    db  = if db.isNil: newCoreDbRef LegacyDbMemory else: db
-    sdb = newStateDB(db, pruneTrie = true, ledgerType)
+    db  = if db.isNil: AristoDbMemory.newCoreDbRef() else: db
+    sdb = db.newStateDB(ledgerType)
   toGenesisHeader(genesis, sdb, fork)
 
 proc toGenesisHeader*(
     params: NetworkParams;
     db = CoreDbRef(nil);
-    ledgerType = GenesisLedgerTypeDefault;
+    ledgerType = LedgerCache;
       ): BlockHeader
       {.raises: [CatchableError].} =
   ## Generate the genesis block header from the `genesis` and `config`

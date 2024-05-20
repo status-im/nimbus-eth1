@@ -13,8 +13,7 @@
 import
   eth/common,
   ../core_db,
-  ./backend/[accounts_cache, accounts_cache_desc,
-             accounts_ledger, accounts_ledger_desc],
+  ./backend/[accounts_ledger, accounts_ledger_desc],
   ./base/api_tracking,
   ./base
 
@@ -39,9 +38,6 @@ when LedgerEnableApiTracking:
 iterator accounts*(ldg: LedgerRef): Account =
   ldg.beginTrackApi LdgAccountsIt
   case ldg.ldgType:
-  of LegacyAccountsCache:
-    for w in ldg.AccountsCache.accountsIt():
-      yield w
   of LedgerCache:
     for w in ldg.AccountsLedgerRef.accountsIt():
       yield w
@@ -53,9 +49,6 @@ iterator accounts*(ldg: LedgerRef): Account =
 iterator addresses*(ldg: LedgerRef): EthAddress =
   ldg.beginTrackApi LdgAdressesIt
   case ldg.ldgType:
-  of LegacyAccountsCache:
-    for w in ldg.AccountsCache.addressesIt():
-      yield w
   of LedgerCache:
     for w in ldg.AccountsLedgerRef.addressesIt():
       yield w
@@ -67,9 +60,6 @@ iterator addresses*(ldg: LedgerRef): EthAddress =
 iterator cachedStorage*(ldg: LedgerRef, eAddr: EthAddress): (UInt256,UInt256) =
   ldg.beginTrackApi LdgCachedStorageIt
   case ldg.ldgType:
-  of LegacyAccountsCache:
-    for w in ldg.AccountsCache.cachedStorageIt(eAddr):
-      yield w
   of LedgerCache:
     for w in ldg.AccountsLedgerRef.cachedStorageIt(eAddr):
       yield w
@@ -81,9 +71,6 @@ iterator cachedStorage*(ldg: LedgerRef, eAddr: EthAddress): (UInt256,UInt256) =
 iterator pairs*(ldg: LedgerRef): (EthAddress,Account) =
   ldg.beginTrackApi LdgPairsIt
   case ldg.ldgType:
-  of LegacyAccountsCache:
-    for w in ldg.AccountsCache.pairsIt():
-      yield w
   of LedgerCache:
     for w in ldg.AccountsLedgerRef.pairsIt():
       yield w
@@ -95,13 +82,9 @@ iterator pairs*(ldg: LedgerRef): (EthAddress,Account) =
 iterator storage*(
     ldg: LedgerRef;
     eAddr: EthAddress;
-      ): (UInt256,UInt256)
-      {.gcsafe, raises: [CoreDbApiError].} =
+      ): (UInt256,UInt256) =
   ldg.beginTrackApi LdgStorageIt
   case ldg.ldgType:
-  of LegacyAccountsCache:
-    for w in ldg.AccountsCache.storageIt(eAddr):
-      yield w
   of LedgerCache:
     for w in ldg.AccountsLedgerRef.storageIt(eAddr):
       yield w

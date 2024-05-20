@@ -40,20 +40,11 @@ proc configurationMain*() =
       check dd.keyStore.string == "banana/bin"
 
     test "chaindb-mode":
-      let aa = makeTestConfig()
-      check aa.chainDbMode == ChainDbMode.Prune
-
-      let bb = makeConfig(@["--chaindb:prune"])
-      check bb.chainDbMode == ChainDbMode.Prune
-
-      let cc = makeConfig(@["--chaindb:archive"])
-      check cc.chainDbMode == ChainDbMode.Archive
-
-      let dd = makeConfig(@["-p:archive"])
-      check dd.chainDbMode == ChainDbMode.Archive
-
       let ee = makeConfig(@["--chaindb:aristo"])
       check ee.chainDbMode == ChainDbMode.Aristo
+
+      let ff = makeConfig(@["--chaindb:ariPrune"])
+      check ff.chainDbMode == ChainDbMode.AriPrune
 
     test "import":
       let aa = makeTestConfig()

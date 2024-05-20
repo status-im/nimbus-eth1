@@ -65,8 +65,7 @@ proc runTest(steps: Steps) =
     ctx  = newEthContext()
     ethNode = setupEthNode(conf, ctx, eth)
     com = CommonRef.new(
-      newCoreDbRef LegacyDbMemory,
-      conf.chainDbMode == ChainDbMode.Prune,
+      newCoreDbRef DefaultDbMemory,
       conf.networkId,
       conf.networkParams
     )

@@ -21,7 +21,7 @@ The points of these two files are:
 
 import
   chronicles,
-  eth/[common, trie/db],
+  eth/common,
   "."/[core_db, distinct_tries, storage_types, values_from_bytes]
 
 
@@ -55,10 +55,7 @@ proc ifNodesExistGetAccount*(trie: AccountsTrie, address: EthAddress): Option[Ac
   ifNodesExistGetAccountBytes(trie, address).map(accountFromBytes)
 
 proc maybeGetCode*(db: CoreDbRef, codeHash: Hash256): Option[seq[byte]] =
-  if db.isLegacy:
-    db.newKvt.backend.toLegacy.maybeGet(contractHashKey(codeHash).toOpenArray)
-  else:
-    some(db.kvt.get(contractHashKey(codeHash).toOpenArray))
+  some(db.kvt.get(contractHashKey(codeHash).toOpenArray))
 
 proc maybeGetCode*(trie: AccountsTrie, address: EthAddress): Option[seq[byte]] =
   let maybeAcc = trie.ifNodesExistGetAccount(address)

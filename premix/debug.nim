@@ -69,7 +69,7 @@ proc main() =
 
   let
     blockEnv = json.parseFile(paramStr(1))
-    memoryDB = newCoreDbRef(LegacyDbMemory)
+    memoryDB = newCoreDbRef(DefaultDbMemory)
     blockNumber = UInt256.fromHex(blockEnv["blockNumber"].getStr())
 
   prepareBlockEnv(blockEnv, memoryDB)

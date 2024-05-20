@@ -22,20 +22,18 @@
 import
   eth/common,
   ./core_db,
-  ./ledger/backend/[
-    accounts_cache, accounts_cache_desc,
-    accounts_ledger, accounts_ledger_desc],
-  ./ledger/base_iterators
+  ./ledger/backend/[accounts_ledger, accounts_ledger_desc],
+  ./ledger/[base_iterators, distinct_ledgers]
 
 import
   ./ledger/base except LedgerApiTxt, beginTrackApi, bless, ifTrackApi
 
 export
-  AccountsCache,
   AccountsLedgerRef,
   LedgerType,
   base,
   base_iterators,
+  distinct_ledgers,
   init
 
 # ------------------------------------------------------------------------------
@@ -46,14 +44,10 @@ proc init*(
     ldgType: LedgerType;
     db: CoreDbRef;
     root: Hash256;
-    pruneTrie: bool;
       ): LedgerRef =
   case ldgType:
-  of LegacyAccountsCache:
-    result = AccountsCache.init(db, root, pruneTrie)
-
   of LedgerCache:
-    result = AccountsLedgerRef.init(db, root, pruneTrie)
+    AccountsLedgerRef.init(db, root)
 
   else:
     raiseAssert: "Missing ledger type label"

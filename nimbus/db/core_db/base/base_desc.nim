@@ -26,14 +26,12 @@ from ../../aristo
 type
   CoreDbType* = enum
     Ooops
-    LegacyDbMemory
-    LegacyDbPersistent
     AristoDbMemory            ## Memory backend emulator
     AristoDbRocks             ## RocksDB backend
     AristoDbVoid              ## No backend
 
 const
-  CoreDbPersistentTypes* = {LegacyDbPersistent, AristoDbRocks}
+  CoreDbPersistentTypes* = {AristoDbRocks}
 
 type
   CoreDbKvtRef*  = distinct CoreDxKvtRef  # Legacy descriptor

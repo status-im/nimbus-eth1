@@ -25,12 +25,11 @@ import
   ../aristo,
   ./memory_only,
   base_iterators_persistent,
-  ./backend/[aristo_rocksdb, legacy_rocksdb]
+  ./backend/aristo_rocksdb
 
 export
   memory_only,
-  base_iterators_persistent,
-  toRocksStoreRef
+  base_iterators_persistent
 
 proc newCoreDbRef*(
     dbType: static[CoreDbType];      # Database type symbol
@@ -40,10 +39,7 @@ proc newCoreDbRef*(
   ##
   ## Note: Using legacy notation `newCoreDbRef()` rather than
   ## `CoreDbRef.init()` because of compiler coughing.
-  when dbType == LegacyDbPersistent:
-    newLegacyPersistentCoreDbRef path
-
-  elif dbType == AristoDbRocks:
+  when dbType == AristoDbRocks:
     newAristoRocksDbCoreDbRef path
 
   else:

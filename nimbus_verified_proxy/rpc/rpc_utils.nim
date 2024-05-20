@@ -89,7 +89,7 @@ proc calculateTransactionData(
   ## - root of transactions trie
   ## - list of transactions hashes
   ## - total size of transactions in block
-  var tr = newCoreDbRef(LegacyDbMemory).mptPrune
+  var tr = newCoreDbRef(DefaultDbMemory).mptPrune
   var txHashes: seq[TxOrHash]
   var txSize: uint64
   for i, t in items:

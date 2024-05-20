@@ -26,14 +26,6 @@ proc setErrorLevel {.used.} =
   when defined(chronicles_runtime_filtering) and loggingEnabled:
     setLogLevel(LogLevel.ERROR)
 
-
-proc preLoadLegaDb(cdb: CoreDbRef; jKvp: JsonNode) =
-    # Just a hack: MPT and KVT share the same base table
-    for k, v in jKvp:
-      let key = hexToSeqByte(k)
-      let value = hexToSeqByte(v.getStr())
-      cdb.kvt.put(key, value)
-
 proc preLoadAristoDb(cdb: CoreDbRef; jKvp: JsonNode; num: BlockNumber) =
   ## Hack for `Aristo` pre-lading using the `snap` protocol proof-loader
   var
@@ -97,12 +89,8 @@ proc testFixtureImpl(node: JsonNode, testStatusIMPL: var TestStatus, memoryDB: C
   com.setTTD none(DifficultyInt)
 
   # Import raw data into database
-  if memoryDB.dbType in {LegacyDbMemory,LegacyDbPersistent}:
-    # Just a hack: MPT and KVT share the same base table
-    memoryDB.preLoadLegaDb state
-  else:
-    # Another hack for `Aristo` using the `snap` protocol proof-loader
-    memoryDB.preLoadAristoDb(state, blockNumber)
+  # Some hack for `Aristo` using the `snap` protocol proof-loader
+  memoryDB.preLoadAristoDb(state, blockNumber)
 
   var header = com.db.getBlockHeader(blockNumber)
   var headerHash = header.blockHash
@@ -121,15 +109,10 @@ proc testFixtureImpl(node: JsonNode, testStatusIMPL: var TestStatus, memoryDB: C
     check receipt["root"].getStr().toLowerAscii() == stateDiff["afterRoot"].getStr().toLowerAscii()
 
 
-proc testFixtureLega(node: JsonNode, testStatusIMPL: var TestStatus) =
-  node.testFixtureImpl(testStatusIMPL, newCoreDbRef LegacyDbMemory)
-
 proc testFixtureAristo(node: JsonNode, testStatusIMPL: var TestStatus) =
   node.testFixtureImpl(testStatusIMPL, newCoreDbRef AristoDbMemory)
 
 proc tracerJsonMain*() =
-  suite "tracer json tests for legacy DB":
-    jsonTest("TracerTests", testFixtureLega)
   suite "tracer json tests for Aristo DB":
     jsonTest("TracerTests", testFixtureAristo)
 

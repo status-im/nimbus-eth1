@@ -106,9 +106,8 @@ const sharedLibText = if defined(linux): " (*.so, *.so.N)"
 
 type
   ChainDbMode* {.pure.} = enum
-    Prune
-    Archive
     Aristo
+    AriPrune
 
   NimbusCmd* {.pure.} = enum
     noCommand
@@ -117,7 +116,7 @@ type
   ProtocolFlag* {.pure.} = enum
     ## Protocol flags
     Eth                           ## enable eth subprotocol
-    Snap                          ## enable snap sub-protocol
+    #Snap                          ## enable snap sub-protocol
     Les                           ## enable les subprotocol
 
   RpcFlag* {.pure.} = enum
@@ -134,7 +133,7 @@ type
   SyncMode* {.pure.} = enum
     Default
     Full                          ## Beware, experimental
-    Snap                          ## Beware, experimental
+    #Snap                          ## Beware, experimental
     Stateless                     ## Beware, experimental
 
   NimbusConf* = object of RootObj
@@ -158,12 +157,11 @@ type
     chainDbMode* {.
       desc: "Blockchain database"
       longDesc:
-        "- Prune   -- Legacy/reference database, full pruning\n" &
-        "- Archive -- Legacy/reference database without pruning\n" &
-        "- Aristo  -- Experimental single state DB\n" &
+        "- Aristo   -- Single state DB, full node\n" &
+        "- AriPrune -- Aristo with curbed block history (for testing)\n" &
         ""
-      defaultValue: ChainDbMode.Prune
-      defaultValueDesc: $ChainDbMode.Prune
+      defaultValue: ChainDbMode.Aristo
+      defaultValueDesc: $ChainDbMode.Aristo
       abbr : "p"
       name: "chaindb" }: ChainDbMode
 
@@ -172,7 +170,7 @@ type
       longDesc:
         "- default   -- legacy sync mode\n" &
         "- full      -- full blockchain archive\n" &
-        "- snap      -- experimental snap mode (development only)\n" &
+        # "- snap      -- experimental snap mode (development only)\n" &
         "- stateless -- experimental stateless mode (development only)"
       defaultValue: SyncMode.Default
       defaultValueDesc: $SyncMode.Default
@@ -376,7 +374,8 @@ type
 
     protocols {.
       desc: "Enable specific set of server protocols (available: Eth, " &
-            " Snap, Les, None.) This will not affect the sync mode"
+            " Les, None.) This will not affect the sync mode"
+            # " Snap, Les, None.) This will not affect the sync mode"
       defaultValue: @[]
       defaultValueDesc: $ProtocolFlag.Eth
       name: "protocols" .}: seq[string]
@@ -643,7 +642,7 @@ proc getProtocolFlags*(conf: NimbusConf): set[ProtocolFlag] =
     case item.toLowerAscii()
     of "eth": result.incl ProtocolFlag.Eth
     of "les": result.incl ProtocolFlag.Les
-    of "snap": result.incl ProtocolFlag.Snap
+    # of "snap": result.incl ProtocolFlag.Snap
     of "none": noneOk = true
     else:
       error "Unknown protocol", name=item

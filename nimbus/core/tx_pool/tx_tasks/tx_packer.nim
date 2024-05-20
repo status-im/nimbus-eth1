@@ -175,7 +175,7 @@ proc vmExecInit(xp: TxPoolRef): Result[TxPackerStateRef, string]
 
   let packer = TxPackerStateRef( # return value
     xp: xp,
-    tr: newCoreDbRef(LegacyDbMemory).mptPrune,
+    tr: AristoDbMemory.newCoreDbRef().mptPrune,
     balance: xp.chain.vmState.readOnlyStateDB.getBalance(xp.chain.feeRecipient),
     numBlobPerBlock: 0,
   )

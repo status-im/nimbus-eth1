@@ -46,20 +46,21 @@ proc addEthHandlerCapability*(
 # Public functions: convenience mappings for `snap`
 # ------------------------------------------------------------------------------
 
-import
-  ./snap as handlers_snap
+when false: # needs to be updated
+  import
+    ./snap as handlers_snap
 
-proc addSnapHandlerCapability*(
-    node: EthereumNode;
-    peerPool: PeerPool;
-    chain = ChainRef(nil);
-      ) =
-  ## Install `snap` handlers,Passing `chein` as `nil` installs the handler
-  ## in minimal/outbound mode.
-  if chain.isNil:
-    node.addCapability protocol.snap
-  else:
-    node.addCapability(protocol.snap, SnapWireRef.init(chain, peerPool))
+  proc addSnapHandlerCapability*(
+      node: EthereumNode;
+      peerPool: PeerPool;
+      chain = ChainRef(nil);
+        ) =
+    ## Install `snap` handlers,Passing `chein` as `nil` installs the handler
+    ## in minimal/outbound mode.
+    if chain.isNil:
+      node.addCapability protocol.snap
+    else:
+      node.addCapability(protocol.snap, SnapWireRef.init(chain, peerPool))
 
 # ------------------------------------------------------------------------------
 # End

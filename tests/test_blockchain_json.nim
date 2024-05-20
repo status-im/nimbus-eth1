@@ -187,7 +187,7 @@ proc blockWitness(vmState: BaseVMState, chainDB: CoreDbRef) =
   let flags = if fork >= FkSpurious: {wfEIP170} else: {}
 
   # build tree from witness
-  var db = newCoreDbRef LegacyDbMemory
+  var db = newCoreDbRef DefaultDbMemory
   when defined(useInputStream):
     var input = memoryInput(witness)
     var tb = initTreeBuilder(input, db, flags)
@@ -221,7 +221,7 @@ proc testGetBlockWitness(chain: ChainRef, parentHeader, currentHeader: BlockHead
 
   # use the MultiKeysRef to build the block proofs
   let
-    ac = newAccountStateDB(chain.com.db, currentHeader.stateRoot, chain.com.pruneTrie)
+    ac = newAccountStateDB(chain.com.db, currentHeader.stateRoot)
     blockProofs = getBlockProofs(state_db.ReadOnlyStateDB(ac), mkeys)
   if witness.len() == 0 and blockProofs.len() != 0:
     raise newException(ValidationError, "Expected blockProofs.len() == 0")
@@ -372,11 +372,10 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
     var ctx = parseTestCtx(fixture, testStatusIMPL)
 
     let
-      pruneTrie = test_config.getConfiguration().pruning
-      memDB     = newCoreDbRef LegacyDbMemory
-      stateDB   = AccountsCache.init(memDB, emptyRlpHash, pruneTrie)
+      memDB     = newCoreDbRef DefaultDbMemory
+      stateDB   = LedgerCache.init(memDB, emptyRlpHash)
       config    = getChainConfig(ctx.network)
-      com       = CommonRef.new(memDB, config, pruneTrie)
+      com       = CommonRef.new(memDB, config)
 
     setupStateDB(fixture["pre"], stateDB)
     stateDB.persist()
@@ -404,7 +403,7 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
       elif lastBlockHash == ctx.lastBlockHash:
         # multiple chain, we are using the last valid canonical
         # state root to test against 'postState'
-        let stateDB = AccountsCache.init(memDB, header.stateRoot, pruneTrie)
+        let stateDB = LedgerCache.init(memDB, header.stateRoot)
         verifyStateDB(fixture["postState"], ledger.ReadOnlyStateDB(stateDB))
 
       success = lastBlockHash == ctx.lastBlockHash
