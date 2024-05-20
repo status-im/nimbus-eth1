@@ -28,7 +28,7 @@ const
 
   baseDir = [".", "..", ".."/"..", $DirSep]
   repoDir = [".", "tests", "nimbus-eth1-blobs"]
-  subDir = ["replay", "test_coredb", "custom-network", "customgenesis"]
+  subDir = ["replay", "test_coredb", "custom-network", "main-era1"]
 
   # Reference file for finding some database directory base
   sampleDirRefFile = "coredb_test_xx.nim"
@@ -273,10 +273,7 @@ when isMainModule:
 
   sampleList = cmdLineConfig().samples
   if sampleList.len == 0:
-    sampleList = @[bulkTest0]
-    when true:
-      sampleList = @[bulkTest2, bulkTest3]
-    sampleList = @[ariTest1] # debugging
+    sampleList = @[bChainCapture]
 
   var state: (Duration, int)
   for n,capture in sampleList:

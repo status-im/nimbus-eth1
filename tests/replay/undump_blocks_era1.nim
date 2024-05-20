@@ -9,31 +9,21 @@
 # according to those terms.
 
 import
-  std/os,
   eth/common,
-  "."/[undump_blocks_era1, undump_blocks_gz]
+  ../../nimbus/db/era1_db
 
 # ------------------------------------------------------------------------------
 # Public undump
 # ------------------------------------------------------------------------------
 
-iterator undumpBlocks*(file: string): (seq[BlockHeader],seq[BlockBody]) =
-  if file.dirExists:
-    for w in file.undumpBlocksEra1:
-      yield w
-  else:
-    let ext = file.splitFile.ext
-    if ext == ".gz":
-      for w in file.undumpBlocksGz:
-        yield w
-    else:
-      raiseAssert "Unsupported extension for \"" &
-        file & "\" (got \"" & ext & "\")"
+iterator undumpBlocksEra1*(dir: string): (seq[BlockHeader],seq[BlockBody]) =
+  let db = Era1DbRef.init dir
+  defer: db.dispose()
 
-iterator undumpBlocks*(files: seq[string]): (seq[BlockHeader],seq[BlockBody]) =
-  for f in files:
-    for w in f.undumpBlocks:
-      yield w
+  doAssert db.hasAllKeys(0,500) # check whether `init()` succeeded
+
+  for w in db.headerBodyPairs:
+    yield w
 
 # ------------------------------------------------------------------------------
 # End

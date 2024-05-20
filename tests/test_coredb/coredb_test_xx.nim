@@ -64,66 +64,74 @@ let
     builtIn: true,
     name:    "goerli",
     network: GoerliNet,
-    files:   @["goerli68161.txt.gz"])     # lon local replay folder
+    files:   @["goerli68161.txt.gz"])         # on local replay folder
 
   goerliSampleEx = CaptureSpecs(
     builtIn: true,
     name:    "goerli",
     network: GoerliNet,
     files:   @[
-        "goerli482304.txt.gz",            # on nimbus-eth1-blobs/replay
+        "goerli482304.txt.gz",                # on nimbus-eth1-blobs/replay
         "goerli482305-504192.txt.gz"])
+
+  mainSample = CaptureSpecs(
+    builtIn: true,
+    name:    "main",
+    network: MainNet,
+    files:  @["mainnet-00000-5ec1ffb8.era1"], # on local replay folder
+    numBlocks: high(int),
+    dbType: AristoDbRocks)
 
   mainSampleEx = CaptureSpecs(
     builtIn: true,
     name:    "main",
     network: MainNet,
-    files:   @[
-      "mainnet332160.txt.gz",             # on nimbus-eth1-blobs/replay
-      "mainnet332161-550848.txt.gz",
-      "mainnet550849-719232.txt.gz",
-      "mainnet719233-843841.txt.gz"])
+    # will run over all avail files in parent folder
+    files:   @["mainnet-era1.txt"])           # on external repo
 
   # ------------------
 
-  bulkTest0* = goerliSample
-    .cloneWith(
-      name      = "-some",
-      numBlocks = 1_000)
-
-  bulkTest1* = goerliSample
+  # Supposed to run mostly on defaults
+  bulkTest0* = mainSample
     .cloneWith(
       name      = "-more",
       numBlocks = high(int))
 
-  bulkTest2* = goerliSampleEx
+  bulkTest1* = mainSample
     .cloneWith(
-      numBlocks = high(int))
+      name      = "-some",
+      numBlocks = 1_000)
 
-  bulkTest3* = mainSampleEx
-    .cloneWith(
-      numBlocks = high(int))
-
-  # Test samples with all the problems one can expect
-  ariTest0* = goerliSampleEx
-    .cloneWith(
-      name      = "-am",
-      numBlocks = high(int),
-      dbType    = AristoDbMemory)
-
-  ariTest1* = goerliSampleEx
-    .cloneWith(
-      name      = "-ar",
-      numBlocks = high(int),
-      dbType    = AristoDbRocks)
-
-  ariTest2* = mainSampleEx
+  bulkTest2* = mainSampleEx
     .cloneWith(
       name      = "-am",
       numBlocks = 500_000,
       dbType    = AristoDbMemory)
 
-  ariTest3* = mainSampleEx
+  bulkTest3* = mainSampleEx
+    .cloneWith(
+      name      = "-ar",
+      numBlocks = high(int),
+      dbType    = AristoDbRocks)
+
+
+  bulkTest4* = goerliSample
+    .cloneWith(
+      name      = "-more",
+      numBlocks = high(int))
+
+  bulkTest5* = goerliSample
+    .cloneWith(
+      name      = "-some",
+      numBlocks = 1_000)
+
+  bulkTest6* = goerliSampleEx
+    .cloneWith(
+      name      = "-am",
+      numBlocks = high(int),
+      dbType    = AristoDbMemory)
+
+  bulkTest7* = goerliSampleEx
     .cloneWith(
       name      = "-ar",
       numBlocks = high(int),
@@ -133,6 +141,6 @@ let
 
   allSamples* = [
     bulkTest0, bulkTest1, bulkTest2, bulkTest3,
-    ariTest0, ariTest1, ariTest2, ariTest3]
+    bulkTest4, bulkTest5, bulkTest6, bulkTest7]
 
 # End
