@@ -69,7 +69,7 @@ proc toTxPool*(
   result[0] = TxPoolRef.new(com,testAddress)
   result[0].baseFee = baseFee
 
-  for chain in file.undumpBlocks:
+  for chain in file.undumpBlocksGz:
     let leadBlkNum = chain[0][0].blockNumber
     chainNo.inc
 
