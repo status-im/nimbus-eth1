@@ -47,17 +47,16 @@ proc genesisHeader(node: JsonNode): BlockHeader =
   rlp.decode(genesisRLP, EthBlock).header
 
 proc setupELClient*(t: TestEnv, conf: ChainConfig, node: JsonNode) =
-  let memDB = newCoreDbRef LegacyDbMemory
+  let memDB = newCoreDbRef DefaultDbMemory
   t.ctx  = newEthContext()
   t.ethNode = setupEthNode(t.conf, t.ctx, eth)
   t.com = CommonRef.new(
       memDB,
-      conf,
-      t.conf.chainDbMode == ChainDbMode.Prune
+      conf
     )
   t.chainRef = newChain(t.com, extraValidation = true)
   let
-    stateDB = AccountsCache.init(memDB, emptyRlpHash, t.conf.chainDbMode == ChainDbMode.Prune)
+    stateDB = LedgerCache.init(memDB, emptyRlpHash)
     genesisHeader = node.genesisHeader
 
   setupStateDB(node["pre"], stateDB)

@@ -59,7 +59,7 @@ proc main() {.used.} =
 
   var conf = makeConfig()
   let db = newCoreDbRef(DefaultDbPersistent, string conf.dataDir)
-  let com = CommonRef.new(db, false)
+  let com = CommonRef.new(db)
 
   com.dumpTest(97)
   com.dumpTest(98) # no uncles and no tx

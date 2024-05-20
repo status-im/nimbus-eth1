@@ -13,7 +13,7 @@
 import
   std/typetraits,
   eth/common,
-  ./backend/[aristo_db, legacy_db],
+  ./backend/aristo_db,
   ./base/[api_tracking, base_desc],
   ./base
 
@@ -41,9 +41,6 @@ iterator pairs*(kvt: CoreDxKvtRef): (Blob, Blob) {.apiRaise.} =
   ##
   kvt.setTrackNewApi KvtPairsIt
   case kvt.parent.dbType:
-  of LegacyDbMemory:
-    for k,v in kvt.legaKvtPairs():
-      yield (k,v)
   of AristoDbMemory:
     for k,v in kvt.aristoKvtPairsMem():
       yield (k,v)
@@ -54,14 +51,11 @@ iterator pairs*(kvt: CoreDxKvtRef): (Blob, Blob) {.apiRaise.} =
     raiseAssert: "Unsupported database type: " & $kvt.parent.dbType
   kvt.ifTrackNewApi: debug newApiTxt, api, elapsed
 
-iterator pairs*(mpt: CoreDxMptRef): (Blob, Blob) {.apiRaise.} =
+iterator pairs*(mpt: CoreDxMptRef): (Blob, Blob) =
   ## Trie traversal, only supported for `CoreDxMptRef` (not `Phk`)
   ##
   mpt.setTrackNewApi MptPairsIt
   case mpt.parent.dbType:
-  of LegacyDbMemory, LegacyDbPersistent:
-    for k,v in mpt.legaMptPairs():
-      yield (k,v)
   of AristoDbMemory, AristoDbRocks, AristoDbVoid:
     for k,v in mpt.aristoMptPairs():
       yield (k,v)
@@ -76,9 +70,6 @@ iterator replicate*(mpt: CoreDxMptRef): (Blob, Blob) {.apiRaise.} =
   ##
   mpt.setTrackNewApi MptReplicateIt
   case mpt.parent.dbType:
-  of LegacyDbMemory, LegacyDbPersistent:
-    for k,v in mpt.legaReplicate():
-      yield (k,v)
   of AristoDbMemory:
     for k,v in aristoReplicateMem(mpt):
       yield (k,v)
@@ -98,7 +89,7 @@ when ProvideLegacyAPI:
     for k,v in kvt.distinctBase.pairs(): yield (k,v)
     kvt.ifTrackLegaApi: debug legaApiTxt, api, elapsed
 
-  iterator pairs*(mpt: CoreDbMptRef): (Blob, Blob) {.apiRaise.} =
+  iterator pairs*(mpt: CoreDbMptRef): (Blob, Blob) =
     ## Trie traversal, not supported for `CoreDbPhkRef`
     mpt.setTrackLegaApi LegaMptPairsIt
     for k,v in mpt.distinctBase.pairs(): yield (k,v)

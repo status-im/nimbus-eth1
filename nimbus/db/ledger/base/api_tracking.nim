@@ -38,6 +38,7 @@ type
     LdgDeleteAccountFn         = "deleteAccount"
     LdgDisposeFn               = "dispose"
     LdgGetAccessListFn         = "getAcessList"
+    LdgGetAccountFn            = "getAccount"
     LdgGetAndClearLogEntriesFn = "getAndClearLogEntries"
     LdgGetBalanceFn            = "getBalance"
     LdgGetCodeFn               = "getCode"

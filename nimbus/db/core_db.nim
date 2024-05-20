@@ -32,13 +32,7 @@ export
 # setting up DB agnostic unit/integration tests.
 #
 # Uncomment the below symbols in order to activate the `Aristo` database.
-#const DefaultDbMemory* = AristoDbMemory
-#const DefaultDbPersistent* = AristoDbRocks
-
-# Catch undefined symbols and set them to the legacy database.
-when not declared(DefaultDbMemory):
-  const DefaultDbMemory* = LegacyDbMemory
-when not declared(DefaultDbPersistent):
-  const DefaultDbPersistent* = LegacyDbPersistent
+const DefaultDbMemory* = AristoDbMemory
+const DefaultDbPersistent* = AristoDbRocks
 
 # End

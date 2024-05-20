@@ -54,8 +54,8 @@ proc main() {.used.} =
 
   let conf = configuration.getConfiguration()
   let com = CommonRef.new(
-    newCoreDbRef(LegacyDbPersistent, conf.dataDir),
-    false, conf.netId, networkParams(conf.netId))
+    newCoreDbRef(DefaultDbPersistent, conf.dataDir),
+    conf.netId, networkParams(conf.netId))
 
   # move head to block number ...
   if conf.head != 0.u256:

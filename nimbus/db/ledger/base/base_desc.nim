@@ -28,7 +28,6 @@ type
 
   LedgerType* = enum
     Ooops = 0
-    LegacyAccountsCache,
     LedgerCache
 
   LedgerSpRef* = ref object of RootRef

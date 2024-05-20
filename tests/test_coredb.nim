@@ -33,8 +33,8 @@ const
   # Reference file for finding some database directory base
   sampleDirRefFile = "coredb_test_xx.nim"
 
-  dbTypeDefault = LegacyDbMemory
-  ldgTypeDefault = LegacyAccountsCache
+  dbTypeDefault = AristoDbMemory
+  ldgTypeDefault = LedgerCache
 
 let
   # Standard test sample
@@ -157,8 +157,6 @@ proc initRunnerDB(
   let coreDB =
     # Resolve for static `dbType`
     case dbType:
-    of LegacyDbMemory: LegacyDbMemory.newCoreDbRef()
-    of LegacyDbPersistent: LegacyDbPersistent.newCoreDbRef path
     of AristoDbMemory: AristoDbMemory.newCoreDbRef()
     of AristoDbRocks: AristoDbRocks.newCoreDbRef path
     of AristoDbVoid: AristoDbVoid.newCoreDbRef()
@@ -257,7 +255,7 @@ proc chainSyncRunner(
 # ------------------------------------------------------------------------------
 
 proc coreDbMain*(noisy = defined(debug)) =
-  noisy.chainSyncRunner(ldgType=LedgerCache)
+  noisy.chainSyncRunner()
 
 when isMainModule:
   import

@@ -13,7 +13,7 @@
 import
   std/typetraits,
   eth/common,
-  ./backend/[aristo_db, aristo_rocksdb, legacy_db],
+  ./backend/[aristo_db, aristo_rocksdb],
   ./base/[api_tracking, base_desc],
   ./base
 
@@ -30,7 +30,7 @@ when ProvideLegacyAPI and CoreDbEnableApiTracking:
     newApiTxt = logTxt & "API"
 
 # Annotation helper(s)
-{.pragma: rlpRaise, gcsafe, raises: [AristoApiRlpError, LegacyApiRlpError].}
+{.pragma: rlpRaise, gcsafe, raises: [AristoApiRlpError].}
 
 # ------------------------------------------------------------------------------
 # Public iterators
@@ -41,9 +41,6 @@ iterator replicatePersistent*(mpt: CoreDxMptRef): (Blob, Blob) {.rlpRaise.} =
   ##
   mpt.setTrackNewApi MptReplicateIt
   case mpt.parent.dbType:
-  of LegacyDbMemory, LegacyDbPersistent:
-    for k,v in mpt.legaReplicate():
-      yield (k,v)
   of AristoDbMemory:
     for k,v in aristoReplicateMem(mpt):
       yield (k,v)

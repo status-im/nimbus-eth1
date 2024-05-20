@@ -17,7 +17,7 @@ import
 # if you want to run fuzz test
 
 test:
-  var db = newCoreDbRef(LegacyDbMemory)
+  var db = newCoreDbRef(DefaultDbMemory)
   try:
     var tb = initTreeBuilder(payload, db, {wfNoFlag})
     let root = tb.buildTree()

@@ -130,7 +130,7 @@ proc parseTester(filename: string, testStatusIMPL: var TestStatus): Tester =
 proc runTest(filePath, fileName: string) =
   test fileName:
     let t = parseTester(filePath, testStatusIMPL)
-    var db = newCoreDbRef(LegacyDbMemory)
+    var db = newCoreDbRef(DefaultDbMemory)
     try:
       var tb = initTreeBuilder(t.output, db, {wfNoFlag})
       let root = tb.buildTree()
@@ -148,7 +148,7 @@ proc writeFuzzData(filePath, fileName: string) =
   let t = parseTester(filePath, testStatusIMPL)
 
   # this block below check the parsed json
-  var db = newCoreDbRef(LegacyDbMemory)
+  var db = newCoreDbRef(DefaultDbMemory)
   var tb = initTreeBuilder(t.output, db, {wfNoFlag})
   discard tb.buildTree()
 

@@ -145,7 +145,6 @@ proc findTx*(
 
   else:
     # Find `(vid,key)` on transaction layers
-    var n = 0
     for (n,tx,layer,error) in db.txRef.txFrameWalk:
       if error != AristoError(0):
         return err(error)

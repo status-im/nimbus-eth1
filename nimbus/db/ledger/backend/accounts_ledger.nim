@@ -180,8 +180,8 @@ proc ledgerExtras(lc: impl.AccountsLedgerRef): LedgerExtras =
 proc newAccountsLedgerRef(
     db: CoreDbRef;
     root: Hash256;
-    pruneTrie: bool): LedgerRef =
-  let lc = impl.AccountsLedgerRef.init(db, root, pruneTrie)
+      ): LedgerRef =
+  let lc = impl.AccountsLedgerRef.init(db, root)
   wrp.AccountsLedgerRef(
     ldgType:   LedgerCache,
     ac:        lc,
@@ -214,8 +214,7 @@ iterator pairsIt*(lc: wrp.AccountsLedgerRef): (EthAddress,Account) =
 iterator storageIt*(
     lc: wrp.AccountsLedgerRef;
     eAddr: EthAddress;
-      ): (UInt256,UInt256)
-      {.gcsafe, raises: [CoreDbApiError].} =
+      ): (UInt256,UInt256) =
   for w in lc.ac.storage(eAddr):
     yield w
 
@@ -227,8 +226,9 @@ proc init*(
     T: type wrp.AccountsLedgerRef;
     db: CoreDbRef;
     root: Hash256;
-    pruneTrie: bool): LedgerRef =
-  db.newAccountsLedgerRef(root, pruneTrie)
+    pruneTrie = false;
+      ): LedgerRef =
+  db.newAccountsLedgerRef root
 
 # ------------------------------------------------------------------------------
 # End

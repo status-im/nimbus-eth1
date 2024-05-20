@@ -63,8 +63,7 @@ proc setupEnv*(extraValidation: bool = false, ccm: CCModify = nil): TestEnv =
 
   let
     com = CommonRef.new(
-      newCoreDbRef LegacyDbMemory,
-      conf.chainDbMode == ChainDbMode.Prune,
+      newCoreDbRef DefaultDbMemory,
       conf.networkId,
       conf.networkParams
     )

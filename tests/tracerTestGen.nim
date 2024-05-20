@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2019-2023 Status Research & Development GmbH
+# Copyright (c) 2019-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -57,8 +57,8 @@ proc main() {.used.} =
   # nimbus --rpc-api: eth, debug --prune: archive
 
   var conf = makeConfig()
-  let db = newCoreDbRef(LegacyDbPersistent, string conf.dataDir)
-  let com = CommonRef.new(db, false)
+  let db = newCoreDbRef(DefaultDbPersistent, string conf.dataDir)
+  let com = CommonRef.new(db)
 
   com.dumpTest(97)
   com.dumpTest(46147)

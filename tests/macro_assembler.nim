@@ -68,7 +68,7 @@ var
     ## This variable needs to be accessible for unit tests like
     ## `test_op_memory` which implicitely uses the `initStorageTrie()` call
     ## from the `distinct_tries` module. The `Aristo` API cannot handle that
-    ## because it needs the account addressfor accessing the storage trie.
+    ## because it needs the account address for accessing the storage trie.
     ##
     ## This problem can be fixed here in the `verifyAsmResult()` function once
     ## there is the time to do it ...
@@ -282,12 +282,10 @@ proc initVMEnv*(network: string): BaseVMState =
       # Need static binding
       case coreDbType:
       of AristoDbMemory: newCoreDbRef AristoDbMemory
-      of LegacyDbMemory: newCoreDbRef LegacyDbMemory
       else: raiseAssert "unsupported: " & $coreDbType
     com = CommonRef.new(
       cdb,
       conf,
-      false,
       conf.chainId.NetworkId)
     parent = BlockHeader(stateRoot: EMPTY_ROOT_HASH)
     parentHash = rlpHash(parent)
@@ -301,9 +299,8 @@ proc initVMEnv*(network: string): BaseVMState =
       gasLimit: 100_000
     )
 
-  when DefaultDbMemory in {AristoDbMemory, AristoDbRocks}:
-    # Disable opportunistic DB layer features for `Aristo`
-    com.db.localDbOnly = true
+  # Disable opportunistic DB layer features
+  com.db.localDbOnly = true
   com.initializeEmptyDb()
   BaseVMState.new(parent, header, com)
 

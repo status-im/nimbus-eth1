@@ -76,8 +76,7 @@ proc setupEnv*(): TestEnv =
   let
     ethCtx  = newEthContext()
     ethNode = setupEthNode(conf, ethCtx, eth)
-    com     = CommonRef.new(newCoreDbRef LegacyDbMemory,
-      conf.chainDbMode == ChainDbMode.Prune,
+    com     = CommonRef.new(newCoreDbRef DefaultDbMemory,
       conf.networkId,
       conf.networkParams
     )

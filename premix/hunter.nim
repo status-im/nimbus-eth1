@@ -38,8 +38,8 @@ proc parseU256(val: string): UInt256 =
 proc prepareBlockEnv(parent: BlockHeader, thisBlock: Block): CoreDbRef =
   var
     accounts     = requestPostState(thisBlock)
-    memoryDB     = newCoreDbRef LegacyDbMemory
-    accountDB    = newAccountStateDB(memoryDB, parent.stateRoot, false)
+    memoryDB     = newCoreDbRef DefaultDbMemory
+    accountDB    = newAccountStateDB(memoryDB, parent.stateRoot)
     parentNumber = %(parent.blockNumber.prefixHex)
 
   for address, account in accounts:
@@ -104,7 +104,7 @@ proc huntProblematicBlock(blockNumber: UInt256): ValidationResult =
     memoryDB     = prepareBlockEnv(parentBlock.header, thisBlock)
 
     # try to execute current block
-    com = CommonRef.new(memoryDB, false)
+    com = CommonRef.new(memoryDB)
 
   discard com.db.setHead(parentBlock.header, true)
 

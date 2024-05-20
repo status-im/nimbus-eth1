@@ -12,12 +12,11 @@
 
 import
   std/options,
-  eth/[common, trie/db],
+  eth/common,
   ../aristo,
-  ./backend/[aristo_db, legacy_db]
+  ./backend/aristo_db
 
 import
-  #./core_apps_legacy as core_apps -- avoid
   ./core_apps_newapi as core_apps
 import
   ./base except bless
@@ -36,10 +35,6 @@ export
   toAristoProfData,
   toAristoOldestState,
 
-  # see `legacy_db`
-  isLegacy,
-  toLegacy,
-
   # Standard interface for calculating merkle hash signatures (see `aristo`)
   MerkleSignRef,
   merkleSignBegin,
@@ -52,17 +47,6 @@ export
 # ------------------------------------------------------------------------------
 
 proc newCoreDbRef*(
-    db: TrieDatabaseRef;
-      ): CoreDbRef
-      {.gcsafe, deprecated: "use newCoreDbRef(LegacyDbPersistent,<path>)".} =
-  ## Legacy constructor.
-  ##
-  ## Note: Using legacy notation `newCoreDbRef()` rather than
-  ## `CoreDbRef.init()` because of compiler coughing.
-  ##
-  db.newLegacyPersistentCoreDbRef()
-
-proc newCoreDbRef*(
     dbType: static[CoreDbType];      # Database type symbol
       ): CoreDbRef =
   ## Constructor for volatile/memory type DB
@@ -70,10 +54,7 @@ proc newCoreDbRef*(
   ## Note: Using legacy notation `newCoreDbRef()` rather than
   ## `CoreDbRef.init()` because of compiler coughing.
   ##
-  when dbType == LegacyDbMemory:
-    newLegacyMemoryCoreDbRef()
-
-  elif dbType == AristoDbMemory:
+  when dbType == AristoDbMemory:
     newAristoMemoryCoreDbRef()
 
   elif dbType == AristoDbVoid:

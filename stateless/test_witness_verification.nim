@@ -51,8 +51,8 @@ proc buildWitness(
   genAccounts: GenesisAlloc): (KeccakHash, BlockWitness) {.raises: [CatchableError].} =
 
   let
-    coreDb = newCoreDbRef(LegacyDbMemory)
-    accountsCache = AccountsCache.init(coreDb, emptyRlpHash, true)
+    coreDb = newCoreDbRef(DefaultDbMemory)
+    accountsCache = LedgerCache.init(coreDb, emptyRlpHash)
     (rootHash, multiKeys) = setupStateDB(genAccounts, accountsCache)
 
   var wb = initWitnessBuilder(coreDb, rootHash, {wfNoFlag})

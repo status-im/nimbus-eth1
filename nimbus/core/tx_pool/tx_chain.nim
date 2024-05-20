@@ -157,7 +157,7 @@ proc update(dh: TxChainRef; parent: BlockHeader)
   let
     timestamp = dh.getTimestamp(parent)
     db  = dh.com.db
-    acc = dh.com.ledgerType.init(db, parent.stateRoot, dh.com.pruneTrie)
+    acc = dh.com.ledgerType.init(db, parent.stateRoot)
     fee = if dh.com.isLondon(parent.blockNumber + 1, timestamp):
             some(dh.com.baseFeeGet(parent).uint64.u256)
           else:

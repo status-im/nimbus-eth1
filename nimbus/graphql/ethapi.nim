@@ -148,7 +148,7 @@ proc wdNode(ctx: GraphqlContextRef, wd: Withdrawal): Node =
 proc getStateDB(com: CommonRef, header: common.BlockHeader): ReadOnlyStateDB =
   ## Retrieves the account db from canonical head
   ## we don't use accounst_cache here because it's read only operations
-  let ac = newAccountStateDB(com.db, header.stateRoot, com.pruneTrie)
+  let ac = newAccountStateDB(com.db, header.stateRoot)
   ReadOnlyStateDB(ac)
 
 proc getBlockByNumber(ctx: GraphqlContextRef, number: Node): RespResult =
