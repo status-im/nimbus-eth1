@@ -5,9 +5,9 @@ Background
 ----------
 
 The new *LedgerRef* module unifies different implementations of the
-*accounts_cache*. It is intended to be used as new base method for all of the
-*AccountsCache* implementations. Only constructors differ, depending on the
-implementation.
+legacy *accounts_cache*. It is intended to be used as new base method for
+all of the *AccountsCache* implementations. The legacy *accounts_cache*
+version has been removed.
 
 This was needed to accomodate for different *CoreDb* API paradigms. While the
 overloaded legacy *AccountsCache* implementation is just a closure based

@@ -30,11 +30,6 @@ when LedgerEnableApiTracking:
 # Public iterators
 # ------------------------------------------------------------------------------
 
-# Note that there should be no closure iterators here, at least for the
-# `storage()` iterator. With closures and the `accounts_cache.nim` driver
-# as-is, all unit tests and no-hive work OK apart from `TracerTests` which
-# fails at block 49018 due to mis-running of `storage()`.
-
 iterator accounts*(ldg: LedgerRef): Account =
   ldg.beginTrackApi LdgAccountsIt
   case ldg.ldgType:

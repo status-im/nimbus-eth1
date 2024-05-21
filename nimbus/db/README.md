@@ -33,55 +33,50 @@ is enclosed in brackets after the name of a component.
 * *(engine)*<br>
   This is a bottom level *driver* in the below diagram.
 
-                                            +-------------------+
-                                            | EVM (application) |
-                                            +-------------------+
-                                                 |          |
-                                                 v          |
-                              +-------------------------+   |
-                              | State DB (concentrator) |   |
-                              +-------------------------+   |
-                                  |           |       |     |
-                                  v           |       |     |
-         +----------------------------+       |       |     |
-         |       Ledger (API)         |       |       |     |
-         +----------------------------+       |       |     |
-                      |      |                |       |     |
-                      v      v                |       |     |
-         +--------------+  +--------------+   |       |     |
-         | legacy cache |  | ledger cache |   |       |     |
-         |   (driver)   |  |   (driver)   |   |       |     |
-         +--------------+  +--------------+   |       |     |
-                      |      |                v       |     |
-                      |      |   +----------------+   |     |
-                      |      |   |   Common       |   |     |
-                      |      |   | (concentrator) |   |     |
-                      |      |   +----------------+   |     |
-                      |      |         |              |     |
-                      v      v         v              v     v
-         +---------------------------------------------------------------------+
-         |               Core DB (API)                                         |
-         +---------------------------------------------------------------------+
-                         |                  |
-                         v                  v
-         +--------------------------+   +--------------------------------------+
-         | legacy DB (concentrator) |   |   Aristo DB (driver,concentrator)    |
-         +--------------------------+   +--------------------------------------+
-               |                 |                |          |
-               v                 |                v          v
-         +--------------------+  |     +--------------+  +---------------------+
-         | Hexary DB (driver) |  |     | Kvt (driver) |  | Aristo MPT (driver) |
-         +--------------------+  |     +--------------+  +---------------------+
-               |                 |                |          |
-               v                 v                |          |
-         +--------------------------+             |          |
-         | Key-value table (driver) |             |          |
-         +--------------------------+             |          |
-                      |                           |          |
-                      v                           v          v
-         +---------------------------------------------------------------------+
-         |                Rocks DB (engine)                                    |
-         +---------------------------------------------------------------------+
+                             +-------------------+
+                             | EVM (application) |
+                             +-------------------+
+                                     |     |
+                                     v     |
+         +-----------------------------+   |
+         |   State DB (concentrator)   |   |
+         +-----------------------------+   |
+             |                       |     |
+             v                       |     |
+         +------------------------+  |     |
+         |      Ledger (API)      |  |     |
+         +------------------------+  |     |
+             |              |        |     |
+             v              |        |     |
+         +--------------+   |        |     |
+         | ledger cache |   |        |     |
+         |   (driver)   |   |        |     |
+         +--------------+   |        |     |
+             |              v        |     |
+             |   +----------------+  |     |
+             |   |   Common       |  |     |
+             |   | (concentrator) |  |     |
+             |   +----------------+  |     |
+             |             |         |     |
+             v             v         v     v
+         +---------------------------------------+
+         |               Core DB (API)           |
+         +---------------------------------------+
+                           |
+                           v
+         +---------------------------------------+
+         |    Aristo DB (driver,concentrator)    |
+         +---------------------------------------+
+                   |             |
+                   v             v
+         +--------------+  +---------------------+
+         | Kvt (driver) |  | Aristo MPT (driver) |
+         +--------------+  +---------------------+
+                   |             |
+                   v             v
+         +---------------------------------------+
+         |         Rocks DB (engine)             |
+         +---------------------------------------+
 
 Here is a list of path references for the components with some explanation.
 The sources for the components are not always complete but indicate the main
@@ -172,16 +167,6 @@ locations where to start looking at.
     Management of accounts and storage data. This is a re-write of the
     [legacy DB (driver)](#lgdd)  which is supposed to work with all
     [Core DB (API)](#cda) backends.
-
-* *legacy cache (driver)*<a name="lgcd"></a>
-  + Sources:<br>
-    ./nimbus/db/distinct_tries.nim<br>
-    ./nimbus/db/ledger/accounts_cache.nim<br>
-    ./nimbus/db/ledger/backend/accounts_cache*
-
-  + Synopsis:<br>
-    Management of accounts and storage data. It works only for the legacy
-    driver of the [Core DB (API)](#cda) backend.
 
 * *legacy DB (concentrator)*<a name="ldc"></a>
   + Sources:<br>

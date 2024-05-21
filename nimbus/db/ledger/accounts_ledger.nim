@@ -10,11 +10,7 @@
 
 {.push raises: [].}
 
-## Re-write of `accounts_cache.nim` using new database API.
-##
-## Many objects and names are kept as in the original ``accounts_cache.nim` so
-## that a diff against the original file gives useful results (e.g. using
-## the graphical diff tool `meld`.)
+## Re-write of legacy `accounts_cache.nim` using new database API.
 ##
 ## Notable changes are:
 ##
