@@ -60,16 +60,14 @@ suite "State Validation":
       raiseAssert "Cannot read test vector: " & error
 
     for testData in testCase:
-      let contentKey = decode(testData.content_key.hexToSeqByte().ByteList).get()
-      let contentValueRetrieval = SSZ.decode(
-        testData.content_value_retrieval.hexToSeqByte(), AccountTrieNodeRetrieval
-      )
+      let contentKey =
+        ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
+      let contentValueRetrieval = AccountTrieNodeRetrieval
+        .decode(testData.content_value_retrieval.hexToSeqByte())
+        .get()
 
       check:
-        validateFetchedAccountTrieNode(
-          contentKey.accountTrieNodeKey, contentValueRetrieval
-        )
-        .isOk()
+        validateRetrieval(contentKey.accountTrieNodeKey, contentValueRetrieval).isOk()
 
   test "Validate invalid AccountTrieNodeRetrieval nodes":
     const file = testVectorDir / "account_trie_node.yaml"
@@ -78,16 +76,15 @@ suite "State Validation":
       raiseAssert "Cannot read test vector: " & error
 
     for testData in testCase:
-      let contentKey = decode(testData.content_key.hexToSeqByte().ByteList).get()
-      var contentValueRetrieval = SSZ.decode(
-        testData.content_value_retrieval.hexToSeqByte(), AccountTrieNodeRetrieval
-      )
+      let contentKey =
+        ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
+      var contentValueRetrieval = AccountTrieNodeRetrieval
+        .decode(testData.content_value_retrieval.hexToSeqByte())
+        .get()
 
       contentValueRetrieval.node[^1] += 1 # Modify node hash
 
-      let res = validateFetchedAccountTrieNode(
-        contentKey.accountTrieNodeKey, contentValueRetrieval
-      )
+      let res = validateRetrieval(contentKey.accountTrieNodeKey, contentValueRetrieval)
       check:
         res.isErr()
         res.error() ==
@@ -100,16 +97,14 @@ suite "State Validation":
       raiseAssert "Cannot read test vector: " & error
 
     for testData in testCase:
-      let contentKey = decode(testData.content_key.hexToSeqByte().ByteList).get()
-      let contentValueRetrieval = SSZ.decode(
-        testData.content_value_retrieval.hexToSeqByte(), ContractTrieNodeRetrieval
-      )
+      let contentKey =
+        ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
+      let contentValueRetrieval = ContractTrieNodeRetrieval
+        .decode(testData.content_value_retrieval.hexToSeqByte())
+        .get()
 
       check:
-        validateFetchedContractTrieNode(
-          contentKey.contractTrieNodeKey, contentValueRetrieval
-        )
-        .isOk()
+        validateRetrieval(contentKey.contractTrieNodeKey, contentValueRetrieval).isOk()
 
   test "Validate invalid ContractTrieNodeRetrieval nodes":
     const file = testVectorDir / "contract_storage_trie_node.yaml"
@@ -118,16 +113,15 @@ suite "State Validation":
       raiseAssert "Cannot read test vector: " & error
 
     for testData in testCase:
-      let contentKey = decode(testData.content_key.hexToSeqByte().ByteList).get()
-      var contentValueRetrieval = SSZ.decode(
-        testData.content_value_retrieval.hexToSeqByte(), ContractTrieNodeRetrieval
-      )
+      let contentKey =
+        ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
+      var contentValueRetrieval = ContractTrieNodeRetrieval
+        .decode(testData.content_value_retrieval.hexToSeqByte())
+        .get()
 
       contentValueRetrieval.node[^1] += 1 # Modify node hash
 
-      let res = validateFetchedContractTrieNode(
-        contentKey.contractTrieNodeKey, contentValueRetrieval
-      )
+      let res = validateRetrieval(contentKey.contractTrieNodeKey, contentValueRetrieval)
       check:
         res.isErr()
         res.error() ==
@@ -140,14 +134,14 @@ suite "State Validation":
       raiseAssert "Cannot read test vector: " & error
 
     for testData in testCase:
-      let contentKey = decode(testData.content_key.hexToSeqByte().ByteList).get()
-      let contentValueRetrieval = SSZ.decode(
-        testData.content_value_retrieval.hexToSeqByte(), ContractCodeRetrieval
-      )
+      let contentKey =
+        ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
+      let contentValueRetrieval = ContractCodeRetrieval
+        .decode(testData.content_value_retrieval.hexToSeqByte())
+        .get()
 
       check:
-        validateFetchedContractCode(contentKey.contractCodeKey, contentValueRetrieval)
-        .isOk()
+        validateRetrieval(contentKey.contractCodeKey, contentValueRetrieval).isOk()
 
   test "Validate invalid ContractCodeRetrieval nodes":
     const file = testVectorDir / "contract_bytecode.yaml"
@@ -156,15 +150,15 @@ suite "State Validation":
       raiseAssert "Cannot read test vector: " & error
 
     for testData in testCase:
-      let contentKey = decode(testData.content_key.hexToSeqByte().ByteList).get()
-      var contentValueRetrieval = SSZ.decode(
-        testData.content_value_retrieval.hexToSeqByte(), ContractCodeRetrieval
-      )
+      let contentKey =
+        ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
+      var contentValueRetrieval = ContractCodeRetrieval
+        .decode(testData.content_value_retrieval.hexToSeqByte())
+        .get()
 
       contentValueRetrieval.code[^1] += 1 # Modify node hash
 
-      let res =
-        validateFetchedContractCode(contentKey.contractCodeKey, contentValueRetrieval)
+      let res = validateRetrieval(contentKey.contractCodeKey, contentValueRetrieval)
       check:
         res.isErr()
         res.error() == "hash of fetched bytecode doesn't match the expected code hash"
@@ -178,34 +172,30 @@ suite "State Validation":
       raiseAssert "Cannot read test vector: " & error
 
     for i, testData in testCase:
-      var stateRoot = KeccakHash.init(testData.state_root.hexToSeqByte())
+      var stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
 
       block:
-        let contentKey = decode(testData.content_key.hexToSeqByte().ByteList).get()
+        let contentKey =
+          ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
         let contentValueOffer =
-          SSZ.decode(testData.content_value_offer.hexToSeqByte(), AccountTrieNodeOffer)
+          AccountTrieNodeOffer.decode(testData.content_value_offer.hexToSeqByte()).get()
 
         check:
-          validateOfferedAccountTrieNode(
-            stateRoot, contentKey.accountTrieNodeKey, contentValueOffer
-          )
+          validateOffer(stateRoot, contentKey.accountTrieNodeKey, contentValueOffer)
           .isOk()
 
       if i == 1:
         continue # second test case only has root node and no recursive gossip
 
-      let contentKey =
-        decode(testData.recursive_gossip.content_key.hexToSeqByte().ByteList).get()
-      let contentValueOffer = SSZ.decode(
-        testData.recursive_gossip.content_value_offer.hexToSeqByte(),
-        AccountTrieNodeOffer,
-      )
+      let contentKey = ContentKey
+        .decode(testData.recursive_gossip.content_key.hexToSeqByte().ByteList)
+        .get()
+      let contentValueOffer = AccountTrieNodeOffer
+        .decode(testData.recursive_gossip.content_value_offer.hexToSeqByte())
+        .get()
 
       check:
-        validateOfferedAccountTrieNode(
-          stateRoot, contentKey.accountTrieNodeKey, contentValueOffer
-        )
-        .isOk()
+        validateOffer(stateRoot, contentKey.accountTrieNodeKey, contentValueOffer).isOk()
 
   test "Validate invalid AccountTrieNodeOffer nodes - bad state roots":
     const file = testVectorDir / "account_trie_node.yaml"
@@ -219,15 +209,15 @@ suite "State Validation":
       raiseAssert "Cannot read test vector: " & error
 
     for i, testData in testCase:
-      var stateRoot = KeccakHash.init(stateRoots[i].hexToSeqByte())
+      var stateRoot = KeccakHash.fromBytes(stateRoots[i].hexToSeqByte())
 
-      let contentKey = decode(testData.content_key.hexToSeqByte().ByteList).get()
+      let contentKey =
+        ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
       let contentValueOffer =
-        SSZ.decode(testData.content_value_offer.hexToSeqByte(), AccountTrieNodeOffer)
+        AccountTrieNodeOffer.decode(testData.content_value_offer.hexToSeqByte()).get()
 
-      let res = validateOfferedAccountTrieNode(
-        stateRoot, contentKey.accountTrieNodeKey, contentValueOffer
-      )
+      let res =
+        validateOffer(stateRoot, contentKey.accountTrieNodeKey, contentValueOffer)
       check:
         res.isErr()
         res.error() == "hash of proof root node doesn't match the expected root hash"
@@ -239,17 +229,17 @@ suite "State Validation":
       raiseAssert "Cannot read test vector: " & error
 
     for i, testData in testCase:
-      var stateRoot = KeccakHash.init(testData.state_root.hexToSeqByte())
+      var stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
 
-      let contentKey = decode(testData.content_key.hexToSeqByte().ByteList).get()
+      let contentKey =
+        ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
       var contentValueOffer =
-        SSZ.decode(testData.content_value_offer.hexToSeqByte(), AccountTrieNodeOffer)
+        AccountTrieNodeOffer.decode(testData.content_value_offer.hexToSeqByte()).get()
 
       contentValueOffer.proof[0][0] += 1.byte
 
-      let res = validateOfferedAccountTrieNode(
-        stateRoot, contentKey.accountTrieNodeKey, contentValueOffer
-      )
+      let res =
+        validateOffer(stateRoot, contentKey.accountTrieNodeKey, contentValueOffer)
       check:
         res.isErr()
         res.error() == "hash of proof root node doesn't match the expected root hash"
@@ -257,33 +247,33 @@ suite "State Validation":
     for i, testData in testCase:
       if i == 1:
         continue # second test case only has root node
-      var stateRoot = KeccakHash.init(testData.state_root.hexToSeqByte())
+      var stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
 
-      let contentKey = decode(testData.content_key.hexToSeqByte().ByteList).get()
+      let contentKey =
+        ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
       var contentValueOffer =
-        SSZ.decode(testData.content_value_offer.hexToSeqByte(), AccountTrieNodeOffer)
+        AccountTrieNodeOffer.decode(testData.content_value_offer.hexToSeqByte()).get()
 
       contentValueOffer.proof[^2][^2] += 1.byte
 
-      let res = validateOfferedAccountTrieNode(
-        stateRoot, contentKey.accountTrieNodeKey, contentValueOffer
-      )
+      let res =
+        validateOffer(stateRoot, contentKey.accountTrieNodeKey, contentValueOffer)
       check:
         res.isErr()
         "hash of next node doesn't match the expected" in res.error()
 
     for i, testData in testCase:
-      var stateRoot = KeccakHash.init(testData.state_root.hexToSeqByte())
+      var stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
 
-      let contentKey = decode(testData.content_key.hexToSeqByte().ByteList).get()
+      let contentKey =
+        ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
       var contentValueOffer =
-        SSZ.decode(testData.content_value_offer.hexToSeqByte(), AccountTrieNodeOffer)
+        AccountTrieNodeOffer.decode(testData.content_value_offer.hexToSeqByte()).get()
 
       contentValueOffer.proof[^1][^1] += 1.byte
 
-      let res = validateOfferedAccountTrieNode(
-        stateRoot, contentKey.accountTrieNodeKey, contentValueOffer
-      )
+      let res =
+        validateOffer(stateRoot, contentKey.accountTrieNodeKey, contentValueOffer)
       check:
         res.isErr()
 
@@ -296,34 +286,31 @@ suite "State Validation":
       raiseAssert "Cannot read test vector: " & error
 
     for i, testData in testCase:
-      var stateRoot = KeccakHash.init(testData.state_root.hexToSeqByte())
+      var stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
 
       block:
-        let contentKey = decode(testData.content_key.hexToSeqByte().ByteList).get()
-        let contentValueOffer =
-          SSZ.decode(testData.content_value_offer.hexToSeqByte(), ContractTrieNodeOffer)
+        let contentKey =
+          ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
+        let contentValueOffer = ContractTrieNodeOffer
+          .decode(testData.content_value_offer.hexToSeqByte())
+          .get()
 
         check:
-          validateOfferedContractTrieNode(
-            stateRoot, contentKey.contractTrieNodeKey, contentValueOffer
-          )
+          validateOffer(stateRoot, contentKey.contractTrieNodeKey, contentValueOffer)
           .isOk()
 
       if i == 1:
         continue # second test case has no recursive gossip
 
-      let contentKey =
-        decode(testData.recursive_gossip.content_key.hexToSeqByte().ByteList).get()
-      let contentValueOffer = SSZ.decode(
-        testData.recursive_gossip.content_value_offer.hexToSeqByte(),
-        ContractTrieNodeOffer,
-      )
+      let contentKey = ContentKey
+        .decode(testData.recursive_gossip.content_key.hexToSeqByte().ByteList)
+        .get()
+      let contentValueOffer = ContractTrieNodeOffer
+        .decode(testData.recursive_gossip.content_value_offer.hexToSeqByte())
+        .get()
 
       check:
-        validateOfferedContractTrieNode(
-          stateRoot, contentKey.contractTrieNodeKey, contentValueOffer
-        )
-        .isOk()
+        validateOffer(stateRoot, contentKey.contractTrieNodeKey, contentValueOffer).isOk()
 
   test "Validate invalid ContractTrieNodeOffer nodes - bad state roots":
     const file = testVectorDir / "contract_storage_trie_node.yaml"
@@ -336,15 +323,15 @@ suite "State Validation":
       raiseAssert "Cannot read test vector: " & error
 
     for i, testData in testCase:
-      var stateRoot = KeccakHash.init(stateRoots[i].hexToSeqByte())
+      var stateRoot = KeccakHash.fromBytes(stateRoots[i].hexToSeqByte())
 
-      let contentKey = decode(testData.content_key.hexToSeqByte().ByteList).get()
+      let contentKey =
+        ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
       let contentValueOffer =
-        SSZ.decode(testData.content_value_offer.hexToSeqByte(), ContractTrieNodeOffer)
+        ContractTrieNodeOffer.decode(testData.content_value_offer.hexToSeqByte()).get()
 
-      let res = validateOfferedContractTrieNode(
-        stateRoot, contentKey.contractTrieNodeKey, contentValueOffer
-      )
+      let res =
+        validateOffer(stateRoot, contentKey.contractTrieNodeKey, contentValueOffer)
       check:
         res.isErr()
         res.error() == "hash of proof root node doesn't match the expected root hash"
@@ -356,73 +343,75 @@ suite "State Validation":
       raiseAssert "Cannot read test vector: " & error
 
     for i, testData in testCase:
-      var stateRoot = KeccakHash.init(testData.state_root.hexToSeqByte())
+      var stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
 
       block:
-        let contentKey = decode(testData.content_key.hexToSeqByte().ByteList).get()
-        var contentValueOffer =
-          SSZ.decode(testData.content_value_offer.hexToSeqByte(), ContractTrieNodeOffer)
+        let contentKey =
+          ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
+        var contentValueOffer = ContractTrieNodeOffer
+          .decode(testData.content_value_offer.hexToSeqByte())
+          .get()
 
         contentValueOffer.accountProof[0][0] += 1.byte
 
-        let res = validateOfferedContractTrieNode(
-          stateRoot, contentKey.contractTrieNodeKey, contentValueOffer
-        )
+        let res =
+          validateOffer(stateRoot, contentKey.contractTrieNodeKey, contentValueOffer)
         check:
           res.isErr()
           res.error() == "hash of proof root node doesn't match the expected root hash"
 
       block:
-        let contentKey = decode(testData.content_key.hexToSeqByte().ByteList).get()
-        var contentValueOffer =
-          SSZ.decode(testData.content_value_offer.hexToSeqByte(), ContractTrieNodeOffer)
+        let contentKey =
+          ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
+        var contentValueOffer = ContractTrieNodeOffer
+          .decode(testData.content_value_offer.hexToSeqByte())
+          .get()
 
         contentValueOffer.storageProof[0][0] += 1.byte
 
-        let res = validateOfferedContractTrieNode(
-          stateRoot, contentKey.contractTrieNodeKey, contentValueOffer
-        )
+        let res =
+          validateOffer(stateRoot, contentKey.contractTrieNodeKey, contentValueOffer)
         check:
           res.isErr()
           res.error() == "hash of proof root node doesn't match the expected root hash"
 
       block:
-        let contentKey = decode(testData.content_key.hexToSeqByte().ByteList).get()
-        var contentValueOffer =
-          SSZ.decode(testData.content_value_offer.hexToSeqByte(), ContractTrieNodeOffer)
+        let contentKey =
+          ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
+        var contentValueOffer = ContractTrieNodeOffer
+          .decode(testData.content_value_offer.hexToSeqByte())
+          .get()
 
         contentValueOffer.accountProof[^1][^1] += 1.byte
 
         check:
-          validateOfferedContractTrieNode(
-            stateRoot, contentKey.contractTrieNodeKey, contentValueOffer
-          )
+          validateOffer(stateRoot, contentKey.contractTrieNodeKey, contentValueOffer)
           .isErr()
 
       block:
-        let contentKey = decode(testData.content_key.hexToSeqByte().ByteList).get()
-        var contentValueOffer =
-          SSZ.decode(testData.content_value_offer.hexToSeqByte(), ContractTrieNodeOffer)
+        let contentKey =
+          ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
+        var contentValueOffer = ContractTrieNodeOffer
+          .decode(testData.content_value_offer.hexToSeqByte())
+          .get()
 
         contentValueOffer.storageProof[^1][^1] += 1.byte
 
         check:
-          validateOfferedContractTrieNode(
-            stateRoot, contentKey.contractTrieNodeKey, contentValueOffer
-          )
+          validateOffer(stateRoot, contentKey.contractTrieNodeKey, contentValueOffer)
           .isErr()
 
       block:
-        let contentKey = decode(testData.content_key.hexToSeqByte().ByteList).get()
-        var contentValueOffer =
-          SSZ.decode(testData.content_value_offer.hexToSeqByte(), ContractTrieNodeOffer)
+        let contentKey =
+          ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
+        var contentValueOffer = ContractTrieNodeOffer
+          .decode(testData.content_value_offer.hexToSeqByte())
+          .get()
 
         contentValueOffer.accountProof[^2][^2] += 1.byte
 
         check:
-          validateOfferedContractTrieNode(
-            stateRoot, contentKey.contractTrieNodeKey, contentValueOffer
-          )
+          validateOffer(stateRoot, contentKey.contractTrieNodeKey, contentValueOffer)
           .isErr()
 
   # Contract bytecode offer validation tests
@@ -434,17 +423,15 @@ suite "State Validation":
       raiseAssert "Cannot read test vector: " & error
 
     for i, testData in testCase:
-      var stateRoot = KeccakHash.init(testData.state_root.hexToSeqByte())
+      var stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
 
-      let contentKey = decode(testData.content_key.hexToSeqByte().ByteList).get()
+      let contentKey =
+        ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
       let contentValueOffer =
-        SSZ.decode(testData.content_value_offer.hexToSeqByte(), ContractCodeOffer)
+        ContractCodeOffer.decode(testData.content_value_offer.hexToSeqByte()).get()
 
       check:
-        validateOfferedContractCode(
-          stateRoot, contentKey.contractCodeKey, contentValueOffer
-        )
-        .isOk()
+        validateOffer(stateRoot, contentKey.contractCodeKey, contentValueOffer).isOk()
 
   test "Validate invalid ContractCodeOffer nodes - bad state root":
     const file = testVectorDir / "contract_bytecode.yaml"
@@ -455,15 +442,14 @@ suite "State Validation":
       raiseAssert "Cannot read test vector: " & error
 
     for i, testData in testCase:
-      var stateRoot = KeccakHash.init(stateRoots[i].hexToSeqByte())
+      var stateRoot = KeccakHash.fromBytes(stateRoots[i].hexToSeqByte())
 
-      let contentKey = decode(testData.content_key.hexToSeqByte().ByteList).get()
+      let contentKey =
+        ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
       let contentValueOffer =
-        SSZ.decode(testData.content_value_offer.hexToSeqByte(), ContractCodeOffer)
+        ContractCodeOffer.decode(testData.content_value_offer.hexToSeqByte()).get()
 
-      let res = validateOfferedContractCode(
-        stateRoot, contentKey.contractCodeKey, contentValueOffer
-      )
+      let res = validateOffer(stateRoot, contentKey.contractCodeKey, contentValueOffer)
       check:
         res.isErr()
         res.error() == "hash of proof root node doesn't match the expected root hash"
@@ -475,59 +461,57 @@ suite "State Validation":
       raiseAssert "Cannot read test vector: " & error
 
     for i, testData in testCase:
-      var stateRoot = KeccakHash.init(testData.state_root.hexToSeqByte())
+      var stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
 
       block:
-        let contentKey = decode(testData.content_key.hexToSeqByte().ByteList).get()
+        let contentKey =
+          ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
         var contentValueOffer =
-          SSZ.decode(testData.content_value_offer.hexToSeqByte(), ContractCodeOffer)
+          ContractCodeOffer.decode(testData.content_value_offer.hexToSeqByte()).get()
 
         contentValueOffer.accountProof[0][0] += 1.byte
 
-        let res = validateOfferedContractCode(
-          stateRoot, contentKey.contractCodeKey, contentValueOffer
-        )
+        let res =
+          validateOffer(stateRoot, contentKey.contractCodeKey, contentValueOffer)
         check:
           res.isErr()
           res.error() == "hash of proof root node doesn't match the expected root hash"
 
       block:
-        let contentKey = decode(testData.content_key.hexToSeqByte().ByteList).get()
+        let contentKey =
+          ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
         var contentValueOffer =
-          SSZ.decode(testData.content_value_offer.hexToSeqByte(), ContractCodeOffer)
+          ContractCodeOffer.decode(testData.content_value_offer.hexToSeqByte()).get()
 
         contentValueOffer.code[0] += 1.byte
 
-        let res = validateOfferedContractCode(
-          stateRoot, contentKey.contractCodeKey, contentValueOffer
-        )
+        let res =
+          validateOffer(stateRoot, contentKey.contractCodeKey, contentValueOffer)
         check:
           res.isErr()
           res.error() == "hash of offered bytecode doesn't match the expected code hash"
 
       block:
-        let contentKey = decode(testData.content_key.hexToSeqByte().ByteList).get()
+        let contentKey =
+          ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
         var contentValueOffer =
-          SSZ.decode(testData.content_value_offer.hexToSeqByte(), ContractCodeOffer)
+          ContractCodeOffer.decode(testData.content_value_offer.hexToSeqByte()).get()
 
         contentValueOffer.accountProof[^1][^1] += 1.byte
 
         check:
-          validateOfferedContractCode(
-            stateRoot, contentKey.contractCodeKey, contentValueOffer
-          )
-          .isErr()
+          validateOffer(stateRoot, contentKey.contractCodeKey, contentValueOffer).isErr()
 
       block:
-        let contentKey = decode(testData.content_key.hexToSeqByte().ByteList).get()
+        let contentKey =
+          ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
         var contentValueOffer =
-          SSZ.decode(testData.content_value_offer.hexToSeqByte(), ContractCodeOffer)
+          ContractCodeOffer.decode(testData.content_value_offer.hexToSeqByte()).get()
 
         contentValueOffer.code[^1] += 1.byte
 
-        let res = validateOfferedContractCode(
-          stateRoot, contentKey.contractCodeKey, contentValueOffer
-        )
+        let res =
+          validateOffer(stateRoot, contentKey.contractCodeKey, contentValueOffer)
         check:
           res.isErr()
           res.error() == "hash of offered bytecode doesn't match the expected code hash"
@@ -549,17 +533,15 @@ suite "State Validation":
       if i == 1:
         continue
 
-      var stateRoot = KeccakHash.init(stateRoots[i].hexToSeqByte())
+      var stateRoot = KeccakHash.fromBytes(stateRoots[i].hexToSeqByte())
 
       for kv in testData.recursive_gossip:
-        let contentKey = decode(kv.content_key.hexToSeqByte().ByteList).get()
+        let contentKey = ContentKey.decode(kv.content_key.hexToSeqByte().ByteList).get()
         let contentValueOffer =
-          SSZ.decode(kv.content_value.hexToSeqByte(), AccountTrieNodeOffer)
+          AccountTrieNodeOffer.decode(kv.content_value.hexToSeqByte()).get()
 
         check:
-          validateOfferedAccountTrieNode(
-            stateRoot, contentKey.accountTrieNodeKey, contentValueOffer
-          )
+          validateOffer(stateRoot, contentKey.accountTrieNodeKey, contentValueOffer)
           .isOk()
 
   test "Validate valid ContractTrieNodeOffer recursive gossip nodes":
@@ -572,15 +554,13 @@ suite "State Validation":
       if i != 1:
         continue
 
-      var stateRoot = KeccakHash.init(testData.state_root.hexToSeqByte())
+      var stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
 
       for kv in testData.recursive_gossip:
-        let contentKey = decode(kv.content_key.hexToSeqByte().ByteList).get()
+        let contentKey = ContentKey.decode(kv.content_key.hexToSeqByte().ByteList).get()
         let contentValueOffer =
-          SSZ.decode(kv.content_value.hexToSeqByte(), ContractTrieNodeOffer)
+          ContractTrieNodeOffer.decode(kv.content_value.hexToSeqByte()).get()
 
         check:
-          validateOfferedContractTrieNode(
-            stateRoot, contentKey.contractTrieNodeKey, contentValueOffer
-          )
+          validateOffer(stateRoot, contentKey.contractTrieNodeKey, contentValueOffer)
           .isOk()

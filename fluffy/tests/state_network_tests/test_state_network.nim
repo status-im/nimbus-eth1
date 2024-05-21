@@ -53,11 +53,8 @@ procSuite "State Network":
         contentKey = ContentKey(
           contentType: accountTrieNode, accountTrieNodeKey: accountTrieNodeKey
         )
-        contentId = toContentId(contentKey)
-        value = RetrievalContentValue(
-          contentType: accountTrieNode,
-          accountTrieNode: AccountTrieNodeRetrieval(node: TrieNode.init(v)),
-        )
+        contentId = toContentId(contentKey.encode())
+        value = AccountTrieNodeRetrieval(node: TrieNode.init(v))
 
       discard proto1.contentDB.put(
         contentId, value.encode(), proto1.portalProtocol.localNode.id
@@ -72,7 +69,7 @@ procSuite "State Network":
         contentKey = ContentKey(
           contentType: accountTrieNode, accountTrieNodeKey: accountTrieNodeKey
         )
-        contentId = toContentId(contentKey)
+        contentId = toContentId(contentKey.encode())
 
       # Note: GetContent and thus the lookup here is not really needed, as we
       # only have to request data to one node.
@@ -129,11 +126,8 @@ procSuite "State Network":
         contentKey = ContentKey(
           contentType: accountTrieNode, accountTrieNodeKey: accountTrieNodeKey
         )
-        contentId = toContentId(contentKey)
-        value = RetrievalContentValue(
-          contentType: accountTrieNode,
-          accountTrieNode: AccountTrieNodeRetrieval(node: TrieNode.init(v)),
-        )
+        contentId = toContentId(contentKey.encode())
+        value = AccountTrieNodeRetrieval(node: TrieNode.init(v))
 
       discard proto2.contentDB.put(
         contentId, value.encode(), proto2.portalProtocol.localNode.id

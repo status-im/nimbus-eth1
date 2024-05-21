@@ -30,11 +30,11 @@ suite "State Content Values":
       blockHash = BlockHash.fromHex(testCase.block_hash)
       proof =
         TrieProof.init(testCase.proof.map((hex) => TrieNode.init(hex.hexToSeqByte())))
-      accountTrieNodeOffer = AccountTrieNodeOffer(blockHash: blockHash, proof: proof)
+      accountTrieNodeOffer = AccountTrieNodeOffer.init(proof, blockHash)
 
-      encoded = SSZ.encode(accountTrieNodeOffer)
+      encoded = accountTrieNodeOffer.encode()
       expected = testCase.content_value.hexToSeqByte()
-      decoded = SSZ.decode(encoded, AccountTrieNodeOffer)
+      decoded = AccountTrieNodeOffer.decode(encoded).get()
 
     check:
       encoded == expected
@@ -54,9 +54,9 @@ suite "State Content Values":
       node = TrieNode.init(testCase.trie_node.hexToSeqByte())
       accountTrieNodeRetrieval = AccountTrieNodeRetrieval(node: node)
 
-      encoded = SSZ.encode(accountTrieNodeRetrieval)
+      encoded = accountTrieNodeRetrieval.encode()
       expected = testCase.content_value.hexToSeqByte()
-      decoded = SSZ.decode(encoded, AccountTrieNodeRetrieval)
+      decoded = AccountTrieNodeRetrieval.decode(encoded).get()
 
     check:
       encoded == expected
@@ -86,9 +86,9 @@ suite "State Content Values":
         blockHash: blockHash, storage_proof: storageProof, account_proof: accountProof
       )
 
-      encoded = SSZ.encode(contractTrieNodeOffer)
+      encoded = contractTrieNodeOffer.encode()
       expected = testCase.content_value.hexToSeqByte()
-      decoded = SSZ.decode(encoded, ContractTrieNodeOffer)
+      decoded = ContractTrieNodeOffer.decode(encoded).get()
 
     check:
       encoded == expected
@@ -111,9 +111,9 @@ suite "State Content Values":
       node = TrieNode.init(testCase.trie_node.hexToSeqByte())
       contractTrieNodeRetrieval = ContractTrieNodeRetrieval(node: node)
 
-      encoded = SSZ.encode(contractTrieNodeRetrieval)
+      encoded = contractTrieNodeRetrieval.encode()
       expected = testCase.content_value.hexToSeqByte()
-      decoded = SSZ.decode(encoded, ContractTrieNodeRetrieval)
+      decoded = ContractTrieNodeRetrieval.decode(encoded).get()
 
     check:
       encoded == expected
@@ -140,9 +140,9 @@ suite "State Content Values":
       contractCodeOffer =
         ContractCodeOffer(code: code, blockHash: blockHash, accountProof: accountProof)
 
-      encoded = SSZ.encode(contractCodeOffer)
+      encoded = contractCodeOffer.encode()
       expected = testCase.content_value.hexToSeqByte()
-      decoded = SSZ.decode(encoded, ContractCodeOffer)
+      decoded = ContractCodeOffer.decode(encoded).get()
 
     check:
       encoded == expected
@@ -162,9 +162,9 @@ suite "State Content Values":
       code = Bytecode.init(testCase.bytecode.hexToSeqByte())
       contractCodeRetrieval = ContractCodeRetrieval(code: code)
 
-      encoded = SSZ.encode(contractCodeRetrieval)
+      encoded = contractCodeRetrieval.encode()
       expected = testCase.content_value.hexToSeqByte()
-      decoded = SSZ.decode(encoded, ContractCodeRetrieval)
+      decoded = ContractCodeRetrieval.decode(encoded).get()
 
     check:
       encoded == expected
