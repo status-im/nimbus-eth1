@@ -8,10 +8,24 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+## Database Backend Tracer
+## =======================
+##
+## TODO:
+##
+##  While it works in the current scenario, this tracer needs a second thought
+##  when it comes to transactions on different database descriptor **heads**.
+##  Currently, the transaction logic is **global** (relaitive to the tracer
+##  journal) but should be localised to the current **head**.
+##
+##  Fixing this issue will not be done until the `ctx` logic has been updated
+##  for the `CoredDb` api.
+##
+
 {.push raises: [].}
 
 import
-  std/tables,
+  std/[tables, typetraits],
   eth/common,
   results,
   ../../../aristo as use_aristo,
@@ -56,10 +70,10 @@ type
 
   TracerLogInstRef* = ref object
     ## Logger instance
-    txLevel*: int
-    flags*: set[CoreDbCaptFlags]
-    kvtJournal*: TableRef[KvtDbRef,TracerBlobTabRef]
-    mptJournal*: TableRef[AristoDbRef,TracerPylTabRef]
+    txLevel: int
+    flags: set[CoreDbCaptFlags]
+    kvtJournal: TableRef[KvtDbRef,TracerBlobTabRef]
+    mptJournal: TableRef[AristoDbRef,TracerPylTabRef]
 
   TraceRecorderRef* = ref object of RootRef
     inst: seq[TracerLogInstRef]   ## Production stack for log database
@@ -90,9 +104,17 @@ when EnableDebugLog:
   func `$`(root: VertexID): string =
     let vid = root.uint64
     if 0 < vid:
-      "$" & vid.toHex.strip(leading=true, trailing=false, chars={'0'})
+      "$" & vid.toHex.toLowerAscii
+               .strip(leading=true, trailing=false, chars={'0'})
     else:
       "$ø"
+
+  func `$`(p: PathID): string =
+    let q = desc_identifiers.`$`(p)
+    if q == "(0)":
+      "@ø"
+    else:
+      "@" & q
 
   func `$`(pyl: PayloadRef): string =
     case pyl.pType:
@@ -173,6 +195,7 @@ proc kvtJournalPut(
     key: openArray[byte];
     tbl: TracerBlobRef;
       ) =
+  ## Add or update journal entry recording `kvt` modification
   var byKvt = tr.inst[^1].kvtJournal.getOrDefault kvt
   if byKvt.isNil:
     byKvt = newTable[Blob,TracerBlobRef]()
@@ -184,6 +207,7 @@ proc kvtJournalDel(
     kvt: KvtDbRef;
     key: openArray[byte];
       ) =
+  ## Remove journal entry recording `kvt` modification
   var byKvt = tr.inst[^1].kvtJournal.getOrDefault kvt
   if byKvt.isNil:
     byKvt.del @key
@@ -196,10 +220,12 @@ proc kvtJournalGet(
     key: openArray[byte];
     modOnly = true;
       ): TracerBlobRef =
+  ## Get journal entry recording `kvt` modification. If the argument `modOnly`
+  ## is false, also blind entries are returned.
   var byKvt = tr.inst[^1].kvtJournal.getOrDefault kvt
   if not byKvt.isNil:
     let tbl = byKvt.getOrDefault @key
-    if not modOnly or tbl.isNil or not tbl.blind:
+    if not modOnly or tbl.isNil or not tbl.blind: # or not (not isNil and blind)
       return tbl
 
 
@@ -209,6 +235,7 @@ proc mptJournalPut(
     key: LeafTie;
     tpl: TracerPylRef;
       ) =
+  ## Add or update journal entry recording `mpt` modification
   var byMpt = tr.inst[^1].mptJournal.getOrDefault mpt
   if byMpt.isNil:
     byMpt = newTable[LeafTie,TracerPylRef]()
@@ -220,6 +247,7 @@ proc mptJournalDel(
     mpt: AristoDbRef;
     key: LeafTie;
       ) =
+  ## Remove journal entry recording `mpt` modification
   let byMpt = tr.inst[^1].mptJournal.getOrDefault mpt
   if not byMpt.isNil:
     byMpt.del key
@@ -232,10 +260,12 @@ proc mptJournalGet(
     key: LeafTie;
     modOnly = true;
       ): TracerPylRef =
+  ## Get journal entry recording `mpt` modification. If the argument `modOnly`
+  ## is false, also blind entries are returned.
   let byMpt = tr.inst[^1].mptJournal.getOrDefault mpt
   if not byMpt.isNil:
     let pyl = byMpt.getOrDefault key
-    if not modOnly or pyl.isNil or not pyl.blind:
+    if not modOnly or pyl.isNil or not pyl.blind: # or not (not isNil and blind)
       return pyl
 
 
@@ -246,6 +276,7 @@ proc popDiscard(tr: TraceRecorderRef) =
 
 proc popRestore(tr: TraceRecorderRef) =
   ## Undo journals and remove/pop top entry.
+  const info = "popRestore()"
   doAssert 0 < tr.inst.len
 
   let inst = tr.inst[^1]
@@ -253,15 +284,30 @@ proc popRestore(tr: TraceRecorderRef) =
 
   let mApi = tr.adb.savedApi
   for (mpt,mptTab) in inst.mptJournal.pairs:
+    var deferredDelete: seq[(LeafTie, TracerPylRef)]
     for (key,tpl) in mptTab.pairs:
       if not tpl.blind:
         let (root, path, accPath) = (key.root, @(key.path), tpl.accPath)
         if tpl.old.isNil:
           if PersistPut notin inst.flags:
-            doAssert mApi.delete(mpt, root, path, accPath).isOk
+            # Storage tries need to be deleted first, then the accounts
+            if key.root.distinctBase < LEAST_FREE_VID:
+              deferredDelete.add (key,tpl)
+            else:
+              mApi.delete(mpt, root, path, accPath).isOkOr:
+                raiseAssert info & " failed to delete(" &
+                  $root & "," & $path & "," & $accPath & "): " & $error[1]
         else:
           if PersistDel notin inst.flags:
-            doAssert mApi.mergePayload(mpt, root, path, tpl.old, accPath).isOk
+            mApi.mergePayload(mpt, root, path, tpl.old, accPath).isOkOr:
+              raiseAssert info & " failed to merge(" &
+                $root & "," & $path & "," & $accPath & "): " & $error
+    # Delete accounts now (if any)
+    for (key,tpl) in deferredDelete:
+      let (root, path, accPath) = (key.root, @(key.path), tpl.accPath)
+      mApi.delete(mpt, root, path, accPath).isOkOr:
+        raiseAssert info & " failed to delete(" &
+          $root & "," & $path & "," & $accPath & "): " & $error[1]
 
   let kApi = tr.kdb.savedApi
   for (kvt,kvtTab) in inst.kvtJournal.pairs:
@@ -476,8 +522,6 @@ proc traceRecorder(
           level = tr.inst.len - 1
           flags = tr.inst[^1].flags
           txLevel = tr.inst[^1].txLevel
-
-      when EnableDebugLog:
         debug logTxt, level, txLevel, flags
 
       # Make sure that the system is properly nested
@@ -500,8 +544,6 @@ proc traceRecorder(
           level = tr.inst.len - 1
           flags = tr.inst[^1].flags
           txLevel = tr.inst[^1].txLevel
-
-      when EnableDebugLog:
         debug logTxt, level, txLevel, flags
 
       # Make sure that the system is properly nested
@@ -630,7 +672,7 @@ proc traceRecorder(
          debug logTxt, level, flags, key, log="del()"
 
       else:
-        # Was modified earlier
+        # Was modified earlier, keep the old value
         let tpl = TracerPylRef(old: jrn.old, accPath: jrn.accPath)
         tr.mptJournalPut(mpt, key, tpl)
         when EnableDebugLog:
@@ -669,7 +711,6 @@ proc traceRecorder(
         let rc = api.fetchPayload(mpt, root, path)
         if rc.isOk:
           tpl.old = rc.value
-          tpl.accPath = accPath
         elif rc.error[1] != FetchPathNotFound:
           when EnableDebugLog:
             debug logTxt, level, flags, key, error=rc.error[1]
@@ -728,7 +769,6 @@ proc traceRecorder(
         let rc = api.fetchPayload(mpt, root, path)
         if rc.isOk:
           tpl.old = rc.value
-          tpl.accPath = accPath
         elif rc.error[1] != FetchPathNotFound:
           when EnableDebugLog:
             debug logTxt, level, flags, key, error=rc.error[1]
@@ -770,10 +810,22 @@ proc topInst*(tr: TraceRecorderRef): TracerLogInstRef =
 func kLog*(inst: TracerLogInstRef): TableRef[Blob,Blob] =
   ## Export `Kvt` journal
   result = newTable[Blob,Blob]()
-  for (kvt,kvtTab) in inst.kvtJournal.pairs:
+  for (_,kvtTab) in inst.kvtJournal.pairs:
     for (key,tbl) in kvtTab.pairs:
       if tbl.cur.len != 0:
         result[key] = tbl.cur
+
+func mLog*(inst: TracerLogInstRef): TableRef[LeafTie,PayloadRef] =
+  ## Export `mpt` journal
+  result = newTable[LeafTie,PayloadRef]()
+  for (_,mptTab) in inst.mptJournal.pairs:
+    for (key,tpl) in mptTab.pairs:
+      if not tpl.cur.isNil:
+        result[key] = tpl.cur
+
+func flags*(inst: TracerLogInstRef): set[CoreDbCaptFlags] =
+  ## Getter
+  inst.flags
 
 proc pop*(tr: TraceRecorderRef): bool =
   ## Reduce logger stack, returns `true` on success. There will always be
