@@ -344,6 +344,30 @@ proc getOldestJournalBlockNumber*(
     doAssert header.stateRoot == st.stateRoot or st.blockNumber == 0
     return st.blockNumber
 
+proc getLatestJournalBlockNumber*(
+    db: CoreDbRef;
+    relax = false;
+      ): BlockNumber
+      {.gcsafe, raises: [RlpError].} =
+  ## Ditto for latest block number, or zero if there is none. This function
+  ## verifies the state consistency of the database and throws an assert
+  ## exception if that fails. So the function will only apply to a finalised
+  ## (aka hashified) database state. For an an opportunistic use, the `relax`
+  ## argument can be set `true` so this function also returns zero if the
+  ## state consistency check fails.
+  ##
+  var
+    header: BlockHeader
+  let
+    st = db.ctx.getMpt(CtGeneric).backend.toAristoLatestState
+    # The correct block number is one step ahead of the journal block number
+    bn = st.blockNumber + 1
+  if db.getBlockHeader(bn, header):
+    discard db.ctx.newColumn(CtAccounts,header.stateRoot).valueOr:
+      if relax:
+        return
+      raiseAssert "getLatestJournalBlockNumber(): state mismatch at #" & $bn
+    return bn
 
 proc getBlockHeader*(
     db: CoreDbRef;

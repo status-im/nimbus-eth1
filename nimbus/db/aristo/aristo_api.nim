@@ -212,6 +212,14 @@ type
       ## Getter, returns `true` if the argument `tx` referes to the current
       ## top level transaction.
 
+  AristoApiJournalGetFilterFn* =
+    proc(be: BackendRef;
+         inx: int;
+        ): Result[FilterRef,AristoError]
+        {.noRaise.}
+      ## Fetch filter from journal where the argument `inx` relates to the
+      ## age starting with `0` for the most recent.
+
   AristoApiJournalGetInxFn* =
     proc(be: BackendRef;
          fid: Option[FilterID];
@@ -402,6 +410,7 @@ type
     hasPath*: AristoApiHasPathFn
     hikeUp*: AristoApiHikeUpFn
     isTop*: AristoApiIsTopFn
+    journalGetFilter*: AristoApiJournalGetFilterFn
     journalGetInx*: AristoApiJournalGetInxFn
     level*: AristoApiLevelFn
     nForked*: AristoApiNForkedFn
@@ -422,45 +431,46 @@ type
     ## Index/name mapping for profile slots
     AristoApiProfTotal          = "total"
 
-    AristoApiProfCommitFn         = "commit"
-    AristoApiProfDeleteFn         = "delete"
-    AristoApiProfDelTreeFn        = "delTree"
-    AristoApiProfFetchPayloadFn   = "fetchPayload"
-    AristoApiProfFindTxFn         = "findTx"
-    AristoApiProfFinishFn         = "finish"
-    AristoApiProfForgetFn         = "forget"
-    AristoApiProfForkTxFn         = "forkTx"
-    AristoApiProfGetKeyRcFn       = "getKeyRc"
-    AristoApiProfHashifyFn        = "hashify"
-    AristoApiProfHasPathFn        = "hasPath"
-    AristoApiProfHikeUpFn         = "hikeUp"
-    AristoApiProfIsTopFn          = "isTop"
-    AristoApiProfJournalGetInxFn  = "journalGetInx"
-    AristoApiProfLevelFn          = "level"
-    AristoApiProfNForkedFn        = "nForked"
-    AristoApiProfMergeFn          = "merge"
-    AristoApiProfMergePayloadFn   = "mergePayload"
-    AristoApiProfPathAsBlobFn     = "pathAsBlob"
-    AristoApiProfPersistFn        = "persist"
-    AristoApiProfReCentreFn       = "reCentre"
-    AristoApiProfRollbackFn       = "rollback"
-    AristoApiProfSerialiseFn      = "serialise"
-    AristoApiProfTxBeginFn        = "txBegin"
-    AristoApiProfTxTopFn          = "txTop"
-    AristoApiProfVidFetchFn       = "vidFetch"
-    AristoApiProfVidDisposeFn     = "vidDispose"
+    AristoApiProfCommitFn           = "commit"
+    AristoApiProfDeleteFn           = "delete"
+    AristoApiProfDelTreeFn          = "delTree"
+    AristoApiProfFetchPayloadFn     = "fetchPayload"
+    AristoApiProfFindTxFn           = "findTx"
+    AristoApiProfFinishFn           = "finish"
+    AristoApiProfForgetFn           = "forget"
+    AristoApiProfForkTxFn           = "forkTx"
+    AristoApiProfGetKeyRcFn         = "getKeyRc"
+    AristoApiProfHashifyFn          = "hashify"
+    AristoApiProfHasPathFn          = "hasPath"
+    AristoApiProfHikeUpFn           = "hikeUp"
+    AristoApiProfIsTopFn            = "isTop"
+    AristoApiProfJournalGetFilterFn = "journalGetFilter"
+    AristoApiProfJournalGetInxFn    = "journalGetInx"
+    AristoApiProfLevelFn            = "level"
+    AristoApiProfNForkedFn          = "nForked"
+    AristoApiProfMergeFn            = "merge"
+    AristoApiProfMergePayloadFn     = "mergePayload"
+    AristoApiProfPathAsBlobFn       = "pathAsBlob"
+    AristoApiProfPersistFn          = "persist"
+    AristoApiProfReCentreFn         = "reCentre"
+    AristoApiProfRollbackFn         = "rollback"
+    AristoApiProfSerialiseFn        = "serialise"
+    AristoApiProfTxBeginFn          = "txBegin"
+    AristoApiProfTxTopFn            = "txTop"
+    AristoApiProfVidFetchFn         = "vidFetch"
+    AristoApiProfVidDisposeFn       = "vidDispose"
 
-    AristoApiProfBeGetVtxFn       = "be/getVtx"
-    AristoApiProfBeGetKeyFn       = "be/getKey"
-    AristoApiProfBeGetFilFn       = "be/getFil"
-    AristoApiProfBeGetIdgFn       = "be/getIfg"
-    AristoApiProfBeGetFqsFn       = "be/getFqs"
-    AristoApiProfBePutVtxFn       = "be/putVtx"
-    AristoApiProfBePutKeyFn       = "be/putKey"
-    AristoApiProfBePutFilFn       = "be/putFil"
-    AristoApiProfBePutIdgFn       = "be/putIdg"
-    AristoApiProfBePutFqsFn       = "be/putFqs"
-    AristoApiProfBePutEndFn       = "be/putEnd"
+    AristoApiProfBeGetVtxFn         = "be/getVtx"
+    AristoApiProfBeGetKeyFn         = "be/getKey"
+    AristoApiProfBeGetFilFn         = "be/getFil"
+    AristoApiProfBeGetIdgFn         = "be/getIfg"
+    AristoApiProfBeGetFqsFn         = "be/getFqs"
+    AristoApiProfBePutVtxFn         = "be/putVtx"
+    AristoApiProfBePutKeyFn         = "be/putKey"
+    AristoApiProfBePutFilFn         = "be/putFil"
+    AristoApiProfBePutIdgFn         = "be/putIdg"
+    AristoApiProfBePutFqsFn         = "be/putFqs"
+    AristoApiProfBePutEndFn         = "be/putEnd"
 
   AristoApiProfRef* = ref object of AristoApiRef
     ## Profiling API extension of `AristoApiObj`
@@ -486,6 +496,7 @@ when AutoValidateApiHooks:
     doAssert not api.hasPath.isNil
     doAssert not api.hikeUp.isNil
     doAssert not api.isTop.isNil
+    doAssert not api.journalGetFilter.isNil
     doAssert not api.journalGetInx.isNil
     doAssert not api.level.isNil
     doAssert not api.nForked.isNil
@@ -539,6 +550,7 @@ func init*(api: var AristoApiObj) =
   api.hasPath = hasPath
   api.hikeUp = hikeUp
   api.isTop = isTop 
+  api.journalGetFilter = journalGetFilter
   api.journalGetInx = journalGetInx
   api.level = level
   api.nForked = nForked
@@ -562,33 +574,34 @@ func init*(T: type AristoApiRef): T =
 
 func dup*(api: AristoApiRef): AristoApiRef =
   result = AristoApiRef(
-    commit:         api.commit,
-    delete:         api.delete,
-    delTree:        api.delTree,
-    fetchPayload:   api.fetchPayload,
-    findTx:         api.findTx,
-    finish:         api.finish,
-    forget:         api.forget,
-    forkTx:         api.forkTx,
-    getKeyRc:       api.getKeyRc,
-    hashify:        api.hashify,
-    hasPath:        api.hasPath,
-    hikeUp:         api.hikeUp,
-    isTop:          api.isTop,
-    journalGetInx:  api.journalGetInx,
-    level:          api.level,
-    nForked:        api.nForked,
-    merge:          api.merge,
-    mergePayload:   api.mergePayload,
-    pathAsBlob:     api.pathAsBlob,
-    persist:        api.persist,
-    reCentre:       api.reCentre,
-    rollback:       api.rollback,
-    serialise:      api.serialise,
-    txBegin:        api.txBegin,
-    txTop:          api.txTop,
-    vidFetch:       api.vidFetch,
-    vidDispose:     api.vidDispose)
+    commit:           api.commit,
+    delete:           api.delete,
+    delTree:          api.delTree,
+    fetchPayload:     api.fetchPayload,
+    findTx:           api.findTx,
+    finish:           api.finish,
+    forget:           api.forget,
+    forkTx:           api.forkTx,
+    getKeyRc:         api.getKeyRc,
+    hashify:          api.hashify,
+    hasPath:          api.hasPath,
+    hikeUp:           api.hikeUp,
+    isTop:            api.isTop,
+    journalGetFilter: api.journalGetFilter,
+    journalGetInx:    api.journalGetInx,
+    level:            api.level,
+    nForked:          api.nForked,
+    merge:            api.merge,
+    mergePayload:     api.mergePayload,
+    pathAsBlob:       api.pathAsBlob,
+    persist:          api.persist,
+    reCentre:         api.reCentre,
+    rollback:         api.rollback,
+    serialise:        api.serialise,
+    txBegin:          api.txBegin,
+    txTop:            api.txTop,
+    vidFetch:         api.vidFetch,
+    vidDispose:       api.vidDispose)
   when AutoValidateApiHooks:
     api.validate
 
@@ -683,6 +696,11 @@ func init*(
     proc(a: AristoTxRef): auto =
       AristoApiProfIsTopFn.profileRunner:
         result = api.isTop(a)
+
+  profApi.journalGetFilter =
+    proc(a: BackendRef; b: int): auto =
+      AristoApiProfJournalGetFilterFn.profileRunner:
+        result = api.journalGetInx(a, b)
 
   profApi.journalGetInx =
     proc(a: BackendRef; b: Option[FilterID]; c = false): auto =

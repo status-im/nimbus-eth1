@@ -11,11 +11,7 @@
 ## Unifies different ledger management APIs. All ledger objects are
 ## derived from the base objects
 ## ::
-##   LedgerRef   => AccountsCache, overloaded AccountsCache, etc.
 ##   LedgerSpRef => SavePoint, overloaded SavePoint etc
-##
-## In order to directly use `AccountsCache` it must be imported via
-## `import db/ledger/accounts_cache`. In this case, there is no `LedgerRef`.
 ##
 {.push raises: [].}
 

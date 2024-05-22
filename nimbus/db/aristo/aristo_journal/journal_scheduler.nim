@@ -561,7 +561,7 @@ func `[]`*(
     journal: QidSchedRef;                          # Cascaded fifos descriptor
     bix: BackwardsIndex;                           # Index into latest items
       ): QueueID =
-  ## Variant of `[]` for provifing `[^bix]`.
+  ## Variant of `[]` for providing `[^bix]`.
   journal[journal.len - bix.distinctBase]
 
 

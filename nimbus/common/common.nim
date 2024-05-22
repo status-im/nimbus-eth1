@@ -158,7 +158,7 @@ proc init(com         : CommonRef,
   com.forkTransitionTable = config.toForkTransitionTable()
   com.networkId   = networkId
   com.syncProgress= SyncProgress()
-  com.ldgType     = LedgerCache
+  com.ldgType     = (if ldgType == LedgerType(0): LedgerCache else: ldgType)
   com.pruneHistory= pruneHistory
 
   # Initalise the PoA state regardless of whether it is needed on the current
@@ -184,8 +184,12 @@ proc init(com         : CommonRef,
       td: some(0.u256),
       time: some(genesis.timestamp)
     ))
-    com.genesisHeader = toGenesisHeader(genesis,
-      com.currentFork, com.db, com.ldgType)
+
+    # Must not overwrite the global state on the single state DB
+    if not db.getBlockHeader(0.toBlockNumber, com.genesisHeader):
+      com.genesisHeader = toGenesisHeader(genesis,
+        com.currentFork, com.db, com.ldgType)
+
     com.setForkId(com.genesisHeader)
     com.pos.timestamp = genesis.timestamp
   else:
