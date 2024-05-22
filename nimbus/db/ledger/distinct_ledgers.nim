@@ -88,24 +88,6 @@ when EnableMptDump:
         if not adb.isNil:
           return adb.pp(kMapOk=false,backendOK=true)
 
-      if db.isLegacy:
-        let ldb = be.toLegacy()
-        var blurb: seq[string]
-        blurb.add "level=" & $db.level
-        try:
-          for (k,v) in ldb.pairs:
-            let key = HashKey.fromBytes(k).value
-            if key.isValid:
-              let acc = rlp.decode(v, Account)
-              blurb.add "(" & key.pp & ",(" &
-                $acc.nonce & "," &
-                $acc.balance & "," &
-                acc.storageRoot.pp & "," &
-                acc.codeHash.pp(codeHashOk=true) & "))"
-        except RlpError as e:
-          raiseAssert "dump: " & $e.name & " - " & e.msg
-        return blurb.join("\n    ")
-
     # Oops
     "<" & $db.dbType & ">"
 
