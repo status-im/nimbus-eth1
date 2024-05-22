@@ -108,11 +108,14 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
     portalNetwork = config.portalNetwork
 
   case portalNetwork
-  of testnet0:
-    for enrURI in testnet0BootstrapNodes:
+  of mainnet:
+    for enrURI in mainnetBootstrapNodes:
       var record: Record
       if fromURI(record, enrURI):
         bootstrapRecords.add(record)
+  of testnet:
+    # TODO: add testnet repo with bootstrap file.
+    discard
   else:
     discard
 

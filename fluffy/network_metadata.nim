@@ -33,16 +33,16 @@ const
     currentSourcePath.parentDir.parentDir.replace('\\', '/') / "vendor" /
     "portal-mainnet" / "config"
   # Note:
-  # For now it gets called testnet0 but this Portal network serves Eth1 mainnet
-  # data. Giving the actual Portal (test)networks different names might not be
-  # that useful as there is no way to distinguish the networks currently.
+  # These are the bootstrap nodes for the Portal mainnet.
+  # TODO: For the Portal testnet, additional bootstrap nodes need to be read
+  # still and Protocol Ids need to be adjusted.
   #
   # When more config data is required per Portal network, a metadata object can
   # be created, but right now only bootstrap nodes can be different.
   # TODO: It would be nice to be able to use `loadBootstrapFile` here, but that
   # doesn't work at compile time. The main issue seems to be the usage of
   # rlp.rawData() in the enr code.
-  testnet0BootstrapNodes* =
+  mainnetBootstrapNodes* =
     loadCompileTimeBootstrapNodes(portalConfigDir / "bootstrap_nodes.txt")
 
   finishedAccumulatorSSZ* = slurp(portalConfigDir / "finished_accumulator.ssz")
