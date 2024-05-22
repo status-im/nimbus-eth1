@@ -38,7 +38,8 @@ const
 
 let
   # Standard test sample
-  bChainCapture = bulkTest0
+  memorySampleDefault = mainTest0m
+  persistentSampleDefault = mainTest2r
 
 # ------------------------------------------------------------------------------
 # Helpers
@@ -189,6 +190,7 @@ proc initRunnerDB(
   setErrorLevel()
   coreDB.trackLegaApi = false
   coreDB.trackNewApi = false
+  coreDB.trackLedgerApi =false
   coreDB.localDbOnly = false
 
 # ------------------------------------------------------------------------------
@@ -197,7 +199,7 @@ proc initRunnerDB(
 
 proc chainSyncRunner(
     noisy = true;
-    capture = bChainCapture;
+    capture = memorySampleDefault;
     dbType = CoreDbType(0);
     ldgType = ldgTypeDefault;
     profilingOk = false;
@@ -212,7 +214,7 @@ proc chainSyncRunner(
                       .splitFile.name.split(".")[0]
                       .strip(leading=false, chars={'0'..'9'})
     filePaths = capture.files.mapIt(it.findFilePath(baseDir,repoDir).value)
-    baseDir = getTmpDir() / capture.name & "-chain-sync"
+    baseDir = getTmpDir() / capture.dbName & "-chain-sync"
     dbDir = baseDir / "tmp"
     numBlocks = capture.numBlocks
     numBlocksInfo = if numBlocks == high(int): "all" else: $numBlocks
@@ -250,12 +252,85 @@ proc chainSyncRunner(
       check noisy.test_chainSync(filePaths, com, numBlocks,
         lastOneExtra=lastOneExtraOk, enaLogging=enaLoggingOk)
 
+
+proc persistentSyncPreLoadAndResumeRunner(
+    noisy = true;
+    capture = persistentSampleDefault;
+    dbType = CoreDbType(0);
+    ldgType = ldgTypeDefault;
+    profilingOk = false;
+    finalDiskCleanUpOk = true;
+    enaLoggingOk = false;
+    lastOneExtraOk = true;
+      ) =
+  ## Test backend database and ledger
+  let
+    fileInfo = capture.files[0]
+                      .splitFile.name.split(".")[0]
+                      .strip(leading=false, chars={'0'..'9'})
+    filePaths = capture.files.mapIt(it.findFilePath(baseDir,repoDir).value)
+    baseDir = getTmpDir() / capture.dbName & "-chain-sync"
+    dbDir = baseDir / "tmp"
+
+    dbType = block:
+      # Decreasing priority: dbType, capture.dbType, dbTypeDefault
+      var effDbType = dbTypeDefault
+      if dbType != CoreDbType(0):
+        effDbType = dbType
+      elif capture.dbType != CoreDbType(0):
+        effDbType = capture.dbType
+      effDbType
+
+  doAssert dbType in CoreDbPersistentTypes
+  defer: baseDir.flushDbDir
+
+  let
+    firstPart = min(capture.numBlocks div 2, 200_000)
+    secndPart = capture.numBlocks
+    secndPartInfo = if secndPart == high(int): "all" else: $secndPart
+
+  suite &"CoreDB pre-load and resume test ..{firstPart}..{secndPartInfo}":
+
+    test "Populate db by initial sample parts":
+      let
+        com = initRunnerDB(dbDir, capture, dbType, ldgType)
+      defer:
+        com.db.finish(flush = finalDiskCleanUpOk)
+        if profilingOk: noisy.test_chainSyncProfilingPrint firstPart
+
+      if noisy:
+        com.db.trackNewApi = true
+        com.db.trackNewApi = true
+        com.db.trackLedgerApi = true
+        com.db.localDbOnly = true
+
+      check noisy.test_chainSync(filePaths, com, firstPart,
+        lastOneExtra=lastOneExtraOk, enaLogging=enaLoggingOk)
+
+    test &"Continue with rest of sample":
+      let
+        com = initRunnerDB(dbDir, capture, dbType, ldgType)
+      defer:
+        com.db.finish(flush = finalDiskCleanUpOk)
+        if profilingOk: noisy.test_chainSyncProfilingPrint secndPart
+        if finalDiskCleanUpOk: dbDir.flushDbDir
+
+      if noisy:
+        com.db.trackNewApi = true
+        com.db.trackNewApi = true
+        com.db.trackLedgerApi = true
+        com.db.localDbOnly = true
+
+      check noisy.test_chainSync(filePaths, com, secndPart,
+        lastOneExtra=lastOneExtraOk, enaLogging=enaLoggingOk)
+
 # ------------------------------------------------------------------------------
 # Main function(s)
 # ------------------------------------------------------------------------------
 
 proc coreDbMain*(noisy = defined(debug)) =
   noisy.chainSyncRunner()
+  noisy.persistentSyncPreLoadAndResumeRunner()
 
 when isMainModule:
   import
@@ -267,24 +342,28 @@ when isMainModule:
 
   setErrorLevel()
 
+  when true:
+    false.coreDbMain()
+
   # This one uses the readily available dump: `bulkTest0` and some huge replay
   # dumps `bulkTest2`, `bulkTest3`, .. from the `nimbus-eth1-blobs` package.
   # For specs see `tests/test_coredb/bulk_test_xx.nim`.
 
   sampleList = cmdLineConfig().samples
   if sampleList.len == 0:
-    sampleList = @[bChainCapture]
+    sampleList = @[memorySampleDefault]
 
-  var state: (Duration, int)
-  for n,capture in sampleList:
-    noisy.profileSection("@sample #" & $n, state):
-      noisy.chainSyncRunner(
-        capture = capture,
-        #profilingOk = true,
-        #finalDiskCleanUpOk = false,
-      )
+  when true: # and false:
+    var state: (Duration, int)
+    for n,capture in sampleList:
+      noisy.profileSection("@sample #" & $n, state):
+        noisy.chainSyncRunner(
+          capture = capture,
+          #profilingOk = true,
+          #finalDiskCleanUpOk = false,
+        )
 
-  noisy.say "***", "total: ", state[0].pp, " sections: ", state[1]
+    noisy.say "***", "total: ", state[0].pp, " sections: ", state[1]
 
 # ------------------------------------------------------------------------------
 # End

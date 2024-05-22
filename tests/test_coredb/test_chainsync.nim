@@ -16,7 +16,7 @@ import
   unittest2,
   ../../nimbus/core/chain,
   ../../nimbus/db/ledger,
-  ../replay/[pp, undump_blocks, xcheck],
+  ../replay/[pp, undump_blocks, undump_blocks_era1, xcheck],
   ./test_helpers
 
 type
@@ -160,10 +160,31 @@ proc test_chainSync*(
   let
     sayBlocks = 900
     chain = com.newChain
+    blockOnDb = com.db.getLatestJournalBlockNumber()
     lastBlock = max(1, numBlocks).toBlockNumber
 
   noisy.initLogging com
   defer: com.finishLogging()
+
+  # Scan folder for `era1` files (ignoring the argument file name)
+  let
+    (dir, _, ext) = filePaths[0].splitFile
+    files =
+      if filePaths.len == 1 and ext == ".era1":
+        @[dir]
+      else:
+        filePaths
+
+  # If the least block is non-zero, resume at the next block
+  let start = block:
+    if blockOnDb == 0:
+      0u64
+    elif blockOnDb < lastBlock:
+      noisy.say "***", "resuming at #", blockOnDb+1
+      blockOnDb.truncate(uint64) + 1
+    else:
+      noisy.say "***", "stop: sample exhausted"
+      return true
 
   # Profile variables will be non-nil if profiling is available. The profiling
   # API data need to be captured so it will be available after the services
@@ -175,16 +196,10 @@ proc test_chainSync*(
   when LedgerEnableApiProfiling:
     ldgProfData = com.db.ldgProfData()
 
-  # Scan folder for `era1` files (ignoring the argument file name)
-  let
-    (dir, _, ext) = filePaths[0].splitFile
-    files =
-      if filePaths.len == 1 and ext == ".era1":
-        @[dir]
-      else:
-        filePaths
+  # This will enable printing the `era1` covered block ranges (if any)
+  undump_blocks_era1.noisy = noisy
 
-  for w in files.undumpBlocks:
+  for w in files.undumpBlocks(least = start):
     let (fromBlock, toBlock) = (w[0][0].blockNumber, w[0][^1].blockNumber)
     if fromBlock == 0.u256:
       xCheck w[0][0] == com.db.getBlockHeader(0.u256)
@@ -220,7 +235,7 @@ proc test_chainSync*(
       bodies9 = w[1][pivot .. ^1]
     doAssert lastBlock == headers9[0].blockNumber
 
-    # Process leading betch before `lastBlock` (if any)
+    # Process leading batch before `lastBlock` (if any)
     var dotsOrSpace = "..."
     if fromBlock < lastBlock:
       let
