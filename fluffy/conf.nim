@@ -58,7 +58,8 @@ type
 
   PortalNetwork* = enum
     none
-    testnet0
+    mainnet
+    testnet
 
   # The networks alias Portal sub-protocols
   Network* = enum
@@ -97,7 +98,7 @@ type
       desc:
         "Select which Portal network to join. This will set the " &
         "Portal network specific bootstrap nodes automatically",
-      defaultValue: PortalNetwork.testnet0,
+      defaultValue: PortalNetwork.mainnet,
       name: "portal-network"
     .}: PortalNetwork
 
@@ -107,7 +108,7 @@ type
         "DEPRECATED: The --network flag will be removed in the future, please use the drop in replacement --portal-network flag instead",
       defaultValue: none(PortalNetwork),
       name: "network"
-    .}: Option[PortalNetwork.testnet0]
+    .}: Option[PortalNetwork.mainnet]
 
     networks* {.
       desc: "Select which networks (Portal sub-protocols) to enable",
