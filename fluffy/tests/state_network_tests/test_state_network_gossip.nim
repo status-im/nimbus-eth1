@@ -100,7 +100,7 @@ procSuite "State Network Gossip":
         decodedValue = AccountTrieNodeOffer.decode(value).get()
         nextValue = recursiveGossipSteps[1].content_value.hexToSeqByte()
         nextDecodedValue = AccountTrieNodeOffer.decode(nextValue).get()
-        nextRetrievalValue = nextDecodedValue.toRetrievalValue().encode()
+        nextRetrievalValue = nextDecodedValue.toRetrievalValue()
 
       if i == 0:
         await currentNode.portalProtocol.gossipOffer(
@@ -109,7 +109,8 @@ procSuite "State Network Gossip":
 
       await sleepAsync(100.milliseconds) #TODO figure out how to get rid of this sleep
 
-      check (await nextNode.getContent(decodedNextKey)) == Opt.some(nextRetrievalValue)
+      check (await nextNode.getAccountTrieNode(decodedNextKey.accountTrieNodeKey)) ==
+        Opt.some(nextRetrievalValue)
 
     for i in 0 .. numOfClients:
       await clients[i].portalProtocol.baseProtocol.closeWait()
