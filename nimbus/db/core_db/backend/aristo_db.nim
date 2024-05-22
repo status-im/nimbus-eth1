@@ -245,6 +245,15 @@ func toAristo*(mBe: CoreDbMptBackendRef): AristoDbRef =
   if not mBe.isNil and mBe.parent.isAristo:
     return mBe.AristoCoreDbMptBE.adb
 
+proc toAristoLatestState*(
+    mBe: CoreDbMptBackendRef;
+      ): tuple[stateRoot: Hash256, blockNumber: BlockNumber] =
+  if not mBe.isNil and mBe.parent.isAristo:
+    let fil = mBe.parent.AristoCoreDbRef.adbBase.getFromJournal 0
+    if not fil.isNil:
+      return (fil.trg, fil.fid.distinctBase.toBlockNumber)
+  (EMPTY_ROOT_HASH, 0.toBlockNumber)
+
 proc toAristoOldestState*(
     mBe: CoreDbMptBackendRef;
       ): tuple[stateRoot: Hash256, blockNumber: BlockNumber] =

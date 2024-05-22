@@ -576,6 +576,11 @@ proc getFromJournal*(base: AristoBaseRef; fid: Option[FilterID]): FilterRef =
       return FilterRef(nil)
     return fp.fil
 
+proc getFromJournal*(base: AristoBaseRef; inx: int): FilterRef =
+  let be = base.ctx.mpt.backend
+  if not be.isNil:
+    return  base.api.journalGetFilter(be, inx).valueOr: FilterRef(nil)
+
 # ---------------------
 
 func to*(dsc: CoreDxMptRef, T: type AristoDbRef): T =

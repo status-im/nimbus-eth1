@@ -21,7 +21,7 @@ import
 
 proc journalGetInx*(
     be: BackendRef;
-    fid = none(FilterID);
+    fid: Option[FilterID];
     earlierOK = false;
       ): Result[JournalInx,AristoError] =
   ## If there is some argument `fid`, find the filter on the journal with ID
@@ -70,6 +70,25 @@ proc journalGetInx*(
     return err(FilInxByQidFailed)
 
   ok fip
+
+
+proc journalGetFilter*(
+    be: BackendRef;
+    inx: int;
+      ): Result[FilterRef,AristoError] =
+  ## Fetch filter from journal where the argument `inx` relates to the age
+  ## starting with `0` for the most recent.
+  ##
+  if be.journal.isNil:
+    return err(FilQuSchedDisabled)
+
+  let qid = be.journal[inx]
+  if qid.isValid:
+    let fil = be.getFilFn(qid).valueOr:
+      return err(error)
+    return ok(fil)
+
+  err(FilFilterNotFound)
 
 
 proc journalGetOverlap*(
