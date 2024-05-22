@@ -13,7 +13,7 @@ import
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ../../network/wire/[portal_protocol, portal_stream],
   ../../network/history/[history_content, history_network],
-  ../../network/state/[state_content, state_network],
+  ../../network/state/[state_content, state_network, state_gossip],
   ../../database/content_db,
   .././test_helpers,
   ../../eth_data/yaml_utils
@@ -74,7 +74,7 @@ procSuite "State Network Gossip":
           header: ByteList.init(headerRlp), proof: BlockHeaderProof.init()
         )
         value = recursiveGossipSteps[0].content_value.hexToSeqByte()
-        decodedValue = SSZ.decode(value, AccountTrieNodeOffer)
+        decodedValue = AccountTrieNodeOffer.decode(value).get()
         contentKey = history_content.ContentKey
           .init(history_content.ContentType.blockHeader, decodedValue.blockHash)
           .encode()
@@ -89,28 +89,22 @@ procSuite "State Network Gossip":
         nextNode = clients[i + 1]
 
         key = ByteList.init(pair.content_key.hexToSeqByte())
-        decodedKey = state_content.decode(key).valueOr:
+        decodedKey = state_content.ContentKey.decode(key).valueOr:
           raiseAssert "Cannot decode key"
 
         nextKey = ByteList.init(recursiveGossipSteps[1].content_key.hexToSeqByte())
-        decodedNextKey = state_content.decode(nextKey).valueOr:
+        decodedNextKey = state_content.ContentKey.decode(nextKey).valueOr:
           raiseAssert "Cannot decode key"
 
         value = pair.content_value.hexToSeqByte()
-        decodedValue = SSZ.decode(value, AccountTrieNodeOffer)
-        offerValue =
-          OfferContentValue(contentType: accountTrieNode, accountTrieNode: decodedValue)
-
+        decodedValue = AccountTrieNodeOffer.decode(value).get()
         nextValue = recursiveGossipSteps[1].content_value.hexToSeqByte()
-        nextDecodedValue = SSZ.decode(nextValue, AccountTrieNodeOffer)
-        nextOfferValue = OfferContentValue(
-          contentType: accountTrieNode, accountTrieNode: nextDecodedValue
-        )
-        nextRetrievalValue = nextOfferValue.offerContentToRetrievalContent().encode()
+        nextDecodedValue = AccountTrieNodeOffer.decode(nextValue).get()
+        nextRetrievalValue = nextDecodedValue.toRetrievalValue().encode()
 
       if i == 0:
-        await currentNode.portalProtocol.gossipContent(
-          Opt.none(NodeId), key, decodedKey, value, offerValue
+        await currentNode.portalProtocol.gossipOffer(
+          Opt.none(NodeId), decodedKey.accountTrieNodeKey, decodedValue
         )
 
       await sleepAsync(100.milliseconds) #TODO figure out how to get rid of this sleep

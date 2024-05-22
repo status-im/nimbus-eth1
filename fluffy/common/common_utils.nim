@@ -14,7 +14,7 @@ import
   stew/[io2, arrayops],
   eth/p2p/discoveryv5/enr
 
-func init*(T: type KeccakHash, hash: openArray[byte]): T =
+func fromBytes*(T: type KeccakHash, hash: openArray[byte]): T =
   doAssert(hash.len() == 32)
   KeccakHash(data: array[32, byte].initCopyFrom(hash))
 

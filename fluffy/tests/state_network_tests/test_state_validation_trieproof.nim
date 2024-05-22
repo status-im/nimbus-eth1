@@ -16,7 +16,7 @@ import
   stint,
   nimcrypto/hash,
   eth/trie/[hexary, db, trie_defs],
-  ../../network/state/state_validation,
+  ../../network/state/[state_content, state_validation],
   ./state_test_helpers
 
 proc getKeyBytes(i: int): seq[byte] =
@@ -88,8 +88,8 @@ suite "MPT trie proof verification":
     check:
       res.isOk()
 
-  test "Validate proof bytes":
-    var trie = initHexaryTrie(newMemoryDB(), isPruning = false)
+  test "Validate proof bytes - 3 keys":
+    var trie = initHexaryTrie(newMemoryDB())
 
     trie.put("doe".toBytes, "reindeer".toBytes)
     trie.put("dog".toBytes, "puppy".toBytes)
@@ -101,35 +101,25 @@ suite "MPT trie proof verification":
       let
         key = "doe".toBytes
         proof = trie.getTrieProof(key)
-        res = validateTrieProof(rootHash, key.asNibbles(), proof)
-
-      check:
-        res.isOk()
+      check validateTrieProof(rootHash, key.asNibbles(), proof).isOk()
 
     block:
       let
         key = "dog".toBytes
         proof = trie.getTrieProof(key)
-        res = validateTrieProof(rootHash, key.asNibbles(), proof)
-
-      check:
-        res.isOk()
+      check validateTrieProof(rootHash, key.asNibbles(), proof).isOk()
 
     block:
       let
         key = "dogglesworth".toBytes
         proof = trie.getTrieProof(key)
-        res = validateTrieProof(rootHash, key.asNibbles(), proof)
-
-      check:
-        res.isOk()
+      check validateTrieProof(rootHash, key.asNibbles(), proof).isOk()
 
     block:
       let
         key = "dogg".toBytes
         proof = trie.getTrieProof(key)
         res = validateTrieProof(rootHash, key.asNibbles(), proof)
-
       check:
         res.isErr()
         res.error() == "not enough nibbles to validate node prefix"
@@ -139,7 +129,6 @@ suite "MPT trie proof verification":
         key = "dogz".toBytes
         proof = trie.getTrieProof(key)
         res = validateTrieProof(rootHash, key.asNibbles(), proof)
-
       check:
         res.isErr()
         res.error() == "path contains more nibbles than expected for proof"
@@ -149,7 +138,6 @@ suite "MPT trie proof verification":
         key = "doe".toBytes
         proof = newSeq[seq[byte]]().asTrieProof()
         res = validateTrieProof(rootHash, key.asNibbles(), proof)
-
       check:
         res.isErr()
         res.error() == "proof is empty"
@@ -159,7 +147,53 @@ suite "MPT trie proof verification":
         key = "doe".toBytes
         proof = @["aaa".toBytes, "ccc".toBytes].asTrieProof()
         res = validateTrieProof(rootHash, key.asNibbles(), proof)
-
       check:
         res.isErr()
         res.error() == "hash of proof root node doesn't match the expected root hash"
+
+  test "Validate proof bytes - 4 keys":
+    var trie = initHexaryTrie(newMemoryDB())
+
+    let
+      # leaf nodes
+      kv1 = "0xa7113550".hexToSeqByte()
+      kv2 = "0xa77d3370".hexToSeqByte()
+      kv3 = "0xa7f93650".hexToSeqByte()
+      kv4 = "0xa77d3970".hexToSeqByte()
+
+      kv5 = "".hexToSeqByte() # root/first extension node
+      kv6 = "0xa7".hexToSeqByte() # first branch node
+
+      # leaf nodes without key ending
+      kv7 = "0xa77d33".hexToSeqByte()
+      kv8 = "0xa77d39".hexToSeqByte()
+
+      # failure cases
+      kv9 = "0xa0".hexToSeqByte()
+      kv10 = "0xa77d".hexToSeqByte()
+      kv11 = "0xa71135".hexToSeqByte()
+      kv12 = "0xa711355000".hexToSeqByte()
+      kv13 = "0xa711".hexToSeqByte()
+
+    trie.put(kv1, kv1)
+    trie.put(kv2, kv2)
+    trie.put(kv3, kv3)
+    trie.put(kv4, kv4)
+
+    let rootHash = trie.rootHash
+
+    check:
+      validateTrieProof(rootHash, kv1.asNibbles(), trie.getTrieProof(kv1)).isOk()
+      validateTrieProof(rootHash, kv2.asNibbles(), trie.getTrieProof(kv2)).isOk()
+      validateTrieProof(rootHash, kv3.asNibbles(), trie.getTrieProof(kv3)).isOk()
+      validateTrieProof(rootHash, kv4.asNibbles(), trie.getTrieProof(kv4)).isOk()
+      validateTrieProof(rootHash, kv5.asNibbles(), trie.getTrieProof(kv5)).isOk()
+      validateTrieProof(rootHash, kv6.asNibbles(), trie.getTrieProof(kv6)).isOk()
+      validateTrieProof(rootHash, kv7.asNibbles(), trie.getTrieProof(kv7)).isOk()
+      validateTrieProof(rootHash, kv8.asNibbles(), trie.getTrieProof(kv8)).isOk()
+
+      validateTrieProof(rootHash, kv9.asNibbles(), trie.getTrieProof(kv9)).isErr()
+      validateTrieProof(rootHash, kv10.asNibbles(), trie.getTrieProof(kv10)).isErr()
+      validateTrieProof(rootHash, kv11.asNibbles(), trie.getTrieProof(kv11)).isErr()
+      validateTrieProof(rootHash, kv12.asNibbles(), trie.getTrieProof(kv12)).isErr()
+      validateTrieProof(rootHash, kv13.asNibbles(), trie.getTrieProof(kv13)).isErr()

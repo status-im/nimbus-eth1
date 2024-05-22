@@ -11,7 +11,7 @@ import
   ../../common/[common_types, common_utils],
   ./state_content
 
-export results
+export results, state_content
 
 # private functions
 
@@ -31,7 +31,7 @@ proc isValidNextNode(thisNodeRlp: Rlp, rlpIdx: int, nextNode: TrieNode): bool =
       let hash = hashOrShortRlp.toBytes()
       if hash.len() != 32:
         return false
-      KeccakHash.init(hash)
+      KeccakHash.fromBytes(hash)
 
   nextNode.hashEquals(nextHash)
 
@@ -47,6 +47,23 @@ proc decodePrefix(nodePrefixRlp: Rlp): (byte, bool, Nibbles) =
     nibbles = Nibbles.init(rlpBytes[startIdx .. ^1], isEven)
 
   (firstNibble.byte, isLeaf, nibbles)
+
+proc rlpDecodeAccountTrieNode(accountNode: TrieNode): Result[Account, string] =
+  let accNodeRlp = rlpFromBytes(accountNode.asSeq())
+  if accNodeRlp.isEmpty() or accNodeRlp.listLen() != 2:
+    return err("invalid account trie node - malformed")
+
+  let accNodePrefixRlp = accNodeRlp.listElem(0)
+  if accNodePrefixRlp.isEmpty():
+    return err("invalid account trie node - empty prefix")
+
+  let (_, isLeaf, _) = decodePrefix(accNodePrefixRlp)
+  if not isLeaf:
+    return err("invalid account trie node - leaf prefix expected")
+
+  decodeRlp(accNodeRlp.listElem(1).toBytes(), Account)
+
+# public functions
 
 proc validateTrieProof*(
     expectedRootHash: KeccakHash, path: Nibbles, proof: TrieProof
@@ -122,24 +139,7 @@ proc validateTrieProof*(
   else:
     ok()
 
-proc rlpDecodeAccountTrieNode(accountNode: TrieNode): Result[Account, string] =
-  let accNodeRlp = rlpFromBytes(accountNode.asSeq())
-  if accNodeRlp.isEmpty() or accNodeRlp.listLen() != 2:
-    return err("invalid account trie node - malformed")
-
-  let accNodePrefixRlp = accNodeRlp.listElem(0)
-  if accNodePrefixRlp.isEmpty():
-    return err("invalid account trie node - empty prefix")
-
-  let (_, isLeaf, _) = decodePrefix(accNodePrefixRlp)
-  if not isLeaf:
-    return err("invalid account trie node - leaf prefix expected")
-
-  decodeRlp(accNodeRlp.listElem(1).toBytes(), Account)
-
-# public functions
-
-proc validateFetchedAccountTrieNode*(
+proc validateRetrieval*(
     trustedAccountTrieNodeKey: AccountTrieNodeKey,
     accountTrieNode: AccountTrieNodeRetrieval,
 ): Result[void, string] =
@@ -148,7 +148,7 @@ proc validateFetchedAccountTrieNode*(
   else:
     err("hash of fetched account trie node doesn't match the expected node hash")
 
-proc validateFetchedContractTrieNode*(
+proc validateRetrieval*(
     trustedContractTrieNodeKey: ContractTrieNodeKey,
     contractTrieNode: ContractTrieNodeRetrieval,
 ): Result[void, string] =
@@ -157,7 +157,7 @@ proc validateFetchedContractTrieNode*(
   else:
     err("hash of fetched contract trie node doesn't match the expected node hash")
 
-proc validateFetchedContractCode*(
+proc validateRetrieval*(
     trustedContractCodeKey: ContractCodeKey, contractCode: ContractCodeRetrieval
 ): Result[void, string] =
   if contractCode.code.hashEquals(trustedContractCodeKey.codeHash):
@@ -165,7 +165,7 @@ proc validateFetchedContractCode*(
   else:
     err("hash of fetched bytecode doesn't match the expected code hash")
 
-proc validateOfferedAccountTrieNode*(
+proc validateOffer*(
     trustedStateRoot: KeccakHash,
     accountTrieNodeKey: AccountTrieNodeKey,
     accountTrieNode: AccountTrieNodeOffer,
@@ -177,7 +177,7 @@ proc validateOfferedAccountTrieNode*(
   else:
     err("hash of offered account trie node doesn't match the expected node hash")
 
-proc validateOfferedContractTrieNode*(
+proc validateOffer*(
     trustedStateRoot: KeccakHash,
     contractTrieNodeKey: ContractTrieNodeKey,
     contractTrieNode: ContractTrieNodeOffer,
@@ -198,7 +198,7 @@ proc validateOfferedContractTrieNode*(
   else:
     err("hash of offered contract trie node doesn't match the expected node hash")
 
-proc validateOfferedContractCode*(
+proc validateOffer*(
     trustedStateRoot: KeccakHash,
     contractCodeKey: ContractCodeKey,
     contractCode: ContractCodeOffer,
