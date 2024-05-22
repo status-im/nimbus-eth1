@@ -29,7 +29,7 @@ suite "State Content Keys":
 
       packedNibbles = packNibbles(testCase.path)
       nodeHash = NodeHash.fromHex(testCase.node_hash)
-      contentKey = initAccountTrieNodeKey(packedNibbles, nodeHash)
+      contentKey = AccountTrieNodeKey.init(packedNibbles, nodeHash).toContentKey()
       encoded = contentKey.encode()
 
     check:
@@ -60,7 +60,8 @@ suite "State Content Keys":
       packedNibbles = packNibbles(testCase.path)
       address = Address.fromHex(testCase.address)
       nodeHash = NodeHash.fromHex(testCase.node_hash)
-      contentKey = initContractTrieNodeKey(address, packedNibbles, nodeHash)
+      contentKey =
+        ContractTrieNodeKey.init(address, packedNibbles, nodeHash).toContentKey()
       encoded = contentKey.encode()
 
     check:
@@ -89,7 +90,7 @@ suite "State Content Keys":
 
       address = Address.fromHex(testCase.address)
       codeHash = CodeHash.fromHex(testCase.code_hash)
-      contentKey = initContractCodeKey(address, codeHash)
+      contentKey = ContractCodeKey.init(address, codeHash).toContentKey()
       encoded = contentKey.encode()
 
     check:

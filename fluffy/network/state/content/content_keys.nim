@@ -73,24 +73,14 @@ func init*(
 func init*(T: type ContractCodeKey, address: Address, codeHash: CodeHash): T =
   ContractCodeKey(address: address, codeHash: codeHash)
 
-func initAccountTrieNodeKey*(path: Nibbles, nodeHash: NodeHash): ContentKey =
-  ContentKey(
-    contentType: accountTrieNode,
-    accountTrieNodeKey: AccountTrieNodeKey.init(path, nodeHash),
-  )
+func toContentKey*(key: AccountTrieNodeKey): ContentKey =
+  ContentKey(contentType: accountTrieNode, accountTrieNodeKey: key)
 
-func initContractTrieNodeKey*(
-    address: Address, path: Nibbles, nodeHash: NodeHash
-): ContentKey =
-  ContentKey(
-    contentType: contractTrieNode,
-    contractTrieNodeKey: ContractTrieNodeKey.init(address, path, nodeHash),
-  )
+func toContentKey*(key: ContractTrieNodeKey): ContentKey =
+  ContentKey(contentType: contractTrieNode, contractTrieNodeKey: key)
 
-func initContractCodeKey*(address: Address, codeHash: CodeHash): ContentKey =
-  ContentKey(
-    contentType: contractCode, contractCodeKey: ContractCodeKey.init(address, codeHash)
-  )
+func toContentKey*(key: ContractCodeKey): ContentKey =
+  ContentKey(contentType: contractCode, contractCodeKey: key)
 
 proc readSszBytes*(data: openArray[byte], val: var ContentKey) {.raises: [SszError].} =
   mixin readSszValue
