@@ -16,7 +16,6 @@ import
   ../../stateless/[witness_from_tree, witness_types, multi_keys],
   ../db/ledger,
   ../common/[common, evmforks],
-  ./async/data_sources,
   ./interpreter/[op_codes, gas_costs],
   ./types
 
@@ -27,7 +26,6 @@ proc init(
       blockCtx:     BlockContext;
       com:          CommonRef;
       tracer:       TracerRef,
-      asyncFactory: AsyncOperationFactory = AsyncOperationFactory(maybeDataSource: none[AsyncDataSource]()),
       flags:        set[VMFlag] = self.flags)
     {.gcsafe.} =
   ## Initialisation helper
@@ -37,7 +35,6 @@ proc init(
   self.com = com
   self.tracer = tracer
   self.stateDB = ac
-  self.asyncFactory = asyncFactory
   self.flags = flags
 
 func blockCtx(com: CommonRef, header: BlockHeader):
@@ -217,23 +214,6 @@ proc init*(
       com    = com,
       tracer = tracer)
     return true
-
-proc statelessInit*(
-    vmState:      BaseVMState;
-    parent:       BlockHeader;     ## parent header, account sync position
-    header:       BlockHeader;     ## header with tx environment data fields
-    com:          CommonRef;       ## block chain config
-    asyncFactory: AsyncOperationFactory;
-    tracer:       TracerRef = nil): bool
-    {.gcsafe, raises: [CatchableError].} =
-  vmState.init(
-    ac          = com.ledgerType.init(com.db, parent.stateRoot),
-    parent      = parent,
-    blockCtx    = com.blockCtx(header),
-    com         = com,
-    tracer      = tracer,
-    asyncFactory = asyncFactory)
-  return true
 
 proc coinbase*(vmState: BaseVMState): EthAddress =
   vmState.blockCtx.coinbase

@@ -28,7 +28,6 @@ export
   vms.getAncestorHash,
   vms.getAndClearLogEntries,
   vms.init,
-  vms.statelessInit,
   vms.mutateStateDB,
   vms.new,
   vms.reinit,

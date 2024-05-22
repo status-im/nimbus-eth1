@@ -134,7 +134,6 @@ type
     Default
     Full                          ## Beware, experimental
     #Snap                          ## Beware, experimental
-    Stateless                     ## Beware, experimental
 
   NimbusConf* = object of RootObj
     ## Main Nimbus configuration object
@@ -171,7 +170,7 @@ type
         "- default   -- legacy sync mode\n" &
         "- full      -- full blockchain archive\n" &
         # "- snap      -- experimental snap mode (development only)\n" &
-        "- stateless -- experimental stateless mode (development only)"
+        ""
       defaultValue: SyncMode.Default
       defaultValueDesc: $SyncMode.Default
       abbr: "y"
@@ -483,11 +482,6 @@ type
         defaultValue: defaultAdminListenAddress
         defaultValueDesc: $defaultAdminListenAddressDesc
         name: "metrics-address" }: IpAddress
-
-      statelessModeDataSourceUrl* {.
-        desc: "URL of the node to use as a data source for on-demand data fetching via the JSON-RPC API"
-        defaultValue: ""
-        name: "stateless-data-source-url" .}: string
 
       trustedSetupFile* {.
         desc: "Load EIP-4844 trusted setup file"

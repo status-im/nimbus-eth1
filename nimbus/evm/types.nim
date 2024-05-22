@@ -13,7 +13,6 @@ import
   json_rpc/rpcclient,
   "."/[stack, memory, code_stream],
   ./interpreter/[gas_costs, op_codes],
-  ./async/data_sources,
   ../db/ledger,
   ../common/[common, evmforks]
 
@@ -70,7 +69,6 @@ type
     receipts*         : seq[Receipt]
     cumulativeGasUsed*: GasInt
     gasCosts*         : GasCosts
-    asyncFactory*     : AsyncOperationFactory
 
   Computation* = ref object
     # The execution computation

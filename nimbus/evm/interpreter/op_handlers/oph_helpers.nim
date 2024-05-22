@@ -64,7 +64,7 @@ proc gasEip2929AccountCheck*(c: Computation; address: EthAddress, slot: UInt256)
                else:
                  WarmStorageReadCost
 
-template checkInStaticContext*(c: Computation) =
+proc checkInStaticContext*(c: Computation) {.gcsafe, raises: [CatchableError].} =
   ## Verify static context in handler function, raise an error otherwise
   if EVMC_STATIC in c.msg.flags:
     # TODO: if possible, this check only appear

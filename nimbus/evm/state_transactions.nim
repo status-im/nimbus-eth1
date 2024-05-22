@@ -9,7 +9,6 @@
 # according to those terms.
 
 import
-  chronos,
   eth/common/eth_types,
   ../constants,
   ../db/ledger,
@@ -63,9 +62,3 @@ template execSysCall*(c: Computation) =
   # A syscall to EVM doesn't require
   # a pre or post ceremony
   c.execCallOrCreate()
-
-# FIXME-duplicatedForAsync
-proc asyncExecComputation*(c: Computation): Future[void] {.async.} =
-  c.preExecComputation()
-  await c.asyncExecCallOrCreate()
-  c.postExecComputation()

@@ -197,8 +197,3 @@ proc testCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, for
     {.gcsafe, raises: [CatchableError].} =
   let call = callParamsForTest(tx, sender, vmState, fork)
   runComputation(call)
-
-# FIXME-duplicatedForAsync
-proc asyncTestCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: EVMFork): Future[CallResult] {.async.} =
-  let call = callParamsForTest(tx, sender, vmState, fork)
-  return await asyncRunComputation(call)

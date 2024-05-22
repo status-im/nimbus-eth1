@@ -12,6 +12,7 @@
 
 import
   std/strutils,
+  stew/results,
   ../../common/common,
   ../../db/ledger,
   ../../transaction/call_evm,
@@ -19,11 +20,8 @@ import
   ../../transaction,
   ../../vm_state,
   ../../vm_types,
-  ../../evm/async/operations,
   ../../constants,
-  ../validate,
-  chronos,
-  stew/results
+  ../validate
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -37,10 +35,13 @@ proc eip1559BaseFee(header: BlockHeader; fork: EVMFork): UInt256 =
     result = header.baseFee
 
 proc commitOrRollbackDependingOnGasUsed(
-    vmState: BaseVMState, accTx: LedgerSpRef,
-    header: BlockHeader, tx: Transaction,
-    gasBurned: GasInt, priorityFee: GasInt):
-    Result[GasInt, string] {.raises: [].} =
+    vmState: BaseVMState;
+    accTx: LedgerSpRef;
+    header: BlockHeader;
+    tx: Transaction;
+    gasBurned: GasInt;
+    priorityFee: GasInt;
+      ): Result[GasInt, string] =
   # Make sure that the tx does not exceed the maximum cumulative limit as
   # set in the block header. Again, the eip-1559 reference does not mention
   # an early stop. It would rather detect differing values for the  block
@@ -63,14 +64,14 @@ proc commitOrRollbackDependingOnGasUsed(
     vmState.gasPool += tx.gasLimit - gasBurned
     return ok(gasBurned)
 
-proc asyncProcessTransactionImpl(
+proc processTransactionImpl(
     vmState: BaseVMState; ## Parent accounts environment for transaction
     tx:      Transaction; ## Transaction to validate
     sender:  EthAddress;  ## tx.getSender or tx.ecRecover
     header:  BlockHeader; ## Header for the block containing the current tx
-    fork:    EVMFork): Future[Result[GasInt, string]]
-    # wildcard exception, wrapped below
-    {.async, gcsafe.} =
+    fork:    EVMFork;
+      ): Result[GasInt, string]
+      {.raises: [CatchableError].} =
   ## Modelled after `https://eips.ethereum.org/EIPS/eip-1559#specification`_
   ## which provides a backward compatible framwork for EIP1559.
 
@@ -85,14 +86,10 @@ proc asyncProcessTransactionImpl(
   # Return failure unless explicitely set `ok()`
   var res: Result[GasInt, string] = err("")
 
-  await ifNecessaryGetAccounts(vmState, @[sender, vmState.coinbase()])
-  if tx.to.isSome:
-    await ifNecessaryGetCode(vmState, tx.to.get)
-
   # buy gas, then the gas goes into gasMeter
   if vmState.gasPool < tx.gasLimit:
-    return err("gas limit reached. gasLimit=$1, gasNeeded=$2" % [
-      $vmState.gasPool, $tx.gasLimit])
+    return err("gas limit reached. gasLimit=" & $vmState.gasPool &
+      ", gasNeeded=" & $tx.gasLimit)
 
   vmState.gasPool -= tx.gasLimit
 
@@ -163,45 +160,25 @@ proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash256):
   statedb.persist(clearEmptyAccount = true, clearCache = false)
   ok()
 
-proc asyncProcessTransaction*(
+proc processTransaction*(
     vmState: BaseVMState; ## Parent accounts environment for transaction
     tx:      Transaction; ## Transaction to validate
     sender:  EthAddress;  ## tx.getSender or tx.ecRecover
     header:  BlockHeader; ## Header for the block containing the current tx
-    fork:    EVMFork): Future[Result[GasInt,string]]
-    {.async, gcsafe.} =
-  ## Process the transaction, write the results to accounts db. The function
-  ## returns the amount of gas burned if executed.
-  return await vmState.asyncProcessTransactionImpl(tx, sender, header, fork)
+    fork:    EVMFork;
+      ): Result[GasInt,string]
+      {.raises: [CatchableError].} =
+  vmState.processTransactionImpl(tx, sender, header, fork)
 
-# FIXME-duplicatedForAsync
-proc asyncProcessTransaction*(
+proc processTransaction*(
     vmState: BaseVMState; ## Parent accounts environment for transaction
     tx:      Transaction; ## Transaction to validate
     sender:  EthAddress;  ## tx.getSender or tx.ecRecover
-    header:  BlockHeader): Future[Result[GasInt,string]]
-    {.async, gcsafe.} =
-  ## Variant of `asyncProcessTransaction()` with `*fork* derived
-  ## from the `vmState` argument.
+    header:  BlockHeader;
+      ): Result[GasInt,string]
+      {.raises: [CatchableError].} =
   let fork = vmState.com.toEVMFork(header.forkDeterminationInfo)
-  return await vmState.asyncProcessTransaction(tx, sender, header, fork)
-
-proc processTransaction*(
-    vmState: BaseVMState; ## Parent accounts environment for transaction
-    tx:      Transaction; ## Transaction to validate
-    sender:  EthAddress;  ## tx.getSender or tx.ecRecover
-    header:  BlockHeader; ## Header for the block containing the current tx
-    fork:    EVMFork): Result[GasInt,string]
-    {.gcsafe, raises: [CatchableError].} =
-  return waitFor(vmState.asyncProcessTransaction(tx, sender, header, fork))
-
-proc processTransaction*(
-    vmState: BaseVMState; ## Parent accounts environment for transaction
-    tx:      Transaction; ## Transaction to validate
-    sender:  EthAddress;  ## tx.getSender or tx.ecRecover
-    header:  BlockHeader): Result[GasInt,string]
-    {.gcsafe, raises: [CatchableError].} =
-  return waitFor(vmState.asyncProcessTransaction(tx, sender, header))
+  vmState.processTransaction(tx, sender, header, fork)
 
 # ------------------------------------------------------------------------------
 # End

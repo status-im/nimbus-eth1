@@ -12,9 +12,10 @@
 ## ===============================================================
 ##
 
+{.push raises: [].}
+
 import
   ../../../errors,
-  ../../async/operations,
   ../../code_stream,
   ../../computation,
   ../../memory,
@@ -36,6 +37,9 @@ when not defined(evmc_enabled):
     ../../state,
     ../../../db/ledger
 
+# Annotation helpers
+{.pragma: catchRaise, gcsafe, raises: [CatchableError].}
+
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
@@ -50,7 +54,7 @@ when evmc_enabled:
     c.opcodeGastCost(Sstore, gasCost, "SSTORE")
 
 else:
-  proc sstoreImpl(c: Computation, slot, newValue: UInt256) =
+  proc sstoreImpl(c: Computation, slot, newValue: UInt256) {.catchRaise.} =
     let
       currentValue = c.getStorage(slot)
       gasParam = GasParams(
@@ -68,7 +72,7 @@ else:
       db.setStorage(c.msg.contractAddress, slot, newValue)
 
 
-  proc sstoreNetGasMeteringImpl(c: Computation; slot, newValue: UInt256, coldAccess = 0.GasInt) =
+  proc sstoreNetGasMeteringImpl(c: Computation; slot, newValue: UInt256, coldAccess = 0.GasInt) {.catchRaise.} =
     let
       stateDB = c.vmState.readOnlyStateDB
       currentValue = c.getStorage(slot)
@@ -100,7 +104,7 @@ template sstoreEvmcOrNetGasMetering(cpt, slot, newValue: untyped, coldAccess = 0
   else:
     sstoreNetGasMeteringImpl(cpt, slot, newValue, coldAccess)
 
-proc jumpImpl(c: Computation; jumpTarget: UInt256) =
+proc jumpImpl(c: Computation; jumpTarget: UInt256) {.catchRaise.} =
   if jumpTarget >= c.code.len.u256:
     raise newException(
       InvalidJumpDestination, "Invalid Jump Destination")
@@ -122,11 +126,11 @@ proc jumpImpl(c: Computation; jumpTarget: UInt256) =
 # ------------------------------------------------------------------------------
 
 const
-  popOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+  popOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x50, Remove item from stack.
     discard k.cpt.stack.popInt
 
-  mloadOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+  mloadOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x51, Load word from memory
     let (memStartPos) = k.cpt.stack.popInt(1)
 
@@ -140,7 +144,7 @@ const
       k.cpt.memory.read(memPos, 32)
 
 
-  mstoreOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+  mstoreOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x52, Save word to memory
     let (memStartPos, value) = k.cpt.stack.popInt(2)
 
@@ -153,7 +157,7 @@ const
     k.cpt.memory.write(memPos, value.toBytesBE)
 
 
-  mstore8Op: Vm2OpFn = proc (k: var Vm2Ctx) =
+  mstore8Op: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x53, Save byte to memory
     let (memStartPos, value) = k.cpt.stack.popInt(2)
 
@@ -167,20 +171,20 @@ const
 
   # -------
 
-  sloadOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+  sloadOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x54, Load word from storage.
     let cpt = k.cpt  # so it can safely be captured by the asyncChainTo closure below
     let (slot) = cpt.stack.popInt(1)
-    cpt.asyncChainToRaise(ifNecessaryGetSlot(cpt.vmState, cpt.msg.contractAddress, slot), [CatchableError]):
+    block:
       cpt.stack.push:
         cpt.getStorage(slot)
 
-  sloadEIP2929Op: Vm2OpFn = proc (k: var Vm2Ctx) =
+  sloadEIP2929Op: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x54, EIP2929: Load word from storage for Berlin and later
     let cpt = k.cpt
     let (slot) = cpt.stack.popInt(1)
 
-    cpt.asyncChainToRaise(ifNecessaryGetSlot(cpt.vmState, cpt.msg.contractAddress, slot), [CatchableError]):
+    block:
       let gasCost = cpt.gasEip2929AccountCheck(cpt.msg.contractAddress, slot)
       cpt.opcodeGastCost(Sload, gasCost, reason = "sloadEIP2929")
       cpt.stack.push:
@@ -188,27 +192,27 @@ const
 
   # -------
 
-  sstoreOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+  sstoreOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x55, Save word to storage.
     let cpt = k.cpt
     let (slot, newValue) = cpt.stack.popInt(2)
 
     checkInStaticContext(cpt)
-    cpt.asyncChainToRaise(ifNecessaryGetSlot(cpt.vmState, cpt.msg.contractAddress, slot), [CatchableError]):
+    block:
       sstoreEvmcOrSstore(cpt, slot, newValue)
 
 
-  sstoreEIP1283Op: Vm2OpFn = proc (k: var Vm2Ctx) =
+  sstoreEIP1283Op: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x55, EIP1283: sstore for Constantinople and later
     let cpt = k.cpt
     let (slot, newValue) = cpt.stack.popInt(2)
 
     checkInStaticContext(cpt)
-    cpt.asyncChainToRaise(ifNecessaryGetSlot(cpt.vmState, cpt.msg.contractAddress, slot), [CatchableError]):
+    block:
       sstoreEvmcOrNetGasMetering(cpt, slot, newValue)
 
 
-  sstoreEIP2200Op: Vm2OpFn = proc (k: var Vm2Ctx) =
+  sstoreEIP2200Op: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x55, EIP2200: sstore for Istanbul and later
     let cpt = k.cpt
     let (slot, newValue) = cpt.stack.popInt(2)
@@ -221,11 +225,11 @@ const
         OutOfGas,
         "Gas not enough to perform EIP2200 SSTORE")
 
-    cpt.asyncChainToRaise(ifNecessaryGetSlot(cpt.vmState, cpt.msg.contractAddress, slot), [CatchableError]):
+    block:
       sstoreEvmcOrNetGasMetering(cpt, slot, newValue)
 
 
-  sstoreEIP2929Op: Vm2OpFn = proc (k: var Vm2Ctx) =
+  sstoreEIP2929Op: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x55, EIP2929: sstore for Berlin and later
     let cpt = k.cpt
     let (slot, newValue) = cpt.stack.popInt(2)
@@ -237,7 +241,7 @@ const
     if cpt.gasMeter.gasRemaining <= SentryGasEIP2200:
       raise newException(OutOfGas, "Gas not enough to perform EIP2200 SSTORE")
 
-    cpt.asyncChainToRaise(ifNecessaryGetSlot(cpt.vmState, cpt.msg.contractAddress, slot), [CatchableError]):
+    block:
       var coldAccessGas = 0.GasInt
       when evmc_enabled:
         if cpt.host.accessStorage(cpt.msg.contractAddress, slot) == EVMC_ACCESS_COLD:
@@ -252,47 +256,47 @@ const
 
   # -------
 
-  jumpOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+  jumpOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x56, Alter the program counter
     let (jumpTarget) = k.cpt.stack.popInt(1)
     jumpImpl(k.cpt, jumpTarget)
 
-  jumpIOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+  jumpIOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x57, Conditionally alter the program counter.
     let (jumpTarget, testedValue) = k.cpt.stack.popInt(2)
     if testedValue.isZero.not:
       jumpImpl(k.cpt, jumpTarget)
 
-  pcOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+  pcOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x58, Get the value of the program counter prior to the increment
     ##       corresponding to this instruction.
     k.cpt.stack.push:
       max(k.cpt.code.pc - 1, 0)
 
-  msizeOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+  msizeOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x59, Get the size of active memory in bytes.
     k.cpt.stack.push:
       k.cpt.memory.len
 
-  gasOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+  gasOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x5a, Get the amount of available gas, including the corresponding
     ##       reduction for the cost of this instruction.
     k.cpt.stack.push:
       k.cpt.gasMeter.gasRemaining
 
-  jumpDestOp: Vm2OpFn = proc (k: var Vm2Ctx) {.gcsafe, raises:[].} =
+  jumpDestOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x5b, Mark a valid destination for jumps. This operation has no effect
     ##       on machine state during execution.
     discard
 
-  tloadOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+  tloadOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x5c, Load word from transient storage.
     let
       slot = k.cpt.stack.popInt()
       val  = k.cpt.getTransientStorage(slot)
     k.cpt.stack.push: val
 
-  tstoreOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+  tstoreOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x5d, Save word to transient storage.
     checkInStaticContext(k.cpt)
 
@@ -301,7 +305,7 @@ const
       val  = k.cpt.stack.popInt()
     k.cpt.setTransientStorage(slot, val)
 
-  mCopyOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+  mCopyOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x5e, Copy memory
     let (dst, src, size) = k.cpt.stack.popInt(3)
 

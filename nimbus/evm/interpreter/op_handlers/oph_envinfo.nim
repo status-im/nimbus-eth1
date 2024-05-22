@@ -12,13 +12,14 @@
 ## ==============================================
 ##
 
+{.push raises: [].}
+
 import
   ../../../errors,
   ../../code_stream,
   ../../computation,
   ../../memory,
   ../../stack,
-  ../../async/operations,
   ../gas_costs,
   ../op_codes,
   ../utils/utils_numeric,
@@ -28,37 +29,38 @@ import
   stint,
   strformat
 
-{.push raises: [CatchableError].} # basically the annotation type of a `Vm2OpFn`
-
 when not defined(evmc_enabled):
   import ../../state
+
+# Annotation helpers
+{.pragma: catchRaise, gcsafe, raises: [CatchableError].}
 
 # ------------------------------------------------------------------------------
 # Private, op handlers implementation
 # ------------------------------------------------------------------------------
 
 const
-  addressOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+  addressOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x30, Get address of currently executing account.
     k.cpt.stack.push:
       k.cpt.msg.contractAddress
 
   # ------------------
 
-  balanceOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+  balanceOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x31, Get balance of the given account.
     let cpt = k.cpt
     let address = cpt.stack.popAddress
-    cpt.asyncChainToRaise(ifNecessaryGetAccount(cpt.vmState, address), [CatchableError]):
+    block:
       cpt.stack.push:
         cpt.getBalance(address)
 
-  balanceEIP2929Op: Vm2OpFn = proc (k: var Vm2Ctx) =
+  balanceEIP2929Op: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x31, EIP292: Get balance of the given account for Berlin and later
     let cpt = k.cpt
     let address = cpt.stack.popAddress()
 
-    cpt.asyncChainToRaise(ifNecessaryGetAccount(cpt.vmState, address), [CatchableError]):
+    block:
       let gasCost = cpt.gasEip2929AccountCheck(address)
       cpt.opcodeGastCost(Balance, gasCost, reason = "Balance EIP2929")
       cpt.stack.push:
@@ -66,23 +68,23 @@ const
 
   # ------------------
 
-  originOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+  originOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x32, Get execution origination address.
     k.cpt.stack.push:
       k.cpt.getOrigin()
 
-  callerOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+  callerOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x33, Get caller address.
     k.cpt.stack.push:
       k.cpt.msg.sender
 
-  callValueOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+  callValueOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x34, Get deposited value by the instruction/transaction
     ##       responsible for this execution
     k.cpt.stack.push:
       k.cpt.msg.value
 
-  callDataLoadOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+  callDataLoadOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x35, Get input data of current environment
     let (startPos) = k.cpt.stack.popInt(1)
     let start = startPos.cleanMemRef
@@ -102,13 +104,13 @@ const
       value
 
 
-  callDataSizeOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+  callDataSizeOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x36, Get size of input data in current environment.
     k.cpt.stack.push:
       k.cpt.msg.data.len.u256
 
 
-  callDataCopyOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+  callDataCopyOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x37, Copy input data in current environment to memory.
     let (memStartPos, copyStartPos, size) = k.cpt.stack.popInt(3)
 
@@ -123,18 +125,19 @@ const
     k.cpt.memory.writePadded(k.cpt.msg.data, memPos, copyPos, len)
 
 
-  codeSizeOp: Vm2OpFn = proc (k: var Vm2Ctx) {.gcsafe, raises:[].} =
+  codeSizeOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x38, Get size of code running in current environment.
     let cpt = k.cpt
-    cpt.asyncChainToRaise(ifNecessaryGetCode(cpt.vmState, cpt.msg.contractAddress), [FullStack]):
+    block:
       cpt.stack.push:
         cpt.code.len
 
 
-  codeCopyOp: Vm2OpFn = proc (k: var Vm2Ctx) {.gcsafe, raises:[].} =
+  codeCopyOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x39, Copy code running in current environment to memory.
     let cpt = k.cpt
-    cpt.asyncChainToRaise(ifNecessaryGetCode(cpt.vmState, cpt.msg.contractAddress), [CatchableError]):
+
+    block:
       let (memStartPos, copyStartPos, size) = cpt.stack.popInt(3)
 
       # TODO tests: https://github.com/status-im/nimbus/issues/67
@@ -147,27 +150,27 @@ const
 
       cpt.memory.writePadded(cpt.code.bytes, memPos, copyPos, len)
 
-  gasPriceOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+  gasPriceOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x3A, Get price of gas in current environment.
     k.cpt.stack.push:
       k.cpt.getGasPrice()
 
   # -----------
 
-  extCodeSizeOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+  extCodeSizeOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x3b, Get size of an account's code
     let cpt = k.cpt
     let address = k.cpt.stack.popAddress()
-    cpt.asyncChainToRaise(ifNecessaryGetCode(cpt.vmState, address), [CatchableError]):
+    block:
       cpt.stack.push:
         cpt.getCodeSize(address)
 
-  extCodeSizeEIP2929Op: Vm2OpFn = proc (k: var Vm2Ctx) =
+  extCodeSizeEIP2929Op: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x3b, Get size of an account's code
     let cpt = k.cpt
     let address = cpt.stack.popAddress()
 
-    cpt.asyncChainToRaise(ifNecessaryGetCode(cpt.vmState, address), [CatchableError]):
+    block:
       let gasCost = cpt.gasEip2929AccountCheck(address)
       cpt.opcodeGastCost(ExtCodeSize, gasCost, reason = "ExtCodeSize EIP2929")
       cpt.stack.push:
@@ -175,12 +178,12 @@ const
 
   # -----------
 
-  extCodeCopyOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+  extCodeCopyOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x3c, Copy an account's code to memory.
     let cpt = k.cpt
     let address = cpt.stack.popAddress()
 
-    cpt.asyncChainToRaise(ifNecessaryGetCode(cpt.vmState, address), [CatchableError]):
+    block:
       let (memStartPos, codeStartPos, size) = cpt.stack.popInt(3)
       let (memPos, codePos, len) =
         (memStartPos.cleanMemRef, codeStartPos.cleanMemRef, size.cleanMemRef)
@@ -193,12 +196,12 @@ const
       cpt.memory.writePadded(codeBytes, memPos, codePos, len)
 
 
-  extCodeCopyEIP2929Op: Vm2OpFn = proc (k: var Vm2Ctx) =
+  extCodeCopyEIP2929Op: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x3c, Copy an account's code to memory.
     let cpt = k.cpt
     let address = cpt.stack.popAddress()
 
-    cpt.asyncChainToRaise(ifNecessaryGetCode(cpt.vmState, address), [CatchableError]):
+    block:
       let (memStartPos, codeStartPos, size) = cpt.stack.popInt(3)
       let (memPos, codePos, len) = (memStartPos.cleanMemRef,
                                     codeStartPos.cleanMemRef, size.cleanMemRef)
@@ -212,14 +215,14 @@ const
 
   # -----------
 
-  returnDataSizeOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+  returnDataSizeOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x3d, Get size of output data from the previous call from the
     ##       current environment.
     k.cpt.stack.push:
       k.cpt.returnData.len
 
 
-  returnDataCopyOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+  returnDataCopyOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x3e, Copy output data from the previous call to memory.
     let (memStartPos, copyStartPos, size) = k.cpt.stack.popInt(3)
 
@@ -241,20 +244,20 @@ const
 
   # ---------------
 
-  extCodeHashOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+  extCodeHashOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x3f, Returns the keccak256 hash of a contract’s code
     let cpt = k.cpt
     let address = k.cpt.stack.popAddress()
-    cpt.asyncChainToRaise(ifNecessaryGetCode(cpt.vmState, address), [CatchableError]):
+    block:
       cpt.stack.push:
         cpt.getCodeHash(address)
 
-  extCodeHashEIP2929Op: Vm2OpFn = proc (k: var Vm2Ctx) =
+  extCodeHashEIP2929Op: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x3f, EIP2929: Returns the keccak256 hash of a contract’s code
     let cpt = k.cpt
     let address = k.cpt.stack.popAddress()
 
-    cpt.asyncChainToRaise(ifNecessaryGetCode(cpt.vmState, address), [CatchableError]):
+    block:
       let gasCost = cpt.gasEip2929AccountCheck(address)
       cpt.opcodeGastCost(ExtCodeHash, gasCost, reason = "ExtCodeHash EIP2929")
 

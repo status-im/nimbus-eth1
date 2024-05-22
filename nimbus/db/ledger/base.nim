@@ -372,11 +372,6 @@ proc getMpt*(ldg: LedgerRef): CoreDbMptRef =
   result = ldg.extras.getMptFn()
   ldg.ifTrackApi: debug apiTxt, api, elapsed, result
 
-proc rawRootHash*(ldg: LedgerRef): Hash256 =
-  ldg.beginTrackApi LdgRawRootHashFn
-  result = ldg.extras.rawRootHashFn()
-  ldg.ifTrackApi: debug apiTxt, api, elapsed, result
-
 # ------------------------------------------------------------------------------
 # Public virtual read-only methods
 # ------------------------------------------------------------------------------

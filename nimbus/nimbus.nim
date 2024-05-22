@@ -29,9 +29,7 @@ import
   ./core/clique/clique_sealer,
   ./sync/protocol,
   ./sync/handlers,
-  ./sync/stateless,
-  ./sync/protocol/les_protocol,
-  ./evm/async/data_sources/json_rpc_data_source
+  ./sync/protocol/les_protocol
 
 when defined(evmc_enabled):
   import transaction/evmc_dynamic_loader
@@ -165,9 +163,6 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     #  nimbus.snapSyncRef = SnapSyncRef.init(
     #    nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers,
     #    tickerOK, exCtrlFile)
-    of SyncMode.Stateless:
-      # FIXME-Adam: what needs to go here?
-      nimbus.statelessSyncRef = StatelessSyncRef.init()
     of SyncMode.Default:
       if com.forkGTE(MergeFork):
         nimbus.beaconSyncRef = BeaconSyncRef.init(
@@ -194,21 +189,12 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     case conf.syncMode:
     #of SyncMode.Snap:
     #  waitForPeers = false
-    of SyncMode.Stateless:
-      waitForPeers = false
     of SyncMode.Full, SyncMode.Default:
       discard
     nimbus.networkLoop = nimbus.ethNode.connectToNetwork(
       enableDiscovery = conf.discovery != DiscoveryType.None,
       waitForPeers = waitForPeers)
 
-proc maybeStatelessAsyncDataSource*(nimbus: NimbusNode, conf: NimbusConf): Option[AsyncDataSource] =
-  if conf.syncMode == SyncMode.Stateless:
-    let rpcClient = waitFor(makeAnRpcClient(conf.statelessModeDataSourceUrl))
-    let asyncDataSource = realAsyncDataSource(nimbus.ethNode.peerPool, rpcClient, false)
-    some(asyncDataSource)
-  else:
-    none[AsyncDataSource]()
 
 proc localServices(nimbus: NimbusNode, conf: NimbusConf,
                    com: CommonRef, protocols: set[ProtocolFlag]) =
@@ -332,8 +318,6 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
             cast[pointer](nimbus.legaSyncRef))
       of SyncMode.Full:
         nimbus.fullSyncRef.start
-      of SyncMode.Stateless:
-        nimbus.statelessSyncRef.start
       #of SyncMode.Snap:
       #  nimbus.snapSyncRef.start
 
