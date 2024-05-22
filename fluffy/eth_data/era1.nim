@@ -99,30 +99,35 @@ proc appendRecord(f: IoHandle, index: BlockIndex): Result[int64, string] =
   f.appendIndex(index.startNumber, index.offsets)
 
 proc readBlockIndex*(f: IoHandle): Result[BlockIndex, string] =
+  var
+    buf: seq[byte]
+    pos: int
+
   let
     startPos = ?f.getFilePos().mapErr(toString)
     fileSize = ?f.getFileSize().mapErr(toString)
-    header = ?f.readHeader()
+    header = ?f.readRecord(buf)
 
   if header.typ != E2BlockIndex:
     return err("not an index")
-  if header.len < 16:
+  if buf.len < 16:
     return err("index entry too small")
-  if header.len mod 8 != 0:
+  if buf.len mod 8 != 0:
     return err("index length invalid")
 
-  var buf: array[8, byte]
-  ?f.readFileExact(buf)
   let
-    blockNumber = uint64.fromBytesLE(buf)
-    count = header.len div 8 - 2
+    blockNumber = uint64.fromBytesLE(buf.toOpenArray(pos, pos + 7))
+    count = buf.len div 8 - 2
+  pos += 8
+
+  # technically not an error, but we'll throw this sanity check in here..
+  if blockNumber > int32.high().uint64:
+    return err("fishy block number")
 
   var offsets = newSeqUninitialized[int64](count)
   for i in 0 ..< count:
-    ?f.readFileExact(buf)
-
     let
-      offset = uint64.fromBytesLE(buf)
+      offset = uint64.fromBytesLE(buf.toOpenArray(pos, pos + 7))
       absolute =
         if offset == 0:
           0'i64
@@ -131,16 +136,12 @@ proc readBlockIndex*(f: IoHandle): Result[BlockIndex, string] =
           cast[int64](cast[uint64](startPos) + offset)
 
     if absolute < 0 or absolute > fileSize:
-      return err("Invalid offset")
+      return err("invalid offset")
     offsets[i] = absolute
+    pos += 8
 
-  ?f.readFileExact(buf)
-  if uint64(count) != uint64.fromBytesLE(buf):
+  if uint64(count) != uint64.fromBytesLE(buf.toOpenArray(pos, pos + 7)):
     return err("invalid count")
-
-  # technically not an error, but we'll throw this sanity check in here..
-  if blockNumber > int32.high().uint64:
-    return err("fishy block number")
 
   ok(BlockIndex(startNumber: blockNumber, offsets: offsets))
 
