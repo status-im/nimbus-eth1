@@ -45,7 +45,7 @@ when not defined(evmc_enabled):
 # ------------------------------------------------------------------------------
 
 when evmc_enabled:
-  proc sstoreEvmc(c: Computation, slot, newValue: UInt256, coldAccess = 0.GasInt) =
+  proc sstoreEvmc(c: Computation, slot, newValue: UInt256, coldAccess = 0.GasInt) {.catchRaise.} =
     let
       status   = c.host.setStorage(c.msg.contractAddress, slot, newValue)
       gasParam = GasParams(kind: Op.Sstore, s_status: status)
