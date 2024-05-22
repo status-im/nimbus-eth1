@@ -28,10 +28,12 @@ import
 
 # Factored this out of procBlkPreamble so that it can be used directly for
 # stateless execution of specific transactions.
-proc processTransactions*(vmState: BaseVMState;
-                          header: BlockHeader;
-                          transactions: seq[Transaction]): Result[void, string]
-    {.gcsafe, raises: [CatchableError].} =
+proc processTransactions*(
+    vmState: BaseVMState;
+    header: BlockHeader;
+    transactions: seq[Transaction];
+      ): Result[void, string]
+      {.gcsafe, raises: [CatchableError].} =
   vmState.receipts = newSeq[Receipt](transactions.len)
   vmState.cumulativeGasUsed = 0
 
@@ -151,8 +153,9 @@ proc procBlkEpilogue(vmState: BaseVMState;
 proc processBlock*(
     vmState: BaseVMState;  ## Parent environment of header/body block
     header:  BlockHeader;  ## Header/body block to add to the blockchain
-    body:    BlockBody): ValidationResult
-    {.gcsafe, raises: [CatchableError].} =
+    body:    BlockBody;
+      ): ValidationResult
+      {.gcsafe, raises: [CatchableError].} =
   ## Generalised function to processes `(header,body)` pair for any network,
   ## regardless of PoA or not.
   ##

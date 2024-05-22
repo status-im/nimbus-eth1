@@ -41,12 +41,10 @@ type
     extras*: LedgerExtras       ## Support might go away
     methods*: LedgerFns
 
-  RawRootHashFn* = proc(): Hash256 {.noRaise.}
   GetMptFn* = proc(): CoreDbMptRef {.noRaise.}
 
   LedgerExtras* = object
     getMptFn*: GetMptFn
-    rawRootHashFn*: RawRootHashFn
 
   AccessListFn* = proc(eAddr: EthAddress) {.noRaise.}
   AccessList2Fn* = proc(eAddr: EthAddress, slot: UInt256) {.noRaise.}

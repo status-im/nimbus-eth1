@@ -38,7 +38,9 @@ type
 
 const
   CleanUpEpoch = 30_000.u256
-    ## Regular checks for history clean up (applies to single state DB)
+    ## Regular checks for history clean up (applies to single state DB). This
+    ## is mainly a debugging/testing feature so that the database can be held
+    ## a bit smaller. It is not applicable to a full node.
 
 # ------------------------------------------------------------------------------
 # Private
@@ -57,7 +59,8 @@ proc getVmState(c: ChainRef, header: BlockHeader):
     return err()
   return ok(vmState)
 
-proc purgeExpiredBlocks(db: CoreDbRef) {.inline, raises: [RlpError].} =
+
+proc purgeOutOfJournalBlocks(db: CoreDbRef) {.inline, raises: [RlpError].} =
   ## Remove non-reachable blocks from KVT database
   var blkNum = db.getOldestJournalBlockNumber()
   if 0 < blkNum:
@@ -85,10 +88,9 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
   let vmState = c.getVmState(headers[0]).valueOr:
     return ValidationResult.Error
 
-  # Needed for figuring out whether KVT cleanup is due (see at the end)
   let (fromBlock, toBlock) = (headers[0].blockNumber, headers[^1].blockNumber)
-
   trace "Persisting blocks", fromBlock, toBlock
+
   for i in 0 ..< headers.len:
     let (header, body) = (headers[i], bodies[i])
 
@@ -197,11 +199,11 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
   # `persistent()` together with the respective block number.
   c.db.persistent(headers[0].blockNumber - 1)
 
-  # For a single state ledger, there is only a limited backlog. So clean up
-  # regularly (the `CleanUpEpoch` should not be too small as each lookup pulls
-  # a journal entry from disk.)
-  if (fromBlock mod CleanUpEpoch) <= (toBlock - fromBlock):
-    c.db.purgeExpiredBlocks()
+  if c.com.pruneHistory:
+    # There is a feature for test systems to regularly clean up older blocks
+    # from the database, not appicable to a full node set up.
+    if(fromBlock mod CleanUpEpoch) <= (toBlock - fromBlock):
+      c.db.purgeOutOfJournalBlocks()
 
   ValidationResult.OK
 

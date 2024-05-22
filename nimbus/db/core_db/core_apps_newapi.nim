@@ -925,19 +925,6 @@ proc persistHeaderToDbWithoutSetHead*(
       headerHash, action="put()", `error`=($$error)
     return
 
-# FIXME-Adam: This seems like a bad idea. I don't see a way to get the score
-# in stateless mode, but it seems dangerous to just shove the header into
-# the DB *without* also storing the score.
-proc persistHeaderToDbWithoutSetHeadOrScore*(db: CoreDbRef; header: BlockHeader) =
-  db.addBlockNumberToHashLookup(header)
-  let
-    kvt = db.newKvt()
-    blockHash = header.blockHash
-  kvt.put(genericHashKey(blockHash).toOpenArray, rlp.encode(header)).isOkOr:
-    warn logTxt "persistHeaderToDbWithoutSetHeadOrScore()",
-      blockHash, action="put()", `error`=($$error)
-    return
-
 proc persistUncles*(db: CoreDbRef, uncles: openArray[BlockHeader]): Hash256 =
   ## Persists the list of uncles to the database.
   ## Returns the uncles hash.

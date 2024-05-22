@@ -12,13 +12,14 @@
 ## ======================================
 ##
 
+{.push raises: [].}
+
 import
   ../../../errors,
   ../../computation,
   ../../memory,
   ../../stack,
   ../../types,
-  ../../async/operations,
   ../gas_costs,
   ../op_codes,
   ../utils/utils_numeric,
@@ -27,19 +28,20 @@ import
   eth/common,
   stint
 
-{.push raises: [CatchableError].} # basically the annotation type of a `Vm2OpFn`
-
 when not defined(evmc_enabled):
   import
     ../../state,
     ../../../db/ledger
+
+# Annotation helpers
+{.pragma: catchRaise, gcsafe, raises: [CatchableError].}
 
 # ------------------------------------------------------------------------------
 # Private
 # ------------------------------------------------------------------------------
 
 const
-  returnOp: Vm2OpFn = proc(k: var Vm2Ctx) =
+  returnOp: Vm2OpFn = proc(k: var Vm2Ctx) {.catchRaise.} =
     ## 0xf3, Halt execution returning output data.
     let (startPos, size) = k.cpt.stack.popInt(2)
 
@@ -51,7 +53,7 @@ const
     k.cpt.output = k.cpt.memory.read(pos, len)
 
 
-  revertOp: Vm2OpFn = proc(k: var Vm2Ctx) =
+  revertOp: Vm2OpFn = proc(k: var Vm2Ctx) {.catchRaise.} =
     ## 0xfd, Halt execution reverting state changes but returning data
     ##       and remaining gas.
     let (startPos, size) = k.cpt.stack.popInt(2)
@@ -67,7 +69,7 @@ const
     k.cpt.setError(EVMC_REVERT, "REVERT opcode executed", false)
 
 
-  invalidOp: Vm2OpFn = proc(k: var Vm2Ctx) =
+  invalidOp: Vm2OpFn = proc(k: var Vm2Ctx) {.catchRaise.} =
     raise newException(InvalidInstruction,
                        "Invalid instruction, received an opcode " &
                          "not implemented in the current fork. " &
@@ -75,23 +77,23 @@ const
 
   # -----------
 
-  selfDestructOp: Vm2OpFn = proc(k: var Vm2Ctx) =
+  selfDestructOp: Vm2OpFn = proc(k: var Vm2Ctx) {.catchRaise.} =
     ## 0xff, Halt execution and register account for later deletion.
     let cpt = k.cpt
     let beneficiary = cpt.stack.popAddress()
     when defined(evmc_enabled):
-      cpt.asyncChainToRaise(ifNecessaryGetAccount(cpt.vmState, beneficiary), [CatchableError]):
+      block:
         cpt.selfDestruct(beneficiary)
     else:
-      cpt.asyncChainTo(ifNecessaryGetAccount(cpt.vmState, beneficiary)):
+      block:
         cpt.selfDestruct(beneficiary)
 
 
-  selfDestructEIP150Op: Vm2OpFn = proc(k: var Vm2Ctx) =
+  selfDestructEIP150Op: Vm2OpFn = proc(k: var Vm2Ctx) {.catchRaise.} =
     ## selfDestructEip150 (auto generated comment)
     let cpt = k.cpt
     let beneficiary = cpt.stack.popAddress()
-    cpt.asyncChainToRaise(ifNecessaryGetAccount(cpt.vmState, beneficiary), [CatchableError]):
+    block:
       let gasParams = GasParams(
         kind: SelfDestruct,
         sd_condition: not cpt.accountExists(beneficiary))
@@ -103,13 +105,13 @@ const
       cpt.selfDestruct(beneficiary)
 
 
-  selfDestructEIP161Op: Vm2OpFn = proc(k: var Vm2Ctx) =
+  selfDestructEIP161Op: Vm2OpFn = proc(k: var Vm2Ctx) {.catchRaise.} =
     ## selfDestructEip161 (auto generated comment)
     let cpt = k.cpt
     checkInStaticContext(cpt)
 
     let beneficiary = cpt.stack.popAddress()
-    cpt.asyncChainToRaise(ifNecessaryGetAccount(cpt.vmState, beneficiary), [CatchableError]):
+    block:
       let
         isDead = not cpt.accountExists(beneficiary)
         balance = cpt.getBalance(cpt.msg.contractAddress)
@@ -125,13 +127,13 @@ const
       cpt.selfDestruct(beneficiary)
 
 
-  selfDestructEIP2929Op: Vm2OpFn = proc(k: var Vm2Ctx) =
+  selfDestructEIP2929Op: Vm2OpFn = proc(k: var Vm2Ctx) {.catchRaise.} =
     ## selfDestructEIP2929 (auto generated comment)
     let cpt = k.cpt
     checkInStaticContext(cpt)
 
     let beneficiary = cpt.stack.popAddress()
-    cpt.asyncChainToRaise(ifNecessaryGetAccount(cpt.vmState, beneficiary), [CatchableError]):
+    block:
       let
         isDead = not cpt.accountExists(beneficiary)
         balance = cpt.getBalance(cpt.msg.contractAddress)

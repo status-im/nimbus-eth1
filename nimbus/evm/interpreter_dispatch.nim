@@ -19,7 +19,6 @@ import
   ".."/[constants, db/ledger],
   "."/[code_stream, computation],
   "."/[message, precompiles, state, types],
-  ./async/operations,
   ./interpreter/[op_dispatcher, gas_costs]
 
 {.push raises: [].}
@@ -324,47 +323,6 @@ else:
         break
       c.dispose()
       (before, shouldPrepareTracer, c.parent, c) = (false, true, nil.Computation, c.parent)
-
-# FIXME-duplicatedForAsync
-#
-# In the long run I'd like to make some clever macro/template to
-# eliminate the duplication between the synchronous and
-# asynchronous versions. But for now let's stick with this for
-# simplicity.
-#
-# Also, I've based this on the recursive one (above), which I think
-# is okay because the "async" pragma is going to rewrite this whole
-# thing to use callbacks anyway. But maybe I'm wrong? It isn't hard
-# to write the async version of the iterative one, but this one is
-# a bit shorter and feels cleaner, so if it works just as well I'd
-# rather use this one. --Adam
-proc asyncExecCallOrCreate*(c: Computation): Future[void] {.async.} =
-  defer: c.dispose()
-
-  await ifNecessaryGetCode(c.vmState, c.msg.contractAddress)
-
-  if c.beforeExec():
-    return
-  c.executeOpcodes()
-  while not c.continuation.isNil:
-    # If there's a continuation, then it's because there's either
-    # a child (i.e. call or create) or a pendingAsyncOperation.
-    if not c.pendingAsyncOperation.isNil:
-      let p = c.pendingAsyncOperation
-      c.pendingAsyncOperation = nil
-      await p
-      c.executeOpcodes(false)
-    else:
-      when evmc_enabled:
-        # FIXME-asyncAndEvmc
-        # Note that this is NOT async. I'm not sure how/whether I
-        # can do EVMC asynchronously.
-        c.res = c.host.call(c.child[])
-      else:
-        await asyncExecCallOrCreate(c.child)
-      c.child = nil
-      c.executeOpcodes()
-  c.afterExec()
 
 # ------------------------------------------------------------------------------
 # End

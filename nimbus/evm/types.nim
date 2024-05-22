@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -13,7 +13,6 @@ import
   json_rpc/rpcclient,
   "."/[stack, memory, code_stream],
   ./interpreter/[gas_costs, op_codes],
-  ./async/data_sources,
   ../db/ledger,
   ../common/[common, evmforks]
 
@@ -70,7 +69,6 @@ type
     receipts*         : seq[Receipt]
     cumulativeGasUsed*: GasInt
     gasCosts*         : GasCosts
-    asyncFactory*     : AsyncOperationFactory
 
   Computation* = ref object
     # The execution computation

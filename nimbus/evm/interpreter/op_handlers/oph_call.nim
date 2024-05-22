@@ -12,7 +12,7 @@
 ## ====================================
 ##
 
-{.push raises: [CatchableError].} # basically the annotation type of a `Vm2OpFn`
+{.push raises: [].}
 
 import
   ../../../constants,
@@ -22,7 +22,6 @@ import
   ../../memory,
   ../../stack,
   ../../types,
-  ../../async/operations,
   ../gas_costs,
   ../gas_meter,
   ../op_codes,
@@ -37,6 +36,9 @@ when not defined(evmc_enabled):
   import
     ../../state,
     ../../../db/ledger
+
+# Annotation helpers
+{.pragma: catchRaise, gcsafe, raises: [CatchableError].}
 
 # ------------------------------------------------------------------------------
 # Private
@@ -59,7 +61,7 @@ type
     gasCallEIP2929:  GasInt
 
 
-proc updateStackAndParams(q: var LocalParams; c: Computation) =
+proc updateStackAndParams(q: var LocalParams; c: Computation) {.catchRaise.} =
   c.stack.push(0)
 
   let
@@ -91,7 +93,7 @@ proc updateStackAndParams(q: var LocalParams; c: Computation) =
           q.gasCallEIP2929 = ColdAccountAccessCost - WarmStorageReadCost
 
 
-proc callParams(c: Computation): LocalParams =
+proc callParams(c: Computation): LocalParams {.catchRaise.} =
   ## Helper for callOp()
   result.gas             = c.stack.popInt()
   result.codeAddress     = c.stack.popAddress()
@@ -108,13 +110,13 @@ proc callParams(c: Computation): LocalParams =
   result.updateStackAndParams(c)
 
 
-proc callCodeParams(c: Computation): LocalParams =
+proc callCodeParams(c: Computation): LocalParams {.catchRaise.} =
   ## Helper for callCodeOp()
   result = c.callParams
   result.contractAddress = c.msg.contractAddress
 
 
-proc delegateCallParams(c: Computation): LocalParams =
+proc delegateCallParams(c: Computation): LocalParams {.catchRaise.} =
   ## Helper for delegateCall()
   result.gas             = c.stack.popInt()
   result.codeAddress     = c.stack.popAddress()
@@ -131,7 +133,7 @@ proc delegateCallParams(c: Computation): LocalParams =
   result.updateStackAndParams(c)
 
 
-proc staticCallParams(c: Computation):  LocalParams =
+proc staticCallParams(c: Computation):  LocalParams {.catchRaise.} =
   ## Helper for staticCall()
   result.gas             = c.stack.popInt()
   result.codeAddress     = c.stack.popAddress()
@@ -166,7 +168,7 @@ when evmc_enabled:
         c.res.release(c.res)
 
 else:
-  proc execSubCall(c: Computation; childMsg: Message; memPos, memLen: int) {.raises: [].} =
+  proc execSubCall(c: Computation; childMsg: Message; memPos, memLen: int) =
     ## Call new VM -- helper for `Call`-like operations
 
     # need to provide explicit <c> and <child> for capturing in chainTo proc()
@@ -192,7 +194,7 @@ else:
 # ------------------------------------------------------------------------------
 
 const
-  callOp: Vm2OpFn = proc(k: var Vm2Ctx) =
+  callOp: Vm2OpFn = proc(k: var Vm2Ctx) {.catchRaise.} =
     ## 0xf1, Message-Call into an account
     let cpt = k.cpt
 
@@ -204,8 +206,8 @@ const
     let
       p = cpt.callParams
 
-    cpt.asyncChainTo(ifNecessaryGetAccounts(cpt.vmState, @[p.sender])):
-      cpt.asyncChainToRaise(ifNecessaryGetCodeForAccounts(cpt.vmState, @[p.contractAddress, p.codeAddress]), [CatchableError]):
+    block:
+      block:
         var (gasCost, childGasLimit) = cpt.gasCosts[Call].c_handler(
           p.value,
           GasParams(
@@ -277,14 +279,14 @@ const
 
   # ---------------------
 
-  callCodeOp: Vm2OpFn = proc(k: var Vm2Ctx) =
+  callCodeOp: Vm2OpFn = proc(k: var Vm2Ctx) {.catchRaise.} =
     ## 0xf2, Message-call into this account with an alternative account's code.
     let
       cpt = k.cpt
       p = cpt.callCodeParams
 
-    cpt.asyncChainTo(ifNecessaryGetAccounts(cpt.vmState, @[p.sender])):
-      cpt.asyncChainToRaise(ifNecessaryGetCodeForAccounts(cpt.vmState, @[p.contractAddress, p.codeAddress]), [CatchableError]):
+    block:
+      block:
         var (gasCost, childGasLimit) = cpt.gasCosts[CallCode].c_handler(
           p.value,
           GasParams(
@@ -356,15 +358,15 @@ const
 
   # ---------------------
 
-  delegateCallOp: Vm2OpFn = proc(k: var Vm2Ctx) =
+  delegateCallOp: Vm2OpFn = proc(k: var Vm2Ctx) {.catchRaise.} =
     ## 0xf4, Message-call into this account with an alternative account's
     ##       code, but persisting the current values for sender and value.
     let
       cpt = k.cpt
       p = cpt.delegateCallParams
 
-    cpt.asyncChainTo(ifNecessaryGetAccounts(cpt.vmState, @[p.sender])):
-      cpt.asyncChainToRaise(ifNecessaryGetCodeForAccounts(cpt.vmState, @[p.contractAddress, p.codeAddress]), [CatchableError]):
+    block:
+      block:
         var (gasCost, childGasLimit) = cpt.gasCosts[DelegateCall].c_handler(
           p.value,
           GasParams(
@@ -430,15 +432,15 @@ const
 
   # ---------------------
 
-  staticCallOp: Vm2OpFn = proc(k: var Vm2Ctx) =
+  staticCallOp: Vm2OpFn = proc(k: var Vm2Ctx) {.catchRaise.} =
     ## 0xfa, Static message-call into an account.
 
     let
       cpt = k.cpt
       p = cpt.staticCallParams
 
-    cpt.asyncChainTo(ifNecessaryGetAccounts(cpt.vmState, @[p.sender])):
-      cpt.asyncChainToRaise(ifNecessaryGetCodeForAccounts(cpt.vmState, @[p.contractAddress, p.codeAddress]), [CatchableError]):
+    block:
+      block:
         var (gasCost, childGasLimit) = cpt.gasCosts[StaticCall].c_handler(
           p.value,
           GasParams(

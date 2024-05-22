@@ -12,76 +12,78 @@
 ## ===============================
 ##
 
+{.push raises: [].}
+
 import
   eth/common,
   ../../computation,
   ../../stack,
-  ../../async/operations,
   ../utils/utils_numeric,
   ../op_codes,
   ./oph_defs
 
-{.push raises: [CatchableError].} # basically the annotation type of a `Vm2OpFn`
-
 when not defined(evmc_enabled):
   import ../../state
+
+# Annotation helpers
+{.pragma: catchRaise, gcsafe, raises: [CatchableError].}
 
 # ------------------------------------------------------------------------------
 # Private, op handlers implementation
 # ------------------------------------------------------------------------------
 
 const
-  blockhashOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+  blockhashOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x40, Get the hash of one of the 256 most recent complete blocks.
     let cpt = k.cpt
     let (blockNumber) = cpt.stack.popInt(1)
-    cpt.asyncChainToRaise(ifNecessaryGetBlockHeaderByNumber(cpt.vmState, blockNumber), [CatchableError]):
+    block:
       cpt.stack.push:
         cpt.getBlockHash(blockNumber)
 
-  coinBaseOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+  coinBaseOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x41, Get the block's beneficiary address.
     k.cpt.stack.push:
       k.cpt.getCoinbase
 
-  timestampOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+  timestampOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x42, Get the block's timestamp.
     k.cpt.stack.push:
       k.cpt.getTimestamp
 
-  blocknumberOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+  blocknumberOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x43, Get the block's number.
     k.cpt.stack.push:
       k.cpt.getBlockNumber
 
-  difficultyOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+  difficultyOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x44, Get the block's difficulty
     k.cpt.stack.push:
       k.cpt.getDifficulty
 
-  gasLimitOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+  gasLimitOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x45, Get the block's gas limit
     k.cpt.stack.push:
       k.cpt.getGasLimit
 
-  chainIdOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+  chainIdOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x46, Get current chain’s EIP-155 unique identifier.
     k.cpt.stack.push:
       k.cpt.getChainId
 
-  selfBalanceOp: Vm2OpFn = proc (k: var Vm2Ctx) {.gcsafe, raises:[].} =
+  selfBalanceOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x47, Get current contract's balance.
     let cpt = k.cpt
-    cpt.asyncChainToRaise(ifNecessaryGetAccount(cpt.vmState, cpt.msg.contractAddress), [CatchableError]):
+    block:
       cpt.stack.push:
         cpt.getBalance(cpt.msg.contractAddress)
 
-  baseFeeOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+  baseFeeOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x48, Get the block's base fee.
     k.cpt.stack.push:
       k.cpt.getBaseFee
 
-  blobHashOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+  blobHashOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x49, Get current transaction's EIP-4844 versioned hash.
     let index = k.cpt.stack.popInt().safeInt
     let len = k.cpt.getVersionedHashesLen
@@ -93,7 +95,7 @@ const
       k.cpt.stack.push:
         0
 
-  blobBaseFeeOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+  blobBaseFeeOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x4a, Get the block's base fee.
     k.cpt.stack.push:
       k.cpt.getBlobBaseFee

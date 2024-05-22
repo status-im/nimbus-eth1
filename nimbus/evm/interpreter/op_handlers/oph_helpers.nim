@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2023 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -64,7 +64,7 @@ proc gasEip2929AccountCheck*(c: Computation; address: EthAddress, slot: UInt256)
                else:
                  WarmStorageReadCost
 
-template checkInStaticContext*(c: Computation) =
+proc checkInStaticContext*(c: Computation) {.gcsafe, raises: [CatchableError].} =
   ## Verify static context in handler function, raise an error otherwise
   if EVMC_STATIC in c.msg.flags:
     # TODO: if possible, this check only appear
