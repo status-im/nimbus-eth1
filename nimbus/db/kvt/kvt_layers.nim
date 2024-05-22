@@ -37,7 +37,7 @@ proc layersHasKey*(db: KvtDbRef; key: openArray[byte]): bool =
   if db.top.delta.sTab.hasKey @key:
     return true
 
-  for w in db.stack.reversed:
+  for w in db.rstack:
     if w.delta.sTab.hasKey @key:
       return true
 
@@ -49,7 +49,7 @@ proc layersGet*(db: KvtDbRef; key: openArray[byte]): Result[Blob,void] =
   if db.top.delta.sTab.hasKey @key:
     return ok(db.top.delta.sTab.getOrVoid @key)
 
-  for w in db.stack.reversed:
+  for w in db.rstack:
     if w.delta.sTab.hasKey @key:
       return ok(w.delta.sTab.getOrVoid @key)
 
@@ -101,7 +101,7 @@ iterator layersWalk*(
     yield (key,val)
     seen.incl key
 
-  for w in db.stack.reversed:
+  for w in db.rstack:
     for (key,val) in w.delta.sTab.pairs:
       if key notin seen:
         yield (key,val)

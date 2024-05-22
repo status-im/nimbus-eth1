@@ -69,7 +69,7 @@ proc layersGetVtx*(db: AristoDbRef; vid: VertexID): Result[VertexRef,void] =
   if db.top.delta.sTab.hasKey vid:
     return ok(db.top.delta.sTab.getOrVoid vid)
 
-  for w in db.stack.reversed:
+  for w in db.rstack:
     if w.delta.sTab.hasKey vid:
       return ok(w.delta.sTab.getOrVoid vid)
 
@@ -89,7 +89,7 @@ proc layersGetKey*(db: AristoDbRef; vid: VertexID): Result[HashKey,void] =
     # dirty, there is an empty `kMap[]` entry on this layer.
     return ok(db.top.delta.kMap.getOrVoid vid)
 
-  for w in db.stack.reversed:
+  for w in db.rstack:
     if w.delta.kMap.hasKey vid:
       # Same reasoning as above regarding the `dirty` flag.
       return ok(w.delta.kMap.getOrVoid vid)
@@ -233,7 +233,7 @@ iterator layersWalkVtx*(
     yield (vid,vtx)
     seen.incl vid
 
-  for w in db.stack.reversed:
+  for w in db.rstack:
     for (vid,vtx) in w.delta.sTab.pairs:
       if vid notin seen:
         yield (vid,vtx)
@@ -258,7 +258,7 @@ iterator layersWalkKey*(
     yield (vid,key)
     seen.incl vid
 
-  for w in db.stack.reversed:
+  for w in db.rstack:
     for (vid,key) in w.delta.kMap.pairs:
       if vid notin seen:
         yield (vid,key)

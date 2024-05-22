@@ -53,11 +53,11 @@ type
     ## `Hash256` type of the Keccak hash of an empty `Blob` (see constant
     ## `EMPTY_ROOT_HASH`.)
     ##
-    case isHash: bool
-    of true:
-      key: Hash256                   ## Merkle hash tacked to a vertex
-    else:
-      blob: Blob                     ## Optionally encoded small node data
+    ## For performance, we avoid storing blobs as `seq`, instead storing their
+    ## length and sharing the data "space".
+    ## TODO can we skip one byte of hash and reduce this type to 32 bytes?
+    buf: array[32, byte] # Either Hash256 or blob data, depending on `len`
+    len: int8 # length in the case of blobs, or 32 when it's a hash
 
   PathID* = object
     ## Path into the `Patricia Trie`. This is a chain of maximal 64 nibbles
@@ -198,15 +198,18 @@ func `==`*(a, b: PathID): bool =
 func cmp*(a, b: PathID): int =
   if a < b: -1 elif b < a: 1 else: 0
 
+template data*(lid: HashKey): openArray[byte] =
+  lid.buf.toOpenArray(0, lid.len - 1)
+
 func to*(lid: HashKey; T: type PathID): T =
   ## Helper to bowrrow certain properties from `PathID`
-  if lid.isHash:
-    PathID(pfx: UInt256.fromBytesBE lid.key.data, length: 64)
-  elif 0 < lid.blob.len:
-    doAssert lid.blob.len < 32
+  if lid.len == 32:
+    PathID(pfx: UInt256.fromBytesBE lid.data, length: 64)
+  elif 0 < lid.len:
+    doAssert lid.len < 32
     var a32: array[32,byte]
-    (addr a32[0]).copyMem(unsafeAddr lid.blob[0], lid.blob.len)
-    PathID(pfx: UInt256.fromBytesBE a32, length: 2 * lid.blob.len.uint8)
+    (addr a32[0]).copyMem(unsafeAddr lid.data[0], lid.len)
+    PathID(pfx: UInt256.fromBytesBE a32, length: 2 * lid.len.uint8)
   else:
     PathID()
 
@@ -215,7 +218,7 @@ func to*(lid: HashKey; T: type PathID): T =
 # ------------------------------------------------------------------------------
 
 func len*(lid: HashKey): int =
-  if lid.isHash: 32 else: lid.blob.len
+  lid.len.int # if lid.isHash: 32 else: lid.blob.len
 
 func fromBytes*(T: type HashKey; data: openArray[byte]): Result[T,void] =
   ## Write argument `data` of length 0 or between 2 and 32 bytes as a `HashKey`.
@@ -228,13 +231,16 @@ func fromBytes*(T: type HashKey; data: openArray[byte]): Result[T,void] =
   ##
   if data.len == 32:
     var lid: T
-    lid.isHash = true
-    (addr lid.key.data[0]).copyMem(unsafeAddr data[0], data.len)
+    lid.len = 32
+    (addr lid.data[0]).copyMem(unsafeAddr data[0], data.len)
     return ok lid
   if data.len == 0:
     return ok HashKey()
   if 1 < data.len and data.len < 32 and data[0].int == 0xbf + data.len:
-    return ok T(isHash: false, blob: @data)
+    var lid: T
+    lid.len = int8 data.len
+    (addr lid.data[0]).copyMem(unsafeAddr data[0], data.len)
+    return ok lid
   err()
 
 func `<`*(a, b: HashKey): bool =
@@ -242,16 +248,11 @@ func `<`*(a, b: HashKey): bool =
   a.to(PathID) < b.to(PathID)
 
 func `==`*(a, b: HashKey): bool =
-  if a.isHash != b.isHash:
-    false
-  elif a.isHash:
-    a.key == b.key
-  else:
-    a.blob == b.blob
+  a.data == b.data
 
 func cmp*(a, b: HashKey): int =
   ## Slow, but useful for debug sorting
-  if a < b: -1 elif b < a: 1 else: 0
+  cmp(a.data, b.data)
 
 # ------------------------------------------------------------------------------
 # Public helpers: `LeafTie` ordered scalar data model
@@ -292,16 +293,13 @@ func cmp*(a, b: LeafTie): int =
 # Public helpers: Reversible conversions between `PathID`, `HashKey`, etc.
 # ------------------------------------------------------------------------------
 
-func to*(key: HashKey; T: type Blob): T =
+func to*(key: HashKey; T: type Blob): T {.deprecated.} =
   ## Rewrite `HashKey` argument as `Blob` type of length between 0 and 32. A
   ## blob of length 32 is taken as a representation of a `HashKey` type while
   ## samller blobs are expected to represent an RLP encoded small node.
-  if key.isHash:
-    @(key.key.data)
-  else:
-    key.blob
+  @(key.data)
 
-func `@`*(lid: HashKey): Blob =
+func `@`*(lid: HashKey): Blob {.deprecated.} =
   ## Variant of `to(Blob)`
   lid.to(Blob)
 
@@ -323,10 +321,10 @@ func `@`*(pid: PathID): Blob =
 func to*(lid: HashKey; T: type Hash256): T =
   ## Returns the `Hash236` key if available, otherwise the Keccak hash of
   ## the `Blob` version.
-  if lid.isHash:
-    lid.key
-  elif 0 < lid.blob.len:
-    lid.blob.keccakHash
+  if lid.len == 32:
+    Hash256(data: lid.buf)
+  elif 0 < lid.len:
+    lid.data.keccakHash
   else:
     EMPTY_ROOT_HASH
 
@@ -336,7 +334,7 @@ func to*(key: Hash256; T: type HashKey): T =
   if key == EMPTY_ROOT_HASH:
     T()
   else:
-    T(isHash: true, key: key)
+    T(len: 32, buf: key.data)
 
 func to*(n: SomeUnsignedInt|UInt256; T: type PathID): T =
   ## Representation of a scalar as `PathID` (preserving full information)
@@ -349,11 +347,14 @@ func to*(n: SomeUnsignedInt|UInt256; T: type PathID): T =
 func digestTo*(data: openArray[byte]; T: type HashKey): T =
   ## For argument `data` with length smaller than 32, import them as-is into
   ## the result. Otherwise import the Keccak hash of the argument `data`.
-  if data.len < 32:
-    result.blob = @data
+  if data.len == 0:
+    result.len = 0
+  elif data.len < 32:
+    result.len = int8 data.len
+    (addr result.data[0]).copyMem(unsafeAddr data[0], data.len)
   else:
-    result.isHash = true
-    result.key = data.keccakHash
+    result.len = 32
+    result.buf = data.keccakHash.data
 
 func normal*(a: PathID): PathID =
   ## Normalise path ID representation
@@ -376,12 +377,7 @@ func hash*(a: PathID): Hash =
 
 func hash*(a: HashKey): Hash =
   ## Table/KeyedQueue mixin
-  var h: Hash = 0
-  if a.isHash:
-    h = h !& a.key.hash
-  else:
-    h = h !& a.blob.hash
-  !$h
+  hash(a.data)
 
 # ------------------------------------------------------------------------------
 # Miscellaneous helpers
@@ -415,10 +411,7 @@ func `$`*(key: Hash256): string =
     w.toHex
 
 func `$`*(key: HashKey): string =
-  if key.isHash:
-    $key.key
-  else:
-    key.blob.toHex & "[#" & $key.blob.len & "]"
+  toHex(key.data)
 
 func `$`*(a: PathID): string =
   if a.pfx.isZero.not:

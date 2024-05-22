@@ -199,6 +199,20 @@ proc test_chainSync*(
   # This will enable printing the `era1` covered block ranges (if any)
   undump_blocks_era1.noisy = noisy
 
+  var
+    blocks = 0
+    total = 0
+    begin = toUnixFloat(getTime())
+    sample = begin
+
+  template sayPerf =
+    if blocks > 0:
+      total += blocks
+      let done {.inject.} = toUnixFloat(getTime())
+      noisy.say "", &"{blocks:3} blocks, {(done-sample):2.3}s, {(blocks.float / (done-sample)):4.3f} b/s, avg {(total.float / (done-begin)):4.3f} b/s"
+      blocks = 0
+      sample = done
+
   for w in files.undumpBlocks(least = start):
     let (fromBlock, toBlock) = (w[0][0].blockNumber, w[0][^1].blockNumber)
     if fromBlock == 0.u256:
@@ -209,9 +223,12 @@ proc test_chainSync*(
     if toBlock < lastBlock:
       # Message if `[fromBlock,toBlock]` contains a multiple of `sayBlocks`
       if fromBlock + (toBlock mod sayBlocks.u256) <= toBlock:
-        noisy.say "***", &"processing ...[#{fromBlock},#{toBlock}]..."
+        sayPerf
+
+        noisy.whisper "***", &"processing ...[#{fromBlock:>8},#{toBlock:>8}]..."
         if enaLogging:
           noisy.startLogging(w[0][0].blockNumber)
+
       noisy.stopLoggingAfter():
         let runPersistBlocksRc = chain.persistBlocks(w[0], w[1])
         xCheck runPersistBlocksRc == ValidationResult.OK:
@@ -222,6 +239,7 @@ proc test_chainSync*(
             com.db.trackNewApi = false
             com.db.trackLedgerApi = false
             discard chain.persistBlocks(w[0], w[1])
+      blocks += w[0].len
       continue
 
     # Last group or single block
@@ -241,7 +259,8 @@ proc test_chainSync*(
       let
         headers1 = w[0][0 ..< pivot]
         bodies1 = w[1][0 ..< pivot]
-      noisy.say "***", &"processing {dotsOrSpace}[#{fromBlock},#{lastBlock-1}]"
+      sayPerf
+      noisy.whisper "***", &"processing {dotsOrSpace}[#{fromBlock:>8},#{(lastBlock-1):>8}]"
       let runPersistBlocks1Rc = chain.persistBlocks(headers1, bodies1)
       xCheck runPersistBlocks1Rc == ValidationResult.OK
       dotsOrSpace = "   "
@@ -251,16 +270,19 @@ proc test_chainSync*(
       let
         headers0 = headers9[0..0]
         bodies0 = bodies9[0..0]
-      noisy.say "***", &"processing {dotsOrSpace}[#{lastBlock},#{lastBlock}]"
+      sayPerf
+      noisy.whisper "***", &"processing {dotsOrSpace}[#{lastBlock:>8},#{lastBlock:>8}]"
       noisy.stopLoggingAfter():
         let runPersistBlocks0Rc = chain.persistBlocks(headers0, bodies0)
         xCheck runPersistBlocks0Rc == ValidationResult.OK
     else:
-      noisy.say "***", &"processing {dotsOrSpace}[#{lastBlock},#{toBlock}]"
+      sayPerf
+      noisy.whisper "***", &"processing {dotsOrSpace}[#{lastBlock:>8},#{toBlock:>8}]"
       noisy.stopLoggingAfter():
         let runPersistBlocks9Rc = chain.persistBlocks(headers9, bodies9)
         xCheck runPersistBlocks9Rc == ValidationResult.OK
     break
+  sayPerf
 
   true
 

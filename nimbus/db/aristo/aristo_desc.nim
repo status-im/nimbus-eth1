@@ -98,7 +98,7 @@ func getOrVoid*[W](tab: Table[W,HashSet[VertexID]]; w: W): HashSet[VertexID] =
 # --------
 
 func isValid*(vtx: VertexRef): bool =
-  vtx != VertexRef(nil) 
+  vtx != VertexRef(nil)
 
 func isValid*(nd: NodeRef): bool =
   nd != NodeRef(nil)
@@ -259,6 +259,11 @@ proc forgetOthers*(db: AristoDbRef): Result[void,AristoError] =
 
     db.dudes = DudesRef(nil)
   ok()
+
+iterator rstack*(db: AristoDbRef): LayerRef =
+  # Stack in reverse order
+  for i in 0..<db.stack.len:
+    yield db.stack[db.stack.len - i - 1]
 
 # ------------------------------------------------------------------------------
 # End

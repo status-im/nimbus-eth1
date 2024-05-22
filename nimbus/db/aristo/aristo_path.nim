@@ -45,9 +45,9 @@ func pathAsBlob*(tag: PathID): Blob =
   ## used to index database leaf values can be represented as `Blob`, i.e.
   ## `PathID` type paths with an even number of nibbles.
   if 0 < tag.length:
-    let key = @(tag.pfx.toBytesBE)
+    let key = tag.pfx.toBytesBE
     if 64 <= tag.length:
-      return key
+      return @key
     else:
       return key[0 .. (tag.length - 1) div 2]
 
