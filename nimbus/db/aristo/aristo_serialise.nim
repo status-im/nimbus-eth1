@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -133,9 +133,9 @@ proc append*(writer: var RlpWriter; node: NodeRef) =
   ## list.
   func addHashKey(w: var RlpWriter; key: HashKey) =
     if 1 < key.len and key.len < 32:
-      w.appendRawBytes @key
+      w.appendRawBytes key.data
     else:
-      w.append @key
+      w.append key.data
 
   if node.error != AristoError(0):
     writer.startList(0)

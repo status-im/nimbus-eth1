@@ -54,7 +54,7 @@ iterator walk*(
           break walkBody
         let
           pfx = StorageType(key[0])
-          id = uint64.fromBytesBE key[1..^1]
+          id = uint64.fromBytesBE key.toOpenArray(1, key.len - 1)
         yield (pfx, id, val)
 
 

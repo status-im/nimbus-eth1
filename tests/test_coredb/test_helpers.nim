@@ -53,6 +53,16 @@ proc say*(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
     else:
       echo pfx, args.toSeq.join
 
+proc whisper*(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
+  if noisy:
+    if args.len == 0:
+      stdout.write("*** ", pfx)
+    elif 0 < pfx.len and pfx[^1] != ' ':
+      stdout.write(pfx, " ", args.toSeq.join)
+    else:
+      stdout.write(pfx, args.toSeq.join)
+    stdout.flushFile()
+
 proc toPfx*(indent: int): string =
   "\n" & " ".repeat(indent)
 

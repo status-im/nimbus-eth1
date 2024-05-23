@@ -191,6 +191,11 @@ proc forgetOthers*(db: KvtDbRef): Result[void,KvtError] =
     db.dudes = DudesRef(nil)
   ok()
 
+iterator rstack*(db: KvtDbRef): LayerRef =
+  # Stack in reverse order
+  for i in 0..<db.stack.len:
+    yield db.stack[db.stack.len - i - 1]
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
