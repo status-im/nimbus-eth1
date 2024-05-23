@@ -117,7 +117,6 @@ type
     ## Protocol flags
     Eth                           ## enable eth subprotocol
     #Snap                          ## enable snap sub-protocol
-    Les                           ## enable les subprotocol
 
   RpcFlag* {.pure.} = enum
     ## RPC flags
@@ -373,8 +372,8 @@ type
 
     protocols {.
       desc: "Enable specific set of server protocols (available: Eth, " &
-            " Les, None.) This will not affect the sync mode"
-            # " Snap, Les, None.) This will not affect the sync mode"
+            " None.) This will not affect the sync mode"
+            # " Snap, None.) This will not affect the sync mode"
       defaultValue: @[]
       defaultValueDesc: $ProtocolFlag.Eth
       name: "protocols" .}: seq[string]
@@ -635,7 +634,6 @@ proc getProtocolFlags*(conf: NimbusConf): set[ProtocolFlag] =
   for item in repeatingList(conf.protocols):
     case item.toLowerAscii()
     of "eth": result.incl ProtocolFlag.Eth
-    of "les": result.incl ProtocolFlag.Les
     # of "snap": result.incl ProtocolFlag.Snap
     of "none": noneOk = true
     else:

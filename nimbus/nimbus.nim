@@ -28,8 +28,7 @@ import
   ./core/clique/clique_desc,
   ./core/clique/clique_sealer,
   ./sync/protocol,
-  ./sync/handlers,
-  ./sync/protocol/les_protocol
+  ./sync/handlers
 
 when defined(evmc_enabled):
   import transaction/evmc_dynamic_loader
@@ -131,8 +130,6 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
         nimbus.ethNode.peerPool,
         nimbus.chainRef,
         nimbus.txPool)
-    of ProtocolFlag.Les:
-      nimbus.ethNode.addCapability les
     #of ProtocolFlag.Snap:
     #  nimbus.ethNode.addSnapHandlerCapability(
     #    nimbus.ethNode.peerPool,

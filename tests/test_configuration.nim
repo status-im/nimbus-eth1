@@ -157,19 +157,9 @@ proc configurationMain*() =
       let flags = conf.getProtocolFlags()
       check ProtocolFlag.Eth in flags
 
-      let aa = makeConfig(@["--protocols:les"])
-      let ax = aa.getProtocolFlags()
-      check ProtocolFlag.Les in ax
-
-      let bb = makeConfig(@["--protocols:eth", "--protocols:les"])
+      let bb = makeConfig(@["--protocols:eth"])
       let bx = bb.getProtocolFlags()
       check ProtocolFlag.Eth in bx
-      check ProtocolFlag.Les in bx
-
-      let cc = makeConfig(@["--protocols:eth,les"])
-      let cx = cc.getProtocolFlags()
-      check ProtocolFlag.Eth in cx
-      check ProtocolFlag.Les in cx
 
     test "bootstrap-node and bootstrap-file":
       let conf = makeTestConfig()
