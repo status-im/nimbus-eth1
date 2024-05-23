@@ -132,7 +132,7 @@ func to*(a: Hash256; T: type PathID): T =
   a.to(UInt256).to(T)
 
 func to*(a: HashKey; T: type UInt256): T =
-  T.fromBytesBE 0u8.repeat(32 - a.len) & @a
+  T.fromBytesBE 0u8.repeat(32 - a.len) & @(a.data)
 
 func to*(fid: FilterID; T: type Hash256): T =
   result.data = fid.uint64.u256.toBytesBE

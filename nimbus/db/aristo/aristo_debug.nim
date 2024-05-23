@@ -204,7 +204,7 @@ proc ppKey(key: HashKey; db: AristoDbRef; pfx = true): string =
       if 1 < vids.len: result &= "}"
       result &= tag
       return
-    result &= @key.toHex.squeeze(hex=true,ignLen=true) & tag
+    result &= @(key.data).toHex.squeeze(hex=true,ignLen=true) & tag
 
 proc ppLeafTie(lty: LeafTie, db: AristoDbRef): string =
   let pfx = lty.path.to(NibblesSeq)

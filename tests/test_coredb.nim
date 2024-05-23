@@ -258,9 +258,6 @@ proc persistentSyncPreLoadAndResumeRunner(
       ) =
   ## Test backend database and ledger
   let
-    fileInfo = capture.files[0]
-                      .splitFile.name.split(".")[0]
-                      .strip(leading=false, chars={'0'..'9'})
     filePaths = capture.files.mapIt(it.findFilePath(baseDir,repoDir).value)
     baseDir = getTmpDir() / capture.dbName & "-chain-sync"
     dbDir = baseDir / "tmp"

@@ -58,7 +58,7 @@ func hash(filter: FilterRef): Hash =
       h = h !& (w.uint64.toBytesBE.toSeq & data).hash
 
     for w in filter.kMap.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID):
-      let data = @(filter.kMap.getOrVoid(w))
+      let data = @(filter.kMap.getOrVoid(w).data)
       h = h !& (w.uint64.toBytesBE.toSeq & data).hash
 
   !$h

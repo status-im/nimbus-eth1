@@ -397,7 +397,7 @@ iterator walk*(
       yield (VtxPfx, vid.uint64, data)
 
   for (vid,key) in be.walkKey:
-    yield (KeyPfx, vid.uint64, @key)
+    yield (KeyPfx, vid.uint64, @(key.data))
 
   if not be.mdb.noFq:
     for lid in be.mdb.rFil.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.QueueID):

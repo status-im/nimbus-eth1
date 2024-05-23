@@ -218,7 +218,7 @@ proc putKeyFn(db: RdbBackendRef): PutKeyFn =
         var batch: seq[(uint64,Blob)]
         for (vid,key) in vkps:
           if key.isValid:
-            batch.add (vid.uint64, @key)
+            batch.add (vid.uint64, @(key.data))
           else:
             batch.add (vid.uint64, EmptyBlob)
 

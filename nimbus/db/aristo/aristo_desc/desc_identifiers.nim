@@ -293,16 +293,6 @@ func cmp*(a, b: LeafTie): int =
 # Public helpers: Reversible conversions between `PathID`, `HashKey`, etc.
 # ------------------------------------------------------------------------------
 
-func to*(key: HashKey; T: type Blob): T {.deprecated.} =
-  ## Rewrite `HashKey` argument as `Blob` type of length between 0 and 32. A
-  ## blob of length 32 is taken as a representation of a `HashKey` type while
-  ## samller blobs are expected to represent an RLP encoded small node.
-  @(key.data)
-
-func `@`*(lid: HashKey): Blob {.deprecated.} =
-  ## Variant of `to(Blob)`
-  lid.to(Blob)
-
 func to*(pid: PathID; T: type NibblesSeq): T =
   ## Representation of a `PathID` as `NibbleSeq` (preserving full information)
   let nibbles = pid.pfx.toBytesBE.toSeq.initNibbleRange()

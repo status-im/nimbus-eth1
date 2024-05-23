@@ -172,7 +172,7 @@ proc blobify*(filter: FilterRef; data: var Blob): Result[void,AristoError] =
   ##
   func blobify(lid: HashKey): Blob =
     let n = lid.len
-    if n < 32: @[n.byte] & @lid & 0u8.repeat(31 - n) else: @lid
+    if n < 32: @[n.byte] & @(lid.data) & 0u8.repeat(31 - n) else: @(lid.data)
 
   if not filter.isValid:
     return err(BlobifyNilFilter)
