@@ -29,13 +29,13 @@ func dup(sTab: Table[VertexID,VertexRef]): Table[VertexID,VertexRef] =
 # Public getters: lazy value lookup for read only versions
 # ------------------------------------------------------------------------------
 
-func dirty*(db: AristoDbRef): HashSet[VertexID] =
+func dirty*(db: AristoDbRef): lent HashSet[VertexID] =
   db.top.final.dirty
 
-func pPrf*(db: AristoDbRef): HashSet[VertexID] =
+func pPrf*(db: AristoDbRef): lent HashSet[VertexID] =
   db.top.final.pPrf
 
-func vGen*(db: AristoDbRef): seq[VertexID] =
+func vGen*(db: AristoDbRef): lent seq[VertexID] =
   db.top.final.vGen
 
 # ------------------------------------------------------------------------------

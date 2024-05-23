@@ -47,7 +47,7 @@ proc getImpl(rdb: RdbInst; key: RdbKey): Result[Blob,(AristoError,string)] =
   # Correct result if needed
   if not gotData:
     res = EmptyBlob
-  ok res
+  ok move(res)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -64,9 +64,10 @@ proc getKey*(rdb: var RdbInst; xid: uint64): Result[Blob,(AristoError,string)] =
   # Try LRU cache first
   let
     key = xid.toRdbKey KeyPfx
+  var
     rc = rdb.rdKeyLru.lruFetch(key)
   if rc.isOK:
-    return ok(rc.value)
+    return ok(move(rc.value))
 
   # Otherwise fetch from backend database
   let res = ? rdb.getImpl(key)
@@ -78,9 +79,10 @@ proc getVtx*(rdb: var RdbInst; xid: uint64): Result[Blob,(AristoError,string)] =
   # Try LRU cache first
   let
     key = xid.toRdbKey VtxPfx
+  var
     rc = rdb.rdVtxLru.lruFetch(key)
   if rc.isOK:
-    return ok(rc.value)
+    return ok(move(rc.value))
 
   # Otherwise fetch from backend database
   let res = ? rdb.getImpl(key)

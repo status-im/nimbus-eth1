@@ -77,9 +77,9 @@ proc getKvpFn(db: MemBackendRef): GetKvpFn =
     proc(key: openArray[byte]): Result[Blob,KvtError] =
       if key.len == 0:
         return err(KeyInvalid)
-      let data = db.mdb.tab.getOrVoid @key
+      var data = db.mdb.tab.getOrVoid @key
       if data.isValid:
-        return ok(data)
+        return ok(move(data))
       err(GetNotFound)
 
 # -------------

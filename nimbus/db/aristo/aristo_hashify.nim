@@ -111,7 +111,7 @@ proc pedigree(
     wff.rev.withValue(toVid, val):
       val[].incl fromVid
     do:
-      wff.rev[toVid] = @[fromVid].toHashSet
+      wff.rev[toVid] = [fromVid].toHashSet
 
     # Remove unnecessarey sup-trie roots (e.g. for a storage root)
     wff.root.excl fromVid
