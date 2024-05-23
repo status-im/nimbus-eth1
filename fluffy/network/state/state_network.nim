@@ -19,7 +19,7 @@ import
   ./state_validation,
   ./state_gossip
 
-export results
+export results, state_content
 
 logScope:
   topics = "portal_state"
@@ -172,12 +172,17 @@ proc processOffer(
   )
   info "Received offered content validated successfully", contentKeyBytes
 
-  await gossipOffer(n.portalProtocol, maybeSrcNodeId, contentKey, contentValue)
+  asyncSpawn gossipOffer(
+    n.portalProtocol, maybeSrcNodeId, contentKeyBytes, contentValueBytes, contentKey,
+    contentValue,
+  )
+
+  ok()
 
 proc processContentLoop(n: StateNetwork) {.async.} =
   try:
     while true:
-      let (maybeSrcNodeId, contentKeys, contentValues) = await n.contentQueue.popFirst()
+      let (srcNodeId, contentKeys, contentValues) = await n.contentQueue.popFirst()
       for i, contentValueBytes in contentValues:
         let
           contentKeyBytes = contentKeys[i]
@@ -192,17 +197,17 @@ proc processContentLoop(n: StateNetwork) {.async.} =
             continue
           of accountTrieNode:
             await processOffer(
-              n, maybeSrcNodeId, contentKeyBytes, contentValueBytes,
+              n, srcNodeId, contentKeyBytes, contentValueBytes,
               contentKey.accountTrieNodeKey, AccountTrieNodeOffer,
             )
           of contractTrieNode:
             await processOffer(
-              n, maybeSrcNodeId, contentKeyBytes, contentValueBytes,
+              n, srcNodeId, contentKeyBytes, contentValueBytes,
               contentKey.contractTrieNodeKey, ContractTrieNodeOffer,
             )
           of contractCode:
             await processOffer(
-              n, maybeSrcNodeId, contentKeyBytes, contentValueBytes,
+              n, srcNodeId, contentKeyBytes, contentValueBytes,
               contentKey.contractCodeKey, ContractCodeOffer,
             )
         if offerRes.isOk():

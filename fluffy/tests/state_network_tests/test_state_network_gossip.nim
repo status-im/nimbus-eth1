@@ -13,7 +13,7 @@ import
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ../../network/wire/[portal_protocol, portal_stream],
   ../../network/history/[history_content, history_network],
-  ../../network/state/[state_content, state_network, state_gossip],
+  ../../network/state/[state_network, state_gossip],
   ../../database/content_db,
   .././test_helpers,
   ../../eth_data/yaml_utils
@@ -104,7 +104,7 @@ procSuite "State Network Gossip":
 
       if i == 0:
         await currentNode.portalProtocol.gossipOffer(
-          Opt.none(NodeId), decodedKey.accountTrieNodeKey, decodedValue
+          Opt.none(NodeId), key, value, decodedKey.accountTrieNodeKey, decodedValue
         )
 
       await sleepAsync(100.milliseconds) #TODO figure out how to get rid of this sleep
