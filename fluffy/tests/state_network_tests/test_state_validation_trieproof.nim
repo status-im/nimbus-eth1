@@ -199,7 +199,9 @@ suite "MPT trie proof verification":
       validateTrieProof(rootHash, kv11.asNibbles(), trie.getTrieProof(kv11)).isErr()
       validateTrieProof(rootHash, kv12.asNibbles(), trie.getTrieProof(kv12)).isErr()
       validateTrieProof(rootHash, kv13.asNibbles(), trie.getTrieProof(kv13)).isErr()
+
       validateTrieProof(rootHash, kv14.asNibbles(), trie.getTrieProof(kv14), false)
       .isErr()
+
       validateTrieProof(rootHash, kv15.asNibbles(), trie.getTrieProof(kv15), false)
       .isErr()

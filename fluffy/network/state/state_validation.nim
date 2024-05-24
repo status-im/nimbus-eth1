@@ -107,38 +107,35 @@ proc validateTrieProof*(
     ok()
 
 proc validateRetrieval*(
-    trustedKey: AccountTrieNodeKey, value: AccountTrieNodeRetrieval
+    key: AccountTrieNodeKey, value: AccountTrieNodeRetrieval
 ): Result[void, string] =
-  if value.node.hashEquals(trustedKey.nodeHash):
+  if value.node.hashEquals(key.nodeHash):
     ok()
   else:
-    err("hash of fetched account trie node doesn't match the expected node hash")
+    err("hash of account trie node doesn't match the expected node hash")
 
 proc validateRetrieval*(
-    trustedKey: ContractTrieNodeKey, value: ContractTrieNodeRetrieval
+    key: ContractTrieNodeKey, value: ContractTrieNodeRetrieval
 ): Result[void, string] =
-  if value.node.hashEquals(trustedKey.nodeHash):
+  if value.node.hashEquals(key.nodeHash):
     ok()
   else:
-    err("hash of fetched contract trie node doesn't match the expected node hash")
+    err("hash of contract trie node doesn't match the expected node hash")
 
 proc validateRetrieval*(
-    trustedKey: ContractCodeKey, value: ContractCodeRetrieval
+    key: ContractCodeKey, value: ContractCodeRetrieval
 ): Result[void, string] =
-  if value.code.hashEquals(trustedKey.codeHash):
+  if value.code.hashEquals(key.codeHash):
     ok()
   else:
-    err("hash of fetched bytecode doesn't match the expected code hash")
+    err("hash of bytecode doesn't match the expected code hash")
 
 proc validateOffer*(
     trustedStateRoot: KeccakHash, key: AccountTrieNodeKey, offer: AccountTrieNodeOffer
 ): Result[void, string] =
   ?validateTrieProof(trustedStateRoot, key.path, offer.proof)
 
-  if offer.proof[^1].hashEquals(key.nodeHash):
-    ok()
-  else:
-    err("hash of offered account trie node doesn't match the expected node hash")
+  validateRetrieval(key, offer.toRetrievalValue())
 
 proc validateOffer*(
     trustedStateRoot: KeccakHash, key: ContractTrieNodeKey, offer: ContractTrieNodeOffer
@@ -155,10 +152,7 @@ proc validateOffer*(
 
   ?validateTrieProof(account.storageRoot, key.path, offer.storageProof)
 
-  if offer.storageProof[^1].hashEquals(key.nodeHash):
-    ok()
-  else:
-    err("hash of offered contract trie node doesn't match the expected node hash")
+  validateRetrieval(key, offer.toRetrievalValue())
 
 proc validateOffer*(
     trustedStateRoot: KeccakHash, key: ContractCodeKey, offer: ContractCodeOffer
@@ -172,8 +166,7 @@ proc validateOffer*(
   )
 
   let account = ?rlpDecodeAccountTrieNode(offer.accountProof[^1])
+  if not offer.code.hashEquals(account.codeHash):
+    return err("hash of bytecode doesn't match the code hash in the account proof")
 
-  if offer.code.hashEquals(account.codeHash):
-    ok()
-  else:
-    err("hash of offered bytecode doesn't match the expected code hash")
+  validateRetrieval(key, offer.toRetrievalValue())
