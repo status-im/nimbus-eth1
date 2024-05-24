@@ -13,8 +13,7 @@ import
   stew/results,
   eth/[common, trie, trie/trie_defs],
   ../../../nimbus/common/chain_config,
-  ../../network/state/state_content,
-  ../../network/state/state_validation,
+  ../../network/state/[state_content, state_validation],
   ./state_test_helpers
 
 template checkValidProofsForExistingLeafs(
@@ -28,9 +27,11 @@ template checkValidProofsForExistingLeafs(
 
     let
       accountProof = accountState.generateAccountProof(address)
+      accountPath = removeLeafKeyEndNibbles(
+        Nibbles.init(keccakHash(address).data, true), accountProof[^1]
+      )
       accountTrieNodeKey = AccountTrieNodeKey(
-        path: Nibbles.init(keccakHash(address).data, true),
-        nodeHash: keccakHash(accountProof[^1].asSeq()),
+        path: accountPath, nodeHash: keccakHash(accountProof[^1].asSeq())
       )
       accountTrieOffer = AccountTrieNodeOffer(proof: accountProof)
       proofResult =
@@ -51,9 +52,12 @@ template checkValidProofsForExistingLeafs(
       for slotKey, slotValue in account.storage:
         let
           storageProof = storageState.generateStorageProof(slotKey)
+          slotPath = removeLeafKeyEndNibbles(
+            Nibbles.init(keccakHash(toBytesBE(slotKey)).data, true), storageProof[^1]
+          )
           contractTrieNodeKey = ContractTrieNodeKey(
             address: address,
-            path: Nibbles.init(keccakHash(toBytesBE(slotKey)).data, true),
+            path: slotPath,
             nodeHash: keccakHash(storageProof[^1].asSeq()),
           )
           contractTrieOffer = ContractTrieNodeOffer(
@@ -75,9 +79,11 @@ template checkInvalidProofsWithBadValue(
 
     var
       accountProof = accountState.generateAccountProof(address)
+      accountPath = removeLeafKeyEndNibbles(
+        Nibbles.init(keccakHash(address).data, true), accountProof[^1]
+      )
       accountTrieNodeKey = AccountTrieNodeKey(
-        path: Nibbles.init(keccakHash(address).data, true),
-        nodeHash: keccakHash(accountProof[^1].asSeq()),
+        path: accountPath, nodeHash: keccakHash(accountProof[^1].asSeq())
       )
     accountProof[^1][^1] += 1 # bad account leaf value
     let
@@ -102,9 +108,12 @@ template checkInvalidProofsWithBadValue(
       for slotKey, slotValue in account.storage:
         var
           storageProof = storageState.generateStorageProof(slotKey)
+          slotPath = removeLeafKeyEndNibbles(
+            Nibbles.init(keccakHash(toBytesBE(slotKey)).data, true), storageProof[^1]
+          )
           contractTrieNodeKey = ContractTrieNodeKey(
             address: address,
-            path: Nibbles.init(keccakHash(toBytesBE(slotKey)).data, true),
+            path: slotPath,
             nodeHash: keccakHash(storageProof[^1].asSeq()),
           )
         storageProof[^1][^1] += 1 # bad storage leaf value

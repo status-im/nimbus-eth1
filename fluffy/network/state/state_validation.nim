@@ -5,15 +5,9 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import
-  results,
-  eth/[common, trie],
-  ../../common/[common_types, common_utils],
-  ./state_content
+import results, eth/common, ../../common/common_utils, ./state_content, ./state_utils
 
 export results, state_content
-
-# private functions
 
 proc hashEquals(value: TrieNode | Bytecode, expectedHash: KeccakHash): bool {.inline.} =
   keccakHash(value.asSeq()) == expectedHash
@@ -35,38 +29,11 @@ proc isValidNextNode(thisNodeRlp: Rlp, rlpIdx: int, nextNode: TrieNode): bool =
 
   nextNode.hashEquals(nextHash)
 
-proc decodePrefix(nodePrefixRlp: Rlp): (byte, bool, Nibbles) =
-  doAssert(not nodePrefixRlp.isEmpty())
-
-  let
-    rlpBytes = nodePrefixRlp.toBytes()
-    firstNibble = (rlpBytes[0] and 0xF0) shr 4
-    isLeaf = firstNibble == 2 or firstNibble == 3
-    isEven = firstNibble == 0 or firstNibble == 2
-    startIdx = if isEven: 1 else: 0
-    nibbles = Nibbles.init(rlpBytes[startIdx .. ^1], isEven)
-
-  (firstNibble.byte, isLeaf, nibbles)
-
-proc rlpDecodeAccountTrieNode(accountNode: TrieNode): Result[Account, string] =
-  let accNodeRlp = rlpFromBytes(accountNode.asSeq())
-  if accNodeRlp.isEmpty() or accNodeRlp.listLen() != 2:
-    return err("invalid account trie node - malformed")
-
-  let accNodePrefixRlp = accNodeRlp.listElem(0)
-  if accNodePrefixRlp.isEmpty():
-    return err("invalid account trie node - empty prefix")
-
-  let (_, isLeaf, _) = decodePrefix(accNodePrefixRlp)
-  if not isLeaf:
-    return err("invalid account trie node - leaf prefix expected")
-
-  decodeRlp(accNodeRlp.listElem(1).toBytes(), Account)
-
-# public functions
-
 proc validateTrieProof*(
-    expectedRootHash: KeccakHash, path: Nibbles, proof: TrieProof
+    expectedRootHash: KeccakHash,
+    path: Nibbles,
+    proof: TrieProof,
+    allowKeyEndInPathForLeafs = false,
 ): Result[void, string] =
   if proof.len() == 0:
     return err("proof is empty")
@@ -104,7 +71,7 @@ proc validateTrieProof*(
       if prefix >= 4:
         return err("invalid prefix in node")
 
-      if not isLastNode or isLeaf:
+      if not isLastNode or (isLeaf and allowKeyEndInPathForLeafs):
         let unpackedPrefix = prefixNibbles.unpackNibbles()
         if remainingNibbles < unpackedPrefix.len():
           return err("not enough nibbles to validate node prefix")
@@ -140,77 +107,66 @@ proc validateTrieProof*(
     ok()
 
 proc validateRetrieval*(
-    trustedAccountTrieNodeKey: AccountTrieNodeKey,
-    accountTrieNode: AccountTrieNodeRetrieval,
+    key: AccountTrieNodeKey, value: AccountTrieNodeRetrieval
 ): Result[void, string] =
-  if accountTrieNode.node.hashEquals(trustedAccountTrieNodeKey.nodeHash):
+  if value.node.hashEquals(key.nodeHash):
     ok()
   else:
-    err("hash of fetched account trie node doesn't match the expected node hash")
+    err("hash of account trie node doesn't match the expected node hash")
 
 proc validateRetrieval*(
-    trustedContractTrieNodeKey: ContractTrieNodeKey,
-    contractTrieNode: ContractTrieNodeRetrieval,
+    key: ContractTrieNodeKey, value: ContractTrieNodeRetrieval
 ): Result[void, string] =
-  if contractTrieNode.node.hashEquals(trustedContractTrieNodeKey.nodeHash):
+  if value.node.hashEquals(key.nodeHash):
     ok()
   else:
-    err("hash of fetched contract trie node doesn't match the expected node hash")
+    err("hash of contract trie node doesn't match the expected node hash")
 
 proc validateRetrieval*(
-    trustedContractCodeKey: ContractCodeKey, contractCode: ContractCodeRetrieval
+    key: ContractCodeKey, value: ContractCodeRetrieval
 ): Result[void, string] =
-  if contractCode.code.hashEquals(trustedContractCodeKey.codeHash):
+  if value.code.hashEquals(key.codeHash):
     ok()
   else:
-    err("hash of fetched bytecode doesn't match the expected code hash")
+    err("hash of bytecode doesn't match the expected code hash")
 
 proc validateOffer*(
-    trustedStateRoot: KeccakHash,
-    accountTrieNodeKey: AccountTrieNodeKey,
-    accountTrieNode: AccountTrieNodeOffer,
+    trustedStateRoot: KeccakHash, key: AccountTrieNodeKey, offer: AccountTrieNodeOffer
 ): Result[void, string] =
-  ?validateTrieProof(trustedStateRoot, accountTrieNodeKey.path, accountTrieNode.proof)
+  ?validateTrieProof(trustedStateRoot, key.path, offer.proof)
 
-  if accountTrieNode.proof[^1].hashEquals(accountTrieNodeKey.nodeHash):
-    ok()
-  else:
-    err("hash of offered account trie node doesn't match the expected node hash")
+  validateRetrieval(key, offer.toRetrievalValue())
 
 proc validateOffer*(
-    trustedStateRoot: KeccakHash,
-    contractTrieNodeKey: ContractTrieNodeKey,
-    contractTrieNode: ContractTrieNodeOffer,
+    trustedStateRoot: KeccakHash, key: ContractTrieNodeKey, offer: ContractTrieNodeOffer
 ): Result[void, string] =
-  let addressHash = keccakHash(contractTrieNodeKey.address).data
+  let addressHash = keccakHash(key.address).data
   ?validateTrieProof(
-    trustedStateRoot, Nibbles.init(addressHash, true), contractTrieNode.accountProof
+    trustedStateRoot,
+    Nibbles.init(addressHash, true),
+    offer.accountProof,
+    allowKeyEndInPathForLeafs = true,
   )
 
-  let account = ?rlpDecodeAccountTrieNode(contractTrieNode.accountProof[^1])
+  let account = ?rlpDecodeAccountTrieNode(offer.accountProof[^1])
 
-  ?validateTrieProof(
-    account.storageRoot, contractTrieNodeKey.path, contractTrieNode.storageProof
-  )
+  ?validateTrieProof(account.storageRoot, key.path, offer.storageProof)
 
-  if contractTrieNode.storageProof[^1].hashEquals(contractTrieNodeKey.nodeHash):
-    ok()
-  else:
-    err("hash of offered contract trie node doesn't match the expected node hash")
+  validateRetrieval(key, offer.toRetrievalValue())
 
 proc validateOffer*(
-    trustedStateRoot: KeccakHash,
-    contractCodeKey: ContractCodeKey,
-    contractCode: ContractCodeOffer,
+    trustedStateRoot: KeccakHash, key: ContractCodeKey, offer: ContractCodeOffer
 ): Result[void, string] =
-  let addressHash = keccakHash(contractCodeKey.address).data
+  let addressHash = keccakHash(key.address).data
   ?validateTrieProof(
-    trustedStateRoot, Nibbles.init(addressHash, true), contractCode.accountProof
+    trustedStateRoot,
+    Nibbles.init(addressHash, true),
+    offer.accountProof,
+    allowKeyEndInPathForLeafs = true,
   )
 
-  let account = ?rlpDecodeAccountTrieNode(contractCode.accountProof[^1])
+  let account = ?rlpDecodeAccountTrieNode(offer.accountProof[^1])
+  if not offer.code.hashEquals(account.codeHash):
+    return err("hash of bytecode doesn't match the code hash in the account proof")
 
-  if contractCode.code.hashEquals(account.codeHash):
-    ok()
-  else:
-    err("hash of offered bytecode doesn't match the expected code hash")
+  validateRetrieval(key, offer.toRetrievalValue())

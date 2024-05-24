@@ -87,8 +87,7 @@ suite "State Validation":
       let res = validateRetrieval(contentKey.accountTrieNodeKey, contentValueRetrieval)
       check:
         res.isErr()
-        res.error() ==
-          "hash of fetched account trie node doesn't match the expected node hash"
+        res.error() == "hash of account trie node doesn't match the expected node hash"
 
   test "Validate valid ContractTrieNodeRetrieval nodes":
     const file = testVectorDir / "contract_storage_trie_node.yaml"
@@ -124,8 +123,7 @@ suite "State Validation":
       let res = validateRetrieval(contentKey.contractTrieNodeKey, contentValueRetrieval)
       check:
         res.isErr()
-        res.error() ==
-          "hash of fetched contract trie node doesn't match the expected node hash"
+        res.error() == "hash of contract trie node doesn't match the expected node hash"
 
   test "Validate valid ContractCodeRetrieval nodes":
     const file = testVectorDir / "contract_bytecode.yaml"
@@ -161,7 +159,7 @@ suite "State Validation":
       let res = validateRetrieval(contentKey.contractCodeKey, contentValueRetrieval)
       check:
         res.isErr()
-        res.error() == "hash of fetched bytecode doesn't match the expected code hash"
+        res.error() == "hash of bytecode doesn't match the expected code hash"
 
   # Account offer validation tests
 
@@ -489,7 +487,8 @@ suite "State Validation":
           validateOffer(stateRoot, contentKey.contractCodeKey, contentValueOffer)
         check:
           res.isErr()
-          res.error() == "hash of offered bytecode doesn't match the expected code hash"
+          res.error() ==
+            "hash of bytecode doesn't match the code hash in the account proof"
 
       block:
         let contentKey =
@@ -514,7 +513,8 @@ suite "State Validation":
           validateOffer(stateRoot, contentKey.contractCodeKey, contentValueOffer)
         check:
           res.isErr()
-          res.error() == "hash of offered bytecode doesn't match the expected code hash"
+          res.error() ==
+            "hash of bytecode doesn't match the code hash in the account proof"
 
   # Recursive gossip offer validation tests
 

@@ -47,9 +47,10 @@ type
   ContractCodeRetrieval* = object
     code*: Bytecode
 
-  ContentValue* =
-    AccountTrieNodeOffer | ContractTrieNodeOffer | ContractCodeOffer |
+  ContentOfferType* = AccountTrieNodeOffer | ContractTrieNodeOffer | ContractCodeOffer
+  ContentRetrievalType* =
     AccountTrieNodeRetrieval | ContractTrieNodeRetrieval | ContractCodeRetrieval
+  ContentValueType* = ContentOfferType | ContentRetrievalType
 
 func init*(T: type AccountTrieNodeOffer, proof: TrieProof, blockHash: BlockHash): T =
   AccountTrieNodeOffer(proof: proof, blockHash: blockHash)
@@ -90,8 +91,8 @@ func toRetrievalValue*(offer: ContractTrieNodeOffer): ContractTrieNodeRetrieval 
 func toRetrievalValue*(offer: ContractCodeOffer): ContractCodeRetrieval =
   ContractCodeRetrieval.init(offer.code)
 
-func encode*(value: ContentValue): seq[byte] =
+func encode*(value: ContentValueType): seq[byte] =
   SSZ.encode(value)
 
-func decode*(T: type ContentValue, bytes: openArray[byte]): Result[T, string] =
+func decode*(T: type ContentValueType, bytes: openArray[byte]): Result[T, string] =
   decodeSsz(bytes, T)

@@ -15,7 +15,7 @@ suite "State Content Nibbles":
       packedNibbles = packNibbles(nibbles)
       unpackedNibbles = unpackNibbles(packedNibbles)
 
-    let encoded = SSZ.encode(packedNibbles)
+    let encoded = packedNibbles.encode()
 
     check:
       encoded.toHex() == expected
@@ -28,7 +28,7 @@ suite "State Content Nibbles":
       packedNibbles = packNibbles(nibbles)
       unpackedNibbles = unpackNibbles(packedNibbles)
 
-    let encoded = SSZ.encode(packedNibbles)
+    let encoded = packedNibbles.encode()
 
     check:
       encoded.toHex() == expected
@@ -41,7 +41,7 @@ suite "State Content Nibbles":
       packedNibbles = packNibbles(nibbles)
       unpackedNibbles = unpackNibbles(packedNibbles)
 
-    let encoded = SSZ.encode(packedNibbles)
+    let encoded = packedNibbles.encode()
 
     check:
       encoded.toHex() == expected
@@ -54,7 +54,7 @@ suite "State Content Nibbles":
       packedNibbles = packNibbles(nibbles)
       unpackedNibbles = unpackNibbles(packedNibbles)
 
-    let encoded = SSZ.encode(packedNibbles)
+    let encoded = packedNibbles.encode()
 
     check:
       encoded.toHex() == expected
@@ -67,7 +67,7 @@ suite "State Content Nibbles":
       packedNibbles = packNibbles(nibbles)
       unpackedNibbles = unpackNibbles(packedNibbles)
 
-    let encoded = SSZ.encode(packedNibbles)
+    let encoded = packedNibbles.encode()
 
     check:
       encoded.toHex() == expected
@@ -86,7 +86,7 @@ suite "State Content Nibbles":
       packedNibbles = packNibbles(nibbles)
       unpackedNibbles = unpackNibbles(packedNibbles)
 
-    let encoded = SSZ.encode(packedNibbles)
+    let encoded = packedNibbles.encode()
 
     check:
       encoded.toHex() == expected

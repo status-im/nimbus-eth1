@@ -38,7 +38,7 @@ suite "MPT trie proof verification":
       let
         kv = getKeyBytes(i)
         proof = trie.getTrieProof(kv)
-        res = validateTrieProof(rootHash, kv.asNibbles(), proof)
+        res = validateTrieProof(rootHash, kv.asNibbles(), proof, true)
 
       check:
         res.isOk()
@@ -55,7 +55,7 @@ suite "MPT trie proof verification":
       rootHash = trie.rootHash()
       key = getKeyBytes(numValues + 1)
       proof = trie.getTrieProof(key)
-      res = validateTrieProof(rootHash, key.asNibbles(), proof)
+      res = validateTrieProof(rootHash, key.asNibbles(), proof, true)
 
     check:
       res.isErr()
@@ -68,7 +68,7 @@ suite "MPT trie proof verification":
       rootHash = trie.rootHash()
       key = "not-exist".toBytes
       proof = trie.getTrieProof(key)
-      res = validateTrieProof(rootHash, key.asNibbles(), proof)
+      res = validateTrieProof(rootHash, key.asNibbles(), proof, true)
 
     check:
       res.isErr()
@@ -83,7 +83,7 @@ suite "MPT trie proof verification":
     let
       rootHash = trie.rootHash
       proof = trie.getTrieProof(key)
-      res = validateTrieProof(rootHash, key.asNibbles(), proof)
+      res = validateTrieProof(rootHash, key.asNibbles(), proof, true)
 
     check:
       res.isOk()
@@ -101,25 +101,25 @@ suite "MPT trie proof verification":
       let
         key = "doe".toBytes
         proof = trie.getTrieProof(key)
-      check validateTrieProof(rootHash, key.asNibbles(), proof).isOk()
+      check validateTrieProof(rootHash, key.asNibbles(), proof, true).isOk()
 
     block:
       let
         key = "dog".toBytes
         proof = trie.getTrieProof(key)
-      check validateTrieProof(rootHash, key.asNibbles(), proof).isOk()
+      check validateTrieProof(rootHash, key.asNibbles(), proof, true).isOk()
 
     block:
       let
         key = "dogglesworth".toBytes
         proof = trie.getTrieProof(key)
-      check validateTrieProof(rootHash, key.asNibbles(), proof).isOk()
+      check validateTrieProof(rootHash, key.asNibbles(), proof, true).isOk()
 
     block:
       let
         key = "dogg".toBytes
         proof = trie.getTrieProof(key)
-        res = validateTrieProof(rootHash, key.asNibbles(), proof)
+        res = validateTrieProof(rootHash, key.asNibbles(), proof, true)
       check:
         res.isErr()
         res.error() == "not enough nibbles to validate node prefix"
@@ -128,7 +128,7 @@ suite "MPT trie proof verification":
       let
         key = "dogz".toBytes
         proof = trie.getTrieProof(key)
-        res = validateTrieProof(rootHash, key.asNibbles(), proof)
+        res = validateTrieProof(rootHash, key.asNibbles(), proof, true)
       check:
         res.isErr()
         res.error() == "path contains more nibbles than expected for proof"
@@ -137,7 +137,7 @@ suite "MPT trie proof verification":
       let
         key = "doe".toBytes
         proof = newSeq[seq[byte]]().asTrieProof()
-        res = validateTrieProof(rootHash, key.asNibbles(), proof)
+        res = validateTrieProof(rootHash, key.asNibbles(), proof, true)
       check:
         res.isErr()
         res.error() == "proof is empty"
@@ -146,7 +146,7 @@ suite "MPT trie proof verification":
       let
         key = "doe".toBytes
         proof = @["aaa".toBytes, "ccc".toBytes].asTrieProof()
-        res = validateTrieProof(rootHash, key.asNibbles(), proof)
+        res = validateTrieProof(rootHash, key.asNibbles(), proof, true)
       check:
         res.isErr()
         res.error() == "hash of proof root node doesn't match the expected root hash"
@@ -157,9 +157,9 @@ suite "MPT trie proof verification":
     let
       # leaf nodes
       kv1 = "0xa7113550".hexToSeqByte()
-      kv2 = "0xa77d3370".hexToSeqByte()
+      kv2 = "0xa77d33".hexToSeqByte() # without key end
       kv3 = "0xa7f93650".hexToSeqByte()
-      kv4 = "0xa77d3970".hexToSeqByte()
+      kv4 = "0xa77d39".hexToSeqByte() # without key end
 
       kv5 = "".hexToSeqByte() # root/first extension node
       kv6 = "0xa7".hexToSeqByte() # first branch node
@@ -174,6 +174,8 @@ suite "MPT trie proof verification":
       kv11 = "0xa71135".hexToSeqByte()
       kv12 = "0xa711355000".hexToSeqByte()
       kv13 = "0xa711".hexToSeqByte()
+      kv14 = "0xa77d3370".hexToSeqByte()
+      kv15 = "0xa77d3970".hexToSeqByte()
 
     trie.put(kv1, kv1)
     trie.put(kv2, kv2)
@@ -183,10 +185,10 @@ suite "MPT trie proof verification":
     let rootHash = trie.rootHash
 
     check:
-      validateTrieProof(rootHash, kv1.asNibbles(), trie.getTrieProof(kv1)).isOk()
-      validateTrieProof(rootHash, kv2.asNibbles(), trie.getTrieProof(kv2)).isOk()
-      validateTrieProof(rootHash, kv3.asNibbles(), trie.getTrieProof(kv3)).isOk()
-      validateTrieProof(rootHash, kv4.asNibbles(), trie.getTrieProof(kv4)).isOk()
+      validateTrieProof(rootHash, kv1.asNibbles(), trie.getTrieProof(kv1), true).isOk()
+      validateTrieProof(rootHash, kv2.asNibbles(), trie.getTrieProof(kv2), false).isOk()
+      validateTrieProof(rootHash, kv3.asNibbles(), trie.getTrieProof(kv3), true).isOk()
+      validateTrieProof(rootHash, kv4.asNibbles(), trie.getTrieProof(kv4), false).isOk()
       validateTrieProof(rootHash, kv5.asNibbles(), trie.getTrieProof(kv5)).isOk()
       validateTrieProof(rootHash, kv6.asNibbles(), trie.getTrieProof(kv6)).isOk()
       validateTrieProof(rootHash, kv7.asNibbles(), trie.getTrieProof(kv7)).isOk()
@@ -197,3 +199,9 @@ suite "MPT trie proof verification":
       validateTrieProof(rootHash, kv11.asNibbles(), trie.getTrieProof(kv11)).isErr()
       validateTrieProof(rootHash, kv12.asNibbles(), trie.getTrieProof(kv12)).isErr()
       validateTrieProof(rootHash, kv13.asNibbles(), trie.getTrieProof(kv13)).isErr()
+
+      validateTrieProof(rootHash, kv14.asNibbles(), trie.getTrieProof(kv14), false)
+      .isErr()
+
+      validateTrieProof(rootHash, kv15.asNibbles(), trie.getTrieProof(kv15), false)
+      .isErr()

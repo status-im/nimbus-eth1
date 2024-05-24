@@ -73,11 +73,8 @@ procSuite "State Network":
 
       # Note: GetContent and thus the lookup here is not really needed, as we
       # only have to request data to one node.
-      let foundContent = await proto2.getContent(contentKey)
-      check foundContent.isSome()
-
-      let accTrieNode = decodeSsz(foundContent.get(), AccountTrieNodeRetrieval)
-      check accTrieNode.isOk()
+      let accTrieNode = await proto2.getAccountTrieNode(accountTrieNodeKey)
+      check accTrieNode.isSome()
 
       let hash = keccakHash(accTrieNode.get().node.asSeq())
       check hash.data == key
@@ -148,11 +145,8 @@ procSuite "State Network":
       contentKey =
         ContentKey(contentType: accountTrieNode, accountTrieNodeKey: accountTrieNodeKey)
 
-    let foundContent = await proto1.getContent(contentKey)
-    check foundContent.isSome()
-
-    let accTrieNode = decodeSsz(foundContent.get(), AccountTrieNodeRetrieval)
-    check accTrieNode.isOk()
+    let accTrieNode = await proto1.getAccountTrieNode(accountTrieNodeKey)
+    check accTrieNode.isSome()
 
     let hash = keccakHash(accTrieNode.get().node.asSeq())
     check hash.data == firstKey
