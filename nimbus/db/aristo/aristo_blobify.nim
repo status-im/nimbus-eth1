@@ -133,7 +133,7 @@ proc blobify*(vtx: VertexRef): Result[Blob, AristoError] =
   ## Variant of `blobify()`
   var data: Blob
   ? vtx.blobify data
-  ok(data)
+  ok(move(data))
 
 proc blobify*(vGen: openArray[VertexID]; data: var Blob) =
   ## This function serialises a list of vertex IDs.
@@ -251,8 +251,7 @@ proc blobify*(filter: FilterRef): Result[Blob, AristoError] =
   ## ...
   var data: Blob
   ? filter.blobify data
-  ok data
-
+  ok move(data)
 
 proc blobify*(vFqs: openArray[(QueueID,QueueID)]; data: var Blob) =
   ## This function serialises a list of filter queue IDs.
@@ -425,7 +424,7 @@ proc deblobify*(data: openArray[byte]; T: type seq[VertexID]): Result[T,AristoEr
   ## Variant of `deblobify()` for deserialising the vertex ID generator state
   var vGen: seq[VertexID]
   ? data.deblobify vGen
-  ok vGen
+  ok move(vGen)
 
 proc deblobify*(data: Blob; filter: var FilterRef): Result[void,AristoError] =
   ## De-serialise an Aristo DB filter object

@@ -51,7 +51,7 @@ proc get*(
 
   if not gotData:
     res = EmptyBlob
-  ok res
+  ok move(res)
 
 # ------------------------------------------------------------------------------
 # End

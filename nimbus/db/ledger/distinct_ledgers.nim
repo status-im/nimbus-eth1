@@ -198,10 +198,10 @@ proc init*(
   mpt.toPhk.T
 
 proc fetch*(sl: StorageLedger, slot: UInt256): Result[Blob,void] =
-  let rc = sl.distinctBase.fetch(slot.toBytesBE)
+  var rc = sl.distinctBase.fetch(slot.toBytesBE)
   if rc.isErr:
     return err()
-  ok rc.value
+  ok move(rc.value)
 
 proc merge*(sl: StorageLedger, slot: UInt256, value: openArray[byte]) =
   const info = "StorageLedger/merge(): "

@@ -84,14 +84,14 @@ proc getKvpFn(db: RdbBackendRef): GetKvpFn =
     proc(key: openArray[byte]): Result[Blob,KvtError] =
 
       # Get data record
-      let data = db.rdb.get(key).valueOr:
+      var data = db.rdb.get(key).valueOr:
         when extraTraceMessages:
           debug logTxt "getKvpFn() failed", key, error=error[0], info=error[1]
         return err(error[0])
 
       # Return if non-empty
       if 0 < data.len:
-        return ok(data)
+        return ok(move(data))
 
       err(GetNotFound)
 

@@ -90,10 +90,10 @@ proc get*(
   if key.len == 0:
     return err(KeyInvalid)
 
-  let data = db.layersGet(key).valueOr:
+  var data = db.layersGet(key).valueOr:
     return db.getBe key
 
-  return ok(data)
+  return ok(move(data))
 
 
 proc hasKey*(
