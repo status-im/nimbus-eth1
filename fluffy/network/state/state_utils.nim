@@ -9,7 +9,7 @@ import results, eth/common, ./state_content
 
 export results, common
 
-proc decodePrefix*(nodePrefixRlp: Rlp): (byte, bool, Nibbles) =
+func decodePrefix*(nodePrefixRlp: Rlp): (byte, bool, Nibbles) =
   doAssert(not nodePrefixRlp.isEmpty())
 
   let
@@ -22,7 +22,7 @@ proc decodePrefix*(nodePrefixRlp: Rlp): (byte, bool, Nibbles) =
 
   (firstNibble.byte, isLeaf, nibbles)
 
-proc rlpDecodeAccountTrieNode*(accountNode: TrieNode): Result[Account, string] =
+func rlpDecodeAccountTrieNode*(accountNode: TrieNode): Result[Account, string] =
   let accNodeRlp = rlpFromBytes(accountNode.asSeq())
   if accNodeRlp.isEmpty() or accNodeRlp.listLen() != 2:
     return err("invalid account trie node - malformed")

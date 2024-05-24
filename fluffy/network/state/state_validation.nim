@@ -30,7 +30,10 @@ proc isValidNextNode(thisNodeRlp: Rlp, rlpIdx: int, nextNode: TrieNode): bool =
   nextNode.hashEquals(nextHash)
 
 proc validateTrieProof*(
-    expectedRootHash: KeccakHash, path: Nibbles, proof: TrieProof
+    expectedRootHash: KeccakHash,
+    path: Nibbles,
+    proof: TrieProof,
+    allowKeyEndInPathForLeafs = false,
 ): Result[void, string] =
   if proof.len() == 0:
     return err("proof is empty")
@@ -68,7 +71,7 @@ proc validateTrieProof*(
       if prefix >= 4:
         return err("invalid prefix in node")
 
-      if not isLastNode or isLeaf:
+      if not isLastNode or (isLeaf and allowKeyEndInPathForLeafs):
         let unpackedPrefix = prefixNibbles.unpackNibbles()
         if remainingNibbles < unpackedPrefix.len():
           return err("not enough nibbles to validate node prefix")
@@ -142,7 +145,10 @@ proc validateOffer*(
 ): Result[void, string] =
   let addressHash = keccakHash(key.address).data
   ?validateTrieProof(
-    trustedStateRoot, Nibbles.init(addressHash, true), offer.accountProof
+    trustedStateRoot,
+    Nibbles.init(addressHash, true),
+    offer.accountProof,
+    allowKeyEndInPathForLeafs = true,
   )
 
   let account = ?rlpDecodeAccountTrieNode(offer.accountProof[^1])
@@ -159,7 +165,10 @@ proc validateOffer*(
 ): Result[void, string] =
   let addressHash = keccakHash(key.address).data
   ?validateTrieProof(
-    trustedStateRoot, Nibbles.init(addressHash, true), offer.accountProof
+    trustedStateRoot,
+    Nibbles.init(addressHash, true),
+    offer.accountProof,
+    allowKeyEndInPathForLeafs = true,
   )
 
   let account = ?rlpDecodeAccountTrieNode(offer.accountProof[^1])

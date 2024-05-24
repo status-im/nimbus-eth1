@@ -11,12 +11,27 @@ import
   std/[sugar, sequtils],
   eth/[common, trie, trie/db],
   ../../nimbus/common/chain_config,
-  ../../network/state/state_content
+  ../../network/state/[state_content, state_utils]
 
-proc asNibbles*(key: openArray[byte], isEven = true): Nibbles =
+func asNibbles*(key: openArray[byte], isEven = true): Nibbles =
   Nibbles.init(key, isEven)
 
-proc asTrieProof*(branch: openArray[seq[byte]]): TrieProof =
+func removeLeafKeyEndNibbles*(
+    nibbles: Nibbles, leafNode: TrieNode
+): Nibbles {.raises: [RlpError].} =
+  let nodeRlp = rlpFromBytes(leafNode.asSeq())
+  doAssert(nodeRlp.listLen() == 2)
+  let (_, isLeaf, prefix) = decodePrefix(nodeRlp.listElem(0))
+  doAssert(isLeaf)
+
+  let leafPrefix = prefix.unpackNibbles()
+  var unpackedNibbles = nibbles.unpackNibbles()
+  doAssert(unpackedNibbles[^leafPrefix.len() .. ^1] == leafPrefix)
+
+  unpackedNibbles.setLen(unpackedNibbles.len() - leafPrefix.len())
+  unpackedNibbles.packNibbles()
+
+func asTrieProof*(branch: openArray[seq[byte]]): TrieProof =
   TrieProof.init(branch.map(node => TrieNode.init(node)))
 
 proc getTrieProof*(

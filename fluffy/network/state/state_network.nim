@@ -196,19 +196,19 @@ proc processContentLoop(n: StateNetwork) {.async.} =
             error "Received content with unused content type"
             continue
           of accountTrieNode:
-            await processOffer(
-              n, srcNodeId, contentKeyBytes, contentValueBytes,
+            await n.processOffer(
+              srcNodeId, contentKeyBytes, contentValueBytes,
               contentKey.accountTrieNodeKey, AccountTrieNodeOffer,
             )
           of contractTrieNode:
-            await processOffer(
-              n, srcNodeId, contentKeyBytes, contentValueBytes,
+            await n.processOffer(
+              srcNodeId, contentKeyBytes, contentValueBytes,
               contentKey.contractTrieNodeKey, ContractTrieNodeOffer,
             )
           of contractCode:
-            await processOffer(
-              n, srcNodeId, contentKeyBytes, contentValueBytes,
-              contentKey.contractCodeKey, ContractCodeOffer,
+            await n.processOffer(
+              srcNodeId, contentKeyBytes, contentValueBytes, contentKey.contractCodeKey,
+              ContractCodeOffer,
             )
         if offerRes.isOk():
           info "Offered content processed successfully", contentKeyBytes
