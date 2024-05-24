@@ -192,6 +192,9 @@ procSuite "Beacon Content Network":
     let
       cfg = genesisTestRuntimeConfig(ConsensusFork.Capella)
       state = newClone(initGenesisState(cfg = cfg))
+      networkData = loadNetworkData("mainnet")
+      forkDigests = (newClone networkData.forks)[]
+
     var cache = StateCache()
 
     var blocks: seq[capella.SignedBeaconBlock]
@@ -214,21 +217,20 @@ procSuite "Beacon Content Network":
           proof = res.get()
 
           historicalSummariesWithProof = HistoricalSummariesWithProof(
-            finalized_slot: forkyState.data.slot,
+            epoch: epoch(forkyState.data.slot),
             historical_summaries: historical_summaries,
             proof: proof,
           )
+          forkDigest = atConsensusFork(forkDigests, consensusFork)
 
-          content = SSZ.encode(historicalSummariesWithProof)
+          content = encodeSsz(historicalSummariesWithProof, forkDigest)
 
         (content, forkyState.data.slot, forkyState.root)
       else:
         raiseAssert("Not implemented pre-Capella")
     let
-      networkData = loadNetworkData("mainnet")
       lcNode1 = newLCNode(rng, 20302, networkData)
       lcNode2 = newLCNode(rng, 20303, networkData)
-      forkDigests = (newClone networkData.forks)[]
 
     check:
       lcNode1.portalProtocol().addNode(lcNode2.localNode()) == Added

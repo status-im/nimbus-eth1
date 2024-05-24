@@ -388,15 +388,19 @@ proc createStoreHandler*(db: BeaconDb): DbStoreHandler =
           )
         )
       of beacon_content.ContentType.historicalSummaries:
-        # TODO: Its probably better to use the kvstore here and instead use a sql
+        # TODO: Its probably better to not use the kvstore here and instead use a sql
         # table with slot as index and move the slot logic to the db store handler.
         let current = db.get(contentId)
         if current.isSome():
-          let summariesWithProof =
-            decodeSszOrRaise(current.get(), HistoricalSummariesWithProof)
-          let newSummariesWithProof = decodeSsz(content, HistoricalSummariesWithProof).valueOr:
+          let summariesWithProof = decodeSsz(
+            db.forkDigests, current.get(), HistoricalSummariesWithProof
+          ).valueOr:
+            raiseAssert error
+          let newSummariesWithProof = decodeSsz(
+            db.forkDigests, content, HistoricalSummariesWithProof
+          ).valueOr:
             return
-          if newSummariesWithProof.finalized_slot > summariesWithProof.finalized_slot:
+          if newSummariesWithProof.epoch > summariesWithProof.epoch:
             db.put(contentId, content)
         else:
           db.put(contentId, content)

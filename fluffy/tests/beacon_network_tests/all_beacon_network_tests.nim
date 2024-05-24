@@ -1,4 +1,4 @@
-# Nimbus
+# fluffy
 # Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
@@ -7,4 +7,8 @@
 
 {.warning[UnusedImport]: off.}
 
-import ./test_beacon_content, ./test_beacon_network, ./test_beacon_light_client
+import
+  ./test_beacon_content,
+  ./test_beacon_historical_summaries,
+  ./test_beacon_network,
+  ./test_beacon_light_client
