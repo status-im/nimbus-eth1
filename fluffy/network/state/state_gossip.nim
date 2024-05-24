@@ -19,23 +19,43 @@ export results, state_content
 logScope:
   topics = "portal_state"
 
-func getParent(nibbles: Nibbles, proof: TrieProof): (Nibbles, TrieProof) =
-  doAssert(nibbles.len() > 0, "nibbles too short")
-  doAssert(proof.len() > 1, "proof too short")
+type ProofWithPath = tuple[path: Nibbles, proof: TrieProof]
+
+type AccountTrieOfferWithKey* =
+  tuple[key: AccountTrieNodeKey, offer: AccountTrieNodeOffer]
+
+type ContractTrieOfferWithKey* =
+  tuple[key: ContractTrieNodeKey, offer: ContractTrieNodeOffer]
+
+func withPath(proof: TrieProof, path: Nibbles): ProofWithPath =
+  (path: path, proof: proof)
+
+func withKey*(
+    offer: AccountTrieNodeOffer, key: AccountTrieNodeKey
+): AccountTrieOfferWithKey =
+  (key: key, offer: offer)
+
+func withKey*(
+    offer: ContractTrieNodeOffer, key: ContractTrieNodeKey
+): ContractTrieOfferWithKey =
+  (key: key, offer: offer)
+
+func getParent(p: ProofWithPath): ProofWithPath =
+  doAssert(p.path.len() > 0, "nibbles too short")
+  doAssert(p.proof.len() > 1, "proof too short")
 
   let
-    parentProof = TrieProof.init(proof[0 ..^ 2])
+    parentProof = TrieProof.init(p.proof[0 ..^ 2])
     parentEndNode = rlpFromBytes(parentProof[^1].asSeq())
 
   # the trie proof should have already been validated when receiving the offer content
   doAssert(parentEndNode.listLen() == 2 or parentEndNode.listLen() == 17)
 
-  var unpackedNibbles = nibbles.unpackNibbles()
+  var unpackedNibbles = p.path.unpackNibbles()
 
   if parentEndNode.listLen() == 17:
     # branch node so only need to remove a single nibble
-    unpackedNibbles.setLen(unpackedNibbles.len() - 1)
-    return (unpackedNibbles.packNibbles(), parentProof)
+    return parentProof.withPath(unpackedNibbles.dropN(1).packNibbles())
 
   # leaf or extension node so we need to remove one or more nibbles
   let (_, isEven, prefixNibbles) = decodePrefix(parentEndNode.listElem(0))
@@ -44,32 +64,30 @@ func getParent(nibbles: Nibbles, proof: TrieProof): (Nibbles, TrieProof) =
   if not isEven:
     inc removeCount
 
-  unpackedNibbles.setLen(unpackedNibbles.len() - removeCount)
-  (unpackedNibbles.packNibbles(), parentProof)
+  parentProof.withPath(unpackedNibbles.dropN(removeCount).packNibbles())
 
-func getParent*(
-    key: AccountTrieNodeKey, offer: AccountTrieNodeOffer
-): (AccountTrieNodeKey, AccountTrieNodeOffer) =
+func getParent*(offerWithKey: AccountTrieOfferWithKey): AccountTrieOfferWithKey =
   let
-    (parentNibbles, parentProof) = getParent(key.path, offer.proof)
-    parentKey =
-      AccountTrieNodeKey.init(parentNibbles, keccakHash(parentProof[^1].asSeq()))
+    (key, offer) = offerWithKey
+    (parentPath, parentProof) = offer.proof.withPath(key.path).getParent()
+
+    parentKey = AccountTrieNodeKey.init(parentPath, keccakHash(parentProof[^1].asSeq()))
     parentOffer = AccountTrieNodeOffer.init(parentProof, offer.blockHash)
 
-  (parentKey, parentOffer)
+  parentOffer.withKey(parentKey)
 
-func getParent*(
-    key: ContractTrieNodeKey, offer: ContractTrieNodeOffer
-): (ContractTrieNodeKey, ContractTrieNodeOffer) =
+func getParent*(offerWithKey: ContractTrieOfferWithKey): ContractTrieOfferWithKey =
   let
-    (parentNibbles, parentProof) = getParent(key.path, offer.storageProof)
+    (key, offer) = offerWithKey
+    (parentPath, parentProof) = offer.storageProof.withPath(key.path).getParent()
+
     parentKey = ContractTrieNodeKey.init(
-      key.address, parentNibbles, keccakHash(parentProof[^1].asSeq())
+      key.address, parentPath, keccakHash(parentProof[^1].asSeq())
     )
     parentOffer =
       ContractTrieNodeOffer.init(parentProof, offer.accountProof, offer.blockHash)
 
-  (parentKey, parentOffer)
+  parentOffer.withKey(parentKey)
 
 proc gossipOffer*(
     p: PortalProtocol,
@@ -87,7 +105,8 @@ proc gossipOffer*(
   if key.path.unpackNibbles().len() == 0:
     return
 
-  let (parentKey, parentOffer) = getParent(key, offer)
+  let (parentKey, parentOffer) = offer.withKey(key).getParent()
+  # continue the recursive gossip by sharing the parent offer with peers
   asyncSpawn p.neighborhoodGossipDiscardPeers(
     srcNodeId,
     ContentKeysList.init(@[parentKey.toContentKey().encode()]),
@@ -110,7 +129,8 @@ proc gossipOffer*(
   if key.path.unpackNibbles().len() == 0:
     return
 
-  let (parentKey, parentOffer) = getParent(key, offer)
+  let (parentKey, parentOffer) = offer.withKey(key).getParent()
+  # continue the recursive gossip by sharing the parent offer with peers
   asyncSpawn p.neighborhoodGossipDiscardPeers(
     srcNodeId,
     ContentKeysList.init(@[parentKey.toContentKey().encode()]),

@@ -25,6 +25,7 @@ const
   MAX_UNPACKED_NIBBLES_LEN = 64
 
 type Nibbles* = List[byte, MAX_PACKED_NIBBLES_LEN]
+type UnpackedNibbles* = seq[byte]
 
 func init*(T: type Nibbles, packed: openArray[byte], isEven: bool): T =
   doAssert(packed.len() <= MAX_PACKED_NIBBLES_LEN)
@@ -79,7 +80,7 @@ func packNibbles*(unpacked: openArray[byte]): Nibbles =
 
   Nibbles(output)
 
-func unpackNibbles*(packed: Nibbles): seq[byte] =
+func unpackNibbles*(packed: Nibbles): UnpackedNibbles =
   doAssert(packed.len() <= MAX_PACKED_NIBBLES_LEN, "Packed nibbles length is too long")
 
   var output = newSeqOfCap[byte](packed.len() * 2)
@@ -99,3 +100,7 @@ func unpackNibbles*(packed: Nibbles): seq[byte] =
       output.add(second)
 
   output
+
+func dropN*(unpacked: var UnpackedNibbles, num: int): UnpackedNibbles =
+  unpacked.setLen(unpacked.len() - num)
+  move(unpacked)

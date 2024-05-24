@@ -28,8 +28,7 @@ func removeLeafKeyEndNibbles*(
   var unpackedNibbles = nibbles.unpackNibbles()
   doAssert(unpackedNibbles[^leafPrefix.len() .. ^1] == leafPrefix)
 
-  unpackedNibbles.setLen(unpackedNibbles.len() - leafPrefix.len())
-  unpackedNibbles.packNibbles()
+  unpackedNibbles.dropN(leafPrefix.len()).packNibbles()
 
 func asTrieProof*(branch: openArray[seq[byte]]): TrieProof =
   TrieProof.init(branch.map(node => TrieNode.init(node)))
