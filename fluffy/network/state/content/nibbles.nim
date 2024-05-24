@@ -99,7 +99,7 @@ func unpackNibbles*(packed: Nibbles): UnpackedNibbles =
       output.add(first)
       output.add(second)
 
-  output
+  move(output)
 
 func dropN*(unpacked: var UnpackedNibbles, num: int): UnpackedNibbles =
   unpacked.setLen(unpacked.len() - num)

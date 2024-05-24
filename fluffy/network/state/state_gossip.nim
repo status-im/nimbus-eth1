@@ -97,21 +97,25 @@ proc gossipOffer*(
     key: AccountTrieNodeKey,
     offer: AccountTrieNodeOffer,
 ) {.async.} =
-  asyncSpawn p.neighborhoodGossipDiscardPeers(
+  let req1Peers = await p.neighborhoodGossip(
     srcNodeId, ContentKeysList.init(@[keyBytes]), @[offerBytes]
   )
+  info "Offered content gossipped successfully with peers", keyBytes, peers = req1Peers
 
   # root node, recursive gossip is finished
   if key.path.unpackNibbles().len() == 0:
     return
 
-  let (parentKey, parentOffer) = offer.withKey(key).getParent()
   # continue the recursive gossip by sharing the parent offer with peers
-  asyncSpawn p.neighborhoodGossipDiscardPeers(
-    srcNodeId,
-    ContentKeysList.init(@[parentKey.toContentKey().encode()]),
-    @[parentOffer.encode()],
-  )
+  let
+    (parentKey, parentOffer) = offer.withKey(key).getParent()
+    parentKeyBytes = parentKey.toContentKey().encode()
+    req2Peers = await p.neighborhoodGossip(
+      srcNodeId, ContentKeysList.init(@[parentKeyBytes]), @[parentOffer.encode()]
+    )
+
+  info "Offered content parent gossipped successfully with peers",
+    parentKeyBytes, peers = req2Peers
 
 proc gossipOffer*(
     p: PortalProtocol,
@@ -121,21 +125,25 @@ proc gossipOffer*(
     key: ContractTrieNodeKey,
     offer: ContractTrieNodeOffer,
 ) {.async.} =
-  asyncSpawn p.neighborhoodGossipDiscardPeers(
+  let req1Peers = await p.neighborhoodGossip(
     srcNodeId, ContentKeysList.init(@[keyBytes]), @[offerBytes]
   )
+  info "Offered content gossipped successfully with peers", keyBytes, peers = req1Peers
 
   # root node, recursive gossip is finished
   if key.path.unpackNibbles().len() == 0:
     return
 
-  let (parentKey, parentOffer) = offer.withKey(key).getParent()
   # continue the recursive gossip by sharing the parent offer with peers
-  asyncSpawn p.neighborhoodGossipDiscardPeers(
-    srcNodeId,
-    ContentKeysList.init(@[parentKey.toContentKey().encode()]),
-    @[parentOffer.encode()],
-  )
+  let
+    (parentKey, parentOffer) = offer.withKey(key).getParent()
+    parentKeyBytes = parentKey.toContentKey().encode()
+    req2Peers = await p.neighborhoodGossip(
+      srcNodeId, ContentKeysList.init(@[parentKeyBytes]), @[parentOffer.encode()]
+    )
+
+  info "Offered content parent gossipped successfully with peers",
+    parentKeyBytes, peers = req2Peers
 
 proc gossipOffer*(
     p: PortalProtocol,
@@ -145,6 +153,7 @@ proc gossipOffer*(
     key: ContractCodeKey,
     offer: ContractCodeOffer,
 ) {.async.} =
-  asyncSpawn p.neighborhoodGossipDiscardPeers(
+  let peers = await p.neighborhoodGossip(
     srcNodeId, ContentKeysList.init(@[keyBytes]), @[offerBytes]
   )
+  info "Offered content gossipped successfully with peers", keyBytes, peers
