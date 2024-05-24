@@ -167,7 +167,7 @@ proc getHistoricalSummaries*(
     contentKey = historicalSummariesContentKey(epoch)
     content = ?await n.getContent(contentKey)
 
-    summariesWithProof = decodeSsz(content, HistoricalSummariesWithProof).valueOr:
+    summariesWithProof = decodeSsz(n.forkDigests, content, HistoricalSummariesWithProof).valueOr:
       return Opt.none(HistoricalSummaries)
 
   if n.validateHistoricalSummaries(summariesWithProof).isOk():
@@ -272,7 +272,8 @@ proc validateContent(
     else:
       ok()
   of beacon_content.ContentType.historicalSummaries:
-    let summariesWithProof = ?decodeSsz(content, HistoricalSummariesWithProof)
+    let summariesWithProof =
+      ?decodeSsz(n.forkDigests, content, HistoricalSummariesWithProof)
 
     n.validateHistoricalSummaries(summariesWithProof)
 

@@ -6,15 +6,21 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 #
-# Example of how the beacon state historical_summaries field could be provided
-# with a Merkle proof that can be verified against the right beacon state root.
-# These historical_summaries with their proof could for example be provided over
-# the network and verified on the receivers end.
+# Implementation of the beacon state historical_summaries provided with a Merkle
+# proof that can be verified against the right beacon state root.
+#
+# As per spec:
+# https://github.com/ethereum/portal-network-specs/blob/master/beacon-chain/beacon-network.md#historicalsummaries
 #
 
 {.push raises: [].}
 
-import stew/results, beacon_chain/spec/forks, beacon_chain/spec/datatypes/capella
+import
+  stew/arrayops,
+  results,
+  beacon_chain/spec/forks,
+  beacon_chain/spec/datatypes/capella,
+  ../../common/common_types
 
 export results
 
@@ -22,9 +28,46 @@ type
   HistoricalSummaries* = HashList[HistoricalSummary, Limit HISTORICAL_ROOTS_LIMIT]
   HistoricalSummariesProof* = array[5, Digest]
   HistoricalSummariesWithProof* = object
-    finalized_slot*: Slot
+    epoch*: Epoch
+    # TODO:
+    # can epoch instead of slot cause any issues? E.g. to verify with right state?
+    # To revise when we fully implement this in validateHistoricalSummaries,
+    # for now follow specification.
+    # finalized_slot*: Slot
     historical_summaries*: HistoricalSummaries
     proof*: HistoricalSummariesProof
+
+# TODO: prefixing the summaries with the forkDigest is currently not necessary
+# and might never be. Perhaps we should drop this until it is needed. Propose
+# spec change?
+func encodeSsz*(obj: HistoricalSummariesWithProof, forkDigest: ForkDigest): seq[byte] =
+  var res: seq[byte]
+  res.add(distinctBase(forkDigest))
+  res.add(SSZ.encode(obj))
+
+  res
+
+func decodeSsz*(
+    forkDigests: ForkDigests,
+    data: openArray[byte],
+    T: type HistoricalSummariesWithProof,
+): Result[HistoricalSummariesWithProof, string] =
+  if len(data) < 4:
+    return
+      Result[HistoricalSummariesWithProof, string].err("Not enough data for forkDigest")
+
+  let
+    forkDigest = ForkDigest(array[4, byte].initCopyFrom(data))
+    contextFork = forkDigests.consensusForkForDigest(forkDigest).valueOr:
+      return Result[HistoricalSummariesWithProof, string].err("Unknown fork")
+
+  if contextFork > ConsensusFork.Bellatrix:
+    # There is only one version of HistoricalSummaries starting since Capella
+    decodeSsz(data.toOpenArray(4, len(data) - 1), HistoricalSummariesWithProof)
+  else:
+    Result[HistoricalSummariesWithProof, string].err(
+      "Invalid Fork for HistoricalSummaries"
+    )
 
 func buildProof*(
     state: ForkedHashedBeaconState
