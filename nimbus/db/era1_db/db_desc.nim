@@ -11,84 +11,85 @@
 {.push raises: [].}
 
 import
-  std/[os, tables],
-  stew/[interval_set, keyed_queue, sorted_set],
+  stew/io2,
+  std/[os, parseutils, strutils, tables],
   results,
+  eth/common/eth_types,
   ../../fluffy/eth_data/era1
 
-const
-  NumOpenEra1DbBlocks* = 10
+export results, eth_types
 
-type
-  Era1DbError* = enum
-    NothingWrong = 0
+# TODO this is a "rough copy" of the fluffy DB, minus the accumulator (it goes
+#      by era number alone instead of rooted name) - eventually the two should
+#      be merged, when eth1 gains accumulators in its metadata
 
-  Era1DbBlocks* = object
-    ## Capability of an `era1` file, to be indexed by starting block num
-    fileName*: string                         # File name on disk
-    nBlocks*: uint                            # Number of blocks available
+type Era1DbRef* = ref object
+  ## The Era1 database manages a collection of era files that together make up
+  ## a linear history of pre-merge execution chain data.
+  path: string
+  network: string
+  files: seq[Era1File]
+  filenames: Table[uint64, string]
 
-  Era1DbRef* = ref object
-    dir*: string                              # Database folder
-    blocks*: KeyedQueue[uint64,Era1File]      # Era1 block on disk
-    byBlkNum*: SortedSet[uint64,Era1DbBlocks] # File access info
-    ranges*: IntervalSetRef[uint64,uint64]    # Covered ranges
+proc getEra1File*(db: Era1DbRef, era: Era1): Result[Era1File, string] =
+  for f in db.files:
+    if f.blockIdx.startNumber.era == era:
+      return ok(f)
 
-# ------------------------------------------------------------------------------
-# Private helpers
-# ------------------------------------------------------------------------------
-
-proc load(db: Era1DbRef, eFile: string) =
   let
-    path = db.dir / eFile
-    dsc = Era1File.open(path).valueOr:
-      return
-    key = dsc.blockIdx.startNumber
+    name =
+      try:
+        db.filenames[uint64 era]
+      except KeyError:
+        return err("Era not covered by existing files: " & $era)
+    path = db.path / name
 
-  if db.blocks.lruFetch(key).isOk or dsc.blockIdx.offsets.len == 0:
-    dsc.close()
-  else:
-    # Add to LRU table
-    while NumOpenEra1DbBlocks <= db.blocks.len:
-      db.blocks.shift.value.data.close() # unqueue first/least item
-    discard db.blocks.lruAppend(key, dsc, NumOpenEra1DbBlocks)
+  if not isFile(path):
+    return err("Era file no longer available: " & path)
 
-    # Add to index list
-    let w = db.byBlkNum.findOrInsert(key).valueOr:
-      raiseAssert "Load error, index corrupted: " & $error
-    if w.data.nBlocks != 0:
-      discard db.ranges.reduce(key, key+w.data.nBlocks.uint64-1)
-    w.data.fileName = eFile
-    w.data.nBlocks = dsc.blockIdx.offsets.len.uint
-    discard db.ranges.merge(key, key+dsc.blockIdx.offsets.len.uint64-1)
+  # TODO: The open call does not do full verification. It is assumed here that
+  # trusted files are used. We might want to add a full validation option.
+  let f = Era1File.open(path).valueOr:
+    return err(error)
 
-# ------------------------------------------------------------------------------
-# Public constructor
-# ------------------------------------------------------------------------------
+  if db.files.len > 16: # TODO LRU
+    close(db.files[0])
+    db.files.delete(0)
+
+  db.files.add(f)
+  ok(f)
 
 proc init*(
-  T: type Era1DbRef;
-  dir: string;
-    ): T =
-  ## Load `era1` index
-  result = T(
-    dir:      dir,
-    byBlkNum: SortedSet[uint64,Era1DbBlocks].init(),
-    ranges:   IntervalSetRef[uint64,uint64].init())
-
+    T: type Era1DbRef, path: string, network: string
+): Result[Era1DbRef, string] =
+  var filenames: Table[uint64, string]
   try:
-    for w in dir.walkDir(relative=true):
+    for w in path.walkDir(relative = true):
       if w.kind in {pcFile, pcLinkToFile}:
-        result.load w.path
-  except CatchableError:
-    discard
+        let (_, name, ext) = w.path.splitFile()
+        # era files are named network-00era-root.era1 - we don't have the root
+        # so do prefix matching instead
+        if name.startsWith(network & "-") and ext == ".era1":
+          var era1: uint64
+          discard parseBiggestUInt(name, era1, start = network.len + 1)
+          filenames[era1] = w.path
+  except CatchableError as exc:
+    return err "Cannot open era database: " & exc.msg
+  if filenames.len == 0:
+    return err "No era files found in " & path
+
+  ok Era1DbRef(path: path, network: network, filenames: filenames)
+
+proc getBlockTuple*(db: Era1DbRef, blockNumber: uint64): Result[BlockTuple, string] =
+  let f = ?db.getEra1File(blockNumber.era)
+
+  f.getBlockTuple(blockNumber)
 
 proc dispose*(db: Era1DbRef) =
-  for w in db.blocks.nextValues:
-    w.close()
-  db.blocks.clear()
-  db.ranges.clear()
-  db.byBlkNum.clear()
+  for w in db.files:
+    if w != nil:
+      w.close()
+  db.files.reset()
 
 # ------------------------------------------------------------------------------
 # End

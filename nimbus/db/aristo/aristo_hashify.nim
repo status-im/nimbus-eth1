@@ -187,7 +187,7 @@ proc pedigree(
 
     redo.swap leafs
 
-  ok wff
+  ok move(wff)
 
 # ------------------------------------------------------------------------------
 # Private functions, tree traversal
@@ -211,7 +211,7 @@ proc createSched(
         continue
       db.layersPutKey(VertexID(1), vid, node.digestTo(HashKey))
 
-  ok wff
+  ok move(wff)
 
 
 proc processSched(
