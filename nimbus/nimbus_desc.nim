@@ -12,7 +12,6 @@ import
   eth/p2p,
   metrics/chronos_httpserver,
   ./rpc/rpc_server,
-  ./core/sealer,
   ./core/chain,
   ./core/tx_pool,
   ./sync/peers,
@@ -29,7 +28,6 @@ export
   p2p,
   chronos_httpserver,
   rpc_server,
-  sealer,
   chain,
   tx_pool,
   peers,
@@ -50,7 +48,6 @@ type
     engineApiServer*: NimbusHttpServerRef
     ethNode*: EthereumNode
     state*: NimbusState
-    sealingEngine*: SealingEngineRef
     ctx*: EthContext
     chainRef*: ChainRef
     txPool*: TxPoolRef
@@ -71,8 +68,6 @@ proc stop*(nimbus: NimbusNode, conf: NimbusConf) {.async, gcsafe.} =
     await nimbus.httpServer.stop()
   if nimbus.engineApiServer.isNil.not:
     await nimbus.engineApiServer.stop()
-  if conf.engineSigner != ZERO_ADDRESS and nimbus.sealingEngine.isNil.not:
-    await nimbus.sealingEngine.stop()
   if conf.maxPeers > 0:
     await nimbus.networkLoop.cancelAndWait()
   if nimbus.peerManager.isNil.not:

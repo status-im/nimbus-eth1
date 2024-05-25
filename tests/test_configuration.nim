@@ -86,12 +86,12 @@ proc configurationMain*() =
       let conf = makeConfig(@["--custom-network:" & genesisFile])
       check conf.networkId == 123.NetworkId
 
-    test "network-id not set, goerli set":
-      let conf = makeConfig(@["--network:goerli"])
-      check conf.networkId == GoerliNet
+    test "network-id not set, sepolia set":
+      let conf = makeConfig(@["--network:sepolia"])
+      check conf.networkId == SepoliaNet
 
-    test "network-id set, goerli set":
-      let conf = makeConfig(@["--network:goerli", "--network:123"])
+    test "network-id set, sepolia set":
+      let conf = makeConfig(@["--network:sepolia", "--network:123"])
       check conf.networkId == 123.NetworkId
 
     test "rpc-api":

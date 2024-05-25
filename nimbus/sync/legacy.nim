@@ -17,7 +17,7 @@ import
   eth/p2p/[private/p2p_types, peer_pool],
   stew/byteutils,
   "."/[protocol, types],
-  ../core/[chain, clique/clique_sealer, eip4844, gaslimit, withdrawals],
+  ../core/[chain, eip4844, gaslimit, withdrawals],
   ../core/pow/difficulty,
   ../constants,
   ../utils/utils,
@@ -151,15 +151,6 @@ proc validateDifficulty(ctx: LegacySyncRef,
     let com = ctx.chain.com
 
     case consensusType
-    of ConsensusType.POA:
-      let rc = ctx.chain.clique.calcDifficulty(parentHeader)
-      if rc.isErr:
-        return false
-      if header.difficulty < rc.get():
-        trace "provided header difficulty is too low",
-          expect=rc.get(), get=header.difficulty
-        return false
-
     of ConsensusType.POW:
       let calcDiffc = com.calcDifficulty(header.timestamp, parentHeader)
       if header.difficulty < calcDiffc:
@@ -211,16 +202,6 @@ proc validateHeader(ctx: LegacySyncRef, header: BlockHeader,
   let consensusType = com.consensus(header)
   if not ctx.validateDifficulty(header, parentHeader, consensusType):
     return false
-
-  if consensusType == ConsensusType.POA:
-    let period = com.cliquePeriod
-    # Timestamp diff between blocks is lower than PERIOD (clique)
-    if parentHeader.timestamp + period > header.timestamp:
-      trace "invalid timestamp diff (lower than period)",
-        parent=parentHeader.timestamp,
-        header=header.timestamp,
-        period
-      return false
 
   var res = com.validateGasLimitOrBaseFee(header, parentHeader)
   if res.isErr:

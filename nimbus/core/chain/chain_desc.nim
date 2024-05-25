@@ -14,8 +14,7 @@ import
   ../../common/common,
   ../../utils/utils,
   ../../vm_types,
-  ../pow,
-  ../clique
+  ../pow
 
 export
   common
@@ -62,12 +61,12 @@ proc newChain*(com: CommonRef,
     vmState: vmState,
   )
 
-proc newChain*(com: CommonRef): ChainRef =
+func newChain*(com: CommonRef): ChainRef =
   ## Constructor for the `Chain` descriptor object. All sub-object descriptors
   ## are initialised with defaults. So is extra block chain validation
   ##  * `enabled` for PoA networks (such as Goerli)
   ##  * `disabled` for non-PaA networks
-  let extraValidation = com.consensus in {ConsensusType.POA, ConsensusType.POS}
+  let extraValidation = com.consensus == ConsensusType.POS
   ChainRef(
     com: com,
     validateBlock: true,
@@ -80,10 +79,6 @@ proc newChain*(com: CommonRef): ChainRef =
 proc vmState*(c: ChainRef): BaseVMState =
   ## Getter
   c.vmState
-
-proc clique*(c: ChainRef): Clique =
-  ## Getter
-  c.com.poa
 
 proc pow*(c: ChainRef): PowRef =
   ## Getter

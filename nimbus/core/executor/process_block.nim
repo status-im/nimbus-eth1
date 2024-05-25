@@ -16,7 +16,6 @@ import
   ../../transaction,
   ../../vm_state,
   ../../vm_types,
-  ../clique,
   ../dao,
   ./calculate_reward,
   ./executor_helpers,
