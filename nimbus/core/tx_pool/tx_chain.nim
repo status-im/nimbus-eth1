@@ -20,7 +20,6 @@ import
   ../../vm_state,
   ../../vm_types,
   ../eip4844,
-  ../clique/[clique_sealer, clique_desc, clique_cfg],
   ../pow/difficulty,
   ../executor,
   ../casper,
@@ -84,12 +83,6 @@ proc prepareHeader(dh: TxChainRef; parent: BlockHeader, timestamp: EthTime)
       dh.prepHeader.timestamp, parent)
     dh.prepHeader.coinbase   = dh.miner
     dh.prepHeader.mixDigest.reset
-  of ConsensusType.POA:
-    discard dh.com.poa.prepare(parent, dh.prepHeader)
-    # beware POA header.coinbase != signerAddress
-    # but BaseVMState.minerAddress == signerAddress
-    # - minerAddress is extracted from header.extraData
-    # - header.coinbase is from clique engine
   of ConsensusType.POS:
     dh.com.pos.prepare(dh.prepHeader)
 
@@ -98,8 +91,6 @@ proc prepareForSeal(dh: TxChainRef; header: var BlockHeader) {.gcsafe, raises: [
   of ConsensusType.POW:
     # do nothing, tx pool was designed with POW in mind
     discard
-  of ConsensusType.POA:
-    dh.com.poa.prepareForSeal(dh.prepHeader, header)
   of ConsensusType.POS:
     dh.com.pos.prepareForSeal(header)
 
@@ -107,12 +98,6 @@ proc getTimestamp(dh: TxChainRef, parent: BlockHeader): EthTime =
   case dh.com.consensus
   of ConsensusType.POW:
     EthTime.now()
-  of ConsensusType.POA:
-    let timestamp = parent.timestamp + dh.com.poa.cfg.period
-    if timestamp < EthTime.now():
-      EthTime.now()
-    else:
-      timestamp
   of ConsensusType.POS:
     dh.com.pos.timestamp
 

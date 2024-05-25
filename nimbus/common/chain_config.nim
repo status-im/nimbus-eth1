@@ -54,7 +54,6 @@ const
   CustomNet*  = 0.NetworkId
   # these are public network id
   MainNet*    = 1.NetworkId
-  GoerliNet*  = 5.NetworkId
   SepoliaNet* = 11155111.NetworkId
   HoleskyNet* = 17000.NetworkId
 
@@ -356,10 +355,6 @@ proc validateChainConfig*(conf: ChainConfig): bool =
     if cur.time.isSome:
       lastTimeBasedFork = cur
 
-  if conf.clique.period.isSome or
-     conf.clique.epoch.isSome:
-    conf.consensusType = ConsensusType.POA
-
 proc parseGenesis*(data: string): Genesis
      {.gcsafe.} =
   try:
@@ -473,29 +468,6 @@ proc chainConfigForNetwork*(id: NetworkId): ChainConfig =
       terminalTotalDifficulty: some(mainNetTTD),
       shanghaiTime:        some(1_681_338_455.EthTime)
     )
-  of GoerliNet:
-    ChainConfig(
-      clique:              CliqueOptions(period: some(15), epoch: some(30000)),
-      consensusType:       ConsensusType.POA,
-      chainId:             GoerliNet.ChainId,
-      # Genesis:                                           # 2015-07-30 15:26:13 UTC
-      homesteadBlock:      some(0.toBlockNumber),          # Included in genesis
-      daoForkSupport:      false,
-      eip150Block:         some(0.toBlockNumber),          # Included in genesis
-      eip150Hash:          toDigest("0000000000000000000000000000000000000000000000000000000000000000"),
-      eip155Block:         some(0.toBlockNumber),          # Included in genesis
-      eip158Block:         some(0.toBlockNumber),          # Included in genesis
-      byzantiumBlock:      some(0.toBlockNumber),          # Included in genesis
-      constantinopleBlock: some(0.toBlockNumber),          # Included in genesis
-      petersburgBlock:     some(0.toBlockNumber),          # Included in genesis
-      istanbulBlock:       some(1_561_651.toBlockNumber),  # 2019-10-30 13:53:05 UTC
-      muirGlacierBlock:    some(4_460_644.toBlockNumber),  # Skipped in Goerli
-      berlinBlock:         some(4_460_644.toBlockNumber),  # 2021-03-18 05:29:51 UTC
-      londonBlock:         some(5_062_605.toBlockNumber),  # 2021-07-01 03:19:39 UTC
-      terminalTotalDifficulty: some(10790000.u256),
-      shanghaiTime:        some(1_678_832_736.EthTime),
-      cancunTime:          some(1_705_473_120.EthTime), # 2024-01-17 06:32:00
-    )
   of SepoliaNet:
     const sepoliaTTD = parse("17000000000000000",UInt256)
     ChainConfig(
@@ -552,15 +524,6 @@ proc genesisBlockForNetwork*(id: NetworkId): Genesis
       gasLimit: 5000,
       difficulty: 17179869184.u256,
       alloc: decodePrealloc(mainnetAllocData)
-    )
-  of GoerliNet:
-    Genesis(
-      nonce: 0.toBlockNonce,
-      timestamp: EthTime(0x5c51a607),
-      extraData: hexToSeqByte("0x22466c6578692069732061207468696e6722202d204166726900000000000000e0a2bd4258d2768837baa26a28fe71dc079f84c70000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
-      gasLimit: 0xa00000,
-      difficulty: 1.u256,
-      alloc: decodePrealloc(goerliAllocData)
     )
   of SepoliaNet:
     Genesis(

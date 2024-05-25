@@ -84,7 +84,7 @@ proc main() =
     )
 
   com.initializeEmptyDb()
-  let txPool = TxPoolRef.new(com, conf.engineSigner)
+  let txPool = TxPoolRef.new(com, ZERO_ADDRESS)
   discard importRlpBlock(blocksFile, com)
   let ctx = setupGraphqlContext(com, ethNode, txPool)
 

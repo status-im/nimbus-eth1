@@ -17,7 +17,6 @@ import
     transaction,
     vm_state,
     vm_types,
-    core/clique,
     core/dao,
     core/validate,
     core/chain/chain_desc,
@@ -106,9 +105,6 @@ proc setBlock*(c: ChainRef; header: BlockHeader;
                           {.inline, raises: [CatchableError].} =
   let dbTx = c.db.beginTransaction()
   defer: dbTx.dispose()
-
-  var cliqueState = c.clique.cliqueSave
-  defer: c.clique.cliqueRestore(cliqueState)
 
   c.com.hardForkTransition(header)
 

@@ -14,8 +14,6 @@ import
   ../../db/ledger,
   ../../vm_state,
   ../../vm_types,
-  ../clique/clique_verify,
-  ../clique,
   ../executor,
   ../validate,
   ./chain_desc,
@@ -79,9 +77,6 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
   let dbTx = c.db.beginTransaction()
   defer: dbTx.dispose()
 
-  var cliqueState = c.clique.cliqueSave
-  defer: c.clique.cliqueRestore(cliqueState)
-
   c.com.hardForkTransition(headers[0])
 
   # Note that `0 < headers.len`, assured when called from `persistBlocks()`
@@ -110,15 +105,14 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
     if c.validateBlock and c.extraValidation and
        c.verifyFrom <= header.blockNumber:
 
-      if c.com.consensus != ConsensusType.POA:
-        let res = c.com.validateHeaderAndKinship(
-          header,
-          body,
-          checkSealOK = false) # TODO: how to checkseal from here
-        if res.isErr:
-          debug "block validation error",
-            msg = res.error
-          return ValidationResult.Error
+      let res = c.com.validateHeaderAndKinship(
+        header,
+        body,
+        checkSealOK = false) # TODO: how to checkseal from here
+      if res.isErr:
+        debug "block validation error",
+          msg = res.error
+        return ValidationResult.Error
 
     if c.generateWitness:
       vmState.generateWitness = true
@@ -136,21 +130,6 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
 
     if validationResult != ValidationResult.OK:
       return validationResult
-
-    if c.validateBlock and c.extraValidation and
-       c.verifyFrom <= header.blockNumber:
-
-      if c.com.consensus == ConsensusType.POA:
-        var parent = if 0 < i: @[headers[i-1]] else: @[]
-        let rc = c.clique.cliqueVerify(c.com, header, parent)
-        if rc.isOk:
-          # mark it off so it would not auto-restore previous state
-          c.clique.cliqueDispose(cliqueState)
-        else:
-          debug "PoA header verification failed",
-            blockNumber = header.blockNumber,
-            msg = $rc.error
-          return ValidationResult.Error
 
     if c.generateWitness:
       let dbTx = c.db.beginTransaction()

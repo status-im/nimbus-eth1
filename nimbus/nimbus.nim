@@ -25,8 +25,6 @@ import
   ./core/eip4844,
   ./core/block_import,
   ./db/core_db/persistent,
-  ./core/clique/clique_desc,
-  ./core/clique/clique_sealer,
   ./sync/protocol,
   ./sync/handlers
 
@@ -49,7 +47,7 @@ proc importBlocks(conf: NimbusConf, com: CommonRef) =
 proc basicServices(nimbus: NimbusNode,
                    conf: NimbusConf,
                    com: CommonRef) =
-  nimbus.txPool = TxPoolRef.new(com, conf.engineSigner)
+  nimbus.txPool = TxPoolRef.new(com, ZERO_ADDRESS)
 
   # txPool must be informed of active head
   # so it can know the latest account state
@@ -207,40 +205,6 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
     discard setTimer(Moment.fromNow(conf.logMetricsInterval.seconds), logMetrics)
 
   nimbus.setupRpc(conf, com, protocols)
-
-  if conf.engineSigner != ZERO_ADDRESS and not com.forkGTE(MergeFork):
-    let res = nimbus.ctx.am.getAccount(conf.engineSigner)
-    if res.isErr:
-      error "Failed to get account",
-         msg = res.error,
-         hint = "--key-store or --import-key"
-      quit(QuitFailure)
-
-    let rs = validateSealer(conf, nimbus.ctx, nimbus.chainRef)
-    if rs.isErr:
-      fatal "Engine signer validation error", msg = rs.error
-      quit(QuitFailure)
-
-    proc signFunc(signer: EthAddress, message: openArray[byte]): Result[RawSignature, cstring] {.gcsafe.} =
-      let
-        hashData = keccakHash(message)
-        acc      = nimbus.ctx.am.getAccount(signer).tryGet()
-        rawSign  = sign(acc.privateKey, SkMessage(hashData.data)).toRaw
-
-      ok(rawSign)
-
-    nimbus.chainRef.clique.authorize(conf.engineSigner, signFunc)
-
-  # disable sealing engine if beacon engine enabled
-  if not com.forkGTE(MergeFork):
-    nimbus.sealingEngine = SealingEngineRef.new(
-      nimbus.chainRef, nimbus.ctx, conf.engineSigner,
-      nimbus.txPool, EngineStopped
-    )
-
-    # only run sealing engine if there is a signer
-    if conf.engineSigner != ZERO_ADDRESS:
-      nimbus.sealingEngine.start()
 
   # metrics server
   if conf.metricsEnabled:

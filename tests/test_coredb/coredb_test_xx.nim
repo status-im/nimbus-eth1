@@ -81,21 +81,6 @@ let
     # will run over all avail files in parent folder
     files:   @["00000.era1"])                 # on external repo
 
-  # Goerli will be abondoned in future
-  goerliSample =  CaptureSpecs(
-    builtIn: true,
-    name:    "goerli",
-    network: GoerliNet,
-    files:   @["goerli68161.txt.gz"])         # on local replay folder
-
-  goerliSampleEx = CaptureSpecs(
-    builtIn: true,
-    name:    "goerli",
-    network: GoerliNet,
-    files:   @[
-        "goerli482304.txt.gz",                # on nimbus-eth1-blobs/replay
-        "goerli482305-504192.txt.gz"])
-
   # ------------------
 
   # Supposed to run mostly on defaults, object name tag: m=memory, r=rocksDB
@@ -142,35 +127,12 @@ let
       dbType    = AristoDbRocks)
 
 
-  # Goerli will be abondoned in future
-  goerliTest0m* = goerliSample
-    .cloneWith(
-      name      = "-am-some",
-      numBlocks = 1_000)
-
-  goerliTest1m* = goerliSample
-    .cloneWith(
-      name      = "-am",
-      numBlocks = high(int))
-
-  goerliTest2m* = goerliSampleEx
-    .cloneWith(
-      name      = "-ex-am",
-      numBlocks = high(int))
-
-  goerliTest3r* = goerliSampleEx
-    .cloneWith(
-      name      = "-ex-ar",
-      numBlocks = high(int),
-      dbType    = AristoDbRocks)
-
   # ------------------
 
   allSamples* = [
     mainTest0m, mainTest1m,
     mainTest2r, mainTest3r, mainTest4r,
-    mainTest5m, mainTest6r,
-    goerliTest0m, goerliTest1m, goerliTest2m, goerliTest3r
+    mainTest5m, mainTest6r
   ]
 
 # End

@@ -189,14 +189,6 @@ type
       abbr: "e"
       name: "import-key" }: InputFile
 
-    engineSigner* {.
-      desc: "Set the signer address(as 20 bytes hex) and enable sealing engine to run and " &
-            "producing blocks at specified interval (only PoA/Clique supported)"
-      defaultValue: ZERO_ADDRESS
-      defaultValueDesc: ""
-      abbr: "s"
-      name: "engine-signer" }: EthAddress
-
     verifyFrom* {.
       desc: "Enable extra verification when current block number greater than verify-from"
       defaultValueDesc: ""
@@ -616,7 +608,6 @@ proc getNetworkId(conf: NimbusConf): Option[NetworkId] =
   let network = toLowerAscii(conf.network)
   case network
   of "mainnet": return some MainNet
-  of "goerli" : return some GoerliNet
   of "sepolia": return some SepoliaNet
   of "holesky": return some HoleskyNet
   else:
@@ -693,8 +684,6 @@ proc getBootNodes*(conf: NimbusConf): seq[ENode] =
     case conf.networkId
     of MainNet:
       bootstrapNodes.setBootnodes(MainnetBootnodes)
-    of GoerliNet:
-      bootstrapNodes.setBootnodes(GoerliBootnodes)
     of SepoliaNet:
       bootstrapNodes.setBootnodes(SepoliaBootnodes)
     of HoleskyNet:

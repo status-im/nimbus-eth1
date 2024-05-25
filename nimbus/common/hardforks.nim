@@ -23,10 +23,6 @@ type
     # algorithm: Ethash
     POW
 
-    # Proof of Authority
-    # algorithm: Clique
-    POA
-
     # Proof of Stake
     # algorithm: Casper
     POS

@@ -13,7 +13,7 @@ import
   std/[options],
   chronicles,
   eth/trie/trie_defs,
-  ../core/[pow, clique, casper],
+  ../core/[pow, casper],
   ../db/[core_db, ledger, storage_types],
   ../utils/[utils, ec_recover],
   ".."/[constants, errors],
@@ -91,9 +91,6 @@ type
     pow: PowRef
       ## Wrapper around `hashimotoLight()` and lookup cache
 
-    poa: Clique
-      ## For non-PoA networks this descriptor is ignored.
-
     pos: CasperRef
       ## Proof Of Stake descriptor
 
@@ -160,10 +157,6 @@ proc init(com         : CommonRef,
   com.syncProgress= SyncProgress()
   com.ldgType     = (if ldgType == LedgerType(0): LedgerCache else: ldgType)
   com.pruneHistory= pruneHistory
-
-  # Initalise the PoA state regardless of whether it is needed on the current
-  # network. For non-PoA networks this descriptor is ignored.
-  com.poa = newClique(com.db, com.cliquePeriod, com.cliqueEpoch)
 
   # Always initialise the PoW epoch cache even though it migh no be used
   com.pow = PowRef.new
@@ -281,7 +274,6 @@ proc clone*(com: CommonRef, db: CoreDbRef): CommonRef =
     currentFork  : com.currentFork,
     consensusType: com.consensusType,
     pow          : com.pow,
-    poa          : com.poa,
     pos          : com.pos,
     ldgType      : com.ldgType,
     pruneHistory : com.pruneHistory)
@@ -353,19 +345,10 @@ func forkGTE*(com: CommonRef, fork: HardFork): bool =
   com.currentFork >= fork
 
 # TODO: move this consensus code to where it belongs
-proc minerAddress*(com: CommonRef; header: BlockHeader): EthAddress
+func minerAddress*(com: CommonRef; header: BlockHeader): EthAddress
     {.gcsafe, raises: [CatchableError].} =
-  if com.consensusType != ConsensusType.POA:
-    # POW and POS return header.coinbase
-    return header.coinbase
-
-  # POA return ecRecover
-  let account = header.ecRecover
-  if account.isErr:
-    let msg = "Could not recover account address: " & $account.error
-    raise newException(ValidationError, msg)
-
-  account.value
+  # POW and POS return header.coinbase
+  return header.coinbase
 
 func forkId*(com: CommonRef, head, time: uint64): ForkID {.gcsafe.} =
   ## EIP 2364/2124
@@ -435,10 +418,6 @@ proc notifyBadBlock*(com: CommonRef; invalid, origin: BlockHeader)
 func startOfHistory*(com: CommonRef): Hash256 =
   ## Getter
   com.startOfHistory
-
-func poa*(com: CommonRef): Clique =
-  ## Getter
-  com.poa
 
 func pow*(com: CommonRef): PowRef =
   ## Getter

@@ -141,7 +141,6 @@ template runGenesisTimeIdTests() =
 proc forkIdMain*() =
   suite "Fork ID tests":
     runTest(MainNet, "MainNet")
-    runTest(GoerliNet, "GoerliNet")
     runTest(SepoliaNet, "SepoliaNet")
     runTest(HoleskyNet, "HoleskyNet")
     test "Genesis Time Fork ID":

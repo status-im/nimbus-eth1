@@ -18,7 +18,6 @@ import
   ../../../nimbus/[
     config,
     constants,
-    core/sealer,
     core/chain,
     core/tx_pool,
     core/tx_pool/tx_item,
@@ -45,7 +44,6 @@ type
     com    : CommonRef
     node   : EthereumNode
     server : RpcHttpServer
-    sealer : SealingEngineRef
     ttd    : DifficultyInt
     client : RpcHttpClient
     sync   : BeaconSyncRef
@@ -93,7 +91,7 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
     chain = newChain(com)
 
   com.initializeEmptyDb()
-  let txPool = TxPoolRef.new(com, conf.engineSigner)
+  let txPool = TxPoolRef.new(com, ZERO_ADDRESS)
 
   node.addEthHandlerCapability(
     node.peerPool,
@@ -117,9 +115,6 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
       echo "Failed to create rpc server: ", error
       quit(QuitFailure)
 
-    sealer = SealingEngineRef.new(
-              chain, ctx, conf.engineSigner,
-              txPool, EngineStopped)
     sync   = if com.ttd().isSome:
                BeaconSyncRef.init(node, chain, ctx.rng, conf.maxPeers, id=conf.tcpPort.int)
              else:
@@ -135,8 +130,6 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
   if chainFile.len > 0:
     if not importRlpBlock(chainFolder / chainFile, com):
       quit(QuitFailure)
-  elif not enableAuth:
-    sealer.start()
 
   server.start()
 
@@ -153,7 +146,6 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
     com    : com,
     node   : node,
     server : server,
-    sealer : sealer,
     client : client,
     sync   : sync,
     txPool : txPool,
@@ -165,7 +157,6 @@ proc close*(env: EngineEnv) =
   if not env.sync.isNil:
     env.sync.stop()
   waitFor env.client.close()
-  waitFor env.sealer.stop()
   waitFor env.server.closeWait()
 
 proc setRealTTD*(env: EngineEnv) =

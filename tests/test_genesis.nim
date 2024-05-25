@@ -36,10 +36,6 @@ proc genesisTest() =
       let b = makeGenesis(MainNet)
       check(b.blockHash == "D4E56740F876AEF8C010B86A40D5F56745A118D0906A34E69AEC8C0DB1CB8FA3".toDigest)
 
-    test "Correct goerlinet hash":
-      let b = makeGenesis(GoerliNet)
-      check(b.blockHash == "bf7e331f7f7c1dd2e05159666b3bf8bc7a8a3a9eb1d518969eab529dd9b88c1a".toDigest)
-
     test "Correct sepolia hash":
       let b = makeGenesis(SepoliaNet)
       check b.blockHash == "25a5cc106eea7138acab33231d7160d69cb777ee0c2c553fcddf5138993e6dd9".toDigest
@@ -59,18 +55,6 @@ proc customGenesisTest() =
       check cga.config.consensusType == ConsensusType.POW
       check cgb.config.consensusType == ConsensusType.POW
       check cgc.config.consensusType == ConsensusType.POW
-
-    test "calaveras.json":
-      var cg: NetworkParams
-      check loadNetworkParams("calaveras.json".findFilePath, cg)
-      let com = CommonRef.new(newCoreDbRef DefaultDbMemory, params = cg)
-      let stateRoot = "664c93de37eb4a72953ea42b8c046cdb64c9f0b0bca5505ade8d970d49ebdb8c".toDigest
-      let genesisHash = "eb9233d066c275efcdfed8037f4fc082770176aefdbcb7691c71da412a5670f2".toDigest
-      check com.genesisHeader.stateRoot == stateRoot
-      check com.genesisHeader.blockHash == genesisHash
-      check com.consensus == ConsensusType.POA
-      check com.cliquePeriod == 30
-      check com.cliqueEpoch == 30000
 
     test "Devnet4.json (aka Kintsugi in all but chainId)":
       var cg: NetworkParams
