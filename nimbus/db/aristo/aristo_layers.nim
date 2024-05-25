@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/[algorithm, sequtils, sets, tables],
+  std/[sequtils, sets, tables],
   eth/common,
   results,
   ./aristo_desc
@@ -62,7 +62,7 @@ func nLayersKey*(db: AristoDbRef): int =
 # Public functions: getter variants
 # ------------------------------------------------------------------------------
 
-proc layersGetVtx*(db: AristoDbRef; vid: VertexID): Result[VertexRef,void] =
+func layersGetVtx*(db: AristoDbRef; vid: VertexID): Result[VertexRef,void] =
   ## Find a vertex on the cache layers. An `ok()` result might contain a
   ## `nil` vertex if it is stored on the cache  that way.
   ##
@@ -75,12 +75,12 @@ proc layersGetVtx*(db: AristoDbRef; vid: VertexID): Result[VertexRef,void] =
 
   err()
 
-proc layersGetVtxOrVoid*(db: AristoDbRef; vid: VertexID): VertexRef =
+func layersGetVtxOrVoid*(db: AristoDbRef; vid: VertexID): VertexRef =
   ## Simplified version of `layersGetVtx()`
   db.layersGetVtx(vid).valueOr: VertexRef(nil)
 
 
-proc layersGetKey*(db: AristoDbRef; vid: VertexID): Result[HashKey,void] =
+func layersGetKey*(db: AristoDbRef; vid: VertexID): Result[HashKey,void] =
   ## Find a hash key on the cache layers. An `ok()` result might contain a void
   ## hash key if it is stored on the cache that way.
   ##
@@ -96,19 +96,19 @@ proc layersGetKey*(db: AristoDbRef; vid: VertexID): Result[HashKey,void] =
 
   err()
 
-proc layersGetKeyOrVoid*(db: AristoDbRef; vid: VertexID): HashKey =
+func layersGetKeyOrVoid*(db: AristoDbRef; vid: VertexID): HashKey =
   ## Simplified version of `layersGetkey()`
   db.layersGetKey(vid).valueOr: VOID_HASH_KEY
 
 
-proc layerGetProofKeyOrVoid*(db: AristoDbRef; vid: VertexID): HashKey =
+func layerGetProofKeyOrVoid*(db: AristoDbRef; vid: VertexID): HashKey =
   ## Get the hash key of a proof node if it was registered as such.
   if vid in db.top.final.pPrf:
     db.top.delta.kMap.getOrVoid vid
   else:
     VOID_HASH_KEY
 
-proc layerGetProofVidOrVoid*(db: AristoDbRef; key: HashKey): VertexID =
+func layerGetProofVidOrVoid*(db: AristoDbRef; key: HashKey): VertexID =
   ## Reverse look up for a registered proof node or a link key for such a
   ## node. The vertex for a returned vertex ID might not exist if the
   ## argument `key` refers to a link key of a registered proof node.
@@ -118,7 +118,7 @@ proc layerGetProofVidOrVoid*(db: AristoDbRef; key: HashKey): VertexID =
 # Public functions: setter variants
 # ------------------------------------------------------------------------------
 
-proc layersPutVtx*(
+func layersPutVtx*(
     db: AristoDbRef;
     root: VertexID;
     vid: VertexID;
@@ -128,7 +128,7 @@ proc layersPutVtx*(
   db.top.delta.sTab[vid] = vtx
   db.top.final.dirty.incl root
 
-proc layersResVtx*(
+func layersResVtx*(
     db: AristoDbRef;
     root: VertexID;
     vid: VertexID;
@@ -138,7 +138,7 @@ proc layersResVtx*(
   db.layersPutVtx(root, vid, VertexRef(nil))
 
 
-proc layersPutKey*(
+func layersPutKey*(
     db: AristoDbRef;
     root: VertexID;
     vid: VertexID;
@@ -149,20 +149,20 @@ proc layersPutKey*(
   db.top.final.dirty.incl root # Modified top cache layers => hashify
 
 
-proc layersResKey*(db: AristoDbRef; root: VertexID; vid: VertexID) =
+func layersResKey*(db: AristoDbRef; root: VertexID; vid: VertexID) =
   ## Shortcut for `db.layersPutKey(vid, VOID_HASH_KEY)`. It is sort of the
   ## equivalent of a delete function.
   db.layersPutKey(root, vid, VOID_HASH_KEY)
 
 
-proc layersPutProof*(db: AristoDbRef; vid: VertexID; key: HashKey) =
+func layersPutProof*(db: AristoDbRef; vid: VertexID; key: HashKey) =
   ## Register a link key of a proof node.
   let lKey = db.layersGetKeyOrVoid vid
   if not lKey.isValid or lKey != key:
     db.top.delta.kMap[vid] = key
   db.top.final.fRpp[key] = vid
 
-proc layersPutProof*(
+func layersPutProof*(
     db: AristoDbRef;
     vid: VertexID;
     key: HashKey;
@@ -179,7 +179,7 @@ proc layersPutProof*(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc layersMergeOnto*(src: LayerRef; trg: var LayerObj) =
+func layersMergeOnto*(src: LayerRef; trg: var LayerObj) =
   ## Merges the argument `src` into the argument `trg` and returns `trg`. For
   ## the result layer, the `txUid` value set to `0`.
   ##

@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/[algorithm, sequtils, sets, tables],
+  std/[sequtils, sets, tables],
   eth/common,
   results,
   ./kvt_desc
@@ -31,7 +31,7 @@ func nLayersKeys*(db: KvtDbRef): int =
 # Public functions: get function
 # ------------------------------------------------------------------------------
 
-proc layersHasKey*(db: KvtDbRef; key: openArray[byte]): bool =
+func layersHasKey*(db: KvtDbRef; key: openArray[byte]): bool =
   ## Return `true` id the argument key is cached.
   ##
   if db.top.delta.sTab.hasKey @key:
@@ -42,7 +42,7 @@ proc layersHasKey*(db: KvtDbRef; key: openArray[byte]): bool =
       return true
 
 
-proc layersGet*(db: KvtDbRef; key: openArray[byte]): Result[Blob,void] =
+func layersGet*(db: KvtDbRef; key: openArray[byte]): Result[Blob,void] =
   ## Find an item on the cache layers. An `ok()` result might contain an
   ## empty value if it is stored on the cache  that way.
   ##
@@ -59,7 +59,7 @@ proc layersGet*(db: KvtDbRef; key: openArray[byte]): Result[Blob,void] =
 # Public functions: put function
 # ------------------------------------------------------------------------------
 
-proc layersPut*(db: KvtDbRef; key: openArray[byte]; data: openArray[byte]) =
+func layersPut*(db: KvtDbRef; key: openArray[byte]; data: openArray[byte]) =
   ## Store a (potentally empty) value on the top layer
   db.top.delta.sTab[@key] = @data
 
@@ -67,7 +67,7 @@ proc layersPut*(db: KvtDbRef; key: openArray[byte]; data: openArray[byte]) =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc layersCc*(db: KvtDbRef; level = high(int)): LayerRef =
+func layersCc*(db: KvtDbRef; level = high(int)): LayerRef =
   ## Provide a collapsed copy of layers up to a particular transaction level.
   ## If the `level` argument is too large, the maximum transaction level is
   ## returned. For the result layer, the `txUid` value set to `0`.
