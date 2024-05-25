@@ -17,7 +17,7 @@ import
   ../../../nimbus/config,
   ../../../nimbus/rpc,
   ../../../nimbus/utils/utils,
-  ../../../nimbus/core/[chain, tx_pool, sealer],
+  ../../../nimbus/core/[chain, tx_pool],
   ../../../tests/test_helpers,
   ./vault
 
@@ -28,7 +28,6 @@ type
     vault*: Vault
     rpcClient*: RpcClient
     rpcServer: RpcServer
-    sealingEngine: SealingEngineRef
     stopServer: StopServerProc
 
 const
@@ -85,28 +84,20 @@ proc setupEnv*(): TestEnv =
   com.initializeEmptyDb()
 
   let chainRef = newChain(com)
-  let txPool = TxPoolRef.new(com, conf.engineSigner)
+  let txPool = TxPoolRef.new(com, ZERO_ADDRESS)
 
   # txPool must be informed of active head
   # so it can know the latest account state
   let head = com.db.getCanonicalHead()
   doAssert txPool.smartHead(head)
 
-  let sealingEngine = SealingEngineRef.new(
-    chainRef, ethCtx, conf.engineSigner,
-    txPool, EngineStopped
-  )
-
   let rpcServer = setupRpcServer(ethCtx, com, ethNode, txPool, conf)
   let rpcClient = newRpcHttpClient()
   waitFor rpcClient.connect("127.0.0.1", Port(8545), false)
   let stopServer = stopRpcHttpServer
 
-  sealingEngine.start()
-
   let t = TestEnv(
     rpcClient: rpcClient,
-    sealingEngine: sealingEngine,
     rpcServer: rpcServer,
     vault : newVault(chainID, gasPrice, rpcClient),
     stopServer: stopServer
@@ -116,5 +107,4 @@ proc setupEnv*(): TestEnv =
 
 proc stopEnv*(t: TestEnv) =
   waitFor t.rpcClient.close()
-  waitFor t.sealingEngine.stop()
   t.stopServer(t.rpcServer)

@@ -17,7 +17,6 @@ import
 
 from ../nimbus/common/chain_config import
   MainNet,
-  GoerliNet,
   SepoliaNet,
   HoleskyNet
 
@@ -73,10 +72,9 @@ proc processU256(val: string, o: var UInt256): ConfigStatus =
     o = parse(val, UInt256)
   result = Success
 
-proc processNetId(val: string, o: var NetworkId): ConfigStatus =
+func processNetId(val: string, o: var NetworkId): ConfigStatus =
   case val.toLowerAscii()
   of "main": o = MainNet
-  of "goerli": o = GoerliNet
   of "sepolia": o = SepoliaNet
   of "holesky": o = HoleskyNet
 
