@@ -24,7 +24,10 @@ import
 # ------------------------------------------------------------------------------
 
 func savePoint(sp: LedgerSpRef): impl.LedgerSavePoint =
-  wrp.LedgerSavePoint(sp).sp
+  if not sp.isNil:
+    wrp.LedgerSavePoint(sp).sp
+  else:
+    nil
 
 # ----------------
 
