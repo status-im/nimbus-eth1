@@ -11,12 +11,8 @@
 {.push raises: [].}
 
 import
-  era1_db/[db_desc, db_utils]
+  era1_db/db_desc
 
-export
-  Era1DbRef,
-  dispose,
-  init,
-  db_utils
+export db_Desc
 
 # End
