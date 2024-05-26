@@ -700,7 +700,7 @@ func init*(
   profApi.journalGetFilter =
     proc(a: BackendRef; b: int): auto =
       AristoApiProfJournalGetFilterFn.profileRunner:
-        result = api.journalGetInx(a, b)
+        result = api.journalGetFilter(a, b)
 
   profApi.journalGetInx =
     proc(a: BackendRef; b: Option[FilterID]; c = false): auto =
