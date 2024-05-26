@@ -61,7 +61,7 @@ let
     version.NimVersion
   ]
 
-proc defaultDataDir*(): string =
+func defaultDataDir*(): string =
   when defined(windows):
     getHomeDir() / "AppData" / "Roaming" / "Nimbus"
   elif defined(macosx):
@@ -69,10 +69,10 @@ proc defaultDataDir*(): string =
   else:
     getHomeDir() / ".cache" / "nimbus"
 
-proc defaultKeystoreDir*(): string =
+func defaultKeystoreDir*(): string =
   defaultDataDir() / "keystore"
 
-proc getLogLevels(): string =
+func getLogLevels(): string =
   var logLevels: seq[string]
   for level in LogLevel:
     if level < enabledLogLevel:
@@ -437,11 +437,6 @@ type
         defaultValue: false
         name: "engine-api-ws" .}: bool
 
-      terminalTotalDifficulty* {.
-        desc: "The terminal total difficulty of the eth2 merge transition block." &
-              " It takes precedence over terminalTotalDifficulty in config file."
-        name: "terminal-total-difficulty" .}: Option[UInt256]
-
       allowedOrigins* {.
         desc: "Comma separated list of domains from which to accept cross origin requests"
         defaultValue: @[]
@@ -488,38 +483,38 @@ type
         defaultValue: ""
         name: "blocks-file" }: InputFile
 
-proc parseCmdArg(T: type NetworkId, p: string): T
+func parseCmdArg(T: type NetworkId, p: string): T
     {.gcsafe, raises: [ValueError].} =
   parseInt(p).T
 
-proc completeCmdArg(T: type NetworkId, val: string): seq[string] =
+func completeCmdArg(T: type NetworkId, val: string): seq[string] =
   return @[]
 
-proc parseCmdArg(T: type UInt256, p: string): T
+func parseCmdArg(T: type UInt256, p: string): T
     {.gcsafe, raises: [ValueError].} =
   parse(p, T)
 
-proc completeCmdArg(T: type UInt256, val: string): seq[string] =
+func completeCmdArg(T: type UInt256, val: string): seq[string] =
   return @[]
 
-proc parseCmdArg(T: type EthAddress, p: string): T
+func parseCmdArg(T: type EthAddress, p: string): T
     {.gcsafe, raises: [ValueError].}=
   try:
     result = hexToByteArray(p, 20)
   except CatchableError:
     raise newException(ValueError, "failed to parse EthAddress")
 
-proc completeCmdArg(T: type EthAddress, val: string): seq[string] =
+func completeCmdArg(T: type EthAddress, val: string): seq[string] =
   return @[]
 
-proc parseCmdArg*(T: type enr.Record, p: string): T {.raises: [ValueError].} =
+func parseCmdArg*(T: type enr.Record, p: string): T {.raises: [ValueError].} =
   if not fromURI(result, p):
     raise newException(ValueError, "Invalid ENR")
 
-proc completeCmdArg*(T: type enr.Record, val: string): seq[string] =
+func completeCmdArg*(T: type enr.Record, val: string): seq[string] =
   return @[]
 
-proc processList(v: string, o: var seq[string])
+func processList(v: string, o: var seq[string])
     =
   ## Process comma-separated list of strings.
   if len(v) > 0:
@@ -535,10 +530,10 @@ proc parseCmdArg(T: type NetworkParams, p: string): T
   except CatchableError:
     raise newException(ValueError, "failed to load customNetwork")
 
-proc completeCmdArg(T: type NetworkParams, val: string): seq[string] =
+func completeCmdArg(T: type NetworkParams, val: string): seq[string] =
   return @[]
 
-proc setBootnodes(output: var seq[ENode], nodeUris: openArray[string]) =
+func setBootnodes(output: var seq[ENode], nodeUris: openArray[string]) =
   output = newSeqOfCap[ENode](nodeUris.len)
   for item in nodeUris:
     output.add(ENode.fromString(item).expect("valid hardcoded ENode"))
@@ -653,7 +648,7 @@ proc getRpcFlags*(conf: NimbusConf): set[RpcFlag] =
 proc getWsFlags*(conf: NimbusConf): set[RpcFlag] =
   getRpcFlags(conf.wsApi)
 
-proc fromEnr*(T: type ENode, r: enr.Record): ENodeResult[ENode] =
+func fromEnr*(T: type ENode, r: enr.Record): ENodeResult[ENode] =
   let
     # TODO: there must always be a public key, else no signature verification
     # could have been done and no Record would exist here.
@@ -725,7 +720,7 @@ proc getStaticPeers*(conf: NimbusConf): seq[ENode] =
 
   staticPeers
 
-proc getAllowedOrigins*(conf: NimbusConf): seq[Uri] =
+func getAllowedOrigins*(conf: NimbusConf): seq[Uri] =
   for item in repeatingList(conf.allowedOrigins):
     result.add parseUri(item)
 
@@ -784,11 +779,6 @@ proc makeConfig*(cmdLine = commandLineParams()): NimbusConf
     result.networkParams = networkParams(result.networkId)
 
   if result.cmd == noCommand:
-    # ttd from cli takes precedence over ttd from config-file
-    if result.terminalTotalDifficulty.isSome:
-      result.networkParams.config.terminalTotalDifficulty =
-        result.terminalTotalDifficulty
-
     if result.udpPort == Port(0):
       # if udpPort not set in cli, then
       result.udpPort = result.tcpPort
