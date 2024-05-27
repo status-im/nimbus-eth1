@@ -23,7 +23,7 @@ proc getKeyBytes(i: int): seq[byte] =
   let hash = keccakHash(u256(i).toBytesBE())
   return toSeq(hash.data)
 
-suite "MPT trie proof verification":
+suite "State Validation - validateTrieProof":
   test "Validate proof for existing value":
     let numValues = 1000
     var trie = initHexaryTrie(newMemoryDB())

@@ -11,7 +11,45 @@ import
   std/[sugar, sequtils],
   eth/[common, trie, trie/db],
   ../../nimbus/common/chain_config,
-  ../../network/state/[state_content, state_utils]
+  ../../network/state/[state_content, state_utils],
+  ../../eth_data/yaml_utils
+
+export yaml_utils
+
+const testVectorDir* = "./vendor/portal-spec-tests/tests/mainnet/state/validation/"
+
+type
+  YamlTrieNodeRecursiveGossipKV* = ref object
+    content_key*: string
+    content_value_offer*: string
+    content_value_retrieval*: string
+
+  YamlTrieNodeKV* = object
+    state_root*: string
+    content_key*: string
+    content_value_offer*: string
+    content_value_retrieval*: string
+    recursive_gossip*: YamlTrieNodeRecursiveGossipKV
+
+  YamlTrieNodeKVs* = seq[YamlTrieNodeKV]
+
+  YamlContractBytecodeKV* = object
+    state_root*: string
+    content_key*: string
+    content_value_offer*: string
+    content_value_retrieval*: string
+
+  YamlContractBytecodeKVs* = seq[YamlContractBytecodeKV]
+
+  YamlRecursiveGossipKV* = object
+    content_key*: string
+    content_value*: string
+
+  YamlRecursiveGossipData* = object
+    state_root*: string
+    recursive_gossip*: seq[YamlRecursiveGossipKV]
+
+  YamlRecursiveGossipKVs* = seq[YamlRecursiveGossipData]
 
 func asNibbles*(key: openArray[byte], isEven = true): Nibbles =
   Nibbles.init(key, isEven)

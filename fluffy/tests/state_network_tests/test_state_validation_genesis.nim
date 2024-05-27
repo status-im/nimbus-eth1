@@ -126,7 +126,7 @@ template checkInvalidProofsWithBadValue(
           )
         check proofResult.isErr()
 
-suite "State Proof Verification Tests":
+suite "State Validation - Genesis JSON Files":
   let genesisFiles = [
     "berlin2000.json", "calaveras.json", "chainid1.json", "chainid7.json",
     "devnet4.json", "devnet5.json", "holesky.json", "mainshadow1.json", "merge.json",
