@@ -58,13 +58,9 @@ func getParent(p: ProofWithPath): ProofWithPath =
     return parentProof.withPath(unpackedNibbles.dropN(1).packNibbles())
 
   # leaf or extension node so we need to remove one or more nibbles
-  let (_, _, prefixNibbles) = decodePrefix(parentEndNode.listElem(0))
+  let prefixNibbles = decodePrefix(parentEndNode.listElem(0))[2]
 
-  var removeCount = (prefixNibbles.len() - 1) * 2
-  if prefixNibbles[0] != 0: # not even length
-    inc removeCount
-
-  parentProof.withPath(unpackedNibbles.dropN(removeCount).packNibbles())
+  parentProof.withPath(unpackedNibbles.dropN(prefixNibbles.len()).packNibbles())
 
 func getParent*(offerWithKey: AccountTrieOfferWithKey): AccountTrieOfferWithKey =
   let

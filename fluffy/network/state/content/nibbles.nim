@@ -101,6 +101,15 @@ func unpackNibbles*(packed: Nibbles): UnpackedNibbles =
 
   move(output)
 
-func dropN*(unpacked: var UnpackedNibbles, num: int): UnpackedNibbles =
-  unpacked.setLen(unpacked.len() - num)
-  move(unpacked)
+func len(packed: Nibbles): int =
+  let lenExclPrefix = (packed.len() - 1) * 2
+
+  if packed[0] == 0x00: # is even length
+    lenExclPrefix
+  else:
+    lenExclPrefix + 1
+
+func dropN*(unpacked: UnpackedNibbles, num: int): UnpackedNibbles =
+  var nibbles = unpacked
+  nibbles.setLen(nibbles.len() - num)
+  move(nibbles)
