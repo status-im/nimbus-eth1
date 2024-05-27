@@ -13,6 +13,7 @@ import
   ./test_state_content_values,
   #./test_state_network_gossip,
   ./test_state_network,
+  ./test_state_recursivegossip_genesis,
   ./test_state_recursivegossip_vectors,
   ./test_state_validation_genesis,
   ./test_state_validation_trieproof,

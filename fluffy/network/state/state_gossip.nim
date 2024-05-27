@@ -58,10 +58,10 @@ func getParent(p: ProofWithPath): ProofWithPath =
     return parentProof.withPath(unpackedNibbles.dropN(1).packNibbles())
 
   # leaf or extension node so we need to remove one or more nibbles
-  let (_, isEven, prefixNibbles) = decodePrefix(parentEndNode.listElem(0))
+  let (_, _, prefixNibbles) = decodePrefix(parentEndNode.listElem(0))
 
   var removeCount = (prefixNibbles.len() - 1) * 2
-  if not isEven:
+  if prefixNibbles[0] != 0: # not even length
     inc removeCount
 
   parentProof.withPath(unpackedNibbles.dropN(removeCount).packNibbles())

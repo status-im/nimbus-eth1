@@ -75,6 +75,8 @@ proc getTrieProof*(
     state: HexaryTrie, key: openArray[byte]
 ): TrieProof {.raises: [RlpError].} =
   let branch = state.getBranch(key)
+  # for node in branch:
+  #   debugEcho rlp.decode(node)
   branch.asTrieProof()
 
 proc generateAccountProof*(
