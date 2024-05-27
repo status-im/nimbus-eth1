@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -12,16 +12,16 @@
 ## ======================================
 ##
 
+{.push raises: [].}
+
 import
   std/[options, strutils],
   ../utils/utils,
-  ./pow/[pow_cache, pow_dataset],
+  ./pow/pow_cache,
   eth/[common, keys, p2p, rlp],
   stew/endians2,
   ethash,
   stint
-
-{.push raises: [].}
 
 type
   PowDigest = tuple ##\
@@ -57,7 +57,6 @@ type
   PowRef* = ref object of RootObj ##\
     ## PoW context descriptor
     lightByEpoch: PowCacheRef     ## PoW cache indexed by epoch
-    fullByEpoch: PowDatasetRef    ## Ditto for dataset
     nonceAttempts: uint64         ## Unsuccessful tests in last mining process
 
     # You should only create one instance of the RNG per application / library
@@ -68,7 +67,7 @@ type
 # Private functions: RLP support
 # ------------------------------------------------------------------------------
 
-proc append(w: var RlpWriter; specs: PowSpecs) =
+func append(w: var RlpWriter; specs: PowSpecs) =
   ## RLP support
   w.startList(5)
   w.append(HashOrNum(isHash: false, number: specs.blockNumber))
@@ -77,7 +76,7 @@ proc append(w: var RlpWriter; specs: PowSpecs) =
   w.append(HashOrNum(isHash: true, hash: specs.mixDigest))
   w.append(specs.difficulty)
 
-proc read(rlp: var Rlp; Q: type PowSpecs): Q
+func read(rlp: var Rlp; Q: type PowSpecs): Q
     {.raises: [RlpError].} =
   ## RLP support
   rlp.tryEnterList()
@@ -87,10 +86,10 @@ proc read(rlp: var Rlp; Q: type PowSpecs): Q
   result.mixDigest =   rlp.read(HashOrNum).hash
   result.difficulty =  rlp.read(DifficultyInt)
 
-proc rlpTextEncode(specs: PowSpecs): string =
+func rlpTextEncode(specs: PowSpecs): string =
   "specs #" & $specs.blockNumber & " " & rlp.encode(specs).toHex
 
-proc decodeRlpText(data: string): PowSpecs
+func decodeRlpText(data: string): PowSpecs
     {.raises: [CatchableError].} =
   if 180 < data.len and data[0 .. 6] == "specs #":
     let hexData = data.split
@@ -102,7 +101,7 @@ proc decodeRlpText(data: string): PowSpecs
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc miningHash(header: BlockHeader): Hash256 =
+func miningHash(header: BlockHeader): Hash256 =
   ## Calculate hash from mining relevant fields of the argument `header`
   let miningHeader = PowHeader(
     parentHash:  header.parentHash,
@@ -123,45 +122,9 @@ proc miningHash(header: BlockHeader): Hash256 =
 
 # ---------------
 
-proc tryNonceFull(nonce: uint64;
-                  ds: PowDatasetItemRef; hash: Hash256): UInt256 =
-  let
-    rc = hashimotoFull(ds.size, ds.data, hash, nonce)
-    value = readUintBE[256](rc.value.data)
-
-  # echo ">>> nonce=", nonce.toHex, " value=", value.toHex
-  return value
-
-proc mineFull(tm: PowRef; blockNumber: BlockNumber; powHeaderDigest: Hash256,
-                difficulty: DifficultyInt; startNonce: BlockNonce): uint64 =
-  ## Returns a valid nonce. This function was inspired by the function
-  ## python function `mine()` from
-  ## `ethash <https://eth.wiki/en/concepts/ethash/ethash>`_.
-  result = startNonce.toUint
-
-  if difficulty.isZero:
-    # Ooops???
-    return
-
-  let
-    ds = tm.fullByEpoch.get(blockNumber)
-    valueMax = UInt256.high div difficulty
-
-  while valueMax < result.tryNonceFull(ds, powHeaderDigest):
-    result.inc # rely on uint overflow mod 2^64
-
-  # Book keeping, debugging support
-  tm.nonceAttempts = if result <= startNonce.toUint:
-                       startNonce.toUint - result
-                     else:
-                       (uint64.high - startNonce.toUint) + result
-
-# ---------------
-
 proc init(tm: PowRef;
           rng: Option[ref HmacDrbgContext];
-          light: Option[PowCacheRef];
-          full: Option[PowDatasetRef]) =
+          light: Option[PowCacheRef]) =
   ## Constructor
   if rng.isSome:
     tm.rng = rng.get
@@ -173,47 +136,20 @@ proc init(tm: PowRef;
   else:
     tm.lightByEpoch = PowCacheRef.new
 
-  if full.isSome:
-    tm.fullByEpoch = full.get
-  else:
-    tm.fullByEpoch = PowDatasetRef.new(cache = tm.lightByEpoch)
-
 # ------------------------------------------------------------------------------
 # Public functions, Constructor
 # ------------------------------------------------------------------------------
 
-proc new*(T: type PowRef;
-          rng: ref HmacDrbgContext;
-          cache: PowCacheRef;
-          dataset: PowDatasetRef): T =
+proc new*(T: type PowRef; cache: PowCacheRef): T =
   ## Constructor
   new result
-  result.init(
-    some(rng), some(cache), some(dataset))
-
-proc new*(T: type PowRef; cache: PowCacheRef; dataset: PowDatasetRef): T =
-  ## Constructor
-  new result
-  result.init(
-    none(ref HmacDrbgContext), some(cache), some(dataset))
-
-proc new*(T: type PowRef; rng: ref HmacDrbgContext): T =
-  ## Constructor
-  new result
-  result.init(
-    some(rng), none(PowCacheRef), none(PowDatasetRef))
-
-proc new*(T: type PowRef): T =
-  ## Constructor
-  new result
-  result.init(
-    none(ref HmacDrbgContext), none(PowCacheRef), none(PowDatasetRef))
+  result.init(none(ref HmacDrbgContext), some(cache))
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc getPowSpecs*(header: BlockHeader): PowSpecs =
+func getPowSpecs*(header: BlockHeader): PowSpecs =
   ## Extracts relevant parts from the `header` argument that are needed
   ## for mining or pow verification. This function might be more useful for
   ## testing and debugging than for production.
@@ -224,7 +160,7 @@ proc getPowSpecs*(header: BlockHeader): PowSpecs =
     mixDigest:   header.mixDigest,
     difficulty:  header.difficulty)
 
-proc getPowCacheLookup*(tm: PowRef;
+func getPowCacheLookup*(tm: PowRef;
                         blockNumber: BlockNumber): (uint64, Hash256)
     {.gcsafe, raises: [KeyError].} =
   ## Returns the pair `(size,digest)` derived from the lookup cache for the
@@ -246,8 +182,8 @@ proc getPowCacheLookup*(tm: PowRef;
 
 # ------------------------
 
-proc getPowDigest*(tm: PowRef; blockNumber: BlockNumber;
-                   powHeaderDigest: Hash256; nonce: BlockNonce): PowDigest =
+func getPowDigest(tm: PowRef; blockNumber: BlockNumber;
+                  powHeaderDigest: Hash256; nonce: BlockNonce): PowDigest =
   ## Calculate the expected value of `header.mixDigest` using the
   ## `hashimotoLight()` library method.
   let
@@ -255,80 +191,27 @@ proc getPowDigest*(tm: PowRef; blockNumber: BlockNumber;
     u64Nonce = uint64.fromBytesBE(nonce)
   hashimotoLight(ds.size, ds.data, powHeaderDigest, u64Nonce)
 
-proc getPowDigest*(tm: PowRef; header: BlockHeader): PowDigest =
+func getPowDigest*(tm: PowRef; header: BlockHeader): PowDigest =
   ## Variant of `getPowDigest()`
   tm.getPowDigest(header.blockNumber, header.miningHash, header.nonce)
 
-proc getPowDigest*(tm: PowRef; specs: PowSpecs): PowDigest =
+func getPowDigest*(tm: PowRef; specs: PowSpecs): PowDigest =
   ## Variant of `getPowDigest()`
   tm.getPowDigest(specs.blockNumber, specs.miningHash, specs.nonce)
-
-# ------------------
-
-proc getNonce*(tm: PowRef; number: BlockNumber; powHeaderDigest: Hash256;
-               difficulty: DifficultyInt; startNonce: BlockNonce): BlockNonce =
-  ## Mining function that calculates the value of a `nonce` satisfying the
-  ## difficulty challenge. This is the most basic function of the
-  ## `getNonce()` series with explicit argument `startNonce`. If this is
-  ## a valid `nonce` already, the function stops and returns that value.
-  ## Otherwise it derives other nonces from the `startNonce` start and
-  ## continues trying.
-  ##
-  ## The function depends on a mining dataset which can be generated with
-  ## `generatePowDataset()` before that function is invoked.
-  ##
-  ## This mining logic was inspired by the Python function `mine()` from
-  ## `ethash <https://eth.wiki/en/concepts/ethash/ethash>`_.
-  tm.mineFull(number, powHeaderDigest, difficulty, startNonce).toBytesBE
-
-proc getNonce*(tm: PowRef; number: BlockNumber; powHeaderDigest: Hash256;
-                  difficulty: DifficultyInt): BlockNonce =
-  ## Variant of `getNonce()`
-  var startNonce: array[8,byte]
-  tm.rng[].generate(startNonce)
-  tm.getNonce(number, powHeaderDigest, difficulty, startNonce)
-
-proc getNonce*(tm: PowRef; header: BlockHeader): BlockNonce =
-  ## Variant of `getNonce()`
-  tm.getNonce(header.blockNumber, header.miningHash, header.difficulty)
-
-proc getNonce*(tm: PowRef; specs: PowSpecs): BlockNonce =
-  ## Variant of `getNonce()`
-  tm.getNonce(specs.blockNumber, specs.miningHash, specs.difficulty)
-
-proc nGetNonce*(tm: PowRef): uint64 =
-  ## Number of unsucchessful internal tests in the last invocation
-  ## of `getNonce()`.
-  tm.nonceAttempts
-
-# ------------------
-
-proc generatePowDataset*(tm: PowRef; number: BlockNumber) =
-  ## Prepare dataset for the `getNonce()` mining function. This dataset
-  ## changes with the epoch of the argument `number` so it is applicable for
-  ## the full epoch. If not generated explicitely, it will be done so by the
-  ## next invocation of `getNonce()`.
-  ##
-  ## This is a slow process which produces a huge data table. So expect this
-  ## function to hang on for a while and do not mind if the OS starts swapping.
-  ## A list of the data sizes indexed by epoch is available at the end of
-  ## the `ethash <https://eth.wiki/en/concepts/ethash/ethash>`_ Python
-  ## reference implementation.
-  discard tm.fullByEpoch.get(number)
 
 # ------------------------------------------------------------------------------
 # Public functions, debugging & testing
 # ------------------------------------------------------------------------------
 
-proc dumpPowSpecs*(specs: PowSpecs): string =
+func dumpPowSpecs*(specs: PowSpecs): string =
   ## Text representation of `PowSpecs` argument object
   specs.rlpTextEncode
 
-proc dumpPowSpecs*(header: BlockHeader): string =
+func dumpPowSpecs*(header: BlockHeader): string =
   ## Variant of `dumpPowSpecs()`
   header.getPowSpecs.dumpPowSpecs
 
-proc undumpPowSpecs*(data: string): PowSpecs
+func undumpPowSpecs*(data: string): PowSpecs
     {.raises: [CatchableError].} =
   ## Recover `PowSpecs` object from text representation
   data.decodeRlpText

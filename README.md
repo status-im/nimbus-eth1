@@ -32,8 +32,7 @@ Some recent highlights include:
 - EVMC compatibility, supporting third-party optimised EVM plugins
 - Up to 100x memory saving during contract executions
 - Asynchronous EVM to execute many contracts in parallel, while they wait for data from the network
-- Proof-of-authority validation for the Goerli test network
-- Updated network protocols, to work with the latest eth/65-66 and snap/1 protocols
+- Updated network protocols, to work with the latest eth/66-68 protocols
 - A prototype new mechanism for state sync which combines what have been called Fast sync, Snap sync and Beam sync in a self-tuning way, and allows the user to participate in the network (read accounts, run transactions etc.) while sync is still in progress
 - A significant redesign of the storage database to use less disk space and run faster.
 
