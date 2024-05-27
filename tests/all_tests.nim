@@ -42,7 +42,6 @@ cliBuilder:
           #../stateless/test_witness_verification, -- fails
           ./test_misc,
           #./test_graphql,                         -- fails
-          #./test_clique,                          -- fails
           ./test_pow,
           ./test_configuration,
           ./test_keyed_queue_rlp,
