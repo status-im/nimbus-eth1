@@ -401,7 +401,7 @@ proc getCode*(ac: AccountsLedgerRef, address: EthAddress): seq[byte] =
 
   if CodeLoaded in acc.flags or CodeChanged in acc.flags:
     result = acc.code
-  else:
+  elif acc.statement.codeHash != EMPTY_CODE_HASH:
     let rc = ac.kvt.get(contractHashKey(acc.statement.codeHash).toOpenArray)
     if rc.isErr:
       warn logTxt "getCode()", codeHash=acc.statement.codeHash, error=($$rc.error)
