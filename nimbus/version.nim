@@ -26,7 +26,11 @@ const
   NimbusVersion* = $NimbusMajor & "." & $NimbusMinor & "." & $NimbusPatch
   ## is the version of Nimbus as a string.
 
-  GitRevisionString* = strip(staticExec("git rev-parse HEAD"))
+  # In the Github Actions CI, different OS can give
+  # different result if using their default configuration.
+  # `git rev-parse HEAD` or `git rev-parse --short HEAD`
+  # So we use --short=8 to make them all produce the same 4 bytes commit hash
+  GitRevisionString* = strip(staticExec("git rev-parse --short=8 HEAD"))
 
   GitRevisionBytes* = hexToByteArray[4](GitRevisionString)
 
