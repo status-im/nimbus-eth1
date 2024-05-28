@@ -137,9 +137,9 @@ template noRlpException(info: static[string]; code: untyped) =
 
 # The AccountsLedgerRef is modeled after TrieDatabase for it's transaction style
 proc init*(x: typedesc[AccountsLedgerRef], db: CoreDbRef,
-           root: KeccakHash, pruneTrie = true): AccountsLedgerRef =
+           root: KeccakHash): AccountsLedgerRef =
   new result
-  result.ledger = AccountLedger.init(db, root, pruneTrie)
+  result.ledger = AccountLedger.init(db, root)
   result.kvt = db.newKvt() # save manually in `persist()`
   result.witnessCache = initTable[EthAddress, WitnessData]()
   discard result.beginSavepoint

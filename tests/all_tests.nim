@@ -28,7 +28,7 @@ cliBuilder:
           ./test_op_arith,
           ./test_op_bit,
           ./test_op_env,
-          #./test_op_memory,                       -- fails
+          ./test_op_memory,
           ./test_op_misc,
           ./test_op_custom,
           #./test_state_db,                        -- does not compile
