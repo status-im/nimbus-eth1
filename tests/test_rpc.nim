@@ -113,8 +113,8 @@ proc setupEnv(com: CommonRef, signer, ks2: EthAddress, ctx: EthContext): TestEnv
       com       = com)
 
   vmState.stateDB.setCode(ks2, code)
-  vmState.stateDB.addBalance(signer, 9_000_000_000.u256)
-
+  vmState.stateDB.addBalance(
+    signer, 1.u256 * 1_000_000_000.u256 * 1_000_000_000.u256)  # 1 ETH
 
   # Test data created for eth_getProof tests
   let regularAcc = ethAddr("0x0000000000000000000000000000000000000001")
@@ -136,7 +136,7 @@ proc setupEnv(com: CommonRef, signer, ks2: EthAddress, ctx: EthContext): TestEnv
     unsignedTx1 = Transaction(
       txType  : TxLegacy,
       nonce   : 0,
-      gasPrice: 1_100,
+      gasPrice: 30_000_000_000,
       gasLimit: 70_000,
       value   : 1.u256,
       to      : some(zeroAddress)
@@ -144,7 +144,7 @@ proc setupEnv(com: CommonRef, signer, ks2: EthAddress, ctx: EthContext): TestEnv
     unsignedTx2 = Transaction(
       txType  : TxLegacy,
       nonce   : 1,
-      gasPrice: 1_200,
+      gasPrice: 30_000_000_100,
       gasLimit: 70_000,
       value   : 2.u256,
       to      : some(zeroAddress)
@@ -160,7 +160,7 @@ proc setupEnv(com: CommonRef, signer, ks2: EthAddress, ctx: EthContext): TestEnv
   for txIndex, tx in txs:
     let sender = tx.getSender()
     let rc = vmState.processTransaction(tx, sender, vmHeader)
-    doAssert(rc.isOk, "Invalid transaction")
+    doAssert(rc.isOk, "Invalid transaction: " & rc.error)
     vmState.receipts[txIndex] = makeReceipt(vmState, tx.txType)
 
   let
@@ -314,7 +314,7 @@ proc rpcMain*() =
 
     test "eth_gasPrice":
       let res = await client.eth_gasPrice()
-      check res == w3Qty(0x47E'u64)
+      check res == w3Qty(30_000_000_050)  # Avg of `unsignedTx1` / `unsignedTx2`
 
     test "eth_accounts":
       let res = await client.eth_accounts()

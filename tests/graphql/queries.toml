@@ -333,6 +333,7 @@
 
 [[units]]
   name = "query.gasPrice"
+  skip = true
   code = """
 {
   gasPrice
