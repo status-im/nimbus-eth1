@@ -122,17 +122,6 @@ proc getContractCode*(
 ): Future[Opt[ContractCodeRetrieval]] {.inline.} =
   n.getContent(key, ContractCodeRetrieval)
 
-# High level endpoints
-# eth_getBalance
-# eth_getStorageAt
-# eth_getCode
-
-func decodeKey(contentKey: ByteList): Opt[ContentKey] =
-  let key = ContentKey.decode(contentKey).valueOr:
-    return Opt.none(ContentKey)
-
-  Opt.some(key)
-
 proc getStateRootByBlockHash(
     n: StateNetwork, hash: BlockHash
 ): Future[Opt[KeccakHash]] {.async.} =
@@ -186,7 +175,7 @@ proc processContentLoop(n: StateNetwork) {.async.} =
       for i, contentValueBytes in contentValues:
         let
           contentKeyBytes = contentKeys[i]
-          contentKey = decodeKey(contentKeyBytes).valueOr:
+          contentKey = ContentKey.decode(contentKeyBytes).valueOr:
             error "Unable to decode offered content key", contentKeyBytes
             continue
 

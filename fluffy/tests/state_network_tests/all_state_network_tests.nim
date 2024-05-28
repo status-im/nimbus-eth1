@@ -11,6 +11,7 @@ import
   ./test_state_content_keys,
   ./test_state_content_nibbles,
   ./test_state_content_values,
+  ./test_state_network_getcontent,
   #./test_state_network_gossip,
   ./test_state_network,
   ./test_state_recursivegossip_genesis,

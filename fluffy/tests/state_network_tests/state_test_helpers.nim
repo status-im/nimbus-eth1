@@ -9,10 +9,16 @@
 
 import
   std/[sugar, sequtils],
+  chronos,
   eth/[common, trie, trie/db],
+  eth/p2p/discoveryv5/protocol as discv5_protocol,
+  eth/p2p/discoveryv5/routing_table,
+  ../../network/wire/[portal_protocol, portal_stream, portal_protocol_config],
   ../../nimbus/common/chain_config,
-  ../../network/state/[state_content, state_utils],
-  ../../eth_data/yaml_utils
+  ../../network/state/[state_content, state_utils, state_network],
+  ../../eth_data/yaml_utils,
+  ../../database/content_db,
+  ../test_helpers
 
 export yaml_utils
 
@@ -129,3 +135,34 @@ proc toState*(
     accountTrie.put(key, value)
 
   (accountTrie, storageStates)
+
+type StateNode* = ref object
+  discoveryProtocol*: discv5_protocol.Protocol
+  stateNetwork*: StateNetwork
+
+proc newStateNode*(
+    rng: ref HmacDrbgContext, port: int
+): StateNode {.raises: [CatchableError].} =
+  let
+    node = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(port))
+    db = ContentDB.new("", uint32.high, inMemory = true)
+    streamManager = StreamManager.new(node)
+    stateNetwork = StateNetwork.new(node, db, streamManager)
+
+  return StateNode(discoveryProtocol: node, stateNetwork: stateNetwork)
+
+proc portalProtocol*(sn: StateNode): PortalProtocol =
+  sn.stateNetwork.portalProtocol
+
+proc localNode*(sn: StateNode): Node =
+  sn.discoveryProtocol.localNode
+
+proc start*(sn: StateNode) =
+  sn.stateNetwork.start()
+
+proc stop*(sn: StateNode) {.async.} =
+  sn.stateNetwork.stop()
+  await sn.discoveryProtocol.closeWait()
+
+proc containsId*(sn: StateNode, contentId: ContentId): bool =
+  return sn.stateNetwork.contentDB.get(contentId).isSome()
