@@ -249,13 +249,6 @@ proc vmExecCommit(pst: TxPackerStateRef)
     for withdrawal in xp.chain.com.pos.withdrawals:
       vmState.stateDB.addBalance(withdrawal.address, withdrawal.weiAmount)
 
-  # EIP-3675: no reward for miner in POA/POS
-  if vmState.com.consensus == ConsensusType.POW:
-    let
-      number = xp.chain.head.blockNumber + 1
-      uncles: seq[BlockHeader] = @[] # no uncles yet
-    vmState.calculateReward(xp.chain.feeRecipient, number + 1, uncles)
-
   # Reward beneficiary
   vmState.mutateStateDB:
     if vmState.generateWitness:

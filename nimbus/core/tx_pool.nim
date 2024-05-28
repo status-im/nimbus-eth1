@@ -504,12 +504,11 @@ proc setHead(xp: TxPoolRef; val: BlockHeader)
 # Public constructor/destructor
 # ------------------------------------------------------------------------------
 
-proc new*(T: type TxPoolRef; com: CommonRef; miner: EthAddress): T
+proc new*(T: type TxPoolRef; com: CommonRef): T
     {.gcsafe,raises: [CatchableError].} =
-  ## Constructor, returns a new tx-pool descriptor. The `miner` argument is
-  ## the fee beneficiary for informational purposes only.
+  ## Constructor, returns a new tx-pool descriptor.
   new result
-  result.init(com, miner)
+  result.init(com)
 
 # ------------------------------------------------------------------------------
 # Public functions, task manager, pool actions serialiser
@@ -594,15 +593,15 @@ proc triggerReorg*(xp: TxPoolRef)
 # Public functions, getters
 # ------------------------------------------------------------------------------
 
-proc com*(xp: TxPoolRef): CommonRef =
+func com*(xp: TxPoolRef): CommonRef =
   ## Getter
   xp.chain.com
 
-proc baseFee*(xp: TxPoolRef): GasPrice =
+func baseFee*(xp: TxPoolRef): GasPrice =
   ## Getter, this parameter modifies/determines the expected gain when packing
   xp.chain.baseFee
 
-proc dirtyBuckets*(xp: TxPoolRef): bool =
+func dirtyBuckets*(xp: TxPoolRef): bool =
   ## Getter, bucket database is ready for re-org if the `autoUpdateBucketsDB`
   ## flag is also set.
   xp.pDirtyBuckets
@@ -669,52 +668,52 @@ proc assembleBlock*(
     blk: blk,
     blobsBundle: blobsBundleOpt)
 
-proc gasCumulative*(xp: TxPoolRef): GasInt =
+func gasCumulative*(xp: TxPoolRef): GasInt =
   ## Getter, retrieves the gas that will be burned in the block after
   ## retrieving it via `ethBlock`.
   xp.chain.gasUsed
 
-proc gasTotals*(xp: TxPoolRef): TxTabsGasTotals =
+func gasTotals*(xp: TxPoolRef): TxTabsGasTotals =
   ## Getter, retrieves the current gas limit totals per bucket.
   xp.txDB.gasTotals
 
-proc lwmTrgPercent*(xp: TxPoolRef): int =
+func lwmTrgPercent*(xp: TxPoolRef): int =
   ## Getter, `trgGasLimit` percentage for `lwmGasLimit` which is
   ## `max(minGasLimit, trgGasLimit * lwmTrgPercent  / 100)`
   xp.chain.lhwm.lwmTrg
 
-proc flags*(xp: TxPoolRef): set[TxPoolFlags] =
+func flags*(xp: TxPoolRef): set[TxPoolFlags] =
   ## Getter, retrieves strategy symbols for how to process items and buckets.
   xp.pFlags
 
-proc head*(xp: TxPoolRef): BlockHeader =
+func head*(xp: TxPoolRef): BlockHeader =
   ## Getter, cached block chain insertion point. Typocally, this should be the
   ## the same header as retrieved by the `getCanonicalHead()` (unless in the
   ## middle of a mining update.)
   xp.chain.head
 
-proc hwmMaxPercent*(xp: TxPoolRef): int =
+func hwmMaxPercent*(xp: TxPoolRef): int =
   ## Getter, `maxGasLimit` percentage for `hwmGasLimit` which is
   ## `max(trgGasLimit, maxGasLimit * hwmMaxPercent  / 100)`
   xp.chain.lhwm.hwmMax
 
-proc maxGasLimit*(xp: TxPoolRef): GasInt =
+func maxGasLimit*(xp: TxPoolRef): GasInt =
   ## Getter, hard size limit when packing blocks (see also `trgGasLimit`.)
   xp.chain.limits.maxLimit
 
 # core/tx_pool.go(435): func (pool *TxPool) GasPrice() *big.Int {
-proc minFeePrice*(xp: TxPoolRef): GasPrice =
+func minFeePrice*(xp: TxPoolRef): GasPrice =
   ## Getter, retrieves minimum for the current gas fee enforced by the
   ## transaction pool for txs to be packed. This is an EIP-1559 only
   ## parameter (see `stage1559MinFee` strategy.)
   xp.pMinFeePrice
 
-proc minPreLondonGasPrice*(xp: TxPoolRef): GasPrice =
+func minPreLondonGasPrice*(xp: TxPoolRef): GasPrice =
   ## Getter. retrieves, the current gas price enforced by the transaction
   ## pool. This is a pre-London parameter (see `packedPlMinPrice` strategy.)
   xp.pMinPlGasPrice
 
-proc minTipPrice*(xp: TxPoolRef): GasPrice =
+func minTipPrice*(xp: TxPoolRef): GasPrice =
   ## Getter, retrieves minimum for the current gas tip (or priority fee)
   ## enforced by the transaction pool. This is an EIP-1559 parameter but it
   ## comes with a fall back interpretation (see `stage1559MinTip` strategy.)
@@ -725,12 +724,12 @@ proc minTipPrice*(xp: TxPoolRef): GasPrice =
 # core/tx_pool.go(1728): func (t *txLookup) Count() int {
 # core/tx_pool.go(1737): func (t *txLookup) LocalCount() int {
 # core/tx_pool.go(1745): func (t *txLookup) RemoteCount() int {
-proc nItems*(xp: TxPoolRef): TxTabsItemsCount =
+func nItems*(xp: TxPoolRef): TxTabsItemsCount =
   ## Getter, retrieves the current number of items per bucket and
   ## some totals.
   xp.txDB.nItems
 
-proc profitability*(xp: TxPoolRef): GasPrice =
+func profitability*(xp: TxPoolRef): GasPrice =
   ## Getter, a calculation of the average *price* per gas to be rewarded after
   ## packing the last block (see `ethBlock`). This *price* is only based on
   ## execution transaction in the VM without *PoW* specific rewards. The net
@@ -741,7 +740,7 @@ proc profitability*(xp: TxPoolRef): GasPrice =
   else:
     0.GasPrice
 
-proc trgGasLimit*(xp: TxPoolRef): GasInt =
+func trgGasLimit*(xp: TxPoolRef): GasInt =
   ## Getter, soft size limit when packing blocks (might be extended to
   ## `maxGasLimit`)
   xp.chain.limits.trgLimit
@@ -750,8 +749,7 @@ proc trgGasLimit*(xp: TxPoolRef): GasInt =
 # Public functions, setters
 # ------------------------------------------------------------------------------
 
-proc `baseFee=`*(xp: TxPoolRef; val: GasPrice)
-    {.gcsafe,raises: [KeyError].} =
+func `baseFee=`*(xp: TxPoolRef; val: GasPrice) {.raises: [KeyError].} =
   ## Setter, sets `baseFee` explicitely witout triggering a packer update.
   ## Stil a database update might take place when updating account ranks.
   ##
@@ -761,7 +759,7 @@ proc `baseFee=`*(xp: TxPoolRef; val: GasPrice)
   xp.txDB.baseFee = val
   xp.chain.baseFee = val
 
-proc `lwmTrgPercent=`*(xp: TxPoolRef; val: int) =
+func `lwmTrgPercent=`*(xp: TxPoolRef; val: int) =
   ## Setter, `val` arguments outside `0..100` are ignored
   if 0 <= val and val <= 100:
     xp.chain.lhwm = (
@@ -771,11 +769,11 @@ proc `lwmTrgPercent=`*(xp: TxPoolRef; val: int) =
       gasCeil: xp.chain.lhwm.gasCeil
     )
 
-proc `flags=`*(xp: TxPoolRef; val: set[TxPoolFlags]) =
+func `flags=`*(xp: TxPoolRef; val: set[TxPoolFlags]) =
   ## Setter, strategy symbols for how to process items and buckets.
   xp.pFlags = val
 
-proc `hwmMaxPercent=`*(xp: TxPoolRef; val: int) =
+func `hwmMaxPercent=`*(xp: TxPoolRef; val: int) =
   ## Setter, `val` arguments outside `0..100` are ignored
   if 0 <= val and val <= 100:
     xp.chain.lhwm = (
@@ -785,13 +783,13 @@ proc `hwmMaxPercent=`*(xp: TxPoolRef; val: int) =
       gasCeil: xp.chain.lhwm.gasCeil
     )
 
-proc `maxRejects=`*(xp: TxPoolRef; val: int) =
+func `maxRejects=`*(xp: TxPoolRef; val: int) =
   ## Setter, the size of the waste basket. This setting becomes effective with
   ## the next move of an item into the waste basket.
   xp.txDB.maxRejects = val
 
 # core/tx_pool.go(444): func (pool *TxPool) SetGasPrice(price *big.Int) {
-proc `minFeePrice=`*(xp: TxPoolRef; val: GasPrice) =
+func `minFeePrice=`*(xp: TxPoolRef; val: GasPrice) =
   ## Setter for `minFeePrice`.  If there was a value change, this function
   ## implies `triggerReorg()`.
   if xp.pMinFeePrice != val:
@@ -799,7 +797,7 @@ proc `minFeePrice=`*(xp: TxPoolRef; val: GasPrice) =
     xp.pDirtyBuckets = true
 
 # core/tx_pool.go(444): func (pool *TxPool) SetGasPrice(price *big.Int) {
-proc `minPreLondonGasPrice=`*(xp: TxPoolRef; val: GasPrice) =
+func `minPreLondonGasPrice=`*(xp: TxPoolRef; val: GasPrice) =
   ## Setter for `minPlGasPrice`. If there was a value change, this function
   ## implies `triggerReorg()`.
   if xp.pMinPlGasPrice != val:
@@ -807,7 +805,7 @@ proc `minPreLondonGasPrice=`*(xp: TxPoolRef; val: GasPrice) =
     xp.pDirtyBuckets = true
 
 # core/tx_pool.go(444): func (pool *TxPool) SetGasPrice(price *big.Int) {
-proc `minTipPrice=`*(xp: TxPoolRef; val: GasPrice) =
+func `minTipPrice=`*(xp: TxPoolRef; val: GasPrice) =
   ## Setter for `minTipPrice`. If there was a value change, this function
   ## implies `triggerReorg()`.
   if xp.pMinTipPrice != val:
@@ -820,11 +818,11 @@ proc `minTipPrice=`*(xp: TxPoolRef; val: GasPrice) =
 
 # core/tx_pool.go(979): func (pool *TxPool) Get(hash common.Hash) ..
 # core/tx_pool.go(985): func (pool *TxPool) Has(hash common.Hash) bool {
-proc getItem*(xp: TxPoolRef; hash: Hash256): Result[TxItemRef,void] =
+func getItem*(xp: TxPoolRef; hash: Hash256): Result[TxItemRef,void] =
   ## Returns a transaction if it is contained in the pool.
   xp.txDB.byItemID.eq(hash)
 
-proc disposeItems*(xp: TxPoolRef; item: TxItemRef;
+func disposeItems*(xp: TxPoolRef; item: TxItemRef;
                    reason = txInfoExplicitDisposal;
                    otherReason = txInfoImpliedDisposal): int
     {.discardable,gcsafe,raises: [CatchableError].} =
@@ -842,10 +840,10 @@ iterator okPairs*(xp: TxPoolRef): (Hash256, TxItemRef) =
     if x.data.reject == txInfoOk:
       yield (x.key, x.data)
 
-proc numTxs*(xp: TxPoolRef): int =
+func numTxs*(xp: TxPoolRef): int =
   xp.txDB.byItemID.len
 
-proc disposeAll*(xp: TxPoolRef) {.gcsafe,raises: [CatchableError].} =
+func disposeAll*(xp: TxPoolRef) {.raises: [CatchableError].} =
   let numTx = xp.numTxs
   var list = newSeqOfCap[TxItemRef](numTx)
   for x in nextPairs(xp.txDB.byItemID):
@@ -857,27 +855,27 @@ proc disposeAll*(xp: TxPoolRef) {.gcsafe,raises: [CatchableError].} =
 # Public functions, local/remote accounts
 # ------------------------------------------------------------------------------
 
-proc isLocal*(xp: TxPoolRef; account: EthAddress): bool =
+func isLocal*(xp: TxPoolRef; account: EthAddress): bool =
   ## This function returns `true` if argument `account` is tagged local.
   xp.txDB.isLocal(account)
 
-proc setLocal*(xp: TxPoolRef; account: EthAddress) =
+func setLocal*(xp: TxPoolRef; account: EthAddress) =
   ## Tag argument `account` local which means that the transactions from this
   ## account -- together with all other local accounts -- will be considered
   ## first for packing.
   xp.txDB.setLocal(account)
 
-proc resLocal*(xp: TxPoolRef; account: EthAddress) =
+func resLocal*(xp: TxPoolRef; account: EthAddress) =
   ## Untag argument `account` as local which means that the transactions from
   ## this account -- together with all other untagged accounts -- will be
   ## considered for packing after the locally tagged accounts.
   xp.txDB.resLocal(account)
 
-proc flushLocals*(xp: TxPoolRef) =
+func flushLocals*(xp: TxPoolRef) =
   ## Untag all *local* addresses on the system.
   xp.txDB.flushLocals
 
-proc accountRanks*(xp: TxPoolRef): TxTabsLocality =
+func accountRanks*(xp: TxPoolRef): TxTabsLocality =
   ## Returns two lists, one for local and the other for non-local accounts.
   ## Any of these lists is sorted by the highest rank first. This sorting
   ## means that the order may be out-dated after adding transactions.
@@ -951,12 +949,12 @@ proc addLocal*(xp: TxPoolRef;
   xp.add(tx, "local tx")
   ok()
 
-proc inPoolAndOk*(xp: TxPoolRef; txHash: Hash256): bool =
+func inPoolAndOk*(xp: TxPoolRef; txHash: Hash256): bool =
   let res = xp.getItem(txHash)
   if res.isErr: return false
   res.get().reject == txInfoOk
 
-proc inPoolAndReason*(xp: TxPoolRef; txHash: Hash256): Result[void, string] =
+func inPoolAndReason*(xp: TxPoolRef; txHash: Hash256): Result[void, string] =
   let res = xp.getItem(txHash)
   if res.isErr:
     # try to look in rejecteds

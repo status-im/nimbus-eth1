@@ -47,7 +47,7 @@ proc importBlocks(conf: NimbusConf, com: CommonRef) =
 proc basicServices(nimbus: NimbusNode,
                    conf: NimbusConf,
                    com: CommonRef) =
-  nimbus.txPool = TxPoolRef.new(com, ZERO_ADDRESS)
+  nimbus.txPool = TxPoolRef.new(com)
 
   # txPool must be informed of active head
   # so it can know the latest account state

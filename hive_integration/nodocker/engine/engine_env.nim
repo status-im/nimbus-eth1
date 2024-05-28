@@ -91,7 +91,7 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
     chain = newChain(com)
 
   com.initializeEmptyDb()
-  let txPool = TxPoolRef.new(com, ZERO_ADDRESS)
+  let txPool = TxPoolRef.new(com)
 
   node.addEthHandlerCapability(
     node.peerPool,
