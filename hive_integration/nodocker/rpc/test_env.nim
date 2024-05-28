@@ -84,7 +84,7 @@ proc setupEnv*(): TestEnv =
   com.initializeEmptyDb()
 
   let chainRef = newChain(com)
-  let txPool = TxPoolRef.new(com, ZERO_ADDRESS)
+  let txPool = TxPoolRef.new(com)
 
   # txPool must be informed of active head
   # so it can know the latest account state

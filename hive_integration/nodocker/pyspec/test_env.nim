@@ -39,9 +39,6 @@ type
     rpcServer: RpcHttpServer
     rpcClient*: RpcHttpClient
 
-const
-  engineSigner = hexToByteArray[20]("0x658bdf435d810c91414ec09147daa6db62406379")
-
 proc genesisHeader(node: JsonNode): BlockHeader =
   let genesisRLP = hexToSeqByte(node["genesisRLP"].getStr)
   rlp.decode(genesisRLP, EthBlock).header
@@ -68,7 +65,7 @@ proc setupELClient*(t: TestEnv, conf: ChainConfig, node: JsonNode) =
     t.com.consensus == ConsensusType.POS)
   doAssert(t.com.db.getCanonicalHead().blockHash == genesisHeader.blockHash)
 
-  let txPool  = TxPoolRef.new(t.com, engineSigner)
+  let txPool  = TxPoolRef.new(t.com)
   t.rpcServer = newRpcHttpServer(["127.0.0.1:8545"])
 
   let beaconEngine = BeaconEngineRef.new(txPool, t.chainRef)

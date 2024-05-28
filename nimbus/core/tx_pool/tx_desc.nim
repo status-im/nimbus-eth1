@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -127,13 +127,12 @@ const
 # Public functions, constructor
 # ------------------------------------------------------------------------------
 
-proc init*(xp: TxPoolRef; com: CommonRef; miner: EthAddress)
+proc init*(xp: TxPoolRef; com: CommonRef)
     {.gcsafe,raises: [CatchableError].} =
-  ## Constructor, returns new tx-pool descriptor. The `miner` argument is
-  ## the fee beneficiary for informational purposes only.
+  ## Constructor, returns new tx-pool descriptor.
   xp.startDate = getTime().utc.toTime
 
-  xp.chain = TxChainRef.new(com, miner)
+  xp.chain = TxChainRef.new(com)
   xp.txDB = TxTabsRef.new
 
   xp.lifeTime = txItemLifeTime
@@ -148,40 +147,40 @@ proc init*(xp: TxPoolRef; com: CommonRef; miner: EthAddress)
 # Public functions, getters
 # ------------------------------------------------------------------------------
 
-proc chain*(xp: TxPoolRef): TxChainRef =
+func chain*(xp: TxPoolRef): TxChainRef =
   ## Getter, block chain DB
   xp.chain
 
-proc pFlags*(xp: TxPoolRef): set[TxPoolFlags] =
+func pFlags*(xp: TxPoolRef): set[TxPoolFlags] =
   ## Returns the set of algorithm strategy symbols for labelling items
   ## as`packed`
   xp.param.flags
 
-proc pDirtyBuckets*(xp: TxPoolRef): bool =
+func pDirtyBuckets*(xp: TxPoolRef): bool =
   ## Getter, buckets need update
   xp.param.dirtyBuckets
 
-proc pDoubleCheck*(xp: TxPoolRef): seq[TxItemRef] =
+func pDoubleCheck*(xp: TxPoolRef): seq[TxItemRef] =
   ## Getter, cached block chain head was moved back
   xp.param.doubleCheck
 
-proc pMinFeePrice*(xp: TxPoolRef): GasPrice =
+func pMinFeePrice*(xp: TxPoolRef): GasPrice =
   ## Getter
   xp.param.minFeePrice
 
-proc pMinTipPrice*(xp: TxPoolRef): GasPrice =
+func pMinTipPrice*(xp: TxPoolRef): GasPrice =
   ## Getter
   xp.param.minTipPrice
 
-proc pMinPlGasPrice*(xp: TxPoolRef): GasPrice =
+func pMinPlGasPrice*(xp: TxPoolRef): GasPrice =
   ## Getter
   xp.param.minPlGasPrice
 
-proc startDate*(xp: TxPoolRef): Time =
+func startDate*(xp: TxPoolRef): Time =
   ## Getter
   xp.startDate
 
-proc txDB*(xp: TxPoolRef): TxTabsRef =
+func txDB*(xp: TxPoolRef): TxTabsRef =
   ## Getter, pool database
   xp.txDB
 
@@ -189,31 +188,31 @@ proc txDB*(xp: TxPoolRef): TxTabsRef =
 # Public functions, setters
 # ------------------------------------------------------------------------------
 
-proc `pDirtyBuckets=`*(xp: TxPoolRef; val: bool) =
+func `pDirtyBuckets=`*(xp: TxPoolRef; val: bool) =
   ## Setter
   xp.param.dirtyBuckets = val
 
-proc pDoubleCheckAdd*(xp: TxPoolRef; val: seq[TxItemRef]) =
+func pDoubleCheckAdd*(xp: TxPoolRef; val: seq[TxItemRef]) =
   ## Pseudo setter
   xp.param.doubleCheck.add val
 
-proc pDoubleCheckFlush*(xp: TxPoolRef) =
+func pDoubleCheckFlush*(xp: TxPoolRef) =
   ## Pseudo setter
   xp.param.doubleCheck.setLen(0)
 
-proc `pFlags=`*(xp: TxPoolRef; val: set[TxPoolFlags]) =
+func `pFlags=`*(xp: TxPoolRef; val: set[TxPoolFlags]) =
   ## Install a set of algorithm strategy symbols for labelling items as`packed`
   xp.param.flags = val
 
-proc `pMinFeePrice=`*(xp: TxPoolRef; val: GasPrice) =
+func `pMinFeePrice=`*(xp: TxPoolRef; val: GasPrice) =
   ## Setter
   xp.param.minFeePrice = val
 
-proc `pMinTipPrice=`*(xp: TxPoolRef; val: GasPrice) =
+func `pMinTipPrice=`*(xp: TxPoolRef; val: GasPrice) =
   ## Setter
   xp.param.minTipPrice = val
 
-proc `pMinPlGasPrice=`*(xp: TxPoolRef; val: GasPrice) =
+func `pMinPlGasPrice=`*(xp: TxPoolRef; val: GasPrice) =
   ## Setter
   xp.param.minPlGasPrice = val
 

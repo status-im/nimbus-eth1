@@ -61,7 +61,6 @@ type
     ## block. This state is typically synchrionised with the canonical\
     ## block chain head when updated.
     com: CommonRef           ## Block chain config
-    miner: EthAddress        ## Address of fee beneficiary
     lhwm: TxChainGasLimitsPc ## Hwm/lwm gas limit percentage
 
     maxMode: bool            ## target or maximal limit for next block header
@@ -73,38 +72,20 @@ type
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
-proc prepareHeader(dh: TxChainRef; parent: BlockHeader, timestamp: EthTime)
-     {.gcsafe, raises: [CatchableError].} =
+func prepareHeader(dh: TxChainRef; parent: BlockHeader, timestamp: EthTime)
+     {.raises: [].} =
+  dh.com.pos.prepare(dh.prepHeader)
 
-  case dh.com.consensus
-  of ConsensusType.POW:
-    dh.prepHeader.timestamp  = timestamp
-    dh.prepHeader.difficulty = dh.com.calcDifficulty(
-      dh.prepHeader.timestamp, parent)
-    dh.prepHeader.coinbase   = dh.miner
-    dh.prepHeader.mixDigest.reset
-  of ConsensusType.POS:
-    dh.com.pos.prepare(dh.prepHeader)
+func prepareForSeal(dh: TxChainRef; header: var BlockHeader) {.raises: [].} =
+  dh.com.pos.prepareForSeal(header)
 
-proc prepareForSeal(dh: TxChainRef; header: var BlockHeader) {.gcsafe, raises: [].} =
-  case dh.com.consensus
-  of ConsensusType.POW:
-    # do nothing, tx pool was designed with POW in mind
-    discard
-  of ConsensusType.POS:
-    dh.com.pos.prepareForSeal(header)
+func getTimestamp(dh: TxChainRef, parent: BlockHeader): EthTime =
+  dh.com.pos.timestamp
 
-proc getTimestamp(dh: TxChainRef, parent: BlockHeader): EthTime =
-  case dh.com.consensus
-  of ConsensusType.POW:
-    EthTime.now()
-  of ConsensusType.POS:
-    dh.com.pos.timestamp
-
-proc feeRecipient*(dh: TxChainRef): EthAddress {.gcsafe.}
+func feeRecipient*(dh: TxChainRef): EthAddress
 
 proc resetTxEnv(dh: TxChainRef; parent: BlockHeader; fee: Option[UInt256])
-  {.gcsafe,raises: [CatchableError].} =
+  {.gcsafe,raises: [].} =
   dh.txEnv.reset
 
   # do hardfork transition before
@@ -137,7 +118,7 @@ proc resetTxEnv(dh: TxChainRef; parent: BlockHeader; fee: Option[UInt256])
   dh.txEnv.excessBlobGas = none(uint64)
 
 proc update(dh: TxChainRef; parent: BlockHeader)
-    {.gcsafe,raises: [CatchableError].} =
+    {.gcsafe,raises: [].} =
 
   let
     timestamp = dh.getTimestamp(parent)
@@ -158,13 +139,12 @@ proc update(dh: TxChainRef; parent: BlockHeader)
 # Public functions, constructor
 # ------------------------------------------------------------------------------
 
-proc new*(T: type TxChainRef; com: CommonRef; miner: EthAddress): T
-    {.gcsafe,raises: [CatchableError].} =
+proc new*(T: type TxChainRef; com: CommonRef): T
+    {.gcsafe, raises: [EVMError].} =
   ## Constructor
   new result
 
   result.com = com
-  result.miner = miner
   result.lhwm.lwmTrg = TRG_THRESHOLD_PER_CENT
   result.lhwm.hwmMax = MAX_THRESHOLD_PER_CENT
   result.lhwm.gasFloor = DEFAULT_GAS_LIMIT
@@ -225,7 +205,7 @@ proc getHeader*(dh: TxChainRef): BlockHeader
   dh.prepareForSeal(result)
 
 proc clearAccounts*(dh: TxChainRef)
-    {.gcsafe,raises: [CatchableError].} =
+    {.gcsafe,raises: [].} =
   ## Reset transaction environment, e.g. before packing a new block
   dh.resetTxEnv(dh.txEnv.vmState.parent, dh.txEnv.vmState.blockCtx.fee)
 
@@ -233,34 +213,31 @@ proc clearAccounts*(dh: TxChainRef)
 # Public functions, getters
 # ------------------------------------------------------------------------------
 
-proc com*(dh: TxChainRef): CommonRef =
+func com*(dh: TxChainRef): CommonRef =
   ## Getter
   dh.com
 
-proc head*(dh: TxChainRef): BlockHeader =
+func head*(dh: TxChainRef): BlockHeader =
   ## Getter
   dh.txEnv.vmState.parent
 
-proc limits*(dh: TxChainRef): TxChainGasLimits =
+func limits*(dh: TxChainRef): TxChainGasLimits =
   ## Getter
   dh.limits
 
-proc lhwm*(dh: TxChainRef): TxChainGasLimitsPc =
+func lhwm*(dh: TxChainRef): TxChainGasLimitsPc =
   ## Getter
   dh.lhwm
 
-proc maxMode*(dh: TxChainRef): bool =
+func maxMode*(dh: TxChainRef): bool =
   ## Getter
   dh.maxMode
 
-proc feeRecipient*(dh: TxChainRef): EthAddress {.gcsafe.} =
+func feeRecipient*(dh: TxChainRef): EthAddress =
   ## Getter
-  if dh.com.consensus == ConsensusType.POS:
-    dh.com.pos.feeRecipient
-  else:
-    dh.miner
+  dh.com.pos.feeRecipient
 
-proc baseFee*(dh: TxChainRef): GasPrice =
+func baseFee*(dh: TxChainRef): GasPrice =
   ## Getter, baseFee for the next bock header. This value is auto-generated
   ## when a new insertion point is set via `head=`.
   if dh.txEnv.vmState.blockCtx.fee.isSome:
@@ -268,41 +245,41 @@ proc baseFee*(dh: TxChainRef): GasPrice =
   else:
     0.GasPrice
 
-proc excessBlobGas*(dh: TxChainRef): uint64 =
+func excessBlobGas*(dh: TxChainRef): uint64 =
   ## Getter, baseFee for the next bock header. This value is auto-generated
   ## when a new insertion point is set via `head=`.
   dh.txEnv.excessBlobGas.get(0'u64)
 
-proc nextFork*(dh: TxChainRef): EVMFork =
+func nextFork*(dh: TxChainRef): EVMFork =
   ## Getter, fork of next block
   dh.com.toEVMFork(dh.txEnv.vmState.forkDeterminationInfoForVMState)
 
-proc gasUsed*(dh: TxChainRef): GasInt =
+func gasUsed*(dh: TxChainRef): GasInt =
   ## Getter, accumulated gas burned for collected blocks
   if 0 < dh.txEnv.receipts.len:
     return dh.txEnv.receipts[^1].cumulativeGasUsed
 
-proc profit*(dh: TxChainRef): UInt256 =
+func profit*(dh: TxChainRef): UInt256 =
   ## Getter
   dh.txEnv.profit
 
-proc receipts*(dh: TxChainRef): seq[Receipt] =
+func receipts*(dh: TxChainRef): seq[Receipt] =
   ## Getter, receipts for collected blocks
   dh.txEnv.receipts
 
-proc reward*(dh: TxChainRef): UInt256 =
+func reward*(dh: TxChainRef): UInt256 =
   ## Getter, reward for collected blocks
   dh.txEnv.reward
 
-proc stateRoot*(dh: TxChainRef): Hash256 =
+func stateRoot*(dh: TxChainRef): Hash256 =
   ## Getter, accounting DB state root hash for the next block header
   dh.txEnv.stateRoot
 
-proc txRoot*(dh: TxChainRef): Hash256 =
+func txRoot*(dh: TxChainRef): Hash256 =
   ## Getter, transaction state root hash for the next block header
   dh.txEnv.txRoot
 
-proc vmState*(dh: TxChainRef): BaseVMState =
+func vmState*(dh: TxChainRef): BaseVMState =
   ## Getter, `BaseVmState` descriptor based on the current insertion point.
   dh.txEnv.vmState
 
@@ -310,7 +287,7 @@ proc vmState*(dh: TxChainRef): BaseVMState =
 # Public functions, setters
 # ------------------------------------------------------------------------------
 
-proc `baseFee=`*(dh: TxChainRef; val: GasPrice) =
+func `baseFee=`*(dh: TxChainRef; val: GasPrice) =
   ## Setter, temorarily overwrites parameter until next `head=` update. This
   ## function would be called in exceptional cases only as this parameter is
   ## determined by the `head=` update.
@@ -320,12 +297,12 @@ proc `baseFee=`*(dh: TxChainRef; val: GasPrice) =
     dh.txEnv.vmState.blockCtx.fee = UInt256.none()
 
 proc `head=`*(dh: TxChainRef; val: BlockHeader)
-    {.gcsafe,raises: [CatchableError].} =
+    {.gcsafe,raises: [].} =
   ## Setter, updates descriptor. This setter re-positions the `vmState` and
   ## account caches to a new insertion point on the block chain database.
   dh.update(val)
 
-proc `lhwm=`*(dh: TxChainRef; val: TxChainGasLimitsPc) =
+func `lhwm=`*(dh: TxChainRef; val: TxChainGasLimitsPc) =
   ## Setter, tuple `(lwmTrg,hwmMax)` will allow the packer to continue
   ## up until the percentage level has been reached of the `trgLimit`, or
   ## `maxLimit` depending on what has been activated.
@@ -336,43 +313,38 @@ proc `lhwm=`*(dh: TxChainRef; val: TxChainGasLimitsPc) =
     dh.txEnv.vmState.blockCtx.gasLimit = if dh.maxMode: dh.limits.maxLimit
                                          else:          dh.limits.trgLimit
 
-proc `maxMode=`*(dh: TxChainRef; val: bool) =
+func `maxMode=`*(dh: TxChainRef; val: bool) =
   ## Setter, the packing mode (maximal or target limit) for the next block
   ## header
   dh.maxMode = val
   dh.txEnv.vmState.blockCtx.gasLimit = if dh.maxMode: dh.limits.maxLimit
                                        else:          dh.limits.trgLimit
 
-proc `miner=`*(dh: TxChainRef; val: EthAddress) =
-  ## Setter
-  dh.miner = val
-  dh.txEnv.vmState.blockCtx.coinbase = val
-
-proc `profit=`*(dh: TxChainRef; val: UInt256) =
+func `profit=`*(dh: TxChainRef; val: UInt256) =
   ## Setter
   dh.txEnv.profit = val
 
-proc `receipts=`*(dh: TxChainRef; val: seq[Receipt]) =
+func `receipts=`*(dh: TxChainRef; val: seq[Receipt]) =
   ## Setter, implies `gasUsed`
   dh.txEnv.receipts = val
 
-proc `reward=`*(dh: TxChainRef; val: UInt256) =
+func `reward=`*(dh: TxChainRef; val: UInt256) =
   ## Getter
   dh.txEnv.reward = val
 
-proc `stateRoot=`*(dh: TxChainRef; val: Hash256) =
+func `stateRoot=`*(dh: TxChainRef; val: Hash256) =
   ## Setter
   dh.txEnv.stateRoot = val
 
-proc `txRoot=`*(dh: TxChainRef; val: Hash256) =
+func `txRoot=`*(dh: TxChainRef; val: Hash256) =
   ## Setter
   dh.txEnv.txRoot = val
 
-proc `excessBlobGas=`*(dh: TxChainRef; val: Option[uint64]) =
+func `excessBlobGas=`*(dh: TxChainRef; val: Option[uint64]) =
   ## Setter
   dh.txEnv.excessBlobGas = val
 
-proc `blobGasUsed=`*(dh: TxChainRef; val: Option[uint64]) =
+func `blobGasUsed=`*(dh: TxChainRef; val: Option[uint64]) =
   ## Setter
   dh.txEnv.blobGasUsed = val
 
