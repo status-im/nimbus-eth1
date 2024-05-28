@@ -241,7 +241,6 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
     params = conf.networkParams)
 
   com.initializeEmptyDb()
-  com.db.compensateLegacySetup()
 
   let protocols = conf.getProtocolFlags()
 

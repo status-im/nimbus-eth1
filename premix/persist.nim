@@ -65,7 +65,6 @@ proc main() {.used.} =
   if canonicalHeadHashKey().toOpenArray notin com.db.kvt:
     persistToDb(com.db):
       com.initializeEmptyDb()
-      com.db.compensateLegacySetup()
     doAssert(canonicalHeadHashKey().toOpenArray in com.db.kvt)
 
   var head = com.db.getCanonicalHead()

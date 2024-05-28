@@ -299,8 +299,6 @@ proc initVMEnv*(network: string): BaseVMState =
       gasLimit: 100_000
     )
 
-  # Disable opportunistic DB layer features
-  com.db.localDbOnly = true
   com.initializeEmptyDb()
   BaseVMState.new(parent, header, com)
 
@@ -347,7 +345,6 @@ proc verifyAsmResult(vmState: BaseVMState, boa: Assembler, asmResult: CallResult
 
   var stateDB = vmState.stateDB
   stateDB.persist()
-
   var
     storageRoot = stateDB.getStorageRoot(codeAddress)
     trie = initStorageTrie(com.db, storageRoot)

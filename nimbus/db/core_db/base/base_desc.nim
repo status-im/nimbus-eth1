@@ -102,7 +102,6 @@ type
     col: CoreDbColRef): CoreDbRc[Hash256] {.noRaise.}
   CoreDbBaseColPrintFn* = proc(vid: CoreDbColRef): string {.noRaise.}
   CoreDbBaseErrorPrintFn* = proc(e: CoreDbErrorRef): string {.noRaise.}
-  CoreDbBaseInitLegaSetupFn* = proc() {.noRaise.}
   CoreDbBaseLevelFn* = proc(): int {.noRaise.}
   CoreDbBaseNewKvtFn* = proc(offSite: bool): CoreDbRc[CoreDxKvtRef] {.noRaise.}
   CoreDbBaseNewCtxFn* = proc(): CoreDbCtxRef {.noRaise.}
@@ -121,7 +120,6 @@ type
     colStateFn*:     CoreDbBaseColStateFn
     colPrintFn*:     CoreDbBaseColPrintFn
     errorPrintFn*:   CoreDbBaseErrorPrintFn
-    legacySetupFn*:  CoreDbBaseInitLegaSetupFn
     levelFn*:        CoreDbBaseLevelFn
 
     # Kvt constructor
@@ -146,7 +144,7 @@ type
   # Sub-descriptor: KVT methods
   # --------------------------------------------------
   CoreDbKvtBackendFn* = proc(): CoreDbKvtBackendRef {.noRaise.}
-  CoreDbKvtGetFn* = proc(k: openArray[byte]): CoreDbRc[Blob] {.noRaise.} 
+  CoreDbKvtGetFn* = proc(k: openArray[byte]): CoreDbRc[Blob] {.noRaise.}
   CoreDbKvtDelFn* = proc(k: openArray[byte]): CoreDbRc[void] {.noRaise.}
   CoreDbKvtPutFn* =
     proc(k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] {.noRaise.}
@@ -281,7 +279,6 @@ type
     trackLegaApi*: bool         ## Debugging, support
     trackNewApi*: bool          ## Debugging, support
     trackLedgerApi*: bool       ## Debugging, suggestion for subsequent ledger
-    localDbOnly*: bool          ## Debugging, suggestion to ignore async fetch
     profTab*: CoreDbProfListRef ## Profiling data (if any)
     ledgerHook*: RootRef        ## Debugging/profiling, to be used by ledger
     methods*: CoreDbBaseFns

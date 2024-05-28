@@ -158,9 +158,6 @@ proc baseMethods(db: AristoCoreDbRef): CoreDbBaseFns =
     errorPrintFn: proc(e: CoreDbErrorRef): string =
       e.errorPrint(),
 
-    legacySetupFn: proc() =
-      discard,
-
     newKvtFn: proc(offSite: bool): CoreDbRc[CoreDxKvtRef] =
       kBase.newKvtHandler(offSite, "newKvtFn()"),
 
