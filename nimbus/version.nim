@@ -7,13 +7,27 @@
 # those terms.
 
 import
-  std/strutils,
+  std/[strutils, os, sequtils],
   stew/byteutils
-
-from std/os import DirSep, AltSep
 
 const
   sourcePath  = currentSourcePath.rsplit({DirSep, AltSep}, 1)[0]
+  nimbusRevision {.strdefine.} = "00000000"
+
+static:
+  doAssert(nimbusRevision.len == 8, "nimbusRevision must be consist of 8 characters")
+  doAssert(nimbusRevision.allIt(it in HexDigits), "nimbusRevision should contains only hex chars")
+
+proc gitFolderExists(path: string): bool {.compileTime.} =
+  # walk up parent folder to find `.git` folder
+  var prevPath = sourcePath
+  while true:
+    if dirExists(prevPath & "/.git"):
+      return true
+    let parts = splitPath(prevPath)
+    if parts.tail.len == 0: break
+    prevPath = parts.head
+  false
 
 const
   NimbusName* = "nimbus-eth1"
@@ -34,7 +48,13 @@ const
   # strip: remove spaces
   # --short=8: ensure we get 8 chars of commit hash
   # -C sourcePath: get the correct git hash no matter where the current dir is.
-  GitRevision* = strip(staticExec("git -C " & sourcePath & " rev-parse --short=8 HEAD"))
+  GitRevision* = if gitFolderExists(sourcePath):
+                   # only using git if the parent dir is a git repo.
+                   strip(staticExec("git -C " & sourcePath & " rev-parse --short=8 HEAD"))
+                 else:
+                   # otherwise we use revision number given by build system.
+                   # e.g. user download from release tarball, or Github zip download.
+                   nimbusRevision
 
   GitRevisionBytes* = hexToByteArray[4](GitRevision)
 
