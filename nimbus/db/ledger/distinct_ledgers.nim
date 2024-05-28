@@ -119,19 +119,18 @@ proc init*(
     T: type AccountLedger;
     db: CoreDbRef;
     root: Hash256;
-    pruneOk = true;
       ): T =
   const
     info = "AccountLedger.init(): "
   let
     ctx = db.ctx
-    trie = block:
+    col = block:
       let rc = ctx.newColumn(CtAccounts, root)
       if rc.isErr:
         raiseAssert info & $$rc.error
       rc.value
     mpt =  block:
-      let rc = ctx.getAcc(trie)
+      let rc = ctx.getAcc(col)
       if rc.isErr:
         raiseAssert info & $$rc.error
       rc.value
@@ -170,14 +169,9 @@ proc init*(
     al: AccountLedger;
     account: CoreDbAccount;
     reHashOk = true;
-    pruneOk = false;
       ): T =
   ## Storage trie constructor.
   ##
-  ## Note that the argument `pruneOk` should be left `false` on the legacy
-  ## `CoreDb` backend. Otherwise, pruning might kill some unwanted entries from
-  ## storage tries ending up with an unstable database leading to crashes (see
-  ## https://github.com/status-im/nimbus-eth1/issues/932.)
   const
     info = "StorageLedger/init(): "
   let
@@ -191,7 +185,7 @@ proc init*(
     ctx = db.ctx
     trie = if stt.isNil: ctx.newColumn(account.address) else: stt
     mpt = block:
-      let rc = ctx.getMpt(trie, pruneOk)
+      let rc = ctx.getMpt(trie)
       if rc.isErr:
         raiseAssert info & $$rc.error
       rc.value
