@@ -50,8 +50,8 @@ const
   # -C sourcePath: get the correct git hash no matter where the current dir is.
   GitRevision* = if gitFolderExists(sourcePath):
                    # only using git if the parent dir is a git repo.
-                   strip(staticExec("git -C \"" & strutils.escape(sourcePath) &
-                     "\" rev-parse --short=8 HEAD"))
+                   strip(staticExec("git -C " & strutils.escape(sourcePath) &
+                     " rev-parse --short=8 HEAD"))
                  else:
                    # otherwise we use revision number given by build system.
                    # e.g. user download from release tarball, or Github zip download.
