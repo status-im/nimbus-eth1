@@ -12,45 +12,10 @@ import
   stew/byteutils,
   eth/common,
   ../../common/common_utils,
-  ../../network/state/state_content,
-  ../../network/state/state_validation,
-  ../../eth_data/yaml_utils
+  ../../network/state/[state_content, state_validation],
+  ./state_test_helpers
 
-const testVectorDir = "./vendor/portal-spec-tests/tests/mainnet/state/validation/"
-
-type YamlTrieNodeRecursiveGossipKV = ref object
-  content_key: string
-  content_value_offer: string
-  content_value_retrieval: string
-
-type YamlTrieNodeKV = object
-  state_root: string
-  content_key: string
-  content_value_offer: string
-  content_value_retrieval: string
-  recursive_gossip: YamlTrieNodeRecursiveGossipKV
-
-type YamlTrieNodeKVs = seq[YamlTrieNodeKV]
-
-type YamlContractBytecodeKV = object
-  state_root: string
-  content_key: string
-  content_value_offer: string
-  content_value_retrieval: string
-
-type YamlContractBytecodeKVs = seq[YamlContractBytecodeKV]
-
-type YamlRecursiveGossipKV = object
-  content_key: string
-  content_value: string
-
-type YamlRecursiveGossipData = object
-  state_root: string
-  recursive_gossip: seq[YamlRecursiveGossipKV]
-
-type YamlRecursiveGossipKVs = seq[YamlRecursiveGossipData]
-
-suite "State Validation":
+suite "State Validation - Test Vectors":
   # Retrieval validation tests
 
   test "Validate valid AccountTrieNodeRetrieval nodes":

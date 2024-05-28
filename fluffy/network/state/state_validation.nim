@@ -59,7 +59,7 @@ proc validateTrieProof*(
       if isLastNode:
         break
       else:
-        return err("empty nibbles but proof has more nodes")
+        return err("proof has more nodes then expected for given path")
 
     case thisNodeRlp.listLen()
     of 2:

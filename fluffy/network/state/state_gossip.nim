@@ -19,57 +19,71 @@ export results, state_content
 logScope:
   topics = "portal_state"
 
-func getParent(nibbles: Nibbles, proof: TrieProof): (Nibbles, TrieProof) =
-  doAssert(nibbles.len() > 0, "nibbles too short")
-  doAssert(proof.len() > 1, "proof too short")
+type ProofWithPath = tuple[path: Nibbles, proof: TrieProof]
+
+type AccountTrieOfferWithKey* =
+  tuple[key: AccountTrieNodeKey, offer: AccountTrieNodeOffer]
+
+type ContractTrieOfferWithKey* =
+  tuple[key: ContractTrieNodeKey, offer: ContractTrieNodeOffer]
+
+func withPath(proof: TrieProof, path: Nibbles): ProofWithPath =
+  (path: path, proof: proof)
+
+func withKey*(
+    offer: AccountTrieNodeOffer, key: AccountTrieNodeKey
+): AccountTrieOfferWithKey =
+  (key: key, offer: offer)
+
+func withKey*(
+    offer: ContractTrieNodeOffer, key: ContractTrieNodeKey
+): ContractTrieOfferWithKey =
+  (key: key, offer: offer)
+
+func getParent(p: ProofWithPath): ProofWithPath =
+  doAssert(p.path.len() > 0, "nibbles too short")
+  doAssert(p.proof.len() > 1, "proof too short")
 
   let
-    parentProof = TrieProof.init(proof[0 ..^ 2])
+    parentProof = TrieProof.init(p.proof[0 ..^ 2])
     parentEndNode = rlpFromBytes(parentProof[^1].asSeq())
 
   # the trie proof should have already been validated when receiving the offer content
   doAssert(parentEndNode.listLen() == 2 or parentEndNode.listLen() == 17)
 
-  var unpackedNibbles = nibbles.unpackNibbles()
+  var unpackedNibbles = p.path.unpackNibbles()
 
   if parentEndNode.listLen() == 17:
     # branch node so only need to remove a single nibble
-    unpackedNibbles.setLen(unpackedNibbles.len() - 1)
-    return (unpackedNibbles.packNibbles(), parentProof)
+    return parentProof.withPath(unpackedNibbles.dropN(1).packNibbles())
 
   # leaf or extension node so we need to remove one or more nibbles
-  let (_, isEven, prefixNibbles) = decodePrefix(parentEndNode.listElem(0))
+  let prefixNibbles = decodePrefix(parentEndNode.listElem(0))[2]
 
-  var removeCount = (prefixNibbles.len() - 1) * 2
-  if not isEven:
-    inc removeCount
+  parentProof.withPath(unpackedNibbles.dropN(prefixNibbles.len()).packNibbles())
 
-  unpackedNibbles.setLen(unpackedNibbles.len() - removeCount)
-  (unpackedNibbles.packNibbles(), parentProof)
-
-func getParent*(
-    key: AccountTrieNodeKey, offer: AccountTrieNodeOffer
-): (AccountTrieNodeKey, AccountTrieNodeOffer) =
+func getParent*(offerWithKey: AccountTrieOfferWithKey): AccountTrieOfferWithKey =
   let
-    (parentNibbles, parentProof) = getParent(key.path, offer.proof)
-    parentKey =
-      AccountTrieNodeKey.init(parentNibbles, keccakHash(parentProof[^1].asSeq()))
+    (key, offer) = offerWithKey
+    (parentPath, parentProof) = offer.proof.withPath(key.path).getParent()
+
+    parentKey = AccountTrieNodeKey.init(parentPath, keccakHash(parentProof[^1].asSeq()))
     parentOffer = AccountTrieNodeOffer.init(parentProof, offer.blockHash)
 
-  (parentKey, parentOffer)
+  parentOffer.withKey(parentKey)
 
-func getParent*(
-    key: ContractTrieNodeKey, offer: ContractTrieNodeOffer
-): (ContractTrieNodeKey, ContractTrieNodeOffer) =
+func getParent*(offerWithKey: ContractTrieOfferWithKey): ContractTrieOfferWithKey =
   let
-    (parentNibbles, parentProof) = getParent(key.path, offer.storageProof)
+    (key, offer) = offerWithKey
+    (parentPath, parentProof) = offer.storageProof.withPath(key.path).getParent()
+
     parentKey = ContractTrieNodeKey.init(
-      key.address, parentNibbles, keccakHash(parentProof[^1].asSeq())
+      key.address, parentPath, keccakHash(parentProof[^1].asSeq())
     )
     parentOffer =
       ContractTrieNodeOffer.init(parentProof, offer.accountProof, offer.blockHash)
 
-  (parentKey, parentOffer)
+  parentOffer.withKey(parentKey)
 
 proc gossipOffer*(
     p: PortalProtocol,
@@ -79,20 +93,25 @@ proc gossipOffer*(
     key: AccountTrieNodeKey,
     offer: AccountTrieNodeOffer,
 ) {.async.} =
-  asyncSpawn p.neighborhoodGossipDiscardPeers(
+  let req1Peers = await p.neighborhoodGossip(
     srcNodeId, ContentKeysList.init(@[keyBytes]), @[offerBytes]
   )
+  info "Offered content gossipped successfully with peers", keyBytes, peers = req1Peers
 
   # root node, recursive gossip is finished
   if key.path.unpackNibbles().len() == 0:
     return
 
-  let (parentKey, parentOffer) = getParent(key, offer)
-  asyncSpawn p.neighborhoodGossipDiscardPeers(
-    srcNodeId,
-    ContentKeysList.init(@[parentKey.toContentKey().encode()]),
-    @[parentOffer.encode()],
-  )
+  # continue the recursive gossip by sharing the parent offer with peers
+  let
+    (parentKey, parentOffer) = offer.withKey(key).getParent()
+    parentKeyBytes = parentKey.toContentKey().encode()
+    req2Peers = await p.neighborhoodGossip(
+      srcNodeId, ContentKeysList.init(@[parentKeyBytes]), @[parentOffer.encode()]
+    )
+
+  info "Offered content parent gossipped successfully with peers",
+    parentKeyBytes, peers = req2Peers
 
 proc gossipOffer*(
     p: PortalProtocol,
@@ -102,20 +121,25 @@ proc gossipOffer*(
     key: ContractTrieNodeKey,
     offer: ContractTrieNodeOffer,
 ) {.async.} =
-  asyncSpawn p.neighborhoodGossipDiscardPeers(
+  let req1Peers = await p.neighborhoodGossip(
     srcNodeId, ContentKeysList.init(@[keyBytes]), @[offerBytes]
   )
+  info "Offered content gossipped successfully with peers", keyBytes, peers = req1Peers
 
   # root node, recursive gossip is finished
   if key.path.unpackNibbles().len() == 0:
     return
 
-  let (parentKey, parentOffer) = getParent(key, offer)
-  asyncSpawn p.neighborhoodGossipDiscardPeers(
-    srcNodeId,
-    ContentKeysList.init(@[parentKey.toContentKey().encode()]),
-    @[parentOffer.encode()],
-  )
+  # continue the recursive gossip by sharing the parent offer with peers
+  let
+    (parentKey, parentOffer) = offer.withKey(key).getParent()
+    parentKeyBytes = parentKey.toContentKey().encode()
+    req2Peers = await p.neighborhoodGossip(
+      srcNodeId, ContentKeysList.init(@[parentKeyBytes]), @[parentOffer.encode()]
+    )
+
+  info "Offered content parent gossipped successfully with peers",
+    parentKeyBytes, peers = req2Peers
 
 proc gossipOffer*(
     p: PortalProtocol,
@@ -125,6 +149,7 @@ proc gossipOffer*(
     key: ContractCodeKey,
     offer: ContractCodeOffer,
 ) {.async.} =
-  asyncSpawn p.neighborhoodGossipDiscardPeers(
+  let peers = await p.neighborhoodGossip(
     srcNodeId, ContentKeysList.init(@[keyBytes]), @[offerBytes]
   )
+  info "Offered content gossipped successfully with peers", keyBytes, peers

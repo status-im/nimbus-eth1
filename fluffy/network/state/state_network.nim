@@ -162,7 +162,7 @@ proc processOffer(
 
   let res = validateOffer(stateRoot, contentKey, contentValue)
   if res.isErr():
-    return err("Received offered content failed validation: " & res.error())
+    return err("Offered content failed validation: " & res.error())
 
   let contentId = n.portalProtocol.toContentId(contentKeyBytes).valueOr:
     return err("Received offered content with invalid content key")
@@ -170,7 +170,7 @@ proc processOffer(
   n.portalProtocol.storeContent(
     contentKeyBytes, contentId, contentValue.toRetrievalValue().encode()
   )
-  info "Received offered content validated successfully", contentKeyBytes
+  info "Offered content validated successfully", contentKeyBytes
 
   asyncSpawn gossipOffer(
     n.portalProtocol, maybeSrcNodeId, contentKeyBytes, contentValueBytes, contentKey,
