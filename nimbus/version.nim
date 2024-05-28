@@ -7,7 +7,7 @@
 # those terms.
 
 import
-  strutils,
+  std/strutils,
   stew/byteutils
 
 const
@@ -31,6 +31,11 @@ const
   # [0..7]   : remove trailing chars(e.g. on Github Windows CI)
   GitRevision* = strip(staticExec("git rev-parse --short=8 HEAD"))[0..7]
 
+static:
+  debugEcho "GIT REVISION: ", GitRevision
+  debugEcho "GIT REVISION LEN: ", GitRevision.len
+
+const
   GitRevisionBytes* = hexToByteArray[4](GitRevision)
 
-  NimVersion* = staticExec("nim --version | grep Version")
+  NimVersion* = "Nim Version " & $NimMajor & "." & $NimMinor & "." & $NimPatch
