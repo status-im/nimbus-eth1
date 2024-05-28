@@ -8,7 +8,7 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import eth/keys
+import eth/[keys, trie]
 import stew/byteutils
 import unittest2
 import ../nimbus/common
@@ -38,6 +38,7 @@ const
 proc overflowMain*() =
   test "GasCall unhandled overflow":
     let header = BlockHeader(
+      stateRoot: emptyRlpHash,
       blockNumber: u256(1150000),
       coinBase: coinbase,
       gasLimit: 30000000,
@@ -45,7 +46,6 @@ proc overflowMain*() =
     )
 
     let com = CommonRef.new(newCoreDbRef(DefaultDbMemory), config = chainConfigForNetwork(MainNet))
-
     let s = BaseVMState.new(
       header,
       header,

@@ -269,15 +269,6 @@ proc dbType*(db: CoreDbRef): CoreDbType =
   result = db.dbType
   db.ifTrackNewApi: debug newApiTxt, api, elapsed, result
 
-proc compensateLegacySetup*(db: CoreDbRef) =
-  ## On the persistent legacy hexary trie, this function is needed for
-  ## bootstrapping and Genesis setup when the `purge` flag is activated.
-  ## Otherwise the database backend may defect on an internal inconsistency.
-  ##
-  db.setTrackNewApi BaseLegacySetupFn
-  db.methods.legacySetupFn()
-  db.ifTrackNewApi: debug newApiTxt, api, elapsed
-
 proc parent*[T: CoreDxKvtRef |
                 CoreDbColRef |
                 CoreDbCtxRef | CoreDxMptRef | CoreDxPhkRef | CoreDxAccRef |

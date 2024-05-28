@@ -333,8 +333,6 @@ proc persistStorage(acc: AccountRef, ac: AccountsLedgerRef, clearCache: bool) =
   if not clearCache and acc.originalStorage.isNil:
     acc.originalStorage = newTable[UInt256, UInt256]()
 
-  ac.ledger.db.compensateLegacySetup()
-
   # Make sure that there is an account column on the database. This is needed
   # for saving the account-linked storage column on the Aristo database.
   if acc.statement.storage.isNil:

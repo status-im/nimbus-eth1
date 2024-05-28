@@ -8,7 +8,7 @@
 import
   std/[strformat, strutils, json, os, tables, macros],
   unittest2, stew/byteutils,
-  eth/keys,
+  eth/[keys, trie],
   ../nimbus/common/common,
   ../nimbus/[vm_computation,
     vm_state,
@@ -69,10 +69,11 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     fork  = parseFork(fixtures["fork"].getStr)
     data  = fixtures["data"]
     privateKey = PrivateKey.fromHex("7a28b5ba57c53603b0b07b56bba752f7784bf506fa95edc395f5cf6c7514fe9d")[]
+    com = CommonRef.new(newCoreDbRef DefaultDbMemory, config = ChainConfig())
     vmState = BaseVMState.new(
-      BlockHeader(blockNumber: 1.u256),
+      BlockHeader(blockNumber: 1.u256, stateRoot: emptyRlpHash),
       BlockHeader(),
-      CommonRef.new(newCoreDbRef DefaultDbMemory, config = ChainConfig())
+      com
     )
 
   case toLowerAscii(label)

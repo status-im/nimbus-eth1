@@ -49,7 +49,6 @@ type
     BaseColStateFn      = "state"
     BaseDbTypeFn        = "dbType"
     BaseFinishFn        = "finish"
-    BaseLegacySetupFn   = "compensateLegacySetup"
     BaseLevelFn         = "level"
     BaseNewCaptureFn    = "newCapture"
     BaseNewCtxFn        = "ctx"
