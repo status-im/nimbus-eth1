@@ -13,7 +13,8 @@ import
   web3/[conversions, execution_types],
   ../beacon/api_handler,
   ../beacon/beacon_engine,
-  ../beacon/web3_eth_conv
+  ../beacon/web3_eth_conv,
+  ../version
 
 {.push raises: [].}
 
@@ -33,6 +34,7 @@ const supportedMethods: HashSet[string] =
     "engine_forkchoiceUpdatedV3",
     "engine_getPayloadBodiesByHashV1",
     "engine_getPayloadBodiesByRangeV1",
+    "engine_getClientVersionV1",
   ])
 
 # I'm trying to keep the handlers below very thin, and move the
@@ -94,3 +96,13 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
   server.rpc("engine_getPayloadBodiesByRangeV1") do(
       start: Quantity, count: Quantity) -> seq[Option[ExecutionPayloadBodyV1]]:
     return engine.getPayloadBodiesByRange(start.uint64, count.uint64)
+
+  server.rpc("engine_getClientVersionV1") do(version: ClientVersionV1) ->
+                                         seq[ClientVersionV1]:
+    # TODO: what should we do with the `version` parameter?
+    return @[ClientVersionV1(
+      code: "NB",
+      name: NimbusName,
+      version: NimbusVersion,
+      commit: FixedBytes[4](GitRevisionBytes),
+    )]

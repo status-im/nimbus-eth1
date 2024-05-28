@@ -1,4 +1,4 @@
-# Copyright (c) 2018-2022 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -6,7 +6,9 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import strutils
+import
+  strutils,
+  stew/byteutils
 
 const
   NimbusName* = "nimbus-eth1"
@@ -24,7 +26,10 @@ const
   NimbusVersion* = $NimbusMajor & "." & $NimbusMinor & "." & $NimbusPatch
   ## is the version of Nimbus as a string.
 
-  GitRevision* = strip(staticExec("git rev-parse --short HEAD"))[0..5]
+  GitRevisionString* = strip(staticExec("git rev-parse --short HEAD"))
+
+  GitRevisionBytes* = hexToByteArray[4](GitRevisionString)
+
+  GitRevision* = GitRevisionString[0..5]
 
   NimVersion* = staticExec("nim --version | grep Version")
-
