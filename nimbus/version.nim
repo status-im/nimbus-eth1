@@ -10,6 +10,11 @@ import
   std/strutils,
   stew/byteutils
 
+from std/os import DirSep, AltSep
+
+const
+  sourcePath  = currentSourcePath.rsplit({DirSep, AltSep}, 1)[0]
+
 const
   NimbusName* = "nimbus-eth1"
   ## project name string
@@ -26,16 +31,11 @@ const
   NimbusVersion* = $NimbusMajor & "." & $NimbusMinor & "." & $NimbusPatch
   ## is the version of Nimbus as a string.
 
-  # strip    : remove spaces
+  # strip: remove spaces
   # --short=8: ensure we get 8 chars of commit hash
-  # [0..7]   : remove trailing chars(e.g. on Github Windows CI)
-  GitRevision* = strip(staticExec("git rev-parse --short=8 HEAD"))
+  # -C sourcePath: get the correct git hash no matter where the current dir is.
+  GitRevision* = strip(staticExec("git -C " & sourcePath & " rev-parse --short=8 HEAD"))
 
-static:
-  debugEcho "GIT REVISION: ", GitRevision
-  debugEcho "GIT REVISION LEN: ", GitRevision.len
-
-const
-  GitRevisionBytes* = hexToByteArray[4](GitRevision[0..7])
+  GitRevisionBytes* = hexToByteArray[4](GitRevision)
 
   NimVersion* = "Nim Version " & $NimMajor & "." & $NimMinor & "." & $NimPatch
