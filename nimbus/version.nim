@@ -15,7 +15,7 @@ const
   nimbusRevision {.strdefine.} = "00000000"
 
 static:
-  doAssert(nimbusRevision.len == 8, "nimbusRevision must be consist of 8 characters")
+  doAssert(nimbusRevision.len == 8, "nimbusRevision must consist of 8 characters")
   doAssert(nimbusRevision.allIt(it in HexDigits), "nimbusRevision should contains only hex chars")
 
 proc gitFolderExists(path: string): bool {.compileTime.} =
@@ -50,7 +50,7 @@ const
   # -C sourcePath: get the correct git hash no matter where the current dir is.
   GitRevision* = if gitFolderExists(sourcePath):
                    # only using git if the parent dir is a git repo.
-                   strip(staticExec("git -C " & sourcePath & " rev-parse --short=8 HEAD"))
+                   strip(staticExec("git -C \"" & sourcePath & "\" rev-parse --short=8 HEAD"))
                  else:
                    # otherwise we use revision number given by build system.
                    # e.g. user download from release tarball, or Github zip download.
@@ -58,4 +58,4 @@ const
 
   GitRevisionBytes* = hexToByteArray[4](GitRevision)
 
-  NimVersion* = "Nim Version " & $NimMajor & "." & $NimMinor & "." & $NimPatch
+  NimVersion* = "Nim version " & $NimMajor & "." & $NimMinor & "." & $NimPatch
