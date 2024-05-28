@@ -38,99 +38,94 @@ type
     data*: array[33, byte]
     dataEndPos*: uint8 # the last populated position in the data
 
-proc genericHashKey*(h: Hash256): DbKey {.inline.} =
+func genericHashKey*(h: Hash256): DbKey {.inline.} =
   result.data[0] = byte ord(genericHash)
   result.data[1 .. 32] = h.data
   result.dataEndPos = uint8 32
 
-proc blockHashToScoreKey*(h: Hash256): DbKey {.inline.} =
+func blockHashToScoreKey*(h: Hash256): DbKey {.inline.} =
   result.data[0] = byte ord(blockHashToScore)
   result.data[1 .. 32] = h.data
   result.dataEndPos = uint8 32
 
-proc transactionHashToBlockKey*(h: Hash256): DbKey {.inline.} =
+func transactionHashToBlockKey*(h: Hash256): DbKey {.inline.} =
   result.data[0] = byte ord(transactionHashToBlock)
   result.data[1 .. 32] = h.data
   result.dataEndPos = uint8 32
 
-proc blockNumberToHashKey*(u: BlockNumber): DbKey {.inline.} =
+func blockNumberToHashKey*(u: BlockNumber): DbKey {.inline.} =
   result.data[0] = byte ord(blockNumberToHash)
   doAssert sizeof(u) <= 32
   copyMem(addr result.data[1], unsafeAddr u, sizeof(u))
   result.dataEndPos = uint8 sizeof(u)
 
-proc canonicalHeadHashKey*(): DbKey {.inline.} =
+func canonicalHeadHashKey*(): DbKey {.inline.} =
   result.data[0] = byte ord(canonicalHeadHash)
   result.dataEndPos = 1
 
-proc slotHashToSlotKey*(h: openArray[byte]): DbKey {.inline.} =
+func slotHashToSlotKey*(h: openArray[byte]): DbKey {.inline.} =
   doAssert(h.len == 32)
   result.data[0] = byte ord(slotHashToSlot)
   result.data[1 .. 32] = h
   result.dataEndPos = uint8 32
 
-proc contractHashKey*(h: Hash256): DbKey {.inline.} =
+func contractHashKey*(h: Hash256): DbKey {.inline.} =
   result.data[0] = byte ord(contractHash)
   result.data[1 .. 32] = h.data
   result.dataEndPos = uint8 32
 
-proc cliqueSnapshotKey*(h: Hash256): DbKey {.inline.} =
-  result.data[0] = byte ord(cliqueSnapshot)
-  result.data[1 .. 32] = h.data
-  result.dataEndPos = uint8 32
-
-proc transitionStatusKey*(): DbKey =
+func transitionStatusKey*(): DbKey =
   # ETH-2 Transition Status
   result.data[0] = byte ord(transitionStatus)
   result.dataEndPos = uint8 1
 
-proc safeHashKey*(): DbKey {.inline.} =
+func safeHashKey*(): DbKey {.inline.} =
   result.data[0] = byte ord(safeHash)
   result.dataEndPos = uint8 1
 
-proc finalizedHashKey*(): DbKey {.inline.} =
+func finalizedHashKey*(): DbKey {.inline.} =
   result.data[0] = byte ord(finalizedHash)
   result.dataEndPos = uint8 1
 
-proc skeletonProgressKey*(): DbKey {.inline.} =
+func skeletonProgressKey*(): DbKey {.inline.} =
   result.data[0] = byte ord(skeletonProgress)
   result.dataEndPos = 1
 
-proc skeletonBlockHashToNumberKey*(h: Hash256): DbKey {.inline.} =
+func skeletonBlockHashToNumberKey*(h: Hash256): DbKey {.inline.} =
   result.data[0] = byte ord(skeletonBlockHashToNumber)
   result.data[1 .. 32] = h.data
   result.dataEndPos = uint8 32
 
-proc skeletonHeaderKey*(u: BlockNumber): DbKey {.inline.} =
+func skeletonHeaderKey*(u: BlockNumber): DbKey {.inline.} =
   result.data[0] = byte ord(skeletonHeader)
   doAssert sizeof(u) <= 32
   copyMem(addr result.data[1], unsafeAddr u, sizeof(u))
   result.dataEndPos = uint8 sizeof(u)
 
-proc skeletonBodyKey*(h: Hash256): DbKey {.inline.} =
+func skeletonBodyKey*(h: Hash256): DbKey {.inline.} =
   result.data[0] = byte ord(skeletonBody)
   result.data[1 .. 32] = h.data
   result.dataEndPos = uint8 32
 
-proc snapSyncAccountKey*(h: openArray[byte]): DbKey {.inline.} =
+func snapSyncAccountKey*(h: openArray[byte]): DbKey {.inline.} =
   doAssert(h.len == 32)
   result.data[0] = byte ord(snapSyncAccount)
   result.data[1 .. 32] = h
   result.dataEndPos = uint8 sizeof(h)
 
-proc snapSyncStorageSlotKey*(h: openArray[byte]): DbKey {.inline.} =
+func snapSyncStorageSlotKey*(h: openArray[byte]): DbKey {.inline.} =
   doAssert(h.len == 32)
   result.data[0] = byte ord(snapSyncStorageSlot)
   result.data[1 .. 32] = h
   result.dataEndPos = uint8 sizeof(h)
 
-proc snapSyncStateRootKey*(h: openArray[byte]): DbKey {.inline.} =
+func snapSyncStateRootKey*(h: openArray[byte]): DbKey {.inline.} =
   doAssert(h.len == 32)
   result.data[0] = byte ord(snapSyncStateRoot)
   result.data[1 .. 32] = h
   result.dataEndPos = uint8 sizeof(h)
 
-proc blockHashToBlockWitnessKey*(h: Hash256): DbKey {.inline.} =
+func blockHashToBlockWitnessKey*(h: Hash256): DbKey {.inline.} =
   result.data[0] = byte ord(blockHashToBlockWitness)
   result.data[1 .. 32] = h.data
   result.dataEndPos = uint8 32
@@ -138,6 +133,6 @@ proc blockHashToBlockWitnessKey*(h: Hash256): DbKey {.inline.} =
 template toOpenArray*(k: DbKey): openArray[byte] =
   k.data.toOpenArray(0, int(k.dataEndPos))
 
-proc `==`*(a, b: DbKey): bool {.inline.} =
+func `==`*(a, b: DbKey): bool {.inline.} =
   a.toOpenArray == b.toOpenArray
 

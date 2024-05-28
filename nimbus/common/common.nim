@@ -67,7 +67,7 @@ type
     # current hard fork, updated after calling `hardForkTransition`
     currentFork: HardFork
 
-    # one of POW/POA/POS, updated after calling `hardForkTransition`
+    # one of POW/POS, updated after calling `hardForkTransition`
     consensusType: ConsensusType
 
     syncReqNewHead: SyncReqNewHeadCB
@@ -107,10 +107,6 @@ type
 proc hardForkTransition*(
   com: CommonRef, forkDeterminer: ForkDeterminationInfo)
   {.gcsafe, raises: [].}
-
-func cliquePeriod*(com: CommonRef): EthTime
-
-func cliqueEpoch*(com: CommonRef): int
 
 # ------------------------------------------------------------------------------
 # Private helper functions
@@ -295,7 +291,7 @@ proc hardForkTransition(
   ## When consensus type already transitioned to POS,
   ## the storage can choose not to store TD anymore,
   ## at that time, TD is no longer needed to find a fork
-  ## TD only needed during transition from POW/POA to POS.
+  ## TD only needed during transition from POW to POS.
   ## Same thing happen before London block, TD can be ignored.
 
   let fork = com.toHardFork(forkDeterminer)
@@ -451,17 +447,6 @@ func ttd*(com: CommonRef): Option[DifficultyInt] =
 func ttdPassed*(com: CommonRef): bool =
   com.config.terminalTotalDifficultyPassed.get(false)
 
-# if you messing with clique period and
-# and epoch, it likely will fail clique verification
-# at epoch * blocknumber
-func cliquePeriod*(com: CommonRef): EthTime =
-  if com.config.clique.period.isSome:
-    return EthTime com.config.clique.period.get()
-
-func cliqueEpoch*(com: CommonRef): int =
-  if com.config.clique.epoch.isSome:
-    return com.config.clique.epoch.get()
-
 func pruneHistory*(com: CommonRef): bool =
   com.pruneHistory
 
@@ -470,8 +455,8 @@ func pruneHistory*(com: CommonRef): bool =
 # because some client do not make distinction
 # between them.
 # And popular networks such as MainNet
-# Goerli add more confusion to this
-# by not make distinction too in their value.
+# add more confusion to this
+# by not making a distinction in their value.
 func chainId*(com: CommonRef): ChainId =
   com.config.chainId
 
