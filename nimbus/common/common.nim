@@ -286,8 +286,7 @@ func toHardFork*(
   toHardFork(com.forkTransitionTable, forkDeterminer)
 
 proc hardForkTransition(
-    com: CommonRef, forkDeterminer: ForkDeterminationInfo)
-    {.gcsafe, raises: [].} =
+    com: CommonRef, forkDeterminer: ForkDeterminationInfo) =
   ## When consensus type already transitioned to POS,
   ## the storage can choose not to store TD anymore,
   ## at that time, TD is no longer needed to find a fork
@@ -302,8 +301,7 @@ proc hardForkTransition*(
     com: CommonRef,
     number: BlockNumber,
     td: Option[DifficultyInt],
-    time: Option[EthTime])
-    {.gcsafe, raises: [].} =
+    time: Option[EthTime]) =
   com.hardForkTransition(ForkDeterminationInfo(
     blockNumber: number, time: time, td: td))
 
@@ -311,8 +309,7 @@ proc hardForkTransition*(
     com: CommonRef,
     parentHash: Hash256,
     number: BlockNumber,
-    time: Option[EthTime])
-    {.gcsafe, raises: [].} =
+    time: Option[EthTime]) =
   com.hardForkTransition(number, getTdIfNecessary(com, parentHash), time)
 
 proc hardForkTransition*(
@@ -341,8 +338,7 @@ func forkGTE*(com: CommonRef, fork: HardFork): bool =
   com.currentFork >= fork
 
 # TODO: move this consensus code to where it belongs
-func minerAddress*(com: CommonRef; header: BlockHeader): EthAddress
-    {.gcsafe, raises: [CatchableError].} =
+func minerAddress*(com: CommonRef; header: BlockHeader): EthAddress =
   # POW and POS return header.coinbase
   return header.coinbase
 

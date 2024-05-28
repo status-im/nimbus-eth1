@@ -167,7 +167,6 @@ proc initRunnerDB(
     setDebugLevel()
     coreDB.trackLegaApi = true
     coreDB.trackNewApi = true
-    coreDB.localDbOnly = true
 
   var
     params: NetworkParams
@@ -191,7 +190,6 @@ proc initRunnerDB(
   coreDB.trackLegaApi = false
   coreDB.trackNewApi = false
   coreDB.trackLedgerApi =false
-  coreDB.localDbOnly = false
 
 # ------------------------------------------------------------------------------
 # Test Runners: accounts and accounts storages
@@ -247,7 +245,6 @@ proc chainSyncRunner(
         com.db.trackNewApi = true
         com.db.trackNewApi = true
         com.db.trackLedgerApi = true
-        com.db.localDbOnly = true
 
       check noisy.test_chainSync(filePaths, com, numBlocks,
         lastOneExtra=lastOneExtraOk, enaLogging=enaLoggingOk)
@@ -302,7 +299,6 @@ proc persistentSyncPreLoadAndResumeRunner(
         com.db.trackNewApi = true
         com.db.trackNewApi = true
         com.db.trackLedgerApi = true
-        com.db.localDbOnly = true
 
       check noisy.test_chainSync(filePaths, com, firstPart,
         lastOneExtra=lastOneExtraOk, enaLogging=enaLoggingOk)
@@ -319,7 +315,6 @@ proc persistentSyncPreLoadAndResumeRunner(
         com.db.trackNewApi = true
         com.db.trackNewApi = true
         com.db.trackLedgerApi = true
-        com.db.localDbOnly = true
 
       check noisy.test_chainSync(filePaths, com, secndPart,
         lastOneExtra=lastOneExtraOk, enaLogging=enaLoggingOk)

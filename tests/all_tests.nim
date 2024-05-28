@@ -19,7 +19,7 @@ cliBuilder:
           ./test_memory,
           ./test_stack,
           ./test_genesis,
-          #./test_precompiles,                     -- fails
+          /test_precompiles,
           #./test_generalstate_json,               -- fails
           ./test_tracer_json,
           #./test_persistblock_json,               -- fails
@@ -49,7 +49,7 @@ cliBuilder:
           #./test_merge,                           -- fails
           ./test_eip4844,
           ./test_beacon/test_skeleton,
-          #./test_overflow,                        -- fails
+          /test_overflow,
           #./test_getproof_json,                   -- fails
           #./test_rpc_experimental_json,           -- fails
           #./test_persistblock_witness_json        -- fails

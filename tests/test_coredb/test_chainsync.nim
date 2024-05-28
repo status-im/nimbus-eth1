@@ -43,7 +43,7 @@ const
   EnableExtraLoggingControl = true
 var
   logStartTime {.used.} = Time()
-  logSavedEnv {.used.}: (bool,bool,bool,bool)
+  logSavedEnv {.used.}: (bool,bool,bool)
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -70,18 +70,17 @@ template initLogging(noisy: bool, com: CommonRef) =
       debug "start undumping into persistent blocks"
     logStartTime = Time()
     logSavedEnv = (com.db.trackLegaApi, com.db.trackNewApi,
-                   com.db.trackLedgerApi, com.db.localDbOnly)
+                   com.db.trackLedgerApi)
     setErrorLevel()
     com.db.trackLegaApi = true
     com.db.trackNewApi = true
     com.db.trackLedgerApi = true
-    com.db.localDbOnly = true
 
 proc finishLogging(com: CommonRef) =
   when EnableExtraLoggingControl:
     setErrorLevel()
     (com.db.trackLegaApi, com.db.trackNewApi,
-     com.db.trackLedgerApi, com.db.localDbOnly) = logSavedEnv
+     com.db.trackLedgerApi) = logSavedEnv
 
 
 template startLogging(noisy: bool; num: BlockNumber) =
