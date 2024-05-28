@@ -20,13 +20,13 @@ static:
 
 proc gitFolderExists(path: string): bool {.compileTime.} =
   # walk up parent folder to find `.git` folder
-  var prevPath = sourcePath
+  var currPath = sourcePath
   while true:
-    if dirExists(prevPath & "/.git"):
+    if dirExists(currPath & "/.git"):
       return true
-    let parts = splitPath(prevPath)
+    let parts = splitPath(currPath)
     if parts.tail.len == 0: break
-    prevPath = parts.head
+    currPath = parts.head
   false
 
 const
@@ -50,7 +50,8 @@ const
   # -C sourcePath: get the correct git hash no matter where the current dir is.
   GitRevision* = if gitFolderExists(sourcePath):
                    # only using git if the parent dir is a git repo.
-                   strip(staticExec("git -C \"" & sourcePath & "\" rev-parse --short=8 HEAD"))
+                   strip(staticExec("git -C \"" & strutils.escape(sourcePath) &
+                     "\" rev-parse --short=8 HEAD"))
                  else:
                    # otherwise we use revision number given by build system.
                    # e.g. user download from release tarball, or Github zip download.
