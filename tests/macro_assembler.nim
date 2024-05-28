@@ -17,12 +17,15 @@ import
   stew/shims/macros
 
 import
-  ../nimbus/db/[ledger, distinct_tries],
+  ../nimbus/db/ledger,
   ../nimbus/evm/types,
   ../nimbus/vm_internals,
   ../nimbus/transaction/[call_common, call_evm],
   ../nimbus/[vm_types, vm_state],
   ../nimbus/core/pow/difficulty
+
+from ../nimbus/db/aristo
+  import EmptyBlob
 
 # Ditto, for GasPrice.
 import ../nimbus/transaction except GasPrice
@@ -63,15 +66,6 @@ type
 
 const
   idToOpcode = CacheTable"NimbusMacroAssembler"
-var
-  coreDbType* = DefaultDbMemory
-    ## This variable needs to be accessible for unit tests like
-    ## `test_op_memory` which implicitely uses the `initStorageTrie()` call
-    ## from the `distinct_tries` module. The `Aristo` API cannot handle that
-    ## because it needs the account address for accessing the storage trie.
-    ##
-    ## This problem can be fixed here in the `verifyAsmResult()` function once
-    ## there is the time to do it ...
 
 static:
   for n in Op:
@@ -278,11 +272,7 @@ const
 proc initVMEnv*(network: string): BaseVMState =
   let
     conf = getChainConfig(network)
-    cdb = block:
-      # Need static binding
-      case coreDbType:
-      of AristoDbMemory: newCoreDbRef AristoDbMemory
-      else: raiseAssert "unsupported: " & $coreDbType
+    cdb = DefaultDbMemory.newCoreDbRef()
     com = CommonRef.new(
       cdb,
       conf,
@@ -299,8 +289,6 @@ proc initVMEnv*(network: string): BaseVMState =
       gasLimit: 100_000
     )
 
-  # Disable opportunistic DB layer features
-  com.db.localDbOnly = true
   com.initializeEmptyDb()
   BaseVMState.new(parent, header, com)
 
@@ -348,15 +336,17 @@ proc verifyAsmResult(vmState: BaseVMState, boa: Assembler, asmResult: CallResult
   var stateDB = vmState.stateDB
   stateDB.persist()
 
-  var
-    storageRoot = stateDB.getStorageRoot(codeAddress)
-    trie = initStorageTrie(com.db, storageRoot)
+  let
+    al = AccountLedger.init(com.db, EMPTY_ROOT_HASH)
+    acc = al.fetch(codeAddress).expect "Valid Account Handle"
+    sl = StorageLedger.init(al, acc)
 
   for kv in boa.storage:
     let key = kv[0].toHex()
     let val = kv[1].toHex()
-    let keyBytes = (@(kv[0]))
-    let actual = trie.getSlotBytes(keyBytes).toHex()
+    let slot = UInt256.fromBytesBE kv[0]
+    let data = sl.fetch(slot).valueOr: EmptyBlob
+    let actual = data.toHex
     let zerosLen = 64 - (actual.len)
     let value = repeat('0', zerosLen) & actual
     if val != value:
