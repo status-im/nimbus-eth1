@@ -26,7 +26,7 @@ const
   NimbusVersion* = $NimbusMajor & "." & $NimbusMinor & "." & $NimbusPatch
   ## is the version of Nimbus as a string.
 
-  GitRevisionString* = strip(staticExec("git rev-parse --short HEAD"))
+  GitRevisionString* = strip(staticExec("git rev-parse HEAD"))
 
   GitRevisionBytes* = hexToByteArray[4](GitRevisionString)
 
