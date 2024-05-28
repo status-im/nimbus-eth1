@@ -29,13 +29,13 @@ const
   # strip    : remove spaces
   # --short=8: ensure we get 8 chars of commit hash
   # [0..7]   : remove trailing chars(e.g. on Github Windows CI)
-  GitRevision* = strip(staticExec("git rev-parse --short=8 HEAD"))[0..7]
+  GitRevision* = strip(staticExec("git rev-parse --short=8 HEAD"))
 
 static:
   debugEcho "GIT REVISION: ", GitRevision
   debugEcho "GIT REVISION LEN: ", GitRevision.len
 
 const
-  GitRevisionBytes* = hexToByteArray[4](GitRevision)
+  GitRevisionBytes* = hexToByteArray[4](GitRevision[0..7])
 
   NimVersion* = "Nim Version " & $NimMajor & "." & $NimMinor & "." & $NimPatch
