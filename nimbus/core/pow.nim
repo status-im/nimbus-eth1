@@ -34,9 +34,9 @@ type
     ## might be more useful for testing and debugging than for production.
     blockNumber*: BlockNumber
     miningHash*: Hash256
-    nonce*: BlockNonce
+    nonce: BlockNonce
     mixDigest*: Hash256
-    difficulty*: DifficultyInt
+    difficulty: DifficultyInt
 
   PowHeader = object ##\
     ## Stolen from `p2p/validate.MiningHeader`
@@ -57,7 +57,6 @@ type
   PowRef* = ref object of RootObj ##\
     ## PoW context descriptor
     lightByEpoch: PowCacheRef     ## PoW cache indexed by epoch
-    nonceAttempts: uint64         ## Unsuccessful tests in last mining process
 
     # You should only create one instance of the RNG per application / library
     # Ref is used so that it can be shared between components
@@ -206,10 +205,6 @@ func getPowDigest*(tm: PowRef; specs: PowSpecs): PowDigest =
 func dumpPowSpecs*(specs: PowSpecs): string =
   ## Text representation of `PowSpecs` argument object
   specs.rlpTextEncode
-
-func dumpPowSpecs*(header: BlockHeader): string =
-  ## Variant of `dumpPowSpecs()`
-  header.getPowSpecs.dumpPowSpecs
 
 func undumpPowSpecs*(data: string): PowSpecs
     {.raises: [CatchableError].} =

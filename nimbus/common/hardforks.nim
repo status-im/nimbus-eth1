@@ -53,10 +53,6 @@ const firstTimeBasedFork* = Shanghai
 
 
 type
-  CliqueOptions* = object
-    epoch* : Option[int]
-    period*: Option[int]
-
   MergeForkTransitionThreshold* = object
     blockNumber*: Option[BlockNumber]
     ttd*: Option[DifficultyInt]
@@ -97,15 +93,11 @@ func forkDeterminationInfo*(n: BlockNumber): ForkDeterminationInfo =
 func forkDeterminationInfo*(n: BlockNumber, t: EthTime): ForkDeterminationInfo =
   ForkDeterminationInfo(blockNumber: n, time: some(t), td: none[DifficultyInt]())
 
-# FIXME: Is this called anywhere?
-func forkDeterminationInfoIncludingTd*(n: BlockNumber, t: EthTime, td: DifficultyInt): ForkDeterminationInfo =
-  ForkDeterminationInfo(blockNumber: n, time: some(t), td: some(td))
-
 func forkDeterminationInfo*(header: BlockHeader): ForkDeterminationInfo =
   # FIXME-Adam-mightAlsoNeedTTD?
   forkDeterminationInfo(header.blockNumber, header.timestamp)
 
-proc adjustForNextBlock*(n: BlockNumber): BlockNumber =
+func adjustForNextBlock*(n: BlockNumber): BlockNumber =
   n + 1
 
 func adjustForNextBlock*(t: EthTime): EthTime =
@@ -181,7 +173,6 @@ type
     cancunTime*         : Option[EthTime]
     pragueTime*         : Option[EthTime]
 
-    clique*             : CliqueOptions
     terminalTotalDifficulty*: Option[UInt256]
     terminalTotalDifficultyPassed*: Option[bool]
     consensusType*
@@ -251,7 +242,7 @@ func mergeForkTransitionThreshold*(conf: ChainConfig): MergeForkTransitionThresh
     ttdPassed: conf.terminalTotalDifficultyPassed
   )
 
-proc toForkTransitionTable*(conf: ChainConfig): ForkTransitionTable =
+func toForkTransitionTable*(conf: ChainConfig): ForkTransitionTable =
   # We used to auto-generate this code from a list of
   # field names, but it doesn't seem worthwhile anymore
   # (now that there's irregularity due to block-based vs
@@ -275,7 +266,7 @@ proc toForkTransitionTable*(conf: ChainConfig): ForkTransitionTable =
   result.timeThresholds[Cancun] = conf.cancunTime
   result.timeThresholds[Prague] = conf.pragueTime
 
-proc populateFromForkTransitionTable*(conf: ChainConfig, t: ForkTransitionTable) =
+func populateFromForkTransitionTable*(conf: ChainConfig, t: ForkTransitionTable) =
   conf.homesteadBlock      = t.blockNumberThresholds[HardFork.Homestead]
   conf.daoForkBlock        = t.blockNumberThresholds[HardFork.DAOFork]
   conf.eip150Block         = t.blockNumberThresholds[HardFork.Tangerine]

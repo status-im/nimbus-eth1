@@ -91,7 +91,6 @@ func getGenesis*(ws: WDBaseSpec, param: NetworkParams) =
   # Remove PoW altogether
   param.genesis.difficulty = 0.u256
   param.config.terminalTotalDifficulty = some(0.u256)
-  param.config.clique = CliqueOptions()
   param.genesis.extraData = @[]
 
   # Add some accounts to withdraw to with unconditional SSTOREs

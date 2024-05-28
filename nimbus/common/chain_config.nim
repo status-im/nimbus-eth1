@@ -71,7 +71,6 @@ NetworkParams.useDefaultReaderIn JGenesis
 GenesisAccount.useDefaultReaderIn JGenesis
 derefType(Genesis).useDefaultReaderIn JGenesis
 derefType(ChainConfig).useDefaultReaderIn JGenesis
-CliqueOptions.useDefaultReaderIn JGenesis
 
 # ------------------------------------------------------------------------------
 # Private helper functions
@@ -149,7 +148,7 @@ func decodePrealloc*(data: seq[byte]): GenesisAlloc
     result[tup.address] = tup.account
 
 # borrowed from `lexer.hexCharValue()` :)
-proc fromHex(c: char): int =
+func fromHex(c: char): int =
   case c
   of '0'..'9': ord(c) - ord('0')
   of 'a'..'f': ord(c) - ord('a') + 10
@@ -294,7 +293,7 @@ macro fillArrayOfTimeBasedForkOptionals(conf, tmp: typed): untyped =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc toHardFork*(map: ForkTransitionTable, forkDeterminer: ForkDeterminationInfo): HardFork =
+func toHardFork*(map: ForkTransitionTable, forkDeterminer: ForkDeterminationInfo): HardFork =
   for fork in countdown(HardFork.high, HardFork.low):
     if isGTETransitionThreshold(map, forkDeterminer, fork):
       return fork
@@ -437,7 +436,7 @@ proc parseGenesisAlloc*(data: string, ga: var GenesisAlloc): bool
 
   return true
 
-proc chainConfigForNetwork*(id: NetworkId): ChainConfig =
+func chainConfigForNetwork*(id: NetworkId): ChainConfig =
   # For some public networks, NetworkId and ChainId value are identical
   # but that is not always the case
 
@@ -514,7 +513,7 @@ proc chainConfigForNetwork*(id: NetworkId): ChainConfig =
   else:
     ChainConfig()
 
-proc genesisBlockForNetwork*(id: NetworkId): Genesis
+func genesisBlockForNetwork*(id: NetworkId): Genesis
     {.gcsafe, raises: [ValueError, RlpError].} =
   result = case id
   of MainNet:
@@ -545,21 +544,21 @@ proc genesisBlockForNetwork*(id: NetworkId): Genesis
   else:
     Genesis()
 
-proc networkParams*(id: NetworkId): NetworkParams
+func networkParams*(id: NetworkId): NetworkParams
     {.gcsafe, raises: [ValueError, RlpError].} =
   result.genesis = genesisBlockForNetwork(id)
   result.config  = chainConfigForNetwork(id)
 
-proc `==`*(a, b: ChainId): bool =
+func `==`*(a, b: ChainId): bool =
   a.uint64 == b.uint64
 
-proc `==`*(a, b: Genesis): bool =
+func `==`*(a, b: Genesis): bool =
   if a.isNil and b.isNil: return true
   if a.isNil and not b.isNil: return false
   if not a.isNil and b.isNil: return false
   a[] == b[]
 
-proc `==`*(a, b: ChainConfig): bool =
+func `==`*(a, b: ChainConfig): bool =
   if a.isNil and b.isNil: return true
   if a.isNil and not b.isNil: return false
   if not a.isNil and b.isNil: return false
