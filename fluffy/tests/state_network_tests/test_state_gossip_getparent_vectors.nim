@@ -15,7 +15,7 @@ import
   ../../network/state/[state_content, state_gossip],
   ./state_test_helpers
 
-suite "State Recursive Gossip - Test Vectors":
+suite "State Gossip getParent - Test Vectors":
   test "Check account trie node parent matches expected recursive gossip":
     const file = testVectorDir / "account_trie_node.yaml"
 

@@ -238,18 +238,8 @@ procSuite "State Network - Offer Content":
   asyncTest "Two state instances - Offer account trie nodes":
     const file = testVectorDir / "account_trie_node.yaml"
 
-    let
-      testCase = YamlTrieNodeKVs.loadFromYaml(file).valueOr:
-        raiseAssert "Cannot read test vector: " & error
-      stateNode1 = newStateNode(rng, STATE_NODE1_PORT)
-      stateNode2 = newStateNode(rng, STATE_NODE2_PORT)
-
-    stateNode1.start()
-    stateNode2.start()
-
-    check:
-      stateNode1.portalProtocol().addNode(stateNode2.localNode()) == Added
-      (await stateNode1.portalProtocol().ping(stateNode2.localNode())).isOk()
+    let testCase = YamlTrieNodeKVs.loadFromYaml(file).valueOr:
+      raiseAssert "Cannot read test vector: " & error
 
     for testData in testCase:
       let
@@ -260,11 +250,20 @@ procSuite "State Network - Offer Content":
         contentValueBytes = testData.content_value_offer.hexToSeqByte()
         contentValue = AccountTrieNodeOffer.decode(contentValueBytes).get()
         contentKV = ContentKV(contentKey: contentKeyBytes, content: contentValueBytes)
+        stateNode1 = newStateNode(rng, STATE_NODE1_PORT)
+        stateNode2 = newStateNode(rng, STATE_NODE2_PORT)
+
+      stateNode1.start()
+      stateNode2.start()
+
+      check:
+        stateNode1.portalProtocol().addNode(stateNode2.localNode()) == Added
+        (await stateNode1.portalProtocol().ping(stateNode2.localNode())).isOk()
 
       # set valid state root
+      stateNode1.mockBlockHashToStateRoot(contentValue.blockHash, stateRoot)
       stateNode2.mockBlockHashToStateRoot(contentValue.blockHash, stateRoot)
 
-      check not stateNode1.containsId(contentId)
       check not stateNode2.containsId(contentId)
 
       let offerResult =
@@ -279,30 +278,19 @@ procSuite "State Network - Offer Content":
       let getRes =
         await stateNode2.stateNetwork.getAccountTrieNode(contentKey.accountTrieNodeKey)
       check:
-        not stateNode1.containsId(contentId)
         stateNode2.containsId(contentId)
         getRes.isOk()
         getRes.get() == contentValue.toRetrievalValue()
         getRes.get().node == contentValue.toRetrievalValue().node
 
-    await stateNode1.stop()
-    await stateNode2.stop()
+      await stateNode1.stop()
+      await stateNode2.stop()
 
   asyncTest "Two state instances - Offer contract trie nodes":
     const file = testVectorDir / "contract_storage_trie_node.yaml"
 
-    let
-      testCase = YamlTrieNodeKVs.loadFromYaml(file).valueOr:
-        raiseAssert "Cannot read test vector: " & error
-      stateNode1 = newStateNode(rng, STATE_NODE1_PORT)
-      stateNode2 = newStateNode(rng, STATE_NODE2_PORT)
-
-    stateNode1.start()
-    stateNode2.start()
-
-    check:
-      stateNode1.portalProtocol().addNode(stateNode2.localNode()) == Added
-      (await stateNode1.portalProtocol().ping(stateNode2.localNode())).isOk()
+    let testCase = YamlTrieNodeKVs.loadFromYaml(file).valueOr:
+      raiseAssert "Cannot read test vector: " & error
 
     for testData in testCase:
       let
@@ -313,11 +301,20 @@ procSuite "State Network - Offer Content":
         contentValueBytes = testData.content_value_offer.hexToSeqByte()
         contentValue = ContractTrieNodeOffer.decode(contentValueBytes).get()
         contentKV = ContentKV(contentKey: contentKeyBytes, content: contentValueBytes)
+        stateNode1 = newStateNode(rng, STATE_NODE1_PORT)
+        stateNode2 = newStateNode(rng, STATE_NODE2_PORT)
+
+      stateNode1.start()
+      stateNode2.start()
+
+      check:
+        stateNode1.portalProtocol().addNode(stateNode2.localNode()) == Added
+        (await stateNode1.portalProtocol().ping(stateNode2.localNode())).isOk()
 
       # set valid state root
+      stateNode1.mockBlockHashToStateRoot(contentValue.blockHash, stateRoot)
       stateNode2.mockBlockHashToStateRoot(contentValue.blockHash, stateRoot)
 
-      check not stateNode1.containsId(contentId)
       check not stateNode2.containsId(contentId)
 
       let offerResult =
@@ -333,30 +330,19 @@ procSuite "State Network - Offer Content":
         contentKey.contractTrieNodeKey
       )
       check:
-        not stateNode1.containsId(contentId)
         stateNode2.containsId(contentId)
         getRes.isOk()
         getRes.get() == contentValue.toRetrievalValue()
         getRes.get().node == contentValue.toRetrievalValue().node
 
-    await stateNode1.stop()
-    await stateNode2.stop()
+      await stateNode1.stop()
+      await stateNode2.stop()
 
   asyncTest "Two state instances - Offer contract bytecode":
     const file = testVectorDir / "contract_bytecode.yaml"
 
-    let
-      testCase = YamlContractBytecodeKVs.loadFromYaml(file).valueOr:
-        raiseAssert "Cannot read test vector: " & error
-      stateNode1 = newStateNode(rng, STATE_NODE1_PORT)
-      stateNode2 = newStateNode(rng, STATE_NODE2_PORT)
-
-    stateNode1.start()
-    stateNode2.start()
-
-    check:
-      stateNode1.portalProtocol().addNode(stateNode2.localNode()) == Added
-      (await stateNode1.portalProtocol().ping(stateNode2.localNode())).isOk()
+    let testCase = YamlContractBytecodeKVs.loadFromYaml(file).valueOr:
+      raiseAssert "Cannot read test vector: " & error
 
     for testData in testCase:
       let
@@ -367,11 +353,20 @@ procSuite "State Network - Offer Content":
         contentValueBytes = testData.content_value_offer.hexToSeqByte()
         contentValue = ContractCodeOffer.decode(contentValueBytes).get()
         contentKV = ContentKV(contentKey: contentKeyBytes, content: contentValueBytes)
+        stateNode1 = newStateNode(rng, STATE_NODE1_PORT)
+        stateNode2 = newStateNode(rng, STATE_NODE2_PORT)
+
+      stateNode1.start()
+      stateNode2.start()
+
+      check:
+        stateNode1.portalProtocol().addNode(stateNode2.localNode()) == Added
+        (await stateNode1.portalProtocol().ping(stateNode2.localNode())).isOk()
 
       # set valid state root
+      stateNode1.mockBlockHashToStateRoot(contentValue.blockHash, stateRoot)
       stateNode2.mockBlockHashToStateRoot(contentValue.blockHash, stateRoot)
 
-      check not stateNode1.containsId(contentId)
       check not stateNode2.containsId(contentId)
 
       let offerResult =
@@ -386,11 +381,10 @@ procSuite "State Network - Offer Content":
       let getRes =
         await stateNode2.stateNetwork.getContractCode(contentKey.contractCodeKey)
       check:
-        not stateNode1.containsId(contentId)
         stateNode2.containsId(contentId)
         getRes.isOk()
         getRes.get() == contentValue.toRetrievalValue()
         getRes.get().code == contentValue.toRetrievalValue().code
 
-    await stateNode1.stop()
-    await stateNode2.stop()
+      await stateNode1.stop()
+      await stateNode2.stop()

@@ -172,6 +172,7 @@ proc processContentLoop(n: StateNetwork) {.async.} =
   try:
     while true:
       let (srcNodeId, contentKeys, contentValues) = await n.contentQueue.popFirst()
+
       for i, contentValueBytes in contentValues:
         let
           contentKeyBytes = contentKeys[i]
@@ -208,8 +209,7 @@ proc processContentLoop(n: StateNetwork) {.async.} =
     trace "processContentLoop canceled"
 
 proc start*(n: StateNetwork) =
-  info "Starting Portal execution state network",
-    protocolId = n.portalProtocol.protocolId
+  info "Starting Portal State Network", protocolId = n.portalProtocol.protocolId
   n.portalProtocol.start()
 
   n.processContentLoop = processContentLoop(n)
