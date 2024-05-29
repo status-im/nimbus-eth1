@@ -110,7 +110,15 @@ proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
     # during the next call to `getComittedStorage`
     db.persist()
 
-  defer:
+  let rc = vmState.processTransaction(
+                ctx.tx, sender, ctx.header, fork)
+  if rc.isOk:
+    gasUsed = rc.value
+
+  let miner = ctx.header.coinbase
+  coinbaseStateClearing(vmState, miner, fork)
+
+  block post:
     let obtainedHash = vmState.readOnlyStateDB.rootHash
     check obtainedHash == ctx.expectedHash
     let logEntries = vmState.getAndClearLogEntries()
@@ -119,14 +127,6 @@ proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
     if ctx.debugMode:
       let success = ctx.expectedLogs == actualLogsHash and obtainedHash == ctx.expectedHash
       ctx.dumpDebugData(vmState, gasUsed, success)
-
-  let rc = vmState.processTransaction(
-                ctx.tx, sender, ctx.header, fork)
-  if rc.isOk:
-    gasUsed = rc.value
-
-  let miner = ctx.header.coinbase
-  coinbaseStateClearing(vmState, miner, fork)
 
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus,
                  trace = false, debugMode = false) =
