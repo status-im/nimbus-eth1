@@ -21,27 +21,10 @@
 ##   ..aliases..             -- type names, syntactic sugar (see below)
 ##
 
-include
-  ./protocol/eth/eth_versions
+import
+  ./protocol/eth68 as proto_eth
 
-assert 0 < ethVersions.len
-
-# multi protocol not functional, yet
-when 1 < buildEthVersions.len:
-  {.warning: "No multi eth-protocol yet (using latest version only)".}
-
-when 68 in ethVersions:
-  {.warning: "Protocol eth68 is not fully functional yet".}
-  import ./protocol/eth68 as proto_eth
-  type eth* = eth68
-
-elif 67 in ethVersions:
-  import ./protocol/eth67 as proto_eth
-  type eth* = eth67
-
-elif 66 in ethVersions:
-  import ./protocol/eth66 as proto_eth
-  type eth* = eth66
+type eth* = eth68
 
 # ---------------
 
