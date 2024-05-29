@@ -13,7 +13,6 @@ import
   ./replay/[pp, gunzip],
   ../nimbus/core/[pow, pow/pow_cache],
   eth/common,
-  stew/endians2,
   unittest2
 
 const

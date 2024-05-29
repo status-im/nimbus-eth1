@@ -15,7 +15,7 @@ import
   std/[os, parseutils, strutils, tables],
   results,
   eth/common/eth_types,
-  ../../fluffy/eth_data/era1
+  ../../../fluffy/eth_data/era1
 
 export results, eth_types
 

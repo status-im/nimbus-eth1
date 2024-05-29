@@ -107,6 +107,7 @@ if not defined(windows):
 --define:nimTypeNames
 --styleCheck:usages
 --styleCheck:hint
+--mm:refc
 
 switch("define", "withoutPCRE")
 
