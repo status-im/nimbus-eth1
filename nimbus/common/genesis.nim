@@ -53,7 +53,7 @@ proc initAccountsLedgerRef(
     db: CoreDbRef;
      ): GenesisLedgerRef =
   ## Methods jump table
-  let ac = LedgerCache.init(db, EMPTY_ROOT_HASH)
+  let ac = LedgerRef.init(db, EMPTY_ROOT_HASH)
 
   GenesisLedgerRef(
     addAccount: proc(
@@ -77,7 +77,7 @@ proc initAccountsLedgerRef(
       ac.persist(),
 
     rootHash: proc(): Hash256 =
-      ac.rootHash(),
+      ac.state(),
 
     getTrie: proc(): CoreDbMptRef =
       ac.getMpt())
@@ -88,10 +88,7 @@ proc initAccountsLedgerRef(
 
 proc newStateDB*(
     db: CoreDbRef;
-    ledgerType: LedgerType;
       ): GenesisLedgerRef =
-  ## Currently only `LedgerCache` supported for `ledgerType`.
-  doAssert ledgerType == LedgerCache
   db.initAccountsLedgerRef()
 
 proc getTrie*(sdb: GenesisLedgerRef): CoreDbMptRef =
@@ -155,28 +152,25 @@ proc toGenesisHeader*(
 proc toGenesisHeader*(
     genesis: Genesis;
     fork: HardFork;
-    db = CoreDbRef(nil);
-    ledgerType = LedgerCache;
-      ): BlockHeader
+    db = CoreDbRef(nil)): BlockHeader
       {.gcsafe, raises: [CatchableError].} =
   ## Generate the genesis block header from the `genesis` and `config`
   ## argument value.
   let
     db  = if db.isNil: AristoDbMemory.newCoreDbRef() else: db
-    sdb = db.newStateDB(ledgerType)
+    sdb = db.newStateDB()
   toGenesisHeader(genesis, sdb, fork)
 
 proc toGenesisHeader*(
     params: NetworkParams;
-    db = CoreDbRef(nil);
-    ledgerType = LedgerCache;
+    db = CoreDbRef(nil)
       ): BlockHeader
       {.raises: [CatchableError].} =
   ## Generate the genesis block header from the `genesis` and `config`
   ## argument value.
   let map  = toForkTransitionTable(params.config)
   let fork = map.toHardFork(forkDeterminationInfo(0.toBlockNumber, params.genesis.timestamp))
-  toGenesisHeader(params.genesis, fork, db, ledgerType)
+  toGenesisHeader(params.genesis, fork, db)
 
 # ------------------------------------------------------------------------------
 # End

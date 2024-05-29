@@ -13,7 +13,7 @@
 import
   eth/common,
   ../core_db,
-  ./backend/[accounts_ledger, accounts_ledger_desc],
+  ./accounts_ledger,
   ./base/api_tracking,
   ./base
 
@@ -32,45 +32,29 @@ when LedgerEnableApiTracking:
 
 iterator accounts*(ldg: LedgerRef): Account =
   ldg.beginTrackApi LdgAccountsIt
-  case ldg.ldgType:
-  of LedgerCache:
-    for w in ldg.AccountsLedgerRef.accountsIt():
-      yield w
-  else:
-    raiseAssert: "Unsupported ledger type: " & $ldg.ldgType
+  for w in ldg.ac.accounts():
+    yield w
   ldg.ifTrackApi: debug apiTxt, api, elapsed
 
 
 iterator addresses*(ldg: LedgerRef): EthAddress =
   ldg.beginTrackApi LdgAdressesIt
-  case ldg.ldgType:
-  of LedgerCache:
-    for w in ldg.AccountsLedgerRef.addressesIt():
-      yield w
-  else:
-    raiseAssert: "Unsupported ledger type: " & $ldg.ldgType
+  for w in ldg.ac.addresses():
+    yield w
   ldg.ifTrackApi: debug apiTxt, api, elapsed
 
 
 iterator cachedStorage*(ldg: LedgerRef, eAddr: EthAddress): (UInt256,UInt256) =
   ldg.beginTrackApi LdgCachedStorageIt
-  case ldg.ldgType:
-  of LedgerCache:
-    for w in ldg.AccountsLedgerRef.cachedStorageIt(eAddr):
-      yield w
-  else:
-    raiseAssert: "Unsupported ledger type: " & $ldg.ldgType
+  for w in ldg.ac.cachedStorage(eAddr):
+    yield w
   ldg.ifTrackApi: debug apiTxt, api, elapsed, eAddr
 
 
 iterator pairs*(ldg: LedgerRef): (EthAddress,Account) =
   ldg.beginTrackApi LdgPairsIt
-  case ldg.ldgType:
-  of LedgerCache:
-    for w in ldg.AccountsLedgerRef.pairsIt():
-      yield w
-  else:
-    raiseAssert: "Unsupported ledger type: " & $ldg.ldgType
+  for w in ldg.ac.pairs():
+    yield w
   ldg.ifTrackApi: debug apiTxt, api, elapsed
 
 
@@ -79,12 +63,8 @@ iterator storage*(
     eAddr: EthAddress;
       ): (UInt256,UInt256) =
   ldg.beginTrackApi LdgStorageIt
-  case ldg.ldgType:
-  of LedgerCache:
-    for w in ldg.AccountsLedgerRef.storageIt(eAddr):
-      yield w
-  else:
-    raiseAssert: "Unsupported ledger type: " & $ldg.ldgType
+  for w in ldg.ac.storage(eAddr):
+    yield w
   ldg.ifTrackApi: debug apiTxt, api, elapsed, eAddr
 
 # ------------------------------------------------------------------------------

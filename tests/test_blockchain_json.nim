@@ -373,7 +373,7 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
 
     let
       memDB     = newCoreDbRef DefaultDbMemory
-      stateDB   = LedgerCache.init(memDB, emptyRlpHash)
+      stateDB   = LedgerRef.init(memDB, emptyRlpHash)
       config    = getChainConfig(ctx.network)
       com       = CommonRef.new(memDB, config)
 
@@ -403,7 +403,7 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
       elif lastBlockHash == ctx.lastBlockHash:
         # multiple chain, we are using the last valid canonical
         # state root to test against 'postState'
-        let stateDB = LedgerCache.init(memDB, header.stateRoot)
+        let stateDB = LedgerRef.init(memDB, header.stateRoot)
         verifyStateDB(fixture["postState"], ledger.ReadOnlyStateDB(stateDB))
 
       success = lastBlockHash == ctx.lastBlockHash

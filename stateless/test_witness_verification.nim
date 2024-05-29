@@ -52,7 +52,7 @@ proc buildWitness(
 
   let
     coreDb = newCoreDbRef(DefaultDbMemory)
-    accountsCache = LedgerCache.init(coreDb, emptyRlpHash)
+    accountsCache = LedgerRef.init(coreDb, emptyRlpHash)
     (rootHash, multiKeys) = setupStateDB(genAccounts, accountsCache)
 
   var wb = initWitnessBuilder(coreDb, rootHash, {wfNoFlag})

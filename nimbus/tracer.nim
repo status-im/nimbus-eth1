@@ -169,7 +169,7 @@ proc traceTransaction*(com: CommonRef, header: BlockHeader,
   # internal transactions:
   let
     saveCtxBefore = setCtx beforeCtx
-    stateBefore = AccountsLedgerRef.init(capture.recorder, beforeRoot)
+    stateBefore = LedgerRef.init(capture.recorder, beforeRoot)
   defer:
     saveCtxBefore.setCtx().ctx.forget()
 
@@ -208,7 +208,7 @@ proc dumpBlockState*(com: CommonRef, header: BlockHeader, body: BlockBody, dumpS
   var
     before = newJArray()
     after = newJArray()
-    stateBefore = AccountsLedgerRef.init(capture.recorder, parent.stateRoot)
+    stateBefore = LedgerRef.init(capture.recorder, parent.stateRoot)
 
   for idx, tx in body.transactions:
     let sender = tx.getSender

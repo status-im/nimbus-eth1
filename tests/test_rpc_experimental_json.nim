@@ -64,7 +64,7 @@ proc checkAndValidateWitnessAgainstProofs(
     proofs: seq[ProofResponse]) =
 
   let
-    stateDB = LedgerCache.init(db, parentStateRoot)
+    stateDB = LedgerRef.init(db, parentStateRoot)
     verifyWitnessResult = verifyWitness(expectedStateRoot, witness, {wfNoFlag})
 
   check verifyWitnessResult.isOk()
