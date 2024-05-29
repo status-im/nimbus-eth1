@@ -36,7 +36,7 @@ const
     [(2,0,high int),(1,1,high int),(1,1,high int),(1,1,high int)],
   ]
 
-  LyoSamples* = samples.mapIt((it, (3 * it.capacity.minCovered) div 2))
+  LyoSamples* = samples.mapIt((it, (3 * it.volumeSize.minCovered) div 2))
 
 # ------------------------------------------------------------------------------
 # Private helpers
