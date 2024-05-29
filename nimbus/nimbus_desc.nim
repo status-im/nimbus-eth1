@@ -16,7 +16,6 @@ import
   ./core/tx_pool,
   ./sync/peers,
   ./sync/beacon,
-  ./sync/legacy,
   # ./sync/snap, # -- todo
   ./sync/full,
   ./beacon/beacon_engine,
@@ -32,7 +31,6 @@ export
   tx_pool,
   peers,
   beacon,
-  legacy,
   #snap,
   full,
   beacon_engine,
@@ -53,7 +51,6 @@ type
     txPool*: TxPoolRef
     networkLoop*: Future[void]
     peerManager*: PeerManagerRef
-    legaSyncRef*: LegacySyncRef
     # snapSyncRef*: SnapSyncRef # -- todo
     fullSyncRef*: FullSyncRef
     beaconSyncRef*: BeaconSyncRef

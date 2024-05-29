@@ -164,8 +164,9 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
           nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers,
         )
       else:
-        nimbus.legaSyncRef = LegacySyncRef.new(
-          nimbus.ethNode, nimbus.chainRef)
+        nimbus.fullSyncRef = FullSyncRef.init(
+          nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers,
+          tickerOK, exCtrlFile)
 
   # Connect directly to the static nodes
   let staticPeers = conf.getStaticPeers()
@@ -271,11 +272,7 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
         if com.forkGTE(MergeFork):
           nimbus.beaconSyncRef.start
         else:
-          nimbus.legaSyncRef.start
-          nimbus.ethNode.setEthHandlerNewBlocksAndHashes(
-            legacy.newBlockHandler,
-            legacy.newBlockHashesHandler,
-            cast[pointer](nimbus.legaSyncRef))
+          nimbus.fullSyncRef.start
       of SyncMode.Full:
         nimbus.fullSyncRef.start
       #of SyncMode.Snap:
