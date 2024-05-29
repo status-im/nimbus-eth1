@@ -15,6 +15,7 @@ import
   eth/p2p/discoveryv5/routing_table,
   ../../network/wire/[portal_protocol, portal_stream, portal_protocol_config],
   ../../nimbus/common/chain_config,
+  ../../network/history/[history_content, history_network],
   ../../network/state/[state_content, state_utils, state_network],
   ../../eth_data/yaml_utils,
   ../../database/content_db,
@@ -146,10 +147,11 @@ proc newStateNode*(
   let
     node = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(port))
     db = ContentDB.new("", uint32.high, inMemory = true)
-    streamManager = StreamManager.new(node)
-    stateNetwork = StateNetwork.new(node, db, streamManager)
+    sm = StreamManager.new(node)
+    hn = HistoryNetwork.new(node, db, sm, FinishedAccumulator())
+    sn = StateNetwork.new(node, db, sm, historyNetwork = Opt.some(hn))
 
-  return StateNode(discoveryProtocol: node, stateNetwork: stateNetwork)
+  return StateNode(discoveryProtocol: node, stateNetwork: sn)
 
 proc portalProtocol*(sn: StateNode): PortalProtocol =
   sn.stateNetwork.portalProtocol
@@ -166,3 +168,21 @@ proc stop*(sn: StateNode) {.async.} =
 
 proc containsId*(sn: StateNode, contentId: ContentId): bool =
   return sn.stateNetwork.contentDB.get(contentId).isSome()
+
+proc mockBlockHashToStateRoot*(
+    sn: StateNode, blockHash: BlockHash, stateRoot: KeccakHash
+) =
+  let
+    blockHeader = BlockHeader(stateRoot: stateRoot)
+    headerRlp = rlp.encode(blockHeader)
+    blockHeaderWithProof = BlockHeaderWithProof(
+      header: ByteList.init(headerRlp), proof: BlockHeaderProof.init()
+    )
+    contentKeyBytes = history_content.ContentKey
+      .init(history_content.ContentType.blockHeader, blockHash)
+      .encode()
+    contentId = history_content.toContentId(contentKeyBytes)
+
+  sn.portalProtocol().storeContent(
+    contentKeyBytes, contentId, SSZ.encode(blockHeaderWithProof)
+  )

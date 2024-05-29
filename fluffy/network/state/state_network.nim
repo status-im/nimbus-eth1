@@ -135,7 +135,7 @@ proc getStateRootByBlockHash(
 
   Opt.some(header.stateRoot)
 
-proc processOffer(
+proc processOffer*(
     n: StateNetwork,
     maybeSrcNodeId: Opt[NodeId],
     contentKeyBytes: ByteList,
