@@ -190,9 +190,12 @@ proc registerAccount*(
     db: AristoDbRef;                   # Database, top layer
     stoRoot: VertexID;                 # Storage root ID
     accPath: PathID;                   # Needed for accounts payload
-       ): Result[void,AristoError] =
+       ): Result[VidVtxPair,AristoError] =
   ## Verify that the `stoRoot` argument is properly referred to by the
   ## account data (if any) implied to by the `accPath` argument.
+  ##
+  ## The function will return an account leaf node if there was any, or an empty
+  ## `VidVtxPair()` object.
   ##
   # Verify storage root and account path
   if not stoRoot.isValid:
@@ -208,12 +211,26 @@ proc registerAccount*(
   if wp.vtx.vType != Leaf:
     return err(UtilsAccPathWithoutLeaf)
   if wp.vtx.lData.pType != AccountData:
-    return ok() # nothing to do
+    return ok(VidVtxPair()) # nothing to do
 
-  # Need to flag for re-hash
+  # Check whether the `stoRoot` exists on the databse
+  let stoVtx = block:
+    let rc = db.getVtxRc stoRoot
+    if rc.isOk:
+      rc.value
+    elif rc.error == GetVtxNotFound:
+      VertexRef(nil)
+    else:
+      return err(rc.error)
+
+  # Verify `stoVtx` against storage root
   let stoID = wp.vtx.lData.account.storageID
-  if stoID.isValid and stoID != stoRoot:
-    return err(UtilsAccWrongStorageRoot)
+  if stoVtx.isValid:
+    if stoID != stoRoot:
+      return err(UtilsAccWrongStorageRoot)
+  else:
+    if stoID.isValid:
+      return err(UtilsAccWrongStorageRoot)
 
   # Clear Merkle keys so that `hasify()` can calculate the re-hash forest/tree
   for w in hike.legs.mapIt(it.wp.vid):
@@ -223,7 +240,7 @@ proc registerAccount*(
   db.top.final.dirty.incl hike.root
   db.top.final.dirty.incl wp.vid
 
-  ok()
+  ok(wp)
 
 # ------------------------------------------------------------------------------
 # End

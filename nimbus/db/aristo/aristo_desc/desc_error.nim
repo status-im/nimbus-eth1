@@ -83,14 +83,17 @@ type
     PathExpectedLeaf
 
     # Merge leaf `merge()`
-    MergeBranchLinkLeafGarbled
-    MergeBranchLinkVtxPfxTooShort
+    MergeAssemblyFailed # Ooops, internal error
     MergeBranchGarbledNibble
     MergeBranchGarbledTail
+    MergeBranchLinkLeafGarbled
     MergeBranchLinkLockedKey
     MergeBranchLinkProofModeLock
+    MergeBranchLinkVtxPfxTooShort
     MergeBranchProofModeLock
     MergeBranchRootExpected
+    MergeLeafCantChangePayloadType
+    MergeLeafCantChangeStorageID
     MergeLeafGarbledHike
     MergeLeafPathCachedAlready
     MergeLeafPathOnBackendAlready
@@ -98,7 +101,6 @@ type
     MergeNonBranchProofModeLock
     MergeRootBranchLinkBusy
     MergeRootMissing
-    MergeAssemblyFailed # Ooops, internal error
 
     MergeHashKeyInvalid
     MergeHashKeyDiffersFromCached
@@ -140,6 +142,8 @@ type
     CheckRlxVtxKeyMissing
     CheckRlxVtxKeyMismatch
 
+    CheckAnyVidDeadStorageRoot
+    CheckAnyVidSharedStorageRoot
     CheckAnyVtxEmptyKeyMissing
     CheckAnyVtxEmptyKeyExpected
     CheckAnyVtxEmptyKeyMismatch
@@ -202,6 +206,7 @@ type
     DelLeafUnexpected
     DelPathNotFound
     DelPathTagError
+    DelSubTreeAccRoot
     DelSubTreeTooBig
     DelSubTreeVoidRoot
     DelVidStaleVtx
