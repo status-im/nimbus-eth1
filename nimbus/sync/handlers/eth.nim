@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/[tables, times, hashes, sets],
+  std/[tables, times, hashes, sets, sequtils],
   chronicles, chronos,
   stew/endians2,
   eth/p2p,
@@ -20,12 +20,6 @@ import
   ../protocol/eth/eth_types,
   ../protocol/trace_config, # gossip noise control
   ../../core/[chain, tx_pool, tx_pool/tx_item]
-
-# There is only one eth protocol version possible at compile time. This
-# might change in future.
-when ethVersion == 68:
-  import
-    std/sequtils
 
 logScope:
   topics = "eth-wire"
@@ -552,57 +546,20 @@ method handleAnnouncedTxs*(ctx: EthWireRef,
   except CatchableError as exc:
     return err(exc.msg)
 
-when ethVersion == 68:
-  method handleAnnouncedTxsHashes*(
-        ctx: EthWireRef;
-        peer: Peer;
-        txTypes: Blob;
-        txSizes: openArray[int];
-        txHashes: openArray[Hash256];
-          ): Result[void, string] =
-    ## `Eth68` method
-    if ctx.enableTxPool != Enabled:
-      when trMissingOrDisabledGossipOk:
-        notEnabled("handleAnnouncedTxsHashes")
-      return ok()
-
-    notImplemented "handleAnnouncedTxsHashes()/eth68"
-
-else:
-  method handleAnnouncedTxsHashes*(ctx: EthWireRef,
-                                   peer: Peer,
-                                   txHashes: openArray[Hash256]):
-                                     Result[void, string] =
-    ## Pre-eth68 method
-    if ctx.enableTxPool != Enabled:
-      when trMissingOrDisabledGossipOk:
-        notEnabled("handleAnnouncedTxsHashes")
-      return ok()
-
-    if txHashes.len == 0:
-      return ok()
-
-    if ctx.lastCleanup - getTime() > POOLED_STORAGE_TIME_LIMIT:
-      ctx.cleanupKnownByPeer()
-
-    ctx.addToKnownByPeer(txHashes, peer)
-    var reqHashes = newSeqOfCap[Hash256](txHashes.len)
-    for txHash in txHashes:
-      if txHash in ctx.pending or ctx.inPool(txHash):
-        continue
-      reqHashes.add txHash
-
-    if reqHashes.len == 0:
-      return ok()
-
-    debug "handleAnnouncedTxsHashes: received new tx hashes",
-      number = reqHashes.len
-
-    for txHash in reqHashes:
-      ctx.pending.incl txHash
-
-    asyncSpawn ctx.fetchTransactions(reqHashes, peer)
+method handleAnnouncedTxsHashes*(
+      ctx: EthWireRef;
+      peer: Peer;
+      txTypes: Blob;
+      txSizes: openArray[int];
+      txHashes: openArray[Hash256];
+        ): Result[void, string] =
+  ## `Eth68` method
+  if ctx.enableTxPool != Enabled:
+    when trMissingOrDisabledGossipOk:
+      notEnabled("handleAnnouncedTxsHashes")
     return ok()
+
+  notImplemented "handleAnnouncedTxsHashes()/eth68"
 
 method handleNewBlock*(ctx: EthWireRef,
                        peer: Peer,
@@ -656,25 +613,6 @@ method handleNewBlockHashes*(ctx: EthWireRef,
     return ok()
   except CatchableError as exc:
     return err(exc.msg)
-
-# There is only one eth protocol version possible at compile time. This
-# might change in future.
-when ethVersion == 66:
-  method getStorageNodes*(ctx: EthWireRef,
-                          hashes: openArray[Hash256]):
-                            Result[seq[Blob], string] {.gcsafe.} =
-    let db = ctx.db.kvt
-    var list: seq[Blob]
-    for hash in hashes:
-      list.add db.get(hash.data)
-    ok(list)
-
-  method handleNodeData*(ctx: EthWireRef,
-                         peer: Peer,
-                         data: openArray[Blob]):
-                           Result[void, string] {.gcsafe.} =
-    notImplemented("handleNodeData")
-    ok()
 
 # ------------------------------------------------------------------------------
 # End
