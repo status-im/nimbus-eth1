@@ -1,4 +1,4 @@
-# Copyright (c) 2018-2022 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -6,7 +6,28 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import strutils
+import
+  std/[strutils, os, sequtils],
+  stew/byteutils
+
+const
+  sourcePath  = currentSourcePath.rsplit({DirSep, AltSep}, 1)[0]
+  nimbusRevision {.strdefine.} = "00000000"
+
+static:
+  doAssert(nimbusRevision.len == 8, "nimbusRevision must consist of 8 characters")
+  doAssert(nimbusRevision.allIt(it in HexDigits), "nimbusRevision should contains only hex chars")
+
+proc gitFolderExists(path: string): bool {.compileTime.} =
+  # walk up parent folder to find `.git` folder
+  var currPath = sourcePath
+  while true:
+    if dirExists(currPath & "/.git"):
+      return true
+    let parts = splitPath(currPath)
+    if parts.tail.len == 0: break
+    currPath = parts.head
+  false
 
 const
   NimbusName* = "nimbus-eth1"
@@ -24,7 +45,18 @@ const
   NimbusVersion* = $NimbusMajor & "." & $NimbusMinor & "." & $NimbusPatch
   ## is the version of Nimbus as a string.
 
-  GitRevision* = strip(staticExec("git rev-parse --short HEAD"))[0..5]
+  # strip: remove spaces
+  # --short=8: ensure we get 8 chars of commit hash
+  # -C sourcePath: get the correct git hash no matter where the current dir is.
+  GitRevision* = if gitFolderExists(sourcePath):
+                   # only using git if the parent dir is a git repo.
+                   strip(staticExec("git -C " & strutils.escape(sourcePath) &
+                     " rev-parse --short=8 HEAD"))
+                 else:
+                   # otherwise we use revision number given by build system.
+                   # e.g. user download from release tarball, or Github zip download.
+                   nimbusRevision
 
-  NimVersion* = staticExec("nim --version | grep Version")
+  GitRevisionBytes* = hexToByteArray[4](GitRevision)
 
+  NimVersion* = "Nim version " & $NimMajor & "." & $NimMinor & "." & $NimPatch

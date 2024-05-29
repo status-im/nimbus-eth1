@@ -267,7 +267,7 @@ jobs:
           mingw32-make ${DEFAULT_MAKE_FLAGS}
           build/nimbus.exe --help
           # give us more space
-          find . -type d -name ".git" -exec rm -rf {} +
+          # find . -type d -name ".git" -exec rm -rf {} +
           find . -type d -name "nimcache" -exec rm -rf {} +
           mingw32-make ${DEFAULT_MAKE_FLAGS} test
           if [[ '${{ matrix.target.cpu }}' == 'amd64' ]]; then
