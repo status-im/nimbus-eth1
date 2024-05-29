@@ -242,7 +242,7 @@ func fifoDel(
         # Delete all available
         return (@[(QueueID(1), fifo[1]), (fifo[0], wrap)], ZeroQidPair)
 
-func capacity(
+func volumeSize(
     ctx: openArray[tuple[size, width: int]];       # Schedule layout
       ): tuple[maxQueue: int, minCovered: int, maxCovered: int] =
   ## Number of maximally stored and covered queued entries for the argument
@@ -262,20 +262,20 @@ func capacity(
 # Public functions
 # ------------------------------------------------------------------------------
 
-func capacity*(
+func volumeSize*(
     ctx: openArray[tuple[size, width, wrap: int]]; # Schedule layout
       ): tuple[maxQueue: int, minCovered: int, maxCovered: int] =
-  ## Variant of `capacity()`.
-  ctx.toSeq.mapIt((it[0],it[1])).capacity
+  ## Variant of `volumeSize()`.
+  ctx.toSeq.mapIt((it[0],it[1])).volumeSize
 
-func capacity*(
+func volumeSize*(
     journal: QidSchedRef;                          # Cascaded fifos descriptor
       ): tuple[maxQueue: int, minCovered: int, maxCovered: int] =
   ## Number of maximally stored and covered queued entries for the layout of
   ## argument `journal`. The resulting value of `maxQueue` entry is the maximal
   ## number of database slots needed, the `minCovered` and `maxCovered` entry
   ## indicate the rancge of the backlog foa a fully populated database.
-  journal.ctx.q.toSeq.mapIt((it[0].int,it[1].int)).capacity()
+  journal.ctx.q.toSeq.mapIt((it[0].int,it[1].int)).volumeSize()
 
 
 func addItem*(
