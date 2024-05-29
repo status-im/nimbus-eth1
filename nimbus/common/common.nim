@@ -94,9 +94,6 @@ type
     pos: CasperRef
       ## Proof Of Stake descriptor
 
-    ldgType: LedgerType
-      ## Optional suggestion for the ledger cache to be used as state DB
-
     pruneHistory: bool
       ## Must not not set for a full node, might go away some time
 
@@ -140,7 +137,6 @@ proc init(com         : CommonRef,
           networkId   : NetworkId,
           config      : ChainConfig,
           genesis     : Genesis,
-          ldgType     : LedgerType,
           pruneHistory: bool,
             ) {.gcsafe, raises: [CatchableError].} =
 
@@ -151,7 +147,6 @@ proc init(com         : CommonRef,
   com.forkTransitionTable = config.toForkTransitionTable()
   com.networkId   = networkId
   com.syncProgress= SyncProgress()
-  com.ldgType     = (if ldgType == LedgerType(0): LedgerCache else: ldgType)
   com.pruneHistory= pruneHistory
 
   # Always initialise the PoW epoch cache even though it migh no be used
@@ -177,7 +172,7 @@ proc init(com         : CommonRef,
     # Must not overwrite the global state on the single state DB
     if not db.getBlockHeader(0.toBlockNumber, com.genesisHeader):
       com.genesisHeader = toGenesisHeader(genesis,
-        com.currentFork, com.db, com.ldgType)
+        com.currentFork, com.db)
 
     com.setForkId(com.genesisHeader)
     com.pos.timestamp = genesis.timestamp
@@ -218,7 +213,6 @@ proc new*(
     db: CoreDbRef;
     networkId: NetworkId = MainNet;
     params = networkParams(MainNet);
-    ldgType = LedgerType(0);
     pruneHistory = false;
       ): CommonRef
       {.gcsafe, raises: [CatchableError].} =
@@ -231,7 +225,6 @@ proc new*(
     networkId,
     params.config,
     params.genesis,
-    ldgType,
     pruneHistory)
 
 proc new*(
@@ -239,7 +232,6 @@ proc new*(
     db: CoreDbRef;
     config: ChainConfig;
     networkId: NetworkId = MainNet;
-    ldgType = LedgerType(0);
     pruneHistory = false;
       ): CommonRef
       {.gcsafe, raises: [CatchableError].} =
@@ -252,7 +244,6 @@ proc new*(
     networkId,
     config,
     nil,
-    ldgType,
     pruneHistory)
 
 proc clone*(com: CommonRef, db: CoreDbRef): CommonRef =
@@ -271,7 +262,6 @@ proc clone*(com: CommonRef, db: CoreDbRef): CommonRef =
     consensusType: com.consensusType,
     pow          : com.pow,
     pos          : com.pos,
-    ldgType      : com.ldgType,
     pruneHistory : com.pruneHistory)
 
 proc clone*(com: CommonRef): CommonRef =
@@ -481,9 +471,6 @@ func syncHighest*(com: CommonRef): BlockNumber =
 
 func syncReqRelaxV2*(com: CommonRef): bool =
   com.syncReqRelaxV2
-
-func ledgerType*(com: CommonRef): LedgerType =
-  com.ldgType
 
 # ------------------------------------------------------------------------------
 # Setters

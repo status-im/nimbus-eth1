@@ -19,9 +19,6 @@ import
   ../replay/[pp, undump_blocks, undump_blocks_era1, xcheck],
   ./test_helpers
 
-type
-  StopMoaningAboutLedger {.used.} = LedgerType
-
 when CoreDbEnableApiProfiling:
   import
     std/sequtils,

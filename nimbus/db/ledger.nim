@@ -18,15 +18,13 @@
 import
   eth/common,
   ./core_db,
-  ./ledger/backend/[accounts_ledger, accounts_ledger_desc],
-  ./ledger/[base_iterators, distinct_ledgers]
+  ./ledger/[base_iterators, distinct_ledgers, accounts_ledger]
 
 import
   ./ledger/base except LedgerApiTxt, beginTrackApi, bless, ifTrackApi
 
 export
   AccountsLedgerRef,
-  LedgerType,
   base,
   base_iterators,
   distinct_ledgers,
@@ -36,17 +34,8 @@ export
 # Public constructor
 # ------------------------------------------------------------------------------
 
-proc init*(
-    ldgType: LedgerType;
-    db: CoreDbRef;
-    root: Hash256;
-      ): LedgerRef =
-  case ldgType:
-  of LedgerCache:
-    AccountsLedgerRef.init(db, root)
-
-  else:
-    raiseAssert: "Missing ledger type label"
+proc init*(_: type LedgerRef, db: CoreDbRef; root: Hash256): LedgerRef =
+  LedgerRef(ac: AccountsLedgerRef.init(db, root)).bless(db)
 
 # ------------------------------------------------------------------------------
 # End

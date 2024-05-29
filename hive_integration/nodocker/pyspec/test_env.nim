@@ -53,7 +53,7 @@ proc setupELClient*(t: TestEnv, conf: ChainConfig, node: JsonNode) =
     )
   t.chainRef = newChain(t.com, extraValidation = true)
   let
-    stateDB = LedgerCache.init(memDB, emptyRlpHash)
+    stateDB = LedgerRef.init(memDB, emptyRlpHash)
     genesisHeader = node.genesisHeader
 
   setupStateDB(node["pre"], stateDB)

@@ -88,7 +88,7 @@ proc setupStateDB(tester: var Tester, wantedState: JsonNode, stateDB: LedgerRef)
 proc testBlockWitness(node: JsonNode, rootHash: Hash256, testStatusIMPL: var TestStatus) =
   var
     tester = Tester(memDB: newCoreDbRef(DefaultDbMemory))
-    ac = LedgerCache.init(tester.memDB, emptyRlpHash)
+    ac = LedgerRef.init(tester.memDB, emptyRlpHash)
 
   let root = tester.setupStateDB(node, ac)
   if rootHash != emptyRlpHash:

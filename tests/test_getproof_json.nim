@@ -135,7 +135,7 @@ proc getProofJsonMain*() =
         let
           accounts = getGenesisAlloc("tests" / "customgenesis" / file)
           coreDb = newCoreDbRef(DefaultDbMemory)
-          accountsCache = LedgerCache.init(coreDb, emptyRlpHash)
+          accountsCache = LedgerRef.init(coreDb, emptyRlpHash)
           stateRootHash = setupStateDB(accounts, accountsCache)
           accountDb = newAccountStateDB(coreDb, stateRootHash)
           readOnlyDb = ReadOnlyStateDB(accountDb)
@@ -148,7 +148,7 @@ proc getProofJsonMain*() =
         let
           accounts = getGenesisAlloc("tests" / "customgenesis" / file)
           coreDb = newCoreDbRef(DefaultDbMemory)
-          accountsCache = LedgerCache.init(coreDb, emptyRlpHash)
+          accountsCache = LedgerRef.init(coreDb, emptyRlpHash)
           stateRootHash = setupStateDB(accounts, accountsCache)
           accountDb = newAccountStateDB(coreDb, stateRootHash)
           readOnlyDb = ReadOnlyStateDB(accountDb)

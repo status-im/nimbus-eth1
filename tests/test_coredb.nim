@@ -17,7 +17,6 @@ import
   results,
   unittest2,
   ../nimbus/db/core_db/persistent,
-  ../nimbus/db/ledger,
   ../nimbus/core/chain,
   ./replay/pp,
   ./test_coredb/[coredb_test_xx, test_chainsync, test_helpers]
@@ -34,7 +33,6 @@ const
   sampleDirRefFile = "coredb_test_xx.nim"
 
   dbTypeDefault = AristoDbMemory
-  ldgTypeDefault = LedgerCache
 
 let
   # Standard test sample
@@ -152,9 +150,7 @@ proc setErrorLevel {.used.} =
 proc initRunnerDB(
     path: string;
     specs: CaptureSpecs;
-    dbType: CoreDbType;
-    ldgType: LedgerType;
-      ): CommonRef =
+    dbType: CoreDbType): CommonRef =
   let coreDB =
     # Resolve for static `dbType`
     case dbType:
@@ -181,8 +177,7 @@ proc initRunnerDB(
   result = CommonRef.new(
     db = coreDB,
     networkId = networkId,
-    params = params,
-    ldgType = ldgType)
+    params = params)
 
   result.initializeEmptyDb
 
@@ -199,7 +194,6 @@ proc chainSyncRunner(
     noisy = true;
     capture = memorySampleDefault;
     dbType = CoreDbType(0);
-    ldgType = ldgTypeDefault;
     profilingOk = false;
     finalDiskCleanUpOk = true;
     enaLoggingOk = false;
@@ -231,11 +225,11 @@ proc chainSyncRunner(
   defer:
     if persistent: baseDir.flushDbDir
 
-  suite &"CoreDB and LedgerRef API on {fileInfo}, {dbType}, {ldgType}":
+  suite &"CoreDB and LedgerRef API on {fileInfo}, {dbType}":
 
-    test &"Ledger API {ldgType}, {numBlocksInfo} blocks":
+    test &"Ledger API {numBlocksInfo} blocks":
       let
-        com = initRunnerDB(dbDir, capture, dbType, ldgType)
+        com = initRunnerDB(dbDir, capture, dbType)
       defer:
         com.db.finish(flush = finalDiskCleanUpOk)
         if profilingOk: noisy.test_chainSyncProfilingPrint numBlocks
@@ -254,7 +248,6 @@ proc persistentSyncPreLoadAndResumeRunner(
     noisy = true;
     capture = persistentSampleDefault;
     dbType = CoreDbType(0);
-    ldgType = ldgTypeDefault;
     profilingOk = false;
     finalDiskCleanUpOk = true;
     enaLoggingOk = false;
@@ -290,7 +283,7 @@ proc persistentSyncPreLoadAndResumeRunner(
 
     test "Populate db by initial sample parts":
       let
-        com = initRunnerDB(dbDir, capture, dbType, ldgType)
+        com = initRunnerDB(dbDir, capture, dbType)
       defer:
         com.db.finish(flush = finalDiskCleanUpOk)
         if profilingOk: noisy.test_chainSyncProfilingPrint firstPart
@@ -305,7 +298,7 @@ proc persistentSyncPreLoadAndResumeRunner(
 
     test &"Continue with rest of sample":
       let
-        com = initRunnerDB(dbDir, capture, dbType, ldgType)
+        com = initRunnerDB(dbDir, capture, dbType)
       defer:
         com.db.finish(flush = finalDiskCleanUpOk)
         if profilingOk: noisy.test_chainSyncProfilingPrint secndPart
