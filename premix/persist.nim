@@ -82,7 +82,6 @@ proc main() {.used.} =
   var retryCount = 0
 
   while true:
-
     var thisBlock: Block
     try:
       thisBlock = requestBlock(blockNumber, { DownloadAndValidate })
@@ -104,8 +103,9 @@ proc main() {.used.} =
 
     if numBlocks == numBlocksToCommit:
       persistToDb(com.db):
-        if chain.persistBlocks(headers, bodies).isErrOr:
-          raise newException(ValidationError, "Error when validating blocks: " & error)
+        let res = chain.persistBlocks(headers, bodies)
+        res.isOkOr:
+          raise newException(ValidationError, "Error when validating blocks: " & res.error)
       numBlocks = 0
       headers.setLen(0)
       bodies.setLen(0)
@@ -116,8 +116,9 @@ proc main() {.used.} =
 
   if numBlocks > 0:
     persistToDb(com.db):
-      if chain.persistBlocks(headers, bodies).isErrOr:
-        raise newException(ValidationError, "Error when validating blocks: " & error)
+      let res = chain.persistBlocks(headers, bodies)
+      res.isOkOr:
+        raise newException(ValidationError, "Error when validating blocks: " & res.error)
 
 when isMainModule:
   var message: string
