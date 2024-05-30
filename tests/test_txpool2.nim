@@ -12,9 +12,8 @@ import
   std/[tables,  os],
   eth/[keys],
   stew/[byteutils, results], unittest2,
-  ../nimbus/db/state_db,
+  ../nimbus/db/ledger,
   ../nimbus/core/chain,
-  ../nimbus/core/clique/[clique_sealer, clique_desc],
   ../nimbus/[config, transaction, constants],
   ../nimbus/core/tx_pool,
   ../nimbus/core/casper,
@@ -59,7 +58,7 @@ proc privKey(keyHex: string): PrivateKey =
 
   kRes.get()
 
-proc makeTx*(t: var TestEnv, recipient: EthAddress, amount: UInt256, payload: openArray[byte] = []): Transaction =
+proc makeTx(t: var TestEnv, recipient: EthAddress, amount: UInt256, payload: openArray[byte] = []): Transaction =
   const
     gasLimit = 75000.GasInt
     gasPrice = 30.gwei
@@ -86,7 +85,6 @@ proc signTxWithNonce(t: TestEnv, tx: Transaction, nonce: AccountNonce): Transact
 proc initEnv(envFork: HardFork): TestEnv =
   var
     conf = makeConfig(@[
-      "--engine-signer:658bdf435d810c91414ec09147daa6db62406379",
       "--custom-network:" & genesisFile.findFilePath(baseDir,repoDir).value
     ])
 
@@ -117,7 +115,7 @@ proc initEnv(envFork: HardFork): TestEnv =
     conf: conf,
     com: com,
     chain: chain,
-    xp: TxPoolRef.new(com, conf.engineSigner),
+    xp: TxPoolRef.new(com),
     vaultKey: privKey(vaultKeyHex),
     chainId: conf.networkParams.config.chainId,
     nonce: 0'u64
@@ -128,113 +126,7 @@ const
   slot = 0x11.u256
   prevRandao = EMPTY_UNCLE_HASH # it can be any valid hash
 
-proc runTxPoolCliqueTest*() =
-  var
-    env = initEnv(London)
-
-  var
-    tx = env.makeTx(recipient, amount)
-    xp = env.xp
-    conf = env.conf
-    chain = env.chain
-    clique = env.chain.clique
-    body: BlockBody
-    blk: EthBlock
-    com = env.chain.com
-
-  let signerKey = privKey(signerKeyHex)
-  proc signerFunc(signer: EthAddress, msg: openArray[byte]):
-                  Result[RawSignature, cstring] {.gcsafe.} =
-    doAssert(signer == conf.engineSigner)
-    let
-      data = keccakHash(msg)
-      rawSign  = sign(signerKey, SkMessage(data.data)).toRaw
-
-    ok(rawSign)
-  clique.authorize(conf.engineSigner, signerFunc)
-
-  suite "Test TxPool with Clique sealer":
-    test "TxPool addLocal":
-      let res = xp.addLocal(PooledTransaction(tx: tx), force = true)
-      check res.isOk
-      if res.isErr:
-        debugEcho res.error
-        return
-
-    test "TxPool jobCommit":
-      check xp.nItems.total == 1
-
-    test "TxPool ethBlock":
-      let res = xp.assembleBlock()
-      if res.isErr:
-        debugEcho res.error
-        check false
-        return
-
-      blk = res.get.blk
-      body = BlockBody(
-        transactions: blk.txs,
-        uncles: blk.uncles
-      )
-      check blk.txs.len == 1
-
-    test "Clique seal":
-      let rx = clique.seal(blk)
-      check rx.isOk
-      if rx.isErr:
-        debugEcho rx.error
-        return
-
-    test "Store generated block in block chain database":
-      xp.chain.clearAccounts
-      check xp.chain.vmState.processBlock(blk.header, body).isOk
-
-      let vmstate2 = BaseVMState.new(blk.header, com)
-      check vmstate2.processBlock(blk.header, body).isOk
-
-    test "Clique persistBlocks":
-      let rr = chain.persistBlocks([blk.header], [body])
-      check rr == ValidationResult.OK
-
-    test "Do not kick the signer out of list":
-      check xp.smartHead(blk.header)
-
-      let tx = env.makeTx(recipient, amount)
-      let res = xp.addLocal(PooledTransaction(tx: tx), force = true)
-      check res.isOk
-      if res.isErr:
-        debugEcho res.error
-        return
-      check xp.nItems.total == 1
-
-      let r = xp.assembleBlock()
-      if r.isErr:
-        debugEcho r.error
-        check false
-        return
-
-      blk = r.get.blk
-      body = BlockBody(
-        transactions: blk.txs,
-        uncles: blk.uncles
-      )
-      check blk.txs.len == 1
-
-      let rx = clique.seal(blk)
-      check rx.isOk
-      if rx.isErr:
-        debugEcho rx.error
-        return
-
-      # prevent block from future detected in persistBlocks
-      os.sleep(com.cliquePeriod.int * 1000)
-
-      xp.chain.clearAccounts
-      check xp.chain.vmState.processBlock(blk.header, body).isOk
-      let rr = chain.persistBlocks([blk.header], [body])
-      check rr == ValidationResult.OK
-
-proc runTxPoolPosTest*() =
+proc runTxPoolPosTest() =
   var
     env = initEnv(MergeFork)
 
@@ -282,19 +174,18 @@ proc runTxPoolPosTest*() =
       check rr == ValidationResult.OK
 
     test "validate TxPool prevRandao setter":
-      var sdb = newAccountStateDB(com.db, blk.header.stateRoot)
-      let (val, ok) = sdb.getStorage(recipient, slot)
+      var sdb = LedgerRef.init(com.db, blk.header.stateRoot)
+      let val = sdb.getStorage(recipient, slot)
       let randao = Hash256(data: val.toBytesBE)
-      check ok
       check randao == prevRandao
 
     test "feeRecipient rewarded":
       check blk.header.coinbase == feeRecipient
-      var sdb = newAccountStateDB(com.db, blk.header.stateRoot)
+      var sdb = LedgerRef.init(com.db, blk.header.stateRoot)
       let bal = sdb.getBalance(feeRecipient)
       check not bal.isZero
 
-proc runTxPoolBlobhashTest*() =
+proc runTxPoolBlobhashTest() =
   var
     env = initEnv(Cancun)
 
@@ -346,15 +237,14 @@ proc runTxPoolBlobhashTest*() =
       check rr == ValidationResult.OK
 
     test "validate TxPool prevRandao setter":
-      var sdb = newAccountStateDB(com.db, blk.header.stateRoot)
-      let (val, ok) = sdb.getStorage(recipient, slot)
+      var sdb = LedgerRef.init(com.db, blk.header.stateRoot)
+      let val = sdb.getStorage(recipient, slot)
       let randao = Hash256(data: val.toBytesBE)
-      check ok
       check randao == prevRandao
 
     test "feeRecipient rewarded":
       check blk.header.coinbase == feeRecipient
-      var sdb = newAccountStateDB(com.db, blk.header.stateRoot)
+      var sdb = LedgerRef.init(com.db, blk.header.stateRoot)
       let bal = sdb.getBalance(feeRecipient)
       check not bal.isZero
 
@@ -373,7 +263,7 @@ proc runTxPoolBlobhashTest*() =
 
       check inPoolAndOk(xp, rlpHash(tx4)) == false
 
-proc runTxHeadDelta*(noisy = true) =
+proc runTxHeadDelta(noisy = true) =
   ## see github.com/status-im/nimbus-eth1/issues/1031
 
   suite "TxPool: Synthesising blocks (covers issue #1031)":
@@ -440,23 +330,23 @@ proc runTxHeadDelta*(noisy = true) =
 
       check com.syncCurrent == 10.toBlockNumber
       head = com.db.getBlockHeader(com.syncCurrent)
-      var
-        sdb = newAccountStateDB(com.db, head.stateRoot)
-
       let
+        sdb = LedgerRef.init(com.db, head.stateRoot)
         expected = u256(txPerblock * numBlocks) * amount
         balance = sdb.getBalance(recipient)
       check balance == expected
 
-when isMainModule:
+proc txPool2Main*() =
   const
     noisy = defined(debug)
 
   setErrorLevel() # mute logger
 
-  runTxPoolCliqueTest()
   runTxPoolPosTest()
   runTxPoolBlobhashTest()
-  #noisy.runTxHeadDelta
+  noisy.runTxHeadDelta
+
+when isMainModule:
+  txPool2Main()
 
 # End

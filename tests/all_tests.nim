@@ -46,6 +46,7 @@ cliBuilder:
           ./test_configuration,
           ./test_keyed_queue_rlp,
           #./test_txpool,                          -- fails
+          ./test_txpool2,
           #./test_merge,                           -- fails
           ./test_eip4844,
           ./test_beacon/test_skeleton,
