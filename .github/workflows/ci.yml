@@ -36,9 +36,6 @@ jobs:
           - os: linux
             cpu: amd64
             evmc: evmc
-          #- os: linux
-          #  cpu: i386
-          #  evmc: evmc
           - os: macos
             cpu: amd64
             evmc: evmc
@@ -48,9 +45,6 @@ jobs:
           - os: linux
             cpu: amd64
             evmc: nimvm
-          #- os: linux
-          #  cpu: i386
-          #  evmc: nimvm
           - os: windows
             cpu: amd64
             evmc: nimvm
@@ -93,12 +87,6 @@ jobs:
           echo "GOARCH=${GOARCH}" >> $GITHUB_ENV
           echo "USE_MIRACL=${USE_MIRACL}" >> $GITHUB_ENV
 
-          # libminiupnp / natpmp
-          if [[ '${{ runner.os }}' == 'Linux' && '${{ matrix.target.cpu }}' == 'i386' ]]; then
-            export CFLAGS="${CFLAGS} -m32 -mno-adx"
-            echo "CFLAGS=${CFLAGS}" >> $GITHUB_ENV
-          fi
-
           ncpu=''
           case '${{ runner.os }}' in
           'Linux')
@@ -120,26 +108,6 @@ jobs:
             echo "ENABLE_EVMC=0" >> $GITHUB_ENV
           fi
 
-      - name: Install build dependencies (Linux i386)
-        if: runner.os == 'Linux' && matrix.target.cpu == 'i386'
-        run: |
-          sudo dpkg --add-architecture i386
-          sudo apt-fast update -qq
-          sudo DEBIAN_FRONTEND='noninteractive' apt-fast install \
-            --no-install-recommends -yq gcc-multilib g++-multilib \
-            libz-dev:i386 libbz2-dev:i386 libssl-dev:i386 libpcre3-dev:i386
-          mkdir -p external/bin
-          cat << EOF > external/bin/gcc
-          #!/bin/bash
-          exec $(which gcc) -m32 "\$@"
-          EOF
-          cat << EOF > external/bin/g++
-          #!/bin/bash
-          exec $(which g++) -m32 "\$@"
-          EOF
-          chmod 755 external/bin/gcc external/bin/g++
-          echo '${{ github.workspace }}/external/bin' >> $GITHUB_PATH
-
       - name: Install build dependencies (Macos)
         # Some home brew modules were reported missing
         if: runner.os == 'Macos'
@@ -154,13 +122,6 @@ jobs:
         with:
           path: rocks-db-cache-${{ matrix.target.cpu }}
           key: 'rocksdb-v2-${{ matrix.target.os }}-${{ matrix.target.cpu }}'
-
-      - name: Build and install rocksdb (Linux i386)
-        # no librocksdb-dev:i386
-        if: runner.os == 'Linux' && matrix.target.cpu == 'i386'
-        run: |
-          curl -O -L -s -S https://raw.githubusercontent.com/status-im/nimbus-build-system/master/scripts/build_rocksdb.sh
-          bash build_rocksdb.sh rocks-db-cache-${{ matrix.target.cpu }}
 
       - name: Install rocksdb (Linux amd64)
         # mysterious illegal instruction error if we build our own librocksdb
@@ -282,17 +243,12 @@ jobs:
           env CC=gcc make ${DEFAULT_MAKE_FLAGS}
           build/nimbus --help
           # CC, GOARCH, and CGO_ENABLED are needed to select correct compiler 32/64 bit
-          if [[ '${{ matrix.target.cpu }}' == 'i386' ]]; then
-            # hide CI failures
-            env CC=gcc GOARCH=${GOARCH} CXX=g++ CGO_ENABLED=1 make ${DEFAULT_MAKE_FLAGS} test || true
-          else
-            # pushd vendor/nimbus-eth2
-            # env NIMBUSEL_BINARY=../../build/nimbus NIMBUSEL_GENESIS=scripts/nimbusel_genesis.json \
-            # ./scripts/launch_local_testnet.sh --nodes=3 --stop-at-epoch=7 \
-            # --disable-htop --reuse-binaries --run-nimbus-el --dl-eth2 --verbose --kill-old-processes
-            # popd
-            env CC=gcc GOARCH=${GOARCH} CXX=g++ CGO_ENABLED=1 make ${DEFAULT_MAKE_FLAGS} test
-          fi
+          # pushd vendor/nimbus-eth2
+          # env NIMBUSEL_BINARY=../../build/nimbus NIMBUSEL_GENESIS=scripts/nimbusel_genesis.json \
+          # ./scripts/launch_local_testnet.sh --nodes=3 --stop-at-epoch=7 \
+          # --disable-htop --reuse-binaries --run-nimbus-el --dl-eth2 --verbose --kill-old-processes
+          # popd
+          env CC=gcc GOARCH=${GOARCH} CXX=g++ CGO_ENABLED=1 make ${DEFAULT_MAKE_FLAGS} test
 
       - name: Run nimbus-eth1 tests (Macos)
         if: runner.os == 'Macos'
