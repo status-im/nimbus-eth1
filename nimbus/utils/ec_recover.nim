@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -21,7 +21,8 @@ import
   ./keyed_queue/kq_rlp,
   ./utils_defs,
   eth/[common, common/transaction, keys, rlp],
-  stew/[keyed_queue, results],
+  stew/keyed_queue,
+  results,
   stint
 
 export

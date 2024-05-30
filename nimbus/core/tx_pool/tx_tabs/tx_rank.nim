@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -12,13 +12,15 @@
 ## =========================================
 ##
 
+{.push raises: [].}
+
 import
   std/[tables],
   ../tx_info,
   eth/[common],
-  stew/[results, sorted_set]
+  stew/[sorted_set],
+  results
 
-{.push raises: [].}
 
 type
   TxRank* = ##\

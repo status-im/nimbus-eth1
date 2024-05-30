@@ -14,7 +14,7 @@ import
   kzg4844/kzg_ex as kzg,
   stew/endians2,
   nimcrypto/sha2,
-  stew/results,
+  results,
   ../../../../nimbus/core/eip4844
 
 type

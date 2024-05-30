@@ -12,7 +12,7 @@ import
   std/[os, strutils],
   nimcrypto/sha2,
   kzg4844/kzg_ex as kzg,
-  stew/results,
+  results,
   stint,
   ../constants,
   ../common/common

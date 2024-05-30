@@ -11,7 +11,8 @@
 
 import
   std/[os, json, tables, strutils],
-  stew/[byteutils, results],
+  stew/byteutils,
+  results,
   eth/[keyfile, common, keys],
   json_serialization
 
@@ -29,7 +30,7 @@ type
 proc init*(_: type AccountsManager): AccountsManager =
   discard
 
-proc loadKeystores*(am: var AccountsManager, path: string): 
+proc loadKeystores*(am: var AccountsManager, path: string):
                       Result[void, string] =
   try:
     createDir(path)
@@ -39,7 +40,7 @@ proc loadKeystores*(am: var AccountsManager, path: string):
       am.accounts[address] = NimbusAccount(keystore: data, unlocked: false)
   except CatchableError as exc:
     return err("loadKeystrores: " & exc.msg)
-  
+
   ok()
 
 proc getAccount*(am: var AccountsManager, address: EthAddress): Result[NimbusAccount, string] =

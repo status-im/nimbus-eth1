@@ -9,7 +9,8 @@
 
 import
   std/typetraits,
-  stew/[arrayops, results],
+  stew/arrayops,
+  results,
   beacon_chain/spec/forks,
   beacon_chain/spec/datatypes/altair,
   nimcrypto/[sha2, hash],

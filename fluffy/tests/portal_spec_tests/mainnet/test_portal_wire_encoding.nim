@@ -10,7 +10,8 @@
 import
   unittest2,
   stint,
-  stew/[byteutils, results],
+  stew/byteutils,
+  results,
   eth/p2p/discoveryv5/enr,
   ../../../network/wire/messages
 

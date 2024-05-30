@@ -10,7 +10,8 @@
 import
   std/[strutils, typetraits],
   stint,
-  stew/[byteutils, results],
+  stew/byteutils,
+  results,
   chronicles,
   json_rpc/[rpcproxy, rpcserver, rpcclient],
   eth/common/eth_types as etypes,

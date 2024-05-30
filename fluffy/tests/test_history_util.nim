@@ -8,9 +8,7 @@
 {.push raises: [].}
 
 import
-  stew/results,
-  eth/common/eth_types_rlp,
-  ../network/history/[history_content, accumulator]
+  results, eth/common/eth_types_rlp, ../network/history/[history_content, accumulator]
 
 export results, accumulator, history_content
 

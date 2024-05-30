@@ -10,7 +10,7 @@
 import
   std/[os, net],
   eth/p2p as ethp2p,
-  stew/results,
+  results,
   chronos, json_rpc/[rpcserver, rpcclient],
   ../../../nimbus/sync/protocol,
   ../../../nimbus/common,

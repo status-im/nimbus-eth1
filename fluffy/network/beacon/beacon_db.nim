@@ -13,7 +13,7 @@ import
   eth/db/kvstore,
   eth/db/kvstore_sqlite3,
   stint,
-  stew/results,
+  results,
   ssz_serialization,
   beacon_chain/db_limits,
   beacon_chain/spec/datatypes/[phase0, altair, bellatrix],

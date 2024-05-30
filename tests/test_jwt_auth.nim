@@ -22,7 +22,7 @@ import
   chronos/apps/http/httptable,
   eth/[common, keys, p2p],
   nimcrypto/[hmac, utils],
-  stew/results,
+  results,
   stint,
   unittest2,
   graphql,

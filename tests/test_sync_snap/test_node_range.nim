@@ -13,7 +13,8 @@
 import
   std/[sequtils, sets, strformat, strutils],
   eth/[common, p2p, trie/nibbles],
-  stew/[byteutils, interval_set, results],
+  stew/[byteutils, interval_set],
+  results,
   unittest2,
   ../../nimbus/sync/[handlers, protocol, types],
   ../../nimbus/sync/snap/range_desc,

@@ -21,7 +21,8 @@ import
   ../tools/common/state_clearing,
   eth/trie/trie_defs,
   unittest2,
-  stew/[results, byteutils]
+  stew/byteutils,
+  results
 
 type
   TestCtx = object

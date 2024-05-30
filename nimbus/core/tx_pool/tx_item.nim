@@ -18,7 +18,7 @@ import
   ../../utils/utils,
   ./tx_info,
   eth/[common, keys],
-  stew/results
+  results
 
 {.push raises: [].}
 

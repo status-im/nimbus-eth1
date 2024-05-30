@@ -8,7 +8,7 @@
 {.push raises: [].}
 
 import
-  stew/results,
+  results,
   chronos,
   chronicles,
   eth/p2p/discoveryv5/[protocol, enr],

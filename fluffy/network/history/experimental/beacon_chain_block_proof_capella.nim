@@ -24,7 +24,7 @@
 {.push raises: [].}
 
 import
-  stew/results,
+  results,
   ssz_serialization,
   ssz_serialization/[proofs, merkleization],
   beacon_chain/spec/eth2_ssz_serialization,

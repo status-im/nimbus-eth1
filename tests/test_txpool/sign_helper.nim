@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2023 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -14,7 +14,7 @@ import
   ../../nimbus/core/tx_pool/tx_item,
   ../../nimbus/core/clique/clique_desc,
   eth/[common, common/transaction, keys],
-  stew/results,
+  results,
   stint
 
 const

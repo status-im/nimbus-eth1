@@ -10,7 +10,8 @@
 import
   json_serialization,
   json_serialization/std/tables,
-  stew/[byteutils, io2, results],
+  results,
+  stew/[byteutils, io2],
   chronicles,
   eth/[rlp, common/eth_types],
   ../../nimbus/common/[chain_config, genesis],

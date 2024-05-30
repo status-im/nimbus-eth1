@@ -23,7 +23,8 @@ import
   chronos/apps/http/httpserver,
   httputils,
   nimcrypto/[hmac, utils],
-  stew/[byteutils, objects, results],
+  stew/[byteutils, objects],
+  results,
   ../config,
   ./jwt_auth_helper,
   ./rpc_server
@@ -254,7 +255,7 @@ proc jwtSharedSecret*(rng: ref rand.HmacDrbgContext; config: NimbusConf):
     return err(jwtCreationError)
 
 proc httpJwtAuth*(key: JwtSharedKey): RpcAuthHook =
-  proc handler(req: HttpRequestRef): Future[HttpResponseRef] 
+  proc handler(req: HttpRequestRef): Future[HttpResponseRef]
          {.gcsafe, async: (raises: [CatchableError]).} =
     let auth = req.headers.getString("Authorization", "?")
     if auth.len < 9 or auth[0..6].cmpIgnoreCase("Bearer ") != 0:

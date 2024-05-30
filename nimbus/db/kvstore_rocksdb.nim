@@ -12,7 +12,7 @@
 
 import
   std/[os, sequtils],
-  stew/results,
+  results,
   rocksdb,
   eth/db/kvstore
 

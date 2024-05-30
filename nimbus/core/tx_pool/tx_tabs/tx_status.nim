@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -16,7 +16,8 @@ import
   ../tx_info,
   ../tx_item,
   eth/[common],
-  stew/[results, keyed_queue, keyed_queue/kq_debug, sorted_set]
+  stew/[keyed_queue, keyed_queue/kq_debug, sorted_set],
+  results
 
 {.push raises: [].}
 

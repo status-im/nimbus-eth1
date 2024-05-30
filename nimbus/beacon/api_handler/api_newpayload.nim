@@ -9,7 +9,7 @@
 
 import
   eth/common,
-  stew/results,
+  results,
   ../web3_eth_conv,
   ../beacon_engine,
   web3/execution_types,

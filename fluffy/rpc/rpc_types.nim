@@ -10,7 +10,8 @@
 import
   stint,
   json_rpc/jsonmarshal,
-  stew/[results, byteutils],
+  stew/[byteutils],
+  results,
   eth/p2p/discoveryv5/[routing_table, enr, node]
 
 export jsonmarshal, routing_table, enr, node

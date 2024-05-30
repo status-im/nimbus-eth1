@@ -14,7 +14,8 @@ import
   std/[sequtils, strutils, tables],
   chronicles,
   eth/[common, trie/nibbles],
-  stew/[results, byteutils],
+  stew/[byteutils],
+  results,
   "../.."/[constants, range_desc],
   "."/[hexary_desc, hexary_nodes_helper, hexary_paths]
 

@@ -11,7 +11,7 @@
 import
   std/[tables,  os],
   eth/[keys],
-  stew/[byteutils, results], unittest2,
+  stew/byteutils, results, unittest2,
   ../nimbus/db/ledger,
   ../nimbus/core/chain,
   ../nimbus/[config, transaction, constants],

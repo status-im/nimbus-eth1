@@ -20,7 +20,7 @@
 
 {.push raises: [].}
 
-import stew/results, beacon_chain/spec/forks, beacon_chain/spec/datatypes/bellatrix
+import results, beacon_chain/spec/forks, beacon_chain/spec/datatypes/bellatrix
 
 export results
 

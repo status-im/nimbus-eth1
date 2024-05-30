@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  stint, stew/[results, objects, endians2], ssz_serialization, ../../common/common_types
+  stint, stew/[objects, endians2], ssz_serialization, ../../common/common_types, results
 
 export ssz_serialization, stint, common_types
 

@@ -10,7 +10,7 @@
 
 import
   std/[macros],
-  stew/results,
+  results,
   "."/[types, blake2b_f, blscurve],
   ./interpreter/[gas_meter, gas_costs, utils/utils_numeric],
   ../errors, eth/[common, keys], chronicles,

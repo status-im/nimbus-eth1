@@ -7,7 +7,7 @@
 
 {.push raises: [].}
 
-import ssz_serialization, eth/rlp, stew/[byteutils, results], nimcrypto/hash
+import results, ssz_serialization, eth/rlp, stew/byteutils, nimcrypto/hash
 
 export hash
 
