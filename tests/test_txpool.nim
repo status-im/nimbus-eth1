@@ -16,7 +16,6 @@ import
   ../nimbus/core/[clique, executor, casper, tx_pool, tx_pool/tx_item],
   ../nimbus/[config, vm_state, vm_types],
   ./test_txpool/[helpers, setup, sign_helper],
-  ./test_txpool2,
   chronos,
   eth/[keys, p2p],
   stew/[keyed_queue, sorted_set],
@@ -885,10 +884,6 @@ proc txPoolMain*(noisy = defined(debug)) =
   noisy.runTxLoader
   noisy.runTxPoolTests
   noisy.runTxPackerTests
-  runTxPoolCliqueTest()
-  runTxPoolPosTest()
-  runTxPoolBlobhashTest()
-  noisy.runTxHeadDelta
 
 when isMainModule:
   const
@@ -903,11 +898,6 @@ when isMainModule:
   noisy.runTxLoader(capture = capts1)
   noisy.runTxPoolTests
   noisy.runTxPackerTests
-
-  runTxPoolCliqueTest()
-  runTxPoolPosTest()
-  runTxPoolBlobhashTest()
-  noisy.runTxHeadDelta
 
   #noisy.runTxLoader(dir = ".")
   #noisy.runTxPoolTests
