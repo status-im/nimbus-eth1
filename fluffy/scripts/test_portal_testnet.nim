@@ -172,13 +172,14 @@ procSuite "Portal testnet tests":
     let clients = await connectToRpcServers(config)
 
     var nodeInfos: seq[NodeInfo]
+
     for client in clients:
-      let nodeInfo = await client.portal_state_nodeInfo()
+      let nodeInfo = await client.portal_stateNodeInfo()
       await client.close()
       nodeInfos.add(nodeInfo)
 
     for client in clients:
-      discard await client.portal_state_addEnrs(
+      discard await client.portal_stateAddEnrs(
         nodeInfos.map(
           proc(x: NodeInfo): Record =
             x.enr
@@ -187,7 +188,7 @@ procSuite "Portal testnet tests":
       await client.close()
 
     for client in clients:
-      let routingTableInfo = await client.portal_state_routingTableInfo()
+      let routingTableInfo = await client.portal_stateRoutingTableInfo()
       await client.close()
       var start: seq[NodeId]
       let nodes = foldl(routingTableInfo.buckets, a & b, start)
@@ -198,7 +199,7 @@ procSuite "Portal testnet tests":
     for client in clients:
       var enr: Record
       try:
-        enr = await client.portal_state_lookupEnr(randomNodeInfo.nodeId)
+        enr = await client.portal_stateLookupEnr(randomNodeInfo.nodeId)
       except CatchableError as e:
         echo e.msg
       # TODO: For state network this occasionally fails. It might be because the
@@ -214,12 +215,12 @@ procSuite "Portal testnet tests":
 
     var nodeInfos: seq[NodeInfo]
     for client in clients:
-      let nodeInfo = await client.portal_history_nodeInfo()
+      let nodeInfo = await client.portal_historyNodeInfo()
       await client.close()
       nodeInfos.add(nodeInfo)
 
     for client in clients:
-      discard await client.portal_history_addEnrs(
+      discard await client.portal_historyAddEnrs(
         nodeInfos.map(
           proc(x: NodeInfo): Record =
             x.enr
@@ -228,7 +229,7 @@ procSuite "Portal testnet tests":
       await client.close()
 
     for client in clients:
-      let routingTableInfo = await client.portal_history_routingTableInfo()
+      let routingTableInfo = await client.portal_historyRoutingTableInfo()
       await client.close()
       var start: seq[NodeId]
       let nodes = foldl(routingTableInfo.buckets, a & b, start)
@@ -238,7 +239,7 @@ procSuite "Portal testnet tests":
     let randomNodeInfo = sample(rng[], nodeInfos)
     for client in clients:
       var enr: Record
-      enr = await client.portal_history_lookupEnr(randomNodeInfo.nodeId)
+      enr = await client.portal_historyLookupEnr(randomNodeInfo.nodeId)
       await client.close()
       check enr == randomNodeInfo.enr
 
@@ -266,7 +267,7 @@ procSuite "Portal testnet tests":
     # require them for validation.
     for (content, contentKey) in blockHeadersWithProof:
       discard
-        (await clients[0].portal_history_gossip(content.toHex(), contentKey.toHex()))
+        (await clients[0].portal_historyGossip(content.toHex(), contentKey.toHex()))
 
     # This will fill the first node its db with blocks from the data file. Next,
     # this node wil offer all these blocks their headers one by one.

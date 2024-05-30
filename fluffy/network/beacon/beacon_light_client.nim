@@ -36,7 +36,7 @@ type
     onFinalizedHeader*, onOptimisticHeader*: LightClientHeaderCallback
     trustedBlockRoot*: Option[Eth2Digest]
 
-func finalizedHeader*(lightClient: LightClient): ForkedLightClientHeader =
+func getFinalizedHeader*(lightClient: LightClient): ForkedLightClientHeader =
   withForkyStore(lightClient.store[]):
     when lcDataFork > LightClientDataFork.None:
       var header = ForkedLightClientHeader(kind: lcDataFork)
@@ -45,7 +45,7 @@ func finalizedHeader*(lightClient: LightClient): ForkedLightClientHeader =
     else:
       default(ForkedLightClientHeader)
 
-func optimisticHeader*(lightClient: LightClient): ForkedLightClientHeader =
+func getOptimisticHeader*(lightClient: LightClient): ForkedLightClientHeader =
   withForkyStore(lightClient.store[]):
     when lcDataFork > LightClientDataFork.None:
       var header = ForkedLightClientHeader(kind: lcDataFork)
@@ -82,11 +82,11 @@ proc new*(
 
   proc onFinalizedHeader() =
     if lightClient.onFinalizedHeader != nil:
-      lightClient.onFinalizedHeader(lightClient, lightClient.finalizedHeader)
+      lightClient.onFinalizedHeader(lightClient, lightClient.getFinalizedHeader)
 
   proc onOptimisticHeader() =
     if lightClient.onOptimisticHeader != nil:
-      lightClient.onOptimisticHeader(lightClient, lightClient.optimisticHeader)
+      lightClient.onOptimisticHeader(lightClient, lightClient.getOptimisticHeader)
 
   lightClient.processor = LightClientProcessor.new(
     dumpEnabled, dumpDirInvalid, dumpDirIncoming, cfg, genesis_validators_root,

@@ -63,8 +63,8 @@ proc installUtpHandlers(
       let nodeAddress = NodeAddress.init(node).unsafeGet()
       discard d.addNode(node)
       let connResult = await s.connectTo(nodeAddress)
-      if (connresult.isOk()):
-        let socket = connresult.get()
+      if (connResult.isOk()):
+        let socket = connResult.get()
         let sKey = socket.socketKey.toSKey()
         t[sKey] = socket
         return sKey
