@@ -62,7 +62,7 @@ proc evmcExecute(vm: ptr evmc_vm, hostInterface: ptr evmc_host_interface,
 
   return evmc_result(
     # Standard EVMC result, if a bit generic.
-    status_code: c.statusCode,
+    status_code: c.evmcStatus,
     # Gas left is required to be zero when not `EVMC_SUCCESS` or `EVMC_REVERT`.
     gas_left:    if result.status_code notin {EVMC_SUCCESS, EVMC_REVERT}: 0'i64
                  else: c.gasMeter.gasRemaining.int64,

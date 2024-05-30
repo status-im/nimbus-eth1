@@ -235,7 +235,7 @@ proc newComputation*(vmState: BaseVMState, sysCall: bool, message: Message,
     result.code = newCodeStream(
       vmState.readOnlyStateDB.getCode(message.codeAddress))
 
-proc newComputation*(vmState: BaseVMState, sysCall: bool,
+func newComputation*(vmState: BaseVMState, sysCall: bool,
                      message: Message, code: seq[byte]): Computation =
   new result
   result.vmState = vmState
@@ -275,25 +275,26 @@ proc dispose*(c: Computation) =
 proc rollback*(c: Computation) =
   c.vmState.stateDB.rollback(c.savePoint)
 
-proc setError*(c: Computation, msg: string, burnsGas = false) =
-  c.error = Error(statusCode: EVMC_FAILURE, info: msg, burnsGas: burnsGas)
+func setError*(c: Computation, msg: string, burnsGas = false) =
+  c.error = Error(evmcStatus: EVMC_FAILURE, info: msg, burnsGas: burnsGas)
 
-proc setError*(c: Computation, code: evmc_status_code, burnsGas = false) =
-  c.error = Error(statusCode: code, info: $code, burnsGas: burnsGas)
+func setError*(c: Computation, code: evmc_status_code, burnsGas = false) =
+  c.error = Error(evmcStatus: code, info: $code, burnsGas: burnsGas)
 
-proc setError*(c: Computation, code: evmc_status_code, msg: string, burnsGas = false) =
-  c.error = Error(statusCode: code, info: msg, burnsGas: burnsGas)
+func setError*(
+    c: Computation, code: evmc_status_code, msg: string, burnsGas = false) =
+  c.error = Error(evmcStatus: code, info: msg, burnsGas: burnsGas)
 
-func statusCode*(c: Computation): evmc_status_code =
+func evmcStatus*(c: Computation): evmc_status_code =
   if c.isSuccess:
     EVMC_SUCCESS
   else:
-    c.error.statusCode
+    c.error.evmcStatus
 
 func errorOpt*(c: Computation): Option[string] =
   if c.isSuccess:
     return none(string)
-  if c.error.statusCode == EVMC_REVERT:
+  if c.error.evmcStatus == EVMC_REVERT:
     return none(string)
   some(c.error.info)
 
@@ -384,7 +385,7 @@ template asyncChainToRaise*(c: Computation,
     c.continuation = nil
     after
 
-proc merge*(c, child: Computation) =
+func merge*(c, child: Computation) =
   c.gasMeter.refundGas(child.gasMeter.gasRefunded)
 
 when evmc_enabled:
@@ -418,22 +419,22 @@ proc execSelfDestruct*(c: Computation, beneficiary: EthAddress)
       localBalance = localBalance.toString,
       beneficiary = beneficiary.toHex
 
-proc addLogEntry*(c: Computation, log: Log) =
+func addLogEntry*(c: Computation, log: Log) =
   c.vmState.stateDB.addLogEntry(log)
 
-proc getGasRefund*(c: Computation): GasInt =
+func getGasRefund*(c: Computation): GasInt =
   if c.isSuccess:
     result = c.gasMeter.gasRefunded
 
-proc refundSelfDestruct*(c: Computation) =
+func refundSelfDestruct*(c: Computation) =
   let cost = gasFees[c.fork][RefundSelfDestruct]
   let num  = c.vmState.stateDB.selfDestructLen
   c.gasMeter.refundGas(cost * num)
 
-proc tracingEnabled*(c: Computation): bool =
+func tracingEnabled*(c: Computation): bool =
   c.vmState.tracingEnabled
 
-proc traceOpCodeStarted*(c: Computation, op: Op): int {.gcsafe, raises: [].} =
+func traceOpCodeStarted*(c: Computation, op: Op): int {.raises: [].} =
   c.vmState.captureOpStart(
     c,
     c.code.pc - 1,
@@ -441,7 +442,7 @@ proc traceOpCodeStarted*(c: Computation, op: Op): int {.gcsafe, raises: [].} =
     c.gasMeter.gasRemaining,
     c.msg.depth + 1)
 
-proc traceOpCodeEnded*(c: Computation, op: Op, opIndex: int) {.gcsafe, raises: [].} =
+func traceOpCodeEnded*(c: Computation, op: Op, opIndex: int) {.raises: [].} =
   c.vmState.captureOpEnd(
     c,
     c.code.pc - 1,
@@ -452,7 +453,7 @@ proc traceOpCodeEnded*(c: Computation, op: Op, opIndex: int) {.gcsafe, raises: [
     c.msg.depth + 1,
     opIndex)
 
-proc traceError*(c: Computation) {.gcsafe, raises: [].} =
+func traceError*(c: Computation) {.raises: [].} =
   c.vmState.captureFault(
     c,
     c.code.pc - 1,
@@ -463,10 +464,12 @@ proc traceError*(c: Computation) {.gcsafe, raises: [].} =
     c.msg.depth + 1,
     c.errorOpt)
 
-proc prepareTracer*(c: Computation) =
+func prepareTracer*(c: Computation) =
   c.vmState.capturePrepare(c, c.msg.depth)
 
-proc opcodeGastCost*(c: Computation, op: Op, gasCost: GasInt, reason: string) {.gcsafe, raises: [OutOfGas, ValueError].}  =
+func opcodeGastCost*(
+    c: Computation, op: Op, gasCost: GasInt, reason: string)
+    {.raises: [OutOfGas, ValueError].} =
   c.vmState.captureGasCost(
     c,
     op,
