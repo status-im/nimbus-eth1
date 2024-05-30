@@ -14,7 +14,7 @@ import
   ../../nimbus/core/tx_pool/tx_item,
   ../../nimbus/core/clique/clique_desc,
   eth/[common, common/transaction, keys],
-  stew/results,
+  results,
   stint
 
 const

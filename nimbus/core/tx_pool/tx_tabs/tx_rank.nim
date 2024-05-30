@@ -12,13 +12,15 @@
 ## =========================================
 ##
 
+{.push raises: [].}
+
 import
   std/[tables],
   ../tx_info,
   eth/[common],
-  stew/[results, sorted_set]
+  stew/[sorted_set],
+  results
 
-{.push raises: [].}
 
 type
   TxRank* = ##\

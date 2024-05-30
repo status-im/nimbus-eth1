@@ -19,7 +19,7 @@
 import
   std/[tables],
   eth/[common, trie/nibbles],
-  stew/results,
+  results,
   "../.."/[constants, range_desc],
   "."/[hexary_desc, hexary_error, hexary_paths]
 

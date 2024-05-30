@@ -10,7 +10,7 @@
 
 import
   std/strutils,
-  stew/results,
+  results,
   zlib
 
 const

@@ -17,7 +17,7 @@ import
   pkg/chronicles,
   pkg/chronicles/helpers,
   chronicles/topics_registry,
-  pkg/stew/results
+  pkg/results
 
 export results
 

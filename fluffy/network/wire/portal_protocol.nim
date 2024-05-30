@@ -12,7 +12,8 @@
 
 import
   std/[sequtils, sets, algorithm, tables],
-  stew/[results, byteutils, leb128, endians2],
+  stew/[byteutils, leb128, endians2],
+  results,
   chronicles,
   chronos,
   nimcrypto/hash,

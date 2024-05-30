@@ -10,7 +10,7 @@
 
 import
   std/json,
-  chronos, stew/results, eth/common,
+  chronos, results, eth/common,
   graphql/httpclient,
   ./parser
 

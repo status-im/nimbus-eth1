@@ -11,7 +11,7 @@ import
   std/tables,
   stint,
   eth/[common, rlp],
-  stew/results,
+  results,
   ../nimbus/db/[core_db, state_db],
   ./[tree_from_witness, witness_types]
 

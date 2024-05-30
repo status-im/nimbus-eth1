@@ -12,7 +12,8 @@
 import
   unittest2,
   stint,
-  stew/[byteutils, results],
+  stew/byteutils,
+  results,
   eth/[common/eth_types, rlp],
   ../../../common/common_types,
   ../../../eth_data/history_data_json_store,

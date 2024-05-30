@@ -10,7 +10,7 @@
 import
   std/os,
   unittest2,
-  stew/results,
+  results,
   eth/[common, trie, trie/trie_defs],
   ../../../nimbus/common/chain_config,
   ../../network/state/[state_content, state_validation],

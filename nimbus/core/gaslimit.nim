@@ -11,7 +11,7 @@
 import
   ../common/common,
   std/strformat,
-  stew/results,
+  results,
   eth/[eip1559]
 
 export

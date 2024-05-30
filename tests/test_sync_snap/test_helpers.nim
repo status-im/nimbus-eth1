@@ -11,7 +11,8 @@
 import
   std/times,
   eth/common,
-  stew/[interval_set, results],
+  stew/interval_set,
+  results,
   unittest2,
   ../../nimbus/sync/snap/range_desc,
   ../../nimbus/sync/snap/worker/db/hexary_error,

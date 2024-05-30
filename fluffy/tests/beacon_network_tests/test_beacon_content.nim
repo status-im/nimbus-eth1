@@ -11,7 +11,7 @@ import
   unittest2,
   stew/byteutils,
   stew/io2,
-  stew/results,
+  results,
   beacon_chain/networking/network_metadata,
   beacon_chain/spec/forks,
   beacon_chain/spec/datatypes/altair,

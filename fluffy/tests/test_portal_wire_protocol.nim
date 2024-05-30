@@ -11,7 +11,7 @@ import
   std/[algorithm, sequtils],
   chronos,
   testutils/unittests,
-  stew/results,
+  results,
   eth/keys,
   eth/p2p/discoveryv5/routing_table,
   nimcrypto/[hash, sha2],

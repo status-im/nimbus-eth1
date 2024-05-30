@@ -435,7 +435,8 @@ import
     tx_recover],
   chronicles,
   eth/keys,
-  stew/[keyed_queue, results],
+  stew/keyed_queue,
+  results,
   ../common/common,
   ./casper
 

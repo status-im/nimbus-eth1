@@ -13,7 +13,7 @@
 import
   std/tables,
   eth/[common, trie/nibbles],
-  stew/results,
+  results,
   ../../range_desc,
   "."/[hexary_desc, hexary_error, hexary_nodes_helper, hexary_paths]
 

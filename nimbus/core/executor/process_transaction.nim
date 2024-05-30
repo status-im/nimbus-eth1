@@ -12,7 +12,7 @@
 
 import
   std/strutils,
-  stew/results,
+  results,
   ../../common/common,
   ../../db/ledger,
   ../../transaction/call_evm,

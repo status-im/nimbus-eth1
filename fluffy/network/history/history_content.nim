@@ -12,7 +12,8 @@
 import
   std/math,
   nimcrypto/[sha2, hash],
-  stew/[byteutils, results],
+  stew/byteutils,
+  results,
   stint,
   ssz_serialization,
   ../../common/common_types

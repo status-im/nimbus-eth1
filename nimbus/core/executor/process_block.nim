@@ -21,7 +21,7 @@ import
   ./executor_helpers,
   ./process_transaction,
   chronicles,
-  stew/results
+  results
 
 {.push raises: [].}
 

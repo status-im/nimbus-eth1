@@ -9,7 +9,7 @@
 
 import
   std/json,
-  json_serialization/stew/results,
+  json_serialization/results,
   json_rpc/[client, jsonmarshal],
   web3/conversions,
   web3/eth_api_types

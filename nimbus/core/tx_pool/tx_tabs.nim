@@ -12,15 +12,16 @@
 ## ======================================================
 ##
 
+{.push raises: [].}
+
 import
   std/[sequtils, tables],
   ./tx_info,
   ./tx_item,
   ./tx_tabs/[tx_sender, tx_rank, tx_status],
   eth/[common, keys],
-  stew/[keyed_queue, keyed_queue/kq_debug, results, sorted_set]
-
-{.push raises: [].}
+  stew/[keyed_queue, keyed_queue/kq_debug, sorted_set],
+  results
 
 export
   # bySender/byStatus index operations

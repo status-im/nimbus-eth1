@@ -21,7 +21,8 @@ import
   ./keyed_queue/kq_rlp,
   ./utils_defs,
   eth/[common, common/transaction, keys, rlp],
-  stew/[keyed_queue, results],
+  stew/keyed_queue,
+  results,
   stint
 
 export

@@ -11,7 +11,7 @@
 import
   chronicles,
   eth/keys,
-  stew/results,
+  results,
   json_rpc/rpcclient,
   ../../../nimbus/config,
   ../../../nimbus/common,

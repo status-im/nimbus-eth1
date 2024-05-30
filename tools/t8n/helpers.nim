@@ -10,7 +10,7 @@
 
 import
   std/[json, strutils, tables],
-  stew/[byteutils, results],
+  stew/byteutils,
   stint,
   eth/[common, rlp, keys],
   ../../nimbus/transaction,

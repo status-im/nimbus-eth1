@@ -13,7 +13,7 @@
 import
   std/[algorithm, sequtils, tables],
   eth/[common, trie/nibbles],
-  stew/results,
+  results,
   ../../range_desc,
   "."/[hexary_debug, hexary_desc, hexary_error, hexary_paths, snapdb_desc]
 

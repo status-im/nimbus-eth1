@@ -10,7 +10,7 @@
 import
   std/[sequtils, typetraits, options],
   stint,
-  stew/results,
+  results,
   eth/common/eth_types as etypes,
   eth/common/eth_types_rlp,
   eth/rlp,

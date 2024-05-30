@@ -8,6 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [].}
+
 ## Transaction Pool Table: `Sender` > `status` | all > `nonce`
 ## ===========================================================
 ##
@@ -17,10 +19,10 @@ import
   ../tx_info,
   ../tx_item,
   eth/[common],
-  stew/[results, keyed_queue, keyed_queue/kq_debug, sorted_set],
+  stew/[keyed_queue, keyed_queue/kq_debug, sorted_set],
+  results,
   ../../eip4844
 
-{.push raises: [].}
 
 type
   TxSenderNonceRef* = ref object ##\

@@ -11,7 +11,7 @@ import
   chronicles,
   metrics,
   stint,
-  stew/results,
+  results,
   eth/db/kvstore,
   eth/db/kvstore_sqlite3,
   ../network/state/state_content,

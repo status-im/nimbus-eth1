@@ -10,7 +10,8 @@
 import
   std/[strutils, os],
   manager,
-  stew/[results, io2, byteutils],
+  stew/[io2, byteutils],
+  results,
   eth/keys
 
 export manager

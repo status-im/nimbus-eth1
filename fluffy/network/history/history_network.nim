@@ -8,7 +8,7 @@
 {.push raises: [].}
 
 import
-  stew/results,
+  results,
   chronos,
   chronicles,
   eth/[common/eth_types_rlp, rlp, trie, trie/db],

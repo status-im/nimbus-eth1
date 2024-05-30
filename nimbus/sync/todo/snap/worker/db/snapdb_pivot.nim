@@ -12,7 +12,7 @@
 
 import
   eth/[common, rlp],
-  stew/results,
+  results,
   ../../range_desc,
   "."/[hexary_error, snapdb_desc, snapdb_persistent]
 

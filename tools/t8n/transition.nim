@@ -11,7 +11,7 @@
 import
   std/[json, strutils, tables, os, streams],
   eth/[rlp, trie, eip1559],
-  stint, stew/results,
+  stint, results,
   "."/[config, types, helpers],
   ../common/state_clearing,
   ../../nimbus/[vm_types, vm_state, transaction],

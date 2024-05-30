@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  stew/results,
+  results,
   ../common/common
 
 {.push raises: [].}

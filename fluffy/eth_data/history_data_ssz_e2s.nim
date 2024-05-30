@@ -8,8 +8,9 @@
 {.push raises: [].}
 
 import
-  stew/[byteutils, io2, results],
+  stew/[byteutils, io2],
   chronicles,
+  results,
   eth/[rlp, common/eth_types],
   ncli/e2store,
   ../network/history/[history_content, accumulator]

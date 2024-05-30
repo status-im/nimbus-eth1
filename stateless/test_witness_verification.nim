@@ -10,7 +10,7 @@
 import
   std/os,
   unittest2,
-  stew/results,
+  results,
   eth/[common, trie/trie_defs],
   ../nimbus/db/[ledger, core_db],
   ../nimbus/common/chain_config,

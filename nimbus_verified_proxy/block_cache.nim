@@ -7,7 +7,7 @@
 
 {.push raises: [].}
 
-import std/tables, web3/primitives, stew/[results, keyed_queue], ./rpc/rpc_utils
+import std/tables, web3/primitives, stew/keyed_queue, results, ./rpc/rpc_utils
 
 ## Cache for payloads received through block gossip and validated by the
 ## consensus light client.

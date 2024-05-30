@@ -11,7 +11,7 @@
 import
   std/times,
   chronicles,
-  stew/results,
+  results,
   ./types,
   ../sim_utils,
   ../../../nimbus/core/eip4844

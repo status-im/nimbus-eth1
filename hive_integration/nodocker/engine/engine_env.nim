@@ -14,7 +14,7 @@ import
   eth/p2p as eth_p2p,
   chronos,
   json_rpc/[rpcserver, rpcclient],
-  stew/[results],
+  results,
   ../../../nimbus/[
     config,
     constants,

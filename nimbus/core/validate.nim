@@ -20,7 +20,8 @@ import
   ./pow/[difficulty, header],
   ./pow,
   nimcrypto/utils as cryptoutils,
-  stew/[objects, results]
+  stew/objects,
+  results
 
 from stew/byteutils
   import nil
