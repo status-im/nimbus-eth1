@@ -36,7 +36,7 @@ template validateVersion(attr, com, apiVersion) =
       if version < Version.V3:
         raise unsupportedFork("forkChoiceUpdated" & $apiVersion &
           " doesn't support payloadAttributes" & $version)
-      if version >= Version.V3:
+      if version > Version.V3:
         raise invalidAttr("forkChoiceUpdated" & $apiVersion &
           " doesn't support PayloadAttributes" & $version)
     elif com.isShanghaiOrLater(timestamp):

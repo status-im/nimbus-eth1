@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -105,7 +105,7 @@ proc runMulti(buddy: BeaconBuddyRef) {.async.} =
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc updateBeaconHeaderCB(ctx: BeaconSyncRef): SyncReqNewHeadCB =
+func updateBeaconHeaderCB(ctx: BeaconSyncRef): SyncReqNewHeadCB =
   ## Update beacon header. This function is intended as a call back function
   ## for the RPC module.
   result = proc(h: BlockHeader) {.gcsafe, raises: [].} =
@@ -119,8 +119,6 @@ proc enableRpcMagic(ctx: BeaconSyncRef) =
   ## Helper for `setup()`: Enable external pivot update via RPC
   let com = ctx.ctx.chain.com
   com.syncReqNewHead = ctx.updateBeaconHeaderCB
-  # We need engine_newPayload to be strict
-  com.syncReqRelaxV2 = false
 
 # ------------------------------------------------------------------------------
 # Public functions

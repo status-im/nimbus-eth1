@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  std/[tables,  os],
+  std/tables,
   eth/[keys],
   stew/byteutils, results, unittest2,
   ../nimbus/db/ledger,
@@ -17,10 +17,9 @@ import
   ../nimbus/[config, transaction, constants],
   ../nimbus/core/tx_pool,
   ../nimbus/core/casper,
-  ../nimbus/core/executor,
   ../nimbus/common/common,
   ../nimbus/utils/utils,
-  ../nimbus/[vm_state, vm_types],
+  ../nimbus/vm_types,
   ./test_txpool/helpers,
   ./macro_assembler
 
@@ -58,7 +57,9 @@ proc privKey(keyHex: string): PrivateKey =
 
   kRes.get()
 
-proc makeTx(t: var TestEnv, recipient: EthAddress, amount: UInt256, payload: openArray[byte] = []): Transaction =
+func makeTx(
+    t: var TestEnv, recipient: EthAddress, amount: UInt256,
+    payload: openArray[byte] = []): Transaction =
   const
     gasLimit = 75000.GasInt
     gasPrice = 30.gwei
@@ -77,7 +78,8 @@ proc makeTx(t: var TestEnv, recipient: EthAddress, amount: UInt256, payload: ope
   inc t.nonce
   signTransaction(tx, t.vaultKey, t.chainId, eip155 = true)
 
-proc signTxWithNonce(t: TestEnv, tx: Transaction, nonce: AccountNonce): Transaction =
+func signTxWithNonce(
+    t: TestEnv, tx: Transaction, nonce: AccountNonce): Transaction =
   var tx = tx
   tx.nonce = nonce
   signTransaction(tx, t.vaultKey, t.chainId, eip155 = true)

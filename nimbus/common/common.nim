@@ -74,11 +74,6 @@ type
       ## Call back function for the sync processor. This function stages
       ## the arguent header to a private aerea for subsequent processing.
 
-    syncReqRelaxV2: bool
-      ## Allow processing of certain RPC/V2 messages type while syncing (i.e.
-      ## `syncReqNewHead` is set.) although `shanghaiTime` is unavailable
-      ## or has not reached, yet.
-
     notifyBadBlock: NotifyBadBlockCB
       ## Allow synchronizer to inform engine-API of bad encountered during sync
       ## progress
@@ -101,7 +96,7 @@ type
 # Forward declarations
 # ------------------------------------------------------------------------------
 
-proc hardForkTransition*(
+func hardForkTransition*(
   com: CommonRef, forkDeterminer: ForkDeterminationInfo)
   {.gcsafe, raises: [].}
 
@@ -109,7 +104,7 @@ proc hardForkTransition*(
 # Private helper functions
 # ------------------------------------------------------------------------------
 
-proc consensusTransition(com: CommonRef, fork: HardFork) =
+func consensusTransition(com: CommonRef, fork: HardFork) =
   if fork >= MergeFork:
     com.consensusType = ConsensusType.POS
   else:
@@ -117,7 +112,7 @@ proc consensusTransition(com: CommonRef, fork: HardFork) =
     # this could happen during reorg
     com.consensusType = com.config.consensusType
 
-proc setForkId(com: CommonRef, genesis: BlockHeader) =
+func setForkId(com: CommonRef, genesis: BlockHeader) =
   com.genesisHash = genesis.blockHash
   let genesisCRC = crc32(0, com.genesisHash.data)
   com.forkIdCalculator = initForkIdCalculator(
@@ -125,7 +120,7 @@ proc setForkId(com: CommonRef, genesis: BlockHeader) =
     genesisCRC,
     genesis.timestamp.uint64)
 
-proc daoCheck(conf: ChainConfig) =
+func daoCheck(conf: ChainConfig) =
   if not conf.daoForkSupport or conf.daoForkBlock.isNone:
     conf.daoForkBlock = conf.homesteadBlock
 
@@ -194,7 +189,7 @@ proc getTd(com: CommonRef, blockHash: Hash256): Option[DifficultyInt] =
   else:
     some(td)
 
-proc needTdForHardForkDetermination(com: CommonRef): bool =
+func needTdForHardForkDetermination(com: CommonRef): bool =
   let t = com.forkTransitionTable.mergeForkTransitionThreshold
   t.ttdPassed.isNone and t.blockNumber.isNone and t.ttd.isSome
 
@@ -246,7 +241,7 @@ proc new*(
     nil,
     pruneHistory)
 
-proc clone*(com: CommonRef, db: CoreDbRef): CommonRef =
+func clone*(com: CommonRef, db: CoreDbRef): CommonRef =
   ## clone but replace the db
   ## used in EVM tracer whose db is CaptureDB
   CommonRef(
@@ -264,7 +259,7 @@ proc clone*(com: CommonRef, db: CoreDbRef): CommonRef =
     pos          : com.pos,
     pruneHistory : com.pruneHistory)
 
-proc clone*(com: CommonRef): CommonRef =
+func clone*(com: CommonRef): CommonRef =
   com.clone(com.db)
 
 # ------------------------------------------------------------------------------
@@ -275,7 +270,7 @@ func toHardFork*(
     com: CommonRef, forkDeterminer: ForkDeterminationInfo): HardFork =
   toHardFork(com.forkTransitionTable, forkDeterminer)
 
-proc hardForkTransition(
+func hardForkTransition(
     com: CommonRef, forkDeterminer: ForkDeterminationInfo) =
   ## When consensus type already transitioned to POS,
   ## the storage can choose not to store TD anymore,
@@ -287,7 +282,7 @@ proc hardForkTransition(
   com.currentFork = fork
   com.consensusTransition(fork)
 
-proc hardForkTransition*(
+func hardForkTransition*(
     com: CommonRef,
     number: BlockNumber,
     td: Option[DifficultyInt],
@@ -469,55 +464,40 @@ func syncCurrent*(com: CommonRef): BlockNumber =
 func syncHighest*(com: CommonRef): BlockNumber =
   com.syncProgress.highest
 
-func syncReqRelaxV2*(com: CommonRef): bool =
-  com.syncReqRelaxV2
-
 # ------------------------------------------------------------------------------
 # Setters
 # ------------------------------------------------------------------------------
 
-proc `syncStart=`*(com: CommonRef, number: BlockNumber) =
+func `syncStart=`*(com: CommonRef, number: BlockNumber) =
   com.syncProgress.start = number
 
-proc `syncCurrent=`*(com: CommonRef, number: BlockNumber) =
+func `syncCurrent=`*(com: CommonRef, number: BlockNumber) =
   com.syncProgress.current = number
 
-proc `syncHighest=`*(com: CommonRef, number: BlockNumber) =
+func `syncHighest=`*(com: CommonRef, number: BlockNumber) =
   com.syncProgress.highest = number
 
-proc `startOfHistory=`*(com: CommonRef, val: Hash256) =
+func `startOfHistory=`*(com: CommonRef, val: Hash256) =
   ## Setter
   com.startOfHistory = val
 
-proc setTTD*(com: CommonRef, ttd: Option[DifficultyInt]) =
+func setTTD*(com: CommonRef, ttd: Option[DifficultyInt]) =
   ## useful for testing
   com.config.terminalTotalDifficulty = ttd
   # rebuild the MergeFork piece of the forkTransitionTable
   com.forkTransitionTable.mergeForkTransitionThreshold = com.config.mergeForkTransitionThreshold
 
-proc setFork*(com: CommonRef, fork: HardFork): HardFork =
+func setFork*(com: CommonRef, fork: HardFork): HardFork =
   ## useful for testing
   result = com.currentFork
   com.currentFork = fork
   com.consensusTransition(fork)
 
-proc `syncReqNewHead=`*(com: CommonRef; cb: SyncReqNewHeadCB) =
-  ## Activate or reset a call back handler for syncing. When resetting (by
-  ## passing `cb` as `nil`), the `syncReqRelaxV2` value is also reset.
+func `syncReqNewHead=`*(com: CommonRef; cb: SyncReqNewHeadCB) =
+  ## Activate or reset a call back handler for syncing.
   com.syncReqNewHead = cb
-  if cb.isNil:
-    com.syncReqRelaxV2 = false
 
-proc `syncReqRelaxV2=`*(com: CommonRef; val: bool) =
-  ## Allow processing of certain RPC/V2 messages type while syncing (i.e.
-  ## `syncReqNewHead` is set.) although `shanghaiTime` is unavailable
-  ## or has not reached, yet.
-  ##
-  ## This setter is effective only while `syncReqNewHead` is activated.
-  if not com.syncReqNewHead.isNil:
-    com.syncReqRelaxV2 = val
-
-proc `notifyBadBlock=`*(com: CommonRef; cb: NotifyBadBlockCB) =
+func `notifyBadBlock=`*(com: CommonRef; cb: NotifyBadBlockCB) =
   ## Activate or reset a call back handler for bad block notification.
   com.notifyBadBlock = cb
 
