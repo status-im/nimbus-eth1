@@ -266,6 +266,7 @@ type
     RdbHashKeyExpected
 
     # Transaction wrappers
+    TxAccRootMissing
     TxArgStaleTx
     TxArgsUseless
     TxBackendNotWritable
