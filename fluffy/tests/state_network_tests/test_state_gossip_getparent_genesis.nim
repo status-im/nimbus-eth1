@@ -16,7 +16,7 @@ import
   ../../network/state/[state_content, state_validation, state_gossip, state_utils],
   ./state_test_helpers
 
-suite "State Recursive Gossip - Genesis JSON Files":
+suite "State Gossip getParent - Genesis JSON Files":
   let genesisFiles = [
     "berlin2000.json", "calaveras.json", "chainid1.json", "chainid7.json",
     "devnet4.json", "devnet5.json", "holesky.json", "mainshadow1.json", "merge.json",

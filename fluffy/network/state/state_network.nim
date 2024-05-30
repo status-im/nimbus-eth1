@@ -122,17 +122,6 @@ proc getContractCode*(
 ): Future[Opt[ContractCodeRetrieval]] {.inline.} =
   n.getContent(key, ContractCodeRetrieval)
 
-# High level endpoints
-# eth_getBalance
-# eth_getStorageAt
-# eth_getCode
-
-func decodeKey(contentKey: ByteList): Opt[ContentKey] =
-  let key = ContentKey.decode(contentKey).valueOr:
-    return Opt.none(ContentKey)
-
-  Opt.some(key)
-
 proc getStateRootByBlockHash(
     n: StateNetwork, hash: BlockHash
 ): Future[Opt[KeccakHash]] {.async.} =
@@ -146,7 +135,7 @@ proc getStateRootByBlockHash(
 
   Opt.some(header.stateRoot)
 
-proc processOffer(
+proc processOffer*(
     n: StateNetwork,
     maybeSrcNodeId: Opt[NodeId],
     contentKeyBytes: ByteList,
@@ -183,10 +172,11 @@ proc processContentLoop(n: StateNetwork) {.async.} =
   try:
     while true:
       let (srcNodeId, contentKeys, contentValues) = await n.contentQueue.popFirst()
+
       for i, contentValueBytes in contentValues:
         let
           contentKeyBytes = contentKeys[i]
-          contentKey = decodeKey(contentKeyBytes).valueOr:
+          contentKey = ContentKey.decode(contentKeyBytes).valueOr:
             error "Unable to decode offered content key", contentKeyBytes
             continue
 
@@ -219,8 +209,7 @@ proc processContentLoop(n: StateNetwork) {.async.} =
     trace "processContentLoop canceled"
 
 proc start*(n: StateNetwork) =
-  info "Starting Portal execution state network",
-    protocolId = n.portalProtocol.protocolId
+  info "Starting Portal State Network", protocolId = n.portalProtocol.protocolId
   n.portalProtocol.start()
 
   n.processContentLoop = processContentLoop(n)
