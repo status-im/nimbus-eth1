@@ -123,26 +123,26 @@ proc stateDBMain*() =
       db.setStorage(addr1, 1.u256, 10.u256)
       check rootHash == db.rootHash
 
-    test "accounts cache readonly operations":
+      # accounts cache readonly operations
       # use previous hash
-      var ac = LedgerRef.init(memDB, emptyRlpHash)
+      var ac2 = LedgerRef.init(memDB, rootHash)
       var addr2 = initAddr(2)
 
-      check ac.getCodeHash(addr2) == emptyAcc.codeHash
-      check ac.getBalance(addr2) == emptyAcc.balance
-      check ac.getNonce(addr2) == emptyAcc.nonce
-      check ac.getCode(addr2) == []
-      check ac.getCodeSize(addr2) == 0
-      check ac.getCommittedStorage(addr2, 1.u256) == 0.u256
-      check ac.getStorage(addr2, 1.u256) == 0.u256
-      check ac.contractCollision(addr2) == false
-      check ac.accountExists(addr2) == false
-      check ac.isDeadAccount(addr2) == true
+      check ac2.getCodeHash(addr2) == emptyAcc.codeHash
+      check ac2.getBalance(addr2) == emptyAcc.balance
+      check ac2.getNonce(addr2) == emptyAcc.nonce
+      check ac2.getCode(addr2) == []
+      check ac2.getCodeSize(addr2) == 0
+      check ac2.getCommittedStorage(addr2, 1.u256) == 0.u256
+      check ac2.getStorage(addr2, 1.u256) == 0.u256
+      check ac2.contractCollision(addr2) == false
+      check ac2.accountExists(addr2) == false
+      check ac2.isDeadAccount(addr2) == true
 
-      ac.persist()
+      ac2.persist()
       # readonly operations should not modify
       # state trie at all
-      check ac.rootHash == rootHash
+      check ac2.rootHash == rootHash
 
     test "accounts cache code retrieval after persist called":
       var ac = LedgerRef.init(memDB, emptyRlpHash)
