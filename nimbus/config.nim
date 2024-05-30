@@ -208,10 +208,9 @@ type
 
     network {.
       separator: "\pETHEREUM NETWORK OPTIONS:"
-      desc: "Name or id number of Ethereum network(mainnet(1), goerli(5), sepolia(11155111), holesky(17000), other=custom)"
+      desc: "Name or id number of Ethereum network(mainnet(1), sepolia(11155111), holesky(17000), other=custom)"
       longDesc:
         "- mainnet: Ethereum main network\n" &
-        "- goerli:  Test network (proof-of-authority, works across all clients)\n" &
         "- sepolia: Test network (proof-of-work)\n" &
         "- holesky: The holesovice post-merge testnet"
       defaultValue: "" # the default value is set in makeConfig
