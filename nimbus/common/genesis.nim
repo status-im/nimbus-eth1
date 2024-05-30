@@ -34,8 +34,6 @@ type
 
   GenesisRootHashFn = proc: Hash256 {.noRaise.}
 
-  GenesisGetTrieFn = proc: CoreDbMptRef {.noRaise.}
-
   GenesisLedgerRef* = ref object
     ## Exportable ledger DB just for initialising Genesis.
     ##
@@ -43,7 +41,6 @@ type
     setStorage: GenesisSetStorageFn
     commit: GenesisCommitFn
     rootHash: GenesisRootHashFn
-    getTrie: GenesisGetTrieFn
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -77,10 +74,7 @@ proc initAccountsLedgerRef(
       ac.persist(),
 
     rootHash: proc(): Hash256 =
-      ac.state(),
-
-    getTrie: proc(): CoreDbMptRef =
-      ac.getMpt())
+      ac.state())
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -90,10 +84,6 @@ proc newStateDB*(
     db: CoreDbRef;
       ): GenesisLedgerRef =
   db.initAccountsLedgerRef()
-
-proc getTrie*(sdb: GenesisLedgerRef): CoreDbMptRef =
-  ## Getter, used in `test_state_network`
-  sdb.getTrie()
 
 proc toGenesisHeader*(
     g: Genesis;
