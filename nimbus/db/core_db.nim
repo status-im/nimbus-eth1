@@ -13,7 +13,7 @@
 ##
 ## See `core_db/README.md` for implementation details
 ##
-## This module provides a memory datanase only. For providing a persistent
+## This module provides a memory database only. For providing a persistent
 ## constructor, import `db/code_db/persistent` though avoiding to
 ## unnecessarily link to the persistent backend library (e.g. `rocksdb`)
 ## when a memory only database is used.
@@ -25,13 +25,7 @@ import
 export
   memory_only
 
-# Default database backend selection. Note that an `Aristo` type backend
-# should run on a `LedgerCache` type ledger (will not work with
-# `LegacyAccountsCache`.) The `common` module automatically sets that up
-# (unless overridden.) Practically, these constants are mainly used for
-# setting up DB agnostic unit/integration tests.
-#
-# Uncomment the below symbols in order to activate the `Aristo` database.
+# Default database backend selection.
 const DefaultDbMemory* = AristoDbMemory
 const DefaultDbPersistent* = AristoDbRocks
 
