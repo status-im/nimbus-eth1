@@ -6,12 +6,15 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
+  std/importutils,
   eth/trie/trie_defs,
+  eth/common/eth_types,
   stew/[byteutils, endians2],
   unittest2,
-  ../nimbus/db/state_db/read_write
-
-include ../nimbus/db/ledger/accounts_cache
+  ../nimbus/db/storage_types,
+  ../nimbus/db/core_db,
+  ../nimbus/db/ledger,
+  ../nimbus/db/ledger/accounts_ledger {.all.} # import all private symbols
 
 func initAddr(z: int): EthAddress =
   const L = sizeof(result)
@@ -23,10 +26,8 @@ proc stateDBMain*() =
       const emptyAcc {.used.} = newAccount()
 
       var
-        memDB = newCoreDbRef LegacyDbMemory
-        acDB {.used.} = newCoreDbRef LegacyDbMemory
-        trie = memDB.mptPrune()
-        stateDB {.used.} = newAccountStateDB(memDB, trie.rootHash, true)
+        memDB = newCoreDbRef DefaultDbMemory
+        stateDB {.used.} = LedgerRef.init(memDB, emptyRlpHash)
         address {.used.} = hexToByteArray[20]("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6")
         code {.used.} = hexToSeqByte("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6")
         rootHash {.used.} : KeccakHash
@@ -35,28 +36,27 @@ proc stateDBMain*() =
       check stateDB.accountExists(address) == false
       check stateDB.isDeadAccount(address) == true
 
-      var acc = stateDB.getAccount(address)
-      acc.balance = 1000.u256
-      stateDB.setAccount(address, acc)
+      stateDB.setBalance(address, 1000.u256)
 
       check stateDB.accountExists(address) == true
       check stateDB.isDeadAccount(address) == false
 
-      acc.balance = 0.u256
-      acc.nonce = 1
-      stateDB.setAccount(address, acc)
+      stateDB.setBalance(address, 0.u256)
+      stateDB.setNonce(address, 1)
       check stateDB.isDeadAccount(address) == false
 
       stateDB.setCode(address, code)
       stateDB.setNonce(address, 0)
       check stateDB.isDeadAccount(address) == false
 
-      stateDB.setCode(address, [])
+      stateDB.setCode(address, newSeq[byte]())
       check stateDB.isDeadAccount(address) == true
       check stateDB.accountExists(address) == true
 
     test "clone storage":
-      var x = RefAccount(
+      # give access to private fields of AccountRef
+      privateAccess(AccountRef)
+      var x = AccountRef(
         overlayStorage: initTable[UInt256, UInt256](),
         originalStorage: newTable[UInt256, UInt256]()
       )
@@ -84,7 +84,7 @@ proc stateDBMain*() =
       check y.originalStorage.len == 3
 
     test "accounts cache":
-      var ac = init(AccountsCache, acDB, emptyRlpHash, true)
+      var ac = LedgerRef.init(memDB, emptyRlpHash)
       var addr1 = initAddr(1)
 
       check ac.isDeadAccount(addr1) == true
@@ -116,7 +116,7 @@ proc stateDBMain*() =
       ac.persist()
       rootHash = ac.rootHash
 
-      var db = newAccountStateDB(memDB, emptyRlpHash, true)
+      var db = LedgerRef.init(memDB, emptyRlpHash)
       db.setBalance(addr1, 1100.u256)
       db.setNonce(addr1, 2)
       db.setCode(addr1, code)
@@ -125,7 +125,7 @@ proc stateDBMain*() =
 
     test "accounts cache readonly operations":
       # use previous hash
-      var ac = init(AccountsCache, acDB, rootHash, true)
+      var ac = LedgerRef.init(memDB, emptyRlpHash)
       var addr2 = initAddr(2)
 
       check ac.getCodeHash(addr2) == emptyAcc.codeHash
@@ -145,22 +145,22 @@ proc stateDBMain*() =
       check ac.rootHash == rootHash
 
     test "accounts cache code retrieval after persist called":
-      var ac = init(AccountsCache, acDB)
+      var ac = LedgerRef.init(memDB, emptyRlpHash)
       var addr2 = initAddr(2)
       ac.setCode(addr2, code)
       ac.persist()
       check ac.getCode(addr2) == code
       let key = contractHashKey(keccakHash(code))
-      check acDB.kvt.get(key.toOpenArray) == code
+      check memDB.kvt.get(key.toOpenArray) == code
 
     test "accessList operations":
-      proc verifyAddrs(ac: AccountsCache, addrs: varargs[int]): bool =
+      proc verifyAddrs(ac: LedgerRef, addrs: varargs[int]): bool =
         for c in addrs:
           if not ac.inAccessList(c.initAddr):
             return false
         true
 
-      proc verifySlots(ac: AccountsCache, address: int, slots: varargs[int]): bool =
+      proc verifySlots(ac: LedgerRef, address: int, slots: varargs[int]): bool =
         let a = address.initAddr
         if not ac.inAccessList(a):
             return false
@@ -170,13 +170,13 @@ proc stateDBMain*() =
             return false
         true
 
-      proc accessList(ac: AccountsCache, address: int) {.inline.} =
+      proc accessList(ac: LedgerRef, address: int) {.inline.} =
         ac.accessList(address.initAddr)
 
-      proc accessList(ac: AccountsCache, address, slot: int) {.inline.} =
+      proc accessList(ac: LedgerRef, address, slot: int) {.inline.} =
         ac.accessList(address.initAddr, slot.u256)
 
-      var ac = init(AccountsCache, acDB)
+      var ac = LedgerRef.init(memDB, emptyRlpHash)
 
       ac.accessList(0xaa)
       ac.accessList(0xbb, 0x01)
@@ -218,15 +218,15 @@ proc stateDBMain*() =
       check ac.verifySlots(0xdd, 0x04)
 
     test "transient storage operations":
-      var ac = init(AccountsCache, acDB)
+      var ac = LedgerRef.init(memDB, emptyRlpHash)
 
-      proc tStore(ac: AccountsCache, address, slot, val: int) =
+      proc tStore(ac: LedgerRef, address, slot, val: int) =
         ac.setTransientStorage(address.initAddr, slot.u256, val.u256)
 
-      proc tLoad(ac: AccountsCache, address, slot: int): UInt256 =
+      proc tLoad(ac: LedgerRef, address, slot: int): UInt256 =
         ac.getTransientStorage(address.initAddr, slot.u256)
 
-      proc vts(ac: AccountsCache, address, slot, val: int): bool =
+      proc vts(ac: LedgerRef, address, slot, val: int): bool =
         ac.tLoad(address, slot) == val.u256
 
       ac.tStore(0xaa, 3, 66)
@@ -285,7 +285,7 @@ proc stateDBMain*() =
 
     test "accounts cache contractCollision":
       # use previous hash
-      var ac = init(AccountsCache, acDB, emptyRlpHash, true)
+      var ac = LedgerRef.init(memDB, emptyRlpHash)
       let addr2 = initAddr(2)
       check ac.contractCollision(addr2) == false
 
@@ -304,6 +304,6 @@ proc stateDBMain*() =
       check ac.contractCollision(addr4) == false
       ac.setNonce(addr4, 1)
       check ac.contractCollision(addr4) == true
-      
+
 when isMainModule:
   stateDBMain()
