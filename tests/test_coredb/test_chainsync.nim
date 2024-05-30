@@ -236,7 +236,7 @@ proc test_chainSync*(
         let runPersistBlocksRc = chain.persistBlocks(w[0], w[1])
         xCheck runPersistBlocksRc == ValidationResult.OK:
           if noisy:
-            # Re-run with logging enabled
+            noisy.whisper "***", "Re-run with logging enabled...\n"
             setTraceLevel()
             com.db.trackLegaApi = false
             com.db.trackNewApi = false
