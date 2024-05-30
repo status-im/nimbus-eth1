@@ -158,9 +158,6 @@ all: | $(TOOLS) nimbus
 # must be included after the default target
 -include $(BUILD_SYSTEM_DIR)/makefiles/targets.mk
 
-# default: use blst
-USE_MIRACL := 0
-
 # default: use nim native evm
 ENABLE_EVMC := 0
 
@@ -180,10 +177,6 @@ endif
 deps: | deps-common nat-libs nimbus.nims
 ifneq ($(USE_LIBBACKTRACE), 0)
 deps: | libbacktrace
-endif
-
-ifneq ($(USE_MIRACL), 0)
-  NIM_PARAMS += -d:BLS_FORCE_BACKEND=miracl
 endif
 
 ifneq ($(ENABLE_EVMC), 0)

@@ -152,11 +152,6 @@ switch("warning", "ObservableStores:off")
 # Too many false positives for "Warning: method has lock level <unknown>, but another method has 0 [LockLevel]"
 switch("warning", "LockLevel:off")
 
-if defined(windows) and defined(i386):
-  # avoid undefined reference to 'sqrx_mont_384x' when compiling in 32 bit mode
-  # without actually using __BLST_PORTABLE__ or __BLST_NO_ASM__
-  switch("define", "BLS_FORCE_BACKEND:miracl")
-
 # nim-kzg shipping their own blst, nimbus-eth1 too.
 # disable nim-kzg's blst
 switch("define", "kzgExternalBlst")
