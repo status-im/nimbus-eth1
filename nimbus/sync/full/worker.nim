@@ -122,7 +122,7 @@ proc processStaged(buddy: FullBuddyRef): bool =
 
   # Store in persistent database
   try:
-    if chain.persistBlocks(wi.headers, wi.bodies) == ValidationResult.OK:
+    if chain.persistBlocks(wi.headers, wi.bodies).isOk():
       bq.blockQueueAccept(wi)
       return true
   except CatchableError as e:

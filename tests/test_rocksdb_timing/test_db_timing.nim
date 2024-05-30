@@ -123,7 +123,7 @@ proc test_dbTimingUndumpBlocks*(
     # Message if [fromBlock,toBlock] contains a multiple of 700
     if fromBlock + (toBlock mod 900) <= toBlock:
       loadNoise.say "***", &"processing ...[#{fromBlock},#{toBlock}]..."
-    check chain.persistBlocks(w[0], w[1]) == ValidationResult.OK
+    check chain.persistBlocks(w[0], w[1]).isOk()
     if numBlocks.toBlockNumber <= w[0][^1].blockNumber:
       break
 

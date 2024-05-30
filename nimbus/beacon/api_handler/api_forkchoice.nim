@@ -118,14 +118,14 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
       return simpleFCU(PayloadExecutionStatus.invalid, "TDs unavailable for TDD check")
 
     if td < ttd or (blockNumber > 0'u64 and ptd > ttd):
-      error "Refusing beacon update to pre-merge",
+      notice "Refusing beacon update to pre-merge",
         number = blockNumber,
         hash = blockHash.short,
         diff = header.difficulty,
         ptd = ptd,
         ttd = ttd
 
-      return invalidFCU()
+      return invalidFCU("Refusing beacon update to pre-merge")
 
   # If the head block is already in our canonical chain, the beacon client is
   # probably resyncing. Ignore the update.
@@ -133,11 +133,10 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
   if db.getBlockHash(header.blockNumber, canonHash) and canonHash == blockHash:
     # TODO should this be possible?
     # If we allow these types of reorgs, we will do lots and lots of reorgs during sync
-    debug "Reorg to previous block"
-    if chain.setCanonical(header) != ValidationResult.OK:
-      return invalidFCU(com, header)
-  elif chain.setCanonical(header) != ValidationResult.OK:
-    return invalidFCU(com, header)
+    notice "Reorg to previous block", blockHash
+
+  chain.setCanonical(header).isOkOr:
+    return invalidFCU(error, com, header)
 
   # If the beacon client also advertised a finalized block, mark the local
   # chain final and completely in PoS mode.

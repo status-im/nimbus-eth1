@@ -219,4 +219,4 @@ func version*(env: EngineEnv, time: uint64): Version =
   env.version(time.EthTime)
 
 proc setBlock*(env: EngineEnv, header: common.BlockHeader, body: common.BlockBody): bool =
-  env.chain.setBlock(header, body) == ValidationResult.OK
+  env.chain.setBlock(header, body).isOk()

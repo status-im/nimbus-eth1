@@ -7,6 +7,8 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
+{.push raises: [].}
+
 import
   chronicles,
   eth/rlp, stew/io2,
@@ -30,9 +32,6 @@ proc importRlpBlock*(blocksRlp: openArray[byte]; com: CommonRef; importFile: str
   while rlp.hasData:
     try:
       rlp.decompose(header, body)
-      if chain.persistBlocks([header], [body]) == ValidationResult.Error:
-        # register one more error and continue
-        errorCount.inc
     except RlpError as e:
       # terminate if there was a decoding error
       error "rlp error",
@@ -40,12 +39,12 @@ proc importRlpBlock*(blocksRlp: openArray[byte]; com: CommonRef; importFile: str
         msg = e.msg,
         exception = e.name
       return false
-    except CatchableError as e:
-      # otherwise continue
+
+    chain.persistBlocks([header], [body]).isOkOr():
+      # register one more error and continue
       error "import error",
         fileName = importFile,
-        msg = e.msg,
-        exception = e.name
+        error
       errorCount.inc
 
   return errorCount == 0

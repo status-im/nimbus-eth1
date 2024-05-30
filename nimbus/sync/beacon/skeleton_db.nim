@@ -197,13 +197,8 @@ proc insertBlocks*(sk: SkeletonRef,
                    headers: openArray[BlockHeader],
                    body: openArray[BlockBody],
                    fromEngine: bool): Result[uint64, string] =
-  try:
-    let res = sk.chain.persistBlocks(headers, body)
-    if res != ValidationResult.OK:
-      return err("insertBlocks validation error")
-    ok(headers.len.uint64)
-  except CatchableError as ex:
-    err(ex.msg)
+  discard ? sk.chain.persistBlocks(headers, body)
+  ok(headers.len.uint64)
 
 proc insertBlock*(sk: SkeletonRef,
                   header: BlockHeader,

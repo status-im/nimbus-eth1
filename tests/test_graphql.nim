@@ -88,7 +88,7 @@ proc setupChain(): CommonRef =
 
   let chain = newChain(com)
   let res = chain.persistBlocks(headers, bodies)
-  assert(res == ValidationResult.OK)
+  assert res.isOk(), res.error()
 
   com
 

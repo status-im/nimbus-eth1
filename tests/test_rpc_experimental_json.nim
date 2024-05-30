@@ -52,7 +52,7 @@ proc importBlockData(node: JsonNode): (CommonRef, Hash256, Hash256, UInt256) {. 
   # it's ok if setHead fails here because of missing ancestors
   discard com.db.setHead(parent, true)
   let validationResult = chain.persistBlocks(headers, bodies)
-  doAssert validationResult == ValidationResult.OK
+  doAssert validationResult.isOk()
 
   return (com, parent.stateRoot, header.stateRoot, blockNumber)
 

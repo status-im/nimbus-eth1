@@ -40,7 +40,7 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus) =
   # it's ok if setHead fails here because of missing ancestors
   discard com.db.setHead(parent, true)
   let validationResult = chain.persistBlocks(headers, bodies)
-  check validationResult == ValidationResult.OK
+  check validationResult.isOk()
 
 proc persistBlockJsonMain*() =
   suite "persist block json tests":

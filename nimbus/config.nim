@@ -145,6 +145,11 @@ type
       abbr: "d"
       name: "data-dir" }: OutDir
 
+    era1DirOpt* {.
+      desc: "Directory where era1 (pre-merge) archive can be found"
+      defaultValueDesc: "<data-dir>/era1"
+      name: "era1-dir" }: Option[OutDir]
+
     keyStore* {.
       desc: "Load one or more keystore files from this directory"
       defaultValue: defaultKeystoreDir()
@@ -166,7 +171,7 @@ type
     syncMode* {.
       desc: "Specify particular blockchain sync mode."
       longDesc:
-        "- default   -- legacy sync mode\n" &
+        "- default   -- beacon sync mode\n" &
         "- full      -- full blockchain archive\n" &
         # "- snap      -- experimental snap mode (development only)\n" &
         ""
@@ -475,12 +480,20 @@ type
         name: "trusted-setup-file" .}: Option[string]
 
     of `import`:
-
       blocksFile* {.
         argument
-        desc: "Import RLP encoded block(s) from a file, validate, write to database and quit"
-        defaultValue: ""
-        name: "blocks-file" }: InputFile
+        desc: "One or more RLP encoded block(s) files"
+        name: "blocks-file" }: seq[InputFile]
+
+      maxBlocks* {.
+        desc: "Maximum number of blocks to import"
+        defaultValue: uint64.high()
+        name: "max-blocks" .}: uint64
+
+      chunkSize* {.
+        desc: "Number of blocks per database transaction"
+        defaultValue: 8192
+        name: "chunk-size" .}: uint64
 
 func parseCmdArg(T: type NetworkId, p: string): T
     {.gcsafe, raises: [ValueError].} =
@@ -734,6 +747,9 @@ func httpServerEnabled*(conf: NimbusConf): bool =
   conf.graphqlEnabled or
     conf.wsEnabled or
     conf.rpcEnabled
+
+func era1Dir*(conf: NimbusConf): OutDir =
+  conf.era1DirOpt.get(OutDir(conf.dataDir.string & "/era1"))
 
 # KLUDGE: The `load()` template does currently not work within any exception
 #         annotated environment.
