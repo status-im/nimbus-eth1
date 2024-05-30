@@ -104,8 +104,8 @@ proc main() {.used.} =
 
     if numBlocks == numBlocksToCommit:
       persistToDb(com.db):
-        if chain.persistBlocks(headers, bodies) != ValidationResult.OK:
-          raise newException(ValidationError, "Error when validating blocks")
+        if chain.persistBlocks(headers, bodies).isErrOr:
+          raise newException(ValidationError, "Error when validating blocks: " & error)
       numBlocks = 0
       headers.setLen(0)
       bodies.setLen(0)
@@ -116,8 +116,8 @@ proc main() {.used.} =
 
   if numBlocks > 0:
     persistToDb(com.db):
-      if chain.persistBlocks(headers, bodies) != ValidationResult.OK:
-        raise newException(ValidationError, "Error when validating blocks")
+      if chain.persistBlocks(headers, bodies).isErrOr:
+        raise newException(ValidationError, "Error when validating blocks: " & error)
 
 when isMainModule:
   var message: string
