@@ -26,8 +26,7 @@ proc init(
       blockCtx:     BlockContext;
       com:          CommonRef;
       tracer:       TracerRef,
-      flags:        set[VMFlag] = self.flags)
-    {.gcsafe.} =
+      flags:        set[VMFlag] = self.flags) =
   ## Initialisation helper
   self.parent = parent
   self.blockCtx = blockCtx
@@ -38,7 +37,7 @@ proc init(
   self.flags = flags
 
 func blockCtx(com: CommonRef, header: BlockHeader):
-                BlockContext {.gcsafe, raises: [CatchableError].} =
+                BlockContext =
   BlockContext(
     timestamp    : header.timestamp,
     gasLimit     : header.gasLimit,
@@ -64,8 +63,7 @@ proc new*(
       parent:   BlockHeader;     ## parent header, account sync position
       blockCtx: BlockContext;
       com:      CommonRef;       ## block chain config
-      tracer:   TracerRef = nil): T
-    {.gcsafe.} =
+      tracer:   TracerRef = nil): T =
   ## Create a new `BaseVMState` descriptor from a parent block header. This
   ## function internally constructs a new account state cache rooted at
   ## `parent.stateRoot`
@@ -84,8 +82,7 @@ proc new*(
 proc reinit*(self:     BaseVMState;     ## Object descriptor
              parent:   BlockHeader;     ## parent header, account sync pos.
              blockCtx: BlockContext
-             ): bool
-    {.gcsafe.} =
+             ): bool =
   ## Re-initialise state descriptor. The `LedgerRef` database is
   ## re-initilaise only if its `rootHash` doe not point to `parent.stateRoot`,
   ## already. Accumulated state data are reset.
@@ -116,8 +113,7 @@ proc reinit*(self:     BaseVMState;     ## Object descriptor
 proc reinit*(self:   BaseVMState; ## Object descriptor
              parent: BlockHeader; ## parent header, account sync pos.
              header: BlockHeader; ## header with tx environment data fields
-             ): bool
-    {.gcsafe, raises: [CatchableError].} =
+             ): bool =
   ## Variant of `reinit()`. The `parent` argument is used to sync the accounts
   ## cache and the `header` is used as a container to pass the `timestamp`,
   ## `gasLimit`, and `fee` values.
@@ -131,8 +127,7 @@ proc reinit*(self:   BaseVMState; ## Object descriptor
 
 proc reinit*(self:      BaseVMState; ## Object descriptor
              header:    BlockHeader; ## header with tx environment data fields
-             ): bool
-    {.gcsafe, raises: [CatchableError].} =
+             ): bool =
   ## This is a variant of the `reinit()` function above where the field
   ## `header.parentHash`, is used to fetch the `parent` BlockHeader to be
   ## used in the `update()` variant, above.
@@ -147,8 +142,7 @@ proc init*(
       parent: BlockHeader;     ## parent header, account sync position
       header: BlockHeader;     ## header with tx environment data fields
       com:    CommonRef;       ## block chain config
-      tracer: TracerRef = nil)
-    {.gcsafe, raises: [CatchableError].} =
+      tracer: TracerRef = nil) =
   ## Variant of `new()` constructor above for in-place initalisation. The
   ## `parent` argument is used to sync the accounts cache and the `header`
   ## is used as a container to pass the `timestamp`, `gasLimit`, and `fee`
@@ -168,8 +162,7 @@ proc new*(
       parent: BlockHeader;     ## parent header, account sync position
       header: BlockHeader;     ## header with tx environment data fields
       com:    CommonRef;       ## block chain config
-      tracer: TracerRef = nil): T
-    {.gcsafe, raises: [CatchableError].} =
+      tracer: TracerRef = nil): T =
   ## This is a variant of the `new()` constructor above where the `parent`
   ## argument is used to sync the accounts cache and the `header` is used
   ## as a container to pass the `timestamp`, `gasLimit`, and `fee` values.
@@ -202,8 +195,7 @@ proc init*(
       vmState: BaseVMState;
       header:  BlockHeader;     ## header with tx environment data fields
       com:     CommonRef;       ## block chain config
-      tracer:  TracerRef = nil): bool
-    {.gcsafe, raises: [CatchableError].} =
+      tracer:  TracerRef = nil): bool =
   ## Variant of `new()` which does not throw an exception on a dangling
   ## `BlockHeader` parent hash reference.
   var parent: BlockHeader

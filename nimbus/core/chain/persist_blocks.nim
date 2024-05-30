@@ -45,8 +45,7 @@ const
 # ------------------------------------------------------------------------------
 
 proc getVmState(c: ChainRef, header: BlockHeader):
-                 Result[BaseVMState, void]
-                  {.gcsafe, raises: [CatchableError].} =
+                 Result[BaseVMState, void] =
   if c.vmState.isNil.not:
     return ok(c.vmState)
 
