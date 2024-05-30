@@ -20,8 +20,8 @@ cliBuilder:
           ./test_stack,
           ./test_genesis,
           /test_precompiles,
-          #./test_generalstate_json,               -- fails
-          ./test_tracer_json,
+          ./test_generalstate_json,
+          #./test_tracer_json,                     -- temporarily suspended
           #./test_persistblock_json,               -- fails
           #./test_rpc,                             -- fails
           ./test_filters,

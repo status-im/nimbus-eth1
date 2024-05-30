@@ -78,8 +78,8 @@ let
     builtIn: true,
     name:    "main",
     network: MainNet,
-    # will run over all avail files in parent folder
-    files:   @["00000.era1"])                 # on external repo
+    # The extren repo is identified by a tag file
+    files:   @["mainnet-extern.era1"])        # on external repo
 
   # ------------------
 
@@ -114,6 +114,7 @@ let
       dbType    = AristoDbRocks,
       dbName    = "main-open") # for resuming on the same persistent DB
 
+  # -----------------------
 
   mainTest5m* = mainSampleEx
     .cloneWith(
@@ -122,17 +123,37 @@ let
 
   mainTest6r* = mainSampleEx
     .cloneWith(
+      name      = "-ex-ar-some",
+      numBlocks = 257_400,
+      dbType    = AristoDbRocks,
+      dbName    = "main-open") # for resuming on the same persistent DB
+
+  mainTest7r* = mainSampleEx
+    .cloneWith(
+      name      = "-ex-ar-more",
+      numBlocks = 1_460_700,   # failure at 1,460,736
+      dbType    = AristoDbRocks,
+      dbName    = "main-open") # for resuming on the same persistent DB
+
+  mainTest8r* = mainSampleEx
+    .cloneWith(
+      name      = "-ex-ar-more2",
+      numBlocks = 1_460_735,   # failure at 1,460,736
+      dbType    = AristoDbRocks,
+      dbName    = "main-open") # for resuming on the same persistent DB
+
+  mainTest9r* = mainSampleEx
+    .cloneWith(
       name      = "-ex-ar",
       numBlocks = high(int),
-      dbType    = AristoDbRocks)
-
+      dbType    = AristoDbRocks,
+      dbName    = "main-open") # for resuming on the same persistent DB
 
   # ------------------
 
   allSamples* = [
-    mainTest0m, mainTest1m,
-    mainTest2r, mainTest3r, mainTest4r,
-    mainTest5m, mainTest6r
+    mainTest0m, mainTest1m, mainTest2r, mainTest3r, mainTest4r,
+    mainTest5m, mainTest6r, mainTest7r, mainTest8r, mainTest9r,
   ]
 
 # End

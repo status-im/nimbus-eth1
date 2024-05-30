@@ -14,7 +14,7 @@
 {.push raises: [].}
 
 import
-  std/options,
+  std/[options, tables],
   results,
   ".."/[aristo_desc, aristo_get, aristo_journal, aristo_layers, aristo_hashify]
 
@@ -68,6 +68,10 @@ proc txStow*(
         # It is OK if there was no `Idg`. Otherwise something serious happened
         # and there is no way to recover easily.
         doAssert rc.error == GetIdgNotFound
+  elif db.top.delta.sTab.len != 0 and
+       not db.top.delta.sTab.getOrVoid(VertexID(1)).isValid:
+    # Currently, a `VertexID(1)` root node is required
+    return err(TxAccRootMissing)
 
   if persistent:
     # Merge/move `roFilter` into persistent tables

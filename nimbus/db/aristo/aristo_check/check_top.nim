@@ -92,6 +92,10 @@ proc checkTopCommon*(
   let
     kMapCount = db.layersWalkKey.toSeq.mapIt(it[1]).filterIt(it.isValid).len
     kMapNilCount = db.layersWalkKey.toSeq.len - kMapCount
+    vGen = db.vGen.toHashSet
+    vGenMax = if vGen.len == 0: VertexID(0) else: db.vGen[^1]
+  var
+    stoRoots: HashSet[VertexID]
 
   # Collect leafs and check deleted entries
   var nNilVtx = 0
@@ -99,7 +103,14 @@ proc checkTopCommon*(
     if vtx.isValid:
       case vtx.vType:
       of Leaf:
-        discard
+        if vtx.lData.pType == AccountData:
+          let stoVid = vtx.lData.account.storageID
+          if stoVid.isValid:
+            if stoVid in stoRoots:
+              return err((stoVid,CheckAnyVidSharedStorageRoot))
+            if vGenMax.isValid and (vGenMax < stoVid or stoVid in vGen):
+              return err((stoVid,CheckAnyVidDeadStorageRoot))
+            stoRoots.incl stoVid
       of Branch:
         block check42Links:
           var seen = false

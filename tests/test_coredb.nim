@@ -198,6 +198,7 @@ proc chainSyncRunner(
     finalDiskCleanUpOk = true;
     enaLoggingOk = false;
     lastOneExtraOk = true;
+    oldLogAlign = false;
       ) =
 
   ## Test backend database and ledger
@@ -241,7 +242,8 @@ proc chainSyncRunner(
         com.db.trackLedgerApi = true
 
       check noisy.test_chainSync(filePaths, com, numBlocks,
-        lastOneExtra=lastOneExtraOk, enaLogging=enaLoggingOk)
+        lastOneExtra=lastOneExtraOk, enaLogging=enaLoggingOk,
+        oldLogAlign=oldLogAlign)
 
 
 proc persistentSyncPreLoadAndResumeRunner(
@@ -252,12 +254,10 @@ proc persistentSyncPreLoadAndResumeRunner(
     finalDiskCleanUpOk = true;
     enaLoggingOk = false;
     lastOneExtraOk = true;
+    oldLogAlign = false;
       ) =
   ## Test backend database and ledger
   let
-    fileInfo = capture.files[0]
-                      .splitFile.name.split(".")[0]
-                      .strip(leading=false, chars={'0'..'9'})
     filePaths = capture.files.mapIt(it.findFilePath(baseDir,repoDir).value)
     baseDir = getTmpDir() / capture.dbName & "-chain-sync"
     dbDir = baseDir / "tmp"
@@ -294,7 +294,8 @@ proc persistentSyncPreLoadAndResumeRunner(
         com.db.trackLedgerApi = true
 
       check noisy.test_chainSync(filePaths, com, firstPart,
-        lastOneExtra=lastOneExtraOk, enaLogging=enaLoggingOk)
+        lastOneExtra=lastOneExtraOk, enaLogging=enaLoggingOk,
+        oldLogAlign=oldLogAlign)
 
     test &"Continue with rest of sample":
       let
@@ -310,7 +311,8 @@ proc persistentSyncPreLoadAndResumeRunner(
         com.db.trackLedgerApi = true
 
       check noisy.test_chainSync(filePaths, com, secndPart,
-        lastOneExtra=lastOneExtraOk, enaLogging=enaLoggingOk)
+        lastOneExtra=lastOneExtraOk, enaLogging=enaLoggingOk,
+        oldLogAlign=oldLogAlign)
 
 # ------------------------------------------------------------------------------
 # Main function(s)
@@ -330,7 +332,7 @@ when isMainModule:
 
   setErrorLevel()
 
-  when true:
+  when true and false:
     false.coreDbMain()
 
   # This one uses the readily available dump: `bulkTest0` and some huge replay
@@ -349,6 +351,7 @@ when isMainModule:
           capture = capture,
           #profilingOk = true,
           #finalDiskCleanUpOk = false,
+          oldLogAlign = true
         )
 
     noisy.say "***", "total: ", state[0].pp, " sections: ", state[1]

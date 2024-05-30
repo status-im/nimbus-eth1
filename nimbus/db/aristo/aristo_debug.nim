@@ -130,12 +130,17 @@ proc ppVid(vid: VertexID; pfx = true): string =
 
 proc ppVids(vids: HashSet[VertexID]): string =
   result = "{"
-  for vid in vids.toSeq.sorted:
-    result = "$"
-    if vid.isValid:
-      result &= vid.toHex.stripZeros.toLowerAscii
-    else:
-      result &= "ø"
+  if vids.len == 0:
+    result &= "}"
+  else:
+    for vid in vids.toSeq.sorted:
+      result &= "$"
+      if vid.isValid:
+        result &= vid.toHex.stripZeros.toLowerAscii
+      else:
+        result &= "ø"
+      result &= ","
+    result[^1] = '}'
 
 func ppCodeHash(h: Hash256): string =
   result = "¢"
@@ -173,7 +178,14 @@ proc ppQid(qid: QueueID): string =
   result &= qid.toHex.stripZeros
 
 proc ppVidList(vGen: openArray[VertexID]): string =
-  "[" & vGen.mapIt(it.ppVid).join(",") & "]"
+  result = "["
+  if vGen.len <= 250:
+    result &= vGen.mapIt(it.ppVid).join(",")
+  else:
+    result &= vGen[0 .. 99].mapIt(it.ppVid).join(",")
+    result &= ",.."
+    result &= vGen[^100 .. ^1].mapIt(it.ppVid).join(",")
+  result &= "]"
 
 proc ppKey(key: HashKey; db: AristoDbRef; pfx = true): string =
   proc getVids(): tuple[vids: HashSet[VertexID], xMapTag: string] =
@@ -204,7 +216,7 @@ proc ppKey(key: HashKey; db: AristoDbRef; pfx = true): string =
       if 1 < vids.len: result &= "}"
       result &= tag
       return
-    result &= @key.toHex.squeeze(hex=true,ignLen=true) & tag
+    result &= @(key.data).toHex.squeeze(hex=true,ignLen=true) & tag
 
 proc ppLeafTie(lty: LeafTie, db: AristoDbRef): string =
   let pfx = lty.path.to(NibblesSeq)
@@ -435,7 +447,7 @@ proc ppFilter(
     result &= $(1+n) & "(" & vid.ppVid & "," & key.ppKey(db) & ")"
   result &= "}"
 
-proc ppBe[T](be: T; db: AristoDbRef; indent: int): string =
+proc ppBe[T](be: T; db: AristoDbRef; limit: int; indent: int): string =
   ## Walk over backend tables
   let
     pfx = indent.toPfx
@@ -445,19 +457,21 @@ proc ppBe[T](be: T; db: AristoDbRef; indent: int): string =
   var (dump,dataOk) = ("",false)
   dump &= pfx & "vGen"
   block:
-    let q = be.getIdgFn().get(otherwise = EmptyVidSeq).mapIt(it.ppVid)
+    let q = be.getIdgFn().get(otherwise = EmptyVidSeq)
     dump &= "(" & $q.len & ")"
     if 0 < q.len:
       dataOk = true
-      dump &= pfx1
-    dump &= "[" & q.join(",") & "]"
+      dump &= pfx1 & q.ppVidList()
   block:
     dump &= pfx & "sTab"
     var (n, data) = (0, "")
     for (vid,vtx) in be.walkVtx:
-      if 0 < n: data &= pfx2
       n.inc
-      data &= $n & "(" & vid.ppVid & "," & vtx.ppVtx(db,vid) & ")"
+      if n < limit:
+        if 1 < n: data &= pfx2
+        data &= $n & "(" & vid.ppVid & "," & vtx.ppVtx(db,vid) & ")"
+      elif n == limit:
+        data &= pfx2 & ".."
     dump &= "(" & $n & ")"
     if 0 < n:
       dataOk = true
@@ -467,9 +481,12 @@ proc ppBe[T](be: T; db: AristoDbRef; indent: int): string =
     dump &= pfx & "kMap"
     var (n, data) = (0, "")
     for (vid,key) in be.walkKey:
-      if 0 < n: data &= pfx2
       n.inc
-      data &= $n & "(" & vid.ppVid & "," & key.ppKey(db) & ")"
+      if n < limit:
+        if 1 < n: data &= pfx2
+        data &= $n & "(" & vid.ppVid & "," & key.ppKey(db) & ")"
+      elif n == limit:
+        data &= pfx2 & ".."
     dump &= "(" & $n & ")"
     if 0 < n:
       dataOk = true
@@ -542,7 +559,7 @@ proc ppLayer(
     if 0 < nOKs:
       let
         info = if layer.final.dirty.len == 0: "clean"
-               else: "dirty{" & layer.final.dirty.ppVids & "}"
+               else: "dirty" & layer.final.dirty.ppVids
       result &= info.doPrefix(false)
 
 # ------------------------------------------------------------------------------
@@ -757,14 +774,15 @@ proc pp*(
 proc pp*(
   be: BackendRef;
   db: AristoDbRef;
+  limit = 100;
   indent = 4;
     ): string =
   result = db.roFilter.ppFilter(db, indent+1) & indent.toPfx
   case be.kind:
   of BackendMemory:
-    result &= be.MemBackendRef.ppBe(db, indent+1)
+    result &= be.MemBackendRef.ppBe(db, limit, indent+1)
   of BackendRocksDB:
-    result &= be.RdbBackendRef.ppBe(db, indent+1)
+    result &= be.RdbBackendRef.ppBe(db, limit, indent+1)
   of BackendVoid:
     result &= "<NoBackend>"
 
@@ -776,6 +794,7 @@ proc pp*(
     topOk = true;
     stackOk = true;
     kMapOk = true;
+    limit = 100;
       ): string =
   if topOk:
     result = db.layersCc.pp(
@@ -796,7 +815,7 @@ proc pp*(
       lStr &= " " & $m & "=(" & $(l.delta.kMap.len - c) & "," & $c & ")"
     result &= " =>" & lStr
   if backendOk:
-    result &= indent.toPfx & db.backend.pp(db)
+    result &= indent.toPfx & db.backend.pp(db, limit=limit, indent)
   elif filterOk:
     result &= indent.toPfx & db.roFilter.ppFilter(db, indent+1)
 

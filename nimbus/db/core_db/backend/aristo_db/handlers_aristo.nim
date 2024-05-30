@@ -197,19 +197,28 @@ proc mptMethods(cMpt: AristoCoreDxMptRef): CoreDbMptFns =
     db.bless AristoCoreDbMptBE(adb: mpt)
 
   proc mptColFn(): CoreDbColRef =
-    let col =
-      if LEAST_FREE_VID <= cMpt.mptRoot.distinctBase:
-        assert cMpt.accPath.isValid # debug mode only
-        AristoColRef(
-          base:    base,
-          colType: CtStorage,
-          stoRoot: cMpt.mptRoot,
-          stoAddr: cMpt.address)
-      else:
-        AristoColRef(
-          base:    base,
-          colType: CoreDbColType(cMpt.mptRoot))
-    db.bless col
+    if cMpt.mptRoot.distinctBase < LEAST_FREE_VID:
+      return db.bless(AristoColRef(
+        base:    base,
+        colType: CoreDbColType(cMpt.mptRoot)))
+
+    assert cMpt.accPath.isValid # debug mode only
+    if cMpt.mptRoot.isValid:
+      # The mpt might have become empty
+      let
+        key = cMpt.address.keccakHash.data
+        pyl = api.fetchPayload(mpt, AccountsVID, key).valueOr:
+          raiseAssert "mptColFn(): " & $error[1] & " at " & $error[0]
+
+      # Update by accounts data
+      doAssert pyl.pType == AccountData
+      cMpt.mptRoot = pyl.account.storageID
+
+    db.bless AristoColRef(
+      base:    base,
+      colType: CtStorage,
+      stoRoot: cMpt.mptRoot,
+      stoAddr: cMpt.address)
 
   proc mptFetch(key: openArray[byte]): CoreDbRc[Blob] =
     const info = "fetchFn()"

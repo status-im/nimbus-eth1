@@ -362,7 +362,15 @@ proc persistStorage(acc: AccountRef, ac: AccountsLedgerRef, clearCache: bool) =
         acc.originalStorage.del(slot)
     acc.overlayStorage.clear()
 
+  # Changing the storage trie might also change the `storage` descriptor when
+  # the trie changes from empty to exixting or v.v.
   acc.statement.storage = storageLedger.getColumn()
+
+  # No need to hold descriptors for longer than needed
+  let state = acc.statement.storage.state.valueOr:
+    raiseAssert "Storage column state error: " & $$error
+  if state == EMPTY_ROOT_HASH:
+    acc.statement.storage = CoreDbColRef(nil)
 
 proc makeDirty(ac: AccountsLedgerRef, address: EthAddress, cloneStorage = true): AccountRef =
   ac.isDirty = true
