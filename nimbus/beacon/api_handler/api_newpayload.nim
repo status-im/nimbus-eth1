@@ -59,12 +59,8 @@ template validateVersion(com, timestamp, version, apiVersion) =
         "payload must be ExecutionPayloadV2, got ExecutionPayload" & $version)
 
   elif version != Version.V1:
-    if com.syncReqRelaxV2:
-      trace "Relaxed mode, treating payload as V1"
-      discard
-    else:
-      raise invalidParams("if timestamp is earlier than Shanghai, " &
-        "payload must be ExecutionPayloadV1, got ExecutionPayload" & $version)
+    raise invalidParams("if timestamp is earlier than Shanghai, " &
+      "payload must be ExecutionPayloadV1, got ExecutionPayload" & $version)
 
   if apiVersion >= Version.V3:
     if version != apiVersion:
