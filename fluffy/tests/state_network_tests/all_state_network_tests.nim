@@ -8,15 +8,14 @@
 {.warning[UnusedImport]: off.}
 
 import
-  ./test_state_content_keys,
+  ./test_state_content_keys_vectors,
   ./test_state_content_nibbles,
-  ./test_state_content_values,
+  ./test_state_content_values_vectors,
   ./test_state_gossip_getparent_genesis,
   ./test_state_gossip_getparent_vectors,
-  ./test_state_gossip_offer,
-  ./test_state_network_getcontent,
-  ./test_state_network_offercontent,
-  ./test_state_network,
+  ./test_state_gossip_gossipoffer_vectors,
+  ./test_state_network_getcontent_vectors,
+  ./test_state_network_offercontent_vectors,
   ./test_state_validation_genesis,
   ./test_state_validation_trieproof,
   ./test_state_validation_vectors
