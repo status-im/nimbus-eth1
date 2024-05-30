@@ -443,6 +443,9 @@ proc testTxMergeAndDeleteSubTree*(
     list: openArray[ProofTrieData];
     rdbPath: string;                          # Rocks DB storage directory
        ): bool =
+  const
+    # Need to reconfigure for the test, root ID 1 cannot be deleted as a trie
+    testRootVid = VertexID(2)
   var
     prng = PrngDesc.init 42
     db = AristoDbRef(nil)
@@ -460,6 +463,10 @@ proc testTxMergeAndDeleteSubTree*(
       else:
         AristoDbRef.init(MemBackendRef, qidLayout=TxQidLyo)
 
+    if testRootVid != VertexID(1):
+      # Add a dummy entry so the journal logic can be triggered
+      discard db.merge(VertexID(1), @[n.byte], @[42.byte], VOID_PATH_ID)
+
     # Start transaction (double frame for testing)
     xCheck db.txTop.isErr
     var tx = db.txBegin().value.to(AristoDbRef).txBegin().value
@@ -469,9 +476,9 @@ proc testTxMergeAndDeleteSubTree*(
     # Reset database so that the next round has a clean setup
     defer: db.innerCleanUp
 
-    # Merge leaf data into main trie (w/vertex ID 1)
+    # Merge leaf data into main trie (w/vertex ID 2)
     let kvpLeafs = block:
-      var lst = w.kvpLst.mapRootVid VertexID(1)
+      var lst = w.kvpLst.mapRootVid testRootVid
       # The list might be reduced for isolation of particular properties,
       # e.g. lst.setLen(min(5,lst.len))
       lst
@@ -500,12 +507,17 @@ proc testTxMergeAndDeleteSubTree*(
           ""
     # Delete sub-tree
     block:
-      let rc = db.delTree(VertexID(1), VOID_PATH_ID)
+      let rc = db.delTree(testRootVid, VOID_PATH_ID)
       xCheckRc rc.error == (0,0):
         noisy.say "***", "del(2)",
           " n=", n, "/", list.len,
           "\n    db\n    ", db.pp(backendOk=true),
           ""
+
+    if testRootVid != VertexID(1):
+      # Update dummy entry so the journal logic can be triggered
+      discard db.merge(VertexID(1), @[n.byte], @[43.byte], VOID_PATH_ID)
+
     block:
       let saveBeOk = tx.saveToBackend(
         chunkedMpt=false, relax=false, noisy=noisy, 2 + list.len * n)
