@@ -64,8 +64,6 @@ proc newChain*(com: CommonRef,
 func newChain*(com: CommonRef): ChainRef =
   ## Constructor for the `Chain` descriptor object. All sub-object descriptors
   ## are initialised with defaults. So is extra block chain validation
-  ##  * `enabled` for PoA networks (such as Goerli)
-  ##  * `disabled` for non-PaA networks
   let extraValidation = com.consensus == ConsensusType.POS
   ChainRef(
     com: com,

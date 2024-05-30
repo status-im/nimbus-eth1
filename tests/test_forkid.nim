@@ -46,20 +46,6 @@ const
     (number: 30000000'u64, time: 2000000000'u64, id: (crc: 0xdce96c2d'u32, next: 0'u64)),          # Future Shanghai block
   ]
 
-  GoerliNetIDs = [
-    (number: 0'u64      , time: 0'u64, id: (crc: 0xa3f5ab08'u32, next: 1561651'u64)), # Unsynced, last Frontier, Homestead, Tangerine, Spurious, Byzantium, Constantinople and first Petersburg block
-    (number: 1561650'u64, time: 0'u64, id: (crc: 0xa3f5ab08'u32, next: 1561651'u64)), # Last Petersburg block
-    (number: 1561651'u64, time: 0'u64, id: (crc: 0xc25efa5c'u32, next: 4460644'u64)), # First Istanbul block
-    (number: 4460643'u64, time: 0'u64, id: (crc: 0xc25efa5c'u32, next: 4460644'u64)), # Future Istanbul block
-    (number: 4460644'u64, time: 0'u64, id: (crc: 0x757a1c47'u32, next: 5062605'u64)), # First Berlin block
-    (number: 5062604'u64, time: 0'u64, id: (crc: 0x757a1c47'u32, next: 5062605'u64)), # Last Berlin block
-    (number: 5062605'u64, time: 0'u64, id: (crc: 0xb8c6299d'u32, next: 1678832736'u64)),         # First London block
-    (number: 6000000'u64, time: 1678832735'u64, id: (crc: 0xB8C6299D'u32, next: 1678832736'u64)), # Last London block
-    (number: 6000001'u64, time: 1678832736'u64, id: (crc: 0xf9843abf'u32, next: 1705473120'u64)), # First Shanghai block
-    (number: 6500000'u64, time: 1705473119'u64, id: (crc: 0xf9843abf'u32, next: 1705473120'u64)), # Last Shanghai block
-    (number: 6500000'u64, time: 1705473120'u64, id: (crc: 0x70cc14e2'u32, next: 0'u64)), # First Cancun block
-  ]
-
   SepoliaNetIDs = [
     (number: 0'u64,       time: 0'u64, id: (crc: 0xfe3366e7'u32, next: 1735371'u64)),             # Unsynced, last Frontier, Homestead, Tangerine, Spurious, Byzantium, Constantinople, Petersburg, Istanbul, Berlin and first London block
     (number: 1735370'u64, time: 0'u64, id: (crc: 0xfe3366e7'u32, next: 1735371'u64)),             # Last London block
