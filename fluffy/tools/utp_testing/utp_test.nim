@@ -62,14 +62,14 @@ procSuite "uTP network simulator tests":
 
   proc findServerConnection(
       connections: openArray[SKey], clientId: NodeId, clientConnectionId: uint16
-  ): Option[Skey] =
+  ): Option[SKey] =
     let conns: seq[SKey] = connections.filter(
-      (key: Skey) => key.id == (clientConnectionId + 1) and key.nodeId == clientId
+      (key: SKey) => key.id == (clientConnectionId + 1) and key.nodeId == clientId
     )
     if len(conns) == 0:
-      none[Skey]()
+      none[SKey]()
     else:
-      some[Skey](conns[0])
+      some[SKey](conns[0])
 
   proc setupTest(): Future[(RpcHttpClient, NodeInfo, RpcHttpClient, NodeInfo)] {.async.} =
     let client = newRpcHttpClient()
