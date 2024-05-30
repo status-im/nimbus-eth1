@@ -31,7 +31,7 @@ cliBuilder:
           ./test_op_memory,
           ./test_op_misc,
           ./test_op_custom,
-          #./test_state_db,                        -- does not compile
+          ./test_state_db,
           ./test_difficulty,
           ./test_transaction_json,
           #./test_blockchain_json,                 -- fails
