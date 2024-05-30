@@ -1,6 +1,6 @@
 # Nimbus - Services available to EVM code that is run for a transaction
 #
-# Copyright (c) 2019-2021 Status Research & Development GmbH
+# Copyright (c) 2019-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -43,7 +43,7 @@ proc afterExecCreateEvmcNested(host: TransactionHost, child: Computation,
     res.status_code = EVMC_SUCCESS
     res.create_address = child.msg.contractAddress.toEvmc
   else:
-    res.status_code = child.statusCode
+    res.status_code = child.evmcStatus
     if child.output.len > 0:
       # TODO: can we move the ownership of seq to raw pointer?
       res.output_size = child.output.len.uint
@@ -78,7 +78,7 @@ proc afterExecCallEvmcNested(host: TransactionHost, child: Computation,
     host.computation.merge(child)
     res.status_code = EVMC_SUCCESS
   else:
-    res.status_code = child.statusCode
+    res.status_code = child.evmcStatus
 
   if child.output.len > 0:
     # TODO: can we move the ownership of seq to raw pointer?

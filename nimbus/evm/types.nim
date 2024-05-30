@@ -96,7 +96,7 @@ type
     sysCall*:               bool
 
   Error* = ref object
-    statusCode*: evmc_status_code
+    evmcStatus*: evmc_status_code
     info*      : string
     burnsGas*  : bool
 
