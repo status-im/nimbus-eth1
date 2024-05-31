@@ -864,6 +864,9 @@ proc persistReceipts*(
     receipts: openArray[Receipt];
       ): Hash256 =
   const info = "persistReceipts()"
+  if receipts.len == 0:
+    return EMPTY_ROOT_HASH
+
   let mpt = db.ctx.getMpt(CtReceipts)
   for idx, rec in receipts:
     mpt.merge(rlp.encode(idx), rlp.encode(rec)).isOkOr:
