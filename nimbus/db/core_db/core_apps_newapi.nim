@@ -122,6 +122,9 @@ iterator getBlockTransactionData*(
     transactionRoot: Hash256;
       ): Blob =
   block body:
+    if transactionRoot == EMPTY_ROOT_HASH:
+      break body
+
     let
       ctx = db.ctx
       col = ctx.newColumn(CtTxs, transactionRoot).valueOr:
@@ -574,6 +577,10 @@ proc persistTransactions*(
       ): Hash256 =
   const
     info = "persistTransactions()"
+
+  if transactions.len == 0:
+    return EMPTY_ROOT_HASH
+
   let
     mpt = db.ctx.getMpt(CtTxs)
     kvt = db.newKvt()
@@ -702,13 +709,16 @@ proc persistWithdrawals*(
     withdrawals: openArray[Withdrawal];
       ): Hash256 =
   const info = "persistWithdrawals()"
-  let mpt = db.ctx.getMpt(CtWithdrawals)
-  for idx, wd in withdrawals:
-    mpt.merge(rlp.encode(idx), rlp.encode(wd)).isOkOr:
-      warn logTxt info, idx, action="merge()", error=($$error)
+  if withdrawals.len > 0:
+    let mpt = db.ctx.getMpt(CtWithdrawals)
+    for idx, wd in withdrawals:
+      mpt.merge(rlp.encode(idx), rlp.encode(wd)).isOkOr:
+        warn logTxt info, idx, action="merge()", error=($$error)
+        return EMPTY_ROOT_HASH
+    mpt.getColumn.state.valueOr:
+      warn logTxt info, action="state()"
       return EMPTY_ROOT_HASH
-  mpt.getColumn.state.valueOr:
-    warn logTxt info, action="state()"
+  else:
     return EMPTY_ROOT_HASH
 
 proc getWithdrawals*(
@@ -716,8 +726,9 @@ proc getWithdrawals*(
     withdrawalsRoot: Hash256;
       ): seq[Withdrawal]
       {.gcsafe, raises: [RlpError].} =
-  for encodedWd in db.getWithdrawalsData(withdrawalsRoot):
-    result.add(rlp.decode(encodedWd, Withdrawal))
+  if withdrawalsRoot != EMPTY_ROOT_HASH:
+    for encodedWd in db.getWithdrawalsData(withdrawalsRoot):
+      result.add(rlp.decode(encodedWd, Withdrawal))
 
 proc getBlockBody*(
     db: CoreDbRef;
