@@ -147,7 +147,7 @@
   path = tests/fixtures/eth_tests
   url = https://github.com/ethereum/tests
   ignore = dirty
-  branch = master
+  branch = develop
 [submodule "vendor/nim-graphql"]
   path = vendor/nim-graphql
   url = https://github.com/status-im/nim-graphql
