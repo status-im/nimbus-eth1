@@ -170,14 +170,8 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
 
   dbTx.commit()
 
-  # The `c.db.persistent()` call is ignored by the legacy DB which
-  # automatically saves persistently when reaching the zero level transaction.
-  #
-  # For the `Aristo` database, this code position is only reached if the
-  # the parent state of the first block (as registered in `headers[0]`) was
-  # the canonical state before updating. So this state will be saved with
-  # `persistent()` together with the respective block number.
-  c.db.persistent(headers[0].blockNumber - 1)
+  # Save and record the block number before the last saved block state.
+  c.db.persistent(headers[^1].blockNumber - 1)
 
   if c.com.pruneHistory:
     # There is a feature for test systems to regularly clean up older blocks
