@@ -578,17 +578,13 @@ func toVoidRc*[T](
     return ok()
   err((VoidVID,rc.error).toError(base, info, error))
 
-proc getFromJournal*(base: AristoBaseRef; fid: Option[FilterID]): FilterRef =
+proc getSavedState*(base: AristoBaseRef): Result[SavedState,void] =
   let be = base.ctx.mpt.backend
   if not be.isNil:
-    let fp = base.api.journalGetInx(be, fid, earlierOK=true).valueOr:
-      return FilterRef(nil)
-    return fp.fil
-
-proc getFromJournal*(base: AristoBaseRef; inx: int): FilterRef =
-  let be = base.ctx.mpt.backend
-  if not be.isNil:
-    return  base.api.journalGetFilter(be, inx).valueOr: FilterRef(nil)
+    let rc = base.api.fetchLastSavedState(base.ctx.mpt)
+    if rc.isOk:
+      return ok(rc.value)
+  err()
 
 # ---------------------
 

@@ -157,7 +157,7 @@ proc test_chainSync*(
   let
     sayBlocks = 900
     chain = com.newChain
-    blockOnDb = com.db.getLatestJournalBlockNumber()
+    blockOnDb = com.db.getSavedStateBlockNumber()
     lastBlock = max(1, numBlocks).toBlockNumber
 
   noisy.initLogging com

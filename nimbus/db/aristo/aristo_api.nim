@@ -86,6 +86,14 @@ type
       ## payload of type `AccountData`, its `storageID` field must be unset
       ## or equal to the `hike.root` vertex ID.
 
+  AristoApiFetchLastSavedStateFn* =
+    proc(db: AristoDbRef
+        ): Result[SavedState,AristoError]
+        {.noRaise.}
+      ## The function returns the state of the last saved state. This is a
+      ## Merkle hash tag for vertex with ID 1 and a bespoke `uint64` identifier
+      ## (may be interpreted as block number.)
+
   AristoApiFetchPayloadFn* =
     proc(db: AristoDbRef;
          root: VertexID;
@@ -400,6 +408,7 @@ type
     commit*: AristoApiCommitFn
     delete*: AristoApiDeleteFn
     delTree*: AristoApiDelTreeFn
+    fetchLastSavedState*: AristoApiFetchLastSavedStateFn
     fetchPayload*: AristoApiFetchPayloadFn
     findTx*: AristoApiFindTxFn
     finish*: AristoApiFinishFn
@@ -431,46 +440,49 @@ type
     ## Index/name mapping for profile slots
     AristoApiProfTotal          = "total"
 
-    AristoApiProfCommitFn           = "commit"
-    AristoApiProfDeleteFn           = "delete"
-    AristoApiProfDelTreeFn          = "delTree"
-    AristoApiProfFetchPayloadFn     = "fetchPayload"
-    AristoApiProfFindTxFn           = "findTx"
-    AristoApiProfFinishFn           = "finish"
-    AristoApiProfForgetFn           = "forget"
-    AristoApiProfForkTxFn           = "forkTx"
-    AristoApiProfGetKeyRcFn         = "getKeyRc"
-    AristoApiProfHashifyFn          = "hashify"
-    AristoApiProfHasPathFn          = "hasPath"
-    AristoApiProfHikeUpFn           = "hikeUp"
-    AristoApiProfIsTopFn            = "isTop"
-    AristoApiProfJournalGetFilterFn = "journalGetFilter"
-    AristoApiProfJournalGetInxFn    = "journalGetInx"
-    AristoApiProfLevelFn            = "level"
-    AristoApiProfNForkedFn          = "nForked"
-    AristoApiProfMergeFn            = "merge"
-    AristoApiProfMergePayloadFn     = "mergePayload"
-    AristoApiProfPathAsBlobFn       = "pathAsBlob"
-    AristoApiProfPersistFn          = "persist"
-    AristoApiProfReCentreFn         = "reCentre"
-    AristoApiProfRollbackFn         = "rollback"
-    AristoApiProfSerialiseFn        = "serialise"
-    AristoApiProfTxBeginFn          = "txBegin"
-    AristoApiProfTxTopFn            = "txTop"
-    AristoApiProfVidFetchFn         = "vidFetch"
-    AristoApiProfVidDisposeFn       = "vidDispose"
+    AristoApiProfCommitFn              = "commit"
+    AristoApiProfDeleteFn              = "delete"
+    AristoApiProfDelTreeFn             = "delTree"
+    AristoApiProfFetchLastSavedStateFn = "fetchPayload"
+    AristoApiProfFetchPayloadFn        = "fetchPayload"
+    AristoApiProfFindTxFn              = "findTx"
+    AristoApiProfFinishFn              = "finish"
+    AristoApiProfForgetFn              = "forget"
+    AristoApiProfForkTxFn              = "forkTx"
+    AristoApiProfGetKeyRcFn            = "getKeyRc"
+    AristoApiProfHashifyFn             = "hashify"
+    AristoApiProfHasPathFn             = "hasPath"
+    AristoApiProfHikeUpFn              = "hikeUp"
+    AristoApiProfIsTopFn               = "isTop"
+    AristoApiProfJournalGetFilterFn    = "journalGetFilter"
+    AristoApiProfJournalGetInxFn       = "journalGetInx"
+    AristoApiProfLevelFn               = "level"
+    AristoApiProfNForkedFn             = "nForked"
+    AristoApiProfMergeFn               = "merge"
+    AristoApiProfMergePayloadFn        = "mergePayload"
+    AristoApiProfPathAsBlobFn          = "pathAsBlob"
+    AristoApiProfPersistFn             = "persist"
+    AristoApiProfReCentreFn            = "reCentre"
+    AristoApiProfRollbackFn            = "rollback"
+    AristoApiProfSerialiseFn           = "serialise"
+    AristoApiProfTxBeginFn             = "txBegin"
+    AristoApiProfTxTopFn               = "txTop"
+    AristoApiProfVidFetchFn            = "vidFetch"
+    AristoApiProfVidDisposeFn          = "vidDispose"
 
-    AristoApiProfBeGetVtxFn         = "be/getVtx"
-    AristoApiProfBeGetKeyFn         = "be/getKey"
-    AristoApiProfBeGetFilFn         = "be/getFil"
-    AristoApiProfBeGetIdgFn         = "be/getIfg"
-    AristoApiProfBeGetFqsFn         = "be/getFqs"
-    AristoApiProfBePutVtxFn         = "be/putVtx"
-    AristoApiProfBePutKeyFn         = "be/putKey"
-    AristoApiProfBePutFilFn         = "be/putFil"
-    AristoApiProfBePutIdgFn         = "be/putIdg"
-    AristoApiProfBePutFqsFn         = "be/putFqs"
-    AristoApiProfBePutEndFn         = "be/putEnd"
+    AristoApiProfBeGetVtxFn            = "be/getVtx"
+    AristoApiProfBeGetKeyFn            = "be/getKey"
+    AristoApiProfBeGetFilFn            = "be/getFil"
+    AristoApiProfBeGetIdgFn            = "be/getIfg"
+    AristoApiProfBeGetLstFn            = "be/getLst"
+    AristoApiProfBeGetFqsFn            = "be/getFqs"
+    AristoApiProfBePutVtxFn            = "be/putVtx"
+    AristoApiProfBePutKeyFn            = "be/putKey"
+    AristoApiProfBePutFilFn            = "be/putFil"
+    AristoApiProfBePutIdgFn            = "be/putIdg"
+    AristoApiProfBePutLstFn            = "be/putLst"
+    AristoApiProfBePutFqsFn            = "be/putFqs"
+    AristoApiProfBePutEndFn            = "be/putEnd"
 
   AristoApiProfRef* = ref object of AristoApiRef
     ## Profiling API extension of `AristoApiObj`
@@ -486,6 +498,7 @@ when AutoValidateApiHooks:
     doAssert not api.commit.isNil
     doAssert not api.delete.isNil
     doAssert not api.delTree.isNil
+    doAssert not api.fetchLastSavedState.isNil
     doAssert not api.fetchPayload.isNil
     doAssert not api.findTx.isNil
     doAssert not api.finish.isNil
@@ -540,6 +553,7 @@ func init*(api: var AristoApiObj) =
   api.commit = commit
   api.delete = delete
   api.delTree = delTree
+  api.fetchLastSavedState = fetchLastSavedState
   api.fetchPayload = fetchPayload
   api.findTx = findTx
   api.finish = finish
@@ -574,34 +588,35 @@ func init*(T: type AristoApiRef): T =
 
 func dup*(api: AristoApiRef): AristoApiRef =
   result = AristoApiRef(
-    commit:           api.commit,
-    delete:           api.delete,
-    delTree:          api.delTree,
-    fetchPayload:     api.fetchPayload,
-    findTx:           api.findTx,
-    finish:           api.finish,
-    forget:           api.forget,
-    forkTx:           api.forkTx,
-    getKeyRc:         api.getKeyRc,
-    hashify:          api.hashify,
-    hasPath:          api.hasPath,
-    hikeUp:           api.hikeUp,
-    isTop:            api.isTop,
-    journalGetFilter: api.journalGetFilter,
-    journalGetInx:    api.journalGetInx,
-    level:            api.level,
-    nForked:          api.nForked,
-    merge:            api.merge,
-    mergePayload:     api.mergePayload,
-    pathAsBlob:       api.pathAsBlob,
-    persist:          api.persist,
-    reCentre:         api.reCentre,
-    rollback:         api.rollback,
-    serialise:        api.serialise,
-    txBegin:          api.txBegin,
-    txTop:            api.txTop,
-    vidFetch:         api.vidFetch,
-    vidDispose:       api.vidDispose)
+    commit:              api.commit,
+    delete:              api.delete,
+    delTree:             api.delTree,
+    fetchLastSavedState: api.fetchLastSavedState,
+    fetchPayload:        api.fetchPayload,
+    findTx:              api.findTx,
+    finish:              api.finish,
+    forget:              api.forget,
+    forkTx:              api.forkTx,
+    getKeyRc:            api.getKeyRc,
+    hashify:             api.hashify,
+    hasPath:             api.hasPath,
+    hikeUp:              api.hikeUp,
+    isTop:               api.isTop,
+    journalGetFilter:    api.journalGetFilter,
+    journalGetInx:       api.journalGetInx,
+    level:               api.level,
+    nForked:             api.nForked,
+    merge:               api.merge,
+    mergePayload:        api.mergePayload,
+    pathAsBlob:          api.pathAsBlob,
+    persist:             api.persist,
+    reCentre:            api.reCentre,
+    rollback:            api.rollback,
+    serialise:           api.serialise,
+    txBegin:             api.txBegin,
+    txTop:               api.txTop,
+    vidFetch:            api.vidFetch,
+    vidDispose:          api.vidDispose)
   when AutoValidateApiHooks:
     api.validate
 
@@ -646,6 +661,11 @@ func init*(
     proc(a: AristoDbRef; b: VertexID; c: PathID): auto =
       AristoApiProfDelTreeFn.profileRunner:
         result = api.delTree(a, b, c)
+
+  profApi.fetchLastSavedState =
+    proc(a: AristoDbRef): auto =
+      AristoApiProfFetchLastSavedStateFn.profileRunner:
+        result = api.fetchLastSavedState(a)
 
   profApi.fetchPayload =
     proc(a: AristoDbRef; b: VertexID; c: openArray[byte]): auto =
@@ -802,6 +822,12 @@ func init*(
           result = be.getIdgFn()
     data.list[AristoApiProfBeGetIdgFn.ord].masked = true
 
+    beDup.getLstFn =
+      proc(): auto =
+        AristoApiProfBeGetLstFn.profileRunner:
+          result = be.getLstFn()
+    data.list[AristoApiProfBeGetLstFn.ord].masked = true
+
     beDup.getFqsFn =
       proc(): auto =
         AristoApiProfBeGetFqsFn.profileRunner:
@@ -831,6 +857,12 @@ func init*(
         AristoApiProfBePutIdgFn.profileRunner:
           be.putIdgFn(a,b)
     data.list[AristoApiProfBePutIdgFn.ord].masked = true
+
+    beDup.putLstFn =
+      proc(a: PutHdlRef; b: SavedState) =
+        AristoApiProfBePutLstFn.profileRunner:
+          be.putLstFn(a,b)
+    data.list[AristoApiProfBePutLstFn.ord].masked = true
 
     beDup.putFqsFn =
       proc(a: PutHdlRef; b: openArray[(QueueID,QueueID)]) =

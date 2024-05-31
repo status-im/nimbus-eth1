@@ -50,6 +50,7 @@ type
     DeblobLeafGotExtPrefix
     DeblobSizeGarbled
     DeblobWrongType
+    DeblobWrongSize
     DeblobPayloadTooShortInt64
     DeblobPayloadTooShortInt256
     DeblobNonceLenUnsupported
@@ -247,6 +248,7 @@ type
     GetKeyNotFound
     GetFilNotFound
     GetIdgNotFound
+    GetLstNotFound
     GetFqsNotFound
 
     # Fetch functions from `aristo_fetch.nim`

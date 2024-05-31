@@ -46,7 +46,8 @@ type
     sTab: Table[VertexID,Blob]       ## Structural vertex table making up a trie
     kMap: Table[VertexID,HashKey]    ## Merkle hash key mapping
     rFil: Table[QueueID,Blob]        ## Backend journal filters
-    vGen: Option[seq[VertexID]]
+    vGen: Option[seq[VertexID]]      ## ID generator state
+    lSst: Option[SavedState]         ## Last saved state
     vFqs: Option[seq[(QueueID,QueueID)]]
     noFq: bool                       ## No filter queues available
 
@@ -59,6 +60,7 @@ type
     kMap: Table[VertexID,HashKey]
     rFil: Table[QueueID,Blob]
     vGen: Option[seq[VertexID]]
+    lSst: Option[SavedState]
     vFqs: Option[seq[(QueueID,QueueID)]]
 
 when extraTraceMessages:
@@ -130,6 +132,13 @@ proc getIdgFn(db: MemBackendRef): GetIdgFn =
       if db.mdb.vGen.isSome:
         return ok db.mdb.vGen.unsafeGet
       err(GetIdgNotFound)
+
+proc getLstFn(db: MemBackendRef): GetLstFn =
+  result =
+    proc(): Result[SavedState,AristoError]=
+      if db.mdb.lSst.isSome:
+        return ok db.mdb.lSst.unsafeGet
+      err(GetLstNotFound)
 
 proc getFqsFn(db: MemBackendRef): GetFqsFn =
   if db.mdb.noFq:
@@ -212,6 +221,13 @@ proc putIdgFn(db: MemBackendRef): PutIdgFn =
       if hdl.error.isNil:
         hdl.vGen = some(vs.toSeq)
 
+proc putLstFn(db: MemBackendRef): PutLstFn =
+  result =
+    proc(hdl: PutHdlRef; lst: SavedState) =
+      let hdl = hdl.getSession db
+      if hdl.error.isNil:
+        hdl.lSst = some(lst)
+
 proc putFqsFn(db: MemBackendRef): PutFqsFn =
   if db.mdb.noFq:
     result =
@@ -272,6 +288,9 @@ proc putEndFn(db: MemBackendRef): PutEndFn =
         else:
           db.mdb.vGen = some(vGen)
 
+      if hdl.lSst.isSome:
+        db.mdb.lSst = hdl.lSst
+
       if hdl.vFqs.isSome:
         let vFqs = hdl.vFqs.unsafeGet
         if vFqs.len == 0:
@@ -308,6 +327,7 @@ proc memoryBackend*(qidLayout: QidLayoutRef): BackendRef =
   db.getKeyFn = getKeyFn db
   db.getFilFn = getFilFn db
   db.getIdgFn = getIdgFn db
+  db.getLstFn = getLstFn db
   db.getFqsFn = getFqsFn db
 
   db.putBegFn = putBegFn db
@@ -315,6 +335,7 @@ proc memoryBackend*(qidLayout: QidLayoutRef): BackendRef =
   db.putKeyFn = putKeyFn db
   db.putFilFn = putFilFn db
   db.putIdgFn = putIdgFn db
+  db.putLstFn = putLstFn db
   db.putFqsFn = putFqsFn db
   db.putEndFn = putEndFn db
 

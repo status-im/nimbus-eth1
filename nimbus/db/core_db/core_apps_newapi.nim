@@ -330,43 +330,31 @@ proc exists*(db: CoreDbRef, hash: Hash256): bool =
     warn logTxt "exisis()", hash, action="hasKey()", error=($$error)
     return false
 
-proc getOldestJournalBlockNumber*(
-    db: CoreDbRef;
-      ): BlockNumber
-      {.gcsafe, raises: [RlpError].} =
-  ## Returns the block number implied by the database journal if there is any,
-  ## or `BlockNumber(0)`. At the moment, only the `Aristo` database has a
-  ## journal.
-  ##
-  let st = db.ctx.getMpt(CtGeneric).backend.toAristoOldestState
-  var header: BlockHeader
-  if db.getBlockHeader(st.blockNumber, header):
-    doAssert header.stateRoot == st.stateRoot or st.blockNumber == 0
-    return st.blockNumber
-
-proc getLatestJournalBlockNumber*(
+proc getSavedStateBlockNumber*(
     db: CoreDbRef;
     relax = false;
       ): BlockNumber
       {.gcsafe, raises: [RlpError].} =
-  ## Ditto for latest block number, or zero if there is none. This function
-  ## verifies the state consistency of the database and throws an assert
-  ## exception if that fails. So the function will only apply to a finalised
-  ## (aka hashified) database state. For an an opportunistic use, the `relax`
-  ## argument can be set `true` so this function also returns zero if the
-  ## state consistency check fails.
+  ## Returns the block number registered when the database was last time
+  ## updated, or `BlockNumber(0)` if there was no updata found.
+  ##
+  ## This function verifies the state consistency of the database and throws
+  ## an assert exception if that fails. So the function will only apply to a
+  ## finalised (aka hashified) database state. For an an opportunistic use,
+  ## the `relax` argument can be set `true` so this function also returns
+  ## zero if the state consistency check fails.
   ##
   var
     header: BlockHeader
   let
-    st = db.ctx.getMpt(CtGeneric).backend.toAristoLatestState
+    st = db.ctx.getMpt(CtGeneric).backend.toAristoSavedStateBlockNumber()
     # The correct block number is one step ahead of the journal block number
     bn = st.blockNumber + 1
   if db.getBlockHeader(bn, header):
     discard db.ctx.newColumn(CtAccounts,header.stateRoot).valueOr:
       if relax:
         return
-      raiseAssert "getLatestJournalBlockNumber(): state mismatch at #" & $bn
+      raiseAssert "getSavedStateBlockNumber(): state mismatch at #" & $bn
     return bn
 
 proc getBlockHeader*(

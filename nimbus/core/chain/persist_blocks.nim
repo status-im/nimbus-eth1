@@ -43,7 +43,7 @@ type
     gas: GasInt
 
 const
-  CleanUpEpoch = 30_000.u256
+  CleanUpEpoch = 30_000.toBlockNumber
     ## Regular checks for history clean up (applies to single state DB). This
     ## is mainly a debugging/testing feature so that the database can be held
     ## a bit smaller. It is not applicable to a full node.
@@ -64,11 +64,13 @@ proc getVmState(c: ChainRef, header: BlockHeader):
 
   ok(vmState)
 
-proc purgeOutOfJournalBlocks(db: CoreDbRef) {.inline, raises: [RlpError].} =
+proc purgeOlderBlocksFromHistory(
+    db: CoreDbRef;
+    bn: BlockNumber;
+      ) {.inline, raises: [RlpError].} =
   ## Remove non-reachable blocks from KVT database
-  var blkNum = db.getOldestJournalBlockNumber()
-  if 0 < blkNum:
-    blkNum = blkNum - 1
+  if 0 < bn:
+    var blkNum = bn - 1
     while 0 < blkNum:
       if not db.forgetHistory blkNum:
         break
@@ -176,8 +178,10 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
   if c.com.pruneHistory:
     # There is a feature for test systems to regularly clean up older blocks
     # from the database, not appicable to a full node set up.
-    if(fromBlock mod CleanUpEpoch) <= (toBlock - fromBlock):
-      c.db.purgeOutOfJournalBlocks()
+    let n = fromBlock div CleanUpEpoch
+    if 0 < n and n < (toBlock div CleanUpEpoch):
+      # Starts at around `2 * CleanUpEpoch`
+      c.db.purgeOlderBlocksFromHistory(fromBlock - CleanUpEpoch)
 
   ok((headers.len, txs, vmState.cumulativeGasUsed))
 

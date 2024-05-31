@@ -31,6 +31,15 @@ proc getIdgUbe*(
     return be.getIdgFn()
   err(GetIdgNotFound)
 
+proc getLstUbe*(
+    db: AristoDbRef;
+      ): Result[SavedState,AristoError] =
+  ## Get the last saved state
+  let be = db.backend
+  if not be.isNil:
+    return be.getLstFn()
+  err(GetLstNotFound)
+
 proc getFqsUbe*(
     db: AristoDbRef;
       ): Result[seq[(QueueID,QueueID)],AristoError] =

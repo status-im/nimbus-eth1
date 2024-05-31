@@ -67,6 +67,7 @@ type
 const
   AdmTabIdIdg* = AdminTabID(0)       ## Access key for vertex ID generator state
   AdmTabIdFqs* = AdminTabID(1)       ## Access key for filter queue states
+  AdmTabIdLst* = AdminTabID(2)       ## Access key for last state
 
 # ------------------------------------------------------------------------------
 # Public helpers

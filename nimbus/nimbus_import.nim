@@ -30,7 +30,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
   setControlCHook(controlCHandler)
 
   let
-    start = com.db.getLatestJournalBlockNumber().truncate(uint64) + 1
+    start = com.db.getSavedStateBlockNumber().truncate(uint64) + 1
     chain = com.newChain()
 
   var
