@@ -37,16 +37,10 @@ const
 # Public constructor
 # ------------------------------------------------------------------------------
 
-proc newAristoRocksDbCoreDbRef*(path: string; qlr: QidLayoutRef): CoreDbRef =
-  let
-    adb = AristoDbRef.init(use_ari.RdbBackendRef, path, qlr).expect aristoFail
-    gdb = adb.guestDb().valueOr: GuestDbRef(nil)
-    kdb = KvtDbRef.init(use_kvt.RdbBackendRef, path, gdb).expect kvtFail
-  AristoDbRocks.create(kdb, adb)
-
 proc newAristoRocksDbCoreDbRef*(path: string): CoreDbRef =
   let
-    adb = AristoDbRef.init(use_ari.RdbBackendRef, path).expect aristoFail
+    qlr = QidLayoutRef(nil)
+    adb = AristoDbRef.init(use_ari.RdbBackendRef, path, qlr).expect aristoFail
     gdb = adb.guestDb().valueOr: GuestDbRef(nil)
     kdb = KvtDbRef.init(use_kvt.RdbBackendRef, path, gdb).expect kvtFail
   AristoDbRocks.create(kdb, adb)
