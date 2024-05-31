@@ -157,11 +157,17 @@ proc journalUpdate*(
         updateSiblings.rev,                      # Store reverse filter
         nxtFid)                                  # Set filter ID (if any)
 
+  let lSst = SavedState(
+    src: db.roFilter.src,
+    trg: db.roFilter.trg,
+    serial: nxtFid.get(otherwise=FilterID(0)).uint64)
+
   # Store structural single trie entries
   let writeBatch = be.putBegFn()
   be.putVtxFn(writeBatch, db.roFilter.sTab.pairs.toSeq)
   be.putKeyFn(writeBatch, db.roFilter.kMap.pairs.toSeq)
   be.putIdgFn(writeBatch, db.roFilter.vGen)
+  be.putLstFn(writeBatch, lSst)
 
   # Store `instr` as history journal entry
   if not be.journal.isNil:

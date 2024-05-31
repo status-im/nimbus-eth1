@@ -150,6 +150,19 @@ proc blobify*(vGen: openArray[VertexID]): Blob =
   ## Variant of `blobify()`
   vGen.blobify result
 
+proc blobify*(lSst: SavedState; data: var Blob) =
+  ## Serialise a last saved state record
+  data.setLen(73)
+  (addr data[0]).copyMem(unsafeAddr lSst.src.data[0], 32)
+  (addr data[32]).copyMem(unsafeAddr lSst.trg.data[0], 32)
+  let w = lSst.serial.toBytesBE
+  (addr data[64]).copyMem(unsafeAddr w[0], 8)
+  data[72] = 0x7fu8
+
+proc blobify*(lSst: SavedState): Blob =
+  ## Variant of `blobify()`
+  lSst.blobify result
+
 
 proc blobify*(filter: FilterRef; data: var Blob): Result[void,AristoError] =
   ## This function serialises an Aristo DB filter object
@@ -271,7 +284,10 @@ proc blobify*(vFqs: openArray[(QueueID,QueueID)]): Blob =
 
 # -------------
 
-proc deblobify(data: openArray[byte]; pyl: var PayloadRef): Result[void,AristoError] =
+proc deblobify(
+    data: openArray[byte];
+    pyl: var PayloadRef;
+      ): Result[void,AristoError] =
   if data.len == 0:
     pyl = PayloadRef(pType: RawData)
     return ok()
@@ -405,7 +421,10 @@ proc deblobify*(data: openArray[byte]; T: type VertexRef): Result[T,AristoError]
   ok vtx
 
 
-proc deblobify*(data: openArray[byte]; vGen: var seq[VertexID]): Result[void,AristoError] =
+proc deblobify*(
+    data: openArray[byte];
+    vGen: var seq[VertexID];
+      ): Result[void,AristoError] =
   ## De-serialise the data record encoded with `blobify()` into the vertex ID
   ## generator argument `vGen`.
   if data.len == 0:
@@ -420,11 +439,39 @@ proc deblobify*(data: openArray[byte]; vGen: var seq[VertexID]): Result[void,Ari
       vGen.add (uint64.fromBytesBE data.toOpenArray(w, w+7)).VertexID
   ok()
 
-proc deblobify*(data: openArray[byte]; T: type seq[VertexID]): Result[T,AristoError] =
+proc deblobify*(
+    data: openArray[byte];
+    T: type seq[VertexID];
+      ): Result[T,AristoError] =
   ## Variant of `deblobify()` for deserialising the vertex ID generator state
-  var vGen: seq[VertexID]
+  var vGen: T
   ? data.deblobify vGen
   ok move(vGen)
+
+proc deblobify*(
+    data: openArray[byte];
+    lSst: var SavedState;
+      ): Result[void,AristoError] =
+  ## De-serialise the last saved state data record previously encoded with
+  ## `blobify()`.
+  if data.len != 73:
+    return err(DeblobWrongSize)
+  if data[^1] != 0x7f:
+    return err(DeblobWrongType)
+  (addr lSst.src.data[0]).copyMem(unsafeAddr data[0], 32)
+  (addr lSst.trg.data[0]).copyMem(unsafeAddr data[32], 32)
+  lSst.serial = uint64.fromBytesBE data[64..72]
+  ok()
+
+proc deblobify*(
+    data: openArray[byte];
+    T: type SavedState;
+      ): Result[T,AristoError] =
+  ## Variant of `deblobify()` for deserialising a last saved state data record
+  var lSst: T
+  ? data.deblobify lSst
+  ok move(lSst)
+
 
 proc deblobify*(data: Blob; filter: var FilterRef): Result[void,AristoError] =
   ## De-serialise an Aristo DB filter object

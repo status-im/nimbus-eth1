@@ -149,6 +149,19 @@ proc getIdgFn(db: RdbBackendRef): GetIdgFn =
       # Decode data record
       data.deblobify seq[VertexID]
 
+proc getLstFn(db: RdbBackendRef): GetLstFn =
+  result =
+    proc(): Result[SavedState,AristoError]=
+
+      # Fetch serialised data record.
+      let data = db.rdb.getByPfx(AdmPfx, AdmTabIdLst.uint64).valueOr:
+        when extraTraceMessages:
+          trace logTxt "getLstFn: failed", error=error[0], info=error[1]
+        return err(error[0])
+
+      # Decode data record
+      data.deblobify SavedState
+
 proc getFqsFn(db: RdbBackendRef): GetFqsFn =
   if db.rdb.noFq:
     result =
@@ -274,11 +287,23 @@ proc putIdgFn(db: RdbBackendRef): PutIdgFn =
     proc(hdl: PutHdlRef; vs: openArray[VertexID])  =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
-        let idg = if 0 < vs.len: vs.blobify else: EmptyBlob
-        db.rdb.putByPfx(AdmPfx, @[(AdmTabIdIdg.uint64, idg)]).isOkOr:
+        let data = if 0 < vs.len: vs.blobify else: EmptyBlob
+        db.rdb.putByPfx(AdmPfx, @[(AdmTabIdIdg.uint64, data)]).isOkOr:
           hdl.error = TypedPutHdlErrRef(
             pfx:  AdmPfx,
             aid:  AdmTabIdIdg,
+            code: error[1],
+            info: error[2])
+
+proc putLstFn(db: RdbBackendRef): PutLstFn =
+  result =
+    proc(hdl: PutHdlRef; lst: SavedState) =
+      let hdl = hdl.getSession db
+      if hdl.error.isNil:
+        db.rdb.putByPfx(AdmPfx, @[(AdmTabIdLst.uint64, lst.blobify)]).isOkOr:
+          hdl.error = TypedPutHdlErrRef(
+            pfx:  AdmPfx,
+            aid:  AdmTabIdLst,
             code: error[1],
             info: error[2])
 
@@ -371,6 +396,7 @@ proc rocksDbBackend*(
   db.getKeyFn = getKeyFn db
   db.getFilFn = getFilFn db
   db.getIdgFn = getIdgFn db
+  db.getLstFn = getLstFn db
   db.getFqsFn = getFqsFn db
 
   db.putBegFn = putBegFn db
@@ -378,6 +404,7 @@ proc rocksDbBackend*(
   db.putKeyFn = putKeyFn db
   db.putFilFn = putFilFn db
   db.putIdgFn = putIdgFn db
+  db.putLstFn = putLstFn db
   db.putFqsFn = putFqsFn db
   db.putEndFn = putEndFn db
 

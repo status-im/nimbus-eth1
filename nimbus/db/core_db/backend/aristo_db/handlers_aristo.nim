@@ -590,6 +590,14 @@ proc getFromJournal*(base: AristoBaseRef; inx: int): FilterRef =
   if not be.isNil:
     return  base.api.journalGetFilter(be, inx).valueOr: FilterRef(nil)
 
+proc getSavedState*(base: AristoBaseRef): Result[SavedState,void] =
+  let be = base.ctx.mpt.backend
+  if not be.isNil:
+    let rc = base.api.fetchLastSavedState(base.ctx.mpt)
+    if rc.isOk:
+      return ok(rc.value)
+  err()
+
 # ---------------------
 
 func to*(dsc: CoreDxMptRef, T: type AristoDbRef): T =

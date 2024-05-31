@@ -39,6 +39,11 @@ type
       ## Generic backend database retrieval function for a the ID generator
       ## `Aristo DB` state record.
 
+  GetLstFn* =
+    proc(): Result[SavedState,AristoError]
+      {.gcsafe, raises: [].}
+        ## Generic last recorded state stamp retrieval function
+
   GetFqsFn* =
     proc(): Result[seq[(QueueID,QueueID)],AristoError] {.gcsafe, raises: [].}
       ## Generic backend database retrieval function for some filter queue
@@ -78,6 +83,12 @@ type
       {.gcsafe, raises: [].}
         ## Generic backend database ID generator state storage function. This
         ## function replaces the current generator state.
+
+  PutLstFn* =
+    proc(hdl: PutHdlRef; lst: SavedState)
+      {.gcsafe, raises: [].}
+        ## Generic last recorded state stamp storage function. This
+        ## function replaces the currentlt saved state.
 
   PutFqsFn* =
     proc(hdl: PutHdlRef; vs: openArray[(QueueID,QueueID)])
@@ -123,6 +134,7 @@ type
     getKeyFn*: GetKeyFn              ## Read Merkle hash/key
     getFilFn*: GetFilFn              ## Read back log filter
     getIdgFn*: GetIdgFn              ## Read vertex ID generator state
+    getLstFn*: GetLstFn              ## Read saved state
     getFqsFn*: GetFqsFn              ## Read filter ID state
 
     putBegFn*: PutBegFn              ## Start bulk store session
@@ -130,6 +142,7 @@ type
     putKeyFn*: PutKeyFn              ## Bulk store vertex hashes
     putFilFn*: PutFilFn              ## Store back log filter
     putIdgFn*: PutIdgFn              ## Store ID generator state
+    putLstFn*: PutLstFn              ## Store saved state
     putFqsFn*: PutFqsFn              ## Store filter ID state
     putEndFn*: PutEndFn              ## Commit bulk store session
 
@@ -143,12 +156,14 @@ proc init*(trg: var BackendObj; src: BackendObj) =
   trg.getKeyFn = src.getKeyFn
   trg.getFilFn = src.getFilFn
   trg.getIdgFn = src.getIdgFn
+  trg.getLstFn = src.getLstFn
   trg.getFqsFn = src.getFqsFn
   trg.putBegFn = src.putBegFn
   trg.putVtxFn = src.putVtxFn
   trg.putKeyFn = src.putKeyFn
   trg.putFilFn = src.putFilFn
   trg.putIdgFn = src.putIdgFn
+  trg.putLstFn = src.putLstFn
   trg.putFqsFn = src.putFqsFn
   trg.putEndFn = src.putEndFn
   trg.guestDbFn = src.guestDbFn

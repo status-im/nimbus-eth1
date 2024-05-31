@@ -72,6 +72,12 @@ type
     vid*: VertexID                    ## Table lookup vertex ID (if any)
     vtx*: VertexRef                   ## Reference to vertex
 
+  SavedState* = object
+    ## Last saved state
+    src*: Hash256                    ## Previous state hash
+    trg*: Hash256                    ## Last state hash
+    serial*: uint64                  ## Generic identifier froom application
+
   FilterRef* = ref object
     ## Delta layer
     fid*: FilterID                   ## Filter identifier

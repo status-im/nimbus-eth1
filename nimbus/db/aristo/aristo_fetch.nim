@@ -14,9 +14,9 @@
 {.push raises: [].}
 
 import
-  eth/trie/nibbles,
+  eth/[common, trie/nibbles],
   results,
-  "."/[aristo_desc, aristo_hike]
+  "."/[aristo_desc, aristo_get, aristo_hike]
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -77,6 +77,14 @@ proc hasPath*(
   if rc.error[1] == FetchPathNotFound:
     return ok(false)
   err(rc.error)
+
+proc fetchLastSavedState*(
+    db: AristoDbRef;
+      ): Result[SavedState,AristoError] =
+  ## Wrapper around `getLstUbe()`. The function returns the state of the last
+  ## saved state. This is a Merkle hash tag for vertex with ID 1 and a bespoke
+  ## `uint64` identifier (may be interpreted as block number.)
+  db.getLstUbe()
 
 # ------------------------------------------------------------------------------
 # End
