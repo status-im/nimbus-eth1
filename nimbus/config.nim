@@ -206,6 +206,12 @@ type
       name: "evm"
       includeIfEvmc }: string
 
+    trustedSetupFile* {.
+      desc: "Load EIP-4844 trusted setup file"
+      defaultValue: none(string)
+      defaultValueDesc: "Baked in trusted setup"
+      name: "trusted-setup-file" .}: Option[string]
+
     network {.
       separator: "\pETHEREUM NETWORK OPTIONS:"
       desc: "Name or id number of Ethereum network(mainnet(1), sepolia(11155111), holesky(17000), other=custom)"
@@ -467,12 +473,6 @@ type
         defaultValue: defaultAdminListenAddress
         defaultValueDesc: $defaultAdminListenAddressDesc
         name: "metrics-address" }: IpAddress
-
-      trustedSetupFile* {.
-        desc: "Load EIP-4844 trusted setup file"
-        defaultValue: none(string)
-        defaultValueDesc: "Baked in trusted setup"
-        name: "trusted-setup-file" .}: Option[string]
 
     of `import`:
 
