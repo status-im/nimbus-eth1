@@ -140,10 +140,9 @@ proc validateOffer*(
 proc validateOffer*(
     trustedStateRoot: KeccakHash, key: ContractTrieNodeKey, offer: ContractTrieNodeOffer
 ): Result[void, string] =
-  let addressHash = keccakHash(key.address).data
   ?validateTrieProof(
     trustedStateRoot,
-    Nibbles.init(addressHash, true),
+    key.address.toPath(),
     offer.accountProof,
     allowKeyEndInPathForLeafs = true,
   )
@@ -157,10 +156,9 @@ proc validateOffer*(
 proc validateOffer*(
     trustedStateRoot: KeccakHash, key: ContractCodeKey, offer: ContractCodeOffer
 ): Result[void, string] =
-  let addressHash = keccakHash(key.address).data
   ?validateTrieProof(
     trustedStateRoot,
-    Nibbles.init(addressHash, true),
+    key.address.toPath(),
     offer.accountProof,
     allowKeyEndInPathForLeafs = true,
   )

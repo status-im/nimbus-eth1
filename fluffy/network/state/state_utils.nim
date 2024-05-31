@@ -22,8 +22,8 @@ func decodePrefix*(nodePrefixRlp: Rlp): (byte, bool, Nibbles) =
 
   (firstNibble.byte, isLeaf, nibbles)
 
-func rlpDecodeAccountTrieNode*(accountNode: TrieNode): Result[Account, string] =
-  let accNodeRlp = rlpFromBytes(accountNode.asSeq())
+func rlpDecodeAccountTrieNode*(accountTrieNode: TrieNode): Result[Account, string] =
+  let accNodeRlp = rlpFromBytes(accountTrieNode.asSeq())
   if accNodeRlp.isEmpty() or accNodeRlp.listLen() != 2:
     return err("invalid account trie node - malformed")
 
@@ -36,3 +36,39 @@ func rlpDecodeAccountTrieNode*(accountNode: TrieNode): Result[Account, string] =
     return err("invalid account trie node - leaf prefix expected")
 
   decodeRlp(accNodeRlp.listElem(1).toBytes(), Account)
+
+# TODO: test the below functions
+
+func rlpDecodeContractTrieNode*(contractTrieNode: TrieNode): Result[UInt256, string] =
+  let storageNodeRlp = rlpFromBytes(contractTrieNode.asSeq())
+  if storageNodeRlp.isEmpty() or storageNodeRlp.listLen() != 2:
+    return err("invalid contract trie node - malformed")
+
+  let storageNodePrefixRlp = storageNodeRlp.listElem(0)
+  if storageNodePrefixRlp.isEmpty():
+    return err("invalid contract trie node - empty prefix")
+
+  let (_, isLeaf, _) = decodePrefix(storageNodePrefixRlp)
+  if not isLeaf:
+    return err("invalid contract trie node - leaf prefix expected")
+
+  decodeRlp(storageNodePrefixRlp.listElem(1).toBytes(), UInt256)
+
+func toAccount*(accountProof: TrieProof): Result[Account, string] {.inline.} =
+  doAssert(accountProof.len() > 1)
+
+  rlpDecodeAccountTrieNode(accountProof[^1])
+
+func toSlot*(storageProof: TrieProof): Result[UInt256, string] {.inline.} =
+  doAssert(storageProof.len() > 1)
+
+  rlpDecodeContractTrieNode(storageProof[^1])
+
+func toPath*(hash: KeccakHash): Nibbles {.inline.} =
+  Nibbles.init(hash.data, isEven = true)
+
+func toPath*(address: Address): Nibbles =
+  keccakHash(address).toPath()
+
+func toPath*(slotKey: UInt256): Nibbles =
+  keccakHash(toBytesBE(slotKey)).toPath()

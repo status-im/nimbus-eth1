@@ -44,6 +44,9 @@ func init*(T: type Nibbles, packed: openArray[byte], isEven: bool): T =
 
   Nibbles(output)
 
+func empty*(T: type Nibbles): T =
+  Nibbles.init(@[], true)
+
 func encode*(nibbles: Nibbles): seq[byte] =
   SSZ.encode(nibbles)
 

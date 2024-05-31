@@ -122,7 +122,7 @@ proc getContractCode*(
 ): Future[Opt[ContractCodeRetrieval]] {.inline.} =
   n.getContent(key, ContractCodeRetrieval)
 
-proc getStateRootByBlockHash(
+proc getStateRootByBlockHash*(
     n: StateNetwork, hash: BlockHash
 ): Future[Opt[KeccakHash]] {.async.} =
   if n.historyNetwork.isNone():
