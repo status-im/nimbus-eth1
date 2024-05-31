@@ -11,6 +11,7 @@
 {.push raises: [].}
 
 import
+  results,
   ../../db/ledger,
   ../../vm_state,
   ../../vm_types,
@@ -25,6 +26,8 @@ when not defined(release):
     ../../tracer,
     ../../utils/utils
 
+export results
+
 type
   PersistBlockFlag = enum
     NoPersistHeader
@@ -33,6 +36,11 @@ type
     NoSaveWithdrawals
 
   PersistBlockFlags = set[PersistBlockFlag]
+
+  PersistStats = tuple
+    blocks: int
+    txs: int
+    gas: GasInt
 
 const
   CleanUpEpoch = 30_000.u256
@@ -45,17 +53,16 @@ const
 # ------------------------------------------------------------------------------
 
 proc getVmState(c: ChainRef, header: BlockHeader):
-                 Result[BaseVMState, void] =
-  if c.vmState.isNil.not:
-    return ok(c.vmState)
-
+                Result[BaseVMState, string] =
   let vmState = BaseVMState()
-  if not vmState.init(header, c.com):
-    debug "Cannot initialise VmState",
-      number = header.blockNumber
-    return err()
-  return ok(vmState)
+  try:
+    # TODO clean up exception handling
+    if not vmState.init(header, c.com):
+      return err("Could not initialise VMState")
+  except CatchableError as exc:
+    return err("Error while initializing VMState: " & exc.msg)
 
+  ok(vmState)
 
 proc purgeOutOfJournalBlocks(db: CoreDbRef) {.inline, raises: [RlpError].} =
   ## Remove non-reachable blocks from KVT database
@@ -67,24 +74,22 @@ proc purgeOutOfJournalBlocks(db: CoreDbRef) {.inline, raises: [RlpError].} =
         break
       blkNum = blkNum - 1
 
-
 proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
                        bodies: openArray[BlockBody],
-                       flags: PersistBlockFlags = {}): ValidationResult
-                          # wildcard exception, wrapped below in public section
-                          {.inline, raises: [CatchableError].} =
+                       flags: PersistBlockFlags = {}): Result[PersistStats, string]
+                         {.raises: [CatchableError] .} =
   let dbTx = c.db.beginTransaction()
   defer: dbTx.dispose()
 
   c.com.hardForkTransition(headers[0])
 
   # Note that `0 < headers.len`, assured when called from `persistBlocks()`
-  let vmState = c.getVmState(headers[0]).valueOr:
-    return ValidationResult.Error
+  let vmState = ?c.getVmState(headers[0])
 
   let (fromBlock, toBlock) = (headers[0].blockNumber, headers[^1].blockNumber)
   trace "Persisting blocks", fromBlock, toBlock
 
+  var txs = 0
   for i in 0 ..< headers.len:
     let (header, body) = (headers[i], bodies[i])
 
@@ -99,19 +104,15 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
       debug "Cannot update VmState",
         blockNumber = header.blockNumber,
         item = i
-      return ValidationResult.Error
+      return err("Cannot update VmState to block " & $header.blockNumber)
 
     if c.validateBlock and c.extraValidation and
        c.verifyFrom <= header.blockNumber:
 
-      let res = c.com.validateHeaderAndKinship(
+      ? c.com.validateHeaderAndKinship(
         header,
         body,
         checkSealOK = false) # TODO: how to checkseal from here
-      if res.isErr:
-        debug "block validation error",
-          msg = res.error
-        return ValidationResult.Error
 
     if c.generateWitness:
       vmState.generateWitness = true
@@ -128,7 +129,7 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
         warn "Validation error. Debugging metadata dumped."
 
     if validationResult != ValidationResult.OK:
-      return validationResult
+      return err("Failed to validate block")
 
     if c.generateWitness:
       let dbTx = c.db.beginTransaction()
@@ -143,7 +144,6 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
       dbTx.rollback()
 
       c.db.setBlockWitness(header.blockHash(), witness)
-
 
     if NoPersistHeader notin flags:
       discard c.db.persistHeaderToDb(
@@ -166,6 +166,8 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
     # Done with this block
     lapTx.commit()
 
+    txs += body.transactions.len
+
   dbTx.commit()
 
   # The `c.db.persistent()` call is ignored by the legacy DB which
@@ -183,60 +185,66 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
     if(fromBlock mod CleanUpEpoch) <= (toBlock - fromBlock):
       c.db.purgeOutOfJournalBlocks()
 
-  ValidationResult.OK
+  ok((headers.len, txs, vmState.cumulativeGasUsed))
 
 # ------------------------------------------------------------------------------
 # Public `ChainDB` methods
 # ------------------------------------------------------------------------------
 
 proc insertBlockWithoutSetHead*(c: ChainRef, header: BlockHeader,
-                                body: BlockBody): ValidationResult
-                                {.gcsafe, raises: [CatchableError].} =
-  result = c.persistBlocksImpl(
-    [header], [body], {NoPersistHeader, NoSaveReceipts})
-  if result == ValidationResult.OK:
+                                body: BlockBody): Result[void, string] =
+  try:
+    discard ? c.persistBlocksImpl(
+      [header], [body], {NoPersistHeader, NoSaveReceipts})
+
     c.db.persistHeaderToDbWithoutSetHead(header, c.com.startOfHistory)
+    ok()
+  except CatchableError as exc:
+    err(exc.msg)
 
-proc setCanonical*(c: ChainRef, header: BlockHeader): ValidationResult
-                                {.gcsafe, raises: [CatchableError].} =
+proc setCanonical*(c: ChainRef, header: BlockHeader): Result[void, string] =
+  try:
+    if header.parentHash == Hash256():
+      discard c.db.setHead(header.blockHash)
+      return ok()
 
-  if header.parentHash == Hash256():
+    var body: BlockBody
+    if not c.db.getBlockBody(header, body):
+      debug "Failed to get BlockBody",
+        hash = header.blockHash
+      return err("Could not get block body")
+
+    discard ? c.persistBlocksImpl([header], [body], {NoPersistHeader, NoSaveTxs})
+
     discard c.db.setHead(header.blockHash)
-    return ValidationResult.OK
+    ok()
+  except CatchableError as exc:
+    err(exc.msg)
 
-  var body: BlockBody
-  if not c.db.getBlockBody(header, body):
-    debug "Failed to get BlockBody",
-      hash = header.blockHash
-    return ValidationResult.Error
-
-  result = c.persistBlocksImpl([header], [body], {NoPersistHeader, NoSaveTxs})
-  if result == ValidationResult.OK:
-    discard c.db.setHead(header.blockHash)
-
-proc setCanonical*(c: ChainRef, blockHash: Hash256): ValidationResult
-                                {.gcsafe, raises: [CatchableError].} =
+proc setCanonical*(c: ChainRef, blockHash: Hash256): Result[void, string] =
   var header: BlockHeader
   if not c.db.getBlockHeader(blockHash, header):
     debug "Failed to get BlockHeader",
       hash = blockHash
-    return ValidationResult.Error
+    return err("Could not get block header")
 
   setCanonical(c, header)
 
 proc persistBlocks*(c: ChainRef; headers: openArray[BlockHeader];
-                      bodies: openArray[BlockBody]): ValidationResult
-                        {.gcsafe, raises: [CatchableError].} =
+                      bodies: openArray[BlockBody]): Result[PersistStats, string] =
   # Run the VM here
   if headers.len != bodies.len:
     debug "Number of headers not matching number of bodies"
-    return ValidationResult.Error
+    return err("Mismatching headers and bodies")
 
   if headers.len == 0:
     debug "Nothing to do"
-    return ValidationResult.OK
+    return ok(default(PersistStats)) # TODO not nice to return nil
 
-  c.persistBlocksImpl(headers,bodies)
+  try:
+    c.persistBlocksImpl(headers,bodies)
+  except CatchableError as exc:
+    err(exc.msg)
 
 # ------------------------------------------------------------------------------
 # End

@@ -22,8 +22,8 @@ import
   ./version,
   ./constants,
   ./nimbus_desc,
+  ./nimbus_import,
   ./core/eip4844,
-  ./core/block_import,
   ./db/core_db/persistent,
   ./sync/protocol,
   ./sync/handlers
@@ -35,14 +35,6 @@ when defined(evmc_enabled):
 ## * No IPv6 support
 ## * No multiple bind addresses support
 ## * No database support
-
-proc importBlocks(conf: NimbusConf, com: CommonRef) =
-  if string(conf.blocksFile).len > 0:
-    # success or not, we quit after importing blocks
-    if not importRlpBlock(string conf.blocksFile, com):
-      quit(QuitFailure)
-    else:
-      quit(QuitSuccess)
 
 proc basicServices(nimbus: NimbusNode,
                    conf: NimbusConf,
@@ -218,7 +210,7 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
     nimbus.metricsServer = res.get
     waitFor nimbus.metricsServer.start()
 
-proc start(nimbus: NimbusNode, conf: NimbusConf) =
+proc run(nimbus: NimbusNode, conf: NimbusConf) =
   ## logging
   setLogLevel(conf.logLevel)
   if conf.logFile.isSome:
@@ -228,6 +220,19 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
 
   when defined(evmc_enabled):
     evmcSetLibraryPath(conf.evm)
+
+  # Trusted setup is needed for processing Cancun+ blocks
+  if conf.trustedSetupFile.isSome:
+    let fileName = conf.trustedSetupFile.get()
+    let res = Kzg.loadTrustedSetup(fileName)
+    if res.isErr:
+      fatal "Cannot load Kzg trusted setup from file", msg=res.error
+      quit(QuitFailure)
+  else:
+    let res = loadKzgTrustedSetup()
+    if res.isErr:
+      fatal "Cannot load baked in Kzg trusted setup", msg=res.error
+      quit(QuitFailure)
 
   createDir(string conf.dataDir)
   let coreDB =
@@ -241,26 +246,17 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
     networkId = conf.networkId,
     params = conf.networkParams)
 
+  defer:
+    com.db.finish()
+
   com.initializeEmptyDb()
-
-  let protocols = conf.getProtocolFlags()
-
-  if conf.cmd != NimbusCmd.`import` and conf.trustedSetupFile.isSome:
-    let fileName = conf.trustedSetupFile.get()
-    let res = Kzg.loadTrustedSetup(fileName)
-    if res.isErr:
-      fatal "Cannot load Kzg trusted setup from file", msg=res.error
-      quit(QuitFailure)
-  else:
-    let res = loadKzgTrustedSetup()
-    if res.isErr:
-      fatal "Cannot load baked in Kzg trusted setup", msg=res.error
-      quit(QuitFailure)
 
   case conf.cmd
   of NimbusCmd.`import`:
     importBlocks(conf, com)
   else:
+    let protocols = conf.getProtocolFlags()
+
     basicServices(nimbus, conf, com)
     manageAccounts(nimbus, conf)
     setupP2P(nimbus, conf, com, protocols)
@@ -282,17 +278,16 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
       # it might have been set to "Stopping" with Ctrl+C
       nimbus.state = NimbusState.Running
 
-proc process*(nimbus: NimbusNode, conf: NimbusConf) =
-  # Main event loop
-  while nimbus.state == NimbusState.Running:
-    try:
-      poll()
-    except CatchableError as e:
-      debug "Exception in poll()", exc = e.name, err = e.msg
-      discard e # silence warning when chronicles not activated
+    # Main event loop
+    while nimbus.state == NimbusState.Running:
+      try:
+        poll()
+      except CatchableError as e:
+        debug "Exception in poll()", exc = e.name, err = e.msg
+        discard e # silence warning when chronicles not activated
 
-  # Stop loop
-  waitFor nimbus.stop(conf)
+    # Stop loop
+    waitFor nimbus.stop(conf)
 
 when isMainModule:
   var nimbus = NimbusNode(state: NimbusState.Starting, ctx: newEthContext())
@@ -312,5 +307,4 @@ when isMainModule:
   ## Processing command line arguments
   let conf = makeConfig()
 
-  nimbus.start(conf)
-  nimbus.process(conf)
+  nimbus.run(conf)

@@ -261,8 +261,8 @@ proc importBlock(ctx: var TestCtx, com: CommonRef,
     chain = newChain(com, extraValidation = true, ctx.vmState)
     res = chain.persistBlocks([tb.header], [tb.body])
 
-  if res == ValidationResult.Error:
-    raise newException(ValidationError, "persistBlocks validation")
+  if res.isErr()
+    raise newException(ValidationError, res.error())
   else:
     blockWitness(chain.vmState, com.db)
     testGetBlockWitness(chain, chain.vmState.parent, tb.header)

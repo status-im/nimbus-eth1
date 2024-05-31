@@ -86,8 +86,7 @@ proc processBlock(
   ValidationResult.OK
 
 proc getVmState(c: ChainRef, header: BlockHeader):
-                 Result[BaseVMState, void]
-                  {.gcsafe, raises: [CatchableError].} =
+                 Result[BaseVMState, void] =
   if c.vmState.isNil.not:
     return ok(c.vmState)
 
@@ -96,6 +95,7 @@ proc getVmState(c: ChainRef, header: BlockHeader):
     debug "Cannot initialise VmState",
       number = header.blockNumber
     return err()
+
   return ok(vmState)
 
 # A stripped down version of persistBlocks without validation

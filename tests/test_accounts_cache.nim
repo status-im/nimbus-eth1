@@ -86,7 +86,7 @@ when false:
     discard
     when defined(chronicles_runtime_filtering) and loggingEnabled:
       setLogLevel(LogLevel.TRACE)
-  
+
   proc setErrorLevel =
     discard
     when defined(chronicles_runtime_filtering) and loggingEnabled:
@@ -104,7 +104,7 @@ proc blockChainForTesting*(network: NetworkId): CommonRef =
   initializeEmptyDb(result)
 
 proc importBlocks(com: CommonRef; h: seq[BlockHeader]; b: seq[BlockBody]) =
-  if com.newChain.persistBlocks(h,b) != ValidationResult.OK:
+  if com.newChain.persistBlocks(h,b).isErr:
     raiseAssert "persistBlocks() failed at block #" & $h[0].blockNumber
 
 proc getVmState(com: CommonRef; number: BlockNumber): BaseVMState =

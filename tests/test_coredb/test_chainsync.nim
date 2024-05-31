@@ -234,7 +234,7 @@ proc test_chainSync*(
 
       noisy.stopLoggingAfter():
         let runPersistBlocksRc = chain.persistBlocks(w[0], w[1])
-        xCheck runPersistBlocksRc == ValidationResult.OK:
+        xCheck runPersistBlocksRc.isOk():
           if noisy:
             noisy.whisper "***", "Re-run with logging enabled...\n"
             setTraceLevel()
@@ -269,7 +269,7 @@ proc test_chainSync*(
         noisy.whisper "***",
            &"processing {dotsOrSpace}[#{fromBlock:>8},#{(lastBlock-1):>8}]"
       let runPersistBlocks1Rc = chain.persistBlocks(headers1, bodies1)
-      xCheck runPersistBlocks1Rc == ValidationResult.OK
+      xCheck runPersistBlocks1Rc.isOk()
       dotsOrSpace = "   "
 
     noisy.startLogging(headers9[0].blockNumber)
@@ -286,7 +286,7 @@ proc test_chainSync*(
           &"processing {dotsOrSpace}[#{lastBlock:>8},#{lastBlock:>8}]"
       noisy.stopLoggingAfter():
         let runPersistBlocks0Rc = chain.persistBlocks(headers0, bodies0)
-        xCheck runPersistBlocks0Rc == ValidationResult.OK
+        xCheck runPersistBlocks0Rc.isOk()
     else:
       if oldLogAlign:
         noisy.whisper "***",
@@ -297,7 +297,7 @@ proc test_chainSync*(
           &"processing {dotsOrSpace}[#{lastBlock:>8},#{toBlock:>8}]"
       noisy.stopLoggingAfter():
         let runPersistBlocks9Rc = chain.persistBlocks(headers9, bodies9)
-        xCheck runPersistBlocks9Rc == ValidationResult.OK
+        xCheck runPersistBlocks9Rc.isOk()
     break
   if not oldLogAlign:
     sayPerf

@@ -369,7 +369,7 @@ proc initializeEmptyDb*(com: CommonRef)
     {.gcsafe, raises: [CatchableError].} =
   let kvt = com.db.kvt()
   if canonicalHeadHashKey().toOpenArray notin kvt:
-    trace "Writing genesis to DB"
+    info "Writing genesis to DB"
     doAssert(com.genesisHeader.blockNumber.isZero,
       "can't commit genesis block with number > 0")
     discard com.db.persistHeaderToDb(com.genesisHeader,

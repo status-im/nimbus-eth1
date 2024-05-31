@@ -85,11 +85,14 @@ proc simpleFCU*(status: PayloadExecutionStatus,
     )
   )
 
-proc invalidFCU*(hash = common.Hash256()): ForkchoiceUpdatedResponse =
+proc invalidFCU*(
+    validationError: string,
+    hash = common.Hash256()): ForkchoiceUpdatedResponse =
   ForkchoiceUpdatedResponse(payloadStatus:
     PayloadStatusV1(
       status: PayloadExecutionStatus.invalid,
-      latestValidHash: toValidHash(hash)
+      latestValidHash: toValidHash(hash),
+      validationError: some validationError
     )
   )
 
@@ -183,13 +186,16 @@ proc latestValidHash*(db: CoreDbRef,
     # latestValidHash MUST be set to ZERO
     common.Hash256()
 
-proc invalidFCU*(com: CommonRef,
-                 header: common.BlockHeader): ForkchoiceUpdatedResponse
-                  {.gcsafe, raises: [RlpError].} =
+proc invalidFCU*(validationError: string,
+                 com: CommonRef,
+                 header: common.BlockHeader): ForkchoiceUpdatedResponse =
   var parent: common.BlockHeader
   if not com.db.getBlockHeader(header.parentHash, parent):
-    return invalidFCU(common.Hash256())
+    return invalidFCU(validationError)
 
-  let blockHash = latestValidHash(com.db, parent,
-    com.ttd.get(high(common.BlockNumber)))
-  invalidFCU(blockHash)
+  let blockHash = try:
+    latestValidHash(com.db, parent, com.ttd.get(high(common.BlockNumber)))
+  except RlpError:
+    default(common.Hash256)
+
+  invalidFCU(validationError, blockHash)

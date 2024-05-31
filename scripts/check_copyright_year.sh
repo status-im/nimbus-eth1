@@ -8,7 +8,7 @@
 # according to those terms.
 
 excluded_files="config.yaml|.gitmodules"
-excluded_extensions="json|md|png|txt|toml|gz|key|rlp|era1"
+excluded_extensions="json|md|png|txt|toml|gz|key|rlp|era1|cfg"
 
 current_year=$(date +"%Y")
 outdated_files=()

@@ -31,7 +31,7 @@ proc setStatus(xp: TxPoolRef; item: TxItemRef; status: TxItemStatus)
     discard xp.txDB.reassign(item, status)
 
 proc importBlocks(c: ChainRef; h: seq[BlockHeader]; b: seq[BlockBody]): int =
-  if c.persistBlocks(h,b) != ValidationResult.OK:
+  if c.persistBlocks(h,b).isErr():
     raiseAssert "persistBlocks() failed at block #" & $h[0].blockNumber
   for body in b:
     result += body.transactions.len

@@ -173,7 +173,7 @@ proc runTxPoolPosTest() =
 
     test "PoS persistBlocks":
       let rr = chain.persistBlocks([blk.header], [body])
-      check rr == ValidationResult.OK
+      check rr.isOk()
 
     test "validate TxPool prevRandao setter":
       var sdb = LedgerRef.init(com.db, blk.header.stateRoot)
@@ -236,7 +236,7 @@ proc runTxPoolBlobhashTest() =
 
     test "Blobhash persistBlocks":
       let rr = chain.persistBlocks([blk.header], [body])
-      check rr == ValidationResult.OK
+      check rr.isOk()
 
     test "validate TxPool prevRandao setter":
       var sdb = LedgerRef.init(com.db, blk.header.stateRoot)

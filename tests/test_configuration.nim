@@ -52,7 +52,7 @@ proc configurationMain*() =
 
       let bb = makeConfig(@["import", genesisFile])
       check bb.cmd == NimbusCmd.`import`
-      check bb.blocksFile.string == genesisFile
+      check bb.blocksFile[0].string == genesisFile
 
     test "custom-network loading config file with no genesis data":
       # no genesis will fallback to geth compatibility mode

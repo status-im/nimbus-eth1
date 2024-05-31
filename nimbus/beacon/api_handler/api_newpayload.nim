@@ -187,10 +187,10 @@ proc newPayload*(ben: BeaconEngineRef,
     hash = blockHash, number = header.blockNumber
   let body = blockBody(payload)
   let vres = ben.chain.insertBlockWithoutSetHead(header, body)
-  if vres != ValidationResult.OK:
+  if vres.isErr:
     ben.setInvalidAncestor(header, blockHash)
     let blockHash = latestValidHash(db, parent, ttd)
-    return invalidStatus(blockHash, "Failed to insert block")
+    return invalidStatus(blockHash, vres.error())
 
   # We've accepted a valid payload from the beacon client. Mark the local
   # chain transitions to notify other subsystems (e.g. downloader) of the
