@@ -33,7 +33,7 @@ export
   isAristo,
   toAristo,
   toAristoProfData,
-  toAristoOldestState,
+  toAristoSavedStateBlockNumber,
 
   # Standard interface for calculating merkle hash signatures (see `aristo`)
   MerkleSignRef,

@@ -150,7 +150,9 @@ proc setErrorLevel {.used.} =
 proc initRunnerDB(
     path: string;
     specs: CaptureSpecs;
-    dbType: CoreDbType): CommonRef =
+    dbType: CoreDbType;
+    pruneHistory: bool;
+     ): CommonRef =
   let coreDB =
     # Resolve for static `dbType`
     case dbType:
@@ -177,7 +179,8 @@ proc initRunnerDB(
   result = CommonRef.new(
     db = coreDB,
     networkId = networkId,
-    params = params)
+    params = params,
+    pruneHistory = pruneHistory)
 
   result.initializeEmptyDb
 
@@ -194,6 +197,7 @@ proc chainSyncRunner(
     noisy = true;
     capture = memorySampleDefault;
     dbType = CoreDbType(0);
+    pruneHistory = false;
     profilingOk = false;
     finalDiskCleanUpOk = true;
     enaLoggingOk = false;
@@ -230,7 +234,7 @@ proc chainSyncRunner(
 
     test &"Ledger API {numBlocksInfo} blocks":
       let
-        com = initRunnerDB(dbDir, capture, dbType)
+        com = initRunnerDB(dbDir, capture, dbType, pruneHistory)
       defer:
         com.db.finish(flush = finalDiskCleanUpOk)
         if profilingOk: noisy.test_chainSyncProfilingPrint numBlocks
@@ -251,6 +255,7 @@ proc persistentSyncPreLoadAndResumeRunner(
     capture = persistentSampleDefault;
     dbType = CoreDbType(0);
     profilingOk = false;
+    pruneHistory = false;
     finalDiskCleanUpOk = true;
     enaLoggingOk = false;
     lastOneExtraOk = true;
@@ -283,7 +288,7 @@ proc persistentSyncPreLoadAndResumeRunner(
 
     test "Populate db by initial sample parts":
       let
-        com = initRunnerDB(dbDir, capture, dbType)
+        com = initRunnerDB(dbDir, capture, dbType, pruneHistory)
       defer:
         com.db.finish(flush = finalDiskCleanUpOk)
         if profilingOk: noisy.test_chainSyncProfilingPrint firstPart
@@ -299,7 +304,7 @@ proc persistentSyncPreLoadAndResumeRunner(
 
     test &"Continue with rest of sample":
       let
-        com = initRunnerDB(dbDir, capture, dbType)
+        com = initRunnerDB(dbDir, capture, dbType, pruneHistory)
       defer:
         com.db.finish(flush = finalDiskCleanUpOk)
         if profilingOk: noisy.test_chainSyncProfilingPrint secndPart
@@ -334,6 +339,7 @@ when isMainModule:
 
   when true and false:
     false.coreDbMain()
+    false.persistentSyncPreLoadAndResumeRunner()
 
   # This one uses the readily available dump: `bulkTest0` and some huge replay
   # dumps `bulkTest2`, `bulkTest3`, .. from the `nimbus-eth1-blobs` package.
@@ -349,8 +355,9 @@ when isMainModule:
       noisy.profileSection("@sample #" & $n, state):
         noisy.chainSyncRunner(
           capture = capture,
+          pruneHistory = true,
           #profilingOk = true,
-          #finalDiskCleanUpOk = false,
+          finalDiskCleanUpOk = false,
           oldLogAlign = true
         )
 
