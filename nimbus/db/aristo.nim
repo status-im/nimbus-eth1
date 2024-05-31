@@ -48,7 +48,6 @@ export
   AristoError,
   AristoTxRef,
   MerkleSignRef,
-  QidLayoutRef,
   isValid
 
 # End

@@ -687,7 +687,7 @@ proc swapCtx*(base: AristoBaseRef; ctx: CoreDbCtxRef): CoreDbCtxRef =
 
 proc persistent*(
     base: AristoBaseRef;
-    fid: Option[FilterID];
+    fid: uint64;
     info: static[string];
       ): CoreDbRc[void] =
   let

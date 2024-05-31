@@ -64,6 +64,8 @@ proc init*(
   ## database.
   if  not db.isCentre:
     return err(FilBackendRoMode)
+  if db.nForked == 0:
+    return ok T(db: db) # No need to do anything
 
   func fromVae(err: (VertexID,AristoError)): AristoError =
     err[1]
@@ -87,17 +89,18 @@ proc update*(ctx: UpdateSiblingsRef): Result[UpdateSiblingsRef,AristoError] =
   ##
   if ctx.state == Initial:
     ctx.state = Updated
-    let db = ctx.db
-    # Update distributed filters. Note that the physical backend database
-    # must not have been updated, yet. So the new root key for the backend
-    # will be `db.roFilter.trg`.
-    for w in db.forked:
-      let rc = db.merge(w.roFilter, ctx.rev, db.roFilter.trg)
-      if rc.isErr:
-        ctx.rollback()
-        return err(rc.error[1])
-      ctx.roFilters.add (w, w.roFilter)
-      w.roFilter = rc.value
+    if not ctx.rev.isNil:
+      let db = ctx.db
+      # Update distributed filters. Note that the physical backend database
+      # must not have been updated, yet. So the new root key for the backend
+      # will be `db.roFilter.trg`.
+      for w in db.forked:
+        let rc = db.merge(w.roFilter, ctx.rev, db.roFilter.trg)
+        if rc.isErr:
+          ctx.rollback()
+          return err(rc.error[1])
+        ctx.roFilters.add (w, w.roFilter)
+        w.roFilter = rc.value
   ok(ctx)
 
 proc update*(
@@ -110,10 +113,10 @@ proc update*(
 # Public getter
 # ------------------------------------------------------------------------------
 
-func rev*(ctx: UpdateSiblingsRef): FilterRef =
-  ## Getter, returns the reverse of the `init()` argument `db` current
-  ## read-only filter.
-  ctx.rev
+#func rev*(ctx: UpdateSiblingsRef): FilterRef =
+#  ## Getter, returns the reverse of the `init()` argument `db` current
+#  ## read-only filter.
+#  ctx.rev
 
 # ------------------------------------------------------------------------------
 # End

@@ -45,11 +45,8 @@ type
     ## Database
     sTab: Table[VertexID,Blob]       ## Structural vertex table making up a trie
     kMap: Table[VertexID,HashKey]    ## Merkle hash key mapping
-    rFil: Table[QueueID,Blob]        ## Backend journal filters
     vGen: Option[seq[VertexID]]      ## ID generator state
     lSst: Option[SavedState]         ## Last saved state
-    vFqs: Option[seq[(QueueID,QueueID)]]
-    noFq: bool                       ## No filter queues available
 
   MemBackendRef* = ref object of TypedBackendRef
     ## Inheriting table so access can be extended for debugging purposes
@@ -58,10 +55,8 @@ type
   MemPutHdlRef = ref object of TypedPutHdlRef
     sTab: Table[VertexID,Blob]
     kMap: Table[VertexID,HashKey]
-    rFil: Table[QueueID,Blob]
     vGen: Option[seq[VertexID]]
     lSst: Option[SavedState]
-    vFqs: Option[seq[(QueueID,QueueID)]]
 
 when extraTraceMessages:
   import chronicles
@@ -113,19 +108,6 @@ proc getKeyFn(db: MemBackendRef): GetKeyFn =
         return ok key
       err(GetKeyNotFound)
 
-proc getFilFn(db: MemBackendRef): GetFilFn =
-  if db.mdb.noFq:
-    result =
-      proc(qid: QueueID): Result[FilterRef,AristoError] =
-        err(FilQuSchedDisabled)
-  else:
-    result =
-      proc(qid: QueueID): Result[FilterRef,AristoError] =
-        let data = db.mdb.rFil.getOrDefault(qid, EmptyBlob)
-        if 0 < data.len:
-          return data.deblobify FilterRef
-        err(GetFilNotFound)
-
 proc getIdgFn(db: MemBackendRef): GetIdgFn =
   result =
     proc(): Result[seq[VertexID],AristoError]=
@@ -139,18 +121,6 @@ proc getLstFn(db: MemBackendRef): GetLstFn =
       if db.mdb.lSst.isSome:
         return ok db.mdb.lSst.unsafeGet
       err(GetLstNotFound)
-
-proc getFqsFn(db: MemBackendRef): GetFqsFn =
-  if db.mdb.noFq:
-    result =
-      proc(): Result[seq[(QueueID,QueueID)],AristoError] =
-        err(FilQuSchedDisabled)
-  else:
-    result =
-      proc(): Result[seq[(QueueID,QueueID)],AristoError] =
-        if db.mdb.vFqs.isSome:
-          return ok db.mdb.vFqs.unsafeGet
-        err(GetFqsNotFound)
 
 # -------------
 
@@ -186,34 +156,6 @@ proc putKeyFn(db: MemBackendRef): PutKeyFn =
         for (vid,key) in vkps:
           hdl.kMap[vid] = key
 
-proc putFilFn(db: MemBackendRef): PutFilFn =
-  if db.mdb.noFq:
-    result =
-      proc(hdl: PutHdlRef; vf: openArray[(QueueID,FilterRef)]) =
-        let hdl = hdl.getSession db
-        if hdl.error.isNil:
-          hdl.error = TypedPutHdlErrRef(
-            pfx:  FilPfx,
-            qid:  (if 0 < vf.len: vf[0][0] else: QueueID(0)),
-            code: FilQuSchedDisabled)
-  else:
-    result =
-      proc(hdl: PutHdlRef; vf: openArray[(QueueID,FilterRef)]) =
-        let hdl = hdl.getSession db
-        if hdl.error.isNil:
-          for (qid,filter) in vf:
-            if filter.isValid:
-              let rc = filter.blobify()
-              if rc.isErr:
-                hdl.error = TypedPutHdlErrRef(
-                  pfx:  FilPfx,
-                  qid:  qid,
-                  code: rc.error)
-                return
-              hdl.rFil[qid] = rc.value
-            else:
-              hdl.rFil[qid] = EmptyBlob
-
 proc putIdgFn(db: MemBackendRef): PutIdgFn =
   result =
     proc(hdl: PutHdlRef; vs: openArray[VertexID])  =
@@ -228,24 +170,6 @@ proc putLstFn(db: MemBackendRef): PutLstFn =
       if hdl.error.isNil:
         hdl.lSst = some(lst)
 
-proc putFqsFn(db: MemBackendRef): PutFqsFn =
-  if db.mdb.noFq:
-    result =
-      proc(hdl: PutHdlRef; fs: openArray[(QueueID,QueueID)])  =
-        let hdl = hdl.getSession db
-        if hdl.error.isNil:
-          hdl.error = TypedPutHdlErrRef(
-            pfx:  AdmPfx,
-            aid:  AdmTabIdFqs,
-            code: FilQuSchedDisabled)
-  else:
-    result =
-      proc(hdl: PutHdlRef; fs: openArray[(QueueID,QueueID)])  =
-        let hdl = hdl.getSession db
-        if hdl.error.isNil:
-          hdl.vFqs = some(fs.toSeq)
-
-
 proc putEndFn(db: MemBackendRef): PutEndFn =
   result =
     proc(hdl: PutHdlRef): Result[void,AristoError] =
@@ -255,8 +179,6 @@ proc putEndFn(db: MemBackendRef): PutEndFn =
           case hdl.error.pfx:
           of VtxPfx, KeyPfx: trace logTxt "putEndFn: vtx/key failed",
             pfx=hdl.error.pfx, vid=hdl.error.vid, error=hdl.error.code
-          of FilPfx: trace logTxt "putEndFn: filter failed",
-            pfx=hdl.error.pfx, qid=hdl.error.qid, error=hdl.error.code
           of AdmPfx: trace logTxt "putEndFn: admin failed",
             pfx=AdmPfx, aid=hdl.error.aid.uint64, error=hdl.error.code
           of Oops: trace logTxt "putEndFn: failed",
@@ -275,12 +197,6 @@ proc putEndFn(db: MemBackendRef): PutEndFn =
         else:
           db.mdb.kMap.del vid
 
-      for (qid,data) in hdl.rFil.pairs:
-        if 0 < data.len:
-          db.mdb.rFil[qid] = data
-        else:
-          db.mdb.rFil.del qid
-
       if hdl.vGen.isSome:
         let vGen = hdl.vGen.unsafeGet
         if vGen.len == 0:
@@ -290,13 +206,6 @@ proc putEndFn(db: MemBackendRef): PutEndFn =
 
       if hdl.lSst.isSome:
         db.mdb.lSst = hdl.lSst
-
-      if hdl.vFqs.isSome:
-        let vFqs = hdl.vFqs.unsafeGet
-        if vFqs.len == 0:
-          db.mdb.vFqs = none(seq[(QueueID,QueueID)])
-        else:
-          db.mdb.vFqs = some(vFqs)
 
       ok()
 
@@ -316,37 +225,25 @@ proc closeFn(db: MemBackendRef): CloseFn =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc memoryBackend*(qidLayout: QidLayoutRef): BackendRef =
+proc memoryBackend*(): BackendRef =
   let db = MemBackendRef(
     beKind: BackendMemory,
     mdb:    MemDbRef())
 
-  db.mdb.noFq = qidLayout.isNil
-
   db.getVtxFn = getVtxFn db
   db.getKeyFn = getKeyFn db
-  db.getFilFn = getFilFn db
   db.getIdgFn = getIdgFn db
   db.getLstFn = getLstFn db
-  db.getFqsFn = getFqsFn db
 
   db.putBegFn = putBegFn db
   db.putVtxFn = putVtxFn db
   db.putKeyFn = putKeyFn db
-  db.putFilFn = putFilFn db
   db.putIdgFn = putIdgFn db
   db.putLstFn = putLstFn db
-  db.putFqsFn = putFqsFn db
   db.putEndFn = putEndFn db
 
   db.guestDbFn = guestDbFn db
-
   db.closeFn = closeFn db
-
-  # Set up filter management table
-  if not db.mdb.noFq:
-    db.journal = QidSchedRef(ctx: qidLayout)
-
   db
 
 proc dup*(db: MemBackendRef): MemBackendRef =
@@ -382,21 +279,6 @@ iterator walkKey*(
     if key.isValid:
       yield (vid, key)
 
-iterator walkFil*(
-    be: MemBackendRef;
-      ): tuple[qid: QueueID, filter: FilterRef] =
-  ##  Iteration over the vertex sub-table.
-  if not be.mdb.noFq:
-    for n,qid in be.mdb.rFil.keys.toSeq.mapIt(it).sorted:
-      let data = be.mdb.rFil.getOrDefault(qid, EmptyBlob)
-      if 0 < data.len:
-        let rc = data.deblobify FilterRef
-        if rc.isErr:
-          when extraTraceMessages:
-            debug logTxt "walkFilFn() skip", n, qid, error=rc.error
-        else:
-          yield (qid, rc.value)
-
 
 iterator walk*(
     be: MemBackendRef;
@@ -407,10 +289,8 @@ iterator walk*(
   ## yield record is still incremented.
   if be.mdb.vGen.isSome:
     yield(AdmPfx, AdmTabIdIdg.uint64, be.mdb.vGen.unsafeGet.blobify)
-
-  if not be.mdb.noFq:
-    if be.mdb.vFqs.isSome:
-      yield(AdmPfx, AdmTabIdFqs.uint64, be.mdb.vFqs.unsafeGet.blobify)
+  if be.mdb.lSst.isSome:
+    yield(AdmPfx, AdmTabIdLst.uint64, be.mdb.lSst.unsafeGet.blobify)
 
   for vid in be.mdb.sTab.keys.toSeq.mapIt(it).sorted:
     let data = be.mdb.sTab.getOrDefault(vid, EmptyBlob)
@@ -419,12 +299,6 @@ iterator walk*(
 
   for (vid,key) in be.walkKey:
     yield (KeyPfx, vid.uint64, @(key.data))
-
-  if not be.mdb.noFq:
-    for lid in be.mdb.rFil.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.QueueID):
-      let data = be.mdb.rFil.getOrDefault(lid, EmptyBlob)
-      if 0 < data.len:
-        yield (FilPfx, lid.uint64, data)
 
 # ------------------------------------------------------------------------------
 # End

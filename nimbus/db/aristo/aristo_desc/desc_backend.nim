@@ -29,11 +29,6 @@ type
       ## Generic backend database retrieval function for a single
       ## `Aristo DB` hash lookup value.
 
-  GetFilFn* =
-    proc(qid: QueueID): Result[FilterRef,AristoError]
-      {.gcsafe, raises: [].}
-        ## Generic backend database retrieval function for a filter record.
-
   GetIdgFn* =
     proc(): Result[seq[VertexID],AristoError] {.gcsafe, raises: [].}
       ## Generic backend database retrieval function for a the ID generator
@@ -43,11 +38,6 @@ type
     proc(): Result[SavedState,AristoError]
       {.gcsafe, raises: [].}
         ## Generic last recorded state stamp retrieval function
-
-  GetFqsFn* =
-    proc(): Result[seq[(QueueID,QueueID)],AristoError] {.gcsafe, raises: [].}
-      ## Generic backend database retrieval function for some filter queue
-      ## administration data (e.g. the bottom/top ID.)
 
   # -------------
 
@@ -73,11 +63,6 @@ type
         ## Generic backend database bulk storage function, `VOID_HASH_KEY`
         ## values indicate that records should be deleted.
 
-  PutFilFn* =
-    proc(hdl: PutHdlRef; qf: openArray[(QueueID,FilterRef)])
-      {.gcsafe, raises: [].}
-        ## Generic backend database storage function for filter records.
-
   PutIdgFn* =
     proc(hdl: PutHdlRef; vs: openArray[VertexID])
       {.gcsafe, raises: [].}
@@ -89,12 +74,6 @@ type
       {.gcsafe, raises: [].}
         ## Generic last recorded state stamp storage function. This
         ## function replaces the currentlt saved state.
-
-  PutFqsFn* =
-    proc(hdl: PutHdlRef; vs: openArray[(QueueID,QueueID)])
-      {.gcsafe, raises: [].}
-        ## Generic backend database filter ID state storage function. This
-        ## function replaces the current filter ID list.
 
   PutEndFn* =
     proc(hdl: PutHdlRef): Result[void,AristoError] {.gcsafe, raises: [].}
@@ -128,44 +107,34 @@ type
   BackendRef* = ref BackendObj
   BackendObj* = object of RootObj
     ## Backend interface.
-    journal*: QidSchedRef            ## Delta filters slot queue state
-
     getVtxFn*: GetVtxFn              ## Read vertex record
     getKeyFn*: GetKeyFn              ## Read Merkle hash/key
-    getFilFn*: GetFilFn              ## Read back log filter
     getIdgFn*: GetIdgFn              ## Read vertex ID generator state
     getLstFn*: GetLstFn              ## Read saved state
-    getFqsFn*: GetFqsFn              ## Read filter ID state
 
     putBegFn*: PutBegFn              ## Start bulk store session
     putVtxFn*: PutVtxFn              ## Bulk store vertex records
     putKeyFn*: PutKeyFn              ## Bulk store vertex hashes
-    putFilFn*: PutFilFn              ## Store back log filter
     putIdgFn*: PutIdgFn              ## Store ID generator state
     putLstFn*: PutLstFn              ## Store saved state
-    putFqsFn*: PutFqsFn              ## Store filter ID state
     putEndFn*: PutEndFn              ## Commit bulk store session
 
     guestDbFn*: GuestDbFn            ## Piggyback DB for another application
-
     closeFn*: CloseFn                ## Generic destructor
 
 proc init*(trg: var BackendObj; src: BackendObj) =
-  trg.journal = src.journal
   trg.getVtxFn = src.getVtxFn
   trg.getKeyFn = src.getKeyFn
-  trg.getFilFn = src.getFilFn
   trg.getIdgFn = src.getIdgFn
   trg.getLstFn = src.getLstFn
-  trg.getFqsFn = src.getFqsFn
+
   trg.putBegFn = src.putBegFn
   trg.putVtxFn = src.putVtxFn
   trg.putKeyFn = src.putKeyFn
-  trg.putFilFn = src.putFilFn
   trg.putIdgFn = src.putIdgFn
   trg.putLstFn = src.putLstFn
-  trg.putFqsFn = src.putFqsFn
   trg.putEndFn = src.putEndFn
+
   trg.guestDbFn = src.guestDbFn
   trg.closeFn = src.closeFn
 

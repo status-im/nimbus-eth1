@@ -128,7 +128,6 @@ proc merge*(
 
   # There is no need to deep copy table vertices as they will not be modified.
   let newFilter = FilterRef(
-    fid:  upper.fid,
     src:  lower.src,
     sTab: lower.sTab,
     kMap: lower.kMap,

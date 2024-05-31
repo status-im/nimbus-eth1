@@ -14,7 +14,7 @@
 {.push raises: [].}
 
 import
-  std/[options, tables],
+  std/tables,
   results,
   ".."/[aristo_desc, aristo_get, aristo_journal, aristo_layers, aristo_hashify]
 
@@ -24,7 +24,7 @@ import
 
 proc txStow*(
     db: AristoDbRef;                  # Database
-    nxtFid: Option[FilterID];         # Next filter ID (zero is OK)
+    nxtSid: uint64;                   # Next state ID (aka block number)
     persistent: bool;                 # Stage only unless `true`
     chunkedMpt: bool;                 # Partial data (e.g. from `snap`)
       ): Result[void,AristoError] =
@@ -75,7 +75,7 @@ proc txStow*(
 
   if persistent:
     # Merge/move `roFilter` into persistent tables
-    ? db.journalUpdate nxtFid
+    ? db.journalUpdate nxtSid
 
   # Special treatment for `snap` proofs (aka `chunkedMpt`)
   let final =

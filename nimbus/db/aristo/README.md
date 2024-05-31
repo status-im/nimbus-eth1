@@ -25,10 +25,8 @@ Contents
   + [4.5 Leaf record payload serialisation for RLP encoded data](#ch4x5)
   + [4.6 Leaf record payload serialisation for unstructured data](#ch4x6)
   + [4.7 Serialisation of the list of unused vertex IDs](#ch4x7)
-  + [4.8 Backend filter record serialisation](#ch4x8)
-  + [4.9 Serialisation of a list of filter IDs](#ch4x92)
-  + [4.10 Serialisation of a last saved state record](#ch4x10)
-  + [4.11 Serialisation record identifier identification](#ch4x11)
+  + [4.8 Serialisation of a last saved state record](#ch4x8)
+  + [4.9 Serialisation record identifier identification](#ch4x9)
 
 * [5. *Patricia Trie* implementation notes](#ch5)
   + [5.1 Database decriptor representation](#ch5x1)
@@ -372,79 +370,7 @@ be used as vertex IDs. If this record is missing, the value *(1u64,0x01)* is
 assumed, i.e. the list with the single vertex ID *1*.
 
 <a name="ch4x8"></a>
-### 4.8 Backend filter record serialisation
-
-         0 +--+--+--+--+--+ .. --+
-           |                     |           -- filter ID
-         8 +--+--+--+--+--+ .. --+--+ .. --+
-           |                               | -- 32 bytes filter source hash
-        40 +--+--+--+--+--+ .. --+--+ .. --+
-           |                               | -- 32 bytes filter target hash
-        72 +--+--+--+--+--+ .. --+--+ .. --+
-           |           |                     -- number of unused vertex IDs
-        76 +--+--+--+--+
-           |           |                     -- number of structural triplets
-        80 +--+--+--+--+--+ .. --+
-           |                     |           -- first unused vertex ID
-        88 +--+--+--+--+--+ .. --+
-           ...                               -- more unused vertex ID
-        N1 +--+--+--+--+
-           ||          |                     -- flg(2) + vtxLen(30), 1st triplet
-           +--+--+--+--+--+ .. --+
-           |                     |           -- vertex ID of first triplet
-           +--+--+--+--+--+ .. --+--+ .. --+
-           |                               | -- optional 32 bytes hash key
-           +--+--+--+--+--+ .. --+--+ .. --+
-           ...                               -- optional vertex record
-        N2 +--+--+--+--+
-           ||          |                     -- flg(2) + vtxLen(30), 2nd triplet
-           +--+--+--+--+
-           ...
-           +--+
-           |  |                              -- marker(8), 0x7d
-           +--+
-
-        where
-          + minimum size of an empty filter is 72 bytes
-
-          + the flg(2) represents a bit tuple encoding the serialised storage
-            modes for the optional 32 bytes hash key:
-
-              0 -- not encoded, to be ignored
-              1 -- not encoded, void => considered deleted
-              2 -- present, encoded as-is (32 bytes)
-              3 -- present, encoded as (len(1),data,zero-padding)
-
-          + the vtxLen(30) is the number of bytes of the optional vertex record
-            which has maximum size 2^30-2 which is short of 1 GiB. The value
-            2^30-1 (i.e. 0x3fffffff) is reserverd for indicating that there is
-            no vertex record following and it should be considered deleted.
-
-          + there is no blind entry, i.e. either flg(2) != 0 or vtxLen(30) != 0.
-
-          + the marker(8) is the eight bit array *0111-1101*
-
-<a name="ch4x9"></a>
-### 4.9 Serialisation of a list of filter IDs
-
-        0 +-- ..
-          ...                                -- some filter ID
-          +--+--+--+--+--+--+--+--+
-          |                       |          -- last filter IDs
-          +--+--+--+--+--+--+--+--+
-          |  |                               -- marker(8), 0x7e
-          +--+
-
-        where
-          marker(8) is the eight bit array *0111-1110*
-
-This list is used to control the filters on the database. By holding some IDs
-in a dedicated list (e.g. the latest filters) one can quickly access particular
-entries without searching through the set of filters. In the current
-implementation this list comes in ID pairs i.e. the number of entries is even.
-
-<a name="ch4x9"></a>
-### 4.10 Serialisation of a last saved state record
+### 4.8 Serialisation of a last saved state record
 
          0 +--+--+--+--+--+ .. --+--+ .. --+
            |                               | -- 32 bytes source state hash
@@ -460,7 +386,7 @@ implementation this list comes in ID pairs i.e. the number of entries is even.
           marker(8) is the eight bit array *0111-111f*
 
 <a name="ch4x10"></a>
-### 4.10 Serialisation record identifier tags
+### 4.9 Serialisation record identifier tags
 
 Any of the above records can uniquely be identified by its trailing marker,
 i.e. the last byte of a serialised record.
@@ -474,9 +400,7 @@ i.e. the last byte of a serialised record.
 |   0110 1010 | 0x6a             | RLP encoded payload  | [4.5](#ch4x5)       |
 |   0110 1011 | 0x6b             | Unstructured payload | [4.6](#ch4x6)       |
 |   0111 1100 | 0x7c             | List of vertex IDs   | [4.7](#ch4x7)       |
-|   0111 1101 | 0x7d             | Filter record        | [4.8](#ch4x8)       |
-|   0111 1110 | 0x7e             | List of filter IDs   | [4.9](#ch4x9)       |
-|   0111 1111 | 0x7f             | Last saved state     | [4.10](#ch4x10)     |
+|   0111 1111 | 0x7f             | Last saved state     | [4.8](#ch4x8)       |
 
 <a name="ch5"></a>
 5. *Patricia Trie* implementation notes

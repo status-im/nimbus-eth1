@@ -14,7 +14,7 @@
 {.push raises: [].}
 
 import
-  eth/[common, trie/nibbles],
+  eth/trie/nibbles,
   results,
   "."/[aristo_desc, aristo_get, aristo_hike]
 

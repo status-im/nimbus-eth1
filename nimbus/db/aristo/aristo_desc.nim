@@ -125,9 +125,6 @@ func isValid*(vid: VertexID): bool =
 func isValid*(sqv: HashSet[VertexID]): bool =
   sqv != EmptyVidSet
 
-func isValid*(qid: QueueID): bool =
-  qid != QueueID(0)
-
 # ------------------------------------------------------------------------------
 # Public functions, miscellaneous
 # ------------------------------------------------------------------------------
@@ -259,6 +256,10 @@ proc forgetOthers*(db: AristoDbRef): Result[void,AristoError] =
 
     db.dudes = DudesRef(nil)
   ok()
+
+# ------------------------------------------------------------------------------
+# Public helpers
+# ------------------------------------------------------------------------------
 
 iterator rstack*(db: AristoDbRef): LayerRef =
   # Stack in reverse order

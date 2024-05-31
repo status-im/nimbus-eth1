@@ -42,10 +42,6 @@ const
   MaxFilterBulk = 150_000
     ## Policy settig for `pack()`
 
-let
-  TxQidLyo = LyoSamples[0][0].to(QidLayoutRef)
-    ## Cascaded filter slots layout for testing
-
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
@@ -349,11 +345,11 @@ proc testTxMergeAndDeleteOneByOne*(
     # Start with brand new persistent database.
     db = block:
       if 0 < rdbPath.len:
-        let rc = AristoDbRef.init(RdbBackendRef, rdbPath, qidLayout=TxQidLyo)
+        let rc = AristoDbRef.init(RdbBackendRef, rdbPath)
         xCheckRc rc.error == 0
         rc.value
       else:
-        AristoDbRef.init(MemBackendRef, qidLayout=TxQidLyo)
+        AristoDbRef.init(MemBackendRef)
 
     # Start transaction (double frame for testing)
     xCheck db.txTop.isErr
@@ -457,11 +453,11 @@ proc testTxMergeAndDeleteSubTree*(
     # Start with brand new persistent database.
     db = block:
       if 0 < rdbPath.len:
-        let rc = AristoDbRef.init(RdbBackendRef, rdbPath, qidLayout=TxQidLyo)
+        let rc = AristoDbRef.init(RdbBackendRef, rdbPath)
         xCheckRc rc.error == 0
         rc.value
       else:
-        AristoDbRef.init(MemBackendRef, qidLayout=TxQidLyo)
+        AristoDbRef.init(MemBackendRef)
 
     if testRootVid != VertexID(1):
       # Add a dummy entry so the journal logic can be triggered
@@ -559,11 +555,11 @@ proc testTxMergeProofAndKvpList*(
       db = block:
         # New DB with disabled filter slots management
         if 0 < rdbPath.len:
-          let rc = AristoDbRef.init(RdbBackendRef, rdbPath, QidLayoutRef(nil))
+          let rc = AristoDbRef.init(RdbBackendRef, rdbPath)
           xCheckRc rc.error == 0
           rc.value
         else:
-          AristoDbRef.init(MemBackendRef, QidLayoutRef(nil))
+          AristoDbRef.init(MemBackendRef)
 
       # Start transaction (double frame for testing)
       tx = db.txBegin().value.to(AristoDbRef).txBegin().value

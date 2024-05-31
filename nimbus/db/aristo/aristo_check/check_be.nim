@@ -192,19 +192,6 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
         # Register deleted vid against backend generator state
         discard vids.merge Interval[VertexID,uint64].new(vid,vid)
 
-    # Check cascaded fifos
-    if fifos and
-       not db.backend.isNil and
-       not db.backend.journal.isNil:
-      var lastTrg = db.getKeyUbe(VertexID(1)).get(otherwise = VOID_HASH_KEY)
-                      .to(Hash256)
-      for (qid,filter) in db.backend.T.walkFifoBe: # walk in fifo order
-        if filter.src != lastTrg:
-          return err((VertexID(0),CheckBeFifoSrcTrgMismatch))
-        if filter.trg != filter.kMap.getOrVoid(VertexID 1).to(Hash256):
-          return err((VertexID(1),CheckBeFifoTrgNotStateRoot))
-        lastTrg = filter.trg
-
     # Check key table
     var list: seq[VertexID]
     for (vid,key) in db.layersWalkKey:

@@ -19,8 +19,7 @@ import
   "."/[aristo_desc, aristo_get, aristo_vid],
   ./aristo_desc/desc_backend,
   ./aristo_journal/[
-    filter_state_root, filter_merge, filter_reverse, filter_siblings,
-    journal_get, journal_ops]
+    filter_state_root, filter_merge, filter_reverse, filter_siblings]
 
 # ------------------------------------------------------------------------------
 # Public functions, construct filters
@@ -101,7 +100,7 @@ proc journalUpdateOk*(db: AristoDbRef): bool =
 
 proc journalUpdate*(
     db: AristoDbRef;                   # Database
-    nxtFid = none(FilterID);           # Next filter ID (if any)
+    nxtFid = 0u64;                     # Next filter ID (if any)
     reCentreOk = false;
       ): Result[void,AristoError] =
   ## Resolve (i.e. move) the backend filter into the physical backend database.
@@ -143,24 +142,10 @@ proc journalUpdate*(
   let updateSiblings = ? UpdateSiblingsRef.init db
   defer: updateSiblings.rollback()
 
-  # Figure out how to save the reverse filter on a cascades slots queue
-  var instr: JournalOpsMod
-  if not be.journal.isNil:                       # Otherwise ignore
-    block getInstr:
-      # Compile instruction for updating filters on the cascaded fifos
-      if db.roFilter.isValid:
-        let ovLap = be.journalGetOverlap db.roFilter
-        if 0 < ovLap:
-          instr = ? be.journalOpsDeleteSlots ovLap # Revert redundant entries
-          break getInstr
-      instr = ? be.journalOpsPushSlot(
-        updateSiblings.rev,                      # Store reverse filter
-        nxtFid)                                  # Set filter ID (if any)
-
   let lSst = SavedState(
     src: db.roFilter.src,
     trg: db.roFilter.trg,
-    serial: nxtFid.get(otherwise=FilterID(0)).uint64)
+    serial: nxtFid)
 
   # Store structural single trie entries
   let writeBatch = be.putBegFn()
@@ -168,66 +153,11 @@ proc journalUpdate*(
   be.putKeyFn(writeBatch, db.roFilter.kMap.pairs.toSeq)
   be.putIdgFn(writeBatch, db.roFilter.vGen)
   be.putLstFn(writeBatch, lSst)
-
-  # Store `instr` as history journal entry
-  if not be.journal.isNil:
-    be.putFilFn(writeBatch, instr.put)
-    be.putFqsFn(writeBatch, instr.scd.state)
   ? be.putEndFn writeBatch                       # Finalise write batch
 
   # Update dudes and this descriptor
   ? updateSiblings.update().commit()
-
-  # Finally update slot queue scheduler state (as saved)
-  if not be.journal.isNil:
-    be.journal.state = instr.scd.state
-
-  db.roFilter = FilterRef(nil)
   ok()
-
-
-proc journalFork*(
-    db: AristoDbRef;
-    episode: int;
-      ): Result[AristoDbRef,AristoError] =
-  ## Construct a new descriptor on the `db` backend which enters it through a
-  ## set of backend filters from the casacded filter fifos. The filter used is
-  ## addressed as `episode`, where the most recend backward filter has episode
-  ## `0`, the next older has episode `1`, etc.
-  ##
-  ## Use `aristo_filter.forget()` directive to clean up this descriptor.
-  ##
-  let be = db.backend
-  if be.isNil:
-    return err(FilBackendMissing)
-  if episode < 0:
-    return err(FilNegativeEpisode)
-  let
-    instr = ? be.journalOpsFetchSlots(backSteps = episode+1)
-    clone = ? db.fork(noToplayer = true)
-  clone.top = LayerRef.init()
-  clone.top.final.vGen = instr.fil.vGen
-  clone.roFilter = instr.fil
-  ok clone
-
-proc journalFork*(
-    db: AristoDbRef;
-    fid: Option[FilterID];
-    earlierOK = false;
-      ): Result[AristoDbRef,AristoError] =
-  ## Variant of `journalFork()` for forking to a particular filter ID (or the
-  ## nearest predecessot if `earlierOK` is passed `true`.) if there is some
-  ## filter ID `fid`.
-  ##
-  ## Otherwise, the oldest filter is forked to (regardless of the value of
-  ## `earlierOK`.)
-  ##
-  let be = db.backend
-  if be.isNil:
-    return err(FilBackendMissing)
-
-  let fip = ? be.journalGetInx(fid, earlierOK)
-  db.journalFork fip.inx
 
 # ------------------------------------------------------------------------------
 # End

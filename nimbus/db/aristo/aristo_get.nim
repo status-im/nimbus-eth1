@@ -40,15 +40,6 @@ proc getLstUbe*(
     return be.getLstFn()
   err(GetLstNotFound)
 
-proc getFqsUbe*(
-    db: AristoDbRef;
-      ): Result[seq[(QueueID,QueueID)],AristoError] =
-  ## Get the list of filter IDs unfiltered backened if available.
-  let be = db.backend
-  if not be.isNil:
-    return be.getFqsFn()
-  err(GetFqsNotFound)
-
 proc getVtxUbe*(
     db: AristoDbRef;
     vid: VertexID;
@@ -68,16 +59,6 @@ proc getKeyUbe*(
   if not be.isNil:
     return be.getKeyFn vid
   err GetKeyNotFound
-
-proc getFilUbe*(
-    db: AristoDbRef;
-    qid: QueueID;
-      ): Result[FilterRef,AristoError] =
-  ## Get the filter from the unfiltered backened if available.
-  let be = db.backend
-  if not be.isNil:
-    return be.getFilFn qid
-  err GetFilNotFound
 
 # ------------------
 

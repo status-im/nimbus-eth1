@@ -43,20 +43,6 @@ iterator walkKeyBe*[T: MemBackendRef|VoidBackendRef](
   for (vid,key) in walkKeyBeImpl[T](db):
     yield (vid,key)
 
-iterator walkFilBe*[T: MemBackendRef|VoidBackendRef](
-   be: T;
-     ): tuple[qid: QueueID, filter: FilterRef] =
-  ## Iterate over backend filters.
-  for (qid,filter) in walkFilBeImpl[T](be):
-    yield (qid,filter)
-
-iterator walkFifoBe*[T: MemBackendRef|VoidBackendRef](
-   be: T;
-     ):  tuple[qid: QueueID, fid: FilterRef] =
-  ## Walk filter slots in fifo order.
-  for (qid,filter) in walkFifoBeImpl[T](be):
-    yield (qid,filter)
-
 # -----------
 
 iterator walkPairs*[T: MemBackendRef|VoidBackendRef](

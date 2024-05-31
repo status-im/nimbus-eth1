@@ -14,7 +14,6 @@
 {.push raises: [].}
 
 import
-  std/options,
   results,
   ./aristo_tx/[tx_fork, tx_frame, tx_stow],
   "."/[aristo_desc, aristo_get]
@@ -225,7 +224,7 @@ proc collapse*(
 
 proc persist*(
     db: AristoDbRef;                  # Database
-    nxtFid = none(FilterID);          # Next filter ID (zero is OK)
+    nxtSid = 0u64;                    # Next state ID (aka block number)
     chunkedMpt = false;               # Partial data (e.g. from `snap`)
       ): Result[void,AristoError] =
   ## Persistently store data onto backend database. If the system is running
@@ -248,7 +247,7 @@ proc persist*(
   ## In this case, the `chunkedMpt` argument must be set `true` (see alse
   ## `fwdFilter()`.)
   ##
-  db.txStow(nxtFid, persistent=true, chunkedMpt=chunkedMpt)
+  db.txStow(nxtSid, persistent=true, chunkedMpt=chunkedMpt)
 
 proc stow*(
     db: AristoDbRef;                  # Database
@@ -267,7 +266,7 @@ proc stow*(
   ## In this case, the `chunkedMpt` argument must be set `true` (see alse
   ## `fwdFilter()`.)
   ##
-  db.txStow(nxtFid=none(FilterID), persistent=false, chunkedMpt=chunkedMpt)
+  db.txStow(nxtSid=0u64, persistent=false, chunkedMpt=chunkedMpt)
 
 # ------------------------------------------------------------------------------
 # End

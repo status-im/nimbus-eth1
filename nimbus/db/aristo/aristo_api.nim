@@ -13,12 +13,11 @@
 
 
 import
-  std/[options, times],
+  std/times,
   eth/[common, trie/nibbles],
   results,
   ./aristo_desc/desc_backend,
   ./aristo_init/memory_db,
-  ./aristo_journal/journal_get,
   "."/[aristo_delete, aristo_desc, aristo_fetch, aristo_get, aristo_hashify,
        aristo_hike, aristo_init, aristo_merge, aristo_path, aristo_profile,
        aristo_serialise, aristo_tx, aristo_vid]
@@ -220,31 +219,6 @@ type
       ## Getter, returns `true` if the argument `tx` referes to the current
       ## top level transaction.
 
-  AristoApiJournalGetFilterFn* =
-    proc(be: BackendRef;
-         inx: int;
-        ): Result[FilterRef,AristoError]
-        {.noRaise.}
-      ## Fetch filter from journal where the argument `inx` relates to the
-      ## age starting with `0` for the most recent.
-
-  AristoApiJournalGetInxFn* =
-    proc(be: BackendRef;
-         fid: Option[FilterID];
-         earlierOK = false;
-        ): Result[JournalInx,AristoError]
-        {.noRaise.}
-      ## For a positive argument `fid`, find the filter on the journal with ID
-      ## not larger than `fid` (i e. the resulting filter might be older.)
-      ##
-      ## If the argument `earlierOK` is passed `false`, the function succeeds
-      ## only if the filter ID of the returned filter is equal to the argument
-      ## `fid`.
-      ##
-      ## In case that the argument `fid` is zera (i.e. `FilterID(0)`), the
-      ## filter with the smallest filter ID (i.e. the oldest filter) is
-      ## returned. In that case, the argument `earlierOK` is ignored.
-
   AristoApiLevelFn* =
     proc(db: AristoDbRef;
         ): int
@@ -303,7 +277,7 @@ type
 
   AristoApiPersistFn* =
     proc(db: AristoDbRef;
-         nxtFid = none(FilterID);
+         nxtSid = 0u64;
          chunkedMpt = false;
         ): Result[void,AristoError]
         {.noRaise.}
@@ -315,13 +289,9 @@ type
       ## backend stage area. After that, the top layer cache is cleared.
       ##
       ## Finally, the staged data are merged into the physical backend
-      ## database and the staged data area is cleared. Wile performing this
-      ## last step, the recovery journal is updated (if available.)
+      ## database and the staged data area is cleared.
       ##
-      ## If the argument `nxtFid` is passed non-zero, it will be the ID for
-      ## the next recovery journal record. If non-zero, this ID must be greater
-      ## than all previous IDs (e.g. block number when storing after block
-      ## execution.)
+      ## The argument `nxtSid` will be the ID for the next saved state record.
       ##
       ## Staging the top layer cache might fail with a partial MPT when it is
       ## set up from partial MPT chunks as it happens with `snap` sync
@@ -419,8 +389,6 @@ type
     hasPath*: AristoApiHasPathFn
     hikeUp*: AristoApiHikeUpFn
     isTop*: AristoApiIsTopFn
-    journalGetFilter*: AristoApiJournalGetFilterFn
-    journalGetInx*: AristoApiJournalGetInxFn
     level*: AristoApiLevelFn
     nForked*: AristoApiNForkedFn
     merge*: AristoApiMergeFn
@@ -454,8 +422,6 @@ type
     AristoApiProfHasPathFn             = "hasPath"
     AristoApiProfHikeUpFn              = "hikeUp"
     AristoApiProfIsTopFn               = "isTop"
-    AristoApiProfJournalGetFilterFn    = "journalGetFilter"
-    AristoApiProfJournalGetInxFn       = "journalGetInx"
     AristoApiProfLevelFn               = "level"
     AristoApiProfNForkedFn             = "nForked"
     AristoApiProfMergeFn               = "merge"
@@ -472,16 +438,12 @@ type
 
     AristoApiProfBeGetVtxFn            = "be/getVtx"
     AristoApiProfBeGetKeyFn            = "be/getKey"
-    AristoApiProfBeGetFilFn            = "be/getFil"
     AristoApiProfBeGetIdgFn            = "be/getIfg"
     AristoApiProfBeGetLstFn            = "be/getLst"
-    AristoApiProfBeGetFqsFn            = "be/getFqs"
     AristoApiProfBePutVtxFn            = "be/putVtx"
     AristoApiProfBePutKeyFn            = "be/putKey"
-    AristoApiProfBePutFilFn            = "be/putFil"
     AristoApiProfBePutIdgFn            = "be/putIdg"
     AristoApiProfBePutLstFn            = "be/putLst"
-    AristoApiProfBePutFqsFn            = "be/putFqs"
     AristoApiProfBePutEndFn            = "be/putEnd"
 
   AristoApiProfRef* = ref object of AristoApiRef
@@ -509,8 +471,6 @@ when AutoValidateApiHooks:
     doAssert not api.hasPath.isNil
     doAssert not api.hikeUp.isNil
     doAssert not api.isTop.isNil
-    doAssert not api.journalGetFilter.isNil
-    doAssert not api.journalGetInx.isNil
     doAssert not api.level.isNil
     doAssert not api.nForked.isNil
     doAssert not api.merge.isNil
@@ -564,8 +524,6 @@ func init*(api: var AristoApiObj) =
   api.hasPath = hasPath
   api.hikeUp = hikeUp
   api.isTop = isTop 
-  api.journalGetFilter = journalGetFilter
-  api.journalGetInx = journalGetInx
   api.level = level
   api.nForked = nForked
   api.merge = merge
@@ -602,8 +560,6 @@ func dup*(api: AristoApiRef): AristoApiRef =
     hasPath:             api.hasPath,
     hikeUp:              api.hikeUp,
     isTop:               api.isTop,
-    journalGetFilter:    api.journalGetFilter,
-    journalGetInx:       api.journalGetInx,
     level:               api.level,
     nForked:             api.nForked,
     merge:               api.merge,
@@ -717,16 +673,6 @@ func init*(
       AristoApiProfIsTopFn.profileRunner:
         result = api.isTop(a)
 
-  profApi.journalGetFilter =
-    proc(a: BackendRef; b: int): auto =
-      AristoApiProfJournalGetFilterFn.profileRunner:
-        result = api.journalGetFilter(a, b)
-
-  profApi.journalGetInx =
-    proc(a: BackendRef; b: Option[FilterID]; c = false): auto =
-      AristoApiProfJournalGetInxFn.profileRunner:
-        result = api.journalGetInx(a, b, c)
-
   profApi.level =
     proc(a: AristoDbRef): auto =
        AristoApiProfLevelFn.profileRunner:
@@ -754,7 +700,7 @@ func init*(
         result = api.pathAsBlob(a)
 
   profApi.persist =
-    proc(a: AristoDbRef; b = none(FilterID); c = false): auto =
+    proc(a: AristoDbRef; b = 0u64; c = false): auto =
        AristoApiProfPersistFn.profileRunner:
         result = api.persist(a, b, c)
 
@@ -810,12 +756,6 @@ func init*(
           result = be.getKeyFn(a)
     data.list[AristoApiProfBeGetKeyFn.ord].masked = true
 
-    beDup.getFilFn =
-      proc(a: QueueID): auto =
-        AristoApiProfBeGetFilFn.profileRunner:
-          result = be.getFilFn(a)
-    data.list[AristoApiProfBeGetFilFn.ord].masked = true
-
     beDup.getIdgFn =
       proc(): auto =
         AristoApiProfBeGetIdgFn.profileRunner:
@@ -827,12 +767,6 @@ func init*(
         AristoApiProfBeGetLstFn.profileRunner:
           result = be.getLstFn()
     data.list[AristoApiProfBeGetLstFn.ord].masked = true
-
-    beDup.getFqsFn =
-      proc(): auto =
-        AristoApiProfBeGetFqsFn.profileRunner:
-          result = be.getFqsFn()
-    data.list[AristoApiProfBeGetFqsFn.ord].masked = true
 
     beDup.putVtxFn =
       proc(a: PutHdlRef; b: openArray[(VertexID,VertexRef)]) =
@@ -846,12 +780,6 @@ func init*(
           be.putKeyFn(a,b)
     data.list[AristoApiProfBePutKeyFn.ord].masked = true
 
-    beDup.putFilFn =
-      proc(a: PutHdlRef; b: openArray[(QueueID,FilterRef)]) =
-        AristoApiProfBePutFilFn.profileRunner:
-          be.putFilFn(a,b)
-    data.list[AristoApiProfBePutFilFn.ord].masked = true
-
     beDup.putIdgFn =
       proc(a: PutHdlRef; b: openArray[VertexID]) =
         AristoApiProfBePutIdgFn.profileRunner:
@@ -863,12 +791,6 @@ func init*(
         AristoApiProfBePutLstFn.profileRunner:
           be.putLstFn(a,b)
     data.list[AristoApiProfBePutLstFn.ord].masked = true
-
-    beDup.putFqsFn =
-      proc(a: PutHdlRef; b: openArray[(QueueID,QueueID)]) =
-        AristoApiProfBePutFqsFn.profileRunner:
-          be.putFqsFn(a,b)
-    data.list[AristoApiProfBePutFqsFn.ord].masked = true
 
     beDup.putEndFn =
       proc(a: PutHdlRef): auto =

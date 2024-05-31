@@ -48,20 +48,6 @@ iterator walkKeyBe*[T: RdbBackendRef](
   for (vid,key) in walkKeyBeImpl[T](db):
     yield (vid,key)
 
-iterator walkFilBe*[T: RdbBackendRef](
-   be: T;
-     ): tuple[qid: QueueID, filter: FilterRef] =
-  ## Iterate over backend filters.
-  for (qid,filter) in be.walkFilBeImpl:
-    yield (qid,filter)
-
-iterator walkFifoBe*[T: RdbBackendRef](
-   be: T;
-     ): tuple[qid: QueueID, fid: FilterRef] =
-  ## Walk filter slots in fifo order.
-  for (qid,filter) in be.walkFifoBeImpl:
-    yield (qid,filter)
-
 # -----------
 
 iterator walkPairs*[T: RdbBackendRef](

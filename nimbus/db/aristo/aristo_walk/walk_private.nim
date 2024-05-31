@@ -76,44 +76,6 @@ iterator walkKeyBeImpl*[T](
       yield (vid,key)
 
 
-iterator walkFilBeImpl*[T](
-    be: T;                             # Backend descriptor
-      ): tuple[qid: QueueID, filter: FilterRef] =
-  ## Generic filter iterator
-  when T isnot VoidBackendRef:
-    mixin walkFil
-
-    for (qid,filter) in be.walkFil:
-      yield (qid,filter)
-
-
-iterator walkFifoBeImpl*[T](
-    be: T;                             # Backend descriptor
-      ): tuple[qid: QueueID, fid: FilterRef] =
-  ## Generic filter iterator walking slots in fifo order. This iterator does
-  ## not depend on the backend type but may be type restricted nevertheless.
-  when T isnot VoidBackendRef:
-    proc kvp(chn: int, qid: QueueID): (QueueID,FilterRef) =
-      let cid = QueueID((chn.uint64 shl 62) or qid.uint64)
-      (cid, be.getFilFn(cid).get(otherwise = FilterRef(nil)))
-
-    if not be.isNil:
-      let scd = be.journal
-      if not scd.isNil:
-        for i in 0 ..< scd.state.len:
-          let (left, right) = scd.state[i]
-          if left == 0:
-            discard
-          elif left <= right:
-            for j in right.countDown left:
-              yield kvp(i, j)
-          else:
-            for j in right.countDown QueueID(1):
-              yield kvp(i, j)
-            for j in scd.ctx.q[i].wrap.countDown left:
-              yield kvp(i, j)
-
-
 iterator walkPairsImpl*[T](
    db: AristoDbRef;                   # Database with top layer & backend filter
      ): tuple[vid: VertexID, vtx: VertexRef] =

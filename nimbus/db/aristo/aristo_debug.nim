@@ -17,7 +17,6 @@ import
   stew/[byteutils, interval_set],
   ./aristo_desc/desc_backend,
   ./aristo_init/[memory_db, memory_only, rocks_db],
-  ./aristo_journal/journal_scheduler,
   "."/[aristo_constants, aristo_desc, aristo_hike, aristo_layers]
 
 # ------------------------------------------------------------------------------
@@ -150,32 +149,6 @@ func ppCodeHash(h: Hash256): string =
     result &= "ø"
   else:
     result &= h.data.toHex.squeeze(hex=true,ignLen=true)
-
-proc ppFid(fid: FilterID): string =
-  "@" & $fid
-
-proc ppQid(qid: QueueID): string =
-  if not qid.isValid:
-    return "ø"
-  let
-    chn = qid.uint64 shr 62
-    qid = qid.uint64 and 0x3fff_ffff_ffff_ffffu64
-  result = "%"
-  if 0 < chn:
-    result &= $chn & ":"
-
-  if 0x0fff_ffff_ffff_ffffu64 <= qid.uint64:
-    block here:
-      if qid.uint64 == 0x0fff_ffff_ffff_ffffu64:
-        result &= "(2^60-1)"
-      elif qid.uint64 == 0x1fff_ffff_ffff_ffffu64:
-        result &= "(2^61-1)"
-      elif qid.uint64 == 0x3fff_ffff_ffff_ffffu64:
-        result &= "(2^62-1)"
-      else:
-        break here
-      return
-  result &= qid.toHex.stripZeros
 
 proc ppVidList(vGen: openArray[VertexID]): string =
   result = "["
@@ -430,7 +403,6 @@ proc ppFilter(
   if fl.isNil:
     result &= " n/a"
     return
-  result &= pfx & "fid=" & fl.fid.ppFid
   result &= pfx & "src=" & fl.src.to(HashKey).ppKey(db)
   result &= pfx & "trg=" & fl.trg.to(HashKey).ppKey(db)
   result &= pfx & "vGen" & pfx1 & "[" &
@@ -590,21 +562,6 @@ proc pp*(lty: LeafTie, db = AristoDbRef(nil)): string =
 
 proc pp*(vid: VertexID): string =
   vid.ppVid
-
-proc pp*(qid: QueueID): string =
-  qid.ppQid
-
-proc pp*(fid: FilterID): string =
-  fid.ppFid
-
-proc pp*(a: openArray[(QueueID,QueueID)]): string =
-  "[" & a.toSeq.mapIt("(" & it[0].pp & "," & it[1].pp & ")").join(",") & "]"
-
-proc pp*(a: QidAction): string =
-  ($a.op).replace("Qid", "") & "(" & a.qid.pp & "," & a.xid.pp & ")"
-
-proc pp*(a: openArray[QidAction]): string =
-  "[" & a.toSeq.mapIt(it.pp).join(",") & "]"
 
 proc pp*(vGen: openArray[VertexID]): string =
   vGen.ppVidList
