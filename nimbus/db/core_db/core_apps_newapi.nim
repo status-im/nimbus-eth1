@@ -173,6 +173,9 @@ iterator getWithdrawalsData*(
     withdrawalsRoot: Hash256;
       ): Blob =
   block body:
+    if withdrawalsRoot == EMPTY_ROOT_HASH:
+      break body
+
     let
       ctx = db.ctx
       col = ctx.newColumn(CtWithdrawals, withdrawalsRoot).valueOr:
@@ -201,6 +204,9 @@ iterator getReceipts*(
       ): Receipt
       {.gcsafe, raises: [RlpError].} =
   block body:
+    if receiptRoot == EMPTY_ROOT_HASH:
+      break body
+
     let
       ctx = db.ctx
       col = ctx.newColumn(CtReceipts, receiptRoot).valueOr:
@@ -709,16 +715,16 @@ proc persistWithdrawals*(
     withdrawals: openArray[Withdrawal];
       ): Hash256 =
   const info = "persistWithdrawals()"
-  if withdrawals.len > 0:
-    let mpt = db.ctx.getMpt(CtWithdrawals)
-    for idx, wd in withdrawals:
-      mpt.merge(rlp.encode(idx), rlp.encode(wd)).isOkOr:
-        warn logTxt info, idx, action="merge()", error=($$error)
-        return EMPTY_ROOT_HASH
-    mpt.getColumn.state.valueOr:
-      warn logTxt info, action="state()"
+  if withdrawals.len == 0:
+    return EMPTY_ROOT_HASH
+
+  let mpt = db.ctx.getMpt(CtWithdrawals)
+  for idx, wd in withdrawals:
+    mpt.merge(rlp.encode(idx), rlp.encode(wd)).isOkOr:
+      warn logTxt info, idx, action="merge()", error=($$error)
       return EMPTY_ROOT_HASH
-  else:
+  mpt.getColumn.state.valueOr:
+    warn logTxt info, action="state()"
     return EMPTY_ROOT_HASH
 
 proc getWithdrawals*(
@@ -726,9 +732,8 @@ proc getWithdrawals*(
     withdrawalsRoot: Hash256;
       ): seq[Withdrawal]
       {.gcsafe, raises: [RlpError].} =
-  if withdrawalsRoot != EMPTY_ROOT_HASH:
-    for encodedWd in db.getWithdrawalsData(withdrawalsRoot):
-      result.add(rlp.decode(encodedWd, Withdrawal))
+  for encodedWd in db.getWithdrawalsData(withdrawalsRoot):
+    result.add(rlp.decode(encodedWd, Withdrawal))
 
 proc getBlockBody*(
     db: CoreDbRef;
