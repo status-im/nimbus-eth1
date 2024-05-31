@@ -11,6 +11,7 @@ import
   chronicles,
   eth/common/eth_hash,
   eth/common/eth_types,
+  ../../common/common_utils,
   ./state_network,
   ./state_utils
 
@@ -19,63 +20,105 @@ export results, state_network
 logScope:
   topics = "portal_state"
 
-  # AccountTrieNodeKey* = object
-  #   path*: Nibbles
-  #   nodeHash*: NodeHash
+proc getNextNodeHash(
+    trieNode: TrieNode, nibbles: UnpackedNibbles, nibbleIdx: var int
+): Opt[(Nibbles, NodeHash)] =
+  doAssert(nibbles.len() > 0)
+  doAssert(nibbleIdx < nibbles.len())
 
-  # ContractTrieNodeKey* = object
-  #   address*: Address
-  #   path*: Nibbles
-  #   nodeHash*: NodeHash
+  let trieNodeRlp = rlpFromBytes(trieNode.asSeq())
+  # the trie node should have already been validated
+  doAssert(not trieNodeRlp.isEmpty())
+  doAssert(trieNodeRlp.listLen() == 2 or trieNodeRlp.listLen() == 17)
 
-  # ContractCodeKey* = object
-  #   address*: Address
-  #   codeHash*: CodeHash
+  if trieNodeRlp.listLen() == 17:
+    let nextNibble = nibbles[nibbleIdx]
+    doAssert(nextNibble < 16)
 
-# proc getAccountTrieNode*(
-#     n: StateNetwork, key: AccountTrieNodeKey
-# ): Future[Opt[AccountTrieNodeRetrieval]] {.inline.} =
-#   n.getContent(key, AccountTrieNodeRetrieval)
+    let nextHashBytes = trieNodeRlp.listElem(nextNibble.int)
+    doAssert(not nextHashBytes.isEmpty())
 
-# proc getContractTrieNode*(
-#     n: StateNetwork, key: ContractTrieNodeKey
-# ): Future[Opt[ContractTrieNodeRetrieval]] {.inline.} =
-#   n.getContent(key, ContractTrieNodeRetrieval)
+    nibbleIdx += 1
+    return Opt.some(
+      (
+        nibbles[0 ..< nibbleIdx].packNibbles(),
+        KeccakHash.fromBytes(nextHashBytes.toBytes()),
+      )
+    )
 
-# proc getContractCode*(
-#     n: StateNetwork, key: ContractCodeKey
-# ): Future[Opt[ContractCodeRetrieval]] {.inline.} =
-#   n.getContent(key, ContractCodeRetrieval)
+  # leaf or extension node so we need to remove one or more nibbles
+  let (_, isLeaf, prefix) = decodePrefix(trieNodeRlp.listElem(0))
+  nibbleIdx += prefix.unpackNibbles().len()
+
+  if isLeaf:
+    return Opt.none((Nibbles, NodeHash))
+
+  # extension node
+  let nextHashBytes = trieNodeRlp.listElem(1)
+  doAssert(not nextHashBytes.isEmpty())
+
+  Opt.some(
+    (
+      nibbles[0 ..< nibbleIdx].packNibbles(),
+      KeccakHash.fromBytes(nextHashBytes.toBytes()),
+    )
+  )
 
 proc getAccountProof(
     n: StateNetwork, stateRoot: KeccakHash, address: Address
 ): Future[Opt[TrieProof]] {.async.} =
-  # let
-  #   rootNodeKey = AccountTrieNodeKey.init(Nibbles.empty(), stateRoot)
-  #   nibbles = address.toPath().unpackedNibbles()
+  let nibbles = address.toPath().unpackNibbles()
 
-  # var
-  #   nibblesIdx = 0
-  #   currentNode = await n.getAccountTrieNode(rootNodeKey).valueOr:
-  #     # log something here
-  #     return Opt.none(TrieProof)
+  var
+    nibblesIdx = 0
+    key = AccountTrieNodeKey.init(Nibbles.empty(), stateRoot)
+    proof = TrieProof.empty()
 
-  # while nibblesIdx < nibbles.len():
-  #   # decode node found
-  #   let
-  #     thisNodeRlp = rlpFromBytes(p.asSeq())
-  #   # get the next hash by looking at the nibbles in the path
+  while nibblesIdx < nibbles.len():
+    # pass in the proof for poke here
+    let
+      accountTrieNode = (await n.getAccountTrieNode(key)).valueOr:
+        # log something here
+        return Opt.none(TrieProof)
+      trieNode = accountTrieNode.node
 
-  #   currentNode = await n.getAccountTrieNode(rootNodeKey).valueOr:
-  #     # log something here
-  #     return Opt.none(TrieProof)
+    let added = proof.add(trieNode)
+    doAssert(added)
 
-  discard
+    let (nextPath, nextNodeHash) = trieNode.getNextNodeHash(nibbles, nibblesIdx).valueOr:
+      break
+
+    key = AccountTrieNodeKey.init(nextPath, nextNodeHash)
+
+  Opt.some(proof)
 
 proc getStorageProof(
-    n: StateNetwork, storageRoot: KeccakHash, storageKey: UInt256
+    n: StateNetwork, storageRoot: KeccakHash, address: Address, storageKey: UInt256
 ): Future[Opt[TrieProof]] {.async.} =
-  discard
+  let nibbles = storageKey.toPath().unpackNibbles()
+
+  var
+    nibblesIdx = 0
+    key = ContractTrieNodeKey.init(address, Nibbles.empty(), storageRoot)
+    proof = TrieProof.empty()
+
+  while nibblesIdx < nibbles.len():
+    # pass in the proof for poke here
+    let
+      contractTrieNode = (await n.getContractTrieNode(key)).valueOr:
+        # log something here
+        return Opt.none(TrieProof)
+      trieNode = contractTrieNode.node
+
+    let added = proof.add(trieNode)
+    doAssert(added)
+
+    let (nextPath, nextNodeHash) = trieNode.getNextNodeHash(nibbles, nibblesIdx).valueOr:
+      break
+
+    key = ContractTrieNodeKey.init(address, nextPath, nextNodeHash)
+
+  Opt.some(proof)
 
 proc getAccount(
     n: StateNetwork, blockHash: BlockHash, address: Address
@@ -118,7 +161,7 @@ proc getStorageAt*(
   let
     account = (await n.getAccount(blockHash, address)).valueOr:
       return Opt.none(UInt256)
-    storageProof = (await n.getStorageProof(account.storageRoot, slotKey)).valueOr:
+    storageProof = (await n.getStorageProof(account.storageRoot, address, slotKey)).valueOr:
       warn "Failed to get storage proof"
       return Opt.none(UInt256)
     slotValue = storageProof.toSlot().valueOr:
@@ -136,7 +179,6 @@ proc getCode*(
       return Opt.none(Bytecode)
     contractCodeKey = ContractCodeKey.init(address, account.codeHash)
 
-  # get the code hash from the account
   let contractCodeRetrieval = (await n.getContractCode(contractCodeKey)).valueOr:
     warn "Failed to get contract code"
     return Opt.none(Bytecode)
