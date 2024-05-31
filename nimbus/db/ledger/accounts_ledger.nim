@@ -534,7 +534,10 @@ proc deleteAccount*(ac: AccountsLedgerRef, address: EthAddress) =
   # make sure all savepoints already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
   let acc = ac.getAccount(address)
-  acc.kill(address)
+  if IsNew in acc.flags:
+    ac.savePoint.cache.del address
+  else:
+    acc.kill(address)
 
 proc selfDestruct*(ac: AccountsLedgerRef, address: EthAddress) =
   ac.setBalance(address, 0.u256)
@@ -572,13 +575,22 @@ proc deleteEmptyAccount(ac: AccountsLedgerRef, address: EthAddress) =
     return
   if not acc.exists:
     return
-  acc.kill(address)
+  if IsNew in acc.flags:
+    ac.savePoint.cache.del(address)
+  else:
+    acc.kill(address)
 
 proc clearEmptyAccounts(ac: AccountsLedgerRef) =
+  var toDel: seq[EthAddress]
   for address, acc in ac.savePoint.cache:
     if Touched in acc.flags and
         acc.isEmpty and acc.exists:
-      acc.kill(address)
+      if IsNew in acc.flags:
+        toDel.add address
+      else:
+        acc.kill(address)
+  for d in toDel:
+    ac.savePoint.cache.del(d)
 
   # https://github.com/ethereum/EIPs/issues/716
   if ac.ripemdSpecial:
