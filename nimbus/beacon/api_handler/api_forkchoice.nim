@@ -102,6 +102,9 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
 
   # Block is known locally, just sanity check that the beacon client does not
   # attempt to push us back to before the merge.
+  #
+  # Disable terminal PoW block conditions validation for fCUV2 and later.
+  # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/shanghai.md#specification-1
   if apiVersion == Version.V1:
     let blockNumber = header.blockNumber.truncate(uint64)
     if header.difficulty > 0.u256 or blockNumber ==  0'u64:
