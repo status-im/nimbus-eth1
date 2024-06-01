@@ -305,6 +305,7 @@ proc delSubTreeImpl(
   #      additions to the list because the sequence must grow which entails a
   #      full copy in addition to this reorg itself - around block 2.5M this
   #      causes significant slowdown as the vid list is >1M entries long
+  #      See also EIP-161 which is why there are so many deletions
   # db.top.final.vGen = db.vGen.vidReorg()
   ok()
 
@@ -402,6 +403,7 @@ proc deleteImpl(
   #      additions to the list because the sequence must grow which entails a
   #      full copy in addition to this reorg itself - around block 2.5M this
   #      causes significant slowdown as the vid list is >1M entries long
+  #      See also EIP-161 which is why there are so many deletions```
   # db.top.final.vGen = db.vGen.vidReorg()
   ok(emptySubTreeOk)
 
