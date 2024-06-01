@@ -300,7 +300,7 @@ proc delSubTreeImpl(
     db.layersPutVtx(VertexID(1), wp.vid, leaf)
     db.layersResKey(VertexID(1), wp.vid)
 
-  # Squeze list of recycled vertex IDs
+  # Squeeze list of recycled vertex IDs
   # TODO this causes a reallocation of vGen which slows down subsequent
   #      additions to the list because the sequence must grow which entails a
   #      full copy in addition to this reorg itself - around block 2.5M this
@@ -397,7 +397,7 @@ proc deleteImpl(
     db.layersPutVtx(VertexID(1), wp.vid, leaf)
     db.layersResKey(VertexID(1), wp.vid)
 
-  # Squeze list of recycled vertex IDs
+  # Squeeze list of recycled vertex IDs
   # TODO this causes a reallocation of vGen which slows down subsequent
   #      additions to the list because the sequence must grow which entails a
   #      full copy in addition to this reorg itself - around block 2.5M this
