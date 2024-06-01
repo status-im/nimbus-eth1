@@ -88,7 +88,7 @@ iterator walk*(
 
         let val = rit.value()
         if val.len != 0:
-          yield (uint64.fromBytesBE key[1..^1], val)
+          yield (uint64.fromBytesBE key.toOpenArray(1, key.high()), val)
 
       # Update Iterator
       rit.next()

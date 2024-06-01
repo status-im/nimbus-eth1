@@ -39,39 +39,41 @@ proc load256(data: openArray[byte]; start: var int): Result[UInt256,AristoError]
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc blobify*(pyl: PayloadRef): Blob =
+proc blobifyTo*(pyl: PayloadRef, data: var Blob) =
   if pyl.isNil:
     return
   case pyl.pType
   of RawData:
-    result = pyl.rawBlob & @[0x6b.byte]
+    data &= pyl.rawBlob
+    data &= [0x6b.byte]
   of RlpData:
-    result = pyl.rlpBlob & @[0x6a.byte]
+    data &= pyl.rlpBlob
+    data &= @[0x6a.byte]
 
   of AccountData:
     var mask: byte
     if 0 < pyl.account.nonce:
       mask = mask or 0x01
-      result &= pyl.account.nonce.uint64.toBytesBE.toSeq
+      data &= pyl.account.nonce.uint64.toBytesBE
 
     if high(uint64).u256 < pyl.account.balance:
       mask = mask or 0x08
-      result &= pyl.account.balance.toBytesBE.toSeq
+      data &= pyl.account.balance.toBytesBE
     elif 0 < pyl.account.balance:
       mask = mask or 0x04
-      result &= pyl.account.balance.truncate(uint64).uint64.toBytesBE.toSeq
+      data &= pyl.account.balance.truncate(uint64).uint64.toBytesBE
 
     if VertexID(0) < pyl.account.storageID:
       mask = mask or 0x10
-      result &= pyl.account.storageID.uint64.toBytesBE.toSeq
+      data &= pyl.account.storageID.uint64.toBytesBE
 
     if pyl.account.codeHash != VOID_CODE_HASH:
       mask = mask or 0x80
-      result &= pyl.account.codeHash.data.toSeq
+      data &= pyl.account.codeHash.data
 
-    result &= @[mask]
+    data &= [mask]
 
-proc blobify*(vtx: VertexRef; data: var Blob): Result[void,AristoError] =
+proc blobifyTo*(vtx: VertexRef; data: var Blob): Result[void,AristoError] =
   ## This function serialises the vertex argument to a database record.
   ## Contrary to RLP based serialisation, these records aim to align on
   ## fixed byte boundaries.
@@ -102,14 +104,15 @@ proc blobify*(vtx: VertexRef; data: var Blob): Result[void,AristoError] =
   of Branch:
     var
       access = 0u16
-      refs: Blob
+      pos = data.len
     for n in 0..15:
       if vtx.bVid[n].isValid:
         access = access or (1u16 shl n)
-        refs &= vtx.bVid[n].uint64.toBytesBE.toSeq
-    if refs.len < 16:
+        data &= vtx.bVid[n].uint64.toBytesBE
+    if data.len - pos < 16:
       return err(BlobifyBranchMissingRefs)
-    data = refs & access.toBytesBE.toSeq & @[0x08u8]
+    data &= access.toBytesBE
+    data &= [0x08u8]
   of Extension:
     let
       pSegm = vtx.ePfx.hexPrefixEncode(isleaf = false)
@@ -118,39 +121,42 @@ proc blobify*(vtx: VertexRef; data: var Blob): Result[void,AristoError] =
       return err(BlobifyExtPathOverflow)
     if not vtx.eVid.isValid:
       return err(BlobifyExtMissingRefs)
-    data = vtx.eVid.uint64.toBytesBE.toSeq & pSegm & @[0x80u8 or psLen]
+    data &= vtx.eVid.uint64.toBytesBE
+    data &= pSegm
+    data &= [0x80u8 or psLen]
   of Leaf:
     let
       pSegm = vtx.lPfx.hexPrefixEncode(isleaf = true)
       psLen = pSegm.len.byte
     if psLen == 0 or 33 < psLen:
       return err(BlobifyLeafPathOverflow)
-    data = vtx.lData.blobify & pSegm & @[0xC0u8 or psLen]
+    vtx.lData.blobifyTo(data)
+    data &= pSegm
+    data &= [0xC0u8 or psLen]
   ok()
 
 
 proc blobify*(vtx: VertexRef): Result[Blob, AristoError] =
   ## Variant of `blobify()`
   var data: Blob
-  ? vtx.blobify data
+  ? vtx.blobifyTo data
   ok(move(data))
 
-proc blobify*(vGen: openArray[VertexID]; data: var Blob) =
+proc blobifyTo*(vGen: openArray[VertexID]; data: var Blob) =
   ## This function serialises a list of vertex IDs.
   ## ::
   ##   uint64, ...    -- list of IDs
   ##   0x7c           -- marker(8)
   ##
-  data.setLen(0)
   for w in vGen:
-    data &= w.uint64.toBytesBE.toSeq
+    data &= w.uint64.toBytesBE
   data.add 0x7Cu8
 
 proc blobify*(vGen: openArray[VertexID]): Blob =
   ## Variant of `blobify()`
-  vGen.blobify result
+  vGen.blobifyTo result
 
-proc blobify*(lSst: SavedState; data: var Blob) =
+proc blobifyTo*(lSst: SavedState; data: var Blob) =
   ## Serialise a last saved state record
   data.setLen(73)
   (addr data[0]).copyMem(unsafeAddr lSst.src.data[0], 32)
@@ -161,10 +167,10 @@ proc blobify*(lSst: SavedState; data: var Blob) =
 
 proc blobify*(lSst: SavedState): Blob =
   ## Variant of `blobify()`
-  lSst.blobify result
+  lSst.blobifyTo result
 
 
-proc blobify*(filter: FilterRef; data: var Blob): Result[void,AristoError] =
+proc blobifyTo*(filter: FilterRef; data: var Blob): Result[void,AristoError] =
   ## This function serialises an Aristo DB filter object
   ## ::
   ##   uint64         -- filter ID
@@ -189,17 +195,17 @@ proc blobify*(filter: FilterRef; data: var Blob): Result[void,AristoError] =
 
   if not filter.isValid:
     return err(BlobifyNilFilter)
-  data.setLen(0)
-  data &= filter.fid.uint64.toBytesBE.toSeq
-  data &= @(filter.src.data)
-  data &= @(filter.trg.data)
 
-  data &= filter.vGen.len.uint32.toBytesBE.toSeq
-  data &= newSeq[byte](4) # place holder
+  data &= filter.fid.uint64.toBytesBE
+  data &= filter.src.data
+  data &= filter.trg.data
+
+  data &= filter.vGen.len.uint32.toBytesBE
+  data &= default(array[4, byte]) # place holder
 
   # Store vertex ID generator state
   for w in filter.vGen:
-    data &= w.uint64.toBytesBE.toSeq
+    data &= w.uint64.toBytesBE
 
   var
     n = 0
@@ -224,18 +230,17 @@ proc blobify*(filter: FilterRef; data: var Blob): Result[void,AristoError] =
       keyMode = 0x4000_0000u       # void hash key => considered deleted
 
     if vtx.isValid:
-      ? vtx.blobify vtxBlob
+      ? vtx.blobifyTo vtxBlob
       vtxLen = vtxBlob.len.uint
       if 0x3fff_ffff <= vtxLen:
         return err(BlobifyFilterRecordOverflow)
     else:
       vtxLen = 0x3fff_ffff         # nil vertex => considered deleted
 
-    data &=
-      (keyMode or vtxLen).uint32.toBytesBE.toSeq &
-      vid.uint64.toBytesBE.toSeq &
-      keyBlob &
-      vtxBlob
+    data &= (keyMode or vtxLen).uint32.toBytesBE
+    data &= vid.uint64.toBytesBE
+    data &= keyBlob
+    data &= vtxBlob
 
   # Loop over remaining data from key table
   for vid in leftOver:
@@ -251,36 +256,34 @@ proc blobify*(filter: FilterRef; data: var Blob): Result[void,AristoError] =
     else:
       keyMode = 0x4000_0000u       # void hash key => considered deleted
 
-    data &=
-      keyMode.uint32.toBytesBE.toSeq &
-      vid.uint64.toBytesBE.toSeq &
-      keyBlob
+    data &= keyMode.uint32.toBytesBE
+    data &= vid.uint64.toBytesBE
+    data &= keyBlob
 
-  data[76 ..< 80] = n.uint32.toBytesBE.toSeq
+  data[76 ..< 80] = n.uint32.toBytesBE
   data.add 0x7Du8
   ok()
 
 proc blobify*(filter: FilterRef): Result[Blob, AristoError] =
   ## ...
   var data: Blob
-  ? filter.blobify data
+  ? filter.blobifyTo data
   ok move(data)
 
-proc blobify*(vFqs: openArray[(QueueID,QueueID)]; data: var Blob) =
+proc blobifyTo*(vFqs: openArray[(QueueID,QueueID)]; data: var Blob) =
   ## This function serialises a list of filter queue IDs.
   ## ::
   ##   uint64, ...    -- list of IDs
   ##   0x7e           -- marker(8)
   ##
-  data.setLen(0)
   for w in vFqs:
-    data &= w[0].uint64.toBytesBE.toSeq
-    data &= w[1].uint64.toBytesBE.toSeq
+    data &= w[0].uint64.toBytesBE
+    data &= w[1].uint64.toBytesBE
   data.add 0x7Eu8
 
 proc blobify*(vFqs: openArray[(QueueID,QueueID)]): Blob =
   ## Variant of `blobify()`
-  vFqs.blobify result
+  vFqs.blobifyTo result
 
 # -------------
 
