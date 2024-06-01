@@ -124,7 +124,8 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
                            vmState.processBlock(header, body)
                          else:
                            ValidationResult.OK
-    when not defined(release):
+
+    when defined(nimbusDumpDebuggingMetaData):
       if validationResult == ValidationResult.Error and
          body.transactions.calcTxRoot == header.txRoot:
         vmState.dumpDebuggingMetaData(header, body)
