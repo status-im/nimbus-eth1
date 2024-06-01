@@ -102,30 +102,31 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
 
   # Block is known locally, just sanity check that the beacon client does not
   # attempt to push us back to before the merge.
-  let blockNumber = header.blockNumber.truncate(uint64)
-  if header.difficulty > 0.u256 or blockNumber ==  0'u64:
-    var
-      td, ptd: DifficultyInt
-      ttd = com.ttd.get(high(common.BlockNumber))
+  if apiVersion == Version.V1:
+    let blockNumber = header.blockNumber.truncate(uint64)
+    if header.difficulty > 0.u256 or blockNumber ==  0'u64:
+      var
+        td, ptd: DifficultyInt
+        ttd = com.ttd.get(high(common.BlockNumber))
 
-    if not db.getTd(blockHash, td) or (blockNumber > 0'u64 and not db.getTd(header.parentHash, ptd)):
-      error "TDs unavailable for TTD check",
-        number = blockNumber,
-        hash = blockHash.short,
-        td = td,
-        parent = header.parentHash.short,
-        ptd = ptd
-      return simpleFCU(PayloadExecutionStatus.invalid, "TDs unavailable for TDD check")
+      if not db.getTd(blockHash, td) or (blockNumber > 0'u64 and not db.getTd(header.parentHash, ptd)):
+        error "TDs unavailable for TTD check",
+          number = blockNumber,
+          hash = blockHash.short,
+          td = td,
+          parent = header.parentHash.short,
+          ptd = ptd
+        return simpleFCU(PayloadExecutionStatus.invalid, "TDs unavailable for TDD check")
 
-    if td < ttd or (blockNumber > 0'u64 and ptd > ttd):
-      notice "Refusing beacon update to pre-merge",
-        number = blockNumber,
-        hash = blockHash.short,
-        diff = header.difficulty,
-        ptd = ptd,
-        ttd = ttd
+      if td < ttd or (blockNumber > 0'u64 and ptd > ttd):
+        notice "Refusing beacon update to pre-merge",
+          number = blockNumber,
+          hash = blockHash.short,
+          diff = header.difficulty,
+          ptd = ptd,
+          ttd = ttd
 
-      return invalidFCU("Refusing beacon update to pre-merge")
+        return invalidFCU("Refusing beacon update to pre-merge")
 
   # If the head block is already in our canonical chain, the beacon client is
   # probably resyncing. Ignore the update.
