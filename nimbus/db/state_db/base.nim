@@ -223,7 +223,7 @@ proc getCode*(db: AccountStateDB, address: EthAddress): seq[byte] =
 
 proc contractCollision*(db: AccountStateDB, address: EthAddress): bool {.inline.} =
   db.getNonce(address) != 0 or
-    db.getCodeHash(address) != EMPTY_SHA3 or
+    db.getCodeHash(address) != EMPTY_CODE_HASH or
       db.getStorageRoot(address) != EMPTY_ROOT_HASH
 
 proc dumpAccount*(db: AccountStateDB, addressS: string): string =
@@ -238,19 +238,19 @@ proc isEmptyAccount*(db: AccountStateDB, address: EthAddress): bool =
   assert(recordFound.len > 0)
 
   let account = rlp.decode(recordFound, Account)
-  result = account.codeHash == EMPTY_SHA3 and
+  account.nonce == 0 and
     account.balance.isZero and
-    account.nonce == 0
+    account.codeHash == EMPTY_CODE_HASH
 
 proc isDeadAccount*(db: AccountStateDB, address: EthAddress): bool =
   let recordFound = db.trie.getAccountBytes(address)
   if recordFound.len > 0:
     let account = rlp.decode(recordFound, Account)
-    result = account.codeHash == EMPTY_SHA3 and
+    account.nonce == 0 and
       account.balance.isZero and
-      account.nonce == 0
+      account.codeHash == EMPTY_CODE_HASH
   else:
-    result = true
+    true
 
 proc removeEmptyRlpNode(branch: var seq[MptNodeRlpBytes]) =
   if branch.len() == 1 and branch[0] == emptyRlp:

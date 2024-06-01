@@ -38,6 +38,4 @@ proc coinbaseStateClearing*(vmState: BaseVMState,
 
     # do not clear cache, we need the cache when constructing
     # post state
-    db.persist(
-      clearEmptyAccount = fork >= FkSpurious,
-      clearCache = false)
+    db.persist(clearEmptyAccount = fork >= FkSpurious)

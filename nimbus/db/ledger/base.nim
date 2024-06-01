@@ -268,10 +268,10 @@ proc makeMultiKeys*(ldg: LedgerRef): MultiKeysRef =
   result = ldg.ac.makeMultiKeys()
   ldg.ifTrackApi: debug apiTxt, api, elapsed
 
-proc persist*(ldg: LedgerRef, clearEmptyAccount = false, clearCache = true) =
+proc persist*(ldg: LedgerRef, clearEmptyAccount = false) =
   ldg.beginTrackApi LdgPersistFn
-  ldg.ac.persist(clearEmptyAccount, clearCache)
-  ldg.ifTrackApi: debug apiTxt, api, elapsed, clearEmptyAccount, clearCache
+  ldg.ac.persist(clearEmptyAccount)
+  ldg.ifTrackApi: debug apiTxt, api, elapsed, clearEmptyAccount
 
 proc ripemdSpecial*(ldg: LedgerRef) =
   ldg.beginTrackApi LdgRipemdSpecialFn

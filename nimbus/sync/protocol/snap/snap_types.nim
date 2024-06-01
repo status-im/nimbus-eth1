@@ -99,12 +99,12 @@ proc snapRead*(
   if rlp.blobLen != 0 or not rlp.isBlob:
     result.codeHash = rlp.read(typeof(result.codeHash))
     when strict:
-      if result.codeHash == EMPTY_SHA3:
+      if result.codeHash == EMPTY_CODE_HASH:
         raise newException(RlpTypeMismatch,
           "EMPTY_SHA3 not encoded as empty string in Snap protocol")
   else:
     rlp.skipElem()
-    result.codeHash = EMPTY_SHA3
+    result.codeHash = EMPTY_CODE_HASH
 
 proc snapAppend*(
     writer: var RlpWriter;
@@ -121,7 +121,7 @@ proc snapAppend*(
     writer.append("")
   else:
     writer.append(account.storageRoot)
-  if account.codeHash == EMPTY_SHA3:
+  if account.codeHash == EMPTY_CODE_HASH:
     writer.append("")
   else:
     writer.append(account.codeHash)

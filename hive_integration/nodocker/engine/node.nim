@@ -74,7 +74,7 @@ proc processBlock(
 
   vmState.mutateStateDB:
     let clearEmptyAccount = vmState.determineFork >= FkSpurious
-    db.persist(clearEmptyAccount, ClearCache in vmState.flags)
+    db.persist(clearEmptyAccount)
 
   # `applyDeletes = false`
   # If the trie pruning activated, each of the block will have its own state

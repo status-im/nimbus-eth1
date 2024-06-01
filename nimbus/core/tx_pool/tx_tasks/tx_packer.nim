@@ -71,9 +71,7 @@ proc persist(pst: TxPackerStateRef)
   ## Smart wrapper
   if not pst.cleanState:
     let fork = pst.xp.chain.nextFork
-    pst.xp.chain.vmState.stateDB.persist(
-      clearEmptyAccount = fork >= FkSpurious,
-      clearCache = false)
+    pst.xp.chain.vmState.stateDB.persist(clearEmptyAccount = fork >= FkSpurious)
     pst.cleanState = true
 
 # ------------------------------------------------------------------------------
@@ -227,9 +225,7 @@ proc vmExecGrabItem(pst: TxPackerStateRef; item: TxItemRef): Result[bool,void]
   # Commit account state DB
   vmState.stateDB.commit(accTx)
 
-  vmState.stateDB.persist(
-    clearEmptyAccount = xp.chain.nextFork >= FkSpurious,
-    clearCache = false)
+  vmState.stateDB.persist(clearEmptyAccount = xp.chain.nextFork >= FkSpurious)
   # let midRoot = vmState.stateDB.rootHash -- notused
 
   # Finish book-keeping and move item to `packed` bucket
@@ -254,9 +250,7 @@ proc vmExecCommit(pst: TxPackerStateRef)
     if vmState.generateWitness:
       db.collectWitnessData()
     # Finish up, then vmState.stateDB.rootHash may be accessed
-    db.persist(
-      clearEmptyAccount = xp.chain.nextFork >= FkSpurious,
-      clearCache = ClearCache in vmState.flags)
+    db.persist(clearEmptyAccount = xp.chain.nextFork >= FkSpurious)
 
   # Update flexi-array, set proper length
   let nItems = xp.txDB.byStatus.eq(txItemPacked).nItems

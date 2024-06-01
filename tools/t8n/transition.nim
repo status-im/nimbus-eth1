@@ -481,7 +481,7 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
 
     vmState.mutateStateDB:
       db.setupAlloc(ctx.alloc)
-      db.persist(clearEmptyAccount = false, clearCache = false)
+      db.persist(clearEmptyAccount = false)
 
     let res = exec(ctx, vmState, conf.stateReward, header, conf)
 

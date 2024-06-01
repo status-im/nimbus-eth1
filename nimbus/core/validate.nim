@@ -354,7 +354,7 @@ proc validateTransaction*(
     # `eth_call` and `eth_estimateGas`
     # EOA = Externally Owned Account
     let codeHash = roDB.getCodeHash(sender)
-    if codeHash != EMPTY_SHA3:
+    if codeHash != EMPTY_CODE_HASH:
       return err("invalid tx: sender is not an EOA. sender=$1, codeHash=$2" % [
         sender.toHex, codeHash.data.toHex])
 
