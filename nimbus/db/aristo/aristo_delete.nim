@@ -301,7 +301,11 @@ proc delSubTreeImpl(
     db.layersResKey(VertexID(1), wp.vid)
 
   # Squeze list of recycled vertex IDs
-  db.top.final.vGen = db.vGen.vidReorg()
+  # TODO this causes a reallocation of vGen which slows down subsequent
+  #      additions to the list because the sequence must grow which entails a
+  #      full copy in addition to this reorg itself - around block 2.5M this
+  #      causes significant slowdown as the vid list is >1M entries long
+  # db.top.final.vGen = db.vGen.vidReorg()
   ok()
 
 
@@ -394,7 +398,11 @@ proc deleteImpl(
     db.layersResKey(VertexID(1), wp.vid)
 
   # Squeze list of recycled vertex IDs
-  db.top.final.vGen = db.vGen.vidReorg()
+  # TODO this causes a reallocation of vGen which slows down subsequent
+  #      additions to the list because the sequence must grow which entails a
+  #      full copy in addition to this reorg itself - around block 2.5M this
+  #      causes significant slowdown as the vid list is >1M entries long
+  # db.top.final.vGen = db.vGen.vidReorg()
   ok(emptySubTreeOk)
 
 # ------------------------------------------------------------------------------
