@@ -131,9 +131,10 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
   # probably resyncing. Ignore the update.
   var canonHash: common.Hash256
   if db.getBlockHash(header.blockNumber, canonHash) and canonHash == blockHash:
-    # TODO should this be possible?
-    # If we allow these types of reorgs, we will do lots and lots of reorgs during sync
-    notice "Reorg to previous block", blockHash
+    notice "Ignoring beacon update to old head",
+      blockHash=blockHash.short,
+      blockNumber=header.blockNumber
+    return validFCU(none(PayloadID), blockHash)
 
   chain.setCanonical(header).isOkOr:
     return invalidFCU(error, com, header)
