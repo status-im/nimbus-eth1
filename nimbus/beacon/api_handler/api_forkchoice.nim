@@ -116,7 +116,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
           td = td,
           parent = header.parentHash.short,
           ptd = ptd
-        return simpleFCU(PayloadExecutionStatus.invalid, "TDs unavailable for TDD check")
+        return simpleFCU(PayloadExecutionStatus.invalid, "TDs unavailable for TTD check")
 
       if td < ttd or (blockNumber > 0'u64 and ptd > ttd):
         notice "Refusing beacon update to pre-merge",
