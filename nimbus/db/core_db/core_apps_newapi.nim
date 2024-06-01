@@ -122,6 +122,9 @@ iterator getBlockTransactionData*(
     transactionRoot: Hash256;
       ): Blob =
   block body:
+    if transactionRoot == EMPTY_ROOT_HASH:
+      break body
+
     let
       ctx = db.ctx
       col = ctx.newColumn(CtTxs, transactionRoot).valueOr:
@@ -170,6 +173,9 @@ iterator getWithdrawalsData*(
     withdrawalsRoot: Hash256;
       ): Blob =
   block body:
+    if withdrawalsRoot == EMPTY_ROOT_HASH:
+      break body
+
     let
       ctx = db.ctx
       col = ctx.newColumn(CtWithdrawals, withdrawalsRoot).valueOr:
@@ -198,6 +204,9 @@ iterator getReceipts*(
       ): Receipt
       {.gcsafe, raises: [RlpError].} =
   block body:
+    if receiptRoot == EMPTY_ROOT_HASH:
+      break body
+
     let
       ctx = db.ctx
       col = ctx.newColumn(CtReceipts, receiptRoot).valueOr:
@@ -562,6 +571,10 @@ proc persistTransactions*(
       ): Hash256 =
   const
     info = "persistTransactions()"
+
+  if transactions.len == 0:
+    return EMPTY_ROOT_HASH
+
   let
     mpt = db.ctx.getMpt(CtTxs)
     kvt = db.newKvt()
@@ -690,6 +703,9 @@ proc persistWithdrawals*(
     withdrawals: openArray[Withdrawal];
       ): Hash256 =
   const info = "persistWithdrawals()"
+  if withdrawals.len == 0:
+    return EMPTY_ROOT_HASH
+
   let mpt = db.ctx.getMpt(CtWithdrawals)
   for idx, wd in withdrawals:
     mpt.merge(rlp.encode(idx), rlp.encode(wd)).isOkOr:
@@ -836,6 +852,9 @@ proc persistReceipts*(
     receipts: openArray[Receipt];
       ): Hash256 =
   const info = "persistReceipts()"
+  if receipts.len == 0:
+    return EMPTY_ROOT_HASH
+
   let mpt = db.ctx.getMpt(CtReceipts)
   for idx, rec in receipts:
     mpt.merge(rlp.encode(idx), rlp.encode(rec)).isOkOr:
