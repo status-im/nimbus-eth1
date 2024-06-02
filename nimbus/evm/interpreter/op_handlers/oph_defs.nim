@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -20,11 +20,10 @@ import
 type
   Vm2Ctx* = tuple
     cpt: Computation          ## computation text
-    rc: int                   ## return code from op handler
 
   Vm2OpFn* =                  ## general op handler, return codes are passed
                               ## back via argument descriptor ``k``
-    proc(k: var Vm2Ctx) {.gcsafe, raises: [CatchableError].}
+    proc(k: var Vm2Ctx) {.nimcall, gcsafe, raises: [CatchableError].}
 
 
   Vm2OpHanders* = tuple       ## three step op code execution, typically
