@@ -123,8 +123,8 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
           avgBps = f(imported.float / diff0),
           avgTps = f(txs.float / diff0),
           avgGps = f(gas.truncate(uint64).float / diff0), # TODO fix truncate
-          elapsed = shortLog(diff1, 3),
-          totElapsed = shortLog(diff0, 3)
+          elapsed = shortLog(time2-time1, 3),
+          totElapsed = shortLog(time2-time0, 3)
         headers.setLen(0)
         bodies.setLen(0)
 
