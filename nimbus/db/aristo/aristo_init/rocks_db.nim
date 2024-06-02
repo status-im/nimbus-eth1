@@ -147,7 +147,14 @@ proc getIdgFn(db: RdbBackendRef): GetIdgFn =
         return ok w           # Compiler error with `ok(EmptyVidSeq)`
 
       # Decode data record
-      data.deblobify seq[VertexID]
+      # TODO vid reuse disabled, implementation too slow since list could have
+      #      millions of entries
+      data.deblobify(seq[VertexID]).map(proc (v: seq[VertexID]): seq[VertexID] =
+        if v.len > 1:
+          @[v[^1]]
+        else:
+          v
+      )
 
 proc getLstFn(db: RdbBackendRef): GetLstFn =
   result =

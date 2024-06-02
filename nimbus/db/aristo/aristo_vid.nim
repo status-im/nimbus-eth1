@@ -45,19 +45,6 @@ proc vidFetch*(db: AristoDbRef; pristine = false): VertexID =
   doAssert LEAST_FREE_VID <= result.distinctBase
 
 
-proc vidPeek*(db: AristoDbRef): VertexID =
-  ## Like `new()` without consuming this *ID*. It will return the *ID* that
-  ## would be returned by the `new()` function.
-  ##
-  case db.vGen.len:
-  of 0:
-    VertexID(LEAST_FREE_VID)
-  of 1:
-    db.vGen[^1]
-  else:
-    db.vGen[^2]
-
-
 proc vidDispose*(db: AristoDbRef; vid: VertexID) =
   ## Recycle the argument `vtxID` which is useful after deleting entries from
   ## the vertex table to prevent the `VertexID` type key values small.
@@ -69,10 +56,13 @@ proc vidDispose*(db: AristoDbRef; vid: VertexID) =
       let topID = db.vGen[^1]
       # Only store smaller numbers: all numberts larger than `topID`
       # are free numbers
-      if vid < topID:
+      # TODO vid reuse disabled, implementation too slow since list could grow
+      #      to millions of entries
+      # if vid < topID:
+      #   db.top.final.vGen[^1] = vid
+      #   db.top.final.vGen.add topID
+      if vid == topID - 1: # no gap - can recycle
         db.top.final.vGen[^1] = vid
-        db.top.final.vGen.add topID
-
 
 proc vidReorg*(vGen: seq[VertexID]): seq[VertexID] =
   ## Return a compacted version of the argument vertex ID generator state
