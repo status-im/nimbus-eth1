@@ -113,18 +113,16 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
         # TODO generate csv with import statistics
         info "Imported blocks",
           blockNumber,
-          blocks = headers.len,
+          blocks = imported.len,
           txs,
           gas,
           bps = f(headers.len.float / diff1),
           tps = f(statsRes[].txs.float / diff1),
           gps = f(statsRes[].gas.float / diff1),
-          totBlocks = imported,
           avgBps = f(imported.float / diff0),
           avgTps = f(txs.float / diff0),
           avgGps = f(gas.truncate(uint64).float / diff0), # TODO fix truncate
-          elapsed = shortLog(time2-time1, 3),
-          totElapsed = shortLog(time2-time0, 3)
+          elapsed = shortLog(time2-time0, 3)
         headers.setLen(0)
         bodies.setLen(0)
 
