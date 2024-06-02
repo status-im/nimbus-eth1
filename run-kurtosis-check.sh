@@ -10,6 +10,10 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+# ------------------------------------------------
+#             Installation Checks
+# ------------------------------------------------
+
 # Checking for docker installation
 echo "Checking docker installation"
 if command -v docker &> /dev/null; then
@@ -49,6 +53,14 @@ enclave_dump=$(kurtosis enclave inspect nimbus-localtestnet)
 assertoor_url=$(echo "$enclave_dump" | grep assertoor | grep http | sed 's/.*\(http:\/\/[0-9.:]\+\).*/\1/')
 echo "Assertoor Checks Please Visit -> ${assertoor_url}"
 
+# ------------------------------------------------
+#               Remove Generated File
+# ------------------------------------------------
+rm assertoor.yaml
+
+# ------------------------------------------------
+#              Check for Test Status
+# ------------------------------------------------
 YELLOW='\033[1;33m'
 GRAY='\033[0;37m'
 GREEN='\033[0;32m'
@@ -187,5 +199,4 @@ fi
 # ------------------------------------------------
 #                   Cleanup
 # ------------------------------------------------
-rm assertoor.yaml
 sudo kurtosis enclave rm -f nimbus-localtestnet
