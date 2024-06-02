@@ -113,7 +113,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
         # TODO generate csv with import statistics
         info "Imported blocks",
           blockNumber,
-          blocks = imported.len,
+          blocks = imported,
           txs,
           gas,
           bps = f(headers.len.float / diff1),
