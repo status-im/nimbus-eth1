@@ -7,9 +7,12 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
+{.push raises: [].}
+
 import
   chronicles,
-  std/[monotimes, strformat, times],
+  chronos/timer,
+  std/strformat,
   stew/io2,
   ./config,
   ./common/common,
@@ -19,8 +22,33 @@ import
 
 var running {.volatile.} = true
 
+func shortLog(a: timer.Duration, parts = int.high): string {.inline.} =
+  ## Returns string representation of Duration ``a`` as nanoseconds value.
+  var
+    res = ""
+    v = a.nanoseconds()
+    parts = parts
+
+  template f(n: string, T: Duration) =
+    if v >= T.nanoseconds():
+      res.add($(uint64(v div T.nanoseconds())))
+      res.add(n)
+      v = v mod T.nanoseconds()
+      dec parts
+      if v == 0 or parts <= 0: return res
+
+  f("w", Week)
+  f("d", Day)
+  f("h", Hour)
+  f("m", Minute)
+  f("s", Second)
+  f("ms", Millisecond)
+  f("us", Microsecond)
+  f("ns", Nanosecond)
+
+  res
+
 proc importBlocks*(conf: NimbusConf, com: CommonRef) =
-  # ## Ctrl+C handling
   proc controlCHandler() {.noconv.} =
     when defined(windows):
       # workaround for https://github.com/nim-lang/Nim/issues/4057
@@ -30,14 +58,19 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
   setControlCHook(controlCHandler)
 
   let
-    start = com.db.getSavedStateBlockNumber().truncate(uint64) + 1
+    start = try:
+      com.db.getSavedStateBlockNumber().truncate(uint64) + 1
+    except RlpError as exc:
+      error "Could not read block number", err = exc.msg
+      quit(QuitFailure)
+
     chain = com.newChain()
 
   var
     imported = 0'u64
     gas = 0.u256
     txs = 0
-    time0 = getMonoTime()
+    time0 = Moment.now()
   template blockNumber(): uint64 =
     start + imported
 
@@ -57,11 +90,14 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
         bodies: seq[BlockBody]
 
       func f(value: float): string =
-        &"{value:4.3f}"
+        try:
+          &"{value:4.3f}"
+        except ValueError:
+          raiseAssert "valid fmt string"
 
       template process() =
         let
-          time1 = getMonoTime()
+          time1 = Moment.now()
           statsRes = chain.persistBlocks(headers, bodies)
         if statsRes.isErr():
           error "Failed to persist blocks", error = statsRes.error
@@ -70,20 +106,23 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
         txs += statsRes[].txs
         gas += uint64 statsRes[].gas
         let
-          time2 = getMonoTime()
-          diff1 = (time2 - time1).inNanoseconds().float / 1000000000
-          diff0 = (time2 - time0).inNanoseconds().float / 1000000000
+          time2 = Moment.now()
+          diff1 = (time2 - time1).nanoseconds().float / 1000000000
+          diff0 = (time2 - time0).nanoseconds().float / 1000000000
 
         # TODO generate csv with import statistics
         info "Imported blocks",
           blockNumber,
+          blocks = imported,
+          txs,
           gas,
           bps = f(headers.len.float / diff1),
           tps = f(statsRes[].txs.float / diff1),
           gps = f(statsRes[].gas.float / diff1),
           avgBps = f(imported.float / diff0),
-          avgGps = f(txs.float / diff0),
-          avgGps = f(gas.truncate(uint64).float / diff0) # TODO fix truncate
+          avgTps = f(txs.float / diff0),
+          avgGps = f(gas.truncate(uint64).float / diff0), # TODO fix truncate
+          elapsed = shortLog(time2-time0, 3)
         headers.setLen(0)
         bodies.setLen(0)
 
