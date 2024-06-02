@@ -80,6 +80,7 @@ type
   LedgerSavePoint* = ref object
     parentSavepoint: LedgerSavePoint
     cache: Table[EthAddress, AccountRef]
+    dirty: Table[EthAddress, AccountRef]
     selfDestruct: HashSet[EthAddress]
     logEntries: seq[Log]
     accessList: ac_access_list.AccessList
@@ -128,6 +129,12 @@ func newCoreDbAccount(address: EthAddress): CoreDbAccount =
     balance:  emptyEthAccount.balance,
     codeHash: emptyEthAccount.codeHash,
     storage:  CoreDbColRef(nil))
+
+func resetCoreDbAccount(v: var CoreDbAccount) =
+  v.nonce = emptyEthAccount.nonce
+  v.balance = emptyEthAccount.balance
+  v.codeHash = emptyEthAccount.codeHash
+  v.storage = nil
 
 template noRlpException(info: static[string]; code: untyped) =
   try:
@@ -196,6 +203,9 @@ proc commit*(ac: AccountsLedgerRef, sp: LedgerSavePoint) =
   for k, v in sp.cache:
     sp.parentSavepoint.cache[k] = v
 
+  for k, v in sp.dirty:
+    sp.parentSavepoint.dirty[k] = v
+
   ac.savePoint.transientStorage.merge(sp.transientStorage)
   ac.savePoint.accessList.merge(sp.accessList)
   ac.savePoint.selfDestruct.incl sp.selfDestruct
@@ -242,7 +252,7 @@ proc getAccount(
 
   # cache the account
   ac.savePoint.cache[address] = result
-
+  ac.savePoint.dirty[address] = result
 
 proc clone(acc: AccountRef, cloneStorage: bool): AccountRef =
   result = AccountRef(
@@ -256,9 +266,9 @@ proc clone(acc: AccountRef, cloneStorage: bool): AccountRef =
     result.overlayStorage = acc.overlayStorage
 
 proc isEmpty(acc: AccountRef): bool =
-  result = acc.statement.codeHash == EMPTY_SHA3 and
+  acc.statement.nonce == 0 and
     acc.statement.balance.isZero and
-    acc.statement.nonce == 0
+    acc.statement.codeHash == EMPTY_CODE_HASH
 
 template exists(acc: AccountRef): bool =
   Alive in acc.flags
@@ -294,12 +304,12 @@ proc storageValue(
   do:
     result = acc.originalStorageValue(slot, ac)
 
-proc kill(acc: AccountRef, address: EthAddress) =
+proc kill(acc: AccountRef) =
   acc.flags.excl Alive
   acc.overlayStorage.clear()
   acc.originalStorage = nil
-  acc.statement = address.newCoreDbAccount()
-  acc.code = default(seq[byte])
+  acc.statement.resetCoreDbAccount()
+  acc.code.reset()
 
 type
   PersistMode = enum
@@ -324,13 +334,13 @@ proc persistCode(acc: AccountRef, ac: AccountsLedgerRef) =
       warn logTxt "persistCode()",
        codeHash=acc.statement.codeHash, error=($$rc.error)
 
-proc persistStorage(acc: AccountRef, ac: AccountsLedgerRef, clearCache: bool) =
+proc persistStorage(acc: AccountRef, ac: AccountsLedgerRef) =
   if acc.overlayStorage.len == 0:
     # TODO: remove the storage too if we figure out
     # how to create 'virtual' storage room for each account
     return
 
-  if not clearCache and acc.originalStorage.isNil:
+  if acc.originalStorage.isNil:
     acc.originalStorage = newTable[UInt256, UInt256]()
 
   # Make sure that there is an account column on the database. This is needed
@@ -352,15 +362,13 @@ proc persistStorage(acc: AccountRef, ac: AccountsLedgerRef, clearCache: bool) =
     if rc.isErr:
       warn logTxt "persistStorage()", slot, error=($$rc.error)
 
-  if not clearCache:
-    # if we preserve cache, move the overlayStorage
-    # to originalStorage, related to EIP2200, EIP1283
-    for slot, value in acc.overlayStorage:
-      if value > 0:
-        acc.originalStorage[slot] = value
-      else:
-        acc.originalStorage.del(slot)
-    acc.overlayStorage.clear()
+  # move the overlayStorage to originalStorage, related to EIP2200, EIP1283
+  for slot, value in acc.overlayStorage:
+    if value > 0:
+      acc.originalStorage[slot] = value
+    else:
+      acc.originalStorage.del(slot)
+  acc.overlayStorage.clear()
 
   # Changing the storage trie might also change the `storage` descriptor when
   # the trie changes from empty to exixting or v.v.
@@ -378,12 +386,14 @@ proc makeDirty(ac: AccountsLedgerRef, address: EthAddress, cloneStorage = true):
   if address in ac.savePoint.cache:
     # it's already in latest savepoint
     result.flags.incl Dirty
+    ac.savePoint.dirty[address] = result
     return
 
   # put a copy into latest savepoint
   result = result.clone(cloneStorage)
   result.flags.incl Dirty
   ac.savePoint.cache[address] = result
+  ac.savePoint.dirty[address] = result
 
 proc getCodeHash*(ac: AccountsLedgerRef, address: EthAddress): Hash256 =
   let acc = ac.getAccount(address, false)
@@ -400,24 +410,33 @@ proc getNonce*(ac: AccountsLedgerRef, address: EthAddress): AccountNonce =
   if acc.isNil: emptyEthAccount.nonce
   else: acc.statement.nonce
 
+proc getCode(acc: AccountRef, kvt: CoreDxKvtRef): lent seq[byte] =
+  if CodeLoaded notin acc.flags and CodeChanged notin acc.flags:
+    if acc.statement.codeHash != EMPTY_CODE_HASH:
+      var rc = kvt.get(contractHashKey(acc.statement.codeHash).toOpenArray)
+      if rc.isErr:
+        warn logTxt "getCode()", codeHash=acc.statement.codeHash, error=($$rc.error)
+      else:
+        acc.code = move(rc.value)
+        acc.flags.incl CodeLoaded
+  else:
+    acc.flags.incl CodeLoaded # avoid hash comparisons
+
+  acc.code
+
 proc getCode*(ac: AccountsLedgerRef, address: EthAddress): seq[byte] =
   let acc = ac.getAccount(address, false)
   if acc.isNil:
     return
 
-  if CodeLoaded in acc.flags or CodeChanged in acc.flags:
-    result = acc.code
-  elif acc.statement.codeHash != EMPTY_CODE_HASH:
-    let rc = ac.kvt.get(contractHashKey(acc.statement.codeHash).toOpenArray)
-    if rc.isErr:
-      warn logTxt "getCode()", codeHash=acc.statement.codeHash, error=($$rc.error)
-    else:
-      acc.code = rc.value
-      acc.flags.incl CodeLoaded
-      result = acc.code
+  acc.getCode(ac.kvt)
 
 proc getCodeSize*(ac: AccountsLedgerRef, address: EthAddress): int =
-  ac.getCode(address).len
+  let acc = ac.getAccount(address, false)
+  if acc.isNil:
+    return
+
+  acc.getCode(ac.kvt).len
 
 proc getCommittedStorage*(ac: AccountsLedgerRef, address: EthAddress, slot: UInt256): UInt256 =
   let acc = ac.getAccount(address, false)
@@ -436,7 +455,7 @@ proc contractCollision*(ac: AccountsLedgerRef, address: EthAddress): bool =
   if acc.isNil:
     return
   acc.statement.nonce != 0 or
-    acc.statement.codeHash != EMPTY_SHA3 or
+    acc.statement.codeHash != EMPTY_CODE_HASH or
      acc.statement.storage.stateOrVoid != EMPTY_ROOT_HASH
 
 proc accountExists*(ac: AccountsLedgerRef, address: EthAddress): bool =
@@ -534,7 +553,8 @@ proc deleteAccount*(ac: AccountsLedgerRef, address: EthAddress) =
   # make sure all savepoints already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
   let acc = ac.getAccount(address)
-  acc.kill(address)
+  ac.savePoint.dirty[address] = acc
+  acc.kill()
 
 proc selfDestruct*(ac: AccountsLedgerRef, address: EthAddress) =
   ac.setBalance(address, 0.u256)
@@ -572,13 +592,16 @@ proc deleteEmptyAccount(ac: AccountsLedgerRef, address: EthAddress) =
     return
   if not acc.exists:
     return
-  acc.kill(address)
+
+  ac.savePoint.dirty[address] = acc
+  acc.kill()
 
 proc clearEmptyAccounts(ac: AccountsLedgerRef) =
-  for address, acc in ac.savePoint.cache:
+  # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-161.md
+  for acc in ac.savePoint.dirty.values():
     if Touched in acc.flags and
         acc.isEmpty and acc.exists:
-      acc.kill(address)
+      acc.kill()
 
   # https://github.com/ethereum/EIPs/issues/716
   if ac.ripemdSpecial:
@@ -586,11 +609,9 @@ proc clearEmptyAccounts(ac: AccountsLedgerRef) =
     ac.ripemdSpecial = false
 
 proc persist*(ac: AccountsLedgerRef,
-              clearEmptyAccount: bool = false,
-              clearCache: bool = true) =
+              clearEmptyAccount: bool = false) =
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
-  var cleanAccounts = initHashSet[EthAddress]()
 
   if clearEmptyAccount:
     ac.clearEmptyAccounts()
@@ -598,8 +619,7 @@ proc persist*(ac: AccountsLedgerRef,
   for address in ac.savePoint.selfDestruct:
     ac.deleteAccount(address)
 
-  for address, acc in ac.savePoint.cache:
-    assert address == acc.statement.address # debugging only
+  for acc in ac.savePoint.dirty.values(): # This is a hotspot in block processing
     case acc.persistMode()
     of Update:
       if CodeChanged in acc.flags:
@@ -607,25 +627,19 @@ proc persist*(ac: AccountsLedgerRef,
       if StorageChanged in acc.flags:
         # storageRoot must be updated first
         # before persisting account into merkle trie
-        acc.persistStorage(ac, clearCache)
+        acc.persistStorage(ac)
       ac.ledger.merge(acc.statement)
     of Remove:
-      ac.ledger.delete address
-      if not clearCache:
-        cleanAccounts.incl address
+      ac.ledger.delete acc.statement.address
+      ac.savePoint.cache.del acc.statement.address
     of DoNothing:
       # dead man tell no tales
       # remove touched dead account from cache
-      if not clearCache and Alive notin acc.flags:
-        cleanAccounts.incl address
+      if Alive notin acc.flags:
+        ac.savePoint.cache.del acc.statement.address
 
     acc.flags = acc.flags - resetFlags
-
-  if clearCache:
-    ac.savePoint.cache.clear()
-  else:
-    for x in cleanAccounts:
-      ac.savePoint.cache.del x
+  ac.savePoint.dirty.clear()
 
   ac.savePoint.selfDestruct.clear()
 

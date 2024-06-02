@@ -116,9 +116,9 @@ proc checkAndValidateWitnessAgainstProofs(
     check stateDB.getBalance(address) == balance
     check stateDB.getNonce(address) == nonce
 
-    if codeHash == ZERO_HASH256 or codeHash == EMPTY_SHA3:
+    if codeHash == ZERO_HASH256 or codeHash == EMPTY_CODE_HASH:
       check stateDB.getCode(address).len() == 0
-      check stateDB.getCodeHash(address) == EMPTY_SHA3
+      check stateDB.getCodeHash(address) == EMPTY_CODE_HASH
     else:
       check stateDB.getCodeHash(address) == codeHash
 

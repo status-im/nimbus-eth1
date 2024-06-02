@@ -118,9 +118,7 @@ proc processTransactionImpl(
 
   if vmState.generateWitness:
     vmState.stateDB.collectWitnessData()
-  vmState.stateDB.persist(
-    clearEmptyAccount = fork >= FkSpurious,
-    clearCache = false)
+  vmState.stateDB.persist(clearEmptyAccount = fork >= FkSpurious)
 
   return res
 
@@ -157,7 +155,7 @@ proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash256):
   if res.isError:
     return err("processBeaconBlockRoot: " & res.error)
 
-  statedb.persist(clearEmptyAccount = true, clearCache = false)
+  statedb.persist(clearEmptyAccount = true)
   ok()
 
 proc processTransaction*(

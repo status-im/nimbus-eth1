@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -38,6 +38,4 @@ proc coinbaseStateClearing*(vmState: BaseVMState,
 
     # do not clear cache, we need the cache when constructing
     # post state
-    db.persist(
-      clearEmptyAccount = fork >= FkSpurious,
-      clearCache = false)
+    db.persist(clearEmptyAccount = fork >= FkSpurious)

@@ -135,7 +135,7 @@ proc runTrial2ok(vmState: BaseVMState; inx: int) =
     vmState.stateDB.modBalance(eAddr)
     vmState.stateDB.commit(accTx)
 
-  vmState.stateDB.persist(clearCache = false)
+  vmState.stateDB.persist()
 
 
 proc runTrial3(vmState: BaseVMState; inx: int; rollback: bool) =
@@ -146,7 +146,7 @@ proc runTrial3(vmState: BaseVMState; inx: int; rollback: bool) =
     let accTx = vmState.stateDB.beginSavepoint
     vmState.stateDB.modBalance(eAddr)
     vmState.stateDB.commit(accTx)
-    vmState.stateDB.persist(clearCache = false)
+    vmState.stateDB.persist()
 
   block:
     let accTx = vmState.stateDB.beginSavepoint
@@ -157,13 +157,13 @@ proc runTrial3(vmState: BaseVMState; inx: int; rollback: bool) =
       break
 
     vmState.stateDB.commit(accTx)
-    vmState.stateDB.persist(clearCache = false)
+    vmState.stateDB.persist()
 
   block:
     let accTx = vmState.stateDB.beginSavepoint
     vmState.stateDB.modBalance(eAddr)
     vmState.stateDB.commit(accTx)
-    vmState.stateDB.persist(clearCache = false)
+    vmState.stateDB.persist()
 
 
 proc runTrial3crash(vmState: BaseVMState; inx: int; noisy = false) =
@@ -177,7 +177,7 @@ proc runTrial3crash(vmState: BaseVMState; inx: int; noisy = false) =
       let accTx = vmState.stateDB.beginSavepoint
       vmState.stateDB.modBalance(eAddr)
       vmState.stateDB.commit(accTx)
-      vmState.stateDB.persist(clearCache = false)
+      vmState.stateDB.persist()
 
     block:
       let accTx = vmState.stateDB.beginSavepoint
@@ -216,7 +216,7 @@ proc runTrial3crash(vmState: BaseVMState; inx: int; noisy = false) =
       vmState.stateDB.commit(accTx)
 
       try:
-        vmState.stateDB.persist(clearCache = false)
+        vmState.stateDB.persist()
       except AssertionDefect as e:
         if noisy:
           let msg = e.msg.rsplit($DirSep,1)[^1]
@@ -224,7 +224,7 @@ proc runTrial3crash(vmState: BaseVMState; inx: int; noisy = false) =
         dbTx.dispose()
         raise e
 
-      vmState.stateDB.persist(clearCache = false)
+      vmState.stateDB.persist()
 
     dbTx.commit()
 
@@ -240,13 +240,13 @@ proc runTrial4(vmState: BaseVMState; inx: int; rollback: bool) =
       let accTx = vmState.stateDB.beginSavepoint
       vmState.stateDB.modBalance(eAddr)
       vmState.stateDB.commit(accTx)
-      vmState.stateDB.persist(clearCache = false)
+      vmState.stateDB.persist()
 
     block:
       let accTx = vmState.stateDB.beginSavepoint
       vmState.stateDB.modBalance(eAddr)
       vmState.stateDB.commit(accTx)
-      vmState.stateDB.persist(clearCache = false)
+      vmState.stateDB.persist()
 
     block:
       let accTx = vmState.stateDB.beginSavepoint
@@ -257,7 +257,7 @@ proc runTrial4(vmState: BaseVMState; inx: int; rollback: bool) =
         break
 
       vmState.stateDB.commit(accTx)
-      vmState.stateDB.persist(clearCache = false)
+      vmState.stateDB.persist()
 
     # There must be no dbTx.rollback() here unless `vmState.stateDB` is
     # discarded and/or re-initialised.
@@ -270,7 +270,7 @@ proc runTrial4(vmState: BaseVMState; inx: int; rollback: bool) =
       let accTx = vmState.stateDB.beginSavepoint
       vmState.stateDB.modBalance(eAddr)
       vmState.stateDB.commit(accTx)
-      vmState.stateDB.persist(clearCache = false)
+      vmState.stateDB.persist()
 
     dbTx.commit()
 

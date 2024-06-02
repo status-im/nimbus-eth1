@@ -39,7 +39,6 @@ type
   VMFlag* = enum
     ExecutionOK
     GenerateWitness
-    ClearCache
 
   BlockContext* = object
     timestamp*        : EthTime

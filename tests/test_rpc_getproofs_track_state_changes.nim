@@ -103,11 +103,11 @@ proc updateStateUsingProofsAndCheckStateRoot(
       stateDB.setCode(address, @[])
       stateDB.clearStorage(address)
       stateDB.deleteAccount(address)
-    elif (balance == 0 and nonce == 0 and codeHash == EMPTY_SHA3 and storageHash == EMPTY_ROOT_HASH):
+    elif (balance == 0 and nonce == 0 and codeHash == EMPTY_CODE_HASH and storageHash == EMPTY_ROOT_HASH):
       # Account exists but is empty:
       # The account was deleted due to a self destruct or the storage was cleared/set to zero
       # and the bytecode is empty.
-      # The RPC API correctly returns codeHash == EMPTY_SHA3 and storageHash == EMPTY_ROOT_HASH
+      # The RPC API correctly returns codeHash == EMPTY_CODE_HASH and storageHash == EMPTY_ROOT_HASH
       # in this scenario which is the same behavior implemented by geth.
       stateDB.setCode(address, @[])
       stateDB.clearStorage(address)
@@ -123,9 +123,9 @@ proc updateStateUsingProofsAndCheckStateRoot(
     check stateDB.getBalance(address) == balance
     check stateDB.getNonce(address) == nonce
 
-    if codeHash == ZERO_HASH256 or codeHash == EMPTY_SHA3:
+    if codeHash == ZERO_HASH256 or codeHash == EMPTY_CODE_HASH:
       check stateDB.getCode(address).len() == 0
-      check stateDB.getCodeHash(address) == EMPTY_SHA3
+      check stateDB.getCodeHash(address) == EMPTY_CODE_HASH
     else:
       check stateDB.getCodeHash(address) == codeHash
 
