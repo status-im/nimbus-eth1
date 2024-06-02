@@ -20,11 +20,10 @@ import
 type
   Vm2Ctx* = tuple
     cpt: Computation          ## computation text
-    rc: int                   ## return code from op handler
 
   Vm2OpFn* =                  ## general op handler, return codes are passed
                               ## back via argument descriptor ``k``
-    proc(k: var Vm2Ctx) {.gcsafe, raises: [CatchableError].}
+    proc(k: var Vm2Ctx) {.nimcall, gcsafe, raises: [CatchableError].}
 
 
   Vm2OpHanders* = tuple       ## three step op code execution, typically
