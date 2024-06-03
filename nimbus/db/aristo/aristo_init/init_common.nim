@@ -29,7 +29,6 @@ type
     AdmPfx = 1                       ## Admin data, e.g. ID generator
     VtxPfx = 2                       ## Vertex data
     KeyPfx = 3                       ## Key/hash data
-    FilPfx = 4                       ## Filter logs (to revert to earlier state)
 
   AdminTabID* = distinct uint64
     ## Access keys for admin table records. When exposed (e.g. when itereating
@@ -50,8 +49,6 @@ type
     case pfx*: StorageType           ## Error sub-table
     of VtxPfx, KeyPfx:
       vid*: VertexID                 ## Vertex ID where the error occured
-    of FilPfx:
-      qid*: QueueID                  ## Ditto
     of AdmPfx:
       aid*: AdminTabID
     of Oops:
@@ -66,7 +63,6 @@ type
 
 const
   AdmTabIdIdg* = AdminTabID(0)       ## Access key for vertex ID generator state
-  AdmTabIdFqs* = AdminTabID(1)       ## Access key for filter queue states
   AdmTabIdLst* = AdminTabID(2)       ## Access key for last state
 
 # ------------------------------------------------------------------------------

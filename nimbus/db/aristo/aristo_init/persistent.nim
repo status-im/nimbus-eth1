@@ -36,11 +36,10 @@ export
 
 proc newAristoRdbDbRef(
     basePath: string;
-    qidLayout: QidLayoutRef;
-    opts: DbOptions
+    opts: DbOptions;
       ): Result[AristoDbRef, AristoError]=
   let
-    be = ? rocksDbBackend(basePath, qidLayout, opts)
+    be = ? rocksDbBackend(basePath, opts)
     vGen = block:
       let rc = be.getIdgFn()
       if rc.isErr:
@@ -49,8 +48,8 @@ proc newAristoRdbDbRef(
       rc.value
   ok AristoDbRef(
     top: LayerRef(
-      delta: LayerDeltaRef(),
-      final: LayerFinalRef(vGen: vGen)),
+      delta: LayerDeltaRef(vGen: vGen),
+      final: LayerFinalRef()),
     backend: be)
 
 # ------------------------------------------------------------------------------
@@ -61,30 +60,13 @@ proc init*[W: RdbBackendRef](
     T: type AristoDbRef;
     B: type W;
     basePath: string;
-    qidLayout: QidLayoutRef;
     opts: DbOptions
       ): Result[T, AristoError] =
   ## Generic constructor, `basePath` argument is ignored for memory backend
   ## databases (which also unconditionally succeed initialising.)
   ##
-  ## If the `qidLayout` argument is set `QidLayoutRef(nil)`, the a backend
-  ## database will not provide filter history management. Providing a different
-  ## scheduler layout shoud be used with care as table access with different
-  ## layouts might render the filter history data unmanageable.
-  ##
   when B is RdbBackendRef:
-    basePath.newAristoRdbDbRef qidLayout, opts
-
-proc init*[W: RdbBackendRef](
-    T: type AristoDbRef;
-    B: type W;
-    basePath: string;
-    opts: DbOptions
-      ): Result[T, AristoError] =
-  ## Variant of `init()` using default schedule.
-  ##
-  when B is RdbBackendRef:
-    basePath.newAristoRdbDbRef DEFAULT_QID_QUEUES.to(QidLayoutRef), opts
+    basePath.newAristoRdbDbRef opts
 
 proc getRocksDbFamily*(
     gdb: GuestDbRef;

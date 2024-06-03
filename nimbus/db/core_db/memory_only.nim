@@ -11,7 +11,6 @@
 {.push raises: [].}
 
 import
-  std/options,
   eth/common,
   ../aristo,
   ./backend/aristo_db
@@ -62,25 +61,6 @@ proc newCoreDbRef*(
 
   else:
     {.error: "Unsupported constructor " & $dbType & ".newCoreDbRef()".}
-
-proc newCoreDbRef*(
-    dbType: static[CoreDbType];      # Database type symbol
-    qidLayout: QidLayoutRef;         # `Aristo` only
-      ): CoreDbRef =
-  ## Constructor for volatile/memory type DB
-  ##
-  ## Note: Using legacy notation `newCoreDbRef()` rather than
-  ## `CoreDbRef.init()` because of compiler coughing.
-  ##
-  when dbType == AristoDbMemory:
-    newAristoMemoryCoreDbRef(DefaultQidLayoutRef)
-
-  elif dbType == AristoDbVoid:
-    newAristoVoidCoreDbRef()
-
-  else:
-    {.error: "Unsupported constructor " & $dbType & ".newCoreDbRef()" &
-             " with qidLayout argument".}
 
 # ------------------------------------------------------------------------------
 # End

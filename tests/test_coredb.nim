@@ -329,18 +329,15 @@ proc coreDbMain*(noisy = defined(debug)) =
   noisy.persistentSyncPreLoadAndResumeRunner()
 
 when isMainModule:
-  import
-    std/times
   const
-    noisy = defined(debug) or true
+    noisy {.used.} = defined(debug) or true
   var
     sampleList: seq[CaptureSpecs]
 
   setErrorLevel()
 
-  when true and false:
+  when true: # and false:
     false.coreDbMain()
-    false.persistentSyncPreLoadAndResumeRunner()
 
   # This one uses the readily available dump: `bulkTest0` and some huge replay
   # dumps `bulkTest2`, `bulkTest3`, .. from the `nimbus-eth1-blobs` package.
@@ -351,6 +348,7 @@ when isMainModule:
     sampleList = @[memorySampleDefault]
 
   when true: # and false:
+    import std/times
     var state: (Duration, int)
     for n,capture in sampleList:
       noisy.profileSection("@sample #" & $n, state):
@@ -358,7 +356,7 @@ when isMainModule:
           capture = capture,
           pruneHistory = true,
           #profilingOk = true,
-          finalDiskCleanUpOk = false,
+          #finalDiskCleanUpOk = false,
           oldLogAlign = true
         )
 

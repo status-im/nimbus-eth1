@@ -40,8 +40,7 @@ const
 
 proc newAristoRocksDbCoreDbRef*(path: string, opts: DbOptions): CoreDbRef =
   let
-    qlr = QidLayoutRef(nil)
-    adb = AristoDbRef.init(use_ari.RdbBackendRef, path, qlr, opts).expect aristoFail
+    adb = AristoDbRef.init(use_ari.RdbBackendRef, path, opts).expect aristoFail
     gdb = adb.guestDb().valueOr: GuestDbRef(nil)
     kdb = KvtDbRef.init(use_kvt.RdbBackendRef, path, gdb).expect kvtFail
   AristoDbRocks.create(kdb, adb)

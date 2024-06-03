@@ -51,9 +51,9 @@ proc init*[W: MemOnlyBackend|RdbBackendRef](
   when B is RdbBackendRef:
     let rc = guestDb.getRocksDbFamily()
     if rc.isOk:
-      ok KvtDbRef(top: LayerRef.init(), backend: ? rocksDbBackend rc.value)
+      ok KvtDbRef(top: LayerRef.init(), backend: ? rocksDbKvtBackend rc.value)
     else:
-      ok KvtDbRef(top: LayerRef.init(), backend: ? rocksDbBackend basePath)
+      ok KvtDbRef(top: LayerRef.init(), backend: ? rocksDbKvtBackend basePath)
 
   else:
     ok KvtDbRef.init B

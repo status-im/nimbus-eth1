@@ -43,10 +43,6 @@ const
   MaxFilterBulk = 150_000
     ## Policy settig for `pack()`
 
-let
-  TxQidLyo = LyoSamples[0][0].to(QidLayoutRef)
-    ## Cascaded filter slots layout for testing
-
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
@@ -126,8 +122,8 @@ proc schedStow(
   ## Scheduled storage
   let
     layersMeter = db.nLayersVtx() + db.nLayersKey()
-    filterMeter = if db.roFilter.isNil: 0
-                  else: db.roFilter.sTab.len + db.roFilter.kMap.len
+    filterMeter = if db.balancer.isNil: 0
+                  else: db.balancer.sTab.len + db.balancer.kMap.len
     persistent = MaxFilterBulk < max(layersMeter, filterMeter)
   if persistent:
     db.persist(chunkedMpt=chunkedMpt)
@@ -350,12 +346,11 @@ proc testTxMergeAndDeleteOneByOne*(
     # Start with brand new persistent database.
     db = block:
       if 0 < rdbPath.len:
-        let rc = AristoDbRef.init(
-          RdbBackendRef, rdbPath, qidLayout=TxQidLyo, DbOptions.init())
+        let rc = AristoDbRef.init(RdbBackendRef, rdbPath, DbOptions.init())
         xCheckRc rc.error == 0
         rc.value
       else:
-        AristoDbRef.init(MemBackendRef, qidLayout=TxQidLyo)
+        AristoDbRef.init(MemBackendRef)
 
     # Start transaction (double frame for testing)
     xCheck db.txTop.isErr
@@ -459,12 +454,11 @@ proc testTxMergeAndDeleteSubTree*(
     # Start with brand new persistent database.
     db = block:
       if 0 < rdbPath.len:
-        let rc = AristoDbRef.init(
-          RdbBackendRef, rdbPath, qidLayout=TxQidLyo, DbOptions.init())
+        let rc = AristoDbRef.init(RdbBackendRef, rdbPath, DbOptions.init())
         xCheckRc rc.error == 0
         rc.value
       else:
-        AristoDbRef.init(MemBackendRef, qidLayout=TxQidLyo)
+        AristoDbRef.init(MemBackendRef)
 
     if testRootVid != VertexID(1):
       # Add a dummy entry so the journal logic can be triggered
@@ -562,12 +556,11 @@ proc testTxMergeProofAndKvpList*(
       db = block:
         # New DB with disabled filter slots management
         if 0 < rdbPath.len:
-          let rc = AristoDbRef.init(
-            RdbBackendRef, rdbPath, QidLayoutRef(nil), DbOptions.init())
+          let rc = AristoDbRef.init(RdbBackendRef, rdbPath, DbOptions.init())
           xCheckRc rc.error == 0
           rc.value
         else:
-          AristoDbRef.init(MemBackendRef, QidLayoutRef(nil))
+          AristoDbRef.init(MemBackendRef)
 
       # Start transaction (double frame for testing)
       tx = db.txBegin().value.to(AristoDbRef).txBegin().value

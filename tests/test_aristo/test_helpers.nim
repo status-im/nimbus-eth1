@@ -9,11 +9,11 @@
 # distributed except according to those terms.
 
 import
-  std/[hashes, os, sequtils],
+  std/[os, sequtils],
   eth/common,
   rocksdb,
   ../../nimbus/db/aristo/[
-    aristo_debug, aristo_desc, aristo_delete, aristo_journal/journal_scheduler,
+    aristo_debug, aristo_desc, aristo_delete,
     aristo_hashify, aristo_hike, aristo_merge],
   ../../nimbus/db/kvstore_rocksdb,
   ../../nimbus/sync/protocol/snap/snap_types,
@@ -29,14 +29,6 @@ type
     id*: int
     proof*: seq[SnapProof]
     kvpLst*: seq[LeafTiePayload]
-
-const
-  samples = [
-    [      (4,0,10),      (3,3,10),      (3,4,10),      (3,5,10)],
-    [(2,0,high int),(1,1,high int),(1,1,high int),(1,1,high int)],
-  ]
-
-  LyoSamples* = samples.mapIt((it, (3 * it.volumeSize.minCovered) div 2))
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -110,7 +102,7 @@ proc say*(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
 func `==`*[T: AristoError|VertexID](a: T, b: int): bool =
   a == T(b)
 
-func `==`*(a: (VertexID|QueueID,AristoError), b: (int,int)): bool =
+func `==`*(a: (VertexID,AristoError), b: (int,int)): bool =
   (a[0].int,a[1].int) == b
 
 func `==`*(a: (VertexID,AristoError), b: (int,AristoError)): bool =
@@ -122,9 +114,6 @@ func `==`*(a: (int,AristoError), b: (int,int)): bool =
 func `==`*(a: (int,VertexID,AristoError), b: (int,int,int)): bool =
   (a[0], a[1].int, a[2].int) == b
 
-func `==`*(a: (QueueID,Hash), b: (int,Hash)): bool =
-  (a[0].int,a[1]) == b
-
 func to*(a: Hash256; T: type UInt256): T =
   T.fromBytesBE a.data
 
@@ -133,9 +122,6 @@ func to*(a: Hash256; T: type PathID): T =
 
 func to*(a: HashKey; T: type UInt256): T =
   T.fromBytesBE 0u8.repeat(32 - a.len) & @(a.data)
-
-func to*(fid: FilterID; T: type Hash256): T =
-  result.data = fid.uint64.u256.toBytesBE
 
 proc to*(sample: AccountsSample; T: type seq[UndumpAccounts]): T =
   ## Convert test data into usable in-memory format

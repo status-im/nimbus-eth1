@@ -28,8 +28,7 @@ type
 export
   BackendType,
   GuestDbRef,
-  MemBackendRef,
-  QidLayoutRef
+  MemBackendRef
 
 # ------------------------------------------------------------------------------
 # Public helpers
@@ -52,7 +51,6 @@ proc kind*(
 proc init*(
     T: type AristoDbRef;                      # Target type
     B: type MemBackendRef;                    # Backend type
-    qidLayout: QidLayoutRef;                  # Optional fifo schedule
       ): T =
   ## Memory backend constructor.
   ##
@@ -62,7 +60,7 @@ proc init*(
   ## layouts might render the filter history data unmanageable.
   ##
   when B is MemBackendRef:
-    AristoDbRef(top: LayerRef.init(), backend: memoryBackend(qidLayout))
+    AristoDbRef(top: LayerRef.init(), backend: memoryBackend())
 
 proc init*(
     T: type AristoDbRef;                      # Target type
@@ -79,8 +77,7 @@ proc init*(
     AristoDbRef(top: LayerRef.init())
 
   elif B is MemBackendRef:
-    let qidLayout = DEFAULT_QID_QUEUES.to(QidLayoutRef)
-    AristoDbRef(top: LayerRef.init(), backend: memoryBackend(qidLayout))
+    AristoDbRef(top: LayerRef.init(), backend: memoryBackend())
 
 proc init*(
     T: type AristoDbRef;                      # Target type

@@ -152,7 +152,9 @@ proc setup(db: RdbBackendRef) =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc rocksDbBackend*(path: string): Result[BackendRef,KvtError] =
+proc rocksDbKvtBackend*(
+    path: string;
+      ): Result[BackendRef,KvtError] =
   let db = RdbBackendRef(
     beKind: BackendRocksDB)
 
@@ -165,7 +167,9 @@ proc rocksDbBackend*(path: string): Result[BackendRef,KvtError] =
   db.setup()
   ok db
 
-proc rocksDbBackend*(store: ColFamilyReadWrite): Result[BackendRef,KvtError] =
+proc rocksDbKvtBackend*(
+    store: ColFamilyReadWrite;
+      ): Result[BackendRef,KvtError] =
   let db = RdbBackendRef(
     beKind: BackendRocksDB)
   db.rdb.init(store)
