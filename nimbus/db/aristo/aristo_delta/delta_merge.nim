@@ -58,7 +58,8 @@ proc merge*(
     return ok(lower)
 
   # Verify stackability
-  if upper.src != lower.trg:
+  let lowerTrg = lower.kMap.getOrVoid(VertexID(1)).to(Hash256)
+  if upper.src != lowerTrg:
     return err((VertexID(0), FilTrgSrcMismatch))
   if lower.src != beStateRoot:
     return err((VertexID(0), FilStateRootMismatch))
@@ -68,8 +69,7 @@ proc merge*(
     src:  lower.src,
     sTab: lower.sTab,
     kMap: lower.kMap,
-    vGen: upper.vGen,
-    trg:  upper.trg)
+    vGen: upper.vGen)
 
   for (vid,vtx) in upper.sTab.pairs:
     if vtx.isValid or not newFilter.sTab.hasKey vid:
@@ -96,7 +96,7 @@ proc merge*(
         return err((vid,rc.error))
 
   # Check consistency
-  if (newFilter.src == newFilter.trg) !=
+  if (newFilter.src == newFilter.kMap.getOrVoid(VertexID 1).to(Hash256)) !=
        (newFilter.sTab.len == 0 and newFilter.kMap.len == 0):
     return err((VertexID(0),FilSrcTrgInconsistent))
 
@@ -123,7 +123,8 @@ proc merge*(
     return err((VertexID(0),FilNilFilterRejected))
 
   # Verify stackability
-  if upper.src != lower.trg:
+  let lowerTrg = lower.kMap.getOrVoid(VertexID(1)).to(Hash256)
+  if upper.src != lowerTrg:
     return err((VertexID(0), FilTrgSrcMismatch))
 
   # There is no need to deep copy table vertices as they will not be modified.
@@ -131,8 +132,7 @@ proc merge*(
     src:  lower.src,
     sTab: lower.sTab,
     kMap: lower.kMap,
-    vGen: upper.vGen,
-    trg:  upper.trg)
+    vGen: upper.vGen)
 
   for (vid,vtx) in upper.sTab.pairs:
     newFilter.sTab[vid] = vtx

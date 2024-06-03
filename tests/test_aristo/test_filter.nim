@@ -152,7 +152,7 @@ proc isDbEq(a, b: FilterRef; db: AristoDbRef; noisy = true): bool =
     return false
   if unsafeAddr(a[]) != unsafeAddr(b[]):
     if a.src != b.src or
-       a.trg != b.trg or
+       a.kMap.getOrVoid(VertexID 1) != b.kMap.getOrVoid(VertexID 1) or
        a.vGen != b.vGen:
       return false
 
@@ -218,60 +218,6 @@ proc isDbEq(a, b: FilterRef; db: AristoDbRef; noisy = true): bool =
 
   true
 
-proc isEq(a, b: FilterRef; db: AristoDbRef; noisy = true): bool =
-  ## ..
-  if a.src != b.src:
-    noisy.say "***", "not isEq:", " a.src=", a.src.pp, " b.src=", b.src.pp
-    return
-  if a.trg != b.trg:
-    noisy.say "***", "not isEq:", " a.trg=", a.trg.pp, " b.trg=", b.trg.pp
-    return
-  if a.vGen != b.vGen:
-    noisy.say "***", "not isEq:", " a.vGen=", a.vGen.pp, " b.vGen=", b.vGen.pp
-    return
-  if a.sTab.len != b.sTab.len:
-    noisy.say "***", "not isEq:",
-      " a.sTab.len=", a.sTab.len,
-      " b.sTab.len=", b.sTab.len
-    return
-  if a.kMap.len != b.kMap.len:
-    noisy.say "***", "not isEq:",
-      " a.kMap.len=", a.kMap.len,
-      " b.kMap.len=", b.kMap.len
-    return
-  for (vid,aVtx) in a.sTab.pairs:
-    if b.sTab.hasKey vid:
-      let bVtx = b.sTab.getOrVoid vid
-      if aVtx != bVtx:
-        noisy.say "***", "not isEq:",
-          " vid=", vid.pp,
-          " aVtx=", aVtx.pp(db),
-          " bVtx=", bVtx.pp(db)
-        return
-    else:
-      noisy.say "***", "not isEq:",
-        " vid=", vid.pp,
-        " aVtx=", aVtx.pp(db),
-        " bVtx=n/a"
-      return
-  for (vid,aKey) in a.kMap.pairs:
-    if b.kMap.hasKey vid:
-      let bKey = b.kMap.getOrVoid vid
-      if aKey != bKey:
-        noisy.say "***", "not isEq:",
-          " vid=", vid.pp,
-          " aKey=", aKey.pp,
-          " bKey=", bKey.pp
-        return
-    else:
-      noisy.say "*** not eq:",
-        " vid=", vid.pp,
-        " aKey=", aKey.pp,
-        " bKey=n/a"
-      return
-
-  true
-
 # ----------------------
 
 proc checkBeOk(
@@ -291,13 +237,6 @@ proc checkBeOk(
           " n=", n, "/", dx.len-1,
           " cache=", cache
   true
-
-# ---------------------------------
-
-iterator payload(list: openArray[ProofTrieData]): LeafTiePayload =
-  for w in list:
-    for p in w.kvpLst.mapRootVid VertexID(1):
-      yield p
 
 # ------------------------------------------------------------------------------
 # Public test function

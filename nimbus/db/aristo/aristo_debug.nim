@@ -404,7 +404,6 @@ proc ppFilter(
     result &= " n/a"
     return
   result &= pfx & "src=" & fl.src.to(HashKey).ppKey(db)
-  result &= pfx & "trg=" & fl.trg.to(HashKey).ppKey(db)
   result &= pfx & "vGen" & pfx1 & "[" &
     fl.vGen.mapIt(it.ppVid).join(",") & "]"
   result &= pfx & "sTab" & pfx1 & "{"

@@ -10,6 +10,7 @@
 
 import
   results,
+  eth/common,
   ../aristo_desc,
   "."/[delta_merge, delta_reverse]
 
@@ -93,9 +94,10 @@ proc update*(ctx: UpdateSiblingsRef): Result[UpdateSiblingsRef,AristoError] =
       let db = ctx.db
       # Update distributed filters. Note that the physical backend database
       # must not have been updated, yet. So the new root key for the backend
-      # will be `db.roFilter.trg`.
+      # will be `db.roFilter.kMap[$1]`.
+      let trg = db.roFilter.kMap.getOrVoid(VertexID 1).to(Hash256)
       for w in db.forked:
-        let rc = db.merge(w.roFilter, ctx.rev, db.roFilter.trg)
+        let rc = db.merge(w.roFilter, ctx.rev, trg)
         if rc.isErr:
           ctx.rollback()
           return err(rc.error[1])

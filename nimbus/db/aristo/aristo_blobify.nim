@@ -158,12 +158,11 @@ proc blobify*(vGen: openArray[VertexID]): Blob =
 
 proc blobifyTo*(lSst: SavedState; data: var Blob) =
   ## Serialise a last saved state record
-  data.setLen(73)
-  (addr data[0]).copyMem(unsafeAddr lSst.src.data[0], 32)
-  (addr data[32]).copyMem(unsafeAddr lSst.trg.data[0], 32)
-  let w = lSst.serial.toBytesBE
-  (addr data[64]).copyMem(unsafeAddr w[0], 8)
-  data[72] = 0x7fu8
+  data.setLen(0)
+  data.add lSst.src.data
+  data.add lSst.trg.data
+  data.add lSst.serial.toBytesBE
+  data.add @[0x7fu8]
 
 proc blobify*(lSst: SavedState): Blob =
   ## Variant of `blobify()`

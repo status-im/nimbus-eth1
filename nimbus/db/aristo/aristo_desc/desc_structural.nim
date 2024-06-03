@@ -81,7 +81,6 @@ type
   FilterRef* = ref object
     ## Delta layer
     src*: Hash256                    ## Applicable to this state root
-    trg*: Hash256                    ## Resulting state root (i.e. `kMap[1]`)
     sTab*: Table[VertexID,VertexRef] ## Filter structural vertex table
     kMap*: Table[VertexID,HashKey]   ## Filter Merkle hash key mapping
     vGen*: seq[VertexID]             ## Filter unique vertex ID generator
@@ -132,13 +131,6 @@ type
     delta*: LayerDeltaRef            ## Most structural tables held as deltas
     final*: LayerFinalRef            ## Stored as latest version
     txUid*: uint                     ## Transaction identifier if positive
-
-# ------------------------------------------------------------------------------
-# Private helpers
-# ------------------------------------------------------------------------------
-
-func max(a, b, c: int): int =
-  max(max(a,b),c)
 
 # ------------------------------------------------------------------------------
 # Public helpers (misc)

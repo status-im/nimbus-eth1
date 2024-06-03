@@ -10,6 +10,7 @@
 
 import
   std/tables,
+  eth/common,
   results,
   ".."/[aristo_desc, aristo_get]
 
@@ -28,9 +29,7 @@ proc revFilter*(
   ## backend (excluding optionally installed read-only filter.)
   ##
   # Register MPT state roots for reverting back
-  let rev = FilterRef(
-    src: filter.trg,
-    trg: filter.src)
+  let rev = FilterRef(src: filter.kMap.getOrVoid(VertexID 1).to(Hash256))
 
   # Get vid generator state on backend
   block:

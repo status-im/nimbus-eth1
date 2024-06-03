@@ -56,8 +56,7 @@ proc deltaFwd*(
     src:  srcRoot,
     sTab: layer.delta.sTab,
     kMap: layer.delta.kMap,
-    vGen: layer.final.vGen.vidReorg, # Compact recycled IDs
-    trg:  trgRoot)
+    vGen: layer.final.vGen.vidReorg) # Compact recycled IDs
 
 # ------------------------------------------------------------------------------
 # Public functions, apply/install filters
@@ -81,7 +80,7 @@ proc deltaMerge*(
       return err((VertexID(1),rc.error))
 
   db.roFilter = ? db.merge(filter, db.roFilter, ubeRoot)
-  if db.roFilter.src == db.roFilter.trg:
+  if db.roFilter.src == db.roFilter.kMap.getOrVoid(VertexID 1).to(Hash256):
     # Under normal conditions, the root keys cannot be the same unless the
     # database is empty. This changes if there is a fixed root vertex as
     # used with the `snap` sync protocol boundaty proof. In that case, there
@@ -143,7 +142,7 @@ proc deltaPersistent*(
 
   let lSst = SavedState(
     src: db.roFilter.src,
-    trg: db.roFilter.trg,
+    trg: db.roFilter.kMap.getOrVoid(VertexID 1).to(Hash256),
     serial: nxtFid)
 
   # Store structural single trie entries

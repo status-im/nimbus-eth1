@@ -96,8 +96,6 @@ proc accountsRunner(
     baseDir = getTmpDir() / sample.name & "-accounts"
     dbDir = if persistent: baseDir / "tmp" else: ""
     isPersistent = if persistent: "persistent DB" else: "mem DB only"
-    doRdbOk = (cmpBackends and 0 < dbDir.len)
-    cmpBeInfo = if doRdbOk: "persistent" else: "memory"
 
   defer:
     try: baseDir.removeDir except CatchableError: discard
@@ -132,8 +130,6 @@ proc storagesRunner(
     baseDir = getTmpDir() / sample.name & "-storage"
     dbDir = if persistent: baseDir / "tmp" else: ""
     isPersistent = if persistent: "persistent DB" else: "mem DB only"
-    doRdbOk = (cmpBackends and 0 < dbDir.len)
-    cmpBeInfo = if doRdbOk: "persistent" else: "memory"
 
   defer:
     try: baseDir.removeDir except CatchableError: discard
@@ -170,7 +166,7 @@ when isMainModule:
 
   when true and false:
     # Verify Problem with the database for production test
-    noisy.accountsRunner(persistent=false)
+    noisy.aristoMain()
 
   # This one uses dumps from the external `nimbus-eth1-blob` repo
   when true and false:
@@ -180,7 +176,7 @@ when isMainModule:
         noisy.accountsRunner(sam, resetDb=true)
 
   when true: # and false:
-    let persistent = false # or true
+    let persistent = false or true
     noisy.showElapsed("@snap_test_list"):
       for n,sam in snapTestList:
         noisy.accountsRunner(sam, persistent=persistent)
