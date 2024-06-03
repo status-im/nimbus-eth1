@@ -11,7 +11,9 @@
 {.push raises: [].}
 
 import
-  std/[bitops, sequtils, sets, tables],
+  std/[sequtils, sets, tables],
+  stew/bitops2,
+  stint,
   eth/[common, trie/nibbles],
   results,
   stew/endians2,
@@ -21,14 +23,99 @@ import
 # Private helper
 # ------------------------------------------------------------------------------
 
-proc load64(data: openArray[byte]; start: var int): Result[uint64,AristoError] =
+type
+  Vube* = object
+    # A big-endian variation of https://john-millikin.com/vu128-efficient-variable-length-integers
+    # to preserve sort order which broadly helps maintain locality in databases
+    # See also https://sqlite.org/src4/doc/trunk/www/varint.wiki for more on this
+    # topic.
+    #
+    # The format uses at most 9 bytes for a uint64. The encoding proceeds as follows:
+    #
+    # If the number is <= 247, a single byte encodes the value - otherwise, we
+    # store the length offset by 247 in the first byte and the shortest possible
+    # big-endian encoding in the rest. uint256 follows the same pattern naturally.
+    #
+    # The encoding uses at most 1 byte more than the original size of the integer
+    # and could plausibly therefor encode integers up to 255 bytes long.
+
+  VubeInt* = uint64|UInt256
+
+func singleByte(_: type Vube, I: type uint64): byte =
+  byte(255 - sizeof(I))
+
+func singleByte(_: type Vube, I: type UInt256): byte =
+  byte(255 - sizeof(I))
+
+func singleHigh(_: type Vube, I: type uint64): uint64 =
+  uint64(Vube.singleByte(I))
+
+func singleHigh(_: type Vube, I: type UInt256): UInt256 =
+  u256(Vube.singleByte(I))
+
+func len*(T: type Vube, x: auto): int8 =
+  ## Returns number of bytes required to encode integer ``x`` as vube.
+  if x <= Vube.singleHigh(typeof(x)):
+    1
+  else:
+    sizeof(x) + 1
+
+func maxLen*(_: type Vube, I: type): int8 =
+  ## The maximum number of bytes needed to encode any value of type I
+  Vube.len(I.high())
+
+type VubeBuf*[I: VubeInt] = object
+  data*: array[maxLen(Vube, I), byte]
+  len*: int8
+
+template toOpenArray[T: VubeBuf](b: T): openArray[byte] =
+  b.data.toOpenArray(0, b.len - 1)
+
+proc toBytes*[I: VubeInt](data: I, _: type Vube): VubeBuf[I] =
+  const singleHigh = Vube.singleHigh(I)
+
+  # Maximum number that we can encode with a single byte - the other values
+  # are used to encode the length
+  if data <= singleHigh:
+    result.data[0] = when data is StUint:
+      data.truncate(uint8)
+    else:
+      uint8(data)
+    result.len = 1
+  else:
+    let
+      be = data.toBytesBE()
+      len = sizeof(data) - (data.leadingZeros() shr 3)
+    result.data[0] = Vube.singleByte(I) + byte(len)
+    result.data[1 .. len] = be.toOpenArray(be.high - len + 1, be.high)
+    result.len = int8(len + 1)
+
+proc fromBytes*(
+    I: type VubeInt, data: openArray[byte], _: type Vube
+): tuple[val: I, len: int8] =
+  const singleHigh = Vube.singleByte(I)
+
+  let code = data[0]
+  if code <= singleHigh:
+    when I is StUint:
+      (u256(code), int8 1)
+    else:
+      (uint64(code), int8 1)
+  else:
+    let len = int8(code - singleHigh)
+    var tmp: array[sizeof(I), byte]
+    tmp[tmp.high - len + 1 .. tmp.high] = data.toOpenArray(1, len)
+
+    (I.fromBytesBE(tmp), len)
+
+proc load64(data: openArray[byte], start: var int): Result[uint64, AristoError] =
   if data.len < start + 9:
     return err(DeblobPayloadTooShortInt64)
   let val = uint64.fromBytesBE(data.toOpenArray(start, start + 7))
   start += 8
   ok val
 
-proc load256(data: openArray[byte]; start: var int): Result[UInt256,AristoError] =
+proc load256(data: openArray[byte], start: var int): Result[UInt256, AristoError] =
   if data.len < start + 33:
     return err(DeblobPayloadTooShortInt256)
   let val = UInt256.fromBytesBE(data.toOpenArray(start, start + 31))
@@ -38,6 +125,18 @@ proc load256(data: openArray[byte]; start: var int): Result[UInt256,AristoError]
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
+
+template blobify*(v: uint64): untyped =
+  v.toBytes(Vube)
+
+template blobify*(v: StUint): untyped =
+  v.toBytes(Vube)
+
+proc blobifyTo2*(v: uint64, data: var Blob) =
+  data.add v.toBytes(Vube).toOpenArray
+
+proc blobifyTo2*(v: UInt256, data: var Blob) =
+  data.add v.toBytes(Vube).toOpenArray
 
 proc blobifyTo*(pyl: PayloadRef, data: var Blob) =
   if pyl.isNil:
@@ -49,7 +148,6 @@ proc blobifyTo*(pyl: PayloadRef, data: var Blob) =
   of RlpData:
     data &= pyl.rlpBlob
     data &= @[0x6a.byte]
-
   of AccountData:
     var mask: byte
     if 0 < pyl.account.nonce:
@@ -73,39 +171,96 @@ proc blobifyTo*(pyl: PayloadRef, data: var Blob) =
 
     data &= [mask]
 
-proc blobifyTo*(vtx: VertexRef; data: var Blob): Result[void,AristoError] =
-  ## This function serialises the vertex argument to a database record.
-  ## Contrary to RLP based serialisation, these records aim to align on
-  ## fixed byte boundaries.
-  ## ::
-  ##   Branch:
-  ##     uint64, ...    -- list of up to 16 child vertices lookup keys
-  ##     uint16         -- index bitmap
-  ##     0x08           -- marker(8)
-  ##
-  ##   Extension:
-  ##     uint64         -- child vertex lookup key
-  ##     Blob           -- hex encoded partial path (at least one byte)
-  ##     0x80 + xx      -- marker(2) + pathSegmentLen(6)
-  ##
-  ##   Leaf:
-  ##     Blob           -- opaque leaf data payload (might be zero length)
-  ##     Blob           -- hex encoded partial path (at least one byte)
-  ##     0xc0 + yy      -- marker(2) + partialPathLen(6)
-  ##
-  ## For a branch record, the bytes of the `access` array indicate the position
-  ## of the Patricia Trie vertex reference. So the `vertexID` with index `n` has
-  ## ::
-  ##   8 * n * ((access shr (n * 4)) and 15)
-  ##
+proc blobifyTo2*(pyl: PayloadRef, data: var Blob) =
+  if pyl.isNil:
+    return
+  case pyl.pType
+  of RawData:
+    data &= pyl.rawBlob
+    data &= [0x6b.byte]
+  of RlpData:
+    data &= pyl.rlpBlob
+    data &= @[0x6a.byte]
+  of AccountData:
+    var mask: byte
+    if 0 < pyl.account.nonce:
+      mask = mask or 0x01
+      data &= pyl.account.nonce.uint64.blobify().toOpenArray()
+
+    if high(uint64).u256 < pyl.account.balance:
+      mask = mask or 0x08
+      data &= pyl.account.balance.blobify().toOpenArray()
+    elif 0 < pyl.account.balance:
+      mask = mask or 0x04
+      data &= pyl.account.balance.truncate(uint64).uint64.blobify().toOpenArray()
+
+    if VertexID(0) < pyl.account.storageID:
+      mask = mask or 0x10
+      data &= pyl.account.storageID.uint64.blobify().toOpenArray()
+
+    if pyl.account.codeHash != VOID_CODE_HASH:
+      mask = mask or 0x80
+      data &= pyl.account.codeHash.data
+
+    data &= [mask]
+
+proc blobifyTo2*(vtx: VertexRef, data: var Blob): Result[void, AristoError] =
   if not vtx.isValid:
     return err(BlobifyNilVertex)
-  case vtx.vType:
+  case vtx.vType
   of Branch:
     var
       access = 0u16
       pos = data.len
-    for n in 0..15:
+    for n in 0 .. 15:
+      if vtx.bVid[n].isValid:
+        access = access or (1u16 shl n)
+        data &= vtx.bVid[n].uint64.blobify().toOpenArray()
+    if data.len - pos < 16:
+      return err(BlobifyBranchMissingRefs)
+    data &= access.toBytesBE()
+    data &= [0x08u8]
+  of Extension:
+    let
+      pSegm = vtx.ePfx.hexPrefixEncode(isleaf = false)
+      psLen = pSegm.len.byte
+    if psLen == 0 or 33 < psLen:
+      return err(BlobifyExtPathOverflow)
+    if not vtx.eVid.isValid:
+      return err(BlobifyExtMissingRefs)
+    data &= vtx.eVid.uint64.blobify.toOpenArray()
+    data &= pSegm
+    data &= [0x80u8 or psLen]
+  of Leaf:
+    let
+      pSegm = vtx.lPfx.hexPrefixEncode(isleaf = true)
+      psLen = pSegm.len.byte
+    if psLen == 0 or 33 < psLen:
+      return err(BlobifyLeafPathOverflow)
+    vtx.lData.blobifyTo(data)
+    data &= pSegm
+    data &= [0xC0u8 or psLen]
+  ok()
+
+proc blobifyTo2*(vGen: openArray[VertexID], data: var Blob) =
+  ## This function serialises a list of vertex IDs.
+  ## ::
+  ##   uint64, ...    -- list of IDs
+  ##   0x7c           -- marker(8)
+  ##
+  for w in vGen:
+    data &= w.uint64.blobify().toOpenArray()
+  data.add 0x7Cu8
+import snappy
+proc blobifyTo*(vtx: VertexRef, data: var Blob): Result[void, AristoError] =
+  if not vtx.isValid:
+    return err(BlobifyNilVertex)
+  case vtx.vType
+  of Branch:
+    var
+      access = 0u16
+      pos = data.len
+    for n in 0 .. 15:
       if vtx.bVid[n].isValid:
         access = access or (1u16 shl n)
         data &= vtx.bVid[n].uint64.toBytesBE
@@ -133,16 +288,31 @@ proc blobifyTo*(vtx: VertexRef; data: var Blob): Result[void,AristoError] =
     vtx.lData.blobifyTo(data)
     data &= pSegm
     data &= [0xC0u8 or psLen]
-  ok()
 
+  {.noSideEffect.}:
+    var bytes {.global.}: int
+    var bytes2 {.global.}: int
+    var bytes3 {.global.}: int
+    var bytes4 {.global.}: int
+    var count {.global.}: int
+    inc count
+    bytes += data.len()
+    var data2: seq[byte]
+    discard blobifyTo2(vtx, data2)
+    bytes2 += data2.len
+    bytes3 += snappy.encode(data).len
+    bytes4 += snappy.encode(data2).len
+    if count mod 100 == 0:
+      debugEcho [count, bytes, bytes2, bytes3, bytes4], " ", [bytes.float / count.float, bytes2.float / bytes.float, bytes4.float / bytes3.float]
+  ok()
 
 proc blobify*(vtx: VertexRef): Result[Blob, AristoError] =
   ## Variant of `blobify()`
   var data: Blob
-  ? vtx.blobifyTo data
+  ?vtx.blobifyTo data
   ok(move(data))
 
-proc blobifyTo*(vGen: openArray[VertexID]; data: var Blob) =
+proc blobifyTo*(vGen: openArray[VertexID], data: var Blob) =
   ## This function serialises a list of vertex IDs.
   ## ::
   ##   uint64, ...    -- list of IDs
@@ -156,7 +326,7 @@ proc blobify*(vGen: openArray[VertexID]): Blob =
   ## Variant of `blobify()`
   vGen.blobifyTo result
 
-proc blobifyTo*(lSst: SavedState; data: var Blob) =
+proc blobifyTo*(lSst: SavedState, data: var Blob) =
   ## Serialise a last saved state record
   data.setLen(73)
   (addr data[0]).copyMem(unsafeAddr lSst.src.data[0], 32)
@@ -169,8 +339,7 @@ proc blobify*(lSst: SavedState): Blob =
   ## Variant of `blobify()`
   lSst.blobifyTo result
 
-
-proc blobifyTo*(filter: FilterRef; data: var Blob): Result[void,AristoError] =
+proc blobifyTo*(filter: FilterRef, data: var Blob): Result[void, AristoError] =
   ## This function serialises an Aristo DB filter object
   ## ::
   ##   uint64         -- filter ID
@@ -191,7 +360,10 @@ proc blobifyTo*(filter: FilterRef; data: var Blob): Result[void,AristoError] =
   ##
   func blobify(lid: HashKey): Blob =
     let n = lid.len
-    if n < 32: @[n.byte] & @(lid.data) & 0u8.repeat(31 - n) else: @(lid.data)
+    if n < 32:
+      @[n.byte] & @(lid.data) & 0u8.repeat(31 - n)
+    else:
+      @(lid.data)
 
   if not filter.isValid:
     return err(BlobifyNilFilter)
@@ -212,13 +384,13 @@ proc blobifyTo*(filter: FilterRef; data: var Blob): Result[void,AristoError] =
     leftOver = filter.kMap.keys.toSeq.toHashSet
 
   # Loop over vertex table
-  for (vid,vtx) in filter.sTab.pairs:
+  for (vid, vtx) in filter.sTab.pairs:
     n.inc
     leftOver.excl vid
 
     var
-      keyMode = 0u                 # default: ignore that key
-      vtxLen  = 0u                 # default: ignore that vertex
+      keyMode = 0u # default: ignore that key
+      vtxLen = 0u # default: ignore that vertex
       keyBlob: Blob
       vtxBlob: Blob
 
@@ -227,15 +399,15 @@ proc blobifyTo*(filter: FilterRef; data: var Blob): Result[void,AristoError] =
       keyBlob = key.blobify
       keyMode = if key.len < 32: 0xc000_0000u else: 0x8000_0000u
     elif filter.kMap.hasKey vid:
-      keyMode = 0x4000_0000u       # void hash key => considered deleted
+      keyMode = 0x4000_0000u # void hash key => considered deleted
 
     if vtx.isValid:
-      ? vtx.blobifyTo vtxBlob
+      ?vtx.blobifyTo vtxBlob
       vtxLen = vtxBlob.len.uint
       if 0x3fff_ffff <= vtxLen:
         return err(BlobifyFilterRecordOverflow)
     else:
-      vtxLen = 0x3fff_ffff         # nil vertex => considered deleted
+      vtxLen = 0x3fff_ffff # nil vertex => considered deleted
 
     data &= (keyMode or vtxLen).uint32.toBytesBE
     data &= vid.uint64.toBytesBE
@@ -246,7 +418,7 @@ proc blobifyTo*(filter: FilterRef; data: var Blob): Result[void,AristoError] =
   for vid in leftOver:
     n.inc
     var
-      keyMode = 0u                 # present and usable
+      keyMode = 0u # present and usable
       keyBlob: Blob
 
     let key = filter.kMap.getOrVoid vid
@@ -254,7 +426,7 @@ proc blobifyTo*(filter: FilterRef; data: var Blob): Result[void,AristoError] =
       keyBlob = key.blobify
       keyMode = if key.len < 32: 0xc000_0000u else: 0x8000_0000u
     else:
-      keyMode = 0x4000_0000u       # void hash key => considered deleted
+      keyMode = 0x4000_0000u # void hash key => considered deleted
 
     data &= keyMode.uint32.toBytesBE
     data &= vid.uint64.toBytesBE
@@ -267,10 +439,10 @@ proc blobifyTo*(filter: FilterRef; data: var Blob): Result[void,AristoError] =
 proc blobify*(filter: FilterRef): Result[Blob, AristoError] =
   ## ...
   var data: Blob
-  ? filter.blobifyTo data
+  ?filter.blobifyTo data
   ok move(data)
 
-proc blobifyTo*(vFqs: openArray[(QueueID,QueueID)]; data: var Blob) =
+proc blobifyTo*(vFqs: openArray[(QueueID, QueueID)], data: var Blob) =
   ## This function serialises a list of filter queue IDs.
   ## ::
   ##   uint64, ...    -- list of IDs
@@ -281,16 +453,13 @@ proc blobifyTo*(vFqs: openArray[(QueueID,QueueID)]; data: var Blob) =
     data &= w[1].uint64.toBytesBE
   data.add 0x7Eu8
 
-proc blobify*(vFqs: openArray[(QueueID,QueueID)]): Blob =
+proc blobify*(vFqs: openArray[(QueueID, QueueID)]): Blob =
   ## Variant of `blobify()`
   vFqs.blobifyTo result
 
 # -------------
 
-proc deblobify(
-    data: openArray[byte];
-    pyl: var PayloadRef;
-      ): Result[void,AristoError] =
+proc deblobify(data: openArray[byte], pyl: var PayloadRef): Result[void, AristoError] =
   if data.len == 0:
     pyl = PayloadRef(pType: RawData)
     return ok()
@@ -307,33 +476,33 @@ proc deblobify(
     pAcc = PayloadRef(pType: AccountData)
     start = 0
 
-  case mask and 0x03:
+  case mask and 0x03
   of 0x00:
     discard
   of 0x01:
-    pAcc.account.nonce = (? data.load64 start).AccountNonce
+    pAcc.account.nonce = (?data.load64 start).AccountNonce
   else:
     return err(DeblobNonceLenUnsupported)
 
-  case mask and 0x0c:
+  case mask and 0x0c
   of 0x00:
     discard
   of 0x04:
-    pAcc.account.balance = (? data.load64 start).u256
+    pAcc.account.balance = (?data.load64 start).u256
   of 0x08:
-    pAcc.account.balance = (? data.load256 start)
+    pAcc.account.balance = (?data.load256 start)
   else:
     return err(DeblobBalanceLenUnsupported)
 
-  case mask and 0x30:
+  case mask and 0x30
   of 0x00:
     discard
   of 0x10:
-    pAcc.account.storageID = (? data.load64 start).VertexID
+    pAcc.account.storageID = (?data.load64 start).VertexID
   else:
     return err(DeblobStorageLenUnsupported)
 
-  case mask and 0xc0:
+  case mask and 0xc0
   of 0x00:
     pAcc.account.codeHash = VOID_CODE_HASH
   of 0x80:
@@ -346,17 +515,19 @@ proc deblobify(
   pyl = pAcc
   ok()
 
-proc deblobify*(record: openArray[byte]; vtx: var VertexRef): Result[void,AristoError] =
+proc deblobify*(
+    record: openArray[byte], vtx: var VertexRef
+): Result[void, AristoError] =
   ## De-serialise a data record encoded with `blobify()`. The second
   ## argument `vtx` can be `nil`.
-  if record.len < 3:                                  # minimum `Leaf` record
+  if record.len < 3: # minimum `Leaf` record
     return err(DeblobVtxTooShort)
 
-  case record[^1] shr 6:
+  case record[^1] shr 6
   of 0: # `Branch` vertex
     if record[^1] != 0x08u8:
       return err(DeblobUnknown)
-    if record.len < 19:                               # at least two edges
+    if record.len < 19: # at least two edges
       return err(DeblobBranchTooShort)
     if (record.len mod 8) != 3:
       return err(DeblobBranchSizeGarbled)
@@ -366,68 +537,59 @@ proc deblobify*(record: openArray[byte]; vtx: var VertexRef): Result[void,Aristo
       aIny = record.len - 2
     var
       offs = 0
-      access = uint16.fromBytesBE record.toOpenArray(aInx, aIny)  # bitmap
-      vtxList: array[16,VertexID]
+      access = uint16.fromBytesBE record.toOpenArray(aInx, aIny) # bitmap
+      vtxList: array[16, VertexID]
     while access != 0:
       if maxOffset < offs:
         return err(DeblobBranchInxOutOfRange)
-      let n = access.firstSetBit - 1
+      let n = access.firstOne - 1
       access.clearBit n
       vtxList[n] = (uint64.fromBytesBE record.toOpenArray(offs, offs + 7)).VertexID
       offs += 8
       # End `while`
-    vtx = VertexRef(
-      vType: Branch,
-      bVid:  vtxList)
-
+    vtx = VertexRef(vType: Branch, bVid: vtxList)
   of 2: # `Extension` vertex
     let
-      sLen = record[^1].int and 0x3f                  # length of path segment
-      rLen = record.len - 1                           # `vertexID` + path segm
+      sLen = record[^1].int and 0x3f # length of path segment
+      rLen = record.len - 1 # `vertexID` + path segm
     if record.len < 10:
       return err(DeblobExtTooShort)
-    if 8 + sLen != rLen:                              # => slen is at least 1
+    if 8 + sLen != rLen: # => slen is at least 1
       return err(DeblobExtSizeGarbled)
     let (isLeaf, pathSegment) = hexPrefixDecode record.toOpenArray(8, rLen - 1)
     if isLeaf:
       return err(DeblobExtGotLeafPrefix)
     vtx = VertexRef(
       vType: Extension,
-      eVid:  (uint64.fromBytesBE record.toOpenArray(0, 7)).VertexID,
-      ePfx:  pathSegment)
-
+      eVid: (uint64.fromBytesBE record.toOpenArray(0, 7)).VertexID,
+      ePfx: pathSegment,
+    )
   of 3: # `Leaf` vertex
     let
-      sLen = record[^1].int and 0x3f                  # length of path segment
-      rLen = record.len - 1                           # payload + path segment
-      pLen = rLen - sLen                              # payload length
+      sLen = record[^1].int and 0x3f # length of path segment
+      rLen = record.len - 1 # payload + path segment
+      pLen = rLen - sLen # payload length
     if rLen < sLen:
       return err(DeblobLeafSizeGarbled)
-    let (isLeaf, pathSegment) = hexPrefixDecode record.toOpenArray(pLen, rLen-1)
+    let (isLeaf, pathSegment) = hexPrefixDecode record.toOpenArray(pLen, rLen - 1)
     if not isLeaf:
       return err(DeblobLeafGotExtPrefix)
     var pyl: PayloadRef
-    ? record.toOpenArray(0, pLen - 1).deblobify(pyl)
-    vtx = VertexRef(
-      vType: Leaf,
-      lPfx:  pathSegment,
-      lData: pyl)
-
+    ?record.toOpenArray(0, pLen - 1).deblobify(pyl)
+    vtx = VertexRef(vType: Leaf, lPfx: pathSegment, lData: pyl)
   else:
     return err(DeblobUnknown)
   ok()
 
-proc deblobify*(data: openArray[byte]; T: type VertexRef): Result[T,AristoError] =
+proc deblobify*(data: openArray[byte], T: type VertexRef): Result[T, AristoError] =
   ## Variant of `deblobify()` for vertex deserialisation.
   var vtx = T(nil) # will be auto-initialised
-  ? data.deblobify vtx
+  ?data.deblobify vtx
   ok vtx
 
-
 proc deblobify*(
-    data: openArray[byte];
-    vGen: var seq[VertexID];
-      ): Result[void,AristoError] =
+    data: openArray[byte], vGen: var seq[VertexID]
+): Result[void, AristoError] =
   ## De-serialise the data record encoded with `blobify()` into the vertex ID
   ## generator argument `vGen`.
   if data.len == 0:
@@ -439,22 +601,18 @@ proc deblobify*(
       return err(DeblobWrongType)
     for n in 0 ..< (data.len div 8):
       let w = n * 8
-      vGen.add (uint64.fromBytesBE data.toOpenArray(w, w+7)).VertexID
+      vGen.add (uint64.fromBytesBE data.toOpenArray(w, w + 7)).VertexID
   ok()
 
-proc deblobify*(
-    data: openArray[byte];
-    T: type seq[VertexID];
-      ): Result[T,AristoError] =
+proc deblobify*(data: openArray[byte], T: type seq[VertexID]): Result[T, AristoError] =
   ## Variant of `deblobify()` for deserialising the vertex ID generator state
   var vGen: T
-  ? data.deblobify vGen
+  ?data.deblobify vGen
   ok move(vGen)
 
 proc deblobify*(
-    data: openArray[byte];
-    lSst: var SavedState;
-      ): Result[void,AristoError] =
+    data: openArray[byte], lSst: var SavedState
+): Result[void, AristoError] =
   ## De-serialise the last saved state data record previously encoded with
   ## `blobify()`.
   if data.len != 73:
@@ -463,29 +621,25 @@ proc deblobify*(
     return err(DeblobWrongType)
   (addr lSst.src.data[0]).copyMem(unsafeAddr data[0], 32)
   (addr lSst.trg.data[0]).copyMem(unsafeAddr data[32], 32)
-  lSst.serial = uint64.fromBytesBE data[64..72]
+  lSst.serial = uint64.fromBytesBE data[64 .. 72]
   ok()
 
-proc deblobify*(
-    data: openArray[byte];
-    T: type SavedState;
-      ): Result[T,AristoError] =
+proc deblobify*(data: openArray[byte], T: type SavedState): Result[T, AristoError] =
   ## Variant of `deblobify()` for deserialising a last saved state data record
   var lSst: T
-  ? data.deblobify lSst
+  ?data.deblobify lSst
   ok move(lSst)
 
-
-proc deblobify*(data: Blob; filter: var FilterRef): Result[void,AristoError] =
+proc deblobify*(data: Blob, filter: var FilterRef): Result[void, AristoError] =
   ## De-serialise an Aristo DB filter object
   if data.len < 80: # minumum length 80 for an empty filter
     return err(DeblobFilterTooShort)
   if data[^1] != 0x7d:
     return err(DeblobWrongType)
 
-  func deblob(data: openArray[byte]; shortKey: bool): Result[HashKey,void] =
+  func deblob(data: openArray[byte], shortKey: bool): Result[HashKey, void] =
     if shortKey:
-      HashKey.fromBytes data.toOpenArray(1, min(int data[0],31))
+      HashKey.fromBytes data.toOpenArray(1, min(int data[0], 31))
     else:
       HashKey.fromBytes data
 
@@ -503,7 +657,7 @@ proc deblobify*(data: Blob; filter: var FilterRef): Result[void,AristoError] =
     return err(DeblobFilterGenTooShort)
   for n in 0 ..< nVids:
     let w = 80 + n * 8
-    f.vGen.add (uint64.fromBytesBE data.toOpenArray(int w, int w+7)).VertexID
+    f.vGen.add (uint64.fromBytesBE data.toOpenArray(int w, int w + 7)).VertexID
 
   var offs = nTrplStart
   for n in 0 ..< nTriplets:
@@ -512,21 +666,22 @@ proc deblobify*(data: Blob; filter: var FilterRef): Result[void,AristoError] =
 
     let
       keyFlag = data[offs] shr 6
-      vtxFlag = ((uint32.fromBytesBE data.toOpenArray(offs, offs+3)) and 0x3fff_ffff).int
+      vtxFlag =
+        ((uint32.fromBytesBE data.toOpenArray(offs, offs + 3)) and 0x3fff_ffff).int
       vLen = if vtxFlag == 0x3fff_ffff: 0 else: vtxFlag
     if keyFlag == 0 and vtxFlag == 0:
       return err(DeblobFilterTrpVtxSizeGarbled) # no blind records
     offs = offs + 4
 
-    let vid = (uint64.fromBytesBE data.toOpenArray(offs, offs+7)).VertexID
+    let vid = (uint64.fromBytesBE data.toOpenArray(offs, offs + 7)).VertexID
     offs = offs + 8
 
     if data.len < offs + (1 < keyFlag).ord * 32 + vLen:
       return err(DeblobFilterTrpTooShort)
 
     if 1 < keyFlag:
-      f.kMap[vid] = data.toOpenArray(offs, offs+31).deblob(keyFlag == 3).valueOr:
-        return err(DeblobHashKeyExpected)
+      f.kMap[vid] = data.toOpenArray(offs, offs + 31).deblob(keyFlag == 3).valueOr:
+          return err(DeblobHashKeyExpected)
       offs = offs + 32
     elif keyFlag == 1:
       f.kMap[vid] = VOID_HASH_KEY
@@ -535,7 +690,7 @@ proc deblobify*(data: Blob; filter: var FilterRef): Result[void,AristoError] =
       f.sTab[vid] = VertexRef(nil)
     elif 0 < vLen:
       var vtx: VertexRef
-      ? data.toOpenArray(offs, offs + vLen - 1).deblobify vtx
+      ?data.toOpenArray(offs, offs + vLen - 1).deblobify vtx
       f.sTab[vid] = vtx
       offs = offs + vLen
 
@@ -545,16 +700,15 @@ proc deblobify*(data: Blob; filter: var FilterRef): Result[void,AristoError] =
   filter = f
   ok()
 
-proc deblobify*(data: Blob; T: type FilterRef): Result[T,AristoError] =
+proc deblobify*(data: Blob, T: type FilterRef): Result[T, AristoError] =
   ##  Variant of `deblobify()` for deserialising an Aristo DB filter object
   var filter: T
-  ? data.deblobify filter
+  ?data.deblobify filter
   ok filter
 
 proc deblobify*(
-    data: Blob;
-    vFqs: var seq[(QueueID,QueueID)];
-      ): Result[void,AristoError] =
+    data: Blob, vFqs: var seq[(QueueID, QueueID)]
+): Result[void, AristoError] =
   ## De-serialise the data record encoded with `blobify()` into a filter queue
   ## ID argument liet `vFqs`.
   if data.len == 0:
@@ -569,16 +723,13 @@ proc deblobify*(
         w = n * 16
         a = (uint64.fromBytesBE data.toOpenArray(w, w + 7)).QueueID
         b = (uint64.fromBytesBE data.toOpenArray(w + 8, w + 15)).QueueID
-      vFqs.add (a,b)
+      vFqs.add (a, b)
   ok()
 
-proc deblobify*(
-    data: Blob;
-    T: type seq[(QueueID,QueueID)];
-      ): Result[T,AristoError] =
+proc deblobify*(data: Blob, T: type seq[(QueueID, QueueID)]): Result[T, AristoError] =
   ## Variant of `deblobify()` for deserialising the vertex ID generator state
-  var vFqs: seq[(QueueID,QueueID)]
-  ? data.deblobify vFqs
+  var vFqs: seq[(QueueID, QueueID)]
+  ?data.deblobify vFqs
   ok vFqs
 
 # ------------------------------------------------------------------------------
