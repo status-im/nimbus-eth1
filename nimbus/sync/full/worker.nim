@@ -14,8 +14,6 @@ import
   chronicles,
   chronos,
   eth/p2p,
-  ../../db/aristo/aristo_desc,
-  ../../db/aristo/aristo_journal/journal_scheduler,
   ".."/[protocol, sync_desc],
   ../handlers/eth,
   ../misc/[best_pivot, block_queue, sync_ctrl, ticker],
@@ -87,18 +85,13 @@ proc tickerUpdater(ctx: FullCtxRef): TickerFullStatsUpdater =
     let suspended =
       0 < ctx.pool.suspendAt and ctx.pool.suspendAt < stats.topAccepted
 
-    var journal: seq[int]
-    if not ctx.pool.journal.isNil:
-      journal = ctx.pool.journal.lengths()
-
     TickerFullStats(
       topPersistent:   stats.topAccepted,
       nextStaged:      stats.nextStaged,
       nextUnprocessed: stats.nextUnprocessed,
       nStagedQueue:    stats.nStagedQueue,
       suspended:       suspended,
-      reOrg:           stats.reOrg,
-      journal:         journal)
+      reOrg:           stats.reOrg)
 
 
 proc processStaged(buddy: FullBuddyRef): bool =
@@ -187,12 +180,6 @@ proc setup*(ctx: FullCtxRef): bool =
   ctx.pool.bCtx = BlockQueueCtxRef.init(rc.value + 1)
   if ctx.pool.enableTicker:
     ctx.pool.ticker = TickerRef.init(ctx.tickerUpdater)
-
-    # Monitor journal state
-    let adb = ctx.chain.com.db.ctx.getMpt(CtGeneric).backend.toAristo
-    if not adb.isNil:
-      doAssert not adb.backend.isNil
-      ctx.pool.journal = adb.backend.journal
   else:
     debug "Ticker is disabled"
 

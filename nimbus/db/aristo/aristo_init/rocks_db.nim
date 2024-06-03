@@ -110,27 +110,6 @@ proc getKeyFn(db: RdbBackendRef): GetKeyFn =
 
       err(GetKeyNotFound)
 
-proc getFilFn(db: RdbBackendRef): GetFilFn =
-  if db.rdb.noFq:
-    result =
-      proc(qid: QueueID): Result[FilterRef,AristoError] =
-        err(FilQuSchedDisabled)
-  else:
-    result =
-      proc(qid: QueueID): Result[FilterRef,AristoError] =
-
-        # Fetch serialised data record.
-        let data = db.rdb.getByPfx(FilPfx, qid.uint64).valueOr:
-          when extraTraceMessages:
-            trace logTxt "getFilFn: failed", qid, error=error[0], info=error[1]
-          return err(error[0])
-
-        # Decode data record
-        if 0 < data.len:
-          return data.deblobify FilterRef
-
-        err(GetFilNotFound)
-
 proc getIdgFn(db: RdbBackendRef): GetIdgFn =
   result =
     proc(): Result[seq[VertexID],AristoError]=
@@ -161,28 +140,6 @@ proc getLstFn(db: RdbBackendRef): GetLstFn =
 
       # Decode data record
       data.deblobify SavedState
-
-proc getFqsFn(db: RdbBackendRef): GetFqsFn =
-  if db.rdb.noFq:
-    result =
-      proc(): Result[seq[(QueueID,QueueID)],AristoError] =
-        err(FilQuSchedDisabled)
-  else:
-    result =
-      proc(): Result[seq[(QueueID,QueueID)],AristoError]=
-
-        # Fetch serialised data record.
-        let data = db.rdb.getByPfx(AdmPfx, AdmTabIdFqs.uint64).valueOr:
-          when extraTraceMessages:
-            trace logTxt "getFqsFn: failed", error=error[0], info=error[1]
-          return err(error[0])
-
-        if data.len == 0:
-          let w = EmptyQidPairSeq   # Must be `let`
-          return ok w               # Compiler error with `ok(EmptyQidPairSeq)`
-
-        # Decode data record
-        data.deblobify seq[(QueueID,QueueID)]
 
 # -------------
 
@@ -243,45 +200,6 @@ proc putKeyFn(db: RdbBackendRef): PutKeyFn =
             code: error[1],
             info: error[2])
 
-proc putFilFn(db: RdbBackendRef): PutFilFn =
-  if db.rdb.noFq:
-    result =
-      proc(hdl: PutHdlRef; vf: openArray[(QueueID,FilterRef)]) =
-        let hdl = hdl.getSession db
-        if hdl.error.isNil:
-          hdl.error = TypedPutHdlErrRef(
-            pfx:  FilPfx,
-            qid:  (if 0 < vf.len: vf[0][0] else: QueueID(0)),
-            code: FilQuSchedDisabled)
-  else:
-    result =
-      proc(hdl: PutHdlRef; vrps: openArray[(QueueID,FilterRef)]) =
-        let hdl = hdl.getSession db
-        if hdl.error.isNil:
-
-          # Collect batch session arguments
-          var batch: seq[(uint64,Blob)]
-          for (qid,filter) in vrps:
-            if filter.isValid:
-              let rc = filter.blobify()
-              if rc.isErr:
-                hdl.error = TypedPutHdlErrRef(
-                  pfx:  FilPfx,
-                  qid:  qid,
-                  code: rc.error)
-                return
-              batch.add (qid.uint64, rc.value)
-            else:
-              batch.add (qid.uint64, EmptyBlob)
-
-          # Stash batch session data
-          db.rdb.putByPfx(FilPfx, batch).isOkOr:
-            hdl.error = TypedPutHdlErrRef(
-              pfx:  FilPfx,
-              qid:  QueueID(error[0]),
-              code: error[1],
-              info: error[2])
-
 proc putIdgFn(db: RdbBackendRef): PutIdgFn =
   result =
     proc(hdl: PutHdlRef; vs: openArray[VertexID])  =
@@ -306,31 +224,6 @@ proc putLstFn(db: RdbBackendRef): PutLstFn =
             aid:  AdmTabIdLst,
             code: error[1],
             info: error[2])
-
-proc putFqsFn(db: RdbBackendRef): PutFqsFn =
-  if db.rdb.noFq:
-    result =
-      proc(hdl: PutHdlRef; fs: openArray[(QueueID,QueueID)])  =
-        let hdl = hdl.getSession db
-        if hdl.error.isNil:
-          hdl.error = TypedPutHdlErrRef(
-            pfx:  AdmPfx,
-            code: FilQuSchedDisabled)
-  else:
-    result =
-      proc(hdl: PutHdlRef; vs: openArray[(QueueID,QueueID)])  =
-        let hdl = hdl.getSession db
-        if hdl.error.isNil:
-
-          # Stash batch session data
-          let fqs = if 0 < vs.len: vs.blobify else: EmptyBlob
-          db.rdb.putByPfx(AdmPfx, @[(AdmTabIdFqs.uint64, fqs)]).isOkOr:
-            hdl.error = TypedPutHdlErrRef(
-              pfx:  AdmPfx,
-              aid:  AdmTabIdFqs,
-              code: error[1],
-              info: error[2])
-
 
 proc putEndFn(db: RdbBackendRef): PutEndFn =
   result =
@@ -374,10 +267,7 @@ proc closeFn(db: RdbBackendRef): CloseFn =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc rocksDbBackend*(
-    path: string;
-    qidLayout: QidLayoutRef;
-      ): Result[BackendRef,AristoError] =
+proc rocksDbAristoBackend*(path: string): Result[BackendRef,AristoError] =
   let db = RdbBackendRef(
     beKind: BackendRocksDB)
 
@@ -390,38 +280,20 @@ proc rocksDbBackend*(
            error=rc.error[0], info=rc.error[1]
         return err(rc.error[0])
 
-  db.rdb.noFq = qidLayout.isNil
-
   db.getVtxFn = getVtxFn db
   db.getKeyFn = getKeyFn db
-  db.getFilFn = getFilFn db
   db.getIdgFn = getIdgFn db
   db.getLstFn = getLstFn db
-  db.getFqsFn = getFqsFn db
 
   db.putBegFn = putBegFn db
   db.putVtxFn = putVtxFn db
   db.putKeyFn = putKeyFn db
-  db.putFilFn = putFilFn db
   db.putIdgFn = putIdgFn db
   db.putLstFn = putLstFn db
-  db.putFqsFn = putFqsFn db
   db.putEndFn = putEndFn db
 
   db.guestDbFn = guestDbFn db
-
   db.closeFn = closeFn db
-
-  # Set up filter management table
-  if not db.rdb.noFq:
-    db.journal = QidSchedRef(ctx: qidLayout)
-    db.journal.state = block:
-      let rc = db.getFqsFn()
-      if rc.isErr:
-        db.closeFn(flush = false)
-        return err(rc.error)
-      rc.value
-
   ok db
 
 proc dup*(db: RdbBackendRef): RdbBackendRef =
@@ -441,20 +313,8 @@ iterator walk*(
   ##
   ## Non-decodable entries are stepped over while the counter `n` of the
   ## yield record is still incremented.
-  if be.rdb.noFq:
-    for w in be.rdb.walk:
-      case w.pfx:
-      of AdmPfx:
-        if w.xid == AdmTabIdFqs.uint64:
-          continue
-      of FilPfx:
-        break # last sub-table
-      else:
-        discard
-      yield w
-  else:
-    for w in be.rdb.walk:
-      yield w
+  for w in be.rdb.walk:
+    yield w
 
 iterator walkVtx*(
     be: RdbBackendRef;
@@ -473,16 +333,6 @@ iterator walkKey*(
     let lid = HashKey.fromBytes(data).valueOr:
       continue
     yield (VertexID(xid), lid)
-
-iterator walkFil*(
-    be: RdbBackendRef;
-      ): tuple[qid: QueueID, filter: FilterRef] =
-  ## Variant of `walk()` iteration over the filter sub-table.
-  if not be.rdb.noFq:
-    for (xid, data) in be.rdb.walk FilPfx:
-      let rc = data.deblobify FilterRef
-      if rc.isOk:
-        yield (QueueID(xid), rc.value)
 
 # ------------------------------------------------------------------------------
 # End

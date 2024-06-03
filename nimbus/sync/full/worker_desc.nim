@@ -13,7 +13,6 @@
 import
   eth/p2p,
   chronos,
-  ../../db/aristo/aristo_desc,
   ../sync_desc,
   ../misc/[best_pivot, block_queue, ticker]
 
@@ -41,7 +40,6 @@ type
 
     enableTicker*: bool             ## Advisary, extra level of gossip
     ticker*: TickerRef              ## Logger ticker
-    journal*: QidSchedRef           ## Journal access for logging (if any)
 
   FullBuddyRef* = BuddyRef[FullCtxData,FullBuddyData]
     ## Extended worker peer descriptor

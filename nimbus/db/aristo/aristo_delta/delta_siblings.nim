@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -10,8 +10,9 @@
 
 import
   results,
+  eth/common,
   ../aristo_desc,
-  "."/[filter_merge, filter_reverse]
+  "."/[delta_merge, delta_reverse]
 
 type
   UpdateState = enum
@@ -21,10 +22,10 @@ type
 
   UpdateSiblingsRef* = ref object
     ## Update transactional context
-    state: UpdateState                       ## No `rollback()` after `commit()`
-    db: AristoDbRef                          ## Main database access
-    roFilters: seq[(AristoDbRef,FilterRef)]  ## Rollback data
-    rev: FilterRef                           ## Reverse filter set up
+    state: UpdateState
+    db: AristoDbRef                             ## Main database access
+    balancers: seq[(AristoDbRef,LayerDeltaRef)] ## Rollback data
+    rev: LayerDeltaRef                          ## Reverse filter set up
 
 # ------------------------------------------------------------------------------
 # Public contructor, commit, rollback
@@ -34,8 +35,8 @@ proc rollback*(ctx: UpdateSiblingsRef) =
   ## Rollback any changes made by the `update()` function. Subsequent
   ## `rollback()` or `commit()` calls will be without effect.
   if ctx.state == Updated:
-    for (d,f) in ctx.roFilters:
-      d.roFilter = f
+    for (d,f) in ctx.balancers:
+      d.balancer = f
   ctx.state = Finished
 
 
@@ -44,7 +45,7 @@ proc commit*(ctx: UpdateSiblingsRef): Result[void,AristoError] =
   if ctx.state != Updated:
     ctx.rollback()
     return err(FilSiblingsCommitUnfinshed)
-  ctx.db.roFilter = FilterRef(nil)
+  ctx.db.balancer = LayerDeltaRef(nil)
   ctx.state = Finished
   ok()
 
@@ -64,6 +65,8 @@ proc init*(
   ## database.
   if  not db.isCentre:
     return err(FilBackendRoMode)
+  if db.nForked == 0:
+    return ok T(db: db) # No need to do anything
 
   func fromVae(err: (VertexID,AristoError)): AristoError =
     err[1]
@@ -71,7 +74,7 @@ proc init*(
   # Filter rollback context
   ok T(
     db:  db,
-    rev: ? db.revFilter(db.roFilter).mapErr fromVae) # Reverse filter
+    rev: ? db.revFilter(db.balancer).mapErr fromVae) # Reverse filter
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -87,17 +90,19 @@ proc update*(ctx: UpdateSiblingsRef): Result[UpdateSiblingsRef,AristoError] =
   ##
   if ctx.state == Initial:
     ctx.state = Updated
-    let db = ctx.db
-    # Update distributed filters. Note that the physical backend database
-    # must not have been updated, yet. So the new root key for the backend
-    # will be `db.roFilter.trg`.
-    for w in db.forked:
-      let rc = db.merge(w.roFilter, ctx.rev, db.roFilter.trg)
-      if rc.isErr:
-        ctx.rollback()
-        return err(rc.error[1])
-      ctx.roFilters.add (w, w.roFilter)
-      w.roFilter = rc.value
+    if not ctx.rev.isNil:
+      let db = ctx.db
+      # Update distributed filters. Note that the physical backend database
+      # must not have been updated, yet. So the new root key for the backend
+      # will be `db.balancer.kMap[$1]`.
+      let trg = db.balancer.kMap.getOrVoid(VertexID 1)
+      for w in db.forked:
+        let rc = db.deltaMerge(w.balancer, ctx.rev, trg)
+        if rc.isErr:
+          ctx.rollback()
+          return err(rc.error[1])
+        ctx.balancers.add (w, w.balancer)
+        w.balancer = rc.value
   ok(ctx)
 
 proc update*(
@@ -105,15 +110,6 @@ proc update*(
       ): Result[UpdateSiblingsRef,AristoError] =
   ## Variant of `update()` for joining with `init()`
   (? rc).update()
-
-# ------------------------------------------------------------------------------
-# Public getter
-# ------------------------------------------------------------------------------
-
-func rev*(ctx: UpdateSiblingsRef): FilterRef =
-  ## Getter, returns the reverse of the `init()` argument `db` current
-  ## read-only filter.
-  ctx.rev
 
 # ------------------------------------------------------------------------------
 # End

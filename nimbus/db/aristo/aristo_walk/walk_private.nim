@@ -23,14 +23,14 @@ iterator walkVtxBeImpl*[T](
       ): tuple[vid: VertexID, vtx: VertexRef] =
   ## Generic iterator
   when T is VoidBackendRef:
-    let filter = if db.roFilter.isNil: FilterRef() else: db.roFilter
+    let filter = if db.balancer.isNil: LayerDeltaRef() else: db.balancer
 
   else:
     mixin walkVtx
 
-    let filter = FilterRef()
-    if not db.roFilter.isNil:
-      filter.sTab = db.roFilter.sTab # copy table
+    let filter = LayerDeltaRef()
+    if not db.balancer.isNil:
+      filter.sTab = db.balancer.sTab # copy table
 
     for (vid,vtx) in db.backend.T.walkVtx:
       if filter.sTab.hasKey vid:
@@ -52,14 +52,14 @@ iterator walkKeyBeImpl*[T](
       ): tuple[vid: VertexID, key: HashKey] =
   ## Generic iterator
   when T is VoidBackendRef:
-    let filter = if db.roFilter.isNil: FilterRef() else: db.roFilter
+    let filter = if db.balancer.isNil: LayerDeltaRef() else: db.balancer
 
   else:
     mixin walkKey
 
-    let filter = FilterRef()
-    if not db.roFilter.isNil:
-      filter.kMap = db.roFilter.kMap # copy table
+    let filter = LayerDeltaRef()
+    if not db.balancer.isNil:
+      filter.kMap = db.balancer.kMap # copy table
 
     for (vid,key) in db.backend.T.walkKey:
       if filter.kMap.hasKey vid:
@@ -74,44 +74,6 @@ iterator walkKeyBeImpl*[T](
     let key = filter.kMap.getOrVoid vid
     if key.isValid:
       yield (vid,key)
-
-
-iterator walkFilBeImpl*[T](
-    be: T;                             # Backend descriptor
-      ): tuple[qid: QueueID, filter: FilterRef] =
-  ## Generic filter iterator
-  when T isnot VoidBackendRef:
-    mixin walkFil
-
-    for (qid,filter) in be.walkFil:
-      yield (qid,filter)
-
-
-iterator walkFifoBeImpl*[T](
-    be: T;                             # Backend descriptor
-      ): tuple[qid: QueueID, fid: FilterRef] =
-  ## Generic filter iterator walking slots in fifo order. This iterator does
-  ## not depend on the backend type but may be type restricted nevertheless.
-  when T isnot VoidBackendRef:
-    proc kvp(chn: int, qid: QueueID): (QueueID,FilterRef) =
-      let cid = QueueID((chn.uint64 shl 62) or qid.uint64)
-      (cid, be.getFilFn(cid).get(otherwise = FilterRef(nil)))
-
-    if not be.isNil:
-      let scd = be.journal
-      if not scd.isNil:
-        for i in 0 ..< scd.state.len:
-          let (left, right) = scd.state[i]
-          if left == 0:
-            discard
-          elif left <= right:
-            for j in right.countDown left:
-              yield kvp(i, j)
-          else:
-            for j in right.countDown QueueID(1):
-              yield kvp(i, j)
-            for j in scd.ctx.q[i].wrap.countDown left:
-              yield kvp(i, j)
 
 
 iterator walkPairsImpl*[T](

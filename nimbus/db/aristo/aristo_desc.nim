@@ -63,7 +63,7 @@ type
     ## Three tier database object supporting distributed instances.
     top*: LayerRef                    ## Database working layer, mutable
     stack*: seq[LayerRef]             ## Stashed immutable parent layers
-    roFilter*: FilterRef              ## Apply read filter (locks writing)
+    balancer*: LayerDeltaRef          ## Baland out concurrent backend access
     backend*: BackendRef              ## Backend database (may well be `nil`)
 
     txRef*: AristoTxRef               ## Latest active transaction
@@ -109,8 +109,8 @@ func isValid*(pld: PayloadRef): bool =
 func isValid*(pid: PathID): bool =
   pid != VOID_PATH_ID
 
-func isValid*(filter: FilterRef): bool =
-  filter != FilterRef(nil)
+func isValid*(filter: LayerDeltaRef): bool =
+  filter != LayerDeltaRef(nil)
 
 func isValid*(root: Hash256): bool =
   root != EMPTY_ROOT_HASH
@@ -124,9 +124,6 @@ func isValid*(vid: VertexID): bool =
 
 func isValid*(sqv: HashSet[VertexID]): bool =
   sqv != EmptyVidSet
-
-func isValid*(qid: QueueID): bool =
-  qid != QueueID(0)
 
 # ------------------------------------------------------------------------------
 # Public functions, miscellaneous
@@ -201,16 +198,16 @@ proc fork*(
     backend: db.backend)
 
   if not noFilter:
-    clone.roFilter = db.roFilter # Ref is ok here (filters are immutable)
+    clone.balancer = db.balancer # Ref is ok here (filters are immutable)
 
   if not noTopLayer:
     clone.top = LayerRef.init()
-    if not db.roFilter.isNil:
-      clone.top.final.vGen = db.roFilter.vGen
+    if not db.balancer.isNil:
+      clone.top.delta.vGen = db.balancer.vGen
     else:
       let rc = clone.backend.getIdgFn()
       if rc.isOk:
-        clone.top.final.vGen = rc.value
+        clone.top.delta.vGen = rc.value
       elif rc.error != GetIdgNotFound:
         return err(rc.error)
 
@@ -259,6 +256,10 @@ proc forgetOthers*(db: AristoDbRef): Result[void,AristoError] =
 
     db.dudes = DudesRef(nil)
   ok()
+
+# ------------------------------------------------------------------------------
+# Public helpers
+# ------------------------------------------------------------------------------
 
 iterator rstack*(db: AristoDbRef): LayerRef =
   # Stack in reverse order

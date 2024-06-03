@@ -69,8 +69,8 @@ proc txFork*(
     let rc = db.getIdgBE()
     if rc.isOk:
       LayerRef(
-        delta: LayerDeltaRef(),
-        final: LayerFinalRef(vGen: rc.value))
+        delta: LayerDeltaRef(vGen: rc.value),
+        final: LayerFinalRef())
     elif rc.error == GetIdgNotFound:
       LayerRef.init()
     else:

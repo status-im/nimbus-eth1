@@ -134,11 +134,11 @@ proc baseMethods(db: AristoCoreDbRef): CoreDbBaseFns =
 
   proc persistent(bn: Option[BlockNumber]): CoreDbRc[void] =
     const info = "persistentFn()"
-    let fid =
-      if bn.isNone: none(FilterID)
-      else: some(bn.unsafeGet.truncate(uint64).FilterID)
+    let sid =
+      if bn.isNone: 0u64
+      else: bn.unsafeGet.truncate(uint64)
     ? kBase.persistent info
-    ? aBase.persistent(fid, info)
+    ? aBase.persistent(sid, info)
     ok()
 
   CoreDbBaseFns(
@@ -199,11 +199,6 @@ proc create*(dbType: CoreDbType; kdb: KvtDbRef; adb: AristoDbRef): CoreDbRef =
   db.methods = db.baseMethods()
   db.bless()
 
-proc newAristoMemoryCoreDbRef*(qlr: QidLayoutRef): CoreDbRef =
-  AristoDbMemory.create(
-    KvtDbRef.init(use_kvt.MemBackendRef),
-    AristoDbRef.init(use_ari.MemBackendRef, qlr))
-
 proc newAristoMemoryCoreDbRef*(): CoreDbRef =
   AristoDbMemory.create(
     KvtDbRef.init(use_kvt.MemBackendRef),
@@ -248,7 +243,7 @@ proc toAristoSavedStateBlockNumber*(
   if not mBe.isNil and mBe.parent.isAristo:
     let rc = mBe.parent.AristoCoreDbRef.adbBase.getSavedState()
     if rc.isOk:
-      return (rc.value.src, rc.value.serial.toBlockNumber)
+      return (rc.value.src.to(Hash256), rc.value.serial.toBlockNumber)
   (EMPTY_ROOT_HASH, 0.toBlockNumber)
 
 # ------------------------------------------------------------------------------
