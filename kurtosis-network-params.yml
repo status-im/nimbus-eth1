@@ -10,7 +10,7 @@
 
 participants:
   - el_type: nimbus
-    el_image: advaitanimbus/nimbus-builder-ci:master
+    el_image: <docker-image-placeholder>
     el_extra_params: ["--log-level=DEBUG"]
     cl_type: nimbus
     cl_image: statusim/nimbus-eth2:multiarch-latest

@@ -31,12 +31,19 @@ else
     sudo apt-get install -y jq
 fi
 
+# ------------------------------------------------
+#            Build the Docker Image
+# ------------------------------------------------
 echo "Starting the Docker Build!"
 # Build the docker Image
 sudo docker build . -t localtestnet
 
 # The new el_image value
 new_el_image="localtestnet"
+
+# ------------------------------------------------
+#             Run the Kurtosis Tests
+# ------------------------------------------------
 
 # Use sed to replace the el_image value in the file
 cat kurtosis-network-params.yml | envsubst > assertoor.yaml
@@ -46,8 +53,6 @@ sudo kurtosis run \
   --enclave nimbus-localtestnet \
   github.com/kurtosis-tech/ethereum-package \
   --args-file assertoor.yaml
-
-assertoor_url=$(echo "$enclave_dump" | grep assertoor | grep http | sed 's/.*\(http:\/\/[0-9.:]\+\).*/\1/')
 
 enclave_dump=$(kurtosis enclave inspect nimbus-localtestnet)
 assertoor_url=$(echo "$enclave_dump" | grep assertoor | grep http | sed 's/.*\(http:\/\/[0-9.:]\+\).*/\1/')
