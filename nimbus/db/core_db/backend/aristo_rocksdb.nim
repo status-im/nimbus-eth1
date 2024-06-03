@@ -20,7 +20,8 @@ import
   ../../kvt/kvt_persistent as use_kvt,
   ../base,
   ./aristo_db,
-  ./aristo_db/[common_desc, handlers_aristo]
+  ./aristo_db/[common_desc, handlers_aristo],
+  ../../opts
 
 include
   ./aristo_db/aristo_replicate
@@ -37,10 +38,10 @@ const
 # Public constructor
 # ------------------------------------------------------------------------------
 
-proc newAristoRocksDbCoreDbRef*(path: string): CoreDbRef =
+proc newAristoRocksDbCoreDbRef*(path: string, opts: DbOptions): CoreDbRef =
   let
     qlr = QidLayoutRef(nil)
-    adb = AristoDbRef.init(use_ari.RdbBackendRef, path, qlr).expect aristoFail
+    adb = AristoDbRef.init(use_ari.RdbBackendRef, path, qlr, opts).expect aristoFail
     gdb = adb.guestDb().valueOr: GuestDbRef(nil)
     kdb = KvtDbRef.init(use_kvt.RdbBackendRef, path, gdb).expect kvtFail
   AristoDbRocks.create(kdb, adb)

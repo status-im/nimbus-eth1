@@ -26,7 +26,8 @@ import
   ],
   eth/[common, net/utils, net/nat, p2p/bootnodes, p2p/enode, p2p/discoveryv5/enr],
   "."/[constants, vm_compile_info, version],
-  common/chain_config
+  common/chain_config,
+  db/opts
 
 export net
 
@@ -379,6 +380,30 @@ type
       defaultValue: @[]
       defaultValueDesc: $ProtocolFlag.Eth
       name: "protocols" .}: seq[string]
+
+    rocksdbMaxOpenFiles {.
+      hidden
+      defaultValue: defaultMaxOpenFiles
+      defaultValueDesc: $defaultMaxOpenFiles
+      name: "debug-rocksdb-max-open-files".}: int
+
+    rocksdbWriteBufferSize {.
+      hidden
+      defaultValue: defaultWriteBufferSize
+      defaultValueDesc: $defaultWriteBufferSize
+      name: "debug-rocksdb-write-buffer-size".}: int
+
+    rocksdbRowCacheSize {.
+      hidden
+      defaultValue: defaultRowCacheSize
+      defaultValueDesc: $defaultRowCacheSize
+      name: "debug-rocksdb-row-cache-size".}: int
+
+    rocksdbBlockCacheSize {.
+      hidden
+      defaultValue: defaultBlockCacheSize
+      defaultValueDesc: $defaultBlockCacheSize
+      name: "debug-rocksdb-block-cache-size".}: int
 
     case cmd* {.
       command
@@ -750,6 +775,14 @@ func httpServerEnabled*(conf: NimbusConf): bool =
 
 func era1Dir*(conf: NimbusConf): OutDir =
   conf.era1DirOpt.get(OutDir(conf.dataDir.string & "/era1"))
+
+func dbOptions*(conf: NimbusConf): DbOptions =
+  DbOptions.init(
+    maxOpenFiles = conf.rocksdbMaxOpenFiles,
+    writeBufferSize = conf.rocksdbWriteBufferSize,
+    rowCacheSize = conf.rocksdbRowCacheSize,
+    blockCacheSize = conf.rocksdbBlockCacheSize,
+  )
 
 # KLUDGE: The `load()` template does currently not work within any exception
 #         annotated environment.

@@ -18,7 +18,8 @@ import
   rocksdb,
   results,
   ../../aristo_desc,
-  ./rdb_desc
+  ./rdb_desc,
+  ../../../opts
 
 const
   extraTraceMessages = false
@@ -38,7 +39,7 @@ when extraTraceMessages:
 proc init*(
     rdb: var RdbInst;
     basePath: string;
-    openMax: int;
+    opts: DbOptions;
       ): Result[void,(AristoError,string)] =
   ## Constructor c ode inspired by `RocksStoreRef.init()` from
   ## kvstore_rocksdb.nim
@@ -53,13 +54,29 @@ proc init*(
     return err((RdbBeCantCreateDataDir, ""))
 
   let
-    cfs = @[initColFamilyDescriptor AristoFamily] &
-          RdbGuest.mapIt(initColFamilyDescriptor $it)
-    opts = defaultDbOptions()
-  opts.setMaxOpenFiles(openMax)
+    cfOpts = defaultColFamilyOptions()
+
+  if opts.writeBufferSize > 0:
+    cfOpts.setWriteBufferSize(opts.writeBufferSize)
+
+  let
+    cfs = @[initColFamilyDescriptor(AristoFamily, cfOpts)] &
+          RdbGuest.mapIt(initColFamilyDescriptor($it, cfOpts))
+    dbOpts = defaultDbOptions()
+
+  dbOpts.setMaxOpenFiles(opts.maxOpenFiles)
+  dbOpts.setMaxBytesForLevelBase(opts.writeBufferSize)
+
+  if opts.rowCacheSize > 0:
+    dbOpts.setRowCache(cacheCreateLRU(opts.rowCacheSize))
+
+  if opts.blockCacheSize > 0:
+    let tableOpts = defaultTableOptions()
+    tableOpts.setBlockCache(cacheCreateLRU(opts.rowCacheSize))
+    dbOpts.setBlockBasedTableFactory(tableOpts)
 
   # Reserve a family corner for `Aristo` on the database
-  let baseDb = openRocksDb(dataDir, opts, columnFamilies=cfs).valueOr:
+  let baseDb = openRocksDb(dataDir, dbOpts, columnFamilies=cfs).valueOr:
     let errSym = RdbBeDriverInitError
     when extraTraceMessages:
       trace logTxt "init failed", dataDir, openMax, error=errSym, info=error

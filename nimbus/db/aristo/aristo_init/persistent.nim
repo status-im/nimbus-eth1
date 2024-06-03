@@ -23,7 +23,8 @@ import
   rocksdb,
   ../aristo_desc,
   ./rocks_db/rdb_desc,
-  "."/[rocks_db, memory_only]
+  "."/[rocks_db, memory_only],
+  ../../opts
 
 export
   RdbBackendRef,
@@ -36,9 +37,10 @@ export
 proc newAristoRdbDbRef(
     basePath: string;
     qidLayout: QidLayoutRef;
+    opts: DbOptions
       ): Result[AristoDbRef, AristoError]=
   let
-    be = ? rocksDbBackend(basePath, qidLayout)
+    be = ? rocksDbBackend(basePath, qidLayout, opts)
     vGen = block:
       let rc = be.getIdgFn()
       if rc.isErr:
@@ -60,6 +62,7 @@ proc init*[W: RdbBackendRef](
     B: type W;
     basePath: string;
     qidLayout: QidLayoutRef;
+    opts: DbOptions
       ): Result[T, AristoError] =
   ## Generic constructor, `basePath` argument is ignored for memory backend
   ## databases (which also unconditionally succeed initialising.)
@@ -70,17 +73,18 @@ proc init*[W: RdbBackendRef](
   ## layouts might render the filter history data unmanageable.
   ##
   when B is RdbBackendRef:
-    basePath.newAristoRdbDbRef qidLayout
+    basePath.newAristoRdbDbRef qidLayout, opts
 
 proc init*[W: RdbBackendRef](
     T: type AristoDbRef;
     B: type W;
     basePath: string;
+    opts: DbOptions
       ): Result[T, AristoError] =
   ## Variant of `init()` using default schedule.
   ##
   when B is RdbBackendRef:
-    basePath.newAristoRdbDbRef DEFAULT_QID_QUEUES.to(QidLayoutRef)
+    basePath.newAristoRdbDbRef DEFAULT_QID_QUEUES.to(QidLayoutRef), opts
 
 proc getRocksDbFamily*(
     gdb: GuestDbRef;

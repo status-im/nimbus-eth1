@@ -17,6 +17,7 @@ import
   unittest2,
   stew/endians2,
   ../../nimbus/sync/protocol,
+  ../../nimbus/db/opts,
   ../../nimbus/db/aristo/[
     aristo_blobify,
     aristo_debug,
@@ -28,8 +29,7 @@ import
     aristo_layers,
     aristo_merge,
     aristo_persistent,
-    aristo_tx,
-    aristo_vid],
+    aristo_tx],
   ../replay/xcheck,
   ./test_helpers
 
@@ -279,7 +279,7 @@ proc testBackendConsistency*(
         filTab.clear
       rdb.finish(flush=true)
       if 0 < rdbPath.len:
-        let rc = AristoDbRef.init(RdbBackendRef, rdbPath)
+        let rc = AristoDbRef.init(RdbBackendRef, rdbPath, DbOptions.init())
         xCheckRc rc.error == 0
         rdb = rc.value
       else:
