@@ -390,7 +390,7 @@ proc ppFRpp(
   "<" & xStr[1..^2] & ">"
 
 proc ppFilter(
-    fl: FilterRef;
+    fl: LayerDeltaRef;
     db: AristoDbRef;
     indent: int;
       ): string =
@@ -721,7 +721,7 @@ proc pp*(
   db.layersCc.pp(db, xTabOk=xTabOk, kMapOk=kMapOk, other=other, indent=indent)
 
 proc pp*(
-    filter: FilterRef;
+    filter: LayerDeltaRef;
     db = AristoDbRef(nil);
     indent = 4;
       ): string =

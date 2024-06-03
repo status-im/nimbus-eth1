@@ -20,8 +20,8 @@ import
 
 proc revFilter*(
     db: AristoDbRef;                   # Database
-    filter: FilterRef;                 # Filter to revert
-      ): Result[FilterRef,(VertexID,AristoError)] =
+    filter: LayerDeltaRef;             # Filter to revert
+      ): Result[LayerDeltaRef,(VertexID,AristoError)] =
   ## Assemble reverse filter for the `filter` argument, i.e. changes to the
   ## backend that reverse the effect of applying the this read-only filter.
   ##
@@ -29,7 +29,7 @@ proc revFilter*(
   ## backend (excluding optionally installed read-only filter.)
   ##
   # Register MPT state roots for reverting back
-  let rev = FilterRef(src: filter.kMap.getOrVoid(VertexID 1))
+  let rev = LayerDeltaRef(src: filter.kMap.getOrVoid(VertexID 1))
 
   # Get vid generator state on backend
   block:

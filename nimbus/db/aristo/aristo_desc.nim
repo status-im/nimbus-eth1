@@ -63,7 +63,7 @@ type
     ## Three tier database object supporting distributed instances.
     top*: LayerRef                    ## Database working layer, mutable
     stack*: seq[LayerRef]             ## Stashed immutable parent layers
-    balancer*: FilterRef              ## Baland out concurrent backend access
+    balancer*: LayerDeltaRef          ## Baland out concurrent backend access
     backend*: BackendRef              ## Backend database (may well be `nil`)
 
     txRef*: AristoTxRef               ## Latest active transaction
@@ -109,8 +109,8 @@ func isValid*(pld: PayloadRef): bool =
 func isValid*(pid: PathID): bool =
   pid != VOID_PATH_ID
 
-func isValid*(filter: FilterRef): bool =
-  filter != FilterRef(nil)
+func isValid*(filter: LayerDeltaRef): bool =
+  filter != LayerDeltaRef(nil)
 
 func isValid*(root: Hash256): bool =
   root != EMPTY_ROOT_HASH

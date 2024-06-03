@@ -8,8 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-## Aristo DB -- Filter and journal management
-## ==========================================
+## Aristo DB -- Delta filter management
+## ====================================
 ##
 
 import
@@ -28,7 +28,7 @@ proc deltaFwd*(
     db: AristoDbRef;                   # Database
     layer: LayerRef;                   # Layer to derive filter from
     chunkedMpt = false;                # Relax for snap/proof scenario
-     ): Result[FilterRef,(VertexID,AristoError)] =
+     ): Result[LayerDeltaRef,(VertexID,AristoError)] =
   ## Assemble forward delta, i.e. changes to the backend equivalent to applying
   ## the current top layer.
   ##
@@ -48,11 +48,11 @@ proc deltaFwd*(
     if rc.isOK:
       (rc.value.be, rc.value.fg)
     elif rc.error == FilPrettyPointlessLayer:
-      return ok FilterRef(nil)
+      return ok LayerDeltaRef(nil)
     else:
       return err((VertexID(1), rc.error))
 
-  ok FilterRef(
+  ok LayerDeltaRef(
     src:  srcRoot,
     sTab: layer.delta.sTab,
     kMap: layer.delta.kMap,
@@ -64,7 +64,7 @@ proc deltaFwd*(
 
 proc deltaMerge*(
     db: AristoDbRef;                   # Database
-    filter: FilterRef;                 # Filter to apply to database
+    filter: LayerDeltaRef;                 # Filter to apply to database
       ): Result[void,(VertexID,AristoError)] =
   ## Merge the argument `filter` into the read-only filter layer. Note that
   ## this function has no control of the filter source. Having merged the
@@ -86,7 +86,7 @@ proc deltaMerge*(
     # used with the `snap` sync protocol boundaty proof. In that case, there
     # can be no history chain and the filter is just another cache.
     if VertexID(1) notin db.top.final.pPrf:
-      db.balancer = FilterRef(nil)
+      db.balancer = LayerDeltaRef(nil)
 
   ok()
 

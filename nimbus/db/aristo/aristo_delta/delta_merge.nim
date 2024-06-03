@@ -20,10 +20,10 @@ import
 
 proc merge*(
     db: AristoDbRef;
-    upper: FilterRef;                          # Src filter, `nil` is ok
-    lower: FilterRef;                          # Trg filter, `nil` is ok
+    upper: LayerDeltaRef;                      # Src filter, `nil` is ok
+    lower: LayerDeltaRef;                      # Trg filter, `nil` is ok
     beStateRoot: HashKey;                      # Merkle hash key
-      ): Result[FilterRef,(VertexID,AristoError)] =
+      ): Result[LayerDeltaRef,(VertexID,AristoError)] =
   ## Merge argument `upper` into the `lower` filter instance.
   ##
   ## Note that the namimg `upper` and `lower` indicate that the filters are
@@ -46,7 +46,7 @@ proc merge*(
   if lower.isNil:
     if upper.isNil:
       # Even more degenerate case when both filters are void
-      return ok FilterRef(nil)
+      return ok LayerDeltaRef(nil)
     if upper.src != beStateRoot:
       return err((VertexID(1),FilStateRootMismatch))
     return ok(upper)
@@ -65,7 +65,7 @@ proc merge*(
     return err((VertexID(0), FilStateRootMismatch))
 
   # There is no need to deep copy table vertices as they will not be modified.
-  let newFilter = FilterRef(
+  let newFilter = LayerDeltaRef(
     src:  lower.src,
     sTab: lower.sTab,
     kMap: lower.kMap,
@@ -104,9 +104,9 @@ proc merge*(
 
 
 proc merge*(
-    upper: FilterRef;                          # filter, not `nil`
-    lower: FilterRef;                          # filter, not `nil`
-      ): Result[FilterRef,(VertexID,AristoError)] =
+    upper: LayerDeltaRef;                      # filter, not `nil`
+    lower: LayerDeltaRef;                      # filter, not `nil`
+      ): Result[LayerDeltaRef,(VertexID,AristoError)] =
   ## Variant of `merge()` without optimising filters relative to the backend.
   ## Also, filter arguments `upper` and `lower` are expected not`nil`.
   ## Otherwise an error is returned.
@@ -128,7 +128,7 @@ proc merge*(
     return err((VertexID(0), FilTrgSrcMismatch))
 
   # There is no need to deep copy table vertices as they will not be modified.
-  let newFilter = FilterRef(
+  let newFilter = LayerDeltaRef(
     src:  lower.src,
     sTab: lower.sTab,
     kMap: lower.kMap,

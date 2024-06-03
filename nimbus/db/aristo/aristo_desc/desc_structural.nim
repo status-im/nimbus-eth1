@@ -78,13 +78,6 @@ type
     trg*: HashKey                    ## Last state hash
     serial*: uint64                  ## Generic identifier froom application
 
-  FilterRef* = ref object
-    ## Delta layer
-    src*: HashKey                    ## Applicable to this state root
-    sTab*: Table[VertexID,VertexRef] ## Filter structural vertex table
-    kMap*: Table[VertexID,HashKey]   ## Filter Merkle hash key mapping
-    vGen*: seq[VertexID]             ## Filter unique vertex ID generator
-
   LayerDeltaRef* = ref object
     ## Delta layers are stacked implying a tables hierarchy. Table entries on
     ## a higher level take precedence over lower layer table entries. So an
@@ -108,6 +101,7 @@ type
     ## tables. So a corresponding zero value or missing entry produces an
     ## inconsistent state that must be resolved.
     ##
+    src*: HashKey                    ## Only needed when used as a filter
     sTab*: Table[VertexID,VertexRef] ## Structural vertex table
     kMap*: Table[VertexID,HashKey]   ## Merkle hash key mapping
     vGen*: seq[VertexID]             ## Recycling state for vertex IDs

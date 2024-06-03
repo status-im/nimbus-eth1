@@ -22,10 +22,10 @@ type
 
   UpdateSiblingsRef* = ref object
     ## Update transactional context
-    state: UpdateState                       ## No `rollback()` after `commit()`
-    db: AristoDbRef                          ## Main database access
-    balancers: seq[(AristoDbRef,FilterRef)]  ## Rollback data
-    rev: FilterRef                           ## Reverse filter set up
+    state: UpdateState
+    db: AristoDbRef                             ## Main database access
+    balancers: seq[(AristoDbRef,LayerDeltaRef)] ## Rollback data
+    rev: LayerDeltaRef                          ## Reverse filter set up
 
 # ------------------------------------------------------------------------------
 # Public contructor, commit, rollback
@@ -45,7 +45,7 @@ proc commit*(ctx: UpdateSiblingsRef): Result[void,AristoError] =
   if ctx.state != Updated:
     ctx.rollback()
     return err(FilSiblingsCommitUnfinshed)
-  ctx.db.balancer = FilterRef(nil)
+  ctx.db.balancer = LayerDeltaRef(nil)
   ctx.state = Finished
   ok()
 
@@ -110,15 +110,6 @@ proc update*(
       ): Result[UpdateSiblingsRef,AristoError] =
   ## Variant of `update()` for joining with `init()`
   (? rc).update()
-
-# ------------------------------------------------------------------------------
-# Public getter
-# ------------------------------------------------------------------------------
-
-#func rev*(ctx: UpdateSiblingsRef): FilterRef =
-#  ## Getter, returns the reverse of the `init()` argument `db` current
-#  ## read-only filter.
-#  ctx.rev
 
 # ------------------------------------------------------------------------------
 # End
