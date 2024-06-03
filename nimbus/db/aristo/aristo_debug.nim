@@ -433,8 +433,7 @@ proc ppFilter(
   result &= pfx & "fid=" & fl.fid.ppFid
   result &= pfx & "src=" & fl.src.to(HashKey).ppKey(db)
   result &= pfx & "trg=" & fl.trg.to(HashKey).ppKey(db)
-  result &= pfx & "vGen" & pfx1 & "[" &
-    fl.vGen.mapIt(it.ppVid).join(",") & "]"
+  result &= pfx & "vGen" & pfx1 & "[" & fl.vGen.ppVid & "]"
   result &= pfx & "sTab" & pfx1 & "{"
   for n,vid in fl.sTab.sortedKeys:
     let vtx = fl.sTab.getOrVoid vid
@@ -457,11 +456,10 @@ proc ppBe[T](be: T; db: AristoDbRef; limit: int; indent: int): string =
   var (dump,dataOk) = ("",false)
   dump &= pfx & "vGen"
   block:
-    let q = be.getIdgFn().get(otherwise = EmptyVidSeq)
-    dump &= "(" & $q.len & ")"
-    if 0 < q.len:
-      dataOk = true
-      dump &= pfx1 & q.ppVidList()
+    let q = be.getIdgFn().get(otherwise = VertexID(0))
+    dump &= "(1)"
+    dataOk = true
+    dump &= pfx1 & q.ppVid()
   block:
     dump &= pfx & "sTab"
     var (n, data) = (0, "")
@@ -530,9 +528,8 @@ proc ppLayer(
       result &= "<layer>".doPrefix(false)
     if vGenOk:
       let
-        tLen = layer.final.vGen.len
-        info = "vGen(" & $tLen & ")"
-      result &= info.doPrefix(0 < tLen) & layer.final.vGen.ppVidList
+        info = "vGen(1)"
+      result &= info.doPrefix(true) & layer.final.vGen.ppVid
     if sTabOk:
       let
         tLen = layer.delta.sTab.len

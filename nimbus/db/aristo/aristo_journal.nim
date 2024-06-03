@@ -58,7 +58,7 @@ proc journalFwdFilter*(
     src:  srcRoot,
     sTab: layer.delta.sTab,
     kMap: layer.delta.kMap,
-    vGen: layer.final.vGen.vidReorg, # Compact recycled IDs
+    vGen: layer.final.vGen,
     trg:  trgRoot)
 
 # ------------------------------------------------------------------------------

@@ -11,15 +11,12 @@
 {.push raises: [].}
 
 import
-  std/[algorithm, sequtils, sets, tables, typetraits],
+  std/[algorithm, sets, tables, typetraits],
   eth/[common, trie/nibbles],
   stew/interval_set,
   ../../aristo,
   ../aristo_walk/persistent,
   ".."/[aristo_desc, aristo_get, aristo_layers, aristo_serialise]
-
-const
-  Vid2 = @[VertexID(LEAST_FREE_VID)].toHashSet
 
 # ------------------------------------------------------------------------------
 # Private helper
@@ -76,17 +73,6 @@ proc toNodeBE(
       return ok node
     return err(vid)
 
-proc vidReorgAlways(vGen: seq[VertexID]): seq[VertexID] =
-  ## See `vidReorg()`, this one always sorts and optimises
-  ##
-  if 1 < vGen.len:
-    let lst = vGen.mapIt(uint64(it)).sorted(Descending).mapIt(VertexID(it))
-    for n in 0 .. lst.len-2:
-      if lst[n].uint64 != lst[n+1].uint64 + 1:
-        return lst[n+1 .. lst.len-1] & @[lst[n]]
-    return @[lst[^1]]
-  vGen
-
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -138,25 +124,6 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
       if expected != key:
         return err((vid,CheckBeKeyMismatch))
     discard vids.reduce Interval[VertexID,uint64].new(vid,vid)
-
-  # Compare calculated state against database state
-  block:
-    # Extract vertex ID generator state
-    let vGen = block:
-      let rc = db.getIdgBE()
-      if rc.isOk:
-        rc.value.vidReorgAlways.toHashSet
-      elif rc.error == GetIdgNotFound:
-        EmptyVidSeq.toHashSet
-      else:
-        return err((VertexID(0),rc.error))
-    let
-      vGenExpected = vids.to(HashSet[VertexID])
-      delta = vGenExpected -+- vGen # symmetric difference
-    if 0 < delta.len:
-      # Exclude fringe case when there is a single root vertex only
-      if vGenExpected != Vid2 or 0 < vGen.len:
-        return err((delta.toSeq.sorted[^1],CheckBeGarbledVGen))
 
   # Check top layer cache against backend
   if cache:
@@ -221,23 +188,6 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
       let expected = node.digestTo(HashKey)
       if expected != key:
         return err((vid,CheckBeCacheKeyMismatch))
-
-    # Check vGen
-    let
-      vGen = db.vGen.vidReorgAlways.toHashSet
-      vGenExpected = vids.to(HashSet[VertexID])
-      delta = vGenExpected -+- vGen # symmetric difference
-    if 0 < delta.len:
-      if vGen == Vid2 and vGenExpected.len == 0:
-        # Fringe case when the database is empty
-        discard
-      elif vGen.len == 0 and vGenExpected == Vid2:
-        # Fringe case when there is a single root vertex only
-        discard
-      else:
-        let delta = delta.toSeq
-        if delta.len != 1 or delta[0] != VertexID(1) or VertexID(1) in vGen:
-          return err((delta.sorted[^1],CheckBeCacheGarbledVGen))
 
   ok()
 

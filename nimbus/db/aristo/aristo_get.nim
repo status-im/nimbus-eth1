@@ -24,7 +24,7 @@ import
 
 proc getIdgUbe*(
     db: AristoDbRef;
-      ): Result[seq[VertexID],AristoError] =
+      ): Result[VertexID,AristoError] =
   ## Get the ID generator state from the unfiltered backened if available.
   let be = db.backend
   if not be.isNil:
@@ -83,7 +83,7 @@ proc getFilUbe*(
 
 proc getIdgBE*(
     db: AristoDbRef;
-      ): Result[seq[VertexID],AristoError] =
+      ): Result[VertexID,AristoError] =
   ## Get the ID generator state the `backened` layer if available.
   if not db.roFilter.isNil:
     return ok(db.roFilter.vGen)

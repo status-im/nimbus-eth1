@@ -200,12 +200,11 @@ proc blobifyTo*(filter: FilterRef; data: var Blob): Result[void,AristoError] =
   data &= filter.src.data
   data &= filter.trg.data
 
-  data &= filter.vGen.len.uint32.toBytesBE
+  data &= 1.uint32.toBytesBE # Legacy freelist support
   data &= default(array[4, byte]) # place holder
 
   # Store vertex ID generator state
-  for w in filter.vGen:
-    data &= w.uint64.toBytesBE
+  data &= filter.vGen.uint64.toBytesBE
 
   var
     n = 0
@@ -463,7 +462,7 @@ proc deblobify*(
     return err(DeblobWrongType)
   (addr lSst.src.data[0]).copyMem(unsafeAddr data[0], 32)
   (addr lSst.trg.data[0]).copyMem(unsafeAddr data[32], 32)
-  lSst.serial = uint64.fromBytesBE data[64..72]
+  lSst.serial = uint64.fromBytesBE data.toOpenArray(64, 72)
   ok()
 
 proc deblobify*(
@@ -476,7 +475,7 @@ proc deblobify*(
   ok move(lSst)
 
 
-proc deblobify*(data: Blob; filter: var FilterRef): Result[void,AristoError] =
+proc deblobify*(data: openArray[byte]; filter: var FilterRef): Result[void,AristoError] =
   ## De-serialise an Aristo DB filter object
   if data.len < 80: # minumum length 80 for an empty filter
     return err(DeblobFilterTooShort)
@@ -503,7 +502,8 @@ proc deblobify*(data: Blob; filter: var FilterRef): Result[void,AristoError] =
     return err(DeblobFilterGenTooShort)
   for n in 0 ..< nVids:
     let w = 80 + n * 8
-    f.vGen.add (uint64.fromBytesBE data.toOpenArray(int w, int w+7)).VertexID
+    # Legacy freelist support: use the last item (new version will store at most one)
+    f.vGen = (uint64.fromBytesBE data.toOpenArray(int w, int w+7)).VertexID
 
   var offs = nTrplStart
   for n in 0 ..< nTriplets:
@@ -552,7 +552,7 @@ proc deblobify*(data: Blob; T: type FilterRef): Result[T,AristoError] =
   ok filter
 
 proc deblobify*(
-    data: Blob;
+    data: openArray[byte];
     vFqs: var seq[(QueueID,QueueID)];
       ): Result[void,AristoError] =
   ## De-serialise the data record encoded with `blobify()` into a filter queue
@@ -573,7 +573,7 @@ proc deblobify*(
   ok()
 
 proc deblobify*(
-    data: Blob;
+    data: openArray[byte];
     T: type seq[(QueueID,QueueID)];
       ): Result[T,AristoError] =
   ## Variant of `deblobify()` for deserialising the vertex ID generator state

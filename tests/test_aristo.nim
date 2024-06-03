@@ -79,10 +79,6 @@ proc miscRunner(
   let (lyo,qidSampleSize) = layout
 
   suite "Aristo: Miscellaneous tests":
-
-    test "VertexID recyling lists":
-      check noisy.testVidRecycleLists()
-
     test &"Low level cascaded fifos API (sample size: {qidSampleSize})":
       check noisy.testQidScheduler(layout = lyo, sampleSize = qidSampleSize)
 

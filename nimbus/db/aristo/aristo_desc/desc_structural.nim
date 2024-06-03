@@ -85,7 +85,7 @@ type
     trg*: Hash256                    ## Resulting state root (i.e. `kMap[1]`)
     sTab*: Table[VertexID,VertexRef] ## Filter structural vertex table
     kMap*: Table[VertexID,HashKey]   ## Filter Merkle hash key mapping
-    vGen*: seq[VertexID]             ## Filter unique vertex ID generator
+    vGen*: VertexID                  ## Filter unique vertex ID generator
 
   LayerDeltaRef* = ref object
     ## Delta layers are stacked implying a tables hierarchy. Table entries on
@@ -123,7 +123,7 @@ type
     ##
     pPrf*: HashSet[VertexID]         ## Locked vertices (proof nodes)
     fRpp*: Table[HashKey,VertexID]   ## Key lookup for `pPrf[]` (proof nodes)
-    vGen*: seq[VertexID]             ## Recycling state for vertex IDs
+    vGen*: VertexID                  ## The first free VertexID
     dirty*: HashSet[VertexID]        ## Start nodes to re-hashiy from
 
   LayerRef* = ref LayerObj

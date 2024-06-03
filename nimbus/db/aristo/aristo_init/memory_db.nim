@@ -46,7 +46,7 @@ type
     sTab: Table[VertexID,Blob]       ## Structural vertex table making up a trie
     kMap: Table[VertexID,HashKey]    ## Merkle hash key mapping
     rFil: Table[QueueID,Blob]        ## Backend journal filters
-    vGen: Option[seq[VertexID]]      ## ID generator state
+    vGen: Option[VertexID]           ## ID generator state
     lSst: Option[SavedState]         ## Last saved state
     vFqs: Option[seq[(QueueID,QueueID)]]
     noFq: bool                       ## No filter queues available
@@ -59,7 +59,7 @@ type
     sTab: Table[VertexID,Blob]
     kMap: Table[VertexID,HashKey]
     rFil: Table[QueueID,Blob]
-    vGen: Option[seq[VertexID]]
+    vGen: Option[VertexID]
     lSst: Option[SavedState]
     vFqs: Option[seq[(QueueID,QueueID)]]
 
@@ -128,7 +128,7 @@ proc getFilFn(db: MemBackendRef): GetFilFn =
 
 proc getIdgFn(db: MemBackendRef): GetIdgFn =
   result =
-    proc(): Result[seq[VertexID],AristoError]=
+    proc(): Result[VertexID,AristoError]=
       if db.mdb.vGen.isSome:
         return ok db.mdb.vGen.unsafeGet
       err(GetIdgNotFound)
@@ -216,10 +216,10 @@ proc putFilFn(db: MemBackendRef): PutFilFn =
 
 proc putIdgFn(db: MemBackendRef): PutIdgFn =
   result =
-    proc(hdl: PutHdlRef; vs: openArray[VertexID])  =
+    proc(hdl: PutHdlRef; vid: VertexID)  =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
-        hdl.vGen = some(vs.toSeq)
+        hdl.vGen = some(vid)
 
 proc putLstFn(db: MemBackendRef): PutLstFn =
   result =
@@ -282,11 +282,7 @@ proc putEndFn(db: MemBackendRef): PutEndFn =
           db.mdb.rFil.del qid
 
       if hdl.vGen.isSome:
-        let vGen = hdl.vGen.unsafeGet
-        if vGen.len == 0:
-          db.mdb.vGen = none(seq[VertexID])
-        else:
-          db.mdb.vGen = some(vGen)
+        db.mdb.vGen = hdl.vGen
 
       if hdl.lSst.isSome:
         db.mdb.lSst = hdl.lSst
@@ -406,7 +402,7 @@ iterator walk*(
   ## Non-decodable entries are stepped over while the counter `n` of the
   ## yield record is still incremented.
   if be.mdb.vGen.isSome:
-    yield(AdmPfx, AdmTabIdIdg.uint64, be.mdb.vGen.unsafeGet.blobify)
+    yield(AdmPfx, AdmTabIdIdg.uint64, [be.mdb.vGen.unsafeGet].blobify)
 
   if not be.mdb.noFq:
     if be.mdb.vFqs.isSome:

@@ -133,7 +133,7 @@ proc getFilFn(db: RdbBackendRef): GetFilFn =
 
 proc getIdgFn(db: RdbBackendRef): GetIdgFn =
   result =
-    proc(): Result[seq[VertexID],AristoError]=
+    proc(): Result[VertexID,AristoError]=
 
       # Fetch serialised data record.
       let data = db.rdb.getByPfx(AdmPfx, AdmTabIdIdg.uint64).valueOr:
@@ -143,17 +143,16 @@ proc getIdgFn(db: RdbBackendRef): GetIdgFn =
 
       # Decode data record
       if data.len == 0:
-        let w = EmptyVidSeq   # Must be `let`
-        return ok w           # Compiler error with `ok(EmptyVidSeq)`
+        return ok(VertexID(0))
 
       # Decode data record
-      # TODO vid reuse disabled, implementation too slow since list could have
-      #      millions of entries
-      data.deblobify(seq[VertexID]).map(proc (v: seq[VertexID]): seq[VertexID] =
-        if v.len > 1:
-          @[v[^1]]
+      # TODO Database uses a sequence here because earlier versions of the code
+      #      supported maintaining a list of freed vids
+      data.deblobify(seq[VertexID]).map(proc (v: seq[VertexID]): VertexID =
+        if v.len >= 1:
+          v[^1]
         else:
-          v
+          VertexID(0)
       )
 
 proc getLstFn(db: RdbBackendRef): GetLstFn =
@@ -291,10 +290,10 @@ proc putFilFn(db: RdbBackendRef): PutFilFn =
 
 proc putIdgFn(db: RdbBackendRef): PutIdgFn =
   result =
-    proc(hdl: PutHdlRef; vs: openArray[VertexID])  =
+    proc(hdl: PutHdlRef; vid: VertexID)  =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
-        let data = if 0 < vs.len: vs.blobify else: EmptyBlob
+        let data = if vid.isValid(): [vid].blobify else: EmptyBlob
         db.rdb.putByPfx(AdmPfx, @[(AdmTabIdIdg.uint64, data)]).isOkOr:
           hdl.error = TypedPutHdlErrRef(
             pfx:  AdmPfx,

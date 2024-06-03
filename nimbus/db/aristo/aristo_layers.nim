@@ -35,7 +35,7 @@ func dirty*(db: AristoDbRef): lent HashSet[VertexID] =
 func pPrf*(db: AristoDbRef): lent HashSet[VertexID] =
   db.top.final.pPrf
 
-func vGen*(db: AristoDbRef): lent seq[VertexID] =
+func vGen*(db: AristoDbRef): VertexID =
   db.top.final.vGen
 
 # ------------------------------------------------------------------------------

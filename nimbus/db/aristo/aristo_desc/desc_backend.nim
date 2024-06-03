@@ -35,7 +35,7 @@ type
         ## Generic backend database retrieval function for a filter record.
 
   GetIdgFn* =
-    proc(): Result[seq[VertexID],AristoError] {.gcsafe, raises: [].}
+    proc(): Result[VertexID,AristoError] {.gcsafe, raises: [].}
       ## Generic backend database retrieval function for a the ID generator
       ## `Aristo DB` state record.
 
@@ -79,7 +79,7 @@ type
         ## Generic backend database storage function for filter records.
 
   PutIdgFn* =
-    proc(hdl: PutHdlRef; vs: openArray[VertexID])
+    proc(hdl: PutHdlRef; vid: VertexID)
       {.gcsafe, raises: [].}
         ## Generic backend database ID generator state storage function. This
         ## function replaces the current generator state.

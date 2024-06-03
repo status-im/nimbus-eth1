@@ -50,8 +50,7 @@ func hash(filter: FilterRef): Hash =
     h = h !& filter.src.hash
     h = h !& filter.trg.hash
 
-    for w in filter.vGen.vidReorg:
-      h = h !& w.uint64.hash
+    h = h !& filter.vGen.uint64.hash
 
     for w in filter.sTab.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID):
       let data = filter.sTab.getOrVoid(w).blobify.get(otherwise = EmptyBlob)
