@@ -16,7 +16,7 @@
 import
   std/tables,
   results,
-  ".."/[aristo_desc, aristo_get, aristo_journal, aristo_layers, aristo_hashify]
+  ".."/[aristo_desc, aristo_get, aristo_delta, aristo_layers, aristo_hashify]
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -34,19 +34,19 @@ proc txStow*(
     return err(TxPendingTx)
   if 0 < db.stack.len:
     return err(TxStackGarbled)
-  if persistent and not db.journalUpdateOk():
+  if persistent and not db.deltaPersistentOk():
     return err(TxBackendNotWritable)
 
   # Update Merkle hashes (unless disabled)
   db.hashify().isOkOr:
     return err(error[1])
 
-  let fwd = db.journalFwdFilter(db.top, chunkedMpt).valueOr:
+  let fwd = db.deltaFwd(db.top, chunkedMpt).valueOr:
     return err(error[1])
 
   if fwd.isValid:
     # Move/merge `top` layer onto `roFilter`
-    db.journalMerge(fwd).isOkOr:
+    db.deltaMerge(fwd).isOkOr:
       return err(error[1])
 
     # Special treatment for `snap` proofs (aka `chunkedMpt`)
@@ -75,7 +75,7 @@ proc txStow*(
 
   if persistent:
     # Merge/move `roFilter` into persistent tables
-    ? db.journalUpdate nxtSid
+    ? db.deltaPersistent nxtSid
 
   # Special treatment for `snap` proofs (aka `chunkedMpt`)
   let final =

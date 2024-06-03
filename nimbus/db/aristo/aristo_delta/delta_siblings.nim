@@ -11,7 +11,7 @@
 import
   results,
   ../aristo_desc,
-  "."/[filter_merge, filter_reverse]
+  "."/[delta_merge, delta_reverse]
 
 type
   UpdateState = enum

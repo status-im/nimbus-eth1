@@ -18,14 +18,13 @@ import
   results,
   "."/[aristo_desc, aristo_get, aristo_vid],
   ./aristo_desc/desc_backend,
-  ./aristo_journal/[
-    filter_state_root, filter_merge, filter_reverse, filter_siblings]
+  ./aristo_delta/[delta_state_root, delta_merge, delta_siblings]
 
 # ------------------------------------------------------------------------------
 # Public functions, construct filters
 # ------------------------------------------------------------------------------
 
-proc journalFwdFilter*(
+proc deltaFwd*(
     db: AristoDbRef;                   # Database
     layer: LayerRef;                   # Layer to derive filter from
     chunkedMpt = false;                # Relax for snap/proof scenario
@@ -64,7 +63,7 @@ proc journalFwdFilter*(
 # Public functions, apply/install filters
 # ------------------------------------------------------------------------------
 
-proc journalMerge*(
+proc deltaMerge*(
     db: AristoDbRef;                   # Database
     filter: FilterRef;                 # Filter to apply to database
       ): Result[void,(VertexID,AristoError)] =
@@ -93,12 +92,12 @@ proc journalMerge*(
   ok()
 
 
-proc journalUpdateOk*(db: AristoDbRef): bool =
+proc deltaPersistentOk*(db: AristoDbRef): bool =
   ## Check whether the read-only filter can be merged into the backend
   not db.backend.isNil and db.isCentre
 
 
-proc journalUpdate*(
+proc deltaPersistent*(
     db: AristoDbRef;                   # Database
     nxtFid = 0u64;                     # Next filter ID (if any)
     reCentreOk = false;
