@@ -13,6 +13,7 @@ import
   ../nimbus/[vm_state, vm_types],
   ../nimbus/core/executor,
   ../nimbus/common/common,
+  ../nimbus/db/opts,
   ../nimbus/db/core_db/persistent,
   configuration # must be late (compilation annoyance)
 
@@ -52,7 +53,8 @@ proc validateBlock(com: CommonRef, blockNumber: BlockNumber): BlockNumber =
 proc main() {.used.} =
   let
     conf = getConfiguration()
-    com = CommonRef.new(newCoreDbRef(DefaultDbPersistent, conf.dataDir))
+    com = CommonRef.new(newCoreDbRef(
+      DefaultDbPersistent, conf.dataDir, DbOptions.init()))
 
   # move head to block number ...
   if conf.head == 0.u256:

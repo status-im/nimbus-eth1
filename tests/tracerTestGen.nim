@@ -11,6 +11,7 @@
 import
   json,
   ../nimbus/common/common, # must be early (compilation annoyance)
+  ../nimbus/db/opts,
   ../nimbus/db/core_db/persistent,
   ../nimbus/[config, tracer, vm_types]
 
@@ -57,7 +58,8 @@ proc main() {.used.} =
   # nimbus --rpc-api: eth, debug --prune: archive
 
   var conf = makeConfig()
-  let db = newCoreDbRef(DefaultDbPersistent, string conf.dataDir)
+  let db = newCoreDbRef(
+    DefaultDbPersistent, string conf.dataDir, DbOptions.init())
   let com = CommonRef.new(db)
 
   com.dumpTest(97)
