@@ -18,7 +18,7 @@ import
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc merge*(
+proc deltaMerge*(
     db: AristoDbRef;
     upper: LayerDeltaRef;                      # Src filter, `nil` is ok
     lower: LayerDeltaRef;                      # Trg filter, `nil` is ok
@@ -99,46 +99,6 @@ proc merge*(
   if (newFilter.src == newFilter.kMap.getOrVoid(VertexID 1)) !=
        (newFilter.sTab.len == 0 and newFilter.kMap.len == 0):
     return err((VertexID(0),FilSrcTrgInconsistent))
-
-  ok newFilter
-
-
-proc merge*(
-    upper: LayerDeltaRef;                      # filter, not `nil`
-    lower: LayerDeltaRef;                      # filter, not `nil`
-      ): Result[LayerDeltaRef,(VertexID,AristoError)] =
-  ## Variant of `merge()` without optimising filters relative to the backend.
-  ## Also, filter arguments `upper` and `lower` are expected not`nil`.
-  ## Otherwise an error is returned.
-  ##
-  ## Comparing before and after merge
-  ## ::
-  ##   arguments                       | merged result
-  ##   --------------------------------+--------------------------------
-  ##   (src2==trg1) --> upper --> trg2 |
-  ##                                   | (src1==trg0) --> newFilter --> trg2
-  ##   (src1==trg0) --> lower --> trg1 |
-  ##                                   |
-  if upper.isNil or lower.isNil:
-    return err((VertexID(0),FilNilFilterRejected))
-
-  # Verify stackability
-  let lowerTrg = lower.kMap.getOrVoid VertexID(1)
-  if upper.src != lowerTrg:
-    return err((VertexID(0), FilTrgSrcMismatch))
-
-  # There is no need to deep copy table vertices as they will not be modified.
-  let newFilter = LayerDeltaRef(
-    src:  lower.src,
-    sTab: lower.sTab,
-    kMap: lower.kMap,
-    vGen: upper.vGen)
-
-  for (vid,vtx) in upper.sTab.pairs:
-    newFilter.sTab[vid] = vtx
-
-  for (vid,key) in upper.kMap.pairs:
-    newFilter.kMap[vid] = key
 
   ok newFilter
 

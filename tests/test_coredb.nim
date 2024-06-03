@@ -329,7 +329,7 @@ proc coreDbMain*(noisy = defined(debug)) =
 
 when isMainModule:
   const
-    noisy = defined(debug) or true
+    noisy {.used.} = defined(debug) or true
   var
     sampleList: seq[CaptureSpecs]
 
@@ -346,7 +346,7 @@ when isMainModule:
   if sampleList.len == 0:
     sampleList = @[memorySampleDefault]
 
-  when true and false:
+  when true: # and false:
     import std/times
     var state: (Duration, int)
     for n,capture in sampleList:

@@ -97,7 +97,7 @@ proc update*(ctx: UpdateSiblingsRef): Result[UpdateSiblingsRef,AristoError] =
       # will be `db.balancer.kMap[$1]`.
       let trg = db.balancer.kMap.getOrVoid(VertexID 1)
       for w in db.forked:
-        let rc = db.merge(w.balancer, ctx.rev, trg)
+        let rc = db.deltaMerge(w.balancer, ctx.rev, trg)
         if rc.isErr:
           ctx.rollback()
           return err(rc.error[1])
