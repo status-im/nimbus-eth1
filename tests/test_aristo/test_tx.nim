@@ -121,8 +121,8 @@ proc schedStow(
   ## Scheduled storage
   let
     layersMeter = db.nLayersVtx() + db.nLayersKey()
-    filterMeter = if db.roFilter.isNil: 0
-                  else: db.roFilter.sTab.len + db.roFilter.kMap.len
+    filterMeter = if db.balancer.isNil: 0
+                  else: db.balancer.sTab.len + db.balancer.kMap.len
     persistent = MaxFilterBulk < max(layersMeter, filterMeter)
   if persistent:
     db.persist(chunkedMpt=chunkedMpt)

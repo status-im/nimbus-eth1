@@ -277,22 +277,22 @@ proc testDistributedAccess*(
       block:
         let rc = db1.persist()
         xCheckRc rc.error == 0
-      xCheck db1.roFilter == FilterRef(nil)
-      xCheck db2.roFilter == db3.roFilter
+      xCheck db1.balancer == FilterRef(nil)
+      xCheck db2.balancer == db3.balancer
 
       block:
         let rc = db2.stow() # non-persistent
         xCheckRc rc.error == 0:
           noisy.say "*** testDistributedAccess (3)", "n=", n, "db2".dump db2
-      xCheck db1.roFilter == FilterRef(nil)
-      xCheck db2.roFilter != db3.roFilter
+      xCheck db1.balancer == FilterRef(nil)
+      xCheck db2.balancer != db3.balancer
 
       # Clause (11) from `aristo/README.md` example
       db2.reCentre()
       block:
         let rc = db2.persist()
         xCheckRc rc.error == 0
-      xCheck db2.roFilter == FilterRef(nil)
+      xCheck db2.balancer == FilterRef(nil)
 
       # Check/verify backends
       block:
@@ -301,8 +301,8 @@ proc testDistributedAccess*(
           noisy.say "*** testDistributedAccess (4)", "n=", n, "db3".dump db3
 
       # Capture filters from clause (11)
-      c11Filter1 = db1.roFilter
-      c11Filter3 = db3.roFilter
+      c11Filter1 = db1.balancer
+      c11Filter3 = db3.balancer
 
       # Clean up
       dx.cleanUp()
@@ -325,8 +325,8 @@ proc testDistributedAccess*(
       block:
         let rc = db2.persist()
         xCheckRc rc.error == 0
-      xCheck db2.roFilter == FilterRef(nil)
-      xCheck db1.roFilter == db3.roFilter
+      xCheck db2.balancer == FilterRef(nil)
+      xCheck db1.balancer == db3.balancer
 
       # Clause (13) from `aristo/README.md` example
       xCheck not db1.isCentre()
@@ -335,7 +335,7 @@ proc testDistributedAccess*(
         xCheckRc rc.error == 0
 
       # Clause (14) from `aristo/README.md` check
-      let c11Fil1_eq_db1RoFilter = c11Filter1.isDbEq(db1.roFilter, db1, noisy)
+      let c11Fil1_eq_db1RoFilter = c11Filter1.isDbEq(db1.balancer, db1, noisy)
       xCheck c11Fil1_eq_db1RoFilter:
         noisy.say "*** testDistributedAccess (7)", "n=", n,
           "\n   c11Filter1\n   ", c11Filter1.pp(db1),
@@ -343,7 +343,7 @@ proc testDistributedAccess*(
           ""
 
       # Clause (15) from `aristo/README.md` check
-      let c11Fil3_eq_db3RoFilter = c11Filter3.isDbEq(db3.roFilter, db3, noisy)
+      let c11Fil3_eq_db3RoFilter = c11Filter3.isDbEq(db3.balancer, db3, noisy)
       xCheck c11Fil3_eq_db3RoFilter:
         noisy.say "*** testDistributedAccess (8)", "n=", n,
           "\n   c11Filter3\n   ", c11Filter3.pp(db3),

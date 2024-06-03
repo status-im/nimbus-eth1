@@ -66,8 +66,8 @@ proc getIdgBE*(
     db: AristoDbRef;
       ): Result[seq[VertexID],AristoError] =
   ## Get the ID generator state the `backened` layer if available.
-  if not db.roFilter.isNil:
-    return ok(db.roFilter.vGen)
+  if not db.balancer.isNil:
+    return ok(db.balancer.vGen)
   db.getIdgUbe()
 
 proc getVtxBE*(
@@ -75,8 +75,8 @@ proc getVtxBE*(
     vid: VertexID;
       ): Result[VertexRef,AristoError] =
   ## Get the vertex from the (filtered) backened if available.
-  if not db.roFilter.isNil:
-    db.roFilter.sTab.withValue(vid, w):
+  if not db.balancer.isNil:
+    db.balancer.sTab.withValue(vid, w):
       if w[].isValid:
         return ok(w[])
       return err(GetVtxNotFound)
@@ -87,8 +87,8 @@ proc getKeyBE*(
     vid: VertexID;
       ): Result[HashKey,AristoError] =
   ## Get the merkle hash/key from the (filtered) backend if available.
-  if not db.roFilter.isNil:
-    db.roFilter.kMap.withValue(vid, w):
+  if not db.balancer.isNil:
+    db.balancer.kMap.withValue(vid, w):
       if w[].isValid:
         return ok(w[])
       return err(GetKeyNotFound)

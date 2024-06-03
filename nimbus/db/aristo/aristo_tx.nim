@@ -61,11 +61,11 @@ proc forkTx*(
   ## are stripped and the remaing layers are squashed into a single transaction.
   ##
   ## If `backLevel` is `-1`, a database descriptor with empty transaction
-  ## layers will be provided where the `roFilter` between database and
+  ## layers will be provided where the `balancer` between database and
   ## transaction layers are kept in place.
   ##
   ## If `backLevel` is `-2`, a database descriptor with empty transaction
-  ## layers will be provided without an `roFilter`.
+  ## layers will be provided without a `balancer`.
   ##
   ## The returned database descriptor will always have transaction level one.
   ## If there were no transactions that could be squashed, an empty
@@ -97,7 +97,7 @@ proc forkTx*(
         return err(TxStackGarbled)
     return tx.txFork dontHashify
 
-  # Plain fork, include `roFilter`
+  # Plain fork, include `balancer`
   if backLevel == -1:
     let xb = ? db.fork(noFilter=false)
     discard xb.txFrameBegin()
@@ -155,9 +155,9 @@ proc findTx*(
     if botKey == key:
       return ok(db.stack.len)
 
-  # Try `(vid,key)` on roFilter
-  if not db.roFilter.isNil:
-    let roKey = db.roFilter.kMap.getOrVoid vid
+  # Try `(vid,key)` on balancer
+  if not db.balancer.isNil:
+    let roKey = db.balancer.kMap.getOrVoid vid
     if roKey == key:
       return ok(-1)
 

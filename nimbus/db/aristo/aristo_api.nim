@@ -163,11 +163,11 @@ type
     ## transaction.
     ##
     ## If `backLevel` is `-1`, a database descriptor with empty transaction
-    ## layers will be provided where the `roFilter` between database and
+    ## layers will be provided where the `balancer` between database and
     ## transaction layers are kept in place.
     ##
     ## If `backLevel` is `-2`, a database descriptor with empty transaction
-    ## layers will be provided without an `roFilter`.
+    ## layers will be provided without a `balancer`.
     ##
     ## The returned database descriptor will always have transaction level one.
     ## If there were no transactions that could be squashed, an empty

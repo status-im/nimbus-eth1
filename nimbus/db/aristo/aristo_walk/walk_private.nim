@@ -23,14 +23,14 @@ iterator walkVtxBeImpl*[T](
       ): tuple[vid: VertexID, vtx: VertexRef] =
   ## Generic iterator
   when T is VoidBackendRef:
-    let filter = if db.roFilter.isNil: FilterRef() else: db.roFilter
+    let filter = if db.balancer.isNil: FilterRef() else: db.balancer
 
   else:
     mixin walkVtx
 
     let filter = FilterRef()
-    if not db.roFilter.isNil:
-      filter.sTab = db.roFilter.sTab # copy table
+    if not db.balancer.isNil:
+      filter.sTab = db.balancer.sTab # copy table
 
     for (vid,vtx) in db.backend.T.walkVtx:
       if filter.sTab.hasKey vid:
@@ -52,14 +52,14 @@ iterator walkKeyBeImpl*[T](
       ): tuple[vid: VertexID, key: HashKey] =
   ## Generic iterator
   when T is VoidBackendRef:
-    let filter = if db.roFilter.isNil: FilterRef() else: db.roFilter
+    let filter = if db.balancer.isNil: FilterRef() else: db.balancer
 
   else:
     mixin walkKey
 
     let filter = FilterRef()
-    if not db.roFilter.isNil:
-      filter.kMap = db.roFilter.kMap # copy table
+    if not db.balancer.isNil:
+      filter.kMap = db.balancer.kMap # copy table
 
     for (vid,key) in db.backend.T.walkKey:
       if filter.kMap.hasKey vid:

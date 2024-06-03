@@ -733,7 +733,7 @@ proc pp*(
   limit = 100;
   indent = 4;
     ): string =
-  result = db.roFilter.ppFilter(db, indent+1) & indent.toPfx
+  result = db.balancer.ppFilter(db, indent+1) & indent.toPfx
   case be.kind:
   of BackendMemory:
     result &= be.MemBackendRef.ppBe(db, limit, indent+1)
@@ -746,7 +746,7 @@ proc pp*(
     db: AristoDbRef;
     indent = 4;
     backendOk = false;
-    filterOk = true;
+    balancerOk = true;
     topOk = true;
     stackOk = true;
     kMapOk = true;
@@ -755,7 +755,7 @@ proc pp*(
   if topOk:
     result = db.layersCc.pp(
       db, xTabOk=true, kMapOk=kMapOk, other=true, indent=indent)
-  let stackOnlyOk = stackOk and not (topOk or filterOk or backendOk)
+  let stackOnlyOk = stackOk and not (topOk or balancerOk or backendOk)
   if not stackOnlyOk:
     result &= indent.toPfx & " level=" & $db.stack.len
   if (stackOk and 0 < db.stack.len) or stackOnlyOk:
@@ -772,8 +772,8 @@ proc pp*(
     result &= " =>" & lStr
   if backendOk:
     result &= indent.toPfx & db.backend.pp(db, limit=limit, indent)
-  elif filterOk:
-    result &= indent.toPfx & db.roFilter.ppFilter(db, indent+1)
+  elif balancerOk:
+    result &= indent.toPfx & db.balancer.ppFilter(db, indent+1)
 
 proc pp*(sdb: MerkleSignRef; indent = 4): string =
   "count=" & $sdb.count &

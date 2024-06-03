@@ -45,7 +45,7 @@ proc txStow*(
     return err(error[1])
 
   if fwd.isValid:
-    # Move/merge `top` layer onto `roFilter`
+    # Move/merge `top` layer onto `balancer`
     db.deltaMerge(fwd).isOkOr:
       return err(error[1])
 
@@ -58,8 +58,8 @@ proc txStow*(
     db.top = LayerRef(
       delta: LayerDeltaRef(),
       final: final)
-    if db.roFilter.isValid:
-      db.top.delta.vGen = db.roFilter.vGen
+    if db.balancer.isValid:
+      db.top.delta.vGen = db.balancer.vGen
     else:
       let rc = db.getIdgUbe()
       if rc.isOk:
@@ -74,7 +74,7 @@ proc txStow*(
     return err(TxAccRootMissing)
 
   if persistent:
-    # Merge/move `roFilter` into persistent tables
+    # Merge/move `balancer` into persistent tables
     ? db.deltaPersistent nxtSid
 
   # Special treatment for `snap` proofs (aka `chunkedMpt`)

@@ -79,14 +79,14 @@ proc deltaMerge*(
     else:
       return err((VertexID(1),rc.error))
 
-  db.roFilter = ? db.merge(filter, db.roFilter, ubeRoot)
-  if db.roFilter.src == db.roFilter.kMap.getOrVoid(VertexID 1):
+  db.balancer = ? db.merge(filter, db.balancer, ubeRoot)
+  if db.balancer.src == db.balancer.kMap.getOrVoid(VertexID 1):
     # Under normal conditions, the root keys cannot be the same unless the
     # database is empty. This changes if there is a fixed root vertex as
     # used with the `snap` sync protocol boundaty proof. In that case, there
     # can be no history chain and the filter is just another cache.
     if VertexID(1) notin db.top.final.pPrf:
-      db.roFilter = FilterRef(nil)
+      db.balancer = FilterRef(nil)
 
   ok()
 
@@ -123,7 +123,7 @@ proc deltaPersistent*(
     return err(FilBackendMissing)
 
   # Blind or missing filter
-  if db.roFilter.isNil:
+  if db.balancer.isNil:
     return ok()
 
   # Make sure that the argument `db` is at the centre so the backend is in
@@ -141,15 +141,15 @@ proc deltaPersistent*(
   defer: updateSiblings.rollback()
 
   let lSst = SavedState(
-    src: db.roFilter.src,
-    trg: db.roFilter.kMap.getOrVoid(VertexID 1),
+    src: db.balancer.src,
+    trg: db.balancer.kMap.getOrVoid(VertexID 1),
     serial: nxtFid)
 
   # Store structural single trie entries
   let writeBatch = be.putBegFn()
-  be.putVtxFn(writeBatch, db.roFilter.sTab.pairs.toSeq)
-  be.putKeyFn(writeBatch, db.roFilter.kMap.pairs.toSeq)
-  be.putIdgFn(writeBatch, db.roFilter.vGen)
+  be.putVtxFn(writeBatch, db.balancer.sTab.pairs.toSeq)
+  be.putKeyFn(writeBatch, db.balancer.kMap.pairs.toSeq)
+  be.putIdgFn(writeBatch, db.balancer.vGen)
   be.putLstFn(writeBatch, lSst)
   ? be.putEndFn writeBatch                       # Finalise write batch
 

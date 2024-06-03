@@ -419,7 +419,7 @@ i.e. the last byte of a serialised record.
         |      | stack[0] |   |  successively recover the top layer)
         |      +----------+   v
         |      +----------+
-        |      | roFilter |   optional read-only backend filter
+        |      | balancer |   optional read-only backend filter
         |      +----------+
         |      +----------+
         |      | backend  |   optional physical key-value backend database
@@ -427,7 +427,7 @@ i.e. the last byte of a serialised record.
 
  There is a three tier access to a key-value database entry as in
 
-        top -> roFilter -> backend
+        top -> balancer -> backend
 
 where only the *top* layer is obligatory.
 

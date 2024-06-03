@@ -24,7 +24,7 @@ type
     ## Update transactional context
     state: UpdateState                       ## No `rollback()` after `commit()`
     db: AristoDbRef                          ## Main database access
-    roFilters: seq[(AristoDbRef,FilterRef)]  ## Rollback data
+    balancers: seq[(AristoDbRef,FilterRef)]  ## Rollback data
     rev: FilterRef                           ## Reverse filter set up
 
 # ------------------------------------------------------------------------------
@@ -35,8 +35,8 @@ proc rollback*(ctx: UpdateSiblingsRef) =
   ## Rollback any changes made by the `update()` function. Subsequent
   ## `rollback()` or `commit()` calls will be without effect.
   if ctx.state == Updated:
-    for (d,f) in ctx.roFilters:
-      d.roFilter = f
+    for (d,f) in ctx.balancers:
+      d.balancer = f
   ctx.state = Finished
 
 
@@ -45,7 +45,7 @@ proc commit*(ctx: UpdateSiblingsRef): Result[void,AristoError] =
   if ctx.state != Updated:
     ctx.rollback()
     return err(FilSiblingsCommitUnfinshed)
-  ctx.db.roFilter = FilterRef(nil)
+  ctx.db.balancer = FilterRef(nil)
   ctx.state = Finished
   ok()
 
@@ -74,7 +74,7 @@ proc init*(
   # Filter rollback context
   ok T(
     db:  db,
-    rev: ? db.revFilter(db.roFilter).mapErr fromVae) # Reverse filter
+    rev: ? db.revFilter(db.balancer).mapErr fromVae) # Reverse filter
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -94,15 +94,15 @@ proc update*(ctx: UpdateSiblingsRef): Result[UpdateSiblingsRef,AristoError] =
       let db = ctx.db
       # Update distributed filters. Note that the physical backend database
       # must not have been updated, yet. So the new root key for the backend
-      # will be `db.roFilter.kMap[$1]`.
-      let trg = db.roFilter.kMap.getOrVoid(VertexID 1)
+      # will be `db.balancer.kMap[$1]`.
+      let trg = db.balancer.kMap.getOrVoid(VertexID 1)
       for w in db.forked:
-        let rc = db.merge(w.roFilter, ctx.rev, trg)
+        let rc = db.merge(w.balancer, ctx.rev, trg)
         if rc.isErr:
           ctx.rollback()
           return err(rc.error[1])
-        ctx.roFilters.add (w, w.roFilter)
-        w.roFilter = rc.value
+        ctx.balancers.add (w, w.balancer)
+        w.balancer = rc.value
   ok(ctx)
 
 proc update*(
