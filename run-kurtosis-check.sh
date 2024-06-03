@@ -24,10 +24,11 @@ else
 fi
 
 # Install jq if not installed already
-if [ "$(dpkg -l | awk '/jq/ {print }'|wc -l)" -ge 1 ]; then
-  echo "jq is already installed"
+if [ "$(which jq)" != "" ]; 
+then
+    echo "jq is already installed"
 else
-    echo "Installing jq"
+    echo "jq is not installed. Installing jq"
     sudo apt-get install -y jq
 fi
 
