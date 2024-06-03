@@ -203,11 +203,11 @@ proc fork*(
   if not noTopLayer:
     clone.top = LayerRef.init()
     if not db.roFilter.isNil:
-      clone.top.final.vGen = db.roFilter.vGen
+      clone.top.delta.vGen = db.roFilter.vGen
     else:
       let rc = clone.backend.getIdgFn()
       if rc.isOk:
-        clone.top.final.vGen = rc.value
+        clone.top.delta.vGen = rc.value
       elif rc.error != GetIdgNotFound:
         return err(rc.error)
 

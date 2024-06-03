@@ -46,8 +46,8 @@ proc newAristoRdbDbRef(
       rc.value
   ok AristoDbRef(
     top: LayerRef(
-      delta: LayerDeltaRef(),
-      final: LayerFinalRef(vGen: vGen)),
+      delta: LayerDeltaRef(vGen: vGen),
+      final: LayerFinalRef()),
     backend: be)
 
 # ------------------------------------------------------------------------------

@@ -501,9 +501,9 @@ proc ppLayer(
       result &= "<layer>".doPrefix(false)
     if vGenOk:
       let
-        tLen = layer.final.vGen.len
+        tLen = layer.delta.vGen.len
         info = "vGen(" & $tLen & ")"
-      result &= info.doPrefix(0 < tLen) & layer.final.vGen.ppVidList
+      result &= info.doPrefix(0 < tLen) & layer.delta.vGen.ppVidList
     if sTabOk:
       let
         tLen = layer.delta.sTab.len

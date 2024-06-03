@@ -33,15 +33,15 @@ proc vidFetch*(db: AristoDbRef; pristine = false): VertexID =
   ##
   if db.vGen.len == 0:
     # Note that `VertexID(1)` is the root of the main trie
-    db.top.final.vGen = @[VertexID(LEAST_FREE_VID+1)]
+    db.top.delta.vGen = @[VertexID(LEAST_FREE_VID+1)]
     result = VertexID(LEAST_FREE_VID)
   elif db.vGen.len == 1 or pristine:
     result = db.vGen[^1]
-    db.top.final.vGen[^1] = result + 1
+    db.top.delta.vGen[^1] = result + 1
   else:
     result = db.vGen[^2]
-    db.top.final.vGen[^2] = db.top.final.vGen[^1]
-    db.top.final.vGen.setLen(db.vGen.len-1)
+    db.top.delta.vGen[^2] = db.top.delta.vGen[^1]
+    db.top.delta.vGen.setLen(db.vGen.len-1)
   doAssert LEAST_FREE_VID <= result.distinctBase
 
 
@@ -64,14 +64,14 @@ proc vidDispose*(db: AristoDbRef; vid: VertexID) =
   ##
   if LEAST_FREE_VID <= vid.distinctBase:
     if db.vGen.len == 0:
-      db.top.final.vGen = @[vid]
+      db.top.delta.vGen = @[vid]
     else:
       let topID = db.vGen[^1]
       # Only store smaller numbers: all numberts larger than `topID`
       # are free numbers
       if vid < topID:
-        db.top.final.vGen[^1] = vid
-        db.top.final.vGen.add topID
+        db.top.delta.vGen[^1] = vid
+        db.top.delta.vGen.add topID
 
 
 proc vidReorg*(vGen: seq[VertexID]): seq[VertexID] =

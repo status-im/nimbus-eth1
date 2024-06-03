@@ -56,7 +56,7 @@ proc deltaFwd*(
     src:  srcRoot,
     sTab: layer.delta.sTab,
     kMap: layer.delta.kMap,
-    vGen: layer.final.vGen.vidReorg) # Compact recycled IDs
+    vGen: layer.delta.vGen.vidReorg) # Compact recycled IDs
 
 # ------------------------------------------------------------------------------
 # Public functions, apply/install filters

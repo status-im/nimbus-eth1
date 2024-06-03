@@ -109,7 +109,7 @@ proc testVidRecycleLists*(noisy = true; seed = 42): bool =
       db1 = AristoDbRef.init()
       rc = dbBlob.deblobify seq[VertexID]
     xCheckRc rc.error == 0
-    db1.top.final.vGen = rc.value
+    db1.top.delta.vGen = rc.value
 
     xCheck db.vGen == db1.vGen
 
@@ -127,7 +127,7 @@ proc testVidRecycleLists*(noisy = true; seed = 42): bool =
     xCheck db.vGen.len == 1
 
   # Repeat last test after clearing the cache
-  db.top.final.vGen.setLen(0)
+  db.top.delta.vGen.setLen(0)
   for n in 0 .. 5:
     let w = db.vidFetch()
     xCheck w == VertexID(LEAST_FREE_VID) + n # VertexID(1) is default root ID

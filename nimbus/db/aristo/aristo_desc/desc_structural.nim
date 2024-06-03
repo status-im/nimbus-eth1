@@ -110,6 +110,7 @@ type
     ##
     sTab*: Table[VertexID,VertexRef] ## Structural vertex table
     kMap*: Table[VertexID,HashKey]   ## Merkle hash key mapping
+    vGen*: seq[VertexID]             ## Recycling state for vertex IDs
 
   LayerFinalRef* = ref object
     ## Final tables fully supersede tables on lower layers when stacked as a
@@ -121,7 +122,6 @@ type
     ##
     pPrf*: HashSet[VertexID]         ## Locked vertices (proof nodes)
     fRpp*: Table[HashKey,VertexID]   ## Key lookup for `pPrf[]` (proof nodes)
-    vGen*: seq[VertexID]             ## Recycling state for vertex IDs
     dirty*: HashSet[VertexID]        ## Start nodes to re-hashiy from
 
   LayerRef* = ref LayerObj
@@ -280,7 +280,6 @@ func dup*(final: LayerFinalRef): LayerFinalRef =
   LayerFinalRef(
     pPrf:  final.pPrf,
     fRpp:  final.fRpp,
-    vGen:  final.vGen,
     dirty: final.dirty)
 
 func dup*(wp: VidVtxPair): VidVtxPair =

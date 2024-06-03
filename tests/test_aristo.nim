@@ -176,7 +176,7 @@ when isMainModule:
         noisy.accountsRunner(sam, resetDb=true)
 
   when true: # and false:
-    let persistent = false or true
+    let persistent = false # or true
     noisy.showElapsed("@snap_test_list"):
       for n,sam in snapTestList:
         noisy.accountsRunner(sam, persistent=persistent)

@@ -59,11 +59,11 @@ proc txStow*(
       delta: LayerDeltaRef(),
       final: final)
     if db.roFilter.isValid:
-      db.top.final.vGen = db.roFilter.vGen
+      db.top.delta.vGen = db.roFilter.vGen
     else:
       let rc = db.getIdgUbe()
       if rc.isOk:
-        db.top.final.vGen = rc.value
+        db.top.delta.vGen = rc.value
       else:
         # It is OK if there was no `Idg`. Otherwise something serious happened
         # and there is no way to recover easily.
@@ -79,12 +79,12 @@ proc txStow*(
 
   # Special treatment for `snap` proofs (aka `chunkedMpt`)
   let final =
-    if chunkedMpt: LayerFinalRef(vGen: db.vGen, fRpp: db.top.final.fRpp)
-    else: LayerFinalRef(vGen: db.vGen)
+    if chunkedMpt: LayerFinalRef(fRpp: db.top.final.fRpp)
+    else: LayerFinalRef()
 
   # New empty top layer (probably with `snap` proofs carry over)
   db.top = LayerRef(
-    delta: LayerDeltaRef(),
+    delta: LayerDeltaRef(vGen: db.vGen),
     final: final,
     txUid: db.top.txUid)
   ok()
