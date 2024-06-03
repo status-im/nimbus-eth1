@@ -13,7 +13,7 @@
 ##
 
 import
-  std/[options, sequtils, sets, tables],
+  std/[sequtils, sets, tables],
   eth/common,
   results,
   "."/[aristo_desc, aristo_get, aristo_vid],
@@ -73,14 +73,14 @@ proc deltaMerge*(
   let ubeRoot = block:
     let rc = db.getKeyUbe VertexID(1)
     if rc.isOk:
-      rc.value.to(Hash256)
+      rc.value
     elif rc.error == GetKeyNotFound:
-      EMPTY_ROOT_HASH
+      VOID_HASH_KEY
     else:
       return err((VertexID(1),rc.error))
 
   db.roFilter = ? db.merge(filter, db.roFilter, ubeRoot)
-  if db.roFilter.src == db.roFilter.kMap.getOrVoid(VertexID 1).to(Hash256):
+  if db.roFilter.src == db.roFilter.kMap.getOrVoid(VertexID 1):
     # Under normal conditions, the root keys cannot be the same unless the
     # database is empty. This changes if there is a fixed root vertex as
     # used with the `snap` sync protocol boundaty proof. In that case, there
@@ -142,7 +142,7 @@ proc deltaPersistent*(
 
   let lSst = SavedState(
     src: db.roFilter.src,
-    trg: db.roFilter.kMap.getOrVoid(VertexID 1).to(Hash256),
+    trg: db.roFilter.kMap.getOrVoid(VertexID 1),
     serial: nxtFid)
 
   # Store structural single trie entries

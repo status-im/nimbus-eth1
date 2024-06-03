@@ -243,7 +243,7 @@ proc toAristoSavedStateBlockNumber*(
   if not mBe.isNil and mBe.parent.isAristo:
     let rc = mBe.parent.AristoCoreDbRef.adbBase.getSavedState()
     if rc.isOk:
-      return (rc.value.src, rc.value.serial.toBlockNumber)
+      return (rc.value.src.to(Hash256), rc.value.serial.toBlockNumber)
   (EMPTY_ROOT_HASH, 0.toBlockNumber)
 
 # ------------------------------------------------------------------------------

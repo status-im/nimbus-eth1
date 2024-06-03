@@ -17,8 +17,8 @@ import
 type
   LayerStateRoot* = tuple
     ## Helper structure for analysing state roots.
-    be: Hash256                    ## Backend state root
-    fg: Hash256                    ## Layer or filter implied state root
+    be: HashKey                    ## Backend state root
+    fg: HashKey                    ## Layer or filter implied state root
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -42,14 +42,10 @@ proc getLayerStateRoots*(
       VOID_HASH_KEY
     else:
       return err(rc.error)
-  spr.be = sprBeKey.to(Hash256)
 
-  spr.fg = block:
-    let key = delta.kMap.getOrVoid VertexID(1)
-    if key.isValid:
-      key.to(Hash256)
-    else:
-      EMPTY_ROOT_HASH
+  spr.be = sprBeKey
+  spr.fg = delta.kMap.getOrVoid VertexID(1)
+
   if spr.fg.isValid:
     return ok(spr)
 
@@ -57,6 +53,7 @@ proc getLayerStateRoots*(
      not delta.sTab.hasKey(VertexID(1)):
     # This layer is unusable, need both: vertex and key
     return err(FilPrettyPointlessLayer)
+
   elif not delta.sTab.getOrVoid(VertexID(1)).isValid:
     # Root key and vertex has been deleted
     return ok(spr)

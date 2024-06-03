@@ -22,7 +22,7 @@ proc merge*(
     db: AristoDbRef;
     upper: FilterRef;                          # Src filter, `nil` is ok
     lower: FilterRef;                          # Trg filter, `nil` is ok
-    beStateRoot: Hash256;                      # Merkle hash key
+    beStateRoot: HashKey;                      # Merkle hash key
       ): Result[FilterRef,(VertexID,AristoError)] =
   ## Merge argument `upper` into the `lower` filter instance.
   ##
@@ -58,7 +58,7 @@ proc merge*(
     return ok(lower)
 
   # Verify stackability
-  let lowerTrg = lower.kMap.getOrVoid(VertexID(1)).to(Hash256)
+  let lowerTrg = lower.kMap.getOrVoid VertexID(1)
   if upper.src != lowerTrg:
     return err((VertexID(0), FilTrgSrcMismatch))
   if lower.src != beStateRoot:
@@ -96,7 +96,7 @@ proc merge*(
         return err((vid,rc.error))
 
   # Check consistency
-  if (newFilter.src == newFilter.kMap.getOrVoid(VertexID 1).to(Hash256)) !=
+  if (newFilter.src == newFilter.kMap.getOrVoid(VertexID 1)) !=
        (newFilter.sTab.len == 0 and newFilter.kMap.len == 0):
     return err((VertexID(0),FilSrcTrgInconsistent))
 
@@ -123,7 +123,7 @@ proc merge*(
     return err((VertexID(0),FilNilFilterRejected))
 
   # Verify stackability
-  let lowerTrg = lower.kMap.getOrVoid(VertexID(1)).to(Hash256)
+  let lowerTrg = lower.kMap.getOrVoid VertexID(1)
   if upper.src != lowerTrg:
     return err((VertexID(0), FilTrgSrcMismatch))
 

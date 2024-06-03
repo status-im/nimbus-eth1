@@ -74,13 +74,13 @@ type
 
   SavedState* = object
     ## Last saved state
-    src*: Hash256                    ## Previous state hash
-    trg*: Hash256                    ## Last state hash
+    src*: HashKey                    ## Previous state hash
+    trg*: HashKey                    ## Last state hash
     serial*: uint64                  ## Generic identifier froom application
 
   FilterRef* = ref object
     ## Delta layer
-    src*: Hash256                    ## Applicable to this state root
+    src*: HashKey                    ## Applicable to this state root
     sTab*: Table[VertexID,VertexRef] ## Filter structural vertex table
     kMap*: Table[VertexID,HashKey]   ## Filter Merkle hash key mapping
     vGen*: seq[VertexID]             ## Filter unique vertex ID generator

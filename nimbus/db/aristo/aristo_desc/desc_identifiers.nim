@@ -159,6 +159,13 @@ func `==`*(a, b: PathID): bool =
 func cmp*(a, b: PathID): int =
   if a < b: -1 elif b < a: 1 else: 0
 
+# ------------------------------------------------------------------------------
+# Public helpers: `HashKey` ordered scalar data model
+# ------------------------------------------------------------------------------
+
+func len*(lid: HashKey): int =
+  lid.len.int # if lid.isHash: 32 else: lid.blob.len
+
 template data*(lid: HashKey): openArray[byte] =
   lid.buf.toOpenArray(0, lid.len - 1)
 
@@ -173,13 +180,6 @@ func to*(lid: HashKey; T: type PathID): T =
     PathID(pfx: UInt256.fromBytesBE a32, length: 2 * lid.len.uint8)
   else:
     PathID()
-
-# ------------------------------------------------------------------------------
-# Public helpers: `HashKey` ordered scalar data model
-# ------------------------------------------------------------------------------
-
-func len*(lid: HashKey): int =
-  lid.len.int # if lid.isHash: 32 else: lid.blob.len
 
 func fromBytes*(T: type HashKey; data: openArray[byte]): Result[T,void] =
   ## Write argument `data` of length 0 or between 2 and 32 bytes as a `HashKey`.

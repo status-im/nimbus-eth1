@@ -29,7 +29,7 @@ proc revFilter*(
   ## backend (excluding optionally installed read-only filter.)
   ##
   # Register MPT state roots for reverting back
-  let rev = FilterRef(src: filter.kMap.getOrVoid(VertexID 1).to(Hash256))
+  let rev = FilterRef(src: filter.kMap.getOrVoid(VertexID 1))
 
   # Get vid generator state on backend
   block:
