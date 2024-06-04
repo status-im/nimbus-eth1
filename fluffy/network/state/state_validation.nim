@@ -147,7 +147,7 @@ proc validateOffer*(
     allowKeyEndInPathForLeafs = true,
   )
 
-  let account = ?rlpDecodeAccountTrieNode(offer.accountProof[^1])
+  let account = ?offer.accountProof.toAccount()
 
   ?validateTrieProof(account.storageRoot, key.path, offer.storageProof)
 
@@ -163,7 +163,7 @@ proc validateOffer*(
     allowKeyEndInPathForLeafs = true,
   )
 
-  let account = ?rlpDecodeAccountTrieNode(offer.accountProof[^1])
+  let account = ?offer.accountProof.toAccount()
   if not offer.code.hashEquals(account.codeHash):
     return err("hash of bytecode doesn't match the code hash in the account proof")
 

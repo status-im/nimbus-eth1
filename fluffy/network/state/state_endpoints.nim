@@ -46,14 +46,14 @@ proc getNextNodeHash(
       )
     )
 
-  # leaf or extension node so we need to remove one or more nibbles
+  # leaf or extension node
   let (_, isLeaf, prefix) = decodePrefix(trieNodeRlp.listElem(0))
-  nibbleIdx += prefix.unpackNibbles().len()
-
   if isLeaf:
     return Opt.none((Nibbles, NodeHash))
 
   # extension node
+  nibbleIdx += prefix.unpackNibbles().len()
+
   let nextHashBytes = trieNodeRlp.listElem(1)
   doAssert(not nextHashBytes.isEmpty())
 
