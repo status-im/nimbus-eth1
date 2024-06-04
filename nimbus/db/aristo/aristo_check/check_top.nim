@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/[sequtils, sets],
+  std/[sequtils, sets, typetraits],
   eth/[common, trie/nibbles],
   results,
   ".."/[aristo_desc, aristo_get, aristo_layers, aristo_serialise, aristo_utils]
@@ -92,15 +92,17 @@ proc checkTopCommon*(
   let
     kMapCount = db.layersWalkKey.toSeq.mapIt(it[1]).filterIt(it.isValid).len
     kMapNilCount = db.layersWalkKey.toSeq.len - kMapCount
-    vGen = db.vGen.toHashSet
-    vGenMax = if vGen.len == 0: VertexID(0) else: db.vGen[^1]
+    vTop = db.vTop
   var
+    topVid = VertexID(0)
     stoRoots: HashSet[VertexID]
 
   # Collect leafs and check deleted entries
   var nNilVtx = 0
   for (vid,vtx) in db.layersWalkVtx:
     if vtx.isValid:
+      if topVid < vid:
+        topVid = vid
       case vtx.vType:
       of Leaf:
         if vtx.lData.pType == AccountData:
@@ -108,7 +110,7 @@ proc checkTopCommon*(
           if stoVid.isValid:
             if stoVid in stoRoots:
               return err((stoVid,CheckAnyVidSharedStorageRoot))
-            if vGenMax.isValid and (vGenMax < stoVid or stoVid in vGen):
+            if vTop < stoVid:
               return err((stoVid,CheckAnyVidDeadStorageRoot))
             stoRoots.incl stoVid
       of Branch:
@@ -130,6 +132,13 @@ proc checkTopCommon*(
         return err((vid,CheckAnyVtxEmptyKeyMissing))
       if rc.value.isValid:
         return err((vid,CheckAnyVtxEmptyKeyExpected))
+
+  if vTop.distinctBase < LEAST_FREE_VID:
+    # Verify that all vids are below `LEAST_FREE_VID`
+    if topVid.distinctBase < LEAST_FREE_VID:
+      for (vid,key) in db.layersWalkKey:
+        if key.isValid and LEAST_FREE_VID <= vid.distinctBase:
+          return err((topVid,CheckAnyVTopUnset))
 
   # If present, there are at least as many deleted hashes as there are deleted
   # vertices.

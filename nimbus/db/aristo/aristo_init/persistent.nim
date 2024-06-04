@@ -38,15 +38,15 @@ proc newAristoRdbDbRef(
       ): Result[AristoDbRef, AristoError]=
   let
     be = ? rocksDbAristoBackend(basePath)
-    vGen = block:
-      let rc = be.getIdgFn()
+    vTop = block:
+      let rc = be.getTuvFn()
       if rc.isErr:
         be.closeFn(flush = false)
         return err(rc.error)
       rc.value
   ok AristoDbRef(
     top: LayerRef(
-      delta: LayerDeltaRef(vGen: vGen),
+      delta: LayerDeltaRef(vTop: vTop),
       final: LayerFinalRef()),
     backend: be)
 
