@@ -79,7 +79,13 @@ task test_import, "Run block import test":
   if dirExists(tmp):
     echo "Remove directory before running test: " & tmp
     quit(QuitFailure)
-  if not fileExists("build/nimbus"):
+
+  const nimbus = when defined(windows):
+    "build/nimbus.exe"
+  else:
+    "build/nimbus"
+
+  if not fileExists(nimbus):
     echo "Build nimbus before running this test"
     quit(QuitFailure)
 
