@@ -225,7 +225,7 @@ jobs:
         run: |
           gcc --version
           DEFAULT_MAKE_FLAGS="-j${ncpu} ENABLE_EVMC=${ENABLE_EVMC} ENABLE_VMLOWMEM=${ENABLE_VMLOWMEM}"
-          mingw32-make ${DEFAULT_MAKE_FLAGS}
+          mingw32-make ${DEFAULT_MAKE_FLAGS} all test_import
           build/nimbus.exe --help
           # give us more space
           # find . -type d -name ".git" -exec rm -rf {} +
@@ -240,7 +240,7 @@ jobs:
         run: |
           export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/lib"
           DEFAULT_MAKE_FLAGS="-j${ncpu} USE_MIRACL=${USE_MIRACL} ENABLE_EVMC=${ENABLE_EVMC}"
-          env CC=gcc make ${DEFAULT_MAKE_FLAGS}
+          env CC=gcc make ${DEFAULT_MAKE_FLAGS} all test_import
           build/nimbus --help
           # CC, GOARCH, and CGO_ENABLED are needed to select correct compiler 32/64 bit
           # pushd vendor/nimbus-eth2
@@ -255,7 +255,7 @@ jobs:
         run: |
           export ZERO_AR_DATE=1 # avoid timestamps in binaries
           DEFAULT_MAKE_FLAGS="-j${ncpu} ENABLE_EVMC=${ENABLE_EVMC}"
-          make ${DEFAULT_MAKE_FLAGS}
+          make ${DEFAULT_MAKE_FLAGS} all test_import
           build/nimbus --help
           # "-static" option will not work for osx unless static system libraries are provided
           # pushd vendor/nimbus-eth2
