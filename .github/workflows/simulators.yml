@@ -27,7 +27,6 @@ jobs:
         id: versions
         run: |
           sudo apt-get -q update
-          sudo apt-get install -y librocksdb-dev libpcre3-dev
           getHash() {
             git ls-remote "https://github.com/$1" "${2:-HEAD}" | cut -f 1
           }
@@ -65,20 +64,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Restore rocksdb from cache
-        id: rocksdb-cache
-        uses: actions/cache@v4
-        with:
-          path: rocks-db-cache
-          key: 'rocksdb-v2'
-
-      - name: Build and install rocksdb
-        run: |
-          HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew install ccache
-          echo "/usr/local/opt/ccache/libexec" >> ${GITHUB_PATH}
-          curl -O -L -s -S https://raw.githubusercontent.com/status-im/nimbus-build-system/master/scripts/build_rocksdb.sh
-          bash build_rocksdb.sh rocks-db-cache
 
       - name: Get latest nimbus-build-system commit hash
         id: versions
@@ -131,20 +116,15 @@ jobs:
           path: external/dlls
           # according to docu, idle caches are kept for up to 7 days
           # so change dlls# to force new cache contents (for some number #)
-          key: dlls0
+          key: dlls1
 
       - name: Install DLLs dependencies
         if: steps.windows-dlls-cache.outputs.cache-hit != 'true'
         run: |
-          ROCKSDBSUB=x64
           DLLPATH=external/dlls
           mkdir -p external
           curl -L "https://nim-lang.org/download/windeps.zip" -o external/windeps.zip
           7z x -y external/windeps.zip -o"$DLLPATH"
-          # ROCKSDB
-          curl -L "https://github.com/status-im/nimbus-deps/releases/download/nimbus-deps/nimbus-deps.zip" -o external/nimbus-deps.zip
-          7z x -y external/nimbus-deps.zip
-          cp "./$ROCKSDBSUB/librocksdb.dll" "$DLLPATH/librocksdb.dll"
 
       - name: Restore llvm-mingw from cache
         id: windows-mingw-cache
