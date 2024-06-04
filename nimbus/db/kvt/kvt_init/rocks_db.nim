@@ -25,7 +25,6 @@
 ##       ...
 ##
 {.push raises: [].}
-{.warning: "*** importing rocks DB which needs a linker library".}
 
 import
   eth/common,
