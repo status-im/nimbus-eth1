@@ -170,7 +170,7 @@ proc blobify*(lSst: SavedState): Blob =
 
 # -------------
 
-proc deblobify(
+proc deblobifyTo(
     data: openArray[byte];
     pyl: var PayloadRef;
       ): Result[void,AristoError] =
@@ -229,7 +229,7 @@ proc deblobify(
   pyl = pAcc
   ok()
 
-proc deblobify*(
+proc deblobifyTo*(
     record: openArray[byte];
     vtx: var VertexRef;
       ): Result[void,AristoError] =
@@ -293,7 +293,7 @@ proc deblobify*(
     if not isLeaf:
       return err(DeblobLeafGotExtPrefix)
     var pyl: PayloadRef
-    ? record.toOpenArray(0, pLen - 1).deblobify(pyl)
+    ? record.toOpenArray(0, pLen - 1).deblobifyTo(pyl)
     vtx = VertexRef(
       vType: Leaf,
       lPfx:  pathSegment,
@@ -309,11 +309,11 @@ proc deblobify*(
       ): Result[T,AristoError] =
   ## Variant of `deblobify()` for vertex deserialisation.
   var vtx = T(nil) # will be auto-initialised
-  ? data.deblobify vtx
+  ? data.deblobifyTo vtx
   ok vtx
 
 
-proc deblobify*(
+proc deblobifyTo*(
     data: openArray[byte];
     vGen: var seq[VertexID];
       ): Result[void,AristoError] =
@@ -337,10 +337,10 @@ proc deblobify*(
       ): Result[T,AristoError] =
   ## Variant of `deblobify()` for deserialising the vertex ID generator state
   var vGen: T
-  ? data.deblobify vGen
+  ? data.deblobifyTo vGen
   ok move(vGen)
 
-proc deblobify*(
+proc deblobifyTo*(
     data: openArray[byte];
     lSst: var SavedState;
       ): Result[void,AristoError] =
@@ -350,9 +350,13 @@ proc deblobify*(
     return err(DeblobWrongSize)
   if data[^1] != 0x7f:
     return err(DeblobWrongType)
-  (addr lSst.src.data[0]).copyMem(unsafeAddr data[0], 32)
-  (addr lSst.trg.data[0]).copyMem(unsafeAddr data[32], 32)
-  lSst.serial = uint64.fromBytesBE data[64..72]
+  func loadHashKey(data: openArray[byte]): Result[HashKey,AristoError] =
+    var w = HashKey.fromBytes(data).valueOr:
+      return err(DeblobHashKeyExpected)
+    ok move(w)
+  lSst.src = ? data.toOpenArray(0, 31).loadHashKey()
+  lSst.trg = ? data.toOpenArray(32, 63).loadHashKey()
+  lSst.serial = uint64.fromBytesBE data.toOpenArray(64, 71)
   ok()
 
 proc deblobify*(
@@ -361,7 +365,7 @@ proc deblobify*(
       ): Result[T,AristoError] =
   ## Variant of `deblobify()` for deserialising a last saved state data record
   var lSst: T
-  ? data.deblobify lSst
+  ? data.deblobifyTo lSst
   ok move(lSst)
 
 # ------------------------------------------------------------------------------
