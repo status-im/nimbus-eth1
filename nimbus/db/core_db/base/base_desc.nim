@@ -73,7 +73,6 @@ type
     CtxNotFound
     HashNotAvailable
     KvtNotFound
-    KvtNotOffSite
     MptNotFound
     NotImplemented
     RlpException
@@ -103,7 +102,7 @@ type
   CoreDbBaseColPrintFn* = proc(vid: CoreDbColRef): string {.noRaise.}
   CoreDbBaseErrorPrintFn* = proc(e: CoreDbErrorRef): string {.noRaise.}
   CoreDbBaseLevelFn* = proc(): int {.noRaise.}
-  CoreDbBaseNewKvtFn* = proc(offSite: bool): CoreDbRc[CoreDxKvtRef] {.noRaise.}
+  CoreDbBaseNewKvtFn* = proc(): CoreDbRc[CoreDxKvtRef] {.noRaise.}
   CoreDbBaseNewCtxFn* = proc(): CoreDbCtxRef {.noRaise.}
   CoreDbBaseNewCtxFromTxFn* = proc(
     colState: Hash256; kind: CoreDbColType): CoreDbRc[CoreDbCtxRef] {.noRaise.}
@@ -148,7 +147,6 @@ type
   CoreDbKvtDelFn* = proc(k: openArray[byte]): CoreDbRc[void] {.noRaise.}
   CoreDbKvtPutFn* =
     proc(k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] {.noRaise.}
-  CoreDbKvtSaveOffSiteFn* = proc(): CoreDbRc[void] {.noRaise.}
   CoreDbKvtForgetFn* = proc(): CoreDbRc[void] {.noRaise.}
   CoreDbKvtHasKeyFn* = proc(k: openArray[byte]): CoreDbRc[bool] {.noRaise.}
 
@@ -159,7 +157,6 @@ type
     delFn*:         CoreDbKvtDelFn
     putFn*:         CoreDbKvtPutFn
     hasKeyFn*:      CoreDbKvtHasKeyFn
-    saveOffSiteFn*: CoreDbKvtSaveOffSiteFn
     forgetFn*:      CoreDbKvtForgetFn
 
   # --------------------------------------------------

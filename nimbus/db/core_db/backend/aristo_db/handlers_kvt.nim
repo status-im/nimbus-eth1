@@ -25,13 +25,8 @@ type
     kdb: KvtDbRef                ## Shared key-value table
     api*: KvtApiRef              ## Api functions can be re-directed
     cache: KvtCoreDxKvtRef       ## Shared transaction table wrapper
-    gq: seq[KvtDbRef]            ## Garbage queue, deferred disposal
 
-  KvtCoreDxKvtRef = ref KvtCoreDxKvtObj
-  KvtCoreDxKvtObj = object of CoreDxKvtRef
-    ## Descriptor extension, subject to a custom `=destroy` destructor. Note
-    ## that the `kvt` is only considered an active descriptor if it is in
-    ## the `base.peers` set.
+  KvtCoreDxKvtRef = ref object of CoreDxKvtRef
     base: KvtBaseRef             ## Local base descriptor
     kvt: KvtDbRef                ## In most cases different from `base.kdb`
 
@@ -70,15 +65,6 @@ func toRc[T](
   err rc.error.toError(base, info, error)
 
 # ------------------------------------------------------------------------------
-# Private auto destructor
-# ------------------------------------------------------------------------------
-
-proc `=destroy`(cKvt: var KvtCoreDxKvtObj) =
-  ## Auto destructor
-  if not cKvt.kvt.isNil:
-    discard cKvt.base.api.forget(cKvt.kvt)
-
-# ------------------------------------------------------------------------------
 # Private `kvt` call back functions
 # ------------------------------------------------------------------------------
 
@@ -107,28 +93,6 @@ proc kvtMethods(cKvt: KvtCoreDxKvtRef): CoreDbKvtFns =
       if rc.isErr:
         return err(rc.error.toError(base, info))
     ok()
-
-  proc kvtSaveOffSite(
-    cKvt: KvtCoreDxKvtRef;
-    info: static[string];
-      ): CoreDbRc[void] =
-    let base = cKvt.base
-    if cKvt == base.cache:
-      return err(use_kvt.GenericError.toError(base, info, KvtNotOffSite))
-
-    # Re-centre to get a writable instance
-    let
-      kvt = cKvt.kvt
-      api = base.api
-    api.reCentre(kvt)
-    defer: api.reCentre(base.kdb)
-
-    # Store/write to persistent DB
-    let rc = api.persist(kvt)
-    if rc.isOk:
-      ok()
-    else:
-      err(rc.error.toError(base, info))
 
   proc kvtGet(
       cKvt: KvtCoreDxKvtRef;
@@ -193,9 +157,6 @@ proc kvtMethods(cKvt: KvtCoreDxKvtRef): CoreDbKvtFns =
     hasKeyFn: proc(k: openArray[byte]): CoreDbRc[bool] =
       cKvt.kvtHasKey(k, "hasKeyFn()"),
 
-    saveOffSiteFn: proc(): CoreDbRc[void] =
-      cKvt.kvtSaveOffSite("persistentFn()"),
-
     forgetFn: proc(): CoreDbRc[void] =
       cKvt.kvtForget("forgetFn()"))
 
@@ -251,16 +212,8 @@ proc persistent*(
 
 proc newKvtHandler*(
     base: KvtBaseRef;
-    offSite: bool;
     info: static[string];
       ): CoreDbRc[CoreDxKvtRef] =
-  if offSite:
-    let
-      kvt = ? base.api.forkTx(base.kdb,0).toRc(base, info)
-      dsc = KvtCoreDxKvtRef(base: base, kvt: kvt)
-    dsc.methods = dsc.kvtMethods()
-    ok(base.parent.bless dsc)
-  else:
     ok(base.cache)
 
 

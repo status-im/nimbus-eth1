@@ -46,7 +46,6 @@ proc validateMethodsDesc(kvt: CoreDbKvtFns) =
   doAssert not kvt.getFn.isNil
   doAssert not kvt.delFn.isNil
   doAssert not kvt.putFn.isNil
-  doAssert not kvt.saveOffSiteFn.isNil
   doAssert not kvt.hasKeyFn.isNil
   doAssert not kvt.forgetFn.isNil
 

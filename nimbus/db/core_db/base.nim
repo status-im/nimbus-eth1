@@ -311,29 +311,18 @@ proc `$$`*(e: CoreDbErrorRef): string =
 # Public key-value table methods
 # ------------------------------------------------------------------------------
 
-proc newKvt*(db: CoreDbRef; offSite = false): CoreDxKvtRef =
+proc newKvt*(db: CoreDbRef): CoreDxKvtRef =
   ## Constructor, will defect on failure.
   ##
-  ## Depending on the argument `offSite`, the constructed object will have
-  ## the following properties.
-  ##
-  ## * `false`
-  ##   Subscribe to the common base object shared with other shared
-  ##   descriptors. Any changes are immediately visible among subscribers.
-  ##   On destruction (when the constructed object gets out of scope), changes
-  ##   are not saved to the backend database but are still cached and available
-  ##   to other subscribers.
-  ##
-  ## * `true`
-  ##   The contructed object will be a new separate table descriptor with a
-  ##   clean cache and no pending transactions. On automatic destruction,
-  ##   changes will be discarded. The contents of this descriptor cache can be
-  ##   saved persistently with the `saveOffSite()` function.
+  ## This function subscribes to the common base object shared with other
+  ## KVT descriptors. Any changes are immediately visible to subscribers.
+  ## On destruction (when the constructed object gets out of scope), changes
+  ## are not saved to the backend database but are still cached and available.
   ##
   db.setTrackNewApi BaseNewKvtFn
-  result = db.methods.newKvtFn(offSite).valueOr:
+  result = db.methods.newKvtFn().valueOr:
     raiseAssert error.prettyText()
-  db.ifTrackNewApi: debug newApiTxt, api, elapsed, offSite
+  db.ifTrackNewApi: debug newApiTxt, api, elapsed
 
 proc get*(kvt: CoreDxKvtRef; key: openArray[byte]): CoreDbRc[Blob] =
   ## This function always returns a non-empty `Blob` or an error code.
@@ -373,37 +362,6 @@ proc hasKey*(kvt: CoreDxKvtRef; key: openArray[byte]): CoreDbRc[bool] =
   kvt.setTrackNewApi KvtHasKeyFn
   result = kvt.methods.hasKeyFn key
   kvt.ifTrackNewApi: debug newApiTxt, api, elapsed, key=key.toStr, result
-
-proc saveOffSite*(kvt: CoreDxKvtRef): CoreDbRc[void] {.discardable.} =
-  ## For the legacy database, this function has no effect and will always
-  ## succeeds. It will nevertheless return a discardable error if there is
-  ## a pending transaction.
-  ##
-  ## Otherwise, if assigned *off-site* (see `newKvt()`), this function will
-  ## save the current cache to the database.
-  ##
-  ## Otherwise, this function will have no effect and return a discardable
-  ## error.
-  ##
-  kvt.setTrackNewApi KvtSaveOffSiteFn
-  result = kvt.methods.saveOffSiteFn()
-  kvt.ifTrackNewApi: debug newApiTxt, api, elapsed, result
-
-proc forget*(kvt: CoreDxKvtRef): CoreDbRc[void] {.discardable.} =
-  ## For the legacy database, this function has no effect and succeeds always.
-  ##
-  ## This function destroys the current non-shared descriptor (see argument
-  ## `sharedTable` for `newKvt()`) regardless of the save/share mode
-  ## assigned to the constructor. For other descriptor types, the function
-  ## does nothing.
-  ##
-  ## Note:
-  ##   Auto destruction seems to be unreliable (causing spurious crashes.)
-  ##   So manual destruction using this function is advised.
-  ##
-  kvt.setTrackNewApi KvtForgetFn
-  result = kvt.methods.forgetFn()
-  kvt.ifTrackNewApi: debug newApiTxt, api, elapsed, result
 
 # ------------------------------------------------------------------------------
 # Public Merkle Patricia Tree context constructors and administration
@@ -883,10 +841,6 @@ proc persistent*(
   ## Otherwise, cached data from the `Kvt`, `Mpt`, and `Acc` descriptors are
   ## stored on the persistent database (if any). This requires that that there
   ## is no transaction pending.
-  ##
-  ## Caveat:
-  ##   For the `Kvt` table(s), cached *off-site* data are not stored and
-  ##   treated separately (see `saveOffSite()`.)
   ##
   db.setTrackNewApi BasePersistentFn
   result = db.methods.persistentFn none(BlockNumber)

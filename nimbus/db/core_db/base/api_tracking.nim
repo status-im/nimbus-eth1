@@ -77,7 +77,6 @@ type
     KvtGetOrEmptyFn     = "kvt/getOrEmpty"
     KvtHasKeyFn         = "kvt/hasKey"
     KvtPairsIt          = "kvt/pairs"
-    KvtSaveOffSiteFn    = "kvt/saveOffSite"
     KvtPutFn            = "kvt/put"
 
     LegaBeginTxFn       = "lega/beginTransaction"
