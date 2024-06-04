@@ -23,7 +23,7 @@ import
 
 when not defined(release):
   import
-    ../../tracer,
+    #../../tracer,
     ../../utils/utils
 
 export results
@@ -80,7 +80,7 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
                        bodies: openArray[BlockBody],
                        flags: PersistBlockFlags = {}): Result[PersistStats, string]
                          {.raises: [CatchableError] .} =
-  let dbTx = c.db.beginTransaction()
+  let dbTx = c.db.newTransaction()
   defer: dbTx.dispose()
 
   c.com.hardForkTransition(headers[0])
@@ -95,10 +95,10 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
   for i in 0 ..< headers.len:
     let (header, body) = (headers[i], bodies[i])
 
-    # This transaction keeps the current state open for inspection
-    # if an error occurs (as needed for `Aristo`.).
-    let lapTx = c.db.beginTransaction()
-    defer: lapTx.dispose()
+    # # This transaction keeps the current state open for inspection
+    # # if an error occurs (as needed for `Aristo`.).
+    # let lapTx = c.db.newTransaction()
+    # defer: lapTx.dispose()
 
     c.com.hardForkTransition(header)
 
@@ -125,17 +125,17 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
                          else:
                            ValidationResult.OK
 
-    when defined(nimbusDumpDebuggingMetaData):
-      if validationResult == ValidationResult.Error and
-         body.transactions.calcTxRoot == header.txRoot:
-        vmState.dumpDebuggingMetaData(header, body)
-        warn "Validation error. Debugging metadata dumped."
+    # when defined(nimbusDumpDebuggingMetaData):
+    #   if validationResult == ValidationResult.Error and
+    #      body.transactions.calcTxRoot == header.txRoot:
+    #     vmState.dumpDebuggingMetaData(header, body)
+    #     warn "Validation error. Debugging metadata dumped."
 
     if validationResult != ValidationResult.OK:
       return err("Failed to validate block")
 
     if c.generateWitness:
-      let dbTx = c.db.beginTransaction()
+      let dbTx = c.db.newTransaction()
       defer: dbTx.dispose()
 
       let
@@ -167,7 +167,7 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
     c.com.syncCurrent = header.blockNumber
 
     # Done with this block
-    lapTx.commit()
+    # lapTx.commit()
 
     txs += body.transactions.len
 

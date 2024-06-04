@@ -863,13 +863,13 @@ proc persistent*(
   result = db.methods.persistentFn some(blockNumber)
   db.ifTrackNewApi: debug newApiTxt, api, elapsed, blockNumber, result
 
-proc newTransaction*(db: CoreDbRef): CoreDbRc[CoreDxTxRef] =
+proc newTransaction*(db: CoreDbRef): CoreDxTxRef =
   ## Constructor
   ##
   db.setTrackNewApi BaseNewTxFn
   result = db.methods.beginFn()
   db.ifTrackNewApi:
-    debug newApiTxt, api, elapsed, newLevel=db.methods.levelFn(), result
+    debug newApiTxt, api, elapsed, newLevel=db.methods.levelFn()
 
 
 proc level*(tx: CoreDxTxRef): int =
@@ -879,29 +879,23 @@ proc level*(tx: CoreDxTxRef): int =
   result = tx.methods.levelFn()
   tx.ifTrackNewApi: debug newApiTxt, api, elapsed, result
 
-proc commit*(tx: CoreDxTxRef, applyDeletes = true): CoreDbRc[void] =
+proc commit*(tx: CoreDxTxRef) =
   tx.setTrackNewApi TxCommitFn:
     let prvLevel {.used.} = tx.methods.levelFn()
-  result = tx.methods.commitFn applyDeletes
-  tx.ifTrackNewApi: debug newApiTxt, api, elapsed, prvLevel, result
+  tx.methods.commitFn()
+  tx.ifTrackNewApi: debug newApiTxt, api, elapsed, prvLevel
 
-proc rollback*(tx: CoreDxTxRef): CoreDbRc[void] =
+proc rollback*(tx: CoreDxTxRef) =
   tx.setTrackNewApi TxRollbackFn:
     let prvLevel {.used.} = tx.methods.levelFn()
-  result = tx.methods.rollbackFn()
-  tx.ifTrackNewApi: debug newApiTxt, api, elapsed, prvLevel, result
+  tx.methods.rollbackFn()
+  tx.ifTrackNewApi: debug newApiTxt, api, elapsed, prvLevel
 
-proc dispose*(tx: CoreDxTxRef): CoreDbRc[void] =
+proc dispose*(tx: CoreDxTxRef) =
   tx.setTrackNewApi TxDisposeFn:
     let prvLevel {.used.} = tx.methods.levelFn()
-  result = tx.methods.disposeFn()
-  tx.ifTrackNewApi: debug newApiTxt, api, elapsed, prvLevel, result
-
-proc safeDispose*(tx: CoreDxTxRef): CoreDbRc[void] =
-  tx.setTrackNewApi TxSaveDisposeFn:
-    let prvLevel {.used.} = tx.methods.levelFn()
-  result = tx.methods.safeDisposeFn()
-  tx.ifTrackNewApi: debug newApiTxt, api, elapsed, prvLevel, result
+  tx.methods.disposeFn()
+  tx.ifTrackNewApi: debug newApiTxt, api, elapsed, prvLevel
 
 # ------------------------------------------------------------------------------
 # Public tracer methods
@@ -1121,32 +1115,26 @@ when ProvideLegacyAPI:
 
   proc beginTransaction*(db: CoreDbRef): CoreDbTxRef =
     db.setTrackLegaApi LegaBeginTxFn
-    result = (db.distinctBase.methods.beginFn().expect $api).CoreDbTxRef
+    result = db.distinctBase.methods.beginFn().CoreDbTxRef
     db.ifTrackLegaApi:
       debug legaApiTxt, api, elapsed, newLevel=db.methods.levelFn()
 
   proc commit*(tx: CoreDbTxRef, applyDeletes = true) =
     tx.setTrackLegaApi LegaTxCommitFn:
       let prvLevel {.used.} = tx.distinctBase.methods.levelFn()
-    tx.distinctBase.commit(applyDeletes).expect $api
+    tx.distinctBase.commit()
     tx.ifTrackLegaApi: debug legaApiTxt, api, elapsed, prvLevel
 
   proc rollback*(tx: CoreDbTxRef) =
     tx.setTrackLegaApi LegaTxCommitFn:
       let prvLevel {.used.} = tx.distinctBase.methods.levelFn()
-    tx.distinctBase.rollback().expect $api
+    tx.distinctBase.rollback()
     tx.ifTrackLegaApi: debug legaApiTxt, api, elapsed, prvLevel
 
   proc dispose*(tx: CoreDbTxRef) =
     tx.setTrackLegaApi LegaTxDisposeFn:
       let prvLevel {.used.} = tx.distinctBase.methods.levelFn()
-    tx.distinctBase.dispose().expect $api
-    tx.ifTrackLegaApi: debug legaApiTxt, api, elapsed, prvLevel
-
-  proc safeDispose*(tx: CoreDbTxRef) =
-    tx.setTrackLegaApi LegaTxSaveDisposeFn:
-      let prvLevel {.used.} = tx.distinctBase.methods.levelFn()
-    tx.distinctBase.safeDispose().expect $api
+    tx.distinctBase.dispose()
     tx.ifTrackLegaApi: debug legaApiTxt, api, elapsed, prvLevel
 
   # ----------------

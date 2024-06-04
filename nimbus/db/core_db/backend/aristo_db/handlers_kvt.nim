@@ -188,8 +188,11 @@ func txTop*(
 proc txBegin*(
     base: KvtBaseRef;
     info: static[string];
-      ): CoreDbRc[KvtTxRef] =
-  base.api.txBegin(base.kdb).toRc(base, info)
+      ): KvtTxRef =
+  let rc = base.api.txBegin(base.kdb)
+  if rc.isErr:
+    raiseAssert info & ": " & $rc.error
+  rc.value
 
 proc persistent*(
     base: KvtBaseRef;

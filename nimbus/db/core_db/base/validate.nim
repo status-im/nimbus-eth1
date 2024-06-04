@@ -127,7 +127,6 @@ proc validateMethodsDesc(tx: CoreDxTxRef) =
   doAssert not tx.methods.commitFn.isNil
   doAssert not tx.methods.rollbackFn.isNil
   doAssert not tx.methods.disposeFn.isNil
-  doAssert not tx.methods.safeDisposeFn.isNil
 
 proc validateMethodsDesc(db: CoreDbRef) =
   doAssert not db.isNil

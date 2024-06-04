@@ -600,8 +600,11 @@ func txTop*(
 proc txBegin*(
     base: AristoBaseRef;
     info: static[string];
-      ): CoreDbRc[AristoTxRef] =
-  base.api.txBegin(base.ctx.mpt).toRc(base, info)
+      ): AristoTxRef =
+  let rc = base.api.txBegin(base.ctx.mpt)
+  if rc.isErr:
+    raiseAssert info & ": " & $rc.error
+  rc.value
 
 proc getLevel*(base: AristoBaseRef): int =
   base.api.level(base.ctx.mpt)

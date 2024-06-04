@@ -367,7 +367,9 @@ proc consensus*(com: CommonRef, header: BlockHeader): ConsensusType
 
 proc initializeEmptyDb*(com: CommonRef)
     {.gcsafe, raises: [CatchableError].} =
-  let kvt = com.db.kvt()
+  let kvt = com.db.newKvt()
+  proc contains(kvt: CoreDxKvtRef; key: openArray[byte]): bool =
+    kvt.hasKey(key).expect "valid bool"
   if canonicalHeadHashKey().toOpenArray notin kvt:
     info "Writing genesis to DB"
     doAssert(com.genesisHeader.blockNumber.isZero,

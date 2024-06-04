@@ -33,7 +33,7 @@ proc rpcCallEvm*(args: TransactionArgs, header: common.BlockHeader, com: CommonR
   let vmState = BaseVMState.new(topHeader, com)
   let params  = toCallParams(vmState, args, globalGasCap, header.fee)
 
-  var dbTx = com.db.beginTransaction()
+  var dbTx = com.db.newTransaction()
   defer: dbTx.dispose() # always dispose state changes
 
   runComputation(params)
@@ -46,7 +46,7 @@ proc rpcCallEvm*(args: TransactionArgs,
   const globalGasCap = 0 # TODO: globalGasCap should configurable by user
   let params  = toCallParams(vmState, args, globalGasCap, header.fee)
 
-  var dbTx = com.db.beginTransaction()
+  var dbTx = com.db.newTransaction()
   defer: dbTx.dispose() # always dispose state changes
 
   runComputation(params)
@@ -71,7 +71,7 @@ proc rpcEstimateGas*(args: TransactionArgs,
     hi : GasInt = GasInt args.gas.get(0.Quantity)
     cap: GasInt
 
-  var dbTx = com.db.beginTransaction()
+  var dbTx = com.db.newTransaction()
   defer: dbTx.dispose() # always dispose state changes
 
   # Determine the highest gas limit can be used during the estimation.

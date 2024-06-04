@@ -107,7 +107,7 @@ type
   CoreDbBaseNewCtxFromTxFn* = proc(
     colState: Hash256; kind: CoreDbColType): CoreDbRc[CoreDbCtxRef] {.noRaise.}
   CoreDbBaseSwapCtxFn* = proc(ctx: CoreDbCtxRef): CoreDbCtxRef {.noRaise.}
-  CoreDbBaseTxBeginFn* = proc(): CoreDbRc[CoreDxTxRef] {.noRaise.}
+  CoreDbBaseTxBeginFn* = proc(): CoreDxTxRef {.noRaise.}
   CoreDbBaseNewCaptFn* =
     proc(flgs: set[CoreDbCaptFlags]): CoreDbRc[CoreDxCaptRef] {.noRaise.}
   CoreDbBaseGetCaptFn* = proc(): CoreDbRc[CoreDxCaptRef] {.noRaise.}
@@ -235,17 +235,15 @@ type
   # Sub-descriptor: Transaction frame management
   # --------------------------------------------------
   CoreDbTxLevelFn* = proc(): int {.noRaise.}
-  CoreDbTxCommitFn* = proc(applyDeletes: bool): CoreDbRc[void] {.noRaise.}
-  CoreDbTxRollbackFn* = proc(): CoreDbRc[void] {.noRaise.}
-  CoreDbTxDisposeFn* = proc(): CoreDbRc[void] {.noRaise.}
-  CoreDbTxSafeDisposeFn* = proc(): CoreDbRc[void] {.noRaise.}
+  CoreDbTxCommitFn* = proc() {.noRaise.}
+  CoreDbTxRollbackFn* = proc() {.noRaise.}
+  CoreDbTxDisposeFn* = proc() {.noRaise.}
 
   CoreDbTxFns* = object
     levelFn*:       CoreDbTxLevelFn
     commitFn*:      CoreDbTxCommitFn
     rollbackFn*:    CoreDbTxRollbackFn
     disposeFn*:     CoreDbTxDisposeFn
-    safeDisposeFn*: CoreDbTxSafeDisposeFn
 
 
   # --------------------------------------------------
