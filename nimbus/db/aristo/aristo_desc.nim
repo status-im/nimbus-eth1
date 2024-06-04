@@ -203,12 +203,12 @@ proc fork*(
   if not noTopLayer:
     clone.top = LayerRef.init()
     if not db.balancer.isNil:
-      clone.top.delta.vGen = db.balancer.vGen
+      clone.top.delta.vTop = db.balancer.vTop
     else:
-      let rc = clone.backend.getIdgFn()
+      let rc = clone.backend.getTuvFn()
       if rc.isOk:
-        clone.top.delta.vGen = rc.value
-      elif rc.error != GetIdgNotFound:
+        clone.top.delta.vTop = rc.value
+      elif rc.error != GetTuvNotFound:
         return err(rc.error)
 
   # Add to peer list of clones

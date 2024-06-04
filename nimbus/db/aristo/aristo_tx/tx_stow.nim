@@ -14,11 +14,10 @@
 {.push raises: [].}
 
 import
-  std/[sets, tables],
+  std/tables,
   results,
   ../aristo_delta/delta_merge,
-  ".."/[aristo_desc, aristo_get, aristo_delta, aristo_layers, aristo_hashify,
-        aristo_vid]
+  ".."/[aristo_desc, aristo_get, aristo_delta, aristo_layers, aristo_hashify]
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -116,20 +115,20 @@ proc txStow*(
     db.topMerge(rc.value).isOkOr:
       return err(error)
 
-    # New empty top layer (probably with `snap` proofs and `vGen` carry over)
+    # New empty top layer (probably with `snap` proofs and `vTop` carry over)
     db.top = LayerRef(
       delta: LayerDeltaRef(),
       final: final)
     if db.balancer.isValid:
-      db.top.delta.vGen = db.balancer.vGen
+      db.top.delta.vTop = db.balancer.vTop
     else:
-      let rc = db.getIdgUbe()
+      let rc = db.getTuvUbe()
       if rc.isOk:
-        db.top.delta.vGen = rc.value
+        db.top.delta.vTop = rc.value
       else:
-        # It is OK if there was no `Idg`. Otherwise something serious happened
+        # It is OK if there was no `vTop`. Otherwise something serious happened
         # and there is no way to recover easily.
-        doAssert rc.error == GetIdgNotFound
+        doAssert rc.error == GetTuvNotFound
 
   elif db.top.delta.sTab.len != 0 and
        not db.top.delta.sTab.getOrVoid(VertexID(1)).isValid:
@@ -142,7 +141,7 @@ proc txStow*(
 
   # New empty top layer (probably with `snap` proofs carry over)
   db.top = LayerRef(
-    delta: LayerDeltaRef(vGen: db.vGen),
+    delta: LayerDeltaRef(vTop: db.vTop),
     final: final,
     txUid: db.top.txUid)
   ok()

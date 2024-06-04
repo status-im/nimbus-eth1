@@ -153,7 +153,7 @@ proc isDbEq(a, b: LayerDeltaRef; db: AristoDbRef; noisy = true): bool =
   if unsafeAddr(a[]) != unsafeAddr(b[]):
     if a.src != b.src or
        a.kMap.getOrVoid(VertexID 1) != b.kMap.getOrVoid(VertexID 1) or
-       a.vGen != b.vGen:
+       a.vTop != b.vTop:
       return false
 
     # Void entries may differ unless on physical backend

@@ -66,12 +66,12 @@ proc txFork*(
 
   # Provide new empty stack layer
   let stackLayer = block:
-    let rc = db.getIdgBE()
+    let rc = db.getTuvBE()
     if rc.isOk:
       LayerRef(
-        delta: LayerDeltaRef(vGen: rc.value),
+        delta: LayerDeltaRef(vTop: rc.value),
         final: LayerFinalRef())
-    elif rc.error == GetIdgNotFound:
+    elif rc.error == GetTuvNotFound:
       LayerRef.init()
     else:
       return err(rc.error)

@@ -29,10 +29,10 @@ type
       ## Generic backend database retrieval function for a single
       ## `Aristo DB` hash lookup value.
 
-  GetIdgFn* =
-    proc(): Result[seq[VertexID],AristoError] {.gcsafe, raises: [].}
-      ## Generic backend database retrieval function for a the ID generator
-      ## `Aristo DB` state record.
+  GetTuvFn* =
+    proc(): Result[VertexID,AristoError] {.gcsafe, raises: [].}
+      ## Generic backend database retrieval function for the top used
+      ## vertex ID.
 
   GetLstFn* =
     proc(): Result[SavedState,AristoError]
@@ -63,11 +63,11 @@ type
         ## Generic backend database bulk storage function, `VOID_HASH_KEY`
         ## values indicate that records should be deleted.
 
-  PutIdgFn* =
-    proc(hdl: PutHdlRef; vs: openArray[VertexID])
+  PutTuvFn* =
+    proc(hdl: PutHdlRef; vs: VertexID)
       {.gcsafe, raises: [].}
-        ## Generic backend database ID generator state storage function. This
-        ## function replaces the current generator state.
+        ## Generic backend database ID generator storage function for the
+        ## top used vertex ID.
 
   PutLstFn* =
     proc(hdl: PutHdlRef; lst: SavedState)
@@ -109,13 +109,13 @@ type
     ## Backend interface.
     getVtxFn*: GetVtxFn              ## Read vertex record
     getKeyFn*: GetKeyFn              ## Read Merkle hash/key
-    getIdgFn*: GetIdgFn              ## Read vertex ID generator state
+    getTuvFn*: GetTuvFn              ## Read top used vertex ID
     getLstFn*: GetLstFn              ## Read saved state
 
     putBegFn*: PutBegFn              ## Start bulk store session
     putVtxFn*: PutVtxFn              ## Bulk store vertex records
     putKeyFn*: PutKeyFn              ## Bulk store vertex hashes
-    putIdgFn*: PutIdgFn              ## Store ID generator state
+    putTuvFn*: PutTuvFn              ## Store top used vertex ID
     putLstFn*: PutLstFn              ## Store saved state
     putEndFn*: PutEndFn              ## Commit bulk store session
 
@@ -125,13 +125,13 @@ type
 proc init*(trg: var BackendObj; src: BackendObj) =
   trg.getVtxFn = src.getVtxFn
   trg.getKeyFn = src.getKeyFn
-  trg.getIdgFn = src.getIdgFn
+  trg.getTuvFn = src.getTuvFn
   trg.getLstFn = src.getLstFn
 
   trg.putBegFn = src.putBegFn
   trg.putVtxFn = src.putVtxFn
   trg.putKeyFn = src.putKeyFn
-  trg.putIdgFn = src.putIdgFn
+  trg.putTuvFn = src.putTuvFn
   trg.putLstFn = src.putLstFn
   trg.putEndFn = src.putEndFn
 
