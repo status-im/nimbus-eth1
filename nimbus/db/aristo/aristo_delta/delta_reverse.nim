@@ -33,10 +33,10 @@ proc revFilter*(
 
   # Get vid generator state on backend
   block:
-    let rc = db.getIdgUbe()
+    let rc = db.getTuvUbe()
     if rc.isOk:
-      rev.vGen = rc.value
-    elif rc.error != GetIdgNotFound:
+      rev.vTop = rc.value
+    elif rc.error != GetTuvNotFound:
       return err((VertexID(0), rc.error))
 
   # Calculate reverse changes for the `sTab[]` structural table

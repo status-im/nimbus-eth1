@@ -77,7 +77,7 @@ proc deltaPersistent*(
   let writeBatch = be.putBegFn()
   be.putVtxFn(writeBatch, db.balancer.sTab.pairs.toSeq)
   be.putKeyFn(writeBatch, db.balancer.kMap.pairs.toSeq)
-  be.putIdgFn(writeBatch, db.balancer.vGen)
+  be.putTuvFn(writeBatch, db.balancer.vTop)
   be.putLstFn(writeBatch, lSst)
   ? be.putEndFn writeBatch                       # Finalise write batch
 

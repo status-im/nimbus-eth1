@@ -25,7 +25,6 @@
 ##       ...
 ##
 {.push raises: [].}
-{.warning: "*** importing rocks DB which needs a linker library".}
 
 import
   eth/common,
@@ -109,23 +108,22 @@ proc getKeyFn(db: RdbBackendRef): GetKeyFn =
 
       err(GetKeyNotFound)
 
-proc getIdgFn(db: RdbBackendRef): GetIdgFn =
+proc getTuvFn(db: RdbBackendRef): GetTuvFn =
   result =
-    proc(): Result[seq[VertexID],AristoError]=
+    proc(): Result[VertexID,AristoError]=
 
       # Fetch serialised data record.
-      let data = db.rdb.getByPfx(AdmPfx, AdmTabIdIdg.uint64).valueOr:
+      let data = db.rdb.getByPfx(AdmPfx, AdmTabIdTuv.uint64).valueOr:
         when extraTraceMessages:
-          trace logTxt "getIdgFn: failed", error=error[0], info=error[1]
+          trace logTxt "getTuvFn: failed", error=error[0], info=error[1]
         return err(error[0])
 
       # Decode data record
       if data.len == 0:
-        let w = EmptyVidSeq   # Must be `let`
-        return ok w           # Compiler error with `ok(EmptyVidSeq)`
+        return ok VertexID(0)
 
       # Decode data record
-      data.deblobify seq[VertexID]
+      data.deblobify VertexID
 
 proc getLstFn(db: RdbBackendRef): GetLstFn =
   result =
@@ -199,18 +197,18 @@ proc putKeyFn(db: RdbBackendRef): PutKeyFn =
             code: error[1],
             info: error[2])
 
-proc putIdgFn(db: RdbBackendRef): PutIdgFn =
+proc putTuvFn(db: RdbBackendRef): PutTuvFn =
   result =
-    proc(hdl: PutHdlRef; vs: openArray[VertexID])  =
+    proc(hdl: PutHdlRef; vs: VertexID)  =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
-        let data = if 0 < vs.len: vs.blobify else: EmptyBlob
-        db.rdb.putByPfx(AdmPfx, @[(AdmTabIdIdg.uint64, data)]).isOkOr:
-          hdl.error = TypedPutHdlErrRef(
-            pfx:  AdmPfx,
-            aid:  AdmTabIdIdg,
-            code: error[1],
-            info: error[2])
+        if vs.isValid:
+          db.rdb.putByPfx(AdmPfx, @[(AdmTabIdTuv.uint64, vs.blobify)]).isOkOr:
+            hdl.error = TypedPutHdlErrRef(
+              pfx:  AdmPfx,
+              aid:  AdmTabIdTuv,
+              code: error[1],
+              info: error[2])
 
 proc putLstFn(db: RdbBackendRef): PutLstFn =
   result =
@@ -284,13 +282,13 @@ proc rocksDbBackend*(
 
   db.getVtxFn = getVtxFn db
   db.getKeyFn = getKeyFn db
-  db.getIdgFn = getIdgFn db
+  db.getTuvFn = getTuvFn db
   db.getLstFn = getLstFn db
 
   db.putBegFn = putBegFn db
   db.putVtxFn = putVtxFn db
   db.putKeyFn = putKeyFn db
-  db.putIdgFn = putIdgFn db
+  db.putTuvFn = putTuvFn db
   db.putLstFn = putLstFn db
   db.putEndFn = putEndFn db
 

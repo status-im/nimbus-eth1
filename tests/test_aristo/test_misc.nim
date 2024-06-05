@@ -11,148 +11,18 @@
 ## Aristo (aka Patricia) DB trancoder test
 
 import
-  std/[sequtils, sets],
   eth/common,
   results,
   stew/byteutils,
-  stew/endians2,
   unittest2,
   ../../nimbus/db/aristo,
-  ../../nimbus/db/aristo/[
-    aristo_check, aristo_debug, aristo_desc, aristo_blobify, aristo_layers,
-    aristo_vid],
+  ../../nimbus/db/aristo/[aristo_check, aristo_debug, aristo_desc],
   ../replay/xcheck,
   ./test_helpers
-
-type
-  TesterDesc = object
-    prng: uint32                       ## random state
-
-# ------------------------------------------------------------------------------
-# Private helpers
-# ------------------------------------------------------------------------------
-
-proc posixPrngRand(state: var uint32): byte =
-  ## POSIX.1-2001 example of a rand() implementation, see manual page rand(3).
-  state = state * 1103515245 + 12345;
-  let val = (state shr 16) and 32767    # mod 2^31
-  (val shr 8).byte                      # Extract second byte
-
-proc rand[W: SomeInteger|VertexID](ap: var TesterDesc; T: type W): T =
-  var a: array[sizeof T,byte]
-  for n in 0 ..< sizeof T:
-    a[n] = ap.prng.posixPrngRand().byte
-  when sizeof(T) == 1:
-    let w = uint8.fromBytesBE(a).T
-  when sizeof(T) == 2:
-    let w = uint16.fromBytesBE(a).T
-  when sizeof(T) == 4:
-    let w = uint32.fromBytesBE(a).T
-  else:
-    let w = uint64.fromBytesBE(a).T
-  when T is SomeUnsignedInt:
-    # That way, `fromBytesBE()` can be applied to `uint`
-    result = w
-  else:
-    # That way the result is independent of endianness
-    (addr result).copyMem(unsafeAddr w, sizeof w)
-
-proc vidRand(td: var TesterDesc; bits = 19): VertexID =
-  if bits < 64:
-    let
-      mask = (1u64 shl max(1,bits)) - 1
-      rval = td.rand uint64
-    (rval and mask).VertexID
-  else:
-    td.rand VertexID
-
-proc init(T: type TesterDesc; seed: int): TesterDesc =
-  result.prng = (seed and 0x7fffffff).uint32
-
-proc `+`(a: VertexID, b: int): VertexID =
-  (a.uint64 + b.uint64).VertexID
 
 # ------------------------------------------------------------------------------
 # Public test function
 # ------------------------------------------------------------------------------
-
-proc testVidRecycleLists*(noisy = true; seed = 42): bool =
-  ## Transcode VID lists held in `AristoDb` descriptor
-  ##
-  var td = TesterDesc.init seed
-  let db = AristoDbRef.init()
-
-  # Add some randum numbers
-  block:
-    let first = td.vidRand()
-    db.vidDispose first
-
-    var
-      expectedVids = 1
-      count = 1
-    # Feed some numbers used and some discaded
-    while expectedVids < 5 or count < 5 + expectedVids:
-      count.inc
-      let vid = td.vidRand()
-      expectedVids += (vid < first).ord
-      db.vidDispose vid
-
-    xCheck db.vGen.len == expectedVids:
-      noisy.say "***", "vids=", db.vGen.len, " discarded=", count-expectedVids
-
-  # Serialise/deserialise
-  block:
-    let dbBlob = db.vGen.blobify
-
-    # Deserialise
-    let
-      db1 = AristoDbRef.init()
-      rc = dbBlob.deblobify seq[VertexID]
-    xCheckRc rc.error == 0
-    db1.top.delta.vGen = rc.value
-
-    xCheck db.vGen == db1.vGen
-
-  # Make sure that recycled numbers are fetched first
-  let topVid = db.vGen[^1]
-  while 1 < db.vGen.len:
-    let w = db.vidFetch()
-    xCheck w < topVid
-  xCheck db.vGen.len == 1 and db.vGen[0] == topVid
-
-  # Get some consecutive vertex IDs
-  for n in 0 .. 5:
-    let w = db.vidFetch()
-    xCheck w == topVid + n
-    xCheck db.vGen.len == 1
-
-  # Repeat last test after clearing the cache
-  db.top.delta.vGen.setLen(0)
-  for n in 0 .. 5:
-    let w = db.vidFetch()
-    xCheck w == VertexID(LEAST_FREE_VID) + n # VertexID(1) is default root ID
-    xCheck db.vGen.len == 1
-
-  # Recycling and re-org tests
-  func toVQ(a: seq[int]): seq[VertexID] = a.mapIt(VertexID(LEAST_FREE_VID+it))
-
-  # Heuristic prevents from re-org
-  xCheck @[8, 7, 3, 4, 5, 9]    .toVQ.vidReorg == @[8, 7, 3, 4, 5, 9]   .toVQ
-  xCheck @[8, 7, 6, 3, 4, 5, 9] .toVQ.vidReorg == @[8, 7, 6, 3, 4, 5, 9].toVQ
-  xCheck @[5, 4, 3, 7]          .toVQ.vidReorg == @[5, 4, 3, 7]         .toVQ
-  xCheck @[5]                   .toVQ.vidReorg == @[5]                  .toVQ
-  xCheck @[3, 5]                .toVQ.vidReorg == @[3, 5]               .toVQ
-  xCheck @[4, 5]                .toVQ.vidReorg == @[4, 5]               .toVQ
-
-  # performing re-org
-  xCheck @[5, 7, 3, 4, 8, 9]    .toVQ.vidReorg == @[5, 4, 3, 7] .toVQ
-  xCheck @[5, 7, 6, 3, 4, 8, 9] .toVQ.vidReorg == @[3]          .toVQ
-  xCheck @[3, 4, 5, 7]          .toVQ.vidReorg == @[5, 4, 3, 7] .toVQ
-
-  xCheck newSeq[VertexID](0).vidReorg().len == 0
-
-  true
-
 
 proc testShortKeys*(
     noisy = true;

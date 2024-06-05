@@ -75,9 +75,6 @@ proc setErrorLevel {.used.} =
 proc miscRunner(noisy = true) =
   suite "Aristo: Miscellaneous tests":
 
-    test "VertexID recyling lists":
-      check noisy.testVidRecycleLists()
-
     test "Short keys and other patholgical cases":
       check noisy.testShortKeys()
 

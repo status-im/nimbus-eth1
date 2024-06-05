@@ -17,7 +17,7 @@ import
   stew/[byteutils, interval_set],
   ./aristo_desc/desc_backend,
   ./aristo_init/[memory_db, memory_only, rocks_db],
-  "."/[aristo_constants, aristo_desc, aristo_hike, aristo_layers]
+  "."/[aristo_desc, aristo_hike, aristo_layers]
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -150,14 +150,14 @@ func ppCodeHash(h: Hash256): string =
   else:
     result &= h.data.toHex.squeeze(hex=true,ignLen=true)
 
-proc ppVidList(vGen: openArray[VertexID]): string =
+proc ppVidList(vLst: openArray[VertexID]): string =
   result = "["
-  if vGen.len <= 250:
-    result &= vGen.mapIt(it.ppVid).join(",")
+  if vLst.len <= 250:
+    result &= vLst.mapIt(it.ppVid).join(",")
   else:
-    result &= vGen[0 .. 99].mapIt(it.ppVid).join(",")
+    result &= vLst[0 .. 99].mapIt(it.ppVid).join(",")
     result &= ",.."
-    result &= vGen[^100 .. ^1].mapIt(it.ppVid).join(",")
+    result &= vLst[^100 .. ^1].mapIt(it.ppVid).join(",")
   result &= "]"
 
 proc ppKey(key: HashKey; db: AristoDbRef; pfx = true): string =
@@ -404,8 +404,7 @@ proc ppFilter(
     result &= " n/a"
     return
   result &= pfx & "src=" & fl.src.ppKey(db)
-  result &= pfx & "vGen" & pfx1 & "[" &
-    fl.vGen.mapIt(it.ppVid).join(",") & "]"
+  result &= pfx & "vTop=" & fl.vTop.ppVid
   result &= pfx & "sTab" & pfx1 & "{"
   for n,vid in fl.sTab.sortedKeys:
     let vtx = fl.sTab.getOrVoid vid
@@ -426,13 +425,11 @@ proc ppBe[T](be: T; db: AristoDbRef; limit: int; indent: int): string =
     pfx2 = indent.toPfx(2)
   result = "<" & $be.kind & ">"
   var (dump,dataOk) = ("",false)
-  dump &= pfx & "vGen"
   block:
-    let q = be.getIdgFn().get(otherwise = EmptyVidSeq)
-    dump &= "(" & $q.len & ")"
-    if 0 < q.len:
+    let rc = be.getTuvFn()
+    if rc.isOk:
+      dump &= pfx & "vTop=" & rc.value.ppVid
       dataOk = true
-      dump &= pfx1 & q.ppVidList()
   block:
     dump &= pfx & "sTab"
     var (n, data) = (0, "")
@@ -471,7 +468,7 @@ proc ppBe[T](be: T; db: AristoDbRef; limit: int; indent: int): string =
 proc ppLayer(
     layer: LayerRef;
     db: AristoDbRef;
-    vGenOk: bool;
+    vTopOk: bool;
     sTabOk: bool;
     kMapOk: bool;
     pPrfOk: bool;
@@ -481,7 +478,7 @@ proc ppLayer(
   let
     pfx1 = indent.toPfx(1)
     pfx2 = indent.toPfx(2)
-    nOKs = vGenOk.ord + sTabOk.ord + kMapOk.ord + pPrfOk.ord + fRppOk.ord
+    nOKs = vTopOk.ord + sTabOk.ord + kMapOk.ord + pPrfOk.ord + fRppOk.ord
     tagOk = 1 < nOKs
   var
     pfy = ""
@@ -489,7 +486,9 @@ proc ppLayer(
   proc doPrefix(s: string; dataOk: bool): string =
     var rc: string
     if tagOk:
-      rc = pfy & s & (if dataOk: pfx2 else: "")
+      rc = pfy
+      if 0 < s.len:
+        rc &= s & (if dataOk: pfx2 else: "")
       pfy = pfx1
     else:
       rc = pfy
@@ -499,11 +498,8 @@ proc ppLayer(
   if not layer.isNil:
     if 2 < nOKs:
       result &= "<layer>".doPrefix(false)
-    if vGenOk:
-      let
-        tLen = layer.delta.vGen.len
-        info = "vGen(" & $tLen & ")"
-      result &= info.doPrefix(0 < tLen) & layer.delta.vGen.ppVidList
+    if vTopOk:
+      result &= "".doPrefix(true) & "vTop=" & layer.delta.vTop.ppVid
     if sTabOk:
       let
         tLen = layer.delta.sTab.len
@@ -562,8 +558,8 @@ proc pp*(lty: LeafTie, db = AristoDbRef(nil)): string =
 proc pp*(vid: VertexID): string =
   vid.ppVid
 
-proc pp*(vGen: openArray[VertexID]): string =
-  vGen.ppVidList
+proc pp*(vLst: openArray[VertexID]): string =
+  vLst.ppVidList
 
 proc pp*(p: PayloadRef, db = AristoDbRef(nil)): string =
   p.ppPayload(db.orDefault)
@@ -681,7 +677,7 @@ proc pp*(
     indent = 4;
       ): string =
   layer.ppLayer(
-    db, vGenOk=true, sTabOk=true, kMapOk=true, pPrfOk=true, fRppOk=true)
+    db, vTopOk=true, sTabOk=true, kMapOk=true, pPrfOk=true, fRppOk=true)
 
 proc pp*(
     layer: LayerRef;
@@ -690,7 +686,7 @@ proc pp*(
     indent = 4;
       ): string =
   layer.ppLayer(
-    db, vGenOk=true, sTabOk=xTabOk, kMapOk=true, pPrfOk=true, fRppOk=true)
+    db, vTopOk=true, sTabOk=xTabOk, kMapOk=true, pPrfOk=true, fRppOk=true)
 
 proc pp*(
     layer: LayerRef;
@@ -701,7 +697,7 @@ proc pp*(
     indent = 4;
       ): string =
   layer.ppLayer(
-    db, vGenOk=other, sTabOk=xTabOk, kMapOk=kMapOk, pPrfOk=other, fRppOk=other)
+    db, vTopOk=other, sTabOk=xTabOk, kMapOk=kMapOk, pPrfOk=other, fRppOk=other)
 
 
 proc pp*(
