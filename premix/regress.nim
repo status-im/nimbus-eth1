@@ -31,7 +31,7 @@ proc validateBlock(com: CommonRef, blockNumber: BlockNumber): BlockNumber =
     headers[i] = com.db.getBlockHeader(blockNumber + i.u256)
     bodies[i]  = com.db.getBlockBody(headers[i].blockHash)
 
-  let transaction = com.db.beginTransaction()
+  let transaction = com.db.newTransaction()
   defer: transaction.dispose()
 
   for i in 0 ..< numBlocks:

@@ -10,6 +10,7 @@
 
 import
   json, stint,
+  results,
   ../nimbus/[tracer, config],
   ../nimbus/core/chain,
   ../nimbus/common/common,
@@ -22,7 +23,7 @@ proc dumpTest(com: CommonRef, blockNumber: int) =
     parentNumber = blockNumber - 1
 
   var
-    capture = com.db.capture()
+    capture = com.db.newCapture.value
     captureCom = com.clone(capture.recorder)
 
   let

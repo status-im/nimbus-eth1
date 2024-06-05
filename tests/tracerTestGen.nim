@@ -10,6 +10,7 @@
 
 import
   json,
+  results,
   ../nimbus/common/common, # must be early (compilation annoyance)
   ../nimbus/db/opts,
   ../nimbus/db/core_db/persistent,
@@ -20,7 +21,7 @@ proc dumpTest(com: CommonRef, blockNumber: int) =
     blockNumber = blockNumber.u256
 
   var
-    capture = com.db.capture()
+    capture = com.db.newCapture.value
     captureCom = com.clone(capture.recorder)
 
   let

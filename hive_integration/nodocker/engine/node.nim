@@ -44,7 +44,7 @@ proc processBlock(
   ## implementations (but can be savely removed, as well.)
   ## variant of `processBlock()` where the `header` argument is explicitely set.
 
-  var dbTx = vmState.com.db.beginTransaction()
+  var dbTx = vmState.com.db.newTransaction()
   defer: dbTx.dispose()
 
   if vmState.com.daoForkSupport and
@@ -76,12 +76,7 @@ proc processBlock(
     let clearEmptyAccount = vmState.determineFork >= FkSpurious
     db.persist(clearEmptyAccount)
 
-  # `applyDeletes = false`
-  # If the trie pruning activated, each of the block will have its own state
-  # trie keep intact, rather than destroyed by trie pruning. But the current
-  # block will still get a pruned trie. If trie pruning deactivated,
-  # `applyDeletes` have no effects.
-  dbTx.commit(applyDeletes = false)
+  dbTx.commit()
 
   ValidationResult.OK
 
@@ -103,7 +98,7 @@ proc getVmState(c: ChainRef, header: BlockHeader):
 proc setBlock*(c: ChainRef; header: BlockHeader;
                   body: BlockBody): ValidationResult
                           {.inline, raises: [CatchableError].} =
-  let dbTx = c.db.beginTransaction()
+  let dbTx = c.db.newTransaction()
   defer: dbTx.dispose()
 
   c.com.hardForkTransition(header)

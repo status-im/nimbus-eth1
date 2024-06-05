@@ -10,6 +10,7 @@ import
   eth/trie/trie_defs,
   eth/common/eth_types,
   stew/[byteutils, endians2],
+  results,
   unittest2,
   ../nimbus/db/storage_types,
   ../nimbus/db/core_db,
@@ -150,8 +151,10 @@ proc stateDBMain*() =
       ac.setCode(addr2, code)
       ac.persist()
       check ac.getCode(addr2) == code
-      let key = contractHashKey(keccakHash(code))
-      check memDB.kvt.get(key.toOpenArray) == code
+      let
+        key = contractHashKey(keccakHash(code))
+        val = memDB.newKvt().get(key.toOpenArray).valueOr: EmptyBlob
+      check val == code
 
     test "accessList operations":
       proc verifyAddrs(ac: LedgerRef, addrs: varargs[int]): bool =

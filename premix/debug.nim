@@ -12,6 +12,7 @@ import
   std/[json, os],
   stew/byteutils,
   chronicles,
+  results,
   ../nimbus/[vm_state, vm_types],
   ../nimbus/core/executor,
   ./premixcore, ./prestate,
@@ -20,11 +21,12 @@ import
 
 proc prepareBlockEnv(node: JsonNode, memoryDB: CoreDbRef) =
   let state = node["state"]
-
+  let kvt = memoryDB.newKvt()
   for k, v in state:
     let key = hexToSeqByte(k)
     let value = hexToSeqByte(v.getStr())
-    memoryDB.kvt.put(key, value)
+    kvt.put(key, value).isOkOr:
+      raiseAssert "prepareBlockEnv(): put() (loop) failed " & $$error
 
 proc executeBlock(blockEnv: JsonNode, memoryDB: CoreDbRef, blockNumber: UInt256) =
   let
@@ -34,7 +36,7 @@ proc executeBlock(blockEnv: JsonNode, memoryDB: CoreDbRef, blockNumber: UInt256)
     header = com.db.getBlockHeader(blockNumber)
     body   = com.db.getBlockBody(header.blockHash)
 
-  let transaction = memoryDB.beginTransaction()
+  let transaction = memoryDB.newTransaction()
   defer: transaction.dispose()
 
   let

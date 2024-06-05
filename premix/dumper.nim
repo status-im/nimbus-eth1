@@ -15,6 +15,7 @@
 
 import
   stint,
+  results,
   ../nimbus/common/common,
   ../nimbus/db/opts,
   ../nimbus/db/core_db/persistent,
@@ -25,10 +26,10 @@ import
 
 proc dumpDebug(com: CommonRef, blockNumber: UInt256) =
   var
-    capture = com.db.capture()
+    capture = com.db.newCapture.value
     captureCom = com.clone(capture.recorder)
 
-  let transaction = capture.recorder.beginTransaction()
+  let transaction = capture.recorder.newTransaction()
   defer: transaction.dispose()
 
 
