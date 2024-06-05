@@ -11,7 +11,7 @@
 import
   random, unittest2, stew/byteutils,
   eth/trie/nibbles,
-  ./multi_keys
+  ../nimbus/stateless/multi_keys
 
 proc initMultiKeys(keys: openArray[string], storageMode: bool = false): MultiKeysRef =
   result.new

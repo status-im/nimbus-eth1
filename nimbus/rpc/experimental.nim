@@ -22,7 +22,7 @@ import
   ./filters,
   ../core/executor/process_block,
   ../db/ledger,
-  ../../stateless/multi_keys,
+  ../stateless/multi_keys,
   ./p2p
 
 type

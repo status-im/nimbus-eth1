@@ -36,7 +36,7 @@ cliBuilder:
           ./test_transaction_json,
           #./test_blockchain_json,                 -- fails
           ./test_forkid,
-          ../stateless/test_multi_keys,
+          ./test_multi_keys,
           ./test_misc,
           #./test_graphql,                         -- fails
           ./test_pow,
