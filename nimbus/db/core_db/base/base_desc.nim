@@ -168,9 +168,9 @@ type
     colType: CoreDbColType; colState: Hash256; address: Option[EthAddress];
     ): CoreDbRc[CoreDbColRef] {.noRaise.}
   CoreDbCtxGetMptFn* = proc(
-    root: CoreDbColRef; prune: bool): CoreDbRc[CoreDxMptRef] {.noRaise.}
+    root: CoreDbColRef): CoreDbRc[CoreDxMptRef] {.noRaise.}
   CoreDbCtxGetAccFn* = proc(
-    root: CoreDbColRef; prune: bool): CoreDbRc[CoreDxAccRef] {.noRaise.}
+    root: CoreDbColRef): CoreDbRc[CoreDxAccRef] {.noRaise.}
   CoreDbCtxForgetFn* = proc() {.noRaise.}
 
   CoreDbCtxFns* = object
@@ -196,7 +196,6 @@ type
     proc(k: openArray[byte]; v: CoreDbAccount): CoreDbRc[void] {.noRaise.}
   CoreDbMptHasPathFn* = proc(k: openArray[byte]): CoreDbRc[bool] {.noRaise.}
   CoreDbMptGetColFn* = proc(): CoreDbColRef {.noRaise.}
-  CoreDbMptIsPruningFn* = proc(): bool {.noRaise.}
   CoreDbMptForgetFn* = proc(): CoreDbRc[void] {.noRaise.}
 
   CoreDbMptFns* = object
@@ -207,7 +206,6 @@ type
     mergeFn*:     CoreDbMptMergeFn
     hasPathFn*:   CoreDbMptHasPathFn
     getColFn*:    CoreDbMptGetColFn
-    isPruningFn*: CoreDbMptIsPruningFn
 
 
   # ----------------------------------------------------
@@ -220,7 +218,6 @@ type
   CoreDbAccMergeFn* = proc(v: CoreDbAccount): CoreDbRc[void] {.noRaise.}
   CoreDbAccHasPathFn* = proc(k: EthAddress): CoreDbRc[bool] {.noRaise.}
   CoreDbAccGetColFn* = proc(): CoreDbColRef {.noRaise.}
-  CoreDbAccIsPruningFn* = proc(): bool {.noRaise.}
   CoreDbAccForgetFn* = proc(): CoreDbRc[void] {.noRaise.}
 
   CoreDbAccFns* = object
@@ -232,7 +229,6 @@ type
     mergeFn*:      CoreDbAccMergeFn
     hasPathFn*:    CoreDbAccHasPathFn
     getColFn*:     CoreDbAccGetColFn
-    isPruningFn*:  CoreDbAccIsPruningFn
 
 
   # --------------------------------------------------

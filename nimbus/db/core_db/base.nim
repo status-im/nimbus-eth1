@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/[options, typetraits],
+  std/options,
   chronicles,
   eth/common,
   results,
@@ -68,6 +68,8 @@ const
   CoreDbEnableApiProfiling* = EnableApiTracking and EnableApiProfiling
 
 when ProvideLegacyAPI:
+  import
+    std/typetraits
   type
     TxWrapperApiError* = object of CoreDbApiError
       ## For re-routing exception on tx/action template
@@ -516,10 +518,8 @@ proc stateOrVoid*(col: CoreDbColRef): Hash256 =
 proc getMpt*(
     ctx: CoreDbCtxRef;
     col: CoreDbColRef;
-    prune = true;
       ): CoreDbRc[CoreDxMptRef] =
-  ## Get an MPT sub-trie view. The argument `prune` is currently ignored on
-  ## other than the legacy backend.
+  ## Get an MPT sub-trie view.
   ##
   ## If the `col` argument descriptor was created for an `EMPTY_ROOT_HASH`
   ## column state of type different form `CtStorage` or `CtAccounts`, all
@@ -528,24 +528,23 @@ proc getMpt*(
   ## function `getColumn()`.
   ##
   ctx.setTrackNewApi CtxGetMptFn
-  result = ctx.methods.getMptFn(col, prune)
-  ctx.ifTrackNewApi: debug newApiTxt, api, elapsed, col, prune, result
+  result = ctx.methods.getMptFn col
+  ctx.ifTrackNewApi: debug newApiTxt, api, elapsed, col, result
 
 proc getMpt*(
     ctx: CoreDbCtxRef;
     colType: CoreDbColType;
     address = none(EthAddress);
-    prune = true;
       ): CoreDxMptRef =
-  ## Shortcut for `getMpt(col,prune)` where the `col` argument is
+  ## Shortcut for `getMpt(col)` where the `col` argument is
   ## `db.getColumn(colType,EMPTY_ROOT_HASH).value`. This function will always
   ## return a non-nil descriptor or throw an exception.
   ##
   ctx.setTrackNewApi CtxGetMptFn
   let col = ctx.methods.newColFn(colType, EMPTY_ROOT_HASH, address).value
-  result = ctx.methods.getMptFn(col, prune).valueOr:
+  result = ctx.methods.getMptFn(col).valueOr:
     raiseAssert error.prettyText()
-  ctx.ifTrackNewApi: debug newApiTxt, api, colType, elapsed, prune
+  ctx.ifTrackNewApi: debug newApiTxt, api, colType, elapsed
 
 
 proc getMpt*(acc: CoreDxAccRef): CoreDxMptRef =
@@ -565,10 +564,8 @@ proc getMpt*(acc: CoreDxAccRef): CoreDxMptRef =
 proc getAcc*(
     ctx: CoreDbCtxRef;
     col: CoreDbColRef;
-    prune = true;
       ): CoreDbRc[CoreDxAccRef] =
-  ## Accounts trie constructor, will defect on failure. The argument `prune`
-  ## is currently ignored on other than the legacy backend.
+  ## Accounts trie constructor, will defect on failure.
   ##
   ## Example:
   ## ::
@@ -585,8 +582,8 @@ proc getAcc*(
   ## recommended using `CoreDxAccRef` methods for accounts.
   ##
   ctx.setTrackNewApi CtxGetAccFn
-  result = ctx.methods.getAccFn(col, prune)
-  ctx.ifTrackNewApi: debug newApiTxt, api, elapsed, col, prune, result
+  result = ctx.methods.getAccFn col
+  ctx.ifTrackNewApi: debug newApiTxt, api, elapsed, col, result
 
 proc toMpt*(phk: CoreDxPhkRef): CoreDxMptRef =
   ## Replaces the pre-hashed argument column `phk` by the non pre-hashed *MPT*.
@@ -609,15 +606,6 @@ proc toPhk*(mpt: CoreDxMptRef): CoreDxPhkRef =
 # ------------------------------------------------------------------------------
 # Public common methods for all hexary trie databases (`mpt`, `phk`, or `acc`)
 # ------------------------------------------------------------------------------
-
-proc isPruning*[T: CoreDbCtxRef | CoreDxMptRef | CoreDxPhkRef | CoreDxAccRef](
-    dsc: T): bool =
-  ## Getter
-  ##
-  dsc.setTrackNewApi AnyIsPruningFn
-  result = dsc.methods.isPruningFn()
-  dsc.ifTrackNewApi: debug newApiTxt, api, elapsed, result
-
 
 proc getColumn*(acc: CoreDxAccRef): CoreDbColRef =
   ## Getter, result is not `nil`
@@ -1028,21 +1016,21 @@ when ProvideLegacyAPI:
     result = phk.distinctBase.toMpt.CoreDbMptRef
     phk.ifTrackLegaApi: debug legaApiTxt, api, elapsed
 
-  proc mptPrune*(db: CoreDbRef; root: Hash256; prune = true): CoreDbMptRef =
+  proc mptPrune*(db: CoreDbRef; root: Hash256): CoreDbMptRef =
     db.setTrackLegaApi LegaNewMptFn
     let
       trie = db.ctx.methods.newColFn(
           CtGeneric, root, none(EthAddress)).valueOr:
         raiseAssert error.prettyText() & ": " & $api
-      mpt = db.ctx.getMpt(trie, prune).valueOr:
+      mpt = db.ctx.getMpt(trie).valueOr:
         raiseAssert error.prettyText() & ": " & $api
     result = mpt.CoreDbMptRef
-    db.ifTrackLegaApi: debug legaApiTxt, api, elapsed, root, prune
+    db.ifTrackLegaApi: debug legaApiTxt, api, elapsed, root
 
-  proc mptPrune*(db: CoreDbRef; prune = true): CoreDbMptRef =
+  proc mptPrune*(db: CoreDbRef): CoreDbMptRef =
     db.setTrackLegaApi LegaNewMptFn
-    result = db.ctx.getMpt(CtGeneric, none(EthAddress), prune).CoreDbMptRef
-    db.ifTrackLegaApi: debug legaApiTxt, api, elapsed, prune
+    result = db.ctx.getMpt(CtGeneric, none(EthAddress)).CoreDbMptRef
+    db.ifTrackLegaApi: debug legaApiTxt, api, elapsed
 
   # ----------------
 
@@ -1051,30 +1039,24 @@ when ProvideLegacyAPI:
     result = mpt.distinctBase.toPhk.CoreDbPhkRef
     mpt.ifTrackLegaApi: debug legaApiTxt, api, elapsed
 
-  proc phkPrune*(db: CoreDbRef; root: Hash256; prune = true): CoreDbPhkRef =
+  proc phkPrune*(db: CoreDbRef; root: Hash256): CoreDbPhkRef =
     db.setTrackLegaApi LegaNewPhkFn
     let
       trie = db.ctx.methods.newColFn(
           CtGeneric, root, none(EthAddress)).valueOr:
         raiseAssert error.prettyText() & ": " & $api
-      phk = db.ctx.getMpt(trie, prune).valueOr:
+      phk = db.ctx.getMpt(trie).valueOr:
         raiseAssert error.prettyText() & ": " & $api
     result = phk.toCoreDxPhkRef.CoreDbPhkRef
-    db.ifTrackLegaApi: debug legaApiTxt, api, elapsed, root, prune
+    db.ifTrackLegaApi: debug legaApiTxt, api, elapsed, root
 
-  proc phkPrune*(db: CoreDbRef; prune = true): CoreDbPhkRef =
+  proc phkPrune*(db: CoreDbRef): CoreDbPhkRef =
     db.setTrackLegaApi LegaNewPhkFn
     result = db.ctx.getMpt(
-      CtGeneric, none(EthAddress), prune).toCoreDxPhkRef.CoreDbPhkRef
-    db.ifTrackLegaApi: debug legaApiTxt, api, elapsed, prune
+      CtGeneric, none(EthAddress)).toCoreDxPhkRef.CoreDbPhkRef
+    db.ifTrackLegaApi: debug legaApiTxt, api, elapsed
 
   # ----------------
-
-  proc isPruning*(trie: CoreDbMptRef | CoreDbPhkRef): bool =
-    trie.setTrackLegaApi LegaIsPruningFn
-    result = trie.distinctBase.isPruning()
-    trie.ifTrackLegaApi: debug legaApiTxt, api, elapsed, result
-
 
   proc get*(mpt: CoreDbMptRef; key: openArray[byte]): Blob =
     mpt.setTrackLegaApi LegaMptGetFn

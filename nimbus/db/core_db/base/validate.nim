@@ -62,7 +62,6 @@ proc validateMethodsDesc(fns: CoreDbMptFns) =
   doAssert not fns.mergeFn.isNil
   doAssert not fns.hasPathFn.isNil
   doAssert not fns.getColFn.isNil
-  doAssert not fns.isPruningFn.isNil
 
 proc validateMethodsDesc(fns: CoreDbAccFns) =
   doAssert not fns.getMptFn.isNil
@@ -72,7 +71,6 @@ proc validateMethodsDesc(fns: CoreDbAccFns) =
   doAssert not fns.mergeFn.isNil
   doAssert not fns.hasPathFn.isNil
   doAssert not fns.getColFn.isNil
-  doAssert not fns.isPruningFn.isNil
 
 # ------------
 

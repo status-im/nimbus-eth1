@@ -79,7 +79,6 @@ proc toStr*(w: seq[(UInt256,UInt256)]): string =
 proc rootHash*   (t: DistinctTrie): KeccakHash   = t.toBase.rootHash()
 proc rootHashHex*(t: DistinctTrie): string       = $t.toBase.rootHash()
 proc db*         (t: DistinctTrie): DB           = t.toBase.parent()
-proc isPruning*  (t: DistinctTrie): bool         = t.toBase.isPruning()
 proc mpt*        (t: DistinctTrie): CoreDbMptRef = t.toBase.toMpt()
 func phk*        (t: DistinctTrie): CoreDbPhkRef = t.toBase
 
@@ -87,11 +86,11 @@ func phk*        (t: DistinctTrie): CoreDbPhkRef = t.toBase
 # Public functions: accounts trie
 # ------------------------------------------------------------------------------
 
-template initAccountsTrie*(db: DB, rootHash: KeccakHash, isPruning = true): AccountsTrie =
-  AccountsTrie(db.phkPrune(rootHash, isPruning))
+template initAccountsTrie*(db: DB, rootHash: KeccakHash): AccountsTrie =
+  AccountsTrie(db.phkPrune(rootHash))
 
 template initAccountsTrie*(db: DB, isPruning = true): AccountsTrie =
-  AccountsTrie(db.phkPrune(isPruning))
+  AccountsTrie(db.phkPrune())
 
 proc getAccountBytes*(trie: AccountsTrie, address: EthAddress): seq[byte] =
   CoreDbPhkRef(trie).get(address)
@@ -109,11 +108,11 @@ proc delAccountBytes*(trie: var AccountsTrie, address: EthAddress) =
 # Public functions: storage trie
 # ------------------------------------------------------------------------------
 
-proc initStorageTrie*(db: DB, rootHash: KeccakHash, isPruning = true): StorageTrie =
-  StorageTrie(db.phkPrune(rootHash, isPruning))
+proc initStorageTrie*(db: DB, rootHash: KeccakHash): StorageTrie =
+  StorageTrie(db.phkPrune(rootHash))
 
 template initStorageTrie*(db: DB, isPruning = true): StorageTrie =
-  StorageTrie(db.phkPrune(isPruning))
+  StorageTrie(db.phkPrune())
 
 template createTrieKeyFromSlot*(slot: UInt256): auto =
   # XXX: This is too expensive. Similar to `createRangeFromAddress`
@@ -136,13 +135,13 @@ proc putSlotBytes*(trie: var StorageTrie, slotAsKey: openArray[byte], value: ope
 proc delSlotBytes*(trie: var StorageTrie, slotAsKey: openArray[byte]) =
   CoreDbPhkRef(trie).del(slotAsKey)
 
-proc storageTrieForAccount*(trie: AccountsTrie, account: Account, isPruning = true): StorageTrie =
+proc storageTrieForAccount*(trie: AccountsTrie, account: Account): StorageTrie =
   # TODO: implement `prefix-db` to solve issue #228 permanently.
   # the `prefix-db` will automatically insert account address to the
   # underlying-db key without disturb how the trie works.
   # it will create virtual container for each account.
   # see nim-eth#9
-  initStorageTrie(trie.db, account.storageRoot, isPruning)
+  initStorageTrie(trie.db, account.storageRoot)
 
 # ------------------------------------------------------------------------------
 # End

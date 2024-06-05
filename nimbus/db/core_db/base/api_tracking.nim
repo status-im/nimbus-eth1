@@ -43,7 +43,6 @@ type
     AccToMptFn          = "acc/toMpt"
 
     AnyBackendFn        = "any/backend"
-    AnyIsPruningFn      = "any/isPruning"
 
     BaseColPrintFn      = "$$"
     BaseColStateFn      = "state"
@@ -84,7 +83,6 @@ type
     LegaCptFlagsFn      = "lega/cpt/flags"
     LegaCptLogDbFn      = "lega/cpt/logDb"
     LegaCptRecorderFn   = "lega/cpt/recorder"
-    LegaIsPruningFn     = "lega/isPruning"
 
     LegaKvtContainsFn   = "lega/kvt/contains"
     LegaKvtDelFn        = "lega/kvt/del"

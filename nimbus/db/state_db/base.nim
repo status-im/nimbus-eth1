@@ -69,7 +69,7 @@ proc rootHash*(db: AccountStateDB): KeccakHash =
   db.trie.rootHash
 
 proc `rootHash=`*(db: AccountStateDB, root: KeccakHash) =
-  db.trie = initAccountsTrie(db.trie.db, root, db.trie.isPruning)
+  db.trie = initAccountsTrie(db.trie.db, root)
 
 proc newAccountStateDB*(backingStore: CoreDbRef,
                         root: KeccakHash): AccountStateDB =
@@ -127,7 +127,7 @@ template createTrieKeyFromSlot(slot: UInt256): auto =
   # morally equivalent to toByteRange_Unnecessary but with different types
 
 template getStorageTrie(db: AccountStateDB, account: Account): auto =
-  storageTrieForAccount(db.trie, account, false)
+  storageTrieForAccount(db.trie, account)
 
 proc clearStorage*(db: AccountStateDB, address: EthAddress) =
   var account = db.getAccount(address)
