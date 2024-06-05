@@ -354,7 +354,7 @@ proc accountNode(ctx: GraphqlContextRef, header: common.BlockHeader, address: Et
       if not db.accountExists(address):
         return ok(respNull())
     let acc = db.getAccount(address)
-    ok(accountNode(ctx, acc, address, db))
+    ok(accountNode(ctx, acc.to(Account), address, db))
   except RlpError as ex:
     err(ex.msg)
 
@@ -552,7 +552,7 @@ proc accountStorage(ud: RootRef, params: Args, parent: Node): RespResult {.apiPr
   let acc = AccountNode(parent)
   try:
     let slot = parse(params[0].val.stringVal, UInt256, radix = 16)
-    let (val, _) = acc.db.getStorage(acc.address, slot)
+    let val = acc.db.getStorage(acc.address, slot).valueOr: 0.u256
     byte32Node(val)
   except RlpError as ex:
     err(ex.msg)

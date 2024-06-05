@@ -12,6 +12,7 @@ import
   typetraits,
   faststreams/inputs, eth/[common, rlp], stint,
   eth/trie/trie_defs,
+  results,
   ./witness_types, stew/byteutils, ../nimbus/[constants, db/core_db]
 
 type
@@ -178,7 +179,8 @@ proc toNodeKey(t: var TreeBuilder, z: openArray[byte]): NodeKey =
   else:
     result.data = keccakHash(z).data
     result.usedBytes = 32
-    t.db.kvt.put(result.data, z)
+    t.db.newKvt().put(result.data, z).isOkOr:
+      raiseAssert "toNodeKey(): put() failed: " & $$error
 
 proc toNodeKey(z: openArray[byte]): NodeKey =
   if z.len >= 32:
@@ -188,13 +190,15 @@ proc toNodeKey(z: openArray[byte]): NodeKey =
 
 proc forceSmallNodeKeyToHash(t: var TreeBuilder, r: NodeKey): NodeKey =
   let hash = keccakHash(r.data.toOpenArray(0, r.usedBytes-1))
-  t.db.kvt.put(hash.data, r.data.toOpenArray(0, r.usedBytes-1))
+  t.db.newKvt().put(hash.data, r.data.toOpenArray(0, r.usedBytes-1)).isOkOr:
+    raiseAssert "forceSmallNodeKeyToHash(): put() failed: " & $$error
   result.data = hash.data
   result.usedBytes = 32
 
 proc writeCode(t: var TreeBuilder, code: openArray[byte]): Hash256 =
   result = keccakHash(code)
-  put(t.db.kvt, result.data, code)
+  t.db.newKvt().put(result.data, code).isOkOr:
+    raiseAssert "writeCode(): put() failed: " & $$error
 
 proc branchNode(t: var TreeBuilder, depth: int, storageMode: bool): NodeKey {.gcsafe.}
 proc extensionNode(t: var TreeBuilder, depth: int, storageMode: bool): NodeKey {.gcsafe.}
