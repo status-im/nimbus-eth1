@@ -239,6 +239,9 @@ test: | build deps rocksdb
 	$(ENV_SCRIPT) nim test_rocksdb $(NIM_PARAMS) nimbus.nims
 	$(ENV_SCRIPT) nim test $(NIM_PARAMS) nimbus.nims
 
+test_import: nimbus
+	$(ENV_SCRIPT) nim test_import $(NIM_PARAMS) nimbus.nims
+
 # builds and runs an EVM-related subset of the nimbus test suite
 test-evm: | build deps rocksdb
 	$(ENV_SCRIPT) nim test_evm $(NIM_PARAMS) nimbus.nims
