@@ -12,7 +12,7 @@
 import
   chronicles,
   chronos/timer,
-  std/strformat,
+  std/[strformat, strutils],
   stew/io2,
   ./config,
   ./common/common,
@@ -35,7 +35,8 @@ func shortLog(a: timer.Duration, parts = int.high): string {.inline.} =
       res.add(n)
       v = v mod T.nanoseconds()
       dec parts
-      if v == 0 or parts <= 0: return res
+      if v == 0 or parts <= 0:
+        return res
 
   f("w", Week)
   f("d", Day)
@@ -58,11 +59,12 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
   setControlCHook(controlCHandler)
 
   let
-    start = try:
-      com.db.getSavedStateBlockNumber().truncate(uint64) + 1
-    except RlpError as exc:
-      error "Could not read block number", err = exc.msg
-      quit(QuitFailure)
+    start =
+      try:
+        com.db.getSavedStateBlockNumber().truncate(uint64) + 1
+      except RlpError as exc:
+        error "Could not read block number", err = exc.msg
+        quit(QuitFailure)
 
     chain = com.newChain()
 
@@ -71,6 +73,23 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
     gas = 0.u256
     txs = 0
     time0 = Moment.now()
+    csv =
+      if conf.csvStats.isSome:
+        try:
+          let f = open(conf.csvStats.get(), fmAppend)
+          if f.getFileSize() == 0:
+            f.writeLine("block_number,blocks,txs,gas,time")
+          f
+        except IOError as exc:
+          error "Could not open statistics output file",
+            file = conf.csvStats, err = exc.msg
+          quit(QuitFailure)
+      else:
+        File(nil)
+  defer:
+    if csv != nil:
+      close(csv)
+
   template blockNumber(): uint64 =
     start + imported
 
@@ -110,7 +129,6 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
           diff1 = (time2 - time1).nanoseconds().float / 1000000000
           diff0 = (time2 - time0).nanoseconds().float / 1000000000
 
-        # TODO generate csv with import statistics
         info "Imported blocks",
           blockNumber,
           blocks = imported,
@@ -122,7 +140,25 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
           avgBps = f(imported.float / diff0),
           avgTps = f(txs.float / diff0),
           avgGps = f(gas.truncate(uint64).float / diff0), # TODO fix truncate
-          elapsed = shortLog(time2-time0, 3)
+          elapsed = shortLog(time2 - time0, 3)
+
+        if csv != nil:
+          # In the CSV, we store a line for every chunk of blocks processed so
+          # that the file can meaningfully be appended to when restarting the
+          # process - this way, each sample is independent
+          try:
+            csv.writeLine(
+              [
+                $blockNumber,
+                $headers.len,
+                $statsRes[].txs,
+                $statsRes[].gas,
+                $(time2 - time1).nanoseconds(),
+              ].join(",")
+            )
+            csv.flushFile()
+          except IOError as exc:
+            warn "Could not write csv", err = exc.msg
         headers.setLen(0)
         bodies.setLen(0)
 
