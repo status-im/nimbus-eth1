@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -13,7 +13,7 @@ FROM debian:testing-slim AS build
 SHELL ["/bin/bash", "-c"]
 
 RUN apt-get clean && apt update \
- && apt -y install build-essential git-lfs librocksdb-dev libpcre3-dev
+ && apt -y install build-essential git-lfs librocksdb-dev
 
 RUN ldd --version ldd
 
@@ -30,7 +30,7 @@ FROM debian:testing-slim as deploy
 
 SHELL ["/bin/bash", "-c"]
 RUN apt-get clean && apt update \
- && apt -y install build-essential librocksdb-dev libpcre3-dev
+ && apt -y install build-essential librocksdb-dev
 RUN apt update && apt -y upgrade
 
 RUN ldd --version ldd
