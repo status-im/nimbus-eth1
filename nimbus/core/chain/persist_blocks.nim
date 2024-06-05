@@ -174,7 +174,7 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
   dbTx.commit()
 
   # Save and record the block number before the last saved block state.
-  c.db.persistent(headers[^1].blockNumber - 1)
+  c.db.persistent(headers[^1].blockNumber)
 
   if c.com.pruneHistory:
     # There is a feature for test systems to regularly clean up older blocks
