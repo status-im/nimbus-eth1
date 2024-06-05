@@ -9,7 +9,6 @@
 
 import
   std/typetraits,
-  chronicles, # Added for generic sandwich that hits in core_db :(
   eth/common/eth_types as etypes,
   eth/[trie, rlp],
   stint,
