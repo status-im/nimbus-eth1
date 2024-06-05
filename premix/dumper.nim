@@ -16,6 +16,7 @@
 import
   stint,
   ../nimbus/common/common,
+  ../nimbus/db/opts,
   ../nimbus/db/core_db/persistent,
   ../nimbus/core/executor,
   ../nimbus/[vm_state, vm_types],
@@ -47,7 +48,8 @@ proc dumpDebug(com: CommonRef, blockNumber: UInt256) =
 
 proc main() {.used.} =
   let conf = getConfiguration()
-  let com = CommonRef.new(newCoreDbRef(DefaultDbPersistent, conf.dataDir))
+  let com = CommonRef.new(
+    newCoreDbRef(DefaultDbPersistent, conf.dataDir, DbOptions.init()))
 
   if conf.head != 0.u256:
     dumpDebug(com, conf.head)

@@ -16,6 +16,7 @@ import
   ../nimbus/errors,
   ../nimbus/core/chain,
   ../nimbus/common,
+  ../nimbus/db/opts,
   ../nimbus/db/[core_db/persistent, storage_types],
   configuration  # must be late (compilation annoyance)
 
@@ -54,7 +55,7 @@ proc main() {.used.} =
 
   let conf = configuration.getConfiguration()
   let com = CommonRef.new(
-    newCoreDbRef(DefaultDbPersistent, conf.dataDir),
+    newCoreDbRef(DefaultDbPersistent, conf.dataDir, DbOptions.init()),
     conf.netId, networkParams(conf.netId))
 
   # move head to block number ...

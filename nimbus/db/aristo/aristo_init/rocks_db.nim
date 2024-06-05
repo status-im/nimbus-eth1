@@ -35,11 +35,10 @@ import
   ../aristo_desc/desc_backend,
   ../aristo_blobify,
   ./init_common,
-  ./rocks_db/[rdb_desc, rdb_get, rdb_init, rdb_put, rdb_walk]
+  ./rocks_db/[rdb_desc, rdb_get, rdb_init, rdb_put, rdb_walk],
+  ../../opts
 
 const
-  maxOpenFiles = 512          ## Rocks DB setup, open files limit
-
   extraTraceMessages = false
     ## Enabled additional logging noise
 
@@ -265,13 +264,16 @@ proc closeFn(db: RdbBackendRef): CloseFn =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc rocksDbAristoBackend*(path: string): Result[BackendRef,AristoError] =
+proc rocksDbBackend*(
+    path: string;
+    opts: DbOptions
+      ): Result[BackendRef,AristoError] =
   let db = RdbBackendRef(
     beKind: BackendRocksDB)
 
   # Initialise RocksDB
   block:
-    let rc = db.rdb.init(path, maxOpenFiles)
+    let rc = db.rdb.init(path, opts)
     if rc.isErr:
       when extraTraceMessages:
         trace logTxt "constructor failed",

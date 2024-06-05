@@ -16,6 +16,7 @@ import
   eth/common,
   results,
   unittest2,
+  ../../nimbus/db/opts,
   ../../nimbus/db/aristo/[
     aristo_check,
     aristo_debug,
@@ -100,7 +101,7 @@ iterator quadripartite(td: openArray[ProofTrieData]): LeafQuartet =
 proc dbTriplet(w: LeafQuartet; rdbPath: string): Result[DbTriplet,AristoError] =
   let db = block:
     if 0 < rdbPath.len:
-      let rc = AristoDbRef.init(RdbBackendRef, rdbPath)
+      let rc = AristoDbRef.init(RdbBackendRef, rdbPath, DbOptions.init())
       xCheckRc rc.error == 0
       rc.value
     else:
