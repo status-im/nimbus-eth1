@@ -221,7 +221,7 @@ proc importBlock(ctx: var TestCtx, com: CommonRef,
       com,
       tracerInst,
     )
-    ctx.vmState.generateWitness = true # Enable saving witness data
+    ctx.vmState.collectWitnessData = true # Enable saving witness data
 
   let
     chain = newChain(com, extraValidation = true)

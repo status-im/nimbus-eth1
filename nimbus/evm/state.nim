@@ -248,12 +248,12 @@ proc `status=`*(vmState: BaseVMState, status: bool) =
  if status: vmState.flags.incl ExecutionOK
  else: vmState.flags.excl ExecutionOK
 
-proc generateWitness*(vmState: BaseVMState): bool =
-  GenerateWitness in vmState.flags
+proc collectWitnessData*(vmState: BaseVMState): bool =
+  CollectWitnessData in vmState.flags
 
-proc `generateWitness=`*(vmState: BaseVMState, status: bool) =
-  if status: vmState.flags.incl GenerateWitness
-  else: vmState.flags.excl GenerateWitness
+proc `collectWitnessData=`*(vmState: BaseVMState, status: bool) =
+  if status: vmState.flags.incl CollectWitnessData
+  else: vmState.flags.excl CollectWitnessData
 
 func forkDeterminationInfoForVMState*(vmState: BaseVMState): ForkDeterminationInfo =
   # FIXME-Adam: Is this timestamp right? Note that up above in blockNumber we add 1;

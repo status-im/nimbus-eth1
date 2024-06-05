@@ -116,7 +116,7 @@ proc processTransactionImpl(
   else:
     res = err(txRes.error)
 
-  if vmState.generateWitness:
+  if vmState.collectWitnessData:
     vmState.stateDB.collectWitnessData()
   vmState.stateDB.persist(clearEmptyAccount = fork >= FkSpurious)
 

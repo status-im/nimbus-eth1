@@ -44,7 +44,7 @@ proc getMultiKeys*(
     # before trying to initialize the VM as we do here.
     vmState = BaseVMState.new(blockHeader, com)
 
-  vmState.generateWitness = true # Enable saving witness data
+  vmState.collectWitnessData = true # Enable saving witness data
   vmState.com.hardForkTransition(blockHeader)
 
   let dbTx = vmState.com.db.beginTransaction()

@@ -111,7 +111,7 @@ proc runTxCommit(pst: TxPackerStateRef; item: TxItemRef; gasBurned: GasInt)
   vmState.stateDB.addBalance(xp.chain.feeRecipient, reward)
   xp.blockValue += reward
 
-  if vmState.generateWitness:
+  if vmState.collectWitnessData:
     vmState.stateDB.collectWitnessData()
 
   # Save accounts via persist() is not needed unless the fork is smaller
@@ -247,7 +247,7 @@ proc vmExecCommit(pst: TxPackerStateRef)
 
   # Reward beneficiary
   vmState.mutateStateDB:
-    if vmState.generateWitness:
+    if vmState.collectWitnessData:
       db.collectWitnessData()
     # Finish up, then vmState.stateDB.rootHash may be accessed
     db.persist(clearEmptyAccount = xp.chain.nextFork >= FkSpurious)

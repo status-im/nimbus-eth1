@@ -115,7 +115,7 @@ proc procBlkEpilogue(vmState: BaseVMState;
     {.gcsafe, raises: [].} =
   # Reward beneficiary
   vmState.mutateStateDB:
-    if vmState.generateWitness:
+    if vmState.collectWitnessData:
       db.collectWitnessData()
 
     db.persist(clearEmptyAccount = vmState.determineFork >= FkSpurious)
