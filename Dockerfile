@@ -13,7 +13,7 @@ FROM debian:testing-slim AS build
 SHELL ["/bin/bash", "-c"]
 
 RUN apt-get clean && apt update \
- && apt -y install build-essential git-lfs librocksdb-dev
+ && apt -y install curl build-essential git-lfs librocksdb-dev
 
 RUN ldd --version ldd
 

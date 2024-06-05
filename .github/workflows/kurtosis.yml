@@ -8,7 +8,7 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-name: Kurtosis Assertoor Tests
+name: Kurtosis Tests
 
 on:
   push:
