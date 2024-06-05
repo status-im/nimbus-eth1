@@ -26,9 +26,31 @@ import
   ../beacon/web3_eth_conv,
   ./filters
 
+const
+  AccountAndStorageProofAvailableAndWorking = false
+    ## Need to include this module despite non-working proof functions. See
+    ## `TODO-P2P.md` for some explanation.
+
 type
   BlockHeader = eth_types.BlockHeader
   Hash256 = eth_types.Hash256
+
+when not AccountAndStorageProofAvailableAndWorking:
+  type
+    MptNodeRlpBytes = seq[byte]
+    AccountProof = seq[MptNodeRlpBytes]
+    SlotProof = seq[MptNodeRlpBytes]
+  func getAccountProof(
+      db: ReadOnlyStateDB;
+      eAddr: EthAddress;
+        ): AccountProof =
+    discard
+  func getStorageProof(
+      db: ReadOnlyStateDB;
+      eAddr: EthAddress;
+      slot: seq[UInt256];
+        ): seq[SlotProof] =
+    discard
 
 proc getProof*(
     accDB: ReadOnlyStateDB,
@@ -43,7 +65,7 @@ proc getProof*(
   var storage = newSeqOfCap[StorageProof](slots.len)
 
   for i, slotKey in slots:
-    let (slotValue, _) = accDB.getStorage(address, u256(slotKey))
+    let slotValue = accDB.getStorage(address, u256(slotKey)).valueOr: 0.u256
     storage.add(StorageProof(
         key: u256(slotKey),
         value: slotValue,
@@ -56,7 +78,7 @@ proc getProof*(
           balance: acc.balance,
           nonce: w3Qty(acc.nonce),
           codeHash: w3Hash(acc.codeHash),
-          storageHash: w3Hash(acc.storageRoot),
+          storageHash: w3Hash(acc.to(Account).storageRoot),
           storageProof: storage)
   else:
     ProofResponse(
@@ -159,7 +181,8 @@ proc setupEthRpc*(
     let
       accDB   = stateDBFromTag(quantityTag)
       address = data.ethAddr
-    result = accDB.getStorage(address, slot)[0].w3FixedBytes
+      data = accDB.getStorage(address, slot).valueOr: 0.u256
+    result = data.w3FixedBytes
 
   server.rpc("eth_getTransactionCount") do(data: Web3Address, quantityTag: BlockTag) -> Web3Quantity:
     ## Returns the number of transactions sent from an address.

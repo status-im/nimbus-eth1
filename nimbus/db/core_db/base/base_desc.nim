@@ -73,7 +73,6 @@ type
     CtxNotFound
     HashNotAvailable
     KvtNotFound
-    KvtNotOffSite
     MptNotFound
     NotImplemented
     RlpException
@@ -103,12 +102,12 @@ type
   CoreDbBaseColPrintFn* = proc(vid: CoreDbColRef): string {.noRaise.}
   CoreDbBaseErrorPrintFn* = proc(e: CoreDbErrorRef): string {.noRaise.}
   CoreDbBaseLevelFn* = proc(): int {.noRaise.}
-  CoreDbBaseNewKvtFn* = proc(offSite: bool): CoreDbRc[CoreDxKvtRef] {.noRaise.}
+  CoreDbBaseNewKvtFn* = proc(): CoreDbRc[CoreDxKvtRef] {.noRaise.}
   CoreDbBaseNewCtxFn* = proc(): CoreDbCtxRef {.noRaise.}
   CoreDbBaseNewCtxFromTxFn* = proc(
     colState: Hash256; kind: CoreDbColType): CoreDbRc[CoreDbCtxRef] {.noRaise.}
   CoreDbBaseSwapCtxFn* = proc(ctx: CoreDbCtxRef): CoreDbCtxRef {.noRaise.}
-  CoreDbBaseTxBeginFn* = proc(): CoreDbRc[CoreDxTxRef] {.noRaise.}
+  CoreDbBaseTxBeginFn* = proc(): CoreDxTxRef {.noRaise.}
   CoreDbBaseNewCaptFn* =
     proc(flgs: set[CoreDbCaptFlags]): CoreDbRc[CoreDxCaptRef] {.noRaise.}
   CoreDbBaseGetCaptFn* = proc(): CoreDbRc[CoreDxCaptRef] {.noRaise.}
@@ -148,7 +147,6 @@ type
   CoreDbKvtDelFn* = proc(k: openArray[byte]): CoreDbRc[void] {.noRaise.}
   CoreDbKvtPutFn* =
     proc(k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] {.noRaise.}
-  CoreDbKvtSaveOffSiteFn* = proc(): CoreDbRc[void] {.noRaise.}
   CoreDbKvtForgetFn* = proc(): CoreDbRc[void] {.noRaise.}
   CoreDbKvtHasKeyFn* = proc(k: openArray[byte]): CoreDbRc[bool] {.noRaise.}
 
@@ -159,7 +157,6 @@ type
     delFn*:         CoreDbKvtDelFn
     putFn*:         CoreDbKvtPutFn
     hasKeyFn*:      CoreDbKvtHasKeyFn
-    saveOffSiteFn*: CoreDbKvtSaveOffSiteFn
     forgetFn*:      CoreDbKvtForgetFn
 
   # --------------------------------------------------
@@ -171,9 +168,9 @@ type
     colType: CoreDbColType; colState: Hash256; address: Option[EthAddress];
     ): CoreDbRc[CoreDbColRef] {.noRaise.}
   CoreDbCtxGetMptFn* = proc(
-    root: CoreDbColRef; prune: bool): CoreDbRc[CoreDxMptRef] {.noRaise.}
+    root: CoreDbColRef): CoreDbRc[CoreDxMptRef] {.noRaise.}
   CoreDbCtxGetAccFn* = proc(
-    root: CoreDbColRef; prune: bool): CoreDbRc[CoreDxAccRef] {.noRaise.}
+    root: CoreDbColRef): CoreDbRc[CoreDxAccRef] {.noRaise.}
   CoreDbCtxForgetFn* = proc() {.noRaise.}
 
   CoreDbCtxFns* = object
@@ -199,7 +196,6 @@ type
     proc(k: openArray[byte]; v: CoreDbAccount): CoreDbRc[void] {.noRaise.}
   CoreDbMptHasPathFn* = proc(k: openArray[byte]): CoreDbRc[bool] {.noRaise.}
   CoreDbMptGetColFn* = proc(): CoreDbColRef {.noRaise.}
-  CoreDbMptIsPruningFn* = proc(): bool {.noRaise.}
   CoreDbMptForgetFn* = proc(): CoreDbRc[void] {.noRaise.}
 
   CoreDbMptFns* = object
@@ -210,7 +206,6 @@ type
     mergeFn*:     CoreDbMptMergeFn
     hasPathFn*:   CoreDbMptHasPathFn
     getColFn*:    CoreDbMptGetColFn
-    isPruningFn*: CoreDbMptIsPruningFn
 
 
   # ----------------------------------------------------
@@ -223,7 +218,6 @@ type
   CoreDbAccMergeFn* = proc(v: CoreDbAccount): CoreDbRc[void] {.noRaise.}
   CoreDbAccHasPathFn* = proc(k: EthAddress): CoreDbRc[bool] {.noRaise.}
   CoreDbAccGetColFn* = proc(): CoreDbColRef {.noRaise.}
-  CoreDbAccIsPruningFn* = proc(): bool {.noRaise.}
   CoreDbAccForgetFn* = proc(): CoreDbRc[void] {.noRaise.}
 
   CoreDbAccFns* = object
@@ -235,24 +229,21 @@ type
     mergeFn*:      CoreDbAccMergeFn
     hasPathFn*:    CoreDbAccHasPathFn
     getColFn*:     CoreDbAccGetColFn
-    isPruningFn*:  CoreDbAccIsPruningFn
 
 
   # --------------------------------------------------
   # Sub-descriptor: Transaction frame management
   # --------------------------------------------------
   CoreDbTxLevelFn* = proc(): int {.noRaise.}
-  CoreDbTxCommitFn* = proc(applyDeletes: bool): CoreDbRc[void] {.noRaise.}
-  CoreDbTxRollbackFn* = proc(): CoreDbRc[void] {.noRaise.}
-  CoreDbTxDisposeFn* = proc(): CoreDbRc[void] {.noRaise.}
-  CoreDbTxSafeDisposeFn* = proc(): CoreDbRc[void] {.noRaise.}
+  CoreDbTxCommitFn* = proc() {.noRaise.}
+  CoreDbTxRollbackFn* = proc() {.noRaise.}
+  CoreDbTxDisposeFn* = proc() {.noRaise.}
 
   CoreDbTxFns* = object
     levelFn*:       CoreDbTxLevelFn
     commitFn*:      CoreDbTxCommitFn
     rollbackFn*:    CoreDbTxRollbackFn
     disposeFn*:     CoreDbTxDisposeFn
-    safeDisposeFn*: CoreDbTxSafeDisposeFn
 
 
   # --------------------------------------------------

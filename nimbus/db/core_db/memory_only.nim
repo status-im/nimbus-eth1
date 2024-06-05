@@ -23,6 +23,7 @@ import
   ./base_iterators
 
 export
+  EmptyBlob,
   base,
   base_iterators,
   common,

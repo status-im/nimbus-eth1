@@ -351,9 +351,9 @@ proc getAccessList*(ldg: LedgerRef): AccessList =
 proc rootHash*(ldg: LedgerRef): KeccakHash =
   ldg.state()
 
-proc getMpt*(ldg: LedgerRef): CoreDbMptRef =
+proc getMpt*(ldg: LedgerRef): CoreDxMptRef =
   ldg.beginTrackApi LdgGetMptFn
-  result = ldg.ac.rawTrie.CoreDxAccRef.getMpt.CoreDbMptRef
+  result = ldg.ac.rawTrie.CoreDxAccRef.getMpt
   ldg.ifTrackApi: debug apiTxt, api, elapsed, result
 
 # ------------------------------------------------------------------------------

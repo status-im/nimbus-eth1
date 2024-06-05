@@ -17,6 +17,8 @@ export
   AccountStateDB,
   ReadOnlyStateDB,
   accountExists,
+  contractCollision,
+  db,
   getAccount,
   getBalance,
   getCode,
@@ -24,13 +26,10 @@ export
   getNonce,
   getStorage,
   getStorageRoot,
-  getTrie,
-  contractCollision,
   isDeadAccount,
   isEmptyAccount,
   newAccountStateDB,
   rootHash,
-  getAccountProof,
-  getStorageProof
+  to
 
 # End

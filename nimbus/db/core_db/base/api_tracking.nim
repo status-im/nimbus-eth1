@@ -43,7 +43,6 @@ type
     AccToMptFn          = "acc/toMpt"
 
     AnyBackendFn        = "any/backend"
-    AnyIsPruningFn      = "any/isPruning"
 
     BaseColPrintFn      = "$$"
     BaseColStateFn      = "state"
@@ -77,7 +76,6 @@ type
     KvtGetOrEmptyFn     = "kvt/getOrEmpty"
     KvtHasKeyFn         = "kvt/hasKey"
     KvtPairsIt          = "kvt/pairs"
-    KvtSaveOffSiteFn    = "kvt/saveOffSite"
     KvtPutFn            = "kvt/put"
 
     LegaBeginTxFn       = "lega/beginTransaction"
@@ -85,7 +83,6 @@ type
     LegaCptFlagsFn      = "lega/cpt/flags"
     LegaCptLogDbFn      = "lega/cpt/logDb"
     LegaCptRecorderFn   = "lega/cpt/recorder"
-    LegaIsPruningFn     = "lega/isPruning"
 
     LegaKvtContainsFn   = "lega/kvt/contains"
     LegaKvtDelFn        = "lega/kvt/del"

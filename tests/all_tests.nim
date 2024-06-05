@@ -14,7 +14,7 @@ cliBuilder:
           #./test_accounts_cache,                  -- does not compile
           #./test_sync_snap,                       -- temporarily suspended
           #./test_rocksdb_timing,                  -- probably redundant
-          ./test_jwt_auth,
+          #./test_jwt_auth,                        -- rpc is Aristo incompatible
           ./test_gas_meter,
           ./test_memory,
           ./test_stack,
