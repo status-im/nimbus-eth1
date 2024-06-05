@@ -318,50 +318,6 @@ const
 
     k.cpt.memory.copy(dstPos, srcPos, len)
 
-#[
-  EIP-2315: temporary disabled
-  Reason  : not included in berlin hard fork
-  beginSubOp: Vm2OpFn = proc (k: var Vm2Ctx) =
-    ## 0x5c, Marks the entry point to a subroutine
-    raise newException(
-      OutOfGas,
-      "Abort: Attempt to execute BeginSub opcode")
-
-
-  returnSubOp: Vm2OpFn = proc (k: var Vm2Ctx) =
-    ## 0x5d, Returns control to the caller of a subroutine.
-    if k.cpt.returnStack.len == 0:
-      raise newException(
-        OutOfGas,
-        "Abort: invalid returnStack during ReturnSub")
-    k.cpt.code.pc = k.cpt.returnStack.pop()
-
-
-  jumpSubOp: Vm2OpFn = proc (k: var Vm2Ctx) =
-    ## 0x5e, Transfers control to a subroutine.
-    let (jumpTarget) = k.cpt.stack.popInt(1)
-
-    if jumpTarget >= k.cpt.code.len.u256:
-      raise newException(
-        InvalidJumpDestination, "JumpSub destination exceeds code len")
-
-    let returnPC = k.cpt.code.pc
-    let jt = jumpTarget.truncate(int)
-    k.cpt.code.pc = jt
-
-    let nextOpcode = k.cpt.code.peek
-    if nextOpcode != BeginSub:
-      raise newException(
-        InvalidJumpDestination, "Invalid JumpSub destination")
-
-    if k.cpt.returnStack.len == 1023:
-      raise newException(
-        FullStack, "Out of returnStack")
-
-    k.cpt.returnStack.add returnPC
-    inc k.cpt.code.pc
-]#
-
 # ------------------------------------------------------------------------------
 # Public, op exec table entries
 # ------------------------------------------------------------------------------
@@ -531,34 +487,6 @@ const
      exec: (prep: vm2OpIgnore,
             run:  mCopyOp,
             post: vm2OpIgnore))]
-
-#[
-    EIP-2315: temporary disabled
-    Reason  : not included in berlin hard fork
-    (opCode: BeginSub,  ## 0x5c, Begin subroutine
-     forks: Vm2OpBerlinAndLater,
-     name: "beginSub",
-     info: " Marks the entry point to a subroutine",
-     exec: (prep: vm2OpIgnore,
-            run:  beginSubOp,
-            post: vm2OpIgnore)),
-
-    (opCode: ReturnSub, ## 0x5d, Return
-     forks: Vm2OpBerlinAndLater,
-     name: "returnSub",
-     info: "Returns control to the caller of a subroutine",
-     exec: (prep: vm2OpIgnore,
-            run:  returnSubOp,
-            post: vm2OpIgnore)),
-
-    (opCode: JumpSub,   ## 0x5e, Call subroutine
-     forks: Vm2OpBerlinAndLater,
-     name: "jumpSub",
-     info: "Transfers control to a subroutine",
-     exec: (prep: vm2OpIgnore,
-            run:  jumpSubOp,
-            post: vm2OpIgnore))]
-]#
 
 # ------------------------------------------------------------------------------
 # End

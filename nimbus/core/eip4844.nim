@@ -15,7 +15,8 @@ import
   results,
   stint,
   ../constants,
-  ../common/common
+  ../common/common,
+  blscurve/bls_backend # trigger blscurve library compilation
 
 {.push raises: [].}
 

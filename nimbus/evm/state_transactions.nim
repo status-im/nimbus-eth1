@@ -35,11 +35,6 @@ proc setupTxContext*(vmState: BaseVMState,
       vmState.determineFork
   vmState.gasCosts = vmState.fork.forkToSchedule
 
-# FIXME-awkwardFactoring: the factoring out of the pre and
-# post parts feels awkward to me, but for now I'd really like
-# not to have too much duplicated code between sync and async.
-# --Adam
-
 proc preExecComputation(c: Computation) =
   if not c.msg.isCreate:
     c.vmState.mutateStateDB:

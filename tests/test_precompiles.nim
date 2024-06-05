@@ -86,17 +86,6 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   of "bn256mul" : data.doTest(vmState, fork, paEcMul)
   of "ecpairing": data.doTest(vmState, fork, paPairing)
   of "blake2f"  : data.doTest(vmState, fork, paBlake2bf)
-  # EIP 2537: disabled
-  # reason: not included in berlin
-  #of "blsg1add" : data.doTest(vmState, fork, paBlsG1Add)
-  #of "blsg1mul" : data.doTest(vmState, fork, paBlsG1Mul)
-  #of "blsg1multiexp" : data.doTest(vmState, fork, paBlsG1MultiExp)
-  #of "blsg2add" : data.doTest(vmState, fork, paBlsG2Add)
-  #of "blsg2mul" : data.doTest(vmState, fork, paBlsG2Mul)
-  #of "blsg2multiexp": data.doTest(vmState, fork, paBlsG2MultiExp)
-  #of "blspairing": data.doTest(vmState, fork, paBlsPairing)
-  #of "blsmapg1": data.doTest(vmState, fork, paBlsMapG1)
-  #of "blsmapg2": data.doTest(vmState, fork, paBlsMapG2)
   else:
     echo "Unknown test vector '" & $label & "'"
     testStatusIMPL = SKIPPED
