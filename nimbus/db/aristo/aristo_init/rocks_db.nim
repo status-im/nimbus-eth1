@@ -217,7 +217,13 @@ proc putLstFn(db: RdbBackendRef): PutLstFn =
     proc(hdl: PutHdlRef; lst: SavedState) =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
-        db.rdb.putByPfx(AdmPfx, @[(AdmTabIdLst.uint64, lst.blobify)]).isOkOr:
+        let data = lst.blobify.valueOr:
+          hdl.error = TypedPutHdlErrRef(
+            pfx:  AdmPfx,
+            aid:  AdmTabIdLst,
+            code: error)
+          return
+        db.rdb.putByPfx(AdmPfx, @[(AdmTabIdLst.uint64, data)]).isOkOr:
           hdl.error = TypedPutHdlErrRef(
             pfx:  AdmPfx,
             aid:  AdmTabIdLst,

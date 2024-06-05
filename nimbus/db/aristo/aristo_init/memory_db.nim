@@ -168,7 +168,14 @@ proc putLstFn(db: MemBackendRef): PutLstFn =
     proc(hdl: PutHdlRef; lst: SavedState) =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
-        hdl.lSst = some(lst)
+        let rc = lst.blobify # test
+        if rc.isOk:
+          hdl.lSst = some(lst)
+        else:
+          hdl.error = TypedPutHdlErrRef(
+            pfx:  AdmPfx,
+            aid:  AdmTabIdLst,
+            code: rc.error)
 
 proc putEndFn(db: MemBackendRef): PutEndFn =
   result =
@@ -287,7 +294,7 @@ iterator walk*(
   if be.mdb.tUvi.isSome:
     yield(AdmPfx, AdmTabIdTuv.uint64, be.mdb.tUvi.unsafeGet.blobify)
   if be.mdb.lSst.isSome:
-    yield(AdmPfx, AdmTabIdLst.uint64, be.mdb.lSst.unsafeGet.blobify)
+    yield(AdmPfx, AdmTabIdLst.uint64, be.mdb.lSst.unsafeGet.blobify.value)
 
   for vid in be.mdb.sTab.keys.toSeq.mapIt(it).sorted:
     let data = be.mdb.sTab.getOrDefault(vid, EmptyBlob)
