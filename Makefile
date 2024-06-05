@@ -203,20 +203,15 @@ update-from-ci: | sanity-checks update-test
 	+ "$(MAKE)" --no-print-directory deps-common
 
 # builds the tools, wherever they are
-$(TOOLS): | build deps
+$(TOOLS): | build deps rocksdb
 	for D in $(TOOLS_DIRS); do [ -e "$${D}/$@.nim" ] && TOOL_DIR="$${D}" && break; done && \
 		echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -o:build/$@ "$${TOOL_DIR}/$@.nim"
 
 # a phony target, because teaching `make` how to do conditional recompilation of Nim projects is too complicated
-nimbus: | build deps
+nimbus: | build deps rocksdb
 	echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/$@ "nimbus/$@.nim"
-
-nimbus_rocksdb_static: | build deps rocksdb_static_deps
-	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:enable_rocksdb_static_linking -d:chronicles_log_level=TRACE \
-		-o:build/$@ "nimbus/nimbus.nim"
 
 # symlink
 nimbus.nims:
@@ -226,12 +221,21 @@ nimbus.nims:
 libbacktrace:
 	+ $(MAKE) -C vendor/nim-libbacktrace --no-print-directory BUILD_CXX_LIB=0
 
-# nim-rocksdb static dependencies
-rocksdb_static_deps:
+# nim-rocksdb
+
+ifneq ($(USE_SYSTEM_ROCKSDB), 0)
+ifeq ($(OS), Windows_NT)
+rocksdb: fetch-dlls
+else
+rocksdb:
 	+ vendor/nim-rocksdb/scripts/build_static_deps.sh
+endif
+else
+rocksdb:
+endif
 
 # builds and runs the nimbus test suite
-test: | build deps
+test: | build deps rocksdb
 	$(ENV_SCRIPT) nim test_rocksdb $(NIM_PARAMS) nimbus.nims
 	$(ENV_SCRIPT) nim test $(NIM_PARAMS) nimbus.nims
 
@@ -239,7 +243,7 @@ test_import: nimbus
 	$(ENV_SCRIPT) nim test_import $(NIM_PARAMS) nimbus.nims
 
 # builds and runs an EVM-related subset of the nimbus test suite
-test-evm: | build deps
+test-evm: | build deps rocksdb
 	$(ENV_SCRIPT) nim test_evm $(NIM_PARAMS) nimbus.nims
 
 # Primitive reproducibility test.
@@ -337,7 +341,7 @@ t8n_test: | build deps t8n
 	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_default_output_device=stderr "tools/t8n/$@.nim"
 
 # builds evm state test tool
-evmstate: | build deps
+evmstate: | build deps rocksdb
 	$(ENV_SCRIPT) nim c $(NIM_PARAMS) "tools/evmstate/$@.nim"
 
 # builds and runs evm state tool test suite

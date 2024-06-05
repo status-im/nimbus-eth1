@@ -28,13 +28,14 @@ type
     SerCantResolveStorageRoot
 
     # Data record transcoders, `deblobify()` and `blobify()`
-    BlobifyNilFilter
-    BlobifyNilVertex
     BlobifyBranchMissingRefs
     BlobifyExtMissingRefs
     BlobifyExtPathOverflow
     BlobifyLeafPathOverflow
-    BlobifyFilterRecordOverflow
+    BlobifyNilFilter
+    BlobifyNilVertex
+    BlobifyStateSrcLenGarbled
+    BlobifyStateTrgLenGarbled
 
     DeblobNilArgument
     DeblobUnknown
@@ -151,6 +152,7 @@ type
     CheckAnyVtxBranchLinksMissing
     CheckAnyVtxExtPfxMissing
     CheckAnyVtxLockWithoutKey
+    CheckAnyVTopUnset
 
     # Backend structural check `checkBE()`
     CheckBeVtxInvalid
@@ -161,7 +163,7 @@ type
     CheckBeKeyMissing
     CheckBeKeyCantCompile
     CheckBeKeyMismatch
-    CheckBeGarbledVGen
+    CheckBeGarbledVTop
 
     CheckBeCacheIsDirty
     CheckBeCacheKeyMissing
@@ -171,7 +173,7 @@ type
     CheckBeCacheVtxDangling
     CheckBeCacheKeyCantCompile
     CheckBeCacheKeyMismatch
-    CheckBeCacheGarbledVGen
+    CheckBeCacheGarbledVTop
 
     CheckBeFifoSrcTrgMismatch
     CheckBeFifoTrgNotStateRoot
@@ -229,7 +231,7 @@ type
     GetVtxNotFound
     GetKeyNotFound
     GetFilNotFound
-    GetIdgNotFound
+    GetTuvNotFound
     GetLstNotFound
     GetFqsNotFound
 

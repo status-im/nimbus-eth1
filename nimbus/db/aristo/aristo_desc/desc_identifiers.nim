@@ -29,6 +29,19 @@ type
     ## keys, the vertex component will be called a node. On the persistent
     ## backend of the database, there is no other reference to the node than
     ## the very same `VertexID`.
+    ##
+    ## Vertex IDs are generated on the fly and thrown away when not needed,
+    ## anymore. They are not recycled. A quick estimate
+    ##
+    ##   (2^64) / (100 * 365.25 * 24 * 3600) / 1000 / 1000 / 1000 = 5.86
+    ##
+    ## shows that the `uint64` scalar space is not exhausted in a 100 years
+    ## if the database consumes somewhat less than 6 IDs per nanosecond.
+    ##
+    ## A simple recycling mechanism was tested which slowed down the system
+    ## considerably because large swaths of database vertices were regularly
+    ## freed so recycling had do deal with extensive lists of non-consecutive
+    ## IDs.
 
   HashKey* = object
     ## Ethereum MPTs use Keccak hashes as node links if the size of an RLP

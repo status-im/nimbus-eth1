@@ -45,7 +45,7 @@ type
     ## Database
     sTab: Table[VertexID,Blob]       ## Structural vertex table making up a trie
     kMap: Table[VertexID,HashKey]    ## Merkle hash key mapping
-    vGen: Option[seq[VertexID]]      ## ID generator state
+    tUvi: Option[VertexID]           ## Top used vertex ID
     lSst: Option[SavedState]         ## Last saved state
 
   MemBackendRef* = ref object of TypedBackendRef
@@ -55,7 +55,7 @@ type
   MemPutHdlRef = ref object of TypedPutHdlRef
     sTab: Table[VertexID,Blob]
     kMap: Table[VertexID,HashKey]
-    vGen: Option[seq[VertexID]]
+    tUvi: Option[VertexID]
     lSst: Option[SavedState]
 
 when extraTraceMessages:
@@ -108,12 +108,12 @@ proc getKeyFn(db: MemBackendRef): GetKeyFn =
         return ok key
       err(GetKeyNotFound)
 
-proc getIdgFn(db: MemBackendRef): GetIdgFn =
+proc getTuvFn(db: MemBackendRef): GetTuvFn =
   result =
-    proc(): Result[seq[VertexID],AristoError]=
-      if db.mdb.vGen.isSome:
-        return ok db.mdb.vGen.unsafeGet
-      err(GetIdgNotFound)
+    proc(): Result[VertexID,AristoError]=
+      if db.mdb.tUvi.isSome:
+        return ok db.mdb.tUvi.unsafeGet
+      err(GetTuvNotFound)
 
 proc getLstFn(db: MemBackendRef): GetLstFn =
   result =
@@ -156,19 +156,26 @@ proc putKeyFn(db: MemBackendRef): PutKeyFn =
         for (vid,key) in vkps:
           hdl.kMap[vid] = key
 
-proc putIdgFn(db: MemBackendRef): PutIdgFn =
+proc putTuvFn(db: MemBackendRef): PutTuvFn =
   result =
-    proc(hdl: PutHdlRef; vs: openArray[VertexID])  =
+    proc(hdl: PutHdlRef; vs: VertexID)  =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
-        hdl.vGen = some(vs.toSeq)
+        hdl.tUvi = some(vs)
 
 proc putLstFn(db: MemBackendRef): PutLstFn =
   result =
     proc(hdl: PutHdlRef; lst: SavedState) =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
-        hdl.lSst = some(lst)
+        let rc = lst.blobify # test
+        if rc.isOk:
+          hdl.lSst = some(lst)
+        else:
+          hdl.error = TypedPutHdlErrRef(
+            pfx:  AdmPfx,
+            aid:  AdmTabIdLst,
+            code: rc.error)
 
 proc putEndFn(db: MemBackendRef): PutEndFn =
   result =
@@ -197,12 +204,9 @@ proc putEndFn(db: MemBackendRef): PutEndFn =
         else:
           db.mdb.kMap.del vid
 
-      if hdl.vGen.isSome:
-        let vGen = hdl.vGen.unsafeGet
-        if vGen.len == 0:
-          db.mdb.vGen = none(seq[VertexID])
-        else:
-          db.mdb.vGen = some(vGen)
+      let tuv = hdl.tUvi.get(otherwise = VertexID(0))
+      if tuv.isValid:
+        db.mdb.tUvi = some(tuv)
 
       if hdl.lSst.isSome:
         db.mdb.lSst = hdl.lSst
@@ -232,13 +236,13 @@ proc memoryBackend*(): BackendRef =
 
   db.getVtxFn = getVtxFn db
   db.getKeyFn = getKeyFn db
-  db.getIdgFn = getIdgFn db
+  db.getTuvFn = getTuvFn db
   db.getLstFn = getLstFn db
 
   db.putBegFn = putBegFn db
   db.putVtxFn = putVtxFn db
   db.putKeyFn = putKeyFn db
-  db.putIdgFn = putIdgFn db
+  db.putTuvFn = putTuvFn db
   db.putLstFn = putLstFn db
   db.putEndFn = putEndFn db
 
@@ -287,10 +291,10 @@ iterator walk*(
   ##
   ## Non-decodable entries are stepped over while the counter `n` of the
   ## yield record is still incremented.
-  if be.mdb.vGen.isSome:
-    yield(AdmPfx, AdmTabIdIdg.uint64, be.mdb.vGen.unsafeGet.blobify)
+  if be.mdb.tUvi.isSome:
+    yield(AdmPfx, AdmTabIdTuv.uint64, be.mdb.tUvi.unsafeGet.blobify)
   if be.mdb.lSst.isSome:
-    yield(AdmPfx, AdmTabIdLst.uint64, be.mdb.lSst.unsafeGet.blobify)
+    yield(AdmPfx, AdmTabIdLst.uint64, be.mdb.lSst.unsafeGet.blobify.value)
 
   for vid in be.mdb.sTab.keys.toSeq.mapIt(it).sorted:
     let data = be.mdb.sTab.getOrDefault(vid, EmptyBlob)

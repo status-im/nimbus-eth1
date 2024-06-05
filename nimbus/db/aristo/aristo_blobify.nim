@@ -135,38 +135,50 @@ proc blobifyTo*(vtx: VertexRef; data: var Blob): Result[void,AristoError] =
     data &= [0xC0u8 or psLen]
   ok()
 
-
 proc blobify*(vtx: VertexRef): Result[Blob, AristoError] =
   ## Variant of `blobify()`
   var data: Blob
   ? vtx.blobifyTo data
   ok(move(data))
 
-proc blobifyTo*(vGen: openArray[VertexID]; data: var Blob) =
-  ## This function serialises a list of vertex IDs.
-  ## ::
-  ##   uint64, ...    -- list of IDs
-  ##   0x7c           -- marker(8)
-  ##
-  for w in vGen:
-    data &= w.uint64.toBytesBE
-  data.add 0x7Cu8
 
-proc blobify*(vGen: openArray[VertexID]): Blob =
-  ## Variant of `blobify()`
-  vGen.blobifyTo result
+proc blobifyTo*(tuv: VertexID; data: var Blob) =
+  ## This function serialises a top used vertex ID.
+  data.setLen(9)
+  let w = tuv.uint64.toBytesBE
+  (addr data[0]).copyMem(unsafeAddr w[0], 8)
+  data[8] = 0x7Cu8
 
-proc blobifyTo*(lSst: SavedState; data: var Blob) =
+proc blobify*(tuv: VertexID): Blob =
+  ## Variant of `blobifyTo()`
+  tuv.blobifyTo result
+
+proc blobifyTo*(lSst: SavedState; data: var Blob): Result[void,AristoError] =
   ## Serialise a last saved state record
-  data.setLen(0)
-  data.add lSst.src.data
-  data.add lSst.trg.data
+  case lSst.src.len:
+  of 0:
+    data.setLen(32)
+  of 32:
+    data.setLen(0)
+    data.add lSst.src.data
+  else:
+    return err(BlobifyStateSrcLenGarbled)
+  case lSst.trg.len:
+  of 0:
+    data.setLen(64)
+  of 32:
+    data.add lSst.trg.data
+  else:
+    return err(BlobifyStateTrgLenGarbled)
   data.add lSst.serial.toBytesBE
   data.add @[0x7fu8]
+  ok()
 
-proc blobify*(lSst: SavedState): Blob =
+proc blobify*(lSst: SavedState): Result[Blob,AristoError] =
   ## Variant of `blobify()`
-  lSst.blobifyTo result
+  var data: Blob
+  ? lSst.blobifyTo data
+  ok(move(data))
 
 # -------------
 
@@ -315,30 +327,28 @@ proc deblobify*(
 
 proc deblobifyTo*(
     data: openArray[byte];
-    vGen: var seq[VertexID];
+    tuv: var VertexID;
       ): Result[void,AristoError] =
-  ## De-serialise the data record encoded with `blobify()` into the vertex ID
-  ## generator argument `vGen`.
+  ## De-serialise a top level vertex ID.
   if data.len == 0:
-    vGen = @[]
+    tuv = VertexID(0)
+  elif data.len != 9:
+    return err(DeblobSizeGarbled)
+  elif data[^1] != 0x7c:
+    return err(DeblobWrongType)
   else:
-    if (data.len mod 8) != 1:
-      return err(DeblobSizeGarbled)
-    if data[^1] != 0x7c:
-      return err(DeblobWrongType)
-    for n in 0 ..< (data.len div 8):
-      let w = n * 8
-      vGen.add (uint64.fromBytesBE data.toOpenArray(w, w+7)).VertexID
+    tuv = (uint64.fromBytesBE data.toOpenArray(0, 7)).VertexID
   ok()
 
 proc deblobify*(
     data: openArray[byte];
-    T: type seq[VertexID];
+    T: type VertexID;
       ): Result[T,AristoError] =
-  ## Variant of `deblobify()` for deserialising the vertex ID generator state
-  var vGen: T
-  ? data.deblobifyTo vGen
-  ok move(vGen)
+  ## Variant of `deblobify()` for deserialising a top level vertex ID.
+  var vTop: T
+  ? data.deblobifyTo vTop
+  ok move(vTop)
+
 
 proc deblobifyTo*(
     data: openArray[byte];
@@ -347,6 +357,7 @@ proc deblobifyTo*(
   ## De-serialise the last saved state data record previously encoded with
   ## `blobify()`.
   if data.len != 73:
+    echo ">>> deblobifyTo got size=", data.len
     return err(DeblobWrongSize)
   if data[^1] != 0x7f:
     return err(DeblobWrongType)

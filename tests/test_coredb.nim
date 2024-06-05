@@ -16,6 +16,7 @@ import
   eth/common,
   results,
   unittest2,
+  ../nimbus/db/opts,
   ../nimbus/db/core_db/persistent,
   ../nimbus/core/chain,
   ./replay/pp,
@@ -157,7 +158,7 @@ proc initRunnerDB(
     # Resolve for static `dbType`
     case dbType:
     of AristoDbMemory: AristoDbMemory.newCoreDbRef()
-    of AristoDbRocks: AristoDbRocks.newCoreDbRef path
+    of AristoDbRocks: AristoDbRocks.newCoreDbRef(path, DbOptions.init())
     of AristoDbVoid: AristoDbVoid.newCoreDbRef()
     else: raiseAssert "Oops"
 

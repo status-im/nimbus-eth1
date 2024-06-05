@@ -69,7 +69,7 @@ proc deltaMerge*(
     src:  lower.src,
     sTab: lower.sTab,
     kMap: lower.kMap,
-    vGen: upper.vGen)
+    vTop: upper.vTop)
 
   for (vid,vtx) in upper.sTab.pairs:
     if vtx.isValid or not newFilter.sTab.hasKey vid:

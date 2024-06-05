@@ -35,8 +35,8 @@ func dirty*(db: AristoDbRef): lent HashSet[VertexID] =
 func pPrf*(db: AristoDbRef): lent HashSet[VertexID] =
   db.top.final.pPrf
 
-func vGen*(db: AristoDbRef): lent seq[VertexID] =
-  db.top.delta.vGen
+func vTop*(db: AristoDbRef): VertexID =
+  db.top.delta.vTop
 
 # ------------------------------------------------------------------------------
 # Public getters/helpers
@@ -190,7 +190,7 @@ func layersMergeOnto*(src: LayerRef; trg: var LayerObj) =
     trg.delta.sTab[vid] = vtx
   for (vid,key) in src.delta.kMap.pairs:
     trg.delta.kMap[vid] = key
-  trg.delta.vGen = src.delta.vGen
+  trg.delta.vTop = src.delta.vTop
 
 
 func layersCc*(db: AristoDbRef; level = high(int)): LayerRef =
@@ -207,7 +207,7 @@ func layersCc*(db: AristoDbRef; level = high(int)): LayerRef =
     delta: LayerDeltaRef(
       sTab: layers[0].delta.sTab.dup,          # explicit dup for ref values
       kMap: layers[0].delta.kMap,
-      vGen: layers[^1].delta.vGen))
+      vTop: layers[^1].delta.vTop))
 
   # Consecutively merge other layers on top
   for n in 1 ..< layers.len:

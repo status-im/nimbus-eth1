@@ -104,7 +104,7 @@ type
     src*: HashKey                    ## Only needed when used as a filter
     sTab*: Table[VertexID,VertexRef] ## Structural vertex table
     kMap*: Table[VertexID,HashKey]   ## Merkle hash key mapping
-    vGen*: seq[VertexID]             ## Recycling state for vertex IDs
+    vTop*: VertexID                  ## Last used vertex ID
 
   LayerFinalRef* = ref object
     ## Final tables fully supersede tables on lower layers when stacked as a

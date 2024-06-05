@@ -23,7 +23,8 @@ import
   rocksdb,
   ../aristo_desc,
   ./rocks_db/rdb_desc,
-  "."/[rocks_db, memory_only]
+  "."/[rocks_db, memory_only],
+  ../../opts
 
 export
   RdbBackendRef,
@@ -35,18 +36,19 @@ export
 
 proc newAristoRdbDbRef(
     basePath: string;
+    opts: DbOptions;
       ): Result[AristoDbRef, AristoError]=
   let
-    be = ? rocksDbAristoBackend(basePath)
-    vGen = block:
-      let rc = be.getIdgFn()
+    be = ? rocksDbBackend(basePath, opts)
+    vTop = block:
+      let rc = be.getTuvFn()
       if rc.isErr:
         be.closeFn(flush = false)
         return err(rc.error)
       rc.value
   ok AristoDbRef(
     top: LayerRef(
-      delta: LayerDeltaRef(vGen: vGen),
+      delta: LayerDeltaRef(vTop: vTop),
       final: LayerFinalRef()),
     backend: be)
 
@@ -58,12 +60,13 @@ proc init*[W: RdbBackendRef](
     T: type AristoDbRef;
     B: type W;
     basePath: string;
+    opts: DbOptions
       ): Result[T, AristoError] =
   ## Generic constructor, `basePath` argument is ignored for memory backend
   ## databases (which also unconditionally succeed initialising.)
   ##
   when B is RdbBackendRef:
-    basePath.newAristoRdbDbRef()
+    basePath.newAristoRdbDbRef opts
 
 proc getRocksDbFamily*(
     gdb: GuestDbRef;

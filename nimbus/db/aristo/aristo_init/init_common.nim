@@ -62,7 +62,7 @@ type
       txId: uint                     ## Transaction ID (for debugging)
 
 const
-  AdmTabIdIdg* = AdminTabID(0)       ## Access key for vertex ID generator state
+  AdmTabIdTuv* = AdminTabID(0)       ## Access key for vertex ID generator state
   AdmTabIdLst* = AdminTabID(2)       ## Access key for last state
 
 # ------------------------------------------------------------------------------

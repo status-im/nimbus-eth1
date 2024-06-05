@@ -22,14 +22,14 @@ import
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc getIdgUbe*(
+proc getTuvUbe*(
     db: AristoDbRef;
-      ): Result[seq[VertexID],AristoError] =
+      ): Result[VertexID,AristoError] =
   ## Get the ID generator state from the unfiltered backened if available.
   let be = db.backend
   if not be.isNil:
-    return be.getIdgFn()
-  err(GetIdgNotFound)
+    return be.getTuvFn()
+  err(GetTuvNotFound)
 
 proc getLstUbe*(
     db: AristoDbRef;
@@ -62,13 +62,13 @@ proc getKeyUbe*(
 
 # ------------------
 
-proc getIdgBE*(
+proc getTuvBE*(
     db: AristoDbRef;
-      ): Result[seq[VertexID],AristoError] =
+      ): Result[VertexID,AristoError] =
   ## Get the ID generator state the `backened` layer if available.
   if not db.balancer.isNil:
-    return ok(db.balancer.vGen)
-  db.getIdgUbe()
+    return ok(db.balancer.vTop)
+  db.getTuvUbe()
 
 proc getVtxBE*(
     db: AristoDbRef;

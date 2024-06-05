@@ -115,29 +115,6 @@ jobs:
           HOMEBREW_NO_INSTALL_CLEANUP=1 brew install gnu-getopt
           brew link --force gnu-getopt
 
-      - name: Restore rocksdb from cache (Macos/Linux)
-        if: runner.os != 'Windows'
-        id: rocksdb-cache
-        uses: actions/cache@v4
-        with:
-          path: rocks-db-cache-${{ matrix.target.cpu }}
-          key: 'rocksdb-v2-${{ matrix.target.os }}-${{ matrix.target.cpu }}'
-
-      - name: Install rocksdb (Linux amd64)
-        # mysterious illegal instruction error if we build our own librocksdb
-        if: runner.os == 'Linux' && matrix.target.cpu == 'amd64'
-        run: |
-         sudo apt-get -q update
-         sudo apt-get install -y librocksdb-dev libpcre3-dev
-
-      - name: Build and install rocksdb (Macos)
-        if: runner.os == 'Macos'
-        run: |
-          HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew install ccache
-          echo "/usr/local/opt/ccache/libexec" >> ${GITHUB_PATH}
-          curl -O -L -s -S https://raw.githubusercontent.com/status-im/nimbus-build-system/master/scripts/build_rocksdb.sh
-          bash build_rocksdb.sh rocks-db-cache-${{ matrix.target.cpu }}
-
       - name: Restore llvm-mingw (Windows) from cache
         if: runner.os == 'Windows'
         id: windows-mingw-cache
@@ -154,7 +131,7 @@ jobs:
           path: external/dlls-${{ matrix.target.cpu }}
           # according to docu, idle caches are kept for up to 7 days
           # so change dlls# to force new cache contents (for some number #)
-          key: dlls0-${{ matrix.target.cpu }}
+          key: dlls1-${{ matrix.target.cpu }}
 
       - name: Install llvm-mingw dependency (Windows)
         if: >
@@ -179,19 +156,10 @@ jobs:
           steps.windows-dlls-cache.outputs.cache-hit != 'true' &&
           runner.os == 'Windows'
         run: |
-          if [[ '${{ matrix.target.cpu }}' == 'amd64' ]]; then
-            ROCKSDBSUB=x64
-          else
-            ROCKSDBSUB=x86
-          fi
           DLLPATH=external/dlls-${{ matrix.target.cpu }}
           mkdir -p external
           curl -L "https://nim-lang.org/download/windeps.zip" -o external/windeps.zip
           7z x -y external/windeps.zip -o"$DLLPATH"
-          # ROCKSDB
-          curl -L "https://github.com/status-im/nimbus-deps/releases/download/nimbus-deps/nimbus-deps.zip" -o external/nimbus-deps.zip
-          7z x -y external/nimbus-deps.zip
-          cp "./$ROCKSDBSUB/librocksdb.dll" "$DLLPATH/librocksdb.dll"
 
       - name: Path to cached dependencies (Windows)
         if: >

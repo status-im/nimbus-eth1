@@ -31,6 +31,7 @@ import
   ../nimbus/core/chain,
   ../nimbus/common/common,
   ../nimbus/rpc,
+  ../nimbus/db/opts,
   ../nimbus/db/core_db,
   ../nimbus/db/core_db/persistent,
   ../nimbus/db/state_db/base,
@@ -145,7 +146,8 @@ proc rpcGetProofsTrackStateChangesMain*() =
 
     test "Test tracking the changes introduced in every block":
 
-      let com = CommonRef.new(newCoreDbRef(DefaultDbPersistent, DATABASE_PATH))
+      let com = CommonRef.new(newCoreDbRef(
+        DefaultDbPersistent, DATABASE_PATH, DbOptions.init()))
       com.initializeEmptyDb()
 
       let

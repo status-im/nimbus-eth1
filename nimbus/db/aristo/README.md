@@ -24,7 +24,7 @@ Contents
   + [4.4 Leaf record payload serialisation for account data](#ch4x4)
   + [4.5 Leaf record payload serialisation for RLP encoded data](#ch4x5)
   + [4.6 Leaf record payload serialisation for unstructured data](#ch4x6)
-  + [4.7 Serialisation of the list of unused vertex IDs](#ch4x7)
+  + [4.7 Serialisation of the top used vertex ID](#ch4x7)
   + [4.8 Serialisation of a last saved state record](#ch4x8)
   + [4.9 Serialisation record identifier identification](#ch4x9)
 
@@ -351,13 +351,11 @@ maximum value of that byte is 0x99.
           marker(8) is the eight bit array *0110-1011*
 
 <a name="ch4x7"></a>
-### 4.7 Serialisation of the list of unused vertex IDs
+### 4.7 Serialisation of the top used vertex ID
 
-        0 +-- ..
-          ...                                -- recycled vertexIDs
-          +--+--+--+--+--+--+--+--+
-          |                       |          -- last unused vertex IDs
-          +--+--+--+--+--+--+--+--+
+        0 +--+--+--+--+--+--+--+--+
+          |                       |          -- last used vertex IDs
+        8 +--+--+--+--+--+--+--+--+
           |  |                               -- marker(8), 0x7c
           +--+
 
@@ -399,7 +397,7 @@ i.e. the last byte of a serialised record.
 |   0xxx 0yyy | (x(3)<<4) + y(3) | Account payload      | [4.4](#ch4x4)       |
 |   0110 1010 | 0x6a             | RLP encoded payload  | [4.5](#ch4x5)       |
 |   0110 1011 | 0x6b             | Unstructured payload | [4.6](#ch4x6)       |
-|   0111 1100 | 0x7c             | List of vertex IDs   | [4.7](#ch4x7)       |
+|   0111 1100 | 0x7c             | Last used vertex ID  | [4.7](#ch4x7)       |
 |   0111 1111 | 0x7f             | Last saved state     | [4.8](#ch4x8)       |
 
 <a name="ch5"></a>
