@@ -22,7 +22,7 @@ from ../aristo
   import EmptyBlob, PayloadRef, isValid
 
 const
-  ProvideLegacyAPI = true
+  ProvideLegacyAPI = false
     ## Enable legacy API. For now everybody would want this enabled.
 
   EnableApiTracking = false
