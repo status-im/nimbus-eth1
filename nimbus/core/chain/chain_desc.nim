@@ -37,12 +37,17 @@ type
       ## First block to when `extraValidation` will be applied (only
       ## effective if `extraValidation` is true.)
 
+    vmState: BaseVMState
+      ## If it's not nil, block validation will use this
+      ## If it's nil, a new vmState state will be created.
+
 # ------------------------------------------------------------------------------
 # Public constructors
 # ------------------------------------------------------------------------------
 
 proc newChain*(com: CommonRef,
-               extraValidation: bool): ChainRef =
+               extraValidation: bool,
+               vmState = BaseVMState(nil)): ChainRef =
   ## Constructor for the `Chain` descriptor object.
   ## The argument `extraValidation` enables extra block
   ## chain validation if set `true`.
@@ -50,6 +55,7 @@ proc newChain*(com: CommonRef,
     com: com,
     validateBlock: true,
     extraValidation: extraValidation,
+    vmState: vmState
   )
 
 func newChain*(com: CommonRef): ChainRef =

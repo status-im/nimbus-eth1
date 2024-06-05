@@ -224,7 +224,7 @@ proc importBlock(ctx: var TestCtx, com: CommonRef,
     ctx.vmState.collectWitnessData = true # Enable saving witness data
 
   let
-    chain = newChain(com, extraValidation = true)
+    chain = newChain(com, extraValidation = true, ctx.vmState)
     res = chain.persistBlocks([tb.header], [tb.body])
 
   if res.isErr():
