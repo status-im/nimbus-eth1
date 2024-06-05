@@ -987,20 +987,6 @@ proc haveBlockAndState*(db: CoreDbRef, headerHash: Hash256): bool =
   # see if stateRoot exists
   db.exists(header.stateRoot)
 
-proc getBlockWitness*(
-    db: CoreDbRef, blockHash: Hash256): Result[seq[byte], string] {.gcsafe.} =
-  let res = db.newKvt().get(blockHashToBlockWitnessKey(blockHash).toOpenArray)
-  if res.isErr():
-    err("Failed to get block witness from database: " & $res.error.error)
-  else:
-    ok(res.value())
-
-proc setBlockWitness*(db: CoreDbRef, blockHash: Hash256, witness: seq[byte]) =
-  let witnessKey = blockHashToBlockWitnessKey(blockHash)
-  db.newKvt.put(witnessKey.toOpenArray, witness).isOkOr:
-    warn logTxt "setBlockWitness()", witnessKey, action="put()", error=($$error)
-    return
-
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

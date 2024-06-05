@@ -23,7 +23,6 @@
 # 3. Start the test.
 
 import
-  std/tables,
   unittest2,
   web3/eth_api,
   json_rpc/rpcclient,
@@ -34,7 +33,6 @@ import
   ../nimbus/db/core_db,
   ../nimbus/db/core_db/persistent,
   ../nimbus/db/state_db/base,
-  ../stateless/[witness_verification, witness_types],
   ./rpc/experimental_rpc_client
 
 const
@@ -56,17 +54,10 @@ template toHash256(hash: untyped): Hash256 =
 proc updateStateUsingProofsAndCheckStateRoot(
     stateDB: AccountStateDB,
     expectedStateRoot: Hash256,
-    witness: seq[byte],
     proofs: seq[ProofResponse]) =
 
-  let verifyWitnessResult = verifyWitness(expectedStateRoot, witness, {wfNoFlag})
-  check verifyWitnessResult.isOk()
-  let witnessData = verifyWitnessResult.value()
-
   check:
-    witness.len() > 0
     proofs.len() > 0
-    witnessData.len() > 0
 
   for proof in proofs:
     let
@@ -76,24 +67,6 @@ proc updateStateUsingProofsAndCheckStateRoot(
       codeHash = proof.codeHash.toHash256()
       storageHash = proof.storageHash.toHash256()
       slotProofs = proof.storageProof
-
-    if witnessData.contains(address):
-
-      let
-        storageData = witnessData[address].storage
-        code = witnessData[address].code
-
-      check:
-        witnessData[address].account.balance == balance
-        witnessData[address].account.nonce == nonce
-        witnessData[address].account.codeHash == codeHash
-
-      for slotProof in slotProofs:
-        if storageData.contains(slotProof.key):
-          check storageData[slotProof.key] == slotProof.value
-
-      if code.len() > 0:
-        stateDB.setCode(address, code)
 
     if (balance == 0 and nonce == 0 and codeHash == ZERO_HASH256 and storageHash == ZERO_HASH256):
       # Account doesn't exist:
@@ -156,13 +129,11 @@ proc rpcGetProofsTrackStateChangesMain*() =
         let
           blockNum = blockId(i.uint64)
           blockHeader: BlockObject = waitFor client.eth_getBlockByNumber(blockNum, false)
-          witness = waitFor client.exp_getWitnessByBlockNumber(blockNum, true)
           proofs = waitFor client.exp_getProofsByBlockNumber(blockNum, true)
 
         updateStateUsingProofsAndCheckStateRoot(
             stateDB,
             blockHeader.stateRoot.toHash256(),
-            witness,
             proofs)
 
         if i mod 1000 == 0:

@@ -33,10 +33,6 @@ type
       ## Trigger extra validation, currently within `persistBlocks()`
       ## function only.
 
-    generateWitness: bool ##\
-      ## Enable generation of block witness, currently within `persistBlocks()`
-      ## function only.
-
     verifyFrom: BlockNumber ##\
       ## First block to when `extraValidation` will be applied (only
       ## effective if `extraValidation` is true.)
@@ -93,10 +89,6 @@ proc extraValidation*(c: ChainRef): bool =
   ## Getter
   c.extraValidation
 
-proc generateWitness*(c: ChainRef): bool =
-  ## Getter
-  c.generateWitness
-
 proc verifyFrom*(c: ChainRef): BlockNumber =
   ## Getter
   c.verifyFrom
@@ -120,11 +112,6 @@ proc `extraValidation=`*(c: ChainRef; extraValidation: bool) =
   ## Setter. If set `true`, the assignment value `extraValidation` enables
   ## extra block chain validation.
   c.extraValidation = extraValidation
-
-proc `generateWitness=`*(c: ChainRef; generateWitness: bool) =
-  ## Setter. If set `true`, the assignment value `generateWitness` enables
-  ## block witness generation.
-  c.generateWitness = generateWitness
 
 proc `verifyFrom=`*(c: ChainRef; verifyFrom: BlockNumber) =
   ## Setter. The  assignment value `verifyFrom` defines the first block where

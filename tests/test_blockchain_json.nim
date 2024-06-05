@@ -21,7 +21,6 @@ import
   ../nimbus/evm/tracer/legacy_tracer,
   ../nimbus/evm/tracer/json_tracer,
   ../nimbus/core/[validate, chain, pow/header],
-  ../stateless/[tree_from_witness, witness_types],
   ../tools/common/helpers as chp,
   ../tools/evmstate/helpers,
   ../nimbus/common/common,
@@ -174,56 +173,23 @@ proc parseTestCtx(fixture: JsonNode, testStatusIMPL: var TestStatus): TestCtx =
 
   result.network = fixture["network"].getStr
 
-proc blockWitness(vmState: BaseVMState, chainDB: CoreDbRef) =
-  let rootHash = vmState.stateDB.rootHash
-  let witness = vmState.buildWitness()
-
-  if witness.len() == 0:
-    if vmState.stateDB.makeMultiKeys().keys.len() != 0:
-      raise newException(ValidationError, "Invalid trie generated from block witness")
-    return
-
-  let fork = vmState.fork
-  let flags = if fork >= FkSpurious: {wfEIP170} else: {}
-
-  # build tree from witness
-  var db = newCoreDbRef DefaultDbMemory
-  when defined(useInputStream):
-    var input = memoryInput(witness)
-    var tb = initTreeBuilder(input, db, flags)
-  else:
-    var tb = initTreeBuilder(witness, db, flags)
-  let root = tb.buildTree()
-
-  # compare the result
-  if root != rootHash:
-    raise newException(ValidationError, "Invalid trie generated from block witness")
-
-proc testGetBlockWitness(chain: ChainRef, parentHeader, currentHeader: BlockHeader) =
+proc testGetMultiKeys(chain: ChainRef, parentHeader, currentHeader: BlockHeader) =
   # check that current state matches current header
   let currentStateRoot = chain.vmState.stateDB.rootHash
   if currentStateRoot != currentHeader.stateRoot:
     raise newException(ValidationError, "Expected currentStateRoot == currentHeader.stateRoot")
 
-  let (mkeys, witness) = getBlockWitness(chain.com, currentHeader, false)
+  let mkeys = getMultiKeys(chain.com, currentHeader, false)
 
-  # check that the vmstate hasn't changed after call to getBlockWitness
+  # check that the vmstate hasn't changed after call to getMultiKeys
   if chain.vmState.stateDB.rootHash != currentHeader.stateRoot:
     raise newException(ValidationError, "Expected chain.vmstate.stateDB.rootHash == currentHeader.stateRoot")
-
-  # check the witnessRoot against the witness tree if the witness isn't empty
-  if witness.len() > 0:
-    let fgs = if chain.vmState.fork >= FkSpurious: {wfEIP170} else: {}
-    var tb = initTreeBuilder(witness, chain.com.db, fgs)
-    let witnessRoot = tb.buildTree()
-    if witnessRoot != parentHeader.stateRoot:
-      raise newException(ValidationError, "Expected witnessRoot == parentHeader.stateRoot")
 
   # use the MultiKeysRef to build the block proofs
   let
     ac = newAccountStateDB(chain.com.db, currentHeader.stateRoot)
     blockProofs = getBlockProofs(state_db.ReadOnlyStateDB(ac), mkeys)
-  if witness.len() == 0 and blockProofs.len() != 0:
+  if blockProofs.len() != 0:
     raise newException(ValidationError, "Expected blockProofs.len() == 0")
 
 proc setupTracer(ctx: TestCtx): TracerRef =
@@ -258,14 +224,13 @@ proc importBlock(ctx: var TestCtx, com: CommonRef,
     ctx.vmState.generateWitness = true # Enable saving witness data
 
   let
-    chain = newChain(com, extraValidation = true, ctx.vmState)
+    chain = newChain(com, extraValidation = true)
     res = chain.persistBlocks([tb.header], [tb.body])
 
-  if res.isErr()
+  if res.isErr():
     raise newException(ValidationError, res.error())
   else:
-    blockWitness(chain.vmState, com.db)
-    testGetBlockWitness(chain, chain.vmState.parent, tb.header)
+    testGetMultiKeys(chain, chain.vmState.parent, tb.header)
 
 proc applyFixtureBlockToChain(ctx: var TestCtx, tb: var TestBlock,
                               com: CommonRef, checkSeal: bool) =

@@ -17,7 +17,6 @@ export
 export
   vms.`$`,
   vms.blockNumber,
-  vms.buildWitness,
   vms.coinbase,
   vms.determineFork,
   vms.difficultyOrPrevRandao,
