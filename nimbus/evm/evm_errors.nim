@@ -26,6 +26,7 @@ type
     PrcInvalidPoint
     PrcInvalidParam
     PrcValidationError
+    GasIntOverflow
 
   EvmErrorObj* = object
     code*: EvmErrorCode
