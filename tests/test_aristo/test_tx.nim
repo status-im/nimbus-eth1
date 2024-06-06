@@ -579,12 +579,12 @@ proc testTxMergeProofAndKvpList*(
 
     if 0 < w.proof.len:
       let root = block:
-        let rc = db.merge(rootKey, VertexID(1))
+        let rc = db.mergeProof(rootKey, VertexID(1))
         xCheckRc rc.error == 0
         rc.value
 
       let nMerged = block:
-        let rc = db.merge(w.proof, root)
+        let rc = db.mergeProof(w.proof, root)
         xCheckRc rc.error == 0
         rc.value
 
