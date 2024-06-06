@@ -38,7 +38,7 @@ const
     let
       cpt = k.cpt
       blockNumber = ? cpt.stack.popInt()
-      blockHash = ? cpt.getBlockHash(blockNumber)
+      blockHash = cpt.getBlockHash(blockNumber)
 
     cpt.stack.push blockHash
 

@@ -9,7 +9,7 @@
 {.push raises: [].}
 
 import
-  macros, strformat, strutils, stint, chronicles,
+  macros, strutils, stint, chronicles,
   stew/byteutils, stew/ptrops,
   ./host_types
 
@@ -44,34 +44,32 @@ proc depthPrefix(host: TransactionHost): string =
     let num = '(' & $depth & ')'
     return num & spaces(42 - num.len)
 
-proc showEvmcMessage(msg: EvmcMessage): string
-    {.gcsafe, raises: [ValueError].} =
+proc showEvmcMessage(msg: EvmcMessage): string =
   let kindStr =
     if msg.flags == {}: $msg.kind
     elif msg.flags == {EVMC_STATIC} and msg.kind == EVMC_CALL: "CALL_STATIC"
-    else: &"{$msg.kind} flags={$msg.flags}"
+    else: $msg.kind & " flags=" & $msg.flags
   var inputStr = "(" & $msg.input_size & ")"
   if msg.input_size > 0:
     inputStr.add toHex(makeOpenArray(msg.input_data,
                                      min(msg.input_size, 256).int))
     if msg.input_size > 256:
       inputStr.add "..."
-  result = &"kind={kindStr}" &
-    &" depth={$msg.depth}" &
-    &" gas={$msg.gas}" &
-    &" value={$msg.value.fromEvmc}" &
-    &" sender={$msg.sender.fromEvmc}" &
-    &" recipient={$msg.recipient.fromEvmc}" &
-    &" code_address={$msg.code_address.fromEvmc}" &
-    &" input_data={inputStr}"
+  result = "kind=" & $kindStr &
+    " depth=" & $msg.depth &
+    " gas=" & $msg.gas &
+    " value=" & $msg.value.fromEvmc &
+    " sender=" & $msg.sender.fromEvmc &
+    " recipient=" & $msg.recipient.fromEvmc &
+    " code_address=" & $msg.code_address.fromEvmc &
+    " input_data=" & inputStr
   if msg.kind == EVMC_CREATE2:
-    result.add &" create2_salt={$msg.create2_salt.fromEvmc}"
+    result.add " create2_salt=" & $msg.create2_salt.fromEvmc
 
-proc showEvmcResult(res: EvmcResult, withCreateAddress = true): string
-    {.gcsafe, raises: [ValueError].} =
+proc showEvmcResult(res: EvmcResult, withCreateAddress = true): string =
   if res.status_code != EVMC_SUCCESS and res.status_code != EVMC_REVERT and
      res.gas_left == 0 and res.output_size == 0:
-    return &"status={$res.status_code}"
+    return "status=" & $res.status_code
 
   var outputStr = "(" & $res.output_size & ")"
   if res.output_size > 0:
@@ -80,23 +78,22 @@ proc showEvmcResult(res: EvmcResult, withCreateAddress = true): string
     if res.output_size > 256:
       outputStr.add "..."
 
-  result = &"status={$res.status_code}" &
-    &" gas_left={$res.gas_left}" &
-    &" output_data={outputStr}"
+  result = "status=" & $res.status_code &
+    " gas_left=" & $res.gas_left &
+    " output_data=" & $outputStr
   if withCreateAddress:
-    result.add &" create_address={$res.create_address.fromEvmc}"
+    result.add " create_address=" & $res.create_address.fromEvmc
 
-proc showEvmcTxContext(txc: EvmcTxContext): string
-    {.gcsafe, raises: [ValueError].} =
-  return &"tx_gas_price={$txc.tx_gas_price.fromEvmc}" &
-    &" tx_origin={$txc.tx_origin.fromEvmc}" &
-    &" block_coinbase={$txc.block_coinbase.fromEvmc}" &
-    &" block_number={$txc.block_number}" &
-    &" block_timestamp={$txc.block_timestamp}" &
-    &" block_gas_limit={$txc.block_gas_limit}" &
-    &" block_prev_randao={$txc.block_prev_randao.fromEvmc}" &
-    &" chain_id={$txc.chain_id.fromEvmc}" &
-    &" block_base_fee={$txc.block_base_fee.fromEvmc}"
+proc showEvmcTxContext(txc: EvmcTxContext): string =
+  return "tx_gas_price=" & $txc.tx_gas_price.fromEvmc &
+    " tx_origin=" & $txc.tx_origin.fromEvmc &
+    " block_coinbase=" & $txc.block_coinbase.fromEvmc &
+    " block_number=" & $txc.block_number &
+    " block_timestamp=" & $txc.block_timestamp &
+    " block_gas_limit=" & $txc.block_gas_limit &
+    " block_prev_randao=" & $txc.block_prev_randao.fromEvmc &
+    " chain_id=" & $txc.chain_id.fromEvmc &
+    " block_base_fee=" & $txc.block_base_fee.fromEvmc
 
 proc showEvmcArgsExpr(fn: NimNode, callName: string): auto =
   var args: seq[NimNode] = newSeq[NimNode]()

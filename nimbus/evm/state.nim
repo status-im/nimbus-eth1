@@ -230,17 +230,16 @@ proc baseFee*(vmState: BaseVMState): UInt256 =
   vmState.blockCtx.fee.get(0.u256)
 
 method getAncestorHash*(
-    vmState: BaseVMState, blockNumber: BlockNumber):
-    EvmResult[Hash256] {.base, gcsafe.} =
+    vmState: BaseVMState, blockNumber: BlockNumber): Hash256 {.base.} =
   let db = vmState.com.db
   try:
     var blockHash: Hash256
     if db.getBlockHash(blockNumber, blockHash):
-      ok(blockHash)
+      blockHash
     else:
-      err(evmErr(EvmBlockHashNotFound))
+      Hash256()
   except RlpError:
-    err(evmErr(EvmBlockHashNotFound))
+    Hash256()
 
 proc readOnlyStateDB*(vmState: BaseVMState): ReadOnlyStateDB {.inline.} =
   ReadOnlyStateDB(vmState.stateDB)

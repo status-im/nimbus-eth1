@@ -47,7 +47,8 @@ when evmc_enabled:
     let
       status   = c.host.setStorage(c.msg.contractAddress, slot, newValue)
       gasParam = GasParams(kind: Op.Sstore, s_status: status)
-      gasCost  = c.gasCosts[Sstore].c_handler(newValue, gasParam)[0] + coldAccess
+      res      = ? c.gasCosts[Sstore].c_handler(newValue, gasParam)
+      gasCost  = res.gasCost + coldAccess
 
     c.opcodeGastCost(Sstore, gasCost, "SSTORE")
 

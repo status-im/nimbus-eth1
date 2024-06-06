@@ -10,7 +10,8 @@
 
 import
   ./host_types, evmc/evmc,
-  ".."/[vm_types, vm_computation, vm_state_transactions]
+  ".."/[vm_types, vm_computation, vm_state_transactions],
+  ../evm/evm_errors
 
 proc evmcReleaseResult(result: var evmc_result) {.cdecl.} =
   dealloc(result.output_data)
@@ -38,13 +39,13 @@ proc evmcExecute(vm: ptr evmc_vm, hostInterface: ptr evmc_host_interface,
   #  host.computation = c
 
   c.host.init(cast[ptr nimbus_host_interface](hostInterface), hostContext)
-  try:
-    if c.sysCall:
-      execSysCall(c)
-    else:
-      execComputation(c)
-  except CatchableError as exc:
-    c.setError(exc.msg)
+  let res = if c.sysCall:
+              execSysCall(c)
+            else:
+              execComputation(c)
+
+  if res.isErr:
+    c.setError($res.error.code)
 
   # When output size is zero, output data pointer may be null.
   var output_data: ptr byte

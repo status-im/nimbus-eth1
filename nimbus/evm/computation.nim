@@ -132,25 +132,24 @@ template getBlobBaseFee*(c: Computation): UInt256 =
   else:
     c.vmState.txCtx.blobBaseFee
 
-proc getBlockHash*(c: Computation, number: UInt256): EvmResult[Hash256]
-                   {.gcsafe, raises: [].} =
+proc getBlockHash*(c: Computation, number: UInt256): Hash256 =
   when evmc_enabled:
     let
       blockNumber = c.host.getTxContext().block_number.u256
       ancestorDepth  = blockNumber - number - 1
     if ancestorDepth >= constants.MAX_PREV_HEADER_DEPTH:
-      return ok(Hash256())
+      return Hash256()
     if number >= blockNumber:
-      return ok(Hash256())
+      return Hash256()
     c.host.getBlockHash(number)
   else:
     let
       blockNumber = c.vmState.blockNumber
       ancestorDepth = blockNumber - number - 1
     if ancestorDepth >= constants.MAX_PREV_HEADER_DEPTH:
-      return ok(Hash256())
+      return Hash256()
     if number >= blockNumber:
-      return ok(Hash256())
+      return Hash256()
     c.vmState.getAncestorHash(number.vmWordToBlockNumber)
 
 template accountExists*(c: Computation, address: EthAddress): bool =
@@ -299,8 +298,7 @@ func errorOpt*(c: Computation): Option[string] =
     return none(string)
   some(c.error.info)
 
-proc writeContract*(c: Computation): EvmResultVoid
-    {.gcsafe, raises: [].} =
+proc writeContract*(c: Computation): EvmResultVoid =
   template withExtra(tracer: untyped, args: varargs[untyped]) =
     tracer args, newContract=($c.msg.contractAddress),
       blockNumber=c.vmState.blockNumber,
@@ -369,14 +367,7 @@ template chainTo*(c: Computation,
 func merge*(c, child: Computation) =
   c.gasMeter.refundGas(child.gasMeter.gasRefunded)
 
-when evmc_enabled:
-  {.pragma: selfDesructPragma, gcsafe, raises: [CatchableError].}
-else:
-  {.pragma: selfDesructPragma, gcsafe, raises: [].}
-
-proc execSelfDestruct*(c: Computation, beneficiary: EthAddress)
-    {.selfDesructPragma.} =
-
+proc execSelfDestruct*(c: Computation, beneficiary: EthAddress) =
   c.vmState.mutateStateDB:
     let localBalance = c.getBalance(c.msg.contractAddress)
 

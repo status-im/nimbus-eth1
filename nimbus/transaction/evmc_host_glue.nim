@@ -21,12 +21,12 @@ proc accountExists(p: evmc_host_context, address: var evmc_address): c99bool {.c
 
 proc getStorage(p: evmc_host_context, address: var evmc_address,
                 key: var evmc_bytes32): evmc_bytes32
-    {.cdecl, raises: [].} =
+    {.cdecl.} =
   toHost(p).getStorage(address.fromEvmc, key.flip256.fromEvmc).toEvmc.flip256
 
 proc setStorage(p: evmc_host_context, address: var evmc_address,
                 key, value: var evmc_bytes32): evmc_storage_status
-    {.cdecl, raises: [].} =
+    {.cdecl.} =
   toHost(p).setStorage(address.fromEvmc, key.flip256.fromEvmc, value.flip256.fromEvmc)
 
 proc getBalance(p: evmc_host_context,
@@ -50,7 +50,7 @@ proc selfDestruct(p: evmc_host_context, address,
   toHost(p).selfDestruct(address.fromEvmc, beneficiary.fromEvmc)
 
 proc call(p: evmc_host_context, msg: var evmc_message): evmc_result
-    {.cdecl, raises: [CatchableError].} =
+    {.cdecl.} =
   # This would contain `flip256`, but `call` is special.  The C stack usage
   # must be kept small for deeply nested EVM calls.  To ensure small stack,
   # `flip256` must be handled at `host_call_nested`, not here.
@@ -62,7 +62,7 @@ proc getTxContext(p: evmc_host_context): evmc_tx_context {.cdecl.} =
   toHost(p).getTxContext()
 
 proc getBlockHash(p: evmc_host_context, number: int64): evmc_bytes32
-    {.cdecl, raises: [CatchableError].} =
+    {.cdecl.} =
   # TODO: `HostBlockNumber` is 256-bit unsigned.  It should be changed to match
   # EVMC which is more sensible.
   toHost(p).getBlockHash(number.uint64.u256).toEvmc
@@ -83,11 +83,11 @@ proc accessStorage(p: evmc_host_context, address: var evmc_address,
 
 proc getTransientStorage(p: evmc_host_context, address: var evmc_address,
                 key: var evmc_bytes32): evmc_bytes32
-    {.cdecl, raises: [].} =
+    {.cdecl.} =
   toHost(p).getTransientStorage(address.fromEvmc, key.flip256.fromEvmc).toEvmc.flip256
 
 proc setTransientStorage(p: evmc_host_context, address: var evmc_address,
-                key, value: var evmc_bytes32) {.cdecl, raises: [].} =
+                key, value: var evmc_bytes32) {.cdecl.} =
   toHost(p).setTransientStorage(address.fromEvmc, key.flip256.fromEvmc, value.flip256.fromEvmc)
 
 let hostInterface = evmc_host_interface(
@@ -109,8 +109,7 @@ let hostInterface = evmc_host_interface(
   set_transient_storage: setTransientStorage,
 )
 
-proc evmcExecComputation*(host: TransactionHost): EvmcResult
-    {.raises: [CatchableError].} =
+proc evmcExecComputation*(host: TransactionHost): EvmcResult =
   host.showCallEntry(host.msg)
 
   let vm = evmcLoadVMCached()

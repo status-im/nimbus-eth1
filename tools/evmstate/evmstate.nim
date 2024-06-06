@@ -22,7 +22,6 @@ import
   ../../nimbus/core/executor,
   ../../nimbus/common/common,
   ../../nimbus/evm/tracer/json_tracer,
-  ../../nimbus/evm/evm_errors,
   ../../nimbus/core/eip4844,
   ../../nimbus/utils/state_dump,
   ../common/helpers as chp,
@@ -65,8 +64,8 @@ proc toBytes(x: string): seq[byte] =
   result = newSeq[byte](x.len)
   for i in 0..<x.len: result[i] = x[i].byte
 
-method getAncestorHash(vmState: TestVMState; blockNumber: BlockNumber): EvmResult[Hash256] =
-  ok(keccakHash(toBytes($blockNumber)))
+method getAncestorHash(vmState: TestVMState; blockNumber: BlockNumber): Hash256 =
+  keccakHash(toBytes($blockNumber))
 
 proc verifyResult(ctx: var StateContext, vmState: BaseVMState) =
   ctx.error = ""

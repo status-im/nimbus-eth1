@@ -14,6 +14,7 @@ import
   stint,
   ".."/[vm_types, vm_computation],
   ../utils/utils,
+  ../evm/evm_errors,
   "."/[host_types, host_trace]
 
 proc evmcResultRelease(res: var EvmcResult) {.cdecl, gcsafe.} =
@@ -112,7 +113,7 @@ proc afterExecCallEvmcNested(host: TransactionHost, child: Computation,
 proc beforeExecEvmcNested(host: TransactionHost, msg: EvmcMessage): Computation
     # This function must be declared with `{.noinline.}` to make sure it doesn't
     # contribute to the stack frame of `callEvmcNested` below.
-    {.noinline, gcsafe, raises: [ValueError].} =
+    {.noinline.} =
   # `call` is special.  Most host functions do `flip256` in `evmc_host_glue`
   # and `show` in `host_services`, but `call` needs to minimise C stack used
   # by nested EVM calls.  Just `flip256` in glue's `call` adds a lot of
@@ -136,7 +137,7 @@ proc afterExecEvmcNested(host: TransactionHost, child: Computation,
                          kind: EvmcCallKind): EvmcResult
     # This function must be declared with `{.noinline.}` to make sure it doesn't
     # contribute to the stack frame of `callEvmcNested` below.
-    {.noinline, gcsafe, raises: [ValueError].} =
+    {.noinline.} =
   host.computation = host.saveComputation[^1]
   host.saveComputation[^1] = nil
   host.saveComputation.setLen(host.saveComputation.len - 1)
@@ -154,5 +155,7 @@ template callEvmcNested*(host: TransactionHost, msg: EvmcMessage): EvmcResult =
   # that template parameters `host` and `msg` are multiple-evaluated here;
   # simple expressions must be used when calling.)
   let child = beforeExecEvmcNested(host, msg)
-  child.execCallOrCreate()
+  let res = child.execCallOrCreate()
+  if res.isErr:
+    child.setError($res.error.code)
   afterExecEvmcNested(host, child, msg.kind)

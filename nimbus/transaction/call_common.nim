@@ -204,8 +204,7 @@ proc setupHost(call: CallParams): TransactionHost =
   return host
 
 when defined(evmc_enabled):
-  proc doExecEvmc(host: TransactionHost, call: CallParams)
-      {.gcsafe, raises: [CatchableError].} =
+  proc doExecEvmc(host: TransactionHost, call: CallParams) =
     var callResult = evmcExecComputation(host)
     let c = host.computation
 
@@ -304,4 +303,3 @@ proc runComputation*(call: CallParams): EvmResult[CallResult] =
       ? execComputation(host.computation)
 
   ok(finishRunningComputation(host, call))
-  
