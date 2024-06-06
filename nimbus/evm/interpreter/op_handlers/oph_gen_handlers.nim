@@ -65,7 +65,7 @@ macro genOphHandlers*(runHandler: static[OphNumToTextFn];
     result.add quote do:
       const `fnName`: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid =
         `comment`
-        ? `body`(k,`n`)
+        `body`(k,`n`)
   # echo ">>>", result.repr
 
 

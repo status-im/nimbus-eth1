@@ -178,3 +178,7 @@ func top*(stack: EvmStackRef,
 iterator items*(stack: EvmStackRef): UInt256 =
   for v in stack.values:
     yield v
+
+iterator pairs*(stack: EvmStackRef): (int, UInt256) =
+  for i, v in stack.values:
+    yield (i, v)

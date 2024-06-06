@@ -16,6 +16,7 @@ import
   ../nimbus/utils/[utils, debug],
   ../nimbus/evm/tracer/legacy_tracer,
   ../nimbus/core/eip4844,
+  ../nimbus/evm/evm_errors,
   ../tools/common/helpers as chp,
   ../tools/evmstate/helpers,
   ../tools/common/state_clearing,
@@ -46,15 +47,15 @@ proc toBytes(x: string): seq[byte] =
   result = newSeq[byte](x.len)
   for i in 0..<x.len: result[i] = x[i].byte
 
-method getAncestorHash*(vmState: BaseVMState; blockNumber: BlockNumber): Hash256 {.gcsafe.} =
+method getAncestorHash*(vmState: BaseVMState; blockNumber: BlockNumber): EvmResult[Hash256] {.gcsafe.} =
   if blockNumber >= vmState.blockNumber:
-    return
+    return ok(Hash256())
   elif blockNumber < 0:
-    return
+    return ok(Hash256())
   elif blockNumber < vmState.blockNumber - 256:
-    return
+    return ok(Hash256())
   else:
-    return keccakHash(toBytes($blockNumber))
+    return ok(keccakHash(toBytes($blockNumber)))
 
 func normalizeFileName(x: string): string =
   const invalidChars = ['/', '\\', '?', '%', '*', ':', '|', '"', '<', '>', ',', ';', '=']

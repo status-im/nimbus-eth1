@@ -397,7 +397,7 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
             res.gasRefund += CleanRefund
 
         res.gasCost = DirtyGas # dirty update (2.2)
-        ok(res)
+      ok(res)
 
   func `prefix gasLog0`(currentMemSize, memOffset, memLength: GasNatural): GasInt {.nimcall.} =
     result = `prefix gasMemoryExpansion`(currentMemSize, memOffset, memLength)

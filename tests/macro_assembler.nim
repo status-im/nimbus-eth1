@@ -34,14 +34,6 @@ import ../tools/common/helpers except LogLevel
 export byteutils
 {.experimental: "dynamicBindSym".}
 
-# backported from Nim 0.19.9
-# remove this when we use newer Nim
-#proc newLitFixed*(arg: enum): NimNode {.compileTime.} =
-#  result = newCall(
-#    arg.type.getTypeInst[1],
-#    newLit(int(arg))
-#  )
-
 type
   VMWord* = array[32, byte]
   Storage* = tuple[key, val: VMWord]
@@ -308,11 +300,11 @@ proc verifyAsmResult(vmState: BaseVMState, boa: Assembler, asmResult: CallResult
       error "different gasUsed", expected=boa.gasUsed, actual=asmResult.gasUsed
       return false
 
-  if boa.stack.len != asmResult.stack.values.len:
-    error "different stack len", expected=boa.stack.len, actual=asmResult.stack.values.len
+  if boa.stack.len != asmResult.stack.len:
+    error "different stack len", expected=boa.stack.len, actual=asmResult.stack.len
     return false
 
-  for i, v in asmResult.stack.values:
+  for i, v in asmResult.stack:
     let actual = v.dumpHex()
     let val = boa.stack[i].toHex()
     if actual != val:
@@ -410,7 +402,9 @@ proc runVM*(vmState: BaseVMState, boa: Assembler): bool =
     db.setCode(codeAddress, boa.code)
     db.setBalance(codeAddress, 1_000_000.u256)
   let tx = createSignedTx(boa.data, com.chainId)
-  let asmResult = testCallEvm(tx, tx.getSender, vmState, fork)
+  let asmResult = testCallEvm(tx, tx.getSender, vmState, fork).valueOr:
+    debug "testCallEvm failed"
+    return false
   verifyAsmResult(vmState, boa, asmResult)
 
 macro assembler*(list: untyped): untyped =

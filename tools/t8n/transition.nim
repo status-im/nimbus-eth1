@@ -22,7 +22,8 @@ import
   ../../nimbus/core/dao,
   ../../nimbus/core/executor/[process_transaction, executor_helpers],
   ../../nimbus/core/eip4844,
-  ../../nimbus/evm/tracer/json_tracer
+  ../../nimbus/evm/tracer/json_tracer,
+  ../../nimbus/evm/evm_errors
 
 const
   wrapExceptionEnabled* {.booldefine.} = true
@@ -334,21 +335,23 @@ proc setupAlloc(stateDB: LedgerRef, alloc: GenesisAlloc) =
     for slot, value in acc.storage:
       stateDB.setStorage(accAddr, slot, value)
 
-method getAncestorHash(vmState: TestVMState; blockNumber: BlockNumber): Hash256 {.gcsafe.} =
+method getAncestorHash(vmState: TestVMState; blockNumber: BlockNumber): EvmResult[Hash256] =
   # we can't raise exception here, it'll mess with EVM exception handler.
   # so, store the exception for later using `hashError`
   let num = blockNumber.truncate(uint64)
   var h = Hash256()
   if vmState.blockHashes.len == 0:
-    vmState.hashError = "getAncestorHash($1) invoked, no blockhashes provided" % [$num]
-    return h
+    vmState.hashError = "getAncestorHash(" &
+      $num & ") invoked, no blockhashes provided"
+    return ok(h)
 
   vmState.blockHashes.withValue(num, val) do:
     h = val[]
   do:
-    vmState.hashError = "getAncestorHash($1) invoked, blockhash for that block not provided" % [$num]
+    vmState.hashError = "getAncestorHash(" &
+      $num & ") invoked, blockhash for that block not provided"
 
-  return h
+  return ok(h)
 
 proc parseChainConfig(network: string): ChainConfig =
   try:

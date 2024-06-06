@@ -23,6 +23,7 @@ func consumeGas*(gasMeter: var GasMeter; amount: GasInt; reason: string): EvmRes
   if amount > gasMeter.gasRemaining:
     return err(memErr(OutOfGas))
   gasMeter.gasRemaining -= amount
+  ok()
 
 func returnGas*(gasMeter: var GasMeter; amount: GasInt) =
   gasMeter.gasRemaining += amount

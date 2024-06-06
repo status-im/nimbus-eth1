@@ -14,7 +14,7 @@ import
     vm_state,
     vm_types,
     constants,
-    vm_precompiles,
+    vm_precompiles {.all.},
     transaction,
     transaction/call_evm
     ],
@@ -41,7 +41,9 @@ template doTest(fixture: JsonNode; vmState: BaseVMState; fork: EVMFork, address:
       payload: if dataStr.len > 0: dataStr.hexToSeqByte else: @[]
     )
     let tx = signTransaction(unsignedTx, privateKey, ChainId(1), false)
-    let fixtureResult = testCallEvm(tx, tx.getSender, vmState, fork)
+    let fixtureResult = testCallEvm(tx, tx.getSender, vmState, fork).valueOr:
+                          check false
+                          continue
 
     if expectedErr:
       check fixtureResult.isError

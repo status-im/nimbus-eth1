@@ -164,9 +164,10 @@ proc beforeExecCreate(c: Computation): bool =
   return false
 
 proc afterExecCreate(c: Computation): EvmResultVoid =
+  result = ok()
   if c.isSuccess:
     # This can change `c.isSuccess`.
-    ? c.writeContract()
+    result = c.writeContract()
     # Contract code should never be returned to the caller.  Only data from
     # `REVERT` is returned after a create.  Clearing in this branch covers the
     # right cases, particularly important with EVMC where it must be cleared.
@@ -297,7 +298,7 @@ when vm_use_recursion:
     c.afterExec()
 
 else:
-  proc execCallOrCreate*(cParam: Computation): EvmResultVoid =
+  proc execCallOrCreate*(cParam: Computation): EvmResultVoid =    
     var (c, before, shouldPrepareTracer) = (cParam, true, true)
     defer:
       while not c.isNil:
@@ -327,7 +328,8 @@ else:
       (before, shouldPrepareTracer, c.parent, c) = (false, true, nil.Computation, c.parent)
       
     ok()
-    
+
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

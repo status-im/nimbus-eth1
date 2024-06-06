@@ -13,11 +13,11 @@ import
   eth/common/eth_types,
   eth/rlp,
   stew/byteutils,
+  results,
   chronicles,
   ".."/[types, memory, stack],
   ../interpreter/op_codes,
-  ../../db/ledger,
-  ../../errors
+  ../../db/ledger
 
 type
   JsonTracer* = ref object of TracerRef
@@ -160,15 +160,13 @@ method captureOpStart*(ctx: JsonTracer, c: Computation,
 
   if TracerFlags.DisableStack notin ctx.flags:
     ctx.stack = newJArray()
-    for v in c.stack.values:
+    for v in c.stack:
       ctx.stack.add(%(v.encodeHex))
 
   if TracerFlags.DisableStorage notin ctx.flags and op == Sstore:
     try:
-      if c.stack.values.len > 1:
-        ctx.rememberStorageKey(c.msg.depth, c.stack[^1, UInt256])
-    except InsufficientStack as ex:
-      error "JsonTracer captureOpStart", msg=ex.msg
+      if c.stack.len > 1:
+        ctx.rememberStorageKey(c.msg.depth, c.stack[^1, UInt256].unsafeValue)
     except ValueError as ex:
       error "JsonTracer captureOpStart", msg=ex.msg
 

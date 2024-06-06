@@ -18,6 +18,7 @@ export
 
 type
   EvmErrorCode* {.pure.} = enum
+    EvmBug
     OutOfGas
     MemoryFull
     StackFull

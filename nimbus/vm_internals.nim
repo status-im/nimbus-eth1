@@ -128,7 +128,9 @@ export
   hStk.popTopic,
   hStk.push,
   hStk.swap,
-  hStk.top
+  hStk.top,
+  hStk.items,
+  hStk.pairs
 
 import
   ./evm/evm_errors

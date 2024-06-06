@@ -457,7 +457,7 @@ func opcodeGastCost*(
     gasCost,
     c.gasMeter.gasRemaining,
     c.msg.depth + 1)
-  ? c.gasMeter.consumeGas(gasCost, reason)
+  c.gasMeter.consumeGas(gasCost, reason)
 
 # ------------------------------------------------------------------------------
 # End
