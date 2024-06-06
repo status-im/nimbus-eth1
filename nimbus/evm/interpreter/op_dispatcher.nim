@@ -17,6 +17,7 @@ const
 import
   ../code_stream,
   ../computation,
+  ../evm_errors,
   ../../common/evmforks,
   ./gas_costs,
   ./gas_meter,
@@ -44,26 +45,26 @@ template handleStopDirective(k: var Vm2Ctx) =
 
 
 template handleFixedGasCostsDirective(fork: EVMFork; op: Op; k: var Vm2Ctx) =
-    if k.cpt.tracingEnabled:
-      k.cpt.opIndex = k.cpt.traceOpCodeStarted(op)
+  if k.cpt.tracingEnabled:
+    k.cpt.opIndex = k.cpt.traceOpCodeStarted(op)
 
-    k.cpt.opcodeGastCost(op, k.cpt.gasCosts[op].cost, reason = $op)
-    vmOpHandlers[fork][op].run(k)
+  ? k.cpt.opcodeGastCost(op, k.cpt.gasCosts[op].cost, reason = $op)
+  ? vmOpHandlers[fork][op].run(k)
 
-    # If continuation is not nil, traceOpCodeEnded will be called in executeOpcodes.
-    if k.cpt.tracingEnabled and k.cpt.continuation.isNil:
-      k.cpt.traceOpCodeEnded(op, k.cpt.opIndex)
+  # If continuation is not nil, traceOpCodeEnded will be called in executeOpcodes.
+  if k.cpt.tracingEnabled and k.cpt.continuation.isNil:
+    k.cpt.traceOpCodeEnded(op, k.cpt.opIndex)
 
 
 template handleOtherDirective(fork: EVMFork; op: Op; k: var Vm2Ctx) =
-    if k.cpt.tracingEnabled:
-      k.cpt.opIndex = k.cpt.traceOpCodeStarted(op)
+  if k.cpt.tracingEnabled:
+    k.cpt.opIndex = k.cpt.traceOpCodeStarted(op)
 
-    vmOpHandlers[fork][op].run(k)
+  ? vmOpHandlers[fork][op].run(k)
 
-    # If continuation is not nil, traceOpCodeEnded will be called in executeOpcodes.
-    if k.cpt.tracingEnabled and k.cpt.continuation.isNil:
-      k.cpt.traceOpCodeEnded(op, k.cpt.opIndex)
+  # If continuation is not nil, traceOpCodeEnded will be called in executeOpcodes.
+  if k.cpt.tracingEnabled and k.cpt.continuation.isNil:
+    k.cpt.traceOpCodeEnded(op, k.cpt.opIndex)
 
 # ------------------------------------------------------------------------------
 # Private, big nasty doubly nested case matrix generator
@@ -163,7 +164,7 @@ when isMainModule and isChatty:
 
   import ../types
 
-  proc optimised(c: Computation, fork: EVMFork) {.compileTime.} =
+  proc optimised(c: Computation, fork: EVMFork): EvmResultVoid {.compileTime.} =
     var desc: Vm2Ctx
     while true:
       genOptimisedDispatcher(fork, desc.cpt.instr, desc)

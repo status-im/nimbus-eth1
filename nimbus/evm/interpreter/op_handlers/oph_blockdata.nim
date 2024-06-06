@@ -19,7 +19,6 @@ import
   ../../computation,
   ../../stack,
   ../../evm_errors,
-  ../utils/utils_numeric,
   ../op_codes,
   ./oph_defs
 

@@ -717,14 +717,14 @@ func activePrecompilesList*(fork: EVMFork): seq[EthAddress] =
   for address in activePrecompiles(fork):
     result.add address
 
-proc execPrecompiles*(c: Computation, fork: EVMFork): EvmResult[bool] =
+proc execPrecompiles*(c: Computation, fork: EVMFork): bool =
   for i in 0..18:
     if c.msg.codeAddress[i] != 0:
-      return ok(false)
+      return false
 
   let lb = c.msg.codeAddress[19]
   if not validPrecompileAddr(lb, fork):
-    return ok(false)
+    return false
 
   let precompile = PrecompileAddresses(lb)
   let res = case precompile
@@ -759,6 +759,6 @@ proc execPrecompiles*(c: Computation, fork: EVMFork): EvmResult[bool] =
         c.setError(EVMC_PRECOMPILE_FAILURE, $res.error.code, true)
       else:
         # swallow any other precompiles errors
-        debug "execPrecompiles validation error", msg=$res.error.code
+        debug "execPrecompiles validation error", errCode = $res.error.code
 
-  ok(true)
+  true

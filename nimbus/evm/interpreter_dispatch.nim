@@ -17,7 +17,7 @@ import
   std/[macros, strformat],
   pkg/[chronicles, chronos, stew/byteutils],
   ".."/[constants, db/ledger],
-  "."/[code_stream, computation],
+  "."/[code_stream, computation, evm_errors],
   "."/[message, precompiles, state, types],
   ./interpreter/[op_dispatcher, gas_costs]
 
@@ -38,8 +38,7 @@ when optimizationCondition:
   # this is a top level pragma since nim 1.6.16
   {.optimization: speed.}
 
-proc selectVM(c: Computation, fork: EVMFork, shouldPrepareTracer: bool)
-    {.gcsafe, raises: [CatchableError].} =
+proc selectVM(c: Computation, fork: EVMFork, shouldPrepareTracer: bool): EvmResultVoid =
   ## Op code execution handler main loop.
   var desc: Vm2Ctx
   desc.cpt = c
@@ -107,6 +106,8 @@ proc selectVM(c: Computation, fork: EVMFork, shouldPrepareTracer: bool)
 
       genLowMemDispatcher(fork, c.instr, desc)
 
+  ok()
+
 proc beforeExecCall(c: Computation) =
   c.snapshot()
   if c.msg.kind == EVMC_CALL:
@@ -129,12 +130,12 @@ proc afterExecCall(c: Computation) =
   else:
     c.rollback()
 
-proc beforeExecCreate(c: Computation): bool
-    {.gcsafe, raises: [ValueError].} =
+proc beforeExecCreate(c: Computation): bool =
   c.vmState.mutateStateDB:
     let nonce = db.getNonce(c.msg.sender)
     if nonce+1 < nonce:
-      c.setError(&"Nonce overflow when sender={c.msg.sender.toHex} wants to create contract", false)
+      let sender = c.msg.sender.toHex
+      c.setError("Nonce overflow when sender=" & sender & " wants to create contract", false)
       return true
     db.setNonce(c.msg.sender, nonce+1)
 
@@ -162,11 +163,10 @@ proc beforeExecCreate(c: Computation): bool
 
   return false
 
-proc afterExecCreate(c: Computation)
-    {.gcsafe, raises: [CatchableError].} =
+proc afterExecCreate(c: Computation): EvmResultVoid =
   if c.isSuccess:
     # This can change `c.isSuccess`.
-    c.writeContract()
+    ? c.writeContract()
     # Contract code should never be returned to the caller.  Only data from
     # `REVERT` is returned after a create.  Clearing in this branch covers the
     # right cases, particularly important with EVMC where it must be cleared.
@@ -194,9 +194,7 @@ func msgToOp(msg: Message): Op =
     return StaticCall
   MsgKindToOp[msg.kind]
 
-proc beforeExec(c: Computation): bool
-    {.gcsafe, raises: [ValueError].} =
-
+proc beforeExec(c: Computation): bool =
   if c.msg.depth > 0:
     c.vmState.captureEnter(c,
         msgToOp(c.msg),
@@ -210,31 +208,35 @@ proc beforeExec(c: Computation): bool
   else:
     c.beforeExecCreate()
 
-proc afterExec(c: Computation)
-    {.gcsafe, raises: [CatchableError].} =
-
+proc afterExec(c: Computation): EvmResultVoid =
   if not c.msg.isCreate:
     c.afterExecCall()
   else:
-    c.afterExecCreate()
+    ? c.afterExecCreate()
 
   if c.msg.depth > 0:
     let gasUsed = c.msg.gas - c.gasMeter.gasRemaining
     c.vmState.captureExit(c, c.output, gasUsed, c.errorOpt)
 
+  ok()
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc executeOpcodes*(c: Computation, shouldPrepareTracer: bool = true)
-    {.gcsafe, raises: [].} =
+      let
+        msg = e.msg
+        depth = $(c.msg.depth + 1) # plus one to match tracer depth, and avoid confusion
+      c.setError("Opcode Dispatch Error: " & msg & ", depth=" & depth, true)
+
+proc executeOpcodes*(c: Computation, shouldPrepareTracer: bool = true) =
   let fork = c.fork
 
-  block:
+  block blockOne:
     if c.continuation.isNil and c.execPrecompiles(fork):
       break
 
-    try:
+    block blockTwo:
       let cont = c.continuation
       if not cont.isNil:
         c.continuation = nil
@@ -259,19 +261,13 @@ proc executeOpcodes*(c: Computation, shouldPrepareTracer: bool = true)
         # Return up to the caller, which will run the async operation or child
         # and then call this proc again.
         discard
-    except CatchableError as e:
-      let
-        msg = e.msg
-        depth = $(c.msg.depth + 1) # plus one to match tracer depth, and avoid confusion
-      c.setError("Opcode Dispatch Error: " & msg & ", depth=" & depth, true)
 
   if c.isError() and c.continuation.isNil:
     if c.tracingEnabled: c.traceError()
 
 when vm_use_recursion:
   # Recursion with tiny stack frame per level.
-  proc execCallOrCreate*(c: Computation)
-      {.gcsafe, raises: [CatchableError].} =
+  proc execCallOrCreate*(c: Computation): EvmResultVoid =
     defer: c.dispose()
     if c.beforeExec():
       return
@@ -294,8 +290,7 @@ when vm_use_recursion:
     c.afterExec()
 
 else:
-  proc execCallOrCreate*(cParam: Computation)
-      {.gcsafe, raises: [CatchableError].} =
+  proc execCallOrCreate*(cParam: Computation): EvmResultVoid =
     var (c, before, shouldPrepareTracer) = (cParam, true, true)
     defer:
       while not c.isNil:

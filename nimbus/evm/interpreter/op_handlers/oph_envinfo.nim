@@ -26,8 +26,7 @@ import
   ./oph_defs,
   ./oph_helpers,
   eth/common,
-  stint,
-  strformat
+  stint
 
 when not defined(evmc_enabled):
   import ../../state

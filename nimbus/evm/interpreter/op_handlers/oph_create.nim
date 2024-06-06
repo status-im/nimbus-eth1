@@ -26,7 +26,6 @@ import
   ../gas_costs,
   ../gas_meter,
   ../op_codes,
-  ../utils/utils_numeric,
   ./oph_defs,
   ./oph_helpers,
   chronicles,
