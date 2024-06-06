@@ -289,14 +289,14 @@ const
     ##       on machine state during execution.
     discard
 
-  tloadOp: Vm2OpFn = func (k: var Vm2Ctx) {.catchRaise.} =
+  tloadOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x5c, Load word from transient storage.
     let
       slot = k.cpt.stack.popInt()
       val  = k.cpt.getTransientStorage(slot)
     k.cpt.stack.push: val
 
-  tstoreOp: Vm2OpFn = func (k: var Vm2Ctx) {.catchRaise.} =
+  tstoreOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x5d, Save word to transient storage.
     checkInStaticContext(k.cpt)
 
