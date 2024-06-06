@@ -31,7 +31,8 @@ const
     FkIstanbul: "Istanbul",
     FkBerlin: "Berlin",
     FkLondon: "London",
-    FkParis: "Merge"
+    FkParis: "Merge",
+    FkPrague: "Prague",
   }.toTable
 
   nameToFork* = revmap(forkNames)
