@@ -10,9 +10,65 @@
 
 import
   std/os,
-  ./test_types
+  eth/common
+
+type
+  AccountsSample* = object
+    name*: string   ## sample name, also used as sub-directory for db separation
+    file*: string
+    firstItem*: int
+    lastItem*: int
+
+  CaptureSpecs* = object
+    name*: string   ## sample name, also used as sub-directory for db separation
+    network*: NetworkId
+    file*: string   ## name of capture file
+    numBlocks*: int ## Number of blocks to load
+
+  SnapSyncSpecs* = object
+    name*: string
+    network*: NetworkId
+    snapDump*: string
+    tailBlocks*: string
+    pivotBlock*: uint64
+    nItems*: int
 
 const
+  snapTest0* = AccountsSample(
+    name: "sample0",
+    file: "sample0.txt.gz",
+    firstItem: 0,
+    lastItem: high(int))
+
+  snapTest1* = AccountsSample(
+    name: "test1",
+    file: snapTest0.file,
+    lastItem: 0) # Only the first `snap/1` reply from the sample
+
+  snapTest2* = AccountsSample(
+    name: "sample1",
+    file: "sample1.txt.gz",
+    lastItem: high(int))
+
+  snapTest3* = AccountsSample(
+    name: "test3",
+    file: snapTest2.file,
+    lastItem: 0) # Only the first `snap/1` reply from the sample
+
+  # Also for storage tests
+  snapTest4* = AccountsSample(
+    name: "sample2",
+    file: "sample2.txt.gz",
+    lastItem: high(int))
+
+  # Also for storage tests
+  snapTest5* = AccountsSample(
+    name: "sample3",
+    file: "sample3.txt.gz",
+    lastItem: high(int))
+
+  # ----------------------
+
   snapOther0a* = AccountsSample(
     name: "Other0a",
     file: "account" / "account0_00_06_dump.txt.gz",
@@ -124,6 +180,12 @@ const
   #6 50..54 11eba9ec2f204c8165a245f9d05bb7ebb5bfdbdbcccc1a849d8ab2b23550cc12
 
   # ------------------------
+
+  snapTestList* = [
+    snapTest0, snapTest1, snapTest2, snapTest3]
+
+  snapTestStorageList* = [
+    snapTest4, snapTest5]
 
   snapOtherHealingList* = [
     @[snapOther0b, snapOther2, snapOther4],

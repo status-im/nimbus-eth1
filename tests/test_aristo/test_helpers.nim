@@ -17,8 +17,8 @@ import
     aristo_hashify, aristo_hike, aristo_merge],
   ../../nimbus/db/kvstore_rocksdb,
   ../../nimbus/sync/protocol/snap/snap_types,
-  ../test_sync_snap/test_types,
-  ../replay/[pp, undump_accounts, undump_storages]
+  ../replay/[pp, undump_accounts, undump_storages],
+  ./test_samples_xx
 
 from ../../nimbus/sync/snap/range_desc
   import NodeKey, ByteArray32
