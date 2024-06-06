@@ -181,16 +181,19 @@ proc new*(
       T:      type BaseVMState;
       header: BlockHeader;     ## header with tx environment data fields
       com:    CommonRef;       ## block chain config
-      tracer: TracerRef = nil): T
-    {.gcsafe, raises: [CatchableError].} =
+      tracer: TracerRef = nil): EvmResult[T] =
   ## This is a variant of the `new()` constructor above where the field
   ## `header.parentHash`, is used to fetch the `parent` BlockHeader to be
   ## used in the `new()` variant, above.
-  BaseVMState.new(
-    parent = com.db.getBlockHeader(header.parentHash),
-    header = header,
-    com    = com,
-    tracer = tracer)
+  var parent: BlockHeader
+  if com.db.getBlockHeader(header.parentHash, parent):
+    ok(BaseVMState.new(
+      parent = parent,
+      header = header,
+      com    = com,
+      tracer = tracer))
+  else:
+    err(evmErr(EvmHeaderNotFound))
 
 proc init*(
       vmState: BaseVMState;
@@ -229,13 +232,15 @@ proc baseFee*(vmState: BaseVMState): UInt256 =
 method getAncestorHash*(
     vmState: BaseVMState, blockNumber: BlockNumber):
     EvmResult[Hash256] {.base, gcsafe.} =
+  let db = vmState.com.db
   try:
-    let db = vmState.com.db
-    ok(db.getBlockHash(blockNumber))
+    var blockHash: Hash256
+    if db.getBlockHash(blockNumber, blockHash):
+      ok(blockHash)
+    else:
+      err(evmErr(EvmBlockHashNotFound))
   except RlpError:
-    err(evmErr(EvmRlpError))
-  except BlockNotFound:
-    err(evmErr(EvmBlockNotFound))
+    err(evmErr(EvmBlockHashNotFound))
 
 proc readOnlyStateDB*(vmState: BaseVMState): ReadOnlyStateDB {.inline.} =
   ReadOnlyStateDB(vmState.stateDB)

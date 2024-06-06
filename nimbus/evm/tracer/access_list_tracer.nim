@@ -14,7 +14,7 @@ import
   ".."/[types, stack],
   ../interpreter/op_codes,
   ../../db/access_list,
-  ../../errors
+  ../evm_errors
 
 type
   AccessListTracer* = ref object of TracerRef
@@ -46,26 +46,19 @@ method captureOpStart*(act: AccessListTracer, c: Computation,
                        fixed: bool, pc: int, op: Op, gas: GasInt,
                        depth: int): int {.gcsafe.} =
   let stackLen = c.stack.len
-  try:
-    if (op in [Sload, Sstore]) and (stackLen >= 1):
-      let slot = c.stack.peekInt()
-      act.list.add(c.msg.contractAddress, slot)
+  if (op in [Sload, Sstore]) and (stackLen >= 1):
+    let slot = c.stack.peekInt().unsafeValue
+    act.list.add(c.msg.contractAddress, slot)
 
-    if (op in [ExtCodeCopy, ExtCodeHash, ExtCodeSize, Balance, SelfDestruct]) and (stackLen >= 1):
-      let address = c.stack.peekAddress()
-      if address notin act.excl:
-        act.list.add address
+  if (op in [ExtCodeCopy, ExtCodeHash, ExtCodeSize, Balance, SelfDestruct]) and (stackLen >= 1):
+    let address = c.stack.peekAddress().unsafeValue
+    if address notin act.excl:
+      act.list.add address
 
-    if (op in [DelegateCall, Call, StaticCall, CallCode]) and (stackLen >= 5):
-      let address = c.stack[^2, EthAddress]
-      if address notin act.excl:
-        act.list.add address
-  except InsufficientStack as exc:
-    # should not raise, because we already check the stack len
-    # this try..except block is to prevent unlisted exception error
-    discard exc
-  except ValueError as exc:
-    discard exc
+  if (op in [DelegateCall, Call, StaticCall, CallCode]) and (stackLen >= 5):
+    let address = c.stack[^2, EthAddress].unsafeValue
+    if address notin act.excl:
+      act.list.add address
 
   # AccessListTracer is not using captureOpEnd
   # no need to return op index

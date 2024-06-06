@@ -16,22 +16,24 @@ import
   ".."/[vm_types, vm_state, vm_gas_costs],
   ../db/ledger,
   ../common/common,
+  ../evm/evm_errors,
   ../rpc/params,
   ./call_common
 
 export
   call_common
 
-proc rpcCallEvm*(args: TransactionArgs, header: common.BlockHeader, com: CommonRef): CallResult
-    {.gcsafe, raises: [CatchableError].} =
+proc rpcCallEvm*(args: TransactionArgs,
+                 header: common.BlockHeader,
+                 com: CommonRef): EvmResult[CallResult] =
   const globalGasCap = 0 # TODO: globalGasCap should configurable by user
   let topHeader = common.BlockHeader(
     parentHash: header.blockHash,
     timestamp:  EthTime.now(),
     gasLimit:   0.GasInt,          ## ???
     fee:        UInt256.none())    ## ???
-  let vmState = BaseVMState.new(topHeader, com)
-  let params  = toCallParams(vmState, args, globalGasCap, header.fee)
+  let vmState = ? BaseVMState.new(topHeader, com)
+  let params  = ? toCallParams(vmState, args, globalGasCap, header.fee)
 
   var dbTx = com.db.newTransaction()
   defer: dbTx.dispose() # always dispose state changes
@@ -41,10 +43,9 @@ proc rpcCallEvm*(args: TransactionArgs, header: common.BlockHeader, com: CommonR
 proc rpcCallEvm*(args: TransactionArgs,
                  header: common.BlockHeader,
                  com: CommonRef,
-                 vmState: BaseVMState): CallResult
-    {.gcsafe, raises: [CatchableError].} =
+                 vmState: BaseVMState): EvmResult[CallResult] =
   const globalGasCap = 0 # TODO: globalGasCap should configurable by user
-  let params  = toCallParams(vmState, args, globalGasCap, header.fee)
+  let params  = ? toCallParams(vmState, args, globalGasCap, header.fee)
 
   var dbTx = com.db.newTransaction()
   defer: dbTx.dispose() # always dispose state changes
@@ -53,18 +54,17 @@ proc rpcCallEvm*(args: TransactionArgs,
 
 proc rpcEstimateGas*(args: TransactionArgs,
                      header: common.BlockHeader,
-                     com: CommonRef, gasCap: GasInt): GasInt
-    {.gcsafe, raises: [CatchableError].} =
+                     com: CommonRef, gasCap: GasInt): EvmResult[GasInt] =
   # Binary search the gas requirement, as it may be higher than the amount used
   let topHeader = common.BlockHeader(
     parentHash: header.blockHash,
     timestamp:  EthTime.now(),
     gasLimit:   0.GasInt,          ## ???
     fee:        UInt256.none())    ## ???
-  let vmState = BaseVMState.new(topHeader, com)
+  let vmState = ? BaseVMState.new(topHeader, com)
   let fork    = vmState.determineFork
   let txGas   = gasFees[fork][GasTransaction] # txGas always 21000, use constants?
-  var params  = toCallParams(vmState, args, gasCap, header.fee)
+  var params  = ? toCallParams(vmState, args, gasCap, header.fee)
 
   var
     lo : GasInt = txGas - 1
@@ -83,22 +83,21 @@ proc rpcEstimateGas*(args: TransactionArgs,
   var feeCap = GasInt args.gasPrice.get(0.Quantity)
   if args.gasPrice.isSome and
     (args.maxFeePerGas.isSome or args.maxPriorityFeePerGas.isSome):
-    raise newException(ValueError,
-      "both gasPrice and (maxFeePerGas or maxPriorityFeePerGas) specified")
+    return err(evmErr(EvmInvalidParam))
   elif args.maxFeePerGas.isSome:
     feeCap = GasInt args.maxFeePerGas.get
 
   # Recap the highest gas limit with account's available balance.
   if feeCap > 0:
     if args.source.isNone:
-      raise newException(ValueError, "`from` can't be null")
+      return err(evmErr(EvmInvalidParam))
 
     let balance = vmState.readOnlyStateDB.getBalance(ethAddr args.source.get)
     var available = balance
     if args.value.isSome:
       let value = args.value.get
       if value > available:
-        raise newException(ValueError, "insufficient funds for transfer")
+        return err(evmErr(EvmInvalidParam))
       available -= value
 
     let allowance = available div feeCap.u256
@@ -118,20 +117,20 @@ proc rpcEstimateGas*(args: TransactionArgs,
   let intrinsicGas = intrinsicGas(params, vmState)
 
   # Create a helper to check if a gas allowance results in an executable transaction
-  proc executable(gasLimit: GasInt): bool
-      {.gcsafe, raises: [CatchableError].} =
+  proc executable(gasLimit: GasInt): EvmResult[bool] =
     if intrinsicGas > gasLimit:
       # Special case, raise gas limit
-      return true
+      return ok(true)
 
     params.gasLimit = gasLimit
     # TODO: bail out on consensus error similar to validateTransaction
-    runComputation(params).isError
+    let res = ? runComputation(params)
+    ok(res.isError)
 
   # Execute the binary search and hone in on an executable gas limit
   while lo+1 < hi:
     let mid = (hi + lo) div 2
-    let failed = executable(mid)
+    let failed = ? executable(mid)
     if failed:
       lo = mid
     else:
@@ -139,13 +138,13 @@ proc rpcEstimateGas*(args: TransactionArgs,
 
   # Reject the transaction as invalid if it still fails at the highest allowance
   if hi == cap:
-    let failed = executable(hi)
+    let failed = ? executable(hi)
     if failed:
       # TODO: provide more descriptive EVM error beside out of gas
       # e.g. revert and other EVM errors
-      raise newException(ValueError, "gas required exceeds allowance " & $cap)
+      return err(evmErr(EvmInvalidParam))
 
-  hi
+  ok(hi)
 
 proc callParamsForTx(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: EVMFork): CallParams =
   # Is there a nice idiom for this kind of thing? Should I
@@ -188,12 +187,18 @@ proc callParamsForTest(tx: Transaction, sender: EthAddress, vmState: BaseVMState
   if tx.txType >= TxEip4844:
     result.versionedHashes = tx.versionedHashes
 
-proc txCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: EVMFork): GasInt
-    {.gcsafe, raises: [CatchableError].} =
-  let call = callParamsForTx(tx, sender, vmState, fork)
-  return runComputation(call).gasUsed
+proc txCallEvm*(tx: Transaction,
+                sender: EthAddress,
+                vmState: BaseVMState,
+                fork: EVMFork): EvmResult[GasInt] =
+  let
+    call = callParamsForTx(tx, sender, vmState, fork)
+    res = ? runComputation(call)
+  ok(res.gasUsed)
 
-proc testCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: EVMFork): CallResult
-    {.gcsafe, raises: [CatchableError].} =
+proc testCallEvm*(tx: Transaction,
+                  sender: EthAddress,
+                  vmState: BaseVMState,
+                  fork: EVMFork): EvmResult[CallResult] =
   let call = callParamsForTest(tx, sender, vmState, fork)
   runComputation(call)

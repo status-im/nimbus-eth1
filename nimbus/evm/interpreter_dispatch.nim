@@ -224,23 +224,27 @@ proc afterExec(c: Computation): EvmResultVoid =
 # Public functions
 # ------------------------------------------------------------------------------
 
-      let
-        msg = e.msg
-        depth = $(c.msg.depth + 1) # plus one to match tracer depth, and avoid confusion
-      c.setError("Opcode Dispatch Error: " & msg & ", depth=" & depth, true)
+template handleEvmError(x: EvmErrorObj) =
+  let
+    msg = $x.code
+    depth = $(c.msg.depth + 1) # plus one to match tracer depth, and avoid confusion
+  c.setError("Opcode Dispatch Error: " & msg & ", depth=" & depth, true)
 
 proc executeOpcodes*(c: Computation, shouldPrepareTracer: bool = true) =
   let fork = c.fork
 
   block blockOne:
     if c.continuation.isNil and c.execPrecompiles(fork):
-      break
+      break blockOne
 
     block blockTwo:
       let cont = c.continuation
       if not cont.isNil:
         c.continuation = nil
-        cont()
+        let res = cont()
+        if res.isErr:
+          handleEvmError(res.error)
+          break blockTwo
       let nextCont = c.continuation
       if nextCont.isNil:
         # FIXME-Adam: I hate how convoluted this is. See also the comment in
@@ -256,7 +260,10 @@ proc executeOpcodes*(c: Computation, shouldPrepareTracer: bool = true) =
         of Return, Revert, SelfDestruct: # FIXME-Adam: HACK, fix this in a clean way; I think the idea is that these are the ones from the "always break" case in op_dispatcher
           discard
         else:
-          c.selectVM(fork, shouldPrepareTracer)
+          let res = c.selectVM(fork, shouldPrepareTracer)
+          if res.isErr:
+            handleEvmError(res.error)
+            break blockTwo
       else:
         # Return up to the caller, which will run the async operation or child
         # and then call this proc again.
@@ -304,7 +311,7 @@ else:
           break
         c.executeOpcodes(shouldPrepareTracer)
         if c.continuation.isNil:
-          c.afterExec()
+          ? c.afterExec()
           break
         if not c.pendingAsyncOperation.isNil:
           before = false
@@ -318,7 +325,9 @@ else:
         break
       c.dispose()
       (before, shouldPrepareTracer, c.parent, c) = (false, true, nil.Computation, c.parent)
-
+      
+    ok()
+    
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

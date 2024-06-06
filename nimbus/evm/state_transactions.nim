@@ -18,7 +18,9 @@ import
   ./interpreter/gas_costs,
   ./message,
   ./state,
-  ./types
+  ./types,
+  ./evm_errors
+
 
 {.push raises: [].}
 
@@ -47,13 +49,13 @@ func postExecComputation(c: Computation) =
       c.refundSelfDestruct()
   c.vmState.status = c.isSuccess
 
-proc execComputation*(c: Computation)
-    {.gcsafe, raises: [CatchableError].} =
+proc execComputation*(c: Computation): EvmResultVoid =
   c.preExecComputation()
-  c.execCallOrCreate()
+  ? c.execCallOrCreate()
   c.postExecComputation()
+  ok()
 
-template execSysCall*(c: Computation) =
+template execSysCall*(c: Computation): auto =
   # A syscall to EVM doesn't require
   # a pre or post ceremony
   c.execCallOrCreate()

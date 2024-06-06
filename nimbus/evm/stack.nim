@@ -75,7 +75,7 @@ func popAux(stack: EvmStackRef, T: type): EvmResult[T] =
   ? ensurePop(stack, 1)
   result = ok(fromStackElem(stack.values[^1], T))
   stack.values.setLen(stack.values.len - 1)
-  
+
 func internalPopTuple(stack: EvmStackRef, T: type, tupleLen: static[int]): EvmResult[T] =
   ? ensurePop(stack, tupleLen)
   var
@@ -115,7 +115,7 @@ func popMemRef*(stack: EvmStackRef): EvmResult[int] =
   ? ensurePop(stack, 1)
   result = ok(fromStackElem(stack.values[^1], UInt256).cleanMemRef)
   stack.values.setLen(stack.values.len - 1)
-  
+
 func popInt*(stack: EvmStackRef, numItems: static[int]): auto =
   type T = genTupleType(numItems, UInt256)
   stack.internalPopTuple(T, numItems)
@@ -174,3 +174,7 @@ func top*(stack: EvmStackRef,
     return err(stackErr(StackInsufficient))
   toStackElem(value, stack.values[^1])
   ok()
+
+iterator items*(stack: EvmStackRef): UInt256 =
+  for v in stack.values:
+    yield v

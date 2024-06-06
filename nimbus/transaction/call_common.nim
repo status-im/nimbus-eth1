@@ -51,8 +51,8 @@ type
     contractAddress*: EthAddress        # Created account (when `isCreate`).
     output*:          seq[byte]         # Output data.
     logEntries*:      seq[Log]          # Output logs.
-    stack*:           Stack             # EVM stack on return (for test only).
-    memory*:          Memory            # EVM memory on return (for test only).
+    stack*:           EvmStackRef       # EVM stack on return (for test only).
+    memory*:          EvmMemoryRef      # EVM memory on return (for test only).
 
 func isError*(cr: CallResult): bool =
   cr.error.len > 0
@@ -291,8 +291,7 @@ proc finishRunningComputation(host: TransactionHost, call: CallParams): CallResu
   result.stack = c.stack
   result.memory = c.memory
 
-proc runComputation*(call: CallParams): CallResult
-    {.gcsafe, raises: [CatchableError].} =
+proc runComputation*(call: CallParams): EvmResult[CallResult] =
   let host = setupHost(call)
   prepareToRunComputation(host, call)
 
@@ -300,8 +299,9 @@ proc runComputation*(call: CallParams): CallResult
     doExecEvmc(host, call)
   else:
     if host.computation.sysCall:
-      execSysCall(host.computation)
+      ? execSysCall(host.computation)
     else:
-      execComputation(host.computation)
+      ? execComputation(host.computation)
 
-  finishRunningComputation(host, call)
+  ok(finishRunningComputation(host, call))
+  

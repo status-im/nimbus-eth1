@@ -31,9 +31,10 @@ type
     StaticContext
     InvalidJumpDest
     OutOfBounds
-    EvmRlpError
-    EvmBlockNotFound
     InvalidInitCode
+    EvmHeaderNotFound
+    EvmBlockHashNotFound
+    EvmInvalidParam
 
   EvmErrorObj* = object
     code*: EvmErrorCode

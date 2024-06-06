@@ -24,7 +24,7 @@ import
   ".."/[types, memory, stack],
   ../interpreter/op_codes,
   ../../db/ledger,
-  ../../errors
+  ../evm_errors
 
 type
   LegacyTracer* = ref object of TracerRef
@@ -85,7 +85,7 @@ method captureOpStart*(ctx: LegacyTracer, c: Computation,
     # log stack
     if TracerFlags.DisableStack notin ctx.flags:
       let stack = newJArray()
-      for v in c.stack.values:
+      for v in c.stack:
         stack.add(%v.dumpHex())
       j["stack"] = stack
 
@@ -102,26 +102,24 @@ method captureOpStart*(ctx: LegacyTracer, c: Computation,
     if TracerFlags.EnableAccount in ctx.flags:
       case op
       of Call, CallCode, DelegateCall, StaticCall:
-        if c.stack.values.len > 2:
-          ctx.accounts.incl c.stack[^2, EthAddress]
+        if c.stack.len > 2:
+          ctx.accounts.incl c.stack[^2, EthAddress].unsafeValue
       of ExtCodeCopy, ExtCodeSize, Balance, SelfDestruct:
-        if c.stack.values.len > 1:
-          ctx.accounts.incl c.stack[^1, EthAddress]
+        if c.stack.len > 1:
+          ctx.accounts.incl c.stack[^1, EthAddress].unsafeValue
       else:
         discard
 
     if TracerFlags.DisableStorage notin ctx.flags:
       if op == Sstore:
-        if c.stack.values.len > 1:
-          ctx.rememberStorageKey(c.msg.depth, c.stack[^1, UInt256])
+        if c.stack.len > 1:
+          ctx.rememberStorageKey(c.msg.depth, c.stack[^1, UInt256].unsafeValue)
 
     result = ctx.trace["structLogs"].len - 1
   except KeyError as ex:
     error "LegacyTracer captureOpStart", msg=ex.msg
   except ValueError as ex:
     error "LegacyTracer captureOpStart", msg=ex.msg
-  except InsufficientStack as ex:
-    error "LegacyTracer captureOpEnd", msg=ex.msg
 
 method captureOpEnd*(ctx: LegacyTracer, c: Computation,
                      fixed: bool, pc: int, op: Op, gas: GasInt, refund: GasInt,
@@ -165,8 +163,6 @@ method captureFault*(ctx: LegacyTracer, comp: Computation,
 
     ctx.trace["failed"] = %true
   except KeyError as ex:
-    error "LegacyTracer captureOpEnd", msg=ex.msg
-  except InsufficientStack as ex:
     error "LegacyTracer captureOpEnd", msg=ex.msg
 
 proc getTracingResult*(ctx: LegacyTracer): JsonNode =
