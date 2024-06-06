@@ -22,10 +22,13 @@ type
     MemoryFull
     StackFull
     StackInsufficient
+    PrcInvalidSig
+    PrcInvalidPoint
+    PrcInvalidParam
+    PrcValidationError
 
   EvmErrorObj* = object
     code*: EvmErrorCode
-    burnGas*: bool
 
   EvmResultVoid* = Result[void, EvmErrorObj]
   EvmResult*[T] = Result[T, EvmErrorObj]
@@ -33,23 +36,19 @@ type
 template gasErr*(errCode): auto =
   EvmErrorObj(
     code: EvmErrorCode.errCode,
-    burnGas: true,
   )
 
 template memErr*(errCode): auto =
   EvmErrorObj(
     code: EvmErrorCode.errCode,
-    burnGas: true,
   )
 
 template stackErr*(errCode): auto =
   EvmErrorObj(
     code: EvmErrorCode.errCode,
-    burnGas: true,
   )
 
 template prcErr*(errCode): auto =
   EvmErrorObj(
     code: EvmErrorCode.errCode,
-    burnGas: true,
   )

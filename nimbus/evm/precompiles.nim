@@ -13,13 +13,15 @@ import
   results,
   "."/[types, blake2b_f, blscurve],
   ./interpreter/[gas_meter, gas_costs, utils/utils_numeric],
-  ../errors, eth/[common, keys], chronicles,
-  nimcrypto/[ripemd, sha2, utils], bncurve/[fields, groups],
+  eth/[common, keys],
+  chronicles,
+  nimcrypto/[ripemd, sha2, utils],
+  bncurve/[fields, groups],
   ../common/evmforks,
   ../core/eip4844,
   ./modexp,
+  ./evm_errors,
   ./computation
-
 
 type
   PrecompileAddresses* = enum
@@ -50,8 +52,15 @@ type
     # paBlsMapG2
     # Cancun
 
+  SigRes = object
+    msgHash: array[32, byte]
+    sig: Signature
 
-proc getMaxPrecompileAddr(fork: EVMFork): PrecompileAddresses =
+# ------------------------------------------------------------------------------
+# Private functions
+# ------------------------------------------------------------------------------
+
+func getMaxPrecompileAddr(fork: EVMFork): PrecompileAddresses =
   if fork < FkByzantium: paIdentity
   elif fork < FkIstanbul: paPairing
   # EIP 2537: disabled
@@ -60,60 +69,48 @@ proc getMaxPrecompileAddr(fork: EVMFork): PrecompileAddresses =
   elif fork < FkCancun: paBlake2bf
   else: PrecompileAddresses.high
 
-proc validPrecompileAddr(addrByte, maxPrecompileAddr: byte): bool =
+func validPrecompileAddr(addrByte, maxPrecompileAddr: byte): bool =
   (addrByte in PrecompileAddresses.low.byte .. maxPrecompileAddr)
 
-proc validPrecompileAddr(addrByte: byte, fork: EVMFork): bool =
+func validPrecompileAddr(addrByte: byte, fork: EVMFork): bool =
   let maxPrecompileAddr = getMaxPrecompileAddr(fork)
   validPrecompileAddr(addrByte, maxPrecompileAddr.byte)
 
-iterator activePrecompiles*(fork: EVMFork): EthAddress =
-  var res: EthAddress
-  let maxPrecompileAddr = getMaxPrecompileAddr(fork)
-  for c in PrecompileAddresses.low..maxPrecompileAddr:
-    if validPrecompileAddr(c.byte, maxPrecompileAddr.byte):
-      res[^1] = c.byte
-      yield res
-
-func activePrecompilesList*(fork: EVMFork): seq[EthAddress] =
-  for address in activePrecompiles(fork):
-    result.add address
-
-proc getSignature(c: Computation): (array[32, byte], Signature) =
+func getSignature(c: Computation): EvmResult[SigRes]  =
   # input is Hash, V, R, S
   template data: untyped = c.msg.data
   var bytes: array[65, byte] # will hold R[32], S[32], V[1], in that order
   let maxPos = min(data.high, 127)
 
   # if we don't have at minimum 64 bytes, there can be no valid V
-  if maxPos >= 63:
-    let v = data[63]
-    # check if V[32] is 27 or 28
-    if not (v.int in 27..28):
-      raise newException(ValidationError, "Invalid V in getSignature")
-    for x in 32..<63:
-      if data[x] != 0:
-        raise newException(ValidationError, "Invalid V in getSignature")
+  if maxPos < 63:
+    return err(prcErr(PrcInvalidSig))
 
-    bytes[64] = v - 27
+  let v = data[63]
+  # check if V[32] is 27 or 28
+  if not (v.int in 27..28):
+    return err(prcErr(PrcInvalidSig))
+  for x in 32..<63:
+    if data[x] != 0:
+      return err(prcErr(PrcInvalidSig))
 
-    # if there is more data for R and S, copy it. Else, defaulted zeroes are
-    # used for R and S
-    if maxPos >= 64:
-      # Copy message data to buffer
-      bytes[0..(maxPos-64)] = data[64..maxPos]
+  bytes[64] = v - 27
 
-    let sig = Signature.fromRaw(bytes)
-    if sig.isErr:
-      raise newException(ValidationError, "Could not recover signature c")
-    result[1] = sig[]
+  # if there is more data for R and S, copy it. Else, defaulted zeroes are
+  # used for R and S
+  if maxPos >= 64:
+    # Copy message data to buffer
+    bytes[0..(maxPos-64)] = data[64..maxPos]
 
-    # extract message hash, only need to copy when there is a valid signature
-    result[0][0..31] = data[0..31]
-  else:
-    raise newException(ValidationError, "Invalid V in getSignature")
+  let sig = Signature.fromRaw(bytes).valueOr:
+    return err(prcErr(PrcInvalidSig))
+  var res = SigRes(sig: sig)
 
-proc simpleDecode*(dst: var FQ2, src: openArray[byte]): bool {.noinit.} =
+  # extract message hash, only need to copy when there is a valid signature
+  res.msgHash[0..31] = data[0..31]
+  ok(res)
+
+func simpleDecode(dst: var FQ2, src: openArray[byte]): bool {.noinit.} =
   # bypassing FQ2.fromBytes
   # because we want to check `value > modulus`
   result = false
@@ -121,78 +118,85 @@ proc simpleDecode*(dst: var FQ2, src: openArray[byte]): bool {.noinit.} =
      dst.c0.fromBytes(src.toOpenArray(32, 63)):
     result = true
 
-template simpleDecode*(dst: var FQ, src: openArray[byte]): bool =
+template simpleDecode(dst: var FQ, src: openArray[byte]): bool =
   fromBytes(dst, src)
 
-proc getPoint[T: G1|G2](t: typedesc[T], data: openArray[byte]): Point[T] =
+func getPoint[T: G1|G2](_: typedesc[T], data: openArray[byte]): EvmResult[Point[T]] =
   when T is G1:
     const nextOffset = 32
     var px, py: FQ
   else:
     const nextOffset = 64
     var px, py: FQ2
+
   if not px.simpleDecode(data.toOpenArray(0, nextOffset - 1)):
-    raise newException(ValidationError, "Could not get point value")
+    return err(prcErr(PrcInvalidPoint))
   if not py.simpleDecode(data.toOpenArray(nextOffset, nextOffset * 2 - 1)):
-    raise newException(ValidationError, "Could not get point value")
+    return err(prcErr(PrcInvalidPoint))
 
   if px.isZero() and py.isZero():
-    result = T.zero()
+    ok(T.zero())
   else:
     var ap: AffinePoint[T]
     if not ap.init(px, py):
-      raise newException(ValidationError, "Point is not on curve")
-    result = ap.toJacobian()
+      return err(prcErr(PrcInvalidPoint))
+    ok(ap.toJacobian())
 
-proc getFR(data: openArray[byte]): FR =
-  if not result.fromBytes2(data):
-    raise newException(ValidationError, "Could not get FR value")
+func getFR(data: openArray[byte]): EvmResult[FR] =
+  var res: FR
+  if not res.fromBytes2(data):
+    return err(prcErr(PrcInvalidPoint))
+  ok(res)
 
-proc ecRecover*(c: Computation) =
-  c.gasMeter.consumeGas(
+# ------------------------------------------------------------------------------
+# Precompiles functions
+# ------------------------------------------------------------------------------
+
+func ecRecover(c: Computation): EvmResultVoid =
+  ? c.gasMeter.consumeGas(
     GasECRecover,
     reason="ECRecover Precompile")
 
-  var
-    (msgHash, sig) = c.getSignature()
-
-  var pubkey = recover(sig, SkMessage(msgHash))
-  if pubkey.isErr:
-    raise newException(ValidationError, "Could not derive public key from c")
+  let
+    sig = ? c.getSignature()
+    pubkey = recover(sig.sig, SkMessage(sig.msgHash)).valueOr:
+      return err(prcErr(PrcInvalidSig))
 
   c.output.setLen(32)
-  c.output[12..31] = pubkey[].toCanonicalAddress()
-  #trace "ECRecover precompile", derivedKey = pubkey[].toCanonicalAddress()
+  c.output[12..31] = pubkey.toCanonicalAddress()
+  ok()
 
-proc sha256*(c: Computation) =
+func sha256(c: Computation): EvmResultVoid =
   let
     wordCount = wordCount(c.msg.data.len)
     gasFee = GasSHA256 + wordCount * GasSHA256Word
 
-  c.gasMeter.consumeGas(gasFee, reason="SHA256 Precompile")
+  ? c.gasMeter.consumeGas(gasFee, reason="SHA256 Precompile")
   c.output = @(sha2.sha256.digest(c.msg.data).data)
-  #trace "SHA256 precompile", output = c.output.toHex
+  ok()
 
-proc ripemd160*(c: Computation) =
+func ripemd160(c: Computation): EvmResultVoid =
   let
     wordCount = wordCount(c.msg.data.len)
     gasFee = GasRIPEMD160 + wordCount * GasRIPEMD160Word
 
-  c.gasMeter.consumeGas(gasFee, reason="RIPEMD160 Precompile")
+  ? c.gasMeter.consumeGas(gasFee, reason="RIPEMD160 Precompile")
   c.output.setLen(32)
   c.output[12..31] = @(ripemd.ripemd160.digest(c.msg.data).data)
-  #trace "RIPEMD160 precompile", output = c.output.toHex
+  ok()
 
-proc identity*(c: Computation) =
+func identity(c: Computation): EvmResultVoid =
   let
     wordCount = wordCount(c.msg.data.len)
     gasFee = GasIdentity + wordCount * GasIdentityWord
 
-  c.gasMeter.consumeGas(gasFee, reason="Identity Precompile")
+  ? c.gasMeter.consumeGas(gasFee, reason="Identity Precompile")
   c.output = c.msg.data
-  #trace "Identity precompile", output = c.output.toHex
+  ok()
 
-proc modExpFee(c: Computation, baseLen, expLen, modLen: UInt256, fork: EVMFork): GasInt =
+func modExpFee(c: Computation,
+               baseLen, expLen, modLen: UInt256,
+               fork: EVMFork): EvmResult[GasInt] =
   template data: untyped {.dirty.} =
     c.msg.data
 
@@ -237,15 +241,15 @@ proc modExpFee(c: Computation, baseLen, expLen, modLen: UInt256, fork: EVMFork):
                else: gasCalc(mulComplexity, GasQuadDivisor)
 
   if gasFee > high(GasInt).u256:
-    raise newException(OutOfGas, "modExp gas overflow")
+    return err(gasErr(OutOfGas))
 
-  result = gasFee.truncate(GasInt)
-
+  var res = gasFee.truncate(GasInt)
   # EIP2565: modExp gas cost
-  if fork >= FkBerlin and result < 200.GasInt:
-    result = 200.GasInt
+  if fork >= FkBerlin and res < 200.GasInt:
+    res = 200.GasInt
+  ok(res)
 
-proc modExp*(c: Computation, fork: EVMFork = FkByzantium) =
+func modExp(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
   ## Modular exponentiation precompiled contract
   ## Yellow Paper Appendix E
   ## EIP-198 - https://github.com/ethereum/EIPs/blob/master/EIPS/eip-198.md
@@ -261,17 +265,17 @@ proc modExp*(c: Computation, fork: EVMFork = FkByzantium) =
     expLen  = expL.safeInt
     modLen  = modL.safeInt
 
-  let gasFee = modExpFee(c, baseL, expL, modL, fork)
-  c.gasMeter.consumeGas(gasFee, reason="ModExp Precompile")
+  let gasFee = ? modExpFee(c, baseL, expL, modL, fork)
+  ? c.gasMeter.consumeGas(gasFee, reason="ModExp Precompile")
 
   if baseLen == 0 and modLen == 0:
     # This is a special case where expLength can be very big.
     c.output = @[]
-    return
+    return ok()
 
   const maxSize = int32.high.u256
   if baseL > maxSize or expL > maxSize or modL > maxSize:
-    raise newException(EVMError, "The Nimbus VM doesn't support oversized modExp operand")
+    return err(prcErr(PrcInvalidParam))
 
   # TODO:
   # add EVM special case:
@@ -291,10 +295,11 @@ proc modExp*(c: Computation, fork: EVMFork = FkByzantium) =
   else:
     c.output = newSeq[byte](modLen)
     c.output[^output.len..^1] = output[0..^1]
+  ok()
 
-proc bn256ecAdd*(c: Computation, fork: EVMFork = FkByzantium) =
+func bn256ecAdd(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
   let gasFee = if fork < FkIstanbul: GasECAdd else: GasECAddIstanbul
-  c.gasMeter.consumeGas(gasFee, reason = "ecAdd Precompile")
+  ? c.gasMeter.consumeGas(gasFee, reason = "ecAdd Precompile")
 
   var
     input: array[128, byte]
@@ -302,18 +307,19 @@ proc bn256ecAdd*(c: Computation, fork: EVMFork = FkByzantium) =
   # Padding data
   let len = min(c.msg.data.len, 128) - 1
   input[0..len] = c.msg.data[0..len]
-  var p1 = G1.getPoint(input.toOpenArray(0, 63))
-  var p2 = G1.getPoint(input.toOpenArray(64, 127))
+  var p1 = ? G1.getPoint(input.toOpenArray(0, 63))
+  var p2 = ? G1.getPoint(input.toOpenArray(64, 127))
   var apo = (p1 + p2).toAffine()
   if isSome(apo):
     # we can discard here because we supply proper buffer
     discard apo.get().toBytes(output)
 
   c.output = @output
+  ok()
 
-proc bn256ecMul*(c: Computation, fork: EVMFork = FkByzantium) =
+func bn256ecMul(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
   let gasFee = if fork < FkIstanbul: GasECMul else: GasECMulIstanbul
-  c.gasMeter.consumeGas(gasFee, reason="ecMul Precompile")
+  ? c.gasMeter.consumeGas(gasFee, reason="ecMul Precompile")
 
   var
     input: array[96, byte]
@@ -322,26 +328,27 @@ proc bn256ecMul*(c: Computation, fork: EVMFork = FkByzantium) =
   # Padding data
   let len = min(c.msg.data.len, 96) - 1
   input[0..len] = c.msg.data[0..len]
-  var p1 = G1.getPoint(input.toOpenArray(0, 63))
-  var fr = getFR(input.toOpenArray(64, 95))
+  var p1 = ? G1.getPoint(input.toOpenArray(0, 63))
+  var fr = ? getFR(input.toOpenArray(64, 95))
   var apo = (p1 * fr).toAffine()
   if isSome(apo):
     # we can discard here because we supply buffer of proper size
     discard apo.get().toBytes(output)
 
   c.output = @output
+  ok()
 
-proc bn256ecPairing*(c: Computation, fork: EVMFork = FkByzantium) =
+func bn256ecPairing(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
   let msglen = len(c.msg.data)
   if msglen mod 192 != 0:
-    raise newException(ValidationError, "Invalid input length")
+    return err(prcErr(PrcInvalidParam))
 
   let numPoints = msglen div 192
   let gasFee = if fork < FkIstanbul:
                  GasECPairingBase + numPoints * GasECPairingPerPoint
                else:
                  GasECPairingBaseIstanbul + numPoints * GasECPairingPerPointIstanbul
-  c.gasMeter.consumeGas(gasFee, reason="ecPairing Precompile")
+  ? c.gasMeter.consumeGas(gasFee, reason="ecPairing Precompile")
 
   var output: array[32, byte]
   if msglen == 0:
@@ -356,9 +363,9 @@ proc bn256ecPairing*(c: Computation, fork: EVMFork = FkByzantium) =
     for i in 0..<count:
       let s = i * 192
       # Loading AffinePoint[G1], bytes from [0..63]
-      var p1 = G1.getPoint(c.msg.data.toOpenArray(s, s + 63))
+      var p1 = ? G1.getPoint(c.msg.data.toOpenArray(s, s + 63))
       # Loading AffinePoint[G2], bytes from [64..191]
-      var p2 = G2.getPoint(c.msg.data.toOpenArray(s + 64, s + 191))
+      var p2 = ? G2.getPoint(c.msg.data.toOpenArray(s + 64, s + 191))
       # Accumulate pairing result
       acc = acc * pairing(p1, p2)
 
@@ -367,22 +374,25 @@ proc bn256ecPairing*(c: Computation, fork: EVMFork = FkByzantium) =
       discard BNU256.one().toBytes(output)
 
   c.output = @output
+  ok()
 
-proc blake2bf*(c: Computation) =
+func blake2bf(c: Computation): EvmResultVoid =
   template input: untyped =
     c.msg.data
 
   if len(input) == blake2FInputLength:
     let gasFee = GasInt(beLoad32(input, 0))
-    c.gasMeter.consumeGas(gasFee, reason="blake2bf Precompile")
+    ? c.gasMeter.consumeGas(gasFee, reason="blake2bf Precompile")
 
   var output: array[64, byte]
   if not blake2b_F(input, output):
-    raise newException(ValidationError, "Blake2b F function invalid input")
+    return err(prcErr(PrcInvalidParam))
   else:
     c.output = @output
+  ok()
 
-proc blsG1Add*(c: Computation) =
+#[
+func blsG1Add*(c: Computation) =
   template input: untyped =
     c.msg.data
 
@@ -404,7 +414,7 @@ proc blsG1Add*(c: Computation) =
   if not encodePoint(a, c.output):
     raise newException(ValidationError, "blsG1Add encodePoint error")
 
-proc blsG1Mul*(c: Computation) =
+func blsG1Mul*(c: Computation) =
   template input: untyped =
     c.msg.data
 
@@ -458,7 +468,7 @@ func calcBlsMultiExpGas(K: int, gasCost: GasInt): GasInt =
   # Calculate gas and return the result
   result = (K * gasCost * discount) div 1000
 
-proc blsG1MultiExp*(c: Computation) =
+func blsG1MultiExp*(c: Computation) =
   template input: untyped =
     c.msg.data
 
@@ -499,7 +509,7 @@ proc blsG1MultiExp*(c: Computation) =
   if not encodePoint(acc, c.output):
     raise newException(ValidationError, "blsG1MuliExp encodePoint error")
 
-proc blsG2Add*(c: Computation) =
+func blsG2Add*(c: Computation) =
   template input: untyped =
     c.msg.data
 
@@ -521,7 +531,7 @@ proc blsG2Add*(c: Computation) =
   if not encodePoint(a, c.output):
     raise newException(ValidationError, "blsG2Add encodePoint error")
 
-proc blsG2Mul*(c: Computation) =
+func blsG2Mul*(c: Computation) =
   template input: untyped =
     c.msg.data
 
@@ -544,7 +554,7 @@ proc blsG2Mul*(c: Computation) =
   if not encodePoint(a, c.output):
     raise newException(ValidationError, "blsG2Mul encodePoint error")
 
-proc blsG2MultiExp*(c: Computation) =
+func blsG2MultiExp*(c: Computation) =
   template input: untyped =
     c.msg.data
 
@@ -585,7 +595,7 @@ proc blsG2MultiExp*(c: Computation) =
   if not encodePoint(acc, c.output):
     raise newException(ValidationError, "blsG2MuliExp encodePoint error")
 
-proc blsPairing*(c: Computation) =
+func blsPairing*(c: Computation) =
   template input: untyped =
     c.msg.data
 
@@ -634,7 +644,7 @@ proc blsPairing*(c: Computation) =
   if acc.check():
     c.output[^1] = 1.byte
 
-proc blsMapG1*(c: Computation) =
+func blsMapG1*(c: Computation) =
   template input: untyped =
     c.msg.data
 
@@ -653,7 +663,7 @@ proc blsMapG1*(c: Computation) =
   if not encodePoint(p, c.output):
     raise newException(ValidationError, "blsMapG1 encodePoint error")
 
-proc blsMapG2*(c: Computation) =
+func blsMapG2*(c: Computation) =
   template input: untyped =
     c.msg.data
 
@@ -671,8 +681,9 @@ proc blsMapG2*(c: Computation) =
   c.output = newSeq[byte](256)
   if not encodePoint(p, c.output):
     raise newException(ValidationError, "blsMapG2 encodePoint error")
+]#
 
-proc pointEvaluation*(c: Computation) =
+proc pointEvaluation(c: Computation): EvmResultVoid =
   # Verify p(z) = y given commitment that corresponds to the polynomial p(x) and a KZG proof.
   # Also verify that the provided commitment matches the provided versioned_hash.
   # The data is encoded as follows: versioned_hash | z | y | commitment | proof |
@@ -680,27 +691,43 @@ proc pointEvaluation*(c: Computation) =
   template input: untyped =
     c.msg.data
 
-  c.gasMeter.consumeGas(POINT_EVALUATION_PRECOMPILE_GAS,
-    reason = "EIP-4844 Point Evaluation Precompile")
+  ? c.gasMeter.consumeGas(POINT_EVALUATION_PRECOMPILE_GAS,
+      reason = "EIP-4844 Point Evaluation Precompile")
 
-  let res = pointEvaluation(input)
-  if res.isErr:
-    raise newException(ValidationError, res.error)
+  pointEvaluation(input).isOkOr:
+    return err(prcErr(PrcValidationError))
 
   # return a constant
   c.output = @PointEvaluationResult
+  ok()
 
-proc execPrecompiles*(c: Computation, fork: EVMFork): bool {.inline.} =
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
+
+iterator activePrecompiles*(fork: EVMFork): EthAddress =
+  var res: EthAddress
+  let maxPrecompileAddr = getMaxPrecompileAddr(fork)
+  for c in PrecompileAddresses.low..maxPrecompileAddr:
+    if validPrecompileAddr(c.byte, maxPrecompileAddr.byte):
+      res[^1] = c.byte
+      yield res
+
+func activePrecompilesList*(fork: EVMFork): seq[EthAddress] =
+  for address in activePrecompiles(fork):
+    result.add address
+
+proc execPrecompiles*(c: Computation, fork: EVMFork): EvmResult[bool] =
   for i in 0..18:
-    if c.msg.codeAddress[i] != 0: return
+    if c.msg.codeAddress[i] != 0:
+      return ok(false)
 
   let lb = c.msg.codeAddress[19]
   if not validPrecompileAddr(lb, fork):
-    return
+    return ok(false)
 
   let precompile = PrecompileAddresses(lb)
-  try:
-    case precompile
+  let res = case precompile
     of paEcRecover: ecRecover(c)
     of paSha256: sha256(c)
     of paRipeMd160: ripemd160(c)
@@ -723,12 +750,15 @@ proc execPrecompiles*(c: Computation, fork: EVMFork): bool {.inline.} =
     # of paBlsPairing: blsPairing(c)
     # of paBlsMapG1: blsMapG1(c)
     # of paBlsMapG2: blsMapG2(c)
-  except OutOfGas as e:
-    c.setError(EVMC_OUT_OF_GAS, e.msg, true)
-  except CatchableError as e:
-    if fork >= FkByzantium and precompile > paIdentity:
-      c.setError(EVMC_PRECOMPILE_FAILURE, e.msg, true)
+
+  if res.isErr:
+    if res.error.code == EvmErrorCode.OutOfGas:
+      c.setError(EVMC_OUT_OF_GAS, $res.error.code, true)
     else:
-      # swallow any other precompiles errors
-      debug "execPrecompiles validation error", msg=e.msg
-  true
+      if fork >= FkByzantium and precompile > paIdentity:
+        c.setError(EVMC_PRECOMPILE_FAILURE, $res.error.code, true)
+      else:
+        # swallow any other precompiles errors
+        debug "execPrecompiles validation error", msg=$res.error.code
+
+  ok(true)

@@ -74,7 +74,7 @@ type
     vmState*:               BaseVMState
     msg*:                   Message
     memory*:                EvmMemoryRef
-    stack*:                 Stack
+    stack*:                 EvmStackRef
     returnStack*:           seq[int]
     gasMeter*:              GasMeter
     code*:                  CodeStream
