@@ -321,6 +321,7 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
       let sc  = c[gasParams.s_status]
       res.gasCost   = sc.gasCost
       res.gasRefund = sc.gasRefund
+      ok(res)
     else:
       when fork >= FkBerlin:
         # EIP2929

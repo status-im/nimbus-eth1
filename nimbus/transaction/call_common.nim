@@ -11,7 +11,7 @@
 import
   eth/common/eth_types, stint, options, stew/ptrops,
   chronos,
-  ".."/[vm_types, vm_state, vm_computation, vm_state_transactions],
+  ".."/[vm_types, vm_state, vm_computation],
   ".."/[vm_internals, vm_precompiles, vm_gas_costs],
   ".."/[db/ledger],
   ../common/evmforks,
@@ -21,6 +21,8 @@ import
 when defined(evmc_enabled):
   import ../utils/utils
   import ./host_services
+else:
+  import ../vm_state_transactions
 
 type
   # Standard call parameters.
