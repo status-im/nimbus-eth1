@@ -284,7 +284,7 @@ proc rocksDbBackend*(
       when extraTraceMessages:
         trace logTxt "constructor failed",
            error=rc.error[0], info=rc.error[1]
-        return err(rc.error[0])
+      return err(rc.error[0])
 
   db.getVtxFn = getVtxFn db
   db.getKeyFn = getKeyFn db
