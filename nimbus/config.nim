@@ -520,6 +520,11 @@ type
         defaultValue: 8192
         name: "chunk-size" .}: uint64
 
+      csvStats* {.
+        hidden
+        desc: "Save performance statistics to CSV"
+        name: "debug-csv-stats".}: Option[string]
+
 func parseCmdArg(T: type NetworkId, p: string): T
     {.gcsafe, raises: [ValueError].} =
   parseInt(p).T
