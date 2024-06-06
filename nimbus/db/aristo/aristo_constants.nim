@@ -38,7 +38,7 @@ const
     ## Void equivalent for Merkle hash value
 
   SUB_TREE_DISPOSAL_MAX* = 200_000
-    ## Some limit for disposing sub-trees in one go using `delete()`.
+    ## Some limit for disposing sub-trees in one go using `delTree()`.
 
   LEAST_FREE_VID* = 100
     ## Vids smaller are used as known state roots and cannot be recycled. Only

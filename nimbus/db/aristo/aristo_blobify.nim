@@ -357,7 +357,6 @@ proc deblobifyTo*(
   ## De-serialise the last saved state data record previously encoded with
   ## `blobify()`.
   if data.len != 73:
-    echo ">>> deblobifyTo got size=", data.len
     return err(DeblobWrongSize)
   if data[^1] != 0x7f:
     return err(DeblobWrongType)
