@@ -119,8 +119,10 @@ proc traceTransaction*(com: CommonRef, header: BlockHeader,
     captureCom = com.clone(capture.recorder)
 
     saveCtx = setCtx com.newCtx(com.db.getParentHeader(header).stateRoot)
-    vmState = BaseVMState.new(header, captureCom)
+    vmState = BaseVMState.new(header, captureCom).valueOr:
+                return newJNull()
     stateDb = vmState.stateDB
+
   defer:
     saveCtx.setCtx().ctx.forget()
     capture.forget()
@@ -199,7 +201,8 @@ proc dumpBlockState*(com: CommonRef, header: BlockHeader, body: BlockBody, dumpS
     tracerInst = newLegacyTracer(captureFlags)
 
     saveCtx = setCtx com.newCtx(parent.stateRoot)
-    vmState = BaseVMState.new(header, captureCom, tracerInst)
+    vmState = BaseVMState.new(header, captureCom, tracerInst).valueOr:
+                return newJNull()
     miner = vmState.coinbase()
   defer:
     saveCtx.setCtx().ctx.forget()
@@ -258,7 +261,9 @@ proc traceBlock*(com: CommonRef, header: BlockHeader, body: BlockBody, tracerFla
     tracerInst = newLegacyTracer(tracerFlags)
 
     saveCtx = setCtx com.newCtx(com.db.getParentHeader(header).stateRoot)
-    vmState = BaseVMState.new(header, captureCom, tracerInst)
+    vmState = BaseVMState.new(header, captureCom, tracerInst).valueOr:
+                return newJNull()
+
   defer:
     saveCtx.setCtx().ctx.forget()
     capture.forget()

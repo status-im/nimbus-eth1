@@ -24,6 +24,7 @@ import
   ../common/[common, context],
   ../utils/utils,
   ../beacon/web3_eth_conv,
+  ../evm/evm_errors,
   ./filters
 
 const
@@ -352,7 +353,8 @@ proc setupEthRpc*(
     ## Returns the return value of executed contract.
     let
       header   = headerFromTag(chainDB, quantityTag)
-      res      = rpcCallEvm(args, header, com)
+      res      = rpcCallEvm(args, header, com).valueOr:
+                   raise newException(ValueError, "rpcCallEvm error: " & $error.code)
     result = res.output
 
   server.rpc("eth_estimateGas") do(args: TransactionArgs) -> Web3Quantity:
@@ -366,7 +368,8 @@ proc setupEthRpc*(
     let
       header   = chainDB.headerFromTag(blockId("latest"))
       # TODO: DEFAULT_RPC_GAS_CAP should configurable
-      gasUsed  = rpcEstimateGas(args, header, com, DEFAULT_RPC_GAS_CAP)
+      gasUsed  = rpcEstimateGas(args, header, com, DEFAULT_RPC_GAS_CAP).valueOr:
+                   raise newException(ValueError, "rpcEstimateGas error: " & $error.code)
     result = w3Qty(gasUsed)
 
   server.rpc("eth_getBlockByHash") do(data: Web3Hash, fullTransactions: bool) -> BlockObject:

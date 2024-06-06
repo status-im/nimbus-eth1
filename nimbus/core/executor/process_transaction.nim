@@ -70,8 +70,7 @@ proc processTransactionImpl(
     sender:  EthAddress;  ## tx.getSender or tx.ecRecover
     header:  BlockHeader; ## Header for the block containing the current tx
     fork:    EVMFork;
-      ): Result[GasInt, string]
-      {.raises: [CatchableError].} =
+      ): Result[GasInt, string] =
   ## Modelled after `https://eips.ethereum.org/EIPS/eip-1559#specification`_
   ## which provides a backward compatible framwork for EIP1559.
 
@@ -109,7 +108,8 @@ proc processTransactionImpl(
     vmState.captureTxStart(tx.gasLimit)
     let
       accTx = vmState.stateDB.beginSavepoint
-      gasBurned = tx.txCallEvm(sender, vmState, fork)
+      gasBurned = tx.txCallEvm(sender, vmState, fork).valueOr:
+                   return err("Evm Error: " & $error.code)
     vmState.captureTxEnd(tx.gasLimit - gasBurned)
 
     res = commitOrRollbackDependingOnGasUsed(vmState, accTx, header, tx, gasBurned, priorityFee)
@@ -127,7 +127,7 @@ proc processTransactionImpl(
 # ------------------------------------------------------------------------------
 
 proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash256):
-                              Result[void, string] {.raises: [CatchableError].} =
+                              Result[void, string] =
   ## processBeaconBlockRoot applies the EIP-4788 system call to the
   ## beacon block root contract. This method is exported to be used in tests.
   ## If EIP-4788 is enabled, we need to invoke the beaconroot storage
@@ -151,7 +151,8 @@ proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash256):
     )
 
   # runComputation a.k.a syscall/evm.call
-  let res = call.runComputation()
+  let res = call.runComputation().valueOr:
+              return err("Syscall error: " & $error.code)
   if res.isError:
     return err("processBeaconBlockRoot: " & res.error)
 
@@ -164,8 +165,7 @@ proc processTransaction*(
     sender:  EthAddress;  ## tx.getSender or tx.ecRecover
     header:  BlockHeader; ## Header for the block containing the current tx
     fork:    EVMFork;
-      ): Result[GasInt,string]
-      {.raises: [CatchableError].} =
+      ): Result[GasInt,string] =
   vmState.processTransactionImpl(tx, sender, header, fork)
 
 proc processTransaction*(
@@ -173,8 +173,7 @@ proc processTransaction*(
     tx:      Transaction; ## Transaction to validate
     sender:  EthAddress;  ## tx.getSender or tx.ecRecover
     header:  BlockHeader;
-      ): Result[GasInt,string]
-      {.raises: [CatchableError].} =
+      ): Result[GasInt,string] =
   let fork = vmState.com.toEVMFork(header.forkDeterminationInfo)
   vmState.processTransaction(tx, sender, header, fork)
 

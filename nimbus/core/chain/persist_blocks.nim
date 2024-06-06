@@ -141,7 +141,8 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
       let
         mkeys = vmState.stateDB.makeMultiKeys()
         # Reset state to what it was before executing the block of transactions
-        initialState = BaseVMState.new(header, c.com)
+        initialState = BaseVMState.new(header, c.com).valueOr:
+                         return err("Failed to create vm state")
         witness = initialState.buildWitness(mkeys)
 
       dbTx.rollback()

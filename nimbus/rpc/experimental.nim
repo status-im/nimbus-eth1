@@ -42,7 +42,8 @@ proc getBlockWitness*(
     # Initializing the VM will throw a Defect if the state doesn't exist.
     # Once we enable pruning we will need to check if the block state has been pruned
     # before trying to initialize the VM as we do here.
-    vmState = BaseVMState.new(blockHeader, com)
+    vmState = BaseVMState.new(blockHeader, com).valueOr:
+                raise newException(ValueError, "Cannot create vm state")
 
   vmState.generateWitness = true # Enable saving witness data
   vmState.com.hardForkTransition(blockHeader)
@@ -60,7 +61,8 @@ proc getBlockWitness*(
     result = (mkeys, vmState.buildWitness(mkeys))
   else:
     # Use the initial state from prior to executing the block of transactions
-    let initialState = BaseVMState.new(blockHeader, com)
+    let initialState = BaseVMState.new(blockHeader, com).valueOr:
+                         raise newException(ValueError, "Cannot create vm state")
     result = (mkeys, initialState.buildWitness(mkeys))
 
   dbTx.rollback()

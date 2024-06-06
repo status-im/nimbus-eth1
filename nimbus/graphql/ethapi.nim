@@ -1057,8 +1057,9 @@ proc toTxArgs(n: Node): TransactionArgs {.gcsafe, raises: [ValueError].} =
   optionalBytes(result.data, n, fData)
 
 proc makeCall(ctx: GraphqlContextRef, args: TransactionArgs,
-              header: common.BlockHeader): RespResult {.gcsafe, raises: [CatchableError].} =
-  let res = rpcCallEvm(args, header, ctx.com)
+              header: common.BlockHeader): RespResult =
+  let res = rpcCallEvm(args, header, ctx.com).valueOr:
+              return err("Failed to call rpcCallEvm")
   var map = respMap(ctx.ids[ethCallResult])
   map["data"]    = resp("0x" & res.output.toHex)
   map["gasUsed"] = longNode(res.gasUsed).get()
@@ -1084,7 +1085,8 @@ proc blockEstimateGas(ud: RootRef, params: Args, parent: Node): RespResult {.api
     let args = toTxArgs(param)
     # TODO: DEFAULT_RPC_GAS_CAP should configurable
     {.cast(noSideEffect).}:
-      let gasUsed = rpcEstimateGas(args, h.header, ctx.com, DEFAULT_RPC_GAS_CAP)
+      let gasUsed = rpcEstimateGas(args, h.header, ctx.com, DEFAULT_RPC_GAS_CAP).valueOr:
+                      return err("Failed to call rpcEstimateGas")
       longNode(gasUsed)
   except CatchableError as em:
     err("estimateGas error: " & em.msg)
