@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -12,9 +12,11 @@
 ## ===========================
 ##
 
+{.push raises: [].}
+
 import
   ../../../constants,
-  ../../../errors,
+  ../../evm_errors,
   ../../computation,
   ../../memory,
   ../../stack,
@@ -24,22 +26,21 @@ import
   ./oph_defs,
   eth/common
 
-{.push raises: [CatchableError].} # basically the annotation type of a `Vm2OpFn`
-
 # ------------------------------------------------------------------------------
 # Private, op handlers implementation
 # ------------------------------------------------------------------------------
 
 const
-  sha3Op: Vm2OpFn = proc (k: var Vm2Ctx) =
+  sha3Op: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
     ## 0x20, Compute Keccak-256 hash.
-    let (startPos, length) = k.cpt.stack.popInt(2)
+    let
+      (startPos, length) = ? k.cpt.stack.popInt(2)
+      (pos, len) = (startPos.safeInt, length.safeInt)
 
-    let (pos, len) = (startPos.safeInt, length.safeInt)
     if pos < 0 or len < 0 or pos > 2147483648'i64:
-      raise newException(OutOfBoundsRead, "Out of bounds memory access")
+      return err(opErr(OutOfBounds))
 
-    k.cpt.opcodeGastCost(Op.Sha3,
+    ? k.cpt.opcodeGastCost(Op.Sha3,
       k.cpt.gasCosts[Op.Sha3].m_handler(k.cpt.memory.len, pos, len),
       reason = "SHA3: word gas cost")
 
@@ -49,8 +50,7 @@ const
     if endRange == -1 or pos >= k.cpt.memory.len:
       k.cpt.stack.push(EMPTY_SHA3)
     else:
-      k.cpt.stack.push:
-        keccakHash k.cpt.memory.bytes.toOpenArray(pos, endRange)
+      k.cpt.stack.push keccakHash k.cpt.memory.bytes.toOpenArray(pos, endRange)
 
 # ------------------------------------------------------------------------------
 # Public, op exec table entries

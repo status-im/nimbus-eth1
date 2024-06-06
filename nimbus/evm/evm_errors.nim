@@ -27,6 +27,13 @@ type
     PrcInvalidParam
     PrcValidationError
     GasIntOverflow
+    InvalidInstruction
+    StaticContext
+    InvalidJumpDest
+    OutOfBounds
+    EvmRlpError
+    EvmBlockNotFound
+    InvalidInitCode
 
   EvmErrorObj* = object
     code*: EvmErrorCode
@@ -50,6 +57,16 @@ template stackErr*(errCode): auto =
   )
 
 template prcErr*(errCode): auto =
+  EvmErrorObj(
+    code: EvmErrorCode.errCode,
+  )
+
+template opErr*(errCode): auto =
+  EvmErrorObj(
+    code: EvmErrorCode.errCode,
+  )
+
+template evmErr*(errCode): auto =
   EvmErrorObj(
     code: EvmErrorCode.errCode,
   )

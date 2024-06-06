@@ -15,6 +15,7 @@ import
   "."/[code_stream, memory, message, stack, state],
   "."/[types],
   ./interpreter/[gas_meter, gas_costs, op_codes],
+  ./evm_errors,
   ../common/[common, evmforks],
   ../utils/utils,
   stew/byteutils,
@@ -131,25 +132,25 @@ template getBlobBaseFee*(c: Computation): UInt256 =
   else:
     c.vmState.txCtx.blobBaseFee
 
-proc getBlockHash*(c: Computation, number: UInt256): Hash256
-                   {.gcsafe, raises: [CatchableError].} =
+proc getBlockHash*(c: Computation, number: UInt256): EvmResult[Hash256]
+                   {.gcsafe, raises: [].} =
   when evmc_enabled:
     let
       blockNumber = c.host.getTxContext().block_number.u256
       ancestorDepth  = blockNumber - number - 1
     if ancestorDepth >= constants.MAX_PREV_HEADER_DEPTH:
-      return
+      return ok(Hash256())
     if number >= blockNumber:
-      return
+      return ok(Hash256())
     c.host.getBlockHash(number)
   else:
     let
       blockNumber = c.vmState.blockNumber
       ancestorDepth = blockNumber - number - 1
     if ancestorDepth >= constants.MAX_PREV_HEADER_DEPTH:
-      return
+      return ok(Hash256())
     if number >= blockNumber:
-      return
+      return ok(Hash256())
     c.vmState.getAncestorHash(number.vmWordToBlockNumber)
 
 template accountExists*(c: Computation, address: EthAddress): bool =
@@ -221,8 +222,8 @@ proc newComputation*(vmState: BaseVMState, sysCall: bool, message: Message,
   new result
   result.vmState = vmState
   result.msg = message
-  result.memory = Memory()
-  result.stack = newStack()
+  result.memory = EvmMemoryRef.new()
+  result.stack = EvmStackRef.new()
   result.returnStack = @[]
   result.gasMeter.init(message.gas)
   result.sysCall = sysCall
@@ -240,8 +241,8 @@ func newComputation*(vmState: BaseVMState, sysCall: bool,
   new result
   result.vmState = vmState
   result.msg = message
-  result.memory = Memory()
-  result.stack = newStack()
+  result.memory = EvmMemoryRef.new()
+  result.stack = EvmStackRef.new()
   result.returnStack = @[]
   result.gasMeter.init(message.gas)
   result.code = newCodeStream(code)
@@ -298,8 +299,8 @@ func errorOpt*(c: Computation): Option[string] =
     return none(string)
   some(c.error.info)
 
-proc writeContract*(c: Computation)
-    {.gcsafe, raises: [CatchableError].} =
+proc writeContract*(c: Computation): EvmResultVoid
+    {.gcsafe, raises: [].} =
   template withExtra(tracer: untyped, args: varargs[untyped]) =
     tracer args, newContract=($c.msg.contractAddress),
       blockNumber=c.vmState.blockNumber,
@@ -310,20 +311,20 @@ proc writeContract*(c: Computation)
   # nested calls (this is specified).  May as well simplify other branches.
   let (len, fork) = (c.output.len, c.fork)
   if len == 0:
-    return
+    return ok()
 
   # EIP-3541 constraint (https://eips.ethereum.org/EIPS/eip-3541).
   if fork >= FkLondon and c.output[0] == 0xEF.byte:
     withExtra trace, "New contract code starts with 0xEF byte, not allowed by EIP-3541"
     c.setError(EVMC_CONTRACT_VALIDATION_FAILURE, true)
-    return
+    return ok()
 
   # EIP-170 constraint (https://eips.ethereum.org/EIPS/eip-3541).
   if fork >= FkSpurious and len > EIP170_MAX_CODE_SIZE:
     withExtra trace, "New contract code exceeds EIP-170 limit",
       codeSize=len, maxSize=EIP170_MAX_CODE_SIZE
     c.setError(EVMC_OUT_OF_GAS, true)
-    return
+    return ok()
 
   # Charge gas and write the code even if the code address is self-destructed.
   # Non-empty code in a newly created, self-destructed account is possible if
@@ -332,14 +333,17 @@ proc writeContract*(c: Computation)
   # gas difference matters.  The new code can be called later in the
   # transaction too, before self-destruction wipes the account at the end.
 
-  let gasParams = GasParams(kind: Create, cr_memLength: len)
-  let codeCost = c.gasCosts[Create].c_handler(0.u256, gasParams).gasCost
+  let
+    gasParams = GasParams(kind: Create, cr_memLength: len)
+    res = ? c.gasCosts[Create].c_handler(0.u256, gasParams)
+    codeCost = res.gasCost
+
   if codeCost <= c.gasMeter.gasRemaining:
-    c.gasMeter.consumeGas(codeCost, reason = "Write new contract code")
+    ? c.gasMeter.consumeGas(codeCost, reason = "Write new contract code")
     c.vmState.mutateStateDB:
       db.setCode(c.msg.contractAddress, c.output)
     withExtra trace, "Writing new contract code"
-    return
+    return ok()
 
   if fork >= FkHomestead:
     # EIP-2 (https://eips.ethereum.org/EIPS/eip-2).
@@ -351,37 +355,14 @@ proc writeContract*(c: Computation)
     # https://github.com/ethereum/go-ethereum/blob/401354976bb4/core/vm/instructions.go#L586
     # The account already has zero-length code to handle nested calls.
     withExtra trace, "New contract given empty code by pre-Homestead rules"
+  ok()
 
 template chainTo*(c: Computation,
                   toChild: typeof(c.child),
-                  shouldRaise: static[bool],
                   after: untyped) =
 
-  when shouldRaise:
-    {.pragma: chainToPragma, gcsafe, raises: [CatchableError].}
-  else:
-    {.pragma: chainToPragma, gcsafe, raises: [].}
-
   c.child = toChild
-  c.continuation = proc() {.chainToPragma.} =
-    c.continuation = nil
-    after
-
-# Register an async operation to be performed before the continuation is called.
-template asyncChainTo*(c: Computation,
-                       asyncOperation: Future[void],
-                       after: untyped) =
-  c.pendingAsyncOperation = asyncOperation
-  c.continuation = proc() {.gcsafe, raises: [].} =
-    c.continuation = nil
-    after
-
-template asyncChainToRaise*(c: Computation,
-                       asyncOperation: Future[void],
-                       RaisesTypes: untyped,
-                       after: untyped) =
-  c.pendingAsyncOperation = asyncOperation
-  c.continuation = proc() {.gcsafe, raises: RaisesTypes.} =
+  c.continuation = proc(): EvmResultVoid {.gcsafe, raises: [].} =
     c.continuation = nil
     after
 
@@ -468,15 +449,15 @@ func prepareTracer*(c: Computation) =
   c.vmState.capturePrepare(c, c.msg.depth)
 
 func opcodeGastCost*(
-    c: Computation, op: Op, gasCost: GasInt, reason: string)
-    {.raises: [OutOfGas, ValueError].} =
+    c: Computation, op: Op, gasCost: GasInt, reason: string): EvmResultVoid
+    {.raises: [].} =
   c.vmState.captureGasCost(
     c,
     op,
     gasCost,
     c.gasMeter.gasRemaining,
     c.msg.depth + 1)
-  c.gasMeter.consumeGas(gasCost, reason)
+  ? c.gasMeter.consumeGas(gasCost, reason)
 
 # ------------------------------------------------------------------------------
 # End

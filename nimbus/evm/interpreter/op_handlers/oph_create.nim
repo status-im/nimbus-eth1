@@ -12,11 +12,11 @@
 ## ======================================
 ##
 
-{.push raises: [CatchableError].} # basically the annotation type of a `Vm2OpFn`
+{.push raises: [].} # basically the annotation type of a `Vm2OpFn`
 
 import
   ../../../constants,
-  ../../../errors,
+  ../../evm_errors,
   ../../../common/evmforks,
   ../../../utils/utils,
   ../../computation,
@@ -32,8 +32,7 @@ import
   chronicles,
   eth/common,
   eth/common/eth_types,
-  stint,
-  strformat
+  stint
 
 when not defined(evmc_enabled):
   import
@@ -46,15 +45,16 @@ when not defined(evmc_enabled):
 
 when evmc_enabled:
   template execSubCreate(c: Computation; msg: ref nimbus_message) =
-    c.chainTo(msg, shouldRaise = true):
+    c.chainTo(msg):
       c.gasMeter.returnGas(c.res.gas_left)
       if c.res.status_code == EVMC_SUCCESS:
-        c.stack.top(c.res.create_address)
+        ? c.stack.top(c.res.create_address)
       elif c.res.status_code == EVMC_REVERT:
         # From create, only use `outputData` if child returned with `REVERT`.
         c.returnData = @(makeOpenArray(c.res.output_data, c.res.output_size.int))
       if not c.res.release.isNil:
         c.res.release(c.res)
+      ok()
 
 else:
   proc execSubCreate(c: Computation; childMsg: Message;
@@ -65,16 +65,17 @@ else:
     var
       child = newComputation(c.vmState, false, childMsg, salt)
 
-    c.chainTo(child, shouldRaise = false):
+    c.chainTo(child):
       if not child.shouldBurnGas:
         c.gasMeter.returnGas(child.gasMeter.gasRemaining)
 
       if child.isSuccess:
         c.merge(child)
-        c.stack.top child.msg.contractAddress
+        ? c.stack.top child.msg.contractAddress
       elif not child.error.burnsGas: # Means return was `REVERT`.
         # From create, only use `outputData` if child returned with `REVERT`.
         c.returnData = child.output
+      ok()
 
 
 # ------------------------------------------------------------------------------
@@ -82,23 +83,22 @@ else:
 # ------------------------------------------------------------------------------
 
 const
-  createOp: Vm2OpFn = proc(k: var Vm2Ctx) =
+  createOp: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid =
     ## 0xf0, Create a new account with associated code
-    checkInStaticContext(k.cpt)
+    ? checkInStaticContext(k.cpt)
 
     let
       cpt       = k.cpt
-      endowment = cpt.stack.popInt()
-      memPos    = cpt.stack.popInt().safeInt
-      memLen    = cpt.stack.peekInt().safeInt
+      endowment = ? cpt.stack.popInt()
+      memPos    = ? cpt.stack.popSafeInt()
+      memLen    = ? cpt.stack.peekSafeInt()
 
-    cpt.stack.top(0)
+    ? cpt.stack.top(0)
 
     # EIP-3860
     if cpt.fork >= FkShanghai and memLen > EIP3860_MAX_INITCODE_SIZE:
       trace "Initcode size exceeds maximum", initcodeSize = memLen
-      raise newException(InitcodeError,
-        &"CREATE: have {memLen}, max {EIP3860_MAX_INITCODE_SIZE}")
+      return err(opErr(InvalidInitCode))
 
     let
       gasParams = GasParams(
@@ -106,11 +106,10 @@ const
         cr_currentMemSize: cpt.memory.len,
         cr_memOffset:      memPos,
         cr_memLength:      memLen)
+      res = ? cpt.gasCosts[Create].c_handler(1.u256, gasParams)
 
-    let gasCost = cpt.gasCosts[Create].c_handler(1.u256, gasParams).gasCost
-
-    cpt.opcodeGastCost(Create,
-      gasCost, reason = &"CREATE: GasCreate + {memLen} * memory expansion")
+    ? cpt.opcodeGastCost(Create,
+      res.gasCost, reason = "CREATE: GasCreate + memLen * memory expansion")
     cpt.memory.extend(memPos, memLen)
     cpt.returnData.setLen(0)
 
@@ -119,7 +118,7 @@ const
         reason = "Stack too deep",
         maxDepth = MaxCallDepth,
         depth = cpt.msg.depth
-      return
+      return ok()
 
     if endowment != 0:
       let senderBalance = cpt.getBalance(cpt.msg.contractAddress)
@@ -128,12 +127,12 @@ const
           reason = "Insufficient funds available to transfer",
           required = endowment,
           balance = senderBalance
-        return
+        return ok()
 
     var createMsgGas = cpt.gasMeter.gasRemaining
     if cpt.fork >= FkTangerine:
       createMsgGas -= createMsgGas div 64
-    cpt.gasMeter.consumeGas(createMsgGas, reason = "CREATE msg gas")
+    ? cpt.gasMeter.consumeGas(createMsgGas, reason = "CREATE msg gas")
 
     when evmc_enabled:
       let
@@ -159,27 +158,28 @@ const
           sender: cpt.msg.contractAddress,
           value:  endowment,
           data:   cpt.memory.read(memPos, memLen)))
+    ok()
 
   # ---------------------
 
-  create2Op: Vm2OpFn = proc(k: var Vm2Ctx) =
+  create2Op: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid =
     ## 0xf5, Behaves identically to CREATE, except using keccak256
-    checkInStaticContext(k.cpt)
+    ? checkInStaticContext(k.cpt)
 
     let
       cpt       = k.cpt
-      endowment = cpt.stack.popInt()
-      memPos    = cpt.stack.popInt().safeInt
-      memLen    = cpt.stack.popInt().safeInt
-      salt      = ContractSalt(bytes: cpt.stack.peekInt().toBytesBE)
+      endowment = ? cpt.stack.popInt()
+      memPos    = ? cpt.stack.popSafeInt()
+      memLen    = ? cpt.stack.popSafeInt()
+      salt256   = ? cpt.stack.peekInt()
+      salt      = ContractSalt(bytes: salt256.toBytesBE)
 
-    cpt.stack.top(0)
+    ? cpt.stack.top(0)
 
     # EIP-3860
     if cpt.fork >= FkShanghai and memLen > EIP3860_MAX_INITCODE_SIZE:
       trace "Initcode size exceeds maximum", initcodeSize = memLen
-      raise newException(InitcodeError,
-        &"CREATE2: have {memLen}, max {EIP3860_MAX_INITCODE_SIZE}")
+      return err(opErr(InvalidInitCode))
 
     let
       gasParams = GasParams(
@@ -187,12 +187,12 @@ const
         cr_currentMemSize: cpt.memory.len,
         cr_memOffset:      memPos,
         cr_memLength:      memLen)
+      res = ? cpt.gasCosts[Create].c_handler(1.u256, gasParams)
 
-    var gasCost = cpt.gasCosts[Create].c_handler(1.u256, gasParams).gasCost
-    gasCost = gasCost + cpt.gasCosts[Create2].m_handler(0, 0, memLen)
+    let gasCost = res.gasCost + cpt.gasCosts[Create2].m_handler(0, 0, memLen)
 
-    cpt.opcodeGastCost(Create2,
-      gasCost, reason = &"CREATE2: GasCreate + {memLen} * memory expansion")
+    ? cpt.opcodeGastCost(Create2,
+      gasCost, reason = "CREATE2: GasCreate + memLen * memory expansion")
     cpt.memory.extend(memPos, memLen)
     cpt.returnData.setLen(0)
 
@@ -201,7 +201,7 @@ const
         reason = "Stack too deep",
         maxDepth = MaxCallDepth,
         depth = cpt.msg.depth
-      return
+      return ok()
 
     if endowment != 0:
       let senderBalance = cpt.getBalance(cpt.msg.contractAddress)
@@ -210,12 +210,12 @@ const
           reason = "Insufficient funds available to transfer",
           required = endowment,
           balance = senderBalance
-        return
+        return ok()
 
     var createMsgGas = cpt.gasMeter.gasRemaining
     if cpt.fork >= FkTangerine:
       createMsgGas -= createMsgGas div 64
-    cpt.gasMeter.consumeGas(createMsgGas, reason = "CREATE2 msg gas")
+    ? cpt.gasMeter.consumeGas(createMsgGas, reason = "CREATE2 msg gas")
 
     when evmc_enabled:
       let
@@ -242,6 +242,7 @@ const
           sender: cpt.msg.contractAddress,
           value:  endowment,
           data:   cpt.memory.read(memPos, memLen)))
+    ok()
 
 # ------------------------------------------------------------------------------
 # Public, op exec table entries

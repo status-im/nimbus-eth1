@@ -12,9 +12,12 @@
 ## ========================
 ##
 
+{.push raises: [].}
+
 import
   ../../types,
   ../../../common/evmforks,
+  ../../evm_errors,
   ../op_codes
 
 type
@@ -23,7 +26,7 @@ type
 
   Vm2OpFn* =                  ## general op handler, return codes are passed
                               ## back via argument descriptor ``k``
-    proc(k: var Vm2Ctx) {.nimcall, gcsafe, raises: [CatchableError].}
+    proc(k: var Vm2Ctx): EvmResultVoid {.nimcall, gcsafe.}
 
 
   Vm2OpHanders* = tuple       ## three step op code execution, typically
@@ -46,7 +49,7 @@ type
 
 const
   vm2OpIgnore*: Vm2OpFn =      ## No operation, placeholder function
-    proc(k: var Vm2Ctx) = discard
+    proc(k: var Vm2Ctx): EvmResultVoid = ok()
 
   # similar to: toSeq(Fork).mapIt({it}).foldl(a+b)
   Vm2OpAllForks* =

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -14,11 +14,12 @@
 
 import
   std/[strutils, macros],
-  ./oph_defs
+  ./oph_defs,
+  ../../evm_errors
 
 type
   OphNumToTextFn* = proc(n: int): string
-  OpHanldlerImplFn* = proc(k: var Vm2Ctx; n: int)
+  OpHanldlerImplFn* = proc(k: var Vm2Ctx; n: int): EvmResultVoid
 
 const
   recForkSet = "Vm2OpAllForks"
@@ -62,9 +63,9 @@ macro genOphHandlers*(runHandler: static[OphNumToTextFn];
 
     # => push##Op: Vm2OpFn = proc (k: var Vm2Ctx) = ...
     result.add quote do:
-      const `fnName`: Vm2OpFn = proc(k: var Vm2Ctx) =
+      const `fnName`: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid =
         `comment`
-        `body`(k,`n`)
+        ? `body`(k,`n`)
   # echo ">>>", result.repr
 
 

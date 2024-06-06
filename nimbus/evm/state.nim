@@ -17,7 +17,8 @@ import
   ../db/ledger,
   ../common/[common, evmforks],
   ./interpreter/[op_codes, gas_costs],
-  ./types
+  ./types,
+  ./evm_errors
 
 proc init(
       self:         BaseVMState;
@@ -227,9 +228,14 @@ proc baseFee*(vmState: BaseVMState): UInt256 =
 
 method getAncestorHash*(
     vmState: BaseVMState, blockNumber: BlockNumber):
-    Hash256 {.base, gcsafe, raises: [CatchableError].} =
-  let db = vmState.com.db
-  db.getBlockHash(blockNumber)
+    EvmResult[Hash256] {.base, gcsafe.} =
+  try:
+    let db = vmState.com.db
+    ok(db.getBlockHash(blockNumber))
+  except RlpError:
+    err(evmErr(EvmRlpError))
+  except BlockNotFound:
+    err(evmErr(EvmBlockNotFound))
 
 proc readOnlyStateDB*(vmState: BaseVMState): ReadOnlyStateDB {.inline.} =
   ReadOnlyStateDB(vmState.stateDB)

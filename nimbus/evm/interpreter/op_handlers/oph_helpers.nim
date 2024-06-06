@@ -12,13 +12,10 @@
 ## ============================================
 ##
 
-when defined(evmc_enabled):
-  {.push raises: [CatchableError].} # basically the annotation type of a `Vm2OpFn`
-else:
-  {.push raises: [].}
+{.push raises: [].}
 
 import
-  ../../../errors,
+  ../../evm_errors,
   ../../types,
   ../gas_costs,
   eth/common,
@@ -26,7 +23,9 @@ import
   stint
 
 when defined(evmc_enabled):
-  import ../../evmc_api, evmc/evmc
+  import
+    ../../evmc_api,
+    evmc/evmc
 else:
   import
     ../../state,
@@ -64,14 +63,14 @@ proc gasEip2929AccountCheck*(c: Computation; address: EthAddress, slot: UInt256)
                else:
                  WarmStorageReadCost
 
-proc checkInStaticContext*(c: Computation) {.gcsafe, raises: [CatchableError].} =
+func checkInStaticContext*(c: Computation): EvmResultVoid =
   ## Verify static context in handler function, raise an error otherwise
   if EVMC_STATIC in c.msg.flags:
     # TODO: if possible, this check only appear
     # when fork >= FkByzantium
-    raise newException(
-      StaticContextError,
-      "Cannot modify state while inside of STATICCALL context")
+    return err(opErr(StaticContext))
+
+  ok()
 
 # ------------------------------------------------------------------------------
 # End

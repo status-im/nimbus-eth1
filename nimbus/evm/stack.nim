@@ -13,7 +13,8 @@
 import
   std/[macros],
   eth/common,
-  ./evm_errors
+  ./evm_errors,
+  ./interpreter/utils/utils_numeric
 
 type
   EvmStackRef* = ref object
@@ -74,7 +75,7 @@ func popAux(stack: EvmStackRef, T: type): EvmResult[T] =
   ? ensurePop(stack, 1)
   result = ok(fromStackElem(stack.values[^1], T))
   stack.values.setLen(stack.values.len - 1)
-
+  
 func internalPopTuple(stack: EvmStackRef, T: type, tupleLen: static[int]): EvmResult[T] =
   ? ensurePop(stack, tupleLen)
   var
@@ -105,6 +106,16 @@ func push*(stack: EvmStackRef, value: openArray[byte]): EvmResultVoid =
 func popInt*(stack: EvmStackRef): EvmResult[UInt256] =
   popAux(stack, UInt256)
 
+func popSafeInt*(stack: EvmStackRef): EvmResult[int] =
+  ? ensurePop(stack, 1)
+  result = ok(fromStackElem(stack.values[^1], UInt256).safeInt)
+  stack.values.setLen(stack.values.len - 1)
+
+func popMemRef*(stack: EvmStackRef): EvmResult[int] =
+  ? ensurePop(stack, 1)
+  result = ok(fromStackElem(stack.values[^1], UInt256).cleanMemRef)
+  stack.values.setLen(stack.values.len - 1)
+  
 func popInt*(stack: EvmStackRef, numItems: static[int]): auto =
   type T = genTupleType(numItems, UInt256)
   stack.internalPopTuple(T, numItems)
@@ -139,6 +150,11 @@ func peek*(stack: EvmStackRef): EvmResult[UInt256] =
   if stack.values.len == 0:
     return err(stackErr(StackInsufficient))
   ok(fromStackElem(stack.values[^1], UInt256))
+
+func peekSafeInt*(stack: EvmStackRef): EvmResult[int] =
+  if stack.values.len == 0:
+    return err(stackErr(StackInsufficient))
+  ok(fromStackElem(stack.values[^1], UInt256).safeInt)
 
 func `[]`*(stack: EvmStackRef, i: BackwardsIndex, T: typedesc): EvmResult[T] =
   ? ensurePop(stack, int(i))

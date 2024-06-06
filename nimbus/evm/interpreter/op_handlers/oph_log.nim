@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -12,9 +12,11 @@
 ## =======================================
 ##
 
+{.push raises: [].}
+
 import
   ../../../constants,
-  ../../../errors,
+  ../../evm_errors,
   ../../computation,
   ../../memory,
   ../../stack,
@@ -27,38 +29,35 @@ import
   ./oph_helpers,
   eth/common,
   sequtils,
-  stint,
-  strformat
-
-{.push raises: [CatchableError].} # basically the annotation type of a `Vm2OpFn`
+  stint
 
 # ------------------------------------------------------------------------------
 # Private, names & settings
 # ------------------------------------------------------------------------------
 
 proc fnName(n: int): string {.compileTime.} =
-  &"log{n}Op"
+  "log" & $n & "Op"
 
 proc opName(n: int): string {.compileTime.} =
-  &"Log{n}"
+  "Log" & $n
 
 proc fnInfo(n: int): string {.compileTime.} =
   var blurb = case n
               of 1: "topic"
               else: "topics"
-  &"Append log record with {n} {blurb}"
+  "Append log record with " & $n & " " & blurb
 
 
-proc logImpl(c: Computation, opcode: Op, topicCount: int) =
+proc logImpl(c: Computation, opcode: Op, topicCount: int): EvmResultVoid =
   doAssert(topicCount in 0 .. 4)
-  checkInStaticContext(c)
-  let (memStartPosition, size) = c.stack.popInt(2)
+  ? checkInStaticContext(c)
+  let (memStartPosition, size) = ? c.stack.popInt(2)
   let (memPos, len) = (memStartPosition.cleanMemRef, size.cleanMemRef)
 
   if memPos < 0 or len < 0:
-    raise newException(OutOfBoundsRead, "Out of bounds memory access")
+    return err(opErr(OutOfBounds))
 
-  c.opcodeGastCost(opcode,
+  ? c.opcodeGastCost(opcode,
     c.gasCosts[opcode].m_handler(c.memory.len, memPos, len),
     reason = "Memory expansion, Log topic and data gas cost")
   c.memory.extend(memPos, len)
@@ -66,7 +65,7 @@ proc logImpl(c: Computation, opcode: Op, topicCount: int) =
   when evmc_enabled:
     var topics: array[4, evmc_bytes32]
     for i in 0 ..< topicCount:
-      topics[i].bytes = c.stack.popTopic()
+      topics[i].bytes = ? c.stack.popTopic()
 
     c.host.emitLog(c.msg.contractAddress,
       c.memory.read(memPos, len),
@@ -75,11 +74,14 @@ proc logImpl(c: Computation, opcode: Op, topicCount: int) =
     var log: Log
     log.topics = newSeqOfCap[Topic](topicCount)
     for i in 0 ..< topicCount:
-      log.topics.add(c.stack.popTopic())
+      let topic = ? c.stack.popTopic()
+      log.topics.add topic
 
     log.data = c.memory.read(memPos, len)
     log.address = c.msg.contractAddress
     c.addLogEntry(log)
+
+  ok()
 
 const
   inxRange = toSeq(0 .. 4)
@@ -93,7 +95,7 @@ const
 # Private, op handlers implementation
 # ------------------------------------------------------------------------------
 
-proc wrapperFn(k: var Vm2Ctx; n: int) =
+proc wrapperFn(k: var Vm2Ctx; n: int): EvmResultVoid =
   logImpl(k.cpt, logOpArg[n], n)
 
 genOphHandlers fnName, fnInfo, inxRange, wrapperFn

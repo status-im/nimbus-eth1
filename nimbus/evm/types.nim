@@ -11,7 +11,7 @@
 import
   chronos,
   json_rpc/rpcclient,
-  "."/[stack, memory, code_stream],
+  "."/[stack, memory, code_stream, evm_errors],
   ./interpreter/[gas_costs, op_codes],
   ../db/ledger,
   ../common/[common, evmforks]
@@ -91,7 +91,7 @@ type
     else:
       parent*, child*:      Computation
     pendingAsyncOperation*: Future[void]
-    continuation*:          proc() {.gcsafe, raises: [CatchableError].}
+    continuation*:          proc(): EvmResultVoid {.gcsafe, raises: [].}
     sysCall*:               bool
 
   Error* = ref object
