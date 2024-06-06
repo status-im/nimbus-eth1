@@ -1,140 +1,160 @@
 # Nimbus
 # Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
-#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
-#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
-# at your option. This file may not be copied, modified, or distributed except according to those terms.
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+#    http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or
+#    http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed except
+# according to those terms.
+
+{.push raises: [].}
 
 import
-  std/[strformat, strutils, sequtils, macros],
-  chronicles, eth/common,
-  ../errors, ./validation
-
-logScope:
-  topics = "vm stack"
+  std/[macros],
+  eth/common,
+  ./evm_errors
 
 type
-  Stack* = ref object of RootObj
-    values*: seq[StackElement]
+  EvmStackRef* = ref object
+    values: seq[EvmStackElement]
 
-  StackElement = UInt256
+  EvmStackElement = UInt256
+  EvmStackInts = uint64 | uint | int | GasInt
+  EvmStackBytes32 = array[32, byte]
 
-template ensureStackLimit: untyped =
-  if len(stack.values) > 1023:
-    raise newException(FullStack, "Stack limit reached")
-
-proc len*(stack: Stack): int {.inline.} =
+func len*(stack: EvmStackRef): int {.inline.} =
   len(stack.values)
 
-proc toStackElement(v: UInt256, elem: var StackElement) {.inline.} = elem = v
-proc toStackElement(v: uint64 | uint | int | GasInt, elem: var StackElement) {.inline.} = elem = v.u256
-proc toStackElement(v: EthAddress, elem: var StackElement) {.inline.} = elem.initFromBytesBE(v)
-proc toStackElement(v: MDigest, elem: var StackElement) {.inline.} = elem.initFromBytesBE(v.data)
+# ------------------------------------------------------------------------------
+# Private functions
+# ------------------------------------------------------------------------------
 
-proc fromStackElement(elem: StackElement, v: var UInt256) {.inline.} = v = elem
-proc fromStackElement(elem: StackElement, v: var EthAddress) {.inline.} = v[0 .. ^1] = elem.toBytesBE().toOpenArray(12, 31)
-proc fromStackElement(elem: StackElement, v: var Hash256) {.inline.} = v.data = elem.toBytesBE()
-proc fromStackElement(elem: StackElement, v: var Topic) {.inline.} = v = elem.toBytesBE()
+template toStackElem(v: UInt256, elem: EvmStackElement) =
+  elem = v
 
-proc toStackElement(v: openArray[byte], elem: var StackElement) {.inline.} =
-  # TODO: This needs to go
-  validateStackItem(v) # This is necessary to pass stack tests
+template toStackElem(v: EvmStackInts, elem: EvmStackElement) =
+  elem = v.u256
+
+template toStackElem(v: EthAddress, elem: EvmStackElement) =
   elem.initFromBytesBE(v)
 
-proc pushAux[T](stack: var Stack, value: T) =
-  ensureStackLimit()
+template toStackElem(v: MDigest, elem: EvmStackElement) =
+  elem.initFromBytesBE(v.data)
+
+template toStackElem(v: openArray[byte], elem: EvmStackElement) =
+  doAssert(v.len <= 32)
+  elem.initFromBytesBE(v)
+
+template fromStackElem(elem: EvmStackElement, _: type UInt256): UInt256 =
+  elem
+
+func fromStackElem(elem: EvmStackElement, _: type EthAddress): EthAddress =
+  result[0 .. ^1] = elem.toBytesBE().toOpenArray(12, 31)
+
+template fromStackElem(elem: EvmStackElement, _: type Hash256): Hash256 =
+  Hash256(data: elem.toBytesBE())
+
+template fromStackElem(elem: EvmStackElement, _: type EvmStackBytes32): EvmStackBytes32 =
+  elem.toBytesBE()
+
+func pushAux[T](stack: EvmStackRef, value: T): EvmResultVoid =
+  if len(stack.values) > 1023:
+    return err(stackErr(StackFull))
   stack.values.setLen(stack.values.len + 1)
-  toStackElement(value, stack.values[^1])
+  toStackElem(value, stack.values[^1])
+  ok()
 
-proc push*(stack: var Stack, value: uint64 | uint | int | GasInt | UInt256 | EthAddress | Hash256) {.inline.} =
-  pushAux(stack, value)
+func ensurePop(stack: EvmStackRef, expected: int): EvmResultVoid =
+  if stack.values.len < expected:
+    return err(stackErr(StackInsufficient))
+  ok()
 
-proc push*(stack: var Stack, value: openArray[byte]) {.inline.} =
-  # TODO: This needs to go...
-  pushAux(stack, value)
-
-proc ensurePop(elements: Stack, a: int) =
-  let num = elements.len
-  let expected = a
-  if num < expected:
-    raise newException(InsufficientStack,
-      &"Stack underflow, expect {expected}, got {num}")
-
-proc popAux[T](stack: var Stack, value: var T) =
-  ensurePop(stack, 1)
-  fromStackElement(stack.values[^1], value)
+func popAux(stack: EvmStackRef, T: type): EvmResult[T] =
+  ? ensurePop(stack, 1)
+  result = ok(fromStackElem(stack.values[^1], T))
   stack.values.setLen(stack.values.len - 1)
 
-proc internalPopTuple(stack: var Stack, v: var tuple, tupleLen: static[int]) =
-  ensurePop(stack, tupleLen)
-  var i = 0
+func internalPopTuple(stack: EvmStackRef, T: type, tupleLen: static[int]): EvmResult[T] =
+  ? ensurePop(stack, tupleLen)
+  var
+    i = 0
+    v: T
   let sz = stack.values.high
   for f in fields(v):
-    fromStackElement(stack.values[sz - i], f)
+    f = fromStackElem(stack.values[sz - i], UInt256)
     inc i
   stack.values.setLen(sz - tupleLen + 1)
-
-proc popInt*(stack: var Stack): UInt256 {.inline.} =
-  popAux(stack, result)
+  ok(v)
 
 macro genTupleType(len: static[int], elemType: untyped): untyped =
   result = nnkTupleConstr.newNimNode()
   for i in 0 ..< len: result.add(elemType)
 
-proc popInt*(stack: var Stack, numItems: static[int]): auto {.inline.} =
-  var r: genTupleType(numItems, UInt256)
-  stack.internalPopTuple(r, numItems)
-  return r
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
 
-proc popAddress*(stack: var Stack): EthAddress {.inline.} =
-  popAux(stack, result)
+func push*(stack: EvmStackRef,
+           value: EvmStackInts | UInt256 | EthAddress | Hash256): EvmResultVoid =
+  pushAux(stack, value)
 
-proc popTopic*(stack: var Stack): Topic {.inline.} =
-  popAux(stack, result)
+func push*(stack: EvmStackRef, value: openArray[byte]): EvmResultVoid =
+  pushAux(stack, value)
 
-proc newStack*(): Stack =
+func popInt*(stack: EvmStackRef): EvmResult[UInt256] =
+  popAux(stack, UInt256)
+
+func popInt*(stack: EvmStackRef, numItems: static[int]): auto =
+  type T = genTupleType(numItems, UInt256)
+  stack.internalPopTuple(T, numItems)
+
+func popAddress*(stack: EvmStackRef): EvmResult[EthAddress] =
+  popAux(stack, EthAddress)
+
+func popTopic*(stack: EvmStackRef): EvmResult[EvmStackBytes32] =
+  popAux(stack, EvmStackBytes32)
+
+func new*(_: type EvmStackRef): EvmStackRef =
   new(result)
   result.values = @[]
 
-proc swap*(stack: var Stack, position: int) =
+func swap*(stack: EvmStackRef, position: int): EvmResultVoid =
   ##  Perform a SWAP operation on the stack
-  var idx = position + 1
-  if idx < len(stack) + 1:
+  let idx = position + 1
+  if idx < stack.values.len + 1:
     (stack.values[^1], stack.values[^idx]) = (stack.values[^idx], stack.values[^1])
+    ok()
   else:
-    raise newException(InsufficientStack,
-                      "Stack underflow for SWAP" & $position)
+    err(stackErr(StackInsufficient))
 
-template getInt(x: int): int = x
-
-proc dup*(stack: var Stack, position: int | UInt256) =
+func dup*(stack: EvmStackRef, position: int): EvmResultVoid =
   ## Perform a DUP operation on the stack
-  let position = position.getInt
   if position in 1 .. stack.len:
     stack.push(stack.values[^position])
   else:
-    raise newException(InsufficientStack,
-                      "Stack underflow for DUP" & $position)
+    err(stackErr(StackInsufficient))
 
-proc peek*(stack: Stack): UInt256 =
-  # This should be used only for testing purposes!
-  fromStackElement(stack.values[^1], result)
+func peek*(stack: EvmStackRef): EvmResult[UInt256] =
+  if stack.values.len == 0:
+    return err(stackErr(StackInsufficient))
+  ok(fromStackElem(stack.values[^1], UInt256))
 
-proc `$`*(stack: Stack): string =
-  let values = stack.values.mapIt(&"  {$it}").join("\n")
-  &"Stack:\n{values}"
+func `[]`*(stack: EvmStackRef, i: BackwardsIndex, T: typedesc): EvmResult[T] =
+  ? ensurePop(stack, int(i))
+  ok(fromStackElem(stack.values[i], T))
 
-proc `[]`*(stack: Stack, i: BackwardsIndex, T: typedesc): T =
-  ensurePop(stack, int(i))
-  fromStackElement(stack.values[i], result)
+func peekInt*(stack: EvmStackRef): EvmResult[UInt256] =
+  ? ensurePop(stack, 1)
+  ok(fromStackElem(stack.values[^1], Uint256))
 
-proc peekInt*(stack: Stack): UInt256 =
-  ensurePop(stack, 1)
-  fromStackElement(stack.values[^1], result)
+func peekAddress*(stack: EvmStackRef): EvmResult[EthAddress] =
+  ? ensurePop(stack, 1)
+  ok(fromStackElem(stack.values[^1], EthAddress))
 
-proc peekAddress*(stack: Stack): EthAddress =
-  ensurePop(stack, 1)
-  fromStackElement(stack.values[^1], result)
-
-proc top*(stack: Stack, value: uint | int | GasInt | UInt256 | EthAddress | Hash256) {.inline.} =
-  toStackElement(value, stack.values[^1])
+func top*(stack: EvmStackRef,
+          value: EvmStackInts | UInt256 | EthAddress | Hash256): EvmResultVoid =
+  if stack.values.len == 0:
+    return err(stackErr(StackInsufficient))
+  toStackElem(value, stack.values[^1])
+  ok()

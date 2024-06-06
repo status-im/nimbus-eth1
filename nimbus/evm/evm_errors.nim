@@ -20,6 +20,8 @@ type
   EvmErrorCode* {.pure.} = enum
     OutOfGas
     MemoryFull
+    StackFull
+    StackInsufficient
 
   EvmErrorObj* = object
     code*: EvmErrorCode
