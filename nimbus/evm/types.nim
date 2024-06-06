@@ -73,7 +73,7 @@ type
     # The execution computation
     vmState*:               BaseVMState
     msg*:                   Message
-    memory*:                Memory
+    memory*:                EvmMemoryRef
     stack*:                 Stack
     returnStack*:           seq[int]
     gasMeter*:              GasMeter
