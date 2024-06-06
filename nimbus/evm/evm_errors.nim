@@ -1,0 +1,53 @@
+# Nimbus
+# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+#    http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or
+#    http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed except
+# according to those terms.
+
+{.push raises: [].}
+
+import
+  results
+
+export
+  results
+
+type
+  EvmErrorCode* {.pure.} = enum
+    OutOfGas
+    MemoryFull
+
+  EvmErrorObj* = object
+    code*: EvmErrorCode
+    burnGas*: bool
+
+  EvmResultVoid* = Result[void, EvmErrorObj]
+  EvmResult*[T] = Result[T, EvmErrorObj]
+
+template gasErr*(errCode): auto =
+  EvmErrorObj(
+    code: EvmErrorCode.errCode,
+    burnGas: true,
+  )
+
+template memErr*(errCode): auto =
+  EvmErrorObj(
+    code: EvmErrorCode.errCode,
+    burnGas: true,
+  )
+
+template stackErr*(errCode): auto =
+  EvmErrorObj(
+    code: EvmErrorCode.errCode,
+    burnGas: true,
+  )
+
+template prcErr*(errCode): auto =
+  EvmErrorObj(
+    code: EvmErrorCode.errCode,
+    burnGas: true,
+  )
