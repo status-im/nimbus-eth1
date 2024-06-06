@@ -14,7 +14,8 @@ register_matplotlib_converters()
 
 def readStats(name: str, min_block_number: int):
     df = pd.read_csv(name).convert_dtypes()
-    df = df[df.block_number >= min_block_number]
+    if len(df.index) > 2 * min_block_number:
+        df = df[df.block_number >= min_block_number]
     df.set_index("block_number", inplace=True)
     df.time /= 1000000000
     df.drop(columns=["gas"], inplace=True)
