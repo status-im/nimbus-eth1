@@ -14,7 +14,6 @@ import
   stint,
   ".."/[vm_types, vm_computation],
   ../utils/utils,
-  ../evm/evm_errors,
   "."/[host_types, host_trace]
 
 proc evmcResultRelease(res: var EvmcResult) {.cdecl, gcsafe.} =
@@ -155,7 +154,7 @@ template callEvmcNested*(host: TransactionHost, msg: EvmcMessage): EvmcResult =
   # that template parameters `host` and `msg` are multiple-evaluated here;
   # simple expressions must be used when calling.)
   let child = beforeExecEvmcNested(host, msg)
-  let res = child.execCallOrCreate()
-  if res.isErr:
-    child.setError($res.error.code)
+  # we can discard the return value from execCallOrCreate,
+  # because error is relayed via computation.setError
+  discard child.execCallOrCreate()
   afterExecEvmcNested(host, child, msg.kind)

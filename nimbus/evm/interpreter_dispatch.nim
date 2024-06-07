@@ -278,7 +278,7 @@ when vm_use_recursion:
   proc execCallOrCreate*(c: Computation): EvmResultVoid =
     defer: c.dispose()
     if c.beforeExec():
-      return
+      return ok()
     c.executeOpcodes()
     while not c.continuation.isNil:
       # If there's a continuation, then it's because there's either
@@ -292,13 +292,13 @@ when vm_use_recursion:
         when evmc_enabled:
           c.res = c.host.call(c.child[])
         else:
-          execCallOrCreate(c.child)
+          ? execCallOrCreate(c.child)
         c.child = nil
         c.executeOpcodes()
     c.afterExec()
 
 else:
-  proc execCallOrCreate*(cParam: Computation): EvmResultVoid =    
+  proc execCallOrCreate*(cParam: Computation): EvmResultVoid =
     var (c, before, shouldPrepareTracer) = (cParam, true, true)
     defer:
       while not c.isNil:
@@ -326,7 +326,7 @@ else:
         break
       c.dispose()
       (before, shouldPrepareTracer, c.parent, c) = (false, true, nil.Computation, c.parent)
-      
+
     ok()
 
 
