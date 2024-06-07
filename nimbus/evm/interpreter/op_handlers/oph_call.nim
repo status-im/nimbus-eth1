@@ -204,12 +204,12 @@ else:
 const
   callOp: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid {.catchRaise.} =
     ## 0xf1, Message-Call into an account
-    let
-      cpt = k.cpt
-      val = ? cpt.stack[^3, UInt256]
+    let cpt = k.cpt
 
-    if EVMC_STATIC in cpt.msg.flags and val > 0.u256:
-      return err(opErr(StaticContext))
+    if EVMC_STATIC in cpt.msg.flags:
+       let val = ? cpt.stack[^3, UInt256]
+       if val > 0.u256:
+          return err(opErr(StaticContext))
 
     let
       p = ? cpt.callParams
