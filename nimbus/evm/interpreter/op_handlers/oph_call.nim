@@ -37,9 +37,6 @@ when not defined(evmc_enabled):
     ../../state,
     ../../../db/ledger
 
-# Annotation helpers
-{.pragma: catchRaise, gcsafe, raises: [].}
-
 # ------------------------------------------------------------------------------
 # Private
 # ------------------------------------------------------------------------------
@@ -61,7 +58,7 @@ type
     gasCallEIP2929:  GasInt
 
 
-proc updateStackAndParams(q: var LocalParams; c: Computation): EvmResultVoid {.catchRaise.} =
+proc updateStackAndParams(q: var LocalParams; c: Computation): EvmResultVoid =
   ? c.stack.push(0)
 
   let
@@ -93,7 +90,7 @@ proc updateStackAndParams(q: var LocalParams; c: Computation): EvmResultVoid {.c
           q.gasCallEIP2929 = ColdAccountAccessCost - WarmStorageReadCost
   ok()
 
-proc callParams(c: Computation): EvmResult[LocalParams] {.catchRaise.} =
+proc callParams(c: Computation): EvmResult[LocalParams] =
   ## Helper for callOp()
   var res = LocalParams(
     gas            : ? c.stack.popInt(),
@@ -112,14 +109,14 @@ proc callParams(c: Computation): EvmResult[LocalParams] {.catchRaise.} =
   ok(res)
 
 
-proc callCodeParams(c: Computation): EvmResult[LocalParams] {.catchRaise.} =
+proc callCodeParams(c: Computation): EvmResult[LocalParams] =
   ## Helper for callCodeOp()
   var res = ? c.callParams()
   res.contractAddress = c.msg.contractAddress
   ok(res)
 
 
-proc delegateCallParams(c: Computation): EvmResult[LocalParams] {.catchRaise.} =
+proc delegateCallParams(c: Computation): EvmResult[LocalParams] =
   ## Helper for delegateCall()
   var res = LocalParams(
     gas            : ? c.stack.popInt(),
@@ -137,7 +134,7 @@ proc delegateCallParams(c: Computation): EvmResult[LocalParams] {.catchRaise.} =
   ok(res)
 
 
-proc staticCallParams(c: Computation):  EvmResult[LocalParams] {.catchRaise.} =
+proc staticCallParams(c: Computation):  EvmResult[LocalParams] =
   ## Helper for staticCall()
   var res = LocalParams(
     gas            : ? c.stack.popInt(),
@@ -202,7 +199,7 @@ else:
 # ------------------------------------------------------------------------------
 
 const
-  callOp: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid {.catchRaise.} =
+  callOp: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid =
     ## 0xf1, Message-Call into an account
     let cpt = k.cpt
 
@@ -286,7 +283,7 @@ const
 
   # ---------------------
 
-  callCodeOp: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid {.catchRaise.} =
+  callCodeOp: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid =
     ## 0xf2, Message-call into this account with an alternative account's code.
     let
       cpt = k.cpt
@@ -363,7 +360,7 @@ const
 
   # ---------------------
 
-  delegateCallOp: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid {.catchRaise.} =
+  delegateCallOp: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid =
     ## 0xf4, Message-call into this account with an alternative account's
     ##       code, but persisting the current values for sender and value.
     let
@@ -435,7 +432,7 @@ const
 
   # ---------------------
 
-  staticCallOp: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid {.catchRaise.} =
+  staticCallOp: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid =
     ## 0xfa, Static message-call into an account.
 
     let

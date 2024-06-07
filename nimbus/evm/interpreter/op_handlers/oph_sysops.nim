@@ -33,15 +33,12 @@ when not defined(evmc_enabled):
     ../../state,
     ../../../db/ledger
 
-# Annotation helpers
-{.pragma: catchRaise, gcsafe, raises: [].}
-
 # ------------------------------------------------------------------------------
 # Private
 # ------------------------------------------------------------------------------
 
 const
-  returnOp: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid {.catchRaise.} =
+  returnOp: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid =
     ## 0xf3, Halt execution returning output data.
     let (startPos, size) = ? k.cpt.stack.popInt(2)
 
@@ -54,7 +51,7 @@ const
     ok()
 
 
-  revertOp: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid {.catchRaise.} =
+  revertOp: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid =
     ## 0xfd, Halt execution reverting state changes but returning data
     ##       and remaining gas.
     let (startPos, size) = ? k.cpt.stack.popInt(2)
@@ -70,12 +67,12 @@ const
     k.cpt.setError(EVMC_REVERT, "REVERT opcode executed", false)
     ok()
 
-  invalidOp: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid {.catchRaise.} =
+  invalidOp: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid =
     err(opErr(InvalidInstruction))
 
   # -----------
 
-  selfDestructOp: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid {.catchRaise.} =
+  selfDestructOp: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid =
     ## 0xff, Halt execution and register account for later deletion.
     let cpt = k.cpt
     let beneficiary = ? cpt.stack.popAddress()
@@ -87,7 +84,7 @@ const
         cpt.selfDestruct(beneficiary)
     ok()
 
-  selfDestructEIP150Op: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid {.catchRaise.} =
+  selfDestructEIP150Op: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid =
     ## selfDestructEip150 (auto generated comment)
     let cpt = k.cpt
     let beneficiary = ? cpt.stack.popAddress()
@@ -102,7 +99,7 @@ const
       cpt.selfDestruct(beneficiary)
     ok()
 
-  selfDestructEIP161Op: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid {.catchRaise.} =
+  selfDestructEIP161Op: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid =
     ## selfDestructEip161 (auto generated comment)
     let cpt = k.cpt
     ? checkInStaticContext(cpt)
@@ -123,7 +120,7 @@ const
       cpt.selfDestruct(beneficiary)
     ok()
 
-  selfDestructEIP2929Op: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid {.catchRaise.} =
+  selfDestructEIP2929Op: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid =
     ## selfDestructEIP2929 (auto generated comment)
     let cpt = k.cpt
     ? checkInStaticContext(cpt)

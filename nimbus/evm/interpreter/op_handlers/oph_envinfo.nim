@@ -31,28 +31,25 @@ import
 when not defined(evmc_enabled):
   import ../../state
 
-# Annotation helpers
-{.pragma: catchRaise, gcsafe, raises: [].}
-
 # ------------------------------------------------------------------------------
 # Private, op handlers implementation
 # ------------------------------------------------------------------------------
 
 const
-  addressOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid {.catchRaise.} =
+  addressOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
     ## 0x30, Get address of currently executing account.
     k.cpt.stack.push k.cpt.msg.contractAddress
 
   # ------------------
 
-  balanceOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid {.catchRaise.} =
+  balanceOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
     ## 0x31, Get balance of the given account.
     let
       cpt = k.cpt
       address = ? cpt.stack.popAddress
     cpt.stack.push cpt.getBalance(address)
 
-  balanceEIP2929Op: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid {.catchRaise.} =
+  balanceEIP2929Op: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
     ## 0x31, EIP292: Get balance of the given account for Berlin and later
     let
       cpt = k.cpt
@@ -64,20 +61,20 @@ const
 
   # ------------------
 
-  originOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid {.catchRaise.} =
+  originOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
     ## 0x32, Get execution origination address.
     k.cpt.stack.push k.cpt.getOrigin()
 
-  callerOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid {.catchRaise.} =
+  callerOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
     ## 0x33, Get caller address.
     k.cpt.stack.push k.cpt.msg.sender
 
-  callValueOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid {.catchRaise.} =
+  callValueOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
     ## 0x34, Get deposited value by the instruction/transaction
     ##       responsible for this execution
     k.cpt.stack.push k.cpt.msg.value
 
-  callDataLoadOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid {.catchRaise.} =
+  callDataLoadOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
     ## 0x35, Get input data of current environment
     let
       startPos = ? k.cpt.stack.popInt()
@@ -97,12 +94,12 @@ const
     k.cpt.stack.push value
 
 
-  callDataSizeOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid {.catchRaise.} =
+  callDataSizeOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
     ## 0x36, Get size of input data in current environment.
     k.cpt.stack.push k.cpt.msg.data.len.u256
 
 
-  callDataCopyOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid {.catchRaise.} =
+  callDataCopyOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
     ## 0x37, Copy input data in current environment to memory.
     let (memStartPos, copyStartPos, size) = ? k.cpt.stack.popInt(3)
 
@@ -118,13 +115,13 @@ const
     ok()
 
 
-  codeSizeOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid {.catchRaise.} =
+  codeSizeOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
     ## 0x38, Get size of code running in current environment.
     let cpt = k.cpt
     cpt.stack.push cpt.code.len
 
 
-  codeCopyOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid {.catchRaise.} =
+  codeCopyOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
     ## 0x39, Copy code running in current environment to memory.
     let
       cpt = k.cpt
@@ -141,13 +138,13 @@ const
     cpt.memory.writePadded(cpt.code.bytes, memPos, copyPos, len)
     ok()
 
-  gasPriceOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid {.catchRaise.} =
+  gasPriceOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
     ## 0x3A, Get price of gas in current environment.
     k.cpt.stack.push k.cpt.getGasPrice()
 
   # -----------
 
-  extCodeSizeOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid {.catchRaise.} =
+  extCodeSizeOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
     ## 0x3b, Get size of an account's code
     let
       cpt = k.cpt
@@ -155,7 +152,7 @@ const
 
     cpt.stack.push cpt.getCodeSize(address)
 
-  extCodeSizeEIP2929Op: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid {.catchRaise.} =
+  extCodeSizeEIP2929Op: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
     ## 0x3b, Get size of an account's code
     let
       cpt = k.cpt
@@ -167,7 +164,7 @@ const
 
   # -----------
 
-  extCodeCopyOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid {.catchRaise.} =
+  extCodeCopyOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
     ## 0x3c, Copy an account's code to memory.
     let
       cpt = k.cpt
@@ -185,7 +182,7 @@ const
     ok()
 
 
-  extCodeCopyEIP2929Op: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid {.catchRaise.} =
+  extCodeCopyEIP2929Op: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
     ## 0x3c, Copy an account's code to memory.
     let
       cpt = k.cpt
@@ -204,13 +201,13 @@ const
 
   # -----------
 
-  returnDataSizeOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid {.catchRaise.} =
+  returnDataSizeOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
     ## 0x3d, Get size of output data from the previous call from the
     ##       current environment.
     k.cpt.stack.push k.cpt.returnData.len
 
 
-  returnDataCopyOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid {.catchRaise.} =
+  returnDataCopyOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
     ## 0x3e, Copy output data from the previous call to memory.
     let
       (memStartPos, copyStartPos, size) = ? k.cpt.stack.popInt(3)
@@ -228,7 +225,7 @@ const
 
   # ---------------
 
-  extCodeHashOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid {.catchRaise.} =
+  extCodeHashOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
     ## 0x3f, Returns the keccak256 hash of a contract’s code
     let
       cpt = k.cpt
@@ -236,7 +233,7 @@ const
 
     cpt.stack.push cpt.getCodeHash(address)
 
-  extCodeHashEIP2929Op: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid {.catchRaise.} =
+  extCodeHashEIP2929Op: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
     ## 0x3f, EIP2929: Returns the keccak256 hash of a contract’s code
     let
       cpt = k.cpt
