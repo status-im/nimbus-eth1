@@ -9,6 +9,7 @@
 
 import
   std/json,
+  stint,
   json_serialization/stew/results,
   json_rpc/[client, jsonmarshal],
   web3/conversions,
