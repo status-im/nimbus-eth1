@@ -168,7 +168,7 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     case conf.syncMode:
     #of SyncMode.Snap:
     #  waitForPeers = false
-    of SyncMode.Full, SyncMode.Default:
+    of SyncMode.Default:
       discard
     nimbus.networkLoop = nimbus.ethNode.connectToNetwork(
       enableDiscovery = conf.discovery != DiscoveryType.None,
