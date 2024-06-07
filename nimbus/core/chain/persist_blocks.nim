@@ -55,13 +55,8 @@ const
 proc getVmState(c: ChainRef, header: BlockHeader):
                 Result[BaseVMState, string] =
   let vmState = BaseVMState()
-  try:
-    # TODO clean up exception handling
-    if not vmState.init(header, c.com):
-      return err("Could not initialise VMState")
-  except CatchableError as exc:
-    return err("Error while initializing VMState: " & exc.msg)
-
+  if not vmState.init(header, c.com):
+    return err("Could not initialise VMState")
   ok(vmState)
 
 proc purgeOlderBlocksFromHistory(
