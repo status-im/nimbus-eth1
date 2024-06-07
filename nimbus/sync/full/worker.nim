@@ -313,7 +313,7 @@ proc runSingle*(buddy: FullBuddyRef) {.async.} =
       let rc = pv.pivotHeader(relaxedMode=true)
       if rc.isOK:
         # Update/activate `bestNumber` from the pivot header
-        bq.bestNumber = some(rc.value.blockNumber)
+        bq.bestNumber = Opt.some(rc.value.blockNumber)
         ctx.pool.pivotState = PivotRunMode
         buddy.ctrl.multiOk = true
         trace "Single pivot accepted", peer, pivot=('#' & $bq.bestNumber.get)
@@ -349,7 +349,7 @@ proc runSingle*(buddy: FullBuddyRef) {.async.} =
   # `case()` handler to process and `return`.
   if await pv.pivotNegotiate(buddy.only.bQueue.bestNumber):
     # Update/activate `bestNumber` from the pivot header
-    bq.bestNumber = some(pv.pivotHeader.value.blockNumber)
+    bq.bestNumber = Opt.some(pv.pivotHeader.value.blockNumber)
     ctx.pool.pivotState = PivotRunMode
     buddy.ctrl.multiOk = true
     trace "Pivot accepted", peer, pivot=('#' & $bq.bestNumber.get)

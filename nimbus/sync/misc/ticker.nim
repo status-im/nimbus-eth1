@@ -45,8 +45,8 @@ type
 
   TickerSnapStats* = object
     ## Snap sync state (see `TickerSnapStatsUpdater`)
-    beaconBlock*: Option[BlockNumber]
-    pivotBlock*: Option[BlockNumber]
+    beaconBlock*: Opt[BlockNumber]
+    pivotBlock*: Opt[BlockNumber]
     nAccounts*: (float,float)          ## Mean and standard deviation
     accountsFill*: (float,float,float) ## Mean, standard deviation, merged total
     nAccountStats*: int                ## #chunks
@@ -58,10 +58,10 @@ type
 
   TickerFullStats* = object
     ## Full sync state (see `TickerFullStatsUpdater`)
-    pivotBlock*: Option[BlockNumber]
+    pivotBlock*: Opt[BlockNumber]
     topPersistent*: BlockNumber
-    nextUnprocessed*: Option[BlockNumber]
-    nextStaged*: Option[BlockNumber]
+    nextUnprocessed*: Opt[BlockNumber]
+    nextStaged*: Opt[BlockNumber]
     nStagedQueue*: int
     suspended*: bool
     reOrg*: bool

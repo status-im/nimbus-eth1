@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2021 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -321,7 +321,7 @@ proc pivotHeader*(
 
 proc pivotNegotiate*(
     bp: BestPivotWorkerRef;              ## Worker peer
-    minBlockNumber: Option[BlockNumber]; ## Minimum block number to expect
+    minBlockNumber: Opt[BlockNumber];    ## Minimum block number to expect
       ): Future[bool]
       {.async.} =
   ## Negotiate best header pivot. This function must be run in *single mode* at
