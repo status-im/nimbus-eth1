@@ -82,7 +82,7 @@ proc new(T: type HunterVMState; parent, header: BlockHeader, com: CommonRef): T 
   result.init(parent, header, com)
   result.headers = initTable[BlockNumber, BlockHeader]()
 
-method getAncestorHash*(vmState: HunterVMState, blockNumber: BlockNumber): Hash256 {.gcsafe.} =
+method getAncestorHash*(vmState: HunterVMState, blockNumber: BlockNumber): Hash256 =
   if blockNumber in vmState.headers:
     result = vmState.headers[blockNumber].hash
   else:

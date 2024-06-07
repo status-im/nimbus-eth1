@@ -1,30 +1,31 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
-#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
-#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
-# at your option. This file may not be copied, modified, or distributed except according to those terms.
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+#    http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or
+#    http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed except
+# according to those terms.
+
+{.push raises: [].}
 
 import
-  chronicles,
-  ./validation,
+  ./evm_errors,
   ./interpreter/utils/utils_numeric
 
 type
-  Memory* = ref object
+  EvmMemoryRef* = ref object
     bytes*:  seq[byte]
 
-logScope:
-  topics = "vm memory"
-
-proc newMemory*: Memory =
+func new*(_: type EvmMemoryRef): EvmMemoryRef =
   new(result)
   result.bytes = @[]
 
-proc len*(memory: Memory): int =
+func len*(memory: EvmMemoryRef): int =
   result = memory.bytes.len
 
-proc extend*(memory: var Memory; startPos: Natural; size: Natural) =
+func extend*(memory: EvmMemoryRef; startPos: Natural; size: Natural) =
   if size == 0:
     return
   let newSize = ceil32(startPos + size)
@@ -32,33 +33,40 @@ proc extend*(memory: var Memory; startPos: Natural; size: Natural) =
     return
   memory.bytes.setLen(newSize)
 
-proc newMemory*(size: Natural): Memory =
-  result = newMemory()
+func new*(_: type EvmMemoryRef, size: Natural): EvmMemoryRef =
+  result = EvmMemoryRef.new()
   result.extend(0, size)
 
-proc read*(memory: var Memory, startPos: Natural, size: Natural): seq[byte] =
+func read*(memory: EvmMemoryRef, startPos: Natural, size: Natural): seq[byte] =
   result = newSeq[byte](size)
   if size > 0:
     copyMem(result[0].addr, memory.bytes[startPos].addr, size)
 
+template read32Bytes*(memory: EvmMemoryRef, startPos): auto =
+  memory.bytes.toOpenArray(startPos, startPos + 31)
+
 when defined(evmc_enabled):
-  proc readPtr*(memory: var Memory, startPos: Natural): ptr byte =
+  func readPtr*(memory: EvmMemoryRef, startPos: Natural): ptr byte =
     if memory.bytes.len == 0 or startPos >= memory.bytes.len: return
     result = memory.bytes[startPos].addr
 
-proc write*(memory: var Memory, startPos: Natural, value: openArray[byte]) =
+func write*(memory: EvmMemoryRef, startPos: Natural, value: openArray[byte]): EvmResultVoid =
   let size = value.len
   if size == 0:
     return
-  validateLte(startPos + size, memory.len)
+  if startPos + size > memory.len:
+    return err(memErr(MemoryFull))
   for z, b in value:
     memory.bytes[z + startPos] = b
+  ok()
 
-proc write*(memory: var Memory, startPos: Natural, value: byte) =
-  validateLte(startPos + 1, memory.len)
+func write*(memory: EvmMemoryRef, startPos: Natural, value: byte): EvmResultVoid =
+  if startPos + 1 > memory.len:
+    return err(memErr(MemoryFull))
   memory.bytes[startPos] = value
+  ok()
 
-proc copy*(memory: var Memory, dst, src, len: Natural) =
+func copy*(memory: EvmMemoryRef, dst, src, len: Natural) =
   if len <= 0: return
   memory.extend(max(dst, src), len)
   if dst == src:
@@ -70,7 +78,7 @@ proc copy*(memory: var Memory, dst, src, len: Natural) =
     for i in countdown(len-1, 0):
       memory.bytes[dst+i] = memory.bytes[src+i]
 
-proc writePadded*(memory: var Memory, data: openArray[byte],
+func writePadded*(memory: EvmMemoryRef, data: openArray[byte],
                   memPos, dataPos, len: Natural) =
 
   memory.extend(memPos, len)

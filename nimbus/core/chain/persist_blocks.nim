@@ -55,13 +55,8 @@ const
 proc getVmState(c: ChainRef, header: BlockHeader):
                 Result[BaseVMState, string] =
   let vmState = BaseVMState()
-  try:
-    # TODO clean up exception handling
-    if not vmState.init(header, c.com):
-      return err("Could not initialise VMState")
-  except CatchableError as exc:
-    return err("Error while initializing VMState: " & exc.msg)
-
+  if not vmState.init(header, c.com):
+    return err("Could not initialise VMState")
   ok(vmState)
 
 proc purgeOlderBlocksFromHistory(
@@ -141,7 +136,8 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
       let
         mkeys = vmState.stateDB.makeMultiKeys()
         # Reset state to what it was before executing the block of transactions
-        initialState = BaseVMState.new(header, c.com)
+        initialState = BaseVMState.new(header, c.com).valueOr:
+                         return err("Failed to create vm state")
         witness = initialState.buildWitness(mkeys)
 
       dbTx.rollback()

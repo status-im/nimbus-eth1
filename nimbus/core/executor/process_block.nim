@@ -31,8 +31,7 @@ proc processTransactions*(
     vmState: BaseVMState;
     header: BlockHeader;
     transactions: seq[Transaction];
-      ): Result[void, string]
-      {.gcsafe, raises: [CatchableError].} =
+      ): Result[void, string] =
   vmState.receipts = newSeq[Receipt](transactions.len)
   vmState.cumulativeGasUsed = 0
 

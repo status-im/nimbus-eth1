@@ -14,7 +14,7 @@ import
     vm_state,
     vm_types,
     constants,
-    vm_precompiles,
+    vm_precompiles {.all.},
     transaction,
     transaction/call_evm
     ],

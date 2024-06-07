@@ -9,9 +9,7 @@
 # according to those terms.
 
 import
-  chronos,
-  json_rpc/rpcclient,
-  "."/[stack, memory, code_stream],
+  "."/[stack, memory, code_stream, evm_errors],
   ./interpreter/[gas_costs, op_codes],
   ../db/ledger,
   ../common/[common, evmforks]
@@ -73,8 +71,8 @@ type
     # The execution computation
     vmState*:               BaseVMState
     msg*:                   Message
-    memory*:                Memory
-    stack*:                 Stack
+    memory*:                EvmMemoryRef
+    stack*:                 EvmStackRef
     returnStack*:           seq[int]
     gasMeter*:              GasMeter
     code*:                  CodeStream
@@ -90,8 +88,7 @@ type
       res*:                 nimbus_result
     else:
       parent*, child*:      Computation
-    pendingAsyncOperation*: Future[void]
-    continuation*:          proc() {.gcsafe, raises: [CatchableError].}
+    continuation*:          proc(): EvmResultVoid {.gcsafe, raises: [].}
     sysCall*:               bool
 
   Error* = ref object

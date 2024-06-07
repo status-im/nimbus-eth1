@@ -38,13 +38,10 @@ proc evmcExecute(vm: ptr evmc_vm, hostInterface: ptr evmc_host_interface,
   #  host.computation = c
 
   c.host.init(cast[ptr nimbus_host_interface](hostInterface), hostContext)
-  try:
-    if c.sysCall:
-      execSysCall(c)
-    else:
-      execComputation(c)
-  except CatchableError as exc:
-    c.setError(exc.msg)
+  if c.sysCall:
+    execSysCall(c)
+  else:
+    execComputation(c)
 
   # When output size is zero, output data pointer may be null.
   var output_data: ptr byte

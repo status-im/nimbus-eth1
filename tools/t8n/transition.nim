@@ -334,19 +334,21 @@ proc setupAlloc(stateDB: LedgerRef, alloc: GenesisAlloc) =
     for slot, value in acc.storage:
       stateDB.setStorage(accAddr, slot, value)
 
-method getAncestorHash(vmState: TestVMState; blockNumber: BlockNumber): Hash256 {.gcsafe.} =
+method getAncestorHash(vmState: TestVMState; blockNumber: BlockNumber): Hash256 =
   # we can't raise exception here, it'll mess with EVM exception handler.
   # so, store the exception for later using `hashError`
   let num = blockNumber.truncate(uint64)
   var h = Hash256()
   if vmState.blockHashes.len == 0:
-    vmState.hashError = "getAncestorHash($1) invoked, no blockhashes provided" % [$num]
+    vmState.hashError = "getAncestorHash(" &
+      $num & ") invoked, no blockhashes provided"
     return h
 
   vmState.blockHashes.withValue(num, val) do:
     h = val[]
   do:
-    vmState.hashError = "getAncestorHash($1) invoked, blockhash for that block not provided" % [$num]
+    vmState.hashError = "getAncestorHash(" &
+      $num & ") invoked, blockhash for that block not provided"
 
   return h
 

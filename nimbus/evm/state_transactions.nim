@@ -47,8 +47,7 @@ func postExecComputation(c: Computation) =
       c.refundSelfDestruct()
   c.vmState.status = c.isSuccess
 
-proc execComputation*(c: Computation)
-    {.gcsafe, raises: [CatchableError].} =
+proc execComputation*(c: Computation) =
   c.preExecComputation()
   c.execCallOrCreate()
   c.postExecComputation()

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -12,35 +12,36 @@
 ## ===========================================
 ##
 
+{.push raises: [].}
+
 import
-  std/[strformat, sequtils],
+  std/[sequtils],
   ../../stack,
+  ../../evm_errors,
   ../op_codes,
   ./oph_defs,
   ./oph_gen_handlers
-
-{.push raises: [CatchableError].} # basically the annotation type of a `Vm2OpFn`
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
 proc fnName(n: int): string {.compileTime.} =
-  &"dup{n}Op"
+  "dup" & $n & "Op"
 
 proc opName(n: int): string {.compileTime.} =
-  &"Dup{n}"
+  "Dup" & $n
 
 proc fnInfo(n: int): string {.compileTime.} =
   var blurb = case n
               of 1: "first"
               of 2: "second"
               of 3: "third"
-              else: &"{n}th"
-  &"Duplicate {blurb} item in the stack"
+              else: $n & "th"
+  "Duplicate " & blurb & " item in the stack"
 
 
-proc dupImpl(k: var Vm2Ctx; n: int) =
+proc dupImpl(k: var Vm2Ctx; n: int): EvmResultVoid =
   k.cpt.stack.dup(n)
 
 const

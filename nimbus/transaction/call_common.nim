@@ -11,7 +11,7 @@
 import
   eth/common/eth_types, stint, options, stew/ptrops,
   chronos,
-  ".."/[vm_types, vm_state, vm_computation, vm_state_transactions],
+  ".."/[vm_types, vm_state, vm_computation],
   ".."/[vm_internals, vm_precompiles, vm_gas_costs],
   ".."/[db/ledger],
   ../common/evmforks,
@@ -21,6 +21,8 @@ import
 when defined(evmc_enabled):
   import ../utils/utils
   import ./host_services
+else:
+  import ../vm_state_transactions
 
 type
   # Standard call parameters.
@@ -51,8 +53,8 @@ type
     contractAddress*: EthAddress        # Created account (when `isCreate`).
     output*:          seq[byte]         # Output data.
     logEntries*:      seq[Log]          # Output logs.
-    stack*:           Stack             # EVM stack on return (for test only).
-    memory*:          Memory            # EVM memory on return (for test only).
+    stack*:           EvmStackRef       # EVM stack on return (for test only).
+    memory*:          EvmMemoryRef      # EVM memory on return (for test only).
 
 func isError*(cr: CallResult): bool =
   cr.error.len > 0
@@ -204,8 +206,7 @@ proc setupHost(call: CallParams): TransactionHost =
   return host
 
 when defined(evmc_enabled):
-  proc doExecEvmc(host: TransactionHost, call: CallParams)
-      {.gcsafe, raises: [CatchableError].} =
+  proc doExecEvmc(host: TransactionHost, call: CallParams) =
     var callResult = evmcExecComputation(host)
     let c = host.computation
 
@@ -291,8 +292,7 @@ proc finishRunningComputation(host: TransactionHost, call: CallParams): CallResu
   result.stack = c.stack
   result.memory = c.memory
 
-proc runComputation*(call: CallParams): CallResult
-    {.gcsafe, raises: [CatchableError].} =
+proc runComputation*(call: CallParams): CallResult =
   let host = setupHost(call)
   prepareToRunComputation(host, call)
 

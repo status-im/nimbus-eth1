@@ -1,2 +1,2 @@
-{"pc":0,"op":0,"gas":"0x0","gasCost":"0xfffffffffffecb68","memSize":0,"stack":[],"depth":1,"refund":0,"opName":"STOP","error":"Blake2b F function invalid input"}
-{"output":"","gasUsed":"0x13498","error":"Blake2b F function invalid input"}
+{"pc":0,"op":0,"gas":"0x0","gasCost":"0xfffffffffffecb68","memSize":0,"stack":[],"depth":1,"refund":0,"opName":"STOP","error":"PrcInvalidParam"}
+{"output":"","gasUsed":"0x13498","error":"PrcInvalidParam"}
