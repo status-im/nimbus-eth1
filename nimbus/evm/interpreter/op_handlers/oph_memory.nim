@@ -104,7 +104,7 @@ template sstoreEvmcOrNetGasMetering(cpt, slot, newValue: untyped, coldAccess = 0
   else:
     sstoreNetGasMeteringImpl(cpt, slot, newValue, coldAccess)
 
-proc jumpImpl(c: Computation; jumpTarget: UInt256) {.catchRaise.} =
+func jumpImpl(c: Computation; jumpTarget: UInt256) {.catchRaise.} =
   if jumpTarget >= c.code.len.u256:
     raise newException(
       InvalidJumpDestination, "Invalid Jump Destination")
@@ -126,7 +126,7 @@ proc jumpImpl(c: Computation; jumpTarget: UInt256) {.catchRaise.} =
 # ------------------------------------------------------------------------------
 
 const
-  popOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
+  popOp: Vm2OpFn = func (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x50, Remove item from stack.
     discard k.cpt.stack.popInt
 
@@ -256,35 +256,35 @@ const
 
   # -------
 
-  jumpOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
+  jumpOp: Vm2OpFn = func (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x56, Alter the program counter
     let (jumpTarget) = k.cpt.stack.popInt(1)
     jumpImpl(k.cpt, jumpTarget)
 
-  jumpIOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
+  jumpIOp: Vm2OpFn = func (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x57, Conditionally alter the program counter.
     let (jumpTarget, testedValue) = k.cpt.stack.popInt(2)
     if testedValue.isZero.not:
       jumpImpl(k.cpt, jumpTarget)
 
-  pcOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
+  pcOp: Vm2OpFn = func (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x58, Get the value of the program counter prior to the increment
     ##       corresponding to this instruction.
     k.cpt.stack.push:
       max(k.cpt.code.pc - 1, 0)
 
-  msizeOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
+  msizeOp: Vm2OpFn = func (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x59, Get the size of active memory in bytes.
     k.cpt.stack.push:
       k.cpt.memory.len
 
-  gasOp: Vm2OpFn = proc (k: var Vm2Ctx) {.catchRaise.} =
+  gasOp: Vm2OpFn = func (k: var Vm2Ctx) {.catchRaise.} =
     ## 0x5a, Get the amount of available gas, including the corresponding
     ##       reduction for the cost of this instruction.
     k.cpt.stack.push:
       k.cpt.gasMeter.gasRemaining
 
-  jumpDestOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+  jumpDestOp: Vm2OpFn = func (k: var Vm2Ctx) =
     ## 0x5b, Mark a valid destination for jumps. This operation has no effect
     ##       on machine state during execution.
     discard
@@ -317,50 +317,6 @@ const
       reason = "Mcopy fee")
 
     k.cpt.memory.copy(dstPos, srcPos, len)
-
-#[
-  EIP-2315: temporary disabled
-  Reason  : not included in berlin hard fork
-  beginSubOp: Vm2OpFn = proc (k: var Vm2Ctx) =
-    ## 0x5c, Marks the entry point to a subroutine
-    raise newException(
-      OutOfGas,
-      "Abort: Attempt to execute BeginSub opcode")
-
-
-  returnSubOp: Vm2OpFn = proc (k: var Vm2Ctx) =
-    ## 0x5d, Returns control to the caller of a subroutine.
-    if k.cpt.returnStack.len == 0:
-      raise newException(
-        OutOfGas,
-        "Abort: invalid returnStack during ReturnSub")
-    k.cpt.code.pc = k.cpt.returnStack.pop()
-
-
-  jumpSubOp: Vm2OpFn = proc (k: var Vm2Ctx) =
-    ## 0x5e, Transfers control to a subroutine.
-    let (jumpTarget) = k.cpt.stack.popInt(1)
-
-    if jumpTarget >= k.cpt.code.len.u256:
-      raise newException(
-        InvalidJumpDestination, "JumpSub destination exceeds code len")
-
-    let returnPC = k.cpt.code.pc
-    let jt = jumpTarget.truncate(int)
-    k.cpt.code.pc = jt
-
-    let nextOpcode = k.cpt.code.peek
-    if nextOpcode != BeginSub:
-      raise newException(
-        InvalidJumpDestination, "Invalid JumpSub destination")
-
-    if k.cpt.returnStack.len == 1023:
-      raise newException(
-        FullStack, "Out of returnStack")
-
-    k.cpt.returnStack.add returnPC
-    inc k.cpt.code.pc
-]#
 
 # ------------------------------------------------------------------------------
 # Public, op exec table entries
@@ -531,34 +487,6 @@ const
      exec: (prep: vm2OpIgnore,
             run:  mCopyOp,
             post: vm2OpIgnore))]
-
-#[
-    EIP-2315: temporary disabled
-    Reason  : not included in berlin hard fork
-    (opCode: BeginSub,  ## 0x5c, Begin subroutine
-     forks: Vm2OpBerlinAndLater,
-     name: "beginSub",
-     info: " Marks the entry point to a subroutine",
-     exec: (prep: vm2OpIgnore,
-            run:  beginSubOp,
-            post: vm2OpIgnore)),
-
-    (opCode: ReturnSub, ## 0x5d, Return
-     forks: Vm2OpBerlinAndLater,
-     name: "returnSub",
-     info: "Returns control to the caller of a subroutine",
-     exec: (prep: vm2OpIgnore,
-            run:  returnSubOp,
-            post: vm2OpIgnore)),
-
-    (opCode: JumpSub,   ## 0x5e, Call subroutine
-     forks: Vm2OpBerlinAndLater,
-     name: "jumpSub",
-     info: "Transfers control to a subroutine",
-     exec: (prep: vm2OpIgnore,
-            run:  jumpSubOp,
-            post: vm2OpIgnore))]
-]#
 
 # ------------------------------------------------------------------------------
 # End

@@ -21,7 +21,6 @@ import
     chronicles,
     confutils,
     confutils/defs,
-    stew/byteutils,
     confutils/std/net
   ],
   eth/[common, net/utils, net/nat, p2p/bootnodes, p2p/enode, p2p/discoveryv5/enr],
@@ -530,23 +529,6 @@ func parseCmdArg(T: type NetworkId, p: string): T
   parseInt(p).T
 
 func completeCmdArg(T: type NetworkId, val: string): seq[string] =
-  return @[]
-
-func parseCmdArg(T: type UInt256, p: string): T
-    {.gcsafe, raises: [ValueError].} =
-  parse(p, T)
-
-func completeCmdArg(T: type UInt256, val: string): seq[string] =
-  return @[]
-
-func parseCmdArg(T: type EthAddress, p: string): T
-    {.gcsafe, raises: [ValueError].}=
-  try:
-    result = hexToByteArray(p, 20)
-  except CatchableError:
-    raise newException(ValueError, "failed to parse EthAddress")
-
-func completeCmdArg(T: type EthAddress, val: string): seq[string] =
   return @[]
 
 func parseCmdArg*(T: type enr.Record, p: string): T {.raises: [ValueError].} =
