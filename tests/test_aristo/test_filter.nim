@@ -23,6 +23,7 @@ import
     aristo_desc,
     aristo_get,
     aristo_layers,
+    aristo_merge,
     aristo_persistent,
     aristo_tx],
   ../replay/xcheck,

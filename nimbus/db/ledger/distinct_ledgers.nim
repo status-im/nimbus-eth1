@@ -149,12 +149,6 @@ proc merge*(al: AccountLedger; account: CoreDbAccount) =
   al.distinctBase.merge(account).isOkOr:
     raiseAssert info & $$error
 
-proc freeStorage*(al: AccountLedger, eAddr: EthAddress) =
-  const info = "AccountLedger/freeStorage()"
-  # Flush associated storage trie
-  al.distinctBase.stoFlush(eAddr).isOkOr:
-    raiseAssert info & $$error
-
 proc delete*(al: AccountLedger, eAddr: EthAddress) =
   const info = "AccountLedger/delete()"
   # Flush associated storage trie

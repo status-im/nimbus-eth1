@@ -268,25 +268,6 @@ proc mptJournalGet(
     if not modOnly or pyl.isNil or not pyl.blind: # or not (not isNil and blind)
       return pyl
 
-proc mptJournalAcountUpdate(
-    tr: TraceRecorderRef;
-    mpt: AristoDbRef;
-    accPath: PathID;
-      ) =
-  let
-    lty = LeafTie(root: VertexID(1), path: accPath)
-    jrn = tr.mptJournalGet(mpt, lty, modOnly=true)
-  if jrn.isNil:
-    # Just delete
-    tr.mptJournalDel(mpt, lty)
-  else:
-    # Update cache
-    let pyl = tr.adb.savedApi.fetchPayload(mpt, VertexID(1), @accPath).valueOr:
-      raiseAssert "mptJournalAcountUpdate() failed to re-fetch($1" & "," &
-        $accPath & "): " & $error
-    jrn.cur.account.storageID = pyl.account.storageID
-    tr.mptJournalPut(mpt, lty, jrn)
-
 
 proc popDiscard(tr: TraceRecorderRef) =
   ## Pop top journal.
@@ -611,6 +592,7 @@ proc traceRecorder(
             debug logTxt, level, flags, root, path=path.toStr, error=error[1]
           return err(error)
 
+      # Use journal entry if available
       let jrn = tr.mptJournalGet(mpt, key, modOnly=false)
       if not jrn.isNil:
         when EnableDebugLog:
@@ -696,56 +678,7 @@ proc traceRecorder(
         when EnableDebugLog:
           debug logTxt, level, flags, key, log="put()", data=($tpl)
 
-      if LEAST_FREE_VID <= root.distinctBase:
-        tr.mptJournalAcountUpdate(mpt, accPath)
-
       ok deleted
-
-  tracerApi.delTree =
-    proc(mpt: AristoDbRef;
-         root: VertexID;
-         accPath: PathID;
-           ): Result[void,(VertexID,AristoError)] =
-      when EnableDebugLog:
-        const
-          logTxt = "trace delTree"
-        let
-          level = tr.inst.len - 1
-          flags = tr.inst[^1].flags
-
-      # TODO: collect all paths on this tree
-      var deletedRows: seq[(LeafTie,PayloadRef)]
-
-      # Delete from DB
-      api.delTree(mpt, root, accPath).isOkOr:
-        when EnableDebugLog:
-          debug logTxt, level, flags, key, error
-        return err(error)
-
-      # Update journal
-      for (key,pyl) in deletedRows:
-        let jrn = tr.mptJournalGet(mpt, key)
-        if jrn.isNil:
-          let tpl = TracerPylRef(old: pyl, accPath: accPath)
-          tr.mptJournalPut(mpt, key, tpl)
-          when EnableDebugLog:
-            debug logTxt, level, flags, key, log="put()", data=($tpl)
-        elif jrn.old.isNil:
-          # Was just added earlier
-          tr.mptJournalDel(mpt, key) # Undo earlier stuff
-          when EnableDebugLog:
-            debug logTxt, level, flags, key, log="del()"
-        else:
-          # Was modified earlier, keep the old value
-          let tpl = TracerPylRef(old: jrn.old, accPath: jrn.accPath)
-          tr.mptJournalPut(mpt, key, tpl)
-          when EnableDebugLog:
-            debug logTxt, level, flags, key, log="put()", data=($tpl)
-
-      if LEAST_FREE_VID <= root.distinctBase:
-        tr.mptJournalAcountUpdate(mpt, accPath)
-
-      ok()
 
   tracerApi.merge =
     proc(mpt: AristoDbRef;
@@ -791,9 +724,6 @@ proc traceRecorder(
         when EnableDebugLog:
           debug logTxt, level, flags, key, accPath, error
         return err(error)
-
-      if LEAST_FREE_VID <= root.distinctBase:
-        tr.mptJournalAcountUpdate(mpt, accPath)
 
       tr.mptJournalPut(mpt, key, tpl)
       when EnableDebugLog:
@@ -852,9 +782,6 @@ proc traceRecorder(
         when EnableDebugLog:
           debug logTxt, level, flags, key, accPath, error
         return err(error)
-
-      if LEAST_FREE_VID <= root.distinctBase:
-        tr.mptJournalAcountUpdate(mpt, accPath)
 
       tr.mptJournalPut(mpt, key, tpl)
       when EnableDebugLog:

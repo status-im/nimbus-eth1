@@ -37,6 +37,9 @@ const
   VOID_PATH_ID* = PathID()
     ## Void equivalent for Merkle hash value
 
+  SUB_TREE_DISPOSAL_MAX* = 200_000
+    ## Some limit for disposing sub-trees in one go using `delete()`.
+
   LEAST_FREE_VID* = 100
     ## Vids smaller are used as known state roots and cannot be recycled. Only
     ## the `VertexID(1)` state root is used by the `Aristo` methods. The other

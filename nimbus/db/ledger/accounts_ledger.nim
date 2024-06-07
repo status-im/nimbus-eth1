@@ -130,8 +130,7 @@ func newCoreDbAccount(address: EthAddress): CoreDbAccount =
     codeHash: emptyEthAccount.codeHash,
     storage:  CoreDbColRef(nil))
 
-proc resetCoreDbAccount(ac: AccountsLedgerRef, v: var CoreDbAccount) =
-  ac.ledger.freeStorage v.address
+func resetCoreDbAccount(v: var CoreDbAccount) =
   v.nonce = emptyEthAccount.nonce
   v.balance = emptyEthAccount.balance
   v.codeHash = emptyEthAccount.codeHash
@@ -305,11 +304,11 @@ proc storageValue(
   do:
     result = acc.originalStorageValue(slot, ac)
 
-proc kill(ac: AccountsLedgerRef, acc: AccountRef) =
+proc kill(acc: AccountRef) =
   acc.flags.excl Alive
   acc.overlayStorage.clear()
   acc.originalStorage = nil
-  ac.resetCoreDbAccount acc.statement
+  acc.statement.resetCoreDbAccount()
   acc.code.reset()
 
 type
@@ -344,8 +343,8 @@ proc persistStorage(acc: AccountRef, ac: AccountsLedgerRef) =
   if acc.originalStorage.isNil:
     acc.originalStorage = newTable[UInt256, UInt256]()
 
-  # Make sure that there is an account address row on the database. This is
-  # needed for saving the account-linked storage column on the Aristo database.
+  # Make sure that there is an account column on the database. This is needed
+  # for saving the account-linked storage column on the Aristo database.
   if acc.statement.storage.isNil:
     ac.ledger.merge(acc.statement)
   var storageLedger = StorageLedger.init(ac.ledger, acc.statement)
@@ -380,7 +379,6 @@ proc persistStorage(acc: AccountRef, ac: AccountsLedgerRef) =
     raiseAssert "Storage column state error: " & $$error
   if state == EMPTY_ROOT_HASH:
     acc.statement.storage = CoreDbColRef(nil)
-
 
 proc makeDirty(ac: AccountsLedgerRef, address: EthAddress, cloneStorage = true): AccountRef =
   ac.isDirty = true
@@ -542,11 +540,9 @@ proc clearStorage*(ac: AccountsLedgerRef, address: EthAddress) =
 
   let accHash = acc.statement.storage.state.valueOr: return
   if accHash != EMPTY_ROOT_HASH:
-    # need to clear the storage from the database first
+    # there is no point to clone the storage since we want to remove it
     let acc = ac.makeDirty(address, cloneStorage = false)
-    ac.ledger.freeStorage address
     acc.statement.storage = CoreDbColRef(nil)
-    # update caches
     if acc.originalStorage.isNil.not:
       # also clear originalStorage cache, otherwise
       # both getStorage and getCommittedStorage will
@@ -558,7 +554,7 @@ proc deleteAccount*(ac: AccountsLedgerRef, address: EthAddress) =
   doAssert(ac.savePoint.parentSavepoint.isNil)
   let acc = ac.getAccount(address)
   ac.savePoint.dirty[address] = acc
-  ac.kill acc
+  acc.kill()
 
 proc selfDestruct*(ac: AccountsLedgerRef, address: EthAddress) =
   ac.setBalance(address, 0.u256)
@@ -598,14 +594,14 @@ proc deleteEmptyAccount(ac: AccountsLedgerRef, address: EthAddress) =
     return
 
   ac.savePoint.dirty[address] = acc
-  ac.kill acc
+  acc.kill()
 
 proc clearEmptyAccounts(ac: AccountsLedgerRef) =
   # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-161.md
   for acc in ac.savePoint.dirty.values():
     if Touched in acc.flags and
         acc.isEmpty and acc.exists:
-      ac.kill acc
+      acc.kill()
 
   # https://github.com/ethereum/EIPs/issues/716
   if ac.ripemdSpecial:

@@ -210,6 +210,7 @@ type
     DelPathNotFound
     DelPathTagError
     DelSubTreeAccRoot
+    DelSubTreeTooBig
     DelSubTreeVoidRoot
     DelVidStaleVtx
 
