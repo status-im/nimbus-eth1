@@ -155,7 +155,7 @@ method captureOpEnd*(ctx: LegacyTracer, c: Computation,
 method captureFault*(ctx: LegacyTracer, comp: Computation,
                      fixed: bool, pc: int, op: Op, gas: GasInt, refund: GasInt,
                      rData: openArray[byte],
-                     depth: int, error: Option[string]) {.gcsafe.} =
+                     depth: int, error: Opt[string]) {.gcsafe.} =
   try:
     if ctx.trace["structLogs"].elems.len > 0:
       let j = ctx.trace["structLogs"].elems[^1]

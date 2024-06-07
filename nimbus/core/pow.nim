@@ -121,14 +121,9 @@ func miningHash(header: BlockHeader): Hash256 =
 
 # ---------------
 
-proc init(tm: PowRef;
-          rng: Option[ref HmacDrbgContext];
-          light: Option[PowCacheRef]) =
+proc init(tm: PowRef; light: Option[PowCacheRef]) =
   ## Constructor
-  if rng.isSome:
-    tm.rng = rng.get
-  else:
-    tm.rng = newRng()
+  tm.rng = newRng()
 
   if light.isSome:
     tm.lightByEpoch = light.get
@@ -142,7 +137,7 @@ proc init(tm: PowRef;
 proc new*(T: type PowRef; cache: PowCacheRef): T =
   ## Constructor
   new result
-  result.init(none(ref HmacDrbgContext), some(cache))
+  result.init(some(cache))
 
 # ------------------------------------------------------------------------------
 # Public functions

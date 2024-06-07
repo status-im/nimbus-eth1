@@ -291,12 +291,12 @@ func evmcStatus*(c: Computation): evmc_status_code =
   else:
     c.error.evmcStatus
 
-func errorOpt*(c: Computation): Option[string] =
+func errorOpt*(c: Computation): Opt[string] =
   if c.isSuccess:
-    return none(string)
+    return Opt.none(string)
   if c.error.evmcStatus == EVMC_REVERT:
-    return none(string)
-  some(c.error.info)
+    return Opt.none(string)
+  Opt.some(c.error.info)
 
 proc writeContract*(c: Computation) =
   template withExtra(tracer: untyped, args: varargs[untyped]) =
