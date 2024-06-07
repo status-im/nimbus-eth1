@@ -108,8 +108,7 @@ proc processTransactionImpl(
     vmState.captureTxStart(tx.gasLimit)
     let
       accTx = vmState.stateDB.beginSavepoint
-      gasBurned = tx.txCallEvm(sender, vmState, fork).valueOr:
-                   return err("Evm Error: " & $error.code)
+      gasBurned = tx.txCallEvm(sender, vmState, fork)
     vmState.captureTxEnd(tx.gasLimit - gasBurned)
 
     res = commitOrRollbackDependingOnGasUsed(vmState, accTx, header, tx, gasBurned, priorityFee)
@@ -151,8 +150,7 @@ proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash256):
     )
 
   # runComputation a.k.a syscall/evm.call
-  let res = call.runComputation().valueOr:
-              return err("Syscall error: " & $error.code)
+  let res = call.runComputation()
   if res.isError:
     return err("processBeaconBlockRoot: " & res.error)
 

@@ -154,7 +154,5 @@ template callEvmcNested*(host: TransactionHost, msg: EvmcMessage): EvmcResult =
   # that template parameters `host` and `msg` are multiple-evaluated here;
   # simple expressions must be used when calling.)
   let child = beforeExecEvmcNested(host, msg)
-  # we can discard the return value from execCallOrCreate,
-  # because error is relayed via computation.setError
-  discard child.execCallOrCreate()
+  child.execCallOrCreate()
   afterExecEvmcNested(host, child, msg.kind)

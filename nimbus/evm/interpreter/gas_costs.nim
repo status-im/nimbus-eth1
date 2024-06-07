@@ -95,6 +95,7 @@ type
     GckFixed,
     GckDynamic,
     GckMemExpansion,
+    GckCreate,
     GckComplex,
     GckLater
 
@@ -111,6 +112,9 @@ type
                     {.nimcall, gcsafe, raises: [].}
     of GckMemExpansion:
       m_handler*: proc(currentMemSize, memOffset, memLength: GasNatural): GasInt
+                    {.nimcall, gcsafe, raises: [].}
+    of GckCreate:
+      cr_handler*: proc(value: UInt256, gasParams: GasParams): GasResult
                     {.nimcall, gcsafe, raises: [].}
     of GckComplex:
       c_handler*: proc(value: UInt256, gasParams: GasParams): EvmResult[GasResult]
@@ -280,18 +284,16 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
     if not value.isZero:
       result += static(FeeSchedule[GasExpByte]) * (1 + log256(value))
 
-  func `prefix gasCreate`(value: UInt256, gasParams: GasParams): EvmResult[GasResult] {.nimcall.} =
-    var res: GasResult
+  func `prefix gasCreate`(value: UInt256, gasParams: GasParams): GasResult {.nimcall.} =
     if value.isZero:
-      res.gasCost = static(FeeSchedule[GasCodeDeposit]) * gasParams.cr_memLength
+      result.gasCost = static(FeeSchedule[GasCodeDeposit]) * gasParams.cr_memLength
     else:
-      res.gasCost = static(FeeSchedule[GasCreate]) +
+      result.gasCost = static(FeeSchedule[GasCreate]) +
                        (static(FeeSchedule[GasInitcodeWord]) * gasParams.cr_memLength.wordCount) +
                        `prefix gasMemoryExpansion`(
                           gasParams.cr_currentMemSize,
                           gasParams.cr_memOffset,
                           gasParams.cr_memLength)
-    ok(res)
 
   func `prefix gasSha3`(currentMemSize, memOffset, memLength: GasNatural): GasInt {.nimcall.} =
 
@@ -570,6 +572,10 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
                   {.nimcall, gcsafe, raises: [].}): GasCost =
       GasCost(kind: GckComplex, c_handler: handler)
 
+    func handleCreate(handler: proc(value: UInt256, gasParams: GasParams): GasResult
+                  {.nimcall, gcsafe, raises: [].}): GasCost =
+      GasCost(kind: GckCreate, cr_handler: handler)
+
     # Returned value
     fill_enum_table_holes(Op, GasCost(kind: GckInvalidOp)):
       [
@@ -737,7 +743,7 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
           Log4:           memExpansion `prefix gasLog4`,
 
           # f0s: System operations
-          Create:         complex `prefix gasCreate`,
+          Create:         handleCreate `prefix gasCreate`,
           Call:           complex `prefix gasCall`,
           CallCode:       complex `prefix gasCall`,
           Return:         memExpansion `prefix gasHalt`,

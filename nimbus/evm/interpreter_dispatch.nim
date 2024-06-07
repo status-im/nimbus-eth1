@@ -163,11 +163,10 @@ proc beforeExecCreate(c: Computation): bool =
 
   return false
 
-proc afterExecCreate(c: Computation): EvmResultVoid =
-  result = ok()
+proc afterExecCreate(c: Computation) =
   if c.isSuccess:
     # This can change `c.isSuccess`.
-    result = c.writeContract()
+    c.writeContract()
     # Contract code should never be returned to the caller.  Only data from
     # `REVERT` is returned after a create.  Clearing in this branch covers the
     # right cases, particularly important with EVMC where it must be cleared.
@@ -209,17 +208,15 @@ proc beforeExec(c: Computation): bool =
   else:
     c.beforeExecCreate()
 
-proc afterExec(c: Computation): EvmResultVoid =
+proc afterExec(c: Computation) =
   if not c.msg.isCreate:
     c.afterExecCall()
   else:
-    ? c.afterExecCreate()
+    c.afterExecCreate()
 
   if c.msg.depth > 0:
     let gasUsed = c.msg.gas - c.gasMeter.gasRemaining
     c.vmState.captureExit(c, c.output, gasUsed, c.errorOpt)
-
-  ok()
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -275,10 +272,10 @@ proc executeOpcodes*(c: Computation, shouldPrepareTracer: bool = true) =
 
 when vm_use_recursion:
   # Recursion with tiny stack frame per level.
-  proc execCallOrCreate*(c: Computation): EvmResultVoid =
+  proc execCallOrCreate*(c: Computation) =
     defer: c.dispose()
     if c.beforeExec():
-      return ok()
+      return
     c.executeOpcodes()
     while not c.continuation.isNil:
       # If there's a continuation, then it's because there's either
@@ -286,13 +283,13 @@ when vm_use_recursion:
       when evmc_enabled:
         c.res = c.host.call(c.child[])
       else:
-        ? execCallOrCreate(c.child)
+        execCallOrCreate(c.child)
       c.child = nil
       c.executeOpcodes()
     c.afterExec()
 
 else:
-  proc execCallOrCreate*(cParam: Computation): EvmResultVoid =
+  proc execCallOrCreate*(cParam: Computation) =
     var (c, before, shouldPrepareTracer) = (cParam, true, true)
     defer:
       while not c.isNil:
@@ -306,15 +303,13 @@ else:
           break
         c.executeOpcodes(shouldPrepareTracer)
         if c.continuation.isNil:
-          ? c.afterExec()
+          c.afterExec()
           break
         (before, shouldPrepareTracer, c.child, c, c.parent) = (true, true, nil.Computation, c.child, c)
       if c.parent.isNil:
         break
       c.dispose()
       (before, shouldPrepareTracer, c.parent, c) = (false, true, nil.Computation, c.parent)
-
-    ok()
 
 
 # ------------------------------------------------------------------------------

@@ -298,7 +298,7 @@ func errorOpt*(c: Computation): Option[string] =
     return none(string)
   some(c.error.info)
 
-proc writeContract*(c: Computation): EvmResultVoid =
+proc writeContract*(c: Computation) =
   template withExtra(tracer: untyped, args: varargs[untyped]) =
     tracer args, newContract=($c.msg.contractAddress),
       blockNumber=c.vmState.blockNumber,
@@ -309,20 +309,20 @@ proc writeContract*(c: Computation): EvmResultVoid =
   # nested calls (this is specified).  May as well simplify other branches.
   let (len, fork) = (c.output.len, c.fork)
   if len == 0:
-    return ok()
+    return
 
   # EIP-3541 constraint (https://eips.ethereum.org/EIPS/eip-3541).
   if fork >= FkLondon and c.output[0] == 0xEF.byte:
     withExtra trace, "New contract code starts with 0xEF byte, not allowed by EIP-3541"
     c.setError(EVMC_CONTRACT_VALIDATION_FAILURE, true)
-    return ok()
+    return
 
   # EIP-170 constraint (https://eips.ethereum.org/EIPS/eip-3541).
   if fork >= FkSpurious and len > EIP170_MAX_CODE_SIZE:
     withExtra trace, "New contract code exceeds EIP-170 limit",
       codeSize=len, maxSize=EIP170_MAX_CODE_SIZE
     c.setError(EVMC_OUT_OF_GAS, true)
-    return ok()
+    return
 
   # Charge gas and write the code even if the code address is self-destructed.
   # Non-empty code in a newly created, self-destructed account is possible if
@@ -333,15 +333,16 @@ proc writeContract*(c: Computation): EvmResultVoid =
 
   let
     gasParams = GasParams(kind: Create, cr_memLength: len)
-    res = ? c.gasCosts[Create].c_handler(0.u256, gasParams)
+    res = c.gasCosts[Create].cr_handler(0.u256, gasParams)
     codeCost = res.gasCost
 
   if codeCost <= c.gasMeter.gasRemaining:
-    ? c.gasMeter.consumeGas(codeCost, reason = "Write new contract code")
+    doAssert c.gasMeter.consumeGas(codeCost, 
+      reason = "Write new contract code").isOk
     c.vmState.mutateStateDB:
       db.setCode(c.msg.contractAddress, c.output)
     withExtra trace, "Writing new contract code"
-    return ok()
+    return
 
   if fork >= FkHomestead:
     # EIP-2 (https://eips.ethereum.org/EIPS/eip-2).
@@ -353,7 +354,6 @@ proc writeContract*(c: Computation): EvmResultVoid =
     # https://github.com/ethereum/go-ethereum/blob/401354976bb4/core/vm/instructions.go#L586
     # The account already has zero-length code to handle nested calls.
     withExtra trace, "New contract given empty code by pre-Homestead rules"
-  ok()
 
 template chainTo*(c: Computation,
                   toChild: typeof(c.child),

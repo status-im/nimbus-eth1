@@ -105,7 +105,7 @@ const
         cr_currentMemSize: cpt.memory.len,
         cr_memOffset:      memPos,
         cr_memLength:      memLen)
-      res = ? cpt.gasCosts[Create].c_handler(1.u256, gasParams)
+      res = cpt.gasCosts[Create].cr_handler(1.u256, gasParams)
 
     ? cpt.opcodeGastCost(Create,
       res.gasCost, reason = "CREATE: GasCreate + memLen * memory expansion")
@@ -186,7 +186,7 @@ const
         cr_currentMemSize: cpt.memory.len,
         cr_memOffset:      memPos,
         cr_memLength:      memLen)
-      res = ? cpt.gasCosts[Create].c_handler(1.u256, gasParams)
+      res = cpt.gasCosts[Create].cr_handler(1.u256, gasParams)
 
     let gasCost = res.gasCost + cpt.gasCosts[Create2].m_handler(0, 0, memLen)
 

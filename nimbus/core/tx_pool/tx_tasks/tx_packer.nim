@@ -78,7 +78,7 @@ proc persist(pst: TxPackerStateRef)
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc runTx(pst: TxPackerStateRef; item: TxItemRef): Result[GasInt, void] =
+proc runTx(pst: TxPackerStateRef; item: TxItemRef): GasInt =
   ## Execute item transaction and update `vmState` book keeping. Returns the
   ## `gasUsed` after executing the transaction.
   let
@@ -86,12 +86,10 @@ proc runTx(pst: TxPackerStateRef; item: TxItemRef): Result[GasInt, void] =
     baseFee = pst.xp.chain.baseFee
     tx = item.tx.eip1559TxNormalization(baseFee.GasInt)
 
-  let gasUsed = tx.txCallEvm(item.sender, pst.xp.chain.vmState, fork).valueOr:
-    return err()
-
+  let gasUsed = tx.txCallEvm(item.sender, pst.xp.chain.vmState, fork)
   pst.cleanState = false
   doAssert 0 <= gasUsed
-  ok(gasUsed)
+  gasUsed
 
 proc runTxCommit(pst: TxPackerStateRef; item: TxItemRef; gasBurned: GasInt)
     {.gcsafe,raises: [CatchableError].} =
@@ -213,7 +211,7 @@ proc vmExecGrabItem(pst: TxPackerStateRef; item: TxItemRef): Result[bool,void]
 
   let
     accTx = vmState.stateDB.beginSavepoint
-    gasUsed = ? pst.runTx(item) # this is the crucial part, running the tx
+    gasUsed = pst.runTx(item) # this is the crucial part, running the tx
 
   # Find out what to do next: accepting this tx or trying the next account
   if not xp.classifyPacked(vmState.cumulativeGasUsed, gasUsed):

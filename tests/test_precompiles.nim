@@ -41,9 +41,7 @@ template doTest(fixture: JsonNode; vmState: BaseVMState; fork: EVMFork, address:
       payload: if dataStr.len > 0: dataStr.hexToSeqByte else: @[]
     )
     let tx = signTransaction(unsignedTx, privateKey, ChainId(1), false)
-    let fixtureResult = testCallEvm(tx, tx.getSender, vmState, fork).valueOr:
-                          check false
-                          continue
+    let fixtureResult = testCallEvm(tx, tx.getSender, vmState, fork)
 
     if expectedErr:
       check fixtureResult.isError

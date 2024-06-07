@@ -292,7 +292,7 @@ proc finishRunningComputation(host: TransactionHost, call: CallParams): CallResu
   result.stack = c.stack
   result.memory = c.memory
 
-proc runComputation*(call: CallParams): EvmResult[CallResult] =
+proc runComputation*(call: CallParams): CallResult =
   let host = setupHost(call)
   prepareToRunComputation(host, call)
 
@@ -300,8 +300,8 @@ proc runComputation*(call: CallParams): EvmResult[CallResult] =
     doExecEvmc(host, call)
   else:
     if host.computation.sysCall:
-      ? execSysCall(host.computation)
+      execSysCall(host.computation)
     else:
-      ? execComputation(host.computation)
+      execComputation(host.computation)
 
-  ok(finishRunningComputation(host, call))
+  finishRunningComputation(host, call)

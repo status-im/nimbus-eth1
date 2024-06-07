@@ -66,10 +66,8 @@ proc overflowMain*() =
 
     let privateKey = PrivateKey.fromHex("0000000000000000000000000000000000000000000000000000001000000000")[]
     let tx = signTransaction(unsignedTx, privateKey, ChainId(1), false)
-    let res = testCallEvm(tx, tx.getSender, s, FkHomestead).valueOr:
-      check false
-      break
-      
+    let res = testCallEvm(tx, tx.getSender, s, FkHomestead)
+
     when defined(evmc_enabled):
       check res.error == "EVMC_FAILURE"
     else:

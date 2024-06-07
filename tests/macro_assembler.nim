@@ -402,9 +402,7 @@ proc runVM*(vmState: BaseVMState, boa: Assembler): bool =
     db.setCode(codeAddress, boa.code)
     db.setBalance(codeAddress, 1_000_000.u256)
   let tx = createSignedTx(boa.data, com.chainId)
-  let asmResult = testCallEvm(tx, tx.getSender, vmState, fork).valueOr:
-    debug "testCallEvm failed"
-    return false
+  let asmResult = testCallEvm(tx, tx.getSender, vmState, fork)
   verifyAsmResult(vmState, boa, asmResult)
 
 macro assembler*(list: untyped): untyped =
