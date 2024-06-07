@@ -98,7 +98,7 @@ proc graphqlMain*() =
     ethCtx  = newEthContext()
     ethNode = setupEthNode(conf, ethCtx, eth)
     com     = setupChain()
-    txPool  = TxPoolRef.new(com, conf.engineSigner)
+    txPool  = TxPoolRef.new(com)
 
   let ctx = setupGraphqlContext(com, ethNode, txPool)
   when isMainModule:

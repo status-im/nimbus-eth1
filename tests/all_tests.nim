@@ -12,12 +12,12 @@ import ./all_tests_macro
 cliBuilder:
   import  ./test_code_stream,
           #./test_accounts_cache,                  -- does not compile
-          #./test_jwt_auth,                        -- rpc is Aristo incompatible
+          ./test_jwt_auth,
           ./test_gas_meter,
           ./test_memory,
           ./test_stack,
           ./test_genesis,
-          /test_precompiles,
+          ./test_precompiles,
           ./test_generalstate_json,
           #./test_tracer_json,                     -- temporarily suspended
           #./test_persistblock_json,               -- fails
@@ -47,7 +47,7 @@ cliBuilder:
           #./test_merge,                           -- fails
           ./test_eip4844,
           ./test_beacon/test_skeleton,
-          /test_overflow,
+          ./test_overflow,
           #./test_getproof_json,                   -- fails
           #./test_rpc_experimental_json,           -- fails
           #./test_persistblock_witness_json        -- fails

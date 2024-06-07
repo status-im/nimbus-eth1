@@ -60,7 +60,7 @@ proc findFilePath(file: string): Result[string,void] =
         return ok(path)
   err()
 
-proc say*(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
+proc say(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
   if noisy:
     if args.len == 0:
       echo "*** ", pfx
@@ -92,17 +92,17 @@ proc base64urlEncode(x: auto): string =
   ## from nimbus-eth2, engine_authentication.nim
   base64.encode(x, safe = true).replace("=", "")
 
-func getIatToken*(time: uint64): JsonNode =
+func getIatToken(time: uint64): JsonNode =
   ## from nimbus-eth2, engine_authentication.nim
   %* {"iat": time}
 
-proc getSignedToken*(key: openArray[byte], payload: string): string =
+proc getSignedToken(key: openArray[byte], payload: string): string =
   ## from nimbus-eth2, engine_authentication.nim
   # Using hard coded string for """{"typ": "JWT", "alg": "HS256"}"""
   let sData = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9." & base64urlEncode(payload)
   sData & "." & sha256.hmac(key, sData).data.base64urlEncode
 
-proc getSignedToken2*(key: openArray[byte], payload: string): string =
+proc getSignedToken2(key: openArray[byte], payload: string): string =
   ## Variant of `getSignedToken()`: different algorithm encoding
   let
     jNode = %* {"alg": "HS256", "typ": "JWT" }
