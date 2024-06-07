@@ -276,24 +276,24 @@ const
     ## 0x59, Get the size of active memory in bytes.
     k.cpt.stack.push k.cpt.memory.len
 
-  gasOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid {.catchRaise.} =
+  gasOp: Vm2OpFn = func (k: var Vm2Ctx): EvmResultVoid {.catchRaise.} =
     ## 0x5a, Get the amount of available gas, including the corresponding
     ##       reduction for the cost of this instruction.
     k.cpt.stack.push k.cpt.gasMeter.gasRemaining
 
-  jumpDestOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  jumpDestOp: Vm2OpFn = func (k: var Vm2Ctx): EvmResultVoid =
     ## 0x5b, Mark a valid destination for jumps. This operation has no effect
     ##       on machine state during execution.
     ok()
 
-  tloadOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid {.catchRaise.} =
+  tloadOp: Vm2OpFn = func (k: var Vm2Ctx): EvmResultVoid {.catchRaise.} =
     ## 0x5c, Load word from transient storage.
     let
       slot = ? k.cpt.stack.popInt()
       val  = k.cpt.getTransientStorage(slot)
     k.cpt.stack.push val
 
-  tstoreOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid {.catchRaise.} =
+  tstoreOp: Vm2OpFn = func (k: var Vm2Ctx): EvmResultVoid {.catchRaise.} =
     ## 0x5d, Save word to transient storage.
     ? checkInStaticContext(k.cpt)
 
