@@ -337,8 +337,9 @@ proc writeContract*(c: Computation) =
     codeCost = res.gasCost
 
   if codeCost <= c.gasMeter.gasRemaining:
-    doAssert c.gasMeter.consumeGas(codeCost, 
-      reason = "Write new contract code").isOk
+    c.gasMeter.consumeGas(codeCost,
+      reason = "Write new contract code").
+        expect("enough gas since we checked against gasRemaining")
     c.vmState.mutateStateDB:
       db.setCode(c.msg.contractAddress, c.output)
     withExtra trace, "Writing new contract code"
