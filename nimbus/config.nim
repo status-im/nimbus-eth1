@@ -131,7 +131,6 @@ type
 
   SyncMode* {.pure.} = enum
     Default
-    Full                          ## Beware, experimental
     #Snap                          ## Beware, experimental
 
   NimbusConf* = object of RootObj
@@ -172,7 +171,6 @@ type
       desc: "Specify particular blockchain sync mode."
       longDesc:
         "- default   -- beacon sync mode\n" &
-        "- full      -- full blockchain archive\n" &
         # "- snap      -- experimental snap mode (development only)\n" &
         ""
       defaultValue: SyncMode.Default
