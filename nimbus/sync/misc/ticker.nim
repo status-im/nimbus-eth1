@@ -45,23 +45,23 @@ type
 
   TickerSnapStats* = object
     ## Snap sync state (see `TickerSnapStatsUpdater`)
-    beaconBlock*: Option[BlockNumber]
-    pivotBlock*: Option[BlockNumber]
+    beaconBlock*: Opt[BlockNumber]
+    pivotBlock*: Opt[BlockNumber]
     nAccounts*: (float,float)          ## Mean and standard deviation
     accountsFill*: (float,float,float) ## Mean, standard deviation, merged total
     nAccountStats*: int                ## #chunks
     nSlotLists*: (float,float)         ## Mean and standard deviation
     nContracts*: (float,float)         ## Mean and standard deviation
-    nStorageQueue*: Option[int]
-    nContractQueue*: Option[int]
+    nStorageQueue*: Opt[int]
+    nContractQueue*: Opt[int]
     nQueues*: int
 
   TickerFullStats* = object
     ## Full sync state (see `TickerFullStatsUpdater`)
-    pivotBlock*: Option[BlockNumber]
+    pivotBlock*: Opt[BlockNumber]
     topPersistent*: BlockNumber
-    nextUnprocessed*: Option[BlockNumber]
-    nextStaged*: Option[BlockNumber]
+    nextUnprocessed*: Opt[BlockNumber]
+    nextStaged*: Opt[BlockNumber]
     nStagedQueue*: int
     suspended*: bool
     reOrg*: bool
@@ -96,7 +96,7 @@ proc pc99(val: float): string =
   elif 0.0 < val and val <= 0.01: "1%"
   else: val.toPC(0)
 
-proc toStr(a: Option[int]): string =
+proc toStr(a: Opt[int]): string =
   if a.isNone: "n/a"
   else: $a.unsafeGet
 

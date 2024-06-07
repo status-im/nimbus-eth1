@@ -313,7 +313,7 @@ proc captureStart*(vmState: BaseVMState, comp: Computation,
     vmState.tracer.captureStart(comp, sender, to, create, input, gasLimit, value)
 
 proc captureEnd*(vmState: BaseVMState, comp: Computation, output: openArray[byte],
-                 gasUsed: GasInt, error: Option[string]) =
+                 gasUsed: GasInt, error: Opt[string]) =
   if vmState.tracingEnabled:
     vmState.tracer.captureEnd(comp, output, gasUsed, error)
 
@@ -325,7 +325,7 @@ proc captureEnter*(vmState: BaseVMState, comp: Computation, op: Op,
     vmState.tracer.captureEnter(comp, op, sender, to, input, gasLimit, value)
 
 proc captureExit*(vmState: BaseVMState, comp: Computation, output: openArray[byte],
-                  gasUsed: GasInt, error: Option[string]) =
+                  gasUsed: GasInt, error: Opt[string]) =
   if vmState.tracingEnabled:
     vmState.tracer.captureExit(comp, output, gasUsed, error)
 
@@ -355,7 +355,7 @@ proc captureOpEnd*(vmState: BaseVMState, comp: Computation, pc: int,
 proc captureFault*(vmState: BaseVMState, comp: Computation, pc: int,
                    op: Op, gas: GasInt, refund: GasInt,
                    rData: openArray[byte],
-                   depth: int, error: Option[string]) =
+                   depth: int, error: Opt[string]) =
   if vmState.tracingEnabled:
     let fixed = vmState.gasCosts[op].kind == GckFixed
     vmState.tracer.captureFault(comp, fixed, pc, op, gas, refund, rData, depth, error)

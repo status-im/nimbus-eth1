@@ -133,8 +133,8 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
   # Early-initialise "--snap-sync" before starting any network connections.
   block:
     let
-      exCtrlFile = if conf.syncCtrlFile.isNone: none(string)
-                   else: some(conf.syncCtrlFile.get)
+      exCtrlFile = if conf.syncCtrlFile.isNone: Opt.none(string)
+                   else: Opt.some(conf.syncCtrlFile.get)
       tickerOK = conf.logLevel in {
         LogLevel.INFO, LogLevel.DEBUG, LogLevel.TRACE}
     case conf.syncMode:

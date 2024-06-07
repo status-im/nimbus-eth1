@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -112,7 +112,7 @@ proc init*(
     rng: ref HmacDrbgContext;
     maxPeers: int;
     enableTicker = false;
-    exCtrlFile = none(string);
+    exCtrlFile = Opt.none(string);
       ): T =
   new result
   result.initSync(ethNode, chain, maxPeers, exCtrlFile)

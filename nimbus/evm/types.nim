@@ -158,7 +158,7 @@ method captureStart*(ctx: TracerRef, comp: Computation,
   discard
 
 method captureEnd*(ctx: TracerRef, comp: Computation, output: openArray[byte],
-                   gasUsed: GasInt, error: Option[string]) {.base, gcsafe.} =
+                   gasUsed: GasInt, error: Opt[string]) {.base, gcsafe.} =
   discard
 
 # Rest of call frames
@@ -169,7 +169,7 @@ method captureEnter*(ctx: TracerRef, comp: Computation, op: Op,
   discard
 
 method captureExit*(ctx: TracerRef, comp: Computation, output: openArray[byte],
-                    gasUsed: GasInt, error: Option[string]) {.base, gcsafe.} =
+                    gasUsed: GasInt, error: Opt[string]) {.base, gcsafe.} =
   discard
 
 # Opcode level
@@ -192,7 +192,7 @@ method captureOpEnd*(ctx: TracerRef, comp: Computation,
 method captureFault*(ctx: TracerRef, comp: Computation,
                      fixed: bool, pc: int, op: Op, gas: GasInt, refund: GasInt,
                      rData: openArray[byte],
-                     depth: int, error: Option[string]) {.base, gcsafe.} =
+                     depth: int, error: Opt[string]) {.base, gcsafe.} =
   discard
 
 # Called at the start of EVM interpreter loop

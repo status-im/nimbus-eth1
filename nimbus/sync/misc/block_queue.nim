@@ -120,15 +120,15 @@ type
   BlockQueueWorkerRef* = ref object
     ## Local descriptor data extension
     global: BlockQueueCtxRef        ## Common data
-    bestNumber: Option[BlockNumber] ## Largest block number reported
+    bestNumber: Opt[BlockNumber]    ## Largest block number reported
     ctrl: BuddyCtrlRef              ## Control and state settings
     peer: Peer                      ## network peer
 
   BlockQueueStats* = object
     ## Statistics
     topAccepted*: BlockNumber
-    nextUnprocessed*: Option[BlockNumber]
-    nextStaged*: Option[BlockNumber]
+    nextUnprocessed*: Opt[BlockNumber]
+    nextStaged*: Opt[BlockNumber]
     nStagedQueue*: int
     reOrg*: bool
 
@@ -175,7 +175,7 @@ proc `$`(iv: BlockRange): string =
 proc `$`(n: Option[BlockRange]): string =
   if n.isNone: "n/a" else: $n.get
 
-proc `$`(n: Option[BlockNumber]): string =
+proc `$`(n: Opt[BlockNumber]): string =
   n.toStr
 
 proc `$`(brs: BlockRangeSetRef): string =
@@ -185,17 +185,17 @@ proc `$`(brs: BlockRangeSetRef): string =
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc nextUnprocessed(ctx: BlockQueueCtxRef): Option[BlockNumber] =
+proc nextUnprocessed(ctx: BlockQueueCtxRef): Opt[BlockNumber] =
   ## Pseudo getter
   let rc = ctx.unprocessed.ge()
   if rc.isOK:
-    result = some(rc.value.minPt)
+    result = Opt.some(rc.value.minPt)
 
-proc nextStaged(ctx: BlockQueueCtxRef): Option[BlockRange] =
+proc nextStaged(ctx: BlockQueueCtxRef): Opt[BlockRange] =
   ## Pseudo getter
   let rc = ctx.staged.ge(low(BlockNumber))
   if rc.isOK:
-    result = some(rc.value.data.blocks)
+    result = Opt.some(rc.value.data.blocks)
 
 template safeTransport(
     qd: BlockQueueWorkerRef;
@@ -474,11 +474,11 @@ proc init*(
 # Public functions -- getter/setter
 # ------------------------------------------------------------------------------
 
-proc bestNumber*(qd: BlockQueueWorkerRef): Option[BlockNumber] =
+proc bestNumber*(qd: BlockQueueWorkerRef): Opt[BlockNumber] =
   ## Getter
   qd.bestNumber
 
-proc `bestNumber=`*(qd: BlockQueueWorkerRef; val: Option[BlockNumber]) =
+proc `bestNumber=`*(qd: BlockQueueWorkerRef; val: Opt[BlockNumber]) =
   ## Setter, needs to be set to something valid so that `blockQueueWorker()`
   ## does something useful.
   qd.bestNumber = val
@@ -596,8 +596,8 @@ proc blockQueueStats*(ctx: BlockQueueCtxRef; stats: var BlockQueueStats) =
   stats.nStagedQueue = ctx.staged.len
   stats.reOrg = ctx.backtrack.isSome
   stats.nextStaged =
-    if ctx.nextStaged.isSome: some(ctx.nextStaged.unsafeGet.minPt)
-    else: none(BlockNumber)
+    if ctx.nextStaged.isSome: Opt.some(ctx.nextStaged.unsafeGet.minPt)
+    else: Opt.none(BlockNumber)
 
 # ------------------------------------------------------------------------------
 # Public functions -- asynchronous
@@ -666,7 +666,7 @@ proc blockQueueWorker*(
     let rc = qd.newWorkItem()
     if rc.isErr:
       # No way, end of capacity for this peer => re-calibrate
-      qd.bestNumber = none(BlockNumber)
+      qd.bestNumber = Opt.none(BlockNumber)
       return err(rc.error)
     rc.value
 

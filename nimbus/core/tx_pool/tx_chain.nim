@@ -8,11 +8,14 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [].}
+
 ## Transaction Pool Block Chain Packer Environment
 ## ===============================================
 ##
 
 import
+  results,
   ../../common/common,
   ../../constants,
   ../../db/ledger,
@@ -29,8 +32,6 @@ import
 export
   TxChainGasLimits,
   TxChainGasLimitsPc
-
-{.push raises: [].}
 
 const
   TRG_THRESHOLD_PER_CENT = ##\
@@ -92,7 +93,8 @@ proc resetTxEnv(dh: TxChainRef; parent: BlockHeader; fee: Option[UInt256])
   # BaseVMState querying any hardfork/consensus from CommonRef
 
   let timestamp = dh.getTimestamp(parent)
-  dh.com.hardForkTransition(parent.blockHash, parent.blockNumber+1, some(timestamp))
+  dh.com.hardForkTransition(
+    parent.blockHash, parent.blockNumber+1, Opt.some(timestamp))
   dh.prepareHeader(parent, timestamp)
 
   # we don't consider PoS difficulty here

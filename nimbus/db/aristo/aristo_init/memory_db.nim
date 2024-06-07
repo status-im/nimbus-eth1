@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023=-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -46,7 +46,7 @@ type
     sTab: Table[VertexID,Blob]       ## Structural vertex table making up a trie
     kMap: Table[VertexID,HashKey]    ## Merkle hash key mapping
     tUvi: Option[VertexID]           ## Top used vertex ID
-    lSst: Option[SavedState]         ## Last saved state
+    lSst: Opt[SavedState]            ## Last saved state
 
   MemBackendRef* = ref object of TypedBackendRef
     ## Inheriting table so access can be extended for debugging purposes
@@ -56,7 +56,7 @@ type
     sTab: Table[VertexID,Blob]
     kMap: Table[VertexID,HashKey]
     tUvi: Option[VertexID]
-    lSst: Option[SavedState]
+    lSst: Opt[SavedState]
 
 when extraTraceMessages:
   import chronicles
@@ -170,7 +170,7 @@ proc putLstFn(db: MemBackendRef): PutLstFn =
       if hdl.error.isNil:
         let rc = lst.blobify # test
         if rc.isOk:
-          hdl.lSst = some(lst)
+          hdl.lSst = Opt.some(lst)
         else:
           hdl.error = TypedPutHdlErrRef(
             pfx:  AdmPfx,
