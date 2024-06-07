@@ -282,11 +282,10 @@ proc delSubTreeImpl(
     var redo: seq[VertexRef]
     for vtx in follow:
       for vid in vtx.subVids:
+        # Exiting here leaves the tree as-is
         let vtx = ? db.getVtxRc(vid).mapErr toVae(vid)
         redo.add vtx
         dispose.add vid
-      if SUB_TREE_DISPOSAL_MAX < dispose.len:
-        return err((VertexID(0),DelSubTreeTooBig))
     redo.swap follow
 
   # Mark nodes deleted
@@ -402,9 +401,7 @@ proc delTree*(
     root: VertexID;                    # Root vertex
     accPath: PathID;                   # Needed for real storage tries
       ): Result[void,(VertexID,AristoError)] =
-  ## Delete sub-trie below `root`. The maximum supported sub-tree size is
-  ## `SUB_TREE_DISPOSAL_MAX`. Larger tries must be disposed by walk-deleting
-  ## leaf nodes using `left()` or `right()` traversal functions.
+  ## Delete sub-trie below `root`.
   ##
   ## Note that the accounts trie hinging on `VertexID(1)` cannot be deleted.
   ##
