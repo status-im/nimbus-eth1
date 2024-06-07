@@ -14,8 +14,9 @@ register_matplotlib_converters()
 
 def readStats(name: str, min_block_number: int):
     df = pd.read_csv(name).convert_dtypes()
-    if len(df.index) > 2 * min_block_number:
-        df = df[df.block_number >= min_block_number]
+    if df.block_number.iloc[-1] > min_block_number:
+        cutoff = min(df.block_number.iloc[-1] - min_block_number, min_block_number)
+        df = df[df.block_number >= cutoff]
     df.set_index("block_number", inplace=True)
     df.time /= 1000000000
     df.drop(columns=["gas"], inplace=True)
@@ -74,8 +75,8 @@ contender = readStats(args.contender, args.min_block_number)
 # interpolate, perhaps - also, maybe should check for non-matching block/tx counts
 df = baseline.merge(contender, on=("block_number", "blocks", "txs"))
 
-df["bpsd"] = (df.bps_y - df.bps_x) / df.bps_x
-df["tpsd"] = (df.tps_y - df.tps_x) / df.tps_x
+df["bpsd"] = ((df.bps_y - df.bps_x) / df.bps_x).fillna(0)
+df["tpsd"] = ((df.tps_y - df.tps_x) / df.tps_x).fillna(0)
 df["timed"] = (df.time_y - df.time_x) / df.time_x
 
 df.reset_index(inplace=True)
@@ -127,8 +128,12 @@ print(
 )
 print(f"bpsd (mean): {df.bpsd.mean():.2%}")
 print(f"tpsd (mean): {df.tpsd.mean():.2%}")
+time_xt = df.time_x.sum()
+time_yt = df.time_y.sum()
+
+timet = time_yt-df.time_x.sum()
 print(
-    f"Time (sum): {prettySecs(df.time_y.sum()-df.time_x.sum())}, {df.timed.mean():.2%}"
+    f"Time (total): {prettySecs(timet)}, {(timet/time_xt):.2%}"
 )
 
 print()
