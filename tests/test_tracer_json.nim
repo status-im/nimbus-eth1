@@ -62,13 +62,13 @@ proc preLoadAristoDb(cdb: CoreDbRef; jKvp: JsonNode; num: BlockNumber) =
 
   # Install sub-trie roots onto production db
   if txRoot.isValid:
-    doAssert adb.merge(txRoot, VertexID(CtTxs)).isOk
+    doAssert adb.mergeProof(txRoot, VertexID(CtTxs)).isOk
   if rcptRoot.isValid:
-    doAssert adb.merge(rcptRoot, VertexID(CtReceipts)).isOk
-  doAssert adb.merge(predRoot, VertexID(CtAccounts)).isOk
+    doAssert adb.mergeProof(rcptRoot, VertexID(CtReceipts)).isOk
+  doAssert adb.mergeProof(predRoot, VertexID(CtAccounts)).isOk
 
   # Set up production MPT
-  doAssert adb.merge(proof).isOk
+  doAssert adb.mergeProof(proof).isOk
 
   # Remove locks so that hashify can re-assign changed nodes
   adb.top.final.pPrf.clear
