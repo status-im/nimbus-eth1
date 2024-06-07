@@ -238,37 +238,37 @@ proc executeOpcodes*(c: Computation, shouldPrepareTracer: bool = true) =
     if c.continuation.isNil and c.execPrecompiles(fork):
       break blockOne
 
-    block blockTwo:
-      let cont = c.continuation
-      if not cont.isNil:
-        c.continuation = nil
-        let res = cont()
-        if res.isErr:
-          handleEvmError(res.error)
-          break blockTwo
-      let nextCont = c.continuation
-      if nextCont.isNil:
-        # FIXME-Adam: I hate how convoluted this is. See also the comment in
-        # op_dispatcher.nim. The idea here is that we need to call
-        # traceOpCodeEnded at the end of the opcode (and only if there
-        # hasn't been an exception thrown); otherwise we run into problems
-        # if an exception (e.g. out of gas) is thrown during a continuation.
-        # So this code says, "If we've just run a continuation, but there's
-        # no *subsequent* continuation, then the opcode is done."
-        if c.tracingEnabled and not(cont.isNil) and nextCont.isNil:
-          c.traceOpCodeEnded(c.instr, c.opIndex)
-        case c.instr
-        of Return, Revert, SelfDestruct: # FIXME-Adam: HACK, fix this in a clean way; I think the idea is that these are the ones from the "always break" case in op_dispatcher
-          discard
-        else:
-          let res = c.selectVM(fork, shouldPrepareTracer)
-          if res.isErr:
-            handleEvmError(res.error)
-            break blockTwo
-      else:
-        # Return up to the caller, which will run the async operation or child
-        # and then call this proc again.
-        discard
+    let cont = c.continuation
+    if not cont.isNil:
+      c.continuation = nil
+      cont().isOkOr:
+        handleEvmError(error)
+        break blockOne
+
+    let nextCont = c.continuation
+    if not nextCont.isNil:
+      # Return up to the caller, which will run the child
+      # and then call this proc again.
+      break blockOne
+
+    # FIXME-Adam: I hate how convoluted this is. See also the comment in
+    # op_dispatcher.nim. The idea here is that we need to call
+    # traceOpCodeEnded at the end of the opcode (and only if there
+    # hasn't been an exception thrown); otherwise we run into problems
+    # if an exception (e.g. out of gas) is thrown during a continuation.
+    # So this code says, "If we've just run a continuation, but there's
+    # no *subsequent* continuation, then the opcode is done."
+    if c.tracingEnabled and not(cont.isNil) and nextCont.isNil:
+      c.traceOpCodeEnded(c.instr, c.opIndex)
+
+    if c.instr == Return or
+       c.instr == Revert or
+       c.instr == SelfDestruct:
+      break blockOne
+
+    c.selectVM(fork, shouldPrepareTracer).isOkOr:
+      handleEvmError(error)
+      break blockOne # this break is not needed but make the flow clear
 
   if c.isError() and c.continuation.isNil:
     if c.tracingEnabled: c.traceError()
@@ -282,19 +282,13 @@ when vm_use_recursion:
     c.executeOpcodes()
     while not c.continuation.isNil:
       # If there's a continuation, then it's because there's either
-      # a child (i.e. call or create) or a pendingAsyncOperation.
-      if not c.pendingAsyncOperation.isNil:
-        let p = c.pendingAsyncOperation
-        c.pendingAsyncOperation = nil
-        doAssert(p.finished(), "In synchronous mode, every async operation should be an already-resolved Future.")
-        c.executeOpcodes(false)
+      # a child (i.e. call or create)
+      when evmc_enabled:
+        c.res = c.host.call(c.child[])
       else:
-        when evmc_enabled:
-          c.res = c.host.call(c.child[])
-        else:
-          ? execCallOrCreate(c.child)
-        c.child = nil
-        c.executeOpcodes()
+        ? execCallOrCreate(c.child)
+      c.child = nil
+      c.executeOpcodes()
     c.afterExec()
 
 else:
@@ -314,14 +308,7 @@ else:
         if c.continuation.isNil:
           ? c.afterExec()
           break
-        if not c.pendingAsyncOperation.isNil:
-          before = false
-          shouldPrepareTracer = false
-          let p = c.pendingAsyncOperation
-          c.pendingAsyncOperation = nil
-          doAssert(p.finished(), "In synchronous mode, every async operation should be an already-resolved Future.")
-        else:
-          (before, shouldPrepareTracer, c.child, c, c.parent) = (true, true, nil.Computation, c.child, c)
+        (before, shouldPrepareTracer, c.child, c, c.parent) = (true, true, nil.Computation, c.child, c)
       if c.parent.isNil:
         break
       c.dispose()

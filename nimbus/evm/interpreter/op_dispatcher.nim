@@ -107,16 +107,6 @@ proc toCaseStmt(forkArg, opArg, k: NimNode): NimNode =
           `forkCaseSubExpr`
           break
       else:
-        # FIXME-manyOpcodesNowRequireContinuations
-        # We used to have another clause in this case statement for various
-        # opcodes that *don't* need to check for a continuation. But now
-        # there are many opcodes that need to, because they call asyncChainTo
-        # (and so they set a pendingAsyncOperation and a continuation that
-        # needs to be noticed by the interpreter_dispatch loop). And that
-        # will become even more true once we implement speculative execution,
-        # because that will mean that even reading from the stack might
-        # require waiting.
-        #
         # Anyway, the point is that now we might as well just do this check
         # for *every* opcode (other than Return/Revert/etc, which need to
         # break no matter what).

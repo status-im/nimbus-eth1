@@ -9,8 +9,6 @@
 # according to those terms.
 
 import
-  chronos,
-  json_rpc/rpcclient,
   "."/[stack, memory, code_stream, evm_errors],
   ./interpreter/[gas_costs, op_codes],
   ../db/ledger,
@@ -90,7 +88,6 @@ type
       res*:                 nimbus_result
     else:
       parent*, child*:      Computation
-    pendingAsyncOperation*: Future[void]
     continuation*:          proc(): EvmResultVoid {.gcsafe, raises: [].}
     sysCall*:               bool
 
