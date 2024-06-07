@@ -47,16 +47,16 @@ method captureOpStart*(act: AccessListTracer, c: Computation,
                        depth: int): int {.gcsafe.} =
   let stackLen = c.stack.len
   if (op in [Sload, Sstore]) and (stackLen >= 1):
-    let slot = c.stack.peekInt().unsafeValue
+    let slot = c.stack.peekInt().expect("stack is not empty")
     act.list.add(c.msg.contractAddress, slot)
 
   if (op in [ExtCodeCopy, ExtCodeHash, ExtCodeSize, Balance, SelfDestruct]) and (stackLen >= 1):
-    let address = c.stack.peekAddress().unsafeValue
+    let address = c.stack.peekAddress().expect("stack is not empty")
     if address notin act.excl:
       act.list.add address
 
   if (op in [DelegateCall, Call, StaticCall, CallCode]) and (stackLen >= 5):
-    let address = c.stack[^2, EthAddress].unsafeValue
+    let address = c.stack[^2, EthAddress].expect("stack contains more than 5 elements")
     if address notin act.excl:
       act.list.add address
 

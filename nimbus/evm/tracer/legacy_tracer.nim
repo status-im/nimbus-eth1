@@ -103,17 +103,18 @@ method captureOpStart*(ctx: LegacyTracer, c: Computation,
       case op
       of Call, CallCode, DelegateCall, StaticCall:
         if c.stack.len > 2:
-          ctx.accounts.incl c.stack[^2, EthAddress].unsafeValue
+          ctx.accounts.incl c.stack[^2, EthAddress].expect("stack constains more than 2 elements")
       of ExtCodeCopy, ExtCodeSize, Balance, SelfDestruct:
         if c.stack.len > 1:
-          ctx.accounts.incl c.stack[^1, EthAddress].unsafeValue
+          ctx.accounts.incl c.stack[^1, EthAddress].expect("stack is not empty")
       else:
         discard
 
     if TracerFlags.DisableStorage notin ctx.flags:
       if op == Sstore:
         if c.stack.len > 1:
-          ctx.rememberStorageKey(c.msg.depth, c.stack[^1, UInt256].unsafeValue)
+          ctx.rememberStorageKey(c.msg.depth,
+            c.stack[^1, UInt256].expect("stack is not empty"))
 
     result = ctx.trace["structLogs"].len - 1
   except KeyError as ex:

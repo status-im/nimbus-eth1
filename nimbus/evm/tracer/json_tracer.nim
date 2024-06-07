@@ -166,7 +166,8 @@ method captureOpStart*(ctx: JsonTracer, c: Computation,
   if TracerFlags.DisableStorage notin ctx.flags and op == Sstore:
     try:
       if c.stack.len > 1:
-        ctx.rememberStorageKey(c.msg.depth, c.stack[^1, UInt256].unsafeValue)
+        ctx.rememberStorageKey(c.msg.depth,
+          c.stack[^1, UInt256].expect("stack constains more than 2 elements"))
     except ValueError as ex:
       error "JsonTracer captureOpStart", msg=ex.msg
 
