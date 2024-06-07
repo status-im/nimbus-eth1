@@ -75,7 +75,6 @@ proc getAccountProof(
     proof = TrieProof.empty()
 
   while nibblesIdx < nibbles.len():
-    # pass in the proof for poke here
     let
       accountTrieNode = (await n.getAccountTrieNode(key)).valueOr:
         # log something here
@@ -103,7 +102,6 @@ proc getStorageProof(
     proof = TrieProof.empty()
 
   while nibblesIdx < nibbles.len():
-    # pass in the proof for poke here
     let
       contractTrieNode = (await n.getContractTrieNode(key)).valueOr:
         # log something here
@@ -172,7 +170,7 @@ proc getStorageAt*(
 
 # Used by: eth_getCode
 proc getCode*(
-    n: StateNetwork, address: Address, blockHash: BlockHash
+    n: StateNetwork, blockHash: BlockHash, address: Address
 ): Future[Opt[Bytecode]] {.async.} =
   let
     account = (await n.getAccount(blockHash, address)).valueOr:
@@ -184,27 +182,3 @@ proc getCode*(
     return Opt.none(Bytecode)
 
   Opt.some(contractCodeRetrieval.code)
-
-# TODO: Implement getProof
-# Used by: eth_getProof
-# proc getProof*(
-#     n: StateNetwork, address: EthAddress, storageKeys: openArray[UInt256], blockHash: BlockHash
-# ): Future[Opt[seq[seq[byte]]]] {.async.} =
-
-# perhaps combining the proofs can be done in the web3 api layer using the below types
-# web3/eth_api_types
-# RlpEncodedBytes* = distinct seq[byte]
-
-# StorageProof* = object
-#   key*: UInt256
-#   value*: UInt256
-#   proof*: seq[RlpEncodedBytes]
-
-# ProofResponse* = object
-#   address*: Address
-#   accountProof*: seq[RlpEncodedBytes]
-#   balance*: UInt256
-#   codeHash*: CodeHash
-#   nonce*: Quantity
-#   storageHash*: StorageHash
-#   storageProof*: seq[StorageProof]

@@ -353,7 +353,8 @@ proc installEthApiHandlers*(
     ## data: address to check for balance.
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns integer of the current balance in wei.
-    discard
+    # TODO
+    raiseAssert("Not implemented")
 
   rpcServerWithProxy.rpc("eth_getTransactionCount") do(
     data: Address, quantityTag: RtBlockIdentifier
@@ -363,7 +364,8 @@ proc installEthApiHandlers*(
     ## data: address.
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns integer of the number of transactions send from this address.
-    discard
+    # TODO
+    raiseAssert("Not implemented")
 
   rpcServerWithProxy.rpc("eth_getStorageAt") do(
     data: Address, slot: UInt256, quantityTag: RtBlockIdentifier
@@ -374,7 +376,8 @@ proc installEthApiHandlers*(
     ## slot: integer of the position in the storage.
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns: the value at this storage position.
-    discard
+    # TODO
+    raiseAssert("Not implemented")
 
   rpcServerWithProxy.rpc("eth_getCode") do(
     data: Address, quantityTag: RtBlockIdentifier
@@ -384,7 +387,8 @@ proc installEthApiHandlers*(
     ## data: address
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns the code from the given address.
-    discard
+    # TODO
+    raiseAssert("Not implemented")
 
   rpcServerWithProxy.rpc("eth_getProof") do(
     address: Address, slots: seq[UInt256], quantityTag: RtBlockIdentifier
@@ -398,4 +402,5 @@ proc installEthApiHandlers*(
     ## slots: integers of the positions in the storage to return with storage proofs.
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns: the proof response containing the account, account proof and storage proof
-    discard
+    # TODO
+    raiseAssert("Not implemented")

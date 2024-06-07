@@ -52,7 +52,7 @@ func rlpDecodeContractTrieNode*(contractTrieNode: TrieNode): Result[UInt256, str
   if not isLeaf:
     return err("invalid contract trie node - leaf prefix expected")
 
-  decodeRlp(storageNodePrefixRlp.listElem(1).toBytes(), UInt256)
+  decodeRlp(storageNodeRlp.listElem(1).toBytes(), UInt256)
 
 func toAccount*(accountProof: TrieProof): Result[Account, string] {.inline.} =
   doAssert(accountProof.len() > 1)
