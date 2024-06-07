@@ -34,7 +34,6 @@ type
     OutOfBounds
     InvalidInitCode
     EvmHeaderNotFound
-    EvmBlockHashNotFound
     EvmInvalidParam
 
   EvmErrorObj* = object

@@ -71,7 +71,7 @@ proc overflowMain*() =
     when defined(evmc_enabled):
       check res.error == "EVMC_FAILURE"
     else:
-      check res.error == "Opcode Dispatch Error: GasInt overflow, gasCost=2199123918888, gasRefund=9223372036845099570, depth=1"
+      check res.error == "Opcode Dispatch Error: GasIntOverflow, depth=1"
 
 when isMainModule:
   overflowMain()
