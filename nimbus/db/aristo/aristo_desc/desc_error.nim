@@ -241,11 +241,16 @@ type
     # RocksDB backend
     RdbBeCantCreateDataDir
     RdbBeCantCreateTmpDir
-    RdbBeDriverDelError
-    RdbBeDriverGetError
+    RdbBeDriverDelAdmError
+    RdbBeDriverDelKeyError
+    RdbBeDriverDelVtxError
+    RdbBeDriverGetAdmError
+    RdbBeDriverGetKeyError
+    RdbBeDriverGetVtxError
     RdbBeDriverGuestError
-    RdbBeDriverInitError
-    RdbBeDriverPutError
+    RdbBeDriverPutAdmError
+    RdbBeDriverPutVtxError
+    RdbBeDriverPutKeyError
     RdbBeDriverWriteError
     RdbGuestInstanceUnsupported
     RdbHashKeyExpected

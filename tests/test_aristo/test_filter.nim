@@ -134,7 +134,7 @@ proc dbTriplet(w: LeafQuartet; rdbPath: string): Result[DbTriplet,AristoError] =
       check (n, report.error) == (n,0)
       return err(report.error)
 
-  return ok dx
+  ok dx
 
 # ----------------------
 
@@ -338,7 +338,6 @@ proc testDistributedAccess*(
       let c11Fil1_eq_db1RoFilter = c11Filter1.isDbEq(db1.balancer, db1, noisy)
       xCheck c11Fil1_eq_db1RoFilter:
         noisy.say "*** testDistributedAccess (7)", "n=", n,
-          "\n   c11Filter1\n   ", c11Filter1.pp(db1),
           "db1".dump(db1),
           ""
 
@@ -346,10 +345,8 @@ proc testDistributedAccess*(
       let c11Fil3_eq_db3RoFilter = c11Filter3.isDbEq(db3.balancer, db3, noisy)
       xCheck c11Fil3_eq_db3RoFilter:
         noisy.say "*** testDistributedAccess (8)", "n=", n,
-          "\n   c11Filter3\n   ", c11Filter3.pp(db3),
           "db3".dump(db3),
           ""
-
       # Check/verify backends
       block:
         let ok = dy.checkBeOk(noisy=noisy,fifos=true)

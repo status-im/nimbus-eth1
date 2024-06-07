@@ -23,10 +23,12 @@ import
 
 type
   RdbInst* = object
-    store*: ColFamilyReadWrite         ## Rocks DB database handler
+    admCol*: ColFamilyReadWrite        ## Admin column family handler
+    vtxCol*: ColFamilyReadWrite        ## Vertex column family handler
+    keyCol*: ColFamilyReadWrite        ## Hash key column family handler
     session*: WriteBatchRef            ## For batched `put()`
-    rdKeyLru*: KeyedQueue[RdbKey,Blob] ## Read cache
-    rdVtxLru*: KeyedQueue[RdbKey,Blob] ## Read cache
+    rdKeyLru*: KeyedQueue[uint64,Blob] ## Read cache
+    rdVtxLru*: KeyedQueue[uint64,Blob] ## Read cache
     basePath*: string                  ## Database directory
     noFq*: bool                        ## No filter queues available
 
@@ -35,15 +37,21 @@ type
 
   # Alien interface
   RdbGuest* = enum
+    ## The guest CF was worth a try, but there are better solutions and this
+    ## item will be removed in future.
     GuestFamily0 = "Guest0"            ## Guest family (e.g. for Kvt)
     GuestFamily1 = "Guest1"            ## Ditto
     GuestFamily2 = "Guest2"            ## Ditto
 
   RdbGuestDbRef* = ref object of GuestDbRef
+    ## The guest CF was worth a try, but there are better solutions and this
+    ## item will be removed in future.
     guestDb*: ColFamilyReadWrite       ## Pigiback feature references
 
 const
-  AristoFamily* = "Aristo"             ## RocksDB column family
+  AdmCF* = "AdmAri"                    ## Admin column family name
+  VtxCF* = "VtxAri"                    ## Vertex column family name
+  KeyCF* = "KeyAri"                    ## Hash key column family name
   BaseFolder* = "nimbus"               ## Same as for Legacy DB
   DataFolder* = "aristo"               ## Legacy DB has "data"
   RdKeyLruMaxSize* = 4096              ## Max size of read cache for keys
@@ -56,6 +64,9 @@ const
 template logTxt*(info: static[string]): static[string] =
   "RocksDB/" & info
 
+template baseDb*(rdb: RdbInst): RocksDbReadWriteRef =
+  rdb.admCol.db
+
 
 func baseDir*(rdb: RdbInst): string =
   rdb.basePath / BaseFolder
@@ -63,10 +74,8 @@ func baseDir*(rdb: RdbInst): string =
 func dataDir*(rdb: RdbInst): string =
   rdb.baseDir / DataFolder
 
-func toRdbKey*(id: uint64; pfx: StorageType): RdbKey =
-  let idKey = id.toBytesBE
-  result[0] = pfx.ord.byte
-  copyMem(addr result[1], unsafeAddr idKey, sizeof idKey)
+template toOpenArray*(xid: uint64): openArray[byte] =
+  xid.toBytesBE.toOpenArray(0,7)
 
 # ------------------------------------------------------------------------------
 # End

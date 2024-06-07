@@ -113,7 +113,7 @@ proc getTuvFn(db: RdbBackendRef): GetTuvFn =
     proc(): Result[VertexID,AristoError]=
 
       # Fetch serialised data record.
-      let data = db.rdb.getByPfx(AdmPfx, AdmTabIdTuv.uint64).valueOr:
+      let data = db.rdb.getAdm(AdmTabIdTuv.int).valueOr:
         when extraTraceMessages:
           trace logTxt "getTuvFn: failed", error=error[0], info=error[1]
         return err(error[0])
@@ -123,14 +123,14 @@ proc getTuvFn(db: RdbBackendRef): GetTuvFn =
         return ok VertexID(0)
 
       # Decode data record
-      data.deblobify VertexID
+      result = data.deblobify VertexID
 
 proc getLstFn(db: RdbBackendRef): GetLstFn =
   result =
     proc(): Result[SavedState,AristoError]=
 
       # Fetch serialised data record.
-      let data = db.rdb.getByPfx(AdmPfx, AdmTabIdLst.uint64).valueOr:
+      let data = db.rdb.getAdm(AdmTabIdLst.int).valueOr:
         when extraTraceMessages:
           trace logTxt "getLstFn: failed", error=error[0], info=error[1]
         return err(error[0])
@@ -203,12 +203,14 @@ proc putTuvFn(db: RdbBackendRef): PutTuvFn =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
         if vs.isValid:
-          db.rdb.putByPfx(AdmPfx, @[(AdmTabIdTuv.uint64, vs.blobify)]).isOkOr:
+          db.rdb.putAdm(AdmTabIdTuv.int, vs.blobify).isOkOr:
             hdl.error = TypedPutHdlErrRef(
               pfx:  AdmPfx,
               aid:  AdmTabIdTuv,
               code: error[1],
               info: error[2])
+            return
+
 
 proc putLstFn(db: RdbBackendRef): PutLstFn =
   result =
@@ -221,7 +223,7 @@ proc putLstFn(db: RdbBackendRef): PutLstFn =
             aid:  AdmTabIdLst,
             code: error)
           return
-        db.rdb.putByPfx(AdmPfx, @[(AdmTabIdLst.uint64, data)]).isOkOr:
+        db.rdb.putAdm(AdmTabIdLst.int, data).isOkOr:
           hdl.error = TypedPutHdlErrRef(
             pfx:  AdmPfx,
             aid:  AdmTabIdLst,
@@ -317,28 +319,32 @@ iterator walk*(
       ): tuple[pfx: StorageType, xid: uint64, data: Blob] =
   ## Walk over all key-value pairs of the database.
   ##
-  ## Non-decodable entries are stepped over while the counter `n` of the
-  ## yield record is still incremented.
-  for w in be.rdb.walk:
-    yield w
+  ## Non-decodable entries are ignored
+  ##
+  for (xid, data) in be.rdb.walkAdm:
+    yield (AdmPfx, xid, data)
+  for (vid, data) in be.rdb.walkVtx:
+    yield (VtxPfx, vid, data)
+  for (vid, data) in be.rdb.walkKey:
+    yield (KeyPfx, vid, data)
 
 iterator walkVtx*(
     be: RdbBackendRef;
       ): tuple[vid: VertexID, vtx: VertexRef] =
   ## Variant of `walk()` iteration over the vertex sub-table.
-  for (xid, data) in be.rdb.walk VtxPfx:
+  for (vid, data) in be.rdb.walkVtx:
     let rc = data.deblobify VertexRef
     if rc.isOk:
-      yield (VertexID(xid), rc.value)
+      yield (VertexID(vid), rc.value)
 
 iterator walkKey*(
     be: RdbBackendRef;
       ): tuple[vid: VertexID, key: HashKey] =
   ## Variant of `walk()` iteration over the Markle hash sub-table.
-  for (xid, data) in be.rdb.walk KeyPfx:
+  for (vid, data) in be.rdb.walkKey:
     let lid = HashKey.fromBytes(data).valueOr:
       continue
-    yield (VertexID(xid), lid)
+    yield (VertexID(vid), lid)
 
 # ------------------------------------------------------------------------------
 # End

@@ -130,10 +130,6 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
       # been deleted.
       for vid in max(topVidBe + 1, VertexID(LEAST_FREE_VID)) .. vidTuvBe:
         if db.getVtxBE(vid).isOk or db.getKeyBE(vid).isOk:
-          echo ">>>",
-           " topVidBe=", topVidBe,
-           " vidTuvBe=", vidTuvBe,
-           " vid=", vid
           return err((vid,CheckBeGarbledVTop))
 
   # Check layer cache against backend
@@ -195,10 +191,6 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
       for vid in max(db.vTop + 1, VertexID(LEAST_FREE_VID)) .. topVidCache:
         if db.layersGetVtxOrVoid(vid).isValid or
            db.layersGetKeyOrVoid(vid).isValid:
-          echo ">>>",
-            " topVidCache=", topVidCache,
-            " vTop=", db.vTop,
-            " vid=", vid
           return err((db.vTop,CheckBeCacheGarbledVTop))
 
   ok()
