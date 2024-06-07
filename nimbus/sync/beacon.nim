@@ -132,7 +132,7 @@ proc init*(
     maxPeers: int;
     id: int = 0): T =
   new result
-  result.initSync(ethNode, chain, maxPeers, none(string))
+  result.initSync(ethNode, chain, maxPeers, Opt.none(string))
   result.ctx.pool.rng = rng
   result.ctx.pool.id = id
 
