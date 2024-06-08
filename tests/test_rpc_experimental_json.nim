@@ -41,19 +41,15 @@ proc importBlockData(node: JsonNode): (CommonRef, Hash256, Hash256, UInt256) {. 
   let
     parentNumber = blockNumber - 1
     parent = com.db.getBlockHeader(parentNumber)
-    header = com.db.getBlockHeader(blockNumber)
-    headerHash = header.blockHash
-    blockBody = com.db.getBlockBody(headerHash)
+    blk = com.db.getEthBlock(blockNumber)
     chain = newChain(com)
-    headers = @[header]
-    bodies = @[blockBody]
 
   # it's ok if setHead fails here because of missing ancestors
   discard com.db.setHead(parent, true)
-  let validationResult = chain.persistBlocks(headers, bodies)
+  let validationResult = chain.persistBlocks([blk])
   doAssert validationResult.isOk()
 
-  return (com, parent.stateRoot, header.stateRoot, blockNumber)
+  return (com, parent.stateRoot, blk.header.stateRoot, blockNumber)
 
 proc checkAndValidateProofs(
     db: CoreDbRef,

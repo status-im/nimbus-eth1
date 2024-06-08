@@ -27,8 +27,7 @@ proc validateBlock(com: CommonRef, blockNumber: BlockNumber): BlockNumber =
     blocks = newSeq[EthBlock](numBlocks)
 
   for i in 0 ..< numBlocks:
-    let header = com.db.getBlockHeader(blockNumber + i.u256)
-    blocks[i]  = EthBlock.init(header, com.db.getBlockBody(header.blockHash))
+    blocks[i] = com.db.getEthBlock(blockNumber + i.u256)
 
   let transaction = com.db.newTransaction()
   defer: transaction.dispose()

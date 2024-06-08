@@ -87,11 +87,9 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, rpcsrv: RpcServer) =
     ## data: Hash of a block.
     var
       h = data.ethHash
-      header = chainDB.getBlockHeader(h)
-      blockHash = chainDB.getBlockHash(header.blockNumber)
-      body = chainDB.getBlockBody(blockHash)
+      blk = chainDB.getEthBlock(h)
 
-    dumpBlockState(com, EthBlock.init(move(header), move(body)))
+    dumpBlockState(com, blk)
 
   rpcsrv.rpc("debug_traceBlockByNumber") do(quantityTag: BlockTag, options: Option[TraceOptions]) -> JsonNode:
     ## The traceBlock method will return a full stack trace of all invoked opcodes of all transaction

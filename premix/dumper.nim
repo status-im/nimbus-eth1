@@ -36,11 +36,8 @@ proc dumpDebug(com: CommonRef, blockNumber: UInt256) =
   var
     parentNumber = blockNumber - 1
     parent = captureCom.db.getBlockHeader(parentNumber)
-    header = captureCom.db.getBlockHeader(blockNumber)
-    headerHash = header.blockHash
-    body = captureCom.db.getBlockBody(headerHash)
-    blk = EthBlock.init(move(header), move(body))
-    vmState = BaseVMState.new(parent, header, captureCom)
+    blk = captureCom.db.getEthBlock(blockNumber)
+    vmState = BaseVMState.new(parent, blk.header, captureCom)
 
   discard captureCom.db.setHead(parent, true)
   discard vmState.processBlock(blk)

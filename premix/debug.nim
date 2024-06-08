@@ -33,14 +33,12 @@ proc executeBlock(blockEnv: JsonNode, memoryDB: CoreDbRef, blockNumber: UInt256)
     parentNumber = blockNumber - 1
     com = CommonRef.new(memoryDB)
     parent = com.db.getBlockHeader(parentNumber)
-    header = com.db.getBlockHeader(blockNumber)
-    body   = com.db.getBlockBody(header.blockHash)
-    blk    = EthBlock.init(move(header), move(body))
+    blk = com.db.getEthBlock(blockNumber)
   let transaction = memoryDB.newTransaction()
   defer: transaction.dispose()
 
   let
-    vmState = BaseVMState.new(parent, header, com)
+    vmState = BaseVMState.new(parent, blk.header, com)
     validationResult = vmState.processBlock(blk)
 
   if validationResult != ValidationResult.OK:
