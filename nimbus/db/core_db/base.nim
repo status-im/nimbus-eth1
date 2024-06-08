@@ -82,7 +82,6 @@ when AutoValidateDescriptors:
 # More settings
 const
   logTxt = "CoreDb "
-  legaApiTxt = logTxt & "legacy API"
   newApiTxt = logTxt & "API"
 
 # Annotation helpers
