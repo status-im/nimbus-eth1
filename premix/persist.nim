@@ -78,8 +78,8 @@ proc main() {.used.} =
 
   let numBlocksToCommit = conf.numCommits
 
-  var headers = newSeqOfCap[EthBlock](numBlocksToCommit)
-  var one     = 1.u256
+  var blocks = newSeqOfCap[EthBlock](numBlocksToCommit)
+  var one    = 1.u256
 
   var numBlocks = 0
   var counter = 0
