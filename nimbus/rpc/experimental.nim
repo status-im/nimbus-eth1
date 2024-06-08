@@ -52,7 +52,7 @@ proc getMultiKeys*(
   defer: dbTx.dispose()
 
   # Execute the block of transactions and collect the keys of the touched account state
-  let processBlockResult = processBlock(vmState, blockHeader, blockBody)
+  let processBlockResult = processBlock(vmState, EthBlock.init(blockHeader, blockBody))
   doAssert processBlockResult == ValidationResult.OK
 
   let mkeys = vmState.stateDB.makeMultiKeys()

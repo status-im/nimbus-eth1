@@ -12,6 +12,7 @@
 
 import
   std/[options, sets, strformat],
+  stew/assign2,
   eth/keys,
   ../db/ledger,
   ../common/[common, evmforks],
@@ -28,7 +29,7 @@ proc init(
       tracer:       TracerRef,
       flags:        set[VMFlag] = self.flags) =
   ## Initialisation helper
-  self.parent = parent
+  assign(self.parent, parent)
   self.blockCtx = blockCtx
   self.gasPool = blockCtx.gasLimit
   self.com = com

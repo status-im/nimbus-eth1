@@ -35,7 +35,7 @@ proc calculateReward*(vmState: BaseVMState; account: EthAddress;
 
 
 proc calculateReward*(vmState: BaseVMState;
-                      header: BlockHeader; body: BlockBody) =
-  vmState.calculateReward(header.coinbase, header.blockNumber, body.uncles)
+                      header: BlockHeader; uncles: openArray[BlockHeader]) =
+  vmState.calculateReward(header.coinbase, header.blockNumber, uncles)
 
 # End

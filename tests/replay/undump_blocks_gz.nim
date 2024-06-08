@@ -82,10 +82,9 @@ proc dumpBlocksNl*(db: CoreDbRef; headers: openArray[BlockHeader];
 # Public undump
 # ------------------------------------------------------------------------------
 
-iterator undumpBlocksGz*(gzFile: string): (seq[BlockHeader],seq[BlockBody]) =
+iterator undumpBlocksGz*(gzFile: string): seq[EthBlock] =
   var
-    headerQ: seq[BlockHeader]
-    bodyQ: seq[BlockBody]
+    blockQ: seq[EthBlock]
     current = 0u
     start = 0u
     top = 0u
@@ -109,8 +108,7 @@ iterator undumpBlocksGz*(gzFile: string): (seq[BlockHeader],seq[BlockBody]) =
           top = start + flds[2].parseUInt
           current = start
           waitFor = ""
-          headerQ.reset
-          bodyQ.reset
+          blockQ.reset
           continue
         else:
           echo &"*** Ignoring line({lno}): {line}."
@@ -123,8 +121,8 @@ iterator undumpBlocksGz*(gzFile: string): (seq[BlockHeader],seq[BlockBody]) =
           var
             rlpHeader = flds[1].rlpFromHex
             rlpBody = flds[2].rlpFromHex
-          headerQ.add rlpHeader.read(BlockHeader)
-          bodyQ.add rlpBody.read(BlockBody)
+          blockQ.add EthBlock.init(
+            rlpHeader.read(BlockHeader), rlpBody.read(BlockBody))
           current.inc
           continue
         else:
@@ -135,14 +133,14 @@ iterator undumpBlocksGz*(gzFile: string): (seq[BlockHeader],seq[BlockBody]) =
           say &"*** commit({lno}) #{start}..{top-1}"
         else:
           echo &"*** commit({lno}) error, current({current}) should be {top}"
-        yield (headerQ, bodyQ)
+        yield blockQ
         waitFor = "transaction"
         continue
 
     echo &"*** Ignoring line({lno}): {line}."
     waitFor = "transaction"
 
-iterator undumpBlocksGz*(gzs: seq[string]): (seq[BlockHeader],seq[BlockBody]) =
+iterator undumpBlocksGz*(gzs: seq[string]): seq[EthBlock] =
   ## Variant of `undumpBlocks()`
   for f in gzs:
     for w in f.undumpBlocksGz:
@@ -152,14 +150,14 @@ iterator undumpBlocksGz*(
         gzFile: string;                          # Data dump file
         least: uint64;                           # First block to extract
         stopAfter = high(uint64);                # Last block to extract
-          ): (seq[BlockHeader],seq[BlockBody]) =
+          ): seq[EthBlock] =
   ## Variant of `undumpBlocks()`
-  for (seqHdr,seqBdy) in gzFile.undumpBlocksGz:
-    let (h,b) = startAt(seqHdr, seqBdy, least)
-    if h.len == 0:
+  for seqBlock in gzFile.undumpBlocksGz:
+    let b = startAt(seqBlock, least)
+    if b.len == 0:
       continue
-    let w = stopAfter(h, b, stopAfter)
-    if w[0].len == 0:
+    let w = stopAfter(b, stopAfter)
+    if w.len == 0:
       break
     yield w
 

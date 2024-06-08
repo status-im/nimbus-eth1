@@ -19,7 +19,7 @@ proc test5*() =
   suite "should fill the canonical chain after being linked to a canonical block past genesis":
     let env = setupEnv()
     let skel = SkeletonRef.new(env.chain)
-    
+
     test "skel open ok":
       let res = skel.open()
       check res.isOk
@@ -43,7 +43,8 @@ proc test5*() =
         check res.isOk
 
     test "canonical height should be at block 2":
-      let r = skel.insertBlocks([block1, block2], [emptyBody, emptyBody], false)
+      let r = skel.insertBlocks([
+        EthBlock.init(block1, emptyBody), EthBlock.init(block2, emptyBody)], false)
       check r.isOk
       check r.get == 2
 

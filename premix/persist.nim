@@ -78,8 +78,7 @@ proc main() {.used.} =
 
   let numBlocksToCommit = conf.numCommits
 
-  var headers = newSeqOfCap[BlockHeader](numBlocksToCommit)
-  var bodies  = newSeqOfCap[BlockBody](numBlocksToCommit)
+  var headers = newSeqOfCap[EthBlock](numBlocksToCommit)
   var one     = 1.u256
 
   var numBlocks = 0
@@ -99,8 +98,7 @@ proc main() {.used.} =
       else:
         raise e
 
-    headers.add thisBlock.header
-    bodies.add thisBlock.body
+    blocks.add EthBlock.init(thisBlock.header, thisBlock.body)
     info "REQUEST HEADER", blockNumber=blockNumber, txs=thisBlock.body.transactions.len
 
     inc numBlocks
@@ -108,12 +106,11 @@ proc main() {.used.} =
 
     if numBlocks == numBlocksToCommit:
       persistToDb(com.db):
-        let res = chain.persistBlocks(headers, bodies)
+        let res = chain.persistBlocks(blocks)
         res.isOkOr:
           raise newException(ValidationError, "Error when validating blocks: " & res.error)
       numBlocks = 0
-      headers.setLen(0)
-      bodies.setLen(0)
+      blocks.setLen(0)
 
     inc counter
     if conf.maxBlocks != 0 and counter >= conf.maxBlocks:
@@ -121,7 +118,7 @@ proc main() {.used.} =
 
   if numBlocks > 0:
     persistToDb(com.db):
-      let res = chain.persistBlocks(headers, bodies)
+      let res = chain.persistBlocks(blocks)
       res.isOkOr:
         raise newException(ValidationError, "Error when validating blocks: " & res.error)
 

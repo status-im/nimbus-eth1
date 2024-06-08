@@ -295,8 +295,8 @@ proc runner(noisy = true; capture = goerliCapture) =
     test &"Import from {fileInfo}":
       # Import minimum amount of blocks, then collect transactions
       for chain in filePath.undumpBlocks:
-        let leadBlkNum = chain[0][0].blockNumber
-        topNumber = chain[0][^1].blockNumber
+        let leadBlkNum = chain[0].header.blockNumber
+        topNumber = chain[^1].header.blockNumber
 
         if loadTxs <= txs.len:
           break
@@ -308,16 +308,16 @@ proc runner(noisy = true; capture = goerliCapture) =
 
         # Import block chain blocks
         if leadBlkNum < loadBlocks:
-          com.importBlocks(chain[0],chain[1])
+          com.importBlocks(chain)
           continue
 
         # Import transactions
-        for inx in 0 ..< chain[0].len:
-          let blkTxs = chain[1][inx].transactions
+        for inx in 0 ..< chain.len:
+          let blkTxs = chain[inx].transactions
 
           # Continue importing up until first non-trivial block
           if txs.len == 0 and blkTxs.len == 0:
-            com.importBlocks(@[chain[0][inx]],@[chain[1][inx]])
+            com.importBlocks([chain[inx]])
             continue
 
           # Load transactions

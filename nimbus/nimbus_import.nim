@@ -104,9 +104,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
     if start <= lastEra1Block:
       notice "Importing era1 archive",
         start, dataDir = conf.dataDir.string, era1Dir = conf.era1Dir.string
-      var
-        headers: seq[BlockHeader]
-        bodies: seq[BlockBody]
+      var blocks: seq[EthBlock]
 
       func f(value: float): string =
         try:
@@ -117,7 +115,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
       template process() =
         let
           time1 = Moment.now()
-          statsRes = chain.persistBlocks(headers, bodies)
+          statsRes = chain.persistBlocks(blocks)
         if statsRes.isErr():
           error "Failed to persist blocks", error = statsRes.error
           quit(QuitFailure)
@@ -134,7 +132,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
           blocks = imported,
           txs,
           gas,
-          bps = f(headers.len.float / diff1),
+          bps = f(blocks.len.float / diff1),
           tps = f(statsRes[].txs.float / diff1),
           gps = f(statsRes[].gas.float / diff1),
           avgBps = f(imported.float / diff0),
@@ -150,7 +148,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
             csv.writeLine(
               [
                 $blockNumber,
-                $headers.len,
+                $blocks.len,
                 $statsRes[].txs,
                 $statsRes[].gas,
                 $(time2 - time1).nanoseconds(),
@@ -159,8 +157,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
             csv.flushFile()
           except IOError as exc:
             warn "Could not write csv", err = exc.msg
-        headers.setLen(0)
-        bodies.setLen(0)
+        blocks.setLen(0)
 
       let db =
         Era1DbRef.init(conf.era1Dir.string, "mainnet").expect("Era files present")
@@ -168,19 +165,17 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
         db.dispose()
 
       while running and imported < conf.maxBlocks and blockNumber <= lastEra1Block:
-        var blk = db.getBlockTuple(blockNumber).valueOr:
+        var blk = db.getEthBlock(blockNumber).valueOr:
           error "Could not load block from era1", blockNumber, error
           break
 
         imported += 1
+        blocks.add move(blk)
 
-        headers.add move(blk.header)
-        bodies.add move(blk.body)
-
-        if headers.lenu64 mod conf.chunkSize == 0:
+        if blocks.lenu64 mod conf.chunkSize == 0:
           process()
 
-      if headers.len > 0:
+      if blocks.len > 0:
         process() # last chunk, if any
 
   for blocksFile in conf.blocksFile:

@@ -32,11 +32,9 @@ proc dumpTest(com: CommonRef, blockNumber: int) =
     headerHash = header.blockHash
     blockBody = captureCom.db.getBlockBody(headerHash)
     chain = newChain(captureCom)
-    headers = @[header]
-    bodies = @[blockBody]
 
   discard captureCom.db.setHead(parent, true)
-  discard chain.persistBlocks(headers, bodies)
+  discard chain.persistBlocks([EthBlock.init(header, blockBody)])
 
   var metaData = %{
     "blockNumber": %blockNumber.toHex
