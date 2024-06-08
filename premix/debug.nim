@@ -29,19 +29,19 @@ proc prepareBlockEnv(node: JsonNode, memoryDB: CoreDbRef) =
       raiseAssert "prepareBlockEnv(): put() (loop) failed " & $$error
 
 proc executeBlock(blockEnv: JsonNode, memoryDB: CoreDbRef, blockNumber: UInt256) =
-  let
+  var
     parentNumber = blockNumber - 1
     com = CommonRef.new(memoryDB)
     parent = com.db.getBlockHeader(parentNumber)
     header = com.db.getBlockHeader(blockNumber)
     body   = com.db.getBlockBody(header.blockHash)
-
+    blk    = EthBlock.init(move(header), move(body))
   let transaction = memoryDB.newTransaction()
   defer: transaction.dispose()
 
   let
     vmState = BaseVMState.new(parent, header, com)
-    validationResult = vmState.processBlock(header, body)
+    validationResult = vmState.processBlock(blk)
 
   if validationResult != ValidationResult.OK:
     error "block validation error", validationResult
@@ -49,7 +49,7 @@ proc executeBlock(blockEnv: JsonNode, memoryDB: CoreDbRef, blockNumber: UInt256)
     info "block validation success", validationResult, blockNumber
 
   transaction.rollback()
-  vmState.dumpDebuggingMetaData(header, body, false)
+  vmState.dumpDebuggingMetaData(blk, false)
   let
     fileName = "debug" & $blockNumber & ".json"
     nimbus   = json.parseFile(fileName)

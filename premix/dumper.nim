@@ -33,19 +33,20 @@ proc dumpDebug(com: CommonRef, blockNumber: UInt256) =
   defer: transaction.dispose()
 
 
-  let
+  var
     parentNumber = blockNumber - 1
     parent = captureCom.db.getBlockHeader(parentNumber)
     header = captureCom.db.getBlockHeader(blockNumber)
     headerHash = header.blockHash
     body = captureCom.db.getBlockBody(headerHash)
+    blk = EthBlock.init(move(header), move(body))
     vmState = BaseVMState.new(parent, header, captureCom)
 
   discard captureCom.db.setHead(parent, true)
-  discard vmState.processBlock(header, body)
+  discard vmState.processBlock(blk, body)
 
   transaction.rollback()
-  vmState.dumpDebuggingMetaData(header, body, false)
+  vmState.dumpDebuggingMetaData(blk, false)
 
 proc main() {.used.} =
   let conf = getConfiguration()
