@@ -16,6 +16,7 @@
 
 import
   eth/[rlp, trie/nibbles],
+  results,
   "."/[core_db]
 
 type
@@ -41,7 +42,7 @@ proc getLocalBytes(x: TrieNodeKey): seq[byte] =
 
 proc dbGet(db: CoreDbRef, data: openArray[byte]): seq[byte]
   {.gcsafe, raises: [].} =
-  db.kvt.get(data)
+  db.newKvt().get(data).valueOr: EmptyBlob
 
 template keyToLocalBytes(db: CoreDbRef, k: TrieNodeKey): seq[byte] =
   if k.len < 32: k.getLocalBytes
@@ -87,11 +88,14 @@ proc getBranchAux(
     raise newException(RlpError, "node has an unexpected number of children")
 
 proc getBranch*(
-    self: CoreDbPhkRef;
+    self: CoreDxPhkRef;
     key: openArray[byte]): seq[seq[byte]] {.raises: [RlpError].} =
-  let keyHash = keccakHash(key).data
+  let
+    keyHash = keccakHash(key).data
+    rootHash = self.getColumn.state.valueOr:
+      raiseAssert "vmExecCommit(): state() failed " & $$error
   result = @[]
   var node = keyToLocalBytes(self.parent(), TrieNodeKey(
-        hash: self.rootHash(), usedBytes: self.rootHash().data.len().uint8))
+    hash: rootHash,usedBytes: rootHash.data.len().uint8))
   result.add node
   getBranchAux(self.parent(), node, initNibbleRange(keyHash), 0, result)

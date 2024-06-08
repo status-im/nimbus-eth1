@@ -353,18 +353,15 @@ proc getSavedStateBlockNumber*(
   ## the `relax` argument can be set `true` so this function also returns
   ## zero if the state consistency check fails.
   ##
-  var
-    header: BlockHeader
-  let
-    st = db.ctx.getMpt(CtGeneric).backend.toAristoSavedStateBlockNumber()
-    # The correct block number is one step ahead of the journal block number
-    bn = st.blockNumber + 1
-  if db.getBlockHeader(bn, header):
+  var header: BlockHeader
+  let st = db.ctx.getMpt(CtGeneric).backend.toAristoSavedStateBlockNumber()
+  if db.getBlockHeader(st.blockNumber, header):
     discard db.ctx.newColumn(CtAccounts,header.stateRoot).valueOr:
       if relax:
         return
-      raiseAssert "getSavedStateBlockNumber(): state mismatch at #" & $bn
-    return bn
+      raiseAssert "getSavedStateBlockNumber(): state mismatch at " &
+        "#" & $st.blockNumber
+    return st.blockNumber
 
 proc getBlockHeader*(
     db: CoreDbRef;

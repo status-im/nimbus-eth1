@@ -14,7 +14,7 @@ import
     vm_state,
     vm_types,
     constants,
-    vm_precompiles,
+    vm_precompiles {.all.},
     transaction,
     transaction/call_evm
     ],
@@ -86,13 +86,12 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   of "bn256mul" : data.doTest(vmState, fork, paEcMul)
   of "ecpairing": data.doTest(vmState, fork, paPairing)
   of "blake2f"  : data.doTest(vmState, fork, paBlake2bf)
-  # EIP 2537: disabled
-  # reason: not included in berlin
-  #of "blsg1add" : data.doTest(vmState, fork, paBlsG1Add)
-  #of "blsg1mul" : data.doTest(vmState, fork, paBlsG1Mul)
-  #of "blsg1multiexp" : data.doTest(vmState, fork, paBlsG1MultiExp)
-  #of "blsg2add" : data.doTest(vmState, fork, paBlsG2Add)
-  #of "blsg2mul" : data.doTest(vmState, fork, paBlsG2Mul)
+  of "blsg1add" : data.doTest(vmState, fork, paBlsG1Add)
+  of "blsg1mul" : data.doTest(vmState, fork, paBlsG1Mul)
+  of "blsg1multiexp" : data.doTest(vmState, fork, paBlsG1MultiExp)
+  of "blsg2add" : data.doTest(vmState, fork, paBlsG2Add)
+  of "blsg2mul" : data.doTest(vmState, fork, paBlsG2Mul)
+  # EIP 2537: disabled due to gas price changes/discprepancies
   #of "blsg2multiexp": data.doTest(vmState, fork, paBlsG2MultiExp)
   #of "blspairing": data.doTest(vmState, fork, paBlsPairing)
   #of "blsmapg1": data.doTest(vmState, fork, paBlsMapG1)

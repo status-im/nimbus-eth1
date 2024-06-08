@@ -46,7 +46,6 @@ proc validateMethodsDesc(kvt: CoreDbKvtFns) =
   doAssert not kvt.getFn.isNil
   doAssert not kvt.delFn.isNil
   doAssert not kvt.putFn.isNil
-  doAssert not kvt.saveOffSiteFn.isNil
   doAssert not kvt.hasKeyFn.isNil
   doAssert not kvt.forgetFn.isNil
 
@@ -63,7 +62,6 @@ proc validateMethodsDesc(fns: CoreDbMptFns) =
   doAssert not fns.mergeFn.isNil
   doAssert not fns.hasPathFn.isNil
   doAssert not fns.getColFn.isNil
-  doAssert not fns.isPruningFn.isNil
 
 proc validateMethodsDesc(fns: CoreDbAccFns) =
   doAssert not fns.getMptFn.isNil
@@ -73,7 +71,6 @@ proc validateMethodsDesc(fns: CoreDbAccFns) =
   doAssert not fns.mergeFn.isNil
   doAssert not fns.hasPathFn.isNil
   doAssert not fns.getColFn.isNil
-  doAssert not fns.isPruningFn.isNil
 
 # ------------
 
@@ -130,7 +127,6 @@ proc validateMethodsDesc(tx: CoreDxTxRef) =
   doAssert not tx.methods.commitFn.isNil
   doAssert not tx.methods.rollbackFn.isNil
   doAssert not tx.methods.disposeFn.isNil
-  doAssert not tx.methods.safeDisposeFn.isNil
 
 proc validateMethodsDesc(db: CoreDbRef) =
   doAssert not db.isNil

@@ -10,9 +10,11 @@
 
 import
   json, stint,
+  results,
   ../nimbus/[tracer, config],
   ../nimbus/core/chain,
   ../nimbus/common/common,
+  ../nimbus/db/opts,
   ../nimbus/db/core_db/persistent
 
 proc dumpTest(com: CommonRef, blockNumber: int) =
@@ -21,7 +23,7 @@ proc dumpTest(com: CommonRef, blockNumber: int) =
     parentNumber = blockNumber - 1
 
   var
-    capture = com.db.capture()
+    capture = com.db.newCapture.value
     captureCom = com.clone(capture.recorder)
 
   let
@@ -58,7 +60,8 @@ proc main() {.used.} =
   # nimbus --rpcapi: eth, debug --prune: archive
 
   var conf = makeConfig()
-  let db = newCoreDbRef(DefaultDbPersistent, string conf.dataDir)
+  let db = newCoreDbRef(
+    DefaultDbPersistent, string conf.dataDir, DbOptions.init())
   let com = CommonRef.new(db)
 
   com.dumpTest(97)

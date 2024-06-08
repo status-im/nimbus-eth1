@@ -28,13 +28,14 @@ type
     SerCantResolveStorageRoot
 
     # Data record transcoders, `deblobify()` and `blobify()`
-    BlobifyNilFilter
-    BlobifyNilVertex
     BlobifyBranchMissingRefs
     BlobifyExtMissingRefs
     BlobifyExtPathOverflow
     BlobifyLeafPathOverflow
-    BlobifyFilterRecordOverflow
+    BlobifyNilFilter
+    BlobifyNilVertex
+    BlobifyStateSrcLenGarbled
+    BlobifyStateTrgLenGarbled
 
     DeblobNilArgument
     DeblobUnknown
@@ -209,7 +210,6 @@ type
     DelPathNotFound
     DelPathTagError
     DelSubTreeAccRoot
-    DelSubTreeTooBig
     DelSubTreeVoidRoot
     DelVidStaleVtx
 

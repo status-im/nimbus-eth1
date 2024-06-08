@@ -15,7 +15,7 @@
 {.push raises: [].}
 
 import
-  ../../../errors,
+  ../../evm_errors,
   ../../computation,
   ../../memory,
   ../../stack,
@@ -33,33 +33,31 @@ when not defined(evmc_enabled):
     ../../state,
     ../../../db/ledger
 
-# Annotation helpers
-{.pragma: catchRaise, gcsafe, raises: [CatchableError].}
-
 # ------------------------------------------------------------------------------
 # Private
 # ------------------------------------------------------------------------------
 
 const
-  returnOp: Vm2OpFn = proc(k: var Vm2Ctx) {.catchRaise.} =
+  returnOp: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid =
     ## 0xf3, Halt execution returning output data.
-    let (startPos, size) = k.cpt.stack.popInt(2)
+    let (startPos, size) = ? k.cpt.stack.popInt(2)
 
     let (pos, len) = (startPos.cleanMemRef, size.cleanMemRef)
-    k.cpt.opcodeGastCost(Return,
+    ? k.cpt.opcodeGastCost(Return,
       k.cpt.gasCosts[Return].m_handler(k.cpt.memory.len, pos, len),
       reason = "RETURN")
     k.cpt.memory.extend(pos, len)
     k.cpt.output = k.cpt.memory.read(pos, len)
+    ok()
 
 
-  revertOp: Vm2OpFn = proc(k: var Vm2Ctx) {.catchRaise.} =
+  revertOp: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid =
     ## 0xfd, Halt execution reverting state changes but returning data
     ##       and remaining gas.
-    let (startPos, size) = k.cpt.stack.popInt(2)
+    let (startPos, size) = ? k.cpt.stack.popInt(2)
 
     let (pos, len) = (startPos.cleanMemRef, size.cleanMemRef)
-    k.cpt.opcodeGastCost(Revert,
+    ? k.cpt.opcodeGastCost(Revert,
       k.cpt.gasCosts[Revert].m_handler(k.cpt.memory.len, pos, len),
       reason = "REVERT")
 
@@ -67,50 +65,46 @@ const
     k.cpt.output = k.cpt.memory.read(pos, len)
     # setError(msg, false) will signal cheap revert
     k.cpt.setError(EVMC_REVERT, "REVERT opcode executed", false)
+    ok()
 
-
-  invalidOp: Vm2OpFn = proc(k: var Vm2Ctx) {.catchRaise.} =
-    raise newException(InvalidInstruction,
-                       "Invalid instruction, received an opcode " &
-                         "not implemented in the current fork. " &
-                          $k.cpt.fork & " " & $k.cpt.instr)
+  invalidOp: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid =
+    err(opErr(InvalidInstruction))
 
   # -----------
 
-  selfDestructOp: Vm2OpFn = proc(k: var Vm2Ctx) {.catchRaise.} =
+  selfDestructOp: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid =
     ## 0xff, Halt execution and register account for later deletion.
     let cpt = k.cpt
-    let beneficiary = cpt.stack.popAddress()
+    let beneficiary = ? cpt.stack.popAddress()
     when defined(evmc_enabled):
       block:
         cpt.selfDestruct(beneficiary)
     else:
       block:
         cpt.selfDestruct(beneficiary)
+    ok()
 
-
-  selfDestructEIP150Op: Vm2OpFn = proc(k: var Vm2Ctx) {.catchRaise.} =
+  selfDestructEIP150Op: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid =
     ## selfDestructEip150 (auto generated comment)
     let cpt = k.cpt
-    let beneficiary = cpt.stack.popAddress()
+    let beneficiary = ? cpt.stack.popAddress()
     block:
       let gasParams = GasParams(
         kind: SelfDestruct,
         sd_condition: not cpt.accountExists(beneficiary))
 
-      let gasCost =
-        cpt.gasCosts[SelfDestruct].c_handler(0.u256, gasParams).gasCost
-      cpt.opcodeGastCost(SelfDestruct,
-        gasCost, reason = "SELFDESTRUCT EIP150")
+      let res = ? cpt.gasCosts[SelfDestruct].c_handler(0.u256, gasParams)
+      ? cpt.opcodeGastCost(SelfDestruct,
+          res.gasCost, reason = "SELFDESTRUCT EIP150")
       cpt.selfDestruct(beneficiary)
+    ok()
 
-
-  selfDestructEIP161Op: Vm2OpFn = proc(k: var Vm2Ctx) {.catchRaise.} =
+  selfDestructEIP161Op: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid =
     ## selfDestructEip161 (auto generated comment)
     let cpt = k.cpt
-    checkInStaticContext(cpt)
+    ? checkInStaticContext(cpt)
 
-    let beneficiary = cpt.stack.popAddress()
+    let beneficiary = ? cpt.stack.popAddress()
     block:
       let
         isDead = not cpt.accountExists(beneficiary)
@@ -120,30 +114,30 @@ const
         kind: SelfDestruct,
         sd_condition: isDead and not balance.isZero)
 
-      let gasCost =
-        cpt.gasCosts[SelfDestruct].c_handler(0.u256, gasParams).gasCost
-      cpt.opcodeGastCost(SelfDestruct,
-        gasCost, reason = "SELFDESTRUCT EIP161")
+      let res = ? cpt.gasCosts[SelfDestruct].c_handler(0.u256, gasParams)
+      ? cpt.opcodeGastCost(SelfDestruct,
+        res.gasCost, reason = "SELFDESTRUCT EIP161")
       cpt.selfDestruct(beneficiary)
+    ok()
 
-
-  selfDestructEIP2929Op: Vm2OpFn = proc(k: var Vm2Ctx) {.catchRaise.} =
+  selfDestructEIP2929Op: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid =
     ## selfDestructEIP2929 (auto generated comment)
     let cpt = k.cpt
-    checkInStaticContext(cpt)
+    ? checkInStaticContext(cpt)
 
-    let beneficiary = cpt.stack.popAddress()
+    let beneficiary = ? cpt.stack.popAddress()
     block:
       let
         isDead = not cpt.accountExists(beneficiary)
         balance = cpt.getBalance(cpt.msg.contractAddress)
 
-      let gasParams = GasParams(
-        kind: SelfDestruct,
-        sd_condition: isDead and not balance.isZero)
+      let
+        gasParams = GasParams(
+          kind: SelfDestruct,
+          sd_condition: isDead and not balance.isZero)
+        res = ? cpt.gasCosts[SelfDestruct].c_handler(0.u256, gasParams)
 
-      var gasCost =
-        cpt.gasCosts[SelfDestruct].c_handler(0.u256, gasParams).gasCost
+      var gasCost = res.gasCost
 
       when evmc_enabled:
         if cpt.host.accessAccount(beneficiary) == EVMC_ACCESS_COLD:
@@ -154,9 +148,10 @@ const
             db.accessList(beneficiary)
             gasCost = gasCost + ColdAccountAccessCost
 
-      cpt.opcodeGastCost(SelfDestruct,
+      ? cpt.opcodeGastCost(SelfDestruct,
         gasCost, reason = "SELFDESTRUCT EIP2929")
       cpt.selfDestruct(beneficiary)
+    ok()
 
 # ------------------------------------------------------------------------------
 # Public, op exec table entries

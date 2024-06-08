@@ -13,11 +13,11 @@ import
   eth/common/eth_types,
   eth/rlp,
   stew/byteutils,
+  results,
   chronicles,
   ".."/[types, memory, stack],
   ../interpreter/op_codes,
-  ../../db/ledger,
-  ../../errors
+  ../../db/ledger
 
 type
   JsonTracer* = ref object of TracerRef
@@ -70,7 +70,7 @@ iterator storage(ctx: JsonTracer, compDepth: int): UInt256 =
 
 proc captureOpImpl(ctx: JsonTracer, c: Computation, pc: int,
                    op: Op, gas: GasInt, refund: GasInt,
-                   rData: openArray[byte], depth: int, error: Option[string]) {.gcsafe.} =
+                   rData: openArray[byte], depth: int, error: Opt[string]) {.gcsafe.} =
   let
     gasCost = ctx.gas - gas
 
@@ -142,7 +142,7 @@ method captureStart*(ctx: JsonTracer, comp: Computation,
   discard
 
 method captureEnd*(ctx: JsonTracer, comp: Computation, output: openArray[byte],
-                   gasUsed: GasInt, error: Option[string]) {.gcsafe.} =
+                   gasUsed: GasInt, error: Opt[string]) {.gcsafe.} =
   var res = %{
     "output": %(output),
     "gasUsed": encodeHex(gasUsed)
@@ -160,20 +160,19 @@ method captureOpStart*(ctx: JsonTracer, c: Computation,
 
   if TracerFlags.DisableStack notin ctx.flags:
     ctx.stack = newJArray()
-    for v in c.stack.values:
+    for v in c.stack:
       ctx.stack.add(%(v.encodeHex))
 
   if TracerFlags.DisableStorage notin ctx.flags and op == Sstore:
     try:
-      if c.stack.values.len > 1:
-        ctx.rememberStorageKey(c.msg.depth, c.stack[^1, UInt256])
-    except InsufficientStack as ex:
-      error "JsonTracer captureOpStart", msg=ex.msg
+      if c.stack.len > 1:
+        ctx.rememberStorageKey(c.msg.depth,
+          c.stack[^1, UInt256].expect("stack constains more than 2 elements"))
     except ValueError as ex:
       error "JsonTracer captureOpStart", msg=ex.msg
 
   try:
-    ctx.captureOpImpl(c, pc, op, 0, 0, [], depth, none(string))
+    ctx.captureOpImpl(c, pc, op, 0, 0, [], depth, Opt.none(string))
   except RlpError as ex:
     error "JsonTracer captureOpStart", msg=ex.msg
 
@@ -214,7 +213,7 @@ method captureOpEnd*(ctx: JsonTracer, comp: Computation,
 method captureFault*(ctx: JsonTracer, comp: Computation,
                      fixed: bool, pc: int, op: Op, gas: GasInt, refund: GasInt,
                      rData: openArray[byte],
-                     depth: int, error: Option[string]) {.gcsafe.} =
+                     depth: int, error: Opt[string]) {.gcsafe.} =
 
   if ctx.node.isNil.not:
     let res = ctx.node

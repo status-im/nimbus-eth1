@@ -9,9 +9,9 @@
 
 import
   std/typetraits,
-  chronicles, # Added for generic sandwich that hits in core_db :(
   eth/common/eth_types as etypes,
   eth/[trie, rlp],
+  results,
   stint,
   web3,
   web3/engine_api_types,
@@ -89,15 +89,16 @@ proc calculateTransactionData(
   ## - root of transactions trie
   ## - list of transactions hashes
   ## - total size of transactions in block
-  var tr = newCoreDbRef(DefaultDbMemory).mptPrune
+  var tr = newCoreDbRef(DefaultDbMemory).ctx.getMpt(CtGeneric)
   var txHashes: seq[TxOrHash]
   var txSize: uint64
   for i, t in items:
     let tx = distinctBase(t)
     txSize = txSize + uint64(len(tx))
-    tr.put(rlp.encode(i), tx)
+    tr.merge(rlp.encode(i), tx).expect "merge data"
     txHashes.add(txOrHash toFixedBytes(keccakHash(tx)))
-  return (tr.rootHash(), txHashes, txSize)
+  let rootHash = tr.getColumn().state().expect "hash"
+  (rootHash, txHashes, txSize)
 
 func blockHeaderSize(payload: ExecutionData, txRoot: etypes.Hash256): uint64 =
   let bh = etypes.BlockHeader(

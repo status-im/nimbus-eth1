@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -12,36 +12,36 @@
 ## ====================================
 ##
 
+{.push raises: [].}
+
 import
-  std/[strformat, sequtils],
+  std/[sequtils],
   ../../code_stream,
   ../../stack,
+  ../../evm_errors,
   ../op_codes,
   ./oph_defs,
   ./oph_gen_handlers
-
-{.push raises: [CatchableError].} # basically the annotation type of a `Vm2OpFn`
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
 proc fnName(n: int): string {.compileTime.} =
-  &"push{n}Op"
+  "push" & $n & "Op"
 
 proc opName(n: int): string {.compileTime.} =
-  &"Push{n}"
+  "Push" & $n
 
 proc fnInfo(n: int): string {.compileTime.} =
   var blurb = case n
               of 1: "byte"
-              else: &"{n} bytes"
-  &"Push {blurb} on the stack"
+              else: $n & " bytes"
+  "Push " & blurb & " on the stack"
 
 
-proc pushImpl(k: var Vm2Ctx; n: int) =
-  k.cpt.stack.push:
-    k.cpt.code.readVmWord(n)
+proc pushImpl(k: var Vm2Ctx; n: int): EvmResultVoid =
+  k.cpt.stack.push k.cpt.code.readVmWord(n)
 
 const
   inxRange = toSeq(1 .. 32)
@@ -66,10 +66,10 @@ genOphList fnName, fnInfo, inxRange, "vm2OpExecPush", opName
 # just adding Push0 here as a special case.)
 
 const
-  push0Op: Vm2OpFn = proc (k: var Vm2Ctx) =
+  push0Op: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
     ## 0x5f, push 0 onto the stack
     k.cpt.stack.push(0)
-  
+
   vm2OpExecPushZero*: seq[Vm2OpExec] = @[
 
     (opCode: Push0,       ## 0x5f, push 0 onto the stack

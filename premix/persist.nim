@@ -16,6 +16,7 @@ import
   ../nimbus/errors,
   ../nimbus/core/chain,
   ../nimbus/common,
+  ../nimbus/db/opts,
   ../nimbus/db/[core_db/persistent, storage_types],
   configuration  # must be late (compilation annoyance)
 
@@ -39,6 +40,9 @@ else:
 template persistToDb(db: CoreDbRef, body: untyped) =
   block: body
 
+proc contains(kvt: CoreDxKvtRef; key: openArray[byte]): bool =
+  kvt.hasKey(key).expect "valid bool"
+
 proc main() {.used.} =
   # 97 block with uncles
   # 46147 block with first transaction
@@ -54,7 +58,7 @@ proc main() {.used.} =
 
   let conf = configuration.getConfiguration()
   let com = CommonRef.new(
-    newCoreDbRef(DefaultDbPersistent, conf.dataDir),
+    newCoreDbRef(DefaultDbPersistent, conf.dataDir, DbOptions.init()),
     conf.netId, networkParams(conf.netId))
 
   # move head to block number ...
@@ -62,10 +66,11 @@ proc main() {.used.} =
     var parentBlock = requestBlock(conf.head, { DownloadAndValidate })
     discard com.db.setHead(parentBlock.header)
 
-  if canonicalHeadHashKey().toOpenArray notin com.db.kvt:
+  let kvt = com.db.newKvt()
+  if canonicalHeadHashKey().toOpenArray notin kvt:
     persistToDb(com.db):
       com.initializeEmptyDb()
-    doAssert(canonicalHeadHashKey().toOpenArray in com.db.kvt)
+    doAssert(canonicalHeadHashKey().toOpenArray in kvt)
 
   var head = com.db.getCanonicalHead()
   var blockNumber = head.blockNumber + 1

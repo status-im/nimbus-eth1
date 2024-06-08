@@ -12,16 +12,14 @@ import ./all_tests_macro
 cliBuilder:
   import  ./test_code_stream,
           #./test_accounts_cache,                  -- does not compile
-          #./test_sync_snap,                       -- temporarily suspended
-          #./test_rocksdb_timing,                  -- probably redundant
           ./test_jwt_auth,
           ./test_gas_meter,
           ./test_memory,
           ./test_stack,
           ./test_genesis,
-          /test_precompiles,
+          ./test_precompiles,
           ./test_generalstate_json,
-          #./test_tracer_json,                     -- temporarily suspended
+          #./test_tracer_json,
           #./test_persistblock_json,               -- fails
           #./test_rpc,                             -- fails
           ./test_filters,
@@ -41,13 +39,12 @@ cliBuilder:
           #./test_graphql,                         -- fails
           ./test_pow,
           ./test_configuration,
-          ./test_keyed_queue_rlp,
           #./test_txpool,                          -- fails
           ./test_txpool2,
           #./test_merge,                           -- fails
           ./test_eip4844,
           ./test_beacon/test_skeleton,
-          /test_overflow,
+          ./test_overflow,
           #./test_getproof_json,                   -- fails
           #./test_rpc_experimental_json,           -- fails
           ./test_aristo,

@@ -299,10 +299,7 @@ proc mptMethods(cMpt: AristoCoreDxMptRef): CoreDbMptFns =
       mptHasPath(k),
 
     getColFn: proc(): CoreDbColRef =
-      mptColFn(),
-
-    isPruningFn: proc(): bool =
-      true)
+      mptColFn())
 
 # ------------------------------------------------------------------------------
 # Private account call back functions
@@ -419,10 +416,7 @@ proc accMethods(cAcc: AristoCoreDxAccRef): CoreDbAccFns =
       accHasPath(address),
 
     getColFn: proc(): CoreDbColRef =
-      getColFn(),
-
-    isPruningFn: proc(): bool =
-      true)
+      getColFn())
 
 # ------------------------------------------------------------------------------
 # Private context call back functions
@@ -543,10 +537,10 @@ proc ctxMethods(cCtx: AristoCoreDbCtxRef): CoreDbCtxFns =
           ): CoreDbRc[CoreDbColRef] =
       ctxNewCol(col, colState, address),
 
-    getMptFn: proc(col: CoreDbColRef; prune: bool): CoreDbRc[CoreDxMptRef] =
+    getMptFn: proc(col: CoreDbColRef): CoreDbRc[CoreDxMptRef] =
       ctxGetMpt(col),
 
-    getAccFn: proc(col: CoreDbColRef; prune: bool): CoreDbRc[CoreDxAccRef] =
+    getAccFn: proc(col: CoreDbColRef): CoreDbRc[CoreDxAccRef] =
       ctxGetAcc(col),
 
     forgetFn: proc() =
@@ -606,8 +600,11 @@ func txTop*(
 proc txBegin*(
     base: AristoBaseRef;
     info: static[string];
-      ): CoreDbRc[AristoTxRef] =
-  base.api.txBegin(base.ctx.mpt).toRc(base, info)
+      ): AristoTxRef =
+  let rc = base.api.txBegin(base.ctx.mpt)
+  if rc.isErr:
+    raiseAssert info & ": " & $rc.error
+  rc.value
 
 proc getLevel*(base: AristoBaseRef): int =
   base.api.level(base.ctx.mpt)

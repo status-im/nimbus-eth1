@@ -12,7 +12,6 @@ import
   ../../nimbus/constants,
   ../../nimbus/utils/ec_recover,
   ../../nimbus/core/tx_pool/tx_item,
-  ../../nimbus/core/clique/clique_desc,
   eth/[common, common/transaction, keys],
   results,
   stint
@@ -91,7 +90,7 @@ proc testKeySign*(header: BlockHeader): BlockHeader =
   header.sign(prvTestKey)
 
 proc signerFunc*(signer: EthAddress, msg: openArray[byte]):
-                Result[RawSignature, cstring] {.gcsafe.} =
+                Result[array[RawSignatureSize, byte], cstring] {.gcsafe.} =
   doAssert(signer == testAddress)
   let
     data = keccakHash(msg)

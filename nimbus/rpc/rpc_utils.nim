@@ -25,7 +25,8 @@ import
   ../vm_types,
   ../vm_state,
   ../evm/precompiles,
-  ../evm/tracer/access_list_tracer
+  ../evm/tracer/access_list_tracer,
+  ../evm/evm_errors
 
 
 const
@@ -283,7 +284,13 @@ proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction,
 
 proc createAccessList*(header: BlockHeader,
                        com: CommonRef,
-                       args: TransactionArgs): AccessListResult {.gcsafe, raises:[CatchableError].} =
+                       args: TransactionArgs): AccessListResult =
+
+  template handleError(msg: string) =
+    return AccessListResult(
+      error: some(msg),
+    )
+
   var args = args
 
   # If the gas amount is not set, default to RPC gas cap.
@@ -291,7 +298,8 @@ proc createAccessList*(header: BlockHeader,
     args.gas = some(Quantity DEFAULT_RPC_GAS_CAP)
 
   let
-    vmState = BaseVMState.new(header, com)
+    vmState = BaseVMState.new(header, com).valueOr:
+                handleError("failed to create vmstate: " & $error.code)
     fork    = com.toEVMFork(forkDeterminationInfo(header.blockNumber, header.timestamp))
     sender  = args.sender
     # TODO: nonce should be retrieved from txPool
@@ -318,13 +326,13 @@ proc createAccessList*(header: BlockHeader,
     # Apply the transaction with the access list tracer
     let
       tracer  = AccessListTracer.new(accessList, sender, to, precompiles)
-      vmState = BaseVMState.new(header, com, tracer)
-      res     = rpcCallEvm(args, header, com, vmState)
+      vmState = BaseVMState.new(header, com, tracer).valueOr:
+                  handleError("failed to create vmstate: " & $error.code)
+      res     = rpcCallEvm(args, header, com, vmState).valueOr:
+                  handleError("failed to call evm: " & $error.code)
 
     if res.isError:
-      return AccessListResult(
-        error: some("failed to apply transaction: " & res.error),
-      )
+      handleError("failed to apply transaction: " & res.error)
 
     if tracer.equal(prevTracer):
       return AccessListResult(

@@ -132,15 +132,11 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
   # Early-initialise "--snap-sync" before starting any network connections.
   block:
     let
-      exCtrlFile = if conf.syncCtrlFile.isNone: none(string)
-                   else: some(conf.syncCtrlFile.get)
+      exCtrlFile = if conf.syncCtrlFile.isNone: Opt.none(string)
+                   else: Opt.some(conf.syncCtrlFile.get)
       tickerOK = conf.logLevel in {
         LogLevel.INFO, LogLevel.DEBUG, LogLevel.TRACE}
     case conf.syncMode:
-    of SyncMode.Full:
-      nimbus.fullSyncRef = FullSyncRef.init(
-        nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers,
-        tickerOK, exCtrlFile)
     #of SyncMode.Snap:
     #  # Minimal capability needed for sync only
     #  if ProtocolFlag.Snap notin protocols:
@@ -150,14 +146,9 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     #    nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers,
     #    tickerOK, exCtrlFile)
     of SyncMode.Default:
-      if com.forkGTE(MergeFork):
-        nimbus.beaconSyncRef = BeaconSyncRef.init(
-          nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers,
-        )
-      else:
-        nimbus.fullSyncRef = FullSyncRef.init(
-          nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers,
-          tickerOK, exCtrlFile)
+      nimbus.beaconSyncRef = BeaconSyncRef.init(
+        nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers,
+      )
 
   # Connect directly to the static nodes
   let staticPeers = conf.getStaticPeers()
@@ -176,7 +167,7 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     case conf.syncMode:
     #of SyncMode.Snap:
     #  waitForPeers = false
-    of SyncMode.Full, SyncMode.Default:
+    of SyncMode.Default:
       discard
     nimbus.networkLoop = nimbus.ethNode.connectToNetwork(
       enableDiscovery = conf.discovery != DiscoveryType.None,
@@ -238,7 +229,8 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
     # Resolve statically for database type
     case conf.chainDbMode:
     of Aristo,AriPrune:
-      AristoDbRocks.newCoreDbRef(string conf.dataDir)
+      AristoDbRocks.newCoreDbRef(string conf.dataDir, conf.dbOptions())
+
   let com = CommonRef.new(
     db = coreDB,
     pruneHistory = (conf.chainDbMode == AriPrune),
@@ -264,12 +256,7 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
     if conf.maxPeers > 0:
       case conf.syncMode:
       of SyncMode.Default:
-        if com.forkGTE(MergeFork):
-          nimbus.beaconSyncRef.start
-        else:
-          nimbus.fullSyncRef.start
-      of SyncMode.Full:
-        nimbus.fullSyncRef.start
+        nimbus.beaconSyncRef.start
       #of SyncMode.Snap:
       #  nimbus.snapSyncRef.start
 

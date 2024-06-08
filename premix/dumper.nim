@@ -15,7 +15,9 @@
 
 import
   stint,
+  results,
   ../nimbus/common/common,
+  ../nimbus/db/opts,
   ../nimbus/db/core_db/persistent,
   ../nimbus/core/executor,
   ../nimbus/[vm_state, vm_types],
@@ -24,10 +26,10 @@ import
 
 proc dumpDebug(com: CommonRef, blockNumber: UInt256) =
   var
-    capture = com.db.capture()
+    capture = com.db.newCapture.value
     captureCom = com.clone(capture.recorder)
 
-  let transaction = capture.recorder.beginTransaction()
+  let transaction = capture.recorder.newTransaction()
   defer: transaction.dispose()
 
 
@@ -47,7 +49,8 @@ proc dumpDebug(com: CommonRef, blockNumber: UInt256) =
 
 proc main() {.used.} =
   let conf = getConfiguration()
-  let com = CommonRef.new(newCoreDbRef(DefaultDbPersistent, conf.dataDir))
+  let com = CommonRef.new(
+    newCoreDbRef(DefaultDbPersistent, conf.dataDir, DbOptions.init()))
 
   if conf.head != 0.u256:
     dumpDebug(com, conf.head)

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -14,10 +14,10 @@ import
   ./evm/memory as vmm
 
 export
-  vmm.Memory,
+  vmm.EvmMemoryRef,
   vmm.extend,
   vmm.len,
-  vmm.newMemory,
+  vmm.new,
   vmm.read,
   vmm.write
 
@@ -116,12 +116,11 @@ export
   fVmo.Op,
   fVmo.PrevRandao,
   gVmg.isCreate,
-  hStk.Stack,
-  hStk.`$`,
+  hStk.EvmStackRef,
   hStk.`[]`,
   hStk.dup,
   hStk.len,
-  hStk.newStack,
+  hStk.new,
   hStk.peek,
   hStk.peekInt,
   hStk.popAddress,
@@ -129,6 +128,14 @@ export
   hStk.popTopic,
   hStk.push,
   hStk.swap,
-  hStk.top
+  hStk.top,
+  hStk.items,
+  hStk.pairs
+
+import
+  ./evm/evm_errors
+
+export
+  evm_errors
 
 # End

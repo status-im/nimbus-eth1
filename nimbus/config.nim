@@ -21,12 +21,12 @@ import
     chronicles,
     confutils,
     confutils/defs,
-    stew/byteutils,
     confutils/std/net
   ],
   eth/[common, net/utils, net/nat, p2p/bootnodes, p2p/enode, p2p/discoveryv5/enr],
   "."/[constants, vm_compile_info, version],
-  common/chain_config
+  common/chain_config,
+  db/opts
 
 export net
 
@@ -131,7 +131,6 @@ type
 
   SyncMode* {.pure.} = enum
     Default
-    Full                          ## Beware, experimental
     #Snap                          ## Beware, experimental
 
   NimbusConf* = object of RootObj
@@ -172,7 +171,6 @@ type
       desc: "Specify particular blockchain sync mode."
       longDesc:
         "- default   -- beacon sync mode\n" &
-        "- full      -- full blockchain archive\n" &
         # "- snap      -- experimental snap mode (development only)\n" &
         ""
       defaultValue: SyncMode.Default
@@ -374,6 +372,30 @@ type
       defaultValueDesc: $ProtocolFlag.Eth
       name: "protocols" .}: seq[string]
 
+    rocksdbMaxOpenFiles {.
+      hidden
+      defaultValue: defaultMaxOpenFiles
+      defaultValueDesc: $defaultMaxOpenFiles
+      name: "debug-rocksdb-max-open-files".}: int
+
+    rocksdbWriteBufferSize {.
+      hidden
+      defaultValue: defaultWriteBufferSize
+      defaultValueDesc: $defaultWriteBufferSize
+      name: "debug-rocksdb-write-buffer-size".}: int
+
+    rocksdbRowCacheSize {.
+      hidden
+      defaultValue: defaultRowCacheSize
+      defaultValueDesc: $defaultRowCacheSize
+      name: "debug-rocksdb-row-cache-size".}: int
+
+    rocksdbBlockCacheSize {.
+      hidden
+      defaultValue: defaultBlockCacheSize
+      defaultValueDesc: $defaultBlockCacheSize
+      name: "debug-rocksdb-block-cache-size".}: int
+
     case cmd* {.
       command
       defaultValue: NimbusCmd.noCommand }: NimbusCmd
@@ -489,28 +511,16 @@ type
         defaultValue: 8192
         name: "chunk-size" .}: uint64
 
+      csvStats* {.
+        hidden
+        desc: "Save performance statistics to CSV"
+        name: "debug-csv-stats".}: Option[string]
+
 func parseCmdArg(T: type NetworkId, p: string): T
     {.gcsafe, raises: [ValueError].} =
   parseInt(p).T
 
 func completeCmdArg(T: type NetworkId, val: string): seq[string] =
-  return @[]
-
-func parseCmdArg(T: type UInt256, p: string): T
-    {.gcsafe, raises: [ValueError].} =
-  parse(p, T)
-
-func completeCmdArg(T: type UInt256, val: string): seq[string] =
-  return @[]
-
-func parseCmdArg(T: type EthAddress, p: string): T
-    {.gcsafe, raises: [ValueError].}=
-  try:
-    result = hexToByteArray(p, 20)
-  except CatchableError:
-    raise newException(ValueError, "failed to parse EthAddress")
-
-func completeCmdArg(T: type EthAddress, val: string): seq[string] =
   return @[]
 
 func parseCmdArg*(T: type enr.Record, p: string): T {.raises: [ValueError].} =
@@ -744,6 +754,14 @@ func httpServerEnabled*(conf: NimbusConf): bool =
 
 func era1Dir*(conf: NimbusConf): OutDir =
   conf.era1DirOpt.get(OutDir(conf.dataDir.string & "/era1"))
+
+func dbOptions*(conf: NimbusConf): DbOptions =
+  DbOptions.init(
+    maxOpenFiles = conf.rocksdbMaxOpenFiles,
+    writeBufferSize = conf.rocksdbWriteBufferSize,
+    rowCacheSize = conf.rocksdbRowCacheSize,
+    blockCacheSize = conf.rocksdbBlockCacheSize,
+  )
 
 # KLUDGE: The `load()` template does currently not work within any exception
 #         annotated environment.

@@ -160,8 +160,8 @@ proc init(com         : CommonRef,
   if genesis.isNil.not:
     com.hardForkTransition(ForkDeterminationInfo(
       blockNumber: 0.toBlockNumber,
-      td: some(0.u256),
-      time: some(genesis.timestamp)
+      td: Opt.some(0.u256),
+      time: Opt.some(genesis.timestamp)
     ))
 
     # Must not overwrite the global state on the single state DB
@@ -174,30 +174,30 @@ proc init(com         : CommonRef,
   else:
     com.hardForkTransition(ForkDeterminationInfo(
       blockNumber: 0.toBlockNumber,
-      td: some(0.u256),
-      time: some(TimeZero)
+      td: Opt.some(0.u256),
+      time: Opt.some(TimeZero)
     ))
 
   # By default, history begins at genesis.
   com.startOfHistory = GENESIS_PARENT_HASH
 
-proc getTd(com: CommonRef, blockHash: Hash256): Option[DifficultyInt] =
+proc getTd(com: CommonRef, blockHash: Hash256): Opt[DifficultyInt] =
   var td: DifficultyInt
   if not com.db.getTd(blockHash, td):
     # TODO: Is this really ok?
-    none[DifficultyInt]()
+    Opt.none(DifficultyInt)
   else:
-    some(td)
+    Opt.some(td)
 
 func needTdForHardForkDetermination(com: CommonRef): bool =
   let t = com.forkTransitionTable.mergeForkTransitionThreshold
   t.ttdPassed.isNone and t.blockNumber.isNone and t.ttd.isSome
 
-proc getTdIfNecessary(com: CommonRef, blockHash: Hash256): Option[DifficultyInt] =
+proc getTdIfNecessary(com: CommonRef, blockHash: Hash256): Opt[DifficultyInt] =
   if needTdForHardForkDetermination(com):
     getTd(com, blockHash)
   else:
-    none[DifficultyInt]()
+    Opt.none(DifficultyInt)
 
 # ------------------------------------------------------------------------------
 # Public constructors
@@ -285,8 +285,8 @@ func hardForkTransition(
 func hardForkTransition*(
     com: CommonRef,
     number: BlockNumber,
-    td: Option[DifficultyInt],
-    time: Option[EthTime]) =
+    td: Opt[DifficultyInt],
+    time: Opt[EthTime]) =
   com.hardForkTransition(ForkDeterminationInfo(
     blockNumber: number, time: time, td: td))
 
@@ -294,14 +294,14 @@ proc hardForkTransition*(
     com: CommonRef,
     parentHash: Hash256,
     number: BlockNumber,
-    time: Option[EthTime]) =
+    time: Opt[EthTime]) =
   com.hardForkTransition(number, getTdIfNecessary(com, parentHash), time)
 
 proc hardForkTransition*(
     com: CommonRef, header: BlockHeader)
     {.gcsafe, raises: [].} =
   com.hardForkTransition(
-    header.parentHash, header.blockNumber, some(header.timestamp))
+    header.parentHash, header.blockNumber, Opt.some(header.timestamp))
 
 func toEVMFork*(com: CommonRef, forkDeterminer: ForkDeterminationInfo): EVMFork =
   ## similar to toFork, but produce EVMFork
@@ -367,7 +367,9 @@ proc consensus*(com: CommonRef, header: BlockHeader): ConsensusType
 
 proc initializeEmptyDb*(com: CommonRef)
     {.gcsafe, raises: [CatchableError].} =
-  let kvt = com.db.kvt()
+  let kvt = com.db.newKvt()
+  proc contains(kvt: CoreDxKvtRef; key: openArray[byte]): bool =
+    kvt.hasKey(key).expect "valid bool"
   if canonicalHeadHashKey().toOpenArray notin kvt:
     info "Writing genesis to DB"
     doAssert(com.genesisHeader.blockNumber.isZero,

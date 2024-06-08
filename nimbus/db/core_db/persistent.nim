@@ -25,7 +25,8 @@ import
   ../aristo,
   ./memory_only,
   base_iterators_persistent,
-  ./backend/aristo_rocksdb
+  ./backend/aristo_rocksdb,
+  ../opts
 
 export
   memory_only,
@@ -34,13 +35,14 @@ export
 proc newCoreDbRef*(
     dbType: static[CoreDbType];      # Database type symbol
     path: string;                    # Storage path for database
+    opts: DbOptions;
       ): CoreDbRef =
   ## Constructor for persistent type DB
   ##
   ## Note: Using legacy notation `newCoreDbRef()` rather than
   ## `CoreDbRef.init()` because of compiler coughing.
   when dbType == AristoDbRocks:
-    newAristoRocksDbCoreDbRef path
+    newAristoRocksDbCoreDbRef path, opts
 
   else:
     {.error: "Unsupported dbType for persistent newCoreDbRef()".}

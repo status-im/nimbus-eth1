@@ -8,7 +8,7 @@
 {.push raises: [].}
 
 import
-  std/[atomics, json, os, strutils],
+  std/[json, os, strutils],
   chronicles,
   chronos,
   confutils,
@@ -204,7 +204,7 @@ proc run*(
         info "New LC finalized header", finalized_header = shortLog(forkyHeader)
         if headerCallback != nil:
           try:
-            headerCallback(Json.encode(forkyHeader), 0)
+            headerCallback(cstring(Json.encode(forkyHeader)), 0)
           except SerializationError as e:
             notice "finalizedHeaderCallback exception"
 
@@ -217,7 +217,7 @@ proc run*(
         optimisticProcessor.setOptimisticHeader(forkyHeader.beacon)
         if headerCallback != nil:
           try:
-            headerCallback(Json.encode(forkyHeader), 1)
+            headerCallback(cstring(Json.encode(forkyHeader)), 1)
           except SerializationError as e:
             notice "optimisticHeaderCallback exception"
 

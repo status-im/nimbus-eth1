@@ -10,6 +10,7 @@
 import
   std/[options, strutils],
   eth/common,
+  results,
   stew/endians2,
   json_serialization,
   ../utils/utils,
@@ -80,18 +81,20 @@ type
   # comment below on forkDeterminationInfo.
   ForkDeterminationInfo* = object
     blockNumber*: BlockNumber
-    time*: Option[EthTime]
-    td*: Option[DifficultyInt]
+    time*: Opt[EthTime]
+    td*: Opt[DifficultyInt]
 
 func forkDeterminationInfo*(n: BlockNumber): ForkDeterminationInfo =
   # FIXME: All callers of this function are suspect; I'm guess we should
   # always be using both block number and time. But we have a few places,
   # like various tests, where we only have block number and the tests are
   # meant for pre-Merge forks, so maybe those are okay.
-  ForkDeterminationInfo(blockNumber: n, time: none[EthTime](), td: none[DifficultyInt]())
+  ForkDeterminationInfo(
+    blockNumber: n, time: Opt.none(EthTime), td: Opt.none(DifficultyInt))
 
 func forkDeterminationInfo*(n: BlockNumber, t: EthTime): ForkDeterminationInfo =
-  ForkDeterminationInfo(blockNumber: n, time: some(t), td: none[DifficultyInt]())
+  ForkDeterminationInfo(
+    blockNumber: n, time: Opt.some(t), td: Opt.none(DifficultyInt))
 
 func forkDeterminationInfo*(header: BlockHeader): ForkDeterminationInfo =
   # FIXME-Adam-mightAlsoNeedTTD?

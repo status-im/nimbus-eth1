@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -8,7 +8,7 @@
 import
   unittest2, macros, strformat,
   eth/common/eth_types,
-  ../nimbus/[vm_types, errors, vm_internals]
+  ../nimbus/[vm_types, vm_internals]
 
 # TODO: quicktest
 # PS: parametrize can be easily immitated, but still quicktests would be even more useful
@@ -82,20 +82,19 @@ proc gasMeterMain*() =
       all(gasMeter):
         check(gasMeter.gasRemaining == StartGas)
         let consume = StartGas
-        gasMeter.consumeGas(consume, "0")
+        check gasMeter.consumeGas(consume, "0").isOk
         check(gasMeter.gasRemaining - (StartGas - consume) == 0)
 
     test "consume errors":
       all(gasMeter):
         check(gasMeter.gasRemaining == StartGas)
-        expect(OutOfGas):
-          gasMeter.consumeGas(StartGas + 1, "")
+        check gasMeter.consumeGas(StartGas + 1, "").error.code == EvmErrorCode.OutOfGas
 
     test "return refund works correctly":
       all(gasMeter):
         check(gasMeter.gasRemaining == StartGas)
         check(gasMeter.gasRefunded == 0)
-        gasMeter.consumeGas(5, "")
+        check gasMeter.consumeGas(5, "").isOk
         check(gasMeter.gasRemaining == StartGas - 5)
         gasMeter.returnGas(5)
         check(gasMeter.gasRemaining == StartGas)

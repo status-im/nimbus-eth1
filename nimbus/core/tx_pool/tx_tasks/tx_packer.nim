@@ -36,7 +36,7 @@ type
 
   TxPackerStateRef = ref object
     xp: TxPoolRef
-    tr: CoreDbMptRef
+    tr: CoreDxMptRef
     cleanState: bool
     balance: UInt256
     blobGasUsed: uint64
@@ -78,8 +78,7 @@ proc persist(pst: TxPackerStateRef)
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc runTx(pst: TxPackerStateRef; item: TxItemRef): GasInt
-    {.gcsafe,raises: [CatchableError].} =
+proc runTx(pst: TxPackerStateRef; item: TxItemRef): GasInt =
   ## Execute item transaction and update `vmState` book keeping. Returns the
   ## `gasUsed` after executing the transaction.
   let
@@ -87,12 +86,10 @@ proc runTx(pst: TxPackerStateRef; item: TxItemRef): GasInt
     baseFee = pst.xp.chain.baseFee
     tx = item.tx.eip1559TxNormalization(baseFee.GasInt)
 
-  #safeExecutor "tx_packer.runTx":
-  #  # Execute transaction, may return a wildcard `Exception`
-  result = tx.txCallEvm(item.sender, pst.xp.chain.vmState, fork)
-
+  let gasUsed = tx.txCallEvm(item.sender, pst.xp.chain.vmState, fork)
   pst.cleanState = false
-  doAssert 0 <= result
+  doAssert 0 <= gasUsed
+  gasUsed
 
 proc runTxCommit(pst: TxPackerStateRef; item: TxItemRef; gasBurned: GasInt)
     {.gcsafe,raises: [CatchableError].} =
@@ -139,7 +136,8 @@ proc runTxCommit(pst: TxPackerStateRef; item: TxItemRef; gasBurned: GasInt)
     pst.blobGasUsed += item.tx.getTotalBlobGas
 
   # Update txRoot
-  pst.tr.put(rlp.encode(inx), rlp.encode(item.tx))
+  pst.tr.merge(rlp.encode(inx), rlp.encode(item.tx)).isOkOr:
+    raiseAssert "runTxCommit(): merge failed, " & $$error
 
   # Add the item to the `packed` bucket. This implicitely increases the
   # receipts index `inx` at the next visit of this function.
@@ -173,7 +171,7 @@ proc vmExecInit(xp: TxPoolRef): Result[TxPackerStateRef, string]
 
   let packer = TxPackerStateRef( # return value
     xp: xp,
-    tr: AristoDbMemory.newCoreDbRef().mptPrune,
+    tr: AristoDbMemory.newCoreDbRef().ctx.getMpt CtGeneric,
     balance: xp.chain.vmState.readOnlyStateDB.getBalance(xp.chain.feeRecipient),
     numBlobPerBlock: 0,
   )
@@ -257,7 +255,8 @@ proc vmExecCommit(pst: TxPackerStateRef)
   vmState.receipts.setLen(nItems)
 
   xp.chain.receipts = vmState.receipts
-  xp.chain.txRoot = pst.tr.rootHash
+  xp.chain.txRoot = pst.tr.getColumn.state.valueOr:
+    raiseAssert "vmExecCommit(): state() failed " & $$error
   xp.chain.stateRoot = vmState.stateDB.rootHash
 
   if vmState.com.forkGTE(Cancun):
@@ -281,7 +280,7 @@ proc packerVmExec*(xp: TxPoolRef): Result[void, string] {.gcsafe,raises: [Catcha
   ## Rebuild `packed` bucket by selection items from the `staged` bucket
   ## after executing them in the VM.
   let db = xp.chain.com.db
-  let dbTx = db.beginTransaction
+  let dbTx = db.newTransaction
   defer: dbTx.dispose()
 
   var pst = xp.vmExecInit.valueOr:

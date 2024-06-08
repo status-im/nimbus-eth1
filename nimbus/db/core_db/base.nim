@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/[options, typetraits],
+  std/options,
   chronicles,
   eth/common,
   results,
@@ -22,7 +22,7 @@ from ../aristo
   import EmptyBlob, PayloadRef, isValid
 
 const
-  ProvideLegacyAPI = true
+  ProvideLegacyAPI = false
     ## Enable legacy API. For now everybody would want this enabled.
 
   EnableApiTracking = false
@@ -68,6 +68,8 @@ const
   CoreDbEnableApiProfiling* = EnableApiTracking and EnableApiProfiling
 
 when ProvideLegacyAPI:
+  import
+    std/typetraits
   type
     TxWrapperApiError* = object of CoreDbApiError
       ## For re-routing exception on tx/action template
@@ -80,7 +82,6 @@ when AutoValidateDescriptors:
 # More settings
 const
   logTxt = "CoreDb "
-  legaApiTxt = logTxt & "legacy API"
   newApiTxt = logTxt & "API"
 
 # Annotation helpers
@@ -311,29 +312,18 @@ proc `$$`*(e: CoreDbErrorRef): string =
 # Public key-value table methods
 # ------------------------------------------------------------------------------
 
-proc newKvt*(db: CoreDbRef; offSite = false): CoreDxKvtRef =
+proc newKvt*(db: CoreDbRef): CoreDxKvtRef =
   ## Constructor, will defect on failure.
   ##
-  ## Depending on the argument `offSite`, the constructed object will have
-  ## the following properties.
-  ##
-  ## * `false`
-  ##   Subscribe to the common base object shared with other shared
-  ##   descriptors. Any changes are immediately visible among subscribers.
-  ##   On destruction (when the constructed object gets out of scope), changes
-  ##   are not saved to the backend database but are still cached and available
-  ##   to other subscribers.
-  ##
-  ## * `true`
-  ##   The contructed object will be a new separate table descriptor with a
-  ##   clean cache and no pending transactions. On automatic destruction,
-  ##   changes will be discarded. The contents of this descriptor cache can be
-  ##   saved persistently with the `saveOffSite()` function.
+  ## This function subscribes to the common base object shared with other
+  ## KVT descriptors. Any changes are immediately visible to subscribers.
+  ## On destruction (when the constructed object gets out of scope), changes
+  ## are not saved to the backend database but are still cached and available.
   ##
   db.setTrackNewApi BaseNewKvtFn
-  result = db.methods.newKvtFn(offSite).valueOr:
+  result = db.methods.newKvtFn().valueOr:
     raiseAssert error.prettyText()
-  db.ifTrackNewApi: debug newApiTxt, api, elapsed, offSite
+  db.ifTrackNewApi: debug newApiTxt, api, elapsed
 
 proc get*(kvt: CoreDxKvtRef; key: openArray[byte]): CoreDbRc[Blob] =
   ## This function always returns a non-empty `Blob` or an error code.
@@ -373,37 +363,6 @@ proc hasKey*(kvt: CoreDxKvtRef; key: openArray[byte]): CoreDbRc[bool] =
   kvt.setTrackNewApi KvtHasKeyFn
   result = kvt.methods.hasKeyFn key
   kvt.ifTrackNewApi: debug newApiTxt, api, elapsed, key=key.toStr, result
-
-proc saveOffSite*(kvt: CoreDxKvtRef): CoreDbRc[void] {.discardable.} =
-  ## For the legacy database, this function has no effect and will always
-  ## succeeds. It will nevertheless return a discardable error if there is
-  ## a pending transaction.
-  ##
-  ## Otherwise, if assigned *off-site* (see `newKvt()`), this function will
-  ## save the current cache to the database.
-  ##
-  ## Otherwise, this function will have no effect and return a discardable
-  ## error.
-  ##
-  kvt.setTrackNewApi KvtSaveOffSiteFn
-  result = kvt.methods.saveOffSiteFn()
-  kvt.ifTrackNewApi: debug newApiTxt, api, elapsed, result
-
-proc forget*(kvt: CoreDxKvtRef): CoreDbRc[void] {.discardable.} =
-  ## For the legacy database, this function has no effect and succeeds always.
-  ##
-  ## This function destroys the current non-shared descriptor (see argument
-  ## `sharedTable` for `newKvt()`) regardless of the save/share mode
-  ## assigned to the constructor. For other descriptor types, the function
-  ## does nothing.
-  ##
-  ## Note:
-  ##   Auto destruction seems to be unreliable (causing spurious crashes.)
-  ##   So manual destruction using this function is advised.
-  ##
-  kvt.setTrackNewApi KvtForgetFn
-  result = kvt.methods.forgetFn()
-  kvt.ifTrackNewApi: debug newApiTxt, api, elapsed, result
 
 # ------------------------------------------------------------------------------
 # Public Merkle Patricia Tree context constructors and administration
@@ -558,10 +517,8 @@ proc stateOrVoid*(col: CoreDbColRef): Hash256 =
 proc getMpt*(
     ctx: CoreDbCtxRef;
     col: CoreDbColRef;
-    prune = true;
       ): CoreDbRc[CoreDxMptRef] =
-  ## Get an MPT sub-trie view. The argument `prune` is currently ignored on
-  ## other than the legacy backend.
+  ## Get an MPT sub-trie view.
   ##
   ## If the `col` argument descriptor was created for an `EMPTY_ROOT_HASH`
   ## column state of type different form `CtStorage` or `CtAccounts`, all
@@ -570,24 +527,23 @@ proc getMpt*(
   ## function `getColumn()`.
   ##
   ctx.setTrackNewApi CtxGetMptFn
-  result = ctx.methods.getMptFn(col, prune)
-  ctx.ifTrackNewApi: debug newApiTxt, api, elapsed, col, prune, result
+  result = ctx.methods.getMptFn col
+  ctx.ifTrackNewApi: debug newApiTxt, api, elapsed, col, result
 
 proc getMpt*(
     ctx: CoreDbCtxRef;
     colType: CoreDbColType;
     address = none(EthAddress);
-    prune = true;
       ): CoreDxMptRef =
-  ## Shortcut for `getMpt(col,prune)` where the `col` argument is
+  ## Shortcut for `getMpt(col)` where the `col` argument is
   ## `db.getColumn(colType,EMPTY_ROOT_HASH).value`. This function will always
   ## return a non-nil descriptor or throw an exception.
   ##
   ctx.setTrackNewApi CtxGetMptFn
   let col = ctx.methods.newColFn(colType, EMPTY_ROOT_HASH, address).value
-  result = ctx.methods.getMptFn(col, prune).valueOr:
+  result = ctx.methods.getMptFn(col).valueOr:
     raiseAssert error.prettyText()
-  ctx.ifTrackNewApi: debug newApiTxt, api, colType, elapsed, prune
+  ctx.ifTrackNewApi: debug newApiTxt, api, colType, elapsed
 
 
 proc getMpt*(acc: CoreDxAccRef): CoreDxMptRef =
@@ -607,10 +563,8 @@ proc getMpt*(acc: CoreDxAccRef): CoreDxMptRef =
 proc getAcc*(
     ctx: CoreDbCtxRef;
     col: CoreDbColRef;
-    prune = true;
       ): CoreDbRc[CoreDxAccRef] =
-  ## Accounts trie constructor, will defect on failure. The argument `prune`
-  ## is currently ignored on other than the legacy backend.
+  ## Accounts trie constructor, will defect on failure.
   ##
   ## Example:
   ## ::
@@ -627,8 +581,8 @@ proc getAcc*(
   ## recommended using `CoreDxAccRef` methods for accounts.
   ##
   ctx.setTrackNewApi CtxGetAccFn
-  result = ctx.methods.getAccFn(col, prune)
-  ctx.ifTrackNewApi: debug newApiTxt, api, elapsed, col, prune, result
+  result = ctx.methods.getAccFn col
+  ctx.ifTrackNewApi: debug newApiTxt, api, elapsed, col, result
 
 proc toMpt*(phk: CoreDxPhkRef): CoreDxMptRef =
   ## Replaces the pre-hashed argument column `phk` by the non pre-hashed *MPT*.
@@ -651,15 +605,6 @@ proc toPhk*(mpt: CoreDxMptRef): CoreDxPhkRef =
 # ------------------------------------------------------------------------------
 # Public common methods for all hexary trie databases (`mpt`, `phk`, or `acc`)
 # ------------------------------------------------------------------------------
-
-proc isPruning*[T: CoreDbCtxRef | CoreDxMptRef | CoreDxPhkRef | CoreDxAccRef](
-    dsc: T): bool =
-  ## Getter
-  ##
-  dsc.setTrackNewApi AnyIsPruningFn
-  result = dsc.methods.isPruningFn()
-  dsc.ifTrackNewApi: debug newApiTxt, api, elapsed, result
-
 
 proc getColumn*(acc: CoreDxAccRef): CoreDbColRef =
   ## Getter, result is not `nil`
@@ -884,10 +829,6 @@ proc persistent*(
   ## stored on the persistent database (if any). This requires that that there
   ## is no transaction pending.
   ##
-  ## Caveat:
-  ##   For the `Kvt` table(s), cached *off-site* data are not stored and
-  ##   treated separately (see `saveOffSite()`.)
-  ##
   db.setTrackNewApi BasePersistentFn
   result = db.methods.persistentFn none(BlockNumber)
   db.ifTrackNewApi: debug newApiTxt, api, elapsed, result
@@ -921,13 +862,13 @@ proc persistent*(
   result = db.methods.persistentFn some(blockNumber)
   db.ifTrackNewApi: debug newApiTxt, api, elapsed, blockNumber, result
 
-proc newTransaction*(db: CoreDbRef): CoreDbRc[CoreDxTxRef] =
+proc newTransaction*(db: CoreDbRef): CoreDxTxRef =
   ## Constructor
   ##
   db.setTrackNewApi BaseNewTxFn
   result = db.methods.beginFn()
   db.ifTrackNewApi:
-    debug newApiTxt, api, elapsed, newLevel=db.methods.levelFn(), result
+    debug newApiTxt, api, elapsed, newLevel=db.methods.levelFn()
 
 
 proc level*(tx: CoreDxTxRef): int =
@@ -937,29 +878,23 @@ proc level*(tx: CoreDxTxRef): int =
   result = tx.methods.levelFn()
   tx.ifTrackNewApi: debug newApiTxt, api, elapsed, result
 
-proc commit*(tx: CoreDxTxRef, applyDeletes = true): CoreDbRc[void] =
+proc commit*(tx: CoreDxTxRef) =
   tx.setTrackNewApi TxCommitFn:
     let prvLevel {.used.} = tx.methods.levelFn()
-  result = tx.methods.commitFn applyDeletes
-  tx.ifTrackNewApi: debug newApiTxt, api, elapsed, prvLevel, result
+  tx.methods.commitFn()
+  tx.ifTrackNewApi: debug newApiTxt, api, elapsed, prvLevel
 
-proc rollback*(tx: CoreDxTxRef): CoreDbRc[void] =
+proc rollback*(tx: CoreDxTxRef) =
   tx.setTrackNewApi TxRollbackFn:
     let prvLevel {.used.} = tx.methods.levelFn()
-  result = tx.methods.rollbackFn()
-  tx.ifTrackNewApi: debug newApiTxt, api, elapsed, prvLevel, result
+  tx.methods.rollbackFn()
+  tx.ifTrackNewApi: debug newApiTxt, api, elapsed, prvLevel
 
-proc dispose*(tx: CoreDxTxRef): CoreDbRc[void] =
+proc dispose*(tx: CoreDxTxRef) =
   tx.setTrackNewApi TxDisposeFn:
     let prvLevel {.used.} = tx.methods.levelFn()
-  result = tx.methods.disposeFn()
-  tx.ifTrackNewApi: debug newApiTxt, api, elapsed, prvLevel, result
-
-proc safeDispose*(tx: CoreDxTxRef): CoreDbRc[void] =
-  tx.setTrackNewApi TxSaveDisposeFn:
-    let prvLevel {.used.} = tx.methods.levelFn()
-  result = tx.methods.safeDisposeFn()
-  tx.ifTrackNewApi: debug newApiTxt, api, elapsed, prvLevel, result
+  tx.methods.disposeFn()
+  tx.ifTrackNewApi: debug newApiTxt, api, elapsed, prvLevel
 
 # ------------------------------------------------------------------------------
 # Public tracer methods
@@ -1074,21 +1009,21 @@ when ProvideLegacyAPI:
     result = phk.distinctBase.toMpt.CoreDbMptRef
     phk.ifTrackLegaApi: debug legaApiTxt, api, elapsed
 
-  proc mptPrune*(db: CoreDbRef; root: Hash256; prune = true): CoreDbMptRef =
+  proc mptPrune*(db: CoreDbRef; root: Hash256): CoreDbMptRef =
     db.setTrackLegaApi LegaNewMptFn
     let
       trie = db.ctx.methods.newColFn(
           CtGeneric, root, none(EthAddress)).valueOr:
         raiseAssert error.prettyText() & ": " & $api
-      mpt = db.ctx.getMpt(trie, prune).valueOr:
+      mpt = db.ctx.getMpt(trie).valueOr:
         raiseAssert error.prettyText() & ": " & $api
     result = mpt.CoreDbMptRef
-    db.ifTrackLegaApi: debug legaApiTxt, api, elapsed, root, prune
+    db.ifTrackLegaApi: debug legaApiTxt, api, elapsed, root
 
-  proc mptPrune*(db: CoreDbRef; prune = true): CoreDbMptRef =
+  proc mptPrune*(db: CoreDbRef): CoreDbMptRef =
     db.setTrackLegaApi LegaNewMptFn
-    result = db.ctx.getMpt(CtGeneric, none(EthAddress), prune).CoreDbMptRef
-    db.ifTrackLegaApi: debug legaApiTxt, api, elapsed, prune
+    result = db.ctx.getMpt(CtGeneric, none(EthAddress)).CoreDbMptRef
+    db.ifTrackLegaApi: debug legaApiTxt, api, elapsed
 
   # ----------------
 
@@ -1097,30 +1032,24 @@ when ProvideLegacyAPI:
     result = mpt.distinctBase.toPhk.CoreDbPhkRef
     mpt.ifTrackLegaApi: debug legaApiTxt, api, elapsed
 
-  proc phkPrune*(db: CoreDbRef; root: Hash256; prune = true): CoreDbPhkRef =
+  proc phkPrune*(db: CoreDbRef; root: Hash256): CoreDbPhkRef =
     db.setTrackLegaApi LegaNewPhkFn
     let
       trie = db.ctx.methods.newColFn(
           CtGeneric, root, none(EthAddress)).valueOr:
         raiseAssert error.prettyText() & ": " & $api
-      phk = db.ctx.getMpt(trie, prune).valueOr:
+      phk = db.ctx.getMpt(trie).valueOr:
         raiseAssert error.prettyText() & ": " & $api
     result = phk.toCoreDxPhkRef.CoreDbPhkRef
-    db.ifTrackLegaApi: debug legaApiTxt, api, elapsed, root, prune
+    db.ifTrackLegaApi: debug legaApiTxt, api, elapsed, root
 
-  proc phkPrune*(db: CoreDbRef; prune = true): CoreDbPhkRef =
+  proc phkPrune*(db: CoreDbRef): CoreDbPhkRef =
     db.setTrackLegaApi LegaNewPhkFn
     result = db.ctx.getMpt(
-      CtGeneric, none(EthAddress), prune).toCoreDxPhkRef.CoreDbPhkRef
-    db.ifTrackLegaApi: debug legaApiTxt, api, elapsed, prune
+      CtGeneric, none(EthAddress)).toCoreDxPhkRef.CoreDbPhkRef
+    db.ifTrackLegaApi: debug legaApiTxt, api, elapsed
 
   # ----------------
-
-  proc isPruning*(trie: CoreDbMptRef | CoreDbPhkRef): bool =
-    trie.setTrackLegaApi LegaIsPruningFn
-    result = trie.distinctBase.isPruning()
-    trie.ifTrackLegaApi: debug legaApiTxt, api, elapsed, result
-
 
   proc get*(mpt: CoreDbMptRef; key: openArray[byte]): Blob =
     mpt.setTrackLegaApi LegaMptGetFn
@@ -1185,32 +1114,26 @@ when ProvideLegacyAPI:
 
   proc beginTransaction*(db: CoreDbRef): CoreDbTxRef =
     db.setTrackLegaApi LegaBeginTxFn
-    result = (db.distinctBase.methods.beginFn().expect $api).CoreDbTxRef
+    result = db.distinctBase.methods.beginFn().CoreDbTxRef
     db.ifTrackLegaApi:
       debug legaApiTxt, api, elapsed, newLevel=db.methods.levelFn()
 
   proc commit*(tx: CoreDbTxRef, applyDeletes = true) =
     tx.setTrackLegaApi LegaTxCommitFn:
       let prvLevel {.used.} = tx.distinctBase.methods.levelFn()
-    tx.distinctBase.commit(applyDeletes).expect $api
+    tx.distinctBase.commit()
     tx.ifTrackLegaApi: debug legaApiTxt, api, elapsed, prvLevel
 
   proc rollback*(tx: CoreDbTxRef) =
     tx.setTrackLegaApi LegaTxCommitFn:
       let prvLevel {.used.} = tx.distinctBase.methods.levelFn()
-    tx.distinctBase.rollback().expect $api
+    tx.distinctBase.rollback()
     tx.ifTrackLegaApi: debug legaApiTxt, api, elapsed, prvLevel
 
   proc dispose*(tx: CoreDbTxRef) =
     tx.setTrackLegaApi LegaTxDisposeFn:
       let prvLevel {.used.} = tx.distinctBase.methods.levelFn()
-    tx.distinctBase.dispose().expect $api
-    tx.ifTrackLegaApi: debug legaApiTxt, api, elapsed, prvLevel
-
-  proc safeDispose*(tx: CoreDbTxRef) =
-    tx.setTrackLegaApi LegaTxSaveDisposeFn:
-      let prvLevel {.used.} = tx.distinctBase.methods.levelFn()
-    tx.distinctBase.safeDispose().expect $api
+    tx.distinctBase.dispose()
     tx.ifTrackLegaApi: debug legaApiTxt, api, elapsed, prvLevel
 
   # ----------------

@@ -153,18 +153,32 @@ proc blobify*(tuv: VertexID): Blob =
   ## Variant of `blobifyTo()`
   tuv.blobifyTo result
 
-
-proc blobifyTo*(lSst: SavedState; data: var Blob) =
+proc blobifyTo*(lSst: SavedState; data: var Blob): Result[void,AristoError] =
   ## Serialise a last saved state record
-  data.setLen(0)
-  data.add lSst.src.data
-  data.add lSst.trg.data
+  case lSst.src.len:
+  of 0:
+    data.setLen(32)
+  of 32:
+    data.setLen(0)
+    data.add lSst.src.data
+  else:
+    return err(BlobifyStateSrcLenGarbled)
+  case lSst.trg.len:
+  of 0:
+    data.setLen(64)
+  of 32:
+    data.add lSst.trg.data
+  else:
+    return err(BlobifyStateTrgLenGarbled)
   data.add lSst.serial.toBytesBE
   data.add @[0x7fu8]
+  ok()
 
-proc blobify*(lSst: SavedState): Blob =
+proc blobify*(lSst: SavedState): Result[Blob,AristoError] =
   ## Variant of `blobify()`
-  lSst.blobifyTo result
+  var data: Blob
+  ? lSst.blobifyTo data
+  ok(move(data))
 
 # -------------
 

@@ -12,6 +12,6 @@
 {"pc":8,"op":96,"gas":"0xf","gasCost":"0x3","memSize":0,"stack":["0x0","0x0","0x0","0x0"],"depth":2,"refund":0,"opName":"PUSH1"}
 {"pc":10,"op":96,"gas":"0xc","gasCost":"0x3","memSize":0,"stack":["0x0","0x0","0x0","0x0","0x0"],"depth":2,"refund":0,"opName":"PUSH1"}
 {"pc":12,"op":90,"gas":"0x9","gasCost":"0x2","memSize":0,"stack":["0x0","0x0","0x0","0x0","0x0","0xfa"],"depth":2,"refund":0,"opName":"GAS"}
-{"pc":13,"op":241,"gas":"0x7","gasCost":"0x9","memSize":0,"stack":["0x0","0x0","0x0","0x0","0x0","0xfa","0x7"],"depth":2,"refund":0,"opName":"CALL","error":"Opcode Dispatch Error: Out of gas: Needed 9 - Remaining 7 - Reason: Call, depth=2"}
-{"pc":12,"op":80,"gas":"0x0","gasCost":"0x2","memSize":0,"stack":["0x0"],"depth":1,"refund":0,"opName":"POP","error":"Opcode Dispatch Error: Out of gas: Needed 2 - Remaining 0 - Reason: Pop, depth=1"}
-{"output":"","gasUsed":"0xa54","error":"Opcode Dispatch Error: Out of gas: Needed 2 - Remaining 0 - Reason: Pop, depth=1"}
+{"pc":13,"op":241,"gas":"0x7","gasCost":"0x9","memSize":0,"stack":["0x0","0x0","0x0","0x0","0x0","0xfa","0x7"],"depth":2,"refund":0,"opName":"CALL","error":"Opcode Dispatch Error: OutOfGas, depth=2"}
+{"pc":12,"op":80,"gas":"0x0","gasCost":"0x2","memSize":0,"stack":["0x0"],"depth":1,"refund":0,"opName":"POP","error":"Opcode Dispatch Error: OutOfGas, depth=1"}
+{"output":"","gasUsed":"0xa54","error":"Opcode Dispatch Error: OutOfGas, depth=1"}

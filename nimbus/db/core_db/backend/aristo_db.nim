@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/[tables, typetraits],
+  std/tables,
   eth/common,
   results,
   ../../aristo as use_ari,
@@ -71,29 +71,31 @@ proc txMethods(
     levelFn: proc(): int =
       aTx.level,
 
-    commitFn: proc(ignore: bool): CoreDbRc[void] =
+    commitFn: proc() =
       const info = "commitFn()"
-      ? adbApi.commit(aTx).toVoidRc(adbBase, info)
-      ? kdbApi.commit(kTx).toVoidRc(kdbBase, info)
-      ok(),
+      adbApi.commit(aTx).isOkOr:
+        raiseAssert info & ": " & $error
+      kdbApi.commit(kTx).isOkOr:
+        raiseAssert info & ": " & $error
+      discard,
 
-    rollbackFn: proc(): CoreDbRc[void] =
+    rollbackFn: proc() =
       const info = "rollbackFn()"
-      ? adbApi.rollback(aTx).toVoidRc(adbBase, info)
-      ? kdbApi.rollback(kTx).toVoidRc(kdbBase, info)
-      ok(),
+      adbApi.rollback(aTx).isOkOr:
+        raiseAssert info & ": " & $error
+      kdbApi.rollback(kTx).isOkOr:
+        raiseAssert info & ": " & $error
+      discard,
 
-    disposeFn: proc(): CoreDbRc[void] =
+    disposeFn: proc() =
       const info =  "disposeFn()"
-      if adbApi.isTop(aTx): ? adbApi.rollback(aTx).toVoidRc(adbBase, info)
-      if kdbApi.isTop(kTx): ? kdbApi.rollback(kTx).toVoidRc(kdbBase, info)
-      ok(),
-
-    safeDisposeFn: proc(): CoreDbRc[void] =
-      const info =  "safeDisposeFn()"
-      if adbApi.isTop(aTx): ? adbApi.rollback(aTx).toVoidRc(adbBase, info)
-      if kdbApi.isTop(kTx): ? kdbApi.rollback(kTx).toVoidRc(kdbBase, info)
-      ok())
+      if adbApi.isTop(aTx):
+        adbApi.rollback(aTx).isOkOr:
+          raiseAssert info & ": " & $error
+      if kdbApi.isTop(kTx):
+        kdbApi.rollback(kTx).isOkOr:
+          raiseAssert info & ": " & $error
+      discard)
 
 proc cptMethods(
     tracer: AristoTracerRef;
@@ -158,8 +160,8 @@ proc baseMethods(db: AristoCoreDbRef): CoreDbBaseFns =
     errorPrintFn: proc(e: CoreDbErrorRef): string =
       e.errorPrint(),
 
-    newKvtFn: proc(offSite: bool): CoreDbRc[CoreDxKvtRef] =
-      kBase.newKvtHandler(offSite, "newKvtFn()"),
+    newKvtFn: proc(): CoreDbRc[CoreDxKvtRef] =
+      kBase.newKvtHandler("newKvtFn()"),
 
     newCtxFn: proc(): CoreDbCtxRef =
       aBase.ctx,
@@ -170,11 +172,13 @@ proc baseMethods(db: AristoCoreDbRef): CoreDbBaseFns =
     swapCtxFn: proc(ctx: CoreDbCtxRef): CoreDbCtxRef =
       aBase.swapCtx(ctx),
 
-    beginFn: proc(): CoreDbRc[CoreDxTxRef] =
+    beginFn: proc(): CoreDxTxRef =
       const info = "beginFn()"
-      let dsc = CoreDxTxRef(
-        methods: db.txMethods(? aBase.txBegin info, ? kBase.txBegin info))
-      ok(db.bless dsc),
+      let
+        aTx = aBase.txBegin info
+        kTx = kBase.txBegin info
+        dsc = CoreDxTxRef(methods: db.txMethods(aTx, kTx))
+      db.bless(dsc),
 
     newCaptureFn: proc(flags: set[CoreDbCaptFlags]): CoreDbRc[CoreDxCaptRef] =
       ok(db.bless flags.tracerSetup()),

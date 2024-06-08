@@ -16,6 +16,7 @@ import
   results,
   unittest2,
   stew/endians2,
+  ../../nimbus/db/opts,
   ../../nimbus/db/aristo/[
     aristo_check,
     aristo_debug,
@@ -345,7 +346,7 @@ proc testTxMergeAndDeleteOneByOne*(
     # Start with brand new persistent database.
     db = block:
       if 0 < rdbPath.len:
-        let rc = AristoDbRef.init(RdbBackendRef, rdbPath)
+        let rc = AristoDbRef.init(RdbBackendRef, rdbPath, DbOptions.init())
         xCheckRc rc.error == 0
         rc.value
       else:
@@ -453,7 +454,7 @@ proc testTxMergeAndDeleteSubTree*(
     # Start with brand new persistent database.
     db = block:
       if 0 < rdbPath.len:
-        let rc = AristoDbRef.init(RdbBackendRef, rdbPath)
+        let rc = AristoDbRef.init(RdbBackendRef, rdbPath, DbOptions.init())
         xCheckRc rc.error == 0
         rc.value
       else:
@@ -555,7 +556,7 @@ proc testTxMergeProofAndKvpList*(
       db = block:
         # New DB with disabled filter slots management
         if 0 < rdbPath.len:
-          let rc = AristoDbRef.init(RdbBackendRef, rdbPath)
+          let rc = AristoDbRef.init(RdbBackendRef, rdbPath, DbOptions.init())
           xCheckRc rc.error == 0
           rc.value
         else:
@@ -578,12 +579,12 @@ proc testTxMergeProofAndKvpList*(
 
     if 0 < w.proof.len:
       let root = block:
-        let rc = db.merge(rootKey, VertexID(1))
+        let rc = db.mergeProof(rootKey, VertexID(1))
         xCheckRc rc.error == 0
         rc.value
 
       let nMerged = block:
-        let rc = db.merge(w.proof, root)
+        let rc = db.mergeProof(w.proof, root)
         xCheckRc rc.error == 0
         rc.value
 

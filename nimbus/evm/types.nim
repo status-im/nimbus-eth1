@@ -9,9 +9,7 @@
 # according to those terms.
 
 import
-  chronos,
-  json_rpc/rpcclient,
-  "."/[stack, memory, code_stream],
+  "."/[stack, memory, code_stream, evm_errors],
   ./interpreter/[gas_costs, op_codes],
   ../db/ledger,
   ../common/[common, evmforks]
@@ -73,8 +71,8 @@ type
     # The execution computation
     vmState*:               BaseVMState
     msg*:                   Message
-    memory*:                Memory
-    stack*:                 Stack
+    memory*:                EvmMemoryRef
+    stack*:                 EvmStackRef
     returnStack*:           seq[int]
     gasMeter*:              GasMeter
     code*:                  CodeStream
@@ -90,8 +88,7 @@ type
       res*:                 nimbus_result
     else:
       parent*, child*:      Computation
-    pendingAsyncOperation*: Future[void]
-    continuation*:          proc() {.gcsafe, raises: [CatchableError].}
+    continuation*:          proc(): EvmResultVoid {.gcsafe, raises: [].}
     sysCall*:               bool
 
   Error* = ref object
@@ -161,7 +158,7 @@ method captureStart*(ctx: TracerRef, comp: Computation,
   discard
 
 method captureEnd*(ctx: TracerRef, comp: Computation, output: openArray[byte],
-                   gasUsed: GasInt, error: Option[string]) {.base, gcsafe.} =
+                   gasUsed: GasInt, error: Opt[string]) {.base, gcsafe.} =
   discard
 
 # Rest of call frames
@@ -172,7 +169,7 @@ method captureEnter*(ctx: TracerRef, comp: Computation, op: Op,
   discard
 
 method captureExit*(ctx: TracerRef, comp: Computation, output: openArray[byte],
-                    gasUsed: GasInt, error: Option[string]) {.base, gcsafe.} =
+                    gasUsed: GasInt, error: Opt[string]) {.base, gcsafe.} =
   discard
 
 # Opcode level
@@ -195,7 +192,7 @@ method captureOpEnd*(ctx: TracerRef, comp: Computation,
 method captureFault*(ctx: TracerRef, comp: Computation,
                      fixed: bool, pc: int, op: Op, gas: GasInt, refund: GasInt,
                      rData: openArray[byte],
-                     depth: int, error: Option[string]) {.base, gcsafe.} =
+                     depth: int, error: Opt[string]) {.base, gcsafe.} =
   discard
 
 # Called at the start of EVM interpreter loop

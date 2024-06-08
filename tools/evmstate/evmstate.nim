@@ -64,7 +64,7 @@ proc toBytes(x: string): seq[byte] =
   result = newSeq[byte](x.len)
   for i in 0..<x.len: result[i] = x[i].byte
 
-method getAncestorHash(vmState: TestVMState; blockNumber: BlockNumber): Hash256 {.gcsafe.} =
+method getAncestorHash(vmState: TestVMState; blockNumber: BlockNumber): Hash256 =
   keccakHash(toBytes($blockNumber))
 
 proc verifyResult(ctx: var StateContext, vmState: BaseVMState) =

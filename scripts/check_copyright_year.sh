@@ -7,8 +7,8 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-excluded_files="config.yaml|.gitmodules"
-excluded_extensions="json|md|png|txt|toml|gz|key|rlp|era1|cfg"
+excluded_files="config.yaml|.gitmodules|.gitignore"
+excluded_extensions="json|md|png|txt|toml|gz|key|rlp|era1|cfg|py|sh"
 
 current_year=$(date +"%Y")
 outdated_files=()

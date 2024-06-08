@@ -31,8 +31,7 @@ proc processTransactions*(
     vmState: BaseVMState;
     header: BlockHeader;
     transactions: seq[Transaction];
-      ): Result[void, string]
-      {.gcsafe, raises: [CatchableError].} =
+      ): Result[void, string] =
   vmState.receipts = newSeq[Receipt](transactions.len)
   vmState.cumulativeGasUsed = 0
 
@@ -164,7 +163,7 @@ proc processBlock*(
   ## implementations (but can be savely removed, as well.)
   ## variant of `processBlock()` where the `header` argument is explicitely set.
 
-  var dbTx = vmState.com.db.beginTransaction()
+  var dbTx = vmState.com.db.newTransaction()
   defer: dbTx.dispose()
 
   if not vmState.procBlkPreamble(header, body):
@@ -177,12 +176,7 @@ proc processBlock*(
   if not vmState.procBlkEpilogue(header, body):
     return ValidationResult.Error
 
-  # `applyDeletes = false`
-  # If the trie pruning activated, each of the block will have its own state
-  # trie keep intact, rather than destroyed by trie pruning. But the current
-  # block will still get a pruned trie. If trie pruning deactivated,
-  # `applyDeletes` have no effects.
-  dbTx.commit(applyDeletes = false)
+  dbTx.commit()
 
   ValidationResult.OK
 

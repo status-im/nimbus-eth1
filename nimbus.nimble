@@ -41,6 +41,8 @@ when declared(namedBin):
     "nimbus_verified_proxy/nimbus_verified_proxy": "nimbus_verified_proxy",
   }.toTable()
 
+import std/os
+
 proc buildBinary(name: string, srcDir = "./", params = "", lang = "c") =
   if not dirExists "build":
     mkDir "build"
@@ -71,6 +73,27 @@ task test, "Run tests":
 
 task test_rocksdb, "Run rocksdb tests":
   test "tests/db", "test_kvstore_rocksdb", "-d:chronicles_log_level=ERROR -d:unittest2DisableParamFiltering"
+
+task test_import, "Run block import test":
+  let tmp = getTempDir() / "nimbus-eth1-block-import"
+  if dirExists(tmp):
+    echo "Remove directory before running test: " & tmp
+    quit(QuitFailure)
+
+  const nimbus = when defined(windows):
+    "build/nimbus.exe"
+  else:
+    "build/nimbus"
+
+  if not fileExists(nimbus):
+    echo "Build nimbus before running this test"
+    quit(QuitFailure)
+
+  # Test that we can resume import
+  exec "build/nimbus import --data-dir:" & tmp & " --era1-dir:tests/replay --max-blocks:1"
+  exec "build/nimbus import --data-dir:" & tmp & " --era1-dir:tests/replay --max-blocks:1023"
+  # There should only be 8k blocks
+  exec "build/nimbus import --data-dir:" & tmp & " --era1-dir:tests/replay --max-blocks:10000"
 
 task test_evm, "Run EVM tests":
   test "tests", "evm_tests", "-d:chronicles_log_level=ERROR -d:unittest2DisableParamFiltering"

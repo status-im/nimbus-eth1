@@ -16,15 +16,14 @@ import
   eth/common,
   results,
   unittest2,
-  ../nimbus/db/aristo/[aristo_desc, aristo_merge],
+  ../nimbus/db/aristo/aristo_desc,
   ./replay/[pp, undump_accounts, undump_storages],
-  ./test_sync_snap/[snap_test_xx, test_types],
-  ./test_aristo/[test_filter, test_helpers, test_misc, test_tx]
+  ./test_aristo/[test_samples_xx, test_filter, test_helpers, test_misc, test_tx]
 
 const
   baseDir = [".", "..", ".."/"..", $DirSep]
   repoDir = [".", "tests", "nimbus-eth1-blobs"]
-  subDir = ["replay", "test_sync_snap", "replay"/"snap"]
+  subDir = ["replay", "test_aristo", "replay"/"snap"]
 
   # Reference file for finding the database directory
   sampleDirRefFile = "sample0.txt.gz"
