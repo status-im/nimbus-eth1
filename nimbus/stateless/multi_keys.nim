@@ -9,11 +9,11 @@
 # according to those terms.
 
 import
-  eth/common, eth/trie/nibbles, algorithm,
-  ./witness_types
+  eth/common, eth/trie/nibbles, algorithm
 
 type
   KeyHash* = array[32, byte]
+  StorageSlot* = array[32, byte]
 
   KeyData* = object
     visited*: bool
@@ -46,6 +46,10 @@ type
   MatchGroup* = object
     match*: bool
     group*: Group
+
+proc setBranchMaskBit(x: var uint, i: int) =
+  assert(i >= 0 and i < 17)
+  x = x or (1 shl i).uint
 
 func cmpHash(a, b: KeyHash): int =
   var i = 0

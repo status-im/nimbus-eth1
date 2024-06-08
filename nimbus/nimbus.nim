@@ -54,7 +54,6 @@ proc basicServices(nimbus: NimbusNode,
     nimbus.chainRef.extraValidation = 0 < verifyFrom
     nimbus.chainRef.verifyFrom = verifyFrom
 
-  nimbus.chainRef.generateWitness = conf.generateWitness
   nimbus.beaconEngine = BeaconEngineRef.new(nimbus.txPool, nimbus.chainRef)
 
 proc manageAccounts(nimbus: NimbusNode, conf: NimbusConf) =

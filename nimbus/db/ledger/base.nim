@@ -14,7 +14,7 @@
 
 import
   eth/common,
-  ../../../stateless/multi_keys,
+  ../../stateless/multi_keys,
   ../core_db,
   ./base/[api_tracking, base_desc]
 

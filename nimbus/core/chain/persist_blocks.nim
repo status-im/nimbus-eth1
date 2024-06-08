@@ -111,11 +111,8 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
         body,
         checkSealOK = false) # TODO: how to checkseal from here
 
-    if c.generateWitness:
-      vmState.generateWitness = true
-
     let
-      validationResult = if c.validateBlock or c.generateWitness:
+      validationResult = if c.validateBlock:
                            vmState.processBlock(header, body)
                          else:
                            ValidationResult.OK
@@ -128,21 +125,6 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
 
     if validationResult != ValidationResult.OK:
       return err("Failed to validate block")
-
-    if c.generateWitness:
-      let dbTx = c.db.newTransaction()
-      defer: dbTx.dispose()
-
-      let
-        mkeys = vmState.stateDB.makeMultiKeys()
-        # Reset state to what it was before executing the block of transactions
-        initialState = BaseVMState.new(header, c.com).valueOr:
-                         return err("Failed to create vm state")
-        witness = initialState.buildWitness(mkeys)
-
-      dbTx.rollback()
-
-      c.db.setBlockWitness(header.blockHash(), witness)
 
     if NoPersistHeader notin flags:
       discard c.db.persistHeaderToDb(

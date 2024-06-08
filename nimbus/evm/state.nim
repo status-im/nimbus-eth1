@@ -13,7 +13,6 @@
 import
   std/[options, sets, strformat],
   eth/keys,
-  ../../stateless/[witness_from_tree, witness_types, multi_keys],
   ../db/ledger,
   ../common/[common, evmforks],
   ./interpreter/[op_codes, gas_costs],
@@ -259,31 +258,12 @@ proc `status=`*(vmState: BaseVMState, status: bool) =
  if status: vmState.flags.incl ExecutionOK
  else: vmState.flags.excl ExecutionOK
 
-proc generateWitness*(vmState: BaseVMState): bool =
-  GenerateWitness in vmState.flags
+proc collectWitnessData*(vmState: BaseVMState): bool =
+  CollectWitnessData in vmState.flags
 
-proc `generateWitness=`*(vmState: BaseVMState, status: bool) =
-  if status: vmState.flags.incl GenerateWitness
-  else: vmState.flags.excl GenerateWitness
-
-proc buildWitness*(
-    vmState: BaseVMState,
-    mkeys: MultiKeysRef): seq[byte] {.raises: [CatchableError].} =
-  let rootHash = vmState.stateDB.rootHash
-  let flags = if vmState.fork >= FkSpurious: {wfEIP170} else: {}
-
-  # A valid block having no transactions should return an empty witness
-  if mkeys.keys.len() == 0:
-    return @[]
-
-  # build witness from tree
-  var wb = initWitnessBuilder(vmState.com.db, rootHash, flags)
-  wb.buildWitness(mkeys)
-
-proc buildWitness*(
-    vmState: BaseVMState): seq[byte] {.raises: [CatchableError].} =
-  let mkeys = vmState.stateDB.makeMultiKeys()
-  buildWitness(vmState, mkeys)
+proc `collectWitnessData=`*(vmState: BaseVMState, status: bool) =
+  if status: vmState.flags.incl CollectWitnessData
+  else: vmState.flags.excl CollectWitnessData
 
 func forkDeterminationInfoForVMState*(vmState: BaseVMState): ForkDeterminationInfo =
   # FIXME-Adam: Is this timestamp right? Note that up above in blockNumber we add 1;

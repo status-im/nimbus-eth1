@@ -29,7 +29,7 @@ import
   chronicles,
   eth/[common, rlp],
   results,
-  ../../../stateless/multi_keys,
+  ../../stateless/multi_keys,
   "../.."/[constants, utils/utils],
   ../access_list as ac_access_list,
   ".."/[core_db, storage_types, transient_storage],

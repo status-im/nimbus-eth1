@@ -22,17 +22,17 @@ import
   ./filters,
   ../core/executor/process_block,
   ../db/ledger,
-  ../../stateless/[witness_verification, multi_keys],
+  ../stateless/multi_keys,
   ./p2p
 
 type
   BlockHeader = eth_types.BlockHeader
   ReadOnlyStateDB = state_db.ReadOnlyStateDB
 
-proc getBlockWitness*(
+proc getMultiKeys*(
     com: CommonRef,
     blockHeader: BlockHeader,
-    statePostExecution: bool): (MultiKeysRef, BlockWitness)
+    statePostExecution: bool): MultiKeysRef
     {.raises: [RlpError, BlockNotFound, ValueError, CatchableError].} =
 
   let
@@ -45,7 +45,7 @@ proc getBlockWitness*(
     vmState = BaseVMState.new(blockHeader, com).valueOr:
                 raise newException(ValueError, "Cannot create vm state")
 
-  vmState.generateWitness = true # Enable saving witness data
+  vmState.collectWitnessData = true # Enable saving witness data
   vmState.com.hardForkTransition(blockHeader)
 
   let dbTx = vmState.com.db.newTransaction()
@@ -57,15 +57,9 @@ proc getBlockWitness*(
 
   let mkeys = vmState.stateDB.makeMultiKeys()
 
-  if statePostExecution:
-    result = (mkeys, vmState.buildWitness(mkeys))
-  else:
-    # Use the initial state from prior to executing the block of transactions
-    let initialState = BaseVMState.new(blockHeader, com).valueOr:
-                         raise newException(ValueError, "Cannot create vm state")
-    result = (mkeys, initialState.buildWitness(mkeys))
-
   dbTx.rollback()
+
+  mkeys
 
 proc getBlockProofs*(
     accDB: ReadOnlyStateDB,
@@ -95,19 +89,6 @@ proc setupExpRpc*(com: CommonRef, server: RpcServer) =
     let ac = newAccountStateDB(chainDB, header.stateRoot)
     result = ReadOnlyStateDB(ac)
 
-  server.rpc("exp_getWitnessByBlockNumber") do(quantityTag: BlockTag, statePostExecution: bool) -> seq[byte]:
-    ## Returns the block witness for a block by block number or tag.
-    ##
-    ## quantityTag: integer of a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.
-    ## statePostExecution: bool which indicates whether to return the witness based on the state before or after executing the block.
-    ## Returns seq[byte]
-
-    let
-      blockHeader = chainDB.headerFromTag(quantityTag)
-      (_, witness) = getBlockWitness(com, blockHeader, statePostExecution)
-
-    return witness
-
   server.rpc("exp_getProofsByBlockNumber") do(quantityTag: BlockTag, statePostExecution: bool) -> seq[ProofResponse]:
     ## Returns the block proofs for a block by block number or tag.
     ##
@@ -117,7 +98,7 @@ proc setupExpRpc*(com: CommonRef, server: RpcServer) =
 
     let
       blockHeader = chainDB.headerFromTag(quantityTag)
-      (mkeys, _) = getBlockWitness(com, blockHeader, statePostExecution)
+      mkeys = getMultiKeys(com, blockHeader, statePostExecution)
 
     let accDB = if statePostExecution:
       getStateDB(blockHeader)

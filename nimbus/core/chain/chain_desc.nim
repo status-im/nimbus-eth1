@@ -33,20 +33,21 @@ type
       ## Trigger extra validation, currently within `persistBlocks()`
       ## function only.
 
-    generateWitness: bool ##\
-      ## Enable generation of block witness, currently within `persistBlocks()`
-      ## function only.
-
     verifyFrom: BlockNumber ##\
       ## First block to when `extraValidation` will be applied (only
       ## effective if `extraValidation` is true.)
+
+    vmState: BaseVMState
+      ## If it's not nil, block validation will use this
+      ## If it's nil, a new vmState state will be created.
 
 # ------------------------------------------------------------------------------
 # Public constructors
 # ------------------------------------------------------------------------------
 
 proc newChain*(com: CommonRef,
-               extraValidation: bool): ChainRef =
+               extraValidation: bool,
+               vmState = BaseVMState(nil)): ChainRef =
   ## Constructor for the `Chain` descriptor object.
   ## The argument `extraValidation` enables extra block
   ## chain validation if set `true`.
@@ -54,6 +55,7 @@ proc newChain*(com: CommonRef,
     com: com,
     validateBlock: true,
     extraValidation: extraValidation,
+    vmState: vmState
   )
 
 func newChain*(com: CommonRef): ChainRef =
@@ -93,10 +95,6 @@ proc extraValidation*(c: ChainRef): bool =
   ## Getter
   c.extraValidation
 
-proc generateWitness*(c: ChainRef): bool =
-  ## Getter
-  c.generateWitness
-
 proc verifyFrom*(c: ChainRef): BlockNumber =
   ## Getter
   c.verifyFrom
@@ -120,11 +118,6 @@ proc `extraValidation=`*(c: ChainRef; extraValidation: bool) =
   ## Setter. If set `true`, the assignment value `extraValidation` enables
   ## extra block chain validation.
   c.extraValidation = extraValidation
-
-proc `generateWitness=`*(c: ChainRef; generateWitness: bool) =
-  ## Setter. If set `true`, the assignment value `generateWitness` enables
-  ## block witness generation.
-  c.generateWitness = generateWitness
 
 proc `verifyFrom=`*(c: ChainRef; verifyFrom: BlockNumber) =
   ## Setter. The  assignment value `verifyFrom` defines the first block where

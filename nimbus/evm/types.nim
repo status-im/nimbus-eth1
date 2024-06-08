@@ -36,7 +36,7 @@ const vm_use_recursion* = defined(evmc_enabled)
 type
   VMFlag* = enum
     ExecutionOK
-    GenerateWitness
+    CollectWitnessData
 
   BlockContext* = object
     timestamp*        : EthTime

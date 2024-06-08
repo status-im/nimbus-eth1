@@ -34,10 +34,7 @@ cliBuilder:
           ./test_transaction_json,
           #./test_blockchain_json,                 -- fails
           ./test_forkid,
-          #../stateless/test_witness_keys,         -- fails
-          #../stateless/test_block_witness,        -- fails
-          #../stateless/test_witness_json,         -- fails
-          #../stateless/test_witness_verification, -- fails
+          ./test_multi_keys,
           ./test_misc,
           #./test_graphql,                         -- fails
           ./test_pow,
@@ -50,6 +47,5 @@ cliBuilder:
           ./test_overflow,
           #./test_getproof_json,                   -- fails
           #./test_rpc_experimental_json,           -- fails
-          #./test_persistblock_witness_json        -- fails
           ./test_aristo,
           ./test_coredb
