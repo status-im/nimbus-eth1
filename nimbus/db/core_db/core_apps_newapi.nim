@@ -935,7 +935,7 @@ proc persistHeaderToDb*(
     var canonHeader: BlockHeader
     if db.getCanonicalHead canonHeader:
       let headScore = db.getScore(canonHeader.hash)
-      if score < headScore:
+      if score <= headScore:
         return
 
   db.setAsCanonicalChainHead(headerHash)
