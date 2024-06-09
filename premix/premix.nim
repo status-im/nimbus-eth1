@@ -62,7 +62,9 @@ proc main() =
 
     # prestate data goes to debug tool and contains data
     # needed to execute single block
-    generatePrestate(nimbus, geth, blockNumber, parentBlock.header, thisBlock.header, thisBlock.body)
+    generatePrestate(
+      nimbus, geth, blockNumber, parentBlock.header,
+      EthBlock.init(thisBlock.header, thisBlock.body))
 
     printDebugInstruction(blockNumber)
   except CatchableError:

@@ -60,7 +60,7 @@ proc executeBlock(blockEnv: JsonNode, memoryDB: CoreDbRef, blockNumber: UInt256)
 
   # prestate data goes to debug tool and contains data
   # needed to execute single block
-  generatePrestate(nimbus, geth, blockNumber, parent, header, body)
+  generatePrestate(nimbus, geth, blockNumber, parent, blk)
 
 proc main() =
   if paramCount() == 0:
