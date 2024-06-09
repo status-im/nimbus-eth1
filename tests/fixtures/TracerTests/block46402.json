@@ -283,7 +283,7 @@
             "0000000000000000000000000000000000000000000000000000000000000000",
             "0000000000000000000000000000000000000000000000000000000000000060"
           ],
-          "error": "Opcode Dispatch Error: Out of gas: Needed 20000 - Remaining 412 - Reason: SSTORE, depth=1",
+          "error": "Opcode Dispatch Error: OutOfGas, depth=1",
           "gasCost": 0
         }
       ],
@@ -705,7 +705,7 @@
           "0000000000000000000000000000000000000000000000000000000000000000",
           "0000000000000000000000000000000000000000000000000000000000000060"
         ],
-        "error": "Opcode Dispatch Error: Out of gas: Needed 20000 - Remaining 412 - Reason: SSTORE, depth=1",
+        "error": "Opcode Dispatch Error: OutOfGas, depth=1",
         "gasCost": 0
       }
     ]
