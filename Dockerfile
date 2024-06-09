@@ -35,7 +35,7 @@ RUN apt update && apt -y upgrade
 
 RUN ldd --version ldd
 
-RUN rm -rf /home/user/nimbus-eth1/build/nimbus
+RUN rm -f /home/user/nimbus-eth1/build/nimbus
 
 COPY --from=build /root/nimbus-eth1/build/nimbus /home/user/nimbus-eth1/build/nimbus
 
