@@ -36,7 +36,7 @@ proc buildAccountsTableFromKeys(
     let code = if key.codeLen > 0:
         db.db.newKvt().get(account.codeHash.data).valueOr: EmptyBlob
       else: @[]
-    var storage = initTable[UInt256, UInt256]()
+    var storage = Table[UInt256, UInt256]()
 
     for slot in key.slots:
       let slotKey = fromBytesBE(UInt256, slot)

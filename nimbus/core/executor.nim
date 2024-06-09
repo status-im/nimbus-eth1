@@ -60,7 +60,7 @@ method addTransaction*(vmState: BaseVMState, transaction: Transaction, c: Comput
   #       block.header.gas_used = receipt.gas_used
 
   #       return block, trie_data
-  result = (b, initTable[string, string]())
+  result = (b, Table[string, string]())
 
 method applyTransaction*(
     vmState: BaseVMState,
@@ -84,5 +84,5 @@ method applyTransaction*(
     result = (computation, ourBlock, trieData)
   else:
     var (computation, blockHeader) = vmState.executeTransaction(transaction)
-    return (computation, nil, initTable[string, string]())
+    return (computation, nil, Table[string, string]())
 ]#

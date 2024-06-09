@@ -28,7 +28,7 @@ proc newCodeStream*(codeBytes: sink seq[byte]): CodeStream =
   new(result)
   result.bytes = system.move(codeBytes)
   result.pc = 0
-  result.invalidPositions = initHashSet[int]()
+  result.invalidPositions = HashSet[int]()
   result.depthProcessed = 0
   result.cached = @[]
 

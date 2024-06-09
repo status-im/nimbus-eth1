@@ -91,7 +91,7 @@ proc execute*(ws: ReorgSpec, env: TestEnv): bool =
       startAccount: 1.u256 shl 160,
       nextIndex   : 0,
       wdHistory   : WDHistory(),
-      sidechain   : initTable[uint64, ExecutionPayload]()
+      sidechain   : Table[uint64, ExecutionPayload]()
     )
 
   # Sidechain withdraws on the max account value range 0xffffffffffffffffffffffffffffffffffffffff

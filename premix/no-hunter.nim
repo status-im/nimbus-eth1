@@ -80,7 +80,7 @@ proc hash*(x: UInt256): Hash =
 proc new(T: type HunterVMState; parent, header: BlockHeader, com: CommonRef): T =
   new result
   result.init(parent, header, com)
-  result.headers = initTable[BlockNumber, BlockHeader]()
+  result.headers = Table[BlockNumber, BlockHeader]()
 
 method getAncestorHash*(vmState: HunterVMState, blockNumber: BlockNumber): Hash256 =
   if blockNumber in vmState.headers:

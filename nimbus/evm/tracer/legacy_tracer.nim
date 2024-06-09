@@ -63,9 +63,9 @@ method capturePrepare*(ctx: LegacyTracer, comp: Computation, depth: int) {.gcsaf
     let prevLen = ctx.storageKeys.len
     ctx.storageKeys.setLen(depth + 1)
     for i in prevLen ..< ctx.storageKeys.len - 1:
-      ctx.storageKeys[i] = initHashSet[UInt256]()
+      ctx.storageKeys[i] = HashSet[UInt256]()
 
-  ctx.storageKeys[depth] = initHashSet[UInt256]()
+  ctx.storageKeys[depth] = HashSet[UInt256]()
 
 # Opcode level
 method captureOpStart*(ctx: LegacyTracer, c: Computation,

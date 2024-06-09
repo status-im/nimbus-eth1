@@ -58,7 +58,7 @@ proc stateDBMain*() =
       # give access to private fields of AccountRef
       privateAccess(AccountRef)
       var x = AccountRef(
-        overlayStorage: initTable[UInt256, UInt256](),
+        overlayStorage: Table[UInt256, UInt256](),
         originalStorage: newTable[UInt256, UInt256]()
       )
 

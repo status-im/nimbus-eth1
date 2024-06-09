@@ -33,7 +33,7 @@ proc merge(a, b: StorageTable) =
 #######################################################################
 
 proc init*(ac: var TransientStorage) =
-  ac.map = initTable[EthAddress, StorageTable]()
+  ac.map = Table[EthAddress, StorageTable]()
 
 proc init*(_: type TransientStorage): TransientStorage {.inline.} =
   result.init()

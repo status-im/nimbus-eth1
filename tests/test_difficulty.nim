@@ -52,7 +52,7 @@ proc parseHash(data: string): Hash256 =
 
 proc parseTests(testData: JSonNode): Tests =
   const hex = true
-  result = initTable[string, Tester]()
+  result = Table[string, Tester]()
   var t: Tester
   for title, data in testData:
     t.parentTimestamp = hexOrInt64(data, "parentTimestamp", hex)

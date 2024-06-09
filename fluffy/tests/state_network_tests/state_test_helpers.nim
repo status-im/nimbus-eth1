@@ -109,7 +109,7 @@ proc toState*(
     alloc: GenesisAlloc
 ): (HexaryTrie, Table[EthAddress, HexaryTrie]) {.raises: [RlpError].} =
   var accountTrie = initHexaryTrie(newMemoryDB())
-  var storageStates = initTable[EthAddress, HexaryTrie]()
+  var storageStates = Table[EthAddress, HexaryTrie]()
 
   for address, genAccount in alloc:
     var storageRoot = EMPTY_ROOT_HASH

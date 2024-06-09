@@ -32,7 +32,7 @@ func toStorageKeys(slots: SlotSet): seq[StorageKey] =
 # ------------------------------------------------------------------------------
 
 proc init*(ac: var AccessList) =
-  ac.slots = initTable[EthAddress, SlotSet]()
+  ac.slots = Table[EthAddress, SlotSet]()
 
 proc init*(_: type AccessList): AccessList {.inline.} =
   result.init()
@@ -58,7 +58,7 @@ proc merge*(ac: var AccessList, other: AccessList) {.inline.} =
 
 proc add*(ac: var AccessList, address: EthAddress) =
   if address notin ac.slots:
-    ac.slots[address] = initHashSet[UInt256]()
+    ac.slots[address] = HashSet[UInt256]()
 
 proc add*(ac: var AccessList, address: EthAddress, slot: UInt256) =
   ac.slots.withValue(address, val):

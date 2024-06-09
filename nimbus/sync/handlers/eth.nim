@@ -165,7 +165,7 @@ proc banPeer(pool: PeerPool, peer: Peer, banTime: chronos.Duration) {.async.} =
 
 proc cleanupKnownByPeer(ctx: EthWireRef) =
   let now = getTime()
-  var tmp = initHashSet[Hash256]()
+  var tmp = HashSet[Hash256]()
   for _, map in ctx.knownByPeer:
     for hash, time in map:
       if time - now >= POOLED_STORAGE_TIME_LIMIT:
@@ -174,7 +174,7 @@ proc cleanupKnownByPeer(ctx: EthWireRef) =
       map.del(hash)
     tmp.clear()
 
-  var tmpPeer = initHashSet[Peer]()
+  var tmpPeer = HashSet[Peer]()
   for peer, map in ctx.knownByPeer:
     if map.len == 0:
       tmpPeer.incl peer

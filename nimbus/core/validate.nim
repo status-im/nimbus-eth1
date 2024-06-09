@@ -144,7 +144,7 @@ proc validateUncles(com: CommonRef; header: BlockHeader;
     return err("Header suggests block should have uncles but block has none")
 
   # Check for duplicates
-  var uncleSet = initHashSet[Hash256]()
+  var uncleSet = HashSet[Hash256]()
   for uncle in uncles:
     let uncleHash = uncle.blockHash
     if uncleHash in uncleSet:
