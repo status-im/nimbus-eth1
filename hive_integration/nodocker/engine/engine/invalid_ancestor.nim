@@ -323,7 +323,7 @@ method execute(cs: InvalidMissingAncestorReOrgSyncTest, env: TestEnv): bool =
             invalidHeader = blockHeader(shadow.payloads[i])
             invalidBody = blockBody(shadow.payloads[i])
 
-          testCond sec.setBlock(invalidHeader, invalidBody):
+          testCond sec.setBlock(EthBlock.init(invalidHeader, invalidBody)):
               fatal "TEST ISSUE - Failed to set invalid block"
           info "Invalid block successfully set",
             idx=i,
