@@ -37,12 +37,11 @@ proc getMultiKeys*(
 
   let
     chainDB = com.db
-    blockHash = chainDB.getBlockHash(blockHeader.blockNumber)
-    blockBody = chainDB.getBlockBody(blockHash)
+    blk = chainDB.getEthBlock(blockHeader.blockNumber)
     # Initializing the VM will throw a Defect if the state doesn't exist.
     # Once we enable pruning we will need to check if the block state has been pruned
     # before trying to initialize the VM as we do here.
-    vmState = BaseVMState.new(blockHeader, com).valueOr:
+    vmState = BaseVMState.new(blk.header, com).valueOr:
                 raise newException(ValueError, "Cannot create vm state")
 
   vmState.collectWitnessData = true # Enable saving witness data
@@ -52,7 +51,7 @@ proc getMultiKeys*(
   defer: dbTx.dispose()
 
   # Execute the block of transactions and collect the keys of the touched account state
-  let processBlockResult = processBlock(vmState, blockHeader, blockBody)
+  let processBlockResult = processBlock(vmState, blk)
   doAssert processBlockResult == ValidationResult.OK
 
   let mkeys = vmState.stateDB.makeMultiKeys()

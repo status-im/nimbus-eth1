@@ -254,7 +254,7 @@ proc collectDebugData(ctx: var TestCtx) =
   }
 
 proc runTestCtx(ctx: var TestCtx, com: CommonRef, testStatusIMPL: var TestStatus) =
-  discard com.db.persistHeaderToDb(ctx.genesisHeader,
+  com.db.persistHeaderToDb(ctx.genesisHeader,
     com.consensus == ConsensusType.POS)
   check com.db.getCanonicalHead().blockHash == ctx.genesisHeader.blockHash
   let checkSeal = ctx.shouldCheckSeal

@@ -110,7 +110,8 @@ const
   internalTxName = "internalTx"
 
 proc traceTransaction*(com: CommonRef, header: BlockHeader,
-                       body: BlockBody, txIndex: int, tracerFlags: set[TracerFlags] = {}): JsonNode =
+                       transactions: openArray[Transaction], txIndex: int,
+                       tracerFlags: set[TracerFlags] = {}): JsonNode =
   let
     # we add a memory layer between backend/lower layer db
     # and capture state db snapshot during transaction execution
@@ -128,8 +129,8 @@ proc traceTransaction*(com: CommonRef, header: BlockHeader,
     capture.forget()
 
   if header.txRoot == EMPTY_ROOT_HASH: return newJNull()
-  doAssert(body.transactions.calcTxRoot == header.txRoot)
-  doAssert(body.transactions.len != 0)
+  doAssert(transactions.calcTxRoot == header.txRoot)
+  doAssert(transactions.len != 0)
 
   var
     gasUsed: GasInt
@@ -142,7 +143,7 @@ proc traceTransaction*(com: CommonRef, header: BlockHeader,
   let
     miner = vmState.coinbase()
 
-  for idx, tx in body.transactions:
+  for idx, tx in transactions:
     let sender = tx.getSender
     let recipient = tx.getRecipient(sender)
 
@@ -191,7 +192,8 @@ proc traceTransaction*(com: CommonRef, header: BlockHeader,
   if TracerFlags.DisableState notin tracerFlags:
     result.dumpMemoryDB(capture)
 
-proc dumpBlockState*(com: CommonRef, header: BlockHeader, body: BlockBody, dumpState = false): JsonNode =
+proc dumpBlockState*(com: CommonRef, blk: EthBlock, dumpState = false): JsonNode =
+  template header: BlockHeader = blk.header
   let
     parent = com.db.getParentHeader(header)
     capture = com.db.newCapture.value
@@ -213,7 +215,7 @@ proc dumpBlockState*(com: CommonRef, header: BlockHeader, body: BlockBody, dumpS
     after = newJArray()
     stateBefore = LedgerRef.init(capture.recorder, parent.stateRoot)
 
-  for idx, tx in body.transactions:
+  for idx, tx in blk.transactions:
     let sender = tx.getSender
     let recipient = tx.getRecipient(sender)
     before.captureAccount(stateBefore, sender, senderName & $idx)
@@ -221,14 +223,14 @@ proc dumpBlockState*(com: CommonRef, header: BlockHeader, body: BlockBody, dumpS
 
   before.captureAccount(stateBefore, miner, minerName)
 
-  for idx, uncle in body.uncles:
+  for idx, uncle in blk.uncles:
     before.captureAccount(stateBefore, uncle.coinbase, uncleName & $idx)
 
-  discard vmState.processBlock(header, body)
+  discard vmState.processBlock(blk)
 
   var stateAfter = vmState.stateDB
 
-  for idx, tx in body.transactions:
+  for idx, tx in blk.transactions:
     let sender = tx.getSender
     let recipient = tx.getRecipient(sender)
     after.captureAccount(stateAfter, sender, senderName & $idx)
@@ -238,7 +240,7 @@ proc dumpBlockState*(com: CommonRef, header: BlockHeader, body: BlockBody, dumpS
   after.captureAccount(stateAfter, miner, minerName)
   tracerInst.removeTracedAccounts(miner)
 
-  for idx, uncle in body.uncles:
+  for idx, uncle in blk.uncles:
     after.captureAccount(stateAfter, uncle.coinbase, uncleName & $idx)
     tracerInst.removeTracedAccounts(uncle.coinbase)
 
@@ -254,7 +256,8 @@ proc dumpBlockState*(com: CommonRef, header: BlockHeader, body: BlockBody, dumpS
   if dumpState:
     result.dumpMemoryDB(capture)
 
-proc traceBlock*(com: CommonRef, header: BlockHeader, body: BlockBody, tracerFlags: set[TracerFlags] = {}): JsonNode =
+proc traceBlock*(com: CommonRef, blk: EthBlock, tracerFlags: set[TracerFlags] = {}): JsonNode =
+  template header: BlockHeader = blk.header
   let
     capture = com.db.newCapture.value
     captureCom = com.clone(capture.recorder)
@@ -269,12 +272,12 @@ proc traceBlock*(com: CommonRef, header: BlockHeader, body: BlockBody, tracerFla
     capture.forget()
 
   if header.txRoot == EMPTY_ROOT_HASH: return newJNull()
-  doAssert(body.transactions.calcTxRoot == header.txRoot)
-  doAssert(body.transactions.len != 0)
+  doAssert(blk.transactions.calcTxRoot == header.txRoot)
+  doAssert(blk.transactions.len != 0)
 
   var gasUsed = GasInt(0)
 
-  for tx in body.transactions:
+  for tx in blk.transactions:
     let
       sender = tx.getSender
       rc = vmState.processTransaction(tx, sender, header)
@@ -287,14 +290,14 @@ proc traceBlock*(com: CommonRef, header: BlockHeader, body: BlockBody, tracerFla
   if TracerFlags.DisableState notin tracerFlags:
     result.dumpMemoryDB(capture)
 
-proc traceTransactions*(com: CommonRef, header: BlockHeader, blockBody: BlockBody): JsonNode =
+proc traceTransactions*(com: CommonRef, header: BlockHeader, transactions: openArray[Transaction]): JsonNode =
   result = newJArray()
-  for i in 0 ..< blockBody.transactions.len:
-    result.add traceTransaction(com, header, blockBody, i, {DisableState})
+  for i in 0 ..< transactions.len:
+    result.add traceTransaction(com, header, transactions, i, {DisableState})
 
 
-proc dumpDebuggingMetaData*(vmState: BaseVMState, header: BlockHeader,
-                            blockBody: BlockBody, launchDebugger = true) =
+proc dumpDebuggingMetaData*(vmState: BaseVMState, blk: EthBlock, launchDebugger = true) =
+  template header: BlockHeader = blk.header
   let
     com = vmState.com
     blockNumber = header.blockNumber
@@ -312,9 +315,9 @@ proc dumpDebuggingMetaData*(vmState: BaseVMState, header: BlockHeader,
 
   var metaData = %{
     "blockNumber": %blockNumber.toHex,
-    "txTraces": traceTransactions(captureCom, header, blockBody),
-    "stateDump": dumpBlockState(captureCom, header, blockBody),
-    "blockTrace": traceBlock(captureCom, header, blockBody, {DisableState}),
+    "txTraces": traceTransactions(captureCom, header, blk.transactions),
+    "stateDump": dumpBlockState(captureCom, blk),
+    "blockTrace": traceBlock(captureCom, blk, {DisableState}),
     "receipts": toJson(vmState.receipts),
     "block": blockSummary
   }

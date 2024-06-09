@@ -7,6 +7,8 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
+{.push raises: [].}
+
 import
   ./web3_eth_conv,
   web3/execution_types,
@@ -81,7 +83,7 @@ func executionPayloadV1V2*(blk: EthBlock): ExecutionPayloadV1OrV2 =
 
 func blockHeader*(p: ExecutionPayload,
                   beaconRoot: Option[common.Hash256]):
-                    common.BlockHeader {.gcsafe, raises:[CatchableError].} =
+                    common.BlockHeader {.gcsafe, raises:[RlpError].} =
   common.BlockHeader(
     parentHash     : ethHash p.parentHash,
     ommersHash     : EMPTY_UNCLE_HASH,
@@ -115,10 +117,10 @@ func blockBody*(p: ExecutionPayload):
 
 func ethBlock*(p: ExecutionPayload,
                beaconRoot: Option[common.Hash256]):
-                 common.EthBlock {.gcsafe, raises:[CatchableError].} =
+                 common.EthBlock {.gcsafe, raises:[RlpError].} =
   common.EthBlock(
-    header     : blockHeader(p, beaconRoot),
-    uncles     : @[],
-    txs        : ethTxs p.transactions,
+    header      : blockHeader(p, beaconRoot),
+    uncles      : @[],
+    transactions: ethTxs p.transactions,
     withdrawals: ethWithdrawals p.withdrawals,
   )

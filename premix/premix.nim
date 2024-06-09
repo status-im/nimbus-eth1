@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2020-2023 Status Research & Development GmbH
+# Copyright (c) 2020-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -62,7 +62,9 @@ proc main() =
 
     # prestate data goes to debug tool and contains data
     # needed to execute single block
-    generatePrestate(nimbus, geth, blockNumber, parentBlock.header, thisBlock.header, thisBlock.body)
+    generatePrestate(
+      nimbus, geth, blockNumber, parentBlock.header,
+      EthBlock.init(thisBlock.header, thisBlock.body))
 
     printDebugInstruction(blockNumber)
   except CatchableError:

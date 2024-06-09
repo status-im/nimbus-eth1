@@ -14,7 +14,8 @@ import
   ../nimbus/db/[core_db, storage_types], eth/[rlp, common],
   ../nimbus/tracer
 
-proc generatePrestate*(nimbus, geth: JsonNode, blockNumber: UInt256, parent, header: BlockHeader, body: BlockBody) =
+proc generatePrestate*(nimbus, geth: JsonNode, blockNumber: UInt256, parent: BlockHeader, blk: EthBlock) =
+  template header: BlockHeader = blk.header
   let
     state = nimbus["state"]
     headerHash = rlpHash(header)
@@ -22,8 +23,8 @@ proc generatePrestate*(nimbus, geth: JsonNode, blockNumber: UInt256, parent, hea
     kvt = chainDB.newKvt()
 
   discard chainDB.setHead(parent, true)
-  discard chainDB.persistTransactions(blockNumber, body.transactions)
-  discard chainDB.persistUncles(body.uncles)
+  discard chainDB.persistTransactions(blockNumber, blk.transactions)
+  discard chainDB.persistUncles(blk.uncles)
 
   kvt.put(genericHashKey(headerHash).toOpenArray, rlp.encode(header)).isOkOr:
     raiseAssert "generatePrestate(): put() failed " & $$error

@@ -213,9 +213,9 @@ proc test_chainSync*(
       sample = done
 
   for w in files.undumpBlocks(least = start):
-    let (fromBlock, toBlock) = (w[0][0].blockNumber, w[0][^1].blockNumber)
+    let (fromBlock, toBlock) = (w[0].header.blockNumber, w[^1].header.blockNumber)
     if fromBlock == 0.u256:
-      xCheck w[0][0] == com.db.getBlockHeader(0.u256)
+      xCheck w[0].header == com.db.getBlockHeader(0.u256)
       continue
 
     # Process groups of blocks ...
@@ -230,10 +230,10 @@ proc test_chainSync*(
           noisy.whisper "***",
             &"processing ...[#{fromBlock:>8},#{toBlock:>8}]..."
         if enaLogging:
-          noisy.startLogging(w[0][0].blockNumber)
+          noisy.startLogging(w[0].header.blockNumber)
 
       noisy.stopLoggingAfter():
-        let runPersistBlocksRc = chain.persistBlocks(w[0], w[1])
+        let runPersistBlocksRc = chain.persistBlocks(w)
         xCheck runPersistBlocksRc.isOk():
           if noisy:
             noisy.whisper "***", "Re-run with logging enabled...\n"
@@ -241,8 +241,8 @@ proc test_chainSync*(
             com.db.trackLegaApi = false
             com.db.trackNewApi = false
             com.db.trackLedgerApi = false
-            discard chain.persistBlocks(w[0], w[1])
-      blocks += w[0].len
+            discard chain.persistBlocks(w)
+      blocks += w.len
       continue
 
     # Last group or single block
@@ -252,31 +252,28 @@ proc test_chainSync*(
     # and execute them first. Then the next batch starts with the `lastBlock`.
     let
       pivot = (lastBlock - fromBlock).truncate(uint)
-      headers9 = w[0][pivot .. ^1]
-      bodies9 = w[1][pivot .. ^1]
-    doAssert lastBlock == headers9[0].blockNumber
+      blocks9 = w[pivot .. ^1]
+    doAssert lastBlock == blocks9[0].header.blockNumber
 
     # Process leading batch before `lastBlock` (if any)
     var dotsOrSpace = "..."
     if fromBlock < lastBlock:
       let
-        headers1 = w[0][0 ..< pivot]
-        bodies1 = w[1][0 ..< pivot]
+        blocks1 = w[0 ..< pivot]
       if oldLogAlign:
         noisy.whisper "***", &"processing ...[#{fromBlock},#{toBlock}]...\n"
       else:
         sayPerf
         noisy.whisper "***",
            &"processing {dotsOrSpace}[#{fromBlock:>8},#{(lastBlock-1):>8}]"
-      let runPersistBlocks1Rc = chain.persistBlocks(headers1, bodies1)
+      let runPersistBlocks1Rc = chain.persistBlocks(blocks1)
       xCheck runPersistBlocks1Rc.isOk()
       dotsOrSpace = "   "
 
-    noisy.startLogging(headers9[0].blockNumber)
+    noisy.startLogging(blocks9[0].header.blockNumber)
     if lastOneExtra:
       let
-        headers0 = headers9[0..0]
-        bodies0 = bodies9[0..0]
+        blocks0 = blocks9[0..0]
       if oldLogAlign:
         noisy.whisper "***",
           &"processing {dotsOrSpace}[#{fromBlock},#{lastBlock-1}]\n"
@@ -285,7 +282,7 @@ proc test_chainSync*(
         noisy.whisper "***",
           &"processing {dotsOrSpace}[#{lastBlock:>8},#{lastBlock:>8}]"
       noisy.stopLoggingAfter():
-        let runPersistBlocks0Rc = chain.persistBlocks(headers0, bodies0)
+        let runPersistBlocks0Rc = chain.persistBlocks(blocks0)
         xCheck runPersistBlocks0Rc.isOk()
     else:
       if oldLogAlign:
@@ -296,7 +293,7 @@ proc test_chainSync*(
         noisy.whisper "***",
           &"processing {dotsOrSpace}[#{lastBlock:>8},#{toBlock:>8}]"
       noisy.stopLoggingAfter():
-        let runPersistBlocks9Rc = chain.persistBlocks(headers9, bodies9)
+        let runPersistBlocks9Rc = chain.persistBlocks(blocks9)
         xCheck runPersistBlocks9Rc.isOk()
     break
   if not oldLogAlign:

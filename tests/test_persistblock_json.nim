@@ -30,16 +30,12 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus) =
   let
     parentNumber = blockNumber - 1
     parent = com.db.getBlockHeader(parentNumber)
-    header = com.db.getBlockHeader(blockNumber)
-    headerHash = header.blockHash
-    blockBody = com.db.getBlockBody(headerHash)
+    blk = com.db.getEthBlock(blockNumber)
     chain = newChain(com)
-    headers = @[header]
-    bodies = @[blockBody]
 
   # it's ok if setHead fails here because of missing ancestors
   discard com.db.setHead(parent, true)
-  let validationResult = chain.persistBlocks(headers, bodies)
+  let validationResult = chain.persistBlocks([blk])
   check validationResult.isOk()
 
 proc persistBlockJsonMain*() =

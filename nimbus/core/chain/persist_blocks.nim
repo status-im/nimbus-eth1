@@ -71,24 +71,25 @@ proc purgeOlderBlocksFromHistory(
         break
       blkNum = blkNum - 1
 
-proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
-                       bodies: openArray[BlockBody],
+proc persistBlocksImpl(c: ChainRef; blocks: openArray[EthBlock];
                        flags: PersistBlockFlags = {}): Result[PersistStats, string]
                          {.raises: [CatchableError] .} =
   let dbTx = c.db.newTransaction()
   defer: dbTx.dispose()
 
-  c.com.hardForkTransition(headers[0])
+  c.com.hardForkTransition(blocks[0].header)
 
   # Note that `0 < headers.len`, assured when called from `persistBlocks()`
-  let vmState = ?c.getVmState(headers[0])
+  let vmState = ?c.getVmState(blocks[0].header)
 
-  let (fromBlock, toBlock) = (headers[0].blockNumber, headers[^1].blockNumber)
+  let
+    fromBlock = blocks[0].header.blockNumber
+    toBlock = blocks[blocks.high()].header.blockNumber
   trace "Persisting blocks", fromBlock, toBlock
 
   var txs = 0
-  for i in 0 ..< headers.len:
-    let (header, body) = (headers[i], bodies[i])
+  for blk in blocks:
+    template header: BlockHeader = blk.header
 
     # # This transaction keeps the current state open for inspection
     # # if an error occurs (as needed for `Aristo`.).
@@ -98,22 +99,18 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
     c.com.hardForkTransition(header)
 
     if not vmState.reinit(header):
-      debug "Cannot update VmState",
-        blockNumber = header.blockNumber,
-        item = i
+      debug "Cannot update VmState", blockNumber = header.blockNumber
       return err("Cannot update VmState to block " & $header.blockNumber)
 
     if c.validateBlock and c.extraValidation and
        c.verifyFrom <= header.blockNumber:
 
-      ? c.com.validateHeaderAndKinship(
-        header,
-        body,
-        checkSealOK = false) # TODO: how to checkseal from here
+      # TODO: how to checkseal from here
+      ? c.com.validateHeaderAndKinship(blk, checkSealOK = false)
 
     let
       validationResult = if c.validateBlock:
-                           vmState.processBlock(header, body)
+                           vmState.processBlock(blk)
                          else:
                            ValidationResult.OK
 
@@ -127,17 +124,17 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
       return err("Failed to validate block")
 
     if NoPersistHeader notin flags:
-      discard c.db.persistHeaderToDb(
+      c.db.persistHeaderToDb(
         header, c.com.consensus == ConsensusType.POS, c.com.startOfHistory)
 
     if NoSaveTxs notin flags:
-      discard c.db.persistTransactions(header.blockNumber, body.transactions)
+      discard c.db.persistTransactions(header.blockNumber, blk.transactions)
 
     if NoSaveReceipts notin flags:
       discard c.db.persistReceipts(vmState.receipts)
 
-    if NoSaveWithdrawals notin flags and body.withdrawals.isSome:
-      discard c.db.persistWithdrawals(body.withdrawals.get)
+    if NoSaveWithdrawals notin flags and blk.withdrawals.isSome:
+      discard c.db.persistWithdrawals(blk.withdrawals.get)
 
     # update currentBlock *after* we persist it
     # so the rpc return consistent result
@@ -147,12 +144,12 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
     # Done with this block
     # lapTx.commit()
 
-    txs += body.transactions.len
+    txs += blk.transactions.len
 
   dbTx.commit()
 
   # Save and record the block number before the last saved block state.
-  c.db.persistent(headers[^1].blockNumber)
+  c.db.persistent(toBlock)
 
   if c.com.pruneHistory:
     # There is a feature for test systems to regularly clean up older blocks
@@ -162,19 +159,18 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
       # Starts at around `2 * CleanUpEpoch`
       c.db.purgeOlderBlocksFromHistory(fromBlock - CleanUpEpoch)
 
-  ok((headers.len, txs, vmState.cumulativeGasUsed))
+  ok((blocks.len, txs, vmState.cumulativeGasUsed))
 
 # ------------------------------------------------------------------------------
 # Public `ChainDB` methods
 # ------------------------------------------------------------------------------
 
-proc insertBlockWithoutSetHead*(c: ChainRef, header: BlockHeader,
-                                body: BlockBody): Result[void, string] =
+proc insertBlockWithoutSetHead*(c: ChainRef, blk: EthBlock): Result[void, string] =
   try:
     discard ? c.persistBlocksImpl(
-      [header], [body], {NoPersistHeader, NoSaveReceipts})
+      [blk], {NoPersistHeader, NoSaveReceipts})
 
-    c.db.persistHeaderToDbWithoutSetHead(header, c.com.startOfHistory)
+    c.db.persistHeaderToDbWithoutSetHead(blk.header, c.com.startOfHistory)
     ok()
   except CatchableError as exc:
     err(exc.msg)
@@ -191,7 +187,7 @@ proc setCanonical*(c: ChainRef, header: BlockHeader): Result[void, string] =
         hash = header.blockHash
       return err("Could not get block body")
 
-    discard ? c.persistBlocksImpl([header], [body], {NoPersistHeader, NoSaveTxs})
+    discard ? c.persistBlocksImpl([EthBlock.init(header, move(body))], {NoPersistHeader, NoSaveTxs})
 
     discard c.db.setHead(header.blockHash)
     ok()
@@ -207,19 +203,15 @@ proc setCanonical*(c: ChainRef, blockHash: Hash256): Result[void, string] =
 
   setCanonical(c, header)
 
-proc persistBlocks*(c: ChainRef; headers: openArray[BlockHeader];
-                      bodies: openArray[BlockBody]): Result[PersistStats, string] =
+proc persistBlocks*(
+    c: ChainRef; blocks: openArray[EthBlock]): Result[PersistStats, string] =
   # Run the VM here
-  if headers.len != bodies.len:
-    debug "Number of headers not matching number of bodies"
-    return err("Mismatching headers and bodies")
-
-  if headers.len == 0:
+  if blocks.len == 0:
     debug "Nothing to do"
     return ok(default(PersistStats)) # TODO not nice to return nil
 
   try:
-    c.persistBlocksImpl(headers,bodies)
+    c.persistBlocksImpl(blocks)
   except CatchableError as exc:
     err(exc.msg)
 

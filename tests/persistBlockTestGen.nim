@@ -28,15 +28,11 @@ proc dumpTest(com: CommonRef, blockNumber: int) =
 
   let
     parent = captureCom.db.getBlockHeader(parentNumber)
-    header = captureCom.db.getBlockHeader(blockNumber)
-    headerHash = header.blockHash
-    blockBody = captureCom.db.getBlockBody(headerHash)
+    blk = captureCom.db.getEthBlock(blockNumber)
     chain = newChain(captureCom)
-    headers = @[header]
-    bodies = @[blockBody]
 
   discard captureCom.db.setHead(parent, true)
-  discard chain.persistBlocks(headers, bodies)
+  discard chain.persistBlocks([blk])
 
   var metaData = %{
     "blockNumber": %blockNumber.toHex

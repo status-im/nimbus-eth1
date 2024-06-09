@@ -29,19 +29,17 @@ proc prepareBlockEnv(node: JsonNode, memoryDB: CoreDbRef) =
       raiseAssert "prepareBlockEnv(): put() (loop) failed " & $$error
 
 proc executeBlock(blockEnv: JsonNode, memoryDB: CoreDbRef, blockNumber: UInt256) =
-  let
+  var
     parentNumber = blockNumber - 1
     com = CommonRef.new(memoryDB)
     parent = com.db.getBlockHeader(parentNumber)
-    header = com.db.getBlockHeader(blockNumber)
-    body   = com.db.getBlockBody(header.blockHash)
-
+    blk = com.db.getEthBlock(blockNumber)
   let transaction = memoryDB.newTransaction()
   defer: transaction.dispose()
 
   let
-    vmState = BaseVMState.new(parent, header, com)
-    validationResult = vmState.processBlock(header, body)
+    vmState = BaseVMState.new(parent, blk.header, com)
+    validationResult = vmState.processBlock(blk)
 
   if validationResult != ValidationResult.OK:
     error "block validation error", validationResult
@@ -49,7 +47,7 @@ proc executeBlock(blockEnv: JsonNode, memoryDB: CoreDbRef, blockNumber: UInt256)
     info "block validation success", validationResult, blockNumber
 
   transaction.rollback()
-  vmState.dumpDebuggingMetaData(header, body, false)
+  vmState.dumpDebuggingMetaData(blk, false)
   let
     fileName = "debug" & $blockNumber & ".json"
     nimbus   = json.parseFile(fileName)
@@ -62,7 +60,7 @@ proc executeBlock(blockEnv: JsonNode, memoryDB: CoreDbRef, blockNumber: UInt256)
 
   # prestate data goes to debug tool and contains data
   # needed to execute single block
-  generatePrestate(nimbus, geth, blockNumber, parent, header, body)
+  generatePrestate(nimbus, geth, blockNumber, parent, blk)
 
 proc main() =
   if paramCount() == 0:

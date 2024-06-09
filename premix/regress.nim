@@ -24,12 +24,10 @@ proc validateBlock(com: CommonRef, blockNumber: BlockNumber): BlockNumber =
   var
     parentNumber = blockNumber - 1
     parent = com.db.getBlockHeader(parentNumber)
-    headers = newSeq[BlockHeader](numBlocks)
-    bodies  = newSeq[BlockBody](numBlocks)
+    blocks = newSeq[EthBlock](numBlocks)
 
   for i in 0 ..< numBlocks:
-    headers[i] = com.db.getBlockHeader(blockNumber + i.u256)
-    bodies[i]  = com.db.getBlockBody(headers[i].blockHash)
+    blocks[i] = com.db.getEthBlock(blockNumber + i.u256)
 
   let transaction = com.db.newTransaction()
   defer: transaction.dispose()
@@ -39,13 +37,13 @@ proc validateBlock(com: CommonRef, blockNumber: BlockNumber): BlockNumber =
     stdout.write "\r"
 
     let
-      vmState = BaseVMState.new(parent, headers[i], com)
-      validationResult = vmState.processBlock(headers[i], bodies[i])
+      vmState = BaseVMState.new(parent, blocks[i].header, com)
+      validationResult = vmState.processBlock(blocks[i])
 
     if validationResult != ValidationResult.OK:
       error "block validation error", validationResult, blockNumber = blockNumber + i.u256
 
-    parent = headers[i]
+    parent = blocks[i].header
 
   transaction.rollback()
   result = blockNumber + numBlocks.u256

@@ -248,8 +248,7 @@ proc removeTransactionFromCanonicalChain(
 proc setAsCanonicalChainHead(
     db: CoreDbRef;
     headerHash: Hash256;
-      ): seq[BlockHeader]
-      {.gcsafe, raises: [RlpError,BlockNotFound].} =
+      ) {.gcsafe, raises: [RlpError,BlockNotFound].} =
   ## Sets the header as the canonical chain HEAD.
   let header = db.getBlockHeader(headerHash)
 
@@ -272,8 +271,6 @@ proc setAsCanonicalChainHead(
   db.newKvt.put(canonicalHeadHash.toOpenArray, rlp.encode(headerHash)).isOkOr:
     warn logTxt "setAsCanonicalChainHead()",
       canonicalHeadHash, action="put()", error=($$error)
-
-  return newCanonicalHeaders
 
 proc markCanonicalChain(
     db: CoreDbRef;
@@ -720,13 +717,28 @@ proc getWithdrawals*(
   for encodedWd in db.getWithdrawalsData(withdrawalsRoot):
     result.add(rlp.decode(encodedWd, Withdrawal))
 
+proc getTransactions*(
+    db: CoreDbRef;
+    header: BlockHeader;
+    output: var seq[Transaction])
+      {.gcsafe, raises: [RlpError].} =
+  for encodedTx in db.getBlockTransactionData(header.txRoot):
+    output.add(rlp.decode(encodedTx, Transaction))
+
+proc getTransactions*(
+    db: CoreDbRef;
+    header: BlockHeader;
+    ): seq[Transaction]
+      {.gcsafe, raises: [RlpError].} =
+  db.getTransactions(header, result)
+
 proc getBlockBody*(
     db: CoreDbRef;
     header: BlockHeader;
     output: var BlockBody;
       ): bool
       {.gcsafe, raises: [RlpError].} =
-  output.transactions = @[]
+  db.getTransactions(header, output.transactions)
   output.uncles = @[]
   for encodedTx in db.getBlockTransactionData(header.txRoot):
     output.transactions.add(rlp.decode(encodedTx, Transaction))
@@ -762,6 +774,27 @@ proc getBlockBody*(
       {.gcsafe, raises: [RlpError,ValueError].} =
   if not db.getBlockBody(hash, result):
     raise newException(ValueError, "Error when retrieving block body")
+
+proc getEthBlock*(
+    db: CoreDbRef;
+    hash: Hash256;
+      ): EthBlock
+      {.gcsafe, raises: [BlockNotFound, RlpError,ValueError].} =
+  var
+    header = db.getBlockHeader(hash)
+    blockBody = db.getBlockBody(hash)
+  EthBlock.init(move(header), move(blockBody))
+
+proc getEthBlock*(
+    db: CoreDbRef;
+    blockNumber: BlockNumber;
+      ): EthBlock
+      {.gcsafe, raises: [BlockNotFound, RlpError,ValueError].} =
+  var
+    header = db.getBlockHeader(blockNumber)
+    headerHash = header.blockHash
+    blockBody = db.getBlockBody(headerHash)
+  EthBlock.init(move(header), move(blockBody))
 
 proc getUncleHashes*(
     db: CoreDbRef;
@@ -876,8 +909,7 @@ proc persistHeaderToDb*(
     header: BlockHeader;
     forceCanonical: bool;
     startOfHistory = GENESIS_PARENT_HASH;
-      ): seq[BlockHeader]
-      {.gcsafe, raises: [RlpError,EVMError].} =
+      ) {.gcsafe, raises: [RlpError,EVMError].} =
   let isStartOfHistory = header.parentHash == startOfHistory
   let headerHash = header.blockHash
   if not isStartOfHistory and not db.headerExists(header.parentHash):
@@ -887,7 +919,7 @@ proc persistHeaderToDb*(
   kvt.put(genericHashKey(headerHash).toOpenArray, rlp.encode(header)).isOkOr:
     warn logTxt "persistHeaderToDb()",
       headerHash, action="put()", `error`=($$error)
-    return @[]
+    return
 
   let score = if isStartOfHistory: header.difficulty
               else: db.getScore(header.parentHash) + header.difficulty
@@ -895,17 +927,18 @@ proc persistHeaderToDb*(
   kvt.put(scoreKey.toOpenArray, rlp.encode(score)).isOkOr:
     warn logTxt "persistHeaderToDb()",
       scoreKey, action="put()", `error`=($$error)
-    return @[]
+    return
 
   db.addBlockNumberToHashLookup(header)
 
-  var canonHeader: BlockHeader
-  if not db.getCanonicalHead canonHeader:
-    return db.setAsCanonicalChainHead(headerHash)
+  if not forceCanonical:
+    var canonHeader: BlockHeader
+    if db.getCanonicalHead canonHeader:
+      let headScore = db.getScore(canonHeader.hash)
+      if score <= headScore:
+        return
 
-  let headScore = db.getScore(canonHeader.hash)
-  if score > headScore or forceCanonical:
-    return db.setAsCanonicalChainHead(headerHash)
+  db.setAsCanonicalChainHead(headerHash)
 
 proc persistHeaderToDbWithoutSetHead*(
     db: CoreDbRef;
