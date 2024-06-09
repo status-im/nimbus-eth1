@@ -14,11 +14,11 @@
 #          Inputs on how to run checks
 # ------------------------------------------------
 echo
-echo -n "Do you want to run the checks in terminal or visit the assertoor URL? (terminal/url) "
+printf "Do you want to run the checks in terminal or visit the assertoor URL? (terminal/url) "
 read reply
 
 echo
-echo -n "Build new changes (yes/no)? "
+printf "Build new changes (yes/no)? "
 read use_previous_image
 
 # ------------------------------------------------
@@ -119,11 +119,11 @@ else
 
   # print assertor logs
   assertoor_container=$(docker container list | grep assertoor | sed 's/^\([^ ]\+\) .*$/\1/')
-  docker logs -f $assertoor_container &
+  docker logs -f "$assertoor_container" &
 
   # helper to fetch task status for specific test id
   get_tasks_status() {
-    tasks=$(curl -s ${assertoor_url}/api/v1/test_run/$1 | jq -c ".data.tasks[] | {index, parent_index, name, title, status, result}")
+    tasks=$(curl -s "${assertoor_url}"/api/v1/test_run/"$1" | jq -c ".data.tasks[] | {index, parent_index, name, title, status, result}")
     declare -A task_graph_map
     task_graph_map[0]=""
 
@@ -175,7 +175,7 @@ else
     task_lines=""
     status_lines+=("$(date +'%Y-%m-%d %H:%M:%S')  Test Status:")
 
-    tests=$(curl -s ${assertoor_url}/api/v1/test_runs | jq -c ".data[] | {run_id, test_id, name, status}")
+    tests=$(curl -s "${assertoor_url}"/api/v1/test_runs | jq -c ".data[] | {run_id, test_id, name, status}")
     while read test; do
       if [ -z "$test" ]; then
         continue
@@ -217,11 +217,11 @@ else
       echo "$task_lines"
     fi
 
-    if [ $failed_tests -gt 0 ]; then 
+    if [ "$failed_tests" -gt 0 ]; then 
       final_test_result="failure"
       break
     fi
-    if [ $total_tests -gt 0 ] && [ $pending_tests -le 0 ]; then
+    if [ "$total_tests" -gt 0 ] && [ "$pending_tests" -le 0 ]; then
       final_test_result="success"
       break
     fi
@@ -236,7 +236,7 @@ else
   do
     echo -e "$status_line"
   done
-  echo ""
+  echo
 
   if ! [ -z "$failed_test_id" ]; then
     echo "failed_test_status"

@@ -20,7 +20,7 @@ on:
 
 jobs:
   build:
-    name: Nimbue eth1 - eth2 compatibility check
+    name: Nimbus eth1 - eth2 interop check
     outputs:
       test_result: ${{ steps.test_result.outputs.test_result }}
       test_status: ${{ steps.test_result.outputs.test_status }}
@@ -47,7 +47,7 @@ jobs:
       run: docker build . -t localtestnet
         
 
-    - name: Setup Kurtosis
+    - name: Set up Kurtosis
       shell: bash
       run: |
         echo "deb [trusted=yes] https://apt.fury.io/kurtosis-tech/ /" | sudo tee /etc/apt/sources.list.d/kurtosis.list
