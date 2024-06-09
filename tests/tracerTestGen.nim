@@ -26,7 +26,7 @@ proc dumpTest(com: CommonRef, blockNumber: int) =
 
   let
     blk = captureCom.db.getEthBlock(blockNumber)
-    txTrace = traceTransactions(captureCom, blk)
+    txTrace = traceTransactions(captureCom, blk.header, blk.transactions)
     stateDump = dumpBlockState(captureCom, blk)
     blockTrace = traceBlock(captureCom, blk, {DisableState})
     receipts = dumpReceipts(captureCom.db, blk.header)
