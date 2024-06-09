@@ -248,7 +248,7 @@ jobs:
         echo "Test Result:  $test_result"
         echo "$test_status"
 
-        if ! [ "$test_result" == "success" ]; then
+        if [ "$test_result" == "success" ]; then
           echo ""
           echo "Failed Test Task Status:"
           echo "$failed_test_status"
