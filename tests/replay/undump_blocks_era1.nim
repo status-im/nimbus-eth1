@@ -20,7 +20,7 @@ iterator undumpBlocksEra1*(
     dir: string,
     least = low(uint64), # First block to extract
     stopAfter = high(uint64), # Last block to extract
-): seq[EthBlock] =
+): (seq[BlockHeader], seq[BlockBody]) =
   let db = Era1DbRef.init(dir, "mainnet").expect("Era files present")
   defer:
     db.dispose()
@@ -28,22 +28,25 @@ iterator undumpBlocksEra1*(
   # TODO it would be a lot more natural for this iterator to return 1 block at
   #      a time and let the consumer do the chunking
   const blocksPerYield = 192
-  var tmp = newSeqOfCap[EthBlock](blocksPerYield)
+  var tmp =
+    (newSeqOfCap[BlockHeader](blocksPerYield), newSeqOfCap[BlockBody](blocksPerYield))
 
   for i in 0 ..< stopAfter:
-    var bck = db.getEthBlock(least + i).valueOr:
+    var bck = db.getBlockTuple(least + i).valueOr:
       doAssert i > 0, "expected at least one block"
       break
 
-    tmp.add move(bck)
+    tmp[0].add move(bck[0])
+    tmp[1].add move(bck[1])
 
     # Genesis block requires a chunk of its own, for compatibility with current
     # test setup (a bit weird, that...)
-    if tmp.len mod blocksPerYield == 0 or tmp[0].header.blockNumber == 0:
+    if tmp[0].len mod blocksPerYield == 0 or tmp[0][0].blockNumber == 0:
       yield tmp
-      tmp.setLen(0)
+      tmp[0].setLen(0)
+      tmp[1].setLen(0)
 
-  if tmp.len > 0:
+  if tmp[0].len > 0:
     yield tmp
 
 # ------------------------------------------------------------------------------

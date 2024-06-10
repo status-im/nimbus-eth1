@@ -45,15 +45,16 @@ proc processTransactions*(
     vmState.receipts[txIndex] = vmState.makeReceipt(tx.txType)
   ok()
 
-proc procBlkPreamble(vmState: BaseVMState; blk: EthBlock): bool
-    {.raises: [CatchableError].} =
-  template header: BlockHeader = blk.header
+proc procBlkPreamble(vmState: BaseVMState;
+                     header: BlockHeader; body: BlockBody): bool
+    {.gcsafe, raises: [CatchableError].} =
+
   if vmState.com.daoForkSupport and
      vmState.com.daoForkBlock.get == header.blockNumber:
     vmState.mutateStateDB:
       db.applyDAOHardFork()
 
-  if blk.transactions.calcTxRoot != header.txRoot:
+  if body.transactions.calcTxRoot != header.txRoot:
     debug "Mismatched txRoot",
       blockNumber = header.blockNumber
     return false
@@ -71,27 +72,27 @@ proc procBlkPreamble(vmState: BaseVMState; blk: EthBlock): bool
       error("error in processing beaconRoot", err=r.error)
 
   if header.txRoot != EMPTY_ROOT_HASH:
-    if blk.transactions.len == 0:
+    if body.transactions.len == 0:
       debug "No transactions in body",
         blockNumber = header.blockNumber
       return false
     else:
-      let r = processTransactions(vmState, header, blk.transactions)
+      let r = processTransactions(vmState, header, body.transactions)
       if r.isErr:
         error("error in processing transactions", err=r.error)
 
   if vmState.determineFork >= FkShanghai:
     if header.withdrawalsRoot.isNone:
       raise ValidationError.newException("Post-Shanghai block header must have withdrawalsRoot")
-    if blk.withdrawals.isNone:
+    if body.withdrawals.isNone:
       raise ValidationError.newException("Post-Shanghai block body must have withdrawals")
 
-    for withdrawal in blk.withdrawals.get:
+    for withdrawal in body.withdrawals.get:
       vmState.stateDB.addBalance(withdrawal.address, withdrawal.weiAmount)
   else:
     if header.withdrawalsRoot.isSome:
       raise ValidationError.newException("Pre-Shanghai block header must not have withdrawalsRoot")
-    if blk.withdrawals.isSome:
+    if body.withdrawals.isSome:
       raise ValidationError.newException("Pre-Shanghai block body must not have withdrawals")
 
   if vmState.cumulativeGasUsed != header.gasUsed:
@@ -101,14 +102,15 @@ proc procBlkPreamble(vmState: BaseVMState; blk: EthBlock): bool
     return false
 
   if header.ommersHash != EMPTY_UNCLE_HASH:
-    let h = vmState.com.db.persistUncles(blk.uncles)
+    let h = vmState.com.db.persistUncles(body.uncles)
     if h != header.ommersHash:
       debug "Uncle hash mismatch"
       return false
 
   true
 
-proc procBlkEpilogue(vmState: BaseVMState, header: BlockHeader): bool
+proc procBlkEpilogue(vmState: BaseVMState;
+                     header: BlockHeader; body: BlockBody): bool
     {.gcsafe, raises: [].} =
   # Reward beneficiary
   vmState.mutateStateDB:
@@ -148,20 +150,30 @@ proc procBlkEpilogue(vmState: BaseVMState, header: BlockHeader): bool
 
 proc processBlock*(
     vmState: BaseVMState;  ## Parent environment of header/body block
-    blk:     EthBlock;     ## Header/body block to add to the blockchain
-      ): ValidationResult {.raises: [CatchableError].} =
-  ## Generalised function to processes `blk` for any network.
+    header:  BlockHeader;  ## Header/body block to add to the blockchain
+    body:    BlockBody;
+      ): ValidationResult
+      {.gcsafe, raises: [CatchableError].} =
+  ## Generalised function to processes `(header,body)` pair for any network,
+  ## regardless of PoA or not.
+  ##
+  ## Rather than calculating the PoA state change here, it is done with the
+  ## verification in the `chain/persist_blocks.persistBlocks()` method. So
+  ## the `poa` descriptor is currently unused and only provided for later
+  ## implementations (but can be savely removed, as well.)
+  ## variant of `processBlock()` where the `header` argument is explicitely set.
+
   var dbTx = vmState.com.db.newTransaction()
   defer: dbTx.dispose()
 
-  if not vmState.procBlkPreamble(blk):
+  if not vmState.procBlkPreamble(header, body):
     return ValidationResult.Error
 
   # EIP-3675: no reward for miner in POA/POS
   if vmState.com.consensus == ConsensusType.POW:
-    vmState.calculateReward(blk.header, blk.uncles)
+    vmState.calculateReward(header, body)
 
-  if not vmState.procBlkEpilogue(blk.header):
+  if not vmState.procBlkEpilogue(header, body):
     return ValidationResult.Error
 
   dbTx.commit()

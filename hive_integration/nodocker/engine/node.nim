@@ -32,8 +32,8 @@ import
 
 proc processBlock(
     vmState: BaseVMState;  ## Parent environment of header/body block
-    blk:     EthBlock;  ## Header/body block to add to the blockchain
-    ): ValidationResult
+    header:  BlockHeader;  ## Header/body block to add to the blockchain
+    body:    BlockBody): ValidationResult
     {.gcsafe, raises: [CatchableError].} =
   ## Generalised function to processes `(header,body)` pair for any network,
   ## regardless of PoA or not.
@@ -43,7 +43,7 @@ proc processBlock(
   ## the `poa` descriptor is currently unused and only provided for later
   ## implementations (but can be savely removed, as well.)
   ## variant of `processBlock()` where the `header` argument is explicitely set.
-  template header: BlockHeader = blk.header
+
   var dbTx = vmState.com.db.newTransaction()
   defer: dbTx.dispose()
 
@@ -57,20 +57,20 @@ proc processBlock(
     if r.isErr:
       error("error in processing beaconRoot", err=r.error)
 
-  let r = processTransactions(vmState, header, blk.transactions)
+  let r = processTransactions(vmState, header, body.transactions)
   if r.isErr:
     error("error in processing transactions", err=r.error)
 
   if vmState.determineFork >= FkShanghai:
-    for withdrawal in blk.withdrawals.get:
+    for withdrawal in body.withdrawals.get:
       vmState.stateDB.addBalance(withdrawal.address, withdrawal.weiAmount)
 
   if header.ommersHash != EMPTY_UNCLE_HASH:
-    discard vmState.com.db.persistUncles(blk.uncles)
+    discard vmState.com.db.persistUncles(body.uncles)
 
   # EIP-3675: no reward for miner in POA/POS
   if vmState.com.consensus == ConsensusType.POW:
-    vmState.calculateReward(header, blk.uncles)
+    vmState.calculateReward(header, body)
 
   vmState.mutateStateDB:
     let clearEmptyAccount = vmState.determineFork >= FkSpurious
@@ -95,9 +95,9 @@ proc getVmState(c: ChainRef, header: BlockHeader):
 
 # A stripped down version of persistBlocks without validation
 # intended to accepts invalid block
-proc setBlock*(c: ChainRef; blk: EthBlock): ValidationResult
+proc setBlock*(c: ChainRef; header: BlockHeader;
+                  body: BlockBody): ValidationResult
                           {.inline, raises: [CatchableError].} =
-  template header: BlockHeader = blk.header
   let dbTx = c.db.newTransaction()
   defer: dbTx.dispose()
 
@@ -108,18 +108,18 @@ proc setBlock*(c: ChainRef; blk: EthBlock): ValidationResult
     vmState = c.getVmState(header).valueOr:
       return ValidationResult.Error
     stateRootChpt = vmState.parent.stateRoot # Check point
-    validationResult = vmState.processBlock(blk)
+    validationResult = vmState.processBlock(header, body)
 
   if validationResult != ValidationResult.OK:
     return validationResult
 
-  c.db.persistHeaderToDb(
+  discard c.db.persistHeaderToDb(
     header, c.com.consensus == ConsensusType.POS, c.com.startOfHistory)
-  discard c.db.persistTransactions(header.blockNumber, blk.transactions)
+  discard c.db.persistTransactions(header.blockNumber, body.transactions)
   discard c.db.persistReceipts(vmState.receipts)
 
-  if blk.withdrawals.isSome:
-    discard c.db.persistWithdrawals(blk.withdrawals.get)
+  if body.withdrawals.isSome:
+    discard c.db.persistWithdrawals(body.withdrawals.get)
 
   # update currentBlock *after* we persist it
   # so the rpc return consistent result

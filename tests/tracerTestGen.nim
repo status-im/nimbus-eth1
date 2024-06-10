@@ -25,11 +25,13 @@ proc dumpTest(com: CommonRef, blockNumber: int) =
     captureCom = com.clone(capture.recorder)
 
   let
-    blk = captureCom.db.getEthBlock(blockNumber)
-    txTrace = traceTransactions(captureCom, blk.header, blk.transactions)
-    stateDump = dumpBlockState(captureCom, blk)
-    blockTrace = traceBlock(captureCom, blk, {DisableState})
-    receipts = dumpReceipts(captureCom.db, blk.header)
+    header = captureCom.db.getBlockHeader(blockNumber)
+    headerHash = header.blockHash
+    blockBody = captureCom.db.getBlockBody(headerHash)
+    txTrace = traceTransactions(captureCom, header, blockBody)
+    stateDump = dumpBlockState(captureCom, header, blockBody)
+    blockTrace = traceBlock(captureCom, header, blockBody, {DisableState})
+    receipts = dumpReceipts(captureCom.db, header)
 
   var metaData = %{
     "blockNumber": %blockNumber.toHex,

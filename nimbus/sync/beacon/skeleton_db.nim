@@ -196,10 +196,11 @@ proc resetCanonicalHead*(sk: SkeletonRef, newHead, oldHead: uint64) =
   sk.chain.com.syncCurrent = newHead.toBlockNumber
 
 proc insertBlocks*(sk: SkeletonRef,
-                   blocks: openArray[EthBlock],
+                   headers: openArray[BlockHeader],
+                   body: openArray[BlockBody],
                    fromEngine: bool): Result[uint64, string] =
-  discard ? sk.chain.persistBlocks(blocks)
-  ok(blocks.len.uint64)
+  discard ? sk.chain.persistBlocks(headers, body)
+  ok(headers.len.uint64)
 
 proc insertBlock*(sk: SkeletonRef,
                   header: BlockHeader,
@@ -208,4 +209,4 @@ proc insertBlock*(sk: SkeletonRef,
     return err(error)
   if maybeBody.isNone:
     return err("insertBlock: Block body not found: " & $header.u64)
-  sk.insertBlocks([EthBlock.init(header, maybeBody.get)], fromEngine)
+  sk.insertBlocks([header], [maybeBody.get], fromEngine)

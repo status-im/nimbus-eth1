@@ -115,8 +115,7 @@ proc newPayload*(ben: BeaconEngineRef,
   validatePayload(apiVersion, version, payload)
   validateVersion(com, timestamp, version, apiVersion)
 
-  var blk = ethBlock(payload, beaconRoot = ethHash beaconRoot)
-  template header: BlockHeader = blk.header
+  var header = blockHeader(payload, beaconRoot = ethHash beaconRoot)
 
   if apiVersion >= Version.V3:
     if versionedHashes.isNone:
@@ -186,7 +185,8 @@ proc newPayload*(ben: BeaconEngineRef,
 
   trace "Inserting block without sethead",
     hash = blockHash, number = header.blockNumber
-  let vres = ben.chain.insertBlockWithoutSetHead(blk)
+  let body = blockBody(payload)
+  let vres = ben.chain.insertBlockWithoutSetHead(header, body)
   if vres.isErr:
     ben.setInvalidAncestor(header, blockHash)
     let blockHash = latestValidHash(db, parent, ttd)

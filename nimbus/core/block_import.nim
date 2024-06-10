@@ -22,17 +22,16 @@ proc importRlpBlock*(blocksRlp: openArray[byte]; com: CommonRef; importFile: str
     rlp = rlpFromBytes(blocksRlp)
     chain = newChain(com, extraValidation = true)
     errorCount = 0
-    blk: array[1, EthBlock]
+    header: BlockHeader
+    body: BlockBody
 
   # even though the new imported blocks have block number
   # smaller than head, we keep importing it.
   # it maybe a side chain.
-  # TODO the above is no longer true with a single-state database - to deal with
-  #      that scenario the code needs to be rewritten to not persist the blocks
-  #      to the state database until all have been processed
+
   while rlp.hasData:
-    blk[0] = try:
-      rlp.read(EthBlock)
+    try:
+      rlp.decompose(header, body)
     except RlpError as e:
       # terminate if there was a decoding error
       error "rlp error",
@@ -41,7 +40,7 @@ proc importRlpBlock*(blocksRlp: openArray[byte]; com: CommonRef; importFile: str
         exception = e.name
       return false
 
-    chain.persistBlocks(blk).isOkOr():
+    chain.persistBlocks([header], [body]).isOkOr():
       # register one more error and continue
       error "import error",
         fileName = importFile,

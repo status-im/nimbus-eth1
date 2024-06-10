@@ -374,7 +374,7 @@ proc initializeEmptyDb*(com: CommonRef)
     info "Writing genesis to DB"
     doAssert(com.genesisHeader.blockNumber.isZero,
       "can't commit genesis block with number > 0")
-    com.db.persistHeaderToDb(com.genesisHeader,
+    discard com.db.persistHeaderToDb(com.genesisHeader,
       com.consensusType == ConsensusType.POS)
     doAssert(canonicalHeadHashKey().toOpenArray in kvt)
 

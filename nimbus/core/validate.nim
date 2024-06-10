@@ -65,13 +65,13 @@ proc validateSeal(pow: PowRef; header: BlockHeader): Result[void,string] =
 
 proc validateHeader(
     com: CommonRef;
-    blk: EthBlock;
+    header: BlockHeader;
     parentHeader: BlockHeader;
+    body: BlockBody;
     checkSealOK: bool;
-      ): Result[void,string] =
-  template header: BlockHeader = blk.header
-  # TODO this code is used for validating uncles also, though these get passed
-  #      an empty body - avoid this by separating header and block validation
+      ): Result[void,string]
+      {.gcsafe, raises: [].} =
+
   template inDAOExtraRange(blockNumber: BlockNumber): bool =
     # EIP-799
     # Blocks with block numbers in the range [1_920_000, 1_920_009]
@@ -84,7 +84,7 @@ proc validateHeader(
   if header.extraData.len > 32:
     return err("BlockHeader.extraData larger than 32 bytes")
 
-  if header.gasUsed == 0 and 0 < blk.transactions.len:
+  if header.gasUsed == 0 and 0 < body.transactions.len:
     return err("zero gasUsed but transactions present");
 
   if header.gasUsed < 0 or header.gasUsed > header.gasLimit:
@@ -121,8 +121,8 @@ proc validateHeader(
     if checkSealOK:
       return com.pow.validateSeal(header)
 
-  ? com.validateWithdrawals(header, blk.withdrawals)
-  ? com.validateEip4844Header(header, parentHeader, blk.transactions)
+  ? com.validateWithdrawals(header, body)
+  ? com.validateEip4844Header(header, parentHeader, body.transactions)
   ? com.validateGasLimitOrBaseFee(header, parentHeader)
 
   ok()
@@ -197,17 +197,21 @@ proc validateUncles(com: CommonRef; header: BlockHeader;
 
     # Now perform VM level validation of the uncle
     if checkSealOK:
-      ? com.pow.validateSeal(uncle)
+      result = com.pow.validateSeal(uncle)
+      if result.isErr:
+        return
 
     let uncleParent = try:
       chainDB.getBlockHeader(uncle.parentHash)
     except BlockNotFound:
       return err("Uncle parent not found")
 
-    ? com.validateHeader(
-      EthBlock.init(uncle, BlockBody()), uncleParent, checkSealOK)
+    result = com.validateHeader(uncle, uncleParent,
+                                BlockBody(), checkSealOK)
+    if result.isErr:
+      return
 
-  ok()
+  result = ok()
 
 # ------------------------------------------------------------------------------
 # Public function, extracted from executor
@@ -372,12 +376,11 @@ proc validateTransaction*(
 
 proc validateHeaderAndKinship*(
     com: CommonRef;
-    blk: EthBlock;
+    header: BlockHeader;
+    body: BlockBody;
     checkSealOK: bool;
       ): Result[void, string]
       {.gcsafe, raises: [].} =
-  template header: BlockHeader = blk.header
-
   if header.isGenesis:
     if header.extraData.len > 32:
       return err("BlockHeader.extraData larger than 32 bytes")
@@ -389,15 +392,16 @@ proc validateHeaderAndKinship*(
   except CatchableError as err:
     return err("Failed to load block header from DB")
 
-  ? com.validateHeader(blk, parent, checkSealOK)
+  result = com.validateHeader(
+    header, parent, body, checkSealOK)
+  if result.isErr:
+    return
 
-  if blk.uncles.len > MAX_UNCLES:
+  if body.uncles.len > MAX_UNCLES:
     return err("Number of uncles exceed limit.")
 
   if com.consensus != ConsensusType.POS:
-    ? com.validateUncles(header, blk.uncles, checkSealOK)
-
-  ok()
+    result = com.validateUncles(header, body.uncles, checkSealOK)
 
 # ------------------------------------------------------------------------------
 # End

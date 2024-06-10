@@ -21,7 +21,7 @@ iterator undumpBlocks*(
     file: string;
     least = low(uint64);                     # First block to extract
     stopAfter = high(uint64);                # Last block to extract
-      ): seq[EthBlock] =
+      ): (seq[BlockHeader],seq[BlockBody]) =
   if file.dirExists:
     for w in file.undumpBlocksEra1(least, stopAfter):
       yield w
@@ -38,7 +38,7 @@ iterator undumpBlocks*(
     files: seq[string];
     least = low(uint64);                     # First block to extract
     stopAfter = high(uint64);                # Last block to extract
-      ): seq[EthBlock] =
+      ): (seq[BlockHeader],seq[BlockBody]) =
   for f in files:
     for w in f.undumpBlocks(least, stopAfter):
       yield w

@@ -92,11 +92,13 @@ proc testFixtureImpl(node: JsonNode, testStatusIMPL: var TestStatus, memoryDB: C
   # Some hack for `Aristo` using the `snap` protocol proof-loader
   memoryDB.preLoadAristoDb(state, blockNumber)
 
-  var blk = com.db.getEthBlock(blockNumber)
+  var header = com.db.getBlockHeader(blockNumber)
+  var headerHash = header.blockHash
+  var blockBody = com.db.getBlockBody(headerHash)
 
-  let txTraces = traceTransactions(com, blk.header, blk.transactions)
-  let stateDump = dumpBlockState(com, blk)
-  let blockTrace = traceBlock(com, blk, {DisableState})
+  let txTraces = traceTransactions(com, header, blockBody)
+  let stateDump = dumpBlockState(com, header, blockBody)
+  let blockTrace = traceBlock(com, header, blockBody, {DisableState})
 
   check node["txTraces"] == txTraces
   check node["stateDump"] == stateDump

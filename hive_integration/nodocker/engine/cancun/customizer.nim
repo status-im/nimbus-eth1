@@ -400,12 +400,12 @@ proc customizePayload*(cust: CustomPayloadData, data: ExecutableData): Executabl
 
   var blk = EthBlock(
     header: customHeader,
-    transactions:
-      if cust.transactions.isSome:
-        cust.transactions.get
-      else:
-        ethTxs data.basePayload.transactions
   )
+
+  if cust.transactions.isSome:
+    blk.txs = cust.transactions.get
+  else:
+    blk.txs = ethTxs data.basePayload.transactions
 
   if cust.removeWithdrawals:
     blk.withdrawals = none(seq[Withdrawal])

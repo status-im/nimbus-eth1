@@ -236,7 +236,7 @@ proc newPayload*(client: RpcClient,
   case version
   of Version.V1: return client.newPayloadV1(payload)
   of Version.V2: return client.newPayloadV2(payload)
-  of Version.V3:
+  of Version.V3:    
     let versionedHashes = collectBlobHashes(payload.transactions)
     return client.newPayloadV3(payload,
       some(versionedHashes),
@@ -246,7 +246,7 @@ proc newPayload*(client: RpcClient,
     return client.newPayloadV4(payload,
       some(versionedHashes),
       w3Hash beaconRoot)
-
+      
 proc newPayload*(client: RpcClient,
                  version: Version,
                  payload: ExecutableData): Result[PayloadStatusV1, string] =
@@ -518,7 +518,7 @@ proc latestBlock*(client: RpcClient): Result[common.EthBlock, string] =
       return err("failed to get latest blockHeader")
     let output = EthBlock(
       header: toBlockHeader(res),
-      transactions: toTransactions(res.transactions),
+      txs: toTransactions(res.transactions),
       withdrawals: toWithdrawals(res.withdrawals),
     )
     return ok(output)

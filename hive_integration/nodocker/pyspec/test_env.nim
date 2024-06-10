@@ -61,7 +61,7 @@ proc setupELClient*(t: TestEnv, conf: ChainConfig, node: JsonNode) =
 
   doAssert stateDB.rootHash == genesisHeader.stateRoot
 
-  t.com.db.persistHeaderToDb(genesisHeader,
+  discard t.com.db.persistHeaderToDb(genesisHeader,
     t.com.consensus == ConsensusType.POS)
   doAssert(t.com.db.getCanonicalHead().blockHash == genesisHeader.blockHash)
 

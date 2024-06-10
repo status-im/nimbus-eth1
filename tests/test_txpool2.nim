@@ -172,7 +172,7 @@ proc runTxPoolPosTest() =
       check blk.txs.len == 1
 
     test "PoS persistBlocks":
-      let rr = chain.persistBlocks([EthBlock.init(blk.header, body)])
+      let rr = chain.persistBlocks([blk.header], [body])
       check rr.isOk()
 
     test "validate TxPool prevRandao setter":
@@ -235,7 +235,7 @@ proc runTxPoolBlobhashTest() =
       check blk.txs.len == 2
 
     test "Blobhash persistBlocks":
-      let rr = chain.persistBlocks([EthBlock.init(blk.header, body)])
+      let rr = chain.persistBlocks([blk.header], [body])
       check rr.isOk()
 
     test "validate TxPool prevRandao setter":
@@ -317,7 +317,7 @@ proc runTxHeadDelta(noisy = true) =
             uncles: blk.uncles)
 
           # Commit to block chain
-          check chain.persistBlocks([EthBlock.init(blk.header, body)]).isOk
+          check chain.persistBlocks([blk.header], [body]).isOk
 
           # Synchronise TxPool against new chain head, register txs differences.
           # In this particular case, these differences will simply flush the
