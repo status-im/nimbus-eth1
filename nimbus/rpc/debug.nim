@@ -62,7 +62,7 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, rpcsrv: RpcServer) =
       txHash = ethHash(data)
       txDetails = chainDB.getTransactionKey(txHash)
       header = chainDB.getBlockHeader(txDetails.blockNumber)
-      transactions = chainDB.getTransactions(header)
+      transactions = chainDB.getTransactions(header.txRoot)
       flags = traceOptionsToFlags(options)
 
     traceTransaction(com, header, transactions, txDetails.index, flags)
