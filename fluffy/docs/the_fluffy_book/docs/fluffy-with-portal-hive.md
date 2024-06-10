@@ -1,27 +1,27 @@
 # Fluffy with Portal-hive
 
-Fluffy is one of the Portal clients that is being tested with [portal-hive](https://github.com/ethereum/portal-hive).
+Fluffy is one of the Portal clients that is being tested with [hive](https://github.com/ethereum/hive).
 
 To see the status of the tests for the current version you can access [https://portal-hive.ethdevops.io/](https://portal-hive.ethdevops.io/).
 
 ## Run the hive tests locally
 
-Build portal-hive:
+Build hive:
 
 ```sh
-git clone https://github.com/ethereum/portal-hive.git
-cd ./portal-hive
+git clone https://github.com/ethereum/hive.git
+cd ./hive
 go build .
 ```
 
 Example commands for running test suites:
 
 ```sh
-# Run the rpc-compat tests with the 3 different clients
-./hive --sim rpc-compat --client fluffy,trin,ultralight
+# Run the history tests with the 3 different clients
+./hive --sim history --client fluffy,trin,ultralight
 
-# Run the portal-interop tests with only the fluffy client
-./hive --sim portal-interop --client fluffy
+# Run the state tests with only the fluffy client
+./hive --sim state --client fluffy
 
 # Access results through web-ui:
 ```sh
@@ -30,7 +30,7 @@ go build ./cmd/hiveview
 ```
 
 !!! note
-    You can see all the implemented simulators in [https://github.com/ethereum/portal-hive/tree/main/simulators](https://github.com/ethereum/portal-hive/tree/main/simulators)
+    You can see all the implemented simulators in [https://github.com/ethereum/hive/tree/master/simulators](https://github.com/ethereum/hive/tree/master/simulators)
 
 ## Build a local development Docker image for portal-hive
 
@@ -55,4 +55,3 @@ docker build --tag fluffy-dev --file ./fluffy/tools/docker/Dockerfile.portalhive
     The `./vendors` dir is dockerignored and cached. If you have to make local
     changes to one of the dependencies in that directory you will have to remove
     `vendors/` from `./fluffy/tools/docker/Dockerfile.portalhive.dockerignore`.
-
