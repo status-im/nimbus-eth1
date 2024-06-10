@@ -139,7 +139,7 @@ proc installEthApiHandlers*(
 
   rpcServerWithProxy.registerProxyMethod("eth_feeHistory")
 
-  # rpcServerWithProxy.registerProxyMethod("eth_getBalance")
+  rpcServerWithProxy.registerProxyMethod("eth_getBalance")
 
   # rpcServerWithProxy.registerProxyMethod("eth_getBlockByHash")
 
@@ -149,7 +149,7 @@ proc installEthApiHandlers*(
 
   rpcServerWithProxy.registerProxyMethod("eth_getBlockTransactionCountByNumber")
 
-  # rpcServerWithProxy.registerProxyMethod("eth_getCode")
+  rpcServerWithProxy.registerProxyMethod("eth_getCode")
 
   rpcServerWithProxy.registerProxyMethod("eth_getRawTransactionByHash")
 
@@ -157,7 +157,7 @@ proc installEthApiHandlers*(
 
   rpcServerWithProxy.registerProxyMethod("eth_getRawTransactionByBlockNumberAndIndex")
 
-  # rpcServerWithProxy.registerProxyMethod("eth_getStorageAt")
+  rpcServerWithProxy.registerProxyMethod("eth_getStorageAt")
 
   rpcServerWithProxy.registerProxyMethod("eth_getTransactionByBlockHashAndIndex")
 
@@ -165,7 +165,7 @@ proc installEthApiHandlers*(
 
   rpcServerWithProxy.registerProxyMethod("eth_getTransactionByHash")
 
-  # rpcServerWithProxy.registerProxyMethod("eth_getTransactionCount")
+  rpcServerWithProxy.registerProxyMethod("eth_getTransactionCount")
 
   rpcServerWithProxy.registerProxyMethod("eth_getTransactionReceipt")
 
@@ -177,7 +177,7 @@ proc installEthApiHandlers*(
 
   rpcServerWithProxy.registerProxyMethod("eth_getUncleCountByBlockNumber")
 
-  # rpcServerWithProxy.registerProxyMethod("eth_getProof")
+  rpcServerWithProxy.registerProxyMethod("eth_getProof")
 
   rpcServerWithProxy.registerProxyMethod("eth_sendRawTransaction")
 
@@ -343,64 +343,65 @@ proc installEthApiHandlers*(
       return filteredLogs
     else:
       # bloomfilter returned false, there are no logs matching the criteria
-      return @[]
+      return
+        @[]
 
-  rpcServerWithProxy.rpc("eth_getBalance") do(
-    data: Address, quantityTag: RtBlockIdentifier
-  ) -> UInt256:
-    ## Returns the balance of the account of given address.
-    ##
-    ## data: address to check for balance.
-    ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
-    ## Returns integer of the current balance in wei.
-    # TODO
-    raiseAssert("Not implemented")
+          # rpcServerWithProxy.rpc("eth_getBalance") do(
+          #   data: Address, quantityTag: RtBlockIdentifier
+          # ) -> UInt256:
+          #   ## Returns the balance of the account of given address.
+          #   ##
+          #   ## data: address to check for balance.
+          #   ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
+          #   ## Returns integer of the current balance in wei.
+          #   # TODO
+          #   raiseAssert("Not implemented")
 
-  rpcServerWithProxy.rpc("eth_getTransactionCount") do(
-    data: Address, quantityTag: RtBlockIdentifier
-  ) -> Quantity:
-    ## Returns the number of transactions sent from an address.
-    ##
-    ## data: address.
-    ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
-    ## Returns integer of the number of transactions send from this address.
-    # TODO
-    raiseAssert("Not implemented")
+          # rpcServerWithProxy.rpc("eth_getTransactionCount") do(
+          #   data: Address, quantityTag: RtBlockIdentifier
+          # ) -> Quantity:
+          #   ## Returns the number of transactions sent from an address.
+          #   ##
+          #   ## data: address.
+          #   ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
+          #   ## Returns integer of the number of transactions send from this address.
+          #   # TODO
+          #   raiseAssert("Not implemented")
 
-  rpcServerWithProxy.rpc("eth_getStorageAt") do(
-    data: Address, slot: UInt256, quantityTag: RtBlockIdentifier
-  ) -> FixedBytes[32]:
-    ## Returns the value from a storage position at a given address.
-    ##
-    ## data: address of the storage.
-    ## slot: integer of the position in the storage.
-    ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
-    ## Returns: the value at this storage position.
-    # TODO
-    raiseAssert("Not implemented")
+          # rpcServerWithProxy.rpc("eth_getStorageAt") do(
+          #   data: Address, slot: UInt256, quantityTag: RtBlockIdentifier
+          # ) -> FixedBytes[32]:
+          #   ## Returns the value from a storage position at a given address.
+          #   ##
+          #   ## data: address of the storage.
+          #   ## slot: integer of the position in the storage.
+          #   ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
+          #   ## Returns: the value at this storage position.
+          #   # TODO
+          #   raiseAssert("Not implemented")
 
-  rpcServerWithProxy.rpc("eth_getCode") do(
-    data: Address, quantityTag: RtBlockIdentifier
-  ) -> seq[byte]:
-    ## Returns code at a given address.
-    ##
-    ## data: address
-    ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
-    ## Returns the code from the given address.
-    # TODO
-    raiseAssert("Not implemented")
+          # rpcServerWithProxy.rpc("eth_getCode") do(
+          #   data: Address, quantityTag: RtBlockIdentifier
+          # ) -> seq[byte]:
+          #   ## Returns code at a given address.
+          #   ##
+          #   ## data: address
+          #   ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
+          #   ## Returns the code from the given address.
+          #   # TODO
+          #   raiseAssert("Not implemented")
 
-  rpcServerWithProxy.rpc("eth_getProof") do(
-    address: Address, slots: seq[UInt256], quantityTag: RtBlockIdentifier
-  ) -> ProofResponse:
-    ## Returns information about an account and storage slots (if the account is a contract
-    ## and the slots are requested) along with account and storage proofs which prove the
-    ## existence of the values in the state.
-    ## See spec here: https://eips.ethereum.org/EIPS/eip-1186
-    ##
-    ## data: address of the account.
-    ## slots: integers of the positions in the storage to return with storage proofs.
-    ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
-    ## Returns: the proof response containing the account, account proof and storage proof
-    # TODO
-    raiseAssert("Not implemented")
+          # rpcServerWithProxy.rpc("eth_getProof") do(
+          #   address: Address, slots: seq[UInt256], quantityTag: RtBlockIdentifier
+          # ) -> ProofResponse:
+          #   ## Returns information about an account and storage slots (if the account is a contract
+          #   ## and the slots are requested) along with account and storage proofs which prove the
+          #   ## existence of the values in the state.
+          #   ## See spec here: https://eips.ethereum.org/EIPS/eip-1186
+          #   ##
+          #   ## data: address of the account.
+          #   ## slots: integers of the positions in the storage to return with storage proofs.
+          #   ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
+          #   ## Returns: the proof response containing the account, account proof and storage proof
+          #   # TODO
+          #   raiseAssert("Not implemented")
