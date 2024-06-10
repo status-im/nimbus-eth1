@@ -79,14 +79,13 @@ proc getVtxFn(db: RdbBackendRef): GetVtxFn =
     proc(vid: VertexID): Result[VertexRef,AristoError] =
 
       # Fetch serialised data record
-      let data = db.rdb.getVtx(vid.uint64).valueOr:
+      let vtx = db.rdb.getVtx(vid).valueOr:
         when extraTraceMessages:
           trace logTxt "getVtxFn() failed", vid, error=error[0], info=error[1]
         return err(error[0])
 
-      # Decode data record
-      if 0 < data.len:
-        return data.deblobify VertexRef
+      if vtx.isValid:
+        return ok(vtx)
 
       err(GetVtxNotFound)
 
@@ -95,16 +94,13 @@ proc getKeyFn(db: RdbBackendRef): GetKeyFn =
     proc(vid: VertexID): Result[HashKey,AristoError] =
 
       # Fetch serialised data record
-      let data = db.rdb.getKey(vid.uint64).valueOr:
+      let key = db.rdb.getKey(vid).valueOr:
         when extraTraceMessages:
           trace logTxt "getKeyFn: failed", vid, error=error[0], info=error[1]
         return err(error[0])
 
-      # Decode data record
-      if 0 < data.len:
-        let lid = HashKey.fromBytes(data).valueOr:
-          return err(RdbHashKeyExpected)
-        return ok lid
+      if key.isValid:
+        return ok(key)
 
       err(GetKeyNotFound)
 
@@ -113,7 +109,7 @@ proc getTuvFn(db: RdbBackendRef): GetTuvFn =
     proc(): Result[VertexID,AristoError]=
 
       # Fetch serialised data record.
-      let data = db.rdb.getAdm(AdmTabIdTuv.int).valueOr:
+      let data = db.rdb.getAdm(AdmTabIdTuv).valueOr:
         when extraTraceMessages:
           trace logTxt "getTuvFn: failed", error=error[0], info=error[1]
         return err(error[0])
@@ -130,7 +126,7 @@ proc getLstFn(db: RdbBackendRef): GetLstFn =
     proc(): Result[SavedState,AristoError]=
 
       # Fetch serialised data record.
-      let data = db.rdb.getAdm(AdmTabIdLst.int).valueOr:
+      let data = db.rdb.getAdm(AdmTabIdLst).valueOr:
         when extraTraceMessages:
           trace logTxt "getLstFn: failed", error=error[0], info=error[1]
         return err(error[0])
@@ -151,27 +147,10 @@ proc putVtxFn(db: RdbBackendRef): PutVtxFn =
     proc(hdl: PutHdlRef; vrps: openArray[(VertexID,VertexRef)]) =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
-
-        # Collect batch session arguments
-        var batch: seq[(uint64,Blob)]
-        for (vid,vtx) in vrps:
-          if vtx.isValid:
-            let rc = vtx.blobify()
-            if rc.isErr:
-              hdl.error = TypedPutHdlErrRef(
-                pfx:  VtxPfx,
-                vid:  vid,
-                code: rc.error)
-              return
-            batch.add (vid.uint64, rc.value)
-          else:
-            batch.add (vid.uint64, EmptyBlob)
-
-        # Stash batch session data via LRU cache
-        db.rdb.putVtx(batch).isOkOr:
+        db.rdb.putVtx(vrps).isOkOr:
           hdl.error = TypedPutHdlErrRef(
             pfx:  VtxPfx,
-            vid:  VertexID(error[0]),
+            vid:  error[0],
             code: error[1],
             info: error[2])
 
@@ -180,20 +159,10 @@ proc putKeyFn(db: RdbBackendRef): PutKeyFn =
     proc(hdl: PutHdlRef; vkps: openArray[(VertexID,HashKey)]) =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
-
-        # Collect batch session arguments
-        var batch: seq[(uint64,Blob)]
-        for (vid,key) in vkps:
-          if key.isValid:
-            batch.add (vid.uint64, @(key.data))
-          else:
-            batch.add (vid.uint64, EmptyBlob)
-
-        # Stash batch session data via LRU cache
-        db.rdb.putKey(batch).isOkOr:
+        db.rdb.putKey(vkps).isOkOr:
           hdl.error = TypedPutHdlErrRef(
             pfx:  KeyPfx,
-            vid:  VertexID(error[0]),
+            vid:  error[0],
             code: error[1],
             info: error[2])
 
@@ -203,7 +172,7 @@ proc putTuvFn(db: RdbBackendRef): PutTuvFn =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
         if vs.isValid:
-          db.rdb.putAdm(AdmTabIdTuv.int, vs.blobify).isOkOr:
+          db.rdb.putAdm(AdmTabIdTuv, vs.blobify).isOkOr:
             hdl.error = TypedPutHdlErrRef(
               pfx:  AdmPfx,
               aid:  AdmTabIdTuv,
@@ -223,7 +192,7 @@ proc putLstFn(db: RdbBackendRef): PutLstFn =
             aid:  AdmTabIdLst,
             code: error)
           return
-        db.rdb.putAdm(AdmTabIdLst.int, data).isOkOr:
+        db.rdb.putAdm(AdmTabIdLst, data).isOkOr:
           hdl.error = TypedPutHdlErrRef(
             pfx:  AdmPfx,
             aid:  AdmTabIdLst,
@@ -245,6 +214,7 @@ proc putEndFn(db: RdbBackendRef): PutEndFn =
             pfx=AdmPfx, aid=hdl.error.aid.uint64, error=hdl.error.code
           of Oops: trace logTxt "putEndFn: oops",
             error=hdl.error.code
+        db.rdb.rollback()
         return err(hdl.error.code)
 
       # Commit session

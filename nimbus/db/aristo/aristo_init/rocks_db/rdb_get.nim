@@ -18,7 +18,8 @@ import
   rocksdb,
   results,
   stew/keyed_queue,
-  ../../aristo_desc,
+  ../../[aristo_blobify, aristo_desc],
+  ../init_common,
   ./rdb_desc
 
 const
@@ -36,12 +37,12 @@ when extraTraceMessages:
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc getAdm*(rdb: RdbInst; xid: int): Result[Blob,(AristoError,string)] =
+proc getAdm*(rdb: RdbInst; xid: AdminTabID): Result[Blob,(AristoError,string)] =
   var res: Blob
   let onData = proc(data: openArray[byte]) =
     res = @data
 
-  let gotData = rdb.admCol.get(xid.uint64.toOpenArray, onData).valueOr:
+  let gotData = rdb.admCol.get(xid.toOpenArray, onData).valueOr:
      const errSym = RdbBeDriverGetAdmError
      when extraTraceMessages:
        trace logTxt "getAdm", xid, error=errSym, info=error
@@ -52,7 +53,11 @@ proc getAdm*(rdb: RdbInst; xid: int): Result[Blob,(AristoError,string)] =
     res = EmptyBlob
   ok move(res)
 
-proc getKey*(rdb: var RdbInst; vid: uint64): Result[Blob,(AristoError,string)] =
+
+proc getKey*(
+    rdb: var RdbInst;
+    vid: VertexID;
+      ): Result[HashKey,(AristoError,string)] =
   # Try LRU cache first
   var rc = rdb.rdKeyLru.lruFetch(vid)
   if rc.isOK:
@@ -70,14 +75,21 @@ proc getKey*(rdb: var RdbInst; vid: uint64): Result[Blob,(AristoError,string)] =
      return err((errSym,error))
 
   # Correct result if needed
-  if not gotData:
-    res = EmptyBlob
+  let key = block:
+    if gotData:
+      HashKey.fromBytes(res).valueOr:
+        return err((RdbHashKeyExpected,""))
+    else:
+      VOID_HASH_KEY
 
   # Update cache and return
-  ok rdb.rdKeyLru.lruAppend(vid, res, RdKeyLruMaxSize)
+  ok rdb.rdKeyLru.lruAppend(vid, key, RdKeyLruMaxSize)
 
 
-proc getVtx*(rdb: var RdbInst; vid: uint64): Result[Blob,(AristoError,string)] =
+proc getVtx*(
+    rdb: var RdbInst;
+    vid: VertexID;
+      ): Result[VertexRef,(AristoError,string)] =
   # Try LRU cache first
   var rc = rdb.rdVtxLru.lruFetch(vid)
   if rc.isOK:
@@ -94,12 +106,15 @@ proc getVtx*(rdb: var RdbInst; vid: uint64): Result[Blob,(AristoError,string)] =
       trace logTxt "getVtx", vid, error=errSym, info=error
     return err((errSym,error))
 
-  # Correct result if needed
-  if not gotData:
-    res = EmptyBlob
+  var vtx = VertexRef(nil)
+  if gotData:
+    let rc = res.deblobify VertexRef
+    if rc.isErr:
+      return err((rc.error,""))
+    vtx = rc.value
 
   # Update cache and return
-  ok rdb.rdVtxLru.lruAppend(vid, res, RdVtxLruMaxSize)
+  ok rdb.rdVtxLru.lruAppend(vid, vtx, RdVtxLruMaxSize)
 
 # ------------------------------------------------------------------------------
 # End

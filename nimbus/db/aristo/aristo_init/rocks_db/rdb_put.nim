@@ -18,7 +18,8 @@ import
   rocksdb,
   results,
   stew/keyed_queue,
-  ../../aristo_desc,
+  ../../[aristo_blobify, aristo_desc],
+  ../init_common,
   ./rdb_desc
 
 const
@@ -66,18 +67,18 @@ proc commit*(rdb: var RdbInst): Result[void,(AristoError,string)] =
 
 proc putAdm*(
     rdb: var RdbInst;
-    xid: int;
+    xid: AdminTabID;
     data: Blob;
-      ): Result[void,(int,AristoError,string)] =
+      ): Result[void,(AdminTabID,AristoError,string)] =
   let dsc = rdb.session
   if data.len == 0:
-    dsc.delete(xid.uint64.toOpenArray, AdmCF).isOkOr:
+    dsc.delete(xid.toOpenArray, AdmCF).isOkOr:
       const errSym = RdbBeDriverDelAdmError
       when extraTraceMessages:
         trace logTxt "putAdm()", xid, error=errSym, info=error
       return err((xid,errSym,error))
   else:
-    dsc.put(xid.uint64.toOpenArray, data, AdmCF).isOkOr:
+    dsc.put(xid.toOpenArray, data, AdmCF).isOkOr:
       const errSym = RdbBeDriverPutAdmError
       when extraTraceMessages:
         trace logTxt "putAdm()", xid, error=errSym, info=error
@@ -87,51 +88,72 @@ proc putAdm*(
 
 proc putKey*(
     rdb: var RdbInst;
-    data: openArray[(uint64,Blob)];
-      ): Result[void,(uint64,AristoError,string)] =
+    data: openArray[(VertexID,HashKey)];
+      ): Result[void,(VertexID,AristoError,string)] =
   let dsc = rdb.session
-  for (vid,val) in data:
-    # Update cache
-    if not rdb.rdKeyLru.lruUpdate(vid, val):
-      discard rdb.rdKeyLru.lruAppend(vid, val, RdKeyLruMaxSize)
+  for (vid,key) in data:
 
-    if val.len == 0:
-      dsc.delete(vid.toOpenArray, KeyCF).isOkOr:
-        const errSym = RdbBeDriverDelKeyError
-        when extraTraceMessages:
-          trace logTxt "putKey()", vid, error=errSym, info=error
-        return err((vid,errSym,error))
-    else:
-      dsc.put(vid.toOpenArray, val, KeyCF).isOkOr:
+    if key.isValid:
+      dsc.put(vid.toOpenArray, key.data, KeyCF).isOkOr:
+        # Caller must `rollback()` which will flush the `rdKeyLru` cache
         const errSym = RdbBeDriverPutKeyError
         when extraTraceMessages:
           trace logTxt "putKey()", vid, error=errSym, info=error
         return err((vid,errSym,error))
+    
+      # Update cache
+      if not rdb.rdKeyLru.lruUpdate(vid, key):
+        discard rdb.rdKeyLru.lruAppend(vid, key, RdKeyLruMaxSize)
+
+    else:
+      dsc.delete(vid.toOpenArray, KeyCF).isOkOr:
+        # Caller must `rollback()` which will flush the `rdKeyLru` cache
+        const errSym = RdbBeDriverDelKeyError
+        when extraTraceMessages:
+          trace logTxt "putKey()", vid, error=errSym, info=error
+        return err((vid,errSym,error))
+
+      # Update cache, vertex will most probably never be visited anymore
+      rdb.rdKeyLru.del vid
+
   ok()
 
 
 proc putVtx*(
     rdb: var RdbInst;
-    data: openArray[(uint64,Blob)];
-      ): Result[void,(uint64,AristoError,string)] =
+    data: openArray[(VertexID,VertexRef)];
+      ): Result[void,(VertexID,AristoError,string)] =
   let dsc = rdb.session
-  for (vid,val) in data:
-    # Update cache
-    if not rdb.rdVtxLru.lruUpdate(vid, val):
-      discard rdb.rdVtxLru.lruAppend(vid, val, RdVtxLruMaxSize)
+  for (vid,vtx) in data:
 
-    if val.len == 0:
-      dsc.delete(vid.toOpenArray, VtxCF).isOkOr:
-        const errSym = RdbBeDriverDelVtxError
-        when extraTraceMessages:
-          trace logTxt "putVtx()", vid, error=errSym, info=error
-        return err((vid,errSym,error))
-    else:
-      dsc.put(vid.toOpenArray, val, VtxCF).isOkOr:
+    if vtx.isValid:
+      let rc = vtx.blobify()
+      if rc.isErr:
+        # Caller must `rollback()` which will flush the `rdVtxLru` cache
+        return err((vid,rc.error,""))
+
+      dsc.put(vid.toOpenArray, rc.value, VtxCF).isOkOr:
+        # Caller must `rollback()` which will flush the `rdVtxLru` cache
         const errSym = RdbBeDriverPutVtxError
         when extraTraceMessages:
           trace logTxt "putVtx()", vid, error=errSym, info=error
         return err((vid,errSym,error))
+
+      # Update cache
+      if not rdb.rdVtxLru.lruUpdate(vid, vtx):
+        discard rdb.rdVtxLru.lruAppend(vid, vtx, RdVtxLruMaxSize)
+
+    else:
+      dsc.delete(vid.toOpenArray, VtxCF).isOkOr:
+        # Caller must `rollback()` which will flush the `rdVtxLru` cache
+        const errSym = RdbBeDriverDelVtxError
+        when extraTraceMessages:
+          trace logTxt "putVtx()", vid, error=errSym, info=error
+        return err((vid,errSym,error))
+
+      # Update cache, vertex will most probably never be visited anymore
+      rdb.rdVtxLru.del vid
+
   ok()
 
 # ------------------------------------------------------------------------------

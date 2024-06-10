@@ -27,8 +27,8 @@ type
     vtxCol*: ColFamilyReadWrite        ## Vertex column family handler
     keyCol*: ColFamilyReadWrite        ## Hash key column family handler
     session*: WriteBatchRef            ## For batched `put()`
-    rdKeyLru*: KeyedQueue[uint64,Blob] ## Read cache
-    rdVtxLru*: KeyedQueue[uint64,Blob] ## Read cache
+    rdKeyLru*: KeyedQueue[VertexID,HashKey] ## Read cache
+    rdVtxLru*: KeyedQueue[VertexID,VertexRef] ## Read cache
     basePath*: string                  ## Database directory
     noFq*: bool                        ## No filter queues available
 
@@ -74,8 +74,12 @@ func baseDir*(rdb: RdbInst): string =
 func dataDir*(rdb: RdbInst): string =
   rdb.baseDir / DataFolder
 
-template toOpenArray*(xid: uint64): openArray[byte] =
-  xid.toBytesBE.toOpenArray(0,7)
+
+template toOpenArray*(xid: AdminTabID): openArray[byte] =
+  xid.uint64.toBytesBE.toOpenArray(0,7)
+
+template toOpenArray*(vid: VertexID): openArray[byte] =
+  vid.uint64.toBytesBE.toOpenArray(0,7)
 
 # ------------------------------------------------------------------------------
 # End
