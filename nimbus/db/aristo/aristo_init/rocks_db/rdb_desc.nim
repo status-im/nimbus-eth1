@@ -30,7 +30,6 @@ type
     rdKeyLru*: KeyedQueue[VertexID,HashKey] ## Read cache
     rdVtxLru*: KeyedQueue[VertexID,VertexRef] ## Read cache
     basePath*: string                  ## Database directory
-    noFq*: bool                        ## No filter queues available
 
   # Alien interface
   RdbGuest* = enum
@@ -45,10 +44,13 @@ type
     ## item will be removed in future.
     guestDb*: ColFamilyReadWrite       ## Pigiback feature references
 
+  AristoCFs* = enum
+    ## Column family symbols/handles and names used on the database
+    AdmCF = "AriAdm"                   ## Admin column family name
+    VtxCF = "AriVtx"                   ## Vertex column family name
+    KeyCF = "AriKey"                   ## Hash key column family name
+
 const
-  AdmCF* = "AdmAri"                    ## Admin column family name
-  VtxCF* = "VtxAri"                    ## Vertex column family name
-  KeyCF* = "KeyAri"                    ## Hash key column family name
   BaseFolder* = "nimbus"               ## Same as for Legacy DB
   DataFolder* = "aristo"               ## Legacy DB has "data"
   RdKeyLruMaxSize* = 4096              ## Max size of read cache for keys
