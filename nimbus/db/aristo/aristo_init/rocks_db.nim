@@ -79,14 +79,13 @@ proc getVtxFn(db: RdbBackendRef): GetVtxFn =
     proc(vid: VertexID): Result[VertexRef,AristoError] =
 
       # Fetch serialised data record
-      let data = db.rdb.getVtx(vid.uint64).valueOr:
+      let vtx = db.rdb.getVtx(vid).valueOr:
         when extraTraceMessages:
           trace logTxt "getVtxFn() failed", vid, error=error[0], info=error[1]
         return err(error[0])
 
-      # Decode data record
-      if 0 < data.len:
-        return data.deblobify VertexRef
+      if vtx.isValid:
+        return ok(vtx)
 
       err(GetVtxNotFound)
 
@@ -95,16 +94,13 @@ proc getKeyFn(db: RdbBackendRef): GetKeyFn =
     proc(vid: VertexID): Result[HashKey,AristoError] =
 
       # Fetch serialised data record
-      let data = db.rdb.getKey(vid.uint64).valueOr:
+      let key = db.rdb.getKey(vid).valueOr:
         when extraTraceMessages:
           trace logTxt "getKeyFn: failed", vid, error=error[0], info=error[1]
         return err(error[0])
 
-      # Decode data record
-      if 0 < data.len:
-        let lid = HashKey.fromBytes(data).valueOr:
-          return err(RdbHashKeyExpected)
-        return ok lid
+      if key.isValid:
+        return ok(key)
 
       err(GetKeyNotFound)
 
@@ -113,7 +109,7 @@ proc getTuvFn(db: RdbBackendRef): GetTuvFn =
     proc(): Result[VertexID,AristoError]=
 
       # Fetch serialised data record.
-      let data = db.rdb.getByPfx(AdmPfx, AdmTabIdTuv.uint64).valueOr:
+      let data = db.rdb.getAdm(AdmTabIdTuv).valueOr:
         when extraTraceMessages:
           trace logTxt "getTuvFn: failed", error=error[0], info=error[1]
         return err(error[0])
@@ -123,14 +119,14 @@ proc getTuvFn(db: RdbBackendRef): GetTuvFn =
         return ok VertexID(0)
 
       # Decode data record
-      data.deblobify VertexID
+      result = data.deblobify VertexID
 
 proc getLstFn(db: RdbBackendRef): GetLstFn =
   result =
     proc(): Result[SavedState,AristoError]=
 
       # Fetch serialised data record.
-      let data = db.rdb.getByPfx(AdmPfx, AdmTabIdLst.uint64).valueOr:
+      let data = db.rdb.getAdm(AdmTabIdLst).valueOr:
         when extraTraceMessages:
           trace logTxt "getLstFn: failed", error=error[0], info=error[1]
         return err(error[0])
@@ -151,27 +147,10 @@ proc putVtxFn(db: RdbBackendRef): PutVtxFn =
     proc(hdl: PutHdlRef; vrps: openArray[(VertexID,VertexRef)]) =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
-
-        # Collect batch session arguments
-        var batch: seq[(uint64,Blob)]
-        for (vid,vtx) in vrps:
-          if vtx.isValid:
-            let rc = vtx.blobify()
-            if rc.isErr:
-              hdl.error = TypedPutHdlErrRef(
-                pfx:  VtxPfx,
-                vid:  vid,
-                code: rc.error)
-              return
-            batch.add (vid.uint64, rc.value)
-          else:
-            batch.add (vid.uint64, EmptyBlob)
-
-        # Stash batch session data via LRU cache
-        db.rdb.putVtx(batch).isOkOr:
+        db.rdb.putVtx(vrps).isOkOr:
           hdl.error = TypedPutHdlErrRef(
             pfx:  VtxPfx,
-            vid:  VertexID(error[0]),
+            vid:  error[0],
             code: error[1],
             info: error[2])
 
@@ -180,20 +159,10 @@ proc putKeyFn(db: RdbBackendRef): PutKeyFn =
     proc(hdl: PutHdlRef; vkps: openArray[(VertexID,HashKey)]) =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
-
-        # Collect batch session arguments
-        var batch: seq[(uint64,Blob)]
-        for (vid,key) in vkps:
-          if key.isValid:
-            batch.add (vid.uint64, @(key.data))
-          else:
-            batch.add (vid.uint64, EmptyBlob)
-
-        # Stash batch session data via LRU cache
-        db.rdb.putKey(batch).isOkOr:
+        db.rdb.putKey(vkps).isOkOr:
           hdl.error = TypedPutHdlErrRef(
             pfx:  KeyPfx,
-            vid:  VertexID(error[0]),
+            vid:  error[0],
             code: error[1],
             info: error[2])
 
@@ -203,12 +172,14 @@ proc putTuvFn(db: RdbBackendRef): PutTuvFn =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
         if vs.isValid:
-          db.rdb.putByPfx(AdmPfx, @[(AdmTabIdTuv.uint64, vs.blobify)]).isOkOr:
+          db.rdb.putAdm(AdmTabIdTuv, vs.blobify).isOkOr:
             hdl.error = TypedPutHdlErrRef(
               pfx:  AdmPfx,
               aid:  AdmTabIdTuv,
               code: error[1],
               info: error[2])
+            return
+
 
 proc putLstFn(db: RdbBackendRef): PutLstFn =
   result =
@@ -221,7 +192,7 @@ proc putLstFn(db: RdbBackendRef): PutLstFn =
             aid:  AdmTabIdLst,
             code: error)
           return
-        db.rdb.putByPfx(AdmPfx, @[(AdmTabIdLst.uint64, data)]).isOkOr:
+        db.rdb.putAdm(AdmTabIdLst, data).isOkOr:
           hdl.error = TypedPutHdlErrRef(
             pfx:  AdmPfx,
             aid:  AdmTabIdLst,
@@ -243,6 +214,7 @@ proc putEndFn(db: RdbBackendRef): PutEndFn =
             pfx=AdmPfx, aid=hdl.error.aid.uint64, error=hdl.error.code
           of Oops: trace logTxt "putEndFn: oops",
             error=hdl.error.code
+        db.rdb.rollback()
         return err(hdl.error.code)
 
       # Commit session
@@ -317,28 +289,32 @@ iterator walk*(
       ): tuple[pfx: StorageType, xid: uint64, data: Blob] =
   ## Walk over all key-value pairs of the database.
   ##
-  ## Non-decodable entries are stepped over while the counter `n` of the
-  ## yield record is still incremented.
-  for w in be.rdb.walk:
-    yield w
+  ## Non-decodable entries are ignored
+  ##
+  for (xid, data) in be.rdb.walkAdm:
+    yield (AdmPfx, xid, data)
+  for (vid, data) in be.rdb.walkVtx:
+    yield (VtxPfx, vid, data)
+  for (vid, data) in be.rdb.walkKey:
+    yield (KeyPfx, vid, data)
 
 iterator walkVtx*(
     be: RdbBackendRef;
       ): tuple[vid: VertexID, vtx: VertexRef] =
   ## Variant of `walk()` iteration over the vertex sub-table.
-  for (xid, data) in be.rdb.walk VtxPfx:
+  for (vid, data) in be.rdb.walkVtx:
     let rc = data.deblobify VertexRef
     if rc.isOk:
-      yield (VertexID(xid), rc.value)
+      yield (VertexID(vid), rc.value)
 
 iterator walkKey*(
     be: RdbBackendRef;
       ): tuple[vid: VertexID, key: HashKey] =
   ## Variant of `walk()` iteration over the Markle hash sub-table.
-  for (xid, data) in be.rdb.walk KeyPfx:
+  for (vid, data) in be.rdb.walkKey:
     let lid = HashKey.fromBytes(data).valueOr:
       continue
-    yield (VertexID(xid), lid)
+    yield (VertexID(vid), lid)
 
 # ------------------------------------------------------------------------------
 # End

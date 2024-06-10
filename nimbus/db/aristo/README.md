@@ -318,8 +318,8 @@ data, for RLP encoded or for unstructured data as defined below.
         where each bitmask(2)-word array entry defines the length of
         the preceeding data fields:
           00 -- field is missing
-          01 -- field lengthh is 8 bytes
-          10 -- field lengthh is 32 bytes
+          01 -- field length is 8 bytes
+          10 -- field length is 32 bytes
 
 Apparently, entries 0 and and 2 of the *4 x bitmask(2)* word array cannot have
 the two bit value *10* as they refer to the nonce and the storage ID data

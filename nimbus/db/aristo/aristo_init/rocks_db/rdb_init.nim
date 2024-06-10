@@ -21,17 +21,6 @@ import
   ./rdb_desc,
   ../../../opts
 
-const
-  extraTraceMessages = false
-    ## Enable additional logging noise
-
-when extraTraceMessages:
-  import
-    chronicles
-
-  logScope:
-    topics = "aristo-rocksdb"
-
 # ------------------------------------------------------------------------------
 # Public constructor
 # ------------------------------------------------------------------------------
@@ -43,11 +32,12 @@ proc init*(
       ): Result[void,(AristoError,string)] =
   ## Constructor c ode inspired by `RocksStoreRef.init()` from
   ## kvstore_rocksdb.nim
+  const initFailed = "RocksDB/init() failed"
+
   rdb.basePath = basePath
 
   let
     dataDir = rdb.dataDir
-
   try:
     dataDir.createDir
   except OSError, IOError:
@@ -60,7 +50,9 @@ proc init*(
     cfOpts.setWriteBufferSize(opts.writeBufferSize)
 
   let
-    cfs = @[initColFamilyDescriptor(AristoFamily, cfOpts)] &
+    cfs = @[initColFamilyDescriptor(AdmCF, cfOpts),
+            initColFamilyDescriptor(VtxCF, cfOpts),
+            initColFamilyDescriptor(KeyCF, cfOpts)] &
           RdbGuest.mapIt(initColFamilyDescriptor($it, cfOpts))
     dbOpts = defaultDbOptions()
 
@@ -77,17 +69,15 @@ proc init*(
 
   # Reserve a family corner for `Aristo` on the database
   let baseDb = openRocksDb(dataDir, dbOpts, columnFamilies=cfs).valueOr:
-    let errSym = RdbBeDriverInitError
-    when extraTraceMessages:
-      trace logTxt "init failed", dataDir, openMax, error=errSym, info=error
-    return err((errSym, error))
+    raiseAssert initFailed & " cannot create base descriptor: " & error
 
-  # Initialise `Aristo` family
-  rdb.store = baseDb.withColFamily(AristoFamily).valueOr:
-    let errSym = RdbBeDriverInitError
-    when extraTraceMessages:
-      trace logTxt "init failed", dataDir, openMax, error=errSym, info=error
-    return err((errSym, error))
+  # Initialise column handlers (this stores implicitely `baseDb`)
+  rdb.admCol = baseDb.withColFamily(AdmCF).valueOr:
+    raiseAssert initFailed & " cannot initialise AdmCF descriptor: " & error
+  rdb.vtxCol = baseDb.withColFamily(VtxCF).valueOr:
+    raiseAssert initFailed & " cannot initialise VtxCF descriptor: " & error
+  rdb.keyCol = baseDb.withColFamily(KeyCF).valueOr:
+    raiseAssert initFailed & " cannot initialise KeyCF descriptor: " & error
 
   ok()
 
@@ -95,16 +85,17 @@ proc initGuestDb*(
     rdb: RdbInst;
     instance: int;
       ): Result[RootRef,(AristoError,string)] =
-  # Initialise `Guest` family
+  ## Initialise `Guest` family
+  ##
+  ## Thus was a worth a try, but there are better solutions and this item
+  ## will be removed in future.
+  ##
   if high(RdbGuest).ord < instance:
     return err((RdbGuestInstanceUnsupported,""))
   let
     guestSym = $RdbGuest(instance)
-    guestDb = rdb.store.db.withColFamily(guestSym).valueOr:
-      let errSym = RdbBeDriverGuestError
-      when extraTraceMessages:
-        trace logTxt "guestDb failed", error=errSym, info=error
-      return err((errSym, error))
+    guestDb = rdb.baseDb.withColFamily(guestSym).valueOr:
+      raiseAssert "RocksDb/initGuestDb() failed: " & error
 
   ok RdbGuestDbRef(
     beKind: BackendRocksDB,
@@ -113,7 +104,7 @@ proc initGuestDb*(
 
 proc destroy*(rdb: var RdbInst; flush: bool) =
   ## Destructor
-  rdb.store.db.close()
+  rdb.baseDb.close()
 
   if flush:
     try:

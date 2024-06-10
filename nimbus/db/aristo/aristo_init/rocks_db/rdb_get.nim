@@ -18,7 +18,7 @@ import
   rocksdb,
   results,
   stew/keyed_queue,
-  ../../aristo_desc,
+  ../../[aristo_blobify, aristo_desc],
   ../init_common,
   ./rdb_desc
 
@@ -33,15 +33,19 @@ when extraTraceMessages:
   logScope:
     topics = "aristo-rocksdb"
 
-proc getImpl(rdb: RdbInst; key: RdbKey): Result[Blob,(AristoError,string)] =
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
+
+proc getAdm*(rdb: RdbInst; xid: AdminTabID): Result[Blob,(AristoError,string)] =
   var res: Blob
   let onData = proc(data: openArray[byte]) =
     res = @data
 
-  let gotData = rdb.store.get(key, onData).valueOr:
-     const errSym = RdbBeDriverGetError
+  let gotData = rdb.admCol.get(xid.toOpenArray, onData).valueOr:
+     const errSym = RdbBeDriverGetAdmError
      when extraTraceMessages:
-       trace logTxt "get", pfx=key[0], error=errSym, info=error
+       trace logTxt "getAdm", xid, error=errSym, info=error
      return err((errSym,error))
 
   # Correct result if needed
@@ -49,46 +53,68 @@ proc getImpl(rdb: RdbInst; key: RdbKey): Result[Blob,(AristoError,string)] =
     res = EmptyBlob
   ok move(res)
 
-# ------------------------------------------------------------------------------
-# Public functions
-# ------------------------------------------------------------------------------
 
-proc getByPfx*(
-    rdb: RdbInst;
-    pfx: StorageType;
-    xid: uint64,
-      ): Result[Blob,(AristoError,string)] =
-  rdb.getImpl(xid.toRdbKey pfx)
-
-proc getKey*(rdb: var RdbInst; xid: uint64): Result[Blob,(AristoError,string)] =
+proc getKey*(
+    rdb: var RdbInst;
+    vid: VertexID;
+      ): Result[HashKey,(AristoError,string)] =
   # Try LRU cache first
-  let
-    key = xid.toRdbKey KeyPfx
-  var
-    rc = rdb.rdKeyLru.lruFetch(key)
+  var rc = rdb.rdKeyLru.lruFetch(vid)
   if rc.isOK:
     return ok(move(rc.value))
 
   # Otherwise fetch from backend database
-  let res = ? rdb.getImpl(key)
+  var res: Blob
+  let onData = proc(data: openArray[byte]) =
+    res = @data
+
+  let gotData = rdb.keyCol.get(vid.toOpenArray, onData).valueOr:
+     const errSym = RdbBeDriverGetKeyError
+     when extraTraceMessages:
+       trace logTxt "getKey", vid, error=errSym, info=error
+     return err((errSym,error))
+
+  # Correct result if needed
+  let key = block:
+    if gotData:
+      HashKey.fromBytes(res).valueOr:
+        return err((RdbHashKeyExpected,""))
+    else:
+      VOID_HASH_KEY
 
   # Update cache and return
-  ok rdb.rdKeyLru.lruAppend(key, res, RdKeyLruMaxSize)
+  ok rdb.rdKeyLru.lruAppend(vid, key, RdKeyLruMaxSize)
 
-proc getVtx*(rdb: var RdbInst; xid: uint64): Result[Blob,(AristoError,string)] =
+
+proc getVtx*(
+    rdb: var RdbInst;
+    vid: VertexID;
+      ): Result[VertexRef,(AristoError,string)] =
   # Try LRU cache first
-  let
-    key = xid.toRdbKey VtxPfx
-  var
-    rc = rdb.rdVtxLru.lruFetch(key)
+  var rc = rdb.rdVtxLru.lruFetch(vid)
   if rc.isOK:
     return ok(move(rc.value))
 
   # Otherwise fetch from backend database
-  let res = ? rdb.getImpl(key)
+  var res: Blob
+  let onData = proc(data: openArray[byte]) =
+    res = @data
+
+  let gotData = rdb.vtxCol.get(vid.toOpenArray, onData).valueOr:
+    const errSym = RdbBeDriverGetVtxError
+    when extraTraceMessages:
+      trace logTxt "getVtx", vid, error=errSym, info=error
+    return err((errSym,error))
+
+  var vtx = VertexRef(nil)
+  if gotData:
+    let rc = res.deblobify VertexRef
+    if rc.isErr:
+      return err((rc.error,""))
+    vtx = rc.value
 
   # Update cache and return
-  ok rdb.rdVtxLru.lruAppend(key, res, RdVtxLruMaxSize)
+  ok rdb.rdVtxLru.lruAppend(vid, vtx, RdVtxLruMaxSize)
 
 # ------------------------------------------------------------------------------
 # End
