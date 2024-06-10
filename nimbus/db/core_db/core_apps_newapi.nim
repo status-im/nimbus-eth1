@@ -719,18 +719,18 @@ proc getWithdrawals*(
 
 proc getTransactions*(
     db: CoreDbRef;
-    header: BlockHeader;
+    txRoot: Hash256;
     output: var seq[Transaction])
       {.gcsafe, raises: [RlpError].} =
-  for encodedTx in db.getBlockTransactionData(header.txRoot):
+  for encodedTx in db.getBlockTransactionData(txRoot):
     output.add(rlp.decode(encodedTx, Transaction))
 
 proc getTransactions*(
     db: CoreDbRef;
-    header: BlockHeader;
+    txRoot: Hash256;
     ): seq[Transaction]
       {.gcsafe, raises: [RlpError].} =
-  db.getTransactions(header, result)
+  db.getTransactions(txRoot, result)
 
 proc getBlockBody*(
     db: CoreDbRef;
@@ -738,23 +738,12 @@ proc getBlockBody*(
     output: var BlockBody;
       ): bool
       {.gcsafe, raises: [RlpError].} =
-  db.getTransactions(header, output.transactions)
-  output.uncles = @[]
-  for encodedTx in db.getBlockTransactionData(header.txRoot):
-    output.transactions.add(rlp.decode(encodedTx, Transaction))
+  output.transactions = db.getTransactions(header.txRoot)
+  output.uncles = db.getUncles(header.ommersHash)
 
   if header.withdrawalsRoot.isSome:
     output.withdrawals = some(db.getWithdrawals(header.withdrawalsRoot.get))
 
-  if header.ommersHash != EMPTY_UNCLE_HASH:
-    let
-      key = genericHashKey(header.ommersHash)
-      encodedUncles = db.newKvt().get(key.toOpenArray).valueOr:
-        if error.error == KvtNotFound:
-          warn logTxt "getBlockBody()",
-            ommersHash=header.ommersHash, action="get()", `error`=($$error)
-        return false
-    output.uncles = rlp.decode(encodedUncles, seq[BlockHeader])
   true
 
 proc getBlockBody*(
