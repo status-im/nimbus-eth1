@@ -85,7 +85,7 @@ proc newAccountStateDB*(backingStore: CoreDbRef,
   result.trie = AccountLedger.init(backingStore, root)
   result.originalRoot = root
   when aleth_compat:
-    result.cleared = initHashSet[EthAddress]()
+    result.cleared = HashSet[EthAddress]()
 
 #proc getTrie*(db: AccountStateDB): CoreDxMptRef =
 #  db.trie.mpt

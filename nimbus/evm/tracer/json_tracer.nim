@@ -130,9 +130,9 @@ method capturePrepare*(ctx: JsonTracer, comp: Computation, depth: int) {.gcsafe.
     let prevLen = ctx.storageKeys.len
     ctx.storageKeys.setLen(depth + 1)
     for i in prevLen ..< ctx.storageKeys.len - 1:
-      ctx.storageKeys[i] = initHashSet[UInt256]()
+      ctx.storageKeys[i] = HashSet[UInt256]()
 
-  ctx.storageKeys[depth] = initHashSet[UInt256]()
+  ctx.storageKeys[depth] = HashSet[UInt256]()
 
 # Top call frame
 method captureStart*(ctx: JsonTracer, comp: Computation,

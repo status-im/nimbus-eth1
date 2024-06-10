@@ -149,7 +149,7 @@ proc init*(x: typedesc[AccountsLedgerRef], db: CoreDbRef,
   new result
   result.ledger = AccountLedger.init(db, root)
   result.kvt = db.newKvt() # save manually in `persist()`
-  result.witnessCache = initTable[EthAddress, WitnessData]()
+  result.witnessCache = Table[EthAddress, WitnessData]()
   discard result.beginSavepoint
 
 proc init*(x: typedesc[AccountsLedgerRef], db: CoreDbRef, pruneTrie = true): AccountsLedgerRef =
@@ -169,7 +169,7 @@ proc isTopLevelClean*(ac: AccountsLedgerRef): bool =
 
 proc beginSavepoint*(ac: AccountsLedgerRef): LedgerSavePoint =
   new result
-  result.cache = initTable[EthAddress, AccountRef]()
+  result.cache = Table[EthAddress, AccountRef]()
   result.accessList.init()
   result.transientStorage.init()
   result.state = Pending
@@ -712,7 +712,7 @@ proc update(wd: var WitnessData, acc: AccountRef) =
     wd.storageKeys.incl k
 
 proc witnessData(acc: AccountRef): WitnessData =
-  result.storageKeys = initHashSet[UInt256]()
+  result.storageKeys = HashSet[UInt256]()
   update(result, acc)
 
 proc collectWitnessData*(ac: AccountsLedgerRef) =

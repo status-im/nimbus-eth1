@@ -83,7 +83,7 @@ proc mapBodiesToHeader(buddy: BeaconBuddyRef,
                        reqBodies: openArray[bool]) {.raises: [].} =
   var
     headers = system.move(job.getBlocksJob.headers)
-    map = initTable[Hash256, int]()
+    map = Table[Hash256, int]()
 
   for i, x in bodies:
     let bodyHash = sumHash(x)

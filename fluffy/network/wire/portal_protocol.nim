@@ -551,7 +551,7 @@ proc new*(
     radiusCache: RadiusCache.init(256),
     offerQueue: newAsyncQueue[OfferRequest](concurrentOffers),
     disablePoke: config.disablePoke,
-    pingTimings: initTable[NodeId, chronos.Moment](),
+    pingTimings: Table[NodeId, chronos.Moment](),
   )
 
   proto.baseProtocol.registerTalkProtocol(@(proto.protocolId), proto).expect(
@@ -984,7 +984,7 @@ proc lookup*(p: PortalProtocol, target: NodeId): Future[seq[Node]] {.async.} =
   # Unvalidated nodes are used for requests as a form of validation.
   var closestNodes = p.routingTable.neighbours(target, BUCKET_SIZE, seenOnly = false)
 
-  var asked, seen = initHashSet[NodeId]()
+  var asked, seen = HashSet[NodeId]()
   asked.incl(p.localNode.id) # No need to ask our own node
   seen.incl(p.localNode.id) # No need to discover our own node
   for node in closestNodes:
@@ -1080,7 +1080,7 @@ proc contentLookup*(
   # first for the same request.
   p.baseProtocol.rng[].shuffle(closestNodes)
 
-  var asked, seen = initHashSet[NodeId]()
+  var asked, seen = HashSet[NodeId]()
   asked.incl(p.localNode.id) # No need to ask our own node
   seen.incl(p.localNode.id) # No need to discover our own node
   for node in closestNodes:
@@ -1180,10 +1180,10 @@ proc traceContentLookup*(
   p.baseProtocol.rng[].shuffle(closestNodes)
 
   let ts = now(chronos.Moment)
-  var responses = initTable[string, TraceResponse]()
-  var metadata = initTable[string, NodeMetadata]()
+  var responses = Table[string, TraceResponse]()
+  var metadata = Table[string, NodeMetadata]()
 
-  var asked, seen = initHashSet[NodeId]()
+  var asked, seen = HashSet[NodeId]()
   asked.incl(p.localNode.id) # No need to ask our own node
   seen.incl(p.localNode.id) # No need to discover our own node
   for node in closestNodes:
@@ -1355,7 +1355,7 @@ proc query*(
   ## the routing table, nodes returned by the first queries will be used.
   var queryBuffer = p.routingTable.neighbours(target, k, seenOnly = false)
 
-  var asked, seen = initHashSet[NodeId]()
+  var asked, seen = HashSet[NodeId]()
   asked.incl(p.localNode.id) # No need to ask our own node
   seen.incl(p.localNode.id) # No need to discover our own node
   for node in queryBuffer:

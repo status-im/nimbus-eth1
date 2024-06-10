@@ -14,7 +14,7 @@ import
   ../nimbus/common/[context, common]
 
 func revmap(x: Table[EVMFork, string]): Table[string, EVMFork] =
-  result = initTable[string, EVMFork]()
+  result = Table[string, EVMFork]()
   for k, v in x:
     result[v] = k
 
