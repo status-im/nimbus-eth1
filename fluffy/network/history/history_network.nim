@@ -610,17 +610,23 @@ proc getEpochAccumulator(
 
   return Opt.none(EpochAccumulator)
 
-proc getBlock*(
+proc getBlockHashByNumber*(
     n: HistoryNetwork, bn: UInt256
-): Future[Result[Opt[Block], string]] {.async.} =
+): Future[Result[BlockHash, string]] {.async.} =
   let
     epochData = n.accumulator.getBlockEpochDataForBlockNumber(bn).valueOr:
       return err(error)
     digest = Digest(data: epochData.epochHash)
     epoch = (await n.getEpochAccumulator(digest)).valueOr:
       return err("Cannot retrieve epoch accumulator for given block number")
-    blockHash = epoch[epochData.blockRelativeIndex].blockHash
 
+  ok(epoch[epochData.blockRelativeIndex].blockHash)
+
+proc getBlock*(
+    n: HistoryNetwork, bn: UInt256
+): Future[Result[Opt[Block], string]] {.async.} =
+  let
+    blockHash = ?(await n.getBlockHashByNumber(bn))
     maybeBlock = await n.getBlock(blockHash)
 
   return ok(maybeBlock)

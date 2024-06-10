@@ -91,6 +91,9 @@ func toRetrievalValue*(offer: ContractTrieNodeOffer): ContractTrieNodeRetrieval 
 func toRetrievalValue*(offer: ContractCodeOffer): ContractCodeRetrieval =
   ContractCodeRetrieval.init(offer.code)
 
+func empty*(T: type TrieProof): T =
+  TrieProof.init(@[])
+
 func encode*(value: ContentValueType): seq[byte] =
   SSZ.encode(value)
 
