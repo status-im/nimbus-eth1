@@ -1,0 +1,32 @@
+# Nimbus
+# Copyright (c) 2024 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+#    http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or
+#    http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed except
+# according to those terms.
+
+participants:
+  - el_type: nimbus
+    el_image: <docker-image-placeholder>
+    el_extra_params: ["--log-level=DEBUG"]
+    cl_type: nimbus
+    cl_image: statusim/nimbus-eth2:multiarch-latest
+    cl_extra_params: ["--log-level=DEBUG;INFO:gossip_eth2,attpool,libp2p,gossipsub,pubsubpeer,pubsub,switch,networking,sync,dialer,identify,syncman,connmanager,beacnde,lightcl,requman,gossip_lc,clearance,lpstream,mplexchannel,nodes-verification,tcptransport,chaindag,noise,eth,p2p,discv5,muxedupgrade,multistream,connection,secure,fee_recipient,mplex,syncpool,multiaddress,peer_proto;WARN:message_router"]
+    use_separate_vc: false
+additional_services:
+  - tx_spammer
+  - assertoor
+  - beacon_metrics_gazer
+tx_spammer_params:
+  tx_spammer_extra_args: ["--accounts=1", "--txcount=1"]
+mev_type: null
+assertoor_params:
+  image: "ethpandaops/assertoor:master"
+  run_stability_check: true
+  run_block_proposal_check: true
+  run_transaction_test: true
+  run_blob_transaction_test: false
+  run_opcodes_transaction_test: true
