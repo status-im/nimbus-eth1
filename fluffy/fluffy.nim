@@ -234,6 +234,7 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
             bootstrapRecords = bootstrapRecords,
             portalConfig = portalConfig,
             historyNetwork = historyNetwork,
+            not config.disableStateRootValidation,
           )
         )
       else:

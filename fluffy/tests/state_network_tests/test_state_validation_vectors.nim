@@ -144,7 +144,9 @@ suite "State Validation - Test Vectors":
           AccountTrieNodeOffer.decode(testData.content_value_offer.hexToSeqByte()).get()
 
         check:
-          validateOffer(stateRoot, contentKey.accountTrieNodeKey, contentValueOffer)
+          validateOffer(
+            Opt.some(stateRoot), contentKey.accountTrieNodeKey, contentValueOffer
+          )
           .isOk()
 
       if i == 1:
@@ -158,7 +160,10 @@ suite "State Validation - Test Vectors":
         .get()
 
       check:
-        validateOffer(stateRoot, contentKey.accountTrieNodeKey, contentValueOffer).isOk()
+        validateOffer(
+          Opt.some(stateRoot), contentKey.accountTrieNodeKey, contentValueOffer
+        )
+        .isOk()
 
   test "Validate invalid AccountTrieNodeOffer nodes - bad state roots":
     const file = testVectorDir / "account_trie_node.yaml"
@@ -179,8 +184,9 @@ suite "State Validation - Test Vectors":
       let contentValueOffer =
         AccountTrieNodeOffer.decode(testData.content_value_offer.hexToSeqByte()).get()
 
-      let res =
-        validateOffer(stateRoot, contentKey.accountTrieNodeKey, contentValueOffer)
+      let res = validateOffer(
+        Opt.some(stateRoot), contentKey.accountTrieNodeKey, contentValueOffer
+      )
       check:
         res.isErr()
         res.error() == "hash of proof root node doesn't match the expected root hash"
@@ -201,8 +207,9 @@ suite "State Validation - Test Vectors":
 
       contentValueOffer.proof[0][0] += 1.byte
 
-      let res =
-        validateOffer(stateRoot, contentKey.accountTrieNodeKey, contentValueOffer)
+      let res = validateOffer(
+        Opt.some(stateRoot), contentKey.accountTrieNodeKey, contentValueOffer
+      )
       check:
         res.isErr()
         res.error() == "hash of proof root node doesn't match the expected root hash"
@@ -219,8 +226,9 @@ suite "State Validation - Test Vectors":
 
       contentValueOffer.proof[^2][^2] += 1.byte
 
-      let res =
-        validateOffer(stateRoot, contentKey.accountTrieNodeKey, contentValueOffer)
+      let res = validateOffer(
+        Opt.some(stateRoot), contentKey.accountTrieNodeKey, contentValueOffer
+      )
       check:
         res.isErr()
         "hash of next node doesn't match the expected" in res.error()
@@ -235,8 +243,9 @@ suite "State Validation - Test Vectors":
 
       contentValueOffer.proof[^1][^1] += 1.byte
 
-      let res =
-        validateOffer(stateRoot, contentKey.accountTrieNodeKey, contentValueOffer)
+      let res = validateOffer(
+        Opt.some(stateRoot), contentKey.accountTrieNodeKey, contentValueOffer
+      )
       check:
         res.isErr()
 
@@ -259,7 +268,9 @@ suite "State Validation - Test Vectors":
           .get()
 
         check:
-          validateOffer(stateRoot, contentKey.contractTrieNodeKey, contentValueOffer)
+          validateOffer(
+            Opt.some(stateRoot), contentKey.contractTrieNodeKey, contentValueOffer
+          )
           .isOk()
 
       if i == 1:
@@ -273,7 +284,10 @@ suite "State Validation - Test Vectors":
         .get()
 
       check:
-        validateOffer(stateRoot, contentKey.contractTrieNodeKey, contentValueOffer).isOk()
+        validateOffer(
+          Opt.some(stateRoot), contentKey.contractTrieNodeKey, contentValueOffer
+        )
+        .isOk()
 
   test "Validate invalid ContractTrieNodeOffer nodes - bad state roots":
     const file = testVectorDir / "contract_storage_trie_node.yaml"
@@ -293,8 +307,9 @@ suite "State Validation - Test Vectors":
       let contentValueOffer =
         ContractTrieNodeOffer.decode(testData.content_value_offer.hexToSeqByte()).get()
 
-      let res =
-        validateOffer(stateRoot, contentKey.contractTrieNodeKey, contentValueOffer)
+      let res = validateOffer(
+        Opt.some(stateRoot), contentKey.contractTrieNodeKey, contentValueOffer
+      )
       check:
         res.isErr()
         res.error() == "hash of proof root node doesn't match the expected root hash"
@@ -317,8 +332,9 @@ suite "State Validation - Test Vectors":
 
         contentValueOffer.accountProof[0][0] += 1.byte
 
-        let res =
-          validateOffer(stateRoot, contentKey.contractTrieNodeKey, contentValueOffer)
+        let res = validateOffer(
+          Opt.some(stateRoot), contentKey.contractTrieNodeKey, contentValueOffer
+        )
         check:
           res.isErr()
           res.error() == "hash of proof root node doesn't match the expected root hash"
@@ -332,8 +348,9 @@ suite "State Validation - Test Vectors":
 
         contentValueOffer.storageProof[0][0] += 1.byte
 
-        let res =
-          validateOffer(stateRoot, contentKey.contractTrieNodeKey, contentValueOffer)
+        let res = validateOffer(
+          Opt.some(stateRoot), contentKey.contractTrieNodeKey, contentValueOffer
+        )
         check:
           res.isErr()
           res.error() == "hash of proof root node doesn't match the expected root hash"
@@ -348,7 +365,9 @@ suite "State Validation - Test Vectors":
         contentValueOffer.accountProof[^1][^1] += 1.byte
 
         check:
-          validateOffer(stateRoot, contentKey.contractTrieNodeKey, contentValueOffer)
+          validateOffer(
+            Opt.some(stateRoot), contentKey.contractTrieNodeKey, contentValueOffer
+          )
           .isErr()
 
       block:
@@ -361,7 +380,9 @@ suite "State Validation - Test Vectors":
         contentValueOffer.storageProof[^1][^1] += 1.byte
 
         check:
-          validateOffer(stateRoot, contentKey.contractTrieNodeKey, contentValueOffer)
+          validateOffer(
+            Opt.some(stateRoot), contentKey.contractTrieNodeKey, contentValueOffer
+          )
           .isErr()
 
       block:
@@ -374,7 +395,9 @@ suite "State Validation - Test Vectors":
         contentValueOffer.accountProof[^2][^2] += 1.byte
 
         check:
-          validateOffer(stateRoot, contentKey.contractTrieNodeKey, contentValueOffer)
+          validateOffer(
+            Opt.some(stateRoot), contentKey.contractTrieNodeKey, contentValueOffer
+          )
           .isErr()
 
   # Contract bytecode offer validation tests
@@ -394,7 +417,10 @@ suite "State Validation - Test Vectors":
         ContractCodeOffer.decode(testData.content_value_offer.hexToSeqByte()).get()
 
       check:
-        validateOffer(stateRoot, contentKey.contractCodeKey, contentValueOffer).isOk()
+        validateOffer(
+          Opt.some(stateRoot), contentKey.contractCodeKey, contentValueOffer
+        )
+        .isOk()
 
   test "Validate invalid ContractCodeOffer nodes - bad state root":
     const file = testVectorDir / "contract_bytecode.yaml"
@@ -412,7 +438,9 @@ suite "State Validation - Test Vectors":
       let contentValueOffer =
         ContractCodeOffer.decode(testData.content_value_offer.hexToSeqByte()).get()
 
-      let res = validateOffer(stateRoot, contentKey.contractCodeKey, contentValueOffer)
+      let res = validateOffer(
+        Opt.some(stateRoot), contentKey.contractCodeKey, contentValueOffer
+      )
       check:
         res.isErr()
         res.error() == "hash of proof root node doesn't match the expected root hash"
@@ -434,8 +462,9 @@ suite "State Validation - Test Vectors":
 
         contentValueOffer.accountProof[0][0] += 1.byte
 
-        let res =
-          validateOffer(stateRoot, contentKey.contractCodeKey, contentValueOffer)
+        let res = validateOffer(
+          Opt.some(stateRoot), contentKey.contractCodeKey, contentValueOffer
+        )
         check:
           res.isErr()
           res.error() == "hash of proof root node doesn't match the expected root hash"
@@ -448,8 +477,9 @@ suite "State Validation - Test Vectors":
 
         contentValueOffer.code[0] += 1.byte
 
-        let res =
-          validateOffer(stateRoot, contentKey.contractCodeKey, contentValueOffer)
+        let res = validateOffer(
+          Opt.some(stateRoot), contentKey.contractCodeKey, contentValueOffer
+        )
         check:
           res.isErr()
           res.error() ==
@@ -464,7 +494,10 @@ suite "State Validation - Test Vectors":
         contentValueOffer.accountProof[^1][^1] += 1.byte
 
         check:
-          validateOffer(stateRoot, contentKey.contractCodeKey, contentValueOffer).isErr()
+          validateOffer(
+            Opt.some(stateRoot), contentKey.contractCodeKey, contentValueOffer
+          )
+          .isErr()
 
       block:
         let contentKey =
@@ -474,8 +507,9 @@ suite "State Validation - Test Vectors":
 
         contentValueOffer.code[^1] += 1.byte
 
-        let res =
-          validateOffer(stateRoot, contentKey.contractCodeKey, contentValueOffer)
+        let res = validateOffer(
+          Opt.some(stateRoot), contentKey.contractCodeKey, contentValueOffer
+        )
         check:
           res.isErr()
           res.error() ==
@@ -506,7 +540,9 @@ suite "State Validation - Test Vectors":
           AccountTrieNodeOffer.decode(kv.content_value.hexToSeqByte()).get()
 
         check:
-          validateOffer(stateRoot, contentKey.accountTrieNodeKey, contentValueOffer)
+          validateOffer(
+            Opt.some(stateRoot), contentKey.accountTrieNodeKey, contentValueOffer
+          )
           .isOk()
 
   test "Validate valid ContractTrieNodeOffer recursive gossip nodes":
@@ -527,5 +563,7 @@ suite "State Validation - Test Vectors":
           ContractTrieNodeOffer.decode(kv.content_value.hexToSeqByte()).get()
 
         check:
-          validateOffer(stateRoot, contentKey.contractTrieNodeKey, contentValueOffer)
+          validateOffer(
+            Opt.some(stateRoot), contentKey.contractTrieNodeKey, contentValueOffer
+          )
           .isOk()

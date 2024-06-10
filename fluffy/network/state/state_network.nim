@@ -32,6 +32,7 @@ type StateNetwork* = ref object
   contentQueue*: AsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])]
   processContentLoop: Future[void]
   historyNetwork: Opt[HistoryNetwork]
+  validateStateIsCanonical: bool
 
 func toContentIdHandler(contentKey: ByteList): results.Opt[ContentId] =
   ok(toContentId(contentKey))
@@ -44,6 +45,7 @@ proc new*(
     bootstrapRecords: openArray[Record] = [],
     portalConfig: PortalProtocolConfig = defaultPortalProtocolConfig,
     historyNetwork = Opt.none(HistoryNetwork),
+    validateStateIsCanonical = true,
 ): T =
   let cq = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
 
@@ -67,6 +69,7 @@ proc new*(
     contentDB: contentDB,
     contentQueue: cq,
     historyNetwork: historyNetwork,
+    validateStateIsCanonical: validateStateIsCanonical,
   )
 
 proc getContent(
@@ -146,10 +149,15 @@ proc processOffer*(
   let contentValue = V.decode(contentValueBytes).valueOr:
     return err("Unable to decode offered content value")
 
-  let stateRoot = (await n.getStateRootByBlockHash(contentValue.blockHash)).valueOr:
-    return err("Failed to get state root by block hash")
+  let res =
+    if n.validateStateIsCanonical:
+      let stateRoot = (await n.getStateRootByBlockHash(contentValue.blockHash)).valueOr:
+        return err("Failed to get state root by block hash")
+      validateOffer(Opt.some(stateRoot), contentKey, contentValue)
+    else:
+      # Skip state root validation
+      validateOffer(Opt.none(KeccakHash), contentKey, contentValue)
 
-  let res = validateOffer(stateRoot, contentKey, contentValue)
   if res.isErr():
     return err("Offered content failed validation: " & res.error())
 

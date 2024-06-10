@@ -42,12 +42,12 @@ suite "State Gossip getParent - Genesis JSON Files":
 
         # validate each parent offer until getting to the root node
         var parent = offer.withKey(key).getParent()
-        check validateOffer(accountState.rootHash(), parent.key, parent.offer).isOk()
+        check validateOffer(Opt.some(accountState.rootHash()), parent.key, parent.offer).isOk()
         db.put(parent.key.nodeHash.data, parent.offer.toRetrievalValue().node.asSeq())
 
         for i in proof.low ..< proof.high - 1:
           parent = parent.getParent()
-          check validateOffer(accountState.rootHash(), parent.key, parent.offer).isOk()
+          check validateOffer(Opt.some(accountState.rootHash()), parent.key, parent.offer).isOk()
           db.put(parent.key.nodeHash.data, parent.offer.toRetrievalValue().node.asSeq())
 
         # after putting all parent nodes into the trie, verify can lookup the leaf
@@ -89,14 +89,14 @@ suite "State Gossip getParent - Genesis JSON Files":
 
             # validate each parent offer until getting to the root node
             var parent = offer.withKey(key).getParent()
-            check validateOffer(accountState.rootHash(), parent.key, parent.offer).isOk()
+            check validateOffer(Opt.some(accountState.rootHash()), parent.key, parent.offer).isOk()
             db.put(
               parent.key.nodeHash.data, parent.offer.toRetrievalValue().node.asSeq()
             )
 
             for i in storageProof.low ..< storageProof.high - 1:
               parent = parent.getParent()
-              check validateOffer(accountState.rootHash(), parent.key, parent.offer)
+              check validateOffer(Opt.some(accountState.rootHash()), parent.key, parent.offer)
               .isOk()
               db.put(
                 parent.key.nodeHash.data, parent.offer.toRetrievalValue().node.asSeq()

@@ -38,7 +38,7 @@ suite "State Validation - validateTrieProof":
       let
         kv = getKeyBytes(i)
         proof = trie.getTrieProof(kv)
-        res = validateTrieProof(rootHash, kv.asNibbles(), proof, true)
+        res = validateTrieProof(Opt.some(rootHash), kv.asNibbles(), proof, true)
 
       check:
         res.isOk()
@@ -55,7 +55,7 @@ suite "State Validation - validateTrieProof":
       rootHash = trie.rootHash()
       key = getKeyBytes(numValues + 1)
       proof = trie.getTrieProof(key)
-      res = validateTrieProof(rootHash, key.asNibbles(), proof, true)
+      res = validateTrieProof(Opt.some(rootHash), key.asNibbles(), proof, true)
 
     check:
       res.isErr()
@@ -68,7 +68,7 @@ suite "State Validation - validateTrieProof":
       rootHash = trie.rootHash()
       key = "not-exist".toBytes
       proof = trie.getTrieProof(key)
-      res = validateTrieProof(rootHash, key.asNibbles(), proof, true)
+      res = validateTrieProof(Opt.some(rootHash), key.asNibbles(), proof, true)
 
     check:
       res.isErr()
@@ -83,7 +83,7 @@ suite "State Validation - validateTrieProof":
     let
       rootHash = trie.rootHash
       proof = trie.getTrieProof(key)
-      res = validateTrieProof(rootHash, key.asNibbles(), proof, true)
+      res = validateTrieProof(Opt.some(rootHash), key.asNibbles(), proof, true)
 
     check:
       res.isOk()
@@ -101,25 +101,25 @@ suite "State Validation - validateTrieProof":
       let
         key = "doe".toBytes
         proof = trie.getTrieProof(key)
-      check validateTrieProof(rootHash, key.asNibbles(), proof, true).isOk()
+      check validateTrieProof(Opt.some(rootHash), key.asNibbles(), proof, true).isOk()
 
     block:
       let
         key = "dog".toBytes
         proof = trie.getTrieProof(key)
-      check validateTrieProof(rootHash, key.asNibbles(), proof, true).isOk()
+      check validateTrieProof(Opt.some(rootHash), key.asNibbles(), proof, true).isOk()
 
     block:
       let
         key = "dogglesworth".toBytes
         proof = trie.getTrieProof(key)
-      check validateTrieProof(rootHash, key.asNibbles(), proof, true).isOk()
+      check validateTrieProof(Opt.some(rootHash), key.asNibbles(), proof, true).isOk()
 
     block:
       let
         key = "dogg".toBytes
         proof = trie.getTrieProof(key)
-        res = validateTrieProof(rootHash, key.asNibbles(), proof, true)
+        res = validateTrieProof(Opt.some(rootHash), key.asNibbles(), proof, true)
       check:
         res.isErr()
         res.error() == "not enough nibbles to validate node prefix"
@@ -128,7 +128,7 @@ suite "State Validation - validateTrieProof":
       let
         key = "dogz".toBytes
         proof = trie.getTrieProof(key)
-        res = validateTrieProof(rootHash, key.asNibbles(), proof, true)
+        res = validateTrieProof(Opt.some(rootHash), key.asNibbles(), proof, true)
       check:
         res.isErr()
         res.error() == "path contains more nibbles than expected for proof"
@@ -137,7 +137,7 @@ suite "State Validation - validateTrieProof":
       let
         key = "doe".toBytes
         proof = newSeq[seq[byte]]().asTrieProof()
-        res = validateTrieProof(rootHash, key.asNibbles(), proof, true)
+        res = validateTrieProof(Opt.some(rootHash), key.asNibbles(), proof, true)
       check:
         res.isErr()
         res.error() == "proof is empty"
@@ -146,7 +146,7 @@ suite "State Validation - validateTrieProof":
       let
         key = "doe".toBytes
         proof = @["aaa".toBytes, "ccc".toBytes].asTrieProof()
-        res = validateTrieProof(rootHash, key.asNibbles(), proof, true)
+        res = validateTrieProof(Opt.some(rootHash), key.asNibbles(), proof, true)
       check:
         res.isErr()
         res.error() == "hash of proof root node doesn't match the expected root hash"
@@ -185,23 +185,59 @@ suite "State Validation - validateTrieProof":
     let rootHash = trie.rootHash
 
     check:
-      validateTrieProof(rootHash, kv1.asNibbles(), trie.getTrieProof(kv1), true).isOk()
-      validateTrieProof(rootHash, kv2.asNibbles(), trie.getTrieProof(kv2), false).isOk()
-      validateTrieProof(rootHash, kv3.asNibbles(), trie.getTrieProof(kv3), true).isOk()
-      validateTrieProof(rootHash, kv4.asNibbles(), trie.getTrieProof(kv4), false).isOk()
-      validateTrieProof(rootHash, kv5.asNibbles(), trie.getTrieProof(kv5)).isOk()
-      validateTrieProof(rootHash, kv6.asNibbles(), trie.getTrieProof(kv6)).isOk()
-      validateTrieProof(rootHash, kv7.asNibbles(), trie.getTrieProof(kv7)).isOk()
-      validateTrieProof(rootHash, kv8.asNibbles(), trie.getTrieProof(kv8)).isOk()
+      validateTrieProof(
+        Opt.some(rootHash), kv1.asNibbles(), trie.getTrieProof(kv1), true
+      )
+      .isOk()
 
-      validateTrieProof(rootHash, kv9.asNibbles(), trie.getTrieProof(kv9)).isErr()
-      validateTrieProof(rootHash, kv10.asNibbles(), trie.getTrieProof(kv10)).isErr()
-      validateTrieProof(rootHash, kv11.asNibbles(), trie.getTrieProof(kv11)).isErr()
-      validateTrieProof(rootHash, kv12.asNibbles(), trie.getTrieProof(kv12)).isErr()
-      validateTrieProof(rootHash, kv13.asNibbles(), trie.getTrieProof(kv13)).isErr()
+      validateTrieProof(
+        Opt.some(rootHash), kv2.asNibbles(), trie.getTrieProof(kv2), false
+      )
+      .isOk()
 
-      validateTrieProof(rootHash, kv14.asNibbles(), trie.getTrieProof(kv14), false)
+      validateTrieProof(
+        Opt.some(rootHash), kv3.asNibbles(), trie.getTrieProof(kv3), true
+      )
+      .isOk()
+
+      validateTrieProof(
+        Opt.some(rootHash), kv4.asNibbles(), trie.getTrieProof(kv4), false
+      )
+      .isOk()
+
+      validateTrieProof(Opt.some(rootHash), kv5.asNibbles(), trie.getTrieProof(kv5))
+      .isOk()
+
+      validateTrieProof(Opt.some(rootHash), kv6.asNibbles(), trie.getTrieProof(kv6))
+      .isOk()
+
+      validateTrieProof(Opt.some(rootHash), kv7.asNibbles(), trie.getTrieProof(kv7))
+      .isOk()
+
+      validateTrieProof(Opt.some(rootHash), kv8.asNibbles(), trie.getTrieProof(kv8))
+      .isOk()
+
+      validateTrieProof(Opt.some(rootHash), kv9.asNibbles(), trie.getTrieProof(kv9))
       .isErr()
 
-      validateTrieProof(rootHash, kv15.asNibbles(), trie.getTrieProof(kv15), false)
+      validateTrieProof(Opt.some(rootHash), kv10.asNibbles(), trie.getTrieProof(kv10))
+      .isErr()
+
+      validateTrieProof(Opt.some(rootHash), kv11.asNibbles(), trie.getTrieProof(kv11))
+      .isErr()
+
+      validateTrieProof(Opt.some(rootHash), kv12.asNibbles(), trie.getTrieProof(kv12))
+      .isErr()
+
+      validateTrieProof(Opt.some(rootHash), kv13.asNibbles(), trie.getTrieProof(kv13))
+      .isErr()
+
+      validateTrieProof(
+        Opt.some(rootHash), kv14.asNibbles(), trie.getTrieProof(kv14), false
+      )
+      .isErr()
+
+      validateTrieProof(
+        Opt.some(rootHash), kv15.asNibbles(), trie.getTrieProof(kv15), false
+      )
       .isErr()

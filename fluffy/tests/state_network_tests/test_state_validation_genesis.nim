@@ -34,15 +34,17 @@ template checkValidProofsForExistingLeafs(
         path: accountPath, nodeHash: keccakHash(accountProof[^1].asSeq())
       )
       accountTrieOffer = AccountTrieNodeOffer(proof: accountProof)
-      proofResult =
-        validateOffer(accountState.rootHash(), accountTrieNodeKey, accountTrieOffer)
+      proofResult = validateOffer(
+        Opt.some(accountState.rootHash()), accountTrieNodeKey, accountTrieOffer
+      )
     check proofResult.isOk()
 
     let
       contractCodeKey = ContractCodeKey(address: address, codeHash: acc.codeHash)
       contractCode =
         ContractCodeOffer(code: Bytecode.init(account.code), accountProof: accountProof)
-      codeResult = validateOffer(accountState.rootHash(), contractCodeKey, contractCode)
+      codeResult =
+        validateOffer(Opt.some(accountState.rootHash()), contractCodeKey, contractCode)
     check codeResult.isOk()
 
     if account.code.len() > 0:
@@ -64,7 +66,7 @@ template checkValidProofsForExistingLeafs(
             storageProof: storageProof, accountProof: accountProof
           )
           proofResult = validateOffer(
-            accountState.rootHash(), contractTrieNodeKey, contractTrieOffer
+            Opt.some(accountState.rootHash()), contractTrieNodeKey, contractTrieOffer
           )
         check proofResult.isOk()
 
@@ -88,8 +90,9 @@ template checkInvalidProofsWithBadValue(
     accountProof[^1][^1] += 1 # bad account leaf value
     let
       accountTrieOffer = AccountTrieNodeOffer(proof: accountProof)
-      proofResult =
-        validateOffer(accountState.rootHash(), accountTrieNodeKey, accountTrieOffer)
+      proofResult = validateOffer(
+        Opt.some(accountState.rootHash()), accountTrieNodeKey, accountTrieOffer
+      )
     check proofResult.isErr()
 
     let
@@ -98,7 +101,8 @@ template checkInvalidProofsWithBadValue(
         code: Bytecode.init(@[1u8, 2, 3]), # bad code value
         accountProof: accountProof,
       )
-      codeResult = validateOffer(accountState.rootHash(), contractCodeKey, contractCode)
+      codeResult =
+        validateOffer(Opt.some(accountState.rootHash()), contractCodeKey, contractCode)
     check codeResult.isErr()
 
     if account.code.len() > 0:
@@ -122,7 +126,7 @@ template checkInvalidProofsWithBadValue(
             storageProof: storageProof, accountProof: accountProof
           )
           proofResult = validateOffer(
-            accountState.rootHash(), contractTrieNodeKey, contractTrieOffer
+            Opt.some(accountState.rootHash()), contractTrieNodeKey, contractTrieOffer
           )
         check proofResult.isErr()
 
