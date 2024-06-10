@@ -125,7 +125,7 @@ jobs:
               task_result="${RED}failure${NC}"
             fi
             
-            echo -e " $(printf '%-4s' "$task_id")\t$task_status\t$task_result\t$(printf '%-50s' "$task_graph$task_name") \t$task_title"
+            printf " $(printf '%-4s' "$task_id")\t$task_status\t$task_result\t$(printf '%-50s' "$task_graph$task_name") \t$task_title \n"
           done <<< $(echo "$tasks")
         }
 
@@ -176,7 +176,7 @@ jobs:
 
           for status_line in "${status_lines[@]}"
           do
-            echo -e "$status_line"
+            printf "$status_line \n"
           done
 
           if ! [ -z "$running_test" ]; then
@@ -202,7 +202,7 @@ jobs:
         echo "test_status<<EOF" >> $GITHUB_OUTPUT
         for status_line in "${status_lines[@]}"
         do
-          echo -e "$status_line" >> $GITHUB_OUTPUT
+          printf "$status_line \n" >> $GITHUB_OUTPUT
         done
         echo "EOF" >> $GITHUB_OUTPUT
 
