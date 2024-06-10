@@ -306,25 +306,6 @@ proc revWalkVerify(
 
   true
 
-proc mergeRlpData*(
-    db: AristoDbRef;                   # Database, top layer
-    path: PathID;                      # Path into database
-    rlpData: openArray[byte];          # RLP encoded payload data
-      ): Result[void,AristoError] =
-  block body:
-    discard db.mergeLeaf(
-      LeafTiePayload(
-        leafTie: LeafTie(
-          root:    VertexID(1),
-          path:    path.normal),
-        payload: PayloadRef(
-          pType:   RlpData,
-          rlpBlob: @rlpData))).valueOr:
-      if error in {MergeLeafPathCachedAlready,MergeLeafPathOnBackendAlready}:
-        break body
-      return err(error)
-  ok()
-
 # ------------------------------------------------------------------------------
 # Public test function
 # ------------------------------------------------------------------------------
@@ -368,7 +349,7 @@ proc testTxMergeAndDeleteOneByOne*(
       # e.g. lst.setLen(min(5,lst.len))
       lst
     for i,leaf in kvpLeafs:
-      let rc = db.mergeLeaf leaf
+      let rc = db.mergeStoLeaf leaf
       xCheckRc rc.error == 0
 
     # List of all leaf entries that should be on the database
@@ -480,7 +461,7 @@ proc testTxMergeAndDeleteSubTree*(
       # e.g. lst.setLen(min(5,lst.len))
       lst
     for i,leaf in kvpLeafs:
-      let rc = db.mergeLeaf leaf
+      let rc = db.mergeStoLeaf leaf
       xCheckRc rc.error == 0
 
     # List of all leaf entries that should be on the database

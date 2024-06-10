@@ -11,10 +11,11 @@
 {.push raises: [].}
 
 import
-  std/[sequtils, sets],
+  std/[sequtils, sets, typetraits],
   eth/[common, trie/nibbles],
   results,
-  ".."/[aristo_desc, aristo_get, aristo_hike, aristo_layers, aristo_vid]
+  ".."/[aristo_desc, aristo_get, aristo_hike, aristo_layers, aristo_path,
+        aristo_utils, aristo_vid]
 
 # ------------------------------------------------------------------------------
 # Private getters & setters
@@ -270,10 +271,10 @@ proc setVtxAndKey*(
   db.layersResKey(root, vid)
 
 # ------------------------------------------------------------------------------
-# Public functions: add Particia Trie leaf vertex
+# Private functions: add Particia Trie leaf vertex
 # ------------------------------------------------------------------------------
 
-proc mergePayloadTopIsBranchAddLeaf*(
+proc mergePayloadTopIsBranchAddLeaf(
     db: AristoDbRef;                   # Database, top layer
     hike: Hike;                        # Path top has a `Branch` vertex
     payload: PayloadRef;               # Leaf data payload
@@ -333,7 +334,7 @@ proc mergePayloadTopIsBranchAddLeaf*(
   db.insertBranch(hike, linkID, linkVtx, payload)
 
 
-proc mergePayloadTopIsExtAddLeaf*(
+proc mergePayloadTopIsExtAddLeaf(
     db: AristoDbRef;                   # Database, top layer
     hike: Hike;                        # Path top has an `Extension` vertex
     payload: PayloadRef;               # Leaf data payload
@@ -404,7 +405,7 @@ proc mergePayloadTopIsExtAddLeaf*(
   ok okHike
 
 
-proc mergePayloadTopIsEmptyAddLeaf*(
+proc mergePayloadTopIsEmptyAddLeaf(
     db: AristoDbRef;                   # Database, top layer
     hike: Hike;                        # No path legs
     rootVtx: VertexRef;                # Root vertex
@@ -440,11 +441,8 @@ proc mergePayloadTopIsEmptyAddLeaf*(
 
   db.insertBranch(hike, hike.root, rootVtx, payload)
 
-# ------------------------------------------------------------------------------
-# Public functions
-# ------------------------------------------------------------------------------
 
-proc mergePayloadUpdate*(
+proc mergePayloadUpdate(
     db: AristoDbRef;                   # Database, top layer
     hike: Hike;                        # No path legs
     leafTie: LeafTie;                  # Leaf item to add to the database
@@ -485,6 +483,99 @@ proc mergePayloadUpdate*(
 
   else:
     err(MergeLeafPathCachedAlready)
+
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
+
+proc mergePayloadImpl*(
+    db: AristoDbRef;                   # Database, top layer
+    leafTie: LeafTie;                  # Leaf item to add to the database
+    payload: PayloadRef;               # Payload value
+    accPath: PathID;                   # Needed for accounts payload
+      ): Result[Hike,AristoError] =
+  ## Merge the argument `leafTie` key-value-pair into the top level vertex
+  ## table of the database `db`. The field `path` of the `leafTie` argument is
+  ## used to address the leaf vertex with the payload. It is stored or updated
+  ## on the database accordingly.
+  ##
+  ## If the `leafTie` argument referes to aa account entrie (i.e. the
+  ## `leafTie.root` equals `VertexID(1)`) and the leaf entry has already an
+  ## `AccountData` payload, its `storageID` field must be the same as the one
+  ## on the database. The `accPath` argument will be ignored.
+  ##
+  ## Otherwise, if the `root` argument belongs to a well known sub trie (i.e.
+  ## it does not exceed `LEAST_FREE_VID`) the `accPath` argument is ignored
+  ## and the entry will just be merged.
+  ##
+  ## Otherwise, a valid `accPath` (i.e. different from `VOID_PATH_ID`.) is
+  ## required relating to an account leaf entry (starting at `VertexID(`)`).
+  ## If the payload of that leaf entry is not of type `AccountData` it is
+  ## ignored.
+  ##
+  ## Otherwise, if the sub-trie where the `leafTie` is to be merged into does
+  ## not exist yes, the `storageID` field of the `accPath` leaf must have been
+  ## reset to `storageID(0)` and will be updated accordingly on the database.
+  ##
+  ## Otherwise its `storageID` field must be equal to the `leafTie.root` vertex
+  ## ID. So vertices can be marked for Merkle hash update.
+  ##
+  let wp = block:
+    if leafTie.root.distinctBase < LEAST_FREE_VID:
+      if not leafTie.root.isValid:
+        return err(MergeRootMissing)
+      VidVtxPair()
+    else:
+      let rc = db.registerAccount(leafTie.root, accPath)
+      if rc.isErr:
+        return err(rc.error)
+      else:
+        rc.value
+
+  let hike = leafTie.hikeUp(db).to(Hike)
+  var okHike: Hike
+  if 0 < hike.legs.len:
+    case hike.legs[^1].wp.vtx.vType:
+    of Branch:
+      okHike = ? db.mergePayloadTopIsBranchAddLeaf(hike, payload)
+    of Leaf:
+      if 0 < hike.tail.len:          # `Leaf` vertex problem?
+        return err(MergeLeafGarbledHike)
+      okHike = ? db.mergePayloadUpdate(hike, leafTie, payload)
+    of Extension:
+      okHike = ? db.mergePayloadTopIsExtAddLeaf(hike, payload)
+
+  else:
+    # Empty hike
+    let rootVtx = db.getVtx hike.root
+    if rootVtx.isValid:
+      okHike = ? db.mergePayloadTopIsEmptyAddLeaf(hike,rootVtx, payload)
+
+    else:
+      # Bootstrap for existing root ID
+      let wp = VidVtxPair(
+        vid: hike.root,
+        vtx: VertexRef(
+          vType: Leaf,
+          lPfx:  leafTie.path.to(NibblesSeq),
+          lData: payload))
+      db.setVtxAndKey(hike.root, wp.vid, wp.vtx)
+      okHike = Hike(root: wp.vid, legs: @[Leg(wp: wp, nibble: -1)])
+
+    # Double check the result until the code is more reliable
+    block:
+      let rc = okHike.to(NibblesSeq).pathToTag
+      if rc.isErr or rc.value != leafTie.path:
+        return err(MergeAssemblyFailed) # Ooops
+
+  # Make sure that there is an accounts that refers to that storage trie
+  if wp.vid.isValid and not wp.vtx.lData.account.storageID.isValid:
+    let leaf = wp.vtx.dup # Dup on modify
+    leaf.lData.account.storageID = leafTie.root
+    db.layersPutVtx(VertexID(1), wp.vid, leaf)
+    db.layersResKey(VertexID(1), wp.vid)
+
+  ok okHike
 
 # ------------------------------------------------------------------------------
 # End
