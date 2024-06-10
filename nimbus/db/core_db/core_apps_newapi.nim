@@ -740,8 +740,6 @@ proc getBlockBody*(
       {.gcsafe, raises: [RlpError].} =
   db.getTransactions(header, output.transactions)
   output.uncles = @[]
-  for encodedTx in db.getBlockTransactionData(header.txRoot):
-    output.transactions.add(rlp.decode(encodedTx, Transaction))
 
   if header.withdrawalsRoot.isSome:
     output.withdrawals = some(db.getWithdrawals(header.withdrawalsRoot.get))
