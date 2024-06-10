@@ -252,6 +252,8 @@ type
     RdbBeDriverPutVtxError
     RdbBeDriverPutKeyError
     RdbBeDriverWriteError
+    RdbBeTypeUnsupported
+    RdbBeWriteSessionUnfinished
     RdbGuestInstanceUnsupported
     RdbHashKeyExpected
 

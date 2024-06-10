@@ -135,6 +135,7 @@ proc initImpl(
   const initFailed = "RocksDB/init() failed"
 
   rdb.basePath = basePath
+  rdb.opts = opts
 
   let
     dataDir = rdb.dataDir
@@ -148,6 +149,9 @@ proc initImpl(
   # Column familiy names to allocate when opening the database. This list
   # might be extended below.
   var useCFs = AristoCFs.toSeq.mapIt($it).toHashSet
+
+  # The `guestCFs` list must not overwrite `AristoCFs` options
+  let guestCFs = guestCFs.filterIt(it.name notin useCFs)
 
   # If the database exists already, check for missing column families and
   # allocate them for opening. Otherwise rocksdb might reject the peristent
@@ -191,10 +195,55 @@ proc init*(
     opts: DbOptions;
       ): Result[void,(AristoError,string)] =
   ## Temporarily define a guest CF list here.
-  let (cfOpts,_) = opts.getInitOptions()
-  let guestCFs = RdbGuest.toSeq.mapIt(initColFamilyDescriptor($it, cfOpts))
-  rdb.initImpl(basePath, opts, guestCFs)
+  rdb.initImpl(basePath, opts)
 
+proc reinit*(
+    rdb: var RdbInst;
+    cfs: openArray[ColFamilyDescriptor];
+      ): Result[seq[ColFamilyReadWrite],(AristoError,string)] =
+  ## Re-open database with changed parameters. Even though tx layers and
+  ## filters might not be affected it is prudent to have them clean and
+  ## saved on the backend database before changing it.
+  ##
+  ## The function returns a list of column family descriptors in the same
+  ## order as the `cfs` argument.
+  ##
+  ## The `cfs` list replaces and extends the CFs already on disk by its
+  ## options except for the ones defined with `AristoCFs`.
+  ##
+  const initFailed = "RocksDB/reinit() failed"
+
+  if not rdb.session.isNil:
+    return err((RdbBeWriteSessionUnfinished,""))
+  if not rdb.baseDb.isClosed():
+    rdb.baseDb.close()
+
+  rdb.initImpl(rdb.basePath, rdb.opts, cfs).isOkOr:
+    return err(error)
+
+  # Assemble list of column family descriptors
+  var guestCols = newSeq[ColFamilyReadWrite](cfs.len)
+  for n,col in cfs:
+    guestCols[n] = rdb.baseDb.withColFamily(col.name).valueOr:
+      raiseAssert initFailed & " cannot initialise " &
+        col.name & " descriptor: " & error
+
+  ok guestCols
+
+
+proc reinitGuestCFs*(
+    rdb: var RdbInst;
+      ): Result[void,(AristoError,string)] =
+  ## Initialise `Guest` family
+  ##
+  ## Thus was a worth a try, but there are better solutions and this item
+  ## will be removed in future.
+  ##
+  let (cfOpts,_) = rdb.opts.getInitOptions
+  let rc = rdb.reinit RdbGuest.toSeq.mapIt(initColFamilyDescriptor($it, cfOpts))
+  if rc.isErr:
+    return err(rc.error)
+  ok()
 
 proc initGuestDb*(
     rdb: RdbInst;

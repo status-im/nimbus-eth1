@@ -67,6 +67,8 @@ proc init*[W: RdbBackendRef](
   ##
   when B is RdbBackendRef:
     basePath.newAristoRdbDbRef opts
+  else:
+    err(RdbBeTypeUnsupported)
 
 proc getRocksDbFamily*(
     gdb: GuestDbRef;

@@ -257,6 +257,15 @@ proc rocksDbBackend*(
            error=rc.error[0], info=rc.error[1]
       return err(rc.error[0])
 
+  # Provide guest access for KVT
+  block:
+    let rc = db.rdb.reinitGuestCFs()
+    if rc.isErr:
+      when extraTraceMessages:
+        trace logTxt "constructor failed",
+           error=rc.error[0], info=rc.error[1]
+      return err(rc.error[0])
+
   db.getVtxFn = getVtxFn db
   db.getKeyFn = getKeyFn db
   db.getTuvFn = getTuvFn db
