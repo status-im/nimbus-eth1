@@ -61,8 +61,26 @@ proc mergePayload*(
     payload: PayloadRef;               # Payload value
     accPath = VOID_PATH_ID;            # Needed for accounts payload
       ): Result[bool,AristoError] =
-  ## Variant of `merge()` for `(root,path)` arguments instead of a `LeafTie`
-  ## object.
+  ## Merge the `(root,path)` arguments into the MPT starting at `root`. The
+  ## argument`path` is used as key to address the leaf vertex with the
+  ## payload argument `payload`. It is stored or updated on the database `db`
+  ## accordingly.
+  ##
+  ## If the `root` argument is `VertexID(1)` the payload argument must be of
+  ## type `AccountData`. In that case, the `storageID` field of the leaf entry
+  ## must refer to an existing vertex if it holds a valid vertex ID. The
+  ## argument `accPath` must be void.
+  ##
+  ## Otherwise, if the `root` argument belongs to a well known sub trie (i.e.
+  ## it does not exceed `LEAST_FREE_VID`) the `accPath` argument is ignored
+  ## and the entry will just be merged.  The argument `accPath` must be void.
+  ##
+  ## Otherwise, a valid `accPath` (i.e. different from `VOID_PATH_ID`.) is
+  ## required leading to an account leaf entry (starting at `VertexID(1)`) the
+  ## leaf of which must have payload type `AccountData`. If the  payload field
+  ## `storageID` does not have a valid entry, a new sub-trie is created and
+  ## the `storageID` field is updated on disk.
+  ##
   let lty = LeafTie(root: root, path: ? path.pathToTag)
   db.mergePayloadImpl(lty, payload, accPath).to(typeof result)
 

@@ -100,6 +100,8 @@ type
     MergeLeafPathCachedAlready
     MergeLeafPathOnBackendAlready
     MergeLeafProofModeLock
+    MergeLeafTypeAccountRequired
+    MergeLeafTypeNonAccountDataRequired
     MergeNonBranchProofModeLock
     MergeRootBranchLinkBusy
     MergeRootMissing

@@ -35,6 +35,10 @@ type
   DbTriplet =
     array[0..2, AristoDbRef]
 
+const
+  testRootVid = VertexID(2)
+    ## Need to reconfigure for the test, root ID 1 cannot be deleted as a trie
+
 # ------------------------------------------------------------------------------
 # Private debugging helpers
 # ------------------------------------------------------------------------------
@@ -74,7 +78,7 @@ iterator quadripartite(td: openArray[ProofTrieData]): LeafQuartet =
   var collect: seq[seq[LeafTiePayload]]
 
   for w in td:
-    let lst = w.kvpLst.mapRootVid VertexID(1)
+    let lst = w.kvpLst.mapRootVid testRootVid
 
     if lst.len < 8:
       if 2 < collect.len:
@@ -101,40 +105,53 @@ proc dbTriplet(w: LeafQuartet; rdbPath: string): Result[DbTriplet,AristoError] =
   let db = block:
     if 0 < rdbPath.len:
       let rc = AristoDbRef.init(RdbBackendRef, rdbPath, DbOptions.init())
-      xCheckRc rc.error == 0
+      xCheckRc rc.error == 0:
+        result = err(rc.error)
       rc.value
     else:
       AristoDbRef.init MemBackendRef
+
+  block:
+    # Add a dummy entry so the balancer logic can be triggered in `persist()`
+    let rc = db.mergeDummyAccLeaf(0, 0)
+    xCheckRc rc.error == 0:
+      result = err(rc.error)
+
+  # Set failed `xCheck()` error result
+  result = err(AristoError 1)
 
   # Fill backend
   block:
     let report = db.mergeList w[0]
     if report.error != 0:
       db.finish(eradicate=true)
-      check report.error == 0
-      return err(report.error)
+      xCheck report.error == 0
     let rc = db.persist()
-    if rc.isErr:
-      check rc.error == 0
-      return
+    xCheckRc rc.error == 0:
+      result = err(rc.error)
 
   let dx = [db, db.forkTx(0).value, db.forkTx(0).value]
   xCheck dx[0].nForked == 2
 
   # Reduce unwanted tx layers
   for n in 1 ..< dx.len:
-    check dx[n].level == 1
-    check dx[n].txTop.value.commit.isOk
+    xCheck dx[n].level == 1
+    xCheck dx[n].txTop.value.commit.isOk
 
   # Clause (9) from `aristo/README.md` example
   for n in 0 ..< dx.len:
     let report = dx[n].mergeList w[n+1]
     if report.error != 0:
       db.finish(eradicate=true)
-      check (n, report.error) == (n,0)
-      return err(report.error)
+      xCheck (n, report.error) == (n,0)
 
-  ok dx
+  block:
+    # Add a dummy entry so the balancer logic can be triggered in `persist()`
+    let rc = db.mergeDummyAccLeaf(0, 1)
+    xCheckRc rc.error == 0:
+      result = err(rc.error)
+
+  return ok(dx)
 
 # ----------------------
 
@@ -152,7 +169,7 @@ proc isDbEq(a, b: LayerDeltaRef; db: AristoDbRef; noisy = true): bool =
     return false
   if unsafeAddr(a[]) != unsafeAddr(b[]):
     if a.src != b.src or
-       a.kMap.getOrVoid(VertexID 1) != b.kMap.getOrVoid(VertexID 1) or
+       a.kMap.getOrVoid(testRootVid) != b.kMap.getOrVoid(testRootVid) or
        a.vTop != b.vTop:
       return false
 
@@ -281,6 +298,11 @@ proc testDistributedAccess*(
       xCheck db2.balancer == db3.balancer
 
       block:
+        # Add dummy entry so the balancer logic can be triggered in `persist()`
+        let rc = db2.mergeDummyAccLeaf(n, 42)
+        xCheckRc rc.error == 0
+
+      block:
         let rc = db2.stow() # non-persistent
         xCheckRc rc.error == 0:
           noisy.say "*** testDistributedAccess (3)", "n=", n, "db2".dump db2
@@ -319,6 +341,11 @@ proc testDistributedAccess*(
         (db1, db2, db3) = (dy[0], dy[1], dy[2])
       defer:
         dy.cleanUp()
+
+      block:
+        # Add dummy entry so the balancer logic can be triggered in `persist()`
+        let rc = db2.mergeDummyAccLeaf(n, 42)
+        xCheckRc rc.error == 0
 
       # Build clause (12) from `aristo/README.md` example
       discard db2.reCentre()
