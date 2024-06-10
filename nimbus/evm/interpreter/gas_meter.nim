@@ -28,5 +28,7 @@ func consumeGas*(gasMeter: var GasMeter; amount: GasInt; reason: string): EvmRes
 func returnGas*(gasMeter: var GasMeter; amount: GasInt) =
   gasMeter.gasRemaining += amount
 
+# some gasRefunded operations still relying
+# on negative number
 func refundGas*(gasMeter: var GasMeter; amount: GasInt) =
   gasMeter.gasRefunded += amount

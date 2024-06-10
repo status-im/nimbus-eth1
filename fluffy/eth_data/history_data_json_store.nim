@@ -210,9 +210,8 @@ proc writeHeaderRecord*(
     writer: var JsonWriter, header: BlockHeader
 ) {.raises: [IOError].} =
   let
-    dataRecord = HeaderRecord(
-      header: rlp.encode(header).to0xHex(), number: header.blockNumber.truncate(uint64)
-    )
+    dataRecord =
+      HeaderRecord(header: rlp.encode(header).to0xHex(), number: header.number)
 
     headerHash = to0xHex(rlpHash(header).data)
 
@@ -226,7 +225,7 @@ proc writeBlockRecord*(
       header: rlp.encode(header).to0xHex(),
       body: encode(body).to0xHex(),
       receipts: encode(receipts).to0xHex(),
-      number: header.blockNumber.truncate(uint64),
+      number: header.number,
     )
 
     headerHash = to0xHex(rlpHash(header).data)

@@ -94,8 +94,8 @@ template validatePayload(apiVersion, version, payload) =
 proc newPayload*(ben: BeaconEngineRef,
                  apiVersion: Version,
                  payload: ExecutionPayload,
-                 versionedHashes = none(seq[Web3Hash]),
-                 beaconRoot = none(Web3Hash)): PayloadStatusV1 =
+                 versionedHashes = Opt.none(seq[Web3Hash]),
+                 beaconRoot = Opt.none(Web3Hash)): PayloadStatusV1 =
 
   trace "Engine API request received",
     meth = "newPayload",
@@ -133,7 +133,7 @@ proc newPayload*(ben: BeaconEngineRef,
   # return a fake success.
   if db.getBlockHeader(blockHash, header):
     warn "Ignoring already known beacon payload",
-      number = header.blockNumber, hash = blockHash.short
+      number = header.number, hash = blockHash.short
     return validStatus(blockHash)
 
   # If this block was rejected previously, keep rejecting it
@@ -153,18 +153,18 @@ proc newPayload*(ben: BeaconEngineRef,
 
   # We have an existing parent, do some sanity checks to avoid the beacon client
   # triggering too early
-  let ttd = com.ttd.get(high(common.BlockNumber))
+  let ttd = com.ttd.get(high(UInt256))
 
   if version == Version.V1:
     let td  = db.getScore(header.parentHash)
     if (not com.forkGTE(MergeFork)) and td < ttd:
       warn "Ignoring pre-merge payload",
-        number = header.blockNumber, hash = blockHash, td, ttd
+        number = header.number, hash = blockHash, td, ttd
       return invalidStatus()
 
   if header.timestamp <= parent.timestamp:
     warn "Invalid timestamp",
-      number = header.blockNumber, parentNumber = parent.blockNumber,
+      number = header.number, parentNumber = parent.number,
       parent = parent.timestamp, header = header.timestamp
     return invalidStatus(parent.blockHash, "Invalid timestamp")
 
@@ -180,12 +180,12 @@ proc newPayload*(ben: BeaconEngineRef,
     ben.put(blockHash, header)
     warn "State not available, ignoring new payload",
       hash   = blockHash,
-      number = header.blockNumber
+      number = header.number
     let blockHash = latestValidHash(db, parent, ttd)
     return acceptedStatus(blockHash)
 
   trace "Inserting block without sethead",
-    hash = blockHash, number = header.blockNumber
+    hash = blockHash, number = header.number
   let vres = ben.chain.insertBlockWithoutSetHead(blk)
   if vres.isErr:
     ben.setInvalidAncestor(header, blockHash)

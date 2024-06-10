@@ -141,7 +141,7 @@ proc connectTo*(
 ): Future[Result[UtpSocket[NodeAddress], string]] {.async.} =
   let connectRes = await stream.transport.connectTo(nodeAddress, connectionId)
   if connectRes.isErr():
-    case connectRes.error.kind
+    case connectRes.error
     of SocketAlreadyExists:
       # This means that there is already a socket to this nodeAddress with given
       # connection id. This means that a peer sent us a connection id which is

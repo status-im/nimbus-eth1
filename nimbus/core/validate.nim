@@ -39,18 +39,18 @@ const
 
 proc validateSeal(pow: PowRef; header: BlockHeader): Result[void,string] =
   try:
-    let (expMixDigest, miningValue) = pow.getPowDigest(header)
+    let (expmixHash, miningValue) = pow.getPowDigest(header)
 
-    if expMixDigest != header.mixDigest:
+    if expmixHash != header.mixHash:
       let
         miningHash = header.getPowSpecs.miningHash
-        (size, cachedHash) = try: pow.getPowCacheLookup(header.blockNumber)
+        (size, cachedHash) = try: pow.getPowCacheLookup(header.number)
                             except KeyError: return err("Unknown block")
                             except CatchableError as e: return err(e.msg)
       return err("mixHash mismatch. actual=$1, expected=$2," &
                 " blockNumber=$3, miningHash=$4, nonce=$5, difficulty=$6," &
                 " size=$7, cachedHash=$8" % [
-                $header.mixDigest, $expMixDigest, $header.blockNumber,
+                $header.mixHash, $expmixHash, $header.number,
                 $miningHash, header.nonce.toHex, $header.difficulty,
                 $size, $cachedHash])
 
@@ -77,7 +77,7 @@ proc validateHeader(
     # Blocks with block numbers in the range [1_920_000, 1_920_009]
     # MUST have DAOForkBlockExtra
     let daoForkBlock = com.daoForkBlock.get
-    let DAOHigh = daoForkBlock + DAOForkExtraRange.u256
+    let DAOHigh = daoForkBlock + DAOForkExtraRange
     daoForkBlock <= blockNumber and
       blockNumber < DAOHigh
 
@@ -90,19 +90,19 @@ proc validateHeader(
   if header.gasUsed < 0 or header.gasUsed > header.gasLimit:
     return err("gasUsed should be non negative and smaller or equal gasLimit")
 
-  if header.blockNumber != parentHeader.blockNumber + 1:
+  if header.number != parentHeader.number + 1:
     return err("Blocks must be numbered consecutively")
 
   if header.timestamp <= parentHeader.timestamp:
     return err("timestamp must be strictly later than parent")
 
-  if com.daoForkSupport and inDAOExtraRange(header.blockNumber):
+  if com.daoForkSupport and inDAOExtraRange(header.number):
     if header.extraData != daoForkBlockExtraData:
       return err("header extra data should be marked DAO")
 
   if com.consensus == ConsensusType.POS:
     # EIP-4399 and EIP-3675
-    # no need to check mixDigest because EIP-4399 override this field
+    # no need to check mixHash because EIP-4399 override this field
     # checking rule
 
     if not header.difficulty.isZero:
@@ -185,7 +185,7 @@ proc validateUncles(com: CommonRef; header: BlockHeader;
        (uncle.parentHash == header.parentHash):
       return err("Uncle's parent is not an ancestor")
 
-    if uncle.blockNumber >= header.blockNumber:
+    if uncle.number >= header.number:
       return err("uncle block number larger than current block number")
 
     # check uncle against own parent
@@ -215,9 +215,9 @@ proc validateUncles(com: CommonRef; header: BlockHeader;
 
 func gasCost*(tx: Transaction): UInt256 =
   if tx.txType >= TxEip4844:
-    tx.gasLimit.u256 * tx.maxFee.u256 + tx.getTotalBlobGas.u256 * tx.maxFeePerBlobGas.u256
+    tx.gasLimit.u256 * tx.maxFeePerGas.u256 + tx.getTotalBlobGas.u256 * tx.maxFeePerBlobGas
   elif tx.txType >= TxEip1559:
-    tx.gasLimit.u256 * tx.maxFee.u256
+    tx.gasLimit.u256 * tx.maxFeePerGas.u256
   else:
     tx.gasLimit.u256 * tx.gasPrice.u256
 
@@ -241,9 +241,9 @@ proc validateTxBasic*(
 
   try:
     # The total must be the larger of the two
-    if tx.maxFee < tx.maxPriorityFee:
+    if tx.maxFeePerGas < tx.maxPriorityFeePerGas:
       return err("invalid tx: maxFee is smaller than maPriorityFee. maxFee=$1, maxPriorityFee=$2" % [
-        $tx.maxFee, $tx.maxPriorityFee])
+        $tx.maxFeePerGas, $tx.maxPriorityFeePerGas])
 
     if tx.gasLimit < tx.intrinsicGas(fork):
       return err("invalid tx: not enough gas to perform calculation. avail=$1, require=$2" % [
@@ -322,9 +322,9 @@ proc validateTransaction*(
         $maxLimit, $tx.gasLimit])
 
     # ensure that the user was willing to at least pay the base fee
-    if tx.maxFee < baseFee.truncate(int64):
+    if tx.maxFeePerGas < baseFee.truncate(GasInt):
       return err("invalid tx: maxFee is smaller than baseFee. maxFee=$1, baseFee=$2" % [
-        $tx.maxFee, $baseFee])
+        $tx.maxFeePerGas, $baseFee])
 
     # the signer must be able to fully afford the transaction
     let gasCost = tx.gasCost()

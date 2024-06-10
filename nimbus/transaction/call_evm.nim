@@ -9,7 +9,6 @@
 {.push raises: [].}
 
 import
-  std/[options],
   chronicles,
   chronos,
   eth/common/eth_types_rlp,
@@ -30,10 +29,11 @@ proc rpcCallEvm*(args: TransactionArgs,
   let topHeader = common.BlockHeader(
     parentHash: header.blockHash,
     timestamp:  EthTime.now(),
-    gasLimit:   0.GasInt,          ## ???
-    fee:        UInt256.none())    ## ???
+    gasLimit:   0.GasInt,              ## ???
+    baseFeePerGas: Opt.none UInt256, ## ???
+  )
   let vmState = ? BaseVMState.new(topHeader, com)
-  let params  = ? toCallParams(vmState, args, globalGasCap, header.fee)
+  let params  = ? toCallParams(vmState, args, globalGasCap, header.baseFeePerGas)
 
   var dbTx = com.db.newTransaction()
   defer: dbTx.dispose() # always dispose state changes
@@ -45,7 +45,7 @@ proc rpcCallEvm*(args: TransactionArgs,
                  com: CommonRef,
                  vmState: BaseVMState): EvmResult[CallResult] =
   const globalGasCap = 0 # TODO: globalGasCap should configurable by user
-  let params  = ? toCallParams(vmState, args, globalGasCap, header.fee)
+  let params  = ? toCallParams(vmState, args, globalGasCap, header.baseFeePerGas)
 
   var dbTx = com.db.newTransaction()
   defer: dbTx.dispose() # always dispose state changes
@@ -59,12 +59,13 @@ proc rpcEstimateGas*(args: TransactionArgs,
   let topHeader = common.BlockHeader(
     parentHash: header.blockHash,
     timestamp:  EthTime.now(),
-    gasLimit:   0.GasInt,          ## ???
-    fee:        UInt256.none())    ## ???
+    gasLimit:   0.GasInt,              ## ???
+    baseFeePerGas: Opt.none UInt256,   ## ???
+  )
   let vmState = ? BaseVMState.new(topHeader, com)
   let fork    = vmState.determineFork
   let txGas   = gasFees[fork][GasTransaction] # txGas always 21000, use constants?
-  var params  = ? toCallParams(vmState, args, gasCap, header.fee)
+  var params  = ? toCallParams(vmState, args, gasCap, header.baseFeePerGas)
 
   var
     lo : GasInt = txGas - 1
@@ -151,7 +152,7 @@ proc callParamsForTx(tx: Transaction, sender: EthAddress, vmState: BaseVMState, 
   # just be writing this as a bunch of assignment statements?
   result = CallParams(
     vmState:      vmState,
-    forkOverride: some(fork),
+    forkOverride: Opt.some(fork),
     gasPrice:     tx.gasPrice,
     gasLimit:     tx.gasLimit,
     sender:       sender,
@@ -169,7 +170,7 @@ proc callParamsForTx(tx: Transaction, sender: EthAddress, vmState: BaseVMState, 
 proc callParamsForTest(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: EVMFork): CallParams =
   result = CallParams(
     vmState:      vmState,
-    forkOverride: some(fork),
+    forkOverride: Opt.some(fork),
     gasPrice:     tx.gasPrice,
     gasLimit:     tx.gasLimit,
     sender:       sender,

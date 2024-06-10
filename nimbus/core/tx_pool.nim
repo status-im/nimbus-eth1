@@ -423,7 +423,7 @@
 ##
 
 import
-  std/[options, sequtils, tables],
+  std/[sequtils, tables],
   ./tx_pool/[tx_chain, tx_desc, tx_info, tx_item],
   ./tx_pool/tx_tabs,
   ./tx_pool/tx_tasks/[
@@ -609,7 +609,7 @@ func dirtyBuckets*(xp: TxPoolRef): bool =
 
 type EthBlockAndBlobsBundle* = object
   blk*: EthBlock
-  blobsBundle*: Option[BlobsBundle]
+  blobsBundle*: Opt[BlobsBundle]
 
 proc assembleBlock*(
     xp: TxPoolRef,
@@ -621,7 +621,7 @@ proc assembleBlock*(
   ## uninitialised:
   ##
   ## * *extraData*: Blob
-  ## * *mixDigest*: Hash256
+  ## * *mixHash*: Hash256
   ## * *nonce*:     BlockNonce
   ##
   ## Note that this getter runs *ad hoc* all the txs through the VM in
@@ -649,7 +649,7 @@ proc assembleBlock*(
 
   let com = xp.chain.com
   if com.forkGTE(Shanghai):
-    blk.withdrawals = some(com.pos.withdrawals)
+    blk.withdrawals = Opt.some(com.pos.withdrawals)
 
   if not com.forkGTE(Cancun) and blobsBundle.commitments.len > 0:
     return err("PooledTransaction contains blobs prior to Cancun")
@@ -657,13 +657,13 @@ proc assembleBlock*(
     if com.forkGTE(Cancun):
       doAssert blobsBundle.commitments.len == blobsBundle.blobs.len
       doAssert blobsBundle.proofs.len == blobsBundle.blobs.len
-      options.some blobsBundle
+      Opt.some blobsBundle
     else:
-      options.none BlobsBundle
+      Opt.none BlobsBundle
 
   if someBaseFee:
     # make sure baseFee always has something
-    blk.header.fee = some(blk.header.fee.get(0.u256))
+    blk.header.baseFeePerGas = Opt.some(blk.header.baseFeePerGas.get(0.u256))
 
   ok EthBlockAndBlobsBundle(
     blk: blk,

@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  json, stint,
+  std/[json, strutils],
   results,
   ../nimbus/[tracer, config],
   ../nimbus/core/chain,
@@ -17,9 +17,8 @@ import
   ../nimbus/db/opts,
   ../nimbus/db/core_db/persistent
 
-proc dumpTest(com: CommonRef, blockNumber: int) =
+proc dumpTest(com: CommonRef, blockNumber: BlockNumber) =
   let
-    blockNumber = blockNumber.u256
     parentNumber = blockNumber - 1
 
   var

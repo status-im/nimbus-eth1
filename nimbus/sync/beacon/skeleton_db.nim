@@ -77,7 +77,7 @@ proc getHeader*(sk: SkeletonRef,
                 onlySkeleton: bool = false): Result[Opt[BlockHeader], string] =
   ## Gets a block from the skeleton or canonical db by number.
   try:
-    let rawHeader = sk.get(skeletonHeaderKey(number.toBlockNumber))
+    let rawHeader = sk.get(skeletonHeaderKey(number.BlockNumber))
     if rawHeader.len != 0:
       let output = rlp.decode(rawHeader, BlockHeader)
       return ok(Opt.some output)
@@ -88,7 +88,7 @@ proc getHeader*(sk: SkeletonRef,
     # As a fallback, try to get the block from the canonical chain
     # in case it is available there
     var output: BlockHeader
-    if sk.db.getBlockHeader(number.toBlockNumber, output):
+    if sk.db.getBlockHeader(number.BlockNumber, output):
       return ok(Opt.some output)
 
     ok(Opt.none BlockHeader)
@@ -124,10 +124,10 @@ proc getHeader*(sk: SkeletonRef,
 proc putHeader*(sk: SkeletonRef, header: BlockHeader) =
   ## Writes a skeleton block header to the db by number
   let encodedHeader = rlp.encode(header)
-  sk.put(skeletonHeaderKey(header.blockNumber), encodedHeader)
+  sk.put(skeletonHeaderKey(header.number), encodedHeader)
   sk.put(
     skeletonBlockHashToNumberKey(header.blockHash),
-    rlp.encode(header.blockNumber)
+    rlp.encode(header.number)
   )
 
 proc putBody*(sk: SkeletonRef, header: BlockHeader, body: BlockBody): Result[void, string] =
@@ -180,7 +180,7 @@ proc readProgress*(sk: SkeletonRef): Result[void, string] =
 
 proc deleteHeaderAndBody*(sk: SkeletonRef, header: BlockHeader) =
   ## Deletes a skeleton block from the db by number
-  sk.del(skeletonHeaderKey(header.blockNumber))
+  sk.del(skeletonHeaderKey(header.number))
   sk.del(skeletonBlockHashToNumberKey(header.blockHash))
   sk.del(skeletonBodyKey(header.sumHash))
 
@@ -193,7 +193,7 @@ proc canonicalHead*(sk: SkeletonRef): Result[BlockHeader, string] =
 
 proc resetCanonicalHead*(sk: SkeletonRef, newHead, oldHead: uint64) =
   debug "RESET CANONICAL", newHead, oldHead
-  sk.chain.com.syncCurrent = newHead.toBlockNumber
+  sk.chain.com.syncCurrent = newHead.BlockNumber
 
 proc insertBlocks*(sk: SkeletonRef,
                    blocks: openArray[EthBlock],

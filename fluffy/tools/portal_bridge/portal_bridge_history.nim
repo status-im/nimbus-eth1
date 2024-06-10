@@ -61,7 +61,7 @@ func asPortalBlock(
 
   (headerWithProof, portalBody)
 
-func asTxType(quantity: Option[Quantity]): Result[TxType, string] =
+func asTxType(quantity: Opt[Quantity]): Result[TxType, string] =
   let value = quantity.get(0.Quantity).uint8
   var txType: TxType
   if not checkedEnumAssign(txType, value):
@@ -91,7 +91,7 @@ func asReceipt(receiptObject: ReceiptObject): Result[Receipt, string] =
         isHash: false,
         status: status == 1,
         cumulativeGasUsed: cumulativeGasUsed,
-        bloom: BloomFilter(receiptObject.logsBloom),
+        logsBloom: BloomFilter(receiptObject.logsBloom),
         logs: logs,
       )
     )
@@ -102,7 +102,7 @@ func asReceipt(receiptObject: ReceiptObject): Result[Receipt, string] =
         isHash: true,
         hash: ethHash receiptObject.root.get(),
         cumulativeGasUsed: cumulativeGasUsed,
-        bloom: BloomFilter(receiptObject.logsBloom),
+        logsBloom: BloomFilter(receiptObject.logsBloom),
         logs: logs,
       )
     )
@@ -260,7 +260,7 @@ proc runLatestLoop(
         if validateBlockBody(body, ethBlock.header).isErr():
           error "Block body is invalid"
           continue
-        if validateReceipts(portalReceipts, ethBlock.header.receiptRoot).isErr():
+        if validateReceipts(portalReceipts, ethBlock.header.receiptsRoot).isErr():
           error "Receipts root is invalid"
           continue
 
@@ -507,7 +507,7 @@ proc runBackfillLoopAuditMode(
             error "Invalid hex for block receipts content", error = e.msg
             break receiptsBlock
 
-      validateReceiptsBytes(content, header.receiptRoot).isOkOr:
+      validateReceiptsBytes(content, header.receiptsRoot).isOkOr:
         error "Block receipts are invalid", error
         break receiptsBlock
 

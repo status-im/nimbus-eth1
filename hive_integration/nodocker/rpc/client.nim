@@ -67,7 +67,7 @@ proc txReceipt*(client: RpcClient, txHash: common.Hash256): Future[Option[Receip
     status     : rc.status.isSome,
     hash       : ethHash rc.root.get(w3Hash()),
     cumulativeGasUsed: rc.cumulativeGasUsed.GasInt,
-    bloom      : BloomFilter(rc.logsBloom),
+    logsBloom  : BloomFilter(rc.logsBloom),
     logs       : toLogs(rc.logs)
   )
   result = some(rec)

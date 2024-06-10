@@ -8,9 +8,8 @@
 # those terms.
 
 import
-  std/[options, strutils],
+  std/[strutils],
   eth/common,
-  results,
   stew/endians2,
   json_serialization,
   ../utils/utils,
@@ -55,14 +54,14 @@ const firstTimeBasedFork* = Shanghai
 
 type
   MergeForkTransitionThreshold* = object
-    blockNumber*: Option[BlockNumber]
-    ttd*: Option[DifficultyInt]
-    ttdPassed*: Option[bool]
+    number*: Opt[BlockNumber]
+    ttd*: Opt[DifficultyInt]
+    ttdPassed*: Opt[bool]
 
   ForkTransitionTable* = object
-    blockNumberThresholds*: array[Frontier..GrayGlacier, Option[BlockNumber]]
+    blockNumberThresholds*: array[Frontier..GrayGlacier, Opt[BlockNumber]]
     mergeForkTransitionThreshold*: MergeForkTransitionThreshold
-    timeThresholds*: array[Shanghai..Prague, Option[EthTime]]
+    timeThresholds*: array[Shanghai..Prague, Opt[EthTime]]
 
   # Starting with Shanghai, forking is based on timestamp
   # rather than block number.
@@ -80,7 +79,7 @@ type
   # it makes sense to allow time to be optional. See the
   # comment below on forkDeterminationInfo.
   ForkDeterminationInfo* = object
-    blockNumber*: BlockNumber
+    number*: BlockNumber
     time*: Opt[EthTime]
     td*: Opt[DifficultyInt]
 
@@ -90,15 +89,15 @@ func forkDeterminationInfo*(n: BlockNumber): ForkDeterminationInfo =
   # like various tests, where we only have block number and the tests are
   # meant for pre-Merge forks, so maybe those are okay.
   ForkDeterminationInfo(
-    blockNumber: n, time: Opt.none(EthTime), td: Opt.none(DifficultyInt))
+    number: n, time: Opt.none(EthTime), td: Opt.none(DifficultyInt))
 
 func forkDeterminationInfo*(n: BlockNumber, t: EthTime): ForkDeterminationInfo =
   ForkDeterminationInfo(
-    blockNumber: n, time: Opt.some(t), td: Opt.none(DifficultyInt))
+    number: n, time: Opt.some(t), td: Opt.none(DifficultyInt))
 
 func forkDeterminationInfo*(header: BlockHeader): ForkDeterminationInfo =
   # FIXME-Adam-mightAlsoNeedTTD?
-  forkDeterminationInfo(header.blockNumber, header.timestamp)
+  forkDeterminationInfo(header.number, header.timestamp)
 
 func adjustForNextBlock*(n: BlockNumber): BlockNumber =
   n + 1
@@ -114,7 +113,7 @@ func adjustForNextBlock*(t: EthTime): EthTime =
 
 func adjustForNextBlock*(f: ForkDeterminationInfo): ForkDeterminationInfo =
   ForkDeterminationInfo(
-    blockNumber: adjustForNextBlock(f.blockNumber),
+    number: adjustForNextBlock(f.number),
     time: f.time.map(adjustForNextBlock),
     td: f.td
   )
@@ -127,15 +126,15 @@ func adjustForNextBlock*(f: ForkDeterminationInfo): ForkDeterminationInfo =
 # Shanghai.
 func isGTETransitionThreshold*(map: ForkTransitionTable, forkDeterminer: ForkDeterminationInfo, fork: HardFork): bool =
   if fork <= lastPurelyBlockNumberBasedFork:
-    map.blockNumberThresholds[fork].isSome and forkDeterminer.blockNumber >= map.blockNumberThresholds[fork].get
+    map.blockNumberThresholds[fork].isSome and forkDeterminer.number >= map.blockNumberThresholds[fork].get
   elif fork == MergeFork:
     # MergeFork is a special case that can use either block number or ttd;
     # ttdPassed > block number > ttd takes precedence.
     let t = map.mergeForkTransitionThreshold
     if t.ttdPassed.isSome:
       t.ttdPassed.get
-    elif t.blockNumber.isSome:
-      forkDeterminer.blockNumber >= t.blockNumber.get
+    elif t.number.isSome:
+      forkDeterminer.number >= t.number.get
     elif t.ttd.isSome and forkDeterminer.td.isSome:
       forkDeterminer.td.get >= t.ttd.get
     else:
@@ -150,34 +149,34 @@ type
   # please update forkBlockField constant too
   ChainConfig* = ref object
     chainId*            : ChainId
-    homesteadBlock*     : Option[BlockNumber]
-    daoForkBlock*       : Option[BlockNumber]
+    homesteadBlock*     : Opt[BlockNumber]
+    daoForkBlock*       : Opt[BlockNumber]
     daoForkSupport*     : bool
-    eip150Block*        : Option[BlockNumber]
+    eip150Block*        : Opt[BlockNumber]
     eip150Hash*         : Hash256
-    eip155Block*        : Option[BlockNumber]
-    eip158Block*        : Option[BlockNumber]
-    byzantiumBlock*     : Option[BlockNumber]
-    constantinopleBlock*: Option[BlockNumber]
-    petersburgBlock*    : Option[BlockNumber]
-    istanbulBlock*      : Option[BlockNumber]
-    muirGlacierBlock*   : Option[BlockNumber]
-    berlinBlock*        : Option[BlockNumber]
-    londonBlock*        : Option[BlockNumber]
-    arrowGlacierBlock*  : Option[BlockNumber]
-    grayGlacierBlock*   : Option[BlockNumber]
+    eip155Block*        : Opt[BlockNumber]
+    eip158Block*        : Opt[BlockNumber]
+    byzantiumBlock*     : Opt[BlockNumber]
+    constantinopleBlock*: Opt[BlockNumber]
+    petersburgBlock*    : Opt[BlockNumber]
+    istanbulBlock*      : Opt[BlockNumber]
+    muirGlacierBlock*   : Opt[BlockNumber]
+    berlinBlock*        : Opt[BlockNumber]
+    londonBlock*        : Opt[BlockNumber]
+    arrowGlacierBlock*  : Opt[BlockNumber]
+    grayGlacierBlock*   : Opt[BlockNumber]
 
     # mergeNetsplitBlock is an alias to mergeForkBlock
     # and is used for geth compatibility layer
-    mergeNetsplitBlock* : Option[BlockNumber]
+    mergeNetsplitBlock* : Opt[BlockNumber]
 
-    mergeForkBlock*     : Option[BlockNumber]
-    shanghaiTime*       : Option[EthTime]
-    cancunTime*         : Option[EthTime]
-    pragueTime*         : Option[EthTime]
+    mergeForkBlock*     : Opt[BlockNumber]
+    shanghaiTime*       : Opt[EthTime]
+    cancunTime*         : Opt[EthTime]
+    pragueTime*         : Opt[EthTime]
 
-    terminalTotalDifficulty*: Option[UInt256]
-    terminalTotalDifficultyPassed*: Option[bool]
+    terminalTotalDifficulty*: Opt[UInt256]
+    terminalTotalDifficultyPassed*: Opt[bool]
     consensusType*
       {.dontSerialize.} : ConsensusType
 
@@ -185,10 +184,10 @@ type
   # are in a valid order.
   BlockNumberBasedForkOptional* = object
     name*: string
-    number*: Option[BlockNumber]
+    number*: Opt[BlockNumber]
   TimeBasedForkOptional* = object
     name*: string
-    time*: Option[EthTime]
+    time*: Opt[EthTime]
 
 func countTimeFields(): int {.compileTime.} =
   var z = ChainConfig()
@@ -240,7 +239,7 @@ const
 
 func mergeForkTransitionThreshold*(conf: ChainConfig): MergeForkTransitionThreshold =
   MergeForkTransitionThreshold(
-    blockNumber: conf.mergeForkBlock,
+    number: conf.mergeForkBlock,
     ttd: conf.terminalTotalDifficulty,
     ttdPassed: conf.terminalTotalDifficultyPassed
   )
@@ -250,7 +249,7 @@ func toForkTransitionTable*(conf: ChainConfig): ForkTransitionTable =
   # field names, but it doesn't seem worthwhile anymore
   # (now that there's irregularity due to block-based vs
   # timestamp-based forking).
-  result.blockNumberThresholds[Frontier      ] = some(0.toBlockNumber)
+  result.blockNumberThresholds[Frontier      ] = Opt.some(0.BlockNumber)
   result.blockNumberThresholds[Homestead     ] = conf.homesteadBlock
   result.blockNumberThresholds[DAOFork       ] = conf.daoForkBlock
   result.blockNumberThresholds[Tangerine     ] = conf.eip150Block
@@ -285,7 +284,7 @@ func populateFromForkTransitionTable*(conf: ChainConfig, t: ForkTransitionTable)
   conf.arrowGlacierBlock   = t.blockNumberThresholds[HardFork.ArrowGlacier]
   conf.grayGlacierBlock    = t.blockNumberThresholds[HardFork.GrayGlacier]
 
-  conf.mergeForkBlock          = t.mergeForkTransitionThreshold.blockNumber
+  conf.mergeForkBlock          = t.mergeForkTransitionThreshold.number
   conf.terminalTotalDifficulty = t.mergeForkTransitionThreshold.ttd
   conf.terminalTotalDifficultyPassed = t.mergeForkTransitionThreshold.ttdPassed
 
@@ -388,15 +387,15 @@ func initForkIdCalculator*(map: ForkTransitionTable,
   var forksByBlock: seq[uint64]
   for fork, val in map.blockNumberThresholds:
     if val.isNone: continue
-    let val64 = val.get.truncate(uint64)
+    let val64 = val.get
     if forksByBlock.len == 0:
       forksByBlock.add val64
     elif forksByBlock[^1] != val64:
       # Deduplicate fork identifiers applying multiple forks
       forksByBlock.add val64
 
-  if map.mergeForkTransitionThreshold.blockNumber.isSome:
-    let val64 = map.mergeForkTransitionThreshold.blockNumber.get.truncate(uint64)
+  if map.mergeForkTransitionThreshold.number.isSome:
+    let val64 = map.mergeForkTransitionThreshold.number.get
     if forksByBlock.len == 0:
       forksByBlock.add val64
     elif forksByBlock[^1] != val64:

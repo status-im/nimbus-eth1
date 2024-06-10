@@ -162,7 +162,7 @@ when evmc_enabled:
         ? c.memory.write(p.memOutPos,
           c.returnData.toOpenArray(0, actualOutputSize - 1))
 
-      c.gasMeter.returnGas(c.res.gas_left)
+      c.gasMeter.returnGas(GasInt c.res.gas_left)
 
       if c.res.status_code == EVMC_SUCCESS:
         ? c.stack.top(1)

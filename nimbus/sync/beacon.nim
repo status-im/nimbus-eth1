@@ -110,7 +110,7 @@ func updateBeaconHeaderCB(ctx: BeaconSyncRef): SyncReqNewHeadCB =
   ## for the RPC module.
   result = proc(h: BlockHeader) {.gcsafe, raises: [].} =
     try:
-      debug "REQUEST SYNC", number=h.blockNumber, hash=h.blockHash.short
+      debug "REQUEST SYNC", number=h.number, hash=h.blockHash.short
       waitFor ctx.ctx.appendSyncTarget(h)
     except CatchableError as ex:
       error "updateBeconHeaderCB error", msg=ex.msg

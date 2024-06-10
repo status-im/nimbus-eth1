@@ -11,11 +11,10 @@
 {.push raises: [].}
 
 import
-  std/[options, strutils, typetraits],
+  std/[strutils, typetraits],
   chronicles,
   eth/[common, trie/nibbles],
   stew/byteutils,
-  results,
   ../../../aristo,
   ../../../aristo/aristo_desc,
   ../../base,
@@ -433,7 +432,7 @@ proc ctxMethods(cCtx: AristoCoreDbCtxRef): CoreDbCtxFns =
   proc ctxNewCol(
       colType: CoreDbColType;
       colState: Hash256;
-      address: Option[EthAddress];
+      address: Opt[EthAddress];
         ): CoreDbRc[CoreDbColRef] =
     const info = "ctx/newColFn()"
 
@@ -533,7 +532,7 @@ proc ctxMethods(cCtx: AristoCoreDbCtxRef): CoreDbCtxFns =
     newColFn: proc(
         col: CoreDbColType;
         colState: Hash256;
-        address: Option[EthAddress];
+        address: Opt[EthAddress];
           ): CoreDbRc[CoreDbColRef] =
       ctxNewCol(col, colState, address),
 

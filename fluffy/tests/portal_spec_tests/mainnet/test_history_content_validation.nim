@@ -46,7 +46,7 @@ suite "History Network Content Validation":
     blockBody = validateBlockBodyBytes(blockBodyBytes, blockHeader).expect(
         "Should be Valid decoded block body"
       )
-    receipts = validateReceiptsBytes(receiptsBytes, blockHeader.receiptRoot).expect(
+    receipts = validateReceiptsBytes(receiptsBytes, blockHeader.receiptsRoot).expect(
         "Should be Valid decoded receipts"
       )
 
@@ -98,16 +98,16 @@ suite "History Network Content Validation":
     check validateBlockBodyBytes(modifiedBodyBytes, blockHeader).isErr()
 
   test "Valid Receipts":
-    check validateReceiptsBytes(receiptsBytes, blockHeader.receiptRoot).isOk()
+    check validateReceiptsBytes(receiptsBytes, blockHeader.receiptsRoot).isOk()
 
   test "Malformed Receipts":
     let malformedBytes = receiptsBytes[10 .. receiptsBytes.high]
 
-    check validateReceiptsBytes(malformedBytes, blockHeader.receiptRoot).isErr()
+    check validateReceiptsBytes(malformedBytes, blockHeader.receiptsRoot).isErr()
 
   test "Invalid Receipts - Modified Receipts List":
     var modifiedReceipts = receipts[1 .. receipts.high]
 
     let modifiedReceiptsBytes = encode(modifiedReceipts)
 
-    check validateReceiptsBytes(modifiedReceiptsBytes, blockHeader.receiptRoot).isErr()
+    check validateReceiptsBytes(modifiedReceiptsBytes, blockHeader.receiptsRoot).isErr()

@@ -9,12 +9,13 @@
 # according to those terms.
 
 import
-  json, stint, stew/byteutils,
+  std/strutils,
+  json, stew/byteutils,
   results,
   ../nimbus/db/[core_db, storage_types], eth/[rlp, common],
   ../nimbus/tracer
 
-proc generatePrestate*(nimbus, geth: JsonNode, blockNumber: UInt256, parent: BlockHeader, blk: EthBlock) =
+proc generatePrestate*(nimbus, geth: JsonNode, blockNumber: BlockNumber, parent: BlockHeader, blk: EthBlock) =
   template header: BlockHeader = blk.header
   let
     state = nimbus["state"]

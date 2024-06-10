@@ -10,9 +10,9 @@
 
 import
   std/[json, os, sets, tables, strutils],
+  stew/byteutils,
   chronicles,
   unittest2,
-  stew/byteutils,
   results,
   ./test_helpers,
   ../nimbus/sync/protocol/snap/snap_types,
@@ -51,10 +51,10 @@ proc preLoadAristoDb(cdb: CoreDbRef; jKvp: JsonNode; num: BlockNumber) =
         try:
           # Pull our particular header fields (if possible)
           let header = rlp.decode(val, BlockHeader)
-          if header.blockNumber == num:
+          if header.number == num:
             txRoot = header.txRoot
-            rcptRoot = header.receiptRoot
-          elif header.blockNumber == num-1:
+            rcptRoot = header.receiptsRoot
+          elif header.number == num-1:
             predRoot = header.stateRoot
         except RlpError:
           discard
@@ -80,13 +80,14 @@ proc testFixtureImpl(node: JsonNode, testStatusIMPL: var TestStatus, memoryDB: C
   setErrorLevel()
 
   var
-    blockNumber = UInt256.fromHex(node["blockNumber"].getStr())
+    blockNumberHex = node["blockNumber"].getStr()
+    blockNumber = parseHexInt(blockNumberHex).uint64
     com = CommonRef.new(memoryDB, chainConfigForNetwork(MainNet))
     state = node["state"]
     receipts = node["receipts"]
 
   # disable POS/post Merge feature
-  com.setTTD none(DifficultyInt)
+  com.setTTD Opt.none(DifficultyInt)
 
   # Import raw data into database
   # Some hack for `Aristo` using the `snap` protocol proof-loader

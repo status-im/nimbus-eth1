@@ -35,7 +35,7 @@ type
     id: PayloadID
     payload: ExecutionPayload
     blockValue: UInt256
-    blobsBundle: Option[BlobsBundleV1]
+    blobsBundle: Opt[BlobsBundleV1]
 
   HeaderItem = object
     hash: common.Hash256
@@ -73,13 +73,13 @@ proc put*(api: var PayloadQueue,
 
 proc put*(api: var PayloadQueue, id: PayloadID,
           blockValue: UInt256, payload: ExecutionPayload,
-          blobsBundle: Option[BlobsBundleV1]) =
+          blobsBundle: Opt[BlobsBundleV1]) =
   api.payloadQueue.put(PayloadItem(id: id,
     payload: payload, blockValue: blockValue, blobsBundle: blobsBundle))
 
 proc put*(api: var PayloadQueue, id: PayloadID,
           blockValue: UInt256, payload: SomeExecutionPayload,
-          blobsBundle: Option[BlobsBundleV1]) =
+          blobsBundle: Opt[BlobsBundleV1]) =
   doAssert blobsBundle.isNone == (payload is
     ExecutionPayloadV1 | ExecutionPayloadV2)
   api.put(id, blockValue, payload.executionPayload, blobsBundle = blobsBundle)
@@ -87,7 +87,7 @@ proc put*(api: var PayloadQueue, id: PayloadID,
 proc put*(api: var PayloadQueue, id: PayloadID,
           blockValue: UInt256,
           payload: ExecutionPayloadV1 | ExecutionPayloadV2) =
-  api.put(id, blockValue, payload, blobsBundle = options.none(BlobsBundleV1))
+  api.put(id, blockValue, payload, blobsBundle = Opt.none(BlobsBundleV1))
 
 # ------------------------------------------------------------------------------
 # Public functions, getters
@@ -104,7 +104,7 @@ proc get*(api: PayloadQueue, hash: common.Hash256,
 proc get*(api: PayloadQueue, id: PayloadID,
           blockValue: var UInt256,
           payload: var ExecutionPayload,
-          blobsBundle: var Option[BlobsBundleV1]): bool =
+          blobsBundle: var Opt[BlobsBundleV1]): bool =
   for x in api.payloadQueue:
     if x.id == id:
       payload = x.payload
@@ -118,7 +118,7 @@ proc get*(api: PayloadQueue, id: PayloadID,
           payload: var ExecutionPayloadV1): bool =
   var
     p: ExecutionPayload
-    blobsBundleOpt: Option[BlobsBundleV1]
+    blobsBundleOpt: Opt[BlobsBundleV1]
   let found = api.get(id, blockValue, p, blobsBundleOpt)
   if found:
     doAssert(p.version == Version.V1)
@@ -131,7 +131,7 @@ proc get*(api: PayloadQueue, id: PayloadID,
           payload: var ExecutionPayloadV2): bool =
   var
     p: ExecutionPayload
-    blobsBundleOpt: Option[BlobsBundleV1]
+    blobsBundleOpt: Opt[BlobsBundleV1]
   let found = api.get(id, blockValue, p, blobsBundleOpt)
   if found:
     doAssert(p.version == Version.V2)
@@ -145,7 +145,7 @@ proc get*(api: PayloadQueue, id: PayloadID,
           blobsBundle: var BlobsBundleV1): bool =
   var
     p: ExecutionPayload
-    blobsBundleOpt: Option[BlobsBundleV1]
+    blobsBundleOpt: Opt[BlobsBundleV1]
   let found = api.get(id, blockValue, p, blobsBundleOpt)
   if found:
     doAssert(p.version == Version.V3)
@@ -159,7 +159,7 @@ proc get*(api: PayloadQueue, id: PayloadID,
           payload: var ExecutionPayloadV1OrV2): bool =
   var
     p: ExecutionPayload
-    blobsBundleOpt: Option[BlobsBundleV1]
+    blobsBundleOpt: Opt[BlobsBundleV1]
   let found = api.get(id, blockValue, p, blobsBundleOpt)
   if found:
     doAssert(p.version in {Version.V1, Version.V2})

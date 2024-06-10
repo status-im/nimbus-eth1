@@ -8,8 +8,8 @@
 # those terms.
 
 import
-  std/[os, json, strutils, times, typetraits, options],
-  stew/[byteutils, results],
+  std/[os, json, strutils, times, typetraits],
+  stew/byteutils,
   eth/common,
   json_rpc/rpcclient,
   web3/execution_types,
@@ -37,7 +37,7 @@ type
   Payload = object
     badBlock: bool
     payload: ExecutionPayload
-    beaconRoot: Option[common.Hash256]
+    beaconRoot: Opt[common.Hash256]
 
 proc getPayload(node: JsonNode): Payload  =
   try:

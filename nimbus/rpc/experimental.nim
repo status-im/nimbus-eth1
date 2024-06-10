@@ -37,7 +37,7 @@ proc getMultiKeys*(
 
   let
     chainDB = com.db
-    blk = chainDB.getEthBlock(blockHeader.blockNumber)
+    blk = chainDB.getEthBlock(blockHeader.number)
     # Initializing the VM will throw a Defect if the state doesn't exist.
     # Once we enable pruning we will need to check if the block state has been pruned
     # before trying to initialize the VM as we do here.

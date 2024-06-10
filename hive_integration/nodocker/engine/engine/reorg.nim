@@ -40,7 +40,7 @@ method execute(cs: SidechainReOrgTest, env: TestEnv): bool =
 
   # This single transaction will change its outcome based on the payload
   let tc = BaseTx(
-    recipient:  some(prevRandaoContractAddr),
+    recipient:  Opt.some(prevRandaoContractAddr),
     txType:     cs.txType,
     gasLimit:   75000,
   )
@@ -57,14 +57,14 @@ method execute(cs: SidechainReOrgTest, env: TestEnv): bool =
       let alternativePrevRandao = common.Hash256.randomBytes()
       let timestamp = w3Qty(env.clMock.latestPayloadBuilt.timestamp, 1)
       let customizer = BasePayloadAttributesCustomizer(
-        timestamp:  some(timestamp.uint64),
-        prevRandao: some(alternativePrevRandao),
+        timestamp:  Opt.some(timestamp.uint64),
+        prevRandao: Opt.some(alternativePrevRandao),
       )
 
       let attr = customizer.getPayloadAttributes(env.clMock.latestPayloadAttributes)
 
       var version = env.engine.version(env.clMock.latestPayloadBuilt.timestamp)
-      let r = env.engine.client.forkchoiceUpdated(version, env.clMock.latestForkchoice, some(attr))
+      let r = env.engine.client.forkchoiceUpdated(version, env.clMock.latestForkchoice, Opt.some(attr))
       r.expectNoError()
 
       let period = chronos.seconds(env.clMock.payloadProductionClientDelay)
@@ -120,7 +120,7 @@ type
   ShadowTx = ref object
     payload: ExecutionPayload
     nextTx: PooledTransaction
-    tx: Option[PooledTransaction]
+    tx: Opt[PooledTransaction]
     sendTransaction: proc(i: int): PooledTransaction {.gcsafe.}
 
 method withMainFork(cs: TransactionReOrgTest, fork: EngineFork): BaseSpec =
@@ -159,7 +159,7 @@ method execute(cs: TransactionReOrgTest, env: TestEnv): bool =
     data[^1] = i.byte
     info "transactionReorg", idx=i
     let tc = BaseTx(
-      recipient: some(sstoreContractAddr),
+      recipient: Opt.some(sstoreContractAddr),
       amount:    0.u256,
       payload:   @data,
       txType:    cs.txType,
@@ -185,7 +185,7 @@ method execute(cs: TransactionReOrgTest, env: TestEnv): bool =
           attr.prevRandao = Web3Hash.randomBytes()
 
           var version = env.engine.version(env.clMock.latestHeader.timestamp)
-          let r = env.engine.client.forkchoiceUpdated(version, env.clMock.latestForkchoice, some(attr))
+          let r = env.engine.client.forkchoiceUpdated(version, env.clMock.latestForkchoice, Opt.some(attr))
           r.expectNoError()
           testCond r.get.payloadID.isSome:
             fatal "No payload ID returned by forkchoiceUpdated"
@@ -201,7 +201,7 @@ method execute(cs: TransactionReOrgTest, env: TestEnv): bool =
         if cs.scenario != TransactionReOrgScenarioReOrgBackIn:
           # At this point we can broadcast the transaction and it will be included in the next payload
           # Data is the key where a `1` will be stored
-          shadow.tx = some(shadow.sendTransaction(i))
+          shadow.tx = Opt.some(shadow.sendTransaction(i))
 
           # Get the receipt
           let receipt = env.engine.client.txReceipt(shadow.txHash)
@@ -219,7 +219,7 @@ method execute(cs: TransactionReOrgTest, env: TestEnv): bool =
         if cs.scenario in [TransactionReOrgScenarioReOrgDifferentBlock, TransactionReOrgScenarioNewPayloadOnRevert]:
           # Create side payload with different hash
           let customizer = CustomPayloadData(
-            extraData: some(@[0x01.byte])
+            extraData: Opt.some(@[0x01.byte])
           )
           shadow.payload = customizer.customizePayload(env.clMock.latestExecutableData).basePayload
 
@@ -244,7 +244,7 @@ method execute(cs: TransactionReOrgTest, env: TestEnv): bool =
             payloadAttributes.suggestedFeeRecipient = w3Addr EthAddress.randomBytes()
 
             var version = env.engine.version(env.clMock.latestHeader.timestamp)
-            let f = env.engine.client.forkchoiceUpdated(version, forkchoiceUpdated, some(payloadAttributes))
+            let f = env.engine.client.forkchoiceUpdated(version, forkchoiceUpdated, Opt.some(payloadAttributes))
             f.expectPayloadStatus(PayloadExecutionStatus.valid)
 
             # Wait a second for the client to prepare the payload with the included transaction
@@ -332,13 +332,13 @@ method execute(cs: TransactionReOrgTest, env: TestEnv): bool =
           txt.expectBlockHash(ethHash env.clMock.latestForkchoice.headBlockHash)
 
           if cs.scenario != TransactionReOrgScenarioReOrgBackIn:
-            shadow.tx = none(PooledTransaction)
+            shadow.tx = Opt.none(PooledTransaction)
 
         if cs.scenario == TransactionReOrgScenarioReOrgBackIn and i > 0:
           # Reasoning: Most of the clients do not re-add blob transactions to the pool
           # after a re-org, so we need to wait until the next tx is sent to actually
           # verify.
-          shadow.tx = some(shadow.nextTx)
+          shadow.tx = Opt.some(shadow.nextTx)
         return true
     ))
     testCond pbRes
@@ -426,7 +426,7 @@ method execute(cs: ReOrgBackToCanonicalTest, env: TestEnv): bool =
         attr.prevRandao = Web3Hash.randomBytes()
 
         var version = env.engine.version(env.clMock.latestHeader.timestamp)
-        let r = env.engine.client.forkchoiceUpdated(version, env.clMock.latestForkchoice, some(attr))
+        let r = env.engine.client.forkchoiceUpdated(version, env.clMock.latestForkchoice, Opt.some(attr))
         r.expectNoError()
         testCond r.get.payloadID.isSome:
           fatal "No payload ID returned by forkchoiceUpdated"
@@ -447,7 +447,7 @@ method execute(cs: ReOrgBackToCanonicalTest, env: TestEnv): bool =
       onPayloadProducerSelected: proc(): bool =
         # Send a transaction on each payload of the canonical chain
         let tc = BaseTx(
-          recipient:  some(ZeroAddr),
+          recipient:  Opt.some(ZeroAddr),
           amount:     1.u256,
           txType:     cs.txType,
           gasLimit:   75000,
@@ -533,7 +533,7 @@ method execute(cs: ReOrgBackFromSyncingTest, env: TestEnv): bool =
     onPayloadProducerSelected: proc(): bool =
       # Send a transaction on each payload of the canonical chain
       let tc = BaseTx(
-        recipient:  some(ZeroAddr),
+        recipient:  Opt.some(ZeroAddr),
         amount:     1.u256,
         txType:     cs.txType,
         gasLimit:   75000,
@@ -554,8 +554,8 @@ method execute(cs: ReOrgBackFromSyncingTest, env: TestEnv): bool =
         altParentHash = shadow.payloads[^1].blockHash
 
       let customizer = CustomPayloadData(
-        parentHash: some(ethHash altParentHash),
-        extraData:  some(@[0x01.byte]),
+        parentHash: Opt.some(ethHash altParentHash),
+        extraData:  Opt.some(@[0x01.byte]),
       )
 
       let payload = customizer.customizePayload(env.clMock.latestExecutableData)
@@ -629,7 +629,7 @@ method execute(cs: ReOrgPrevValidatedPayloadOnSideChainTest, env: TestEnv): bool
     onPayloadProducerSelected: proc(): bool =
       # Send a transaction on each payload of the canonical chain
       let tc = BaseTx(
-        recipient:  some(ZeroAddr),
+        recipient:  Opt.some(ZeroAddr),
         amount:     1.u256,
         txType:     cs.txType,
         gasLimit:   75000,
@@ -646,11 +646,11 @@ method execute(cs: ReOrgPrevValidatedPayloadOnSideChainTest, env: TestEnv): bool
 
       # The side chain will consist simply of the same payloads with extra data appended
       var customData = CustomPayloadData(
-        extraData: some(toSeq("side")),
+        extraData: Opt.some(toSeq("side")),
       )
 
       if len(shadow.payloads) > 0:
-        customData.parentHash = some(ethHash shadow.payloads[^1].blockHash)
+        customData.parentHash = Opt.some(ethHash shadow.payloads[^1].blockHash)
 
       let payload = customData.customizePayload(env.clMock.latestExecutableData)
       shadow.payloads.add  payload
@@ -673,8 +673,8 @@ method execute(cs: ReOrgPrevValidatedPayloadOnSideChainTest, env: TestEnv): bool
         suggestedFeeRecipient = ethAddress(0x12, 0x34)
 
       let payloadAttributesCustomizer = BasePayloadAttributesCustomizer(
-        prevRandao:            some(prevRandao),
-        suggestedFeerecipient: some(suggestedFeeRecipient),
+        prevRandao:            Opt.some(prevRandao),
+        suggestedFeerecipient: Opt.some(suggestedFeeRecipient),
       )
 
       let reOrgPayload = shadow.payloads[^2]
@@ -687,7 +687,7 @@ method execute(cs: ReOrgPrevValidatedPayloadOnSideChainTest, env: TestEnv): bool
       )
 
       var version = env.engine.version(reOrgPayload.timestamp)
-      let r = env.engine.client.forkchoiceUpdated(version, fcu, some(newPayloadAttributes))
+      let r = env.engine.client.forkchoiceUpdated(version, fcu, Opt.some(newPayloadAttributes))
       r.expectPayloadStatus(PayloadExecutionStatus.valid)
       r.expectLatestValidHash(reOrgPayload.blockHash)
 
@@ -745,8 +745,8 @@ method execute(cs: SafeReOrgToSideChainTest, env: TestEnv): bool =
         altParentHash = shadow.payloads[^1].blockHash
 
       let customizer = CustomPayloadData(
-        parentHash: some(ethHash altParentHash),
-        extraData:  some(@[0x01.byte]),
+        parentHash: Opt.some(ethHash altParentHash),
+        extraData:  Opt.some(@[0x01.byte]),
       )
 
       let payload = customizer.customizePayload(env.clMock.latestExecutableData)

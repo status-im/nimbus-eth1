@@ -73,7 +73,7 @@ method execute(cs: InvalidMissingAncestorReOrgTest, env: TestEnv): bool =
         # Send the transaction to the globals.PrevRandaoContractAddr
         let eng = env.clMock.nextBlockProducer
         let ok = env.sendNextTx(eng, BaseTx(
-            recipient:  some(prevRandaoContractAddr),
+            recipient:  Opt.some(prevRandaoContractAddr),
             amount:     1.u256,
             txType:     cs.txType,
             gasLimit:   75000,
@@ -86,8 +86,8 @@ method execute(cs: InvalidMissingAncestorReOrgTest, env: TestEnv): bool =
     onGetPayload: proc(): bool =
       # Insert extraData to ensure we deviate from the main payload, which contains empty extradata
       let customizer = CustomPayloadData(
-        parentHash: some(ethHash shadow.payloads[^1].blockHash),
-        extraData:  some(@[0x01.byte]),
+        parentHash: Opt.some(ethHash shadow.payloads[^1].blockHash),
+        extraData:  Opt.some(@[0x01.byte]),
       )
 
       var sidePayload = customizer.customizePayload(env.clMock.latestExecutableData)
@@ -244,7 +244,7 @@ method execute(cs: InvalidMissingAncestorReOrgSyncTest, env: TestEnv): bool =
       if not cs.emptyTransactions:
         # Send the transaction to the globals.PrevRandaoContractAddr
         let tc = BaseTx(
-          recipient:  some(prevRandaoContractAddr),
+          recipient:  Opt.some(prevRandaoContractAddr),
           amount:     1.u256,
           txType:     cs.txType,
           gasLimit:   75000,
@@ -259,8 +259,8 @@ method execute(cs: InvalidMissingAncestorReOrgSyncTest, env: TestEnv): bool =
         # Insert extraData to ensure we deviate from the main payload, which contains empty extradata
         pHash = shadow.payloads[^1].blockHash
         customizer = CustomPayloadData(
-          parentHash: some(ethHash pHash),
-          extraData:  some(@[0x01.byte]),
+          parentHash: Opt.some(ethHash pHash),
+          extraData:  Opt.some(@[0x01.byte]),
         )
         sidePayload = customizer.customizePayload(env.clMock.latestExecutableData)
 
@@ -273,7 +273,7 @@ method execute(cs: InvalidMissingAncestorReOrgSyncTest, env: TestEnv): bool =
       #if shadow.payloads.len == cs.invalidIndex:
       #  var uncle *types.Block
       #  if cs.invalidField == InvalidOmmers:
-      #    let number = sideBlock.blockNumber.uint64-1
+      #    let number = sideBlock.number.uint64-1
       #    doAssert(env.clMock.executedPayloadHistory.hasKey(number), "FAIL: Unable to get uncle block")
       #    let unclePayload = env.clMock.executedPayloadHistory[number]
       #      # Uncle is a PoS payload
@@ -340,7 +340,7 @@ method execute(cs: InvalidMissingAncestorReOrgSyncTest, env: TestEnv): bool =
         fatal "TEST ISSUE - Secondary Node has invalid blockHash",
           got=head.blockHash.short,
           want=shadow.payloads[shadow.n-1].blockHash.short,
-          gotNum=head.blockNumber,
+          gotNum=head.number,
           wantNum=shadow.payloads[shadow.n].blockNumber
 
       info "Secondary Node has correct block"
@@ -356,7 +356,7 @@ method execute(cs: InvalidMissingAncestorReOrgSyncTest, env: TestEnv): bool =
         let head = res.get
         info "Latest block on main client before sync",
           hash=head.blockHash.short,
-          number=head.blockNumber
+          number=head.number
 
       # If we are syncing through p2p, we need to keep polling until the client syncs the missing payloads
       let period = chronos.milliseconds(500)
@@ -390,8 +390,8 @@ method execute(cs: InvalidMissingAncestorReOrgSyncTest, env: TestEnv): bool =
             fatal "Unable to get latest block: ", msg=res.error
 
           # Print last shadow.n blocks, for debugging
-          let latestNumber = res.get.blockNumber.truncate(int64)
-          var k = latestNumber - int64(shadow.n)
+          let latestNumber = res.get.number
+          var k = latestNumber - uint64(shadow.n)
           if k < 0: k = 0
 
           while k <= latestNumber:

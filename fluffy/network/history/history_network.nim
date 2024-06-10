@@ -98,7 +98,7 @@ func fromPortalBlockBody*(
       BlockBody(
         transactions: transactions,
         uncles: @[], # Uncles must be empty: TODO where validation?
-        withdrawals: some(withdrawals),
+        withdrawals: Opt.some(withdrawals),
       )
     )
   except RlpError as e:
@@ -192,7 +192,7 @@ proc calcRootHash(items: Transactions | PortalReceipts | Withdrawals): Hash256 =
   var tr = initHexaryTrie(newMemoryDB(), isPruning = false)
   for i, item in items:
     try:
-      tr.put(rlp.encode(i), item.asSeq())
+      tr.put(rlp.encode(i.uint), item.asSeq())
     except CatchableError as e:
       # tr.put now is a generic interface to whatever underlying db
       # and it can raise exception if the backend db is something like aristo
@@ -305,7 +305,7 @@ proc validateBlockBodyBytes*(
       let body = ?decodeSsz(bytes, PortalBlockBodyShanghai)
       ?validateBlockBody(body, header)
       BlockBody.fromPortalBlockBody(body)
-  elif isPoSBlock(chainConfig, header.blockNumber.truncate(uint64)):
+  elif isPoSBlock(chainConfig, header.number):
     if header.withdrawalsRoot.isSome():
       return err("Expected no withdrawalsRoot for pre Shanghai block")
     elif header.ommersHash != EMPTY_UNCLE_HASH:
@@ -374,7 +374,7 @@ proc get(
         BlockBody.fromPortalBlockBodyOrRaise(
           decodeSszOrRaise(encoded, PortalBlockBodyShanghai)
         )
-      elif isPoSBlock(chainConfig, header.blockNumber.truncate(uint64)):
+      elif isPoSBlock(chainConfig, header.number):
         BlockBody.fromPortalBlockBodyOrRaise(
           decodeSszOrRaise(encoded, PortalBlockBodyLegacy)
         )
@@ -532,7 +532,7 @@ proc getBlock*(n: HistoryNetwork, hash: BlockHash): Future[Opt[Block]] {.async.}
 proc getReceipts*(
     n: HistoryNetwork, hash: BlockHash, header: BlockHeader
 ): Future[Opt[seq[Receipt]]] {.async.} =
-  if header.receiptRoot == EMPTY_ROOT_HASH:
+  if header.receiptsRoot == EMPTY_ROOT_HASH:
     # Short path for empty receipts indicated by receipts root
     return Opt.some(newSeq[Receipt]())
 
@@ -554,7 +554,7 @@ proc getReceipts*(
       receiptsContent = (await n.portalProtocol.contentLookup(contentKey, contentId)).valueOr:
         warn "Failed fetching receipts from the network"
         return Opt.none(seq[Receipt])
-      receipts = validateReceiptsBytes(receiptsContent.content, header.receiptRoot).valueOr:
+      receipts = validateReceiptsBytes(receiptsContent.content, header.receiptsRoot).valueOr:
         warn "Validation of receipts failed", error
         continue
 
@@ -671,7 +671,7 @@ proc validateContent(
       warn "Failed getting canonical header for receipts"
       return false
 
-    let res = validateReceiptsBytes(content, header.receiptRoot)
+    let res = validateReceiptsBytes(content, header.receiptsRoot)
     if res.isErr():
       warn "Failed validating receipts", error = res.error
       return false

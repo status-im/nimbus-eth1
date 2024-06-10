@@ -53,9 +53,9 @@ type
     txRoot: Hash256          ## `rootHash` after packing
     stateRoot: Hash256       ## `stateRoot` after packing
     blobGasUsed:
-      Option[uint64]         ## EIP-4844 block blobGasUsed
+      Opt[uint64]         ## EIP-4844 block blobGasUsed
     excessBlobGas:
-      Option[uint64]         ## EIP-4844 block excessBlobGas
+      Opt[uint64]         ## EIP-4844 block excessBlobGas
 
   TxChainRef* = ref object ##\
     ## State cache of the transaction environment for creating a new\
@@ -85,7 +85,7 @@ func getTimestamp(dh: TxChainRef, parent: BlockHeader): EthTime =
 
 func feeRecipient*(dh: TxChainRef): EthAddress
 
-proc resetTxEnv(dh: TxChainRef; parent: BlockHeader; fee: Option[UInt256])
+proc resetTxEnv(dh: TxChainRef; parent: BlockHeader; baseFeePerGas: Opt[UInt256])
   {.gcsafe,raises: [].} =
   dh.txEnv.reset
 
@@ -94,7 +94,7 @@ proc resetTxEnv(dh: TxChainRef; parent: BlockHeader; fee: Option[UInt256])
 
   let timestamp = dh.getTimestamp(parent)
   dh.com.hardForkTransition(
-    parent.blockHash, parent.blockNumber+1, Opt.some(timestamp))
+    parent.blockHash, parent.number+1, Opt.some(timestamp))
   dh.prepareHeader(parent, timestamp)
 
   # we don't consider PoS difficulty here
@@ -102,7 +102,7 @@ proc resetTxEnv(dh: TxChainRef; parent: BlockHeader; fee: Option[UInt256])
   let blockCtx = BlockContext(
     timestamp    : dh.prepHeader.timestamp,
     gasLimit     : (if dh.maxMode: dh.limits.maxLimit else: dh.limits.trgLimit),
-    fee          : fee,
+    baseFeePerGas: baseFeePerGas,
     prevRandao   : dh.prepHeader.prevRandao,
     difficulty   : dh.prepHeader.difficulty,
     coinbase     : dh.feeRecipient,
@@ -116,8 +116,8 @@ proc resetTxEnv(dh: TxChainRef; parent: BlockHeader; fee: Option[UInt256])
 
   dh.txEnv.txRoot = EMPTY_ROOT_HASH
   dh.txEnv.stateRoot = dh.txEnv.vmState.parent.stateRoot
-  dh.txEnv.blobGasUsed = none(uint64)
-  dh.txEnv.excessBlobGas = none(uint64)
+  dh.txEnv.blobGasUsed = Opt.none(uint64)
+  dh.txEnv.excessBlobGas = Opt.none(uint64)
 
 proc update(dh: TxChainRef; parent: BlockHeader)
     {.gcsafe,raises: [].} =
@@ -126,10 +126,10 @@ proc update(dh: TxChainRef; parent: BlockHeader)
     timestamp = dh.getTimestamp(parent)
     db  = dh.com.db
     acc = LedgerRef.init(db, parent.stateRoot)
-    fee = if dh.com.isLondon(parent.blockNumber + 1, timestamp):
-            some(dh.com.baseFeeGet(parent).uint64.u256)
+    fee = if dh.com.isLondon(parent.number + 1, timestamp):
+            Opt.some(dh.com.baseFeeGet(parent).uint64.u256)
           else:
-            UInt256.none()
+            Opt.none UInt256
 
   # Keep a separate accounts descriptor positioned at the sync point
   dh.roAcc = ReadOnlyStateDB(acc)
@@ -179,37 +179,37 @@ proc getHeader*(dh: TxChainRef): BlockHeader
                 else: dh.txEnv.receipts[^1].cumulativeGasUsed
 
   result = BlockHeader(
-    parentHash:  dh.txEnv.vmState.parent.blockHash,
-    ommersHash:  EMPTY_UNCLE_HASH,
-    coinbase:    dh.prepHeader.coinbase,
-    stateRoot:   dh.txEnv.stateRoot,
-    txRoot:      dh.txEnv.txRoot,
-    receiptRoot: dh.txEnv.receipts.calcReceiptRoot,
-    bloom:       dh.txEnv.receipts.createBloom,
-    difficulty:  dh.prepHeader.difficulty,
-    blockNumber: dh.txEnv.vmState.blockNumber,
-    gasLimit:    dh.txEnv.vmState.blockCtx.gasLimit,
-    gasUsed:     gasUsed,
-    timestamp:   dh.prepHeader.timestamp,
-    # extraData: Blob       # signing data
-    # mixDigest: Hash256    # mining hash for given difficulty
-    # nonce:     BlockNonce # mining free vaiable
-    fee:         dh.txEnv.vmState.blockCtx.fee,
-    blobGasUsed: dh.txEnv.blobGasUsed,
+    parentHash:    dh.txEnv.vmState.parent.blockHash,
+    ommersHash:    EMPTY_UNCLE_HASH,
+    coinbase:      dh.prepHeader.coinbase,
+    stateRoot:     dh.txEnv.stateRoot,
+    txRoot:        dh.txEnv.txRoot,
+    receiptsRoot:  dh.txEnv.receipts.calcReceiptsRoot,
+    logsBloom:     dh.txEnv.receipts.createBloom,
+    difficulty:    dh.prepHeader.difficulty,
+    number:        dh.txEnv.vmState.blockNumber,
+    gasLimit:      dh.txEnv.vmState.blockCtx.gasLimit,
+    gasUsed:       gasUsed,
+    timestamp:     dh.prepHeader.timestamp,
+    # extraData:   Blob       # signing data
+    # mixHash:     Hash256    # mining hash for given difficulty
+    # nonce:       BlockNonce # mining free vaiable
+    baseFeePerGas: dh.txEnv.vmState.blockCtx.baseFeePerGas,
+    blobGasUsed:   dh.txEnv.blobGasUsed,
     excessBlobGas: dh.txEnv.excessBlobGas)
 
   if dh.com.forkGTE(Shanghai):
-    result.withdrawalsRoot = some(calcWithdrawalsRoot(dh.com.pos.withdrawals))
+    result.withdrawalsRoot = Opt.some(calcWithdrawalsRoot(dh.com.pos.withdrawals))
 
   if dh.com.forkGTE(Cancun):
-    result.parentBeaconBlockRoot = some(dh.com.pos.parentBeaconBlockRoot)
+    result.parentBeaconBlockRoot = Opt.some(dh.com.pos.parentBeaconBlockRoot)
 
   dh.prepareForSeal(result)
 
 proc clearAccounts*(dh: TxChainRef)
     {.gcsafe,raises: [].} =
   ## Reset transaction environment, e.g. before packing a new block
-  dh.resetTxEnv(dh.txEnv.vmState.parent, dh.txEnv.vmState.blockCtx.fee)
+  dh.resetTxEnv(dh.txEnv.vmState.parent, dh.txEnv.vmState.blockCtx.baseFeePerGas)
 
 # ------------------------------------------------------------------------------
 # Public functions, getters
@@ -242,8 +242,8 @@ func feeRecipient*(dh: TxChainRef): EthAddress =
 func baseFee*(dh: TxChainRef): GasPrice =
   ## Getter, baseFee for the next bock header. This value is auto-generated
   ## when a new insertion point is set via `head=`.
-  if dh.txEnv.vmState.blockCtx.fee.isSome:
-    dh.txEnv.vmState.blockCtx.fee.get.truncate(uint64).GasPrice
+  if dh.txEnv.vmState.blockCtx.baseFeePerGas.isSome:
+    dh.txEnv.vmState.blockCtx.baseFeePerGas.get.truncate(uint64).GasPrice
   else:
     0.GasPrice
 
@@ -294,9 +294,9 @@ func `baseFee=`*(dh: TxChainRef; val: GasPrice) =
   ## function would be called in exceptional cases only as this parameter is
   ## determined by the `head=` update.
   if 0 < val or dh.com.isLondon(dh.txEnv.vmState.blockNumber):
-    dh.txEnv.vmState.blockCtx.fee = some(val.uint64.u256)
+    dh.txEnv.vmState.blockCtx.baseFeePerGas = Opt.some(val.uint64.u256)
   else:
-    dh.txEnv.vmState.blockCtx.fee = UInt256.none()
+    dh.txEnv.vmState.blockCtx.baseFeePerGas = Opt.none UInt256
 
 proc `head=`*(dh: TxChainRef; val: BlockHeader)
     {.gcsafe,raises: [].} =
@@ -342,11 +342,11 @@ func `txRoot=`*(dh: TxChainRef; val: Hash256) =
   ## Setter
   dh.txEnv.txRoot = val
 
-func `excessBlobGas=`*(dh: TxChainRef; val: Option[uint64]) =
+func `excessBlobGas=`*(dh: TxChainRef; val: Opt[uint64]) =
   ## Setter
   dh.txEnv.excessBlobGas = val
 
-func `blobGasUsed=`*(dh: TxChainRef; val: Option[uint64]) =
+func `blobGasUsed=`*(dh: TxChainRef; val: Opt[uint64]) =
   ## Setter
   dh.txEnv.blobGasUsed = val
 

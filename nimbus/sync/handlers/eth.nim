@@ -92,17 +92,17 @@ proc successorHeader(db: CoreDbRef,
                      h: BlockHeader,
                      output: var BlockHeader,
                      skip = 0'u): bool {.gcsafe, raises: [RlpError].} =
-  let offset = 1 + skip.toBlockNumber
-  if h.blockNumber <= (not 0.toBlockNumber) - offset:
-    result = db.getBlockHeader(h.blockNumber + offset, output)
+  let offset = 1 + skip.BlockNumber
+  if h.number <= (not 0.BlockNumber) - offset:
+    result = db.getBlockHeader(h.number + offset, output)
 
 proc ancestorHeader(db: CoreDbRef,
                      h: BlockHeader,
                      output: var BlockHeader,
                      skip = 0'u): bool {.gcsafe, raises: [RlpError].} =
-  let offset = 1 + skip.toBlockNumber
-  if h.blockNumber >= offset:
-    result = db.getBlockHeader(h.blockNumber - offset, output)
+  let offset = 1 + skip.BlockNumber
+  if h.number >= offset:
+    result = db.getBlockHeader(h.number - offset, output)
 
 proc blockHeader(db: CoreDbRef,
                  b: HashOrNum,
@@ -399,7 +399,7 @@ method getStatus*(ctx: EthWireRef): Result[EthState, string]
       db = ctx.db
       com = ctx.chain.com
       bestBlock = db.getCanonicalHead()
-      forkId = com.forkId(bestBlock.blockNumber, bestBlock.timestamp)
+      forkId = com.forkId(bestBlock.number, bestBlock.timestamp)
 
     return ok(EthState(
       totalDifficulty: db.headTotalDifficulty,
@@ -426,7 +426,7 @@ method getReceipts*(ctx: EthWireRef,
     var list: seq[seq[Receipt]]
     for blockHash in hashes:
       if db.getBlockHeader(blockHash, header):
-        list.add db.getReceipts(header.receiptRoot)
+        list.add db.getReceipts(header.receiptsRoot)
       else:
         list.add @[]
         trace "handlers.getReceipts: blockHeader not found", blockHash
@@ -574,7 +574,7 @@ method handleNewBlock*(ctx: EthWireRef,
   try:
     if ctx.chain.com.forkGTE(MergeFork):
       debug "Dropping peer for sending NewBlock after merge (EIP-3675)",
-        peer, blockNumber=blk.header.blockNumber,
+        peer, blockNumber=blk.header.number,
         blockHash=blk.header.blockHash, totalDifficulty
       asyncSpawn banPeer(ctx.peerPool, peer, PEER_LONG_BANTIME)
       return ok()

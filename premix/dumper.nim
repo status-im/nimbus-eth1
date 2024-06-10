@@ -14,7 +14,6 @@
 #
 
 import
-  stint,
   results,
   ../nimbus/common/common,
   ../nimbus/db/opts,
@@ -24,7 +23,7 @@ import
   ../nimbus/tracer,
   ./configuration # must be late (compilation annoyance)
 
-proc dumpDebug(com: CommonRef, blockNumber: UInt256) =
+proc dumpDebug(com: CommonRef, blockNumber: BlockNumber) =
   var
     capture = com.db.newCapture.value
     captureCom = com.clone(capture.recorder)
@@ -50,7 +49,7 @@ proc main() {.used.} =
   let com = CommonRef.new(
     newCoreDbRef(DefaultDbPersistent, conf.dataDir, DbOptions.init()))
 
-  if conf.head != 0.u256:
+  if conf.head != 0'u64:
     dumpDebug(com, conf.head)
 
 when isMainModule:

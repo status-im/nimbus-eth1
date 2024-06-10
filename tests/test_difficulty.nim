@@ -23,7 +23,7 @@ type
     parentDifficulty: Uint256
     parentUncles: Hash256
     currentTimestamp: int64
-    currentBlockNumber: Uint256
+    currentBlockNumber: uint64
     currentDifficulty: Uint256
 
   Tests = Table[string, Tester]
@@ -63,7 +63,7 @@ proc parseTests(testData: JSonNode): Tests =
     else:
       t.parentUncles = parseHash(pu.getStr)
     t.currentTimestamp = hexOrInt64(data, "currentTimestamp", hex)
-    t.currentBlockNumber = hexOrInt256(data, "currentBlockNumber", hex)
+    t.currentBlockNumber = uint64 hexOrInt64(data, "currentBlockNumber", hex)
     t.currentDifficulty = hexOrInt256(data, "currentDifficulty", hex)
     result[title] = t
 
@@ -95,7 +95,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
       let p = BlockHeader(
         difficulty : t.parentDifficulty,
         timestamp  : EthTime(t.parentTimestamp),
-        blockNumber: t.currentBlockNumber - 1,
+        number     : t.currentBlockNumber - 1,
         ommersHash : t.parentUncles
       )
 

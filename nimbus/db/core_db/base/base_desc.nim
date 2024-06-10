@@ -13,7 +13,6 @@
 import
   std/tables,
   eth/common,
-  results,
   ../../aristo/aristo_profile
 
 from ../../aristo
@@ -112,7 +111,7 @@ type
     proc(flgs: set[CoreDbCaptFlags]): CoreDbRc[CoreDxCaptRef] {.noRaise.}
   CoreDbBaseGetCaptFn* = proc(): CoreDbRc[CoreDxCaptRef] {.noRaise.}
   CoreDbBasePersistentFn* =
-    proc(bn: Option[BlockNumber]): CoreDbRc[void] {.noRaise.}
+    proc(bn: Opt[BlockNumber]): CoreDbRc[void] {.noRaise.}
 
   CoreDbBaseFns* = object
     destroyFn*:      CoreDbBaseDestroyFn
@@ -165,7 +164,7 @@ type
   CoreDbCtxFromTxFn* =
     proc(root: Hash256; kind: CoreDbColType): CoreDbRc[CoreDbCtxRef] {.noRaise.}
   CoreDbCtxNewColFn* = proc(
-    colType: CoreDbColType; colState: Hash256; address: Option[EthAddress];
+    colType: CoreDbColType; colState: Hash256; address: Opt[EthAddress];
     ): CoreDbRc[CoreDbColRef] {.noRaise.}
   CoreDbCtxGetMptFn* = proc(
     root: CoreDbColRef): CoreDbRc[CoreDxMptRef] {.noRaise.}

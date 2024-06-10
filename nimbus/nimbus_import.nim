@@ -61,7 +61,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
   let
     start =
       try:
-        com.db.getSavedStateBlockNumber().truncate(uint64) + 1
+        com.db.getSavedStateBlockNumber() + 1
       except RlpError as exc:
         error "Could not read block number", err = exc.msg
         quit(QuitFailure)

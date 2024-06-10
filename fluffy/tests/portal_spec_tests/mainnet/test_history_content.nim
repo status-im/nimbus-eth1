@@ -210,7 +210,7 @@ suite "History Content Encodings":
     check contentKey.isOk()
 
     # Decode (SSZ + RLP decode step) and validate receipts
-    let contentValue = validateReceiptsBytes(contentValueEncoded, header.receiptRoot)
+    let contentValue = validateReceiptsBytes(contentValueEncoded, header.receiptsRoot)
     check contentValue.isOk()
 
     # Encode content

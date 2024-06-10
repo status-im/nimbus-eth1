@@ -10,7 +10,7 @@
 {.push raises: [].}
 
 import
-  std/[strutils, algorithm, options],
+  std/[strutils, algorithm],
   ./rpc_types,
   ./params,
   ../common/common,
@@ -55,10 +55,10 @@ proc headerFromTag*(chain: CoreDbRef, blockId: BlockTag): BlockHeader
     else:
       raise newException(ValueError, "Unsupported block tag " & tag)
   else:
-    let blockNum = blockId.number.uint64.toBlockNumber
+    let blockNum = blockId.number.uint64
     result = chain.getBlockHeader(blockNum)
 
-proc headerFromTag*(chain: CoreDbRef, blockTag: Option[BlockTag]): BlockHeader
+proc headerFromTag*(chain: CoreDbRef, blockTag: Opt[BlockTag]): BlockHeader
     {.gcsafe, raises: [CatchableError].} =
   let blockId = blockTag.get(defaultTag)
   chain.headerFromTag(blockId)
@@ -94,7 +94,7 @@ proc calculateMedianGasPrice*(chain: CoreDbRef): GasInt
 proc unsignedTx*(tx: TransactionArgs, chain: CoreDbRef, defaultNonce: AccountNonce): Transaction
     {.gcsafe, raises: [CatchableError].} =
   if tx.to.isSome:
-    result.to = some(ethAddr(tx.to.get))
+    result.to = Opt.some(ethAddr(tx.to.get))
 
   if tx.gas.isSome:
     result.gasLimit = tx.gas.get.GasInt
@@ -132,15 +132,15 @@ proc toWdList(list: openArray[Withdrawal]): seq[WithdrawalObject] =
     result.add toWd(x)
 
 proc populateTransactionObject*(tx: Transaction,
-                                optionalHeader: Option[BlockHeader] = none(BlockHeader),
-                                txIndex: Option[int] = none(int)): TransactionObject
+                                optionalHeader: Opt[BlockHeader] = Opt.none(BlockHeader),
+                                txIndex: Opt[uint64] = Opt.none(uint64)): TransactionObject
     {.gcsafe, raises: [ValidationError].} =
   result = TransactionObject()
-  result.`type` = some w3Qty(tx.txType.ord)
+  result.`type` = Opt.some Quantity(tx.txType)
   if optionalHeader.isSome:
     let header = optionalHeader.get
-    result.blockHash = some(w3Hash header.hash)
-    result.blockNumber = some(w3BlockNumber(header.blockNumber))
+    result.blockHash = Opt.some(w3Hash header.hash)
+    result.blockNumber = Opt.some(w3BlockNumber(header.number))
 
   result.`from` = w3Addr tx.getSender()
   result.gas = w3Qty(tx.gasLimit)
@@ -148,99 +148,97 @@ proc populateTransactionObject*(tx: Transaction,
   result.hash = w3Hash tx.rlpHash
   result.input = tx.payload
   result.nonce = w3Qty(tx.nonce)
-  result.to = some(w3Addr tx.destination)
+  result.to = Opt.some(w3Addr tx.destination)
   if txIndex.isSome:
-    result.transactionIndex = some(w3Qty(txIndex.get))
+    result.transactionIndex = Opt.some(Quantity(txIndex.get))
   result.value = tx.value
   result.v = w3Qty(tx.V)
-  result.r = u256(tx.R)
-  result.s = u256(tx.S)
-  result.maxFeePerGas = some w3Qty(tx.maxFee)
-  result.maxPriorityFeePerGas = some w3Qty(tx.maxPriorityFee)
+  result.r = tx.R
+  result.s = tx.S
+  result.maxFeePerGas = Opt.some w3Qty(tx.maxFeePerGas)
+  result.maxPriorityFeePerGas = Opt.some w3Qty(tx.maxPriorityFeePerGas)
 
   if tx.txType >= TxEip2930:
-    result.chainId = some(Web3Quantity(tx.chainId))
-    result.accessList = some(w3AccessList(tx.accessList))
+    result.chainId = Opt.some(Web3Quantity(tx.chainId))
+    result.accessList = Opt.some(w3AccessList(tx.accessList))
 
   if tx.txType >= TxEIP4844:
-    result.maxFeePerBlobGas = some(tx.maxFeePerBlobGas)
-    result.blobVersionedHashes = some(w3Hashes tx.versionedHashes)
+    result.maxFeePerBlobGas = Opt.some(tx.maxFeePerBlobGas)
+    result.blobVersionedHashes = Opt.some(w3Hashes tx.versionedHashes)
 
 proc populateBlockObject*(header: BlockHeader, chain: CoreDbRef, fullTx: bool, isUncle = false): BlockObject
     {.gcsafe, raises: [CatchableError].} =
   let blockHash = header.blockHash
   result = BlockObject()
 
-  result.number = w3BlockNumber(header.blockNumber)
+  result.number = w3BlockNumber(header.number)
   result.hash = w3Hash blockHash
   result.parentHash = w3Hash header.parentHash
-  result.nonce = some(FixedBytes[8] header.nonce)
+  result.nonce = Opt.some(FixedBytes[8] header.nonce)
   result.sha3Uncles = w3Hash header.ommersHash
-  result.logsBloom = FixedBytes[256] header.bloom
+  result.logsBloom = FixedBytes[256] header.logsBloom
   result.transactionsRoot = w3Hash header.txRoot
   result.stateRoot = w3Hash header.stateRoot
-  result.receiptsRoot = w3Hash header.receiptRoot
+  result.receiptsRoot = w3Hash header.receiptsRoot
   result.miner = w3Addr header.coinbase
   result.difficulty = header.difficulty
   result.extraData = HistoricExtraData header.extraData
-  result.mixHash = w3Hash header.mixDigest
+  result.mixHash = w3Hash header.mixHash
 
   # discard sizeof(seq[byte]) of extraData and use actual length
   let size = sizeof(BlockHeader) - sizeof(common.Blob) + header.extraData.len
-  result.size = w3Qty(size)
+  result.size = Quantity(size)
 
   result.gasLimit  = w3Qty(header.gasLimit)
   result.gasUsed   = w3Qty(header.gasUsed)
   result.timestamp = w3Qty(header.timestamp)
-  result.baseFeePerGas = if header.fee.isSome:
-                           some(header.baseFee)
-                         else:
-                           none(UInt256)
+  result.baseFeePerGas = header.baseFeePerGas
+
   if not isUncle:
     result.totalDifficulty = chain.getScore(blockHash)
     result.uncles = w3Hashes chain.getUncleHashes(header)
 
     if fullTx:
-      var i = 0
+      var i = 0'u64
       for tx in chain.getBlockTransactions(header):
-        result.transactions.add txOrHash(populateTransactionObject(tx, some(header), some(i)))
+        result.transactions.add txOrHash(populateTransactionObject(tx, Opt.some(header), Opt.some(i)))
         inc i
     else:
       for x in chain.getBlockTransactionHashes(header):
         result.transactions.add txOrHash(w3Hash(x))
 
   if header.withdrawalsRoot.isSome:
-    result.withdrawalsRoot = some(w3Hash header.withdrawalsRoot.get)
-    result.withdrawals = some(toWdList(chain.getWithdrawals(header.withdrawalsRoot.get)))
+    result.withdrawalsRoot = Opt.some(w3Hash header.withdrawalsRoot.get)
+    result.withdrawals = Opt.some(toWdList(chain.getWithdrawals(header.withdrawalsRoot.get)))
 
   if header.blobGasUsed.isSome:
-    result.blobGasUsed = some(w3Qty(header.blobGasUsed.get))
+    result.blobGasUsed = Opt.some(w3Qty(header.blobGasUsed.get))
 
   if header.excessBlobGas.isSome:
-    result.excessBlobGas = some(w3Qty(header.excessBlobGas.get))
+    result.excessBlobGas = Opt.some(w3Qty(header.excessBlobGas.get))
 
   if header.parentBeaconBlockRoot.isSome:
-    result.parentBeaconBlockRoot = some(w3Hash header.parentBeaconBlockRoot.get)
+    result.parentBeaconBlockRoot = Opt.some(w3Hash header.parentBeaconBlockRoot.get)
 
 proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction,
-                      txIndex: int, header: BlockHeader): ReceiptObject
+                      txIndex: uint64, header: BlockHeader): ReceiptObject
     {.gcsafe, raises: [ValidationError].} =
   result = ReceiptObject()
   result.transactionHash = w3Hash tx.rlpHash
-  result.transactionIndex = w3Qty(txIndex)
+  result.transactionIndex = Quantity(txIndex)
   result.blockHash = w3Hash header.hash
-  result.blockNumber = w3BlockNumber(header.blockNumber)
+  result.blockNumber = w3BlockNumber(header.number)
   result.`from` = w3Addr tx.getSender()
-  result.to = some(w3Addr tx.destination)
+  result.to = Opt.some(w3Addr tx.destination)
   result.cumulativeGasUsed = w3Qty(receipt.cumulativeGasUsed)
   result.gasUsed = w3Qty(gasUsed)
-  result.`type` = some w3Qty(receipt.receiptType.ord)
+  result.`type` = Opt.some Quantity(receipt.receiptType)
 
   if tx.contractCreation:
     var sender: EthAddress
     if tx.getSender(sender):
       let contractAddress = generateAddress(sender, tx.nonce)
-      result.contractAddress = some(w3Addr contractAddress)
+      result.contractAddress = Opt.some(w3Addr contractAddress)
 
   for log in receipt.logs:
     # TODO: Work everywhere with either `Hash256` as topic or `array[32, byte]`
@@ -252,13 +250,13 @@ proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction,
       removed: false,
       # TODO: Not sure what is difference between logIndex and TxIndex and how
       # to calculate it.
-      logIndex: some(result.transactionIndex),
+      logIndex: Opt.some(result.transactionIndex),
       # Note: the next 4 fields cause a lot of duplication of data, but the spec
       # is what it is. Not sure if other clients actually add this.
-      transactionIndex: some(result.transactionIndex),
-      transactionHash: some(result.transactionHash),
-      blockHash: some(result.blockHash),
-      blockNumber: some(result.blockNumber),
+      transactionIndex: Opt.some(result.transactionIndex),
+      transactionHash: Opt.some(result.transactionHash),
+      blockHash: Opt.some(result.blockHash),
+      blockNumber: Opt.some(result.blockNumber),
       # The actual fields
       address: w3Addr log.address,
       data: log.data,
@@ -266,21 +264,22 @@ proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction,
     )
     result.logs.add(logObject)
 
-  result.logsBloom = FixedBytes[256] receipt.bloom
+  result.logsBloom = FixedBytes[256] receipt.logsBloom
 
   # post-transaction stateroot (pre Byzantium).
   if receipt.hasStateRoot:
-    result.root = some(w3Hash receipt.stateRoot)
+    result.root = Opt.some(w3Hash receipt.stateRoot)
   else:
     # 1 = success, 0 = failure.
-    result.status = some(w3Qty(receipt.status.uint64))
+    result.status = Opt.some(w3Qty(receipt.status.uint64))
 
-  let normTx = eip1559TxNormalization(tx, header.baseFee.truncate(GasInt))
+  let baseFeePerGas = header.baseFeePerGas.get(0.u256)
+  let normTx = eip1559TxNormalization(tx, baseFeePerGas.truncate(GasInt))
   result.effectiveGasPrice = w3Qty(normTx.gasPrice)
 
   if tx.txType == TxEip4844:
-    result.blobGasUsed = some(w3Qty(tx.versionedHashes.len.uint64 * GAS_PER_BLOB.uint64))
-    result.blobGasPrice = some(getBlobBaseFee(header.excessBlobGas.get(0'u64)))
+    result.blobGasUsed = Opt.some(w3Qty(tx.versionedHashes.len.uint64 * GAS_PER_BLOB.uint64))
+    result.blobGasPrice = Opt.some(getBlobBaseFee(header.excessBlobGas.get(0'u64)))
 
 proc createAccessList*(header: BlockHeader,
                        com: CommonRef,
@@ -288,19 +287,19 @@ proc createAccessList*(header: BlockHeader,
 
   template handleError(msg: string) =
     return AccessListResult(
-      error: some(msg),
+      error: Opt.some(msg),
     )
 
   var args = args
 
   # If the gas amount is not set, default to RPC gas cap.
   if args.gas.isNone:
-    args.gas = some(Quantity DEFAULT_RPC_GAS_CAP)
+    args.gas = Opt.some(Quantity DEFAULT_RPC_GAS_CAP)
 
   let
     vmState = BaseVMState.new(header, com).valueOr:
                 handleError("failed to create vmstate: " & $error.code)
-    fork    = com.toEVMFork(forkDeterminationInfo(header.blockNumber, header.timestamp))
+    fork    = com.toEVMFork(forkDeterminationInfo(header.number, header.timestamp))
     sender  = args.sender
     # TODO: nonce should be retrieved from txPool
     nonce   = vmState.stateDB.getNonce(sender)
@@ -321,7 +320,7 @@ proc createAccessList*(header: BlockHeader,
 
     # Set the accesslist to the last accessList
     # generated by prevTracer
-    args.accessList = some(w3AccessList accessList)
+    args.accessList = Opt.some(w3AccessList accessList)
 
     # Apply the transaction with the access list tracer
     let

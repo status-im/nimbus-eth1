@@ -85,11 +85,11 @@ func toBytes(list: openArray[float64]): seq[byte] =
     result.add(cast[uint64](x).toBytesLE)
 
 func calcBaseFee(com: CommonRef, bc: BlockContent): UInt256 =
-  if com.isLondon((bc.blockNumber + 1).toBlockNumber):
+  if com.isLondon(bc.blockNumber + 1):
     calcEip1599BaseFee(
       bc.header.gasLimit,
       bc.header.gasUsed,
-      bc.header.baseFee)
+      bc.header.baseFeePerGas.get(0.u256))
   else:
     0.u256
 
@@ -98,7 +98,7 @@ func calcBaseFee(com: CommonRef, bc: BlockContent): UInt256 =
 # fills in the rest of the fields.
 proc processBlock(oracle: Oracle, bc: BlockContent, percentiles: openArray[float64]): ProcessedFees =
   result = ProcessedFees(
-    baseFee: bc.header.baseFee,
+    baseFee: bc.header.baseFeePerGas.get(0.u256),
     blobBaseFee: getBlobBaseFee(bc.header.excessBlobGas.get(0'u64)),
     nextBaseFee: calcBaseFee(oracle.com, bc),
     nextBlobBaseFee: getBlobBaseFee(calcExcessBlobGas(bc.header)),
@@ -125,7 +125,7 @@ proc processBlock(oracle: Oracle, bc: BlockContent, percentiles: openArray[float
 
   for i, tx in bc.txs:
     let
-      reward = tx.effectiveGasTip(bc.header.fee)
+      reward = tx.effectiveGasTip(bc.header.baseFeePerGas)
       gasUsed = bc.receipts[i].cumulativeGasUsed - prevUsed
     sorter[i] = TxGasAndReward(
       gasUsed: gasUsed.uint64,
@@ -163,7 +163,7 @@ proc resolveBlockRange(oracle: Oracle, blockId: BlockTag, numBlocks: uint64): Re
                   oracle.com.db.getCanonicalHead()
                 except CatchableError as exc:
                   return err(exc.msg)
-    head = headBlock.blockNumber.truncate(uint64)
+    head = headBlock.number
 
   var
     reqEnd: uint64
@@ -182,7 +182,7 @@ proc resolveBlockRange(oracle: Oracle, blockId: BlockTag, numBlocks: uint64): Re
     if tag == "pending":
       try:
         resolved = headerFromTag(oracle.com.db, blockId)
-        pendingBlock = Opt.some(resolved.blockNumber.truncate(uint64))
+        pendingBlock = Opt.some(resolved.number)
       except CatchableError:
         # Pending block not supported by backend, process only until latest block.
         resolved = headBlock
@@ -195,7 +195,7 @@ proc resolveBlockRange(oracle: Oracle, blockId: BlockTag, numBlocks: uint64): Re
         return err(exc.msg)
 
     # Absolute number resolved.
-    reqEnd = resolved.blockNumber.truncate(uint64)
+    reqEnd = resolved.number
 
   # If there are no blocks to return, short circuit.
   if blocks == 0:
@@ -221,11 +221,11 @@ proc getBlockContent(oracle: Oracle,
 
   let db = oracle.com.db
   try:
-    bc.header = db.getBlockHeader(blockNumber.toblockNumber)
+    bc.header = db.getBlockHeader(blockNumber.BlockNumber)
     for tx in db.getBlockTransactions(bc.header):
       bc.txs.add tx
 
-    for rc in db.getReceipts(bc.header.receiptRoot):
+    for rc in db.getReceipts(bc.header.receiptsRoot):
       bc.receipts.add rc
 
     return ok(bc)
@@ -357,9 +357,9 @@ proc feeHistory*(oracle: Oracle,
 
   if rewardPercentiles.len != 0:
     res.reward.setLen(res.firstMissing)
-    historyResult.reward = some(system.move res.reward)
+    historyResult.reward = Opt.some(system.move res.reward)
   else:
-    historyResult.reward = none(seq[FeeHistoryReward])
+    historyResult.reward = Opt.none(seq[FeeHistoryReward])
 
   res.baseFee.setLen(res.firstMissing+1)
   res.gasUsedRatio.setLen(res.firstMissing)

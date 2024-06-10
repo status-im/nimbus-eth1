@@ -133,22 +133,22 @@ proc headDiff*(xp: TxPoolRef;
     # sanity check
     warn "Tx-pool head forward for non-existing header",
       newHead = newHash,
-      newNumber = newHead.blockNumber
+      newNumber = newHead.number
     return err(txInfoErrForwardHeadMissing)
 
   if not db.getBlockHeader(curHash, ignHeader):
     # This can happen if a `setHead()` is performed, where we have discarded
     # the old head from the chain.
-    if curHead.blockNumber <= newHead.blockNumber:
+    if curHead.number <= newHead.number:
       warn "Tx-pool head forward from detached current header",
         curHead = curHash,
-        curNumber = curHead.blockNumber
+        curNumber = curHead.number
       return err(txInfoErrAncestorMissing)
     debug "Tx-pool reset with detached current head",
       curHeader = curHash,
-      curNumber = curHead.blockNumber,
+      curNumber = curHead.number,
       newHeader = newHash,
-      newNumber = newHead.blockNumber
+      newNumber = newHead.number
     return err(txInfoErrChainHeadMissing)
 
   # Equalise block numbers between branches (typically, these btanches
@@ -161,7 +161,7 @@ proc headDiff*(xp: TxPoolRef;
     newBranchHead = newHead
     newBranchHash = newHash
 
-  if newHead.blockNumber < curHead.blockNumber:
+  if newHead.number < curHead.number:
     #
     # new head block number smaller than the current head one
     #
@@ -178,7 +178,7 @@ proc headDiff*(xp: TxPoolRef;
     # + txs of blocks with numbers between #new..#current need to be
     #   re-inserted into the pool
     #
-    while newHead.blockNumber < curBranchHead.blockNumber:
+    while newHead.number < curBranchHead.number:
       xp.insert(txDiffs, curBranchHash)
       let
         tmpHead = curBranchHead # cache value for error logging
@@ -187,7 +187,7 @@ proc headDiff*(xp: TxPoolRef;
       if not db.getBlockHeader(curBranchHash, curBranchHead):
         error "Unrooted old chain seen by tx-pool",
           curBranchHead = tmpHash,
-          curBranchNumber = tmpHead.blockNumber
+          curBranchNumber = tmpHead.number
         return err(txInfoErrUnrootedCurChain)
   else:
     #
@@ -206,7 +206,7 @@ proc headDiff*(xp: TxPoolRef;
     # + txs of blocks with numbers between #current..#new need to be
     #   deleted from the pool (as they are on the block chain, now)
     #
-    while curHead.blockNumber < newBranchHead.blockNumber:
+    while curHead.number < newBranchHead.number:
       xp.remove(txDiffs, newBranchHash)
       let
         tmpHead = newBranchHead # cache value for error logging
@@ -215,7 +215,7 @@ proc headDiff*(xp: TxPoolRef;
       if not db.getBlockHeader(newBranchHash, newBranchHead):
         error "Unrooted new chain seen by tx-pool",
           newBranchHead = tmpHash,
-          newBranchNumber = tmpHead.blockNumber
+          newBranchNumber = tmpHead.number
         return err(txInfoErrUnrootedNewChain)
 
   # simultaneously step back until junction-head (aka common ancestor) while
@@ -231,7 +231,7 @@ proc headDiff*(xp: TxPoolRef;
       if not db.getBlockHeader(curBranchHash, curBranchHead):
         error "Unrooted old chain seen by tx-pool",
           curBranchHead = tmpHash,
-          curBranchNumber = tmpHead.blockNumber
+          curBranchNumber = tmpHead.number
         return err(txInfoErrUnrootedCurChain)
     block:
       xp.remove(txDiffs, newBranchHash)
@@ -242,7 +242,7 @@ proc headDiff*(xp: TxPoolRef;
       if not db.getBlockHeader(newBranchHash, newBranchHead):
         error "Unrooted new chain seen by tx-pool",
           newBranchHead = tmpHash,
-          newBranchNumber = tmpHead.blockNumber
+          newBranchNumber = tmpHead.number
         return err(txInfoErrUnrootedNewChain)
 
   # figure out difference sets

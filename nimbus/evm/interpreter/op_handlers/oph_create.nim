@@ -45,7 +45,7 @@ when not defined(evmc_enabled):
 when evmc_enabled:
   template execSubCreate(c: Computation; msg: ref nimbus_message) =
     c.chainTo(msg):
-      c.gasMeter.returnGas(c.res.gas_left)
+      c.gasMeter.returnGas(GasInt c.res.gas_left)
       if c.res.status_code == EVMC_SUCCESS:
         ? c.stack.top(c.res.create_address)
       elif c.res.status_code == EVMC_REVERT:

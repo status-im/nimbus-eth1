@@ -57,7 +57,7 @@ method execute(cs: BlockStatus, env: TestEnv): bool =
   var callbacks = BlockProcessCallbacks(
     onPayloadProducerSelected: proc(): bool =
       let tc = BaseTx(
-        recipient:  some(ZeroAddr),
+        recipient: Opt.some(ZeroAddr),
         amount:     1.u256,
         txType:     cs.txType,
         gasLimit:   75000,

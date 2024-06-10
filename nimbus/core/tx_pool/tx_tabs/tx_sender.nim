@@ -15,7 +15,6 @@
 ##
 
 import
-  std/[math],
   ../tx_info,
   ../tx_item,
   eth/[common],

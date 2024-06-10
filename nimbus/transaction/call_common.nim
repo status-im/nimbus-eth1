@@ -9,8 +9,9 @@
 {.push raises: [].}
 
 import
-  eth/common/eth_types, stint, options, stew/ptrops,
+  eth/common/eth_types, stint, stew/ptrops,
   chronos,
+  results,
   ".."/[vm_types, vm_state, vm_computation],
   ".."/[vm_internals, vm_precompiles, vm_gas_costs],
   ".."/[db/ledger],
@@ -28,8 +29,8 @@ type
   # Standard call parameters.
   CallParams* = object
     vmState*:      BaseVMState          # Chain, database, state, block, fork.
-    forkOverride*: Option[EVMFork]      # Default fork is usually correct.
-    origin*:       Option[HostAddress]  # Default origin is `sender`.
+    forkOverride*: Opt[EVMFork]         # Default fork is usually correct.
+    origin*:       Opt[HostAddress]     # Default origin is `sender`.
     gasPrice*:     GasInt               # Gas price for this call.
     gasLimit*:     GasInt               # Maximum gas available for this call.
     sender*:       HostAddress          # Sender account.
@@ -63,7 +64,7 @@ proc hostToComputationMessage*(msg: EvmcMessage): Message =
   Message(
     kind:            CallKind(msg.kind.ord),
     depth:           msg.depth,
-    gas:             msg.gas,
+    gas:             GasInt msg.gas,
     sender:          msg.sender.fromEvmc,
     contractAddress: msg.recipient.fromEvmc,
     codeAddress:     msg.code_address.fromEvmc,
@@ -97,7 +98,7 @@ func intrinsicGas*(call: CallParams, vmState: BaseVMState): GasInt {.inline.} =
   if fork >= FkBerlin:
     for account in call.accessList:
       gas += ACCESS_LIST_ADDRESS_COST
-      gas += account.storageKeys.len * ACCESS_LIST_STORAGE_KEY_COST
+      gas += GasInt(account.storageKeys.len) * ACCESS_LIST_STORAGE_KEY_COST
 
   return gas
 
@@ -217,7 +218,7 @@ when defined(evmc_enabled):
     else:
       c.setError(callResult.status_code, true)
 
-    c.gasMeter.gasRemaining = callResult.gas_left
+    c.gasMeter.gasRemaining = GasInt callResult.gas_left
     c.msg.contractAddress = callResult.create_address.fromEvmc
     c.output = if callResult.output_size <= 0: @[]
                else: @(makeOpenArray(callResult.output_data,
@@ -265,7 +266,7 @@ proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): Gas
     result = c.gasMeter.gasRemaining
   elif not c.shouldBurnGas:
     let maxRefund = (call.gasLimit - c.gasMeter.gasRemaining) div MaxRefundQuotient
-    let refund = min(c.getGasRefund(), maxRefund)
+    let refund = min(GasInt c.getGasRefund(), maxRefund)
     c.gasMeter.returnGas(refund)
     result = c.gasMeter.gasRemaining
 
@@ -279,7 +280,7 @@ proc finishRunningComputation(host: TransactionHost, call: CallParams): CallResu
 
   let gasRemaining = calculateAndPossiblyRefundGas(host, call)
   # evm gas used without intrinsic gas
-  let gasUsed = host.msg.gas - gasRemaining
+  let gasUsed = host.msg.gas.GasInt - gasRemaining
   host.vmState.captureEnd(c, c.output, gasUsed, c.errorOpt)
 
   if c.isError:

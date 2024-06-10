@@ -14,7 +14,7 @@ import results, ../common/common
 
 # https://eips.ethereum.org/EIPS/eip-4895
 proc validateWithdrawals*(
-    com: CommonRef, header: BlockHeader, withdrawals: Option[seq[Withdrawal]]
+    com: CommonRef, header: BlockHeader, withdrawals: Opt[seq[Withdrawal]]
 ): Result[void, string] =
   if com.forkGTE(Shanghai):
     if header.withdrawalsRoot.isNone:
@@ -24,7 +24,7 @@ proc validateWithdrawals*(
     else:
       try:
         if withdrawals.get.calcWithdrawalsRoot != header.withdrawalsRoot.get:
-          return err("Mismatched withdrawalsRoot blockNumber =" & $header.blockNumber)
+          return err("Mismatched withdrawalsRoot blockNumber =" & $header.number)
       except RlpError as ex:
         return err(ex.msg)
   else:

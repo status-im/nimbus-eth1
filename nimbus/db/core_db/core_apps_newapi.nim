@@ -14,10 +14,9 @@
 {.push raises: [].}
 
 import
-  std/[algorithm, options, sequtils],
+  std/[algorithm, sequtils],
   chronicles,
   eth/[common, rlp],
-  results,
   stew/byteutils,
   "../.."/[errors, constants],
   ".."/[aristo, storage_types],
@@ -30,7 +29,7 @@ logScope:
 type
   TransactionKey = tuple
     blockNumber: BlockNumber
-    index: int
+    index: uint
 
 const
   extraTraceMessages = false
@@ -103,7 +102,7 @@ iterator findNewAncestors(
   var h = header
   var orig: BlockHeader
   while true:
-    if db.getBlockHeader(h.blockNumber, orig) and orig.hash == h.hash:
+    if db.getBlockHeader(h.number, orig) and orig.hash == h.hash:
       break
 
     yield h
@@ -135,7 +134,7 @@ iterator getBlockTransactionData*(
         warn logTxt "getBlockTransactionData()", transactionRoot,
           action="newMpt()", col=($$col), error=($$error)
         break body
-    var transactionIdx = 0
+    var transactionIdx = 0'u64
     while true:
       let transactionKey = rlp.encode(transactionIdx)
       let data = transactionDb.fetch(transactionKey).valueOr:
@@ -188,7 +187,7 @@ iterator getWithdrawalsData*(
         break body
     var idx = 0
     while true:
-      let wdKey = rlp.encode(idx)
+      let wdKey = rlp.encode(idx.uint)
       let data = wddb.fetch(wdKey).valueOr:
         if error.error != MptNotFound:
           warn logTxt "getWithdrawalsData()",
@@ -200,30 +199,30 @@ iterator getWithdrawalsData*(
 
 iterator getReceipts*(
     db: CoreDbRef;
-    receiptRoot: Hash256;
+    receiptsRoot: Hash256;
       ): Receipt
       {.gcsafe, raises: [RlpError].} =
   block body:
-    if receiptRoot == EMPTY_ROOT_HASH:
+    if receiptsRoot == EMPTY_ROOT_HASH:
       break body
 
     let
       ctx = db.ctx
-      col = ctx.newColumn(CtReceipts, receiptRoot).valueOr:
+      col = ctx.newColumn(CtReceipts, receiptsRoot).valueOr:
         warn logTxt "getWithdrawalsData()",
-          receiptRoot, action="newColumn()", error=($$error)
+          receiptsRoot, action="newColumn()", error=($$error)
         break body
       receiptDb = ctx.getMpt(col).valueOr:
         warn logTxt "getWithdrawalsData()",
-          receiptRoot, action="getMpt()", col=($$col), error=($$error)
+          receiptsRoot, action="getMpt()", col=($$col), error=($$error)
         break body
     var receiptIdx = 0
     while true:
-      let receiptKey = rlp.encode(receiptIdx)
+      let receiptKey = rlp.encode(receiptIdx.uint)
       let receiptData = receiptDb.fetch(receiptKey).valueOr:
         if error.error != MptNotFound:
           warn logTxt "getWithdrawalsData()",
-            receiptRoot, receiptKey, action="hasKey()", error=($$error)
+            receiptsRoot, receiptKey, action="hasKey()", error=($$error)
         break body
       yield rlp.decode(receiptData, Receipt)
       inc receiptIdx
@@ -256,7 +255,7 @@ proc setAsCanonicalChainHead(
   reverse(newCanonicalHeaders)
   for h in newCanonicalHeaders:
     var oldHash: Hash256
-    if not db.getBlockHash(h.blockNumber, oldHash):
+    if not db.getBlockHash(h.number, oldHash):
       break
 
     let oldHeader = db.getBlockHeader(oldHash)
@@ -287,7 +286,7 @@ proc markCanonicalChain(
   # mark current header as canonical
   let
     kvt = db.newKvt()
-    key = blockNumberToHashKey(currHeader.blockNumber)
+    key = blockNumberToHashKey(currHeader.number)
   kvt.put(key.toOpenArray, rlp.encode(currHash)).isOkOr:
     warn logTxt "markCanonicalChain()", key, action="put()", error=($$error)
     return false
@@ -302,7 +301,7 @@ proc markCanonicalChain(
     return false
 
   while currHash != Hash256():
-    let key = blockNumberToHashKey(currHeader.blockNumber)
+    let key = blockNumberToHashKey(currHeader.number)
     let data = kvt.getOrEmpty(key.toOpenArray).valueOr:
       warn logTxt "markCanonicalChain()", key, action="get()", error=($$error)
       return false
@@ -460,7 +459,7 @@ proc getBlockHeader*(
 proc getBlockHeaderWithHash*(
     db: CoreDbRef;
     n: BlockNumber;
-      ): Option[(BlockHeader, Hash256)]
+      ): Opt[(BlockHeader, Hash256)]
       {.gcsafe, raises: [RlpError].} =
   ## Returns the block header and its hash, with the given number in the
   ## canonical chain. Hash is returned to avoid recomputing it
@@ -469,13 +468,13 @@ proc getBlockHeaderWithHash*(
     # Note: this will throw if header is not present.
     var header: BlockHeader
     if db.getBlockHeader(hash, header):
-      return some((header, hash))
+      return Opt.some((header, hash))
     else:
       # this should not happen, but if it happen lets fail laudly as this means
       # something is super wrong
       raiseAssert("Corrupted database. Mapping number->hash present, without header in database")
   else:
-    return none[(BlockHeader, Hash256)]()
+    return Opt.none((BlockHeader, Hash256))
 
 proc getBlockHeader*(
     db: CoreDbRef;
@@ -539,11 +538,11 @@ proc headTotalDifficulty*(
 
 proc getAncestorsHashes*(
     db: CoreDbRef;
-    limit: UInt256;
+    limit: BlockNumber;
     header: BlockHeader;
       ): seq[Hash256]
       {.gcsafe, raises: [BlockNotFound].} =
-  var ancestorCount = min(header.blockNumber, limit).truncate(int)
+  var ancestorCount = min(header.number, limit)
   var h = header
 
   result = newSeq[Hash256](ancestorCount)
@@ -553,7 +552,7 @@ proc getAncestorsHashes*(
     dec ancestorCount
 
 proc addBlockNumberToHashLookup*(db: CoreDbRef; header: BlockHeader) =
-  let blockNumberKey = blockNumberToHashKey(header.blockNumber)
+  let blockNumberKey = blockNumberToHashKey(header.number)
   db.newKvt.put(blockNumberKey.toOpenArray, rlp.encode(header.hash)).isOkOr:
     warn logTxt "addBlockNumberToHashLookup()",
       blockNumberKey, action="put()", error=($$error)
@@ -575,11 +574,11 @@ proc persistTransactions*(
 
   for idx, tx in transactions:
     let
-      encodedKey = rlp.encode(idx)
+      encodedKey = rlp.encode(idx.uint)
       encodedTx = rlp.encode(tx)
       txHash = rlpHash(tx)
       blockKey = transactionHashToBlockKey(txHash)
-      txKey: TransactionKey = (blockNumber, idx)
+      txKey: TransactionKey = (blockNumber, idx.uint)
     mpt.merge(encodedKey, encodedTx).isOkOr:
       warn logTxt info, idx, action="merge()", error=($$error)
       return EMPTY_ROOT_HASH
@@ -613,7 +612,7 @@ proc forgetHistory*(
 proc getTransaction*(
     db: CoreDbRef;
     txRoot: Hash256;
-    txIndex: int;
+    txIndex: uint64;
     res: var Transaction;
       ): bool
       {.gcsafe, raises: [RlpError].} =
@@ -652,7 +651,7 @@ proc getTransactionCount*(
       return 0
   var txCount = 0
   while true:
-    let hasPath = mpt.hasPath(rlp.encode(txCount)).valueOr:
+    let hasPath = mpt.hasPath(rlp.encode(txCount.uint)).valueOr:
       warn logTxt info, txCount, action="hasPath()", error=($$error)
       return 0
     if hasPath:
@@ -702,7 +701,7 @@ proc persistWithdrawals*(
 
   let mpt = db.ctx.getMpt(CtWithdrawals)
   for idx, wd in withdrawals:
-    mpt.merge(rlp.encode(idx), rlp.encode(wd)).isOkOr:
+    mpt.merge(rlp.encode(idx.uint), rlp.encode(wd)).isOkOr:
       warn logTxt info, idx, action="merge()", error=($$error)
       return EMPTY_ROOT_HASH
   mpt.getColumn.state.valueOr:
@@ -742,7 +741,7 @@ proc getBlockBody*(
   output.uncles = db.getUncles(header.ommersHash)
 
   if header.withdrawalsRoot.isSome:
-    output.withdrawals = some(db.getWithdrawals(header.withdrawalsRoot.get))
+    output.withdrawals = Opt.some(db.getWithdrawals(header.withdrawalsRoot.get))
 
   true
 
@@ -811,7 +810,7 @@ proc getUncleHashes*(
 proc getTransactionKey*(
     db: CoreDbRef;
     transactionHash: Hash256;
-      ): tuple[blockNumber: BlockNumber, index: int]
+      ): tuple[blockNumber: BlockNumber, index: uint64]
       {.gcsafe, raises: [RlpError].} =
   let
     txKey = transactionHashToBlockKey(transactionHash)
@@ -819,9 +818,9 @@ proc getTransactionKey*(
       if error.error == KvtNotFound:
         warn logTxt "getTransactionKey()",
           transactionHash, action="get()", `error`=($$error)
-      return (0.toBlockNumber, -1)
+      return (0.BlockNumber, 0)
   let key = rlp.decode(tx, TransactionKey)
-  (key.blockNumber, key.index)
+  (key.blockNumber, key.index.uint64)
 
 proc headerExists*(db: CoreDbRef; blockHash: Hash256): bool =
   ## Returns True if the header with the given block hash is in our DB.
@@ -876,7 +875,7 @@ proc persistReceipts*(
 
   let mpt = db.ctx.getMpt(CtReceipts)
   for idx, rec in receipts:
-    mpt.merge(rlp.encode(idx), rlp.encode(rec)).isOkOr:
+    mpt.merge(rlp.encode(idx.uint), rlp.encode(rec)).isOkOr:
       warn logTxt info, idx, action="merge()", error=($$error)
   mpt.getColumn.state.valueOr:
     when extraTraceMessages:
@@ -885,11 +884,11 @@ proc persistReceipts*(
 
 proc getReceipts*(
     db: CoreDbRef;
-    receiptRoot: Hash256;
+    receiptsRoot: Hash256;
       ): seq[Receipt]
       {.gcsafe, raises: [RlpError].} =
   var receipts = newSeq[Receipt]()
-  for r in db.getReceipts(receiptRoot):
+  for r in db.getReceipts(receiptsRoot):
     receipts.add(r)
   return receipts
 

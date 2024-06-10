@@ -41,7 +41,7 @@ proc processChainData(cd: ChainData): TestStatus =
   else:
     trace "block hash not equal",
       got=blockHash,
-      number=head.blockNumber,
+      number=head.number,
       expected=cd.lastBlockHash
     TestStatus.Failed
 

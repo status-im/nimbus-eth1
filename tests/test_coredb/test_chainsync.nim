@@ -155,10 +155,10 @@ proc test_chainSync*(
       ): bool =
   ## Store persistent blocks from dump into chain DB
   let
-    sayBlocks = 900
+    sayBlocks = 900'u64
     chain = com.newChain
     blockOnDb = com.db.getSavedStateBlockNumber()
-    lastBlock = max(1, numBlocks).toBlockNumber
+    lastBlock = max(1, numBlocks).BlockNumber
 
   noisy.initLogging com
   defer: com.finishLogging()
@@ -178,7 +178,7 @@ proc test_chainSync*(
       0u64
     elif blockOnDb < lastBlock:
       noisy.say "***", "resuming at #", blockOnDb+1
-      blockOnDb.truncate(uint64) + 1
+      blockOnDb + 1
     else:
       noisy.say "***", "stop: sample exhausted"
       return true
@@ -213,15 +213,15 @@ proc test_chainSync*(
       sample = done
 
   for w in files.undumpBlocks(least = start):
-    let (fromBlock, toBlock) = (w[0].header.blockNumber, w[^1].header.blockNumber)
-    if fromBlock == 0.u256:
-      xCheck w[0].header == com.db.getBlockHeader(0.u256)
+    let (fromBlock, toBlock) = (w[0].header.number, w[^1].header.number)
+    if fromBlock == 0'u64:
+      xCheck w[0].header == com.db.getBlockHeader(0'u64)
       continue
 
     # Process groups of blocks ...
     if toBlock < lastBlock:
       # Message if `[fromBlock,toBlock]` contains a multiple of `sayBlocks`
-      if fromBlock + (toBlock mod sayBlocks.u256) <= toBlock:
+      if fromBlock + (toBlock mod sayBlocks) <= toBlock:
         if oldLogAlign:
           noisy.whisper "***",
            &"processing ...[#{fromBlock},#{toBlock}]...\n"
@@ -230,7 +230,7 @@ proc test_chainSync*(
           noisy.whisper "***",
             &"processing ...[#{fromBlock:>8},#{toBlock:>8}]..."
         if enaLogging:
-          noisy.startLogging(w[0].header.blockNumber)
+          noisy.startLogging(w[0].header.number)
 
       noisy.stopLoggingAfter():
         let runPersistBlocksRc = chain.persistBlocks(w)
@@ -251,9 +251,9 @@ proc test_chainSync*(
     # So It might be necessary to Split off all blocks smaller than `lastBlock`
     # and execute them first. Then the next batch starts with the `lastBlock`.
     let
-      pivot = (lastBlock - fromBlock).truncate(uint)
+      pivot = lastBlock - fromBlock
       blocks9 = w[pivot .. ^1]
-    doAssert lastBlock == blocks9[0].header.blockNumber
+    doAssert lastBlock == blocks9[0].header.number
 
     # Process leading batch before `lastBlock` (if any)
     var dotsOrSpace = "..."
@@ -270,7 +270,7 @@ proc test_chainSync*(
       xCheck runPersistBlocks1Rc.isOk()
       dotsOrSpace = "   "
 
-    noisy.startLogging(blocks9[0].header.blockNumber)
+    noisy.startLogging(blocks9[0].header.number)
     if lastOneExtra:
       let
         blocks0 = blocks9[0..0]

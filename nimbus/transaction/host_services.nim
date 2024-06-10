@@ -9,11 +9,13 @@
 #{.push raises: [].}
 
 import
+  std/typetraits,
   stint, chronicles,
   eth/common/eth_types, ../db/ledger,
   ../common/[evmforks, common],
   ".."/[vm_state, vm_computation, vm_internals, vm_gas_costs],
-  ./host_types, ./host_trace, ./host_call_nested
+  ./host_types, ./host_trace, ./host_call_nested,
+  stew/saturation_arith
 
 proc setupTxContext(host: TransactionHost) =
   # Conversion issues:
@@ -54,16 +56,15 @@ proc setupTxContext(host: TransactionHost) =
   host.txContext.tx_origin        = vmState.txCtx.origin.toEvmc
   # vmState.coinbase now unused
   host.txContext.block_coinbase   = vmState.blockCtx.coinbase.toEvmc
-  # vmState.blockNumber now unused
-  host.txContext.block_number     = (vmState.blockNumber
-                                     .truncate(typeof(host.txContext.block_number)))
+  # vmState.number now unused
+  host.txContext.block_number     = int64.saturate(vmState.blockNumber)
   # vmState.timestamp now unused
-  host.txContext.block_timestamp  = cast[int64](vmState.blockCtx.timestamp)
+  host.txContext.block_timestamp  = int64.saturate(distinctBase(vmState.blockCtx.timestamp))
   # vmState.gasLimit now unused
   host.txContext.block_gas_limit  = vmState.blockCtx.gasLimit
   # vmState.difficulty now unused
   host.txContext.chain_id         = vmState.com.chainId.uint.u256.toEvmc
-  host.txContext.block_base_fee   = vmState.blockCtx.fee.get(0.u256).toEvmc
+  host.txContext.block_base_fee   = vmState.blockCtx.baseFeePerGas.get(0.u256).toEvmc
 
   if vmState.txCtx.versionedHashes.len > 0:
     type
@@ -253,7 +254,7 @@ proc getTxContext(host: TransactionHost): EvmcTxContext {.show.} =
 
 proc getBlockHash(host: TransactionHost, number: HostBlockNumber): HostHash {.show.} =
   # TODO: Clean up the different messy block number types.
-  host.vmState.getAncestorHash(number.toBlockNumber)
+  host.vmState.getAncestorHash(number.BlockNumber)
 
 proc emitLog(host: TransactionHost, address: HostAddress,
              data: ptr byte, data_size: HostSize,

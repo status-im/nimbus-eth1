@@ -107,8 +107,8 @@ proc init*(x: typedesc[HostContext], host: ptr nimbus_host_interface, context: e
 proc getTxContext*(ctx: HostContext): nimbus_tx_context =
   ctx.host.get_tx_context(ctx.context)
 
-proc getBlockHash*(ctx: HostContext, number: UInt256): Hash256 =
-  ctx.host.get_block_hash(ctx.context, number.truncate(int64))
+proc getBlockHash*(ctx: HostContext, number: BlockNumber): Hash256 =
+  ctx.host.get_block_hash(ctx.context, number.int64)
 
 proc accountExists*(ctx: HostContext, address: EthAddress): bool =
   ctx.host.account_exists(ctx.context, address)
@@ -175,8 +175,8 @@ proc setTransientStorage*(ctx: HostContext, address: EthAddress,
 # The following two templates put here because the stupid style checker
 # complaints about block_number vs blockNumber and chain_id vs chainId
 # if they are written directly in computation.nim
-template getBlockNumber*(ctx: HostContext): UInt256 =
-  ctx.getTxContext().block_number.u256
+template getBlockNumber*(ctx: HostContext): uint64 =
+  ctx.getTxContext().block_number.uint64
 
 template getChainId*(ctx: HostContext): uint64 =
   UInt256.fromEvmc(ctx.getTxContext().chain_id).truncate(uint64)

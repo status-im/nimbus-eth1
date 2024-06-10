@@ -47,7 +47,7 @@ proc procBlkPreamble(vmState: BaseVMState, blk: EthBlock): Result[void, string] 
   template header(): BlockHeader =
     blk.header
 
-  if vmState.com.daoForkSupport and vmState.com.daoForkBlock.get == header.blockNumber:
+  if vmState.com.daoForkSupport and vmState.com.daoForkBlock.get == header.number:
     vmState.mutateStateDB:
       db.applyDAOHardFork()
 
@@ -112,23 +112,23 @@ proc procBlkEpilogue(vmState: BaseVMState, header: BlockHeader): Result[void, st
   if header.stateRoot != stateDB.rootHash:
     # TODO replace logging with better error
     debug "wrong state root in block",
-      blockNumber = header.blockNumber,
+      blockNumber = header.number,
       expected = header.stateRoot,
       actual = stateDB.rootHash,
       arrivedFrom = vmState.com.db.getCanonicalHead().stateRoot
     return err("stateRoot mismatch")
 
   let bloom = createBloom(vmState.receipts)
-  if header.bloom != bloom:
+  if header.logsBloom != bloom:
     return err("bloom mismatch")
 
-  let receiptRoot = calcReceiptRoot(vmState.receipts)
-  if header.receiptRoot != receiptRoot:
+  let receiptsRoot = calcReceiptsRoot(vmState.receipts)
+  if header.receiptsRoot != receiptsRoot:
     # TODO replace logging with better error
     debug "wrong receiptRoot in block",
-      blockNumber = header.blockNumber,
-      actual = receiptRoot,
-      expected = header.receiptRoot
+      blockNumber = header.number,
+      actual = receiptsRoot,
+      expected = header.receiptsRoot
     return err("receiptRoot mismatch")
 
   ok()

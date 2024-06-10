@@ -57,7 +57,7 @@ import
 
 # Need to be selective due to the `Block` type conflict from downloader
 from ../network/history/history_network import encode
-from ../../nimbus/utils/utils import calcTxRoot, calcReceiptRoot
+from ../../nimbus/utils/utils import calcTxRoot, calcreceiptsRoot
 
 chronicles.formatIt(IoErrorCode):
   $it
@@ -406,7 +406,7 @@ when isMainModule:
 
               headerHash = to0xHex(rlpHash(blockHeader).data)
             debug "Header decoded successfully",
-              hash = headerHash, blockNumber = blockHeader.blockNumber
+              hash = headerHash, blockNumber = blockHeader.number
           else:
             warn "Skipping record, not a block header", typ = toHex(header.typ)
 
@@ -464,10 +464,10 @@ when isMainModule:
                   return err("Invalid block header in " & file & ": " & e.msg)
 
               # Quick sanity check
-              if blockHeader.blockNumber.truncate(uint64) != i * epochSize + count:
+              if blockHeader.number != i * epochSize + count:
                 fatal "Incorrect block headers in file",
                   file = file,
-                  blockNumber = blockHeader.blockNumber,
+                  blockNumber = blockHeader.number,
                   expectedBlockNumber = i * epochSize + count
                 quit 1
 
@@ -478,7 +478,7 @@ when isMainModule:
               # a header for the next epoch (or on finishing the epoch).
               if writeEpochAccumulators:
                 if accumulator.currentEpoch.len() == epochSize or
-                    blockHeader.blockNumber.truncate(uint64) == mergeBlockNumber - 1:
+                    blockHeader.number == mergeBlockNumber - 1:
                   let file =
                     try:
                       dataDir / &"mainnet-epoch-accumulator-{i.uint64:05}.ssz"
@@ -495,7 +495,7 @@ when isMainModule:
                 info "Updated an epoch", epoch = i
               count.inc()
 
-              if blockHeader.blockNumber.truncate(uint64) == mergeBlockNumber - 1:
+              if blockHeader.number == mergeBlockNumber - 1:
                 let finishedAccumulator = finishAccumulator(accumulator)
                 info "Updated last epoch, finished building master accumulator",
                   epoch = i

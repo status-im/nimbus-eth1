@@ -251,7 +251,7 @@ proc collectDebugData(ctx: var TestCtx) =
   let tracerInst = LegacyTracer(vmState.tracer)
   let tracingResult = if ctx.trace: tracerInst.getTracingResult() else: %[]
   ctx.debugData.add %{
-    "blockNumber": %($vmState.blockNumber),
+    "blockNumber": %($vmState.number),
     "structLogs": tracingResult,
   }
 

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -95,7 +95,7 @@ proc gasLimitsGet*(com: CommonRef; parent: BlockHeader; parentLimit: GasInt;
   ## Calculate gas limits for the next block header.
   result.gasLimit = parentLimit
 
-  if com.isLondon(parent.blockNumber+1):
+  if com.isLondon(parent.number+1):
     result.setPostLondonLimits
   else:
     result.setPreLondonLimits
@@ -108,9 +108,9 @@ proc gasLimitsGet*(com: CommonRef; parent: BlockHeader; parentLimit: GasInt;
     result.trgLimit, (result.maxLimit * pc.hwmMax + 50) div 100)
 
   # override trgLimit, see https://github.com/status-im/nimbus-eth1/issues/1032
-  if com.isLondon(parent.blockNumber+1):
+  if com.isLondon(parent.number+1):
     var parentGasLimit = parent.gasLimit
-    if not com.isLondon(parent.blockNumber):
+    if not com.isLondon(parent.number):
       # Bump by 2x
       parentGasLimit = parent.gasLimit * EIP1559_ELASTICITY_MULTIPLIER
     result.trgLimit = calcGasLimit1559(parentGasLimit, desiredLimit = pc.gasCeil)

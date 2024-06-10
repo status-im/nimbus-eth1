@@ -27,13 +27,13 @@ proc validateBlock(com: CommonRef, blockNumber: BlockNumber): BlockNumber =
     blocks = newSeq[EthBlock](numBlocks)
 
   for i in 0 ..< numBlocks:
-    blocks[i] = com.db.getEthBlock(blockNumber + i.u256)
+    blocks[i] = com.db.getEthBlock(blockNumber + i.BlockNumber)
 
   let transaction = com.db.newTransaction()
   defer: transaction.dispose()
 
   for i in 0 ..< numBlocks:
-    stdout.write blockNumber + i.u256
+    stdout.write blockNumber + i.BlockNumber
     stdout.write "\r"
 
     let
@@ -42,12 +42,12 @@ proc validateBlock(com: CommonRef, blockNumber: BlockNumber): BlockNumber =
 
     if validationResult.isErr:
       error "block validation error",
-        err = validationResult.error(), blockNumber = blockNumber + i.u256
+        err = validationResult.error(), blockNumber = blockNumber + i.BlockNumber
 
     parent = blocks[i].header
 
   transaction.rollback()
-  result = blockNumber + numBlocks.u256
+  result = blockNumber + numBlocks.BlockNumber
 
 proc main() {.used.} =
   let
@@ -56,7 +56,7 @@ proc main() {.used.} =
       DefaultDbPersistent, conf.dataDir, DbOptions.init()))
 
   # move head to block number ...
-  if conf.head == 0.u256:
+  if conf.head == 0'u64:
     raise newException(ValueError, "please set block number with --head: blockNumber")
 
   var counter = 0

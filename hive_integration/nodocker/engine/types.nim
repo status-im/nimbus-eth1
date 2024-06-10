@@ -9,7 +9,8 @@
 # according to those terms.
 
 import
-  std/[options, typetraits, strutils],
+  std/[typetraits, strutils],
+  chronicles,
   eth/common,
   nimcrypto/[sysrand, sha2],
   stew/[byteutils, endians2],
@@ -33,7 +34,7 @@ type
     ForkCancun   = "Cancun"
 
   BaseSpec* = ref object of RootObj
-    txType*: Option[TxType]
+    txType*: Opt[TxType]
 
     # CL Mocker configuration for slots to `safe` and `finalized` respectively
     slotsToSafe*: int
@@ -56,9 +57,9 @@ type
 
   ExecutableData* = object
     basePayload*: ExecutionPayload
-    beaconRoot* : Option[common.Hash256]
+    beaconRoot* : Opt[common.Hash256]
     attr*       : PayloadAttributes
-    versionedHashes*: Option[seq[common.Hash256]]
+    versionedHashes*: Opt[seq[common.Hash256]]
 
 const
   DefaultTimeout* = 60 # seconds
@@ -113,7 +114,7 @@ template testCond*(expr, body: untyped) =
     body
     return false
 
-proc `==`*(a: Option[BlockHash], b: Option[common.Hash256]): bool =
+proc `==`*(a: Opt[BlockHash], b: Opt[common.Hash256]): bool =
   if a.isNone and b.isNone:
     return true
   if a.isSome and b.isSome:
@@ -142,7 +143,7 @@ template expectPayload*(res: untyped, payload: ExecutionPayload) =
     testCond x.executionPayload == payload.V3:
       error "getPayloadV3 return mismatch payload"
 
-template expectWithdrawalsRoot*(res: untyped, wdRoot: Option[common.Hash256]) =
+template expectWithdrawalsRoot*(res: untyped, wdRoot: Opt[common.Hash256]) =
   testCond res.isOk:
     error "Unexpected error", msg=res.error
   let h = res.get
@@ -235,7 +236,7 @@ template expectStatus*(res: untyped, cond: PayloadExecutionStatus) =
   testCond s.status == cond:
     error "Unexpected newPayload status", expect=cond, get=s.status
 
-template expectPayloadID*(res: untyped, id: Option[PayloadID]) =
+template expectPayloadID*(res: untyped, id: Opt[PayloadID]) =
   testCond res.isOk:
     error "Unexpected expectPayloadID Error", msg=res.error
   let s = res.get()

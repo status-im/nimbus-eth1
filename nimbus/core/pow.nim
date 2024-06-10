@@ -27,16 +27,16 @@ type
   PowDigest = tuple ##\
     ## Return value from the `hashimotoLight()` function
     mixDigest: Hash256
-    value: Hash256
+    value  : Hash256
 
   PowSpecs* = object ##\
     ## Relevant block header parts for PoW mining & verifying. This object
     ## might be more useful for testing and debugging than for production.
-    blockNumber*: BlockNumber
+    number*    : BlockNumber
     miningHash*: Hash256
-    nonce: BlockNonce
-    mixDigest*: Hash256
-    difficulty: DifficultyInt
+    nonce      : BlockNonce
+    mixHash*   : Hash256
+    difficulty : DifficultyInt
 
   PowHeader = object ##\
     ## Stolen from `p2p/validate.MiningHeader`
@@ -45,10 +45,10 @@ type
     coinbase    : EthAddress
     stateRoot   : Hash256
     txRoot      : Hash256
-    receiptRoot : Hash256
-    bloom       : common.BloomFilter
+    receiptsRoot: Hash256
+    logsBloom   : common.BloomFilter
     difficulty  : DifficultyInt
-    blockNumber : BlockNumber
+    number      : BlockNumber
     gasLimit    : GasInt
     gasUsed     : GasInt
     timestamp   : EthTime
@@ -69,24 +69,24 @@ type
 func append(w: var RlpWriter; specs: PowSpecs) =
   ## RLP support
   w.startList(5)
-  w.append(HashOrNum(isHash: false, number: specs.blockNumber))
+  w.append(HashOrNum(isHash: false, number: specs.number))
   w.append(HashOrNum(isHash: true, hash: specs.miningHash))
   w.append(specs.nonce.toUint)
-  w.append(HashOrNum(isHash: true, hash: specs.mixDigest))
+  w.append(HashOrNum(isHash: true, hash: specs.mixHash))
   w.append(specs.difficulty)
 
 func read(rlp: var Rlp; Q: type PowSpecs): Q
     {.raises: [RlpError].} =
   ## RLP support
   rlp.tryEnterList()
-  result.blockNumber = rlp.read(HashOrNum).number
+  result.number = rlp.read(HashOrNum).number
   result.miningHash =  rlp.read(HashOrNum).hash
   result.nonce =       rlp.read(uint64).toBlockNonce
-  result.mixDigest =   rlp.read(HashOrNum).hash
+  result.mixHash =   rlp.read(HashOrNum).hash
   result.difficulty =  rlp.read(DifficultyInt)
 
 func rlpTextEncode(specs: PowSpecs): string =
-  "specs #" & $specs.blockNumber & " " & rlp.encode(specs).toHex
+  "specs #" & $specs.number & " " & rlp.encode(specs).toHex
 
 func decodeRlpText(data: string): PowSpecs
     {.raises: [CatchableError].} =
@@ -108,10 +108,10 @@ func miningHash(header: BlockHeader): Hash256 =
     coinbase:    header.coinbase,
     stateRoot:   header.stateRoot,
     txRoot:      header.txRoot,
-    receiptRoot: header.receiptRoot,
-    bloom:       header.bloom,
+    receiptsRoot:header.receiptsRoot,
+    logsBloom:   header.logsBloom,
     difficulty:  header.difficulty,
-    blockNumber: header.blockNumber,
+    number:      header.number,
     gasLimit:    header.gasLimit,
     gasUsed:     header.gasUsed,
     timestamp:   header.timestamp,
@@ -148,10 +148,10 @@ func getPowSpecs*(header: BlockHeader): PowSpecs =
   ## for mining or pow verification. This function might be more useful for
   ## testing and debugging than for production.
   PowSpecs(
-    blockNumber: header.blockNumber,
+    number:      header.number,
     miningHash:  header.miningHash,
     nonce:       header.nonce,
-    mixDigest:   header.mixDigest,
+    mixHash:     header.mixHash,
     difficulty:  header.difficulty)
 
 func getPowCacheLookup*(tm: PowRef;
@@ -178,7 +178,7 @@ func getPowCacheLookup*(tm: PowRef;
 
 func getPowDigest(tm: PowRef; blockNumber: BlockNumber;
                   powHeaderDigest: Hash256; nonce: BlockNonce): PowDigest =
-  ## Calculate the expected value of `header.mixDigest` using the
+  ## Calculate the expected value of `header.mixHash` using the
   ## `hashimotoLight()` library method.
   let
     ds = tm.lightByEpoch.get(blockNumber)
@@ -187,11 +187,11 @@ func getPowDigest(tm: PowRef; blockNumber: BlockNumber;
 
 func getPowDigest*(tm: PowRef; header: BlockHeader): PowDigest =
   ## Variant of `getPowDigest()`
-  tm.getPowDigest(header.blockNumber, header.miningHash, header.nonce)
+  tm.getPowDigest(header.number, header.miningHash, header.nonce)
 
 func getPowDigest*(tm: PowRef; specs: PowSpecs): PowDigest =
   ## Variant of `getPowDigest()`
-  tm.getPowDigest(specs.blockNumber, specs.miningHash, specs.nonce)
+  tm.getPowDigest(specs.number, specs.miningHash, specs.nonce)
 
 # ------------------------------------------------------------------------------
 # Public functions, debugging & testing

@@ -50,23 +50,23 @@ func init*(
     txIndex: int,
 ): T {.raises: [ValidationError].} =
   TransactionObject(
-    blockHash: some(w3Hash header.blockHash),
-    blockNumber: some(eth_api_types.BlockNumber(header.blockNumber.truncate(uint64))),
+    blockHash: Opt.some(w3Hash header.blockHash),
+    blockNumber: Opt.some(eth_api_types.BlockNumber(header.number)),
     `from`: w3Addr tx.getSender(),
     gas: Quantity(tx.gasLimit),
     gasPrice: Quantity(tx.gasPrice),
     hash: w3Hash tx.rlpHash,
     input: tx.payload,
     nonce: Quantity(tx.nonce),
-    to: some(w3Addr tx.destination),
-    transactionIndex: some(Quantity(txIndex)),
+    to: Opt.some(w3Addr tx.destination),
+    transactionIndex: Opt.some(Quantity(txIndex)),
     value: tx.value,
     v: Quantity(tx.V),
     r: tx.R,
     s: tx.S,
-    `type`: some(Quantity(tx.txType)),
-    maxFeePerGas: some(Quantity(tx.maxFee)),
-    maxPriorityFeePerGas: some(Quantity(tx.maxPriorityFee)),
+    `type`: Opt.some(Quantity(tx.txType)),
+    maxFeePerGas: Opt.some(Quantity(tx.maxFeePerGas)),
+    maxPriorityFeePerGas: Opt.some(Quantity(tx.maxPriorityFeePerGas)),
   )
 
 # Note: Similar as `populateBlockObject` from rpc_utils, but lacking the
@@ -81,15 +81,15 @@ func init*(
   let blockHash = header.blockHash
 
   var blockObject = BlockObject(
-    number: eth_api_types.BlockNumber(header.blockNumber.truncate(uint64)),
+    number: eth_api_types.BlockNumber(header.number),
     hash: w3Hash blockHash,
     parentHash: w3Hash header.parentHash,
-    nonce: some(FixedBytes[8](header.nonce)),
+    nonce: Opt.some(FixedBytes[8](header.nonce)),
     sha3Uncles: w3Hash header.ommersHash,
-    logsBloom: FixedBytes[256] header.bloom,
+    logsBloom: FixedBytes[256] header.logsBloom,
     transactionsRoot: w3Hash header.txRoot,
     stateRoot: w3Hash header.stateRoot,
-    receiptsRoot: w3Hash header.receiptRoot,
+    receiptsRoot: w3Hash header.receiptsRoot,
     miner: w3Addr header.coinbase,
     difficulty: header.difficulty,
     extraData: HistoricExtraData header.extraData,
@@ -97,9 +97,9 @@ func init*(
     # https://playground.open-rpc.org/?schemaUrl=https://raw.githubusercontent.com/ethereum/eth1.0-apis/assembled-spec/openrpc.json
     # So we should probably change `BlockObject`.
     totalDifficulty: UInt256.low(),
-    gasLimit: Quantity(header.gasLimit.uint64),
-    gasUsed: Quantity(header.gasUsed.uint64),
-    timestamp: Quantity(header.timestamp.uint64),
+    gasLimit: Quantity(header.gasLimit),
+    gasUsed: Quantity(header.gasUsed),
+    timestamp: Quantity(header.timestamp),
   )
 
   let size = sizeof(BlockHeader) - sizeof(Blob) + header.extraData.len
@@ -212,7 +212,7 @@ proc installEthApiHandlers*(
 
   rpcServerWithProxy.rpc("eth_getBlockByHash") do(
     data: eth_api_types.Hash256, fullTransactions: bool
-  ) -> Option[BlockObject]:
+  ) -> Opt[BlockObject]:
     ## Returns information about a block by hash.
     ##
     ## data: Hash of a block.
@@ -223,13 +223,13 @@ proc installEthApiHandlers*(
     let
       blockHash = data.toHash()
       (header, body) = (await historyNetwork.getBlock(blockHash)).valueOr:
-        return none(BlockObject)
+        return Opt.none(BlockObject)
 
-    return some(BlockObject.init(header, body, fullTransactions))
+    return Opt.some(BlockObject.init(header, body, fullTransactions))
 
   rpcServerWithProxy.rpc("eth_getBlockByNumber") do(
     quantityTag: RtBlockIdentifier, fullTransactions: bool
-  ) -> Option[BlockObject]:
+  ) -> Opt[BlockObject]:
     if quantityTag.kind == bidAlias:
       let tag = quantityTag.alias.toLowerAscii
       case tag
@@ -250,9 +250,9 @@ proc installEthApiHandlers*(
             let
               blockHash = forkyStore.optimistic_header.execution.block_hash
               (header, body) = (await historyNetwork.getBlock(blockHash)).valueOr:
-                return none(BlockObject)
+                return Opt.none(BlockObject)
 
-            return some(BlockObject.init(header, body, fullTransactions))
+            return Opt.some(BlockObject.init(header, body, fullTransactions))
           else:
             raise newException(ValueError, "Not available before Capella - not synced?")
       of "finalized":
@@ -264,9 +264,9 @@ proc installEthApiHandlers*(
             let
               blockHash = forkyStore.finalized_header.execution.block_hash
               (header, body) = (await historyNetwork.getBlock(blockHash)).valueOr:
-                return none(BlockObject)
+                return Opt.none(BlockObject)
 
-            return some(BlockObject.init(header, body, fullTransactions))
+            return Opt.some(BlockObject.init(header, body, fullTransactions))
           else:
             raise newException(ValueError, "Not available before Capella - not synced?")
       of "pending":
@@ -275,15 +275,15 @@ proc installEthApiHandlers*(
         raise newException(ValueError, "Unsupported block tag " & tag)
     else:
       let
-        blockNumber = quantityTag.number.uint64.toBlockNumber
+        blockNumber = quantityTag.number.uint64.u256
         maybeBlock = (await historyNetwork.getBlock(blockNumber)).valueOr:
           raise newException(ValueError, error)
 
       if maybeBlock.isNone():
-        return none(BlockObject)
+        return Opt.none(BlockObject)
       else:
         let (header, body) = maybeBlock.get()
-        return some(BlockObject.init(header, body, fullTransactions))
+        return Opt.some(BlockObject.init(header, body, fullTransactions))
 
   rpcServerWithProxy.rpc("eth_getBlockTransactionCountByHash") do(
     data: eth_api_types.Hash256
@@ -309,7 +309,7 @@ proc installEthApiHandlers*(
   # from from the block with that block hash. The Canonical Indices Network
   # would need to be implemented to get this information.
   # rpcServerWithProxy.rpc("eth_getTransactionReceipt") do(
-  #     data: EthHashStr) -> Option[ReceiptObject]:
+  #     data: EthHashStr) -> Opt[ReceiptObject]:
 
   rpcServerWithProxy.rpc("eth_getLogs") do(
     filterOptions: FilterOptions

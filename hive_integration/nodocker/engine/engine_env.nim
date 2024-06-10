@@ -162,7 +162,7 @@ proc close*(env: EngineEnv) =
 proc setRealTTD*(env: EngineEnv) =
   let genesis = env.com.genesisHeader
   let realTTD = genesis.difficulty
-  env.com.setTTD some(realTTD)
+  env.com.setTTD Opt.some(realTTD)
   env.ttd = realTTD
 
 func httpPort*(env: EngineEnv): Port =

@@ -10,7 +10,6 @@
 {.push raises: [].}
 
 import
-  std/[options],
   chronicles,
   eth/trie/trie_defs,
   ../core/[pow, casper],
@@ -24,7 +23,6 @@ export
   core_db,
   constants,
   errors,
-  options,
   evmforks,
   hardforks,
   genesis,
@@ -159,13 +157,13 @@ proc init(com         : CommonRef,
   # by setForkId
   if genesis.isNil.not:
     com.hardForkTransition(ForkDeterminationInfo(
-      blockNumber: 0.toBlockNumber,
+      number: 0.BlockNumber,
       td: Opt.some(0.u256),
       time: Opt.some(genesis.timestamp)
     ))
 
     # Must not overwrite the global state on the single state DB
-    if not db.getBlockHeader(0.toBlockNumber, com.genesisHeader):
+    if not db.getBlockHeader(0.BlockNumber, com.genesisHeader):
       com.genesisHeader = toGenesisHeader(genesis,
         com.currentFork, com.db)
 
@@ -173,7 +171,7 @@ proc init(com         : CommonRef,
     com.pos.timestamp = genesis.timestamp
   else:
     com.hardForkTransition(ForkDeterminationInfo(
-      blockNumber: 0.toBlockNumber,
+      number: 0.BlockNumber,
       td: Opt.some(0.u256),
       time: Opt.some(TimeZero)
     ))
@@ -191,7 +189,7 @@ proc getTd(com: CommonRef, blockHash: Hash256): Opt[DifficultyInt] =
 
 func needTdForHardForkDetermination(com: CommonRef): bool =
   let t = com.forkTransitionTable.mergeForkTransitionThreshold
-  t.ttdPassed.isNone and t.blockNumber.isNone and t.ttd.isSome
+  t.ttdPassed.isNone and t.number.isNone and t.ttd.isSome
 
 proc getTdIfNecessary(com: CommonRef, blockHash: Hash256): Opt[DifficultyInt] =
   if needTdForHardForkDetermination(com):
@@ -288,7 +286,7 @@ func hardForkTransition*(
     td: Opt[DifficultyInt],
     time: Opt[EthTime]) =
   com.hardForkTransition(ForkDeterminationInfo(
-    blockNumber: number, time: time, td: td))
+    number: number, time: time, td: td))
 
 proc hardForkTransition*(
     com: CommonRef,
@@ -301,7 +299,7 @@ proc hardForkTransition*(
     com: CommonRef, header: BlockHeader)
     {.gcsafe, raises: [].} =
   com.hardForkTransition(
-    header.parentHash, header.blockNumber, Opt.some(header.timestamp))
+    header.parentHash, header.number, Opt.some(header.timestamp))
 
 func toEVMFork*(com: CommonRef, forkDeterminer: ForkDeterminationInfo): EVMFork =
   ## similar to toFork, but produce EVMFork
@@ -333,7 +331,7 @@ func forkId*(com: CommonRef, head, time: uint64): ForkID {.gcsafe.} =
 
 func forkId*(com: CommonRef, head: BlockNumber, time: EthTime): ForkID {.gcsafe.} =
   ## EIP 2364/2124
-  com.forkIdCalculator.newID(head.truncate(uint64), time.uint64)
+  com.forkIdCalculator.newID(head, time.uint64)
 
 func isEIP155*(com: CommonRef, number: BlockNumber): bool =
   com.config.eip155Block.isSome and number >= com.config.eip155Block.get
@@ -372,7 +370,7 @@ proc initializeEmptyDb*(com: CommonRef)
     kvt.hasKey(key).expect "valid bool"
   if canonicalHeadHashKey().toOpenArray notin kvt:
     info "Writing genesis to DB"
-    doAssert(com.genesisHeader.blockNumber.isZero,
+    doAssert(com.genesisHeader.number == 0.BlockNumber,
       "can't commit genesis block with number > 0")
     com.db.persistHeaderToDb(com.genesisHeader,
       com.consensusType == ConsensusType.POS)
@@ -412,19 +410,19 @@ func db*(com: CommonRef): CoreDbRef =
 func consensus*(com: CommonRef): ConsensusType =
   com.consensusType
 
-func eip150Block*(com: CommonRef): Option[BlockNumber] =
+func eip150Block*(com: CommonRef): Opt[BlockNumber] =
   com.config.eip150Block
 
 func eip150Hash*(com: CommonRef): Hash256 =
   com.config.eip150Hash
 
-func daoForkBlock*(com: CommonRef): Option[BlockNumber] =
+func daoForkBlock*(com: CommonRef): Opt[BlockNumber] =
   com.config.daoForkBlock
 
 func daoForkSupport*(com: CommonRef): bool =
   com.config.daoForkSupport
 
-func ttd*(com: CommonRef): Option[DifficultyInt] =
+func ttd*(com: CommonRef): Opt[DifficultyInt] =
   com.config.terminalTotalDifficulty
 
 func ttdPassed*(com: CommonRef): bool =
@@ -483,7 +481,7 @@ func `startOfHistory=`*(com: CommonRef, val: Hash256) =
   ## Setter
   com.startOfHistory = val
 
-func setTTD*(com: CommonRef, ttd: Option[DifficultyInt]) =
+func setTTD*(com: CommonRef, ttd: Opt[DifficultyInt]) =
   ## useful for testing
   com.config.terminalTotalDifficulty = ttd
   # rebuild the MergeFork piece of the forkTransitionTable

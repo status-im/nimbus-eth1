@@ -35,12 +35,12 @@ proc toBlock(n: JsonNode, key: string): EthBlock =
 proc setupChain(): CommonRef =
   let config = ChainConfig(
     chainId             : MainNet.ChainId,
-    byzantiumBlock      : some(0.toBlockNumber),
-    constantinopleBlock : some(0.toBlockNumber),
-    petersburgBlock     : some(0.toBlockNumber),
-    istanbulBlock       : some(0.toBlockNumber),
-    muirGlacierBlock    : some(0.toBlockNumber),
-    berlinBlock         : some(10.toBlockNumber)
+    byzantiumBlock      : some(0.BlockNumber),
+    constantinopleBlock : some(0.BlockNumber),
+    petersburgBlock     : some(0.BlockNumber),
+    istanbulBlock       : some(0.BlockNumber),
+    muirGlacierBlock    : some(0.BlockNumber),
+    berlinBlock         : some(10.BlockNumber)
   )
 
   var jn = json.parseFile(dataFolder & "/oneUncle.json")
@@ -55,7 +55,7 @@ proc setupChain(): CommonRef =
     extraData : gen.header.extraData,
     gasLimit  : gen.header.gasLimit,
     difficulty: gen.header.difficulty,
-    mixHash   : gen.header.mixDigest,
+    mixHash   : gen.header.mixHash,
     coinBase  : gen.header.coinbase,
     timestamp : gen.header.timestamp,
     baseFeePerGas: gen.header.fee

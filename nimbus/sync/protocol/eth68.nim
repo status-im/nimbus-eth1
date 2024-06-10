@@ -228,7 +228,7 @@ p2pProtocol eth68(version = ethVersion,
     when trEthTraceGossipOk:
       trace trEthRecvReceived & "NewBlock (0x07)", peer,
         totalDifficulty,
-        blockNumber = blk.header.blockNumber,
+        blockNumber = blk.header.number,
         blockDifficulty = blk.header.difficulty
 
     let ctx = peer.networkState()

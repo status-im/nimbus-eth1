@@ -87,14 +87,14 @@ proc persistFixtureBlock(chainDB: CoreDbRef) =
   # Manually inserting header to avoid any parent checks
   chainDB.kvt.put(genericHashKey(header.blockHash).toOpenArray, rlp.encode(header))
   chainDB.addBlockNumberToHashLookup(header)
-  discard chainDB.persistTransactions(header.blockNumber, getBlockBody4514995().transactions)
+  discard chainDB.persistTransactions(header.number, getBlockBody4514995().transactions)
   discard chainDB.persistReceipts(getReceipts4514995())
 
 proc setupEnv(com: CommonRef, signer, ks2: EthAddress, ctx: EthContext): TestEnv =
   var
     parent = com.db.getCanonicalHead()
     acc = ctx.am.getAccount(signer).tryGet()
-    blockNumber = 1.toBlockNumber
+    blockNumber = 1.BlockNumber
     parentHash = parent.blockHash
 
   const code = evmByteCode:
@@ -164,7 +164,7 @@ proc setupEnv(com: CommonRef, signer, ks2: EthAddress, ctx: EthContext): TestEnv
     vmState.receipts[txIndex] = makeReceipt(vmState, tx.txType)
 
   let
-    receiptRoot = com.db.persistReceipts(vmState.receipts)
+    receiptsRoot = com.db.persistReceipts(vmState.receipts)
     date        = dateTime(2017, mMar, 30)
     timeStamp   = date.toTime.toUnix.EthTime
     difficulty  = com.calcDifficulty(timeStamp, parent)
@@ -177,7 +177,7 @@ proc setupEnv(com: CommonRef, signer, ks2: EthAddress, ctx: EthContext): TestEnv
     #coinbase*:      EthAddress
     stateRoot   : vmState.stateDB.rootHash,
     txRoot      : txRoot,
-    receiptRoot : receiptRoot,
+    receiptsRoot : receiptsRoot,
     bloom       : createBloom(vmState.receipts),
     difficulty  : difficulty,
     blockNumber : blockNumber,
@@ -185,7 +185,7 @@ proc setupEnv(com: CommonRef, signer, ks2: EthAddress, ctx: EthContext): TestEnv
     gasUsed     : vmState.cumulativeGasUsed,
     timestamp   : timeStamp
     #extraData:     Blob
-    #mixDigest:     Hash256
+    #mixHash:     Hash256
     #nonce:         BlockNonce
     )
 
@@ -343,7 +343,7 @@ proc rpcMain*() =
       check res == w3Qty(0'u64)
 
     test "eth_getBlockTransactionCountByHash":
-      let hash = com.db.getBlockHash(0.toBlockNumber)
+      let hash = com.db.getBlockHash(0.BlockNumber)
       let res = await client.eth_getBlockTransactionCountByHash(w3Hash hash)
       check res == w3Qty(0'u64)
 
@@ -352,7 +352,7 @@ proc rpcMain*() =
       check res == w3Qty(0'u64)
 
     test "eth_getUncleCountByBlockHash":
-      let hash = com.db.getBlockHash(0.toBlockNumber)
+      let hash = com.db.getBlockHash(0.BlockNumber)
       let res = await client.eth_getUncleCountByBlockHash(w3Hash hash)
       check res == w3Qty(0'u64)
 
@@ -441,14 +441,14 @@ proc rpcMain*() =
     test "eth_getTransactionByHash":
       let res = await client.eth_getTransactionByHash(w3Hash env.txHash)
       check res.isNil.not
-      check res.blockNumber.get() == w3BlockNumber(1'u64)
+      check res.number.get() == w3BlockNumber(1'u64)
       let res2 = await client.eth_getTransactionByHash(w3Hash env.blockHash)
       check res2.isNil
 
     test "eth_getTransactionByBlockHashAndIndex":
       let res = await client.eth_getTransactionByBlockHashAndIndex(w3Hash env.blockHash, w3Qty(0'u64))
       check res.isNil.not
-      check res.blockNumber.get() == w3BlockNumber(1'u64)
+      check res.number.get() == w3BlockNumber(1'u64)
 
       let res2 = await client.eth_getTransactionByBlockHashAndIndex(w3Hash env.blockHash, w3Qty(3'u64))
       check res2.isNil
@@ -459,7 +459,7 @@ proc rpcMain*() =
     test "eth_getTransactionByBlockNumberAndIndex":
       let res = await client.eth_getTransactionByBlockNumberAndIndex("latest", w3Qty(1'u64))
       check res.isNil.not
-      check res.blockNumber.get() == w3BlockNumber(1'u64)
+      check res.number.get() == w3BlockNumber(1'u64)
 
       let res2 = await client.eth_getTransactionByBlockNumberAndIndex("latest", w3Qty(3'u64))
       check res2.isNil
@@ -467,7 +467,7 @@ proc rpcMain*() =
     test "eth_getTransactionReceipt":
       let res = await client.eth_getTransactionReceipt(w3Hash env.txHash)
       check res.isNil.not
-      check res.blockNumber == w3BlockNumber(1'u64)
+      check res.number == w3BlockNumber(1'u64)
 
       let res2 = await client.eth_getTransactionReceipt(w3Hash env.blockHash)
       check res2.isNil
@@ -514,8 +514,8 @@ proc rpcMain*() =
     test "eth_getLogs by blockNumber, no filters":
       let testHeader = getBlockHeader4514995()
       let testHash = testHeader.blockHash
-      let fBlock = blockId(testHeader.blockNumber.truncate(uint64))
-      let tBlock = blockId(testHeader.blockNumber.truncate(uint64))
+      let fBlock = blockId(testHeader.number)
+      let tBlock = blockId(testHeader.number)
       let filterOptions = FilterOptions(
         fromBlock: some(fBlock),
         toBlock: some(tBlock)
