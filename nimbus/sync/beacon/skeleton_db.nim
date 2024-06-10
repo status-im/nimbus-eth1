@@ -208,4 +208,7 @@ proc insertBlock*(sk: SkeletonRef,
     return err(error)
   if maybeBody.isNone:
     return err("insertBlock: Block body not found: " & $header.u64)
-  sk.insertBlocks([EthBlock.init(header, maybeBody.get)], fromEngine)
+  # TODO: make `header` param become a sink and then fix caller
+  let headerCopy = header
+  # EthBlock.init will call `system.move` on both headerCopy and  maybeBody
+  sk.insertBlocks([EthBlock.init(headerCopy, maybeBody.get)], fromEngine)
