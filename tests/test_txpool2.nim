@@ -139,6 +139,7 @@ proc runTxPoolPosTest() =
     chain = env.chain
     body: BlockBody
     blk: EthBlock
+    headerCopy: BlockHeader
 
   suite "Test TxPool with PoS block":
     test "TxPool addLocal":
@@ -170,20 +171,22 @@ proc runTxPoolPosTest() =
         uncles: blk.uncles
       )
       check blk.txs.len == 1
+      headerCopy = blk.header # make a copy before EthBlock.init
 
     test "PoS persistBlocks":
+      # EthBlock.init will move header and body
       let rr = chain.persistBlocks([EthBlock.init(blk.header, body)])
       check rr.isOk()
 
     test "validate TxPool prevRandao setter":
-      var sdb = LedgerRef.init(com.db, blk.header.stateRoot)
+      var sdb = LedgerRef.init(com.db, headerCopy.stateRoot)
       let val = sdb.getStorage(recipient, slot)
       let randao = Hash256(data: val.toBytesBE)
       check randao == prevRandao
 
     test "feeRecipient rewarded":
-      check blk.header.coinbase == feeRecipient
-      var sdb = LedgerRef.init(com.db, blk.header.stateRoot)
+      check headerCopy.coinbase == feeRecipient
+      var sdb = LedgerRef.init(com.db, headerCopy.stateRoot)
       let bal = sdb.getBalance(feeRecipient)
       check not bal.isZero
 
@@ -199,6 +202,7 @@ proc runTxPoolBlobhashTest() =
     chain = env.chain
     body: BlockBody
     blk: EthBlock
+    headerCopy: BlockHeader
 
   suite "Test TxPool with blobhash block":
     test "TxPool addLocal":
@@ -233,20 +237,22 @@ proc runTxPoolBlobhashTest() =
         withdrawals: some[seq[Withdrawal]](@[])
       )
       check blk.txs.len == 2
+      headerCopy = blk.header # make a copy before EthBlock.init
 
     test "Blobhash persistBlocks":
+      # EthBlock.init will move header and body
       let rr = chain.persistBlocks([EthBlock.init(blk.header, body)])
       check rr.isOk()
 
     test "validate TxPool prevRandao setter":
-      var sdb = LedgerRef.init(com.db, blk.header.stateRoot)
+      var sdb = LedgerRef.init(com.db, headerCopy.stateRoot)
       let val = sdb.getStorage(recipient, slot)
       let randao = Hash256(data: val.toBytesBE)
       check randao == prevRandao
 
     test "feeRecipient rewarded":
-      check blk.header.coinbase == feeRecipient
-      var sdb = LedgerRef.init(com.db, blk.header.stateRoot)
+      check headerCopy.coinbase == feeRecipient
+      var sdb = LedgerRef.init(com.db, headerCopy.stateRoot)
       let bal = sdb.getBalance(feeRecipient)
       check not bal.isZero
 
@@ -256,7 +262,7 @@ proc runTxPoolBlobhashTest() =
         tx4 = env.signTxWithNonce(tx3, AccountNonce(env.nonce-2))
         xp = env.xp
 
-      check xp.smartHead(blk.header)
+      check xp.smartHead(headerCopy)
       let res = xp.addLocal(PooledTransaction(tx: tx4), force = true)
       check res.isOk
       if res.isErr:
@@ -283,6 +289,8 @@ proc runTxHeadDelta(noisy = true) =
         numBlocks = 10
 
       # setTraceLevel()
+
+      var headerCopy: BlockHeader
 
       block:
         for n in 0..<numBlocks:
@@ -315,14 +323,16 @@ proc runTxHeadDelta(noisy = true) =
           let body = BlockBody(
             transactions: blk.txs,
             uncles: blk.uncles)
+          headerCopy = blk.header # make a copy before EthBlock.init
 
           # Commit to block chain
+          # EthBlock.init will move header and body
           check chain.persistBlocks([EthBlock.init(blk.header, body)]).isOk
 
           # Synchronise TxPool against new chain head, register txs differences.
           # In this particular case, these differences will simply flush the
           # packer bucket.
-          check xp.smartHead(blk.header)
+          check xp.smartHead(headerCopy)
 
           # Move TxPool chain head to new chain head and apply delta jobs
           check xp.nItems.staged == 0
