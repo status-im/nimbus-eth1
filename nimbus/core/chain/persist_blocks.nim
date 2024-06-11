@@ -37,45 +37,41 @@ type
 
   PersistBlockFlags = set[PersistBlockFlag]
 
-  PersistStats = tuple
-    blocks: int
-    txs: int
-    gas: GasInt
+  PersistStats = tuple[blocks: int, txs: int, gas: GasInt]
 
-const
-  CleanUpEpoch = 30_000.toBlockNumber
-    ## Regular checks for history clean up (applies to single state DB). This
-    ## is mainly a debugging/testing feature so that the database can be held
-    ## a bit smaller. It is not applicable to a full node.
+const CleanUpEpoch = 30_000.toBlockNumber
+  ## Regular checks for history clean up (applies to single state DB). This
+  ## is mainly a debugging/testing feature so that the database can be held
+  ## a bit smaller. It is not applicable to a full node.
 
 # ------------------------------------------------------------------------------
 # Private
 # ------------------------------------------------------------------------------
 
-proc getVmState(c: ChainRef, header: BlockHeader):
-                Result[BaseVMState, string] =
+proc getVmState(c: ChainRef, header: BlockHeader): Result[BaseVMState, string] =
   let vmState = BaseVMState()
   if not vmState.init(header, c.com):
     return err("Could not initialise VMState")
   ok(vmState)
 
-proc purgeOlderBlocksFromHistory(
-    db: CoreDbRef;
-    bn: BlockNumber;
-      ) {.inline, raises: [RlpError].} =
+proc purgeOlderBlocksFromHistory(db: CoreDbRef, bn: BlockNumber) =
   ## Remove non-reachable blocks from KVT database
   if 0 < bn:
     var blkNum = bn - 1
     while 0 < blkNum:
-      if not db.forgetHistory blkNum:
-        break
+      try:
+        if not db.forgetHistory blkNum:
+          break
+      except RlpError as exc:
+        warn "Error forgetting history", err = exc.msg
       blkNum = blkNum - 1
 
-proc persistBlocksImpl(c: ChainRef; blocks: openArray[EthBlock];
-                       flags: PersistBlockFlags = {}): Result[PersistStats, string]
-                         {.raises: [CatchableError] .} =
+proc persistBlocksImpl(
+    c: ChainRef, blocks: openArray[EthBlock], flags: PersistBlockFlags = {}
+): Result[PersistStats, string] =
   let dbTx = c.db.newTransaction()
-  defer: dbTx.dispose()
+  defer:
+    dbTx.dispose()
 
   c.com.hardForkTransition(blocks[0].header)
 
@@ -89,12 +85,8 @@ proc persistBlocksImpl(c: ChainRef; blocks: openArray[EthBlock];
 
   var txs = 0
   for blk in blocks:
-    template header: BlockHeader = blk.header
-
-    # # This transaction keeps the current state open for inspection
-    # # if an error occurs (as needed for `Aristo`.).
-    # let lapTx = c.db.newTransaction()
-    # defer: lapTx.dispose()
+    template header(): BlockHeader =
+      blk.header
 
     c.com.hardForkTransition(header)
 
@@ -102,17 +94,12 @@ proc persistBlocksImpl(c: ChainRef; blocks: openArray[EthBlock];
       debug "Cannot update VmState", blockNumber = header.blockNumber
       return err("Cannot update VmState to block " & $header.blockNumber)
 
-    if c.validateBlock and c.extraValidation and
-       c.verifyFrom <= header.blockNumber:
-
+    if c.validateBlock and c.extraValidation and c.verifyFrom <= header.blockNumber:
       # TODO: how to checkseal from here
-      ? c.com.validateHeaderAndKinship(blk, checkSealOK = false)
+      ?c.com.validateHeaderAndKinship(blk, checkSealOK = false)
 
-    let
-      validationResult = if c.validateBlock:
-                           vmState.processBlock(blk)
-                         else:
-                           ValidationResult.OK
+    if c.validateBlock:
+      ?vmState.processBlock(blk)
 
     # when defined(nimbusDumpDebuggingMetaData):
     #   if validationResult == ValidationResult.Error and
@@ -120,21 +107,22 @@ proc persistBlocksImpl(c: ChainRef; blocks: openArray[EthBlock];
     #     vmState.dumpDebuggingMetaData(header, body)
     #     warn "Validation error. Debugging metadata dumped."
 
-    if validationResult != ValidationResult.OK:
-      return err("Failed to validate block")
+    try:
+      if NoPersistHeader notin flags:
+        c.db.persistHeaderToDb(
+          header, c.com.consensus == ConsensusType.POS, c.com.startOfHistory
+        )
 
-    if NoPersistHeader notin flags:
-      c.db.persistHeaderToDb(
-        header, c.com.consensus == ConsensusType.POS, c.com.startOfHistory)
+      if NoSaveTxs notin flags:
+        discard c.db.persistTransactions(header.blockNumber, blk.transactions)
 
-    if NoSaveTxs notin flags:
-      discard c.db.persistTransactions(header.blockNumber, blk.transactions)
+      if NoSaveReceipts notin flags:
+        discard c.db.persistReceipts(vmState.receipts)
 
-    if NoSaveReceipts notin flags:
-      discard c.db.persistReceipts(vmState.receipts)
-
-    if NoSaveWithdrawals notin flags and blk.withdrawals.isSome:
-      discard c.db.persistWithdrawals(blk.withdrawals.get)
+      if NoSaveWithdrawals notin flags and blk.withdrawals.isSome:
+        discard c.db.persistWithdrawals(blk.withdrawals.get)
+    except CatchableError as exc:
+      return err(exc.msg)
 
     # update currentBlock *after* we persist it
     # so the rpc return consistent result
@@ -157,7 +145,10 @@ proc persistBlocksImpl(c: ChainRef; blocks: openArray[EthBlock];
     let n = fromBlock div CleanUpEpoch
     if 0 < n and n < (toBlock div CleanUpEpoch):
       # Starts at around `2 * CleanUpEpoch`
-      c.db.purgeOlderBlocksFromHistory(fromBlock - CleanUpEpoch)
+      try:
+        c.db.purgeOlderBlocksFromHistory(fromBlock - CleanUpEpoch)
+      except CatchableError as exc:
+        warn "Could not clean up old blocks from history", err = exc.msg
 
   ok((blocks.len, txs, vmState.cumulativeGasUsed))
 
@@ -166,54 +157,60 @@ proc persistBlocksImpl(c: ChainRef; blocks: openArray[EthBlock];
 # ------------------------------------------------------------------------------
 
 proc insertBlockWithoutSetHead*(c: ChainRef, blk: EthBlock): Result[void, string] =
-  try:
-    discard ? c.persistBlocksImpl(
-      [blk], {NoPersistHeader, NoSaveReceipts})
+  discard ?c.persistBlocksImpl([blk], {NoPersistHeader, NoSaveReceipts})
 
+  try:
     c.db.persistHeaderToDbWithoutSetHead(blk.header, c.com.startOfHistory)
     ok()
-  except CatchableError as exc:
+  except RlpError as exc:
     err(exc.msg)
 
 proc setCanonical*(c: ChainRef, header: BlockHeader): Result[void, string] =
+  if header.parentHash == Hash256():
+    try:
+      if not c.db.setHead(header.blockHash):
+        return err("setHead failed")
+    except RlpError as exc:
+      # TODO fix exception+bool error return
+      return err(exc.msg)
+    return ok()
+
+  var body: BlockBody
   try:
-    if header.parentHash == Hash256():
-      discard c.db.setHead(header.blockHash)
-      return ok()
-
-    var body: BlockBody
     if not c.db.getBlockBody(header, body):
-      debug "Failed to get BlockBody",
-        hash = header.blockHash
+      debug "Failed to get BlockBody", hash = header.blockHash
       return err("Could not get block body")
+  except RlpError as exc:
+    return err(exc.msg)
 
-    discard ? c.persistBlocksImpl([EthBlock.init(header, move(body))], {NoPersistHeader, NoSaveTxs})
+  discard
+    ?c.persistBlocksImpl(
+      [EthBlock.init(header, move(body))], {NoPersistHeader, NoSaveTxs}
+    )
 
+  try:
     discard c.db.setHead(header.blockHash)
-    ok()
-  except CatchableError as exc:
-    err(exc.msg)
+  except RlpError as exc:
+    return err(exc.msg)
+  ok()
 
 proc setCanonical*(c: ChainRef, blockHash: Hash256): Result[void, string] =
   var header: BlockHeader
   if not c.db.getBlockHeader(blockHash, header):
-    debug "Failed to get BlockHeader",
-      hash = blockHash
+    debug "Failed to get BlockHeader", hash = blockHash
     return err("Could not get block header")
 
   setCanonical(c, header)
 
 proc persistBlocks*(
-    c: ChainRef; blocks: openArray[EthBlock]): Result[PersistStats, string] =
+    c: ChainRef, blocks: openArray[EthBlock]
+): Result[PersistStats, string] =
   # Run the VM here
   if blocks.len == 0:
     debug "Nothing to do"
     return ok(default(PersistStats)) # TODO not nice to return nil
 
-  try:
-    c.persistBlocksImpl(blocks)
-  except CatchableError as exc:
-    err(exc.msg)
+  c.persistBlocksImpl(blocks)
 
 # ------------------------------------------------------------------------------
 # End

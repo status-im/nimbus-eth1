@@ -184,9 +184,6 @@ proc pp*(w: TxChainGasLimits): string =
 # Public functions, other
 # ------------------------------------------------------------------------------
 
-proc isOk*(rc: ValidationResult): bool =
-  rc == ValidationResult.OK
-
 proc toHex*(acc: EthAddress): string =
   acc.toHex
 

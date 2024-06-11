@@ -41,10 +41,10 @@ proc executeBlock(blockEnv: JsonNode, memoryDB: CoreDbRef, blockNumber: UInt256)
     vmState = BaseVMState.new(parent, blk.header, com)
     validationResult = vmState.processBlock(blk)
 
-  if validationResult != ValidationResult.OK:
-    error "block validation error", validationResult
+  if validationResult.isErr:
+    error "block validation error", err = validationResult.error()
   else:
-    info "block validation success", validationResult, blockNumber
+    info "block validation success", blockNumber
 
   transaction.rollback()
   vmState.dumpDebuggingMetaData(blk, false)
