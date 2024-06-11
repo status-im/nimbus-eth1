@@ -43,11 +43,11 @@ TraceResponse.useDefaultSerializationIn JrpcConv
 proc installPortalApiHandlers*(
     rpcServer: RpcServer | RpcProxy, p: PortalProtocol, network: static string
 ) =
-  template invalidKeyErr() =
-    (ref errors.InvalidRequest)(code: -32602, msg: "Invalid content key")
-
-  template invalidValueErr() =
-    (ref errors.InvalidRequest)(code: -32602, msg: "Invalid content value")
+  let
+    invalidKeyErr =
+      (ref errors.InvalidRequest)(code: -32602, msg: "Invalid content key")
+    invalidValueErr =
+      (ref errors.InvalidRequest)(code: -32602, msg: "Invalid content value")
 
   rpcServer.rpc("portal_" & network & "NodeInfo") do() -> NodeInfo:
     return p.routingTable.getNodeInfo()
@@ -226,22 +226,22 @@ proc installPortalApiHandlers*(
     let valueToStore =
       if network == "state":
         let decodedKey = ContentKey.decode(key).valueOr:
-          raise invalidKeyErr()
+          raise invalidKeyErr
 
         case decodedKey.contentType
         of unused:
-          raise invalidKeyErr()
+          raise invalidKeyErr
         of accountTrieNode:
           let offerValue = AccountTrieNodeOffer.decode(contentValueBytes).valueOr:
-            raise invalidValueErr()
+            raise invalidValueErr
           offerValue.toRetrievalValue.encode()
         of contractTrieNode:
           let offerValue = ContractTrieNodeOffer.decode(contentValueBytes).valueOr:
-            raise invalidValueErr()
+            raise invalidValueErr
           offerValue.toRetrievalValue.encode()
         of contractCode:
           let offerValue = ContractCodeOffer.decode(contentValueBytes).valueOr:
-            raise invalidValueErr()
+            raise invalidValueErr
           offerValue.toRetrievalValue.encode()
       else:
         contentValueBytes
@@ -251,7 +251,7 @@ proc installPortalApiHandlers*(
       p.storeContent(key, contentId.get(), valueToStore)
       return true
     else:
-      raise invalidKeyErr()
+      raise invalidKeyErr
 
   rpcServer.rpc("portal_" & network & "LocalContent") do(contentKey: string) -> string:
     let
